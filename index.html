@@ -492,7 +492,7 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
 <!-- ===== 班级签 / 彩带彩蛋弹窗 ===== -->
 <div class="sign-mask" id="signMask">
   <div class="sign-box">
-    <h3>🥠 今日班级签</h3>
+    <h3>今日班级签</h3>
     <span class="sign-tag" id="signTag"></span>
     <div class="sign-text" id="signText"></div>
     <div class="sign-sub" id="signSub"></div>
@@ -783,7 +783,7 @@ var SITE_DATA = {
     { date: "2026-08-25 20:03", text: "【紧急修复】刚才部分同学在分类页点密码验证后出现整页空白，现已修复。原因是页面重渲染时把当前分类视图重置掉了，导致你正在看的分类被隐藏、内容看不见。现在重渲染会保持你当前所在的分类或首页，验证后仍停留在原位置并显示密码错误提示。", category: "site" },
     { date: "2026-08-25 20:41", text: "公告栏「公众号」旁新增「仓库」按钮，点击可直达 Gitee 源码仓库查看。另：作业查看中 8.25-8.27 的「2026 暑假作业」为示例测试数据，并非真实作业，正式作业以老师线下布置为准。", category: "site" },
     { date: "2026-08-25 21:55", text: "「班级事务」中原「建言献策」「情况反映」两个待开发卡片已合并为「意见反馈」，点击即可匿名填写问卷，对班级的建议、想法或想反映的问题都可以提交。", category: "class" },
-    { date: "2026-08-25 22:58", text: "🥠 首页新增「今日班级签」：小卡片已放在「每日日报」上方，点一下抽一张签，有好签也有提醒签，每天限抽一次，次日 0 点自动刷新。图个乐子，别当真～", category: "site" },
+    { date: "2026-08-25 22:58", text: "首页新增「今日班级签」：小卡片已放在「每日日报」上方，点一下抽一张签，有好签也有提醒签，每天限抽一次，次日 0 点自动刷新。图个乐子，别当真～", category: "site" },
     { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "class" },
     { date: "2026-08-25 16:46", text: "本轮更新：公告改名为「公告」并按网站内部/班级事务/班级活动/站主杂谈四类分组；学习资料板块新增「网络限制提示」弹窗（首次进入弹出，可选不再显示）；作业查看卡片因 Classworks 打不开新增「当前作业/历史日历」按钮；PWA 主图标改为 512；公告时间统一为「精确到分」。", category: 'site' },
     { date: "2026-08-25 16:19", text: "修复每日日报卡片排版（被压缩成一团）；修复首次输入正确密码仍报错的 bug（异步哈希未 await）；密码显示切换按钮换为更精致的 SVG 图标。", category: 'site' },
@@ -1953,7 +1953,7 @@ function renderSignBar(){
   var saved = null;
   try{ saved = localStorage.getItem(signDayKey()); }catch(e){}
   el.innerHTML =
-    '<div class="signbar-icon">🥠</div>' +
+    '<div class="signbar-icon">签</div>' +
     '<div class="signbar-info">' +
       '<div class="signbar-title">今日班级签</div>' +
       '<div class="signbar-sub">' + (saved ? '今天已抽过 · 明天 0 点刷新' : '一天一签 · 有好也有坏，看运气') + '</div>' +
