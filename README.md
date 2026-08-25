@@ -6,8 +6,8 @@
 
 | 平台 | 链接 | 说明 |
 |------|------|------|
-| GitHub Pages（待定主链接） | `https://yuzikaaang.github.io/class-site/` | 国内访问稳定则作为主链接（需 Gitee→GitHub 镜像同步 + 开启 Pages） |
-| WorkBuddy（当前主链接） | `https://a5048c773a210b3d4-25579.app.workbuddy.link/` | 内容已最新；沙箱休息时可能短暂不可用 |
+| **GitHub Pages（主链接）** | `https://yuzikaaang.github.io/class-site/` | 当前主链接；Gitee→GitHub 镜像自动同步，内容随仓库实时更新。Gitee 与 GitHub 仓库均已公开 |
+| WorkBuddy（应急备用，已取消常驻） | 由维护者按需临时重新发布 | 主链接打不开时，临时向 AI 申请重新发布获取新链接；常规不再作为分发入口 |
 
 ## 目录结构
 
@@ -19,7 +19,6 @@
 ├── favicon.svg             # 站点图标
 ├── icon-192.png            # PWA 图标
 ├── icon-512.png
-├── icon-maskable-512.png
 ├── qrcode.jpg              # 班级公众号二维码
 ├── class-site-backup.zip   # 完整版备份包（站内密码验证后下载，每次更新后重新生成）
 ├── secrets.json.enc        # 令牌加密文件（密码提示见 secrets-hint.txt）
@@ -37,13 +36,13 @@
   - 图标类：使用图床直链。
   - 二维码类：直接放入仓库根目录（避免图床审核不过）。
 - **路径规范**：所有本地资源统一使用相对路径（`./xxx`），以同时兼容 WorkBuddy 根路径部署和 GitHub Pages 子路径部署。
-- **主链接更新**：修改 `index.html` 后推送到 Gitee，在 WorkBuddy 重新发布/刷新同一链接即可。
+- **主链接更新**：修改 `index.html` 后推送到 Gitee，Gitee→GitHub 镜像自动同步，GitHub Pages 通常几分钟内刷新（强制刷新用 `Ctrl/Cmd + F5`）。
 - **安装到手机**：用手机浏览器打开链接 → 菜单「添加到主屏幕」，即可像 APP 一样使用，内容随网站实时更新。
 
 ## 双仓库同步
 
-- **Gitee 主仓库**：`https://gitee.com/zikang0529/class-site`
-- **GitHub 备用仓库**：`https://github.com/yuzikaaang/class-site`
+- **Gitee 主仓库（已公开）**：`https://gitee.com/zikang0529/class-site`
+- **GitHub 主链接仓库（已公开）**：`https://github.com/yuzikaaang/class-site`
 
 由于 WorkBuddy 沙箱无法直连 GitHub，GitHub 同步通过 **Gitee 仓库镜像管理** 完成：
 
@@ -75,6 +74,7 @@ GitHub Pages 在 GitHub 仓库 Settings → Pages 中开启（选择 `master` �
 
 ## 最近更新
 
+- 2026-08-25：主链接切换为 GitHub Pages（`https://yuzikaaang.github.io/class-site/`），原 WorkBuddy 分享链接取消常驻、改为应急备用；Gitee 与 GitHub 仓库均已公开。
 - 2026-08-25：公告系统重构（按网站内部/班级事务/班级活动/站主杂谈四类分组 + 置顶 Classworks 通知）；学习资料新增网络限制提示弹窗；作业查看卡片新增「当前作业/历史日历」按钮；PWA 主图标升级为 512；公告时间改回精确到分。
 - 2026-08-25：修复每日日报卡片空白问题；班级公告时间精确到秒；导出密码错误提示增强。
 - 2026-08-25：修复日报卡片排版（被压缩成一团）；修复首次输入正确密码仍报错的 bug（异步哈希未 await）；密码显示切换按钮换为更精致的 SVG 图标。

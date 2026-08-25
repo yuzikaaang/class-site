@@ -26,7 +26,6 @@
 ├── favicon.svg             # 站点图标
 ├── icon-192.png            # PWA 图标
 ├── icon-512.png
-├── icon-maskable-512.png
 ├── qrcode.jpg              # 班级公众号二维码（由维护者提供）
 ├── backups/                # 每周自动备份的 index.html 快照
 ├── .github/workflows/      # GitHub Actions 工作流（每周自动备份）
@@ -45,10 +44,10 @@
 - 用途：主要编辑与版本管理
 - 操作：所有内容改动先在本地完成，再推送到 Gitee `master` 分支
 
-### 3.2 备用仓库（GitHub）
+### 3.2 GitHub（主链接来源）
 
-- 仓库地址：`https://github.com/yuzikaaang/class-site`
-- 用途：防止 WorkBuddy 分享链接因沙箱休息失效时，提供 GitHub Pages 备用链接
+- 仓库地址：`https://github.com/yuzikaaang/class-site`（已公开）
+- 用途：对外主链接 `https://yuzikaaang.github.io/class-site/` 的来源；Gitee 推送后由镜像自动同步，GitHub Pages 作为全班访问主入口
 - 同步方式：通过 Gitee 的「仓库镜像管理」自动同步到 GitHub
 
 #### 配置 Gitee → GitHub 镜像（一次性）
@@ -69,17 +68,16 @@
 3. 选择 `master` 分支，`/(root)` 目录
 4. 保存后获得备用链接：`https://yuzikaaang.github.io/class-site/`
 
-> 该仓库为私密仓库，GitHub Pages 默认仅自己可见；如需公开访问，需要 GitHub Pro 或改为公开仓库。
+> 仓库已设为公开，GitHub Pages 任何人可访问。
 
 ## 4. 分享链接
 
-- **主链接（当前）**：`https://a5048c773a210b3d4-25579.app.workbuddy.link/`
-  - 内容已是最新；重复发布保持此链接
-  - 注意：原 `a5048c773a210b3d4.app.workbuddy.link`（b3d4）为旧沙箱发布，内容停留在旧快照且无法在当前沙箱复用，已弃用
-- **备用链接（GitHub Pages）**：`https://yuzikaaang.github.io/class-site/`
-  - 由 Gitee 镜像自动同步后触发更新
-  - **主链接决策（待用户测试）**：若 github.io 在国内访问稳定，则作为主链接、停用 WorkBuddy 链接。测试方法：用国内手机/电脑打开上述 GitHub Pages 地址，观察是否稳定可访问。
-  - ⚠️ 注意：GitHub 仓库为私密时，Pages 仅自己可见；供全班使用需将仓库改为公开或开通 GitHub Pro。
+- **主链接（当前）**：`https://yuzikaaang.github.io/class-site/`
+  - 由 Gitee→GitHub 镜像自动同步后触发更新；Gitee 与 GitHub 仓库均已公开，便于全班访问与查询
+  - 强制刷新缓存：浏览器 `Ctrl/Cmd + F5`
+- **应急备用链接（WorkBuddy，按需重新发布）**：主链接 `github.io` 国内偶尔不可达时，临时向 AI 申请重新发布获取新链接
+  - 原常驻链接 `https://a5048c773a210b3d4-25579.app.workbuddy.link/`（及更早的 `a5048c773a210b3d4.app.workbuddy.link`）已于 2026-08-25 取消发布，已失效
+  - 重新发布会在新沙箱会话生成新链接，不保证与历史链接一致
 
 ## 4.1 令牌管理（重要）
 
@@ -152,17 +150,16 @@
 - [ ] `class-site-backup.zip` 已重新生成
 - [ ] `README.md` 和 `TUTORIAL.md` 已同步更新
 - [ ] 已提交并推送到 Gitee `master`
-- [ ] Gitee → GitHub 镜像已同步（或已触发）
-- [ ] WorkBuddy 分享链接已重新发布/刷新
-- [ ] GitHub Pages 备用链接可访问（如已开启）
+- [ ] Gitee → GitHub 镜像已同步（GitHub Pages 主链接已刷新）
+- [ ] 主链接 GitHub Pages 在国内可访问（如已开启）
 
 ## 8. 常见问题
 
 **Q：为什么 GitHub 同步不通过 WorkBuddy 直接做？**
 A：WorkBuddy 沙箱无法直连 GitHub（TLS 被重置），因此使用 Gitee 官方镜像功能作为中转。
 
-**Q：为什么 WorkBuddy 链接要保持不变？**
-A：主分享链接已经分发出去，变更会增加同学们的访问成本。注意：链接能否保持取决于发布该链接的沙箱会话是否仍然存在；若沙箱实例已重建，平台会生成带后缀的新链接，旧链接内容停留在最后一次发布时的快照（需在新会话重新发布后把新链接作为主链接）。
+**Q：WorkBuddy 分享链接还能用吗？**
+A：常驻的 WorkBuddy 链接已于 2026-08-25 取消发布。主链接改为 GitHub Pages（`https://yuzikaaang.github.io/class-site/`）。仅当主链接国内不可达时，才临时向维护者（AI）申请重新发布 WorkBuddy 链接作为应急入口。
 
 **Q：source/ 目录还能用吗？**
 A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `index.html` 中实现。
@@ -171,6 +168,7 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 | 日期 | 内容 |
 |------|------|
+| 2026-08-25 | 主链接切换为 GitHub Pages（`https://yuzikaaang.github.io/class-site/`）；WorkBuddy 常驻分享链接取消发布，改为应急备用（主链接不可达时临时重新发布）；Gitee 与 GitHub 仓库均已公开。 |
 | 2026-08-25 | 每日日报入口改为 `https://newsnow.czl.net/c/china`（不再自部署），简介同步更新；修复「全部重要日期」弹窗倒计时不走秒的问题（弹窗打开后每秒刷新）。 |
 | 2026-08-25 | 令牌加密存储上线：`secrets.json.enc` + `scripts/encrypt-secret.sh` / `scripts/decrypt-secret.sh`，文档中不再出现明文令牌；本地工作副本清理。 |
 | 2026-08-25 | 取消自动备份与每周打包（Gitee 个人版不支持定时任务），改为站内「📦 导出备份」：密码验证（SHA-256 哈希）后下载完整版 `class-site-backup.zip`；约定每次内容更新同步一条站内公告并更新 README。 |
