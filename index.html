@@ -695,6 +695,7 @@ var SITE_DATA = {
     { date: "2026-08-25 19:22", text: "作业查看卡片恢复 Classworks 直达入口，现提供三个入口：📝 查看当前作业 / 📅 历史作业（日期）/ 🌐 前往 Classworks（微信内自动引导用浏览器打开）。", category: "site" },
     { date: "2026-08-25 19:39", text: "【修复】站内所有密码输入（站点门禁 / 导出备份 / 联系方式查询）已恢复正常，之前点击无反应是因为哈希校验函数被重复定义覆盖。作业查看卡片的 Classworks 说明已更正：因校园网限制，班级电脑端的 Classworks 连不上服务器、无法同步云端供大家查看，故站内作业为站主手动同步；「前往 Classworks」按钮已排到第一位。", category: "site" },
     { date: "2026-08-25 19:50", text: "【二次修复】课堂笔记 / 教学课件 / 私人云盘 / 联系方式查询的密码入口也已修复：之前链接数据缺少 id 字段，导致门禁点击无反应也无提示。现已为所有链接补全 id，密码错误时会显示提示，正确输入后进入对应资源。点歌平台下方新增提示：服务器配置有限，没有立即跳转请耐心等待几秒。", category: "site" },
+    { date: "2026-08-25 20:03", text: "【紧急修复】刚才部分同学在分类页点密码验证后出现整页空白，现已修复。原因是页面重渲染时把当前分类视图重置掉了，导致你正在看的分类被隐藏、内容看不见。现在重渲染会保持你当前所在的分类或首页，验证后仍停留在原位置并显示密码错误提示。", category: "site" },
     { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "class" },
     { date: "2026-08-25 16:46", text: "本轮更新：公告改名为「公告」并按网站内部/班级事务/班级活动/站主杂谈四类分组；学习资料板块新增「网络限制提示」弹窗（首次进入弹出，可选不再显示）；作业查看卡片因 Classworks 打不开新增「当前作业/历史日历」按钮；PWA 主图标改为 512；公告时间统一为「精确到分」。", category: 'site' },
     { date: "2026-08-25 16:19", text: "修复每日日报卡片排版（被压缩成一团）；修复首次输入正确密码仍报错的 bug（异步哈希未 await）；密码显示切换按钮换为更精致的 SVG 图标。", category: 'site' },
@@ -1168,7 +1169,7 @@ function render(){
   var dailyEl = document.getElementById('dailyNews');
   if(dailyEl){
     var dailyLink = null;
-    for(var d=0;d<SITE_DATA.links.length;d++){ if(SITE_DATA.links[d].id===4){ dailyLink=SITE_DATA.links[d]; break; } }
+    for(var d=0;d<SITE_DATA.links.length;d++){ if(SITE_DATA.links[d].categoryId===0){ dailyLink=SITE_DATA.links[d]; break; } }
     if(dailyLink){
       dailyEl.innerHTML =
         '<div class="daily-card">'+
@@ -1261,6 +1262,18 @@ function render(){
   }).join('');
 
   Array.prototype.forEach.call(grid.querySelectorAll('.tab-page'), function(p){ p.classList.remove('active'); });
+  /* 恢复当前视图：分类页保持激活、首页则显示 homeView。避免 checkGate 等触发重渲染后整页空白 */
+  if(__activeCat != null){
+    var page2 = document.getElementById('tab-cat-'+__activeCat);
+    if(page2) page2.classList.add('active');
+    var home2 = document.getElementById('homeView');
+    if(home2) home2.style.display = 'none';
+    grid.style.display = 'block';
+  }else{
+    var home3 = document.getElementById('homeView');
+    if(home3) home3.style.display = 'block';
+    grid.style.display = 'none';
+  }
 }
 function jsq(u){ return (u||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
@@ -1309,6 +1322,7 @@ function buildSidebar(){
     return '<button class="side-btn" data-cat="'+c.id+'" onclick="openCat('+c.id+')">'+esc(c.name)+'</button>';
   }).join('');
 }
+var __activeCat = null;
 function openCat(id){
   /* 安装为应用：微信内无法直接安装，先引导用浏览器打开（与 voicehub 等入口一致） */
   if(id === 9 && isWeChat()){
@@ -1319,6 +1333,7 @@ function openCat(id){
     if(gh){ var h=''; try{ h = new URL(location.href).hostname; }catch(e){} gh.textContent = h ? '目标：' + h : ''; }
     return;
   }
+  __activeCat = id;
   var home = document.getElementById('homeView');
   var grid = document.getElementById('grid');
   if(home) home.style.display = 'none';
@@ -1337,6 +1352,7 @@ function openCat(id){
   closeSidebar();
 }
 function goHomeView(){
+  __activeCat = null;
   var home = document.getElementById('homeView');
   var grid = document.getElementById('grid');
   if(home) home.style.display = 'block';
