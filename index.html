@@ -692,6 +692,7 @@ var SITE_DATA = {
     { date: "2026-08-25 17:14", text: "【主链接切换】班级服务站主链接已切换为 GitHub Pages：https://yuzikaaang.github.io/class-site/ （Gitee 与 GitHub 仓库均已公开，可放心收藏与查询）。原 WorkBuddy 分享链接已停用，仅作为主链接不可达时的应急备用入口。", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
     { date: "2026-08-25 17:30", text: "公告栏新增分类筛选：点击「总览 / 网站内部 / 班级事务 / 班级活动 / 站主杂谈」即可只看对应分类的公告，无需展开全部。", category: "site" },
     { date: "2026-08-25 19:11", text: "📲 侧边栏新增「安装为应用」教程：支持 Windows / iPhone / 安卓各品牌一键安装到桌面，微信内请复制链接到浏览器打开。移动端页面右下角新增悬浮按钮，滚动到任意位置都可随时唤起侧边栏。", category: "site" },
+    { date: "2026-08-25 19:22", text: "作业查看卡片恢复 Classworks 直达入口，现提供三个入口：📝 查看当前作业 / 📅 历史作业（日期）/ 🌐 前往 Classworks（微信内自动引导用浏览器打开）。", category: "site" },
     { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "class" },
     { date: "2026-08-25 16:46", text: "本轮更新：公告改名为「公告」并按网站内部/班级事务/班级活动/站主杂谈四类分组；学习资料板块新增「网络限制提示」弹窗（首次进入弹出，可选不再显示）；作业查看卡片因 Classworks 打不开新增「当前作业/历史日历」按钮；PWA 主图标改为 512；公告时间统一为「精确到分」。", category: 'site' },
     { date: "2026-08-25 16:19", text: "修复每日日报卡片排版（被压缩成一团）；修复首次输入正确密码仍报错的 bug（异步哈希未 await）；密码显示切换按钮换为更精致的 SVG 图标。", category: 'site' },
@@ -756,10 +757,11 @@ var SITE_DATA = {
     {
       categoryId: 1, title: "作业查看", subtitle: "Classworks", icon: "https://s41.ax1x.com/2026/08/21/pmxX87n.png",
       desc: "周作业及假期作业均可在线查看。\n使用教程：点击页面中的「已注册」，即可自动登录。\n若未显示当周作业，请跳转到布置作业的当天重新查看。",
-      cardTip: "⚠️ 因校园网络限制，原 Classworks 入口暂无法打开；上述入口将没有数据，请使用下方按钮查看（站主手动同步的大假作业）。",
+      cardTip: "⚠️ 因校园网络限制，直接打开 Classworks 可能失败；若没有数据，请用下方「查看当前作业 / 历史作业」按钮（站主手动同步的大假作业）。",
       customActions: [
         { label: "📝 查看当前作业", onclick: "showCurrentHomework()" },
-        { label: "📅 历史作业（日期）", onclick: "showHomeworkCalendar()" }
+        { label: "📅 历史作业（日期）", onclick: "showHomeworkCalendar()" },
+        { label: "🌐 前往 Classworks", onclick: "openClassworks()" }
       ]
     },
     {
@@ -960,6 +962,8 @@ function openLink(url, wechatOk){
     window.open(url, '_blank');
   }
 }
+/* Classworks 直达入口（微信内自动引导浏览器打开） */
+function openClassworks(){ openLink('https://cs.houlang.cloud/?namespace=%E9%AB%98%E4%BA%8C%EF%BC%885%EF%BC%89%E7%8F%AD&authCode=202505', false); }
 
 function copyTarget(){
   var ta = document.createElement('textarea');
