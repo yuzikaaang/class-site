@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>25级05班班级服务站</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#0b1220">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+body{background:linear-gradient(135deg,#eef2fb 0%,#e8eef8 50%,#dbe5f4 100%);min-height:100vh;color:#2c3e50;margin:0;position:relative;overflow-x:hidden}
+body::before,body::after{content:'';position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0}
+body::before{width:340px;height:340px;background:rgba(185,200,255,.45);top:-80px;left:-80px}
+body::after{width:380px;height:380px;background:rgba(255,217,176,.4);bottom:-120px;right:-80px}
+.layout{display:flex;gap:20px;max-width:1200px;margin:0 auto;padding:20px 16px;position:relative;z-index:1}
+.sidebar{flex:0 0 220px;position:sticky;top:16px;height:calc(100vh - 32px);background:#fff;border-radius:20px;padding:16px;box-shadow:0 8px 25px rgba(0,0,0,.06);display:flex;flex-direction:column;overflow-y:auto}
+.side-tip{background:#eef1ff;color:#3b5bfd;font-size:.75rem;line-height:1.7;padding:10px 12px;border-radius:12px;margin-bottom:12px}
+.side-btn{display:block;width:100%;text-align:left;background:#eef1ff;color:#3b5bfd;border:none;border-radius:12px;padding:11px 14px;font-size:.9rem;font-weight:600;cursor:pointer;margin-bottom:8px;transition:.2s}
+.side-btn:hover{background:#dce3ff}
+.side-btn.active{background:#4a6cf7;color:#fff}
+.sidebar-mask{display:none}
+.content{flex:1;min-width:0}
+.home-view{display:block}
+.menu-btn{display:flex;position:absolute;left:12px;top:12px;z-index:10;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.05rem;cursor:pointer;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:.25s}
+.menu-btn:hover{background:rgba(255,255,255,.35);transform:scale(1.05)}
+@media(max-width:900px){
+  .layout{display:block;padding:0}
+  .sidebar{position:fixed;left:0;top:0;height:100vh;z-index:1100;border-radius:0;width:76vw;max-width:280px;transform:translateX(-100%);transition:transform .3s}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1050}
+  .sidebar-mask.show{display:block}
+  .content{padding:0}
+}
+@media(min-width:901px){
+  .menu-btn{display:none}
+  .theme-btn{right:auto;left:16px;top:16px}
+}
+header{background:linear-gradient(135deg,#4a6cf7,#3b5bfd);border-radius:24px;padding:40px 30px;color:#fff;box-shadow:0 10px 30px rgba(59,91,253,.25);margin-bottom:20px;text-align:center;position:relative;overflow:hidden}
+header h1{font-size:clamp(1.4rem,4.5vw,2.5rem);font-weight:800;letter-spacing:1px;text-shadow:2px 2px 4px rgba(0,0,0,.15)}
+header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px}
+.logo{position:absolute;top:20px;right:20px;width:72px;height:72px;border-radius:50%;overflow:hidden;border:3px solid rgba(255,255,255,.6);box-shadow:0 4px 15px rgba(0,0,0,.15);background:#fff}
+.logo img{width:100%;height:100%;object-fit:cover}
+.tab-bar{display:flex;gap:12px;background:#fff;border-radius:16px;padding:12px 16px;box-shadow:0 4px 15px rgba(0,0,0,.05);margin-bottom:28px;flex-wrap:wrap}
+.tab-btn{padding:10px 22px;border:none;border-radius:12px;background:#eef1ff;color:#3b5bfd;font-size:1rem;font-weight:600;cursor:pointer;transition:.3s}
+.tab-btn.active{background:#4a6cf7;color:#fff;box-shadow:0 4px 10px rgba(59,91,253,.3)}
+.tab-btn:hover:not(.active){background:#dce3ff}
+.tab-page{display:none}
+.tab-page.active{display:block}
+.grid{display:none;grid-template-columns:1fr;gap:25px}
+.card{background:#fff;border-radius:20px;padding:28px 32px;box-shadow:0 8px 25px rgba(0,0,0,.06);transition:transform .3s,box-shadow .3s;border-top:4px solid #4a6cf7;display:flex;align-items:center;gap:24px;text-align:left}
+.card:hover{transform:translateY(-5px);box-shadow:0 15px 35px rgba(59,91,253,.12)}
+.card-icon{flex:0 0 25%;display:flex;align-items:center;justify-content:center}
+.card-icon img{width:80px;height:80px;object-fit:contain}
+.card-icon .fallback{width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#4a6cf7,#3b5bfd);color:#fff;font-size:1.8rem;font-weight:800;display:flex;align-items:center;justify-content:center}
+.card-content{flex:0 0 50%;padding:0 10px}
+.card-content h3{color:#3b5bfd;font-size:1.5rem;margin-bottom:12px}
+.card-content p{color:#4a5568;line-height:1.75;font-size:1.05rem;white-space:pre-line}
+.card-actions{flex:0 0 25%;display:flex;flex-direction:column;gap:10px;align-items:center}
+.btn{display:inline-block;background:#4a6cf7;color:#fff;padding:10px 24px;border-radius:25px;font-size:.95rem;font-weight:600;text-decoration:none;transition:.25s;text-align:center;min-width:140px;border:none;cursor:pointer}
+.btn:hover{background:#3b5bfd;transform:scale(1.05)}
+.btn-secondary{background:#eef1ff;color:#3b5bfd}
+.btn-secondary:hover{background:#dce3ff}
+.btn-green{background:#07c160}
+.btn-green:hover{background:#06ad56}
+.wechat-hint{font-size:.75rem;color:#c2410c;background:#fff7ed;border-radius:999px;padding:4px 12px}
+.gate-box{background:#f3f6ff;border-radius:16px;padding:14px;margin-top:12px;text-align:left}
+.gate-q{color:#3b5bfd;font-weight:700;font-size:.95rem;margin:0 0 10px !important}
+.gate-row{display:flex;gap:8px;align-items:center}
+.gate-input{height:44px;width:100%;border:1px solid #c3d0df;border-radius:12px;background:#fff;padding:0 14px;font-size:.95rem;color:#2c3e50;outline:none;box-sizing:border-box}
+.gate-input:focus{border-color:#4a6cf7}
+.gate-input-wrap{position:relative;flex:1;min-width:0}
+.gate-input-wrap .gate-input{padding-right:40px}
+.eye-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;padding:4px;color:#9aa7b8;border-radius:8px;line-height:1}
+.eye-btn:hover{background:#eef1ff;color:#3b5bfd}
+.gate-btn{min-width:96px;padding:10px 16px}
+.gate-hint{color:#c2410c;font-size:.85rem;font-weight:600;margin:10px 0 0 !important}
+.gate-tip{font-size:.78rem;color:#3b5bfd;background:#eef1ff;border-radius:999px;padding:4px 12px}
+.btn-disabled{background:#c3d0df;color:#fff;cursor:not-allowed}
+.copy-btn{display:block;width:100%;margin:6px 0;padding:11px 14px;border-radius:12px;background:#eef1ff;color:#3b5bfd;border:none;cursor:pointer;font-size:.9rem;font-weight:600;text-align:left;box-sizing:border-box}
+.copy-btn:hover{background:#dce3ff}
+.contact-badges{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.badge{font-size:.75rem;font-weight:700;padding:4px 10px;border-radius:8px}
+.badge-blue{background:#eef1ff;color:#3b5bfd}
+.badge-orange{background:#ffedd5;color:#c2410c}
+.badge-green{background:#e6f9f0;color:#07a154}
+.daily{background:#fff;border-radius:20px;box-shadow:0 8px 25px rgba(0,0,0,.06);padding:16px 20px;margin-bottom:26px;display:flex;align-items:center;gap:14px;text-align:left}
+.daily-icon{flex:0 0 44px;width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#4a6cf7,#3b5bfd);color:#fff;font-size:.95rem;font-weight:800;display:flex;align-items:center;justify-content:center}
+.daily-info{flex:1;min-width:0}
+.daily-title{color:#3b5bfd;font-size:1.05rem;font-weight:700}
+.daily-sub{color:#4a5568;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.daily-btn{min-width:110px;padding:10px 18px}
+@media(max-width:768px){.daily{padding:14px 16px}.daily-sub{white-space:normal}}
+.site-gate{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:24px}
+.site-gate.show{display:flex}
+.site-gate-box{background:#fff;border-radius:24px;padding:28px 26px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.board-more{display:block;width:100%;border-top:1px solid #f1f5f9;background:#f8fafc;color:#3b5bfd;font-size:.85rem;font-weight:600;padding:10px;cursor:pointer;border:none}
+.board-more:hover{background:#f1f5f9}
+.allboard-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9997;align-items:center;justify-content:center;padding:20px}
+.allboard-mask.show{display:flex}
+.allboard-box{background:#fff;border-radius:20px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:80vh;display:flex;flex-direction:column}
+.allboard-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#4a6cf7,#5d7fff);color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
+.allboard-head button{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:999px;padding:4px 12px;font-size:.75rem;cursor:pointer}
+.allboard-list{overflow-y:auto;list-style:none;margin:0;padding:0;max-height:60vh}
+.allboard-list li{padding:13px 18px;border-bottom:1px solid #f1f5f9}
+.allboard-list li:last-child{border-bottom:none}
+.theme-btn{position:absolute;right:12px;top:12px;z-index:10;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:.25s}
+.theme-btn:hover{background:rgba(255,255,255,.35);transform:scale(1.05)}
+
+/* ===== 暗黑模式（.dark 挂在 html 上）===== */
+.dark body{background:linear-gradient(135deg,#131a26 0%,#182130 50%,#10151f 100%)}
+.dark .card{background:#1b2432;box-shadow:0 8px 25px rgba(0,0,0,.4)}
+.dark .card-content h3{color:#9db1ff}
+.dark .card-content p{color:#b6c2d9}
+.dark .card-sub{color:#64748b}
+.dark .tab-bar{background:#1b2432}
+.dark .tab-btn{background:#2a3550;color:#9db1ff}
+.dark .tab-btn:hover{background:#33405f}
+.dark .tab-btn.active{background:#4a6cf7;color:#fff}
+.dark .board{background:#1b2432}
+.dark .board-date{background:#2a3550;color:#9db1ff}
+.dark .board-date.hot{background:rgba(124,45,18,.45);color:#fbbf24}
+.dark .board-text{color:#b6c2d9}
+.dark .board-text.important{color:#e2e8f0}
+.dark .board-more{background:#202a3a;border-color:#2a3550;color:#9db1ff}
+.dark .board-more:hover{background:#253047}
+.dark .daily{background:#1b2432}
+.dark .daily-title{color:#9db1ff}
+.dark .daily-sub{color:#b6c2d9}
+.dark .cd-hol{background:#1b2432}
+.dark .cd-hol .cd-head{color:#e2e8f0}
+.dark .cd-name{color:#e2e8f0}
+.dark .cd-sub{color:#64748b}
+.dark .cd-row{background:#202a3a}
+.dark .cd-days b,.dark .cd-days span{color:#34d399}
+.dark .cd-empty{color:#64748b}
+.dark .gate-box{background:#22304a}
+.dark .gate-q{color:#9db1ff}
+.dark .gate-input{background:#131a26;border-color:#3a4a6b;color:#e2e8f0}
+.dark .gate-input:focus{border-color:#4a6cf7}
+.dark .gate-hint{color:#fbbf24}
+.dark .copy-btn{background:#2a3550;color:#9db1ff}
+.dark .copy-btn:hover{background:#33405f}
+.dark .badge-blue{background:#2a3550;color:#9db1ff}
+.dark .badge-orange{background:rgba(124,45,18,.45);color:#fbbf24}
+.dark .badge-green{background:rgba(4,120,87,.35);color:#34d399}
+.dark .btn-secondary{background:#2a3550;color:#9db1ff}
+.dark .btn-secondary:hover{background:#33405f}
+.dark .btn-disabled{background:#475569}
+.dark .wechat-hint{background:rgba(124,45,18,.3);color:#fbbf24}
+.dark .gate-tip{background:#2a3550;color:#9db1ff}
+.dark .sidebar{background:#1b2432}
+.dark .side-tip{background:#22304a;color:#9db1ff}
+.dark .side-btn{background:#2a3550;color:#9db1ff}
+.dark .side-btn:hover{background:#33405f}
+.dark .side-btn.active{background:#4a6cf7;color:#fff}
+.dark footer p{color:#64748b !important}
+.dark footer p:first-child{color:#9db1ff !important}
+.dark .site-gate-box{background:#1b2432;color:#e2e8f0}
+.dark .site-gate-box h2{color:#e2e8f0}
+.dark .site-gate-box p{color:#b6c2d9}
+.dark .allboard-box{background:#1b2432}
+.dark .allboard-list li{border-color:#2a3550}
+.dark .qr-box{background:#1b2432}
+.dark .qr-tip{color:#e2e8f0}
+.dark .qr-sub{color:#64748b}
+.dark .placeholder{color:#64748b}
+.dark .board-count{background:rgba(255,255,255,.15)}
+.placeholder{background:#f8fafc;border:2px dashed #c3d0df;border-radius:20px;padding:40px;text-align:center;color:#90a4ae;font-size:1.1rem;margin-top:25px}
+.placeholder span{font-size:2rem;display:block;margin-bottom:10px}
+footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:500;font-size:.9rem}
+
+/* 公告栏 */
+.board{background:#fff;border-radius:16px;box-shadow:0 8px 25px rgba(0,0,0,.06);overflow:hidden;margin-bottom:28px}
+.board-head{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#4a6cf7,#5d7fff);padding:12px 18px}
+.board-head h2{color:#fff;font-size:1rem}
+.board-count{margin-left:auto;background:rgba(255,255,255,.2);color:#fff;font-size:.72rem;padding:3px 10px;border-radius:999px}
+.btn-qr{margin-left:8px;background:#07c160;color:#fff;border:none;border-radius:999px;padding:5px 14px;font-size:.75rem;font-weight:700;cursor:pointer}
+.btn-qr:active{transform:scale(.95)}
+.board-list{list-style:none;max-height:240px;overflow-y:auto}
+.board-list li{padding:13px 18px;border-bottom:1px solid #f1f5f9}
+.board-meta{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.board-list li:last-child{border-bottom:none}
+.board-date{flex:0 0 auto;margin-top:2px;background:#eef1ff;color:#3b5bfd;font-size:.72rem;font-weight:700;padding:4px 8px;border-radius:8px}
+.board-date.hot{background:#ffedd5;color:#c2410c}
+.board-text{color:#4a5568;font-size:.88rem;line-height:1.6}
+.board-text.important{color:#2c3e50;font-weight:600}
+.board-pin{display:inline-block;background:#c2410c;color:#fff;font-size:.68rem;font-weight:800;border-radius:4px;padding:2px 6px;margin-right:6px;vertical-align:1px}
+
+/* 倒计时（两个面板并排，移动端紧凑） */
+.countdown{display:flex;flex-direction:row;gap:12px;margin-bottom:28px}
+.cd-sem{flex:1;min-width:0;background:linear-gradient(135deg,#4a6cf7,#3b5bfd);border-radius:16px;padding:14px;color:#fff;box-shadow:0 8px 25px rgba(59,91,253,.18);display:flex;flex-direction:column;overflow:hidden}
+.cd-head{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.92rem;margin-bottom:10px}
+.cd-label{font-size:.92rem;font-weight:800;color:#ffe08a;margin-bottom:10px}
+.cd-label small{font-weight:400;opacity:.75;margin-left:4px;font-size:.7rem}
+.cd-units{display:flex;justify-content:space-between;gap:6px}
+.cd-box{flex:1;background:rgba(255,255,255,.15);border-radius:10px;padding:8px 2px;text-align:center;backdrop-filter:blur(2px)}
+.cd-num{font-size:1.25rem;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.cd-unit{display:block;font-size:.62rem;font-weight:500;opacity:.85;margin-top:4px}
+.cd-end{text-align:center;padding:8px 0}
+.cd-end .emo{font-size:2rem}
+.cd-end .t1{font-size:1.1rem;font-weight:800;margin-top:6px}
+.cd-end .t2{font-size:.78rem;opacity:.85;margin-top:4px}
+.cd-hol{flex:1;min-width:0;background:#fff;border-radius:16px;padding:14px;box-shadow:0 8px 25px rgba(0,0,0,.06);display:flex;flex-direction:column;overflow:hidden}
+.cd-hol .cd-head{color:#2c3e50}
+.cd-hol .cd-head svg{color:#07c160}
+.cd-row{display:flex;align-items:center;gap:10px;background:#f8fafc;border-radius:10px;padding:9px 10px;margin-bottom:8px}
+.cd-row:last-child{margin-bottom:0}
+.cd-name{font-size:.85rem;font-weight:700;color:#2c3e50}
+.cd-sub{font-size:.66rem;color:#9aa7b8;margin-top:2px}
+.cd-days{margin-left:auto;text-align:right}
+.cd-days b{font-size:1.05rem;font-weight:800;color:#07c160;font-variant-numeric:tabular-nums}
+.cd-days span{font-size:.68rem;font-weight:600;color:#07c160;margin-left:2px}
+.cd-empty{padding:14px 0;text-align:center;font-size:.85rem;color:#90a4ae}
+.cd-clickable{cursor:pointer;transition:transform .2s,box-shadow .2s}
+.cd-clickable:active{transform:scale(0.98)}
+.cd-viewall{margin-left:auto;font-size:.7rem;font-weight:600;background:rgba(255,255,255,.25);padding:3px 10px;border-radius:999px}
+.cd-hol .cd-viewall{background:#eef1ff;color:#3b5bfd}
+.imp-mobile{display:flex;flex-direction:column;flex:1;min-height:0}
+.imp-area{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:4px 0}
+.imp-desktop{display:none}
+.imp-fold{background:rgba(255,255,255,.18);border-radius:12px;padding:11px 12px;cursor:pointer;text-align:center;transition:transform .15s,background .15s}
+.imp-fold:active{transform:scale(0.98)}
+.imp-fold-name{font-size:.72rem;opacity:.85;margin-bottom:3px}
+.imp-fold-main{font-size:.92rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:-0.01em}
+.imp-desktop ul{flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px}
+.imp-desktop ul li{background:rgba(255,255,255,.18);border-radius:12px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+@media(min-width:1024px){
+  .imp-mobile{display:none}
+  .imp-desktop{display:flex;flex-direction:column}
+}
+.allimp-head{background:linear-gradient(90deg,#4a6cf7,#3b5bfd)}
+.allhol-head{background:linear-gradient(90deg,#07c160,#05a050)}
+.dark .cd-hol .cd-viewall{background:#2a3550;color:#9db1ff}
+.dark .cd-viewall{background:rgba(255,255,255,.2)}
+/* 移动端：隐藏月份格与节假日日期行，更紧凑 */
+.cd-units .cd-box:first-child{display:none}
+.cd-row .cd-sub{display:none}
+@media(min-width:1024px){
+  .countdown{gap:16px}
+  .cd-sem,.cd-hol{padding:20px}
+  .cd-head{font-size:1rem;margin-bottom:12px}
+  .cd-label{font-size:1.05rem;margin-bottom:12px}
+  .cd-box{padding:10px 4px}
+  .cd-num{font-size:1.7rem}
+  .cd-units .cd-box:first-child{display:block}
+  .cd-row .cd-sub{display:block}
+}
+
+/* 卡片副标题 */
+.card-sub{color:#9aa7b8;font-size:.76rem;font-weight:600;margin-top:2px;margin-bottom:8px}
+
+/* 首次欢迎弹窗 */
+.welcome-mask{display:none;position:fixed;inset:0;z-index:9998;align-items:center;justify-content:center;background:rgba(0,0,0,.6);padding:24px}
+.welcome-mask.show{display:flex}
+.welcome-box{max-width:360px;width:100%;background:linear-gradient(135deg,#4a6cf7,#3b5bfd);border-radius:24px;padding:28px 24px;text-align:center;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.welcome-title{font-size:1.2rem;font-weight:800;line-height:1.5;margin-bottom:12px}
+.welcome-desc{font-size:.85rem;line-height:1.7;opacity:.95;margin-bottom:14px}
+.welcome-list{background:rgba(255,255,255,.15);border-radius:16px;padding:14px 16px;text-align:left;margin-bottom:14px}
+.welcome-list-title{font-size:.85rem;font-weight:700;margin-bottom:8px}
+.welcome-list-body{font-size:.85rem;line-height:1.7;opacity:.95}
+.welcome-btn{margin-top:4px;background:#fff;color:#3b5bfd;border:none;border-radius:999px;padding:10px 32px;font-size:.85rem;font-weight:800;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.2)}
+.welcome-btn:active{transform:scale(.96)}
+
+
+/* 微信引导覆盖层 */
+.guide-overlay{display:none;position:fixed;inset:0;background:#fff;z-index:9999;overflow:auto}
+.guide-overlay.show{display:flex;align-items:center;justify-content:center;padding:20px}
+.guide-arrow{position:fixed;top:14px;right:16px;text-align:center;animation:bounce 1.4s infinite}
+.guide-arrow .tag{display:inline-block;background:#4a6cf7;color:#fff;font-size:.8rem;font-weight:600;padding:6px 14px;border-radius:999px;box-shadow:0 4px 12px rgba(59,91,253,.35);margin-bottom:4px}
+.guide-arrow svg{color:#3b5bfd}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.guide-box{max-width:420px;background:#fff;padding:36px 26px;border-radius:20px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.08);margin-top:60px}
+.guide-box h2{color:#222;margin-bottom:14px;font-size:22px}
+.guide-box .lead{color:#555;line-height:1.8;font-size:15px}
+.steps{margin-top:20px;background:#fff7ed;padding:18px;border-radius:12px;text-align:left}
+.steps p{color:#c2410c;line-height:2;font-size:15px;display:flex;align-items:flex-start;gap:10px}
+.steps b{flex:0 0 22px;height:22px;border-radius:50%;background:#c2410c;color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;margin-top:4px}
+.guide-target{margin-top:16px;font-size:.8rem;color:#999;word-break:break-all}
+.btn-copy{display:block;width:100%;margin-top:18px;background:#fff;color:#3b5bfd;border:1.5px solid #4a6cf7;padding:11px;border-radius:999px;font-size:.95rem;font-weight:600;cursor:pointer}
+.btn-copy:active{background:#eef1ff}
+.guide-back{display:block;margin-top:14px;color:#999;font-size:.85rem;text-decoration:none}
+
+/* 浏览器打开后的跳转提示层 */
+.jump-overlay{display:none;position:fixed;inset:0;background:linear-gradient(135deg,#f5f7fa,#d5dce5);z-index:9999;align-items:center;justify-content:center;padding:20px}
+.jump-overlay.show{display:flex}
+.jump-box{max-width:400px;background:#fff;padding:36px 30px;border-radius:20px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+.spinner{width:42px;height:42px;border:4px solid #e0e7ff;border-top-color:#4a6cf7;border-radius:50%;margin:0 auto 16px;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* 公众号二维码弹窗 */
+.qr-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;padding:24px}
+.qr-mask.show{display:flex}
+.qr-box{background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.qr-head{display:flex;justify-content:center;align-items:center;margin-bottom:12px}
+.qr-head h3{color:#07c160;font-size:1rem}
+.qr-close{border:none;background:none;font-size:22px;color:#999;cursor:pointer;line-height:1;padding:4px}
+.qr-close:hover{color:#555}
+.qr-box img{width:100%;max-width:230px;border-radius:16px;border:1px solid #e5e7eb}
+.qr-tip{margin-top:14px;color:#2c3e50;font-size:.9rem;font-weight:600}
+.qr-sub{margin-top:4px;color:#aaa;font-size:.75rem}
+
+@media(max-width:768px){
+header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
+.logo{position:static;width:58px;height:58px;margin-bottom:12px;order:-1}
+.card{flex-direction:column;text-align:center;padding:24px 18px;gap:14px}
+.card-icon{flex:0 0 auto}
+.card-icon img{width:72px;height:72px}
+.card-content{flex:0 0 auto;padding:0}
+.card-content h3{font-size:1.35rem}
+.card-actions{flex:0 0 auto;width:100%}
+.btn{min-width:130px}
+.tab-bar{justify-content:center;padding:10px}
+.tab-btn{padding:9px 16px;font-size:.92rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== 浏览器打开后的自动跳转提示 ===== -->
+<div class="jump-overlay" id="jumpOverlay">
+  <div class="jump-box">
+    <div class="spinner"></div>
+    <h2 style="color:#2c3e50;margin-bottom:8px;font-size:19px">正在为您跳转</h2>
+    <p style="color:#999;font-size:.85rem;margin-bottom:4px">目标站点</p>
+    <p id="jumpHost" style="color:#3b5bfd;font-weight:700;word-break:break-all"></p>
+    <a id="jumpManual" href="#" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:20px;background:#4a6cf7;color:#fff;padding:11px;border-radius:999px;text-decoration:none;font-size:.95rem;font-weight:600">若未自动跳转，点此前往</a>
+    <a href="#" onclick="resetHome();return false" style="display:block;margin-top:12px;color:#999;font-size:.82rem;text-decoration:none">返回班级服务站</a>
+  </div>
+</div>
+
+<!-- ===== 微信引导页 ===== -->
+<div class="guide-overlay" id="guideOverlay">
+  <div class="guide-arrow">
+    <span class="tag">菜单在这里 ↑</span><br>
+    <svg width="44" height="44" viewBox="0 0 46 46"><path d="M8 38 L36 10 M36 10 L36 26 M36 10 L20 10" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+  </div>
+  <div class="guide-box">
+    <div style="font-size:2.2rem;margin-bottom:6px">🌐</div>
+    <h2>需要使用浏览器打开</h2>
+    <p class="lead">该站点在微信内置浏览器中无法直接访问<br>请按以下步骤切换到系统浏览器</p>
+    <div class="steps">
+      <p><b>1</b><span>点击屏幕右上角的【···】按钮</span></p>
+      <p><b>2</b><span>在弹出菜单中选择<strong>「在浏览器打开」</strong></span></p>
+      <p><b>3</b><span>浏览器打开后将自动跳转到目标页面</span></p>
+    </div>
+    <p class="guide-target" id="guideHost"></p>
+    <button class="btn-copy" id="copyBtn" onclick="copyTarget()">复制目标链接</button>
+    <a class="guide-back" href="#" onclick="resetHome();return false">← 返回班级服务站</a>
+  </div>
+</div>
+
+<!-- ===== 公众号二维码弹窗 ===== -->
+<div class="qr-mask" id="qrMask">
+  <div class="qr-box">
+    <div class="qr-head"><h3>班级公众号</h3></div>
+    <img id="qrImg" src="" alt="班级公众号二维码">
+    <p class="qr-tip">长按二维码，选择「识别图中二维码」关注</p>
+    <p class="qr-sub">右上角「···」可转发给同学</p>
+  </div>
+</div>
+
+<!-- ===== 首次打开欢迎弹窗 ===== -->
+<div class="welcome-mask" id="welcomeMask">
+  <div class="welcome-box">
+    <p class="welcome-title">欢迎来到5班服务站 ✧⁺⸜(●˙▾˙●)⸝⁺✧</p>
+    <p class="welcome-desc">这里汇总咱们班级线上常用工具，后续功能也会持续更新维护！</p>
+    <div class="welcome-list">
+      <p class="welcome-list-title">站内现有功能一览</p>
+      <p class="welcome-list-body">▫ 班级点歌台<br>▫ 作业查询<br>▫ 班级大屏应用跳转<br>▫ 每日日报资讯<br>▫ 考试 / 假期倒计时<br>▫ 班级重要公告<br>…………等待开发</p>
+    </div>
+    <p class="welcome-desc">所有班级通知、线上工具都会同步在这里，记得常来看看哦~<br>✨ 祝你新学期一切顺利！</p>
+    <button class="welcome-btn" onclick="closeWelcome()">进入服务站</button>
+  </div>
+</div>
+
+<!-- ===== 站点入口问答（首次进入需回答） ===== -->
+<div class="site-gate" id="siteGate">
+  <div class="site-gate-box">
+    <div style="font-size:2.6rem;margin-bottom:8px">🔒</div>
+    <h2 style="color:#2c3e50;font-size:1.1rem;margin:0 0 10px">进入班级服务站</h2>
+    <p id="siteGateQ" style="color:#4a5568;font-size:.92rem;line-height:1.7;margin:0 0 14px"></p>
+    <span style="display:block;position:relative">
+      <input id="siteGateInput" type="password" placeholder="请输入答案" class="gate-input" autocomplete="off" style="width:100%;text-align:center;padding-right:40px" onkeydown="if(event.key==='Enter')submitSiteGate()">
+      <button type="button" class="eye-btn" style="position:absolute;right:8px;top:50%;transform:translateY(-50%)" onclick="togglePwd('siteGateInput', this)">👁</button>
+    </span>
+    <button class="btn" style="width:100%;margin-top:12px" onclick="submitSiteGate()">验证进入</button>
+    <p id="siteGateErr" style="color:#c2410c;font-weight:600;font-size:.85rem;margin:10px 0 0"></p>
+  </div>
+</div>
+
+<!-- ===== 全部重要日期弹窗 ===== -->
+<div class="allboard-mask" id="allImpMask">
+  <div class="allboard-box">
+    <div class="allboard-head allimp-head"><span id="allImpTitle">全部重要日期</span><button onclick="closeAllImp()">关闭</button></div>
+    <ul class="allboard-list" id="allImpList"></ul>
+  </div>
+</div>
+
+<!-- ===== 全部法定节假日弹窗 ===== -->
+<div class="allboard-mask" id="allHolMask">
+  <div class="allboard-box">
+    <div class="allboard-head allhol-head"><span id="allHolTitle">全部法定节假日</span><button onclick="closeAllHol()">关闭</button></div>
+    <ul class="allboard-list" id="allHolList"></ul>
+  </div>
+</div>
+
+<!-- ===== 全部公告弹窗 ===== -->
+<div class="allboard-mask" id="allBoardMask">
+  <div class="allboard-box">
+    <div class="allboard-head"><span id="allBoardTitle">全部公告</span><button onclick="closeAllBoard()">关闭</button></div>
+    <ul class="allboard-list" id="allBoardList"></ul>
+  </div>
+</div>
+
+<!-- ===== 主页面 ===== -->
+<div class="layout" id="mainPage">
+  <!-- 侧边栏：桌面常驻，移动端抽屉 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-tip">💡 站点应用入口在侧边栏中，点击下方板块即可打开</div>
+    <button class="side-btn" id="homeBtn" onclick="goHomeView()">🏠 首页</button>
+    <div id="sideCats"></div>
+  </aside>
+  <div class="sidebar-mask" id="sideMask" onclick="closeSidebar()"></div>
+
+  <!-- 主内容 -->
+  <main class="content">
+    <header>
+      <button class="menu-btn" id="menuBtn" onclick="openSidebar()" aria-label="打开侧边栏">☰</button>
+      <button class="theme-btn" id="themeToggle" onclick="toggleTheme()" aria-label="切换主题">🌙</button>
+      <h1>🏫 25级05班班级服务站</h1>
+      <p>一站式获取班级服务 · 资源 · 工具</p>
+      <div class="logo"><img src="https://s41.ax1x.com/2026/06/07/pmmhF6H.png" alt="班徽" onerror="this.parentNode.style.display='none'"></div>
+    </header>
+
+    <!-- 首页视图：公告 / 每日日报 / 倒计时 -->
+    <section class="home-view" id="homeView">
+      <section class="board" id="board"></section>
+      <section class="daily" id="dailyNews"></section>
+      <section class="countdown" id="countdown"></section>
+    </section>
+
+    <!-- 板块内容（从侧边栏打开） -->
+    <div class="grid" id="grid"></div>
+
+    <footer>
+      <p>© 25级05班班级服务站</p>
+      <p style="margin-top:4px;font-size:.75rem;color:#9aa7b8">内容更新请联系管理员 · 全站可在微信内直接访问</p>
+      <p style="font-size:.75rem;color:#9aa7b8">页面由 Work Buddy 辅助生成</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+/* =====================================================
+   前端安全工具：SHA-256 哈希 + XOR/Base64 混淆
+   答案、联系人姓名以哈希对比；联系方式密文解密显示
+   ===================================================== */
+var GATE_SALT = 'cls2505-gate-salt';
+var CONTACT_SALT = 'cls2505-contact-salt';
+var XOR_KEY = 'cls2505-xor-key-2026';
+function sha256Raw(latin1){
+  var rightRotate=function(v,amt){ return (v>>>amt)|(v<<(32-amt)); };
+  var mathPow=Math.pow, maxWord=mathPow(2,32), result='', words=[], asciiBitLength=latin1.length*8;
+  var hash=sha256Raw.h||[], k=sha256Raw.k||[], primeCounter=k.length, isComposite={};
+  for(var candidate=2;primeCounter<64;candidate++){
+    if(!isComposite[candidate]){
+      for(var i2=0;i2<313;i2+=candidate) isComposite[i2]=candidate;
+      hash[primeCounter]=(mathPow(candidate,0.5)*maxWord)|0;
+      k[primeCounter++]=(mathPow(candidate,1/3)*maxWord)|0;
+    }
+  }
+  sha256Raw.h=hash; sha256Raw.k=k;
+  latin1+='\x80';
+  while(latin1.length%64-56) latin1+='\x00';
+  for(var i3=0;i3<latin1.length;i3++){
+    var j=latin1.charCodeAt(i3);
+    if(j>>8) return '';
+    words[i3>>2]|=j<<(((3-i3)%4)*8);
+  }
+  words[words.length]=(asciiBitLength/maxWord)|0;
+  words[words.length]=asciiBitLength;
+  for(var j2=0;j2<words.length;){
+    var w=words.slice(j2,(j2+=16)), oldHash=hash.slice(0);
+    hash=hash.slice(0,8);
+    for(var i4=0;i4<64;i4++){
+      var w15=w[i4-15], w2=w[i4-2], a=hash[0], e=hash[4];
+      var temp1=hash[7]+(rightRotate(e,6)^rightRotate(e,11)^rightRotate(e,25))+((e&hash[5])^(~e&hash[6]))+k[i4]+
+        (w[i4]=i4<16?w[i4]:(w[i4-16]+(rightRotate(w15,7)^rightRotate(w15,18)^(w15>>>3))+w[i4-7]+(rightRotate(w2,17)^rightRotate(w2,19)^(w2>>>10)))|0);
+      var temp2=(rightRotate(a,2)^rightRotate(a,13)^rightRotate(a,22))+((a&hash[1])^(a&hash[2])^(hash[1]&hash[2]));
+      hash=[(temp1+temp2)|0].concat(hash);
+      hash[4]=(hash[4]+temp1)|0;
+    }
+    for(var i5=0;i5<8;i5++) hash[i5]=(hash[i5]+oldHash[i5])|0;
+  }
+  for(var i6=0;i6<8;i6++){
+    for(var j3=3;j3+1;j3--){
+      var b=(hash[i6]>>(j3*8))&255;
+      result+=(b<16?'0':'')+b.toString(16);
+    }
+  }
+  return result;
+}
+function sha256Hex(input){ return sha256Raw(unescape(encodeURIComponent(input))); }
+function hashSecret(value, salt){ return sha256Hex(salt+'::'+value.trim().toLowerCase()); }
+function xorEncrypt(plain){
+  var enc = new TextEncoder();
+  var keyBytes = Array.prototype.slice.call(enc.encode(XOR_KEY));
+  var bytes = Array.prototype.slice.call(enc.encode(plain));
+  for(var i=0;i<bytes.length;i++) bytes[i]=bytes[i]^keyBytes[i%keyBytes.length];
+  var bin=''; for(var j=0;j<bytes.length;j++) bin+=String.fromCharCode(bytes[j]);
+  return btoa(bin);
+}
+function xorDecrypt(cipher){
+  var bin=atob(cipher);
+  var enc = new TextEncoder();
+  var keyBytes = Array.prototype.slice.call(enc.encode(XOR_KEY));
+  var bytes=[]; for(var i=0;i<bin.length;i++) bytes.push(bin.charCodeAt(i)^keyBytes[i%keyBytes.length]);
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}
+/* =====================================================
+   站点数据（管理员修改此区域后重新发布即可）
+   wechatOk: true = 微信内可直接打开
+             false = 需引导用户用浏览器打开
+   ===================================================== */
+var SITE_DATA = {
+  /* 班级公众号二维码（公告栏旁「公众号」按钮弹出） */
+  qrUrl: "qrcode.jpg",
+  /* ── 联系方式名单（name=哈希，其余为密文，查询时解密）── */
+  contacts: [
+    { name: "6edf6fc48db2cecbe826594996f606fb1f99f32a96944c311a4b437a4267b004", studentId: "UVlDBwUB", role: "hsHV1aGv" },
+    { name: "338a66cc44808e94fae8f8f23ec355d4bd1118e1e089b0219c1e295330e6f5a3", studentId: "UVlDBwUC", role: "hsHV1aGv" },
+    { name: "b3e8a4374d79896ce4ea5515a1f04a2ab9739c93ce0de00de65c3fe745c469f1", studentId: "UVlDBwUD", role: "hsHV1aGv" },
+    { name: "cc72fe4139c1594048c067a36054e1bc19ec61f2d81a6a28ad1e8b78b7534bc3", studentId: "UVlDBwUE", role: "hsHV1aGv" },
+    { name: "53aeba31817d0b9045cd742c55229201d7b39e10aedc744706c405dfe1f5c334", studentId: "UVlDBwUF", role: "hsHV1aGv" },
+    { name: "253007e4caa94fe764acab32fbe18efb5c2b5fff0b5f1502f4a75a038be23e0e", studentId: "UVlDBwUG", role: "hsHV1aGv" },
+    { name: "1dbacc13f59db223dee613ce8da9e3a518f6ef934d735ac002f2c71930e9410c", studentId: "UVlDBwUH", role: "hsHV1aGv" },
+    { name: "4d43235c5a4fc8407a52ee851ac8535043df6462ca0fab5b7afab0f7af423c3c", studentId: "UVlDBwUI", role: "hsHV1aGv" },
+    { name: "05e5841799618ba25aa49522ee28ec572d197c0f98c9bd26eefcf3ed708e8bca", studentId: "UVlDBwUJ", role: "hsHV1aGv" },
+    { name: "a34c850cb97c91d43eae4856748fd6737531a9600b1e1b63ad2362385fe726aa", studentId: "UVlDBwQA", role: "hsHV1aGv" },
+    { name: "31f53f857eb435a21729b01496b15c4dc118ec93c2add27ba4e36527e0343522", studentId: "UVlDBwQB", role: "hsHV1aGv" },
+    { name: "8735829c7abf4d3f837cac0cb0de598102bf01803b5e9b7fca75573e59c11572", studentId: "UVlDBwQC", role: "hsHV1aGv" },
+    { name: "19106232d19044c50a91b7d10af158a6ce8e400964e9e736413974268ee2ea93", studentId: "UVlDBwQD", role: "hsHV1aGv" },
+    { name: "7a5152e33f5d575f537c8d8069bbec1b4614f6cb93cf47492fe2ba36f83e0d48", studentId: "UVlDBwQE", role: "hsHV1aGv" },
+    { name: "ce7d97fec9786c0afbf62e54265ac4c89f7b1fdd291bfaee32a0e2ee3125a93b", studentId: "UVlDBwQF", role: "hsHV1aGv" },
+    { name: "77ee4fb9ce71c4aef73923c127aa247519ee3b336e3b9d8478cb20759b7e88f8", studentId: "UVlDBwQG", role: "hsHV1aGv" },
+    { name: "d787e4b8ccdd6418ae9712b9a174d8cd9b2aa06812972ca95798bc98840cf65e", studentId: "UVlDBwQH", role: "hsHV1aGv" },
+    { name: "592a6bc0219ff44ba852b8fbc1a54e75bdbdabd31882d42abe30ab1993f1685e", studentId: "UVlDBwQI", role: "hMLS1aW20Lzg", wechat: "GhYYSF4AAB9B", phone: "UllFAgIABxtPWkA=" },
+    { name: "47fa22025171fcc48a86fce9505e6fd887bbc451199faa036a411260965bd156", studentId: "UVlDBwQJ", role: "hsHV1aGv" },
+    { name: "103cbbfc30f608cf0d050eec932be5091795daa59054e5ee4d139ae016ec5a00", studentId: "UVlDBwcA", role: "hsHV1aGv" },
+    { name: "0438ef5d9f5a67013379d5658de687f8654e12a2164e21ab5ba61a5c2ddd1ad9", studentId: "UVlDBwcB", role: "hsHV1aGv" },
+    { name: "a37fb9acbff3a5d24dd0ca3105e0136c9b9c74da16c80cbb8ee185930d4a38c6", studentId: "UVlDBwcC", role: "hsHV1aGv" },
+    { name: "163a8e443ba1dd3a581c69bcfc600499ef3ed84420aa3d145d52e9535a0a2c11", studentId: "UVlDBwcD", role: "hsHV1aGv" },
+    { name: "abefa25aabcb67678fcc14befe7c23176fe5311c5d64d1c0feffb3d86677fae5", studentId: "UVlDBwcE", role: "hsHV1aGv" },
+    { name: "f4d4d76e8dccea25e4c5734625662dae88ddf732444d6b43e8e9332abd13bbd7", studentId: "UVlDBwcF", role: "hsHV1aGv" },
+    { name: "c9b354223547e5c56a60647ce3cbd59a1445f0f2f77e62a4a3a7fa2ac4d90829", studentId: "UVlDBwcG", role: "hsHV1aGv" },
+    { name: "9abce2917d1575c2b7baff8ea2d46b73ad621d2c33cb7d5adbd6604f5d91d861", studentId: "UVlDBwcH", role: "hsHV1aGv" },
+    { name: "fab9ca917a9631d034637da2ee7a4194dd587f07dd3f1799fddc39c3662e2afe", studentId: "UVlDBwcI", role: "hsHV1aGv" },
+    { name: "d0c645065f1a6393d84b5d8badf03d71e47a9774aa08db880edd2d4e91280480", studentId: "UVlDBwcJ", role: "hsHV1aGv" },
+    { name: "074cb34db36f904cb51bbb4692dcff4eb4edaa017044c885b22060956e76a7a6", studentId: "UVlDBwYA", role: "hsHV1aGv" },
+    { name: "aef402888d32e4be5a387deedbe52e8e96ac89f8d45f5f1e32202a1d7504903f", studentId: "UVlDBwYB", role: "hsHV1aGv" },
+    { name: "f188e0221f799a76dfb4b9fbbcb40351981f074e89f2494f65cfa3a711ef31be", studentId: "UVlDBwYC", role: "hsHV1aGv" },
+    { name: "baa39eb61639b988b6cc6ae630b1dabe1e7e1134ac2ec7b8507cf7b1441d5ec2", studentId: "UVlDBwYD", role: "hsHV1aGv" },
+    { name: "130bd3a6c1d31f5bdd1d1e9b15932f038c43b10e97bca97bb28a99a7d9ee4cf1", studentId: "UVlDBwYE", role: "hsHV1aGv" },
+    { name: "805100b3f9cbeb454b3cf0365a501bd1702f32ee6e62f59ee0272c5ac6d6dfa7", studentId: "UVlDBwYF", role: "hsHV1aGv" },
+    { name: "c8008d219325679dddbe70d5a65d2ea8e9b9614a9aab0590c3edb1f6a6bb84b0", studentId: "UVlDBwYG", role: "hsHV1aGv" },
+    { name: "d6c898b609f08ee086e1d40674b4b7df43f18767c68203613043317bff33462e", studentId: "UVlDBwYH", role: "hsHV1aGv" },
+    { name: "08095bac5639a83842bb220f2a5543d6759483c6d9c254806f5ae11816de60ba", studentId: "UVlDBwYI", role: "hsHV1aGv" },
+    { name: "de55cab513a67fd49b5e3328127932d7452ee8cd692791dae13d92d1c886b4a6", studentId: "UVlDBwYJ", role: "hsHV1aGv" },
+    { name: "641fb904f5a45e8796766af7288ea05757ae494719e18199ff467cfe4ff630dd", studentId: "UVlDBwEA", role: "hsHV1aGv" },
+    { name: "aa62fed579d48b78bb7423542c70b14e7c467d3bde6316c165e009afb76d1a8f", studentId: "UVlDBwEB", role: "hsHV1aGv" },
+    { name: "adc7a8894cc54facf18b7bec45127a4ebaa578eac672ecd7acba0a3aca1e11e2", studentId: "UVlDBwEC", role: "hsHV1aGv" },
+    { name: "69e5771d48f7e4ac8cb44d03831f6339e692afc4c1f2dbdbb49ae7be8236da5e", studentId: "UVlDBwED", role: "hsHV1aGv" },
+    { name: "25b1be539510316be9396879a177605296319d76548f6a71c21059a22aac6bca", studentId: "UVlDBwEE", role: "hsHV1aGv" },
+    { name: "081b046904293a739e10294c453c9d9474d93ecc8b9ce6468818a80bdd746ad6", studentId: "UVlDBwEF", role: "hsHV1aGv" },
+    { name: "eb50343bceb91db7c9fe8287c3dd04713a41d4788e7a4df02a30c7e941ac91fa", studentId: "UVlDBwEG", role: "hsHV1aGv" },
+    { name: "2b7c3edf81913935d760ca09824064acf8f138352e1bf1f7b315e3802396ac70", studentId: "UVlDBwEH", role: "hsHV1aGv" },
+    { name: "5ccdaa717a2dd3672fa66c1681a4384413dc18a15647d0b423f7ca99efc081da", studentId: "UVlDBwEI", role: "hsHV1aGv" },
+    { name: "7e64be7e4c8bb53d115cd502684f18e821f7cedb8b5220727678d7a7135cf35e", studentId: "UVlDBwEJ", role: "hsHV1aGv" },
+    { name: "f331461ef257250b14174bd6cf695b5fa8e386bba2ecf59b1785de10aa9f20b9", studentId: "UVlDBwAA", role: "hsHV1aGv" },
+    { name: "64e30ead116c6bbabf31156a4d2781a1fae62e37ce23f2d11ae9df67fb2aa5bb", studentId: "UVlDBwAB", role: "hsHV1aGv" },
+    { name: "db12712ba46cb88d0bf6bef56d22d8a44770d6f522e129d111c43fa6ecd17f8d", studentId: "UVlDBwAC", role: "hsHV1aGv" },
+    { name: "4dc4bdc87a96b1f945f8a1b57653829999b6ee2ef2e0791949b12a0afc5a36a3", studentId: "UVlDBwAD", role: "hsHV1aGv" },
+    { name: "b214e7e1b4b19e5a7fcee920c58798f32a28386f938fa4c88561acc9da3c629a", studentId: "UVlDBwAE", role: "hsHV1aGv" },
+    { name: "9816eb6ae59e1963e01c0d19ede28f3d34d6e53e817dbf097a80449cd31b0887", studentId: "UVlDBwAF", role: "hsHV1aGv" },
+    { name: "bdc94bceb46e48a5e75d5f6d326fd6889431c93bed024a7bdf613b6e6ef750a4", studentId: "UVlDBwAG", role: "hsHV1aGv" },
+    { name: "b78a6b3376a2257102abcc3a5c22f02a6e8786279f5478fffb211f5647717e12", studentId: "UVlDBwAH", role: "hsHV1aGv" },
+    { name: "532dee1f87fc7dab143c3f8465c1e0326946c479c027e67e913ed62283b72c06", studentId: "UVlDBwAI", role: "hsHV1aGv" },
+    { name: "597de027095c241d792c7dbfed025f826fe1619ffb38f679727209f750eeda34", studentId: "UVlDBwAJ", role: "hsHV1aGv" },
+    { name: "7a331538b75959bc2523bf63d9f024da20440035c4404fc137397a7eb840ddf1", studentId: "UVlDBwMA", role: "hsHV1aGv" },
+    { name: "d7a45c427ccb4592fccf36b876a8a704b5b5bfbb3c21df564fb2aebc3e5e64e8", studentId: "UVlDBwMB", role: "hsHV1aGv" },
+    { name: "6a90186918c176b91d1e2209c4e303c4b8575dc82031f368d194a66aaf00c850", role: "i+zy1424", wechat: "AAMcXkJZW0lJVkUV", phone: "Ul9KBQUCBhlBXEA=" }
+  ],
+  /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
+  announcements: [
+    { date: "2026-08-23 12:37", text: "修复倒计时时/分/秒不实时刷新的问题。" },
+    { date: "2026-08-23 12:33", text: "修复倒计时实时刷新；其他工具新增番茄时钟。" },
+    { date: "2026-08-23 12:24", text: "首页改版：应用入口移至侧边栏；法定节假日已备至 2028 年 6 月。" },
+    { date: "2026-08-23 12:09", text: "倒计时重做：精确到月天，点击面板可查看全部重要日期 / 全部法定节假日。" },
+    { date: "2026-08-23 12:00", text: "新增暗黑模式：点击页头左上角的月亮/太阳图标即可切换。" },
+    { date: "2026-08-23 11:39", text: "站点新增入口问答；私人云盘已接入访问密码验证。" },
+    { date: "2026-08-23 11:34", text: "点歌平台与听歌平台用途说明已修正；其他工具入口文案优化。" },
+    { date: "2026-08-23 11:31", text: "点歌平台说明已更新；其他工具新增「私人云盘」占位入口。" },
+    { date: "2026-08-23 11:25", text: "板块整理：新增「班级事务」「其他工具」，每日日报移至首页公告下方。" },
+    { date: "2026-08-23 11:16", text: "联系方式已更新为班级通讯录（含学号与职位），欢迎查询。" },
+    { date: "2026-08-23 11:04", text: "联系方式说明已更新：采用加密存储，无需担心泄露。" },
+    { date: "2026-08-23 10:58", text: "学习资料问答与联系方式已升级为加密存储，数据更安全。" },
+    { date: "2026-08-23 10:53", text: "已新增联系人，可在「其他」-「联系方式」中查询。" },
+    { date: "2026-08-23 10:48", text: "新增「其他」板块：联系方式、情况反映、建言献策、排行榜、班级活动。" },
+    { date: "2026-08-23 10:42", text: "学习资料问答题目已更新，如有通过记录失效请重新答题。" },
+    { date: "2026-08-23 10:36", text: "修复课堂笔记、教学课件网盘链接，欢迎重新查看。" },
+    { date: "2026-08-23 10:29", text: "新增「学习资料」板块：课堂笔记、教学课件，答对班级小问题即可获取网盘链接与访问码。" },
+    { date: "2026-08-23 10:09", text: "每日日报入口已更新，班级应用新增 EchoMusic 听歌平台。" },
+    { date: "2026-08-23 00:22", text: "经过我这么久的调试这个网站终于有点雏形在了！(╥╯﹏╰╥)ง" },
+    { date: "2026-08-22", text: "点歌平台入口已开放！微信内无法直接访问，点击「前往入口」后请按引导用浏览器打开。" },
+    { date: "2026-08-22", text: "班级服务站 2.0 上线：新增公告栏；站点可在微信内直接打开，部分国外站点会自动引导用浏览器访问。" }
+  ],
+  categories: [
+    { id: 1, name: "常用服务" },
+    { id: 2, name: "班级应用" },
+    { id: 5, name: "学习资料" },
+    { id: 3, name: "成绩查询" },
+    { id: 7, name: "班级事务" },
+    { id: 8, name: "其他工具" }
+  ],
+  links: [
+    {
+      categoryId: 1, title: "点歌平台", subtitle: "VoiceHub", icon: "https://s41.ax1x.com/2026/08/21/pmxXJkq.png",
+      desc: "线上点歌平台：点击下方按钮进入，点播你想听的歌曲。\n本平台由 VoiceHub 提供技术支持\n初始账号：学号（如 250501），默认密码：生日（如 20250901）",
+      mainLabel: "前往入口", mainUrl: "https://xsyzc2505.dpdns.org/", mainWechatOk: false,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 1, title: "作业查看", subtitle: "Classworks", icon: "https://s41.ax1x.com/2026/08/21/pmxX87n.png",
+      desc: "周作业及假期作业均可在线查看。\n使用教程：点击页面中的「已注册」，即可自动登录。\n若未显示当周作业，请跳转到布置作业的当天重新查看。",
+      mainLabel: "前往入口",
+      mainUrl: "https://cs.houlang.cloud/?namespace=%E9%AB%98%E4%BA%8C%EF%BC%885%EF%BC%89%E7%8F%AD&authCode=202505&autoExecute=true&config=eyJzZXJ2ZXIuYXV0aERvbWFpbiI6Imh0dHBzOi8va3YuaG91bGFuZy5jbG91ZCIsInNlcnZlci5jbGFzc051bWJlciI6IumrmOS4ieWFq%2BePrSIsInNlcnZlci5kb21haW4iOiJodHRwczovL2t2LXNlcnZpY2Uud3V5dWFuLmRldiIsInNlcnZlci5wcm92aWRlciI6ImNsYXNzd29ya3NjbG91ZCIsInNlcnZlci5zaXRlS2V5IjoiIn0%3D",
+      mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 2, title: "班级课表", subtitle: "ClassIsland", icon: "https://s41.ax1x.com/2026/08/21/pmxjpEn.png",
+      desc: "开源智能大屏课表系统，\n实时展示当日课程、上下课倒计时与提醒，\n支持多周轮换课表与临时调课功能。",
+      mainLabel: "前往官方页面", mainUrl: "https://www.classisland.tech/", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 2, title: "屏幕批注", subtitle: "ICC-CE", icon: "https://s41.ax1x.com/2026/08/22/pmz6J6U.png",
+      desc: "智能课堂绘图增强工具，\n专为教师打造高效交互式绘图解决方案，\n支持智能笔迹处理、PPT 实时标注、多点触控手势与高度自定义设置。",
+      mainLabel: "前往官方页面", mainUrl: "https://cjk-is-so-cute.netlify.app/", mainWechatOk: false,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 2, title: "听歌平台", subtitle: "EchoMusic", icon: "./echomusic-icon.png",
+      desc: "音乐课等课上播放歌曲的桌面播放器，\n支持歌单分享、歌词同步、主题换肤与多平台音乐导入，\n可在教室电脑安装使用，课上一起听歌更自在。",
+      mainLabel: "查看项目", mainUrl: "https://github.com/hoowhoami/EchoMusic", mainWechatOk: false,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 5, title: "课堂笔记", icon: "", iconText: "笔记",
+      desc: "经多方对比，课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载基本不限速。\n笔记为截图，可在线预览，加载卡顿建议下载查看。\n打不开可复制链接至浏览器打开（微信页面可能存在兼容问题）。",
+      mainLabel: "", mainUrl: "", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true,
+      gate: {
+        question: "请回答本班科任男女人数之比（共10人）",
+        answers: ["ac18bd73597efe3e39320f1c78d6fa7d8baacb81e29b4db28638146a16894e2c", "7321b13f59cde5cf414fe889f0cc93d3912387dad2ee1097dd25365e1e0867fc"],
+        hint: "四字，格式为「男_女_」",
+        url: "https://cloud.189.cn/t/EbEzInJnQBzq",
+        code: "7xlk",
+        version: "2026-08-23-v3"
+      }
+    },
+    {
+      categoryId: 5, title: "教学课件", icon: "", iconText: "课件",
+      desc: "经多方对比，课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载基本不限速。\n打不开可复制链接至浏览器打开（微信页面可能存在兼容问题）。",
+      mainLabel: "", mainUrl: "", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true,
+      gate: {
+        question: "请回答在高一下学期中零排的常驻嘉宾是？",
+        answers: ["9d782e21981e703e909d86136724dea48c956e805bf3be2fc69652c697ee626e"],
+        hint: "三个字，全名",
+        url: "https://cloud.189.cn/t/zYJnEfBnIj22",
+        code: "pap9",
+        version: "2026-08-23-v3"
+      }
+    },
+    {
+      categoryId: 0, title: "每日日报", icon: "",
+      desc: "每日时事热点速览，\n点击下方按钮即可查看当日热点内容。",
+      mainLabel: "前往查看", mainUrl: "https://a288a58108efc2c2f.app.workbuddy.link", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true,
+      iconText: "日报"
+    },
+    {
+      categoryId: 3, title: "高一下学期期末考", subtitle: "易查分", icon: "", iconText: "成绩",
+      desc: "",
+      mainLabel: "查询成绩", mainUrl: "https://u5p5aq6d.yichafen.com/qz/166mKITWTt", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 8, title: "联系方式查询", icon: "", iconText: "联系", contactQuery: true,
+      desc: "输入姓名，快速查询同学、老师的联系方式。\n联系方式采用加密存储，不用担心泄露。",
+      mainLabel: "", mainUrl: "", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 8, title: "番茄时钟", icon: "", iconText: "🍅",
+      desc: "番茄工作法计时器：专注 25 分钟 + 短暂休息，\n帮你提升学习效率，保持专注。",
+      mainLabel: "前往使用", mainUrl: "https://focustide.app/", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 8, title: "私人云盘", icon: "", iconText: "云盘",
+      desc: "用于同步班级重要文件、应用与软件，方便随时取用。",
+      mainLabel: "", mainUrl: "", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true,
+      gate: {
+        question: "请输入私人云盘的访问密码",
+        answers: ["5e67cd33facc7b1ac3169e55cd8b161c655cc939c6f9322c0f56919ffaa432c3"],
+        hint: "仅管理员持有访问密码",
+        url: "",
+        code: "",
+        version: "2026-08-23-v1"
+      }
+    },
+    {
+      categoryId: 7, title: "情况反映", icon: "", iconText: "反映", comingSoon: true,
+      desc: "说说班上令你厌恶的点，匿名反映。\n如果是投稿班级建议，请点击「建言献策」。",
+      mainLabel: "待开发", mainUrl: "", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 7, title: "建言献策", icon: "", iconText: "建议", comingSoon: true,
+      desc: "针对班上你有什么好的意见或想法。\n如果是投稿班上不好的事情，请点击「情况反映」。",
+      mainLabel: "待开发", mainUrl: "", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 7, title: "排行榜", icon: "", iconText: "排行", comingSoon: true,
+      desc: "班级排行榜功能开发中，敬请期待。",
+      mainLabel: "开发中", mainUrl: "", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      categoryId: 7, title: "班级活动", icon: "", iconText: "活动", comingSoon: true,
+      desc: "暂时还没有班级活动，敬请期待。",
+      mainLabel: "敬请期待", mainUrl: "", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    }
+  ]
+};
+/* ===================================================== */
+
+/* ── 站点入口问答（首次打开需回答，answers 为哈希）── */
+var SITE_GATE = {
+  question: "请回答举办“给未来自己的一封信”当天所对应的节日。",
+  answers: ["725f83c579b242c8f55fd871f950c2b87f06e0d05f66065d658d1a74e7d06c80"],
+  hint: "三个字",
+  version: "2026-08-23-v1"
+};
+
+/* ── 学期与节假日倒计时配置（可在此修改）── */
+var SEMESTER = {
+  reportDate: "2026-08-31T18:00:00", /* 报到：8月31日 18:00 */
+  breakDate: "2027-01-30T00:00:00"  /* 寒假开始：1月30日 00:00（以学校通知为准） */
+};
+var IMPORTANT_DATES = [
+  { name: "报到", date: "2026-08-31T18:00:00" },
+  { name: "寒假", date: "2027-01-30T00:00:00" }
+];
+var HOLIDAYS = [
+  { name: "中秋节", date: "2026-09-25", days: 3 },
+  { name: "国庆节", date: "2026-10-01", days: 8 },
+  { name: "元旦",   date: "2027-01-01", days: 3 },
+  { name: "春节",   date: "2027-02-06", days: 7 },
+  { name: "清明节", date: "2027-04-05", days: 3 },
+  { name: "劳动节", date: "2027-05-01", days: 5 },
+  { name: "端午节", date: "2027-06-09", days: 3 },
+  { name: "中秋节", date: "2027-09-15", days: 3 },
+  { name: "国庆节", date: "2027-10-01", days: 8 },
+  { name: "元旦",   date: "2028-01-01", days: 3 },
+  { name: "春节",   date: "2028-01-26", days: 7 },
+  { name: "清明节", date: "2028-04-04", days: 3 },
+  { name: "劳动节", date: "2028-05-01", days: 5 },
+  { name: "端午节", date: "2028-05-28", days: 3 }
+];
+
+function isWeChat(){ return /micromessenger/i.test(navigator.userAgent); }
+function httpUrl(u){ return /^https?:\/\//i.test((u||'').trim()); }
+
+var targetUrl = '';
+
+/* ---- 哈希路由：#/guide?url=xxx ---- */
+function applyHash(){
+  var h = location.hash || '';
+  var m = h.match(/^#\/guide\?url=(.*)$/);
+  if(m){
+    var u = '';
+    try{ u = decodeURIComponent(m[1]); }catch(e){ u = m[1]; }
+    if(!httpUrl(u)){ resetHome(); return; }
+    targetUrl = u;
+    if(isWeChat()){
+      show('guideOverlay');
+      var host = '';
+      try{ host = new URL(u).hostname; }catch(e){}
+      document.getElementById('guideHost').textContent = host ? '目标：' + host : '';
+    }else{
+      show('jumpOverlay');
+      var jh = '';
+      try{ jh = new URL(u).hostname; }catch(e){}
+      document.getElementById('jumpHost').textContent = jh;
+      document.getElementById('jumpManual').href = u;
+      setTimeout(function(){ window.location.replace(u); }, 900);
+    }
+  }else{
+    hideOverlays();
+  }
+}
+function show(id){ hideOverlays(); document.getElementById(id).classList.add('show'); }
+function hideOverlays(){
+  document.getElementById('guideOverlay').classList.remove('show');
+  document.getElementById('jumpOverlay').classList.remove('show');
+}
+function resetHome(){ location.hash = ''; hideOverlays(); window.scrollTo(0,0); }
+window.addEventListener('hashchange', applyHash);
+
+/* ---- 链接打开（微信智能分流） ---- */
+function openLink(url, wechatOk){
+  url = (url||'').trim();
+  if(!url || url === '#'){ alert('该入口链接暂未配置，请联系管理员补充'); return; }
+  if(isWeChat() && !wechatOk){
+    location.hash = '/guide?url=' + encodeURIComponent(url);
+  }else if(isWeChat()){
+    window.location.href = url;
+  }else{
+    window.open(url, '_blank');
+  }
+}
+
+function copyTarget(){
+  var ta = document.createElement('textarea');
+  ta.value = targetUrl;
+  ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  var ok = false;
+  try{ ok = document.execCommand('copy'); }catch(e){}
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(targetUrl).catch(function(){});
+    ok = true;
+  }
+  document.body.removeChild(ta);
+  var b = document.getElementById('copyBtn');
+  b.textContent = ok ? '已复制，可粘贴到浏览器' : '复制失败，请长按上方链接';
+  setTimeout(function(){ b.textContent = '复制目标链接'; }, 2200);
+}
+
+/* 公众号二维码弹窗 */
+function openQr(src){
+  document.getElementById('qrImg').src = src;
+  document.getElementById('qrMask').classList.add('show');
+}
+function closeQr(){
+  document.getElementById('qrMask').classList.remove('show');
+}
+document.getElementById('qrMask').addEventListener('click', function(e){
+  if(e.target.id === 'qrMask') closeQr();
+});
+
+/* ---- 渲染主页面 ---- */
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ---- 倒计时 ---- */
+function pad2(n){ return (n<10?'0':'') + n; }
+function calendarDiff(target, from){
+  var months = (target.getFullYear()-from.getFullYear())*12 + (target.getMonth()-from.getMonth());
+  function atSame(m){ return new Date(from.getFullYear(), from.getMonth()+m, from.getDate(), from.getHours(), from.getMinutes(), from.getSeconds()); }
+  var d = atSame(months);
+  if(d > target){ months--; d = atSame(months); }
+  var rem = target.getTime() - d.getTime();
+  var days = Math.floor(rem/86400000); rem -= days*86400000;
+  var hours = Math.floor(rem/3600000); rem -= hours*3600000;
+  var mins = Math.floor(rem/60000); rem -= mins*60000;
+  var secs = Math.floor(rem/1000);
+  return { months:months, days:days, hours:hours, minutes:mins, seconds:secs };
+}
+function calendarMD2(target, from){
+  var months = (target.getFullYear()-from.getFullYear())*12 + (target.getMonth()-from.getMonth());
+  var atSame = function(m){ return new Date(from.getFullYear(), from.getMonth()+m, from.getDate()); };
+  var d = atSame(months);
+  if(d > target){ months -= 1; d = atSame(months); }
+  var days = Math.floor((target.getTime() - d.getTime())/86400000);
+  return { months: months, days: days };
+}
+function impTotalDays(target, from){
+  return Math.max(0, Math.floor((target.getTime()-from.getTime())/86400000));
+}
+function impRemainFold(target, from){
+  var sec = Math.max(0, Math.floor((target.getTime()-from.getTime())/1000));
+  var d = Math.floor(sec/86400);
+  var h = Math.floor((sec%86400)/3600);
+  var m = Math.floor((sec%3600)/60);
+  return d+'天 '+h+'时 '+m+'分';
+}
+function updateCountdown(){
+  var box = document.getElementById('countdown');
+  if(!box) return;
+  var now = new Date();
+  var semList = IMPORTANT_DATES.map(function(d){ return { name:d.name, date:d.date, d:new Date(d.date) }; })
+    .sort(function(a,b){ return a.d - b.d; })
+    .filter(function(d){ var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); return d.d >= t; });
+  var semHtml = '<div class="cd-sem">' +
+    '<div class="cd-head">📅 重要日期倒计时<span class="cd-viewall" onclick="openAllImp()" style="cursor:pointer">查看全部</span></div>' +
+    (semList.length === 0 ? '<div class="cd-empty">暂无重要日期</div>' :
+      '<div class="imp-mobile">' +
+        '<div class="imp-area">' +
+          '<div class="imp-fold" onclick="openAllImp()" tabindex="0" role="button" aria-label="查看全部重要日期">' +
+            '<div class="imp-fold-name">'+esc(semList[0].name)+'</div>'+
+            '<div class="imp-fold-main">'+impRemainFold(semList[0].d, now)+'</div>'+
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="imp-desktop">' +
+        '<ul>' +
+        semList.slice(0,4).map(function(d){
+          var f = calendarDiff(d.d, now);
+          return '<li class="imp-desk-row"><span class="cd-name">'+esc(d.name)+'</span><span class="imp-full">'+f.months+'月 '+f.days+'天 '+pad2(f.hours)+'时 '+pad2(f.minutes)+'分 '+pad2(f.seconds)+'秒</span></li>';
+        }).join('') +
+        '</ul>' +
+      '</div>'
+    ) + '</div>';
+  var upcoming = HOLIDAYS.map(function(h){ return { name:h.name, date:h.date, days:h.days, d:new Date(h.date+'T00:00:00') }; })
+    .filter(function(h){ var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); return h.d >= t; })
+    .sort(function(a,b){ return a.d - b.d; })
+    .slice(0,3);
+  var holHtml = '<div class="cd-hol cd-clickable" onclick="openAllHol()" role="button" tabindex="0">' +
+    '<div class="cd-head">⏰ 节假日倒计时<span class="cd-viewall">查看全部</span></div>' +
+    (upcoming.length===0 ? '<div class="cd-empty">本学期暂无更多法定节假日 🎈</div>' :
+      '<ul class="flex flex-col justify-center gap-2 md:gap-2.5">' +
+      upcoming.map(function(h){
+        var left = Math.ceil((h.d.getTime()-now.getTime())/86400000);
+        return '<li class="cd-row"><div><div class="cd-name">'+esc(h.name)+'</div><div class="cd-sub">'+esc(h.date.slice(5))+' 放假 '+h.days+' 天</div></div>' +
+          '<div class="cd-days"><b>'+left+'</b><span>天</span></div></li>';
+      }).join('')
+    ) + '</div>';
+  box.innerHTML = semHtml + holHtml;
+}
+function cdUnits(d){
+  return '<div class="cd-box"><span class="cd-num">'+pad2(d.months)+'</span><span class="cd-unit">月</span></div>' +
+    '<div class="cd-box"><span class="cd-num">'+pad2(d.days)+'</span><span class="cd-unit">天</span></div>' +
+    '<div class="cd-box"><span class="cd-num">'+pad2(d.hours)+'</span><span class="cd-unit">时</span></div>' +
+    '<div class="cd-box"><span class="cd-num">'+pad2(d.minutes)+'</span><span class="cd-unit">分</span></div>' +
+    '<div class="cd-box"><span class="cd-num">'+pad2(d.seconds)+'</span><span class="cd-unit">秒</span></div>';
+}
+
+function render(){
+  /* 公告栏（置顶永远在最上方） */
+  var ann = (SITE_DATA.announcements || []).slice().sort(function(a,b){
+    return (b.important?1:0) - (a.important?1:0);
+  });
+  var board = document.getElementById('board');
+  if(ann.length === 0){
+    board.style.display = 'none';
+  }else{
+    var visibleAnn = ann.slice(0, 2);
+    var hiddenCount = ann.length - visibleAnn.length;
+    board.innerHTML =
+      '<div class="board-head"><h2>📢 班级公告</h2><span class="board-count">' + ann.length + ' 条</span>' +
+      '<button class="btn-qr" onclick="openQr(\'' + SITE_DATA.qrUrl + '\')">公众号</button></div>' +
+      '<ul class="board-list">' + visibleAnn.map(function(a){
+        return '<li>' +
+          '<div class="board-meta">' +
+            '<span class="board-date' + (a.important ? ' hot' : '') + '">' + esc(a.date.slice(5)) + '</span>' +
+            (a.important ? '<span class="board-pin">置顶</span>' : '') +
+          '</div>' +
+          '<p class="board-text' + (a.important ? ' important' : '') + '">' + esc(a.text) + '</p>' +
+        '</li>';
+      }).join('') + '</ul>' +
+      (hiddenCount > 0 ? '<button class="board-more" onclick="showAllBoard()">查看全部 ' + hiddenCount + ' 条公告</button>' : '');
+  }
+
+  /* 每日日报（独立区域，公告下方 / 倒计时上方） */
+  var dailyEl = document.getElementById('dailyNews');
+  if(dailyEl){
+    var dailyLink = null;
+    for(var d=0;d<SITE_DATA.links.length;d++){ if(SITE_DATA.links[d].id===4){ dailyLink=SITE_DATA.links[d]; break; } }
+    if(dailyLink){
+      dailyEl.innerHTML =
+        '<div class="daily-card">'+
+          '<div class="daily-icon">日报</div>'+
+          '<div class="daily-info"><div class="daily-title">每日日报</div><div class="daily-sub">每日自动整理的实时热点</div></div>'+
+          '<button class="btn daily-btn" onclick="openLink(\''+jsq(dailyLink.mainUrl)+'\','+(dailyLink.mainWechatOk?'true':'false')+')">'+esc(dailyLink.mainLabel||'前往查看')+'</button>'+
+        '</div>';
+    }
+  }
+
+  var cats = SITE_DATA.categories.filter(function(c){ return c.active !== false; });
+  buildSidebar();
+
+  var grid = document.getElementById('grid');
+  grid.innerHTML = cats.map(function(c,i){
+    var links = SITE_DATA.links.filter(function(l){ return l.categoryId === c.id && l.active !== false; });
+    var inner;
+    if(links.length === 0){
+      inner = '<div class="placeholder"><span>➕</span>该板块内容正在筹备中，敬请期待</div>';
+    }else{
+      inner = links.map(function(l){
+        var fallback = esc(l.iconText || (l.title||'').charAt(0) || '链');
+        var iconHtml = l.icon
+          ? '<img src="'+esc(l.icon)+'" alt="'+esc(l.title)+'" onerror="this.outerHTML=\'<div class=&quot;fallback&quot;>'+fallback+'</div>\'">'
+          : '<div class="fallback">'+fallback+'</div>';
+        var needBrowser = isWeChat() && !l.mainWechatOk && httpUrl(l.mainUrl);
+        var passed = gatePassed(l);
+        var contentHtml = '<div class="card-content"><h3>'+esc(l.title)+'</h3>'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
+        if(l.gate && !passed){
+          contentHtml += '<div class="gate-box"><p class="gate-q">🔒 '+esc(l.gate.question)+'</p>'+
+            '<div class="gate-row"><span class="gate-input-wrap"><input id="gate-input-'+l.id+'" type="password" placeholder="请输入答案" class="gate-input" autocomplete="off" onkeydown="if(event.key===\'Enter\')checkGate('+l.id+')">'+
+            '<button type="button" class="eye-btn" onclick="togglePwd(\'gate-input-'+l.id+'\', this)">👁</button></span>'+
+            '<button class="btn gate-btn" onclick="checkGate('+l.id+')">验证答案</button></div>'+
+            (window.__gateErr && window.__gateErr[l.id] ? '<p class="gate-hint">💡 '+esc(window.__gateErr[l.id])+'</p>' : '')+
+            '</div>';
+        }
+        if(l.contactQuery){
+          contentHtml += '<div class="gate-box"><p class="gate-q">📇 查询联系方式</p>'+
+            '<div class="gate-row"><input id="contact-input-'+l.id+'" type="text" placeholder="请输入姓名" class="gate-input" onkeydown="if(event.key===\'Enter\')findContact('+l.id+')">'+
+            '<button class="btn gate-btn" onclick="findContact('+l.id+')">查询</button></div>'+
+            '<p id="contact-out-'+l.id+'" class="gate-hint" style="color:#9aa7b8;font-weight:400"></p>'+
+            '</div>';
+        }
+        contentHtml += '</div>';
+        var actionsHtml;
+        if(l.gate){
+          if(passed){
+            actionsHtml = '';
+            if(l.gate.url){
+              actionsHtml += '<button class="btn" onclick="openLink(\''+jsq(l.gate.url)+'\',true)">打开链接</button>';
+            }else{
+              actionsHtml += '<span class="gate-tip">链接待开放</span>';
+            }
+            if(l.gate.code){
+              actionsHtml += '<button class="btn btn-secondary" onclick="copyCode('+l.id+')">访问码：'+esc(l.gate.code)+'</button>';
+            }
+            if(isWeChat() && l.gate.url){
+              actionsHtml += '<span class="wechat-hint">建议复制链接到浏览器打开</span>';
+            }
+          }else{
+            actionsHtml = '<span class="gate-tip">答对后获取访问码</span>';
+          }
+        }else if(l.comingSoon){
+          actionsHtml = '<button class="btn btn-disabled" onclick="alert(\'功能开发中，敬请期待\')">'+esc(l.mainLabel||'待开发')+'</button>';
+        }else if(l.contactQuery){
+          actionsHtml = '<span class="gate-tip">输入姓名查询</span>';
+        }else{
+          actionsHtml = (l.qrImage
+            ? '<button class="btn btn-green" onclick="openQr(\''+jsq(l.qrImage)+'\')">'+esc(l.mainLabel||'查看公众号')+'</button>'
+            : '<button class="btn" onclick="openLink(\''+jsq(l.mainUrl)+'\','+(l.mainWechatOk?'true':'false')+')">'+esc(l.mainLabel||'前往入口')+'</button>')+
+            (l.extraLabel ? '<button class="btn btn-secondary" onclick="openLink(\''+jsq(l.extraUrl)+'\','+(l.extraWechatOk?'true':'false')+')">'+esc(l.extraLabel)+'</button>' : '')+
+            (needBrowser ? '<span class="wechat-hint">微信内请按引导用浏览器打开</span>' : '');
+        }
+        return '<div class="card">'+
+          '<div class="card-icon">'+iconHtml+'</div>'+
+          contentHtml+
+          '<div class="card-actions">'+actionsHtml+'</div>'+
+        '</div>';
+      }).join('');
+    }
+    return '<div class="tab-page" id="tab-cat-'+c.id+'">'+inner+'</div>';
+  }).join('');
+
+  Array.prototype.forEach.call(grid.querySelectorAll('.tab-page'), function(p){ p.classList.remove('active'); });
+}
+function jsq(u){ return (u||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+/* ---- 侧边栏：构建与页面切换 ---- */
+function buildSidebar(){
+  var box = document.getElementById('sideCats');
+  if(!box) return;
+  var cats = SITE_DATA.categories.filter(function(c){ return c.active !== false; });
+  box.innerHTML = cats.map(function(c){
+    return '<button class="side-btn" data-cat="'+c.id+'" onclick="openCat('+c.id+')">'+esc(c.name)+'</button>';
+  }).join('');
+}
+function openCat(id){
+  var home = document.getElementById('homeView');
+  var grid = document.getElementById('grid');
+  if(home) home.style.display = 'none';
+  if(grid) grid.style.display = 'block';
+  var pages = grid ? grid.querySelectorAll('.tab-page') : [];
+  for(var i=0;i<pages.length;i++){ pages[i].classList.remove('active'); }
+  var page = document.getElementById('tab-cat-'+id);
+  if(page) page.classList.add('active');
+  var btns = document.querySelectorAll('#sideCats .side-btn');
+  for(var j=0;j<btns.length;j++){ btns[j].classList.remove('active'); }
+  var cur = document.querySelector('#sideCats .side-btn[data-cat="'+id+'"]');
+  if(cur) cur.classList.add('active');
+  var homeBtn = document.getElementById('homeBtn');
+  if(homeBtn) homeBtn.classList.remove('active');
+  closeSidebar();
+}
+function goHomeView(){
+  var home = document.getElementById('homeView');
+  var grid = document.getElementById('grid');
+  if(home) home.style.display = 'block';
+  if(grid) grid.style.display = 'none';
+  var btns = document.querySelectorAll('#sideCats .side-btn');
+  for(var i=0;i<btns.length;i++){ btns[i].classList.remove('active'); }
+  var homeBtn = document.getElementById('homeBtn');
+  if(homeBtn) homeBtn.classList.add('active');
+  closeSidebar();
+}
+function openSidebar(){ var s=document.getElementById('sidebar'); var m=document.getElementById('sideMask'); if(s) s.classList.add('open'); if(m) m.classList.add('show'); }
+function closeSidebar(){ var s=document.getElementById('sidebar'); var m=document.getElementById('sideMask'); if(s) s.classList.remove('open'); if(m) m.classList.remove('show'); }
+
+/* ---- 学习资料问答（gate）---- */
+function findLink(id){
+  for(var i=0;i<SITE_DATA.links.length;i++){ if(SITE_DATA.links[i].id===id) return SITE_DATA.links[i]; }
+  return null;
+}
+function gatePassed(l){
+  if(!l || !l.gate) return false;
+  try{
+    return localStorage.getItem('cls_gate_'+l.id)==='ok' && localStorage.getItem('cls_gate_'+l.id+'_v')===l.gate.version;
+  }catch(e){ return false; }
+}
+function checkGate(id){
+  var l = findLink(id);
+  if(!l || !l.gate) return;
+  var input = document.getElementById('gate-input-'+id);
+  var v = hashSecret((input ? input.value : ''), GATE_SALT);
+  var ok = false;
+  for(var j=0;j<l.gate.answers.length;j++){
+    if(l.gate.answers[j]===v){ ok=true; break; }
+  }
+  if(ok){
+    try{
+      localStorage.setItem('cls_gate_'+id,'ok');
+      localStorage.setItem('cls_gate_'+id+'_v', l.gate.version);
+    }catch(e){}
+    if(window.__gateErr) delete window.__gateErr[id];
+  }else{
+    if(!window.__gateErr) window.__gateErr = {};
+    window.__gateErr[id] = l.gate.hint;
+  }
+  render();
+}
+function copyCode(id){
+  var l = findLink(id);
+  if(!l || !l.gate) return;
+  var txt = '访问码：'+l.gate.code;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(l.gate.code).then(function(){ alert('访问码已复制：'+l.gate.code); }, function(){ alert(txt); });
+  }else{ alert(txt); }
+}
+function togglePwd(inputId, btn){
+  var el = document.getElementById(inputId);
+  if(!el) return;
+  if(el.type === 'password'){ el.type = 'text'; btn.textContent = '🙈'; }
+  else { el.type = 'password'; btn.textContent = '👁'; }
+}
+function copyText(val, label){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(val).then(function(){ alert(label+'已复制：'+val); }, function(){ alert(val); });
+  }else{ alert(val); }
+}
+function findContact(id){
+  var l = findLink(id);
+  if(!l) return;
+  var input = document.getElementById('contact-input-'+id);
+  var out = document.getElementById('contact-out-'+id);
+  if(!out) return;
+  var name = (input ? input.value : '').trim();
+  out.innerHTML = '';
+  out.style.color = '';
+  if(!name){ out.textContent = '请输入姓名'; out.style.color = '#c2410c'; return; }
+  var nameHash = hashSecret(name, CONTACT_SALT);
+  var cs = SITE_DATA.contacts || [];
+  var hit = null;
+  for(var i=0;i<cs.length;i++){ if(cs[i].name === nameHash){ hit = cs[i]; break; } }
+  if(!hit){ out.textContent = '暂未找到该姓名的联系方式'; out.style.color = '#c2410c'; return; }
+  var sid = hit.studentId ? xorDecrypt(hit.studentId) : '';
+  var role = hit.role ? xorDecrypt(hit.role) : '';
+  if(sid || role){
+    var badges = document.createElement('div');
+    badges.className = 'contact-badges';
+    if(sid){
+      var s = document.createElement('span');
+      s.className = 'badge badge-blue';
+      s.textContent = '学号 ' + sid;
+      badges.appendChild(s);
+    }
+    if(role){
+      var r = document.createElement('span');
+      r.className = role === '老师' ? 'badge badge-orange' : (role === '管理员' ? 'badge badge-green' : 'badge badge-blue');
+      r.textContent = role;
+      badges.appendChild(r);
+    }
+    out.appendChild(badges);
+  }
+  if(hit.wechat){
+    var wText = xorDecrypt(hit.wechat);
+    var w = document.createElement('button');
+    w.type = 'button';
+    w.className = 'copy-btn';
+    w.textContent = '微信号：' + wText + '  📋 点击复制';
+    w.onclick = (function(val){ return function(){ copyText(val, '微信号'); }; })(wText);
+    out.appendChild(w);
+  }
+  if(hit.phone){
+    var pText = xorDecrypt(hit.phone);
+    var p = document.createElement('button');
+    p.type = 'button';
+    p.className = 'copy-btn';
+    p.textContent = '电话：' + pText + '  📋 点击复制';
+    p.onclick = (function(val){ return function(){ copyText(val, '电话'); }; })(pText);
+    out.appendChild(p);
+  }
+}
+
+/* ---- 首次打开欢迎弹窗 ---- */
+function showWelcome(){
+  var m = document.getElementById('welcomeMask');
+  if(!m) return;
+  m.classList.add('show');
+}
+function closeWelcome(){
+  var m = document.getElementById('welcomeMask');
+  if(m) m.classList.remove('show');
+  try{ localStorage.setItem('cls_welcome_v1','1'); }catch(e){}
+}
+
+/* ---- 全部公告弹窗 ---- */
+function showAllBoard(){
+  var mask = document.getElementById('allBoardMask');
+  var list = document.getElementById('allBoardList');
+  var title = document.getElementById('allBoardTitle');
+  if(!mask || !list) return;
+  var ann = (SITE_DATA.announcements || []).slice().sort(function(a,b){
+    return (b.important?1:0) - (a.important?1:0);
+  });
+  if(title) title.textContent = '全部公告（' + ann.length + ' 条）';
+  list.innerHTML = ann.map(function(a){
+    return '<li>' +
+      '<div class="board-meta">' +
+        '<span class="board-date' + (a.important ? ' hot' : '') + '">' + esc(a.date.slice(5)) + '</span>' +
+        (a.important ? '<span class="board-pin">置顶</span>' : '') +
+      '</div>' +
+      '<p class="board-text' + (a.important ? ' important' : '') + '">' + esc(a.text) + '</p>' +
+    '</li>';
+  }).join('');
+  mask.classList.add('show');
+}
+function closeAllBoard(){
+  var m = document.getElementById('allBoardMask');
+  if(m) m.classList.remove('show');
+}
+
+/* ---- 全部重要日期 / 法定节假日 弹窗 ---- */
+function fmtFullDate(d){
+  var w = ['日','一','二','三','四','五','六'][d.getDay()];
+  var pad = function(n){ return n<10?'0'+n:n; };
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' 周'+w+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function openAllImp(){
+  var mask = document.getElementById('allImpMask');
+  var list = document.getElementById('allImpList');
+  var title = document.getElementById('allImpTitle');
+  if(!mask||!list) return;
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var arr = IMPORTANT_DATES.map(function(d){ return { name:d.name, date:d.date, d:new Date(d.date) }; })
+    .sort(function(a,b){ return a.d - b.d; });
+  if(title) title.textContent = '全部重要日期（'+arr.length+' 个）';
+  list.innerHTML = arr.map(function(d){
+    var diff = calendarDiff(d.d, now);
+    var isPast = d.d < today;
+    return '<li>'+
+      '<div class="board-meta">'+
+        '<span class="board-date">'+esc(d.name)+'</span>'+
+        (isPast ? '<span class="board-pin" style="background:#9aa7b8">已过</span>' : '')+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">'+
+        '<span style="font-size:.78rem;color:#9aa7b8">'+fmtFullDate(d.d)+'</span>'+
+        '<span style="font-size:.85rem;font-weight:800;color:#3b5bfd;white-space:nowrap">'+(isPast?'0月 0天 0时 0分 0秒':diff.months+'月 '+diff.days+'天 '+pad2(diff.hours)+'时 '+pad2(diff.minutes)+'分 '+pad2(diff.seconds)+'秒')+'</span>'+
+      '</div></li>';
+  }).join('');
+  mask.classList.add('show');
+}
+function closeAllImp(){ var m=document.getElementById('allImpMask'); if(m) m.classList.remove('show'); }
+function openAllHol(){
+  var mask = document.getElementById('allHolMask');
+  var list = document.getElementById('allHolList');
+  var title = document.getElementById('allHolTitle');
+  if(!mask||!list) return;
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var arr = HOLIDAYS.map(function(h){ return { name:h.name, date:h.date, days:h.days, d:new Date(h.date+'T00:00:00') }; })
+    .sort(function(a,b){ return a.d - b.d; });
+  if(title) title.textContent = '全部法定节假日（'+arr.length+' 个）';
+  list.innerHTML = arr.map(function(h){
+    var left = Math.ceil((h.d.getTime()-now.getTime())/86400000);
+    var isPast = h.d < today;
+    var pastColor = isPast?'#9aa7b8':'#07c160';
+    return '<li style="display:flex;align-items:center;gap:12px">'+
+      '<div style="flex:1;display:flex;flex-direction:column">'+
+        '<span style="font-weight:700;color:#2c3e50;font-size:.92rem">'+esc(h.name)+'</span>'+
+        '<span style="font-size:.7rem;color:#9aa7b8;margin-top:2px">'+h.date+' · 放假 '+h.days+' 天</span>'+
+      '</div>'+
+      '<div style="text-align:right">'+
+        '<b style="font-size:1.05rem;font-weight:800;color:'+pastColor+';font-variant-numeric:tabular-nums">'+(isPast?0:left)+'</b>'+
+        '<span style="font-size:.7rem;font-weight:600;color:'+pastColor+';margin-left:2px">天</span>'+
+      '</div></li>';
+  }).join('');
+  mask.classList.add('show');
+}
+function closeAllHol(){ var m=document.getElementById('allHolMask'); if(m) m.classList.remove('show'); }
+
+render();
+applyHash();
+updateCountdown();
+setInterval(updateCountdown, 1000);
+goHomeView();
+/* 暗黑模式切换 */
+function toggleTheme(){
+  var d = document.documentElement;
+  var dark = d.classList.toggle('dark');
+  try{ localStorage.setItem('cls_theme', dark ? 'dark' : 'light'); }catch(e){}
+  var b = document.getElementById('themeToggle');
+  if(b) b.textContent = dark ? '☀️' : '🌙';
+}
+function initTheme(){
+  var dark = false;
+  try{ dark = localStorage.getItem('cls_theme') === 'dark'; }catch(e){}
+  if(dark) document.documentElement.classList.add('dark');
+  var b = document.getElementById('themeToggle');
+  if(b) b.textContent = dark ? '☀️' : '🌙';
+}
+initTheme();
+/* 站点入口问答：首次进入需回答（本地记住，版本变更需重新回答） */
+function submitSiteGate(){
+  var g = document.getElementById('siteGate');
+  var input = document.getElementById('siteGateInput');
+  var err = document.getElementById('siteGateErr');
+  if(!g || !err) return;
+  var v = hashSecret(input ? input.value : '', GATE_SALT);
+  var ok = false;
+  for(var i=0;i<SITE_GATE.answers.length;i++){ if(SITE_GATE.answers[i]===v){ ok=true; break; } }
+  if(ok){
+    try{ localStorage.setItem('cls_site_gate', SITE_GATE.version); }catch(e){}
+    g.classList.remove('show');
+  }else{
+    err.textContent = '💡 提示：' + SITE_GATE.hint;
+  }
+}
+(function(){
+  var g = document.getElementById('siteGate');
+  if(!g) return;
+  var needGate = true;
+  try{ needGate = (localStorage.getItem('cls_site_gate') !== SITE_GATE.version); }catch(e){}
+  if(needGate){
+    document.getElementById('siteGateQ').textContent = SITE_GATE.question;
+    g.classList.add('show');
+  }
+})();
+try{ if(!localStorage.getItem('cls_welcome_v1')){ showWelcome(); } }catch(e){}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
