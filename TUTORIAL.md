@@ -125,19 +125,29 @@
 
 ### 5.4 点歌券（贪吃蛇奖励）
 
-**链路**：贪吃蛇吃到 30 分 → `games/snake.html` 前端调用 VoiceHub 开放 API 创建一张券 → 弹窗展示券码 → 同学复制券码去点歌平台点歌时输入 → VoiceHub 原生校验并核销（一张券只能用一次）。
+**链路**：贪吃蛇蛇身长度达到 `REWARD_LENGTH` → `games/snake.html` 前端调用 VoiceHub 开放 API 创建一张券 → 弹窗展示券码 → 同学复制券码去点歌平台点歌时输入 → VoiceHub 原生校验并核销（一张券只能用一次）。
+
+**触发条件**：`REWARD_LENGTH`（蛇身长度，初始 2）。长度 N ≈ 吃到 N-2 个食物。
+- ⚠️ **当前为临时测试值 5**（2026-08-26，用户待调回）。正式值建议 32（对应原 30 分难度）。
+- 只改 `games/snake.html` 顶部的 `REWARD_LENGTH` 一行即可。调回正式值时记得同步更新站内公告（现公告写的是旧「30 分」说法）。
 
 **关键配置（`games/snake.html` 顶部 `VOICEHUB_COUPON`）**：
 - `enabled: true`（发券开关）
 - `url: https://xsyzc2505.dpdns.org/api/open/card-codes`
-- `token: vhub_xxx`（API Key，**当前为维护者提供的 key，注意该 key 含 read/write/delete 权限，已暴露在前端公开仓库中；建议后续在 VoiceHub 后台建一把仅 `card-codes:write` 的 key 替换**，改这一处即可）
+- `token: _cpnDec()`——**不明文存储**！完整 key 加密在 `secrets.json.enc` 的 `voicehub.key` 字段（密码见 `secrets-hint.txt`），前端只存混淆密文 `_CPN_ENC`（xor+hex），运行时 `_cpnDec()` 解密。
 - 认证请求头 `x-api-key`；创建参数 `{count:1, prefix:'SONG', length:8, note}`，券码取响应 `data.cardCodes[0].code`
+
+**⚠️ 令牌不明文铁律（用户规则，2026-08-26 起生效）**：所有 API Key / 令牌**不得明文进仓库**（Gitee/GitHub 公开）。做法：
+1. 明文权威版本只存 `secrets.json.enc`（`./scripts/decrypt-secret.sh <密码>` 查看，`<密码>` 为 6 位数字）
+2. 前端必须使用的令牌 → 用 xor+hex 混淆后嵌入（生成方法：`python3` 对 key 逐字符与 `_CPN_MASK` 异或转 hex，替换 `_CPN_ENC`；`_CPN_MASK` 可自行更换）
+3. 换 key 步骤：① 更新 `secrets.json` 的 `voicehub.key` 并重新加密 ② 重新生成 `_CPN_ENC` 替换 snake.html ③ 若更换了 `_CPN_MASK` 同步替换
+4. 认识局限：纯前端混淆防不了专业逆向（F12 下断点仍可解出），目的是"仓库不明码"，不是密码学防护。涉钱/涉权限高的令牌严禁放前端。
 
 **VoiceHub 侧配套**（必须保持）：
 - 仓库 `server/middleware/api-0-open-cors.ts`：开放 `/api/open/*` 跨域（白名单 `https://yuzikaaang.github.io` 等）。**文件名以 `api-0-` 开头**，保证在 `api-auth.ts` 之前执行，否则浏览器预检会被 401 拦截。删除该文件则前端发券失效。
 - 上游同步（Sync fork / merge）不受影响：这是纯新增文件，不碰上游任何已有文件。
 
-**手动验证命令**：
+**手动验证命令**（KEY 从 `secrets.json.enc` 解密获取，勿明文写入命令历史可先用变量）：
 ```bash
 # 创建 1 张测试券
 curl -X POST https://xsyzc2505.dpdns.org/api/open/card-codes \
@@ -197,6 +207,7 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 | 日期 | 内容 |
 |------|------|
+| 2026-08-26 | 点歌券触发条件由「得分」改为「蛇身长度」：`REWARD_LENGTH`（当前**临时为 5** 供测试，正式建议 32，调回时同步更新站内公告）。**令牌不明文铁律**：VoiceHub key 移入 `secrets.json.enc`（新增 `voicehub` 字段，密码 本地口令 解密），前端改为 xor+hex 混淆密文 `_CPN_ENC` + `_cpnDec()` 运行时解密；以后所有 API/令牌一律不明文进仓库。详见第 5.4 节。 |
 | 2026-08-26 | 🐍 贪吃蛇达标发点歌券：吃到 30 分 → 前端调 VoiceHub 开放 API 创建一张券（`POST https://xsyzc2505.dpdns.org/api/open/card-codes`，请求头 `x-api-key`，body `{count:1,prefix:'SONG',length:8,note}`），弹窗展示券码；同学复制券码去点歌平台点歌时输入，由 VoiceHub 原生核销（一张券只能用一次）。**VoiceHub 侧配套部署**了 `server/middleware/api-0-open-cors.ts`（开放 `/api/open/*` 跨域，白名单 github.io 等）；前端配置在 `games/snake.html` 顶部 `VOICEHUB_COUPON`。维护要点与换 key 方法见「第 5.4 节点歌券」。 |
 | 2026-08-25 | 班级签位置由公告栏「仓库」按钮旁改为「每日日报」上方独立窄卡片（桌面约 380px，明显窄于日报；移动端满宽）；图标与弹窗标题改用文字「签」，避免部分设备 emoji 显示异常；公告栏现仅留「公众号」「仓库」两按钮；新增「三处同步」铁律（每次改动必须同步 ①站内公告 ②README ③TUTORIAL，见第 0/7 节）；SW 缓存升至 v4。 |
 | 2026-08-25 | 修复站内所有密码输入失效（`sha256Hex` 被重复定义覆盖 + 链接数据全部补全 id + `render()` 现在会保留当前分类视图，修复课堂笔记 / 教学课件 / 私人云盘 / 联系方式查询的门禁点击无反应和验证后整页空白问题）；作业查看卡片 Classworks 说明更正（校园网限制导致班级电脑端连不上服务器、无法同步云端），「前往 Classworks」入口排到第一位；点歌平台下方新增「服务器配置有限，没有立即跳转请耐心等待几秒」提示；SW 缓存升至 v3。 |
