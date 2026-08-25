@@ -692,7 +692,7 @@ var SITE_DATA = {
     { date: "2026-08-23 10:36", text: "修复课堂笔记、教学课件网盘链接，欢迎重新查看。", category: 'site' },
     { date: "2026-08-23 10:29", text: "新增「学习资料」板块：课堂笔记、教学课件，答对班级小问题即可获取网盘链接与访问码。", category: 'site' },
     { date: "2026-08-23 10:09", text: "每日日报入口已更新，班级应用新增 EchoMusic 听歌平台。", category: 'site' },
-    { date: "2026-08-23 00:22", text: "经过我这么久的调试这个网站终于有点雏形在了！(╥╯﹏╰╥)ง", category: 'site' },
+    { date: "2026-08-23 00:22", text: "经过我这么久的调试这个网站终于有点雏形在了！(╥╯﹏╰╥)ง", category: 'misc' },
     { date: "2026-08-22 00:00", text: "点歌平台入口已开放！微信内无法直接访问，点击「前往入口」后请按引导用浏览器打开。", category: 'site' },
     { date: "2026-08-22 00:00", text: "班级服务站 2.0 上线：新增公告栏；站点可在微信内直接打开，部分国外站点会自动引导用浏览器访问。", category: 'site' }
   ],
@@ -1073,11 +1073,11 @@ function renderBoard(){
   if(ann.length === 0){ board.style.display = 'none'; return; }
   var filtered = (annFilter && annFilter !== 'all') ? ann.filter(function(a){ return (a.category || 'misc') === annFilter; }) : ann;
   var CATS = [
-    { key: 'all',     name: '总览' },
     { key: 'site',    name: '📡 网站内部' },
     { key: 'class',   name: '🏫 班级事务' },
     { key: 'activity',name: '🎉 班级活动' },
-    { key: 'misc',    name: '💭 站主杂谈' }
+    { key: 'misc',    name: '💭 站主杂谈' },
+    { key: 'all',     name: '总览' }
   ];
   var filterBar = '<div class="board-filters">' + CATS.map(function(c){
     return '<button class="filter-btn' + (annFilter === c.key ? ' active' : '') + '" onclick="setAnnFilter(\'' + c.key + '\')">' + esc(c.name) + '</button>';
