@@ -170,6 +170,11 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px}
 .dark .qr-sub{color:#64748b}
 .dark .placeholder{color:#64748b}
 .dark .board-count{background:rgba(255,255,255,.15)}
+.dark .board-filters{background:#202a3a;border-color:#2a3550}
+.dark .filter-btn{background:#1b2432;border-color:#2a3550;color:#9db1ff}
+.dark .filter-btn:hover{background:#253047}
+.dark .filter-btn.active{background:#4a6cf7;border-color:#4a6cf7;color:#fff}
+.dark .board-empty{color:#64748b}
 .placeholder{background:#f8fafc;border:2px dashed #c3d0df;border-radius:20px;padding:40px;text-align:center;color:#90a4ae;font-size:1.1rem;margin-top:25px}
 .placeholder span{font-size:2rem;display:block;margin-bottom:10px}
 footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:500;font-size:.9rem}
@@ -190,6 +195,11 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .board-text{color:#4a5568;font-size:.88rem;line-height:1.6}
 .board-text.important{color:#2c3e50;font-weight:600}
 .board-pin{display:inline-block;background:#c2410c;color:#fff;font-size:.68rem;font-weight:800;border-radius:4px;padding:2px 6px;margin-right:6px;vertical-align:1px}
+.board-filters{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 6px;background:#f8fafc;border-bottom:1px solid #f1f5f9}
+.filter-btn{flex:1 1 auto;min-width:52px;border:1px solid #e2e8f0;background:#fff;color:#475569;font-size:.76rem;font-weight:600;padding:6px 6px;border-radius:999px;cursor:pointer;transition:.15s;white-space:nowrap}
+.filter-btn:hover{background:#eef1ff;border-color:#c3d0df}
+.filter-btn.active{background:#4a6cf7;border-color:#4a6cf7;color:#fff;box-shadow:0 2px 8px rgba(74,108,247,.3)}
+.board-empty{padding:24px;text-align:center;color:#90a4ae;font-size:.85rem}
 
 /* 倒计时（两个面板并排，移动端紧凑） */
 .countdown{display:flex;flex-direction:row;gap:12px;margin-bottom:28px}
@@ -657,7 +667,8 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
-    { date: "2026-08-25 17:14", text: "【主链接切换】班级服务站主链接已切换为 GitHub Pages：https://yuzikaaang.github.io/class-site/ （Gitee 与 GitHub 仓库均已公开，可放心收藏与查询）。原 WorkBuddy 分享链接已停用，仅作为主链接不可达时的应急备用入口。", important: true, category: "site" },
+    { date: "2026-08-25 17:14", text: "【主链接切换】班级服务站主链接已切换为 GitHub Pages：https://yuzikaaang.github.io/class-site/ （Gitee 与 GitHub 仓库均已公开，可放心收藏与查询）。原 WorkBuddy 分享链接已停用，仅作为主链接不可达时的应急备用入口。", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
+    { date: "2026-08-25 17:30", text: "公告栏新增分类筛选：点击「总览 / 网站内部 / 班级事务 / 班级活动 / 站主杂谈」即可只看对应分类的公告，无需展开全部。", category: "site" },
     { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "class" },
     { date: "2026-08-25 16:46", text: "本轮更新：公告改名为「公告」并按网站内部/班级事务/班级活动/站主杂谈四类分组；学习资料板块新增「网络限制提示」弹窗（首次进入弹出，可选不再显示）；作业查看卡片因 Classworks 打不开新增「当前作业/历史日历」按钮；PWA 主图标改为 512；公告时间统一为「精确到分」。", category: 'site' },
     { date: "2026-08-25 16:19", text: "修复每日日报卡片排版（被压缩成一团）；修复首次输入正确密码仍报错的 bug（异步哈希未 await）；密码显示切换按钮换为更精致的 SVG 图标。", category: 'site' },
@@ -1041,34 +1052,72 @@ function cdUnits(d){
     '<div class="cd-box"><span class="cd-num">'+pad2(d.seconds)+'</span><span class="cd-unit">秒</span></div>';
 }
 
-function render(){
-  /* 公告栏（置顶永远在最上方；弹窗内按分类小节展示） */
-  var ann = (SITE_DATA.announcements || []).slice().sort(function(a,b){
-    if((b.important?1:0) !== (a.important?1:0)) return (b.important?1:0) - (a.important?1:0);
+/* 公告分类筛选状态：'all' 或 site/class/activity/misc */
+var annFilter = 'all';
+
+/* 置顶是否仍生效：支持限时置顶（importantUntil 之后自动失效） */
+function isImportant(a){
+  if(!a || !a.important) return false;
+  if(a.importantUntil && new Date(a.importantUntil).getTime() <= Date.now()) return false;
+  return true;
+}
+
+/* 公告栏（支持分类筛选；置顶永远在最上方；弹窗内按分类小节展示） */
+function renderBoard(){
+  var annAll = (SITE_DATA.announcements || []);
+  var ann = annAll.slice().sort(function(a,b){
+    if((isImportant(b)?1:0) !== (isImportant(a)?1:0)) return (isImportant(b)?1:0) - (isImportant(a)?1:0);
     return (b.date || '').localeCompare(a.date || '');
   });
   var board = document.getElementById('board');
-  if(ann.length === 0){
-    board.style.display = 'none';
-  }else{
-    var pinned = ann.filter(function(a){ return a.important; });
-    var others = ann.filter(function(a){ return !a.important; });
+  if(ann.length === 0){ board.style.display = 'none'; return; }
+  var filtered = (annFilter && annFilter !== 'all') ? ann.filter(function(a){ return (a.category || 'misc') === annFilter; }) : ann;
+  var CATS = [
+    { key: 'all',     name: '总览' },
+    { key: 'site',    name: '📡 网站内部' },
+    { key: 'class',   name: '🏫 班级事务' },
+    { key: 'activity',name: '🎉 班级活动' },
+    { key: 'misc',    name: '💭 站主杂谈' }
+  ];
+  var filterBar = '<div class="board-filters">' + CATS.map(function(c){
+    return '<button class="filter-btn' + (annFilter === c.key ? ' active' : '') + '" onclick="setAnnFilter(\'' + c.key + '\')">' + esc(c.name) + '</button>';
+  }).join('') + '</div>';
+  function renderList(items){
+    return '<ul class="board-list">' + items.map(function(a){
+      return '<li>' +
+        '<div class="board-meta">' +
+          '<span class="board-date' + (isImportant(a) ? ' hot' : '') + '">' + esc(a.date.slice(5)) + '</span>' +
+          (isImportant(a) ? '<span class="board-pin">置顶</span>' : '') +
+        '</div>' +
+        '<p class="board-text' + (isImportant(a) ? ' important' : '') + '">' + esc(a.text) + '</p>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+  var body = '';
+  if(annFilter === 'all'){
+    var pinned = filtered.filter(isImportant);
+    var others = filtered.filter(function(a){ return !isImportant(a); });
     var visibleAnn = pinned.concat(others.slice(0, pinned.length ? 1 : 2));
     var hiddenCount = ann.length - visibleAnn.length;
-    board.innerHTML =
-      '<div class="board-head"><h2>📢 公告</h2><span class="board-count">' + ann.length + ' 条</span>' +
-      '<button class="btn-qr" onclick="openQr(\'' + SITE_DATA.qrUrl + '\')">公众号</button></div>' +
-      '<ul class="board-list">' + visibleAnn.map(function(a){
-        return '<li>' +
-          '<div class="board-meta">' +
-            '<span class="board-date' + (a.important ? ' hot' : '') + '">' + esc(a.date.slice(5)) + '</span>' +
-            (a.important ? '<span class="board-pin">置顶</span>' : '') +
-          '</div>' +
-          '<p class="board-text' + (a.important ? ' important' : '') + '">' + esc(a.text) + '</p>' +
-        '</li>';
-      }).join('') + '</ul>' +
-      (hiddenCount > 0 ? '<button class="board-more" onclick="showAllBoard()">查看全部 ' + hiddenCount + ' 条公告</button>' : '');
+    body = renderList(visibleAnn) + (hiddenCount > 0 ? '<button class="board-more" onclick="showAllBoard()">查看全部 ' + hiddenCount + ' 条公告</button>' : '');
+  }else if(filtered.length === 0){
+    body = '<div class="board-empty">该分类暂无公告</div>';
+  }else{
+    body = renderList(filtered);
   }
+  board.style.display = '';
+  board.innerHTML =
+    '<div class="board-head"><h2>📢 公告</h2><span class="board-count">' + filtered.length + ' 条</span>' +
+    '<button class="btn-qr" onclick="openQr(\'' + SITE_DATA.qrUrl + '\')">公众号</button></div>' +
+    filterBar + body;
+}
+function setAnnFilter(cat){
+  annFilter = cat;
+  renderBoard();
+}
+
+function render(){
+  renderBoard();
 
   /* 每日日报（独立区域，公告下方 / 倒计时上方） */
   var dailyEl = document.getElementById('dailyNews');
@@ -1346,7 +1395,7 @@ function showAllBoard(){
   var title = document.getElementById('allBoardTitle');
   if(!mask || !list) return;
   var ann = (SITE_DATA.announcements || []).slice().sort(function(a,b){
-    if((b.important?1:0) !== (a.important?1:0)) return (b.important?1:0) - (a.important?1:0);
+    if((isImportant(b)?1:0) !== (isImportant(a)?1:0)) return (isImportant(b)?1:0) - (isImportant(a)?1:0);
     return (b.date || '').localeCompare(a.date || '');
   });
   if(title) title.textContent = '全部公告（' + ann.length + ' 条）';
@@ -1359,10 +1408,10 @@ function showAllBoard(){
   function renderItem(a){
     return '<li class="ann-item">' +
       '<div class="board-meta">' +
-        '<span class="board-date' + (a.important ? ' hot' : '') + '">' + esc(a.date.slice(5)) + '</span>' +
-        (a.important ? '<span class="board-pin">置顶</span>' : '') +
+        '<span class="board-date' + (isImportant(a) ? ' hot' : '') + '">' + esc(a.date.slice(5)) + '</span>' +
+        (isImportant(a) ? '<span class="board-pin">置顶</span>' : '') +
       '</div>' +
-      '<p class="board-text' + (a.important ? ' important' : '') + '">' + esc(a.text) + '</p>' +
+      '<p class="board-text' + (isImportant(a) ? ' important' : '') + '">' + esc(a.text) + '</p>' +
     '</li>';
   }
   var grouped = {};
