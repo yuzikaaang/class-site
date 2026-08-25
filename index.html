@@ -117,6 +117,18 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px}
 .daily-sub{color:#4a5568;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .daily-btn{min-width:110px;padding:10px 18px}
 @media(max-width:768px){.daily{padding:14px 16px}.daily-sub{white-space:normal}}
+/* 班级签（窄卡片，位于每日日报上方） */
+.signbar{background:#fff;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.05);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;text-align:left;max-width:380px;box-sizing:border-box}
+.signbar-icon{flex:0 0 32px;width:32px;height:32px;border-radius:11px;background:linear-gradient(135deg,#8f95ff,#6a72f0);color:#fff;font-size:1rem;display:flex;align-items:center;justify-content:center}
+.signbar-info{flex:1;min-width:0}
+.signbar-title{color:#5f68f5;font-size:.92rem;font-weight:700;line-height:1.3}
+.signbar-sub{color:#7a869a;font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.signbar-btn{flex:0 0 auto;padding:7px 14px;border:none;border-radius:10px;background:#7c83ff;color:#fff;font-size:.79rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.signbar-btn:hover{background:#6a72f0}
+.dark .signbar{background:#1b2432;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+.dark .signbar-title{color:#a8afff}
+.dark .signbar-sub{color:#8d9ab1}
+@media(max-width:768px){.signbar{max-width:none;padding:9px 12px}.signbar-sub{white-space:normal}}
 .site-gate{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:24px}
 .site-gate.show{display:flex}
 .site-gate-box{background:#fff;border-radius:24px;padding:28px 26px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -602,6 +614,7 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
     <!-- 首页视图：公告 / 每日日报 / 倒计时 -->
     <section class="home-view" id="homeView">
       <section class="board" id="board"></section>
+      <section class="signbar" id="signBar"></section>
       <section class="daily" id="dailyNews"></section>
       <section class="countdown" id="countdown"></section>
     </section>
@@ -770,6 +783,7 @@ var SITE_DATA = {
     { date: "2026-08-25 20:03", text: "【紧急修复】刚才部分同学在分类页点密码验证后出现整页空白，现已修复。原因是页面重渲染时把当前分类视图重置掉了，导致你正在看的分类被隐藏、内容看不见。现在重渲染会保持你当前所在的分类或首页，验证后仍停留在原位置并显示密码错误提示。", category: "site" },
     { date: "2026-08-25 20:41", text: "公告栏「公众号」旁新增「仓库」按钮，点击可直达 Gitee 源码仓库查看。另：作业查看中 8.25-8.27 的「2026 暑假作业」为示例测试数据，并非真实作业，正式作业以老师线下布置为准。", category: "site" },
     { date: "2026-08-25 21:55", text: "「班级事务」中原「建言献策」「情况反映」两个待开发卡片已合并为「意见反馈」，点击即可匿名填写问卷，对班级的建议、想法或想反映的问题都可以提交。", category: "class" },
+    { date: "2026-08-25 22:58", text: "🥠 首页新增「今日班级签」：小卡片已放在「每日日报」上方，点一下抽一张签，有好签也有提醒签，每天限抽一次，次日 0 点自动刷新。图个乐子，别当真～", category: "site" },
     { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "class" },
     { date: "2026-08-25 16:46", text: "本轮更新：公告改名为「公告」并按网站内部/班级事务/班级活动/站主杂谈四类分组；学习资料板块新增「网络限制提示」弹窗（首次进入弹出，可选不再显示）；作业查看卡片因 Classworks 打不开新增「当前作业/历史日历」按钮；PWA 主图标改为 512；公告时间统一为「精确到分」。", category: 'site' },
     { date: "2026-08-25 16:19", text: "修复每日日报卡片排版（被压缩成一团）；修复首次输入正确密码仍报错的 bug（异步哈希未 await）；密码显示切换按钮换为更精致的 SVG 图标。", category: 'site' },
@@ -1223,8 +1237,7 @@ function renderBoard(){
   board.innerHTML =
     '<div class="board-head"><h2>📢 公告</h2><span class="board-count">' + filtered.length + ' 条</span>' +
     '<button class="btn-qr" onclick="openQr(\'' + SITE_DATA.qrUrl + '\')">公众号</button>' +
-    '<button class="btn-qr" style="background:#2b3a55" onclick="openLink(\'' + jsq(SITE_DATA.repoUrl) + '\',true)">仓库</button>' +
-    '<button class="btn-qr" style="background:#7c83ff" onclick="openClassSign()">班级签</button></div>' +
+    '<button class="btn-qr" style="background:#2b3a55" onclick="openLink(\'' + jsq(SITE_DATA.repoUrl) + '\',true)">仓库</button></div>' +
     filterBar + body;
 }
 function setAnnFilter(cat){
@@ -1234,6 +1247,7 @@ function setAnnFilter(cat){
 
 function render(){
   renderBoard();
+  renderSignBar();
 
   /* 每日日报（独立区域，公告下方 / 倒计时上方） */
   var dailyEl = document.getElementById('dailyNews');
@@ -1926,8 +1940,28 @@ var CLASS_SIGN_POOL = [
   {t:'mid',  text:'运气一般，但你的努力比运气靠谱。'},
   {t:'mid',  text:'今天适合整理一下桌面和心情。'}
 ];
+/* 本地日期 key（不用 UTC，避免早上 8 点前跨天错乱） */
+function signDayKey(){
+  var d = new Date();
+  var m = d.getMonth() + 1, day = d.getDate();
+  return 'cls_sign_' + d.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
+}
+/* 班级签窄卡片（每日日报上方） */
+function renderSignBar(){
+  var el = document.getElementById('signBar');
+  if(!el) return;
+  var saved = null;
+  try{ saved = localStorage.getItem(signDayKey()); }catch(e){}
+  el.innerHTML =
+    '<div class="signbar-icon">🥠</div>' +
+    '<div class="signbar-info">' +
+      '<div class="signbar-title">今日班级签</div>' +
+      '<div class="signbar-sub">' + (saved ? '今天已抽过 · 明天 0 点刷新' : '一天一签 · 有好也有坏，看运气') + '</div>' +
+    '</div>' +
+    '<button class="signbar-btn" onclick="openClassSign()">' + (saved ? '看今日签' : '抽一签') + '</button>';
+}
 function openClassSign(){
-  var key = 'cls_sign_' + new Date().toISOString().slice(0,10);
+  var key = signDayKey();
   var saved = null;
   try{ saved = localStorage.getItem(key); }catch(e){}
   var sign;
@@ -1944,6 +1978,7 @@ function openClassSign(){
   document.getElementById('signText').textContent = sign.text;
   document.getElementById('signSub').textContent = saved ? '今天已经抽过啦，明天 0 点刷新 🌙' : '一天一签，明天 0 点刷新';
   document.getElementById('signMask').classList.add('show');
+  renderSignBar();
 }
 function closeSign(){ document.getElementById('signMask').classList.remove('show'); }
 document.getElementById('signMask').addEventListener('click', function(e){ if(e.target.id==='signMask') closeSign(); });
