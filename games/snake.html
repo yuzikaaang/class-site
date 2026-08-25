@@ -45,7 +45,7 @@
 <body>
 <a class="back" href="../">← 返回班级站</a>
 <h1>🐍 贪吃蛇</h1>
-<div class="score">得分：<b id="sc">0</b> · 最高：<b id="hi">0</b> · <span id="goal">目标长度 5 得点歌券</span></div>
+<div class="score">得分：<b id="sc">0</b> · 最高：<b id="hi">0</b> · <span id="goal">目标 100 豆得点歌券</span></div>
 <canvas id="cv" width="320" height="320"></canvas>
 <div class="hint">方向键 / 在屏幕上滑动控制方向</div>
 
@@ -69,8 +69,14 @@
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const N=20,CELL=cv.width/N;
-/* 每步间隔（毫秒）：数值越大越慢。原为 110，偏快，现放慢 */
-const SPEED=175;
+/* ===== 速度与难度 =====
+ * SPEED_BASE 初始每步间隔（ms，数值越大越慢）
+ * 每吃 SPEED_STEP 个豆提速 SPEED_STEP_MS 毫秒，最快到 SPEED_MIN */
+const SPEED_BASE=175;
+const SPEED_MIN=80;
+const SPEED_STEP=10;
+const SPEED_STEP_MS=10;
+function curSpeed(sc){ return Math.max(SPEED_MIN, SPEED_BASE - Math.floor(sc/SPEED_STEP)*SPEED_STEP_MS); }
 
 /* ========== 点歌券配置 ==========
  * 达标后调用 VoiceHub 开放 API 创建点歌券。
@@ -83,8 +89,7 @@ const SPEED=175;
  * ⚠️ 令牌不明文存储：完整 key 见 secrets.json.enc（密码见 secrets-hint.txt），
  *    前端仅存混淆密文（_CPN_ENC）运行时解密。纯前端无法防专业逆向，仅防明码泄露。
  *    重新加密方法见 TUTORIAL 5.4 */
-const REWARD_LENGTH=5;                // 发券门槛=蛇身长度（临时 5 供测试；正式建议 32）
-                                      // 初始长度 2，长度 N ≈ 吃到 N-2 个食物
+const REWARD_DOTS=100;                // 发券门槛=吃豆数（吃到第 100 个豆发一张点歌券）
 /* VoiceHub API Key 混淆密文（xor+hex）。更换 key 时重新生成密文并替换下面两行 */
 var _CPN_MASK='vgate25coupon0801';
 var _CPN_ENC='000f14163a0251055b41155e5f56010605415653165d5406055b47155b57060a5552415f57';
@@ -136,7 +141,7 @@ function claimCoupon(score,dur,cb){
     }
     headers['Content-Type']='application/json';
     /* VoiceHub 接口参数：count 生成数量 / prefix 前缀 / length 随机部分长度 / note 备注 */
-    var body=JSON.stringify({count:1,prefix:'SONG',length:8,note:'贪吃蛇长度'+score+'奖励'});
+    var body=JSON.stringify({count:1,prefix:'SONG',length:8,note:'贪吃蛇吃豆'+score+'奖励'});
     fetch(cfg.url,{method:cfg.method||'POST',headers:headers,body:body})
       .then(function(r){ return r.json().catch(function(){ return {code:''}; }); })
       .then(function(j){
@@ -152,16 +157,16 @@ function claimCoupon(score,dur,cb){
   }
 }
 
-function showReward(len){
+function showReward(dots){
   var mask=document.getElementById('rewardMask');
-  document.getElementById('rwTitle').textContent='达成长度 '+len+'！';
+  document.getElementById('rwTitle').textContent='吃到 '+dots+' 个豆！';
   document.getElementById('rwSub').textContent='获得一张点歌券（去点歌平台点歌时使用）';
   document.getElementById('rwCode').textContent='请稍候…';
   document.getElementById('rwTip').textContent='';
   var tag=document.getElementById('rwTag'); tag.className='reward-tag'; tag.textContent='正在为你生成券码…';
   mask.classList.add('show');
   var dur=Math.max(1,Math.round((Date.now()-window.__snakeStart)/1000));
-  claimCoupon(len,dur,function(res){
+  claimCoupon(score,dur,function(res){
     document.getElementById('rwCode').textContent=res.code||'生成失败';
     if(res.ok && res.remote){
       tag.className='reward-tag'; tag.textContent='✅ 已在点歌平台登记，复制券码去点歌吧';
@@ -206,15 +211,15 @@ function loop(){
   snake.unshift(h);
   if(h.x===food.x&&h.y===food.y){sc++;document.getElementById('sc').textContent=sc;
     if(sc>hi){hi=sc;localStorage.setItem('snake_hi',hi);document.getElementById('hi').textContent=hi;}place();
-    /* 达标发券：蛇身长度达到门槛且今天没领过（长度只增不减，=== 保证只触发一次） */
-    if(snake.length===REWARD_LENGTH && !alreadyClaimed()){ markClaimed(); showReward(snake.length); }
+    /* 达标发券：吃豆数达到门槛且今天没领过（=== 保证只触发一次） */
+    if(sc===REWARD_DOTS && !alreadyClaimed()){ markClaimed(); showReward(sc); }
   }
   else snake.pop();
-  draw();timer=setTimeout(loop,SPEED);
+  draw();timer=setTimeout(loop,curSpeed(sc));
 }
 function reset(){clearTimeout(timer);snake=[{x:10,y:10},{x:9,y:10}];dir={x:1,y:0};place();sc=0;over=false;
   window.__snakeStart=Date.now();
-  var g=document.getElementById('goal'); if(g) g.textContent='目标长度 '+REWARD_LENGTH+' 得点歌券';
+  var g=document.getElementById('goal'); if(g) g.textContent='目标 '+REWARD_DOTS+' 豆得点歌券';
   document.getElementById('sc').textContent=0;loop();}
 document.addEventListener('keydown',e=>{const k=e.key;
   if(k==='ArrowUp'&&dir.y===0)dir={x:0,y:-1};
