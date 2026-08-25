@@ -46,8 +46,6 @@ body::after{width:380px;height:380px;background:rgba(255,217,176,.4);bottom:-120
 .dark .install-hero{background:linear-gradient(135deg,#20294a,#1a2240)}
 .content{flex:1;min-width:0}
 .home-view{display:block}
-.menu-btn{display:flex;position:absolute;left:12px;top:12px;z-index:10;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.05rem;cursor:pointer;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:.25s}
-.menu-btn:hover{background:rgba(255,255,255,.35);transform:scale(1.05)}
 @media(max-width:900px){
   .layout{display:block;padding:0}
   .sidebar{position:fixed;left:0;top:0;height:100vh;z-index:1100;border-radius:0;width:76vw;max-width:280px;transform:translateX(-100%);transition:transform .3s}
@@ -55,13 +53,12 @@ body::after{width:380px;height:380px;background:rgba(255,217,176,.4);bottom:-120
   .sidebar-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1050}
   .sidebar-mask.show{display:block}
   .content{padding:0}
-  .fab{position:fixed;right:16px;bottom:18px;z-index:1040;width:46px;height:46px;border-radius:50%;border:none;background:rgba(74,108,247,.9);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(59,91,253,.35);backdrop-filter:blur(4px);transition:transform .2s,background .2s;animation:fabIn .3s ease}
+  .fab{position:fixed;left:14px;top:14px;z-index:1040;width:46px;height:46px;border-radius:50%;border:none;background:rgba(74,108,247,.9);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(59,91,253,.35);backdrop-filter:blur(4px);transition:transform .2s,background .2s;animation:fabIn .3s ease}
   .fab:hover{background:rgba(59,91,253,1);transform:scale(1.06)}
   .fab:active{transform:scale(.95)}
   @keyframes fabIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 }
 @media(min-width:901px){
-  .menu-btn{display:none}
   .theme-btn{right:auto;left:16px;top:16px}
 }
 header{background:linear-gradient(135deg,#4a6cf7,#3b5bfd);border-radius:24px;padding:40px 30px;color:#fff;box-shadow:0 10px 30px rgba(59,91,253,.25);margin-bottom:20px;text-align:center;position:relative;overflow:hidden}
@@ -526,7 +523,6 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
   <!-- 主内容 -->
   <main class="content">
     <header>
-      <button class="menu-btn" id="menuBtn" onclick="openSidebar()" aria-label="打开侧边栏">☰</button>
       <button class="theme-btn" id="themeToggle" onclick="toggleTheme()" aria-label="切换主题">🌙</button>
       <h1>🏫 25级05班班级服务站</h1>
       <p>一站式获取班级服务 · 资源 · 工具</p>
@@ -1293,6 +1289,15 @@ function buildSidebar(){
   }).join('');
 }
 function openCat(id){
+  /* 安装为应用：微信内无法直接安装，先引导用浏览器打开（与 voicehub 等入口一致） */
+  if(id === 9 && isWeChat()){
+    closeSidebar();
+    targetUrl = location.href;
+    show('guideOverlay');
+    var gh = document.getElementById('guideHost');
+    if(gh){ var h=''; try{ h = new URL(location.href).hostname; }catch(e){} gh.textContent = h ? '目标：' + h : ''; }
+    return;
+  }
   var home = document.getElementById('homeView');
   var grid = document.getElementById('grid');
   if(home) home.style.display = 'none';
