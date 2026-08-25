@@ -123,6 +123,34 @@
 
 `manifest.webmanifest` 和 `sw.js` 内的路径也已统一改为相对路径，不要随意改回绝对路径。
 
+### 5.4 点歌券（贪吃蛇奖励）
+
+**链路**：贪吃蛇吃到 30 分 → `games/snake.html` 前端调用 VoiceHub 开放 API 创建一张券 → 弹窗展示券码 → 同学复制券码去点歌平台点歌时输入 → VoiceHub 原生校验并核销（一张券只能用一次）。
+
+**关键配置（`games/snake.html` 顶部 `VOICEHUB_COUPON`）**：
+- `enabled: true`（发券开关）
+- `url: https://xsyzc2505.dpdns.org/api/open/card-codes`
+- `token: vhub_xxx`（API Key，**当前为维护者提供的 key，注意该 key 含 read/write/delete 权限，已暴露在前端公开仓库中；建议后续在 VoiceHub 后台建一把仅 `card-codes:write` 的 key 替换**，改这一处即可）
+- 认证请求头 `x-api-key`；创建参数 `{count:1, prefix:'SONG', length:8, note}`，券码取响应 `data.cardCodes[0].code`
+
+**VoiceHub 侧配套**（必须保持）：
+- 仓库 `server/middleware/api-0-open-cors.ts`：开放 `/api/open/*` 跨域（白名单 `https://yuzikaaang.github.io` 等）。**文件名以 `api-0-` 开头**，保证在 `api-auth.ts` 之前执行，否则浏览器预检会被 401 拦截。删除该文件则前端发券失效。
+- 上游同步（Sync fork / merge）不受影响：这是纯新增文件，不碰上游任何已有文件。
+
+**手动验证命令**：
+```bash
+# 创建 1 张测试券
+curl -X POST https://xsyzc2505.dpdns.org/api/open/card-codes \
+  -H "x-api-key: <KEY>" -H "Content-Type: application/json" \
+  -d '{"count":1,"prefix":"TEST","length":8,"note":"测试"}'
+# 核销（按 id）
+curl -X PATCH https://xsyzc2505.dpdns.org/api/open/card-codes \
+  -H "x-api-key: <KEY>" -H "Content-Type: application/json" \
+  -d '{"ids":[<ID>],"status":"REDEEMED"}'
+```
+
+**防刷现状（务必知情）**：前端仅做「本地每天限领 1 张」（localStorage，清缓存可绕过）。VoiceHub 侧无按人限领，理论上可反复创建券。已通过 VoiceHub 自带的 API 访问日志 + IP 限流机制兜底，但做不到绝对防刷。若后续需要更强限制，可考虑在 VoiceHub 侧加限领逻辑或换中转。
+
 ## 6. 备份机制
 
 ### 6.1 站内手动导出（唯一备份方式）
@@ -169,6 +197,7 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 | 日期 | 内容 |
 |------|------|
+| 2026-08-26 | 🐍 贪吃蛇达标发点歌券：吃到 30 分 → 前端调 VoiceHub 开放 API 创建一张券（`POST https://xsyzc2505.dpdns.org/api/open/card-codes`，请求头 `x-api-key`，body `{count:1,prefix:'SONG',length:8,note}`），弹窗展示券码；同学复制券码去点歌平台点歌时输入，由 VoiceHub 原生核销（一张券只能用一次）。**VoiceHub 侧配套部署**了 `server/middleware/api-0-open-cors.ts`（开放 `/api/open/*` 跨域，白名单 github.io 等）；前端配置在 `games/snake.html` 顶部 `VOICEHUB_COUPON`。维护要点与换 key 方法见「第 5.4 节点歌券」。 |
 | 2026-08-25 | 班级签位置由公告栏「仓库」按钮旁改为「每日日报」上方独立窄卡片（桌面约 380px，明显窄于日报；移动端满宽）；图标与弹窗标题改用文字「签」，避免部分设备 emoji 显示异常；公告栏现仅留「公众号」「仓库」两按钮；新增「三处同步」铁律（每次改动必须同步 ①站内公告 ②README ③TUTORIAL，见第 0/7 节）；SW 缓存升至 v4。 |
 | 2026-08-25 | 修复站内所有密码输入失效（`sha256Hex` 被重复定义覆盖 + 链接数据全部补全 id + `render()` 现在会保留当前分类视图，修复课堂笔记 / 教学课件 / 私人云盘 / 联系方式查询的门禁点击无反应和验证后整页空白问题）；作业查看卡片 Classworks 说明更正（校园网限制导致班级电脑端连不上服务器、无法同步云端），「前往 Classworks」入口排到第一位；点歌平台下方新增「服务器配置有限，没有立即跳转请耐心等待几秒」提示；SW 缓存升至 v3。 |
 | 2026-08-25 | 公告栏「公众号」旁新增「仓库」按钮（跳转 Gitee）；8.25-8.27「2026 暑假作业」标注为示例测试数据（`isDemo: true`，弹窗与日历详情均显示「⚠️ 示例测试数据，并非真实作业」）。 |
