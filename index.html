@@ -216,7 +216,9 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .hidden-fun-icon{font-size:1.6rem;flex:0 0 auto}
 .hidden-fun-title{font-weight:700;color:#2c3e50;font-size:.92rem}
 .hidden-fun-desc{color:#5b6781;font-size:.8rem;margin-top:2px}
+.hidden-fun-login{display:flex;align-items:center;gap:8px;margin-top:8px;background:#fff;border:1px dashed #c3d0df;border-radius:8px;padding:6px 10px;font-size:.78rem;color:#5b6781;flex-wrap:wrap}
 .dark .hidden-fun-card{background:#1b2432}
+.dark .hidden-fun-login{background:#131a26;border-color:#3a4a6b;color:#9aa7b8}
 .dark .hidden-fun-card:hover{background:#243047}
 .dark .hidden-fun-title{color:#e7ecff}
 .board-list{list-style:none;max-height:240px;overflow-y:auto}
@@ -1408,6 +1410,7 @@ function closeSidebar(){ var s=document.getElementById('sidebar'); var m=documen
 var HIDDEN_SALT = 'cls2505-hide-salt';
 var HIDDEN_PASS_HASH = '0db4949b1a8623cc73323bb6755a91cc9e481dc55c485718c3701c0e7b4ace65';
 var HIDDEN_FUN_LINKS = [
+  { icon: "🗂️", title: "云智安（班级资源站）", desc: "登录后浏览内部资源，账号密码见下方", url: "https://yqzan.cn/", login: { user: "xsyzclass5", pass: "xsyz985211" } },
   { icon: "🕹️", title: "小霸王游戏厅", desc: "在线复古红白机游戏合集，找回童年", url: "https://yikm.net/" },
   { icon: "🧩", title: "2048", desc: "经典数字合成小游戏", url: "https://play2048.co/" },
   { icon: "🎮", title: "4399 小游戏", desc: "海量在线小游戏，点开即玩", url: "https://www.4399.com/" },
@@ -1449,10 +1452,17 @@ function renderHiddenView(){
   var grid = document.getElementById('hiddenViewGrid');
   if(!grid) return;
   grid.innerHTML = HIDDEN_FUN_LINKS.map(function(l){
-    return '<button class="hidden-fun-card" onclick="openLink(\'' + jsq(l.url) + '\',true)">' +
+    var loginHtml = l.login
+      ? '<div class="hidden-fun-login">' +
+        '<span>账号 <b style="color:#3b5bfd">' + esc(l.login.user) + '</b></span>' +
+        '<span>密码 <b style="color:#3b5bfd">' + esc(l.login.pass) + '</b></span>' +
+        '<button type="button" class="btn-qr" style="margin-left:auto;background:#4a6cf7" onclick="event.stopPropagation();copyText(\'' + jsq(l.login.user + ' / ' + l.login.pass) + '\',\'账号密码\')">复制</button>' +
+        '</div>'
+      : '';
+    return '<div class="hidden-fun-card" onclick="openLink(\'' + jsq(l.url) + '\',true)">' +
       '<span class="hidden-fun-icon">' + esc(l.icon) + '</span>' +
-      '<span><span class="hidden-fun-title">' + esc(l.title) + '</span><br><span class="hidden-fun-desc">' + esc(l.desc) + '</span></span>' +
-    '</button>';
+      '<span style="flex:1;min-width:0"><span class="hidden-fun-title">' + esc(l.title) + '</span><br><span class="hidden-fun-desc">' + esc(l.desc) + '</span>' + loginHtml + '</span>' +
+    '</div>';
   }).join('');
 }
 function openHiddenView(){
