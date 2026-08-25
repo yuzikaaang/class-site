@@ -128,9 +128,9 @@
 **链路**：贪吃蛇吃豆数达到 `REWARD_DOTS`（100）→ `games/snake.html` 前端调用 VoiceHub 开放 API 创建一张券 → 弹窗展示券码 → 同学复制券码去点歌平台点歌时输入 → VoiceHub 原生校验并核销（一张券只能用一次）。
 
 **触发与难度**：
-- `REWARD_DOTS = 100`（吃豆数 = 得分 sc，吃到第 100 个豆发券）
-- **渐进加速**：`SPEED_BASE=175`ms/步起，每吃 10 个豆提速 10ms（`SPEED_STEP`/`SPEED_STEP_MS`），最快 `SPEED_MIN=80`ms。曲线：0 豆 175 → 50 豆 125 → 100 豆 80。
-- 控制：方向键 / 屏幕滑动（已支持）。
+- `REWARD_DOTS = 60`（吃豆数 = 得分 sc，吃到第 60 个豆发券）
+- **渐进加速**：`SPEED_BASE=175`ms/步起，每吃 10 个豆提速 10ms（`SPEED_STEP`/`SPEED_STEP_MS`），最快 `SPEED_MIN=80`ms。曲线：0 豆 175 → 50 豆 125 → 60 豆 80。
+- 控制：**屏幕虚拟方向键**（`.dpad-btn`，点击/触摸）替代了触摸滑动；键盘方向键仍可用。画布点击用于游戏结束后重开。
 - 只改 `games/snake.html` 顶部 `REWARD_DOTS` 及相关速度常量即可调难度。
 
 **其他活动复用点歌券**：后续任何活动（其他小游戏、班级活动等）想发点歌券，走同一套接口即可——前端复制 `games/snake.html` 里的 `claimCoupon()` + `VOICEHUB_COUPON` + `_cpnDec()` 三个部分（注意沿用混淆密文，不要明文放 key），达标时调用 `claimCoupon(score,dur,function(res){ if(res.ok) 展示 res.code })`。
@@ -164,6 +164,23 @@ curl -X PATCH https://xsyzc2505.dpdns.org/api/open/card-codes \
 ```
 
 **防刷现状（务必知情）**：前端仅做「本地每天限领 1 张」（localStorage，清缓存可绕过）。VoiceHub 侧无按人限领，理论上可反复创建券。已通过 VoiceHub 自带的 API 访问日志 + IP 限流机制兜底，但做不到绝对防刷。若后续需要更强限制，可考虑在 VoiceHub 侧加限领逻辑或换中转。
+
+### 5.5 密码错误自锁（全站统一）
+
+**规则（用户定，2026-08-26）**：所有密码/暗号入口连续输错 **超过 3 次锁定 30s**，此后每次再错递增（1 / 2 / 5 / 10 / 30 / 60 分钟封顶），**输对一次清零**。状态存 localStorage，**刷新 / 退出重进依然锁定**。
+
+**实现**：`index.html` 顶部 `LOCK_LEVELS = [0,0,0,0,30,60,120,300,600,1200,3600]`（下标=累计失败次数）。工具函数：`onPassFail(scope)` / `onPassOk(scope)` / `lockRemain(scope)` / `startLockTimer(scope,errEl,inputEl)`（倒计时+禁用输入框，到点自动恢复）。
+
+**接入的入口（scope）**：
+| 入口 | scope | 备注 |
+|---|---|---|
+| 站点入口问答 | `site` | `submitSiteGate()` |
+| 资源门禁（课堂笔记等） | `gate_<链接id>` | `checkGate(id)`；锁定期间 render 会禁用输入框 |
+| 导出备份 | `export` | `submitExport()` |
+| 隐藏娱乐暗号 | `hidden` | `submitHiddenGate()` |
+
+**新增入口接入方法**：失败时调 `onPassFail(scope)`（返回 `{count, remain}`），`remain>0` 时调 `startLockTimer(scope, 错误元素, 输入框)`；成功调 `onPassOk(scope)`。
+**⚠️ 已知坑**：读取锁定时 `until` 字段**不能用 `|0` 位运算**（毫秒时间戳会溢出成错误值导致锁定失效），已修复为 `typeof d.until==='number'`。
 
 ## 6. 备份机制
 
@@ -211,6 +228,7 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 | 日期 | 内容 |
 |------|------|
+| 2026-08-26 | ① 贪吃蛇门槛定为**吃 60 个豆**（`REWARD_DOTS=60`），新增**屏幕虚拟方向键**（替代触摸滑动，键盘保留）；② **全站密码自锁**：站点门禁/资源门禁/导出备份/隐藏暗号统一接入 `LOCK_LEVELS` 机制——连续输错超 3 次锁 30s，再错递增 1/2/5/10/30/60 分钟，状态持久化（刷新无效），输对清零。修复一个坑：`until` 字段曾用 `|0` 位运算导致毫秒时间戳溢出、锁定失效。详见 5.5。 |
 | 2026-08-26 | 贪吃蛇正式规则（测试通过）：发券门槛定为 **吃 100 个豆**（`REWARD_DOTS`）；**渐进加速**——每吃 10 个豆提速 10ms（175→下限 80ms）；控制为方向键/滑动。站内公告已从旧「30 分」更新为新规则。另记录：后续其他活动可通过同一 VoiceHub API 发券（复用 `claimCoupon()` 三件套，见 5.4）。 |
 | 2026-08-26 | 点歌券触发条件由「得分」改为「蛇身长度」：`REWARD_LENGTH`（当前**临时为 5** 供测试，正式建议 32，调回时同步更新站内公告）。**令牌不明文铁律**：VoiceHub key 移入 `secrets.json.enc`（新增 `voicehub` 字段，密码 本地口令 解密），前端改为 xor+hex 混淆密文 `_CPN_ENC` + `_cpnDec()` 运行时解密；以后所有 API/令牌一律不明文进仓库。详见第 5.4 节。 |
 | 2026-08-26 | 🐍 贪吃蛇达标发点歌券：吃到 30 分 → 前端调 VoiceHub 开放 API 创建一张券（`POST https://xsyzc2505.dpdns.org/api/open/card-codes`，请求头 `x-api-key`，body `{count:1,prefix:'SONG',length:8,note}`），弹窗展示券码；同学复制券码去点歌平台点歌时输入，由 VoiceHub 原生核销（一张券只能用一次）。**VoiceHub 侧配套部署**了 `server/middleware/api-0-open-cors.ts`（开放 `/api/open/*` 跨域，白名单 github.io 等）；前端配置在 `games/snake.html` 顶部 `VOICEHUB_COUPON`。维护要点与换 key 方法见「第 5.4 节点歌券」。 |

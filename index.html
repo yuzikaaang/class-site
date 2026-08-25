@@ -784,7 +784,7 @@ var SITE_DATA = {
     { date: "2026-08-25 20:41", text: "公告栏「公众号」旁新增「仓库」按钮，点击可直达 Gitee 源码仓库查看。另：作业查看中 8.25-8.27 的「2026 暑假作业」为示例测试数据，并非真实作业，正式作业以老师线下布置为准。", category: "site" },
     { date: "2026-08-25 21:55", text: "「班级事务」中原「建言献策」「情况反映」两个待开发卡片已合并为「意见反馈」，点击即可匿名填写问卷，对班级的建议、想法或想反映的问题都可以提交。", category: "class" },
     { date: "2026-08-25 22:58", text: "首页新增「今日班级签」：小卡片已放在「每日日报」上方，点一下抽一张签，有好签也有提醒签，每天限抽一次，次日 0 点自动刷新。图个乐子，别当真～", category: "site" },
-    { date: "2026-08-26 00:25", text: "🐍 贪吃蛇挑战奖励（正式规则）：吃到 100 个豆即可获得一张点歌券！弹窗里复制券码，去点歌平台点歌时输入即可使用（一张券只能用一次）。每吃 10 个豆蛇会提速一点点，越到后面越刺激。每人每天限领一张，次日 0 点刷新。", category: "site" },
+    { date: "2026-08-26 00:45", text: "🐍 贪吃蛇挑战奖励更新：点歌券门槛改为吃满 60 个豆！每吃 10 个豆蛇会提速一点点；新增屏幕虚拟方向键，手机上不用滑动也能操控。🔒 另：站内所有密码/暗号增加防爆破——连续输错 3 次会锁定 30 秒，之后每次再错等待时间递增（1 / 2 / 5 分钟…），输对一次自动清零。", category: "site" },
     { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "class" },
     { date: "2026-08-25 16:46", text: "本轮更新：公告改名为「公告」并按网站内部/班级事务/班级活动/站主杂谈四类分组；学习资料板块新增「网络限制提示」弹窗（首次进入弹出，可选不再显示）；作业查看卡片因 Classworks 打不开新增「当前作业/历史日历」按钮；PWA 主图标改为 512；公告时间统一为「精确到分」。", category: 'site' },
     { date: "2026-08-25 16:19", text: "修复每日日报卡片排版（被压缩成一团）；修复首次输入正确密码仍报错的 bug（异步哈希未 await）；密码显示切换按钮换为更精致的 SVG 图标。", category: 'site' },
@@ -1286,11 +1286,14 @@ function render(){
         var passed = gatePassed(l);
         var contentHtml = '<div class="card-content"><h3>'+esc(l.title)+'</h3>'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
         if(l.gate && !passed){
+          var _lr = lockRemain('gate_'+l.id);
+          var _lockMsg = _lr > 0 ? '🔒 连续输错次数过多，请 ' + Math.ceil(_lr/1000) + ' 秒后再试' : '';
+          var _errMsg = _lockMsg || (window.__gateErr && window.__gateErr[l.id] ? '💡 ' + esc(window.__gateErr[l.id]) : '');
           contentHtml += '<div class="gate-box"><p class="gate-q">🔒 '+esc(l.gate.question)+'</p>'+
-            '<div class="gate-row"><span class="gate-input-wrap"><input id="gate-input-'+l.id+'" type="password" placeholder="请输入答案" class="gate-input" autocomplete="off" onkeydown="if(event.key===\'Enter\')checkGate('+l.id+')">'+
+            '<div class="gate-row"><span class="gate-input-wrap"><input id="gate-input-'+l.id+'" type="password" placeholder="'+(_lr>0?'锁定中，请稍候…':'请输入答案')+'" class="gate-input" autocomplete="off"'+(_lr>0?' disabled':'')+' onkeydown="if(event.key===\'Enter\')checkGate('+l.id+')">'+
             '<button type="button" class="eye-btn" style="display:inline-flex;align-items:center;justify-content:center" onclick="togglePwd(\'gate-input-'+l.id+'\', this)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></span>'+
-            '<button class="btn gate-btn" onclick="checkGate('+l.id+')">验证答案</button></div>'+
-            (window.__gateErr && window.__gateErr[l.id] ? '<p class="gate-hint">💡 '+esc(window.__gateErr[l.id])+'</p>' : '')+
+            '<button class="btn gate-btn"'+( _lr>0 ? ' disabled style="opacity:.5"' : '' )+' onclick="checkGate('+l.id+')">验证答案</button></div>'+
+            (_errMsg ? '<p class="gate-hint">'+_errMsg+'</p>' : '')+
             '</div>';
         }
         if(l.contactQuery){
@@ -1488,13 +1491,24 @@ function submitHiddenGate(){
   var inp = document.getElementById('hiddenGateInput');
   var err = document.getElementById('hiddenGateErr');
   if(!inp || !err) return;
+  var remain = lockRemain('hidden');
+  if(remain > 0){
+    startLockTimer('hidden', err, inp);
+    return;
+  }
   var v = hashSecret(inp.value || '', HIDDEN_SALT);
   if(v === HIDDEN_PASS_HASH){
+    onPassOk('hidden');
+    if(__lockTimers['hidden']) clearInterval(__lockTimers['hidden']);
     closeHiddenGate();
     openHiddenView();
   }else{
-    err.textContent = '💡 暗号不对，再想想（同学群目前人数？）';
+    var r = onPassFail('hidden');
+    err.textContent = r.remain > 0
+      ? '💡 暗号不对，再想想（同学群目前人数？）　🔒 已连续错误 ' + r.count + ' 次，请 ' + Math.ceil(r.remain/1000) + ' 秒后再试'
+      : '💡 暗号不对，再想想（同学群目前人数？）';
     inp.value = '';
+    if(r.remain > 0) startLockTimer('hidden', err, inp);
   }
 }
 function renderHiddenView(){
@@ -1521,6 +1535,56 @@ function openHiddenView(){
 }
 function closeHiddenView(){ var m = document.getElementById('hiddenViewMask'); if(m) m.classList.remove('show'); }
 
+/* ---- 密码错误自锁（2026-08-26 用户规则）----
+ * 规则：同一入口连续输错超过 3 次锁定 30s，此后每次再错递增（1/2/5/10/30/60 分钟封顶）。
+ * 状态存 localStorage：刷新 / 退出重进依然锁定。输对一次即清零。
+ * 每个密码入口一个 scope，互不影响。 */
+var LOCK_LEVELS = [0,0,0,0,30,60,120,300,600,1200,3600]; // index=累计失败次数：1-3次不锁，4→30s，5→60s，6→120s，7→300s，8→600s，9→1200s，10+→3600s（封顶）
+function lockKey(scope){ return 'cls_lock_'+scope; }
+function getLock(scope){
+  try{
+    var s = localStorage.getItem(lockKey(scope));
+    if(!s) return {count:0, until:0};
+    var d = JSON.parse(s);
+    return {count:(d.count|0)||0, until:(typeof d.until==='number' ? d.until : 0)};
+  }catch(e){ return {count:0, until:0}; }
+}
+function setLock(scope, data){ try{ localStorage.setItem(lockKey(scope), JSON.stringify(data)); }catch(e){} }
+function lockRemain(scope){ return Math.max(0, (getLock(scope).until) - Date.now()); }
+function lockSec(level){ return level >= LOCK_LEVELS.length ? LOCK_LEVELS[LOCK_LEVELS.length-1] : LOCK_LEVELS[level]; }
+function onPassFail(scope){
+  var d = getLock(scope); d.count++;
+  var sec = lockSec(d.count);
+  d.until = sec > 0 ? Date.now() + sec*1000 : 0;
+  setLock(scope, d);
+  return {count:d.count, remain:sec > 0 ? sec*1000 : 0};
+}
+function onPassOk(scope){ setLock(scope, {count:0, until:0}); }
+function lockRemainSec(scope){ return Math.ceil(lockRemain(scope)/1000); }
+/* 锁定倒计时：每秒刷新提示并禁用输入框，到点自动恢复 */
+function showLockCountdown(scope, errEl, inputEl){
+  var t = null;
+  var tick = function(){
+    var r = lockRemain(scope);
+    if(r <= 0){
+      if(t) clearInterval(t);
+      if(inputEl) inputEl.disabled = false;
+      if(errEl) errEl.textContent = '';
+      return;
+    }
+    if(errEl) errEl.textContent = '🔒 连续输错次数过多，请 ' + Math.ceil(r/1000) + ' 秒后再试';
+  };
+  if(inputEl) inputEl.disabled = true;
+  tick();
+  t = setInterval(tick, 1000);
+  return t;
+}
+var __lockTimers = {};
+function startLockTimer(scope, errEl, inputEl){
+  if(__lockTimers[scope]) clearInterval(__lockTimers[scope]);
+  __lockTimers[scope] = showLockCountdown(scope, errEl, inputEl);
+}
+
 /* ---- 学习资料问答（gate）---- */
 function findLink(id){
   for(var i=0;i<SITE_DATA.links.length;i++){ if(SITE_DATA.links[i].id===id) return SITE_DATA.links[i]; }
@@ -1536,20 +1600,31 @@ function checkGate(id){
   var l = findLink(id);
   if(!l || !l.gate) return;
   var input = document.getElementById('gate-input-'+id);
+  var remain = lockRemain('gate_'+id);
+  if(remain > 0){
+    if(!window.__gateErr) window.__gateErr = {};
+    window.__gateErr[id] = '🔒 连续输错次数过多，请 ' + Math.ceil(remain/1000) + ' 秒后再试';
+    render();
+    return;
+  }
   var v = hashSecret((input ? input.value : ''), GATE_SALT);
   var ok = false;
   for(var j=0;j<l.gate.answers.length;j++){
     if(l.gate.answers[j]===v){ ok=true; break; }
   }
   if(ok){
+    onPassOk('gate_'+id);
     try{
       localStorage.setItem('cls_gate_'+id,'ok');
       localStorage.setItem('cls_gate_'+id+'_v', l.gate.version);
     }catch(e){}
     if(window.__gateErr) delete window.__gateErr[id];
   }else{
+    var r = onPassFail('gate_'+id);
     if(!window.__gateErr) window.__gateErr = {};
-    window.__gateErr[id] = l.gate.hint;
+    window.__gateErr[id] = r.remain > 0
+      ? '💡 ' + l.gate.hint + '　🔒 已连续错误 ' + r.count + ' 次，请 ' + Math.ceil(r.remain/1000) + ' 秒后再试'
+      : '💡 ' + l.gate.hint;
   }
   render();
 }
@@ -1895,13 +1970,29 @@ function submitExport(){
   var inp=document.getElementById('exportPassInput');
   var err=document.getElementById('exportErr');
   if(!inp) return;
+  if(err) err.style.display='block';
+  var remain=lockRemain('export');
+  if(remain>0){
+    startLockTimer('export', err, inp);
+    return;
+  }
   var h = sha256Hex(inp.value);
   if(h && h===EXPORT_PASS_HASH){
+    onPassOk('export');
+    if(__lockTimers['export']) clearInterval(__lockTimers['export']);
+    if(err) err.style.display='none';
     window.location.href='./class-site-backup.zip';
     closeExport();
   } else {
-    if(err) err.style.display='block';
+    var r = onPassFail('export');
+    if(err){
+      err.style.display='block';
+      err.textContent = r.remain > 0
+        ? '密码错误，已连续错误 ' + r.count + ' 次，请 ' + Math.ceil(r.remain/1000) + ' 秒后再试'
+        : '密码错误，请重试';
+    }
     if(inp) inp.value='';
+    if(r.remain > 0) startLockTimer('export', err, inp);
   }
 }
 
@@ -2050,15 +2141,26 @@ async function submitSiteGate(){
   var input = document.getElementById('siteGateInput');
   var err = document.getElementById('siteGateErr');
   if(!g || !err) return;
+  var remain = lockRemain('site');
+  if(remain > 0){
+    startLockTimer('site', err, input);
+    return;
+  }
   var v = await hashSecret(input ? input.value : '', GATE_SALT);
   if(v == null){ err.textContent = '当前环境不支持验证，请用浏览器打开'; return; }
   var ok = false;
   for(var i=0;i<SITE_GATE.answers.length;i++){ if(SITE_GATE.answers[i]===v){ ok=true; break; } }
   if(ok){
+    onPassOk('site');
+    if(__lockTimers['site']) clearInterval(__lockTimers['site']);
     try{ localStorage.setItem('cls_site_gate', SITE_GATE.version); }catch(e){}
     g.classList.remove('show');
   }else{
-    err.textContent = '💡 提示：' + SITE_GATE.hint;
+    var r = onPassFail('site');
+    err.textContent = r.remain > 0
+      ? '💡 提示：' + SITE_GATE.hint + '　🔒 已连续错误 ' + r.count + ' 次，请 ' + Math.ceil(r.remain/1000) + ' 秒后再试'
+      : '💡 提示：' + SITE_GATE.hint;
+    if(r.remain > 0) startLockTimer('site', err, input);
   }
 }
 (function(){
