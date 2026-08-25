@@ -23,6 +23,27 @@ body::after{width:380px;height:380px;background:rgba(255,217,176,.4);bottom:-120
 .side-btn:hover{background:#dce3ff}
 .side-btn.active{background:#4a6cf7;color:#fff}
 .sidebar-mask{display:none}
+
+/* 悬浮按钮：移动端随时唤起侧边栏（桌面侧边栏常驻，故仅移动端显示） */
+.fab{display:none}
+
+/* 安装为应用教程 */
+.install-guide{display:block}
+.install-hero{display:flex;gap:14px;align-items:center;background:linear-gradient(135deg,#eef1ff,#e7ecff);border-radius:18px;padding:18px 20px;margin-bottom:18px}
+.install-hero-ico{font-size:2rem;flex:0 0 auto}
+.install-hero-title{font-size:1.1rem;font-weight:800;color:#3b5bfd}
+.install-hero-sub{font-size:.82rem;line-height:1.7;color:#5b6781;margin-top:4px}
+.install-sec{background:#fff;border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:0 4px 15px rgba(0,0,0,.05);border-left:4px solid #4a6cf7}
+.install-sec h3{font-size:1rem;font-weight:800;color:#2c3550;margin-bottom:10px}
+.install-sec ul{margin:0;padding-left:18px}
+.install-sec li{font-size:.86rem;line-height:1.8;color:#3a4256;margin-bottom:6px}
+.install-sec li b{color:#3b5bfd}
+.install-sec .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.install-sec .dot.o{background:#ff7a00}.install-sec .dot.g{background:#1db954}.install-sec .dot.p{background:#7b3ff2}.install-sec .dot.b{background:#2b6cff}
+.install-tip{background:#fff4e5;border:1px solid #ffd8a8;color:#a85b00;border-radius:14px;padding:14px 16px;font-size:.85rem;line-height:1.8}
+.install-tip b{color:#c2410c}
+.dark .install-sec{background:#1b2432}.dark .install-sec h3{color:#e7ecff}
+.dark .install-hero{background:linear-gradient(135deg,#20294a,#1a2240)}
 .content{flex:1;min-width:0}
 .home-view{display:block}
 .menu-btn{display:flex;position:absolute;left:12px;top:12px;z-index:10;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.05rem;cursor:pointer;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:.25s}
@@ -34,6 +55,10 @@ body::after{width:380px;height:380px;background:rgba(255,217,176,.4);bottom:-120
   .sidebar-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1050}
   .sidebar-mask.show{display:block}
   .content{padding:0}
+  .fab{position:fixed;right:16px;bottom:18px;z-index:1040;width:46px;height:46px;border-radius:50%;border:none;background:rgba(74,108,247,.9);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(59,91,253,.35);backdrop-filter:blur(4px);transition:transform .2s,background .2s;animation:fabIn .3s ease}
+  .fab:hover{background:rgba(59,91,253,1);transform:scale(1.06)}
+  .fab:active{transform:scale(.95)}
+  @keyframes fabIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 }
 @media(min-width:901px){
   .menu-btn{display:none}
@@ -496,6 +521,7 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
     <button class="side-btn" onclick="openExport()" style="margin-top:auto">📦 导出备份</button>
   </aside>
   <div class="sidebar-mask" id="sideMask" onclick="closeSidebar()"></div>
+  <button class="fab" id="fabBtn" onclick="openSidebar()" aria-label="打开侧边栏">☰</button>
 
   <!-- 主内容 -->
   <main class="content">
@@ -669,6 +695,7 @@ var SITE_DATA = {
   announcements: [
     { date: "2026-08-25 17:14", text: "【主链接切换】班级服务站主链接已切换为 GitHub Pages：https://yuzikaaang.github.io/class-site/ （Gitee 与 GitHub 仓库均已公开，可放心收藏与查询）。原 WorkBuddy 分享链接已停用，仅作为主链接不可达时的应急备用入口。", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
     { date: "2026-08-25 17:30", text: "公告栏新增分类筛选：点击「总览 / 网站内部 / 班级事务 / 班级活动 / 站主杂谈」即可只看对应分类的公告，无需展开全部。", category: "site" },
+    { date: "2026-08-25 19:11", text: "📲 侧边栏新增「安装为应用」教程：支持 Windows / iPhone / 安卓各品牌一键安装到桌面，微信内请复制链接到浏览器打开。移动端页面右下角新增悬浮按钮，滚动到任意位置都可随时唤起侧边栏。", category: "site" },
     { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "class" },
     { date: "2026-08-25 16:46", text: "本轮更新：公告改名为「公告」并按网站内部/班级事务/班级活动/站主杂谈四类分组；学习资料板块新增「网络限制提示」弹窗（首次进入弹出，可选不再显示）；作业查看卡片因 Classworks 打不开新增「当前作业/历史日历」按钮；PWA 主图标改为 512；公告时间统一为「精确到分」。", category: 'site' },
     { date: "2026-08-25 16:19", text: "修复每日日报卡片排版（被压缩成一团）；修复首次输入正确密码仍报错的 bug（异步哈希未 await）；密码显示切换按钮换为更精致的 SVG 图标。", category: 'site' },
@@ -720,7 +747,8 @@ var SITE_DATA = {
     { id: 5, name: "学习资料" },
     { id: 3, name: "成绩查询" },
     { id: 7, name: "班级事务" },
-    { id: 8, name: "其他工具" }
+    { id: 8, name: "其他工具" },
+    { id: 9, name: "📲 安装为应用" }
   ],
   links: [
     {
@@ -1141,7 +1169,9 @@ function render(){
   grid.innerHTML = cats.map(function(c,i){
     var links = SITE_DATA.links.filter(function(l){ return l.categoryId === c.id && l.active !== false; });
     var inner;
-    if(links.length === 0){
+    if(c.id === 9){
+      inner = installGuideHtml();
+    }else if(links.length === 0){
       inner = '<div class="placeholder"><span>➕</span>该板块内容正在筹备中，敬请期待</div>';
     }else{
       inner = links.map(function(l){
@@ -1216,6 +1246,42 @@ function render(){
   Array.prototype.forEach.call(grid.querySelectorAll('.tab-page'), function(p){ p.classList.remove('active'); });
 }
 function jsq(u){ return (u||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+/* ---- 安装为应用（PWA）教程 ---- */
+function installGuideHtml(){
+  function sec(icon, title, items){
+    return '<div class="install-sec">' +
+      '<h3>' + icon + ' ' + esc(title) + '</h3>' +
+      '<ul>' + items.map(function(it){ return '<li>' + it + '</li>'; }).join('') + '</ul>' +
+    '</div>';
+  }
+  return '<div class="install-guide">' +
+    '<div class="install-hero">' +
+      '<div class="install-hero-ico">📲</div>' +
+      '<div><div class="install-hero-title">将本站安装为本地应用</div>' +
+      '<div class="install-hero-sub">安装后可像 App 一样从桌面 / 主屏幕打开，已加载内容离线也能查看。微信内不支持安装，请先复制链接到浏览器打开。</div></div>' +
+    '</div>' +
+    sec('🖥', '电脑端（Windows · Edge）', [
+      '用 <b>Edge</b> 打开本站，地址栏右侧点「安装」图标（⚡ 或应用图标）即可。',
+      '若地址栏没有该图标：右上角「···」菜单 → <b>应用</b> → <b>将此站点安装为应用</b>。'
+    ]) +
+    sec('🍎', '苹果手机 / 平板（iPhone · iPad · Safari）', [
+      '必须使用 <b>Safari</b> 浏览器打开本站（微信、Chrome 等均不行）。',
+      '点底部「<b>分享</b>」按钮 → 下滑找到【<b>添加到主屏幕</b>】→ 确认添加。'
+    ]) +
+    sec('📱', '安卓手机（各品牌浏览器）', [
+      '<span class="dot o"></span><b>小米 / 红米</b>：小米浏览器 → 底部「菜单」→ <b>工具箱</b> → 安装应用；若无该选项，先「收藏」再「添加至桌面」。',
+      '<span class="dot g"></span><b>OPPO / realme</b>：OPPO 浏览器 → 底部「三」→ <b>收藏网页</b> → 长按书签「添加至桌面」（仅为快捷方式）。',
+      '<span class="dot p"></span><b>vivo / iQOO</b>：vivo 浏览器 → 右上角「···」，优先选「安装应用」，找不到则「添加到桌面」。',
+      '<span class="dot b"></span><b>华为</b>：华为浏览器 → 右下角「四点」菜单 → <b>添加至桌面</b>。'
+    ]) +
+    sec('✅', '安卓兜底方案（推荐 · 纯净独立应用）', [
+      '下载 <b>Microsoft Edge</b> 打开本站 → 左下角「三」菜单，右滑找到【<b>添加至手机</b>】。',
+      '安装后为独立应用窗口，<b>无浏览器地址栏</b>，体验最佳，各品牌通用。'
+    ]) +
+    '<div class="install-tip">⚠️ <b>通用提示</b>：微信内置浏览器不支持安装，请「复制链接」到系统浏览器（Edge / Safari / 手机自带浏览器）打开后再安装。</div>' +
+  '</div>';
+}
 
 /* ---- 侧边栏：构建与页面切换 ---- */
 function buildSidebar(){
