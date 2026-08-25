@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>打地鼠 · 25级05班</title>
+<style>
+  :root{--bg:#0f1226;--fg:#e9ecff;--accent:#7c83ff}
+  *{box-sizing:border-box}html,body{margin:0}
+  body{background:linear-gradient(160deg,#0f1226,#161a3a);color:var(--fg);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:14px;gap:10px;min-height:100vh}
+  a.back{color:var(--fg);opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
+  h1{font-size:18px;margin:2px 0}
+  .score{font-size:15px;margin-bottom:4px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:min(80vw,300px)}
+  .hole{position:relative;aspect-ratio:1;background:#1b2432;border-radius:50%;overflow:hidden;
+    box-shadow:inset 0 8px 18px rgba(0,0,0,.45);cursor:pointer}
+  .mole{position:absolute;left:15%;top:100%;width:70%;height:70%;background:radial-gradient(circle at 50% 35%,#ffd27a,#e0992e);
+    border-radius:50% 50% 45% 45%;transition:top .12s ease;display:flex;align-items:flex-end;justify-content:center;font-size:26px}
+  .hole.up .mole{top:18%}
+  .hint{font-size:12px;opacity:.6}
+</style>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>🔨 打地鼠</h1>
+<div class="score">得分：<b id="sc">0</b> · 剩余：<b id="time">30</b>s · 最高：<b id="hi">0</b></div>
+<div class="grid" id="grid"></div>
+<div class="hint">地鼠冒头就点它，30 秒挑战手速</div>
+<script>
+const grid=document.getElementById('grid');
+let sc=0,time=30,hi=+(localStorage.getItem('whack_hi')||0),running=false,spawnT,moleT,countT;
+document.getElementById('hi').textContent=hi;
+for(let i=0;i<9;i++){const h=document.createElement('div');h.className='hole';h.innerHTML='<div class="mole">🐹</div>';
+  h.onclick=()=>{if(h.classList.contains('up')){sc++;document.getElementById('sc').textContent=sc;h.classList.remove('up');}};grid.appendChild(h);}
+const holes=[...grid.children];
+function start(){sc=0;time=30;running=true;document.getElementById('sc').textContent=0;document.getElementById('time').textContent=30;
+  spawnT=setInterval(()=>{holes.forEach(h=>h.classList.remove('up'));const up=holes[(Math.random()*9)|0];up.classList.add('up');
+    setTimeout(()=>up.classList.remove('up'),650);},750);
+  countT=setInterval(()=>{time--;document.getElementById('time').textContent=time;if(time<=0)end();},1000);}
+function end(){running=false;clearInterval(spawnT);clearInterval(countT);holes.forEach(h=>h.classList.remove('up'));
+  if(sc>hi){hi=sc;localStorage.setItem('whack_hi',hi);document.getElementById('hi').textContent=hi;}
+  setTimeout(()=>alert('时间到！本局 '+sc+' 分，最高 '+hi+' 分。点任意处再来一局'),120);}
+document.body.addEventListener('click',e=>{if(!running&&!e.target.closest('a'))start();});
+start();
+</script>
+</body>
+</html>

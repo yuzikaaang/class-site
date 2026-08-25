@@ -340,6 +340,23 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 /* 公众号二维码弹窗 */
 .qr-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;padding:24px}
 .qr-mask.show{display:flex}
+/* 班级签弹窗 + 彩带彩蛋 */
+.sign-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9990;padding:20px}
+.sign-mask.show{display:flex}
+.sign-box{background:linear-gradient(160deg,#1b2432,#222c4a);border:1px solid rgba(255,255,255,.12);border-radius:18px;max-width:340px;width:100%;padding:22px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.sign-box h3{margin:0 0 6px;font-size:18px}
+.sign-tag{display:inline-block;font-size:12px;padding:3px 10px;border-radius:999px;margin-bottom:12px}
+.sign-tag.good{background:rgba(70,224,200,.18);color:#46e0c8}
+.sign-tag.bad{background:rgba(255,107,139,.18);color:#ff6b8b}
+.sign-tag.mid{background:rgba(124,131,255,.18);color:#9db1ff}
+.sign-text{font-size:16px;line-height:1.7;min-height:60px;margin:6px 0 4px}
+.sign-sub{font-size:12px;color:#9aa2d0;margin-bottom:16px}
+.sign-box .btn-qr{background:#7c83ff;color:#fff;border:none;border-radius:999px;padding:8px 22px;font-weight:700;cursor:pointer}
+.confetti-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:9991;padding:20px}
+.confetti-mask.show{display:flex}
+.confetti-box{background:rgba(27,36,50,.92);border:1px solid rgba(255,255,255,.14);border-radius:18px;max-width:320px;width:100%;padding:22px;text-align:center}
+.confetti-box p{font-size:15px;line-height:1.7;margin:0 0 16px}
+#confettiCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9992}
 .qr-box{background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .qr-head{display:flex;justify-content:center;align-items:center;margin-bottom:12px}
 .qr-head h3{color:#07c160;font-size:1rem}
@@ -459,6 +476,24 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
     <p style="color:#9aa7b8;font-size:.78rem;text-align:center;margin:0 0 14px">更多娱乐资源陆续补充中……</p>
   </div>
 </div>
+
+<!-- ===== 班级签 / 彩带彩蛋弹窗 ===== -->
+<div class="sign-mask" id="signMask">
+  <div class="sign-box">
+    <h3>🥠 今日班级签</h3>
+    <span class="sign-tag" id="signTag"></span>
+    <div class="sign-text" id="signText"></div>
+    <div class="sign-sub" id="signSub"></div>
+    <button class="btn-qr" onclick="closeSign()">收下</button>
+  </div>
+</div>
+<div class="confetti-mask" id="confettiMask">
+  <div class="confetti-box">
+    <p id="confettiText"></p>
+    <button class="btn-qr" style="background:#7c83ff;color:#fff;border:none;border-radius:999px;padding:8px 22px;font-weight:700;cursor:pointer" onclick="closeConfetti()">好耶 ✨</button>
+  </div>
+</div>
+<canvas id="confettiCanvas"></canvas>
 
 <!-- ===== 全部重要日期弹窗 ===== -->
 <div class="allboard-mask" id="allImpMask">
@@ -1188,7 +1223,8 @@ function renderBoard(){
   board.innerHTML =
     '<div class="board-head"><h2>📢 公告</h2><span class="board-count">' + filtered.length + ' 条</span>' +
     '<button class="btn-qr" onclick="openQr(\'' + SITE_DATA.qrUrl + '\')">公众号</button>' +
-    '<button class="btn-qr" style="background:#2b3a55" onclick="openLink(\'' + jsq(SITE_DATA.repoUrl) + '\',true)">仓库</button></div>' +
+    '<button class="btn-qr" style="background:#2b3a55" onclick="openLink(\'' + jsq(SITE_DATA.repoUrl) + '\',true)">仓库</button>' +
+    '<button class="btn-qr" style="background:#7c83ff" onclick="openClassSign()">班级签</button></div>' +
     filterBar + body;
 }
 function setAnnFilter(cat){
@@ -1408,7 +1444,11 @@ var HIDDEN_FUN_LINKS = [
   { icon: "🕹️", title: "小霸王游戏厅", desc: "在线复古红白机游戏合集，找回童年", url: "https://yikm.net/" },
   { icon: "🧩", title: "2048", desc: "经典数字合成小游戏", url: "https://play2048.co/" },
   { icon: "🎮", title: "4399 小游戏", desc: "海量在线小游戏，点开即玩", url: "https://www.4399.com/" },
-  { icon: "🎯", title: "7k7k 小游戏", desc: "另一大经典小游戏库", url: "https://www.7k7k.com/" }
+  { icon: "🎯", title: "7k7k 小游戏", desc: "另一大经典小游戏库", url: "https://www.7k7k.com/" },
+  { icon: "🐍", title: "贪吃蛇", desc: "经典方向控制，越吃越长", url: "games/snake.html" },
+  { icon: "🧱", title: "俄罗斯方块", desc: "经典落块消除，手速大考", url: "games/tetris.html" },
+  { icon: "🔨", title: "打地鼠", desc: "地鼠冒头就点，30秒挑战", url: "games/whack.html" },
+  { icon: "🃏", title: "记忆翻牌", desc: "翻牌配对，练记忆力", url: "games/memory.html" }
 ];
 var _badgeClicks = 0, _badgeTimer = null;
 function badgeClick(){
@@ -1862,6 +1902,103 @@ function toggleTheme(){
   try{ localStorage.setItem('cls_theme', dark ? 'dark' : 'light'); }catch(e){}
   var b = document.getElementById('themeToggle');
   if(b) b.textContent = dark ? '☀️' : '🌙';
+  /* 连续切换白天/黑夜 → 彩带彩蛋 */
+  _themeRhythm++;
+  if(_themeRhythmTimer) clearTimeout(_themeRhythmTimer);
+  _themeRhythmTimer = setTimeout(function(){ _themeRhythm = 0; }, 1600);
+  if(_themeRhythm >= 3){ _themeRhythm = 0; confettiEgg(); }
+}
+var _themeRhythm = 0, _themeRhythmTimer = null;
+
+/* ---- 班级签：一天一签，本地限制 ---- */
+var CLASS_SIGN_POOL = [
+  {t:'good', text:'今天你回答问题会格外顺，勇敢举一次手吧。'},
+  {t:'good', text:'有同学偷偷觉得你今天状态很在线，自信点。'},
+  {t:'good', text:'今日宜：把拖延的一件小事做掉，运气会顺起来。'},
+  {t:'good', text:'午休去晒会儿太阳，下午效率直接翻倍。'},
+  {t:'good', text:'今天适合主动跟一个人说句话，会有小惊喜。'},
+  {t:'bad',  text:'今天容易走神，重要的事记在纸上，别全靠脑子。'},
+  {t:'bad',  text:'作业可能比你以为的多，早点开动，别熬到深夜。'},
+  {t:'bad',  text:'今天别在老师背后比划，月亮不圆的时候容易被看到。'},
+  {t:'bad',  text:'奶茶少喝一杯，今天的运气经不起太多糖分的考验。'},
+  {t:'bad',  text:'粗心日提醒：交东西前多看一眼名字和日期。'},
+  {t:'mid',  text:'平平淡淡也是好日子，今天稳住就行。'},
+  {t:'mid',  text:'运气一般，但你的努力比运气靠谱。'},
+  {t:'mid',  text:'今天适合整理一下桌面和心情。'}
+];
+function openClassSign(){
+  var key = 'cls_sign_' + new Date().toISOString().slice(0,10);
+  var saved = null;
+  try{ saved = localStorage.getItem(key); }catch(e){}
+  var sign;
+  if(saved){
+    try{ sign = JSON.parse(saved); }catch(e){ sign = null; }
+  }
+  if(!sign){
+    sign = CLASS_SIGN_POOL[(Math.random()*CLASS_SIGN_POOL.length)|0];
+    try{ localStorage.setItem(key, JSON.stringify(sign)); }catch(e){}
+  }
+  var tag = document.getElementById('signTag');
+  tag.className = 'sign-tag ' + (sign.t==='good'?'good':sign.t==='bad'?'bad':'mid');
+  tag.textContent = sign.t==='good' ? '吉签 ✨' : sign.t==='bad' ? '平签 ⚠️' : '凡签';
+  document.getElementById('signText').textContent = sign.text;
+  document.getElementById('signSub').textContent = saved ? '今天已经抽过啦，明天 0 点刷新 🌙' : '一天一签，明天 0 点刷新';
+  document.getElementById('signMask').classList.add('show');
+}
+function closeSign(){ document.getElementById('signMask').classList.remove('show'); }
+document.getElementById('signMask').addEventListener('click', function(e){ if(e.target.id==='signMask') closeSign(); });
+
+/* ---- 彩带彩蛋：连续切主题触发 ---- */
+var CONFETTI_COLORS = ['#7c83ff','#46e0c8','#ff6b8b','#ffcf7a','#4a6cf7','#34d399'];
+var _cfRAF = null;
+function confettiEgg(){
+  var box = document.getElementById('confettiMask');
+  var txt = document.getElementById('confettiText');
+  var phrases = [
+    '🌗 你在白天与黑夜之间反复横跳，把太阳和月亮都吵醒了。它们决定撒一把彩带赔罪——今天也要好好切换心情呀！',
+    '🌓 明与暗被你来回拨弄，惊动了掌管昼夜的小精灵。它丢下一把彩带：既然切换了这么多次，不如也把心情切换到开心档～',
+    '🌒 你在大白天和深夜里反复横跳，宇宙的调光师看乐了，顺手给你放了一场彩带雨。'
+  ];
+  txt.textContent = phrases[(Math.random()*phrases.length)|0];
+  box.classList.add('show');
+  fireConfetti();
+}
+function closeConfetti(){
+  document.getElementById('confettiMask').classList.remove('show');
+  stopConfetti();
+}
+document.getElementById('confettiMask').addEventListener('click', function(e){ if(e.target.id==='confettiMask') closeConfetti(); });
+function fireConfetti(){
+  var cv = document.getElementById('confettiCanvas');
+  var ctx = cv.getContext('2d');
+  cv.width = window.innerWidth; cv.height = window.innerHeight;
+  var ps = [];
+  for(var i=0;i<160;i++){
+    ps.push({ x: Math.random()*cv.width, y: -20 - Math.random()*cv.height*0.3,
+      vx: (Math.random()-0.5)*4, vy: 2 + Math.random()*4,
+      w: 6 + Math.random()*6, h: 10 + Math.random()*10,
+      rot: Math.random()*Math.PI, vr: (Math.random()-0.5)*0.3,
+      c: CONFETTI_COLORS[(Math.random()*CONFETTI_COLORS.length)|0] });
+  }
+  var end = Date.now() + 3500;
+  function frame(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    var alive = false;
+    ps.forEach(function(p){
+      p.x += p.vx; p.y += p.vy; p.vy += 0.06; p.rot += p.vr;
+      if(p.y < cv.height + 30) alive = true;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot); ctx.fillStyle = p.c;
+      ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h); ctx.restore();
+    });
+    if(Date.now() < end && alive){ _cfRAF = requestAnimationFrame(frame); }
+    else { ctx.clearRect(0,0,cv.width,cv.height); }
+  }
+  cancelAnimationFrame(_cfRAF); frame();
+}
+function stopConfetti(){
+  cancelAnimationFrame(_cfRAF);
+  var cv = document.getElementById('confettiCanvas');
+  if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
 }
 function initTheme(){
   var dark = false;
