@@ -655,6 +655,7 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
     <button class="side-btn" onclick="openData()" style="margin-top:auto">💾 数据管理</button>
     <button class="side-btn" id="sfxBtn" onclick="toggleSfx()">🔔 音效：开</button>
     <button class="side-btn" onclick="openExport()">📦 导出备份</button>
+    <button class="side-btn" id="copyLinkBtn" onclick="copySiteLink()">🔗 复制链接</button>
   </aside>
   <div class="sidebar-mask" id="sideMask" onclick="closeSidebar()"></div>
   <button class="fab" id="fabBtn" onclick="openSidebar()" aria-label="打开侧边栏">☰</button>
@@ -913,7 +914,8 @@ var SITE_DATA = {
     { date: "2026-08-22 00:00", text: "点歌平台入口已开放！微信内无法直接访问，点击「前往入口」后请按引导用浏览器打开。", category: 'site' },
     { date: "2026-08-22 00:00", text: "班级服务站 2.0 上线：新增公告栏；站点可在微信内直接打开，部分国外站点会自动引导用浏览器访问。", category: 'site' },
     { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清空本机站点数据（游戏记录、主题/音效、密码与暗号通关及锁状态等），保留设备标识、班级签、点歌券记录（防借初始化刷签/刷券）。", category: "site" },
-    { date: "2026-08-27 00:13", text: "📌 功能更新：\n① 学习资料「访问提示」弹窗关闭后，右下角出现带红点的消息悬浮球，点击可重新打开；勾选「不再显示」则无悬浮球。\n② 全部公告日期筛选升级：快捷范围 近 3 天 / 7 天 / 15 天 / 30 天 / 近半年，并支持自定义起止日期。\n③ 全部公告可按时间隐藏更早公告（范围同②），公告条数随筛选实时更新。", category: "site" }
+    { date: "2026-08-27 00:13", text: "📌 功能更新：\n① 学习资料「访问提示」弹窗关闭后，右下角出现带红点的消息悬浮球，点击可重新打开；勾选「不再显示」则无悬浮球。\n② 全部公告日期筛选升级：快捷范围 近 3 天 / 7 天 / 15 天 / 30 天 / 近半年，并支持自定义起止日期。\n③ 全部公告可按时间隐藏更早公告（范围同②），公告条数随筛选实时更新。", category: "site" },
+    { date: "2026-08-27 00:21", text: "📌 功能更新：\n① 新增「夜间自动暗色模式」：18:30–次日 7:30 自动切换暗色，其余时间自动恢复亮色；夜间手动切回亮色时询问是否关闭自动切换，关闭后不再自动切换。\n② 侧边栏新增「复制链接」按钮，一键复制当前网页地址。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -2150,6 +2152,28 @@ function fallbackCopyData(json){
   catch(e){ dataMsg('❌ 复制失败', '#c2410c'); }
   document.body.removeChild(ta);
 }
+/* ---- 复制网页链接（侧边栏按钮） ---- */
+function copySiteLink(){
+  var url=location.href;
+  var b=document.getElementById('copyLinkBtn');
+  var done=function(){
+    if(b){ b.textContent='✅ 链接已复制'; setTimeout(function(){ b.textContent='🔗 复制链接'; },1600); }
+    SFX.success();
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(done, function(){ fallbackCopyLink(url, done, b); });
+  }else{
+    fallbackCopyLink(url, done, b);
+  }
+}
+function fallbackCopyLink(url, done, b){
+  var ta=document.createElement('textarea');
+  ta.value=url; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); done(); }
+  catch(e){ if(b) b.textContent='❌ 复制失败'; }
+  document.body.removeChild(ta);
+}
 function pasteDataMode(){
   var ta=document.getElementById('dataPaste');
   if(!ta) return;
@@ -2385,18 +2409,50 @@ goHomeView();
     goHomeView();
   }
 })();
-/* 暗黑模式切换 */
+/* 暗黑模式切换（含夜间自动模式询问） */
 function toggleTheme(){
   var d = document.documentElement;
-  var dark = d.classList.toggle('dark');
-  try{ localStorage.setItem('cls_theme', dark ? 'dark' : 'light'); }catch(e){}
+  var isDark = d.classList.contains('dark');
+  var next = !isDark;
+  /* 夜间自动暗色模式下手动切回亮色 → 询问是否关闭自动切换 */
+  if(themeAutoEnabled() && isNightTime() && !next){
+    if(confirm('当前为夜间自动暗色模式。\n是否关闭主题自动切换？\n关闭后站点将不再按时间自动切换主题。')){
+      try{ localStorage.setItem('cls_theme_auto','off'); }catch(e){}
+    }else{
+      return;
+    }
+  }
+  d.classList.toggle('dark');
+  try{ localStorage.setItem('cls_theme', next ? 'dark' : 'light'); }catch(e){}
   var b = document.getElementById('themeToggle');
-  if(b) b.textContent = dark ? '☀️' : '🌙';
+  if(b) b.textContent = next ? '☀️' : '🌙';
   /* 连续切换白天/黑夜 → 彩带彩蛋 */
   _themeRhythm++;
   if(_themeRhythmTimer) clearTimeout(_themeRhythmTimer);
   _themeRhythmTimer = setTimeout(function(){ _themeRhythm = 0; }, 1600);
   if(_themeRhythm >= 3){ _themeRhythm = 0; confettiEgg(); }
+}
+/* 夜间自动暗色模式：18:30~次日7:30 自动暗色，其余时间自动亮色 */
+function isNightTime(){
+  var d=new Date(), t=d.getHours()*60+d.getMinutes();
+  return t>=1110 || t<450; /* 18*60+30=1110, 7*60+30=450 */
+}
+function themeAutoEnabled(){
+  try{ return localStorage.getItem('cls_theme_auto')!=='off'; }catch(e){ return true; }
+}
+var _lastAutoNight=null;
+function applyAutoTheme(){
+  if(!themeAutoEnabled()) return;
+  var night=isNightTime();
+  _lastAutoNight=night;
+  var wantDark=night;
+  var dark=document.documentElement.classList.contains('dark');
+  if(dark!==wantDark){
+    document.documentElement.classList.toggle('dark', wantDark);
+    try{ localStorage.setItem('cls_theme', wantDark?'dark':'light'); }catch(e){}
+    var b=document.getElementById('themeToggle');
+    if(b) b.textContent=wantDark?'☀️':'🌙';
+  }
 }
 var _themeRhythm = 0, _themeRhythmTimer = null;
 
@@ -2519,6 +2575,13 @@ function initTheme(){
   if(dark) document.documentElement.classList.add('dark');
   var b = document.getElementById('themeToggle');
   if(b) b.textContent = dark ? '☀️' : '🌙';
+  /* 自动暗色模式：加载时应用 + 每 30s 检查 18:30 / 7:30 边界 */
+  applyAutoTheme();
+  setInterval(function(){
+    if(!themeAutoEnabled()) return;
+    var n=isNightTime();
+    if(n!==_lastAutoNight) applyAutoTheme();
+  }, 30000);
 }
 initTheme();
 /* 站点入口问答：首次进入需回答（本地记住，版本变更需重新回答） */
