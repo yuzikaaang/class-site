@@ -825,6 +825,7 @@ var SITE_DATA = {
     { date: "2026-08-25 20:41", text: "公告栏「公众号」旁新增「仓库」按钮，点击可直达 Gitee 源码仓库查看。另：作业查看中 8.25-8.27 的「2026 暑假作业」为示例测试数据，并非真实作业，正式作业以老师线下布置为准。", category: "site" },
     { date: "2026-08-25 21:55", text: "「班级事务」中原「建言献策」「情况反映」两个待开发卡片已合并为「意见反馈」，点击即可匿名填写问卷，对班级的建议、想法或想反映的问题都可以提交。", category: "class" },
     { date: "2026-08-25 22:58", text: "首页新增「今日班级签」：小卡片已放在「每日日报」上方，点一下抽一张签，有好签也有提醒签，每天限抽一次，次日 0 点自动刷新。图个乐子，别当真～", category: "site" },
+    { date: "2026-08-26 10:25", text: "🔄 新增「返回记忆」：从网站跳到外部链接或小游戏后返回，会自动回到你刚才所在的页面（首页 / 分类 / 隐藏空间都适用），不用重新找入口。", category: "site" },
     { date: "2026-08-26 10:12", text: "🎁 悄悄说一句：站内藏着彩蛋和隐藏空间，说不定哪天就被你碰上了～（线索就藏在日常交互里，自己去探索才有意思）", category: "misc" },
     { date: "2026-08-26 09:55", text: "🔔 全站新增轻量音效反馈：点击按钮、抽班级签、触发彩蛋、密码验证成功/失败都有小音效，氛围感拉满。如果觉得吵，侧边栏新增「🔔 音效」开关，一键关闭且会记住你的选择。", category: "site" },
     { date: "2026-08-26 00:45", text: "🐍 贪吃蛇挑战奖励更新：点歌券门槛改为吃满 60 个豆！每吃 10 个豆蛇会提速一点点；新增屏幕虚拟方向键，手机上不用滑动也能操控。🔒 另：站内所有密码/暗号增加防爆破——连续输错 3 次会锁定 30 秒，之后每次再错等待时间递增（1 / 2 / 5 分钟…），输对一次自动清零。", category: "site" },
@@ -1095,7 +1096,16 @@ function resetHome(){ location.hash = ''; hideOverlays(); window.scrollTo(0,0); 
 window.addEventListener('hashchange', applyHash);
 
 /* ---- 链接打开（微信智能分流） ---- */
+/* 跳转前记住当前视图，返回班级站时自动恢复（sessionStorage） */
+function rememberView(){
+  var v = 'home';
+  var hm = document.getElementById('hiddenViewMask');
+  if(hm && hm.classList.contains('show')){ v = 'hidden'; }
+  else if(window.__activeCat != null){ v = 'cat_' + window.__activeCat; }
+  try{ sessionStorage.setItem('cls_return_view', v); }catch(e){}
+}
 function openLink(url, wechatOk){
+  rememberView();
   url = (url||'').trim();
   if(!url || url === '#'){ alert('该入口链接暂未配置，请联系管理员补充'); return; }
   if(isWeChat() && !wechatOk){
@@ -2058,6 +2068,20 @@ applyHash();
 updateCountdown();
 setInterval(updateCountdown, 1000);
 goHomeView();
+/* 返回记忆：从外链/小游戏返回时，恢复到跳转前的视图（隐藏空间/分类/首页）。
+ * 必须在 goHomeView() 之后执行，否则会被其覆盖回首页 */
+(function(){
+  var v = null;
+  try{ v = sessionStorage.getItem('cls_return_view'); sessionStorage.removeItem('cls_return_view'); }catch(e){}
+  if(v === 'hidden'){
+    var hm = document.getElementById('hiddenViewMask');
+    if(hm && !hm.classList.contains('show')) openHiddenView();
+  }else if(v && v.indexOf('cat_') === 0){
+    openCat(parseInt(v.slice(4), 10));
+  }else if(v === 'home'){
+    goHomeView();
+  }
+})();
 /* 暗黑模式切换 */
 function toggleTheme(){
   var d = document.documentElement;

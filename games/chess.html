@@ -70,7 +70,8 @@ function initBoard(){
   for(var y=0;y<10;y++)board.push([0,0,0,0,0,0,0,0,0]);
   var back=[R,N,B,A,K,A,B,N,R];
   for(var x=0;x<9;x++){board[0][x]=-back[x];board[9][x]=back[x];}
-  for(var x=0;x<9;x++){board[3][x]=-P;board[6][x]=P;}
+  /* 中国象棋兵/卒只有 5 个，隔一格摆放（x=0,2,4,6,8），不是一排 9 个 */
+  for(var x=0;x<9;x+=2){board[3][x]=-P;board[6][x]=P;}
   board[2][1]=-C;board[2][7]=-C;board[7][1]=C;board[7][7]=C;
 }
 function reset(){
