@@ -986,7 +986,8 @@ var SITE_DATA = {
     { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清空本机站点数据（游戏记录、主题/音效、密码与暗号通关及锁状态等），保留设备标识、班级签、点歌券记录（防借初始化刷签/刷券）。", category: "site" },
     { date: "2026-08-27 00:13", text: "📌 功能更新：\n① 学习资料「访问提示」弹窗关闭后，右下角出现带红点的消息悬浮球，点击可重新打开；勾选「不再显示」则无悬浮球。\n② 全部公告日期筛选升级：快捷范围 近 3 天 / 7 天 / 15 天 / 30 天 / 近半年，并支持自定义起止日期。\n③ 全部公告可按时间隐藏更早公告（范围同②），公告条数随筛选实时更新。", category: "site" },
     { date: "2026-08-27 00:21", text: "📌 功能更新：\n① 新增「夜间自动暗色模式」：18:30–次日 7:30 自动切换暗色，其余时间自动恢复亮色；夜间手动切回亮色时询问是否关闭自动切换，关闭后不再自动切换。\n② 侧边栏新增「复制链接」按钮，一键复制当前网页地址。", category: "site" },
-    { date: "2026-08-27 00:28", text: "📌 功能与视觉更新：\n① 「复制链接」升级为弹窗：复制站点主链接，备用链接上线后将在此列出。\n② 夜间自动暗色询问升级为三选：仅这次切换 / 关闭自动切换 / 保持暗色。\n③ 全站视觉升级：液态玻璃质感、背景光斑流动、卡片流光与入场、弹窗弹出动画，按钮均有按压反馈，音效保持不变。", category: "site" }
+    { date: "2026-08-27 00:28", text: "📌 功能与视觉更新：\n① 「复制链接」升级为弹窗：复制站点主链接，备用链接上线后将在此列出。\n② 夜间自动暗色询问升级为三选：仅这次切换 / 关闭自动切换 / 保持暗色。\n③ 全站视觉升级：液态玻璃质感、背景光斑流动、卡片流光与入场、弹窗弹出动画，按钮均有按压反馈，音效保持不变。", category: "site" },
+    { date: "2026-08-27 00:46", text: "💬 学习资料「访问提示」悬浮球调整：仅在学习资料板块内显示，离开板块后自动消失。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -1616,6 +1617,7 @@ function openCat(id){
   var page = document.getElementById('tab-cat-'+id);
   if(page) page.classList.add('active');
   if(id === 5){ showStudyNotice(); }
+  else { studyBubbleHide(); }
   var btns = document.querySelectorAll('#sideCats .side-btn');
   for(var j=0;j<btns.length;j++){ btns[j].classList.remove('active'); }
   var cur = document.querySelector('#sideCats .side-btn[data-cat="'+id+'"]');
@@ -1626,6 +1628,7 @@ function openCat(id){
 }
 function goHomeView(){
   __activeCat = null;
+  studyBubbleHide();
   var home = document.getElementById('homeView');
   var grid = document.getElementById('grid');
   if(home) home.style.display = 'block';
@@ -2319,6 +2322,7 @@ function wipeAllData(){
 /* ---- 学习资料网络限制提示弹窗（关闭后显示带红点悬浮球） ---- */
 function studyBubbleShow(){
   var b=document.getElementById('studyBubble'); if(!b) return;
+  if(window.__activeCat !== 5){ b.style.display='none'; return; } /* 仅在学习资料板块内显示 */
   var off=false; try{ off=localStorage.getItem('cls_study_notice_dismissed')==='1'; }catch(e){}
   b.style.display = off ? 'none' : 'flex';
 }

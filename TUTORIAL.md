@@ -227,7 +227,7 @@ curl -X PATCH https://xsyzc2505.dpdns.org/api/open/card-codes \
 ### 6.1 站内手动导出（唯一备份方式）
 
 - 网站侧边栏底部「📦 导出备份」按钮 → 输入备份密码 → 下载 `class-site-backup.zip`。
-- 备份密码 备份口令 仅以 SHA-256 哈希存在前端，源码无明文（见 `EXPORT_PASS_HASH`）。
+- 备份密码仅以 SHA-256 哈希存在前端（见 `EXPORT_PASS_HASH`），明文口令不入库。
 - **每次内容更新后必须重新生成 zip 并提交**（保证导出文件与线上一致）：
   ```bash
   zip -r class-site-backup.zip . -x ".git/*" "backups/*" ".github/*" "*.log" "source/node_modules/*"
@@ -268,6 +268,7 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 | 日期 | 内容 |
 |------|------|
+| 2026-08-27 | 🔐 **口令轮换完成 + 悬浮球板块限定**：① `secrets.json.enc` 已用新口令重新加密（AES-256-CBC + PBKDF2 200000 轮，往返验证通过；**口令值不入库**）；② 补发现 TUTORIAL 6.1 节曾明文写出导出备份口令，已脱敏为「明文口令不入库」，并随历史改写一并抹除；③ 学习资料访问提示悬浮球 `studyBubbleShow()` 增加 `__activeCat!==5` 判定——仅在学习资料板块（id=5）内显示，`goHomeView()` 与其他分类打开时隐藏。 |
 | 2026-08-27 | 🔐 **【事故+修复】敏感信息泄露**：此前 `TUTORIAL.md` 两处明文出现 `secrets.json.enc` 解密口令 + tracked 的 `secrets-hint.txt`（"6位数字"提示将口令暴力破解复杂度降到极低）+ `scripts/encrypt-secret.sh` & `scripts/decrypt-secret.sh` 入仓。处置：① 工作树脱敏——TUTORIAL 两处"密码 本地口令"替换为"本地口令（口令不入库）"；`git rm secrets-hint.txt scripts/encrypt-secret.sh scripts/decrypt-secret.sh`；保留 `secrets.json.enc` 密文。② 新站规"敏感信息安全（红线）"——线上只传密文、口令永不入库、脚本与提示不入库、提交前 `git grep` 自检。③ **改写 Git 历史** 抹除所有 commit 中的明文与 hint/脚本文件并 force-push。④ **必须轮换已被暴露的密钥**（旧密钥视为已泄露），重新加密 `secrets.json.enc`。已记台账。 |
 | 2026-08-27 | 📌 **复制链接弹窗 + 自动暗色三选 + 全站液态玻璃动画**：① 「复制链接」改弹窗：`SITE_DATA.siteLinks` 列表渲染（主链接 + 备用链接占位「敬请期待」），复制主链接；② 夜间自动暗色询问改三选弹窗 `#themeAutoAskMask`（仅这次切换 / 关闭自动切换 / 保持暗色）；③ 全站视觉升级：背景光斑漂移（`blobA/blobB`）、表面玻璃化（`--glass-bg`+`backdrop-filter`）、卡片流光（`sheen`）与入场（`riseIn`）、弹窗弹出（`popIn`）、按钮按压/旋转/FAB 脉冲等动画。已发分点公告。 |
 | 2026-08-27 | 📌 **夜间自动暗色 + 复制链接**：① 自动暗色模式：`isNightTime()`（分钟制 >=1110 或 <450，即 18:30~次日 7:30）判断夜间；`applyAutoTheme()` 在 `initTheme` 加载时应用并按需写入 `cls_theme`，另设 30s 定时器仅在 `isNightTime()!==_lastAutoNight` 边界翻转时应用（白天手动切深色不被覆盖）；夜间自动暗色下手动切回亮色 → `toggleTheme` 内 `confirm` 询问是否关闭自动切换，确认后写 `cls_theme_auto='off'` 永不再自动切换。② 侧边栏底部新增「🔗 复制链接」`copySiteLink()`（clipboard API + `fallbackCopyLink` execCommand 兜底，按钮短暂显示「✅ 链接已复制」）。已发分点公告。 |
@@ -344,7 +345,7 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 | 2026-08-27 | **复制链接弹窗（主+备用结构）**：侧边栏「🔗 复制链接」改为弹窗（`openCopyLink` / `copyOneLink` / `closeCopyLink`），按 `SITE_DATA.siteLinks` 列表渲染（当前仅主链接，备用链接未上线留占位行「敬请期待」）；复制即站点主链接（不再复制当前 location）。 | 已上线 |
 | 2026-08-27 | **夜间自动暗色三选弹窗**：夜间手动切亮色改为 `#themeAutoAskMask` 三选——仅这次切换（`themeAskOnce`，切亮并保持自动开启）/ 关闭自动切换（`themeAskOff` 写 `cls_theme_auto='off'`）/ 保持暗色（`closeThemeAutoAsk`）；替代原 confirm 双选。 | 已上线 |
 | 2026-08-27 | **全站液态玻璃与动画**：背景光斑漂移动画（`blobA` / `blobB`）、主要表面玻璃化（`--glass-bg` 变量 + `backdrop-filter` 毛玻璃：sidebar / card / allboard-box / install-sec）、卡片流光扫过（`sheen`）、卡片入场（`riseIn` 交错延迟）、弹窗弹出（`popIn`）、按钮按压反馈、主题按钮旋转、FAB 脉冲、页头轻浮动；尊重 `prefers-reduced-motion`。 | 已上线 |
-| 2026-08-27 | **【事故+修复】敏感信息安全**：此前 `TUTORIAL.md` 两处明文出现 `secrets.json.enc` 解密口令 + tracked 的 `secrets-hint.txt`（6位数字提示，降低暴力破解难度）+ `scripts/encrypt-secret.sh` & `scripts/decrypt-secret.sh` 入仓。处置：① 工作树：TUTORIAL 脱敏（口令替换为"本地口令（口令不入库）"）、`git rm secrets-hint.txt scripts/*.sh`（保留 `secrets.json.enc` 密文）；② 立新铁律"敏感信息安全（红线）"——线上只传密文、口令永不入库、脚本与提示不入库、提交前 `git grep` 自检；③ **改写 Git 历史**抹除所有 commit 中的明文与 hint 文件并 `force-push`；④ **必须轮换已暴露的密钥**（旧密钥视为已泄露）。 | 处置中 |
+| 2026-08-27 | **【事故+修复】敏感信息安全**：此前 `TUTORIAL.md` 两处明文出现 `secrets.json.enc` 解密口令 + tracked 的 `secrets-hint.txt`（6位数字提示，降低暴力破解难度）+ `scripts/encrypt-secret.sh` & `scripts/decrypt-secret.sh` 入仓。处置：① 工作树：TUTORIAL 脱敏（口令替换为"本地口令（口令不入库）"）、`git rm secrets-hint.txt scripts/*.sh`（保留 `secrets.json.enc` 密文）；② 立新铁律"敏感信息安全（红线）"——线上只传密文、口令永不入库、脚本与提示不入库、提交前 `git grep` 自检；③ **改写 Git 历史**抹除所有 commit 中的明文与 hint 文件并 `force-push`；④ **必须轮换已暴露的密钥**（旧密钥视为已泄露）。⑤ 后续：解密口令已轮换、`secrets.json.enc` 已用新口令重新加密（同 encrypt-secret.sh 方案，往返验证通过，口令值不入库）；另补发现 TUTORIAL 6.1 节曾明文写出导出备份口令，已脱敏并随历史改写一并抹除；学习资料悬浮球改为仅板块内显示。 | 已完成 |
 | 2026-08-22~26 | **班级签**：首页「每日日报」上方窄卡片，每天限抽一次，次日 0 点刷新。 | 已上线 |
 | 2026-08-22~26 | **彩带彩蛋**：连续切换白天/黑夜主题 3 次触发彩带。 | 已上线 |
 | 2026-08-22~26 | **隐藏娱乐天地（小游戏集合）**：陆续新增 贪吃蛇/俄罗斯方块/打地鼠/记忆翻牌/像素飞鸟/打砖块/消消乐/扫雷/涂鸦跳跃/五子棋/象棋/飞机大战，均单文件、深色主题、移动端自适应、含音效与本地最高分；入口在隐藏空间（班徽点 5 次 → 暗号 → 进入）。 | 已上线 |
