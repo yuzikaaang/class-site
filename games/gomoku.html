@@ -12,7 +12,7 @@
     display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh}
   a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
   h1{font-size:18px;margin:0}
-  .hud{display:flex;gap:16px;font-size:15px;align-items:center}
+  .hud{display:flex;gap:16px;font-size:15px;align-items:center;flex-wrap:wrap;justify-content:center}
   .hud b{color:#ffcf7a}
   .hud .turn{font-size:13px;padding:4px 12px;border-radius:999px;background:#232f55;color:#9db1ff}
   .hud .turn.ai{background:rgba(70,224,200,.15);color:#46e0c8}
@@ -26,30 +26,39 @@
   .ov button{border:none;border-radius:14px;padding:12px 24px;font-size:15px;font-weight:800;cursor:pointer;
     background:linear-gradient(135deg,#7c83ff,#4a6cf7);color:#fff;box-shadow:0 8px 20px rgba(74,108,247,.35)}
   .ov button:active{transform:scale(.95)}
-  .bar{display:flex;gap:10px;margin-top:2px}
-  .bar button{border:none;border-radius:10px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;
-    background:#232f55;color:#9db1ff}
-  .bar button:active{background:#33405f}
+  .bar{display:flex;gap:8px;margin-top:2px;flex-wrap:wrap;justify-content:center;align-items:center}
+  .bar select,.bar button{border:none;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;
+    background:#232f55;color:#9db1ff;outline:none}
+  .bar button:active,.bar select:active{background:#33405f}
   .tip{font-size:12px;opacity:.55}
 </style>
 </head>
 <body>
 <a class="back" href="../">← 返回班级站</a>
-<h1>⚫ 五子棋 <span style="font-size:12px;opacity:.6">vs AI</span></h1>
-<div class="hud"><span>胜 <b id="wins">0</b></span><span>负 <b id="losses">0</b></span><span class="turn" id="turn">你执黑 · 轮到你</span></div>
+<h1>⚫ 五子棋</h1>
+<div class="hud"><span>胜 <b id="wins">0</b></span><span>负 <b id="losses">0</b></span><span class="turn" id="turn">轮到你（黑）</span></div>
 <div id="wrap">
   <canvas id="cv"></canvas>
   <div class="ov hidden" id="endOv">
-    <h2 id="endTitle">🎉 你赢了！</h2>
+    <h2 id="endTitle">🎉 黑方胜！</h2>
     <p id="endInfo"></p>
     <button id="reBtn">再来一局</button>
   </div>
 </div>
 <div class="bar">
+  <select id="modeSel" title="对战模式">
+    <option value="ai">🤖 人机对战</option>
+    <option value="pvp">👥 本地双人</option>
+  </select>
+  <select id="diffSel" title="AI 难度（仅人机模式）">
+    <option value="0">😌 简单</option>
+    <option value="1" selected>🙂 普通</option>
+    <option value="2">😈 困难</option>
+  </select>
   <button id="undoBtn">↩ 悔棋</button>
   <button id="restartBtn">⟳ 重新开始</button>
 </div>
-<div class="tip">你是黑子先手 · 点击交叉点落子 · 五连即胜</div>
+<div class="tip">黑先白后 · 五连即胜 · 双人模式两人轮流落子</div>
 <script>
 var AC=null;
 function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
@@ -60,20 +69,31 @@ var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 var N=15,CELL=28,M=16;
 var SIZE=N*CELL+M*2;
 cv.width=SIZE;cv.height=SIZE;
-var board,moves,playing,aiThinking,wins,losses;
+var board,moves,playing,aiThinking,cur;   // cur=1黑 2白
+var mode='ai',diff=1;
+var wins,losses;
 wins=+(localStorage.getItem('gomoku_w')||0);losses=+(localStorage.getItem('gomoku_l')||0);
 document.getElementById('wins').textContent=wins;document.getElementById('losses').textContent=losses;
 
 function reset(){
   board=[];moves=[];
   for(var r=0;r<N;r++){board[r]=[];for(var c=0;c<N;c++)board[r][c]=0;}
-  playing=true;aiThinking=false;
-  setTurn('你执黑 · 轮到你',false);
+  playing=true;aiThinking=false;cur=1;
+  refreshTurn();
   document.getElementById('endOv').classList.add('hidden');
   draw();
 }
-function setTurn(t,ai){var el=document.getElementById('turn');el.textContent=t;el.className='turn'+(ai?' ai':'');}
-function idx(r,c){return r*N+c;}
+function refreshTurn(){
+  var el=document.getElementById('turn');
+  if(!playing){return;}
+  if(mode==='pvp'){
+    el.textContent=(cur===1?'⚫ 黑方':'⚪ 白方')+'落子';
+    el.className='turn';
+  }else{
+    if(cur===1){el.textContent='轮到你（黑）';el.className='turn';}
+    else{el.textContent='🤖 AI 思考中…';el.className='turn ai';}
+  }
+}
 function inb(r,c){return r>=0&&r<N&&c>=0&&c<N;}
 function place(r,c,p){
   board[r][c]=p;moves.push({r:r,c:c,p:p});
@@ -92,15 +112,25 @@ function checkWin(r,c,p){
   return false;
 }
 function end(winner){
-  playing=false;
-  if(winner===1){snd.win();wins++;try{localStorage.setItem('gomoku_w',wins);}catch(e){} document.getElementById('wins').textContent=wins;
-    document.getElementById('endTitle').textContent='🎉 你赢了！';document.getElementById('endInfo').textContent='五连达成，AI 甘拜下风';
-  }else{snd.lose();losses++;try{localStorage.setItem('gomoku_l',losses);}catch(e){} document.getElementById('losses').textContent=losses;
-    document.getElementById('endTitle').textContent='🤖 AI 赢了';document.getElementById('endInfo').textContent='再想想棋路，你可以的';
+  playing=false;aiThinking=false;
+  var blackWin = (mode==='pvp' ? winner===1 : winner===1);
+  if(blackWin){snd.win();}
+  else{snd.lose();}
+  // 人机模式：黑=玩家，白=AI
+  if(mode==='ai'){
+    if(winner===1){wins++;try{localStorage.setItem('gomoku_w',wins);}catch(e){} document.getElementById('wins').textContent=wins;
+      document.getElementById('endTitle').textContent='🎉 你赢了！';document.getElementById('endInfo').textContent='五连达成，AI 甘拜下风';
+    }else{losses++;try{localStorage.setItem('gomoku_l',losses);}catch(e){} document.getElementById('losses').textContent=losses;
+      document.getElementById('endTitle').textContent='🤖 AI 赢了';document.getElementById('endInfo').textContent='再想想棋路，你可以的';
+    }
+  }else{
+    document.getElementById('endTitle').textContent=(winner===1?'🎉 黑方胜！':'⚪ 白方胜！');
+    document.getElementById('endInfo').textContent='五连达成';
   }
+  document.getElementById('turn').textContent='对局结束';
   document.getElementById('endOv').classList.remove('hidden');
 }
-/* ===== AI：方向评分启发式 ===== */
+/* ===== 评估与 AI ===== */
 function lineScore(r,c,p){
   var dirs=[[1,0],[0,1],[1,1],[1,-1]],best=0;
   for(var d=0;d<4;d++){
@@ -125,22 +155,85 @@ function lineScore(r,c,p){
   }
   return best;
 }
+function aiCandidates(){
+  var list=[];
+  for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+    if(board[r][c]!==0)continue;
+    var near=false;
+    for(var dr=-2;dr<=2&&!near;dr++)for(var dc=-2;dc<=2;dc++){
+      if(inb(r+dr,c+dc)&&board[r+dr][c+dc]!==0){near=true;break;}
+    }
+    if(near)list.push({r:r,c:c});
+  }
+  if(list.length===0)list.push({r:7,c:7});
+  return list;
+}
+function evalBoard(){
+  var s=0;
+  for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+    if(board[r][c]===2)s+=lineScore(r,c,2);      // 白(AI) 优为正
+    else if(board[r][c]===1)s-=lineScore(r,c,1)*1.05;
+  }
+  return s;
+}
+/* negamax：color=1 白方视角（最大化 evalBoard），-1 黑方视角 */
+function negamax(depth,alpha,beta,color){
+  if(depth===0)return color*evalBoard();
+  var cand=aiCandidates();
+  if(cand.length===0)return color*evalBoard();
+  var best=-Infinity;
+  for(var i=0;i<cand.length;i++){
+    board[cand[i].r][cand[i].c]=(color===1?2:1);
+    var v=-negamax(depth-1,-beta,-alpha,-color);
+    board[cand[i].r][cand[i].c]=0;
+    if(v>best)best=v;
+    if(v>alpha)alpha=v;
+    if(alpha>=beta)break;
+  }
+  return best;
+}
 function aiMove(){
   if(!playing||aiThinking)return;
-  aiThinking=true;setTurn('🤖 AI 思考中…',true);
+  if(cur!==2)return;
+  aiThinking=true;refreshTurn();
   setTimeout(function(){
-    var best=null,bestS=-1;
-    for(var r=0;r<N;r++)for(var c=0;c<N;c++){
-      if(board[r][c]!==0)continue;
-      var off=lineScore(r,c,2),def=lineScore(r,c,1);
-      var s=off+def*1.02;
-      if(s>bestS){bestS=s;best={r:r,c:c};}
+    var best=null,bestS=-Infinity;
+    var cand=aiCandidates();
+    if(diff===0){
+      // 简单：随机空位（略偏中心）
+      var prefer=[];
+      for(var i=0;i<cand.length;i++){
+        var d=Math.abs(cand[i].r-7)+Math.abs(cand[i].c-7);
+        if(d<=3)prefer.push(cand[i]);
+      }
+      var pool=prefer.length?prefer:cand;
+      best=pool[(Math.random()*pool.length)|0];
+    }else if(diff===1){
+      // 普通：一步贪心
+      for(var i=0;i<cand.length;i++){
+        var off=lineScore(cand[i].r,cand[i].c,2),def=lineScore(cand[i].r,cand[i].c,1);
+        var s=off+def*1.02;
+        if(s>bestS){bestS=s;best=cand[i];}
+      }
+    }else{
+      // 困难：negamax 深度2（候选过多时启发式剪枝）
+      if(cand.length>20){
+        cand.sort(function(a,b){return (lineScore(b.r,b.c,2)+lineScore(b.r,b.c,1)*1.02)-(lineScore(a.r,a.c,2)+lineScore(a.r,a.c,1)*1.02);});
+        cand=cand.slice(0,20);
+      }
+      for(var i=0;i<cand.length;i++){
+        board[cand[i].r][cand[i].c]=2;
+        var v=-negamax(1,-Infinity,Infinity,-1); // 对手（黑）回应一层，转白方视角
+        board[cand[i].r][cand[i].c]=0;
+        if(v>bestS){bestS=v;best=cand[i];}
+      }
     }
-    if(!best)return;
     aiThinking=false;
-    place(best.r,best.c,2);
-    if(playing)setTurn('你执黑 · 轮到你',false);
-  },280);
+    if(best&&playing){
+      place(best.r,best.c,2);
+      if(playing){cur=1;refreshTurn();}
+    }else if(playing){cur=1;refreshTurn();}
+  },240);
 }
 cv.addEventListener('pointerdown',function(e){
   if(!playing||aiThinking)return;
@@ -148,20 +241,31 @@ cv.addEventListener('pointerdown',function(e){
   var x=(e.clientX-r.left)*(SIZE/r.width)-M,y=(e.clientY-r.top)*(SIZE/r.height)-M;
   var c=Math.round(x/CELL),rr=Math.round(y/CELL);
   if(!inb(rr,c)||board[rr][c]!==0)return;
-  if(place(rr,c,1))return;
-  aiMove();
+  var p=cur;
+  place(rr,c,p);
+  if(!playing)return;
+  if(mode==='ai'){
+    cur=2;refreshTurn();
+    if(cur===2)aiMove();
+  }else{
+    cur=cur===1?2:1;
+    refreshTurn();
+  }
 });
 document.getElementById('undoBtn').addEventListener('click',function(){
   if(moves.length<2)return;
   var m1=moves.pop();board[m1.r][m1.c]=0;
   if(moves.length>0&&moves[moves.length-1].p===2){var m2=moves.pop();board[m2.r][m2.c]=0;}
   playing=true;aiThinking=false;
-  setTurn('你执黑 · 轮到你',false);
+  cur=1;
+  refreshTurn();
   document.getElementById('endOv').classList.add('hidden');
   draw();
 });
 document.getElementById('restartBtn').addEventListener('click',function(){reset();});
 document.getElementById('reBtn').addEventListener('click',function(){reset();});
+document.getElementById('modeSel').addEventListener('change',function(){mode=this.value;reset();});
+document.getElementById('diffSel').addEventListener('change',function(){diff=+this.value;reset();});
 function draw(){
   ctx.clearRect(0,0,SIZE,SIZE);
   ctx.fillStyle='#1a2440';ctx.fillRect(0,0,SIZE,SIZE);

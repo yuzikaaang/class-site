@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>飞机大战 · 25级05班</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:linear-gradient(170deg,#0d1024,#101a38);color:#e9ecff;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh}
+  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
+  h1{font-size:18px;margin:0}
+  .hud{display:flex;gap:18px;font-size:15px}
+  .hud b{color:#ffcf7a}
+  #wrap{position:relative;width:min(94vw,420px)}
+  canvas{width:100%;height:auto;background:#060a18;border-radius:16px;display:block;box-shadow:0 12px 40px rgba(0,0,0,.5);touch-action:none}
+  .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:rgba(6,10,24,.78);border-radius:16px;text-align:center;padding:20px;z-index:3}
+  .ov.hidden{display:none}
+  .ov h2{margin:0;font-size:24px;color:#ffcf7a}
+  .ov p{margin:2px 0;font-size:13px;color:#9db1ff;line-height:1.7}
+  .ov button{border:none;border-radius:14px;padding:13px 30px;font-size:16px;font-weight:800;cursor:pointer;
+    background:linear-gradient(135deg,#46e0c8,#2fd6a8);color:#0b0f22;box-shadow:0 8px 20px rgba(70,224,200,.3)}
+  .ov button:active{transform:scale(.95)}
+  .tip{font-size:12px;opacity:.55}
+</style>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>✈️ 飞机大战</h1>
+<div class="hud"><span>得分 <b id="sc">0</b></span><span>生命 <b id="life">3</b></span><span>最高 <b id="hi">0</b></span></div>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="ov" id="startOv">
+    <h2>飞机大战</h2>
+    <p>左右移动躲避并击落敌机<br>按住屏幕拖动飞机 · 自动开火</p>
+    <button id="startBtn">开始游戏</button>
+  </div>
+  <div class="ov hidden" id="overOv">
+    <h2>💥 坠机啦</h2>
+    <p id="ovInfo"></p>
+    <button id="reBtn">再来一局</button>
+  </div>
+</div>
+<div class="tip">击落敌机得分 · 漏掉或相撞掉命 · 敌机会越来越快</div>
+<script>
+var AC=null;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f,d,t,v,delay){var c=ac();if(!c)return;var o=c.createOscillator(),g=c.createGain();o.type=t||'square';o.frequency.value=f;var t0=c.currentTime+(delay||0);g.gain.setValueAtTime(v||0.05,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(d||0.08));o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+(d||0.08)+0.02);}
+var snd={shot:function(){tone(900,0.03,'square',0.02);},hit:function(){tone(300,0.12,'sawtooth',0.05);setTimeout(function(){tone(160,0.15,'sawtooth',0.04);},60);},boom:function(){tone(120,0.4,'sawtooth',0.08);setTimeout(function(){tone(70,0.5,'sawtooth',0.06);},100);},level:function(){tone(700,0.07,'sine',0.05);setTimeout(function(){tone(1000,0.09,'sine',0.05);},70);}};
+
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var W=380,H=600;
+cv.width=W;cv.height=H;
+var px,py,pw,ph,sc,life,hi,playing,bullets,enemies,stars,raf,fireT;
+hi=+(localStorage.getItem('plane_hi')||0);document.getElementById('hi').textContent=hi;
+pw=44,ph=52;
+
+function reset(){
+  px=W/2-pw/2;py=H-110;sc=0;life=3;bullets=[];enemies=[];
+  stars=[];for(var i=0;i<40;i++)stars.push({x:Math.random()*W,y:Math.random()*H,s:Math.random()*1.8+0.4});
+  document.getElementById('sc').textContent=0;document.getElementById('life').textContent=3;
+  hideOv();playing=true;raf=requestAnimationFrame(tick);
+}
+function hideOv(){document.getElementById('startOv').classList.add('hidden');document.getElementById('overOv').classList.add('hidden');}
+function end(){
+  playing=false;cancelAnimationFrame(raf);snd.boom();
+  if(sc>hi){hi=sc;try{localStorage.setItem('plane_hi',hi);}catch(e){} document.getElementById('hi').textContent=hi;}
+  document.getElementById('ovInfo').innerHTML='得分 '+sc+(sc>=hi&&sc>0?'　🏆 新纪录！':'　最高 '+hi);
+  document.getElementById('overOv').classList.remove('hidden');
+}
+function tick(){
+  if(!playing){draw();return;}
+  // 子弹
+  if(!fireT||Date.now()-fireT>260){fireT=Date.now();bullets.push({x:px+pw/2-2,y:py-8,w:4,h:12});snd.shot();}
+  for(var i=bullets.length-1;i>=0;i--){
+    bullets[i].y-=8;
+    if(bullets[i].y<-20)bullets.splice(i,1);
+  }
+  // 敌机生成（随分数加速）
+  var spawn=Math.max(30,90-sc*0.5);
+  if(Math.random()*100<spawn/10){
+    var t=Math.random();
+    var type=t<0.6?0:(t<0.85?1:2); // 0小 1中 2大
+    var es=[16,22,30],hp=[1,2,4],sp=[2.2,1.8,1.4];
+    enemies.push({x:Math.random()*(W-40),y:-30,w:es[type]*2,h:es[type]*2,hp:hp[type],max:hp[type],sp:sp[type]+sc*0.012,type:type});
+  }
+  for(var i=enemies.length-1;i>=0;i--){
+    var e=enemies[i];
+    e.y+=e.sp;
+    if(e.y>H+40){enemies.splice(i,1);life--;document.getElementById('life').textContent=life;snd.boom();
+      if(life<=0){end();return;}
+      continue;
+    }
+    // 子弹打中
+    for(var j=bullets.length-1;j>=0;j--){
+      var b=bullets[j];
+      if(b.x<e.x+e.w&&b.x+b.w>e.x&&b.y<e.y+e.h&&b.y+b.h>e.y){
+        e.hp--;bullets.splice(j,1);
+        if(e.hp<=0){
+          var pts=[10,20,40][e.type];
+          sc+=pts;snd.hit();
+          document.getElementById('sc').textContent=sc;
+          if(sc>hi){hi=sc;try{localStorage.setItem('plane_hi',hi);}catch(e){} document.getElementById('hi').textContent=hi;}
+          if(sc%100<10&&sc>0)snd.level();
+          enemies.splice(i,1);
+          break;
+        }
+      }
+    }
+  }
+  // 相撞
+  for(var i=enemies.length-1;i>=0;i--){
+    var e=enemies[i];
+    if(px+pw>e.x&&px<e.x+e.w&&py+ph>e.y&&py<e.y+e.h){
+      enemies.splice(i,1);life--;document.getElementById('life').textContent=life;snd.boom();
+      if(life<=0){end();return;}
+    }
+  }
+  draw();raf=requestAnimationFrame(tick);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // 星空
+  for(var i=0;i<stars.length;i++){
+    var s=stars[i];
+    ctx.fillStyle='rgba(255,255,255,'+(0.2+s.s*0.2)+')';
+    ctx.fillRect(s.x,s.y,s.s,s.s);
+    s.y+=0.5;if(s.y>H){s.y=0;s.x=Math.random()*W;}
+  }
+  // 子弹
+  ctx.fillStyle='#46e0c8';
+  for(var i=0;i<bullets.length;i++)ctx.fillRect(bullets[i].x,bullets[i].y,bullets[i].w,bullets[i].h);
+  // 敌机
+  for(var i=0;i<enemies.length;i++){
+    var e=enemies[i];
+    var cols=['#ff6b8b','#ff9f6b','#c084fc'];
+    ctx.fillStyle=cols[e.type];
+    ctx.beginPath();ctx.moveTo(e.x+e.w/2,e.y);ctx.lineTo(e.x+e.w,e.y+e.h);ctx.lineTo(e.x+e.w/2,e.y+e.h*0.8);ctx.lineTo(e.x,e.y+e.h);ctx.closePath();ctx.fill();
+    if(e.hp<e.max){
+      ctx.fillStyle='#0b0f22';ctx.fillRect(e.x,e.y-6,e.w,4);
+      ctx.fillStyle='#46e0c8';ctx.fillRect(e.x,e.y-6,e.w*(e.hp/e.max),4);
+    }
+  }
+  // 玩家
+  ctx.fillStyle='#7c83ff';
+  ctx.beginPath();ctx.moveTo(px+pw/2,py);ctx.lineTo(px+pw,py+ph);ctx.lineTo(px+pw/2,py+ph*0.82);ctx.lineTo(px,py+ph);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#46e0c8';ctx.fillRect(px+pw/2-2,py-4,4,10);
+}
+cv.addEventListener('pointermove',function(e){
+  var r=cv.getBoundingClientRect();
+  px=Math.max(0,Math.min(W-pw,(e.clientX-r.left)*(W/r.width)-pw/2));
+});
+cv.addEventListener('touchmove',function(e){
+  e.preventDefault();
+  var t=e.touches[0],r=cv.getBoundingClientRect();
+  px=Math.max(0,Math.min(W-pw,(t.clientX-r.left)*(W/r.width)-pw/2));
+},{passive:false});
+document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
+document.getElementById('reBtn').addEventListener('click',function(){reset();});
+</script>
+</body>
+</html>

@@ -825,6 +825,7 @@ var SITE_DATA = {
     { date: "2026-08-25 20:41", text: "公告栏「公众号」旁新增「仓库」按钮，点击可直达 Gitee 源码仓库查看。另：作业查看中 8.25-8.27 的「2026 暑假作业」为示例测试数据，并非真实作业，正式作业以老师线下布置为准。", category: "site" },
     { date: "2026-08-25 21:55", text: "「班级事务」中原「建言献策」「情况反映」两个待开发卡片已合并为「意见反馈」，点击即可匿名填写问卷，对班级的建议、想法或想反映的问题都可以提交。", category: "class" },
     { date: "2026-08-25 22:58", text: "首页新增「今日班级签」：小卡片已放在「每日日报」上方，点一下抽一张签，有好签也有提醒签，每天限抽一次，次日 0 点自动刷新。图个乐子，别当真～", category: "site" },
+    { date: "2026-08-26 10:10", text: "🔍 悄悄告诉你：页面顶部班徽上藏着彩蛋入口，连点几下会触发暗号验证，暗号答案与「同学群目前人数」有关。别在站主杂谈里翻啦，就藏在班徽里～（找到的别声张，先玩为敬）", category: "misc" },
     { date: "2026-08-26 09:55", text: "🔔 全站新增轻量音效反馈：点击按钮、抽班级签、触发彩蛋、密码验证成功/失败都有小音效，氛围感拉满。如果觉得吵，侧边栏新增「🔔 音效」开关，一键关闭且会记住你的选择。", category: "site" },
     { date: "2026-08-26 00:45", text: "🐍 贪吃蛇挑战奖励更新：点歌券门槛改为吃满 60 个豆！每吃 10 个豆蛇会提速一点点；新增屏幕虚拟方向键，手机上不用滑动也能操控。🔒 另：站内所有密码/暗号增加防爆破——连续输错 3 次会锁定 30 秒，之后每次再错等待时间递增（1 / 2 / 5 分钟…），输对一次自动清零。", category: "site" },
     { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "class" },
@@ -1512,9 +1513,11 @@ var HIDDEN_FUN_LINKS = [
   { icon: "🐦", title: "像素飞鸟", desc: "一飞冲天，穿过水管拿高分", url: "games/bird.html" },
   { icon: "🧱", title: "打砖块", desc: "弹球消砖，手感复古", url: "games/breakout.html" },
   { icon: "🍬", title: "消消乐", desc: "三连消除，连击爆分", url: "games/match3.html" },
-  { icon: "💣", title: "扫雷", desc: "推理翻格，长按标旗", url: "games/minesweeper.html" },
+  { icon: "💣", title: "扫雷", desc: "推理翻格，雷数自定", url: "games/minesweeper.html" },
   { icon: "🦘", title: "涂鸦跳跃", desc: "一路向上，踩弹簧起飞", url: "games/doodle.html" },
-  { icon: "⚫", title: "五子棋", desc: "人机对战，五连即胜", url: "games/gomoku.html" }
+  { icon: "⚫", title: "五子棋", desc: "人机三档难度 / 本地双人", url: "games/gomoku.html" },
+  { icon: "♟", title: "中国象棋", desc: "完整规则，AI 三档 / 本地双人", url: "games/chess.html" },
+  { icon: "✈️", title: "飞机大战", desc: "纵版射击，击落敌机冲高分", url: "games/plane.html" }
 ];
 var _badgeClicks = 0, _badgeTimer = null;
 function badgeClick(){
