@@ -59,7 +59,7 @@ hi=+(localStorage.getItem('plane_hi')||0);document.getElementById('hi').textCont
 pw=44,ph=52;
 
 function reset(){
-  px=W/2-pw/2;py=H-110;sc=0;life=3;bullets=[];enemies=[];
+  px=W/2-pw/2;py=H-110;sc=0;life=3;bullets=[];enemies=[];tickFrame=0;
   stars=[];for(var i=0;i<40;i++)stars.push({x:Math.random()*W,y:Math.random()*H,s:Math.random()*1.8+0.4});
   document.getElementById('sc').textContent=0;document.getElementById('life').textContent=3;
   hideOv();playing=true;raf=requestAnimationFrame(tick);
@@ -79,13 +79,15 @@ function tick(){
     bullets[i].y-=8;
     if(bullets[i].y<-20)bullets.splice(i,1);
   }
-  // 敌机生成（随分数加速）
-  var spawn=Math.max(30,90-sc*0.5);
-  if(Math.random()*100<spawn/10){
+  // 敌机生成：慢节奏（时间间隔 + 分数缓慢加速）
+  // 初始 90 帧一架（约 1.5s@60fps），每得 50 分减 5 帧，最快 35 帧一架
+  var spawnInt = Math.max(35, 90 - Math.floor(sc/50)*5);
+  tickFrame = (tickFrame||0) + 1;
+  if(tickFrame % spawnInt === 0){
     var t=Math.random();
-    var type=t<0.6?0:(t<0.85?1:2); // 0小 1中 2大
-    var es=[16,22,30],hp=[1,2,4],sp=[2.2,1.8,1.4];
-    enemies.push({x:Math.random()*(W-40),y:-30,w:es[type]*2,h:es[type]*2,hp:hp[type],max:hp[type],sp:sp[type]+sc*0.012,type:type});
+    var type=t<0.7?0:(t<0.92?1:2); // 0小 1中 2大（中小机更常见）
+    var es=[16,22,30],hp=[1,2,4],sp=[2.0,1.6,1.2];
+    enemies.push({x:Math.random()*(W-40),y:-30,w:es[type]*2,h:es[type]*2,hp:hp[type],max:hp[type],sp:sp[type]+Math.min(1.5,sc*0.008),type:type});
   }
   for(var i=enemies.length-1;i>=0;i--){
     var e=enemies[i];
