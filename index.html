@@ -528,7 +528,7 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
   <div class="allboard-box" style="max-width:360px">
     <div class="allboard-head"><span>💾 数据管理</span><button onclick="closeData()">关闭</button></div>
     <div style="padding:16px 20px;text-align:left">
-      <p style="font-size:.8rem;color:#4a5568;margin:0 0 12px">管理本站保存在本设备上的数据（游戏最高分、记录、班级签等）。换设备或清缓存前可先导出，之后导入即可恢复。如需彻底清空（含主题、音效、密码/暗号通关与锁状态、设备标识等全部本机数据），请用下方「全部清理」。</p>
+      <p style="font-size:.8rem;color:#4a5568;margin:0 0 12px">管理本站保存在本设备上的数据（游戏最高分、记录、班级签等）。换设备或清缓存前可先导出，之后导入即可恢复。如需彻底清空（游戏记录、主题/音效、密码与暗号通关及锁状态等），请用下方「全部清理」；设备标识、班级签、点歌券记录不会被清除（防借初始化刷签/刷券）。</p>
       <button class="btn" style="width:100%;margin-bottom:8px" onclick="exportData()">📤 导出数据（下载 JSON）</button>
       <button class="btn" style="width:100%;margin-bottom:8px;background:#eef1ff;color:#3b5bfd" onclick="copyDataText()">📋 复制数据文本</button>
       <div style="display:flex;gap:8px;margin-bottom:8px">
@@ -538,7 +538,7 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
       </div>
       <textarea id="dataPaste" placeholder="粘贴导出的数据文本后点击「粘贴导入」" style="display:none;width:100%;height:60px;box-sizing:border-box;padding:8px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem;margin-bottom:8px" onclick="this.select()"></textarea>
       <button class="btn" style="width:100%;background:#ffeded;color:#c2410c" onclick="resetData()">🗑 重置游戏数据</button>
-      <button class="btn" style="width:100%;background:#c0392b;color:#fff;margin-top:8px" onclick="wipeAllData()">🧹 全部清理（恢复首次打开）</button>
+      <button class="btn" style="width:100%;background:#c0392b;color:#fff;margin-top:8px" onclick="wipeAllData()">🧹 全部清理（保留设备/班签/券）</button>
       <p id="dataMsg" style="font-size:.8rem;margin:10px 0 0;color:#07a154;min-height:1.2em"></p>
     </div>
   </div>
@@ -879,7 +879,8 @@ var SITE_DATA = {
     { date: "2026-08-22 00:00", text: "点歌平台入口已开放！微信内无法直接访问，点击「前往入口」后请按引导用浏览器打开。", category: 'site' },
     { date: "2026-08-22 00:00", text: "班级服务站 2.0 上线：新增公告栏；站点可在微信内直接打开，部分国外站点会自动引导用浏览器访问。", category: 'site' },
     { date: "2026-08-26 23:18", text: "📦 整站备份包（class-site-backup.zip）现已随每次更新同步到最新——站内「导出备份」密码验证后下载到的就是当前完整版站点（含所有小游戏与配置）。另新增站规：每次改动前先通读 README / TUTORIAL 的「用户要求」，确保不漏执行。", category: "site" },
-    { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清除本机全部站点数据（含主题、音效、密码/暗号通关与锁状态、设备标识等），恢复首次打开状态。", category: "site" }
+    { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清空本机站点数据（游戏记录、主题/音效、密码与暗号通关及锁状态等），保留设备标识、班级签、点歌券记录（防借初始化刷签/刷券）。", category: "site" },
+    { date: "2026-08-26 23:38", text: "📌 站规更新：① 主动识别对话中的「印象要求」（如「如果 / 以后」等条件词触发），即便未明说也记入 Gitee 并同步推送；② 单次更新含多条内容时，站内公告改用编号分点（1. 2. 3. …）列出，便于查看。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -2033,10 +2034,16 @@ function resetData(){
   setTimeout(function(){ location.reload(); }, 800);
 }
 function wipeAllData(){
-  if(!confirm('确定要清空本设备的全部站点数据吗？\n\n将清除：游戏记录、班级签、点歌券、主题与音效设置、所有密码/暗号的通关记录与锁状态、设备标识等——等同于首次打开本网站。\n此操作不可恢复。')) return;
-  try{ localStorage.clear(); }catch(e){}
-  try{ sessionStorage.clear(); }catch(e){}
-  dataMsg('✅ 已清空全部数据，即将刷新…');
+  if(!confirm('确定要清空本设备的站点数据吗？\n\n将清除：游戏记录、主题与音效设置、所有密码/暗号的通关记录与锁状态等。\n保留：设备标识、班级签、点歌券记录（防止借初始化刷签/刷券）。\n此操作不可恢复。')) return;
+  try{
+    for(var i=localStorage.length-1;i>=0;i--){
+      var k=localStorage.key(i);
+      if(k && (k.indexOf('song_coupon_')===0 || k.indexOf('cls_sign_')===0 || k==='cls_device_id')) continue;
+      try{ localStorage.removeItem(k); }catch(e){}
+    }
+    sessionStorage.clear();
+  }catch(e){}
+  dataMsg('✅ 已清空站点数据，即将刷新…');
   SFX.success();
   setTimeout(function(){ location.reload(); }, 800);
 }
