@@ -396,6 +396,48 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
 .tab-bar{justify-content:center;padding:10px}
 .tab-btn{padding:9px 16px;font-size:.92rem}
 }
+/* ===== 全站液态玻璃与动画（2026-08-27） ===== */
+:root{--glass-bg:rgba(255,255,255,.60);--glass-border:rgba(255,255,255,.7);--glass-shadow:0 8px 30px rgba(31,38,135,.10)}
+.dark{--glass-bg:rgba(22,30,52,.56);--glass-border:rgba(122,140,190,.22);--glass-shadow:0 8px 30px rgba(0,0,0,.4)}
+/* 背景液态光斑漂移 */
+body::before,body::after{animation:blobA 26s ease-in-out infinite alternate}
+body::after{animation-name:blobB;animation-duration:34s}
+@keyframes blobA{0%{transform:translate(0,0) scale(1)}50%{transform:translate(26vw,18vh) scale(1.3) rotate(18deg)}100%{transform:translate(-8vw,-12vh) scale(.85) rotate(-14deg)}}
+@keyframes blobB{0%{transform:translate(0,0) scale(1)}50%{transform:translate(-22vw,-14vh) scale(1.25)}100%{transform:translate(16vw,10vh) scale(.8)}}
+/* 玻璃化主要表面 */
+.sidebar,.card,.allboard-box,.install-sec{
+  background:var(--glass-bg)!important;
+  -webkit-backdrop-filter:blur(16px) saturate(1.35);
+  backdrop-filter:blur(16px) saturate(1.35);
+  border:1px solid var(--glass-border)!important;
+}
+.sidebar,.card,.install-sec{box-shadow:var(--glass-shadow)!important}
+.card{-webkit-backdrop-filter:blur(12px) saturate(1.3);backdrop-filter:blur(12px) saturate(1.3)}
+/* 卡片液态流光扫过 */
+.card{position:relative;overflow:hidden}
+.card::after{content:'';position:absolute;top:0;left:0;width:60%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.32),transparent);transform:translateX(-130%) skewX(-20deg);animation:sheen 6s ease-in-out infinite;pointer-events:none}
+.dark .card::after{background:linear-gradient(100deg,transparent,rgba(255,255,255,.06),transparent)}
+@keyframes sheen{0%{transform:translateX(-130%) skewX(-20deg)}60%,100%{transform:translateX(320%) skewX(-20deg)}}
+/* 卡片入场 */
+.card{animation:riseIn .55s cubic-bezier(.2,.9,.3,1.15) backwards}
+.card:nth-child(2){animation-delay:.07s}.card:nth-child(3){animation-delay:.14s}.card:nth-child(4){animation-delay:.21s}.card:nth-child(5){animation-delay:.28s}.card:nth-child(6){animation-delay:.35s}.card:nth-child(7){animation-delay:.42s}.card:nth-child(8){animation-delay:.49s}
+@keyframes riseIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+/* 弹窗弹出 */
+.allboard-mask.show .allboard-box{animation:popIn .3s cubic-bezier(.2,1.25,.35,1) both}
+@keyframes popIn{from{opacity:0;transform:scale(.92) translateY(14px)}to{opacity:1;transform:scale(1) translateY(0)}}
+/* 按钮反馈 */
+.btn,.side-btn,.filter-btn,.board-more,.tab-btn,.btn-qr{transition:transform .18s ease,box-shadow .18s ease,background .2s}
+.btn:hover,.filter-btn:hover,.board-more:hover{transform:translateY(-2px)}
+.btn:hover{transform:scale(1.04) translateY(-2px)}
+.btn:active,.side-btn:active,.filter-btn:active,.board-more:active,.tab-btn:active,.btn-qr:active{transform:scale(.94)}
+.theme-btn{transition:transform .35s ease}
+.theme-btn:hover{transform:rotate(40deg) scale(1.12)}
+.fab{animation:fabPulse 2.6s ease-in-out infinite}
+@keyframes fabPulse{0%,100%{box-shadow:0 6px 18px rgba(59,91,253,.35),0 0 0 0 rgba(74,108,247,.45)}50%{box-shadow:0 6px 18px rgba(59,91,253,.35),0 0 0 12px rgba(74,108,247,0)}}
+/* 页头轻浮动 */
+.content header h1{animation:floatSoft 5s ease-in-out infinite}
+@keyframes floatSoft{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
@@ -622,6 +664,30 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
 <!-- 学习资料提示悬浮球（关闭弹窗后出现，带红点；已勾选不再显示则不出现） -->
 <button id="studyBubble" onclick="showStudyNotice()" title="查看访问提示" aria-label="查看访问提示" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(74,108,247,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(59,91,253,.35)">💬<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
 
+<!-- ===== 复制链接弹窗（主链接 + 备用链接占位） ===== -->
+<div class="allboard-mask" id="copyLinkMask">
+  <div class="allboard-box" style="max-width:360px">
+    <div class="allboard-head"><span>🔗 复制链接</span><button onclick="closeCopyLink()">关闭</button></div>
+    <div style="padding:16px 20px">
+      <p style="font-size:.82rem;color:#4a5568;line-height:1.7;margin:0 0 12px">复制班级服务站链接，粘贴到微信 / QQ 即可分享给同学。备用链接上线后将在此列出。</p>
+      <div id="siteLinkList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 夜间自动暗色三选弹窗 ===== -->
+<div class="allboard-mask" id="themeAutoAskMask">
+  <div class="allboard-box" style="max-width:340px">
+    <div class="allboard-head"><span>🌙 主题自动切换</span><button onclick="closeThemeAutoAsk()">关闭</button></div>
+    <div style="padding:16px 20px;text-align:left">
+      <p style="font-size:.85rem;color:#4a5568;line-height:1.8;margin:0 0 14px">当前为夜间自动暗色模式，要切换为亮色吗？</p>
+      <button class="btn btn-green" style="width:100%;margin-bottom:8px" onclick="themeAskOnce()">☀️ 仅这次切换（自动切换保持开启）</button>
+      <button class="btn" style="width:100%;margin-bottom:8px;background:#ffeded;color:#c2410c" onclick="themeAskOff()">🚫 关闭自动切换（以后不再自动切换）</button>
+      <button class="btn btn-secondary" style="width:100%" onclick="closeThemeAutoAsk()">🌙 保持暗色</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 当前作业弹窗 ===== -->
 <div class="allboard-mask" id="hwCurrentMask">
   <div class="allboard-box" style="max-width:560px">
@@ -655,7 +721,7 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
     <button class="side-btn" onclick="openData()" style="margin-top:auto">💾 数据管理</button>
     <button class="side-btn" id="sfxBtn" onclick="toggleSfx()">🔔 音效：开</button>
     <button class="side-btn" onclick="openExport()">📦 导出备份</button>
-    <button class="side-btn" id="copyLinkBtn" onclick="copySiteLink()">🔗 复制链接</button>
+    <button class="side-btn" id="copyLinkBtn" onclick="openCopyLink()">🔗 复制链接</button>
   </aside>
   <div class="sidebar-mask" id="sideMask" onclick="closeSidebar()"></div>
   <button class="fab" id="fabBtn" onclick="openSidebar()" aria-label="打开侧边栏">☰</button>
@@ -805,6 +871,10 @@ var SITE_DATA = {
   qrUrl: "qrcode.jpg",
   /* 仓库地址（公告栏旁「仓库」按钮跳转） */
   repoUrl: "https://gitee.com/zikang0529/class-site",
+  /* 复制链接：主链接 + 备用链接（备用未上线前不填，弹窗按此列表渲染） */
+  siteLinks: [
+    { label: "主链接", url: "https://yuzikaaang.github.io/class-site/" }
+  ],
   /* ── 联系方式名单（name=哈希，其余为密文，查询时解密）── */
   contacts: [
     { name: "6edf6fc48db2cecbe826594996f606fb1f99f32a96944c311a4b437a4267b004", studentId: "UVlDBwUB", role: "hsHV1aGv" },
@@ -915,7 +985,8 @@ var SITE_DATA = {
     { date: "2026-08-22 00:00", text: "班级服务站 2.0 上线：新增公告栏；站点可在微信内直接打开，部分国外站点会自动引导用浏览器访问。", category: 'site' },
     { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清空本机站点数据（游戏记录、主题/音效、密码与暗号通关及锁状态等），保留设备标识、班级签、点歌券记录（防借初始化刷签/刷券）。", category: "site" },
     { date: "2026-08-27 00:13", text: "📌 功能更新：\n① 学习资料「访问提示」弹窗关闭后，右下角出现带红点的消息悬浮球，点击可重新打开；勾选「不再显示」则无悬浮球。\n② 全部公告日期筛选升级：快捷范围 近 3 天 / 7 天 / 15 天 / 30 天 / 近半年，并支持自定义起止日期。\n③ 全部公告可按时间隐藏更早公告（范围同②），公告条数随筛选实时更新。", category: "site" },
-    { date: "2026-08-27 00:21", text: "📌 功能更新：\n① 新增「夜间自动暗色模式」：18:30–次日 7:30 自动切换暗色，其余时间自动恢复亮色；夜间手动切回亮色时询问是否关闭自动切换，关闭后不再自动切换。\n② 侧边栏新增「复制链接」按钮，一键复制当前网页地址。", category: "site" }
+    { date: "2026-08-27 00:21", text: "📌 功能更新：\n① 新增「夜间自动暗色模式」：18:30–次日 7:30 自动切换暗色，其余时间自动恢复亮色；夜间手动切回亮色时询问是否关闭自动切换，关闭后不再自动切换。\n② 侧边栏新增「复制链接」按钮，一键复制当前网页地址。", category: "site" },
+    { date: "2026-08-27 00:28", text: "📌 功能与视觉更新：\n① 「复制链接」升级为弹窗：复制站点主链接，备用链接上线后将在此列出。\n② 夜间自动暗色询问升级为三选：仅这次切换 / 关闭自动切换 / 保持暗色。\n③ 全站视觉升级：液态玻璃质感、背景光斑流动、卡片流光与入场、弹窗弹出动画，按钮均有按压反馈，音效保持不变。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -2152,26 +2223,42 @@ function fallbackCopyData(json){
   catch(e){ dataMsg('❌ 复制失败', '#c2410c'); }
   document.body.removeChild(ta);
 }
-/* ---- 复制网页链接（侧边栏按钮） ---- */
-function copySiteLink(){
-  var url=location.href;
-  var b=document.getElementById('copyLinkBtn');
-  var done=function(){
-    if(b){ b.textContent='✅ 链接已复制'; setTimeout(function(){ b.textContent='🔗 复制链接'; },1600); }
-    SFX.success();
-  };
+/* ---- 复制网页链接（侧边栏按钮 → 弹窗列出主链接/备用链接） ---- */
+function openCopyLink(){
+  var list=document.getElementById('siteLinkList');
+  if(list){
+    var links=(SITE_DATA.siteLinks||[]);
+    var html=links.map(function(l,i){
+      return '<div style="display:flex;align-items:center;gap:10px;background:#eef1ff;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
+        '<span style="flex:1;font-size:.85rem;color:#3b5bfd;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.label)+'</span>'+
+        '<button class="btn" style="min-width:64px;padding:7px 12px;font-size:.8rem" onclick="copyOneLink('+i+',this)">复制</button></div>';
+    }).join('');
+    html += '<div style="display:flex;align-items:center;gap:10px;background:#f1f5f9;border-radius:12px;padding:10px 12px;opacity:.75">'+
+      '<span style="flex:1;font-size:.85rem;color:#64748b">🔄 备用链接</span>'+
+      '<span style="font-size:.78rem;color:#9aa7b8">敬请期待</span></div>';
+    list.innerHTML=html;
+  }
+  var m=document.getElementById('copyLinkMask'); if(m) m.classList.add('show');
+  SFX.pop();
+}
+function closeCopyLink(){ var m=document.getElementById('copyLinkMask'); if(m) m.classList.remove('show'); }
+(function(){ var m=document.getElementById('copyLinkMask'); if(m) m.addEventListener('click',function(e){ if(e.target.id==='copyLinkMask') closeCopyLink(); }); })();
+function copyOneLink(i,btn){
+  var links=(SITE_DATA.siteLinks||[]); if(!links[i]) return;
+  var url=links[i].url;
+  var done=function(){ if(btn){ btn.textContent='✅ 已复制'; setTimeout(function(){ btn.textContent='复制'; },1600); } SFX.success(); };
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(url).then(done, function(){ fallbackCopyLink(url, done, b); });
+    navigator.clipboard.writeText(url).then(done, function(){ fallbackCopyLink(url, done); });
   }else{
-    fallbackCopyLink(url, done, b);
+    fallbackCopyLink(url, done);
   }
 }
-function fallbackCopyLink(url, done, b){
+function fallbackCopyLink(url, done){
   var ta=document.createElement('textarea');
   ta.value=url; ta.style.position='fixed'; ta.style.opacity='0';
   document.body.appendChild(ta); ta.select();
   try{ document.execCommand('copy'); done(); }
-  catch(e){ if(b) b.textContent='❌ 复制失败'; }
+  catch(e){}
   document.body.removeChild(ta);
 }
 function pasteDataMode(){
@@ -2414,13 +2501,10 @@ function toggleTheme(){
   var d = document.documentElement;
   var isDark = d.classList.contains('dark');
   var next = !isDark;
-  /* 夜间自动暗色模式下手动切回亮色 → 询问是否关闭自动切换 */
+  /* 夜间自动暗色模式下手动切回亮色 → 三选弹窗（仅这次 / 关闭自动 / 保持） */
   if(themeAutoEnabled() && isNightTime() && !next){
-    if(confirm('当前为夜间自动暗色模式。\n是否关闭主题自动切换？\n关闭后站点将不再按时间自动切换主题。')){
-      try{ localStorage.setItem('cls_theme_auto','off'); }catch(e){}
-    }else{
-      return;
-    }
+    openThemeAutoAsk();
+    return;
   }
   d.classList.toggle('dark');
   try{ localStorage.setItem('cls_theme', next ? 'dark' : 'light'); }catch(e){}
@@ -2453,6 +2537,26 @@ function applyAutoTheme(){
     var b=document.getElementById('themeToggle');
     if(b) b.textContent=wantDark?'☀️':'🌙';
   }
+}
+/* 夜间自动暗色三选弹窗：仅这次切换 / 关闭自动切换 / 保持暗色 */
+function openThemeAutoAsk(){ var m=document.getElementById('themeAutoAskMask'); if(m){ m.classList.add('show'); SFX.pop(); } }
+function closeThemeAutoAsk(){ var m=document.getElementById('themeAutoAskMask'); if(m) m.classList.remove('show'); }
+function applyLightTheme(){
+  var d=document.documentElement;
+  if(d.classList.contains('dark')) d.classList.remove('dark');
+  try{ localStorage.setItem('cls_theme','light'); }catch(e){}
+  var b=document.getElementById('themeToggle'); if(b) b.textContent='🌙';
+}
+function themeAskOnce(){
+  closeThemeAutoAsk();
+  applyLightTheme();
+  SFX.success();
+}
+function themeAskOff(){
+  closeThemeAutoAsk();
+  try{ localStorage.setItem('cls_theme_auto','off'); }catch(e){}
+  applyLightTheme();
+  SFX.success();
 }
 var _themeRhythm = 0, _themeRhythmTimer = null;
 
