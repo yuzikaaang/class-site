@@ -35,7 +35,7 @@
   <canvas id="cv"></canvas>
   <div class="ov" id="startOv">
     <h2>消消乐</h2>
-    <p>点击两个相邻的糖果交换位置<br>三个或更多相同糖果连成一线即可消除</p>
+    <p>点击两个相邻的图案交换位置<br>三个或更多相同图案连成一线即可消除</p>
     <button id="startBtn">开始游戏</button>
   </div>
   <div class="ov hidden" id="overOv">
@@ -54,21 +54,28 @@ var snd={pick:function(){tone(500,0.05,'triangle',0.04);},swap:function(){tone(6
 var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 var N=8,CELL=46,SIZE=N*CELL;
 cv.width=SIZE;cv.height=SIZE;
-/* 6 种糖果：离屏 canvas 预渲染（避免每帧 emoji fillText 导致的严重卡顿） */
-var GLYPHS=['🍎','🍇','🍊','🥝','🍋','💎'];
-var GLYPH_COLORS=['#ff6b8b','#9b59d0','#ff9f6b','#2fd6a8','#ffd93d','#7c83ff'];
+/* 6 种图案：离屏 canvas 预渲染，每种用「不同形状 + 强对比颜色」，辨识度更高（不再用同形状纯色圆） */
+var KIND=6;
+var GLYPH_COLORS=['#ff5d6c','#4d8bff','#2fd67a','#ffd23d','#b06bff','#ff8a3d'];
 var glyphCache=[];
+function _rr(x,a,b,w,h,r){x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath();}
+function _star(x,cx,cy,R){x.beginPath();for(var i=0;i<10;i++){var a=-Math.PI/2+i*Math.PI/5,rad=(i%2)?R*0.45:R;x.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad);}x.closePath();}
 (function buildGlyphCache(){
-  var gs=CELL-8;
-  for(var i=0;i<GLYPHS.length;i++){
+  var gs=CELL-8,m=4,R=gs/2-m,cx=gs/2,cy=gs/2;
+  for(var i=0;i<KIND;i++){
     var c=document.createElement('canvas');c.width=gs;c.height=gs;
-    var x=c.getContext('2d'),r=gs/2;
-    x.fillStyle=GLYPH_COLORS[i];
-    x.beginPath();x.arc(r,r,r-2,0,7);x.fill();
-    x.fillStyle='rgba(255,255,255,.85)';
-    x.beginPath();x.arc(r,r,4,0,7);x.fill();
-    x.fillStyle=GLYPH_COLORS[i];
-    x.beginPath();x.arc(r,r,2.2,0,7);x.fill();
+    var x=c.getContext('2d'),col=GLYPH_COLORS[i];
+    x.fillStyle=col;x.strokeStyle='rgba(0,0,0,.38)';x.lineWidth=2;
+    if(i===0){x.beginPath();x.arc(cx,cy,R,0,7);}
+    else if(i===1){_rr(x,m,m,gs-2*m,gs-2*m,R*0.32);}
+    else if(i===2){x.beginPath();x.moveTo(cx,cy-R);x.lineTo(cx+R,cy+R);x.lineTo(cx-R,cy+R);x.closePath();}
+    else if(i===3){_star(x,cx,cy,R);}
+    else if(i===4){x.beginPath();x.moveTo(cx,cy-R);x.lineTo(cx+R,cy);x.lineTo(cx,cy+R);x.lineTo(cx-R,cy);x.closePath();}
+    else{x.beginPath();for(var k=0;k<6;k++){var a=Math.PI/6+k*Math.PI/3;x.lineTo(cx+Math.cos(a)*R,cy+Math.sin(a)*R);}x.closePath();}
+    x.fill();x.stroke();
+    // 左上高光，增强立体感
+    x.fillStyle='rgba(255,255,255,.4)';
+    x.beginPath();x.arc(cx-R*0.3,cy-R*0.32,R*0.2,0,7);x.fill();
     glyphCache[i]=c;
   }
 })();
@@ -79,7 +86,7 @@ function mkGrid(){
   grid=[];
   for(var r=0;r<N;r++){grid[r]=[];for(var c=0;c<N;c++)grid[r][c]=null;}
   for(var r=0;r<N;r++)for(var c=0;c<N;c++){
-    do{grid[r][c]=(Math.random()*GLYPHS.length)|0;}while(matchAt(r,c).length>0);
+    do{grid[r][c]=(Math.random()*KIND)|0;}while(matchAt(r,c).length>0);
   }
 }
 function matchAt(r,c){
@@ -128,7 +135,7 @@ function doMatch(){
   for(var c=0;c<N;c++){
     var col=[];
     for(var r=N-1;r>=0;r--)if(grid[r][c]!=null)col.push(grid[r][c]);
-    while(col.length<N)col.push((Math.random()*GLYPHS.length)|0);
+    while(col.length<N)col.push((Math.random()*KIND)|0);
     for(var r=N-1;r>=0;r--)grid[r][c]=col[N-1-r];
   }
   draw();
