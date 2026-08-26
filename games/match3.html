@@ -54,7 +54,24 @@ var snd={pick:function(){tone(500,0.05,'triangle',0.04);},swap:function(){tone(6
 var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 var N=8,CELL=46,SIZE=N*CELL;
 cv.width=SIZE;cv.height=SIZE;
+/* 6 种糖果：离屏 canvas 预渲染（避免每帧 emoji fillText 导致的严重卡顿） */
 var GLYPHS=['🍎','🍇','🍊','🥝','🍋','💎'];
+var GLYPH_COLORS=['#ff6b8b','#9b59d0','#ff9f6b','#2fd6a8','#ffd93d','#7c83ff'];
+var glyphCache=[];
+(function buildGlyphCache(){
+  var gs=CELL-8;
+  for(var i=0;i<GLYPHS.length;i++){
+    var c=document.createElement('canvas');c.width=gs;c.height=gs;
+    var x=c.getContext('2d'),r=gs/2;
+    x.fillStyle=GLYPH_COLORS[i];
+    x.beginPath();x.arc(r,r,r-2,0,7);x.fill();
+    x.fillStyle='rgba(255,255,255,.85)';
+    x.beginPath();x.arc(r,r,4,0,7);x.fill();
+    x.fillStyle=GLYPH_COLORS[i];
+    x.beginPath();x.arc(r,r,2.2,0,7);x.fill();
+    glyphCache[i]=c;
+  }
+})();
 var grid,sc,hi,sel,busy,playing;
 hi=+(localStorage.getItem('match3_hi')||0);document.getElementById('hi').textContent=hi;
 
@@ -114,7 +131,11 @@ function doMatch(){
     while(col.length<N)col.push((Math.random()*GLYPHS.length)|0);
     for(var r=N-1;r>=0;r--)grid[r][c]=col[N-1-r];
   }
-  setTimeout(function(){doMatch();},260);
+  draw();
+  /* 连锁消除最多 12 层，防止极端情况下长时间连锁卡顿 */
+  _matchChain=(_matchChain||0)+1;
+  if(_matchChain>12){busy=false;_matchChain=0;return;}
+  setTimeout(function(){doMatch();},220);
 }
 function trySwap(a,b){
   var t=grid[a.r][a.c];grid[a.r][a.c]=grid[b.r][b.c];grid[b.r][b.c]=t;
@@ -141,7 +162,6 @@ document.getElementById('startBtn').addEventListener('click',function(){ac();res
 document.getElementById('reBtn').addEventListener('click',function(){reset();});
 function draw(){
   ctx.clearRect(0,0,SIZE,SIZE);
-  ctx.fillStyle='#0b0f22';ctx.fillRect(0,0,SIZE,SIZE);
   for(var r=0;r<N;r++)for(var c=0;c<N;c++){
     var x=c*CELL+3,y=r*CELL+3;
     if(sel&&sel.r===r&&sel.c===c){
@@ -149,8 +169,7 @@ function draw(){
       ctx.beginPath();ctx.roundRect(x,y,CELL-6,CELL-6,10);ctx.fill();
     }
     if(grid[r][c]==null)continue;
-    ctx.font=(CELL-12)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(GLYPHS[grid[r][c]],c*CELL+CELL/2,r*CELL+CELL/2+2);
+    ctx.drawImage(glyphCache[grid[r][c]],x+1,y+1,CELL-8,CELL-8);
   }
   ctx.strokeStyle='rgba(255,255,255,.05)';
   for(var i=0;i<=N;i++){ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,SIZE);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(SIZE,i*CELL);ctx.stroke();}

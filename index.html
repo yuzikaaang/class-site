@@ -523,6 +523,26 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
   </div>
 </div>
 
+<!-- ===== 用户数据管理弹窗（导出/导入/重置） ===== -->
+<div class="allboard-mask" id="dataMask">
+  <div class="allboard-box" style="max-width:360px">
+    <div class="allboard-head"><span>💾 数据管理</span><button onclick="closeData()">关闭</button></div>
+    <div style="padding:16px 20px;text-align:left">
+      <p style="font-size:.8rem;color:#4a5568;margin:0 0 12px">管理本站保存在本设备上的数据（游戏最高分、记录、班级签等）。换设备或清缓存前可先导出，之后导入即可恢复。</p>
+      <button class="btn" style="width:100%;margin-bottom:8px" onclick="exportData()">📤 导出数据（下载 JSON）</button>
+      <button class="btn" style="width:100%;margin-bottom:8px;background:#eef1ff;color:#3b5bfd" onclick="copyDataText()">📋 复制数据文本</button>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn" style="flex:1;background:#e6f9f0;color:#07a154" onclick="document.getElementById('dataFile').click()">📥 导入文件</button>
+        <input type="file" id="dataFile" accept=".json,application/json" style="display:none" onchange="importDataFile(this)">
+        <button class="btn" style="flex:1;background:#eef1ff;color:#3b5bfd" onclick="pasteDataMode()">📥 粘贴导入</button>
+      </div>
+      <textarea id="dataPaste" placeholder="粘贴导出的数据文本后点击「粘贴导入」" style="display:none;width:100%;height:60px;box-sizing:border-box;padding:8px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem;margin-bottom:8px" onclick="this.select()"></textarea>
+      <button class="btn" style="width:100%;background:#ffeded;color:#c2410c" onclick="resetData()">🗑 重置游戏数据</button>
+      <p id="dataMsg" style="font-size:.8rem;margin:10px 0 0;color:#07a154;min-height:1.2em"></p>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 导出备份弹窗 ===== -->
 <div class="allboard-mask" id="exportMask">
   <div class="allboard-box" style="max-width:340px">
@@ -597,7 +617,8 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
     <div class="side-tip">💡 站点应用入口在侧边栏中，点击下方板块即可打开</div>
     <button class="side-btn" id="homeBtn" onclick="goHomeView()">🏠 首页</button>
     <div id="sideCats"></div>
-    <button class="side-btn" id="sfxBtn" onclick="toggleSfx()" style="margin-top:auto">🔔 音效：开</button>
+    <button class="side-btn" onclick="openData()" style="margin-top:auto">💾 数据管理</button>
+    <button class="side-btn" id="sfxBtn" onclick="toggleSfx()">🔔 音效：开</button>
     <button class="side-btn" onclick="openExport()">📦 导出备份</button>
   </aside>
   <div class="sidebar-mask" id="sideMask" onclick="closeSidebar()"></div>
@@ -825,6 +846,7 @@ var SITE_DATA = {
     { date: "2026-08-25 20:41", text: "公告栏「公众号」旁新增「仓库」按钮，点击可直达 Gitee 源码仓库查看。另：作业查看中 8.25-8.27 的「2026 暑假作业」为示例测试数据，并非真实作业，正式作业以老师线下布置为准。", category: "site" },
     { date: "2026-08-25 21:55", text: "「班级事务」中原「建言献策」「情况反映」两个待开发卡片已合并为「意见反馈」，点击即可匿名填写问卷，对班级的建议、想法或想反映的问题都可以提交。", category: "class" },
     { date: "2026-08-25 22:58", text: "首页新增「今日班级签」：小卡片已放在「每日日报」上方，点一下抽一张签，有好签也有提醒签，每天限抽一次，次日 0 点自动刷新。图个乐子，别当真～", category: "site" },
+    { date: "2026-08-26 10:52", text: "💾 侧边栏新增「数据管理」：可导出 / 复制本站保存在本设备的全部数据（各游戏最高分、记录、班级签等）。换设备或清缓存前导出一份，之后一键导入即可恢复；「重置游戏数据」可随时清空所有游戏记录，以备不时之需。", category: "site" },
     { date: "2026-08-26 10:25", text: "🔄 新增「返回记忆」：从网站跳到外部链接或小游戏后返回，会自动回到你刚才所在的页面（首页 / 分类 / 隐藏空间都适用），不用重新找入口。", category: "site" },
     { date: "2026-08-26 10:12", text: "🎁 悄悄说一句：站内藏着彩蛋和隐藏空间，说不定哪天就被你碰上了～（线索就藏在日常交互里，自己去探索才有意思）", category: "misc" },
     { date: "2026-08-26 09:55", text: "🔔 全站新增轻量音效反馈：点击按钮、抽班级签、触发彩蛋、密码验证成功/失败都有小音效，氛围感拉满。如果觉得吵，侧边栏新增「🔔 音效」开关，一键关闭且会记住你的选择。", category: "site" },
@@ -1922,6 +1944,91 @@ function openExport(){
   var inp=document.getElementById('exportPassInput'); if(inp) inp.value='';
 }
 function closeExport(){ var m=document.getElementById('exportMask'); if(m) m.classList.remove('show'); }
+
+/* ---- 用户数据管理（导出 / 导入 / 重置） ---- */
+var GAME_KEYS=['snake_hi','bird_hi','breakout_hi','breakout_lv','match3_hi','mine_best','doodle_hi','plane_hi','gomoku_w','gomoku_l'];
+function dataMsg(t,c){ var m=document.getElementById('dataMsg'); if(m){ m.textContent=t; m.style.color=c||'#07a154'; } }
+function collectAllData(){
+  var out={};
+  try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); out[k]=localStorage.getItem(k); } }catch(e){}
+  return out;
+}
+function openData(){
+  var m=document.getElementById('dataMask'); if(!m) return;
+  m.classList.add('show');
+  var ta=document.getElementById('dataPaste');
+  if(ta){ ta.style.display='none'; ta.value=''; }
+  dataMsg('', '#07a154');
+  SFX.pop();
+}
+function closeData(){ var m=document.getElementById('dataMask'); if(m) m.classList.remove('show'); }
+(function(){ var m=document.getElementById('dataMask'); if(m) m.addEventListener('click',function(e){ if(e.target.id==='dataMask') closeData(); }); })();
+function exportData(){
+  var json=JSON.stringify(collectAllData(),null,1);
+  var blob=new Blob([json],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download='class-site-data-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); },3000);
+  dataMsg('✅ 已下载数据文件（.json）');
+  SFX.success();
+}
+function copyDataText(){
+  var json=JSON.stringify(collectAllData());
+  var ok=false;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(json).then(function(){ ok=true; dataMsg('✅ 数据文本已复制，请妥善保存'); SFX.success(); },function(){ fallbackCopyData(json); });
+  }else{ fallbackCopyData(json); }
+}
+function fallbackCopyData(json){
+  var ta=document.createElement('textarea');
+  ta.value=json; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); dataMsg('✅ 数据文本已复制，请妥善保存'); SFX.success(); }
+  catch(e){ dataMsg('❌ 复制失败', '#c2410c'); }
+  document.body.removeChild(ta);
+}
+function pasteDataMode(){
+  var ta=document.getElementById('dataPaste');
+  if(!ta) return;
+  if(ta.style.display==='none'){ ta.style.display='block'; ta.focus(); return; }
+  doImport(ta.value.trim());
+}
+function importDataFile(input){
+  var f=input.files && input.files[0];
+  if(!f) return;
+  var rd=new FileReader();
+  rd.onload=function(){ doImport(String(rd.result||'').trim()); input.value=''; };
+  rd.readAsText(f);
+}
+function doImport(text){
+  if(!text){ dataMsg('请先选择文件或粘贴数据', '#c2410c'); return; }
+  var obj=null;
+  try{ obj=JSON.parse(text); }catch(e){ dataMsg('❌ 数据格式不正确，无法导入', '#c2410c'); return; }
+  if(!obj || typeof obj!=='object'){ dataMsg('❌ 数据格式不正确，无法导入', '#c2410c'); return; }
+  var n=0;
+  try{
+    for(var k in obj){ localStorage.setItem(k, String(obj[k])); n++; }
+  }catch(e){ dataMsg('❌ 写入失败（存储空间不足）', '#c2410c'); return; }
+  dataMsg('✅ 已导入 ' + n + ' 项数据，即将刷新…');
+  SFX.success();
+  setTimeout(function(){ location.reload(); }, 800);
+}
+function resetData(){
+  if(!confirm('确定要重置本设备的游戏数据吗？（各游戏最高分、记录将被清空，不可恢复）')) return;
+  var seen={},n=0;
+  try{
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(GAME_KEYS.indexOf(k)>=0 || k.indexOf('song_coupon_')===0 || k.indexOf('cls_sign_')===0 || k==='cls_device_id') seen[k]=1;
+    }
+  }catch(e){}
+  for(var k in seen){ try{ localStorage.removeItem(k); n++; }catch(e){} }
+  dataMsg('✅ 已重置 ' + n + ' 项游戏数据，即将刷新…');
+  SFX.success();
+  setTimeout(function(){ location.reload(); }, 800);
+}
 
 /* ---- 学习资料网络限制提示弹窗 ---- */
 function showStudyNotice(){
