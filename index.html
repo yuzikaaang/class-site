@@ -142,6 +142,9 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px}
 .allboard-list{overflow-y:auto;list-style:none;margin:0;padding:0;max-height:60vh}
 .allboard-list li{padding:13px 18px;border-bottom:1px solid #f1f5f9}
 .allboard-list li:last-child{border-bottom:none}
+.ann-cat.collapsed > ul{display:none}
+.ann-item.hl{background:#fff8e1;border-radius:8px;margin:6px 0}
+mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .theme-btn{position:absolute;right:12px;top:12px;z-index:10;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:.25s}
 .theme-btn:hover{background:rgba(255,255,255,.35);transform:scale(1.05)}
 
@@ -160,6 +163,8 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px}
 .dark .board-date.hot{background:rgba(124,45,18,.45);color:#fbbf24}
 .dark .board-text{color:#b6c2d9}
 .dark .board-text.important{color:#e2e8f0}
+.dark .ann-item.hl{background:#2f3317}
+.dark mark{background:#8a6d1f;color:#fff}
 .dark .board-more{background:#202a3a;border-color:#2a3550;color:#9db1ff}
 .dark .board-more:hover{background:#253047}
 .dark .daily{background:#1b2432}
@@ -239,7 +244,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .board-list li:last-child{border-bottom:none}
 .board-date{flex:0 0 auto;margin-top:2px;background:#eef1ff;color:#3b5bfd;font-size:.72rem;font-weight:700;padding:4px 8px;border-radius:8px}
 .board-date.hot{background:#ffedd5;color:#c2410c}
-.board-text{color:#4a5568;font-size:.88rem;line-height:1.6}
+.board-text{color:#4a5568;font-size:.88rem;line-height:1.6;white-space:pre-line}
 .board-text.important{color:#2c3e50;font-weight:600}
 .board-pin{display:inline-block;background:#c2410c;color:#fff;font-size:.68rem;font-weight:800;border-radius:4px;padding:2px 6px;margin-right:6px;vertical-align:1px}
 .board-filters{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 6px;background:#f8fafc;border-bottom:1px solid #f1f5f9}
@@ -557,10 +562,28 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
   </div>
 </div>
 
-<!-- ===== 全部公告弹窗 ===== -->
+<!-- ===== 全部公告弹窗（按板块折叠 / 搜索 / 范围筛选） ===== -->
 <div class="allboard-mask" id="allBoardMask">
   <div class="allboard-box">
     <div class="allboard-head"><span id="allBoardTitle">全部公告</span><button onclick="closeAllBoard()">关闭</button></div>
+    <div style="padding:10px 16px 2px">
+      <input id="allSearchInput" type="search" placeholder="🔍 搜索公告（支持相近词，如：彩蛋 / 隐藏 / 暗号）" oninput="onAllSearchInput()" style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem">
+      <div style="display:flex;gap:8px;margin:8px 0 2px;font-size:.8rem">
+        <select id="allSearchCat" onchange="onAllSearchScope()" style="flex:1;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222">
+          <option value="all">全部板块</option>
+          <option value="class">🏫 班级事务</option>
+          <option value="site">📡 网站内部</option>
+          <option value="activity">🎉 班级活动</option>
+          <option value="misc">💭 站主杂谈</option>
+        </select>
+        <select id="allSearchTime" onchange="onAllSearchScope()" style="flex:1;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222">
+          <option value="all">全部时间</option>
+          <option value="7d">近 7 天</option>
+          <option value="30d">近 30 天</option>
+          <option value="2026">2026 年</option>
+        </select>
+      </div>
+    </div>
     <ul class="allboard-list" id="allBoardList"></ul>
   </div>
 </div>
@@ -878,9 +901,7 @@ var SITE_DATA = {
     { date: "2026-08-23 00:22", text: "经过我这么久的调试这个网站终于有点雏形在了！(╥╯﹏╰╥)ง", category: 'misc' },
     { date: "2026-08-22 00:00", text: "点歌平台入口已开放！微信内无法直接访问，点击「前往入口」后请按引导用浏览器打开。", category: 'site' },
     { date: "2026-08-22 00:00", text: "班级服务站 2.0 上线：新增公告栏；站点可在微信内直接打开，部分国外站点会自动引导用浏览器访问。", category: 'site' },
-    { date: "2026-08-26 23:18", text: "📦 整站备份包（class-site-backup.zip）现已随每次更新同步到最新——站内「导出备份」密码验证后下载到的就是当前完整版站点（含所有小游戏与配置）。另新增站规：每次改动前先通读 README / TUTORIAL 的「用户要求」，确保不漏执行。", category: "site" },
-    { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清空本机站点数据（游戏记录、主题/音效、密码与暗号通关及锁状态等），保留设备标识、班级签、点歌券记录（防借初始化刷签/刷券）。", category: "site" },
-    { date: "2026-08-26 23:38", text: "📌 站规更新：① 主动识别对话中的「印象要求」（如「如果 / 以后」等条件词触发），即便未明说也记入 Gitee 并同步推送；② 单次更新含多条内容时，站内公告改用编号分点（1. 2. 3. …）列出，便于查看。", category: "site" }
+    { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清空本机站点数据（游戏记录、主题/音效、密码与暗号通关及锁状态等），保留设备标识、班级签、点歌券记录（防借初始化刷签/刷券）。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -1826,45 +1847,138 @@ function closeWelcome(){
   try{ localStorage.setItem('cls_welcome_v1','1'); }catch(e){}
 }
 
-/* ---- 全部公告弹窗 ---- */
-function showAllBoard(){
-  var mask = document.getElementById('allBoardMask');
-  var list = document.getElementById('allBoardList');
-  var title = document.getElementById('allBoardTitle');
-  if(!mask || !list) return;
-  var ann = (SITE_DATA.announcements || []).slice().sort(function(a,b){
-    if((isImportant(b)?1:0) !== (isImportant(a)?1:0)) return (isImportant(b)?1:0) - (isImportant(a)?1:0);
-    return (b.date || '').localeCompare(a.date || '');
+/* ---- 全部公告弹窗（按板块折叠 / 搜索 / 范围筛选 / 模糊匹配） ---- */
+var ANN_CATS = [
+  { key: 'class',    name: '🏫 班级事务' },
+  { key: 'site',     name: '📡 网站内部' },
+  { key: 'activity', name: '🎉 班级活动' },
+  { key: 'misc',     name: '💭 站主杂谈' }
+];
+/* 相近词词典：模糊搜索用，猜用户实际想搜什么（彩蛋 ↔ 隐藏 ↔ 暗号 …） */
+var ANN_SYN = {
+  '彩蛋':['彩蛋','隐藏','暗号','秘密','探索','入口'],
+  '隐藏':['隐藏','彩蛋','暗号','秘密','探索','入口'],
+  '暗号':['暗号','密码','彩蛋','隐藏','口令'],
+  '密码':['密码','暗号','口令','验证'],
+  '点歌':['点歌','音乐','歌曲','歌','点歌券'],
+  '点歌券':['点歌券','点歌','券','奖励'],
+  '歌':['歌','音乐','点歌'],
+  '音乐':['音乐','点歌','歌曲','歌'],
+  '游戏':['游戏','小游戏','娱乐','天地'],
+  '娱乐':['娱乐','游戏','小游戏'],
+  '作业':['作业','假期','暑假','寒假'],
+  '考试':['考试','测验','成绩','分数'],
+  '签到':['签到','班级签','签'],
+  '数据':['数据','备份','导出','导入','清理','重置'],
+  '备份':['备份','数据','导出','zip'],
+  '更新':['更新','修复','新增','上线','优化','bug'],
+  '修复':['修复','更新','bug','问题','优化'],
+  '安全':['安全','加密','锁','锁定'],
+  '锁':['锁','锁定','密码','安全'],
+  '加密':['加密','安全','密文'],
+  '主题':['主题','深色','浅色','皮肤'],
+  '音效':['音效','声音','音'],
+  '清理':['清理','重置','清空','初始化'],
+  '重置':['重置','清理','清空','初始化']
+};
+function annExpand(q){
+  var toks=[], seen={};
+  String(q||'').toLowerCase().split(/\s+/).forEach(function(w){
+    if(!w || seen[w]) return;
+    seen[w]=1; toks.push(w);
+    var syn=ANN_SYN[w];
+    if(syn) syn.forEach(function(s){ s=s.toLowerCase(); if(!seen[s]){ seen[s]=1; toks.push(s); } });
   });
-  if(title) title.textContent = '全部公告（' + ann.length + ' 条）';
-  var CATS = [
-    { key: 'class',    name: '🏫 班级事务' },
-    { key: 'site',     name: '📡 网站内部' },
-    { key: 'activity', name: '🎉 班级活动' },
-    { key: 'misc',     name: '💭 站主杂谈' }
-  ];
-  function renderItem(a){
-    return '<li class="ann-item">' +
-      '<div class="board-meta">' +
-        '<span class="board-date' + (isImportant(a) ? ' hot' : '') + '">' + esc(a.date.slice(5)) + '</span>' +
-        (isImportant(a) ? '<span class="board-pin">置顶</span>' : '') +
-      '</div>' +
-      '<p class="board-text' + (isImportant(a) ? ' important' : '') + '">' + esc(a.text) + '</p>' +
-    '</li>';
+  return toks;
+}
+function annMatch(a,q){
+  var toks=annExpand(q);
+  if(!toks.length) return true;
+  var t=a.text.toLowerCase();
+  for(var i=0;i<toks.length;i++){ if(t.indexOf(toks[i])>=0) return true; }
+  return false;
+}
+function annHighlight(a,q){
+  var html=esc(a.text);
+  var toks=annExpand(q).sort(function(x,y){ return y.length-x.length; });
+  for(var i=0;i<toks.length;i++){
+    var k=toks[i]; if(!k) continue;
+    var re=new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
+    html=html.replace(re,function(m){ return '<mark>'+m+'</mark>'; });
   }
-  var grouped = {};
-  ann.forEach(function(a){ var c = a.category || 'misc'; (grouped[c] = grouped[c] || []).push(a); });
-  list.innerHTML = CATS.map(function(c){
-    var items = grouped[c.key];
-    if(!items || !items.length) return '';
-    return '<li class="ann-cat"><h4 style="margin:12px 0 8px;color:#3b5bfd;font-size:.95rem">'+esc(c.name)+'（'+items.length+'）</h4>' +
-      '<ul style="list-style:none;padding:0;margin:0">' + items.map(renderItem).join('') + '</ul></li>';
-  }).filter(Boolean).join('') ||
-  '<li style="padding:18px;color:#9aa7b8;text-align:center">暂无公告</li>';
-  mask.classList.add('show');
+  return html;
+}
+function annDateOk(a,time){
+  if(!time || time==='all') return true;
+  var d=(a.date||'').slice(0,10);
+  if(!d) return false;
+  if(time==='2026') return d.slice(0,4)==='2026';
+  var now=new Date(), cut=new Date();
+  if(time==='7d') cut.setDate(now.getDate()-7);
+  else if(time==='30d') cut.setDate(now.getDate()-30);
+  else return true;
+  var c=cut.getFullYear()+'-'+((cut.getMonth()+1)<10?'0':'')+(cut.getMonth()+1)+'-'+(cut.getDate()<10?'0':'')+cut.getDate();
+  return d>=c;
+}
+function toggleAnnCat(h){
+  var li=h.parentNode; if(li) li.classList.toggle('collapsed');
+}
+function onAllSearchInput(){ renderAllBoard(); }
+function onAllSearchScope(){ renderAllBoard(); }
+function renderAllBoard(){
+  var list=document.getElementById('allBoardList');
+  if(!list) return;
+  var title=document.getElementById('allBoardTitle');
+  var inp=document.getElementById('allSearchInput');
+  var catSel=document.getElementById('allSearchCat');
+  var timeSel=document.getElementById('allSearchTime');
+  var q=inp?inp.value.trim():'';
+  var ck=catSel?catSel.value:'all';
+  var tk=timeSel?timeSel.value:'all';
+  var ann=(SITE_DATA.announcements||[]).slice().sort(function(a,b){
+    if((isImportant(b)?1:0)!==(isImportant(a)?1:0)) return (isImportant(b)?1:0)-(isImportant(a)?1:0);
+    return (b.date||'').localeCompare(a.date||'');
+  });
+  var scoped=ann.filter(function(a){
+    if(ck!=='all' && (a.category||'misc')!==ck) return false;
+    return annDateOk(a,tk);
+  });
+  if(q){
+    var hits=scoped.filter(function(a){ return annMatch(a,q); });
+    if(title) title.textContent='搜索「'+q+'」· 命中 '+hits.length+' / 共 '+ann.length+' 条';
+    list.innerHTML=hits.length
+      ? '<li class="ann-cat"><h4 style="margin:12px 0 8px;color:#3b5bfd;font-size:.95rem">🔎 匹配结果（'+hits.length+'）</h4>'+
+        '<ul style="list-style:none;padding:0;margin:0">'+hits.map(function(a){
+          return '<li class="ann-item hl"><div class="board-meta">'+
+            '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(a.date.slice(5))+'</span>'+
+            (isImportant(a)?'<span class="board-pin">置顶</span>':'')+'</div>'+
+            '<p class="board-text">'+annHighlight(a,q)+'</p></li>';
+        }).join('')+'</ul></li>'
+      : '<li style="padding:18px;color:#9aa7b8;text-align:center">未找到匹配公告，可试试相近词（如「彩蛋 / 隐藏」）</li>';
+  }else{
+    if(title) title.textContent='全部公告（'+scoped.length+' 条）';
+    var grouped={};
+    scoped.forEach(function(a){ var c=a.category||'misc'; (grouped[c]=grouped[c]||[]).push(a); });
+    var html=ANN_CATS.map(function(c){
+      var items=grouped[c.key];
+      if(!items||!items.length) return '';
+      return '<li class="ann-cat"><h4 onclick="toggleAnnCat(this)" style="margin:12px 0 8px;color:#3b5bfd;font-size:.95rem;cursor:pointer;user-select:none">'+esc(c.name)+'（'+items.length+'）▾</h4>'+
+        '<ul style="list-style:none;padding:0;margin:0">'+items.map(function(a){
+          return '<li class="ann-item"><div class="board-meta">'+
+            '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(a.date.slice(5))+'</span>'+
+            (isImportant(a)?'<span class="board-pin">置顶</span>':'')+'</div>'+
+            '<p class="board-text">'+esc(a.text)+'</p></li>';
+        }).join('')+'</ul></li>';
+    }).filter(Boolean).join('') || '<li style="padding:18px;color:#9aa7b8;text-align:center">暂无公告</li>';
+    list.innerHTML=html;
+  }
+}
+function showAllBoard(){
+  var mask=document.getElementById('allBoardMask');
+  if(mask){ renderAllBoard(); mask.classList.add('show'); }
 }
 function closeAllBoard(){
-  var m = document.getElementById('allBoardMask');
+  var m=document.getElementById('allBoardMask');
   if(m) m.classList.remove('show');
 }
 
