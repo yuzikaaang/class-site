@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>涂鸦跳跃 · 25级05班</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:linear-gradient(170deg,#0d1024,#161a3a);color:#e9ecff;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh}
+  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
+  h1{font-size:18px;margin:0}
+  .hud{display:flex;gap:18px;font-size:15px}
+  .hud b{color:#ffcf7a}
+  #wrap{position:relative;width:min(94vw,420px)}
+  canvas{width:100%;height:auto;background:linear-gradient(180deg,#141a3a,#1d2b5e 60%,#2b1f55);border-radius:16px;display:block;box-shadow:0 12px 40px rgba(0,0,0,.5);touch-action:none}
+  .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:rgba(10,12,30,.74);border-radius:16px;text-align:center;padding:20px;z-index:3}
+  .ov.hidden{display:none}
+  .ov h2{margin:0;font-size:24px;color:#ffcf7a}
+  .ov p{margin:2px 0;font-size:13px;color:#9db1ff;line-height:1.7}
+  .ov button{border:none;border-radius:14px;padding:13px 30px;font-size:16px;font-weight:800;cursor:pointer;
+    background:linear-gradient(135deg,#46e0c8,#2fd6a8);color:#0b0f22;box-shadow:0 8px 20px rgba(70,224,200,.3)}
+  .ov button:active{transform:scale(.95)}
+  .tip{font-size:12px;opacity:.55}
+</style>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>🦘 涂鸦跳跃</h1>
+<div class="hud"><span>高度 <b id="sc">0</b></span><span>最高 <b id="hi">0</b></span></div>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="ov" id="startOv">
+    <h2>涂鸦跳跃</h2>
+    <p>左右移动让角色不断往上跳<br>踩平台借力 · 弹簧可以弹超高<br>掉下去就结束</p>
+    <button id="startBtn">开始游戏</button>
+  </div>
+  <div class="ov hidden" id="overOv">
+    <h2>😵 掉下去啦</h2>
+    <p id="ovInfo"></p>
+    <button id="reBtn">再来一局</button>
+  </div>
+</div>
+<div class="tip">键盘 ← → 或按住屏幕左右半边移动</div>
+<script>
+var AC=null;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f,d,t,v,delay){var c=ac();if(!c)return;var o=c.createOscillator(),g=c.createGain();o.type=t||'square';o.frequency.value=f;var t0=c.currentTime+(delay||0);g.gain.setValueAtTime(v||0.05,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(d||0.08));o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+(d||0.08)+0.02);}
+var snd={hop:function(){tone(600,0.05,'triangle',0.05);},spring:function(){tone(900,0.08,'sine',0.07);setTimeout(function(){tone(1200,0.1,'sine',0.05);},60);},fall:function(){tone(300,0.15,'sawtooth',0.06);setTimeout(function(){tone(140,0.3,'sawtooth',0.06);},120);}};
+
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var W=420,H=640;
+cv.width=W;cv.height=H;
+var PX=30,PY=46,PW=70;   // 平台尺寸
+var plats,px,py,vy,sc,hi,playing,camY,dirL,dirR;
+hi=+(localStorage.getItem('doodle_hi')||0);document.getElementById('hi').textContent=hi;
+
+function reset(){
+  plats=[];
+  for(var i=0;i<14;i++){
+    var spring=(Math.random()<0.14);
+    plats.push({x:Math.random()*(W-PW),y:H-PY-(H/14)*i,spring:spring,broke:false});
+  }
+  px=W/2-PX/2;py=H-PY-PY;vy=-9;sc=0;camY=0;playing=true;
+  document.getElementById('sc').textContent=0;
+  hideOv();requestAnimationFrame(tick);
+}
+function hideOv(){document.getElementById('startOv').classList.add('hidden');document.getElementById('overOv').classList.add('hidden');}
+function tick(){
+  if(!playing){draw();return;}
+  var mv=(dirR?1:0)-(dirL?1:0);
+  px+=mv*5.6;
+  if(px<0)px=0;if(px>W-PX)px=W-PX;
+  vy+=0.42;
+  py+=vy;
+  // 平台碰撞（仅在向下时）
+  if(vy>0){
+    for(var i=0;i<plats.length;i++){
+      var p=plats[i];
+      if(!p.broke&&px+PX>p.x&&px<p.x+PW&&py+PY>p.y&&py+PY<p.y+16){
+        if(p.spring){vy=-17;snd.spring();}
+        else{vy=-10.5;snd.hop();}
+        py=p.y-1;
+        break;
+      }
+    }
+  }
+  // 最高平台上方生成新平台
+  var topY=plats[plats.length-1].y;
+  if(py<topY+PY){
+    var y=topY-60;
+    plats.push({x:Math.random()*(W-PW),y:y,spring:(Math.random()<0.14),broke:false});
+  }
+  // 移除下方平台
+  while(plats.length>0&&plats[0].y>camY+H+80)plats.splice(0,1);
+  // 高度与镜头
+  if(py<camY+PY){
+    sc+=Math.round((camY+PY-py)/10)*10;
+    camY=py-PY;
+    document.getElementById('sc').textContent=sc;
+    if(sc>hi){hi=sc;try{localStorage.setItem('doodle_hi',hi);}catch(e){} document.getElementById('hi').textContent=hi;}
+  }
+  // 掉落
+  if(py>camY+H+60){
+    playing=false;snd.fall();
+    document.getElementById('ovInfo').textContent='高度 '+sc+(sc>=hi&&sc>0?'　🏆 新纪录！':'　最高 '+hi);
+    document.getElementById('overOv').classList.remove('hidden');
+  }
+  draw();requestAnimationFrame(tick);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // 星星背景
+  ctx.fillStyle='rgba(255,255,255,.12)';
+  for(var i=0;i<26;i++){
+    var sx=(i*89+17)%W,sy=(camY+i*73+29)%(H+200)-100;
+    ctx.fillRect(sx,sy,2,2);
+  }
+  // 平台
+  for(var i=0;i<plats.length;i++){
+    var p=plats[i];
+    if(p.y<camY-30||p.y>camY+H+30)continue;
+    var sy=p.y-camY;
+    if(p.spring){
+      ctx.fillStyle='#ff6b8b';ctx.fillRect(p.x,sy,PW,10);
+      ctx.fillStyle='#ffcf7a';ctx.fillRect(p.x+2,sy-6,PW-4,6);
+    }else{
+      ctx.fillStyle='#2fd6a8';ctx.fillRect(p.x,sy,PW,12);
+      ctx.fillStyle='rgba(255,255,255,.2)';ctx.fillRect(p.x+4,sy,PW-8,3);
+    }
+  }
+  // 角色
+  var bx=px+15,by=py-camY;
+  ctx.fillStyle='#ffd93d';ctx.fillRect(bx-13,by,26,30);
+  ctx.fillStyle='#e9ecff';ctx.fillRect(bx+2,by+4,7,6);
+  ctx.fillStyle='#222';ctx.fillRect(bx+5,by+6,2,2);
+  ctx.fillStyle='#ff7b3d';ctx.fillRect(bx-13,by+20,26,10);
+  ctx.fillStyle='#7c83ff';ctx.fillRect(bx-15,by+30,8,8);
+  ctx.fillStyle='#7c83ff';ctx.fillRect(bx+7,by+30,8,8);
+}
+document.addEventListener('keydown',function(e){ if(e.code==='ArrowLeft')dirL=true; if(e.code==='ArrowRight')dirR=true; });
+document.addEventListener('keyup',function(e){ if(e.code==='ArrowLeft')dirL=false; if(e.code==='ArrowRight')dirR=false; });
+cv.addEventListener('touchstart',function(e){ if(!playing)return; var t=e.touches[0],r=cv.getBoundingClientRect(); if(t.clientX-r.left<r.width/2)dirL=true;else dirR=true; },{passive:true});
+cv.addEventListener('touchend',function(){ dirL=dirR=false; });
+document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
+document.getElementById('reBtn').addEventListener('click',function(){reset();});
+</script>
+</body>
+</html>

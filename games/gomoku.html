@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>五子棋 · 25级05班</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:linear-gradient(170deg,#0d1024,#161a3a);color:#e9ecff;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh}
+  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
+  h1{font-size:18px;margin:0}
+  .hud{display:flex;gap:16px;font-size:15px;align-items:center}
+  .hud b{color:#ffcf7a}
+  .hud .turn{font-size:13px;padding:4px 12px;border-radius:999px;background:#232f55;color:#9db1ff}
+  .hud .turn.ai{background:rgba(70,224,200,.15);color:#46e0c8}
+  #wrap{position:relative;width:min(94vw,430px)}
+  canvas{width:100%;height:auto;background:#1a2440;border-radius:14px;display:block;box-shadow:0 12px 40px rgba(0,0,0,.5);touch-action:none}
+  .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:rgba(10,12,30,.76);border-radius:14px;text-align:center;padding:20px;z-index:3}
+  .ov.hidden{display:none}
+  .ov h2{margin:0;font-size:24px;color:#ffcf7a}
+  .ov p{margin:2px 0;font-size:13px;color:#9db1ff;line-height:1.7}
+  .ov button{border:none;border-radius:14px;padding:12px 24px;font-size:15px;font-weight:800;cursor:pointer;
+    background:linear-gradient(135deg,#7c83ff,#4a6cf7);color:#fff;box-shadow:0 8px 20px rgba(74,108,247,.35)}
+  .ov button:active{transform:scale(.95)}
+  .bar{display:flex;gap:10px;margin-top:2px}
+  .bar button{border:none;border-radius:10px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;
+    background:#232f55;color:#9db1ff}
+  .bar button:active{background:#33405f}
+  .tip{font-size:12px;opacity:.55}
+</style>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>⚫ 五子棋 <span style="font-size:12px;opacity:.6">vs AI</span></h1>
+<div class="hud"><span>胜 <b id="wins">0</b></span><span>负 <b id="losses">0</b></span><span class="turn" id="turn">你执黑 · 轮到你</span></div>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="ov hidden" id="endOv">
+    <h2 id="endTitle">🎉 你赢了！</h2>
+    <p id="endInfo"></p>
+    <button id="reBtn">再来一局</button>
+  </div>
+</div>
+<div class="bar">
+  <button id="undoBtn">↩ 悔棋</button>
+  <button id="restartBtn">⟳ 重新开始</button>
+</div>
+<div class="tip">你是黑子先手 · 点击交叉点落子 · 五连即胜</div>
+<script>
+var AC=null;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f,d,t,v,delay){var c=ac();if(!c)return;var o=c.createOscillator(),g=c.createGain();o.type=t||'square';o.frequency.value=f;var t0=c.currentTime+(delay||0);g.gain.setValueAtTime(v||0.05,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(d||0.08));o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+(d||0.08)+0.02);}
+var snd={place:function(){tone(420,0.05,'triangle',0.05);},ai:function(){tone(320,0.05,'triangle',0.05);},win:function(){tone(660,0.09,'sine',0.06);setTimeout(function(){tone(880,0.09,'sine',0.06);},90);setTimeout(function(){tone(1100,0.12,'sine',0.06);},180);},lose:function(){tone(280,0.12,'sawtooth',0.06);setTimeout(function(){tone(160,0.25,'sawtooth',0.06);},100);}};
+
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var N=15,CELL=28,M=16;
+var SIZE=N*CELL+M*2;
+cv.width=SIZE;cv.height=SIZE;
+var board,moves,playing,aiThinking,wins,losses;
+wins=+(localStorage.getItem('gomoku_w')||0);losses=+(localStorage.getItem('gomoku_l')||0);
+document.getElementById('wins').textContent=wins;document.getElementById('losses').textContent=losses;
+
+function reset(){
+  board=[];moves=[];
+  for(var r=0;r<N;r++){board[r]=[];for(var c=0;c<N;c++)board[r][c]=0;}
+  playing=true;aiThinking=false;
+  setTurn('你执黑 · 轮到你',false);
+  document.getElementById('endOv').classList.add('hidden');
+  draw();
+}
+function setTurn(t,ai){var el=document.getElementById('turn');el.textContent=t;el.className='turn'+(ai?' ai':'');}
+function idx(r,c){return r*N+c;}
+function inb(r,c){return r>=0&&r<N&&c>=0&&c<N;}
+function place(r,c,p){
+  board[r][c]=p;moves.push({r:r,c:c,p:p});
+  snd.place();draw();
+  if(checkWin(r,c,p)){end(p);return true;}
+  return false;
+}
+function checkWin(r,c,p){
+  var dirs=[[1,0],[0,1],[1,1],[1,-1]];
+  for(var d=0;d<4;d++){
+    var dr=dirs[d][0],dc=dirs[d][1],cnt=1;
+    for(var s=1;inb(r+dr*s,c+dc*s)&&board[r+dr*s][c+dc*s]===p;s++)cnt++;
+    for(var s=1;inb(r-dr*s,c-dc*s)&&board[r-dr*s][c-dc*s]===p;s++)cnt++;
+    if(cnt>=5)return true;
+  }
+  return false;
+}
+function end(winner){
+  playing=false;
+  if(winner===1){snd.win();wins++;try{localStorage.setItem('gomoku_w',wins);}catch(e){} document.getElementById('wins').textContent=wins;
+    document.getElementById('endTitle').textContent='🎉 你赢了！';document.getElementById('endInfo').textContent='五连达成，AI 甘拜下风';
+  }else{snd.lose();losses++;try{localStorage.setItem('gomoku_l',losses);}catch(e){} document.getElementById('losses').textContent=losses;
+    document.getElementById('endTitle').textContent='🤖 AI 赢了';document.getElementById('endInfo').textContent='再想想棋路，你可以的';
+  }
+  document.getElementById('endOv').classList.remove('hidden');
+}
+/* ===== AI：方向评分启发式 ===== */
+function lineScore(r,c,p){
+  var dirs=[[1,0],[0,1],[1,1],[1,-1]],best=0;
+  for(var d=0;d<4;d++){
+    var dr=dirs[d][0],dc=dirs[d][1];
+    var cnt=1,open=0;
+    var sr=r+dr,sc=c+dc;
+    while(inb(sr,sc)&&board[sr][sc]===p){cnt++;sr+=dr;sc+=dc;}
+    if(inb(sr,sc)&&board[sr][sc]===0)open++;
+    sr=r-dr;sc=c-dc;
+    while(inb(sr,sc)&&board[sr][sc]===p){cnt++;sr-=dr;sc-=dc;}
+    if(inb(sr,sc)&&board[sr][sc]===0)open++;
+    var s=0;
+    if(cnt>=5)s=100000;
+    else if(cnt===4&&open===2)s=10000;
+    else if(cnt===4&&open===1)s=1200;
+    else if(cnt===3&&open===2)s=1100;
+    else if(cnt===3&&open===1)s=180;
+    else if(cnt===2&&open===2)s=90;
+    else if(cnt===2&&open===1)s=20;
+    else if(cnt===1&&open===2)s=8;
+    if(s>best)best=s;
+  }
+  return best;
+}
+function aiMove(){
+  if(!playing||aiThinking)return;
+  aiThinking=true;setTurn('🤖 AI 思考中…',true);
+  setTimeout(function(){
+    var best=null,bestS=-1;
+    for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+      if(board[r][c]!==0)continue;
+      var off=lineScore(r,c,2),def=lineScore(r,c,1);
+      var s=off+def*1.02;
+      if(s>bestS){bestS=s;best={r:r,c:c};}
+    }
+    if(!best)return;
+    aiThinking=false;
+    place(best.r,best.c,2);
+    if(playing)setTurn('你执黑 · 轮到你',false);
+  },280);
+}
+cv.addEventListener('pointerdown',function(e){
+  if(!playing||aiThinking)return;
+  var r=cv.getBoundingClientRect();
+  var x=(e.clientX-r.left)*(SIZE/r.width)-M,y=(e.clientY-r.top)*(SIZE/r.height)-M;
+  var c=Math.round(x/CELL),rr=Math.round(y/CELL);
+  if(!inb(rr,c)||board[rr][c]!==0)return;
+  if(place(rr,c,1))return;
+  aiMove();
+});
+document.getElementById('undoBtn').addEventListener('click',function(){
+  if(moves.length<2)return;
+  var m1=moves.pop();board[m1.r][m1.c]=0;
+  if(moves.length>0&&moves[moves.length-1].p===2){var m2=moves.pop();board[m2.r][m2.c]=0;}
+  playing=true;aiThinking=false;
+  setTurn('你执黑 · 轮到你',false);
+  document.getElementById('endOv').classList.add('hidden');
+  draw();
+});
+document.getElementById('restartBtn').addEventListener('click',function(){reset();});
+document.getElementById('reBtn').addEventListener('click',function(){reset();});
+function draw(){
+  ctx.clearRect(0,0,SIZE,SIZE);
+  ctx.fillStyle='#1a2440';ctx.fillRect(0,0,SIZE,SIZE);
+  ctx.strokeStyle='rgba(255,255,255,.25)';
+  for(var i=0;i<N;i++){
+    ctx.beginPath();ctx.moveTo(M, M+i*CELL);ctx.lineTo(SIZE-M, M+i*CELL);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(M+i*CELL, M);ctx.lineTo(M+i*CELL, SIZE-M);ctx.stroke();
+  }
+  ctx.fillStyle='rgba(255,255,255,.35)';
+  [[3,3],[3,11],[7,7],[11,3],[11,11]].forEach(function(p){ctx.beginPath();ctx.arc(M+p[0]*CELL,M+p[1]*CELL,3,0,7);ctx.fill();});
+  for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+    if(board[r][c]===0)continue;
+    var x=M+c*CELL,y=M+r*CELL;
+    ctx.beginPath();ctx.arc(x,y,11,0,7);
+    ctx.fillStyle=board[r][c]===1?'#0d0f1a':'#eef1ff';
+    ctx.fill();
+    if(board[r][c]===2){ctx.fillStyle='#eef1ff';ctx.beginPath();ctx.arc(x,y,3.5,0,7);ctx.fill();}
+  }
+}
+reset();
+</script>
+</body>
+</html>

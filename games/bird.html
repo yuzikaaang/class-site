@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>像素飞鸟 · 25级05班</title>
+<style>
+  :root{--bg:#0f1226;--fg:#e9ecff;--accent:#ffcf7a;--good:#46e0c8}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:linear-gradient(170deg,#0d1024,#1a1440 60%,#2a1a4a);color:var(--fg);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh;overflow:hidden}
+  a.back{color:var(--fg);opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start;z-index:5}
+  h1{font-size:18px;margin:0;z-index:5}
+  .hud{display:flex;gap:18px;font-size:15px;z-index:5}
+  .hud b{color:var(--accent)}
+  #wrap{position:relative;width:min(92vw,420px);z-index:2}
+  canvas{width:100%;height:auto;background:linear-gradient(180deg,#141a3a,#1d2b5e 55%,#2b1f55);border-radius:18px;
+    box-shadow:0 12px 40px rgba(0,0,0,.5);display:block;touch-action:none;cursor:pointer}
+  .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:rgba(10,12,30,.72);border-radius:18px;text-align:center;padding:20px;z-index:3}
+  .ov.hidden{display:none}
+  .ov h2{font-size:26px;margin:0;color:var(--accent)}
+  .ov p{margin:2px 0;font-size:13px;color:#9db1ff;line-height:1.7}
+  .ov button{border:none;border-radius:14px;padding:13px 30px;font-size:16px;font-weight:800;cursor:pointer;
+    background:linear-gradient(135deg,#7c83ff,#4a6cf7);color:#fff;box-shadow:0 8px 20px rgba(74,108,247,.35)}
+  .ov button:active{transform:scale(.95)}
+  .tip{font-size:12px;opacity:.55;z-index:5;text-align:center}
+</style>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>🐦 像素飞鸟</h1>
+<div class="hud"><span>得分 <b id="sc">0</b></span><span>最高 <b id="hi">0</b></span></div>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="ov" id="startOv">
+    <h2>像素飞鸟</h2>
+    <p>点击 / 空格 / 触摸 让小鸟扇翅膀<br>穿过水管得分，撞到就结束</p>
+    <button id="startBtn">开始游戏</button>
+  </div>
+  <div class="ov hidden" id="overOv">
+    <h2>💥 撞到啦</h2>
+    <p id="overInfo"></p>
+    <button id="reBtn">再来一局</button>
+  </div>
+</div>
+<div class="tip">每次点击扇一次翅膀 · 下落速度会越来越快</div>
+<script>
+/* ===== 音效（Web Audio 合成） ===== */
+var AC=null;
+function ac(){ if(!AC){ try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} } if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f,d,t,v,delay){
+  var c=ac(); if(!c)return;
+  var o=c.createOscillator(),g=c.createGain();
+  o.type=t||'square';o.frequency.value=f;
+  var t0=c.currentTime+(delay||0);
+  g.gain.setValueAtTime(v||0.05,t0);
+  g.gain.exponentialRampToValueAtTime(0.001,t0+(d||0.08));
+  o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+(d||0.08)+0.02);
+}
+var snd={flap:function(){tone(320,0.06,'triangle',0.06);},score:function(){tone(880,0.07,'sine',0.06);setTimeout(function(){tone(1320,0.09,'sine',0.05);},70);},hit:function(){tone(220,0.2,'sawtooth',0.07);setTimeout(function(){tone(110,0.3,'sawtooth',0.06);},90);}};
+
+/* ===== 游戏 ===== */
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var W=420,H=640;
+cv.width=W;cv.height=H;
+var G=0.5,FLAP=-9.5,BIRD=22,GAP=150,PIPE_W=64,SPEED=3.2;
+var bird,y,vel,sc,hi,pipes,timer,playing,over;
+hi=+(localStorage.getItem('bird_hi')||0);document.getElementById('hi').textContent=hi;
+
+function reset(){bird=W*0.32;y=H*0.42;vel=0;sc=0;pipes=[];playing=true;over=false;
+  document.getElementById('sc').textContent=0;hideOv();tick();}
+function flap(){ if(!playing)return; vel=FLAP; snd.flap(); }
+function hideOv(){document.getElementById('startOv').classList.add('hidden');document.getElementById('overOv').classList.add('hidden');}
+function gameOver(){
+  playing=false;over=true;
+  snd.hit();
+  if(sc>hi){hi=sc;try{localStorage.setItem('bird_hi',hi);}catch(e){} document.getElementById('hi').textContent=hi;}
+  document.getElementById('overInfo').innerHTML='得分 '+sc+'　'+(sc>=hi&&sc>0?'🏆 新纪录！':'最高 '+hi);
+  document.getElementById('overOv').classList.remove('hidden');
+}
+function tick(){
+  if(!playing){ if(over) draw(); return; }
+  vel+=G;y+=vel;
+  // 生成水管
+  if(pipes.length===0||pipes[pipes.length-1].x<W-220){
+    var top=60+Math.random()*(H-GAP-140);
+    pipes.push({x:W,top:top});
+  }
+  for(var i=pipes.length-1;i>=0;i--){
+    var p=pipes[i];p.x-=SPEED;
+    if(!p.passed&&p.x+PIPE_W<bird){p.passed=true;sc++;snd.score();document.getElementById('sc').textContent=sc;}
+    if(p.x+PIPE_W<-10)pipes.splice(i,1);
+  }
+  // 碰撞
+  if(y<0||y>H-BIRD){gameOver();draw();return;}
+  var bx=bird,bw=BIRD,bh=BIRD;
+  for(var i=0;i<pipes.length;i++){
+    var p=pipes[i];
+    if(bx+bw>p.x&&bx<p.x+PIPE_W){
+      if(y<p.top||y+bh>p.top+GAP){gameOver();draw();return;}
+    }
+  }
+  draw();requestAnimationFrame(tick);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // 星空背景
+  ctx.fillStyle='rgba(255,255,255,.14)';
+  for(var i=0;i<22;i++){
+    var sx=(i*97+13)%W, sy=(i*61+29)%(H-60);
+    ctx.fillRect(sx,sy,2,2);
+  }
+  // 水管
+  for(var i=0;i<pipes.length;i++){
+    var p=pipes[i];
+    ctx.fillStyle='#2fd6a8';ctx.fillRect(p.x,0,PIPE_W,p.top);
+    ctx.fillStyle='#23b389';ctx.fillRect(p.x+4,p.top-16,PIPE_W-8,16);
+    ctx.fillStyle='#2fd6a8';ctx.fillRect(p.x,p.top+GAP,PIPE_W,H-p.top-GAP);
+    ctx.fillStyle='#23b389';ctx.fillRect(p.x+4,p.top+GAP,PIPE_W-8,16);
+  }
+  // 鸟（像素风）
+  ctx.save();ctx.translate(bird+11,y+11);
+  ctx.fillStyle='#ffd93d';ctx.fillRect(-11,-9,22,18);
+  ctx.fillStyle='#fff';ctx.fillRect(2,-5,6,5);
+  ctx.fillStyle='#222';ctx.fillRect(5,-3,2,2);
+  ctx.fillStyle='#ff7b3d';ctx.fillRect(-11,2,6,8);
+  ctx.fillStyle='#46e0c8';ctx.fillRect(-9,-9,6,6);
+  ctx.restore();
+}
+document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
+document.getElementById('reBtn').addEventListener('click',function(){reset();});
+cv.addEventListener('pointerdown',function(){flap();});
+document.addEventListener('keydown',function(e){ if(e.code==='Space'||e.code==='ArrowUp'){ e.preventDefault(); flap(); } });
+</script>
+</body>
+</html>

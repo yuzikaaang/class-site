@@ -182,6 +182,21 @@ curl -X PATCH https://xsyzc2505.dpdns.org/api/open/card-codes \
 **新增入口接入方法**：失败时调 `onPassFail(scope)`（返回 `{count, remain}`），`remain>0` 时调 `startLockTimer(scope, 错误元素, 输入框)`；成功调 `onPassOk(scope)`。
 **⚠️ 已知坑**：读取锁定时 `until` 字段**不能用 `|0` 位运算**（毫秒时间戳会溢出成错误值导致锁定失效），已修复为 `typeof d.until==='number'`。
 
+### 5.6 内置小游戏与全站音效
+
+**隐藏娱乐天地**（班徽 5 连击进入）现共 **15 个入口**：外链 5 个（云智安/小霸王/2048/4399/7k7k）+ 内置游戏 10 个（`games/`）。内置游戏均单文件、纯 HTML+CSS+JS、深色主题、移动端自适应、含 Web Audio 音效与本地最高分（localStorage）：
+- `snake.html` 贪吃蛇（吃豆 60 可赢点歌券，见 5.4）
+- `tetris.html` 俄罗斯方块 · `whack.html` 打地鼠 · `memory.html` 记忆翻牌
+- `bird.html` 像素飞鸟 · `breakout.html` 打砖块 · `match3.html` 消消乐
+- `minesweeper.html` 扫雷（移动端长按标旗）· `doodle.html` 涂鸦跳跃（按住屏幕左右半边移动）
+- `gomoku.html` 五子棋（15×15 人机对局，AI 为方向评分启发式 `lineScore`，可悔棋，胜负数本地记录）
+
+**新增小游戏方法**：把新文件放进 `games/`，在 `index.html` 的 `HIDDEN_FUN_LINKS` 数组加一行 `{icon, title, desc, url:'games/xxx.html'}` 即可。
+
+**全站音效**：`index.html` 顶部 `SFX` 对象（Web Audio 合成，无音频文件）。音效集：`click`（全局交互元素自动播放）/ `pop` / `success` / `error` / `fanfare`。全局轻点击音效通过 `document.addEventListener('click', ..., true)` 委托监听（`button/a/.card/.fab/.tab-btn/.daily-btn/.signbar-btn/.side-btn` 等）。特定事件已接入：抽班级签 `success`、彩带彩蛋 `fanfare`、四个密码入口对错 `success/error`。
+- 开关：侧边栏「🔔 音效」按钮（`toggleSfx()`），状态存 `localStorage.cls_sfx`（`on`/`off`），默认开。
+- 接入新音效：在目标函数里调 `SFX.xxx()`。音量均在 0.02~0.05，注意克制，避免打扰。
+
 ## 6. 备份机制
 
 ### 6.1 站内手动导出（唯一备份方式）
@@ -228,6 +243,7 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 | 日期 | 内容 |
 |------|------|
+| 2026-08-26 | ⚠️ 未公开项（不进站内公告）：隐藏娱乐天地新增 6 个内置小游戏（像素飞鸟/打砖块/消消乐/扫雷/涂鸦跳跃/五子棋 AI），`games/` 现有 10 个内置游戏，隐藏入口共 15 个（详见 5.6）。公开项：**全站音效系统**上线（`SFX` 对象 + 侧边栏开关，详见 5.6），已发公告。 |
 | 2026-08-26 | ① 贪吃蛇门槛定为**吃 60 个豆**（`REWARD_DOTS=60`），新增**屏幕虚拟方向键**（替代触摸滑动，键盘保留）；② **全站密码自锁**：站点门禁/资源门禁/导出备份/隐藏暗号统一接入 `LOCK_LEVELS` 机制——连续输错超 3 次锁 30s，再错递增 1/2/5/10/30/60 分钟，状态持久化（刷新无效），输对清零。修复一个坑：`until` 字段曾用 `|0` 位运算导致毫秒时间戳溢出、锁定失效。详见 5.5。 |
 | 2026-08-26 | 贪吃蛇正式规则（测试通过）：发券门槛定为 **吃 100 个豆**（`REWARD_DOTS`）；**渐进加速**——每吃 10 个豆提速 10ms（175→下限 80ms）；控制为方向键/滑动。站内公告已从旧「30 分」更新为新规则。另记录：后续其他活动可通过同一 VoiceHub API 发券（复用 `claimCoupon()` 三件套，见 5.4）。 |
 | 2026-08-26 | 点歌券触发条件由「得分」改为「蛇身长度」：`REWARD_LENGTH`（当前**临时为 5** 供测试，正式建议 32，调回时同步更新站内公告）。**令牌不明文铁律**：VoiceHub key 移入 `secrets.json.enc`（新增 `voicehub` 字段，密码 本地口令 解密），前端改为 xor+hex 混淆密文 `_CPN_ENC` + `_cpnDec()` 运行时解密；以后所有 API/令牌一律不明文进仓库。详见第 5.4 节。 |

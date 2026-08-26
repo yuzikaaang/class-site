@@ -597,7 +597,8 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
     <div class="side-tip">💡 站点应用入口在侧边栏中，点击下方板块即可打开</div>
     <button class="side-btn" id="homeBtn" onclick="goHomeView()">🏠 首页</button>
     <div id="sideCats"></div>
-    <button class="side-btn" onclick="openExport()" style="margin-top:auto">📦 导出备份</button>
+    <button class="side-btn" id="sfxBtn" onclick="toggleSfx()" style="margin-top:auto">🔔 音效：开</button>
+    <button class="side-btn" onclick="openExport()">📦 导出备份</button>
   </aside>
   <div class="sidebar-mask" id="sideMask" onclick="closeSidebar()"></div>
   <button class="fab" id="fabBtn" onclick="openSidebar()" aria-label="打开侧边栏">☰</button>
@@ -631,6 +632,46 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
 </div>
 
 <script>
+/* =====================================================
+   全站音效（Web Audio 合成，无音频文件；侧边栏可关）
+   ===================================================== */
+var SFX=(function(){
+  var AC=null,on=true;
+  try{ on=localStorage.getItem('cls_sfx')!=='off'; }catch(e){}
+  function ac(){ if(!AC){ try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} } if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+  function tone(f,d,t,v,delay){
+    var c=ac(); if(!c)return;
+    var o=c.createOscillator(),g=c.createGain();
+    o.type=t||'sine';o.frequency.value=f;
+    var t0=c.currentTime+(delay||0);
+    g.gain.setValueAtTime(v||0.04,t0);
+    g.gain.exponentialRampToValueAtTime(0.001,t0+d);
+    o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+d+0.03);
+  }
+  function play(fn){ if(!on)return; try{fn();}catch(e){} }
+  function refreshBtn(){
+    var b=document.getElementById('sfxBtn');
+    if(b) b.textContent='🔔 音效：'+(on?'开':'关');
+  }
+  refreshBtn();
+  return {
+    click:function(){ play(function(){tone(700,0.05,'triangle',0.025);}); },
+    pop:function(){ play(function(){tone(880,0.07,'sine',0.035);}); },
+    success:function(){ play(function(){tone(660,0.08,'sine',0.045);setTimeout(function(){tone(990,0.1,'sine',0.04);},70);}); },
+    error:function(){ play(function(){tone(200,0.14,'sawtooth',0.035);}); },
+    fanfare:function(){ play(function(){tone(523,0.09,'triangle',0.05);setTimeout(function(){tone(659,0.09,'triangle',0.05);},80);setTimeout(function(){tone(784,0.09,'triangle',0.05);},160);setTimeout(function(){tone(1047,0.16,'triangle',0.05);},240);}); },
+    setOn:function(v){ on=v; try{localStorage.setItem('cls_sfx',v?'on':'off');}catch(e){} refreshBtn(); },
+    isOn:function(){ return on; }
+  };
+})();
+function toggleSfx(){ SFX.setOn(!SFX.isOn()); if(SFX.isOn()) SFX.success(); }
+/* 全局轻点击音效（交互元素自动响应） */
+document.addEventListener('click',function(e){
+  var t=e.target;
+  if(t.closest && t.closest('button, a, .card, .board-more, .fab, .hidden-fun-card, .tab-btn, .daily-btn, .signbar-btn, .side-btn')){
+    SFX.click();
+  }
+},true);
 /* =====================================================
    前端安全工具：SHA-256 哈希 + XOR/Base64 混淆
    答案、联系人姓名以哈希对比；联系方式密文解密显示
@@ -784,6 +825,7 @@ var SITE_DATA = {
     { date: "2026-08-25 20:41", text: "公告栏「公众号」旁新增「仓库」按钮，点击可直达 Gitee 源码仓库查看。另：作业查看中 8.25-8.27 的「2026 暑假作业」为示例测试数据，并非真实作业，正式作业以老师线下布置为准。", category: "site" },
     { date: "2026-08-25 21:55", text: "「班级事务」中原「建言献策」「情况反映」两个待开发卡片已合并为「意见反馈」，点击即可匿名填写问卷，对班级的建议、想法或想反映的问题都可以提交。", category: "class" },
     { date: "2026-08-25 22:58", text: "首页新增「今日班级签」：小卡片已放在「每日日报」上方，点一下抽一张签，有好签也有提醒签，每天限抽一次，次日 0 点自动刷新。图个乐子，别当真～", category: "site" },
+    { date: "2026-08-26 09:55", text: "🔔 全站新增轻量音效反馈：点击按钮、抽班级签、触发彩蛋、密码验证成功/失败都有小音效，氛围感拉满。如果觉得吵，侧边栏新增「🔔 音效」开关，一键关闭且会记住你的选择。", category: "site" },
     { date: "2026-08-26 00:45", text: "🐍 贪吃蛇挑战奖励更新：点歌券门槛改为吃满 60 个豆！每吃 10 个豆蛇会提速一点点；新增屏幕虚拟方向键，手机上不用滑动也能操控。🔒 另：站内所有密码/暗号增加防爆破——连续输错 3 次会锁定 30 秒，之后每次再错等待时间递增（1 / 2 / 5 分钟…），输对一次自动清零。", category: "site" },
     { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "class" },
     { date: "2026-08-25 16:46", text: "本轮更新：公告改名为「公告」并按网站内部/班级事务/班级活动/站主杂谈四类分组；学习资料板块新增「网络限制提示」弹窗（首次进入弹出，可选不再显示）；作业查看卡片因 Classworks 打不开新增「当前作业/历史日历」按钮；PWA 主图标改为 512；公告时间统一为「精确到分」。", category: 'site' },
@@ -1463,10 +1505,16 @@ var HIDDEN_FUN_LINKS = [
   { icon: "🧩", title: "2048", desc: "经典数字合成小游戏", url: "https://play2048.co/" },
   { icon: "🎮", title: "4399 小游戏", desc: "海量在线小游戏，点开即玩", url: "https://www.4399.com/" },
   { icon: "🎯", title: "7k7k 小游戏", desc: "另一大经典小游戏库", url: "https://www.7k7k.com/" },
-  { icon: "🐍", title: "贪吃蛇", desc: "经典方向控制，越吃越长", url: "games/snake.html" },
+  { icon: "🐍", title: "贪吃蛇", desc: "吃豆挑战：100分难度可赢点歌券", url: "games/snake.html" },
   { icon: "🧱", title: "俄罗斯方块", desc: "经典落块消除，手速大考", url: "games/tetris.html" },
   { icon: "🔨", title: "打地鼠", desc: "地鼠冒头就点，30秒挑战", url: "games/whack.html" },
-  { icon: "🃏", title: "记忆翻牌", desc: "翻牌配对，练记忆力", url: "games/memory.html" }
+  { icon: "🃏", title: "记忆翻牌", desc: "翻牌配对，练记忆力", url: "games/memory.html" },
+  { icon: "🐦", title: "像素飞鸟", desc: "一飞冲天，穿过水管拿高分", url: "games/bird.html" },
+  { icon: "🧱", title: "打砖块", desc: "弹球消砖，手感复古", url: "games/breakout.html" },
+  { icon: "🍬", title: "消消乐", desc: "三连消除，连击爆分", url: "games/match3.html" },
+  { icon: "💣", title: "扫雷", desc: "推理翻格，长按标旗", url: "games/minesweeper.html" },
+  { icon: "🦘", title: "涂鸦跳跃", desc: "一路向上，踩弹簧起飞", url: "games/doodle.html" },
+  { icon: "⚫", title: "五子棋", desc: "人机对战，五连即胜", url: "games/gomoku.html" }
 ];
 var _badgeClicks = 0, _badgeTimer = null;
 function badgeClick(){
@@ -1500,10 +1548,12 @@ function submitHiddenGate(){
   if(v === HIDDEN_PASS_HASH){
     onPassOk('hidden');
     if(__lockTimers['hidden']) clearInterval(__lockTimers['hidden']);
+    SFX.success();
     closeHiddenGate();
     openHiddenView();
   }else{
     var r = onPassFail('hidden');
+    SFX.error();
     err.textContent = r.remain > 0
       ? '💡 暗号不对，再想想（同学群目前人数？）　🔒 已连续错误 ' + r.count + ' 次，请 ' + Math.ceil(r.remain/1000) + ' 秒后再试'
       : '💡 暗号不对，再想想（同学群目前人数？）';
@@ -1619,8 +1669,10 @@ function checkGate(id){
       localStorage.setItem('cls_gate_'+id+'_v', l.gate.version);
     }catch(e){}
     if(window.__gateErr) delete window.__gateErr[id];
+    SFX.success();
   }else{
     var r = onPassFail('gate_'+id);
+    SFX.error();
     if(!window.__gateErr) window.__gateErr = {};
     window.__gateErr[id] = r.remain > 0
       ? '💡 ' + l.gate.hint + '　🔒 已连续错误 ' + r.count + ' 次，请 ' + Math.ceil(r.remain/1000) + ' 秒后再试'
@@ -1981,10 +2033,12 @@ function submitExport(){
     onPassOk('export');
     if(__lockTimers['export']) clearInterval(__lockTimers['export']);
     if(err) err.style.display='none';
+    SFX.success();
     window.location.href='./class-site-backup.zip';
     closeExport();
   } else {
     var r = onPassFail('export');
+    SFX.error();
     if(err){
       err.style.display='block';
       err.textContent = r.remain > 0
@@ -2070,6 +2124,7 @@ function openClassSign(){
   document.getElementById('signText').textContent = sign.text;
   document.getElementById('signSub').textContent = saved ? '今天已经抽过啦，明天 0 点刷新 🌙' : '一天一签，明天 0 点刷新';
   document.getElementById('signMask').classList.add('show');
+  if(!saved) SFX.success();
   renderSignBar();
 }
 function closeSign(){ document.getElementById('signMask').classList.remove('show'); }
@@ -2088,6 +2143,7 @@ function confettiEgg(){
   ];
   txt.textContent = phrases[(Math.random()*phrases.length)|0];
   box.classList.add('show');
+  SFX.fanfare();
   fireConfetti();
 }
 function closeConfetti(){
@@ -2154,9 +2210,11 @@ async function submitSiteGate(){
     onPassOk('site');
     if(__lockTimers['site']) clearInterval(__lockTimers['site']);
     try{ localStorage.setItem('cls_site_gate', SITE_GATE.version); }catch(e){}
+    SFX.success();
     g.classList.remove('show');
   }else{
     var r = onPassFail('site');
+    SFX.error();
     err.textContent = r.remain > 0
       ? '💡 提示：' + SITE_GATE.hint + '　🔒 已连续错误 ' + r.count + ' 次，请 ' + Math.ceil(r.remain/1000) + ' 秒后再试'
       : '💡 提示：' + SITE_GATE.hint;

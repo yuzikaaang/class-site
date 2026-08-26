@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>消消乐 · 25级05班</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:linear-gradient(170deg,#0d1024,#1a1440);color:#e9ecff;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh}
+  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
+  h1{font-size:18px;margin:0}
+  .hud{display:flex;gap:18px;font-size:15px}
+  .hud b{color:#ffcf7a}
+  #wrap{position:relative;width:min(94vw,420px)}
+  canvas{width:100%;height:auto;background:#0b0f22;border-radius:16px;display:block;box-shadow:0 12px 40px rgba(0,0,0,.5);touch-action:none}
+  .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:rgba(10,12,30,.74);border-radius:16px;text-align:center;padding:20px;z-index:3}
+  .ov.hidden{display:none}
+  .ov h2{margin:0;font-size:24px;color:#ffcf7a}
+  .ov p{margin:2px 0;font-size:13px;color:#9db1ff;line-height:1.7}
+  .ov button{border:none;border-radius:14px;padding:13px 30px;font-size:16px;font-weight:800;cursor:pointer;
+    background:linear-gradient(135deg,#ff9f6b,#ff6b8b);color:#fff;box-shadow:0 8px 20px rgba(255,107,139,.3)}
+  .ov button:active{transform:scale(.95)}
+  .tip{font-size:12px;opacity:.55}
+</style>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>🍬 消消乐</h1>
+<div class="hud"><span>得分 <b id="sc">0</b></span><span>最高 <b id="hi">0</b></span></div>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="ov" id="startOv">
+    <h2>消消乐</h2>
+    <p>点击两个相邻的糖果交换位置<br>三个或更多相同糖果连成一线即可消除</p>
+    <button id="startBtn">开始游戏</button>
+  </div>
+  <div class="ov hidden" id="overOv">
+    <h2>⏸ 继续？</h2>
+    <p id="ovInfo"></p>
+    <button id="reBtn">重新开局</button>
+  </div>
+</div>
+<div class="tip">拖拽或点击交换 · 连击越多分越高</div>
+<script>
+var AC=null;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f,d,t,v,delay){var c=ac();if(!c)return;var o=c.createOscillator(),g=c.createGain();o.type=t||'square';o.frequency.value=f;var t0=c.currentTime+(delay||0);g.gain.setValueAtTime(v||0.05,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(d||0.08));o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+(d||0.08)+0.02);}
+var snd={pick:function(){tone(500,0.05,'triangle',0.04);},swap:function(){tone(650,0.05,'sine',0.05);},clear:function(n){for(var i=0;i<n;i++)setTimeout(function(){tone(700+i*160,0.09,'square',0.05);},i*55);},bad:function(){tone(180,0.12,'sawtooth',0.05);}};
+
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var N=8,CELL=46,SIZE=N*CELL;
+cv.width=SIZE;cv.height=SIZE;
+var GLYPHS=['🍎','🍇','🍊','🥝','🍋','💎'];
+var grid,sc,hi,sel,busy,playing;
+hi=+(localStorage.getItem('match3_hi')||0);document.getElementById('hi').textContent=hi;
+
+function mkGrid(){
+  grid=[];
+  for(var r=0;r<N;r++){grid[r]=[];for(var c=0;c<N;c++)grid[r][c]=null;}
+  for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+    do{grid[r][c]=(Math.random()*GLYPHS.length)|0;}while(matchAt(r,c).length>0);
+  }
+}
+function matchAt(r,c){
+  var g=grid[r][c],hits=[];
+  if(g==null)return hits;
+  // 横向
+  var i,j;for(i=c-1;i>=0&&grid[r][i]===g;i--);
+  for(j=c+1;j<N&&grid[r][j]===g;j++);
+  if(j-i-1>=3){for(var k=i;k<j;k++)hits.push(r+','+k);}
+  // 纵向
+  for(i=r-1;i>=0&&grid[i][c]===g;i--);
+  for(j=r+1;j<N&&grid[j][c]===g;j++);
+  if(j-i-1>=3){for(var k=i;k<j;k++)hits.push(k+','+c);}
+  return hits;
+}
+function findAllMatches(){
+  var set={};
+  for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+    if(grid[r][c]==null)continue;
+    var h=matchAt(r,c);
+    for(var k=0;k<h.length;k++)set[h[k]]=true;
+  }
+  return Object.keys(set).map(function(s){var p=s.split(',');return {r:+p[0],c:+p[1]};});
+}
+function reset(){
+  mkGrid();sc=0;sel=null;busy=false;playing=true;
+  document.getElementById('sc').textContent=0;
+  hideOv();draw();
+  // 初始无可消除则重排
+  while(findAllMatches().length>0)mkGrid();
+  draw();
+}
+function hideOv(){document.getElementById('startOv').classList.add('hidden');document.getElementById('overOv').classList.add('hidden');}
+function pause(){playing=false;document.getElementById('overOv').classList.remove('hidden');document.getElementById('ovInfo').textContent='当前得分 '+sc+(sc>=hi&&sc>0?'　🏆 新纪录！':'　最高 '+hi);}
+function doMatch(){
+  var matches=findAllMatches();
+  if(matches.length===0){busy=false;if(sel){sel=null;draw();}return;}
+  var pts=matches.length;
+  sc+=pts*10;
+  if(pts>3)sc+=20;
+  if(sc>hi){hi=sc;try{localStorage.setItem('match3_hi',hi);}catch(e){} document.getElementById('hi').textContent=hi;}
+  document.getElementById('sc').textContent=sc;
+  snd.clear(Math.min(6,pts));
+  for(var k=0;k<matches.length;k++)grid[matches[k].r][matches[k].c]=null;
+  // 下落
+  for(var c=0;c<N;c++){
+    var col=[];
+    for(var r=N-1;r>=0;r--)if(grid[r][c]!=null)col.push(grid[r][c]);
+    while(col.length<N)col.push((Math.random()*GLYPHS.length)|0);
+    for(var r=N-1;r>=0;r--)grid[r][c]=col[N-1-r];
+  }
+  setTimeout(function(){doMatch();},260);
+}
+function trySwap(a,b){
+  var t=grid[a.r][a.c];grid[a.r][a.c]=grid[b.r][b.c];grid[b.r][b.c]=t;
+  if(findAllMatches().length>0){snd.swap();busy=true;doMatch();}
+  else{t=grid[a.r][a.c];grid[a.r][a.c]=grid[b.r][b.c];grid[b.r][b.c]=t;snd.bad();}
+  sel=null;draw();
+}
+function cellAt(px,py){return {r:(py/CELL)|0,c:(px/CELL)|0};}
+function inGrid(x){return x>=0&&x<N;}
+cv.addEventListener('pointerdown',function(e){
+  if(!playing||busy)return;
+  var r=cv.getBoundingClientRect();
+  var p=cellAt((e.clientX-r.left)*(SIZE/r.width),(e.clientY-r.top)*(SIZE/r.height));
+  if(!inGrid(p.r)||!inGrid(p.c))return;
+  if(!sel){sel=p;snd.pick();}
+  else{
+    var dr=Math.abs(p.r-sel.r),dc=Math.abs(p.c-sel.c);
+    if(dr+dc===1){trySwap(sel,p);}
+    else{sel=p;snd.pick();}
+  }
+  draw();
+});
+document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
+document.getElementById('reBtn').addEventListener('click',function(){reset();});
+function draw(){
+  ctx.clearRect(0,0,SIZE,SIZE);
+  ctx.fillStyle='#0b0f22';ctx.fillRect(0,0,SIZE,SIZE);
+  for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+    var x=c*CELL+3,y=r*CELL+3;
+    if(sel&&sel.r===r&&sel.c===c){
+      ctx.fillStyle='rgba(124,131,255,.35)';
+      ctx.beginPath();ctx.roundRect(x,y,CELL-6,CELL-6,10);ctx.fill();
+    }
+    if(grid[r][c]==null)continue;
+    ctx.font=(CELL-12)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(GLYPHS[grid[r][c]],c*CELL+CELL/2,r*CELL+CELL/2+2);
+  }
+  ctx.strokeStyle='rgba(255,255,255,.05)';
+  for(var i=0;i<=N;i++){ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,SIZE);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(SIZE,i*CELL);ctx.stroke();}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>扫雷 · 25级05班</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:linear-gradient(170deg,#0d1024,#12203f);color:#e9ecff;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh}
+  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
+  h1{font-size:18px;margin:0}
+  .hud{display:flex;gap:16px;font-size:15px}
+  .hud b{color:#ffcf7a}
+  #wrap{position:relative;width:min(94vw,420px)}
+  canvas{width:100%;height:auto;background:#0b0f22;border-radius:14px;display:block;box-shadow:0 12px 40px rgba(0,0,0,.5);touch-action:none}
+  .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:rgba(10,12,30,.74);border-radius:14px;text-align:center;padding:20px;z-index:3}
+  .ov.hidden{display:none}
+  .ov h2{margin:0;font-size:24px;color:#ffcf7a}
+  .ov p{margin:2px 0;font-size:13px;color:#9db1ff;line-height:1.7}
+  .ov button{border:none;border-radius:14px;padding:13px 30px;font-size:16px;font-weight:800;cursor:pointer;
+    background:linear-gradient(135deg,#7c83ff,#4a6cf7);color:#fff;box-shadow:0 8px 20px rgba(74,108,247,.35)}
+  .ov button:active{transform:scale(.95)}
+  .tip{font-size:12px;opacity:.55}
+</style>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>💣 扫雷</h1>
+<div class="hud"><span>雷 <b id="mines">10</b></span><span>时间 <b id="tm">0</b></span><span>最快 <b id="best">--</b></span></div>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="ov" id="startOv">
+    <h2>扫雷</h2>
+    <p>点格子翻开 · 长按/右键标红旗<br>翻出所有安全格且不踩雷即胜利</p>
+    <button id="startBtn">开始游戏</button>
+  </div>
+  <div class="ov hidden" id="overOv">
+    <h2 id="ovTitle">💥 踩雷啦</h2>
+    <p id="ovInfo"></p>
+    <button id="reBtn">再来一局</button>
+  </div>
+</div>
+<div class="tip">移动端长按格子标旗 · 数字表示周围雷数</div>
+<script>
+var AC=null;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f,d,t,v,delay){var c=ac();if(!c)return;var o=c.createOscillator(),g=c.createGain();o.type=t||'square';o.frequency.value=f;var t0=c.currentTime+(delay||0);g.gain.setValueAtTime(v||0.05,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(d||0.08));o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+(d||0.08)+0.02);}
+var snd={open:function(){tone(520,0.04,'triangle',0.04);},flag:function(){tone(340,0.05,'square',0.04);},boom:function(){tone(150,0.35,'sawtooth',0.08);setTimeout(function(){tone(90,0.4,'sawtooth',0.06);},110);},win:function(){tone(660,0.09,'sine',0.06);setTimeout(function(){tone(880,0.09,'sine',0.06);},90);setTimeout(function(){tone(1100,0.12,'sine',0.06);},180);}};
+
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var R=9,C=9,MINES=10,CELL=44;
+var W=C*CELL,H=R*CELL;
+cv.width=W;cv.height=H;
+var grid,flags,revealed,playing,started,t0,timerId,best;
+best=+(localStorage.getItem('mine_best')||0);
+document.getElementById('best').textContent=best?best+'s':'--';
+
+function reset(){
+  grid=[];flags=0;revealed=0;playing=true;started=false;t0=0;
+  if(timerId)clearInterval(timerId);
+  document.getElementById('tm').textContent='0';
+  document.getElementById('mines').textContent=MINES;
+  for(var r=0;r<R;r++){grid[r]=[];for(var c=0;c<C;c++)grid[r][c]={mine:false,open:false,flag:false,n:0};}
+  hideOv();draw();
+}
+function plant(avoidR,avoidC){
+  var placed=0;
+  while(placed<MINES){
+    var r=(Math.random()*R)|0,c=(Math.random()*C)|0;
+    if(grid[r][c].mine)continue;
+    if(Math.abs(r-avoidR)<=1&&Math.abs(c-avoidC)<=1)continue;
+    grid[r][c].mine=true;placed++;
+  }
+  for(var r=0;r<R;r++)for(var c=0;c<C;c++){
+    if(grid[r][c].mine){grid[r][c].n=-1;continue;}
+    var n=0;
+    for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){
+      var nr=r+dr,nc=c+dc;
+      if(nr>=0&&nr<R&&nc>=0&&nc<C&&grid[nr][nc].mine)n++;
+    }
+    grid[r][c].n=n;
+  }
+}
+function hideOv(){document.getElementById('startOv').classList.add('hidden');document.getElementById('overOv').classList.add('hidden');}
+function flood(r,c){
+  if(r<0||r>=R||c<0||c>=C)return;
+  var g=grid[r][c];
+  if(g.open||g.flag)return;
+  g.open=true;revealed++;
+  if(g.n===0)for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++)if(dr||dc)flood(r+dr,c+dc);
+}
+function open(r,c){
+  if(!playing)return;
+  if(!started){plant(r,c);started=true;t0=Date.now();timerId=setInterval(function(){document.getElementById('tm').textContent=Math.round((Date.now()-t0)/1000);},500);}
+  var g=grid[r][c];
+  if(g.flag||g.open)return;
+  if(g.mine){boom();return;}
+  flood(r,c);snd.open();
+  if(revealed>=R*C-MINES)win();
+  draw();
+}
+function flag(r,c){
+  if(!playing)return;
+  var g=grid[r][c];
+  if(g.open)return;
+  g.flag=!g.flag;
+  flags+=g.flag?1:-1;
+  document.getElementById('mines').textContent=MINES-flags;
+  snd.flag();draw();
+}
+function boom(){
+  playing=false;snd.boom();
+  if(timerId)clearInterval(timerId);
+  for(var r=0;r<R;r++)for(var c=0;c<C;c++)if(grid[r][c].mine)grid[r][c].open=true;
+  document.getElementById('ovTitle').textContent='💥 踩雷啦';
+  document.getElementById('ovInfo').textContent='坚持了 '+document.getElementById('tm').textContent+' 秒';
+  document.getElementById('overOv').classList.remove('hidden');
+  draw();
+}
+function win(){
+  playing=false;snd.win();
+  if(timerId)clearInterval(timerId);
+  var sec=Math.round((Date.now()-t0)/1000);
+  if(!best||sec<best){best=sec;try{localStorage.setItem('mine_best',best);}catch(e){} document.getElementById('best').textContent=best+'s 🏆';}
+  document.getElementById('ovTitle').textContent='🎉 扫完啦！';
+  document.getElementById('ovInfo').textContent='用时 '+sec+' 秒'+(best===sec?'　🏆 新纪录！':'　最快 '+best+'s');
+  document.getElementById('overOv').classList.remove('hidden');
+}
+cv.addEventListener('contextmenu',function(e){e.preventDefault();});
+cv.addEventListener('pointerdown',function(e){
+  var r=cv.getBoundingClientRect();
+  var c=((e.clientX-r.left)*(W/r.width)/CELL)|0;
+  var rr=((e.clientY-r.top)*(H/r.height)/CELL)|0;
+  if(c<0||c>=C||rr<0||rr>=R)return;
+  if(e.button===2){flag(rr,c);}
+  else open(rr,c);
+  draw();
+});
+/* 移动端长按标旗 */
+var longT=null;
+cv.addEventListener('touchstart',function(e){ if(!playing)return; var t=e.touches[0],r=cv.getBoundingClientRect(); var c=((t.clientX-r.left)*(W/r.width)/CELL)|0,rr=((t.clientY-r.top)*(H/r.height)/CELL)|0; if(c<0||c>=C||rr<0||rr>=R)return; longT=setTimeout(function(){ flag(rr,c); draw(); },500); },{passive:true});
+cv.addEventListener('touchend',function(){ clearTimeout(longT); });
+document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
+document.getElementById('reBtn').addEventListener('click',function(){reset();});
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  var numC=['','#4a6cf7','#2fd6a8','#ff6b8b','#9b59d0','#e67e22','#1abc9c','#f1c40f','#95a5a6'];
+  for(var r=0;r<R;r++)for(var c=0;c<C;c++){
+    var g=grid[r][c],x=c*CELL,y=r*CELL;
+    ctx.fillStyle=g.open?'#1a2440':'#232f55';
+    ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+    ctx.strokeStyle='rgba(255,255,255,.06)';ctx.strokeRect(x+1,y+1,CELL-2,CELL-2);
+    if(g.open&&g.n>0){
+      ctx.fillStyle=numC[g.n];ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(g.n,x+CELL/2,y+CELL/2+1);
+    }else if(g.open&&g.mine){
+      ctx.font='22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('💣',x+CELL/2,y+CELL/2+1);
+    }else if(g.flag){
+      ctx.font='20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🚩',x+CELL/2,y+CELL/2+1);
+    }
+  }
+}
+</script>
+</body>
+</html>
