@@ -767,7 +767,7 @@ var SITE_DATA = {
     { name: "ce7d97fec9786c0afbf62e54265ac4c89f7b1fdd291bfaee32a0e2ee3125a93b", studentId: "UVlDBwQF", role: "hsHV1aGv" },
     { name: "77ee4fb9ce71c4aef73923c127aa247519ee3b336e3b9d8478cb20759b7e88f8", studentId: "UVlDBwQG", role: "hsHV1aGv" },
     { name: "d787e4b8ccdd6418ae9712b9a174d8cd9b2aa06812972ca95798bc98840cf65e", studentId: "UVlDBwQH", role: "hsHV1aGv" },
-    { name: "592a6bc0219ff44ba852b8fbc1a54e75bdbdabd31882d42abe30ab1993f1685e", studentId: "UVlDBwQI", role: "hMLS1aW20Lzg", wechat: "GhYYSF4AAB9B", phone: "UllFAgIABxtPWkA=" },
+    { name: "592a6bc0219ff44ba852b8fbc1a54e75bdbdabd31882d42abe30ab1993f1685e", studentId: "UVlDBwQI", role: "hMLS1aW20Lzg", wechat: "GhYYSF4AAB9B", phone: "UllFAgIABxtPWkA=", qq: "UF5EAwUGAB5OXg==" },
     { name: "47fa22025171fcc48a86fce9505e6fd887bbc451199faa036a411260965bd156", studentId: "UVlDBwQJ", role: "hsHV1aGv" },
     { name: "103cbbfc30f608cf0d050eec932be5091795daa59054e5ee4d139ae016ec5a00", studentId: "UVlDBwcA", role: "hsHV1aGv" },
     { name: "0438ef5d9f5a67013379d5658de687f8654e12a2164e21ab5ba61a5c2ddd1ad9", studentId: "UVlDBwcB", role: "hsHV1aGv" },
@@ -1776,6 +1776,15 @@ function findContactDo(nameHash, out){
     p.textContent = '电话：' + pText + '  📋 点击复制';
     p.onclick = (function(val){ return function(){ copyText(val, '电话'); }; })(pText);
     out.appendChild(p);
+  }
+  if(hit.qq){
+    var qText = xorDecrypt(hit.qq);
+    var q = document.createElement('button');
+    q.type = 'button';
+    q.className = 'copy-btn';
+    q.textContent = 'QQ：' + qText + '  📋 点击复制';
+    q.onclick = (function(val){ return function(){ copyText(val, 'QQ号'); }; })(qText);
+    out.appendChild(q);
   }
 }
 
