@@ -25,6 +25,11 @@
     background:linear-gradient(135deg,#46e0c8,#2fd6a8);color:#0b0f22;box-shadow:0 8px 20px rgba(70,224,200,.3)}
   .ov button:active{transform:scale(.95)}
   .tip{font-size:12px;opacity:.55}
+  .ctrl{display:flex;gap:16px;width:min(94vw,420px);justify-content:center;margin-top:2px}
+  .ctrl button{flex:1;max-width:170px;border:none;border-radius:16px;padding:18px 0;font-size:22px;font-weight:900;cursor:pointer;
+    color:#0b0f22;background:linear-gradient(135deg,#7c83ff,#4a6cf7);box-shadow:0 8px 22px rgba(74,108,247,.35);user-select:none;-webkit-user-select:none;touch-action:none}
+  .ctrl button:active{transform:scale(.94)}
+  .ctrl button.right{background:linear-gradient(135deg,#46e0c8,#2fd6a8);box-shadow:0 8px 22px rgba(47,214,168,.35)}
 </style>
 </head>
 <body>
@@ -44,7 +49,11 @@
     <button id="reBtn">再来一局</button>
   </div>
 </div>
-<div class="tip">键盘 ← → 或按住屏幕左右半边移动</div>
+<div class="ctrl">
+  <button id="leftBtn" aria-label="左移">◀ 左</button>
+  <button id="rightBtn" class="right" aria-label="右移">右 ▶</button>
+</div>
+<div class="tip">键盘 ← → 或屏幕下方虚拟按键移动 · 踩平台往上跳</div>
 <script>
 var AC=null;
 function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
@@ -143,8 +152,16 @@ function draw(){
 }
 document.addEventListener('keydown',function(e){ if(e.code==='ArrowLeft')dirL=true; if(e.code==='ArrowRight')dirR=true; });
 document.addEventListener('keyup',function(e){ if(e.code==='ArrowLeft')dirL=false; if(e.code==='ArrowRight')dirR=false; });
-cv.addEventListener('touchstart',function(e){ if(!playing)return; var t=e.touches[0],r=cv.getBoundingClientRect(); if(t.clientX-r.left<r.width/2)dirL=true;else dirR=true; },{passive:true});
-cv.addEventListener('touchend',function(){ dirL=dirR=false; });
+/* 虚拟按键：按住左/右移动，松开停止（替代原来的“按住屏幕半边滑动”） */
+function hold(id,on){
+  var el=document.getElementById(id);
+  el.addEventListener('pointerdown',function(e){e.preventDefault();on();});
+  el.addEventListener('pointerup',function(e){e.preventDefault();dirL=dirR=false;});
+  el.addEventListener('pointerleave',function(e){dirL=dirR=false;});
+  el.addEventListener('pointercancel',function(e){dirL=dirR=false;});
+}
+hold('leftBtn',function(){dirL=true;});
+hold('rightBtn',function(){dirR=true;});
 document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
 document.getElementById('reBtn').addEventListener('click',function(){reset();});
 </script>

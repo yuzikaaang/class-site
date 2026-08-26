@@ -42,7 +42,7 @@
   <canvas id="cv"></canvas>
   <div class="ov" id="startOv">
     <h2>扫雷</h2>
-    <p>选择难度开始 · 长按 / 右键标旗</p>
+    <p>选择难度开始 · 电脑右键 / 手机长按 标旗</p>
     <div class="diff-row">
       <button onclick="startGame(9,9,10)">😌 简单</button>
       <button onclick="startGame(12,12,24)">🙂 中等</button>
@@ -92,6 +92,7 @@ function reset(){
   if(timerId)clearInterval(timerId);
   document.getElementById('tm').textContent='0';
   document.getElementById('mines').textContent=MINES;
+  document.getElementById('overOv').classList.add('hidden');
   for(var r=0;r<R;r++){grid[r]=[];for(var c=0;c<C;c++)grid[r][c]={mine:false,open:false,flag:false,n:0};}
   draw();
 }
@@ -159,18 +160,35 @@ function win(){
   document.getElementById('overOv').classList.remove('hidden');
 }
 cv.addEventListener('contextmenu',function(e){e.preventDefault();});
-cv.addEventListener('pointerdown',function(e){
+/* 统一用 pointer 事件处理输入：
+   电脑：左键翻开 / 右键标旗
+   手机：轻点翻开 / 长按约 450ms 标旗（轻点与长按用计时器区分，避免冲突） */
+function cellFromEvent(e){
   var r=cv.getBoundingClientRect();
   var c=((e.clientX-r.left)*(W/r.width)/CELL)|0;
   var rr=((e.clientY-r.top)*(H/r.height)/CELL)|0;
-  if(c<0||c>=C||rr<0||rr>=R)return;
-  if(e.button===2){flag(rr,c);}
-  else open(rr,c);
-  draw();
+  if(c<0||c>=C||rr<0||rr>=R)return null;
+  return {r:rr,c:c};
+}
+var pressTimer=null,pressCell=null,longFired=false;
+cv.addEventListener('pointerdown',function(e){
+  if(!playing)return;
+  var pos=cellFromEvent(e); if(!pos)return;
+  if(e.pointerType==='mouse'){
+    if(e.button===2){flag(pos.r,pos.c);draw();}
+    else{open(pos.r,pos.c);draw();}
+    return;
+  }
+  pressCell=pos;longFired=false;
+  pressTimer=setTimeout(function(){ longFired=true; flag(pos.r,pos.c); draw(); },450);
 });
-var longT=null;
-cv.addEventListener('touchstart',function(e){ if(!playing)return; var t=e.touches[0],r=cv.getBoundingClientRect(); var c=((t.clientX-r.left)*(W/r.width)/CELL)|0,rr=((t.clientY-r.top)*(H/r.height)/CELL)|0; if(c<0||c>=C||rr<0||rr>=R)return; longT=setTimeout(function(){ flag(rr,c); draw(); },500); },{passive:true});
-cv.addEventListener('touchend',function(){ clearTimeout(longT); });
+cv.addEventListener('pointerup',function(e){
+  if(e.pointerType!=='touch')return;
+  clearTimeout(pressTimer);
+  if(!longFired&&pressCell){open(pressCell.r,pressCell.c);draw();}
+  pressCell=null;
+});
+cv.addEventListener('pointercancel',function(){ clearTimeout(pressTimer); pressCell=null; });
 document.getElementById('reBtn').addEventListener('click',function(){startGame(R,C,MINES);});
 function draw(){
   ctx.clearRect(0,0,W,H);
