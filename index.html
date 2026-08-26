@@ -578,10 +578,18 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
         </select>
         <select id="allSearchTime" onchange="onAllSearchScope()" style="flex:1;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222">
           <option value="all">全部时间</option>
+          <option value="3d">近 3 天</option>
           <option value="7d">近 7 天</option>
+          <option value="15d">近 15 天</option>
           <option value="30d">近 30 天</option>
-          <option value="2026">2026 年</option>
+          <option value="180d">近半年</option>
+          <option value="custom">自定义</option>
         </select>
+      </div>
+      <div id="allDateRange" style="display:none;gap:8px;margin:8px 0 2px;font-size:.8rem;align-items:center">
+        <input type="date" id="allDateFrom" onchange="onAllSearchScope()" style="flex:1;min-width:0;padding:5px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222">
+        <span style="color:#9aa7b8">至</span>
+        <input type="date" id="allDateTo" onchange="onAllSearchScope()" style="flex:1;min-width:0;padding:5px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222">
       </div>
     </div>
     <ul class="allboard-list" id="allBoardList"></ul>
@@ -610,6 +618,9 @@ header{display:flex;flex-direction:column;align-items:center;padding-top:18px}
     </div>
   </div>
 </div>
+
+<!-- 学习资料提示悬浮球（关闭弹窗后出现，带红点；已勾选不再显示则不出现） -->
+<button id="studyBubble" onclick="showStudyNotice()" title="查看访问提示" aria-label="查看访问提示" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(74,108,247,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(59,91,253,.35)">💬<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
 
 <!-- ===== 当前作业弹窗 ===== -->
 <div class="allboard-mask" id="hwCurrentMask">
@@ -901,7 +912,8 @@ var SITE_DATA = {
     { date: "2026-08-23 00:22", text: "经过我这么久的调试这个网站终于有点雏形在了！(╥╯﹏╰╥)ง", category: 'misc' },
     { date: "2026-08-22 00:00", text: "点歌平台入口已开放！微信内无法直接访问，点击「前往入口」后请按引导用浏览器打开。", category: 'site' },
     { date: "2026-08-22 00:00", text: "班级服务站 2.0 上线：新增公告栏；站点可在微信内直接打开，部分国外站点会自动引导用浏览器访问。", category: 'site' },
-    { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清空本机站点数据（游戏记录、主题/音效、密码与暗号通关及锁状态等），保留设备标识、班级签、点歌券记录（防借初始化刷签/刷券）。", category: "site" }
+    { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清空本机站点数据（游戏记录、主题/音效、密码与暗号通关及锁状态等），保留设备标识、班级签、点歌券记录（防借初始化刷签/刷券）。", category: "site" },
+    { date: "2026-08-27 00:13", text: "📌 功能更新：\n① 学习资料「访问提示」弹窗关闭后，右下角出现带红点的消息悬浮球，点击可重新打开；勾选「不再显示」则无悬浮球。\n② 全部公告日期筛选升级：快捷范围 近 3 天 / 7 天 / 15 天 / 30 天 / 近半年，并支持自定义起止日期。\n③ 全部公告可按时间隐藏更早公告（范围同②），公告条数随筛选实时更新。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -1908,15 +1920,18 @@ function annHighlight(a,q){
   }
   return html;
 }
-function annDateOk(a,time){
+function annDateOk(a,time,from,to){
   if(!time || time==='all') return true;
   var d=(a.date||'').slice(0,10);
   if(!d) return false;
-  if(time==='2026') return d.slice(0,4)==='2026';
-  var now=new Date(), cut=new Date();
-  if(time==='7d') cut.setDate(now.getDate()-7);
-  else if(time==='30d') cut.setDate(now.getDate()-30);
-  else return true;
+  if(time==='custom'){
+    if(from && d<from) return false;
+    if(to && d>to) return false;
+    return true;
+  }
+  var days = time==='3d'?3:time==='7d'?7:time==='15d'?15:time==='30d'?30:time==='180d'?180:0;
+  if(days<=0) return true;
+  var cut=new Date(); cut.setDate(cut.getDate()-days);
   var c=cut.getFullYear()+'-'+((cut.getMonth()+1)<10?'0':'')+(cut.getMonth()+1)+'-'+(cut.getDate()<10?'0':'')+cut.getDate();
   return d>=c;
 }
@@ -1924,7 +1939,20 @@ function toggleAnnCat(h){
   var li=h.parentNode; if(li) li.classList.toggle('collapsed');
 }
 function onAllSearchInput(){ renderAllBoard(); }
-function onAllSearchScope(){ renderAllBoard(); }
+var ANN_FILTER_KEY='cls_ann_filter';
+function saveAnnFilter(){
+  try{
+    var t=document.getElementById('allSearchTime'), c=document.getElementById('allSearchCat'),
+        f=document.getElementById('allDateFrom'), t2=document.getElementById('allDateTo');
+    if(t) localStorage.setItem(ANN_FILTER_KEY, JSON.stringify({t:t.value, c:c?c.value:'all', f:f?f.value:'', t2:t2?t2.value:''}));
+  }catch(e){}
+}
+function loadAnnFilter(){ try{ return JSON.parse(localStorage.getItem(ANN_FILTER_KEY))||{}; }catch(e){ return {}; } }
+function onAllSearchScope(){
+  var t=document.getElementById('allSearchTime'), r=document.getElementById('allDateRange');
+  if(r && t) r.style.display=(t.value==='custom')?'flex':'none';
+  renderAllBoard();
+}
 function renderAllBoard(){
   var list=document.getElementById('allBoardList');
   if(!list) return;
@@ -1932,20 +1960,25 @@ function renderAllBoard(){
   var inp=document.getElementById('allSearchInput');
   var catSel=document.getElementById('allSearchCat');
   var timeSel=document.getElementById('allSearchTime');
+  var fromInp=document.getElementById('allDateFrom');
+  var toInp=document.getElementById('allDateTo');
   var q=inp?inp.value.trim():'';
   var ck=catSel?catSel.value:'all';
   var tk=timeSel?timeSel.value:'all';
+  var from=fromInp?fromInp.value:'';
+  var to=toInp?toInp.value:'';
   var ann=(SITE_DATA.announcements||[]).slice().sort(function(a,b){
     if((isImportant(b)?1:0)!==(isImportant(a)?1:0)) return (isImportant(b)?1:0)-(isImportant(a)?1:0);
     return (b.date||'').localeCompare(a.date||'');
   });
   var scoped=ann.filter(function(a){
     if(ck!=='all' && (a.category||'misc')!==ck) return false;
-    return annDateOk(a,tk);
+    return annDateOk(a,tk,from,to);
   });
+  saveAnnFilter();
   if(q){
     var hits=scoped.filter(function(a){ return annMatch(a,q); });
-    if(title) title.textContent='搜索「'+q+'」· 命中 '+hits.length+' / 共 '+ann.length+' 条';
+    if(title) title.textContent='搜索「'+q+'」· 命中 '+hits.length+' / 范围内 '+scoped.length+' 条';
     list.innerHTML=hits.length
       ? '<li class="ann-cat"><h4 style="margin:12px 0 8px;color:#3b5bfd;font-size:.95rem">🔎 匹配结果（'+hits.length+'）</h4>'+
         '<ul style="list-style:none;padding:0;margin:0">'+hits.map(function(a){
@@ -1975,7 +2008,17 @@ function renderAllBoard(){
 }
 function showAllBoard(){
   var mask=document.getElementById('allBoardMask');
-  if(mask){ renderAllBoard(); mask.classList.add('show'); }
+  if(mask){
+    var f=loadAnnFilter();
+    var t=document.getElementById('allSearchTime'), c=document.getElementById('allSearchCat'),
+        fi=document.getElementById('allDateFrom'), ti=document.getElementById('allDateTo');
+    if(t && f.t) t.value=f.t;
+    if(c && f.c) c.value=f.c;
+    if(fi && f.f) fi.value=f.f;
+    if(ti && f.t2) ti.value=f.t2;
+    onAllSearchScope();
+    mask.classList.add('show');
+  }
 }
 function closeAllBoard(){
   var m=document.getElementById('allBoardMask');
@@ -2162,16 +2205,28 @@ function wipeAllData(){
   setTimeout(function(){ location.reload(); }, 800);
 }
 
-/* ---- 学习资料网络限制提示弹窗 ---- */
+/* ---- 学习资料网络限制提示弹窗（关闭后显示带红点悬浮球） ---- */
+function studyBubbleShow(){
+  var b=document.getElementById('studyBubble'); if(!b) return;
+  var off=false; try{ off=localStorage.getItem('cls_study_notice_dismissed')==='1'; }catch(e){}
+  b.style.display = off ? 'none' : 'flex';
+}
+function studyBubbleHide(){ var b=document.getElementById('studyBubble'); if(b) b.style.display='none'; }
 function showStudyNotice(){
   try{ if(localStorage.getItem('cls_study_notice_dismissed')==='1') return; }catch(e){}
+  studyBubbleHide();
   var m=document.getElementById('studyNoticeMask'); if(m) m.classList.add('show');
 }
-function closeStudyNotice(){ var m=document.getElementById('studyNoticeMask'); if(m) m.classList.remove('show'); }
+function closeStudyNotice(){
+  var m=document.getElementById('studyNoticeMask'); if(m) m.classList.remove('show');
+  studyBubbleShow();
+}
 function dismissStudyNotice(){
   var cb=document.getElementById('studyNoticeNoShow');
-  try{ if(cb && cb.checked) localStorage.setItem('cls_study_notice_dismissed','1'); }catch(e){}
-  closeStudyNotice();
+  var off=false;
+  if(cb && cb.checked){ try{ localStorage.setItem('cls_study_notice_dismissed','1'); }catch(e){} off=true; }
+  var m=document.getElementById('studyNoticeMask'); if(m) m.classList.remove('show');
+  if(off) studyBubbleHide(); else studyBubbleShow();
 }
 
 /* ---- 大假作业（当前作业 / 日历）---- */
