@@ -2906,6 +2906,7 @@ function djRun(){
       if(box) box.innerHTML = '<p style="color:#c2410c;font-size:.85rem">该时间范围内没有可抽歌曲，请调整范围、勾选「不限时间范围」或关闭「排除已播放」。</p>';
       return;
     }
+    var clamped = n > pool.length;
     if(n > pool.length) n = pool.length;
     if(topN > n) topN = n;
     if(topN > pool.length) topN = pool.length;
@@ -2917,9 +2918,10 @@ function djRun(){
       guarantee.forEach(function(s){ var idx = restPool.indexOf(s); if(idx>=0) restPool.splice(idx,1); });
     }
     var picked = guarantee.slice();
-    /* 2) 其余：随机（高赞优先=按点赞加权） */
+    /* 2) 其余：随机（高赞优先=按点赞加权）。need 先算好，避免循环条件里 picked.length 增长导致提前终止 */
     var bag = restPool.slice();
-    for(var k=0; k<n-picked.length && bag.length; k++){
+    var need = n - picked.length;
+    for(var k=0; k<need && bag.length; k++){
       var idx;
       if(top){
         var wsum=0, a;
@@ -2943,9 +2945,9 @@ function djRun(){
     _djLastPick = picked;
     var gset = {}; guarantee.forEach(function(s){ gset[s.id]=1; });
     var rows = picked.map(function(s,i){ return (gset[s.id]?'🔥 ':'')+(i+1)+'. '+esc(s.title)+' - '+esc(s.artist||'未知歌手')+'（点赞 '+(s.voteCount||0)+'）'; }).join('<br>');
-    var mode = (topN>0 ? '高赞必选 '+guarantee.length+' 首 + ' : '') + (top?'加权随机':'随机') + (excl?' · 排除已播放':' · 含已播放') + (noLimit?' · 不限时间':'');
+    var mode = (topN>0 ? '高赞必选 '+guarantee.length+' 首 + ' : '') + (top?'加权随机':'随机') + (excl?' · 排除已播放':' · 含已播放') + (noLimit?' · 不限时间':'') + ' · 池中 '+pool.length+' 首';
     if(box) box.innerHTML = '<div style="background:#f0f6ff;border-radius:12px;padding:12px 14px;margin:10px 0;font-size:.85rem;line-height:1.9">'+
-      '<b style="color:#07a154">✅ 已抽中 '+picked.length+' 首，已加入本地排期（累计 '+list.length+' 首）</b><br>'+
+      '<b style="color:#07a154">✅ 已抽中 '+picked.length+' 首'+(clamped ? '（池中仅 '+pool.length+' 首，已全部抽取）' : '')+'，已加入本地排期（累计 '+list.length+' 首）</b><br>'+
       '<span style="color:#3b5bfd">'+mode+'</span><br>'+
       rows+'</div>';
     SFX.success();
