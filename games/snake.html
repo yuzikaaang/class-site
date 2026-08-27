@@ -55,7 +55,7 @@
 <body>
 <a class="back" href="../">← 返回班级站</a>
 <h1>🐍 贪吃蛇</h1>
-<div class="score">得分：<b id="sc">0</b> · 最高：<b id="hi">0</b> · <span id="goal">目标 100 豆得点歌券</span></div>
+<div class="score">得分：<b id="sc">0</b> · 最高：<b id="hi">0</b> · <span id="goal">目标 60 豆得点歌券</span></div>
 <canvas id="cv" width="320" height="320"></canvas>
 <div class="hint">方向键 / 屏幕虚拟按键控制</div>
 <!-- 虚拟方向键（替代滑动） -->
@@ -123,7 +123,7 @@ var VOICEHUB_COUPON = {
   respCodeKey: 'data.cardCodes.0.code' // 响应里第一个券码的字段路径
 };
 
-/* 设备唯一标识（本地生成，用于每日限领） */
+/* 设备唯一标识（本地生成，用于周常限领） */
 function deviceId(){
   var k='cls_device_id';
   try{
@@ -134,11 +134,16 @@ function deviceId(){
     return d;
   }catch(e){ return 'dev_'+Date.now(); }
 }
-function todayKey(){ var d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
-function alreadyClaimed(){
-  try{ return !!localStorage.getItem('song_coupon_'+todayKey()); }catch(e){ return false; }
+/* 周常限领：每款游戏每周一张点歌券，每周一刷新（周一为一周起点） */
+function weekKey(){
+  var d=new Date(), day=(d.getDay()+6)%7;   // 周一=0
+  d.setDate(d.getDate()-day);
+  return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
 }
-function markClaimed(){ try{ localStorage.setItem('song_coupon_'+todayKey(),'1'); }catch(e){} }
+function alreadyClaimed(){
+  try{ return localStorage.getItem('song_coupon_w_snake')===weekKey(); }catch(e){ return false; }
+}
+function markClaimed(){ try{ localStorage.setItem('song_coupon_w_snake', weekKey()); }catch(e){} }
 
 /* 解析响应中的券码：支持 'code' / 'data.code' 路径 */
 function pickPath(obj,path){

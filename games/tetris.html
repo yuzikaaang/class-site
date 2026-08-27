@@ -19,12 +19,36 @@
     background:rgba(255,255,255,.08);color:var(--fg)}
   .pad button:active{background:var(--accent)}
   .hint{font-size:12px;opacity:.6}
+  /* 达标发券弹窗 */
+  .reward-mask{display:none;position:fixed;inset:0;background:rgba(10,12,30,.78);z-index:999;
+    align-items:center;justify-content:center;padding:20px}
+  .reward-mask.show{display:flex}
+  .reward-box{background:linear-gradient(160deg,#1a2040,#141936);border:1px solid #2a3550;
+    border-radius:22px;padding:26px 22px;max-width:340px;width:100%;text-align:center;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);animation:pop .25s ease}
+  @keyframes pop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+  .reward-emoji{font-size:46px;line-height:1}
+  .reward-title{font-size:19px;font-weight:800;color:#ffcf7a;margin:10px 0 4px}
+  .reward-sub{font-size:13px;color:#9db1ff;margin-bottom:14px}
+  .coupon-code{font-size:22px;font-weight:800;letter-spacing:2px;color:#46e0c8;
+    background:#0b0f1f;border:1px dashed #2f5f5a;border-radius:12px;padding:12px 8px;margin:6px 0;
+    user-select:all;-webkit-user-select:all;word-break:break-all}
+  .reward-tip{font-size:12px;color:#7a869a;line-height:1.6;text-align:left;margin:10px 0 4px}
+  .reward-btns{display:flex;gap:10px;margin-top:12px}
+  .reward-btns button{flex:1;border:none;border-radius:12px;padding:11px 0;font-size:14px;
+    font-weight:700;cursor:pointer}
+  .btn-copy{background:#7c83ff;color:#fff}
+  .btn-goto{background:#46e0c8;color:#0b0f1f;text-decoration:none;display:flex;align-items:center;justify-content:center;font-weight:800}
+  .btn-close{background:#242b4a;color:#9db1ff}
+  .reward-tag{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;
+    background:rgba(124,131,255,.15);color:#a8afff;margin-top:8px}
+  .reward-tag.err{background:rgba(255,107,139,.15);color:#ff9db4}
 </style>
 </head>
 <body>
 <a class="back" href="../">← 返回班级站</a>
 <h1>🧱 俄罗斯方块</h1>
-<div class="score">得分：<b id="sc">0</b> · 最高：<b id="hi">0</b></div>
+<div class="score">得分：<b id="sc">0</b> · 最高：<b id="hi">0</b> · 目标 <b style="color:#ffcf7a">120</b> 分得点歌券</div>
 <canvas id="cv" width="200" height="400"></canvas>
 <div class="pad">
   <button onclick="move(-1)">←</button>
@@ -33,6 +57,22 @@
   <button onclick="rotate()">⟳</button>
 </div>
 <div class="hint">方向键 / 触屏按钮，空格旋转</div>
+<!-- 达标发券弹窗 -->
+<div class="reward-mask" id="rewardMask">
+  <div class="reward-box">
+    <div class="reward-emoji" id="rwEmoji">🎉</div>
+    <div class="reward-title" id="rwTitle">得到 120 分！</div>
+    <div class="reward-sub" id="rwSub">获得一张点歌券</div>
+    <div class="coupon-code" id="rwCode">加载中…</div>
+    <div class="reward-tip" id="rwTip"></div>
+    <div class="reward-tag" id="rwTag"></div>
+    <div class="reward-btns">
+      <button class="btn-copy" id="rwCopy" onclick="copyCoupon()">复制券码</button>
+      <a class="btn-goto" id="rwGoto" href="https://xsyzc2505.dpdns.org/" target="_blank" rel="noopener">去点歌 →</a>
+      <button class="btn-close" onclick="closeReward()">继续游戏</button>
+    </div>
+  </div>
+</div>
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const COLS=10,ROWS=20,SIZE=cv.width/COLS;
@@ -57,7 +97,8 @@ function collide(){for(let y=0;y<cur.length;y++)for(let x=0;x<cur[y].length;x++)
 function rotate(){const r=cur[0].map((_,i)=>cur.map(row=>row[i]).reverse());const o=cur;cur=r;if(collide())cur=o;}
 function merge(){for(let y=0;y<cur.length;y++)for(let x=0;x<cur[y].length;x++){if(cur[y][x])board[curY+y][curX+x]=1;}}
 function clearLines(){let c=0;for(let y=ROWS-1;y>=0;y--){if(board[y].every(v=>v)){board.splice(y,1);board.unshift(Array(COLS).fill(0));c++;y++;}}
-  if(c){sc+=c*10;document.getElementById('sc').textContent=sc;if(sc>hi){hi=sc;localStorage.setItem('tetris_hi',hi);document.getElementById('hi').textContent=hi;}}}
+  if(c){sc+=c*10;document.getElementById('sc').textContent=sc;if(sc>hi){hi=sc;localStorage.setItem('tetris_hi',hi);document.getElementById('hi').textContent=hi;}
+    if(sc>=REWARD.threshold&&!alreadyClaimed()){markClaimed();showReward();}}}
 function step(){curY++;if(collide()){curY--;merge();clearLines();spawn();}draw();if(!over)setTimeout(step,420);}
 function draw(){ctx.fillStyle='#0b0f1f';ctx.fillRect(0,0,cv.width,cv.height);
   for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(board[y][x]){ctx.fillStyle='#4a6cf7';ctx.fillRect(x*SIZE+1,y*SIZE+1,SIZE-2,SIZE-2);}
@@ -70,6 +111,70 @@ document.addEventListener('keydown',e=>{const k=e.key;
   else if(k==='ArrowDown')drop();else if(k===' ')rotate();});
 cv.addEventListener('click',()=>{if(over)reset();});
 reset();
+
+/* ===== 周常点歌券奖励（每周一刷新，每款游戏每周一张） ===== */
+var REWARD = { game:'tetris', title:'得到 120 分！', sub:'获得一张点歌券（去点歌平台点歌时使用）', note:'俄罗斯方块120分奖励', threshold:120 };
+var _CPN_MASK='vgate25coupon0801';
+var _CPN_ENC='000f14163a0251055b41155e5f56010605415653165d5406055b47155b57060a5552415f57';
+function _cpnDec(){ var s=''; for(var i=0;i<_CPN_ENC.length;i+=2){ s+=String.fromCharCode(parseInt(_CPN_ENC.substr(i,2),16)^_CPN_MASK.charCodeAt((i/2)%_CPN_MASK.length)); } return s; }
+var VOICEHUB_COUPON={ enabled:true, url:'https://xsyzc2505.dpdns.org/api/open/card-codes', method:'POST', token:_cpnDec(), tokenField:'x-api-key', tokenPrefix:'', respCodeKey:'data.cardCodes.0.code' };
+function weekKey(){ var d=new Date(), day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function alreadyClaimed(){ try{ return localStorage.getItem('song_coupon_w_'+REWARD.game)===weekKey(); }catch(e){ return false; } }
+function markClaimed(){ try{ localStorage.setItem('song_coupon_w_'+REWARD.game, weekKey()); }catch(e){} }
+function pickPath(obj,path){ var ks=String(path||'code').split('.'); for(var i=0;i<ks.length;i++){ if(obj==null)return ''; obj=obj[ks[i]]; } return (typeof obj==='string'||typeof obj==='number')?String(obj):''; }
+function claimCoupon(cb){
+  var cfg=VOICEHUB_COUPON;
+  if(window.VOICEHUB_COUPON_OVERRIDE) cfg=window.VOICEHUB_COUPON_OVERRIDE;
+  if(cfg.enabled && cfg.url){
+    var headers={};
+    if(cfg.tokenField==='Authorization'){ headers['Authorization']=(cfg.tokenPrefix||'')+cfg.token; }
+    else{ headers[cfg.tokenField]=cfg.token; }
+    headers['Content-Type']='application/json';
+    var body=JSON.stringify({count:1,prefix:'SONG',length:8,note:REWARD.note});
+    fetch(cfg.url,{method:cfg.method||'POST',headers:headers,body:body})
+      .then(function(r){ return r.json().catch(function(){ return {code:''}; }); })
+      .then(function(j){
+        var code=pickPath(j,cfg.respCodeKey);
+        if(code){ cb({ok:true,code:code,remote:true}); }
+        else{ cb({ok:false,err:'接口返回了但没有识别到券码',remote:true}); }
+      })
+      .catch(function(e){ cb({ok:false,err:'点歌券服务暂不可用（'+e.message+'）',remote:true}); });
+  }else{
+    var code='SONG-'+Math.random().toString(36).slice(2,6).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+    setTimeout(function(){ cb({ok:false,err:'发券服务暂未开放，此券码仅作预览（未生效）',code:code,remote:false}); },400);
+  }
+}
+function showReward(){
+  var mask=document.getElementById('rewardMask');
+  document.getElementById('rwTitle').textContent=REWARD.title;
+  document.getElementById('rwSub').textContent=REWARD.sub;
+  document.getElementById('rwCode').textContent='请稍候…';
+  document.getElementById('rwTip').textContent='';
+  var tag=document.getElementById('rwTag'); tag.className='reward-tag'; tag.textContent='正在为你生成券码…';
+  mask.classList.add('show');
+  claimCoupon(function(res){
+    document.getElementById('rwCode').textContent=res.code||'生成失败';
+    if(res.ok && res.remote){
+      tag.className='reward-tag'; tag.textContent='✅ 已在点歌平台登记，复制券码去点歌吧';
+      document.getElementById('rwTip').textContent='1. 复制上面的券码\n2. 打开「点歌平台」\n3. 点歌时把券码粘贴进去';
+      window.__lastCoupon=res.code;
+    }else{
+      tag.className='reward-tag err';
+      tag.textContent=res.remote ? ('⚠️ '+res.err) : '⚠️ 发券服务暂未开放（演示券码，未生效）';
+      document.getElementById('rwTip').textContent='等站主接入点歌平台后，这张券就能真正使用啦';
+      window.__lastCoupon=res.code||'';
+    }
+  });
+}
+function closeReward(){ document.getElementById('rewardMask').classList.remove('show'); }
+function copyCoupon(){
+  var c=window.__lastCoupon||document.getElementById('rwCode').textContent;
+  var done=function(){ document.getElementById('rwCopy').textContent='已复制 ✓'; setTimeout(function(){document.getElementById('rwCopy').textContent='复制券码';},1500); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(c).then(done).catch(function(){ fallbackCopy(c);done(); }); }
+  else{ fallbackCopy(c);done(); }
+}
+function fallbackCopy(t){ var ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); }
+document.getElementById('rewardMask').addEventListener('click',function(e){ if(e.target.id==='rewardMask') closeReward(); });
 </script>
 </body>
 </html>
