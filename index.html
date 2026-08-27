@@ -454,9 +454,13 @@ body::after{animation-name:blobB;animation-duration:34s}
 .dark #copyLinkMask #siteLinkList > div:last-child span{color:#8b9bb5!important}
 .dark #djPanelMask input[type="datetime-local"],
 .dark #djPanelMask input[type="number"],
-.dark #djVerifyMask input[type="password"]{background:#1b2432;color:#e2e8f0;border-color:#2a3550}
+.dark #djVerifyMask input[type="password"],
+.dark #djHistoryMask input{background:#1b2432;color:#e2e8f0;border-color:#2a3550}
 .dark #djPanelMask input[type="datetime-local"]:disabled,
 .dark #djPanelMask input[type="number"]:disabled{opacity:.45}
+.dark #djHistoryMask .dj-round{background:#20294a!important;border-color:#2a3550!important}
+.dark #djHistoryMask .dj-label{color:#b6c2d9!important}
+.dark #djHistoryMask #djHistoryList > p{color:#93a3bd!important}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
@@ -734,12 +738,12 @@ body::after{animation-name:blobB;animation-duration:34s}
 <div class="allboard-mask" id="djPanelMask">
   <div class="allboard-box" style="max-width:480px">
     <div class="allboard-head"><span>🎲 抽歌排期</span><button onclick="closeDjPanel()">关闭</button></div>
-    <div style="padding:14px 18px;text-align:left">
-      <p class="dj-desc" style="font-size:.8rem;color:#9aa7b8;margin:0 0 10px">从 VoiceHub 拉取歌单，按投稿时间过滤后本地抽签，结果保存在本机（不上传）。</p>
+    <div style="padding:14px 18px;text-align:left;flex:1;min-height:0;overflow-y:auto">
+      <p class="dj-desc" style="font-size:.8rem;color:#5b6781;margin:0 0 10px">从 VoiceHub 拉取歌单，按投稿时间过滤后本地抽签，结果保存在本机（不上传）。</p>
       <label class="dj-label" style="font-size:.85rem;color:#4a5568;display:block;margin-bottom:4px">投稿时间范围</label>
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
         <input type="datetime-local" id="djFrom" style="flex:1;min-width:0;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem">
-        <span class="dj-label" style="color:#9aa7b8">至</span>
+        <span class="dj-label" style="color:#5b6781">至</span>
         <input type="datetime-local" id="djTo" style="flex:1;min-width:0;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem">
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px;font-size:.8rem">
@@ -748,22 +752,35 @@ body::after{animation-name:blobB;animation-duration:34s}
         <button class="btn btn-secondary" style="flex:1;min-width:0;padding:6px 8px" onclick="djQuick(7)">近7天</button>
         <button class="btn btn-secondary" style="flex:1;min-width:0;padding:6px 8px" onclick="djQuick(30)">近30天</button>
       </div>
-      <label class="dj-label" style="display:flex;align-items:center;gap:4px;font-size:.82rem;color:#4a5568;margin-bottom:10px"><input type="checkbox" id="djNoLimit" onchange="djNoLimitChange()"> 不限时间范围（忽略上方时间）</label>
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;font-size:.85rem">
         <label class="dj-label" style="color:#4a5568">抽取数量 <input type="number" id="djCount" min="1" max="50" value="5" style="width:64px;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222"></label>
-        <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djTop"> 高赞优先</label>
         <label class="dj-label" style="color:#4a5568">高赞必选 <input type="number" id="djTopN" min="0" max="50" value="0" title="点赞最高的前 N 首必定中选，其余随机" style="width:56px;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222"></label>
       </div>
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;font-size:.85rem">
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>
+        <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludeSched"> 排除已排期</label>
       </div>
       <button class="btn" style="width:100%;margin-bottom:8px" onclick="djRun()">🎲 开始抽签</button>
       <div id="djResult"></div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="btn btn-green" style="flex:1;min-width:0" onclick="djCopy()">📋 一键复制公示</button>
-        <button class="btn btn-secondary" style="flex:1;min-width:0" onclick="djClear()">🗑 清空排期</button>
+        <button class="btn btn-secondary" style="flex:1;min-width:0" onclick="djOpenHistory()">📜 历史记录</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;font-size:.8rem">
+        <button class="btn btn-secondary" style="flex:1;min-width:0;padding:7px 8px" onclick="djExportRounds()">📤 导出数据</button>
+        <button class="btn btn-secondary" style="flex:1;min-width:0;padding:7px 8px" onclick="document.getElementById('djImportFile').click()">📥 导入数据</button>
+        <input type="file" id="djImportFile" accept=".json,application/json" style="display:none" onchange="djImportRounds(this)">
+        <button class="btn btn-secondary" style="flex:1;min-width:0;padding:7px 8px;color:#c2410c" onclick="djClear()">🗑 清空排期</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ===== 抽歌历史记录弹窗（备注/已排期/已播放/删除） ===== -->
+<div class="allboard-mask" id="djHistoryMask">
+  <div class="allboard-box" style="max-width:480px">
+    <div class="allboard-head"><span>📜 抽歌历史记录</span><button onclick="closeDjHistory()">关闭</button></div>
+    <div id="djHistoryList" style="padding:10px 16px;flex:1;min-height:0;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -2833,17 +2850,12 @@ function djVerify(){
     }
   }
 }
-function djNoLimitChange(){
-  var on=(document.getElementById('djNoLimit')||{}).checked;
-  var f=document.getElementById('djFrom'), t=document.getElementById('djTo');
-  if(f) f.disabled=on; if(t) t.disabled=on;
-}
 function openDjPanel(){
   var m = document.getElementById('djPanelMask'); if(!m) return;
   m.classList.add('show');
   djQuick(7);
   var box = document.getElementById('djResult');
-  if(box) box.innerHTML = '<p style="color:#9aa7b8;font-size:.85rem">当前本地排期 ' + djScheduleCount() + ' 首。设置参数后点击「开始抽签」。</p>';
+  if(box) box.innerHTML = '<p class="dj-desc" style="color:#5b6781;font-size:.85rem">当前本地排期 ' + djScheduleCount() + ' 首。设置参数后点击「开始抽签」。</p>';
   SFX.pop();
 }
 function closeDjPanel(){ var m = document.getElementById('djPanelMask'); if(m) m.classList.remove('show'); }
@@ -2880,30 +2892,52 @@ function djFetchSongs(){
       });
     });
 }
+function djLoadRounds(){
+  var arr=[];
+  try{ arr=JSON.parse(localStorage.getItem('cls_dj_schedule')||'[]')||[]; }catch(e){ arr=[]; }
+  /* 旧版迁移：扁平歌曲数组 → 合并为一个批次记录 */
+  if(arr.length && !arr[0].songs){
+    var legacy={ id:Date.now(), at:(arr[0]&&arr[0].at)||new Date().toLocaleString('zh-CN',{hour12:false}), note:'（旧数据）', addedToPlatform:false, played:false,
+      songs:arr.map(function(s){ return {id:s.id,title:s.title,artist:s.artist,votes:s.votes||0}; }) };
+    arr=[legacy];
+    try{ localStorage.setItem('cls_dj_schedule', JSON.stringify(arr)); }catch(e){}
+  }
+  return arr;
+}
+function djSaveRounds(arr){ try{ localStorage.setItem('cls_dj_schedule', JSON.stringify(arr||[])); }catch(e){} }
+function djScheduleCount(){
+  var n=0; djLoadRounds().forEach(function(r){ n+=(r.songs||[]).length; }); return n;
+}
 function djRun(){
   var f = document.getElementById('djFrom'), t = document.getElementById('djTo');
   var n = parseInt((document.getElementById('djCount')||{}).value || '5', 10);
   if(!(n>=1)) n = 5;
-  var top = (document.getElementById('djTop')||{}).checked;
   var excl = (document.getElementById('djExcludePlayed')||{}).checked;
-  var noLimit = (document.getElementById('djNoLimit')||{}).checked;
+  var exclSched = (document.getElementById('djExcludeSched')||{}).checked;
   var topN = parseInt((document.getElementById('djTopN')||{}).value || '0', 10);
   if(!(topN>=0)) topN = 0;
   var box = document.getElementById('djResult');
-  if(box) box.innerHTML = '<p style="color:#9aa7b8;font-size:.85rem">正在拉取歌单并抽签…</p>';
+  if(box) box.innerHTML = '<p class="dj-desc" style="color:#5b6781;font-size:.85rem">正在拉取歌单并抽签…</p>';
   var tFrom = f && f.value ? new Date(f.value).getTime() : -Infinity;
   var tTo = t && t.value ? new Date(t.value).getTime() : Infinity;
+  /* 本地历史里已排期(addedToPlatform)与已播放(played)的歌曲 id */
+  var rounds = djLoadRounds(), schedIds={}, playedIds={};
+  rounds.forEach(function(r){
+    (r.songs||[]).forEach(function(s){
+      if(r.addedToPlatform) schedIds[s.id]=1;
+      if(r.played) playedIds[s.id]=1;
+    });
+  });
   djFetchSongs().then(function(songs){
     var pool = songs.filter(function(s){
-      if(excl && s.played) return false;
-      if(!noLimit){
-        var ts = new Date(s.createdAt).getTime();
-        if(ts < tFrom || ts > tTo) return false;
-      }
+      if(excl && (s.played || playedIds[s.id])) return false;
+      if(exclSched && schedIds[s.id]) return false;
+      var ts = new Date(s.createdAt).getTime();
+      if(ts < tFrom || ts > tTo) return false;
       return true;
     });
     if(!pool.length){
-      if(box) box.innerHTML = '<p style="color:#c2410c;font-size:.85rem">该时间范围内没有可抽歌曲，请调整范围、勾选「不限时间范围」或关闭「排除已播放」。</p>';
+      if(box) box.innerHTML = '<p class="dj-desc" style="color:#c2410c;font-size:.85rem">没有可抽歌曲，请调整时间范围（点「全部」不限时间）、关闭「排除已播放」或「排除已排期」。</p>';
       return;
     }
     var clamped = n > pool.length;
@@ -2918,55 +2952,48 @@ function djRun(){
       guarantee.forEach(function(s){ var idx = restPool.indexOf(s); if(idx>=0) restPool.splice(idx,1); });
     }
     var picked = guarantee.slice();
-    /* 2) 其余：随机（高赞优先=按点赞加权）。need 先算好，避免循环条件里 picked.length 增长导致提前终止 */
+    /* 2) 其余：纯随机。need 先算好，避免循环条件里 picked.length 增长导致提前终止 */
     var bag = restPool.slice();
     var need = n - picked.length;
     for(var k=0; k<need && bag.length; k++){
-      var idx;
-      if(top){
-        var wsum=0, a;
-        for(a=0;a<bag.length;a++) wsum += 1 + Math.max(0, (bag[a].voteCount||0));
-        var r = Math.random()*wsum, acc = 0, hit = bag.length-1;
-        for(a=0;a<bag.length;a++){ acc += 1 + Math.max(0,(bag[a].voteCount||0)); if(r < acc){ hit = a; break; } }
-        idx = hit;
-      }else{
-        idx = Math.floor(Math.random()*bag.length);
-      }
+      var idx = Math.floor(Math.random()*bag.length);
       picked.push(bag[idx]);
       bag.splice(idx,1);
     }
-    /* 加入本地排期 */
-    var list = [];
-    try{ list = JSON.parse(localStorage.getItem('cls_dj_schedule')||'[]') || []; }catch(e){}
-    picked.forEach(function(s){
-      list.push({ id: s.id, title: s.title, artist: s.artist, votes: s.voteCount||0, at: new Date().toLocaleString('zh-CN',{hour12:false}) });
+    /* 保存为一个批次记录（含时间/备注/已排期/已播放标记） */
+    rounds.push({
+      id: Date.now(),
+      at: new Date().toLocaleString('zh-CN',{hour12:false}),
+      note: '',
+      addedToPlatform: false,
+      played: false,
+      songs: picked.map(function(s){ return { id:s.id, title:s.title, artist:s.artist, votes:s.voteCount||0 }; })
     });
-    try{ localStorage.setItem('cls_dj_schedule', JSON.stringify(list)); }catch(e){}
+    djSaveRounds(rounds);
     _djLastPick = picked;
     var gset = {}; guarantee.forEach(function(s){ gset[s.id]=1; });
     var rows = picked.map(function(s,i){ return (gset[s.id]?'🔥 ':'')+(i+1)+'. '+esc(s.title)+' - '+esc(s.artist||'未知歌手')+'（点赞 '+(s.voteCount||0)+'）'; }).join('<br>');
-    var mode = (topN>0 ? '高赞必选 '+guarantee.length+' 首 + ' : '') + (top?'加权随机':'随机') + (excl?' · 排除已播放':' · 含已播放') + (noLimit?' · 不限时间':'') + ' · 池中 '+pool.length+' 首';
+    var mode = (topN>0 ? '高赞必选 '+guarantee.length+' 首 + ' : '') + '随机' + (excl?' · 排除已播放':' · 含已播放') + (exclSched?' · 排除已排期':'') + ' · 池中 '+pool.length+' 首';
     if(box) box.innerHTML = '<div style="background:#f0f6ff;border-radius:12px;padding:12px 14px;margin:10px 0;font-size:.85rem;line-height:1.9">'+
-      '<b style="color:#07a154">✅ 已抽中 '+picked.length+' 首'+(clamped ? '（池中仅 '+pool.length+' 首，已全部抽取）' : '')+'，已加入本地排期（累计 '+list.length+' 首）</b><br>'+
+      '<b style="color:#07a154">✅ 已抽中 '+picked.length+' 首'+(clamped ? '（池中仅 '+pool.length+' 首，已全部抽取）' : '')+'，已加入本地排期（累计 '+djScheduleCount()+' 首）</b><br>'+
       '<span style="color:#3b5bfd">'+mode+'</span><br>'+
       rows+'</div>';
     SFX.success();
   }).catch(function(err){
-    if(box) box.innerHTML = '<p style="color:#c2410c;font-size:.85rem">拉取失败：'+esc(String((err&&err.message)||err))+'</p>';
+    if(box) box.innerHTML = '<p class="dj-desc" style="color:#c2410c;font-size:.85rem">拉取失败：'+esc(String((err&&err.message)||err))+'</p>';
   });
 }
-function djScheduleCount(){
-  try{ return (JSON.parse(localStorage.getItem('cls_dj_schedule')||'[]')||[]).length; }catch(e){ return 0; }
-}
 function djCopy(){
-  var list = [];
-  try{ list = JSON.parse(localStorage.getItem('cls_dj_schedule')||'[]') || []; }catch(e){}
-  if(!list.length){ alert('本地排期为空，请先抽签'); return; }
+  var rounds = djLoadRounds();
+  if(!rounds.length){ alert('本地排期为空，请先抽签'); return; }
+  var last = rounds[rounds.length-1];
   var lines = [];
   lines.push('【25级05班 · 点歌抽签排期公示】');
   lines.push('公示时间：' + new Date().toLocaleString('zh-CN',{hour12:false}));
-  lines.push('本期中选 ' + _djLastPick.length + ' 首，累计排期 ' + list.length + ' 首：');
-  list.forEach(function(s,i){ lines.push((i+1)+'. '+(s.title||'?')+' - '+(s.artist||'未知')+'（点赞 '+(s.votes||0)+'）'); });
+  lines.push('抽取时间：' + (last.at||''));
+  if(last.note) lines.push('备注：' + last.note);
+  lines.push('本期中选 ' + (last.songs||[]).length + ' 首，累计排期 ' + djScheduleCount() + ' 首：');
+  (last.songs||[]).forEach(function(s,i){ lines.push((i+1)+'. '+(s.title||'?')+' - '+(s.artist||'未知')+'（点赞 '+(s.votes||0)+'）'); });
   var text = lines.join('\n');
   var done = function(){ alert('✅ 公示文本已复制，可粘贴到班级群'); SFX.success(); };
   if(navigator.clipboard && navigator.clipboard.writeText){
@@ -2981,11 +3008,101 @@ function fallbackCopyText(text){
   document.body.removeChild(ta);
 }
 function djClear(){
-  if(!confirm('确定清空本地排期吗？')) return;
+  if(!confirm('确定清空全部本地排期历史吗？')) return;
   try{ localStorage.removeItem('cls_dj_schedule'); }catch(e){}
   _djLastPick = [];
   var box = document.getElementById('djResult');
-  if(box) box.innerHTML = '<p style="color:#9aa7b8;font-size:.85rem">本地排期已清空</p>';
+  if(box) box.innerHTML = '<p class="dj-desc" style="color:#5b6781;font-size:.85rem">本地排期已清空</p>';
+  var h = document.getElementById('djHistoryList');
+  if(h) djRenderHistory();
+  SFX.success();
+}
+/* ---- 抽歌历史记录（备注 / 已排期 / 已播放 / 删除 / 导出导入） ---- */
+function djOpenHistory(){
+  var m=document.getElementById('djHistoryMask'); if(!m) return;
+  djRenderHistory();
+  m.classList.add('show'); SFX.pop();
+}
+function closeDjHistory(){ var m=document.getElementById('djHistoryMask'); if(m) m.classList.remove('show'); }
+(function(){ var m=document.getElementById('djHistoryMask'); if(m) m.addEventListener('click',function(e){ if(e.target.id==='djHistoryMask') closeDjHistory(); }); })();
+function djRenderHistory(){
+  var list=document.getElementById('djHistoryList'); if(!list) return;
+  var rounds=djLoadRounds();
+  if(!rounds.length){ list.innerHTML='<p class="dj-desc" style="color:#5b6781;font-size:.85rem;text-align:center;padding:22px 0">暂无历史记录，先抽签吧</p>'; return; }
+  var html=rounds.slice().reverse().map(function(r){
+    var songRows=(r.songs||[]).map(function(s,j){ return (j+1)+'. '+esc(s.title)+' - '+esc(s.artist||'未知')+'（点赞 '+(s.votes||0)+'）'; }).join('<br>');
+    return '<div class="dj-round" style="background:#f6f8fc;border:1px solid #e5eaf3;border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:.82rem">'+
+      '<div class="dj-label" style="font-weight:700;color:#3b5bfd;margin-bottom:6px">📅 '+(r.at||'')+'</div>'+
+      '<div style="display:flex;gap:6px;margin-bottom:6px">'+
+        '<input id="djNote_'+r.id+'" placeholder="备注：本次用于…" value="'+esc(r.note||'')+'" style="flex:1;min-width:0;padding:6px 8px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem">'+
+        '<button class="btn" style="min-width:56px;padding:5px 8px;font-size:.75rem" onclick="djSetRoundNote('+r.id+')">保存</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:14px;margin-bottom:6px;flex-wrap:wrap">'+
+        '<label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" '+(r.addedToPlatform?'checked':'')+' onchange="djToggleRoundFlag('+r.id+',\'addedToPlatform\',this.checked)"> 已排期（已加到平台）</label>'+
+        '<label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" '+(r.played?'checked':'')+' onchange="djToggleRoundFlag('+r.id+',\'played\',this.checked)"> 已播放</label>'+
+      '</div>'+
+      '<div class="dj-label" style="color:#4a5568;line-height:1.8">'+songRows+'</div>'+
+      '<div style="text-align:right;margin-top:6px"><button class="btn" style="min-width:76px;padding:5px 8px;font-size:.75rem;background:#ffeded;color:#c2410c" onclick="djDeleteRound('+r.id+')">🗑 删除本批</button></div>'+
+    '</div>';
+  }).join('');
+  list.innerHTML=html;
+}
+function djSetRoundNote(id){
+  var inp=document.getElementById('djNote_'+id); if(!inp) return;
+  var rounds=djLoadRounds(), hit=null;
+  for(var i=0;i<rounds.length;i++){ if(rounds[i].id===id){ hit=rounds[i]; break; } }
+  if(!hit) return;
+  hit.note=inp.value.trim();
+  djSaveRounds(rounds);
+  var btn=inp.parentNode.querySelector('.btn');
+  if(btn){ var old=btn.textContent; btn.textContent='✅ 已保存'; setTimeout(function(){ btn.textContent=old; },1200); }
+  SFX.success();
+}
+function djToggleRoundFlag(id, flag, val){
+  var rounds=djLoadRounds();
+  for(var i=0;i<rounds.length;i++){ if(rounds[i].id===id){ rounds[i][flag]=!!val; break; } }
+  djSaveRounds(rounds);
+  SFX.pop();
+}
+function djDeleteRound(id){
+  if(!confirm('确定删除本批记录吗？')) return;
+  djSaveRounds(djLoadRounds().filter(function(r){ return r.id!==id; }));
+  djRenderHistory();
+  SFX.success();
+}
+function djExportRounds(){
+  var json=JSON.stringify(djLoadRounds(),null,1);
+  var blob=new Blob([json],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download='dj-schedule-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); },3000);
+  alert('✅ 已导出抽歌历史数据（.json）');
+  SFX.success();
+}
+function djImportRounds(input){
+  if(!input || !input.files || !input.files[0]) return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    var text=String(rd.result||'').trim();
+    try{
+      var data=JSON.parse(text);
+      if(!Array.isArray(data)) throw new Error('格式应为数组');
+      if(data.length && !data[0].songs){
+        data=[{ id:Date.now(), at:new Date().toLocaleString('zh-CN',{hour12:false}), note:'（导入·旧格式）', addedToPlatform:false, played:false,
+          songs:data.map(function(s){ return {id:s.id,title:s.title,artist:s.artist,votes:s.votes||0}; }) }];
+      }
+      djSaveRounds(djLoadRounds().concat(data));
+      alert('✅ 已导入 '+data.length+' 批记录，共 '+djScheduleCount()+' 首');
+      djRenderHistory();
+      SFX.success();
+    }catch(e){
+      alert('❌ 导入失败：数据格式不正确');
+    }
+    input.value='';
+  };
+  rd.readAsText(input.files[0]);
 }
 
 function initTheme(){
