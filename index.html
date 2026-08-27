@@ -774,7 +774,10 @@ body::after{animation-name:blobB;animation-duration:34s}
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludeSched"> 排除已排期</label>
       </div>
-      <button class="btn btn-secondary" style="width:100%;margin-bottom:8px;font-size:.85rem" onclick="djOpenSongs()">🎼 歌单管理（预览全部歌曲 · 标记不参与抽签）</button>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn btn-secondary" style="flex:1;min-width:0;font-size:.85rem;padding:7px 6px" onclick="djOpenSongs()">🎼 歌单管理</button>
+        <button class="btn btn-secondary" style="flex:1;min-width:0;font-size:.85rem;padding:7px 6px" onclick="openCouponAdmin()">🎟️ 点歌券管理</button>
+      </div>
       <button class="btn" style="width:100%;margin-bottom:8px" onclick="djRun()">🎲 开始抽签</button>
       <div id="djResult"></div>
       <div style="display:flex;gap:8px;margin-top:8px">
@@ -816,7 +819,7 @@ body::after{animation-name:blobB;animation-duration:34s}
   <div class="allboard-box" style="max-width:480px">
     <div class="allboard-head"><span>🎟️ 点歌券管理</span><button onclick="closeCouponAdmin()">关闭</button></div>
     <div style="padding:12px 18px;text-align:left;flex:1;min-height:0;overflow-y:auto">
-      <p class="dj-desc" style="font-size:.8rem;color:#5b6781;margin:0 0 10px">「添加」= 在点歌平台真实生成券码；「禁用 / 隐藏」为本地标记（开放 API 无删除权限，真实作废需到平台后台）。</p>
+      <p class="dj-desc" style="font-size:.8rem;color:#5b6781;margin:0 0 10px">「添加」= 在点歌平台真实生成券码（可备注来源）；「删除」= 真实删除平台上的券（不可恢复）；「禁用」= 本地标记（仅影响本站展示）。</p>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
         <label class="dj-label" style="font-size:.85rem;color:#4a5568;white-space:nowrap">数量 <input type="number" id="cpCount" min="1" max="50" value="1" style="width:58px;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
         <label class="dj-label" style="flex:1;font-size:.85rem;color:#4a5568">备注 <input type="text" id="cpNote" maxlength="40" placeholder="如：点歌活动奖励" style="width:100%;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
@@ -824,9 +827,6 @@ body::after{animation-name:blobB;animation-duration:34s}
       </div>
       <p class="dj-desc" id="cpStatus" style="font-size:.8rem;color:#5b6781;margin:0 0 8px">加载中…</p>
       <div id="cpList"></div>
-      <div id="cpRestoreBar" style="display:none;margin-top:8px">
-        <button class="btn btn-secondary" style="width:100%;font-size:.8rem;padding:7px" onclick="cpRestoreAllHidden()">♻️ 恢复全部已隐藏券</button>
-      </div>
     </div>
   </div>
 </div>
@@ -1805,8 +1805,7 @@ var HIDDEN_FUN_LINKS = [
   { icon: "🦘", title: "涂鸦跳跃", desc: "一路向上，踩弹簧起飞", url: "games/doodle.html" },
   { icon: "⚫", title: "五子棋", desc: "人机三档难度 / 本地双人", url: "games/gomoku.html" },
   { icon: "♟", title: "中国象棋", desc: "完整规则，本地双人对战", url: "games/chess.html" },
-  { icon: "✈️", title: "飞机大战", desc: "纵版射击，击落敌机冲高分", url: "games/plane.html" },
-  { icon: "🎟️", title: "点歌券管理", desc: "站主：添加 / 查看 / 本地禁用点歌券", action: "openCouponAdmin" }
+  { icon: "✈️", title: "飞机大战", desc: "纵版射击，击落敌机冲高分", url: "games/plane.html" }
 ];
 var _badgeClicks = 0, _badgeTimer = null;
 function badgeClick(){
@@ -3000,24 +2999,35 @@ function renderDjSongs(songs){
 function closeDjSongs(){ var m=document.getElementById('djSongsMask'); if(m) m.classList.remove('show'); }
 (function(){ var m=document.getElementById('djSongsMask'); if(m) m.addEventListener('click', function(e){ if(e.target.id==='djSongsMask') closeDjSongs(); }); })();
 
-/* ---- 点歌券管理（站主）：添加 / 查看 / 本地禁用 / 本地隐藏 ----
+/* ---- 点歌券管理（站主）：添加 / 查看 / 真实删除 / 本地禁用 ----
  * 添加=真实调用 VoiceHub POST /card-codes（发券专用旧 key，xor 混淆密文）
- * 禁用/隐藏=本地标记（开放 API 无删除权限，真实作废需到平台后台） */
+ * 删除=真实调用 DELETE /card-codes?id=XX（2026-08-27 站主在后台开放权限，实测可用）
+ * 禁用=本地标记（仅影响本站展示） */
 var CP_ADMIN_KEY_ENC='FQQGUGoAUUtMWxccWgNAGwYHAwQBVBUBUwQHSExWRB8OBk4VBA==';
 function cpApiKey(){ try{ return xorDecrypt(CP_ADMIN_KEY_ENC); }catch(e){ return ''; } }
 function cpLoadMap(k){ var d={}; try{ d=JSON.parse(localStorage.getItem(k)||'{}')||{}; }catch(e){} return d; }
 function cpSaveMap(k,d){ try{ localStorage.setItem(k, JSON.stringify(d||{})); }catch(e){} }
 function cpDisabled(){ return cpLoadMap('cls_coupon_disabled'); }
-function cpHidden(){ return cpLoadMap('cls_coupon_hidden'); }
 function cpSetDisabled(code,on){
   var d=cpDisabled(); if(on) d[code]=1; else delete d[code];
   cpSaveMap('cls_coupon_disabled',d); cpRenderList();
 }
-function cpHide(code,on){
-  var h=cpHidden(); if(on) h[code]=1; else delete h[code];
-  cpSaveMap('cls_coupon_hidden',h); cpRenderList();
+function cpDelete(id,code){
+  if(!confirm('确定删除点歌券「'+code+'」吗？\n此操作会真实删除点歌平台上的这张券，不可恢复！')) return;
+  var st=document.getElementById('cpStatus'); if(st) st.textContent='正在删除…';
+  fetch(DJ_API+'/card-codes?id='+id, { method:'DELETE', headers:{ 'x-api-key': cpApiKey() } })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d && d.success){
+        SFX.success();
+        if(st) st.textContent='✅ 已删除 '+code+'（平台与本站同步生效）';
+        cpLoadList();
+      }else{
+        if(st) st.textContent='删除失败：'+JSON.stringify(d).slice(0,100);
+      }
+    })
+    .catch(function(e){ if(st) st.textContent='删除失败：'+esc(String((e&&e.message)||e)); });
 }
-function cpRestoreAllHidden(){ cpSaveMap('cls_coupon_hidden',{}); cpRenderList(); }
 var _cpCache=[];
 function openCouponAdmin(){
   var m=document.getElementById('couponAdminMask'); if(!m) return;
@@ -3035,13 +3045,9 @@ function cpLoadList(){
 }
 function cpRenderList(){
   var st=document.getElementById('cpStatus'), list=document.getElementById('cpList');
-  var dis=cpDisabled(), hid=cpHidden();
-  var vis=_cpCache.filter(function(c){ return !hid[c.code]; });
-  var hidCount=0; for(var k in hid) hidCount++;
-  if(st) st.textContent='共 '+_cpCache.length+' 张券 · 本地禁用 '+Object.keys(dis).length+' 张 · 已隐藏 '+hidCount+' 张';
-  var bar=document.getElementById('cpRestoreBar');
-  if(bar) bar.style.display = hidCount>0 ? 'block' : 'none';
-  list.innerHTML=vis.map(function(c,i){
+  var dis=cpDisabled();
+  if(st) st.textContent='共 '+_cpCache.length+' 张券 · 本地禁用 '+Object.keys(dis).length+' 张';
+  list.innerHTML=_cpCache.map(function(c,i){
     var stt=c.status==='AVAILABLE'?'🟢 可用':(c.status==='REDEEMED'?'🔴 已用':'⚪ '+esc(c.status));
     var d=!!dis[c.code];
     return '<div class="cp-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef1f8;font-size:.82rem">'+
@@ -3052,7 +3058,7 @@ function cpRenderList(){
         '<br><span style="color:#9aa7b8;font-size:.75rem">'+(c.note?esc(c.note):'（无备注）')+' · '+esc(String(c.createdAt||'').slice(0,16).replace('T',' '))+'</span>'+
       '</span>'+
       '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem" onclick="cpSetDisabled(\''+c.code+'\','+(d?'false':'true')+')">'+(d?'✅ 恢复':'🚫 禁用')+'</button>'+
-      '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem;color:#c2410c" onclick="cpHide(\''+c.code+'\',true)">🗑 隐藏</button>'+
+      '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem;color:#c2410c" onclick="cpDelete('+c.id+',\''+c.code+'\')">🗑 删除</button>'+
     '</div>';
   }).join('') || '<p style="color:#9aa7b8;text-align:center;padding:20px">暂无点歌券</p>';
 }

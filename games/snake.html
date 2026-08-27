@@ -98,6 +98,21 @@
   </div>
 </div>
 
+<!-- 领券人填写（每周首张券需填名字，备注留痕：谁·时间·任务） -->
+<div class="reward-mask" id="nameMask">
+  <div class="reward-box">
+    <div class="reward-emoji">✍️</div>
+    <div class="reward-title">填写领券人</div>
+    <div class="reward-sub" id="nmTask">领取：贪吃蛇吃豆 60 奖励（每周一张）</div>
+    <input type="text" id="nmInput" placeholder="请输入你的名字" maxlength="10" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid #3a4668;background:#0b0f1f;color:#e9ecff;font-size:15px;text-align:center;margin:8px 0 2px">
+    <div class="reward-tip" style="text-align:center">名字会记录在这张券的备注里（谁 · 时间 · 任务）</div>
+    <div class="reward-btns" style="margin-top:14px">
+      <button class="btn-copy" onclick="doClaim()">✅ 确认领券</button>
+      <button class="btn-close" onclick="closeName()">取消</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const N=20,CELL=cv.width/N;
@@ -165,8 +180,34 @@ function pickPath(obj,path){
   return (typeof obj==='string'||typeof obj==='number') ? String(obj) : '';
 }
 
+/* 领券人填写（每周首张券需填名字，备注留痕：谁·时间·任务） */
+var _claimName='';
+function nowStamp(){
+  var d=new Date(),p=function(n){return (n<10?'0':'')+n;};
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+function showNameAsk(){
+  var m=document.getElementById('nameMask'); if(!m) return;
+  var sub=document.getElementById('nmTask'); if(sub) sub.textContent='领取：贪吃蛇吃豆 '+REWARD_DOTS+' 奖励（每周一张）';
+  var inp=document.getElementById('nmInput');
+  if(inp){ try{ inp.value=localStorage.getItem('cls_coupon_name')||''; }catch(e){} }
+  m.classList.add('show');
+}
+function doClaim(){
+  var inp=document.getElementById('nmInput');
+  var name=(inp?inp.value.trim():'');
+  if(!name){ if(inp){ inp.style.borderColor='#ff6b8b'; inp.focus(); } return; }
+  if(inp) inp.style.borderColor='#3a4668';
+  try{ localStorage.setItem('cls_coupon_name', name); }catch(e){}
+  _claimName=name;
+  closeName();
+  markClaimed();
+  showReward(sc);
+}
+function closeName(){ var m=document.getElementById('nameMask'); if(m) m.classList.remove('show'); }
+
 /* 领券：调用 VoiceHub 开放 API 创建一张券 */
-function claimCoupon(score,dur,cb){
+function claimCoupon(score,dur,name,cb){
   var cfg=VOICEHUB_COUPON;
   if(window.VOICEHUB_COUPON_OVERRIDE) cfg=window.VOICEHUB_COUPON_OVERRIDE;
   if(cfg.enabled && cfg.url){
@@ -177,8 +218,8 @@ function claimCoupon(score,dur,cb){
       headers[cfg.tokenField]=cfg.token;
     }
     headers['Content-Type']='application/json';
-    /* VoiceHub 接口参数：count 生成数量 / prefix 前缀 / length 随机部分长度 / note 备注 */
-    var body=JSON.stringify({count:1,prefix:'SONG',length:8,note:'贪吃蛇吃豆'+score+'奖励'});
+    /* VoiceHub 接口参数：count 生成数量 / prefix 前缀 / length 随机部分长度 / note 备注（谁·时间·任务） */
+    var body=JSON.stringify({count:1,prefix:'SONG',length:8,note:(name||'匿名')+' · '+nowStamp()+' · 贪吃蛇吃豆'+score+'奖励'});
     fetch(cfg.url,{method:cfg.method||'POST',headers:headers,body:body})
       .then(function(r){ return r.json().catch(function(){ return {code:''}; }); })
       .then(function(j){
@@ -203,7 +244,7 @@ function showReward(dots){
   var tag=document.getElementById('rwTag'); tag.className='reward-tag'; tag.textContent='正在为你生成券码…';
   mask.classList.add('show');
   var dur=Math.max(1,Math.round((Date.now()-window.__snakeStart)/1000));
-  claimCoupon(score,dur,function(res){
+  claimCoupon(sc,dur,_claimName,function(res){
     document.getElementById('rwCode').textContent=res.code||'生成失败';
     if(res.ok && res.remote){
       tag.className='reward-tag'; tag.textContent='✅ 已在点歌平台登记，复制券码去点歌吧';
@@ -253,9 +294,9 @@ function loop(){
   snake.unshift(h);
   if(h.x===food.x&&h.y===food.y){sc++;document.getElementById('sc').textContent=sc;
     if(sc>hi){hi=sc;localStorage.setItem('snake_hi',hi);document.getElementById('hi').textContent=hi;}place();
-    /* 达标发券：吃豆数达到门槛；本周未领→发券，已领→暂停游戏提示 */
+    /* 达标发券：吃豆数达到门槛；本周未领→填名字领券，已领→暂停游戏提示 */
     if(sc===REWARD_DOTS){
-      if(!alreadyClaimed()){ markClaimed(); showReward(sc); }
+      if(!alreadyClaimed()){ showNameAsk(); }
       else{ clearTimeout(timer); paused=true; showClaimed(); }
     }
   }
