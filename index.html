@@ -820,11 +820,11 @@ body::after{animation-name:blobB;animation-duration:34s}
     <div class="allboard-head"><span>🎟️ 点歌券管理</span><button onclick="closeCouponAdmin()">关闭</button></div>
     <div style="padding:12px 18px;text-align:left;flex:1;min-height:0;overflow-y:auto">
       <p class="dj-desc" style="font-size:.8rem;color:#5b6781;margin:0 0 10px">「添加」= 在点歌平台真实生成券码（可备注来源）；「删除」= 真实删除平台上的券（不可恢复）；「禁用」= 本地标记（仅影响本站展示）。</p>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
         <label class="dj-label" style="font-size:.85rem;color:#4a5568;white-space:nowrap">数量 <input type="number" id="cpCount" min="1" max="50" value="1" style="width:58px;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
-        <label class="dj-label" style="flex:1;font-size:.85rem;color:#4a5568">备注 <input type="text" id="cpNote" maxlength="40" placeholder="如：点歌活动奖励" style="width:100%;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
-        <button class="btn" style="padding:7px 12px;font-size:.85rem" onclick="cpCreate()">➕ 添加</button>
+        <button class="btn" style="padding:7px 14px;font-size:.85rem;margin-left:auto" onclick="cpCreate()">➕ 添加</button>
       </div>
+      <label class="dj-label" style="display:block;font-size:.85rem;color:#4a5568;margin-bottom:10px">备注 <input type="text" id="cpNote" maxlength="40" placeholder="如：点歌活动奖励" style="width:100%;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
       <p class="dj-desc" id="cpStatus" style="font-size:.8rem;color:#5b6781;margin:0 0 8px">加载中…</p>
       <div id="cpList"></div>
     </div>
@@ -2985,12 +2985,13 @@ function renderDjSongs(songs){
   if(st) st.textContent='共 '+songs.length+' 首 · 已排除 '+exCount+' 首（抽签时自动跳过）';
   list.innerHTML=songs.map(function(s,i){
     var isEx=!!ex[s.id];
+    var req=(typeof s.requester==='string')?s.requester:((s.requester&&s.requester.name)||'');
     return '<div class="dj-song-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef1f8;font-size:.82rem">'+
       '<span style="color:#9aa7b8;min-width:26px">'+(i+1)+'</span>'+
       '<span style="flex:1;min-width:0">'+
         '<b class="dj-song-title" style="color:'+(isEx?'#c2410c':'#222')+';'+(isEx?'text-decoration:line-through':'')+'">'+esc(s.title)+'</b> '+
         '<span class="dj-song-artist" style="color:#5b6781">'+esc(s.artist||'未知')+'</span>'+
-        '<br><span style="color:#9aa7b8;font-size:.75rem">👍 '+(s.voteCount||0)+' · '+esc(String(s.createdAt||'').slice(0,10))+(s.played?' · 已播放':'')+(isEx?' · 已排除':'')+'</span>'+
+        '<br><span style="color:#9aa7b8;font-size:.75rem">👍 '+(s.voteCount||0)+' · 点歌：'+esc(req||'?')+(s.played?' · 已播放':'')+' · '+esc(String(s.createdAt||'').slice(0,10))+(isEx?' · 已排除':'')+'</span>'+
       '</span>'+
       '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap"><input type="checkbox" '+(isEx?'checked':'')+' onchange="djSetExcluded('+s.id+',this.checked);renderDjSongs(_djSongsCache)"> 排除</label>'+
     '</div>';
@@ -3051,14 +3052,19 @@ function cpRenderList(){
     var stt=c.status==='AVAILABLE'?'🟢 可用':(c.status==='REDEEMED'?'🔴 已用':'⚪ '+esc(c.status));
     var d=!!dis[c.code];
     return '<div class="cp-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef1f8;font-size:.82rem">'+
-      '<span style="min-width:30px;color:#9aa7b8">'+(i+1)+'</span>'+
-      '<span style="flex:1;min-width:0">'+
-        '<b class="cp-code" style="color:'+(d?'#c2410c':'#222')+';'+(d?'text-decoration:line-through':'')+'" onclick="cpCopyCode(\''+c.code+'\')">'+esc(c.code)+'</b> '+
-        '<span class="cp-st" style="color:#5b6781">'+stt+(d?' · 已禁用':'')+'</span>'+
-        '<br><span style="color:#9aa7b8;font-size:.75rem">'+(c.note?esc(c.note):'（无备注）')+' · '+esc(String(c.createdAt||'').slice(0,16).replace('T',' '))+'</span>'+
-      '</span>'+
-      '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem" onclick="cpSetDisabled(\''+c.code+'\','+(d?'false':'true')+')">'+(d?'✅ 恢复':'🚫 禁用')+'</button>'+
-      '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem;color:#c2410c" onclick="cpDelete('+c.id+',\''+c.code+'\')">🗑 删除</button>'+
+      '<span style="min-width:22px;color:#9aa7b8;flex-shrink:0">'+(i+1)+'</span>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
+          '<b class="cp-code" style="color:'+(d?'#c2410c':'#222')+';'+(d?'text-decoration:line-through':'')+'" onclick="cpCopyCode(\''+c.code+'\')">'+esc(c.code)+'</b>'+
+          '<span class="cp-st" style="color:#5b6781;white-space:nowrap">'+stt+(d?' · 已禁用':'')+'</span>'+
+        '</div>'+
+        '<div class="cp-note" style="color:#5b6781;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="'+(c.note?esc(c.note):'')+'">'+(c.note?esc(c.note):'（无备注）')+'</div>'+
+        '<div style="color:#9aa7b8;font-size:.75rem;margin-top:1px">'+esc(String(c.createdAt||'').slice(0,16).replace('T',' '))+'</div>'+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">'+
+        '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem" onclick="cpSetDisabled(\''+c.code+'\','+(d?'false':'true')+')">'+(d?'✅ 恢复':'🚫 禁用')+'</button>'+
+        '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem;color:#c2410c" onclick="cpDelete('+c.id+',\''+c.code+'\')">🗑 删除</button>'+
+      '</div>'+
     '</div>';
   }).join('') || '<p style="color:#9aa7b8;text-align:center;padding:20px">暂无点歌券</p>';
 }
@@ -3150,12 +3156,15 @@ function djRun(){
       note: '',
       addedToPlatform: false,
       played: false,
-      songs: picked.map(function(s){ return { id:s.id, title:s.title, artist:s.artist, votes:s.voteCount||0 }; })
+      songs: picked.map(function(s){ return { id:s.id, title:s.title, artist:s.artist, votes:s.voteCount||0, requester:(typeof s.requester==='string')?s.requester:((s.requester&&s.requester.name)||'') }; })
     });
     djSaveRounds(rounds);
     _djLastPick = picked;
     var gset = {}; guarantee.forEach(function(s){ gset[s.id]=1; });
-    var rows = picked.map(function(s,i){ return (gset[s.id]?'🔥 ':'')+(i+1)+'. '+esc(s.title)+' - '+esc(s.artist||'未知歌手')+'（点赞 '+(s.voteCount||0)+'）'; }).join('<br>');
+    var rows = picked.map(function(s,i){
+      var req=(typeof s.requester==='string')?s.requester:((s.requester&&s.requester.name)||'');
+      return (gset[s.id]?'🔥 ':'')+(i+1)+'. '+esc(s.title)+' - '+esc(s.artist||'未知歌手')+'（'+(req?'点歌：'+esc(req)+' · ':'')+'点赞 '+(s.voteCount||0)+'）';
+    }).join('<br>');
     var mode = (topN>0 ? '高赞必选 '+guarantee.length+' 首 + ' : '') + '随机' + (excl?' · 排除已播放':' · 含已播放') + (exclSched?' · 排除已排期':'') + ' · 池中 '+pool.length+' 首';
     if(box) box.innerHTML = '<div style="background:#f0f6ff;border-radius:12px;padding:12px 14px;margin:10px 0;font-size:.85rem;line-height:1.9">'+
       '<b style="color:#07a154">✅ 已抽中 '+picked.length+' 首'+(clamped ? '（池中仅 '+pool.length+' 首，已全部抽取）' : '')+'，已加入本地排期（累计 '+djScheduleCount()+' 首）</b><br>'+
@@ -3176,7 +3185,7 @@ function djCopy(){
   lines.push('抽取时间：' + (last.at||''));
   if(last.note) lines.push('备注：' + last.note);
   lines.push('本期中选 ' + (last.songs||[]).length + ' 首，累计排期 ' + djScheduleCount() + ' 首：');
-  (last.songs||[]).forEach(function(s,i){ lines.push((i+1)+'. '+(s.title||'?')+' - '+(s.artist||'未知')+'（点赞 '+(s.votes||0)+'）'); });
+  (last.songs||[]).forEach(function(s,i){ lines.push((i+1)+'. '+(s.title||'?')+' - '+(s.artist||'未知')+(s.requester?'（点歌：'+s.requester+'）':'')+'（点赞 '+(s.votes||0)+'）'); });
   var text = lines.join('\n');
   var done = function(){ alert('✅ 公示文本已复制，可粘贴到班级群'); SFX.success(); };
   if(navigator.clipboard && navigator.clipboard.writeText){
@@ -3213,7 +3222,7 @@ function djRenderHistory(){
   var rounds=djLoadRounds();
   if(!rounds.length){ list.innerHTML='<p class="dj-desc" style="color:#5b6781;font-size:.85rem;text-align:center;padding:22px 0">暂无历史记录，先抽签吧</p>'; return; }
   var html=rounds.slice().reverse().map(function(r){
-    var songRows=(r.songs||[]).map(function(s,j){ return (j+1)+'. '+esc(s.title)+' - '+esc(s.artist||'未知')+'（点赞 '+(s.votes||0)+'）'; }).join('<br>');
+    var songRows=(r.songs||[]).map(function(s,j){ return (j+1)+'. '+esc(s.title)+' - '+esc(s.artist||'未知')+(s.requester?'（点歌：'+esc(s.requester)+'）':'')+'（点赞 '+(s.votes||0)+'）'; }).join('<br>');
     return '<div class="dj-round" style="background:#f6f8fc;border:1px solid #e5eaf3;border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:.82rem">'+
       '<div class="dj-label" style="font-weight:700;color:#3b5bfd;margin-bottom:6px">📅 '+(r.at||'')+'</div>'+
       '<div style="display:flex;gap:6px;margin-bottom:6px">'+
