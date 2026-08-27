@@ -89,6 +89,18 @@
     </div>
   </div>
 </div>
+<!-- 本周已领过提示 -->
+<div class="reward-mask" id="claimedMask">
+  <div class="reward-box">
+    <div class="reward-emoji">🎫</div>
+    <div class="reward-title">本周这张券已领过啦</div>
+    <div class="reward-sub">涂鸦跳跃每周限领一张点歌券<br>下周一 0 点刷新后再来挑战！</div>
+    <div class="reward-btns" style="margin-top:16px">
+      <button class="btn-copy" onclick="claimContinue()">▶ 继续游戏</button>
+      <button class="btn-close" onclick="claimExit()">🚪 退出游戏</button>
+    </div>
+  </div>
+</div>
 <div class="ctrl">
   <button id="leftBtn" aria-label="左移">◀ 左</button>
   <button id="rightBtn" class="right" aria-label="右移">右 ▶</button>
@@ -104,7 +116,8 @@ var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 var W=420,H=640;
 cv.width=W;cv.height=H;
 var PX=30,PY=46,PW=70;   // 平台尺寸
-var plats,px,py,vy,sc,hi,playing,camY,dirL,dirR;
+var plats,px,py,vy,sc,hi,playing,camY,dirL,dirR,rewardHandled;
+rewardHandled=false;
 hi=+(localStorage.getItem('doodle_hi')||0);document.getElementById('hi').textContent=hi;
 
 function reset(){
@@ -115,7 +128,7 @@ function reset(){
     plats.push({x:x0,y:H-PY-(H/14)*i,spring:spring,broke:false});
     x0=djNextPlatX(x0);
   }
-  px=W/2-PX/2;py=H-PY-PY;vy=-9;sc=0;camY=0;playing=true;
+  px=W/2-PX/2;py=H-PY-PY;vy=-9;sc=0;camY=0;playing=true;rewardHandled=false;
   document.getElementById('sc').textContent=0;
   hideOv();requestAnimationFrame(tick);
 }
@@ -152,7 +165,9 @@ function tick(){
     sc+=Math.round((camY+PY-py)/10)*10;
     camY=py-PY;
     document.getElementById('sc').textContent=sc;
-    if(sc>=REWARD.threshold&&!alreadyClaimed()){markClaimed();showReward();}
+    if(sc>=REWARD.threshold&&!rewardHandled){rewardHandled=true;
+      if(!alreadyClaimed()){markClaimed();showReward();}
+      else{pauseForClaimed();}}
     if(sc>hi){hi=sc;try{localStorage.setItem('doodle_hi',hi);}catch(e){} document.getElementById('hi').textContent=hi;}
   }
   // 掉落
@@ -272,6 +287,12 @@ function showReward(){
   });
 }
 function closeReward(){ document.getElementById('rewardMask').classList.remove('show'); }
+/* 本周已领过：暂停游戏 + 选择继续/退出 */
+function showClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.add('show'); }
+function closeClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.remove('show'); }
+function pauseForClaimed(){ playing=false; showClaimed(); }
+function claimContinue(){ closeClaimed(); playing=true; tick(); }
+function claimExit(){ closeClaimed(); playing=false; document.getElementById('startOv').classList.remove('hidden'); }
 function copyCoupon(){
   var c=window.__lastCoupon||document.getElementById('rwCode').textContent;
   var done=function(){ document.getElementById('rwCopy').textContent='已复制 ✓'; setTimeout(function(){document.getElementById('rwCopy').textContent='复制券码';},1500); };

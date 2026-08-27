@@ -85,6 +85,18 @@
       </div>
     </div>
   </div>
+  <!-- 本周已领过提示 -->
+  <div class="reward-mask" id="claimedMask">
+    <div class="reward-box">
+      <div class="reward-emoji">🎫</div>
+      <div class="reward-title">本周这张券已领过啦</div>
+      <div class="reward-sub">像素飞鸟每周限领一张点歌券<br>下周一 0 点刷新后再来挑战！</div>
+      <div class="reward-btns" style="margin-top:16px">
+        <button class="btn-copy" onclick="claimContinue()">▶ 继续游戏</button>
+        <button class="btn-close" onclick="claimExit()">🚪 退出游戏</button>
+      </div>
+    </div>
+  </div>
 </div>
 <div class="tip">每次点击扇一次翅膀 · 下落速度会越来越快</div>
 <script>
@@ -107,10 +119,11 @@ var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 var W=420,H=640;
 cv.width=W;cv.height=H;
 var G=0.5,FLAP=-9.5,BIRD=22,GAP=150,PIPE_W=64,SPEED=3.2;
-var bird,y,vel,sc,hi,pipes,timer,playing,over;
+var bird,y,vel,sc,hi,pipes,timer,playing,over,rewardHandled,invince;
 hi=+(localStorage.getItem('bird_hi')||0);document.getElementById('hi').textContent=hi;
 
-function reset(){bird=W*0.32;y=H*0.42;vel=0;sc=0;pipes=[];playing=true;over=false;
+function reset(){bird=W*0.32;y=H*0.42;vel=0;sc=0;pipes=[];playing=true;over=false;rewardHandled=false;
+  invince=Date.now()+2000;   /* 开局 2 秒无敌：前 2 秒不判碰撞，避免开局快速连排的水管直接撞死 */
   document.getElementById('sc').textContent=0;hideOv();tick();}
 function flap(){ if(!playing)return; vel=FLAP; snd.flap(); }
 function hideOv(){document.getElementById('startOv').classList.add('hidden');document.getElementById('overOv').classList.add('hidden');}
@@ -132,16 +145,25 @@ function tick(){
   for(var i=pipes.length-1;i>=0;i--){
     var p=pipes[i];p.x-=SPEED;
     if(!p.passed&&p.x+PIPE_W<bird){p.passed=true;sc++;snd.score();document.getElementById('sc').textContent=sc;
-      if(sc>=REWARD.threshold&&!alreadyClaimed()){markClaimed();showReward();}}
+      if(sc>=REWARD.threshold&&!rewardHandled){rewardHandled=true;
+        if(!alreadyClaimed()){markClaimed();showReward();}
+        else{pauseForClaimed();}}}
     if(p.x+PIPE_W<-10)pipes.splice(i,1);
   }
-  // 碰撞
-  if(y<0||y>H-BIRD){gameOver();draw();return;}
+  var now=Date.now();
+  if(now<invince){
+    /* 无敌期：只夹紧上下边界，不判死 */
+    if(y<0)y=0; else if(y>H-BIRD)y=H-BIRD;
+  }else{
+    if(y<0||y>H-BIRD){gameOver();draw();return;}
+  }
   var bx=bird,bw=BIRD,bh=BIRD;
-  for(var i=0;i<pipes.length;i++){
-    var p=pipes[i];
-    if(bx+bw>p.x&&bx<p.x+PIPE_W){
-      if(y<p.top||y+bh>p.top+GAP){gameOver();draw();return;}
+  if(now>=invince){
+    for(var i=0;i<pipes.length;i++){
+      var p=pipes[i];
+      if(bx+bw>p.x&&bx<p.x+PIPE_W){
+        if(y<p.top||y+bh>p.top+GAP){gameOver();draw();return;}
+      }
     }
   }
   draw();requestAnimationFrame(tick);
@@ -162,7 +184,8 @@ function draw(){
     ctx.fillStyle='#2fd6a8';ctx.fillRect(p.x,p.top+GAP,PIPE_W,H-p.top-GAP);
     ctx.fillStyle='#23b389';ctx.fillRect(p.x+4,p.top+GAP,PIPE_W-8,16);
   }
-  // 鸟（像素风）
+  // 鸟（像素风；无敌期半透明闪烁）
+  if(Date.now()<invince) ctx.globalAlpha=.5;
   ctx.save();ctx.translate(bird+11,y+11);
   ctx.fillStyle='#ffd93d';ctx.fillRect(-11,-9,22,18);
   ctx.fillStyle='#fff';ctx.fillRect(2,-5,6,5);
@@ -170,6 +193,7 @@ function draw(){
   ctx.fillStyle='#ff7b3d';ctx.fillRect(-11,2,6,8);
   ctx.fillStyle='#46e0c8';ctx.fillRect(-9,-9,6,6);
   ctx.restore();
+  ctx.globalAlpha=1;
 }
 document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
 document.getElementById('reBtn').addEventListener('click',function(){reset();});
@@ -231,6 +255,12 @@ function showReward(){
   });
 }
 function closeReward(){ document.getElementById('rewardMask').classList.remove('show'); }
+/* 本周已领过：暂停游戏 + 选择继续/退出 */
+function showClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.add('show'); }
+function closeClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.remove('show'); }
+function pauseForClaimed(){ playing=false; showClaimed(); }
+function claimContinue(){ closeClaimed(); playing=true; tick(); }
+function claimExit(){ closeClaimed(); playing=false; over=false; document.getElementById('startOv').classList.remove('hidden'); }
 function copyCoupon(){
   var c=window.__lastCoupon||document.getElementById('rwCode').textContent;
   var done=function(){ document.getElementById('rwCopy').textContent='已复制 ✓'; setTimeout(function(){document.getElementById('rwCopy').textContent='复制券码';},1500); };

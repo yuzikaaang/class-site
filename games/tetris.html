@@ -73,6 +73,18 @@
     </div>
   </div>
 </div>
+<!-- 本周已领过提示 -->
+<div class="reward-mask" id="claimedMask">
+  <div class="reward-box">
+    <div class="reward-emoji">🎫</div>
+    <div class="reward-title">本周这张券已领过啦</div>
+    <div class="reward-sub">俄罗斯方块每周限领一张点歌券<br>下周一 0 点刷新后再来挑战！</div>
+    <div class="reward-btns" style="margin-top:16px">
+      <button class="btn-copy" onclick="claimContinue()">▶ 继续游戏</button>
+      <button class="btn-close" onclick="claimExit()">🚪 退出游戏</button>
+    </div>
+  </div>
+</div>
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const COLS=10,ROWS=20,SIZE=cv.width/COLS;
@@ -86,7 +98,8 @@ const SHAPES=[
  [[1,1,0],[0,1,1]]
 ];
 const COLORS=['#7c83ff','#46e0c8','#ffb454','#ff6b8b','#4a6cf7','#34d399','#ffcf7a'];
-let board,cur,curX,curY,sc,hi,over;
+let board,cur,curX,curY,sc,hi,over,paused,rewardHandled;
+paused=false;rewardHandled=false;
 hi=+(localStorage.getItem('tetris_hi')||0);document.getElementById('hi').textContent=hi;
 function newBoard(){board=Array.from({length:ROWS},()=>Array(COLS).fill(0));}
 function spawn(){cur=SHAPES[(Math.random()*SHAPES.length)|0].map(r=>r.slice());curX=4;curY=0;
@@ -98,12 +111,14 @@ function rotate(){const r=cur[0].map((_,i)=>cur.map(row=>row[i]).reverse());cons
 function merge(){for(let y=0;y<cur.length;y++)for(let x=0;x<cur[y].length;x++){if(cur[y][x])board[curY+y][curX+x]=1;}}
 function clearLines(){let c=0;for(let y=ROWS-1;y>=0;y--){if(board[y].every(v=>v)){board.splice(y,1);board.unshift(Array(COLS).fill(0));c++;y++;}}
   if(c){sc+=c*10;document.getElementById('sc').textContent=sc;if(sc>hi){hi=sc;localStorage.setItem('tetris_hi',hi);document.getElementById('hi').textContent=hi;}
-    if(sc>=REWARD.threshold&&!alreadyClaimed()){markClaimed();showReward();}}}
-function step(){curY++;if(collide()){curY--;merge();clearLines();spawn();}draw();if(!over)setTimeout(step,420);}
+    if(sc>=REWARD.threshold&&!rewardHandled){rewardHandled=true;
+      if(!alreadyClaimed()){markClaimed();showReward();}
+      else{pauseForClaimed();}}}}
+function step(){if(over||paused)return;curY++;if(collide()){curY--;merge();clearLines();spawn();}draw();if(!over)setTimeout(step,420);}
 function draw(){ctx.fillStyle='#0b0f1f';ctx.fillRect(0,0,cv.width,cv.height);
   for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(board[y][x]){ctx.fillStyle='#4a6cf7';ctx.fillRect(x*SIZE+1,y*SIZE+1,SIZE-2,SIZE-2);}
   if(cur)for(let y=0;y<cur.length;y++)for(let x=0;x<cur[y].length;x++)if(cur[y][x]){ctx.fillStyle='#7c83ff';ctx.fillRect((curX+x)*SIZE+1,(curY+y)*SIZE+1,SIZE-2,SIZE-2);}}
-function reset(){newBoard();sc=0;over=false;document.getElementById('sc').textContent=0;spawn();draw();setTimeout(step,420);}
+function reset(){newBoard();sc=0;over=false;paused=false;rewardHandled=false;document.getElementById('sc').textContent=0;spawn();draw();setTimeout(step,420);}
 function move(d){curX+=d;if(collide())curX-=d;else draw();}
 function drop(){curY++;if(collide()){curY--;merge();clearLines();spawn();}draw();}
 document.addEventListener('keydown',e=>{const k=e.key;
@@ -167,6 +182,12 @@ function showReward(){
   });
 }
 function closeReward(){ document.getElementById('rewardMask').classList.remove('show'); }
+/* 本周已领过：暂停游戏 + 选择继续/退出 */
+function showClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.add('show'); }
+function closeClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.remove('show'); }
+function pauseForClaimed(){ paused=true; showClaimed(); }
+function claimContinue(){ closeClaimed(); paused=false; step(); }
+function claimExit(){ closeClaimed(); paused=false; over=true; draw(); }
 function copyCoupon(){
   var c=window.__lastCoupon||document.getElementById('rwCode').textContent;
   var done=function(){ document.getElementById('rwCopy').textContent='已复制 ✓'; setTimeout(function(){document.getElementById('rwCopy').textContent='复制券码';},1500); };

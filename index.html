@@ -459,6 +459,20 @@ body::after{animation-name:blobB;animation-duration:34s}
 .dark #djPanelMask input[type="datetime-local"]:disabled,
 .dark #djPanelMask input[type="number"]:disabled{opacity:.45}
 .dark #djHistoryMask .dj-round{background:#20294a!important;border-color:#2a3550!important}
+/* 歌单管理弹窗 暗色适配 */
+.dark #djSongsMask .dj-label,
+.dark #djSongsMask .dj-desc{color:#93a3bd!important}
+.dark #djSongsMask .dj-song-row{border-bottom-color:#2a3550!important}
+.dark #djSongsMask .dj-song-title{color:#e2e8f0!important}
+.dark #djSongsMask .dj-song-artist{color:#9db1ff!important}
+.dark #djSongsMask label{color:#9db1ff!important}
+/* 点歌券管理弹窗 暗色适配 */
+.dark #couponAdminMask .dj-label,
+.dark #couponAdminMask .dj-desc{color:#93a3bd!important}
+.dark #couponAdminMask .cp-row{border-bottom-color:#2a3550!important}
+.dark #couponAdminMask .cp-code{color:#e2e8f0!important}
+.dark #couponAdminMask .cp-st{color:#9db1ff!important}
+.dark #couponAdminMask input{background:#1b2432;color:#e2e8f0;border-color:#2a3550}
 .dark #djHistoryMask .dj-label{color:#b6c2d9!important}
 .dark #djHistoryMask #djHistoryList > p{color:#93a3bd!important}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
@@ -760,6 +774,7 @@ body::after{animation-name:blobB;animation-duration:34s}
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludeSched"> 排除已排期</label>
       </div>
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:8px;font-size:.85rem" onclick="djOpenSongs()">🎼 歌单管理（预览全部歌曲 · 标记不参与抽签）</button>
       <button class="btn" style="width:100%;margin-bottom:8px" onclick="djRun()">🎲 开始抽签</button>
       <div id="djResult"></div>
       <div style="display:flex;gap:8px;margin-top:8px">
@@ -781,6 +796,38 @@ body::after{animation-name:blobB;animation-duration:34s}
   <div class="allboard-box" style="max-width:480px">
     <div class="allboard-head"><span>📜 抽歌历史记录</span><button onclick="closeDjHistory()">关闭</button></div>
     <div id="djHistoryList" style="padding:10px 16px;flex:1;min-height:0;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- ===== 抽歌歌单管理弹窗（预览全部 + 标记排除，不参与抽签） ===== -->
+<div class="allboard-mask" id="djSongsMask">
+  <div class="allboard-box" style="max-width:480px">
+    <div class="allboard-head"><span>🎼 歌单管理</span><button onclick="closeDjSongs()">关闭</button></div>
+    <div style="padding:10px 16px 0;font-size:.8rem">
+      <p class="dj-desc" style="color:#5b6781;margin:4px 0 4px">勾选「排除」的歌曲不参与抽签（排除列表保存在本机）。</p>
+      <p class="dj-desc" id="djSongsStatus" style="color:#5b6781;margin:0 0 8px">加载中…</p>
+    </div>
+    <div id="djSongsList" style="padding:0 16px 10px;flex:1;min-height:0;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- ===== 点歌券管理弹窗（站主：添加 / 查看 / 本地禁用 / 本地隐藏） ===== -->
+<div class="allboard-mask" id="couponAdminMask">
+  <div class="allboard-box" style="max-width:480px">
+    <div class="allboard-head"><span>🎟️ 点歌券管理</span><button onclick="closeCouponAdmin()">关闭</button></div>
+    <div style="padding:12px 18px;text-align:left;flex:1;min-height:0;overflow-y:auto">
+      <p class="dj-desc" style="font-size:.8rem;color:#5b6781;margin:0 0 10px">「添加」= 在点歌平台真实生成券码；「禁用 / 隐藏」为本地标记（开放 API 无删除权限，真实作废需到平台后台）。</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <label class="dj-label" style="font-size:.85rem;color:#4a5568;white-space:nowrap">数量 <input type="number" id="cpCount" min="1" max="50" value="1" style="width:58px;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
+        <label class="dj-label" style="flex:1;font-size:.85rem;color:#4a5568">备注 <input type="text" id="cpNote" maxlength="40" placeholder="如：点歌活动奖励" style="width:100%;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
+        <button class="btn" style="padding:7px 12px;font-size:.85rem" onclick="cpCreate()">➕ 添加</button>
+      </div>
+      <p class="dj-desc" id="cpStatus" style="font-size:.8rem;color:#5b6781;margin:0 0 8px">加载中…</p>
+      <div id="cpList"></div>
+      <div id="cpRestoreBar" style="display:none;margin-top:8px">
+        <button class="btn btn-secondary" style="width:100%;font-size:.8rem;padding:7px" onclick="cpRestoreAllHidden()">♻️ 恢复全部已隐藏券</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1758,7 +1805,8 @@ var HIDDEN_FUN_LINKS = [
   { icon: "🦘", title: "涂鸦跳跃", desc: "一路向上，踩弹簧起飞", url: "games/doodle.html" },
   { icon: "⚫", title: "五子棋", desc: "人机三档难度 / 本地双人", url: "games/gomoku.html" },
   { icon: "♟", title: "中国象棋", desc: "完整规则，本地双人对战", url: "games/chess.html" },
-  { icon: "✈️", title: "飞机大战", desc: "纵版射击，击落敌机冲高分", url: "games/plane.html" }
+  { icon: "✈️", title: "飞机大战", desc: "纵版射击，击落敌机冲高分", url: "games/plane.html" },
+  { icon: "🎟️", title: "点歌券管理", desc: "站主：添加 / 查看 / 本地禁用点歌券", action: "openCouponAdmin" }
 ];
 var _badgeClicks = 0, _badgeTimer = null;
 function badgeClick(){
@@ -1816,7 +1864,7 @@ function renderHiddenView(){
         '<button type="button" class="btn-qr" style="margin-left:auto;background:#4a6cf7" onclick="event.stopPropagation();copyText(\'' + jsq(l.login.user + ' / ' + l.login.pass) + '\',\'账号密码\')">复制</button>' +
         '</div>'
       : '';
-    return '<div class="hidden-fun-card" onclick="openLink(\'' + jsq(l.url) + '\',true)">' +
+    return '<div class="hidden-fun-card" onclick="' + (l.action ? l.action + '()' : "openLink('" + jsq(l.url) + "',true)") + '">' +
       '<span class="hidden-fun-icon">' + esc(l.icon) + '</span>' +
       '<span style="flex:1;min-width:0"><span class="hidden-fun-title">' + esc(l.title) + '</span><br><span class="hidden-fun-desc">' + esc(l.desc) + '</span>' + loginHtml + '</span>' +
     '</div>';
@@ -2905,6 +2953,133 @@ function djLoadRounds(){
   return arr;
 }
 function djSaveRounds(arr){ try{ localStorage.setItem('cls_dj_schedule', JSON.stringify(arr||[])); }catch(e){} }
+
+/* ---- 歌单管理：预览全部歌曲 + 标记"不参与抽签"（排除列表存本机） ---- */
+function djGetExcluded(){
+  var a=[]; try{ a=JSON.parse(localStorage.getItem('cls_dj_excluded')||'[]')||[]; }catch(e){}
+  var s={}; a.forEach(function(id){ s[id]=1; }); return s;
+}
+function djSetExcluded(id,on){
+  var a=[]; try{ a=JSON.parse(localStorage.getItem('cls_dj_excluded')||'[]')||[]; }catch(e){}
+  var idx=a.indexOf(id);
+  if(on&&idx<0) a.push(id); else if(!on&&idx>=0) a.splice(idx,1);
+  try{ localStorage.setItem('cls_dj_excluded', JSON.stringify(a)); }catch(e){}
+}
+var _djSongsCache=null;
+function djOpenSongs(){
+  var m=document.getElementById('djSongsMask'); if(!m) return;
+  m.classList.add('show');
+  SFX.pop();
+  var st=document.getElementById('djSongsStatus'), list=document.getElementById('djSongsList');
+  if(st) st.textContent='正在拉取歌单…';
+  if(list) list.innerHTML='';
+  djFetchSongs().then(function(songs){
+    _djSongsCache=songs;
+    renderDjSongs(songs);
+  }).catch(function(err){
+    if(st) st.textContent='拉取失败：'+esc(String((err&&err.message)||err));
+  });
+}
+function renderDjSongs(songs){
+  var ex=djGetExcluded(), exCount=0; for(var k in ex) exCount++;
+  var st=document.getElementById('djSongsStatus'), list=document.getElementById('djSongsList');
+  if(st) st.textContent='共 '+songs.length+' 首 · 已排除 '+exCount+' 首（抽签时自动跳过）';
+  list.innerHTML=songs.map(function(s,i){
+    var isEx=!!ex[s.id];
+    return '<div class="dj-song-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef1f8;font-size:.82rem">'+
+      '<span style="color:#9aa7b8;min-width:26px">'+(i+1)+'</span>'+
+      '<span style="flex:1;min-width:0">'+
+        '<b class="dj-song-title" style="color:'+(isEx?'#c2410c':'#222')+';'+(isEx?'text-decoration:line-through':'')+'">'+esc(s.title)+'</b> '+
+        '<span class="dj-song-artist" style="color:#5b6781">'+esc(s.artist||'未知')+'</span>'+
+        '<br><span style="color:#9aa7b8;font-size:.75rem">👍 '+(s.voteCount||0)+' · '+esc(String(s.createdAt||'').slice(0,10))+(s.played?' · 已播放':'')+(isEx?' · 已排除':'')+'</span>'+
+      '</span>'+
+      '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap"><input type="checkbox" '+(isEx?'checked':'')+' onchange="djSetExcluded('+s.id+',this.checked);renderDjSongs(_djSongsCache)"> 排除</label>'+
+    '</div>';
+  }).join('') || '<p style="color:#9aa7b8;text-align:center;padding:20px">暂无歌曲</p>';
+}
+function closeDjSongs(){ var m=document.getElementById('djSongsMask'); if(m) m.classList.remove('show'); }
+(function(){ var m=document.getElementById('djSongsMask'); if(m) m.addEventListener('click', function(e){ if(e.target.id==='djSongsMask') closeDjSongs(); }); })();
+
+/* ---- 点歌券管理（站主）：添加 / 查看 / 本地禁用 / 本地隐藏 ----
+ * 添加=真实调用 VoiceHub POST /card-codes（发券专用旧 key，xor 混淆密文）
+ * 禁用/隐藏=本地标记（开放 API 无删除权限，真实作废需到平台后台） */
+var CP_ADMIN_KEY_ENC='FQQGUGoAUUtMWxccWgNAGwYHAwQBVBUBUwQHSExWRB8OBk4VBA==';
+function cpApiKey(){ try{ return xorDecrypt(CP_ADMIN_KEY_ENC); }catch(e){ return ''; } }
+function cpLoadMap(k){ var d={}; try{ d=JSON.parse(localStorage.getItem(k)||'{}')||{}; }catch(e){} return d; }
+function cpSaveMap(k,d){ try{ localStorage.setItem(k, JSON.stringify(d||{})); }catch(e){} }
+function cpDisabled(){ return cpLoadMap('cls_coupon_disabled'); }
+function cpHidden(){ return cpLoadMap('cls_coupon_hidden'); }
+function cpSetDisabled(code,on){
+  var d=cpDisabled(); if(on) d[code]=1; else delete d[code];
+  cpSaveMap('cls_coupon_disabled',d); cpRenderList();
+}
+function cpHide(code,on){
+  var h=cpHidden(); if(on) h[code]=1; else delete h[code];
+  cpSaveMap('cls_coupon_hidden',h); cpRenderList();
+}
+function cpRestoreAllHidden(){ cpSaveMap('cls_coupon_hidden',{}); cpRenderList(); }
+var _cpCache=[];
+function openCouponAdmin(){
+  var m=document.getElementById('couponAdminMask'); if(!m) return;
+  m.classList.add('show'); SFX.pop();
+  cpLoadList();
+}
+function closeCouponAdmin(){ var m=document.getElementById('couponAdminMask'); if(m) m.classList.remove('show'); }
+(function(){ var m=document.getElementById('couponAdminMask'); if(m) m.addEventListener('click', function(e){ if(e.target.id==='couponAdminMask') closeCouponAdmin(); }); })();
+function cpLoadList(){
+  var st=document.getElementById('cpStatus'); if(st) st.textContent='正在拉取券列表…';
+  fetch(DJ_API+'/card-codes?page=1&limit=100', { headers: { 'x-api-key': cpApiKey() } })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ _cpCache=(d&&d.data&&d.data.cardCodes)||[]; cpRenderList(); })
+    .catch(function(e){ if(st) st.textContent='拉取失败：'+esc(String((e&&e.message)||e)); });
+}
+function cpRenderList(){
+  var st=document.getElementById('cpStatus'), list=document.getElementById('cpList');
+  var dis=cpDisabled(), hid=cpHidden();
+  var vis=_cpCache.filter(function(c){ return !hid[c.code]; });
+  var hidCount=0; for(var k in hid) hidCount++;
+  if(st) st.textContent='共 '+_cpCache.length+' 张券 · 本地禁用 '+Object.keys(dis).length+' 张 · 已隐藏 '+hidCount+' 张';
+  var bar=document.getElementById('cpRestoreBar');
+  if(bar) bar.style.display = hidCount>0 ? 'block' : 'none';
+  list.innerHTML=vis.map(function(c,i){
+    var stt=c.status==='AVAILABLE'?'🟢 可用':(c.status==='REDEEMED'?'🔴 已用':'⚪ '+esc(c.status));
+    var d=!!dis[c.code];
+    return '<div class="cp-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef1f8;font-size:.82rem">'+
+      '<span style="min-width:30px;color:#9aa7b8">'+(i+1)+'</span>'+
+      '<span style="flex:1;min-width:0">'+
+        '<b class="cp-code" style="color:'+(d?'#c2410c':'#222')+';'+(d?'text-decoration:line-through':'')+'" onclick="cpCopyCode(\''+c.code+'\')">'+esc(c.code)+'</b> '+
+        '<span class="cp-st" style="color:#5b6781">'+stt+(d?' · 已禁用':'')+'</span>'+
+        '<br><span style="color:#9aa7b8;font-size:.75rem">'+(c.note?esc(c.note):'（无备注）')+' · '+esc(String(c.createdAt||'').slice(0,16).replace('T',' '))+'</span>'+
+      '</span>'+
+      '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem" onclick="cpSetDisabled(\''+c.code+'\','+(d?'false':'true')+')">'+(d?'✅ 恢复':'🚫 禁用')+'</button>'+
+      '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem;color:#c2410c" onclick="cpHide(\''+c.code+'\',true)">🗑 隐藏</button>'+
+    '</div>';
+  }).join('') || '<p style="color:#9aa7b8;text-align:center;padding:20px">暂无点歌券</p>';
+}
+function cpCreate(){
+  var n=parseInt((document.getElementById('cpCount')||{}).value||'1',10); if(!(n>=1)) n=1;
+  var note=(document.getElementById('cpNote')||{}).value.trim()||'手动添加';
+  var st=document.getElementById('cpStatus'); if(st) st.textContent='正在生成券码…';
+  fetch(DJ_API+'/card-codes',{ method:'POST',
+    headers:{ 'x-api-key': cpApiKey(), 'Content-Type':'application/json' },
+    body: JSON.stringify({count:n,prefix:'SONG',length:8,note:note}) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var codes=(d&&d.data&&d.data.cardCodes)||[];
+      if(codes.length){
+        SFX.success();
+        if(st) st.textContent='✅ 已生成 '+codes.length+' 张券：'+codes.map(function(c){ return c.code; }).join('、');
+      }else{
+        if(st) st.textContent='生成失败：'+JSON.stringify(d).slice(0,120);
+      }
+      cpLoadList();
+    })
+    .catch(function(e){ if(st) st.textContent='生成失败：'+esc(String((e&&e.message)||e)); });
+}
+function cpCopyCode(code){
+  var done=function(){ SFX.success(); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(code).then(done).catch(done); }
+}
 function djScheduleCount(){
   var n=0; djLoadRounds().forEach(function(r){ n+=(r.songs||[]).length; }); return n;
 }
@@ -2929,7 +3104,9 @@ function djRun(){
     });
   });
   djFetchSongs().then(function(songs){
+    var exIds = djGetExcluded();
     var pool = songs.filter(function(s){
+      if(exIds[s.id]) return false;
       if(excl && (s.played || playedIds[s.id])) return false;
       if(exclSched && schedIds[s.id]) return false;
       var ts = new Date(s.createdAt).getTime();
