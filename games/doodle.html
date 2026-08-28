@@ -351,27 +351,65 @@ function claimCoupon(name,cb){
     setTimeout(function(){ cb({ok:false,err:'发券服务暂未开放，此券码仅作预览（未生效）',code:code,remote:false}); },400);
   }
 }
+/* 平台查重：本周该名字该游戏是否已有可用券（先查后台，有则直接展示券码，不再生成新券） */
+function weekStartMs(){ var d=new Date(); var day=(d.getDay()+6)%7; d.setHours(0,0,0,0); d.setDate(d.getDate()-day); return d.getTime(); }
+function platformFind(name){
+  return new Promise(function(resolve){
+    var cfg=VOICEHUB_COUPON;
+    if(window.VOICEHUB_COUPON_OVERRIDE) cfg=window.VOICEHUB_COUPON_OVERRIDE;
+    if(!(cfg.enabled&&cfg.url)){ resolve({found:false}); return; }
+    var headers={};
+    if(cfg.tokenField==='Authorization'){ headers['Authorization']=(cfg.tokenPrefix||'')+cfg.token; }
+    else{ headers[cfg.tokenField]=cfg.token; }
+    fetch(cfg.url.split('?')[0]+'?page=1&limit=100',{headers:headers})
+      .then(function(r){ return r.json().catch(function(){ return {}; }); })
+      .then(function(j){
+        var list=(j&&j.data&&j.data.cardCodes)||[];
+        var w0=weekStartMs();
+        for(var i=0;i<list.length;i++){
+          var c=list[i];
+          if(!c||c.status!=='AVAILABLE') continue;
+          var t=new Date(c.createdAt); if(isNaN(t.getTime())) continue;
+          if(t.getTime()<w0) continue;
+          var note=String(c.note||'');
+          if(note.split(' · ')[0].trim()===name && note.indexOf(REWARD.note)>=0){ resolve({found:true,code:c.code}); return; }
+        }
+        resolve({found:false});
+      })
+      .catch(function(){ resolve({found:false,err:'net'}); });
+  });
+}
 function showReward(){
   var mask=document.getElementById('rewardMask');
   document.getElementById('rwTitle').textContent=REWARD.title;
   document.getElementById('rwSub').textContent=REWARD.sub;
   document.getElementById('rwCode').textContent='请稍候…';
   document.getElementById('rwTip').textContent='';
-  var tag=document.getElementById('rwTag'); tag.className='reward-tag'; tag.textContent='正在为你生成券码…';
+  var tag=document.getElementById('rwTag'); tag.className='reward-tag'; tag.textContent='正在核对本周领券记录…';
   mask.classList.add('show');
-  claimCoupon(_claimName,function(res){
-    document.getElementById('rwCode').textContent=res.code||'生成失败';
-    if(res.ok && res.remote){
+  platformFind(_claimName).then(function(f){
+    if(f.found){
+      document.getElementById('rwCode').textContent=f.code;
       ledgerAdd(_claimName); markClaimed();
-      tag.className='reward-tag'; tag.textContent='✅ 已在点歌平台登记，复制券码去点歌吧';
+      tag.className='reward-tag'; tag.textContent='✅ 本周已在平台领过，券码已找回（无需重新生成）';
       document.getElementById('rwTip').textContent='1. 复制上面的券码\n2. 打开「点歌平台」\n3. 点歌时把券码粘贴进去';
-      window.__lastCoupon=res.code;
-    }else{
-      tag.className='reward-tag err';
-      tag.textContent=res.remote ? ('⚠️ '+res.err) : '⚠️ 发券服务暂未开放（演示券码，未生效）';
-      document.getElementById('rwTip').textContent='发券失败：请截图本局通关画面发给管理员（站主），管理员核对后会手动补发点歌券';
-      window.__lastCoupon=res.code||'';
+      window.__lastCoupon=f.code;
+      return;
     }
+    claimCoupon(_claimName,function(res){
+      document.getElementById('rwCode').textContent=res.code||'生成失败';
+      if(res.ok && res.remote){
+        ledgerAdd(_claimName); markClaimed();
+        tag.className='reward-tag'; tag.textContent='✅ 已在点歌平台登记，复制券码去点歌吧';
+        document.getElementById('rwTip').textContent='1. 复制上面的券码\n2. 打开「点歌平台」\n3. 点歌时把券码粘贴进去';
+        window.__lastCoupon=res.code;
+      }else{
+        tag.className='reward-tag err';
+        tag.textContent=res.remote ? ('⚠️ '+res.err) : '⚠️ 发券服务暂未开放（演示券码，未生效）';
+        document.getElementById('rwTip').textContent='发券失败：请截图本局通关画面发给管理员（站主），管理员核对后会手动补发点歌券';
+        window.__lastCoupon=res.code||'';
+      }
+    });
   });
 }
 function closeReward(){ document.getElementById('rewardMask').classList.remove('show'); }

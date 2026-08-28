@@ -1196,7 +1196,8 @@ var SITE_DATA = {
     { date: "2026-08-28 22:18", text: "📌 游戏点歌券规则升级：\n① 领券前需从全班名单中选择自己的名字，系统会按「名字 + 本周 + 游戏」核对是否已领过；已领过的同学会收到提醒，下周一 0 点刷新后再来挑战。\n② 像素飞鸟发券门槛下调：40 → 30 管；贪吃蛇：60 → 50 豆，更容易拿到券。\n③ 涂鸦跳跃难度升级：每 500 分提升一档难度（重力渐大、平台更散、弹簧变少）。\n④ 「班级事务-排行榜」入口暂隐藏（数据保留）。", category: "site" },
     { date: "2026-08-28 22:30", text: "🔐 站主杂谈：偷偷告诉你，站里其实藏着隐藏空间～进入方式：在首页连点班徽 5 次，就会唤出「隐藏区域」门禁，输入暗号就能进去探索了。暗号嘛……就藏在日常提示里（比如同学群目前人数），找到记得保密哦。", category: "misc" },
     { date: "2026-08-28 23:15", text: "📌 电脑端体验修复：主页点开站内小游戏（贪吃蛇 / 俄罗斯方块 / 涂鸦跳跃等）不再新开标签页，改为在当前页面直接打开；玩完点「返回班级站」即回到主页，任务栏不再堆满本站点。外部链接（如 4399、Classworks）仍在新标签页打开，方便保留班级服务站。手机端行为不变。", category: "site" },
-    { date: "2026-08-29 00:30", text: "⚠️ 备用链接失效说明：此前填入的 Gitee Pages 备用入口（zikang0529.gitee.io）已无法使用——Gitee Pages 服务于 2024 年永久下线且无恢复计划。主链接（GitHub Pages）在微信内置浏览器中同样会被拦截。已备案、微信可开的备用链接将重新部署后在此公告并填入侧边栏「复制链接」，请先使用主链接（电脑/手机浏览器均可正常打开）。", category: "site" }
+    { date: "2026-08-29 00:30", text: "⚠️ 备用链接失效说明：此前填入的 Gitee Pages 备用入口（zikang0529.gitee.io）已无法使用——Gitee Pages 服务于 2024 年永久下线且无恢复计划。主链接（GitHub Pages）在微信内置浏览器中同样会被拦截。已备案、微信可开的备用链接将重新部署后在此公告并填入侧边栏「复制链接」，请先使用主链接（电脑/手机浏览器均可正常打开）。", category: "site" },
+    { date: "2026-08-29 00:40", text: "🎟️ 游戏点歌券防重复升级：发券前会先查点歌平台后台——本周内同一名字在同一款游戏已领过券的，直接展示原来的券码，不再重复生成。换手机 / 换浏览器 / 清缓存都拦得住（以平台记录为准），保证每款游戏每周每人一张券。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -3140,6 +3141,8 @@ function closeCouponAdmin(){ var m=document.getElementById('couponAdminMask'); i
 (function(){ var m=document.getElementById('couponAdminMask'); if(m) m.addEventListener('click', function(e){ if(e.target.id==='couponAdminMask') closeCouponAdmin(); }); })();
 /* ---- 游戏点歌券补发（站主手动补发登记；写入门票台账防重复领） ---- */
 var _RI_GAMES={bird:'像素飞鸟',snake:'贪吃蛇',doodle:'涂鸦跳跃',tetris:'俄罗斯方块'};
+/* 与各游戏端 REWARD.note 完全一致，保证平台查重（platformFind）能识别补发券 */
+var _RI_NOTE={bird:'像素飞鸟过30管奖励',snake:'贪吃蛇吃豆50奖励',doodle:'涂鸦跳跃10000高奖励',tetris:'俄罗斯方块120分奖励'};
 var _riSel='';
 function riInit(){
   var t=document.getElementById('riTime'); if(t){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; t.value=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }
@@ -3164,7 +3167,20 @@ function riSubmit(){
   if(!time){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; time=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
   ledgerAdd(name,game,'补发');
   riRender();
-  if(msg){ msg.textContent='✅ 已登记补发：'+name+' · '+(_RI_GAMES[game]||game)+' · '+time+'。请把券码手动发给该同学（本周已锁定不可重复领）'; msg.style.color='#07a154'; }
+  /* 补发自动在平台生成一张券（note 与游戏端统一格式，游戏端平台查重可识别 → 该同学换浏览器再领会被拦截并找回券码）；券码展示给站主手动发同学 */
+  var note=name+' · '+time+' · '+(_RI_NOTE[game]||game);
+  fetch(DJ_API+'/card-codes',{method:'POST',
+    headers:{'x-api-key':cpApiKey(),'Content-Type':'application/json'},
+    body:JSON.stringify({count:1,prefix:'SONG',length:8,note:note})})
+    .then(function(r){ return r.json().catch(function(){ return {}; }); })
+    .then(function(d){
+      var codes=(d&&d.data&&d.data.cardCodes)||[];
+      if(msg){
+        if(codes.length){ msg.style.color='#07a154'; msg.textContent='✅ 已登记补发并在平台生成券码：'+codes[0].code+'。请把券码手动发给该同学（本周已锁定不可重复领）'; }
+        else{ msg.style.color='#c2410c'; msg.textContent='✅ 已登记补发（平台生成未成功，请手动在「券管理」生成券码发给同学）'; }
+      }
+    })
+    .catch(function(){ if(msg){ msg.style.color='#c2410c'; msg.textContent='✅ 已登记补发（平台生成未成功，请手动在「券管理」生成券码发给同学）'; } });
   var inp=document.getElementById('riNameInput'); if(inp) inp.value='';
   _riSel='';
   if(timeInp) timeInp.value='';

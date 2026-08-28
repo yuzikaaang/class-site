@@ -91,6 +91,7 @@ GitHub Pages 在 GitHub 仓库 Settings → Pages 中开启（选择 `master` �
 
 ## 最近更新
 
+- 2026-08-29：🎟️ **游戏点歌券跨设备防重复**——根因：台账 `cls_coupon_ledger` 存各设备 localStorage，换浏览器即视为"未领"，同名字同游戏可重复出券。修复：发券前先查点歌平台后台（`GET /api/open/card-codes?page=1&limit=100`，复用发券 key，实测有读权限）——本周内「note 首段名字 + 含游戏备注（REWARD.note）+ status=AVAILABLE」命中则直接展示原券码（`platformFind`，不再生成），未命中才调用生成；站主补发（`riSubmit`）改为自动在平台生成统一格式券（`_RI_NOTE` 与游戏端 note 一致），补发同学换设备再领同样被平台查重拦回。4 款游戏（bird/snake/tetris/doodle）同步。真机 mock 验证：平台无记录→生成新券；换浏览器清缓存但平台有记录→展示原券且生成调用为 0。站内公告已同步。
 - 2026-08-29：🎮 **井字棋新增 + 五子棋简单档 AI 改进**——① 新增井字棋（`games/tictactoe.html`）：本地双人 + 人机三档（简单=随机 / 普通=会堵会赢 / 困难=minimax 必不败），含音效与胜负平记录，已加入隐藏娱乐天地；② 五子棋「简单」档不再乱下——会抓自己必胜、堵对手必胜，其余按局势加权随机（保留随机性但明显有策略，介于随机与普通贪心之间）。游戏内容，按站规不进公告。
 - 2026-08-29：⚠️ **Gitee Pages 永久下线，旧备用链接已清除**——`zikang0529.gitee.io/class-site/` 已无法访问（Gitee 官方 2024 年宣布 Pages 服务永久下线、无恢复计划）。已清除侧边栏死链、将「复制链接」恢复为仅主链接（备用行回退"敬请期待"），并发布站内公告说明。已备案、微信可开的备用链接将改用其他方案重新部署，部署后在此处与公告同步。主链接 GitHub Pages 在微信内仍被拦截，电脑/手机浏览器可正常打开。
 - 2026-08-29：☁️ **CloudBase 接入（部署工具链就绪）**——按 CloudBase 官方 skill 接入：沙箱已安装 `@cloudbase/cli`（tcb 3.8.1），并新增 `cloudbaserc.json`（静态托管根目录配置）。部署需站主用自己腾讯云/微信实名账号完成 `tcb login` → 创建环境 → `tcb hosting deploy`（或控制台上传整个目录）；envId 生成后回填 `SITE_DATA.siteLinks` 备用项并公告。本环境无 CloudBase MCP/插件加载机制，走 CLI 兜底路径。
