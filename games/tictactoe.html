@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>井字棋 · 25级05班</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:linear-gradient(170deg,#0d1024,#161a3a);color:#e9ecff;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px;min-height:100vh}
+  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
+  h1{font-size:18px;margin:0}
+  .hud{display:flex;gap:14px;font-size:15px;align-items:center;flex-wrap:wrap;justify-content:center}
+  .hud b{color:#ffcf7a}
+  .hud .turn{font-size:13px;padding:4px 12px;border-radius:999px;background:#232f55;color:#9db1ff}
+  .hud .turn.ai{background:rgba(70,224,200,.15);color:#46e0c8}
+  #board{width:min(86vw,320px);height:min(86vw,320px);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:8px;
+    background:#1a2440;padding:8px;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .cell{background:linear-gradient(160deg,#222d52,#1a2440);border-radius:10px;display:flex;align-items:center;justify-content:center;
+    font-size:min(17vw,62px);font-weight:900;cursor:pointer;user-select:none;transition:transform .08s, background .12s}
+  .cell:active{transform:scale(.94)}
+  .cell.x{color:#7c9bff}
+  .cell.o{color:#46e0c8}
+  .cell.disabled{cursor:default}
+  .cell.win{background:linear-gradient(160deg,#3a4a2a,#2a3a1a);box-shadow:inset 0 0 0 2px rgba(255,207,122,.5)}
+  .bar{display:flex;gap:8px;margin-top:2px;flex-wrap:wrap;justify-content:center;align-items:center}
+  .bar select,.bar button{border:none;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;background:#232f55;color:#9db1ff;outline:none}
+  .bar button:active,.bar select:active{background:#33405f}
+  .tip{font-size:12px;opacity:.55;text-align:center;max-width:330px;line-height:1.6}
+  .ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(10,12,30,.82);z-index:9;text-align:center;padding:20px}
+  .ov.hidden{display:none}
+  .ov h2{margin:0;font-size:28px;color:#ffcf7a}
+  .ov p{margin:2px 0;font-size:14px;color:#9db1ff}
+  .ov button{border:none;border-radius:14px;padding:12px 26px;font-size:15px;font-weight:800;cursor:pointer;background:linear-gradient(135deg,#7c83ff,#4a6cf7);color:#fff;box-shadow:0 8px 20px rgba(74,108,247,.35)}
+  .ov button:active{transform:scale(.95)}
+</style>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>⭕ 井字棋</h1>
+<div class="hud"><span>胜 <b id="wins">0</b></span><span>负 <b id="losses">0</b></span><span>平 <b id="draws">0</b></span><span class="turn" id="turn">轮到你（X）</span></div>
+<div id="board"></div>
+<div class="bar">
+  <select id="modeSel" title="对战模式">
+    <option value="ai">🤖 人机对战</option>
+    <option value="pvp">👥 本地双人</option>
+  </select>
+  <select id="diffSel" title="AI 难度（仅人机模式）">
+    <option value="0">😌 简单</option>
+    <option value="1" selected>🙂 普通</option>
+    <option value="2">😈 困难</option>
+  </select>
+  <button id="restartBtn">⟳ 重新开始</button>
+</div>
+<div class="tip">你执 ✖ 先手，AI 执 ⭕ · 率先连成一线（横/竖/斜）即胜 · 三档难度：简单随机、普通会堵会赢、困难永不败</div>
+<div class="ov hidden" id="endOv">
+  <h2 id="endTitle">🎉 你赢了！</h2>
+  <p id="endInfo"></p>
+  <button id="reBtn">再来一局</button>
+</div>
+<script>
+/* ===== 音效 ===== */
+var AC=null;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f,d,t,v,delay){var c=ac();if(!c)return;var o=c.createOscillator(),g=c.createGain();o.type=t||'square';o.frequency.value=f;var t0=c.currentTime+(delay||0);g.gain.setValueAtTime(v||0.05,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(d||0.08));o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+(d||0.08)+0.02);}
+var snd={place:function(){tone(430,0.05,'triangle',0.05);},ai:function(){tone(330,0.05,'triangle',0.05);},win:function(){tone(660,0.09,'sine',0.06);setTimeout(function(){tone(880,0.09,'sine',0.06);},90);setTimeout(function(){tone(1100,0.12,'sine',0.06);},180);},lose:function(){tone(280,0.12,'sawtooth',0.06);setTimeout(function(){tone(160,0.25,'sawtooth',0.06);},100);},draw:function(){tone(440,0.12,'sine',0.05);}};
+
+var LINES=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+var board,playing,cur,mode,diff;
+var wins=+(localStorage.getItem('ttt_w')||0),losses=+(localStorage.getItem('ttt_l')||0),draws=+(localStorage.getItem('ttt_d')||0);
+document.getElementById('wins').textContent=wins;document.getElementById('losses').textContent=losses;document.getElementById('draws').textContent=draws;
+
+var boardEl=document.getElementById('board'),cells=[];
+for(var i=0;i<9;i++){
+  var d=document.createElement('div');
+  d.className='cell';d.dataset.i=i;
+  d.addEventListener('click',onCellClick);
+  boardEl.appendChild(d);cells.push(d);
+}
+function winnerOf(b){
+  for(var k=0;k<LINES.length;k++){
+    var a=LINES[k][0],bb=LINES[k][1],c=LINES[k][2];
+    if(b[a]&&b[a]===b[bb]&&b[a]===b[c]) return {p:b[a],line:LINES[k]};
+  }
+  return null;
+}
+function isFull(b){ for(var i=0;i<9;i++) if(!b[i]) return false; return true; }
+
+function reset(){
+  board=['','','','','','','','',''];playing=true;cur='X';
+  mode=document.getElementById('modeSel').value;
+  diff=+(document.getElementById('diffSel').value);
+  for(var i=0;i<9;i++){cells[i].textContent='';cells[i].className='cell';}
+  document.getElementById('endOv').classList.add('hidden');
+  refreshTurn();
+  if(mode==='ai'&&cur==='O') aiMove();
+}
+function refreshTurn(){
+  var el=document.getElementById('turn');
+  if(!playing)return;
+  if(mode==='pvp'){ el.textContent=(cur==='X'?'✖ 玩家1（X）':'⭕ 玩家2（O）'); el.className='turn'; }
+  else{ if(cur==='X'){el.textContent='轮到你（X）';el.className='turn';} else {el.textContent='🤖 AI 思考中…';el.className='turn ai';} }
+}
+function onCellClick(e){
+  if(!playing)return;
+  if(mode==='ai'&&cur==='O')return;
+  var i=+e.currentTarget.dataset.i;
+  if(board[i])return;
+  cur= (mode==='pvp'? cur : 'X');
+  place(i,cur);
+  if(!playing)return;
+  cur= (cur==='X'?'O':'X');
+  refreshTurn();
+  if(mode==='ai'&&cur==='O') aiMove();
+}
+function place(i,p){
+  board[i]=p;cells[i].textContent=p;cells[i].className='cell '+p.toLowerCase();
+  snd.place();
+  var w=winnerOf(board);
+  if(w){ end(w); return; }
+  if(isFull(board)){ end(null); return; }
+}
+function end(w){
+  playing=false;
+  var ov=document.getElementById('endOv'),t=document.getElementById('endTitle'),info=document.getElementById('endInfo');
+  var winLine=(w&&w.line)||[];
+  for(var k=0;k<winLine.length;k++){ if(cells[winLine[k]]) cells[winLine[k]].classList.add('win'); }
+  if(mode==='pvp'){
+    if(!w){ t.textContent='🤝 平局'; info.textContent='棋盘已满'; snd.draw(); }
+    else { t.textContent=(w.p==='X'?'✖ 玩家1 胜！':'⭕ 玩家2 胜！'); info.textContent='连成一线'; snd.win(); }
+  }else{
+    if(w&&w.p==='X'){ wins++;localStorage.setItem('ttt_w',wins);document.getElementById('wins').textContent=wins; t.textContent='🎉 你赢了！'; info.textContent='连成一线，AI 没拦住'; snd.win(); }
+    else if(w&&w.p==='O'){ losses++;localStorage.setItem('ttt_l',losses);document.getElementById('losses').textContent=losses; t.textContent='🤖 AI 赢了'; info.textContent='再想想棋路，你可以的'; snd.lose(); }
+    else { draws++;localStorage.setItem('ttt_d',draws);document.getElementById('draws').textContent=draws; t.textContent='🤝 平局'; info.textContent='势均力敌'; snd.draw(); }
+  }
+  ov.classList.remove('hidden');
+}
+/* ===== AI ===== */
+function aiMove(){
+  if(!playing||cur!=='O')return;
+  document.getElementById('turn').textContent='🤖 AI 思考中…';
+  setTimeout(function(){
+    if(!playing)return;
+    var mv=(diff===0)?randomMove(board):(diff===1)?normalMove(board):bestMove(board);
+    if(mv>=0){ place(mv,'O'); if(playing){ cur='X'; refreshTurn(); } }
+  },260);
+}
+function randomMove(b){ var e=[]; for(var i=0;i<9;i++) if(!b[i]) e.push(i); return e.length?e[(Math.random()*e.length)|0]:-1; }
+function normalMove(b){
+  // 1) 自己能赢
+  for(var i=0;i<9;i++){ if(!b[i]){ b[i]='O'; if(winnerOf(b)){b[i]='';return i;} b[i]=''; } }
+  // 2) 堵对手
+  for(var i=0;i<9;i++){ if(!b[i]){ b[i]='X'; if(winnerOf(b)){b[i]='';return i;} b[i]=''; } }
+  // 3) 中心
+  if(!b[4]) return 4;
+  // 4) 角（随机选一个空角）
+  var corners=[0,2,6,8].filter(function(i){return !b[i];});
+  if(corners.length) return corners[(Math.random()*corners.length)|0];
+  // 5) 边
+  var edges=[1,3,5,7].filter(function(i){return !b[i];});
+  return edges.length?edges[(Math.random()*edges.length)|0]:-1;
+}
+function bestMove(b){
+  var best=-Infinity,mv=-1;
+  for(var i=0;i<9;i++){
+    if(!b[i]){ b[i]='O'; var v=minimax(b,false,1); b[i]=''; if(v>best){best=v;mv=i;} }
+  }
+  return mv;
+}
+function minimax(b,isAI,depth){
+  var w=winnerOf(b);
+  if(w) return (w.p==='O') ? (10-depth) : (depth-10);
+  if(isFull(b)) return 0;
+  var best=isAI?-Infinity:Infinity;
+  for(var i=0;i<9;i++){
+    if(!b[i]){
+      b[i]=isAI?'O':'X';
+      var v=minimax(b,!isAI,depth+1);
+      b[i]='';
+      if(isAI) best=Math.max(best,v); else best=Math.min(best,v);
+    }
+  }
+  return best;
+}
+document.getElementById('modeSel').addEventListener('change',reset);
+document.getElementById('diffSel').addEventListener('change',reset);
+document.getElementById('restartBtn').addEventListener('click',reset);
+document.getElementById('reBtn').addEventListener('click',reset);
+reset();
+</script>
+</body>
+</html>

@@ -200,14 +200,34 @@ function aiMove(){
     var best=null,bestS=-Infinity;
     var cand=aiCandidates();
     if(diff===0){
-      // 简单：随机空位（略偏中心）
-      var prefer=[];
+      // 简单：有一点头脑——会抓自己必胜、堵对手必胜，否则按局势轻度加权随机（保留随机性，不再乱下）
+      var winMove=null, blockMove=null;
       for(var i=0;i<cand.length;i++){
-        var d=Math.abs(cand[i].r-7)+Math.abs(cand[i].c-7);
-        if(d<=3)prefer.push(cand[i]);
+        board[cand[i].r][cand[i].c]=2;
+        if(checkWin(cand[i].r,cand[i].c,2)) winMove=cand[i];
+        board[cand[i].r][cand[i].c]=0;
+        if(winMove) break;
       }
-      var pool=prefer.length?prefer:cand;
-      best=pool[(Math.random()*pool.length)|0];
+      if(!winMove){
+        for(var i=0;i<cand.length;i++){
+          board[cand[i].r][cand[i].c]=1;
+          if(checkWin(cand[i].r,cand[i].c,1)) blockMove=cand[i];
+          board[cand[i].r][cand[i].c]=0;
+          if(blockMove) break;
+        }
+      }
+      if(winMove){ best=winMove; }
+      else if(blockMove){ best=blockMove; }
+      else {
+        // 加权随机：局势分越高的位置越可能被选，但所有位置都有机会，保留随机性（介于随机与普通贪心之间）
+        var bag=[];
+        for(var i=0;i<cand.length;i++){
+          var sc=lineScore(cand[i].r,cand[i].c,2)+lineScore(cand[i].r,cand[i].c,1)*1.02;
+          var w=Math.max(1,Math.round(sc/25));
+          for(var k=0;k<w;k++) bag.push(cand[i]);
+        }
+        best=bag.length?bag[(Math.random()*bag.length)|0]:cand[0];
+      }
     }else if(diff===1){
       // 普通：一步贪心
       for(var i=0;i<cand.length;i++){
