@@ -1193,7 +1193,8 @@ var SITE_DATA = {
     { date: "2026-08-27 00:46", text: "💬 学习资料「访问提示」悬浮球调整：仅在学习资料板块内显示，离开板块后自动消失。", category: "site" },
     { date: "2026-08-28 10:00", text: "📌 全站文字对比度优化：\n① 亮色模式统一为深色文字、暗色模式统一为浅色文字，阅读更清晰。\n② 修复暗色模式下多处文字与背景同色、几乎看不清的问题（弹窗、面板、页脚等）。\n③ 修正部分小游戏按钮白字落在浅色渐变上、对比不足的问题（消消乐、扫雷）。", category: "site" },
     { date: "2026-08-28 14:50", text: "📌 倒计时面板时间字对比度补修：\n① 「查看全部」弹窗中具体日期与剩余时间（X月X天X时X分X秒）改为亮色深字 / 暗色浅字，均达标。\n② 节假日弹窗名称与「已过」日期调整为高对比配色，暗色下不再发灰。\n③ 首页倒计时面板内的时间文字改为白字落在加深的药丸底上，不再发灰。", category: "site" },
-    { date: "2026-08-28 22:18", text: "📌 游戏点歌券规则升级：\n① 领券前需从全班名单中选择自己的名字，系统会按「名字 + 本周 + 游戏」核对是否已领过；已领过的同学会收到提醒，下周一 0 点刷新后再来挑战。\n② 像素飞鸟发券门槛下调：40 → 30 管；贪吃蛇：60 → 50 豆，更容易拿到券。\n③ 涂鸦跳跃难度升级：每 500 分提升一档难度（重力渐大、平台更散、弹簧变少）。\n④ 「班级事务-排行榜」入口暂隐藏（数据保留）。", category: "site" }
+    { date: "2026-08-28 22:18", text: "📌 游戏点歌券规则升级：\n① 领券前需从全班名单中选择自己的名字，系统会按「名字 + 本周 + 游戏」核对是否已领过；已领过的同学会收到提醒，下周一 0 点刷新后再来挑战。\n② 像素飞鸟发券门槛下调：40 → 30 管；贪吃蛇：60 → 50 豆，更容易拿到券。\n③ 涂鸦跳跃难度升级：每 500 分提升一档难度（重力渐大、平台更散、弹簧变少）。\n④ 「班级事务-排行榜」入口暂隐藏（数据保留）。", category: "site" },
+    { date: "2026-08-28 22:30", text: "🔐 站主杂谈：偷偷告诉你，站里其实藏着隐藏空间～进入方式：在首页连点班徽 5 次，就会唤出「隐藏区域」门禁，输入暗号就能进去探索了。暗号嘛……就藏在日常提示里（比如同学群目前人数），找到记得保密哦。", category: "misc" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -2461,14 +2462,17 @@ function openCopyLink(){
   var list=document.getElementById('siteLinkList');
   if(list){
     var links=(SITE_DATA.siteLinks||[]);
+    var hasBackup=links.some(function(l){ return l.label.indexOf('备用')>=0; });
     var html=links.map(function(l,i){
       return '<div style="display:flex;align-items:center;gap:10px;background:#eef1ff;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
         '<span style="flex:1;font-size:.85rem;color:#3b5bfd;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.label)+'</span>'+
         '<button class="btn" style="min-width:64px;padding:7px 12px;font-size:.8rem" onclick="copyOneLink('+i+',this)">复制</button></div>';
     }).join('');
-    html += '<div style="display:flex;align-items:center;gap:10px;background:#f1f5f9;border-radius:12px;padding:10px 12px;opacity:.75">'+
-      '<span style="flex:1;font-size:.85rem;color:#64748b">🔄 备用链接</span>'+
-      '<span style="font-size:.78rem;color:#9aa7b8">敬请期待</span></div>';
+    if(!hasBackup){
+      html += '<div style="display:flex;align-items:center;gap:10px;background:#f1f5f9;border-radius:12px;padding:10px 12px;opacity:.75">'+
+        '<span style="flex:1;font-size:.85rem;color:#64748b">🔄 备用链接</span>'+
+        '<span style="font-size:.78rem;color:#9aa7b8">敬请期待</span></div>';
+    }
     list.innerHTML=html;
   }
   var m=document.getElementById('copyLinkMask'); if(m) m.classList.add('show');

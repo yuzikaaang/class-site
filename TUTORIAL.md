@@ -14,7 +14,7 @@
 - **铁律 · 三处同步**：任何内容改动（新增/调整/修复功能）都必须同步更新三处、缺一不可——① `index.html` 的站内公告（`SITE_DATA.announcements`，新条目放数组末尾、带 `date` 与 `category`）② `README.md` 的「最近更新」③ `TUTORIAL.md` 的「更新记录」表。隐藏/彩蛋类不进公告，但仍需记在 TUTORIAL。详见第 7 节检查清单。
 > - **铁律 · 用户要求**：用户提出的**所有要求**必须逐条写入本文件「用户要求台账」（第 10 节）；每次改动前须核对台账、**不得违反或跳过任何已记录的用户要求**；若当前需求与过往要求矛盾，**必须向用户确认并同步更新规则**，不得擅自取舍；用户每次提出要求或需求变更后，**立即 commit + push 到 Gitee**。README 顶部「维护须知」同步提示此规。
 > - **铁律 · 通读站规**：每次执行任务前，必须完整阅读 `README.md` 与 `TUTORIAL.md` 的「用户要求」章节（第 10 节台账 + 顶部铁律），逐项核对，确保不漏执行任何已记录要求（三处同步 / 隐藏不进公告 / 整站 zip 打包等）。
-> - **铁律 · 整站备份**：每次内容更新后，必须将整个站点（含 `index.html`、`games/`、`manifest.webmanifest`、`sw.js`、`secrets.json.enc` 等，排除 `.git`）重新打包为 `class-site-backup.zip` 并提交推送，确保站主每次下载到的都是最新完整版。
+> - **铁律 · 整站备份**：每次内容更新后，必须将整个站点（含 `index.html`、`games/`、`manifest.webmanifest`、`sw.js`、`secrets.json.enc` 等，排除 `.git`）重新打包为 `class-site-backup.zip` 并提交推送，确保站主每次下载到的都是最新完整版。**修改前先备份**：每次开始新修改前，先把「修改前」的当前状态打包为 `backup/class-site-backup-before-<时间戳>.zip` 留档（进 git，供回档）。
 > - **铁律 · 敏感信息安全（红线）**：① **线上只上传密文**——仓库内**严禁**出现任何明文口令 / 密钥 / API Token / 加密提示；唯一允许提交的是 `secrets.json.enc`（AES-256-CBC + PBKDF2 密文）。② 解密口令**永不入库**：不得写入 `README` / `TUTORIAL` / 任何源码注释 / commit message / hint 文件；口令由维护者**本地记忆**，解密过程**仅在本地**完成。③ 加密脚本与提示文件**不入库**（`secrets-hint.txt`、`scripts/encrypt-secret.sh`、`scripts/decrypt-secret.sh` 等一律 `.gitignore` / 不跟踪）。④ 历史上若发生过口令 / 密钥明文入库事故，必须：a) 立即**轮换被暴露的密钥**（旧密钥视为已泄露）；b) **改写 Git 历史**将明文从所有 commit 中抹除并 force-push；c) 在 TUTORIAL 更新记录中留档事故与处置。⑤ 提交前自检：`git grep` 搜索口令、token、key、hint、password 等关键词必须为空。
 > - **铁律 · 公告规范**：站内公告须**简洁、凝练、官方口吻**；除「站主杂谈」与「用户要求」类外不得出现「你 / 我 / 我们」等主观语气词；**只发用户可见的站点功能，仓库 / 维护内容（站规、zip 打包、README / TUTORIAL 更新说明等）一律不进公告**；分点公告每条之间**必须换行**（text 内用 `\n`，CSS `white-space:pre-line` 渲染）。
 
@@ -268,6 +268,7 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 | 日期 | 内容 |
 |------|------|
+| 2026-08-28 | 📦 **修改前备份机制 + 站主杂谈入口公告 + 公告规则更新（站规级）**：① **修改前备份**——新增 `backup/` 目录，每次开始新修改前先把「修改前」的当前状态打包为 `backup/class-site-backup-before-<YYYYMMDD-HHmm>.zip`（排除 `.git`/`backup/`/`class-site-backup.zip`），进 git 可追溯；回档时据此包恢复。已更新铁律「整站备份」+ README 维护须知。② **站主杂谈公告告知隐藏空间入口**——公告 `SITE_DATA.announcements` 新增 category `misc` 条目（2026-08-28 22:30）：直接写明「首页连点班徽 5 次唤出「隐藏区域」门禁，输入暗号进入」，暗号不透露（仍自行探索）。**本次为用户点名要求的例外**。③ **新站规「游戏/隐藏空间不进公告（除非用户要求）」**——更新台账站规「隐藏/彩蛋不进公告」：默认游戏内容与隐藏空间只同步 README/TUTORIAL 不进公告，除非站主明确要求；已同步台账历史表 + README 维护须知 + 站内公告。④ **备用链接代码接入（待发布）**——`SITE_DATA.siteLinks` 备用项结构保留；`openCopyLink` 占位逻辑改为「有备用项则不显示『敬请期待』」；⚠️ 本轮尝试发布 WorkBuddy 分享链接（Artifact 上传 index.html）连续返回 403「path not allowed」（/workspace/class-site/、/workspace/、/root/uploads/ 三路径均失败），判定为发布服务侧不可用，备用链接 URL 待服务恢复后发布填入。已同步 README 最近更新 + 站内公告 + 重打包 `class-site-backup.zip`。 |
 | 2026-08-28 | 🎮 **游戏点歌券规则升级 + 涂鸦难度曲线 + 排行榜隐藏（用户可见，已发公告；补发系统属站主功能未进公告）**：① **发券后台核对**——新增 `CLASS_LIST`（全班 61 人名单，写入 `cls_class_list` 供小游戏读取，games 内置副本兜底）与领券台账 `cls_coupon_ledger`（`{周key:{游戏:{名字:时间·来源}}}`，`ledgerGet/ledgerAdd/ledgerHas`）；4 个发券游戏（bird/snake/doodle/tetris）领券改为：达标→弹名字选择器（输入即过滤 `nmFilter`/`nmPick`）→必须从名单选（`doClaim` 校验 `classList().indexOf(name)>=0`）→①台账按名字已领则拒绝并提示（`showClaimedName`，显示领券时间）②本设备已标记（旧数据）提示截图联系管理员（`showClaimedDevice`）→调 API；**成功才** `ledgerAdd`+`markClaimed`（原实现先标记后发券、失败也吞次数，已改为成功才记账）；失败提示「截图通关画面发管理员，核对后手动补发」。② **门槛调整**——bird `REWARD.threshold` 40→30（HUD/标题/备注同步）、snake `REWARD_DOTS` 60→50（HUD/描述同步）；doodle 3000、tetris 120 不变。③ **涂鸦难度曲线**——新增 `diffLvl()=floor(sc/500)` 及 `gravity()`(0.42+0.015/档,封顶0.18)、`platGapY()`(60+2/档,封顶24)、`springChance()`(0.14−0.008/档,下限0.06)、`platGapX()`(60+6/档+rand100)，tick/reset/生成函数全部接入。④ **排行榜隐藏**——id:15 卡片加 `active:false`（渲染过滤 `l.active!==false`，数据保留可恢复）。⑤ **补发系统**——点歌券管理弹窗新增「游戏点歌券补发」区：`riGame`(4游戏下拉)+`riNameInput/riNameList`(名单搜索选择)+`riTime`(datetime-local 默认当前)+`riSubmit`(写入台账 `· 补发` 锁定本周)+`riRender`(本周补发记录列表)；`openCouponAdmin` 时 `riInit()`。⑥ 实测（Playwright override claimCoupon）：成功写台账+设备标记、同名重复领拦截含名字+时间、失败不写台账+提示截图、非名单名字拒绝；snake/tetris 流程同验；doodle 难度各档数值正确。已同步 README 最近更新 + 站内公告 + 重打包 `class-site-backup.zip`。 |
 | 2026-08-28 | 🎨 **隐藏彩蛋弹窗文字对比度修复（隐藏功能，不进公告）**：① 门禁/娱乐天地弹窗内联浅灰 `#4a5568`/`#9aa7b8` 改为双模式类 `.pop-sub`(`#5f6b80`/`.dark #aab4c8`)、`.pop-hint`(`#64748b`/`.dark #b9c2d4`)；娱乐天地条目描述 `.hidden-fun-desc` 补 `.dark #b4bdd0`；班级签 `.sign-text` 强制浅字 `#eef2fb`、`.sign-sub` 提亮至 `#b3bbdd`；彩带 `#confettiText` 继承 `.confetti-box{color:#e6edf7}` 浅字。② 根因——这些弹窗在暗色/恒深底上用了浅色或继承亮色深字，班级签与彩带在亮色模式下深蓝字落深底几乎不可见。③ 实测强制亮/暗两模式：门禁/娱乐/班级签/彩带关键文字 ratio 亮色 5.9~16.5、暗色 5.1~16.1，全部过 AA。仅同步 README + TUTORIAL，未进站内公告（属隐藏功能）。已重打包 `class-site-backup.zip`。 |
 | 2026-08-28 | 🎨 **倒计时面板时间文字对比度补修（用户可见，已发公告）**：① 根因——「查看全部」弹窗里具体时间字用了内联浅灰 `#9aa7b8`（亮色落白底仅 2.4）与蓝 `#3b5bfd`（暗色落深底仅 2.6），节假日弹窗名字用 `#2c3e50`（暗色落深底几乎不可见）；首页倒计时面板内的时间文字 `.imp-full` 落在 `rgba(255,255,255,.18)` 浅蓝药丸上、白字仅约 3.0。② 修复——新增双模式类 `.imp-date`(`#5f6b80`/`.dark #aab4c8`)、`.imp-remain`(`#3b5bfd`/`.dark #9db1ff`)、`.imp-name`(`#1f2a44`/`.dark #e6edf7`)、`.imp-past`(`#64748b`/`.dark #aab4c8`)；把弹窗 JS 内 4 处内联色改为这些类；面板药丸底色 `rgba(255,255,255,.18)`→`rgba(0,0,0,.18)`，白字 `.imp-full` 提至 6+；「已过」徽章底色 `#9aa7b8`→`#64748b`。③ 实测（强制暗色类后）弹窗时间字 ratio 均 ≥10，亮色落白底 ≥4.5。已同步 README 最近更新 + 站内公告 + 重打包 `class-site-backup.zip`。 |
@@ -321,11 +322,11 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 ### 站规（持续生效）
 
 - **仓库唯一源 + 三处同步**：Gitee 为唯一内容源；任何改动同步 ① 站内公告（`index.html` 的 `SITE_DATA.announcements`）② `README.md`「最近更新」③ `TUTORIAL.md`「更新记录」。
-- **隐藏/彩蛋不进公告**：小游戏、隐藏空间类改动只同步 README / TUTORIAL，不写站内公告；仅保留一条模糊彩蛋提示（只说「藏着彩蛋和隐藏空间、自己去探索」，不透露触发方法/密码）。
+- **隐藏/彩蛋/游戏内容不进公告（除非用户明确要求）**：小游戏、隐藏空间类改动只同步 README / TUTORIAL，默认不写站内公告；仅保留一条模糊彩蛋提示（只说「藏着彩蛋和隐藏空间、自己去探索」，不透露触发方法/密码）。**例外**：2026-08-28 用户明确要求以「站主杂谈」公告告知隐藏空间进入方式（连点班徽 5 次唤出门禁，暗号仍需自行探索），该次为特例已执行；后续除非用户点名要求，游戏/隐藏空间内容一律不进公告。
 - **令牌不明文**：所有 API / 令牌一律不明文进仓库（VoiceHub Key 存 `secrets.json.enc`，由本地口令解密，**口令一律不入库**；前端用混淆密文运行时解密）。
 - **用户要求全量留档与遵守**：所有要求写入本台账；改动前不违反已记录要求；冲突先问用户并更新规则；提要求后立即 `commit + push`。
 - **通读站规**：每次执行任务前，完整阅读 README 与 TUTORIAL 的「用户要求」章节，逐项核对，确保不漏执行任何已记录要求（三处同步 / 隐藏不进公告 / 整站 zip 打包等）。
-- **整站备份（zip）**：每次内容更新后，将整个站点（含 `index.html`、`games/`、`manifest.webmanifest`、`sw.js`、`secrets.json.enc` 等，排除 `.git`）重新打包为 `class-site-backup.zip` 并提交推送，确保每次下载都是最新完整版。
+- **整站备份（zip）**：每次内容更新后，将整个站点（含 `index.html`、`games/`、`manifest.webmanifest`、`sw.js`、`secrets.json.enc` 等，排除 `.git`）重新打包为 `class-site-backup.zip` 并提交推送，确保每次下载都是最新完整版。**另：每次开始新修改前，先把「修改前」的当前状态打包为 `backup/class-site-backup-before-<YYYYMMDD-HHmm>.zip`（排除 `.git`、`backup/`、`class-site-backup.zip`）留档，用户要回档时据此压缩包恢复；`backup/` 目录进 git 可追溯。**
 - **敏感信息安全（红线）**：① 线上只上传密文——严禁明文口令/密钥/Token/加密提示入仓；仅 `secrets.json.enc` 可提交。② 解密口令永不入库（不入 README/TUTORIAL/注释/commit/hint），由维护者本地记忆，解密仅在本地完成。③ 加密脚本与提示文件不入库（`secrets-hint.txt`、`scripts/*.sh` 一律不跟踪）。④ 历史口令/密钥明文入库事故处置：立即轮换暴露密钥 + 改写 Git 历史抹除明文并强推 + 更新记录留档。⑤ 提交前 `git grep` 自检口令/token/key/hint/password 必须为空。
 - **公告规范**：站内公告须简洁、凝练、官方口吻；除「站主杂谈」与「用户要求」类外禁用「你/我/我们」等主观语气词；**只发用户可见的站点功能，仓库/维护内容（站规、zip 打包、README/TUTORIAL 更新说明等）不进公告**；分点公告每条换行（`\n`）。
 - **印象要求识别**：对话中含「如果/以后/比如」等条件或举例词的要求，即便未明说也视为正式要求，记入台账并推送。
@@ -336,6 +337,10 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 | 日期 | 用户要求 | 状态 |
 |------|----------|------|
+| 2026-08-28 | **【站规】修改前备份（回档）**：每次开始新修改前，先把「修改前」的当前状态打包为 `backup/class-site-backup-before-<YYYYMMDD-HHmm>.zip`（排除 `.git`/`backup/`/`class-site-backup.zip`）并进 git；用户要回档时据此包恢复。 | 生效 |
+| 2026-08-28 | **【站规】游戏/隐藏空间默认不进公告**：游戏内容、隐藏空间不入站内公告，除非用户明确要求；2026-08-28 用户点名要求以「站主杂谈」公告告知隐藏空间入口（连点班徽 5 次），为特例已执行。 | 生效 |
+| 2026-08-28 | **WorkBuddy 备用分享链接**：创建 workbuddy 分享链接作为站点备用入口，并同步进侧边栏「复制链接」弹窗（`SITE_DATA.siteLinks` 备用项）。⚠️ 当前 Artifact 发布服务返回 403 不可用，待服务恢复后发布填入；弹窗占位逻辑已改（有备用项则不显示「敬请期待」）。 | 处理中 |
+| 2026-08-28 | **站主杂谈公告告知隐藏空间入口**：公告（category `misc` 站主杂谈）直接写明「首页连点班徽 5 次唤出门禁」，暗号不透露。 | 已上线 |
 | 持续生效 | **【站规】用户要求全量留档与遵守**：① 所有要求写入本台账；② README 顶部加「维护须知」提示；③ 改动前不得违反/跳过已记录要求；④ 冲突先问用户并更新规则；⑤ 提要求后立即 commit+push。 | 生效 |
 | 持续生效 | **【站规】通读站规**：每次执行任务前，完整阅读 README 与 TUTORIAL 的「用户要求」章节（第 10 节台账 + 顶部铁律），逐项核对，确保不漏执行任何已记录要求（三处同步 / 隐藏不进公告 / 整站 zip 打包等）。 | 生效 |
 | 持续生效 | **【站规】整站备份（zip）**：每次内容更新后，将整个站点（含 `index.html`、`games/`、`manifest.webmanifest`、`sw.js`、`secrets.json.enc` 等，排除 `.git`）重新打包为 `class-site-backup.zip` 并提交推送，确保每次下载都是最新完整版。 | 生效 |
