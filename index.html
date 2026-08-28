@@ -329,6 +329,17 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
   .cd-units .cd-box:first-child{display:block}
   .cd-row .cd-sub{display:block}
 }
+/* 倒计时时间文字对比度修正：亮色深字 / 暗色浅字，且落在面板/弹窗上均达标 */
+.imp-full{color:#fff;font-weight:700}
+.imp-desktop ul li,.imp-fold{background:rgba(0,0,0,.18)}
+.imp-date{color:#5f6b80}
+.imp-remain{color:#3b5bfd;font-variant-numeric:tabular-nums;font-weight:800}
+.imp-name{color:#1f2a44}
+.imp-past{color:#64748b}
+.dark .imp-date{color:#aab4c8}
+.dark .imp-remain{color:#9db1ff}
+.dark .imp-name{color:#e6edf7}
+.dark .imp-past{color:#aab4c8}
 
 /* 卡片副标题 */
 .card-sub{color:#9aa7b8;font-size:.76rem;font-weight:600;margin-top:2px;margin-bottom:8px}
@@ -1148,7 +1159,8 @@ var SITE_DATA = {
     { date: "2026-08-27 00:21", text: "📌 功能更新：\n① 新增「夜间自动暗色模式」：18:30–次日 7:30 自动切换暗色，其余时间自动恢复亮色；夜间手动切回亮色时询问是否关闭自动切换，关闭后不再自动切换。\n② 侧边栏新增「复制链接」按钮，一键复制当前网页地址。", category: "site" },
     { date: "2026-08-27 00:28", text: "📌 功能与视觉更新：\n① 「复制链接」升级为弹窗：复制站点主链接，备用链接上线后将在此列出。\n② 夜间自动暗色询问升级为三选：仅这次切换 / 关闭自动切换 / 保持暗色。\n③ 全站视觉升级：液态玻璃质感、背景光斑流动、卡片流光与入场、弹窗弹出动画，按钮均有按压反馈，音效保持不变。", category: "site" },
     { date: "2026-08-27 00:46", text: "💬 学习资料「访问提示」悬浮球调整：仅在学习资料板块内显示，离开板块后自动消失。", category: "site" },
-    { date: "2026-08-28 10:00", text: "📌 全站文字对比度优化：\n① 亮色模式统一为深色文字、暗色模式统一为浅色文字，阅读更清晰。\n② 修复暗色模式下多处文字与背景同色、几乎看不清的问题（弹窗、面板、页脚等）。\n③ 修正部分小游戏按钮白字落在浅色渐变上、对比不足的问题（消消乐、扫雷）。", category: "site" }
+    { date: "2026-08-28 10:00", text: "📌 全站文字对比度优化：\n① 亮色模式统一为深色文字、暗色模式统一为浅色文字，阅读更清晰。\n② 修复暗色模式下多处文字与背景同色、几乎看不清的问题（弹窗、面板、页脚等）。\n③ 修正部分小游戏按钮白字落在浅色渐变上、对比不足的问题（消消乐、扫雷）。", category: "site" },
+    { date: "2026-08-28 14:50", text: "📌 倒计时面板时间字对比度补修：\n① 「查看全部」弹窗中具体日期与剩余时间（X月X天X时X分X秒）改为亮色深字 / 暗色浅字，均达标。\n② 节假日弹窗名称与「已过」日期调整为高对比配色，暗色下不再发灰。\n③ 首页倒计时面板内的时间文字改为白字落在加深的药丸底上，不再发灰。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -2282,11 +2294,11 @@ function renderAllImp(){
     return '<li>'+
       '<div class="board-meta">'+
         '<span class="board-date">'+esc(d.name)+'</span>'+
-        (isPast ? '<span class="board-pin" style="background:#9aa7b8">已过</span>' : '')+
+        (isPast ? '<span class="board-pin" style="background:#64748b">已过</span>' : '')+
       '</div>'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">'+
-        '<span style="font-size:.78rem;color:#9aa7b8">'+fmtFullDate(d.d)+'</span>'+
-        '<span style="font-size:.85rem;font-weight:800;color:#3b5bfd;white-space:nowrap">'+(isPast?'0月 0天 0时 0分 0秒':diff.months+'月 '+diff.days+'天 '+pad2(diff.hours)+'时 '+pad2(diff.minutes)+'分 '+pad2(diff.seconds)+'秒')+'</span>'+
+        '<span class="imp-date" style="font-size:.78rem">'+fmtFullDate(d.d)+'</span>'+
+        '<span class="imp-remain" style="font-size:.85rem;font-weight:800;white-space:nowrap">'+(isPast?'0月 0天 0时 0分 0秒':diff.months+'月 '+diff.days+'天 '+pad2(diff.hours)+'时 '+pad2(diff.minutes)+'分 '+pad2(diff.seconds)+'秒')+'</span>'+
       '</div></li>';
   }).join('');
 }
@@ -2319,15 +2331,15 @@ function openAllHol(){
   list.innerHTML = arr.map(function(h){
     var left = Math.ceil((h.d.getTime()-now.getTime())/86400000);
     var isPast = h.d < today;
-    var pastColor = isPast?'#9aa7b8':'#07c160';
+    var pastCls = isPast?'imp-past':'';
     return '<li style="display:flex;align-items:center;gap:12px">'+
       '<div style="flex:1;display:flex;flex-direction:column">'+
-        '<span style="font-weight:700;color:#2c3e50;font-size:.92rem">'+esc(h.name)+'</span>'+
-        '<span style="font-size:.7rem;color:#9aa7b8;margin-top:2px">'+h.date+' · 放假 '+h.days+' 天</span>'+
+        '<span class="imp-name" style="font-weight:700;font-size:.92rem">'+esc(h.name)+'</span>'+
+        '<span class="imp-date" style="font-size:.7rem;margin-top:2px">'+h.date+' · 放假 '+h.days+' 天</span>'+
       '</div>'+
       '<div style="text-align:right">'+
-        '<b style="font-size:1.05rem;font-weight:800;color:'+pastColor+';font-variant-numeric:tabular-nums">'+(isPast?0:left)+'</b>'+
-        '<span style="font-size:.7rem;font-weight:600;color:'+pastColor+';margin-left:2px">天</span>'+
+        '<b class="'+pastCls+'" style="font-size:1.05rem;font-weight:800;font-variant-numeric:tabular-nums;color:'+(isPast?'':'#07c160')+'">'+(isPast?0:left)+'</b>'+
+        '<span class="'+pastCls+'" style="font-size:.7rem;font-weight:600;margin-left:2px;color:'+(isPast?'':'#07c160')+'">天</span>'+
       '</div></li>';
   }).join('');
   mask.classList.add('show');
