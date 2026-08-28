@@ -137,13 +137,14 @@ hi=+(localStorage.getItem('doodle_hi')||0);document.getElementById('hi').textCon
 
 function reset(){
   plats=[];
+  sc=0; camY=0;   // 必须在生成平台前初始化，否则 diffLvl() 读到 undefined 让平台 x 变 NaN、角色落不上台阶
   var x0=W/2-PW/2;
   for(var i=0;i<14;i++){
     var spring=(Math.random()<springChance());
     plats.push({x:x0,y:H-PY-(H/14)*i,spring:spring,broke:false});
     x0=djNextPlatX(x0);
   }
-  px=W/2-PX/2;py=H-PY-PY;vy=-9;sc=0;camY=0;playing=true;rewardHandled=false;
+  px=W/2-PX/2;py=H-PY-PY;vy=-9;playing=true;rewardHandled=false;
   document.getElementById('sc').textContent=0;
   hideOv();requestAnimationFrame(tick);
 }
@@ -160,8 +161,8 @@ function tick(){
     for(var i=0;i<plats.length;i++){
       var p=plats[i];
       if(!p.broke&&px+PX>p.x&&px<p.x+PW&&py+PY>p.y&&py+PY<p.y+16){
-        if(p.spring){vy=-17;snd.spring();}
-        else{vy=-10.5;snd.hop();}
+        if(p.spring){vy=-springVel();snd.spring();}
+        else{vy=-jumpVel();snd.hop();}
         py=p.y-1;
         break;
       }
@@ -237,10 +238,14 @@ hold('rightBtn',function(){dirR=true;});
 document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
 document.getElementById('reBtn').addEventListener('click',function(){reset();});
 
-/* 难度曲线：每 500 分升一档（重力渐大、平台垂直间距加大、水平跨度增大、弹簧变少） */
+/* 难度曲线：每 500 分升一档
+   重力平缓上升并设上限；跳跃初速度随档位同步增强，确保每档“完美垂直跳”都能越过上方平台（留≥12px余量）。
+   难度主要通过水平间距增大、弹簧变少来体现，而非靠重力把人压死导致跳不上台阶。 */
 function diffLvl(){ return Math.floor(sc/500); }
-function gravity(){ return 0.42 + Math.min(diffLvl()*0.015, 0.18); }
-function platGapY(){ return 60 + Math.min(diffLvl()*2, 24); }
+function gravity(){ return 0.42 + Math.min(diffLvl()*0.010, 0.12); }
+function jumpVel(){ return 10.5 + Math.min(diffLvl()*0.16, 3.0); }
+function springVel(){ return 17 + Math.min(diffLvl()*0.12, 2.0); }
+function platGapY(){ return 60 + Math.min(diffLvl()*1.5, 16); }
 function springChance(){ return Math.max(0.14 - diffLvl()*0.008, 0.06); }
 function platGapX(){ return (60 + Math.min(diffLvl()*6, 60)) + Math.random()*100; }
 
