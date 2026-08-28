@@ -506,6 +506,11 @@ body::after{animation-name:blobB;animation-duration:34s}
 .dark #couponAdminMask .cp-code{color:#e2e8f0!important}
 .dark #couponAdminMask .cp-st{color:#9db1ff!important}
 .dark #couponAdminMask input{background:#1b2432;color:#e2e8f0;border-color:#2a3550}
+.dark #couponAdminMask select,
+.dark #couponAdminMask #riTime,
+.dark #couponAdminMask #riNameList{background:#1b2432;color:#e2e8f0;border-color:#2a3550}
+.dark #couponAdminMask #riNameList .ri-name:hover{background:#2a3550}
+.dark #couponAdminMask #riList{color:#93a3bd}
 .dark #djHistoryMask .dj-label{color:#b6c2d9!important}
 .dark #djHistoryMask #djHistoryList > p{color:#93a3bd!important}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
@@ -860,6 +865,28 @@ body::after{animation-name:blobB;animation-duration:34s}
       <label class="dj-label" style="display:block;font-size:.85rem;color:#4a5568;margin-bottom:10px">备注 <input type="text" id="cpNote" maxlength="40" placeholder="如：点歌活动奖励" style="width:100%;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
       <p class="dj-desc" id="cpStatus" style="font-size:.8rem;color:#5b6781;margin:0 0 8px">加载中…</p>
       <div id="cpList"></div>
+      <div style="margin-top:16px;border-top:1px solid #eef1ff;padding-top:14px">
+        <p style="font-weight:800;color:#3b5bfd;font-size:.9rem;margin:0 0 4px">🛠 游戏点歌券补发</p>
+        <p class="dj-desc" style="font-size:.78rem;color:#5b6781;margin:0 0 10px">同学发券失败时，让其把游戏通关截图发你；在此登记后，把点歌券码手动发给该同学。登记后该同学本周此游戏将不能再领（防重复）。</p>
+        <select id="riGame" style="width:100%;padding:8px 10px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem;margin-bottom:8px;box-sizing:border-box">
+          <option value="bird">像素飞鸟（过 30 管）</option>
+          <option value="snake">贪吃蛇（吃 50 豆）</option>
+          <option value="doodle">涂鸦跳跃（3000 高）</option>
+          <option value="tetris">俄罗斯方块（120 分）</option>
+        </select>
+        <div style="position:relative;margin-bottom:8px">
+          <input type="text" id="riNameInput" placeholder="🔍 搜索选择同学名字" autocomplete="off" onfocus="riFilter()" oninput="riFilter()" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem">
+          <div id="riNameList" style="display:none;position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #d7dff0;border-radius:10px;max-height:170px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.14)"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <label class="dj-label" style="font-size:.82rem;color:#4a5568;white-space:nowrap">补发时间</label>
+          <input type="datetime-local" id="riTime" style="flex:1;min-width:0;padding:6px 8px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.82rem">
+          <button class="btn" style="padding:7px 12px;font-size:.82rem;background:#7c83ff;color:#fff;border:none" onclick="riSubmit()">📝 登记补发</button>
+        </div>
+        <p class="dj-desc" id="riMsg" style="font-size:.8rem;color:#07a154;margin:0 0 6px;min-height:1.2em"></p>
+        <p class="dj-label" style="font-size:.82rem;color:#4a5568;margin:0 0 4px">本周补发记录</p>
+        <div id="riList" style="font-size:.8rem;color:#5b6781"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1165,7 +1192,8 @@ var SITE_DATA = {
     { date: "2026-08-27 00:28", text: "📌 功能与视觉更新：\n① 「复制链接」升级为弹窗：复制站点主链接，备用链接上线后将在此列出。\n② 夜间自动暗色询问升级为三选：仅这次切换 / 关闭自动切换 / 保持暗色。\n③ 全站视觉升级：液态玻璃质感、背景光斑流动、卡片流光与入场、弹窗弹出动画，按钮均有按压反馈，音效保持不变。", category: "site" },
     { date: "2026-08-27 00:46", text: "💬 学习资料「访问提示」悬浮球调整：仅在学习资料板块内显示，离开板块后自动消失。", category: "site" },
     { date: "2026-08-28 10:00", text: "📌 全站文字对比度优化：\n① 亮色模式统一为深色文字、暗色模式统一为浅色文字，阅读更清晰。\n② 修复暗色模式下多处文字与背景同色、几乎看不清的问题（弹窗、面板、页脚等）。\n③ 修正部分小游戏按钮白字落在浅色渐变上、对比不足的问题（消消乐、扫雷）。", category: "site" },
-    { date: "2026-08-28 14:50", text: "📌 倒计时面板时间字对比度补修：\n① 「查看全部」弹窗中具体日期与剩余时间（X月X天X时X分X秒）改为亮色深字 / 暗色浅字，均达标。\n② 节假日弹窗名称与「已过」日期调整为高对比配色，暗色下不再发灰。\n③ 首页倒计时面板内的时间文字改为白字落在加深的药丸底上，不再发灰。", category: "site" }
+    { date: "2026-08-28 14:50", text: "📌 倒计时面板时间字对比度补修：\n① 「查看全部」弹窗中具体日期与剩余时间（X月X天X时X分X秒）改为亮色深字 / 暗色浅字，均达标。\n② 节假日弹窗名称与「已过」日期调整为高对比配色，暗色下不再发灰。\n③ 首页倒计时面板内的时间文字改为白字落在加深的药丸底上，不再发灰。", category: "site" },
+    { date: "2026-08-28 22:18", text: "📌 游戏点歌券规则升级：\n① 领券前需从全班名单中选择自己的名字，系统会按「名字 + 本周 + 游戏」核对是否已领过；已领过的同学会收到提醒，下周一 0 点刷新后再来挑战。\n② 像素飞鸟发券门槛下调：40 → 30 管；贪吃蛇：60 → 50 豆，更容易拿到券。\n③ 涂鸦跳跃难度升级：每 500 分提升一档难度（重力渐大、平台更散、弹簧变少）。\n④ 「班级事务-排行榜」入口暂隐藏（数据保留）。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -1317,7 +1345,7 @@ var SITE_DATA = {
     },
     {
       id: 15,
-      categoryId: 7, title: "排行榜", icon: "", iconText: "排行", comingSoon: true,
+      categoryId: 7, title: "排行榜", icon: "", iconText: "排行", comingSoon: true, active: false,
       desc: "班级排行榜功能开发中，敬请期待。",
       mainLabel: "开发中", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
@@ -1829,7 +1857,7 @@ var HIDDEN_FUN_LINKS = [
   { icon: "🧩", title: "2048", desc: "经典数字合成小游戏", url: "https://play2048.co/" },
   { icon: "🎮", title: "4399 小游戏", desc: "海量在线小游戏，点开即玩", url: "https://www.4399.com/" },
   { icon: "🎯", title: "7k7k 小游戏", desc: "另一大经典小游戏库", url: "https://www.7k7k.com/" },
-  { icon: "🐍", title: "贪吃蛇", desc: "吃豆挑战：吃满60豆可赢点歌券（每周一张，周一刷新）", url: "games/snake.html" },
+  { icon: "🐍", title: "贪吃蛇", desc: "吃豆挑战：吃满50豆可赢点歌券（每周一张，周一刷新）", url: "games/snake.html" },
   { icon: "🧱", title: "俄罗斯方块", desc: "经典落块消除，手速大考", url: "games/tetris.html" },
   { icon: "🔨", title: "打地鼠", desc: "地鼠冒头就点，30秒挑战", url: "games/whack.html" },
   { icon: "🃏", title: "记忆翻牌", desc: "翻牌配对，练记忆力", url: "games/memory.html" },
@@ -2362,6 +2390,30 @@ function closeExport(){ var m=document.getElementById('exportMask'); if(m) m.cla
 
 /* ---- 用户数据管理（导出 / 导入 / 重置） ---- */
 var GAME_KEYS=['snake_hi','bird_hi','breakout_hi','breakout_lv','match3_hi','mine_best','doodle_hi','plane_hi','gomoku_w','gomoku_l'];
+
+/* ---- 全班名单（领券人选择 / 补发系统共用；写入 localStorage 供小游戏读取） ---- */
+var CLASS_LIST=["樊张凯","余子轩","余倩","韩文韬","雷其桐","胡一博","邹亦汐","吴俊驰","刘子豪","刘佳欣","张炜","刘竹琳","李宇迦","梁宇翔","车宇辰","陈旭辉","孙卢茹","余子康","吴婷婷","范名扬","周雄辉","杨梓俊","卢垚明","包铠恺","车正楠","王馨妍","梁子君","刘浚轩","武圣钦","卢拓琳","卢伟琪","兰静怡","吴伟","戴云聪","石可妍","朱书妍","刘宇焕","梁康煜","樊筱雅","李博涛","桂祺","杜语熙","刘名强","吴欣瑶","郑琪琪","冷宇航","卢煜","樊宇涵","徐海军","朱俊雅","程晶晶","韩魏斌","冷紫涵","祝智勇","孙妍妍","胡婉怡","石芸熙","刘雨馨","梁咏佳","冷伟明","冷思敏"];
+try{ localStorage.setItem('cls_class_list', JSON.stringify(CLASS_LIST)); }catch(e){}
+function classList(){
+  try{ var l=JSON.parse(localStorage.getItem('cls_class_list')||'null'); if(Array.isArray(l)&&l.length) return l; }catch(e){}
+  return CLASS_LIST;
+}
+/* ---- 领券台账（按 名字+本周+游戏 核对，防跨设备/清缓存重复领） ---- */
+var CLAIM_LEDGER_KEY='cls_coupon_ledger';
+function ledgerLoad(){ try{ return JSON.parse(localStorage.getItem(CLAIM_LEDGER_KEY)||'{}'); }catch(e){ return {}; } }
+function ledgerSave(L){ try{ localStorage.setItem(CLAIM_LEDGER_KEY, JSON.stringify(L)); }catch(e){} }
+function ledgerWeek(){ var d=new Date(), day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function ledgerStamp(){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+function ledgerGet(name,game){ var L=ledgerLoad(),w=ledgerWeek(); return (L[w]&&L[w][game]&&L[w][game][name])||''; }
+function ledgerAdd(name,game,src){
+  var L=ledgerLoad(),w=ledgerWeek();
+  L[w]=L[w]||{}; L[w][game]=L[w][game]||{};
+  L[w][game][name]=(ledgerStamp())+' · '+(src||'自动');
+  ledgerSave(L);
+  return L;
+}
+function ledgerAll(){ return ledgerLoad(); }
+
 function dataMsg(t,c){ var m=document.getElementById('dataMsg'); if(m){ m.textContent=t; m.style.color=c||'#07a154'; } }
 function collectAllData(){
   var out={};
@@ -3069,9 +3121,71 @@ function openCouponAdmin(){
   var m=document.getElementById('couponAdminMask'); if(!m) return;
   m.classList.add('show'); SFX.pop();
   cpLoadList();
+  riInit();
 }
 function closeCouponAdmin(){ var m=document.getElementById('couponAdminMask'); if(m) m.classList.remove('show'); }
 (function(){ var m=document.getElementById('couponAdminMask'); if(m) m.addEventListener('click', function(e){ if(e.target.id==='couponAdminMask') closeCouponAdmin(); }); })();
+/* ---- 游戏点歌券补发（站主手动补发登记；写入门票台账防重复领） ---- */
+var _RI_GAMES={bird:'像素飞鸟',snake:'贪吃蛇',doodle:'涂鸦跳跃',tetris:'俄罗斯方块'};
+var _riSel='';
+function riInit(){
+  var t=document.getElementById('riTime'); if(t){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; t.value=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }
+  riRender();
+}
+function riFilter(){
+  var inp=document.getElementById('riNameInput'); if(!inp) return;
+  var box=document.getElementById('riNameList');
+  var q=(inp.value||'').trim();
+  var list=classList().filter(function(n){ return !q || n.indexOf(q)>=0; });
+  if(list.length){ box.style.display='block'; box.innerHTML=list.map(function(n){ return '<div class="ri-name" data-n="'+esc(n)+'" style="padding:8px 12px;cursor:pointer;font-size:.85rem" onclick="riPick(this)">'+esc(n)+'</div>'; }).join(''); }
+  else{ box.style.display='none'; }
+}
+function riPick(el){ _riSel=el.getAttribute('data-n'); var inp=document.getElementById('riNameInput'); if(inp) inp.value=_riSel; var box=document.getElementById('riNameList'); if(box) box.style.display='none'; }
+function riSubmit(){
+  var msg=document.getElementById('riMsg');
+  var game=document.getElementById('riGame').value;
+  var name=_riSel;
+  if(!name){ if(msg){ msg.textContent='⚠️ 请先从名单里选择同学名字'; msg.style.color='#c2410c'; } return; }
+  var timeInp=document.getElementById('riTime');
+  var time=(timeInp&&timeInp.value)?timeInp.value.replace('T',' '):'';
+  if(!time){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; time=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+  ledgerAdd(name,game,'补发');
+  riRender();
+  if(msg){ msg.textContent='✅ 已登记补发：'+name+' · '+(_RI_GAMES[game]||game)+' · '+time+'。请把券码手动发给该同学（本周已锁定不可重复领）'; msg.style.color='#07a154'; }
+  var inp=document.getElementById('riNameInput'); if(inp) inp.value='';
+  _riSel='';
+  if(timeInp) timeInp.value='';
+}
+function riRender(){
+  var box=document.getElementById('riList'); if(!box) return;
+  var L=ledgerLoad(), w=ledgerWeek(), rows=[];
+  if(L[w]){
+    for(var g in L[w]){
+      if(!_RI_GAMES[g]) continue;
+      for(var n in L[w][g]){
+        var v=L[w][g][n]||'';
+        if(v.indexOf('补发')>=0) rows.push({g:_RI_GAMES[g],n:n,t:v});
+      }
+    }
+  }
+  rows.sort(function(a,b){ return a.t<b.t?1:-1; });
+  box.innerHTML = rows.length
+    ? rows.map(function(r){ return '<div style="padding:6px 8px;border-bottom:1px dashed #e6ecf8">'+esc(r.g)+' · <b>'+esc(r.n)+'</b> · '+esc(r.t)+'</div>'; }).join('')
+    : '<div style="color:#9aa7b8">本周暂无补发记录</div>';
+}
+/* ---- 补发记录同时展示"已领名单"（站主核对用） ---- */
+function riToggleLedger(){
+  var box=document.getElementById('riLedgerBox'); if(!box) return;
+  var L=ledgerLoad(), w=ledgerWeek(), lines=[];
+  if(L[w]){
+    for(var g in L[w]){
+      if(!_RI_GAMES[g]) continue;
+      for(var n in L[w][g]){ lines.push(_RI_GAMES[g]+' · '+n+' · '+L[w][g][n]); }
+    }
+  }
+  box.style.display = box.style.display==='block' ? 'none' : 'block';
+  box.innerHTML = lines.length ? lines.map(function(s){ return '<div style="padding:4px 8px;font-size:.78rem">'+esc(s)+'</div>'; }).join('') : '<div style="padding:4px 8px;font-size:.78rem;color:#9aa7b8">本周暂无领券记录</div>';
+}
 function cpLoadList(){
   var st=document.getElementById('cpStatus'); if(st) st.textContent='正在拉取券列表…';
   fetch(DJ_API+'/card-codes?page=1&limit=100', { headers: { 'x-api-key': cpApiKey() } })

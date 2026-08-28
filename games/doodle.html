@@ -93,8 +93,8 @@
 <div class="reward-mask" id="claimedMask">
   <div class="reward-box">
     <div class="reward-emoji">🎫</div>
-    <div class="reward-title">本周这张券已领过啦</div>
-    <div class="reward-sub">涂鸦跳跃每周限领一张点歌券<br>下周一 0 点刷新后再来挑战！</div>
+    <div class="reward-title" id="claimedTitle">本周这张券已领过啦</div>
+    <div class="reward-sub" id="claimedSub">涂鸦跳跃每周限领一张点歌券<br>下周一 0 点刷新后再来挑战！</div>
     <div class="reward-btns" style="margin-top:16px">
       <button class="btn-copy" onclick="claimContinue()">▶ 继续游戏</button>
       <button class="btn-close" onclick="claimExit()">🚪 退出游戏</button>
@@ -107,8 +107,9 @@
     <div class="reward-emoji">✍️</div>
     <div class="reward-title">填写领券人</div>
     <div class="reward-sub" id="nmTask">领取：涂鸦跳跃 3000 高奖励（每周一张）</div>
-    <input type="text" id="nmInput" placeholder="请输入你的名字" maxlength="10" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid #3a4668;background:#0b0f1f;color:#e9ecff;font-size:15px;text-align:center;margin:8px 0 2px">
-    <div class="reward-tip" style="text-align:center">名字会记录在这张券的备注里（谁 · 时间 · 任务）</div>
+    <input type="text" id="nmInput" placeholder="🔍 搜索选择你的名字" maxlength="10" autocomplete="off" onfocus="nmFilter()" oninput="nmFilter()" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid #3a4668;background:#0b0f1f;color:#e9ecff;font-size:15px;text-align:center;margin:8px 0 2px">
+    <div id="nmList" style="display:none;margin-top:6px;background:#0b0f1f;border:1px solid #3a4668;border-radius:10px;max-height:170px;overflow-y:auto;text-align:left"></div>
+    <div class="reward-tip" id="nmTip" style="text-align:center">从名单里选择你的名字（用于核对本周是否已领过券）</div>
     <div class="reward-btns" style="margin-top:14px">
       <button class="btn-copy" onclick="doClaim()">✅ 确认领券</button>
       <button class="btn-close" onclick="closeName()">取消</button>
@@ -138,7 +139,7 @@ function reset(){
   plats=[];
   var x0=W/2-PW/2;
   for(var i=0;i<14;i++){
-    var spring=(Math.random()<0.14);
+    var spring=(Math.random()<springChance());
     plats.push({x:x0,y:H-PY-(H/14)*i,spring:spring,broke:false});
     x0=djNextPlatX(x0);
   }
@@ -152,7 +153,7 @@ function tick(){
   var mv=(dirR?1:0)-(dirL?1:0);
   px+=mv*5.6;
   if(px<0)px=0;if(px>W-PX)px=W-PX;
-  vy+=0.42;
+  vy+=gravity();
   py+=vy;
   // 平台碰撞（仅在向下时）
   if(vy>0){
@@ -169,8 +170,8 @@ function tick(){
   // 最高平台上方生成新平台（x 限制在上一个平台左右 60~160px，保证跳得过去）
   var topY=plats[plats.length-1].y;
   if(py<topY+PY){
-    var y=topY-60;
-    plats.push({x:djNextPlatX(plats[plats.length-1].x),y:y,spring:(Math.random()<0.14),broke:false});
+    var y=topY-platGapY();
+    plats.push({x:djNextPlatX(plats[plats.length-1].x),y:y,spring:(Math.random()<springChance()),broke:false});
   }
   // 移除下方平台
   while(plats.length>0&&plats[0].y>camY+H+80)plats.splice(0,1);
@@ -180,8 +181,7 @@ function tick(){
     camY=py-PY;
     document.getElementById('sc').textContent=sc;
     if(sc>=REWARD.threshold&&!rewardHandled){rewardHandled=true;
-      if(!alreadyClaimed()){showNameAsk();}
-      else{pauseForClaimed();}}
+      showNameAsk();}
     if(sc>hi){hi=sc;try{localStorage.setItem('doodle_hi',hi);}catch(e){} document.getElementById('hi').textContent=hi;}
   }
   // 掉落
@@ -237,9 +237,16 @@ hold('rightBtn',function(){dirR=true;});
 document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
 document.getElementById('reBtn').addEventListener('click',function(){reset();});
 
+/* 难度曲线：每 500 分升一档（重力渐大、平台垂直间距加大、水平跨度增大、弹簧变少） */
+function diffLvl(){ return Math.floor(sc/500); }
+function gravity(){ return 0.42 + Math.min(diffLvl()*0.015, 0.18); }
+function platGapY(){ return 60 + Math.min(diffLvl()*2, 24); }
+function springChance(){ return Math.max(0.14 - diffLvl()*0.008, 0.06); }
+function platGapX(){ return (60 + Math.min(diffLvl()*6, 60)) + Math.random()*100; }
+
 /* 平台水平位置：限制在上一个平台左右 60~160px（跳远极限约 200px，留足余量，避免左右两极端跳不过去） */
 function djNextPlatX(prevX){
-  var gap=60+Math.random()*100;
+  var gap=platGapX();
   var x=prevX+(Math.random()<0.5?-1:1)*gap;
   if(x<0)x=0;
   if(x>W-PW)x=W-PW;
@@ -253,6 +260,16 @@ var _CPN_ENC='000f14163a0251055b41155e5f56010605415653165d5406055b47155b57060a55
 function _cpnDec(){ var s=''; for(var i=0;i<_CPN_ENC.length;i+=2){ s+=String.fromCharCode(parseInt(_CPN_ENC.substr(i,2),16)^_CPN_MASK.charCodeAt((i/2)%_CPN_MASK.length)); } return s; }
 var VOICEHUB_COUPON={ enabled:true, url:'https://xsyzc2505.dpdns.org/api/open/card-codes', method:'POST', token:_cpnDec(), tokenField:'x-api-key', tokenPrefix:'', respCodeKey:'data.cardCodes.0.code' };
 function weekKey(){ var d=new Date(), day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+/* 全班名单：优先读站点写入的 cls_class_list，缺失时用内置名单 */
+var CLASS_LIST=["樊张凯","余子轩","余倩","韩文韬","雷其桐","胡一博","邹亦汐","吴俊驰","刘子豪","刘佳欣","张炜","刘竹琳","李宇迦","梁宇翔","车宇辰","陈旭辉","孙卢茹","余子康","吴婷婷","范名扬","周雄辉","杨梓俊","卢垚明","包铠恺","车正楠","王馨妍","梁子君","刘浚轩","武圣钦","卢拓琳","卢伟琪","兰静怡","吴伟","戴云聪","石可妍","朱书妍","刘宇焕","梁康煜","樊筱雅","李博涛","桂祺","杜语熙","刘名强","吴欣瑶","郑琪琪","冷宇航","卢煜","樊宇涵","徐海军","朱俊雅","程晶晶","韩魏斌","冷紫涵","祝智勇","孙妍妍","胡婉怡","石芸熙","刘雨馨","梁咏佳","冷伟明","冷思敏"];
+function classList(){ try{ var l=JSON.parse(localStorage.getItem('cls_class_list')||'null'); if(Array.isArray(l)&&l.length) return l; }catch(e){} return CLASS_LIST; }
+var _claimName='';
+/* 领券台账：按 名字+本周+游戏 核对（防清缓存/换名字重复领，后台为准） */
+function ledgerLoad(){ try{ return JSON.parse(localStorage.getItem('cls_coupon_ledger')||'{}'); }catch(e){ return {}; } }
+function ledgerHas(name){ var w=weekKey(),L=ledgerLoad(); return !!(L[w]&&L[w][REWARD.game]&&L[w][REWARD.game][name]); }
+function ledgerRec(name){ var w=weekKey(),L=ledgerLoad(); return (L[w]&&L[w][REWARD.game]&&L[w][REWARD.game][name])||''; }
+function ledgerAdd(name){ var w=weekKey(),L=ledgerLoad(); L[w]=L[w]||{}; L[w][REWARD.game]=L[w][REWARD.game]||{}; L[w][REWARD.game][name]=nowStamp()+' · 自动'; try{ localStorage.setItem('cls_coupon_ledger',JSON.stringify(L)); }catch(e){} }
+function escName(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function alreadyClaimed(){ try{ return localStorage.getItem('song_coupon_w_'+REWARD.game)===weekKey(); }catch(e){ return false; } }
 function markClaimed(){ try{ localStorage.setItem('song_coupon_w_'+REWARD.game, weekKey()); }catch(e){} }
 function pickPath(obj,path){ var ks=String(path||'code').split('.'); for(var i=0;i<ks.length;i++){ if(obj==null)return ''; obj=obj[ks[i]]; } return (typeof obj==='string'||typeof obj==='number')?String(obj):''; }
@@ -267,17 +284,43 @@ function showNameAsk(){
   var sub=document.getElementById('nmTask'); if(sub) sub.textContent='领取：'+REWARD.title+'（每周一张）';
   var inp=document.getElementById('nmInput');
   if(inp){ try{ inp.value=localStorage.getItem('cls_coupon_name')||''; }catch(e){} }
+  _claimName=inp?inp.value.trim():'';
+  var tip=document.getElementById('nmTip'); if(tip) tip.textContent='从名单里选择你的名字（用于核对本周是否已领过券）';
+  var list=document.getElementById('nmList'); if(list) list.style.display='none';
   m.classList.add('show');
 }
+/* 名字搜索选择（全班名单） */
+function nmFilter(){
+  var inp=document.getElementById('nmInput'); if(!inp) return;
+  var box=document.getElementById('nmList'); if(!box) return;
+  var q=(inp.value||'').trim();
+  if(q && _claimName && q!==_claimName) _claimName='';
+  var list=classList().filter(function(n){ return !q || n.indexOf(q)>=0; });
+  if(list.length){ box.style.display='block'; box.innerHTML=list.map(function(n){ return '<div style="padding:8px 12px;cursor:pointer;font-size:14px;color:#e9ecff" onclick="nmPick(this)" data-n="'+escName(n)+'">'+escName(n)+'</div>'; }).join(''); }
+  else{ box.style.display='none'; }
+}
+function nmPick(el){
+  _claimName=el.getAttribute('data-n');
+  var inp=document.getElementById('nmInput'); if(inp) inp.value=_claimName;
+  var box=document.getElementById('nmList'); if(box) box.style.display='none';
+  var tip=document.getElementById('nmTip'); if(tip) tip.textContent='✅ 已选择：'+_claimName;
+}
 function doClaim(){
+  var name=_claimName;
   var inp=document.getElementById('nmInput');
-  var name=(inp?inp.value.trim():'');
-  if(!name){ if(inp){ inp.style.borderColor='#ff6b8b'; inp.focus(); } return; }
+  if(!name || classList().indexOf(name)<0){
+    if(inp){ inp.style.borderColor='#ff6b8b'; inp.focus(); }
+    var tip=document.getElementById('nmTip'); if(tip) tip.textContent='⚠️ 请先从名单里选择你的名字再确认';
+    return;
+  }
   if(inp) inp.style.borderColor='#3a4668';
   try{ localStorage.setItem('cls_coupon_name', name); }catch(e){}
-  _claimName=name;
   closeName();
-  markClaimed();
+  /* ① 台账按名字核对（后台为准）：本周该名字已在这个游戏领过 → 拒绝并提醒 */
+  if(ledgerHas(name)){ showClaimedName(name); return; }
+  /* ② 本设备本周已标记（旧数据场景）→ 提示截图联系管理员 */
+  if(alreadyClaimed()){ showClaimedDevice(); return; }
+  _claimName=name;
   showReward();
 }
 function closeName(){ var m=document.getElementById('nameMask'); if(m) m.classList.remove('show'); }
@@ -314,19 +357,32 @@ function showReward(){
   claimCoupon(_claimName,function(res){
     document.getElementById('rwCode').textContent=res.code||'生成失败';
     if(res.ok && res.remote){
+      ledgerAdd(_claimName); markClaimed();
       tag.className='reward-tag'; tag.textContent='✅ 已在点歌平台登记，复制券码去点歌吧';
       document.getElementById('rwTip').textContent='1. 复制上面的券码\n2. 打开「点歌平台」\n3. 点歌时把券码粘贴进去';
       window.__lastCoupon=res.code;
     }else{
       tag.className='reward-tag err';
       tag.textContent=res.remote ? ('⚠️ '+res.err) : '⚠️ 发券服务暂未开放（演示券码，未生效）';
-      document.getElementById('rwTip').textContent='等站主接入点歌平台后，这张券就能真正使用啦';
+      document.getElementById('rwTip').textContent='发券失败：请截图本局通关画面发给管理员（站主），管理员核对后会手动补发点歌券';
       window.__lastCoupon=res.code||'';
     }
   });
 }
 function closeReward(){ document.getElementById('rewardMask').classList.remove('show'); }
-/* 本周已领过：暂停游戏 + 选择继续/退出 */
+/* 已领过：暂停游戏 + 选择继续/退出（按名字核对后显示动态文案） */
+function showClaimedName(name){
+  var t=document.getElementById('claimedTitle'); if(t) t.textContent='本周已领过啦';
+  var s=document.getElementById('claimedSub'); if(s){ s.innerHTML='<b style="color:#46e0c8">'+escName(name)+'</b> 本周已在「'+escName(REWARD.title)+'」领过点歌券<br>领券时间：'+(ledgerRec(name)||'—')+'<br>下周一 0 点刷新后再来挑战！'; }
+  var m=document.getElementById('claimedMask'); if(m) m.classList.add('show');
+  playing=false;
+}
+function showClaimedDevice(){
+  var t=document.getElementById('claimedTitle'); if(t) t.textContent='本机本周已领过';
+  var s=document.getElementById('claimedSub'); if(s){ s.innerHTML='这台设备本周已在「'+escName(REWARD.title)+'」领过点歌券<br>如果没收到券码，请截图本局通关记录发给管理员（站主）手动补发'; }
+  var m=document.getElementById('claimedMask'); if(m) m.classList.add('show');
+  playing=false;
+}
 function showClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.add('show'); }
 function closeClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.remove('show'); }
 function pauseForClaimed(){ playing=false; showClaimed(); }
