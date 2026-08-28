@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.cloudbase.net/schema/cloudbaserc.json",
+  "envId": "REPLACE_WITH_YOUR_CLOUDBASE_ENV_ID",
+  "hosting": [
+    {
+      "version": 2,
+      "source": "./",
+      "ignore": [
+        ".git/**",
+        "backup/**",
+        "class-site-backup.zip",
+        "node_modules/**",
+        "source/**"
+      ]
+    }
+  ]
+}
