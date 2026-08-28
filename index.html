@@ -394,12 +394,17 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .sign-tag.good{background:rgba(70,224,200,.18);color:#46e0c8}
 .sign-tag.bad{background:rgba(255,107,139,.18);color:#ff6b8b}
 .sign-tag.mid{background:rgba(124,131,255,.18);color:#9db1ff}
-.sign-text{font-size:16px;line-height:1.7;min-height:60px;margin:6px 0 4px}
-.sign-sub{font-size:12px;color:#9aa2d0;margin-bottom:16px}
+.sign-text{font-size:16px;line-height:1.7;min-height:60px;margin:6px 0 4px;color:#eef2fb}
+.sign-sub{font-size:12px;color:#b3bbdd;margin-bottom:16px}
 .sign-box .btn-qr{background:#7c83ff;color:#fff;border:none;border-radius:999px;padding:8px 22px;font-weight:700;cursor:pointer}
 .confetti-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:9991;padding:20px}
 .confetti-mask.show{display:flex}
-.confetti-box{background:rgba(27,36,50,.92);border:1px solid rgba(255,255,255,.14);border-radius:18px;max-width:320px;width:100%;padding:22px;text-align:center}
+.confetti-box{background:rgba(27,36,50,.92);border:1px solid rgba(255,255,255,.14);border-radius:18px;max-width:320px;width:100%;padding:22px;text-align:center;color:#e6edf7}
+.dark .hidden-fun-desc{color:#b4bdd0}
+.pop-sub{color:#5f6b80;font-size:.9rem;margin:0 0 6px}
+.dark .pop-sub{color:#aab4c8}
+.pop-hint{color:#64748b;font-size:.8rem;margin:0 0 14px}
+.dark .pop-hint{color:#b9c2d4}
 .confetti-box p{font-size:15px;line-height:1.7;margin:0 0 16px}
 #confettiCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9992}
 .qr-box{background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -585,8 +590,8 @@ body::after{animation-name:blobB;animation-duration:34s}
   <div class="allboard-box" style="max-width:360px;text-align:center">
     <div class="allboard-head"><span>🔐 隐藏区域</span><button onclick="closeHiddenGate()">关闭</button></div>
     <div style="font-size:2.2rem;margin:14px 0 6px">🎮</div>
-    <p style="color:#4a5568;font-size:.92rem;margin:0 0 6px">输入暗号进入隐藏娱乐天地</p>
-    <p style="color:#9aa7b8;font-size:.82rem;margin:0 0 14px">（提示：同学群目前人数）</p>
+    <p class="pop-sub">输入暗号进入隐藏娱乐天地</p>
+    <p class="pop-hint">（提示：同学群目前人数）</p>
     <input id="hiddenGateInput" type="password" placeholder="请输入暗号" class="gate-input" autocomplete="off" style="text-align:center" onkeydown="if(event.key==='Enter')submitHiddenGate()">
     <p id="hiddenGateErr" style="color:#c2410c;font-weight:600;font-size:.85rem;margin:10px 0 0"></p>
     <button class="btn" style="width:100%;margin-top:12px" onclick="submitHiddenGate()">进入</button>
@@ -598,7 +603,7 @@ body::after{animation-name:blobB;animation-duration:34s}
   <div class="allboard-box" style="max-width:560px">
     <div class="allboard-head"><span>🎮 隐藏娱乐天地</span><button onclick="closeHiddenView()">关闭</button></div>
     <div class="hidden-view-grid" id="hiddenViewGrid"></div>
-    <p style="color:#9aa7b8;font-size:.78rem;text-align:center;margin:0 0 14px">更多娱乐资源陆续补充中……</p>
+    <p class="pop-hint" style="text-align:center;margin:0 0 14px">更多娱乐资源陆续补充中……</p>
   </div>
 </div>
 
