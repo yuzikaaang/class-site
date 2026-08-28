@@ -48,7 +48,7 @@
 <body>
 <a class="back" href="../">← 返回班级站</a>
 <h1>🧱 俄罗斯方块</h1>
-<div class="score">得分：<b id="sc">0</b> · 最高：<b id="hi">0</b> · 目标 <b style="color:#ffcf7a">120</b> 分得点歌券</div>
+<div class="score">得分：<b id="sc">0</b> · 最高：<b id="hi">0</b> · 目标 <b style="color:#ffcf7a">200</b> 分得点歌券</div>
 <canvas id="cv" width="200" height="400"></canvas>
 <div class="pad">
   <button onclick="move(-1)">←</button>
@@ -61,7 +61,7 @@
 <div class="reward-mask" id="rewardMask">
   <div class="reward-box">
     <div class="reward-emoji" id="rwEmoji">🎉</div>
-    <div class="reward-title" id="rwTitle">得到 120 分！</div>
+    <div class="reward-title" id="rwTitle">得到 200 分！</div>
     <div class="reward-sub" id="rwSub">获得一张点歌券</div>
     <div class="coupon-code" id="rwCode">加载中…</div>
     <div class="reward-tip" id="rwTip"></div>
@@ -90,7 +90,7 @@
   <div class="reward-box">
     <div class="reward-emoji">✍️</div>
     <div class="reward-title">填写领券人</div>
-    <div class="reward-sub" id="nmTask">领取：俄罗斯方块 120 分奖励（每周一张）</div>
+    <div class="reward-sub" id="nmTask">领取：俄罗斯方块 200 分奖励（每周一张）</div>
     <input type="text" id="nmInput" placeholder="🔍 搜索选择你的名字" maxlength="10" autocomplete="off" onfocus="nmFilter()" oninput="nmFilter()" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid #3a4668;background:#0b0f1f;color:#e9ecff;font-size:15px;text-align:center;margin:8px 0 2px">
     <div id="nmList" style="display:none;margin-top:6px;background:#0b0f1f;border:1px solid #3a4668;border-radius:10px;max-height:170px;overflow-y:auto;text-align:left"></div>
     <div class="reward-tip" id="nmTip" style="text-align:center">从名单里选择你的名字（用于核对本周是否已领过券）</div>
@@ -142,7 +142,7 @@ cv.addEventListener('click',()=>{if(over)reset();});
 reset();
 
 /* ===== 周常点歌券奖励（每周一刷新，每款游戏每周一张） ===== */
-var REWARD = { game:'tetris', title:'得到 120 分！', sub:'获得一张点歌券（去点歌平台点歌时使用）', note:'俄罗斯方块120分奖励', threshold:120 };
+var REWARD = { game:'tetris', title:'得到 200 分！', sub:'获得一张点歌券（去点歌平台点歌时使用）', note:'俄罗斯方块200分奖励', threshold:200, noteAlias:['俄罗斯方块120分奖励'] };
 var _CPN_MASK='vgate25coupon0801';
 var _CPN_ENC='000f14163a0251055b41155e5f56010605415653165d5406055b47155b57060a5552415f57';
 function _cpnDec(){ var s=''; for(var i=0;i<_CPN_ENC.length;i+=2){ s+=String.fromCharCode(parseInt(_CPN_ENC.substr(i,2),16)^_CPN_MASK.charCodeAt((i/2)%_CPN_MASK.length)); } return s; }
@@ -234,6 +234,13 @@ function claimCoupon(name,cb){
     setTimeout(function(){ cb({ok:false,err:'发券服务暂未开放，此券码仅作预览（未生效）',code:code,remote:false}); },400);
   }
 }
+/* 备注匹配：兼容历史门槛文案（120 分时期的旧券），避免改门槛后本周已发的旧券查不到而重复发券 */
+function noteHit(note){
+  if(note.indexOf(REWARD.note)>=0) return true;
+  var al=REWARD.noteAlias||[];
+  for(var i=0;i<al.length;i++){ if(note.indexOf(al[i])>=0) return true; }
+  return false;
+}
 /* 平台查重：本周该名字该游戏是否已有可用券（先查后台，有则直接展示券码，不再生成新券） */
 function weekStartMs(){ var d=new Date(); var day=(d.getDay()+6)%7; d.setHours(0,0,0,0); d.setDate(d.getDate()-day); return d.getTime(); }
 function platformFind(name){
@@ -255,7 +262,7 @@ function platformFind(name){
           var t=new Date(c.createdAt); if(isNaN(t.getTime())) continue;
           if(t.getTime()<w0) continue;
           var note=String(c.note||'');
-          if(note.split(' · ')[0].trim()===name && note.indexOf(REWARD.note)>=0){ resolve({found:true,code:c.code}); return; }
+          if(note.split(' · ')[0].trim()===name && noteHit(note)){ resolve({found:true,code:c.code}); return; }
         }
         resolve({found:false});
       })

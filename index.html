@@ -869,10 +869,10 @@ body::after{animation-name:blobB;animation-duration:34s}
         <p style="font-weight:800;color:#3b5bfd;font-size:.9rem;margin:0 0 4px">🛠 游戏点歌券补发</p>
         <p class="dj-desc" style="font-size:.78rem;color:#5b6781;margin:0 0 10px">同学发券失败时，让其把游戏通关截图发你；在此登记后，把点歌券码手动发给该同学。登记后该同学本周此游戏将不能再领（防重复）。</p>
         <select id="riGame" style="width:100%;padding:8px 10px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem;margin-bottom:8px;box-sizing:border-box">
-          <option value="bird">像素飞鸟（过 30 管）</option>
+          <option value="bird">像素飞鸟（过 20 管）</option>
           <option value="snake">贪吃蛇（吃 50 豆）</option>
           <option value="doodle">涂鸦跳跃（10000 高）</option>
-          <option value="tetris">俄罗斯方块（120 分）</option>
+          <option value="tetris">俄罗斯方块（200 分）</option>
         </select>
         <div style="position:relative;margin-bottom:8px">
           <input type="text" id="riNameInput" placeholder="🔍 搜索选择同学名字" autocomplete="off" onfocus="riFilter()" oninput="riFilter()" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem">
@@ -3142,7 +3142,7 @@ function closeCouponAdmin(){ var m=document.getElementById('couponAdminMask'); i
 /* ---- 游戏点歌券补发（站主手动补发登记；写入门票台账防重复领） ---- */
 var _RI_GAMES={bird:'像素飞鸟',snake:'贪吃蛇',doodle:'涂鸦跳跃',tetris:'俄罗斯方块'};
 /* 与各游戏端 REWARD.note 完全一致，保证平台查重（platformFind）能识别补发券 */
-var _RI_NOTE={bird:'像素飞鸟过30管奖励',snake:'贪吃蛇吃豆50奖励',doodle:'涂鸦跳跃10000高奖励',tetris:'俄罗斯方块120分奖励'};
+var _RI_NOTE={bird:'像素飞鸟过20管奖励',snake:'贪吃蛇吃豆50奖励',doodle:'涂鸦跳跃10000高奖励',tetris:'俄罗斯方块200分奖励'};
 var _riSel='';
 function riInit(){
   var t=document.getElementById('riTime'); if(t){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; t.value=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }
