@@ -82,6 +82,7 @@
       <a class="btn-goto" id="rwGoto" href="https://xsyzc2505.dpdns.org/" target="_blank" rel="noopener">去点歌 →</a>
       <button class="btn-close" onclick="closeReward()">继续游戏</button>
     </div>
+    <div class="reward-tip" style="text-align:center;margin-top:8px">点「继续游戏」后有 <b style="color:#ffcf7a">2 秒无敌</b>（撞墙、撞到自己都不会死）</div>
   </div>
 </div>
 
@@ -95,6 +96,7 @@
       <button class="btn-copy" onclick="claimContinue()">▶ 继续游戏</button>
       <button class="btn-close" onclick="claimExit()">🚪 退出游戏</button>
     </div>
+    <div class="reward-tip" style="text-align:center;margin-top:8px">点「继续游戏」后有 <b style="color:#ffcf7a">2 秒无敌</b>（撞墙、撞到自己都不会死）</div>
   </div>
 </div>
 
@@ -207,6 +209,7 @@ function showNameAsk(){
   var tip=document.getElementById('nmTip'); if(tip) tip.textContent='从名单里选择你的名字（用于核对本周是否已领过券）';
   var list=document.getElementById('nmList'); if(list) list.style.display='none';
   m.classList.add('show');
+  clearTimeout(timer); paused=true;   /* 弹窗期间暂停游戏，避免边填名字边继续跑 */
 }
 /* 名字搜索选择（全班名单） */
 function nmFilter(){
@@ -234,7 +237,7 @@ function doClaim(){
   }
   if(inp) inp.style.borderColor='#3a4668';
   try{ localStorage.setItem('cls_coupon_name', name); }catch(e){}
-  closeName();
+  hideNameMask();   /* 只关闭弹窗不恢复游戏：下面可能还要接着弹「已领过/券码」弹窗，恢复交由各弹窗自己决定 */
   /* ① 台账按名字核对（后台为准）：本周该名字已在这个游戏领过 → 拒绝并提醒 */
   if(ledgerHas(name)){ showClaimedName(name); return; }
   /* ② 本设备本周已标记（旧数据场景）→ 提示截图联系管理员 */
@@ -242,7 +245,9 @@ function doClaim(){
   _claimName=name;
   showReward(sc);
 }
-function closeName(){ var m=document.getElementById('nameMask'); if(m) m.classList.remove('show'); }
+function hideNameMask(){ var m=document.getElementById('nameMask'); if(m) m.classList.remove('show'); }
+/* 主动取消领券 → 继续游戏，并给 2 秒无敌缓冲 */
+function closeName(){ hideNameMask(); if(!over) resumeGame(); }
 
 /* 领券：调用 VoiceHub 开放 API 创建一张券 */
 function claimCoupon(score,dur,name,cb){
@@ -303,6 +308,7 @@ function platformFind(name){
   });
 }
 function showReward(dots){
+  if(!over){ clearTimeout(timer); paused=true; }   /* 券码弹窗期间同样暂停，避免发券时游戏还在跑 */
   var mask=document.getElementById('rewardMask');
   document.getElementById('rwTitle').textContent='吃到 '+dots+' 个豆！';
   document.getElementById('rwSub').textContent='获得一张点歌券（去点歌平台点歌时使用）';
@@ -336,7 +342,7 @@ function showReward(dots){
     });
   });
 }
-function closeReward(){ document.getElementById('rewardMask').classList.remove('show'); }
+function closeReward(){ document.getElementById('rewardMask').classList.remove('show'); if(!over) resumeGame(); }
 /* 已领过：暂停游戏 + 选择继续/退出（按名字核对后显示动态文案） */
 function showClaimedName(name){
   var t=document.getElementById('claimedTitle'); if(t) t.textContent='本周已领过啦';
@@ -351,7 +357,7 @@ function showClaimedDevice(){
   clearTimeout(timer); paused=true;
 }
 function showClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.add('show'); }
-function claimContinue(){ var m=document.getElementById('claimedMask'); if(m) m.classList.remove('show'); paused=false; loop(); }
+function claimContinue(){ var m=document.getElementById('claimedMask'); if(m) m.classList.remove('show'); resumeGame(); }
 function claimExit(){ var m=document.getElementById('claimedMask'); if(m) m.classList.remove('show'); paused=false; over=true; draw(); }
 function copyCoupon(){
   var c=window.__lastCoupon||document.getElementById('rwCode').textContent;
@@ -366,21 +372,35 @@ function fallbackCopy(t){
 }
 document.getElementById('rewardMask').addEventListener('click',function(e){ if(e.target.id==='rewardMask') closeReward(); });
 
-let snake,dir,food,sc,hi,timer,over,paused;
+let snake,dir,food,sc,hi,timer,over,paused,invince;
 paused=false;
+invince=0;   /* 无敌截止时间戳（关闭弹窗继续游戏时给 2 秒缓冲，防止刚恢复就撞死） */
+var INVINCE_MS=2000;
+function isInv(){ return Date.now()<invince; }
 hi=+(localStorage.getItem('snake_hi')||0);document.getElementById('hi').textContent=hi;
 function place(){food={x:(Math.random()*N)|0,y:(Math.random()*N)|0};}
 function draw(){
   ctx.fillStyle='#0b0f1f';ctx.fillRect(0,0,cv.width,cv.height);
   ctx.fillStyle='#46e0c8';ctx.fillRect(food.x*CELL+2,food.y*CELL+2,CELL-4,CELL-4);
-  ctx.fillStyle=over?'#ff6b8b':'#7c83ff';
+  ctx.fillStyle=over?'#ff6b8b':(isInv()?'#ffcf7a':'#7c83ff');
   snake.forEach(s=>ctx.fillRect(s.x*CELL+1,s.y*CELL+1,CELL-2,CELL-2));
   if(over){ctx.fillStyle='#fff';ctx.font='22px sans-serif';ctx.textAlign='center';ctx.fillText('游戏结束 · 点屏重来',cv.width/2,cv.height/2);}
+  else if(isInv()){   /* 无敌提示：右上角显示剩余秒数，蛇身变金色 */
+    ctx.fillStyle='#ffcf7a';ctx.font='bold 13px -apple-system,"PingFang SC",sans-serif';ctx.textAlign='right';
+    ctx.fillText('🛡 无敌 '+Math.max(1,Math.ceil((invince-Date.now())/1000))+'s',cv.width-8,18);
+  }
 }
+/* 关闭弹窗后继续游戏：给 2 秒无敌缓冲（撞墙不越界、撞自己不死） */
+function resumeGame(){ invince=Date.now()+INVINCE_MS; paused=false; loop(); }
 function loop(){
   if(over||paused)return;
   const h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
-  if(h.x<0||h.y<0||h.x>=N||h.y>=N||snake.some(s=>s.x===h.x&&s.y===h.y)){over=true;draw();return;}
+  if(h.x<0||h.y<0||h.x>=N||h.y>=N||snake.some(s=>s.x===h.x&&s.y===h.y)){
+    if(!isInv()){over=true;draw();return;}
+    /* 无敌：撞自己不判死；撞墙则把蛇头夹紧在界内继续走 */
+    if(h.x<0)h.x=0; if(h.x>=N)h.x=N-1;
+    if(h.y<0)h.y=0; if(h.y>=N)h.y=N-1;
+  }
   snake.unshift(h);
   if(h.x===food.x&&h.y===food.y){sc++;document.getElementById('sc').textContent=sc;
     if(sc>hi){hi=sc;localStorage.setItem('snake_hi',hi);document.getElementById('hi').textContent=hi;}place();
@@ -390,9 +410,11 @@ function loop(){
     }
   }
   else snake.pop();
-  draw();timer=setTimeout(loop,curSpeed(sc));
+  draw();
+  if(!paused) timer=setTimeout(loop,curSpeed(sc));   /* showNameAsk 等弹窗会在本步内把 paused 置真，这里不再续跑 */
 }
 function reset(){clearTimeout(timer);snake=[{x:10,y:10},{x:9,y:10}];dir={x:1,y:0};place();sc=0;over=false;paused=false;
+  invince=0;
   window.__snakeStart=Date.now();
   var g=document.getElementById('goal'); if(g) g.textContent='目标 '+REWARD_DOTS+' 豆得点歌券';
   document.getElementById('sc').textContent=0;loop();}
