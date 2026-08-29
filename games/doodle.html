@@ -339,6 +339,9 @@ function ledgerRec(name){ var w=weekKey(),L=ledgerLoad(); return (L[w]&&L[w][REW
 function ledgerAdd(name){ var w=weekKey(),L=ledgerLoad(); L[w]=L[w]||{}; L[w][REWARD.game]=L[w][REWARD.game]||{}; L[w][REWARD.game][name]=nowStamp()+' · 自动'; try{ localStorage.setItem('cls_coupon_ledger',JSON.stringify(L)); }catch(e){} }
 function escName(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function alreadyClaimed(){ try{ return localStorage.getItem('song_coupon_w_'+REWARD.game)===weekKey(); }catch(e){ return false; } }
+/* 本地记录与后台不一致时（站主在后台删了券）：清掉本地记录，允许本周重新领 */
+function ledgerDel(name){ var w=weekKey(),L=ledgerLoad(); if(L[w]&&L[w][REWARD.game]&&L[w][REWARD.game][name]){ delete L[w][REWARD.game][name]; try{ localStorage.setItem('cls_coupon_ledger',JSON.stringify(L)); }catch(e){} } }
+function clearClaimed(){ try{ localStorage.removeItem('song_coupon_w_'+REWARD.game); }catch(e){} }
 function markClaimed(){ try{ localStorage.setItem('song_coupon_w_'+REWARD.game, weekKey()); }catch(e){} }
 function pickPath(obj,path){ var ks=String(path||'code').split('.'); for(var i=0;i<ks.length;i++){ if(obj==null)return ''; obj=obj[ks[i]]; } return (typeof obj==='string'||typeof obj==='number')?String(obj):''; }
 /* 领券人填写（每周首张券需填名字，备注留痕：谁·时间·任务） */
@@ -384,10 +387,19 @@ function doClaim(){
   if(inp) inp.style.borderColor='#3a4668';
   try{ localStorage.setItem('cls_coupon_name', name); }catch(e){}
   closeName();
-  /* ① 台账按名字核对（后台为准）：本周该名字已在这个游戏领过 → 拒绝并提醒 */
-  if(ledgerHas(name)){ showClaimedName(name); return; }
-  /* ② 本设备本周已标记（旧数据场景）→ 提示截图联系管理员 */
-  if(alreadyClaimed()){ showClaimedDevice(); return; }
+  /* 本地台账/设备标记说本周领过 → 不直接拒绝，先跟后台核实：
+       后台确实有这张券（含已使用）→ 展示原券码并拦住；
+       后台查不到（被站主删除）→ 清掉本地记录，允许重新领；
+       网络不通查不了 → 保守拦住，提示截图联系管理员。 */
+  if(ledgerHas(name)||alreadyClaimed()){
+    platformFind(name).then(function(f){
+      if(f.found){ showClaimedName(name,f.code,f.status); return; }
+      if(f.err){ showClaimedName(name); return; }
+      ledgerDel(name); clearClaimed();
+      _claimName=name; showReward();
+    });
+    return;
+  }
   _claimName=name;
   showReward();
 }
@@ -431,11 +443,11 @@ function platformFind(name){
         var w0=weekStartMs();
         for(var i=0;i<list.length;i++){
           var c=list[i];
-          if(!c||c.status!=='AVAILABLE') continue;
+          if(!c) continue;   /* 不再限定 status==='AVAILABLE'：券被核销(已使用)同样算本周已领过，避免用掉后再领一张 */
           var t=new Date(c.createdAt); if(isNaN(t.getTime())) continue;
           if(t.getTime()<w0) continue;
           var note=String(c.note||'');
-          if(note.split(' · ')[0].trim()===name && note.indexOf(REWARD.note)>=0){ resolve({found:true,code:c.code}); return; }
+          if(note.split(' · ')[0].trim()===name && note.indexOf(REWARD.note)>=0){ resolve({found:true,code:c.code,status:c.status}); return; }
         }
         resolve({found:false});
       })
@@ -454,7 +466,7 @@ function showReward(){
     if(f.found){
       document.getElementById('rwCode').textContent=f.code;
       ledgerAdd(_claimName); markClaimed();
-      tag.className='reward-tag'; tag.textContent='✅ 本周已在平台领过，券码已找回（无需重新生成）';
+      tag.className='reward-tag'; tag.textContent=(f.status&&f.status!=='AVAILABLE')?'✅ 本周这张券你已领过（已使用），下周一 0 点刷新':'✅ 本周已在平台领过，券码已找回（无需重新生成）';
       document.getElementById('rwTip').textContent='1. 复制上面的券码\n2. 打开「点歌平台」\n3. 点歌时把券码粘贴进去';
       window.__lastCoupon=f.code;
       return;
@@ -477,9 +489,16 @@ function showReward(){
 }
 function closeReward(){ document.getElementById('rewardMask').classList.remove('show'); }
 /* 已领过：暂停游戏 + 选择继续/退出（按名字核对后显示动态文案） */
-function showClaimedName(name){
+function showClaimedName(name,code,status){
   var t=document.getElementById('claimedTitle'); if(t) t.textContent='本周已领过啦';
-  var s=document.getElementById('claimedSub'); if(s){ s.innerHTML='<b style="color:#46e0c8">'+escName(name)+'</b> 本周已在「'+escName(REWARD.title)+'」领过点歌券<br>领券时间：'+(ledgerRec(name)||'—')+'<br>下周一 0 点刷新后再来挑战！'; }
+  var s=document.getElementById('claimedSub');
+  if(s){
+    var used=!!(status&&status!=='AVAILABLE');
+    var html='<b style="color:#46e0c8">'+escName(name)+'</b> 本周已在「'+escName(REWARD.title)+'」领过点歌券<br>';
+    if(code) html+='你的券码：<b style="color:#ffcf7a">'+escName(code)+'</b>'+(used?'（已使用）':'（仍可用）')+'<br>';
+    html+='领券时间：'+(ledgerRec(name)||'—')+'<br>下周一 0 点刷新后再来挑战！';
+    s.innerHTML=html;
+  }
   var m=document.getElementById('claimedMask'); if(m) m.classList.add('show');
   playing=false;
 }
