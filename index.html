@@ -502,12 +502,23 @@ body::after{animation-name:blobB;animation-duration:34s}
 .dark #djSongsMask .dj-song-title{color:#e2e8f0!important}
 .dark #djSongsMask .dj-song-artist{color:#9db1ff!important}
 .dark #djSongsMask label{color:#9db1ff!important}
+/* 点歌券管理 · 备注分段展示（名字/时间/游戏奖励分色，长备注自动换行，不再单行截断） */
+.cp-note .cp-nm{color:#1f2a44;font-weight:700}
+.cp-note .cp-tm{color:#64748b}
+.cp-note .cp-gm{color:#3b5bfd}
+.cp-note .cp-dot{color:#c3cbdb}
 /* 点歌券管理弹窗 暗色适配 */
 .dark #couponAdminMask .dj-label,
 .dark #couponAdminMask .dj-desc{color:#93a3bd!important}
 .dark #couponAdminMask .cp-row{border-bottom-color:#2a3550!important}
 .dark #couponAdminMask .cp-code{color:#e2e8f0!important}
 .dark #couponAdminMask .cp-st{color:#9db1ff!important}
+.dark #couponAdminMask .cp-note{color:#b9c2d4!important}
+.dark #couponAdminMask .cp-note .cp-nm{color:#eef2fb!important}
+.dark #couponAdminMask .cp-note .cp-tm{color:#b9c2d4!important}
+.dark #couponAdminMask .cp-note .cp-gm{color:#9db1ff!important}
+.dark #couponAdminMask .cp-note .cp-dot{color:#6b7a95!important}
+.dark #couponAdminMask .cp-time{color:#8b9bb5!important}
 .dark #couponAdminMask input{background:#1b2432;color:#e2e8f0;border-color:#2a3550}
 .dark #couponAdminMask select,
 .dark #couponAdminMask #riTime,
@@ -3263,6 +3274,30 @@ function cpLoadList(){
     .then(function(d){ _cpCache=(d&&d.data&&d.data.cardCodes)||[]; cpRenderList(); })
     .catch(function(e){ if(st) st.textContent='拉取失败：'+esc(String((e&&e.message)||e)); });
 }
+/* 时间格式化：平台返回 UTC（如 2026-08-29T00:20:41Z），直接切片会显示 00:20，
+   与备注里写的本地时间 08:20 对不上。改为按浏览器本地时区（国内 +8）格式化。 */
+function cpFmt(iso){
+  if(!iso) return '';
+  var d=new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0,16).replace('T',' ');
+  function p(n){ return (n<10?'0':'')+n; }
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+/* 备注分段渲染：「名字 · 时间 · 游戏奖励」→ 名字加粗、时间次要色、游戏奖励高亮。
+   外层 .cp-note 已去掉 nowrap/ellipsis，长备注自动换行完整显示（原来会被截断一半）。 */
+function cpNoteHtml(c){
+  var n=c.note||'';
+  if(!n) return '<span style="color:#9aa7b8">（无备注）</span>';
+  var p=n.split(' · ');
+  if(p.length<3) return esc(n);
+  return '<span class="cp-nm">'+esc(p[0])+'</span><span class="cp-dot"> · </span><span class="cp-tm">'+esc(p.slice(1,p.length-1).join(' · '))+'</span><span class="cp-dot"> · </span><span class="cp-gm">'+esc(p[p.length-1])+'</span>';
+}
+/* 时间行：创建时间 + 已核销券的核销时间（平台实测核销后 status='REDEEMED'） */
+function cpTimeHtml(c){
+  var t='创建 '+cpFmt(c.createdAt);
+  if(c.status==='REDEEMED' && c.redeemedAt) t+=' · 已核销 '+cpFmt(c.redeemedAt);
+  return esc(t);
+}
 function cpRenderList(){
   var st=document.getElementById('cpStatus'), list=document.getElementById('cpList');
   var dis=cpDisabled();
@@ -3277,8 +3312,8 @@ function cpRenderList(){
           '<b class="cp-code" style="color:'+(d?'#c2410c':'#222')+';'+(d?'text-decoration:line-through':'')+'" onclick="cpCopyCode(\''+c.code+'\')">'+esc(c.code)+'</b>'+
           '<span class="cp-st" style="color:#5b6781;white-space:nowrap">'+stt+(d?' · 已禁用':'')+'</span>'+
         '</div>'+
-        '<div class="cp-note" style="color:#5b6781;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="'+(c.note?esc(c.note):'')+'">'+(c.note?esc(c.note):'（无备注）')+'</div>'+
-        '<div style="color:#9aa7b8;font-size:.75rem;margin-top:1px">'+esc(String(c.createdAt||'').slice(0,16).replace('T',' '))+'</div>'+
+        '<div class="cp-note" style="color:#5b6781;font-size:.76rem;line-height:1.55;word-break:break-all;margin-top:3px" title="'+(c.note?esc(c.note):'')+'">'+cpNoteHtml(c)+'</div>'+
+        '<div class="cp-time" style="color:#5f6b80;font-size:.75rem;margin-top:2px;line-height:1.4">'+cpTimeHtml(c)+'</div>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">'+
         '<button class="btn btn-secondary" style="padding:5px 9px;font-size:.75rem" onclick="cpSetDisabled(\''+c.code+'\','+(d?'false':'true')+')">'+(d?'✅ 恢复':'🚫 禁用')+'</button>'+

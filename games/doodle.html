@@ -466,7 +466,7 @@ function showReward(){
     if(f.found){
       document.getElementById('rwCode').textContent=f.code;
       ledgerAdd(_claimName); markClaimed();
-      tag.className='reward-tag'; tag.textContent=(f.status&&f.status!=='AVAILABLE')?'✅ 本周这张券你已领过（已使用），下周一 0 点刷新':'✅ 本周已在平台领过，券码已找回（无需重新生成）';
+      tag.className='reward-tag'; var _stx=(f.status==='REDEEMED')?'已核销':((f.status&&f.status!=='AVAILABLE')?'已使用':''); tag.textContent=_stx?('✅ 本周这张券你已领过（'+_stx+'），下周一 0 点刷新'):'✅ 本周已在平台领过，券码已找回（无需重新生成）';
       document.getElementById('rwTip').textContent='1. 复制上面的券码\n2. 打开「点歌平台」\n3. 点歌时把券码粘贴进去';
       window.__lastCoupon=f.code;
       return;
@@ -493,9 +493,11 @@ function showClaimedName(name,code,status){
   var t=document.getElementById('claimedTitle'); if(t) t.textContent='本周已领过啦';
   var s=document.getElementById('claimedSub');
   if(s){
-    var used=!!(status&&status!=='AVAILABLE');
+    /* 平台实测：核销后 status='REDEEMED'（不是 USED）；其余非 AVAILABLE 状态（如 LOCKED）按已使用处理 */
+    var usedTxt=(status==='REDEEMED')?'已核销':((status&&status!=='AVAILABLE')?'已使用':'');
+    var used=!!usedTxt;
     var html='<b style="color:#46e0c8">'+escName(name)+'</b> 本周已在「'+escName(REWARD.title)+'」领过点歌券<br>';
-    if(code) html+='你的券码：<b style="color:#ffcf7a">'+escName(code)+'</b>'+(used?'（已使用）':'（仍可用）')+'<br>';
+    if(code) html+='你的券码：<b style="color:#ffcf7a">'+escName(code)+'</b>'+(usedTxt?('（'+usedTxt+'）'):'（仍可用）')+'<br>';
     html+='领券时间：'+(ledgerRec(name)||'—')+'<br>下周一 0 点刷新后再来挑战！';
     s.innerHTML=html;
   }
