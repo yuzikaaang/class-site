@@ -6,16 +6,21 @@
 <title>涂鸦跳跃 · 25级05班</title>
 <style>
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%}
+  /* 移动端：锁定视口不滚动（原布局总高超过手机视口，触摸时页面被拖动/数字宽度抖动 → “鬼畜”） */
+  html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
   body{background:linear-gradient(170deg,#0d1024,#161a3a);color:#e9ecff;
     font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
-    display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh}
-  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
-  h1{font-size:18px;margin:0}
-  .hud{display:flex;gap:18px;font-size:15px}
-  .hud b{color:#ffcf7a}
-  #wrap{position:relative;width:min(94vw,420px)}
-  canvas{width:100%;height:auto;background:linear-gradient(180deg,#141a3a,#1d2b5e 60%,#2b1f55);border-radius:16px;display:block;box-shadow:0 12px 40px rgba(0,0,0,.5);touch-action:none}
+    display:flex;flex-direction:column;align-items:center;
+    padding:calc(6px + env(safe-area-inset-top)) 8px calc(6px + env(safe-area-inset-bottom));
+    gap:6px;height:100dvh;min-height:100vh;touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  .topbar{display:flex;align-items:center;gap:8px;width:100%;max-width:420px;font-size:13px}
+  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:13px;padding:8px 10px;margin:-8px -10px -8px -10px}
+  .brand{font-weight:800;font-size:14px}
+  .badge{margin-left:auto;font-size:11px;padding:4px 9px;border-radius:999px;
+    background:rgba(70,224,200,.14);color:#46e0c8;white-space:nowrap}
+  #wrap{position:relative}
+  canvas{width:100%;height:100%;background:linear-gradient(180deg,#141a3a,#1d2b5e 60%,#2b1f55);border-radius:16px;display:block;box-shadow:0 12px 40px rgba(0,0,0,.5);touch-action:none}
   .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
     background:rgba(10,12,30,.74);border-radius:16px;text-align:center;padding:20px;z-index:3}
   .ov.hidden{display:none}
@@ -24,12 +29,13 @@
   .ov button{border:none;border-radius:14px;padding:13px 30px;font-size:16px;font-weight:800;cursor:pointer;
     background:linear-gradient(135deg,#46e0c8,#2fd6a8);color:#0b0f22;box-shadow:0 8px 20px rgba(70,224,200,.3)}
   .ov button:active{transform:scale(.95)}
-  .tip{font-size:12px;opacity:.55}
-  .ctrl{display:flex;gap:16px;width:min(94vw,420px);justify-content:center;margin-top:2px}
-  .ctrl button{flex:1;max-width:170px;border:none;border-radius:16px;padding:18px 0;font-size:22px;font-weight:900;cursor:pointer;
+  .tip{font-size:11px;opacity:.5;text-align:center;line-height:1.5}
+  .ctrl{display:flex;gap:12px;width:100%;max-width:420px;justify-content:center}
+  .ctrl button{flex:1;max-width:180px;border:none;border-radius:16px;padding:15px 0;font-size:20px;font-weight:900;cursor:pointer;
     color:#0b0f22;background:linear-gradient(135deg,#7c83ff,#4a6cf7);box-shadow:0 8px 22px rgba(74,108,247,.35);user-select:none;-webkit-user-select:none;touch-action:none}
   .ctrl button:active{transform:scale(.94)}
   .ctrl button.right{background:linear-gradient(135deg,#46e0c8,#2fd6a8);box-shadow:0 8px 22px rgba(47,214,168,.35)}
+  @media (max-height:680px){ .tip{display:none} .ctrl button{padding:12px 0;font-size:18px} }
   /* 达标发券弹窗 */
   .reward-mask{display:none;position:fixed;inset:0;background:rgba(10,12,30,.78);z-index:999;
     align-items:center;justify-content:center;padding:20px}
@@ -57,14 +63,16 @@
 </style>
 </head>
 <body>
-<a class="back" href="../">← 返回班级站</a>
-<h1>🦘 涂鸦跳跃</h1>
-<div class="hud"><span>高度 <b id="sc">0</b></span><span>最高 <b id="hi">0</b></span><span>目标 <b style="color:#46e0c8">10000</b> 高得点歌券</span></div>
+<div class="topbar">
+  <a class="back" href="../">← 返回</a>
+  <span class="brand">🦘 涂鸦跳跃</span>
+  <span class="badge">🎟 10000 高得券</span>
+</div>
 <div id="wrap">
   <canvas id="cv"></canvas>
   <div class="ov" id="startOv">
     <h2>涂鸦跳跃</h2>
-    <p>左右移动让角色不断往上跳<br>踩平台借力 · 弹簧可以弹超高<br>掉下去就结束</p>
+    <p>左右移动让角色不断往上跳<br>踩平台借力 · 弹簧可以弹超高<br>掉下去就结束<br>⏱ 限时 2:30 内跳到 10000 高才能领点歌券</p>
     <button id="startBtn">开始游戏</button>
   </div>
   <div class="ov hidden" id="overOv">
@@ -120,7 +128,7 @@
   <button id="leftBtn" aria-label="左移">◀ 左</button>
   <button id="rightBtn" class="right" aria-label="右移">右 ▶</button>
 </div>
-<div class="tip">键盘 ← → 或屏幕下方虚拟按键移动 · 踩平台往上跳</div>
+<div class="tip">键盘 ← → 或下方按键移动 · 限时 2:30 内达标才发券（超时仍可继续玩）</div>
 <script>
 var AC=null;
 function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
@@ -132,10 +140,12 @@ var W=420,H=640;
 cv.width=W;cv.height=H;
 var PX=30,PY=46,PW=70;   // 平台尺寸
 var plats,px,py,vy,sc,hi,playing,camY,dirL,dirR,rewardHandled;
+var playMs=0,lastAt=0,overtime=false,leftSec=0;   // 限时领券计时（仅游戏中累加，弹窗/结束暂停时冻结）
 rewardHandled=false;
-hi=+(localStorage.getItem('doodle_hi')||0);document.getElementById('hi').textContent=hi;
+hi=+(localStorage.getItem('doodle_hi')||0);
 
 function reset(){
+  playMs=0;lastAt=0;overtime=false;leftSec=REWARD.timeLimit;
   plats=[];
   sc=0; camY=0;   // 必须在生成平台前初始化，否则 diffLvl() 读到 undefined 让平台 x 变 NaN、角色落不上台阶
   var x0=W/2-PW/2;
@@ -145,12 +155,20 @@ function reset(){
     x0=djNextPlatX(x0);
   }
   px=W/2-PX/2;py=H-PY-PY;vy=-9;playing=true;rewardHandled=false;
-  document.getElementById('sc').textContent=0;
   hideOv();requestAnimationFrame(tick);
 }
 function hideOv(){document.getElementById('startOv').classList.add('hidden');document.getElementById('overOv').classList.add('hidden');}
 function tick(){
   if(!playing){draw();return;}
+  /* 限时计时：按真实游戏时长累加（tick 只在游戏中运行，弹窗暂停/掉落结束自动冻结） */
+  var now=Date.now();
+  if(lastAt) playMs+=(now-lastAt);
+  lastAt=now;
+  if(!overtime){
+    var left=REWARD.timeLimit-playMs/1000;
+    if(left<=0){ left=0; overtime=true; }
+    leftSec=left;
+  }
   var mv=(dirR?1:0)-(dirL?1:0);
   px+=mv*5.6;
   if(px<0)px=0;if(px>W-PX)px=W-PX;
@@ -180,10 +198,10 @@ function tick(){
   if(py<camY+PY){
     sc+=Math.round((camY+PY-py)/10)*10;
     camY=py-PY;
-    document.getElementById('sc').textContent=sc;
+    /* 达标发券：限时内达标才弹窗领券；超时后达标静默跳过（不弹窗、不打扰，可继续玩） */
     if(sc>=REWARD.threshold&&!rewardHandled){rewardHandled=true;
-      showNameAsk();}
-    if(sc>hi){hi=sc;try{localStorage.setItem('doodle_hi',hi);}catch(e){} document.getElementById('hi').textContent=hi;}
+      if(!overtime) showNameAsk();}
+    if(sc>hi){hi=sc;try{localStorage.setItem('doodle_hi',hi);}catch(e){}}
   }
   // 掉落
   if(py>camY+H+60){
@@ -222,7 +240,52 @@ function draw(){
   ctx.fillStyle='#ff7b3d';ctx.fillRect(bx-13,by+20,26,10);
   ctx.fillStyle='#7c83ff';ctx.fillRect(bx-15,by+30,8,8);
   ctx.fillStyle='#7c83ff';ctx.fillRect(bx+7,by+30,8,8);
+  drawHUD();
 }
+/* HUD 画在 canvas 内（不再每帧改 DOM 文本，避免移动端重排抖动） */
+function fmtTime(s){ var m=Math.floor(s/60),ss=Math.floor(s%60); return m+':'+(ss<10?'0':'')+ss; }
+function drawHUD(){
+  ctx.save();
+  ctx.fillStyle='rgba(8,11,26,.5)';
+  if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(8,8,W-16,36,12); ctx.fill(); }
+  else{ ctx.fillRect(8,8,W-16,36); }
+  ctx.textBaseline='middle';
+  /* 高度（等宽数字，位数变化不抖动） */
+  ctx.font='bold 19px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+  ctx.textAlign='left'; ctx.fillStyle='#ffcf7a';
+  ctx.fillText('↑'+sc,20,27);
+  /* 最高纪录 */
+  ctx.font='12px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign='center'; ctx.fillStyle='rgba(157,177,255,.85)';
+  ctx.fillText('最高 '+hi,W/2+8,27);
+  /* 限时倒计时 */
+  ctx.font='bold 16px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+  ctx.textAlign='right';
+  ctx.fillStyle= overtime?'#ff9db4' : (leftSec<=30?'#ffcf7a':'#8fe9ff');
+  ctx.fillText((overtime?'⏱ 超时':'⏱ '+fmtTime(leftSec)),W-18,27);
+  /* 超时说明（仅文字提示，不弹窗打断游戏） */
+  if(overtime){
+    ctx.font='11px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign='center'; ctx.fillStyle='rgba(255,157,180,.9)';
+    ctx.fillText('本局已超时，达标不再发券 · 重开一局可再挑战',W/2,58);
+  }
+  ctx.restore();
+}
+/* 画布自适应：按可用空间缩放，保证整页不超出视口（不滚动） */
+function fit(){
+  var wrap=document.getElementById('wrap');
+  var topbar=document.querySelector('.topbar'), ctrl=document.querySelector('.ctrl'), tip=document.querySelector('.tip');
+  var used=(topbar?topbar.offsetHeight:32)+(ctrl?ctrl.offsetHeight:56)+(tip&&tip.offsetHeight?tip.offsetHeight:0)+34;
+  var h=window.innerHeight-used, w=window.innerWidth-16;
+  var cw=Math.min(420,w,h*W/H);
+  cw=Math.max(200,cw);
+  wrap.style.width=Math.round(cw)+'px';
+  wrap.style.height=Math.round(cw*H/W)+'px';
+}
+window.addEventListener('resize',fit);
+window.addEventListener('orientationchange',function(){ setTimeout(fit,150); });
+if(window.visualViewport) window.visualViewport.addEventListener('resize',fit);
+fit();
 document.addEventListener('keydown',function(e){ if(e.code==='ArrowLeft')dirL=true; if(e.code==='ArrowRight')dirR=true; });
 document.addEventListener('keyup',function(e){ if(e.code==='ArrowLeft')dirL=false; if(e.code==='ArrowRight')dirR=false; });
 /* 虚拟按键：按住左/右移动，松开停止（替代原来的“按住屏幕半边滑动”） */
@@ -259,7 +322,7 @@ function djNextPlatX(prevX){
 }
 
 /* ===== 周常点歌券奖励（每周一刷新，每款游戏每周一张） ===== */
-var REWARD = { game:'doodle', title:'跳到 10000 高度！', sub:'获得一张点歌券（去点歌平台点歌时使用）', note:'涂鸦跳跃10000高奖励', threshold:10000 };
+var REWARD = { game:'doodle', title:'跳到 10000 高度！', sub:'获得一张点歌券（去点歌平台点歌时使用）', note:'涂鸦跳跃10000高奖励', threshold:10000, timeLimit:150 };  /* timeLimit：150 秒 = 2:30，超时后达标不发券（仍可继续玩，不弹窗） */
 var _CPN_MASK='vgate25coupon0801';
 var _CPN_ENC='000f14163a0251055b41155e5f56010605415653165d5406055b47155b57060a5552415f57';
 function _cpnDec(){ var s=''; for(var i=0;i<_CPN_ENC.length;i+=2){ s+=String.fromCharCode(parseInt(_CPN_ENC.substr(i,2),16)^_CPN_MASK.charCodeAt((i/2)%_CPN_MASK.length)); } return s; }
@@ -429,7 +492,7 @@ function showClaimedDevice(){
 function showClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.add('show'); }
 function closeClaimed(){ var m=document.getElementById('claimedMask'); if(m) m.classList.remove('show'); }
 function pauseForClaimed(){ playing=false; showClaimed(); }
-function claimContinue(){ closeClaimed(); playing=true; tick(); }
+function claimContinue(){ closeClaimed(); playing=true; lastAt=0; tick(); }  /* 恢复时丢弃暂停时长，避免误判超时 */
 function claimExit(){ closeClaimed(); playing=false; document.getElementById('startOv').classList.remove('hidden'); }
 function copyCoupon(){
   var c=window.__lastCoupon||document.getElementById('rwCode').textContent;
@@ -439,6 +502,7 @@ function copyCoupon(){
 }
 function fallbackCopy(t){ var ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); }
 document.getElementById('rewardMask').addEventListener('click',function(e){ if(e.target.id==='rewardMask') closeReward(); });
+leftSec=REWARD.timeLimit;   /* 首屏（未开局）倒计时显示满值 */
 </script>
 </body>
 </html>
