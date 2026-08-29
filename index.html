@@ -405,6 +405,9 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .dark .pop-sub{color:#aab4c8}
 .pop-hint{color:#64748b;font-size:.8rem;margin:0 0 14px}
 .dark .pop-hint{color:#b9c2d4}
+/* 链接弹窗里的使用限制提示（亮/暗双模式高对比） */
+.link-note{color:#c2410c;font-size:.74rem;margin-top:6px;line-height:1.5;font-weight:600}
+.dark .link-note{color:#ffb08a}
 .confetti-box p{font-size:15px;line-height:1.7;margin:0 0 16px}
 #confettiCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9992}
 .qr-box{background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -740,12 +743,12 @@ body::after{animation-name:blobB;animation-duration:34s}
 <!-- 学习资料提示悬浮球（关闭弹窗后出现，带红点；已勾选不再显示则不出现） -->
 <button id="studyBubble" onclick="showStudyNotice()" title="查看访问提示" aria-label="查看访问提示" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(74,108,247,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(59,91,253,.35)">💬<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
 
-<!-- ===== 复制链接弹窗（主链接 + 备用链接占位） ===== -->
+<!-- ===== 复制链接弹窗（主链接 + 备用链接） ===== -->
 <div class="allboard-mask" id="copyLinkMask">
   <div class="allboard-box" style="max-width:360px">
     <div class="allboard-head"><span>🔗 复制链接</span><button onclick="closeCopyLink()">关闭</button></div>
     <div style="padding:16px 20px">
-      <p style="font-size:.82rem;color:#4a5568;line-height:1.7;margin:0 0 12px">复制班级服务站链接，粘贴到微信 / QQ 即可分享给同学。备用链接上线后将在此列出。</p>
+      <p style="font-size:.82rem;color:#4a5568;line-height:1.7;margin:0 0 12px">复制班级服务站链接，粘贴到微信 / QQ 即可分享给同学。平时用<b>主链接</b>；主链接打不开时再用<b>备用链接</b>，备用链接<b>在微信内无法打开</b>，需复制链接到系统浏览器（Safari / Chrome / Edge）打开。</p>
       <div id="siteLinkList"></div>
     </div>
   </div>
@@ -1074,9 +1077,10 @@ var SITE_DATA = {
   qrUrl: "qrcode.jpg",
   /* 仓库地址（公告栏旁「仓库」按钮跳转） */
   repoUrl: "https://gitee.com/zikang0529/class-site",
-  /* 复制链接：主链接 + 备用链接（Gitee Pages 已于 2024 永久下线，旧链接失效；备用入口待重新部署后补全，未上线时弹窗显示"敬请期待"） */
+  /* 复制链接：主链接 + 备用链接（Gitee Pages 已于 2024 永久下线，旧链接失效；备用入口为 WorkBuddy 静态托管，note 用于展示使用限制提示） */
   siteLinks: [
-    { label: "主链接", url: "https://yuzikaaang.github.io/class-site/" }
+    { label: "主链接", url: "https://yuzikaaang.github.io/class-site/" },
+    { label: "备用链接", url: "https://a5048c773a210b3d4-25579.app.workbuddy.link/", note: "⚠️ 微信内打不开！请复制链接后用系统浏览器（Safari / Chrome / Edge）打开。主链接正常时优先用主链接。" }
   ],
   /* ── 联系方式名单（name=哈希，其余为密文，查询时解密）── */
   contacts: [
@@ -1145,6 +1149,7 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-08-29 15:20", text: "🔗【备用链接已上线】班级服务站新增备用入口：https://a5048c773a210b3d4-25579.app.workbuddy.link/\n① 平时请优先使用主链接，备用链接内容与主链接一致，仅作主链接打不开时的应急入口；\n② 备用链接在微信内无法打开，必须复制链接到系统浏览器（Safari / Chrome / Edge / 手机自带浏览器）打开；\n③ 侧边栏「🔗 复制链接」已同时列出主链接与备用链接，点右侧「复制」按钮即可；\n④ 备用链接为临时托管，若后续更换会在此公告更新。", important: true, importantUntil: "2026-08-30T15:20:00", category: "site" },
     { date: "2026-08-25 17:14", text: "【主链接切换】班级服务站主链接已切换为 GitHub Pages：https://yuzikaaang.github.io/class-site/ （Gitee 与 GitHub 仓库均已公开，可放心收藏与查询）。原 WorkBuddy 分享链接已停用，仅作为主链接不可达时的应急备用入口。", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
     { date: "2026-08-25 17:30", text: "公告栏新增分类筛选：点击「总览 / 网站内部 / 班级事务 / 班级活动 / 站主杂谈」即可只看对应分类的公告，无需展开全部。", category: "site" },
     { date: "2026-08-25 19:11", text: "📲 侧边栏新增「安装为应用」教程：支持 Windows / iPhone / 安卓各品牌一键安装到桌面，微信内请复制链接到浏览器打开。移动端页面右下角新增悬浮按钮，滚动到任意位置都可随时唤起侧边栏。", category: "site" },
@@ -2474,9 +2479,12 @@ function openCopyLink(){
     var links=(SITE_DATA.siteLinks||[]);
     var hasBackup=links.some(function(l){ return l.label.indexOf('备用')>=0; });
     var html=links.map(function(l,i){
-      return '<div style="display:flex;align-items:center;gap:10px;background:#eef1ff;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
+      return '<div style="background:#eef1ff;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
+        '<div style="display:flex;align-items:center;gap:10px">'+
         '<span style="flex:1;font-size:.85rem;color:#3b5bfd;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.label)+'</span>'+
-        '<button class="btn" style="min-width:64px;padding:7px 12px;font-size:.8rem" onclick="copyOneLink('+i+',this)">复制</button></div>';
+        '<button class="btn" style="min-width:64px;padding:7px 12px;font-size:.8rem" onclick="copyOneLink('+i+',this)">复制</button></div>'+
+        (l.note ? '<div class="link-note">'+esc(l.note)+'</div>' : '')+
+        '</div>';
     }).join('');
     if(!hasBackup){
       html += '<div style="display:flex;align-items:center;gap:10px;background:#f1f5f9;border-radius:12px;padding:10px 12px;opacity:.75">'+
@@ -2693,6 +2701,39 @@ function _renderHwCalendar(){
     });
   });
 }
+/* 备份包下载：优先 .zip；被 WAF 拦截（某些托管域名按后缀封禁 .zip）时回退无扩展名副本。
+   用 fetch + blob 触发下载，统一把文件名写成 class-site-backup.zip，用户拿到的始终是 zip。 */
+function downloadBackup(){
+  var cands=['./class-site-backup.zip','./class-site-backup'];
+  var i=0;
+  function fail(){
+    var err=document.getElementById('exportErr');
+    if(err){ err.style.display='block'; err.textContent='备份包下载失败，请稍后重试或联系站主'; }
+  }
+  function next(){
+    if(i>=cands.length){
+      // 兜底：file:// 等 fetch 不可用场景，回到直接跳转
+      if(location.protocol==='file:'){ window.location.href='./class-site-backup.zip'; return; }
+      fail();
+      return;
+    }
+    var url=cands[i++];
+    fetch(url,{cache:'no-store'}).then(function(r){
+      if(!r.ok) throw new Error('http '+r.status);
+      var ct=(r.headers && r.headers.get ? (r.headers.get('content-type')||'') : '');
+      if(ct.indexOf('text/html')>=0) throw new Error('html page');
+      return r.blob();
+    }).then(function(b){
+      if(!b || b.size<2048) throw new Error('bad size');
+      var u=URL.createObjectURL(b);
+      var a=document.createElement('a');
+      a.href=u; a.download='class-site-backup.zip';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(u); },5000);
+    }).catch(function(){ next(); });
+  }
+  try{ next(); }catch(e){ fail(); }
+}
 function submitExport(){
   var inp=document.getElementById('exportPassInput');
   var err=document.getElementById('exportErr');
@@ -2709,7 +2750,7 @@ function submitExport(){
     if(__lockTimers['export']) clearInterval(__lockTimers['export']);
     if(err) err.style.display='none';
     SFX.success();
-    window.location.href='./class-site-backup.zip';
+    downloadBackup();
     closeExport();
   } else {
     var r = onPassFail('export');

@@ -23,7 +23,7 @@
 | 平台 | 链接 | 说明 |
 |------|------|------|
 | **GitHub Pages（主链接）** | `https://yuzikaaang.github.io/class-site/` | 当前主链接；Gitee→GitHub 镜像自动同步，内容随仓库实时更新。Gitee 与 GitHub 仓库均已公开 |
-| WorkBuddy（应急备用，已取消常驻） | 由维护者按需临时重新发布 | 主链接打不开时，临时向 AI 申请重新发布获取新链接；常规不再作为分发入口 |
+| WorkBuddy（应急备用，2026-08-29 重新上线） | `https://a5048c773a210b3d4-25579.app.workbuddy.link/` | 主链接打不开时的应急入口，**微信内无法打开**，需复制链接到系统浏览器；已写入站内「🔗 复制链接」。⚠️ 该域名 WAF 按后缀封禁 `.zip`，备份包需无扩展名副本（见「备份与导出」） |
 
 ## 目录结构
 
@@ -73,7 +73,9 @@ GitHub Pages 在 GitHub 仓库 Settings → Pages 中开启（选择 `master` �
 
 - 网站内置「导出备份」功能（侧边栏底部按钮）：输入备份密码后下载完整版 `class-site-backup.zip`（含全部网站内容）。
 - 备份密码在站内以 SHA-256 哈希存储，不在源码中出现明文。
-- 导出 zip 由维护者每次内容更新后同步更新。
+- 导出 zip 由维护者每次内容更新后同步更新（`zip -rq class-site-backup.zip . -x ".git/*" "backup/*"`）。
+- **⚠️ 备用站点下载坑（2026-08-29）**：WorkBuddy 备用域名的腾讯云 WAF **按后缀封禁 `.zip`**（不存在的文件也返回 403）。因此下载逻辑 `downloadBackup()` 会在 `.zip` 失败时回退到**无扩展名副本 `class-site-backup`**，发布到备用站点时必须两份都放（`class-site-backup.zip` + `class-site-backup`），文件名仍保存为 `class-site-backup.zip`。主链 `github.io` 无此限制。
+- **线上发布包为净化版**：排除 `backup/`（历史备份包，不上传）、`source/`、`secrets.json.enc`、`README.md`、`TUTORIAL.md`、`cloudbaserc.json`、`.gitignore`；仓库内的 `class-site-backup.zip` 仍是完整版。
 
 ## 令牌管理
 
@@ -91,6 +93,7 @@ GitHub Pages 在 GitHub 仓库 Settings → Pages 中开启（选择 `master` �
 
 ## 最近更新
 
+- 2026-08-29：🔗 **备用链接上线 + 备份包可下载 + 全站隐私扫描**——① **备用链接**：`SITE_DATA.siteLinks` 填入 WorkBuddy 静态托管入口 `https://a5048c773a210b3d4-25579.app.workbuddy.link/`，侧边栏「🔗 复制链接」现同时列出主链接与备用链接；新增 `note` 字段与 `.link-note` 类（亮色 `#c2410c` / 暗色 `#ffb08a` 双模式高对比），备用链接下方与弹窗顶部均注明「**微信内打不开，需复制链接到系统浏览器**」。② **备份包可下载（备用站点）**：关键坑——WorkBuddy 域名前置的腾讯云 **WAF 按后缀封禁 `.zip`**（不存在的 zip 也返回 403，与 UA/Referer 无关），直接 `location.href` 下载必失败。改为新增 `downloadBackup()`：用 fetch 依次尝试 `./class-site-backup.zip` → **`./class-site-backup`（无扩展名副本）**，命中后以 blob + `a[download]` 保存，文件名统一为 `class-site-backup.zip`；`r.ok` 为假或 `content-type` 含 `text/html`（WAF 拦截页）即判失败换下一个，全部失败且非 `file://` 时提示「下载失败」，`file://` 场景回退直接跳转。发布目录同时放两份备份包（含无扩展名副本）。③ **发布口径**：线上发布包为**净化版**——排除 `backup/`（11 个历史备份包约 12MB，不上传）、`secrets.json.enc`、`source/`、`README.md`、`TUTORIAL.md`、`cloudbaserc.json`、`.gitignore`；仓库内的 `class-site-backup.zip` 仍是完整版（含上述文件）。实测线上 `/class-site-backup` → 200（226KB，`application/octet-stream`），`/class-site-backup.zip` → 403（WAF，已由回退兜住），`/backup/`、`/README.md`、`/secrets.json.enc`、`/source/package.json` 均 404；线上 Playwright 端到端：弹窗两条链接 + 微信提示正常，点击下载得到 226822 字节有效 zip（21 条目），无控制台错误。④ **隐私扫描（4 类）**：API 令牌/密钥模式（`sk-`/`ghp_`/`AKIA`/`xoxb-`/Bearer/腾讯/阿里等）**未命中**；`token|password|secret|apikey` 变量赋值**未命中**；≥24 位十六进制串命中两类且均非明文——4 个游戏里的 `_CPN_ENC`（发券凭证 XOR 密文，掩码 `vgate25coupon0801`）与 `index.html` contacts 的 SHA-256 姓名哈希（设计如此）；手机/QQ/身份证/邮箱命中 `index.html` 中一个 11 位数字串（`177****9631`），经查为某条 64 位 SHA-256 哈希（`25b1be53…c6bca`）的内部子串，**误报、非手机号**。`secrets.json.enc` 为 OpenSSL `Salted__` 密文，`cloudbaserc.json` 的 `envId` 为占位符。**结论：无明文令牌/密钥泄露。** ⑤ 已发站内公告（category `site`，置顶至 2026-08-30 15:20）。已做修改前备份 `backup/class-site-backup-before-20260829-151636.zip`；已重打包 `class-site-backup.zip`。
 - 2026-08-29：🎟️ **点歌券「每周一张」改为严格判定（券用过就不再发）**——原后台查重只认 `status==="AVAILABLE"`，券一旦被核销就查不到，同学用掉后重新达标**又能领一张**，等于没限制。改为：① `platformFind` 不再过滤 status，本周内「名字 + 游戏备注」匹配即算已领过（已使用的券同样拦住，并把原券码标「已使用」展示出来）；② 本地台账/设备标记命中时**不再直接拒绝**，改为先跟后台核实——后台真有券（含已使用）→ 拦截并展示原券码；后台查不到（站主删了券）→ 清掉本地记录允许重新领（新增 `ledgerDel`/`clearClaimed`）；网络不通查不了 → 保守拦截，提示截图联系管理员。③ 弹窗文案区分「券码已找回（无需重新生成）」与「本周这张券你已领过（已使用），下周一 0 点刷新」。四款游戏（bird/tetris/doodle/snake）全部同步。实测 4 游戏 × 7 场景共 28 项全部符合预期，无页面报错。属游戏/发券机制，按站规不进公告。
 - 2026-08-29：🐍🦘 **两处小修**——① **贪吃蛇豆子不再生成在蛇身内部**：原 `place()` 纯随机取格，蛇越长越容易把豆子刷到身体里（吃到后豆子“消失/重叠”）。改为先标记蛇身占格，再在所有空格子里随机取一个（无空格时回退原随机，避免死循环）。随机 4000 局（最长蛇 342/400 格）+ 极端仅剩 1 空格 + 连续 200 次吃豆，落在蛇身次数均为 **0**。② **涂鸦跳跃达标限时 2:30 → 2:00**：`REWARD.timeLimit` 150→120，开始遮罩与底部提示同步改为「限时 2:00」；倒计时 `fmtTime` 改为向上取整，开局显示满值 **2:00**（此前会先闪 1:59）。游戏内容，按站规不进公告。
 - 2026-08-29：🐍 **贪吃蛇：达标弹窗暂停 + 继续游戏 2 秒无敌**——① 达标弹「填写领券人」时同步 `clearTimeout(timer); paused=true`（原弹窗弹出后蛇还在跑，填名字过程中可能撞死），券码弹窗 `showReward` 同样暂停（新增），已领过弹窗本来就暂停；`loop()` 末尾改为 `if(!paused)` 才续跑，避免暂停后仍排下一个 timer。② 新增 `invince/INVINCE_MS=2000` 与 `resumeGame()`：`closeName`（取消领券）、`closeReward`（继续游戏）、`claimContinue`（已领过→继续游戏）三个恢复入口统一给 **2 秒无敌**——期间撞自己不死、撞墙把蛇头夹紧在界内继续走，蛇身变金色且右上角显示「🛡 无敌 Xs」倒计时；`reset()` 清零无敌。③ `doClaim` 改用 `hideNameMask()`（只关弹窗不恢复），避免恢复一帧后又被「已领过」弹窗暂停。两处弹窗加提示「点继续游戏后有 2 秒无敌」。游戏内容，按站规不进公告。
