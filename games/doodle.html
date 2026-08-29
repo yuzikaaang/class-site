@@ -72,7 +72,7 @@
   <canvas id="cv"></canvas>
   <div class="ov" id="startOv">
     <h2>涂鸦跳跃</h2>
-    <p>左右移动让角色不断往上跳<br>踩平台借力 · 弹簧可以弹超高<br>掉下去就结束<br>⏱ 限时 2:30 内跳到 10000 高才能领点歌券</p>
+    <p>左右移动让角色不断往上跳<br>踩平台借力 · 弹簧可以弹超高<br>掉下去就结束<br>⏱ 限时 2:00 内跳到 10000 高才能领点歌券</p>
     <button id="startBtn">开始游戏</button>
   </div>
   <div class="ov hidden" id="overOv">
@@ -128,7 +128,7 @@
   <button id="leftBtn" aria-label="左移">◀ 左</button>
   <button id="rightBtn" class="right" aria-label="右移">右 ▶</button>
 </div>
-<div class="tip">键盘 ← → 或下方按键移动 · 限时 2:30 内达标才发券（超时仍可继续玩）</div>
+<div class="tip">键盘 ← → 或下方按键移动 · 限时 2:00 内达标才发券（超时仍可继续玩）</div>
 <script>
 var AC=null;
 function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
@@ -243,7 +243,7 @@ function draw(){
   drawHUD();
 }
 /* HUD 画在 canvas 内（不再每帧改 DOM 文本，避免移动端重排抖动） */
-function fmtTime(s){ var m=Math.floor(s/60),ss=Math.floor(s%60); return m+':'+(ss<10?'0':'')+ss; }
+function fmtTime(s){ var t=Math.max(0,Math.ceil(s)); var m=Math.floor(t/60),ss=t%60; return m+':'+(ss<10?'0':'')+ss; }  /* 向上取整：开局显示满值 2:00 而不是 1:59 */
 function drawHUD(){
   ctx.save();
   ctx.fillStyle='rgba(8,11,26,.5)';
@@ -322,7 +322,7 @@ function djNextPlatX(prevX){
 }
 
 /* ===== 周常点歌券奖励（每周一刷新，每款游戏每周一张） ===== */
-var REWARD = { game:'doodle', title:'跳到 10000 高度！', sub:'获得一张点歌券（去点歌平台点歌时使用）', note:'涂鸦跳跃10000高奖励', threshold:10000, timeLimit:150 };  /* timeLimit：150 秒 = 2:30，超时后达标不发券（仍可继续玩，不弹窗） */
+var REWARD = { game:'doodle', title:'跳到 10000 高度！', sub:'获得一张点歌券（去点歌平台点歌时使用）', note:'涂鸦跳跃10000高奖励', threshold:10000, timeLimit:120 };  /* timeLimit：120 秒 = 2:00，超时后达标不发券（仍可继续玩，不弹窗） */
 var _CPN_MASK='vgate25coupon0801';
 var _CPN_ENC='000f14163a0251055b41155e5f56010605415653165d5406055b47155b57060a5552415f57';
 function _cpnDec(){ var s=''; for(var i=0;i<_CPN_ENC.length;i+=2){ s+=String.fromCharCode(parseInt(_CPN_ENC.substr(i,2),16)^_CPN_MASK.charCodeAt((i/2)%_CPN_MASK.length)); } return s; }

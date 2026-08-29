@@ -378,7 +378,15 @@ invince=0;   /* 无敌截止时间戳（关闭弹窗继续游戏时给 2 秒缓�
 var INVINCE_MS=2000;
 function isInv(){ return Date.now()<invince; }
 hi=+(localStorage.getItem('snake_hi')||0);document.getElementById('hi').textContent=hi;
-function place(){food={x:(Math.random()*N)|0,y:(Math.random()*N)|0};}
+/* 放豆子：只在空格子里随机取，避免生成在蛇身内部（原来纯随机，蛇越长越容易撞上） */
+function place(){
+  var occ={},i;
+  for(i=0;i<snake.length;i++) occ[snake[i].x+','+snake[i].y]=1;
+  var free=[];
+  for(var y=0;y<N;y++){ for(var x=0;x<N;x++){ if(!occ[x+','+y]) free.push({x:x,y:y}); } }
+  if(!free.length){ food={x:(Math.random()*N)|0,y:(Math.random()*N)|0}; return; }
+  food=free[(Math.random()*free.length)|0];
+}
 function draw(){
   ctx.fillStyle='#0b0f1f';ctx.fillRect(0,0,cv.width,cv.height);
   ctx.fillStyle='#46e0c8';ctx.fillRect(food.x*CELL+2,food.y*CELL+2,CELL-4,CELL-4);
