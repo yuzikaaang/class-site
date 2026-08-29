@@ -408,6 +408,9 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 /* 链接弹窗里的使用限制提示（亮/暗双模式高对比） */
 .link-note{color:#c2410c;font-size:.74rem;margin-top:6px;line-height:1.5;font-weight:600}
 .dark .link-note{color:#ffb08a}
+/* 班级活动通知弹窗 暗色文字适配 */
+.dark #actMask #actBody{color:#c8d1e0!important}
+.dark #actMask #actEnd{color:#aab4c8!important}
 .confetti-box p{font-size:15px;line-height:1.7;margin:0 0 16px}
 #confettiCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9992}
 .qr-box{background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -665,9 +668,9 @@ body::after{animation-name:blobB;animation-duration:34s}
   <div class="allboard-box" style="max-width:360px">
     <div class="allboard-head"><span>💾 数据管理</span><button onclick="closeData()">关闭</button></div>
     <div style="padding:16px 20px;text-align:left">
-      <p style="font-size:.8rem;color:#4a5568;margin:0 0 12px">管理本站保存在本设备上的数据（游戏最高分、记录、班级签等）。换设备或清缓存前可先导出，之后导入即可恢复。如需彻底清空（游戏记录、主题/音效、密码与暗号通关及锁状态等），请用下方「全部清理」；设备标识、班级签、点歌券记录不会被清除（防借初始化刷签/刷券）。</p>
-      <button class="btn" style="width:100%;margin-bottom:8px" onclick="exportData()">📤 导出数据（下载 JSON）</button>
-      <button class="btn" style="width:100%;margin-bottom:8px;background:#eef1ff;color:#3b5bfd" onclick="copyDataText()">📋 复制数据文本</button>
+      <p style="font-size:.8rem;color:#4a5568;margin:0 0 12px">管理本站保存在本设备上的数据（游戏最高分、记录、班级签等）。换设备或清缓存前可先导出，之后导入即可恢复。<b style="color:#c2410c">导出时会用你自己设置的密码加密</b>——原明文导出会把姓名、班级签、点歌记录等直接暴露，现已加 AES-GCM 加密；导入需输入同一密码，<b>请务必记住</b>。如需彻底清空（游戏记录、主题/音效、密码与暗号通关及锁状态等），请用下方「全部清理」；设备标识、班级签、点歌券记录不会被清除（防借初始化刷签/刷券）。</p>
+      <button class="btn" style="width:100%;margin-bottom:8px" onclick="exportData()">📤 导出数据（加密 .json）</button>
+      <button class="btn" style="width:100%;margin-bottom:8px;background:#eef1ff;color:#3b5bfd" onclick="copyDataText()">📋 复制加密数据文本</button>
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <button class="btn" style="flex:1;background:#e6f9f0;color:#07a154" onclick="document.getElementById('dataFile').click()">📥 导入文件</button>
         <input type="file" id="dataFile" accept=".json,application/json" style="display:none" onchange="importDataFile(this)">
@@ -677,6 +680,20 @@ body::after{animation-name:blobB;animation-duration:34s}
       <button class="btn" style="width:100%;background:#ffeded;color:#c2410c" onclick="resetData()">🗑 重置游戏数据</button>
       <button class="btn" style="width:100%;background:#c0392b;color:#fff;margin-top:8px" onclick="wipeAllData()">🧹 全部清理（保留设备/班签/券）</button>
       <p id="dataMsg" style="font-size:.8rem;margin:10px 0 0;color:#07a154;min-height:1.2em"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 数据加密口令弹窗（导出时设置 / 导入时输入） ===== -->
+<div class="allboard-mask" id="dataEncMask">
+  <div class="allboard-box" style="max-width:340px">
+    <div class="allboard-head"><span id="dataEncTitle">🔐 设置导出密码</span><button onclick="closeDataEnc()">关闭</button></div>
+    <div style="padding:18px 22px;text-align:center">
+      <p id="dataEncDesc" style="font-size:.82rem;color:#4a5568;line-height:1.7;margin:0 0 14px"></p>
+      <input id="dataEncPass" type="password" placeholder="请输入密码（至少 4 位）" class="gate-input" autocomplete="off" style="width:100%;text-align:center" onkeydown="if(event.key==='Enter')submitDataEnc()">
+      <input id="dataEncPass2" type="password" placeholder="请再输入一次密码" class="gate-input" autocomplete="off" style="width:100%;text-align:center;margin-top:8px" onkeydown="if(event.key==='Enter')submitDataEnc()">
+      <p id="dataEncErr" style="color:#c2410c;font-size:.8rem;margin-top:8px;display:none"></p>
+      <button class="btn" style="width:100%;margin-top:14px" onclick="submitDataEnc()">确定</button>
     </div>
   </div>
 </div>
@@ -703,9 +720,9 @@ body::after{animation-name:blobB;animation-duration:34s}
       <div style="display:flex;gap:8px;margin:8px 0 2px;font-size:.8rem">
         <select id="allSearchCat" onchange="onAllSearchScope()" style="flex:1;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222">
           <option value="all">全部板块</option>
-          <option value="class">🏫 班级事务</option>
           <option value="site">📡 网站内部</option>
-          <option value="activity">🎉 班级活动</option>
+          <option value="activity">🔔 重要更新</option>
+          <option value="class">🏫 班级事务</option>
           <option value="misc">💭 站主杂谈</option>
         </select>
         <select id="allSearchTime" onchange="onAllSearchScope()" style="flex:1;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222">
@@ -753,6 +770,22 @@ body::after{animation-name:blobB;animation-duration:34s}
 
 <!-- 学习资料提示悬浮球（关闭弹窗后出现，带红点；已勾选不再显示则不出现） -->
 <button id="studyBubble" onclick="showStudyNotice()" title="查看访问提示" aria-label="查看访问提示" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(74,108,247,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(59,91,253,.35)">💬<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
+
+<!-- 班级活动通知悬浮球（进站弹窗关闭后出现；活动结束自动消失，可点开重新查看） -->
+<button id="actBubble" onclick="showAct()" title="查看班级活动" aria-label="查看班级活动" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(255,159,67,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,159,67,.4)">🎉<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
+
+<!-- ===== 班级活动通知弹窗（进站自动弹出；关闭后留悬浮球，到活动结束才不再出现） ===== -->
+<div class="allboard-mask" id="actMask">
+  <div class="allboard-box" style="max-width:360px">
+    <div class="allboard-head"><span id="actTitle">🎉 班级活动</span><button onclick="closeAct()">关闭</button></div>
+    <div style="padding:18px 22px;text-align:left">
+      <div id="actBody" style="font-size:.9rem;color:#4a5568;line-height:1.85;white-space:pre-line"></div>
+      <div id="actEnd" style="font-size:.78rem;color:#5f6b80;margin-top:10px"></div>
+      <button class="btn" id="actLink" style="width:100%;margin-top:14px;display:none" onclick="actGoLink()"></button>
+      <button class="btn btn-secondary" style="width:100%;margin-top:10px" onclick="closeAct()">我知道了（今天不再自动弹）</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== 复制链接弹窗（主链接 + 备用链接） ===== -->
 <div class="allboard-mask" id="copyLinkMask">
@@ -1093,6 +1126,25 @@ var SITE_DATA = {
     { label: "主链接", url: "https://yuzikaaang.github.io/class-site/" },
     { label: "备用链接", url: "https://a5048c773a210b3d4-25579.app.workbuddy.link/", note: "⚠️ 微信内打不开！请复制链接后用系统浏览器（Safari / Chrome / Edge）打开。主链接正常时优先用主链接。" }
   ],
+  /* ── 班级活动通知（启用后进站自动弹窗；弹窗关掉后留一个悬浮球，
+        点悬浮球可随时重新打开，**到 endAt 活动结束后弹窗与悬浮球都不再出现**）──
+     站主用法：有活动时把 enabled 改成 true，填 title / body / endAt 即可：
+       id      —— 换一场新活动就改个新 id，让之前关过弹窗的同学也会重新收到通知
+       title   —— 弹窗标题
+       body    —— 活动说明，\n 换行
+       startAt —— 可选，到点才开始弹（留空=立即开始）
+       endAt   —— 活动结束时间（如 "2026-09-05T18:00:00"），到点后自动撤掉悬浮球
+       linkText / linkUrl —— 可选，底部按钮（留空则不显示按钮） */
+  activity: {
+    enabled: false,
+    id: "act-2026-autumn",
+    title: "🎉 班级活动",
+    body: "这里写活动说明，支持换行。\n第二行内容。",
+    startAt: "",
+    endAt: "",
+    linkText: "",
+    linkUrl: ""
+  },
   /* ── 联系方式名单（name=哈希，其余为密文，查询时解密）── */
   contacts: [
     { name: "6edf6fc48db2cecbe826594996f606fb1f99f32a96944c311a4b437a4267b004", studentId: "UVlDBwUB", role: "hsHV1aGv" },
@@ -1160,7 +1212,8 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
-    { date: "2026-08-29 15:20", text: "🔗【备用链接已上线】班级服务站新增备用入口：https://a5048c773a210b3d4-25579.app.workbuddy.link/\n① 平时请优先使用主链接，备用链接内容与主链接一致，仅作主链接打不开时的应急入口；\n② 备用链接在微信内无法打开，必须复制链接到系统浏览器（Safari / Chrome / Edge / 手机自带浏览器）打开；\n③ 侧边栏「🔗 复制链接」已同时列出主链接与备用链接，点右侧「复制」按钮即可；\n④ 备用链接为临时托管，若后续更换会在此公告更新。", important: true, importantUntil: "2026-08-30T15:20:00", category: "site" },
+    { date: "2026-08-29 16:20", text: "📌 两处小更新：\n① 公告分类「🎉 班级活动」更名为「🔔 重要更新」并前移一格，班级重要消息以后都归在这里，更好找。\n② 后续班级有活动时会在这条「重要更新」里发通知，进站还会自动弹窗提醒；弹窗关掉后右下角会留一个悬浮球，随时点开重看，活动结束后自动消失。\n③ 「数据管理」导出的个人数据（含姓名、班级签、点歌记录等）现在会用你设置的密码加密，不再明文导出；导入时需要输入同一个密码，请务必记住。", category: "site" },
+    { date: "2026-08-29 15:20", text: "🔗【备用链接已上线】班级服务站新增备用入口：https://a5048c773a210b3d4-25579.app.workbuddy.link/\n① 平时请优先使用主链接，备用链接内容与主链接一致，仅作主链接打不开时的应急入口；\n② 备用链接在微信内无法打开，必须复制链接到系统浏览器（Safari / Chrome / Edge / 手机自带浏览器）打开；\n③ 侧边栏「🔗 复制链接」已同时列出主链接与备用链接，点右侧「复制」按钮即可；\n④ 备用链接为临时托管，若后续更换会在此公告更新。", important: true, importantUntil: "2026-08-29T18:00:00", category: "site" },
     { date: "2026-08-25 17:14", text: "【主链接切换】班级服务站主链接已切换为 GitHub Pages：https://yuzikaaang.github.io/class-site/ （Gitee 与 GitHub 仓库均已公开，可放心收藏与查询）。原 WorkBuddy 分享链接已停用，仅作为主链接不可达时的应急备用入口。", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
     { date: "2026-08-25 17:30", text: "公告栏新增分类筛选：点击「总览 / 网站内部 / 班级事务 / 班级活动 / 站主杂谈」即可只看对应分类的公告，无需展开全部。", category: "site" },
     { date: "2026-08-25 19:11", text: "📲 侧边栏新增「安装为应用」教程：支持 Windows / iPhone / 安卓各品牌一键安装到桌面，微信内请复制链接到浏览器打开。移动端页面右下角新增悬浮按钮，滚动到任意位置都可随时唤起侧边栏。", category: "site" },
@@ -1621,8 +1674,8 @@ function renderBoard(){
   var filtered = (annFilter && annFilter !== 'all') ? ann.filter(function(a){ return (a.category || 'misc') === annFilter; }) : ann;
   var CATS = [
     { key: 'site',    name: '📡 网站内部' },
+    { key: 'activity',name: '🔔 重要更新' },
     { key: 'class',   name: '🏫 班级事务' },
-    { key: 'activity',name: '🎉 班级活动' },
     { key: 'misc',    name: '💭 站主杂谈' },
     { key: 'all',     name: '总览' }
   ];
@@ -2170,9 +2223,9 @@ function closeWelcome(){
 
 /* ---- 全部公告弹窗（按板块折叠 / 搜索 / 范围筛选 / 模糊匹配） ---- */
 var ANN_CATS = [
-  { key: 'class',    name: '🏫 班级事务' },
   { key: 'site',     name: '📡 网站内部' },
-  { key: 'activity', name: '🎉 班级活动' },
+  { key: 'activity', name: '🔔 重要更新' },
+  { key: 'class',    name: '🏫 班级事务' },
   { key: 'misc',     name: '💭 站主杂谈' }
 ];
 /* 相近词词典：模糊搜索用，猜用户实际想搜什么（彩蛋 ↔ 隐藏 ↔ 暗号 …） */
@@ -2457,29 +2510,99 @@ function openData(){
 }
 function closeData(){ var m=document.getElementById('dataMask'); if(m) m.classList.remove('show'); }
 (function(){ var m=document.getElementById('dataMask'); if(m) m.addEventListener('click',function(e){ if(e.target.id==='dataMask') closeData(); }); })();
-function exportData(){
-  var json=JSON.stringify(collectAllData(),null,1);
+/* ---- 个人数据加密（PBKDF2-SHA256 派生密钥 + AES-GCM 加密）
+       密码只在导出/导入时由用户输入，不写进 localStorage、不随数据走 ---- */
+var DE_ITER=150000;
+function _b64enc(u8){ var s=''; for(var i=0;i<u8.length;i++) s+=String.fromCharCode(u8[i]); return btoa(s); }
+function _b64dec(str){ var s=atob(str), u=new Uint8Array(s.length); for(var i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
+function cryptoOK(){ return !!(window.crypto && crypto.subtle && crypto.subtle.deriveKey && crypto.subtle.encrypt && window.TextEncoder); }
+function _deriveKey(pw,salt){
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey'])
+    .then(function(base){
+      return crypto.subtle.deriveKey({name:'PBKDF2',salt:salt,iterations:DE_ITER,hash:'SHA-256'}, base, {name:'AES-GCM',length:256}, false, ['encrypt','decrypt']);
+    });
+}
+function encPayload(obj,pw){
+  var salt=crypto.getRandomValues(new Uint8Array(16));
+  var iv=crypto.getRandomValues(new Uint8Array(12));
+  var data=new TextEncoder().encode(JSON.stringify(obj));
+  return _deriveKey(pw,salt)
+    .then(function(k){ return crypto.subtle.encrypt({name:'AES-GCM',iv:iv},k,data); })
+    .then(function(ct){ return {v:2,alg:'PBKDF2-SHA256/AES-GCM',iter:DE_ITER,salt:_b64enc(salt),iv:_b64enc(iv),ct:_b64enc(new Uint8Array(ct))}; });
+}
+function decPayload(w,pw){
+  return _deriveKey(pw,_b64dec(w.salt))
+    .then(function(k){ return crypto.subtle.decrypt({name:'AES-GCM',iv:_b64dec(w.iv)},k,_b64dec(w.ct)); })
+    .then(function(pt){ return JSON.parse(new TextDecoder().decode(new Uint8Array(pt))); });
+}
+/* 口令弹窗（导出=设置+确认，导入=仅输入） */
+var __deCb=null, __deMode='export';
+function askDataEnc(mode,cb){
+  __deMode=mode; __deCb=cb;
+  var t=document.getElementById('dataEncTitle'), d=document.getElementById('dataEncDesc');
+  var p=document.getElementById('dataEncPass'), p2=document.getElementById('dataEncPass2'), err=document.getElementById('dataEncErr');
+  if(t) t.textContent=(mode==='export')?'🔐 设置导出密码':'🔓 输入数据密码';
+  if(d) d.innerHTML=(mode==='export')
+    ? '导出内容含<b>姓名、班级签、点歌记录</b>等，将用你设置的密码加密。<br><b style="color:#c2410c">请务必记住</b>——导入时要输入同一个密码，忘记将无法恢复。'
+    : '这份数据是加密过的，请输入导出时设置的密码。';
+  if(p2) p2.style.display=(mode==='export')?'':'none';
+  if(err) err.style.display='none';
+  if(p) p.value=''; if(p2) p2.value='';
+  var m=document.getElementById('dataEncMask'); if(m) m.classList.add('show');
+  setTimeout(function(){ if(p) p.focus(); },120);
+}
+function closeDataEnc(){ var m=document.getElementById('dataEncMask'); if(m) m.classList.remove('show'); __deCb=null; }
+function submitDataEnc(){
+  var p=document.getElementById('dataEncPass'), p2=document.getElementById('dataEncPass2'), err=document.getElementById('dataEncErr');
+  var v=p?p.value:'', cb=__deCb, mode=__deMode;
+  if(v.length<4){ if(err){ err.style.display='block'; err.textContent='密码至少 4 位'; } return; }
+  if(mode==='export' && p2 && p2.value!==v){ if(err){ err.style.display='block'; err.textContent='两次输入的密码不一致'; } return; }
+  closeDataEnc();
+  if(cb) cb(v);
+}
+(function(){ var m=document.getElementById('dataEncMask'); if(m) m.addEventListener('click',function(e){ if(e.target.id==='dataEncMask') closeDataEnc(); }); })();
+
+function _dlJSON(json,name){
   var blob=new Blob([json],{type:'application/json'});
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');
-  a.href=url; a.download='class-site-data-'+new Date().toISOString().slice(0,10)+'.json';
+  a.href=url; a.download=name;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(url); },3000);
-  dataMsg('✅ 已下载数据文件（.json）');
-  SFX.success();
+}
+function _plainWarn(then){
+  if(!confirm('当前环境不支持加密（Web Crypto 需要 https 或 localhost 环境）。\n\n仍要以【明文】方式导出吗？这样文件里的姓名、班级签、点歌记录等都能被直接看到。')) return;
+  then();
+}
+function exportData(){
+  var fname='class-site-data-'+new Date().toISOString().slice(0,10)+'.json';
+  if(!cryptoOK()){ _plainWarn(function(){ _dlJSON(JSON.stringify(collectAllData(),null,1), fname); dataMsg('⚠️ 已明文导出（未加密）','#c2410c'); SFX.success(); }); return; }
+  askDataEnc('export',function(pw){
+    encPayload(collectAllData(),pw).then(function(w){
+      _dlJSON(JSON.stringify(w),fname);
+      dataMsg('🔐 已加密导出，请记住密码');
+      SFX.success();
+    }).catch(function(){ dataMsg('❌ 加密失败，请重试','#c2410c'); });
+  });
 }
 function copyDataText(){
-  var json=JSON.stringify(collectAllData());
-  var ok=false;
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(json).then(function(){ ok=true; dataMsg('✅ 数据文本已复制，请妥善保存'); SFX.success(); },function(){ fallbackCopyData(json); });
-  }else{ fallbackCopyData(json); }
+  if(!cryptoOK()){ _plainWarn(function(){ _copyOut(JSON.stringify(collectAllData()),'⚠️ 已复制明文数据（未加密）','#c2410c'); }); return; }
+  askDataEnc('export',function(pw){
+    encPayload(collectAllData(),pw).then(function(w){
+      _copyOut(JSON.stringify(w),'🔐 已复制加密数据，请记住密码','#07a154');
+    }).catch(function(){ dataMsg('❌ 加密失败，请重试','#c2410c'); });
+  });
 }
-function fallbackCopyData(json){
+function _copyOut(json,msg,color){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(json).then(function(){ dataMsg(msg,color); SFX.success(); },function(){ fallbackCopyData(json,msg,color); });
+  }else{ fallbackCopyData(json,msg,color); }
+}
+function fallbackCopyData(json,msg,color){
   var ta=document.createElement('textarea');
   ta.value=json; ta.style.position='fixed'; ta.style.opacity='0';
   document.body.appendChild(ta); ta.select();
-  try{ document.execCommand('copy'); dataMsg('✅ 数据文本已复制，请妥善保存'); SFX.success(); }
+  try{ document.execCommand('copy'); dataMsg(msg||'✅ 数据文本已复制，请妥善保存', color||'#07a154'); SFX.success(); }
   catch(e){ dataMsg('❌ 复制失败', '#c2410c'); }
   document.body.removeChild(ta);
 }
@@ -2540,11 +2663,7 @@ function importDataFile(input){
   rd.onload=function(){ doImport(String(rd.result||'').trim()); input.value=''; };
   rd.readAsText(f);
 }
-function doImport(text){
-  if(!text){ dataMsg('请先选择文件或粘贴数据', '#c2410c'); return; }
-  var obj=null;
-  try{ obj=JSON.parse(text); }catch(e){ dataMsg('❌ 数据格式不正确，无法导入', '#c2410c'); return; }
-  if(!obj || typeof obj!=='object'){ dataMsg('❌ 数据格式不正确，无法导入', '#c2410c'); return; }
+function applyImport(obj){
   var n=0;
   try{
     for(var k in obj){ localStorage.setItem(k, String(obj[k])); n++; }
@@ -2552,6 +2671,26 @@ function doImport(text){
   dataMsg('✅ 已导入 ' + n + ' 项数据，即将刷新…');
   SFX.success();
   setTimeout(function(){ location.reload(); }, 800);
+}
+function doImport(text){
+  if(!text){ dataMsg('请先选择文件或粘贴数据', '#c2410c'); return; }
+  var obj=null;
+  try{ obj=JSON.parse(text); }catch(e){ dataMsg('❌ 数据格式不正确，无法导入', '#c2410c'); return; }
+  if(!obj || typeof obj!=='object'){ dataMsg('❌ 数据格式不正确，无法导入', '#c2410c'); return; }
+  /* 加密格式（v:2 + alg）→ 要求输入密码；旧版明文数据仍可直接导入 */
+  if(obj.v===2 && typeof obj.alg==='string' && obj.alg.indexOf('AES-GCM')>=0){
+    if(!cryptoOK()){ dataMsg('❌ 这是加密数据，当前环境不支持解密（需 https 或 localhost）', '#c2410c'); return; }
+    askDataEnc('import', function(pw){
+      dataMsg('⏳ 正在解密…', '#3b5bfd');
+      decPayload(obj, pw).then(function(plain){
+        applyImport(plain);
+      }).catch(function(){
+        dataMsg('❌ 密码错误或数据已损坏', '#c2410c'); SFX.error();
+      });
+    });
+    return;
+  }
+  applyImport(obj);
 }
 function resetData(){
   if(!confirm('确定要重置本设备的游戏数据吗？（各游戏最高分、记录将被清空，不可恢复）')) return;
@@ -2585,9 +2724,10 @@ function wipeAllData(){
 /* ---- 学习资料网络限制提示弹窗（关闭后显示带红点悬浮球） ---- */
 function studyBubbleShow(){
   var b=document.getElementById('studyBubble'); if(!b) return;
-  if(window.__activeCat !== 5){ b.style.display='none'; return; } /* 仅在学习资料板块内显示 */
+  if(window.__activeCat !== 5){ b.style.display='none'; actSyncBubble(); return; } /* 仅在学习资料板块内显示 */
   var off=false; try{ off=localStorage.getItem('cls_study_notice_dismissed')==='1'; }catch(e){}
   b.style.display = off ? 'none' : 'flex';
+  actSyncBubble(); /* 活动球可见时上移，避免两个球叠一起 */
 }
 function studyBubbleHide(){ var b=document.getElementById('studyBubble'); if(b) b.style.display='none'; }
 function showStudyNotice(){
@@ -2605,6 +2745,73 @@ function dismissStudyNotice(){
   if(cb && cb.checked){ try{ localStorage.setItem('cls_study_notice_dismissed','1'); }catch(e){} off=true; }
   var m=document.getElementById('studyNoticeMask'); if(m) m.classList.remove('show');
   if(off) studyBubbleHide(); else studyBubbleShow();
+}
+
+/* ---- 班级活动通知（进站自动弹窗；关闭后留悬浮球，活动结束自动撤掉）---- */
+function actGet(){ return (window.SITE_DATA && SITE_DATA.activity) || null; }
+function _actMs(v){ if(!v) return NaN; var t=new Date(v).getTime(); return isNaN(t) ? NaN : t; }
+function actActive(){
+  var a=actGet();
+  if(!a || !a.enabled) return false;
+  var now=Date.now();
+  var s=_actMs(a.startAt), e=_actMs(a.endAt);
+  if(!isNaN(s) && now < s) return false;   /* 还没到开始时间 */
+  if(!isNaN(e) && now > e) return false;   /* 已过结束时间 */
+  return true;
+}
+function actPopKey(){ var a=actGet(); return 'cls_act_pop_'+((a && a.id)||'default'); }
+function actTodayKey(){ return actPopKey()+'_'+new Date().toDateString(); }
+function actAutoPopped(){ try{ return localStorage.getItem(actTodayKey())==='1'; }catch(e){ return false; } }
+/* 两个悬浮球都贴右下角：活动球出现时把学习资料球上移，避免叠在一起 */
+function actSyncBubble(){
+  var ab=document.getElementById('actBubble'), sb=document.getElementById('studyBubble');
+  var vis = !!(ab && ab.style.display==='flex');
+  if(sb) sb.style.bottom = vis ? '74px' : '16px';
+}
+function actBubbleShow(){
+  var b=document.getElementById('actBubble'); if(!b) return;
+  b.style.display = actActive() ? 'flex' : 'none';
+  actSyncBubble();
+}
+function showAct(){
+  if(!actActive()) return;
+  var a=actGet();
+  var ttl=document.getElementById('actTitle'), body=document.getElementById('actBody');
+  var end=document.getElementById('actEnd'), link=document.getElementById('actLink');
+  if(ttl) ttl.textContent=a.title||'🎉 班级活动';
+  if(body) body.textContent=a.body||'';
+  if(end) end.textContent = a.endAt ? ('活动持续至 '+String(a.endAt).replace('T',' ')) : '';
+  if(link){
+    if(a.linkUrl && a.linkText){ link.style.display=''; link.textContent=a.linkText; }
+    else{ link.style.display='none'; }
+  }
+  var b=document.getElementById('actBubble'); if(b) b.style.display='none';
+  actSyncBubble();
+  var m=document.getElementById('actMask'); if(m) m.classList.add('show');
+  SFX.pop();
+}
+function closeAct(){
+  var m=document.getElementById('actMask'); if(m) m.classList.remove('show');
+  try{ localStorage.setItem(actTodayKey(),'1'); }catch(e){}
+  actBubbleShow();
+}
+function actGoLink(){ var a=actGet(); if(a && a.linkUrl && typeof openLink==='function') openLink(a.linkUrl,true); }
+/* 自动弹窗：等其它弹窗（欢迎语 / 门禁 / 学习资料提示等）关掉后再弹，避免叠在一起 */
+function actAutoPop(){
+  var tries=0;
+  (function attempt(){
+    tries++;
+    var busy=document.querySelector('.allboard-mask.show') || document.querySelector('.gate.show');
+    if(busy && tries<24){ setTimeout(attempt,500); return; }
+    if(!actActive()) return;
+    showAct();
+  })();
+}
+function actInit(){
+  actBubbleShow();
+  if(actActive() && !actAutoPopped()) setTimeout(actAutoPop, 800);
+  /* 每分钟核对一次：到活动结束时间立即撤掉悬浮球 */
+  setInterval(actBubbleShow, 60000);
 }
 
 /* ---- 大假作业（当前作业 / 日历）---- */
@@ -3607,6 +3814,7 @@ async function submitSiteGate(){
   }
 })();
 try{ if(!localStorage.getItem('cls_welcome_v1')){ showWelcome(); } }catch(e){}
+actInit();   /* 班级活动通知：有进行中的活动则自动弹窗 + 留悬浮球，活动结束自动撤掉 */
 </script>
 <script>
 if ('serviceWorker' in navigator) {
