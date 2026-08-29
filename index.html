@@ -493,11 +493,16 @@ body::after{animation-name:blobB;animation-duration:34s}
 .dark #copyLinkMask #siteLinkList > div:last-child span{color:#8b9bb5!important}
 .dark #djPanelMask input[type="datetime-local"],
 .dark #djPanelMask input[type="number"],
-.dark #djVerifyMask input[type="password"],
+.dark #djVerifyMask input.pwd-mask,
 .dark #djHistoryMask input{background:#1b2432;color:#e2e8f0;border-color:#2a3550}
 .dark #djPanelMask input[type="datetime-local"]:disabled,
 .dark #djPanelMask input[type="number"]:disabled{opacity:.45}
 .dark #djHistoryMask .dj-round{background:#20294a!important;border-color:#2a3550!important}
+/* ===== 密码框：用 text-security 遮蔽，保留中文输入法可用（type=password 会被浏览器强制禁用输入法） ===== */
+input.pwd-mask{-webkit-text-security:disc;text-security:disc}
+input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
+.pwd-ime-tip{font-size:.75rem;color:#9db1ff;opacity:.9;margin:6px 0 0;line-height:1.5}
+.dark .pwd-ime-tip{color:#b6c2d9}
 /* 歌单管理弹窗 暗色适配 */
 .dark #djSongsMask .dj-label,
 .dark #djSongsMask .dj-desc{color:#93a3bd!important}
@@ -599,10 +604,11 @@ body::after{animation-name:blobB;animation-duration:34s}
     <h2 style="color:#2c3e50;font-size:1.1rem;margin:0 0 10px">进入班级服务站</h2>
     <p id="siteGateQ" style="color:#4a5568;font-size:.92rem;line-height:1.7;margin:0 0 14px"></p>
     <span style="display:block;position:relative">
-      <input id="siteGateInput" type="password" placeholder="请输入答案" class="gate-input" autocomplete="off" style="width:100%;text-align:center;padding-right:40px" onkeydown="if(event.key==='Enter')submitSiteGate()">
+      <input id="siteGateInput" type="text" placeholder="请输入答案" class="gate-input pwd-mask" autocomplete="off" style="width:100%;text-align:center;padding-right:40px" onkeydown="if(event.key==='Enter')submitSiteGate()">
       <button type="button" class="eye-btn" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;justify-content:center" onclick="togglePwd('siteGateInput', this)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </span>
     <button class="btn" style="width:100%;margin-top:12px" onclick="submitSiteGate()">验证进入</button>
+    <p class="pwd-ime-tip" style="text-align:center">💡 输入法切不出中文时，可直接输入拼音或英文</p>
     <p id="siteGateErr" style="color:#c2410c;font-weight:600;font-size:.85rem;margin:10px 0 0"></p>
   </div>
 </div>
@@ -614,7 +620,7 @@ body::after{animation-name:blobB;animation-duration:34s}
     <div style="font-size:2.2rem;margin:14px 0 6px">🎮</div>
     <p class="pop-sub">输入暗号进入隐藏娱乐天地</p>
     <p class="pop-hint">（提示：同学群目前人数）</p>
-    <input id="hiddenGateInput" type="password" placeholder="请输入暗号" class="gate-input" autocomplete="off" style="text-align:center" onkeydown="if(event.key==='Enter')submitHiddenGate()">
+    <input id="hiddenGateInput" type="text" placeholder="请输入暗号" class="gate-input pwd-mask" autocomplete="off" style="text-align:center" onkeydown="if(event.key==='Enter')submitHiddenGate()">
     <p id="hiddenGateErr" style="color:#c2410c;font-weight:600;font-size:.85rem;margin:10px 0 0"></p>
     <button class="btn" style="width:100%;margin-top:12px" onclick="submitHiddenGate()">进入</button>
   </div>
@@ -690,8 +696,8 @@ body::after{animation-name:blobB;animation-duration:34s}
     <div class="allboard-head"><span id="dataEncTitle">🔐 设置导出密码</span><button onclick="closeDataEnc()">关闭</button></div>
     <div style="padding:18px 22px;text-align:center">
       <p id="dataEncDesc" style="font-size:.82rem;color:#4a5568;line-height:1.7;margin:0 0 14px"></p>
-      <input id="dataEncPass" type="password" placeholder="请输入密码（至少 4 位）" class="gate-input" autocomplete="off" style="width:100%;text-align:center" onkeydown="if(event.key==='Enter')submitDataEnc()">
-      <input id="dataEncPass2" type="password" placeholder="请再输入一次密码" class="gate-input" autocomplete="off" style="width:100%;text-align:center;margin-top:8px" onkeydown="if(event.key==='Enter')submitDataEnc()">
+      <input id="dataEncPass" type="text" placeholder="请输入密码（至少 4 位）" class="gate-input pwd-mask" autocomplete="off" style="width:100%;text-align:center" onkeydown="if(event.key==='Enter')submitDataEnc()">
+      <input id="dataEncPass2" type="text" placeholder="请再输入一次密码" class="gate-input pwd-mask" autocomplete="off" style="width:100%;text-align:center;margin-top:8px" onkeydown="if(event.key==='Enter')submitDataEnc()">
       <p id="dataEncErr" style="color:#c2410c;font-size:.8rem;margin-top:8px;display:none"></p>
       <button class="btn" style="width:100%;margin-top:14px" onclick="submitDataEnc()">确定</button>
     </div>
@@ -704,7 +710,7 @@ body::after{animation-name:blobB;animation-duration:34s}
     <div class="allboard-head"><span>📦 导出完整备份</span><button onclick="closeExport()">关闭</button></div>
     <div style="padding:18px 22px;text-align:center">
       <p style="font-size:.85rem;color:#4a5568;margin:0 0 14px">输入备份密码后即可下载完整版 zip（含全部网站内容），用于本地留存或还原。</p>
-      <input id="exportPassInput" type="password" placeholder="请输入备份密码" class="gate-input" autocomplete="off" style="width:100%;text-align:center" onkeydown="if(event.key==='Enter')submitExport()">
+      <input id="exportPassInput" type="text" placeholder="请输入备份密码" class="gate-input pwd-mask" autocomplete="off" style="width:100%;text-align:center" onkeydown="if(event.key==='Enter')submitExport()">
       <p id="exportErr" style="color:#c2410c;font-size:.8rem;margin-top:8px;display:none">密码错误，请重试（提示：站主高中绝对不会忘记的数字）</p>
       <button class="btn" style="width:100%;margin-top:14px" onclick="submitExport()">验证并下载</button>
     </div>
@@ -819,12 +825,12 @@ body::after{animation-name:blobB;animation-duration:34s}
       <p class="dj-desc" style="font-size:.8rem;color:#9aa7b8;margin:0 0 12px">验证信息仅在本机校验，不会上传。连续输错将触发锁定。</p>
       <label class="dj-label" style="font-size:.85rem;color:#4a5568;display:block;margin-bottom:4px">身份证后四位</label>
       <div style="position:relative;margin-bottom:10px">
-        <input id="djIdInput" type="password" maxlength="4" inputmode="numeric" placeholder="请输入后四位" autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px 38px 9px 12px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.9rem">
+        <input id="djIdInput" type="text" maxlength="4" inputmode="numeric" class="pwd-mask" placeholder="请输入后四位" autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px 38px 9px 12px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.9rem">
         <button type="button" class="eye-btn" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;justify-content:center" onclick="togglePwd('djIdInput', this)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
       </div>
       <label class="dj-label" style="font-size:.85rem;color:#4a5568;display:block;margin-bottom:4px">户籍地村名</label>
       <div style="position:relative;margin-bottom:10px">
-        <input id="djVillageInput" type="password" placeholder="请输入村名" autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px 38px 9px 12px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.9rem">
+        <input id="djVillageInput" type="text" placeholder="请输入村名" class="pwd-mask" autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px 38px 9px 12px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.9rem">
         <button type="button" class="eye-btn" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;justify-content:center" onclick="togglePwd('djVillageInput', this)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
       </div>
       <p id="djVerifyErr" class="dj-err" style="color:#c2410c;font-size:.8rem;margin:0 0 10px;display:none">验证信息不正确，请重新输入</p>
@@ -1096,6 +1102,21 @@ function sha256Raw(latin1){
 }
 function sha256Hex(input){ return sha256Raw(unescape(encodeURIComponent(input))); }
 function hashSecret(value, salt){ return sha256Hex(salt+'::'+value.trim().toLowerCase()); }
+/* 答案归一化（仅用于站点门禁，不改变既有哈希算法）：
+   全角→半角、去所有空白、去常见标点、转小写，让带空格 / 全角 / 大小写混排的写法都能通过（不记录任何答案明文） */
+function normAnswer(s){
+  var out = '', i, code;
+  s = String(s == null ? '' : s);
+  for(i=0;i<s.length;i++){
+    code = s.charCodeAt(i);
+    if(code === 0x3000) out += ' ';                              /* 全角空格 */
+    else if(code > 0xFEE0 && code < 0xFF01 + 0x5F) out += String.fromCharCode(code - 0xFEE0); /* 全角字符 */
+    else out += s.charAt(i);
+  }
+  out = out.replace(/\s+/g, '');                                 /* 去空白 */
+  out = out.replace(/[，。、！？；：·,.!?;:'"()（）\-_~\[\]【】]/g, ''); /* 去标点 */
+  return out.toLowerCase();
+}
 function xorEncrypt(plain){
   var enc = new TextEncoder();
   var keyBytes = Array.prototype.slice.call(enc.encode(XOR_KEY));
@@ -1212,6 +1233,7 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-08-29 18:10", text: "🔤 入口验证优化（打不出中文的同学看这里）：\n① 修复电脑端密码框切不出中文输入法的问题——浏览器默认会禁用密码输入框的输入法，现已改用不影响输入法的遮蔽方式，密码框仍照常显示为圆点；\n② 输入法实在切不出中文时，可直接输入该节日的拼音或英文，同样可验证通过；\n③ 学习资料、隐藏空间、联系方式查询、导出备份、数据管理等所有密码输入处同步生效。", category: "site" },
     { date: "2026-08-29 16:20", text: "📌 两处小更新：\n① 公告分类「🎉 班级活动」更名为「🔔 重要更新」并前移一格，班级重要消息以后都归在这里，更好找。\n② 后续班级有活动时会在这条「重要更新」里发通知，进站还会自动弹窗提醒；弹窗关掉后右下角会留一个悬浮球，随时点开重看，活动结束后自动消失。\n③ 「数据管理」导出的个人数据（含姓名、班级签、点歌记录等）现在会用你设置的密码加密，不再明文导出；导入时需要输入同一个密码，请务必记住。", category: "site" },
     { date: "2026-08-29 15:20", text: "🔗【备用链接已上线】班级服务站新增备用入口：https://a5048c773a210b3d4-25579.app.workbuddy.link/\n① 平时请优先使用主链接，备用链接内容与主链接一致，仅作主链接打不开时的应急入口；\n② 备用链接在微信内无法打开，必须复制链接到系统浏览器（Safari / Chrome / Edge / 手机自带浏览器）打开；\n③ 侧边栏「🔗 复制链接」已同时列出主链接与备用链接，点右侧「复制」按钮即可；\n④ 备用链接为临时托管，若后续更换会在此公告更新。", important: true, importantUntil: "2026-08-29T18:00:00", category: "activity" },
     { date: "2026-08-25 17:14", text: "【主链接切换】班级服务站主链接已切换为 GitHub Pages：https://yuzikaaang.github.io/class-site/ （Gitee 与 GitHub 仓库均已公开，可放心收藏与查询）。原 WorkBuddy 分享链接已停用，仅作为主链接不可达时的应急备用入口。", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
@@ -1437,8 +1459,22 @@ var SITE_DATA = {
 /* ── 站点入口问答（首次打开需回答，answers 为哈希）── */
 var SITE_GATE = {
   question: "请回答举办“给未来自己的一封信”当天所对应的节日。",
-  answers: ["725f83c579b242c8f55fd871f950c2b87f06e0d05f66065d658d1a74e7d06c80"],
-  hint: "三个字",
+  /* 答案以 SHA-256 存储，不出现明文。为照顾「输入法切不出中文 / 只会英文键盘」的同学，
+     额外接受：中文别名、错别字、全拼、缩写、英文。新增答案用 hashSecret(明文, GATE_SALT) 生成。 */
+  answers: [
+    "725f83c579b242c8f55fd871f950c2b87f06e0d05f66065d658d1a74e7d06c80", /* 标准答案（三个字） */
+    "68bc7fd010888eaaaddaf9b9d31f25dfbac8918e20043c30bd85f113a5ca743c", /* 前两个字 */
+    "906dba96dc9f70f65b3f270a155f6d021d8f30733cd61014e69f39282de1c66f", /* 别名一 */
+    "ab89374858196c85b0545916fa32686edfddb8790219bcac63932876d871eb25", /* 别名二 */
+    "37c681d68e334c8d17c20050171df05c9a514a43d04f60458bb50dbfe0e60fea", /* 农历日期叫法 */
+    "7f46a07d533679aee472a9239607a02f551420513f5e30eb43a27a43d6350c6d", /* 常见错字 */
+    "2275311545501cc80a9540d3c00a50f1c5c3211223d82f3833330a3f9f541296", /* 全拼 */
+    "9294f0a54fe8392b985448a08999d130a1aacb0cc3f3e2d88f8fca0f6b33dafe", /* 全拼+jie */
+    "e9fae19194a8bd4bd5c5de3b43c80c4fbb460dbd044dff6b5fa9ff00d15c47f2", /* 拼音首字母 */
+    "3eb9458649cd696b90acae91c2f419113bcbc672ce71d3158199732503c02b41", /* 英文 */
+    "5d13ec93993f41453a708ae6d8664c9e3f5da47ecd8812316ff35dbcf9e0d9f2"  /* 英文全称 */
+  ],
+  hint: "三个字；输入法打不出中文时，可直接输拼音或英文",
   version: "2026-08-23-v1"
 };
 
@@ -1761,7 +1797,7 @@ function render(){
           var _lockMsg = _lr > 0 ? '🔒 连续输错次数过多，请 ' + Math.ceil(_lr/1000) + ' 秒后再试' : '';
           var _errMsg = _lockMsg || (window.__gateErr && window.__gateErr[l.id] ? '💡 ' + esc(window.__gateErr[l.id]) : '');
           contentHtml += '<div class="gate-box"><p class="gate-q">🔒 '+esc(l.gate.question)+'</p>'+
-            '<div class="gate-row"><span class="gate-input-wrap"><input id="gate-input-'+l.id+'" type="password" placeholder="'+(_lr>0?'锁定中，请稍候…':'请输入答案')+'" class="gate-input" autocomplete="off"'+(_lr>0?' disabled':'')+' onkeydown="if(event.key===\'Enter\')checkGate('+l.id+')">'+
+            '<div class="gate-row"><span class="gate-input-wrap"><input id="gate-input-'+l.id+'" type="text" placeholder="'+(_lr>0?'锁定中，请稍候…':'请输入答案')+'" class="gate-input pwd-mask" autocomplete="off"'+(_lr>0?' disabled':'')+' onkeydown="if(event.key===\'Enter\')checkGate('+l.id+')">'+
             '<button type="button" class="eye-btn" style="display:inline-flex;align-items:center;justify-content:center" onclick="togglePwd(\'gate-input-'+l.id+'\', this)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></span>'+
             '<button class="btn gate-btn"'+( _lr>0 ? ' disabled style="opacity:.5"' : '' )+' onclick="checkGate('+l.id+')">验证答案</button></div>'+
             (_errMsg ? '<p class="gate-hint">'+_errMsg+'</p>' : '')+
@@ -1978,7 +2014,7 @@ function submitHiddenGate(){
     startLockTimer('hidden', err, inp);
     return;
   }
-  var v = hashSecret(inp.value || '', HIDDEN_SALT);
+  var v = hashSecret(normAnswer(inp.value || ''), HIDDEN_SALT);
   if(v === HIDDEN_PASS_HASH){
     onPassOk('hidden');
     if(__lockTimers['hidden']) clearInterval(__lockTimers['hidden']);
@@ -2091,7 +2127,7 @@ function checkGate(id){
     render();
     return;
   }
-  var v = hashSecret((input ? input.value : ''), GATE_SALT);
+  var v = hashSecret(normAnswer(input ? input.value : ''), GATE_SALT);
   var ok = false;
   for(var j=0;j<l.gate.answers.length;j++){
     if(l.gate.answers[j]===v){ ok=true; break; }
@@ -2124,12 +2160,41 @@ function copyCode(id){
 }
 var EYE_OPEN_HTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 var EYE_OFF_HTML  = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+/* 眼睛开关：只切换「遮蔽样式」，不改 input type。
+   原因：type="password" 会被浏览器强制禁用中文输入法（IME），导致中文类答案打不出来；
+   改用 type=text + -webkit-text-security 遮蔽，既显示成圆点，又能正常调用系统中文输入法。 */
 function togglePwd(inputId, btn){
   var el = document.getElementById(inputId);
   if(!el) return;
-  if(el.type === 'password'){ el.type = 'text'; btn.innerHTML = EYE_OFF_HTML; }
-  else { el.type = 'password'; btn.innerHTML = EYE_OPEN_HTML; }
+  el.classList.toggle('pwd-plain');
+  var plain = el.classList.contains('pwd-plain');
+  btn.innerHTML = plain ? EYE_OFF_HTML : EYE_OPEN_HTML;
+  btn.setAttribute('aria-label', plain ? '隐藏密码' : '显示密码');
 }
+/* 兜底：不支持 text-security 的浏览器（如 Firefox）无法用 CSS 遮蔽，
+   退回 type=password 保证不泄露，并提示「点眼睛显示后即可用输入法打中文」。 */
+(function initPwdMaskFallback(){
+  var supported = false;
+  try{ supported = !!(window.CSS && CSS.supports && (CSS.supports('-webkit-text-security','disc') || CSS.supports('text-security','disc'))); }catch(e){}
+  if(supported) return;
+  function downgrade(){
+    var els = document.querySelectorAll('input.pwd-mask');
+    for(var i=0;i<els.length;i++){
+      var el = els[i];
+      el.classList.remove('pwd-mask','pwd-plain');
+      if(el.type === 'text') el.type = 'password';
+      var wrap = el.parentNode;
+      if(wrap && !wrap.querySelector('.pwd-ime-tip')){
+        var tip = document.createElement('p');
+        tip.className = 'pwd-ime-tip';
+        tip.textContent = '💡 本浏览器不支持密码遮蔽；若无法输入中文，点右侧眼睛「显示」后再输入即可。';
+        wrap.appendChild(tip);
+      }
+    }
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', downgrade);
+  else downgrade();
+})();
 function copyText(val, label){
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(val).then(function(){ alert(label+'已复制：'+val); }, function(){ alert(val); });
@@ -3784,7 +3849,7 @@ async function submitSiteGate(){
     startLockTimer('site', err, input);
     return;
   }
-  var v = await hashSecret(input ? input.value : '', GATE_SALT);
+  var v = await hashSecret(normAnswer(input ? input.value : ''), GATE_SALT);
   if(v == null){ err.textContent = '当前环境不支持验证，请用浏览器打开'; return; }
   var ok = false;
   for(var i=0;i<SITE_GATE.answers.length;i++){ if(SITE_GATE.answers[i]===v){ ok=true; break; } }
