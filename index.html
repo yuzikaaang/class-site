@@ -1418,8 +1418,8 @@ var SITE_DATA = {
         question: "请回答本班科任男女人数之比（共10人）",
         answers: ["ac18bd73597efe3e39320f1c78d6fa7d8baacb81e29b4db28638146a16894e2c", "7321b13f59cde5cf414fe889f0cc93d3912387dad2ee1097dd25365e1e0867fc"],
         hint: "四字，格式为「男_女_」",
-        url: "https://cloud.189.cn/t/EbEzInJnQBzq",
-        code: "7xlk",
+        url: "", code: "",
+        sUrl: "CxgHQkYXHxpOHxsAAFccCgkcVQ1DBx1wT3VPZB0+GzU7V0M=", sCode: "VBQfWQ==",
         version: "2026-08-23-v3"
       }
     },
@@ -1433,8 +1433,8 @@ var SITE_DATA = {
         question: "请回答在高一下学期中零排的常驻嘉宾是？",
         answers: ["9d782e21981e703e909d86136724dea48c956e805bf3be2fc69652c697ee626e"],
         hint: "三个字，全名",
-        url: "https://cloud.189.cn/t/zYJnEfBnIj22",
-        code: "pap9",
+        url: "", code: "",
+        sUrl: "CxgHQkYXHxpOHxsAAFccCgkcVQ1DBx1PdHpbaBU2Gy0THwA=", sCode: "Ew0DCw==",
         version: "2026-08-23-v3"
       }
     },
@@ -1866,15 +1866,17 @@ function render(){
         if(l.gate){
           if(passed){
             actionsHtml = '';
-            if(l.gate.url){
-              actionsHtml += '<button class="btn" onclick="openLink(\''+jsq(l.gate.url)+'\',true)">打开链接</button>';
+            /* 链接与访问码走 gateUrl()/gateCode() 运行时解混淆，源码里只有密文 */
+            var _gu = gateUrl(l), _gc = gateCode(l);
+            if(_gu){
+              actionsHtml += '<button class="btn" onclick="openLink(\''+jsq(_gu)+'\',true)">打开链接</button>';
             }else{
               actionsHtml += '<span class="gate-tip">链接待开放</span>';
             }
-            if(l.gate.code){
-              actionsHtml += '<button class="btn btn-secondary" onclick="copyCode('+l.id+')">访问码：'+esc(l.gate.code)+'</button>';
+            if(_gc){
+              actionsHtml += '<button class="btn btn-secondary" onclick="copyCode('+l.id+')">访问码：'+esc(_gc)+'</button>';
             }
-            if(isWeChat() && l.gate.url){
+            if(isWeChat() && _gu){
               actionsHtml += '<span class="wechat-hint">建议复制链接到浏览器打开</span>';
             }
           }else{
@@ -2160,6 +2162,36 @@ function findLink(id){
   for(var i=0;i<SITE_DATA.links.length;i++){ if(SITE_DATA.links[i].id===id) return SITE_DATA.links[i]; }
   return null;
 }
+/* ---- 门禁链接的运行时解混淆（2026-08-30 站主要求） ----
+ * 问题：云盘链接与访问码此前以**明文**写在数据里，任何人「查看源文件(Ctrl+U)」就能抄走，
+ *       门禁问题形同虚设——答案做了哈希加盐，链接却裸奔。
+ * 方案：源码里只存 XOR + Base64 的密文（sUrl / sCode），页面渲染时才用 GATE_SEAL_KEY 还原。
+ * ⚠️ 这是**混淆不是加密**：密钥就在同一份 JS 里，懂技术的人照样能还原。
+ *    它解决的是「同学随手 Ctrl+U 就抄走链接」这个真实场景，**不是**抗专业逆向。
+ *    若要更强，可升级为「答案派生密钥」（不知道答案就解不开），但那要求问题足够难——
+ *    现有「男女人数之比」的答案空间仅约 10 种，会被秒破，所以先不上这层，详见 internal/notes.md。 */
+var GATE_SEAL_KEY = 'cls25-05-study-2026';
+function gateUnseal(b64){
+  if(!b64) return '';
+  try{
+    var raw = atob(b64), out = '', k = GATE_SEAL_KEY;
+    for(var i=0;i<raw.length;i++){
+      out += String.fromCharCode((raw.charCodeAt(i) ^ k.charCodeAt(i % k.length)) & 0xff);
+    }
+    return out;
+  }catch(e){ return ''; }
+}
+/* 取门禁链接 / 访问码：优先解密封字段，解密失败或没有则回退明文（兼容未加密的旧数据） */
+function gateUrl(l){
+  if(!l || !l.gate) return '';
+  var v = l.gate.sUrl ? gateUnseal(l.gate.sUrl) : '';
+  return v || l.gate.url || '';
+}
+function gateCode(l){
+  if(!l || !l.gate) return '';
+  var v = l.gate.sCode ? gateUnseal(l.gate.sCode) : '';
+  return v || l.gate.code || '';
+}
 function gatePassed(l){
   if(!l || !l.gate) return false;
   try{
@@ -2203,9 +2235,11 @@ function checkGate(id){
 function copyCode(id){
   var l = findLink(id);
   if(!l || !l.gate) return;
-  var txt = '访问码：'+l.gate.code;
+  var cd = gateCode(l);            /* 运行时解密，源码里是密文 */
+  if(!cd){ alert('访问码待开放'); return; }
+  var txt = '访问码：'+cd;
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(l.gate.code).then(function(){ alert('访问码已复制：'+l.gate.code); }, function(){ alert(txt); });
+    navigator.clipboard.writeText(cd).then(function(){ alert('访问码已复制：'+cd); }, function(){ alert(txt); });
   }else{ alert(txt); }
 }
 var EYE_OPEN_HTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
