@@ -24,12 +24,19 @@
 | ① 改代码 | `index.html` / `games/*.html` / `sw.js` | 提需求 |
 | ② 本地测试 | 起本地服务 + 自动化测试，不能只靠「看代码觉得没问题」 | — |
 | ③ 同步文档 | 站内公告（如有用户可见变更）+ `internal/notes.md` | — |
-| ④ 推送 Gitee | `commit + push` 到 `zikang0529/class-site` 的 `master` | — |
+| ④ 推送 Gitee | **先 `git fetch` + `git rebase` 拉最新，再 `commit + push`** 到 `zikang0529/class-site` 的 `master` | — |
 | ⑤ 主链更新 | Gitee 镜像**自动**同步到 GitHub Pages | — |
 | ⑥ 备用链接 | AI 重新发布 WorkBuddy 链接 | — |
 | ⑦ 你验收 | 打开链接看一眼 | ✅ **这步是你的** |
 
 > 主链一般 **1~5 分钟**内刷新。超过 15 分钟没变，才需要到 Gitee 仓库「管理 → 仓库镜像管理」手动点一次同步。
+
+> ### ⚠️ 多 AI 协作铁律（2026-08-30 立，见 `internal/notes.md` 站规「多 AI 同步」）
+> 你可能会同时给多个 AI（比如 A 和 B）改这个仓库。**远端是唯一真相源，每个 AI 本地只是副本。**
+> - **动手前必拉**：`git fetch <HTTPS带令牌地址> master` → `git rebase FETCH_HEAD`，把别的 AI 推的新提交接在本地改动之前，再编辑。
+> - **绝对禁止 `git push --force`**：那会把别的 AI 的提交整个覆盖掉，数据直接没了。推送被拒（`! [rejected] (fetch first)`）是正常的，先 `fetch`+`rebase` 再看，别强推。
+> - **同会话比跨会话危险**：会话还活着时，AI 本地文件是某天别的 AI 推送前的旧版，不拉就改就会撞冲突；新开对话工作区自动重新拉取、反而是最新的。
+> - 推送前用 `git status -sb` 确认没有 `ahead`/`behind` 之外的分叉即可。
 
 ### 1.1 手机上怎么快速验收
 
