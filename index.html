@@ -510,6 +510,14 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .dark #djSongsMask .dj-song-title{color:#e2e8f0!important}
 .dark #djSongsMask .dj-song-artist{color:#9db1ff!important}
 .dark #djSongsMask label{color:#9db1ff!important}
+/* 歌单管理 · 次要信息行：统一走主题变量 --fg-3（亮 #5f6b80 5.38:1 / 暗 #9aa7b8 6.39:1，均达 AA）
+   注：亮色下 #9aa7b8 落白底仅 2.44:1，看不清，故不能直接写死该色值 */
+.dj-song-meta{color:var(--fg-3)}
+/* 排除态标记：亮色橙红 #c2410c(5.18:1) / 暗色浅橙 #ffb08a(8.79:1)
+   注：暗色下 #c2410c 落 #1b2432 仅 3.02:1，必须换浅橙 */
+.dj-ex-tag{color:#c2410c}
+.dark #djSongsMask .dj-ex-tag{color:#ffb08a!important}
+.dark #djSongsMask .dj-song-title.dj-ex-tag{color:#ffb08a!important}
 /* 点歌券管理 · 备注分段展示（名字/时间/游戏奖励分色，长备注自动换行，不再单行截断） */
 .cp-note .cp-nm{color:#1f2a44;font-weight:700}
 .cp-note .cp-tm{color:#64748b}
@@ -863,7 +871,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
       </div>
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;font-size:.85rem">
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>
-        <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludeSched"> 排除已排期</label>
+        <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568" title="本地排期列表里已有的歌不再重复抽中"><input type="checkbox" id="djExcludeSched" checked> 排除已排期</label>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;font-size:.85rem;flex-wrap:wrap">
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djOnePer" checked> 每人限一首</label>
@@ -910,7 +918,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
       <input type="text" id="djSongSearch" placeholder="🔍 搜索歌名 / 歌手 / 点歌人" oninput="renderDjSongs(_djSongsCache)" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem;margin-bottom:6px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <p class="dj-desc" id="djSongsStatus" style="color:#5b6781;margin:0;flex:1;min-width:0">加载中…</p>
-        <button class="btn btn-secondary" style="padding:4px 9px;font-size:.75rem;color:#c2410c;white-space:nowrap" onclick="djClearExcluded()">清空排除</button>
+        <button class="btn btn-secondary dj-ex-tag" style="padding:4px 9px;font-size:.75rem;white-space:nowrap" onclick="djClearExcluded()">清空排除</button>
       </div>
     </div>
     <div id="djSongsList" style="padding:0 16px 10px;flex:1;min-height:0;overflow-y:auto"></div>
@@ -3469,14 +3477,14 @@ function djSongRowHtml(s,i,ex,exReq){
   var byReq = req && !!exReq[req];
   var isEx = !!ex[s.id] || byReq;
   return '<div class="dj-song-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef1f8;font-size:.82rem">'+
-    '<span style="color:#9aa7b8;min-width:24px">'+(i+1)+'</span>'+
+    '<span class="dj-song-meta" style="min-width:24px">'+(i+1)+'</span>'+
     '<span style="flex:1;min-width:0">'+
-      '<b class="dj-song-title" style="color:'+(isEx?'#c2410c':'#222')+';'+(isEx?'text-decoration:line-through':'')+'">'+esc(s.title||'?')+'</b> '+
+      '<b class="dj-song-title'+(isEx?' dj-ex-tag':'')+'" style="'+(isEx?'text-decoration:line-through':'color:#222')+'">'+esc(s.title||'?')+'</b> '+
       '<span class="dj-song-artist" style="color:#5b6781">'+esc(s.artist||'未知')+'</span>'+
-      '<br><span style="color:#9aa7b8;font-size:.75rem">👍 '+(s.voteCount||0)+' · 点歌：'+esc(req||'?')+(s.played?' · 已播放':'')+' · '+esc(String(s.createdAt||'').slice(0,10))+'</span>'+
+      '<br><span class="dj-song-meta" style="font-size:.75rem">👍 '+(s.voteCount||0)+' · 点歌：'+esc(req||'?')+(s.played?' · 已播放':'')+' · '+esc(String(s.createdAt||'').slice(0,10))+'</span>'+
     '</span>'+
     (byReq
-      ? '<span style="color:#c2410c;white-space:nowrap;font-size:.75rem" title="这位点歌人已被整人排除，请到「按点歌人」里解除">👤 已排除</span>'
+      ? '<span class="dj-ex-tag" style="white-space:nowrap;font-size:.75rem" title="这位点歌人已被整人排除，请到「按点歌人」里解除">👤 已排除</span>'
       : '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap"><input type="checkbox" '+(ex[s.id]?'checked':'')+' onchange="djSetExcludedById('+parseInt(s.id,10)+',this.checked)"> 排除</label>')+
   '</div>';
 }
@@ -3497,8 +3505,8 @@ function djRenderReqView(arr,ex,exReq){
     return '<div style="padding:9px 0;border-bottom:1px solid #eef1f8">'+
       '<div style="display:flex;align-items:center;gap:8px">'+
         '<span style="flex:1;min-width:0;cursor:pointer;font-size:.85rem" onclick="djToggleReqIdx('+i+')">'+
-          (open?'▾ ':'▸ ')+'<b style="color:'+(isEx?'#c2410c':'#222')+';'+(isEx?'text-decoration:line-through':'')+'">'+esc(g.name)+'</b>'+
-          '<span style="color:#9aa7b8;font-size:.75rem"> · '+g.songs.length+' 首'+(cntEx?' · 单曲排除 '+cntEx:'')+'</span>'+
+          (open?'▾ ':'▸ ')+'<b class="'+(isEx?'dj-ex-tag':'')+'" style="'+(isEx?'text-decoration:line-through':'color:#222')+'">'+esc(g.name)+'</b>'+
+          '<span class="dj-song-meta" style="font-size:.75rem"> · '+g.songs.length+' 首'+(cntEx?' · 单曲排除 '+cntEx:'')+'</span>'+
         '</span>'+
         (anon ? '' :
         '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap;font-size:.8rem"><input type="checkbox" '+(isEx?'checked':'')+' onchange="djSetExcludedReqIdx('+i+',this.checked)"> 排除此人</label>')+
@@ -3740,11 +3748,14 @@ function djRun(){
   if(box) box.innerHTML = '<p class="dj-desc" style="color:#5b6781;font-size:.85rem">正在拉取歌单并抽签…</p>';
   var tFrom = f && f.value ? new Date(f.value).getTime() : -Infinity;
   var tTo = t && t.value ? new Date(t.value).getTime() : Infinity;
-  /* 本地历史里已排期(addedToPlatform)与已播放(played)的歌曲 id */
+  /* 本地历史里已排期与已播放的歌曲 id
+   * 注：schedIds 收集「所有」排期记录里的歌——只要抽中过就进了本地排期，即算已排期；
+   *     不再要求该批次被手动标记为「已加到平台」（addedToPlatform），
+   *     否则「排除已排期」勾选后形同虚设（新抽签记录默认 addedToPlatform:false）。 */
   var rounds = djLoadRounds(), schedIds={}, playedIds={};
   rounds.forEach(function(r){
     (r.songs||[]).forEach(function(s){
-      if(r.addedToPlatform) schedIds[s.id]=1;
+      schedIds[s.id]=1;
       if(r.played) playedIds[s.id]=1;
     });
   });
