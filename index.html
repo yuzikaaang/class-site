@@ -98,7 +98,7 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px}
 .gate-input:focus{border-color:#4a6cf7}
 .gate-input-wrap{position:relative;flex:1;min-width:0}
 .gate-input-wrap .gate-input{padding-right:40px}
-.eye-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;padding:4px;color:#9aa7b8;border-radius:8px;line-height:1}
+.eye-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;padding:4px;color:var(--fg-3);border-radius:8px;line-height:1}
 .eye-btn:hover{background:#eef1ff;color:#3b5bfd}
 .gate-btn{min-width:96px;padding:10px 16px}
 .gate-hint{color:#c2410c;font-size:.85rem;font-weight:600;margin:10px 0 0 !important}
@@ -150,6 +150,13 @@ mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .theme-btn{position:absolute;right:12px;top:12px;z-index:10;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:.25s}
 .theme-btn:hover{background:rgba(255,255,255,.35);transform:scale(1.05)}
 
+/* ===== 亮色模式内联色值兜底（站规：亮色 / 暗色双模式可读性）=====
+   #9aa7b8 落白底仅 2.44:1（远低于 AA 的 4.5:1），亮色下统一映射到 --fg-3（#5f6b80 → 5.38:1）。
+   暗色下由下方 .dark 规则映射到 --fg-3（即 #9aa7b8 → 6.39:1），两种模式互为对称。
+   内联样式遍布全站 20+ 处，逐一改不现实，故用属性选择器兜底；新代码请直接用 var(--fg-3)。 */
+[style*="color:#9aa7b8"],[style*="color: #9aa7b8"]{color:var(--fg-3)}
+[style*="color:#7a869a"],[style*="color: #7a869a"]{color:var(--fg-3)}
+
 /* ===== 暗黑模式（.dark 挂在 html 上）===== */
 .dark body{background:linear-gradient(135deg,#131a26 0%,#182130 50%,#10151f 100%);color:var(--fg)}
 /* 修复内联颜色在暗色模式下变不可见：日常深色文本在暗色背景上需翻转为浅色 */
@@ -166,7 +173,7 @@ mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .dark .card{background:#1b2432;box-shadow:0 8px 25px rgba(0,0,0,.4)}
 .dark .card-content h3{color:#9db1ff}
 .dark .card-content p{color:#b6c2d9}
-.dark .card-sub{color:#64748b}
+.dark .card-sub{color:var(--fg-3)}
 .dark .tab-bar{background:#1b2432}
 .dark .tab-btn{background:#2a3550;color:#9db1ff}
 .dark .tab-btn:hover{background:#33405f}
@@ -342,7 +349,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .dark .imp-past{color:#aab4c8}
 
 /* 卡片副标题 */
-.card-sub{color:#9aa7b8;font-size:.76rem;font-weight:600;margin-top:2px;margin-bottom:8px}
+.card-sub{color:var(--fg-3);font-size:.76rem;font-weight:600;margin-top:2px;margin-bottom:8px}
 
 /* 首次欢迎弹窗 */
 .welcome-mask{display:none;position:fixed;inset:0;z-index:9998;align-items:center;justify-content:center;background:rgba(0,0,0,.6);padding:24px}
@@ -501,7 +508,7 @@ body::after{animation-name:blobB;animation-duration:34s}
 /* ===== 密码框：用 text-security 遮蔽，保留中文输入法可用（type=password 会被浏览器强制禁用输入法） ===== */
 input.pwd-mask{-webkit-text-security:disc;text-security:disc}
 input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
-.pwd-ime-tip{font-size:.75rem;color:#9db1ff;opacity:.9;margin:6px 0 0;line-height:1.5}
+.pwd-ime-tip{font-size:.75rem;color:#3b5bfd;margin:6px 0 0;line-height:1.5}
 .dark .pwd-ime-tip{color:#b6c2d9}
 /* 歌单管理弹窗 暗色适配 */
 .dark #djSongsMask .dj-label,
