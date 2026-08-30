@@ -512,7 +512,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .dark #djSongsMask label{color:#9db1ff!important}
 /* 歌单管理 · 次要信息行：统一走主题变量 --fg-3（亮 #5f6b80 5.38:1 / 暗 #9aa7b8 6.39:1，均达 AA）
    注：亮色下 #9aa7b8 落白底仅 2.44:1，看不清，故不能直接写死该色值 */
-.dj-song-meta{color:var(--fg-3)}
+.dj-song-meta,.dj-muted{color:var(--fg-3)}
 /* 排除态标记：亮色橙红 #c2410c(5.18:1) / 暗色浅橙 #ffb08a(8.79:1)
    注：暗色下 #c2410c 落 #1b2432 仅 3.02:1，必须换浅橙 */
 .dj-ex-tag{color:#c2410c}
@@ -875,7 +875,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;font-size:.85rem;flex-wrap:wrap">
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djOnePer" checked> 每人限一首</label>
-        <span style="color:#9aa7b8;font-size:.75rem">同一位同学点的歌，同一次抽签最多上一首</span>
+        <span class="dj-muted" style="font-size:.75rem">同一位同学点的歌，同一次抽签最多上一首</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <button class="btn btn-secondary" style="flex:1;min-width:0;font-size:.85rem;padding:7px 6px" onclick="djOpenSongs()">🎼 歌单管理</button>
