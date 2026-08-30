@@ -88,8 +88,8 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px}
 .btn:hover{background:#3b5bfd;transform:scale(1.05)}
 .btn-secondary{background:#eef1ff;color:#3b5bfd}
 .btn-secondary:hover{background:#dce3ff}
-.btn-green{background:#07c160}
-.btn-green:hover{background:#06ad56}
+.btn-green{background:#0a7d42}
+.btn-green:hover{background:#09703c}
 .wechat-hint{font-size:.75rem;color:#c2410c;background:#fff7ed;border-radius:999px;padding:4px 12px}
 .gate-box{background:#f3f6ff;border-radius:16px;padding:14px;margin-top:12px;text-align:left}
 .gate-q{color:#3b5bfd;font-weight:700;font-size:.95rem;margin:0 0 10px !important}
@@ -531,6 +531,8 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
    注：暗色下 #c2410c 落 #1b2432 仅 3.02:1，必须换浅橙 */
 .dj-ex-tag{color:#c2410c}
 .dark #djSongsMask .dj-ex-tag{color:#ffb08a!important}
+/* 通用兜底：任何弹窗里的 .dj-ex-tag 暗色下都翻浅橙（抽歌面板的「↺ 默认」按钮等） */
+.dark .dj-ex-tag{color:#ffb08a!important}
 .dark #djSongsMask .dj-song-title.dj-ex-tag{color:#ffb08a!important}
 /* 点歌券管理 · 备注分段展示（名字/时间/游戏奖励分色，长备注自动换行，不再单行截断） */
 .cp-note .cp-nm{color:#1f2a44;font-weight:700}
@@ -889,8 +891,8 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
         <label class="dj-label" style="color:#4a5568">高赞必选 <input type="number" id="djTopN" min="0" max="50" value="0" title="点赞最高的前 N 首必定中选，其余随机" style="width:56px;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222"></label>
       </div>
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;font-size:.85rem">
-        <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>
-        <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568" title="本地排期列表里已有的歌不再重复抽中"><input type="checkbox" id="djExcludeSched" checked> 排除已排期</label>
+        <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludePlayed" checked onchange="renderDjSongs(_djSongsCache)"> 排除已播放</label>
+        <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568" title="本地排期列表里已有的歌不再重复抽中"><input type="checkbox" id="djExcludeSched" checked onchange="renderDjSongs(_djSongsCache)"> 排除已排期</label>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;font-size:.85rem;flex-wrap:wrap">
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djOnePer" checked> 每人限一首</label>
@@ -902,6 +904,13 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
       </div>
       <button class="btn" style="width:100%;margin-bottom:8px" onclick="djRun()">🎲 开始抽签</button>
       <div id="djResult"></div>
+      <div style="margin-top:10px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <label class="dj-label" style="font-size:.8rem;color:#4a5568;flex:1;min-width:0">公示备注（可自己改，会加在公示最后）</label>
+          <button class="btn btn-secondary dj-ex-tag" style="padding:3px 8px;font-size:.72rem;white-space:nowrap" onclick="djResetCopyNote()" title="恢复按当前规则自动生成的默认备注">↺ 默认</button>
+        </div>
+        <textarea id="djCopyNote" rows="2" placeholder="例如：本次点歌不随机抽人，是对段考前十的奖励" oninput="djSaveCopyNote()" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem;resize:vertical;font-family:inherit"></textarea>
+      </div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="btn btn-green" style="flex:1;min-width:0" onclick="djCopy()">📋 一键复制公示</button>
         <button class="btn btn-secondary" style="flex:1;min-width:0" onclick="djOpenHistory()">📜 历史记录</button>
@@ -929,7 +938,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   <div class="allboard-box" style="max-width:480px">
     <div class="allboard-head"><span>🎼 歌单管理</span><button onclick="closeDjSongs()">关闭</button></div>
     <div style="padding:10px 16px 0;font-size:.8rem">
-      <p class="dj-desc" style="color:#5b6781;margin:4px 0 6px">可以排除「某一首歌」，也可以排除「某一个人点的全部歌」。被排除的不参与抽签（记录保存在本机）。</p>
+      <p class="dj-desc" style="color:#5b6781;margin:4px 0 6px">可以排除「某一首歌」，也可以排除「某一个人点的全部歌」。<b class="dj-ex-tag">已播放 / 已排期的歌默认排除，不用手动点</b>（行尾标 🚫），想让它们重新参与，到抽歌面板取消对应的「排除」开关即可。手动排除记录保存在本机。</p>
       <div style="display:flex;gap:6px;margin-bottom:6px">
         <button class="btn btn-secondary" id="djSongsTabSong" style="flex:1;min-width:0;padding:6px 8px;font-size:.8rem" onclick="djSongsTab('song')">🎵 按歌曲</button>
         <button class="btn btn-secondary" id="djSongsTabReq" style="flex:1;min-width:0;padding:6px 8px;font-size:.8rem" onclick="djSongsTab('req')">👤 按点歌人</button>
@@ -1272,6 +1281,7 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-08-30 18:50", text: "🎲 点歌抽签体验优化：\n① 歌单管理里，已播放 / 已排期的歌曲现在默认排除，无需再逐首手动勾选——列表行尾会标注「已播放」或「已排期」；如需让它们重新参与抽签，取消抽歌面板上对应的「排除」开关即可。\n② 一键复制公示不再显示公示时间，改为在末尾附上备注；备注默认按本次抽签规则自动生成（如「每人限一首；已播放的不再抽；已排期的不重复上」），也可自行改成对本次点歌的说明（例如奖励性质、不随机抽人等），下次沿用，点「↺ 默认」可恢复。", category: "site" },
     { date: "2026-08-30 16:05", text: "🎲 点歌抽签规则升级（公平性）：\n① 新增「每人限一首」——同一次抽签里，同一位同学点的歌最多上一首（默认开启），不会再出现一个人的歌同时占掉多个名额；\n② 歌单管理支持「按点歌人排除」——可整人排除（该同学点的歌全部不参与抽签），也可只排除某一首歌；\n③ 歌单管理新增搜索（歌名 / 歌手 / 点歌人）与「清空排除」；\n④ 「高赞必选」若撞上「每人限一首」，名额会自动顺延给后面的歌，不再作废。", category: "site" },
     { date: "2026-08-29 18:10", text: "🔤 入口验证优化（打不出中文的同学看这里）：\n① 修复电脑端密码框切不出中文输入法的问题——浏览器默认会禁用密码输入框的输入法，现已改用不影响输入法的遮蔽方式，密码框仍照常显示为圆点；\n② 输入法实在切不出中文时，可直接输入该节日的拼音或英文，同样可验证通过；\n③ 学习资料、隐藏空间、联系方式查询、导出备份、数据管理等所有密码输入处同步生效。", category: "site" },
     { date: "2026-08-29 16:20", text: "📌 两处小更新：\n① 公告分类「🎉 班级活动」更名为「🔔 重要更新」并前移一格，班级重要消息以后都归在这里，更好找。\n② 后续班级有活动时会在这条「重要更新」里发通知，进站还会自动弹窗提醒；弹窗关掉后右下角会留一个悬浮球，随时点开重看，活动结束后自动消失。\n③ 「数据管理」导出的个人数据（含姓名、班级签、点歌记录等）现在会用你设置的密码加密，不再明文导出；导入时需要输入同一个密码，请务必记住。", category: "site" },
@@ -3367,6 +3377,7 @@ function openDjPanel(){
   m.classList.add('show');
   djQuick(7);
   djProbeApi();   /* 静默探测：连不上就在面板顶部显示「去主链接」提示 */
+  djSyncCopyNote();
   var box = document.getElementById('djResult');
   if(box) box.innerHTML = '<p class="dj-desc" style="color:#5b6781;font-size:.85rem">当前本地排期 ' + djScheduleCount() + ' 首。设置参数后点击「开始抽签」。</p>';
   SFX.pop();
@@ -3452,6 +3463,38 @@ function djLoadRounds(){
 }
 function djSaveRounds(arr){ try{ localStorage.setItem('cls_dj_schedule', JSON.stringify(arr||[])); }catch(e){} }
 
+/* ---- 自动排除：已播放 / 已排期（默认排除，不用手动一首首点）----
+ * 与手动排除（cls_dj_excluded 单曲 / cls_dj_excluded_req 整人）的区别：
+ *   手动排除 → 写进 localStorage，用户点「清空排除」可清掉
+ *   自动排除 → **每次实时从本地排期历史算出，不写进 localStorage**
+ *              好处：排期清空 / 标记取消后这首歌自动恢复可抽；「清空排除」也不会误伤它
+ * 是否生效受面板上「排除已播放 / 排除已排期」两个开关控制（两个都默认开启）。 */
+function djAutoExclude(){
+  var el1=document.getElementById('djExcludePlayed'), el2=document.getElementById('djExcludeSched');
+  var rounds = djLoadRounds(), schedIds={}, playedIds={};
+  rounds.forEach(function(r){
+    (r.songs||[]).forEach(function(s){
+      if(s && s.id!=null){
+        schedIds[s.id]=1;
+        if(r.played) playedIds[s.id]=1;
+      }
+    });
+  });
+  return {
+    usePlayed: el1 ? !!el1.checked : true,
+    useSched:  el2 ? !!el2.checked : true,
+    schedIds: schedIds, playedIds: playedIds
+  };
+}
+/* 返回这首歌被自动排除的原因：'' / '已播放' / '已排期' */
+function djAutoExReason(s, info){
+  if(!s) return '';
+  info = info || djAutoExclude();
+  if(info.usePlayed && (s.played || info.playedIds[s.id])) return '已播放';
+  if(info.useSched && info.schedIds[s.id]) return '已排期';
+  return '';
+}
+
 /* ---- 歌单管理：可排除「某一首歌」，也可排除「某一位点歌人的全部歌」 ----
  * 排除单曲  ：localStorage['cls_dj_excluded']     （song.id 数组）
  * 排除点歌人：localStorage['cls_dj_excluded_req'] （点歌人姓名数组）
@@ -3525,10 +3568,11 @@ function djSongsFilter(arr){
     return (String(s.title||'')+' '+String(s.artist||'')+' '+djReqName(s)).toLowerCase().indexOf(q)>=0;
   });
 }
-function djSongRowHtml(s,i,ex,exReq){
+function djSongRowHtml(s,i,ex,exReq,auto){
   var req=djReqName(s);
   var byReq = req && !!exReq[req];
-  var isEx = !!ex[s.id] || byReq;
+  var autoR = djAutoExReason(s, auto);          /* '已播放' / '已排期' / '' */
+  var isEx = !!ex[s.id] || byReq || !!autoR;
   return '<div class="dj-song-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef1f8;font-size:.82rem">'+
     '<span class="dj-song-meta" style="min-width:24px">'+(i+1)+'</span>'+
     '<span style="flex:1;min-width:0">'+
@@ -3538,10 +3582,12 @@ function djSongRowHtml(s,i,ex,exReq){
     '</span>'+
     (byReq
       ? '<span class="dj-ex-tag" style="white-space:nowrap;font-size:.75rem" title="这位点歌人已被整人排除，请到「按点歌人」里解除">👤 已排除</span>'
-      : '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap"><input type="checkbox" '+(ex[s.id]?'checked':'')+' onchange="djSetExcludedById('+parseInt(s.id,10)+',this.checked)"> 排除</label>')+
+      : autoR
+        ? '<span class="dj-ex-tag" style="white-space:nowrap;font-size:.75rem" title="'+autoR+'的歌默认排除，不用手动勾选。想让它重新参与，到抽歌面板取消「排除'+autoR+'」即可">🚫 '+autoR+'</span>'
+        : '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap"><input type="checkbox" '+(ex[s.id]?'checked':'')+' onchange="djSetExcludedById('+parseInt(s.id,10)+',this.checked)"> 排除</label>')+
   '</div>';
 }
-function djRenderReqView(arr,ex,exReq){
+function djRenderReqView(arr,ex,exReq,auto){
   var map={}, order=[];
   arr.forEach(function(s){
     var r=djReqName(s)||'（未填写点歌人）';
@@ -3553,19 +3599,20 @@ function djRenderReqView(arr,ex,exReq){
   return _djReqGroups.map(function(g,i){
     var anon = (g.name==='（未填写点歌人）');
     var isEx = !anon && !!exReq[g.name];
-    var cntEx=0; g.songs.forEach(function(s){ if(ex[s.id]) cntEx++; });
+    var cntEx=0, cntAuto=0;
+    g.songs.forEach(function(s){ if(ex[s.id]) cntEx++; if(djAutoExReason(s,auto)) cntAuto++; });
     var open=!!_djReqOpen[g.name];
     return '<div style="padding:9px 0;border-bottom:1px solid #eef1f8">'+
       '<div style="display:flex;align-items:center;gap:8px">'+
         '<span style="flex:1;min-width:0;cursor:pointer;font-size:.85rem" onclick="djToggleReqIdx('+i+')">'+
           (open?'▾ ':'▸ ')+'<b class="'+(isEx?'dj-ex-tag':'')+'" style="'+(isEx?'text-decoration:line-through':'color:#222')+'">'+esc(g.name)+'</b>'+
-          '<span class="dj-song-meta" style="font-size:.75rem"> · '+g.songs.length+' 首'+(cntEx?' · 单曲排除 '+cntEx:'')+'</span>'+
+          '<span class="dj-song-meta" style="font-size:.75rem"> · '+g.songs.length+' 首'+(cntAuto?' · 自动排除 '+cntAuto:'')+(cntEx?' · 单曲排除 '+cntEx:'')+'</span>'+
         '</span>'+
         (anon ? '' :
         '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap;font-size:.8rem"><input type="checkbox" '+(isEx?'checked':'')+' onchange="djSetExcludedReqIdx('+i+',this.checked)"> 排除此人</label>')+
       '</div>'+
       (open ? '<div style="margin:6px 0 2px 14px;border-left:2px solid #e6ecf8;padding-left:10px">'+
-        g.songs.map(function(s,j){ return djSongRowHtml(s,j+1,ex,exReq); }).join('')+'</div>' : '')+
+        g.songs.map(function(s,j){ return djSongRowHtml(s,j+1,ex,exReq,auto); }).join('')+'</div>' : '')+
     '</div>';
   }).join('');
 }
@@ -3577,13 +3624,15 @@ function renderDjSongs(songs){
   var ex=djGetExcluded(), exReq=djGetExcludedReq(), k;
   var exCount=0; for(k in ex) exCount++;
   var exReqCount=0; for(k in exReq) exReqCount++;
-  if(st) st.textContent='共 '+songs.length+' 首 · 已排除 '+exCount+' 首 / '+exReqCount+' 位点歌人（抽签时自动跳过）';
+  var auto=djAutoExclude(), autoCnt=0;
+  songs.forEach(function(s){ if(djAutoExReason(s,auto)) autoCnt++; });
+  if(st) st.textContent='共 '+songs.length+' 首 · 手动排除 '+exCount+' 首 / '+exReqCount+' 人 · 已播放或已排期 '+autoCnt+' 首（默认排除，不用手动点）';
   if(!songs.length){ list.innerHTML='<p style="color:#9aa7b8;text-align:center;padding:20px">暂无歌曲</p>'; return; }
   var arr=djSongsFilter(songs);
   if(!arr.length){ list.innerHTML='<p style="color:#9aa7b8;text-align:center;padding:20px">没有匹配的歌曲</p>'; return; }
   list.innerHTML = (_djSongsView==='req')
-    ? djRenderReqView(arr,ex,exReq)
-    : arr.map(function(s,i){ return djSongRowHtml(s,i,ex,exReq); }).join('');
+    ? djRenderReqView(arr,ex,exReq,auto)
+    : arr.map(function(s,i){ return djSongRowHtml(s,i,ex,exReq,auto); }).join('');
 }
 function closeDjSongs(){ var m=document.getElementById('djSongsMask'); if(m) m.classList.remove('show'); }
 (function(){ var m=document.getElementById('djSongsMask'); if(m) m.addEventListener('click', function(e){ if(e.target.id==='djSongsMask') closeDjSongs(); }); })();
@@ -3801,25 +3850,18 @@ function djRun(){
   if(box) box.innerHTML = '<p class="dj-desc" style="color:#5b6781;font-size:.85rem">正在拉取歌单并抽签…</p>';
   var tFrom = f && f.value ? new Date(f.value).getTime() : -Infinity;
   var tTo = t && t.value ? new Date(t.value).getTime() : Infinity;
-  /* 本地历史里已排期与已播放的歌曲 id
+  /* 已播放 / 已排期：统一走 djAutoExclude()（抽签与歌单管理列表共用同一套判定，避免两处逻辑漂移）
    * 注：schedIds 收集「所有」排期记录里的歌——只要抽中过就进了本地排期，即算已排期；
    *     不再要求该批次被手动标记为「已加到平台」（addedToPlatform），
    *     否则「排除已排期」勾选后形同虚设（新抽签记录默认 addedToPlatform:false）。 */
-  var rounds = djLoadRounds(), schedIds={}, playedIds={};
-  rounds.forEach(function(r){
-    (r.songs||[]).forEach(function(s){
-      schedIds[s.id]=1;
-      if(r.played) playedIds[s.id]=1;
-    });
-  });
+  var auto = djAutoExclude();
   djFetchSongs().then(function(songs){
     var exIds = djGetExcluded(), exReq = djGetExcludedReq();
     var pool = songs.filter(function(s){
       if(exIds[s.id]) return false;                 /* 排除单曲 */
       var rq = djReqName(s);
       if(rq && exReq[rq]) return false;             /* 排除该点歌人的全部歌 */
-      if(excl && (s.played || playedIds[s.id])) return false;
-      if(exclSched && schedIds[s.id]) return false;
+      if(djAutoExReason(s, auto)) return false;      /* 已播放 / 已排期：默认排除 */
       var ts = new Date(s.createdAt).getTime();
       if(ts < tFrom || ts > tTo) return false;
       return true;
@@ -3870,7 +3912,9 @@ function djRun(){
         if(rq2){ for(var j=bag.length-1;j>=0;j--){ if(djReqName(bag[j])===rq2) bag.splice(j,1); } }
       }
     }
-    /* 保存为一个批次记录（含时间/备注/已排期/已播放标记） */
+    /* 保存为一个批次记录（含时间/备注/已排期/已播放标记）
+     * 注：这里重新取一次最新排期——djAutoExclude() 里那份 rounds 是函数内部的，取不到 */
+    var rounds = djLoadRounds();
     rounds.push({
       id: Date.now(),
       at: new Date().toLocaleString('zh-CN',{hour12:false}),
@@ -3908,17 +3952,53 @@ function djRun(){
     if(box) box.innerHTML = '<p class="dj-desc" style="color:#c2410c;font-size:.85rem">拉取失败：'+esc(String((err&&err.message)||err))+'</p>';
   });
 }
+/* ---- 公示备注：默认按当前抽签规则自动生成，用户可自己改 ----
+ * 用户改过就记在 localStorage 下次沿用；想回到规则默认点「↺ 默认」。 */
+var DJ_NOTE_KEY = 'cls_dj_copy_note';
+function djDefaultNote(){
+  var ps = [];
+  var onePer = document.getElementById('djOnePer');
+  if(!onePer || onePer.checked) ps.push('每人限一首');
+  var ep = document.getElementById('djExcludePlayed');
+  if(!ep || ep.checked) ps.push('已播放的不再抽');
+  var es = document.getElementById('djExcludeSched');
+  if(!es || es.checked) ps.push('已排期的不重复上');
+  var topN = parseInt((document.getElementById('djTopN')||{}).value || '0', 10);
+  if(topN > 0) ps.push('点赞最高的 ' + topN + ' 首必选');
+  return ps.length ? ('规则：' + ps.join('；') + '。') : '';
+}
+function djSyncCopyNote(){
+  var el = document.getElementById('djCopyNote'); if(!el) return;
+  var saved = '';
+  try{ saved = String(localStorage.getItem(DJ_NOTE_KEY) || ''); }catch(e){}
+  el.value = saved || djDefaultNote();
+}
+function djSaveCopyNote(){
+  var el = document.getElementById('djCopyNote'); if(!el) return;
+  try{ localStorage.setItem(DJ_NOTE_KEY, el.value); }catch(e){}
+}
+function djResetCopyNote(){
+  var el = document.getElementById('djCopyNote'); if(!el) return;
+  try{ localStorage.removeItem(DJ_NOTE_KEY); }catch(e){}
+  el.value = djDefaultNote();
+  SFX.pop();
+}
 function djCopy(){
   var rounds = djLoadRounds();
   if(!rounds.length){ alert('本地排期为空，请先抽签'); return; }
   var last = rounds[rounds.length-1];
   var lines = [];
   lines.push('【25级05班 · 点歌抽签排期公示】');
-  lines.push('公示时间：' + new Date().toLocaleString('zh-CN',{hour12:false}));
   lines.push('抽取时间：' + (last.at||''));
-  if(last.note) lines.push('备注：' + last.note);
   lines.push('本期中选 ' + (last.songs||[]).length + ' 首，累计排期 ' + djScheduleCount() + ' 首：');
   (last.songs||[]).forEach(function(s,i){ lines.push((i+1)+'. '+(s.title||'?')+' - '+(s.artist||'未知')+(s.requester?'（点歌：'+s.requester+'）':'')+'（点赞 '+(s.votes||0)+'）'); });
+  /* 备注统一放最后：批次备注（历史记录里填的）+ 公示备注（默认按规则生成，可自己改） */
+  var notes = [];
+  if(last.note) notes.push(String(last.note));
+  var noteEl = document.getElementById('djCopyNote');
+  var note = noteEl ? String(noteEl.value || '').trim() : '';
+  if(note) notes.push(note);
+  if(notes.length) lines.push('备注：' + notes.join(' '));
   var text = lines.join('\n');
   var done = function(){ alert('✅ 公示文本已复制，可粘贴到班级群'); SFX.success(); };
   if(navigator.clipboard && navigator.clipboard.writeText){
