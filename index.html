@@ -861,9 +861,13 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
         <label class="dj-label" style="color:#4a5568">抽取数量 <input type="number" id="djCount" min="1" max="50" value="5" style="width:64px;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222"></label>
         <label class="dj-label" style="color:#4a5568">高赞必选 <input type="number" id="djTopN" min="0" max="50" value="0" title="点赞最高的前 N 首必定中选，其余随机" style="width:56px;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222"></label>
       </div>
-      <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;font-size:.85rem">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;font-size:.85rem">
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>
         <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djExcludeSched"> 排除已排期</label>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;font-size:.85rem;flex-wrap:wrap">
+        <label class="dj-label" style="display:flex;align-items:center;gap:4px;color:#4a5568"><input type="checkbox" id="djOnePer" checked> 每人限一首</label>
+        <span style="color:#9aa7b8;font-size:.75rem">同一位同学点的歌，同一次抽签最多上一首</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <button class="btn btn-secondary" style="flex:1;min-width:0;font-size:.85rem;padding:7px 6px" onclick="djOpenSongs()">🎼 歌单管理</button>
@@ -893,13 +897,21 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   </div>
 </div>
 
-<!-- ===== 抽歌歌单管理弹窗（预览全部 + 标记排除，不参与抽签） ===== -->
+<!-- ===== 抽歌歌单管理弹窗（按歌曲 / 按点歌人 排除，不参与抽签） ===== -->
 <div class="allboard-mask" id="djSongsMask">
   <div class="allboard-box" style="max-width:480px">
     <div class="allboard-head"><span>🎼 歌单管理</span><button onclick="closeDjSongs()">关闭</button></div>
     <div style="padding:10px 16px 0;font-size:.8rem">
-      <p class="dj-desc" style="color:#5b6781;margin:4px 0 4px">勾选「排除」的歌曲不参与抽签（排除列表保存在本机）。</p>
-      <p class="dj-desc" id="djSongsStatus" style="color:#5b6781;margin:0 0 8px">加载中…</p>
+      <p class="dj-desc" style="color:#5b6781;margin:4px 0 6px">可以排除「某一首歌」，也可以排除「某一个人点的全部歌」。被排除的不参与抽签（记录保存在本机）。</p>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <button class="btn btn-secondary" id="djSongsTabSong" style="flex:1;min-width:0;padding:6px 8px;font-size:.8rem" onclick="djSongsTab('song')">🎵 按歌曲</button>
+        <button class="btn btn-secondary" id="djSongsTabReq" style="flex:1;min-width:0;padding:6px 8px;font-size:.8rem" onclick="djSongsTab('req')">👤 按点歌人</button>
+      </div>
+      <input type="text" id="djSongSearch" placeholder="🔍 搜索歌名 / 歌手 / 点歌人" oninput="renderDjSongs(_djSongsCache)" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <p class="dj-desc" id="djSongsStatus" style="color:#5b6781;margin:0;flex:1;min-width:0">加载中…</p>
+        <button class="btn btn-secondary" style="padding:4px 9px;font-size:.75rem;color:#c2410c;white-space:nowrap" onclick="djClearExcluded()">清空排除</button>
+      </div>
     </div>
     <div id="djSongsList" style="padding:0 16px 10px;flex:1;min-height:0;overflow-y:auto"></div>
   </div>
@@ -1233,6 +1245,7 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-08-30 16:05", text: "🎲 点歌抽签规则升级（公平性）：\n① 新增「每人限一首」——同一次抽签里，同一位同学点的歌最多上一首（默认开启），不会再出现一个人的歌同时占掉多个名额；\n② 歌单管理支持「按点歌人排除」——可整人排除（该同学点的歌全部不参与抽签），也可只排除某一首歌；\n③ 歌单管理新增搜索（歌名 / 歌手 / 点歌人）与「清空排除」；\n④ 「高赞必选」若撞上「每人限一首」，名额会自动顺延给后面的歌，不再作废。", category: "site" },
     { date: "2026-08-29 18:10", text: "🔤 入口验证优化（打不出中文的同学看这里）：\n① 修复电脑端密码框切不出中文输入法的问题——浏览器默认会禁用密码输入框的输入法，现已改用不影响输入法的遮蔽方式，密码框仍照常显示为圆点；\n② 输入法实在切不出中文时，可直接输入该节日的拼音或英文，同样可验证通过；\n③ 学习资料、隐藏空间、联系方式查询、导出备份、数据管理等所有密码输入处同步生效。", category: "site" },
     { date: "2026-08-29 16:20", text: "📌 两处小更新：\n① 公告分类「🎉 班级活动」更名为「🔔 重要更新」并前移一格，班级重要消息以后都归在这里，更好找。\n② 后续班级有活动时会在这条「重要更新」里发通知，进站还会自动弹窗提醒；弹窗关掉后右下角会留一个悬浮球，随时点开重看，活动结束后自动消失。\n③ 「数据管理」导出的个人数据（含姓名、班级签、点歌记录等）现在会用你设置的密码加密，不再明文导出；导入时需要输入同一个密码，请务必记住。", category: "site" },
     { date: "2026-08-29 15:20", text: "🔗【备用链接已上线】班级服务站新增备用入口：https://a5048c773a210b3d4-25579.app.workbuddy.link/\n① 平时请优先使用主链接，备用链接内容与主链接一致，仅作主链接打不开时的应急入口；\n② 备用链接在微信内无法打开，必须复制链接到系统浏览器（Safari / Chrome / Edge / 手机自带浏览器）打开；\n③ 侧边栏「🔗 复制链接」已同时列出主链接与备用链接，点右侧「复制」按钮即可；\n④ 备用链接为临时托管，若后续更换会在此公告更新。", important: true, importantUntil: "2026-08-29T18:00:00", category: "activity" },
@@ -3378,7 +3391,15 @@ function djLoadRounds(){
 }
 function djSaveRounds(arr){ try{ localStorage.setItem('cls_dj_schedule', JSON.stringify(arr||[])); }catch(e){} }
 
-/* ---- 歌单管理：预览全部歌曲 + 标记"不参与抽签"（排除列表存本机） ---- */
+/* ---- 歌单管理：可排除「某一首歌」，也可排除「某一位点歌人的全部歌」 ----
+ * 排除单曲  ：localStorage['cls_dj_excluded']     （song.id 数组）
+ * 排除点歌人：localStorage['cls_dj_excluded_req'] （点歌人姓名数组）
+ * 抽签去重（每人限一首）：见 djRun()，按 djReqName() 分组，同一次抽签内每人最多一首
+ */
+function djReqName(s){
+  var r = (typeof s.requester === 'string') ? s.requester : ((s.requester && s.requester.name) || '');
+  return String(r == null ? '' : r).trim();
+}
 function djGetExcluded(){
   var a=[]; try{ a=JSON.parse(localStorage.getItem('cls_dj_excluded')||'[]')||[]; }catch(e){}
   var s={}; a.forEach(function(id){ s[id]=1; }); return s;
@@ -3389,7 +3410,38 @@ function djSetExcluded(id,on){
   if(on&&idx<0) a.push(id); else if(!on&&idx>=0) a.splice(idx,1);
   try{ localStorage.setItem('cls_dj_excluded', JSON.stringify(a)); }catch(e){}
 }
+function djGetExcludedReq(){
+  var a=[]; try{ a=JSON.parse(localStorage.getItem('cls_dj_excluded_req')||'[]')||[]; }catch(e){}
+  var s={}; a.forEach(function(n){ s[String(n)]=1; }); return s;
+}
+function djSetExcludedReq(name,on){
+  var n=String(name==null?'':name).trim(); if(!n) return;
+  var a=[]; try{ a=JSON.parse(localStorage.getItem('cls_dj_excluded_req')||'[]')||[]; }catch(e){}
+  var idx=a.indexOf(n);
+  if(on&&idx<0) a.push(n); else if(!on&&idx>=0) a.splice(idx,1);
+  try{ localStorage.setItem('cls_dj_excluded_req', JSON.stringify(a)); }catch(e){}
+}
+function djClearExcluded(){
+  if(!confirm('确定清空全部排除记录？（包含「单曲排除」和「点歌人排除」）')) return;
+  try{ localStorage.removeItem('cls_dj_excluded'); localStorage.removeItem('cls_dj_excluded_req'); }catch(e){}
+  renderDjSongs(_djSongsCache);
+  SFX.pop();
+}
+/* ---- 歌单管理弹窗：按歌曲 / 按点歌人 双视图 + 搜索 ---- */
 var _djSongsCache=null;
+var _djSongsView='song';   /* 'song' | 'req' */
+var _djReqGroups=[];       /* 按点歌人视图的分组，索引驱动（避免内联字符串转义问题） */
+var _djReqOpen={};         /* 点歌人 -> 是否展开其歌曲 */
+function djSongsTab(v){ _djSongsView = (v==='req') ? 'req' : 'song'; renderDjSongs(_djSongsCache); }
+function djSyncSongsTab(){
+  var a=document.getElementById('djSongsTabSong'), b=document.getElementById('djSongsTabReq');
+  var on='background:#3b5bfd;color:#fff;border-color:#3b5bfd;';
+  if(a) a.style.cssText = (_djSongsView==='song' ? on : '');
+  if(b) b.style.cssText = (_djSongsView==='req'  ? on : '');
+}
+function djSetExcludedById(id,on){ id=parseInt(id,10); if(!(id>=0)) return; djSetExcluded(id,on); renderDjSongs(_djSongsCache); }
+function djSetExcludedReqIdx(i,on){ var g=_djReqGroups[i]; if(!g) return; djSetExcludedReq(g.name,on); renderDjSongs(_djSongsCache); }
+function djToggleReqIdx(i){ var g=_djReqGroups[i]; if(!g) return; _djReqOpen[g.name]=!_djReqOpen[g.name]; renderDjSongs(_djSongsCache); }
 function djOpenSongs(){
   var m=document.getElementById('djSongsMask'); if(!m) return;
   m.classList.add('show');
@@ -3404,23 +3456,73 @@ function djOpenSongs(){
     if(st) st.textContent='拉取失败：'+esc(String((err&&err.message)||err));
   });
 }
-function renderDjSongs(songs){
-  var ex=djGetExcluded(), exCount=0; for(var k in ex) exCount++;
-  var st=document.getElementById('djSongsStatus'), list=document.getElementById('djSongsList');
-  if(st) st.textContent='共 '+songs.length+' 首 · 已排除 '+exCount+' 首（抽签时自动跳过）';
-  list.innerHTML=songs.map(function(s,i){
-    var isEx=!!ex[s.id];
-    var req=(typeof s.requester==='string')?s.requester:((s.requester&&s.requester.name)||'');
-    return '<div class="dj-song-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef1f8;font-size:.82rem">'+
-      '<span style="color:#9aa7b8;min-width:26px">'+(i+1)+'</span>'+
-      '<span style="flex:1;min-width:0">'+
-        '<b class="dj-song-title" style="color:'+(isEx?'#c2410c':'#222')+';'+(isEx?'text-decoration:line-through':'')+'">'+esc(s.title)+'</b> '+
-        '<span class="dj-song-artist" style="color:#5b6781">'+esc(s.artist||'未知')+'</span>'+
-        '<br><span style="color:#9aa7b8;font-size:.75rem">👍 '+(s.voteCount||0)+' · 点歌：'+esc(req||'?')+(s.played?' · 已播放':'')+' · '+esc(String(s.createdAt||'').slice(0,10))+(isEx?' · 已排除':'')+'</span>'+
-      '</span>'+
-      '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap"><input type="checkbox" '+(isEx?'checked':'')+' onchange="djSetExcluded('+s.id+',this.checked);renderDjSongs(_djSongsCache)"> 排除</label>'+
+function djSongsFilter(arr){
+  var el=document.getElementById('djSongSearch');
+  var q=el?String(el.value||'').trim().toLowerCase():'';
+  if(!q) return arr.slice();
+  return arr.filter(function(s){
+    return (String(s.title||'')+' '+String(s.artist||'')+' '+djReqName(s)).toLowerCase().indexOf(q)>=0;
+  });
+}
+function djSongRowHtml(s,i,ex,exReq){
+  var req=djReqName(s);
+  var byReq = req && !!exReq[req];
+  var isEx = !!ex[s.id] || byReq;
+  return '<div class="dj-song-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef1f8;font-size:.82rem">'+
+    '<span style="color:#9aa7b8;min-width:24px">'+(i+1)+'</span>'+
+    '<span style="flex:1;min-width:0">'+
+      '<b class="dj-song-title" style="color:'+(isEx?'#c2410c':'#222')+';'+(isEx?'text-decoration:line-through':'')+'">'+esc(s.title||'?')+'</b> '+
+      '<span class="dj-song-artist" style="color:#5b6781">'+esc(s.artist||'未知')+'</span>'+
+      '<br><span style="color:#9aa7b8;font-size:.75rem">👍 '+(s.voteCount||0)+' · 点歌：'+esc(req||'?')+(s.played?' · 已播放':'')+' · '+esc(String(s.createdAt||'').slice(0,10))+'</span>'+
+    '</span>'+
+    (byReq
+      ? '<span style="color:#c2410c;white-space:nowrap;font-size:.75rem" title="这位点歌人已被整人排除，请到「按点歌人」里解除">👤 已排除</span>'
+      : '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap"><input type="checkbox" '+(ex[s.id]?'checked':'')+' onchange="djSetExcludedById('+parseInt(s.id,10)+',this.checked)"> 排除</label>')+
+  '</div>';
+}
+function djRenderReqView(arr,ex,exReq){
+  var map={}, order=[];
+  arr.forEach(function(s){
+    var r=djReqName(s)||'（未填写点歌人）';
+    if(!map[r]){ map[r]=[]; order.push(r); }
+    map[r].push(s);
+  });
+  order.sort(function(a,b){ return map[b].length-map[a].length; });
+  _djReqGroups=order.map(function(r){ return {name:r, songs:map[r]}; });
+  return _djReqGroups.map(function(g,i){
+    var anon = (g.name==='（未填写点歌人）');
+    var isEx = !anon && !!exReq[g.name];
+    var cntEx=0; g.songs.forEach(function(s){ if(ex[s.id]) cntEx++; });
+    var open=!!_djReqOpen[g.name];
+    return '<div style="padding:9px 0;border-bottom:1px solid #eef1f8">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<span style="flex:1;min-width:0;cursor:pointer;font-size:.85rem" onclick="djToggleReqIdx('+i+')">'+
+          (open?'▾ ':'▸ ')+'<b style="color:'+(isEx?'#c2410c':'#222')+';'+(isEx?'text-decoration:line-through':'')+'">'+esc(g.name)+'</b>'+
+          '<span style="color:#9aa7b8;font-size:.75rem"> · '+g.songs.length+' 首'+(cntEx?' · 单曲排除 '+cntEx:'')+'</span>'+
+        '</span>'+
+        (anon ? '' :
+        '<label style="display:flex;align-items:center;gap:3px;color:#5b6781;white-space:nowrap;font-size:.8rem"><input type="checkbox" '+(isEx?'checked':'')+' onchange="djSetExcludedReqIdx('+i+',this.checked)"> 排除此人</label>')+
+      '</div>'+
+      (open ? '<div style="margin:6px 0 2px 14px;border-left:2px solid #e6ecf8;padding-left:10px">'+
+        g.songs.map(function(s,j){ return djSongRowHtml(s,j+1,ex,exReq); }).join('')+'</div>' : '')+
     '</div>';
-  }).join('') || '<p style="color:#9aa7b8;text-align:center;padding:20px">暂无歌曲</p>';
+  }).join('');
+}
+function renderDjSongs(songs){
+  songs = songs || [];
+  var st=document.getElementById('djSongsStatus'), list=document.getElementById('djSongsList');
+  if(!list) return;
+  djSyncSongsTab();
+  var ex=djGetExcluded(), exReq=djGetExcludedReq(), k;
+  var exCount=0; for(k in ex) exCount++;
+  var exReqCount=0; for(k in exReq) exReqCount++;
+  if(st) st.textContent='共 '+songs.length+' 首 · 已排除 '+exCount+' 首 / '+exReqCount+' 位点歌人（抽签时自动跳过）';
+  if(!songs.length){ list.innerHTML='<p style="color:#9aa7b8;text-align:center;padding:20px">暂无歌曲</p>'; return; }
+  var arr=djSongsFilter(songs);
+  if(!arr.length){ list.innerHTML='<p style="color:#9aa7b8;text-align:center;padding:20px">没有匹配的歌曲</p>'; return; }
+  list.innerHTML = (_djSongsView==='req')
+    ? djRenderReqView(arr,ex,exReq)
+    : arr.map(function(s,i){ return djSongRowHtml(s,i,ex,exReq); }).join('');
 }
 function closeDjSongs(){ var m=document.getElementById('djSongsMask'); if(m) m.classList.remove('show'); }
 (function(){ var m=document.getElementById('djSongsMask'); if(m) m.addEventListener('click', function(e){ if(e.target.id==='djSongsMask') closeDjSongs(); }); })();
@@ -3625,10 +3727,15 @@ function djRun(){
   var f = document.getElementById('djFrom'), t = document.getElementById('djTo');
   var n = parseInt((document.getElementById('djCount')||{}).value || '5', 10);
   if(!(n>=1)) n = 5;
+  var wantN = n;
   var excl = (document.getElementById('djExcludePlayed')||{}).checked;
   var exclSched = (document.getElementById('djExcludeSched')||{}).checked;
+  /* 每人限一首：默认开启 —— 同一次抽签里，同一位点歌人的歌最多上一首 */
+  var onePerEl = document.getElementById('djOnePer');
+  var onePer = !onePerEl || onePerEl.checked;
   var topN = parseInt((document.getElementById('djTopN')||{}).value || '0', 10);
   if(!(topN>=0)) topN = 0;
+  var wantTop = topN;
   var box = document.getElementById('djResult');
   if(box) box.innerHTML = '<p class="dj-desc" style="color:#5b6781;font-size:.85rem">正在拉取歌单并抽签…</p>';
   var tFrom = f && f.value ? new Date(f.value).getTime() : -Infinity;
@@ -3642,9 +3749,11 @@ function djRun(){
     });
   });
   djFetchSongs().then(function(songs){
-    var exIds = djGetExcluded();
+    var exIds = djGetExcluded(), exReq = djGetExcludedReq();
     var pool = songs.filter(function(s){
-      if(exIds[s.id]) return false;
+      if(exIds[s.id]) return false;                 /* 排除单曲 */
+      var rq = djReqName(s);
+      if(rq && exReq[rq]) return false;             /* 排除该点歌人的全部歌 */
       if(excl && (s.played || playedIds[s.id])) return false;
       if(exclSched && schedIds[s.id]) return false;
       var ts = new Date(s.createdAt).getTime();
@@ -3652,28 +3761,50 @@ function djRun(){
       return true;
     });
     if(!pool.length){
-      if(box) box.innerHTML = '<p class="dj-desc" style="color:#c2410c;font-size:.85rem">没有可抽歌曲，请调整时间范围（点「全部」不限时间）、关闭「排除已播放」或「排除已排期」。</p>';
+      if(box) box.innerHTML = '<p class="dj-desc" style="color:#c2410c;font-size:.85rem">没有可抽歌曲，请调整时间范围（点「全部」不限时间）、关闭「排除已播放」/「排除已排期」，或到「🎼 歌单管理」取消排除。</p>';
       return;
     }
-    var clamped = n > pool.length;
-    if(n > pool.length) n = pool.length;
+    /* 「每人限一首」时的容量上限 = 不同点歌人数 + 无点歌人信息的歌数 */
+    var personSet={}, anonCnt=0, pk;
+    pool.forEach(function(s){ var rq=djReqName(s); if(rq) personSet[rq]=1; else anonCnt++; });
+    var personCnt=0; for(pk in personSet) personCnt++;
+    var cap = onePer ? (personCnt + anonCnt) : pool.length;
+    if(n > cap) n = cap;
     if(topN > n) topN = n;
-    if(topN > pool.length) topN = pool.length;
-    /* 1) 高赞必选：点赞最高前 topN 首必定中选 */
-    var guarantee = [], restPool = pool.slice();
+    /* 抽签：①同一首歌不重复 ②开启「每人限一首」时同一位点歌人只占一个名额 */
+    var usedId={}, usedReq={}, picked=[], guarantee=[];
+    function take(s){
+      if(!s || usedId[s.id]) return false;
+      var rq = djReqName(s);
+      if(onePer && rq && usedReq[rq]) return false;
+      usedId[s.id]=1; if(rq) usedReq[rq]=1; picked.push(s);
+      return true;
+    }
+    /* 1) 高赞必选：按点赞降序取；撞上「每人限一首」时自动顺延到下一首 */
+    var deferred = 0;   /* 因「每人限一首」被跳过的高赞候选数 */
     if(topN > 0){
       var sorted = pool.slice().sort(function(a,b){ return (b.voteCount||0)-(a.voteCount||0); });
-      guarantee = sorted.slice(0, topN);
-      guarantee.forEach(function(s){ var idx = restPool.indexOf(s); if(idx>=0) restPool.splice(idx,1); });
+      for(var i=0;i<sorted.length && guarantee.length<topN;i++){
+        if(take(sorted[i])){ guarantee.push(sorted[i]); continue; }
+        var rqD = djReqName(sorted[i]);
+        if(onePer && rqD && usedReq[rqD]) deferred++;
+      }
     }
-    var picked = guarantee.slice();
-    /* 2) 其余：纯随机。need 先算好，避免循环条件里 picked.length 增长导致提前终止 */
-    var bag = restPool.slice();
-    var need = n - picked.length;
-    for(var k=0; k<need && bag.length; k++){
+    /* 2) 其余随机：候选剔除已选 id 与已占用点歌人；每中一首，同步剔除同一人的其他歌 */
+    var bag = pool.filter(function(s){
+      if(usedId[s.id]) return false;
+      var rq = djReqName(s);
+      return !(onePer && rq && usedReq[rq]);
+    });
+    while(picked.length < n && bag.length){
       var idx = Math.floor(Math.random()*bag.length);
-      picked.push(bag[idx]);
+      var s = bag[idx];
       bag.splice(idx,1);
+      if(!take(s)) continue;
+      if(onePer){
+        var rq2 = djReqName(s);
+        if(rq2){ for(var j=bag.length-1;j>=0;j--){ if(djReqName(bag[j])===rq2) bag.splice(j,1); } }
+      }
     }
     /* 保存为一个批次记录（含时间/备注/已排期/已播放标记） */
     rounds.push({
@@ -3682,19 +3813,31 @@ function djRun(){
       note: '',
       addedToPlatform: false,
       played: false,
-      songs: picked.map(function(s){ return { id:s.id, title:s.title, artist:s.artist, votes:s.voteCount||0, requester:(typeof s.requester==='string')?s.requester:((s.requester&&s.requester.name)||'') }; })
+      songs: picked.map(function(s){ return { id:s.id, title:s.title, artist:s.artist, votes:s.voteCount||0, requester:djReqName(s) }; })
     });
     djSaveRounds(rounds);
     _djLastPick = picked;
     var gset = {}; guarantee.forEach(function(s){ gset[s.id]=1; });
     var rows = picked.map(function(s,i){
-      var req=(typeof s.requester==='string')?s.requester:((s.requester&&s.requester.name)||'');
-      return (gset[s.id]?'🔥 ':'')+(i+1)+'. '+esc(s.title)+' - '+esc(s.artist||'未知歌手')+'（'+(req?'点歌：'+esc(req)+' · ':'')+'点赞 '+(s.voteCount||0)+'）';
+      var rq = djReqName(s);
+      return (gset[s.id]?'🔥 ':'')+(i+1)+'. '+esc(s.title||'?')+' - '+esc(s.artist||'未知歌手')+'（'+(rq?'点歌：'+esc(rq)+' · ':'')+'点赞 '+(s.voteCount||0)+'）';
     }).join('<br>');
-    var mode = (topN>0 ? '高赞必选 '+guarantee.length+' 首 + ' : '') + '随机' + (excl?' · 排除已播放':' · 含已播放') + (exclSched?' · 排除已排期':'') + ' · 池中 '+pool.length+' 首';
+    var mode = (topN>0 ? '高赞必选 '+guarantee.length+' 首 + ' : '') + '随机'
+      + (onePer ? ' · 每人限一首' : ' · 不限制每人首数')
+      + (excl ? ' · 排除已播放' : '') + (exclSched ? ' · 排除已排期' : '')
+      + ' · 池中 '+pool.length+' 首' + (onePer ? ' / '+personCnt+' 位同学' : '');
+    var shortMsg = '';
+    if(picked.length < wantN){
+      shortMsg = onePer
+        ? '（受「每人限一首」限制：本次池中 '+personCnt+' 位点歌人 + '+anonCnt+' 首无点歌人信息，最多只能抽 '+cap+' 首）'
+        : '（池中仅 '+pool.length+' 首，已全部抽取）';
+    }
+    var topMsg = (wantTop>0 && deferred>0)
+      ? '⚠️ 高赞必选里有 '+deferred+' 首因「每人限一首」被顺延（同一位同学已有歌中选，名额让给后面的歌）' : '';
     if(box) box.innerHTML = '<div style="background:#f0f6ff;border-radius:12px;padding:12px 14px;margin:10px 0;font-size:.85rem;line-height:1.9">'+
-      '<b style="color:#07a154">✅ 已抽中 '+picked.length+' 首'+(clamped ? '（池中仅 '+pool.length+' 首，已全部抽取）' : '')+'，已加入本地排期（累计 '+djScheduleCount()+' 首）</b><br>'+
+      '<b style="color:#07a154">✅ 已抽中 '+picked.length+' 首'+shortMsg+'，已加入本地排期（累计 '+djScheduleCount()+' 首）</b><br>'+
       '<span style="color:#3b5bfd">'+mode+'</span><br>'+
+      (topMsg?'<span style="color:#c2410c;font-size:.8rem">'+topMsg+'</span><br>':'')+
       rows+'</div>';
     SFX.success();
   }).catch(function(err){
