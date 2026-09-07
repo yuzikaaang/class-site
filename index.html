@@ -463,6 +463,13 @@ body::after{animation-name:blobB;animation-duration:34s}
 .card{position:relative;overflow:hidden}
 .card::after{content:'';position:absolute;top:0;left:0;width:60%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.32),transparent);transform:translateX(-130%) skewX(-20deg);animation:sheen 6s ease-in-out infinite;pointer-events:none}
 .dark .card::after{background:linear-gradient(100deg,transparent,rgba(255,255,255,.06),transparent)}
+/* 暂停开放卡片（学习资料因网络问题暂时关闭，2026-09-07）：整体灰度化、去流光、不上浮；数据保留，仅关入口 */
+.card.card-paused{filter:grayscale(1);border-top-color:#7d8797;background:#e9ebee}
+.dark .card.card-paused{background:#232a37}
+.card.card-paused::after{display:none}
+.card.card-paused:hover{transform:none;box-shadow:0 8px 25px rgba(0,0,0,.06)}
+.paused-box{margin-top:10px;padding:10px 14px;border:1.5px dashed #8a94a6;border-radius:12px;background:rgba(125,135,151,.10);color:var(--fg-3);font-size:.9rem;font-weight:700;line-height:1.65}
+.dark .paused-box{border-color:#5b6577;background:rgba(91,101,119,.16)}
 @keyframes sheen{0%{transform:translateX(-130%) skewX(-20deg)}60%,100%{transform:translateX(320%) skewX(-20deg)}}
 /* 卡片入场 */
 .card{animation:riseIn .55s cubic-bezier(.2,.9,.3,1.15) backwards}
@@ -1340,7 +1347,8 @@ var SITE_DATA = {
     { date: "2026-08-28 23:15", text: "📌 电脑端体验修复：主页点开站内小游戏（贪吃蛇 / 俄罗斯方块 / 涂鸦跳跃等）不再新开标签页，改为在当前页面直接打开；玩完点「返回班级站」即回到主页，任务栏不再堆满本站点。外部链接（如 4399、Classworks）仍在新标签页打开，方便保留班级服务站。手机端行为不变。", category: "site" },
     { date: "2026-08-29 00:30", text: "⚠️ 备用链接失效说明：此前填入的 Gitee Pages 备用入口（zikang0529.gitee.io）已无法使用——Gitee Pages 服务于 2024 年永久下线且无恢复计划。主链接（GitHub Pages）在微信内置浏览器中同样会被拦截。已备案、微信可开的备用链接将重新部署后在此公告并填入侧边栏「复制链接」，请先使用主链接（电脑/手机浏览器均可正常打开）。", category: "site" },
     { date: "2026-08-29 00:40", text: "🎟️ 游戏点歌券防重复升级：发券前会先查点歌平台后台——本周内同一名字在同一款游戏已领过券的，直接展示原来的券码，不再重复生成。换手机 / 换浏览器 / 清缓存都拦得住（以平台记录为准），保证每款游戏每周每人一张券。", category: "site" },
-    { date: "2026-08-31 18:26", text: "📌 「报到」日期（8/31 18:00）已过，首页「重要日期倒计时」中的「报到」项已隐藏；当前面板仅显示「寒假」倒计时。", category: "site" }
+    { date: "2026-08-31 18:26", text: "📌 「报到」日期（8/31 18:00）已过，首页「重要日期倒计时」中的「报到」项已隐藏；当前面板仅显示「寒假」倒计时。", category: "site" },
+    { date: "2026-09-07 12:57", text: "【班级通知】因网络问题，「学习资料」板块中的课堂笔记与教学课件暂时关闭，恢复开放时间另行通知，给大家带来的不便敬请谅解。", category: "site" }
   ],
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
@@ -1412,7 +1420,7 @@ var SITE_DATA = {
     },
     {
       id: 6,
-      categoryId: 5, title: "课堂笔记", icon: "", iconText: "笔记",
+      categoryId: 5, title: "课堂笔记", icon: "", iconText: "笔记", paused: true,
       desc: "经多方对比，课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载基本不限速。\n笔记为截图，可在线预览，加载卡顿建议下载查看。\n打不开可复制链接至浏览器打开（微信页面可能存在兼容问题）。",
       mainLabel: "", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
@@ -1427,7 +1435,7 @@ var SITE_DATA = {
     },
     {
       id: 7,
-      categoryId: 5, title: "教学课件", icon: "", iconText: "课件",
+      categoryId: 5, title: "教学课件", icon: "", iconText: "课件", paused: true,
       desc: "经多方对比，课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载基本不限速。\n打不开可复制链接至浏览器打开（微信页面可能存在兼容问题）。",
       mainLabel: "", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
@@ -1842,7 +1850,9 @@ function render(){
         var needBrowser = isWeChat() && !l.mainWechatOk && httpUrl(l.mainUrl);
         var passed = gatePassed(l);
         var contentHtml = '<div class="card-content"><h3>'+esc(l.title)+'</h3>'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
-        if(l.gate && !passed){
+        if(l.paused){
+          contentHtml += '<div class="paused-box">⛔ 因网络问题，暂时关闭，恢复开放时间另行通知</div>';
+        }else if(l.gate && !passed){
           var _lr = lockRemain('gate_'+l.id);
           var _lockMsg = _lr > 0 ? '🔒 连续输错次数过多，请 ' + Math.ceil(_lr/1000) + ' 秒后再试' : '';
           var _errMsg = _lockMsg || (window.__gateErr && window.__gateErr[l.id] ? '💡 ' + esc(window.__gateErr[l.id]) : '');
@@ -1863,7 +1873,9 @@ function render(){
         contentHtml += (l.cardTip ? '<p class="card-hw-tip" style="font-size:.78rem;color:#c2410c;margin-top:6px;line-height:1.6">'+esc(l.cardTip)+'</p>' : '');
         contentHtml += '</div>';
         var actionsHtml;
-        if(l.gate){
+        if(l.paused){
+          actionsHtml = ''; /* 暂停开放：不渲染任何入口按钮与门禁 */
+        }else if(l.gate){
           if(passed){
             actionsHtml = '';
             /* 链接与访问码走 gateUrl()/gateCode() 运行时解混淆，源码里只有密文 */
@@ -1898,7 +1910,7 @@ function render(){
             (l.extraLabel ? '<button class="btn btn-secondary" onclick="openLink(\''+jsq(l.extraUrl)+'\','+(l.extraWechatOk?'true':'false')+')">'+esc(l.extraLabel)+'</button>' : '')+
             (needBrowser ? '<span class="wechat-hint">微信内请按引导用浏览器打开</span>' : '');
         }
-        return '<div class="card">'+
+        return '<div class="card'+(l.paused?' card-paused':'')+'">'+
           '<div class="card-icon">'+iconHtml+'</div>'+
           contentHtml+
           '<div class="card-actions">'+actionsHtml+'</div>'+
@@ -4252,7 +4264,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
   <!-- 51LA 网站统计：匿名访问统计（PV/UV/来源/设备），详见站内公告。hashMode 适配本站单页 PWA 翻页 -->
-  <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+  <script charset="UTF-8" id="LA_COLLECT" src="https://sdk.51.la/js-sdk-pro.min.js"></script>
   <script>LA.init({id:"3R2vmhdz45oTG6V1",ck:"3R2vmhdz45oTG6V1",autoTrack:true,hashMode:true})</script>
 </body>
 </html>
