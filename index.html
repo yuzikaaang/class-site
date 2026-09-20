@@ -392,6 +392,15 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 /* 公众号二维码弹窗 */
 .qr-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;padding:24px}
 .qr-mask.show{display:flex}
+/* ===== 网页内视频播放弹窗 ===== */
+.video-box{background:#0e1320;border-radius:18px;max-width:560px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.video-box .allboard-head{background:linear-gradient(90deg,#ff5f6d,#ffc371);color:#fff}
+.video-body{padding:0;background:#000}
+.video-wrap{position:relative;width:100%;padding-top:56.25%;background:#000}
+.video-wrap iframe,.video-wrap video{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
+.video-fallback{padding:12px 18px;color:#cdd6e6;font-size:.8rem;line-height:1.7;background:#0e1320}
+.video-fallback a{color:#7db4ff;text-decoration:none}
+.video-fallback a:hover{text-decoration:underline}
 /* 班级签弹窗 + 彩带彩蛋 */
 .sign-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9990;padding:20px}
 .sign-mask.show{display:flex}
@@ -609,8 +618,16 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   <div class="qr-box">
     <div class="qr-head"><h3>班级公众号</h3></div>
     <img id="qrImg" src="" alt="班级公众号二维码">
-    <p class="qr-tip">长按二维码，选择「识别图中二维码」关注</p>
-    <p class="qr-sub">右上角「···」可转发给同学</p>
+  <p class="qr-tip">长按二维码，选择「识别图中二维码」关注</p>
+  <p class="qr-sub">右上角「···」可转发给同学</p>
+  </div>
+</div>
+
+<!-- ===== 网页内视频播放弹窗（支持 B站分享链接 / 云端直链，均在站内播放） ===== -->
+<div class="allboard-mask" id="videoMask">
+  <div class="video-box">
+    <div class="allboard-head"><span id="videoTitle">视频播放</span><button onclick="closeVideo()">关闭</button></div>
+    <div class="video-body" id="videoBody"></div>
   </div>
 </div>
 
@@ -1419,6 +1436,12 @@ var SITE_DATA = {
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
+      id: 18,
+      categoryId: 2, title: "ClassIsland 三周年纪念", icon: "", iconText: "🎉",
+      desc: "🎉 庆祝班级课表 ClassIsland 三周年（2023 → 2026）！\n点击下方按钮即可在站内观看官方纪念视频，无需跳转 B站。",
+      video: "https://www.bilibili.com/video/BV1sJe36ZEb9/" /* B站官方三周年回顾短片；也可换成云端直链 */
+    },
+    {
       id: 6,
       categoryId: 5, title: "课堂笔记", icon: "", iconText: "笔记", paused: true,
       desc: "经多方对比，课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载基本不限速。\n笔记为截图，可在线预览，加载卡顿建议下载查看。\n打不开可复制链接至浏览器打开（微信页面可能存在兼容问题）。",
@@ -1660,6 +1683,44 @@ document.getElementById('qrMask').addEventListener('click', function(e){
   if(e.target.id === 'qrMask') closeQr();
 });
 
+/* ---- 网页内视频播放（支持 B站分享链接 / 云端直链，均在站内播放，不跳转） ---- */
+function parseVideo(url){
+  url = (url||'').trim();
+  /* 1) B站：提取 BV 号 → 站内嵌入 player.bilibili.com（无需跳转） */
+  var bili = url.match(/bilibili\.com\/video\/(BV[0-9A-Za-z]+)/i)
+          || url.match(/player\.bilibili\.com\/\?bvid=(BV[0-9A-Za-z]+)/i)
+          || url.match(/\b(BV[0-9A-Za-z]+)\b/i);
+  if(bili){
+    var bvid = bili[1] || ''; /* ⚠️ BV 号大小写敏感，严禁 toUpperCase()，否则 B站会报「无法正常播放」 */
+    var src = 'https://player.bilibili.com/player.html?bvid='+encodeURIComponent(bvid)+'&page=1&high_quality=1&danmaku=0&autoplay=0';
+    return '<div class="video-wrap"><iframe src="'+src+'" scrolling="no" frameborder="0" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"></iframe></div>'+
+      '<div class="video-fallback">📺 由 哔哩哔哩 提供 · <a href="https://www.bilibili.com/video/'+encodeURIComponent(bvid)+'" target="_blank" rel="noopener">在 B站打开</a></div>';
+  }
+  /* 2) 非 B站：按云端 / 直链视频文件处理（mp4/webm/ogg 等均可） */
+  if(/^https?:\/\//i.test(url)){
+    return '<div class="video-wrap"><video controls playsinline preload="metadata" src="'+esc(url)+'"></video></div>'+
+      '<div class="video-fallback">⚠️ 若无法播放，可能是网盘分享页（非直链）。可 <a href="'+esc(url)+'" target="_blank" rel="noopener">在新标签页打开</a>。</div>';
+  }
+  return '<div class="video-fallback">视频链接无效，请检查后重试。</div>';
+}
+function openVideo(url, title){
+  url = (url||'').trim();
+  if(!url){ alert('该视频链接暂未配置，请联系管理员补充'); return; }
+  var t = document.getElementById('videoTitle');
+  if(t) t.textContent = title || '视频播放';
+  var body = document.getElementById('videoBody');
+  if(body) body.innerHTML = parseVideo(url);
+  var m = document.getElementById('videoMask');
+  if(m) m.classList.add('show');
+}
+function closeVideo(){
+  var m = document.getElementById('videoMask');
+  if(m) m.classList.remove('show');
+  var body = document.getElementById('videoBody');
+  if(body) body.innerHTML = ''; /* 关闭时清空，停止播放并释放资源 */
+}
+document.getElementById('videoMask').addEventListener('click', function(e){ if(e.target.id === 'videoMask') closeVideo(); });
+
 /* ---- 渲染主页面 ---- */
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -1898,6 +1959,8 @@ function render(){
           actionsHtml = '<button class="btn btn-disabled" onclick="alert(\'功能开发中，敬请期待\')">'+esc(l.mainLabel||'待开发')+'</button>';
         }else if(l.contactQuery){
           actionsHtml = '<span class="gate-tip">输入姓名查询</span>';
+        }else if(l.video){
+          actionsHtml = '<button class="btn" onclick="openVideo(\''+jsq(l.video)+'\',\''+jsq(l.title)+'\')">▶ 播放视频</button>';
         }else if(l.customActions && l.customActions.length){
           actionsHtml = l.customActions.map(function(a){
             var style = a.style || '';

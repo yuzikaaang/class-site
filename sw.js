@@ -1,7 +1,7 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v9：学习资料卡片暂停态（灰显关闭入口）+ 飞机大战手绘风重做；升版本号会清掉 v8 留下的旧缓存
-const CACHE = 'class-site-v9'
+// v10：新增「网页内视频播放」能力（B站分享链接 / 云端直链均在站内播放）；升版本号清掉旧缓存
+const CACHE = 'class-site-v10'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
