@@ -1,7 +1,7 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v13：国庆假期天数纠正（8→7）、分类「班级应用」改名「大屏服务」、隐藏 ICC-CE 卡片；升版本号清掉旧缓存
-const CACHE = 'class-site-v13'
+// v12：视频改为「进板块自动弹窗 + 顶部庆祝横幅」（不再占卡片）；加横屏提示与「📱 横屏查看」按钮；升版本号清掉旧缓存
+const CACHE = 'class-site-v12'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
