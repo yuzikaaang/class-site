@@ -393,37 +393,14 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .qr-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;padding:24px}
 .qr-mask.show{display:flex}
 /* ===== 网页内视频播放弹窗 ===== */
-.video-box{background:#0e1320;border-radius:18px;max-width:860px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;transition:max-width .2s ease}
-.video-box .allboard-head{background:linear-gradient(90deg,#ff5f6d,#ffc371);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px}
-.video-box .allboard-head span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.video-head-btns{display:flex;gap:6px;flex-shrink:0}
-.video-head-btns button{background:rgba(255,255,255,.22);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.76rem;font-weight:700;cursor:pointer;white-space:nowrap}
-.video-head-btns button:hover{background:rgba(255,255,255,.34)}
+.video-box{background:#0e1320;border-radius:18px;max-width:560px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.video-box .allboard-head{background:linear-gradient(90deg,#ff5f6d,#ffc371);color:#fff}
 .video-body{padding:0;background:#000}
 .video-wrap{position:relative;width:100%;padding-top:56.25%;background:#000}
 .video-wrap iframe,.video-wrap video{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
 .video-fallback{padding:12px 18px;color:#cdd6e6;font-size:.8rem;line-height:1.7;background:#0e1320}
 .video-fallback a{color:#7db4ff;text-decoration:none}
 .video-fallback a:hover{text-decoration:underline}
-/* 全屏态：弹窗铺满视口，播放器宽度优先占满、上下黑场居中（B站内部全屏按钮跨域受限，故由外层实现） */
-.video-mask.fs{align-items:stretch;justify-content:stretch;padding:0}
-.video-mask.fs .video-box{max-width:none;width:100%;height:100vh;height:100dvh;border-radius:0}
-.video-mask.fs .video-body{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}
-/* 宽度占满，高度按 16:9 自适应（竖屏=贴满宽度、上下黑场；横屏由下方 media 查询切为高度约束） */
-.video-mask.fs .video-wrap{padding-top:0;aspect-ratio:16/9;width:100%;height:auto;min-height:0;flex:0 0 auto}
-/* 横屏 / 宽视口：按高度铺满，宽度自适应，避免超出视口高度 */
-@media (min-aspect-ratio: 16/9){
-  .video-mask.fs .video-wrap{width:auto;height:100%;aspect-ratio:16/9}
-}
-/* 卡片整体可点（视频类卡片不再需要二级按钮）
-   注意：.card::after 已被流光扫过动画占用（见 line 495），角标必须用 ::before，否则会被覆盖。 */
-.card-clickable{cursor:pointer}
-.card-clickable::before{content:"▶ 站内观看";position:absolute;top:10px;right:10px;z-index:2;background:linear-gradient(135deg,#ff5f6d,#ffc371);color:#fff;font-size:.66rem;font-weight:800;padding:3px 9px;border-radius:999px;box-shadow:0 3px 10px rgba(255,95,109,.35);pointer-events:none}
-.card-clickable:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.14)}
-.card-clickable:active{transform:scale(.99)}
-/* 关闭后右下角视频悬浮球 */
-#videoBubble{display:none;position:fixed;right:14px;bottom:16px;z-index:1044;width:48px;height:48px;border-radius:50%;border:none;background:linear-gradient(135deg,#ff5f6d,#ffc371);color:#fff;font-size:1.25rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,95,109,.4)}
-#videoBubble span.dot{position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff}
 /* 班级签弹窗 + 彩带彩蛋 */
 .sign-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9990;padding:20px}
 .sign-mask.show{display:flex}
@@ -647,20 +624,12 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 </div>
 
 <!-- ===== 网页内视频播放弹窗（支持 B站分享链接 / 云端直链，均在站内播放） ===== -->
-<div class="allboard-mask video-mask" id="videoMask">
+<div class="allboard-mask" id="videoMask">
   <div class="video-box">
-    <div class="allboard-head">
-      <span id="videoTitle">视频播放</span>
-      <div class="video-head-btns">
-        <button id="videoFsBtn" onclick="toggleVideoFs()" title="放大 / 还原（B站播放器自带的全屏按钮受跨域限制，请用此按钮）">⛶ 放大</button>
-        <button onclick="closeVideo()">关闭</button>
-      </div>
-    </div>
+    <div class="allboard-head"><span id="videoTitle">视频播放</span><button onclick="closeVideo()">关闭</button></div>
     <div class="video-body" id="videoBody"></div>
   </div>
 </div>
-<!-- 关闭视频弹窗后的右下角悬浮球（点击可重新打开） -->
-<button id="videoBubble" onclick="reopenVideo()" title="继续观看视频" aria-label="继续观看视频">🎬<span class="dot"></span></button>
 
 <!-- ===== 首次打开欢迎弹窗 ===== -->
 <div class="welcome-mask" id="welcomeMask">
@@ -1469,7 +1438,7 @@ var SITE_DATA = {
     {
       id: 18,
       categoryId: 2, title: "ClassIsland 三周年纪念", icon: "", iconText: "🎉",
-      desc: "🎉 庆祝班级课表 ClassIsland 三周年（2023 → 2026）！\n点卡片任意位置，直接在站内观看官方纪念视频，无需跳转 B站。",
+      desc: "🎉 庆祝班级课表 ClassIsland 三周年（2023 → 2026）！\n点击下方按钮即可在站内观看官方纪念视频，无需跳转 B站。",
       video: "https://www.bilibili.com/video/BV1sJe36ZEb9/" /* B站官方三周年回顾短片；也可换成云端直链 */
     },
     {
@@ -1715,7 +1684,6 @@ document.getElementById('qrMask').addEventListener('click', function(e){
 });
 
 /* ---- 网页内视频播放（支持 B站分享链接 / 云端直链，均在站内播放，不跳转） ---- */
-var _videoUrl = '', _videoTitle = '视频播放'; /* 记住上次播放，供右下角悬浮球重新打开 */
 function parseVideo(url){
   url = (url||'').trim();
   /* 1) B站：提取 BV 号 → 站内嵌入 player.bilibili.com（无需跳转） */
@@ -1738,56 +1706,20 @@ function parseVideo(url){
 function openVideo(url, title){
   url = (url||'').trim();
   if(!url){ alert('该视频链接暂未配置，请联系管理员补充'); return; }
-  _videoUrl = url; _videoTitle = title || '视频播放';
   var t = document.getElementById('videoTitle');
-  if(t) t.textContent = _videoTitle;
+  if(t) t.textContent = title || '视频播放';
   var body = document.getElementById('videoBody');
   if(body) body.innerHTML = parseVideo(url);
   var m = document.getElementById('videoMask');
   if(m) m.classList.add('show');
-  videoBubbleHide();
 }
-/* 关闭：收起弹窗（保留链接，供右下角悬浮球重新打开），并停播释放资源 */
 function closeVideo(){
   var m = document.getElementById('videoMask');
-  if(m){ m.classList.remove('show'); m.classList.remove('fs'); }
-  var b = document.getElementById('videoFsBtn');
-  if(b) b.textContent = '⛶ 放大';
+  if(m) m.classList.remove('show');
   var body = document.getElementById('videoBody');
   if(body) body.innerHTML = ''; /* 关闭时清空，停止播放并释放资源 */
-  if(_videoUrl) videoBubbleShow(); /* 关闭后右下角出现悬浮球，点一下可继续看 */
-}
-/* 悬浮球：重新打开上次的视频 */
-function reopenVideo(){
-  if(!_videoUrl) return;
-  openVideo(_videoUrl, _videoTitle);
-}
-function videoBubbleShow(){
-  var el = document.getElementById('videoBubble'); if(!el) return;
-  el.style.display = 'flex';
-  if(typeof studyBubbleSync === 'function') studyBubbleSync();
-}
-function videoBubbleHide(){ var el = document.getElementById('videoBubble'); if(el) el.style.display = 'none'; }
-/* 全屏切换：B站播放器内部的全屏按钮在跨域 iframe 内常被浏览器拦截（手机/微信内尤甚），
-   故由外层弹窗实现放大，保证全屏一定可用。 */
-function toggleVideoFs(){
-  var m = document.getElementById('videoMask'); if(!m) return;
-  var on = m.classList.toggle('fs');
-  var b = document.getElementById('videoFsBtn');
-  if(b) b.textContent = on ? '⛶ 还原' : '⛶ 放大';
-  try{
-    if(on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){});
-    else if(!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function(){});
-  }catch(e){ /* 浏览器不支持真全屏时，仍保留 CSS 铺满视口的效果 */ }
 }
 document.getElementById('videoMask').addEventListener('click', function(e){ if(e.target.id === 'videoMask') closeVideo(); });
-/* 退出浏览器真全屏时，同步还原弹窗放大态，避免状态不一致 */
-document.addEventListener('fullscreenchange', function(){
-  if(!document.fullscreenElement){
-    var m = document.getElementById('videoMask');
-    if(m && m.classList.contains('fs')){ m.classList.remove('fs'); var b=document.getElementById('videoFsBtn'); if(b) b.textContent='⛶ 放大'; }
-  }
-});
 
 /* ---- 渲染主页面 ---- */
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -2028,8 +1960,7 @@ function render(){
         }else if(l.contactQuery){
           actionsHtml = '<span class="gate-tip">输入姓名查询</span>';
         }else if(l.video){
-          /* 视频类卡片：整卡即入口，不再需要「▶ 播放视频」二级按钮（用户要求） */
-          actionsHtml = '<span class="gate-tip">点卡片任意位置即可在站内观看，无需跳转 B站</span>';
+          actionsHtml = '<button class="btn" onclick="openVideo(\''+jsq(l.video)+'\',\''+jsq(l.title)+'\')">▶ 播放视频</button>';
         }else if(l.customActions && l.customActions.length){
           actionsHtml = l.customActions.map(function(a){
             var style = a.style || '';
@@ -2042,10 +1973,7 @@ function render(){
             (l.extraLabel ? '<button class="btn btn-secondary" onclick="openLink(\''+jsq(l.extraUrl)+'\','+(l.extraWechatOk?'true':'false')+')">'+esc(l.extraLabel)+'</button>' : '')+
             (needBrowser ? '<span class="wechat-hint">微信内请按引导用浏览器打开</span>' : '');
         }
-        /* 视频类卡片整卡可点：点卡片任意位置直接弹视频，无需二级按钮 */
-        var cardCls = 'card' + (l.paused?' card-paused':'') + (l.video?' card-clickable':'');
-        var cardClick = l.video ? ' onclick="openVideo(\''+jsq(l.video)+'\',\''+jsq(l.title)+'\')"' : '';
-        return '<div class="'+cardCls+'"'+cardClick+'>'+
+        return '<div class="card'+(l.paused?' card-paused':'')+'">'+
           '<div class="card-icon">'+iconHtml+'</div>'+
           contentHtml+
           '<div class="card-actions">'+actionsHtml+'</div>'+
@@ -3060,13 +2988,9 @@ function actTodayKey(){ return actPopKey()+'_'+new Date().toDateString(); }
 function actAutoPopped(){ try{ return localStorage.getItem(actTodayKey())==='1'; }catch(e){ return false; } }
 /* 两个悬浮球都贴右下角：活动球出现时把学习资料球上移，避免叠在一起 */
 function actSyncBubble(){
-  var ab=document.getElementById('actBubble'), sb=document.getElementById('studyBubble'), vb=document.getElementById('videoBubble');
-  var aVis = !!(ab && ab.style.display==='flex');
-  var sVis = !!(sb && sb.style.display==='flex');
-  var vVis = !!(vb && vb.style.display==='flex');
-  /* 从下往上叠：视频球 → 学习资料球 → 活动球，互不遮挡 */
-  if(sb) sb.style.bottom = (aVis ? 74 : 16) + 'px';
-  if(vb) vb.style.bottom = 16 + (sVis ? 58 : 0) + (aVis ? 58 : 0) + 'px';
+  var ab=document.getElementById('actBubble'), sb=document.getElementById('studyBubble');
+  var vis = !!(ab && ab.style.display==='flex');
+  if(sb) sb.style.bottom = vis ? '74px' : '16px';
 }
 function actBubbleShow(){
   var b=document.getElementById('actBubble'); if(!b) return;

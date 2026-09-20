@@ -1,7 +1,7 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v11：视频弹窗改为「整卡即入口」+ 外层放大按钮（B站跨域全屏受限）+ 关闭后右下角悬浮球；升版本号清掉旧缓存
-const CACHE = 'class-site-v11'
+// v10：新增「网页内视频播放」能力（B站分享链接 / 云端直链均在站内播放）；升版本号清掉旧缓存
+const CACHE = 'class-site-v10'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
