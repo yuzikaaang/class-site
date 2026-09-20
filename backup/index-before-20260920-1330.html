@@ -393,34 +393,18 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .qr-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;padding:24px}
 .qr-mask.show{display:flex}
 /* ===== 网页内视频播放弹窗 ===== */
-/* 弹窗整体限制在视口高度内，避免矮视口（手机横屏）溢出被裁 */
-.video-mask{align-items:center;justify-content:center;padding:16px}
-.video-box{background:#0e1320;border-radius:18px;max-width:860px;width:100%;max-height:calc(100dvh - 32px);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column}
-.video-box .allboard-head{background:linear-gradient(90deg,#ff5f6d,#ffc371);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0}
+.video-box{background:#0e1320;border-radius:18px;max-width:860px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;transition:max-width .2s ease}
+.video-box .allboard-head{background:linear-gradient(90deg,#ff5f6d,#ffc371);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .video-box .allboard-head span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .video-head-btns{display:flex;gap:6px;flex-shrink:0}
 .video-head-btns button{background:rgba(255,255,255,.22);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.76rem;font-weight:700;cursor:pointer;white-space:nowrap}
 .video-head-btns button:hover{background:rgba(255,255,255,.34)}
-/* ⚠️ .video-body 必须是 block（不能用 flex）：wrap 作为 flex item 时 width:min(100%,…) 里的
-   百分比基数会变成「flex 分配宽度」而非父级宽度，实测会把视频算成 136px（几乎看不见）。 */
-.video-body{padding:0;background:#000;display:block}
-/* 视频区域：宽度取 min(弹窗可用宽, 可用高度×16/9)，高度按 16:9 自动得出。
-   纯 CSS 计算，不依赖 flex 反推（实测 flex + max-height 在子项上无效会溢出）。
-   扣减量实测：遮罩留白 32 + 标题栏 59 + 横屏提示条 40 = 131px。 */
-.video-wrap{position:relative;width:min(100%, calc((100dvh - 131px) * 16 / 9));aspect-ratio:16/9;background:#000;margin:0 auto}
-/* 宽视口（横屏/电脑）时横屏提示条已隐藏；扣减量实测为「遮罩留白 32 + 标题栏 59 = 91px」，
-   以此反算视频可用的最大高度并铺满（横屏/电脑下视频最大化）。 */
-@media (min-aspect-ratio: 4/3){
-  .video-box{max-width:min(96vw, 1200px)}
-  .video-wrap{width:min(100%, calc((100dvh - 91px) * 16 / 9))}
-}
+.video-body{padding:0;background:#000}
+.video-wrap{position:relative;width:100%;padding-top:56.25%;background:#000}
 .video-wrap iframe,.video-wrap video{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
 .video-fallback{padding:12px 18px;color:#cdd6e6;font-size:.8rem;line-height:1.7;background:#0e1320}
 .video-fallback a{color:#7db4ff;text-decoration:none}
 .video-fallback a:hover{text-decoration:underline}
-.video-desc{padding:14px 18px;color:#e8eeff;font-size:.82rem;line-height:1.75;background:#0e1320;white-space:pre-line}
-/* 全屏 / 横屏态下隐藏说明与兜底行，把空间全留给画面 */
-.video-mask.fs .video-desc,.video-mask.fs .video-fallback{display:none}
 /* 全屏态：弹窗铺满视口，播放器宽度优先占满、上下黑场居中（B站内部全屏按钮跨域受限，故由外层实现） */
 .video-mask.fs{align-items:stretch;justify-content:stretch;padding:0}
 .video-mask.fs .video-box{max-width:none;width:100%;height:100vh;height:100dvh;border-radius:0}
@@ -440,24 +424,6 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 /* 关闭后右下角视频悬浮球 */
 #videoBubble{display:none;position:fixed;right:14px;bottom:16px;z-index:1044;width:48px;height:48px;border-radius:50%;border:none;background:linear-gradient(135deg,#ff5f6d,#ffc371);color:#fff;font-size:1.25rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,95,109,.4)}
 #videoBubble span.dot{position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff}
-/* ===== 板块庆祝横幅（替代卡片；点一下即弹视频） ===== */
-.celebrate-banner{display:flex;align-items:center;gap:12px;margin:0 0 18px;padding:14px 18px;border-radius:16px;background:linear-gradient(100deg,#ff5f6d,#ffc371);color:#fff;cursor:pointer;box-shadow:0 8px 22px rgba(255,95,109,.28);transition:transform .25s,box-shadow .25s;border:none;width:100%;text-align:left;font-family:inherit}
-.celebrate-banner:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(255,95,109,.36)}
-.celebrate-banner:active{transform:scale(.995)}
-.celebrate-banner .cb-icon{font-size:1.6rem;line-height:1;flex-shrink:0}
-.celebrate-banner .cb-text{flex:1;min-width:0}
-.celebrate-banner .cb-title{font-size:.92rem;font-weight:800;line-height:1.4}
-.celebrate-banner .cb-sub{font-size:.76rem;opacity:.94;line-height:1.5;margin-top:2px}
-.celebrate-banner .cb-go{flex-shrink:0;background:rgba(255,255,255,.24);border-radius:999px;padding:6px 12px;font-size:.74rem;font-weight:800;white-space:nowrap}
-/* ===== 视频弹窗：横屏提示条 ===== */
-.video-rotate-tip{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;background:linear-gradient(90deg,#2c3550,#3a4668);color:#e8eeff;font-size:.78rem;line-height:1.5}
-.video-rotate-tip button{flex-shrink:0;background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:.76rem;font-weight:800;cursor:pointer;white-space:nowrap}
-.video-rotate-tip button:hover{background:rgba(255,255,255,.32)}
-.video-rotate-tip button:active{transform:scale(.96)}
-/* 已横屏 / 宽视口时收起提示条，避免占地方 */
-@media (min-aspect-ratio: 4/3){ .video-rotate-tip{display:none} }
-/* 提示条不可见时（横屏态）不参与布局 */
-.video-mask.fs .video-rotate-tip{display:none}
 /* 班级签弹窗 + 彩带彩蛋 */
 .sign-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9990;padding:20px}
 .sign-mask.show{display:flex}
@@ -691,10 +657,6 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
       </div>
     </div>
     <div class="video-body" id="videoBody"></div>
-    <div class="video-rotate-tip" id="videoRotateTip">
-      <span>📱 建议把手机横过来看，画面更大更清楚</span>
-      <button onclick="rotateVideoLandscape()">📱 横屏查看</button>
-    </div>
   </div>
 </div>
 <!-- 关闭视频弹窗后的右下角悬浮球（点击可重新打开） -->
@@ -1307,23 +1269,6 @@ var SITE_DATA = {
     linkText: "",
     linkUrl: ""
   },
-  /* ── 板块庆祝视频（**不占卡片位**；进入指定板块时自动弹出视频弹窗）──
-     站主用法：想在某板块做庆祝/预告，把 enabled 改成 true 并填好字段即可；不用了改回 false。
-       enabled —— 总开关（false 时既无横幅也无弹窗，等于不存在）
-       categoryId —— 进入哪个板块时弹出（2 = 班级应用）
-       title / desc —— 弹窗标题 / 横幅与弹窗里的说明文字，\n 换行
-       video —— B站分享链接（含 BV 号）或云端/直链（mp4 等）
-       bannerText —— 板块顶部横幅文字
-       everyTime —— true = 每次进该板块都弹；false = 关掉后本次不再弹（悬浮球仍可重看） */
-  celebrate: {
-    enabled: true,
-    categoryId: 2,
-    title: "🎉 ClassIsland 三周年纪念",
-    desc: "🎉 庆祝班级课表 ClassIsland 三周年（2023 → 2026）！\n点击「📱 横屏查看」把手机横过来，画面更大更清楚。",
-    video: "https://www.bilibili.com/video/BV1sJe36ZEb9/",
-    bannerText: "🎉 ClassIsland 三周年纪念 · 点击看官方纪念短片",
-    everyTime: true
-  },
   /* ── 联系方式名单（name=哈希，其余为密文，查询时解密）── */
   contacts: [
     { name: "6edf6fc48db2cecbe826594996f606fb1f99f32a96944c311a4b437a4267b004", studentId: "UVlDBwUB", role: "hsHV1aGv" },
@@ -1520,6 +1465,12 @@ var SITE_DATA = {
       desc: "音乐课等课上播放歌曲的桌面播放器，\n支持歌单分享、歌词同步、主题换肤与多平台音乐导入，\n可在教室电脑安装使用，课上一起听歌更自在。",
       mainLabel: "查看项目", mainUrl: "https://github.com/hoowhoami/EchoMusic", mainWechatOk: false,
       extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
+      id: 18,
+      categoryId: 2, title: "ClassIsland 三周年纪念", icon: "", iconText: "🎉",
+      desc: "🎉 庆祝班级课表 ClassIsland 三周年（2023 → 2026）！\n点卡片任意位置，直接在站内观看官方纪念视频，无需跳转 B站。",
+      video: "https://www.bilibili.com/video/BV1sJe36ZEb9/" /* B站官方三周年回顾短片；也可换成云端直链 */
     },
     {
       id: 6,
@@ -1838,97 +1789,6 @@ document.addEventListener('fullscreenchange', function(){
   }
 });
 
-/* ---- 横屏查看：优先尝试系统横屏锁定，失败则提示用户手动旋转 ----
-   ⚠️ 注意：现代浏览器对 screen.orientation.lock 限制严格——多数要求「已处于全屏」且移动端才可用，
-   桌面浏览器 / 部分安卓浏览器会直接 reject。因此必须保留「提示用户手动旋转」的兜底。 */
-function rotateVideoLandscape(){
-  var tipped = false;
-  try{
-    /* 先进入真全屏（部分浏览器要求全屏后才允许锁定方向） */
-    if(document.documentElement.requestFullscreen && !document.fullscreenElement){
-      var r = document.documentElement.requestFullscreen();
-      if(r && r.catch) r.catch(function(){});
-    }
-    if(screen.orientation && screen.orientation.lock){
-      var p = screen.orientation.lock('landscape');
-      if(p && p.catch) p.catch(function(){});
-    }
-  }catch(e){ /* 忽略：交给下面的兜底提示 */ }
-  /* 无论锁定是否成功，都提示用户手动横屏（自动旋转开着时转一下就好）
-     ⚠️ 判断是否已横屏必须用「视口宽 > 视口高」，不能信 screen.orientation.type——
-     实测桌面 Chromium 会回报 "landscape-primary" 而视口其实是 420×860（竖屏），会导致误判为已横屏而不提示。 */
-  setTimeout(function(){
-    var alreadyLandscape = window.innerWidth > window.innerHeight;
-    if(!alreadyLandscape){
-      showVideoTip('📱 请把手机横过来（或打开「自动旋转」后转动手机），画面就会自动变大');
-    } else {
-      showVideoTip('✅ 已横屏，享受大画面吧～');
-    }
-  }, 700);
-}
-function showVideoTip(msg){
-  var tip = document.getElementById('videoRotateTip');
-  if(!tip) return;
-  var span = tip.querySelector('span');
-  if(span){ span.textContent = msg; }
-  tip.style.animation='none'; void tip.offsetWidth; tip.style.animation='';
-}
-
-/* ---- 板块庆祝（横幅 + 进板块自动弹视频；不占卡片位）---- */
-function celebGet(){
-  var c = (window.SITE_DATA && SITE_DATA.celebrate) || null;
-  return (c && c.enabled && c.video) ? c : null;
-}
-function celebForCat(catId){
-  var c = celebGet();
-  return (c && Number(c.categoryId) === Number(catId)) ? c : null;
-}
-/* 横幅 HTML：渲染进对应板块顶部（无则返回空串） */
-function celebBannerHtml(catId){
-  var c = celebForCat(catId);
-  if(!c) return '';
-  return '<button class="celebrate-banner" onclick="openCelebrate()" title="点击观看">'+
-    '<span class="cb-icon">🎉</span>'+
-    '<span class="cb-text">'+
-      '<span class="cb-title">'+esc(c.title||'庆祝')+'</span>'+
-      (c.bannerText ? '<span class="cb-sub">'+esc(c.bannerText)+'</span>' : '')+
-    '</span>'+
-    '<span class="cb-go">▶ 观看</span>'+
-  '</button>';
-}
-function openCelebrate(){
-  var c = celebGet(); if(!c) return;
-  openVideo(c.video, c.title || '视频播放');
-  var body = document.getElementById('videoBody');
-  var desc = (c.desc||'').trim();
-  if(body && desc){
-    var d = document.createElement('div');
-    d.className = 'video-desc';
-    d.textContent = desc;
-    body.appendChild(d);
-  }
-}
-/* 进板块自动弹：每次进入该板块都弹（everyTime=true 时不记标记） */
-var _celebPopping = false;
-function celebAutoPop(catId){
-  var c = celebForCat(catId);
-  if(!c || _celebPopping) return;
-  if(document.getElementById('videoMask').classList.contains('show')) return; /* 已在弹就别重复 */
-  _celebPopping = true;
-  /* 等其它弹窗（欢迎语 / 门禁 / 公告）先关掉，避免叠加 */
-  var tries = 0;
-  (function attempt(){
-    tries++;
-    var busy = document.querySelector('.allboard-mask.show') || document.querySelector('.gate.show');
-    /* 但自己的视频弹窗不算 busy */
-    if(busy && busy.id === 'videoMask') busy = null;
-    if(busy && tries < 20){ setTimeout(attempt, 400); return; }
-    _celebPopping = false;
-    openCelebrate();
-  })();
-}
-function celebInit(){ /* 预留：进站时的初始化（当前无需自动弹，仅在进板块时弹） */ }
-
 /* ---- 渲染主页面 ---- */
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -2192,7 +2052,7 @@ function render(){
         '</div>';
       }).join('');
     }
-    return '<div class="tab-page" id="tab-cat-'+c.id+'">'+celebBannerHtml(c.id)+inner+'</div>';
+    return '<div class="tab-page" id="tab-cat-'+c.id+'">'+inner+'</div>';
   }).join('');
 
   Array.prototype.forEach.call(grid.querySelectorAll('.tab-page'), function(p){ p.classList.remove('active'); });
@@ -2278,8 +2138,6 @@ function openCat(id){
   if(page) page.classList.add('active');
   if(id === 5){ showStudyNotice(); }
   else { studyBubbleHide(); }
-  /* 板块庆祝：进入该板块时自动弹视频（用户要求「每次进板块都弹」） */
-  if(celebForCat(id)){ setTimeout(function(){ celebAutoPop(id); }, 500); }
   var btns = document.querySelectorAll('#sideCats .side-btn');
   for(var j=0;j<btns.length;j++){ btns[j].classList.remove('active'); }
   var cur = document.querySelector('#sideCats .side-btn[data-cat="'+id+'"]');
