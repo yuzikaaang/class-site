@@ -1,7 +1,7 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v15：作业项可勾选「已完成」（localStorage 持久化）；数学第二题配图（原误挂语文）；Classworks 入口按钮置灰；升版本号清掉旧缓存
-const CACHE = 'class-site-v15'
+// v16：新增开屏「作业已发布」通知弹窗（9.24–9.27 进站自动弹 + 可「不再显示」+ 悬浮球 + 点击跳转查看）；同步站内公告；升版本号清掉旧缓存
+const CACHE = 'class-site-v16'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

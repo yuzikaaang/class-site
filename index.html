@@ -636,6 +636,24 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .dark #couponAdminMask #riList{color:#93a3bd}
 .dark #djHistoryMask .dj-label{color:#b6c2d9!important}
 .dark #djHistoryMask #djHistoryList > p{color:#93a3bd!important}
+/* ===== 开屏通知弹窗（大假作业发布等；带「不再显示」勾选 + 悬浮球） ===== */
+.hwPop-box{max-width:370px}
+.hwPop-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#e8543f,#ffa23a);color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
+.hwPop-head button{background:rgba(255,255,255,.22);border:none;color:#fff;padding:5px 12px;border-radius:999px;font-size:.78rem;cursor:pointer;font-family:inherit}
+.hwPop-body{padding:18px 20px 16px}
+.hwPop-icon{text-align:center;font-size:2.4rem;line-height:1;margin-bottom:10px}
+.hwPop-title{text-align:center;font-size:1rem;font-weight:800;color:#2c3e50;margin:0 0 10px}
+.hwPop-text{font-size:.86rem;line-height:1.85;color:#4a5568;margin:0 0 10px;white-space:pre-line}
+.hwPop-meta{background:#f7f9ff;border-radius:10px;padding:8px 12px;font-size:.78rem;color:#5f6b80;line-height:1.7;margin:0 0 12px}
+.hwPop-go{width:100%;background:linear-gradient(90deg,#e8543f,#ffa23a);color:#fff;border:none;border-radius:25px;padding:11px;font-size:.95rem;font-weight:700;cursor:pointer;font-family:inherit;transition:.22s;box-shadow:0 6px 16px rgba(232,84,63,.3)}
+.hwPop-go:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(232,84,63,.4)}
+.hwPop-no{margin-top:10px;font-size:.78rem;color:#5f6b80;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.hwPop-foot{margin-top:8px;font-size:.74rem;color:#5f6b80;text-align:center;line-height:1.6}
+.dark .hwPop-title{color:#e8eeff}
+.dark .hwPop-text{color:#cdd6e6}
+.dark .hwPop-meta{background:#222c3f;color:#9aa7b8}
+.dark .hwPop-no,.dark .hwPop-foot{color:#9aa7b8}
+#hwPopBubble{display:none;position:fixed;right:14px;bottom:16px;z-index:1046;width:48px;height:48px;border-radius:50%;border:none;background:linear-gradient(135deg,#e8543f,#ffa23a);color:#fff;font-size:1.25rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(232,84,63,.42)}
 /* ===== 作业展示美化（当前作业 / 历史日历） ===== */
 .hw-item{margin:0 0 14px;border:1px solid #eef1f8;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(20,40,90,.05)}
 .hw-item:last-child{margin-bottom:0}
@@ -730,6 +748,23 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 </div>
 <!-- 关闭视频弹窗后的右下角悬浮球（点击可重新打开） -->
 <button id="videoBubble" onclick="reopenVideo()" title="继续观看视频" aria-label="继续观看视频">🎬<span class="dot"></span></button>
+
+<!-- ===== 开屏通知弹窗：大假作业已发布（9.24–9.27 中秋；可「不再显示」，关闭后留悬浮球） ===== -->
+<button id="hwPopBubble" onclick="showHwPop()" title="查看作业发布通知" aria-label="查看作业发布通知">📝<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
+<div class="allboard-mask" id="hwPopMask">
+  <div class="allboard-box hwPop-box">
+    <div class="hwPop-head"><span>📝 作业已发布</span><button onclick="dismissHwPop()">关闭</button></div>
+    <div class="hwPop-body">
+      <div class="hwPop-icon">🌕</div>
+      <p class="hwPop-title" id="hwPopTitle">中秋假期作业已发布</p>
+      <p class="hwPop-text" id="hwPopText"></p>
+      <p class="hwPop-meta" id="hwPopMeta"></p>
+      <button class="hwPop-go" id="hwPopGo" onclick="hwPopGoView()">👉 点这里查看作业</button>
+      <label class="hwPop-no" for="hwPopNoShow"><input type="checkbox" id="hwPopNoShow"> 不再显示此提示</label>
+      <p class="hwPop-foot">也可从「常用服务 → 作业查看 → 📝 查看当前作业」进入</p>
+    </div>
+  </div>
+</div>
 
 <!-- ===== 首次打开欢迎弹窗 ===== -->
 <div class="welcome-mask" id="welcomeMask">
@@ -1487,8 +1522,20 @@ var SITE_DATA = {
     { date: "2026-08-29 00:30", text: "⚠️ 备用链接失效说明：此前填入的 Gitee Pages 备用入口（zikang0529.gitee.io）已无法使用——Gitee Pages 服务于 2024 年永久下线且无恢复计划。主链接（GitHub Pages）在微信内置浏览器中同样会被拦截。已备案、微信可开的备用链接将重新部署后在此公告并填入侧边栏「复制链接」，请先使用主链接（电脑/手机浏览器均可正常打开）。", category: "site" },
     { date: "2026-08-29 00:40", text: "🎟️ 游戏点歌券防重复升级：发券前会先查点歌平台后台——本周内同一名字在同一款游戏已领过券的，直接展示原来的券码，不再重复生成。换手机 / 换浏览器 / 清缓存都拦得住（以平台记录为准），保证每款游戏每周每人一张券。", category: "site" },
     { date: "2026-08-31 18:26", text: "📌 「报到」日期（8/31 18:00）已过，首页「重要日期倒计时」中的「报到」项已隐藏；当前面板仅显示「寒假」倒计时。", category: "site" },
-    { date: "2026-09-07 12:57", text: "【班级通知】因网络问题，「学习资料」板块中的课堂笔记与教学课件暂时关闭，恢复开放时间另行通知，给大家带来的不便敬请谅解。", category: "site" }
+    { date: "2026-09-07 12:57", text: "【班级通知】因网络问题，「学习资料」板块中的课堂笔记与教学课件暂时关闭，恢复开放时间另行通知，给大家带来的不便敬请谅解。", category: "site" },
+    { date: "2026-09-24 13:40", text: "🌕 中秋假期作业（9.24 – 9.27）已发布，语文 / 数学 / 英语 / 物理 / 化学 / 生物 六科全齐。\n查看方式：进站弹窗点「查看作业」，或从「常用服务 → 作业查看 → 📝 查看当前作业」进入，也可用「📅 历史作业（日期）」按日期回看。\n每条作业都可点击勾选「已完成」，进度会自动保存在本机。\n本次更新后打开网站会自动弹出作业发布提醒，勾选「不再显示」后不再弹出。", category: "site" }
   ],
+  /* ── 开屏通知弹窗：大假作业发布提醒（在 start~end 期间打开网站自动弹出；可「不再显示」）── */
+  homeworkNotice: {
+    enabled: true,
+    id: "hw-2026-zhongqiu",
+    start: "2026-09-24",
+    end: "2026-09-27",
+    hwTitle: "🌕 中秋假期作业（9.24–9.27）",
+    title: "中秋假期作业已发布",
+    text: "9.24 – 9.27 中秋假期作业已经整理好啦！\n语文 / 数学 / 英语 / 物理 / 化学 / 生物 六科全齐，\n点下方按钮即可查看，每条作业还能勾选「已完成」。",
+    goTo: 1
+  },
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
   holidayHomeworks: [
     {
@@ -3251,15 +3298,22 @@ function actActive(){
 function actPopKey(){ var a=actGet(); return 'cls_act_pop_'+((a && a.id)||'default'); }
 function actTodayKey(){ return actPopKey()+'_'+new Date().toDateString(); }
 function actAutoPopped(){ try{ return localStorage.getItem(actTodayKey())==='1'; }catch(e){ return false; } }
-/* 两个悬浮球都贴右下角：活动球出现时把学习资料球上移，避免叠在一起 */
+/* 三个悬浮球都贴右下角：依次从下往上叠，避免叠在一起 */
 function actSyncBubble(){
-  var ab=document.getElementById('actBubble'), sb=document.getElementById('studyBubble'), vb=document.getElementById('videoBubble');
+  var ab=document.getElementById('actBubble'), sb=document.getElementById('studyBubble'), vb=document.getElementById('videoBubble'), hb=document.getElementById('hwPopBubble');
   var aVis = !!(ab && ab.style.display==='flex');
   var sVis = !!(sb && sb.style.display==='flex');
   var vVis = !!(vb && vb.style.display==='flex');
-  /* 从下往上叠：视频球 → 学习资料球 → 活动球，互不遮挡 */
-  if(sb) sb.style.bottom = (aVis ? 74 : 16) + 'px';
-  if(vb) vb.style.bottom = 16 + (sVis ? 58 : 0) + (aVis ? 58 : 0) + 'px';
+  var hVis = !!(hb && hb.style.display==='flex');
+  /* 从下往上叠：作业通知球 → 视频球 → 学习资料球 → 活动球，互不遮挡 */
+  var base = 16;
+  if(hb) hb.style.bottom = base + 'px';
+  if(hVis) base += 58;
+  if(vb) vb.style.bottom = base + 'px';
+  if(vVis) base += 58;
+  if(sb) sb.style.bottom = base + 'px';
+  if(sVis) base += 58;
+  if(ab) ab.style.bottom = base + 'px';
 }
 function actBubbleShow(){
   var b=document.getElementById('actBubble'); if(!b) return;
@@ -3307,8 +3361,80 @@ function actInit(){
   setInterval(actBubbleShow, 60000);
 }
 
+/* ---- 开屏通知弹窗：大假作业已发布（start~end 期间进站自动弹；可「不再显示」+ 悬浮球）---- */
+function hwPopGet(){ return (window.SITE_DATA && SITE_DATA.homeworkNotice) || null; }
+function hwPopOffKey(){ var n=hwPopGet(); return 'cls_hwpop_off_' + ((n && n.id) || 'default'); }
+/* 是否处于通知有效期内（按本地日期判断，含首尾两天） */
+function hwPopActive(){
+  var n=hwPopGet();
+  if(!n || !n.enabled) return false;
+  var today=_hwDateStr(new Date());
+  if(n.start && today < n.start) return false;
+  if(n.end && today > n.end) return false;
+  return true;
+}
+/* 用户是否勾过「不再显示」（跨会话永久生效，不按天重置） */
+function hwPopDismissed(){ try{ return localStorage.getItem(hwPopOffKey())==='1'; }catch(e){ return false; } }
+function showHwPop(){
+  if(!hwPopActive()) return;
+  var n=hwPopGet();
+  var ttl=document.getElementById('hwPopTitle'), txt=document.getElementById('hwPopText'), meta=document.getElementById('hwPopMeta');
+  if(ttl) ttl.textContent = n.title || '作业已发布';
+  if(txt) txt.textContent = n.text || '';
+  if(meta){
+    var hw = null;
+    var list = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
+    for(var i=0;i<list.length;i++){ if(list[i].id === n.id){ hw = list[i]; break; } }
+    if(hw){ meta.textContent = '📅 ' + hw.start + ' ~ ' + hw.end + ' · 共 ' + (hw.items||[]).length + ' 科作业'; }
+    else { meta.textContent = ''; }
+  }
+  var b=document.getElementById('hwPopBubble'); if(b) b.style.display='none';
+  if(typeof actSyncBubble==='function') actSyncBubble();
+  var m=document.getElementById('hwPopMask'); if(m) m.classList.add('show');
+  if(typeof SFX!=='undefined' && SFX.pop) SFX.pop();
+}
+/* 关闭弹窗：勾了「不再显示」则永久不再弹、也不留悬浮球；否则留球可重看 */
+function dismissHwPop(){
+  var cb=document.getElementById('hwPopNoShow');
+  var off = !!(cb && cb.checked);
+  var m=document.getElementById('hwPopMask'); if(m) m.classList.remove('show');
+  if(off){ try{ localStorage.setItem(hwPopOffKey(),'1'); }catch(e){} }
+  hwPopBubbleShow();
+}
+/* 点「查看作业」：关弹窗 → 进作业查看所在板块 → 打开当前作业弹窗 */
+function hwPopGoView(){
+  var n=hwPopGet();
+  var m=document.getElementById('hwPopMask'); if(m) m.classList.remove('show');
+  hwPopBubbleShow();
+  if(typeof closeSidebar==='function') closeSidebar();
+  if(n && n.goTo != null && typeof openCat==='function') openCat(n.goTo);
+  setTimeout(function(){ if(typeof showCurrentHomework==='function') showCurrentHomework(); }, 320);
+}
+function hwPopBubbleShow(){
+  var b=document.getElementById('hwPopBubble'); if(!b) return;
+  /* 通知期内 且 没勾「不再显示」 且 弹窗当前没开着 → 显示悬浮球 */
+  var mask=document.getElementById('hwPopMask');
+  var open = !!(mask && mask.classList.contains('show'));
+  b.style.display = (hwPopActive() && !hwPopDismissed() && !open) ? 'flex' : 'none';
+  if(typeof actSyncBubble==='function') actSyncBubble();
+}
+function hwPopInit(){
+  hwPopBubbleShow();
+  if(hwPopActive() && !hwPopDismissed()) setTimeout(function(){
+    /* 让位给欢迎语 / 门禁 / 活动通知，避免叠弹窗 */
+    var tries=0;
+    (function attempt(){
+      tries++;
+      var busy=document.querySelector('.allboard-mask.show') || document.querySelector('.gate.show');
+      if(busy && tries<24){ setTimeout(attempt,500); return; }
+      if(!hwPopActive() || hwPopDismissed()) return;
+      showHwPop();
+    })();
+  }, 1000);
+  setInterval(hwPopBubbleShow, 60000);
+}
+
 /* ---- 大假作业（当前作业 / 日历）---- */
-/* 各科配色与图标（用于作业排版美化） */
 var HW_SUBJECT_STYLE = {
   '语文': { c:'#e8543f', e:'📖' },
   '数学': { c:'#2f7de1', e:'📐' },
@@ -4645,6 +4771,7 @@ async function submitSiteGate(){
 })();
 try{ if(!localStorage.getItem('cls_welcome_v1')){ showWelcome(); } }catch(e){}
 actInit();   /* 班级活动通知：有进行中的活动则自动弹窗 + 留悬浮球，活动结束自动撤掉 */
+hwPopInit(); /* 开屏通知弹窗：大假作业发布提醒（9.24–9.27 进站自动弹；可「不再显示」） */
 </script>
 <script>
 if ('serviceWorker' in navigator) {
