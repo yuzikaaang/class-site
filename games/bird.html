@@ -221,9 +221,13 @@ var _CPN_ENC='000f14163a0251055b41155e5f56010605415653165d5406055b47155b57060a55
 function _cpnDec(){ var s=''; for(var i=0;i<_CPN_ENC.length;i+=2){ s+=String.fromCharCode(parseInt(_CPN_ENC.substr(i,2),16)^_CPN_MASK.charCodeAt((i/2)%_CPN_MASK.length)); } return s; }
 var VOICEHUB_COUPON={ enabled:true, url:'https://xsyzc2505.dpdns.org/api/open/card-codes', method:'POST', token:_cpnDec(), tokenField:'x-api-key', tokenPrefix:'', respCodeKey:'data.cardCodes.0.code' };
 function weekKey(){ var d=new Date(), day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
-/* 全班名单：优先读站点写入的 cls_class_list，缺失时用内置名单 */
-var CLASS_LIST=["樊张凯","余子轩","余倩","韩文韬","雷其桐","胡一博","邹亦汐","吴俊驰","刘子豪","刘佳欣","张炜","刘竹琳","李宇迦","梁宇翔","车宇辰","陈旭辉","孙卢茹","余子康","吴婷婷","范名扬","周雄辉","杨梓俊","卢垚明","包铠恺","车正楠","王馨妍","梁子君","刘浚轩","武圣钦","卢拓琳","卢伟琪","兰静怡","吴伟","戴云聪","石可妍","朱书妍","刘宇焕","梁康煜","樊筱雅","李博涛","桂祺","杜语熙","刘名强","吴欣瑶","郑琪琪","冷宇航","卢煜","樊宇涵","徐海军","朱俊雅","程晶晶","韩魏斌","冷紫涵","祝智勇","孙妍妍","胡婉怡","石芸熙","刘雨馨","梁咏佳","冷伟明","冷思敏"];
-function classList(){ try{ var l=JSON.parse(localStorage.getItem('cls_class_list')||'null'); if(Array.isArray(l)&&l.length) return l; }catch(e){} return CLASS_LIST; }
+/* 全班名单：密文存储（源码不含明文姓名）；优先读站点写入的 cls_class_list，缺失时用内置密文名单 */
+var CLASS_KEY="cls2505-xor-key-2026";
+function _clDec(v){ try{ var bin=atob(v), kb=CLASS_KEY.split("").map(function(c){return c.charCodeAt(0);}), b=[];
+  for(var i=0;i<bin.length;i++) b.push(bin.charCodeAt(i)^kb[i%kb.length]);
+  return new TextDecoder().decode(new Uint8Array(b)); }catch(e){ return v; } }
+var CLASS_LIST_ENC=["hcT514mQ0KrX","h9Hq15ig3ZDR","h9Hq17WZ","ivPa1KO33LLU","ivfE17CG04zo","i+/S1o2w0KDi","iu7K1o+W05zo","hvzH1oq63ITI","huTr15ig3ZzS","huTr1oiD04Hb","htDT1bes","huTr1Z6J0r3L","hfH915u33ZLe","hc7y15u30pLs","i9HV15u33ZPI","ivX71KKd3ZPx","hsHq17iS3aHB","h9Hq15ig0JfP","hvzH15yH0ITP","i+Dw16W906TU","hv3b26603ZPx","hfHb1Jej0ZLy","huHR16uq07X2","huD226aQ06zC","i9HV1JiT04jY","hOL425OY0Iv1","hc7y15ig0L3j","huTr1ICq3ZDR","hcHV16mT3L/e","huHR1L6j0r3L","huHR1omv0r3S","hunD26ip063Z","hvzH1omv","heTH1o+h3azS","hPPA17qf0Iv1","hfDC1oyW0Iv1","huTr15u30qnt","hc7y14+H0qjk","hcT51ZiB3Lb9","hfH917iq05vj","hc3x1ZCK","hfHv2pqd0qvh","huTr16W90JHC","hvzH1JmT0rzO","iu/i1aWa0r3S","hurE15u33aXS","huHR1bCs","hcT515u305vN","htLj1ICH0Kvj","hfDC1oq63Lb9","hMT41KyG07TO","ivPa25i/07v0","hurE1YGb05vN","hMnu1KyK0Kb/","hsHq15O90Iv1","i+/S15y5063Z","hPPA2r+I0qvh","huTr266Y3IvQ","hc7y16e/0ZDL","hurE1omv07X2","hurE1LWt07j3"];
+function classList(){ try{ var l=JSON.parse(localStorage.getItem('cls_class_list')||'null'); if(Array.isArray(l)&&l.length) return l.map(_clDec); }catch(e){} return CLASS_LIST_ENC.map(_clDec); }
 var _claimName='';
 /* 领券台账：按 名字+本周+游戏 核对（防清缓存/换名字重复领，后台为准） */
 function ledgerLoad(){ try{ return JSON.parse(localStorage.getItem('cls_coupon_ledger')||'{}'); }catch(e){ return {}; } }
