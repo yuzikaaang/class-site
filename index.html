@@ -103,6 +103,8 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px}
 .gate-btn{min-width:96px;padding:10px 16px}
 .gate-hint{color:#c2410c;font-size:.85rem;font-weight:600;margin:10px 0 0 !important}
 .gate-tip{font-size:.78rem;color:#3b5bfd;background:#eef1ff;border-radius:999px;padding:4px 12px}
+.btn-gray{background:#c3ccd9;color:#5b6781;cursor:pointer}
+.btn-gray:hover{background:#b4bdcc}
 .btn-disabled{background:#c3d0df;color:#475569;cursor:not-allowed}
 .copy-btn{display:block;width:100%;margin:6px 0;padding:11px 14px;border-radius:12px;background:#eef1ff;color:#3b5bfd;border:none;cursor:pointer;font-size:.9rem;font-weight:600;text-align:left;box-sizing:border-box}
 .copy-btn:hover{background:#dce3ff}
@@ -212,6 +214,8 @@ mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .dark .btn-disabled{background:#475569;color:#fff}
 .dark .wechat-hint{background:rgba(124,45,18,.3);color:#fbbf24}
 .dark .gate-tip{background:#2a3550;color:#9db1ff}
+.dark .btn-gray{background:#3a4767;color:#9aa7b8}
+.dark .btn-gray:hover{background:#445274}
 .dark .sidebar{background:#1b2432}
 .dark .side-tip{background:#22304a;color:#9db1ff}
 .dark .side-btn{background:#2a3550;color:#9db1ff}
@@ -639,8 +643,14 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .hw-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:999px;font-size:.82rem;font-weight:800;color:#fff;line-height:1.5;box-shadow:0 2px 6px rgba(0,0,0,.08)}
 .hw-item-body{padding:12px 14px}
 .hw-tasks{margin:0;padding:0;list-style:none}
-.hw-tasks li{position:relative;padding:6px 0 6px 28px;font-size:.9rem;line-height:1.7;color:#3c4257;word-break:break-word}
-.hw-tasks li::before{content:"";position:absolute;left:5px;top:12px;width:14px;height:14px;border:2px solid #c3ccdf;border-radius:5px;box-sizing:border-box;background:#fff}
+.hw-task{position:relative;display:flex;align-items:flex-start;gap:10px;padding:10px 4px;font-size:.92rem;line-height:1.6;color:#3c4257;word-break:break-word;cursor:pointer;border-radius:10px;transition:background .15s}
+.hw-task+.hw-task{border-top:1px dashed #eef1f8}
+.hw-task:hover{background:#f7f9ff}
+.hw-check{flex:0 0 18px;width:18px;height:18px;margin-top:2px;border:2px solid #c3ccdf;border-radius:5px;box-sizing:border-box;background:#fff;transition:.18s;position:relative}
+.hw-task.done .hw-check{background:#3b5bfd;border-color:#3b5bfd}
+.hw-task.done .hw-check::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.hw-task.done .hw-task-text{color:#9aa7b8;text-decoration:line-through;text-decoration-color:#c3ccdf}
+.hw-progress{margin-left:auto;font-size:.74rem;color:#9aa7b8;font-weight:700;align-self:center;white-space:nowrap}
 .hw-imgs{margin-top:12px;display:grid;gap:8px}
 .hw-imgs img{width:100%;border-radius:12px;border:1px solid #eef1f8;display:block;cursor:zoom-in;box-shadow:0 2px 10px rgba(20,40,90,.06);background:#f3f6ff}
 .hw-img-cap{font-size:.76rem;color:#9aa7b8;text-align:center;margin-top:2px}
@@ -648,8 +658,10 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 #hwZoomMask img{max-width:92vw;max-height:86vh;border-radius:12px;box-shadow:0 12px 50px rgba(0,0,0,.5);display:block}
 .dark .hw-item{background:#1b2432;border-color:#2a3550}
 .dark .hw-item-head{background:#171f2d;border-color:#2a3550}
-.dark .hw-tasks li{color:#cdd6e6}
-.dark .hw-tasks li::before{border-color:#3a4767;background:#1b2432}
+.dark .hw-task{color:#cdd6e6}
+.dark .hw-task:hover{background:#222c3f}
+.dark .hw-task.done .hw-task-text{color:#5b6781}
+.dark .hw-check{border-color:#3a4767;background:#1b2432}
 .dark .hw-imgs img{background:#222c3f}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
@@ -1501,8 +1513,8 @@ var SITE_DATA = {
       end: "2026-09-27",
       title: "🌕 中秋假期作业（9.24–9.27）",
       items: [
-        { subject: "语文", tasks: ["同步练习第二单元写完以及 p1-p8", "文言梳理没写完的写完", "背诵《将进酒》", "答题卡练字一张"], images: ["./homework/zhongqiu-yuwen.jpg"] },
-        { subject: "数学", tasks: ["同步练习写到 p43", "课上要求做的两道练习题", "滚动练习（一）", "单元卷"] },
+        { subject: "语文", tasks: ["同步练习第二单元写完以及 p1-p8", "文言梳理没写完的写完", "背诵《将进酒》", "答题卡练字一张"] },
+        { subject: "数学", tasks: ["同步练习写到 p43", { text: "课上要求做的两道练习题", img: "./homework/zhongqiu-yuwen.jpg" }, "滚动练习（一）", "单元卷"] },
         { subject: "英语", tasks: ["试卷一张（要写大作文）", "单词练习一整本写完", "考试完形填空的错题整理"] },
         { subject: "物理", tasks: ["试卷 2 张"] },
         { subject: "化学", tasks: ["试卷 1 张", "同步练习 P56-68"] },
@@ -1533,7 +1545,7 @@ var SITE_DATA = {
       desc: "周作业及假期作业均可在线查看。\n使用教程：点击页面中的「已注册」，即可自动登录。\n若未显示当周作业，请跳转到布置作业的当天重新查看。",
       cardTip: "⚠️ 因校园网限制，班级电脑端的 Classworks 连不上服务器、无法同步到云端供大家查看，故站内作业为站主手动同步。如需尝试直接访问原站，可点「🌐 前往 Classworks」。",
       customActions: [
-        { label: "🌐 前往 Classworks", onclick: "openClassworks()" },
+        { label: "🌐 前往 Classworks", onclick: "openClassworks()", style: "gray" },
         { label: "📝 查看当前作业", onclick: "showCurrentHomework()" },
         { label: "📅 历史作业（日期）", onclick: "showHomeworkCalendar()" }
       ]
@@ -2211,7 +2223,8 @@ function render(){
         }else if(l.customActions && l.customActions.length){
           actionsHtml = l.customActions.map(function(a){
             var style = a.style || '';
-            return '<button class="btn '+(style==='secondary'?'btn-secondary':'')+'" onclick="'+esc(a.onclick||'')+'">'+esc(a.label||'按钮')+'</button>';
+            var cls = style==='secondary' ? 'btn-secondary' : style==='gray' ? 'btn-gray' : '';
+            return '<button class="btn '+cls+'" onclick="'+esc(a.onclick||'')+'">'+esc(a.label||'按钮')+'</button>';
           }).join('');
         }else{
           actionsHtml = (l.qrImage
@@ -3305,18 +3318,52 @@ var HW_SUBJECT_STYLE = {
   '生物': { c:'#27ae60', e:'🧬' },
   '其他': { c:'#7f8c8d', e:'📌' }
 };
-/* 把作业 items 渲染成美化后的科目卡片（支持每张配图，点击放大） */
-function _renderHwItems(items){
+/* 作业「已完成」状态：按 hwId + 科目 + 任务序号存 localStorage */
+function _hwDoneKey(hwId){ return 'cls_hw_done_' + hwId; }
+function _getHwDone(hwId){
+  try { return JSON.parse(localStorage.getItem(_hwDoneKey(hwId)) || '{}'); } catch(e){ return {}; }
+}
+function _isHwDone(hwId, subject, ti){
+  var d = _getHwDone(hwId);
+  return !!(d[subject] && d[subject][ti]);
+}
+function toggleHwDone(hwId, subject, ti, el){
+  var d = _getHwDone(hwId);
+  if(!d[subject]) d[subject] = {};
+  d[subject][ti] = !d[subject][ti];
+  try { localStorage.setItem(_hwDoneKey(hwId), JSON.stringify(d)); } catch(e){}
+  if(!el) return;
+  el.classList.toggle('done', d[subject][ti]);
+  var item = el.closest('.hw-item');
+  if(item){
+    var all = item.querySelectorAll('.hw-task');
+    var done = item.querySelectorAll('.hw-task.done').length;
+    var prog = item.querySelector('.hw-progress');
+    if(prog) prog.textContent = done + '/' + all.length + ' 已完成';
+  }
+}
+/* 把作业 items 渲染成美化后的科目卡片（任务可点选「已完成」；支持单条配图，点击放大） */
+function _renderHwItems(items, hwId){
   if(!items || !items.length) return '<div style="padding:18px;text-align:center;color:#9aa7b8">该作业暂无具体科目内容。</div>';
   return items.map(function(it){
     var s = HW_SUBJECT_STYLE[it.subject] || { c:'#5b6b86', e:'📝' };
-    var tasks = (it.tasks||[]).map(function(t){ return '<li>'+esc(t)+'</li>'; }).join('');
-    var imgs = (it.images||[]).map(function(src){
-      return '<img src="'+esc(src)+'" alt="'+esc(it.subject||'作业')+'配图" loading="lazy" onclick="hwZoom(\''+esc(src)+'\')">';
+    var total = (it.tasks||[]).length;
+    var tasks = (it.tasks||[]).map(function(t, ti){
+      var text, img;
+      if(t && typeof t === 'object'){ text = t.text; img = t.img; }
+      else { text = t; img = null; }
+      var done = _isHwDone(hwId, it.subject, ti);
+      var imgHtml = img ? '<div class="hw-imgs"><img src="'+esc(img)+'" alt="'+esc(it.subject||'作业')+'配图" loading="lazy" onclick="hwZoom(\''+esc(img)+'\')"></div>' : '';
+      return '<div class="hw-task'+(done?' done':'')+'" onclick="toggleHwDone(\''+esc(hwId)+'\',\''+esc(it.subject)+'\','+ti+',this)">'
+        + '<span class="hw-check" aria-hidden="true"></span>'
+        + '<span class="hw-task-text">'+esc(text)+'</span>'
+        + '</div>' + imgHtml;
     }).join('');
+    var doneCnt = (it.tasks||[]).filter(function(t, ti){ return _isHwDone(hwId, it.subject, ti); }).length;
+    var progHtml = total ? '<span class="hw-progress">'+doneCnt+'/'+total+' 已完成</span>' : '';
     return '<div class="hw-item">'
-      + '<div class="hw-item-head"><span class="hw-badge" style="background:'+s.c+'">'+s.e+' '+esc(it.subject)+'</span></div>'
-      + '<div class="hw-item-body"><ul class="hw-tasks">'+tasks+'</ul>'+(imgs?'<div class="hw-imgs">'+imgs+'</div>':'')+'</div>'
+      + '<div class="hw-item-head"><span class="hw-badge" style="background:'+s.c+'">'+s.e+' '+esc(it.subject)+'</span>'+progHtml+'</div>'
+      + '<div class="hw-item-body">'+tasks+'</div>'
       + '</div>';
   }).join('');
 }
@@ -3356,7 +3403,7 @@ function showCurrentHomework(){
   var demoHtml = hw.isDemo
     ? '<div style="background:#fff7e6;border:1px solid #ffd591;color:#d46b08;padding:10px 12px;border-radius:10px;font-size:.82rem;font-weight:700;margin-bottom:12px">⚠️ 示例测试数据，并非真实作业</div>'
     : '';
-  list.innerHTML = demoHtml + _renderHwItems(hw.items);
+  list.innerHTML = demoHtml + _renderHwItems(hw.items, hw.id);
   mask.classList.add('show');
 }
 function closeHwCurrent(){ var m=document.getElementById('hwCurrentMask'); if(m) m.classList.remove('show'); }
@@ -3416,7 +3463,7 @@ function _renderHwCalendar(){
       if(hw){
         detail.innerHTML = '<div style="font-weight:700;color:#3b5bfd;margin:0 0 8px">'+esc(hw.title)+'（'+hw.start+' ~ '+hw.end+'）</div>' +
           (hw.isDemo ? '<div style="background:#fff7e6;border:1px solid #ffd591;color:#d46b08;padding:8px 10px;border-radius:8px;font-size:.78rem;font-weight:700;margin-bottom:8px">⚠️ 示例测试数据，并非真实作业</div>' : '') +
-          _renderHwItems(hw.items);
+          _renderHwItems(hw.items, hw.id);
       }else{
         detail.innerHTML = '<div style="padding:6px 0;color:#9aa7b8;font-size:.85rem">该日期暂无作业记录。</div>';
       }
