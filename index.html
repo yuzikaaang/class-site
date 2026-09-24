@@ -632,6 +632,25 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .dark #couponAdminMask #riList{color:#93a3bd}
 .dark #djHistoryMask .dj-label{color:#b6c2d9!important}
 .dark #djHistoryMask #djHistoryList > p{color:#93a3bd!important}
+/* ===== 作业展示美化（当前作业 / 历史日历） ===== */
+.hw-item{margin:0 0 14px;border:1px solid #eef1f8;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(20,40,90,.05)}
+.hw-item:last-child{margin-bottom:0}
+.hw-item-head{display:flex;align-items:center;gap:8px;padding:9px 14px;background:#f7f9ff;border-bottom:1px solid #eef1f8}
+.hw-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:999px;font-size:.82rem;font-weight:800;color:#fff;line-height:1.5;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.hw-item-body{padding:12px 14px}
+.hw-tasks{margin:0;padding:0;list-style:none}
+.hw-tasks li{position:relative;padding:6px 0 6px 28px;font-size:.9rem;line-height:1.7;color:#3c4257;word-break:break-word}
+.hw-tasks li::before{content:"";position:absolute;left:5px;top:12px;width:14px;height:14px;border:2px solid #c3ccdf;border-radius:5px;box-sizing:border-box;background:#fff}
+.hw-imgs{margin-top:12px;display:grid;gap:8px}
+.hw-imgs img{width:100%;border-radius:12px;border:1px solid #eef1f8;display:block;cursor:zoom-in;box-shadow:0 2px 10px rgba(20,40,90,.06);background:#f3f6ff}
+.hw-img-cap{font-size:.76rem;color:#9aa7b8;text-align:center;margin-top:2px}
+#hwZoomMask{padding:24px;background:rgba(15,23,42,.92)}
+#hwZoomMask img{max-width:92vw;max-height:86vh;border-radius:12px;box-shadow:0 12px 50px rgba(0,0,0,.5);display:block}
+.dark .hw-item{background:#1b2432;border-color:#2a3550}
+.dark .hw-item-head{background:#171f2d;border-color:#2a3550}
+.dark .hw-tasks li{color:#cdd6e6}
+.dark .hw-tasks li::before{border-color:#3a4767;background:#1b2432}
+.dark .hw-imgs img{background:#222c3f}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
@@ -1107,6 +1126,11 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   </div>
 </div>
 
+<!-- ===== 作业配图放大查看 ===== -->
+<div class="allboard-mask" id="hwZoomMask" onclick="closeHwZoom()">
+  <img id="hwZoomImg" src="" alt="作业配图放大">
+</div>
+
 
 <!-- ===== 主页面 ===== -->
 <div class="layout" id="mainPage">
@@ -1469,6 +1493,20 @@ var SITE_DATA = {
         { subject: "化学", tasks: ["1. 试卷2份"] },
         { subject: "生物", tasks: ["1. 试卷×2", "2. 笔尖上的生命密码写至p104", "3. 生物同步练习p59-68 1-6"] },
         { subject: "其他", tasks: ["1. 错题整理"] }
+      ]
+    },
+    {
+      id: "hw-2026-zhongqiu",
+      start: "2026-09-24",
+      end: "2026-09-27",
+      title: "🌕 中秋假期作业（9.24–9.27）",
+      items: [
+        { subject: "语文", tasks: ["同步练习第二单元写完以及 p1-p8", "文言梳理没写完的写完", "背诵《将进酒》", "答题卡练字一张"], images: ["./homework/zhongqiu-yuwen.jpg"] },
+        { subject: "数学", tasks: ["同步练习写到 p43", "课上要求做的两道练习题", "滚动练习（一）", "单元卷"] },
+        { subject: "英语", tasks: ["试卷一张（要写大作文）", "单词练习一整本写完", "考试完形填空的错题整理"] },
+        { subject: "物理", tasks: ["试卷 2 张"] },
+        { subject: "化学", tasks: ["试卷 1 张", "同步练习 P56-68"] },
+        { subject: "生物", tasks: ["同步练习写至 p66（先写选修一，再写必修二剩下的）"] }
       ]
     }
   ],
@@ -3257,6 +3295,34 @@ function actInit(){
 }
 
 /* ---- 大假作业（当前作业 / 日历）---- */
+/* 各科配色与图标（用于作业排版美化） */
+var HW_SUBJECT_STYLE = {
+  '语文': { c:'#e8543f', e:'📖' },
+  '数学': { c:'#2f7de1', e:'📐' },
+  '英语': { c:'#16a085', e:'🔤' },
+  '物理': { c:'#8e44ad', e:'⚛️' },
+  '化学': { c:'#e67e22', e:'🧪' },
+  '生物': { c:'#27ae60', e:'🧬' },
+  '其他': { c:'#7f8c8d', e:'📌' }
+};
+/* 把作业 items 渲染成美化后的科目卡片（支持每张配图，点击放大） */
+function _renderHwItems(items){
+  if(!items || !items.length) return '<div style="padding:18px;text-align:center;color:#9aa7b8">该作业暂无具体科目内容。</div>';
+  return items.map(function(it){
+    var s = HW_SUBJECT_STYLE[it.subject] || { c:'#5b6b86', e:'📝' };
+    var tasks = (it.tasks||[]).map(function(t){ return '<li>'+esc(t)+'</li>'; }).join('');
+    var imgs = (it.images||[]).map(function(src){
+      return '<img src="'+esc(src)+'" alt="'+esc(it.subject||'作业')+'配图" loading="lazy" onclick="hwZoom(\''+esc(src)+'\')">';
+    }).join('');
+    return '<div class="hw-item">'
+      + '<div class="hw-item-head"><span class="hw-badge" style="background:'+s.c+'">'+s.e+' '+esc(it.subject)+'</span></div>'
+      + '<div class="hw-item-body"><ul class="hw-tasks">'+tasks+'</ul>'+(imgs?'<div class="hw-imgs">'+imgs+'</div>':'')+'</div>'
+      + '</div>';
+  }).join('');
+}
+/* 作业配图放大查看 */
+function hwZoom(src){ var m=document.getElementById('hwZoomMask'), i=document.getElementById('hwZoomImg'); if(!m||!i) return; i.src=src; m.classList.add('show'); }
+function closeHwZoom(){ var m=document.getElementById('hwZoomMask'); if(m) m.classList.remove('show'); }
 function _hwDateStr(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
 function getCurrentHomework(){
   var today = _hwDateStr(new Date());
@@ -3290,9 +3356,7 @@ function showCurrentHomework(){
   var demoHtml = hw.isDemo
     ? '<div style="background:#fff7e6;border:1px solid #ffd591;color:#d46b08;padding:10px 12px;border-radius:10px;font-size:.82rem;font-weight:700;margin-bottom:12px">⚠️ 示例测试数据，并非真实作业</div>'
     : '';
-  list.innerHTML = demoHtml + hw.items.map(function(it){
-    return '<div style="margin-bottom:10px;padding:10px 12px;background:#f3f6ff;border-radius:10px"><div style="font-weight:700;color:#3b5bfd;margin-bottom:6px">'+esc(it.subject)+'</div><div style="color:#4a5568;font-size:.88rem;line-height:1.8;white-space:pre-line">'+esc(it.tasks.join('\n'))+'</div></div>';
-  }).join('');
+  list.innerHTML = demoHtml + _renderHwItems(hw.items);
   mask.classList.add('show');
 }
 function closeHwCurrent(){ var m=document.getElementById('hwCurrentMask'); if(m) m.classList.remove('show'); }
@@ -3352,9 +3416,7 @@ function _renderHwCalendar(){
       if(hw){
         detail.innerHTML = '<div style="font-weight:700;color:#3b5bfd;margin:0 0 8px">'+esc(hw.title)+'（'+hw.start+' ~ '+hw.end+'）</div>' +
           (hw.isDemo ? '<div style="background:#fff7e6;border:1px solid #ffd591;color:#d46b08;padding:8px 10px;border-radius:8px;font-size:.78rem;font-weight:700;margin-bottom:8px">⚠️ 示例测试数据，并非真实作业</div>' : '') +
-          hw.items.map(function(it){
-          return '<div style="margin-bottom:6px;line-height:1.7"><span style="color:#3b5bfd;font-weight:600">'+esc(it.subject)+'</span><span style="color:#4a5568;margin-left:8px;font-size:.85rem;white-space:pre-line">'+esc(it.tasks.join('\n'))+'</span></div>';
-        }).join('');
+          _renderHwItems(hw.items);
       }else{
         detail.innerHTML = '<div style="padding:6px 0;color:#9aa7b8;font-size:.85rem">该日期暂无作业记录。</div>';
       }
