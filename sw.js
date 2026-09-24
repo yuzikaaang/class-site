@@ -1,7 +1,7 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v19：化学作业删除「同步练习 P56-68」（站主确认系多加）；升版本号清掉旧缓存
-const CACHE = 'class-site-v19'
+// v20：「联系方式查询」改名「个人资料查询」并改为免门禁（输姓名即查）；新增政治面貌（中共党员/共青团员/普通学生）与智学网准考证，62 人全量填充；升版本号清掉旧缓存
+const CACHE = 'class-site-v20'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
