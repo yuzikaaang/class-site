@@ -61,6 +61,117 @@
     background:rgba(124,131,255,.15);color:#a8afff;margin-top:8px}
   .reward-tag.err{background:rgba(255,107,139,.15);color:#ff9db4}
 </style>
+
+
+<style>.licon{display:inline-block;flex:none;vertical-align:-2px}</style>
+<script>
+/* =====================================================
+   图标系统：Lucide（lucide-static v1.48.0）—— 本页按需内联用到的图标
+   全站统一只用 Lucide 一套，不混库、不使用 emoji 作为功能图标。
+   ===================================================== */
+var LUCIDE_ICONS={"arrow-left":"<path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/>","arrow-right":"<path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/>","arrow-up":"<path d=\"m5 12 7-7 7 7\"/><path d=\"M12 19V5\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","chevron-left":"<path d=\"m15 18-6-6 6-6\"/>","circle-check-big":"<path d=\"M21.801 10A10 10 0 1 1 17 3.335\"/><path d=\"m9 11 3 3L22 4\"/>","door-open":"<path d=\"M10 21H2\"/><path d=\"M10 3H7a2 2 0 00-2 2v16\"/><path d=\"M14 12h.01\"/><path d=\"M19 21V5a2 2 0 00-1.675-1.974l-6.163-1.013A1 1 0 0010 3v18a1 1 0 001.124.992z\"/><path d=\"M22 21h-3\"/>","party-popper":"<path d=\"M5.8 11.3 2 22l10.7-3.79\"/><path d=\"M4 3h.01\"/><path d=\"M22 8h.01\"/><path d=\"M15 2h.01\"/><path d=\"M22 20h.01\"/><path d=\"m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10\"/><path d=\"m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17\"/><path d=\"m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7\"/><path d=\"M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z\"/>","pencil":"<path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\"/><path d=\"m15 5 4 4\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","rabbit":"<path d=\"M13 16a3 3 0 0 1 2.24 5\"/><path d=\"M18 12h.01\"/><path d=\"M18 21h-8a4 4 0 0 1-4-4 7 7 0 0 1 7-7h.2L9.6 6.4a1 1 0 1 1 2.8-2.8L15.8 7h.2c3.3 0 6 2.7 6 6v1a2 2 0 0 1-2 2h-1a3 3 0 0 0-3 3\"/><path d=\"M20 8.54V4a2 2 0 1 0-4 0v3\"/><path d=\"M7.612 12.524a3 3 0 1 0-1.6 4.3\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","skull":"<path d=\"m12.5 17-.5-1-.5 1h1z\"/><path d=\"M15 22a1 1 0 0 0 1-1v-1a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20v1a1 1 0 0 0 1 1z\"/><circle cx=\"15\" cy=\"12\" r=\"1\"/><circle cx=\"9\" cy=\"12\" r=\"1\"/>","ticket":"<path d=\"M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z\"/><path d=\"M13 5v2\"/><path d=\"M13 17v2\"/><path d=\"M13 11v2\"/>","timer":"<line x1=\"10\" x2=\"14\" y1=\"2\" y2=\"2\"/><line x1=\"12\" x2=\"15\" y1=\"14\" y2=\"11\"/><circle cx=\"12\" cy=\"14\" r=\"8\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","trophy":"<path d=\"M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2\"/><path d=\"M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2\"/><path d=\"M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3\"/><path d=\"M4 22h16\"/><path d=\"M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z\"/><path d=\"M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3\"/>"};
+var EMOJI_ICON_MAP={"←":"arrow-left","🦘":"rabbit","🎟":"ticket","⏱":"timer","😵":"skull","🎉":"party-popper","→":"arrow-right","🎫":"ticket","▶":"play","🚪":"door-open","✍":"pencil","🔍":"search","✅":"circle-check-big","◀":"chevron-left","🏆":"trophy","↑":"arrow-up","⚠":"triangle-alert","✓":"check"};
+function iconSvg(name, size, extra){
+  var s=size||16, e=extra||'';
+  var inner=LUCIDE_ICONS[name];
+  if(!inner) return '';
+  return '<svg class="licon" xmlns="http://www.w3.org/2000/svg" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" '
+    + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+    + 'style="width:'+s+'px;height:'+s+'px;vertical-align:-2px;flex:none;'+e+'" aria-hidden="true">' + inner + '</svg>';
+}
+var EMOJI_RE=new RegExp('('+Object.keys(EMOJI_ICON_MAP).sort(function(a,b){return b.length-a.length;})
+  .map(function(c){return c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}).join('|')+')\\uFE0F?','g');
+function emojiIconName(ch){ var k=ch.replace(/\uFE0F/g,''); return EMOJI_ICON_MAP[k]||EMOJI_ICON_MAP[ch]||''; }
+function emojiSvgNode(ch,size){ var b=document.createElement('div'); b.innerHTML=iconSvg(emojiIconName(ch),size||16); return b.firstChild; }
+function emojiifyText(node,size){
+  var t=node.nodeValue; if(!t) return false;
+  EMOJI_RE.lastIndex=0; if(!EMOJI_RE.test(t)) return false; EMOJI_RE.lastIndex=0;
+  var frag=document.createDocumentFragment(),last=0,m,ok=false;
+  while((m=EMOJI_RE.exec(t))){
+    if(!emojiIconName(m[0])) continue;
+    if(m.index>last) frag.appendChild(document.createTextNode(t.slice(last,m.index)));
+    var sv=emojiSvgNode(m[0],size); if(sv) frag.appendChild(sv);
+    last=m.index+m[0].length; ok=true;
+    if(m[0].length===0) EMOJI_RE.lastIndex++;
+  }
+  if(!ok) return false;
+  if(last<t.length) frag.appendChild(document.createTextNode(t.slice(last)));
+  if(node.parentNode) node.parentNode.replaceChild(frag,node);
+  return true;
+}
+var EMOJI_SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,NOSCRIPT:1,TITLE:1,SVG:1,IFRAME:1,OPTION:1,SELECT:1};
+function emojiify(root){
+  root=root||document.body; if(!root) return 0;
+  var changed=0,sizeCache={};
+  try{
+    var tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null,false),list=[],n;
+    while((n=tw.nextNode())){ var p=n.parentNode; if(!p||EMOJI_SKIP[p.nodeName]||!n.nodeValue) continue; list.push(n); }
+    for(var i=0;i<list.length;i++){
+      var pe=list[i].parentElement,sz=16;
+      if(pe){ if(sizeCache[pe.nodeName]===undefined){ try{ var fs=parseFloat(getComputedStyle(pe).fontSize)||15;
+          sizeCache[pe.nodeName]=Math.max(12,Math.min(22,Math.round(fs*1.05)));}catch(e){sizeCache[pe.nodeName]=16;} }
+        sz=sizeCache[pe.nodeName]; }
+      if(emojiifyText(list[i],sz)) changed++;
+    }
+    changed+=emojiifyPlaceholders(root); changed+=emojiifyOptions(root);
+  }catch(e){}
+  return changed;
+}
+/* placeholder 只能放纯文本 → 换成行内 SVG 背景图标 */
+function emojiifyPlaceholders(root){
+  var ins=[],hit=0; try{ ins=root.querySelectorAll('input[placeholder],textarea[placeholder]'); }catch(e){ return 0; }
+  for(var i=0;i<ins.length;i++){
+    var el=ins[i]; if(el.getAttribute('data-emo-ico')) continue;
+    var ph=el.getAttribute('placeholder')||''; EMOJI_RE.lastIndex=0;
+    var m=EMOJI_RE.exec(ph); if(!m||!emojiIconName(m[0])) continue;
+    el.setAttribute('data-emo-ico','1');
+    el.setAttribute('placeholder', ph.replace(m[0],'').replace(/^\s+/,''));
+    try{ var svg=iconSvg(emojiIconName(m[0]),16,'color:#9aa3b2');
+      el.style.backgroundImage='url("data:image/svg+xml;utf8,'+encodeURIComponent(svg)+'")';
+      el.style.backgroundRepeat='no-repeat'; el.style.backgroundPosition='10px center'; el.style.backgroundSize='16px 16px';
+      var pl=parseFloat(getComputedStyle(el).paddingLeft)||10; if(pl<34) el.style.paddingLeft='34px'; }catch(e){}
+    hit++;
+  }
+  return hit;
+}
+/* <option> 内无法内嵌 SVG（HTML 规范限制）→ 去掉图形保留文字 */
+function emojiifyOptions(root){
+  var opts=[],hit=0; try{ opts=root.querySelectorAll('option'); }catch(e){ return 0; }
+  for(var i=0;i<opts.length;i++){ var el=opts[i],t=el.textContent||''; EMOJI_RE.lastIndex=0;
+    if(!EMOJI_RE.test(t)) continue; el.textContent=t.replace(EMOJI_RE,'').replace(/^\s+/,''); hit++; }
+  return hit;
+}
+var _emoBusy=false,_emoTimer=null,_emoAgain=false;
+function emojiifySoon(){
+  if(_emoBusy){ _emoAgain=true; return; }
+  if(_emoTimer) return;
+  _emoTimer=setTimeout(function(){ _emoTimer=null; if(_emoBusy) return; _emoBusy=true;
+    try{ emojiify(document.body); }catch(e){} _emoBusy=false;
+    if(_emoAgain){ _emoAgain=false; emojiifySoon(); } },60);
+}
+function emojiStart(){
+  try{ emojiify(document.body); }catch(e){}
+  if(window.MutationObserver){ try{ (new MutationObserver(emojiifySoon)).observe(document.body,{childList:true,subtree:true,characterData:true}); }catch(e){} }
+  [400,1200,3000].forEach(function(d){ setTimeout(function(){ try{ emojiify(document.body); }catch(e){} },d); });
+}
+/* canvas 里画 Lucide 图标（游戏每帧重绘，图标异步解码不影响最终显示） */
+var _liCache={};
+function lucideImg(name,size,color,sw){
+  var k=name+'|'+size+'|'+color+'|'+(sw||2);
+  if(_liCache[k]) return _liCache[k];
+  var inner=LUCIDE_ICONS[name]||'';
+  var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="'+(sw||2)+'" stroke-linecap="round" stroke-linejoin="round">'+inner+'</svg>';
+  var im=new Image(); im.src='data:image/svg+xml;utf8,'+encodeURIComponent(svg);
+  _liCache[k]=im; return im;
+}
+/* align: center=以(x,y)为中心 | left=从x起 | right=到x止 */
+function drawIcon(ctx,name,x,y,size,color,align){
+  var im=lucideImg(name,size,color||'#fff');
+  var ox = align==='center' ? x-size/2 : (align==='right' ? x-size : x);
+  try{ ctx.drawImage(im,ox,y-size/2,size,size); }catch(e){}
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',emojiStart); else setTimeout(emojiStart,0);
+</script>
 </head>
 <body>
 <div class="topbar">
@@ -253,7 +364,7 @@ function drawHUD(){
   /* 高度（等宽数字，位数变化不抖动） */
   ctx.font='bold 19px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
   ctx.textAlign='left'; ctx.fillStyle='#ffcf7a';
-  ctx.fillText('↑'+sc,20,27);
+  drawIcon(ctx,'arrow-up',20,27,15,'#ffcf7a','left');ctx.fillText(''+sc,38,27);
   /* 最高纪录 */
   ctx.font='12px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
   ctx.textAlign='center'; ctx.fillStyle='rgba(157,177,255,.85)';
@@ -262,7 +373,7 @@ function drawHUD(){
   ctx.font='bold 16px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
   ctx.textAlign='right';
   ctx.fillStyle= overtime?'#ff9db4' : (leftSec<=30?'#ffcf7a':'#8fe9ff');
-  ctx.fillText((overtime?'⏱ 超时':'⏱ '+fmtTime(leftSec)),W-18,27);
+  var _tt=overtime?'超时':fmtTime(leftSec);ctx.fillText(_tt,W-18,27);drawIcon(ctx,'timer',W-20-ctx.measureText(_tt).width,27,15,overtime?'#ff9db4':(leftSec<=30?'#ffcf7a':'#8fe9ff'),'right');
   /* 超时说明（仅文字提示，不弹窗打断游戏） */
   if(overtime){
     ctx.font='11px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';

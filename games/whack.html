@@ -21,6 +21,101 @@
   .hole.up .mole{top:18%}
   .hint{font-size:12px;opacity:.6}
 </style>
+
+
+<style>.licon{display:inline-block;flex:none;vertical-align:-2px}</style>
+<script>
+/* =====================================================
+   图标系统：Lucide（lucide-static v1.48.0）—— 本页按需内联用到的图标
+   全站统一只用 Lucide 一套，不混库、不使用 emoji 作为功能图标。
+   ===================================================== */
+var LUCIDE_ICONS={"arrow-left":"<path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/>","hammer":"<path d=\"m15 12-9.373 9.373a1 1 0 0 1-3.001-3L12 9\"/><path d=\"m18 15 4-4\"/><path d=\"m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172v-.344a2 2 0 0 0-.586-1.414l-1.657-1.657A6 6 0 0 0 12.516 3H9l1.243 1.243A6 6 0 0 1 12 8.485V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5\"/>","rat":"<path d=\"M13 22H4a2 2 0 0 1 0-4h12\"/><path d=\"M13.236 18a3 3 0 0 0-2.2-5\"/><path d=\"M16 9h.01\"/><path d=\"M16.82 3.94a3 3 0 1 1 3.237 4.868l1.815 2.587a1.5 1.5 0 0 1-1.5 2.1l-2.872-.453a3 3 0 0 0-3.5 3\"/><path d=\"M17 4.988a3 3 0 1 0-5.2 2.052A7 7 0 0 0 4 14.015 4 4 0 0 0 8 18\"/>"};
+var EMOJI_ICON_MAP={"←":"arrow-left","🔨":"hammer","🐹":"rat"};
+function iconSvg(name, size, extra){
+  var s=size||16, e=extra||'';
+  var inner=LUCIDE_ICONS[name];
+  if(!inner) return '';
+  return '<svg class="licon" xmlns="http://www.w3.org/2000/svg" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" '
+    + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+    + 'style="width:'+s+'px;height:'+s+'px;vertical-align:-2px;flex:none;'+e+'" aria-hidden="true">' + inner + '</svg>';
+}
+var EMOJI_RE=new RegExp('('+Object.keys(EMOJI_ICON_MAP).sort(function(a,b){return b.length-a.length;})
+  .map(function(c){return c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}).join('|')+')\\uFE0F?','g');
+function emojiIconName(ch){ var k=ch.replace(/\uFE0F/g,''); return EMOJI_ICON_MAP[k]||EMOJI_ICON_MAP[ch]||''; }
+function emojiSvgNode(ch,size){ var b=document.createElement('div'); b.innerHTML=iconSvg(emojiIconName(ch),size||16); return b.firstChild; }
+function emojiifyText(node,size){
+  var t=node.nodeValue; if(!t) return false;
+  EMOJI_RE.lastIndex=0; if(!EMOJI_RE.test(t)) return false; EMOJI_RE.lastIndex=0;
+  var frag=document.createDocumentFragment(),last=0,m,ok=false;
+  while((m=EMOJI_RE.exec(t))){
+    if(!emojiIconName(m[0])) continue;
+    if(m.index>last) frag.appendChild(document.createTextNode(t.slice(last,m.index)));
+    var sv=emojiSvgNode(m[0],size); if(sv) frag.appendChild(sv);
+    last=m.index+m[0].length; ok=true;
+    if(m[0].length===0) EMOJI_RE.lastIndex++;
+  }
+  if(!ok) return false;
+  if(last<t.length) frag.appendChild(document.createTextNode(t.slice(last)));
+  if(node.parentNode) node.parentNode.replaceChild(frag,node);
+  return true;
+}
+var EMOJI_SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,NOSCRIPT:1,TITLE:1,SVG:1,IFRAME:1,OPTION:1,SELECT:1};
+function emojiify(root){
+  root=root||document.body; if(!root) return 0;
+  var changed=0,sizeCache={};
+  try{
+    var tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null,false),list=[],n;
+    while((n=tw.nextNode())){ var p=n.parentNode; if(!p||EMOJI_SKIP[p.nodeName]||!n.nodeValue) continue; list.push(n); }
+    for(var i=0;i<list.length;i++){
+      var pe=list[i].parentElement,sz=16;
+      if(pe){ if(sizeCache[pe.nodeName]===undefined){ try{ var fs=parseFloat(getComputedStyle(pe).fontSize)||15;
+          sizeCache[pe.nodeName]=Math.max(12,Math.min(22,Math.round(fs*1.05)));}catch(e){sizeCache[pe.nodeName]=16;} }
+        sz=sizeCache[pe.nodeName]; }
+      if(emojiifyText(list[i],sz)) changed++;
+    }
+    changed+=emojiifyPlaceholders(root); changed+=emojiifyOptions(root);
+  }catch(e){}
+  return changed;
+}
+/* placeholder 只能放纯文本 → 换成行内 SVG 背景图标 */
+function emojiifyPlaceholders(root){
+  var ins=[],hit=0; try{ ins=root.querySelectorAll('input[placeholder],textarea[placeholder]'); }catch(e){ return 0; }
+  for(var i=0;i<ins.length;i++){
+    var el=ins[i]; if(el.getAttribute('data-emo-ico')) continue;
+    var ph=el.getAttribute('placeholder')||''; EMOJI_RE.lastIndex=0;
+    var m=EMOJI_RE.exec(ph); if(!m||!emojiIconName(m[0])) continue;
+    el.setAttribute('data-emo-ico','1');
+    el.setAttribute('placeholder', ph.replace(m[0],'').replace(/^\s+/,''));
+    try{ var svg=iconSvg(emojiIconName(m[0]),16,'color:#9aa3b2');
+      el.style.backgroundImage='url("data:image/svg+xml;utf8,'+encodeURIComponent(svg)+'")';
+      el.style.backgroundRepeat='no-repeat'; el.style.backgroundPosition='10px center'; el.style.backgroundSize='16px 16px';
+      var pl=parseFloat(getComputedStyle(el).paddingLeft)||10; if(pl<34) el.style.paddingLeft='34px'; }catch(e){}
+    hit++;
+  }
+  return hit;
+}
+/* <option> 内无法内嵌 SVG（HTML 规范限制）→ 去掉图形保留文字 */
+function emojiifyOptions(root){
+  var opts=[],hit=0; try{ opts=root.querySelectorAll('option'); }catch(e){ return 0; }
+  for(var i=0;i<opts.length;i++){ var el=opts[i],t=el.textContent||''; EMOJI_RE.lastIndex=0;
+    if(!EMOJI_RE.test(t)) continue; el.textContent=t.replace(EMOJI_RE,'').replace(/^\s+/,''); hit++; }
+  return hit;
+}
+var _emoBusy=false,_emoTimer=null,_emoAgain=false;
+function emojiifySoon(){
+  if(_emoBusy){ _emoAgain=true; return; }
+  if(_emoTimer) return;
+  _emoTimer=setTimeout(function(){ _emoTimer=null; if(_emoBusy) return; _emoBusy=true;
+    try{ emojiify(document.body); }catch(e){} _emoBusy=false;
+    if(_emoAgain){ _emoAgain=false; emojiifySoon(); } },60);
+}
+function emojiStart(){
+  try{ emojiify(document.body); }catch(e){}
+  if(window.MutationObserver){ try{ (new MutationObserver(emojiifySoon)).observe(document.body,{childList:true,subtree:true,characterData:true}); }catch(e){} }
+  [400,1200,3000].forEach(function(d){ setTimeout(function(){ try{ emojiify(document.body); }catch(e){} },d); });
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',emojiStart); else setTimeout(emojiStart,0);
+</script>
 </head>
 <body>
 <a class="back" href="../">← 返回班级站</a>

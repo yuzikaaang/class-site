@@ -1,7 +1,7 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v21：全班名单明文清零——点歌平台 CLASS_LIST 改为密文（index.html + snake/tetris/bird/doodle 共 5 文件），localStorage 同步存密文；升版本号清掉旧缓存
-const CACHE = 'class-site-v21'
+// v22：全站 emoji 图标清零——统一改用 Lucide 一套线性图标（index.html 内联 85 个 + 13 个小游戏按需内联），含主站 UI 图标、作业科目徽章、公告正文、小游戏内图标与 canvas 绘制图标；升版本号清掉旧缓存
+const CACHE = 'class-site-v22'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
