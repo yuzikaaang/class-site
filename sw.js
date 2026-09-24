@@ -1,7 +1,7 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v18：物理作业条目合并为一点（预习第11章第3节「实验：测量导体的电阻率」含课后习题）；升版本号清掉旧缓存
-const CACHE = 'class-site-v18'
+// v19：化学作业删除「同步练习 P56-68」（站主确认系多加）；升版本号清掉旧缓存
+const CACHE = 'class-site-v19'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
