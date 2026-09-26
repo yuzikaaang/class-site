@@ -1,7 +1,7 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v25：拖进度条改为「能拖就拖、不能拖就说清原因」——不再假装成功；补无 Range 服务端的明确提示；升版本号清掉旧缓存
-const CACHE = 'class-site-v25'
+// v26：公告精简为一句「新增英语听力音频」（立站规：公告一律 30 字内一句话）；升版本号清掉旧缓存
+const CACHE = 'class-site-v26'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
