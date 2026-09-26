@@ -1,9 +1,11 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v31：色相整体改绿（双轨：--grad-* 装饰 / --btn-* 载白字，全部实测达标）
-//      + 全套动效 + 国内字体 CDN + 移动端卡片边距修复（v30 成果保留）
+// v32：色相改回暖阳橙（双轨：--grad-* 装饰 / --btn-* 载白字，全部实测达标）
+//      顺手修了初版橙的一个隐患：强调文字 #C2410C 落 tint-2 只有 4.21:1，
+//      换成 #AF410F（饱和度更高、更向阳，四种底色最差 4.76:1 全达标）
+//      全套动效 + 国内字体 CDN + 移动端卡片边距修复（v30/v31 成果保留）
 //      升版本清旧缓存
-const CACHE = 'class-site-v31'
+const CACHE = 'class-site-v32'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
