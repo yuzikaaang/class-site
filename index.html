@@ -2209,7 +2209,7 @@ function _audioEnsure(){
   /* 一次性绑定事件 */
   el.addEventListener('loadedmetadata', _audioSyncMeta);
   el.addEventListener('durationchange', _audioSyncMeta);
-  el.addEventListener('timeupdate', function(){ if(!_audioDragging) _audioSyncProgress(); });
+  el.addEventListener('timeupdate', function(){ if(!_audioDragging){ _audioSyncProgress(); _audioSubTick(); } });
   el.addEventListener('play',  function(){ _audioVisual(true);  _audioToggleBtn(true);  });
   el.addEventListener('pause', function(){ _audioVisual(false); _audioToggleBtn(false); });
   el.addEventListener('ended', function(){ _audioVisual(false); _audioToggleBtn(false); _audioSetSub('播放完毕，可点「播放」重听'); });
@@ -2246,12 +2246,20 @@ function _audioVisual(playing){
   var v = document.getElementById('audioVisual');
   if(v) v.classList.toggle('playing', !!playing);
   if(playing){
-    var el = _audioEnsure();
-    var p = el.duration && isFinite(el.duration) ? Math.round(el.currentTime/el.duration*100) : 0;
-    _audioSetSub('正在播放 · 已播 '+p+'%');
+    _audioSubTick();
   } else {
-    _audioSetSub('已暂停，点「播放」继续');
+    var el = _audioEnsure();
+    /* 自然播完由 ended 事件单独提示，这里只处理暂停 */
+    if(!el.ended) _audioSetSub('已暂停，点「播放」继续');
   }
+}
+/* 播放中持续刷新「已播 x%」（由 timeupdate 驱动，见 _audioEnsure） */
+function _audioSubTick(){
+  var el = _audioEnsure();
+  if(el.paused || el.ended) return;
+  var p = (el.duration && isFinite(el.duration)) ? Math.round(el.currentTime/el.duration*100) : 0;
+  p = Math.max(0, Math.min(100, p));
+  _audioSetSub('正在播放 · 已播 '+p+'%');
 }
 function _audioSetSub(t){ var s = document.getElementById('audioSub'); if(s) s.textContent = t; }
 
