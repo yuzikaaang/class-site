@@ -424,14 +424,11 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .video-head-btns button{background:rgba(255,255,255,.22);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.76rem;font-weight:700;cursor:pointer;white-space:nowrap}
 .video-head-btns button:hover{background:rgba(255,255,255,.34)}
 /* 音频播放器图标（Lucide，CSS 遮罩方式，跟随文字颜色） */
-:root{--ico-play:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23fff%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M5%205a2%202%200%200%201%203.008-1.728l11.997%206.998a2%202%200%200%201%20.003%203.458l-12%207A2%202%200%200%201%205%2019z%22%2F%3E%3C%2Fsvg%3E");--ico-pause:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23fff%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%2214%22%20y%3D%223%22%20width%3D%225%22%20height%3D%2218%22%20rx%3D%221%22%2F%3E%3Crect%20x%3D%225%22%20y%3D%223%22%20width%3D%225%22%20height%3D%2218%22%20rx%3D%221%22%2F%3E%3C%2Fsvg%3E");--ico-vol:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cdd6e6%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M11%204.702a.705.705%200%200%200-1.203-.498L6.413%207.587A1.4%201.4%200%200%201%205.416%208H3a1%201%200%200%200-1%201v6a1%201%200%200%200%201%201h2.416a1.4%201.4%200%200%201%20.997.413l3.383%203.384A.705.705%200%200%200%2011%2019.298z%22%2F%3E%3Cpath%20d%3D%22M16%209a5%205%200%200%201%200%206%22%2F%3E%3Cpath%20d%3D%22M19.364%2018.364a9%209%200%200%200%200-12.728%22%2F%3E%3C%2Fsvg%3E");--ico-vol-mute:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cdd6e6%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M11%204.702a.7.7%200%200%200-1.203-.498L6.413%207.587A1.4%201.4%200%200%201%205.416%208H3a1%201%200%200%200-1%201v6a1%201%200%200%200%201%201h2.416a1.4%201.4%200%200%201%20.997.413l3.383%203.384A.7.7%200%200%200%2011%2019.298z%22%2F%3E%3Cpath%20d%3D%22m16.5%2014.5%205-5%22%2F%3E%3Cpath%20d%3D%22m16.5%209.5%205%205%22%2F%3E%3C%2Fsvg%3E");--ico-music:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23fff%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M9%2018V5l12-2v13%22%2F%3E%3Ccircle%20cx%3D%226%22%20cy%3D%2218%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2216%22%20r%3D%223%22%2F%3E%3C%2Fsvg%3E");--ico-rewind:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cdd6e6%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M12%206a2%202%200%200%200-3.414-1.414l-6%206a2%202%200%200%200%200%202.828l6%206A2%202%200%200%200%2012%2018z%22%2F%3E%3Cpath%20d%3D%22M22%206a2%202%200%200%200-3.414-1.414l-6%206a2%202%200%200%200%200%202.828l6%206A2%202%200%200%200%2022%2018z%22%2F%3E%3C%2Fsvg%3E");--ico-forward:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cdd6e6%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M12%206a2%202%200%200%201%203.414-1.414l6%206a2%202%200%200%201%200%202.828l-6%206A2%202%200%200%201%2012%2018z%22%2F%3E%3Cpath%20d%3D%22M2%206a2%202%200%200%201%203.414-1.414l6%206a2%202%200%200%201%200%202.828l-6%206A2%202%200%200%201%202%2018z%22%2F%3E%3C%2Fsvg%3E")}
+:root{--ico-play:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%2523fff%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M5%205a2%202%200%200%201%203.008-1.728l11.997%206.998a2%202%200%200%201%20.003%203.458l-12%207A2%202%200%200%201%205%2019z%22%2F%3E%3C%2Fsvg%3E");--ico-pause:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%2523fff%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%2214%22%20y%3D%223%22%20width%3D%225%22%20height%3D%2218%22%20rx%3D%221%22%2F%3E%3Crect%20x%3D%225%22%20y%3D%223%22%20width%3D%225%22%20height%3D%2218%22%20rx%3D%221%22%2F%3E%3C%2Fsvg%3E");--ico-vol:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%2523cdd6e6%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M11%204.702a.705.705%200%200%200-1.203-.498L6.413%207.587A1.4%201.4%200%200%201%205.416%208H3a1%201%200%200%200-1%201v6a1%201%200%200%200%201%201h2.416a1.4%201.4%200%200%201%20.997.413l3.383%203.384A.705.705%200%200%200%2011%2019.298z%22%2F%3E%3Cpath%20d%3D%22M16%209a5%205%200%200%201%200%206%22%2F%3E%3Cpath%20d%3D%22M19.364%2018.364a9%209%200%200%200%200-12.728%22%2F%3E%3C%2Fsvg%3E");--ico-vol-mute:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%2523cdd6e6%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M11%204.702a.7.7%200%200%200-1.203-.498L6.413%207.587A1.4%201.4%200%200%201%205.416%208H3a1%201%200%200%200-1%201v6a1%201%200%200%200%201%201h2.416a1.4%201.4%200%200%201%20.997.413l3.383%203.384A.7.7%200%200%200%2011%2019.298z%22%2F%3E%3Cpath%20d%3D%22m16.5%2014.5%205-5%22%2F%3E%3Cpath%20d%3D%22m16.5%209.5%205%205%22%2F%3E%3C%2Fsvg%3E");--ico-music:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%2523fff%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%22M9%2018V5l12-2v13%22%2F%3E%3Ccircle%20cx%3D%226%22%20cy%3D%2218%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2216%22%20r%3D%223%22%2F%3E%3C%2Fsvg%3E")}
 
 /* ===== 音频播放器（听力音频）—— 自绘控件，全站沿用 Lucide 图标 ===== */
-/* 弹窗垂直居中：.video-box 是 flex column + max-height，若 body 不参与弹性伸展，
-   内容撑不满时盒子会被压到视口底部（手机上尤其明显）。这里让 body 吃掉剩余高度并居中。 */
-.audio-box{max-width:620px;margin:auto;height:auto;max-height:calc(100dvh - 32px)}
-.audio-body{background:#0e1320;padding:16px 16px 14px;flex:1 1 auto;min-height:0;
-  display:flex;flex-direction:column;justify-content:center;overflow:visible}
+.audio-box{max-width:620px}
+.audio-body{background:#0e1320;padding:18px 18px 6px}
 /* 播放态的可视区：唱片旋转 + 波形跳动（纯装饰，暂停即停） */
 .audio-visual{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:22px 10px 20px;border-radius:14px;background:radial-gradient(circle at 50% 30%,#1c2740,#121a2c);overflow:hidden}
 .audio-disc{width:82px;height:82px;color:#7db4ff;opacity:.9;transition:transform .3s}
@@ -448,11 +445,8 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 @keyframes aWave{0%,100%{height:8px}50%{height:32px}}
 .audio-sub{color:#9db1d6;font-size:.78rem;text-align:center;line-height:1.6;max-width:100%;word-break:break-all}
 /* 控制区 */
-/* 控制区：播放键 + 进度条。
-   注意 .audio-ctrl 里播放键占 54px + 14px 间距，.a-tools 实际可用宽 = 弹窗内宽 - 84px，
-   所以按钮不能做太大，否则 430px 附近会溢出（实测需 ~307px 才放得下 4 个控件）。 */
-.audio-ctrl{display:flex;align-items:center;gap:12px;margin-top:14px}
-.a-play{flex:none;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#ff5f6d,#ffc371);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,95,109,.35);transition:transform .15s}
+.audio-ctrl{display:flex;align-items:center;gap:14px;margin-top:16px}
+.a-play{flex:none;width:54px;height:54px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#ff5f6d,#ffc371);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,95,109,.35);transition:transform .15s}
 .a-play:hover{transform:scale(1.06)}
 .a-play:active{transform:scale(.96)}
 .a-play::after{content:"";width:22px;height:22px;background:currentColor;display:block;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;background-color:#fff;-webkit-mask-image:var(--ico-play);mask-image:var(--ico-play)}
@@ -460,79 +454,33 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .a-main{flex:1;min-width:0}
 .a-bar-row{display:flex;align-items:center;gap:10px}
 .a-time{flex:none;color:#cdd6e6;font-size:.76rem;font-variant-numeric:tabular-nums;min-width:42px;text-align:center}
-/* 进度条：热区做高（28px），槽体只占 20px 高度，既好点又好拖 */
-.a-bar{position:relative;flex:1;min-width:0;height:28px;display:flex;align-items:center;cursor:pointer;touch-action:none}
+.a-bar{position:relative;flex:1;min-width:0;height:22px;display:flex;align-items:center;cursor:pointer;touch-action:none}
 .a-bar-track{position:relative;width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.16);overflow:visible}
 .a-bar-fill{position:absolute;left:0;top:0;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#ff5f6d,#ffc371)}
 .a-bar-knob{position:absolute;top:50%;left:0;width:13px;height:13px;margin-top:-6.5px;margin-left:-6.5px;border-radius:50%;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.5);transition:transform .12s}
 .a-bar:hover .a-bar-knob,.a-bar.dragging .a-bar-knob{transform:scale(1.25)}
 .a-bar-tip{position:absolute;top:-26px;left:0;transform:translateX(-50%);background:rgba(15,22,36,.95);color:#fff;font-size:.68rem;padding:2px 7px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity .12s;font-variant-numeric:tabular-nums}
 .a-bar:hover .a-bar-tip,.a-bar.dragging .a-bar-tip{opacity:1}
-/* 工具行：图标按钮 + 倍速 + 音量。
-   窄屏下音量条隐藏（见下方媒体查询），音量组靠右对齐，避免中间留空。 */
-.a-tools{display:flex;align-items:center;gap:7px;margin-top:10px;flex-wrap:nowrap}
-.a-rate-btn{margin-right:auto}
-.a-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;background:rgba(255,255,255,.1);border:none;color:#cdd6e6;border-radius:9px;padding:7px 9px;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap;flex:none;min-height:34px;transition:background .12s,color .12s,transform .1s}
+.a-tools{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.a-btn{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.1);border:none;color:#cdd6e6;border-radius:8px;padding:5px 9px;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap}
 .a-btn:hover{background:rgba(255,255,255,.2);color:#fff}
-.a-btn:active{transform:scale(.95)}
 .a-btn i{font-style:normal;font-size:.68rem;opacity:.85}
 .a-btn b{color:#ffcf7a;font-weight:800}
-.a-btn-ico{position:relative;padding:7px 9px}
+.a-btn-ico{position:relative;padding:5px 8px}
 .a-btn-ico::after{content:"";display:block;width:16px;height:16px;background-color:#cdd6e6;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-image:var(--ico-vol);mask-image:var(--ico-vol)}
-/* 音量：静音等图标由 JS 切 data-state，避免手写 style 覆盖 mask 变量 */
-.a-btn-ico[data-state="mute"]::after{-webkit-mask-image:var(--ico-vol-mute);mask-image:var(--ico-vol-mute)}
-/* 跳转按钮：图标 + 15 秒 */
-.a-btn-skip{gap:5px;padding-left:9px;padding-right:11px}
-.a-btn-skip::before{content:"";flex:none;display:block;width:16px;height:16px;background-color:#cdd6e6;
-  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;
-  -webkit-mask-size:contain;mask-size:contain;
-  -webkit-mask-image:var(--ico-rewind);mask-image:var(--ico-rewind)}
-.a-btn-skip.is-fwd::before{-webkit-mask-image:var(--ico-forward);mask-image:var(--ico-forward)}
-.a-vol{display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;max-width:180px}
-.a-vol-bar{flex:1 1 auto;min-width:34px;max-width:150px;height:26px;display:flex;align-items:center;cursor:pointer;touch-action:none}
-/* 窄屏：音量条去掉，只留静音按钮。
-   原因：4 个按钮（后退/前进/倍速/静音）已占 214px，390px 手机上再塞一条
-   音量条必然溢出换行；而手机本身有实体音量键，音量条属于冗余。 */
-@media (max-width:520px){
-  .a-vol-bar{display:none}
-  .a-vol{flex:0 0 auto}
-}
-.a-vol-track{position:relative;width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.16)}
+.a-vol{display:flex;align-items:center;gap:6px}
+.a-vol-bar{width:76px;height:18px;display:flex;align-items:center;cursor:pointer;touch-action:none}
+.a-vol-track{position:relative;width:100%;height:4px;border-radius:99px;background:rgba(255,255,255,.16)}
 .a-vol-fill{position:absolute;left:0;top:0;height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#5d7fff,#7db4ff)}
-.a-vol-knob{position:absolute;top:50%;left:100%;width:12px;height:12px;margin-top:-6px;margin-left:-6px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
-/* 倍速：**点一下就换下一档**，不做下拉菜单（下拉在窄屏必定被遮）。
-   用一个横排"挡位胶囊"直观显示当前档位，跟音量条并排、不换行。 */
-.a-rate-btn{padding-left:9px;padding-right:9px}
-.a-rate-chip{background:rgba(255,255,255,.14);color:#ffcf7a;border-radius:6px;padding:1px 6px;font-weight:800;font-size:.72rem;font-variant-numeric:tabular-nums;min-width:34px;text-align:center;display:inline-block;transition:background .15s,transform .15s}
-.a-rate-btn.bump .a-rate-chip{transform:scale(1.18);background:rgba(255,207,122,.28)}
-/* 「后退 / 前进」在小屏收窄，保证一行放得下 */
-@media (max-width:430px){
-  .audio-ctrl{gap:10px}
-  .a-play{width:48px;height:48px}
-  .a-play::after{width:20px;height:20px}
-  .a-tools{gap:5px}
-  .a-btn{font-size:.7rem;padding:7px 7px;min-height:32px;gap:3px}
-  .a-btn-skip{gap:3px;padding-left:6px;padding-right:6px}
-  .a-btn-skip::before{width:14px;height:14px}
-  .a-btn-skip i{font-size:.6rem}
-  .a-rate-btn{padding-left:7px;padding-right:7px}
-  .a-rate-chip{min-width:28px;padding:1px 4px;font-size:.66rem}
-}
-@media (max-width:360px){
-  .audio-ctrl{gap:8px}
-  .a-play{width:44px;height:44px}
-  .a-play::after{width:18px;height:18px}
-  .a-tools{gap:4px}
-  .a-btn{font-size:.64rem;padding:6px 5px;min-height:30px}
-  .a-btn-skip{gap:2px;padding-left:5px;padding-right:5px}
-  .a-btn-skip::before{width:13px;height:13px}
-  .a-btn-skip i{display:none}   /* 极窄屏去掉「15」字样，靠 title 提示 */
-  .a-rate-btn{padding-left:5px;padding-right:5px}
-  .a-rate-chip{min-width:26px;padding:1px 3px;font-size:.62rem}
-}
+.a-vol-knob{position:absolute;top:50%;left:100%;width:11px;height:11px;margin-top:-5.5px;margin-left:-5.5px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.a-rate{position:relative}
+.a-rate-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:5;background:#1a2438;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:5px;min-width:88px;box-shadow:0 10px 26px rgba(0,0,0,.5)}
+.a-rate-menu.show{display:block}
+.a-rate-menu button{display:block;width:100%;background:none;border:none;color:#cdd6e6;padding:6px 10px;font-size:.76rem;text-align:left;border-radius:6px;cursor:pointer;font-weight:700}
+.a-rate-menu button:hover{background:rgba(255,255,255,.12);color:#fff}
+.a-rate-menu button.on{color:#ffcf7a;background:rgba(255,207,122,.12)}
 .audio-fallback{display:none}
-.audio-fallback.show{display:block;padding:10px 16px 14px;color:#9db1d6;font-size:.76rem;line-height:1.7;text-align:center;border-top:1px solid rgba(255,255,255,.08)}
-.audio-fallback a{color:#7db4ff}
+.audio-fallback.show{display:block}
 /* 全屏态：铺满视口，控制区放大居中 */
 .video-mask.fs .audio-box{max-width:none;width:100%;height:100vh;height:100dvh;border-radius:0}
 .video-mask.fs .audio-body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;padding:24px max(18px,6vw)}
@@ -547,11 +495,9 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .video-mask.fs .a-time{font-size:.86rem;min-width:52px}
 .video-mask.fs .a-btn{font-size:.82rem;padding:7px 12px}
 .video-mask.fs .audio-sub{font-size:.88rem}
-/* 音频悬浮球：与视频球同款，图标用 Lucide 音符。
-   位置由 actSyncBubble() 统一调度，这里不要写死 bottom，否则会跟其它球重叠。 */
+/* 音频悬浮球：与视频球同款，图标用 Lucide 音符 */
 .ab-ico{width:20px;height:20px;background-color:#fff;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-image:var(--ico-music);mask-image:var(--ico-music)}
-#audioBubble{position:fixed;right:14px;bottom:16px;z-index:1045;display:none;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#5d7fff,#7db4ff);box-shadow:0 6px 18px rgba(93,127,255,.42)}
-#audioBubble span.dot{position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff}
+#audioBubble{position:fixed;right:16px;bottom:16px;z-index:9996;display:none;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#5d7fff,#7db4ff);box-shadow:0 8px 22px rgba(93,127,255,.4)}
 /* ⚠️ .video-body 必须是 block（不能用 flex）：wrap 作为 flex item 时 width:min(100%,…) 里的
    百分比基数会变成「flex 分配宽度」而非父级宽度，实测会把视频算成 136px（几乎看不见）。 */
 .video-body{padding:0;background:#000;display:block}
@@ -932,14 +878,14 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
             <span class="a-time" id="audioDur">--:--</span>
           </div>
           <div class="a-tools">
-            <button class="a-btn a-btn-skip" onclick="audioSkip(-15)" title="后退 15 秒" aria-label="后退 15 秒">后退<i>15</i></button>
-            <button class="a-btn a-btn-skip is-fwd" onclick="audioSkip(15)" title="前进 15 秒" aria-label="前进 15 秒">前进<i>15</i></button>
-            <!-- 倍速：点一次换下一档（0.5→0.75→…→2→回到 0.5），不做下拉菜单，避免窄屏被遮 -->
-            <button class="a-btn a-rate-btn" id="audioRateBtn" onclick="audioRateCycle()" title="点一下切换播放速度" aria-label="切换播放速度">
-              倍速<span class="a-rate-chip" id="audioRateNow">1.0×</span>
-            </button>
+            <button class="a-btn" onclick="audioSkip(-15)" title="后退 15 秒">后退<i>15</i></button>
+            <button class="a-btn" onclick="audioSkip(15)" title="前进 15 秒">前进<i>15</i></button>
+            <div class="a-rate" id="audioRateBox">
+              <button class="a-btn" onclick="audioRateMenu(event)" title="播放速度">倍速 <b id="audioRateNow">1.0×</b></button>
+              <div class="a-rate-menu" id="audioRateMenu"></div>
+            </div>
             <div class="a-vol" id="audioVolBox">
-              <button class="a-btn a-btn-ico" onclick="audioMute()" id="audioMuteBtn" title="静音 / 取消静音" aria-label="静音 / 取消静音"></button>
+              <button class="a-btn a-btn-ico" onclick="audioMute()" id="audioMuteBtn" title="静音 / 取消静音"></button>
               <div class="a-vol-bar" id="audioVolBar" role="slider" aria-label="音量">
                 <div class="a-vol-track"><div class="a-vol-fill" id="audioVolFill"></div><div class="a-vol-knob" id="audioVolKnob"></div></div>
               </div>
@@ -2239,14 +2185,7 @@ document.getElementById('qrMask').addEventListener('click', function(e){
 var _audioUrl = '', _audioTitle = '音频播放', _audioEl = null;
 var AUDIO_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 var _audioRate = 1, _audioVol = 1, _audioMuted = false, _audioDragging = false;
-/* 统一的「是否可跳转」判定：seekable 已知且末段终点 > 0.5s。
-   服务端不支持 HTTP Range（只回 200 不回 206）时恒为 false，此时写 currentTime 会被静默丢弃。 */
-var _audioNoSeekWarned = false;
-function _aSeekable(){
-  var el = _audioEl;
-  try{ return !!(el && el.seekable && el.seekable.length && el.seekable.end(el.seekable.length-1) > 0.5); }
-  catch(e){ return false; }
-}
+
 /* 秒 -> mm:ss / h:mm:ss */
 function _aFmtTime(s){
   if(!isFinite(s) || s < 0) s = 0;
@@ -2267,29 +2206,19 @@ function _audioEnsure(){
     document.body.appendChild(el);
   }
   _audioEl = el;
-  /* ⚠️ 事件只在首次创建时绑定一次。之前每次调用都绑，导致 timeupdate 被叠加多个监听，
-     且 openAudio 每次都重设 src 把已缓冲的进度丢掉——这是「拖了没反应」的真根因之一。 */
-  if(!el.dataset.bound){
-    el.dataset.bound = '1';
-    el.addEventListener('loadedmetadata', _audioSyncMeta);
-    el.addEventListener('durationchange', _audioSyncMeta);
-    el.addEventListener('timeupdate', function(){ if(!_audioDragging){ _audioSyncProgress(); _audioSubTick(); } });
-    el.addEventListener('seeked', function(){ _audioSyncProgress(); _audioSubTick(); });
-    el.addEventListener('play',  function(){ _audioVisual(true);  _audioToggleBtn(true);  });
-    el.addEventListener('pause', function(){ _audioVisual(false); _audioToggleBtn(false); });
-    el.addEventListener('ended', function(){ _audioVisual(false); _audioToggleBtn(false); _audioSetSub('播放完毕，可点「播放」重听'); });
-    el.addEventListener('error',  function(){
-      var fb = document.getElementById('audioFallback');
-      if(fb){ fb.classList.add('show'); fb.innerHTML = '音频加载失败。可能是网络问题，或该链接不是可直接播放的音频直链。可 <a href="'+esc(_audioUrl)+'" target="_blank" rel="noopener">在新标签页打开试试</a>。'; }
-    });
-    el.addEventListener('progress', function(){ /* 缓冲进度预留，当前用填充条表示播放进度 */ });
-  }
+  /* 一次性绑定事件 */
+  el.addEventListener('loadedmetadata', _audioSyncMeta);
+  el.addEventListener('durationchange', _audioSyncMeta);
+  el.addEventListener('timeupdate', function(){ if(!_audioDragging){ _audioSyncProgress(); _audioSubTick(); } });
+  el.addEventListener('play',  function(){ _audioVisual(true);  _audioToggleBtn(true);  });
+  el.addEventListener('pause', function(){ _audioVisual(false); _audioToggleBtn(false); });
+  el.addEventListener('ended', function(){ _audioVisual(false); _audioToggleBtn(false); _audioSetSub('播放完毕，可点「播放」重听'); });
+  el.addEventListener('error',  function(){
+    var fb = document.getElementById('audioFallback');
+    if(fb){ fb.classList.add('show'); fb.innerHTML = '音频加载失败。可能是网络问题，或该链接不是可直接播放的音频直链。可 <a href="'+esc(_audioUrl)+'" target="_blank" rel="noopener">在新标签页打开试试</a>。'; }
+  });
+  el.addEventListener('progress', function(){ /* 缓冲进度预留，当前用填充条表示播放进度 */ });
   return el;
-}
-/* 把 URL 统一成绝对地址再比较：el.src 读出来永远是绝对值，
-   直接用相对路径比会恒不相等，于是每次打开都重设 src、白丢缓冲。 */
-function _aAbs(url){
-  try{ return new URL(url, location.href).href; }catch(e){ return url; }
 }
 function _audioSyncMeta(){
   var el = _audioEnsure();
@@ -2299,7 +2228,6 @@ function _audioSyncMeta(){
 }
 function _audioSyncProgress(){
   var el = _audioEnsure();
-  if(_audioDragging) return;   /* 拖拽中由手势接管视觉，避免 timeupdate 抢回去 */
   var pct = (el.duration && isFinite(el.duration)) ? (el.currentTime/el.duration*100) : 0;
   pct = Math.max(0, Math.min(100, pct));
   var fill = document.getElementById('audioFill'), knob = document.getElementById('audioKnob');
@@ -2325,22 +2253,13 @@ function _audioVisual(playing){
     if(!el.ended) _audioSetSub('已暂停，点「播放」继续');
   }
 }
-/* 播放中持续刷新「已播 x%」（由 timeupdate 驱动，见 _audioEnsure）
-   ⚠️ 但「不支持拖动」这类重要提示必须压过进度刷屏，否则提示刚写出
-   就被下一次 timeupdate 覆盖掉（实测只活了几毫秒，用户根本看不到）。 */
-var _audioSubHold = false;
+/* 播放中持续刷新「已播 x%」（由 timeupdate 驱动，见 _audioEnsure） */
 function _audioSubTick(){
   var el = _audioEnsure();
   if(el.paused || el.ended) return;
-  if(_audioSubHold) return;
   var p = (el.duration && isFinite(el.duration)) ? Math.round(el.currentTime/el.duration*100) : 0;
   p = Math.max(0, Math.min(100, p));
   _audioSetSub('正在播放 · 已播 '+p+'%');
-}
-/* 写一条「需要用户看见」的提示：暂停进度刷屏，直到用户再次操作 */
-function _audioSubHoldSet(t){
-  _audioSubHold = true;
-  _audioSetSub(t);
 }
 function _audioSetSub(t){ var s = document.getElementById('audioSub'); if(s) s.textContent = t; }
 
@@ -2349,24 +2268,17 @@ function openAudio(url, title){
   if(!url){ alert('该音频暂未配置，请联系管理员补充'); return; }
   _audioUrl = url; _audioTitle = title || '音频播放';
   _audioNoSeekWarned = false;
-  _audioSubHold = false;
   var t = document.getElementById('audioTitle'); if(t) t.textContent = _audioTitle;
   var fb = document.getElementById('audioFallback'); if(fb){ fb.classList.remove('show'); fb.innerHTML=''; }
   var el = _audioEnsure();
-  /* 同一个音频不要重设 src：重设会丢弃已缓冲数据、并让 seekable 重新变空。
-     只有地址真的换了（比较绝对 URL）才重新加载。 */
-  var same = el.src && el.src === _aAbs(url);
-  if(!same){
-    el.src = url;
-    try{ el.currentTime = 0; }catch(e){}
-    el.load();   /* 显式 load，确保新源一定进入加载流程 */
-  }
+  if(el.src !== url){ el.src = url; el.currentTime = 0; }
   el.playbackRate = _audioRate;
   el.volume = _audioVol; el.muted = _audioMuted;
   _audioSyncRateUI(); _audioSyncVolUI();
   var m = document.getElementById('audioMask'); if(m) m.classList.add('show');
   audioBubbleHide();
-  _audioSetSub(same ? '已续上上次进度，点「播放」继续' : '点下方按钮开始播放');
+  _audioSetSub('点下方按钮开始播放');
+  var msg = document.getElementById('audioMsg'); if(msg) msg.textContent = '';
   _audioSyncProgress();
 }
 /* 关闭：暂停并收起弹窗，保留进度供悬浮球续播 */
@@ -2376,6 +2288,7 @@ function closeAudio(){
   var m = document.getElementById('audioMask');
   if(m){ m.classList.remove('show'); m.classList.remove('fs'); }
   var b = document.getElementById('audioFsBtn'); if(b) b.textContent = '全屏';
+  audioRateMenuClose();
   if(_audioUrl) audioBubbleShow();
 }
 function reopenAudio(){
@@ -2387,40 +2300,12 @@ function reopenAudio(){
   _audioSyncMeta(); _audioSyncRateUI(); _audioSyncVolUI();
   _audioSetSub('已续上上次进度，点「播放」继续');
 }
-function audioBubbleShow(){
-  var el = document.getElementById('audioBubble'); if(!el) return;
-  el.style.display = 'flex';
-  if(typeof actSyncBubble === 'function') actSyncBubble();
-}
-function audioBubbleHide(){
-  var el = document.getElementById('audioBubble'); if(el) el.style.display = 'none';
-  if(typeof actSyncBubble === 'function') actSyncBubble();
-}
+function audioBubbleShow(){ var el = document.getElementById('audioBubble'); if(!el) return; el.style.display = 'flex'; if(typeof studyBubbleSync === 'function') studyBubbleSync(); }
+function audioBubbleHide(){ var el = document.getElementById('audioBubble'); if(el) el.style.display = 'none'; }
 
-/* 真正的跳转动作：所有跳转（进度条、±15 秒、键盘）都走这里，保证行为一致。
-   返回 true 表示已生效。 */
-function audioSeekTo(t, silent){
-  var el = _audioEnsure();
-  if(!isFinite(el.duration) || el.duration <= 0) return false;
-  t = Math.max(0, Math.min(el.duration, t));
-  if(!_aSeekable()){
-    if(!silent) audioNoSeekTip();
-    return false;
-  }
-  try{ el.currentTime = t; }catch(e){ return false; }
-  /* 立即刷新 UI，不等 seeked（慢一点时手感更好），seeked 到了会再刷一次 */
-  var pct = el.duration ? (t/el.duration*100) : 0;
-  var fill = document.getElementById('audioFill'), knob = document.getElementById('audioKnob');
-  if(fill) fill.style.width = pct+'%';
-  if(knob) knob.style.left = pct+'%';
-  var cur = document.getElementById('audioCur'); if(cur) cur.textContent = _aFmtTime(t);
-  _audioHideFallback();
-  return true;
-}
 /* 播放 / 暂停：必须由点击触发（微信等环境禁止自动播放有声媒体） */
 function audioToggle(){
   var el = _audioEnsure();
-  _audioSubHold = false;          /* 用户主动操作，恢复进度刷屏 */
   if(el.paused){
     var pr = el.play();
     if(pr && pr.catch) pr.catch(function(){ _audioSetSub('浏览器拦截了自动播放，请再点一次「播放」'); });
@@ -2430,50 +2315,39 @@ function audioToggle(){
 }
 function audioSkip(sec){
   var el = _audioEnsure();
-  if(!isFinite(el.duration)){
-    _audioSubHoldSet('音频还在加载，稍等一下再试');
-    return;
-  }
-  /* 播完之后按「后退」应当从结尾往回退，而不是停在结尾 */
-  if(el.ended && sec < 0) el.pause();
-  var target = el.currentTime + sec;
-  /* ⚠️ 先 seek 再解除提示屏蔽：audioSeekTo 失败时会写「不支持」提示，
-     若提前把 _audioSubHold 置 false，timeupdate 会立刻把它刷成「已播 x%」。 */
-  var ok = audioSeekTo(target);
-  if(ok){
-    _audioSubHold = false;
-    _audioSyncProgress();
-  }
+  if(!isFinite(el.duration)) return;
+  el.currentTime = Math.max(0, Math.min(el.duration, el.currentTime + sec));
+  _audioSyncProgress();
 }
 /* ---- 进度条拖动（鼠标 + 触摸统一用 Pointer 事件） ---- */
 /* 关于「拖了没反应」，分两种情况：
-   ① 正常情况：服务端支持 HTTP Range（返回 206），浏览器知道 seekable 区间，
-      直接把 currentTime 写进去即可生效。
+   ① 正常情况：preload=metadata 只拉了元数据，但 seekable 已知（服务端支持 Range）。
+      直接把 currentTime 写进去即可，无需任何兜底。
    ② 服务端不支持 HTTP Range（返回 200 而非 206，例如某些托管网关）：
       浏览器**根本无法跳转**——seekable 恒为 [0,0]，改 currentTime 会被静默丢弃，
-      这是浏览器 + HTTP 协议层面的限制，前端无法绕过。
+      这是浏览器 + HTTP 协议层面的限制，前端无法绕过（实测缓冲到 267 秒仍不能跳）。
       这种情况如实告知用户，而不是假装拖成功了。 */
-function _audioHideFallback(){
-  var fb = document.getElementById('audioFallback');
-  if(fb && fb.classList.contains('show') && fb.dataset.kind === 'noseek'){
-    fb.classList.remove('show'); fb.innerHTML='';
-    _audioSubHold = false;
-  }
+var _audioNoSeekWarned = false;
+function _audioCanSeek(el){
+  return !!(el.seekable && el.seekable.length && el.seekable.end(el.seekable.length-1) > 0.5);
 }
 function audioNoSeekTip(){
   if(_audioNoSeekWarned) return;
   _audioNoSeekWarned = true;
-  _audioSubHoldSet('这个音频源不支持拖动进度条，可点下方链接用系统播放器收听');
+  _audioSetSub('当前音频源不支持拖动进度条，可点「在新标签页打开」用系统播放器收听');
   var fb = document.getElementById('audioFallback');
   if(fb){
-    fb.dataset.kind = 'noseek';
     fb.classList.add('show');
-    fb.innerHTML = '当前音频地址不支持拖动进度条（服务器不支持分段读取），播放不受影响。'
-      + '<br>需要跳着听的话，可 <a href="'+esc(_audioUrl)+'" target="_blank" rel="noopener">在新标签页打开</a>，用系统播放器收听。';
+    fb.innerHTML = '这个音频地址不支持拖动进度条（服务器不支持分段读取）。'
+      + '可 <a href="'+esc(_audioUrl)+'" target="_blank" rel="noopener">在新标签页打开</a>，用系统播放器完整收听。';
   }
 }
-/* 拖动时的「预览」：只动视觉 + 时间气泡，松手才真正 seek（避免拖动中疯狂请求） */
-function audioBarPreview(pct){
+function audioSeekFromEvent(e){
+  var bar = document.getElementById('audioBar'); if(!bar) return;
+  var r = bar.getBoundingClientRect();
+  var x = (e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0));
+  var pct = r.width ? (x - r.left) / r.width : 0;
+  pct = Math.max(0, Math.min(1, pct));
   var el = _audioEnsure();
   var fill = document.getElementById('audioFill'), knob = document.getElementById('audioKnob');
   if(fill) fill.style.width = (pct*100)+'%';
@@ -2481,57 +2355,25 @@ function audioBarPreview(pct){
   var tip = document.getElementById('audioTip');
   var t = isFinite(el.duration) ? pct*el.duration : 0;
   if(tip){ tip.style.left = (pct*100)+'%'; tip.textContent = _aFmtTime(t); }
+  /* 能 seek 就直接写；不能 seek（服务端不支持 Range）就如实提示，不假装成功 */
+  if(isFinite(el.duration)){
+    if(_audioCanSeek(el)){
+      try{ el.currentTime = t; }catch(err){}
+    } else {
+      audioNoSeekTip();
+      return;   /* 视觉上不跟着走，避免条子动了、声音没动造成误解 */
+    }
+  }
   var cur = document.getElementById('audioCur'); if(cur) cur.textContent = _aFmtTime(t);
-  return t;
 }
-function audioBarPctFromEvent(e){
-  var bar = document.getElementById('audioBar'); if(!bar) return 0;
-  var r = bar.getBoundingClientRect();
-  var x = (e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0));
-  var pct = r.width ? (x - r.left) / r.width : 0;
-  return Math.max(0, Math.min(1, pct));
-}
+/* 松手后强制刷新一次进度 UI，避免 timeupdate 尚未触发时显示回退 */
+function audioSyncProgressForce(){ if(typeof _audioSyncProgress === 'function') _audioSyncProgress(); }
 function audioBarInit(){
   var bar = document.getElementById('audioBar'); if(!bar || bar.dataset.bound) return;
   bar.dataset.bound = '1';
-  var lastPct = 0;
-  function down(e){
-    var el = _audioEnsure();
-    if(!isFinite(el.duration)) return;   /* 还没拿到时长，等加载完再说 */
-    _audioSubHold = false;
-    audioBarSetDragging(true);
-    lastPct = audioBarPctFromEvent(e);
-    audioBarPreview(lastPct);
-    try{ bar.setPointerCapture(e.pointerId); }catch(err){}
-    e.preventDefault();
-  }
-  function move(e){
-    if(!_audioDragging) return;
-    lastPct = audioBarPctFromEvent(e);
-    audioBarPreview(lastPct);
-    e.preventDefault();
-  }
-  function up(e){
-    if(!_audioDragging) return;
-    /* ⚠️ 顺序很重要：必须先 seek 再复位 dragging。
-       之前先复位会让 timeupdate 抢先把填充条刷回旧位置，看起来就是「拖了没反应」。 */
-    var el = _audioEnsure();
-    lastPct = audioBarPctFromEvent(e);
-    var t = audioBarPreview(lastPct);
-    /* silent=false：失败要出声。拖到不能拖的源上必须当场告知，
-       否则用户看到条子动了、声音没动，只会觉得「坏了」。
-       成功时 audioSeekTo 会顺带收起旧提示。 */
-    var ok = audioSeekTo(t, false);
-    audioBarSetDragging(false);
-    if(ok){
-      audioSyncProgressForce();
-    } else {
-      /* 不能跳：把条子拨回真实播放位置，不让视觉骗人 */
-      _audioSyncProgress();
-      var tip = document.getElementById('audioTip');
-      if(tip) tip.style.opacity = '0';
-    }
-  }
+  function down(e){ audioBarSetDragging(true); audioSeekFromEvent(e); try{ bar.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); }
+  function move(e){ if(!_audioDragging) return; audioSeekFromEvent(e); e.preventDefault(); }
+  function up(e){ if(!_audioDragging) return; audioSeekFromEvent(e); audioBarSetDragging(false); audioSyncProgressForce(); }
   bar.addEventListener('pointerdown', down);
   bar.addEventListener('pointermove', move);
   bar.addEventListener('pointerup', up);
@@ -2549,42 +2391,40 @@ function audioBarInit(){
     if(e.key === 'ArrowLeft'){ audioSkip(-5); e.preventDefault(); }
     if(e.key === 'ArrowRight'){ audioSkip(5); e.preventDefault(); }
   });
-  /* 加载完时长后，如果之前因为不支持拖拽提示过、现在又能拖了，把提示收掉 */
-  bar.addEventListener('pointerdown', function(){
-    if(_aSeekable()) _audioHideFallback();
-  });
 }
 function audioBarSetDragging(on){
   _audioDragging = on;
   var bar = document.getElementById('audioBar'); if(bar) bar.classList.toggle('dragging', on);
 }
-/* ---- 倍速：点一次换下一档，循环 ---- */
-function audioRateCycle(){
-  var i = AUDIO_RATES.indexOf(_audioRate);
-  var next = AUDIO_RATES[(i < 0 ? 0 : i + 1) % AUDIO_RATES.length];
-  audioSetRate(next);
-  var b = document.getElementById('audioRateBtn');
-  if(b){
-    b.classList.remove('bump');
-    void b.offsetWidth;          /* 强制重排，让动画可以连点重放 */
-    b.classList.add('bump');
-    setTimeout(function(){ b.classList.remove('bump'); }, 200);
+/* ---- 倍速 ---- */
+function audioRateMenu(e){
+  if(e) e.stopPropagation();
+  var m = document.getElementById('audioRateMenu');
+  if(!m) return;
+  if(!m.dataset.built){
+    m.dataset.built = '1';
+    m.innerHTML = AUDIO_RATES.map(function(r){
+      return '<button data-rate="'+r+'" onclick="audioSetRate('+r+',event)">'+(r===1?'1.0×（正常）':(r % 1 === 0 ? r.toFixed(1) : String(r))+'×')+'</button>';
+    }).join('');
   }
-  var el = _audioEnsure();
-  _audioSetSub('播放速度已切换为 ' + _aRateText(_audioRate));
+  m.classList.toggle('show');
 }
-function _aRateText(r){ return (_aRateDisplay(r)) + '×'; }
-function _aRateDisplay(r){ return (r % 1 === 0 ? r.toFixed(1) : String(r)); }
-function audioSetRate(r){
+function audioRateMenuClose(){ var m = document.getElementById('audioRateMenu'); if(m) m.classList.remove('show'); }
+function audioSetRate(r, e){
+  if(e) e.stopPropagation();
   _audioRate = r;
   var el = _audioEnsure(); el.playbackRate = r;
-  _audioSyncRateUI();
+  _audioSyncRateUI(); audioRateMenuClose();
 }
 function _audioSyncRateUI(){
   var now = document.getElementById('audioRateNow');
-  if(now) now.textContent = _aRateDisplay(_audioRate) + '×';
-  var b = document.getElementById('audioRateBtn');
-  if(b) b.title = '当前 ' + _aRateText(_audioRate) + '，点一下切换到下一档（最高 2×）';
+  if(now) now.textContent = (_audioRate % 1 === 0 ? _audioRate.toFixed(1) : String(_audioRate)) + '×';
+  var m = document.getElementById('audioRateMenu');
+  if(m && m.dataset.built){
+    Array.prototype.forEach.call(m.querySelectorAll('button'), function(b){
+      b.classList.toggle('on', parseFloat(b.dataset.rate) === _audioRate);
+    });
+  }
 }
 /* ---- 音量 ---- */
 function audioVolFromEvent(e){
@@ -2605,12 +2445,10 @@ function _audioSyncVolUI(){
   if(knob) knob.style.left = (v*100)+'%';
   var b = document.getElementById('audioMuteBtn');
   if(b){
-    /* 静音态切 data-state，由 CSS 选择器换图标；
-       之前是用 JS 拼 --ico-volume-x 这种**并不存在**的变量名，图标永远显示不出来。 */
-    var muted = _audioMuted || _audioVol <= 0.02;
-    b.dataset.state = muted ? 'mute' : 'on';
+    var icon = _audioMuted ? 'volume-x' : (_audioVol <= 0.02 ? 'volume-x' : (_audioVol < 0.5 ? 'volume-1' : 'volume-2'));
+    b.style.setProperty('-webkit-mask-image', 'var(--ico-'+icon.replace('volume-','')+')');
+    b.style.setProperty('mask-image', 'var(--ico-'+icon.replace('volume-','')+')');
     b.title = _audioMuted ? '取消静音' : '静音';
-    b.setAttribute('aria-label', _audioMuted ? '当前已静音，点击恢复声音' : '静音');
   }
 }
 function audioMute(){
@@ -2622,24 +2460,21 @@ function audioMute(){
 function audioVolInit(){
   var bar = document.getElementById('audioVolBar'); if(!bar || bar.dataset.bound) return;
   bar.dataset.bound = '1';
-  function down(e){ audioVolFromEvent(e); try{ bar.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); }
-  function move(e){ if(!bar.dataset.drag) return; audioVolFromEvent(e); e.preventDefault(); }
-  function up(){ bar.dataset.drag = ''; }
-  function start(e){ bar.dataset.drag = '1'; down(e); }
-  bar.addEventListener('pointerdown', start);
+  function down(e){ audioVolFromEvent(e); bar.dataset.drag='1'; try{ bar.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); }
+  function move(e){ if(bar.dataset.drag!=='1') return; audioVolFromEvent(e); e.preventDefault(); }
+  function up(){ bar.dataset.drag='0'; }
+  bar.addEventListener('pointerdown', down);
   bar.addEventListener('pointermove', move);
   bar.addEventListener('pointerup', up);
   bar.addEventListener('pointercancel', up);
   if(!window.PointerEvent){
-    bar.addEventListener('mousedown', start); bar.addEventListener('mousemove', move);
+    bar.addEventListener('mousedown', down); bar.addEventListener('mousemove', move);
     document.addEventListener('mouseup', up);
-    bar.addEventListener('touchstart', start, {passive:false});
+    bar.addEventListener('touchstart', down, {passive:false});
     bar.addEventListener('touchmove', move, {passive:false});
     bar.addEventListener('touchend', up);
   }
 }
-/* 松手 / 跳转后强制刷新一次进度 UI，避免 timeupdate 尚未触发时显示回退 */
-function audioSyncProgressForce(){ _audioSyncProgress(); }
 /* ---- 全屏（外层弹窗实现，微信内同样可用） ---- */
 function toggleAudioFs(){
   var m = document.getElementById('audioMask'); if(!m) return;
@@ -2661,7 +2496,9 @@ function toggleAudioFs(){
     _audioSyncVolUI(); _audioSyncRateUI();
     var m = document.getElementById('audioMask');
     if(m) m.addEventListener('click', function(e){
-      if(e.target.id === 'audioMask'){ closeAudio(); }
+      if(e.target.id === 'audioMask'){ closeAudio(); return; }
+      /* 点击控制区以外收起倍速菜单 */
+      if(!e.target.closest || !e.target.closest('.a-rate')) audioRateMenuClose();
     });
     document.addEventListener('fullscreenchange', function(){
       if(!document.fullscreenElement){
@@ -2734,12 +2571,9 @@ function reopenVideo(){
 function videoBubbleShow(){
   var el = document.getElementById('videoBubble'); if(!el) return;
   el.style.display = 'flex';
-  if(typeof actSyncBubble === 'function') actSyncBubble();
+  if(typeof studyBubbleSync === 'function') studyBubbleSync();
 }
-function videoBubbleHide(){
-  var el = document.getElementById('videoBubble'); if(el) el.style.display = 'none';
-  if(typeof actSyncBubble === 'function') actSyncBubble();
-}
+function videoBubbleHide(){ var el = document.getElementById('videoBubble'); if(el) el.style.display = 'none'; }
 /* 全屏切换：B站播放器内部的全屏按钮在跨域 iframe 内常被浏览器拦截（手机/微信内尤甚），
    故由外层弹窗实现放大，保证全屏一定可用。 */
 function toggleVideoFs(){
@@ -4119,10 +3953,7 @@ function studyBubbleShow(){
   b.style.display = off ? 'none' : 'flex';
   actSyncBubble(); /* 活动球可见时上移，避免两个球叠一起 */
 }
-function studyBubbleHide(){
-  var b=document.getElementById('studyBubble'); if(b) b.style.display='none';
-  actSyncBubble();
-}
+function studyBubbleHide(){ var b=document.getElementById('studyBubble'); if(b) b.style.display='none'; }
 function showStudyNotice(){
   try{ if(localStorage.getItem('cls_study_notice_dismissed')==='1') return; }catch(e){}
   studyBubbleHide();
@@ -4155,17 +3986,22 @@ function actActive(){
 function actPopKey(){ var a=actGet(); return 'cls_act_pop_'+((a && a.id)||'default'); }
 function actTodayKey(){ return actPopKey()+'_'+new Date().toDateString(); }
 function actAutoPopped(){ try{ return localStorage.getItem(actTodayKey())==='1'; }catch(e){ return false; } }
-/* 所有右下角悬浮球统一在这里排布：依次从下往上叠，避免互相遮挡。
-   ⚠️ 新增悬浮球时**必须**加进这个函数，否则会跟其它球叠在同一个坐标上。 */
+/* 三个悬浮球都贴右下角：依次从下往上叠，避免叠在一起 */
 function actSyncBubble(){
-  var ids = ['hwPopBubble','videoBubble','audioBubble','studyBubble','actBubble'];
-  var base = 16, GAP = 58;
-  for(var i = 0; i < ids.length; i++){
-    var el = document.getElementById(ids[i]);
-    if(!el) continue;
-    el.style.bottom = base + 'px';
-    if(el.style.display === 'flex') base += GAP;
-  }
+  var ab=document.getElementById('actBubble'), sb=document.getElementById('studyBubble'), vb=document.getElementById('videoBubble'), hb=document.getElementById('hwPopBubble');
+  var aVis = !!(ab && ab.style.display==='flex');
+  var sVis = !!(sb && sb.style.display==='flex');
+  var vVis = !!(vb && vb.style.display==='flex');
+  var hVis = !!(hb && hb.style.display==='flex');
+  /* 从下往上叠：作业通知球 → 视频球 → 学习资料球 → 活动球，互不遮挡 */
+  var base = 16;
+  if(hb) hb.style.bottom = base + 'px';
+  if(hVis) base += 58;
+  if(vb) vb.style.bottom = base + 'px';
+  if(vVis) base += 58;
+  if(sb) sb.style.bottom = base + 'px';
+  if(sVis) base += 58;
+  if(ab) ab.style.bottom = base + 'px';
 }
 function actBubbleShow(){
   var b=document.getElementById('actBubble'); if(!b) return;
