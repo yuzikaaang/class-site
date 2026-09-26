@@ -320,7 +320,7 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .allboard-list li{padding:13px 18px;border-bottom:1px solid #e8f2eb}
 .allboard-list li:last-child{border-bottom:none}
 .ann-cat.collapsed > ul{display:none}
-.ann-item.hl{background:#fff8e1;border-radius:8px;margin:6px 0}
+.ann-item.hl{background:#eaf6ee;border-radius:8px;margin:6px 0}
 mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .theme-btn{position:absolute;right:12px;top:12px;z-index:10;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:.25s}
 .theme-btn:hover{background:rgba(255,255,255,.35);transform:scale(1.05)}
@@ -610,7 +610,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#177245;font-weight:
    注意 .audio-ctrl 里播放键占 54px + 14px 间距，.a-tools 实际可用宽 = 弹窗内宽 - 84px，
    所以按钮不能做太大，否则 430px 附近会溢出（实测需 ~307px 才放得下 4 个控件）。 */
 .audio-ctrl{display:flex;align-items:center;gap:12px;margin-top:14px}
-.a-play{flex:none;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#22c55e,#86efac);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,95,109,.35);transition:transform .15s}
+.a-play{flex:none;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#22c55e,#86efac);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(21,128,61,.35);transition:transform .15s}
 .a-play:hover{transform:scale(1.06)}
 .a-play:active{transform:scale(.96)}
 .a-play::after{content:"";width:22px;height:22px;background:currentColor;display:block;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;background-color:#fff;-webkit-mask-image:var(--ico-play);mask-image:var(--ico-play)}
@@ -668,7 +668,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#177245;font-weight:
    用一个横排"挡位胶囊"直观显示当前档位，跟音量条并排、不换行。 */
 .a-rate-btn{padding-left:9px;padding-right:9px}
 .a-rate-chip{background:rgba(255,255,255,.14);color:#86efac;border-radius:6px;padding:1px 6px;font-weight:800;font-size:.72rem;font-variant-numeric:tabular-nums;min-width:34px;text-align:center;display:inline-block;transition:background .15s,transform .15s}
-.a-rate-btn.bump .a-rate-chip{transform:scale(1.18);background:rgba(255,207,122,.28)}
+.a-rate-btn.bump .a-rate-chip{transform:scale(1.18);background:rgba(134,239,172,.3)}
 /* 「后退 / 前进」在小屏收窄，保证一行放得下 */
 @media (max-width:430px){
   .audio-ctrl{gap:10px}
@@ -749,15 +749,15 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#177245;font-weight:
 /* 卡片整体可点（视频类卡片不再需要二级按钮）
    注意：.card::after 已被流光扫过动画占用（见 line 495），角标必须用 ::before，否则会被覆盖。 */
 .card-clickable{cursor:pointer}
-.card-clickable::before{content:"站内观看";position:absolute;top:10px;right:10px;z-index:2;background:linear-gradient(135deg,#22c55e,#86efac);background-image:linear-gradient(135deg,#22c55e,#86efac),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z'/%3E%3C/svg%3E");background-repeat:no-repeat,no-repeat;background-position:0 0,8px center;background-size:auto,10px 10px;color:#fff;font-size:.66rem;font-weight:800;padding:3px 9px 3px 22px;border-radius:999px;box-shadow:0 3px 10px rgba(255,95,109,.35);pointer-events:none}
+.card-clickable::before{content:"站内观看";position:absolute;top:10px;right:10px;z-index:2;background:linear-gradient(135deg,#22c55e,#86efac);background-image:linear-gradient(135deg,#22c55e,#86efac),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z'/%3E%3C/svg%3E");background-repeat:no-repeat,no-repeat;background-position:0 0,8px center;background-size:auto,10px 10px;color:#fff;font-size:.66rem;font-weight:800;padding:3px 9px 3px 22px;border-radius:999px;box-shadow:0 3px 10px rgba(21,128,61,.35);pointer-events:none}
 .card-clickable:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.14)}
 .card-clickable:active{transform:scale(.99)}
 /* 关闭后右下角视频悬浮球 */
-#videoBubble{display:none;position:fixed;right:14px;bottom:16px;z-index:1044;width:48px;height:48px;border-radius:50%;border:none;background:linear-gradient(135deg,#22c55e,#86efac);color:#fff;font-size:1.25rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,95,109,.4)}
+#videoBubble{display:none;position:fixed;right:14px;bottom:16px;z-index:1044;width:48px;height:48px;border-radius:50%;border:none;background:linear-gradient(135deg,#22c55e,#86efac);color:#fff;font-size:1.25rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(21,128,61,.4)}
 #videoBubble span.dot{position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff}
 /* ===== 板块庆祝横幅（替代卡片；点一下即弹视频） ===== */
-.celebrate-banner{display:flex;align-items:center;gap:12px;margin:0 0 18px;padding:14px 18px;border-radius:16px;background:linear-gradient(100deg,#22c55e,#86efac);color:#fff;cursor:pointer;box-shadow:0 8px 22px rgba(255,95,109,.28);transition:transform .25s,box-shadow .25s;border:none;width:100%;text-align:left;font-family:inherit}
-.celebrate-banner:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(255,95,109,.36)}
+.celebrate-banner{display:flex;align-items:center;gap:12px;margin:0 0 18px;padding:14px 18px;border-radius:16px;background:linear-gradient(100deg,#22c55e,#86efac);color:#fff;cursor:pointer;box-shadow:0 8px 22px rgba(21,128,61,.28);transition:transform .25s,box-shadow .25s;border:none;width:100%;text-align:left;font-family:inherit}
+.celebrate-banner:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(21,128,61,.30)}
 .celebrate-banner:active{transform:scale(.995)}
 .celebrate-banner .cb-icon{font-size:1.6rem;line-height:1;flex-shrink:0}
 .celebrate-banner .cb-text{flex:1;min-width:0}
@@ -950,22 +950,22 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .dark #djHistoryMask #djHistoryList > p{color:#b8b1aa!important}
 /* ===== 开屏通知弹窗（大假作业发布等；带「不再显示」勾选 + 悬浮球） ===== */
 .hwPop-box{max-width:370px}
-.hwPop-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#e8543f,#ffa23a);color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
+.hwPop-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,var(--btn-a),var(--btn-b));color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
 .hwPop-head button{background:rgba(255,255,255,.22);border:none;color:#fff;padding:5px 12px;border-radius:999px;font-size:.78rem;cursor:pointer;font-family:inherit}
 .hwPop-body{padding:18px 20px 16px}
 .hwPop-icon{text-align:center;font-size:2.4rem;line-height:1;margin-bottom:10px}
 .hwPop-title{text-align:center;font-size:1rem;font-weight:800;color:#292524;margin:0 0 10px}
 .hwPop-text{font-size:.86rem;line-height:1.85;color:#57534e;margin:0 0 10px;white-space:pre-line}
 .hwPop-meta{background:#f6faf7;border-radius:10px;padding:8px 12px;font-size:.78rem;color:#6e635a;line-height:1.7;margin:0 0 12px}
-.hwPop-go{width:100%;background:linear-gradient(90deg,#e8543f,#ffa23a);color:#fff;border:none;border-radius:25px;padding:11px;font-size:.95rem;font-weight:700;cursor:pointer;font-family:inherit;transition:.22s;box-shadow:0 6px 16px rgba(232,84,63,.3)}
-.hwPop-go:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(232,84,63,.4)}
+.hwPop-go{width:100%;background:linear-gradient(90deg,var(--btn-a),var(--btn-b));color:#fff;border:none;border-radius:25px;padding:11px;font-size:.95rem;font-weight:700;cursor:pointer;font-family:inherit;transition:.22s;box-shadow:0 6px 16px rgba(21,128,61,.3)}
+.hwPop-go:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(21,128,61,.4)}
 .hwPop-no{margin-top:10px;font-size:.78rem;color:#6e635a;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
 .hwPop-foot{margin-top:8px;font-size:.74rem;color:#6e635a;text-align:center;line-height:1.6}
 .dark .hwPop-title{color:#f5f5f4}
 .dark .hwPop-text{color:#d5dbd7}
 .dark .hwPop-meta{background:#2e2926;color:#a5ada8}
 .dark .hwPop-no,.dark .hwPop-foot{color:#a5ada8}
-#hwPopBubble{display:none;position:fixed;right:14px;bottom:16px;z-index:1046;width:48px;height:48px;border-radius:50%;border:none;background:linear-gradient(135deg,#e8543f,#ffa23a);color:#fff;font-size:1.25rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(232,84,63,.42)}
+#hwPopBubble{display:none;position:fixed;right:14px;bottom:16px;z-index:1046;width:48px;height:48px;border-radius:50%;border:none;background:linear-gradient(135deg,#166534,#4ade80);color:#fff;font-size:1.25rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(21,128,61,.42)}
 /* ===== 作业展示美化（当前作业 / 历史日历） ===== */
 .hw-item{margin:0 0 14px;border:1px solid #f2eae2;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(69,61,55,.05)}
 .hw-item:last-child{margin-bottom:0}
@@ -4601,7 +4601,7 @@ function showCurrentHomework(){
   }
   if(title) title.textContent = hw.title + '（' + hw.start + ' ~ ' + hw.end + '）';
   var demoHtml = hw.isDemo
-    ? '<div style="background:#fff7e6;border:1px solid #ffd591;color:#16a34a;padding:10px 12px;border-radius:10px;font-size:.82rem;font-weight:700;margin-bottom:12px">⚠️ 示例测试数据，并非真实作业</div>'
+    ? '<div style="background:#eef8f1;border:1px solid #b9e3c8;color:#16a34a;padding:10px 12px;border-radius:10px;font-size:.82rem;font-weight:700;margin-bottom:12px">⚠️ 示例测试数据，并非真实作业</div>'
     : '';
   list.innerHTML = demoHtml + _renderHwItems(hw.items, hw.id);
   mask.classList.add('show');
@@ -4662,7 +4662,7 @@ function _renderHwCalendar(){
       detail.style.display = 'block';
       if(hw){
         detail.innerHTML = '<div style="font-weight:700;color:#177245;margin:0 0 8px">'+esc(hw.title)+'（'+hw.start+' ~ '+hw.end+'）</div>' +
-          (hw.isDemo ? '<div style="background:#fff7e6;border:1px solid #ffd591;color:#16a34a;padding:8px 10px;border-radius:8px;font-size:.78rem;font-weight:700;margin-bottom:8px">⚠️ 示例测试数据，并非真实作业</div>' : '') +
+          (hw.isDemo ? '<div style="background:#eef8f1;border:1px solid #b9e3c8;color:#16a34a;padding:8px 10px;border-radius:8px;font-size:.78rem;font-weight:700;margin-bottom:8px">⚠️ 示例测试数据，并非真实作业</div>' : '') +
           _renderHwItems(hw.items, hw.id);
       }else{
         detail.innerHTML = '<div style="padding:6px 0;color:#6e635a;font-size:.85rem">该日期暂无作业记录。</div>';
