@@ -1,8 +1,8 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v28：听力音频改用站主提供的云链直链（不再自托管）；跳转走 fastSeek 快通道
-//      + 缓冲中视觉反馈（waiting/playing/canplay）；preload 改 auto；升版本号清旧缓存
-const CACHE = 'class-site-v28'
+// v27：修音频播放器四个问题（弹窗沉底 / 悬浮球重叠 / 进度条与±15秒无效 / 倍速菜单被遮）
+//      + 修 CSS 静默故障（图标 data-URI 双重编码致 200+ 条规则被丢弃）；升版本号清旧缓存
+const CACHE = 'class-site-v27'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

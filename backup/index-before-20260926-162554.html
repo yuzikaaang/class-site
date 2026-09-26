@@ -457,12 +457,6 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:
 .a-play:active{transform:scale(.96)}
 .a-play::after{content:"";width:22px;height:22px;background:currentColor;display:block;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;background-color:#fff;-webkit-mask-image:var(--ico-play);mask-image:var(--ico-play)}
 .a-play.is-play::after{-webkit-mask-image:var(--ico-pause);mask-image:var(--ico-pause)}
-/* 缓冲中：播放键脉冲呼吸 + 光标等待。
-   跳转/弱网时是必须的反馈——不然界面完全静止，用户分不清是在加载还是卡死了。 */
-#audioMask.is-buffering .a-play{animation:a-pulse 1s ease-in-out infinite}
-#audioMask.is-buffering .audio-sub{color:#ffcf7a}
-@keyframes a-pulse{0%,100%{transform:scale(1);opacity:.75}50%{transform:scale(1.08);opacity:1}}
-@media (prefers-reduced-motion:reduce){#audioMask.is-buffering .a-play{animation:none;opacity:.8}}
 .a-main{flex:1;min-width:0}
 .a-bar-row{display:flex;align-items:center;gap:10px}
 .a-time{flex:none;color:#cdd6e6;font-size:.76rem;font-variant-numeric:tabular-nums;min-width:42px;text-align:center}
@@ -1938,7 +1932,7 @@ var SITE_DATA = {
       items: [
         { subject: "语文", tasks: ["同步练习第二单元写完以及 p1-p8", "文言梳理没写完的写完", "背诵《将进酒》", "答题卡练字一张"] },
         { subject: "数学", tasks: ["同步练习写到 p43", { text: "课上要求做的两道练习题", img: "./homework/zhongqiu-yuwen.jpg" }, "滚动练习（一）", "单元卷"] },
-        { subject: "英语", tasks: [{ text: "试卷一张（要写大作文）", audio: "https://videotourl.com/audio/1790407224072-9b1a37fc-417d-4c39-ad08-091787a1be6f.mp3", audioLabel: "播放听力音频" }, "单词练习一整本写完", "考试完形填空的错题整理"] },
+        { subject: "英语", tasks: [{ text: "试卷一张（要写大作文）", audio: "./homework/zhongqiu-english-listening.mp3", audioLabel: "播放听力音频" }, "单词练习一整本写完", "考试完形填空的错题整理"] },
         { subject: "物理", tasks: ["试卷 2 张", "预习课本第 11 章第 3 节「实验：测量导体的电阻率」（可借助导学案预习，课后习题要做）"] },
         { subject: "化学", tasks: ["试卷 1 张"] },
         { subject: "生物", tasks: ["同步练习写至 p66（先写选修一，再写必修二剩下的）"] }
@@ -2267,8 +2261,7 @@ function _audioEnsure(){
   if(!el){
     el = document.createElement('audio');
     el.id = 'audioEl';
-    el.preload = 'auto';              /* 允许浏览器多缓冲一些，跳转后更快出声 */
-    el.setAttribute('playsinline',''); /* iOS 不强制进系统全屏播放器 */
+    el.preload = 'metadata';          /* 只预载元数据，点了才拉流，省流量 */
     el.setAttribute('playsinline',''); /* iOS 不强制进系统全屏播放器 */
     el.style.display = 'none';
     document.body.appendChild(el);
@@ -2285,18 +2278,6 @@ function _audioEnsure(){
     el.addEventListener('play',  function(){ _audioVisual(true);  _audioToggleBtn(true);  });
     el.addEventListener('pause', function(){ _audioVisual(false); _audioToggleBtn(false); });
     el.addEventListener('ended', function(){ _audioVisual(false); _audioToggleBtn(false); _audioSetSub('播放完毕，可点「播放」重听'); });
-    el.addEventListener('waiting', function(){
-      /* 跳转/网络慢时会进这个状态。必须给反馈，否则界面一片安静，
-         用户分不清「在加载」还是「坏了」——这是体感「等好久」的主要来源。 */
-      _audioSetSub('正在缓冲…');
-      var m = document.getElementById('audioMask'); if(m) m.classList.add('is-buffering');
-    });
-    el.addEventListener('playing', function(){
-      var m = document.getElementById('audioMask'); if(m) m.classList.remove('is-buffering');
-    });
-    el.addEventListener('canplay', function(){
-      var m = document.getElementById('audioMask'); if(m) m.classList.remove('is-buffering');
-    });
     el.addEventListener('error',  function(){
       var fb = document.getElementById('audioFallback');
       if(fb){ fb.classList.add('show'); fb.innerHTML = '音频加载失败。可能是网络问题，或该链接不是可直接播放的音频直链。可 <a href="'+esc(_audioUrl)+'" target="_blank" rel="noopener">在新标签页打开试试</a>。'; }
@@ -2416,10 +2397,6 @@ function audioBubbleHide(){
   if(typeof actSyncBubble === 'function') actSyncBubble();
 }
 
-/* ⚡ fastSeek 开关：默认 true，由调用方在需要「落点必须精确」时临时置 false。
-   规则：拖进度条松手 → 精确 seek（用户看着刻度，差一点都不行）；
-        ±15 秒快进/后退 → fastSeek（快更重要，差不到一秒听不出来）。 */
-var _audioFastOk = true;
 /* 真正的跳转动作：所有跳转（进度条、±15 秒、键盘）都走这里，保证行为一致。
    返回 true 表示已生效。 */
 function audioSeekTo(t, silent){
@@ -2430,17 +2407,7 @@ function audioSeekTo(t, silent){
     if(!silent) audioNoSeekTip();
     return false;
   }
-  /* ⚡ 拖动/±15 秒这类「用户还在操作」的跳转优先用 fastSeek：
-     它跳到目标附近的最近关键帧而不是精确字节位置，省掉一次完整回源，
-     体感明显更快。代价是落点可能差不到一秒——对听力音频无感，但拖进度条时
-     必须精确，故仅在 _aFastSeekOK(t) 允许时使用（见下）。
-     前提：跳转不改变播放/暂停状态；暂停时用 fastSeek 会看不出效果，仍走精确 seek。 */
-  var useFast = !el.paused && typeof el.fastSeek === 'function' && _audioFastOk;
-  try{
-    if(useFast) el.fastSeek(t); else el.currentTime = t;
-  }catch(e){
-    try{ el.currentTime = t; }catch(e2){ return false; }
-  }
+  try{ el.currentTime = t; }catch(e){ return false; }
   /* 立即刷新 UI，不等 seeked（慢一点时手感更好），seeked 到了会再刷一次 */
   var pct = el.duration ? (t/el.duration*100) : 0;
   var fill = document.getElementById('audioFill'), knob = document.getElementById('audioKnob');
@@ -2554,10 +2521,7 @@ function audioBarInit(){
     /* silent=false：失败要出声。拖到不能拖的源上必须当场告知，
        否则用户看到条子动了、声音没动，只会觉得「坏了」。
        成功时 audioSeekTo 会顺带收起旧提示。 */
-    /* 拖进度条必须精确落点（用户对着刻度看），临时关掉 fastSeek */
-    _audioFastOk = false;
     var ok = audioSeekTo(t, false);
-    _audioFastOk = true;
     audioBarSetDragging(false);
     if(ok){
       audioSyncProgressForce();
