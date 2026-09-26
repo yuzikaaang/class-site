@@ -1,8 +1,8 @@
 // Service Worker for 25级05班班级服务站 (static PWA)
 // 策略：网络优先（保证内容随 Gitee 实时更新），离线时回退缓存
-// v29：暂时停用全站门禁密码（进站问答/学习资料/隐藏空间，代码保留可一键恢复）
-//      + 公告精简 75%（6306→1597 字）+ 配色改柔和低饱和（对比度仍全达标）；升版本清缓存
-const CACHE = 'class-site-v29'
+// v28：听力音频改用站主提供的云链直链（不再自托管）；跳转走 fastSeek 快通道
+//      + 缓冲中视觉反馈（waiting/playing/canplay）；preload 改 auto；升版本号清旧缓存
+const CACHE = 'class-site-v28'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

@@ -14,20 +14,16 @@
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
 :root{--fg:#2c3e50;--fg-2:#4a5568;--fg-3:#5f6b80;--fg-muted:#64748b}
 .dark{--fg:#e6edf7;--fg-2:#b6c2d9;--fg-3:#9aa7b8;--fg-muted:#9aa7b8}
-/* 柔和低饱和配色（站主 2026-09-27 要求「配色更舒适」）：
-   背景由原来的蓝紫渐变改为接近奶白的极淡灰蓝，渐变跨度收窄；
-   两处光斑的饱和度与不透明度都调低，避免大面积高饱和色块晃眼。
-   所有文字对比度仍满足 WCAG AA（正文 ≥4.5:1，详见 internal/notes.md）。 */
-body{background:linear-gradient(135deg,#f7f8fa 0%,#f4f6f9 50%,#eef1f5 100%);min-height:100vh;color:var(--fg);margin:0;position:relative;overflow-x:hidden}
-body::before,body::after{content:'';position:fixed;border-radius:50%;filter:blur(100px);pointer-events:none;z-index:0}
-body::before{width:340px;height:340px;background:rgba(176,190,214,.28);top:-80px;left:-80px}
-body::after{width:380px;height:380px;background:rgba(224,203,180,.24);bottom:-120px;right:-80px}
+body{background:linear-gradient(135deg,#eef2fb 0%,#e8eef8 50%,#dbe5f4 100%);min-height:100vh;color:var(--fg);margin:0;position:relative;overflow-x:hidden}
+body::before,body::after{content:'';position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0}
+body::before{width:340px;height:340px;background:rgba(185,200,255,.45);top:-80px;left:-80px}
+body::after{width:380px;height:380px;background:rgba(255,217,176,.4);bottom:-120px;right:-80px}
 .layout{display:flex;gap:20px;max-width:1200px;margin:0 auto;padding:20px 16px;position:relative;z-index:1}
 .sidebar{flex:0 0 220px;position:sticky;top:16px;height:calc(100vh - 32px);background:#fff;border-radius:20px;padding:16px;box-shadow:0 8px 25px rgba(0,0,0,.06);display:flex;flex-direction:column;overflow-y:auto}
-.side-tip{background:#f2f5f9;color:#4d6fa5;font-size:.75rem;line-height:1.7;padding:10px 12px;border-radius:12px;margin-bottom:12px}
-.side-btn{display:block;width:100%;text-align:left;background:#f2f5f9;color:#4d6fa5;border:none;border-radius:12px;padding:11px 14px;font-size:.9rem;font-weight:600;cursor:pointer;margin-bottom:8px;transition:.2s}
-.side-btn:hover{background:#e6eaf1}
-.side-btn.active{background:#46689c;color:#fff}
+.side-tip{background:#eef1ff;color:#3b5bfd;font-size:.75rem;line-height:1.7;padding:10px 12px;border-radius:12px;margin-bottom:12px}
+.side-btn{display:block;width:100%;text-align:left;background:#eef1ff;color:#3b5bfd;border:none;border-radius:12px;padding:11px 14px;font-size:.9rem;font-weight:600;cursor:pointer;margin-bottom:8px;transition:.2s}
+.side-btn:hover{background:#dce3ff}
+.side-btn.active{background:#3f5fe6;color:#fff}
 .sidebar-mask{display:none}
 
 /* 悬浮按钮：移动端随时唤起侧边栏（桌面侧边栏常驻，故仅移动端显示） */
@@ -35,20 +31,20 @@ body::after{width:380px;height:380px;background:rgba(224,203,180,.24);bottom:-12
 
 /* 安装为应用教程 */
 .install-guide{display:block}
-.install-hero{display:flex;gap:14px;align-items:center;background:linear-gradient(135deg,#f2f5f9,#f1f4f8);border-radius:18px;padding:18px 20px;margin-bottom:18px}
+.install-hero{display:flex;gap:14px;align-items:center;background:linear-gradient(135deg,#eef1ff,#e7ecff);border-radius:18px;padding:18px 20px;margin-bottom:18px}
 .install-hero-ico{font-size:2rem;flex:0 0 auto}
-.install-hero-title{font-size:1.1rem;font-weight:800;color:#4d6fa5}
+.install-hero-title{font-size:1.1rem;font-weight:800;color:#3b5bfd}
 .install-hero-sub{font-size:.82rem;line-height:1.7;color:#5b6781;margin-top:4px}
-.install-sec{background:#fff;border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:0 4px 15px rgba(0,0,0,.05);border-left:4px solid #46689c}
+.install-sec{background:#fff;border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:0 4px 15px rgba(0,0,0,.05);border-left:4px solid #3f5fe6}
 .install-sec h3{font-size:1rem;font-weight:800;color:#2c3550;margin-bottom:10px}
 .install-sec ul{margin:0;padding-left:18px}
 .install-sec li{font-size:.86rem;line-height:1.8;color:#3a4256;margin-bottom:6px}
-.install-sec li b{color:#4d6fa5}
+.install-sec li b{color:#3b5bfd}
 .install-sec .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:1px}
-.install-sec .dot.o{background:#ff7a00}.install-sec .dot.g{background:#1db954}.install-sec .dot.p{background:#7b3ff2}.install-sec .dot.b{background:#5b7ba6}
+.install-sec .dot.o{background:#ff7a00}.install-sec .dot.g{background:#1db954}.install-sec .dot.p{background:#7b3ff2}.install-sec .dot.b{background:#2b6cff}
 .install-tip{background:#fff4e5;border:1px solid #ffd8a8;color:#a85b00;border-radius:14px;padding:14px 16px;font-size:.85rem;line-height:1.8}
 .install-tip b{color:#c2410c}
-.dark .install-sec{background:#1b2432}.dark .install-sec h3{color:#f1f4f8}
+.dark .install-sec{background:#1b2432}.dark .install-sec h3{color:#e7ecff}
 .dark .install-hero{background:linear-gradient(135deg,#20294a,#1a2240)}
 .content{flex:1;min-width:0}
 .home-view{display:block}
@@ -59,108 +55,108 @@ body::after{width:380px;height:380px;background:rgba(224,203,180,.24);bottom:-12
   .sidebar-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1050}
   .sidebar-mask.show{display:block}
   .content{padding:0}
-  .fab{position:fixed;left:14px;top:14px;z-index:1040;width:46px;height:46px;border-radius:50%;border:none;background:rgba(74,108,247,.9);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(77,111,165,.22);backdrop-filter:blur(4px);transition:transform .2s,background .2s;animation:fabIn .3s ease}
-  .fab:hover{background:rgba(77,111,165,1);transform:scale(1.06)}
+  .fab{position:fixed;left:14px;top:14px;z-index:1040;width:46px;height:46px;border-radius:50%;border:none;background:rgba(74,108,247,.9);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(59,91,253,.35);backdrop-filter:blur(4px);transition:transform .2s,background .2s;animation:fabIn .3s ease}
+  .fab:hover{background:rgba(59,91,253,1);transform:scale(1.06)}
   .fab:active{transform:scale(.95)}
   @keyframes fabIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 }
 @media(min-width:901px){
   .theme-btn{right:auto;left:16px;top:16px}
 }
-header{background:linear-gradient(135deg,#46689c,#4d6fa5);border-radius:24px;padding:40px 30px;color:#fff;box-shadow:0 10px 30px rgba(77,111,165,.18);margin-bottom:20px;text-align:center;position:relative;overflow:hidden}
+header{background:linear-gradient(135deg,#3f5fe6,#3b5bfd);border-radius:24px;padding:40px 30px;color:#fff;box-shadow:0 10px 30px rgba(59,91,253,.25);margin-bottom:20px;text-align:center;position:relative;overflow:hidden}
 header h1{font-size:clamp(1.4rem,4.5vw,2.5rem);font-weight:800;letter-spacing:1px;text-shadow:2px 2px 4px rgba(0,0,0,.15)}
 header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px}
 .logo{position:absolute;top:20px;right:20px;width:72px;height:72px;border-radius:50%;overflow:hidden;border:3px solid rgba(255,255,255,.6);box-shadow:0 4px 15px rgba(0,0,0,.15);background:#fff}
 .logo img{width:100%;height:100%;object-fit:cover}
 .tab-bar{display:flex;gap:12px;background:#fff;border-radius:16px;padding:12px 16px;box-shadow:0 4px 15px rgba(0,0,0,.05);margin-bottom:28px;flex-wrap:wrap}
-.tab-btn{padding:10px 22px;border:none;border-radius:12px;background:#f2f5f9;color:#4d6fa5;font-size:1rem;font-weight:600;cursor:pointer;transition:.3s}
-.tab-btn.active{background:#46689c;color:#fff;box-shadow:0 4px 10px rgba(77,111,165,.3)}
-.tab-btn:hover:not(.active){background:#e6eaf1}
+.tab-btn{padding:10px 22px;border:none;border-radius:12px;background:#eef1ff;color:#3b5bfd;font-size:1rem;font-weight:600;cursor:pointer;transition:.3s}
+.tab-btn.active{background:#3f5fe6;color:#fff;box-shadow:0 4px 10px rgba(59,91,253,.3)}
+.tab-btn:hover:not(.active){background:#dce3ff}
 .tab-page{display:none}
 .tab-page.active{display:block}
 .grid{display:none;grid-template-columns:1fr;gap:25px}
-.card{background:#fff;border-radius:20px;padding:28px 32px;box-shadow:0 8px 25px rgba(0,0,0,.06);transition:transform .3s,box-shadow .3s;border-top:4px solid #46689c;display:flex;align-items:center;gap:24px;text-align:left}
-.card:hover{transform:translateY(-5px);box-shadow:0 15px 35px rgba(77,111,165,.12)}
+.card{background:#fff;border-radius:20px;padding:28px 32px;box-shadow:0 8px 25px rgba(0,0,0,.06);transition:transform .3s,box-shadow .3s;border-top:4px solid #3f5fe6;display:flex;align-items:center;gap:24px;text-align:left}
+.card:hover{transform:translateY(-5px);box-shadow:0 15px 35px rgba(59,91,253,.12)}
 .card-icon{flex:0 0 25%;display:flex;align-items:center;justify-content:center}
 .card-icon img{width:80px;height:80px;object-fit:contain}
-.card-icon .fallback{width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#46689c,#4d6fa5);color:#fff;font-size:1.8rem;font-weight:800;display:flex;align-items:center;justify-content:center}
+.card-icon .fallback{width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#3f5fe6,#3b5bfd);color:#fff;font-size:1.8rem;font-weight:800;display:flex;align-items:center;justify-content:center}
 .card-content{flex:0 0 50%;padding:0 10px}
-.card-content h3{color:#4d6fa5;font-size:1.5rem;margin-bottom:12px}
+.card-content h3{color:#3b5bfd;font-size:1.5rem;margin-bottom:12px}
 .card-content p{color:#4a5568;line-height:1.75;font-size:1.05rem;white-space:pre-line}
 .card-actions{flex:0 0 25%;display:flex;flex-direction:column;gap:10px;align-items:center}
-.btn{display:inline-block;background:#46689c;color:#fff;padding:10px 24px;border-radius:25px;font-size:.95rem;font-weight:600;text-decoration:none;transition:.25s;text-align:center;min-width:140px;border:none;cursor:pointer}
-.btn:hover{background:#4d6fa5;transform:scale(1.05)}
-.btn-secondary{background:#f2f5f9;color:#4d6fa5}
-.btn-secondary:hover{background:#e6eaf1}
+.btn{display:inline-block;background:#3f5fe6;color:#fff;padding:10px 24px;border-radius:25px;font-size:.95rem;font-weight:600;text-decoration:none;transition:.25s;text-align:center;min-width:140px;border:none;cursor:pointer}
+.btn:hover{background:#3b5bfd;transform:scale(1.05)}
+.btn-secondary{background:#eef1ff;color:#3b5bfd}
+.btn-secondary:hover{background:#dce3ff}
 .btn-green{background:#0a7d42}
 .btn-green:hover{background:#09703c}
 .wechat-hint{font-size:.75rem;color:#c2410c;background:#fff7ed;border-radius:999px;padding:4px 12px}
 .gate-box{background:#f3f6ff;border-radius:16px;padding:14px;margin-top:12px;text-align:left}
-.gate-q{color:#4d6fa5;font-weight:700;font-size:.95rem;margin:0 0 10px !important}
+.gate-q{color:#3b5bfd;font-weight:700;font-size:.95rem;margin:0 0 10px !important}
 .gate-row{display:flex;gap:8px;align-items:center}
 .gate-input{height:44px;width:100%;border:1px solid #c3d0df;border-radius:12px;background:#fff;padding:0 14px;font-size:.95rem;color:#2c3e50;outline:none;box-sizing:border-box}
-.gate-input:focus{border-color:#46689c}
+.gate-input:focus{border-color:#3f5fe6}
 .gate-input-wrap{position:relative;flex:1;min-width:0}
 .gate-input-wrap .gate-input{padding-right:40px}
 .eye-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;padding:4px;color:var(--fg-3);border-radius:8px;line-height:1}
-.eye-btn:hover{background:#f2f5f9;color:#4d6fa5}
+.eye-btn:hover{background:#eef1ff;color:#3b5bfd}
 .gate-btn{min-width:96px;padding:10px 16px}
 .gate-hint{color:#c2410c;font-size:.85rem;font-weight:600;margin:10px 0 0 !important}
-.gate-tip{font-size:.78rem;color:#4d6fa5;background:#f2f5f9;border-radius:999px;padding:4px 12px}
+.gate-tip{font-size:.78rem;color:#3b5bfd;background:#eef1ff;border-radius:999px;padding:4px 12px}
 .btn-gray{background:#c3ccd9;color:#5b6781;cursor:pointer}
 .btn-gray:hover{background:#b4bdcc}
 .btn-disabled{background:#c3d0df;color:#475569;cursor:not-allowed}
-.copy-btn{display:block;width:100%;margin:6px 0;padding:11px 14px;border-radius:12px;background:#f2f5f9;color:#4d6fa5;border:none;cursor:pointer;font-size:.9rem;font-weight:600;text-align:left;box-sizing:border-box}
-.copy-btn:hover{background:#e6eaf1}
+.copy-btn{display:block;width:100%;margin:6px 0;padding:11px 14px;border-radius:12px;background:#eef1ff;color:#3b5bfd;border:none;cursor:pointer;font-size:.9rem;font-weight:600;text-align:left;box-sizing:border-box}
+.copy-btn:hover{background:#dce3ff}
 .contact-badges{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
 .licon{display:inline-block;flex:none;vertical-align:-2px}
 .lic-fb{display:inline-block;background:currentColor;opacity:.35;border-radius:3px}
 .hw-badge .licon,.badge .licon{vertical-align:-1px}
-.hw-audio{display:inline-flex;align-items:center;gap:7px;margin:8px 0 4px 26px;background:linear-gradient(135deg,#f2f5f9,#e8f6ff);border:1px solid #d3e0ff;color:#4d6fa5;border-radius:10px;padding:7px 12px;font-size:.82rem;font-weight:800;cursor:pointer;transition:transform .14s,box-shadow .14s}
-.hw-audio:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(77,111,165,.18)}
+.hw-audio{display:inline-flex;align-items:center;gap:7px;margin:8px 0 4px 26px;background:linear-gradient(135deg,#eef1ff,#e8f6ff);border:1px solid #d3e0ff;color:#3b5bfd;border-radius:10px;padding:7px 12px;font-size:.82rem;font-weight:800;cursor:pointer;transition:transform .14s,box-shadow .14s}
+.hw-audio:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(59,91,253,.18)}
 .hw-audio:active{transform:translateY(0)}
-.hw-audio svg.licon{color:#4d6fa5}
-.hw-audio-sub{margin-left:2px;background:#4d6fa5;color:#fff;border-radius:6px;padding:1px 6px;font-size:.66rem;font-weight:800;letter-spacing:.3px}
-.dark .hw-audio{background:linear-gradient(135deg,#1b2547,#182a3d);border-color:#2c3d6b;color:#adbcd4}
-.dark .hw-audio svg.licon{color:#adbcd4}
-.dark .hw-audio-sub{background:#54749f}
+.hw-audio svg.licon{color:#3b5bfd}
+.hw-audio-sub{margin-left:2px;background:#3b5bfd;color:#fff;border-radius:6px;padding:1px 6px;font-size:.66rem;font-weight:800;letter-spacing:.3px}
+.dark .hw-audio{background:linear-gradient(135deg,#1b2547,#182a3d);border-color:#2c3d6b;color:#9db6ff}
+.dark .hw-audio svg.licon{color:#9db6ff}
+.dark .hw-audio-sub{background:#4a6bff}
 .badge{font-size:.75rem;font-weight:700;padding:4px 10px;border-radius:8px}
-.badge-blue{background:#f2f5f9;color:#4d6fa5}
+.badge-blue{background:#eef1ff;color:#3b5bfd}
 .badge-orange{background:#ffedd5;color:#c2410c}
 .badge-green{background:#e6f9f0;color:#07a154}
 /* 政治面貌徽章：中共党员 / 共青团员 / 普通学生 —— 亮暗双模式均达 WCAG AA */
 .badge-red{background:#fdeaea;color:#c0392b}
-.badge-teal{background:#e3f6f5;color:#3f6f68}
+.badge-teal{background:#e3f6f5;color:#0f766e}
 .badge-gray{background:#eef1f6;color:#4b5563}
 .daily{background:#fff;border-radius:20px;box-shadow:0 8px 25px rgba(0,0,0,.06);padding:16px 20px;margin-bottom:26px;display:flex;align-items:center;gap:14px;text-align:left}
 .daily-card{display:flex; align-items:center; gap:14px; flex:1; min-width:0; width:100%}
-.daily-icon{flex:0 0 44px;width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#46689c,#4d6fa5);color:#fff;font-size:.95rem;font-weight:800;display:flex;align-items:center;justify-content:center}
+.daily-icon{flex:0 0 44px;width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#3f5fe6,#3b5bfd);color:#fff;font-size:.95rem;font-weight:800;display:flex;align-items:center;justify-content:center}
 .daily-info{flex:1;min-width:0}
-.daily-title{color:#4d6fa5;font-size:1.05rem;font-weight:700}
+.daily-title{color:#3b5bfd;font-size:1.05rem;font-weight:700}
 .daily-sub{color:#4a5568;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .daily-btn{min-width:110px;padding:10px 18px}
 @media(max-width:768px){.daily{padding:14px 16px}.daily-sub{white-space:normal}}
 /* 班级签（窄卡片，位于每日日报上方） */
 .signbar{background:#fff;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.05);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;text-align:left;max-width:380px;box-sizing:border-box}
-.signbar-icon{flex:0 0 32px;width:32px;height:32px;border-radius:11px;background:linear-gradient(135deg,#9aa0c2,#7b82a8);color:#fff;font-size:1rem;display:flex;align-items:center;justify-content:center}
+.signbar-icon{flex:0 0 32px;width:32px;height:32px;border-radius:11px;background:linear-gradient(135deg,#8f95ff,#6a72f0);color:#fff;font-size:1rem;display:flex;align-items:center;justify-content:center}
 .signbar-info{flex:1;min-width:0}
-.signbar-title{color:#576090;font-size:.92rem;font-weight:700;line-height:1.3}
+.signbar-title{color:#5f68f5;font-size:.92rem;font-weight:700;line-height:1.3}
 .signbar-sub{color:#5f6b80;font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.signbar-btn{flex:0 0 auto;padding:7px 14px;border:none;border-radius:10px;background:#6b6a9e;color:#fff;font-size:.79rem;font-weight:700;cursor:pointer;white-space:nowrap}
-.signbar-btn:hover{background:#7b82a8}
+.signbar-btn{flex:0 0 auto;padding:7px 14px;border:none;border-radius:10px;background:#574fd6;color:#fff;font-size:.79rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.signbar-btn:hover{background:#6a72f0}
 .dark .signbar{background:#1b2432;box-shadow:0 6px 18px rgba(0,0,0,.4)}
-.dark .signbar-title{color:#b0b6cc}
+.dark .signbar-title{color:#a8afff}
 .dark .signbar-sub{color:#aab4c8}
 @media(max-width:768px){.signbar{max-width:none;padding:9px 12px}.signbar-sub{white-space:normal}}
 .site-gate{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:24px}
 .site-gate.show{display:flex}
 .site-gate-box{background:#fff;border-radius:24px;padding:28px 26px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-.board-more{display:block;width:100%;border-top:1px solid #f1f5f9;background:#f8fafc;color:#4d6fa5;font-size:.85rem;font-weight:600;padding:10px;cursor:pointer;border:none}
+.board-more{display:block;width:100%;border-top:1px solid #f1f5f9;background:#f8fafc;color:#3b5bfd;font-size:.85rem;font-weight:600;padding:10px;cursor:pointer;border:none}
 .board-more:hover{background:#f1f5f9}
 .allboard-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9997;align-items:center;justify-content:center;padding:20px}
 .allboard-mask.show{display:flex}
 .allboard-box{background:#fff;border-radius:20px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:80vh;display:flex;flex-direction:column}
-.allboard-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#46689c,#6d86ad);color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
+.allboard-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#3f5fe6,#5d7fff);color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
 .allboard-head button{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:999px;padding:4px 12px;font-size:.75rem;cursor:pointer}
 .allboard-list{overflow-y:auto;list-style:none;margin:0;padding:0;max-height:60vh}
 .allboard-list li{padding:13px 18px;border-bottom:1px solid #f1f5f9}
@@ -188,28 +184,28 @@ mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .dark [style*="color:#7a869a"],.dark [style*="color: #7a869a"]{color:var(--fg-3)!important}
 .dark [style*="color:#222"],.dark [style*="color: #222"]{color:var(--fg)!important}
 .dark [style*="color:#999"],.dark [style*="color: #999"]{color:var(--fg-3)!important}
-.dark [style*="color:#4d6fa5"],.dark [style*="color: #4d6fa5"]{color:#b3c2dc!important}
+.dark [style*="color:#3b5bfd"],.dark [style*="color: #3b5bfd"]{color:#9db1ff!important}
 .dark [style*="background:#fff"]{background:#131a26!important;color:var(--fg)!important;border-color:#3a4a6b!important}
 .dark [style*="background: #fff"]{background:#131a26!important;color:var(--fg)!important;border-color:#3a4a6b!important}
 .dark .card{background:#1b2432;box-shadow:0 8px 25px rgba(0,0,0,.4)}
-.dark .card-content h3{color:#b3c2dc}
+.dark .card-content h3{color:#9db1ff}
 .dark .card-content p{color:#b6c2d9}
 .dark .card-sub{color:var(--fg-3)}
 .dark .tab-bar{background:#1b2432}
-.dark .tab-btn{background:#2a3550;color:#b3c2dc}
+.dark .tab-btn{background:#2a3550;color:#9db1ff}
 .dark .tab-btn:hover{background:#33405f}
-.dark .tab-btn.active{background:#46689c;color:#fff}
+.dark .tab-btn.active{background:#3f5fe6;color:#fff}
 .dark .board{background:#1b2432}
-.dark .board-date{background:#2a3550;color:#b3c2dc}
+.dark .board-date{background:#2a3550;color:#9db1ff}
 .dark .board-date.hot{background:rgba(124,45,18,.45);color:#fbbf24}
 .dark .board-text{color:#b6c2d9}
 .dark .board-text.important{color:#e2e8f0}
 .dark .ann-item.hl{background:#2f3317}
 .dark mark{background:#8a6d1f;color:#fff}
-.dark .board-more{background:#202a3a;border-color:#2a3550;color:#b3c2dc}
+.dark .board-more{background:#202a3a;border-color:#2a3550;color:#9db1ff}
 .dark .board-more:hover{background:#253047}
 .dark .daily{background:#1b2432}
-.dark .daily-title{color:#b3c2dc}
+.dark .daily-title{color:#9db1ff}
 .dark .daily-sub{color:#b6c2d9}
 .dark .cd-hol{background:#1b2432}
 .dark .cd-hol .cd-head{color:#e2e8f0}
@@ -219,32 +215,32 @@ mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .dark .cd-days b,.dark .cd-days span{color:#6ee7b7}
 .dark .cd-empty{color:#64748b}
 .dark .gate-box{background:#22304a}
-.dark .gate-q{color:#b3c2dc}
+.dark .gate-q{color:#9db1ff}
 .dark .gate-input{background:#131a26;border-color:#3a4a6b;color:#e2e8f0}
-.dark .gate-input:focus{border-color:#46689c}
+.dark .gate-input:focus{border-color:#3f5fe6}
 .dark .gate-hint{color:#fbbf24}
-.dark .copy-btn{background:#2a3550;color:#b3c2dc}
+.dark .copy-btn{background:#2a3550;color:#9db1ff}
 .dark .copy-btn:hover{background:#33405f}
-.dark .badge-blue{background:#2a3550;color:#b3c2dc}
+.dark .badge-blue{background:#2a3550;color:#9db1ff}
 .dark .badge-orange{background:rgba(124,45,18,.45);color:#fbbf24}
-.dark .badge-green{background:rgba(4,120,87,.35);color:#5f9e86}
+.dark .badge-green{background:rgba(4,120,87,.35);color:#34d399}
 .dark .badge-red{background:rgba(192,57,43,.32);color:#fca5a5}
-.dark .badge-teal{background:rgba(13,148,136,.3);color:#8fbdb2}
+.dark .badge-teal{background:rgba(13,148,136,.3);color:#5eead4}
 .dark .badge-gray{background:#2a3550;color:#b6c2d9}
-.dark .btn-secondary{background:#2a3550;color:#b3c2dc}
+.dark .btn-secondary{background:#2a3550;color:#9db1ff}
 .dark .btn-secondary:hover{background:#33405f}
 .dark .btn-disabled{background:#475569;color:#fff}
 .dark .wechat-hint{background:rgba(124,45,18,.3);color:#fbbf24}
-.dark .gate-tip{background:#2a3550;color:#b3c2dc}
+.dark .gate-tip{background:#2a3550;color:#9db1ff}
 .dark .btn-gray{background:#3a4767;color:#9aa7b8}
 .dark .btn-gray:hover{background:#445274}
 .dark .sidebar{background:#1b2432}
-.dark .side-tip{background:#22304a;color:#b3c2dc}
-.dark .side-btn{background:#2a3550;color:#b3c2dc}
+.dark .side-tip{background:#22304a;color:#9db1ff}
+.dark .side-btn{background:#2a3550;color:#9db1ff}
 .dark .side-btn:hover{background:#33405f}
-.dark .side-btn.active{background:#46689c;color:#fff}
+.dark .side-btn.active{background:#3f5fe6;color:#fff}
 .dark footer p{color:#9aa7b8 !important}
-.dark footer p:first-child{color:#b3c2dc !important}
+.dark footer p:first-child{color:#9db1ff !important}
 .dark .site-gate-box{background:#1b2432;color:#e2e8f0}
 .dark .site-gate-box h2{color:#e2e8f0}
 .dark .site-gate-box p{color:#b6c2d9}
@@ -256,19 +252,19 @@ mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .dark .placeholder{color:#9aa7b8}
 .dark .board-count{background:rgba(255,255,255,.15)}
 .dark .board-filters{background:#202a3a;border-color:#2a3550}
-.dark .filter-btn{background:#1b2432;border-color:#2a3550;color:#b3c2dc}
+.dark .filter-btn{background:#1b2432;border-color:#2a3550;color:#9db1ff}
 .dark .filter-btn:hover{background:#253047}
-.dark .filter-btn.active{background:#46689c;border-color:#46689c;color:#fff}
+.dark .filter-btn.active{background:#3f5fe6;border-color:#3f5fe6;color:#fff}
 .dark .board-empty{color:#9aa7b8}
 .placeholder{background:#f8fafc;border:2px dashed #c3d0df;border-radius:20px;padding:40px;text-align:center;color:#64748b;font-size:1.1rem;margin-top:25px}
 .placeholder span{font-size:2rem;display:block;margin-bottom:10px}
-footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:500;font-size:.9rem}
+footer{text-align:center;margin-top:40px;padding:20px;color:#3b5bfd;font-weight:500;font-size:.9rem}
 .footer-sub{margin-top:4px;font-size:.75rem;color:#5f6b80}
 .dark .footer-sub{color:#9aa7b8}
 
 /* 公告栏 */
 .board{background:#fff;border-radius:16px;box-shadow:0 8px 25px rgba(0,0,0,.06);overflow:hidden;margin-bottom:28px}
-.board-head{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#46689c,#6d86ad);padding:12px 18px}
+.board-head{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#3f5fe6,#5d7fff);padding:12px 18px}
 .board-head h2{color:#fff;font-size:1rem}
 .board-count{margin-left:auto;background:rgba(255,255,255,.2);color:#fff;font-size:.72rem;padding:3px 10px;border-radius:999px}
 .btn-qr{margin-left:8px;background:#047857;color:#fff;border:none;border-radius:999px;padding:5px 14px;font-size:.75rem;font-weight:700;cursor:pointer}
@@ -277,7 +273,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 /* 隐藏娱乐天地（彩蛋） */
 .hidden-view-grid{display:flex;flex-direction:column;gap:10px;padding:14px 18px;max-height:62vh;overflow-y:auto}
 .hidden-fun-card{display:flex;align-items:center;gap:12px;background:#f3f6ff;border-radius:12px;padding:12px 14px;cursor:pointer;transition:.2s;border:none;text-align:left}
-.hidden-fun-card:hover{background:#f1f4f8;transform:translateX(3px)}
+.hidden-fun-card:hover{background:#e7ecff;transform:translateX(3px)}
 .hidden-fun-card:active{transform:scale(.98)}
 .hidden-fun-icon{font-size:1.6rem;flex:0 0 auto}
 .hidden-fun-title{font-weight:700;color:#2c3e50;font-size:.92rem}
@@ -286,25 +282,25 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 .dark .hidden-fun-card{background:#1b2432}
 .dark .hidden-fun-login{background:#131a26;border-color:#3a4a6b;color:#9aa7b8}
 .dark .hidden-fun-card:hover{background:#243047}
-.dark .hidden-fun-title{color:#f1f4f8}
+.dark .hidden-fun-title{color:#e7ecff}
 .board-list{list-style:none;max-height:240px;overflow-y:auto}
 .board-list li{padding:13px 18px;border-bottom:1px solid #f1f5f9}
 .board-meta{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .board-list li:last-child{border-bottom:none}
-.board-date{flex:0 0 auto;margin-top:2px;background:#f2f5f9;color:#4d6fa5;font-size:.72rem;font-weight:700;padding:4px 8px;border-radius:8px}
+.board-date{flex:0 0 auto;margin-top:2px;background:#eef1ff;color:#3b5bfd;font-size:.72rem;font-weight:700;padding:4px 8px;border-radius:8px}
 .board-date.hot{background:#ffedd5;color:#c2410c}
 .board-text{color:#4a5568;font-size:.88rem;line-height:1.6;white-space:pre-line}
 .board-text.important{color:#2c3e50;font-weight:600}
 .board-pin{display:inline-block;background:#c2410c;color:#fff;font-size:.68rem;font-weight:800;border-radius:4px;padding:2px 6px;margin-right:6px;vertical-align:1px}
 .board-filters{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 6px;background:#f8fafc;border-bottom:1px solid #f1f5f9}
 .filter-btn{flex:1 1 auto;min-width:52px;border:1px solid #e2e8f0;background:#fff;color:#475569;font-size:.76rem;font-weight:600;padding:6px 6px;border-radius:999px;cursor:pointer;transition:.15s;white-space:nowrap}
-.filter-btn:hover{background:#f2f5f9;border-color:#c3d0df}
-.filter-btn.active{background:#46689c;border-color:#46689c;color:#fff;box-shadow:0 2px 8px rgba(74,108,247,.3)}
+.filter-btn:hover{background:#eef1ff;border-color:#c3d0df}
+.filter-btn.active{background:#3f5fe6;border-color:#3f5fe6;color:#fff;box-shadow:0 2px 8px rgba(74,108,247,.3)}
 .board-empty{padding:24px;text-align:center;color:#64748b;font-size:.85rem}
 
 /* 倒计时（两个面板并排，移动端紧凑） */
 .countdown{display:flex;flex-direction:row;gap:12px;margin-bottom:28px}
-.cd-sem{flex:1;min-width:0;background:linear-gradient(135deg,#46689c,#4d6fa5);border-radius:16px;padding:14px;color:#fff;box-shadow:0 8px 25px rgba(77,111,165,.18);display:flex;flex-direction:column;overflow:hidden}
+.cd-sem{flex:1;min-width:0;background:linear-gradient(135deg,#3f5fe6,#3b5bfd);border-radius:16px;padding:14px;color:#fff;box-shadow:0 8px 25px rgba(59,91,253,.18);display:flex;flex-direction:column;overflow:hidden}
 .cd-head{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.92rem;margin-bottom:10px}
 .cd-label{font-size:.92rem;font-weight:800;color:#ffe08a;margin-bottom:10px}
 .cd-label small{font-weight:400;opacity:.75;margin-left:4px;font-size:.7rem}
@@ -318,7 +314,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 .cd-end .t2{font-size:.78rem;opacity:.85;margin-top:4px}
 .cd-hol{flex:1;min-width:0;background:#fff;border-radius:16px;padding:14px;box-shadow:0 8px 25px rgba(0,0,0,.06);display:flex;flex-direction:column;overflow:hidden}
 .cd-hol .cd-head{color:#2c3e50}
-.cd-hol .cd-head svg{color:#3d8f6a}
+.cd-hol .cd-head svg{color:#07c160}
 .cd-row{display:flex;align-items:center;gap:10px;background:#f8fafc;border-radius:10px;padding:9px 10px;margin-bottom:8px}
 .cd-row:last-child{margin-bottom:0}
 .cd-name{font-size:.85rem;font-weight:700;color:#2c3e50}
@@ -331,7 +327,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 .cd-clickable{cursor:pointer;transition:transform .2s,box-shadow .2s}
 .cd-clickable:active{transform:scale(0.98)}
 .cd-viewall{margin-left:auto;font-size:.7rem;font-weight:600;background:rgba(255,255,255,.25);padding:3px 10px;border-radius:999px}
-.cd-hol .cd-viewall{background:#f2f5f9;color:#4d6fa5}
+.cd-hol .cd-viewall{background:#eef1ff;color:#3b5bfd}
 .imp-mobile{display:flex;flex-direction:column;flex:1;min-height:0}
 .imp-area{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:4px 0}
 .imp-desktop{display:none}
@@ -345,9 +341,9 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
   .imp-mobile{display:none}
   .imp-desktop{display:flex;flex-direction:column}
 }
-.allimp-head{background:linear-gradient(90deg,#46689c,#4d6fa5)}
-.allhol-head{background:linear-gradient(90deg,#3d8f6a,#05a050)}
-.dark .cd-hol .cd-viewall{background:#2a3550;color:#b3c2dc}
+.allimp-head{background:linear-gradient(90deg,#3f5fe6,#3b5bfd)}
+.allhol-head{background:linear-gradient(90deg,#07c160,#05a050)}
+.dark .cd-hol .cd-viewall{background:#2a3550;color:#9db1ff}
 .dark .cd-viewall{background:rgba(255,255,255,.2)}
 /* 移动端：隐藏月份格与节假日日期行，更紧凑 */
 .cd-units .cd-box:first-child{display:none}
@@ -366,11 +362,11 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 .imp-full{color:#fff;font-weight:700}
 .imp-desktop ul li,.imp-fold{background:rgba(0,0,0,.18)}
 .imp-date{color:#5f6b80}
-.imp-remain{color:#4d6fa5;font-variant-numeric:tabular-nums;font-weight:800}
+.imp-remain{color:#3b5bfd;font-variant-numeric:tabular-nums;font-weight:800}
 .imp-name{color:#1f2a44}
 .imp-past{color:#64748b}
 .dark .imp-date{color:#aab4c8}
-.dark .imp-remain{color:#b3c2dc}
+.dark .imp-remain{color:#9db1ff}
 .dark .imp-name{color:#e6edf7}
 .dark .imp-past{color:#aab4c8}
 
@@ -380,13 +376,13 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 /* 首次欢迎弹窗 */
 .welcome-mask{display:none;position:fixed;inset:0;z-index:9998;align-items:center;justify-content:center;background:rgba(0,0,0,.6);padding:24px}
 .welcome-mask.show{display:flex}
-.welcome-box{max-width:360px;width:100%;background:linear-gradient(135deg,#46689c,#4d6fa5);border-radius:24px;padding:28px 24px;text-align:center;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.welcome-box{max-width:360px;width:100%;background:linear-gradient(135deg,#3f5fe6,#3b5bfd);border-radius:24px;padding:28px 24px;text-align:center;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .welcome-title{font-size:1.2rem;font-weight:800;line-height:1.5;margin-bottom:12px}
 .welcome-desc{font-size:.85rem;line-height:1.7;opacity:.95;margin-bottom:14px}
 .welcome-list{background:rgba(255,255,255,.15);border-radius:16px;padding:14px 16px;text-align:left;margin-bottom:14px}
 .welcome-list-title{font-size:.85rem;font-weight:700;margin-bottom:8px}
 .welcome-list-body{font-size:.85rem;line-height:1.7;opacity:.95}
-.welcome-btn{margin-top:4px;background:#fff;color:#4d6fa5;border:none;border-radius:999px;padding:10px 32px;font-size:.85rem;font-weight:800;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.2)}
+.welcome-btn{margin-top:4px;background:#fff;color:#3b5bfd;border:none;border-radius:999px;padding:10px 32px;font-size:.85rem;font-weight:800;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.2)}
 .welcome-btn:active{transform:scale(.96)}
 
 
@@ -394,8 +390,8 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 .guide-overlay{display:none;position:fixed;inset:0;background:#fff;z-index:9999;overflow:auto}
 .guide-overlay.show{display:flex;align-items:center;justify-content:center;padding:20px}
 .guide-arrow{position:fixed;top:14px;right:16px;text-align:center;animation:bounce 1.4s infinite}
-.guide-arrow .tag{display:inline-block;background:#46689c;color:#fff;font-size:.8rem;font-weight:600;padding:6px 14px;border-radius:999px;box-shadow:0 4px 12px rgba(77,111,165,.22);margin-bottom:4px}
-.guide-arrow svg{color:#4d6fa5}
+.guide-arrow .tag{display:inline-block;background:#3f5fe6;color:#fff;font-size:.8rem;font-weight:600;padding:6px 14px;border-radius:999px;box-shadow:0 4px 12px rgba(59,91,253,.35);margin-bottom:4px}
+.guide-arrow svg{color:#3b5bfd}
 @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 .guide-box{max-width:420px;background:#fff;padding:36px 26px;border-radius:20px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.08);margin-top:60px}
 .guide-box h2{color:#222;margin-bottom:14px;font-size:22px}
@@ -404,15 +400,15 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 .steps p{color:#c2410c;line-height:2;font-size:15px;display:flex;align-items:flex-start;gap:10px}
 .steps b{flex:0 0 22px;height:22px;border-radius:50%;background:#c2410c;color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;margin-top:4px}
 .guide-target{margin-top:16px;font-size:.8rem;color:#999;word-break:break-all}
-.btn-copy{display:block;width:100%;margin-top:18px;background:#fff;color:#4d6fa5;border:1.5px solid #46689c;padding:11px;border-radius:999px;font-size:.95rem;font-weight:600;cursor:pointer}
-.btn-copy:active{background:#f2f5f9}
+.btn-copy{display:block;width:100%;margin-top:18px;background:#fff;color:#3b5bfd;border:1.5px solid #3f5fe6;padding:11px;border-radius:999px;font-size:.95rem;font-weight:600;cursor:pointer}
+.btn-copy:active{background:#eef1ff}
 .guide-back{display:block;margin-top:14px;color:#999;font-size:.85rem;text-decoration:none}
 
 /* 浏览器打开后的跳转提示层 */
 .jump-overlay{display:none;position:fixed;inset:0;background:linear-gradient(135deg,#f5f7fa,#d5dce5);z-index:9999;align-items:center;justify-content:center;padding:20px}
 .jump-overlay.show{display:flex}
 .jump-box{max-width:400px;background:#fff;padding:36px 30px;border-radius:20px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.08)}
-.spinner{width:42px;height:42px;border:4px solid #e0e7ff;border-top-color:#46689c;border-radius:50%;margin:0 auto 16px;animation:spin .9s linear infinite}
+.spinner{width:42px;height:42px;border:4px solid #e0e7ff;border-top-color:#3f5fe6;border-radius:50%;margin:0 auto 16px;animation:spin .9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* 公众号二维码弹窗 */
@@ -438,7 +434,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
   display:flex;flex-direction:column;justify-content:center;overflow:visible}
 /* 播放态的可视区：唱片旋转 + 波形跳动（纯装饰，暂停即停） */
 .audio-visual{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:22px 10px 20px;border-radius:14px;background:radial-gradient(circle at 50% 30%,#1c2740,#121a2c);overflow:hidden}
-.audio-disc{width:82px;height:82px;color:#93aecd;opacity:.9;transition:transform .3s}
+.audio-disc{width:82px;height:82px;color:#7db4ff;opacity:.9;transition:transform .3s}
 .audio-disc svg{width:100%;height:100%;display:block}
 .audio-visual.playing .audio-disc{animation:aSpin 6s linear infinite;color:#ffcf7a}
 @keyframes aSpin{to{transform:rotate(360deg)}}
@@ -508,7 +504,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
   .a-vol{flex:0 0 auto}
 }
 .a-vol-track{position:relative;width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.16)}
-.a-vol-fill{position:absolute;left:0;top:0;height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#6d86ad,#93aecd)}
+.a-vol-fill{position:absolute;left:0;top:0;height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#5d7fff,#7db4ff)}
 .a-vol-knob{position:absolute;top:50%;left:100%;width:12px;height:12px;margin-top:-6px;margin-left:-6px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
 /* 倍速：**点一下就换下一档**，不做下拉菜单（下拉在窄屏必定被遮）。
    用一个横排"挡位胶囊"直观显示当前档位，跟音量条并排、不换行。 */
@@ -542,7 +538,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 }
 .audio-fallback{display:none}
 .audio-fallback.show{display:block;padding:10px 16px 14px;color:#9db1d6;font-size:.76rem;line-height:1.7;text-align:center;border-top:1px solid rgba(255,255,255,.08)}
-.audio-fallback a{color:#93aecd}
+.audio-fallback a{color:#7db4ff}
 /* 全屏态：铺满视口，控制区放大居中 */
 .video-mask.fs .audio-box{max-width:none;width:100%;height:100vh;height:100dvh;border-radius:0}
 .video-mask.fs .audio-body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;padding:24px max(18px,6vw)}
@@ -560,7 +556,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 /* 音频悬浮球：与视频球同款，图标用 Lucide 音符。
    位置由 actSyncBubble() 统一调度，这里不要写死 bottom，否则会跟其它球重叠。 */
 .ab-ico{width:20px;height:20px;background-color:#fff;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-image:var(--ico-music);mask-image:var(--ico-music)}
-#audioBubble{position:fixed;right:14px;bottom:16px;z-index:1045;display:none;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#6d86ad,#93aecd);box-shadow:0 6px 18px rgba(93,127,255,.42)}
+#audioBubble{position:fixed;right:14px;bottom:16px;z-index:1045;display:none;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#5d7fff,#7db4ff);box-shadow:0 6px 18px rgba(93,127,255,.42)}
 #audioBubble span.dot{position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff}
 /* ⚠️ .video-body 必须是 block（不能用 flex）：wrap 作为 flex item 时 width:min(100%,…) 里的
    百分比基数会变成「flex 分配宽度」而非父级宽度，实测会把视频算成 136px（几乎看不见）。 */
@@ -577,7 +573,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 }
 .video-wrap iframe,.video-wrap video{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
 .video-fallback{padding:12px 18px;color:#cdd6e6;font-size:.8rem;line-height:1.7;background:#0e1320}
-.video-fallback a{color:#93aecd;text-decoration:none}
+.video-fallback a{color:#7db4ff;text-decoration:none}
 .video-fallback a:hover{text-decoration:underline}
 .video-desc{padding:14px 18px;color:#e8eeff;font-size:.82rem;line-height:1.75;background:#0e1320;white-space:pre-line}
 /* 全屏 / 横屏态下隐藏说明与兜底行，把空间全留给画面 */
@@ -625,12 +621,12 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 .sign-box{background:linear-gradient(160deg,#1b2432,#222c4a);border:1px solid rgba(255,255,255,.12);border-radius:18px;max-width:340px;width:100%;padding:22px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .sign-box h3{margin:0 0 6px;font-size:18px}
 .sign-tag{display:inline-block;font-size:12px;padding:3px 10px;border-radius:999px;margin-bottom:12px}
-.sign-tag.good{background:rgba(70,224,200,.18);color:#7fb8ab}
+.sign-tag.good{background:rgba(70,224,200,.18);color:#46e0c8}
 .sign-tag.bad{background:rgba(255,107,139,.18);color:#ff6b8b}
-.sign-tag.mid{background:rgba(124,131,255,.18);color:#b3c2dc}
+.sign-tag.mid{background:rgba(124,131,255,.18);color:#9db1ff}
 .sign-text{font-size:16px;line-height:1.7;min-height:60px;margin:6px 0 4px;color:#eef2fb}
 .sign-sub{font-size:12px;color:#b3bbdd;margin-bottom:16px}
-.sign-box .btn-qr{background:#6b6a9e;color:#fff;border:none;border-radius:999px;padding:8px 22px;font-weight:700;cursor:pointer}
+.sign-box .btn-qr{background:#574fd6;color:#fff;border:none;border-radius:999px;padding:8px 22px;font-weight:700;cursor:pointer}
 .confetti-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:9991;padding:20px}
 .confetti-mask.show{display:flex}
 .confetti-box{background:rgba(27,36,50,.92);border:1px solid rgba(255,255,255,.14);border-radius:18px;max-width:320px;width:100%;padding:22px;text-align:center;color:#e6edf7}
@@ -649,8 +645,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#4d6fa5;font-weight:
 #confettiCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9992}
 .qr-box{background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .qr-head{display:flex;justify-content:center;align-items:center;margin-bottom:12px}
-.qr-head h3{color:#2f7355;font-size:1rem}
-.dark .qr-head h3{color:#7fb8ab}
+.qr-head h3{color:#07c160;font-size:1rem}
 .qr-close{border:none;background:none;font-size:22px;color:#999;cursor:pointer;line-height:1;padding:4px}
 .qr-close:hover{color:#555}
 .qr-box img{width:100%;max-width:230px;border-radius:16px;border:1px solid #e5e7eb}
@@ -714,7 +709,7 @@ body::after{animation-name:blobB;animation-duration:34s}
 .theme-btn{transition:transform .35s ease}
 .theme-btn:hover{transform:rotate(40deg) scale(1.12)}
 .fab{animation:fabPulse 2.6s ease-in-out infinite}
-@keyframes fabPulse{0%,100%{box-shadow:0 6px 18px rgba(77,111,165,.22),0 0 0 0 rgba(74,108,247,.45)}50%{box-shadow:0 6px 18px rgba(77,111,165,.22),0 0 0 12px rgba(74,108,247,0)}}
+@keyframes fabPulse{0%,100%{box-shadow:0 6px 18px rgba(59,91,253,.35),0 0 0 0 rgba(74,108,247,.45)}50%{box-shadow:0 6px 18px rgba(59,91,253,.35),0 0 0 12px rgba(74,108,247,0)}}
 /* 页头轻浮动 */
 .content header h1{animation:floatSoft 5s ease-in-out infinite}
 @keyframes floatSoft{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
@@ -727,8 +722,8 @@ body::after{animation-name:blobB;animation-duration:34s}
 .dark #djPanelMask .dj-desc{color:#93a3bd!important}
 .dark #djVerifyMask .dj-err{color:#ff8a80!important}
 .dark #djPanelMask #djResult > div{background:#20294a!important}
-.dark #djPanelMask #djResult p{color:#b3c2dc!important}
-.dark #djPanelMask #djResult span{color:#b3c2dc!important}
+.dark #djPanelMask #djResult p{color:#9db1ff!important}
+.dark #djPanelMask #djResult span{color:#9db1ff!important}
 .dark #copyLinkMask #siteLinkList > div{background:#2a3550!important}
 .dark #copyLinkMask #siteLinkList > div:last-child{background:#222c44!important}
 .dark #copyLinkMask #siteLinkList span{color:#b6c2d9!important}
@@ -743,15 +738,15 @@ body::after{animation-name:blobB;animation-duration:34s}
 /* ===== 密码框：用 text-security 遮蔽，保留中文输入法可用（type=password 会被浏览器强制禁用输入法） ===== */
 input.pwd-mask{-webkit-text-security:disc;text-security:disc}
 input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
-.pwd-ime-tip{font-size:.75rem;color:#4d6fa5;margin:6px 0 0;line-height:1.5}
+.pwd-ime-tip{font-size:.75rem;color:#3b5bfd;margin:6px 0 0;line-height:1.5}
 .dark .pwd-ime-tip{color:#b6c2d9}
 /* 歌单管理弹窗 暗色适配 */
 .dark #djSongsMask .dj-label,
 .dark #djSongsMask .dj-desc{color:#93a3bd!important}
 .dark #djSongsMask .dj-song-row{border-bottom-color:#2a3550!important}
 .dark #djSongsMask .dj-song-title{color:#e2e8f0!important}
-.dark #djSongsMask .dj-song-artist{color:#b3c2dc!important}
-.dark #djSongsMask label{color:#b3c2dc!important}
+.dark #djSongsMask .dj-song-artist{color:#9db1ff!important}
+.dark #djSongsMask label{color:#9db1ff!important}
 /* 歌单管理 · 次要信息行：统一走主题变量 --fg-3（亮 #5f6b80 5.38:1 / 暗 #9aa7b8 6.39:1，均达 AA）
    注：亮色下 #9aa7b8 落白底仅 2.44:1，看不清，故不能直接写死该色值 */
 .dj-song-meta,.dj-muted{color:var(--fg-3)}
@@ -772,18 +767,18 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* 点歌券管理 · 备注分段展示（名字/时间/游戏奖励分色，长备注自动换行，不再单行截断） */
 .cp-note .cp-nm{color:#1f2a44;font-weight:700}
 .cp-note .cp-tm{color:#64748b}
-.cp-note .cp-gm{color:#4d6fa5}
+.cp-note .cp-gm{color:#3b5bfd}
 .cp-note .cp-dot{color:#c3cbdb}
 /* 点歌券管理弹窗 暗色适配 */
 .dark #couponAdminMask .dj-label,
 .dark #couponAdminMask .dj-desc{color:#93a3bd!important}
 .dark #couponAdminMask .cp-row{border-bottom-color:#2a3550!important}
 .dark #couponAdminMask .cp-code{color:#e2e8f0!important}
-.dark #couponAdminMask .cp-st{color:#b3c2dc!important}
+.dark #couponAdminMask .cp-st{color:#9db1ff!important}
 .dark #couponAdminMask .cp-note{color:#b9c2d4!important}
 .dark #couponAdminMask .cp-note .cp-nm{color:#eef2fb!important}
 .dark #couponAdminMask .cp-note .cp-tm{color:#b9c2d4!important}
-.dark #couponAdminMask .cp-note .cp-gm{color:#b3c2dc!important}
+.dark #couponAdminMask .cp-note .cp-gm{color:#9db1ff!important}
 .dark #couponAdminMask .cp-note .cp-dot{color:#6b7a95!important}
 .dark #couponAdminMask .cp-time{color:#8b9bb5!important}
 .dark #couponAdminMask input{background:#1b2432;color:#e2e8f0;border-color:#2a3550}
@@ -823,7 +818,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .hw-task+.hw-task{border-top:1px dashed #eef1f8}
 .hw-task:hover{background:#f7f9ff}
 .hw-check{flex:0 0 18px;width:18px;height:18px;margin-top:2px;border:2px solid #c3ccdf;border-radius:5px;box-sizing:border-box;background:#fff;transition:.18s;position:relative}
-.hw-task.done .hw-check{background:#4d6fa5;border-color:#4d6fa5}
+.hw-task.done .hw-check{background:#3b5bfd;border-color:#3b5bfd}
 .hw-task.done .hw-check::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
 .hw-task.done .hw-task-text{color:#9aa7b8;text-decoration:line-through;text-decoration-color:#c3ccdf}
 .hw-progress{margin-left:auto;font-size:.74rem;color:#9aa7b8;font-weight:700;align-self:center;white-space:nowrap}
@@ -850,8 +845,8 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
     <div class="spinner"></div>
     <h2 style="color:#2c3e50;margin-bottom:8px;font-size:19px">正在为您跳转</h2>
     <p style="color:#999;font-size:.85rem;margin-bottom:4px">目标站点</p>
-    <p id="jumpHost" style="color:#4d6fa5;font-weight:700;word-break:break-all"></p>
-    <a id="jumpManual" href="#" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:20px;background:#46689c;color:#fff;padding:11px;border-radius:999px;text-decoration:none;font-size:.95rem;font-weight:600">若未自动跳转，点此前往</a>
+    <p id="jumpHost" style="color:#3b5bfd;font-weight:700;word-break:break-all"></p>
+    <a id="jumpManual" href="#" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:20px;background:#3f5fe6;color:#fff;padding:11px;border-radius:999px;text-decoration:none;font-size:.95rem;font-weight:600">若未自动跳转，点此前往</a>
     <a href="#" onclick="resetHome();return false" style="display:block;margin-top:12px;color:#999;font-size:.82rem;text-decoration:none">返回班级服务站</a>
   </div>
 </div>
@@ -1047,7 +1042,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 <div class="confetti-mask" id="confettiMask">
   <div class="confetti-box">
     <p id="confettiText"></p>
-    <button class="btn-qr" style="background:#6b6a9e;color:#fff;border:none;border-radius:999px;padding:8px 22px;font-weight:700;cursor:pointer" onclick="closeConfetti()">好耶 ✨</button>
+    <button class="btn-qr" style="background:#574fd6;color:#fff;border:none;border-radius:999px;padding:8px 22px;font-weight:700;cursor:pointer" onclick="closeConfetti()">好耶 ✨</button>
   </div>
 </div>
 <canvas id="confettiCanvas"></canvas>
@@ -1073,13 +1068,13 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   <div class="allboard-box" style="max-width:360px">
     <div class="allboard-head"><span>💾 数据管理</span><button onclick="closeData()">关闭</button></div>
     <div style="padding:16px 20px;text-align:left">
-      <p style="font-size:.8rem;color:#4a5568;margin:0 0 12px">导出本机数据会加密，导入需同一密码，请记住。</p>
+      <p style="font-size:.8rem;color:#4a5568;margin:0 0 12px">管理本站保存在本设备上的数据（游戏最高分、记录、班级签等）。换设备或清缓存前可先导出，之后导入即可恢复。<b style="color:#c2410c">导出时会用你自己设置的密码加密</b>——原明文导出会把姓名、班级签、点歌记录等直接暴露，现已加 AES-GCM 加密；导入需输入同一密码，<b>请务必记住</b>。如需彻底清空（游戏记录、主题/音效、密码与暗号通关及锁状态等），请用下方「全部清理」；设备标识、班级签、点歌券记录不会被清除（防借初始化刷签/刷券）。</p>
       <button class="btn" style="width:100%;margin-bottom:8px" onclick="exportData()">📤 导出数据（加密 .json）</button>
-      <button class="btn" style="width:100%;margin-bottom:8px;background:#f2f5f9;color:#4d6fa5" onclick="copyDataText()">📋 复制加密数据文本</button>
+      <button class="btn" style="width:100%;margin-bottom:8px;background:#eef1ff;color:#3b5bfd" onclick="copyDataText()">📋 复制加密数据文本</button>
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <button class="btn" style="flex:1;background:#e6f9f0;color:#07a154" onclick="document.getElementById('dataFile').click()">📥 导入文件</button>
         <input type="file" id="dataFile" accept=".json,application/json" style="display:none" onchange="importDataFile(this)">
-        <button class="btn" style="flex:1;background:#f2f5f9;color:#4d6fa5" onclick="pasteDataMode()">📥 粘贴导入</button>
+        <button class="btn" style="flex:1;background:#eef1ff;color:#3b5bfd" onclick="pasteDataMode()">📥 粘贴导入</button>
       </div>
       <textarea id="dataPaste" placeholder="粘贴导出的数据文本后点击「粘贴导入」" style="display:none;width:100%;height:60px;box-sizing:border-box;padding:8px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem;margin-bottom:8px" onclick="this.select()"></textarea>
       <button class="btn" style="width:100%;background:#ffeded;color:#c2410c" onclick="resetData()">🗑 重置游戏数据</button>
@@ -1155,7 +1150,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   <div class="allboard-box" style="max-width:440px">
     <div class="allboard-head"><span>📚 班级电脑端访问提示</span><button onclick="closeStudyNotice()">关闭</button></div>
     <div style="padding:18px 22px;font-size:.92rem;line-height:1.8;color:#4a5568">
-      <p style="margin:0 0 8px;font-weight:700;color:#4d6fa5">因校园网络访问限制的官方说明：</p>
+      <p style="margin:0 0 8px;font-weight:700;color:#3b5bfd">因校园网络访问限制的官方说明：</p>
       <p style="margin:0 0 8px">目前本班级电脑端的部分云盘软件及外部学习平台因<strong>校园网络限制 + 未备案网站审核</strong>原因无法正常联网，导致：</p>
       <ul style="margin:6px 0 12px 18px;padding:0">
         <li>课堂笔记、课件等学习资源无法实时同步至云端；</li>
@@ -1174,7 +1169,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 </div>
 
 <!-- 学习资料提示悬浮球（关闭弹窗后出现，带红点；已勾选不再显示则不出现） -->
-<button id="studyBubble" onclick="showStudyNotice()" title="查看访问提示" aria-label="查看访问提示" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(74,108,247,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(77,111,165,.22)">💬<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
+<button id="studyBubble" onclick="showStudyNotice()" title="查看访问提示" aria-label="查看访问提示" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(74,108,247,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(59,91,253,.35)">💬<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
 
 <!-- 班级活动通知悬浮球（进站弹窗关闭后出现；活动结束自动消失，可点开重新查看） -->
 <button id="actBubble" onclick="showAct()" title="查看班级活动" aria-label="查看班级活动" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(255,159,67,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,159,67,.4)">🎉<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
@@ -1245,7 +1240,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
     <div style="padding:14px 18px;text-align:left;flex:1;min-height:0;overflow-y:auto">
       <div class="dj-offline-tip" id="djOfflineTip">
         <b>⚠️ 当前站点连不上点歌平台</b>
-        <div class="dj-muted" style="margin-top:4px;font-size:.75rem">备用链接下点歌相关功能不可用，请到主链接操作。</div>
+        <div class="dj-muted" style="margin-top:4px;font-size:.75rem">本站是备用链接，点歌平台还没给它开放跨域权限，所以抽签、歌单管理、点歌券在这儿都用不了。请到主链接操作，功能完全一样，数据也是同一份。</div>
         <button class="btn" style="width:100%;margin-top:9px;padding:8px" onclick="djGoMain()">🔗 前往主链接抽歌</button>
       </div>
       <p class="dj-desc" style="font-size:.8rem;color:#5b6781;margin:0 0 10px">从 VoiceHub 拉取歌单，按投稿时间过滤后本地抽签，结果保存在本机（不上传）。</p>
@@ -1333,7 +1328,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   <div class="allboard-box" style="max-width:480px">
     <div class="allboard-head"><span>🎟️ 点歌券管理</span><button onclick="closeCouponAdmin()">关闭</button></div>
     <div style="padding:12px 18px;text-align:left;flex:1;min-height:0;overflow-y:auto">
-      <p class="dj-desc" style="font-size:.8rem;color:#5b6781;margin:0 0 10px">「添加」生成券码；「删除」不可恢复；「禁用」仅本站不显示。</p>
+      <p class="dj-desc" style="font-size:.8rem;color:#5b6781;margin:0 0 10px">「添加」= 在点歌平台真实生成券码（可备注来源）；「删除」= 真实删除平台上的券（不可恢复）；「禁用」= 本地标记（仅影响本站展示）。</p>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
         <label class="dj-label" style="font-size:.85rem;color:#4a5568;white-space:nowrap">数量 <input type="number" id="cpCount" min="1" max="50" value="1" style="width:58px;padding:6px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
         <button class="btn" style="padding:7px 14px;font-size:.85rem;margin-left:auto" onclick="cpCreate()">➕ 添加</button>
@@ -1341,9 +1336,9 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
       <label class="dj-label" style="display:block;font-size:.85rem;color:#4a5568;margin-bottom:10px">备注 <input type="text" id="cpNote" maxlength="40" placeholder="如：点歌活动奖励" style="width:100%;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem"></label>
       <p class="dj-desc" id="cpStatus" style="font-size:.8rem;color:#5b6781;margin:0 0 8px">加载中…</p>
       <div id="cpList"></div>
-      <div style="margin-top:16px;border-top:1px solid #f2f5f9;padding-top:14px">
-        <p style="font-weight:800;color:#4d6fa5;font-size:.9rem;margin:0 0 4px">🛠 游戏点歌券补发</p>
-        <p class="dj-desc" style="font-size:.78rem;color:#5b6781;margin:0 0 10px">发券失败时在此登记，手动把券码发给该同学。</p>
+      <div style="margin-top:16px;border-top:1px solid #eef1ff;padding-top:14px">
+        <p style="font-weight:800;color:#3b5bfd;font-size:.9rem;margin:0 0 4px">🛠 游戏点歌券补发</p>
+        <p class="dj-desc" style="font-size:.78rem;color:#5b6781;margin:0 0 10px">同学发券失败时，让其把游戏通关截图发你；在此登记后，把点歌券码手动发给该同学。登记后该同学本周此游戏将不能再领（防重复）。</p>
         <select id="riGame" style="width:100%;padding:8px 10px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.85rem;margin-bottom:8px;box-sizing:border-box">
           <option value="bird">像素飞鸟（过 20 管）</option>
           <option value="snake">贪吃蛇（吃 50 豆）</option>
@@ -1357,7 +1352,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
           <label class="dj-label" style="font-size:.82rem;color:#4a5568;white-space:nowrap">补发时间</label>
           <input type="datetime-local" id="riTime" style="flex:1;min-width:0;padding:6px 8px;border-radius:10px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.82rem">
-          <button class="btn" style="padding:7px 12px;font-size:.82rem;background:#6b6a9e;color:#fff;border:none" onclick="riSubmit()">📝 登记补发</button>
+          <button class="btn" style="padding:7px 12px;font-size:.82rem;background:#574fd6;color:#fff;border:none" onclick="riSubmit()">📝 登记补发</button>
         </div>
         <p class="dj-desc" id="riMsg" style="font-size:.8rem;color:#07a154;margin:0 0 6px;min-height:1.2em"></p>
         <p class="dj-label" style="font-size:.82rem;color:#4a5568;margin:0 0 4px">本周补发记录</p>
@@ -1385,7 +1380,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
       <button onclick="closeHwCalendar()" style="margin-left:8px">关闭</button>
     </div>
     <div id="hwCalBody" style="padding:10px 14px"></div>
-    <div id="hwCalDetail" style="padding:10px 16px 14px;border-top:1px solid #f2f5f9;max-height:40vh;overflow:auto"></div>
+    <div id="hwCalDetail" style="padding:10px 16px 14px;border-top:1px solid #eef1ff;max-height:40vh;overflow:auto"></div>
   </div>
 </div>
 
@@ -1840,33 +1835,32 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
-    { date: "2026-09-27 17:20", text: "🔓 站内入口已免密码，直接进入即可。", category: "site" },
     { date: "2026-09-27 10:40", text: "🎧 新增英语听力音频，可在「作业查看」里直接点击播放。", category: "site" },
-    { date: "2026-09-24 23:25", text: "🔣 全站图标统一为 Lucide 一套，含小游戏", category: "site" },
-    { date: "2026-08-30 23:36", text: "📊 已接入匿名访问统计，不收集个人信息", category: "site" },
-    { date: "2026-08-30 18:50", text: "🎲 点歌抽签优化：自动排除已播/已排期", category: "site" },
-    { date: "2026-08-30 16:05", text: "🎲 点歌抽签新增「每人限一首」，更公平", category: "site" },
-    { date: "2026-08-29 18:10", text: "🔤 修复密码框打不出中文的问题", category: "site" },
-    { date: "2026-08-29 16:20", text: "📌 公告分类调整，数据导出改为加密", category: "site" },
-    { date: "2026-08-29 15:20", text: "🔗 备用链接已上线，主链打不开时用", important: true, importantUntil: "2026-08-29T18:00:00", category: "activity" },
-    { date: "2026-08-25 17:14", text: "🔗 主链接已切换为 GitHub Pages", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
-    { date: "2026-08-25 17:30", text: "📣 公告支持按分类筛选", category: "site" },
-    { date: "2026-08-25 19:11", text: "📲 新增「安装为应用」教程", category: "activity" },
-    { date: "2026-08-25 19:22", text: "📝 作业查看恢复 Classworks 直达入口", category: "site" },
-    { date: "2026-08-25 19:39", text: "🔧 修复密码输入无反应的问题", category: "site" },
-    { date: "2026-08-25 19:50", text: "🔧 修复资料类入口点击无反应的问题", category: "site" },
-    { date: "2026-08-25 20:03", text: "🔧 修复分类页验证后整页空白的问题", category: "site" },
-    { date: "2026-08-25 20:41", text: "📦 新增「仓库」按钮，可查看源码", category: "site" },
-    { date: "2026-08-25 21:55", text: "📝 新增「意见反馈」，可匿名填写", category: "class" },
-    { date: "2026-08-25 22:58", text: "🎋 新增「今日班级签」，每天可抽一次", category: "activity" },
-    { date: "2026-08-26 10:52", text: "💾 新增「数据管理」，可导出导入", category: "site" },
-    { date: "2026-08-26 10:25", text: "🔄 返回时自动回到刚才的页面", category: "site" },
+    { date: "2026-09-24 23:25", text: "全站图标系统统一：站内所有功能图标（主站界面图标、作业科目徽章、公告图标、小游戏内图标）已从 emoji 全部换成 Lucide 一套线性图标，不再混用不同图标库。\n① 风格统一：全站只有一套图标，深浅色模式下都会自动跟随文字颜色，不会再出现不同 emoji 在不同手机上长得不一样的情况；\n② 小游戏同步改造：扫雷的雷与旗、贪吃蛇的无敌护盾、涂鸦跳跃的高度箭头与倒计时，都换成了同套图标；\n③ 记忆翻牌的 8 种水果改为 8 种形状（圆形 / 方形 / 三角 / 星形 / 心形 / 六边形 / 八边形 / 菱形），配对玩法完全不变；\n④ 下拉选项框里放不了图标（浏览器限制），这类位置去掉图形只留文字，属正常现象；\n⑤ 公告正文、作业条目里的序号（如 ①②③）和文字箭头（如 2023 → 2026）是排版文字，不是图标，保持原样。", category: "site" },
+    { date: "2026-08-30 23:36", text: "📊 本站点已接入 51LA 匿名访问统计：仅统计访问量、访客来源、设备与地区等聚合数据，不收集姓名、手机号、微信号等个人信息，也不录制屏幕。你可以看到每天有多少人、从哪个入口（主链接 / 备用链接）进入站点。数据统计由 51.la 提供，数据保存在其服务器。", category: "site" },
+    { date: "2026-08-30 18:50", text: "🎲 点歌抽签体验优化：\n① 歌单管理里，已播放 / 已排期的歌曲现在默认排除，无需再逐首手动勾选——列表行尾会标注「已播放」或「已排期」；如需让它们重新参与抽签，取消抽歌面板上对应的「排除」开关即可。\n② 一键复制公示不再显示公示时间，并新增一行自动生成的「抽签规则」（例如「高赞必选 3 + 随机 2 · 每人限一首 · 排除已播放、已排期 · 池中 7 首」），怎么抽的一目了然。\n③ 公示备注不再预填内容，默认留空——需要说明时才自己写（例如「本次不随机抽人，是对段考前十的奖励」），会加在公示最后，下次沿用，点「✕ 清空」可清掉。", category: "site" },
+    { date: "2026-08-30 16:05", text: "🎲 点歌抽签规则升级（公平性）：\n① 新增「每人限一首」——同一次抽签里，同一位同学点的歌最多上一首（默认开启），不会再出现一个人的歌同时占掉多个名额；\n② 歌单管理支持「按点歌人排除」——可整人排除（该同学点的歌全部不参与抽签），也可只排除某一首歌；\n③ 歌单管理新增搜索（歌名 / 歌手 / 点歌人）与「清空排除」；\n④ 「高赞必选」若撞上「每人限一首」，名额会自动顺延给后面的歌，不再作废。", category: "site" },
+    { date: "2026-08-29 18:10", text: "🔤 入口验证优化（打不出中文的同学看这里）：\n① 修复电脑端密码框切不出中文输入法的问题——浏览器默认会禁用密码输入框的输入法，现已改用不影响输入法的遮蔽方式，密码框仍照常显示为圆点；\n② 输入法实在切不出中文时，可直接输入该节日的拼音或英文，同样可验证通过；\n③ 学习资料、隐藏空间、联系方式查询、导出备份、数据管理等所有密码输入处同步生效。", category: "site" },
+    { date: "2026-08-29 16:20", text: "📌 两处小更新：\n① 公告分类「🎉 班级活动」更名为「🔔 重要更新」并前移一格，班级重要消息以后都归在这里，更好找。\n② 后续班级有活动时会在这条「重要更新」里发通知，进站还会自动弹窗提醒；弹窗关掉后右下角会留一个悬浮球，随时点开重看，活动结束后自动消失。\n③ 「数据管理」导出的个人数据（含姓名、班级签、点歌记录等）现在会用你设置的密码加密，不再明文导出；导入时需要输入同一个密码，请务必记住。", category: "site" },
+    { date: "2026-08-29 15:20", text: "🔗【备用链接已上线】班级服务站新增备用入口：https://a5048c773a210b3d4-25579.app.workbuddy.link/\n① 平时请优先使用主链接，备用链接内容与主链接一致，仅作主链接打不开时的应急入口；\n② 备用链接在微信内无法打开，必须复制链接到系统浏览器（Safari / Chrome / Edge / 手机自带浏览器）打开；\n③ 侧边栏「🔗 复制链接」已同时列出主链接与备用链接，点右侧「复制」按钮即可；\n④ 备用链接为临时托管，若后续更换会在此公告更新。", important: true, importantUntil: "2026-08-29T18:00:00", category: "activity" },
+    { date: "2026-08-25 17:14", text: "【主链接切换】班级服务站主链接已切换为 GitHub Pages：https://yuzikaaang.github.io/class-site/ （Gitee 与 GitHub 仓库均已公开，可放心收藏与查询）。原 WorkBuddy 分享链接已停用，仅作为主链接不可达时的应急备用入口。", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
+    { date: "2026-08-25 17:30", text: "公告栏新增分类筛选：点击「总览 / 网站内部 / 班级事务 / 班级活动 / 站主杂谈」即可只看对应分类的公告，无需展开全部。", category: "site" },
+    { date: "2026-08-25 19:11", text: "📲 侧边栏新增「安装为应用」教程：支持 Windows / iPhone / 安卓各品牌一键安装到桌面，微信内请复制链接到浏览器打开。移动端页面右下角新增悬浮按钮，滚动到任意位置都可随时唤起侧边栏。", category: "activity" },
+    { date: "2026-08-25 19:22", text: "作业查看卡片恢复 Classworks 直达入口，现提供三个入口：📝 查看当前作业 / 📅 历史作业（日期）/ 🌐 前往 Classworks（微信内自动引导用浏览器打开）。", category: "site" },
+    { date: "2026-08-25 19:39", text: "【修复】站内所有密码输入（站点门禁 / 导出备份 / 联系方式查询）已恢复正常，之前点击无反应是因为哈希校验函数被重复定义覆盖。作业查看卡片的 Classworks 说明已更正：因校园网限制，班级电脑端的 Classworks 连不上服务器、无法同步云端供大家查看，故站内作业为站主手动同步；「前往 Classworks」按钮已排到第一位。", category: "site" },
+    { date: "2026-08-25 19:50", text: "【二次修复】课堂笔记 / 教学课件 / 私人云盘 / 联系方式查询的密码入口也已修复：之前链接数据缺少 id 字段，导致门禁点击无反应也无提示。现已为所有链接补全 id，密码错误时会显示提示，正确输入后进入对应资源。点歌平台下方新增提示：服务器配置有限，没有立即跳转请耐心等待几秒。", category: "site" },
+    { date: "2026-08-25 20:03", text: "【紧急修复】刚才部分同学在分类页点密码验证后出现整页空白，现已修复。原因是页面重渲染时把当前分类视图重置掉了，导致你正在看的分类被隐藏、内容看不见。现在重渲染会保持你当前所在的分类或首页，验证后仍停留在原位置并显示密码错误提示。", category: "site" },
+    { date: "2026-08-25 20:41", text: "公告栏「公众号」旁新增「仓库」按钮，点击可直达 Gitee 源码仓库查看。另：作业查看中 8.25-8.27 的「2026 暑假作业」为示例测试数据，并非真实作业，正式作业以老师线下布置为准。", category: "site" },
+    { date: "2026-08-25 21:55", text: "「班级事务」中原「建言献策」「情况反映」两个待开发卡片已合并为「意见反馈」，点击即可匿名填写问卷，对班级的建议、想法或想反映的问题都可以提交。", category: "class" },
+    { date: "2026-08-25 22:58", text: "首页新增「今日班级签」：小卡片已放在「每日日报」上方，点一下抽一张签，有好签也有提醒签，每天限抽一次，次日 0 点自动刷新。图个乐子，别当真～", category: "activity" },
+    { date: "2026-08-26 10:52", text: "💾 侧边栏新增「数据管理」：可导出 / 复制本站保存在本设备的全部数据（各游戏最高分、记录、班级签等）。换设备或清缓存前导出一份，之后一键导入即可恢复；「重置游戏数据」可随时清空所有游戏记录，以备不时之需。", category: "site" },
+    { date: "2026-08-26 10:25", text: "🔄 新增「返回记忆」：从网站跳到外部链接或小游戏后返回，会自动回到你刚才所在的页面（首页 / 分类 / 隐藏空间都适用），不用重新找入口。", category: "site" },
     { date: "2026-08-26 10:12", text: "🎁 悄悄说一句：站内藏着彩蛋和隐藏空间，说不定哪天就被你碰上了～（线索就藏在日常交互里，自己去探索才有意思）", category: "misc" },
-    { date: "2026-08-26 09:55", text: "🔔 新增音效反馈，侧边栏可关闭", category: "site" },
-    { date: "2026-08-26 00:45", text: "🔒 密码增加防爆破，输错会短暂锁定", category: "activity" },
-    { date: "2026-08-25 16:46", text: "【班级通知】Classworks 暂无法连接服务器，作业以老师线下布置为准。", important: true, category: "activity" },
-    { date: "2026-08-25 16:46", text: "📌 公告分组调整，新增多项小功能", category: 'site' },
-    { date: "2026-08-25 16:19", text: "🔧 修复日报排版与首次密码报错", category: 'site' },
+    { date: "2026-08-26 09:55", text: "🔔 全站新增轻量音效反馈：点击按钮、抽班级签、触发彩蛋、密码验证成功/失败都有小音效，氛围感拉满。如果觉得吵，侧边栏新增「🔔 音效」开关，一键关闭且会记住你的选择。", category: "site" },
+    { date: "2026-08-26 00:45", text: "🔒 站内所有密码 / 暗号增加防爆破：连续输错 3 次会锁定 30 秒，之后每次再错等待时间递增（1 / 2 / 5 分钟…），输对一次自动清零。", category: "activity" },
+    { date: "2026-08-25 16:46", text: "【班级通知】因一中校园网络访问限制及未备案网站审核原因，班级作业查看平台 Classworks 暂无法连接服务器，近期作业无法同步至云端，请同学们以老师线下布置为准，给大家带来的不便敬请谅解，相关解决办法仍在积极探索中。", important: true, category: "activity" },
+    { date: "2026-08-25 16:46", text: "本轮更新：公告改名为「公告」并按网站内部/班级事务/班级活动/站主杂谈四类分组；学习资料板块新增「网络限制提示」弹窗（首次进入弹出，可选不再显示）；作业查看卡片因 Classworks 打不开新增「当前作业/历史日历」按钮；PWA 主图标改为 512；公告时间统一为「精确到分」。", category: 'site' },
+    { date: "2026-08-25 16:19", text: "修复每日日报卡片排版（被压缩成一团）；修复首次输入正确密码仍报错的 bug（异步哈希未 await）；密码显示切换按钮换为更精致的 SVG 图标。", category: 'site' },
     { date: "2026-08-25 16:13", text: "修复每日日报卡片空白问题；班级公告时间统一为「精确到分」。", category: 'site' },
     { date: "2026-08-25 15:30", text: "每日日报已切换为外部热点聚合站；修复重要日期弹窗倒计时不走秒；新增「导出备份」功能（站内密码验证后下载完整版 zip）。", category: 'site' },
     { date: "2026-08-23 12:37", text: "修复倒计时时/分/秒不实时刷新的问题。", category: 'site' },
@@ -1890,22 +1884,22 @@ var SITE_DATA = {
     { date: "2026-08-23 00:22", text: "经过我这么久的调试这个网站终于有点雏形在了！(╥╯﹏╰╥)ง", category: 'misc' },
     { date: "2026-08-22 00:00", text: "点歌平台入口已开放！微信内无法直接访问，点击「前往入口」后请按引导用浏览器打开。", category: 'site' },
     { date: "2026-08-22 00:00", text: "班级服务站 2.0 上线：新增公告栏；站点可在微信内直接打开，部分国外站点会自动引导用浏览器访问。", category: 'site' },
-    { date: "2026-08-26 23:27", text: "💾 新增「全部清理」，一键清空本机数据", category: "site" },
-    { date: "2026-08-27 00:13", text: "📌 公告支持按日期筛选与隐藏", category: "site" },
-    { date: "2026-08-27 00:21", text: "🌙 新增夜间自动暗色模式", category: "site" },
-    { date: "2026-08-27 00:28", text: "✨ 全站视觉升级，动画更顺滑", category: "site" },
+    { date: "2026-08-26 23:27", text: "💾 数据管理新增「全部清理」：一键清空本机站点数据（游戏记录、主题/音效、密码与暗号通关及锁状态等），保留设备标识、班级签、点歌券记录（防借初始化刷签/刷券）。", category: "site" },
+    { date: "2026-08-27 00:13", text: "📌 功能更新：\n① 学习资料「访问提示」弹窗关闭后，右下角出现带红点的消息悬浮球，点击可重新打开；勾选「不再显示」则无悬浮球。\n② 全部公告日期筛选升级：快捷范围 近 3 天 / 7 天 / 15 天 / 30 天 / 近半年，并支持自定义起止日期。\n③ 全部公告可按时间隐藏更早公告（范围同②），公告条数随筛选实时更新。", category: "site" },
+    { date: "2026-08-27 00:21", text: "📌 功能更新：\n① 新增「夜间自动暗色模式」：18:30–次日 7:30 自动切换暗色，其余时间自动恢复亮色；夜间手动切回亮色时询问是否关闭自动切换，关闭后不再自动切换。\n② 侧边栏新增「复制链接」按钮，一键复制当前网页地址。", category: "site" },
+    { date: "2026-08-27 00:28", text: "📌 功能与视觉更新：\n① 「复制链接」升级为弹窗：复制站点主链接，备用链接上线后将在此列出。\n② 夜间自动暗色询问升级为三选：仅这次切换 / 关闭自动切换 / 保持暗色。\n③ 全站视觉升级：液态玻璃质感、背景光斑流动、卡片流光与入场、弹窗弹出动画，按钮均有按压反馈，音效保持不变。", category: "site" },
     { date: "2026-08-27 00:46", text: "💬 学习资料「访问提示」悬浮球调整：仅在学习资料板块内显示，离开板块后自动消失。", category: "site" },
-    { date: "2026-08-28 10:00", text: "👁️ 优化全站文字对比度，更清晰", category: "site" },
-    { date: "2026-08-28 14:50", text: "👁️ 修复倒计时文字看不清的问题", category: "site" },
-    { date: "2026-08-28 22:18", text: "🎟️ 点歌券规则升级，门槛下调", category: "site" },
-    { date: "2026-08-28 22:30", text: "🔐 站里藏着隐藏空间，自己找找看", category: "misc" },
-    { date: "2026-08-28 23:15", text: "🖥️ 电脑端小游戏改为当前页打开", category: "site" },
-    { date: "2026-08-29 00:30", text: "⚠️ 原 Gitee Pages 备用入口已失效", category: "site" },
-    { date: "2026-08-29 00:40", text: "🎟️ 点歌券防重复，每周每人一张", category: "site" },
+    { date: "2026-08-28 10:00", text: "📌 全站文字对比度优化：\n① 亮色模式统一为深色文字、暗色模式统一为浅色文字，阅读更清晰。\n② 修复暗色模式下多处文字与背景同色、几乎看不清的问题（弹窗、面板、页脚等）。\n③ 修正部分小游戏按钮白字落在浅色渐变上、对比不足的问题（消消乐、扫雷）。", category: "site" },
+    { date: "2026-08-28 14:50", text: "📌 倒计时面板时间字对比度补修：\n① 「查看全部」弹窗中具体日期与剩余时间（X月X天X时X分X秒）改为亮色深字 / 暗色浅字，均达标。\n② 节假日弹窗名称与「已过」日期调整为高对比配色，暗色下不再发灰。\n③ 首页倒计时面板内的时间文字改为白字落在加深的药丸底上，不再发灰。", category: "site" },
+    { date: "2026-08-28 22:18", text: "📌 游戏点歌券规则升级：\n① 领券前需从全班名单中选择自己的名字，系统会按「名字 + 本周 + 游戏」核对是否已领过；已领过的同学会收到提醒，下周一 0 点刷新后再来挑战。\n② 像素飞鸟发券门槛下调：40 → 30 管；贪吃蛇：60 → 50 豆，更容易拿到券。\n③ 涂鸦跳跃难度升级：每 500 分提升一档难度（重力渐大、平台更散、弹簧变少）。\n④ 「班级事务-排行榜」入口暂隐藏（数据保留）。", category: "site" },
+    { date: "2026-08-28 22:30", text: "🔐 站主杂谈：偷偷告诉你，站里其实藏着隐藏空间～进入方式：在首页连点班徽 5 次，就会唤出「隐藏区域」门禁，输入暗号就能进去探索了。暗号嘛……就藏在日常提示里（比如同学群目前人数），找到记得保密哦。", category: "misc" },
+    { date: "2026-08-28 23:15", text: "📌 电脑端体验修复：主页点开站内小游戏（贪吃蛇 / 俄罗斯方块 / 涂鸦跳跃等）不再新开标签页，改为在当前页面直接打开；玩完点「返回班级站」即回到主页，任务栏不再堆满本站点。外部链接（如 4399、Classworks）仍在新标签页打开，方便保留班级服务站。手机端行为不变。", category: "site" },
+    { date: "2026-08-29 00:30", text: "⚠️ 备用链接失效说明：此前填入的 Gitee Pages 备用入口（zikang0529.gitee.io）已无法使用——Gitee Pages 服务于 2024 年永久下线且无恢复计划。主链接（GitHub Pages）在微信内置浏览器中同样会被拦截。已备案、微信可开的备用链接将重新部署后在此公告并填入侧边栏「复制链接」，请先使用主链接（电脑/手机浏览器均可正常打开）。", category: "site" },
+    { date: "2026-08-29 00:40", text: "🎟️ 游戏点歌券防重复升级：发券前会先查点歌平台后台——本周内同一名字在同一款游戏已领过券的，直接展示原来的券码，不再重复生成。换手机 / 换浏览器 / 清缓存都拦得住（以平台记录为准），保证每款游戏每周每人一张券。", category: "site" },
     { date: "2026-08-31 18:26", text: "📌 「报到」日期（8/31 18:00）已过，首页「重要日期倒计时」中的「报到」项已隐藏；当前面板仅显示「寒假」倒计时。", category: "site" },
     { date: "2026-09-07 12:57", text: "【班级通知】因网络问题，「学习资料」板块中的课堂笔记与教学课件暂时关闭，恢复开放时间另行通知，给大家带来的不便敬请谅解。", category: "site" },
-    { date: "2026-09-24 22:52", text: "📇 升级为「个人资料查询」，新增政治面貌", category: "site" },
-    { date: "2026-09-24 13:40", text: "🌕 中秋假期作业已发布，六科全齐", category: "site" }
+    { date: "2026-09-24 22:52", text: "📇 「联系方式查询」已升级为「个人资料查询」（免访问码，输入姓名即可查）：\n① 新增政治面貌（中共党员 / 共青团员 / 普通学生）与职务标注；\n② 新增智学网准考证号，点击即可复制；\n③ 班主任冷锋老师的资料也已录入，可一并查询。\n全班 61 名同学 + 班主任资料均已更新完毕，资料仍为加密存储。", category: "site" },
+    { date: "2026-09-24 13:40", text: "🌕 中秋假期作业（9.24 – 9.27）已发布，语文 / 数学 / 英语 / 物理 / 化学 / 生物 六科全齐。\n查看方式：进站弹窗点「查看作业」，或从「常用服务 → 作业查看 → 📝 查看当前作业」进入，也可用「📅 历史作业（日期）」按日期回看。\n每条作业都可点击勾选「已完成」，进度会自动保存在本机。\n本次更新后打开网站会自动弹出作业发布提醒，勾选「不再显示」后不再弹出。", category: "site" }
   ],
   /* ── 开屏通知弹窗：大假作业发布提醒（在 start~end 期间打开网站自动弹出；可「不再显示」）── */
   homeworkNotice: {
@@ -3082,8 +3076,7 @@ function render(){
           ? '<img src="'+esc(l.icon)+'" alt="'+esc(l.title)+'" onerror="this.outerHTML=\'<div class=&quot;fallback&quot;>'+fallback+'</div>\'">'
           : '<div class="fallback">'+fallback+'</div>';
         var needBrowser = isWeChat() && !l.mainWechatOk && httpUrl(l.mainUrl);
-        /* 门禁总开关关闭时直接视为「已通过」，不再渲染问答框（GATE_ENABLED=false） */
-        var passed = gatePassed(l) || !gateOn();
+        var passed = gatePassed(l);
         var contentHtml = '<div class="card-content"><h3>'+esc(l.title)+'</h3>'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
         if(l.paused){
           contentHtml += '<div class="paused-box">⛔ 因网络问题，暂时关闭，恢复开放时间另行通知</div>';
@@ -3191,7 +3184,7 @@ function installGuideHtml(){
     '<div class="install-hero">' +
       '<div class="install-hero-ico">📲</div>' +
       '<div><div class="install-hero-title">将本站安装为本地应用</div>' +
-      '<div class="install-hero-sub">安装后可像 App 一样打开，离线也能看。微信内请用浏览器打开。</div></div>' +
+      '<div class="install-hero-sub">安装后可像 App 一样从桌面 / 主屏幕打开，已加载内容离线也能查看。微信内不支持安装，请先复制链接到浏览器打开。</div></div>' +
     '</div>' +
     sec('🖥', '电脑端（Windows · Edge）', [
       '用 <b>Edge</b> 打开本站，地址栏右侧点「安装」图标（⚡ 或应用图标）即可。',
@@ -3306,8 +3299,6 @@ function badgeClick(){
   }
 }
 function openHiddenGate(){
-  /* 门禁总开关关闭（GATE_ENABLED=false）时跳过暗号问答，直接进隐藏空间 */
-  if(!gateOn()){ openHiddenView(); return; }
   var m = document.getElementById('hiddenGateMask');
   var inp = document.getElementById('hiddenGateInput');
   var err = document.getElementById('hiddenGateErr');
@@ -3348,9 +3339,9 @@ function renderHiddenView(){
   grid.innerHTML = HIDDEN_FUN_LINKS.map(function(l){
     var loginHtml = l.login
       ? '<div class="hidden-fun-login">' +
-        '<span>账号 <b style="color:#4d6fa5">' + esc(l.login.user) + '</b></span>' +
-        '<span>密码 <b style="color:#4d6fa5">' + esc(l.login.pass) + '</b></span>' +
-        '<button type="button" class="btn-qr" style="margin-left:auto;background:#46689c" onclick="event.stopPropagation();copyText(\'' + jsq(l.login.user + ' / ' + l.login.pass) + '\',\'账号密码\')">复制</button>' +
+        '<span>账号 <b style="color:#3b5bfd">' + esc(l.login.user) + '</b></span>' +
+        '<span>密码 <b style="color:#3b5bfd">' + esc(l.login.pass) + '</b></span>' +
+        '<button type="button" class="btn-qr" style="margin-left:auto;background:#3f5fe6" onclick="event.stopPropagation();copyText(\'' + jsq(l.login.user + ' / ' + l.login.pass) + '\',\'账号密码\')">复制</button>' +
         '</div>'
       : '';
     return '<div class="hidden-fun-card" onclick="' + (l.action ? l.action + '()' : "openLink('" + jsq(l.url) + "',true)") + '">' +
@@ -3430,22 +3421,6 @@ function findLink(id){
  *    若要更强，可升级为「答案派生密钥」（不知道答案就解不开），但那要求问题足够难——
  *    现有「男女人数之比」的答案空间仅约 10 种，会被秒破，所以先不上这层，详见 internal/notes.md。 */
 var GATE_SEAL_KEY = 'cls25-05-study-2026';
-/* ============================================================
- * 【门禁总开关】站主 2026-09-27 要求：暂时取消站内所有「门禁密码」
- * ------------------------------------------------------------
- *  true  = 开启门禁（进站问答 / 学习资料 / 隐藏空间都要答对才进）
- *  false = 全部停用——直接放行，不再弹任何问答框
- *
- * ⚠️ 实现原则：只停用，**不删任何门禁代码**。
- *    所有校验逻辑、答案、提示、锁定时长原样保留，
- *    将来把这里改回 true（或删掉这个常量）即可一键全部恢复。
- * ⚠️ 本开关只管「门禁」（浏览类入口），**不管数据加密**：
- *    「导出备份」「数据管理导出」的密码是保护姓名等个人信息的，
- *    不是门禁，不受本开关影响，照常要求输入。
- * ============================================================ */
-var GATE_ENABLED = false;
-/* 门禁是否启用：GATE_ENABLED 为 false 时一律放行 */
-function gateOn(){ return GATE_ENABLED === true; }
 function gateUnseal(b64){
   if(!b64) return '';
   try{
@@ -3476,8 +3451,6 @@ function gatePassed(l){
 function checkGate(id){
   var l = findLink(id);
   if(!l || !l.gate) return;
-  /* 门禁总开关关闭（GATE_ENABLED=false）：直接放行，不做任何校验 */
-  if(!gateOn()){ render(); return; }
   var input = document.getElementById('gate-input-'+id);
   var remain = lockRemain('gate_'+id);
   if(remain > 0){
@@ -3788,7 +3761,7 @@ function renderAllBoard(){
     var hits=scoped.filter(function(a){ return annMatch(a,q); });
     if(title) title.textContent='搜索「'+q+'」· 命中 '+hits.length+' / 范围内 '+scoped.length+' 条';
     list.innerHTML=hits.length
-      ? '<li class="ann-cat"><h4 style="margin:12px 0 8px;color:#4d6fa5;font-size:.95rem">🔎 匹配结果（'+hits.length+'）</h4>'+
+      ? '<li class="ann-cat"><h4 style="margin:12px 0 8px;color:#3b5bfd;font-size:.95rem">🔎 匹配结果（'+hits.length+'）</h4>'+
         '<ul style="list-style:none;padding:0;margin:0">'+hits.map(function(a){
           return '<li class="ann-item hl"><div class="board-meta">'+
             '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(a.date.slice(5))+'</span>'+
@@ -3803,7 +3776,7 @@ function renderAllBoard(){
     var html=ANN_CATS.map(function(c){
       var items=grouped[c.key];
       if(!items||!items.length) return '';
-      return '<li class="ann-cat"><h4 onclick="toggleAnnCat(this)" style="margin:12px 0 8px;color:#4d6fa5;font-size:.95rem;cursor:pointer;user-select:none">'+esc(c.name)+'（'+items.length+'）▾</h4>'+
+      return '<li class="ann-cat"><h4 onclick="toggleAnnCat(this)" style="margin:12px 0 8px;color:#3b5bfd;font-size:.95rem;cursor:pointer;user-select:none">'+esc(c.name)+'（'+items.length+'）▾</h4>'+
         '<ul style="list-style:none;padding:0;margin:0">'+items.map(function(a){
           return '<li class="ann-item"><div class="board-meta">'+
             '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(a.date.slice(5))+'</span>'+
@@ -3897,8 +3870,8 @@ function openAllHol(){
         '<span class="imp-date" style="font-size:.7rem;margin-top:2px">'+h.date+' · 放假 '+h.days+' 天</span>'+
       '</div>'+
       '<div style="text-align:right">'+
-        '<b class="'+pastCls+'" style="font-size:1.05rem;font-weight:800;font-variant-numeric:tabular-nums;color:'+(isPast?'':'#3d8f6a')+'">'+(isPast?0:left)+'</b>'+
-        '<span class="'+pastCls+'" style="font-size:.7rem;font-weight:600;margin-left:2px;color:'+(isPast?'':'#3d8f6a')+'">天</span>'+
+        '<b class="'+pastCls+'" style="font-size:1.05rem;font-weight:800;font-variant-numeric:tabular-nums;color:'+(isPast?'':'#07c160')+'">'+(isPast?0:left)+'</b>'+
+        '<span class="'+pastCls+'" style="font-size:.7rem;font-weight:600;margin-left:2px;color:'+(isPast?'':'#07c160')+'">天</span>'+
       '</div></li>';
   }).join('');
   mask.classList.add('show');
@@ -4066,9 +4039,9 @@ function openCopyLink(){
     var links=(SITE_DATA.siteLinks||[]);
     var hasBackup=links.some(function(l){ return l.label.indexOf('备用')>=0; });
     var html=links.map(function(l,i){
-      return '<div style="background:#f2f5f9;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
+      return '<div style="background:#eef1ff;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
         '<div style="display:flex;align-items:center;gap:10px">'+
-        '<span style="flex:1;font-size:.85rem;color:#4d6fa5;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.label)+'</span>'+
+        '<span style="flex:1;font-size:.85rem;color:#3b5bfd;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.label)+'</span>'+
         '<button class="btn" style="min-width:64px;padding:7px 12px;font-size:.8rem" onclick="copyOneLink('+i+',this)">复制</button></div>'+
         (l.note ? '<div class="link-note">'+esc(l.note)+'</div>' : '')+
         '</div>';
@@ -4134,7 +4107,7 @@ function doImport(text){
   if(obj.v===2 && typeof obj.alg==='string' && obj.alg.indexOf('AES-GCM')>=0){
     if(!cryptoOK()){ dataMsg('❌ 这是加密数据，当前环境不支持解密（需 https 或 localhost）', '#c2410c'); return; }
     askDataEnc('import', function(pw){
-      dataMsg('⏳ 正在解密…', '#4d6fa5');
+      dataMsg('⏳ 正在解密…', '#3b5bfd');
       decPayload(obj, pw).then(function(plain){
         applyImport(plain);
       }).catch(function(){
@@ -4491,8 +4464,8 @@ function _renderHwCalendar(){
     var hw = _findHwByDate(dStr);
     var isToday = dStr === todayStr;
     var style = 'padding:8px 0;border-radius:8px;cursor:pointer;font-size:.85rem;text-align:center;';
-    if(hw){ style += 'background:#46689c;color:#fff;font-weight:700;'; }
-    else if(isToday){ style += 'border:2px solid #46689c;color:#4d6fa5;font-weight:700;'; }
+    if(hw){ style += 'background:#3f5fe6;color:#fff;font-weight:700;'; }
+    else if(isToday){ style += 'border:2px solid #3f5fe6;color:#3b5bfd;font-weight:700;'; }
     else { style += 'color:#4a5568;'; }
     html += '<div data-d="'+dStr+'" style="'+style+'">'+d+'</div>';
   }
@@ -4506,7 +4479,7 @@ function _renderHwCalendar(){
       if(!detail) return;
       detail.style.display = 'block';
       if(hw){
-        detail.innerHTML = '<div style="font-weight:700;color:#4d6fa5;margin:0 0 8px">'+esc(hw.title)+'（'+hw.start+' ~ '+hw.end+'）</div>' +
+        detail.innerHTML = '<div style="font-weight:700;color:#3b5bfd;margin:0 0 8px">'+esc(hw.title)+'（'+hw.start+' ~ '+hw.end+'）</div>' +
           (hw.isDemo ? '<div style="background:#fff7e6;border:1px solid #ffd591;color:#d46b08;padding:8px 10px;border-radius:8px;font-size:.78rem;font-weight:700;margin-bottom:8px">⚠️ 示例测试数据，并非真实作业</div>' : '') +
           _renderHwItems(hw.items, hw.id);
       }else{
@@ -4724,7 +4697,7 @@ function closeSign(){ document.getElementById('signMask').classList.remove('show
 document.getElementById('signMask').addEventListener('click', function(e){ if(e.target.id==='signMask') closeSign(); });
 
 /* ---- 彩带彩蛋：连续切主题触发 ---- */
-var CONFETTI_COLORS = ['#7c83ff','#7fb8ab','#ff6b8b','#ffcf7a','#46689c','#5f9e86'];
+var CONFETTI_COLORS = ['#7c83ff','#46e0c8','#ff6b8b','#ffcf7a','#3f5fe6','#34d399'];
 var _cfRAF = null;
 function confettiEgg(){
   var box = document.getElementById('confettiMask');
@@ -5020,7 +4993,7 @@ var _djReqOpen={};         /* 点歌人 -> 是否展开其歌曲 */
 function djSongsTab(v){ _djSongsView = (v==='req') ? 'req' : 'song'; renderDjSongs(_djSongsCache); }
 function djSyncSongsTab(){
   var a=document.getElementById('djSongsTabSong'), b=document.getElementById('djSongsTabReq');
-  var on='background:#4d6fa5;color:#fff;border-color:#4d6fa5;';
+  var on='background:#3b5bfd;color:#fff;border-color:#3b5bfd;';
   if(a) a.style.cssText = (_djSongsView==='song' ? on : '');
   if(b) b.style.cssText = (_djSongsView==='req'  ? on : '');
 }
@@ -5348,7 +5321,7 @@ function djRun(){
       return true;
     });
     if(!pool.length){
-      if(box) box.innerHTML = '<p class="dj-desc" style="color:#c2410c;font-size:.85rem">没有可抽歌曲，试试放宽时间或关闭排除。</p>';
+      if(box) box.innerHTML = '<p class="dj-desc" style="color:#c2410c;font-size:.85rem">没有可抽歌曲，请调整时间范围（点「全部」不限时间）、关闭「排除已播放」/「排除已排期」，或到「🎼 歌单管理」取消排除。</p>';
       return;
     }
     /* 「每人限一首」时的容量上限 = 不同点歌人数 + 无点歌人信息的歌数 */
@@ -5432,7 +5405,7 @@ function djRun(){
       ? '⚠️ 高赞必选里有 '+deferred+' 首因「每人限一首」被顺延（同一位同学已有歌中选，名额让给后面的歌）' : '';
     if(box) box.innerHTML = '<div style="background:#f0f6ff;border-radius:12px;padding:12px 14px;margin:10px 0;font-size:.85rem;line-height:1.9">'+
       '<b style="color:#07a154">✅ 已抽中 '+picked.length+' 首'+shortMsg+'，已加入本地排期（累计 '+djScheduleCount()+' 首）</b><br>'+
-      '<span style="color:#4d6fa5">'+mode+'</span><br>'+
+      '<span style="color:#3b5bfd">'+mode+'</span><br>'+
       (topMsg?'<span style="color:#c2410c;font-size:.8rem">'+topMsg+'</span><br>':'')+
       rows+'</div>';
     SFX.success();
@@ -5560,7 +5533,7 @@ function djRenderHistory(){
   var html=rounds.slice().reverse().map(function(r){
     var songRows=(r.songs||[]).map(function(s,j){ return (j+1)+'. '+esc(s.title)+' - '+esc(s.artist||'未知')+(s.requester?'（点歌：'+esc(s.requester)+'）':'')+'（点赞 '+(s.votes||0)+'）'; }).join('<br>');
     return '<div class="dj-round" style="background:#f6f8fc;border:1px solid #e5eaf3;border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:.82rem">'+
-      '<div class="dj-label" style="font-weight:700;color:#4d6fa5;margin-bottom:6px">📅 '+(r.at||'')+'</div>'+
+      '<div class="dj-label" style="font-weight:700;color:#3b5bfd;margin-bottom:6px">📅 '+(r.at||'')+'</div>'+
       '<div style="display:flex;gap:6px;margin-bottom:6px">'+
         '<input id="djNote_'+r.id+'" placeholder="备注：本次用于…" value="'+esc(r.note||'')+'" style="flex:1;min-width:0;padding:6px 8px;border-radius:8px;border:1px solid #d7dff0;background:#fff;color:#222;font-size:.8rem">'+
         '<button class="btn" style="min-width:56px;padding:5px 8px;font-size:.75rem" onclick="djSetRoundNote('+r.id+')">保存</button>'+
@@ -5681,8 +5654,6 @@ async function submitSiteGate(){
 (function(){
   var g = document.getElementById('siteGate');
   if(!g) return;
-  /* 门禁总开关关闭（GATE_ENABLED=false）时不再拦人，直接进站 */
-  if(!gateOn()) return;
   var needGate = true;
   try{ needGate = (localStorage.getItem('cls_site_gate') !== SITE_GATE.version); }catch(e){}
   if(needGate){
