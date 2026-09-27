@@ -8,8 +8,12 @@
 //      排序一律存在数据层（不是 DOM），render() 重建后自动重放，站主新增项永不丢失。
 //      背景可读性守护：选到深色背景自动配夜间模式（实测最坏情况对比度 2.24:1 → 16.68:1）。
 //      （v32 暖阳橙色相成果保留）
+// v34：修正 4 条站内公告的时间——原值写成了未来时刻且日期整体错了一天，
+//      现按 git 提交时间回填（09-26 15:38 / 16:43 / 17:50，以及本轮 09-27 09:32）。
+//      同期修正 internal/notes.md 中 8 条更新记录标题与 10 处站规日期。
+//      （v33 自定义设置成果保留）
 //      升版本清旧缓存
-const CACHE = 'class-site-v33'
+const CACHE = 'class-site-v34'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
