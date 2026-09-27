@@ -5,7 +5,7 @@
   "description": "25级05班班级服务站的用户系统后端（Vercel Serverless + Neon Postgres）",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": "20.x"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
