@@ -1,0 +1,99 @@
+# ============================================================
+# 自动发布到 GitHub Pages
+# ------------------------------------------------------------
+# 作用：master 有新提交时，自动把「该公开的文件」复制到 gh-pages 分支，
+#       Pages 从 gh-pages 出页面，避免 internal/ 等内部文件被公网访问。
+#
+# 站主只需配一次：Settings → Pages → Source 改成 gh-pages 分支。
+# 之后每次 push 全自动，无需手动同步。
+#
+# ⚠️ 若以后新增了站点要用的文件（新图片夹、新页面等），
+#    要同步加进下面的 SOURCE_FILES，否则不会被发布。
+# ============================================================
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  # 允许在 Actions 页面手动点一下重新发布（应急用）
+  workflow_dispatch:
+
+# 让 workflow 有权限推送到 gh-pages 分支
+permissions:
+  contents: write
+
+# 同一时间只跑一个，避免并发推送打架
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 拉取 master 分支完整内容
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 挑出上线文件到独立目录
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+
+          # ------------------------------------------------------------
+          # 这行决定「哪些东西会上线」。
+          # 只列站点运行必需的文件与目录，其余（api/ internal/ backup/
+          # source/ 等）一律不复制，从而不会出现在线上。
+          #
+          # 用数组而不是空格分隔的字符串，避免不同 shell 对词分割的处理差异。
+          # ------------------------------------------------------------
+          SOURCE_FILES=(
+            index.html
+            sw.js
+            manifest.webmanifest
+            favicon.svg
+            icon-192.png
+            icon-512.png
+            qrcode.jpg
+            games
+            homework
+          )
+
+          for f in "${SOURCE_FILES[@]}"; do
+            if [ -e "$f" ]; then
+              cp -r "$f" _site/
+              echo "  ✅ 发布 $f"
+            else
+              echo "  ⚠️  跳过（不存在）：$f"
+            fi
+          done
+
+          # 生成 .nojekyll，告诉 GitHub Pages 不要用 Jekyll 处理
+          # （否则以下划线开头的文件/目录会被忽略）
+          touch _site/.nojekyll
+
+          echo "---- 上线目录内容 ----"
+          ls -la _site/
+
+          # 上线检查：这些内部文件绝不能出现在发布包里，出现就判失败
+          for forbidden in api internal backup source; do
+            if [ -e "_site/$forbidden" ]; then
+              echo "❌ 上线检查失败：$forbidden 不该被发布"
+              exit 1
+            fi
+          done
+          echo "✅ 上线检查通过：内部文件均未混入"
+
+      - name: 推送到 gh-pages 分支
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          publish_branch: gh-pages
+          # 只保留最近 1 次提交，避免 gh-pages 历史越积越大
+          force_orphan: false
+          commit_message: "自动发布：${{ github.event.head_commit.message }}"
