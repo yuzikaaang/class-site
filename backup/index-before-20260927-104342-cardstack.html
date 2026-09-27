@@ -859,87 +859,6 @@ body::after{animation-name:blobB;animation-duration:34s}
 .card{animation:riseIn .55s cubic-bezier(.2,.9,.3,1.15) backwards}
 .card:nth-child(2){animation-delay:.07s}.card:nth-child(3){animation-delay:.14s}.card:nth-child(4){animation-delay:.21s}.card:nth-child(5){animation-delay:.28s}.card:nth-child(6){animation-delay:.35s}.card:nth-child(7){animation-delay:.42s}.card:nth-child(8){animation-delay:.49s}
 @keyframes riseIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-
-/* =====================================================
-   卡片堆叠（v35）—— 同一分类下多张卡片的层叠展示 + 上下轮换
-   【设计要点】堆叠变换只加在外层 .stack-item 上，.card 原样不动，
-   从而避开 .card 自身的 riseIn 入场动画、:hover 上浮、overflow:hidden
-   与 ::after 流光这四处 transform 冲突。
-   纯 CSS transform/transition 实现，不依赖任何第三方库（微信 X5 可用）。
-   ===================================================== */
-.stack-deck{position:relative;padding-top:34px}   /* 顶部留出 .stack-bar 的位置 */
-.stack-deck.is-open{padding-top:34px}
-/* 顶部操作条：张数徽标 + 轮换按钮 + 展开/收起 */
-.stack-bar{position:absolute;top:0;right:0;left:0;display:flex;align-items:center;gap:7px;
-  justify-content:flex-end;height:28px;margin-bottom:6px}
-.stack-bar .stack-count{font-size:.74rem;font-weight:700;color:var(--fg-3);
-  background:rgba(120,53,15,.07);border:1px solid rgba(120,53,15,.10);
-  border-radius:999px;padding:3px 10px;white-space:nowrap;line-height:1.3}
-.dark .stack-bar .stack-count{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.10);color:var(--fg-3)}
-.stack-nav{flex:none;width:28px;height:28px;border-radius:9px;border:1px solid rgba(120,53,15,.12);
-  background:#fff;color:#af410f;font-size:.8rem;font-weight:800;cursor:pointer;padding:0;
-  display:inline-flex;align-items:center;justify-content:center;font-family:inherit;
-  transition:background .2s,transform .16s,color .2s}
-.stack-nav:hover{background:#fdf1e7;transform:translateY(-1px)}
-.stack-nav:active{transform:scale(.94)}
-.dark .stack-nav{background:#2e2926;border-color:#453d37;color:#fdba74}
-.dark .stack-nav:hover{background:#3a332e}
-.stack-toggle{flex:none;height:28px;padding:0 11px;border-radius:9px;
-  border:1px solid rgba(120,53,15,.12);background:#fff;color:#af410f;
-  font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;
-  display:inline-flex;align-items:center;gap:4px;transition:background .2s,transform .16s}
-.stack-toggle:hover{background:#fdf1e7;transform:translateY(-1px)}
-.stack-toggle:active{transform:scale(.96)}
-.dark .stack-toggle{background:#2e2926;border-color:#453d37;color:#fdba74}
-.dark .stack-toggle:hover{background:#3a332e}
-
-/* 栈体：堆叠态下用绝对定位把卡片摞起来，露出的边缘由 JS 写入 --edge 控制 */
-.stack-body{position:relative}
-.stack-item{transition:transform .46s var(--ease-out),opacity .36s var(--ease-out);will-change:transform}
-/* 堆叠态：顶牌参与文档流撑开高度，其余绝对定位叠上去（紧凑堆叠，只露 10px 边缘） */
-.stack-deck:not(.is-open) .stack-body{display:block}
-.stack-deck:not(.is-open) .stack-item{transform-origin:center top}
-.stack-deck:not(.is-open) .stack-item:not(.stack-top){
-  position:absolute;top:0;left:0;width:100%;
-  pointer-events:none}                    /* 被压住的卡片不响应指针，避免误触看不见的按钮 */
-/* 顶牌轻抬，强化「最上面这张」的层次 */
-.stack-deck:not(.is-open) .stack-item.stack-top{filter:drop-shadow(0 12px 22px rgba(120,53,15,.13))}
-.dark .stack-deck:not(.is-open) .stack-item.stack-top{filter:drop-shadow(0 12px 22px rgba(0,0,0,.5))}
-/* 堆叠态下顶牌背景必须不透明：卡片本身是半透明玻璃底（--glass-bg 60% 透明），
-   否则下层卡片的文字会透上来与顶牌重叠，糊成一团（真机实测问题）。 */
-.stack-deck:not(.is-open) .stack-item.stack-top > .card{
-  background:#fff!important;-webkit-backdrop-filter:none;backdrop-filter:none}
-.dark .stack-deck:not(.is-open) .stack-item.stack-top > .card{background:#262220!important}
-/* 暂停态的顶牌用回它自己的灰底，避免被上面的白底覆盖 */
-.stack-deck:not(.is-open) .stack-item.stack-top > .card.card-paused{background:#ebe3db!important}
-.dark .stack-deck:not(.is-open) .stack-item.stack-top > .card.card-paused{background:#2e2926!important}
-/* 下层卡片同样给不透明底：它们露出的边缘若是半透明，会和背景糊在一起看不清层次 */
-.stack-deck:not(.is-open) .stack-item:not(.stack-top) > .card{
-  background:#fff!important;-webkit-backdrop-filter:none;backdrop-filter:none;
-  box-shadow:0 -2px 8px rgba(120,53,15,.07)!important}
-.dark .stack-deck:not(.is-open) .stack-item:not(.stack-top) > .card{background:#262220!important}
-.stack-deck:not(.is-open) .stack-item:not(.stack-top) > .card.card-paused{background:#ebe3db!important}
-.dark .stack-deck:not(.is-open) .stack-item:not(.stack-top) > .card.card-paused{background:#2e2926!important}
-
-/* 展开态：恢复普通竖向平铺，所有卡片完全可交互（等同改造前的样子） */
-.stack-deck.is-open .stack-body{display:flex;flex-direction:column;gap:25px}
-.stack-deck.is-open .stack-item{transform:none!important;pointer-events:auto!important;filter:none}
-
-/* 窄屏（微信常见宽度）：紧凑堆叠下层边缘收窄，避免占太高 */
-@media (max-width:600px){
-  .stack-bar{gap:6px}
-  .stack-bar .stack-count{padding:3px 8px;font-size:.7rem}
-  .stack-nav{width:26px;height:26px;border-radius:8px}
-  .stack-toggle{height:26px;padding:0 9px;font-size:.7rem}
-}
-/* 无障碍 + 用户手动关动效：堆叠仍生效，但取消补间与顶牌投影 */
-@media (prefers-reduced-motion:reduce){
-  .stack-item{transition:none!important}
-  .stack-deck:not(.is-open) .stack-item.stack-top{filter:none}
-}
-html[data-motion="off"] .stack-item{transition:none!important}
-html[data-motion="off"] .stack-deck:not(.is-open) .stack-item.stack-top{filter:none}
-
 /* 弹窗弹出 */
 .allboard-mask.show .allboard-box{animation:popIn .3s cubic-bezier(.2,1.25,.35,1) both}
 @keyframes popIn{from{opacity:0;transform:scale(.92) translateY(14px)}to{opacity:1;transform:scale(1) translateY(0)}}
@@ -3641,10 +3560,7 @@ function render(){
           contentHtml+
           '<div class="card-actions">'+actionsHtml+'</div>'+
         '</div>';
-      });
-      /* 【卡片堆叠 v35】同一分类下 ≥2 张卡片时包一层堆叠容器；仅 1 张时不包（堆叠无意义）。
-         用户可在「自定义设置 → 动效」里关掉堆叠，回到传统平铺。 */
-      inner = (UI.stack !== 0 && inner.length >= 2) ? stackDeckHtml(inner, c.id) : inner.join('');
+      }).join('');
     }
     return '<div class="tab-page" id="tab-cat-'+c.id+'">'+celebBannerHtml(c.id)+inner+'</div>';
   }).join('');
@@ -3663,162 +3579,8 @@ function render(){
     grid.style.display = 'none';
   }
   applyHomeOrder();   /* 【自定义设置】首页区块顺序：任何重渲染都顺带纠正 */
-  stackApply();       /* 【卡片堆叠 v35】重建后重算层叠位移（门禁答题等触发重渲染时保持堆叠） */
 }
 function jsq(u){ return (u||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
-
-/* =====================================================
-   卡片堆叠（v35）
-   -----------------------------------------------------
-   同一分类下有多张卡片时，层叠成一沓、只露顶牌，可点击「展开」铺平。
-   交互：
-     · 顶部的 ↑ / ↓ 按钮 —— 上下轮换（顶牌循环移到底部/从底部取一张到顶部）
-     · 在堆叠区用滚轮 / 手指上下滑动 —— 同样的轮换
-     · 「展开 / 收起」按钮 —— 在堆叠态与平铺态之间切换
-   实现：纯 CSS transform + transition，JS 只负责算序号与写样式；不用任何库。
-   状态：展开与否记在 STACK_OPEN 里（按分类 id 存），render() 重建后能恢复。
-   ===================================================== */
-var STACK_OPEN = {};       /* { 分类id: true } —— 哪些堆叠当前是展开的 */
-
-/* 生成一个堆叠容器。cards 是已渲染好的卡片 HTML 数组，catId 用于记忆展开状态 */
-function stackDeckHtml(cards, catId){
-  if(!cards || cards.length < 2) return (cards || []).join('');
-  var open = STACK_OPEN[catId] === true;
-  var body = cards.map(function(h){
-    return '<div class="stack-item">' + h + '</div>';
-  }).join('');
-  return '<div class="stack-deck' + (open ? ' is-open' : '') + '" data-cat="' + catId + '">' +
-    stackBarHtml(cards.length, open) +
-    '<div class="stack-body">' + body + '</div>' +
-  '</div>';
-}
-
-/* 顶部操作条：张数徽标 + ↑↓ 轮换 + 展开/收起 */
-function stackBarHtml(n, open){
-  return '<div class="stack-bar">' +
-    '<span class="stack-count">共 ' + n + ' 个入口</span>' +
-    (open ? '' :
-      '<button type="button" class="stack-nav" title="上一张" aria-label="上一张" onclick="stackShift(this,-1)">↑</button>' +
-      '<button type="button" class="stack-nav" title="下一张" aria-label="下一张" onclick="stackShift(this,1)">↓</button>') +
-    '<button type="button" class="stack-toggle" onclick="stackToggle(this)">' +
-      (open ? '收起' : '展开全部') + '</button>' +
-  '</div>';
-}
-
-/* 按当前 DOM 顺序，给栈内每张卡重算层叠位移与层级（紧凑堆叠：每层露 10px） */
-function stackApply(){
-  var decks = document.querySelectorAll('.stack-deck');
-  Array.prototype.forEach.call(decks, function(deck){
-    var open = deck.classList.contains('is-open');
-    var items = Array.prototype.slice.call(deck.querySelectorAll(':scope > .stack-body > .stack-item'));
-    if(!items.length) return;
-    deck.setAttribute('data-n', items.length);
-    if(open){
-      items.forEach(function(it){
-        it.classList.remove('stack-top');
-        it.style.transform = '';
-        it.style.zIndex = '';
-        it.removeAttribute('aria-hidden');
-      });
-      return;
-    }
-    var EDGE = Math.round(14 * (UI.fs || 1));   /* 每层露出的边缘高度，跟随用户字号缩放 */
-    /* 按栈顶到栈底依次排：第 0 张在最上；下面几张整体下移并轻微缩小 + 旋转 */
-    items.forEach(function(it, i){
-      it.classList.toggle('stack-top', i === 0);
-      it.style.zIndex = String(items.length - i);   /* 越靠上层级越高 */
-      if(i === 0){
-        it.style.transform = '';
-        it.removeAttribute('aria-hidden');
-      }else{
-        var y = i * EDGE;                            /* 逐层下移，露出边缘 */
-        var sc = 1 - i * 0.03;                       /* 逐层轻微缩小，做出纵深 */
-        var rot = (i % 2 ? 1 : -1) * (i * 0.4);      /* 左右交替微旋转，像一沓牌 */
-        it.style.transform = 'translateY(' + y + 'px) scale(' + sc + ') rotate(' + rot + 'deg)';
-        it.setAttribute('aria-hidden', 'true');
-      }
-    });
-  });
-}
-
-/* 上下轮换：dir=1 顶牌移到底部（像往下翻），dir=-1 底牌移到顶部 */
-function stackShift(btn, dir){
-  var deck = btn && btn.closest ? btn.closest('.stack-deck') : null;
-  if(!deck || deck.classList.contains('is-open')) return;
-  var body = deck.querySelector(':scope > .stack-body');
-  if(!body) return;
-  var items = body.children;
-  if(items.length < 2) return;
-  if(dir === 1){                       /* 顶牌移到末尾 */
-    body.appendChild(items[0]);
-  }else{                               /* 末牌移到最前 */
-    body.insertBefore(items[items.length - 1], items[0]);
-  }
-  if(typeof SFX !== 'undefined' && SFX && SFX.click) SFX.click();
-  stackApply();
-}
-
-/* 展开 / 收起切换（状态按分类记忆，render() 重建后沿用） */
-function stackToggle(btn){
-  var deck = btn && btn.closest ? btn.closest('.stack-deck') : null;
-  if(!deck) return;
-  var catId = deck.getAttribute('data-cat');
-  var open = !deck.classList.contains('is-open');
-  deck.classList.toggle('is-open', open);
-  if(catId != null){ if(open) STACK_OPEN[catId] = true; else delete STACK_OPEN[catId]; }
-  /* 重建顶部操作条（展开态不显示 ↑↓） */
-  var bar = deck.querySelector(':scope > .stack-bar');
-  var n = deck.querySelectorAll(':scope > .stack-body > .stack-item').length;
-  if(bar) bar.outerHTML = stackBarHtml(n, open);
-  if(typeof SFX !== 'undefined' && SFX && SFX.click) SFX.click();
-  stackApply();
-}
-
-/* 滚轮 / 触摸：在堆叠区上下滑动即轮换（在 #grid 上做事件委托，
-   #grid 本身不被 render() 重建，所以只需绑一次） */
-(function(){
-  var lock = 0;
-  function deckOf(t){
-    if(!t || !t.closest) return null;
-    var d = t.closest('.stack-deck');
-    return (d && !d.classList.contains('is-open')) ? d : null;
-  }
-  function shift(deck, dir){
-    if(!deck) return;
-    var body = deck.querySelector(':scope > .stack-body');
-    if(!body || body.children.length < 2) return;
-    var now = Date.now();
-    if(now - lock < 420) return;            /* 防抖：一次滑动只轮换一张 */
-    lock = now;
-    if(dir === 1) body.appendChild(body.children[0]);
-    else body.insertBefore(body.children[body.children.length - 1], body.children[0]);
-    stackApply();
-  }
-  document.addEventListener('wheel', function(e){
-    var deck = deckOf(e.target);
-    if(!deck) return;
-    /* 堆叠态下卡片是叠着的，没有独立滚动区，因此直接接管滚轮做轮换；
-       但若指针落在卡片内部的滚动容器上，则让位给正常滚动 */
-    var sc = e.target.closest ? e.target.closest('.stack-item') : null;
-    if(sc && sc.scrollHeight > sc.clientHeight + 4) return;
-    e.preventDefault();
-    shift(deck, e.deltaY > 0 ? 1 : -1);
-  }, { passive: false });
-
-  var ty = 0, tDeck = null;
-  document.addEventListener('touchstart', function(e){
-    tDeck = deckOf(e.target);
-    ty = e.touches && e.touches[0] ? e.touches[0].clientY : 0;
-  }, { passive: true });
-  document.addEventListener('touchend', function(e){
-    if(!tDeck) return;
-    var y = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : ty;
-    var dy = ty - y;
-    if(Math.abs(dy) > 42) shift(tDeck, dy > 0 ? 1 : -1);
-    tDeck = null;
-  }, { passive: true });
-})();
-
 
 /* =====================================================
  * 【自定义设置 + 交互动效】
@@ -3845,7 +3607,6 @@ function uiDefault(){
     v: UI_V,
     fs: 1,              /* 字号缩放 0.85 ~ 1.35 */
     motion: 1,          /* 1 = 完整动效，0 = 精简 */
-    stack: 1,           /* 【卡片堆叠 v35】1 = 多卡片分类层叠展示，0 = 传统平铺 */
     bg: { type:'theme', color:'#fffbf7', grad:'', veil:55 },  /* theme|solid|grad|image */
     order: {
       home: ['ann','sign','daily','countdown'],
@@ -3884,7 +3645,6 @@ function normalizeUI(o){
   var out = uiDefault();
   out.fs = (typeof o.fs === 'number' && o.fs >= 0.7 && o.fs <= 1.6) ? o.fs : 1;
   out.motion = (o.motion === 0) ? 0 : 1;
-  out.stack  = (o.stack  === 0) ? 0 : 1;   /* 【卡片堆叠 v35】缺省开，仅显式 0 才关 */
   if(o.bg && typeof o.bg === 'object'){
     out.bg.type = (['theme','solid','grad','image'].indexOf(o.bg.type) >= 0) ? o.bg.type : 'theme';
     out.bg.color = (typeof o.bg.color === 'string') ? o.bg.color : d.bg.color;
@@ -4057,7 +3817,6 @@ function applyUICfg(){
   applyFont();
   applyBg();
   applyHomeOrder();
-  STACK_OPEN = {};    /* 【卡片堆叠 v35】配置变更（导入/恢复默认）后清展开记忆，回到默认堆叠态 */
   document.documentElement.setAttribute('data-motion', UI.motion ? 'on' : 'off');
   var sb = document.getElementById('uiSetBtn');
   if(sb) sb.innerHTML = iconSvg('settings', 15, 'margin-right:7px;vertical-align:-2px') + '自定义设置';
@@ -4546,9 +4305,7 @@ function renderSettings(){
     html += secHtml('mo','动效','sliders-horizontal',
       '<div class="sw-row"><span class="t">完整动效<span class="s">拖拽、涟漪、圆形主题切换等</span></span>' +
         swHtml(UI.motion !== 0, 'toggleMotion(event)') + '</div>' +
-      '<div class="sw-row"><span class="t">卡片堆叠<span class="s">同一板块的多个入口层叠展示，可点 ↑↓ 上下轮换</span></span>' +
-        swHtml(UI.stack !== 0, 'toggleStack(event)') + '</div>' +
-      '<p class="ui-hint">关闭后所有动效立即静止（跟随系统的「减少动态效果」设置也同理）；关闭「卡片堆叠」则卡片恢复平铺罗列。</p>', true);
+      '<p class="ui-hint">关闭后所有动效立即静止（跟随系统的「减少动态效果」设置也同理）。</p>', true);
     html += secHtml('sfx','音效','droplet',
       '<div class="sw-row"><span class="t">界面音效<span class="s">点击、成功、错误提示音</span></span>' +
         swHtml(SFX.isOn(), 'toggleSfxFromUI(event)') + '</div>', false);
@@ -4706,18 +4463,6 @@ function toggleMotion(ev){
   var btn = ev && ev.target && ev.target.closest ? ev.target.closest('.sw') : null;
   if(UI.motion) rippleOn(btn, ev);
   else if(btn) btn.classList.remove('ripping');
-  renderSettings();
-  SFX.click();
-}
-
-/* 【卡片堆叠 v35】开关：切换「层叠展示」与「传统平铺」，立即重渲染生效 */
-function toggleStack(ev){
-  UI.stack = (UI.stack === 0) ? 1 : 0;
-  saveUI();
-  STACK_OPEN = {};                        /* 切换模式时清掉展开记忆，回到默认堆叠态 */
-  var btn = ev && ev.target && ev.target.closest ? ev.target.closest('.sw') : null;
-  rippleOn(btn, ev);
-  rerenderAll();                          /* 重渲染分类卡片，让堆叠/平铺立即生效 */
   renderSettings();
   SFX.click();
 }

@@ -12,13 +12,8 @@
 //      现按 git 提交时间回填（09-26 15:38 / 16:43 / 17:50，以及本轮 09-27 09:32）。
 //      同期修正 internal/notes.md 中 8 条更新记录标题与 10 处站规日期。
 //      （v33 自定义设置成果保留）
-// v35：板块卡片改为「卡片堆叠」——同一板块下 ≥2 个入口时层叠成一沓只露顶牌，
-//      顶部条显示入口数并提供 ↑↓ 上下轮换（点击 / 滚轮 / 手机上下滑动均可触发），
-//      另有「展开全部」回到平铺，被压住的卡片在堆叠态不响应指针避免误触。
-//      纯 CSS transform 实现，不引入任何第三方库（微信 X5 可用）；
-//      可在「自定义设置 → 动效」里关掉，回到传统平铺。仅单个入口的板块不堆叠。
 //      升版本清旧缓存
-const CACHE = 'class-site-v35'
+const CACHE = 'class-site-v34'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
