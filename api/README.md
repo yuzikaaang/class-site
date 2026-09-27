@@ -8,13 +8,13 @@
 ## 一、整体架构
 
 ```
-┌─────────────────────┐         ┌──────────────────────────┐
-│  前端（Gitee Pages） │         │  后端（Vercel）           │
-│  index.html         │  HTTPS  │  /api/auth   登录注册      │
-│  · 账号弹窗          │ ──────▶ │  /api/data   个人数据同步  │
-│  · 个人中心          │  Bearer │  /api/admin  管理员后台    │
-│  · 管理后台          │  token  │         │                 │
-└─────────────────────┘         └─────────┼────────────────┘
+┌──────────────────────┐        ┌──────────────────────────┐
+│  前端（GitHub Pages）  │        │  后端（Vercel）           │
+│  index.html          │ HTTPS  │  /api/auth   登录注册      │
+│  · 账号弹窗           │ ─────▶ │  /api/data   个人数据同步  │
+│  · 个人中心           │ Bearer │  /api/admin  管理员后台    │
+│  · 管理后台           │ token  │         │                 │
+└──────────────────────┘        └─────────┼────────────────┘
                                           │ SQL（HTTP 传输）
                                           ▼
                                 ┌──────────────────────────┐
@@ -26,9 +26,46 @@
 
 **前端不动，只加 API**——这是站主选定的方案，所以跨域是必须处理的事。
 
+> 📌 **关于仓库平台**：Vercel **只支持 GitHub / GitLab / Bitbucket** 导入，
+> **不支持 Gitee**。本站源码仓库就是 GitHub 上的 `yuzikaaang/class-site`，
+> 因此 Vercel 直接连它即可，无需中转。Gitee 上那份是历史镜像，
+> 且 Gitee Pages 已于 2024 年永久下线，不再作为部署来源。
+
 ---
 
 ## 二、部署步骤（约 15 分钟）
+
+### 前置：确认代码在 GitHub 上
+
+Vercel 只能连 **GitHub / GitLab / Bitbucket**（**不支持 Gitee**）。
+本站源码仓库在 GitHub：`https://github.com/yuzikaaang/class-site`。
+
+推代码上去（在项目根目录执行，**只需做一次**）：
+
+```bash
+git remote add github https://github.com/yuzikaaang/class-site.git
+git push -u github master
+```
+
+> ⚠️ 若该仓库此前**只放过 GitHub Pages 的产物**（仓库里只有 HTML/静态文件、
+> 没有 `api/`、`vercel.json`、`package.json`），直接推会因历史冲突失败。
+> 两种处理方式，任选其一：
+>
+> **A. 仓库还能用 → 强制覆盖**（会丢掉仓库里原有的所有历史，仅当那些内容不重要时用）
+> ```bash
+> git push -u github master --force
+> ```
+>
+> **B. 更干净 → 在 GitHub 新建一个空仓库**（比如 `class-site-src`），然后
+> ```bash
+> git remote add github https://github.com/yuzikaaang/class-site-src.git
+> git push -u github master
+> ```
+> 新建仓库**不要勾** "Add a README"，保持全空，否则推的时候还要先拉一次。
+
+> 💡 **GitHub Pages 不受影响**：Pages 是仓库的 Settings → Pages 里单独配的，
+> 面向 `gh-pages` 分支或某个目录出页面。往 `master` 推源码**不会**动到它。
+> 推完记得去仓库 **Settings → Pages** 确认 Source 仍指向正确的分支。
 
 ### 第 1 步：建 Neon 数据库
 
@@ -44,8 +81,9 @@
 
 ### 第 2 步：部署后端到 Vercel
 
-1. 打开 <https://vercel.com>，用 GitHub 登录
-2. **Add New → Project** → 选你的 `class-site` 仓库 → Import
+1. 打开 <https://vercel.com>，用 GitHub 登录（授权后 Vercel 才能读你的仓库）
+2. **Add New → Project** → 在列表里选 `class-site` 仓库 → Import
+   > 如果列表里没有：点 **Adjust GitHub App Permissions** 授予该仓库访问权。
 3. 配置（**很重要**）：
    - **Framework Preset**：`Other`
    - **Root Directory**：保持 `./`（仓库根目录）
@@ -57,12 +95,14 @@
    |---|---|---|
    | `DATABASE_URL` | Neon 连接串 | `postgresql://...neon.tech/neondb?sslmode=require` |
    | `ADMIN_USERS` | 管理员用户名（逗号分隔） | `zikang` |
-   | `ALLOW_ORIGINS` | 允许跨域的前端地址 | `https://zikang0529.gitee.io` |
+   | `ALLOW_ORIGINS` | 允许跨域的前端地址 | `https://yuzikaaang.github.io` |
    | `SESSION_DAYS` | 登录保持天数 | `30` |
    | `ALLOW_REGISTER` | 是否开放注册 | `1` |
 
-   > `ALLOW_ORIGINS` **必须填你前端的真实地址**（Gitee Pages 的域名），
-   > 不填的话浏览器会因为跨域拒绝请求。多个用英文逗号分隔，**结尾不要带斜杠**。
+   > `ALLOW_ORIGINS` **必须填你前端的真实域名**（GitHub Pages 的域名，
+   > 形如 `https://yuzikaaang.github.io`），不填浏览器会因跨域拒绝请求。
+   > 多个用英文逗号分隔，**结尾不要带斜杠**。
+   > 本地调试时可临时填 `*`，上线后改回具体域名。
 
 5. 点 **Deploy**，等 1 分钟左右
 6. 部署完拿到地址，形如 `https://class-site-xxxx.vercel.app`
@@ -81,7 +121,7 @@ var API_BASE_DEFAULT = '';
 var API_BASE_DEFAULT = 'https://class-site-xxxx.vercel.app';
 ```
 
-保存 → 推送到 Gitee → 同学们强刷页面即可。
+保存 → 推到 GitHub → 同学们强刷页面即可。
 
 ### 第 4 步：注册管理员
 
@@ -201,6 +241,17 @@ ADMIN_USERS="zikang" ALLOW_ORIGINS="*" PORT=8912 node testsrv.js
 ---
 
 ## 七、常见问题
+
+**Q：Vercel 能导入 Gitee 仓库吗？**
+A：**不能**。Vercel 官方只支持 GitHub / GitLab / Bitbucket 三家。
+本站源码本来就在 GitHub（`yuzikaaang/class-site`），直接连它即可。
+如果以后想继续用 Gitee 做镜像，两者可以并存——GitHub 推 Vercel 部署，
+Gitee 只是备份，互不干扰（但记得两边都推，否则代码会不同步）。
+
+**Q：`ALLOW_ORIGINS` 填错了会怎样？**
+A：浏览器控制台报 CORS 错误，登录/同步全部失败。检查三点：
+① 域名拼写是否完全一致（含 `https://`）；② 结尾是否多带了 `/`；
+③ 修改环境变量后是否**重新部署**（Vercel 改环境变量不会自动生效，要 Redeploy）。
 
 **Q：同学打开页面卡在「加载中」？**
 A：检查 `ALLOW_ORIGINS` 是否填对了前端域名（结尾不要带 `/`）。

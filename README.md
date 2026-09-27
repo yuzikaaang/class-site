@@ -131,7 +131,7 @@ A：会。内容随仓库实时更新，打开即是最新版；装到桌面后�
 
 - 纯静态 PWA：单文件 `index.html` + `games/` 小游戏 + Service Worker 离线缓存
 - 无需后端与数据库，所有个人数据保存在你自己的设备（localStorage）里，不上传服务器
-- 仓库开源：Gitee `zikang0529/class-site` / GitHub `yuzikaaang/class-site`
+- 仓库开源：GitHub `yuzikaaang/class-site`（主仓库，Pages 与 Vercel 都基于它）
 - 站内「导出备份」可下载完整站点备份包（需备份密码）
 
 ---

@@ -2,7 +2,7 @@
    HTTP 工具：CORS、统一响应、鉴权
    ------------------------------------------------------------
    鉴权用 Authorization: Bearer <token>，不依赖 Cookie。
-   原因：前端在 Gitee Pages、API 在 Vercel，属于跨站请求，
+   原因：前端在 GitHub Pages、API 在 Vercel，属于跨站请求，
    Cookie 需要 SameSite=None + Secure 才可能带上，而微信内置浏览器
    （X5 内核）对第三方 Cookie 限制很严，登录态会莫名其妙掉。
    用 Bearer token 存 localStorage，跨域一样稳定。

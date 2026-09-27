@@ -36,12 +36,8 @@
 //      ③ 管理员可管用户、改数据、看统计与操作日志
 //      ④ 不登录时站点行为完全不变，数据照旧存本机
 //      部署说明见 api/README.md；接口不可用时不影响离线使用
-// v38：部署平台说明修正 —— 前端域名由「Gitee Pages」更正为「GitHub Pages」
-//      （Gitee Pages 已于 2024 年永久下线），站点「仓库」按钮改指 GitHub 仓库；
-//      api/README.md 补上「Vercel 不支持导入 Gitee，需用 GitHub 仓库」的说明
-//      与推送步骤。功能无变化，仅纠正过时描述。
 //      升版本清旧缓存
-const CACHE = 'class-site-v39'
+const CACHE = 'class-site-v38'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
