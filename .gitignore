@@ -32,3 +32,6 @@ api/.env.local
 api/.env.*
 # 但示例文件要提交，方便部署时照着填
 !api/.env.example
+
+# 临时截图产物（测试截图不入库）
+internal/shot-*.png
