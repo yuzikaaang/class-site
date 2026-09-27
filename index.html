@@ -1025,14 +1025,24 @@ html[data-bg="theme"] #bgLayer{display:none}
 html:not([data-bg="theme"]) body::before,
 html:not([data-bg="theme"]) body::after{display:none}
 
-/* ③ Radial Theme Transition —— 从点击点扩散的圆形裁剪 */
-.theme-ripple{position:fixed;inset:0;z-index:9999;pointer-events:none;background:var(--ripple-bg);
-  -webkit-clip-path:circle(0px at var(--tx,50%) var(--ty,50%));clip-path:circle(0px at var(--tx,50%) var(--ty,50%));
-  transition:-webkit-clip-path .48s var(--ease-out),clip-path .48s var(--ease-out)}
-.theme-ripple.go{-webkit-clip-path:circle(var(--rr,150vmax) at var(--tx,50%) var(--ty,50%));
-                 clip-path:circle(var(--rr,150vmax) at var(--tx,50%) var(--ty,50%))}
-:root{--ripple-bg:#1a1715}
-.dark{--ripple-bg:#fffbf7}
+/* ③ Radial Theme Transition —— 从点击点扩散的圆形裁剪
+ * A 路径（View Transitions）：旧帧静止，新帧（切换后的真实页面）从按钮坐标扩散揭示。
+ *   关键在 animation:none 压掉默认 cross-fade，否则两层混合会出现半透明鬼影。 */
+::view-transition-old(root){animation:none;mix-blend-mode:normal}
+::view-transition-new(root){mix-blend-mode:normal;animation:vt-reveal .48s var(--ease-out) both;
+  clip-path:circle(0px at var(--vt-x,50%) var(--vt-y,50%))}
+@keyframes vt-reveal{
+  from{clip-path:circle(0px at var(--vt-x,50%) var(--vt-y,50%))}
+  to{clip-path:circle(var(--vt-r,1200px) at var(--vt-x,50%) var(--vt-y,50%))}
+}
+@media (prefers-reduced-motion: reduce){
+  ::view-transition-old(root),::view-transition-new(root){animation:none!important}
+}
+/* B 路径（不支持 VT 的内核）：切换前盖上的「旧主题真实背景」，向按钮收缩后移除。
+ * 背景内容由 JS 固化（主题渐变 / 用户自定义图色 + 蒙层），这里只管层与过渡。 */
+.theme-legacy{position:fixed;inset:0;z-index:2147483000;pointer-events:none;
+  background-size:cover;background-position:center;background-repeat:no-repeat;
+  transition:clip-path .48s var(--ease-out),-webkit-clip-path .48s var(--ease-out)}
 
 /* ④ 设置面板骨架 */
 .ui-tabs{display:flex;gap:6px;padding:10px 14px 0;flex:none}
@@ -1157,7 +1167,7 @@ html[data-motion="off"] .sw::before,
 html[data-motion="off"] .sw,
 html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 @media (prefers-reduced-motion:reduce){
-  .theme-ripple{display:none}
+  .theme-legacy{display:none}
   .sort-row,.stepper i,.ui-sec-b,.filter-btn::before,.sw,.sw::before,
   .snap-thumb,.snap.snapping .snap-thumb{transition:none}
   .sw.ripping .rip{animation:none}
@@ -3820,25 +3830,82 @@ function rerenderAll(){
   if(ab && ab.classList.contains('show')) renderAllBoard();
 }
 
-/* ---------- Radial Theme Transition ---------- */
-
-function radialTheme(x, y){
-  if(!motionOn()) return;
-  try{
-    if(!(window.CSS && CSS.supports && CSS.supports('clip-path','circle(0px at 0 0)'))) return;
-  }catch(e){ return; }
+/* ---------- Radial Theme Transition ----------
+ * 【v34 重做】旧版是「先瞬间切完主题，再放一块纯色圆盘从按钮扩散」——圆盘里没有页面
+ * 内容，站主指出这不是扩散，是「在新图层放了个动画」。正确做法有两条：
+ *  A. 支持 View Transitions API（Chrome 111+ / Safari 18+）：用 startViewTransition 让
+ *     浏览器截取切换前后的【真实页面快照】，新帧从按钮坐标做 clip-path 圆形扩散——
+ *     圆里是带全部卡片文字图片的新主题画面，这才是真的「从按钮处扩散」。
+ *  B. 不支持的内核（微信 X5 等）：切换【前】先盖一层「旧主题的真实背景」（固化主题
+ *     渐变 / 用户自定义背景 + 蒙层），切换后让它向按钮收缩消失——拿不到旧画面截图的
+ *     内核上能做到的最接近效果。方向是收缩而非扩散，但屏幕上始终是真实页面在变化。
+ *  C. 动效关闭 / 系统「减少动态效果」：直接切换，无任何动画。 */
+function themeRippleCenter(ev){
   var w = window.innerWidth, h = window.innerHeight;
-  var rr = Math.hypot(Math.max(x, w - x), Math.max(y, h - y)) + 8;
-  var el = document.createElement('div');
-  el.className = 'theme-ripple';
-  el.style.setProperty('--tx', x + 'px');
-  el.style.setProperty('--ty', y + 'px');
-  el.style.setProperty('--rr', rr + 'px');
-  document.body.appendChild(el);
-  requestAnimationFrame(function(){
-    requestAnimationFrame(function(){ el.classList.add('go'); });
-  });
-  setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 560);
+  var x = w / 2, y = 60;
+  if(ev && ev.clientX){ x = ev.clientX; y = ev.clientY; }
+  else { var tb = document.getElementById('themeToggle');
+         if(tb){ var r = tb.getBoundingClientRect(); x = r.left + r.width/2; y = r.top + r.height/2; } }
+  x = Math.round(x); y = Math.round(y);
+  var rr = Math.round(Math.hypot(Math.max(x, w - x), Math.max(y, h - y)) + 8);
+  return { x: x, y: y, r: rr };
+}
+
+/* 视觉状态的统一出口：类切换 + 背景层 + 按钮图标（VT 路径下它运行在快照回调内） */
+function applyThemeSwitch(next){
+  var d = document.documentElement;
+  d.classList.toggle('dark', next);
+  applyBg();
+  var b = document.getElementById('themeToggle');
+  if(b) b.textContent = next ? '☀️' : '🌙';
+}
+
+function radialTheme(x, y, next){
+  if(!motionOn()){ applyThemeSwitch(next); return; }          /* C：无动画 */
+  /* A：View Transitions —— 真实快照扩散 */
+  if(typeof document.startViewTransition === 'function'){
+    try{
+      var st = document.documentElement.style, c = themeRippleCenter();
+      st.setProperty('--vt-x', x + 'px');
+      st.setProperty('--vt-y', y + 'px');
+      st.setProperty('--vt-r', c.r + 'px');
+      document.startViewTransition(function(){ applyThemeSwitch(next); });
+      return;
+    }catch(e){ /* 支持 API 但执行失败 → 落到 B */ }
+  }
+  /* B：旧画面收缩（固化切换前的真实背景） */
+  var okClip = true;
+  try{ okClip = !!(window.CSS && CSS.supports && CSS.supports('clip-path','circle(0px at 0 0)')); }catch(e){ okClip = false; }
+  if(!okClip){ applyThemeSwitch(next); return; }
+  var old = document.querySelector('.theme-legacy');
+  if(old && old.parentNode) old.parentNode.removeChild(old);   /* 快速连点时的上一层 */
+  var cs = getComputedStyle(document.documentElement);
+  var ov = document.createElement('div');
+  ov.className = 'theme-legacy';
+  if((document.documentElement.getAttribute('data-bg') || 'theme') === 'theme'){
+    ov.style.backgroundImage = 'linear-gradient(160deg,' + cs.getPropertyValue('--bg-1').trim() + ',' +
+      cs.getPropertyValue('--bg-2').trim() + ' 55%,' + cs.getPropertyValue('--bg-3').trim() + ')';
+  }else{
+    var bgEl = document.getElementById('bgLayer'), bs = bgEl ? getComputedStyle(bgEl) : null;
+    var layers = [], veil = cs.getPropertyValue('--bg-veil').trim();
+    if(veil) layers.push('linear-gradient(' + veil + ',' + veil + ')');
+    if(bs && bs.backgroundImage && bs.backgroundImage !== 'none') layers.push(bs.backgroundImage);
+    if(layers.length) ov.style.backgroundImage = layers.join(',');
+    if(bs && bs.backgroundColor && bs.backgroundColor !== 'rgba(0, 0, 0, 0)')
+      ov.style.backgroundColor = bs.backgroundColor;
+    if(!layers.length && !ov.style.backgroundColor)            /* 兜底：主题渐变 */
+      ov.style.backgroundImage = 'linear-gradient(160deg,' + cs.getPropertyValue('--bg-1').trim() + ',' +
+        cs.getPropertyValue('--bg-2').trim() + ' 55%,' + cs.getPropertyValue('--bg-3').trim() + ')';
+  }
+  var full = 'circle(' + themeRippleCenter().r + 'px at ' + x + 'px ' + y + 'px)';
+  var zero = 'circle(0px at ' + x + 'px ' + y + 'px)';
+  ov.style.clipPath = full; ov.style.webkitClipPath = full;
+  document.body.appendChild(ov);
+  applyThemeSwitch(next);                                      /* 真实页面切换（被覆盖层盖住） */
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){
+    ov.style.clipPath = zero; ov.style.webkitClipPath = zero;
+    setTimeout(function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); }, 540);
+  });});
 }
 
 /* ---------- Animated Text Disclosure（手风琴，真实高度） ---------- */
@@ -6031,16 +6098,9 @@ function toggleTheme(ev){
     return;
   }
   /* 【自定义设置】Radial Theme Transition：把点击点作为扩散圆心 */
-  var _rx = window.innerWidth / 2, _ry = 60;
-  if(ev && ev.clientX){ _rx = ev.clientX; _ry = ev.clientY; }
-  else { var _tb = document.getElementById('themeToggle');
-         if(_tb){ var _r = _tb.getBoundingClientRect(); _rx = _r.left + _r.width/2; _ry = _r.top + _r.height/2; } }
-  d.classList.toggle('dark');
-  radialTheme(_rx, _ry);
-  applyBg();   /* 蒙层颜色随主题切换 */
+  var _c = themeRippleCenter(ev);
   try{ localStorage.setItem('cls_theme', next ? 'dark' : 'light'); }catch(e){}
-  var b = document.getElementById('themeToggle');
-  if(b) b.textContent = next ? '☀️' : '🌙';
+  radialTheme(_c.x, _c.y, next);
   /* 连续切换白天/黑夜 → 彩带彩蛋 */
   _themeRhythm++;
   if(_themeRhythmTimer) clearTimeout(_themeRhythmTimer);
