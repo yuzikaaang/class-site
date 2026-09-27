@@ -19,6 +19,7 @@
 //      可在「自定义设置 → 动效」里关掉，回到传统平铺。仅单个入口的板块不堆叠。
 //      升版本清旧缓存
 const CACHE = 'class-site-v35'
+// v35.1：卡片堆叠调整——所有卡片统一高度（矮卡不再让下层漏内容）、层间距加大更好点击
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

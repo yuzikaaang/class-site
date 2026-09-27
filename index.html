@@ -893,15 +893,23 @@ body::after{animation-name:blobB;animation-duration:34s}
 .dark .stack-toggle{background:#2e2926;border-color:#453d37;color:#fdba74}
 .dark .stack-toggle:hover{background:#3a332e}
 
-/* 栈体：堆叠态下用绝对定位把卡片摞起来，露出的边缘由 JS 写入 --edge 控制 */
+/* 栈体：堆叠态下把卡片摞成一沓，每张只露出底部一条边。
+   关键：所有卡片统一高度（由 JS 写入 --deck-h），下层下移到「高度 - 露出量」处，
+   这样露出来的正好是它自己的底边，且矮卡片也不会让下层内容漏出来。 */
 .stack-body{position:relative}
 .stack-item{transition:transform .46s var(--ease-out),opacity .36s var(--ease-out);will-change:transform}
-/* 堆叠态：顶牌参与文档流撑开高度，其余绝对定位叠上去（紧凑堆叠，只露 10px 边缘） */
 .stack-deck:not(.is-open) .stack-body{display:block}
-.stack-deck:not(.is-open) .stack-item{transform-origin:center top}
+.stack-deck:not(.is-open) .stack-item{transform-origin:center top;
+  /* 统一高度由 JS 写入 --deck-h：栈内最高的那张卡有多高，所有 item 就多高。
+     否则矮卡片压不住高卡片，下面卡片的内容会从底边漏出来（站主实测提出）。 */
+  height:var(--deck-h,auto)}
 .stack-deck:not(.is-open) .stack-item:not(.stack-top){
   position:absolute;top:0;left:0;width:100%;
   pointer-events:none}                    /* 被压住的卡片不响应指针，避免误触看不见的按钮 */
+/* 卡片在统一高度里纵向拉伸填满，避免矮卡片下半截空着露出底色 */
+.stack-deck:not(.is-open) .stack-item > .card{height:100%;overflow:hidden}
+/* 只是略矮的卡片（内容短一点）让它居中，避免顶部贴着、底部空一大块 */
+.stack-deck:not(.is-open) .stack-item.stack-top > .card{justify-content:center}
 /* 顶牌轻抬，强化「最上面这张」的层次 */
 .stack-deck:not(.is-open) .stack-item.stack-top{filter:drop-shadow(0 12px 22px rgba(120,53,15,.13))}
 .dark .stack-deck:not(.is-open) .stack-item.stack-top{filter:drop-shadow(0 12px 22px rgba(0,0,0,.5))}
@@ -915,11 +923,29 @@ body::after{animation-name:blobB;animation-duration:34s}
 .dark .stack-deck:not(.is-open) .stack-item.stack-top > .card.card-paused{background:#2e2926!important}
 /* 下层卡片同样给不透明底：它们露出的边缘若是半透明，会和背景糊在一起看不清层次 */
 .stack-deck:not(.is-open) .stack-item:not(.stack-top) > .card{
-  background:#fff!important;-webkit-backdrop-filter:none;backdrop-filter:none;
-  box-shadow:0 -2px 8px rgba(120,53,15,.07)!important}
+  background:#fff!important;-webkit-backdrop-filter:none;backdrop-filter:none}
 .dark .stack-deck:not(.is-open) .stack-item:not(.stack-top) > .card{background:#262220!important}
 .stack-deck:not(.is-open) .stack-item:not(.stack-top) > .card.card-paused{background:#ebe3db!important}
 .dark .stack-deck:not(.is-open) .stack-item:not(.stack-top) > .card.card-paused{background:#2e2926!important}
+/* ⚠️ 下层卡片只露出一条边，不能把图标标题漏出来（实测问题）。
+   用 clip-path 把它自己裁成「只剩最上面 EDGE 那一条」，再叠一张同色底板挡住内容——
+   因为卡片顶部还有 24px 内边距，光裁剪仍会露出图标的上半截。
+   --cover 由 JS 写入（该层露出的高度）。 */
+.stack-deck:not(.is-open) .stack-item:not(.stack-top) > .card{
+  clip-path:inset(0 0 calc(100% - var(--cover,50px)) 0)}
+.stack-deck:not(.is-open) .stack-item:not(.stack-top)::before{
+  content:'';position:absolute;left:0;right:0;top:0;height:var(--cover,50px);
+  background:#fff;border:1px solid rgba(120,53,15,.055);border-bottom:none;
+  border-radius:22px 22px 0 0;z-index:4;pointer-events:none}
+.dark .stack-deck:not(.is-open) .stack-item:not(.stack-top)::before{
+  background:#262220;border-color:rgba(255,255,255,.06)}
+.stack-deck:not(.is-open) .stack-item:not(.stack-top).is-paused::before{background:#ebe3db}
+.dark .stack-deck:not(.is-open) .stack-item:not(.stack-top).is-paused::before{background:#2e2926}
+/* 展开态与顶牌不做裁剪 */
+.stack-deck.is-open .stack-item > .card,
+.stack-deck:not(.is-open) .stack-item.stack-top > .card{clip-path:none}
+.stack-deck.is-open .stack-item::before,
+.stack-deck:not(.is-open) .stack-item.stack-top::before{display:none}
 
 /* 展开态：恢复普通竖向平铺，所有卡片完全可交互（等同改造前的样子） */
 .stack-deck.is-open .stack-body{display:flex;flex-direction:column;gap:25px}
@@ -3705,7 +3731,10 @@ function stackBarHtml(n, open){
   '</div>';
 }
 
-/* 按当前 DOM 顺序，给栈内每张卡重算层叠位移与层级（紧凑堆叠：每层露 10px） */
+/* 按当前 DOM 顺序，重算栈内每张卡的高度与层叠位移。
+   【统一高度】先把 --deck-h 清掉量出每张卡的自然高度，取最大值写回 --deck-h，
+   让所有 item 一样高——否则矮卡片挡不住高卡片，下面的内容会从底边漏出来。
+   【看穿过滤】层与层必须有足够间距，否则下面的卡片会被上面完全盖住、看不出是一沓。 */
 function stackApply(){
   var decks = document.querySelectorAll('.stack-deck');
   Array.prototype.forEach.call(decks, function(deck){
@@ -3714,30 +3743,63 @@ function stackApply(){
     if(!items.length) return;
     deck.setAttribute('data-n', items.length);
     if(open){
+      deck.style.removeProperty('--deck-h');       /* 展开态回到各自自然高度 */
+      deck.style.paddingBottom = '';               /* 清掉堆叠态为露出边缘留的余量 */
       items.forEach(function(it){
         it.classList.remove('stack-top');
         it.style.transform = '';
         it.style.zIndex = '';
         it.removeAttribute('aria-hidden');
+        it.style.removeProperty('--cover');       /* 展开态不做裁剪，清掉露出量 */
       });
       return;
     }
-    var EDGE = Math.round(14 * (UI.fs || 1));   /* 每层露出的边缘高度，跟随用户字号缩放 */
-    /* 按栈顶到栈底依次排：第 0 张在最上；下面几张整体下移并轻微缩小 + 旋转 */
+    /* ⚠️ 所属分类还没显示（display:none）时量不到高度，全部为 0。
+       render() 里会先调本函数，而那时 .tab-page 往往还不是 active——
+       所以这里直接返回，等 openCat() 切到该分类后再调一次（见 openCat）。 */
+    if(!deck.offsetHeight && !deck.offsetWidth) return;
+
+    /* ① 量自然高度：先把所有 item 的 transform 与统一高度都摘掉，
+          否则量到的是「上一次缩放后的视觉高度」，算出来的统一高度会一代代缩水。
+          摘掉后强制读一次 offsetHeight 逼浏览器重排，确保量的是干净的自然高度。 */
+    deck.style.removeProperty('--deck-h');
+    items.forEach(function(it){ it.style.transform = ''; });
+    void deck.offsetHeight;                              /* 强制回流，让上面的清空生效 */
+    var maxH = 0;
+    items.forEach(function(it){
+      /* 用 offsetHeight 而非 getBoundingClientRect：后者受 CSS 变换影响 */
+      var h = it.offsetHeight || 0;
+      if(h > maxH) maxH = h;
+    });
+    if(maxH > 0) deck.style.setProperty('--deck-h', Math.ceil(maxH) + 'px');
+
+    /* ② 每层露出的边缘：堆得松一些，层次更清楚（跟随用户字号缩放） */
+    var EDGE = Math.round(46 * (UI.fs || 1));
+    /* 统一高度（px）。所有 item 都一样高，所以位移基准用同一个值。 */
+    var H = Math.ceil(maxH) || 0;
     items.forEach(function(it, i){
       it.classList.toggle('stack-top', i === 0);
       it.style.zIndex = String(items.length - i);   /* 越靠上层级越高 */
       if(i === 0){
-        it.style.transform = '';
+        it.style.transform = '';                    /* 顶牌不位移，靠它定整体位置 */
         it.removeAttribute('aria-hidden');
       }else{
-        var y = i * EDGE;                            /* 逐层下移，露出边缘 */
-        var sc = 1 - i * 0.03;                       /* 逐层轻微缩小，做出纵深 */
+        /* 下层整体下移到「顶牌底边 - 露出量」处，露出它自己最上面的 EDGE 一条。
+           若用 i*EDGE 累加，位移太小会被顶牌整个盖住，看不出是一沓（实测问题）。 */
+        var y = Math.max(0, H - EDGE * i);
+        var sc = 1 - i * 0.018;                      /* 逐层极轻微缩小，做出纵深 */
         var rot = (i % 2 ? 1 : -1) * (i * 0.4);      /* 左右交替微旋转，像一沓牌 */
         it.style.transform = 'translateY(' + y + 'px) scale(' + sc + ') rotate(' + rot + 'deg)';
         it.setAttribute('aria-hidden', 'true');
+        /* 把卡片裁成只剩顶边一条，并另叠一层同色底板挡住内容
+           （卡片顶部有 24px 内边距，只裁剪仍会露出图标上半截——实测问题） */
+        it.style.setProperty('--cover', EDGE + 'px');
+        var card = it.querySelector(':scope > .card');
+        it.classList.toggle('is-paused', !!(card && card.classList.contains('card-paused')));
       }
     });
+    /* ③ 栈体总高要容下最下面那张露出的边：比单张卡高再多出 (n-1)*EDGE */
+    deck.style.paddingBottom = (items.length - 1) * EDGE + 'px';
   });
 }
 
@@ -4988,6 +5050,13 @@ function openCat(id){
   if(cur) cur.classList.add('active');
   var homeBtn = document.getElementById('homeBtn');
   if(homeBtn) homeBtn.classList.remove('active');
+  /* 【卡片堆叠 v35】切到该分类后卡片才真正可见，此时才能量到高度算统一高度。
+     render() 里的 stackApply() 跑在分类显示之前，量不到高度会被跳过，
+     所以这里补一次；用 rAF 等布局稳定后再量，避免刚切过去量到过渡中的中间值。 */
+  if(typeof stackApply === 'function'){
+    stackApply();
+    requestAnimationFrame(function(){ stackApply(); });
+  }
   closeSidebar();
 }
 function goHomeView(){
