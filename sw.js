@@ -45,8 +45,10 @@
 //      会出现「能进后台但每个接口都 403」的尴尬。现在点开后台前先问一次
 //      /api/auth?action=me，以服务端返回的 role 为准并回写本地缓存。
 //      同时修掉一个残留问题：核实失败时清空弹窗内容，不留上次的旧界面。
+// v41：重要日期新增【第一次段考】（10月13日—14日），并在「查看全部」里支持
+//      二级弹窗展开各科考试范围（文字版）。列表日期对跨天事项改为显示区间。
 //      升版本清旧缓存
-const CACHE = 'class-site-v40'
+const CACHE = 'class-site-v41'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

@@ -321,6 +321,39 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .allboard-list{overflow-y:auto;list-style:none;margin:0;padding:0;max-height:60vh}
 .allboard-list li{padding:13px 18px;border-bottom:1px solid #f4ede6}
 .allboard-list li:last-child{border-bottom:none}
+
+/* ===== 考试范围弹窗（二级）=====
+   配色沿用暖橙主色（#9a3412 → #af410f），与弹窗头部呼应；白字对比度 7.31:1，达 AA。
+   暗色规则写在下方 .dark 区块，别指望自动继承。 */
+.ex-scope-btn{
+  background:linear-gradient(90deg,#9a3412,#af410f);color:#fff;border:none;
+  border-radius:999px;padding:7px 16px;font-size:.78rem;font-weight:700;cursor:pointer;
+  box-shadow:0 2px 8px rgba(120,53,15,.22);
+}
+.ex-scope-btn:hover{filter:brightness(1.08)}
+.ex-scope-btn:active{transform:translateY(1px)}
+.ex-scope-body{padding:14px 18px 18px;overflow-y:auto;max-height:60vh}
+.ex-scope-date{
+  font-size:.8rem;font-weight:700;color:#9a3412;background:#fff1e7;
+  border-radius:10px;padding:7px 12px;margin-bottom:12px;
+}
+.ex-scope-list{list-style:none;margin:0;padding:0}
+.ex-scope-item{padding:10px 0;border-bottom:1px dashed rgba(120,53,15,.16)}
+.ex-scope-item:last-child{border-bottom:none}
+.ex-scope-sub{
+  font-size:.8rem;font-weight:800;color:#fff;background:#af410f;
+  border-radius:6px;padding:2px 9px;display:inline-block;margin-bottom:6px;
+}
+.ex-scope-txt{font-size:.82rem;line-height:1.7;color:#3f3730;word-break:break-word}
+.ex-scope-note{
+  margin-top:12px;padding-top:10px;border-top:1px solid rgba(120,53,15,.16);
+  font-size:.72rem;color:#6e635a;line-height:1.6;
+}
+/* 暗色模式下正文要反转用浅色，别指望自动继承 */
+.dark .ex-scope-date{background:rgba(175,65,15,.22);color:#ffb08a}
+.dark .ex-scope-item{border-bottom-color:rgba(255,255,255,.12)}
+.dark .ex-scope-txt{color:#c9cfd8}
+.dark .ex-scope-note{color:#9aa7b8;border-top-color:rgba(255,255,255,.12)}
 .ann-cat.collapsed > ul{display:none}
 .ann-item.hl{background:#fff1e7;border-radius:8px;margin:6px 0}
 mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
@@ -1611,6 +1644,14 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   </div>
 </div>
 
+<!-- ===== 考试范围弹窗（二级：由「全部重要日期」点进来） ===== -->
+<div class="allboard-mask" id="examScopeMask">
+  <div class="allboard-box" style="max-width:460px">
+    <div class="allboard-head allimp-head"><span id="examScopeTitle">考试范围</span><button onclick="closeExamScope()">关闭</button></div>
+    <div class="ex-scope-body" id="examScopeBody"></div>
+  </div>
+</div>
+
 <!-- ===== 账号：登录 / 注册 / 个人中心 ===== -->
 <!--
   设计说明：
@@ -2479,6 +2520,7 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-09-29 23:02", text: "📅 第一次段考时间已公布：10月13日—14日。\n各科考试范围可在「重要日期倒计时」→「查看全部」→「查看考试范围」中查看。", category: "activity" },
     { date: "2026-09-27 09:32", text: "🎨 新增自定义设置：排序、字号、背景", category: "site" },
     { date: "2026-09-26 17:50", text: "界面换回暖橙新装，更清爽啦。", category: "site" },
     { date: "2026-09-26 16:43", text: "🔓 站内入口已免密码，直接进入即可。", category: "site" },
@@ -2766,8 +2808,69 @@ var SEMESTER = {
   breakDate: "2027-01-30T00:00:00"  /* 寒假开始：1月30日 00:00（以学校通知为准） */
 };
 var IMPORTANT_DATES = [
-  { name: "寒假", date: "2027-01-30T00:00:00" }
+  { name: "寒假", date: "2027-01-30T00:00:00" },
+  /* 第一次段考（10月13日—14日，共两天）
+     · endDate：结束日期，用于显示「13日—14日」这种区间（单日事项不用填）
+     · scope：各科考试范围，填了才会在弹窗里出现「查看考试范围」入口 */
+  { name: "第一次段考", date: "2026-10-13T00:00:00", endDate: "2026-10-14", scope: [
+      { sub: "语文", txt: "选择性必修上册第一单元和第二单元（默写范围：《〈论语〉十二章》《大学之道》《〈老子〉四章》）" },
+      { sub: "数学", txt: "选择性必修一第一章，第二章第一节" },
+      { sub: "英语", txt: "选择性必修一 Unit1 — Unit3" },
+      { sub: "物理", txt: "必修三 第九章静电场、第十章静电场中的能量、第十一章电路及其应用　全部内容" },
+      { sub: "化学", txt: "选必一第一章到第三章第一节电离平衡" },
+      { sub: "生物", txt: "必修二前5章（占30%），必修二第六章至选择性必修一第二章第三节（占70%）。" }
+    ] }
 ];
+
+/* ── 考试范围弹窗 ──
+   为什么单独一个弹窗：段考范围有六科、每科一大段，塞进倒计时那一小条会挤成一团，
+   手机上根本没法看。做成二级弹窗后，倒计时仍然清爽，想看的人点进去才是全文。 */
+var EXAM_SCOPE = {};   /* 打开时按 name 存一份当前条目，避免把整段文本塞进 onclick */
+function openExamScope(name){
+  for(var i=0;i<IMPORTANT_DATES.length;i++){
+    var d = IMPORTANT_DATES[i];
+    if(d.name === name && d.scope && d.scope.length){
+      EXAM_SCOPE = d;
+      break;
+    }
+  }
+  if(!EXAM_SCOPE || !EXAM_SCOPE.scope) return;
+  var mask  = document.getElementById('examScopeMask');
+  var title = document.getElementById('examScopeTitle');
+  var body  = document.getElementById('examScopeBody');
+  if(!mask || !body) return;
+
+  if(title) title.textContent = EXAM_SCOPE.name + ' · 考试范围';
+
+  /* 日期行：单日显示一天，跨日显示区间 */
+  var dateLine = '';
+  if(EXAM_SCOPE.endDate){
+    var a = new Date(EXAM_SCOPE.date), b = new Date(EXAM_SCOPE.endDate + 'T00:00:00');
+    dateLine = fmtDayCn(a) + ' — ' + fmtDayCn(b);
+  }else{
+    dateLine = fmtDayCn(new Date(EXAM_SCOPE.date));
+  }
+
+  body.innerHTML =
+    '<div class="ex-scope-date">🗓 ' + esc(dateLine) + '</div>' +
+    '<ul class="ex-scope-list">' +
+      EXAM_SCOPE.scope.map(function(s){
+        return '<li class="ex-scope-item">' +
+          '<div class="ex-scope-sub">' + esc(s.sub) + '</div>' +
+          '<div class="ex-scope-txt">' + esc(s.txt) + '</div>' +
+        '</li>';
+      }).join('') +
+    '</ul>' +
+    '<div class="ex-scope-note">范围以各科老师最终通知为准。</div>';
+
+  mask.classList.add('show');
+}
+function closeExamScope(){ var m=document.getElementById('examScopeMask'); if(m) m.classList.remove('show'); }
+/* 例：2026-10-13 → "10月13日 周一" */
+function fmtDayCn(d){
+  var w = ['日','一','二','三','四','五','六'][d.getDay()];
+  return (d.getMonth()+1) + '月' + d.getDate() + '日 周' + w;
+}
 
 /* ============ 法定节假日：自动推算（不再手填日期） ============
    以前这里是一张写死的日期表，过一年就得手动补，忘了就会空掉。
@@ -6637,20 +6740,35 @@ function renderAllImp(){
   if(!list) return;
   var now = new Date();
   var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  var arr = IMPORTANT_DATES.map(function(d){ return { name:d.name, date:d.date, d:new Date(d.date) }; })
+  /* ⚠️ map 出来的对象是新的，必须显式带上 endDate / scope ——
+     若不写进来，后面渲染时 d.endDate 永远是 undefined，
+     就会退回到「单日」的老格式，且不会出现「查看考试范围」入口。
+     这个坑已经踩过一次（2026-09-29），改这里务必连同整行一起看。 */
+  var arr = IMPORTANT_DATES.map(function(d){
+    return { name:d.name, date:d.date, d:new Date(d.date), endDate:d.endDate, scope:d.scope };
+  })
     .sort(function(a,b){ return a.d - b.d; });
   list.innerHTML = arr.map(function(d){
     var diff = calendarDiff(d.d, now);
     var isPast = d.d < today;
+    /* 日期行：跨天的事项（如段考 13—14 日）显示区间，单日的照旧显示完整时间 */
+    var dateText = d.endDate
+      ? fmtDayCn(new Date(d.date)) + ' — ' + fmtDayCn(new Date(d.endDate + 'T00:00:00'))
+      : fmtFullDate(d.d);
     return '<li>'+
       '<div class="board-meta">'+
         '<span class="board-date">'+esc(d.name)+'</span>'+
         (isPast ? '<span class="board-pin" style="background:#6e635a">已过</span>' : '')+
       '</div>'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">'+
-        '<span class="imp-date" style="font-size:.78rem">'+fmtFullDate(d.d)+'</span>'+
+        '<span class="imp-date" style="font-size:.78rem">'+esc(dateText)+'</span>'+
         '<span class="imp-remain" style="font-size:.85rem;font-weight:800;white-space:nowrap">'+(isPast?'0月 0天 0时 0分 0秒':diff.months+'月 '+diff.days+'天 '+pad2(diff.hours)+'时 '+pad2(diff.minutes)+'分 '+pad2(diff.seconds)+'秒')+'</span>'+
-      '</div></li>';
+      '</div>'+
+      /* 只有配了 scope 的事项才有这个入口，普通日期不会出现多余的按钮 */
+      (d.scope && d.scope.length
+        ? '<div style="margin-top:8px"><button class="ex-scope-btn" onclick="openExamScope('+JSON.stringify(d.name).replace(/"/g,'&quot;')+')">📖 查看考试范围</button></div>'
+        : '')+
+      '</li>';
   }).join('');
 }
 function openAllImp(){
