@@ -1547,7 +1547,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   <div class="allboard-box hwPop-box">
     <div class="hwPop-head"><span>📝 作业已发布</span><button onclick="dismissHwPop()">关闭</button></div>
     <div class="hwPop-body">
-      <div class="hwPop-icon">🌕</div>
+      <div class="hwPop-icon">🎉</div>
       <p class="hwPop-title" id="hwPopTitle">作业已发布</p>
       <p class="hwPop-text" id="hwPopText"></p>
       <p class="hwPop-meta" id="hwPopMeta"></p>
@@ -2548,7 +2548,9 @@ var SITE_DATA = {
     { date: "2026-08-26 10:12", text: "🎁 悄悄说一句：站内藏着彩蛋和隐藏空间，说不定哪天就被你碰上了～（线索就藏在日常交互里，自己去探索才有意思）", category: "misc" },
     { date: "2026-08-26 09:55", text: "🔔 新增音效反馈，侧边栏可关闭", category: "site" },
     { date: "2026-08-26 00:45", text: "🔒 密码增加防爆破，输错会短暂锁定", category: "activity" },
-    { date: "2026-08-25 16:46", text: "【班级通知】Classworks 暂无法连接服务器，作业以老师线下布置为准。", important: true, category: "activity" },
+    /* 2026-09-30 站主要求：这条不再永久置顶。置顶靠 important:true 且无 importantUntil 实现，
+       直接删掉会连历史记录一起丢，所以只取消置顶、保留条目，仍可在活动分组里翻到。 */
+    { date: "2026-08-25 16:46", text: "【班级通知】Classworks 暂无法连接服务器，作业以老师线下布置为准。", category: "activity" },
     { date: "2026-08-25 16:46", text: "📌 公告分组调整，新增多项小功能", category: 'site' },
     { date: "2026-08-25 16:19", text: "🔧 修复日报排版与首次密码报错", category: 'site' },
     { date: "2026-08-25 16:13", text: "修复每日日报卡片空白问题；班级公告时间统一为「精确到分」。", category: 'site' },
@@ -4623,6 +4625,158 @@ function saveAuth(){
 }
 function isLoggedIn(){ return !!AUTH.token; }
 function isAdmin(){ return !!(AUTH.user && AUTH.user.role === 'admin'); }
+
+/* ============================================================
+ * 【站点内容云端化】2026-09-30
+ * ------------------------------------------------------------
+ * 目标：公告、作业这些「共享内容」改存云端，站主在后台改完即时生效，
+ *       不必再改代码 + 等 Pages 重新构建 + 同学清缓存。
+
+ * 设计原则（站主选定「渐进式」）：
+ *   ① index.html 里的 SITE_DATA **永久保留**，作为「静态兜底」。
+ *      —— 断网、后端挂了、还没部署后端，页面都必须和以前一模一样。
+ *   ② 启动时异步去拉云端内容，**拉到才覆盖**，拉不到就静默用本地的。
+ *      —— 绝不因为后端问题导致页面空白或报错。
+ *   ③ 拉到什么就存进 localStorage 做缓存，并记下服务器时间；
+ *      下次先用缓存渲染（秒开），再在后台悄悄比对增量。
+
+ * 云端内容与本地字段的对应关系（改一边要同时看另一边）：
+ *     content 键             →  SITE_DATA 字段
+ *     announcements          →  announcements
+ *     holiday_homeworks      →  holidayHomeworks
+ *     homework_notice        →  homeworkNotice
+ *     important_dates        →  importantDates
+ *     site_config            →  站点通用配置（部分字段）
+ * ============================================================ */
+
+/* 云端内容键 ↔ 本地字段名 */
+var CONTENT_MAP = {
+  announcements:     'announcements',
+  holiday_homeworks: 'holidayHomeworks',
+  homework_notice:   'homeworkNotice',
+  important_dates:   'importantDates',
+  daily_quote:       'dailyQuote',
+  song_config:       'songConfig',
+  activities:        'activityList',
+  site_config:       null            /* 特殊：见 applySiteConfig() */
+};
+
+var CONTENT_CACHE_KEY = 'cls_content_cache_v1';
+var CONTENT_SINCE_KEY = 'cls_content_since_v1';
+/* 内容同步状态，供界面显示「已是最新 / 使用本地数据」 */
+var CONTENT_STATE = { status:'idle', lastAt:null, count:0, error:null };
+
+/** 读本地缓存（上次拉到的云端内容） */
+function contentCacheGet(){
+  try{
+    var raw = localStorage.getItem(CONTENT_CACHE_KEY);
+    if(!raw) return null;
+    var o = JSON.parse(raw);
+    return (o && typeof o === 'object') ? o : null;
+  }catch(e){ return null; }
+}
+function contentCacheSet(items){
+  try{
+    var cur = contentCacheGet() || {};
+    Object.keys(items || {}).forEach(function(k){ cur[k] = items[k]; });
+    localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(cur));
+  }catch(e){ /* 隐私模式等写不了就算了，不影响主流程 */ }
+}
+
+/** 把一份云端内容合并进 SITE_DATA（只覆盖认识的键，其它忽略） */
+function applyCloudContent(items, opts){
+  opts = opts || {};
+  if(!items || typeof items !== 'object') return 0;
+  var n = 0;
+  Object.keys(items).forEach(function(k){
+    var v = items[k];
+    /* 云端没这个键（null）时跳过——不能把本地数据抹成 null */
+    if(v === null || v === undefined) return;
+    if(k === 'site_config'){ applySiteConfig(v); n++; return; }
+    var field = CONTENT_MAP[k];
+    if(!field) return;              /* 不认识的键不动 */
+    /* 类型护栏：数组字段必须给数组，对象字段必须给对象。
+       类型不对时保留本地值——宁可显示旧的，也不能把页面搞崩。 */
+    var local = window.SITE_DATA ? SITE_DATA[field] : undefined;
+    if(Array.isArray(local) && !Array.isArray(v)) return;
+    if(local && typeof local === 'object' && !Array.isArray(local) && (typeof v !== 'object' || Array.isArray(v))) return;
+    SITE_DATA[field] = v;
+    n++;
+  });
+  return n;
+}
+
+/** 站点通用配置（站点名、门禁、公告栏问候语等） */
+function applySiteConfig(cfg){
+  if(!cfg || typeof cfg !== 'object') return;
+  ['siteName','siteSubtitle','gateQuestion','gateAnswer','welcomeTitle'].forEach(function(k){
+    if(cfg[k] !== undefined && cfg[k] !== null) SITE_DATA[k] = cfg[k];
+  });
+}
+
+/**
+ * 拉云端内容。
+ * @param {boolean} force  true = 忽略本地记录的 since，全量拉
+ * @returns {Promise<{ok:boolean, count:number, error?:string, usedCache?:boolean}>}
+ * 任何情况下都不 reject——调用方不需要处理异常，失败就是「用本地数据」。
+ */
+function syncCloudContent(force){
+  if(!apiReady()){
+    CONTENT_STATE = { status:'unavailable', lastAt:null, count:0, error:'后端未配置' };
+    return Promise.resolve({ ok:false, count:0, error:'后端未配置' });
+  }
+  var since = null;
+  if(!force){
+    try{ since = Number(localStorage.getItem(CONTENT_SINCE_KEY)) || null; }catch(e){}
+  }
+  var path = '/content' + (since ? ('?since=' + since) : '');
+  CONTENT_STATE.status = 'loading';
+  return api(path).then(function(j){
+    if(!j || !j.ok) throw new Error((j && j.error) || '接口返回异常');
+    var items = j.items || {};
+    var n = applyCloudContent(items);
+    contentCacheSet(items);
+    /* 记服务器时间而不是本地时间：避免手机时间不准导致增量漏内容 */
+    if(j.serverTime){
+      try{ localStorage.setItem(CONTENT_SINCE_KEY, new Date(j.serverTime).getTime()); }catch(e){}
+    }
+    CONTENT_STATE = { status:'ok', lastAt:new Date(), count:n, error:null };
+    return { ok:true, count:n, changed:n > 0 };
+  }).catch(function(e){
+    CONTENT_STATE = { status:'error', lastAt:null, count:0, error:String(e && e.message || e) };
+    return { ok:false, count:0, error:CONTENT_STATE.error };
+  });
+}
+
+/** 启动时：先用缓存立刻渲染（秒开、离线也行），再去后台同步 */
+function contentBoot(){
+  var cached = contentCacheGet();
+  if(cached){
+    var n = applyCloudContent(cached);
+    if(n > 0){
+      /* 用缓存覆盖过内容 → 需要重渲染一次界面 */
+      try{ if(typeof rerenderAll === 'function') rerenderAll(); }catch(e){}
+    }
+  }
+  /* 后台同步：成功了且内容有变，再重渲染一次 */
+  syncCloudContent(false).then(function(r){
+    if(r.ok && r.count > 0){
+      try{ if(typeof rerenderAll === 'function') rerenderAll(); }catch(e){}
+      if(typeof refreshHwViews === 'function') refreshHwViews();
+    }
+  });
+}
+
+/** 内容变动后，把跟作业/公告相关的界面刷一遍 */
+function refreshHwViews(){
+  try{
+    var cm = document.getElementById('hwCurrentMask');
+    if(cm && cm.classList.contains('show') && typeof showCurrentHomework === 'function') showCurrentHomework();
+    var cal = document.getElementById('hwCalendarMask');
+    if(cal && cal.classList.contains('show') && typeof _renderHwCalendar === 'function') _renderHwCalendar();
+    if(typeof hwPopBubbleShow === 'function') hwPopBubbleShow();
+  }catch(e){}
+}
 
 /* ---------- 侧边栏按钮随登录态变化 ---------- */
 function refreshAcctBtn(){
@@ -8679,8 +8833,14 @@ async function submitSiteGate(){
   }
 })();
 try{ if(!localStorage.getItem('cls_welcome_v1')){ showWelcome(); } }catch(e){}
+/* ⚠️ 顺序要紧：contentBoot() 必须先于 hwPopInit()。
+   它会先用本地缓存把 SITE_DATA 覆盖成云端内容，再去后台同步；
+   若放到 hwPopInit() 之后，开屏弹窗判断「今天是否在通知期内」时
+   读到的还是 index.html 里写死的旧日期，会出现「内容已是国庆、
+   弹窗却按中秋那几天判断」的错位。（2026-09-30 加，改动勿调序） */
+contentBoot();
 actInit();   /* 班级活动通知：有进行中的活动则自动弹窗 + 留悬浮球，活动结束自动撤掉 */
-hwPopInit(); /* 开屏通知弹窗：大假作业发布提醒（9.24–9.27 进站自动弹；可「不再显示」） */
+hwPopInit(); /* 开屏通知弹窗：大假作业发布提醒（进站自动弹；可「不再显示」） */
 </script>
 <script>
 if ('serviceWorker' in navigator) {
