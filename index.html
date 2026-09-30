@@ -2520,6 +2520,7 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-09-30 15:46", text: "🎉 国庆假期作业已发布，六科全齐。\n可在「作业查看」→「📝 查看当前作业」中查看，每条还能勾选「已完成」。", category: "activity" },
     { date: "2026-09-29 23:02", text: "📅 第一次段考时间已公布：10月13日—14日。\n各科考试范围可在「重要日期倒计时」→「查看全部」→「查看考试范围」中查看。", category: "activity" },
     { date: "2026-09-27 09:32", text: "🎨 新增自定义设置：排序、字号、背景", category: "site" },
     { date: "2026-09-26 17:50", text: "界面换回暖橙新装，更清爽啦。", category: "site" },
@@ -2593,12 +2594,12 @@ var SITE_DATA = {
   /* ── 开屏通知弹窗：大假作业发布提醒（在 start~end 期间打开网站自动弹出；可「不再显示」）── */
   homeworkNotice: {
     enabled: true,
-    id: "hw-2026-zhongqiu",
-    start: "2026-09-24",
-    end: "2026-09-27",
-    hwTitle: "🌕 中秋假期作业（9.24–9.27）",
-    title: "中秋假期作业已发布",
-    text: "9.24 – 9.27 中秋假期作业已经整理好啦！\n语文 / 数学 / 英语 / 物理 / 化学 / 生物 六科全齐，\n点下方按钮即可查看，每条作业还能勾选「已完成」。",
+    id: "hw-2026-guocing",
+    start: "2026-10-01",
+    end: "2026-10-07",
+    hwTitle: "🎉 国庆假期作业（10.1–10.7）",
+    title: "国庆假期作业已发布",
+    text: "10.1 – 10.7 国庆假期作业已经整理好啦！\n语文 / 数学 / 英语 / 物理 / 化学 / 生物 六科全齐，\n点下方按钮即可查看，每条作业还能勾选「已完成」。",
     goTo: 1
   },
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
@@ -2631,6 +2632,43 @@ var SITE_DATA = {
         { subject: "物理", tasks: ["试卷 2 张", "预习课本第 11 章第 3 节「实验：测量导体的电阻率」（可借助导学案预习，课后习题要做）"] },
         { subject: "化学", tasks: ["试卷 1 张"] },
         { subject: "生物", tasks: ["同步练习写至 p66（先写选修一，再写必修二剩下的）"] }
+      ]
+    },
+    {
+      id: "hw-2026-guocing",
+      start: "2026-10-01",
+      end: "2026-10-07",
+      title: "🎉 国庆假期作业（10.1–10.7）",
+      items: [
+        { subject: "语文", tasks: [
+          "语文小练（A4 纸）：共 5 张",
+          "作文训练 ×2：合 1 张 A4 纸，一面一次，每次约 300–450 字",
+          "答题卡练字：写一面（不是一页）",
+          "同步练习 p9–19"
+        ] },
+        { subject: "数学", tasks: [
+          "同步练习 p45–54",
+          "试卷 2 张"
+        ] },
+        { subject: "英语", tasks: [
+          "试卷 1 张（要写小作文）",
+          "自购英语阅读：写到老师折的那一处",
+          "每天英语打卡"
+        ] },
+        { subject: "物理", tasks: [
+          "同步练习 p36–42",
+          "第三周练习试卷",
+          "第五周练习试卷",
+          "第十章专题提升试卷（背面为电场）",
+          "国庆试卷"
+        ] },
+        { subject: "化学", tasks: [
+          "同步练习 p56–68",
+          "试卷 2 张（无答题卡）"
+        ] },
+        { subject: "生物", tasks: [
+          "同步练习（待发，返校自习时补做）"
+        ] }
       ]
     }
   ],
@@ -7347,13 +7385,27 @@ function _hwDateStr(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2
 function getCurrentHomework(){
   var today = _hwDateStr(new Date());
   var list = SITE_DATA.holidayHomeworks || [];
+  /* ① 今天正落在某个假期区间内 → 就是它（区间不重叠，只会命中一个） */
   for(var i=0;i<list.length;i++){
     if(today >= list[i].start && today <= list[i].end) return list[i];
   }
+  /* ② 否则取「离今天最近的那份」。
+     判据分两种，未来优先——因为同学最需要看的是「接下来那次假期」的作业：
+       · 若存在还没开始的假期 → 取 start 最小的（即最近的将来）
+       · 若所有假期都开始了   → 取 start 最大的（即最近刚过的）
+     ⚠️ 旧写法是「return 第一个 today≥start 的」，而数组按时间正序存，
+     于是第一个满足的永远是**最早**那条（暑假），导致中秋/国庆期间
+     点「查看当前作业」永远只看到暑假作业（2026-09-30 修）。 */
+  var future = null, past = null;
   for(var i=0;i<list.length;i++){
-    if(today >= list[i].start) return list[i];
+    if(list[i].start > today){
+      if(future === null || list[i].start < future.start) future = list[i];
+    }else{
+      if(past === null || list[i].start > past.start) past = list[i];
+    }
   }
-  return null;
+  if(future) return future;
+  return past;
 }
 function _findHwByDate(dStr){
   var list = SITE_DATA.holidayHomeworks || [];

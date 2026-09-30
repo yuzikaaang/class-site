@@ -47,8 +47,9 @@
 //      同时修掉一个残留问题：核实失败时清空弹窗内容，不留上次的旧界面。
 // v41：重要日期新增【第一次段考】（10月13日—14日），并在「查看全部」里支持
 //      二级弹窗展开各科考试范围（文字版）。列表日期对跨天事项改为显示区间。
+// v42：新增【国庆假期作业】（10.1–10.7，六科），开屏通知弹窗同步切换为国庆作业。
 //      升版本清旧缓存
-const CACHE = 'class-site-v41'
+const CACHE = 'class-site-v42'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
