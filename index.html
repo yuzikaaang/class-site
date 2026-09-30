@@ -1548,7 +1548,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
     <div class="hwPop-head"><span>📝 作业已发布</span><button onclick="dismissHwPop()">关闭</button></div>
     <div class="hwPop-body">
       <div class="hwPop-icon">🌕</div>
-      <p class="hwPop-title" id="hwPopTitle">中秋假期作业已发布</p>
+      <p class="hwPop-title" id="hwPopTitle">作业已发布</p>
       <p class="hwPop-text" id="hwPopText"></p>
       <p class="hwPop-meta" id="hwPopMeta"></p>
       <button class="hwPop-go" id="hwPopGo" onclick="hwPopGoView()">👉 点这里查看作业</button>
@@ -2520,7 +2520,7 @@ var SITE_DATA = {
   ],
   /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
-    { date: "2026-09-30 15:46", text: "🎉 国庆假期作业已发布，六科全齐。\n可在「作业查看」→「📝 查看当前作业」中查看，每条还能勾选「已完成」。", category: "activity" },
+    { date: "2026-09-30 15:56", text: "🎉 国庆假期作业已发布", category: "activity" },
     { date: "2026-09-29 23:02", text: "📅 第一次段考时间已公布：10月13日—14日。\n各科考试范围可在「重要日期倒计时」→「查看全部」→「查看考试范围」中查看。", category: "activity" },
     { date: "2026-09-27 09:32", text: "🎨 新增自定义设置：排序、字号、背景", category: "site" },
     { date: "2026-09-26 17:50", text: "界面换回暖橙新装，更清爽啦。", category: "site" },
@@ -2598,8 +2598,8 @@ var SITE_DATA = {
     start: "2026-10-01",
     end: "2026-10-07",
     hwTitle: "🎉 国庆假期作业（10.1–10.7）",
-    title: "国庆假期作业已发布",
-    text: "10.1 – 10.7 国庆假期作业已经整理好啦！\n语文 / 数学 / 英语 / 物理 / 化学 / 生物 六科全齐，\n点下方按钮即可查看，每条作业还能勾选「已完成」。",
+    title: "作业已发布",
+    text: "",
     goTo: 1
   },
   /* ── 大假作业记录（由站主手动同步；平常小作业不展示）── */
@@ -2642,7 +2642,7 @@ var SITE_DATA = {
       items: [
         { subject: "语文", tasks: [
           "语文小练（A4 纸）：共 5 张",
-          "作文训练 ×2：合 1 张 A4 纸，一面一次，每次约 300–450 字",
+          "作文训练 ×2（一张 A4）",
           "答题卡练字：写一面（不是一页）",
           "同步练习 p9–19"
         ] },
@@ -7261,7 +7261,12 @@ function showHwPop(){
   var n=hwPopGet();
   var ttl=document.getElementById('hwPopTitle'), txt=document.getElementById('hwPopText'), meta=document.getElementById('hwPopMeta');
   if(ttl) ttl.textContent = n.title || '作业已发布';
-  if(txt) txt.textContent = n.text || '';
+  /* text 可为空（站主要求只显示「作业已发布」标题）——空时把整个 <p> 收起，
+     否则它带着 margin 会留一道空白 */
+  if(txt){
+    if(n.text){ txt.textContent = n.text; txt.style.display = ''; }
+    else { txt.textContent = ''; txt.style.display = 'none'; }
+  }
   if(meta){
     var hw = null;
     var list = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
