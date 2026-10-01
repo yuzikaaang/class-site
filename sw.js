@@ -58,9 +58,10 @@
 //         断网 / 后端挂掉 / 未部署后端时，页面与从前完全一致；
 //         拉到内容后存 localStorage 缓存，二次进站先用缓存秒开、再后台比对增量。
 //      升版本清旧缓存
-// v45：国庆英语新增一条**听力音频**任务（与中秋那条格式一致，站内弹窗播放）。
+// v46：国庆英语的听力音频并入「试卷 1 张」同一条（不单独占一行答题项）。
+//      v45：国庆英语新增听力音频（与中秋那条格式一致，站内弹窗播放）。
 //      升版本清旧缓存
-const CACHE = 'class-site-v45'
+const CACHE = 'class-site-v46'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
