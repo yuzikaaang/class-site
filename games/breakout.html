@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>打砖块 · 25级05班</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:linear-gradient(170deg,#0d1024,#16214a);color:#e9ecff;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh}
+  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
+  h1{font-size:18px;margin:0}
+  .hud{display:flex;gap:14px;font-size:15px;flex-wrap:wrap;justify-content:center}
+  .hud b{color:#ffcf7a}
+  #wrap{position:relative;width:min(94vw,420px)}
+  canvas{width:100%;height:auto;background:#0b0f22;border-radius:16px;display:block;box-shadow:0 12px 40px rgba(0,0,0,.5);touch-action:none}
+  .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:rgba(10,12,30,.78);border-radius:16px;text-align:center;padding:20px;z-index:3}
+  .ov.hidden{display:none}
+  .ov h2{margin:0;font-size:24px;color:#ffcf7a}
+  .ov p{margin:2px 0;font-size:13px;color:#9db1ff;line-height:1.7}
+  .ov button{border:none;border-radius:14px;padding:13px 30px;font-size:16px;font-weight:800;cursor:pointer;
+    background:linear-gradient(135deg,#46e0c8,#2fd6a8);color:#0b0f22;box-shadow:0 8px 20px rgba(70,224,200,.3)}
+  .ov button:active{transform:scale(.95)}
+  .ov button.second{border:none;border-radius:14px;padding:11px 24px;font-size:14px;font-weight:700;cursor:pointer;background:#232f55;color:#9db1ff}
+  .tip{font-size:12px;opacity:.55}
+</style>
+
+
+<style>.licon{display:inline-block;flex:none;vertical-align:-2px}</style>
+<script>
+/* =====================================================
+   图标系统：Lucide（lucide-static v1.48.0）—— 本页按需内联用到的图标
+   全站统一只用 Lucide 一套，不混库、不使用 emoji 作为功能图标。
+   ===================================================== */
+var LUCIDE_ICONS={"arrow-left":"<path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/>","arrow-right":"<path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/>","blocks":"<path d=\"M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2\"/><rect x=\"14\" y=\"2\" width=\"8\" height=\"8\" rx=\"1\"/>","heart-crack":"<path d=\"M12.409 5.824c-.702.792-1.15 1.496-1.415 2.166l2.153 2.156a.5.5 0 0 1 0 .707l-2.293 2.293a.5.5 0 0 0 0 .707L12 15\"/><path d=\"M13.508 20.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5a5.5 5.5 0 0 1 9.591-3.677.6.6 0 0 0 .818.001A5.5 5.5 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5z\"/>","party-popper":"<path d=\"M5.8 11.3 2 22l10.7-3.79\"/><path d=\"M4 3h.01\"/><path d=\"M22 8h.01\"/><path d=\"M15 2h.01\"/><path d=\"M22 20h.01\"/><path d=\"m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10\"/><path d=\"m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17\"/><path d=\"m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7\"/><path d=\"M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z\"/>","trophy":"<path d=\"M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2\"/><path d=\"M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2\"/><path d=\"M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3\"/><path d=\"M4 22h16\"/><path d=\"M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z\"/><path d=\"M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3\"/>"};
+var EMOJI_ICON_MAP={"←":"arrow-left","🧱":"blocks","🎉":"party-popper","💔":"heart-crack","🏆":"trophy","→":"arrow-right"};
+function iconSvg(name, size, extra){
+  var s=size||16, e=extra||'';
+  var inner=LUCIDE_ICONS[name];
+  if(!inner) return '';
+  return '<svg class="licon" xmlns="http://www.w3.org/2000/svg" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" '
+    + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+    + 'style="width:'+s+'px;height:'+s+'px;vertical-align:-2px;flex:none;'+e+'" aria-hidden="true">' + inner + '</svg>';
+}
+var EMOJI_RE=new RegExp('('+Object.keys(EMOJI_ICON_MAP).sort(function(a,b){return b.length-a.length;})
+  .map(function(c){return c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}).join('|')+')\\uFE0F?','g');
+function emojiIconName(ch){ var k=ch.replace(/\uFE0F/g,''); return EMOJI_ICON_MAP[k]||EMOJI_ICON_MAP[ch]||''; }
+function emojiSvgNode(ch,size){ var b=document.createElement('div'); b.innerHTML=iconSvg(emojiIconName(ch),size||16); return b.firstChild; }
+function emojiifyText(node,size){
+  var t=node.nodeValue; if(!t) return false;
+  EMOJI_RE.lastIndex=0; if(!EMOJI_RE.test(t)) return false; EMOJI_RE.lastIndex=0;
+  var frag=document.createDocumentFragment(),last=0,m,ok=false;
+  while((m=EMOJI_RE.exec(t))){
+    if(!emojiIconName(m[0])) continue;
+    if(m.index>last) frag.appendChild(document.createTextNode(t.slice(last,m.index)));
+    var sv=emojiSvgNode(m[0],size); if(sv) frag.appendChild(sv);
+    last=m.index+m[0].length; ok=true;
+    if(m[0].length===0) EMOJI_RE.lastIndex++;
+  }
+  if(!ok) return false;
+  if(last<t.length) frag.appendChild(document.createTextNode(t.slice(last)));
+  if(node.parentNode) node.parentNode.replaceChild(frag,node);
+  return true;
+}
+var EMOJI_SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,NOSCRIPT:1,TITLE:1,SVG:1,IFRAME:1,OPTION:1,SELECT:1};
+function emojiify(root){
+  root=root||document.body; if(!root) return 0;
+  var changed=0,sizeCache={};
+  try{
+    var tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null,false),list=[],n;
+    while((n=tw.nextNode())){ var p=n.parentNode; if(!p||EMOJI_SKIP[p.nodeName]||!n.nodeValue) continue; list.push(n); }
+    for(var i=0;i<list.length;i++){
+      var pe=list[i].parentElement,sz=16;
+      if(pe){ if(sizeCache[pe.nodeName]===undefined){ try{ var fs=parseFloat(getComputedStyle(pe).fontSize)||15;
+          sizeCache[pe.nodeName]=Math.max(12,Math.min(22,Math.round(fs*1.05)));}catch(e){sizeCache[pe.nodeName]=16;} }
+        sz=sizeCache[pe.nodeName]; }
+      if(emojiifyText(list[i],sz)) changed++;
+    }
+    changed+=emojiifyPlaceholders(root); changed+=emojiifyOptions(root);
+  }catch(e){}
+  return changed;
+}
+/* placeholder 只能放纯文本 → 换成行内 SVG 背景图标 */
+function emojiifyPlaceholders(root){
+  var ins=[],hit=0; try{ ins=root.querySelectorAll('input[placeholder],textarea[placeholder]'); }catch(e){ return 0; }
+  for(var i=0;i<ins.length;i++){
+    var el=ins[i]; if(el.getAttribute('data-emo-ico')) continue;
+    var ph=el.getAttribute('placeholder')||''; EMOJI_RE.lastIndex=0;
+    var m=EMOJI_RE.exec(ph); if(!m||!emojiIconName(m[0])) continue;
+    el.setAttribute('data-emo-ico','1');
+    el.setAttribute('placeholder', ph.replace(m[0],'').replace(/^\s+/,''));
+    try{ var svg=iconSvg(emojiIconName(m[0]),16,'color:#9aa3b2');
+      el.style.backgroundImage='url("data:image/svg+xml;utf8,'+encodeURIComponent(svg)+'")';
+      el.style.backgroundRepeat='no-repeat'; el.style.backgroundPosition='10px center'; el.style.backgroundSize='16px 16px';
+      var pl=parseFloat(getComputedStyle(el).paddingLeft)||10; if(pl<34) el.style.paddingLeft='34px'; }catch(e){}
+    hit++;
+  }
+  return hit;
+}
+/* <option> 内无法内嵌 SVG（HTML 规范限制）→ 去掉图形保留文字 */
+function emojiifyOptions(root){
+  var opts=[],hit=0; try{ opts=root.querySelectorAll('option'); }catch(e){ return 0; }
+  for(var i=0;i<opts.length;i++){ var el=opts[i],t=el.textContent||''; EMOJI_RE.lastIndex=0;
+    if(!EMOJI_RE.test(t)) continue; el.textContent=t.replace(EMOJI_RE,'').replace(/^\s+/,''); hit++; }
+  return hit;
+}
+var _emoBusy=false,_emoTimer=null,_emoAgain=false;
+function emojiifySoon(){
+  if(_emoBusy){ _emoAgain=true; return; }
+  if(_emoTimer) return;
+  _emoTimer=setTimeout(function(){ _emoTimer=null; if(_emoBusy) return; _emoBusy=true;
+    try{ emojiify(document.body); }catch(e){} _emoBusy=false;
+    if(_emoAgain){ _emoAgain=false; emojiifySoon(); } },60);
+}
+function emojiStart(){
+  try{ emojiify(document.body); }catch(e){}
+  if(window.MutationObserver){ try{ (new MutationObserver(emojiifySoon)).observe(document.body,{childList:true,subtree:true,characterData:true}); }catch(e){} }
+  [400,1200,3000].forEach(function(d){ setTimeout(function(){ try{ emojiify(document.body); }catch(e){} },d); });
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',emojiStart); else setTimeout(emojiStart,0);
+</script>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>🧱 打砖块</h1>
+<div class="hud"><span>关卡 <b id="lv">1</b></span><span>得分 <b id="sc">0</b></span><span>剩余 <b id="life">3</b></span><span>最高关 <b id="hLv">1</b></span></div>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="ov" id="startOv">
+    <h2>打砖块</h2>
+    <p>鼠标 / 手指移动挡板<br>消光砖块过关 · 关卡会越来越难</p>
+    <button id="startBtn">开始游戏</button>
+  </div>
+  <div class="ov hidden" id="overOv">
+    <h2 id="ovTitle">🎉 通关！</h2>
+    <p id="ovInfo"></p>
+    <button id="reBtn">再来一局</button>
+  </div>
+</div>
+<div class="tip">浅色砖 1 下打掉 · 深色砖要 2 下 · 每过一关球更快</div>
+<script>
+var AC=null;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f,d,t,v,delay){var c=ac();if(!c)return;var o=c.createOscillator(),g=c.createGain();o.type=t||'square';o.frequency.value=f;var t0=c.currentTime+(delay||0);g.gain.setValueAtTime(v||0.05,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(d||0.08));o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+(d||0.08)+0.02);}
+var snd={bounce:function(){tone(520,0.05,'triangle',0.05);},brick:function(){tone(760,0.06,'square',0.05);},lost:function(){tone(200,0.25,'sawtooth',0.06);},win:function(){tone(660,0.1,'sine',0.06);setTimeout(function(){tone(880,0.1,'sine',0.06);},90);setTimeout(function(){tone(1100,0.12,'sine',0.06);},180);}};
+
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var W=420,H=640;
+cv.width=W;cv.height=H;
+var ROWS=6,COLS=8;
+var PAD_W=86,PAD_H=14,BALL=9;
+var px,py,bx,by,bvx,bvy,life,sc,hi,level,hLv,playing,bricks;
+hi=+(localStorage.getItem('breakout_hi')||0);
+hLv=+(localStorage.getItem('breakout_lv')||1);document.getElementById('hLv').textContent=hLv;
+var BRICK_W=(W-2*10- (COLS-1)*6)/COLS, BRICK_H=24;
+var PALETTE=['#ff6b8b','#ff9f6b','#ffcf7a','#7cffb2','#46e0c8','#7c83ff'];
+
+/* 关卡布局：每种返回 [r][c] -> {hp}（0 表示空格） */
+function buildLevel(lv){
+  var rows=[];
+  for(var r=0;r<ROWS;r++){rows.push([]);for(var c=0;c<COLS;c++)rows[r].push(0);}
+  var mode=(lv-1)%5;
+  if(mode===0){ // 标准网格
+    for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++)rows[r][c]={hp:1};
+  }else if(mode===1){ // 交错
+    for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++)if((r+c)%2===0)rows[r][c]={hp:1};
+  }else if(mode===2){ // 金字塔
+    for(var r=0;r<Math.min(ROWS,5);r++)for(var c=r;c<COLS-r;c++)rows[r][c]={hp:1};
+  }else if(mode===3){ // V 形
+    for(var r=0;r<ROWS;r++){
+      var k=r<3?r:ROWS-1-r;
+      rows[r][k]={hp:1};rows[r][COLS-1-k]={hp:1};
+      rows[r][3]={hp:1};rows[r][4]={hp:1};
+    }
+  }else{ // 随机迷宫（随关增强：双血砖变多）
+    for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++){
+      if(Math.random()<0.75){
+        var hp=Math.random()<(0.25+lv*0.03)?2:1;
+        rows[r][c]={hp:hp};
+      }
+    }
+  }
+  // 从第 3 关起，把一排砖升级成 2 血（加深色）
+  if(lv>=3){
+    var rr=(lv-3)%ROWS;
+    for(var c=0;c<COLS;c++)if(rows[rr][c])rows[rr][c].hp=2;
+  }
+  return rows;
+}
+function startLevel(n){
+  level=n;
+  document.getElementById('lv').textContent=level;
+  if(level>hLv){hLv=level;try{localStorage.setItem('breakout_lv',hLv);}catch(e){} document.getElementById('hLv').textContent=hLv;}
+  px=W/2-PAD_W/2;py=H-46;
+  life=3;document.getElementById('life').textContent=3;
+  bricks=[];
+  var rows=buildLevel(level);
+  for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++){
+    if(!rows[r][c])continue;
+    bricks.push({x:10+c*(BRICK_W+6),y:56+r*(BRICK_H+6),w:BRICK_W,h:BRICK_H,c:PALETTE[r],hp:rows[r][c].hp,max:rows[r][c].hp,alive:true});
+  }
+  launch();
+  hideOv();playing=true;tick();
+}
+function reset(){sc=0;document.getElementById('sc').textContent=0;startLevel(1);}
+function launch(){bx=px+PAD_W/2;by=py-BALL;var a=Math.PI*0.25+Math.random()*Math.PI*0.5;var sp=5.4+(level-1)*0.35;bvx=Math.cos(a)*sp;bvy=-Math.abs(Math.sin(a))*sp;}
+function hideOv(){document.getElementById('startOv').classList.add('hidden');document.getElementById('overOv').classList.add('hidden');}
+function end(win){
+  playing=false;
+  if(win){snd.win();document.getElementById('ovTitle').textContent='🎉 第 '+level+' 关通过！';
+    if(sc>hi){hi=sc;try{localStorage.setItem('breakout_hi',hi);}catch(e){} }
+  }else{snd.lost();document.getElementById('ovTitle').textContent='💔 球都丢啦（第 '+level+' 关）';}
+  document.getElementById('ovInfo').innerHTML='得分 '+sc+(sc>=hi&&sc>0?'　🏆 新纪录！':'　最高 '+hi)+'<br>最高关卡 '+hLv;
+  document.getElementById('reBtn').textContent=win?'下一关 →':'再来一局';
+  document.getElementById('overOv').classList.remove('hidden');
+}
+function tick(){
+  if(!playing){draw();return;}
+  bx+=bvx;by+=bvy;
+  if(bx<BALL||bx>W-BALL){bvx*=-1;if(bx<BALL)bx=BALL;else bx=W-BALL;snd.bounce();}
+  if(by<BALL){by=BALL;bvy*=-1;snd.bounce();}
+  // 挡板
+  if(by+BALL>py&&by-BALL<py+PAD_H&&bx>px-BALL&&bx<px+PAD_W+BALL&&bvy>0){
+    var rel=(bx-(px+PAD_W/2))/(PAD_W/2);
+    bvx=rel*6;bvy=-Math.abs(bvy);by=py-BALL;snd.bounce();
+  }
+  // 砖块
+  for(var i=0;i<bricks.length;i++){
+    var b=bricks[i];if(!b.alive)continue;
+    if(bx> b.x && bx< b.x+b.w && by> b.y && by< b.y+b.h){
+      b.hp--;
+      if(b.hp<=0)b.alive=false;
+      bvy*=-1;sc+=10;snd.brick();document.getElementById('sc').textContent=sc;
+      if(sc>hi){hi=sc;try{localStorage.setItem('breakout_hi',hi);}catch(e){} }
+      break;
+    }
+  }
+  // 掉落
+  if(by>H+BALL){
+    life--;document.getElementById('life').textContent=life;
+    if(life<=0){end(false);return;}
+    snd.lost();launch();
+  }
+  // 过关
+  var left=0;for(var i=0;i<bricks.length;i++)if(bricks[i].alive)left++;
+  if(left===0){end(true);return;}
+  draw();requestAnimationFrame(tick);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  for(var i=0;i<bricks.length;i++){
+    var b=bricks[i];if(!b.alive)continue;
+    if(b.max===2){
+      ctx.fillStyle='#7c2d3a';ctx.globalAlpha=.95;
+      ctx.fillRect(b.x,b.y,b.w,b.h);
+      ctx.globalAlpha=1;
+      ctx.fillStyle=b.hp===2?'#e14b6b':'#8f3550';
+      ctx.fillRect(b.x,b.y,b.w,b.h-6);
+      ctx.fillStyle='rgba(255,255,255,.25)';ctx.fillRect(b.x+5,b.y+3,b.w-10,3);
+    }else{
+      ctx.fillStyle=b.c;ctx.globalAlpha=.9;
+      ctx.fillRect(b.x,b.y,b.w,b.h);
+      ctx.globalAlpha=1;
+      ctx.globalAlpha=.35;ctx.fillRect(b.x,b.y,b.w,5);
+      ctx.globalAlpha=1;
+    }
+  }
+  ctx.fillStyle='#e9ecff';ctx.beginPath();ctx.arc(bx,by,BALL,0,7);ctx.fill();
+  ctx.fillStyle='#7c83ff';ctx.beginPath();
+  ctx.roundRect(px,py,PAD_W,PAD_H,8);ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.25)';ctx.fillRect(px+8,py+3,PAD_W-16,4);
+}
+function movePad(tx){px=Math.max(0,Math.min(W-PAD_W,tx-PAD_W/2));}
+cv.addEventListener('pointermove',function(e){
+  var r=cv.getBoundingClientRect();
+  movePad((e.clientX-r.left)*(W/r.width));
+});
+cv.addEventListener('touchmove',function(e){
+  e.preventDefault();
+  var t=e.touches[0],r=cv.getBoundingClientRect();
+  movePad((t.clientX-r.left)*(W/r.width));
+},{passive:false});
+cv.addEventListener('pointerdown',function(e){ if(!playing&&!document.querySelector('.ov:not(.hidden)')) {reset();return;} });
+document.getElementById('startBtn').addEventListener('click',function(){ac();reset();});
+document.getElementById('reBtn').addEventListener('click',function(){
+  if(document.getElementById('ovTitle').textContent.indexOf('通过')>=0) startLevel(level+1);
+  else reset();
+});
+document.addEventListener('keydown',function(e){ if(e.code==='ArrowLeft')px=Math.max(0,px-26); if(e.code==='ArrowRight')px=Math.min(W-PAD_W,px+26); });
+</script>
+</body>
+</html>

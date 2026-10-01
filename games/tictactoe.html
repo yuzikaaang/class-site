@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>井字棋 · 25级05班</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:linear-gradient(170deg,#0d1024,#161a3a);color:#e9ecff;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px;min-height:100vh}
+  a.back{color:#e9ecff;opacity:.7;text-decoration:none;font-size:14px;align-self:flex-start}
+  h1{font-size:18px;margin:0}
+  .hud{display:flex;gap:14px;font-size:15px;align-items:center;flex-wrap:wrap;justify-content:center}
+  .hud b{color:#ffcf7a}
+  .hud .turn{font-size:13px;padding:4px 12px;border-radius:999px;background:#232f55;color:#9db1ff}
+  .hud .turn.ai{background:rgba(70,224,200,.15);color:#46e0c8}
+  #board{width:min(86vw,320px);height:min(86vw,320px);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:8px;
+    background:#1a2440;padding:8px;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .cell{background:linear-gradient(160deg,#222d52,#1a2440);border-radius:10px;display:flex;align-items:center;justify-content:center;
+    font-size:min(17vw,62px);font-weight:900;cursor:pointer;user-select:none;transition:transform .08s, background .12s}
+  .cell:active{transform:scale(.94)}
+  .cell.x{color:#7c9bff}
+  .cell.o{color:#46e0c8}
+  .cell.disabled{cursor:default}
+  .cell.win{background:linear-gradient(160deg,#3a4a2a,#2a3a1a);box-shadow:inset 0 0 0 2px rgba(255,207,122,.5)}
+  .bar{display:flex;gap:8px;margin-top:2px;flex-wrap:wrap;justify-content:center;align-items:center}
+  .bar select,.bar button{border:none;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;background:#232f55;color:#9db1ff;outline:none}
+  .bar button:active,.bar select:active{background:#33405f}
+  .tip{font-size:12px;opacity:.55;text-align:center;max-width:330px;line-height:1.6}
+  .ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(10,12,30,.82);z-index:9;text-align:center;padding:20px}
+  .ov.hidden{display:none}
+  .ov h2{margin:0;font-size:28px;color:#ffcf7a}
+  .ov p{margin:2px 0;font-size:14px;color:#9db1ff}
+  .ov button{border:none;border-radius:14px;padding:12px 26px;font-size:15px;font-weight:800;cursor:pointer;background:linear-gradient(135deg,#7c83ff,#4a6cf7);color:#fff;box-shadow:0 8px 20px rgba(74,108,247,.35)}
+  .ov button:active{transform:scale(.95)}
+</style>
+
+
+<style>.licon{display:inline-block;flex:none;vertical-align:-2px}</style>
+<script>
+/* =====================================================
+   图标系统：Lucide（lucide-static v1.48.0）—— 本页按需内联用到的图标
+   全站统一只用 Lucide 一套，不混库、不使用 emoji 作为功能图标。
+   ===================================================== */
+var LUCIDE_ICONS={"arrow-left":"<path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/>","bot":"<path d=\"M12 8V4H8\"/><rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"/><path d=\"M2 14h2\"/><path d=\"M20 14h2\"/><path d=\"M15 13v2\"/><path d=\"M9 13v2\"/>","grid-3x3":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M3 9h18\"/><path d=\"M3 15h18\"/><path d=\"M9 3v18\"/><path d=\"M15 3v18\"/>","handshake":"<path d=\"m11 17 2 2a1 1 0 1 0 3-3\"/><path d=\"m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4\"/><path d=\"m21 3 1 11h-2\"/><path d=\"M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3\"/><path d=\"M3 4h8\"/>","party-popper":"<path d=\"M5.8 11.3 2 22l10.7-3.79\"/><path d=\"M4 3h.01\"/><path d=\"M22 8h.01\"/><path d=\"M15 2h.01\"/><path d=\"M22 20h.01\"/><path d=\"m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10\"/><path d=\"m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17\"/><path d=\"m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7\"/><path d=\"M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z\"/>","signal-high":"<path d=\"M2 20h.01\"/><path d=\"M7 20v-4\"/><path d=\"M12 20v-8\"/><path d=\"M17 20V8\"/>","signal-low":"<path d=\"M2 20h.01\"/><path d=\"M7 20v-4\"/>","signal-medium":"<path d=\"M2 20h.01\"/><path d=\"M7 20v-4\"/><path d=\"M12 20v-8\"/>","users":"<path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><path d=\"M16 3.128a4 4 0 0 1 0 7.744\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>"};
+var EMOJI_ICON_MAP={"←":"arrow-left","⭕":"grid-3x3","🤖":"bot","👥":"users","😌":"signal-low","🙂":"signal-medium","😈":"signal-high","✖":"x","🎉":"party-popper","🤝":"handshake"};
+function iconSvg(name, size, extra){
+  var s=size||16, e=extra||'';
+  var inner=LUCIDE_ICONS[name];
+  if(!inner) return '';
+  return '<svg class="licon" xmlns="http://www.w3.org/2000/svg" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" '
+    + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+    + 'style="width:'+s+'px;height:'+s+'px;vertical-align:-2px;flex:none;'+e+'" aria-hidden="true">' + inner + '</svg>';
+}
+var EMOJI_RE=new RegExp('('+Object.keys(EMOJI_ICON_MAP).sort(function(a,b){return b.length-a.length;})
+  .map(function(c){return c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}).join('|')+')\\uFE0F?','g');
+function emojiIconName(ch){ var k=ch.replace(/\uFE0F/g,''); return EMOJI_ICON_MAP[k]||EMOJI_ICON_MAP[ch]||''; }
+function emojiSvgNode(ch,size){ var b=document.createElement('div'); b.innerHTML=iconSvg(emojiIconName(ch),size||16); return b.firstChild; }
+function emojiifyText(node,size){
+  var t=node.nodeValue; if(!t) return false;
+  EMOJI_RE.lastIndex=0; if(!EMOJI_RE.test(t)) return false; EMOJI_RE.lastIndex=0;
+  var frag=document.createDocumentFragment(),last=0,m,ok=false;
+  while((m=EMOJI_RE.exec(t))){
+    if(!emojiIconName(m[0])) continue;
+    if(m.index>last) frag.appendChild(document.createTextNode(t.slice(last,m.index)));
+    var sv=emojiSvgNode(m[0],size); if(sv) frag.appendChild(sv);
+    last=m.index+m[0].length; ok=true;
+    if(m[0].length===0) EMOJI_RE.lastIndex++;
+  }
+  if(!ok) return false;
+  if(last<t.length) frag.appendChild(document.createTextNode(t.slice(last)));
+  if(node.parentNode) node.parentNode.replaceChild(frag,node);
+  return true;
+}
+var EMOJI_SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,NOSCRIPT:1,TITLE:1,SVG:1,IFRAME:1,OPTION:1,SELECT:1};
+function emojiify(root){
+  root=root||document.body; if(!root) return 0;
+  var changed=0,sizeCache={};
+  try{
+    var tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null,false),list=[],n;
+    while((n=tw.nextNode())){ var p=n.parentNode; if(!p||EMOJI_SKIP[p.nodeName]||!n.nodeValue) continue; list.push(n); }
+    for(var i=0;i<list.length;i++){
+      var pe=list[i].parentElement,sz=16;
+      if(pe){ if(sizeCache[pe.nodeName]===undefined){ try{ var fs=parseFloat(getComputedStyle(pe).fontSize)||15;
+          sizeCache[pe.nodeName]=Math.max(12,Math.min(22,Math.round(fs*1.05)));}catch(e){sizeCache[pe.nodeName]=16;} }
+        sz=sizeCache[pe.nodeName]; }
+      if(emojiifyText(list[i],sz)) changed++;
+    }
+    changed+=emojiifyPlaceholders(root); changed+=emojiifyOptions(root);
+  }catch(e){}
+  return changed;
+}
+/* placeholder 只能放纯文本 → 换成行内 SVG 背景图标 */
+function emojiifyPlaceholders(root){
+  var ins=[],hit=0; try{ ins=root.querySelectorAll('input[placeholder],textarea[placeholder]'); }catch(e){ return 0; }
+  for(var i=0;i<ins.length;i++){
+    var el=ins[i]; if(el.getAttribute('data-emo-ico')) continue;
+    var ph=el.getAttribute('placeholder')||''; EMOJI_RE.lastIndex=0;
+    var m=EMOJI_RE.exec(ph); if(!m||!emojiIconName(m[0])) continue;
+    el.setAttribute('data-emo-ico','1');
+    el.setAttribute('placeholder', ph.replace(m[0],'').replace(/^\s+/,''));
+    try{ var svg=iconSvg(emojiIconName(m[0]),16,'color:#9aa3b2');
+      el.style.backgroundImage='url("data:image/svg+xml;utf8,'+encodeURIComponent(svg)+'")';
+      el.style.backgroundRepeat='no-repeat'; el.style.backgroundPosition='10px center'; el.style.backgroundSize='16px 16px';
+      var pl=parseFloat(getComputedStyle(el).paddingLeft)||10; if(pl<34) el.style.paddingLeft='34px'; }catch(e){}
+    hit++;
+  }
+  return hit;
+}
+/* <option> 内无法内嵌 SVG（HTML 规范限制）→ 去掉图形保留文字 */
+function emojiifyOptions(root){
+  var opts=[],hit=0; try{ opts=root.querySelectorAll('option'); }catch(e){ return 0; }
+  for(var i=0;i<opts.length;i++){ var el=opts[i],t=el.textContent||''; EMOJI_RE.lastIndex=0;
+    if(!EMOJI_RE.test(t)) continue; el.textContent=t.replace(EMOJI_RE,'').replace(/^\s+/,''); hit++; }
+  return hit;
+}
+var _emoBusy=false,_emoTimer=null,_emoAgain=false;
+function emojiifySoon(){
+  if(_emoBusy){ _emoAgain=true; return; }
+  if(_emoTimer) return;
+  _emoTimer=setTimeout(function(){ _emoTimer=null; if(_emoBusy) return; _emoBusy=true;
+    try{ emojiify(document.body); }catch(e){} _emoBusy=false;
+    if(_emoAgain){ _emoAgain=false; emojiifySoon(); } },60);
+}
+function emojiStart(){
+  try{ emojiify(document.body); }catch(e){}
+  if(window.MutationObserver){ try{ (new MutationObserver(emojiifySoon)).observe(document.body,{childList:true,subtree:true,characterData:true}); }catch(e){} }
+  [400,1200,3000].forEach(function(d){ setTimeout(function(){ try{ emojiify(document.body); }catch(e){} },d); });
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',emojiStart); else setTimeout(emojiStart,0);
+</script>
+</head>
+<body>
+<a class="back" href="../">← 返回班级站</a>
+<h1>⭕ 井字棋</h1>
+<div class="hud"><span>胜 <b id="wins">0</b></span><span>负 <b id="losses">0</b></span><span>平 <b id="draws">0</b></span><span class="turn" id="turn">轮到你（X）</span></div>
+<div id="board"></div>
+<div class="bar">
+  <select id="modeSel" title="对战模式">
+    <option value="ai">🤖 人机对战</option>
+    <option value="pvp">👥 本地双人</option>
+  </select>
+  <select id="diffSel" title="AI 难度（仅人机模式）">
+    <option value="0">😌 简单</option>
+    <option value="1" selected>🙂 普通</option>
+    <option value="2">😈 困难</option>
+  </select>
+  <button id="restartBtn">⟳ 重新开始</button>
+</div>
+<div class="tip">你执 ✖ 先手，AI 执 ⭕ · 率先连成一线（横/竖/斜）即胜 · 三档难度：简单随机、普通会堵会赢、困难永不败</div>
+<div class="ov hidden" id="endOv">
+  <h2 id="endTitle">🎉 你赢了！</h2>
+  <p id="endInfo"></p>
+  <button id="reBtn">再来一局</button>
+</div>
+<script>
+/* ===== 音效 ===== */
+var AC=null;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f,d,t,v,delay){var c=ac();if(!c)return;var o=c.createOscillator(),g=c.createGain();o.type=t||'square';o.frequency.value=f;var t0=c.currentTime+(delay||0);g.gain.setValueAtTime(v||0.05,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(d||0.08));o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+(d||0.08)+0.02);}
+var snd={place:function(){tone(430,0.05,'triangle',0.05);},ai:function(){tone(330,0.05,'triangle',0.05);},win:function(){tone(660,0.09,'sine',0.06);setTimeout(function(){tone(880,0.09,'sine',0.06);},90);setTimeout(function(){tone(1100,0.12,'sine',0.06);},180);},lose:function(){tone(280,0.12,'sawtooth',0.06);setTimeout(function(){tone(160,0.25,'sawtooth',0.06);},100);},draw:function(){tone(440,0.12,'sine',0.05);}};
+
+var LINES=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+var board,playing,cur,mode,diff;
+var wins=+(localStorage.getItem('ttt_w')||0),losses=+(localStorage.getItem('ttt_l')||0),draws=+(localStorage.getItem('ttt_d')||0);
+document.getElementById('wins').textContent=wins;document.getElementById('losses').textContent=losses;document.getElementById('draws').textContent=draws;
+
+var boardEl=document.getElementById('board'),cells=[];
+for(var i=0;i<9;i++){
+  var d=document.createElement('div');
+  d.className='cell';d.dataset.i=i;
+  d.addEventListener('click',onCellClick);
+  boardEl.appendChild(d);cells.push(d);
+}
+function winnerOf(b){
+  for(var k=0;k<LINES.length;k++){
+    var a=LINES[k][0],bb=LINES[k][1],c=LINES[k][2];
+    if(b[a]&&b[a]===b[bb]&&b[a]===b[c]) return {p:b[a],line:LINES[k]};
+  }
+  return null;
+}
+function isFull(b){ for(var i=0;i<9;i++) if(!b[i]) return false; return true; }
+
+function reset(){
+  board=['','','','','','','','',''];playing=true;cur='X';
+  mode=document.getElementById('modeSel').value;
+  diff=+(document.getElementById('diffSel').value);
+  for(var i=0;i<9;i++){cells[i].textContent='';cells[i].className='cell';}
+  document.getElementById('endOv').classList.add('hidden');
+  refreshTurn();
+  if(mode==='ai'&&cur==='O') aiMove();
+}
+function refreshTurn(){
+  var el=document.getElementById('turn');
+  if(!playing)return;
+  if(mode==='pvp'){ el.textContent=(cur==='X'?'✖ 玩家1（X）':'⭕ 玩家2（O）'); el.className='turn'; }
+  else{ if(cur==='X'){el.textContent='轮到你（X）';el.className='turn';} else {el.textContent='🤖 AI 思考中…';el.className='turn ai';} }
+}
+function onCellClick(e){
+  if(!playing)return;
+  if(mode==='ai'&&cur==='O')return;
+  var i=+e.currentTarget.dataset.i;
+  if(board[i])return;
+  cur= (mode==='pvp'? cur : 'X');
+  place(i,cur);
+  if(!playing)return;
+  cur= (cur==='X'?'O':'X');
+  refreshTurn();
+  if(mode==='ai'&&cur==='O') aiMove();
+}
+function place(i,p){
+  board[i]=p;cells[i].textContent=p;cells[i].className='cell '+p.toLowerCase();
+  snd.place();
+  var w=winnerOf(board);
+  if(w){ end(w); return; }
+  if(isFull(board)){ end(null); return; }
+}
+function end(w){
+  playing=false;
+  var ov=document.getElementById('endOv'),t=document.getElementById('endTitle'),info=document.getElementById('endInfo');
+  var winLine=(w&&w.line)||[];
+  for(var k=0;k<winLine.length;k++){ if(cells[winLine[k]]) cells[winLine[k]].classList.add('win'); }
+  if(mode==='pvp'){
+    if(!w){ t.textContent='🤝 平局'; info.textContent='棋盘已满'; snd.draw(); }
+    else { t.textContent=(w.p==='X'?'✖ 玩家1 胜！':'⭕ 玩家2 胜！'); info.textContent='连成一线'; snd.win(); }
+  }else{
+    if(w&&w.p==='X'){ wins++;localStorage.setItem('ttt_w',wins);document.getElementById('wins').textContent=wins; t.textContent='🎉 你赢了！'; info.textContent='连成一线，AI 没拦住'; snd.win(); }
+    else if(w&&w.p==='O'){ losses++;localStorage.setItem('ttt_l',losses);document.getElementById('losses').textContent=losses; t.textContent='🤖 AI 赢了'; info.textContent='再想想棋路，你可以的'; snd.lose(); }
+    else { draws++;localStorage.setItem('ttt_d',draws);document.getElementById('draws').textContent=draws; t.textContent='🤝 平局'; info.textContent='势均力敌'; snd.draw(); }
+  }
+  ov.classList.remove('hidden');
+}
+/* ===== AI ===== */
+function aiMove(){
+  if(!playing||cur!=='O')return;
+  document.getElementById('turn').textContent='🤖 AI 思考中…';
+  setTimeout(function(){
+    if(!playing)return;
+    var mv=(diff===0)?randomMove(board):(diff===1)?normalMove(board):bestMove(board);
+    if(mv>=0){ place(mv,'O'); if(playing){ cur='X'; refreshTurn(); } }
+  },260);
+}
+function randomMove(b){ var e=[]; for(var i=0;i<9;i++) if(!b[i]) e.push(i); return e.length?e[(Math.random()*e.length)|0]:-1; }
+function normalMove(b){
+  // 1) 自己能赢
+  for(var i=0;i<9;i++){ if(!b[i]){ b[i]='O'; if(winnerOf(b)){b[i]='';return i;} b[i]=''; } }
+  // 2) 堵对手
+  for(var i=0;i<9;i++){ if(!b[i]){ b[i]='X'; if(winnerOf(b)){b[i]='';return i;} b[i]=''; } }
+  // 3) 中心
+  if(!b[4]) return 4;
+  // 4) 角（随机选一个空角）
+  var corners=[0,2,6,8].filter(function(i){return !b[i];});
+  if(corners.length) return corners[(Math.random()*corners.length)|0];
+  // 5) 边
+  var edges=[1,3,5,7].filter(function(i){return !b[i];});
+  return edges.length?edges[(Math.random()*edges.length)|0]:-1;
+}
+function bestMove(b){
+  var best=-Infinity,mv=-1;
+  for(var i=0;i<9;i++){
+    if(!b[i]){ b[i]='O'; var v=minimax(b,false,1); b[i]=''; if(v>best){best=v;mv=i;} }
+  }
+  return mv;
+}
+function minimax(b,isAI,depth){
+  var w=winnerOf(b);
+  if(w) return (w.p==='O') ? (10-depth) : (depth-10);
+  if(isFull(b)) return 0;
+  var best=isAI?-Infinity:Infinity;
+  for(var i=0;i<9;i++){
+    if(!b[i]){
+      b[i]=isAI?'O':'X';
+      var v=minimax(b,!isAI,depth+1);
+      b[i]='';
+      if(isAI) best=Math.max(best,v); else best=Math.min(best,v);
+    }
+  }
+  return best;
+}
+document.getElementById('modeSel').addEventListener('change',reset);
+document.getElementById('diffSel').addEventListener('change',reset);
+document.getElementById('restartBtn').addEventListener('click',reset);
+document.getElementById('reBtn').addEventListener('click',reset);
+reset();
+</script>
+</body>
+</html>
