@@ -73,6 +73,7 @@ create table profiles (
   name_hash text unique,
   student_id text unique,
   politics text,
+  exam_no text,
   role text not null default '学生',
   wechat text,
   qq text,
@@ -107,6 +108,10 @@ let queryLog = [];
 
 function translate(sqlText) {
   let s = sqlText;
+  /* SQLite 的 alter table 不支持 add column if not exists，直接忽略这类语句 */
+  if (/^\s*alter\s+table[\s\S]*add\s+column\s+if\s+not\s+exists/i.test(s)) {
+    return 'select 1 where 0';
+  }
   /* 此时占位符还是 $1 $2 的形式（PG_to_Q 在之后才跑），所以按 \$N 匹配。
      第一步：把 ( $N || ' days' )::interval 压成 datetime 参数片段 */
   s = s.replace(
@@ -897,6 +902,89 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   t('删除资料成功', dp.status === 200, JSON.stringify(dp.body));
   const pd2 = await call('/api/admin?action=profile&id=' + pid2, { token: adminToken });
   t('删除后详情 404', pd2.status === 404, '实际 ' + pd2.status);
+
+  /* ================================================================
+     准考证号（exam_no）—— 2026-10-05 导入名单时新增的字段。
+     设计约定：属于班内公开信息，**不走审核**，谁的查询都能直接看到。
+     ================================================================ */
+
+  /* 管理员建一条带准考证号的资料 */
+  const ce = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '准考证测试生', studentId: '250701', politics: '群众', examNo: '11399999' },
+  });
+  t('新增带准考证号的资料成功', ce.status === 200 && ce.body.id > 0, JSON.stringify(ce.body));
+  const eid = ce.body.id;
+
+  /* 普通同学（已改密）去查，应当直接看到准考证号 */
+  const se = await call('/api/profile?action=search&q=250701', { token: token2 });
+  const ehit = (se.body.results || [])[0] || {};
+  t('同学查询能拿到准考证号', ehit.examNo === '11399999', '实际 ' + ehit.examNo);
+
+  /* 关键断言：准考证号不依赖 contact_status。
+     这条资料没填任何联系方式，contact_status 是 none，
+     但准考证号仍然要可见 —— 证明它走的是独立通道，没被审核门禁误伤。 */
+  t('未填联系方式时 contactVisible=false', ehit.contactVisible === false);
+  t('未填联系方式时准考证号依然可见', ehit.examNo === '11399999', '实际 ' + ehit.examNo);
+  t('未填联系方式时微信/QQ/手机号均为空',
+    !ehit.wechat && !ehit.qq && !ehit.phone,
+    JSON.stringify({ w: ehit.wechat, q: ehit.qq, p: ehit.phone }));
+
+  /* 按准考证号也能搜到人 */
+  const se2 = await call('/api/profile?action=search&q=11399999', { token: token2 });
+  t('支持用准考证号搜索',
+    (se2.body.results || []).length === 1 && (se2.body.results || [])[0].name === '准考证测试生',
+    JSON.stringify(se2.body.results || []).length + ' 条');
+
+  /* 后台列表要带上这个字段 */
+  const le = await call('/api/admin?action=profiles&q=250701', { token: adminToken });
+  t('后台列表返回 examNo', (le.body.profiles || [])[0] && (le.body.profiles || [])[0].examNo === '11399999',
+    JSON.stringify((le.body.profiles || [])[0] || {}).slice(0, 160));
+
+  /* 后台单条详情要带上 */
+  const de = await call('/api/admin?action=profile&id=' + eid, { token: adminToken });
+  t('后台详情返回 examNo', de.body.profile && de.body.profile.examNo === '11399999');
+
+  /* 管理员改准考证号 */
+  const ue = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: eid, name: '准考证测试生', studentId: '250701', examNo: '11400001' },
+  });
+  t('管理员修改准考证号成功', ue.status === 200, JSON.stringify(ue.body));
+  const se3 = await call('/api/profile?action=search&q=250701', { token: token2 });
+  t('修改后同学看到的是新号码', (se3.body.results || [])[0].examNo === '11400001',
+    '实际 ' + (se3.body.results || [])[0].examNo);
+
+  /* 批量导入要认这个字段（Excel 导入走的就是这条路） */
+  const be = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: [
+      { name: '批量准考证甲', studentId: '250702', politics: '群众', examNo: '11380001' },
+      { name: '批量准考证乙', studentId: '250703', politics: '共青团员', examNo: '11380002' },
+    ] },
+  });
+  t('批量导入带准考证号成功', be.status === 200 && be.body.created === 2, JSON.stringify(be.body));
+  const se4 = await call('/api/profile?action=search&q=250702', { token: token2 });
+  t('批量导入的准考证号可被同学查到',
+    (se4.body.results || [])[0].examNo === '11380001',
+    '实际 ' + (se4.body.results || [])[0].examNo);
+
+  /* 不带准考证号的资料，字段应是空串而不是 undefined（前端拼字符串才安全） */
+  const se5 = await call('/api/profile?action=search&q=250501', { token: token2 });
+  t('无准考证号时返回空串而非 undefined',
+    (se5.body.results || [])[0].examNo === '',
+    JSON.stringify((se5.body.results || [])[0].examNo));
+
+  /* 收尾：把测试造的这几条删掉，避免污染 */
+  for (const id of [eid]) {
+    await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id } });
+  }
+  const bp = await call('/api/admin?action=profiles&q=批量准考证', { token: adminToken });
+  for (const x of (bp.body.profiles || [])) {
+    await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id: x.id } });
+  }
+  t('准考证号测试数据已清理',
+    (bp.body.profiles || []).length === 2, '找到 ' + (bp.body.profiles || []).length + ' 条待清理');
 }
 
 console.log('\n' + '='.repeat(52));
