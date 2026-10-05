@@ -22,6 +22,11 @@ create table if not exists users (
 /* 用户名统一小写，方便大小写不敏感登录 */
 create unique index if not exists users_username_lower_idx on users (lower(username));
 
+/* ---------------- 登录限流所需的两列（2026-09-30 加，幂等可重复执行） ----------------
+   老库直接执行本文件即可补上，不需要重建表。 */
+alter table users add column if not exists failed_count int not null default 0;
+alter table users add column if not exists locked_until  timestamptz;
+
 /* ---------------- 会话表 ---------------- */
 create table if not exists sessions (
   token      text        primary key,

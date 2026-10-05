@@ -61,7 +61,11 @@
 // v46：国庆英语的听力音频并入「试卷 1 张」同一条（不单独占一行答题项）。
 //      v45：国庆英语新增听力音频（与中秋那条格式一致，站内弹窗播放）。
 //      升版本清旧缓存
-const CACHE = 'class-site-v46'
+// v47：隐私加固 —— 移除「个人资料查询」里的电话 / 微信 / QQ / 智学网准考证四类字段
+//       （此前用 XOR 混淆存放，密钥就在同一份 JS 里，等于明文；公开站点藏不住，故彻底删除）。
+//       清理仓库内全部历史备份包（backup/ 与根目录 class-site-backup.zip），改用 git 做版本留档。
+//       升版本清旧缓存。
+const CACHE = 'class-site-v47'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

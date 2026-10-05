@@ -103,23 +103,77 @@ async function login(req, res) {
   if (!username || !password) return fail(res, 400, '请填写用户名和密码');
 
   const sql = getSql();
+
+  /* 登录限流：同一用户名连续失败 5 次 → 锁 15 分钟（防暴力破解） */
+  const lockedMin = await lockRemain(sql, username);
+  if (lockedMin > 0) {
+    return fail(res, 429, '密码连续输错次数过多，请 ' + lockedMin + ' 分钟后再试');
+  }
+
   const rows = await sql`
     select id, username, display_name, role, status, password_hash, created_at
       from users where lower(username) = ${username} limit 1
   `;
 
-  /* 用户不存在时也走一次 bcrypt 比对，避免通过响应时间探测用户名是否存在 */
+  /* 用户不存在时也走一次 bcrypt 比对，避免通过响应时间探测用户名是否存在。
+     ⚠️ 这个陪跑 hash 必须是**合法的 60 位 bcrypt 串**，否则 bcryptjs 会直接
+        返回 false、根本不做计算，防护等于没做（2026-09-30 修复：旧值是 66 位）。 */
+  const DECOY_HASH = '$2b$10$n.efqrKQnSwnqYiREnaSpOl49tlmj/klIxVjh//dcu6q/5.N8n/r2';
   const u = rows[0];
-  const hash = u ? u.password_hash : '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidinv';
+  const hash = u ? u.password_hash : DECOY_HASH;
   const good = await bcrypt.compare(password, hash);
 
-  if (!u || !good) return fail(res, 401, '用户名或密码不对');
+  if (!u || !good) {
+    await bumpFail(sql, u ? u.id : null, username);
+    return fail(res, 401, '用户名或密码不对');
+  }
   if (u.status !== 'active') return fail(res, 403, '该账号已被禁用，请联系管理员');
 
+  await clearFail(sql, u.id);
   await sql`update users set last_login_at = now() where id = ${u.id}`;
   const token = await issueSession(sql, u.id);
 
   return ok(res, { message: '登录成功', token, user: shape(u) });
+}
+
+/* ---------------- 登录限流（基于 users 表，跨实例生效） ----------------
+   需要 schema.sql 里的 failed_count / locked_until 两列；
+   若老库没执行过 ALTER，这里会静默降级（不阻断登录），并在日志里提示。 */
+const MAX_FAILS = 5;
+const LOCK_MINUTES = 15;
+
+async function lockRemain(sql, username) {
+  try {
+    const rows = await sql`
+      select locked_until from users where lower(username) = ${username} limit 1
+    `;
+    if (!rows.length || !rows[0].locked_until) return 0;
+    const ms = new Date(rows[0].locked_until).getTime() - Date.now();
+    return ms > 0 ? Math.ceil(ms / 60000) : 0;
+  } catch (e) {
+    return 0; /* 列不存在 → 不限流 */
+  }
+}
+
+async function bumpFail(sql, userId, username) {
+  try {
+    await sql`
+      update users
+         set failed_count = failed_count + 1,
+             locked_until = case when failed_count + 1 >= ${MAX_FAILS}
+                                 then now() + (${LOCK_MINUTES} || ' minutes')::interval
+                                 else locked_until end
+       where lower(username) = ${username}
+    `;
+  } catch (e) {
+    console.warn('[auth] 限流未生效（可能缺少 failed_count/locked_until 列）：', e.message);
+  }
+}
+
+async function clearFail(sql, userId) {
+  try {
+    await sql`update users set failed_count = 0, locked_until = null where id = ${userId}`;
+  } catch (e) { /* 忽略 */ }
 }
 
 /* ---------------- 登出 ---------------- */

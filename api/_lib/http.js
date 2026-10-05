@@ -69,12 +69,15 @@ export function fail(res, status, msg, extra) {
   json(res, status, { ok: false, error: msg, ...(extra || {}) });
 }
 
-/** 读取请求体（Vercel 一般已解析好，兜底处理字符串） */
+/** 读取请求体（Vercel / FC 一般已解析好，兜底处理字符串与 Buffer） */
 export async function body(req) {
-  if (req.body && typeof req.body === 'object') return req.body;
-  if (typeof req.body === 'string' && req.body) {
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) return req.body;
+  let raw = req.body;
+  /* FC 传来的可能是 Buffer，Vercel 可能是已解析对象或字符串 */
+  if (Buffer.isBuffer(raw)) raw = raw.toString('utf-8');
+  if (typeof raw === 'string' && raw) {
     try {
-      return JSON.parse(req.body);
+      return JSON.parse(raw);
     } catch {
       return {};
     }

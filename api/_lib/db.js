@@ -49,10 +49,13 @@ export function cfg() {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
 
-    /* 允许跨域的前端来源。前端在 GitHub Pages、API 在 Vercel，属于跨站，
+    /* 允许跨域的前端来源。前端在 GitHub Pages、API 在 FC，属于跨站，
        必须显式列白名单（不能用 * ，否则带凭据的请求会被浏览器拒绝）。
-       多个用英文逗号分隔；填 '*' 表示放行全部（仅建议本地调试） */
-    allowOrigins: (process.env.ALLOW_ORIGINS || '*')
+       多个用英文逗号分隔；填 '*' 表示放行全部（仅建议本地调试）。
+
+       ⚠️ 2026-09-30 改为「默认不放行」：以前漏配环境变量会静默放行所有站点，
+       等于把 API 敞开。现在漏配 = 跨域请求全部被浏览器拒绝，问题立刻暴露。 */
+    allowOrigins: (process.env.ALLOW_ORIGINS || '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),

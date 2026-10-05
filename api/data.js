@@ -59,6 +59,9 @@ export default async function handler(req, res) {
      sendBeacon 只能发 POST 且不能带自定义头，所以 token 走 query 参数。
      这条通道只做「写入」，权限等同普通登录用户。 */
   if (req.query.action === 'beacon') {
+    /* 只接受 POST：sendBeacon 本来就只发 POST，放行 GET 会让「带 token 的 URL」
+       被浏览器历史、服务器日志、Referer 头记下来，等于把凭据写进日志。 */
+    if (req.method !== 'POST') return fail(res, 405, 'beacon 通道只接受 POST');
     const u = await requireUserFromQuery(req, res);
     if (!u) return;
     try {
