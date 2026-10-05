@@ -8,7 +8,7 @@
 import { getSql, cfg } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body,
-  requireUser, newToken, audit,
+  requireUser, newToken, audit, ensureSchema,
 } from './_lib/http.js';
 import {
   hashPassword, verifyPassword, needsRehash, DECOY_HASH,
@@ -103,6 +103,9 @@ async function login(req, res) {
   if (!username || !password) return fail(res, 400, '请填写用户名和密码');
 
   const sql = getSql();
+
+  /* 先补全可能缺失的列/表，避免引用新列时直接 500（详见 ensureSchema 注释） */
+  await ensureSchema(sql);
 
   /* 登录限流：同一用户名连续失败 5 次 → 锁 15 分钟（防暴力破解） */
   const lockedMin = await lockRemain(sql, username);
