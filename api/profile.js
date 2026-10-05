@@ -110,6 +110,8 @@ function shapeProfile(row, full) {
     name: row.name || '',
     studentId: row.student_id || '',
     politics: row.politics || '',
+    /* 准考证号是管理员从名单导入的，属于班内公开信息，不走审核、谁的查询都能看到 */
+    examNo: row.exam_no || '',
     role: row.role || '学生',
     contactStatus: row.contact_status || 'none',
     /* 是否展示了联系方式 —— 前端据此显示「待审核」之类的提示 */
@@ -130,17 +132,18 @@ async function search(req, res, u) {
 
   const sql = getSql();
 
-  /* 支持三种命中：① 学号前缀 ② 姓名包含 ③ 姓名哈希（老数据兼容）
-     学号用前缀匹配方便同学只打几位；姓名用包含匹配贴近搜索习惯。 */
+  /* 支持四种命中：① 学号前缀 ② 姓名包含 ③ 准考证号前缀 ④ 姓名哈希（老数据兼容）
+     学号/准考证号用前缀匹配方便同学只打几位；姓名用包含匹配贴近搜索习惯。 */
   const like = '%' + q + '%';
   const sidLike = q + '%';
 
   const rows = await sql`
-    select id, name, student_id, politics, role, wechat, qq, phone,
+    select id, name, student_id, politics, exam_no, role, wechat, qq, phone,
            contact_status, updated_at
       from profiles
      where student_id ilike ${sidLike}
         or name ilike ${like}
+        or exam_no like ${sidLike}
      order by student_id nulls last, name
      limit ${MAX_RESULTS}
   `;
@@ -179,7 +182,7 @@ async function myProfile(req, res, u) {
   let rows = [];
   if (u.profileId) {
     rows = await sql`
-      select id, name, student_id, politics, role, wechat, qq, phone,
+      select id, name, student_id, politics, exam_no, role, wechat, qq, phone,
              contact_status, reject_reason, updated_at
         from profiles where id = ${u.profileId} limit 1
     `;
