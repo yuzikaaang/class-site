@@ -2312,7 +2312,7 @@ function contentDialog(idx){
  * ---------------------------------------------------------------------------
  * 后端 /admin?action=profiles 返回：
  *   { total, counts:{total,pending,approved,claimed}, profiles:[{ id, name,
- *     studentId, politics, role, wechat, qq, phone, contactStatus,
+ *     studentId, politics, examNo, role, wechat, qq, phone, contactStatus,
  *     rejectReason, userId, boundUsername, createdAt, updatedAt }] }
  *
  * 注意：这里的联系方式是**管理端明文视图**，只有管理员能看到。
@@ -2445,6 +2445,7 @@ function paintProfiles(){
       +   '<div><b>' + esc(p.name || '(未填姓名)') + '</b>'
       +   '<i class="mono">' + esc(p.studentId || '无学号') + '</i></div></div></td>'
       + '<td class="nowrap">' + esc(p.politics || '—') + '</td>'
+      + '<td class="mono nowrap">' + (p.examNo ? esc(p.examNo) : '<span class="muted">—</span>') + '</td>'
       + '<td>' + contacts + '</td>'
       + '<td class="nowrap"><span class="badge ' + st.cls + '">' + st.text + '</span>'
       +   (p.contactStatus === 'rejected' && p.rejectReason
@@ -2462,7 +2463,7 @@ function paintProfiles(){
 
   body.innerHTML =
     '<div class="table-wrap"><table><thead><tr>'
-    + '<th>姓名 / 学号</th><th class="nowrap">政治面貌</th><th>联系方式</th>'
+    + '<th>姓名 / 学号</th><th class="nowrap">政治面貌</th><th class="nowrap">准考证号</th><th>联系方式</th>'
     + '<th class="nowrap">审核状态</th><th class="nowrap">归属账号</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
@@ -2506,7 +2507,11 @@ function profileDialog(p){
       + '<p class="hint">学号在全部资料里必须唯一，重复会报错。</p></div>'
 
       + '<div class="field"><label for="pfPol">政治面貌</label>'
-      + '<select id="pfPol">' + opts(p ? p.politics : '共青团员') + '</select></div>'
+      + '<select id="pfPol">' + opts(p ? p.politics : '群众') + '</select></div>'
+
+      + '<div class="field"><label for="pfEx">智学网准考证号</label>'
+      + '<input id="pfEx" class="inp" maxlength="24" value="' + attr(p ? p.examNo : '') + '" placeholder="如 11399395">'
+      + '<p class="hint">不属于隐私字段，同学查询时就能直接看到，不需要审核。</p></div>'
 
       + '<div class="field"><label>联系方式</label>'
       +   '<div class="ct-grid" style="gap:10px">'
@@ -2538,6 +2543,7 @@ function profileDialog(p){
           name:      box.querySelector('#pfName').value.trim(),
           studentId: box.querySelector('#pfSid').value.trim(),
           politics:  box.querySelector('#pfPol').value,
+          examNo:    box.querySelector('#pfEx').value.trim(),
           wechat:    box.querySelector('#pfWx').value.trim(),
           qq:        box.querySelector('#pfQq').value.trim(),
           phone:     box.querySelector('#pfPh').value.trim(),
@@ -2643,6 +2649,7 @@ function profileExport(){
         '姓名': p.name || '',
         '学号': p.studentId || '',
         '政治面貌': p.politics || '',
+        '准考证号': p.examNo || '',
         '微信': p.wechat || '',
         'QQ': p.qq || '',
         '手机号': p.phone || '',
@@ -2660,14 +2667,14 @@ function profileExport(){
 
 /**
  * Excel 批量导入资料。
- * 表头：姓名 / 学号 / 政治面貌 / 微信 / QQ / 手机号
+ * 表头：姓名 / 学号 / 政治面貌 / 准考证号 / 微信 / QQ / 手机号
  * 按学号优先匹配（没有学号则按姓名），命中就更新、没命中就新增。
  * 后端单批上限 60 条，所以这里分片串行提交。
  */
 function profileImportDialog(){
   openModal({
     title: 'Excel 批量导入资料',
-    sub: '表头需包含：姓名 / 学号 / 政治面貌 / 微信 / QQ / 手机号',
+    sub: '表头需包含：姓名 / 学号 / 政治面貌 / 准考证号 / 微信 / QQ / 手机号',
     wide: true,
     body:
       '<div class="alert info" style="margin-bottom:16px">'
@@ -2740,6 +2747,7 @@ function profileImportDialog(){
               name:      pick(r, ['姓名','名字','学生姓名']),
               studentId: pick(r, ['学号','学籍号']),
               politics:  pick(r, ['政治面貌','面貌']),
+              examNo:    pick(r, ['准考证号','智学网准考证号','智学网号']),
               wechat:    pick(r, ['微信','微信号']),
               qq:        pick(r, ['QQ','QQ号']),
               phone:     pick(r, ['手机号','手机','电话','手机号码'])
@@ -2876,6 +2884,7 @@ function paintReviews(){
           + '<div class="fields">'
           +   f('微信', r.wechat) + f('QQ', r.qq) + f('手机号', r.phone)
           +   '<div><div class="k">政治面貌</div><div class="v" style="font-family:inherit">' + esc(r.politics || '—') + '</div></div>'
+          +   '<div><div class="k">准考证号</div><div class="v">' + (r.examNo ? esc(r.examNo) : '<span class="muted" style="font-family:inherit;font-weight:400">未填</span>') + '</div></div>'
           + '</div>'
           + '</div>';
       }).join('')
