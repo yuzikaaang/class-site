@@ -2,7 +2,7 @@
   "name": "class-site-api",
   "version": "1.0.0",
   "private": true,
-  "description": "25级05班班级服务站的用户系统后端（Vercel Serverless + Neon Postgres）",
+  "description": "25级05班班级服务站的用户系统后端（Cloudflare Workers + Neon Postgres）",
   "type": "module",
   "engines": {
     "node": "20.x"
@@ -10,5 +10,14 @@
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
     "bcryptjs": "^2.4.3"
+  },
+  "scripts": {
+    "test": "node test_e2e.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "sql.js": "^1.10.3",
+    "wrangler": "^3.90.0"
   }
 }

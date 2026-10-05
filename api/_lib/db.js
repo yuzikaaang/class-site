@@ -16,6 +16,7 @@
    ============================================================ */
 
 import { neon } from '@neondatabase/serverless';
+import { getEnv } from './env.js';
 
 let _sql = null;
 
@@ -30,10 +31,10 @@ export function getSql() {
     return _sql;
   }
 
-  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  const url = getEnv('DATABASE_URL') || getEnv('POSTGRES_URL');
   if (!url) {
     throw new Error(
-      '缺少 DATABASE_URL 环境变量。请在 Vercel 项目 → Settings → Environment Variables 里配置 Neon 的连接串。'
+      '缺少 DATABASE_URL 环境变量。请在部署平台的环境变量里配置 Neon 的连接串。'
     );
   }
   _sql = neon(url);
@@ -44,26 +45,26 @@ export function getSql() {
 export function cfg() {
   return {
     /* 站点管理员用户名（首个管理员）。多个用英文逗号分隔 */
-    adminUsers: (process.env.ADMIN_USERS || '')
+    adminUsers: getEnv('ADMIN_USERS')
       .split(',')
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
 
-    /* 允许跨域的前端来源。前端在 GitHub Pages、API 在 FC，属于跨站，
+    /* 允许跨域的前端来源。前端在 GitHub Pages、API 在 Cloudflare Workers，属于跨站，
        必须显式列白名单（不能用 * ，否则带凭据的请求会被浏览器拒绝）。
        多个用英文逗号分隔；填 '*' 表示放行全部（仅建议本地调试）。
 
        ⚠️ 2026-09-30 改为「默认不放行」：以前漏配环境变量会静默放行所有站点，
        等于把 API 敞开。现在漏配 = 跨域请求全部被浏览器拒绝，问题立刻暴露。 */
-    allowOrigins: (process.env.ALLOW_ORIGINS || '')
+    allowOrigins: getEnv('ALLOW_ORIGINS')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
 
     /* 会话 token 有效期（天） */
-    sessionDays: Number(process.env.SESSION_DAYS || 30),
+    sessionDays: Number(getEnv('SESSION_DAYS') || 30),
 
     /* 是否允许自助注册 */
-    allowRegister: (process.env.ALLOW_REGISTER || '1') !== '0',
+    allowRegister: (getEnv('ALLOW_REGISTER') || '1') !== '0',
   };
 }

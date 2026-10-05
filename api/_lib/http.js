@@ -69,12 +69,18 @@ export function fail(res, status, msg, extra) {
   json(res, status, { ok: false, error: msg, ...(extra || {}) });
 }
 
-/** 读取请求体（Vercel / FC 一般已解析好，兜底处理字符串与 Buffer） */
+/** 读取请求体。
+ *  - Workers：入口已把请求体预读成字符串挂在 req.__rawBody
+ *  - Vercel / FC：body 可能已是对象、字符串或 Buffer，做兼容
+ *  - 兜底：手动读流（仅 Node 环境有流事件）
+ */
 export async function body(req) {
-  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) return req.body;
-  let raw = req.body;
-  /* FC 传来的可能是 Buffer，Vercel 可能是已解析对象或字符串 */
-  if (Buffer.isBuffer(raw)) raw = raw.toString('utf-8');
+  if (req.body && typeof req.body === 'object' && !isBuffer(req.body)) return req.body;
+
+  /* Workers 入口预读的原始串 */
+  let raw = req.__rawBody !== undefined ? req.__rawBody : req.body;
+
+  if (isBuffer(raw)) raw = raw.toString('utf-8');
   if (typeof raw === 'string' && raw) {
     try {
       return JSON.parse(raw);
@@ -82,7 +88,13 @@ export async function body(req) {
       return {};
     }
   }
-  /* 兜底：手动读流 */
+  if (raw === '' || raw === undefined || raw === null) {
+    /* Workers 下没有流事件，直接返回空对象 */
+    if (!req.on) return {};
+  }
+
+  /* 兜底：Node 环境手动读流 */
+  if (!req.on) return {};
   return await new Promise((resolve) => {
     let raw = '';
     req.on('data', (c) => {
@@ -97,6 +109,11 @@ export async function body(req) {
     });
     req.on('error', () => resolve({}));
   });
+}
+
+/** 兼容判断 Buffer（Workers 里没有 Buffer 全局） */
+function isBuffer(v) {
+  return typeof Buffer !== 'undefined' && Buffer.isBuffer(v);
 }
 
 /* ---------------- 会话与鉴权 ---------------- */

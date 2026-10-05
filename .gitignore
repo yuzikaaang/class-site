@@ -39,3 +39,9 @@ internal/shot-*.png
 # 备份产物不入库（2026-09-30：清理历史备份，改用 git 本身做版本留档）
 backup/
 *.zip
+
+# Cloudflare Workers（2026-10-05 新增后端方案）
+# wrangler 的本地缓存与构建产物
+.wrangler/
+.dev.vars
+# 注：wrangler.toml 要入库（含非敏感配置），密钥用 wrangler secret 配置后存在云端

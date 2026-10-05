@@ -1,0 +1,38 @@
+# ============================================================
+# Cloudflare Workers 配置
+# ------------------------------------------------------------
+# 部署：npx wrangler deploy
+# 本地调试：npx wrangler dev
+#
+# 环境变量（如 DATABASE_URL）不要写在这里，用 secret 方式配置：
+#   npx wrangler secret put DATABASE_URL
+#   npx wrangler secret put ADMIN_USERS
+#   npx wrangler secret put ALLOW_ORIGINS
+#   npx wrangler secret put SESSION_DAYS
+# ============================================================
+
+name = "class-site-api"
+main = "api/worker.mjs"
+compatibility_date = "2026-10-01"
+
+# bcryptjs 依赖 Node 的 crypto/stream，开启 nodejs_compat 才能跑
+compatibility_flags = ["nodejs_compat"]
+
+# 观察日志（开发期建议开，方便排查）
+[observability]
+enabled = true
+
+# 非敏感变量可以放这里；敏感信息用 wrangler secret 配置
+[vars]
+# ⚠️ 必填：允许跨域的前端来源（多个用英文逗号分隔）
+# 前端在 GitHub Pages，API 在 Workers，属于跨站，必须列白名单
+ALLOW_ORIGINS = "https://yuzikaaang.github.io"
+
+# 管理员用户名
+ADMIN_USERS = "yuzikang"
+
+# 会话有效期（天）
+SESSION_DAYS = "30"
+
+# 是否允许自助注册（1 开 / 0 关）
+ALLOW_REGISTER = "1"

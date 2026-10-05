@@ -5,14 +5,14 @@
    函数数量限制），部署轻。
    ============================================================ */
 
-import bcrypt from 'bcryptjs';
 import { getSql, cfg } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body,
   requireUser, newToken, audit,
 } from './_lib/http.js';
-
-const SALT_ROUNDS = 10;
+import {
+  hashPassword, verifyPassword, needsRehash, DECOY_HASH,
+} from './_lib/password.js';
 
 /* 用户名规则：3–20 位，字母/数字/下划线/中文 */
 function normUsername(s) {
@@ -69,7 +69,7 @@ async function register(req, res) {
   const dup = await sql`select id from users where lower(username) = ${username} limit 1`;
   if (dup.length) return fail(res, 409, '这个用户名已经被注册了，换一个吧');
 
-  const hash = await bcrypt.hash(password, SALT_ROUNDS);
+  const hash = await hashPassword(password);
 
   /* 首个注册者 / 配置里指定的用户名，自动成为管理员 */
   const { adminUsers } = cfg();
@@ -115,13 +115,14 @@ async function login(req, res) {
       from users where lower(username) = ${username} limit 1
   `;
 
-  /* 用户不存在时也走一次 bcrypt 比对，避免通过响应时间探测用户名是否存在。
-     ⚠️ 这个陪跑 hash 必须是**合法的 60 位 bcrypt 串**，否则 bcryptjs 会直接
-        返回 false、根本不做计算，防护等于没做（2026-09-30 修复：旧值是 66 位）。 */
-  const DECOY_HASH = '$2b$10$n.efqrKQnSwnqYiREnaSpOl49tlmj/klIxVjh//dcu6q/5.N8n/r2';
+  /* 用户不存在时也走一次密码比对，避免通过响应时间探测用户名是否存在。
+     ⚠️ 这个陪跑串必须是**合法且能被真正计算的**哈希，否则会提前返回、
+        防护等于没做。（历史上踩过两次坑：
+          2026-09-30 —— 假 bcrypt 串是 66 位非法长度，bcryptjs 直接返回 false；
+          2026-10-05 —— 换 PBKDF2 后，假串同步改为合法的 pbkdf2 格式。） */
   const u = rows[0];
   const hash = u ? u.password_hash : DECOY_HASH;
-  const good = await bcrypt.compare(password, hash);
+  const good = await verifyPassword(password, hash);
 
   if (!u || !good) {
     await bumpFail(sql, u ? u.id : null, username);
@@ -130,6 +131,18 @@ async function login(req, res) {
   if (u.status !== 'active') return fail(res, 403, '该账号已被禁用，请联系管理员');
 
   await clearFail(sql, u.id);
+
+  /* 旧算法的哈希在登录成功后顺手升级（bcrypt → pbkdf2，或提高迭代次数）。
+     换算法不影响老用户：能登录就说明密码对，这里只是把它重新存成新格式。 */
+  if (needsRehash(u.password_hash)) {
+    try {
+      const upgraded = await hashPassword(password);
+      await sql`update users set password_hash = ${upgraded} where id = ${u.id}`;
+    } catch (e) {
+      console.warn('[auth] 密码哈希升级失败（不影响登录）：', e.message);
+    }
+  }
+
   await sql`update users set last_login_at = now() where id = ${u.id}`;
   const token = await issueSession(sql, u.id);
 
@@ -148,11 +161,48 @@ async function lockRemain(sql, username) {
       select locked_until from users where lower(username) = ${username} limit 1
     `;
     if (!rows.length || !rows[0].locked_until) return 0;
-    const ms = new Date(rows[0].locked_until).getTime() - Date.now();
+    const until = toTime(rows[0].locked_until);
+    if (!until) return 0;
+    const ms = until - Date.now();
     return ms > 0 ? Math.ceil(ms / 60000) : 0;
   } catch (e) {
     return 0; /* 列不存在 → 不限流 */
   }
+}
+
+/**
+ * 把数据库返回的时间值转成毫秒时间戳。
+ *
+ * ⚠️ 这里踩过一个坑（2026-10-05）：
+ * Neon 的 HTTP 驱动返回 timestamptz 是**字符串**（形如 "2026-10-05 05:52:28"），
+ * 不是 JS Date 对象。而带空格的这种格式在 Safari / 部分 WebView 里
+ * `new Date("2026-10-05 05:52:28")` 会得到 Invalid Date，
+ * getTime() 返回 NaN —— NaN > 0 恒为 false，限流会**静默失效**。
+ * 所以这里手动解析，并把空格换成 T、补上时区标识，确保各端一致。
+ *
+ * @returns {number} 毫秒时间戳；无法解析时返回 0
+ */
+function toTime(v) {
+  if (!v) return 0;
+  if (v instanceof Date) {
+    const t = v.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
+  /* 数字（epoch 毫秒或秒） */
+  if (typeof v === 'number') return v > 1e12 ? v : v * 1000;
+  const s = String(v).trim();
+  /* 纯数字字符串 */
+  if (/^\d+$/.test(s)) {
+    const n = Number(s);
+    return n > 1e12 ? n : n * 1000;
+  }
+  /* "YYYY-MM-DD HH:MM:SS"（Postgres 默认格式）→ ISO 8601 并补 UTC 标识。
+     Neon 返回的时间已是 UTC，但不带时区后缀，直接 new Date 会被当成本地时间，
+     导致误差一个时区（国内差 8 小时）。这里统一按 UTC 处理。 */
+  const iso = s.replace(' ', 'T');
+  const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
+  const t = Date.parse(withZone);
+  return Number.isFinite(t) ? t : 0;
 }
 
 async function bumpFail(sql, userId, username) {
@@ -220,10 +270,10 @@ async function changePassword(req, res) {
 
   const sql = getSql();
   const rows = await sql`select password_hash from users where id = ${u.id}`;
-  const good = await bcrypt.compare(oldPwd, rows[0].password_hash);
+  const good = await verifyPassword(oldPwd, rows[0].password_hash);
   if (!good) return fail(res, 401, '原密码不对');
 
-  const hash = await bcrypt.hash(newPwd, SALT_ROUNDS);
+  const hash = await hashPassword(newPwd);
   await sql`update users set password_hash = ${hash} where id = ${u.id}`;
   /* 改密码后踢掉其他设备的登录，只保留当前这台 */
   await sql`delete from sessions where user_id = ${u.id}`;

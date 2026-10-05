@@ -14,13 +14,11 @@
    POST   /api/admin?action=clear-sessions            强制某用户全部设备下线
    ============================================================ */
 
-import bcrypt from 'bcryptjs';
 import { getSql } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireAdmin, audit,
 } from './_lib/http.js';
-
-const SALT_ROUNDS = 10;
+import { hashPassword } from './_lib/password.js';
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
@@ -196,7 +194,7 @@ async function resetPassword(req, res, me, b) {
   if (newPwd.length < 6 || newPwd.length > 64) return fail(res, 400, '新密码需 6–64 位');
 
   const sql = getSql();
-  const hash = await bcrypt.hash(newPwd, SALT_ROUNDS);
+  const hash = await hashPassword(newPwd);
   const rows = await sql`
     update users set password_hash = ${hash} where id = ${id}
     returning username
