@@ -90,23 +90,32 @@ jobs:
           # ------------------------------------------------------------
           # 背景：曾经出现过 Actions 显示 success、gh-pages 分支却停在旧版本
           # 的情况（线上跑的是几个月前的存档页），排查成本很高。
-          # 这里直接把关键文件的大小与指纹打出来，任何异常在 Actions 日志里
-          # 一眼可见；index.html 若被换成了历史存档版（体积骤降）直接判失败。
+          # 这里把关键文件的大小打出来，任何异常在 Actions 日志里一眼可见。
+          #
+          # 校验强度分两档，避免「缺一个次要文件就整站不发」：
+          #   · index.html 是站点命脉 —— 缺失或体积异常（疑似换成了历史存档版）
+          #     直接判失败，宁可红着也不要发错的页面上线
+          #   · 其余文件 —— 只警告，不阻断发布
           # ------------------------------------------------------------
-          for f in index.html admin.html; do
-            if [ ! -f "_site/$f" ]; then
-              echo "❌ 发布包缺少 $f"
-              exit 1
-            fi
-            echo "  📄 $f  $(wc -c < "_site/$f") 字节"
-          done
-
-          INDEX_SIZE=$(wc -c < _site/index.html)
-          if [ "$INDEX_SIZE" -lt 200000 ]; then
-            echo "❌ 自检失败：index.html 只有 ${INDEX_SIZE} 字节，疑似误发布了历史存档版"
-            echo "   期望值约 528000 字节。若确实做了大幅精简，请调低此处的阈值。"
+          if [ ! -f "_site/index.html" ]; then
+            echo "❌ 自检失败：发布包里没有 index.html"
             exit 1
           fi
+
+          INDEX_SIZE=$(wc -c < _site/index.html)
+          echo "  📄 index.html  ${INDEX_SIZE} 字节"
+          if [ "$INDEX_SIZE" -lt 200000 ]; then
+            echo "❌ 自检失败：index.html 只有 ${INDEX_SIZE} 字节，疑似误发布了历史存档版"
+            echo "   参考值约 528000 字节。若确实做过大幅精简，请调低此处的阈值。"
+            exit 1
+          fi
+
+          if [ -f "_site/admin.html" ]; then
+            echo "  📄 admin.html  $(wc -c < _site/admin.html) 字节"
+          else
+            echo "  ⚠️  发布包里没有 admin.html（管理后台将无法访问）"
+          fi
+
           echo "✅ 发布内容自检通过"
 
           # 上线检查：这些内部文件绝不能出现在发布包里，出现就判失败
