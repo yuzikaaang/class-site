@@ -105,7 +105,8 @@ create table if not exists profiles (
   name          text,                                  -- 姓名（明文，管理员维护）
   name_hash     text        unique,                    -- 姓名 SHA-256（精确匹配用，可空）
   student_id    text        unique,                    -- 学号（管理员维护，唯一）
-  politics      text,                                  -- 政治面貌：共青团员 / 普通学生 / 中共党员 等
+  politics      text,                                  -- 政治面貌：共青团员 / 群众 / 中共党员 等
+  exam_no       text,                                  -- 智学网准考证号（管理员维护，同学查询时直接可见）
   role          text        not null default '学生',    -- 学生 | 老师 | 管理员
   /* ---- 以下三项由同学自填，需管理员审核后展示 ---- */
   wechat        text,
@@ -121,6 +122,7 @@ create table if not exists profiles (
     check (contact_status in ('none','pending','approved','rejected'))
 );
 create index if not exists profiles_name_idx    on profiles (name);
+create index if not exists profiles_exam_idx    on profiles (exam_no);
 create index if not exists profiles_namehash_idx on profiles (name_hash);
 create index if not exists profiles_sid_idx     on profiles (student_id);
 create index if not exists profiles_user_idx    on profiles (user_id);
