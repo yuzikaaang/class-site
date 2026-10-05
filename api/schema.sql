@@ -27,6 +27,25 @@ create unique index if not exists users_username_lower_idx on users (lower(usern
 alter table users add column if not exists failed_count int not null default 0;
 alter table users add column if not exists locked_until  timestamptz;
 
+/* ---------------- 首次登录强制改密（2026-10-05 加，幂等） ----------------
+   由管理员在后台「添加用户」或「批量导入」时置为 true，
+   同学首次用初始密码登录后必须自行改密，改完自动置回 false。
+   管理员始终看不到明文密码（库中只有 PBKDF2 哈希）。 */
+alter table users add column if not exists must_change_password boolean not null default false;
+
+/* ---------------- 登录记录表（2026-10-05 加，幂等） ----------------
+   每次成功登录写一条；users.last_login_at 只保留最后一次，
+   本表保留完整历史，供后台「用户详情 → 登录记录」查看。 */
+create table if not exists login_log (
+  id         bigserial   primary key,
+  user_id    bigint      not null references users(id) on delete cascade,
+  ip         text,                                  -- 客户端 IP（取 CF-Connecting-IP / X-Forwarded-For）
+  user_agent text,                                  -- 浏览器 UA，截断到 500 字符
+  created_at timestamptz not null default now()
+);
+create index if not exists login_log_user_idx  on login_log (user_id, created_at desc);
+create index if not exists login_log_time_idx  on login_log (created_at desc);
+
 /* ---------------- 会话表 ---------------- */
 create table if not exists sessions (
   token      text        primary key,
