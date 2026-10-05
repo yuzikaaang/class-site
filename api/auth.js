@@ -111,7 +111,8 @@ async function login(req, res) {
   }
 
   const rows = await sql`
-    select id, username, display_name, role, status, password_hash, created_at
+    select id, username, display_name, role, status, password_hash, created_at,
+           coalesce(must_change_password, false) as must_change_password
       from users where lower(username) = ${username} limit 1
   `;
 
@@ -144,9 +145,40 @@ async function login(req, res) {
   }
 
   await sql`update users set last_login_at = now() where id = ${u.id}`;
+  await logLogin(sql, req, u.id);
   const token = await issueSession(sql, u.id);
 
-  return ok(res, { message: '登录成功', token, user: shape(u) });
+  return ok(res, {
+    message: '登录成功',
+    token,
+    user: shape(u),
+    /* 首次登录（或管理员重置过密码）→ 前端强制弹改密，不给跳过 */
+    mustChangePassword: !!u.must_change_password,
+  });
+}
+
+/**
+ * 记录一次登录（写入 login_log）。
+ * 失败不影响登录本身 —— 老库若没执行过建表脚本，这里静默跳过。
+ */
+async function logLogin(sql, req, userId) {
+  try {
+    const h = req.headers || {};
+    /* Cloudflare 走 CF-Connecting-IP；Node/Vercel 走 x-forwarded-for（取第一段） */
+    const ip = String(
+      h['cf-connecting-ip']
+      || (h['x-forwarded-for'] ? String(h['x-forwarded-for']).split(',')[0] : '')
+      || h['x-real-ip']
+      || ''
+    ).trim().slice(0, 64);
+    const ua = String(h['user-agent'] || '').slice(0, 500);
+    await sql`
+      insert into login_log (user_id, ip, user_agent)
+      values (${userId}, ${ip || null}, ${ua || null})
+    `;
+  } catch (e) {
+    console.warn('[auth] 登录记录写入失败（可能缺少 login_log 表）：', e.message);
+  }
 }
 
 /* ---------------- 登录限流（基于 users 表，跨实例生效） ----------------
@@ -274,13 +306,21 @@ async function changePassword(req, res) {
   if (!good) return fail(res, 401, '原密码不对');
 
   const hash = await hashPassword(newPwd);
-  await sql`update users set password_hash = ${hash} where id = ${u.id}`;
+  /* must_change_password 一并清零：首次登录被强制改密后，下次不再拦 */
+  await sql`
+    update users
+       set password_hash = ${hash},
+           must_change_password = false,
+           failed_count = 0,
+           locked_until = null
+     where id = ${u.id}
+  `;
   /* 改密码后踢掉其他设备的登录，只保留当前这台 */
   await sql`delete from sessions where user_id = ${u.id}`;
   const token = await issueSession(sql, u.id);
 
   await audit(u.id, 'user.change_password', 'user', String(u.id), null);
-  return ok(res, { message: '密码已修改，其他设备已退出登录', token });
+  return ok(res, { message: '密码已修改，其他设备已退出登录', token, mustChangePassword: false });
 }
 
 /* ---------------- 内部工具 ---------------- */
