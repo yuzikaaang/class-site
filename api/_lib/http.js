@@ -61,6 +61,7 @@ export async function ensureSchema(sql) {
         name_hash      text        unique,
         student_id     text        unique,
         politics       text,
+        exam_no        text,
         role           text        not null default '学生',
         wechat         text,
         qq             text,
@@ -72,6 +73,8 @@ export async function ensureSchema(sql) {
         updated_at     timestamptz not null default now()
       )
     `;
+    /* 老库补列：exam_no 是后加的（2026-10-05 导入名单时需要）。 */
+    await s`alter table profiles add column if not exists exam_no text`;
     await s`
       create table if not exists profile_view_log (
         id          bigserial   primary key,
@@ -84,6 +87,7 @@ export async function ensureSchema(sql) {
       )
     `;
     await s`create index if not exists profiles_name_idx    on profiles (name)`;
+    await s`create index if not exists profiles_exam_idx    on profiles (exam_no)`;
     await s`create index if not exists profiles_sid_idx     on profiles (student_id)`;
     await s`create index if not exists profiles_user_idx    on profiles (user_id)`;
     await s`create index if not exists profiles_status_idx  on profiles (contact_status)`;
