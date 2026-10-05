@@ -501,6 +501,11 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .btn-qr{margin-left:8px;background:#047857;color:#fff;border:none;border-radius:999px;padding:5px 14px;font-size:.75rem;font-weight:700;cursor:pointer}
 .dark .btn-qr{background:#047857}
 .btn-qr:active{transform:scale(.95)}
+/* 登录按钮：已登录用深色高亮，未登录（暂未开放注册）置灰且不可点 */
+.btn-qr.acct-on{background:#c2410c}
+.dark .btn-qr.acct-on{background:#c2410c}
+.btn-qr[disabled]{background:rgba(255,255,255,.16)!important;color:rgba(255,255,255,.6)!important;cursor:not-allowed;opacity:.75}
+.btn-qr[disabled]:active{transform:none}
 /* 隐藏娱乐天地（彩蛋） */
 .hidden-view-grid{display:flex;flex-direction:column;gap:10px;padding:14px 18px;max-height:62vh;overflow-y:auto}
 .hidden-fun-card{display:flex;align-items:center;gap:12px;background:#f6f1ec;border-radius:12px;padding:12px 14px;cursor:pointer;transition:.2s;border:none;text-align:left}
@@ -1206,6 +1211,8 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .acct-uname{font-size:.92rem;font-weight:800;color:#3f342c;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .acct-urole{font-size:.62rem;font-weight:800;padding:2px 7px;border-radius:20px;background:#c2410c;color:#fff}
 .acct-urole.user{background:#b8a99c}
+/* 头衔标签（班长/课代表等），与「管理员/成员」角色徽章区分开用蓝色 */
+.acct-urole.title-tag{background:#0369a1;margin-right:4px}
 .acct-usub{font-size:.7rem;color:#a99a8d;margin-top:3px}
 .dark .acct-user{background:rgba(255,255,255,.05)}
 .dark .acct-uname{color:#f0e6dc}
@@ -1607,6 +1614,22 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
     </div>
     <p class="welcome-desc">所有班级通知、线上工具都会同步在这里，记得常来看看哦~<br>✨ 祝你新学期一切顺利！</p>
     <button class="welcome-btn" onclick="closeWelcome()">进入服务站</button>
+  </div>
+</div>
+
+<!-- ===== 登录引导弹窗（首次打开时，未登录才弹一次） =====
+     目的：让同学知道「登录后能把自己的设置/作业打勾同步到云端，换设备不用重弄」。
+     只在欢迎弹窗之后出现，且关掉一次就不再弹（键 cls_login_guide_v1）。 -->
+<div class="welcome-mask" id="loginGuideMask">
+  <div class="welcome-box" style="background:linear-gradient(135deg,#0f766e,#047857)">
+    <p class="welcome-title">登录一下，数据跟着你走 ☁️</p>
+    <p class="welcome-desc">不登录也能正常用，数据存在你自己手机上。<br>登录之后多这些好处：</p>
+    <div class="welcome-list">
+      <p class="welcome-list-body">▫ 作业打勾、点歌记录自动上云<br>▫ 换手机 / 换浏览器不用重新设置<br>▫ 班级公告、作业第一时间收到<br>▫ 可以认领并维护自己的班级资料</p>
+    </div>
+    <p class="welcome-desc" id="lgHint">登录入口在首页公告栏右上角 <b>「👤 登录」</b></p>
+    <button class="welcome-btn" id="lgGo" onclick="closeLoginGuide(true)">去登录</button>
+    <button class="welcome-btn" style="background:transparent;color:#fff;box-shadow:none;margin-top:4px" onclick="closeLoginGuide(false)">先不用，谢谢</button>
   </div>
 </div>
 
@@ -2087,7 +2110,6 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
     <button class="side-btn" id="homeBtn" onclick="goHomeView()">🏠 首页</button>
     <div id="sideCats"></div>
     <button class="side-btn" id="uiSetBtn" onclick="openSettings()">⚙️ 自定义设置</button>
-    <button class="side-btn" id="acctBtn" onclick="openAccount()">👤 登录 / 注册</button>
     <button class="side-btn" onclick="openData()" style="margin-top:auto">💾 数据管理</button>
     <button class="side-btn" id="sfxBtn" onclick="toggleSfx()">🔔 音效：开</button>
     <button class="side-btn" onclick="openExport()">📦 导出备份</button>
@@ -3895,9 +3917,12 @@ function renderBoard(){
   board.style.display = '';
   board.innerHTML =
     '<div class="board-head"><h2>📢 公告</h2><span class="board-count">' + filtered.length + ' 条</span>' +
+    '<button class="btn-qr" id="acctBtn" onclick="openAccount()">登录</button>' +
     '<button class="btn-qr" onclick="openQr(\'' + SITE_DATA.qrUrl + '\')">公众号</button>' +
     '<button class="btn-qr" style="background:#3e3733" onclick="openLink(\'' + jsq(SITE_DATA.repoUrl) + '\',true)">仓库</button></div>' +
     filterBar + body;
+  /* 公告栏是整块重绘的，所以每次都得把登录按钮的状态同步一次 */
+  refreshAcctBtn();
 }
 function setAnnFilter(cat){
   annFilter = cat;
@@ -4558,11 +4583,34 @@ function apiReady(){
 var AUTH_KEY = 'cls_auth';
 var AUTH = { token:'', user:null };   /* 当前登录态 */
 
-/* 允许云同步的本机键（与后端 api/data.js 的白名单保持一致） */
+/* 允许云同步的本机键（与后端 api/data.js 的 ALLOW_KEYS 保持一致）
+   2026-10-05：按「尽量都同步」的原则扩充。
+
+   ⚠️ 两条纪律：
+     ① 改这里**必须同步改后端** api/data.js 的 ALLOW_KEYS，否则推上去被 403 挡掉；
+     ② 键名必须是 index.html 里真实用到的（改之前先 grep 确认），
+        凭空造键名不会报错，只会静默无效。
+
+   不同步的键（有意排除）：
+     cls_auth         登录 token，各设备各登各的
+     cls_site_gate    站点门禁是否已通过，安全相关
+     cls_lock_*       输错密码的锁定计时，安全相关
+     cls_gate_*       各入口的验证状态，安全相关
+     cls_device_id    设备标识，本来就该各不相同
+     cls_content_cache_v1 / cls_content_since_v1  云端内容的本地缓存，不是用户数据 */
 var CLOUD_KEYS = [
+  /* 外观与界面 */
   'cls_theme','cls_theme_auto','cls_ui_cfg','cls_ui_bgimg','cls_sfx',
-  'cls_welcome_v1','cls_study_notice_dismissed',
-  'cls_dj_excluded','cls_dj_excluded_req','cls_dj_note','cls_dj_schedule'
+  /* 各种「已看过 / 已关闭」的标记：换设备不该重复打扰 */
+  'cls_welcome_v1','cls_login_guide_v1','cls_study_notice_dismissed','cls_welcome_hide',
+  'cls_exam_tip_seen','cls_holiday_tip_seen','cls_exam_scope_seen',
+  /* 点歌相关 */
+  'cls_dj_excluded','cls_dj_excluded_req','cls_dj_note','cls_dj_schedule',
+  'cls_dj_my_songs','cls_dj_pending','cls_dj_history','cls_dj_copy_note',
+  /* 学习与班级事务 */
+  'cls_study_plan','cls_notice_read','cls_class_list',
+  /* 站内偏好 */
+  'cls_ann_filter','cls_board_collapsed','cls_side_open','cls_return_view',
 ];
 /* 前缀匹配的键（作业完成标记、签到、领券台账等） */
 var CLOUD_KEY_PREFIX = ['cls_hw_done_','cls_sign_','cls_claim_','cls_act_'];
@@ -4774,20 +4822,44 @@ function refreshHwViews(){
   }catch(e){}
 }
 
-/* ---------- 侧边栏按钮随登录态变化 ---------- */
+/* ---------- 登录按钮随登录态变化 ----------
+   位置：公告栏「公众号」左边（2026-10-05 从侧边栏挪过来的）。
+
+   需求：暂不开放注册入口，所以未登录时按钮是**置灰且不可点**的。
+   等以后开放注册，把 REGISTER_OPEN 改成 true 即可，其余逻辑不用动。 */
+var REGISTER_OPEN = false;
+
 function refreshAcctBtn(){
   var b = document.getElementById('acctBtn');
   if(!b) return;
+
   if(isLoggedIn()){
     var name = AUTH.user.displayName || AUTH.user.username;
     var badge = isAdmin() ? ' 🛠' : '';
-    b.innerHTML = '👤 ' + esc(name) + badge;
+    var t = (AUTH.user.title || '').trim();
+    /* 头衔取第一个展示，多了放不下 */
+    var titleTag = t ? '「' + esc(t.split(/[,，、]/)[0]) + '」' : '';
+    b.innerHTML = '👤 ' + titleTag + esc(name) + badge;
     b.classList.add('acct-on');
+    b.disabled = false;
+    b.removeAttribute('aria-disabled');
     b.onclick = openAccount;
+    b.title = '查看 / 修改我的个人信息';
   }else{
-    b.innerHTML = '👤 登录 / 注册';
+    /* 未登录：置灰。用户明确要求暂不开放注册，所以这里不给点。 */
+    b.innerHTML = '👤 登录';
     b.classList.remove('acct-on');
-    b.onclick = openAccount;
+    if(REGISTER_OPEN){
+      b.disabled = false;
+      b.removeAttribute('aria-disabled');
+      b.onclick = openAccount;
+      b.title = '登录 / 注册';
+    }else{
+      b.disabled = true;
+      b.setAttribute('aria-disabled', 'true');
+      b.onclick = null;
+      b.title = '登录功能即将开放';
+    }
   }
 }
 
@@ -4797,6 +4869,9 @@ var ACCT_TAB = 'login';   /* login | register | profile */
 function openAccount(){
   var m = document.getElementById('acctMask');
   if(!m) return;
+  /* 需求：暂不开放注册。未登录时只给登录 tab，
+     万一之前停在 register 也得掰回来，否则会渲染出一个进不去的表单。 */
+  if(!isLoggedIn() && !REGISTER_OPEN) ACCT_TAB = 'login';
   renderAccount();
   m.classList.add('show');
   if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
@@ -4806,6 +4881,7 @@ function closeAccount(){
 }
 
 function acctTab(k){
+  if(k === 'register' && !REGISTER_OPEN && !isLoggedIn()) return;
   ACCT_TAB = k;
   renderAccount();
   if(typeof SFX !== 'undefined' && SFX && SFX.click) SFX.click();
@@ -4825,10 +4901,13 @@ function renderAccount(){
 
   if(title) title.textContent = ACCT_TAB === 'register' ? '📝 注册账号' : '👤 登录账号';
 
-  var tabs = '<div class="acct-tabs">' +
-    '<button class="acct-tab' + (ACCT_TAB === 'login' ? ' active' : '') + '" onclick="acctTab(\'login\')">登录</button>' +
-    '<button class="acct-tab' + (ACCT_TAB === 'register' ? ' active' : '') + '" onclick="acctTab(\'register\')">注册</button>' +
-  '</div>';
+  /* 注册未开放时干脆不渲染 tab 栏，免得用户点了没反应更困惑 */
+  var tabs = REGISTER_OPEN
+    ? '<div class="acct-tabs">' +
+        '<button class="acct-tab' + (ACCT_TAB === 'login' ? ' active' : '') + '" onclick="acctTab(\'login\')">登录</button>' +
+        '<button class="acct-tab' + (ACCT_TAB === 'register' ? ' active' : '') + '" onclick="acctTab(\'register\')">注册</button>' +
+      '</div>'
+    : '';
 
   var form = ACCT_TAB === 'register'
     ? '<div class="acct-field"><label>用户名</label><input id="acctU" placeholder="3–20 位，中英文/数字/下划线" autocomplete="username"></div>' +
@@ -4942,16 +5021,28 @@ function acctProfileHtml(){
   var u = AUTH.user;
   var initial = (u.displayName || u.username || '?').charAt(0).toUpperCase();
   var cloudCount = window.__cloudKeyCount || 0;
+  var myTitle = String(u.title || '').split(/[,，、]/).map(function(s){ return s.trim(); }).filter(Boolean);
 
   return '<div class="acct-user">' +
       '<div class="acct-avatar">' + esc(initial) + '</div>' +
       '<div style="flex:1;min-width:0">' +
-        '<div class="acct-uname">' + esc(u.displayName || u.username) +
+        /* 需求：点击姓名可以查看与修改个人信息 */
+        '<div class="acct-uname" onclick="openMyProfile()" style="cursor:pointer" title="查看 / 修改我的个人信息">' +
+          esc(u.displayName || u.username) +
+          (myTitle.length ? '<span class="acct-urole title-tag">' + esc(myTitle[0]) + '</span>' : '') +
           '<span class="acct-urole' + (u.role === 'admin' ? '' : ' user') + '">' +
             (u.role === 'admin' ? '管理员' : '成员') + '</span>' +
+          '<span style="font-size:.7rem;opacity:.6;margin-left:4px">›</span>' +
         '</div>' +
         '<div class="acct-usub">@' + esc(u.username) + ' · 云端已存 ' + cloudCount + ' 项</div>' +
       '</div>' +
+    '</div>' +
+
+    /* ---- 我的资料：查看 / 修改 / 认领 ---- */
+    '<div class="acct-sw" style="margin-top:14px">' +
+      '<div><span class="t">📇 我的资料</span>' +
+        '<span class="s">姓名、学号、准考证号由管理员维护；微信/QQ/手机号可自己填</span></div>' +
+      '<button class="acct-btn" style="width:auto;padding:8px 14px;font-size:.78rem" onclick="openMyProfile()">查看 / 修改</button>' +
     '</div>' +
 
     '<div class="acct-sw">' +
@@ -4966,7 +5057,7 @@ function acctProfileHtml(){
 
     (isAdmin()
       ? '<div class="acct-row" style="margin-top:14px">' +
-          '<button class="acct-btn" onclick="closeAccount();openAdmin()">🛠 打开管理员后台</button>' +
+          '<button class="acct-btn" onclick="gotoAdminPage()">🛠 进入管理后台</button>' +
         '</div>'
       : '') +
 
@@ -4976,6 +5067,40 @@ function acctProfileHtml(){
     '<div id="acctPwdBox"></div>' +
     '<p class="acct-hint">云同步只上传<b>你自己的个人数据</b>（设置、打勾记录等），' +
     '公告、资料这些站内容不会同步。<br>换手机时登录同一账号点「从云端恢复」即可。</p>';
+}
+
+/* ---------- 我的资料：查看 / 修改 / 认领 ----------
+   需求「点击姓名可以查看与修改个人信息」「学生在哪里新增个人数据」。
+
+   说明：班级资料（姓名/学号/准考证号）由管理员维护，同学**只能认领**已有的那条，
+   不能自己新建——否则谁都能往通讯录里塞假名字。
+   能自己填的是联系方式（微信/QQ/手机号），提交后等管理员审核。
+   认领/修改的入口本来就在首页的「个人资料查询」板块里（那一套逻辑很完整），
+   这里不重复实现，直接把用户带过去。 */
+function openMyProfile(){
+  if(!isLoggedIn()){ openAccount(); return; }
+  closeAccount();
+
+  /* 首页资料查询板块的输入框 id 形如 contact-input-<id>，用它定位 */
+  var input = document.querySelector('[id^="contact-input-"]');
+  if(input){
+    var box = input.closest ? input.closest('.gate-box') : null;
+    if(box && box.scrollIntoView){
+      box.scrollIntoView({ behavior:'smooth', block:'center' });
+    }else if(input.scrollIntoView){
+      input.scrollIntoView({ behavior:'smooth', block:'center' });
+    }
+    /* 已经认领过的同学：直接帮他把资料查出来，省得自己再输一次 */
+    try{
+      if(PC_MY_PROFILE_ID){
+        var m = /^contact-input-(\d+)$/.exec(input.id);
+        if(m && typeof findContact === 'function') findContact(m[1]);
+      }
+    }catch(e){}
+    if(typeof uiMsg === 'function') uiMsg('在下方「个人资料查询」里认领/修改你的资料');
+    return;
+  }
+  if(typeof uiMsg === 'function') uiMsg('请在首页「个人资料查询」板块操作', '#af410f');
 }
 
 /* ---------- 改密码 ---------- */
@@ -5021,6 +5146,15 @@ function collectLocalCloudData(){
     }
   }catch(e){}
   return out;
+}
+
+/** 读单个键的云端值。键不存在返回 undefined（区别于 null） */
+function readLocalCloudValue(k){
+  try{
+    var raw = localStorage.getItem(k);
+    if(raw === null) return undefined;
+    try{ return JSON.parse(raw); }catch(e){ return raw; }
+  }catch(e){ return undefined; }
 }
 
 /** 把本机数据推到云端 */
@@ -5073,6 +5207,148 @@ function syncPull(ask){
 
 function k0In(o, k){ return Object.prototype.hasOwnProperty.call(o, k); }
 
+/* ============================================================
+   自动上云（2026-10-05 新增 · 需求「每触发一次本地修改时自动上云」）
+   ------------------------------------------------------------
+   思路：不拦截每一次 localStorage 写入就去发请求——那会把后端打爆
+   （同学点一下作业、切一下主题就一个请求）。
+   改为「攒一攒再发」：
+
+     markCloudDirty(key)  本地改了什么就登记一下（很便宜，只进内存 Set）
+            ↓
+     scheduleCloudSync()  1.5 秒防抖：这段时间内再改就重新计时
+            ↓
+     flushCloudSync()     真正发请求，只推 dirty 的那几个键
+
+   另外加 10 秒节流兜底：如果同学一直在高频操作（比如连续打勾几十个作业），
+   防抖会被无限推迟，所以最多等 10 秒就必须发一次。
+
+   时机：页面切到后台/关闭时立即 flush，防止最后几下改动来不及上传。
+   ============================================================ */
+var DIRTY_KEYS = {};          /* 待推送的键（用对象当 Set，兼容老浏览器） */
+var DIRTY_COUNT = 0;
+var SYNC_DEBOUNCE_MS = 1500;  /* 停手 1.5 秒后发 */
+var SYNC_MAX_WAIT_MS = 10000; /* 但最多攒 10 秒 */
+var __syncDebounceTimer = null;
+var __syncFirstDirtyAt = 0;
+var __syncInFlight = false;
+
+/** 登记一个待同步的键。非云键、未登录都直接忽略 */
+function markCloudDirty(key){
+  if(!key || typeof key !== 'string') return;
+  if(!isLoggedIn()) return;
+  if(!isCloudKey(key)) return;
+  if(DIRTY_KEYS[key]) return;
+  DIRTY_KEYS[key] = 1;
+  DIRTY_COUNT++;
+  scheduleCloudSync();
+}
+
+/** 防抖调度：停手 1.5 秒发一次；但距首次 dirty 超过 10 秒就必须发 */
+function scheduleCloudSync(){
+  if(!isLoggedIn()) return;
+  var now = Date.now();
+  if(!__syncFirstDirtyAt) __syncFirstDirtyAt = now;
+
+  /* 已经攒够 10 秒了，别等了，直接发 */
+  if(now - __syncFirstDirtyAt >= SYNC_MAX_WAIT_MS){
+    flushCloudSync();
+    return;
+  }
+  if(__syncDebounceTimer !== null && __syncDebounceTimer !== undefined){
+    clearTimeout(__syncDebounceTimer);
+  }
+  __syncDebounceTimer = setTimeout(function(){
+    __syncDebounceTimer = null;
+    flushCloudSync();
+  }, SYNC_DEBOUNCE_MS);
+}
+
+/** 真正推送：只推 dirty 的键，一次请求搞定 */
+function flushCloudSync(){
+  if(__syncDebounceTimer !== null && __syncDebounceTimer !== undefined){
+    clearTimeout(__syncDebounceTimer);
+    __syncDebounceTimer = null;
+  }
+  __syncFirstDirtyAt = 0;
+  if(!isLoggedIn()){ DIRTY_KEYS = {}; DIRTY_COUNT = 0; return Promise.resolve({ pushed:0 }); }
+  var keys = Object.keys(DIRTY_KEYS);
+  if(!keys.length) return Promise.resolve({ pushed:0 });
+  /* 同一次请求里不要重复发：慢网络下前一个还没回来就再发会乱序 */
+  if(__syncInFlight) return Promise.resolve({ pushed:0, skipped:true });
+
+  /* 先把待发清单清空——如果请求后面失败了，这些键会被下一次修改重新登记，
+     不会因为「一直失败」而卡住后续改动。 */
+  DIRTY_KEYS = {};
+  DIRTY_COUNT = 0;
+
+  var items = {};
+  keys.forEach(function(k){
+    var v = readLocalCloudValue(k);
+    if(v !== undefined) items[k] = v;
+  });
+  if(!Object.keys(items).length) return Promise.resolve({ pushed:0 });
+
+  __syncInFlight = true;
+  return api('/data', { method:'PUT', body:{ items: items } })
+    .then(function(j){
+      window.__cloudKeyCount = Object.keys(items).length;
+      return { pushed: j.written || Object.keys(items).length };
+    })
+    .catch(function(e){
+      /* 失败不打扰用户——自动同步是「锦上添花」，弹错误提示反而烦人。
+         但要把键重新登记，等下次改动时再试。 */
+      keys.forEach(function(k){ DIRTY_KEYS[k] = 1; DIRTY_COUNT++; });
+      return { pushed:0, error:String(e && e.message || e) };
+    })
+    .then(function(r){ __syncInFlight = false; return r; });
+}
+
+/* 有改动待上传吗？页面隐藏时用它判断要不要立即发 */
+function hasPendingCloudSync(){
+  for(var k in DIRTY_KEYS){ if(DIRTY_KEYS[k]) return true; }
+  return false;
+}
+
+/* ---------------- 挂钩 localStorage.setItem ----------------
+   页面里有 35 处直接调 setItem，一个个去加标记既不现实也容易漏。
+   这里包一层原生方法：凡是写「云键」就自动登记待同步。
+   其它键（token、门禁状态等）原样放行，不产生任何副作用。
+
+   为什么包在 try 里：某些浏览器（隐私模式 / 禁用存储）访问 localStorage
+   会直接抛异常，包装失败也不能让整个页面挂掉。 */
+(function hookLocalStorage(){
+  try{
+    var proto = window.localStorage;
+    if(!proto || proto.__clsHooked) return;
+    var rawSet = proto.setItem.bind(proto);
+    var rawRemove = proto.removeItem.bind(proto);
+
+    proto.setItem = function(k, v){
+      rawSet(k, v);
+      /* 写失败会抛异常，能走到这里说明写成功了 */
+      try{ markCloudDirty(String(k)); }catch(e){}
+    };
+    /* 删除也算改动：云端要跟着删掉，否则换设备又冒出来 */
+    proto.removeItem = function(k){
+      rawRemove(k);
+      try{ markCloudDirty(String(k)); }catch(e){}
+    };
+    proto.__clsHooked = true;
+  }catch(e){ /* 挂不上就算了，手动同步仍然可用 */ }
+})();
+
+/* 页面切到后台 / 关闭时立即把待发的改动送出去。
+   sendBeacon 那条路已经在下面处理了，这里补的是「切到后台但没关页面」
+   这种最常见的情况（比如同学切去回微信消息）。 */
+try{
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'hidden' && hasPendingCloudSync()){
+      flushCloudSync();
+    }
+  });
+}catch(e){}
+
 /** 立即同步：先推本机 → 云端，再把云端最新拉回来，保证一致 */
 function syncNow(){
   if(!isLoggedIn()){ if(typeof uiMsg === 'function') uiMsg('请先登录', '#af410f'); return; }
@@ -5090,56 +5366,20 @@ function syncNow(){
 var ADMIN_TAB = 'users';
 var ADMIN_CACHE = { users: [], stats: null, detail: null };
 
-function openAdmin(){
+/* 需求变更（2026-10-05）：主站不再内置管理员弹窗。
+   管理功能统一放在独立的 admin.html，权限更清晰，主站也不用背着那套代码。
+   （长按班徽、账号弹窗里的按钮、以及任何遗留的 openAdmin() 调用都走这里。）
+
+   留 openAdmin 这个函数名是为了兼容既有调用点，实际行为＝跳转。 */
+function gotoAdminPage(){
   if(!isLoggedIn()){ if(typeof uiMsg === 'function') uiMsg('请先登录', '#af410f'); return; }
-  var m = document.getElementById('adminMask');
-  if(!m) return;
-
-  /* 先清掉上一次打开残留的内容，避免核实失败时还留着旧的管理界面 */
-  var bodyEl = document.getElementById('adminBody');
-  var tabsEl = document.getElementById('adminTabs');
-
-  /* 【身份核实】本地的 AUTH.user.role 只是缓存，可能过时（比如管理员刚被降级、
-     或有人手动改了 localStorage 伪造 role）。所以进后台前先问一次服务端，
-     以服务端返回的 role 为准，顺便把最新的个人信息写回本地缓存。
-     这样避免出现「本地显示是管理员、进去后每个接口都 403」的尴尬。 */
-  if(API_BASE || apiReady()){
-    m.classList.remove('show');
-    if(bodyEl) bodyEl.innerHTML = '';
-    if(tabsEl) tabsEl.innerHTML = '';
-    if(typeof uiMsg === 'function') uiMsg('正在核实权限…');
-
-    api('/auth?action=me').then(function(j){
-      if(j && j.user){
-        AUTH.user = j.user;
-        saveAuth();
-        refreshAcctBtn();
-      }
-      if(isAdmin()){
-        m.classList.add('show');
-        adminTab('users');
-      }else{
-        if(typeof uiMsg === 'function') uiMsg('需要管理员权限', '#af410f');
-      }
-    }).catch(function(e){
-      if(bodyEl) bodyEl.innerHTML = '<div class="admin-empty">权限核实失败：'
-        + esc(e.message || '网络异常') + '</div>';
-      if(typeof uiMsg === 'function') uiMsg('权限核实失败：' + (e.message || '网络异常'), '#af410f');
-    });
-    return;
-  }
-
-  /* 后端未配置时按本地缓存放行（离线场景，接口本来也用不了） */
-  if(!isAdmin()){
-    m.classList.remove('show');
-    if(bodyEl) bodyEl.innerHTML = '';
-    if(tabsEl) tabsEl.innerHTML = '';
-    if(typeof uiMsg === 'function') uiMsg('需要管理员权限', '#af410f');
-    return;
-  }
-  m.classList.add('show');
-  adminTab('users');
+  location.href = 'admin.html';
 }
+function openAdmin(){ gotoAdminPage(); }
+
+/* 以下 closeAdmin / adminTab 等辅助函数保留：
+   它们被隐藏入口和遗留代码引用，删掉会连带报错。
+   但主站已经不再渲染管理员界面，所以这些函数实际上不会被触发。 */
 function closeAdmin(){
   var m = document.getElementById('adminMask'); if(m) m.classList.remove('show');
 }
@@ -5399,10 +5639,24 @@ function loadAdminAudit(){
 
 /* ---------- 页面关闭前，如果登录了就补推一次 ---------- */
 /* 注意：sendBeacon 只能发 POST，所以后端另外留了 /api/data?action=beacon 这条
-   POST 通道专门接收（见 api/data.js）。这里失败也不影响页面关闭。 */
+   POST 通道专门接收（见 api/data.js）。这里失败也不影响页面关闭。
+
+   2026-10-05 调整：优先只推「还没发出去的改动」（dirty），
+   payload 小、成功率高；没有 dirty 时才退回全量兜底
+   （守住「换设备能拿到完整数据」这个底线）。 */
 window.addEventListener('pagehide', function(){
   if(!isLoggedIn()) return;
-  var items = collectLocalCloudData();
+
+  var items;
+  if(hasPendingCloudSync()){
+    items = {};
+    Object.keys(DIRTY_KEYS).forEach(function(k){
+      var v = readLocalCloudValue(k);
+      if(v !== undefined) items[k] = v;
+    });
+  }else{
+    items = collectLocalCloudData();
+  }
   if(Object.keys(items).length === 0) return;
   try{
     var blob = new Blob([JSON.stringify({ items: items })], { type:'application/json' });
@@ -6976,6 +7230,32 @@ function closeWelcome(){
   var m = document.getElementById('welcomeMask');
   if(m) m.classList.remove('show');
   try{ localStorage.setItem('cls_welcome_v1','1'); }catch(e){}
+  /* 看完欢迎弹窗接着问要不要登录——但只在没登录过、也没问过的情况下问 */
+  setTimeout(maybeShowLoginGuide, 400);
+}
+
+/* ---- 登录引导弹窗（需求：开屏引导用户登录来上传云端） ----
+   弹的条件（三个都满足才弹）：
+     ① 没登录；② 之前没弹过（cls_login_guide_v1）；③ 站点后端配好了（没后端登录也没意义）
+   关掉就记一笔，之后不再打扰。 */
+function maybeShowLoginGuide(){
+  try{
+    if(isLoggedIn()) return;
+    if(localStorage.getItem('cls_login_guide_v1') === '1') return;
+    if(!apiReady()) return;
+  }catch(e){ return; }
+  var m = document.getElementById('loginGuideMask');
+  if(!m) return;
+  /* 如果此刻正压着别的弹窗（比如站点门禁），就别挤在一起弹 */
+  if(document.getElementById('siteGate') && document.getElementById('siteGate').classList.contains('show')) return;
+  m.classList.add('show');
+}
+/** @param {boolean} gotoLogin true = 顺手把登录框打开 */
+function closeLoginGuide(gotoLogin){
+  var m = document.getElementById('loginGuideMask');
+  if(m) m.classList.remove('show');
+  try{ localStorage.setItem('cls_login_guide_v1','1'); }catch(e){}
+  if(gotoLogin) setTimeout(openAccount, 200);
 }
 
 /* ---- 全部公告弹窗（按板块折叠 / 搜索 / 范围筛选 / 模糊匹配） ---- */
@@ -9056,7 +9336,15 @@ async function submitSiteGate(){
     g.classList.add('show');
   }
 })();
-try{ if(!localStorage.getItem('cls_welcome_v1')){ showWelcome(); } }catch(e){}
+try{
+  if(!localStorage.getItem('cls_welcome_v1')){
+    showWelcome();
+  }else{
+    /* 已经看过欢迎弹窗的老用户：给他们补一次登录引导，
+       免得这个功能只对新设备可见。已经登录过或弹过的会自动跳过。 */
+    setTimeout(maybeShowLoginGuide, 1200);
+  }
+}catch(e){}
 /* ⚠️ 顺序要紧：contentBoot() 必须先于 hwPopInit()。
    它会先用本地缓存把 SITE_DATA 覆盖成云端内容，再去后台同步；
    若放到 hwPopInit() 之后，开屏弹窗判断「今天是否在通知期内」时

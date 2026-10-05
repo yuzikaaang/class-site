@@ -33,6 +33,14 @@ alter table users add column if not exists locked_until  timestamptz;
    管理员始终看不到明文密码（库中只有 PBKDF2 哈希）。 */
 alter table users add column if not exists must_change_password boolean not null default false;
 
+/* ---------------- AI 助手账号标记（2026-10-05 加，幂等） ----------------
+   给 AI 助手账号打标。作用有二：
+     ① 授权：is_ai = true 的账号可以编辑云端公告/作业（见 http.js 的 requireAI）；
+     ② 交接：换 AI 时把 is_ai 从旧账号转给新账号即可，不必改代码。
+   AI 账号同时也是管理员（role = 'admin'），但反过来不成立——
+   普通管理员 is_ai = false，不会被误认成 AI。 */
+alter table users add column if not exists is_ai boolean not null default false;
+
 /* ---------------- 登录记录表（2026-10-05 加，幂等） ----------------
    每次成功登录写一条；users.last_login_at 只保留最后一次，
    本表保留完整历史，供后台「用户详情 → 登录记录」查看。 */
@@ -107,8 +115,7 @@ create table if not exists profiles (
   student_id    text        unique,                    -- 学号（管理员维护，唯一）
   politics      text,                                  -- 政治面貌：共青团员 / 群众 / 中共党员 等
   exam_no       text,                                  -- 智学网准考证号（管理员维护，同学查询时直接可见）
-  role          text        not null default '学生',    -- 学生 | 老师 | 管理员
-  /* ---- 以下三项由同学自填，需管理员审核后展示 ---- */
+  role          text        not null default '学生',    -- 学生 | 老师 | 管理员  /* ---- 以下三项由同学自填，需管理员审核后展示 ---- */
   wechat        text,
   qq            text,
   phone         text,
@@ -127,6 +134,30 @@ create index if not exists profiles_namehash_idx on profiles (name_hash);
 create index if not exists profiles_sid_idx     on profiles (student_id);
 create index if not exists profiles_user_idx    on profiles (user_id);
 create index if not exists profiles_status_idx  on profiles (contact_status);
+
+/* ---------------- 头衔（2026-10-05 加，幂等） ----------------
+   班级职务，由管理员在后台「头衔任命」里指定。
+   存英文逗号分隔的纯文本（如 '团支书,课代表'），一个人可兼多职。
+
+   ⚠️ 授权只认本列的服务端值，绝不接受前端传参——
+      否则任何人都能自称课代表去改作业。 */
+alter table profiles add column if not exists title text;
+
+/* ============================================================
+   AI 助手账号（2026-10-05）
+   ------------------------------------------------------------
+   aibot 由用户自行注册（初始为普通 user）。这里把它提为管理员并打上
+   is_ai 标记，使它具备「编辑云端公告/作业」的权限。
+
+   ⚠️ 这段是幂等的（update 到同样的值不会有副作用），可以放心重复执行。
+   ⚠️ 密码不在这里设置——用户注册时设的是 ai202505，该密码已在对话中
+      明文出现过，请在首次登录后立即到「我的账户」自行修改。
+   ============================================================ */
+update users
+   set role = 'admin',
+       is_ai = true,
+       display_name = coalesce(nullif(display_name, ''), 'ai助手')
+ where lower(username) = 'aibot';
 
 /* ---------------- 资料查看日志：谁在什么时候查看了谁 ---------------- */
 create table if not exists profile_view_log (

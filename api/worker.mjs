@@ -21,6 +21,7 @@ import authHandler from './auth.js';
 import dataHandler from './data.js';
 import adminHandler from './admin.js';
 import profileHandler from './profile.js';
+import contentHandler from './content.js';
 import { cors } from './_lib/http.js';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
@@ -116,6 +117,9 @@ export default {
           break;
         case 'profile':
           await profileHandler(req, res);
+          break;
+        case 'content':
+          await contentHandler(req, res);
           break;
         default:
           /* 404 也要回 CORS 头，否则跨域下浏览器会把响应整个拦掉，

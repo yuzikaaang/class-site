@@ -22,6 +22,12 @@
    POST   /api/admin?action=save-profile              新增或修改资料（姓名/学号/政治面貌）
    POST   /api/admin?action=delete-profile            删除一条资料
    POST   /api/admin?action=batch-profiles            批量导入资料
+
+   头衔任命 / AI 交接（2026-10-05 新增）
+   GET    /api/admin?action=titles                    头衔列表（谁担任什么职务）
+   GET    /api/admin?action=ai-account                当前 AI 助手账号是谁
+   POST   /api/admin?action=set-title                 任命/撤销头衔
+   POST   /api/admin?action=handover-ai               把 AI 助手身份转交给另一个账号
    ============================================================ */
 
 import { getSql } from './_lib/db.js';
@@ -52,6 +58,8 @@ export default async function handler(req, res) {
       if (action === 'profile')          return await profileDetail(req, res);
       if (action === 'profile-requests') return await profileRequests(req, res);
       if (action === 'view-logs')        return await viewLogs(req, res);
+      if (action === 'titles')           return await listTitles(req, res);
+      if (action === 'ai-account')       return await aiAccount(req, res);
       return fail(res, 404, '未知的 action：' + action);
     }
 
@@ -72,6 +80,8 @@ export default async function handler(req, res) {
         case 'save-profile':   return await saveProfile(req, res, me, b);
         case 'delete-profile': return await deleteProfile(req, res, me, b);
         case 'batch-profiles': return await batchProfiles(req, res, me, b);
+        case 'set-title':      return await setTitle(req, res, me, b);
+        case 'handover-ai':    return await handoverAi(req, res, me, b);
         default:               return fail(res, 404, '未知的 action：' + action);
       }
     }
@@ -344,6 +354,188 @@ async function setRole(req, res, me, b) {
   await audit(me.id, 'user.set_role', 'user', String(id), role);
   return ok(res, { message: '已把 ' + rows[0].username + ' 设为' + (role === 'admin' ? '管理员' : '普通用户') });
 }
+
+/* ============================================================================
+ * 头衔系统（2026-10-05 新增）
+ * ----------------------------------------------------------------------------
+ * 班级职务，由管理员任命。头衔存在 profiles.title 里，英文逗号分隔，
+ * 一个人可以兼多个职务（如「团支书,课代表」）。
+ *
+ * 授权方面：目前只有「课代表」参与实际授权——可以编辑云端作业
+ * （见 api/content.js 里的 requireTitle 判定）。其余头衔先只做展示，
+ * 以后要扩权就在对应接口换上 requireTitle('xxx') 即可。
+ *
+ * ⚠️ 安全边界：头衔只写进 profiles.title，接口授权时只读这个字段。
+ *    前端传什么头衔都不作数，否则谁都能自称课代表去改作业。
+ * ========================================================================= */
+
+/* 允许的头衔白名单。不在这个表里的值一律拒绝，避免脏数据。 */
+const ALLOWED_TITLES = [
+  '班长', '副班长', '团支书', '学习委员', '纪律委员',
+  '生活委员', '体育委员', '文艺委员', '电教委',
+  '语文课代表', '数学课代表', '英语课代表', '物理课代表',
+  '化学课代表', '生物课代表', '政治课代表', '历史课代表',
+  '地理课代表', '课代表',
+];
+
+/** 规范化头衔字符串：拆开、去空、去重、校验白名单 */
+function normTitles(input) {
+  const raw = Array.isArray(input) ? input : String(input || '').split(/[,，、\s]+/);
+  const out = [];
+  const bad = [];
+  raw.forEach((x) => {
+    const v = String(x || '').trim();
+    if (!v) return;
+    if (!ALLOWED_TITLES.includes(v)) { bad.push(v); return; }
+    if (!out.includes(v)) out.push(v);
+  });
+  return { list: out, bad };
+}
+
+/* ---------------- 读：头衔一览 ---------------- */
+async function listTitles(req, res) {
+  const sql = getSql();
+  const rows = await sql`
+    select p.id, p.name, p.student_id, p.title, p.role, p.user_id,
+           u.username, u.display_name
+      from profiles p
+      left join users u on u.id = p.user_id
+     where coalesce(p.title, '') <> ''
+     order by p.id
+  `;
+  const ai = await sql`
+    select id, username, display_name from users
+     where is_ai = true order by id limit 1
+  `;
+  return ok(res, {
+    profiles: rows.map((r) => ({
+      id: Number(r.id),
+      name: r.name || '',
+      studentId: r.student_id || '',
+      title: r.title || '',
+      titles: normTitles(r.title).list,
+      role: r.role || '学生',
+      userId: r.user_id ? Number(r.user_id) : null,
+      username: r.username || null,
+      displayName: r.display_name || null,
+    })),
+    allowed: ALLOWED_TITLES,
+    aiAccount: ai.length
+      ? { id: Number(ai[0].id), username: ai[0].username, displayName: ai[0].display_name || 'ai助手' }
+      : null,
+  });
+}
+
+/* ---------------- 写：任命 / 撤销头衔 ---------------- */
+async function setTitle(req, res, me, b) {
+  const id = Number(b.id);
+  if (!id) return fail(res, 400, '缺少资料 id');
+
+  const { list, bad } = normTitles(b.titles !== undefined ? b.titles : b.title);
+  if (bad.length) {
+    return fail(res, 400, '不认识的头衔：' + bad.join('、') + '。可选：' + ALLOWED_TITLES.join('、'));
+  }
+
+  const sql = getSql();
+  /* 空字符串而不是 null：前端判断更省事，也不会把「已清空」和「从没设过」混起来 */
+  const val = list.join(',');
+  const rows = await sql`
+    update profiles set title = ${val}, updated_at = now()
+     where id = ${id}
+    returning name
+  `;
+  if (!rows.length) return fail(res, 404, '资料不存在');
+
+  await audit(me.id, 'profile.set_title', 'profile', String(id),
+    (rows[0].name || '') + ' → ' + (val || '（已清空）'));
+  return ok(res, {
+    message: list.length
+      ? '已把 ' + (rows[0].name || '该同学') + ' 任命为：' + list.join('、')
+      : '已清空 ' + (rows[0].name || '该同学') + ' 的头衔',
+    titles: list,
+  });
+}
+
+/* ============================================================================
+ * AI 助手账号与交接（2026-10-05 新增）
+ * ----------------------------------------------------------------------------
+ * AI 助手是一个真实的管理员账号（users.role='admin' 且 is_ai=true），
+ * 它能通过 /api/content 编辑云端公告与作业。
+ *
+ * 交接设计（为什么需要）：
+ *   现在用的 AI 助手将来可能换人/换模型，如果账号写死在代码里，
+ *   每次交接都要改代码重新部署。所以把「谁是 AI」做成数据库的一个标记位
+ *   （users.is_ai），换的时候调一次 handover-ai 就行，代码一行不动。
+ *
+ *   交接后：旧账号降回普通用户并取消 is_ai；新账号提为管理员并打上 is_ai。
+ *   会话 token 不迁移——新 AI 用新密码重新登录，避免旧 token 继续有效。
+ * ========================================================================= */
+
+/* ---------------- 读：当前 AI 账号是谁 ---------------- */
+async function aiAccount(req, res) {
+  const sql = getSql();
+  const rows = await sql`
+    select id, username, display_name, status, created_at, last_login_at
+      from users where is_ai = true order by id limit 1
+  `;
+  return ok(res, {
+    account: rows.length ? {
+      id: Number(rows[0].id),
+      username: rows[0].username,
+      displayName: rows[0].display_name || 'ai助手',
+      status: rows[0].status,
+      lastLoginAt: rows[0].last_login_at || null,
+    } : null,
+  });
+}
+
+/* ---------------- 写：把 AI 身份转交给另一个账号 ---------------- */
+async function handoverAi(req, res, me, b) {
+  const username = normUsername(b.username);
+  if (!username) return fail(res, 400, '请填写要接管的账号名');
+  if (!validUsername(username)) return fail(res, 400, '账号名格式不对');
+
+  const sql = getSql();
+
+  /* 找目标账号 */
+  const target = await sql`
+    select id, username, role from users where lower(username) = ${username} limit 1
+  `;
+  if (!target.length) {
+    return fail(res, 404, '找不到账号「' + username + '」。请先让新账号自行注册，再来这里交接。');
+  }
+  const newId = Number(target[0].id);
+
+  /* 看当前是谁 */
+  const cur = await sql`select id, username from users where is_ai = true order by id limit 1`;
+  if (cur.length && Number(cur[0].id) === newId) {
+    return fail(res, 400, '「' + username + '」已经是 AI 助手账号了');
+  }
+
+  /* 旧账号：取消标记并降回普通用户（不删号，他的其它数据都还在） */
+  if (cur.length) {
+    await sql`
+      update users set is_ai = false, role = 'user' where id = ${Number(cur[0].id)}
+    `;
+  }
+
+  /* 新账号：提为管理员并打标记 */
+  await sql`
+    update users set is_ai = true, role = 'admin' where id = ${newId}
+  `;
+
+  await audit(me.id, 'ai.handover', 'user', String(newId),
+    'AI 助手：' + (cur.length ? cur[0].username : '(无)') + ' → ' + username);
+
+  return ok(res, {
+    message: '已把 AI 助手身份交给「' + username + '」。'
+      + (cur.length ? '旧账号 ' + cur[0].username + ' 已降回普通用户，' : '')
+      + '请用新账号重新登录。',
+    previous: cur.length ? cur[0].username : null,
+    current: username,
+  });
+}
+
 
 /* ---------------- 写：修改某用户的某条数据 ---------------- */
 async function setData(req, res, me, b) {

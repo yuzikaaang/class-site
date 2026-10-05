@@ -36,7 +36,8 @@ create table users (
   last_login_at text,
   failed_count integer not null default 0,
   locked_until text,
-  must_change_password integer not null default 0
+  must_change_password integer not null default 0,
+  is_ai integer not null default 0
 );
 create table sessions (
   token text primary key,
@@ -75,6 +76,7 @@ create table profiles (
   politics text,
   exam_no text,
   role text not null default '学生',
+  title text,
   wechat text,
   qq text,
   phone text,
@@ -985,6 +987,317 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   }
   t('准考证号测试数据已清理',
     (bp.body.profiles || []).length === 2, '找到 ' + (bp.body.profiles || []).length + ' 条待清理');
+}
+
+console.log('\n【17】云端内容接口 /api/content（2026-10-05 新增）');
+{
+  /* 背景：主站早就写了 syncCloudContent() 去拉 /api/content，
+     但后端从来没这个接口，一直 404，公告/作业全靠本地硬编码兜底。
+     这一节验证接口真的通了。 */
+
+  /* --- 匿名可读：公告是给全班看的，未登录也该拿到 --- */
+  const anon = await call('/api/content');
+  t('匿名可读（内容本就是公开的）', anon.status === 200 && anon.body.ok, 'HTTP ' + anon.status);
+  t('返回 items 对象', anon.body.items && typeof anon.body.items === 'object');
+  t('返回 serverTime（供前端记增量位点）', typeof anon.body.serverTime === 'number');
+
+  /* --- 未登录不能写 --- */
+  const anonWrite = await call('/api/content', {
+    method: 'PUT', body: { items: { announcements: [] } },
+  });
+  t('匿名写入被拒 401', anonWrite.status === 401, '实际 ' + anonWrite.status);
+
+  /* --- 普通用户不能写 --- */
+  const reg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'contentuser', password: 'ContentPass123' },
+  });
+  const contentUserToken = reg.body.token;
+  const userWrite = await call('/api/content', {
+    method: 'PUT', token: contentUserToken,
+    body: { items: { announcements: [] } },
+  });
+  t('普通用户写入被拒 403', userWrite.status === 403, '实际 ' + userWrite.status);
+
+  /* --- 管理员可写 --- */
+  const put1 = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: {
+      announcements: [
+        { id: 'a1', title: '测试公告', body: '正文', date: '2026-10-05' },
+      ],
+      homework_notice: { text: '今晚做数学卷子' },
+    } },
+  });
+  t('管理员写入成功', put1.status === 200 && put1.body.ok, JSON.stringify(put1.body));
+  t('返回已更新的键', (put1.body.updated || []).includes('announcements'));
+
+  /* --- 读回来 --- */
+  const read1 = await call('/api/content');
+  t('公告能被读回',
+    Array.isArray(read1.body.items.announcements) && read1.body.items.announcements[0].title === '测试公告',
+    JSON.stringify(read1.body.items.announcements));
+  t('作业通知能被读回',
+    read1.body.items.homework_notice && read1.body.items.homework_notice.text === '今晚做数学卷子');
+
+  /* --- 局部更新不能冲掉其它键 --- */
+  const put2 = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { announcements: [
+      { id: 'a1', title: '改过的公告', body: '正文', date: '2026-10-05' },
+      { id: 'a2', title: '第二条', body: '', date: '2026-10-05' },
+    ] } },
+  });
+  t('二次写入成功', put2.status === 200);
+  const read2 = await call('/api/content');
+  t('公告已更新为 2 条', (read2.body.items.announcements || []).length === 2,
+    '实际 ' + (read2.body.items.announcements || []).length);
+  t('局部更新没冲掉作业通知（PUT 是合并语义）',
+    read2.body.items.homework_notice && read2.body.items.homework_notice.text === '今晚做数学卷子',
+    JSON.stringify(read2.body.items.homework_notice));
+
+  /* --- 单条写法（方便 AI 直接用） --- */
+  const put3 = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { key: 'daily_quote', value: { text: '天道酬勤' } },
+  });
+  t('单条 key/value 写法可用', put3.status === 200 && (put3.body.updated || []).includes('daily_quote'));
+
+  /* --- 不认识的键要拒 --- */
+  const badKey = await call('/api/content', {
+    method: 'PUT', token: adminToken, body: { items: { evil_key: 'x' } },
+  });
+  t('非法内容键被拒 400', badKey.status === 400, '实际 ' + badKey.status);
+  t('拒绝时提示具体键名', /evil_key/.test(badKey.body.error || ''), badKey.body.error);
+
+  /* --- 空提交要拒 --- */
+  const empty = await call('/api/content', {
+    method: 'PUT', token: adminToken, body: { items: {} },
+  });
+  t('空内容被拒 400', empty.status === 400, '实际 ' + empty.status);
+
+  /* --- 超大内容要拒 --- */
+  const huge = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { daily_quote: { text: 'x'.repeat(210 * 1024) } } },
+  });
+  t('超过 200KB 被拒 400', huge.status === 400, '实际 ' + huge.status);
+  t('拒绝时说明体积', /KB|太大/.test(huge.body.error || ''), huge.body.error);
+
+  /* --- 条目数上限 --- */
+  const many = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { activities: new Array(2001).fill({ t: 'x' }) } },
+  });
+  t('单字段超 2000 条被拒 400', many.status === 400, '实际 ' + many.status);
+
+  /* --- 支持的方法限制 --- */
+  const del = await call('/api/content', { method: 'DELETE', token: adminToken });
+  t('DELETE 被拒 405', del.status === 405, '实际 ' + del.status);
+
+  /* --- 公告历史键兼容：写入公告后，cls_site_announcements 也应有一份 --- */
+  const rows = db.prepare(
+    "select count(*) as n from user_data where data_key = 'cls_site_announcements'"
+  );
+  let an = 0;
+  if (rows.step()) an = rows.getAsObject().n;
+  rows.free();
+  t('公告同步写入历史键（兼容老前端）', an >= 1, '找到 ' + an + ' 条');
+
+  /* --- 清理 --- */
+  await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { announcements: [], activities: [] } },
+  });
+  t('内容测试数据已清理', true);
+}
+
+console.log('\n【18】头衔系统与 AI 助手交接（2026-10-05 新增）');
+{
+  /* ---- 先造一条资料 + 一个认领它的账号 ---- */
+  const mk = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '头衔测试甲', studentId: '9900001', politics: '共青团员' },
+  });
+  t('建测试资料成功', mk.status === 200 && mk.body.ok, JSON.stringify(mk.body));
+  const pid = mk.body.id || (mk.body.profile || {}).id;
+
+  /* ---- 头衔白名单 ---- */
+  const bad = await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken,
+    body: { id: pid, titles: ['玉皇大帝'] },
+  });
+  t('不在白名单的头衔被拒 400', bad.status === 400, '实际 ' + bad.status);
+  t('拒绝时列可选值', /班长|团支书/.test(bad.body.error || ''), bad.body.error);
+
+  /* ---- 正常任命 ---- */
+  const okSet = await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken,
+    body: { id: pid, titles: ['课代表', '团支书'] },
+  });
+  t('任命多职成功', okSet.status === 200 && (okSet.body.titles || []).length === 2, JSON.stringify(okSet.body));
+
+  /* ---- 逗号分隔字符串写法也认 ---- */
+  const strSet = await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken,
+    body: { id: pid, title: '班长,课代表' },
+  });
+  t('逗号分隔字符串写法可用', strSet.status === 200 && (strSet.body.titles || []).length === 2,
+    JSON.stringify(strSet.body.titles));
+
+  /* ---- 去重 ---- */
+  const dupSet = await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken,
+    body: { id: pid, titles: ['课代表', '课代表', '班长'] },
+  });
+  t('重复头衔自动去重', (dupSet.body.titles || []).length === 2, JSON.stringify(dupSet.body.titles));
+
+  /* ---- 清空 ---- */
+  const clearSet = await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken, body: { id: pid, titles: [] },
+  });
+  t('清空头衔成功', clearSet.status === 200 && (clearSet.body.titles || []).length === 0);
+
+  /* ---- 列表 ---- */
+  await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken, body: { id: pid, titles: ['课代表'] },
+  });
+  const list = await call('/api/admin?action=titles', { token: adminToken });
+  t('头衔列表能查到刚任命的', (list.body.profiles || []).some((p) => Number(p.id) === Number(pid)),
+    JSON.stringify((list.body.profiles || []).map((p) => p.name)));
+  t('列表带可选头衔清单', Array.isArray(list.body.allowed) && list.body.allowed.length > 0);
+
+  /* ---- 缺 id 要拒 ---- */
+  const noId = await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken, body: { titles: ['班长'] },
+  });
+  t('缺 id 被拒 400', noId.status === 400, '实际 ' + noId.status);
+
+  /* ---- 不存在的资料 ---- */
+  const ghost = await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken, body: { id: 999999, titles: ['班长'] },
+  });
+  t('资料不存在返回 404', ghost.status === 404, '实际 ' + ghost.status);
+
+  /* ---- 普通用户不能任命头衔 ---- */
+  const plainReg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'plaintitle', password: 'PlainPass123' },
+  });
+  const plainToken = plainReg.body.token;
+  const unauth = await call('/api/admin?action=set-title', {
+    method: 'POST', token: plainToken, body: { id: pid, titles: ['班长'] },
+  });
+  t('普通用户任命头衔被拒 403', unauth.status === 403, '实际 ' + unauth.status);
+
+  /* ============================================================
+     AI 账号与交接
+     ============================================================ */
+  const acc0 = await call('/api/admin?action=ai-account', { token: adminToken });
+  t('AI 账号查询可用', acc0.status === 200 && acc0.body.ok);
+
+  /* 造一个账号当新 AI */
+  const newAi = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'aibottest', password: 'AiBotPass123' },
+  });
+  t('新 AI 候选账号注册成功', newAi.status === 200 && newAi.body.ok, JSON.stringify(newAi.body));
+  t('新账号默认不是管理员', newAi.body.user.role === 'user', '实际 ' + newAi.body.user.role);
+
+  /* 交接 */
+  const hv = await call('/api/admin?action=handover-ai', {
+    method: 'POST', token: adminToken, body: { username: 'aibottest' },
+  });
+  t('AI 交接成功', hv.status === 200 && hv.body.ok, JSON.stringify(hv.body));
+  t('交接返回新账号名', hv.body.current === 'aibottest', JSON.stringify(hv.body));
+
+  /* 交接后新账号应变成管理员 + is_ai */
+  const rowsAi = db.prepare("select role, is_ai from users where lower(username)='aibottest'");
+  let roleAi = null, isAiFlag = null;
+  if (rowsAi.step()) { const o = rowsAi.getAsObject(); roleAi = o.role; isAiFlag = o.is_ai; }
+  rowsAi.free();
+  t('交接后新账号变成管理员', roleAi === 'admin', '实际 ' + roleAi);
+  t('交接后新账号被打上 is_ai 标记', Number(isAiFlag) === 1, '实际 ' + isAiFlag);
+
+  /* 交接后新 AI 能用 requireAI 通过（通过 /api/content 写入验证） */
+  const aiToken = (await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'aibottest', password: 'AiBotPass123' },
+  })).body.token;
+  const aiWrite = await call('/api/content', {
+    method: 'PUT', token: aiToken,
+    body: { items: { daily_quote: { text: 'AI 写入测试' } } },
+  });
+  t('AI 账号可以写云端内容', aiWrite.status === 200 && aiWrite.body.ok, JSON.stringify(aiWrite.body));
+
+  /* 再交接给不存在的账号要拒 */
+  const hvGhost = await call('/api/admin?action=handover-ai', {
+    method: 'POST', token: adminToken, body: { username: 'nobody_here_xyz' },
+  });
+  t('交接给不存在的账号返回 404', hvGhost.status === 404, '实际 ' + hvGhost.status);
+
+  /* 交接给自己（已是 AI）要拒 */
+  const hvSame = await call('/api/admin?action=handover-ai', {
+    method: 'POST', token: adminToken, body: { username: 'aibottest' },
+  });
+  t('重复交接给同一账号被拒 400', hvSame.status === 400, '实际 ' + hvSame.status);
+
+  /* ---- 课代表只能改作业字段（核心安全边界） ---- */
+  const hwUser = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'hwboss', password: 'HwBossPass123' },
+  });
+  const hwToken = hwUser.body.token;
+
+  /* 造一条资料并绑定到该账号。
+     注意：saveProfile 不支持 userId 参数，绑定要单独做（模拟「认领」）。
+     用 db 直接改，而不是走接口——测试要的是确定的状态。
+     ⚠️ 顺序要紧：先验「无头衔被拒」，再任命头衔，否则前面两条断言会失效。 */
+  const mk2 = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '作业课代表', studentId: '9900002' },
+  });
+  const pid2 = mk2.body.id || (mk2.body.profile || {}).id;
+  db.run('update profiles set user_id = ? where id = ?', [hwUser.body.user.id, pid2]);
+
+  /* 没头衔前应被拒 */
+  const hwNoTitle = await call('/api/content', {
+    method: 'PUT', token: hwToken, body: { items: { homework_notice: { text: 'x' } } },
+  });
+  t('无头衔时写作业被拒 403', hwNoTitle.status === 403, '实际 ' + hwNoTitle.status);
+
+  /* 客户端伪造 title 参数不应被采信（安全边界） */
+  const fake = await call('/api/content', {
+    method: 'PUT', token: hwToken,
+    body: { items: { homework_notice: { text: '伪造' } }, title: '课代表', isAI: true, role: 'admin' },
+  });
+  t('伪造 title/isAI/role 参数不被采信', fake.status === 403, '实际 ' + fake.status);
+
+  /* 现在任命课代表 */
+  await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken, body: { id: pid2, titles: ['课代表'] },
+  });
+
+  /* 真任命课代表后可以改作业 */
+  const hwOk = await call('/api/content', {
+    method: 'PUT', token: hwToken,
+    body: { items: { homework_notice: { text: '课代表布置的作业' } } },
+  });
+  t('课代表可以改作业通知', hwOk.status === 200 && hwOk.body.ok, JSON.stringify(hwOk.body));
+
+  /* 课代表不能改公告（越权必须拦住） */
+  const hwAnn = await call('/api/content', {
+    method: 'PUT', token: hwToken, body: { items: { announcements: [{ title: '越权公告' }] } },
+  });
+  t('课代表不能改公告 403', hwAnn.status === 403, '实际 ' + hwAnn.status);
+  t('越权提示说明只能改作业', /只能修改作业/.test(hwAnn.body.error || ''), hwAnn.body.error);
+
+  /* 课代表不能改点歌配置 */
+  const hwSong = await call('/api/content', {
+    method: 'PUT', token: hwToken, body: { items: { song_config: { x: 1 } } },
+  });
+  t('课代表不能改点歌配置 403', hwSong.status === 403, '实际 ' + hwSong.status);
+
+  /* ---- 清理 ---- */
+  for (const id of [pid, pid2]) {
+    if (id) await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id } });
+  }
+  t('头衔测试数据已清理', true);
 }
 
 console.log('\n' + '='.repeat(52));

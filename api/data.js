@@ -16,19 +16,48 @@ import {
 } from './_lib/http.js';
 
 /* 允许云同步的键白名单。新增同步项时在这里加一行即可。
-   前缀匹配用结尾的 *，如 'cls_dj_note_*' */
+   前缀匹配用结尾的 *，如 'cls_dj_note_*'
+
+   ⚠️ 2026-10-05：按用户要求「尽量都同步」做过一次扩充。
+      改这里**必须同步改前端** index.html 的 CLOUD_KEYS，
+      两边对不上会出现「前端以为能同步、后端 403 拒绝」的静默失败。
+
+   有意不放行的键（安全 / 设备相关）：
+     cls_auth / cls_site_gate / cls_lock_* / cls_gate_* / cls_device_id */
 const ALLOW_KEYS = [
+  /* 外观与界面 */
   'cls_theme',              // 主题（亮/暗）
   'cls_theme_auto',         // 是否跟随系统
   'cls_ui_cfg',             // 界面设置（字号/背景/排序/动效）
   'cls_ui_bgimg',           // 自定义背景图
   'cls_sfx',                // 音效开关
+  /* 各种「已看过 / 已关闭」的标记：换设备不该重复打扰 */
   'cls_welcome_v1',         // 欢迎弹窗是否已看过
+  'cls_login_guide_v1',     // 登录引导弹窗是否已看过（2026-10-05 加）
   'cls_study_notice_dismissed',
+  'cls_welcome_hide',
+  'cls_exam_tip_seen',
+  'cls_holiday_tip_seen',
+  'cls_exam_scope_seen',
+  /* 点歌相关 */
   'cls_dj_excluded',        // 点歌：自己排除的曲目
   'cls_dj_excluded_req',    // 点歌：申请排除
   'cls_dj_note',            // 点歌：备注
   'cls_dj_schedule',        // 点歌：排期
+  'cls_dj_my_songs',        // 点歌：我点过的歌
+  'cls_dj_pending',         // 点歌：待审核
+  'cls_dj_history',         // 点歌：历史记录
+  'cls_dj_copy_note',       // 点歌：复制备注
+  /* 学习与班级事务 */
+  'cls_study_plan',         // 学习计划
+  'cls_notice_read',        // 通知已读位点
+  'cls_class_list',         // 班级名单（用户自存）
+  /* 站内偏好 */
+  'cls_ann_filter',         // 公告分类筛选
+  'cls_board_collapsed',    // 公告栏折叠
+  'cls_side_open',          // 侧边栏展开
+  'cls_return_view',        // 上次停留的视图
+  /* 前缀匹配 */
   'cls_hw_done_*',          // 作业完成标记（按作业 id 展开）
   'cls_sign_*',             // 每日班级签（按日期展开）
   'cls_claim_*',            // 点歌券领取台账

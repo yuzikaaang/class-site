@@ -75,6 +75,15 @@ export async function ensureSchema(sql) {
     `;
     /* 老库补列：exam_no 是后加的（2026-10-05 导入名单时需要）。 */
     await s`alter table profiles add column if not exists exam_no text`;
+    /* 头衔（班长/团支书/课代表…），2026-10-05 新增。
+       存英文逗号分隔的纯文本，如 '团支书,课代表'——一个人可兼多职。
+       授权判定只认本列的服务端值，绝不接受前端传参。 */
+    await s`alter table profiles add column if not exists title text`;
+    /* 标记 AI 账号，2026-10-05 新增。用于「AI 可编辑云端内容」与后续交接。 */
+    await s`
+      alter table users add column if not exists is_ai
+        boolean not null default false
+    `;
     await s`
       create table if not exists profile_view_log (
         id          bigserial   primary key,
@@ -229,6 +238,7 @@ export async function currentUser(req) {
   const rows = await sql`
     select u.id, u.username, u.role, u.status, u.display_name, u.created_at,
            coalesce(u.must_change_password, false) as must_change_password,
+           coalesce(u.is_ai, false) as is_ai,
            s.expires_at
       from sessions s
       join users u on u.id = s.user_id
@@ -241,11 +251,19 @@ export async function currentUser(req) {
   if (u.status !== 'active') return null;
 
   /* 查该账号认领的班级资料（可能没有）。
-     profiles 表由 ensureSchema 保证存在；查询失败不阻断登录态。 */
+     profiles 表由 ensureSchema 保证存在；查询失败不阻断登录态。
+     这里一并取出 role/title：role 是「学生/老师/管理员」的展示字段（与
+     users.role 的 user/admin 是两套东西，别混），title 是头衔，授权时要用。 */
   let profileId = null;
+  let profileRole = null;
+  let title = '';
   try {
-    const pr = await sql`select id from profiles where user_id = ${u.id} limit 1`;
-    if (pr.length) profileId = Number(pr[0].id);
+    const pr = await sql`select id, role, title from profiles where user_id = ${u.id} limit 1`;
+    if (pr.length) {
+      profileId = Number(pr[0].id);
+      profileRole = pr[0].role || null;
+      title = pr[0].title || '';
+    }
   } catch (e) {
     /* 老库或无 DDL 权限时可能查不到，忽略即可 */
   }
@@ -258,6 +276,9 @@ export async function currentUser(req) {
     createdAt: u.created_at,
     mustChangePassword: !!u.must_change_password,
     profileId,
+    profileRole,
+    title,
+    isAI: !!u.is_ai,
   };
 }
 
@@ -280,6 +301,57 @@ export async function requireAdmin(req, res) {
     return null;
   }
   return u;
+}
+
+/**
+ * 要求持有某个头衔（班长 / 课代表 / 团支书…）。
+ *
+ * ⚠️ 安全边界：头衔一律以数据库 profiles.title 为准，**绝不接受前端传参**、
+ * 也不从 token 里解。前端传什么都无关紧要，这里只认服务端读出来的值。
+ *
+ * 管理员与 AI 账号天然通过（管理员本来就该能改一切；AI 账号见 is_ai）。
+ *
+ * @param {string} need 需要的头衔，如 '课代表'
+ */
+export async function requireTitle(req, res, need) {
+  const u = await requireUser(req, res);
+  if (!u) return null;
+  if (u.role === 'admin' || u.isAI) return u;
+  const list = String(u.title || '')
+    .split(/[,，、\s]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!list.includes(String(need || '').trim())) {
+    fail(res, 403, `需要「${need}」头衔才能操作`);
+    return null;
+  }
+  return u;
+}
+
+/**
+ * 要求 AI 账号（users.is_ai = true 且是管理员）。
+ * 用于「AI 助手可编辑云端公告/作业」这类能力，也便于以后排查 AI 的动作。
+ */
+export async function requireAI(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return null;
+  if (!u.isAI || u.role !== 'admin') {
+    fail(res, 403, '需要 AI 助手账号才能操作');
+    return null;
+  }
+  return u;
+}
+
+/**
+ * 要求「管理员 或 AI 助手」。云端内容的写入走这个。
+ * 单独抽出来是因为 content 接口既要给管理员用，也要给 AI 用。
+ */
+export async function requireAdminOrAI(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return null;
+  if (u.role === 'admin' || u.isAI) return u;
+  fail(res, 403, '需要管理员权限');
+  return null;
 }
 
 /**
