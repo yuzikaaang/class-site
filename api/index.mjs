@@ -13,6 +13,7 @@
 import authHandler from './auth.js';
 import dataHandler from './data.js';
 import adminHandler from './admin.js';
+import { cors } from './_lib/http.js';
 
 /* FC 的 resp 是 Express 风格（有 send / setHeader / setStatusCode）。
    现有代码写的是 Node 原生 res（statusCode + end），这里做一层兼容，
@@ -52,6 +53,9 @@ export const handler = async (req, resp, context) => {
       case 'data':  return await dataHandler(r, res);
       case 'admin': return await adminHandler(r, res);
       default:
+        /* 这里也要回 CORS 头：否则跨域下浏览器会把 404 响应整个拦掉，
+           前端只能看到一句含糊的 "Failed to fetch"，看不出到底是接口名写错还是没配后端 */
+        cors(r, res);
         res.statusCode = 404;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.end(JSON.stringify({ ok: false, error: '未知接口：/api/' + (seg || '(空)') }));
@@ -59,6 +63,7 @@ export const handler = async (req, resp, context) => {
     }
   } catch (e) {
     console.error('[fc]', seg, e);
+    cors(r, res);
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(JSON.stringify({ ok: false, error: '服务器内部错误' }));
