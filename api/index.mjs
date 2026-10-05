@@ -13,6 +13,7 @@
 import authHandler from './auth.js';
 import dataHandler from './data.js';
 import adminHandler from './admin.js';
+import profileHandler from './profile.js';
 import { cors } from './_lib/http.js';
 
 /* FC 的 resp 是 Express 风格（有 send / setHeader / setStatusCode）。
@@ -52,6 +53,7 @@ export const handler = async (req, resp, context) => {
       case 'auth':  return await authHandler(r, res);
       case 'data':  return await dataHandler(r, res);
       case 'admin': return await adminHandler(r, res);
+      case 'profile': return await profileHandler(r, res);
       default:
         /* 这里也要回 CORS 头：否则跨域下浏览器会把 404 响应整个拦掉，
            前端只能看到一句含糊的 "Failed to fetch"，看不出到底是接口名写错还是没配后端 */
