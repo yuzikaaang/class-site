@@ -4531,12 +4531,12 @@ function rerenderAll(){
       → 必须填完整地址，否则跨域请求打不到后端
 
    ⚠️ 当前后端：Cloudflare Workers + Neon
-      前端（GitHub Pages）→ 后端（api.classite.dpdns.org）
+      前端（GitHub Pages）→ 后端（api.classsite.dpdns.org）
       自定义域名走的是自建域名，绕开 workers.dev 在大陆被 DNS 污染的问题。
       改地址时注意结尾不要带斜杠。
    也可以不改代码，在页面 head 里提前注入一行设置 window.CLS_API_BASE（见 api/.env.example 的说明）
    ------------------------------------------------------------ */
-var API_BASE_DEFAULT = 'https://api.classite.dpdns.org';
+var API_BASE_DEFAULT = 'https://api.classsite.dpdns.org';
 
 var API_BASE = (function(){
   /* ① 运行时显式注入优先（head 里注入，或本文件稍后赋值） */
