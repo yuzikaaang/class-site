@@ -6384,16 +6384,142 @@ var HIDDEN_FUN_LINKS = [
   { icon: "♟", title: "中国象棋", desc: "完整规则，本地双人对战", url: "games/chess.html" },
   { icon: "✈️", title: "飞机大战", desc: "纵版射击，击落敌机冲高分", url: "games/plane.html" }
 ];
+/**
+ * 班徽手势：短按累计 5 次 → 隐藏娱乐天地；长按约 700ms → 管理后台。
+ *
+ * 为什么不用 onclick 做长按：
+ *   onclick 在手指抬起时才触发，那时已经分不清「长按后松手」和「短按」了。
+ *   所以长按必须靠 touchstart/mousedown 起计时，到点就执行；
+ *   并且用 _badgeLongFired 标记，让随后必然到来的 click 自己作废，
+ *   否则长按一次会顺带把计数器 +1，攒到 5 次就误开娱乐天地。
+ *
+ * 为什么要有移动阈值：
+ *   手机上手指按下去很容易带一点位移（尤其从班徽往上下滑动页面时）。
+ *   位移超过 10px 就判定为「滚动」，取消长按，避免误跳后台。
+ */
 var _badgeClicks = 0, _badgeTimer = null;
+var _badgeHoldTimer = null, _badgeLongFired = false;
+var _badgeStartX = 0, _badgeStartY = 0;
+var BADGE_LONG_MS = 700;      /* 长按判定时长 */
+var BADGE_MOVE_TOL = 10;      /* 移动超过这个像素数就取消长按 */
+
+function badgeLongStart(x, y){
+  _badgeLongFired = false;
+  _badgeStartX = x;
+  _badgeStartY = y;
+  badgeLongCancel();                 /* 先清掉可能残留的上一次计时 */
+  _badgeHoldTimer = setTimeout(function(){
+    _badgeHoldTimer = null;
+    _badgeLongFired = true;
+    /* 长按成功：清掉短按计数，免得残留的次数过一会儿凑够 5 次 */
+    _badgeClicks = 0;
+    if(_badgeTimer){ clearTimeout(_badgeTimer); _badgeTimer = null; }
+    badgeVibrate();
+    location.href = 'admin.html';
+  }, BADGE_LONG_MS);
+}
+
+function badgeLongMove(x, y){
+  /* 用 !== null 判断而不是真值判断：setTimeout 在部分环境下会返回 0，
+     而 0 是 falsy，用 if(_badgeHoldTimer) 会漏判、导致长按取消不掉。 */
+  if(_badgeHoldTimer === null || _badgeHoldTimer === undefined) return;
+  var dx = Math.abs(x - _badgeStartX);
+  var dy = Math.abs(y - _badgeStartY);
+  if(dx > BADGE_MOVE_TOL || dy > BADGE_MOVE_TOL) badgeLongCancel();
+}
+
+function badgeLongCancel(){
+  if(_badgeHoldTimer === null || _badgeHoldTimer === undefined) return;
+  clearTimeout(_badgeHoldTimer);
+  _badgeHoldTimer = null;
+}
+
+/** 轻微震动反馈，让用户知道“松手就跳走了”（不支持的浏览器静默跳过） */
+function badgeVibrate(){
+  try{
+    if(navigator.vibrate) navigator.vibrate(18);
+  }catch(e){}
+}
+
 function badgeClick(){
+  /* 长按已经跳走了，这一次 click 是长按的尾巴，直接忽略 */
+  if(_badgeLongFired){ _badgeLongFired = false; return; }
+
   _badgeClicks++;
-  if(_badgeTimer) clearTimeout(_badgeTimer);
-  _badgeTimer = setTimeout(function(){ _badgeClicks = 0; }, 3000);
+  if(_badgeTimer !== null && _badgeTimer !== undefined) clearTimeout(_badgeTimer);
+  _badgeTimer = setTimeout(function(){ _badgeClicks = 0; _badgeTimer = null; }, 3000);
   if(_badgeClicks >= 5){
     _badgeClicks = 0;
     openHiddenGate();
   }
 }
+
+/* 班徽的长按绑定。
+   用事件委托挂在 document 上，而不是直接绑到 .logo 元素——
+   因为 .logo 是页面中段渲染出来的，而这段脚本可能在它之前执行；
+   委托到 document 后，无论班徽何时出现、出现几次，都能收到事件。
+
+   注意 touchstart 必须是 passive:true：这里是纯监听，不 preventDefault，
+   否则会拖慢移动端滚动。长按的取消只靠“松手不做事”实现，不需要阻止默认行为。 */
+(function bindBadgeLongPress(){
+  var lastTarget = null;
+
+  function isBadge(node){
+    /* 班徽是 <div class="logo"><img></div>，点在图片上要往上找一层 */
+    while(node && node !== document){
+      if(node.classList && node.classList.contains('logo')) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  document.addEventListener('touchstart', function(e){
+    var el = isBadge(e.target);
+    if(!el) return;
+    lastTarget = el;
+    var t = e.touches && e.touches[0];
+    if(t) badgeLongStart(t.clientX, t.clientY);
+  }, { passive:true });
+
+  document.addEventListener('touchmove', function(e){
+    if(!lastTarget) return;
+    var t = e.touches && e.touches[0];
+    if(t) badgeLongMove(t.clientX, t.clientY);
+  }, { passive:true });
+
+  document.addEventListener('touchend', function(){
+    lastTarget = null;
+    badgeLongCancel();
+  }, { passive:true });
+
+  document.addEventListener('touchcancel', function(){
+    lastTarget = null;
+    badgeLongCancel();
+  }, { passive:true });
+
+  /* 鼠标设备（电脑上调试也能用） */
+  document.addEventListener('mousedown', function(e){
+    var el = isBadge(e.target);
+    if(!el) return;
+    lastTarget = el;
+    badgeLongStart(e.clientX, e.clientY);
+  });
+  document.addEventListener('mousemove', function(e){
+    if(!lastTarget) return;
+    badgeLongMove(e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseup', function(){
+    lastTarget = null;
+    badgeLongCancel();
+  });
+
+  /* 长按期间禁止系统弹出“选择图片/文字”菜单，否则手感很怪 */
+  document.addEventListener('contextmenu', function(e){
+    if(_badgeHoldTimer !== null && _badgeHoldTimer !== undefined && isBadge(e.target)){
+      e.preventDefault();
+    }
+  });
+})();
 function openHiddenGate(){
   /* 门禁总开关关闭（GATE_ENABLED=false）时跳过暗号问答，直接进隐藏空间 */
   if(!gateOn()){ openHiddenView(); return; }
