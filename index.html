@@ -1656,7 +1656,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 <!--
   设计说明：
   · 登录态用 Bearer token 存 localStorage，不用 Cookie。
-    因为前端在 Gitee Pages、后端在 Vercel，属于跨站请求，
+    因为前端在 GitHub Pages、后端在 Cloudflare Workers，属于跨站请求，
     微信内置浏览器对第三方 Cookie 限制很严，Cookie 方案登录态会莫名掉。
   · 未登录时站点一切照旧（数据存本机），登录后可选开启云同步。
 -->
@@ -4515,7 +4515,7 @@ function rerenderAll(){
  * 【账号系统 + 云同步 + 管理员后台】2026-09-27
  * ------------------------------------------------------------
  * 设计要点：
- *  ① 前端在 GitHub Pages、后端在 Vercel，属于跨站请求。
+ *  ① 前端在 GitHub Pages、后端在 Cloudflare Workers，属于跨站请求。
  *     登录态用 Authorization: Bearer <token>，不用 Cookie，
  *     因为微信内置浏览器对第三方 Cookie 限制很严，登录态会莫名掉。
  *  ② 站点原有行为完全不变：未登录时所有数据照旧存本机；
@@ -4526,15 +4526,17 @@ function rerenderAll(){
 /* 后端地址
    ------------------------------------------------------------
    两种部署形态：
-   ① 前端与后端同在 Vercel → 留空即可，走同域相对路径 /api
-   ② 前端在 GitHub Pages、后端在 Vercel（本站当前形态）
-      → 必须填 Vercel 的完整地址，否则跨域请求打不到后端
+   ① 前端与后端同域 → 留空即可，走同域相对路径 /api
+   ② 前端在 GitHub Pages、后端在 Cloudflare Workers（本站当前形态）
+      → 必须填完整地址，否则跨域请求打不到后端
 
-   ⚠️ 部署后请把 API_BASE_DEFAULT 改成你的 Vercel 地址，例如：
-      var API_BASE_DEFAULT = 'https://class-site-api.vercel.app';
+   ⚠️ 当前后端：Cloudflare Workers + Neon
+      前端（GitHub Pages）→ 后端（api.classite.dpdns.org）
+      自定义域名走的是自建域名，绕开 workers.dev 在大陆被 DNS 污染的问题。
+      改地址时注意结尾不要带斜杠。
    也可以不改代码，在页面 head 里提前注入一行设置 window.CLS_API_BASE（见 api/.env.example 的说明）
    ------------------------------------------------------------ */
-var API_BASE_DEFAULT = '';
+var API_BASE_DEFAULT = 'https://api.classite.dpdns.org';
 
 var API_BASE = (function(){
   /* ① 运行时显式注入优先（head 里注入，或本文件稍后赋值） */
@@ -4544,7 +4546,7 @@ var API_BASE = (function(){
   /* ② 代码里写死的默认值 */
   if(API_BASE_DEFAULT) return API_BASE_DEFAULT.replace(/\/+$/, '');
   /* ③ 页面本身就在部署后端的那台机器上 → 同域，用相对路径 */
-  if(/vercel\.app$/.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1'){
+  if(/vercel\.app$/.test(location.hostname) || /workers\.dev$/.test(location.hostname) || location.hostname === 'localhost' || location.hostname === '127.0.0.1'){
     return '';
   }
   /* ④ 其余情况（如 GitHub Pages / 本地 file://）——没配后端地址，接口不可用 */
@@ -4554,7 +4556,8 @@ var API_BASE = (function(){
 /** 后端地址是否已配置（未配置时给出友好提示，而不是让请求默默失败） */
 function apiReady(){
   if(API_BASE) return true;
-  return /vercel\.app$/.test(location.hostname) || location.hostname === 'localhost'
+  return /vercel\.app$/.test(location.hostname) || /workers\.dev$/.test(location.hostname)
+      || location.hostname === 'localhost'
       || location.hostname === '127.0.0.1';
 }
 
@@ -4583,7 +4586,7 @@ function api(path, opts){
   opts = opts || {};
   if(!apiReady()){
     return Promise.reject(new Error(
-      '后端还没配置好。请把 index.html 里的 API_BASE_DEFAULT 填成你的 Vercel 地址（或在页面 head 里注入 window.CLS_API_BASE）。'
+      '后端还没配置好。请把 index.html 里的 API_BASE_DEFAULT 填成后端地址（或在页面 head 里注入 window.CLS_API_BASE）。'
     ));
   }
   var headers = { 'Content-Type':'application/json' };
