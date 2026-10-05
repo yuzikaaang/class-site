@@ -32,10 +32,12 @@ export default async function handler(req, res) {
   try {
     /* 读操作 */
     if (req.method === 'GET') {
-      if (action === 'users')   return await listUsers(req, res);
-      if (action === 'user')    return await userDetail(req, res);
-      if (action === 'stats')   return await stats(req, res);
-      if (action === 'audit')   return await listAudit(req, res);
+      if (action === 'users')      return await listUsers(req, res);
+      if (action === 'user')       return await userDetail(req, res);
+      if (action === 'stats')      return await stats(req, res);
+      if (action === 'audit')      return await listAudit(req, res);
+      if (action === 'login-logs') return await loginLogs(req, res);
+      if (action === 'export')     return await exportUsers(req, res);
       return fail(res, 404, '未知的 action：' + action);
     }
 
@@ -43,6 +45,8 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const b = await body(req);
       switch (action) {
+        case 'create-user':    return await createUser(req, res, me, b);
+        case 'batch-create':   return await batchCreate(req, res, me, b);
         case 'reset-password': return await resetPassword(req, res, me, b);
         case 'set-status':     return await setStatus(req, res, me, b);
         case 'set-role':       return await setRole(req, res, me, b);
@@ -61,6 +65,14 @@ export default async function handler(req, res) {
   }
 }
 
+/* ---------------- 用户名 / 密码校验（与 auth.js 保持一致） ---------------- */
+function normUsername(s) {
+  return String(s || '').trim().toLowerCase();
+}
+function validUsername(u) {
+  return /^[a-z0-9_\u4e00-\u9fa5]{3,20}$/.test(u);
+}
+
 /* ---------------- 读：用户列表 ---------------- */
 async function listUsers(req, res) {
   const sql = getSql();
@@ -71,6 +83,7 @@ async function listUsers(req, res) {
   const rows = await sql`
     select u.id, u.username, u.display_name, u.role, u.status,
            u.created_at, u.last_login_at,
+           coalesce(u.must_change_password, false) as must_change_password,
            coalesce(d.n, 0)::int as data_count
       from users u
       left join (
@@ -93,6 +106,7 @@ async function listUsers(req, res) {
       status: r.status,
       createdAt: r.created_at,
       lastLoginAt: r.last_login_at,
+      mustChangePassword: !!r.must_change_password,
       dataCount: r.data_count,
     })),
   });
@@ -151,7 +165,9 @@ async function stats(req, res) {
     select count(*)::int as total,
            count(*) filter (where status = 'banned')::int as banned,
            count(*) filter (where role = 'admin')::int as admins,
-           count(*) filter (where last_login_at > now() - interval '7 days')::int as active7
+           count(*) filter (where coalesce(must_change_password,false))::int as pending_pwd,
+           count(*) filter (where last_login_at > now() - interval '7 days')::int as active7,
+           count(*) filter (where last_login_at >= date_trunc('day', now()))::int as today_active
       from users
   `;
   const [d] = await sql`select count(*)::int as rows, coalesce(sum(pg_column_size(data_value)),0)::bigint as bytes from user_data`;
@@ -163,11 +179,41 @@ async function stats(req, res) {
      group by data_key order by n desc limit 10
   `;
 
+  /* 登录相关统计 + 最近登录记录。login_log 表不存在时静默降级为 0/空数组，
+     避免老库没执行建表脚本时整个概览页报错。 */
+  let loginTotal = 0;
+  let loginToday = 0;
+  let recentLogins = [];
+  try {
+    const [lt] = await sql`select count(*)::int as n from login_log`;
+    loginTotal = lt.n;
+    const [ld] = await sql`
+      select count(*)::int as n from login_log where created_at >= date_trunc('day', now())
+    `;
+    loginToday = ld.n;
+    const rl = await sql`
+      select l.user_id, l.ip, l.created_at, u.username
+        from login_log l
+        left join users u on u.id = l.user_id
+       order by l.created_at desc
+       limit 15
+    `;
+    recentLogins = rl.map((r) => ({
+      userId: Number(r.user_id),
+      username: r.username,
+      ip: r.ip,
+      createdAt: r.created_at,
+    }));
+  } catch (e) {
+    console.warn('[admin] login_log 不可用（可能未执行建表脚本）：', e.message);
+  }
+
   return ok(res, {
     users: u,
     data: { rows: d.rows, bytes: Number(d.bytes) },
     activeSessions: s.n,
     topKeys: topKeys.map((k) => ({ key: k.data_key, count: k.n })),
+    login: { total: loginTotal, today: loginToday, recent: recentLogins },
   });
 }
 
@@ -195,8 +241,15 @@ async function resetPassword(req, res, me, b) {
 
   const sql = getSql();
   const hash = await hashPassword(newPwd);
+  /* 管理员重置的密码等同「新的初始密码」→ 把强制改密标记置回 true，
+     要求对方下次登录时再自行设置。否则管理员会一直知道对方密码。 */
   const rows = await sql`
-    update users set password_hash = ${hash} where id = ${id}
+    update users
+       set password_hash = ${hash},
+           must_change_password = true,
+           failed_count = 0,
+           locked_until = null
+     where id = ${id}
     returning username
   `;
   if (!rows.length) return fail(res, 404, '用户不存在');
@@ -205,7 +258,9 @@ async function resetPassword(req, res, me, b) {
   await sql`delete from sessions where user_id = ${id}`;
   await audit(me.id, 'user.reset_password', 'user', String(id), rows[0].username);
 
-  return ok(res, { message: '已重置 ' + rows[0].username + ' 的密码，该用户需重新登录' });
+  return ok(res, {
+    message: '已重置 ' + rows[0].username + ' 的密码，该用户需用新密码登录并自行修改',
+  });
 }
 
 /* ---------------- 写：启用/禁用 ---------------- */
@@ -305,4 +360,207 @@ async function clearSessions(req, res, me, b) {
   await sql`delete from sessions where user_id = ${id}`;
   await audit(me.id, 'user.clear_sessions', 'user', String(id), null);
   return ok(res, { message: '已让该用户在所有设备退出登录' });
+}
+
+/* ============================================================
+ * 以下为 2026-10-05 新增：后台专用开号 / 批量导入 / 登录记录 / 导出
+ * ------------------------------------------------------------
+ * 设计要点：
+ *   ① 关闭自助注册后，账号一律由管理员在后台创建
+ *   ② 新建的账号 must_change_password = true —— 同学首次登录必须改密
+ *   ③ 管理员始终看不到明文密码（库里只有 PBKDF2 哈希），只能重置
+ * ============================================================ */
+
+/* ---------------- 写：创建单个用户 ---------------- */
+async function createUser(req, res, me, b) {
+  const username = normUsername(b.username);
+  const password = String(b.password || '');
+  const displayName = String(b.displayName || '').trim().slice(0, 30) || null;
+  const role = b.role === 'admin' ? 'admin' : 'user';
+
+  if (!validUsername(username)) {
+    return fail(res, 400, '用户名需 3–20 位，仅限中英文、数字、下划线');
+  }
+  if (password.length < 6 || password.length > 64) {
+    return fail(res, 400, '初始密码长度需 6–64 位');
+  }
+
+  const sql = getSql();
+  const dup = await sql`select id from users where lower(username) = ${username} limit 1`;
+  if (dup.length) return fail(res, 409, '用户名 ' + username + ' 已存在');
+
+  const hash = await hashPassword(password);
+  const rows = await sql`
+    insert into users (username, display_name, password_hash, role, must_change_password)
+    values (${username}, ${displayName}, ${hash}, ${role}, true)
+    returning id, username
+  `;
+  await audit(me.id, 'user.create', 'user', String(rows[0].id), username);
+
+  return ok(res, {
+    message: '已创建账号 ' + username + '，该同学首次登录需自行修改密码',
+    user: { id: Number(rows[0].id), username: rows[0].username },
+  });
+}
+
+/* ---------------- 写：批量创建（Excel 导入用） ----------------
+   接收 { users: [{ username, password, displayName, role }] }，
+   逐条 try-catch，返回 created / failed / errors[{index, username, reason}]。
+   index 是**批内下标**，前端据此换算回 Excel 真实行号。
+
+   为避免一次请求算太久（Workers 免费版 CPU 时间有限，PBKDF2 每次约 5–10ms），
+   这里限制单批最多 60 条 —— 由前端分片调用。 */
+const BATCH_LIMIT = 60;
+
+async function batchCreate(req, res, me, b) {
+  const list = Array.isArray(b.users) ? b.users : null;
+  if (!list) return fail(res, 400, 'users 必须是数组');
+  if (list.length === 0) return ok(res, { created: 0, failed: 0, errors: [] });
+  if (list.length > BATCH_LIMIT) {
+    return fail(res, 400, '单批最多 ' + BATCH_LIMIT + ' 条，请分片提交');
+  }
+
+  const sql = getSql();
+  const errors = [];
+  let created = 0;
+
+  /* ① 先做一次批内查重，减少无谓的哈希计算 */
+  const seen = new Set();
+
+  for (let i = 0; i < list.length; i++) {
+    const raw = list[i] || {};
+    const username = normUsername(raw.username);
+    const password = String(raw.password || '');
+    const displayName = String(raw.displayName || raw.name || '').trim().slice(0, 30) || null;
+    const role = raw.role === 'admin' ? 'admin' : 'user';
+
+    /* 各项校验，失败就记原因继续下一条 */
+    if (!username) { errors.push({ index: i, reason: '用户名为空' }); continue; }
+    if (!validUsername(username)) {
+      errors.push({ index: i, username, reason: '用户名格式不对（3–20 位中英文/数字/下划线）' });
+      continue;
+    }
+    if (password.length < 6 || password.length > 64) {
+      errors.push({ index: i, username, reason: '密码长度需 6–64 位' });
+      continue;
+    }
+    if (seen.has(username)) {
+      errors.push({ index: i, username, reason: '本批次内重复' });
+      continue;
+    }
+    seen.add(username);
+
+    try {
+      const dup = await sql`select id from users where lower(username) = ${username} limit 1`;
+      if (dup.length) {
+        errors.push({ index: i, username, reason: '用户名已存在' });
+        continue;
+      }
+      const hash = await hashPassword(password);
+      await sql`
+        insert into users (username, display_name, password_hash, role, must_change_password)
+        values (${username}, ${displayName}, ${hash}, ${role}, true)
+      `;
+      created++;
+    } catch (e) {
+      /* 唯一索引冲突等并发情况也走这里，不中断整批 */
+      errors.push({ index: i, username, reason: '写入失败：' + (e.message || '未知错误') });
+    }
+  }
+
+  await audit(
+    me.id, 'user.batch_create', 'user', null,
+    'created=' + created + ' failed=' + errors.length
+  );
+
+  return ok(res, { created, failed: errors.length, errors });
+}
+
+/* ---------------- 读：登录记录 ----------------
+   GET ?action=login-logs&id=1&limit=50&offset=0   → 某人的登录历史
+   GET ?action=login-logs&limit=50&offset=0        → 全站最近登录（不传 id）
+   ------------------------------------------------------------ */
+async function loginLogs(req, res) {
+  const sql = getSql();
+  const id = Number(req.query.id || 0);
+  const limit = Math.min(Number(req.query.limit || 50), 300);
+  const offset = Math.max(Number(req.query.offset || 0), 0);
+
+  let rows;
+  let total;
+
+  if (id) {
+    rows = await sql`
+      select l.id, l.user_id, l.ip, l.user_agent, l.created_at, u.username
+        from login_log l
+        left join users u on u.id = l.user_id
+       where l.user_id = ${id}
+       order by l.created_at desc
+       limit ${limit} offset ${offset}
+    `;
+    total = (await sql`select count(*)::int as n from login_log where user_id = ${id}`)[0].n;
+  } else {
+    rows = await sql`
+      select l.id, l.user_id, l.ip, l.user_agent, l.created_at, u.username
+        from login_log l
+        left join users u on u.id = l.user_id
+       order by l.created_at desc
+       limit ${limit} offset ${offset}
+    `;
+    total = (await sql`select count(*)::int as n from login_log`)[0].n;
+  }
+
+  return ok(res, {
+    total,
+    logs: rows.map((r) => ({
+      id: Number(r.id),
+      userId: Number(r.user_id),
+      username: r.username,
+      ip: r.ip,
+      userAgent: r.user_agent,
+      createdAt: r.created_at,
+    })),
+  });
+}
+
+/* ---------------- 读：导出（按筛选返回全量，前端生成 xlsx） ----------------
+   带上与列表页相同的筛选条件，做到「所见即所得」的导出。
+   不返回密码哈希——只导出非敏感字段。 */
+async function exportUsers(req, res) {
+  const sql = getSql();
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const role = String(req.query.role || '').trim().toLowerCase();
+  const status = String(req.query.status || '').trim().toLowerCase();
+
+  const rows = await sql`
+    select u.id, u.username, u.display_name, u.role, u.status,
+           u.created_at, u.last_login_at,
+           coalesce(u.must_change_password, false) as must_change_password,
+           coalesce(l.n, 0)::int as login_count
+      from users u
+      left join (
+        select user_id, count(*)::int as n from login_log group by user_id
+      ) l on l.user_id = u.id
+     where (${q} = '' or lower(u.username) like '%' || ${q} || '%'
+                         or lower(coalesce(u.display_name,'')) like '%' || ${q} || '%')
+       and (${role} = ''   or u.role = ${role})
+       and (${status} = '' or u.status = ${status})
+     order by u.id
+     limit 5000
+  `;
+
+  return ok(res, {
+    total: rows.length,
+    users: rows.map((r) => ({
+      id: Number(r.id),
+      username: r.username,
+      displayName: r.display_name,
+      role: r.role,
+      status: r.status,
+      createdAt: r.created_at,
+      lastLoginAt: r.last_login_at,
+      mustChangePassword: !!r.must_change_password,
+      loginCount: r.login_count,
+    })),
+  });
 }
