@@ -12,6 +12,16 @@
    POST   /api/admin?action=delete-data               删某用户的某条数据
    POST   /api/admin?action=delete-user               删号（连带其数据）
    POST   /api/admin?action=clear-sessions            强制某用户全部设备下线
+
+   班级通讯录 / 个人资料（2026-10-05 新增）
+   GET    /api/admin?action=profiles                  资料列表（可按状态/关键词筛）
+   GET    /api/admin?action=profile&id=1              单条资料详情
+   GET    /api/admin?action=profile-requests          待审核的联系方式列表
+   GET    /api/admin?action=view-logs                 资料查看日志（谁看了谁）
+   POST   /api/admin?action=review-contact            审核联系方式：通过 / 驳回
+   POST   /api/admin?action=save-profile              新增或修改资料（姓名/学号/政治面貌）
+   POST   /api/admin?action=delete-profile            删除一条资料
+   POST   /api/admin?action=batch-profiles            批量导入资料
    ============================================================ */
 
 import { getSql } from './_lib/db.js';
@@ -38,6 +48,10 @@ export default async function handler(req, res) {
       if (action === 'audit')      return await listAudit(req, res);
       if (action === 'login-logs') return await loginLogs(req, res);
       if (action === 'export')     return await exportUsers(req, res);
+      if (action === 'profiles')         return await listProfiles(req, res);
+      if (action === 'profile')          return await profileDetail(req, res);
+      if (action === 'profile-requests') return await profileRequests(req, res);
+      if (action === 'view-logs')        return await viewLogs(req, res);
       return fail(res, 404, '未知的 action：' + action);
     }
 
@@ -54,6 +68,10 @@ export default async function handler(req, res) {
         case 'delete-data':    return await deleteData(req, res, me, b);
         case 'delete-user':    return await deleteUser(req, res, me, b);
         case 'clear-sessions': return await clearSessions(req, res, me, b);
+        case 'review-contact': return await reviewContact(req, res, me, b);
+        case 'save-profile':   return await saveProfile(req, res, me, b);
+        case 'delete-profile': return await deleteProfile(req, res, me, b);
+        case 'batch-profiles': return await batchProfiles(req, res, me, b);
         default:               return fail(res, 404, '未知的 action：' + action);
       }
     }
@@ -208,12 +226,36 @@ async function stats(req, res) {
     console.warn('[admin] login_log 不可用（可能未执行建表脚本）：', e.message);
   }
 
+  /* 通讯录统计：资料总数、待审核数、已认领数、近 7 天查看量。
+     与上面同理，表不存在时静默降级，不影响概览页其他部分。 */
+  let profileStats = { total: 0, pending: 0, approved: 0, claimed: 0, views7: 0, viewsTotal: 0 };
+  try {
+    const [p] = await sql`
+      select count(*)::int as total,
+             count(*) filter (where contact_status = 'pending')::int  as pending,
+             count(*) filter (where contact_status = 'approved')::int as approved,
+             count(*) filter (where user_id is not null)::int         as claimed
+        from profiles
+    `;
+    profileStats = { ...profileStats, ...p };
+    const [v1] = await sql`select count(*)::int as n from profile_view_log`;
+    const [v2] = await sql`
+      select count(*)::int as n from profile_view_log
+       where created_at > now() - interval '7 days'
+    `;
+    profileStats.viewsTotal = v1.n;
+    profileStats.views7 = v2.n;
+  } catch (e) {
+    console.warn('[admin] profiles / profile_view_log 不可用：', e.message);
+  }
+
   return ok(res, {
     users: u,
     data: { rows: d.rows, bytes: Number(d.bytes) },
     activeSessions: s.n,
     topKeys: topKeys.map((k) => ({ key: k.data_key, count: k.n })),
     login: { total: loginTotal, today: loginToday, recent: recentLogins },
+    profiles: profileStats,
   });
 }
 
@@ -562,5 +604,410 @@ async function exportUsers(req, res) {
       mustChangePassword: !!r.must_change_password,
       loginCount: r.login_count,
     })),
+  });
+}
+
+/* ============================================================
+   班级通讯录 / 个人资料 管理
+   ------------------------------------------------------------
+   分工：
+     · 姓名 / 学号 / 政治面貌 —— 身份信息，只有管理员能改（本人无权限）
+     · 微信 / QQ / 手机号     —— 同学自填，管理员审核后才对外展示
+     · 查看日志               —— 记录谁在什么时候查了谁，管理员可查
+   ============================================================ */
+
+/** 清洗文本输入 */
+function cText(s, max) {
+  return String(s == null ? '' : s).trim().slice(0, max || 60);
+}
+/** 联系方式去危险字符 */
+function cContact(s) {
+  return String(s == null ? '' : s).trim().slice(0, 64).replace(/[<>"']/g, '');
+}
+
+/**
+ * 资料列表。支持按关键词（姓名/学号）与审核状态筛选。
+ * 这个接口返回的是**管理端视图**：含联系方式原文与关联账号，仅管理员可调。
+ */
+async function listProfiles(req, res) {
+  const sql = getSql();
+  const q = cText(req.query.q, 40).replace(/[%_\\]/g, '');
+  const st = cText(req.query.status, 16);   /* '' | none | pending | approved | rejected */
+
+  const rows = await sql`
+    select p.id, p.name, p.student_id, p.politics, p.role,
+           p.wechat, p.qq, p.phone, p.contact_status, p.reject_reason,
+           p.user_id, p.created_at, p.updated_at,
+           u.username as bound_username
+      from profiles p
+      left join users u on u.id = p.user_id
+     where (${q} = '' or coalesce(p.name,'') like '%' || ${q} || '%'
+                         or coalesce(p.student_id,'') like '%' || ${q} || '%')
+       and (${st} = '' or p.contact_status = ${st})
+     order by p.student_id nulls last, p.name
+     limit 1000
+  `;
+
+  /* 统计各状态数量，供后台顶部标签显示 */
+  const cnt = await sql`
+    select
+      count(*)::int as total,
+      count(*) filter (where contact_status = 'pending')::int  as pending,
+      count(*) filter (where contact_status = 'approved')::int as approved,
+      count(*) filter (where user_id is not null)::int         as claimed
+      from profiles
+  `;
+
+  return ok(res, {
+    total: rows.length,
+    counts: cnt[0] || { total: 0, pending: 0, approved: 0, claimed: 0 },
+    profiles: rows.map((r) => ({
+      id: Number(r.id),
+      name: r.name || '',
+      studentId: r.student_id || '',
+      politics: r.politics || '',
+      role: r.role || '学生',
+      wechat: r.wechat || '',
+      qq: r.qq || '',
+      phone: r.phone || '',
+      contactStatus: r.contact_status || 'none',
+      rejectReason: r.reject_reason || '',
+      userId: r.user_id ? Number(r.user_id) : null,
+      boundUsername: r.bound_username || '',
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    })),
+  });
+}
+
+/** 单条资料详情 */
+async function profileDetail(req, res) {
+  const id = Number(req.query.id || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const sql = getSql();
+  const rows = await sql`
+    select p.*, u.username as bound_username
+      from profiles p left join users u on u.id = p.user_id
+     where p.id = ${id} limit 1
+  `;
+  if (!rows.length) return fail(res, 404, '资料不存在');
+  const r = rows[0];
+
+  /* 顺带给出该资料的查看记录（最近 20 条），管理员点开就能看到谁查过 */
+  let views = [];
+  try {
+    views = await sql`
+      select v.created_at, v.keyword, v.ip, u.username as viewer
+        from profile_view_log v
+        left join users u on u.id = v.viewer_id
+       where v.target_id = ${id}
+       order by v.created_at desc
+       limit 20
+    `;
+  } catch (e) { /* 表可能还没建，忽略 */ }
+
+  return ok(res, {
+    profile: {
+      id: Number(r.id),
+      name: r.name || '',
+      studentId: r.student_id || '',
+      politics: r.politics || '',
+      role: r.role || '学生',
+      wechat: r.wechat || '',
+      qq: r.qq || '',
+      phone: r.phone || '',
+      contactStatus: r.contact_status || 'none',
+      rejectReason: r.reject_reason || '',
+      userId: r.user_id ? Number(r.user_id) : null,
+      boundUsername: r.bound_username || '',
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    },
+    views: views.map((v) => ({
+      viewer: v.viewer || '(已删除账号)',
+      keyword: v.keyword || '',
+      ip: v.ip || '',
+      createdAt: v.created_at,
+    })),
+  });
+}
+
+/** 待审核列表（只返回 pending，后台「待审核」页用） */
+async function profileRequests(req, res) {
+  const sql = getSql();
+  const rows = await sql`
+    select p.id, p.name, p.student_id, p.politics, p.wechat, p.qq, p.phone,
+           p.contact_status, p.updated_at, u.username as bound_username
+      from profiles p
+      left join users u on u.id = p.user_id
+     where p.contact_status = 'pending'
+     order by p.updated_at desc
+     limit 500
+  `;
+  return ok(res, {
+    total: rows.length,
+    requests: rows.map((r) => ({
+      id: Number(r.id),
+      name: r.name || '',
+      studentId: r.student_id || '',
+      politics: r.politics || '',
+      wechat: r.wechat || '',
+      qq: r.qq || '',
+      phone: r.phone || '',
+      status: r.contact_status,
+      boundUsername: r.bound_username || '',
+      updatedAt: r.updated_at,
+    })),
+  });
+}
+
+/**
+ * 审核联系方式。
+ * body: { id, approve: true|false, reason?: '驳回原因' }
+ * 通过 → approved（对外可见）；驳回 → rejected + 记下原因（本人可见）
+ */
+async function reviewContact(req, res, me, b) {
+  const id = Number(b.id || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const approve = b.approve !== false;
+  const reason = cText(b.reason, 200);
+
+  const sql = getSql();
+  const rows = await sql`select id, name, student_id from profiles where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '资料不存在');
+
+  await sql`
+    update profiles
+       set contact_status = ${approve ? 'approved' : 'rejected'},
+           reject_reason  = ${approve ? null : (reason || '管理员驳回')},
+           updated_at     = now()
+     where id = ${id}
+  `;
+
+  const label = rows[0].name || rows[0].student_id || ('#' + id);
+  await audit(sql, me, approve ? 'profile.contact_approve' : 'profile.contact_reject', 'profile', String(id), label);
+
+  return ok(res, {
+    message: approve ? ('已通过 ' + label + ' 的联系方式') : ('已驳回 ' + label + ' 的联系方式'),
+    status: approve ? 'approved' : 'rejected',
+  });
+}
+
+/**
+ * 新增或修改资料（管理员专用）。
+ * body: { id?, name, studentId, politics, role, wechat?, qq?, phone?, contactStatus? }
+ * 带 id = 修改，不带 = 新增。
+ */
+async function saveProfile(req, res, me, b) {
+  const id = Number(b.id || 0);
+  const name = cText(b.name, 30);
+  const sid = cText(b.studentId, 20);
+  const politics = cText(b.politics, 30);
+  const role = cText(b.role, 10) || '学生';
+  const wechat = cContact(b.wechat);
+  const qq = cContact(b.qq);
+  const phone = cContact(b.phone);
+  const stRaw = cText(b.contactStatus, 16);
+  const st = ['none', 'pending', 'approved', 'rejected'].includes(stRaw) ? stRaw : null;
+
+  if (!name && !sid) return fail(res, 400, '姓名与学号至少填一项');
+
+  const sql = getSql();
+
+  /* 学号唯一性检查：同一个学号不能挂两条资料 */
+  if (sid) {
+    const dup = await sql`select id from profiles where student_id = ${sid} limit 1`;
+    if (dup.length && Number(dup[0].id) !== id) {
+      return fail(res, 409, '学号 ' + sid + ' 已被另一条资料占用');
+    }
+  }
+
+  if (id) {
+    /* 修改：只更新传了的字段，避免把没传的字段清空 */
+    const cur = await sql`select * from profiles where id = ${id} limit 1`;
+    if (!cur.length) return fail(res, 404, '资料不存在');
+    const c = cur[0];
+
+    await sql`
+      update profiles
+         set name      = ${name || c.name},
+             student_id = ${sid || c.student_id},
+             politics  = ${politics || c.politics},
+             role      = ${role || c.role},
+             wechat    = ${wechat !== '' ? wechat : c.wechat},
+             qq        = ${qq !== '' ? qq : c.qq},
+             phone     = ${phone !== '' ? phone : c.phone},
+             contact_status = ${st || c.contact_status},
+             updated_at = now()
+       where id = ${id}
+    `;
+    await audit(sql, me, 'profile.update', 'profile', String(id), name || sid);
+    return ok(res, { message: '已保存', id });
+  }
+
+  /* 新增 */
+  const ins = await sql`
+    insert into profiles (name, student_id, politics, role, wechat, qq, phone, contact_status)
+    values (${name || null}, ${sid || null}, ${politics || null}, ${role},
+            ${wechat || null}, ${qq || null}, ${phone || null},
+            ${st || (wechat || qq || phone ? 'approved' : 'none')})
+    returning id
+  `;
+  const newId = Number(ins[0].id);
+  await audit(sql, me, 'profile.create', 'profile', String(newId), name || sid);
+  return ok(res, { message: '已新增', id: newId });
+}
+
+/** 删除一条资料 */
+async function deleteProfile(req, res, me, b) {
+  const id = Number(b.id || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const sql = getSql();
+  const rows = await sql`select name, student_id from profiles where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '资料不存在');
+  await sql`delete from profiles where id = ${id}`;
+  await audit(sql, me, 'profile.delete', 'profile', String(id), rows[0].name || rows[0].student_id || '');
+  return ok(res, { message: '已删除' });
+}
+
+/**
+ * 批量导入资料。
+ * body: { rows: [{ name, studentId, politics, role, wechat?, qq?, phone? }, ...] }
+ * 按学号或姓名判断是新增还是更新（有就更新，没有就插入）。
+ * 单批上限与用户批量导入保持一致（60 条），由前端分片调用。
+ * 逐条返回错误与行号，方便对照 Excel 修数据。
+ */
+async function batchProfiles(req, res, me, b) {
+  const list = Array.isArray(b.rows) ? b.rows : [];
+  if (!list.length) return ok(res, { created: 0, updated: 0, failed: 0, errors: [] });
+  if (list.length > 60) return fail(res, 400, '单批最多 60 条，请分批提交');
+
+  const sql = getSql();
+  let created = 0, updated = 0;
+  const errors = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const raw = list[i] || {};
+    try {
+      const name = cText(raw.name, 30);
+      const sid = cText(raw.studentId, 20);
+      const politics = cText(raw.politics, 30);
+      const role = cText(raw.role, 10) || '学生';
+      const wechat = cContact(raw.wechat);
+      const qq = cContact(raw.qq);
+      const phone = cContact(raw.phone);
+
+      if (!name && !sid) {
+        errors.push({ index: i, name, studentId: sid, reason: '姓名与学号都为空' });
+        continue;
+      }
+
+      /* 先按学号找，再按姓名找 */
+      let hit = [];
+      if (sid) hit = await sql`select id from profiles where student_id = ${sid} limit 1`;
+      if (!hit.length && name) hit = await sql`select id from profiles where name = ${name} limit 1`;
+
+      if (hit.length) {
+        const pid = Number(hit[0].id);
+        await sql`
+          update profiles
+             set name = ${name || null},
+                 student_id = ${sid || null},
+                 politics = ${politics || null},
+                 role = ${role},
+                 wechat = ${wechat || null},
+                 qq = ${qq || null},
+                 phone = ${phone || null},
+                 contact_status = ${(wechat || qq || phone) ? 'approved' : 'none'},
+                 updated_at = now()
+           where id = ${pid}
+        `;
+        updated++;
+      } else {
+        await sql`
+          insert into profiles (name, student_id, politics, role, wechat, qq, phone, contact_status)
+          values (${name || null}, ${sid || null}, ${politics || null}, ${role},
+                  ${wechat || null}, ${qq || null}, ${phone || null},
+                  ${(wechat || qq || phone) ? 'approved' : 'none'})
+        `;
+        created++;
+      }
+    } catch (e) {
+      errors.push({
+        index: i,
+        name: cText(raw.name, 30),
+        studentId: cText(raw.studentId, 20),
+        reason: String(e.message || e).slice(0, 120),
+      });
+    }
+  }
+
+  if (created || updated) {
+    await audit(sql, me, 'profile.batch', 'profile', '', '新增 ' + created + ' / 更新 ' + updated);
+  }
+
+  return ok(res, { created, updated, failed: errors.length, errors });
+}
+
+/**
+ * 资料查看日志：谁在什么时候查看了谁。
+ * 支持 ?viewer=id 只看某人的查看行为，?target=id 只看某条资料被谁看过。
+ */
+async function viewLogs(req, res) {
+  const sql = getSql();
+  const viewer = Number(req.query.viewer || 0);
+  const target = Number(req.query.target || 0);
+  const limit = Math.min(Number(req.query.limit || 100), 500);
+  const offset = Math.max(Number(req.query.offset || 0), 0);
+
+  let rows = [];
+  try {
+    rows = await sql`
+      select v.id, v.created_at, v.keyword, v.ip, v.target_name,
+             v.viewer_id, v.target_id,
+             u.username as viewer_name, u.display_name as viewer_display,
+             t.student_id as target_sid, t.name as target_real_name
+        from profile_view_log v
+        left join users u    on u.id = v.viewer_id
+        left join profiles t on t.id = v.target_id
+       where (${viewer} = 0 or v.viewer_id = ${viewer})
+         and (${target} = 0 or v.target_id = ${target})
+       order by v.created_at desc
+       limit ${limit} offset ${offset}
+    `;
+  } catch (e) {
+    /* 表还没建出来时返回空，避免后台整页报错 */
+    console.warn('[admin] 读取查看日志失败：', e.message);
+    return ok(res, { total: 0, logs: [] });
+  }
+
+  /* 近 7 天查看次数排行，供后台展示「谁最常查资料」 */
+  let top = [];
+  try {
+    top = await sql`
+      select u.username, count(*)::int as n
+        from profile_view_log v
+        left join users u on u.id = v.viewer_id
+       where v.created_at > now() - interval '7 days'
+       group by u.username
+       order by n desc
+       limit 10
+    `;
+  } catch (e) { /* 忽略 */ }
+
+  return ok(res, {
+    total: rows.length,
+    logs: rows.map((r) => ({
+      id: Number(r.id),
+      viewerId: r.viewer_id ? Number(r.viewer_id) : null,
+      viewer: r.viewer_display || r.viewer_name || '(已删除账号)',
+      targetId: r.target_id ? Number(r.target_id) : null,
+      targetName: r.target_real_name || r.target_name || '(已删除)',
+      targetStudentId: r.target_sid || '',
+      keyword: r.keyword || '',
+      ip: r.ip || '',
+      createdAt: r.created_at,
+    })),
+    top: top.map((t) => ({ username: t.username || '(已删除)', count: t.n })),
   });
 }
