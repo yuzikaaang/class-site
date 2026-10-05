@@ -28,6 +28,8 @@ import { getSql, cfg } from './db.js';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
+  /* 先置位再执行：无论成功失败都只尝试一次，避免每次请求都刷一遍日志 */
+  schemaReady = true;
   const s = sql || getSql();
   try {
     await s`
@@ -51,9 +53,48 @@ export async function ensureSchema(sql) {
       create index if not exists login_log_time_idx
         on login_log (created_at desc)
     `;
-    schemaReady = true;
+    /* 班级通讯录 / 个人资料（与 schema.sql 保持一致，见该文件的说明） */
+    await s`
+      create table if not exists profiles (
+        id             bigserial   primary key,
+        name           text,
+        name_hash      text        unique,
+        student_id     text        unique,
+        politics       text,
+        role           text        not null default '学生',
+        wechat         text,
+        qq             text,
+        phone          text,
+        contact_status text        not null default 'none',
+        reject_reason  text,
+        user_id        bigint      references users(id) on delete set null,
+        created_at     timestamptz not null default now(),
+        updated_at     timestamptz not null default now()
+      )
+    `;
+    await s`
+      create table if not exists profile_view_log (
+        id          bigserial   primary key,
+        viewer_id   bigint      not null references users(id) on delete cascade,
+        target_id   bigint      references profiles(id) on delete set null,
+        target_name text,
+        keyword     text,
+        ip          text,
+        created_at  timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists profiles_name_idx    on profiles (name)`;
+    await s`create index if not exists profiles_sid_idx     on profiles (student_id)`;
+    await s`create index if not exists profiles_user_idx    on profiles (user_id)`;
+    await s`create index if not exists profiles_status_idx  on profiles (contact_status)`;
+    await s`create index if not exists pvl_viewer_idx on profile_view_log (viewer_id, created_at desc)`;
+    await s`create index if not exists pvl_target_idx on profile_view_log (target_id, created_at desc)`;
+    await s`create index if not exists pvl_time_idx   on profile_view_log (created_at desc)`;
   } catch (e) {
-    console.warn('[schema] 表结构自愈失败（不影响基本功能）：', e.message);
+    /* 自愈失败不抛错：老库的基本功能仍可用（只是少了强制改密与登录记录）。
+       只警告一次，避免每次请求都刷日志把真正的问题淹没。
+       （测试桩 SQLite 不支持 ADD COLUMN IF NOT EXISTS，会走到这里，属预期。） */
+    console.warn('[schema] 表结构自愈未完成（不影响基本功能）：', e.message);
   }
 }
 
@@ -194,6 +235,17 @@ export async function currentUser(req) {
   if (!rows.length) return null;
   const u = rows[0];
   if (u.status !== 'active') return null;
+
+  /* 查该账号认领的班级资料（可能没有）。
+     profiles 表由 ensureSchema 保证存在；查询失败不阻断登录态。 */
+  let profileId = null;
+  try {
+    const pr = await sql`select id from profiles where user_id = ${u.id} limit 1`;
+    if (pr.length) profileId = Number(pr[0].id);
+  } catch (e) {
+    /* 老库或无 DDL 权限时可能查不到，忽略即可 */
+  }
+
   return {
     id: Number(u.id),
     username: u.username,
@@ -201,6 +253,7 @@ export async function currentUser(req) {
     displayName: u.display_name,
     createdAt: u.created_at,
     mustChangePassword: !!u.must_change_password,
+    profileId,
   };
 }
 
