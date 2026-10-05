@@ -35,7 +35,8 @@ create table users (
   created_at text not null default (datetime('now')),
   last_login_at text,
   failed_count integer not null default 0,
-  locked_until text
+  locked_until text,
+  must_change_password integer not null default 0
 );
 create table sessions (
   token text primary key,
@@ -59,10 +60,44 @@ create table audit_log (
   detail text,
   created_at text not null default (datetime('now'))
 );
+create table login_log (
+  id integer primary key autoincrement,
+  user_id integer not null,
+  ip text,
+  user_agent text,
+  created_at text not null default (datetime('now'))
+);
+create table profiles (
+  id integer primary key autoincrement,
+  name text,
+  name_hash text unique,
+  student_id text unique,
+  politics text,
+  role text not null default '学生',
+  wechat text,
+  qq text,
+  phone text,
+  contact_status text not null default 'none',
+  reject_reason text,
+  user_id integer,
+  created_at text not null default (datetime('now')),
+  updated_at text not null default (datetime('now'))
+);
+create table profile_view_log (
+  id integer primary key autoincrement,
+  viewer_id integer not null,
+  target_id integer,
+  target_name text,
+  keyword text,
+  ip text,
+  created_at text not null default (datetime('now'))
+);
 `);
 
 /* ---------- 3.5 SQLite 兼容：补上 Postgres 有、SQLite 没有的函数 ---------- */
 db.create_function('pg_unnest_probe', () => 1);
+/* pg_column_size：Postgres 专有，返回列字节数。测试里只需要一个数值即可 */
+db.create_function('pg_column_size', (v) => (v === null || v === undefined ? 0 : String(v).length));
 
 /* ---------- 3. 模板查询桥接 ----------
    业务代码写的是 sql`... ${a} ...`，这里收到的是 (strings, ...values)。
@@ -83,8 +118,25 @@ function translate(sqlText) {
     /\(\s*\$(\d+)\s*\|\|\s*'\s*(\w+)\s*'\s*\)\s*::\s*interval/gi,
     (m, n, unit) => "($" + n + " || ' " + unit + "')"
   );
+  /* now() ± interval 'N unit' 字面量形式 → datetime('now', '±N unit')
+     例：now() - interval '7 days'  →  datetime('now', '-7 days') */
+  s = s.replace(
+    /now\(\)\s*([+-])\s*interval\s*'\s*(\d+)\s*(\w+)\s*'/gi,
+    (m, sign, num, unit) => "datetime('now', '" + sign + num + " " + unit + "')"
+  );
+  /* date_trunc('day', X) → X 的当天起点（SQLite 用 date(X)） */
+  s = s.replace(
+    /date_trunc\s*\(\s*'day'\s*,\s*([^)]+)\)/gi,
+    (m, inner) => "date(" + inner.trim() + ")"
+  );
   /* 剩余 now() */
   s = s.replace(/\bnow\(\)/gi, "datetime('now')");
+  /* ilike → like：SQLite 的 LIKE 对 ASCII 本来就大小写不敏感，
+     Postgres 的 ilike 在这里等价降级，测试语义不变 */
+  s = s.replace(/\bilike\b/gi, 'like');
+  /* order by ... nulls last / nulls first：SQLite 3.30+ 支持，
+     但 sql.js 版本可能偏低，直接剥掉（测试不依赖 null 的排序位置） */
+  s = s.replace(/\s+nulls\s+(last|first)/gi, '');
   /* 剥掉其余类型转换 */
   s = s.replace(/::\s*(int|integer|text|jsonb|boolean|bigint|timestamptz|interval)(\s*\[\s*\])?/gi, '');
   return s;
@@ -375,13 +427,478 @@ console.log('\n【9】登出');
   t('登出后 token 失效', after.status === 401, '实际 ' + after.status);
 }
 
-console.log('\n【10】方法限制');
+console.log('\n【10】后台新增：开号 / 批量导入 / 登录记录 / 导出');
+{
+  /* --- 单个开号：应带 must_change_password --- */
+  const c1 = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'stu001', password: 'Init2025', displayName: '张三' },
+  });
+  t('管理员可创建账号', c1.status === 200, JSON.stringify(c1.body));
+  t('创建返回提示含"首次登录"', /首次登录/.test(c1.body.message || ''), c1.body.message);
+
+  /* --- 重复用户名应 409 --- */
+  const c1dup = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'stu001', password: 'Init2025' },
+  });
+  t('重名开号被拒 409', c1dup.status === 409, '实际 ' + c1dup.status);
+
+  /* --- 非法用户名应 400 --- */
+  const cBad = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'ab', password: 'Init2025' },
+  });
+  t('用户名过短被拒 400', cBad.status === 400, '实际 ' + cBad.status);
+
+  /* --- 新账号首次登录：mustChangePassword=true --- */
+  const l1 = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'stu001', password: 'Init2025' },
+  });
+  t('新账号可用初始密码登录', l1.status === 200, JSON.stringify(l1.body));
+  t('首次登录返回 mustChangePassword=true', l1.body.mustChangePassword === true,
+    '实际 ' + l1.body.mustChangePassword);
+  const stuToken = l1.body.token;
+
+  /* --- 未改密时，data 接口应被后端拦截 403 --- */
+  const blocked = await call('/api/data', { method: 'GET', token: stuToken });
+  t('未改密时 data 接口被拦截 403', blocked.status === 403, '实际 ' + blocked.status);
+  t('拦截响应带 mustChangePassword 标记', blocked.body.mustChangePassword === true);
+
+  /* --- 改密后放行 --- */
+  const cp = await call('/api/auth?action=change-password', {
+    method: 'POST', token: stuToken,
+    body: { oldPassword: 'Init2025', newPassword: 'MyOwn2025' },
+  });
+  t('首次改密成功', cp.status === 200, JSON.stringify(cp.body));
+  t('改密响应 mustChangePassword=false', cp.body.mustChangePassword === false);
+
+  const stuToken2 = cp.body.token;
+  const okNow = await call('/api/data', { method: 'GET', token: stuToken2 });
+  t('改密后 data 接口放行', okNow.status === 200, '实际 ' + okNow.status);
+
+  /* --- 改密后新密码可登录、旧密码不可 --- */
+  const l2 = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'stu001', password: 'MyOwn2025' },
+  });
+  t('新密码可登录', l2.status === 200);
+  t('二次登录不再要求改密', l2.body.mustChangePassword === false,
+    '实际 ' + l2.body.mustChangePassword);
+  const lOld = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'stu001', password: 'Init2025' },
+  });
+  t('旧初始密码已失效', lOld.status === 401, '实际 ' + lOld.status);
+
+  /* --- 批量导入：好数据 + 坏数据混合 --- */
+  const bc = await call('/api/admin?action=batch-create', {
+    method: 'POST', token: adminToken,
+    body: {
+      users: [
+        { username: 'stu002', password: 'Init2025', displayName: '李四' },
+        { username: 'stu003', password: 'Init2025', displayName: '王五' },
+        { username: 'stu001', password: 'Init2025' },          // 已存在 → 失败
+        { username: 'x', password: 'Init2025' },                // 用户名过短 → 失败
+        { username: 'stu004', password: '123' },                // 密码过短 → 失败
+        { username: 'stu005', password: 'Init2025', role: 'admin' }, // 带角色
+      ],
+    },
+  });
+  t('批量导入返回 200', bc.status === 200, JSON.stringify(bc.body));
+  t('批量导入成功 3 条', bc.body.created === 3, '实际 ' + bc.body.created);
+  t('批量导入失败 3 条', bc.body.failed === 3, '实际 ' + bc.body.failed);
+  t('错误项带批内下标', Array.isArray(bc.body.errors) && bc.body.errors.every(e => typeof e.index === 'number'));
+  t('错误项有具体原因', (bc.body.errors || []).every(e => e.reason && e.reason.length > 0));
+  t('重名原因正确',
+    (bc.body.errors || []).some(e => e.username === 'stu001' && /已存在/.test(e.reason)));
+
+  /* --- 批量导入的单批上限 --- */
+  const tooMany = await call('/api/admin?action=batch-create', {
+    method: 'POST', token: adminToken,
+    body: { users: Array.from({ length: 61 }, (_, i) => ({ username: 'bulk' + i, password: 'Init2025' })) },
+  });
+  t('超 60 条的单批被拒 400', tooMany.status === 400, '实际 ' + tooMany.status);
+
+  /* --- 登录记录：应记下 stu001 的登录 --- */
+  const logs = await call('/api/admin?action=login-logs&limit=50', { token: adminToken });
+  t('登录记录接口返回 200', logs.status === 200, JSON.stringify(logs.body));
+  t('登录记录非空', (logs.body.logs || []).length > 0, '实际 ' + (logs.body.logs || []).length);
+  t('登录记录含 stu001',
+    (logs.body.logs || []).some(l => l.username === 'stu001'));
+  t('登录记录带 UA 字段',
+    (logs.body.logs || []).every(l => 'userAgent' in l));
+
+  /* --- 按用户筛选登录记录 --- */
+  const meLogs = await call('/api/admin?action=login-logs&id=1&limit=10', { token: adminToken });
+  t('按 id 筛选登录记录成功', meLogs.status === 200);
+  t('筛选结果只含该用户',
+    (meLogs.body.logs || []).every(l => l.userId === 1), JSON.stringify(meLogs.body.logs));
+
+  /* --- 用户列表带 mustChangePassword 字段 --- */
+  const ul = await call('/api/admin?action=users&limit=100', { token: adminToken });
+  t('用户列表带 mustChangePassword',
+    (ul.body.users || []).every(u => 'mustChangePassword' in u));
+
+  /* --- 导出：全量 + 筛选 --- */
+  const ex = await call('/api/admin?action=export', { token: adminToken });
+  t('导出接口返回 200', ex.status === 200, JSON.stringify(ex.body));
+  t('导出含全部用户', (ex.body.users || []).length >= 6, '实际 ' + (ex.body.users || []).length);
+  t('导出不含密码哈希',
+    (ex.body.users || []).every(u => !('password_hash' in u) && !('passwordHash' in u)));
+  t('导出含登录次数', (ex.body.users || []).every(u => typeof u.loginCount === 'number'));
+
+  const exAdmin = await call('/api/admin?action=export&role=admin', { token: adminToken });
+  t('导出支持角色筛选',
+    (exAdmin.body.users || []).every(u => u.role === 'admin') && (exAdmin.body.users || []).length >= 1,
+    JSON.stringify(exAdmin.body.users));
+
+  const exQ = await call('/api/admin?action=export&q=stu002', { token: adminToken });
+  t('导出支持搜索词筛选',
+    (exQ.body.users || []).length === 1 && exQ.body.users[0].username === 'stu002',
+    JSON.stringify(exQ.body.users));
+
+  /* --- 非管理员不能碰新接口 --- */
+  const stuT = (await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'stu002', password: 'Init2025' },
+  })).body.token;
+  /* stu002 也是首次登录，需先改密才能过 data 守卫；但 admin 接口不受该守卫影响，直接验权限 */
+  const nope = await call('/api/admin?action=export', { token: stuT });
+  t('普通用户不能导出 403', nope.status === 403, '实际 ' + nope.status);
+  const nope2 = await call('/api/admin?action=batch-create', {
+    method: 'POST', token: stuT, body: { users: [] },
+  });
+  t('普通用户不能批量开号 403', nope2.status === 403, '实际 ' + nope2.status);
+  const nope3 = await call('/api/admin?action=login-logs', { token: stuT });
+  t('普通用户不能看登录记录 403', nope3.status === 403, '实际 ' + nope3.status);
+
+  /* --- 重置密码后应重新要求改密 --- */
+  /* 先从用户列表里取 stu001 的真实 id，避免硬编码 */
+  const stuRow = (ul.body.users || []).find(u => u.username === 'stu001');
+  t('用户列表能查到 stu001', !!stuRow);
+  const rp = await call('/api/admin?action=reset-password', {
+    method: 'POST', token: adminToken,
+    body: { id: stuRow ? stuRow.id : 1, newPassword: 'Reset2025' },
+  });
+  t('重置密码成功', rp.status === 200, JSON.stringify(rp.body));
+  t('重置提示含"自行修改"', /自行修改/.test(rp.body.message || ''), rp.body.message);
+  const l3 = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'stu001', password: 'Reset2025' },
+  });
+  t('重置后可用新密码登录', l3.status === 200, JSON.stringify(l3.body));
+  t('重置后再次要求改密', l3.body.mustChangePassword === true,
+    '实际 ' + l3.body.mustChangePassword);
+
+  /* --- stats 应带登录统计 --- */
+  const st = await call('/api/admin?action=stats', { token: adminToken });
+  t('stats 含 login 统计块', !!st.body.login, JSON.stringify(Object.keys(st.body)));
+  t('stats.login 含 total', typeof st.body.login.total === 'number');
+  t('stats.login 含 recent 数组', Array.isArray(st.body.login.recent));
+  t('stats.users 含待改密人数', typeof st.body.users.pending_pwd === 'number');
+}
+
+console.log('\n【11】方法限制');
 {
   const g = await call('/api/auth?action=login', { method: 'GET' });
   t('登录接口拒绝 GET', g.status === 405, '实际 ' + g.status);
 }
 
 /* ---------- 汇总 ---------- */
+
+console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查看日志）');
+{
+  /* 这一组测试针对 2026-10-05 的隐私改造：
+     把通讯录从前端密文搬到后端数据库，并加上登录门禁、审核与查看日志。
+
+     测试思路：管理员先用后台接口建几条资料，再用普通同学的身份走一遍
+     「查询 → 看到什么 / 看不到什么 → 提交联系方式 → 待审 → 审核通过」全流程。 */
+
+  /* ---- 管理员建资料 ---- */
+  const c1 = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '测试同学甲', studentId: '250501', politics: '共青团员' },
+  });
+  t('管理员新增资料成功', c1.status === 200 && c1.body.id > 0, JSON.stringify(c1.body));
+  const pid1 = c1.body.id;
+
+  const c2 = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '测试老师乙', politics: '中共党员', role: '老师', phone: '13800138000' },
+  });
+  t('管理员新增老师资料成功', c2.status === 200, JSON.stringify(c2.body));
+  const pid2 = c2.body.id;
+
+  /* 学号唯一性：同一个学号不能挂第二条 */
+  const cdup = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '重名测试', studentId: '250501' },
+  });
+  t('学号重复被拒绝 409', cdup.status === 409, '实际 ' + cdup.status);
+
+  /* 姓名与学号都空应报错 */
+  const cempty = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken, body: { name: '', studentId: '' },
+  });
+  t('姓名学号全空被拒绝 400', cempty.status === 400, '实际 ' + cempty.status);
+
+  /* ---- 未登录不能查询 ---- */
+  const s0 = await call('/api/profile?action=search&q=测试', {});
+  t('未登录查询资料 401', s0.status === 401, '实际 ' + s0.status);
+
+  /* ---- 准备一个普通同学账号 ---- */
+  const cu = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'pctest01', password: 'Init2025x' },
+  });
+  t('为资料测试开一个普通账号', cu.status === 200, JSON.stringify(cu.body));
+
+  const l1 = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'pctest01', password: 'Init2025x' },
+  });
+  t('普通账号首次登录成功', l1.status === 200, JSON.stringify(l1.body));
+  t('首次登录带强制改密标记', l1.body.mustChangePassword === true);
+
+  /* 未改初始密码前，资料查询应被拦（requireUserReady 的作用） */
+  const before = await call('/api/profile?action=search&q=测试', { token: l1.body.token });
+  t('未改初始密码不能查资料 403', before.status === 403, '实际 ' + before.status);
+
+  /* 改密后放行 */
+  const cp = await call('/api/auth?action=change-password', {
+    method: 'POST', token: l1.body.token,
+    body: { oldPassword: 'Init2025x', newPassword: 'Newpw2025x' },
+  });
+  t('普通账号改密成功', cp.status === 200, JSON.stringify(cp.body));
+  const token2 = (await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'pctest01', password: 'Newpw2025x' },
+  })).body.token;
+  t('改密后能重新登录', !!token2);
+
+  /* ---- 登录后可查询 ---- */
+  const s1 = await call('/api/profile?action=search&q=250501', { token: token2 });
+  t('登录后按学号查询成功', s1.status === 200 && (s1.body.results || []).length >= 1,
+    JSON.stringify(s1.body).slice(0, 150));
+  const hit1 = (s1.body.results || [])[0] || {};
+  t('查询结果带姓名', hit1.name === '测试同学甲', '实际 ' + hit1.name);
+  t('查询结果带政治面貌', hit1.politics === '共青团员', '实际 ' + hit1.politics);
+
+  /* 老师那条有手机号且 contact_status 默认 approved（管理员直接录入视为已核实） */
+  const s2 = await call('/api/profile?action=search&q=测试老师', { token: token2 });
+  const hit2 = (s2.body.results || [])[0] || {};
+  t('按姓名能查到老师', hit2.name === '测试老师乙', '实际 ' + hit2.name);
+  t('已核实的手机号对登录用户可见', hit2.phone === '13800138000', '实际 ' + hit2.phone);
+  t('已核实标记正确', hit2.contactVisible === true);
+
+  /* 空关键词报错 */
+  const s3 = await call('/api/profile?action=search&q=', { token: token2 });
+  t('空关键词报 400', s3.status === 400, '实际 ' + s3.status);
+
+  /* 查不到时返回空数组而非报错 */
+  const s4 = await call('/api/profile?action=search&q=不存在的人名xyz', { token: token2 });
+  t('查不到返回空结果', s4.status === 200 && (s4.body.results || []).length === 0);
+
+  /* ---- 查看日志：上面每次查询都应被记录 ---- */
+  const vl = await call('/api/admin?action=view-logs', { token: adminToken });
+  t('管理员能读取查看日志', vl.status === 200, JSON.stringify(vl.body).slice(0, 120));
+  t('查看日志已记录 pctest01 的查询',
+    (vl.body.logs || []).some(x => x.viewer === 'pctest01'),
+    JSON.stringify((vl.body.logs || []).slice(0, 3)));
+  t('查看日志记录了被查者姓名',
+    (vl.body.logs || []).some(x => x.targetName === '测试同学甲'),
+    JSON.stringify((vl.body.logs || []).map(x => x.targetName).slice(0, 5)));
+  t('查看日志记录了查询关键词',
+    (vl.body.logs || []).some(x => x.keyword === '250501'),
+    JSON.stringify((vl.body.logs || []).map(x => x.keyword).slice(0, 5)));
+
+  /* 按被查者筛选 */
+  const vl2 = await call('/api/admin?action=view-logs&target=' + pid1, { token: adminToken });
+  t('查看日志可按被查者筛选',
+    (vl2.body.logs || []).every(x => x.targetId === pid1),
+    JSON.stringify((vl2.body.logs || []).map(x => x.targetId)));
+
+  /* 普通用户不能看查看日志 */
+  const vl3 = await call('/api/admin?action=view-logs', { token: token2 });
+  t('普通用户不能看查看日志 403', vl3.status === 403, '实际 ' + vl3.status);
+
+  /* ---- 认领自己的资料 ---- */
+  const cl0 = await call('/api/profile?action=me', { token: token2 });
+  t('未认领时 me 返回 claimed=false', cl0.body.claimed === false, JSON.stringify(cl0.body));
+
+  const clBad = await call('/api/profile?action=claim', {
+    method: 'POST', token: token2,
+    body: { name: '错误的姓名', studentId: '250501' },
+  });
+  t('姓名学号对不上时认领失败 404', clBad.status === 404, '实际 ' + clBad.status);
+
+  const clOk = await call('/api/profile?action=claim', {
+    method: 'POST', token: token2,
+    body: { name: '测试同学甲', studentId: '250501' },
+  });
+  t('认领自己的资料成功', clOk.status === 200, JSON.stringify(clOk.body));
+
+  const cl1 = await call('/api/profile?action=me', { token: token2 });
+  t('认领后 me 返回 claimed=true', cl1.body.claimed === true);
+  t('认领后 me 带出 profileId', cl1.body.profile && cl1.body.profile.id === pid1,
+    JSON.stringify(cl1.body.profile || {}).slice(0, 100));
+
+  /* ---- 提交联系方式 → 进待审 ---- */
+  const sb = await call('/api/profile?action=submit', {
+    method: 'POST', token: token2,
+    body: { wechat: 'test_wx_id', qq: '123456789', phone: '13900139000' },
+  });
+  t('提交联系方式成功', sb.status === 200, JSON.stringify(sb.body));
+  t('提交后状态为 pending', sb.body.status === 'pending', '实际 ' + sb.body.status);
+
+  /* 格式校验 */
+  const sbBadQq = await call('/api/profile?action=submit', {
+    method: 'POST', token: token2, body: { qq: 'abc' },
+  });
+  t('非法 QQ 被拒绝 400', sbBadQq.status === 400, '实际 ' + sbBadQq.status);
+  const sbEmpty = await call('/api/profile?action=submit', {
+    method: 'POST', token: token2, body: { wechat: '', qq: '', phone: '' },
+  });
+  t('三项全空被拒绝 400', sbEmpty.status === 400, '实际 ' + sbEmpty.status);
+
+  /* ⚠️ 关键断言：待审核的联系方式，别人查不到 */
+  const s5 = await call('/api/profile?action=search&q=250501', { token: token2 });
+  const selfHit = (s5.body.results || [])[0] || {};
+  t('本人能看见自己待审的联系方式',
+    selfHit.wechat === 'test_wx_id', '实际 ' + selfHit.wechat);
+  t('本人在结果里被标记为可见', selfHit.contactVisible === true);
+
+  /* 换一个账号来看，应该看不到（用管理员账号当「别人」测——管理员在查询接口
+     里也是普通查询者视角，只有本人会拿到完整信息） */
+  const s6 = await call('/api/profile?action=search&q=250501', { token: adminToken });
+  const otherHit = (s6.body.results || [])[0] || {};
+  t('待审核的联系方式不会暴露给其他人',
+    !otherHit.wechat && !otherHit.qq && !otherHit.phone,
+    JSON.stringify({ wx: otherHit.wechat, qq: otherHit.qq, ph: otherHit.phone }));
+  t('别人视角下 contactVisible=false', otherHit.contactVisible === false);
+  t('别人视角下给出脱敏预览', otherHit.phoneMasked === '139****9000',
+    '实际 ' + otherHit.phoneMasked);
+
+  /* ---- 后台看到待审队列 ---- */
+  const rq = await call('/api/admin?action=profile-requests', { token: adminToken });
+  t('待审核队列能读到刚提交的申请',
+    (rq.body.requests || []).some(x => x.id === pid1),
+    JSON.stringify(rq.body).slice(0, 150));
+
+  /* ---- 驳回 ---- */
+  const rj = await call('/api/admin?action=review-contact', {
+    method: 'POST', token: adminToken,
+    body: { id: pid1, approve: false, reason: '号码看起来不对' },
+  });
+  t('驳回联系方式成功', rj.status === 200, JSON.stringify(rj.body));
+  t('驳回后状态为 rejected', rj.body.status === 'rejected');
+
+  const mineRej = await call('/api/profile?action=mine-requests', { token: token2 });
+  t('本人能看到驳回原因',
+    (mineRej.body.requests || [])[0] &&
+    (mineRej.body.requests || [])[0].rejectReason === '号码看起来不对',
+    JSON.stringify(mineRej.body).slice(0, 200));
+
+  const sRej = await call('/api/profile?action=search&q=250501', { token: adminToken });
+  t('被驳回后其他人仍看不到',
+    !(sRej.body.results || [])[0].wechat,
+    JSON.stringify((sRej.body.results || [])[0]).slice(0, 120));
+
+  /* ---- 重新提交 → 通过 ---- */
+  const sb2 = await call('/api/profile?action=submit', {
+    method: 'POST', token: token2,
+    body: { wechat: 'fixed_wx', qq: '987654321', phone: '13900139000' },
+  });
+  t('重新提交后状态回到 pending', sb2.body.status === 'pending');
+
+  const ap = await call('/api/admin?action=review-contact', {
+    method: 'POST', token: adminToken, body: { id: pid1, approve: true },
+  });
+  t('审核通过成功', ap.status === 200 && ap.body.status === 'approved', JSON.stringify(ap.body));
+
+  const s7 = await call('/api/profile?action=search&q=250501', { token: adminToken });
+  const ok2 = (s7.body.results || [])[0] || {};
+  t('审核通过后其他人能看到微信', ok2.wechat === 'fixed_wx', '实际 ' + ok2.wechat);
+  t('审核通过后其他人能看到 QQ', ok2.qq === '987654321', '实际 ' + ok2.qq);
+  t('审核通过后 contactVisible=true', ok2.contactVisible === true);
+
+  /* ---- 管理员不能通过查询接口改身份信息（改只能走 admin 接口） ---- */
+  /* 这里验证「同学无法改自己的姓名/学号」：profile 接口的 submit 只接受联系方式 */
+  const tryRename = await call('/api/profile?action=submit', {
+    method: 'POST', token: token2,
+    body: { name: '改名试试', studentId: '999999', wechat: 'x' },
+  });
+  t('submit 不接受姓名/学号（仅联系方式）', tryRename.status === 200);
+  const s8 = await call('/api/profile?action=search&q=250501', { token: token2 });
+  const stillName = (s8.body.results || [])[0] || {};
+  t('姓名未被改掉', stillName.name === '测试同学甲', '实际 ' + stillName.name);
+  t('学号未被改掉', stillName.studentId === '250501', '实际 ' + stillName.studentId);
+
+  /* ---- 管理员编辑资料 ---- */
+  const ed = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: pid1, name: '测试同学甲', studentId: '250501', politics: '普通学生' },
+  });
+  t('管理员修改政治面貌成功', ed.status === 200, JSON.stringify(ed.body));
+  const s9 = await call('/api/profile?action=search&q=250501', { token: token2 });
+  t('政治面貌已更新为普通学生',
+    (s9.body.results || [])[0].politics === '普通学生',
+    '实际 ' + (s9.body.results || [])[0].politics);
+
+  /* ---- 批量导入 ---- */
+  const batch = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: [
+      { name: '批量甲', studentId: '250601', politics: '共青团员' },
+      { name: '批量乙', studentId: '250602', politics: '普通学生' },
+      { name: '', studentId: '' },
+      { name: '批量甲', studentId: '250601', politics: '共青团员' },  /* 重复 → 应为更新 */
+    ] },
+  });
+  t('批量导入成功', batch.status === 200, JSON.stringify(batch.body));
+  t('批量导入新增 2 条', batch.body.created === 2, '实际 ' + batch.body.created);
+  t('批量导入更新 1 条', batch.body.updated === 1, '实际 ' + batch.body.updated);
+  t('批量导入失败 1 条', batch.body.failed === 1, '实际 ' + batch.body.failed);
+  t('批量错误带 index', (batch.body.errors || [])[0] && batch.body.errors[0].index === 2,
+    JSON.stringify(batch.body.errors));
+  t('批量错误带原因', (batch.body.errors || [])[0] && !!batch.body.errors[0].reason);
+
+  /* 超 60 条应被拒 */
+  const tooMany = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: new Array(61).fill({ name: 'x', studentId: '' }) },
+  });
+  t('批量导入超 60 条被拒绝 400', tooMany.status === 400, '实际 ' + tooMany.status);
+
+  /* ---- 列表与统计 ---- */
+  const lp = await call('/api/admin?action=profiles', { token: adminToken });
+  t('管理员能读取资料列表', lp.status === 200, JSON.stringify(lp.body).slice(0, 120));
+  t('资料列表带统计块', !!lp.body.counts, JSON.stringify(lp.body.counts));
+  t('统计含待审核数', typeof lp.body.counts.pending === 'number');
+  t('统计含已认领数', typeof lp.body.counts.claimed === 'number');
+
+  const lpQ = await call('/api/admin?action=profiles&q=批量', { token: adminToken });
+  t('资料列表支持关键词筛选',
+    (lpQ.body.profiles || []).length === 2, '实际 ' + (lpQ.body.profiles || []).length);
+
+  const pd = await call('/api/admin?action=profile&id=' + pid1, { token: adminToken });
+  t('单条资料详情可读', pd.status === 200 && pd.body.profile.id === pid1);
+  t('详情带查看记录', Array.isArray(pd.body.views), JSON.stringify(pd.body.views).slice(0, 100));
+
+  /* 普通用户不能访问管理端资料接口 */
+  const noPerm = await call('/api/admin?action=profiles', { token: token2 });
+  t('普通用户不能读管理端资料列表 403', noPerm.status === 403, '实际 ' + noPerm.status);
+
+  /* ---- stats 应含通讯录统计 ---- */
+  const st2 = await call('/api/admin?action=stats', { token: adminToken });
+  t('stats 含 profiles 统计块', !!st2.body.profiles, JSON.stringify(Object.keys(st2.body)));
+  t('stats.profiles 含 pending', typeof st2.body.profiles.pending === 'number');
+  t('stats.profiles 含 views7', typeof st2.body.profiles.views7 === 'number');
+
+  /* ---- 删除资料 ---- */
+  const dp = await call('/api/admin?action=delete-profile', {
+    method: 'POST', token: adminToken, body: { id: pid2 },
+  });
+  t('删除资料成功', dp.status === 200, JSON.stringify(dp.body));
+  const pd2 = await call('/api/admin?action=profile&id=' + pid2, { token: adminToken });
+  t('删除后详情 404', pd2.status === 404, '实际 ' + pd2.status);
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
