@@ -1277,6 +1277,8 @@ function paintUsers(){
       +   (u.status === 'banned'
             ? '<button class="ok" data-act="unban" data-id="' + u.id + '">解禁</button>'
             : '<button class="danger" data-act="ban" data-id="' + u.id + '">禁用</button>')
+      +   '<button class="danger" data-act="del" data-id="' + u.id + '"'
+      +     (STATE.me && u.id === STATE.me.id ? ' disabled title="不能删除自己"' : '') + '>删除</button>'
       + '</div></td>'
       + '</tr>';
   }).join('');
@@ -1340,13 +1342,59 @@ function paintPick(){
   el.innerHTML = '已选 <b style="color:var(--accent-ink)">' + ids.length + '</b> 人 '
     + '<button class="btn btn-sm btn-ghost" data-bulk-pwd style="margin-left:6px">批量重置密码</button> '
     + '<button class="btn btn-sm btn-ghost" data-bulk-ban style="margin-left:4px">批量禁用</button> '
+    + '<button class="btn btn-sm btn-ghost" data-bulk-del style="margin-left:4px;color:var(--danger)">批量删除</button> '
     + '<button class="btn btn-sm btn-ghost" data-bulk-clear style="margin-left:4px">取消选择</button>';
 
   el.querySelector('[data-bulk-pwd]').onclick = function(){ bulkResetPwd(ids); };
   el.querySelector('[data-bulk-ban]').onclick = function(){ bulkBan(ids); };
+  el.querySelector('[data-bulk-del]').onclick = function(){ bulkDelUsers(ids); };
   el.querySelector('[data-bulk-clear]').onclick = function(){
     STATE.users.selected = {}; paintUsers();
   };
+}
+
+/** 批量删除用户：先把「选到自己」剔除，再逐个串行删（后端只支持单个删除） */
+function bulkDelUsers(ids){
+  var mineId = STATE.me ? STATE.me.id : 0;
+  var target = ids.filter(function(k){ return Number(k) !== Number(mineId); });
+  if(!target.length){ toast('选中的只有你自己的账号，不能删除', 'err', 3800); return; }
+
+  var skipped = ids.length - target.length;
+
+  confirmBox({
+    title: '批量删除用户',
+    html: '确定要删除选中的 <b>' + target.length + '</b> 个用户吗？',
+    detail: '他们的云端数据会一并清除。'
+          + (skipped ? '\n已自动跳过你自己的账号。' : ''),
+    warn: '不可撤销。如果只是想暂时阻止登录，请改用「批量禁用」。',
+    danger: true,
+    okText: '确认删除',
+  }).then(function(ok){
+    if(!ok) return;
+
+    var doneN = 0, failN = 0, firstErr = '';
+    var idx = 0;
+
+    /* 串行删：并发删除容易撞外键级联，也让审计日志顺序乱掉 */
+    var step = function(){
+      if(idx >= target.length) return finish();
+      var id = Number(target[idx]);
+      return api('/admin?action=delete-user', { method:'POST', body: { id: id } })
+        .then(function(){ doneN++; })
+        .catch(function(e){ failN++; if(!firstErr) firstErr = e.message; })
+        .then(function(){ idx++; return step(); });
+    };
+
+    var finish = function(){
+      STATE.users.selected = {};
+      loadUsers();
+      var msg = '已删除 ' + doneN + ' 个账号';
+      if(failN) msg += '，失败 ' + failN + ' 个（' + firstErr + '）';
+      toast(msg, failN ? 'err' : 'ok', 4200);
+    };
+
+    step();
+  });
 }
 
 /* ---------------- 用户操作分发 ---------------- */
@@ -1356,6 +1404,33 @@ function userAction(act, id){
   if(act === 'pwd')    return resetPwdDialog(id, u);
   if(act === 'ban')    return setStatus(id, u, 'banned');
   if(act === 'unban')  return setStatus(id, u, 'active');
+  if(act === 'del')    return deleteUserDialog(id, u);
+}
+
+/** 删除单个用户：二次确认 + 明确告知连带后果 */
+function deleteUserDialog(id, u){
+  if(!u) return;
+  if(STATE.me && id === STATE.me.id){ toast('不能删除自己的账号', 'err'); return; }
+
+  var label = u.displayName ? (u.displayName + '（' + u.username + '）') : u.username;
+
+  confirmBox({
+    title: '删除用户',
+    html: '确定要删除 <b>' + esc(label) + '</b> 吗？',
+    detail: '他的云端数据（点歌记录、作业提交、会话）会被一并清除。',
+    warn: '不可撤销。如果只是想暂时阻止登录，请改用「禁用」。',
+    danger: true,
+    okText: '确认删除',
+  }).then(function(ok){
+    if(!ok) return;
+    api('/admin?action=delete-user', { method:'POST', body: { id: id } })
+      .then(function(j){
+        toast(j.message || '已删除', 'ok', 3600);
+        delete STATE.users.selected[id];
+        loadUsers();
+      })
+      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+  });
 }
 
 function setStatus(id, u, status){
@@ -2672,6 +2747,9 @@ function profileExport(){
  * 后端单批上限 60 条，所以这里分片串行提交。
  */
 function profileImportDialog(){
+  var parsed = [];          /* 解析出的待导入数据 */
+  var headerNote = '';
+
   openModal({
     title: 'Excel 批量导入资料',
     sub: '表头需包含：姓名 / 学号 / 政治面貌 / 准考证号 / 微信 / QQ / 手机号',
@@ -2681,38 +2759,71 @@ function profileImportDialog(){
       +   '按 <b>学号</b> 匹配已有资料（没有学号则按姓名），命中就更新、没命中就新增。'
       +   '导入的数据会连带把联系方式记为「已通过」。单次请控制在 900 条以内。'
       + '</div>'
-      + '<div class="field"><label for="pfFile">选择 Excel 文件（.xlsx / .xls）</label>'
-      + '<input id="pfFile" type="file" accept=".xlsx,.xls" style="height:auto;padding:10px 12px">'
-      + '<p class="hint">可以从上一行的「导出」拿到模板，填好再导回来。</p></div>'
+
+      /* 第一步：先给模板，再选文件 */
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'
+      +   '<button class="btn btn-sm btn-secondary" id="pfTpl">' + svg('download', 14) + '下载模板</button>'
+      +   '<label class="btn btn-sm" style="cursor:pointer">' + svg('upload', 14) + '选择 Excel 文件'
+      +     '<input type="file" id="pfFile" accept=".xlsx,.xls" style="display:none"></label>'
+      + '</div>'
+
+      /* 第二步：解析结果预览 */
+      + '<div id="pfPreview"><p class="muted" style="font-size:.85rem;margin:0">'
+      +   '建议先点「下载模板」，按模板表头填好再导回来。选好文件后这里会先预览，确认无误再导入。'
+      + '</p></div>'
       + '<div class="msg" id="pfImpMsg"></div>',
     foot: '<button class="btn btn-ghost" data-no>取消</button>'
         + '<button class="btn" data-yes disabled>开始导入</button>',
     onMount: function(box){
       var file = box.querySelector('#pfFile');
       var msg  = box.querySelector('#pfImpMsg');
+      var prev = box.querySelector('#pfPreview');
       var yes  = box.querySelector('[data-yes]');
       box.querySelector('[data-no]').onclick = closeModal;
 
-      file.onchange = function(){
-        var f = file.files[0];
-        yes.disabled = !f;
-        if(f){
-          msg.className = 'msg show';
-          msg.style.background = 'var(--info-bg)';
-          msg.style.color = 'var(--info)';
-          msg.textContent = '已选择：' + f.name + '（' + bytes(f.size) + '）';
-        }
+      var setMsg = function(kind, text){
+        msg.className = 'msg ' + kind + ' show';
+        msg.textContent = text;
       };
 
-      yes.onclick = function(){
+      /* --- 下载模板：表头 + 一行示例 + 一行说明 --- */
+      box.querySelector('#pfTpl').onclick = function(){
+        loadXLSX().then(function(XLSX){
+          if(!XLSX){ toast('模板库加载失败，请检查网络', 'err', 4200); return; }
+          var ws = XLSX.utils.json_to_sheet([
+            {
+              姓名: '张三', 学号: '250501', 政治面貌: '群众', 准考证号: '11389409',
+              微信: '', QQ: '', 手机号: '',
+            },
+            {
+              姓名: '李四（示例·老师无学号）', 学号: '', 政治面貌: '共青团员', 准考证号: '',
+              微信: 'lisi_wechat', QQ: '10001', 手机号: '13900000000',
+            },
+          ]);
+          ws['!cols'] = [
+            { wch: 22 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+            { wch: 16 }, { wch: 10 }, { wch: 14 },
+          ];
+          var wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, '资料导入');
+          XLSX.writeFile(wb, '班级资料导入模板.xlsx');
+          toast('模板已下载，填好后导回来即可', 'ok', 3600);
+        });
+      };
+
+      /* --- 选中文件 → 先解析并预览，不直接提交 --- */
+      file.onchange = function(){
         var f = file.files[0];
-        if(!f) return;
-        var btn = yes;
-        btn.disabled = true;
-        msg.className = 'msg show';
-        msg.style.background = 'var(--info-bg)';
-        msg.style.color = 'var(--info)';
-        msg.textContent = '正在解析文件…';
+        yes.disabled = true;
+        parsed = [];
+        if(!f){
+          prev.innerHTML = '<p class="muted" style="font-size:.85rem;margin:0">还没有选择文件。</p>';
+          msg.className = 'msg';
+          return;
+        }
+
+        prev.innerHTML = '<div class="loading"><div class="spinner"></div>正在解析…</div>';
+        msg.className = 'msg';
 
         var reader = new FileReader();
         reader.onload = function(ev){
@@ -2722,15 +2833,13 @@ function profileImportDialog(){
             var ws = wb.Sheets[wb.SheetNames[0]];
             rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
           }catch(err){
-            msg.className = 'msg err show';
-            msg.textContent = '解析失败：' + err.message;
-            btn.disabled = false;
+            prev.innerHTML = '<div class="alert danger">解析失败：' + esc(err.message) + '</div>';
+            setMsg('err', '解析失败：' + err.message);
             return;
           }
           if(!rows.length){
-            msg.className = 'msg err show';
-            msg.textContent = '文件里没有读到数据行';
-            btn.disabled = false;
+            prev.innerHTML = '<div class="alert danger">文件里没有读到数据行。</div>';
+            setMsg('err', '文件里没有读到数据行');
             return;
           }
 
@@ -2742,6 +2851,8 @@ function profileImportDialog(){
             }
             return '';
           };
+
+          var bad = 0;
           var list = rows.map(function(r){
             return {
               name:      pick(r, ['姓名','名字','学生姓名']),
@@ -2752,64 +2863,108 @@ function profileImportDialog(){
               qq:        pick(r, ['QQ','QQ号']),
               phone:     pick(r, ['手机号','手机','电话','手机号码'])
             };
-          }).filter(function(x){ return x.name || x.studentId; });
+          }).filter(function(x){
+            /* 姓名和学号都空的算无效行，单独计数提示 */
+            if(!x.name && !x.studentId){ bad++; return false; }
+            return true;
+          });
 
           if(!list.length){
-            msg.className = 'msg err show';
-            msg.textContent = '没有一行同时含「姓名」或「学号」，请检查表头';
-            btn.disabled = false;
+            prev.innerHTML = '<div class="alert danger">没有一行同时含「姓名」或「学号」，请检查表头是否为：'
+              + '姓名 / 学号 / 政治面貌 / 准考证号 / 微信 / QQ / 手机号</div>';
+            setMsg('err', '没有一行含「姓名」或「学号」，请检查表头');
             return;
           }
 
-          /* 分片串行提交，避免一次性压垮 Worker */
-          var CHUNK = 60;
-          var chunks = [];
-          for(var i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
+          parsed = list;
+          yes.disabled = false;
+          var hasExam  = list.filter(function(x){ return x.examNo; }).length;
+          var hasPhone = list.filter(function(x){ return x.wechat || x.qq || x.phone; }).length;
 
-          var created = 0, updated = 0, failed = 0, firstErr = '';
-          var idx = 0;
+          /* 预览前 8 行，让管理员能一眼看出列有没有对错 */
+          var head = ['姓名','学号','政治面貌','准考证号','微信','QQ','手机号'];
+          var bodyRows = list.slice(0, 8).map(function(x){
+            var cells = [x.name, x.studentId, x.politics, x.examNo, x.wechat, x.qq, x.phone];
+            return '<tr>' + cells.map(function(c, i){
+              var dash = c ? esc(c) : '<span class="muted">—</span>';
+              /* 学号/准考证号用等宽字体，便于肉眼核对数字有没有错位 */
+              return '<td' + ((i === 1 || i === 3) ? ' class="mono nowrap"' : '') + '>' + dash + '</td>';
+            }).join('') + '</tr>';
+          }).join('');
 
-          var step = function(){
-            if(idx >= chunks.length) return finish();
-            var n = idx + 1;
-            msg.textContent = '正在导入… 第 ' + n + '/' + chunks.length + ' 批（' + (idx * CHUNK) + ' / ' + list.length + ' 条）';
-            return api('/admin?action=batch-profiles', { method:'POST', body: { rows: chunks[idx] } })
-              .then(function(j){
-                created += j.created || 0;
-                updated += j.updated || 0;
-                failed  += j.failed  || 0;
-                if(!firstErr && j.errors && j.errors.length){
-                  firstErr = '第 ' + (idx * CHUNK + j.errors[0].index + 1) + ' 行：' + j.errors[0].reason;
-                }
-                idx++;
-                return step();
-              });
-          };
+          prev.innerHTML =
+            '<div class="alert ok" style="margin-bottom:12px">'
+            +   '读到 <b>' + list.length + '</b> 条有效数据'
+            +   (bad ? '，跳过 ' + bad + ' 条空行' : '')
+            +   '；其中含准考证号 <b>' + hasExam + '</b> 条、含联系方式 <b>' + hasPhone + '</b> 条。'
+            + '</div>'
+            + '<p class="muted" style="font-size:.8rem;margin:0 0 8px">'
+            +   '预览前 ' + Math.min(8, list.length) + ' 行（确认列没串位再导入）：</p>'
+            + '<div class="table-wrap" style="max-height:280px;overflow:auto"><table><thead><tr>'
+            +   head.map(function(h){ return '<th class="nowrap">' + h + '</th>'; }).join('')
+            + '</tr></thead><tbody>' + bodyRows + '</tbody></table></div>'
+            + (list.length > 8
+                ? '<p class="hint" style="margin-top:8px">仅预览前 8 行，导入时会处理全部 ' + list.length + ' 条。</p>'
+                : '');
 
-          var finish = function(){
-            var parts = ['新增 ' + created + ' 条', '更新 ' + updated + ' 条'];
-            if(failed) parts.push('失败 ' + failed + ' 条');
-            msg.className = 'msg ' + (failed ? 'warn' : 'ok') + ' show';
-            msg.textContent = '导入完成：' + parts.join('，') + (firstErr ? ('\n首个错误 ' + firstErr) : '');
-            toast('导入完成，新增 ' + created + ' 更新 ' + updated, 'ok', 4000);
-            loadProfiles();
-            btn.textContent = '再导一次';
-            btn.disabled = false;
-          };
-
-          step().catch(function(e){
-            msg.className = 'msg err show';
-            msg.textContent = '导入中断：' + e.message + '\n（已成功的批次已入库，可以修完数据再导一次，重复的会走更新）';
-            btn.disabled = false;
-            loadProfiles();
-          });
+          setMsg('info', '已选择：' + f.name + '（' + bytes(f.size) + '），确认预览无误后点「开始导入」。');
         };
         reader.onerror = function(){
-          msg.className = 'msg err show';
-          msg.textContent = '读取文件失败';
-          btn.disabled = false;
+          prev.innerHTML = '<div class="alert danger">读取文件失败。</div>';
+          setMsg('err', '读取文件失败');
         };
         reader.readAsArrayBuffer(f);
+      };
+
+      /* --- 确认导入：分片串行提交，避免一次性压垮 Worker --- */
+      yes.onclick = function(){
+        if(!parsed.length) return;
+        var list = parsed;
+        var btn = yes;
+        btn.disabled = true;
+
+        var CHUNK = 60;
+        var chunks = [];
+        for(var i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
+
+        var created = 0, updated = 0, failed = 0, firstErr = '';
+        var idx = 0;
+
+        var step = function(){
+          if(idx >= chunks.length) return finish();
+          var n = idx + 1;
+          setMsg('info', '正在导入… 第 ' + n + '/' + chunks.length + ' 批（' + (idx * CHUNK) + ' / ' + list.length + ' 条）');
+          return api('/admin?action=batch-profiles', { method:'POST', body: { rows: chunks[idx] } })
+            .then(function(j){
+              created += j.created || 0;
+              updated += j.updated || 0;
+              failed  += j.failed  || 0;
+              if(!firstErr && j.errors && j.errors.length){
+                firstErr = '第 ' + (idx * CHUNK + j.errors[0].index + 1) + ' 行：' + j.errors[0].reason;
+              }
+              idx++;
+              return step();
+            });
+        };
+
+        var finish = function(){
+          var parts = ['新增 ' + created + ' 条', '更新 ' + updated + ' 条'];
+          if(failed) parts.push('失败 ' + failed + ' 条');
+          setMsg(failed ? 'warn' : 'ok',
+            '导入完成：' + parts.join('，') + (firstErr ? ('\n首个错误 ' + firstErr) : ''));
+          toast('导入完成，新增 ' + created + ' 更新 ' + updated, 'ok', 4000);
+          loadProfiles();
+          btn.textContent = '再导一次';
+          btn.disabled = false;
+        };
+
+        step().catch(function(e){
+          setMsg('err',
+            '导入中断：' + e.message
+            + '\n（已成功的批次已入库，可以修完数据再导一次，重复的会走更新）');
+          btn.disabled = false;
+          loadProfiles();
+        });
       };
     }
   });
