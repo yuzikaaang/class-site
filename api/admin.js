@@ -635,7 +635,7 @@ async function listProfiles(req, res) {
   const st = cText(req.query.status, 16);   /* '' | none | pending | approved | rejected */
 
   const rows = await sql`
-    select p.id, p.name, p.student_id, p.politics, p.role,
+    select p.id, p.name, p.student_id, p.politics, p.exam_no, p.role,
            p.wechat, p.qq, p.phone, p.contact_status, p.reject_reason,
            p.user_id, p.created_at, p.updated_at,
            u.username as bound_username
@@ -666,6 +666,7 @@ async function listProfiles(req, res) {
       name: r.name || '',
       studentId: r.student_id || '',
       politics: r.politics || '',
+      examNo: r.exam_no || '',
       role: r.role || '学生',
       wechat: r.wechat || '',
       qq: r.qq || '',
@@ -712,6 +713,7 @@ async function profileDetail(req, res) {
       name: r.name || '',
       studentId: r.student_id || '',
       politics: r.politics || '',
+      examNo: r.exam_no || '',
       role: r.role || '学生',
       wechat: r.wechat || '',
       qq: r.qq || '',
@@ -736,7 +738,7 @@ async function profileDetail(req, res) {
 async function profileRequests(req, res) {
   const sql = getSql();
   const rows = await sql`
-    select p.id, p.name, p.student_id, p.politics, p.wechat, p.qq, p.phone,
+    select p.id, p.name, p.student_id, p.politics, p.exam_no, p.wechat, p.qq, p.phone,
            p.contact_status, p.updated_at, u.username as bound_username
       from profiles p
       left join users u on u.id = p.user_id
@@ -751,6 +753,7 @@ async function profileRequests(req, res) {
       name: r.name || '',
       studentId: r.student_id || '',
       politics: r.politics || '',
+      examNo: r.exam_no || '',
       wechat: r.wechat || '',
       qq: r.qq || '',
       phone: r.phone || '',
@@ -795,7 +798,7 @@ async function reviewContact(req, res, me, b) {
 
 /**
  * 新增或修改资料（管理员专用）。
- * body: { id?, name, studentId, politics, role, wechat?, qq?, phone?, contactStatus? }
+ * body: { id?, name, studentId, politics, examNo?, role, wechat?, qq?, phone?, contactStatus? }
  * 带 id = 修改，不带 = 新增。
  */
 async function saveProfile(req, res, me, b) {
@@ -803,6 +806,7 @@ async function saveProfile(req, res, me, b) {
   const name = cText(b.name, 30);
   const sid = cText(b.studentId, 20);
   const politics = cText(b.politics, 30);
+  const examNo = cText(b.examNo, 24);
   const role = cText(b.role, 10) || '学生';
   const wechat = cContact(b.wechat);
   const qq = cContact(b.qq);
@@ -833,6 +837,7 @@ async function saveProfile(req, res, me, b) {
          set name      = ${name || c.name},
              student_id = ${sid || c.student_id},
              politics  = ${politics || c.politics},
+             exam_no   = ${examNo || c.exam_no},
              role      = ${role || c.role},
              wechat    = ${wechat !== '' ? wechat : c.wechat},
              qq        = ${qq !== '' ? qq : c.qq},
@@ -847,8 +852,8 @@ async function saveProfile(req, res, me, b) {
 
   /* 新增 */
   const ins = await sql`
-    insert into profiles (name, student_id, politics, role, wechat, qq, phone, contact_status)
-    values (${name || null}, ${sid || null}, ${politics || null}, ${role},
+    insert into profiles (name, student_id, politics, exam_no, role, wechat, qq, phone, contact_status)
+    values (${name || null}, ${sid || null}, ${politics || null}, ${examNo || null}, ${role},
             ${wechat || null}, ${qq || null}, ${phone || null},
             ${st || (wechat || qq || phone ? 'approved' : 'none')})
     returning id
@@ -872,7 +877,7 @@ async function deleteProfile(req, res, me, b) {
 
 /**
  * 批量导入资料。
- * body: { rows: [{ name, studentId, politics, role, wechat?, qq?, phone? }, ...] }
+ * body: { rows: [{ name, studentId, politics, examNo?, role, wechat?, qq?, phone? }, ...] }
  * 按学号或姓名判断是新增还是更新（有就更新，没有就插入）。
  * 单批上限与用户批量导入保持一致（60 条），由前端分片调用。
  * 逐条返回错误与行号，方便对照 Excel 修数据。
@@ -892,6 +897,7 @@ async function batchProfiles(req, res, me, b) {
       const name = cText(raw.name, 30);
       const sid = cText(raw.studentId, 20);
       const politics = cText(raw.politics, 30);
+      const examNo = cText(raw.examNo, 24);
       const role = cText(raw.role, 10) || '学生';
       const wechat = cContact(raw.wechat);
       const qq = cContact(raw.qq);
@@ -914,6 +920,7 @@ async function batchProfiles(req, res, me, b) {
              set name = ${name || null},
                  student_id = ${sid || null},
                  politics = ${politics || null},
+                 exam_no = ${examNo || null},
                  role = ${role},
                  wechat = ${wechat || null},
                  qq = ${qq || null},
@@ -925,8 +932,8 @@ async function batchProfiles(req, res, me, b) {
         updated++;
       } else {
         await sql`
-          insert into profiles (name, student_id, politics, role, wechat, qq, phone, contact_status)
-          values (${name || null}, ${sid || null}, ${politics || null}, ${role},
+          insert into profiles (name, student_id, politics, exam_no, role, wechat, qq, phone, contact_status)
+          values (${name || null}, ${sid || null}, ${politics || null}, ${examNo || null}, ${role},
                   ${wechat || null}, ${qq || null}, ${phone || null},
                   ${(wechat || qq || phone) ? 'approved' : 'none'})
         `;
