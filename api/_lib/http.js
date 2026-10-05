@@ -10,6 +10,53 @@
 
 import { getSql, cfg } from './db.js';
 
+/* ============================================================
+   表结构自愈（全站公共）
+   ------------------------------------------------------------
+   背景：2026-10-05 上线「首次登录强制改密 + 登录记录」时新增了
+   users.must_change_password 列与 login_log 表。站主如果没在 Neon
+   执行建表脚本，任何引用新列的查询都会直接 500 —— 表现为
+   「无法登录，服务器内部问题」，且完全依赖人工记得执行 SQL。
+
+   这里做一次幂等的结构补全：缺列补列、缺表建表。Postgres 的
+   IF NOT EXISTS 语义保证重复执行无副作用，配合下面的内存标记，
+   每个进程生命周期内只真正跑一次，开销可忽略。
+
+   任何失败都只记录警告、不抛错：自愈逻辑绝不能变成新的故障点。
+   （若数据库账号没有 DDL 权限，补全失败，但老库的基本登录仍可正常。）
+   ------------------------------------------------------------ */
+let schemaReady = false;
+export async function ensureSchema(sql) {
+  if (schemaReady) return;
+  const s = sql || getSql();
+  try {
+    await s`
+      alter table users add column if not exists must_change_password
+        boolean not null default false
+    `;
+    await s`
+      create table if not exists login_log (
+        id         bigserial   primary key,
+        user_id    bigint      not null references users(id) on delete cascade,
+        ip         text,
+        user_agent text,
+        created_at timestamptz not null default now()
+      )
+    `;
+    await s`
+      create index if not exists login_log_user_idx
+        on login_log (user_id, created_at desc)
+    `;
+    await s`
+      create index if not exists login_log_time_idx
+        on login_log (created_at desc)
+    `;
+    schemaReady = true;
+  } catch (e) {
+    console.warn('[schema] 表结构自愈失败（不影响基本功能）：', e.message);
+  }
+}
+
 /** 允许的请求头 / 方法 */
 const ALLOW_HEADERS = 'Content-Type, Authorization';
 const ALLOW_METHODS = 'GET, POST, PUT, DELETE, OPTIONS';
@@ -132,6 +179,8 @@ export async function currentUser(req) {
   const token = bearer(req);
   if (!token) return null;
   const sql = getSql();
+  /* 确保 must_change_password 列存在，否则下面的 select 会整条失败 */
+  await ensureSchema(sql);
   const rows = await sql`
     select u.id, u.username, u.role, u.status, u.display_name, u.created_at,
            coalesce(u.must_change_password, false) as must_change_password,
