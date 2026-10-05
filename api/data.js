@@ -12,7 +12,7 @@
 
 import { getSql } from './_lib/db.js';
 import {
-  cors, handlePreflight, ok, fail, body, requireUser, audit,
+  cors, handlePreflight, ok, fail, body, requireUser, requireUserReady, audit,
 } from './_lib/http.js';
 
 /* 允许云同步的键白名单。新增同步项时在这里加一行即可。
@@ -72,7 +72,7 @@ export default async function handler(req, res) {
     }
   }
 
-  const u = await requireUser(req, res);
+  const u = await requireUserReady(req, res, 'data');
   if (!u) return;
 
   try {
