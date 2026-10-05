@@ -134,6 +134,7 @@ export async function currentUser(req) {
   const sql = getSql();
   const rows = await sql`
     select u.id, u.username, u.role, u.status, u.display_name, u.created_at,
+           coalesce(u.must_change_password, false) as must_change_password,
            s.expires_at
       from sessions s
       join users u on u.id = s.user_id
@@ -150,6 +151,7 @@ export async function currentUser(req) {
     role: u.role,
     displayName: u.display_name,
     createdAt: u.created_at,
+    mustChangePassword: !!u.must_change_password,
   };
 }
 
@@ -169,6 +171,27 @@ export async function requireAdmin(req, res) {
   if (!u) return null;
   if (u.role !== 'admin') {
     fail(res, 403, '需要管理员权限');
+    return null;
+  }
+  return u;
+}
+
+/**
+ * 要求「已完成首次改密」的用户。
+ *
+ * 首次登录被强制改密时，前端会弹一个不可关闭的弹窗；但光靠前端不够——
+ * 有人可以拿 token 直接调接口绕过。所以后端这里再拦一道：
+ * must_change_password = true 的用户，除 /auth?action=me|change-password|logout
+ * 之外的接口一律 403 拒绝。
+ *
+ * @param {string} allowAction 当前 action 名，命中白名单则放行
+ */
+export async function requireUserReady(req, res, allowAction) {
+  const ALLOW = ['me', 'change-password', 'logout'];
+  const u = await requireUser(req, res);
+  if (!u) return null;
+  if (u.mustChangePassword && !ALLOW.includes(String(allowAction || '').toLowerCase())) {
+    fail(res, 403, '首次登录请先修改初始密码', { mustChangePassword: true });
     return null;
   }
   return u;
