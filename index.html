@@ -269,6 +269,44 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .copy-btn{display:block;width:100%;margin:6px 0;padding:11px 14px;border-radius:12px;background:#f6f1ec;color:#af410f;border:none;cursor:pointer;font-size:.9rem;font-weight:600;text-align:left;box-sizing:border-box}
 .copy-btn:hover{background:#ede3d9}
 .contact-badges{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+/* ============================================================
+   资料查询结果卡片（2026-10-05 后端化改造时新增）
+   配色沿用本站暖阳橙双轨：正文用中性色保证对比度，
+   强调用 --accent-ink；亮暗两套都覆盖。
+   ============================================================ */
+.pc-list{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.pc-card{background:#fff;border:1px solid #ece4dc;border-radius:14px;padding:12px 13px}
+.dark .pc-card{background:#221f1d;border-color:#3a332e}
+.pc-head{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:9px}
+.pc-name{font-weight:800;font-size:.98rem;color:#292524;margin-right:2px}
+.dark .pc-name{color:#e4d8cb}
+.pc-contact{display:flex;flex-direction:column;gap:6px}
+.pc-row{display:flex;align-items:center;gap:8px;background:#f6f1ec;border-radius:10px;padding:7px 10px}
+.dark .pc-row{background:#2e2926}
+.pc-key{flex:none;font-size:.78rem;font-weight:700;color:#6e635a;min-width:34px}
+.pc-val{flex:1;min-width:0;font-size:.9rem;color:#292524;word-break:break-all;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.dark .pc-val{color:#e4d8cb}
+.pc-copy{flex:none;border:none;background:#af410f;color:#fff;border-radius:8px;
+  font-size:.76rem;font-weight:700;padding:5px 10px;cursor:pointer}
+.pc-copy:hover{background:#9a3412}
+.pc-copy:active{transform:scale(.97)}
+.pc-pending{display:inline-block;font-size:.82rem;color:#6e635a;background:#f6f1ec;
+  border-radius:999px;padding:5px 11px}
+.dark .pc-pending{color:#a8a29e;background:#2e2926}
+/* 本人资料的就地编辑区：用左侧色条和卡片区分开，避免和「查看」混淆 */
+.pc-edit{margin-top:11px;padding-top:11px;border-top:1px dashed #e4ddd6}
+.dark .pc-edit{border-top-color:#453d37}
+.pc-edit-title{font-size:.82rem;font-weight:700;color:#af410f;margin-bottom:8px}
+.dark .pc-edit-title{color:#fbbf24}
+.pc-edit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:7px}
+.pc-inp{height:40px;width:100%;border:1px solid #e4ddd6;border-radius:10px;background:#fff;
+  padding:0 11px;font-size:.88rem;color:#292524;outline:none;box-sizing:border-box}
+.pc-inp:focus{border-color:#9a3412}
+.dark .pc-inp{background:#1a1715;border-color:#453d37;color:#e4d8cb}
+.pc-edit-actions{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-top:9px}
+.pc-edit-tip{font-size:.76rem;color:#6e635a;flex:1;min-width:150px;line-height:1.5}
+.dark .pc-edit-tip{color:#a8a29e}
 .licon{display:inline-block;flex:none;vertical-align:-2px}
 .lic-fb{display:inline-block;background:currentColor;opacity:.35;border-radius:3px}
 .hw-badge .licon,.badge .licon{vertical-align:-1px}
@@ -2131,10 +2169,12 @@ document.addEventListener('click',function(e){
 },true);
 /* =====================================================
    前端安全工具：SHA-256 哈希 + XOR/Base64 混淆
-   答案、联系人姓名以哈希对比；联系方式密文解密显示
+   用途：门禁答案比对、点歌平台密钥解混淆
+   ⚠️ 注意：XOR 是「混淆」不是「加密」——密钥就在本文件里，认真翻源码可以还原。
+      因此**绝不能**用它保护真实隐私数据（联系方式已在 2026-10-05 迁到后端数据库）。
    ===================================================== */
 var GATE_SALT = 'cls2505-gate-salt';
-var CONTACT_SALT = 'cls2505-contact-salt';
+/* CONTACT_SALT 已随通讯录数据一起移除（2026-10-05），不要再加回来 */
 var XOR_KEY = 'cls2505-xor-key-2026';
 function sha256Raw(latin1){
   var rightRotate=function(v,amt){ return (v>>>amt)|(v<<(32-amt)); };
@@ -2453,72 +2493,10 @@ var SITE_DATA = {
     bannerText: "🎉 ClassIsland 三周年纪念 · 点击看官方纪念短片",
     everyTime: true
   },
-  /* ── 联系方式名单（name=哈希，其余为密文，查询时解密）── */
-  contacts: [
-    { name: "6edf6fc48db2cecbe826594996f606fb1f99f32a96944c311a4b437a4267b004", studentId: "UVlDBwUB", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "338a66cc44808e94fae8f8f23ec355d4bd1118e1e089b0219c1e295330e6f5a3", studentId: "UVlDBwUC", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "b3e8a4374d79896ce4ea5515a1f04a2ab9739c93ce0de00de65c3fe745c469f1", studentId: "UVlDBwUD", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "cc72fe4139c1594048c067a36054e1bc19ec61f2d81a6a28ad1e8b78b7534bc3", studentId: "UVlDBwUE", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "53aeba31817d0b9045cd742c55229201d7b39e10aedc744706c405dfe1f5c334", studentId: "UVlDBwUF", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "253007e4caa94fe764acab32fbe18efb5c2b5fff0b5f1502f4a75a038be23e0e", studentId: "UVlDBwUG", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "1dbacc13f59db223dee613ce8da9e3a518f6ef934d735ac002f2c71930e9410c", studentId: "UVlDBwUH", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "4d43235c5a4fc8407a52ee851ac8535043df6462ca0fab5b7afab0f7af423c3c", studentId: "UVlDBwUI", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "05e5841799618ba25aa49522ee28ec572d197c0f98c9bd26eefcf3ed708e8bca", studentId: "UVlDBwUJ", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "a34c850cb97c91d43eae4856748fd6737531a9600b1e1b63ad2362385fe726aa", studentId: "UVlDBwQA", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "31f53f857eb435a21729b01496b15c4dc118ec93c2add27ba4e36527e0343522", studentId: "UVlDBwQB", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "8735829c7abf4d3f837cac0cb0de598102bf01803b5e9b7fca75573e59c11572", studentId: "UVlDBwQC", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "19106232d19044c50a91b7d10af158a6ce8e400964e9e736413974268ee2ea93", studentId: "UVlDBwQD", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "7a5152e33f5d575f537c8d8069bbec1b4614f6cb93cf47492fe2ba36f83e0d48", studentId: "UVlDBwQE", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "ce7d97fec9786c0afbf62e54265ac4c89f7b1fdd291bfaee32a0e2ee3125a93b", studentId: "UVlDBwQF", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "77ee4fb9ce71c4aef73923c127aa247519ee3b336e3b9d8478cb20759b7e88f8", studentId: "UVlDBwQG", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "d787e4b8ccdd6418ae9712b9a174d8cd9b2aa06812972ca95798bc98840cf65e", studentId: "UVlDBwQH", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "592a6bc0219ff44ba852b8fbc1a54e75bdbdabd31882d42abe30ab1993f1685e", studentId: "UVlDBwQI", role: "hMLS1aW20Lzg", politics: "hunC26ii0LbaiuO1S6fODderkND3w5eLkw==" },
-    { name: "47fa22025171fcc48a86fce9505e6fd887bbc451199faa036a411260965bd156", studentId: "UVlDBwQJ", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "103cbbfc30f608cf0d050eec932be5091795daa59054e5ee4d139ae016ec5a00", studentId: "UVlDBwcA", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "0438ef5d9f5a67013379d5658de687f8654e12a2164e21ab5ba61a5c2ddd1ad9", studentId: "UVlDBwcB", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "a37fb9acbff3a5d24dd0ca3105e0136c9b9c74da16c80cbb8ee185930d4a38c6", studentId: "UVlDBwcC", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "163a8e443ba1dd3a581c69bcfc600499ef3ed84420aa3d145d52e9535a0a2c11", studentId: "UVlDBwcD", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "abefa25aabcb67678fcc14befe7c23176fe5311c5d64d1c0feffb3d86677fae5", studentId: "UVlDBwcE", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "f4d4d76e8dccea25e4c5734625662dae88ddf732444d6b43e8e9332abd13bbd7", studentId: "UVlDBwcF", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "c9b354223547e5c56a60647ce3cbd59a1445f0f2f77e62a4a3a7fa2ac4d90829", studentId: "UVlDBwcG", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "9abce2917d1575c2b7baff8ea2d46b73ad621d2c33cb7d5adbd6604f5d91d861", studentId: "UVlDBwcH", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "fab9ca917a9631d034637da2ee7a4194dd587f07dd3f1799fddc39c3662e2afe", studentId: "UVlDBwcI", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "d0c645065f1a6393d84b5d8badf03d71e47a9774aa08db880edd2d4e91280480", studentId: "UVlDBwcJ", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "074cb34db36f904cb51bbb4692dcff4eb4edaa017044c885b22060956e76a7a6", studentId: "UVlDBwYA", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "aef402888d32e4be5a387deedbe52e8e96ac89f8d45f5f1e32202a1d7504903f", studentId: "UVlDBwYB", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "f188e0221f799a76dfb4b9fbbcb40351981f074e89f2494f65cfa3a711ef31be", studentId: "UVlDBwYC", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "baa39eb61639b988b6cc6ae630b1dabe1e7e1134ac2ec7b8507cf7b1441d5ec2", studentId: "UVlDBwYD", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "130bd3a6c1d31f5bdd1d1e9b15932f038c43b10e97bca97bb28a99a7d9ee4cf1", studentId: "UVlDBwYE", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "805100b3f9cbeb454b3cf0365a501bd1702f32ee6e62f59ee0272c5ac6d6dfa7", studentId: "UVlDBwYF", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "c8008d219325679dddbe70d5a65d2ea8e9b9614a9aab0590c3edb1f6a6bb84b0", studentId: "UVlDBwYG", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "d6c898b609f08ee086e1d40674b4b7df43f18767c68203613043317bff33462e", studentId: "UVlDBwYH", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "08095bac5639a83842bb220f2a5543d6759483c6d9c254806f5ae11816de60ba", studentId: "UVlDBwYI", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "de55cab513a67fd49b5e3328127932d7452ee8cd692791dae13d92d1c886b4a6", studentId: "UVlDBwYJ", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "641fb904f5a45e8796766af7288ea05757ae494719e18199ff467cfe4ff630dd", studentId: "UVlDBwEA", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "aa62fed579d48b78bb7423542c70b14e7c467d3bde6316c165e009afb76d1a8f", studentId: "UVlDBwEB", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "adc7a8894cc54facf18b7bec45127a4ebaa578eac672ecd7acba0a3aca1e11e2", studentId: "UVlDBwEC", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "69e5771d48f7e4ac8cb44d03831f6339e692afc4c1f2dbdbb49ae7be8236da5e", studentId: "UVlDBwED", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "25b1be539510316be9396879a177605296319d76548f6a71c21059a22aac6bca", studentId: "UVlDBwEE", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "081b046904293a739e10294c453c9d9474d93ecc8b9ce6468818a80bdd746ad6", studentId: "UVlDBwEF", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "eb50343bceb91db7c9fe8287c3dd04713a41d4788e7a4df02a30c7e941ac91fa", studentId: "UVlDBwEG", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "2b7c3edf81913935d760ca09824064acf8f138352e1bf1f7b315e3802396ac70", studentId: "UVlDBwEH", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "5ccdaa717a2dd3672fa66c1681a4384413dc18a15647d0b423f7ca99efc081da", studentId: "UVlDBwEI", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "7e64be7e4c8bb53d115cd502684f18e821f7cedb8b5220727678d7a7135cf35e", studentId: "UVlDBwEJ", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "f331461ef257250b14174bd6cf695b5fa8e386bba2ecf59b1785de10aa9f20b9", studentId: "UVlDBwAA", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "64e30ead116c6bbabf31156a4d2781a1fae62e37ce23f2d11ae9df67fb2aa5bb", studentId: "UVlDBwAB", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "db12712ba46cb88d0bf6bef56d22d8a44770d6f522e129d111c43fa6ecd17f8d", studentId: "UVlDBwAC", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "4dc4bdc87a96b1f945f8a1b57653829999b6ee2ef2e0791949b12a0afc5a36a3", studentId: "UVlDBwAD", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "b214e7e1b4b19e5a7fcee920c58798f32a28386f938fa4c88561acc9da3c629a", studentId: "UVlDBwAE", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "9816eb6ae59e1963e01c0d19ede28f3d34d6e53e817dbf097a80449cd31b0887", studentId: "UVlDBwAF", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "bdc94bceb46e48a5e75d5f6d326fd6889431c93bed024a7bdf613b6e6ef750a4", studentId: "UVlDBwAG", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "b78a6b3376a2257102abcc3a5c22f02a6e8786279f5478fffb211f5647717e12", studentId: "UVlDBwAH", role: "hsHV1aGv", politics: "hfXd27Wq0IDeiOay" },
-    { name: "532dee1f87fc7dab143c3f8465c1e0326946c479c027e67e913ed62283b72c06", studentId: "UVlDBwAI", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "597de027095c241d792c7dbfed025f826fe1619ffb38f679727209f750eeda34", studentId: "UVlDBwAJ", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "7a331538b75959bc2523bf63d9f024da20440035c4404fc137397a7eb840ddf1", studentId: "UVlDBwMA", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "d7a45c427ccb4592fccf36b876a8a704b5b5bfbb3c21df564fb2aebc3e5e64e8", studentId: "UVlDBwMB", role: "hsHV1aGv", politics: "hunC26ii0LbaiuO1" },
-    { name: "6a90186918c176b91d1e2209c4e303c4b8575dc82031f368d194a66aaf00c850", role: "i+zy1424", politics: "h9Te17CB0KjiiuO1" },
-  ],
-  /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
+  /* 通讯录数据已于 2026-10-05 全部迁到后端数据库（api/profile.js + profiles 表）。
+     此处原先存放姓名哈希与 XOR 密文，但密钥就在同一份 JS 里，等于公开，
+     已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
+/* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
     { date: "2026-09-30 15:56", text: "🎉 国庆假期作业已发布", category: "activity" },
     { date: "2026-09-29 23:02", text: "📅 第一次段考时间已公布：10月13日—14日。\n各科考试范围可在「重要日期倒计时」→「查看全部」→「查看考试范围」中查看。", category: "activity" },
@@ -3980,12 +3958,27 @@ function render(){
             '</div>';
         }
         if(l.contactQuery){
-          /* 个人资料查询：无需门禁，直接输入姓名查询（用户要求「任何人输姓名就能查」） */
-          contentHtml += '<div class="gate-box"><p class="gate-q">📇 输入姓名查询资料</p>'+
-            '<div class="gate-row"><input id="contact-input-'+l.id+'" type="text" placeholder="请输入姓名" class="gate-input" onkeydown="if(event.key===\'Enter\')findContact('+l.id+')">'+
-            '<button class="btn gate-btn" onclick="findContact('+l.id+')">查询</button></div>'+
-            '<p id="contact-out-'+l.id+'" class="gate-hint" style="color:#6e635a;font-weight:400"></p>'+
-            '</div>';
+          /* 个人资料查询（2026-10-05 改版）
+             ------------------------------------------------------------
+             ⚠️ 这次改版的根本原因：旧方案把姓名哈希 + XOR 密文放在前端 JS 里，
+             而密钥就在同一份 JS 中，等于公开（公开仓库 + 公开站点）。
+             现在数据全部搬到后端数据库，本页只做「展示 + 转发查询」，
+             源码里不再有任何通讯录数据。
+
+             必须登录：未登录只显示登录引导，不给任何资料。
+             查询行为会记录到后端（谁在什么时候查了谁），管理员可查。 */
+          if(!isLoggedIn()){
+            contentHtml += '<div class="gate-box"><p class="gate-q">🔐 请先登录后查询资料</p>'+
+              '<p class="gate-hint" style="color:#6e635a;font-weight:400;margin:6px 0 10px">为保护同学隐私，资料查询需要登录。登录后可查询姓名或学号，并查看是否需要补充自己的联系方式。</p>'+
+              '<div class="gate-row"><button class="btn gate-btn" onclick="openAccount(\'login\')">去登录</button></div>'+
+              '</div>';
+          }else{
+            contentHtml += '<div class="gate-box"><p class="gate-q">📇 输入姓名或学号查询资料</p>'+
+              '<div class="gate-row"><input id="contact-input-'+l.id+'" type="text" placeholder="请输入姓名或学号" class="gate-input" onkeydown="if(event.key===\'Enter\')findContact('+l.id+')">'+
+              '<button class="btn gate-btn" onclick="findContact('+l.id+')">查询</button></div>'+
+              '<p id="contact-out-'+l.id+'" class="gate-hint" style="color:#6e635a;font-weight:400"></p>'+
+              '</div>';
+          }
         }
         contentHtml += (l.cardTip ? '<p class="card-hw-tip" style="font-size:.78rem;color:#af410f;margin-top:6px;line-height:1.6">'+esc(l.cardTip)+'</p>' : '');
         contentHtml += '</div>';
@@ -4915,6 +4908,8 @@ function doLogin(){
       refreshAcctBtn();
       acctBusy(false);
       acctMsg('登录成功，正在读取云端数据…', 'ok');
+      /* 拉一次「我认领的资料」，供资料查询页判断哪条是本人（可就地编辑联系方式） */
+      if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
       /* 登录后自动拉一次云端数据（有则询问是否覆盖本机） */
       syncPull(true).then(function(){
         renderAccount();
@@ -4935,6 +4930,8 @@ function doLogout(){
       saveAuth();
       refreshAcctBtn();
       ACCT_TAB = 'login';
+      /* 清掉资料页缓存：退出后不该再知道「哪条是我自己」 */
+      if(typeof PC_MY_PROFILE_ID !== 'undefined') PC_MY_PROFILE_ID = null;
       renderAccount();
       if(typeof uiMsg === 'function') uiMsg('已退出登录');
     });
@@ -5394,6 +5391,8 @@ function loadAdminAudit(){
       saveAuth();
       refreshAcctBtn();
       window.__cloudKeyCount = (j.cloudKeys || []).length;
+      /* 顺便拉「我认领的资料」，让资料查询页立刻知道哪条是本人 */
+      if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
     }).catch(function(){ /* 401 已在 api() 里处理 */ });
   }
 })();
@@ -6651,65 +6650,195 @@ function copyText(val, label){
     navigator.clipboard.writeText(val).then(function(){ alert(label+'已复制：'+val); }, function(){ alert(val); });
   }else{ alert(val); }
 }
+/* ============================================================
+   个人资料查询（2026-10-05 后端化改造）
+   ------------------------------------------------------------
+   与旧实现的关键区别：
+     · 数据源从「前端 SITE_DATA.contacts 密文数组」改为后端 /api/profile
+       旧方案把 XOR 密文与密钥放在同一份 JS 里，等于公开，必须废弃。
+     · 查询必须登录；未登录在渲染层就已经拦住了，这里再兜一次底。
+     · 每次查询由后端记录「谁在什么时候查了谁」，管理员可查。
+     · 查到本人时，结果里直接带出「补充联系方式」的编辑区（就地编辑）。
+   ============================================================ */
+
+/** 当前查询结果缓存，供评论区 / 编辑区复用，避免重复请求 */
+var PC_RESULTS = {};
+
 function findContact(id){
   var l = findLink(id);
   if(!l) return;
   var input = document.getElementById('contact-input-'+id);
   var out = document.getElementById('contact-out-'+id);
   if(!out) return;
-  var name = (input ? input.value : '').trim();
-  out.innerHTML = '';
-  out.style.color = '';
-  if(!name){ out.textContent = '请输入姓名'; out.style.color = '#af410f'; return; }
-  var nameHash = hashSecret(name, CONTACT_SALT);
-  if(!nameHash || typeof nameHash.then === 'function'){
-    // 异步 SHA-256：等待完成后再查
-    nameHash.then(function(h){
-      findContactDo(h, out);
-    });
+
+  var q = (input ? input.value : '').trim();
+
+  /* 未登录兜底：正常情况下卡片已经是登录引导，这里防直接调函数绕过 */
+  if(!isLoggedIn()){
+    out.innerHTML = '<span style="color:#af410f">请先登录后再查询</span>';
     return;
   }
-  findContactDo(nameHash, out);
+  if(!q){ out.innerHTML = '<span style="color:#af410f">请输入姓名或学号</span>'; return; }
+
+  out.innerHTML = '<span style="color:#6e635a">查询中…</span>';
+
+  api('/profile?action=search&q=' + encodeURIComponent(q)).then(function(j){
+    if(!j || !j.ok){
+      out.innerHTML = '<span style="color:#af410f">' + esc((j && j.error) || '查询失败') + '</span>';
+      return;
+    }
+    PC_RESULTS[String(id)] = j.results || [];
+    renderContactResults(id, out, j);
+  }).catch(function(e){
+    out.innerHTML = '<span style="color:#af410f">' + esc(e && e.message ? e.message : '网络异常，请稍后再试') + '</span>';
+  });
 }
-function findContactDo(nameHash, out){
-  if(!nameHash){ out.textContent = '当前环境不支持验证'; out.style.color = '#af410f'; return; }
-  var cs = SITE_DATA.contacts || [];
-  var hit = null;
-  for(var i=0;i<cs.length;i++){ if(cs[i].name === nameHash){ hit = cs[i]; break; } }
-  if(!hit){ out.textContent = '暂未找到该姓名的联系方式'; out.style.color = '#af410f'; return; }
-  var sid = hit.studentId ? xorDecrypt(hit.studentId) : '';
-  var role = hit.role ? xorDecrypt(hit.role) : '';
-  var pol = hit.politics ? xorDecrypt(hit.politics) : '';
-  if(sid || role || pol){
-    var badges = document.createElement('div');
-    badges.className = 'contact-badges';
-    if(sid){
-      var s = document.createElement('span');
-      s.className = 'badge badge-blue';
-      s.textContent = '学号 ' + sid;
-      badges.appendChild(s);
-    }
-    if(role){
-      var r = document.createElement('span');
-      r.className = role === '老师' ? 'badge badge-orange' : (role === '管理员' ? 'badge badge-green' : 'badge badge-blue');
-      r.textContent = role;
-      badges.appendChild(r);
-    }
-    if(pol){
-      var pl = document.createElement('span');
-      /* 政治面貌配色：中共党员=红、共青团员（含「共青团员 · 团支书」）=青绿、普通学生=灰
-         用 indexOf 匹配，确保带职务后缀的「共青团员 · 团支书」也归为青绿 */
-      pl.className = pol.indexOf('中共党员') >= 0 ? 'badge badge-red'
-                   : (pol.indexOf('共青团员') >= 0 ? 'badge badge-teal' : 'badge badge-gray');
-      pl.textContent = pol;
-      badges.appendChild(pl);
-    }
-    out.appendChild(badges);
+
+/** 把后端返回的结果渲染成卡片列表 */
+function renderContactResults(id, out, j){
+  var list = j.results || [];
+  out.innerHTML = '';
+  out.style.color = '';
+
+  if(!list.length){
+    out.innerHTML = '<span style="color:#af410f">'+(j.message ? esc(j.message) : '未找到匹配的资料')+
+      '<br><span style="font-size:.82em;color:#6e635a">提示：可以试试学号后几位，或确认姓名是否写全。</span></span>';
+    return;
   }
-  /* 联系方式（微信 / 电话 / QQ / 智学网准考证）已于 2026-09-30 从前端彻底移除。
-     原因：这些字段此前用 XOR 混淆存放，而密钥就在同一份 JS 里，任何人都能还原，
-     公开仓库 + 公开站点等于明文泄露。前端页面无论怎么「加密」都藏不住，故直接删除。
-     同学需要联系老师请当面或经班主任转达。 */}
+
+  var wrap = document.createElement('div');
+  wrap.className = 'pc-list';
+
+  list.forEach(function(p){
+    var card = document.createElement('div');
+    card.className = 'pc-card';
+
+    /* ---- 姓名 + 身份徽章 ---- */
+    var head = document.createElement('div');
+    head.className = 'pc-head';
+    var nm = document.createElement('span');
+    nm.className = 'pc-name';
+    nm.textContent = p.name || '(未录入姓名)';
+    head.appendChild(nm);
+    if(p.studentId){
+      var s1 = document.createElement('span');
+      s1.className = 'badge badge-blue';
+      s1.textContent = '学号 ' + p.studentId;
+      head.appendChild(s1);
+    }
+    if(p.role){
+      var r1 = document.createElement('span');
+      r1.className = p.role === '老师' ? 'badge badge-orange'
+                    : (p.role === '管理员' ? 'badge badge-green' : 'badge badge-blue');
+      r1.textContent = p.role;
+      head.appendChild(r1);
+    }
+    if(p.politics){
+      var pl = document.createElement('span');
+      /* 政治面貌配色沿用原设计：中共党员=红、共青团员=青绿、其他=灰。
+         用 indexOf 而非全等，确保「共青团员 · 团支书」也归入青绿。 */
+      pl.className = p.politics.indexOf('中共党员') >= 0 ? 'badge badge-red'
+                   : (p.politics.indexOf('共青团员') >= 0 ? 'badge badge-teal' : 'badge badge-gray');
+      pl.textContent = p.politics;
+      head.appendChild(pl);
+    }
+    card.appendChild(head);
+
+    /* ---- 联系方式区 ---- */
+    var ct = document.createElement('div');
+    ct.className = 'pc-contact';
+
+    if(p.contactVisible && (p.wechat || p.qq || p.phone)){
+      /* 已审核通过（或本人自己看）→ 展示可复制 */
+      [['微信', p.wechat], ['QQ', p.qq], ['手机', p.phone]].forEach(function(pair){
+        if(!pair[1]) return;
+        var row = document.createElement('div');
+        row.className = 'pc-row';
+        var k = document.createElement('span');
+        k.className = 'pc-key';
+        k.textContent = pair[0];
+        var v = document.createElement('span');
+        v.className = 'pc-val';
+        v.textContent = pair[1];
+        var b = document.createElement('button');
+        b.className = 'pc-copy';
+        b.type = 'button';
+        b.textContent = '复制';
+        b.onclick = function(){ copyText(pair[1], pair[0]); };
+        row.appendChild(k); row.appendChild(v); row.appendChild(b);
+        ct.appendChild(row);
+      });
+    }else if(p.contactStatus === 'pending'){
+      ct.innerHTML = '<span class="pc-pending">⏳ 联系方式已提交，等待管理员核实后展示</span>';
+    }else if(p.contactStatus === 'rejected'){
+      ct.innerHTML = '<span class="pc-pending">⚠️ 联系方式未通过核实，暂不展示</span>';
+    }else{
+      ct.innerHTML = '<span class="pc-pending">该同学还没有填写联系方式</span>';
+    }
+    card.appendChild(ct);
+
+    /* ---- 本人的话，就地给出补充 / 修改入口 ---- */
+    if(p.id && PC_MY_PROFILE_ID && Number(PC_MY_PROFILE_ID) === Number(p.id)){
+      var edit = document.createElement('div');
+      edit.className = 'pc-edit';
+      edit.innerHTML =
+        '<div class="pc-edit-title">✏️ 这是你自己的资料，可填写或修改联系方式</div>' +
+        '<div class="pc-edit-grid">' +
+          '<input class="pc-inp" id="pc-wx-'+id+'" type="text" placeholder="微信号" value="'+esc(p.wechat || '')+'">' +
+          '<input class="pc-inp" id="pc-qq-'+id+'" type="text" placeholder="QQ 号" value="'+esc(p.qq || '')+'">' +
+          '<input class="pc-inp" id="pc-ph-'+id+'" type="text" placeholder="手机号" value="'+esc(p.phone || '')+'">' +
+        '</div>' +
+        '<div class="pc-edit-actions">' +
+          '<button class="btn gate-btn" type="button" onclick="pcSubmitContact('+id+')">提交核实</button>' +
+          '<span class="pc-edit-tip" id="pc-tip-'+id+'">提交后需管理员核实通过，才会对同学展示</span>' +
+        '</div>';
+      card.appendChild(edit);
+    }
+
+    wrap.appendChild(card);
+  });
+
+  out.appendChild(wrap);
+}
+
+/** 提交自己的联系方式（进待审） */
+function pcSubmitContact(id){
+  var tip = document.getElementById('pc-tip-'+id);
+  var wx = (document.getElementById('pc-wx-'+id) || {}).value || '';
+  var qq = (document.getElementById('pc-qq-'+id) || {}).value || '';
+  var ph = (document.getElementById('pc-ph-'+id) || {}).value || '';
+  wx = wx.trim(); qq = qq.trim(); ph = ph.trim();
+
+  if(!wx && !qq && !ph){
+    if(tip){ tip.textContent = '请至少填写一项联系方式'; tip.style.color = '#af410f'; }
+    return;
+  }
+  if(tip){ tip.textContent = '提交中…'; tip.style.color = '#6e635a'; }
+
+  api('/profile?action=submit', {
+    method:'POST',
+    body: { wechat: wx, qq: qq, phone: ph }
+  }).then(function(j){
+    if(j && j.ok){
+      if(tip){ tip.textContent = '✅ ' + (j.message || '已提交，等待核实'); tip.style.color = '#0f7b4f'; }
+      /* 重新查一次，让状态立刻变为「待核实」 */
+      setTimeout(function(){ findContact(id); }, 800);
+    }else{
+      if(tip){ tip.textContent = '❌ ' + ((j && j.error) || '提交失败'); tip.style.color = '#af410f'; }
+    }
+  }).catch(function(e){
+    if(tip){ tip.textContent = '❌ ' + (e && e.message ? e.message : '网络异常'); tip.style.color = '#af410f'; }
+  });
+}
+
+/** 拉取「我认领的资料」信息，缓存到 PC_MY_PROFILE_ID，供结果页判断是否本人 */
+var PC_MY_PROFILE_ID = null;
+function pcLoadMyProfile(){
+  if(!isLoggedIn()) { PC_MY_PROFILE_ID = null; return; }
+  api('/profile?action=me').then(function(j){
+    if(j && j.ok && j.profile) PC_MY_PROFILE_ID = j.profile.id;
+  }).catch(function(){ /* 静默失败，不影响查询 */ });
+}
 
 /* ---- 首次打开欢迎弹窗 ---- */
 function showWelcome(){
