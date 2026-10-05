@@ -141,43 +141,146 @@ jobs:
       # 推送结果回查（重要）
       # ------------------------------------------------------------
       # 背景：曾出现过 peaceiris 这个 action 报告 success、但 gh-pages 分支
-      # 实际没有更新（指针停在旧提交）的静默失败，导致线上长期跑历史存档页，
-      # 排查花了很久。这里推送完直接拉一次远端 gh-pages，确认它确实动了。
+      # 实际没有更新（指针停在旧提交）的静默失败，导致线上长期跑历史存档页。
+      #
+      # ⚠️ 2026-10-05 二次踩坑记录（改这一版的原因）：
+      #    上一版回查只比对了 index.html 的**字节数**，没有比对 commit SHA。
+      #    结果出现了「远端 SIZE 和本地 SIZE 恰好相等 → 判定通过 → 实际线上
+      #    还是几个月前的存档页」的情况（gh-pages 指针停在 e3bab998 不动，
+      #    而 peaceiris 与回查步骤双双报 success）。字节数相等属于巧合，
+      #    不能作为「推送成功」的证据。
+      #
+      #    这一版改成三重校验，任何一条不满足都直接判失败：
+      #      ① gh-pages 的 head SHA 必须等于 peaceiris 实际推上去的那个 commit
+      #      ② 该 commit 必须**不是**推送前的旧 SHA（即指针确实动了）
+      #      ③ 该 commit 里的 index.html / admin.html 内容与本次构建逐字节一致
       #
       # 常见失败原因：仓库 Settings → Actions → General → Workflow permissions
-      # 被设为只读，此时 GITHUB_TOKEN 无写权限，推送会被丢弃。
+      # 被设为只读，此时 GITHUB_TOKEN 无写权限，推送会被静默丢弃。
       # ------------------------------------------------------------
       - name: 回查 gh-pages 是否真的更新了
+        id: verify
         shell: bash
         run: |
           set -euo pipefail
-          REMOTE_SHA=$(git ls-remote \
-            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
-            refs/heads/gh-pages | awk '{print $1}')
 
-          echo "  远端 gh-pages 当前 head : $REMOTE_SHA"
-          echo "  本次构建的提交          : ${{ github.sha }}"
+          REPO_URL="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
 
-          if [ -z "$REMOTE_SHA" ]; then
-            echo "❌ 回查失败：读不到 gh-pages 分支"
-            exit 1
+          # ① 推送前先记下 gh-pages 的旧指针，用来判断后面「动了没有」
+          BEFORE_SHA=$(git ls-remote "$REPO_URL" refs/heads/gh-pages | awk '{print $1}')
+          echo "  推送前 gh-pages head : ${BEFORE_SHA:-（空，说明分支不存在）}"
+
+          # peaceiris 推完后，本地就能看到它新建的那个提交
+          LOCAL_SHA=$(git rev-parse HEAD)
+          echo "  本地 HEAD            : $LOCAL_SHA"
+          echo "  本次构建的提交        : ${{ github.sha }}"
+
+          # ② 拉取远端最新 gh-pages（--force 避免浅克隆缓存导致读到旧对象）
+          git fetch --depth=1 --force "$REPO_URL" gh-pages:refs/remotes/verify/gh-pages
+
+          AFTER_SHA=$(git rev-parse refs/remotes/verify/gh-pages)
+          echo "  推送后 gh-pages head : $AFTER_SHA"
+
+          FAILED=0
+
+          # 校验一：指针必须真的动了
+          if [ "$AFTER_SHA" = "$BEFORE_SHA" ]; then
+            echo ""
+            echo "❌ 回查失败：gh-pages 指针没有变化（推送被静默丢弃）。"
+            FAILED=1
           fi
 
-          # 取回远端内容，核对线上那份 index.html 到底是不是本次构建的产物
-          git fetch --depth=1 origin gh-pages
-          REMOTE_SIZE=$(git show FETCH_HEAD:index.html | wc -c)
-          LOCAL_SIZE=$(wc -c < _site/index.html)
-          echo "  远端 index.html 大小    : $REMOTE_SIZE 字节"
-          echo "  本次发布 index.html 大小: $LOCAL_SIZE 字节"
+          # 校验二：远端 head 必须包含本次要发布的文件，且逐字节一致
+          if [ "$FAILED" = "0" ]; then
+            for f in index.html admin.html; do
+              LOCAL_FILE="_site/$f"
+              if [ ! -f "$LOCAL_FILE" ]; then
+                echo "  ⏭  本地没有 $f，跳过比对"
+                continue
+              fi
+              LOCAL_HASH=$(sha256sum < "$LOCAL_FILE" | awk '{print $1}')
+              if git cat-file -e "refs/remotes/verify/gh-pages:$f" 2>/dev/null; then
+                REMOTE_HASH=$(git cat-file -p "refs/remotes/verify/gh-pages:$f" | sha256sum | awk '{print $1}')
+                if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+                  echo ""
+                  echo "❌ 回查失败：gh-pages 上的 $f 与本次构建不一致。"
+                  echo "   本地 sha256: $LOCAL_HASH"
+                  echo "   远端 sha256: $REMOTE_HASH"
+                  FAILED=1
+                else
+                  echo "  ✅ $f 一致（sha256 ${LOCAL_HASH:0:12}…）"
+                fi
+              else
+                echo ""
+                echo "❌ 回查失败：gh-pages 上找不到 $f，线上这份页面将无法访问。"
+                FAILED=1
+              fi
+            done
+          fi
 
-          if [ "$REMOTE_SIZE" != "$LOCAL_SIZE" ]; then
-            echo ""
-            echo "❌ 回查失败：gh-pages 上的 index.html 与本次发布的不是同一份。"
-            echo "   这说明推送被静默丢弃了，线上仍会显示旧版页面。"
+          if [ "$FAILED" != "0" ]; then
             echo ""
             echo "   👉 请检查：仓库 Settings → Actions → General → Workflow permissions"
             echo "      必须选 'Read and write permissions'，然后重跑本 workflow。"
+            echo "   👉 若权限已正确，可能是 peaceiris/actions-gh-pages 静默失败，"
+            echo "      可在下方改用「git 直接推送」的备用步骤。"
             exit 1
           fi
 
-          echo "✅ 回查通过：gh-pages 已更新为本次构建的内容"
+          echo ""
+          echo "✅ 回查通过：gh-pages 已更新为本次构建的内容（$AFTER_SHA）"
+
+      # ------------------------------------------------------------
+      # 备用通道：直接用 git 推 gh-pages（回查失败时自动触发）
+      # ------------------------------------------------------------
+      # peaceiris 这个 action 偶尔会静默不推（见上方说明）。与其让线上停在
+      # 旧版本等人排查，不如自己再推一次 —— 同一份 _site，等价效果。
+      # 只有在主通道回查失败时才跑，正常情况下一路绿灯不会被触发。
+      # ------------------------------------------------------------
+      - name: 备用方案：用 git 直接推送 gh-pages
+        if: failure() && steps.verify.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd _site
+          git init -q
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "自动发布（备用通道）：${{ github.event.head_commit.message }}"
+          git branch -M gh-pages
+
+          echo "  准备强制推送到 gh-pages …"
+          git push --force \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            gh-pages
+
+          echo "  ✅ 备用通道推送完成"
+
+      # ------------------------------------------------------------
+      # 备用通道回查：推完再验一次，确保真的落地了
+      # ------------------------------------------------------------
+      - name: 备用通道回查
+        if: failure() && steps.verify.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO_URL="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+          git fetch --depth=1 --force "$REPO_URL" gh-pages:refs/remotes/verify2/gh-pages
+          REMOTE_SHA=$(git rev-parse refs/remotes/verify2/gh-pages)
+          echo "  备用通道推送后 gh-pages head : $REMOTE_SHA"
+
+          for f in index.html admin.html; do
+            [ -f "_site/$f" ] || continue
+            LOCAL_HASH=$(sha256sum < "_site/$f" | awk '{print $1}')
+            REMOTE_HASH=$(git cat-file -p "refs/remotes/verify2/gh-pages:$f" | sha256sum | awk '{print $1}')
+            if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+              echo "❌ 备用通道回查失败：$f 仍不一致"
+              exit 1
+            fi
+            echo "  ✅ $f 一致"
+          done
+
+          echo "✅ 备用通道回查通过：gh-pages 已更新"
