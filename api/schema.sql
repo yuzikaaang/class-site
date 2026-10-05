@@ -82,3 +82,60 @@ create index if not exists audit_log_time_idx   on audit_log (created_at desc);
 
 /* ---------------- 自动清理过期会话（可选，建议配 Neon 定时任务） ---------------- */
 -- 手动清理： delete from sessions where expires_at < now();
+
+/* ============================================================
+   班级通讯录 / 个人资料（2026-10-05 新增，幂等可重复执行）
+   ------------------------------------------------------------
+   设计要点（隐私优先）：
+   ① 所有真实数据只存这里，前端 index.html 里不再保留任何通讯录数据。
+      旧方案是把姓名哈希 + XOR 密文放在前端 JS，而密钥同在 JS 里，
+      等于公开——这是必须搬走的原因。
+   ② 姓名拆成 name（明文，供检索与展示）与 name_hash（SHA-256，供精确匹配）。
+      仅靠哈希无法展示姓名，仅靠明文又容易被爬，故两者并存：
+      列表只返回脱敏信息，命中查询才返回详情。
+   ③ 微信 / QQ / 手机号是「同学自填」字段，带独立审核状态：
+        pending  已提交待审核（不对外展示）
+        approved 审核通过（对已登录用户展示）
+        rejected 已驳回（不展示，本人可见驳回原因）
+   ④ 姓名 / 学号 / 政治面貌属于「身份信息」，同学无权修改，
+      只能由管理员在后台维护（对应代码里的 protect 字段校验）。
+   ============================================================ */
+create table if not exists profiles (
+  id            bigserial   primary key,
+  name          text,                                  -- 姓名（明文，管理员维护）
+  name_hash     text        unique,                    -- 姓名 SHA-256（精确匹配用，可空）
+  student_id    text        unique,                    -- 学号（管理员维护，唯一）
+  politics      text,                                  -- 政治面貌：共青团员 / 普通学生 / 中共党员 等
+  role          text        not null default '学生',    -- 学生 | 老师 | 管理员
+  /* ---- 以下三项由同学自填，需管理员审核后展示 ---- */
+  wechat        text,
+  qq            text,
+  phone         text,
+  contact_status text       not null default 'none',   -- none | pending | approved | rejected
+  reject_reason text,                                  -- 驳回原因，仅本人与管理员可见
+  /* 关联登录账号：同学首次用自己的账号认领本人资料后写入 */
+  user_id       bigint      references users(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  constraint profiles_contact_chk
+    check (contact_status in ('none','pending','approved','rejected'))
+);
+create index if not exists profiles_name_idx    on profiles (name);
+create index if not exists profiles_namehash_idx on profiles (name_hash);
+create index if not exists profiles_sid_idx     on profiles (student_id);
+create index if not exists profiles_user_idx    on profiles (user_id);
+create index if not exists profiles_status_idx  on profiles (contact_status);
+
+/* ---------------- 资料查看日志：谁在什么时候查看了谁 ---------------- */
+create table if not exists profile_view_log (
+  id         bigserial   primary key,
+  viewer_id  bigint      not null references users(id) on delete cascade,  -- 查看者
+  target_id  bigint      references profiles(id) on delete set null,       -- 被查看的资料
+  target_name text,                                                        -- 冗余存姓名，资料删除后日志仍可读
+  keyword    text,                                                         -- 本次查询用的关键词
+  ip         text,
+  created_at timestamptz not null default now()
+);
+create index if not exists pvl_viewer_idx on profile_view_log (viewer_id, created_at desc);
+create index if not exists pvl_target_idx on profile_view_log (target_id, created_at desc);
+create index if not exists pvl_time_idx   on profile_view_log (created_at desc);
