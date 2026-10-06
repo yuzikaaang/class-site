@@ -376,6 +376,19 @@ tbody tr.sel{background:var(--tint-2)}
  * 堆叠成卡片，任何宽度都不需要横向滚动。
  * ============================================================ */
 .rec-list{display:flex;flex-direction:column}
+/* ---- 作业编辑器（2026-10-07 重写：按主站 items 形态编辑，每条任务可挂图片/音频）---- */
+.hwed-subj{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px;background:var(--bg-2)}
+.hwed-subj-head{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.hwed-subj-head .hwed-name{flex:1;font-weight:800;font-size:.88rem}
+.hwed-task{display:grid;grid-template-columns:1fr auto;gap:6px;margin-bottom:8px;align-items:center}
+.hwed-task .hwed-text{grid-column:1}
+.hwed-task .hwed-x{grid-column:2;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--danger);cursor:pointer;font-size:1rem;line-height:1}
+.hwed-task .hwed-media{grid-column:1 / -1;font-size:.76rem;padding:6px 9px}
+.field-row{display:flex;gap:12px;flex-wrap:wrap}
+.field-row .field{flex:1;min-width:150px}
+@media(max-width:520px){
+  .hwed-task{grid-template-columns:1fr auto}
+}
 .rec{
   display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;
   padding:13px 15px;border-bottom:1px solid var(--border);
@@ -821,7 +834,7 @@ var STATE = {
   classcontent: { list: [], cat: '全部', sort: 'new', q: '' },
   /* 2026-10-05 新增面板的状态 */
   titles: { list: [], allowed: [], aiAccount: null, q: '', onlySet: false },
-  homeworks: { list: [], notice: '' },
+  homeworks: { list: [], notice: '', draft: null },
   song: { list: [], cards: [] },
   /* 2026-10-06 新增 */
   quotes: { list: [] },
@@ -3052,8 +3065,10 @@ function renderHomeworks(){
     +   '<button class="btn btn-sm btn-secondary" id="hwRefresh">' + svg('refresh', 14) + '刷新</button>'
     + '</div>'
     + '<div class="alert info" style="margin-bottom:16px">'
-    +   '这里管的是全班都能看到的作业内容。<b>保存后同学刷新页面即可看到</b>。<br>'
-    +   '课代表登录后也能改作业，但改不了公告等其它内容。'
+    +   '<b>要新增某个日期的作业</b>：点左上角「＋ 新增作业」→ 填标题（如「国庆假期作业」）、'
+    +   '开始 / 结束日期 → 逐科添加任务 → 保存。到日子同学打开「作业」就能看到，日期过了自动归档。<br>'
+    +   '每条任务下面可以单独挂<b>图片 / 音频链接</b>，挂在哪条就显示在哪个任务下面。<br>'
+    +   '日常改本科目作业不用进后台——课代表在自己科目的作业卡上点 ✏️ 即可（只能改自己那科）。'
     + '</div>'
     + '<section class="panel">'
     +   '<h3 style="margin:0 0 10px;font-size:.9rem">📌 作业通知</h3>'
@@ -3220,37 +3235,195 @@ function hwViewDialog(h){
   });
 }
 
+/* ============================================================
+ * 作业编辑器（2026-10-07 重写）
+ * ------------------------------------------------------------
+ * 旧编辑器写的是扁平形态 { title, subject, due, content }，
+ * 而主站真正消费的是 { id, start, end, title, items:[{subject, tasks:[]}] }。
+ * 两套形态对不上 → 站主在后台「新增作业」填完，同学那边根本看不到，
+ * 看起来就像「新增了但没生效」。现在统一按主站形态编辑。
+ *
+ * 附件（图片 / 音频）挂在哪条任务上，同学就看到它跟哪条任务在一起
+ * ——也就是「这张图对应数学的第 2 个作业」这种要求。
+ * ============================================================ */
+function hwToDraft(h){
+  if(!h) return { id:'', title:'', start:'', end:'', subjects:[] };
+  if(Array.isArray(h.items) && h.items.length){
+    return {
+      id: h.id || '', title: h.title || '', start: h.start || '', end: h.end || '',
+      subjects: h.items.map(function(it){
+        return {
+          name: it.subject || '',
+          tasks: (it.tasks || []).map(function(t){
+            if(t && typeof t === 'object'){
+              return { text: t.text || '', img: t.img || '', audio: t.audio || '', audioLabel: t.audioLabel || '' };
+            }
+            return { text: String(t == null ? '' : t), img:'', audio:'', audioLabel:'' };
+          }),
+        };
+      }),
+    };
+  }
+  /* 老扁平数据：转成一个科目一条任务，保存后自动升级成主站形态 */
+  return {
+    id: h.id || '', title: h.title || '', start: h.start || '', end: h.end || '',
+    subjects: (h.subject || h.content)
+      ? [{ name: h.subject || '', tasks: [{ text: h.content || '', img:'', audio:'', audioLabel:'' }] }]
+      : [],
+  };
+}
+
+function hwDraftToItem(d, raw){
+  var item = Object.assign({}, raw || {});
+  item.id    = d.id || (raw && raw.id) || ('hw-' + Date.now().toString(36));
+  item.title = d.title.trim();
+  item.start = d.start;
+  item.end   = d.end;
+  item.items = d.subjects.map(function(s){
+    return {
+      subject: s.name.trim() || '未分科',
+      tasks: s.tasks.map(function(t){
+        var txt = (t.text || '').trim();
+        /* 没图没音频就存字符串（和主站既有数据保持一致，纯文本任务占大多数） */
+        if(!t.img && !t.audio) return txt;
+        var o = { text: txt };
+        if(t.img)   o.img = t.img.trim();
+        if(t.audio){ o.audio = t.audio.trim(); o.audioLabel = (t.audioLabel || '').trim() || '播放听力音频'; }
+        return o;
+      }).filter(function(t){
+        return (typeof t === 'string') ? t.length > 0 : !!(t.text || t.img || t.audio);
+      }),
+    };
+  }).filter(function(it){ return it.tasks.length; });
+  item.updatedAt = new Date().toISOString();
+  /* 老扁平字段清掉，免得主站读的时候两套字段打架 */
+  delete item.subject; delete item.content; delete item.due;
+  return item;
+}
+
+function hwTaskHtml(t, si, ti){
+  return '<div class="hwed-task">'
+    + '<input class="hwed-text" data-si="' + si + '" data-ti="' + ti + '" data-f="text"'
+    +   ' value="' + attr(t.text || '') + '" placeholder="任务内容，一行一条" maxlength="300">'
+    + '<button class="hwed-x" data-del-task="' + si + '.' + ti + '" title="删除这条任务">×</button>'
+    + '<input class="hwed-media" data-si="' + si + '" data-ti="' + ti + '" data-f="img"'
+    +   ' value="' + attr(t.img || '') + '" placeholder="🖼 图片链接（可选）：填直链，如 https://… / ./homework/xxx.jpg" maxlength="400">'
+    + '<input class="hwed-media" data-si="' + si + '" data-ti="' + ti + '" data-f="audio"'
+    +   ' value="' + attr(t.audio || '') + '" placeholder="🎧 音频链接（可选）：填直链，如 https://….mp3" maxlength="400">'
+    + '</div>';
+}
+
+function hwSubjHtml(s, si){
+  return '<div class="hwed-subj">'
+    + '<div class="hwed-subj-head">'
+    +   '<input class="hwed-name" data-si="' + si + '" value="' + attr(s.name || '') + '"'
+    +     ' placeholder="科目名，如 数学" maxlength="12">'
+    +   '<button class="btn btn-sm btn-secondary" data-del-subj="' + si + '">删除科目</button>'
+    + '</div>'
+    + '<div class="hwed-tasks">'
+    +   (s.tasks.length
+          ? s.tasks.map(function(t, ti){ return hwTaskHtml(t, si, ti); }).join('')
+          : '<div class="muted" style="font-size:.78rem;padding:2px 0 6px">这个科目还没有任务</div>')
+    + '</div>'
+    + '<button class="btn btn-sm btn-ghost" data-add-task="' + si + '">+ 添加一条任务</button>'
+    + '</div>';
+}
+
+function hwPaintEd(){
+  var S = STATE.homeworks;
+  var d = S.draft;
+  var box = $('hwEd');
+  if(!box || !d) return;
+
+  box.innerHTML =
+      '<div class="field"><label>作业标题</label>'
+    +   '<input id="hwedTitle" maxlength="60" placeholder="例如：国庆假期作业（10.1–10.7）" value="' + attr(d.title) + '"></div>'
+    + '<div class="field-row">'
+    +   '<div class="field"><label>开始日期</label><input id="hwedStart" type="date" value="' + attr(d.start) + '"></div>'
+    +   '<div class="field"><label>结束日期</label><input id="hwedEnd" type="date" value="' + attr(d.end) + '"></div>'
+    + '</div>'
+    + '<div class="alert info" style="font-size:.78rem;margin:0 0 12px">'
+    +   '任务一行一条。<b>图片 / 音频填直链</b>（外链，或仓库里的相对路径如 '
+    +   '<code>./homework/xxx.jpg</code>）——填在哪条任务上，同学就看到它跟哪条任务在一起，'
+    +   '比如「数学第 2 条任务」下面挂一张图。</div>'
+    + '<div id="hwedSubs">' + (d.subjects.length ? d.subjects.map(hwSubjHtml).join('') : '') + '</div>'
+    + '<button class="btn btn-sm btn-secondary" id="hwedAddSubj">+ 添加科目</button>';
+
+  var t = $('hwedTitle'); if(t) t.oninput = function(){ d.title = this.value; };
+  var s1 = $('hwedStart'); if(s1) s1.onchange = function(){ d.start = this.value; };
+  var e1 = $('hwedEnd');   if(e1) e1.onchange = function(){ d.end = this.value; };
+
+  Array.prototype.forEach.call(box.querySelectorAll('.hwed-name'), function(el){
+    el.oninput = function(){ var s = d.subjects[+el.dataset.si]; if(s) s.name = el.value; };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('input[data-f]'), function(el){
+    el.oninput = function(){
+      var s = d.subjects[+el.dataset.si]; if(!s) return;
+      var t2 = s.tasks[+el.dataset.ti];   if(!t2) return;
+      t2[el.dataset.f] = el.value;
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-del-subj]'), function(b){
+    b.onclick = function(){ d.subjects.splice(+b.dataset.delSubj, 1); hwPaintEd(); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-add-task]'), function(b){
+    b.onclick = function(){
+      var s = d.subjects[+b.dataset.addTask]; if(!s) return;
+      s.tasks.push({ text:'', img:'', audio:'', audioLabel:'' });
+      hwPaintEd();
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-del-task]'), function(b){
+    b.onclick = function(){
+      var p = String(b.dataset.delTask).split('.');
+      var s = d.subjects[+p[0]]; if(!s) return;
+      s.tasks.splice(+p[1], 1);
+      hwPaintEd();
+    };
+  });
+  var addS = $('hwedAddSubj');
+  if(addS) addS.onclick = function(){
+    d.subjects.push({ name:'', tasks:[{ text:'', img:'', audio:'', audioLabel:'' }] });
+    hwPaintEd();
+  };
+}
+
 function hwDialog(idx){
   var S = STATE.homeworks;
-  var h = (idx === null || idx === undefined) ? {} : (S.list[idx] || {});
   var isNew = (idx === null || idx === undefined);
+  var raw = isNew ? null : (S.list[idx] || {});
+  S.draft = hwToDraft(raw);
 
   openModal({
     title: isNew ? '新增作业' : '编辑作业',
-    body: '<div class="field"><label>标题</label><input id="hwT" value="' + attr(h.title || '') + '" maxlength="60" placeholder="例如：数学必修一 3.2 习题"></div>'
-        + '<div class="field"><label>科目</label><input id="hwS" value="' + attr(h.subject || '') + '" maxlength="12" placeholder="数学"></div>'
-        + '<div class="field"><label>截止时间</label><input id="hwD" value="' + attr(h.due || '') + '" maxlength="30" placeholder="例如：10月8日 早读前"></div>'
-        + '<div class="field"><label>说明（可选）</label><textarea id="hwC" rows="3" maxlength="400" placeholder="补充要求、页码范围等">' + esc(h.content || '') + '</textarea></div>',
+    sub: isNew ? '按日期区间新增，同学到日子就能看到' : (raw.title || ''),
+    wide: true,
+    body: '<div id="hwEd"></div>',
     foot: '<button class="btn btn-secondary" data-close>取消</button>'
         + '<button class="btn" id="hwSave">保存</button>',
   });
+  hwPaintEd();
 
   var sv = $('hwSave');
   if(sv) sv.onclick = function(){
-    var item = {
-      title: $('hwT').value.trim(),
-      subject: $('hwS').value.trim(),
-      due: $('hwD').value.trim(),
-      content: $('hwC').value.trim(),
-      updatedAt: new Date().toISOString(),
-    };
-    if(!item.title){ toast('标题不能为空', 'err'); return; }
+    var d = S.draft;
+    if(!d.title.trim()){ toast('请先填作业标题', 'err'); return; }
+    if(!d.start || !d.end){ toast('请填开始日期和结束日期', 'err'); return; }
+    if(d.start > d.end){ toast('开始日期不能晚于结束日期', 'err'); return; }
+    var ok2 = d.subjects.some(function(s){
+      return s.name.trim() && s.tasks.some(function(t){
+        return (t.text || '').trim() || t.img || t.audio;
+      });
+    });
+    if(!ok2){ toast('至少要有一个科目名和一条任务', 'err'); return; }
+
+    var item = hwDraftToItem(d, raw);
     var next = S.list.slice();
     if(isNew) next.push(item); else next[idx] = item;
     api('/content', { method:'PUT', body:{ items:{ holiday_homeworks: next } } })
       .then(function(){
         closeModal();
-        toast(isNew ? '已新增作业' : '已保存', 'ok', 3000);
+        toast(isNew ? '已新增作业，同学刷新即可看到' : '已保存', 'ok', 3200);
         loadHomeworks();
       })
       .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
