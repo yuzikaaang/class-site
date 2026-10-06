@@ -333,6 +333,17 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .daily-title{color:#af410f;font-size:1.05rem;font-weight:700}
 .daily-sub{color:#57534e;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .daily-btn{min-width:110px;padding:10px 18px}
+/* ---- 每日一言（2026-10-06 新增）----
+   和「每日日报」视觉同源，但用引号图标 + 衬线感的语录排版做区分。
+   无内容时整块不渲染（由 JS 控制 innerHTML 为空），不会留空白条。 */
+.quote{background:#fff;border-radius:20px;box-shadow:0 1px 2px rgba(120,53,15,.05),0 8px 24px rgba(120,53,15,.07);border:1px solid rgba(120,53,15,.055);padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px;text-align:left}
+.quote-mark{flex:0 0 40px;width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--grad-a),var(--grad-b));box-shadow:var(--sh-accent);color:#fff;font-size:1.3rem;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1}
+.quote-body{flex:1;min-width:0}
+.quote-text{color:#af410f;font-size:.98rem;font-weight:600;line-height:1.5}
+.quote-from{color:#57534e;font-size:.76rem;margin-top:3px}
+.dark .quote{background:#1b2432;border-color:rgba(255,255,255,.07)}
+.dark .quote-text{color:#f0c9a8}
+.dark .quote-from{color:#9aa7b8}
 @media(max-width:768px){.daily{padding:14px 16px}.daily-sub{white-space:normal}}
 /* 班级签（窄卡片，位于每日日报上方） */
 .signbar{background:#fff;border-radius:16px;box-shadow:0 1px 2px rgba(120,53,15,.05),0 6px 18px rgba(120,53,15,.07);border:1px solid rgba(120,53,15,.055);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;text-align:left;max-width:380px;box-sizing:border-box}
@@ -2127,11 +2138,12 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
       <div class="logo" onclick="badgeClick()"><img src="https://s41.ax1x.com/2026/06/07/pmmhF6H.png" alt="班徽" onerror="this.parentNode.style.display='none'"></div>
     </header>
 
-    <!-- 首页视图：公告 / 每日日报 / 倒计时 -->
+    <!-- 首页视图：公告 / 每日日报 / 每日一言 / 倒计时 -->
     <section class="home-view" id="homeView">
       <section class="board" id="board"></section>
       <section class="signbar" id="signBar"></section>
       <section class="daily" id="dailyNews"></section>
+      <section class="quote" id="dailyQuoteBar"></section>
       <section class="countdown" id="countdown"></section>
     </section>
 
@@ -3948,6 +3960,8 @@ function render(){
     }
   }
 
+  renderDailyQuote();
+
   var cats = uiCats();   /* 【自定义设置】经顺序覆盖层取，顺序即用户顺序 */
   buildSidebar();
 
@@ -4413,7 +4427,7 @@ function uiAnnCats(list){
 }
 
 /* 首页 4 区块顺序（用 DOM 移动；#homeView 的子元素是静态 HTML，render 不重建其容器） */
-var HOME_BLOCKS = { ann:'board', sign:'signBar', daily:'dailyNews', countdown:'countdown' };
+var HOME_BLOCKS = { ann:'board', sign:'signBar', daily:'dailyNews', quote:'dailyQuoteBar', countdown:'countdown' };
 function applyHomeOrder(){
   var hv = document.getElementById('homeView'); if(!hv) return;
   var ord = UI.order.home || [];
@@ -4524,6 +4538,11 @@ function applyUICfg(){
 /* 重渲染所有受顺序影响的地方 */
 function rerenderAll(){
   render();                 /* 内部已含 renderBoard() + buildSidebar() + applyHomeOrder() */
+  /* 重要日期落在独立变量 IMPORTANT_DATES 上，render() 不碰它 ——
+     不在这里补一刀，云端内容替换后首页倒计时最久要等 1 秒（下一个 interval tick）
+     才更新，看着像「云端改了没反应」。 */
+  try{ if(typeof updateCountdown === 'function') updateCountdown(); }catch(e){}
+  try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
   renderHiddenView();
   var ab = document.getElementById('allBoardMask');
   if(ab && ab.classList.contains('show')) renderAllBoard();
@@ -4685,23 +4704,33 @@ function isAdmin(){ return !!(AUTH.user && AUTH.user.role === 'admin'); }
  *      下次先用缓存渲染（秒开），再在后台悄悄比对增量。
 
  * 云端内容与本地字段的对应关系（改一边要同时看另一边）：
- *     content 键             →  SITE_DATA 字段
- *     announcements          →  announcements
- *     holiday_homeworks      →  holidayHomeworks
- *     homework_notice        →  homeworkNotice
- *     important_dates        →  importantDates
+ *     content 键             →  本地落点
+ *     announcements          →  SITE_DATA.announcements
+ *     holiday_homeworks      →  SITE_DATA.holidayHomeworks
+ *     homework_notice        →  SITE_DATA.homeworkNotice
+ *     important_dates        →  IMPORTANT_DATES（⚠️ 独立变量，不在 SITE_DATA 里）
+ *     daily_quote            →  SITE_DATA.dailyQuote（首页「每日一言」卡片）
  *     site_config            →  站点通用配置（部分字段）
+ *
+ * ⚠️ 这里的键必须与后端 api/content.js 的 ALLOW_CONTENT_KEYS 对齐。
+ *
+ * 【2026-10-06 修正】原先这个表里有 4 个「死映射」——
+ *   importantDates / dailyQuote / songConfig / activityList
+ * 它们只在本表出现，页面上没有任何代码消费，等于写了也白写
+ * （云端有数据，但页面不认）。本次处理：
+ *   · important_dates → 改接到真实的 IMPORTANT_DATES（见 applyCloudContent 的特判）
+ *   · daily_quote     → 补上真实消费点（首页「每日一言」卡片）
+ *   · song_config     → 从本表移除（点歌配置改由后台直连 VoiceHub，不走内容通道）
+ *   · activities      → 从本表移除（主站活动区用的是 SITE_DATA.activity 单数对象，不是数组）
  * ============================================================ */
 
-/* 云端内容键 ↔ 本地字段名 */
+/* 云端内容键 ↔ 本地字段名。值为 null 的表示「特殊处理，不走通用赋值」。 */
 var CONTENT_MAP = {
   announcements:     'announcements',
   holiday_homeworks: 'holidayHomeworks',
   homework_notice:   'homeworkNotice',
-  important_dates:   'importantDates',
   daily_quote:       'dailyQuote',
-  song_config:       'songConfig',
-  activities:        'activityList',
+  important_dates:   null,           /* 特殊：落到 IMPORTANT_DATES，见 applyCloudContent() */
   site_config:       null            /* 特殊：见 applySiteConfig() */
 };
 
@@ -4737,6 +4766,15 @@ function applyCloudContent(items, opts){
     /* 云端没这个键（null）时跳过——不能把本地数据抹成 null */
     if(v === null || v === undefined) return;
     if(k === 'site_config'){ applySiteConfig(v); n++; return; }
+    /* 重要日期落在独立变量 IMPORTANT_DATES 上，不在 SITE_DATA 里。
+       必须整体替换数组（渲染函数都现取 IMPORTANT_DATES，替换后立刻生效），
+       不做逐项 patch——避免两份数据混在一起对不上。 */
+    if(k === 'important_dates'){
+      if(!Array.isArray(v) || !v.length) return;   /* 类型/空值护栏 */
+      IMPORTANT_DATES = v;
+      n++;
+      return;
+    }
     var field = CONTENT_MAP[k];
     if(!field) return;              /* 不认识的键不动 */
     /* 类型护栏：数组字段必须给数组，对象字段必须给对象。
@@ -4756,6 +4794,50 @@ function applySiteConfig(cfg){
   ['siteName','siteSubtitle','gateQuestion','gateAnswer','welcomeTitle'].forEach(function(k){
     if(cfg[k] !== undefined && cfg[k] !== null) SITE_DATA[k] = cfg[k];
   });
+}
+
+/* ---------------- 每日一言（2026-10-06 新增）----------------
+   数据源：SITE_DATA.dailyQuote（云端内容键 daily_quote）。
+   取法：按「当天日期」取模 —— 同一天内人人看到同一句、刷新也不变，
+        跨天自动换下一句，不需要任何定时任务。
+
+   为什么用日期取模而不是随机：随机的话每次刷新都变，家长/同学会以为出错；
+   而且「每日一句」的语义本来就是一天固定一句。
+
+   无数据时整块清空（不留空卡片）——云端没配就当作没这个功能。 */
+function dailyQuoteOfToday(){
+  var list = (window.SITE_DATA && Array.isArray(SITE_DATA.dailyQuote)) ? SITE_DATA.dailyQuote : [];
+  if(!list.length) return null;
+
+  /* 归一化：支持「纯字符串」和「{text, from}」两种写法 */
+  var items = [];
+  list.forEach(function(it){
+    if(typeof it === 'string'){
+      var s = it.trim();
+      if(s) items.push({ text: s, from: '' });
+    }else if(it && typeof it === 'object' && it.text){
+      items.push({ text: String(it.text), from: it.from ? String(it.from) : '' });
+    }
+  });
+  if(!items.length) return null;
+
+  /* 用「本地日期」算序数，保证跨时区/跨设备在同一天取值一致 */
+  var d = new Date();
+  var seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  return items[seed % items.length];
+}
+
+function renderDailyQuote(){
+  var el = document.getElementById('dailyQuoteBar');
+  if(!el) return;
+  var q = dailyQuoteOfToday();
+  if(!q){ el.innerHTML = ''; return; }   /* 云端没配 → 整块不显示 */
+  el.innerHTML =
+    '<div class="quote-mark">❝</div>'+
+    '<div class="quote-body">'+
+      '<div class="quote-text">'+esc(q.text)+'</div>'+
+      (q.from ? '<div class="quote-from">—— '+esc(q.from)+'</div>' : '')+
+    '</div>';
 }
 
 /**
@@ -5310,6 +5392,182 @@ function hasPendingCloudSync(){
   return false;
 }
 
+/* ============================================================
+   共享内容推送（2026-10-06 新增）
+   ------------------------------------------------------------
+   背景：/api/content 是「全班共享内容」通道（公告/作业/重要日期…），
+   与上面 /api/data 的「个人本机数据」通道是两条独立线路：
+     · /api/data     → 每人一份，白名单 CLOUD_KEYS，自动脏推
+     · /api/content  → 全班共享，键见 CONTENT_MAP，本次补上推送
+
+   上一轮只做了 /api/content 的「读」，没做「写」——于是云端永远是空的，
+   后台三个面板都显示「暂无数据」。这里补上写的能力。
+
+   为什么单独一套而不是并进 CLOUD_KEYS：
+     内容键是共享的、要经过服务端权限校验（管理员/AI/课代表），
+     塞进个人数据通道会绕过那层校验，也会让「我改的」和「大家看的」混淆。
+
+   冲突处理（用户确认「两边都能改」）：
+     推之前先比 updated_at。若云端比本地记录的时间更新，
+     说明别人（或后台）先改过了 —— 这时不覆盖，改为提示，避免把别人的改动冲掉。
+   ============================================================ */
+
+/* 本地记录「我最后一次看到云端内容的时间」，用于冲突判断 */
+var CONTENT_TS_KEY = 'cls_content_myts_v1';
+/* 待推送的内容键（与 DIRTY_KEYS 分开，因为要发往不同接口） */
+var DIRTY_CONTENT = {};
+var __contentInFlight = false;
+
+/** 本地内容改动了 → 登记待推 */
+function markContentDirty(key){
+  if(!key || typeof key !== 'string') return;
+  if(!isLoggedIn()) return;
+  if(!CONTENT_MAP.hasOwnProperty(key)) return;   /* 只认内容通道的键 */
+  DIRTY_CONTENT[key] = 1;
+  scheduleContentSync();
+}
+
+var __contentDebounce = null;
+var __contentFirstAt = 0;
+
+function scheduleContentSync(){
+  if(!isLoggedIn()) return;
+  if(!Object.keys(DIRTY_CONTENT).length) return;
+  var now = Date.now();
+  if(!__contentFirstAt) __contentFirstAt = now;
+  if(now - __contentFirstAt >= SYNC_MAX_WAIT_MS){ flushContentSync(); return; }
+  if(__contentDebounce !== null && __contentDebounce !== undefined) clearTimeout(__contentDebounce);
+  __contentDebounce = setTimeout(function(){
+    __contentDebounce = null;
+    flushContentSync();
+  }, SYNC_DEBOUNCE_MS);
+}
+
+/** 从本地取出某个内容键当前的值（用于推送给云端） */
+function readLocalContentValue(key){
+  try{
+    if(key === 'announcements') return SITE_DATA.announcements;
+    if(key === 'holiday_homeworks') return SITE_DATA.holidayHomeworks;
+    if(key === 'homework_notice') return SITE_DATA.homeworkNotice;
+    if(key === 'daily_quote') return SITE_DATA.dailyQuote;
+    if(key === 'important_dates') return IMPORTANT_DATES;
+  }catch(e){}
+  return undefined;
+}
+
+/**
+ * 把本地内容推到云端。
+ * @param {object} items  { 内容键: 值 }
+ * @param {boolean} force true = 跳过冲突检查（后台改完主动同步时用）
+ * @returns {Promise<{ok:boolean, pushed:number, conflict?:boolean, error?:string}>}
+ * 失败不 reject —— 与个人数据同步一致，自动同步不该打断用户操作。
+ */
+function pushCloudContent(items, force){
+  if(!apiReady()) return Promise.resolve({ ok:false, pushed:0, error:'后端未配置' });
+  if(!isLoggedIn()) return Promise.resolve({ ok:false, pushed:0, error:'未登录' });
+  var keys = Object.keys(items || {});
+  if(!keys.length) return Promise.resolve({ ok:true, pushed:0 });
+  if(__contentInFlight) return Promise.resolve({ ok:false, pushed:0, error:'上一次还在发' });
+
+  /* --- 冲突检查：云端比我知道的更新，就别覆盖 --- */
+  if(!force){
+    return api('/content').then(function(j){
+      var cloudTs = Number(j && j.serverTime) || 0;
+      var myTs = 0;
+      try{ myTs = Number(localStorage.getItem(CONTENT_TS_KEY)) || 0; }catch(e){}
+      /* 云端时间明显更晚（容忍 2 秒时钟误差）→ 认定有别人的新改动 */
+      if(cloudTs > 0 && myTs > 0 && cloudTs - myTs > 2000){
+        return { ok:false, pushed:0, conflict:true };
+      }
+      return doPushContent(items);
+    }).catch(function(){
+      /* 读失败（网络抖动）不能阻止写入——直接推，宁可覆盖也不要丢改动 */
+      return doPushContent(items);
+    });
+  }
+  return doPushContent(items);
+}
+
+function doPushContent(items){
+  __contentInFlight = true;
+  return api('/content', { method:'PUT', body:{ items: items } })
+    .then(function(j){
+      if(j && j.ok === false) throw new Error(j.error || '保存失败');
+      /* 记下服务端时间，作为下次冲突判断的基准 */
+      if(j && j.serverTime){
+        try{ localStorage.setItem(CONTENT_TS_KEY, String(j.serverTime)); }catch(e){}
+      }
+      /* 推成功 = 本地与云端一致，清掉待推标记 */
+      Object.keys(items).forEach(function(k){ delete DIRTY_CONTENT[k]; });
+      return { ok:true, pushed:(j && j.updated && j.updated.length) || Object.keys(items).length };
+    })
+    .catch(function(e){
+      /* 失败保留 DIRTY_CONTENT，等下次改动或页面隐藏时再试 */
+      return { ok:false, pushed:0, error:String(e && e.message || e) };
+    })
+    .then(function(r){ __contentInFlight = false; return r; });
+}
+
+/** 真正推送所有待推的内容键 */
+function flushContentSync(){
+  if(__contentDebounce !== null && __contentDebounce !== undefined){
+    clearTimeout(__contentDebounce);
+    __contentDebounce = null;
+  }
+  __contentFirstAt = 0;
+  if(!isLoggedIn()){ DIRTY_CONTENT = {}; return Promise.resolve({ ok:true, pushed:0 }); }
+
+  var keys = Object.keys(DIRTY_CONTENT);
+  if(!keys.length) return Promise.resolve({ ok:true, pushed:0 });
+
+  var items = {};
+  keys.forEach(function(k){
+    var v = readLocalContentValue(k);
+    if(v !== undefined && v !== null) items[k] = v;
+  });
+  if(!Object.keys(items).length){ DIRTY_CONTENT = {}; return Promise.resolve({ ok:true, pushed:0 }); }
+
+  return pushCloudContent(items, false).then(function(r){
+    if(r && r.conflict){
+      /* 有冲突：不清 DIRTY，但要提示一次，避免用户以为改动丢了 */
+      if(typeof uiMsg === 'function'){
+        uiMsg('云端有我未见过的修改，本次未覆盖。可刷新页面后再改。', '#af410f', 5200);
+      }
+      DIRTY_CONTENT = {};
+      /* 立刻拉一次，把云端的最新内容显示出来，减少「两边不一致」的困惑 */
+      try{ syncCloudContent(true).then(function(){ try{ rerenderAll(); }catch(e){} }); }catch(e){}
+    }
+    return r;
+  });
+}
+
+/* 有内容改动待上传吗？ */
+function hasPendingContentSync(){
+  for(var k in DIRTY_CONTENT){ if(DIRTY_CONTENT[k]) return true; }
+  return false;
+}
+
+/* ---------------- 挂钩内容写入 ----------------
+   页面里改公告/作业的地方会直接改 SITE_DATA 上的字段。
+   这里提供一个统一的「改完调一下」入口，避免每处都手写推送。 */
+function saveContentLocal(key, value){
+  var ok = applyCloudContent((function(){ var o = {}; o[key] = value; return o; })());
+  if(!ok) return false;
+  /* 写入本地缓存，刷新后不必等网络就能显示最新 */
+  try{
+    var o2 = {}; o2[key] = value;
+    contentCacheSet(o2);
+  }catch(e){}
+  markContentDirty(key);
+  /* 立刻刷新界面，不等网络 */
+  try{
+    if(key === 'announcements' || key === 'daily_quote') rerenderAll();
+    if(key === 'holiday_homeworks' || key === 'homework_notice') refreshHwViews();
+    if(key === 'important_dates'){ renderAllImp(); updateCountdown(); }
+  }catch(e){}
+  return true;
+}
+
 /* ---------------- 挂钩 localStorage.setItem ----------------
    页面里有 35 处直接调 setItem，一个个去加标记既不现实也容易漏。
    这里包一层原生方法：凡是写「云键」就自动登记待同步。
@@ -5343,8 +5601,9 @@ function hasPendingCloudSync(){
    这种最常见的情况（比如同学切去回微信消息）。 */
 try{
   document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'hidden' && hasPendingCloudSync()){
-      flushCloudSync();
+    if(document.visibilityState === 'hidden'){
+      if(hasPendingCloudSync()) flushCloudSync();
+      if(hasPendingContentSync()) flushContentSync();   /* 共享内容走另一条线路 */
     }
   });
 }catch(e){}
@@ -5646,6 +5905,26 @@ function loadAdminAudit(){
    （守住「换设备能拿到完整数据」这个底线）。 */
 window.addEventListener('pagehide', function(){
   if(!isLoggedIn()) return;
+
+  /* 共享内容通道也补一次——它走的是 /api/content，与个人数据不是同一条线路。
+     sendBeacon 只能带 URL 上的 token，而 /api/content 走 Authorization 头，
+     所以这里用同步 XHR 兜底（页面卸载时会等待完成）。 */
+  try{
+    if(hasPendingContentSync()){
+      var citems = {};
+      Object.keys(DIRTY_CONTENT).forEach(function(k){
+        var cv = readLocalContentValue(k);
+        if(cv !== undefined && cv !== null) citems[k] = cv;
+      });
+      if(Object.keys(citems).length){
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', apiUrl('/content'), false);   /* false = 同步，卸载时才会等 */
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        if(AUTH && AUTH.token) xhr.setRequestHeader('Authorization', 'Bearer ' + AUTH.token);
+        xhr.send(JSON.stringify({ items: citems }));
+      }
+    }
+  }catch(e){ /* 失败不影响关闭 */ }
 
   var items;
   if(hasPendingCloudSync()){

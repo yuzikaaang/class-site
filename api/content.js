@@ -28,21 +28,23 @@ const CONTENT_KEY = 'cls_site_contents';        // 通用内容（作业通知/�
 const ANNOUNCE_KEY = 'cls_site_announcements';  // 公告（历史遗留的独立键，一并兼容）
 
 /* 允许通过本接口写入的内容键白名单。
-   必须与前端 CONTENT_MAP 保持一致，否则写了前端也不认。 */
+   必须与前端 CONTENT_MAP 保持一致，否则写了前端也不认。
+   ⚠️ 只放「前端真的会读」的键。历史上这里放过 song_config / activities，
+      但主站根本没有消费它们（song_config 改成直连 VoiceHub，
+      活动用的是单数 SITE_DATA.activity），结果是「后台存进去了、首页没反应」，
+      排查了很久。加键之前先在 index.html 里搜有没有读取方。 */
 const ALLOW_CONTENT_KEYS = [
   'announcements',      // 公告列表
   'holiday_homeworks',  // 假期作业
   'homework_notice',    // 作业通知
-  'important_dates',    // 重要日期
-  'daily_quote',        // 每日一句
-  'song_config',        // 点歌配置
-  'activities',         // 活动列表
+  'important_dates',    // 重要日期 / 考试范围
+  'daily_quote',        // 每日一言
   'site_config',        // 站点通用配置
 ];
 
 /* 课代表能改的字段——只有作业相关。
    这是用户明确确认的授权范围（「仅作业可编辑」），
-   课代表碰不了公告、点歌配置等其它内容。 */
+   课代表碰不了公告、每日一言、重要日期等内容。 */
 const HW_EDITABLE_KEYS = ['holiday_homeworks', 'homework_notice'];
 
 /* 单条内容体积上限（字符数）。公告/作业都是纯文本，200KB 绰绰有余；
@@ -101,11 +103,19 @@ async function readContent(req, res) {
     return ok(res, { items: {}, serverTime: Date.now(), empty: true });
   }
 
+  /* ⚠️ 必须用「整个数组当一个参数」的写法（与 api/data.js:212 的 unnest 同一套路），
+     不要写成 `in (${a}, ${b})`。
+
+     实测（2026-10-06）：写成 `in (${CONTENT_KEY}, ${ANNOUNCE_KEY})` 时，
+     查询**不报错、但永远返回 0 行** —— 于是出现
+     「写入成功（cloudKeys 里能看到键）、读取为空」的诡异现象，排查了很久。
+     根因是 @neondatabase/serverless 的模板标签对这种散装占位展开不正确。 */
+  const wantKeys = [CONTENT_KEY, ANNOUNCE_KEY];
   const rows = await sql`
     select data_key, data_value, updated_at
       from user_data
      where user_id = ${uid}
-       and data_key in (${CONTENT_KEY}, ${ANNOUNCE_KEY})
+       and data_key = any(${wantKeys}::text[])
   `;
 
   const items = {};

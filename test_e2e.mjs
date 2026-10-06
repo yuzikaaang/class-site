@@ -10,6 +10,7 @@
 
 import initSqlJs from 'sql.js';
 import crypto from 'crypto';
+import fs from 'node:fs';
 
 /* ---------- 1. 桥接环境变量 ---------- */
 globalThis.__ENV__ = {
@@ -184,6 +185,34 @@ const sqlBridge = (strings, ...values) => {
           }
           stmt.free();
           resolve([]);
+          return;
+        }
+
+        /* ---- 特例：`data_key = any($N::text[])` 形式的数组匹配 ----
+           Postgres 写法：where data_key = any($2::text[])
+           参数是一个 JS 数组，翻译成 SQLite 得靠 json_each 展开。
+           （对应 api/content.js 里读云端内容的那条查询。） */
+        if (/=\s*any\s*\(\s*\?\s*\)/i.test(translated)) {
+          const m = /=\s*any\s*\(\s*\?\s*\)/i.exec(translated);
+          /* any 那个 ? 是整条 SQL 里的第几个占位 */
+          const anyAt = (translated.slice(0, m.index).match(/\?/g) || []).length;
+          const arr = Array.isArray(values[anyAt]) ? values[anyAt] : [];
+          const holes = arr.length ? arr.map(() => '?').join(', ') : 'null';
+          const sqlA = translated.slice(0, m.index) + 'in (' + holes + ')'
+                     + translated.slice(m.index + m[0].length);
+          /* 值列表要在 anyAt 位置把数组摊平，其余顺序不变 */
+          const valsA = values.slice(0, anyAt).concat(arr, values.slice(anyAt + 1));
+          const stmtA = db.prepare(sqlA);
+          stmtA.bind(valsA.map((v) => {
+            if (v === undefined || v === null) return null;
+            if (typeof v === 'boolean') return v ? 1 : 0;
+            if (typeof v === 'object') return JSON.stringify(v);
+            return v;
+          }));
+          const rowsA = [];
+          while (stmtA.step()) rowsA.push(stmtA.getAsObject());
+          stmtA.free();
+          resolve(rowsA);
           return;
         }
 
@@ -1055,6 +1084,31 @@ console.log('\n【17】云端内容接口 /api/content（2026-10-05 新增）');
     read2.body.items.homework_notice && read2.body.items.homework_notice.text === '今晚做数学卷子',
     JSON.stringify(read2.body.items.homework_notice));
 
+  /* --- 回归护栏：读取必须用「数组参数」而不是 in ($1, $2) ---
+     2026-10-06 线上事故：readContent 写的是
+       and data_key in (${CONTENT_KEY}, ${ANNOUNCE_KEY})
+     在真正的 Neon 驱动上**不报错但永远返回 0 行**，导致
+     「写入成功（cloudKeys 能看到）、读取为空」。
+     sql.js 桩对这个写法是宽容的，所以当时测试全绿却没抓到。
+     这里直接断言源码形态，把这种「桩过、线上不过」的写法挡在门外。 */
+  {
+    const src = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
+    const bad = /data_key\s+in\s*\(\s*\$\{/i.test(src);
+    const good = /=\s*any\s*\(\s*\$\{/.test(src);
+    t('读取未使用 in (${a}, ${b}) 的散装占位写法（Neon 上会静默返回 0 行）', !bad,
+      bad ? '检测到 in (${...}, ${...})，请改成 data_key = any(${arr}::text[])' : '');
+    t('读取使用 = any(${arr}::text[]) 的数组参数写法', good);
+  }
+
+  /* --- 读路径真的能取到两个键（不只是不报错）--- */
+  {
+    const both = await call('/api/content');
+    const ks = Object.keys(both.body.items || {});
+    t('读取能同时取到通用内容键与公告键（覆盖多键查询）',
+      ks.includes('announcements') && ks.length >= 2,
+      '实际键：' + ks.join(', '));
+  }
+
   /* --- 单条写法（方便 AI 直接用） --- */
   const put3 = await call('/api/content', {
     method: 'PUT', token: adminToken,
@@ -1287,11 +1341,74 @@ console.log('\n【18】头衔系统与 AI 助手交接（2026-10-05 新增）');
   t('课代表不能改公告 403', hwAnn.status === 403, '实际 ' + hwAnn.status);
   t('越权提示说明只能改作业', /只能修改作业/.test(hwAnn.body.error || ''), hwAnn.body.error);
 
-  /* 课代表不能改点歌配置 */
-  const hwSong = await call('/api/content', {
-    method: 'PUT', token: hwToken, body: { items: { song_config: { x: 1 } } },
+  /* 课代表不能改每日一言（新增面板的键，同样不在作业白名单里） */
+  const hwQuote = await call('/api/content', {
+    method: 'PUT', token: hwToken, body: { items: { daily_quote: ['越权一言'] } },
   });
-  t('课代表不能改点歌配置 403', hwSong.status === 403, '实际 ' + hwSong.status);
+  t('课代表不能改每日一言 403', hwQuote.status === 403, '实际 ' + hwQuote.status);
+
+  /* 课代表不能改重要日期 */
+  const hwDates = await call('/api/content', {
+    method: 'PUT', token: hwToken, body: { items: { important_dates: [{ name: '越权日期', date: '2027-01-01T00:00:00' }] } },
+  });
+  t('课代表不能改重要日期 403', hwDates.status === 403, '实际 ' + hwDates.status);
+
+  /* 课代表不能改站点配置 */
+  const hwCfg = await call('/api/content', {
+    method: 'PUT', token: hwToken, body: { items: { site_config: { x: 1 } } },
+  });
+  t('课代表不能改站点配置 403', hwCfg.status === 403, '实际 ' + hwCfg.status);
+
+  /* ---- 管理员能写新键，且读得回来（daily_quote / important_dates 的往返） ---- */
+  const putQ = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { daily_quote: ['测试一言', { text: '带出处的一句', from: '—— 测试' }] } },
+  });
+  t('管理员可以写 daily_quote', putQ.status === 200 && putQ.body.ok, JSON.stringify(putQ.body));
+
+  const putD = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { important_dates: [
+      { name: '测试单日', date: '2027-03-01T00:00:00' },
+      { name: '测试段考', date: '2027-04-01T00:00:00', endDate: '2027-04-02',
+        scope: [{ sub: '语文', txt: '第一单元' }] },
+    ] } },
+  });
+  t('管理员可以写 important_dates', putD.status === 200 && putD.body.ok, JSON.stringify(putD.body));
+
+  /* 关键：写完立刻读，两个键都要能读回来。
+     这一条正是本轮踩过的坑 —— 用 `in (${a}, ${b})` 写 SQL 时
+     写入成功但读取永远返回 0 行，所以必须验证「读完真的拿到了内容」。 */
+  const back = await call('/api/content');
+  const items = back.body.items || {};
+  t('读回 daily_quote 且内容正确',
+    Array.isArray(items.daily_quote) && items.daily_quote.length === 2,
+    JSON.stringify(items.daily_quote));
+  t('读回带出处的写法', !!(items.daily_quote && items.daily_quote[1] && items.daily_quote[1].from === '—— 测试'),
+    JSON.stringify(items.daily_quote && items.daily_quote[1]));
+  t('读回 important_dates 且内容正确',
+    Array.isArray(items.important_dates) && items.important_dates.length === 2,
+    JSON.stringify(items.important_dates));
+  t('读回段考的 endDate（驼峰）',
+    !!(items.important_dates && items.important_dates[1] && items.important_dates[1].endDate === '2027-04-02'),
+    JSON.stringify(items.important_dates && items.important_dates[1]));
+  t('读回段考的 scope 科目',
+    !!(items.important_dates && items.important_dates[1] && Array.isArray(items.important_dates[1].scope)
+       && items.important_dates[1].scope[0].sub === '语文'),
+    JSON.stringify(items.important_dates && items.important_dates[1] && items.important_dates[1].scope));
+
+  /* 已下线的旧键必须被拒 —— 留着它会让人以为「后台存了、首页没反应」是 bug */
+  const goneSong = await call('/api/content', {
+    method: 'PUT', token: adminToken, body: { items: { song_config: { x: 1 } } },
+  });
+  t('song_config 已从白名单移除（前端已改为直连 VoiceHub，无人消费）',
+    goneSong.status === 400, '实际 ' + goneSong.status);
+
+  const goneAct = await call('/api/content', {
+    method: 'PUT', token: adminToken, body: { items: { activities: [{ x: 1 }] } },
+  });
+  t('activities 已从白名单移除（主站用的是单数 activity）',
+    goneAct.status === 400, '实际 ' + goneAct.status);
 
   /* ---- 清理 ---- */
   for (const id of [pid, pid2]) {

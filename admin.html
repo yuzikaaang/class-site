@@ -732,7 +732,10 @@ var STATE = {
   /* 2026-10-05 新增面板的状态 */
   titles: { list: [], allowed: [], aiAccount: null, q: '' },
   homeworks: { list: [], notice: '' },
-  song: { list: [], config: null },
+  song: { list: [], cards: [] },
+  /* 2026-10-06 新增 */
+  quotes: { list: [] },
+  dates:  { list: [] },
 };
 window.__ADMIN_STATE = STATE;   /* 调试用 */
 
@@ -879,6 +882,11 @@ var ICON = {
   clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/>',
   ban:'<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  ticket:'<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>',
+  calendar:'<path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>',
+  quote:'<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1a1 1 0 0 1 1 1v1a2 2 0 0 1-2 2h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1a1 1 0 0 1 1 1v1a2 2 0 0 1-2 2H4a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
+  grip:'<circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/>',
   user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   globe:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/>',
   file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v6h6"/>',
@@ -1029,6 +1037,8 @@ var PAGES = [
   { id:'content',       label:'内容管理', icon:'layers',    group:'内容',  title:'内容管理' },
   { id:'homeworks',     label:'作业管理', icon:'file',      group:'内容',  title:'作业管理' },
   { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
+  { id:'quotes',        label:'每日一言', icon:'quote',     group:'内容',  title:'每日一言' },
+  { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
   { id:'logs',          label:'操作日志', icon:'file',      group:'安全',  title:'操作日志' },
   { id:'settings',      label:'系统设置', icon:'settings',  group:'系统',  title:'系统设置' },
@@ -1081,6 +1091,8 @@ function go(page){
     content:       renderContent,
     homeworks:     renderHomeworks,
     song:          renderSong,
+    quotes:        renderQuotes,
+    dates:         renderDates,
     logins:        renderLogins,
     logs:          renderLogs,
     settings:      renderSettings,
@@ -2775,73 +2787,824 @@ function hwDelete(idx){
 }
 
 /* ============================================================================
- * ⑪-D 面板：点歌管理（2026-10-05 新增）
+ * ⑪-D 面板：点歌管理（2026-10-06 改为直连 VoiceHub 实时数据）
  * ---------------------------------------------------------------------------
- * 需求「原先的点歌歌单、点歌券查询页面也放到后台」。
- * 数据在云端 song_config 字段里。
+ * 需求变更：「后台的点歌面板应该改成直连 VoiceHub 实时数据」。
+ *
+ * 之前这里读的是云端 song_config 字段 —— 那是个**空头字段**：主站从来没写过它，
+ * 同学点歌时用的是主站内置逻辑 + VoiceHub 平台数据。所以后台永远显示
+ * 「云端还没有歌单配置」，看着像坏了，其实是数据源压根就选错了。
+ *
+ * 现在的数据源：VoiceHub 开放 API（与主站 index.html 同一个平台、同一把 key）
+ *   base            https://xsyzc2505.dpdns.org/api/open
+ *   鉴权            请求头 x-api-key
+ *   歌单            GET  /songs?page=1&limit=100    → { data:{ songs, pagination } }
+ *   发券            POST /card-codes                → { data:{ cardCodes } }
+ *   删券            DELETE /card-codes?id=XX
+ *
+ * ⚠️ 密钥不明文写：admin.html 也是公开页面（GitHub Pages 上人人可看源码）。
+ *    这里复用主站的 xor 混淆方案 —— 密文写死，运行时用 XOR_KEY 解出来。
+ *    注意这只防「随手翻源码看见」，**不是加密**，别拿它当真正的保密手段。
+ *
+ * ⚠️ CORS：VoiceHub 那边的白名单是硬编码在 fork 仓库
+ *    yuzikaaang/VoiceHub 的 server/middleware/api-0-open-cors.ts 里的，
+ *    已含 https://yuzikaaang.github.io。换域名部署前要先改那边，否则全部请求被拦。
  * ========================================================================= */
+
+var VH_API      = 'https://xsyzc2505.dpdns.org/api/open';
+var VH_XOR_KEY  = 'cls2505-xor-key-2026';
+/* 以下两串是 xor 之后的密文（key = VH_XOR_KEY），解开才是真正的 vhub_xxx */
+var VH_DJ_KEY_ENC = 'FQQGUGoJAxsbC0oVCVBNTwRWAQYHChAEAAEGSRoNFxwJUhgaBA==';
+var VH_CP_KEY_ENC = 'FQQGUGoAUUtMWxccWgNAGwYHAwQBVBUBUwQHSExWRB8OBk4VBA==';
+
+/* ---- 是否在后台直连平台。想临时关掉（比如平台挂了）把这里置 false ---- */
+var VH_ENABLED = true;
+
+function vhXorDecrypt(cipher){
+  var bin = atob(cipher);
+  var enc = new TextEncoder();
+  var kb  = Array.prototype.slice.call(enc.encode(VH_XOR_KEY));
+  var bytes = [];
+  for(var i = 0; i < bin.length; i++) bytes.push(bin.charCodeAt(i) ^ kb[i % kb.length]);
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}
+function vhDjKey(){ try{ return vhXorDecrypt(VH_DJ_KEY_ENC); }catch(e){ return ''; } }
+function vhCpKey(){ try{ return vhXorDecrypt(VH_CP_KEY_ENC); }catch(e){ return ''; } }
+
+/** 点歌人字段兼容：平台可能返回字符串，也可能是 {name} 对象 */
+function vhReqName(s){
+  var r = (typeof s.requester === 'string') ? s.requester : ((s.requester && s.requester.name) || '');
+  return String(r == null ? '' : r).trim();
+}
+
+/** 平台返回 UTC ISO，直接切片会差 8 小时，这里按本地时区格式化 */
+function vhFmtTime(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+       + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/** 拉全量歌单（平台分页，第一页拿到总页数后再并发拉其余页） */
+function vhFetchSongs(){
+  var h = { 'x-api-key': vhDjKey() };
+  return fetch(VH_API + '/songs?page=1&limit=100', { headers: h })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var songs = (d && d.data && d.data.songs) || [];
+      var pages = (d && d.data && d.data.pagination && d.data.pagination.totalPages) || 1;
+      var tasks = [];
+      for(var i = 2; i <= pages; i++){
+        (function(pg){
+          tasks.push(fetch(VH_API + '/songs?page=' + pg + '&limit=100', { headers: h })
+            .then(function(r){ return r.json(); })
+            .then(function(x){ return (x && x.data && x.data.songs) || []; }));
+        })(i);
+      }
+      return Promise.all(tasks).then(function(rs){
+        var all = songs.slice();
+        rs.forEach(function(a){ all = all.concat(a); });
+        return all;
+      });
+    });
+}
+
+/** 拉券列表（只取第一页 100 张，够用；要更多可以再翻页） */
+function vhFetchCards(){
+  return fetch(VH_API + '/card-codes?page=1&limit=100', { headers: { 'x-api-key': vhCpKey() } })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ return (d && d.data && d.data.cardCodes) || []; });
+}
+
+/* ---- 面板骨架 ---- */
 function renderSong(){
   $('view').innerHTML =
     '<div class="alert info" style="margin-bottom:16px">'
-    +   '这里的配置对全班生效。同学在首页点歌台看到的歌单、点歌券数量都以此为准。'
+    +   '本页数据**实时来自点歌平台**（VoiceHub），不是云端缓存 —— 同学在首页点的歌、'
+    +   '领的券都会立刻出现在这里。此处的增删会真实作用到平台上，全班同步生效。'
     + '</div>'
+    + '<section class="panel" style="margin-bottom:16px">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'
+    +     '<h3 style="margin:0;font-size:.9rem">🎵 实时歌单</h3>'
+    +     '<div style="display:flex;gap:8px">'
+    +       '<button class="btn btn-sm btn-ghost" id="sgRefund">' + svg('ticket', 14) + ' 游戏券补发</button>'
+    +       '<button class="btn btn-sm btn-ghost" id="sgReload">' + svg('refresh', 14) + ' 刷新</button>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div id="sgSongs"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    + '</section>'
     + '<section class="panel">'
-    +   '<h3 style="margin:0 0 10px;font-size:.9rem">🎵 歌单配置</h3>'
-    +   '<div id="sgBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    +   '<h3 style="margin:0 0 10px;font-size:.9rem">🎟 点歌券管理</h3>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">'
+    +     '<div class="field" style="margin:0;min-width:90px"><label for="sgCount">生成数量</label>'
+    +       '<input id="sgCount" type="number" min="1" max="50" value="1"></div>'
+    +     '<div class="field" style="margin:0;flex:1;min-width:180px"><label for="sgNote">备注</label>'
+    +       '<input id="sgNote" maxlength="80" placeholder="如 手动添加"></div>'
+    +     '<button class="btn btn-sm" id="sgCreate">' + svg('plus', 14) + ' 生成券码</button>'
+    +   '</div>'
+    +   '<div id="sgCards"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
     + '</section>';
+
+  var rb = $('sgReload');
+  if(rb) rb.onclick = function(){ loadSong(); };
+  var rfb = $('sgRefund');
+  if(rfb) rfb.onclick = songRefundDialog;
+  var cb = $('sgCreate');
+  if(cb) cb.onclick = songCreateCards;
 
   loadSong();
 }
 
+/* ---- 取数 ---- */
 function loadSong(){
+  var sb = $('sgSongs'), cb2 = $('sgCards');
+  if(!VH_ENABLED){
+    if(sb) sb.innerHTML = '<div class="empty">' + svg('ban', 34) + '<p>后台直连已关闭</p>'
+      + '<p class="muted" style="font-size:.78rem">把 admin.html 里的 VH_ENABLED 改回 true 即可恢复</p></div>';
+    if(cb2) cb2.innerHTML = '';
+    return;
+  }
+
+  vhFetchSongs().then(function(list){
+    STATE.song.list = list;
+    paintSongSongs();
+  }).catch(function(e){
+    STATE.song.list = [];
+    paintSongSongs(e);
+  });
+
+  vhFetchCards().then(function(list){
+    STATE.song.cards = list;
+    paintSongCards();
+  }).catch(function(e){
+    STATE.song.cards = [];
+    paintSongCards(e);
+  });
+}
+
+/* ---- 渲染：歌单 ---- */
+function paintSongSongs(err){
+  var body = $('sgSongs');
+  if(!body) return;
+
+  if(err){
+    body.innerHTML = '<div class="empty">' + svg('alert', 34)
+      + '<p>拉取歌单失败</p>'
+      + '<p class="muted" style="font-size:.78rem;word-break:break-all">' + esc(String((err && err.message) || err)) + '</p>'
+      + '<p class="muted" style="font-size:.78rem">常见原因：平台暂时不可用，或本站域名不在平台 CORS 白名单里。</p></div>';
+    return;
+  }
+
+  var list = STATE.song.list || [];
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('music', 38) + '<p>平台上还没有人点歌</p>'
+      + '<p class="muted" style="font-size:.78rem">同学在首页「点歌台」提交后会实时出现在这里</p></div>';
+    return;
+  }
+
+  /* 按点赞降序，同票按创建时间倒序 —— 让最热门的排前面 */
+  var sorted = list.slice().sort(function(a, b){
+    var va = Number(a.voteCount) || 0, vb = Number(b.voteCount) || 0;
+    if(vb !== va) return vb - va;
+    return String(b.createdAt || '') < String(a.createdAt || '') ? -1 : 1;
+  });
+
+  var totalVotes = sorted.reduce(function(n, s){ return n + (Number(s.voteCount) || 0); }, 0);
+  var played = sorted.filter(function(s){ return !!s.played; }).length;
+
+  body.innerHTML =
+    '<div class="muted" style="font-size:.78rem;margin-bottom:8px">'
+    +   '共 <b>' + sorted.length + '</b> 首 · 总点赞 <b>' + totalVotes + '</b> · 已播放 <b>' + played + '</b>'
+    + '</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    +   '<th class="nowrap" style="width:36px">#</th>'
+    +   '<th>歌曲</th><th class="nowrap" style="width:70px">👍 点赞</th>'
+    +   '<th>点歌人</th><th class="nowrap" style="width:130px">点歌时间</th>'
+    +   '<th class="nowrap" style="width:70px">状态</th>'
+    + '</tr></thead><tbody>'
+    + sorted.map(function(s, i){
+        var req = vhReqName(s) || '—';
+        return '<tr>'
+          + '<td class="muted nowrap">' + (i + 1) + '</td>'
+          + '<td><b>' + esc(s.title || '(无歌名)') + '</b>'
+          +   '<i class="muted" style="display:block;font-size:.75rem;font-style:normal">' + esc(s.artist || '未知歌手') + '</i></td>'
+          + '<td class="nowrap"><b style="color:#af410f">' + (Number(s.voteCount) || 0) + '</b></td>'
+          + '<td class="nowrap">' + esc(req) + '</td>'
+          + '<td class="nowrap muted" style="font-size:.76rem">' + esc(vhFmtTime(s.createdAt)) + '</td>'
+          + '<td class="nowrap">' + (s.played
+              ? '<span class="badge badge-gray">已播放</span>'
+              : '<span class="badge badge-blue">待播放</span>') + '</td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+/* ---- 渲染：券列表 ---- */
+function paintSongCards(err){
+  var body = $('sgCards');
+  if(!body) return;
+
+  if(err){
+    body.innerHTML = '<div class="empty">' + svg('alert', 30) + '<p>拉取券列表失败</p>'
+      + '<p class="muted" style="font-size:.78rem;word-break:break-all">' + esc(String((err && err.message) || err)) + '</p></div>';
+    return;
+  }
+
+  var list = STATE.song.cards || [];
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('key', 34) + '<p>平台上还没有点歌券</p></div>';
+    return;
+  }
+
+  var avail = list.filter(function(c){ return c.status === 'AVAILABLE'; }).length;
+  var used  = list.filter(function(c){ return c.status === 'REDEEMED'; }).length;
+
+  body.innerHTML =
+    '<div class="muted" style="font-size:.78rem;margin-bottom:8px">'
+    +   '共 <b>' + list.length + '</b> 张 · 可用 <b>' + avail + '</b> · 已核销 <b>' + used + '</b>'
+    + '</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    +   '<th class="nowrap" style="width:36px">#</th>'
+    +   '<th class="nowrap" style="width:120px">券码</th>'
+    +   '<th>备注</th><th class="nowrap" style="width:80px">状态</th>'
+    +   '<th style="text-align:right;width:80px">操作</th>'
+    + '</tr></thead><tbody>'
+    + list.map(function(c, i){
+        var st = c.status === 'AVAILABLE' ? '<span class="badge badge-green">可用</span>'
+               : (c.status === 'REDEEMED' ? '<span class="badge badge-gray">已核销</span>'
+               : '<span class="badge badge-gray">' + esc(c.status || '?') + '</span>');
+        return '<tr>'
+          + '<td class="muted nowrap">' + (i + 1) + '</td>'
+          + '<td class="nowrap"><b class="mono" style="font-size:.78rem">' + esc(c.code || '') + '</b></td>'
+          + '<td class="muted" style="font-size:.76rem;word-break:break-all">' + esc(c.note || '（无备注）') + '</td>'
+          + '<td class="nowrap">' + st + '</td>'
+          + '<td class="nowrap" style="text-align:right">'
+          +   '<button class="btn btn-sm btn-ghost" data-delcard="' + esc(c.id) + '" data-code="' + attr(c.code || '') + '">'
+          +   svg('trash', 13) + ' 删除</button></td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-delcard]'), function(b){
+    b.onclick = function(){ songDeleteCard(b.dataset.delcard, b.dataset.code); };
+  });
+}
+
+/* ---- 生成券码（真实调平台） ---- */
+function songCreateCards(){
+  var n = parseInt(($('sgCount') || {}).value || '1', 10);
+  if(!(n >= 1)) n = 1;
+  if(n > 50) n = 50;
+  var note = (($('sgNote') || {}).value || '').trim() || '手动添加';
+
+  var btn = $('sgCreate');
+  if(btn){ btn.disabled = true; btn.textContent = '生成中…'; }
+
+  fetch(VH_API + '/card-codes', {
+    method: 'POST',
+    headers: { 'x-api-key': vhCpKey(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ count: n, prefix: 'SONG', length: 8, note: note })
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var codes = (d && d.data && d.data.cardCodes) || [];
+      if(codes.length) toast('已生成 ' + codes.length + ' 张券：' + codes.map(function(c){ return c.code; }).join('、'), 'ok', 6000);
+      else toast('平台未返回券码：' + JSON.stringify(d).slice(0, 120), 'err', 6000);
+      if($('sgNote')) $('sgNote').value = '';
+      loadSong();
+    })
+    .catch(function(e){ toast('生成失败：' + ((e && e.message) || e), 'err', 5000); })
+    .then(function(){
+      if(btn){ btn.disabled = false; btn.innerHTML = svg('plus', 14) + ' 生成券码'; }
+    });
+}
+
+/* ---- 删除券（真实删平台，不可恢复） ---- */
+function songDeleteCard(id, code){
+  confirmBox({
+    title: '删除点歌券',
+    html: '确定删除券码 <b>' + esc(code) + '</b> 吗？',
+    detail: '这会真实删除点歌平台上的这张券，同学拿着它就无法再点歌，且不可恢复。',
+    warn: '如果只是想让本站暂时不认这张券，主站点歌台里有「禁用」选项，那个是可撤销的。',
+    danger: true,
+    okText: '删除'
+  }).then(function(yes){
+    if(!yes) return;
+    fetch(VH_API + '/card-codes?id=' + encodeURIComponent(id), {
+      method: 'DELETE',
+      headers: { 'x-api-key': vhCpKey() }
+    })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d && d.success) toast('已删除 ' + code, 'ok', 3000);
+        else toast('删除失败：' + JSON.stringify(d).slice(0, 120), 'err', 5000);
+        loadSong();
+      })
+      .catch(function(e){ toast('删除失败：' + ((e && e.message) || e), 'err', 5000); });
+  });
+}
+
+/* ---- 游戏点歌券补发（原主站功能搬进后台） ----
+ * 需求：「原先的点歌歌单、点歌券查询页面也放到后台」中的补发部分。
+ * 与主站一致：note 格式必须与游戏端 REWARD.note 完全相同，
+ * 否则游戏端的平台查重（platformFind）认不出这张补发券，同学可能重复领。 */
+var SONG_GAMES = { bird:'像素飞鸟', snake:'贪吃蛇', doodle:'涂鸦跳跃', tetris:'俄罗斯方块' };
+var SONG_NOTES = {
+  bird:  '像素飞鸟过20管奖励',
+  snake: '贪吃蛇吃豆50奖励',
+  doodle:'涂鸦跳跃10000高奖励',
+  tetris:'俄罗斯方块200分奖励'
+};
+
+function songRefundDialog(){
+  var gameOpts = Object.keys(SONG_GAMES).map(function(k){
+    return '<option value="' + attr(k) + '">' + esc(SONG_GAMES[k]) + '</option>';
+  }).join('');
+
+  openModal({
+    title: '游戏点歌券补发',
+    sub: '给达到游戏奖励条件但因故没领到券的同学补一张',
+    body:
+      '<div class="field"><label for="srName">同学姓名</label>'
+      + '<input id="srName" maxlength="30" placeholder="如 张三">'
+      + '<p class="hint">必须与班级名单里的名字完全一致，否则本站台账对不上。</p></div>'
+      + '<div class="field"><label for="srGame">游戏</label>'
+      + '<select id="srGame">' + gameOpts + '</select></div>'
+      + '<div class="field"><label for="srTime">达成时间</label>'
+      + '<input id="srTime" type="datetime-local"></div>'
+      + '<div class="alert info" style="margin:0">'
+      +   '提交后会真实在平台上生成一张券，券码直接显示给你。请手动把券码发给该同学。'
+      + '</div>'
+      + '<div class="msg" id="srMsg"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>登记并生成券</button>',
+    onMount: function(box){
+      var t = box.querySelector('#srTime');
+      if(t){
+        var d = new Date();
+        function p(n){ return (n < 10 ? '0' : '') + n; }
+        t.value = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+                + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+      }
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var msg  = box.querySelector('#srMsg');
+        var name = (box.querySelector('#srName').value || '').trim();
+        var game = box.querySelector('#srGame').value;
+        var tv   = (t && t.value) ? t.value.replace('T', ' ') : '';
+        if(!name){ msg.textContent = '请填写同学姓名'; msg.style.color = 'var(--danger,#af410f)'; return; }
+
+        if(!tv){
+          var d = new Date();
+          function p(n){ return (n < 10 ? '0' : '') + n; }
+          tv = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+             + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+        }
+        var note = name + ' · ' + tv + ' · ' + (SONG_NOTES[game] || game);
+
+        msg.style.color = 'var(--fg-3)';
+        msg.textContent = '正在平台上生成券码…';
+        fetch(VH_API + '/card-codes', {
+          method: 'POST',
+          headers: { 'x-api-key': vhCpKey(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count: 1, prefix: 'SONG', length: 8, note: note })
+        })
+          .then(function(r){ return r.json().catch(function(){ return {}; }); })
+          .then(function(d){
+            var codes = (d && d.data && d.data.cardCodes) || [];
+            if(codes.length){
+              toast('已为 ' + name + ' 生成券码：' + codes[0].code + '（请手动发给该同学）', 'ok', 9000);
+              closeModal();
+            }else{
+              msg.style.color = 'var(--danger,#af410f)';
+              msg.textContent = '平台生成未成功，请在「点歌管理」里手动生成一张券发给同学。';
+            }
+            loadSong();
+          })
+          .catch(function(e){
+            msg.style.color = 'var(--danger,#af410f)';
+            msg.textContent = '平台生成未成功（' + ((e && e.message) || e) + '），请手动生成。';
+          });
+      };
+    }
+  });
+}
+
+/* ============================================================================
+ * ⑪-E 面板：每日一言（2026-10-06 新增）
+ * ---------------------------------------------------------------------------
+ * 需求「每日一言要真做成功能」。
+ *
+ * 云端字段：daily_quote  数组，支持两种写法混用：
+ *   "今天也要加油"                        ← 纯字符串
+ *   { text:"...", from:"—— 某人的话" }     ← 带出处
+ *
+ * 主站按「当天日期取模」选一句（同一天早上和晚上看到的是同一句，
+ * 跨天才换），所以这里改完不需要通知同学刷新具体某句，第二天自然生效。
+ *
+ * ⚠️ 把数组清空 → 主站那边整块「每日一言」卡片直接不渲染（不留空壳）。
+ *    这是刻意设计：后台删干净，首页就干净。
+ * ========================================================================= */
+function renderQuotes(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<button class="btn btn-sm" id="dqAdd">' + svg('plus', 14) + '新增一句</button>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="dqRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '首页「每日一言」每天自动换一句（按日期轮换），同学不用手动刷。'
+    +   '这里保存后，<b>改动会在下一天自然生效</b>；想让今天立刻变，让同学刷新一下页面即可。'
+    + '</div>'
+    + '<section class="panel"><div id="dqBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('dqAdd').onclick     = function(){ dqDialog(null); };
+  $('dqRefresh').onclick = function(){ loadQuotes(); };
+  loadQuotes();
+}
+
+function dqNormalize(list){
+  if(!Array.isArray(list)) return [];
+  return list.map(function(x){
+    if(typeof x === 'string') return { text: x, from: '' };
+    if(x && typeof x === 'object') return { text: String(x.text || ''), from: String(x.from || '') };
+    /* 数字 / 布尔 / null 一律丢掉。
+       不要写成 String(x) —— 数组里混进一个 0 或 true，首页就会出现
+       一句莫名其妙的「0」。宁可少显示，也不要显示垃圾。 */
+    return null;
+  }).filter(function(x){ return x && x.text.trim(); });
+}
+
+function loadQuotes(){
   api('/content').then(function(j){
     var items = (j && j.items) || {};
-    STATE.song.config = items.song_config || null;
-    paintSong();
+    STATE.quotes.list = dqNormalize(items.daily_quote);
+    paintQuotes();
   }).catch(function(e){
-    var b = $('sgBody');
+    var b = $('dqBody');
     if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
   });
 }
 
-function paintSong(){
-  var body = $('sgBody');
+function paintQuotes(){
+  var body = $('dqBody');
   if(!body) return;
-  var cfg = STATE.song.config;
+  var list = STATE.quotes.list || [];
 
-  if(!cfg || typeof cfg !== 'object'){
-    body.innerHTML = '<div class="empty">' + svg('activity', 38) + '<p>云端还没有歌单配置</p>'
-      + '<p class="muted" style="font-size:.78rem">同学点歌时用的是站点内置的歌单</p></div>';
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('quote', 38) + '<p>云端还没有每日一言</p>'
+      + '<p class="muted" style="font-size:.78rem">首页的那张卡片现在不会显示；加一条就会自动出现</p></div>';
     return;
   }
 
-  /* song_config 的结构由主站定义，这里做通用展示 + 原始编辑，
-     不假设字段名——否则主站改个字段名后台就崩了。 */
-  var keys = Object.keys(cfg);
-  body.innerHTML = '<div class="table-wrap"><table><thead><tr>'
-    + '<th>配置项</th><th>值</th></tr></thead><tbody>'
-    + keys.map(function(k){
-        var v = cfg[k];
-        var s = (typeof v === 'object') ? JSON.stringify(v) : String(v);
-        return '<tr><td><b>' + esc(k) + '</b></td>'
-          + '<td class="muted" style="font-size:.78rem;word-break:break-all">' + esc(s.slice(0, 300)) + '</td></tr>';
-      }).join('')
-    + '</tbody></table></div>'
-    + '<div style="margin-top:14px"><label style="font-size:.8rem;display:block;margin-bottom:6px">直接编辑（JSON）</label>'
-    + '<textarea id="sgJson" rows="10" style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--line);font-family:ui-monospace,monospace;font-size:.78rem">'
-    + esc(JSON.stringify(cfg, null, 2)) + '</textarea>'
-    + '<div style="text-align:right;margin-top:10px"><button class="btn btn-sm" id="sgSave">保存</button></div></div>';
+  /* 今天会轮到哪一句：与主站完全相同的取模算法，方便站主对照 */
+  var d = new Date();
+  var seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  var todayIdx = seed % list.length;
 
-  var btn = $('sgSave');
-  if(btn) btn.onclick = function(){
-    var raw = $('sgJson').value;
-    var parsed;
-    try{ parsed = JSON.parse(raw); }
-    catch(e){ toast('JSON 格式不对：' + e.message, 'err', 4600); return; }
-    api('/content', { method:'PUT', body:{ items:{ song_config: parsed } } })
-      .then(function(){ toast('歌单配置已保存', 'ok', 3000); loadSong(); })
-      .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
-  };
+  body.innerHTML =
+    '<div class="muted" style="font-size:.78rem;margin-bottom:8px">共 <b>' + list.length + '</b> 句</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    +   '<th class="nowrap" style="width:36px">#</th>'
+    +   '<th>内容</th><th style="width:180px">出处</th>'
+    +   '<th style="text-align:right;width:130px">操作</th>'
+    + '</tr></thead><tbody>'
+    + list.map(function(q, i){
+        return '<tr' + (i === todayIdx ? ' style="background:rgba(175,65,15,.05)"' : '') + '>'
+          + '<td class="muted nowrap">' + (i + 1)
+          +   (i === todayIdx ? '<span class="badge badge-blue" style="margin-left:4px">今天</span>' : '')
+          + '</td>'
+          + '<td>' + esc(q.text) + '</td>'
+          + '<td class="muted" style="font-size:.78rem">' + (q.from ? esc(q.from) : '—') + '</td>'
+          + '<td style="text-align:right"><div class="row-actions">'
+          +   '<button data-dq-edit="' + i + '">编辑</button>'
+          +   '<button class="danger" data-dq-del="' + i + '">删除</button>'
+          + '</div></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dq-edit]'), function(b){
+    b.onclick = function(){ dqDialog(Number(b.dataset.dqEdit)); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dq-del]'), function(b){
+    b.onclick = function(){ dqDelete(Number(b.dataset.dqDel)); };
+  });
+}
+
+function dqDialog(idx){
+  var list = STATE.quotes.list || [];
+  var isNew = (idx === null || idx === undefined);
+  var q = isNew ? { text:'', from:'' } : (list[idx] || { text:'', from:'' });
+
+  openModal({
+    title: isNew ? '新增每日一言' : '编辑每日一言',
+    sub: '留空出处的就只显示句子本身',
+    body:
+      '<div class="field"><label for="dqT">内容</label>'
+      + '<textarea id="dqT" rows="3" maxlength="200" placeholder="例如：慢慢来，比较快">' + esc(q.text) + '</textarea></div>'
+      + '<div class="field"><label for="dqF">出处（可选）</label>'
+      + '<input id="dqF" maxlength="60" value="' + attr(q.from) + '" placeholder="例如：—— 班主任"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>' + (isNew ? '新增' : '保存') + '</button>',
+    onMount: function(box){
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var text = (box.querySelector('#dqT').value || '').trim();
+        var from = (box.querySelector('#dqF').value || '').trim();
+        if(!text){ toast('内容不能为空', 'err'); return; }
+
+        var next = list.slice();
+        var item = { text: text };
+        if(from) item.from = from;
+        if(isNew) next.push(item); else next[idx] = item;
+
+        api('/content', { method:'PUT', body:{ items:{ daily_quote: next } } })
+          .then(function(){
+            closeModal();
+            toast(isNew ? '已新增' : '已保存', 'ok', 3000);
+            loadQuotes();
+          })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
+      };
+    }
+  });
+}
+
+function dqDelete(idx){
+  var list = STATE.quotes.list || [];
+  var q = list[idx];
+  if(!q) return;
+  confirmBox({
+    title: '删除每日一言',
+    html: '确定删除这句吗？<br><br><b>' + esc(q.text) + '</b>',
+    detail: list.length === 1 ? '这是最后一句，删完首页那张卡片就不会再显示。' : '',
+    danger: true,
+    okText: '删除'
+  }).then(function(ok){
+    if(!ok) return;
+    var next = list.slice();
+    next.splice(idx, 1);
+    api('/content', { method:'PUT', body:{ items:{ daily_quote: next } } })
+      .then(function(){ toast('已删除', 'ok'); loadQuotes(); })
+      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+  });
+}
+
+/* ============================================================================
+ * ⑪-F 面板：重要日期 / 考试范围（2026-10-06 新增）
+ * ---------------------------------------------------------------------------
+ * 需求「重要日期 / 考试范围也要能上云」。
+ *
+ * 云端字段：important_dates
+ *   [
+ *     { name:"寒假", date:"2027-01-30T00:00:00" },                       ← 单日
+ *     { name:"第一次段考", date:"2026-10-13T00:00:00",
+ *       endDate:"2026-10-14",                                            ← 跨天事项才填
+ *       scope:[ { sub:"语文", txt:"..." }, ... ] }                       ← 填了才显示「查看考试范围」
+ *   ]
+ *
+ * ⚠️ 字段名必须与主站 index.html 里的 IMPORTANT_DATES 完全一致 ——
+ *    主站是**整体替换**这个数组（applyCloudContent 里对 important_dates 的特判），
+ *    这里多写/少写一个字段都会被静默吞掉：比如漏了 endDate，段考就退化成单日；
+ *    漏了 scope，「查看考试范围」按钮直接消失。所以下面硬编码这几个键名。
+ * ========================================================================= */
+function renderDates(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<button class="btn btn-sm" id="dtAdd">' + svg('plus', 14) + '新增日期</button>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="dtRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '这里的每一条都会出现在首页「重要日期」倒计时里。'
+    +   '填了「考试范围」的事项，同学点开才有「查看考试范围」按钮。<br>'
+    +   '<b>注意：清空云端不影响首页</b> —— 主站会自动回退到页面内置的那份日期，不会出现空白。'
+    + '</div>'
+    + '<section class="panel"><div id="dtBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('dtAdd').onclick     = function(){ dtDialog(null); };
+  $('dtRefresh').onclick = function(){ loadDates(); };
+  loadDates();
+}
+
+function loadDates(){
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    STATE.dates.list = Array.isArray(items.important_dates) ? items.important_dates : [];
+    paintDates();
+  }).catch(function(e){
+    var b = $('dtBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function dtFmtDate(v){
+  if(!v) return '—';
+  var d = new Date(v);
+  if(isNaN(d.getTime())) return String(v).slice(0, 10);
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+function paintDates(){
+  var body = $('dtBody');
+  if(!body) return;
+  var list = STATE.dates.list || [];
+
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('calendar', 38) + '<p>云端还没有重要日期</p>'
+      + '<p class="muted" style="font-size:.78rem">首页此刻显示的是页面内置的那份（寒假 + 第一次段考）</p></div>';
+    return;
+  }
+
+  var sorted = list.slice().sort(function(a, b){
+    return String(a.date || '') < String(b.date || '') ? -1 : 1;
+  });
+
+  body.innerHTML =
+    '<div class="muted" style="font-size:.78rem;margin-bottom:8px">共 <b>' + sorted.length + '</b> 项</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    +   '<th>名称</th><th class="nowrap" style="width:200px">日期</th>'
+    +   '<th class="nowrap" style="width:90px">考试范围</th>'
+    +   '<th style="text-align:right;width:130px">操作</th>'
+    + '</tr></thead><tbody>'
+    + sorted.map(function(d){
+        var dateText = dtFmtDate(d.date);
+        if(d.endDate) dateText += ' — ' + dtFmtDate(d.endDate);
+        var sc = Array.isArray(d.scope) ? d.scope.filter(function(x){ return x && x.txt; }) : [];
+        return '<tr>'
+          + '<td><b>' + esc(d.name || '(未命名)') + '</b></td>'
+          + '<td class="muted nowrap" style="font-size:.78rem">' + esc(dateText) + '</td>'
+          + '<td class="nowrap">' + (sc.length
+              ? '<span class="badge badge-blue">' + sc.length + ' 科</span>'
+              : '<span class="muted">无</span>') + '</td>'
+          + '<td style="text-align:right"><div class="row-actions">'
+          +   '<button data-dt-edit="' + esc(d.name) + '">编辑</button>'
+          +   '<button class="danger" data-dt-del="' + esc(d.name) + '">删除</button>'
+          + '</div></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dt-edit]'), function(b){
+    b.onclick = function(){ dtDialog(b.dataset.dtEdit); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dt-del]'), function(b){
+    b.onclick = function(){ dtDelete(b.dataset.dtDel); };
+  });
+}
+
+/**
+ * 新增/编辑重要日期。
+ * @param {string|null} key 传 null = 新增；传名称 = 编辑那一条
+ */
+function dtDialog(key){
+  var list = STATE.dates.list || [];
+  var isNew = (key === null || key === undefined);
+  var d = isNew ? { name:'', date:'', endDate:'', scope:[] }
+                : (list.find(function(x){ return x.name === key; }) || { name:'', date:'', endDate:'', scope:[] });
+  var scope = Array.isArray(d.scope) ? d.scope.slice() : [];
+
+  /* 把 ISO 时间裁成 datetime-local 需要的 "YYYY-MM-DDTHH:mm" */
+  function toLocalInput(v){
+    if(!v) return '';
+    var t = String(v);
+    return t.length > 16 ? t.slice(0, 16) : t;
+  }
+  function toDayInput(v){ return v ? String(v).slice(0, 10) : ''; }
+
+  function scopeRows(){
+    if(!scope.length) return '<div class="muted" style="font-size:.78rem;padding:6px 0">还没有科目，点下面的「添加科目」</div>';
+    return scope.map(function(s, i){
+      return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start">'
+        + '<input data-sc-sub="' + i + '" value="' + attr(s.sub || '') + '" maxlength="12" placeholder="科目" style="width:80px;flex-shrink:0">'
+        + '<textarea data-sc-txt="' + i + '" rows="2" maxlength="600" placeholder="考试范围" style="flex:1">' + esc(s.txt || '') + '</textarea>'
+        + '<button type="button" class="btn btn-sm btn-ghost" data-sc-del="' + i + '" style="flex-shrink:0">' + svg('x', 13) + '</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  openModal({
+    title: isNew ? '新增重要日期' : ('编辑 ' + (d.name || '')),
+    sub: '跨天事项才填「结束日期」；不考试的事项不用填科目',
+    wide: true,
+    body:
+      '<div class="field"><label for="dtN">名称</label>'
+      + '<input id="dtN" maxlength="30" value="' + attr(d.name || '') + '" placeholder="例如：第一次段考"></div>'
+
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+      +   '<div class="field" style="flex:1;min-width:200px"><label for="dtD">开始时间</label>'
+      +   '<input id="dtD" type="datetime-local" value="' + attr(toLocalInput(d.date)) + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:180px"><label for="dtE">结束日期（可选）</label>'
+      +   '<input id="dtE" type="date" value="' + attr(toDayInput(d.endDate)) + '">'
+      +   '<p class="hint">只有跨天的事项才填，比如段考 13—14 日。</p></div>'
+      + '</div>'
+
+      + '<div class="field"><label>考试范围（可选）</label>'
+      +   '<div id="dtScope">' + scopeRows() + '</div>'
+      +   '<div style="margin-top:8px"><button type="button" class="btn btn-sm btn-ghost" id="dtScopeAdd">'
+      +   svg('plus', 13) + ' 添加科目</button></div>'
+      +   '<p class="hint">填了之后，同学在首页点这条才会看到「查看考试范围」入口。</p></div>'
+
+      + '<div class="msg" id="dtMsg"></div>',
+
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>' + (isNew ? '新增' : '保存') + '</button>',
+
+    onMount: function(box){
+      var scopeBox = box.querySelector('#dtScope');
+
+      /* 每一次重画都从 scope 数组重新生成，所以先把文本区里的改动收回去 */
+      function harvest(){
+        Array.prototype.forEach.call(box.querySelectorAll('[data-sc-sub]'), function(inp){
+          var i = Number(inp.dataset.scSub);
+          if(scope[i]) scope[i].sub = inp.value;
+        });
+        Array.prototype.forEach.call(box.querySelectorAll('[data-sc-txt]'), function(inp){
+          var i = Number(inp.dataset.scTxt);
+          if(scope[i]) scope[i].txt = inp.value;
+        });
+      }
+      function redraw(){
+        harvest();
+        scopeBox.innerHTML = scopeRows();
+        bind();
+      }
+      function bind(){
+        Array.prototype.forEach.call(scopeBox.querySelectorAll('[data-sc-del]'), function(b){
+          b.onclick = function(){ harvest(); scope.splice(Number(b.dataset.scDel), 1); redraw(); };
+        });
+      }
+      bind();
+
+      box.querySelector('#dtScopeAdd').onclick = function(){
+        harvest();
+        scope.push({ sub: '', txt: '' });
+        redraw();
+      };
+      box.querySelector('[data-no]').onclick = closeModal;
+
+      box.querySelector('[data-yes]').onclick = function(){
+        harvest();
+        var msg = box.querySelector('#dtMsg');
+        var name = (box.querySelector('#dtN').value || '').trim();
+        var date = (box.querySelector('#dtD').value || '').trim();
+        var end  = (box.querySelector('#dtE').value || '').trim();
+
+        if(!name){ msg.textContent = '名称不能为空'; msg.style.color = 'var(--danger,#af410f)'; return; }
+        if(!date){ msg.textContent = '请选择开始时间'; msg.style.color = 'var(--danger,#af410f)'; return; }
+        if(end && end < date.slice(0, 10)){
+          msg.textContent = '结束日期不能早于开始日期'; msg.style.color = 'var(--danger,#af410f)'; return;
+        }
+        /* 同名会被主站 openExamScope() 按 name 查找，重名就取到错的那条，必须拦住 */
+        var dup = (STATE.dates.list || []).some(function(x){
+          return x.name === name && x.name !== key;
+        });
+        if(dup){ msg.textContent = '已经有一条叫「' + name + '」的了，换个名字'; msg.style.color = 'var(--danger,#af410f)'; return; }
+
+        var item = { name: name, date: date };
+        if(end) item.endDate = end;
+        var real = scope.filter(function(s){ return (s.txt || '').trim(); })
+                        .map(function(s){ return { sub: (s.sub || '').trim(), txt: s.txt.trim() }; });
+        if(real.length) item.scope = real;
+
+        var next = (STATE.dates.list || []).slice();
+        if(isNew) next.push(item);
+        else{
+          var at = next.findIndex(function(x){ return x.name === key; });
+          if(at >= 0) next[at] = item; else next.push(item);
+        }
+
+        api('/content', { method:'PUT', body:{ items:{ important_dates: next } } })
+          .then(function(){
+            closeModal();
+            toast(isNew ? '已新增' : '已保存', 'ok', 3000);
+            loadDates();
+          })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
+      };
+    }
+  });
+}
+
+function dtDelete(key){
+  var list = STATE.dates.list || [];
+  var d = list.find(function(x){ return x.name === key; });
+  if(!d) return;
+  confirmBox({
+    title: '删除重要日期',
+    html: '确定删除 <b>' + esc(d.name || '') + '</b> 吗？',
+    detail: '删除后首页倒计时里不再显示这一条。',
+    danger: true,
+    okText: '删除'
+  }).then(function(ok){
+    if(!ok) return;
+    var next = list.filter(function(x){ return x.name !== key; });
+    api('/content', { method:'PUT', body:{ items:{ important_dates: next } } })
+      .then(function(){ toast('已删除', 'ok'); loadDates(); })
+      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+  });
 }
 
 /* ============================================================================
