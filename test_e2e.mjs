@@ -504,12 +504,19 @@ console.log('\n【10】后台新增：开号 / 批量导入 / 登录记录 / 导
   });
   t('重名开号被拒 409', c1dup.status === 409, '实际 ' + c1dup.status);
 
-  /* --- 非法用户名应 400 --- */
+  /* --- 非法用户名应 400（2026-10-06 放宽到 2 位：两字姓名可导入，1 位仍拒） --- */
   const cBad = await call('/api/admin?action=create-user', {
     method: 'POST', token: adminToken,
-    body: { username: 'ab', password: 'Init2025' },
+    body: { username: 'a', password: 'Init2025' },
   });
   t('用户名过短被拒 400', cBad.status === 400, '实际 ' + cBad.status);
+
+  /* --- 2 位用户名现在合法（按姓名建账号的关键） --- */
+  const cTwo = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: '余倩', password: 'Init2025' },
+  });
+  t('2 字中文用户名可创建', cTwo.status === 200 && cTwo.body.ok, JSON.stringify(cTwo.body).slice(0, 120));
 
   /* --- 新账号首次登录：mustChangePassword=true --- */
   const l1 = await call('/api/auth?action=login', {
@@ -1487,19 +1494,64 @@ console.log('\n【18】头衔系统与 AI 助手交接（2026-10-05 新增）');
     method: 'POST', token: adminToken, body: { id: pid2, titles: ['课代表'] },
   });
 
-  /* 真任命课代表后可以改作业 */
+  /* 2026-10-06 收紧：课代表不再能 PUT 整包写（整包语义可清空别的科目），
+     改走 POST ?action=ca-save-subject 专用通道，服务端按科目头衔强校验 */
   const hwOk = await call('/api/content', {
     method: 'PUT', token: hwToken,
     body: { items: { homework_notice: { text: '课代表布置的作业' } } },
   });
-  t('课代表可以改作业通知', hwOk.status === 200 && hwOk.body.ok, JSON.stringify(hwOk.body));
+  t('课代表 PUT 整包写被拒 403（权限收紧）', hwOk.status === 403, '实际 ' + hwOk.status);
+
+  /* 先放一份作业进云端（课代表单科保存需要有现存条目） */
+  const seedHw = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { holiday_homeworks: [
+      { id: 'hw-e2e-ca', start: '2026-10-01', end: '2026-10-07', items: [
+        { subject: '语文', tasks: ['原任务1'] },
+        { subject: '数学', tasks: ['数学原任务'] },
+      ] },
+    ] } },
+  });
+  t('管理员预置作业条目', seedHw.status === 200 && seedHw.body.ok, JSON.stringify(seedHw.body).slice(0, 100));
+
+  /* 通用「课代表」头衔不含具体科目 → 单科保存被拒 */
+  const caGeneric = await call('/api/content?action=ca-save-subject', {
+    method: 'POST', token: hwToken,
+    body: { subject: '语文', tasks: ['新的语文任务'], homeworkId: 'hw-e2e-ca' },
+  });
+  t('通用课代表头衔不能改具体科目 403', caGeneric.status === 403, '实际 ' + caGeneric.status + ' ' + (caGeneric.body.error || ''));
+
+  /* 任命为「语文课代表」→ 只能改语文 */
+  await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken, body: { id: pid2, titles: ['语文课代表'] },
+  });
+  const caCn = await call('/api/content?action=ca-save-subject', {
+    method: 'POST', token: hwToken,
+    body: { subject: '语文', tasks: ['新的语文任务', { text: '附件任务', img: './homework/x.jpg' }], homeworkId: 'hw-e2e-ca' },
+  });
+  t('语文课代表可保存语文 200', caCn.status === 200 && caCn.body.ok, JSON.stringify(caCn.body).slice(0, 120));
+
+  const caMath = await call('/api/content?action=ca-save-subject', {
+    method: 'POST', token: hwToken,
+    body: { subject: '数学', tasks: ['越权改数学'], homeworkId: 'hw-e2e-ca' },
+  });
+  t('语文课代表改数学被拒 403（科目级隔离）', caMath.status === 403, '实际 ' + caMath.status + ' ' + (caMath.body.error || ''));
+
+  /* 保存结果回读：语文 tasks 已换、数学原样、start/end 未动 */
+  const hwRead = await call('/api/content', { method: 'GET', token: adminToken });
+  const hwBack = ((hwRead.body.items || {}).holiday_homeworks || []).find((h) => h && h.id === 'hw-e2e-ca');
+  const cnBack = hwBack && (hwBack.items || []).find((it) => it.subject === '语文');
+  const maBack = hwBack && (hwBack.items || []).find((it) => it.subject === '数学');
+  t('回读：语文任务已更新且附件对象保留', cnBack && cnBack.tasks[0] === '新的语文任务' && cnBack.tasks[1] && cnBack.tasks[1].img === './homework/x.jpg', JSON.stringify(cnBack).slice(0, 140));
+  t('回读：数学未被波及', maBack && maBack.tasks[0] === '数学原任务', JSON.stringify(maBack).slice(0, 100));
+  t('回读：作业起止日期未动', hwBack && hwBack.start === '2026-10-01' && hwBack.end === '2026-10-07', JSON.stringify(hwBack && { s: hwBack.start, e: hwBack.end }));
 
   /* 课代表不能改公告（越权必须拦住） */
   const hwAnn = await call('/api/content', {
     method: 'PUT', token: hwToken, body: { items: { announcements: [{ title: '越权公告' }] } },
   });
   t('课代表不能改公告 403', hwAnn.status === 403, '实际 ' + hwAnn.status);
-  t('越权提示说明只能改作业', /只能修改作业/.test(hwAnn.body.error || ''), hwAnn.body.error);
+  t('越权提示说明需要管理员', /需要管理员权限/.test(hwAnn.body.error || ''), hwAnn.body.error);
 
   /* 课代表不能改每日一言（新增面板的键，同样不在作业白名单里） */
   const hwQuote = await call('/api/content', {

@@ -806,7 +806,7 @@ var STATE = {
   reviews:  { list: [], total: 0, page: 1, size: 30 },
   viewlogs: { list: [], total: 0, page: 1, size: 30, top: [], q: '' },
   /* 班级内容：公告 + 内容合并成一个列表（2026-10-06） */
-  classcontent: { list: [] },
+  classcontent: { list: [], cat: '全部', sort: 'new', q: '' },
   /* 2026-10-05 新增面板的状态 */
   titles: { list: [], allowed: [], aiAccount: null, q: '' },
   homeworks: { list: [], notice: '' },
@@ -2241,6 +2241,7 @@ function contentItemsToArray(items){
          '通知'）就会掉进 site_config，把数据搬错地方。 */
       out.push({
         kind: x.kind || fieldToKind(f),
+        cat: x.category || '',
         title: x.title || '',
         body: x.body || '',
         updatedAt: x.updatedAt || null,
@@ -2281,19 +2282,35 @@ function fieldToKind(f){
 function renderClassContent(){
   var S = STATE.classcontent;
   $('view').innerHTML =
-    '<div class="toolbar" style="background:var(--panel)">'
+    '<div class="toolbar" style="background:var(--panel);flex-wrap:wrap;gap:8px">'
     +   '<button class="btn btn-sm" id="ccAdd">' + svg('plus', 14) + '新增内容</button>'
+    +   '<select id="ccCatFilter" class="gate-input" style="width:auto;padding:6px 8px;font-size:.8rem">'
+    +     [{ v:'全部', n:'全部' }, { v:'site', n:'📡 网站内部' }, { v:'activity', n:'🔔 重要更新' },
+          { v:'class', n:'🏫 班级事务' }, { v:'misc', n:'💭 站主杂谈' }, { v:'__hw__', n:'📝 作业' }].map(function(c){
+          return '<option value="' + attr(c.v) + '"' + (S.cat === c.v ? ' selected' : '') + '>' + esc(c.n) + '</option>';
+        }).join('')
+    +   '</select>'
+    +   '<input id="ccQ" class="gate-input" placeholder="搜标题 / 正文…" style="width:180px;padding:6px 10px;font-size:.8rem" value="' + attr(S.q) + '">'
+    +   '<button class="btn btn-sm btn-ghost" id="ccSort" title="切换时间排序">⇅ ' + (S.sort === 'new' ? '新→旧' : '旧→新') + '</button>'
     +   '<span style="flex:1"></span>'
     +   '<span class="muted" style="font-size:.8rem" id="ccCount">加载中…</span>'
     + '</div>'
     + '<div class="alert info" style="margin-bottom:14px">'
-    +   '<b>公告</b>会同步显示在班级站首页的通知栏，可以指定只发给某几位同学；'
-    +   '<b>作业 / 活动 / 课程表</b>这类是站内的内容区块，全班都能看到。<br>'
-    +   '列表里只显示标题和时间，<b>点「查看」看正文详情</b>，点「编辑」改内容。'
+    +   '<b>公告</b>按站内四板块分类（网站内部 / 重要更新 / 班级事务 / 站主杂谈），可以指定只发给某几位同学；'
+    +   '<b>作业不再在这里编辑</b>——课代表在前端作业界面改自己的科目，你在前端用管理员账号可改全部科目。<br>'
+    +   '列表里只显示标题和时间，<b>点「查看」看正文详情</b>。'
     + '</div>'
     + '<section class="panel" id="ccPanel"><div class="loading"><div class="spinner"></div>加载中…</div></section>';
 
   $('ccAdd').onclick = function(){ classContentDialog(null); };
+  $('ccCatFilter').onchange = function(){ S.cat = this.value; paintClassContent(); };
+  $('ccSort').onclick = function(){ S.sort = (S.sort === 'new' ? 'old' : 'new'); this.textContent = '⇅ ' + (S.sort === 'new' ? '新→旧' : '旧→新'); paintClassContent(); };
+  var qTimer = null;
+  $('ccQ').oninput = function(){
+    clearTimeout(qTimer);
+    var v = this.value;
+    qTimer = setTimeout(function(){ S.q = v; paintClassContent(); }, 200);
+  };
   loadClassContent();
 }
 
@@ -2334,6 +2351,7 @@ function loadClassContent(){
         _store: 'announcement',
         _ref: a,                     /* 原始对象，保存时原样写回（形态保真） */
         kind: '公告',
+        cat: a.category || '',       /* 站内板块分类（site/activity/class/misc），面板筛选用 */
         title: a.title || annFirstLine(text),
         body: text,
         targets: a.targets || [],
@@ -2418,11 +2436,48 @@ function paintClassContent(){
     return;
   }
 
-  panel.innerHTML = '<div class="rec-list">' + S.list.map(function(c, i){
+  /* ③ 过滤 + 排序 + 搜索（2026-10-06：站主要求按前端四板块 + 作业分开找，能搜能排）
+        分类下拉的值同时匹配公告的板块分类（cat）与「📝 作业」这类 kind。 */
+  var rows = S.list;
+  if(S.cat && S.cat !== '全部'){
+    var catKey = S.cat;
+    if(catKey === '__hw__'){
+      rows = rows.filter(function(c){ return c.kind === '作业'; });
+    } else {
+      rows = rows.filter(function(c){ return c.kind === '公告' && (c.cat || '') === catKey; });
+    }
+  }
+  if(S.q){
+    var q = S.q.trim().toLowerCase();
+    if(q){
+      rows = rows.filter(function(c){
+        return String(c.title || '').toLowerCase().indexOf(q) >= 0
+            || String(c.body || '').toLowerCase().indexOf(q) >= 0;
+      });
+    }
+  }
+  rows = rows.slice().sort(function(a, b){
+    var ta = Date.parse(String(a.time || '').replace(' ', 'T')) || 0;
+    var tb = Date.parse(String(b.time || '').replace(' ', 'T')) || 0;
+    return S.sort === 'new' ? (tb - ta) : (ta - tb);
+  });
+
+  if(!rows.length){
+    panel.innerHTML = '<div class="empty">' + svg('layers', 38) + '<p>当前筛选下没有内容</p>'
+      + '<p class="muted" style="font-size:.78rem">换个分类或清空搜索关键词试试</p></div>';
+    return;
+  }
+
+  panel.innerHTML = '<div class="rec-list">' + rows.map(function(c){
+    var i = S.list.indexOf(c);
     var timeTxt = c.time ? fmt(c.time) : '—';
     var scope = (c.kind === '公告')
       ? (c.targets && c.targets.length ? '定向 ' + c.targets.length + ' 人' : '全体同学')
       : '';
+    /* 作业不再在后台编辑（2026-10-06）：课代表在前端改，管理员前端改全部 */
+    var editBtn = (c.kind === '作业')
+      ? ''
+      : '<button data-cc-edit="' + i + '">' + svg('edit', 14) + '编辑</button>';
     return '<div class="rec">'
       + '<div class="rec-main">'
       +   '<div class="rec-top">'
@@ -2437,7 +2492,7 @@ function paintClassContent(){
       + '</div>'
       + '<div class="rec-act">'
       +   '<button class="view" data-cc-view="' + i + '">' + svg('eye', 14) + '查看</button>'
-      +   '<button data-cc-edit="' + i + '">' + svg('edit', 14) + '编辑</button>'
+      +   editBtn
       +   '<button class="danger" data-cc-del="' + i + '">' + svg('trash', 14) + '删除</button>'
       + '</div></div>';
   }).join('') + '</div>';
@@ -2567,7 +2622,22 @@ function classContentDialog(idx){
   var kind = c ? c.kind : '公告';
   var isAnnounce = kind === '公告';
   var isHomework = kind === '作业';
-  var KIND_OPTS = ['公告', '作业', '活动', '课程表', '值日安排', '其他'];
+  /* 「作业」已从后台编辑移除（2026-10-06）：入口被拦在这里，给出去向说明 */
+  if (isHomework) {
+    openModal({
+      title: '作业已移到前端编辑',
+      body: '<div class="alert info">后台不再编辑作业。现在改作业有两条路：<br>'
+          + '<b>① 课代表</b>：登录班级站 → 打开作业查看 → 自己科目卡片上点「✏️ 编辑」（只能改本科目）；<br>'
+          + '<b>② 站主</b>：用管理员账号登录班级站 → 同样位置，全部科目都能改。<br>'
+          + '删错条目仍可在这里点该条作业的「删除」。</div>',
+      foot: '<button class="btn" data-cc-cancel>知道了</button>',
+      onMount: function(box){ box.querySelector('[data-cc-cancel]').onclick = closeModal; }
+    });
+    return;
+  }
+  /* 「作业」已从后台编辑移除（2026-10-06）：课代表在前端作业界面改本科目，
+     站主用管理员账号登录前端也能改全部科目。这里不再新建/编辑作业。 */
+  var KIND_OPTS = ['公告', '活动', '课程表', '值日安排', '其他'];
   /* 主站公告分类（index.html ANN_CATS 的键） */
   var ANN_CATS = [
     { key: 'site',     name: '网站内部' },

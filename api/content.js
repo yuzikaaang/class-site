@@ -60,6 +60,9 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') return await readContent(req, res);
     if (req.method === 'PUT') return await writeContent(req, res);
+    if (req.method === 'POST' && String(req.query.action || '').toLowerCase() === 'ca-save-subject') {
+      return await caSaveSubject(req, res);
+    }
     return fail(res, 405, '不支持的方法');
   } catch (e) {
     console.error('[content]', req.method, e);
@@ -162,23 +165,16 @@ async function writeContent(req, res) {
   const bad = keys.filter((k) => !ALLOW_CONTENT_KEYS.includes(k));
   if (bad.length) return fail(res, 400, '不支持的内容键：' + bad.join(', '));
 
-  /* --- 权限判定 --- */
+  /* --- 权限判定 ---
+     2026-10-06 收紧：课代表不再走 PUT 整包写入（原来只限字段级，
+     但整包语义下可以把别的科目清空、改 homework_notice，与
+     「课代表只能修改对应科目」的要求冲突）。课代表改作业请走
+     POST ?action=ca-save-subject 专用通道，服务端强校验科目头衔。 */
   const isAdmin = u.role === 'admin';
   const isAI = !!u.isAI;
-  const myTitles = String(u.title || '')
-    .split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean);
-  /* 有「课代表」或某个具体科目的课代表，都算作业可编辑 */
-  const canEditHw = myTitles.some((t) => t === '课代表' || /课代表$/.test(t));
 
-  if (!isAdmin && !isAI && !canEditHw) {
+  if (!isAdmin && !isAI) {
     return fail(res, 403, '需要管理员权限');
-  }
-  /* 课代表只能碰作业相关字段 */
-  if (!isAdmin && !isAI && canEditHw) {
-    const illegal = keys.filter((k) => !HW_EDITABLE_KEYS.includes(k));
-    if (illegal.length) {
-      return fail(res, 403, '你只能修改作业相关内容，不能改：' + illegal.join(', '));
-    }
   }
 
   /* 体积与结构校验：宁可拒绝，也不要写进去一堆前端渲染不了的东西 */
@@ -256,6 +252,116 @@ async function writeContent(req, res) {
   return ok(res, {
     message: '已保存',
     updated: changed,
+    serverTime: Date.now(),
+  });
+}
+
+/* ---------------- 课代表：单科作业保存（2026-10-06） ----------------
+   POST ?action=ca-save-subject   body: { subject, tasks, homeworkId? }
+
+   规则（站主拍板「课代表只能修改对应科目」）：
+     · 持有「语文课代表」头衔 → 只能改 subject=语文 的任务；
+       通用「课代表」头衔不含具体科目，不给作业编辑权。
+     · 管理员 / AI 助手不受限（调试与兜底）。
+     · 目标条目：homeworkId 指定；缺省取 holiday_homeworks 里 end 最大的一条
+       （= 当前生效的那份作业）。
+     · tasks 的条目要么是字符串，要么是 {text, img?, audio?, audioLabel?} 对象
+       （附件 URL 由前端保真回传，服务端只做形状校验，不重建对象）。
+   本接口只动该科目的 tasks，作业的 start/end 与其他科目原样保留。 */
+async function caSaveSubject(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return;
+
+  const b = await body(req);
+  const subject = String(b.subject || '').trim();
+  const KNOWN_SUBJECTS = ['语文', '数学', '英语', '物理', '化学', '生物', '政治', '历史', '地理', '其他'];
+  if (!KNOWN_SUBJECTS.includes(subject)) {
+    return fail(res, 400, '不认识的科目：' + (subject || '（空）'));
+  }
+
+  const isAdmin = u.role === 'admin' || !!u.isAI;
+  if (!isAdmin) {
+    const titles = String(u.title || '')
+      .split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean);
+    if (!titles.includes(subject + '课代表')) {
+      return fail(res, 403, '你不是「' + subject + '课代表」，不能修改该科目');
+    }
+  }
+
+  const tasks = b.tasks;
+  if (!Array.isArray(tasks)) return fail(res, 400, 'tasks 必须是数组');
+  if (tasks.length > 100) return fail(res, 400, '任务条数过多（上限 100 条）');
+  for (const t of tasks) {
+    if (typeof t === 'string') {
+      if (t.length > 500) return fail(res, 400, '单条任务太长（上限 500 字）');
+      continue;
+    }
+    if (t && typeof t === 'object' && !Array.isArray(t)) {
+      const shapeOk = typeof t.text === 'string' && t.text.length <= 500 &&
+        (t.img === undefined || t.img === null || typeof t.img === 'string') &&
+        (t.audio === undefined || t.audio === null || typeof t.audio === 'string') &&
+        (t.audioLabel === undefined || t.audioLabel === null || typeof t.audioLabel === 'string');
+      if (!shapeOk) return fail(res, 400, '任务条目格式不对（应为文本或 {text, img/audio} 附件对象）');
+      continue;
+    }
+    return fail(res, 400, '任务条目格式不对（应为文本或附件对象）');
+  }
+
+  const sql = getSql();
+  const uid = await systemUserId(sql);
+  if (!uid) return fail(res, 500, '没有可用的系统账号');
+
+  /* 读现有文档。与 writeContent 相同的铁律：读不出来 = 拒绝写入，
+     绝不静默当空文档，防止把 70 条公告 + 全部作业冲掉。 */
+  const cur = await sql`
+    select data_value from user_data
+     where user_id = ${uid} and data_key = ${CONTENT_KEY}
+  `;
+  let doc = {};
+  if (cur.length) {
+    const p = jsonCol(cur[0].data_value);
+    if (cur[0].data_value === null || cur[0].data_value === undefined) {
+      doc = {};
+    } else if (p && typeof p === 'object' && !Array.isArray(p)) {
+      doc = p;
+    } else {
+      return fail(res, 500, '云端现有内容读不出来，已中止保存以防覆盖历史数据，请联系管理员');
+    }
+  }
+
+  const list = Array.isArray(doc.holiday_homeworks) ? doc.holiday_homeworks : [];
+  let hw = null;
+  if (b.homeworkId) {
+    hw = list.find((h) => h && String(h.id) === String(b.homeworkId)) || null;
+    if (!hw) return fail(res, 404, '找不到指定的作业条目：' + b.homeworkId);
+  } else {
+    for (const h of list) {
+      if (h && (!hw || String(h.end || '') > String(hw.end || ''))) hw = h;
+    }
+    if (!hw) return fail(res, 404, '云端还没有作业条目，请先让管理员发布一份作业');
+  }
+  if (!Array.isArray(hw.items)) hw.items = [];
+
+  const entry = { subject, tasks: tasks };
+  const hit = hw.items.some((it) => it && it.subject === subject);
+  hw.items = hit
+    ? hw.items.map((it) => (it && it.subject === subject) ? entry : it)
+    : hw.items.concat([entry]);
+  doc.holiday_homeworks = list;
+
+  await sql`
+    insert into user_data (user_id, data_key, data_value, updated_at)
+    values (${uid}, ${CONTENT_KEY}, ${JSON.stringify(doc)}, now())
+    on conflict (user_id, data_key)
+    do update set data_value = excluded.data_value, updated_at = now()
+  `;
+
+  await audit(u.id, 'content-ca-subject', 'site_content', String(hw.id || ''),
+    (isAdmin ? '管理员' : '课代表') + '修改作业科目「' + subject + '」（' + tasks.length + ' 条）');
+
+  return ok(res, {
+    message: subject + ' 已保存',
+    homeworkId: hw.id || null,
     serverTime: Date.now(),
   });
 }

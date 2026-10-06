@@ -1166,6 +1166,12 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .hw-item{margin:0 0 14px;border:1px solid #f2eae2;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(69,61,55,.05)}
 .hw-item:last-child{margin-bottom:0}
 .hw-item-head{display:flex;align-items:center;gap:8px;padding:9px 14px;background:#faf5ef;border-bottom:1px solid #f2eae2}
+/* 课代表编辑按钮（2026-10-06）：本科目课代表/管理员可见 */
+.hw-edit-btn{margin-left:auto;border:1px solid #e2d5c3;background:#fff;color:#8a5a2b;border-radius:8px;padding:3px 10px;font-size:.72rem;cursor:pointer;flex-shrink:0}
+.hw-edit-btn:hover{background:#fdf3e7}
+.dark .hw-edit-btn{background:#2a2523;border-color:#443c35;color:#d8b98f}
+.ca-ta{width:100%;box-sizing:border-box;min-height:180px;padding:10px 12px;border-radius:10px;border:1px solid #e2d5c3;background:#fff;color:#222;font-size:.85rem;line-height:1.7;resize:vertical;font-family:inherit}
+.dark .ca-ta{background:#221f1d;border-color:#443c35;color:#eee}
 .hw-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:999px;font-size:.82rem;font-weight:800;color:#fff;line-height:1.5;box-shadow:0 2px 6px rgba(0,0,0,.08)}
 .hw-item-body{padding:12px 14px}
 .hw-tasks{margin:0;padding:0;list-style:none}
@@ -2078,6 +2084,16 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 <!-- ===== 作业配图放大查看 ===== -->
 <div class="allboard-mask" id="hwZoomMask" onclick="closeHwZoom()">
   <img id="hwZoomImg" src="" alt="作业配图放大">
+</div>
+
+<!-- ===== 课代表作业编辑（2026-10-06）=====
+     后台不再提供作业编辑（站主要求），改作业走这里：
+     课代表登录后只能改自己科目的任务；管理员可改全部科目。 -->
+<div class="allboard-mask" id="caMask">
+  <div class="allboard-box" style="max-width:580px">
+    <div class="allboard-head"><span id="caTitle">✏️ 编辑作业</span><button onclick="closeCaEditor()">关闭</button></div>
+    <div id="caBody" style="padding:14px 16px"></div>
+  </div>
 </div>
 
 
@@ -4987,6 +5003,13 @@ function renderAccount(){
       return;
     }
     acctCloseHidden(false);
+    /* 个人资料页（账号弹窗内嵌，不跳转；2026-10-06 站主要求「点开姓名就能改」） */
+    if(ACCT_TAB === 'myprofile'){
+      if(title) title.textContent = '📇 我的资料';
+      box.innerHTML = myProfileHtml();
+      if(MY_PROF_STATE === 'idle') myProfLoad();
+      return;
+    }
     if(title) title.textContent = '👤 我的账号';
     box.innerHTML = acctProfileHtml();
     return;
@@ -5184,7 +5207,7 @@ function acctProfileHtml(){
       '<div class="acct-avatar">' + esc(initial) + '</div>' +
       '<div style="flex:1;min-width:0">' +
         /* 需求：点击姓名可以查看与修改个人信息 */
-        '<div class="acct-uname" onclick="openMyProfile()" style="cursor:pointer" title="查看 / 修改我的个人信息">' +
+        '<div class="acct-uname" onclick="acctTab(\'myprofile\')" style="cursor:pointer" title="查看 / 修改我的个人信息">' +
           esc(u.displayName || u.username) +
           (myTitle.length ? '<span class="acct-urole title-tag">' + esc(myTitle[0]) + '</span>' : '') +
           '<span class="acct-urole' + (u.role === 'admin' ? '' : ' user') + '">' +
@@ -5199,7 +5222,7 @@ function acctProfileHtml(){
     '<div class="acct-sw" style="margin-top:14px">' +
       '<div><span class="t">📇 我的资料</span>' +
         '<span class="s">姓名、学号、准考证号由管理员维护；微信/QQ/手机号可自己填</span></div>' +
-      '<button class="acct-btn" style="width:auto;padding:8px 14px;font-size:.78rem" onclick="openMyProfile()">查看 / 修改</button>' +
+      '<button class="acct-btn" style="width:auto;padding:8px 14px;font-size:.78rem" onclick="acctTab(\'myprofile\')">查看 / 修改</button>' +
     '</div>' +
 
     '<div class="acct-sw">' +
@@ -5234,30 +5257,162 @@ function acctProfileHtml(){
    能自己填的是联系方式（微信/QQ/手机号），提交后等管理员审核。
    认领/修改的入口本来就在首页的「个人资料查询」板块里（那一套逻辑很完整），
    这里不重复实现，直接把用户带过去。 */
+/* ---------- 我的资料：账号弹窗内嵌页（2026-10-06） ----------
+   站主要求：点开自己的姓名之后，就能查看并修改个人数据。
+   以前这里是「跳到首页资料查询板块去找输入框」，体验绕；
+   现在直接在账号弹窗里开一页：只读信息 + 微信/QQ/手机号自助填写。
+   姓名、学号、准考证号、政治面貌由管理员维护，同学改不了（后端也拦）。 */
+var MY_PROF = null;
+var MY_PROF_STATE = 'idle';    /* idle | loading | ok | none | error */
+var MY_PROF_ERR = '';
+
+/* 属性值转义：esc() 只处理 &<>，放进 value="…" 里遇到引号会把属性截断 */
+function attr(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function openMyProfile(){
   if(!isLoggedIn()){ openAccount(); return; }
-  closeAccount();
-
-  /* 首页资料查询板块的输入框 id 形如 contact-input-<id>，用它定位 */
-  var input = document.querySelector('[id^="contact-input-"]');
-  if(input){
-    var box = input.closest ? input.closest('.gate-box') : null;
-    if(box && box.scrollIntoView){
-      box.scrollIntoView({ behavior:'smooth', block:'center' });
-    }else if(input.scrollIntoView){
-      input.scrollIntoView({ behavior:'smooth', block:'center' });
-    }
-    /* 已经认领过的同学：直接帮他把资料查出来，省得自己再输一次 */
-    try{
-      if(PC_MY_PROFILE_ID){
-        var m = /^contact-input-(\d+)$/.exec(input.id);
-        if(m && typeof findContact === 'function') findContact(m[1]);
-      }
-    }catch(e){}
-    if(typeof uiMsg === 'function') uiMsg('在下方「个人资料查询」里认领/修改你的资料');
-    return;
+  ACCT_TAB = 'myprofile';
+  if(MY_PROF_STATE === 'ok' || MY_PROF_STATE === 'none' || MY_PROF_STATE === 'error'){
+    MY_PROF_STATE = 'idle'; MY_PROF = null;   /* 重新拉一次，保证是最新的 */
   }
-  if(typeof uiMsg === 'function') uiMsg('请在首页「个人资料查询」板块操作', '#af410f');
+  renderAccount();
+  var m = document.getElementById('acctMask');
+  if(m) m.classList.add('show');
+}
+
+function myProfLoad(){
+  if(!isLoggedIn()) return;
+  MY_PROF_STATE = 'loading';
+  var box = document.getElementById('acctBody');
+  if(box) box.innerHTML = myProfileHtml();
+  api('/profile?action=me')
+    .then(function(j){
+      if(j && j.ok && j.profile){ MY_PROF = j.profile; MY_PROF_STATE = 'ok'; }
+      else { MY_PROF = null; MY_PROF_STATE = 'none'; }
+      PC_MY_PROFILE_ID = MY_PROF ? MY_PROF.id : null;
+      if(ACCT_TAB === 'myprofile') renderAccount();
+    })
+    .catch(function(e){
+      MY_PROF_ERR = (e && e.message) || '未知错误';
+      MY_PROF_STATE = 'error';
+      if(ACCT_TAB === 'myprofile') renderAccount();
+    });
+}
+
+function myProfileHtml(){
+  if(MY_PROF_STATE === 'idle' || MY_PROF_STATE === 'loading'){
+    return '<p class="acct-hint">⏳ 正在读取你的资料…</p>';
+  }
+  if(MY_PROF_STATE === 'error'){
+    return '<p class="acct-hint">读取失败：' + esc(MY_PROF_ERR) + '</p>' +
+      '<button class="acct-btn" onclick="myProfLoad()">重试</button>' +
+      '<button class="acct-btn ghost" onclick="acctTab(\'profile\')">返回</button>';
+  }
+  var p = MY_PROF;
+
+  /* 还没认领资料：先认领（学号 + 姓名双验，与后端 claim 一致） */
+  if(!p){
+    return '<p class="acct-hint">你还没认领班级资料。认领之后就能自己维护<b>微信 / QQ / 手机号</b>，' +
+        '同学查到的也是你填的内容。</p>' +
+      '<div class="acct-field"><label>姓名</label><input id="mpName" placeholder="你的姓名" autocomplete="off"></div>' +
+      '<div class="acct-field"><label>学号</label><input id="mpSid" placeholder="例如 250518" autocomplete="off"></div>' +
+      '<button class="acct-btn" id="mpClaim" onclick="myProfClaim()">认领我的资料</button>' +
+      '<div class="acct-msg" id="mpMsg"></div>' +
+      '<p style="margin:12px 0 0"><button class="acct-btn ghost" onclick="acctTab(\'profile\')">返回</button></p>';
+  }
+
+  var stMap = {
+    approved: '✅ 已通过审核，同学可以查到',
+    pending:  '⏳ 已提交，等站主审核（审核中同学查不到）',
+    rejected: '⚠️ 未通过审核' + (p.rejectReason ? '：' + esc(p.rejectReason) : ''),
+    none:     '— 还没填，填一项保存即可'
+  };
+  var st = stMap[p.contactStatus] || '';
+
+  return '<div class="acct-user" style="margin-bottom:12px">' +
+      '<div class="acct-avatar">' + esc((p.name || '?').charAt(0)) + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div class="acct-uname">' + esc(p.name) + '</div>' +
+        '<div class="acct-usub">' + esc(p.role || '学生') + (p.studentId ? ' · 学号 ' + esc(p.studentId) : '') + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    /* 只读区：管理员维护的字段，同学改不了 */
+    '<div class="acct-sw" style="margin-top:0">' +
+      '<div><span class="t">🔒 班级信息</span>' +
+        '<span class="s">学号 ' + esc(p.studentId || '—') + '　准考证号 ' + esc(p.examNo || '—') +
+        '　政治面貌 ' + esc(p.politics || '—') + '<br>这部分由管理员维护，自己改不了，有误请找站主</span></div>' +
+    '</div>' +
+
+    '<div class="acct-field"><label>💬 微信号</label><input id="mpWechat" value="' + attr(p.wechat || '') + '" placeholder="选填，微信号" autocomplete="off"></div>' +
+    '<div class="acct-field"><label>🐧 QQ 号</label><input id="mpQq" value="' + attr(p.qq || '') + '" placeholder="选填，5–12 位数字" autocomplete="off"></div>' +
+    '<div class="acct-field"><label>📱 手机号</label><input id="mpPhone" value="' + attr(p.phone || '') + '" placeholder="选填，手机号" autocomplete="off"></div>' +
+
+    '<button class="acct-btn" id="mpSave" onclick="myProfSave()">保存我的联系方式</button>' +
+    '<div class="acct-msg" id="mpMsg"></div>' +
+    '<p class="acct-hint">' + st + '<br>' +
+      '改完会重新提交审核（站主核一遍才对同学可见），这是为了防止有人乱填别人的联系方式。<br>' +
+      '不想被查到就清空三项再保存。</p>' +
+    '<p style="margin:12px 0 0"><button class="acct-btn ghost" onclick="acctTab(\'profile\')">返回</button></p>';
+}
+
+function myProfSay(t, cls){
+  var el = document.getElementById('mpMsg');
+  if(el){ el.textContent = t || ''; el.className = 'acct-msg ' + (cls || '') + ' show'; }
+}
+
+function myProfSave(){
+  var w = (document.getElementById('mpWechat') || {}).value || '';
+  var q = (document.getElementById('mpQq') || {}).value || '';
+  var ph = (document.getElementById('mpPhone') || {}).value || '';
+  w = w.trim(); q = q.trim(); ph = ph.trim();
+
+  if(!w && !q && !ph){
+    /* 清空：允许，但要提示会撤回公开 */
+    if(!confirm('三项都空着，保存会把你的联系方式撤回（同学查不到）。确定吗？')) return;
+  }
+  if(ph && !/^[0-9+\-() ]{6,20}$/.test(ph)){ myProfSay('手机号格式看起来不对'); return; }
+  if(q && !/^[0-9]{5,12}$/.test(q)){ myProfSay('QQ 号应为 5–12 位数字'); return; }
+
+  var btn = document.getElementById('mpSave');
+  if(btn) btn.disabled = true;
+  myProfSay('提交中…', 'ok');
+  api('/profile?action=submit', { method:'POST', body:{ wechat:w, qq:q, phone:ph } })
+    .then(function(j){
+      if(btn) btn.disabled = false;
+      myProfSay((j && j.message) || '已提交，等站主审核', 'ok');
+      if(typeof uiMsg === 'function') uiMsg('✅ 已提交，等站主审核');
+      /* 重新拉一次，拿到新的审核状态 */
+      setTimeout(myProfLoad, 600);
+    })
+    .catch(function(e){
+      if(btn) btn.disabled = false;
+      myProfSay((e && e.message) || '保存失败，请重试');
+    });
+}
+
+function myProfClaim(){
+  var name = ((document.getElementById('mpName') || {}).value || '').trim();
+  var sid  = ((document.getElementById('mpSid') || {}).value || '').trim();
+  if(!name || !sid){ myProfSay('姓名和学号都要填'); return; }
+  var btn = document.getElementById('mpClaim');
+  if(btn) btn.disabled = true;
+  myProfSay('认领中…', 'ok');
+  api('/profile?action=claim', { method:'POST', body:{ name:name, studentId:sid } })
+    .then(function(j){
+      if(btn) btn.disabled = false;
+      if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
+      myProfSay((j && j.message) || '认领成功', 'ok');
+      setTimeout(myProfLoad, 600);
+    })
+    .catch(function(e){
+      if(btn) btn.disabled = false;
+      myProfSay((e && e.message) || '认领失败，请核对姓名与学号');
+    });
 }
 
 /* ---------- 改密码 ---------- */
@@ -8389,11 +8544,162 @@ function _renderHwItems(items, hwId){
     }).join('');
     var doneCnt = (it.tasks||[]).filter(function(t, ti){ return _isHwDone(hwId, it.subject, ti); }).length;
     var progHtml = total ? '<span class="hw-progress">'+doneCnt+'/'+total+' 已完成</span>' : '';
+    /* 课代表编辑入口（2026-10-06）：登录 + 本科目课代表（或管理员）才显示 */
+    var editBtnHtml = _canEditSubject(it.subject)
+      ? '<button class="hw-edit-btn" onclick="event.stopPropagation();openCaEditor(\''+esc(hwId)+'\',\''+esc(it.subject)+'\')" title="修改本科目作业">✏️ 编辑</button>'
+      : '';
     return '<div class="hw-item">'
-      + '<div class="hw-item-head"><span class="hw-badge" style="background:'+s.c+'">'+s.e+' '+esc(it.subject)+'</span>'+progHtml+'</div>'
+      + '<div class="hw-item-head"><span class="hw-badge" style="background:'+s.c+'">'+s.e+' '+esc(it.subject)+'</span>'+progHtml+editBtnHtml+'</div>'
       + '<div class="hw-item-body">'+tasks+'</div>'
       + '</div>';
   }).join('');
+}
+
+/* ============================================================
+ * 【课代表作业编辑】2026-10-06
+ * ------------------------------------------------------------
+ * 站主拍板的分工：后台只有站主能进 → 作业改版走前端——
+ *   · 课代表登录后，在自己科目的作业卡片上点「✏️ 编辑」，
+ *     只能改本科目任务（服务端按 profiles.title 强校验，前端按钮只是入口）；
+ *   · 管理员（站主）登录后全部科目可编辑（补上后台作业编辑移除后的空缺）；
+ *   · 附件（图片/音频）以「📎 [图片] 描述」占位行预留——原有附件原样保留，
+ *     新增附件行在描述后用「 | 链接」带上 URL；没带 URL 的行保存为文字提示，
+ *     之后拿到链接再补。
+ * 任务一行一条，与后台旧编辑器同一套习惯。
+ * ============================================================ */
+var CA_CTX = null;   /* { hwId, hwLabel, subject, orig } */
+
+function _myTitles(){
+  var u = AUTH.user || {};
+  return String(u.title || '').split(/[,，、\s]+/).map(function(x){ return x.trim(); }).filter(Boolean);
+}
+function _canEditSubject(subject){
+  if(!isLoggedIn()) return false;
+  if(isAdmin()) return true;
+  return _myTitles().indexOf(subject + '课代表') >= 0;
+}
+
+function openCaEditor(hwId, subject){
+  if(!_canEditSubject(subject)){
+    if(typeof uiMsg === 'function') uiMsg('只有「' + subject + '课代表」能编辑本科目', '#af410f');
+    return;
+  }
+  var hw = null, list = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
+  for(var i = 0; i < list.length; i++){ if(String(list[i].id) === String(hwId)){ hw = list[i]; break; } }
+  if(!hw){ if(typeof uiMsg === 'function') uiMsg('找不到作业数据，刷新页面后再试', '#af410f'); return; }
+  var it = null, items = hw.items || [];
+  for(var j = 0; j < items.length; j++){ if(items[j] && items[j].subject === subject){ it = items[j]; break; } }
+  var orig = (it && it.tasks || []).slice();
+  CA_CTX = { hwId: String(hw.id), hwLabel: (hw.start || '') + ' ~ ' + (hw.end || ''), subject: subject, orig: orig };
+
+  var taVal = orig.map(function(t){
+    if(t && typeof t === 'object'){
+      var kind = t.audio ? '音频' : '图片';
+      return '📎 [' + kind + '] ' + (t.text || '');
+    }
+    return String(t == null ? '' : t);
+  }).join('\n');
+
+  document.getElementById('caTitle').textContent = '✏️ 编辑「' + subject + '」作业 · ' + CA_CTX.hwLabel;
+  document.getElementById('caBody').innerHTML =
+      '<p style="margin:0 0 8px;font-size:.78rem;color:#6e635a;line-height:1.7">' +
+      '一行一条任务。图片/音频是 <b>📎 [图片] 描述</b> 这样的占位行：已有的会原样保留（改文字即可）；' +
+      '新加的附件行在描述后用 <b>| 链接</b> 带上网址（没有链接就先保存，之后拿到再补）。' +
+      (isAdmin() ? '<br>你是管理员：本次保存直接生效。' : '<br>你是本科目课代表：只能改本科目，保存即生效。') +
+      '</p>' +
+      '<textarea id="caTa" class="ca-ta"></textarea>' +
+      '<button class="acct-btn" id="caGo" style="margin-top:10px" onclick="caSave()">保存修改</button>' +
+      '<div class="acct-msg" id="caMsg"></div>';
+  document.getElementById('caTa').value = taVal;
+  document.getElementById('caMask').classList.add('show');
+  if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
+}
+
+function closeCaEditor(){
+  var m = document.getElementById('caMask');
+  if(m) m.classList.remove('show');
+  CA_CTX = null;
+}
+
+function caSay(t, cls){
+  var el = document.getElementById('caMsg');
+  if(el){ el.textContent = t || ''; el.className = 'acct-msg ' + (cls || '') + ' show'; }
+}
+
+function caSave(){
+  if(!CA_CTX) return;
+  var lines = document.getElementById('caTa').value.split('\n');
+  var tasks = [];
+  var pool = CA_CTX.orig.filter(function(t){ return t && typeof t === 'object'; });
+  var pendingAtt = 0;
+
+  for(var li = 0; li < lines.length; li++){
+    var line = lines[li].replace(/\s+$/, '');
+    if(!line.trim()) continue;
+
+    if(/^\s*📎/.test(line)){
+      var m = line.match(/^\s*📎\s*\[([^\]]*)\]\s*/);
+      var kind = (m && m[1]) ? m[1] : '图片';
+      var rest = m ? line.slice(m[0].length) : line.replace(/^\s*📎\s*/, '');
+      var url = null, desc = rest.trim();
+      var pipe = rest.indexOf('|');
+      if(pipe >= 0){ url = rest.slice(pipe + 1).trim(); desc = rest.slice(0, pipe).trim(); }
+
+      /* 复用原附件对象：描述一致的优先，否则按原顺序取队首——URL 不丢 */
+      var idx = -1;
+      for(var i = 0; i < pool.length; i++){ if(pool[i] && (pool[i].text || '') === desc){ idx = i; break; } }
+      if(idx < 0 && pool.length) idx = 0;
+      if(idx >= 0){
+        var o = pool.splice(idx, 1)[0];
+        var obj = { text: desc };
+        if(o.audio || (kind === '音频' && url)) obj.audio = url || o.audio;
+        else obj.img = url || o.img;
+        if(obj.audio && o.audioLabel) obj.audioLabel = o.audioLabel;
+        tasks.push(obj);
+      } else if(url){
+        var obj2 = { text: desc };
+        if(kind === '音频') obj2.audio = url; else obj2.img = url;
+        tasks.push(obj2);
+      } else {
+        /* 新加的附件行还没链接：先存成文字占位，之后拿到链接再来补 */
+        pendingAtt++;
+        tasks.push('📎 [' + kind + '] ' + desc + '（附件链接待补）');
+      }
+      continue;
+    }
+    tasks.push(line.trim());
+  }
+
+  var btn = document.getElementById('caGo');
+  if(btn) btn.disabled = true;
+  caSay('保存中…', 'ok');
+  api('/content?action=ca-save-subject', {
+      method: 'POST',
+      body: { subject: CA_CTX.subject, tasks: tasks, homeworkId: CA_CTX.hwId },
+    })
+    .then(function(j){
+      if(btn) btn.disabled = false;
+      var hw = null, list = SITE_DATA.holidayHomeworks || [];
+      for(var i = 0; i < list.length; i++){ if(String(list[i].id) === String(CA_CTX.hwId)){ hw = list[i]; break; } }
+      if(hw && Array.isArray(hw.items)){
+        var entry = { subject: CA_CTX.subject, tasks: tasks };
+        var hit = false;
+        for(var k = 0; k < hw.items.length; k++){
+          if(hw.items[k] && hw.items[k].subject === CA_CTX.subject){ hw.items[k] = entry; hit = true; break; }
+        }
+        if(!hit) hw.items.push(entry);
+      }
+      closeCaEditor();
+      if(typeof uiMsg === 'function'){
+        uiMsg('✅ ' + ((j && j.message) || '已保存') + (pendingAtt ? '（' + pendingAtt + ' 个附件待补链接）' : ''));
+      }
+      /* 作业弹窗 / 悬浮球若开着，统一走现成的刷新逻辑 */
+      if(typeof refreshHwViews === 'function') refreshHwViews();
+    })
+    .catch(function(e){
+      if(btn) btn.disabled = false;
+      caSay((e && e.message) || '保存失败，请重试');
+    });
 }
 /* 作业配图放大查看 */
 function hwZoom(src){ var m=document.getElementById('hwZoomMask'), i=document.getElementById('hwZoomImg'); if(!m||!i) return; i.src=src; m.classList.add('show'); }

@@ -82,6 +82,7 @@ export default async function handler(req, res) {
         case 'save-profile':   return await saveProfile(req, res, me, b);
         case 'delete-profile': return await deleteProfile(req, res, me, b);
         case 'batch-profiles': return await batchProfiles(req, res, me, b);
+        case 'bind-profiles':  return await bindProfiles(req, res, me, b);
         case 'set-title':      return await setTitle(req, res, me, b);
         case 'handover-ai':    return await handoverAi(req, res, me, b);
         case 'save-secret':    return await saveAdminSecret(req, res, me, b);
@@ -102,7 +103,8 @@ function normUsername(s) {
   return String(s || '').trim().toLowerCase();
 }
 function validUsername(u) {
-  return /^[a-z0-9_\u4e00-\u9fa5]{3,20}$/.test(u);
+  /* 与 auth.js 保持一致（2026-10-06 放宽到 2 位）；此副本曾漏改导致两字姓名导入被拒 */
+  return /^[a-z0-9_\u4e00-\u9fa5]{2,20}$/.test(u);
 }
 
 /* ---------------- 读：用户列表 ---------------- */
@@ -1259,4 +1261,68 @@ async function deleteAdminSecret(req, res, me, b) {
     console.error('[admin] delete secret', e);
     return fail(res, 400, e.message);
   }
+}
+
+/* ---------------- 批量绑定「账号 ↔ 班级资料」（2026-10-06） ----------------
+   POST admin?action=bind-profiles   body: { names: ['余子康', ...], dryRun?: true }
+
+   背景：管理员按名单批量建账号（username=姓名）+ 批量导资料（name=姓名），
+   两边同名但没关联。资料要靠同学自己在前端「认领」（学号+姓名双验）才能挂上，
+   全班 60 人都去认领一遍体验不好。
+
+   本接口按姓名把两边对上：profiles.user_id = users.id，
+   之后同学登录 → /api/profile?action=me 直接返回自己的资料，
+   「我的资料」里就能直接填 / 改微信、QQ、手机号。
+
+   ⚠️ 只绑「资料还没被人认领」的条目；已认领且是本人 → 跳过；
+      已认领且是别人 → 报冲突不覆盖（防互相顶掉）。
+   dryRun=true 时只报告会做什么，不写库（先跑一遍心里有数）。 */
+async function bindProfiles(req, res, me, b) {
+  if (req.method !== 'POST') return fail(res, 405, '请用 POST');
+
+  const names = Array.isArray(b.names) ? b.names : [];
+  if (!names.length) return fail(res, 400, 'names 必须是非空数组');
+  /* 与批量导入同一道子请求上限：Workers 单调用 50 个子请求，每条约 3 条 SQL */
+  if (names.length > 15) {
+    return fail(res, 400, '单次最多 15 条（Cloudflare Workers 子请求上限），请分片提交');
+  }
+
+  const dry = !!b.dryRun;
+  const sql = getSql();
+  const out = { bound: 0, skipped: 0, noAccount: [], noProfile: [], conflict: [], boundNames: [] };
+
+  for (const raw of names) {
+    const name = String(raw || '').trim().slice(0, 30);
+    if (!name) continue;
+
+    const acc = await sql`
+      select id, username from users where username = ${name} limit 1
+    `;
+    if (!acc.length) { out.noAccount.push(name); continue; }
+    const uid = Number(acc[0].id);
+
+    const prof = await sql`
+      select id, user_id, name from profiles where name = ${name} limit 1
+    `;
+    if (!prof.length) { out.noProfile.push(name); continue; }
+    const pid = Number(prof[0].id);
+    const owner = prof[0].user_id == null ? null : Number(prof[0].user_id);
+
+    if (owner === uid) { out.skipped++; continue; }
+    if (owner !== null && owner !== uid) { out.conflict.push(name); continue; }
+
+    if (!dry) {
+      await sql`update profiles set user_id = ${uid}, updated_at = now() where id = ${pid}`;
+    }
+    out.bound++;
+    out.boundNames.push(name);
+  }
+
+  if (!dry && out.bound) {
+    await audit(me.id, 'profile.bind', 'profile', null,
+      '批量绑定账号与资料：' + out.bound + ' 人（' + out.boundNames.slice(0, 3).join('、') +
+      (out.boundNames.length > 3 ? ' 等' : '') + '）');
+  }
+
+  return ok(res, Object.assign({ message: dry ? '预检完成（未写入）' : ('已绑定 ' + out.bound + ' 人') }, out));
 }

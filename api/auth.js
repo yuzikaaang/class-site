@@ -152,10 +152,18 @@ async function login(req, res) {
   await logLogin(sql, req, u.id);
   const token = await issueSession(sql, u.id);
 
+  /* 头衔一并返回：前端据此显示「课代表编辑」入口（2026-10-06）。
+     登录不频繁，多一次查询可接受；老库无 profiles 表时静默跳过。 */
+  let loginTitle = '';
+  try {
+    const pr = await sql`select title from profiles where user_id = ${u.id} limit 1`;
+    if (pr.length) loginTitle = pr[0].title || '';
+  } catch (e) { /* ignore */ }
+
   return ok(res, {
     message: '登录成功',
     token,
-    user: shape(u),
+    user: Object.assign(shape(u), { title: loginTitle }),
     /* 首次登录（或管理员重置过密码）→ 前端强制弹改密，不给跳过 */
     mustChangePassword: !!u.must_change_password,
   });
@@ -285,6 +293,9 @@ async function me(req, res) {
     user: {
       id: u.id, username: u.username, displayName: u.displayName,
       role: u.role, createdAt: u.createdAt,
+      /* 头衔与班级身份（来自 profiles，currentUser 已查好）：
+         前端「课代表编辑作业」按钮的判定依据 */
+      title: u.title || '', profileRole: u.profileRole || '',
     },
     isAdmin: u.role === 'admin',
     cloudKeys: keys.map((k) => ({ key: k.data_key, updatedAt: k.updated_at })),
