@@ -313,8 +313,8 @@ console.log('\n【1】路由与 CORS');
 
   const bad = await call('/api/auth?action=login', { method: 'POST', body: {}, origin: 'https://evil.com' });
   const allowHeader = bad.headers.get('access-control-allow-origin');
-  t('非白名单来源不回显（防跨站盗用）', allowHeader !== 'https://evil.com',
-    '实际 ' + allowHeader);
+  t('非白名单来源【不输出】CORS 头（站规：不得回退白名单任一项）',
+    allowHeader === null || allowHeader === '', '实际 ' + allowHeader);
 }
 
 console.log('\n【2】注册（首个用户自动成为管理员）');

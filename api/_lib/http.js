@@ -123,11 +123,14 @@ export function cors(req, res) {
   const origin = req.headers.origin || '';
   const { allowOrigins } = cfg();
 
-  let allow = '*';
-  if (!allowOrigins.includes('*')) {
-    allow = allowOrigins.includes(origin) ? origin : allowOrigins[0] || '';
-  } else if (origin) {
+  /* 站规（2026-09-30 第十八轮立）：不在白名单就【不输出】Access-Control-Allow-Origin，
+     不得回退到白名单任一项——旧写法 `includes(origin) ? origin : allowOrigins[0]`
+     会让任意来源都收到白名单第一项，构成防御纵深缺失。Workers 版 2026-10-06 补落实。 */
+  let allow = '';
+  if (allowOrigins.includes('*')) {
     /* 白名单是 * 时，回显具体来源，方便本地调试 */
+    allow = origin;
+  } else if (allowOrigins.includes(origin)) {
     allow = origin;
   }
 
