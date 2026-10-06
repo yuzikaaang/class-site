@@ -15,6 +15,12 @@ name = "class-site-api"
 main = "api/worker.mjs"
 compatibility_date = "2026-10-01"
 
+# ⚠️ 自动部署需要它：CI 不知道你的账号是哪个。
+#    填法：Cloudflare 后台 → 右侧栏复制「账户 ID」，或 npx wrangler whoami 里看。
+#    这不是敏感信息（不像 API Token），可以放心写进仓库。
+#    本地手动 npx wrangler deploy 时不填也能跑（wrangler 会用你登录的账号）。
+# account_id = "在这里填你的账户 ID"
+
 # bcryptjs 依赖 Node 的 crypto/stream，开启 nodejs_compat 才能跑
 compatibility_flags = ["nodejs_compat"]
 
@@ -36,3 +42,8 @@ SESSION_DAYS = "30"
 
 # 是否允许自助注册（1 开 / 0 关）
 ALLOW_REGISTER = "1"
+
+# 构建标记：由 GitHub Actions 在部署时临时追加（不回写仓库）。
+# 作用见 api/worker.mjs 里 X-Build-Sha 响应头的注释 —— 用来核对线上跑的是哪份代码。
+# 本地部署时是默认值，不影响使用。
+BUILD_SHA = "local"

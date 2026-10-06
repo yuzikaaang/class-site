@@ -1,0 +1,189 @@
+# ============================================================
+# 后端部署：自动发布到 Cloudflare Workers
+# ------------------------------------------------------------
+# 2026-10-06 新增。
+#
+# 【为什么需要它】
+# Workers 默认**不会**跟着 Git 仓库自动部署（那是 Pages 的能力）。
+# 之前的流程是改完代码手动跑 `npx wrangler deploy`，
+# 忘一次线上就一直是旧代码 —— 而本地测试全绿，看不出任何异常。
+# 本轮就出过这事：`api/content.js` 的读取 bug 修好了、测试也过了，
+# 但因为没 deploy，云端读取依然返回空。
+#
+# 【触发条件】
+# 只在后端相关文件变化时跑：
+#   api/**        业务代码
+#   wrangler.toml 部署配置
+#   package.json  依赖变化（比如换了 Neon 驱动版本）
+# 前端改 index.html / admin.html 时**不会**触发 —— 后端没变，没必要重部。
+# 也可以在 Actions 页面手动点「Run workflow」应急。
+#
+# 【前置配置（一次性，做一次就行）】
+# GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret
+#   CLOUDFLARE_API_TOKEN   你的 Cloudflare API Token
+#   CLOUDFLARE_ACCOUNT_ID  你的 Cloudflare 账户 ID（可选，见下）
+#
+# 关于 ACCOUNT_ID：如果你的 Token 只在一个账号下有权限，wrangler 能自己推断，
+# 可以不配；配了更稳。**两个都不配会部署失败**，工作流会给出明确提示而不是静默跳过。
+# ============================================================
+
+name: 部署后端到 Cloudflare Workers
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'api/**'
+      - 'wrangler.toml'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-worker.yml'
+  # 手动触发（应急重部、或改了 secret 之后想重跑一次）
+  workflow_dispatch:
+
+# 同时只跑一个部署，避免两份代码互相覆盖
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取仓库内容
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------
+      # 先检查必备的 secret 在不在。
+      # 这一步是刻意加的：缺 secret 时 wrangler 的报错很含糊
+      #（"Authentication error" 之类的），看不出到底是没配还是配错了。
+      # 提前说清楚，省得对着一行报错猜半天。
+      # ------------------------------------------------------------
+      - name: 检查部署凭据是否齐全
+        shell: bash
+        # ⚠️ secret 一律走 env 传入，不在 run 里直接 ${{ }} 插值。
+        #    插值的写法一旦值里含引号就会破坏 shell 语法，
+        #    而且展开后的值有机会被 echo 出去、绕过 GitHub 的掩码。
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CF_TOKEN" ]; then
+            echo "❌ 缺少 CLOUDFLARE_API_TOKEN"
+            echo ""
+            echo "去配一下（只需一次）："
+            echo "  GitHub 仓库 → Settings → Secrets and variables → Actions"
+            echo "  → New repository secret"
+            echo ""
+            echo "Token 在 Cloudflare 后台拿："
+            echo "  My Profile → API Tokens → Create Token"
+            echo "  模板选「Edit Cloudflare Workers」，权限范围够用且不过大"
+            exit 1
+          fi
+          echo "✅ CLOUDFLARE_API_TOKEN 已配置"
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # wrangler 打包时要解析 @neondatabase/serverless / bcryptjs，
+      # 没有 node_modules 会直接失败。
+      - name: 安装依赖
+        run: npm ci
+
+      # ------------------------------------------------------------
+      # 把当前 commit 写进 wrangler.toml，部署后据此核对线上版本。
+      #
+      # ⚠️ 这里改的是 CI 工作区里的临时副本，**不会回写仓库**
+      #（本 job 没有任何 git commit / push 步骤）。
+      # ------------------------------------------------------------
+      - name: 写入构建标记
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="${GITHUB_SHA:0:7}"
+          echo "本次构建的 commit：$SHA"
+          printf '\n# 由 CI 注入（不回写仓库）\nBUILD_SHA = "%s"\n' "$SHA" >> wrangler.toml
+          echo "$SHA" > /tmp/build_sha.txt
+          tail -4 wrangler.toml
+
+      # ------------------------------------------------------------
+      # 正式部署。
+      # ACCOUNT_ID 用 secret 传（如果没配就是空字符串，让 wrangler 自己推断）。
+      # ------------------------------------------------------------
+      - name: 部署到 Cloudflare Workers
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+          # 不加 --minify：Worker 代码不多，压缩后线上日志难以阅读，
+          # 排查问题时吃亏。真要优化体积再加。
+
+      # ------------------------------------------------------------
+      # 部署完立刻回查线上。
+      #
+      # 为什么必须有这一步：本项目在 Pages 上踩过「job 全绿、线上没变」的坑
+      #（GITHUB_TOKEN 没写权限，push 被静默丢弃，脚本察觉不到）。
+      # 部署这一步报成功，不等于线上真的换了代码。
+      #
+      # 做法：打一个不需要登录的接口，读响应头 X-Build-Sha，
+      # 和本次 commit 的前 7 位比对。对得上才算真的部署成功。
+      # ------------------------------------------------------------
+      - name: 回查线上是否真的更新
+        shell: bash
+        run: |
+          set -euo pipefail
+          WANT=$(cat /tmp/build_sha.txt)
+          URL="https://api.classsite.dpdns.org/api/content"
+          echo ""
+          echo "期望线上构建标记：$WANT"
+          echo "回查地址：$URL"
+          echo ""
+
+          # Workers 全球生效需要一点时间，多试几次
+          for i in $(seq 1 15); do
+            HDRS=$(curl -sS -D - -o /dev/null "$URL" 2>/dev/null || echo "")
+            GOT=$(echo "$HDRS" | tr -d '\r' \
+                  | awk -F': ' 'tolower($1)=="x-build-sha" {print $2}' | tail -1)
+
+            if [ -n "$GOT" ]; then
+              echo "  第 $i 次：线上标记 = $GOT"
+              if [ "$GOT" = "$WANT" ]; then
+                echo ""
+                echo "✅ 回查通过：线上跑的正是本次提交（$WANT）"
+                exit 0
+              fi
+            else
+              echo "  第 $i 次：还没拿到构建标记（正在生效）"
+            fi
+            sleep 8
+          done
+
+          echo ""
+          echo "❌ 回查失败：等了 120 秒，线上构建标记仍不等于 $WANT"
+          echo ""
+          echo "  已见的标记：${GOT:-（空 —— 可能是旧版本还没带这个头）}"
+          echo ""
+          echo "  排查顺序："
+          echo "   1. Actions 日志里 wrangler 是否报了认证/权限错误"
+          echo "   2. api.classsite.dpdns.org 这个自定义域是否指向了这个 Worker"
+          echo "   3. 若是首次部署，旧版本没有 X-Build-Sha 头属正常，重跑一次即可"
+          exit 1
+
+      - name: 部署小结
+        if: always()
+        shell: bash
+        run: |
+          echo "## 后端部署结果" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 提交：\`$(cat /tmp/build_sha.txt 2>/dev/null || echo '未知')\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 接口：<https://api.classsite.dpdns.org/api/content>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "核对方式（终端里跑，看 X-Build-Sha 是否等于上面的提交号）：" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo 'curl -sI https://api.classsite.dpdns.org/api/content | grep -i x-build-sha' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

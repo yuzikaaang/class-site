@@ -141,6 +141,15 @@ export default {
        会对非空 body 直接抛 TypeError。必须传 null。
        （Vercel 的 Node ServerResponse 没这个限制，所以这里要单独处理。） */
     const noBody = state.statusCode === 204 || state.statusCode === 304;
+
+    /* 构建标记：由 CI 注入（wrangler.toml 的 [vars] BUILD_SHA）。
+       存在的意义是**可验证** —— 自动部署后 curl 一下响应头，
+       就能确认线上跑的是不是刚推上去的那份代码。
+       不是为了好看：本项目踩过「job 全绿、线上却还是旧代码」的坑，
+       有个能一眼核对的标记，排查成本从「猜」降到「看一眼」。
+       本地开发时没这个变量，就不输出这个头。 */
+    if (env && env.BUILD_SHA) state.headers['X-Build-Sha'] = String(env.BUILD_SHA);
+
     return new Response(noBody ? null : state.body, {
       status: state.statusCode,
       headers: state.headers,
