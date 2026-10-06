@@ -105,9 +105,12 @@ jobs:
           set -euo pipefail
           SHA="${GITHUB_SHA:0:7}"
           echo "本次构建的 commit：$SHA"
-          printf '\n# 由 CI 注入（不回写仓库）\nBUILD_SHA = "%s"\n' "$SHA" >> wrangler.toml
+          # 用 sed 替换而不是追加：wrangler.toml 的 [vars] 里已有 BUILD_SHA = "local"，
+          # 同表追加重复键是非法 TOML，实测旧值会赢（2026-10-06 首跑踩坑：部署成功但
+          # x-build-sha 停在 local）。替换 49 行那处定义，保持键唯一。
+          sed -i "s/^BUILD_SHA = \"local\"$/BUILD_SHA = \"$SHA\"/" wrangler.toml
           echo "$SHA" > /tmp/build_sha.txt
-          tail -4 wrangler.toml
+          grep -n 'BUILD_SHA' wrangler.toml
 
       # ------------------------------------------------------------
       # 正式部署。
