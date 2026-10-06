@@ -39,11 +39,15 @@ console.log('\n[/api/content] ok =', content.ok, ' count =', content.count,
   ' items 键 =', Object.keys(content.items || {}).join(', ') || '(空)');
 
 /* 3) 关键对照：/api/data 能读到、/api/content 读不到
-      → 说明 readContent 的 SQL 或 systemUserId 有问题 */
+      → 2026-10-06 定案：根因不是 SQL，而是 data_value 是 **jsonb 列**，
+        Neon 驱动返回已解析的对象，对它 JSON.parse 抛错被 catch 吞掉。
+        修法：统一走 _lib/db.js 的 jsonCol()。 */
 console.log('\n===== 结论 =====');
 if (data.items && data.items.cls_site_contents && content.count === 0) {
   console.log('数据确实在库里（/api/data 读到了），但 /api/content 读不到。');
-  console.log('→ 问题在 readContent 的 SQL（很可能是 sql`... in (${a}, ${b})` 的写法）');
+  console.log('→ 若线上还是旧代码：先确认 X-Build-Sha 是不是最新 commit；');
+  console.log('→ 已是新代码仍为 0：检查 readContent 是否对 data_value 做了裸 JSON.parse');
+  console.log('  （jsonb 列返回对象，parse 会抛错被吞，表现为永远 count=0）');
 } else if (content.count > 0) {
   console.log('两边都读到了，问题不存在。');
 } else {

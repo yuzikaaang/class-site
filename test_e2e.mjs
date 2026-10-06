@@ -107,6 +107,30 @@ db.create_function('pg_column_size', (v) => (v === null || v === undefined ? 0 :
    业务代码写的是 sql`... ${a} ...`，这里收到的是 (strings, ...values)。
    把 $1 $2 换成 sqlite 的 ? ，并做几处 Postgres→SQLite 语法翻译。 */
 
+/* ---------- 3.6 jsonb 仿真（关键：桩不能比生产宽容） ----------
+   生产库 user_data.data_value 是 **jsonb 列**，Neon 驱动直接返回已解析的 JS 对象；
+   SQLite 桩是 text 列，返回 JSON 文本字符串。
+
+   以前桩返回字符串，业务代码里的 JSON.parse 反而「能成功」，
+   于是 245 项测试全绿，线上却因为「对对象调 JSON.parse 抛错被吞」
+   出现「写入成功、读取永远为空」。
+
+   教训：桩比生产宽容 = 测试通过是假信号。这里把读出来的值还原成对象，
+   让桩的行为和生产对齐。 */
+function emulateJsonb(sqlText, rows) {
+  if (!/from\s+user_data/i.test(sqlText)) return rows;
+  if (!/\bdata_value\b/i.test(sqlText)) return rows;
+  return rows.map((r) => {
+    if (!Object.prototype.hasOwnProperty.call(r, 'data_value')) return r;
+    if (typeof r.data_value !== 'string') return r;
+    const s = r.data_value.trim();
+    if (!s) return r;
+    let v;
+    try { v = JSON.parse(s); } catch { return r; }   // 不是合法 JSON：原样返回
+    return Object.assign({}, r, { data_value: v });
+  });
+}
+
 let queryLog = [];
 
 function translate(sqlText) {
@@ -212,7 +236,7 @@ const sqlBridge = (strings, ...values) => {
           const rowsA = [];
           while (stmtA.step()) rowsA.push(stmtA.getAsObject());
           stmtA.free();
-          resolve(rowsA);
+          resolve(emulateJsonb(sqlA, rowsA));
           return;
         }
 
@@ -226,7 +250,7 @@ const sqlBridge = (strings, ...values) => {
         const rows = [];
         while (stmt.step()) rows.push(stmt.getAsObject());
         stmt.free();
-        resolve(rows);
+        resolve(emulateJsonb(translated, rows));
       } catch (e) {
         reject(new Error('SQL 失败: ' + e.message + '\n  SQL: ' + translated + '\n  值: ' + JSON.stringify(values)));
       }
@@ -1098,6 +1122,43 @@ console.log('\n【17】云端内容接口 /api/content（2026-10-05 新增）');
     t('读取未使用 in (${a}, ${b}) 的散装占位写法（Neon 上会静默返回 0 行）', !bad,
       bad ? '检测到 in (${...}, ${...})，请改成 data_key = any(${arr}::text[])' : '');
     t('读取使用 = any(${arr}::text[]) 的数组参数写法', good);
+
+    /* --- 回归护栏 2：不许对 data_value 裸调 JSON.parse ---
+       2026-10-06 第二个线上事故：data_value 是 jsonb 列，
+       Neon 驱动返回的是**已解析的对象**，对它 JSON.parse 抛
+       "[object Object]" is not valid JSON，异常被 catch 吞掉 →
+       「PUT 200、/api/data 看得到、GET /api/content 永远 count=0」。
+       更糟的是写入侧同一个错误会让 doc 退化成 {}，
+       于是这次 PUT 把库里存量（70 条公告）整包冲掉。
+       统一走 jsonCol()，这里断言源码里不再出现裸 JSON.parse。 */
+    const bare = /JSON\.parse\s*\([^)]*data_value/i.test(src);
+    const uses = /jsonCol\s*\(/.test(src);
+    t('未对 jsonb 列 data_value 裸调 JSON.parse（对象会被 parse 抛错）', !bare,
+      bare ? '检测到 JSON.parse(...data_value...)，请改用 jsonCol()' : '');
+    t('统一使用 jsonCol() 兼容「对象 / JSON 文本」两种返回', uses);
+  }
+
+  /* --- 护栏 3：存量读不出来时必须报错，绝不能静默覆盖 ---
+     线上真实损失：一次普通 PUT 把 70 条公告冲掉，只剩新写的内容。 */
+  {
+    const CK = 'cls_site_contents';
+    db.run("update user_data set data_value = 'not-json{{{' where data_key = '" + CK + "'");
+    const guard = await call('/api/content', {
+      method: 'PUT', token: adminToken,
+      body: { key: 'daily_quote', value: ['探针'] },
+    });
+    t('存量内容读不出来时拒绝写入（防止覆盖历史数据）', guard.status === 500,
+      '实际 ' + guard.status + ' ' + JSON.stringify(guard.body));
+    t('拒绝时说明是「读不出来」而不是写入失败',
+      /读不出来|中止保存/.test(String(guard.body && guard.body.error || '')));
+    /* 复原：删掉这行损坏的数据，并重新写一份内容供后续用例读取 */
+    db.run("delete from user_data where data_key = '" + CK + "'");
+    const reseed = await call('/api/content', {
+      method: 'PUT', token: adminToken,
+      body: { items: { homework_notice: { text: '今晚做数学卷子' } } },
+    });
+    t('损坏数据清掉后写入恢复正常', reseed.status === 200,
+      '实际 ' + reseed.status + ' ' + JSON.stringify(reseed.body));
   }
 
   /* --- 读路径真的能取到两个键（不只是不报错）--- */

@@ -16,7 +16,7 @@
  *   PUT  /api/content                      写入（管理员或 AI 助手）
  * ============================================================ */
 
-import { getSql } from './_lib/db.js';
+import { getSql, jsonCol } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireUser,
   audit,
@@ -122,10 +122,11 @@ async function readContent(req, res) {
   let latest = 0;
 
   rows.forEach((r) => {
-    const raw = r.data_value;
-    if (!raw) return;
-    let val;
-    try { val = JSON.parse(raw); } catch { return; }
+    /* ⚠️ data_value 是 jsonb 列：驱动可能直接给出**已解析好的对象**，
+       也可能给 JSON 文本（取决于驱动 / 测试桩）。
+       以前这里写死 JSON.parse(raw)，碰到对象就抛异常被 catch 吞掉，
+       于是「库里有数据、接口永远返回空」。现在统一走 jsonCol()。 */
+    const val = jsonCol(r.data_value);
     if (val === null || val === undefined) return;
 
     /* 时间戳：用于增量判断。数据库给的是 SQL 字符串，交给 JS 解析。 */
@@ -226,12 +227,22 @@ async function writeContent(req, res) {
     select data_value from user_data
      where user_id = ${uid} and data_key = ${CONTENT_KEY}
   `;
+  /* ⚠️ 这里如果解析失败，绝不能静默当成空文档往下走：
+     那会让这次 PUT 只写新内容、把库里的存量（公告/作业…）整包冲掉。
+     实测（2026-10-06）就因为 jsonb 解析失败发生过一次「70 条公告被覆盖」。
+     读不出来 = 拒绝写入，宁可报错也不能丢数据。 */
   let doc = {};
-  if (cur.length && cur[0].data_value) {
-    try {
-      const p = JSON.parse(cur[0].data_value);
-      if (p && typeof p === 'object' && !Array.isArray(p)) doc = p;
-    } catch { doc = {}; }
+  if (cur.length) {
+    const p = jsonCol(cur[0].data_value);
+    if (cur[0].data_value === null || cur[0].data_value === undefined) {
+      /* 行存在、值为 NULL → 视作空文档，可以正常初始化 */
+      doc = {};
+    } else if (p && typeof p === 'object' && !Array.isArray(p)) {
+      doc = p;
+    } else {
+      return fail(res, 500,
+        '云端现有内容读不出来，已中止保存以防覆盖历史数据，请联系管理员检查数据库');
+    }
   }
 
   const changed = [];

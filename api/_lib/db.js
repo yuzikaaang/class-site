@@ -41,6 +41,35 @@ export function getSql() {
   return _sql;
 }
 
+/**
+ * 把 user_data.data_value 这一列的值还原成 JS 值。
+ *
+ * ⚠️ 这个列是 **jsonb**（见 schema.sql:72），不同驱动返回的东西不一样：
+ *      · Neon 服务端驱动（@neondatabase/serverless）→ **已经解析好的 JS 对象**
+ *      · 部分驱动 / 本地 SQLite 测试桩            → JSON 文本字符串
+ *   所以绝对不能无脑 `JSON.parse(raw)`。
+ *
+ *   实测踩过的坑（2026-10-06）：对象是对象时 JSON.parse 会抛
+ *   `SyntaxError: "[object Object]" is not valid JSON`，异常被 catch 吞掉后，
+ *   表现为「PUT 返回 200、/api/data 里能看到数据、GET /api/content 永远 count=0」，
+ *   排查了很久才定位到是列类型而不是 SQL 语句的问题。
+ *
+ * @returns {*} 解析后的值；解析不出来返回 null（调用方要据此决定是「空」还是「出错」）
+ */
+export function jsonCol(raw) {
+  if (raw === null || raw === undefined) return null;
+  /* 已经是对象/数组：jsonb 被驱动解析过了，直接用 */
+  if (typeof raw === 'object') return raw;
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim();
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
 /** 配置：管理员账号、允许的前端来源、会话有效期 */
 export function cfg() {
   return {
