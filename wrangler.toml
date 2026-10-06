@@ -41,7 +41,9 @@ ADMIN_USERS = "yuzikang"
 SESSION_DAYS = "30"
 
 # 是否允许自助注册（1 开 / 0 关）
-ALLOW_REGISTER = "1"
+# 2026-10-06 关闭：账号改由管理员批量导入（姓名+出生日期初始密码+首登强制改密），
+# 不再开放自助注册，防止非本班同学注册看到隐私数据。
+ALLOW_REGISTER = "0"
 
 # 构建标记：由 GitHub Actions 在部署时临时追加（不回写仓库）。
 # 作用见 api/worker.mjs 里 X-Build-Sha 响应头的注释 —— 用来核对线上跑的是哪份代码。

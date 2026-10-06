@@ -4907,8 +4907,9 @@ function refreshHwViews(){
 /* ---------- 登录按钮随登录态变化 ----------
    位置：公告栏「公众号」左边（2026-10-05 从侧边栏挪过来的）。
 
-   需求：暂不开放注册入口，所以未登录时按钮是**置灰且不可点**的。
-   等以后开放注册，把 REGISTER_OPEN 改成 true 即可，其余逻辑不用动。 */
+   2026-10-06 起账号体系正式启用：账号由管理员批量导入（用户名=姓名，
+   初始密码=8位出生日期，首次登录强制改密）。所以未登录时按钮**可点**，
+   打开登录弹窗；自助注册仍然关闭（REGISTER_OPEN 控制注册 tab 不渲染）。 */
 var REGISTER_OPEN = false;
 
 function refreshAcctBtn(){
@@ -4928,20 +4929,13 @@ function refreshAcctBtn(){
     b.onclick = openAccount;
     b.title = '查看 / 修改我的个人信息';
   }else{
-    /* 未登录：置灰。用户明确要求暂不开放注册，所以这里不给点。 */
+    /* 未登录：按钮可点，打开登录弹窗（账号由管理员导入，注册入口关闭） */
     b.innerHTML = '👤 登录';
     b.classList.remove('acct-on');
-    if(REGISTER_OPEN){
-      b.disabled = false;
-      b.removeAttribute('aria-disabled');
-      b.onclick = openAccount;
-      b.title = '登录 / 注册';
-    }else{
-      b.disabled = true;
-      b.setAttribute('aria-disabled', 'true');
-      b.onclick = null;
-      b.title = '登录功能即将开放';
-    }
+    b.disabled = false;
+    b.removeAttribute('aria-disabled');
+    b.onclick = openAccount;
+    b.title = '登录';
   }
 }
 
@@ -4959,6 +4953,8 @@ function openAccount(){
   if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
 }
 function closeAccount(){
+  /* 首次登录强制改密期间不允许关闭（防止跳过）；改完密码自动离开该态 */
+  if(ACCT_TAB === 'forcepwd' && isLoggedIn()) return;
   var m = document.getElementById('acctMask'); if(m) m.classList.remove('show');
 }
 
@@ -4974,12 +4970,28 @@ function renderAccount(){
   var title = document.getElementById('acctTitle');
   if(!box) return;
 
-  /* 已登录 → 个人中心 */
+  /* 已登录 → 个人中心（首次登录强制改密态优先，不允许跳过） */
   if(isLoggedIn()){
+    if(ACCT_TAB === 'forcepwd'){
+      if(title) title.textContent = '🔒 设置新密码';
+      box.innerHTML = acctForcePwdHtml();
+      acctCloseHidden(true);
+      var fpWrap = document.getElementById('acctBody');
+      if(fpWrap){
+        fpWrap.querySelectorAll('input').forEach(function(inp){
+          inp.addEventListener('keydown', function(e){
+            if(e.key === 'Enter') doForceChangePwd();
+          });
+        });
+      }
+      return;
+    }
+    acctCloseHidden(false);
     if(title) title.textContent = '👤 我的账号';
     box.innerHTML = acctProfileHtml();
     return;
   }
+  acctCloseHidden(false);
 
   if(title) title.textContent = ACCT_TAB === 'register' ? '📝 注册账号' : '👤 登录账号';
 
@@ -5021,6 +5033,26 @@ function renderAccount(){
 function acctMsg(t, cls){
   var el = document.getElementById('acctMsg');
   if(el){ el.textContent = t || ''; el.className = 'acct-msg ' + (cls || ''); }
+}
+
+/* 强制改密期间隐藏/恢复弹窗右上角「关闭」按钮 */
+function acctCloseHidden(hide){
+  var head = document.querySelector('#acctMask .allboard-head');
+  if(!head) return;
+  var btn = head.querySelector('button');
+  if(btn) btn.style.display = hide ? 'none' : '';
+}
+
+/* 首次登录强制改密表单（无取消入口，改完才能用） */
+function acctForcePwdHtml(){
+  return '<div class="acct-hint" style="margin-bottom:10px">你的账号目前用的是初始密码（出生日期），'
+    + '太容易被猜到。请先设置一个新密码，之后就可以正常使用了。</div>'
+    + '<div class="acct-field"><label>新密码（至少 6 位）</label>'
+    + '<input id="fpP1" type="password" autocomplete="new-password"></div>'
+    + '<div class="acct-field"><label>再输一遍确认</label>'
+    + '<input id="fpP2" type="password" autocomplete="new-password"></div>'
+    + '<button class="acct-btn" id="fpGo" onclick="doForceChangePwd()">保存并继续</button>'
+    + '<div class="acct-msg" id="fpMsg"></div>';
 }
 
 function acctBusy(on, text){
@@ -5068,6 +5100,16 @@ function doLogin(){
       saveAuth();
       refreshAcctBtn();
       acctBusy(false);
+
+      /* 首次登录（管理员批量导入的初始密码）→ 强制改密，改完才能继续。
+         初始密码要在内存里暂存一下，作为改密接口的「原密码」参数。 */
+      if(j.mustChangePassword){
+        FORCE_OLD_PWD = p;
+        ACCT_TAB = 'forcepwd';
+        renderAccount();
+        return;
+      }
+
       acctMsg('登录成功，正在读取云端数据…', 'ok');
       /* 拉一次「我认领的资料」，供资料查询页判断哪条是本人（可就地编辑联系方式） */
       if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
@@ -5078,6 +5120,39 @@ function doLogin(){
       });
     })
     .catch(function(e){ acctBusy(false); acctMsg(e.message, 'err'); });
+}
+
+/* 强制改密：登录时输入的初始密码暂存（仅内存，改完即清） */
+var FORCE_OLD_PWD = '';
+
+/* ---------- 首次登录强制改密 ---------- */
+function doForceChangePwd(){
+  var p1 = val('fpP1'), p2 = val('fpP2');
+  var msg = document.getElementById('fpMsg');
+  function say(t, cls){ if(msg){ msg.className = 'msg ' + (cls || 'err') + ' show'; msg.textContent = t; } }
+
+  if(!p1 || p1.length < 6){ say('新密码至少 6 位'); return; }
+  if(p1.length > 64){ say('新密码最长 64 位'); return; }
+  if(p1 === FORCE_OLD_PWD){ say('新密码不能和初始密码一样'); return; }
+  if(p1 !== p2){ say('两次输入的新密码不一致'); return; }
+
+  var btn = document.getElementById('fpGo');
+  if(btn) btn.disabled = true;
+  api('/auth?action=change-password', { method:'POST', body:{ oldPassword: FORCE_OLD_PWD, newPassword: p1 } })
+    .then(function(j){
+      /* 接口会踢掉全部旧会话并签发新 token —— 必须更新本地存储，否则后续请求全 401 */
+      if(j.token) AUTH = { token:j.token, user: (AUTH.user || {}) };
+      FORCE_OLD_PWD = '';
+      saveAuth();
+      ACCT_TAB = 'profile';
+      if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
+      syncPull(true).then(function(){ renderAccount(); });
+      if(typeof uiMsg === 'function') uiMsg('✅ 密码已设置，欢迎使用');
+    })
+    .catch(function(e){
+      if(btn) btn.disabled = false;
+      say(e.message || '修改失败，请重试');
+    });
 }
 
 /* ---------- 登出 ---------- */

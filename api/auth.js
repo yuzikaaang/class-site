@@ -19,7 +19,8 @@ function normUsername(s) {
   return String(s || '').trim().toLowerCase();
 }
 function validUsername(u) {
-  return /^[a-z0-9_\u4e00-\u9fa5]{3,20}$/.test(u);
+  /* 2026-10-06 放宽到 2 位：按姓名导入账号，两字姓名（余倩、张炜…）也要能注册 */
+  return /^[a-z0-9_\u4e00-\u9fa5]{2,20}$/.test(u);
 }
 
 export default async function handler(req, res) {
@@ -57,7 +58,7 @@ async function register(req, res) {
   const displayName = String(b.displayName || b.display_name || '').trim().slice(0, 30) || null;
 
   if (!validUsername(username)) {
-    return fail(res, 400, '用户名需 3–20 位，仅限中英文、数字、下划线');
+    return fail(res, 400, '用户名需 2–20 位，仅限中英文、数字、下划线');
   }
   if (password.length < 6 || password.length > 64) {
     return fail(res, 400, '密码长度需 6–64 位');

@@ -675,7 +675,7 @@ async function batchCreate(req, res, me, b) {
     /* 各项校验，失败就记原因继续下一条 */
     if (!username) { errors.push({ index: i, reason: '用户名为空' }); continue; }
     if (!validUsername(username)) {
-      errors.push({ index: i, username, reason: '用户名格式不对（3–20 位中英文/数字/下划线）' });
+      errors.push({ index: i, username, reason: '用户名格式不对（2–20 位中英文/数字/下划线）' });
       continue;
     }
     if (password.length < 6 || password.length > 64) {
