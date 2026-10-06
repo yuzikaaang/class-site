@@ -48,6 +48,28 @@
 - 看到的是旧内容 → 强制刷新：`Chrome` 长按刷新按钮选「硬刷新」，或地址栏再进一次（站点是**网络优先**，正常不会卡缓存）
 - 备用链接 `https://a5048c773a210b3d4-25579.app.workbuddy.link/` **在微信里打不开**，要复制到系统浏览器
 
+### 1.2 后端部署：GitHub Actions（2026-10-06 新增）
+
+后端（Cloudflare Workers）**不用你手动部署**——仓库里配了自动部署：
+
+| 场景 | 会发生什么 | 你要做什么 |
+|---|---|---|
+| AI 改了**前端**（页面 / 样式）并推送 | 走第 1 节的老链路，GitHub Pages 自动更新 | 等几分钟看效果 |
+| AI 改了**后端**（`api/` 里的代码、部署配置）并推送 | Actions **自动**跑「部署后端到 Cloudflare Workers」 | 等几分钟看效果 |
+| 改了后端密钥 / 怀疑线上代码没更新 | 自动部署可能没触发或没生效 | **手动点一次 Run workflow**（见下） |
+
+**手动触发（应急用）**：
+
+1. 打开 GitHub 仓库 `yuzikaaang/class-site` → 顶部 **Actions** 标签
+2. 左侧列表点 **「部署后端到 Cloudflare Workers」**
+3. 右侧点 **Run workflow ▾** → 分支保持 `master` → 点绿色 **Run workflow** 按钮
+4. 等 1~3 分钟，这条记录变 **绿勾** = 部署成功（黄点是进行中；**红叉** = 失败，点进去把报错截图发给 AI）
+5. 打开网站确认公告 / 作业还在、登录正常
+
+> 两个 Secrets（`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`）你已于 2026-10-06 配好，之后**不用再管**。只有 Cloudflare 令牌将来轮换时，才去仓库 **Settings → Secrets and variables → Actions** 更新 `CLOUDFLARE_API_TOKEN` 的值。
+>
+> 前端发布走的是另一个 workflow「发布站点到 GitHub Pages」，推送后自动跑，同样不用手动操作。
+
 ---
 
 ## 2. 凭据管理：Gitee access token 轮换
