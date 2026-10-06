@@ -678,6 +678,14 @@ tbody tr.sel{background:var(--tint-2)}
   .toolbar .btn-sm{height:38px}
   .view-body{font-size:.85rem;line-height:1.7}
 }
+/* ---- 2026-10-07：游戏数据面板 ---- */
+.seg{display:inline-flex;background:var(--fill);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:none;padding:0 14px;height:34px;font-size:.82rem;color:var(--muted);cursor:pointer;font-family:inherit}
+.seg button.on{background:var(--accent);color:#fff;font-weight:600}
+.mini-card{display:flex;flex-direction:column;gap:2px;padding:10px 16px;border:1px solid var(--line);border-radius:12px;background:var(--fill);min-width:110px}
+.mini-card .mc-label{font-size:.72rem;color:var(--muted)}
+.mini-card b{font-size:1.15rem;line-height:1.2}
+#gmWeek{height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:inherit;font-family:inherit;font-size:.8rem}
 </style>
 </head>
 <body>
@@ -815,7 +823,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.1.0';
+var SITE_VERSION = '2.2.0';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -840,6 +848,8 @@ var STATE = {
   quotes: { list: [] },
   dates:  { list: [] },
   secrets: { list: [], encrypted: false, hasKey: false },
+  /* 2026-10-07 新增：游戏数据（最高分 / 游玩时长 / 券获取时间） */
+  games: { list: [], meta: [], summary: null, q: '', tab: 'play', week: '' },
 };
 window.__ADMIN_STATE = STATE;   /* 调试用 */
 
@@ -1142,6 +1152,7 @@ var PAGES = [
   { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
   { id:'quotes',        label:'每日一言', icon:'quote',     group:'内容',  title:'每日一言' },
   { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
+  { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
   { id:'logs',          label:'操作日志', icon:'file',      group:'安全',  title:'操作日志' },
   { id:'secrets',       label:'令牌管理', icon:'key',       group:'系统',  title:'系统令牌' },
@@ -1196,6 +1207,7 @@ function go(page){
     song:          renderSong,
     quotes:        renderQuotes,
     dates:         renderDates,
+    games:         renderGames,
     logins:        renderLogins,
     logs:          renderLogs,
     secrets:       renderSecrets,
@@ -5135,6 +5147,194 @@ function paintViewLogs(){
       loadViewLogs(S.page + (b.dataset.vlp === 'next' ? 1 : -1));
     };
   });
+}
+
+/* ============================================================================
+ * ⑭⁺ 面板：游戏数据（2026-10-07 新增）
+ * ------------------------------------------------------------------------
+ * 站主要求：后台能看到每个同学的
+ *   ① 各游戏最高分（cls_game_<键>）
+ *   ② 每个游戏的游玩时长（cls_game_play_<游戏>：局数 / 总时长 / 最近一局 / 最近时间）
+ *   ③ 点歌券获取时间（cls_game_coupon_ledger）
+ * 数据来自 /api/data 的个人同步表 user_data，由 /api/admin?action=games 聚合。
+ * ========================================================================= */
+function fmtDur(ms){
+  ms = Number(ms) || 0;
+  var s = Math.round(ms / 1000);
+  if(s < 60) return s + ' 秒';
+  var m = Math.floor(s / 60), ss = s % 60;
+  if(m < 60) return m + ' 分' + (ss ? ' ' + ss + ' 秒' : '');
+  var h = Math.floor(m / 60), mm = m % 60;
+  return h + ' 小时' + (mm ? ' ' + mm + ' 分' : '');
+}
+
+function renderGames(){
+  var S = STATE.games;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div class="search">' + svg('search')
+    +     '<input id="gmSearch" placeholder="搜索姓名或账号…" value="' + attr(S.q) + '" maxlength="40">'
+    +   '</div>'
+    +   '<span class="seg" id="gmTab">'
+    +     '<button data-gm-tab="play"' + (S.tab === 'play' ? ' class="on"' : '') + '>游玩数据</button>'
+    +     '<button data-gm-tab="coupon"' + (S.tab === 'coupon' ? ' class="on"' : '') + '>点歌券</button>'
+    +   '</span>'
+    +   '<button class="btn btn-sm btn-secondary" id="gmRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '数据由游戏页自动上报（需登录后才会上传）：<b>最高分</b>破纪录时上报、'
+    +   '<b>游玩时长</b>每局结束时累加、<b>点歌券</b>领取时写入台账（本周已有记录就不会再发券）。<br>'
+    +   '<b>注意</b>：只有登录状态下玩的游戏才会上云；未登录的只存在本机。'
+    + '</div>'
+    + '<section class="panel"><div id="gmBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('gmSearch').oninput = debounce(function(e){
+    S.q = e.target.value.trim(); paintGames();
+  }, 300);
+  $('gmRefresh').onclick = function(){ loadGames(); };
+  Array.prototype.forEach.call($('gmTab').querySelectorAll('[data-gm-tab]'), function(b){
+    b.onclick = function(){ S.tab = b.dataset.gmTab; renderGames(); };
+  });
+
+  loadGames();
+}
+
+function loadGames(){
+  var S = STATE.games;
+  api('/admin?action=games').then(function(j){
+    S.list = j.users || [];
+    S.meta = j.games || [];
+    S.summary = j.summary || null;
+    paintGames();
+  }).catch(function(e){
+    var b = $('gmBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintGames(){
+  var S = STATE.games;
+  var body = $('gmBody');
+  if(!body) return;   /* 防迟到响应抢页面 */
+
+  var kw = (S.q || '').toLowerCase();
+  var list = S.list.filter(function(u){
+    if(!kw) return true;
+    return String(u.name || '').toLowerCase().indexOf(kw) >= 0
+        || String(u.username || '').toLowerCase().indexOf(kw) >= 0;
+  });
+
+  if(!S.list.length){
+    body.innerHTML = '<div class="empty">' + svg('activity', 38)
+      + '<p>还没有任何游戏数据上云</p>'
+      + '<p class="muted" style="font-size:.82rem">同学登录后再去玩一局，这里就会有记录</p></div>';
+    return;
+  }
+
+  var sm = S.summary || {};
+  var head = '<div class="stat-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div class="mini-card"><span class="mc-label">上报人数</span><b>' + (sm.players || 0) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">累计游玩</span><b>' + fmtDur(sm.totalMs) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">点歌券发放</span><b>' + (sm.coupons || 0) + ' 张</b></div>'
+    + '</div>';
+
+  if(S.tab === 'coupon'){ body.innerHTML = head + paintCoupons(list); return; }
+  body.innerHTML = head + paintPlay(list);
+}
+
+/* ---- 游玩数据 ---- */
+function paintPlay(list){
+  var S = STATE.games;
+  var cols = S.meta.map(function(g){
+    return '<th style="text-align:right">' + g.icon + ' ' + esc(g.label) + '</th>';
+  }).join('');
+
+  var rows = list.map(function(u){
+    var his = S.meta.map(function(g){
+      var v = u.hi[g.hiKey];
+      return '<td style="text-align:right">'
+        + (v == null || v === '' ? '<span class="muted">—</span>' : '<b>' + esc(v) + '</b>')
+        + '</td>';
+    }).join('');
+    var plays = S.meta.map(function(g){
+      var p = u.play[g.id];
+      if(!p) return '<span class="muted">—</span>';
+      return g.label + ' ' + (p.count || 0) + ' 局 / ' + fmtDur(p.totalMs);
+    }).filter(function(x){ return x.indexOf('muted') < 0; }).join('　·　');
+    var last = '';
+    S.meta.forEach(function(g){
+      var p = u.play[g.id];
+      if(p && p.lastAt && (!last || String(p.lastAt) > last)) last = String(p.lastAt);
+    });
+    return '<tr>'
+      + '<td><b>' + esc(u.name || '(未填)') + '</b></td>'
+      + '<td class="muted" style="font-size:.78rem">' + esc(u.username || '—') + '</td>'
+      + his
+      + '<td style="text-align:right"><b>' + fmtDur(u.totalMs) + '</b></td>'
+      + '<td style="max-width:280px;font-size:.76rem" class="muted">' + (plays || '—') + '</td>'
+      + '<td class="muted" style="font-size:.76rem">' + (last ? esc(fmt(last)) : '—') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  return '<div class="table-wrap"><table><thead><tr>'
+    + '<th>姓名</th><th>账号</th>' + cols
+    + '<th style="text-align:right">总时长</th><th>各游戏局数 / 时长</th><th>最近游玩</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+/* ---- 点歌券 ---- */
+function paintCoupons(list){
+  var S = STATE.games;
+  var all = [];
+  list.forEach(function(u){
+    (u.coupons || []).forEach(function(c){
+      all.push({ name: u.name, username: u.username, c: c });
+    });
+  });
+  all.sort(function(a, b){
+    return String(b.c.time || '').localeCompare(String(a.c.time || ''));
+  });
+
+  if(!all.length){
+    return '<div class="empty">' + svg('activity', 34)
+      + '<p>还没有人领过点歌券</p>'
+      + '<p class="muted" style="font-size:.82rem">券只有在游戏通关达标后发放，且必须先登录</p></div>';
+  }
+
+  var weeks = [];
+  all.forEach(function(x){ if(weeks.indexOf(x.c.week) < 0) weeks.push(x.c.week); });
+  weeks.sort().reverse();
+  if(!S.week || weeks.indexOf(S.week) < 0) S.week = weeks[0];
+  var shown = all.filter(function(x){ return x.c.week === S.week; });
+
+  var sel = '<label class="ck" style="font-size:.82rem">周次：'
+    + '<select id="gmWeek" style="margin-left:6px">'
+    + weeks.map(function(w){
+        return '<option value="' + attr(w) + '"' + (w === S.week ? ' selected' : '') + '>'
+          + esc(w) + '（' + all.filter(function(x){ return x.c.week === w; }).length + ' 张）</option>';
+      }).join('')
+    + '</select></label>';
+
+  var rows = shown.map(function(x){
+    var c = x.c;
+    return '<tr>'
+      + '<td><b>' + esc(x.name || '(未填)') + '</b></td>'
+      + '<td class="muted" style="font-size:.78rem">' + esc(x.username || '—') + '</td>'
+      + '<td>' + esc(c.gameLabel || c.game) + '</td>'
+      + '<td><code style="font-size:.8rem">' + (c.code ? esc(c.code) : '<span class="muted">（旧记录无券码）</span>') + '</code></td>'
+      + '<td class="muted">' + esc(c.time || '—') + '</td>'
+      + '<td class="muted" style="font-size:.76rem">' + esc(c.source || '—') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  var body = '<div style="margin-bottom:12px">' + sel + '</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    + '<th>姓名</th><th>账号</th><th>游戏</th><th>券码</th><th>获取时间</th><th>来源</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  var sel2 = $('gmWeek');
+  if(sel2) sel2.onchange = function(){ S.week = sel2.value; paintGames(); };
+  return body;
 }
 
 /* ============================================================================

@@ -2526,7 +2526,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.1.0';
+var SITE_VERSION = '2.2.0';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -5211,6 +5211,7 @@ function doRegister(){
       acctBusy(false);
       acctMsg(j.message || '注册成功', 'ok');
       startHeartbeat();
+      syncRoster();   /* 登录后名单改从云端拉（2026-10-07） */
       setTimeout(function(){
         renderAccount();
         if(typeof uiMsg === 'function') uiMsg('✅ ' + (j.message || '注册成功'));
@@ -5232,6 +5233,7 @@ function doLogin(){
       refreshAcctBtn();
       acctBusy(false);
       startHeartbeat();
+      syncRoster();   /* 登录后名单改从云端拉（2026-10-07） */
 
       /* 首次登录（管理员批量导入的初始密码）→ 强制改密，改完才能继续。
          初始密码要在内存里暂存一下，作为改密接口的「原密码」参数。 */
@@ -5277,6 +5279,7 @@ function doForceChangePwd(){
       FORCE_OLD_PWD = '';
       saveAuth();
       startHeartbeat();
+      syncRoster();   /* 改密成功后才算真正登录，这时才拉名单（2026-10-07） */
       ACCT_TAB = 'profile';
       if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
       syncPull(true).then(function(){ renderAccount(); });
@@ -6234,6 +6237,8 @@ function loadAdminAudit(){
       if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
       /* 登录着就开始心跳，后台「最后上线」才准（2026-10-07） */
       startHeartbeat();
+      /* 班级名单改从云端拉（2026-10-07）：不再依赖写死在页面里的名单 */
+      syncRoster();
     }).catch(function(){ /* 401 已在 api() 里处理 */ });
   }
   /* 版本号渲染到页脚 */
@@ -8158,19 +8163,77 @@ function closeExport(){ var m=document.getElementById('exportMask'); if(m) m.cla
 var GAME_KEYS=['snake_hi','bird_hi','breakout_hi','breakout_lv','match3_hi','mine_best','doodle_hi','plane_hi','gomoku_w','gomoku_l'];
 
 /* ---- 全班名单（领券人选择 / 补发系统共用；写入 localStorage 供小游戏读取） ----
-   ⚠️ 2026-09-24 起改为密文存储：源码与 localStorage 均不再出现明文姓名（与「个人资料查询」一致）。
-   加密 = XOR + Base64（密钥 cls2505-xor-key-2026），运行时解密后使用，功能不变。
-   兼容：旧设备 localStorage 残留的明文名单解密失败会自动回退原值，不影响使用。 */
+
+   【2026-10-07 改造：不再硬编码，改走云端 + 本地缓存】
+   站主要求「主页面不直接写入用户信息，全部由云端同步，同步完本地缓存」。
+   原来是 61 个名字写死在这份 JS 里（XOR + Base64，但密钥就在同一份文件里，
+   等于公开；而且有人转班 / 改名必须改代码重发版）。
+
+   现在的三级取值：
+     ① 内存（本次会话已从云端拉到）
+     ② localStorage 缓存（上次同步到的，离线也能用）
+     ③ 旧的 CLASS_LIST_ENC（最后的静态兜底，保证任何情况下功能不倒退）
+
+   启动时 syncRoster() 静默拉一次云端（必须登录），拉到就覆盖并写缓存。
+   小游戏通过 localStorage['cls_class_list'] 读名单，所以那一份仍写成密文，
+   兼容小游戏端的 _clDec 解密逻辑。 */
 var CLASS_KEY="cls2505-xor-key-2026";
 function _clDec(v){ try{ var bin=atob(v), kb=CLASS_KEY.split("").map(function(c){return c.charCodeAt(0);}), b=[];
   for(var i=0;i<bin.length;i++) b.push(bin.charCodeAt(i)^kb[i%kb.length]);
   return new TextDecoder().decode(new Uint8Array(b)); }catch(e){ return v; } }
+/* 与 _clDec 配对：小游戏端用同一密钥解密，写进 cls_class_list 的必须是密文 */
+function _clEnc(v){ try{
+  var kb=CLASS_KEY.split("").map(function(c){return c.charCodeAt(0);});
+  var bin=new TextEncoder().encode(String(v)), b=[];
+  for(var i=0;i<bin.length;i++) b.push(String.fromCharCode(bin[i]^kb[i%kb.length]));
+  return btoa(b.join(''));
+}catch(e){ return v; } }
 var CLASS_LIST_ENC=["hcT514mQ0KrX","h9Hq15ig3ZDR","h9Hq17WZ","ivPa1KO33LLU","ivfE17CG04zo","i+/S1o2w0KDi","iu7K1o+W05zo","hvzH1oq63ITI","huTr15ig3ZzS","huTr1oiD04Hb","htDT1bes","huTr1Z6J0r3L","hfH915u33ZLe","hc7y15u30pLs","i9HV15u33ZPI","ivX71KKd3ZPx","hsHq17iS3aHB","h9Hq15ig0JfP","hvzH15yH0ITP","i+Dw16W906TU","hv3b26603ZPx","hfHb1Jej0ZLy","huHR16uq07X2","huD226aQ06zC","i9HV1JiT04jY","hOL425OY0Iv1","hc7y15ig0L3j","huTr1ICq3ZDR","hcHV16mT3L/e","huHR1L6j0r3L","huHR1omv0r3S","hunD26ip063Z","hvzH1omv","heTH1o+h3azS","hPPA17qf0Iv1","hfDC1oyW0Iv1","huTr15u30qnt","hc7y14+H0qjk","hcT51ZiB3Lb9","hfH917iq05vj","hc3x1ZCK","hfHv2pqd0qvh","huTr16W90JHC","hvzH1JmT0rzO","iu/i1aWa0r3S","hurE15u33aXS","huHR1bCs","hcT515u305vN","htLj1ICH0Kvj","hfDC1oq63Lb9","hMT41KyG07TO","ivPa25i/07v0","hurE1YGb05vN","hMnu1KyK0Kb/","hsHq15O90Iv1","i+/S15y5063Z","hPPA2r+I0qvh","huTr266Y3IvQ","hc7y16e/0ZDL","hurE1omv07X2","hurE1LWt07j3"];
-try{ localStorage.setItem('cls_class_list', JSON.stringify(CLASS_LIST_ENC)); }catch(e){}
+
+var ROSTER_CACHE_KEY='cls_roster_cache_v1';   /* 明文姓名数组，本站自己读 */
+var _ROSTER_MEM = null;                        /* ① 本次会话的云端名单 */
+
+/** 写两处缓存：本站明文 + 小游戏密文（cls_class_list） */
+function rosterCacheSet(names){
+  if(!Array.isArray(names) || !names.length) return;
+  try{ localStorage.setItem(ROSTER_CACHE_KEY, JSON.stringify(names)); }catch(e){}
+  try{ localStorage.setItem('cls_class_list', JSON.stringify(names.map(_clEnc))); }catch(e){}
+}
+function rosterCacheGet(){
+  try{
+    var l=JSON.parse(localStorage.getItem(ROSTER_CACHE_KEY)||'null');
+    if(Array.isArray(l) && l.length) return l;
+  }catch(e){}
+  return null;
+}
+
 function classList(){
-  try{ var l=JSON.parse(localStorage.getItem('cls_class_list')||'null'); if(Array.isArray(l)&&l.length) return l.map(_clDec); }catch(e){}
+  if(_ROSTER_MEM && _ROSTER_MEM.length) return _ROSTER_MEM;              /* ① 云端 */
+  var c = rosterCacheGet();
+  if(c) return c;                                                        /* ② 缓存 */
+  try{                                                                   /* ③ 兜底 */
+    var l=JSON.parse(localStorage.getItem('cls_class_list')||'null');
+    if(Array.isArray(l)&&l.length) return l.map(_clDec);
+  }catch(e){}
   return CLASS_LIST_ENC.map(_clDec);
 }
+
+/** 登录后拉一次云端名单；失败静默，继续用缓存 / 兜底。
+    只取姓名，不含任何联系方式（后端 roster 也不下发联系方式）。 */
+function syncRoster(){
+  try{
+    if(typeof apiReady === 'function' && !apiReady()) return Promise.resolve(false);
+    if(typeof isLoggedIn === 'function' && !isLoggedIn()) return Promise.resolve(false);
+    return api('/profile?action=roster').then(function(j){
+      var names = (j && j.names) || [];
+      if(!names.length) return false;
+      _ROSTER_MEM = names;
+      rosterCacheSet(names);
+      return true;
+    }).catch(function(){ return false; });
+  }catch(e){ return Promise.resolve(false); }
+}
+
 /* ---- 领券台账（按 名字+本周+游戏 核对，防跨设备/清缓存重复领） ---- */
 var CLAIM_LEDGER_KEY='cls_coupon_ledger';
 function ledgerLoad(){ try{ return JSON.parse(localStorage.getItem(CLAIM_LEDGER_KEY)||'{}'); }catch(e){ return {}; } }

@@ -227,6 +227,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
   </div>
 </div>
 
+<script src="cloud.js"></script>
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const N=20,CELL=cv.width/N;
@@ -302,7 +303,14 @@ var GAME_ID='snake';
 function ledgerLoad(){ try{ return JSON.parse(localStorage.getItem('cls_coupon_ledger')||'{}'); }catch(e){ return {}; } }
 function ledgerHas(name){ var w=weekKey(),L=ledgerLoad(); return !!(L[w]&&L[w][GAME_ID]&&L[w][GAME_ID][name]); }
 function ledgerRec(name){ var w=weekKey(),L=ledgerLoad(); return (L[w]&&L[w][GAME_ID]&&L[w][GAME_ID][name])||''; }
-function ledgerAdd(name){ var w=weekKey(),L=ledgerLoad(); L[w]=L[w]||{}; L[w][GAME_ID]=L[w][GAME_ID]||{}; L[w][GAME_ID][name]=nowStamp()+' · 自动'; try{ localStorage.setItem('cls_coupon_ledger',JSON.stringify(L)); }catch(e){} }
+function ledgerAdd(name, code){
+  var w=weekKey(),L=ledgerLoad(); L[w]=L[w]||{}; L[w][GAME_ID]=L[w][GAME_ID]||{};
+  /* 新格式带券码：SONGXXXX · 时间 · 来源（旧格式只有 时间 · 来源，读取端兼容） */
+  L[w][GAME_ID][name]=((code||'')?code+' · ':'')+nowStamp()+' · 自动';
+  try{ localStorage.setItem('cls_coupon_ledger',JSON.stringify(L)); }catch(e){}
+  /* 台账同步到云端：换设备也拦得住，后台也能看到领取时间（2026-10-07） */
+  try{ if(window.CLS_CLOUD) CLS_CLOUD.pushLedger(L); }catch(e){}
+}
 function escName(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 /* 解析响应中的券码：支持 'code' / 'data.code' 路径 */
@@ -348,6 +356,12 @@ function nmPick(el){
 function doClaim(){
   var name=_claimName;
   var inp=document.getElementById('nmInput');
+  /* 领券必须登录（2026-10-07 站主规定）：登录态与主站共享 */
+  if(!(window.CLS_CLOUD && CLS_CLOUD.auth())){
+    var tip0=document.getElementById('nmTip');
+    if(tip0) tip0.innerHTML='🔒 领券需要先登录班级账号——<a href="../index.html" style="color:#7dd3fc;text-decoration:underline">去主站登录</a>，登录后回来再领。';
+    return;
+  }
   if(!name || classList().indexOf(name)<0){
     if(inp){ inp.style.borderColor='#ff6b8b'; inp.focus(); }
     var tip=document.getElementById('nmTip'); if(tip) tip.textContent='⚠️ 请先从名单里选择你的名字再确认';
@@ -356,12 +370,12 @@ function doClaim(){
   if(inp) inp.style.borderColor='#3a4668';
   try{ localStorage.setItem('cls_coupon_name', name); }catch(e){}
   hideNameMask();   /* 只关闭弹窗不恢复游戏：下面可能还要接着弹「已领过/券码」弹窗，恢复交由各弹窗自己决定 */
-  /* 本地台账/设备标记说本周领过 → 不直接拒绝，先跟后台核实：
-       后台确实有这张券（含已使用）→ 展示原券码并拦住；
-       后台查不到（被站主删除）→ 清掉本地记录，允许重新领；
+  /* 本地台账/设备标记说本周领过 → 不直接拒绝，先跟云端/后台核实：
+       云端或平台确实有这张券（含已使用）→ 展示原券码并拦住；
+       都查不到（被站主删除）→ 清掉本地记录，允许重新领；
        网络不通查不了 → 保守拦住，提示截图联系管理员。 */
   if(ledgerHas(name)||alreadyClaimed()){
-    platformFind(name).then(function(f){
+    findClaimP(name).then(function(f){
       if(f.found){ showClaimedName(name,f.code,f.status); return; }
       if(f.err){ showClaimedName(name); return; }
       ledgerDel(name); clearClaimed();
@@ -407,6 +421,27 @@ function claimCoupon(score,dur,name,cb){
 
 /* 平台查重：本周该名字该游戏是否已有可用券（先查后台，有则直接展示券码，不再生成新券） */
 function weekStartMs(){ var d=new Date(); var day=(d.getDay()+6)%7; d.setHours(0,0,0,0); d.setDate(d.getDate()-day); return d.getTime(); }
+/* 组合查重（2026-10-07）：先查本站云端台账 cls_game_coupon_ledger（换设备也拦得住），
+   云端没有再查点歌平台兜底（找回历史券）。 */
+function findClaimP(name){
+  return new Promise(function(resolve){
+    if(!(window.CLS_CLOUD)){ resolve(platformFind(name)); return; }
+    CLS_CLOUD.pullLedger(function(L){
+      try{
+        var w=weekKey();
+        var rec=L&&L[w]&&L[w][GAME_ID]&&L[w][GAME_ID][name];
+        if(rec){
+          var p=String(rec).split(' · ');
+          /* 新格式：券码 · 时间 · 来源；旧格式：时间 · 来源（无券码，回平台找回） */
+          if(/^SONG/i.test(p[0]||'')){ resolve({found:true, code:p[0], status:'AVAILABLE', cloud:true}); return; }
+          resolve({found:true, code:'', status:'', cloud:true});
+          return;
+        }
+      }catch(e){}
+      resolve(platformFind(name));
+    });
+  });
+}
 function platformFind(name){
   return new Promise(function(resolve){
     var cfg=VOICEHUB_COUPON;
@@ -443,20 +478,28 @@ function showReward(dots){
   document.getElementById('rwTip').textContent='';
   var tag=document.getElementById('rwTag'); tag.className='reward-tag'; tag.textContent='正在核对本周领券记录…';
   mask.classList.add('show');
-  platformFind(_claimName).then(function(f){
-    if(f.found){
+  findClaimP(_claimName).then(function(f){
+    if(f.found && f.code){
       document.getElementById('rwCode').textContent=f.code;
-      ledgerAdd(_claimName); markClaimed();
-      tag.className='reward-tag'; var _stx=(f.status==='REDEEMED')?'已核销':((f.status&&f.status!=='AVAILABLE')?'已使用':''); tag.textContent=_stx?('✅ 本周这张券你已领过（'+_stx+'），下周一 0 点刷新'):'✅ 本周已在平台领过，券码已找回（无需重新生成）';
+      ledgerAdd(_claimName, f.code); markClaimed();
+      tag.className='reward-tag'; var _stx=(f.status==='REDEEMED')?'已核销':((f.status&&f.status!=='AVAILABLE')?'已使用':''); tag.textContent=_stx?('✅ 本周这张券你已领过（'+_stx+'），下周一 0 点刷新'):'✅ 本周已领过，券码已找回（无需重新生成）';
       document.getElementById('rwTip').textContent='1. 复制上面的券码\n2. 打开「点歌平台」\n3. 点歌时把券码粘贴进去';
       window.__lastCoupon=f.code;
+      return;
+    }
+    if(f.found && !f.code){
+      /* 云端有领取记录但没存券码（旧格式数据）→ 保守拦住，绝不重复发券 */
+      document.getElementById('rwCode').textContent='（记录里没有券码）';
+      tag.className='reward-tag'; tag.textContent='✅ 本周你已领过（云端有记录），券码请联系管理员找回';
+      document.getElementById('rwTip').textContent='本周已领过，下周一 0 点刷新。需要券码请截图联系管理员（站主）。';
+      ledgerAdd(_claimName, ''); markClaimed();
       return;
     }
     var dur=Math.max(1,Math.round((Date.now()-window.__snakeStart)/1000));
     claimCoupon(sc,dur,_claimName,function(res){
       document.getElementById('rwCode').textContent=res.code||'生成失败';
       if(res.ok && res.remote){
-        ledgerAdd(_claimName); markClaimed();
+        ledgerAdd(_claimName, res.code); markClaimed();
         tag.className='reward-tag'; tag.textContent='✅ 已在点歌平台登记，复制券码去点歌吧';
         document.getElementById('rwTip').textContent='1. 复制上面的券码\n2. 打开「点歌平台」\n3. 点歌时把券码粘贴进去';
         window.__lastCoupon=res.code;
@@ -480,7 +523,9 @@ function showClaimedName(name,code,status){
     var used=!!usedTxt;
     var html='<b style="color:#46e0c8">'+escName(name)+'</b> 本周已在「贪吃蛇吃豆 '+REWARD_DOTS+' 奖励」领过点歌券<br>';
     if(code) html+='你的券码：<b style="color:#ffcf7a">'+escName(code)+'</b>'+(usedTxt?('（'+usedTxt+'）'):'（仍可用）')+'<br>';
-    html+='领券时间：'+(ledgerRec(name)||'—')+'<br>下周一 0 点刷新后再来挑战！';
+    var _rec=String(ledgerRec(name)||'—');
+    if(/^SONG/i.test(_rec.split(' · ')[0]||'')) _rec=_rec.split(' · ').slice(1).join(' · ');  /* 新格式去掉券码段只显示时间 */
+    html+='领券时间：'+_rec+'<br>下周一 0 点刷新后再来挑战！';
     s.innerHTML=html;
   }
   var m=document.getElementById('claimedMask'); if(m) m.classList.add('show');
@@ -514,6 +559,8 @@ invince=0;   /* 无敌截止时间戳（关闭弹窗继续游戏时给 2 秒缓�
 var INVINCE_MS=2000;
 function isInv(){ return Date.now()<invince; }
 hi=+(localStorage.getItem('snake_hi')||0);document.getElementById('hi').textContent=hi;
+/* 云端最高分：换设备 / 清缓存不丢纪录（登录后才生效，云端高就用云端的） */
+if(window.CLS_CLOUD) CLS_CLOUD.pullHi('snake_hi',function(v){ if(v>hi){hi=v;document.getElementById('hi').textContent=hi;} });
 /* 放豆子：只在空格子里随机取，避免生成在蛇身内部（原来纯随机，蛇越长越容易撞上） */
 function place(){
   var occ={},i;
@@ -540,14 +587,18 @@ function loop(){
   if(over||paused)return;
   const h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
   if(h.x<0||h.y<0||h.x>=N||h.y>=N||snake.some(s=>s.x===h.x&&s.y===h.y)){
-    if(!isInv()){over=true;draw();return;}
+    if(!isInv()){over=true;draw();
+      /* 游玩时长上云：这一局玩了多久（后台「游戏数据」可见） */
+      try{ if(window.CLS_CLOUD) CLS_CLOUD.addPlay('snake', Date.now()-(window.__snakeStart||Date.now()), {score:sc}); }catch(e){}
+      return;}
     /* 无敌：撞自己不判死；撞墙则把蛇头夹紧在界内继续走 */
     if(h.x<0)h.x=0; if(h.x>=N)h.x=N-1;
     if(h.y<0)h.y=0; if(h.y>=N)h.y=N-1;
   }
   snake.unshift(h);
   if(h.x===food.x&&h.y===food.y){sc++;document.getElementById('sc').textContent=sc;
-    if(sc>hi){hi=sc;localStorage.setItem('snake_hi',hi);document.getElementById('hi').textContent=hi;}place();
+    if(sc>hi){hi=sc;localStorage.setItem('snake_hi',hi);document.getElementById('hi').textContent=hi;
+      if(window.CLS_CLOUD) CLS_CLOUD.pushHi('snake_hi',hi);}place();
     /* 达标发券：吃豆数达到门槛；先让同学从名单选名字，核对后台本周是否已领 */
     if(sc===REWARD_DOTS){
       showNameAsk();

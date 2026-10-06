@@ -52,6 +52,7 @@ export default async function handler(req, res) {
   try {
     switch (action) {
       case 'search':         return await search(req, res, u);
+      case 'roster':         return await roster(req, res);
       case 'me':             return await myProfile(req, res, u);
       case 'mine-requests':  return await mineRequests(req, res, u);
       case 'claim':          return await claim(req, res, u);
@@ -173,6 +174,28 @@ async function search(req, res, u) {
       const isSelf = u.profileId && Number(u.profileId) === Number(r.id);
       return shapeProfile(r, isSelf);
     }),
+  });
+}
+
+/* ---------------- 班级名单（2026-10-07）----------------
+   用途：领券人选择、补发券等「只要姓名」的场景。
+   背景：这些名字原先硬编码在 index.html 的 CLASS_LIST_ENC 里（XOR + Base64，
+        但密钥就在同一份 JS 中，等于公开），新人转班、改名都要改代码重发版。
+   现在改为登录后从云端拉，前端缓存到 localStorage 供离线 / 小游戏读取。
+   ⚠️ 只返回姓名与学号，**不含任何联系方式**（微信 / QQ / 手机号一律不下发）。 */
+async function roster(req, res) {
+  const sql = getSql();
+  const rows = await sql`
+    select name, student_id
+      from profiles
+     where coalesce(name, '') <> ''
+     order by student_id nulls last, name
+  `;
+  return ok(res, {
+    count: rows.length,
+    names: rows.map((r) => r.name),
+    /* 学号只在前端做排序 / 去重备用，同样是班内公开信息 */
+    students: rows.map((r) => ({ name: r.name, studentId: r.student_id || '' })),
   });
 }
 

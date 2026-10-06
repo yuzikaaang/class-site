@@ -62,6 +62,10 @@ const ALLOW_KEYS = [
   'cls_sign_*',             // 每日班级签（按日期展开）
   'cls_claim_*',            // 点歌券领取台账
   'cls_act_*',              // 每日活动记录
+  /* 游戏（2026-10-07）：最高分 / 游玩时长 / 券台账全部上云
+     cls_game_<本地键>（如 cls_game_snake_hi）、cls_game_play_<游戏>、
+     cls_game_coupon_ledger（券台账云端副本，发放前以它判重） */
+  'cls_game_*',
 ];
 
 /** 单条数据体积上限（字符数），防止有人塞大文件进来 */

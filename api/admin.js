@@ -26,6 +26,7 @@
    头衔任命 / AI 交接（2026-10-05 新增）
    GET    /api/admin?action=titles                    头衔列表（谁担任什么职务）
    GET    /api/admin?action=ai-account                当前 AI 助手账号是谁
+   GET    /api/admin?action=games                     游戏数据：最高分 / 游玩时长 / 券获取时间
    POST   /api/admin?action=set-title                 任命/撤销头衔
    POST   /api/admin?action=handover-ai               把 AI 助手身份转交给另一个账号
    ============================================================ */
@@ -61,6 +62,7 @@ export default async function handler(req, res) {
       if (action === 'view-logs')        return await viewLogs(req, res);
       if (action === 'titles')           return await listTitles(req, res);
       if (action === 'ai-account')       return await aiAccount(req, res);
+      if (action === 'games')            return await gameStats(req, res);
       if (action === 'secrets')          return await listAdminSecrets(req, res);
       return fail(res, 404, '未知的 action：' + action);
     }
@@ -439,6 +441,115 @@ async function listTitles(req, res) {
       ? { id: Number(ai[0].id), username: ai[0].username, displayName: ai[0].display_name || 'ai助手' }
       : null,
   });
+}
+
+/* ---------------- 读：游戏数据（2026-10-07 新增）----------------
+   站主要求：后台能看到每个同学的
+     ① 各游戏最高分      cls_game_<本地键>    如 cls_game_snake_hi
+     ② 每个游戏的游玩时长 cls_game_play_<游戏> {count,totalMs,lastMs,lastAt,bestScore}
+     ③ 点歌券获取时间     cls_game_coupon_ledger {周: {游戏: {姓名: '券码 · 时间 · 来源'}}}
+   数据都躺在 user_data 里（/api/data 的个人同步表），这里按人聚合后返回。 */
+const GAME_META = [
+  { id: 'snake',  hiKey: 'snake_hi',  label: '贪吃蛇',   icon: '🐍' },
+  { id: 'tetris', hiKey: 'tetris_hi', label: '俄罗斯方块', icon: '🧱' },
+  { id: 'bird',   hiKey: 'bird_hi',   label: '像素飞鸟',   icon: '🐦' },
+  { id: 'doodle', hiKey: 'doodle_hi', label: '涂鸦跳跃',   icon: '🦘' },
+];
+
+async function gameStats(req, res) {
+  const sql = getSql();
+  const rows = await sql`
+    select d.user_id, d.data_key, d.data_value, d.updated_at,
+           u.username,
+           coalesce(p.name, u.display_name, u.username) as who
+      from user_data d
+      join users u on u.id = d.user_id
+      left join profiles p on p.user_id = u.id
+     where d.data_key like 'cls_game_%'
+     order by u.id, d.data_key
+  `;
+
+  const byUser = new Map();
+  for (const r of rows) {
+    const uid = Number(r.user_id);
+    if (!byUser.has(uid)) {
+      byUser.set(uid, {
+        userId: uid,
+        username: r.username,
+        name: r.who,
+        hi: {}, play: {}, coupons: [], updatedAt: null,
+      });
+    }
+    const u = byUser.get(uid);
+    const k = String(r.data_key);
+    const v = r.data_value;
+    const at = r.updated_at ? new Date(r.updated_at).toISOString() : null;
+    if (at && (!u.updatedAt || at > u.updatedAt)) u.updatedAt = at;
+
+    if (k === 'cls_game_coupon_ledger') {
+      /* { 周: { 游戏: { 姓名: '券码 · 时间 · 来源' } } } */
+      const L = (v && typeof v === 'object') ? v : {};
+      for (const week of Object.keys(L)) {
+        const byGame = L[week] || {};
+        for (const game of Object.keys(byGame)) {
+          const byName = byGame[game] || {};
+          for (const nm of Object.keys(byName)) {
+            const raw = String(byName[nm] || '');
+            const parts = raw.split(' · ');
+            /* 新格式：券码 · 时间 · 来源；旧格式：时间 · 来源 */
+            const hasCode = /^SONG/i.test(parts[0] || '');
+            u.coupons.push({
+              week,
+              game,
+              gameLabel: (GAME_META.find((g) => g.id === game) || {}).label || game,
+              name: nm,
+              code: hasCode ? parts[0] : '',
+              time: hasCode ? (parts[1] || '') : (parts[0] || ''),
+              source: hasCode ? (parts.slice(2).join(' · ')) : (parts.slice(1).join(' · ')),
+              raw,
+            });
+          }
+        }
+      }
+      continue;
+    }
+
+    if (k.startsWith('cls_game_play_')) {
+      const g = k.slice('cls_game_play_'.length);
+      if (v && typeof v === 'object') {
+        u.play[g] = {
+          count: Number(v.count) || 0,
+          totalMs: Number(v.totalMs) || 0,
+          lastMs: Number(v.lastMs) || 0,
+          lastAt: v.lastAt || null,
+          bestScore: (v.bestScore == null ? null : Number(v.bestScore)),
+        };
+      }
+      continue;
+    }
+
+    if (k.startsWith('cls_game_')) {
+      const localKey = k.slice('cls_game_'.length);
+      const num = Number(v);
+      if (Number.isFinite(num)) u.hi[localKey] = num;
+      else u.hi[localKey] = v;
+    }
+  }
+
+  const users = Array.from(byUser.values());
+  users.forEach((u) => {
+    u.totalMs = Object.values(u.play).reduce((s, p) => s + (p.totalMs || 0), 0);
+    u.coupons.sort((a, b) => String(b.time).localeCompare(String(a.time)));
+  });
+  users.sort((a, b) => b.totalMs - a.totalMs);
+
+  const summary = {
+    players: users.length,
+    coupons: users.reduce((s, u) => s + u.coupons.length, 0),
+    totalMs: users.reduce((s, u) => s + u.totalMs, 0),
+  };
+
+  return ok(res, { games: GAME_META, users, summary });
 }
 
 /* ---------------- 写：任命 / 撤销头衔 ---------------- */
@@ -1302,11 +1413,22 @@ async function bindProfiles(req, res, me, b) {
   const out = { bound: 0, skipped: 0, noAccount: [], noProfile: [], conflict: [], boundNames: [] };
 
   for (const raw of names) {
-    const name = String(raw || '').trim().slice(0, 30);
+    /* 两种写法：
+         字符串 '余子康'                 → 找同名账号
+         对象   {name:'余子康', username:'yuzikang'}
+                                        → 指定账号（账号名与姓名不一致时用，
+                                          例如站主自己注册的 yuzikang） */
+    const name = String((raw && raw.name) || (typeof raw === 'string' ? raw : '') || '')
+      .trim().slice(0, 30);
+    const wantUser = (raw && typeof raw === 'object' && raw.username)
+      ? String(raw.username).trim().slice(0, 40) : '';
     if (!name) continue;
+    const lookup = wantUser || name;
 
     const acc = await sql`
-      select id, username from users where username = ${name} limit 1
+      select id, username from users
+       where username = ${lookup} or display_name = ${lookup}
+       order by (username = ${lookup}) desc limit 1
     `;
     if (!acc.length) { out.noAccount.push(name); continue; }
     const uid = Number(acc[0].id);
@@ -1325,7 +1447,7 @@ async function bindProfiles(req, res, me, b) {
       await sql`update profiles set user_id = ${uid}, updated_at = now() where id = ${pid}`;
     }
     out.bound++;
-    out.boundNames.push(name);
+    out.boundNames.push(name + (wantUser ? '→' + wantUser : ''));
   }
 
   if (!dry && out.bound) {

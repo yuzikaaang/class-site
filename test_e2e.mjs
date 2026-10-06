@@ -1764,6 +1764,127 @@ console.log('\n【19】最后上线（心跳）· 版本号一致性（2026-10-0
   t('大版本号为 2（含后端的大版本）', v1.split('.')[0] === '2', v1);
 }
 
+{
+  /* ---- 班级名单不再硬编码：云端 roster + 本地缓存（站主第 5 条）---- */
+  const rr = await call('/api/profile?action=roster', { token: adminToken });
+  t('roster 接口 200', rr.status === 200, '实际 ' + rr.status + ' ' + JSON.stringify(rr.body).slice(0, 200));
+  t('roster 返回姓名数组', Array.isArray(rr.body.names), JSON.stringify(rr.body).slice(0, 200));
+  t('roster 不下发联系方式（隐私保护）',
+    !('wechat' in rr.body) && !('qq' in rr.body) && !('phone' in rr.body)
+    && !(rr.body.students || []).some((s) => 'wechat' in s || 'qq' in s || 'phone' in s),
+    JSON.stringify(rr.body.students || []).slice(0, 200));
+  const rrNo = await call('/api/profile?action=roster');
+  t('未登录读 roster 被拒 401', rrNo.status === 401, '实际 ' + rrNo.status);
+
+  const idx2 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf-8');
+  t('主站有 syncRoster()', idx2.indexOf('function syncRoster(') >= 0);
+  t('主站会调用 syncRoster()', idx2.split('syncRoster()').length >= 4,
+    '出现次数 ' + (idx2.split('syncRoster(').length - 1));
+  t('名单有本地缓存键', idx2.indexOf('cls_roster_cache_v1') >= 0);
+  /* 硬编码名单仍保留作兜底（断网不能开天窗），但取值顺序必须云端优先 */
+  const cl = idx2.match(/function classList\(\)\{[\s\S]{0,500}?\n\}/);
+  t('classList() 云端 / 缓存优先于硬编码',
+    !!cl && cl[0].indexOf('_ROSTER_MEM') >= 0 && cl[0].indexOf('rosterCacheGet') >= 0
+    && cl[0].indexOf('_ROSTER_MEM') < cl[0].indexOf('CLASS_LIST_ENC'),
+    cl ? cl[0].slice(0, 240) : 'not found');
+}
+
+console.log('\n【20】游戏数据上云 + 后台面板（2026-10-07 新增）');
+{
+  /* ---- 站主要求：后台能看到最高分 / 游玩时长 / 券获取时间 ---- */
+  const g = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'gameruser01', password: 'GamePass123' },
+  });
+  t('建游戏测试账号成功', g.status === 200 && !!g.body.token, JSON.stringify(g.body).slice(0, 200));
+  const gtk = g.body.token;
+
+  /* 1) 最高分 */
+  const hi = await call('/api/data', {
+    method: 'PUT', token: gtk,
+    body: { items: { cls_game_snake_hi: 128, cls_game_tetris_hi: 3400 } },
+  });
+  t('最高分可写入云端', hi.status === 200, JSON.stringify(hi.body).slice(0, 200));
+
+  /* 2) 游玩时长 */
+  const pl = await call('/api/data', {
+    method: 'PUT', token: gtk,
+    body: { items: { cls_game_play_snake: { count: 3, totalMs: 185000, lastMs: 62000,
+            lastAt: '2026-10-07T10:30:00.000Z', bestScore: 128 } } },
+  });
+  t('游玩时长可写入云端', pl.status === 200, JSON.stringify(pl.body).slice(0, 200));
+
+  /* 3) 券台账（带券码的新格式） */
+  const L = { '2026-W41': { snake: { '测试同学': 'SONGA1B2C3 · 2026-10-07 10:31 · 自动' } } };
+  const cp = await call('/api/data', {
+    method: 'PUT', token: gtk, body: { items: { cls_game_coupon_ledger: L } },
+  });
+  t('券台账可写入云端', cp.status === 200, JSON.stringify(cp.body).slice(0, 200));
+
+  /* 后台聚合 */
+  const gs = await call('/api/admin?action=games', { token: adminToken });
+  t('后台游戏接口 200', gs.status === 200, '实际 ' + gs.status + ' ' + JSON.stringify(gs.body).slice(0, 200));
+  t('后台返回游戏清单', (gs.body.games || []).length >= 4, JSON.stringify(gs.body.games || []));
+  const me = (gs.body.users || []).find((u) => u.username === 'gameruser01');
+  t('后台能看到该同学', !!me, '名单 ' + (gs.body.users || []).map((u) => u.username).join(','));
+  t('后台能看到最高分', !!me && me.hi.snake_hi === 128 && me.hi.tetris_hi === 3400,
+    JSON.stringify(me && me.hi));
+  t('后台能看到游玩时长', !!me && !!me.play.snake && me.play.snake.totalMs === 185000
+    && me.play.snake.count === 3, JSON.stringify(me && me.play));
+  t('后台能看到券获取时间', !!me && (me.coupons || []).length === 1
+    && me.coupons[0].code === 'SONGA1B2C3' && me.coupons[0].time === '2026-10-07 10:31',
+    JSON.stringify(me && me.coupons));
+  t('券记录带游戏名', !!me && me.coupons[0].gameLabel === '贪吃蛇', JSON.stringify(me && me.coupons[0]));
+  t('汇总有人数/券数/时长', !!gs.body.summary && gs.body.summary.players >= 1
+    && gs.body.summary.coupons >= 1 && gs.body.summary.totalMs >= 185000,
+    JSON.stringify(gs.body.summary));
+
+  /* 非管理员不能看 */
+  const noAdm = await call('/api/admin?action=games', { token: gtk });
+  t('普通用户读游戏数据被拒 403', noAdm.status === 403, '实际 ' + noAdm.status);
+}
+
+{
+  /* ---- 游戏页必须引入 cloud.js，否则 CLS_CLOUD 为 undefined，
+         登录检查恒真会错误放行发券（静默失效，肉眼发现不了）---- */
+  const files = ['snake', 'tetris', 'bird', 'doodle'];
+  files.forEach((f) => {
+    const s = fs.readFileSync(new URL('./games/' + f + '.html', import.meta.url), 'utf-8');
+    t('games/' + f + '.html 引入了 cloud.js', s.indexOf('src="cloud.js"') >= 0);
+    t('games/' + f + '.html 有 findClaimP（云端优先查重）', s.indexOf('function findClaimP') >= 0);
+    t('games/' + f + '.html 发券前检查登录', s.indexOf('CLS_CLOUD.auth()') >= 0);
+    t('games/' + f + '.html 破纪录上云', s.indexOf('pushHi(') >= 0);
+    t('games/' + f + '.html 游玩时长上云', s.indexOf('addPlay(') >= 0);
+    t('games/' + f + '.html 券台账上云', s.indexOf('pushLedger(') >= 0);
+  });
+  /* 云端键必须在后端白名单里，否则前端推上去被 403 静默丢弃 */
+  const dj = fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf-8');
+  t('data.js 白名单放行 cls_game_*', dj.indexOf("'cls_game_*'") >= 0);
+}
+
+{
+  /* ---- 语法护栏：内联 <script> 必须能被解析 ----
+     血泪教训：用脚本批量改 HTML 时极易把注释/字符串截断，
+     控制台报错只有真开浏览器才看得到。这里用 acorn 在 CI 里先抓一遍。 */
+  let acorn = null;
+  try { const m = await import('acorn'); acorn = m.default || m; } catch (e) { /* 没装就跳过 */ }
+  if (acorn && typeof acorn.parse !== 'function') acorn = acorn.default || null;
+  if (acorn) {
+    const parse = (code) => acorn.parse(code, { ecmaVersion: 'latest', sourceType: 'script' });
+    const check = (file) => {
+      const s = fs.readFileSync(new URL('./' + file, import.meta.url), 'utf-8');
+      const blocks = [...s.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+      let okAll = true, firstErr = '';
+      for (const b of blocks) {
+        try { parse(b); } catch (e) { okAll = false; if (!firstErr) firstErr = e.message; }
+      }
+      t(file + ' 内联脚本语法正确（' + blocks.length + ' 段）', okAll, firstErr);
+    };
+    console.log('\n【21】内联脚本语法护栏（acorn）');
+    ['index.html', 'admin.html', 'games/snake.html', 'games/bird.html',
+     'games/tetris.html', 'games/doodle.html'].forEach(check);
+  }
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
