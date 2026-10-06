@@ -358,6 +358,66 @@ tbody tr.sel{background:var(--tint-2)}
 .row-actions button:hover{background:var(--tint);color:var(--accent-ink);border-color:var(--btn-b)}
 .row-actions button.danger:hover{background:var(--danger-bg);color:var(--danger);border-color:var(--danger)}
 .row-actions button.ok:hover{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}
+.row-actions button.view{color:var(--info);border-color:var(--border-2)}
+.row-actions button.view:hover{background:var(--info-bg);color:var(--info);border-color:var(--info)}
+.row-actions button.icon{display:inline-flex;align-items:center;gap:4px}
+.row-actions button.icon svg{width:13px;height:13px}
+
+/* ============================================================
+ * ④-B 记录列表（列表只放「类型 / 标题 / 时间 / 操作」，
+ *      正文一律收进「查看」弹窗）
+ * ------------------------------------------------------------
+ * 为什么不用表格：正文要塞进表格列 → 只能 nowrap + 省略号，
+ * 电脑端挤成一坨、移动端横向滚动条拉不到头。用户的原话是
+ * 「移动端肯定塞不下，电脑端也不好看」，说的就是这个。
+ * 所以这里改成记录行：宽屏两栏（左标题右操作），窄屏自动
+ * 堆叠成卡片，任何宽度都不需要横向滚动。
+ * ============================================================ */
+.rec-list{display:flex;flex-direction:column}
+.rec{
+  display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;
+  padding:13px 15px;border-bottom:1px solid var(--border);
+  transition:background var(--t-fast);
+}
+.rec:last-child{border-bottom:none}
+.rec:hover{background:var(--tint)}
+.rec-main{flex:1;min-width:0}
+.rec-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rec-top b{font-size:.9rem;font-weight:800;word-break:break-word}
+.rec-meta{margin-top:5px;font-size:.75rem;color:var(--fg-3);display:flex;gap:10px;flex-wrap:wrap}
+.rec-meta span{display:inline-flex;align-items:center;gap:4px}
+.rec-act{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}
+.rec-act button{
+  height:32px;padding:0 12px;font-size:.76rem;font-weight:700;border-radius:var(--radius-sm);
+  border:1px solid var(--border-2);background:var(--panel);color:var(--fg-2);cursor:pointer;
+  transition:all var(--t-fast);white-space:nowrap;display:inline-flex;align-items:center;gap:5px;
+}
+.rec-act button:hover{background:var(--tint);color:var(--accent-ink);border-color:var(--btn-b)}
+.rec-act button.danger:hover{background:var(--danger-bg);color:var(--danger);border-color:var(--danger)}
+.rec-act button.view{color:var(--info)}
+.rec-act button.view:hover{background:var(--info-bg);color:var(--info);border-color:var(--info)}
+.rec-act button svg{width:14px;height:14px}
+
+/* 只读详情弹窗里的正文块 */
+.view-body{
+  font-size:.87rem;line-height:1.75;white-space:pre-wrap;word-break:break-word;
+  color:var(--fg);background:var(--bg-2);border:1px solid var(--border);
+  border-radius:var(--radius-md);padding:14px 16px;max-height:52vh;overflow:auto;
+}
+.view-kv{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;font-size:.8rem;margin-bottom:14px}
+.view-kv dt{color:var(--fg-3);font-weight:700;white-space:nowrap}
+.view-kv dd{margin:0;color:var(--fg-2);word-break:break-word}
+
+/* 作业详情里的科目分组 */
+.hwv-subj{margin-bottom:14px}
+.hwv-subj:last-child{margin-bottom:0}
+.hwv-subj h4{
+  margin:0 0 7px;font-size:.78rem;font-weight:800;letter-spacing:.05em;
+  color:var(--accent-ink);display:flex;align-items:center;gap:7px;
+}
+.hwv-subj h4::before{content:'';width:3px;height:13px;border-radius:2px;background:linear-gradient(180deg,var(--grad-a),var(--grad-b))}
+.hwv-subj ul{margin:0;padding-left:20px;font-size:.84rem;line-height:1.72}
+.hwv-subj li{word-break:break-word}
 
 .pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 4px 2px;flex-wrap:wrap}
 .pager .info{font-size:.78rem;color:var(--fg-3)}
@@ -583,6 +643,25 @@ tbody tr.sel{background:var(--tint-2)}
   .field-grid{grid-template-columns:1fr 1fr}
   #toasts{right:12px;bottom:12px;left:12px}
   .toast{max-width:none}
+
+  /* --- 记录列表：窄屏堆叠成卡片，按钮铺满一行 --- */
+  .rec{padding:13px 12px;gap:10px}
+  .rec-main{flex:1 1 100%}
+  .rec-top b{font-size:.87rem}
+  .rec-act{flex:1 1 100%;width:100%}
+  .rec-act button{flex:1;justify-content:center;height:36px;min-width:0}
+  .view-body{max-height:46vh;padding:12px 13px}
+  .view-kv{grid-template-columns:1fr;gap:2px}
+  .view-kv dt{margin-top:8px;font-size:.72rem}
+  .view-kv dt:first-child{margin-top:0}
+  /* 弹窗按钮也放大一点，手指点得准 */
+  .modal-foot button{height:42px;font-size:.84rem}
+}
+@media(max-width:480px){
+  /* 极窄屏（手机竖屏）：工具栏按钮铺满、图标区可换行 */
+  .toolbar{flex-wrap:wrap;gap:8px}
+  .toolbar .btn-sm{height:38px}
+  .view-body{font-size:.85rem;line-height:1.7}
 }
 </style>
 </head>
@@ -726,9 +805,8 @@ var STATE = {
   profiles: { list: [], total: 0, counts: {}, page: 1, size: 30, q: '', status: '' },
   reviews:  { list: [], total: 0, page: 1, size: 30 },
   viewlogs: { list: [], total: 0, page: 1, size: 30, top: [], q: '' },
-  /* 公告与内容存后端 user_data 的特殊键（见下方 SITE_KEYS） */
-  announcements: [],
-  content: [],
+  /* 班级内容：公告 + 内容合并成一个列表（2026-10-06） */
+  classcontent: { list: [] },
   /* 2026-10-05 新增面板的状态 */
   titles: { list: [], allowed: [], aiAccount: null, q: '' },
   homeworks: { list: [], notice: '' },
@@ -1034,8 +1112,7 @@ var PAGES = [
   { id:'profiles',      label:'资料管理', icon:'inbox',     group:'用户',  title:'班级资料' },
   { id:'reviews',       label:'联系方式审核', icon:'check', group:'用户',  title:'联系方式审核' },
   { id:'viewlogs',      label:'查看记录', icon:'eye',       group:'用户',  title:'资料查看记录' },
-  { id:'announcements', label:'公告管理', icon:'megaphone', group:'内容',  title:'公告管理' },
-  { id:'content',       label:'内容管理', icon:'layers',    group:'内容',  title:'内容管理' },
+  { id:'classcontent',  label:'班级内容', icon:'layers',    group:'内容',  title:'班级内容（公告 / 作业 / 活动）' },
   { id:'homeworks',     label:'作业管理', icon:'file',      group:'内容',  title:'作业管理' },
   { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
   { id:'quotes',        label:'每日一言', icon:'quote',     group:'内容',  title:'每日一言' },
@@ -1089,8 +1166,7 @@ function go(page){
     profiles:      renderProfiles,
     reviews:       renderReviews,
     viewlogs:      renderViewLogs,
-    announcements: renderAnnouncements,
-    content:       renderContent,
+    classcontent:  renderClassContent,
     homeworks:     renderHomeworks,
     song:          renderSong,
     quotes:        renderQuotes,
@@ -2090,7 +2166,7 @@ function cellText(key, u){
 }
 
 /* ============================================================================
- * ⑩ 面板：公告管理
+ * ⑩ 云端内容的读写底座（公告 + 内容共用）
  * ========================================================================= */
 /* 公告/内容在云端的存储方式：存在「系统账号」（优先 AI 助手，其次最早的管理员）
    的 user_data 里，后端接口是 /api/content。
@@ -2100,72 +2176,75 @@ function cellText(key, u){
    user_data；而主站 index.html 读的是 /api/content —— 那个接口当时根本不存在（404），
    前端 .catch 静默吞掉，于是公告一直显示硬编码内容。
    也就是说「管理员改公告 → 同学能看到」从来没生效过。
-   现在改为统一走 /api/content，两端终于接上了。 */
-var SITE_KEY_ANNOUNCE = 'cls_site_announcements';
-var SITE_KEY_CONTENT  = 'cls_site_contents';
+   现在改为统一走 /api/content，两端终于接上了。
 
-/* /api/content 返回的 items 里，
-   公告是数组（announcements），内容管理是 {contentKey: value} 字典。
-   这里做一层适配，让上层面板代码不用关心差异。 */
-function loadSiteData(key){
-  return api('/content')
-    .then(function(j){
-      var items = (j && j.items) || {};
-      if(key === SITE_KEY_ANNOUNCE){
-        return Array.isArray(items.announcements) ? items.announcements : [];
-      }
-      /* 内容管理：后端把各字段平铺在 items 上，这里还原成数组方便面板渲染 */
-      return contentItemsToArray(items);
-    })
-    .catch(function(){ return []; });
-}
+   ⚠️ 2026-10-06：原先的 loadSiteData / saveSiteData 双入口已删除——
+   公告与内容合并成「班级内容」面板后，读写统一走
+   loadClassContent() / saveClassContent()（见下方 ⑩-A）。 */
 
-function saveSiteData(key, arr){
-  var payload;
-  if(key === SITE_KEY_ANNOUNCE){
-    payload = { items: { announcements: arr } };
-  } else {
-    payload = { items: contentArrayToItems(arr) };
-  }
-  return api('/content', { method:'PUT', body: payload })
-    .then(function(j){
-      if(j && j.ok === false) throw new Error(j.error || '保存失败');
-      return j;
-    });
-}
+/* 已下架的内容类型：旧的「通知」条目不再显示（公告才是正式通知渠道）。
+   注意只是不显示，云端数据没删——万一哪天要恢复还能捞回来。 */
+var CONTENT_RETIRED_KINDS = ['通知'];
 
 /* 内容面板的条目 ↔ 云端 items 字段名 的双向映射。
-   面板里每条是 {kind, title, body}，云端按 kind 归到不同字段。 */
+   面板里每条是 {kind, title, body}，云端按 kind 归到不同字段。
+
+   ⚠️ 2026-10-06 修正：'活动' 原先是映到 activities 字段，但后端
+   api/content.js 的 ALLOW_CONTENT_KEYS 白名单里**没有** activities
+   （注释写明：主站 index.html 根本不消费它，加了会造成「后台存进去、
+   首页没反应」）。结果是管理员只要选了「活动」，保存就会被 400 拒掉。
+   现在统一落到 site_config —— 主站确实读这个键，测试能兜住。 */
 var CONTENT_FIELD = {
   '作业':     'holiday_homeworks',
-  '活动':     'activities',
   '课程表':   'site_config',
   '值日安排': 'site_config',
+  '活动':     'site_config',
   '其他':     'site_config'
 };
 
-function contentArrayToItems(arr){
-  var out = {};
-  (arr || []).forEach(function(c){
-    var f = CONTENT_FIELD[c.kind] || 'site_config';
-    if(!Array.isArray(out[f])) out[f] = [];
-    out[f].push({ title: c.title, body: c.body, kind: c.kind, updatedAt: c.updatedAt });
-  });
-  return out;
-}
+/* items 里「属于内容区」的字段 —— 公告不在其中。
+   ⚠️ 2026-10-06 修 bug：以前 contentItemsToArray 遍历 items 的**全部**数组字段，
+   而 announcements 也是数组，于是公告会被摊平两次：
+   一次作为「公告」、一次被 fieldToKind() 兜底成「其他」。
+   表现为列表里每条公告都出现两遍，而且那个「其他」副本一编辑保存
+   就会被写进 site_config，等于凭空多出一条永远删不掉的幽灵记录。
+   现在只认下面这些真正属于「内容区」的字段。
+
+   ⚠️⚠️ 极其重要：daily_quote（每日一言）和 important_dates（重要日期）
+   都有**自己的专属面板**，千万不要放在这里。
+   本面板保存时是全量提交，一旦把 daily_quote 也铺成空数组写上去，
+   管理员在「班级内容」里改一条值日安排，就会顺手把 20 句每日一言
+   和所有考试日期全部清空 —— 隔壁面板背锅，还极难定位。 */
+var CONTENT_ARRAY_FIELDS = [
+  'holiday_homeworks',
+  'site_config',
+  'activities',      /* 后端已拒收，但历史数据里可能有，读出来让管理员能迁走 */
+];
+
+/* 本面板有「写权限」的字段子集 —— 上面那些里，activities 只读不写。 */
+var CONTENT_WRITABLE_FIELDS = ['holiday_homeworks', 'site_config'];
+
+/* 其它面板拥有的字段：本面板读都不读、写更不写。
+   列在这里是为了让「为什么不算进来」这件事有据可查。 */
+var CONTENT_OWNED_BY_OTHER_PANELS = ['daily_quote', 'important_dates', 'homework_notice'];
+void CONTENT_OWNED_BY_OTHER_PANELS;
 
 function contentItemsToArray(items){
   var out = [];
-  Object.keys(items || {}).forEach(function(f){
-    var v = items[f];
+  CONTENT_ARRAY_FIELDS.forEach(function(f){
+    var v = (items || {})[f];
     if(!Array.isArray(v)) return;
     v.forEach(function(x){
       if(!x || typeof x !== 'object') return;
+      /* 这条是从哪个云端字段来的 —— 保存时靠它归位，不再靠 kind 猜。
+         以前靠 kind→CONTENT_FIELD 反查，遇到 kind 认不出来（比如旧的
+         '通知'）就会掉进 site_config，把数据搬错地方。 */
       out.push({
         kind: x.kind || fieldToKind(f),
         title: x.title || '',
         body: x.body || '',
-        updatedAt: x.updatedAt || null
+        updatedAt: x.updatedAt || null,
+        _field: f
       });
     });
   });
@@ -2180,97 +2259,342 @@ function fieldToKind(f){
   return m[f] || '其他';
 }
 
-function renderAnnouncements(){
-  loadSiteData(SITE_KEY_ANNOUNCE).then(function(list){
-    STATE.announcements = list;
-    paintAnnouncements();
-  });
-}
-
-function paintAnnouncements(){
-  var list = STATE.announcements;
+/* ============================================================================
+ * ⑪ 面板：班级内容（公告 + 内容，2026-10-06 合并）
+ * ---------------------------------------------------------------------------
+ * ⚠️ 为什么合并：旧版这里是两个面板——
+ *      「公告管理」：存在 announcements 数组，有标题/正文/定向发布对象
+ *      「内容管理」：存在 items 的平铺字段里，有 kind 分类
+ *    但对使用者来说这俩长的几乎一样，都要填标题+正文，区别只在
+ *    「要不要指定发给谁」。结果就是管理员根本不知道该用哪个——
+ *    用户的反馈原话：「公告跟内容这两个有什么区别？我没有搞懂。」
+ *
+ *    现在合成一个列表，kind 里多一个「公告」类型，
+ *    announcements 数组在读取时被摊平成同样的记录条目，
+ *    保存时按 kind 分派回原来的存储位置。对外只有一个面板、一个按钮。
+ *
+ * ⚠️ 呈现方式（2026-10-06 改）：列表只放「类型 / 标题 / 时间 / 操作」，
+ *    正文一律收进「查看」按钮的只读弹窗。以前把正文塞进表格列，
+ *    移动端横向滚动、电脑端省略号截断，聊胜于无。
+ * ========================================================================= */
+function renderClassContent(){
+  var S = STATE.classcontent;
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel)">'
-    +   '<button class="btn btn-sm" id="anAdd">' + svg('plus', 14) + '发布公告</button>'
+    +   '<button class="btn btn-sm" id="ccAdd">' + svg('plus', 14) + '新增内容</button>'
     +   '<span style="flex:1"></span>'
-    +   '<span class="muted" style="font-size:.8rem">共 ' + list.length + ' 条</span>'
+    +   '<span class="muted" style="font-size:.8rem" id="ccCount">加载中…</span>'
     + '</div>'
-    + '<section class="panel">' + (list.length
-        ? '<div class="table-wrap"><table><thead><tr>'
-          + '<th>标题</th><th>发布对象</th><th class="nowrap">发布时间</th><th style="text-align:right">操作</th>'
-          + '</tr></thead><tbody>'
-          + list.map(function(a, i){
-              var target = (!a.targets || !a.targets.length)
-                ? '<span class="badge badge-blue">全体同学</span>'
-                : '<span class="badge badge-orange">定向 ' + a.targets.length + ' 人</span>';
-              return '<tr>'
-                + '<td><b>' + esc(a.title || '(无标题)') + '</b>'
-                + (a.body ? '<div class="muted" style="font-size:.76rem;margin-top:3px;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(a.body) + '</div>' : '')
-                + '</td>'
-                + '<td class="nowrap">' + target + '</td>'
-                + '<td class="nowrap muted">' + esc(a.createdAt ? fmt(a.createdAt) : '—') + '</td>'
-                + '<td style="text-align:right"><div class="row-actions">'
-                + '<button data-an-edit="' + i + '">编辑</button>'
-                + '<button class="danger" data-an-del="' + i + '">删除</button>'
-                + '</div></td></tr>';
-            }).join('')
-          + '</tbody></table></div>'
-        : '<div class="empty">' + svg('megaphone', 38) + '<p>还没有发布过公告</p></div>')
-    + '</section>';
+    + '<div class="alert info" style="margin-bottom:14px">'
+    +   '<b>公告</b>会同步显示在班级站首页的通知栏，可以指定只发给某几位同学；'
+    +   '<b>作业 / 活动 / 课程表</b>这类是站内的内容区块，全班都能看到。<br>'
+    +   '列表里只显示标题和时间，<b>点「查看」看正文详情</b>，点「编辑」改内容。'
+    + '</div>'
+    + '<section class="panel" id="ccPanel"><div class="loading"><div class="spinner"></div>加载中…</div></section>';
 
-  $('anAdd').onclick = function(){ announceDialog(null); };
-  Array.prototype.forEach.call($('view').querySelectorAll('[data-an-edit]'), function(b){
-    b.onclick = function(){ announceDialog(Number(b.dataset.anEdit)); };
-  });
-  Array.prototype.forEach.call($('view').querySelectorAll('[data-an-del]'), function(b){
-    b.onclick = function(){
-      var i = Number(b.dataset.anDel);
-      confirmBox({ title:'删除公告', text:'确定删除「' + (list[i].title || '') + '」吗？', danger:true, okText:'删除' })
-        .then(function(yes){
-          if(!yes) return;
-          list.splice(i, 1);
-          saveSiteData(SITE_KEY_ANNOUNCE, list).then(function(){
-            toast('已删除', 'ok'); paintAnnouncements();
-          }).catch(function(e){ toast(e.message, 'err'); });
-        });
-    };
+  $('ccAdd').onclick = function(){ classContentDialog(null); };
+  loadClassContent();
+}
+
+/**
+ * 拉云端数据并摊平成统一记录数组。
+ * 每条记录带 _store 字段标明来源，保存时靠它决定往哪儿写回去。
+ */
+function loadClassContent(){
+  var S = STATE.classcontent;
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    var out = [];
+
+    /* ① 公告：announcements 是数组，带 targets */
+    var ann = Array.isArray(items.announcements) ? items.announcements : [];
+    ann.forEach(function(a){
+      out.push({
+        _store: 'announcement',
+        _id: a.id || '',
+        _ref: a,                     /* 原始对象，编辑保存时保留 targets 等字段 */
+        kind: '公告',
+        title: a.title || '',
+        body: a.body || '',
+        targets: a.targets || [],
+        time: a.createdAt || a.updatedAt || null
+      });
+    });
+
+    /* ② 其它内容：平铺字段里带 kind 的对象数组 */
+    contentItemsToArray(items).forEach(function(c){
+      if(CONTENT_RETIRED_KINDS.indexOf(c.kind) !== -1) return;   /* 已下架的旧类型 */
+      out.push({
+        _store: 'content',
+        _id: '',
+        _ref: c,
+        _field: c._field,          /* 来自哪个云端字段，保存时归位用 */
+        kind: c.kind || '其他',
+        title: c.title || '',
+        body: c.body || '',
+        targets: [],
+        time: c.updatedAt || null
+      });
+    });
+
+    /* ③ 主站形态的假期作业：holiday_homeworks 里是
+          { id, start, end, title, items:[{subject, tasks:[]}] }，
+          没有 body 字段。只看 body 会显示成「无正文」，
+          所以这里把科目写进 body，让「查看」弹窗（走 hwItemsOf）能正常渲染。 */
+    out.forEach(function(r){
+      if(r.kind !== '作业' || r.body) return;
+      var items0 = hwItemsOf(r._ref);
+      if(!items0.length) return;
+      r.body = items0.map(function(it){
+        var tasks = (it.tasks || []).map(function(t){
+          if(t && typeof t === 'object') return (t.text || '(附件)');
+          return String(t);
+        }).join('；');
+        return it.subject + '：' + tasks;
+      }).join('\n');
+    });
+
+    /* 按时间倒序，新的在前；没有时间的沉底 */
+    out.sort(function(a, b){
+      var ta = a.time ? Date.parse(a.time) : 0;
+      var tb = b.time ? Date.parse(b.time) : 0;
+      if(isNaN(ta)) ta = 0;
+      if(isNaN(tb)) tb = 0;
+      return tb - ta;
+    });
+
+    S.list = out;
+    paintClassContent();
+  }).catch(function(e){
+    var p = $('ccPanel');
+    if(p) p.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+    var c = $('ccCount');
+    if(c) c.textContent = '加载失败';
   });
 }
 
-function announceDialog(idx){
-  var editing = idx !== null && idx !== undefined;
-  var item = editing ? STATE.announcements[idx] : null;
-  var targets = item && item.targets ? item.targets.slice() : [];
+/* 类型 → 徽章配色。公告用红（最抓眼），作业蓝，活动绿，其余灰。 */
+function kindBadgeClass(kind){
+  var m = { '公告':'badge-red', '作业':'badge-blue', '活动':'badge-green', '课程表':'badge-orange', '值日安排':'badge-orange' };
+  return m[kind] || 'badge-gray';
+}
+
+function paintClassContent(){
+  var S = STATE.classcontent;
+  var panel = $('ccPanel');
+  if(!panel) return;
+  var cnt = $('ccCount');
+  if(cnt) cnt.textContent = '共 ' + S.list.length + ' 条';
+
+  if(!S.list.length){
+    panel.innerHTML = '<div class="empty">' + svg('layers', 38) + '<p>还没有任何内容</p>'
+      + '<p class="muted" style="font-size:.78rem">点左上角「新增内容」发布第一条</p></div>';
+    return;
+  }
+
+  panel.innerHTML = '<div class="rec-list">' + S.list.map(function(c, i){
+    var timeTxt = c.time ? fmt(c.time) : '—';
+    var scope = (c.kind === '公告')
+      ? (c.targets && c.targets.length ? '定向 ' + c.targets.length + ' 人' : '全体同学')
+      : '';
+    return '<div class="rec">'
+      + '<div class="rec-main">'
+      +   '<div class="rec-top">'
+      +     '<span class="badge ' + kindBadgeClass(c.kind) + '">' + esc(c.kind) + '</span>'
+      +     '<b>' + esc(c.title || '(无标题)') + '</b>'
+      +   '</div>'
+      +   '<div class="rec-meta">'
+      +     '<span>' + svg('clock', 12) + esc(timeTxt) + '</span>'
+      +     (scope ? '<span>' + svg('users', 12) + esc(scope) + '</span>' : '')
+      +     (c.body ? '<span>' + svg('file', 12) + '正文 ' + c.body.length + ' 字</span>' : '<span class="muted">无正文</span>')
+      +   '</div>'
+      + '</div>'
+      + '<div class="rec-act">'
+      +   '<button class="view" data-cc-view="' + i + '">' + svg('eye', 14) + '查看</button>'
+      +   '<button data-cc-edit="' + i + '">' + svg('edit', 14) + '编辑</button>'
+      +   '<button class="danger" data-cc-del="' + i + '">' + svg('trash', 14) + '删除</button>'
+      + '</div></div>';
+  }).join('') + '</div>';
+
+  bindAll(panel, '[data-cc-view]', 'ccView', function(i){ classContentViewDialog(S.list[i]); });
+  bindAll(panel, '[data-cc-edit]', 'ccEdit', function(i){ classContentDialog(i); });
+  bindAll(panel, '[data-cc-del]', 'ccDel', function(i){ classContentDelete(i); });
+}
+
+/* 小工具：批量绑定 data-xxx 属性上的点击事件（属性名去掉连字符） */
+function bindAll(root, sel, dataKey, fn){
+  Array.prototype.forEach.call(root.querySelectorAll(sel), function(b){
+    b.onclick = function(){ fn(Number(b.dataset[dataKey])); };
+  });
+}
+
+/** 只读详情弹窗 —— 列表里看不到的正文全在这儿。 */
+function classContentViewDialog(c){
+  if(!c) return;
+  var meta =
+    '<dl class="view-kv">'
+    + '<dt>类型</dt><dd><span class="badge ' + kindBadgeClass(c.kind) + '">' + esc(c.kind) + '</span></dd>'
+    + '<dt>标题</dt><dd>' + esc(c.title || '(无标题)') + '</dd>'
+    + '<dt>时间</dt><dd>' + esc(c.time ? fmt(c.time) : '—') + '</dd>'
+    + (c.kind === '公告'
+        ? '<dt>发布对象</dt><dd>' + ((c.targets && c.targets.length)
+            ? '定向 ' + c.targets.length + ' 人：' + esc(c.targets.join('、'))
+            : '全体同学') + '</dd>'
+        : '')
+    + '</dl>';
+
+  var body = c.body
+    ? '<div class="view-body">' + esc(c.body) + '</div>'
+    : '<div class="empty" style="padding:26px">' + svg('file', 30) + '<p>这条内容没有正文</p></div>';
 
   openModal({
-    title: editing ? '编辑公告' : '发布公告',
+    title: '查看内容',
+    sub: c.kind + ' · ' + (c.title || '(无标题)'),
     wide: true,
-    sub: '公告会显示在班级站首页',
-    body:
-      '<div class="field"><label for="anTitle">标题 <span style="color:var(--danger)">*</span></label>'
-      + '<input id="anTitle" value="' + attr(item ? item.title : '') + '" placeholder="例如：明天交物理作业"></div>'
-      + '<div class="field"><label for="anBody">正文</label>'
-      + '<textarea id="anBody" rows="5" placeholder="支持多行文本">' + esc(item ? item.body : '') + '</textarea></div>'
-
-      + '<div class="field"><label>发布对象</label>'
-      + '<div style="display:flex;gap:8px;margin-bottom:10px">'
-      +   '<button class="btn btn-sm btn-secondary" id="anAll">全体同学</button>'
-      +   '<span id="anScope" class="muted" style="font-size:.82rem;align-self:center"></span>'
-      + '</div>'
-      + '<div class="search" style="margin-bottom:10px">' + svg('search', 15) + '<input id="anSearch" placeholder="搜索用户名，点击添加…"></div>'
-      + '<div class="picker" id="anPicker"><div class="loading" style="padding:20px"><div class="spinner"></div></div></div>'
-      + '<div class="chips" id="anChips"></div>'
-      + '</div>'
-      + '<div class="msg" id="anMsg"></div>',
-    foot: '<button class="btn btn-ghost" data-close6>取消</button>'
-          + '<button class="btn" id="anGo">' + (editing ? '保存修改' : '发布公告') + '</button>',
+    body: meta + body,
+    foot: '<button class="btn btn-ghost" data-cv-close>关闭</button>'
+        + '<button class="btn" id="cvEdit">' + svg('edit', 14) + ' 去编辑</button>',
     onMount: function(box){
-      box.querySelector('[data-close6]').onclick = closeModal;
-      var picker = box.querySelector('#anPicker');
-      var chips  = box.querySelector('#anChips');
-      var scope  = box.querySelector('#anScope');
-      var msg    = box.querySelector('#anMsg');
+      box.querySelector('[data-cv-close]').onclick = closeModal;
+      box.querySelector('#cvEdit').onclick = function(){
+        var idx = STATE.classcontent.list.indexOf(c);
+        closeModal();
+        if(idx >= 0) classContentDialog(idx);
+      };
+    }
+  });
+}
+
+function classContentDelete(i){
+  var S = STATE.classcontent;
+  var c = S.list[i];
+  if(!c) return;
+  confirmBox({
+    title: '删除' + (c.kind === '公告' ? '公告' : '内容'),
+    text: '确定删除「' + (c.title || '(无标题)') + '」吗？',
+    detail: c.body ? (c.body.length > 90 ? c.body.slice(0, 90) + '…' : c.body) : '',
+    danger: true,
+    okText: '删除'
+  }).then(function(yes){
+    if(!yes) return;
+    var next = S.list.slice();
+    next.splice(i, 1);
+    saveClassContent(next).then(function(){
+      toast('已删除', 'ok');
+      loadClassContent();
+    }).catch(function(e){ toast(e.message, 'err'); });
+  });
+}
+
+/**
+ * 把统一记录数组写回云端。
+ * 按 _store 分派：公告 → announcements 数组；其它 → 按 _field 归位到内容字段。
+ * 两者在同一次 PUT 里提交，避免「删了公告但内容没更新」的半截状态。
+ *
+ * ⚠️ 必须**全量**提交。后端 /api/content 的 PUT 是「读旧文档 → 合并 → 写回」，
+ *    传什么就覆盖什么。少传一个字段它原样保留，但传了空数组就是「真的要清空」——
+ *    这两种语义必须能区分开，所以这里每个内容字段都显式写出来（哪怕是空数组）。
+ *    只写「有数据的字段」是不行的：那样删掉最后一条记录时，空数组传不出去，
+ *    云端那条记录就永远删不掉了。
+ */
+function saveClassContent(list){
+  var ann = [];
+  /* 先把**本面板能写**的内容字段铺成空数组，这样「删空」也能表达出来
+     （只写有数据的字段是不行的：删掉最后一条时空数组传不出去，云端就永远删不掉）。
+     ⚠️ 只铺 CONTENT_WRITABLE_FIELDS —— 绝不能碰 daily_quote /
+     important_dates，那是隔壁专属面板的地盘。 */
+  var items = {};
+  CONTENT_WRITABLE_FIELDS.forEach(function(f){ items[f] = []; });
+
+  (list || []).forEach(function(c){
+    if(c._store === 'announcement'){
+      var a = c._ref || {};
+      ann.push({
+        id: a.id || c._id || ('a' + Date.now()),
+        title: c.title,
+        body: c.body,
+        targets: c.targets || [],
+        createdAt: a.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      return;
+    }
+    /* 归位：优先用记录自带的 _field（历史数据靠它不搬错地方），
+       没有就按 kind 现算。再兜一层 —— 算出来的字段必须在可写白名单内，
+       否则（比如历史上从 activities 读出来的）一律归到 site_config。 */
+    var f = c._field || CONTENT_FIELD[c.kind] || 'site_config';
+    if(CONTENT_WRITABLE_FIELDS.indexOf(f) === -1) f = 'site_config';
+    items[f].push({
+      kind: c.kind,
+      title: c.title,
+      body: c.body,
+      updatedAt: c.time || new Date().toISOString()
+    });
+  });
+
+  items.announcements = ann;
+
+  return api('/content', { method:'PUT', body:{ items: items } })
+    .then(function(j){
+      if(j && j.ok === false) throw new Error(j.error || '保存失败');
+      return j;
+    });
+}
+
+function classContentDialog(idx){
+  var editing = (idx !== null && idx !== undefined);
+  var c = editing ? STATE.classcontent.list[idx] : null;
+  var isAnnounce = c ? (c.kind === '公告') : true;   /* 新建默认发公告 */
+  var targets = (c && c.targets) ? c.targets.slice() : [];
+
+  /* 类型下拉：公告排第一，其余是内容区块 */
+  var KIND_OPTS = ['公告', '作业', '活动', '课程表', '值日安排', '其他'];
+
+  openModal({
+    title: editing ? '编辑内容' : '新增内容',
+    wide: true,
+    sub: '公告会显示在班级站首页；其它类型是站内内容区块',
+    body:
+      '<div class="field"><label for="ccKind">类型</label>'
+      + '<select id="ccKind">'
+      + KIND_OPTS.map(function(k){
+          return '<option value="' + attr(k) + '"' + (c && c.kind === k ? ' selected' : '') + '>' + esc(k) + '</option>';
+        }).join('')
+      + '</select></div>'
+      + '<div class="field"><label for="ccTitle">标题 <span style="color:var(--danger)">*</span></label>'
+      + '<input id="ccTitle" value="' + attr(c ? c.title : '') + '" placeholder="例如：明天交物理作业"></div>'
+      + '<div class="field"><label for="ccBody">正文</label>'
+      + '<textarea id="ccBody" rows="7" placeholder="支持多行文本">' + esc(c ? c.body : '') + '</textarea></div>'
+      + '<div class="field" id="ccScopeField"><label>发布对象（仅公告有效）</label>'
+      +   '<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+      +     '<button class="btn btn-sm btn-secondary" id="ccAll">全体同学</button>'
+      +     '<span id="ccScopeHint" class="muted" style="font-size:.82rem;align-self:center"></span>'
+      +   '</div>'
+      +   '<div class="search" style="margin-bottom:10px">' + svg('search', 15) + '<input id="ccSearch" placeholder="搜索用户名，点击添加…"></div>'
+      +   '<div class="picker" id="ccPicker"><div class="loading" style="padding:20px"><div class="spinner"></div></div></div>'
+      +   '<div class="chips" id="ccChips"></div>'
+      + '</div>'
+      + '<div class="msg" id="ccMsg"></div>',
+    foot: '<button class="btn btn-ghost" data-cc-cancel>取消</button>'
+        + '<button class="btn" id="ccGo">' + (editing ? '保存修改' : '新增') + '</button>',
+    onMount: function(box){
+      box.querySelector('[data-cc-cancel]').onclick = closeModal;
+
+      var picker = box.querySelector('#ccPicker');
+      var chips  = box.querySelector('#ccChips');
+      var hint   = box.querySelector('#ccScopeHint');
+      var msg    = box.querySelector('#ccMsg');
+      var kindEl = box.querySelector('#ccKind');
+      var scopeF = box.querySelector('#ccScopeField');
       var allUsers = [];
+
+      /* 切到非「公告」时把定向选择器收起来——内容区块没有发布对象的概念，
+         留着只会让人以为「不选人就发不出去」。 */
+      function syncScopeVisible(){
+        scopeF.style.display = (kindEl.value === '公告') ? '' : 'none';
+      }
+      kindEl.onchange = syncScopeVisible;
+      syncScopeVisible();
 
       function paintChips(){
         chips.innerHTML = targets.map(function(t, i){
@@ -2279,7 +2603,7 @@ function announceDialog(idx){
         Array.prototype.forEach.call(chips.querySelectorAll('[data-rm]'), function(b){
           b.onclick = function(){ targets.splice(Number(b.dataset.rm), 1); paintChips(); };
         });
-        scope.textContent = targets.length ? '已选 ' + targets.length + ' 人' : '当前：全体同学';
+        hint.textContent = targets.length ? '已选 ' + targets.length + ' 人' : '当前：全体同学';
       }
 
       function paintPicker(kw){
@@ -2310,178 +2634,64 @@ function announceDialog(idx){
         });
       }
 
-      /* 拉用户列表填选择器 */
       api('/admin?action=users&limit=500').then(function(j){
         allUsers = j.users || [];
         paintPicker('');
       }).catch(function(){
-        picker.innerHTML = '<p class="muted" style="padding:14px;font-size:.82rem;margin:0">用户列表加载失败</p>';
+        picker.innerHTML = '<p class="muted" style="padding:14px;font-size:.82rem;margin:0">用户列表加载失败，可选择「全体同学」</p>';
       });
 
-      box.querySelector('#anSearch').oninput = debounce(function(e){
+      box.querySelector('#ccSearch').oninput = debounce(function(e){
         paintPicker(e.target.value.trim());
       }, 260);
-      box.querySelector('#anAll').onclick = function(){
+      box.querySelector('#ccAll').onclick = function(){
         targets.length = 0;
         paintChips();
-        paintPicker(box.querySelector('#anSearch').value.trim());
+        paintPicker(box.querySelector('#ccSearch').value.trim());
       };
 
       paintChips();
 
-      box.querySelector('#anGo').onclick = function(){
-        var title = box.querySelector('#anTitle').value.trim();
-        var bodyV = box.querySelector('#anBody').value;
+      box.querySelector('#ccGo').onclick = function(){
+        var kind  = kindEl.value;
+        var title = box.querySelector('#ccTitle').value.trim();
+        var bodyV = box.querySelector('#ccBody').value;
         if(!title){ msg.className = 'msg err show'; msg.textContent = '请填写标题'; return; }
 
+        /* 存储位置由「类型」唯一决定，不看原来存在哪：
+             kind === '公告'  → announcements（有 targets）
+             其它 kind        → 按 CONTENT_FIELD 落到对应内容字段
+           这样「把公告改成活动」会自动从 announcements 迁到 site_config，
+           「把活动改成公告」也会自动迁过来，不需要额外的状态机。 */
+        var store = (kind === '公告') ? 'announcement' : 'content';
+
         var rec = {
-          id: item ? item.id : ('a' + Date.now()),
+          _store: store,
+          _id: c ? c._id : '',
+          _ref: c ? c._ref : {},
+          /* 内容记录留住原来的字段归属，只在新建或类型变了时才重新算。
+             保住 _field 是为了不把历史数据（比如 activities）搬错地方。 */
+          _field: (editing && c && c._store === 'content' && kind === c.kind)
+            ? c._field : CONTENT_FIELD[kind],
+          kind: kind,
           title: title,
           body: bodyV,
-          targets: targets.slice(),
-          createdAt: item ? item.createdAt : new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          targets: kind === '公告' ? targets.slice() : [],
+          time: new Date().toISOString()
         };
 
-        var list = STATE.announcements.slice();
-        if(editing) list[idx] = rec; else list.unshift(rec);
+        var next = STATE.classcontent.list.slice();
+        if(editing) next[idx] = rec; else next.unshift(rec);
 
-        box.querySelector('#anGo').disabled = true;
-        saveSiteData(SITE_KEY_ANNOUNCE, list).then(function(){
-          STATE.announcements = list;
-          toast(editing ? '已保存修改' : '公告已发布', 'ok');
+        box.querySelector('#ccGo').disabled = true;
+        saveClassContent(next).then(function(){
+          toast(editing ? '已保存修改' : '已新增', 'ok');
           closeModal();
-          paintAnnouncements();
+          loadClassContent();
         }).catch(function(e){
           msg.className = 'msg err show';
           msg.textContent = e.message;
-          box.querySelector('#anGo').disabled = false;
-        });
-      };
-    }
-  });
-}
-
-/* ============================================================================
- * ⑪ 面板：内容管理（主站各区块数据）
- * ========================================================================= */
-function renderContent(){
-  loadSiteData(SITE_KEY_CONTENT).then(function(list){
-    STATE.content = filterLegacyKinds(list);
-    paintContent();
-  });
-}
-
-/* 预设的内容类型，覆盖班级站常见区块。
-   ⚠️ 2026-10-05：移除「通知」——它与「公告管理」面板职责重叠，
-      公告才是正式的通知渠道，这里留着只会让人不知道该用哪个。
-      历史遗留的 kind='通知' 条目在下面 filterLegacyKinds() 里过滤掉。 */
-var CONTENT_KINDS = ['作业', '活动', '课程表', '值日安排', '其他'];
-
-/* 过滤掉已下架的类型（旧的「通知」条目），避免它们在列表里阴魂不散。
-   注意：只是不显示，云端数据没删——万一哪天要恢复还能捞回来。 */
-var CONTENT_RETIRED_KINDS = ['通知'];
-function filterLegacyKinds(list){
-  return (list || []).filter(function(c){
-    return CONTENT_RETIRED_KINDS.indexOf(c && c.kind) === -1;
-  });
-}
-
-function paintContent(){
-  var list = STATE.content;
-  $('view').innerHTML =
-    '<div class="alert info">这里管理班级站首页的各个内容区块。修改后同学刷新页面即可看到最新内容。</div>'
-    + '<div class="toolbar" style="background:var(--panel)">'
-    +   '<button class="btn btn-sm" id="ctAdd">' + svg('plus', 14) + '新增内容</button>'
-    +   '<span style="flex:1"></span>'
-    +   '<span class="muted" style="font-size:.8rem">共 ' + list.length + ' 项</span>'
-    + '</div>'
-    + '<section class="panel">' + (list.length
-        ? '<div class="table-wrap"><table><thead><tr>'
-          + '<th>类型</th><th>标题</th><th>内容</th><th class="nowrap">更新时间</th><th style="text-align:right">操作</th>'
-          + '</tr></thead><tbody>'
-          + list.map(function(c, i){
-              return '<tr>'
-                + '<td class="nowrap"><span class="badge badge-orange">' + esc(c.kind || '其他') + '</span></td>'
-                + '<td><b>' + esc(c.title || '') + '</b></td>'
-                + '<td class="muted" style="font-size:.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.body || '') + '</td>'
-                + '<td class="nowrap muted">' + esc(c.updatedAt ? ago(c.updatedAt) : '—') + '</td>'
-                + '<td style="text-align:right"><div class="row-actions">'
-                + '<button data-ct-edit="' + i + '">编辑</button>'
-                + '<button class="danger" data-ct-del="' + i + '">删除</button>'
-                + '</div></td></tr>';
-            }).join('')
-          + '</tbody></table></div>'
-        : '<div class="empty">' + svg('layers', 38) + '<p>还没有内容项</p></div>')
-    + '</section>';
-
-  $('ctAdd').onclick = function(){ contentDialog(null); };
-  Array.prototype.forEach.call($('view').querySelectorAll('[data-ct-edit]'), function(b){
-    b.onclick = function(){ contentDialog(Number(b.dataset.ctEdit)); };
-  });
-  Array.prototype.forEach.call($('view').querySelectorAll('[data-ct-del]'), function(b){
-    b.onclick = function(){
-      var i = Number(b.dataset.ctDel);
-      confirmBox({ title:'删除内容', text:'确定删除「' + (list[i].title || '') + '」吗？', danger:true, okText:'删除' })
-        .then(function(yes){
-          if(!yes) return;
-          list.splice(i, 1);
-          saveSiteData(SITE_KEY_CONTENT, list).then(function(){
-            toast('已删除', 'ok'); paintContent();
-          }).catch(function(e){ toast(e.message, 'err'); });
-        });
-    };
-  });
-}
-
-function contentDialog(idx){
-  var editing = idx !== null && idx !== undefined;
-  var item = editing ? STATE.content[idx] : null;
-
-  openModal({
-    title: editing ? '编辑内容' : '新增内容',
-    sub: '班级站首页的内容区块',
-    body:
-      '<div class="field"><label for="ctKind">类型</label>'
-      + '<select id="ctKind" style="height:46px;padding:0 12px;border:1px solid var(--border-2);border-radius:var(--radius-md);background:var(--bg-1);color:var(--fg);width:100%">'
-      + CONTENT_KINDS.map(function(k){
-          return '<option value="' + attr(k) + '"' + (item && item.kind === k ? ' selected' : '') + '>' + esc(k) + '</option>';
-        }).join('')
-      + '</select></div>'
-      + '<div class="field"><label for="ctTitle">标题 <span style="color:var(--danger)">*</span></label>'
-      + '<input id="ctTitle" value="' + attr(item ? item.title : '') + '" placeholder="例如：本周值日安排"></div>'
-      + '<div class="field"><label for="ctBody">内容</label>'
-      + '<textarea id="ctBody" rows="6" placeholder="支持多行文本">' + esc(item ? item.body : '') + '</textarea></div>'
-      + '<div class="msg" id="ctMsg"></div>',
-    foot: '<button class="btn btn-ghost" data-close7>取消</button>'
-          + '<button class="btn" id="ctGo">' + (editing ? '保存修改' : '新增') + '</button>',
-    onMount: function(box){
-      box.querySelector('[data-close7]').onclick = closeModal;
-      box.querySelector('#ctGo').onclick = function(){
-        var title = box.querySelector('#ctTitle').value.trim();
-        var msg = box.querySelector('#ctMsg');
-        if(!title){ msg.className = 'msg err show'; msg.textContent = '请填写标题'; return; }
-
-        var rec = {
-          id: item ? item.id : ('c' + Date.now()),
-          kind: box.querySelector('#ctKind').value,
-          title: title,
-          body: box.querySelector('#ctBody').value,
-          updatedAt: new Date().toISOString()
-        };
-        var list = STATE.content.slice();
-        if(editing) list[idx] = rec; else list.unshift(rec);
-
-        box.querySelector('#ctGo').disabled = true;
-        saveSiteData(SITE_KEY_CONTENT, list).then(function(){
-          STATE.content = list;
-          toast(editing ? '已保存' : '已新增', 'ok');
-          closeModal();
-          paintContent();
-        }).catch(function(e){
-          msg.className = 'msg err show';
-          msg.textContent = e.message;
-          box.querySelector('#ctGo').disabled = false;
+          box.querySelector('#ccGo').disabled = false;
         });
       };
     }
@@ -2705,28 +2915,122 @@ function paintHomeworks(){
     return;
   }
 
-  body.innerHTML = '<div class="table-wrap"><table><thead><tr>'
-    + '<th>标题</th><th>科目</th><th>截止</th><th class="nowrap">更新时间</th><th style="text-align:right">操作</th>'
-    + '</tr></thead><tbody>'
-    + S.list.map(function(h, i){
-        var t = h.updatedAt ? ago(h.updatedAt) : '—';
-        return '<tr>'
-          + '<td><b>' + esc(h.title || '(未命名)') + '</b></td>'
-          + '<td><span class="badge">' + esc(h.subject || '—') + '</span></td>'
-          + '<td class="muted">' + esc(h.due || '—') + '</td>'
-          + '<td class="nowrap muted">' + esc(t) + '</td>'
-          + '<td style="text-align:right"><div class="row-actions">'
-          +   '<button data-hw-edit="' + i + '">编辑</button>'
-          +   '<button class="danger" data-hw-del="' + i + '">删除</button>'
-          + '</div></td></tr>';
-      }).join('')
-    + '</tbody></table></div>';
+  /* ⚠️ 呈现方式（2026-10-06 改）：
+     旧版表格只有「标题 / 科目 / 截止 / 更新时间」，**完全没有正文**。
+     用户看到的「作业显示不出来 / 显示不全」，根子就在这儿——
+     数据一直都在（主站三条渲染路径实测全通），是后台压根没把它画出来。
+     现在每行列出内容摘要，正文和科目明细进「查看」弹窗。 */
+  body.innerHTML = '<div class="rec-list">' + S.list.map(function(h, i){
+    var t = h.updatedAt ? ago(h.updatedAt) : '—';
+    var sum = hwSummary(h);
+    /* 主站结构的作业没有 due，用 start~end 区间；都靠不到才显示「未设置」。
+       以前这里无脑显示「截止 —」，管理员会以为数据丢了。 */
+    var when = h.due
+      ? '截止 ' + h.due
+      : (h.start || h.end ? (h.start || '?') + ' ~ ' + (h.end || '?') : '未设置时间');
+    return '<div class="rec">'
+      + '<div class="rec-main">'
+      +   '<div class="rec-top">'
+      +     (h.subject ? '<span class="badge badge-blue">' + esc(h.subject) + '</span>' : '')
+      +     '<b>' + esc(h.title || '(未命名)') + '</b>'
+      +   '</div>'
+      +   '<div class="rec-meta">'
+      +     '<span>' + svg('clock', 12) + esc(when) + '</span>'
+      +     '<span>' + svg('refresh', 12) + esc(t) + '</span>'
+      +     (sum ? '<span>' + svg('file', 12) + esc(sum) + '</span>' : '')
+      +   '</div>'
+      + '</div>'
+      + '<div class="rec-act">'
+      +   '<button class="view" data-hw-view="' + i + '">' + svg('eye', 14) + '查看</button>'
+      +   '<button data-hw-edit="' + i + '">' + svg('edit', 14) + '编辑</button>'
+      +   '<button class="danger" data-hw-del="' + i + '">' + svg('trash', 14) + '删除</button>'
+      + '</div></div>';
+  }).join('') + '</div>';
 
-  Array.prototype.forEach.call(body.querySelectorAll('[data-hw-edit]'), function(b){
-    b.onclick = function(){ hwDialog(Number(b.dataset.hwEdit)); };
-  });
-  Array.prototype.forEach.call(body.querySelectorAll('[data-hw-del]'), function(b){
-    b.onclick = function(){ hwDelete(Number(b.dataset.hwDel)); };
+  bindAll(body, '[data-hw-view]', 'hwView', function(i){ hwViewDialog(S.list[i]); });
+  bindAll(body, '[data-hw-edit]', 'hwEdit', function(i){ hwDialog(i); });
+  bindAll(body, '[data-hw-del]',  'hwDel',  function(i){ hwDelete(i); });
+}
+
+/**
+ * 一句话概括一条作业里到底写了什么。
+ * 支持两种形态：
+ *   ① 后台编辑用的扁平结构 { subject, title, content }
+ *   ② 主站 holidayHomeworks 的结构 { items:[{subject, tasks:[]}] }
+ * 第 ② 种是主站在用的，后台以前完全不认，所以显示得像空的。
+ */
+function hwItemsOf(h){
+  if(!h) return [];
+  if(Array.isArray(h.items) && h.items.length) return h.items;
+  /* 扁平结构打包成统一形状，下面的渲染器只认这一种 */
+  if(h.subject || h.content){
+    return [{ subject: h.subject || '未分科', tasks: h.content ? [h.content] : [] }];
+  }
+  return [];
+}
+
+function hwSummary(h){
+  var items = hwItemsOf(h);
+  if(!items.length) return '';
+  var subj = items.map(function(x){ return x.subject; }).filter(Boolean);
+  var n = items.reduce(function(a, x){ return a + ((x.tasks || []).length); }, 0);
+  return subj.length + ' 个科目 · ' + n + ' 条任务';
+}
+
+/** 作业只读详情弹窗：科目分组 + 每条任务全文，图片/音频也标出来。 */
+function hwViewDialog(h){
+  if(!h) return;
+  var items = hwItemsOf(h);
+
+  var meta =
+    '<dl class="view-kv">'
+    + '<dt>标题</dt><dd>' + esc(h.title || '(未命名)') + '</dd>'
+    + (h.subject ? '<dt>科目</dt><dd>' + esc(h.subject) + '</dd>' : '')
+    + '<dt>截止</dt><dd>' + esc(h.due || '未设置') + '</dd>'
+    + (h.start || h.end ? '<dt>区间</dt><dd>' + esc((h.start || '?') + ' ~ ' + (h.end || '?')) + '</dd>' : '')
+    + (h.updatedAt ? '<dt>更新</dt><dd>' + esc(fmt(h.updatedAt)) + '</dd>' : '')
+    + '</dl>';
+
+  var content = '';
+  if(items.length){
+    content = items.map(function(it){
+      var tasks = (it.tasks || []).map(function(t){
+        /* 任务可以是字符串，也可以是 {text, img, audio, audioLabel} */
+        if(t && typeof t === 'object'){
+          var line = esc(t.text || '(未填写文字)');
+          var extra = '';
+          if(t.img) extra += ' <span class="badge badge-gray">图片</span>';
+          if(t.audio) extra += ' <span class="badge badge-gray">' + esc(t.audioLabel || '音频') + '</span>';
+          return '<li>' + line + extra + '</li>';
+        }
+        return '<li>' + esc(String(t)) + '</li>';
+      }).join('');
+      if(!tasks) tasks = '<li class="muted">（这个科目还没写任务）</li>';
+      return '<div class="hwv-subj"><h4>' + esc(it.subject || '未分科') + '</h4><ul>' + tasks + '</ul></div>';
+    }).join('');
+  } else if(h.content){
+    content = '<div class="view-body">' + esc(h.content) + '</div>';
+  } else {
+    content = '<div class="empty" style="padding:26px">' + svg('file', 30)
+            + '<p>这条作业没有正文</p>'
+            + '<p class="muted" style="font-size:.78rem">点「去编辑」补上内容</p></div>';
+  }
+
+  openModal({
+    title: '查看作业',
+    sub: h.title || '(未命名)',
+    wide: true,
+    body: meta + (items.length ? '<div class="view-body">' + content + '</div>' : content),
+    foot: '<button class="btn btn-ghost" data-hv-close>关闭</button>'
+        + '<button class="btn" id="hvEdit">' + svg('edit', 14) + ' 去编辑</button>',
+    onMount: function(box){
+      box.querySelector('[data-hv-close]').onclick = closeModal;
+      box.querySelector('#hvEdit').onclick = function(){
+        var idx = STATE.homeworks.list.indexOf(h);
+        closeModal();
+        if(idx >= 0) hwDialog(idx);
+      };
+    }
   });
 }
 

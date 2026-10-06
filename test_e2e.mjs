@@ -1136,6 +1136,32 @@ console.log('\n【17】云端内容接口 /api/content（2026-10-05 新增）');
     t('未对 jsonb 列 data_value 裸调 JSON.parse（对象会被 parse 抛错）', !bare,
       bare ? '检测到 JSON.parse(...data_value...)，请改用 jsonCol()' : '');
     t('统一使用 jsonCol() 兼容「对象 / JSON 文本」两种返回', uses);
+
+    /* --- 回归护栏 3：admin.html 的 CONTENT_FIELD 只能指向白名单内的键 ---
+       2026-10-06 发现：后台类型下拉里的「活动」原来映到 activities 字段，
+       但 ALLOW_CONTENT_KEYS 里**没有** activities（后端注释：主站不消费它），
+       于是管理员选「活动」保存必被 400 拒绝。
+       这类「前端写、后端拒」的错配肉眼极难发现（下拉里每个选项看起来都正常），
+       所以直接把两份名单拿出来做交叉校验。 */
+    const adminSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+    const allowBlock = src.match(/const ALLOW_CONTENT_KEYS\s*=\s*\[([\s\S]*?)\];/);
+    t('能从后端源码解析出 ALLOW_CONTENT_KEYS', !!allowBlock);
+    const allowKeys = allowBlock
+      ? Array.from(allowBlock[1].matchAll(/'([a-z_]+)'/g)).map((m) => m[1])
+      : [];
+    t('ALLOW_CONTENT_KEYS 解析出若干键', allowKeys.length >= 4, JSON.stringify(allowKeys));
+
+    const cfBlock = adminSrc.match(/var CONTENT_FIELD\s*=\s*\{([\s\S]*?)\};/);
+    t('能在 admin.html 里解析出 CONTENT_FIELD', !!cfBlock);
+    if (cfBlock && allowKeys.length) {
+      const vals = Array.from(cfBlock[1].matchAll(/:\s*'([a-z_]+)'/g)).map((m) => m[1]);
+      const uniq = Array.from(new Set(vals));
+      t('CONTENT_FIELD 里解析到了映射目标', uniq.length > 0, JSON.stringify(uniq));
+      const notAllowed = uniq.filter((k) => !allowKeys.includes(k));
+      t('CONTENT_FIELD 的每个目标键都在后端白名单内（否则保存必被 400）',
+        notAllowed.length === 0,
+        notAllowed.length ? '不在白名单：' + notAllowed.join(', ') + '（白名单：' + allowKeys.join(',') + '）' : '');
+    }
   }
 
   /* --- 护栏 3：存量读不出来时必须报错，绝不能静默覆盖 ---
@@ -1217,6 +1243,79 @@ console.log('\n【17】云端内容接口 /api/content（2026-10-05 新增）');
   if (rows.step()) an = rows.getAsObject().n;
   rows.free();
   t('公告同步写入历史键（兼容老前端）', an >= 1, '找到 ' + an + ' 条');
+
+  /* ==================================================================
+     【合并面板契约】后台「班级内容」把公告和内容合成一次 PUT 提交。
+     它依赖两条后端语义，缺一不可：
+       ① 只传部分字段 → 其它字段**原样保留**（绝对不能整个文档覆盖）
+       ② 传了空数组 → 视为「真的要清空这个字段」
+     ② 和 ① 必须能区分开。这两条一旦破了，管理员改一条活动就可能
+     把 50 条公告连带冲掉（历史上真发生过，见 jsonb 那次事故）。
+     ================================================================== */
+  await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { announcements: [
+      { id: 'a1', title: '保留测试甲', body: '正文甲', targets: [] },
+      { id: 'a2', title: '保留测试乙', body: '正文乙', targets: ['u1'] },
+    ] } },
+  });
+  await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { activities: [{ kind: '活动', title: '运动会' }] } },
+  });
+
+  const keep = await call('/api/content', { method: 'GET', token: adminToken });
+  const keepAnn = keep.body.items.announcements || [];
+  t('① 只传 activities 时，announcements 原样保留',
+    keepAnn.length === 2, '实际 ' + keepAnn.length + ' 条');
+  t('① 保留的公告内容完整', keepAnn.some((a) => a.title === '保留测试甲'));
+  t('① 保留的公告 targets 没丢',
+    (keepAnn.find((a) => a.title === '保留测试乙') || {}).targets?.[0] === 'u1',
+    JSON.stringify(keepAnn.find((a) => a.title === '保留测试乙')));
+
+  /* ② 显式传空数组 → 真的清空（与「没传」语义区分开） */
+  await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { announcements: [] } },
+  });
+  const cleared = await call('/api/content', { method: 'GET', token: adminToken });
+  t('② 显式传空数组会真的清空 announcements',
+    (cleared.body.items.announcements || []).length === 0,
+    '实际 ' + (cleared.body.items.announcements || []).length + ' 条');
+
+  /* ③ 合并提交：一次 PUT 里同时带 announcements 和内容字段，两边都要落地。
+     ⚠️ 这里必须用**白名单内**的键。'activities' 不在 ALLOW_CONTENT_KEYS 里
+     （后端注释说明：主站不消费它），传了会被 400 拒掉。 */
+  const mergedPut = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: {
+      announcements: [{ id: 'm1', title: '合并提交公告', body: 'b', targets: [] }],
+      site_config: [{ kind: '活动', title: '合并提交活动', body: 'b2' }],
+    } },
+  });
+  t('③ 合并提交被接受 200', mergedPut.status === 200, '实际 ' + mergedPut.status
+    + ' ' + JSON.stringify(mergedPut.body).slice(0, 120));
+
+  const merged = await call('/api/content', { method: 'GET', token: adminToken });
+  t('③ 一次 PUT 里公告与内容字段同时落地',
+    (merged.body.items.announcements || []).length === 1
+    && (merged.body.items.site_config || []).length >= 1,
+    'announcements=' + (merged.body.items.announcements || []).length
+    + ' site_config=' + (merged.body.items.site_config || []).length);
+  t('③ 合并提交后公告内容正确',
+    (merged.body.items.announcements || [])[0]?.title === '合并提交公告',
+    JSON.stringify(merged.body.items.announcements));
+
+  /* ④ 回归护栏：'activities' 不在白名单里 —— 前端映射绝不能往这个键写。
+     这条断言和 admin.html 的 CONTENT_FIELD 是一对，
+     任何一边改错都会被立刻抓出来。 */
+  const actPut = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { activities: [{ title: '不该被接受' }] } },
+  });
+  t('④ activities 不在白名单（前端映射已绕开它）', actPut.status === 400,
+    '实际 ' + actPut.status + ' —— 若变成 200 说明白名单被放开了，'
+    + '需同步检查 admin.html 的 CONTENT_FIELD');
 
   /* --- 清理 --- */
   await call('/api/content', {
