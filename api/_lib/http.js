@@ -36,6 +36,11 @@ export async function ensureSchema(sql) {
       alter table users add column if not exists must_change_password
         boolean not null default false
     `;
+    /* 2026-10-07「最后上线」：与 last_login_at（登录时刻）区分，
+       由前端心跳 /api/auth?action=ping 刷新，关掉页面后停更 */
+    await s`
+      alter table users add column if not exists last_seen_at timestamptz
+    `;
     await s`
       create table if not exists login_log (
         id         bigserial   primary key,

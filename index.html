@@ -2096,6 +2096,21 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   </div>
 </div>
 
+<!-- ===== 仓库入口选择（Gitee / GitHub 二选，2026-10-07） ===== -->
+<div class="allboard-mask" id="repoMask">
+  <div class="allboard-box" style="max-width:420px">
+    <div class="allboard-head"><span>📦 源码仓库</span><button onclick="closeRepoDialog()">关闭</button></div>
+    <div style="padding:14px 16px">
+      <p style="font-size:.82rem;color:#57534e;line-height:1.7;margin:0 0 12px">
+        班级站点源码放在两个仓库，内容一样，选一个打开就行：<br>
+        <b>Gitee</b> 国内访问快（推荐）；<b>GitHub</b> 是源码主仓库，Pages 站点由它发布。
+      </p>
+      <button class="side-btn" style="margin:0 0 8px;text-align:left" onclick="openRepo('gitee')">🇨🇳 Gitee 仓库（国内快）</button>
+      <button class="side-btn" style="margin:0;text-align:left" onclick="openRepo('github')">🌐 GitHub 仓库（源码主仓）</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- ===== 自定义设置 ===== -->
 <div class="allboard-mask" id="uiSetMask">
@@ -2136,11 +2151,14 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
     <div class="side-tip">💡 站点应用入口在侧边栏中，点击下方板块即可打开</div>
     <button class="side-btn" id="homeBtn" onclick="goHomeView()">🏠 首页</button>
     <div id="sideCats"></div>
+    <button class="side-btn" id="sfxBtn" onclick="toggleSfx()" style="margin-top:auto">🔔 音效：开</button>
     <button class="side-btn" id="uiSetBtn" onclick="openSettings()">⚙️ 自定义设置</button>
-    <button class="side-btn" onclick="openData()" style="margin-top:auto">💾 数据管理</button>
-    <button class="side-btn" id="sfxBtn" onclick="toggleSfx()">🔔 音效：开</button>
-    <button class="side-btn" onclick="openExport()">📦 导出备份</button>
-    <button class="side-btn" id="copyLinkBtn" onclick="openCopyLink()">🔗 复制链接</button>
+    <!-- ↓↓↓ 以下三项 2026-10-07 起隐藏（云端同步已接管：数据在云端，链接也由站点分享，
+         不再需要本地导出/备份/复制链接）。用 display:none 而不是删掉，
+         哪天要用把 display:none 去掉即可，代码都还在。 -->
+    <button class="side-btn" onclick="openData()" style="display:none">💾 数据管理</button>
+    <button class="side-btn" onclick="openExport()" style="display:none">📦 导出备份</button>
+    <button class="side-btn" id="copyLinkBtn" onclick="openCopyLink()" style="display:none">🔗 复制链接</button>
   </aside>
   <div class="sidebar-mask" id="sideMask" onclick="closeSidebar()"></div>
   <button class="fab" id="fabBtn" onclick="openSidebar()" aria-label="打开侧边栏">☰</button>
@@ -2170,6 +2188,10 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
       <p>© 25级05班班级服务站</p>
       <p class="footer-sub">内容更新请联系管理员 · 全站可在微信内直接访问</p>
       <p class="footer-sub">页面由 Work Buddy 辅助生成</p>
+      <!-- 版本号：站主用来核对「改动到底推上线没有」。
+           点击可立刻回查线上构建号（x-build-sha），不用去 GitHub Actions 页面看。 -->
+      <p class="footer-sub" id="verLine" onclick="checkOnlineVersion()" style="cursor:pointer"
+         title="点击查看线上是否已是最新版本"></p>
     </footer>
   </main>
 </div>
@@ -2489,6 +2511,91 @@ function emojiStart(){
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',emojiStart);
 else setTimeout(emojiStart,0);
+
+/* =====================================================
+   站点版本号（2026-10-07 新增）
+   -----------------------------------------------------
+   用途：站主要一眼判断「我改的东西到底推上线了没有」。
+   显示在首页最底部与后台页脚；点一下还能回查线上后端构建号。
+
+   三段式  主版本 . 功能批次 . 修订
+     第 1 段 大版本：1 = 纯前端静态站；2 = 含后端 + 数据库（2026-10 起）
+     第 2 段 功能批次：同一个大版本里每新增一批功能 +1
+     第 3 段 修订：同一批功能里的修修补补 +1
+
+   ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
+      忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
+   ===================================================== */
+var SITE_VERSION = '2.1.0';
+var VER_DATE = '2026-10-07';
+/* 源码仓库（「仓库」按钮二选一，2026-10-07） */
+var REPO_LINKS = {
+  gitee:  'https://gitee.com/zikang0529/class-site',
+  github: 'https://github.com/yuzikaaang/class-site'
+};
+
+/* ---------- 版本号显示与线上回查 ---------- */
+function paintVersion(){
+  var el = document.getElementById('verLine');
+  if(!el) return;
+  el.textContent = '站点版本 v' + SITE_VERSION + ' · ' + VER_DATE + ' 更新（点击查看线上是否同步）';
+}
+/* 点版本号：回查线上后端构建号，省得去 GitHub Actions 页面翻。
+   线上若是刚刚推的代码，这里显示的短 SHA 应该等于最新一次 commit 的前 7 位。 */
+function checkOnlineVersion(){
+  var el = document.getElementById('verLine');
+  if(!el) return;
+  el.textContent = '站点版本 v' + SITE_VERSION + ' · 正在回查线上…';
+  var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+  if(!base){ el.textContent = '站点版本 v' + SITE_VERSION + ' · ' + VER_DATE + ' 更新'; return; }
+  var t = new Date();
+  var hhmm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+  fetch(base + '/content', { method:'GET', cache:'no-store' })
+    .then(function(r){
+      var sha = r.headers.get('x-build-sha') || '';
+      el.textContent = '站点版本 v' + SITE_VERSION + ' · ' + VER_DATE
+        + ' · 线上后端构建 ' + (sha || '未知') + '（' + hhmm + ' 回查）';
+    })
+    .catch(function(){
+      el.textContent = '站点版本 v' + SITE_VERSION + ' · ' + VER_DATE + ' · 线上回查失败（可能没网）';
+    });
+}
+
+/* ---------- 仓库入口二选（Gitee / GitHub） ---------- */
+function openRepoDialog(){
+  var m = document.getElementById('repoMask');
+  if(m) m.classList.add('show');
+  if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
+}
+function closeRepoDialog(){
+  var m = document.getElementById('repoMask');
+  if(m) m.classList.remove('show');
+}
+function openRepo(which){
+  var url = REPO_LINKS[which] || REPO_LINKS.gitee;
+  closeRepoDialog();
+  openLink(url, true);
+}
+
+/* ---------- 在线心跳（后台「最后上线」用，2026-10-07） ----------
+   登录后在页面可见时每 60 秒打一次，切到别的标签页就不打了。
+   后端节流 30 秒，所以就算网络把请求堆在一起也不会狂写库。 */
+function startHeartbeat(){
+  if(!(typeof AUTH !== 'undefined' && AUTH && AUTH.token)) return;
+  if(window.__hbTimer) { clearInterval(window.__hbTimer); window.__hbTimer = 0; }
+  var beat = function(){
+    if(document.hidden) return;
+    if(!AUTH || !AUTH.token) return;
+    var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+    if(!base) return;
+    fetch(base + '/auth?action=ping', {
+      method:'GET', cache:'no-store',
+      headers:{ Authorization:'Bearer ' + AUTH.token }
+    }).then(function(){}).catch(function(){});   /* 心跳失败无所谓，下次再打 */
+  };
+  beat();
+  window.__hbTimer = setInterval(beat, 60000);
+}
 
 /* =====================================================
    站点数据（管理员修改此区域后重新发布即可）
@@ -3947,7 +4054,7 @@ function renderBoard(){
     '<div class="board-head"><h2>📢 公告</h2><span class="board-count">' + filtered.length + ' 条</span>' +
     '<button class="btn-qr" id="acctBtn" onclick="openAccount()">登录</button>' +
     '<button class="btn-qr" onclick="openQr(\'' + SITE_DATA.qrUrl + '\')">公众号</button>' +
-    '<button class="btn-qr" style="background:#3e3733" onclick="openLink(\'' + jsq(SITE_DATA.repoUrl) + '\',true)">仓库</button></div>' +
+    '<button class="btn-qr" style="background:#3e3733" onclick="openRepoDialog()">仓库</button></div>' +
     filterBar + body;
   /* 公告栏是整块重绘的，所以每次都得把登录按钮的状态同步一次 */
   refreshAcctBtn();
@@ -5103,6 +5210,7 @@ function doRegister(){
       refreshAcctBtn();
       acctBusy(false);
       acctMsg(j.message || '注册成功', 'ok');
+      startHeartbeat();
       setTimeout(function(){
         renderAccount();
         if(typeof uiMsg === 'function') uiMsg('✅ ' + (j.message || '注册成功'));
@@ -5123,6 +5231,7 @@ function doLogin(){
       saveAuth();
       refreshAcctBtn();
       acctBusy(false);
+      startHeartbeat();
 
       /* 首次登录（管理员批量导入的初始密码）→ 强制改密，改完才能继续。
          初始密码要在内存里暂存一下，作为改密接口的「原密码」参数。 */
@@ -5167,6 +5276,7 @@ function doForceChangePwd(){
       if(j.token) AUTH = { token:j.token, user: (AUTH.user || {}) };
       FORCE_OLD_PWD = '';
       saveAuth();
+      startHeartbeat();
       ACCT_TAB = 'profile';
       if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
       syncPull(true).then(function(){ renderAccount(); });
@@ -6122,8 +6232,12 @@ function loadAdminAudit(){
       window.__cloudKeyCount = (j.cloudKeys || []).length;
       /* 顺便拉「我认领的资料」，让资料查询页立刻知道哪条是本人 */
       if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
+      /* 登录着就开始心跳，后台「最后上线」才准（2026-10-07） */
+      startHeartbeat();
     }).catch(function(){ /* 401 已在 api() 里处理 */ });
   }
+  /* 版本号渲染到页脚 */
+  paintVersion();
 })();
 
 /* ---------- 页面关闭前，如果登录了就补推一次 ---------- */

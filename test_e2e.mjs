@@ -35,6 +35,8 @@ create table users (
   status text not null default 'active',
   created_at text not null default (datetime('now')),
   last_login_at text,
+  /* 2026-10-07「最后上线」：与登录时刻分开，由 /api/auth?action=ping 心跳刷新 */
+  last_seen_at text,
   failed_count integer not null default 0,
   locked_until text,
   must_change_password integer not null default 0,
@@ -1387,6 +1389,29 @@ console.log('\n【18】头衔系统与 AI 助手交接（2026-10-05 新增）');
     JSON.stringify((list.body.profiles || []).map((p) => p.name)));
   t('列表带可选头衔清单', Array.isArray(list.body.allowed) && list.body.allowed.length > 0);
 
+  /* ---- 【护栏】没被任命过的同学也必须出现在列表里 ----
+     2026-10-07 事故：listTitles 里原本有
+         where coalesce(p.title, '') <> ''
+     于是全班刚导入、人人头衔为空 → 列表 0 条 → 站主打开「头衔任命」
+     只看到「还没有资料」，一个人都任命不了。典型的鸡生蛋。
+     这条断言就是防止那句 where 复活。 */
+  const mkNoTitle = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '头衔测试乙', studentId: '9900002', politics: '群众' },
+  });
+  const noTitlePid = mkNoTitle.body.id || (mkNoTitle.body.profile || {}).id;
+  const list2 = await call('/api/admin?action=titles', { token: adminToken });
+  t('无头衔同学也出现在任命列表（鸡生蛋护栏）',
+    (list2.body.profiles || []).some((p) => Number(p.id) === Number(noTitlePid)),
+    '该同学从未被任命，也必须能查到 —— 否则站主一个头衔都发不出去');
+  const posSet = (list2.body.profiles || []).findIndex((p) => Number(p.id) === Number(pid));
+  const posNone = (list2.body.profiles || []).findIndex((p) => Number(p.id) === Number(noTitlePid));
+  t('已任命的排在未任命的之前', posSet >= 0 && posNone >= 0 && posSet < posNone,
+    '已任命下标 ' + posSet + ' / 未任命下标 ' + posNone);
+  await call('/api/admin?action=delete-profile', {
+    method: 'POST', token: adminToken, body: { id: noTitlePid },
+  });
+
   /* ---- 缺 id 要拒 ---- */
   const noId = await call('/api/admin?action=set-title', {
     method: 'POST', token: adminToken, body: { titles: ['班长'] },
@@ -1693,6 +1718,50 @@ console.log('\n【18】头衔系统与 AI 助手交接（2026-10-05 新增）');
     if (id) await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id } });
   }
   t('头衔测试数据已清理', true);
+}
+
+console.log('\n【19】最后上线（心跳）· 版本号一致性（2026-10-07 新增）');
+{
+  /* ---- 在线心跳：后台「最后上线」靠它刷新 ---- */
+  const reg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'pinguser01', password: 'PingPass123' },
+  });
+  t('建心跳测试账号成功', reg.status === 200 && !!reg.body.token, JSON.stringify(reg.body).slice(0, 200));
+  const tk = reg.body.token;
+
+  const p1 = await call('/api/auth?action=ping', { token: tk });
+  t('心跳返回 200', p1.status === 200, '实际 ' + p1.status);
+  t('心跳返回 pong', p1.body && typeof p1.body.pong === 'number', JSON.stringify(p1.body));
+
+  const pNoAuth = await call('/api/auth?action=ping');
+  t('未登录心跳被拒 401', pNoAuth.status === 401, '实际 ' + pNoAuth.status);
+
+  /* 后台要能看到，而且和「最后登录」是两个独立的字段 */
+  const lu = await call('/api/admin?action=users&q=pinguser01', { token: adminToken });
+  const row = (lu.body.users || []).find((u) => u.username === 'pinguser01');
+  t('用户列表返回 lastSeenAt', !!row && !!row.lastSeenAt, JSON.stringify(row || {}).slice(0, 200));
+  t('lastSeenAt 与 lastLoginAt 是两个字段',
+    !!row && 'lastLoginAt' in row && 'lastSeenAt' in row,
+    Object.keys(row || {}).join(','));
+}
+
+{
+  /* ---- 版本号护栏：主站与后台必须同步递增 ----
+     站主靠版本号判断「改动推上线没有」，两边不一致就会误判。 */
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf-8');
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf-8');
+  const grab = (s, k) => {
+    const m = s.match(new RegExp('var\\s+' + k + "\\s*=\\s*'([^']+)'"));
+    return m ? m[1] : '';
+  };
+  const v1 = grab(idx, 'SITE_VERSION'), v2 = grab(adm, 'SITE_VERSION');
+  const d1 = grab(idx, 'VER_DATE'), d2 = grab(adm, 'VER_DATE');
+  t('主站有版本号', !!v1, v1);
+  t('后台有版本号', !!v2, v2);
+  t('主站与后台版本号一致（漏改会被抓）', !!v1 && v1 === v2, '主站 ' + v1 + ' / 后台 ' + v2);
+  t('主站与后台版本日期一致', !!d1 && d1 === d2, '主站 ' + d1 + ' / 后台 ' + d2);
+  t('版本号是三段数字', /^\d+\.\d+\.\d+$/.test(v1), v1);
+  t('大版本号为 2（含后端的大版本）', v1.split('.')[0] === '2', v1);
 }
 
 console.log('\n' + '='.repeat(52));

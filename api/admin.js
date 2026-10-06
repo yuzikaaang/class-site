@@ -116,7 +116,7 @@ async function listUsers(req, res) {
 
   const rows = await sql`
     select u.id, u.username, u.display_name, u.role, u.status,
-           u.created_at, u.last_login_at,
+           u.created_at, u.last_login_at, u.last_seen_at,
            coalesce(u.must_change_password, false) as must_change_password,
            coalesce(d.n, 0)::int as data_count
       from users u
@@ -140,6 +140,7 @@ async function listUsers(req, res) {
       status: r.status,
       createdAt: r.created_at,
       lastLoginAt: r.last_login_at,
+      lastSeenAt: r.last_seen_at || null,
       mustChangePassword: !!r.must_change_password,
       dataCount: r.data_count,
     })),
@@ -153,7 +154,7 @@ async function userDetail(req, res) {
   const sql = getSql();
 
   const rows = await sql`
-    select id, username, display_name, role, status, created_at, last_login_at
+    select id, username, display_name, role, status, created_at, last_login_at, last_seen_at
       from users where id = ${id}
   `;
   if (!rows.length) return fail(res, 404, '用户不存在');
@@ -177,6 +178,7 @@ async function userDetail(req, res) {
       status: u.status,
       createdAt: u.created_at,
       lastLoginAt: u.last_login_at,
+      lastSeenAt: u.last_seen_at || null,
     },
     data: data.map((d) => ({
       key: d.data_key,
@@ -200,8 +202,10 @@ async function stats(req, res) {
            count(*) filter (where status = 'banned')::int as banned,
            count(*) filter (where role = 'admin')::int as admins,
            count(*) filter (where coalesce(must_change_password,false))::int as pending_pwd,
-           count(*) filter (where last_login_at > now() - interval '7 days')::int as active7,
-           count(*) filter (where last_login_at >= date_trunc('day', now()))::int as today_active
+           /* 活跃口径改按「最后上线」算：登录一次 token 能用很多天，
+              只看 last_login_at 会把天天在线的同学算成不活跃（2026-10-07） */
+           count(*) filter (where coalesce(last_seen_at, last_login_at) > now() - interval '7 days')::int as active7,
+           count(*) filter (where coalesce(last_seen_at, last_login_at) >= date_trunc('day', now()))::int as today_active
       from users
   `;
   const [d] = await sql`select count(*)::int as rows, coalesce(sum(pg_column_size(data_value)),0)::bigint as bytes from user_data`;
@@ -401,13 +405,18 @@ function normTitles(input) {
 /* ---------------- 读：头衔一览 ---------------- */
 async function listTitles(req, res) {
   const sql = getSql();
+  /* ⚠️ 2026-10-07 修复「鸡生蛋」：这里原本有一句
+        where coalesce(p.title, '') <> ''
+     意思是「只列出已经任命过头衔的人」。后果是全班刚导入、人人头衔为空时
+     列表 0 条，站主在「头衔任命」面板看到「还没有资料，请先导入名单」，
+     根本没法任命——而任命不了就永远进不了这个列表。
+     现在改为返回全部资料，由前端按 onlySet 过滤（默认只看未任命/全部可切）。 */
   const rows = await sql`
     select p.id, p.name, p.student_id, p.title, p.role, p.user_id,
            u.username, u.display_name
       from profiles p
       left join users u on u.id = p.user_id
-     where coalesce(p.title, '') <> ''
-     order by p.id
+     order by (coalesce(p.title, '') <> '') desc, p.id
   `;
   const ai = await sql`
     select id, username, display_name from users
@@ -774,7 +783,7 @@ async function exportUsers(req, res) {
 
   const rows = await sql`
     select u.id, u.username, u.display_name, u.role, u.status,
-           u.created_at, u.last_login_at,
+           u.created_at, u.last_login_at, u.last_seen_at,
            coalesce(u.must_change_password, false) as must_change_password,
            coalesce(l.n, 0)::int as login_count
       from users u
@@ -799,6 +808,7 @@ async function exportUsers(req, res) {
       status: r.status,
       createdAt: r.created_at,
       lastLoginAt: r.last_login_at,
+      lastSeenAt: r.last_seen_at || null,
       mustChangePassword: !!r.must_change_password,
       loginCount: r.login_count,
     })),

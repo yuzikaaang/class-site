@@ -35,6 +35,7 @@ export default async function handler(req, res) {
       case 'login':    return await login(req, res);
       case 'logout':   return await logout(req, res);
       case 'me':       return await me(req, res);
+      case 'ping':     return await ping(req, res);
       case 'change-password': return await changePassword(req, res);
       default:
         return fail(res, 404, '未知的 action：' + (action || '(空)'));
@@ -148,7 +149,7 @@ async function login(req, res) {
     }
   }
 
-  await sql`update users set last_login_at = now() where id = ${u.id}`;
+  await sql`update users set last_login_at = now(), last_seen_at = now() where id = ${u.id}`;
   await logLogin(sql, req, u.id);
   const token = await issueSession(sql, u.id);
 
@@ -300,6 +301,34 @@ async function me(req, res) {
     isAdmin: u.role === 'admin',
     cloudKeys: keys.map((k) => ({ key: k.data_key, updatedAt: k.updated_at })),
   });
+}
+
+/* ---------------- 在线心跳（2026-10-07） ----------------
+   GET /api/auth?action=ping
+
+   用途：后台「用户管理」要看的是同学**最后一次在线**的时间，
+   而不是最后一次输密码登录的时间（登录一次 token 能用很多天，
+   只看 last_login_at 会以为人家好几天没来，其实天天在站上）。
+
+   前端在页面可见时每 60 秒打一次；切到后台标签页就不打了。
+   写库很轻（一条 update），但为了不白白刷库，做了 30 秒节流：
+   30 秒内的重复心跳直接回 ok 不写库。 */
+const PING_THROTTLE_MS = 30 * 1000;
+async function ping(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return;
+  const sql = getSql();
+  try {
+    await sql`
+      update users set last_seen_at = now()
+       where id = ${u.id}
+         and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')
+    `;
+  } catch (e) {
+    /* last_seen_at 列还没建出来（老库首次部署）时不能让心跳把前端搞崩 */
+    console.warn('[auth] ping 更新失败：', e.message);
+  }
+  return ok(res, { pong: Date.now() });
 }
 
 /* ---------------- 修改自己的密码 ---------------- */

@@ -340,6 +340,8 @@ tbody tr.sel{background:var(--tint-2)}
 .badge-orange{background:var(--tint-2);color:var(--accent-ink)}
 .badge-green{background:var(--ok-bg);color:var(--ok)}
 .badge-red{background:var(--danger-bg);color:var(--danger)}
+/* 「当前在线」小绿点（配合最后上线时间显示） */
+.dot-on{display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:5px;vertical-align:middle;box-shadow:0 0 0 3px rgba(34,197,94,.16)}
 .badge-blue{background:var(--info-bg);color:var(--info)}
 /* 头衔任命弹窗的选项网格（2026-10-05 加） */
 .tt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
@@ -721,6 +723,9 @@ tbody tr.sel{background:var(--tint-2)}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
         </button>
       </div>
+      <!-- 版本号：与主页保持一致，点一下回查线上构建号（核对改动有没有推上线） -->
+      <div id="adminVer" style="margin-top:8px;text-align:center;font-size:.68rem;opacity:.6;cursor:pointer"
+           onclick="checkAdminVer()" title="点击回查线上后端构建号"></div>
     </div>
   </aside>
 
@@ -793,6 +798,13 @@ var LS_USER  = 'cls_admin_user';
 var LS_THEME = 'cls_admin_theme';
 var LS_UI    = 'cls_admin_ui';
 
+/* 站点版本号（2026-10-07）
+   ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
+      两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
+      render_test.mjs 里有一条断言专门盯这件事。 */
+var SITE_VERSION = '2.1.0';
+var VER_DATE = '2026-10-07';
+
 /* ---- 运行时状态 ---- */
 var STATE = {
   token: '',
@@ -808,7 +820,7 @@ var STATE = {
   /* 班级内容：公告 + 内容合并成一个列表（2026-10-06） */
   classcontent: { list: [], cat: '全部', sort: 'new', q: '' },
   /* 2026-10-05 新增面板的状态 */
-  titles: { list: [], allowed: [], aiAccount: null, q: '' },
+  titles: { list: [], allowed: [], aiAccount: null, q: '', onlySet: false },
   homeworks: { list: [], notice: '' },
   song: { list: [], cards: [] },
   /* 2026-10-06 新增 */
@@ -1290,6 +1302,13 @@ function renderOverview(){
 /* ============================================================================
  * ⑦ 面板：用户管理（核心，深度对标 VoiceHub）
  * ========================================================================= */
+/* 「现在就在站上吗」：5 分钟内有心跳即算在线（2026-10-07） */
+function isOnlineNow(u){
+  var t = u && (u.lastSeenAt || u.lastLoginAt);
+  if(!t) return false;
+  var ms = Date.now() - new Date(t).getTime();
+  return ms >= 0 && ms < 5 * 60 * 1000;
+}
 function renderUsers(){
   var view = $('view');
   var S = STATE.users;
@@ -1380,7 +1399,12 @@ function paintUsers(){
       +   '<div><b>' + esc(u.displayName || u.username) + '</b>'
       +   '<i class="mono">' + esc(u.username) + '</i></div></div></td>'
       + '<td class="nowrap">' + badges + '</td>'
-      + '<td class="nowrap muted">' + esc(u.lastLoginAt ? ago(u.lastLoginAt) : '从未登录') + '</td>'
+      /* 「最后上线」：优先用心跳时间 lastSeenAt，没有才退回登录时间。
+         5 分钟内有心跳 = 现在就在站上，给个绿点（2026-10-07 站主要求：要看的是什么时候上过线，不是什么时候输过密码） */
+      + '<td class="nowrap muted" title="' + attr(fmt(u.lastSeenAt || u.lastLoginAt)) + '">'
+      +   (isOnlineNow(u) ? '<span class="dot-on" title="当前在线"></span>' : '')
+      +   esc(u.lastSeenAt ? ago(u.lastSeenAt) : (u.lastLoginAt ? ago(u.lastLoginAt) : '从未上线'))
+      + '</td>'
       + '<td class="nowrap muted">' + esc(fmt(u.createdAt, 'date')) + '</td>'
       + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
       +   '<button data-act="detail" data-id="' + u.id + '">详情</button>'
@@ -1400,7 +1424,7 @@ function paintUsers(){
   body.innerHTML =
     '<div class="table-wrap"><table><thead><tr>'
     + '<th style="width:38px"><input type="checkbox" class="chk" data-pick-all' + (allChecked ? ' checked' : '') + '></th>'
-    + '<th>用户</th><th class="nowrap">角色 / 状态</th><th class="nowrap">最后登录</th><th class="nowrap">创建时间</th>'
+    + '<th>用户</th><th class="nowrap">角色 / 状态</th><th class="nowrap">最后上线</th><th class="nowrap">创建时间</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
     + '<div class="pager">'
@@ -1703,6 +1727,9 @@ function userDetailDialog(id){
           + '<div class="panel-body"><dl class="kv">'
           + '<dt>显示名</dt><dd>' + esc(u.displayName || '—') + '</dd>'
           + '<dt>创建时间</dt><dd>' + esc(fmt(u.createdAt)) + '</dd>'
+          + '<dt>最后上线</dt><dd>' + (u.lastSeenAt
+              ? esc(fmt(u.lastSeenAt) + '（' + ago(u.lastSeenAt) + '）') + (isOnlineNow(u) ? ' <span class="badge badge-green">在线</span>' : '')
+              : '<span class="muted">未记录</span>') + '</dd>'
           + '<dt>最后登录</dt><dd>' + esc(u.lastLoginAt ? fmt(u.lastLoginAt) + '（' + ago(u.lastLoginAt) + '）' : '从未登录') + '</dd>'
           + '<dt>在线会话</dt><dd>' + sess.length + ' 个' + (sess.length ? '（最近：' + esc(fmt(sess[0].createdAt)) + '）' : '') + '</dd>'
           + '</dl></div></div>';
@@ -2058,6 +2085,7 @@ var EXPORT_FIELDS = [
   { key:'status',       label:'状态',         on:true  },
   { key:'mustChangePassword', label:'待改密',  on:true  },
   { key:'createdAt',    label:'创建时间',      on:true  },
+  { key:'lastSeenAt',   label:'最后上线',      on:true  },
   { key:'lastLoginAt',  label:'最后登录',      on:true  },
   { key:'loginCount',   label:'累计登录次数',  on:true  },
   { key:'dataCount',    label:'云端数据条数',  on:false }
@@ -2157,6 +2185,7 @@ function cellText(key, u){
     case 'status':      return u.status === 'banned' ? '已禁用' : '正常';
     case 'mustChangePassword': return u.mustChangePassword ? '是' : '否';
     case 'createdAt':   return fmt(u.createdAt);
+    case 'lastSeenAt':  return u.lastSeenAt ? fmt(u.lastSeenAt) : '未记录';
     case 'lastLoginAt': return u.lastLoginAt ? fmt(u.lastLoginAt) : '从未登录';
     case 'loginCount':  return u.loginCount || 0;
     case 'dataCount':   return u.dataCount || 0;
@@ -2867,12 +2896,13 @@ function renderTitles(){
     +   '<div class="search">' + svg('search')
     +     '<input id="ttSearch" placeholder="搜索姓名或学号…" value="' + attr(S.q) + '" maxlength="40">'
     +   '</div>'
-    +   '<span style="flex:1"></span>'
+    +   '<span><label class="ck" style="font-size:.82rem;white-space:nowrap"><input type="checkbox" id="ttOnly"'
+    +     (S.onlySet ? ' checked' : '') + '>只看已任命</label></span>'
     +   '<button class="btn btn-sm btn-secondary" id="ttRefresh">' + svg('refresh', 14) + '刷新</button>'
     + '</div>'
     + '<div class="alert info" style="margin-bottom:16px">'
     +   '给同学任命班级职务。头衔可以兼多职（比如既是团支书又是课代表）。<br>'
-    +   '<b>课代表有实际权限</b>：可以修改云端作业；其余头衔目前只用于展示。'
+    +   '<b>课代表有实际权限</b>：可以在主站作业界面修改<b>本科目</b>作业；其余头衔目前只用于展示。'
     + '</div>'
     + '<section class="panel"><div id="ttBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
 
@@ -2880,6 +2910,8 @@ function renderTitles(){
     S.q = e.target.value.trim(); loadTitles();
   }, 320);
   $('ttRefresh').onclick = function(){ loadTitles(); };
+  var onlyBox = $('ttOnly');
+  if(onlyBox) onlyBox.onchange = function(){ S.onlySet = !!onlyBox.checked; paintTitles(); };
 
   loadTitles();
 }
@@ -2904,6 +2936,7 @@ function paintTitles(){
 
   var kw = (S.q || '').toLowerCase();
   var list = S.list.filter(function(p){
+    if(S.onlySet && !(p.titles || []).length) return false;
     if(!kw) return true;
     return String(p.name || '').toLowerCase().indexOf(kw) >= 0
         || String(p.studentId || '').toLowerCase().indexOf(kw) >= 0;
@@ -2911,7 +2944,9 @@ function paintTitles(){
 
   if(!list.length){
     body.innerHTML = '<div class="empty">' + svg('shield', 38) + '<p>'
-      + (S.q ? '没找到匹配的同学' : '还没有资料，请先到「资料管理」导入全班名单') + '</p></div>';
+      + (!S.list.length ? '还没有资料，请先到「资料管理」导入全班名单'
+         : (S.onlySet ? '当前全班还没有人被任命头衔（取消勾选「只看已任命」看全部同学）' : '没找到匹配的同学'))
+      + '</p></div>';
     return;
   }
 
@@ -5458,6 +5493,8 @@ function setToken(t){
     if(t) localStorage.setItem(LS_TOKEN, t);
     else localStorage.removeItem(LS_TOKEN);
   }catch(e){}
+  /* 登录后开始心跳：站主自己在后台挂着也要算「在线」（2026-10-07） */
+  if(t && typeof startAdminHeartbeat === 'function') startAdminHeartbeat();
 }
 function setUser(u){
   STATE.me = u || null;
@@ -5591,8 +5628,44 @@ function initTheme(){
 /* ============================================================================
  * ㉑ 启动
  * ========================================================================= */
+/* ============================================================================
+ * 版本号显示 + 在线心跳（2026-10-07）
+ * -------------------------------------------------------------------------- */
+function paintAdminVer(){
+  var el = $('adminVer');
+  if(el) el.textContent = 'v' + SITE_VERSION + ' · ' + VER_DATE;
+}
+/* 点一下回查线上后端构建号：等于最新 commit 前 7 位说明已经是新代码 */
+function checkAdminVer(){
+  var el = $('adminVer');
+  if(!el) return;
+  el.textContent = 'v' + SITE_VERSION + ' · 回查中…';
+  var t = new Date();
+  var hhmm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+  fetch((API_BASE || '') + '/api/content', { cache:'no-store' })
+    .then(function(r){
+      var sha = r.headers.get('x-build-sha') || '';
+      el.textContent = 'v' + SITE_VERSION + ' · ' + VER_DATE + ' · 线上构建 ' + (sha || '未知') + ' ' + hhmm;
+    })
+    .catch(function(){ el.textContent = 'v' + SITE_VERSION + ' · ' + VER_DATE + ' · 回查失败'; });
+}
+/* 后台也算「在线」：站主自己在后台挂着也要体现在最后上线里 */
+function startAdminHeartbeat(){
+  var beat = function(){
+    var token = '';
+    try{ token = localStorage.getItem(LS_TOKEN) || ''; }catch(e){}
+    if(!token || document.hidden) return;
+    fetch((API_BASE || '') + '/api/auth?action=ping', {
+      cache:'no-store', headers:{ Authorization:'Bearer ' + token }
+    }).then(function(){}).catch(function(){});
+  };
+  beat();
+  setInterval(beat, 60000);
+}
+
 function boot(){
   initTheme();
+  paintAdminVer();
 
   /* 顶栏按钮 */
   $('btnTheme').onclick = function(){
