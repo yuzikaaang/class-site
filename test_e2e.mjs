@@ -1471,6 +1471,72 @@ console.log('\n【18】头衔系统与 AI 助手交接（2026-10-05 新增）');
   t('activities 已从白名单移除（主站用的是单数 activity）',
     goneAct.status === 400, '实际 ' + goneAct.status);
 
+  /* --- 系统令牌管理（管理员专用） --- */
+  const sec1 = await call('/api/admin?action=save-secret', {
+    method: 'POST', token: adminToken,
+    body: { name: 'GITEE_TOKEN', value: 'gitee-token-123' },
+  });
+  t('管理员可保存系统令牌', sec1.status === 200 && sec1.body.name === 'GITEE_TOKEN', JSON.stringify(sec1.body));
+
+  const secList = await call('/api/admin?action=secrets', { token: adminToken });
+  const secGitee = (secList.body.secrets || []).find((s) => s.name === 'GITEE_TOKEN');
+  t('管理员可读取系统令牌明文', secGitee && secGitee.value === 'gitee-token-123',
+    JSON.stringify(secList.body));
+
+  const secPut2 = await call('/api/admin?action=save-secret', {
+    method: 'POST', token: adminToken,
+    body: { name: 'CLOUDFLARE_API_TOKEN', value: 'cf-token-456' },
+  });
+  t('管理员可保存第二个令牌', secPut2.status === 200, JSON.stringify(secPut2.body));
+
+  const secList2 = await call('/api/admin?action=secrets', { token: adminToken });
+  t('列出多个令牌', (secList2.body.secrets || []).length >= 2, JSON.stringify(secList2.body));
+
+  const secDel = await call('/api/admin?action=delete-secret', {
+    method: 'POST', token: adminToken,
+    body: { name: 'GITEE_TOKEN' },
+  });
+  t('管理员可删除系统令牌', secDel.status === 200 && secDel.body.deleted === 'GITEE_TOKEN', JSON.stringify(secDel.body));
+
+  const secList3 = await call('/api/admin?action=secrets', { token: adminToken });
+  t('删除后列表中不再出现该令牌', !(secList3.body.secrets || []).some((s) => s.name === 'GITEE_TOKEN'));
+
+  const secBadName = await call('/api/admin?action=save-secret', {
+    method: 'POST', token: adminToken,
+    body: { name: 'lowercase_token', value: 'x' },
+  });
+  t('非法令牌名称被拒', secBadName.status === 400, secBadName.status);
+
+  const secNoVal = await call('/api/admin?action=save-secret', {
+    method: 'POST', token: adminToken,
+    body: { name: 'EMPTY_TOKEN', value: '' },
+  });
+  t('空令牌值被拒', secNoVal.status === 400, secNoVal.status);
+
+  const secUser = await call('/api/admin?action=secrets', { token: userToken });
+  t('普通用户读令牌被拒 403/401', secUser.status === 403 || secUser.status === 401, secUser.status);
+
+  /* 造一个新的普通账号，token 有效 */
+  const secPlainReg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'secplainuser', password: 'PlainPass123' },
+  });
+  const secPlainToken = secPlainReg.body.token;
+
+  const secUser2 = await call('/api/admin?action=secrets', { token: secPlainToken });
+  t('普通用户读令牌被拒 403', secUser2.status === 403, secUser2.status);
+
+  const secPutUser = await call('/api/admin?action=save-secret', {
+    method: 'POST', token: secPlainToken,
+    body: { name: 'USER_TOKEN', value: 'x' },
+  });
+  t('普通用户写令牌被拒 403', secPutUser.status === 403, secPutUser.status);
+
+  /* 清理令牌测试数据 */
+  await call('/api/admin?action=delete-secret', {
+    method: 'POST', token: adminToken,
+    body: { name: 'CLOUDFLARE_API_TOKEN' },
+  });
+
   /* ---- 清理 ---- */
   for (const id of [pid, pid2]) {
     if (id) await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id } });

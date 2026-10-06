@@ -736,6 +736,7 @@ var STATE = {
   /* 2026-10-06 新增 */
   quotes: { list: [] },
   dates:  { list: [] },
+  secrets: { list: [], encrypted: false, hasKey: false },
 };
 window.__ADMIN_STATE = STATE;   /* 调试用 */
 
@@ -1041,6 +1042,7 @@ var PAGES = [
   { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
   { id:'logs',          label:'操作日志', icon:'file',      group:'安全',  title:'操作日志' },
+  { id:'secrets',       label:'令牌管理', icon:'key',       group:'系统',  title:'系统令牌' },
   { id:'settings',      label:'系统设置', icon:'settings',  group:'系统',  title:'系统设置' },
   { id:'account',       label:'我的账户', icon:'lock',      group:'系统',  title:'我的账户' }
 ];
@@ -1095,6 +1097,7 @@ function go(page){
     dates:         renderDates,
     logins:        renderLogins,
     logs:          renderLogs,
+    secrets:       renderSecrets,
     settings:      renderSettings,
     account:       renderAccount
   })[page];
@@ -4602,7 +4605,161 @@ function loadAudit(){
 }
 
 /* ============================================================================
- * ⑰ 面板：系统设置
+ * ⑰ 面板：系统令牌（仅管理员可见）
+ * ---------------------------------------------------------------------------
+ * Cloudflare / Gitee / VoiceHub 等第三方令牌统一存这里。
+ * 后端挂在系统账号下，读写接口只让 role=admin 通过。
+ * ========================================================================= */
+function renderSecrets(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<span class="muted" style="font-size:.82rem">仅管理员可查看。建议开启 ADMIN_SECRETS_KEY 加密，否则数据库里明文存储。</span>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm" id="scAdd">' + svg('plus', 14) + '新增令牌</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="scRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert warn" id="scWarn" style="display:none;margin-bottom:14px"></div>'
+    + '<section class="panel"><div id="scBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('scAdd').onclick = function(){ secretDialog(null); };
+  $('scRefresh').onclick = loadSecrets;
+  loadSecrets();
+}
+
+function loadSecrets(){
+  api('/admin?action=secrets').then(function(j){
+    STATE.secrets = j.secrets || [];
+    STATE.secretsEncrypted = !!j.encrypted;
+    STATE.secretsHasKey = !!j.hasKey;
+    paintSecrets();
+    var warn = $('scWarn');
+    if(warn){
+      if(j.warning){
+        warn.style.display = 'block';
+        warn.textContent = j.warning;
+      }else if(!j.hasKey){
+        warn.style.display = 'block';
+        warn.textContent = '当前未配置 ADMIN_SECRETS_KEY，令牌在数据库里明文存储。如需加密，到 Cloudflare Workers 设置环境变量 ADMIN_SECRETS_KEY（值用 openssl rand -base64 32 生成）。';
+      }else{
+        warn.style.display = 'none';
+      }
+    }
+  }).catch(function(e){
+    var b = $('scBody');
+    if(b) b.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function paintSecrets(){
+  var body = $('scBody');
+  if(!body) return;
+  var list = STATE.secrets || [];
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('key', 38)
+      + '<p>还没有保存任何令牌</p>'
+      + '<p style="font-size:.78rem;margin-top:8px">点右上角「新增令牌」把 Cloudflare / Gitee 等凭据存进来</p></div>';
+    return;
+  }
+
+  var rows = list.map(function(s){
+    var v = s.value || '';
+    var masked = v.length > 12 ? (v.slice(0, 6) + '…' + v.slice(-6)) : v;
+    return '<tr data-name="' + attr(s.name) + '">'
+      + '<td class="mono nowrap" style="font-weight:600">' + esc(s.name) + '</td>'
+      + '<td style="font-family:monospace;font-size:.78rem;max-width:320px;overflow:hidden;text-overflow:ellipsis" title="' + attr(v) + '">'
+      +   '<span class="sc-val">' + esc(masked) + '</span>'
+      + '</td>'
+      + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
+      +   '<button data-sc="show">显示</button>'
+      +   '<button data-sc="edit">编辑</button>'
+      +   '<button class="danger" data-sc="del">删除</button>'
+      + '</div></td>'
+      + '</tr>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="table-wrap"><table><thead><tr>'
+    + '<th class="nowrap">名称</th><th>令牌值</th><th style="text-align:right">操作</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '<p class="hint" style="padding:12px 14px 0;font-size:.75rem">' + (STATE.secretsEncrypted ? '已启用加密存储' : '当前明文存储') + '</p>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-sc]'), function(b){
+    var name = b.closest('[data-name]').dataset.name;
+    var item = list.find(function(x){ return x.name === name; }) || {};
+    if(b.dataset.sc === 'show'){
+      b.onclick = function(){
+        var cell = b.closest('tr').querySelector('.sc-val');
+        if(cell.textContent === item.value){
+          var v = item.value || '';
+          cell.textContent = v.length > 12 ? (v.slice(0, 6) + '…' + v.slice(-6)) : v;
+          b.textContent = '显示';
+        }else{
+          cell.textContent = item.value;
+          b.textContent = '隐藏';
+        }
+      };
+    }else if(b.dataset.sc === 'edit'){
+      b.onclick = function(){ secretDialog(item); };
+    }else if(b.dataset.sc === 'del'){
+      b.onclick = function(){ deleteSecretDialog(item); };
+    }
+  });
+}
+
+function secretDialog(item){
+  var isNew = !item;
+  openModal({
+    title: isNew ? '新增令牌' : ('编辑 ' + esc(item.name)),
+    sub: isNew ? '名称用大写下划线格式，如 CLOUDFLARE_API_TOKEN' : '留空表示不修改名称',
+    body:
+      '<div class="field"><label for="scName">令牌名称</label>'
+      + '<input id="scName" maxlength="64" value="' + attr(isNew ? '' : item.name) + '" placeholder="如 CLOUDFLARE_API_TOKEN">'
+      + '<p class="hint">只能是大写字母、数字、下划线，且以大写字母开头。</p></div>'
+      + '<div class="field"><label for="scValue">令牌值</label>'
+      + '<textarea id="scValue" rows="3" placeholder="粘贴令牌内容" style="font-family:monospace">' + attr(isNew ? '' : item.value) + '</textarea></div>'
+      + '<div class="msg" id="scMsg"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>' + (isNew ? '保存' : '更新') + '</button>',
+    onMount: function(box){
+      var msg = box.querySelector('#scMsg');
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var name = (box.querySelector('#scName').value || '').trim();
+        var value = box.querySelector('#scValue').value;
+        if(!name){ msg.className = 'msg err show'; msg.textContent = '令牌名称不能为空'; return; }
+        if(!value){ msg.className = 'msg err show'; msg.textContent = '令牌值不能为空'; return; }
+        api('/admin?action=save-secret', { method:'POST', body:{ name: name, value: value } })
+          .then(function(j){
+            closeModal();
+            toast(j.message || '已保存', 'ok');
+            loadSecrets();
+          })
+          .catch(function(e){
+            msg.className = 'msg err show';
+            msg.textContent = e.message;
+          });
+      };
+    }
+  });
+}
+
+function deleteSecretDialog(item){
+  confirmBox({
+    title: '删除令牌',
+    html: '确定删除 <b class="mono">' + esc(item.name) + '</b> 吗？',
+    detail: '删除后后台就不再保存这条令牌，但已经写到 Cloudflare / GitHub Secrets 里的不受影响。',
+    danger: true,
+    okText: '删除'
+  }).then(function(ok){
+    if(!ok) return;
+    api('/admin?action=delete-secret', { method:'POST', body:{ name: item.name } })
+      .then(function(){ toast('已删除', 'ok'); loadSecrets(); })
+      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4000); });
+  });
+}
+
+/* ============================================================================
+ * ⑱ 面板：系统设置
  * ========================================================================= */
 function renderSettings(){
   $('view').innerHTML =
@@ -4673,7 +4830,7 @@ function renderSettings(){
 }
 
 /* ============================================================================
- * ⑱ 面板：我的账户
+ * ⑲ 面板：我的账户
  * ========================================================================= */
 function renderAccount(){
   var me = STATE.me || {};

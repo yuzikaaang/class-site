@@ -35,6 +35,7 @@ import {
   cors, handlePreflight, ok, fail, body, requireAdmin, audit,
 } from './_lib/http.js';
 import { hashPassword } from './_lib/password.js';
+import { listSecrets, saveSecret, deleteSecret } from './_lib/secrets-store.js';
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
@@ -60,6 +61,7 @@ export default async function handler(req, res) {
       if (action === 'view-logs')        return await viewLogs(req, res);
       if (action === 'titles')           return await listTitles(req, res);
       if (action === 'ai-account')       return await aiAccount(req, res);
+      if (action === 'secrets')          return await listAdminSecrets(req, res);
       return fail(res, 404, '未知的 action：' + action);
     }
 
@@ -82,6 +84,8 @@ export default async function handler(req, res) {
         case 'batch-profiles': return await batchProfiles(req, res, me, b);
         case 'set-title':      return await setTitle(req, res, me, b);
         case 'handover-ai':    return await handoverAi(req, res, me, b);
+        case 'save-secret':    return await saveAdminSecret(req, res, me, b);
+        case 'delete-secret':  return await deleteAdminSecret(req, res, me, b);
         default:               return fail(res, 404, '未知的 action：' + action);
       }
     }
@@ -1209,4 +1213,50 @@ async function viewLogs(req, res) {
     })),
     top: top.map((t) => ({ username: t.username || '(已删除)', count: t.n })),
   });
+}
+
+/* ============================================================
+   系统令牌管理（管理员专用）
+   ------------------------------------------------------------
+   存放 Cloudflare / Gitee / VoiceHub 等第三方令牌。
+   仅 role=admin 可读写，非管理员连列表都看不到。
+   ============================================================ */
+
+async function listAdminSecrets(req, res) {
+  try {
+    const data = await listSecrets(req);
+    return ok(res, data);
+  } catch (e) {
+    console.error('[admin] list secrets', e);
+    return fail(res, 500, '读取令牌失败：' + e.message);
+  }
+}
+
+async function saveAdminSecret(req, res, me, b) {
+  const name = String(b.name || '').trim();
+  const value = String(b.value || '');
+  if (!value) return fail(res, 400, '令牌值不能为空');
+
+  try {
+    const result = await saveSecret(req, name, value);
+    await audit(me.id, 'secret.save', 'secret', name, '保存/更新令牌 ' + name);
+    return ok(res, { ...result, message: '已保存 ' + name });
+  } catch (e) {
+    console.error('[admin] save secret', e);
+    return fail(res, 400, e.message);
+  }
+}
+
+async function deleteAdminSecret(req, res, me, b) {
+  const name = String(b.name || '').trim();
+  if (!name) return fail(res, 400, '缺少 name');
+
+  try {
+    const result = await deleteSecret(req, name);
+    await audit(me.id, 'secret.delete', 'secret', name, '删除令牌 ' + name);
+    return ok(res, { ...result, message: '已删除 ' + name });
+  } catch (e) {
+    console.error('[admin] delete secret', e);
+    return fail(res, 400, e.message);
+  }
 }

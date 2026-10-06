@@ -16,7 +16,7 @@
  *   PUT  /api/content                      写入（管理员或 AI 助手）
  * ============================================================ */
 
-import { getSql, jsonCol } from './_lib/db.js';
+import { getSql, jsonCol, systemUserId } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireUser,
   audit,
@@ -65,28 +65,6 @@ export default async function handler(req, res) {
     console.error('[content]', req.method, e);
     return fail(res, 500, '服务器内部错误，请稍后重试');
   }
-}
-
-/* ---------------- 找「系统账号」 ----------------
-   内容挂在谁名下？优先 AI 助手（它不会毕业、不会换人），
-   没有就退回到最早创建的管理员。
-   这样即使具体管事的同学毕业了、账号被删了，内容也不会跟着丢。 */
-async function systemUserId(sql) {
-  const ai = await sql`
-    select id from users
-     where is_ai = true and status = 'active'
-     order by id limit 1
-  `;
-  if (ai.length) return Number(ai[0].id);
-
-  const adm = await sql`
-    select id from users
-     where role = 'admin' and status = 'active'
-     order by id limit 1
-  `;
-  if (adm.length) return Number(adm[0].id);
-
-  return null;
 }
 
 /* ---------------- 读取 ----------------

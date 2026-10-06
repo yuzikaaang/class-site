@@ -71,6 +71,27 @@ export function jsonCol(raw) {
 }
 
 /** 配置：管理员账号、允许的前端来源、会话有效期 */
+/** 找「系统账号」：优先 AI 助手，其次最早的管理员。
+ *  内容/令牌等站点级数据挂在这个账号下，避免具体管理员毕业后数据丢失。 */
+export async function systemUserId(sql) {
+  const s = sql || getSql();
+  const ai = await s`
+    select id from users
+     where is_ai = true and status = 'active'
+     order by id limit 1
+  `;
+  if (ai.length) return Number(ai[0].id);
+
+  const adm = await s`
+    select id from users
+     where role = 'admin' and status = 'active'
+     order by id limit 1
+  `;
+  if (adm.length) return Number(adm[0].id);
+
+  return null;
+}
+
 export function cfg() {
   return {
     /* 站点管理员用户名（首个管理员）。多个用英文逗号分隔 */
