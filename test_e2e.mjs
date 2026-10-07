@@ -2435,6 +2435,149 @@ console.log('\n【31】第二十七轮·游戏排行榜（⑪）');
   t('本周分只在更高时更新', /sc > \(Number\(wk\.score\)/.test(cl));
 }
 
+console.log('\n【32】第二十八轮·抽歌功能迁移后台（前台删除 + 云端存储）');
+{
+  const page = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm  = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const cont = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
+
+  /* ---- 后端白名单已加 3 键 ---- */
+  t('ALLOW_CONTENT_KEYS 含 dj_schedule', cont.indexOf("'dj_schedule'") >= 0);
+  t('ALLOW_CONTENT_KEYS 含 dj_excluded', cont.indexOf("'dj_excluded'") >= 0);
+  t('ALLOW_CONTENT_KEYS 含 release_notes', cont.indexOf("'release_notes'") >= 0);
+
+  /* ---- CONTENT_MAP 同步（项目铁律：两表必须一致） ---- */
+  t('CONTENT_MAP 含 dj_schedule', /dj_schedule\s*:\s*null/.test(page));
+  t('CONTENT_MAP 含 dj_excluded', /dj_excluded\s*:\s*null/.test(page));
+  t('CONTENT_MAP 含 release_notes', /release_notes\s*:\s*null/.test(page));
+
+  /* ---- 前台：抽歌相关全部删净 ---- */
+  const deadFns = ['djIconClick','openDjVerify','closeDjVerify','djVerify','openDjPanel','closeDjPanel',
+    'djRun','djCopy','djOpenHistory','djOpenSongs','renderDjSongs','closeDjSongs','djFetchSongs',
+    'djLoadRounds','djSaveRounds','djExportRounds','djImportRounds','djClear','djScheduleCount',
+    'openCouponAdmin','closeCouponAdmin','cpCreate','cpLoadList','cpRenderList','riInit','riSubmit',
+    'xorEncrypt','xorDecrypt'];
+  const alive = deadFns.filter((n) => new RegExp('function\\s+' + n + '\\s*\\(').test(page));
+  t('前台抽歌/点歌券函数已全部删除', alive.length === 0, alive.join(','));
+
+  const deadMasks = ['djVerifyMask','djPanelMask','djHistoryMask','djSongsMask','couponAdminMask'];
+  const aliveMasks = deadMasks.filter((id) => page.indexOf('id="' + id + '"') >= 0);
+  t('前台 5 个相关弹窗已全部删除', aliveMasks.length === 0, aliveMasks.join(','));
+
+  t('前台不再有身份验证入口（身份证后四位）', page.indexOf('身份证后四位') < 0);
+  t('前台不再残留点歌平台密钥常量', page.indexOf('DJ_KEY_ENC') < 0 && page.indexOf('CP_ADMIN_KEY_ENC') < 0);
+  /* 注意：不能简单搜 "xorDecrypt"，因为门禁模块 (GATE_SEAL_KEY) 有自己的
+     混淆说明文字、且与抽歌无关，那些必须保留。这里只查「是否还有定义与调用」。 */
+  t('前台不再有抽歌用的 XOR 函数定义',
+    !/function\s+xorDecrypt\s*\(/.test(page) && !/function\s+xorEncrypt\s*\(/.test(page));
+  t('前台不再有抽歌用的 XOR 密钥常量', page.indexOf("XOR_KEY = 'cls2505-xor-key-2026'") < 0);
+
+  /* 点歌平台卡片本身要留着（只删抽歌，不是删入口） */
+  t('点歌平台卡片仍在', /title:\s*"点歌平台"/.test(page));
+
+  /* ---- 后台：抽歌排期面板 ---- */
+  t('后台 PAGES 注册了 dj 面板', /id:'dj'/.test(adm));
+  t('后台 PAGES 注册了 releases 面板', /id:'releases'/.test(adm));
+  t('后台 go() 映射到 renderDj', /dj:\s*renderDj/.test(adm));
+  t('后台 go() 映射到 renderReleases', /releases:\s*renderReleases/.test(adm));
+
+  t('后台定义 renderDj()', /function renderDj\(\)/.test(adm));
+  t('后台定义 djRun()', /function djRun\(\)/.test(adm));
+  t('后台定义 djLoadCloud()', /function djLoadCloud\(\)/.test(adm));
+  t('后台定义 djSaveSchedule()', /function djSaveSchedule\(/.test(adm));
+  t('后台定义 djSaveExcluded()', /function djSaveExcluded\(/.test(adm));
+  t('后台定义 djSongRowHtml()', /function djSongRowHtml\(/.test(adm));
+  t('后台定义 djRenderReqView()', /function djRenderReqView\(/.test(adm));
+  t('后台定义 paintDjHistory()', /function paintDjHistory\(\)/.test(adm));
+  t('后台定义 djCopy()', /function djCopy\(\)/.test(adm));
+  t('后台定义 djParamsLine()', /function djParamsLine\(/.test(adm));
+  t('后台定义 djScheduleCount()', /function djScheduleCount\(\)/.test(adm));
+
+  /* ---- 后台抽歌：走云端而非 localStorage ---- */
+  t('排期写入云端 dj_schedule', /items:\s*\{\s*dj_schedule:/.test(adm));
+  t('排除清单写入云端 dj_excluded', /items:\s*\{\s*dj_excluded:/.test(adm));
+  t('后台复用已有的 vhFetchSongs（不重复实现拉歌单）', /function djFetchSongs\(\)[\s\S]{0,200}vhFetchSongs\(\)/.test(adm));
+  t('带有「旧数据一键迁移」提示', /function djShowMigrateTip\(\)/.test(adm));
+  t('包含自动排除逻辑（已播放/已排期）', /function djAutoExReason\(/.test(adm));
+  t('包含「每人限一首」约束', /onePer/.test(adm) && /usedReq\[rq\]/.test(adm));
+  t('包含高赞必选顺延逻辑', /deferred/.test(adm));
+  /* 后台不应有身份验证的「实现」（模块头注释里提到为什么砍掉它，那是有意保留的说明） */
+  t('后台不再有身份验证实现',
+    !/function\s+openDjVerify\s*\(/.test(adm) && !/function\s+djVerify\s*\(/.test(adm)
+    && adm.indexOf('id="djVerifyMask"') < 0);
+  t('后台不再需要身份证后四位校验', !/djVerifyErr|djIdInput/.test(adm));
+
+  /* ---- 后台：版本更新面板 ---- */
+  t('后台定义 renderReleases()', /function renderReleases\(\)/.test(adm));
+  t('后台定义 paintReleases()', /function paintReleases\(\)/.test(adm));
+  t('后台定义 relEdit()', /function relEdit\(/.test(adm));
+  t('后台定义 relWrite()', /function relWrite\(/.test(adm));
+  t('版本记录写入云端 release_notes', /items:\s*\{\s*release_notes:/.test(adm));
+  t('有「填入最近几轮」初始数据', /function relSeed\(\)/.test(adm));
+  t('初始数据含 v2.3.5 排行榜', /version:\s*'2\.3\.5'/.test(adm));
+  t('初始数据含 v2.3.1 改密修复', /version:\s*'2\.3\.1'/.test(adm));
+  t('版本类型含 fix / feature / improve', /feature:/.test(adm) && /fix:/.test(adm) && /improve:/.test(adm));
+  t('支持标记重点版本', /highlight/.test(adm));
+  t('前台不展示版本记录（值为 null）', /release_notes\s*:\s*null/.test(page));
+}
+
+console.log('\n【33】第二十八轮·云端字段端到端写入读取');
+{
+  /* 真实走一遍 /api/content：写 dj_schedule / dj_excluded / release_notes 再读回来 */
+  const schedule = [
+    { id: 1759800000000, at: '2026/10/07 17:30:00', note: '测试批次',
+      addedToPlatform: false, played: false,
+      songs: [ { id: 101, title: '测试歌曲A', artist: '歌手甲', votes: 7, requester: '张三' },
+               { id: 102, title: '测试歌曲B', artist: '歌手乙', votes: 3, requester: '李四' } ],
+      params: { top: 1, picked: 2, onePer: true, exPlayed: true, exSched: true, pool: 12, persons: 5 } },
+  ];
+  const excluded = { songs: [101, 999], reqs: ['王五'] };
+  const notes = [
+    { version: '9.9.9', date: '2026-10-07', title: '端到端测试版本',
+      type: 'fix', items: ['测试条目一', '测试条目二'], highlight: true },
+  ];
+
+  const w = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { dj_schedule: schedule, dj_excluded: excluded, release_notes: notes } },
+  });
+  t('三个键可以一起写入（200）', w.status === 200 && w.body.ok, JSON.stringify(w.body).slice(0, 160));
+  t('写入回执含 dj_schedule', (w.body.updated || []).indexOf('dj_schedule') >= 0, JSON.stringify(w.body.updated));
+  t('写入回执含 release_notes', (w.body.updated || []).indexOf('release_notes') >= 0);
+
+  const rd = await call('/api/content');
+  const items = rd.body.items || {};
+  t('读回 dj_schedule', Array.isArray(items.dj_schedule) && items.dj_schedule.length === 1,
+    JSON.stringify(items.dj_schedule).slice(0, 120));
+  t('读回排期内的歌名', items.dj_schedule && items.dj_schedule[0].songs[0].title === '测试歌曲A');
+  t('读回排期内的参数', items.dj_schedule && items.dj_schedule[0].params && items.dj_schedule[0].params.pool === 12);
+  t('读回 dj_excluded.songs', items.dj_excluded && Array.isArray(items.dj_excluded.songs) && items.dj_excluded.songs.length === 2);
+  t('读回 dj_excluded.reqs', items.dj_excluded && items.dj_excluded.reqs[0] === '王五');
+  t('读回 release_notes', Array.isArray(items.release_notes) && items.release_notes.length === 1);
+  t('读回版本号', items.release_notes && items.release_notes[0].version === '9.9.9');
+  t('读回 highlight 标记', items.release_notes && items.release_notes[0].highlight === true);
+  t('读回条目数组', items.release_notes && items.release_notes[0].items.length === 2);
+
+  /* 局部写入不能冲掉别的键（PUT 是读旧→合并→写回） */
+  const w2 = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { key: 'release_notes', value: [] },
+  });
+  t('单键写入（key/value 形式）成功', w2.status === 200 && w2.body.ok);
+  const rd2 = await call('/api/content');
+  const it2 = rd2.body.items || {};
+  t('清空 release_notes 后 dj_schedule 仍在', Array.isArray(it2.dj_schedule) && it2.dj_schedule.length === 1,
+    JSON.stringify(it2.dj_schedule).slice(0, 80));
+  t('清空 release_notes 后 dj_excluded 仍在', it2.dj_excluded && it2.dj_excluded.reqs[0] === '王五');
+
+  /* 未登记过的键必须被拒（白名单生效） */
+  const bad = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { dj_nonexistent_key: [1, 2, 3] } },
+  });
+  t('白名单外的键被拒（400）', bad.status === 400, '实际 ' + bad.status + ' ' + JSON.stringify(bad.body).slice(0, 120));
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }

@@ -823,7 +823,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.3.5';
+var SITE_VERSION = '2.3.6';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -1150,6 +1150,8 @@ var PAGES = [
   { id:'classcontent',  label:'班级内容', icon:'layers',    group:'内容',  title:'班级内容（公告 / 作业 / 活动）' },
   { id:'homeworks',     label:'作业管理', icon:'file',      group:'内容',  title:'作业管理' },
   { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
+  { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
+  { id:'releases',      label:'版本更新', icon:'clock',     group:'内容',  title:'版本更新记录' },
   { id:'quotes',        label:'每日一言', icon:'quote',     group:'内容',  title:'每日一言' },
   { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
@@ -1205,6 +1207,8 @@ function go(page){
     classcontent:  renderClassContent,
     homeworks:     renderHomeworks,
     song:          renderSong,
+    dj:            renderDj,
+    releases:      renderReleases,
     quotes:        renderQuotes,
     dates:         renderDates,
     games:         renderGames,
@@ -6246,6 +6250,1155 @@ if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', boot);
 }else{
   boot();
+}
+
+/* ============================================================================
+ * ⑫ 面板：抽歌排期（第二十八轮，从主站 index.html 整体搬迁）
+ * ----------------------------------------------------------------------------
+ * 【为什么搬】
+ *   原先这套抽签逻辑住在前端 index.html 里，靠「点歌平台图标连点 5 次 +
+ *   答身份验证题（身份证后四位 / 户籍地村名）」隐藏进入。
+ *   站主要求：功能挪进后台，前台那套入口整个删掉。
+ *
+ * 【搬过来时砍掉了什么】
+ *   · 身份验证弹窗 —— 后台本身就要密码登录，再答一遍是重复劳动。
+ *   · 「点歌平台图标连点 5 次」的入口 —— 后台由侧栏点进来，不需要暗门。
+ *   · 平台密钥的两个 xor 密文常量 —— 后台已有一份（VH_DJ_KEY_ENC），复用即可。
+ *
+ * 【数据存哪：这次改了】
+ *   前台版本把排期存在浏览器 localStorage（cls_dj_schedule），
+ *   换台电脑 / 清缓存就全没了 —— 而这是个「在教室电脑抽签」的场景。
+ *   现在改为存云端（/api/content 的 dj_schedule / dj_excluded 两键），
+ *   全班管理员共享同一份，换设备不丢。
+ *
+ *   ⚠️ localStorage 仍然保留，但只做两件事：
+ *      ① 读取失败时的兜底（比如网络断了，至少还能看本机旧数据）
+ *      ② 首次进入时的「旧数据一键迁移」来源
+ *   写入一律走云端，不再写 localStorage。
+ *
+ * 【依赖】
+ *   · vhFetchSongs() / vhDjKey()  —— 后台「点歌管理」面板已有的拉歌单实现，直接复用，不重复实现
+ *   · api()                       —— 统一请求封装（自动带 token、处理 401）
+ *   · openModal / confirmBox / toast / svg / esc  —— 后台通用 UI
+ * ========================================================================= */
+
+/* 排期与排除清单的云端读写。改自前台 djLoadRounds/djSaveRounds —— 区别只在「存云端」。 */
+var DJ_LS_SCHEDULE = 'cls_dj_schedule';   /* 仅作旧数据迁移与本机兜底 */
+var DJ_LS_EXCLUDED = 'cls_dj_excluded';
+var DJ_LS_EXCLUDED_REQ = 'cls_dj_excluded_req';
+var DJ_LS_NOTE = 'cls_dj_copy_note';
+
+var DJ_STATE = {
+  songs: [],          /* 平台歌单（拉下来后缓存在这，切视图不重复拉） */
+  rounds: [],         /* 排期批次 */
+  excluded: { songs: [], reqs: [] },   /* 单曲排除 / 整人排除 */
+  view: 'song',       /* 歌单管理视图：song=按歌曲 req=按点歌人 */
+  pick: [],           /* 本次抽中的歌（用于「复制公示」校验） */
+  loaded: false,      /* 云端数据是否已拉过 */
+  dirtyLocal: false,  /* 本机是否有可迁移的旧数据 */
+};
+
+/* ---- 兼容读取：云端那份可能被写成数组，也可能写成 {schedule:[...]} ---- */
+function djNormRounds(v){
+  if(Array.isArray(v)) return v;
+  if(v && Array.isArray(v.schedule)) return v.schedule;
+  return [];
+}
+function djNormExcluded(v){
+  var o = { songs: [], reqs: [] };
+  if(Array.isArray(v)) { o.songs = v; return o; }        /* 极老格式：纯 id 数组 */
+  if(v && typeof v === 'object'){
+    if(Array.isArray(v.songs)) o.songs = v.songs;
+    if(Array.isArray(v.reqs)) o.reqs = v.reqs;
+  }
+  return o;
+}
+
+/* ---- 本机旧数据（只读，供迁移与兜底）---- */
+function djLocalRounds(){
+  try{ return djNormRounds(JSON.parse(localStorage.getItem(DJ_LS_SCHEDULE) || '[]')); }catch(e){ return []; }
+}
+function djLocalExcluded(){
+  var s = [], r = [];
+  try{ s = JSON.parse(localStorage.getItem(DJ_LS_EXCLUDED) || '[]') || []; }catch(e){}
+  try{ r = JSON.parse(localStorage.getItem(DJ_LS_EXCLUDED_REQ) || '[]') || []; }catch(e){}
+  return { songs: Array.isArray(s) ? s : [], reqs: Array.isArray(r) ? r : [] };
+}
+
+/* ---- 从云端拉一次（排期 + 排除清单一起）---- */
+function djLoadCloud(){
+  return api('/content').then(function(j){
+    var it = (j && j.items) || {};
+    DJ_STATE.rounds = djNormRounds(it.dj_schedule);
+    DJ_STATE.excluded = djNormExcluded(it.dj_excluded);
+    /* 云端两个都是空的、而本机有旧数据 → 提示可迁移 */
+    var loc = djLocalRounds(), locEx = djLocalExcluded();
+    DJ_STATE.dirtyLocal = (!DJ_STATE.rounds.length && !DJ_STATE.excluded.songs.length && !DJ_STATE.excluded.reqs.length)
+      && (loc.length > 0 || locEx.songs.length > 0 || locEx.reqs.length > 0);
+    DJ_STATE.loaded = true;
+    return j;
+  });
+}
+/* ---- 写云端。只传要改的键，后端是「读旧→合并→写回」语义 ---- */
+function djSaveSchedule(arr){
+  DJ_STATE.rounds = arr || [];
+  return api('/content', { method:'PUT', body:{ items:{ dj_schedule: DJ_STATE.rounds } } })
+    .then(function(){ toast('排期已保存到云端', 'ok'); })
+    .catch(function(e){ toast('保存失败：' + e.message, 'err', 4000); throw e; });
+}
+function djSaveExcluded(){
+  return api('/content', { method:'PUT', body:{ items:{ dj_excluded: DJ_STATE.excluded } } })
+    .catch(function(e){ toast('排除清单保存失败：' + e.message, 'err', 4000); throw e; });
+}
+
+/* ---- 取排除态（改成读内存，不再读 localStorage）---- */
+function djExcludedMap(){
+  var m = {};
+  (DJ_STATE.excluded.songs || []).forEach(function(id){ m[id] = 1; });
+  return m;
+}
+function djExcludedReqMap(){
+  var m = {};
+  (DJ_STATE.excluded.reqs || []).forEach(function(n){ m[n] = 1; });
+  return m;
+}
+function djSetExcluded(id, on){
+  var arr = (DJ_STATE.excluded.songs || []).filter(function(x){ return String(x) !== String(id); });
+  if(on) arr.push(id);
+  DJ_STATE.excluded.songs = arr;
+  return djSaveExcluded();
+}
+function djSetExcludedReq(name, on){
+  var arr = (DJ_STATE.excluded.reqs || []).filter(function(x){ return String(x) !== String(name); });
+  if(on) arr.push(name);
+  DJ_STATE.excluded.reqs = arr;
+  return djSaveExcluded();
+}
+function djClearExcluded(){
+  confirmBox({
+    text: '确定清空全部排除记录？',
+    detail: '包含「单曲排除」和「点歌人排除」两类，清空后这些歌会重新参与抽签。',
+    danger: true, okText: '清空',
+  }).then(function(yes){
+    if(!yes) return;
+    DJ_STATE.excluded = { songs: [], reqs: [] };
+    djSaveExcluded().then(function(){
+      toast('已清空排除记录', 'ok');
+      paintDjSongs();
+    });
+  });
+}
+
+/* ---- 点歌人姓名兼容（平台可能返回字符串或 {name} 对象）---- */
+function djReqName(s){
+  var r = (typeof s.requester === 'string') ? s.requester : ((s.requester && s.requester.name) || '');
+  return String(r == null ? '' : r).trim();
+}
+
+/* ---- 已播放 / 已排期：默认排除，不用手动一首首点 ----
+ * 「已排期」= 只要在排期记录里出现过就算，不要求该批次被勾成「已加到平台」。
+ * （前台 2026-08-30 修的坑：要求 addedToPlatform 会让「排除已排期」形同虚设） */
+function djAutoExclude(){
+  var schedIds = {}, playedIds = {};
+  (DJ_STATE.rounds || []).forEach(function(r){
+    (r.songs || []).forEach(function(s){
+      if(s && s.id != null) schedIds[s.id] = 1;
+    });
+  });
+  /* 平台自身也带 played 标记（同学在平台上标记过已播） */
+  (DJ_STATE.songs || []).forEach(function(s){ if(s && s.played) playedIds[s.id] = 1; });
+  return { schedIds: schedIds, playedIds: playedIds };
+}
+function djAutoExReason(s, info){
+  if(!s) return '';
+  if(info.playedIds[s.id]) return '已播放';
+  if(info.schedIds[s.id]) return '已排期';
+  return '';
+}
+
+/* ---- 时间格式化（平台返回 UTC ISO，直接切片会差 8 小时）---- */
+function djFmtTime(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate())
+       + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function djNowLocal(){
+  var d = new Date();
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate())
+       + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/* ============================ 面板骨架 ============================ */
+function renderDj(){
+  $('view').innerHTML =
+    '<div class="alert info" style="margin-bottom:16px">'
+    +   '本页数据保存在<b>云端</b>（全班管理员共用一份），换电脑 / 清缓存都不会丢。'
+    +   '歌单实时来自点歌平台，抽签结果会写进云端排期。'
+    + '</div>'
+    + '<div id="djMigrate"></div>'
+    + '<section class="panel" style="margin-bottom:16px">'
+    +   '<div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px">'
+    +     '<h3 style="margin:0;font-size:.95rem">🎲 抽签</h3>'
+    +     '<div style="display:flex;gap:8px">'
+    +       '<button class="btn btn-sm btn-ghost" id="djSongsBtn">' + svg('music',14) + ' 歌单管理</button>'
+    +       '<button class="btn btn-sm btn-ghost" id="djHistoryBtn">' + svg('clock',14) + ' 历史记录</button>'
+    +     '</div>'
+    +   '</div>'
+    /* 时间范围 */
+    +   '<div class="field" style="margin-top:4px"><label>投稿时间范围</label>'
+    +     '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+    +       '<input type="datetime-local" id="djFrom" style="flex:1;min-width:150px">'
+    +       '<span class="muted">至</span>'
+    +       '<input type="datetime-local" id="djTo" style="flex:1;min-width:150px">'
+    +     '</div>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:6px;margin:8px 0 14px;flex-wrap:wrap">'
+    +     '<button class="btn btn-sm btn-secondary" data-dj-quick="0">全部</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-dj-quick="3">近 3 天</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-dj-quick="7">近 7 天</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-dj-quick="30">近 30 天</button>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px">'
+    +     '<div class="field" style="margin:0;width:120px"><label>抽取数量</label>'
+    +       '<input type="number" id="djCount" min="1" max="50" value="5"></div>'
+    +     '<div class="field" style="margin:0;width:130px"><label>高赞必选</label>'
+    +       '<input type="number" id="djTopN" min="0" max="50" value="0" title="点赞最高的前 N 首必定中选，其余随机"></div>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:.85rem">'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludeSched" checked> 排除已排期</label>'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer" title="同一位同学点的歌，同一次抽签最多上一首"><input type="checkbox" id="djOnePer" checked> 每人限一首</label>'
+    +   '</div>'
+    +   '<button class="btn" id="djRunBtn" style="width:100%">🎲 开始抽签</button>'
+    +   '<div id="djResult" style="margin-top:12px"></div>'
+    + '</section>'
+    + '<section class="panel">'
+    +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">📋 公示</h3></div>'
+    +   '<div class="field"><label>公示备注（选填，会加在公示最后）</label>'
+    +     '<textarea id="djCopyNote" rows="2" placeholder="选填：例如「本次不随机抽人，是对段考前十的奖励」。抽签规则那行会自动生成，不用填"></textarea>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+    +     '<button class="btn btn-green" id="djCopyBtn">' + svg('file',14) + ' 一键复制公示</button>'
+    +     '<button class="btn btn-secondary" id="djExportBtn">' + svg('download',14) + ' 导出数据</button>'
+    +     '<button class="btn btn-secondary" id="djImportBtn">' + svg('upload',14) + ' 导入数据</button>'
+    +     '<button class="btn btn-ghost" id="djClearBtn" style="color:#b3261e">' + svg('trash',14) + ' 清空排期</button>'
+    +     '<input type="file" id="djImportFile" accept=".json,application/json" style="display:none">'
+    +   '</div>'
+    + '</section>';
+
+  /* 备注：沿用本机存的那份（只是输入框的草稿，不算业务数据，不必上云） */
+  var ne = $('djCopyNote');
+  if(ne){ try{ ne.value = String(localStorage.getItem(DJ_LS_NOTE) || ''); }catch(e){} }
+  ne.oninput = function(){ try{ localStorage.setItem(DJ_LS_NOTE, ne.value); }catch(e){} };
+
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-dj-quick]'), function(b){
+    b.onclick = function(){ djQuick(parseInt(b.dataset.djQuick, 10) || 0); };
+  });
+  $('djSongsBtn').onclick = openDjSongs;
+  $('djHistoryBtn').onclick = openDjHistory;
+  $('djRunBtn').onclick = djRun;
+  $('djCopyBtn').onclick = djCopy;
+  $('djExportBtn').onclick = djExportRounds;
+  $('djImportBtn').onclick = function(){ $('djImportFile').click(); };
+  $('djImportFile').onchange = function(){ djImportRounds(this); };
+  $('djClearBtn').onclick = djClear;
+
+  $('djTo').value = djNowLocal();
+
+  /* 拉云端数据；成功后检查要不要提示迁移旧数据 */
+  djLoadCloud().then(function(){
+    if(DJ_STATE.dirtyLocal) djShowMigrateTip();
+  }).catch(function(e){
+    /* 云端拉不到 → 用本机旧数据兜底，至少界面不是空的 */
+    DJ_STATE.rounds = djLocalRounds();
+    DJ_STATE.excluded = djLocalExcluded();
+    DJ_STATE.loaded = true;
+    var box = $('djMigrate');
+    if(box) box.innerHTML = '<div class="alert danger" style="margin-bottom:16px">'
+      + '读取云端排期失败（' + esc(e.message) + '），当前显示的是<b>本机旧数据</b>。'
+      + '此时做出的修改无法保存，请检查网络后刷新重试。</div>';
+  });
+}
+
+/* 本机旧数据迁移提示（只在云端为空、本机有数据时出现一次） */
+function djShowMigrateTip(){
+  var box = $('djMigrate');
+  if(!box) return;
+  var n = djLocalRounds().length, ex = djLocalExcluded();
+  box.innerHTML = '<div class="alert info" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    + '<span style="flex:1;min-width:200px">检测到本机有旧抽歌数据'
+    +   '（排期 <b>' + n + '</b> 批，单曲排除 <b>' + ex.songs.length + '</b> 首，整人排除 <b>' + ex.reqs.length + '</b> 人），'
+    +   '云端还是空的。要不要把它上传到云端？</span>'
+    + '<button class="btn btn-sm" id="djMigGo">上传到云端</button>'
+    + '<button class="btn btn-sm btn-ghost" id="djMigNo">不用了</button></div>';
+  $('djMigGo').onclick = function(){
+    var rounds = djLocalRounds(), e = djLocalExcluded();
+    DJ_STATE.rounds = rounds;
+    DJ_STATE.excluded = e;
+    api('/content', { method:'PUT', body:{ items:{ dj_schedule: rounds, dj_excluded: e } } })
+      .then(function(){
+        toast('旧数据已上传到云端', 'ok');
+        box.innerHTML = '';
+        DJ_STATE.dirtyLocal = false;
+      })
+      .catch(function(err){ toast('上传失败：' + err.message, 'err', 4000); });
+  };
+  $('djMigNo').onclick = function(){ box.innerHTML = ''; };
+}
+
+/* 快捷时间范围：0=全部，其余=近 N 天 */
+function djQuick(days){
+  var f = $('djFrom'), t = $('djTo');
+  if(days <= 0){ if(f) f.value = ''; if(t) t.value = ''; return; }
+  var now = new Date(), from = new Date(now.getTime() - days * 86400000);
+  function fmt(d){
+    function p(n){ return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate())
+         + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  if(f) f.value = fmt(from);
+  if(t) t.value = fmt(now);
+}
+
+/* ============================ 抽签主流程 ============================
+ * 算法与前台完全一致（三个约束按顺序施加）：
+ *   ① 同一首歌不重复中选
+ *   ② 「每人限一首」时，同一位点歌人只占一个名额
+ *   ③ 高赞必选优先，撞上 ② 就顺延给后面的歌
+ * 变化只有一处：结果写云端而非 localStorage。
+ * ================================================================= */
+function djRun(){
+  var n = parseInt(($('djCount') || {}).value || '5', 10);
+  if(!(n >= 1)) n = 5;
+  var wantN = n;
+  var excl = ($('djExcludePlayed') || {}).checked;
+  var exclSched = ($('djExcludeSched') || {}).checked;
+  var onePerEl = $('djOnePer');
+  var onePer = !onePerEl || onePerEl.checked;
+  var topN = parseInt(($('djTopN') || {}).value || '0', 10);
+  if(!(topN >= 0)) topN = 0;
+  var wantTop = topN;
+
+  var box = $('djResult');
+  if(box) box.innerHTML = '<div class="loading" style="padding:12px"><div class="spinner"></div>正在拉取歌单并抽签…</div>';
+
+  var f = $('djFrom'), t = $('djTo');
+  var tFrom = f && f.value ? new Date(f.value).getTime() : -Infinity;
+  var tTo = t && t.value ? new Date(t.value).getTime() : Infinity;
+
+  djFetchSongs().then(function(songs){
+    var exIds = djExcludedMap(), exReq = djExcludedReqMap();
+    var auto = djAutoExclude();
+    var pool = songs.filter(function(s){
+      if(exIds[s.id]) return false;                  /* 手动排除单曲 */
+      var rq = djReqName(s);
+      if(rq && exReq[rq]) return false;              /* 手动排除该点歌人的全部歌 */
+      if(excl && auto.playedIds[s.id]) return false; /* 排除已播放 */
+      if(exclSched && auto.schedIds[s.id]) return false; /* 排除已排期 */
+      var ts = new Date(s.createdAt).getTime();
+      if(ts < tFrom || ts > tTo) return false;
+      return true;
+    });
+    if(!pool.length){
+      if(box) box.innerHTML = '<div class="alert danger">没有可抽歌曲。试试放宽时间范围，或到「歌单管理」解除排除、取消「排除已播放 / 已排期」。</div>';
+      return;
+    }
+
+    /* 「每人限一首」时的容量上限 = 不同点歌人数 + 无点歌人信息的歌数 */
+    var personSet = {}, anonCnt = 0, pk;
+    pool.forEach(function(s){ var rq = djReqName(s); if(rq) personSet[rq] = 1; else anonCnt++; });
+    var personCnt = 0; for(pk in personSet) personCnt++;
+    var cap = onePer ? (personCnt + anonCnt) : pool.length;
+    if(n > cap) n = cap;
+    if(topN > n) topN = n;
+
+    var usedId = {}, usedReq = {}, picked = [], guarantee = [];
+    function take(s){
+      if(!s || usedId[s.id]) return false;
+      var rq = djReqName(s);
+      if(onePer && rq && usedReq[rq]) return false;
+      usedId[s.id] = 1; if(rq) usedReq[rq] = 1; picked.push(s);
+      return true;
+    }
+    /* 1) 高赞必选：按点赞降序取；撞上「每人限一首」时自动顺延 */
+    var deferred = 0;
+    if(topN > 0){
+      var sorted = pool.slice().sort(function(a, b){ return (b.voteCount || 0) - (a.voteCount || 0); });
+      for(var i = 0; i < sorted.length && guarantee.length < topN; i++){
+        if(take(sorted[i])){ guarantee.push(sorted[i]); continue; }
+        var rqD = djReqName(sorted[i]);
+        if(onePer && rqD && usedReq[rqD]) deferred++;
+      }
+    }
+    /* 2) 其余随机：每中一首，同步剔除同一人的其他歌 */
+    var bag = pool.filter(function(s){
+      if(usedId[s.id]) return false;
+      var rq = djReqName(s);
+      return !(onePer && rq && usedReq[rq]);
+    });
+    while(picked.length < n && bag.length){
+      var idx = Math.floor(Math.random() * bag.length);
+      var s = bag[idx];
+      bag.splice(idx, 1);
+      if(!take(s)) continue;
+      if(onePer){
+        var rq2 = djReqName(s);
+        if(rq2){ for(var j = bag.length - 1; j >= 0; j--){ if(djReqName(bag[j]) === rq2) bag.splice(j, 1); } }
+      }
+    }
+
+    /* 存成一个批次（含时间 / 备注 / 已排期 / 已播放标记 + 本次参数） */
+    var rounds = (DJ_STATE.rounds || []).slice();
+    var rec = {
+      id: Date.now(),
+      at: new Date().toLocaleString('zh-CN', { hour12:false }),
+      note: '', addedToPlatform: false, played: false,
+      songs: picked.map(function(s){
+        return { id: s.id, title: s.title, artist: s.artist, votes: s.voteCount || 0, requester: djReqName(s) };
+      }),
+    };
+    /* 把参数存进批次：公示时用「这一批自己的参数」，
+       而不是复制时面板上的当前开关（否则抽完又改了开关，公示的规则就对不上歌单了） */
+    rec.params = {
+      top: guarantee.length, picked: picked.length, onePer: onePer,
+      exPlayed: !!excl, exSched: !!exclSched, pool: pool.length, persons: personCnt,
+    };
+    rounds.push(rec);
+    DJ_STATE.pick = picked;
+
+    djSaveSchedule(rounds).then(function(){
+      var gset = {}; guarantee.forEach(function(s){ gset[s.id] = 1; });
+      var rows = picked.map(function(s, i){
+        var rq = djReqName(s);
+        return (gset[s.id] ? '🔥 ' : '') + (i + 1) + '. ' + esc(s.title || '?') + ' - ' + esc(s.artist || '未知歌手')
+          + '（' + (rq ? '点歌：' + esc(rq) + ' · ' : '') + '点赞 ' + (s.voteCount || 0) + '）';
+      }).join('<br>');
+      var mode = (topN > 0 ? '高赞必选 ' + guarantee.length + ' 首 + ' : '') + '随机'
+        + (onePer ? ' · 每人限一首' : ' · 不限制每人首数')
+        + (excl ? ' · 排除已播放' : '') + (exclSched ? ' · 排除已排期' : '')
+        + ' · 池中 ' + pool.length + ' 首' + (onePer ? ' / ' + personCnt + ' 位同学' : '');
+      var shortMsg = '';
+      if(picked.length < wantN){
+        shortMsg = onePer
+          ? '（受「每人限一首」限制：池中 ' + personCnt + ' 位点歌人 + ' + anonCnt + ' 首无点歌人信息，最多只能抽 ' + cap + ' 首）'
+          : '（池中仅 ' + pool.length + ' 首，已全部抽取）';
+      }
+      var topMsg = (wantTop > 0 && deferred > 0)
+        ? '⚠️ 高赞必选里有 ' + deferred + ' 首因「每人限一首」被顺延（同一位同学已有歌中选，名额让给后面的歌）'
+        : '';
+      if(box){
+        box.innerHTML = '<div class="alert info" style="line-height:1.9">'
+          + '<b style="color:#0a7d42">✅ 已抽中 ' + picked.length + ' 首' + shortMsg
+          + '，已写入云端排期（累计 ' + djScheduleCount() + ' 首）</b><br>'
+          + '<span style="color:#af410f">' + mode + '</span><br>'
+          + (topMsg ? '<span style="color:#af410f;font-size:.82rem">' + topMsg + '</span><br>' : '')
+          + rows + '</div>';
+      }
+    }).catch(function(){
+      /* djSaveSchedule 内已弹错误提示；此处把结果框标红，避免看着像「抽成功了」 */
+      if(box) box.innerHTML = '<div class="alert danger">抽签结果<b>没能保存到云端</b>，请检查网络后重试。'
+        + '（本次抽中的歌未计入排期）</div>';
+    });
+  }).catch(function(err){
+    if(box) box.innerHTML = '<div class="alert danger">拉取歌单失败：' + esc(String((err && err.message) || err))
+      + '<br>请确认后台「点歌管理」能正常连上平台，再回来重试。</div>';
+  });
+}
+
+function djScheduleCount(){
+  var n = 0;
+  (DJ_STATE.rounds || []).forEach(function(r){ n += (r.songs || []).length; });
+  return n;
+}
+
+/* ============================ 拉歌单（复用点歌管理面板的实现） ============================ */
+function djFetchSongs(){
+  return vhFetchSongs().then(function(list){
+    DJ_STATE.songs = list || [];
+    return DJ_STATE.songs;
+  });
+}
+
+/* ============================ 歌单管理（按歌曲 / 按点歌人） ============================ */
+var _djReqGroups = [], _djReqOpen = {};
+
+function openDjSongs(){
+  openModal({
+    title: '🎼 歌单管理',
+    sub: '可以排除「某一首歌」，也可以排除「某一个人点的全部歌」',
+    wide: true,
+    body: '<p class="muted" style="font-size:.82rem;margin:0 0 10px;line-height:1.7">'
+        + '已播放 / 已排期的歌会<b>默认排除</b>（行尾标 🚫），不用手动点。'
+        + '想让它们重新参与，到抽签面板取消对应的「排除」开关即可。'
+        + '手动排除记录保存在云端。</p>'
+        + '<div class="seg" id="djSongsTab" style="margin-bottom:10px">'
+        +   '<button data-dj-view="song">🎵 按歌曲</button>'
+        +   '<button data-dj-view="req">👤 按点歌人</button>'
+        + '</div>'
+        + '<div class="search" style="width:100%;margin-bottom:8px">' + svg('search')
+        +   '<input id="djSongSearch" placeholder="搜索歌名 / 歌手 / 点歌人" maxlength="40">'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+        +   '<p id="djSongsStatus" class="muted" style="flex:1;min-width:0;margin:0;font-size:.82rem"></p>'
+        +   '<button class="btn btn-sm btn-ghost" id="djSongsClear">清空排除</button>'
+        + '</div>'
+        + '<div id="djSongsList" style="max-height:52vh;overflow:auto"><div class="loading"><div class="spinner"></div>加载中…</div></div>',
+    onMount: function(box){
+      box.querySelector('[data-dj-view="song"]').onclick = function(){ djSongsView('song'); };
+      box.querySelector('[data-dj-view="req"]').onclick  = function(){ djSongsView('req'); };
+      box.querySelector('#djSongSearch').oninput = debounce(function(e){
+        DJ_STATE.q = e.target.value.trim();
+        paintDjSongs();
+      }, 250);
+      box.querySelector('#djSongsClear').onclick = djClearExcluded;
+    },
+  });
+  paintDjSongs();
+  /* 歌单还没拉过就先拉一次 */
+  if(!DJ_STATE.songs.length){
+    djFetchSongs().then(function(){ paintDjSongs(); })
+      .catch(function(e){
+        var l = $('djSongsList');
+        if(l) l.innerHTML = '<div class="empty">' + svg('alert', 32) + '<p>拉取歌单失败：' + esc(e.message) + '</p></div>';
+      });
+  }
+  djLoadCloud().then(function(){ paintDjSongs(); }).catch(function(){});
+}
+
+function djSongsView(v){
+  DJ_STATE.view = (v === 'req') ? 'req' : 'song';
+  paintDjSongs();
+}
+function djSyncSongsTab(){
+  var box = $('djSongsTab');
+  if(!box) return;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-dj-view]'), function(b){
+    b.className = (b.dataset.djView === DJ_STATE.view) ? 'on' : '';
+  });
+}
+function djSongsFiltered(arr){
+  var kw = String(DJ_STATE.q || '').toLowerCase();
+  if(!kw) return arr;
+  return arr.filter(function(s){
+    return String(s.title || '').toLowerCase().indexOf(kw) >= 0
+        || String(s.artist || '').toLowerCase().indexOf(kw) >= 0
+        || djReqName(s).toLowerCase().indexOf(kw) >= 0;
+  });
+}
+function paintDjSongs(){
+  var list = $('djSongsList'), st = $('djSongsStatus');
+  if(!list) return;
+  djSyncSongsTab();
+  var songs = DJ_STATE.songs || [];
+  var ex = djExcludedMap(), exReq = djExcludedReqMap();
+  var exCount = 0, k; for(k in ex) exCount++;
+  var exReqCount = 0; for(k in exReq) exReqCount++;
+  var auto = djAutoExclude(), autoCnt = 0;
+  songs.forEach(function(s){ if(djAutoExReason(s, auto)) autoCnt++; });
+  if(st) st.textContent = '共 ' + songs.length + ' 首 · 手动排除 ' + exCount + ' 首 / ' + exReqCount
+    + ' 人 · 已播放或已排期 ' + autoCnt + ' 首（默认排除）';
+
+  if(!songs.length){ list.innerHTML = '<div class="empty">' + svg('music', 32) + '<p>平台上还没有人点歌</p></div>'; return; }
+  var arr = djSongsFiltered(songs);
+  if(!arr.length){ list.innerHTML = '<div class="empty"><p>没有匹配的歌曲</p></div>'; return; }
+
+  list.innerHTML = (DJ_STATE.view === 'req')
+    ? djRenderReqView(arr, ex, exReq, auto)
+    : arr.map(function(s, i){ return djSongRowHtml(s, i + 1, ex, exReq, auto); }).join('');
+
+  /* 事件绑定：用 data-* 属性循环绑，避免内联 onclick 拼字符串的转义风险 */
+  Array.prototype.forEach.call(list.querySelectorAll('[data-dj-ex-id]'), function(cb){
+    cb.onchange = function(){
+      djSetExcluded(cb.dataset.djExId, cb.checked).then(paintDjSongs);
+    };
+  });
+  Array.prototype.forEach.call(list.querySelectorAll('[data-dj-ex-req]'), function(cb){
+    cb.onchange = function(){
+      djSetExcludedReq(cb.dataset.djExReq, cb.checked).then(paintDjSongs);
+    };
+  });
+  Array.prototype.forEach.call(list.querySelectorAll('[data-dj-req-open]'), function(el){
+    el.onclick = function(){
+      var n = el.dataset.djReqOpen;
+      _djReqOpen[n] = !_djReqOpen[n];
+      paintDjSongs();
+    };
+  });
+}
+
+function djSongRowHtml(s, i, ex, exReq, auto){
+  var req = djReqName(s);
+  var byReq = req && !!exReq[req];
+  var autoR = djAutoExReason(s, auto);
+  var isEx = !!ex[s.id] || byReq || !!autoR;
+  var isAuto = !!autoR;
+  return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">'
+    + '<span class="muted" style="min-width:24px;font-size:.8rem">' + i + '</span>'
+    + '<span style="flex:1;min-width:0;font-size:.85rem">'
+    +   '<b style="' + (isEx ? 'text-decoration:line-through;color:var(--fg-3)' : '') + '">' + esc(s.title || '?') + '</b> '
+    +   '<span class="muted">' + esc(s.artist || '未知') + '</span>'
+    +   '<br><span class="muted" style="font-size:.76rem">👍 ' + (s.voteCount || 0)
+    +     ' · 点歌：' + esc(req || '?') + (s.played ? ' · 已播放' : '')
+    +     ' · ' + esc(String(s.createdAt || '').slice(0, 10)) + '</span>'
+    + '</span>'
+    + (byReq
+        ? '<span class="badge badge-gray" title="这位点歌人已被整人排除，请到「按点歌人」里解除">👤 已排除</span>'
+        : isAuto
+          ? '<span class="badge badge-gray" title="' + autoR + '的歌默认排除，不用手动勾选">🚫 ' + autoR + '</span>'
+          : '<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:.82rem;cursor:pointer">'
+            + '<input type="checkbox" data-dj-ex-id="' + attr(String(s.id)) + '"' + (ex[s.id] ? ' checked' : '') + '> 排除</label>')
+    + '</div>';
+}
+
+function djRenderReqView(arr, ex, exReq, auto){
+  var map = {}, order = [];
+  arr.forEach(function(s){
+    var r = djReqName(s) || '（未填写点歌人）';
+    if(!map[r]){ map[r] = []; order.push(r); }
+    map[r].push(s);
+  });
+  order.sort(function(a, b){ return map[b].length - map[a].length; });
+  _djReqGroups = order.map(function(r){ return { name: r, songs: map[r] }; });
+
+  return _djReqGroups.map(function(g){
+    var anon = (g.name === '（未填写点歌人）');
+    var isEx = !anon && !!exReq[g.name];
+    var cntEx = 0, cntAuto = 0;
+    g.songs.forEach(function(s){ if(ex[s.id]) cntEx++; if(djAutoExReason(s, auto)) cntAuto++; });
+    var open = !!_djReqOpen[g.name];
+    return '<div style="padding:10px 0;border-bottom:1px solid var(--line)">'
+      + '<div style="display:flex;align-items:center;gap:10px">'
+      +   '<span style="flex:1;min-width:0;cursor:pointer;font-size:.88rem" data-dj-req-open="' + attr(g.name) + '">'
+      +     (open ? '▾ ' : '▸ ') + '<b style="' + (isEx ? 'text-decoration:line-through;color:var(--fg-3)' : '') + '">' + esc(g.name) + '</b>'
+      +     '<span class="muted" style="font-size:.76rem"> · ' + g.songs.length + ' 首'
+      +       (cntAuto ? ' · 自动排除 ' + cntAuto : '') + (cntEx ? ' · 单曲排除 ' + cntEx : '') + '</span>'
+      +   '</span>'
+      +   (anon ? ''
+              : '<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:.82rem;cursor:pointer">'
+                + '<input type="checkbox" data-dj-ex-req="' + attr(g.name) + '"' + (isEx ? ' checked' : '') + '> 排除此人</label>')
+      + '</div>'
+      + (open ? '<div style="margin:8px 0 2px 16px;border-left:2px solid var(--line);padding-left:12px">'
+              + g.songs.map(function(s, j){ return djSongRowHtml(s, j + 1, ex, exReq, auto); }).join('')
+              + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+/* ============================ 历史记录 ============================ */
+function openDjHistory(){
+  openModal({
+    title: '📜 抽歌历史记录',
+    sub: '共 ' + (DJ_STATE.rounds || []).length + ' 批，累计 ' + djScheduleCount() + ' 首',
+    wide: true,
+    body: '<div id="djHistoryList" style="max-height:56vh;overflow:auto"></div>',
+  });
+  paintDjHistory();
+}
+function paintDjHistory(){
+  var list = $('djHistoryList');
+  if(!list) return;
+  var rounds = DJ_STATE.rounds || [];
+  if(!rounds.length){
+    list.innerHTML = '<div class="empty">' + svg('clock', 32) + '<p>还没有排期记录，先去抽一次签</p></div>';
+    return;
+  }
+  list.innerHTML = rounds.slice().reverse().map(function(r){
+    var songRows = (r.songs || []).map(function(s, j){
+      return (j + 1) + '. ' + esc(s.title || '?') + ' - ' + esc(s.artist || '未知')
+        + (s.requester ? '（点歌：' + esc(s.requester) + '）' : '') + '（点赞 ' + (s.votes || 0) + '）';
+    }).join('<br>');
+    return '<div class="panel" style="margin:0 0 12px;padding:12px 14px;font-size:.85rem">'
+      + '<div style="font-weight:700;color:#af410f;margin-bottom:8px">📅 ' + esc(r.at || '') + '</div>'
+      + '<div style="display:flex;gap:8px;margin-bottom:8px">'
+      +   '<input data-dj-note="' + attr(String(r.id)) + '" placeholder="备注：本次用于…" value="' + attr(r.note || '') + '" style="flex:1;min-width:0">'
+      +   '<button class="btn btn-sm" data-dj-note-save="' + attr(String(r.id)) + '">保存</button>'
+      + '</div>'
+      + '<div style="display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap;font-size:.83rem">'
+      +   '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-dj-flag="' + attr(String(r.id)) + '" data-dj-flag-name="addedToPlatform"' + (r.addedToPlatform ? ' checked' : '') + '> 已排期（已加到平台）</label>'
+      +   '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-dj-flag="' + attr(String(r.id)) + '" data-dj-flag-name="played"' + (r.played ? ' checked' : '') + '> 已播放</label>'
+      + '</div>'
+      + '<div class="muted" style="line-height:1.9">' + (songRows || '（本批没有歌）') + '</div>'
+      + '<div style="text-align:right;margin-top:8px">'
+      +   '<button class="btn btn-sm btn-ghost" data-dj-del="' + attr(String(r.id)) + '" style="color:#b3261e">' + svg('trash', 13) + ' 删除本批</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  var box = list;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-dj-note-save]'), function(b){
+    b.onclick = function(){ djSetRoundNote(b.dataset.djNoteSave, b); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-dj-flag]'), function(cb){
+    cb.onchange = function(){ djToggleRoundFlag(cb.dataset.djFlag, cb.dataset.djFlagName, cb.checked); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-dj-del]'), function(b){
+    b.onclick = function(){ djDeleteRound(b.dataset.djDel); };
+  });
+}
+function djSetRoundNote(id, btn){
+  var inp = document.querySelector('[data-dj-note="' + id + '"]');
+  if(!inp) return;
+  var rounds = (DJ_STATE.rounds || []).slice(), hit = null;
+  for(var i = 0; i < rounds.length; i++){ if(String(rounds[i].id) === String(id)){ hit = rounds[i]; break; } }
+  if(!hit) return;
+  hit.note = inp.value.trim();
+  djSaveSchedule(rounds).then(function(){
+    if(btn){ var old = btn.textContent; btn.textContent = '✅ 已保存'; setTimeout(function(){ btn.textContent = old; }, 1200); }
+  });
+}
+function djToggleRoundFlag(id, flag, val){
+  var rounds = (DJ_STATE.rounds || []).slice();
+  for(var i = 0; i < rounds.length; i++){
+    if(String(rounds[i].id) === String(id)){ rounds[i][flag] = !!val; break; }
+  }
+  djSaveSchedule(rounds);
+}
+function djDeleteRound(id){
+  confirmBox({ text: '确定删除这批记录吗？', detail: '只是一条排期批次记录，不影响平台上的歌单。', danger: true, okText: '删除' })
+    .then(function(yes){
+      if(!yes) return;
+      var rounds = (DJ_STATE.rounds || []).filter(function(r){ return String(r.id) !== String(id); });
+      djSaveSchedule(rounds).then(function(){ paintDjHistory(); });
+    });
+}
+
+/* ============================ 导出 / 导入 / 清空 ============================ */
+function djExportRounds(){
+  var json = JSON.stringify(DJ_STATE.rounds || [], null, 1);
+  download(new Blob([json], { type: 'application/json' }), 'dj-schedule-' + new Date().toISOString().slice(0, 10) + '.json');
+  toast('已导出排期数据', 'ok');
+}
+function djImportRounds(input){
+  var file = input.files && input.files[0];
+  if(!file) return;
+  var rd = new FileReader();
+  rd.onload = function(){
+    try{
+      var arr = JSON.parse(String(rd.result));
+      if(!Array.isArray(arr)) throw new Error('不是数组');
+      /* 旧格式兼容：早期导出的是「扁平歌曲数组」，这里包一层成批次 */
+      var isFlat = arr.length && arr[0] && (arr[0].title !== undefined) && (arr[0].songs === undefined);
+      var add = isFlat
+        ? [{ id: Date.now(), at: new Date().toLocaleString('zh-CN', { hour12:false }),
+             note: '（从旧格式导入）', addedToPlatform: false, played: false, songs: arr }]
+        : arr;
+      var merged = (DJ_STATE.rounds || []).concat(add);
+      djSaveSchedule(merged).then(function(){
+        toast('已导入 ' + add.length + ' 批记录', 'ok');
+        if($('djHistoryList')) paintDjHistory();
+        if($('djResult')) $('djResult').innerHTML = '';
+      });
+    }catch(e){
+      toast('导入失败：数据格式不正确', 'err', 4000);
+    }
+    input.value = '';
+  };
+  rd.readAsText(file);
+}
+function djClear(){
+  confirmBox({
+    text: '确定清空全部排期历史吗？',
+    detail: '会清空云端的 ' + (DJ_STATE.rounds || []).length + ' 批记录，不可恢复。建议先「导出数据」备份。',
+    danger: true, okText: '清空',
+  }).then(function(yes){
+    if(!yes) return;
+    DJ_STATE.pick = [];
+    djSaveSchedule([]).then(function(){
+      if($('djResult')) $('djResult').innerHTML = '';
+      if($('djHistoryList')) paintDjHistory();
+    });
+  });
+}
+
+/* ============================ 公示 ============================ */
+/* 「抽签规则」行：自动生成，尽量短。
+   数据优先用批次自带的 params（抽签那一刻的开关），老批次没有才按当前面板现算。 */
+function djParamsLine(r, pickedLen){
+  var p = (r && r.params) || null;
+  if(!p){
+    p = {
+      top: Math.max(0, parseInt(($('djTopN') || {}).value || '0', 10) || 0),
+      picked: pickedLen || 0,
+      onePer: !$('djOnePer') || $('djOnePer').checked,
+      exPlayed: !$('djExcludePlayed') || $('djExcludePlayed').checked,
+      exSched: !$('djExcludeSched') || $('djExcludeSched').checked,
+      pool: 0, persons: 0,
+    };
+  }
+  var picked = p.picked || pickedLen || 0;
+  var top = Math.max(0, p.top || 0); if(top > picked) top = picked;
+  var seg = [];
+  seg.push(top > 0 ? ('高赞必选 ' + top + ' + 随机 ' + (picked - top)) : ('随机 ' + picked));
+  seg.push(p.onePer ? '每人限一首' : '不限每人首数');
+  var ex = [];
+  if(p.exPlayed) ex.push('已播放');
+  if(p.exSched) ex.push('已排期');
+  if(ex.length) seg.push('排除' + ex.join('、'));
+  if(p.pool) seg.push('池中 ' + p.pool + ' 首');
+  return seg.join(' · ');
+}
+function djCopy(){
+  var rounds = DJ_STATE.rounds || [];
+  if(!rounds.length){ toast('还没有排期，请先抽签', 'err'); return; }
+  var last = rounds[rounds.length - 1];
+  var lines = [];
+  lines.push('【25级05班 · 点歌抽签排期公示】');
+  lines.push('抽取时间：' + (last.at || ''));
+  var rule = djParamsLine(last, (last.songs || []).length);
+  if(rule) lines.push('抽签规则：' + rule);
+  lines.push('本期中选 ' + (last.songs || []).length + ' 首，累计排期 ' + djScheduleCount() + ' 首：');
+  (last.songs || []).forEach(function(s, i){
+    lines.push((i + 1) + '. ' + (s.title || '?') + ' - ' + (s.artist || '未知')
+      + (s.requester ? '（点歌：' + s.requester + '）' : '') + '（点赞 ' + (s.votes || 0) + '）');
+  });
+  /* 备注统一放最后：批次备注（历史记录里填的）+ 公示备注（默认为空，手填才有） */
+  var notes = [];
+  if(last.note) notes.push(String(last.note));
+  var ne = $('djCopyNote');
+  var note = ne ? String(ne.value || '').trim() : '';
+  if(note) notes.push(note);
+  if(notes.length) lines.push('备注：' + notes.join(' '));
+
+  var text = lines.join('\n');
+  var done = function(){ toast('公示文本已复制，可粘贴到班级群', 'ok'); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, function(){ djFallbackCopy(text); done(); });
+  }else{ djFallbackCopy(text); done(); }
+}
+function djFallbackCopy(text){
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
+}
+
+/* ============================================================================
+ * ⑬ 面板：版本更新记录（第二十八轮）
+ * ----------------------------------------------------------------------------
+ * 站主需求：「后台新增一个板块，用于记录每个版本更新、修复的问题，
+ *           有点像 GitHub 上的 release。」
+ *
+ * 【只有后台能看】前台不展示 —— 这是站主明确的要求（CONTENT_MAP 里
+ *   release_notes 的值是 null，主站不消费它）。
+ *
+ * 【为什么要放云端而不是后台本地】
+ *   版本记录是「站长资产」：换电脑、重装浏览器都不该丢。
+ *   同时它天然就是「这个站怎么长起来的」的历史档案，值得跟内容一起云备份。
+ *
+ * 【权限】
+ *   走 /api/content PUT，后端只放行 admin / AI 助手，天然受保护。
+ * ========================================================================= */
+
+var REL_STATE = { list: [], editing: null };
+
+/* 版本条目类型 → 展示标签 / 颜色（badge 样式复用后台已有的 badge-*） */
+var REL_TYPES = {
+  feature:  { label: '新功能', cls: 'badge-green' },
+  fix:      { label: '问题修复', cls: 'badge-blue' },
+  improve:  { label: '体验优化', cls: 'badge-gray' },
+  security: { label: '安全', cls: 'badge' },
+};
+function relTypeOf(t){
+  return REL_TYPES[t] || { label: t || '其他', cls: 'badge-gray' };
+}
+
+/* ---- 初始数据：站主选了「只放最近几轮」，来源是 internal/notes.md ---- */
+function relSeed(){
+  return [
+    {
+      version: '2.3.5', date: '2026-10-07', title: '游戏排行榜', type: 'feature', highlight: false,
+      items: [
+        '新增四款领券游戏（贪吃蛇 / 像素飞鸟 / 俄罗斯方块 / 涂鸦跳跃）的跨用户排行榜',
+        '支持「历史总榜 / 本周榜」切换，名次带金银铜，分数带单位',
+        '入口固定在娱乐天地第一位，需登录才能看；接口只回姓名与分数，不回账号 ID',
+      ],
+    },
+    {
+      version: '2.3.4', date: '2026-10-07', title: '点歌券改用账号身份取券', type: 'improve', highlight: false,
+      items: [
+        '领券不再从全班名单里手搜名字，改为自动使用登录账号的真名，输入框锁定不可改 —— 从根上防冒领',
+        '未登录时提示先去登录，不再允许手填姓名',
+        '修复涂鸦跳跃达标后直接退出、整局游玩数据不上报的问题',
+      ],
+    },
+    {
+      version: '2.3.3', date: '2026-10-07', title: '自动云同步', type: 'feature', highlight: false,
+      items: [
+        '每 60 秒自动双向同步一次（先推本机改动、再拉云端最新）',
+        '失败自动退避：30 秒 → 1 分 → 2 分 → 4 分，封顶 5 分钟，成功一次即恢复',
+        '保守策略：切到后台不跑、正在打字不跑，恢复可见或恢复网络立刻补跑',
+        '账号面板新增「上传本机 / 拉取云端 / 双向同步」三个手动入口与上次同步时间',
+      ],
+    },
+    {
+      version: '2.3.2', date: '2026-10-07', title: '通用弹窗引擎', type: 'feature', highlight: false,
+      items: [
+        '新增统一的弹窗配置，支持「进站弹」与「进某个板块才弹」两种场景',
+        '可设置按天弹 / 只弹一次 / 每次都弹，支持时间窗、按钮、视频与图片',
+        '关闭后可留一个悬浮球，方便同学回头再看',
+        '开屏弹会排队，等欢迎语、门禁、活动弹窗关掉后再弹，不会几个框叠在一起',
+      ],
+    },
+    {
+      version: '2.3.1', date: '2026-10-07', title: '修改密码 / 重置密码「服务器错误」修复', type: 'fix', highlight: true,
+      items: [
+        '修好了困扰许久的「改密码报服务器错误」：真因是用户表缺两个字段，而自动建表逻辑漏补了它们',
+        '现在部署时会自动补齐缺失字段，不再需要手动执行 SQL',
+        '登录失败次数限制顺带恢复生效（之前因为容错代码把异常吞掉了，实际上一直没起作用）',
+        '改进测试方式：让测试环境真实执行建表语句，这类「线上缺字段」的故障以后能在测试里提前发现',
+      ],
+    },
+    {
+      version: '2.3.0', date: '2026-10-07', title: '多项修复与安全加固', type: 'security', highlight: false,
+      items: [
+        '会话令牌改为加密存储，数据库里不再保留明文；老账号平滑过渡，不用全员重新登录',
+        '后台与主站登录状态打通，修好「后台显示旧身份」「在线状态不显示」',
+        '作业附件直链只允许管理员增改，课代表编辑作业时原附件只读保留',
+        '成绩查询、意见反馈改为需登录才能进入',
+        '修正若干处文字对比度过低、看不清的问题',
+      ],
+    },
+  ];
+}
+
+function renderReleases(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">版本更新记录</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">只在后台可见，前台不展示</p></div>'
+    +   '<button class="btn btn-sm btn-secondary" id="relSeed">' + svg('database',14) + ' 填入最近几轮</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="relRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +   '<button class="btn btn-sm" id="relAdd">' + svg('plus',14) + ' 新增版本</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '像 GitHub Release 一样记录每个版本改了什么。<b>新增版本</b>时会自动带上当前站点版本号与今天的日期，'
+    +   '条目一行写一条即可。这些记录存在云端，换设备不会丢。'
+    + '</div>'
+    + '<section class="panel"><div id="relBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('relRefresh').onclick = loadReleases;
+  $('relAdd').onclick = function(){ relEdit(null); };
+  $('relSeed').onclick = relSeedAsk;
+  loadReleases();
+}
+
+function loadReleases(){
+  api('/content').then(function(j){
+    var v = (j && j.items && j.items.release_notes) || [];
+    REL_STATE.list = Array.isArray(v) ? v : [];
+    relSort();
+    paintReleases();
+  }).catch(function(e){
+    var b = $('relBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+/* 按日期倒序（同一天按版本号倒序）——最新的在最上面 */
+function relSort(){
+  REL_STATE.list.sort(function(a, b){
+    var d = String(b.date || '').localeCompare(String(a.date || ''));
+    if(d) return d;
+    return relVerNum(b.version) - relVerNum(a.version);
+  });
+}
+function relVerNum(v){
+  var m = String(v || '').match(/(\d+)\.(\d+)\.(\d+)/);
+  if(!m) return 0;
+  return (+m[1]) * 1000000 + (+m[2]) * 1000 + (+m[3]);
+}
+
+function paintReleases(){
+  var body = $('relBody');
+  if(!body) return;
+  var list = REL_STATE.list || [];
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('clock', 38)
+      + '<p>还没有版本记录</p>'
+      + '<p class="muted" style="font-size:.82rem">点右上角「新增版本」开始记录，'
+      + '或点「填入最近几轮」一键导入这几天的主要改动</p></div>';
+    return;
+  }
+  body.innerHTML = list.map(function(r, i){
+    var ty = relTypeOf(r.type);
+    var items = (r.items || []).map(function(t){
+      return '<li style="margin:5px 0;line-height:1.7">' + esc(t) + '</li>';
+    }).join('');
+    return '<div class="panel" style="margin:0 0 14px;padding:14px 16px' + (r.highlight ? ';border-left:3px solid #af410f' : '') + '">'
+      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+      +   '<b style="font-size:1rem">v' + esc(r.version || '?') + '</b>'
+      +   '<span class="badge ' + ty.cls + '">' + esc(ty.label) + '</span>'
+      +   (r.highlight ? '<span class="badge badge-green">重点</span>' : '')
+      +   '<span class="muted" style="font-size:.82rem">' + esc(r.date || '') + '</span>'
+      +   '<span style="flex:1"></span>'
+      +   '<button class="btn btn-sm btn-ghost" data-rel-up="' + i + '" title="上移">↑</button>'
+      +   '<button class="btn btn-sm btn-ghost" data-rel-down="' + i + '" title="下移">↓</button>'
+      +   '<button class="btn btn-sm btn-ghost" data-rel-edit="' + i + '">' + svg('edit',13) + ' 编辑</button>'
+      +   '<button class="btn btn-sm btn-ghost" data-rel-del="' + i + '" style="color:#b3261e">' + svg('trash',13) + ' 删除</button>'
+      + '</div>'
+      + (r.title ? '<div style="font-weight:700;margin-bottom:6px">' + esc(r.title) + '</div>' : '')
+      + (items ? '<ul style="margin:0;padding-left:20px;font-size:.86rem">' + items + '</ul>'
+               : '<p class="muted" style="margin:0;font-size:.84rem">（没有条目）</p>')
+      + '</div>';
+  }).join('');
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rel-edit]'), function(b){
+    b.onclick = function(){ relEdit(parseInt(b.dataset.relEdit, 10)); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rel-del]'), function(b){
+    b.onclick = function(){ relDelete(parseInt(b.dataset.relDel, 10)); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rel-up]'), function(b){
+    b.onclick = function(){ relMove(parseInt(b.dataset.relUp, 10), -1); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rel-down]'), function(b){
+    b.onclick = function(){ relMove(parseInt(b.dataset.relDown, 10), 1); };
+  });
+}
+
+/* 上移 / 下移：交换后把顺序整体写回（排序是按日期，所以交换日期意义不大——
+   这里直接交换数组位置并「锁序」：给两条同样的日期，靠数组顺序决定先后）。
+   为避免与 relSort 打架，交换后同步把 date 也维持原样即可，
+   因为 relSort 只在加载时跑一次，之后列表顺序由我们掌控。 */
+function relMove(i, dir){
+  var j = i + dir;
+  var list = REL_STATE.list;
+  if(j < 0 || j >= list.length) return;
+  var t = list[i]; list[i] = list[j]; list[j] = t;
+  paintReleases();
+  toast('顺序已调整，记得点「编辑」保存任一条以同步到云端', 'ok', 3500);
+}
+
+function relEdit(idx){
+  var isNew = (idx === null || idx === undefined);
+  var r = isNew
+    ? { version: String(typeof SITE_VERSION !== 'undefined' ? SITE_VERSION : ''), date: relToday(), title: '', type: 'feature', items: [], highlight: false }
+    : REL_STATE.list[idx];
+  if(!r) return;
+
+  openModal({
+    title: isNew ? '新增版本记录' : ('编辑 v' + esc(r.version || '')),
+    sub: isNew ? '版本号与日期已按当前站点预填，可直接改' : '',
+    wide: true,
+    body:
+      '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      + '<div class="field" style="margin:0;width:150px"><label for="relVer">版本号</label>'
+      +   '<input id="relVer" value="' + attr(r.version || '') + '" placeholder="如 2.3.6" maxlength="20"></div>'
+      + '<div class="field" style="margin:0;width:170px"><label for="relDate">日期</label>'
+      +   '<input id="relDate" type="date" value="' + attr(r.date || '') + '"></div>'
+      + '<div class="field" style="margin:0;width:150px"><label for="relType">类型</label>'
+      +   '<select id="relType">'
+      +     Object.keys(REL_TYPES).map(function(k){
+              return '<option value="' + k + '"' + (r.type === k ? ' selected' : '') + '>' + esc(REL_TYPES[k].label) + '</option>';
+            }).join('')
+      +   '</select></div>'
+      + '</div>'
+      + '<div class="field"><label for="relTitle">标题（一句话概括这个版本）</label>'
+      +   '<input id="relTitle" value="' + attr(r.title || '') + '" placeholder="如 游戏排行榜" maxlength="60"></div>'
+      + '<div class="field"><label for="relItems">更新条目（一行一条）</label>'
+      +   '<textarea id="relItems" rows="8" placeholder="新增四款游戏的跨用户排行榜&#10;支持历史总榜 / 本周榜切换">'
+      +   esc((r.items || []).join('\n')) + '</textarea></div>'
+      + '<label style="display:flex;align-items:center;gap:6px;font-size:.86rem;cursor:pointer">'
+      +   '<input type="checkbox" id="relHi"' + (r.highlight ? ' checked' : '') + '> 标为重点版本（列表左侧加一条橙线）</label>',
+    foot: '<button class="btn btn-ghost" data-rel-cancel>取消</button>'
+        + '<button class="btn" data-rel-save>保存</button>',
+    onMount: function(box){
+      box.querySelector('[data-rel-cancel]').onclick = closeModal;
+      box.querySelector('[data-rel-save]').onclick = function(){ relSave(idx); };
+    },
+  });
+}
+
+function relSave(idx){
+  var ver = String(($('relVer') || {}).value || '').trim();
+  if(!ver){ toast('版本号不能为空', 'err'); return; }
+  var date = String(($('relDate') || {}).value || '').trim() || relToday();
+  var title = String(($('relTitle') || {}).value || '').trim();
+  var type = String(($('relType') || {}).value || 'feature');
+  var raw = String(($('relItems') || {}).value || '');
+  var items = raw.split('\n').map(function(x){ return x.trim(); }).filter(Boolean);
+  var hi = !!($('relHi') || {}).checked;
+
+  var rec = { version: ver, date: date, title: title, type: type, items: items, highlight: hi };
+  var isNew = (idx === null || idx === undefined);
+  var list = (REL_STATE.list || []).slice();
+
+  if(isNew){
+    /* 同版本号已存在 → 让站主决定是覆盖还是取消，避免手一抖出现两条同版本 */
+    var dup = -1;
+    for(var i = 0; i < list.length; i++){ if(String(list[i].version) === ver){ dup = i; break; } }
+    if(dup >= 0){
+      confirmBox({ text: 'v' + ver + ' 已经存在了', detail: '要继续的话会覆盖那条记录。', okText: '覆盖' })
+        .then(function(yes){ if(yes){ list[dup] = rec; relWrite(list, '已覆盖 v' + ver); } });
+      return;
+    }
+    list.push(rec);
+  }else{
+    list[idx] = rec;
+  }
+  relWrite(list, isNew ? (ver + ' 已新增') : (ver + ' 已保存'));
+}
+
+function relWrite(list, okMsg){
+  api('/content', { method:'PUT', body:{ items:{ release_notes: list } } })
+    .then(function(){
+      REL_STATE.list = list;
+      relSort();
+      paintReleases();
+      toast(okMsg, 'ok');
+    })
+    .catch(function(e){ toast('保存失败：' + e.message, 'err', 4000); });
+}
+
+function relDelete(idx){
+  var r = REL_STATE.list[idx];
+  if(!r) return;
+  confirmBox({ text: '确定删除 v' + (r.version || '?') + ' 的记录吗？', detail: '删除后不可恢复。', danger: true, okText: '删除' })
+    .then(function(yes){
+      if(!yes) return;
+      var list = (REL_STATE.list || []).slice();
+      list.splice(idx, 1);
+      relWrite(list, '已删除 v' + (r.version || '?'));
+    });
+}
+
+/* 一键填入最近几轮：只在「当前没有任何记录」时提供，避免把已有内容冲掉 */
+function relSeedAsk(){
+  if((REL_STATE.list || []).length){
+    confirmBox({
+      text: '当前已经有 ' + REL_STATE.list.length + ' 条版本记录',
+      detail: '「填入最近几轮」是给空白列表用的初始数据。继续会把这些记录追加到列表末尾（同版本号不会重复添加）。',
+      okText: '追加',
+    }).then(function(yes){ if(yes) doRelSeed(true); });
+    return;
+  }
+  doRelSeed(false);
+}
+function doRelSeed(append){
+  var seed = relSeed();
+  var list = append ? (REL_STATE.list || []).slice() : [];
+  var exist = {};
+  list.forEach(function(r){ exist[String(r.version)] = 1; });
+  var added = 0;
+  seed.forEach(function(r){
+    if(exist[String(r.version)]) return;
+    list.push(r); added++;
+  });
+  if(!added){ toast('这些版本都已经在了', 'ok'); return; }
+  relWrite(list, '已填入 ' + added + ' 条历史记录');
+}
+
+/* 今天（本地时区的 YYYY-MM-DD） */
+function relToday(){
+  var d = new Date();
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
 }
 
 })();

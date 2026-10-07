@@ -41,6 +41,9 @@ const ALLOW_CONTENT_KEYS = [
   'daily_quote',        // 每日一言
   'site_config',        // 站点通用配置
   'popups',             // 通用弹窗引擎（第二十七轮）：开屏弹 + 板块弹
+  'dj_schedule',        // 抽歌排期批次（第二十八轮）：从主站本机 localStorage 迁到云端
+  'dj_excluded',        // 抽歌排除清单（第二十八轮）：{ songs:[id], reqs:[点歌人] }
+  'release_notes',      // 版本更新记录（第二十八轮）：仅后台可见，前台不展示
 ];
 
 /* 课代表能改的字段——只有作业相关。
