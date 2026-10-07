@@ -14,6 +14,7 @@ import { getSql } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireUser, requireUserReady, audit,
 } from './_lib/http.js';
+import { sha256Hex } from './_lib/password.js';
 
 /* 允许云同步的键白名单。新增同步项时在这里加一行即可。
    前缀匹配用结尾的 *，如 'cls_dj_note_*'
@@ -126,10 +127,12 @@ async function requireUserFromQuery(req, res) {
   const token = String(req.query.t || '').trim();
   if (!token) { fail(res, 401, '缺少登录凭据'); return null; }
   const sql = getSql();
+  /* 会话表存 sha256(token)；兼容升级前的明文老会话用 OR 双匹配 */
+  const tokenHash = await sha256Hex(token);
   const rows = await sql`
     select u.id, u.username, u.role, u.status, u.display_name, u.created_at
       from sessions s join users u on u.id = s.user_id
-     where s.token = ${token} and s.expires_at > now() limit 1
+     where (s.token = ${tokenHash} or s.token = ${token}) and s.expires_at > now() limit 1
   `;
   if (!rows.length || rows[0].status !== 'active') { fail(res, 401, '未登录或登录已过期'); return null; }
   const u = rows[0];

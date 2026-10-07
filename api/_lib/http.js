@@ -9,6 +9,7 @@
    ============================================================ */
 
 import { getSql, cfg } from './db.js';
+import { sha256Hex } from './password.js';
 
 /* ============================================================
    表结构自愈（全站公共）
@@ -243,6 +244,9 @@ export async function currentUser(req) {
   const sql = getSql();
   /* 确保 must_change_password 列存在，否则下面的 select 会整条失败 */
   await ensureSchema(sql);
+  /* 会话表存的是 sha256(token)；升级前的老会话仍是明文 token，
+     这里两种都匹配，保证平滑迁移、不强制重登。 */
+  const tokenHash = await sha256Hex(token);
   const rows = await sql`
     select u.id, u.username, u.role, u.status, u.display_name, u.created_at,
            coalesce(u.must_change_password, false) as must_change_password,
@@ -250,7 +254,7 @@ export async function currentUser(req) {
            s.expires_at
       from sessions s
       join users u on u.id = s.user_id
-     where s.token = ${token}
+     where (s.token = ${tokenHash} or s.token = ${token})
        and s.expires_at > now()
      limit 1
   `;

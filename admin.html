@@ -823,7 +823,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.2.2';
+var SITE_VERSION = '2.3.0';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -5977,11 +5977,31 @@ function handoverAi(){
 /* ============================================================================
  * ⑲ 登录门 / 会话
  * ========================================================================= */
+/* 与主站 index.html 共用的登录态键。
+   第二十七轮（2026-10-07）修复「后台显示旧身份 / 在线不显示」：
+   以前后台用 cls_admin_token / cls_admin_user，主站用 cls_auth，
+   两套完全独立 —— 在主站登了 AI 账号，后台还显示上次的余子康；
+   两边心跳各发各的 token，后端只记到一边，在线状态也对不上。
+   现在后台登录/登出都同步写一份 cls_auth（主站同款形状 {token,user}），
+   启动时也优先读 cls_auth，实现「一套登录态、两站共享」。 */
+var LS_SHARED = 'cls_auth';
+
+function syncShared(){
+  try{
+    if(STATE.token && STATE.me){
+      localStorage.setItem(LS_SHARED, JSON.stringify({ token: STATE.token, user: STATE.me }));
+    }else{
+      localStorage.removeItem(LS_SHARED);
+    }
+  }catch(e){}
+}
+
 function setToken(t){
   STATE.token = t || '';
   try{
     if(t) localStorage.setItem(LS_TOKEN, t);
     else localStorage.removeItem(LS_TOKEN);
+    syncShared();
   }catch(e){}
   /* 登录后开始心跳：站主自己在后台挂着也要算「在线」（2026-10-07） */
   if(t && typeof startAdminHeartbeat === 'function') startAdminHeartbeat();
@@ -5991,6 +6011,7 @@ function setUser(u){
   try{
     if(u) localStorage.setItem(LS_USER, JSON.stringify(u));
     else localStorage.removeItem(LS_USER);
+    syncShared();
   }catch(e){}
 }
 
@@ -6178,14 +6199,25 @@ function boot(){
   $('gP').onkeydown = function(e){ if(e.key === 'Enter') doLogin(); };
   $('gU').onkeydown = function(e){ if(e.key === 'Enter') $('gP').focus(); };
 
-  /* 恢复会话 */
+  /* 恢复会话：优先读与主站共用的 cls_auth（2026-10-07 统一登录态）。
+     这样在主站登录了 AI 账号，打开后台直接就是 AI 账号，不会再显示旧身份。 */
   var token = '';
   var user = null;
   try{
-    token = localStorage.getItem(LS_TOKEN) || '';
-    var raw = localStorage.getItem(LS_USER);
-    if(raw) user = JSON.parse(raw);
+    var shared = localStorage.getItem(LS_SHARED);
+    if(shared){
+      var sa = JSON.parse(shared);
+      if(sa && sa.token && sa.user){ token = sa.token; user = sa.user; }
+    }
   }catch(e){}
+  /* 兜底：升级前残留的 cls_admin_*（旧会话） */
+  if(!token){
+    try{
+      token = localStorage.getItem(LS_TOKEN) || '';
+      var raw = localStorage.getItem(LS_USER);
+      if(raw) user = JSON.parse(raw);
+    }catch(e){}
+  }
 
   if(!token || !user || user.role !== 'admin'){
     return;   /* 停在登录门 */

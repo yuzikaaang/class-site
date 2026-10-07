@@ -321,7 +321,7 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .badge{font-size:.75rem;font-weight:700;padding:4px 10px;border-radius:8px}
 .badge-blue{background:#f6f1ec;color:#af410f}
 .badge-orange{background:#ffedd5;color:#af410f}
-.badge-green{background:#e6f9f0;color:#07a154}
+.badge-green{background:#e6f9f0;color:#0a7d42}
 /* 政治面貌徽章：中共党员 / 共青团员 / 普通学生 —— 亮暗双模式均达 WCAG AA */
 .badge-red{background:#fdeaea;color:#c0392b}
 .badge-teal{background:#e3f6f5;color:#3f6f68}
@@ -425,7 +425,7 @@ mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .dark [style*="color:#6e635a"],.dark [style*="color: #6e635a"]{color:var(--fg-3)!important}
 .dark [style*="color:#6e635a"],.dark [style*="color: #6e635a"]{color:var(--fg-3)!important}
 .dark [style*="color:#222"],.dark [style*="color: #222"]{color:var(--fg)!important}
-.dark [style*="color:#999"],.dark [style*="color: #999"]{color:var(--fg-3)!important}
+.dark [style*="color:#6e635a"],.dark [style*="color: #6e635a"]{color:var(--fg-3)!important}
 .dark [style*="color:#af410f"],.dark [style*="color: #af410f"]{color:#d6d3d1!important}
 .dark [style*="background:#fff"]{background:#1a1715!important;color:var(--fg)!important;border-color:#453d37!important}
 .dark [style*="background: #fff"]{background:#1a1715!important;color:var(--fg)!important;border-color:#453d37!important}
@@ -646,10 +646,10 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .steps{margin-top:20px;background:#fff7ed;padding:18px;border-radius:12px;text-align:left}
 .steps p{color:#af410f;line-height:2;font-size:0.9375rem;display:flex;align-items:flex-start;gap:10px}
 .steps b{flex:0 0 22px;height:22px;border-radius:50%;background:#af410f;color:#fff;font-size:0.8125rem;display:flex;align-items:center;justify-content:center;margin-top:4px}
-.guide-target{margin-top:16px;font-size:.8rem;color:#999;word-break:break-all}
+.guide-target{margin-top:16px;font-size:.8rem;color:#6e635a;word-break:break-all}
 .btn-copy{display:block;width:100%;margin-top:18px;background:#fff;color:#af410f;border:1.5px solid #9a3412;padding:11px;border-radius:999px;font-size:.95rem;font-weight:600;cursor:pointer}
 .btn-copy:active{background:#f6f1ec}
-.guide-back{display:block;margin-top:14px;color:#999;font-size:.85rem;text-decoration:none}
+.guide-back{display:block;margin-top:14px;color:#6e635a;font-size:.85rem;text-decoration:none}
 
 /* 浏览器打开后的跳转提示层 */
 .jump-overlay{display:none;position:fixed;inset:0;background:linear-gradient(135deg,#faf5ef,#e4ddd6);z-index:9999;align-items:center;justify-content:center;padding:20px}
@@ -894,7 +894,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .qr-head{display:flex;justify-content:center;align-items:center;margin-bottom:12px}
 .qr-head h3{color:#2f7355;font-size:1rem}
 .dark .qr-head h3{color:#7fb8ab}
-.qr-close{border:none;background:none;font-size:1.375rem;color:#999;cursor:pointer;line-height:1;padding:4px}
+.qr-close{border:none;background:none;font-size:1.375rem;color:#6e635a;cursor:pointer;line-height:1;padding:4px}
 .qr-close:hover{color:#555}
 .qr-box img{width:100%;max-width:230px;border-radius:16px;border:1px solid #e7ddd3}
 .qr-tip{margin-top:14px;color:#292524;font-size:.9rem;font-weight:600}
@@ -1180,6 +1180,13 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .ca-tools button:disabled{opacity:.5;cursor:not-allowed}
 .dark .ca-tools button{background:#241f1b;border-color:#4a3f36;color:#c9bfb4}
 .dark .ca-tools button:hover:not(:disabled){border-color:#ea8a4d;color:#ea8a4d;background:#2b241e}
+/* 课代表编辑作业时的附件只读区（2026-10-07 第二十七轮：附件直链仅管理员可改） */
+.ca-att-ro{margin:0 0 10px;padding:9px 11px;border:1px solid #eadfd0;border-radius:10px;background:#fbf6ee}
+.ca-att-ro-h{font-size:.72rem;color:#a8a29e;margin-bottom:6px}
+.ca-chip{display:inline-block;margin:0 6px 6px 0;padding:4px 10px;border-radius:999px;background:#efe7db;color:#6b5d4d;font-size:.74rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.dark .ca-att-ro{border-color:#4a3f36;background:#221d19}
+.dark .ca-chip{background:#322a23;color:#c9bfb4}
+
 .hw-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:999px;font-size:.82rem;font-weight:800;color:#fff;line-height:1.5;box-shadow:0 2px 6px rgba(0,0,0,.08)}
 .hw-item-body{padding:12px 14px}
 .hw-tasks{margin:0;padding:0;list-style:none}
@@ -1238,7 +1245,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .acct-avatar{flex:none;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#c2410c,#e8944c);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800}
 .acct-uname{font-size:.92rem;font-weight:800;color:#3f342c;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .acct-urole{font-size:.62rem;font-weight:800;padding:2px 7px;border-radius:20px;background:#c2410c;color:#fff}
-.acct-urole.user{background:#b8a99c}
+.acct-urole.user{background:#7c6f63}
 /* 头衔标签（班长/课代表等），与「管理员/成员」角色徽章区分开用蓝色 */
 .acct-urole.title-tag{background:#0369a1;margin-right:4px}
 .acct-usub{font-size:.7rem;color:#a99a8d;margin-top:3px}
@@ -1273,7 +1280,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .admin-item .who b{font-size:.84rem;color:#3f342c;font-weight:800}
 .admin-item .who small{display:block;font-size:.67rem;color:#a99a8d;margin-top:3px}
 .dark .admin-item .who b{color:#f0e6dc}
-.admin-tag{font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:20px;background:#b8a99c;color:#fff;margin-left:6px}
+.admin-tag{font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:20px;background:#7c6f63;color:#fff;margin-left:6px}
 .admin-tag.admin{background:#c2410c}
 .admin-tag.banned{background:#8b1e1e}
 .admin-act{display:flex;gap:5px;flex-wrap:wrap}
@@ -1379,7 +1386,7 @@ html:not([data-bg="theme"]) body::after{display:none}
 .ui-foot{display:flex;gap:8px;padding:10px 16px 14px;border-top:1px solid #f0e6dc;flex:none;flex-wrap:wrap}
 .dark .ui-foot{border-color:#332d29}
 .ui-foot .btn{flex:1;min-width:88px;font-size:.78rem;padding:9px 6px}
-.ui-msg{font-size:.76rem;margin:0 16px 12px;color:#07a154;min-height:1.15em;text-align:left;flex:none}
+.ui-msg{font-size:.76rem;margin:0 16px 12px;color:#0a7d42;min-height:1.15em;text-align:left;flex:none}
 .ui-row{display:flex;align-items:center;gap:10px;padding:7px 0}
 .ui-row .lb{flex:0 0 74px;font-size:.8rem;color:var(--fg-3);font-weight:600}
 .ui-hint{font-size:.72rem;color:var(--fg-3);line-height:1.5;margin:2px 0 8px}
@@ -1498,10 +1505,10 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   <div class="jump-box">
     <div class="spinner"></div>
     <h2 style="color:#292524;margin-bottom:8px;font-size:1.1875rem">正在为您跳转</h2>
-    <p style="color:#999;font-size:.85rem;margin-bottom:4px">目标站点</p>
+    <p style="color:#6e635a;font-size:.85rem;margin-bottom:4px">目标站点</p>
     <p id="jumpHost" style="color:#af410f;font-weight:700;word-break:break-all"></p>
     <a id="jumpManual" href="#" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:20px;background:#9a3412;color:#fff;padding:11px;border-radius:999px;text-decoration:none;font-size:.95rem;font-weight:600">若未自动跳转，点此前往</a>
-    <a href="#" onclick="resetHome();return false" style="display:block;margin-top:12px;color:#999;font-size:.82rem;text-decoration:none">返回班级服务站</a>
+    <a href="#" onclick="resetHome();return false" style="display:block;margin-top:12px;color:#6e635a;font-size:.82rem;text-decoration:none">返回班级服务站</a>
   </div>
 </div>
 
@@ -1780,14 +1787,14 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
       <button class="btn" style="width:100%;margin-bottom:8px" onclick="exportData()">📤 导出数据（加密 .json）</button>
       <button class="btn" style="width:100%;margin-bottom:8px;background:#f6f1ec;color:#af410f" onclick="copyDataText()">📋 复制加密数据文本</button>
       <div style="display:flex;gap:8px;margin-bottom:8px">
-        <button class="btn" style="flex:1;background:#e6f9f0;color:#07a154" onclick="document.getElementById('dataFile').click()">📥 导入文件</button>
+        <button class="btn" style="flex:1;background:#e6f9f0;color:#0a7d42" onclick="document.getElementById('dataFile').click()">📥 导入文件</button>
         <input type="file" id="dataFile" accept=".json,application/json" style="display:none" onchange="importDataFile(this)">
         <button class="btn" style="flex:1;background:#f6f1ec;color:#af410f" onclick="pasteDataMode()">📥 粘贴导入</button>
       </div>
       <textarea id="dataPaste" placeholder="粘贴导出的数据文本后点击「粘贴导入」" style="display:none;width:100%;height:60px;box-sizing:border-box;padding:8px;border-radius:10px;border:1px solid #ebdccb;background:#fff;color:#222;font-size:.8rem;margin-bottom:8px" onclick="this.select()"></textarea>
       <button class="btn" style="width:100%;background:#ffeded;color:#af410f" onclick="resetData()">🗑 重置游戏数据</button>
       <button class="btn" style="width:100%;background:#c0392b;color:#fff;margin-top:8px" onclick="wipeAllData()">🧹 全部清理（保留设备/班签/券）</button>
-      <p id="dataMsg" style="font-size:.8rem;margin:10px 0 0;color:#07a154;min-height:1.2em"></p>
+      <p id="dataMsg" style="font-size:.8rem;margin:10px 0 0;color:#0a7d42;min-height:1.2em"></p>
     </div>
   </div>
 </div>
@@ -2062,7 +2069,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
           <input type="datetime-local" id="riTime" style="flex:1;min-width:0;padding:6px 8px;border-radius:10px;border:1px solid #ebdccb;background:#fff;color:#222;font-size:.82rem">
           <button class="btn" style="padding:7px 12px;font-size:.82rem;background:#9a3412;color:#fff;border:none" onclick="riSubmit()">📝 登记补发</button>
         </div>
-        <p class="dj-desc" id="riMsg" style="font-size:.8rem;color:#07a154;margin:0 0 6px;min-height:1.2em"></p>
+        <p class="dj-desc" id="riMsg" style="font-size:.8rem;color:#0a7d42;margin:0 0 6px;min-height:1.2em"></p>
         <p class="dj-label" style="font-size:.82rem;color:#57534e;margin:0 0 4px">本周补发记录</p>
         <div id="riList" style="font-size:.8rem;color:#6e635a"></div>
       </div>
@@ -2537,7 +2544,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.2.2';
+var SITE_VERSION = '2.3.0';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -2872,6 +2879,7 @@ var SITE_DATA = {
     {
       id: 6,
       categoryId: 5, title: "课堂笔记", icon: "", iconText: "笔记", paused: true,
+      pausedMsg: "📌 以后查看课堂笔记 / 课件，请线下在班上大屏查看。",
       desc: "经多方对比，课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载基本不限速。\n笔记为截图，可在线预览，加载卡顿建议下载查看。\n打不开可复制链接至浏览器打开（微信页面可能存在兼容问题）。",
       mainLabel: "", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
@@ -2887,6 +2895,7 @@ var SITE_DATA = {
     {
       id: 7,
       categoryId: 5, title: "教学课件", icon: "", iconText: "课件", paused: true,
+      pausedMsg: "📌 以后查看课堂笔记 / 课件，请线下在班上大屏查看。",
       desc: "经多方对比，课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载基本不限速。\n打不开可复制链接至浏览器打开（微信页面可能存在兼容问题）。",
       mainLabel: "", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
@@ -2911,7 +2920,8 @@ var SITE_DATA = {
       categoryId: 3, title: "高一下学期期末考", subtitle: "易查分", icon: "", iconText: "成绩",
       desc: "",
       mainLabel: "查询成绩", mainUrl: "https://u5p5aq6d.yichafen.com/qz/166mKITWTt", mainWechatOk: true,
-      extraLabel: "", extraUrl: "", extraWechatOk: true
+      extraLabel: "", extraUrl: "", extraWechatOk: true,
+      needLogin: true
     },
     {
       id: 10,
@@ -2947,7 +2957,8 @@ var SITE_DATA = {
       categoryId: 7, title: "意见反馈", icon: "", iconText: "📮",
       desc: "对班级事务有任何想法、建议，或想反映的问题，都可以在这里匿名提交。\n好的点子、槽点、建议都可以畅所欲言，我们会认真查看。",
       mainLabel: "前往填写", mainUrl: "https://www.wjx.top/vm/tFMclw4.aspx#", mainWechatOk: true,
-      extraLabel: "", extraUrl: "", extraWechatOk: true
+      extraLabel: "", extraUrl: "", extraWechatOk: true,
+      needLogin: true
     },
     {
       id: 15,
@@ -4119,7 +4130,7 @@ function render(){
         var passed = gatePassed(l) || !gateOn();
         var contentHtml = '<div class="card-content"><h3>'+esc(l.title)+'</h3>'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
         if(l.paused){
-          contentHtml += '<div class="paused-box">⛔ 因网络问题，暂时关闭，恢复开放时间另行通知</div>';
+          contentHtml += '<div class="paused-box">'+(l.pausedMsg ? esc(l.pausedMsg) : '⛔ 因网络问题，暂时关闭，恢复开放时间另行通知')+'</div>';
         }else if(l.gate && !passed){
           var _lr = lockRemain('gate_'+l.id);
           var _lockMsg = _lr > 0 ? '🔒 连续输错次数过多，请 ' + Math.ceil(_lr/1000) + ' 秒后再试' : '';
@@ -4153,6 +4164,12 @@ function render(){
               '<p id="contact-out-'+l.id+'" class="gate-hint" style="color:#6e635a;font-weight:400"></p>'+
               '</div>';
           }
+        }else if(l.needLogin && !isLoggedIn()){
+          /* 第二十七轮（2026-10-07）：成绩查询 / 意见反馈 需登录后查看。
+             未登录只给引导，不渲染入口，避免隐私内容被未登录同学点开。 */
+          contentHtml += '<div class="gate-box"><p class="gate-q">🔐 请先登录后查看</p>'+
+            '<p class="gate-hint" style="color:#6e635a;font-weight:400;margin:6px 0 10px">'+esc(l.title)+'需要登录后才能打开。登录后回到这里点开即可进入。</p>'+
+            '</div>';
         }
         contentHtml += (l.cardTip ? '<p class="card-hw-tip" style="font-size:.78rem;color:#af410f;margin-top:6px;line-height:1.6">'+esc(l.cardTip)+'</p>' : '');
         contentHtml += '</div>';
@@ -4182,6 +4199,8 @@ function render(){
           actionsHtml = '<button class="btn btn-disabled" onclick="alert(\'功能开发中，敬请期待\')">'+esc(l.mainLabel||'待开发')+'</button>';
         }else if(l.contactQuery){
           actionsHtml = '<span class="gate-tip">输入姓名查询</span>';
+        }else if(l.needLogin && !isLoggedIn()){
+          actionsHtml = '<button class="btn" onclick="openAccount(\'login\')">去登录后查看</button>';
         }else if(l.video){
           /* 视频类卡片：整卡即入口，不再需要「▶ 播放视频」二级按钮（用户要求） */
           actionsHtml = '<span class="gate-tip">点卡片任意位置即可在站内观看，无需跳转 B站</span>';
@@ -5153,6 +5172,7 @@ function renderAccount(){
       '<button class="acct-btn" id="acctGo" onclick="doRegister()">注册并登录</button>'
     : '<div class="acct-field"><label>用户名</label><input id="acctU" placeholder="输入用户名" autocomplete="username"></div>' +
       '<div class="acct-field"><label>密码</label><input id="acctP" type="password" placeholder="输入密码" autocomplete="current-password"></div>' +
+      '<p class="acct-hint" style="margin:2px 0 10px">💡 用户名就是你的<b>姓名</b>，初始密码是<b>出生日期 8 位数字</b>（如 2010 年 7 月 10 日生 → <code>20100710</code>）。</p>' +
       '<button class="acct-btn" id="acctGo" onclick="doLogin()">登录</button>';
 
   box.innerHTML = tabs + form +
@@ -6704,7 +6724,7 @@ function uiSec(k){
 function uiMsg(t, color){
   var el = document.getElementById('uiMsg'); if(!el) return;
   el.textContent = t || '';
-  el.style.color = color || '#07a154';
+  el.style.color = color || '#0a7d42';
   if(t) setTimeout(function(){ if(el.textContent === t) el.textContent = ''; }, 4000);
 }
 
@@ -8262,7 +8282,7 @@ function ledgerAdd(name,game,src){
 }
 function ledgerAll(){ return ledgerLoad(); }
 
-function dataMsg(t,c){ var m=document.getElementById('dataMsg'); if(m){ m.textContent=t; m.style.color=c||'#07a154'; } }
+function dataMsg(t,c){ var m=document.getElementById('dataMsg'); if(m){ m.textContent=t; m.style.color=c||'#0a7d42'; } }
 function collectAllData(){
   var out={};
   try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); out[k]=localStorage.getItem(k); } }catch(e){}
@@ -8273,7 +8293,7 @@ function openData(){
   m.classList.add('show');
   var ta=document.getElementById('dataPaste');
   if(ta){ ta.style.display='none'; ta.value=''; }
-  dataMsg('', '#07a154');
+  dataMsg('', '#0a7d42');
   SFX.pop();
 }
 function closeData(){ var m=document.getElementById('dataMask'); if(m) m.classList.remove('show'); }
@@ -8357,7 +8377,7 @@ function copyDataText(){
   if(!cryptoOK()){ _plainWarn(function(){ _copyOut(JSON.stringify(collectAllData()),'⚠️ 已复制明文数据（未加密）','#af410f'); }); return; }
   askDataEnc('export',function(pw){
     encPayload(collectAllData(),pw).then(function(w){
-      _copyOut(JSON.stringify(w),'🔐 已复制加密数据，请记住密码','#07a154');
+      _copyOut(JSON.stringify(w),'🔐 已复制加密数据，请记住密码','#0a7d42');
     }).catch(function(){ dataMsg('❌ 加密失败，请重试','#af410f'); });
   });
 }
@@ -8370,7 +8390,7 @@ function fallbackCopyData(json,msg,color){
   var ta=document.createElement('textarea');
   ta.value=json; ta.style.position='fixed'; ta.style.opacity='0';
   document.body.appendChild(ta); ta.select();
-  try{ document.execCommand('copy'); dataMsg(msg||'✅ 数据文本已复制，请妥善保存', color||'#07a154'); SFX.success(); }
+  try{ document.execCommand('copy'); dataMsg(msg||'✅ 数据文本已复制，请妥善保存', color||'#0a7d42'); SFX.success(); }
   catch(e){ dataMsg('❌ 复制失败', '#af410f'); }
   document.body.removeChild(ta);
 }
@@ -8448,7 +8468,7 @@ function doImport(text){
   /* 【自定义设置】若选中的是「自定义设置」导出的配置文件，走配置导入通道（合并模式） */
   if(obj.app === 'class-site-ui-config'){
     var _r = applyUICfgObj(obj, 'merge');
-    dataMsg(_r ? '✅ 已识别为「自定义设置」配置文件，已合并导入' : '❌ 配置导入失败', _r ? '#07a154' : '#af410f');
+    dataMsg(_r ? '✅ 已识别为「自定义设置」配置文件，已合并导入' : '❌ 配置导入失败', _r ? '#0a7d42' : '#af410f');
     if(_r) SFX.success();
     return;
   }
@@ -8804,21 +8824,77 @@ function openCaEditor(hwId, subject){
     return String(t == null ? '' : t);
   }).join('\n');
 
+  /* 第二十七轮（2026-10-07）：附件直链（📎 行）只有管理员能增改。
+     课代表只填文字内容，附件行改为只读展示，并隐藏「📎 新增附件行」按钮，
+     从源头关掉入口，避免不会操作的同学误改直链。 */
+  var isAdm = isAdmin();
+  CA_CTX.lockedAtt = null;
+  var editorText = taVal;
+  var chipsHtml = '';
+  if(!isAdm){
+    var _lines = (taVal || '').split('\n');
+    var _att = [], _txt = [];
+    for(var _i = 0; _i < _lines.length; _i++){
+      if(/^\s*📎/.test(_lines[_i])) _att.push(_lines[_i]); else _txt.push(_lines[_i]);
+    }
+    editorText = _txt.join('\n');
+    if(_att.length){
+      chipsHtml = '<div class="ca-att-ro"><div class="ca-att-ro-h">📎 附件（只读，直链需管理员修改）：</div>'
+        + _att.map(function(ln){
+            var mm = ln.match(/^\s*📎\s*\[([^\]]*)\]\s*([\s\S]*)$/);
+            var k = mm ? mm[1] : '附件';
+            var rest = mm ? mm[2] : ln.replace(/^\s*📎\s*/, '');
+            var pi = rest.indexOf('|');
+            var d = pi >= 0 ? rest.slice(0, pi).trim() : rest.trim();
+            var u = pi >= 0 ? rest.slice(pi + 1).trim() : '';
+            return '<span class="ca-chip" title="' + (u || '待补链接') + '">📎 [' + k + '] ' + (d || '附件') + (u ? ' · 已挂链接' : ' · 待补') + '</span>';
+          }).join('')
+        + '</div>';
+      /* 锁存附件对象，保存时原样回写，确保课代表改不到也能保留原直链 */
+      CA_CTX.lockedAtt = _att.map(function(ln){
+        var mm = ln.match(/^\s*📎\s*\[([^\]]*)\]\s*([\s\S]*)$/);
+        var k = mm ? mm[1] : '图片';
+        var rest = mm ? mm[2] : '';
+        var pi = rest.indexOf('|');
+        var d = pi >= 0 ? rest.slice(0, pi).trim() : rest.trim();
+        var u = pi >= 0 ? rest.slice(pi + 1).trim() : '';
+        var pool = (CA_CTX.orig || []).filter(function(t){ return t && typeof t === 'object'; });
+        var obj = null;
+        for(var p = 0; p < pool.length; p++){ if((pool[p].text || '') === d){ obj = pool[p]; break; } }
+        var o = { text: d };
+        if(obj){
+          if(obj.audio || (k === '音频' && u)) o.audio = u || obj.audio;
+          else if(obj.video || (k === '视频' && u)) o.video = u || obj.video;
+          else o.img = u || obj.img;
+          if(o.audio && obj.audioLabel) o.audioLabel = obj.audioLabel;
+        } else {
+          if(k === '音频') o.audio = u; else if(k === '视频') o.video = u; else o.img = u;
+        }
+        return o;
+      });
+    }
+  }
+
   document.getElementById('caTitle').textContent = '✏️ 编辑「' + subject + '」作业 · ' + CA_CTX.hwLabel;
   document.getElementById('caBody').innerHTML =
       '<p style="margin:0 0 8px;font-size:.78rem;color:#6e635a;line-height:1.7">' +
-      '一行一条任务。音频 / 视频 / 图片附件请直接手写 <b>📎 [音频] 描述</b> 占位行，' +
-      '在描述后用 <b>| 链接</b> 带上网址（附件文件由站主统一上传，链接找站主要）。<br>' +
-      (isAdmin() ? '你是管理员：全部科目都能改、本次保存直接生效。' : '你是本科目课代表：只能改本科目。') +
+      (isAdm
+        ? '一行一条任务。音频 / 视频 / 图片附件请直接手写 <b>📎 [音频] 描述</b> 占位行，在描述后用 <b>| 链接</b> 带上网址（附件文件由站主统一上传，链接找站主要）。<br>你是管理员：全部科目都能改、本次保存直接生效。'
+        : '一行一条任务。<b>你是本科目课代表：只能编辑文字内容</b>，附件直链需由管理员修改（见下方只读区）。') +
       '</p>' +
-      '<div class="ca-tools">' +
-        '<button type="button" onclick="caInsertTask()">＋ 新增一条任务</button>' +
-        '<button type="button" onclick="caInsertAttRow()">📎 新增附件行</button>' +
-      '</div>' +
+      (isAdm
+        ? '<div class="ca-tools">' +
+            '<button type="button" onclick="caInsertTask()">＋ 新增一条任务</button>' +
+            '<button type="button" onclick="caInsertAttRow()">📎 新增附件行</button>' +
+          '</div>'
+        : '<div class="ca-tools">' +
+            '<button type="button" onclick="caInsertTask()">＋ 新增一条任务</button>' +
+          '</div>') +
+      chipsHtml +
       '<textarea id="caTa" class="ca-ta"></textarea>' +
       '<button class="acct-btn" id="caGo" style="margin-top:10px" onclick="caSave()">保存修改</button>' +
       '<div class="acct-msg" id="caMsg"></div>';
-  document.getElementById('caTa').value = taVal;
+  document.getElementById('caTa').value = editorText;
   document.getElementById('caMask').classList.add('show');
   if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
 }
@@ -8953,6 +9029,12 @@ function caSave(){
       continue;
     }
     tasks.push(line.trim());
+  }
+
+  /* 课代表编辑时附件行被拆成只读 chips，这里把锁存的附件对象原样拼回，
+     保证「课代表只改文字、不丢附件直链」。管理员 lockedAtt 为 null，无影响。 */
+  if(CA_CTX.lockedAtt && CA_CTX.lockedAtt.length){
+    tasks = CA_CTX.lockedAtt.concat(tasks);
   }
 
   var btn = document.getElementById('caGo');
@@ -9784,7 +9866,7 @@ function riSubmit(){
     .then(function(d){
       var codes=(d&&d.data&&d.data.cardCodes)||[];
       if(msg){
-        if(codes.length){ msg.style.color='#07a154'; msg.textContent='✅ 已登记补发并在平台生成券码：'+codes[0].code+'。请把券码手动发给该同学（本周已锁定不可重复领）'; }
+        if(codes.length){ msg.style.color='#0a7d42'; msg.textContent='✅ 已登记补发并在平台生成券码：'+codes[0].code+'。请把券码手动发给该同学（本周已锁定不可重复领）'; }
         else{ msg.style.color='#af410f'; msg.textContent='✅ 已登记补发（平台生成未成功，请手动在「券管理」生成券码发给同学）'; }
       }
     })
@@ -10022,7 +10104,7 @@ function djRun(){
     var topMsg = (wantTop>0 && deferred>0)
       ? '⚠️ 高赞必选里有 '+deferred+' 首因「每人限一首」被顺延（同一位同学已有歌中选，名额让给后面的歌）' : '';
     if(box) box.innerHTML = '<div style="background:#f5ede4;border-radius:12px;padding:12px 14px;margin:10px 0;font-size:.85rem;line-height:1.9">'+
-      '<b style="color:#07a154">✅ 已抽中 '+picked.length+' 首'+shortMsg+'，已加入本地排期（累计 '+djScheduleCount()+' 首）</b><br>'+
+      '<b style="color:#0a7d42">✅ 已抽中 '+picked.length+' 首'+shortMsg+'，已加入本地排期（累计 '+djScheduleCount()+' 首）</b><br>'+
       '<span style="color:#af410f">'+mode+'</span><br>'+
       (topMsg?'<span style="color:#af410f;font-size:.8rem">'+topMsg+'</span><br>':'')+
       rows+'</div>';

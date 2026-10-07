@@ -10,11 +10,18 @@
 
    PBKDF2 是 Web Crypto（crypto.subtle）原生支持的算法，
    不依赖任何第三方库，Workers 上能跑。
-   实测耗时（Node 环境参考值，Workers 上更快）：
-     25,000 次 ≈ 5ms
-     50,000 次 ≈ 10ms
-    100,000 次 ≈ 18ms
-   这里取 50,000 次：在 10ms 限制内留有余量。
+
+   🔴 第二十七轮（2026-10-07）踩坑：改密码接口 500「服务器错误」。
+      根因：改密码要「校验原密码（1 次派生）+ 生成新哈希（1 次派生）」，
+      合计 2 次 PBKDF2。迭代次数取 50000 时：
+        1 次 ≈ 9.3ms（登录勉强卡在 10ms 内，正常）
+        2 次 ≈ 18.7ms（改密码直接超出 10ms → 被掐断 → 500）
+      原密码填错只走 1 次派生就 return 了，所以「错密码」正常、「对密码」500。
+      实测把迭代次数降到 25000 后：
+        1 次 ≈ 4.5ms，2 次 ≈ 9.1ms —— 改密码也能稳稳落在 10ms 内。
+      故迭代次数从 50000 降到 **25000**，并在 needsRehash 里不再按
+      「迭代次数偏低」触发重哈希（否则老账号登录会被迫多算 1 次派生，
+      反而又把登录也拖爆）。
 
    存储格式：pbkdf2$<迭代次数>$<base64url 盐>$<base64url 派生密钥>
      - 迭代次数写进串里，将来调高也不影响老用户登录
@@ -29,8 +36,12 @@
 
 import bcrypt from 'bcryptjs';
 
-/** 默认迭代次数。若线上频繁报 1102，可调低到 25000 */
-export const ITERATIONS = 50000;
+/** 默认迭代次数。
+ *  选 25000 的考量（2026-10-07）：改密码路径要算 2 次派生，
+ *  2 × 25000 ≈ 9.1ms，稳稳低于 Workers 免费版 10ms CPU 上限；
+ *  同时仍远高于「在线爆破」的可行成本（有登录限流兜底）。
+ *  若线上仍偶发 1102，可继续下调到 20000 / 15000。 */
+export const ITERATIONS = 25000;
 const SALT_BYTES = 16;
 const KEY_BYTES = 32;
 
@@ -123,15 +134,33 @@ export async function verifyPassword(password, stored) {
 }
 
 /**
- * 这个哈希串是否需要升级（bcrypt → pbkdf2，或迭代次数偏低）。
- * 登录成功后如果返回 true，可以顺手重新哈希写回库。
+ * 这个哈希串是否需要升级（仅 bcrypt → pbkdf2 这种「算法」层面的升级）。
+ *
+ * ⚠️ 2026-10-07 第二十七轮重要约束：
+ *    绝不能因为「迭代次数偏低」就触发重哈希。
+ *    原因：登录流程是「校验原密码（1 次派生）+ 升级写回（第 2 次派生）」，
+ *    对仍存着 50000 次老哈希的账号，登录一旦触发重哈希就会变成 2 次派生，
+ *    合计 ≈ 14ms 直接超 10ms CPU 上限 → 登录也跟着 500。
+ *    所以这里只认「算法是否还是 bcrypt」，迭代次数差异一律忽略，
+ *    老账号保持 1 次派生登录，平稳过渡。
  */
 export function needsRehash(stored) {
   const s = String(stored || '');
   if (/^\$2[aby]\$/.test(s)) return true;
   const parts = s.split('$');
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return true;
-  return Number(parts[1]) < ITERATIONS;
+  return false;
+}
+
+/* ---------------- SHA-256（用于会话 token 哈希存储） ----------------
+   会话表 sessions.token 不再存明文 token，改存 sha256(token)。
+   这样即便数据库被拖库，拿到的也只是不可逆的哈希，无法伪造登录态。
+   查询时先把客户端传来的明文 token 哈希再比对主键。 */
+
+export async function sha256Hex(str) {
+  const data = new TextEncoder().encode(String(str));
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -141,4 +170,4 @@ export function needsRehash(stored) {
  * bcryptjs 直接返回 false 不做计算）。
  */
 export const DECOY_HASH =
-  'pbkdf2$50000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  'pbkdf2$25000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';

@@ -2013,6 +2013,74 @@ console.log('\n【22】附件方案护栏：只填直链、不做上传（2026-1
   t('wrangler 记录了放弃上传的原因', wt.indexOf('绑银行卡') >= 0 || wt.indexOf('实名') >= 0);
 }
 
+console.log('\n【27】第二十七轮·令牌哈希存储 + 改密码回归');
+{
+  const { sha256Hex } = await import('./api/_lib/password.js');
+
+  /* 注册一个全新用户，隔离其它用例的登录态（DB 每次运行都是全新的，固定名即可） */
+  const uname = 'toktester';
+  const pwd = 'TokTester2026';
+  const reg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: uname, password: pwd, displayName: '令牌测试' },
+  });
+  t('令牌测试用户注册成功', reg.status === 200 && reg.body.ok, JSON.stringify(reg.body));
+  const login = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: uname, password: pwd },
+  });
+  t('令牌测试用户登录成功', login.status === 200 && login.body.token, JSON.stringify(login.body));
+  const token = login.body.token;
+
+  /* 取库里存的会话行，确认存的是 sha256(token) 而非明文 token
+     （注册 + 登录各签发一条会话，所以至少 1 条；重点验「存哈希、不存明文」） */
+  const uidRes = db.exec("select id from users where username = '" + uname + "'");
+  const uid = uidRes[0].values[0][0];
+  const sres = db.exec("select token from sessions where user_id = " + uid);
+  const stored = sres[0].values.map((r) => r[0]);
+  const expectHash = await sha256Hex(token);
+  t('会话表至少存了 1 条会话', stored.length >= 1, '实际 ' + stored.length);
+  t('会话表存的是 sha256(token)（含当前登录 token 的哈希）', stored.includes(expectHash), 'stored=' + JSON.stringify(stored));
+  t('明文 token 未落库（没有任何一行等于原始 token）', !stored.includes(token));
+
+  /* 用明文 token 调接口应正常（哈希匹配） */
+  const me1 = await call('/api/auth?action=me', { token });
+  t('明文 token 仍可用（currentUser 哈希匹配）', me1.status === 200 && me1.body.ok, JSON.stringify(me1.body));
+
+  /* 改密码：原密码正确 → 200 + 新 token（这条以前会因 2 次 PBKDF2 超 10ms CPU 而 500） */
+  const cp = await call('/api/auth?action=change-password', {
+    method: 'POST', token, body: { oldPassword: pwd, newPassword: 'NewPass2026!' },
+  });
+  t('改密码（原密码正确）返回 200', cp.status === 200 && cp.body.ok, 'status ' + cp.status + ' ' + JSON.stringify(cp.body));
+  t('改密码返回新 token', typeof cp.body.token === 'string' && cp.body.token.length === 64, 'len ' + (cp.body.token||'').length);
+
+  if (cp.body.token) {
+    const newToken = cp.body.token;
+    const newHash = await sha256Hex(newToken);
+    /* 旧 token 立即失效 */
+    const oldMe = await call('/api/auth?action=me', { token });
+    t('旧 token 改密后失效（401）', oldMe.status === 401, 'status ' + oldMe.status);
+    /* 新 token 可用 */
+    const newMe = await call('/api/auth?action=me', { token: newToken });
+    t('新 token 可用', newMe.status === 200 && newMe.body.ok);
+    /* 会话表仍是 1 条，且为新哈希（旧会话被踢） */
+    const s2 = db.exec("select token from sessions where user_id = " + uid);
+    const stored2 = s2[0].values.map((r) => r[0]);
+    t('改密后只剩 1 条会话', stored2.length === 1, '实际 ' + stored2.length);
+    t('改密后存的是新 token 的哈希', stored2[0] === newHash);
+    t('新令牌仍是 64 位十六进制', /^[0-9a-f]{64}$/.test(newToken));
+  }
+
+  /* 改密码：原密码错误 → 401（这条一直正常，确认没被改坏） */
+  const bad = await call('/api/auth?action=change-password', {
+    method: 'POST', token: cp.body.token, body: { oldPassword: 'wrongpwd', newPassword: 'Another2026!' },
+  });
+  t('改密码（原密码错误）返回 401', bad.status === 401, 'status ' + bad.status);
+
+  /* 把测试账号密码改回去，避免污染后续手工验证 */
+  await call('/api/auth?action=change-password', {
+    method: 'POST', token: cp.body.token, body: { oldPassword: 'NewPass2026!', newPassword: pwd },
+  });
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }

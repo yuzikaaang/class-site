@@ -11,7 +11,7 @@ import {
   requireUser, newToken, audit, ensureSchema,
 } from './_lib/http.js';
 import {
-  hashPassword, verifyPassword, needsRehash, DECOY_HASH,
+  hashPassword, verifyPassword, needsRehash, DECOY_HASH, sha256Hex,
 } from './_lib/password.js';
 
 /* 用户名规则：3–20 位，字母/数字/下划线/中文 */
@@ -277,8 +277,12 @@ async function logout(req, res) {
   const h = req.headers.authorization || '';
   const m = /^Bearer\s+(.+)$/i.exec(h.trim());
   if (m) {
+    const raw = m[1].trim();
+    /* 会话表存的是 sha256(token)；同时为兼容升级前的明文老会话，
+       这里两种都删（老会话自然过期后只剩哈希行）。 */
+    const th = await sha256Hex(raw);
     const sql = getSql();
-    await sql`delete from sessions where token = ${m[1].trim()}`;
+    await sql`delete from sessions where token = ${th} or token = ${raw}`;
   }
   return ok(res, { message: '已退出登录' });
 }
@@ -346,6 +350,7 @@ async function changePassword(req, res) {
 
   const sql = getSql();
   const rows = await sql`select password_hash from users where id = ${u.id}`;
+  if (!rows.length) return fail(res, 400, '账号数据异常，请联系管理员');
   const good = await verifyPassword(oldPwd, rows[0].password_hash);
   if (!good) return fail(res, 401, '原密码不对');
 
@@ -371,9 +376,15 @@ async function changePassword(req, res) {
 async function issueSession(sql, userId) {
   const { sessionDays } = cfg();
   const token = newToken();
+  /* 🔒 第二十七轮（2026-10-07）：会话表不再存明文 token，改存 sha256(token)。
+     明文 token 只回给客户端、永不落库；查询时先哈希再比对主键。
+     这样既防拖库伪造，又能平滑迁移：升级前的老会话仍是明文 token，
+     靠 currentUser / logout 里的「哈希 OR 明文」双匹配继续可用，
+     无需强制全员重新登录。 */
+  const tokenHash = await sha256Hex(token);
   await sql`
     insert into sessions (token, user_id, expires_at)
-    values (${token}, ${userId}, now() + (${sessionDays} || ' days')::interval)
+    values (${tokenHash}, ${userId}, now() + (${sessionDays} || ' days')::interval)
   `;
   return token;
 }
