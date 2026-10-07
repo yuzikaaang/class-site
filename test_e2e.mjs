@@ -2318,6 +2318,123 @@ console.log('\n【30】第二十七轮·点歌券改用账号身份（⑩）');
   }
 }
 
+console.log('\n【31】第二十七轮·游戏排行榜（⑪）');
+{
+  /* ---- 路由：/api/games 已挂上 ---- */
+  const wrk = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  const idxM = fs.readFileSync(new URL('./api/index.mjs', import.meta.url), 'utf8');
+  t('worker.mjs 注册了 games 路由', /case 'games'/.test(wrk));
+  t('worker.mjs 导入了 gamesHandler', /import gamesHandler/.test(wrk));
+  t('index.mjs 注册了 games 路由', /case 'games'/.test(idxM));
+  t('index.mjs 导入了 gamesHandler', /import gamesHandler/.test(idxM));
+
+  /* ---- 未登录必须被拒（榜上有姓名，不能匿名拉） ---- */
+  const anon = await call('/api/games?action=leaderboard');
+  t('未登录访问排行榜被拒（401）', anon.status === 401, '实际 ' + anon.status + ' ' + JSON.stringify(anon.body));
+
+  /* ---- 游戏列表 ---- */
+  const gl = await call('/api/games?action=games');
+  t('游戏列表需要登录（401）', gl.status === 401, '实际 ' + gl.status);
+
+  /* ---- 已登录：空榜也能正常返回结构 ---- */
+  const empty = await call('/api/games?action=leaderboard', { token: adminToken });
+  t('登录后排行榜返回 200', empty.status === 200 && empty.body.ok, JSON.stringify(empty.body).slice(0, 160));
+  t('返回包含四个游戏', empty.body.games && Object.keys(empty.body.games).length === 4,
+    JSON.stringify(Object.keys(empty.body.games || {})));
+  t('每个游戏有 meta.unit', !!(empty.body.games.snake && empty.body.games.snake.meta && empty.body.games.snake.meta.unit));
+  t('默认 range 为 all', empty.body.range === 'all', String(empty.body.range));
+
+  /* ---- 写入成绩：建两个用户，各推最高分 ----
+     ⚠️ 后台建的账号 must_change_password=true，未改密前所有写操作会被
+        401 挡住（这是有意的安全设计，见 auth.js）。所以建号后必须先
+        走一次改密码，拿到可写的新 token。 */
+  const mkUser = async (uname, dname, pwd) => {
+    const st = await call('/api/admin?action=create-user', {
+      method: 'POST', token: adminToken,
+      body: { username: uname, password: pwd, displayName: dname },
+    });
+    const lg = await call('/api/auth?action=login', { method: 'POST', body: { username: uname, password: pwd } });
+    const first = lg.body && lg.body.token;
+    if (!first) return { status: st.status, token: null };
+    /* 首登强制改密 → 换到可写的 token */
+    const cp = await call('/api/auth?action=change-password', {
+      method: 'POST', token: first,
+      body: { oldPassword: pwd, newPassword: pwd + 'x' },
+    });
+    return { status: st.status, token: (cp.body && cp.body.token) || null, cpStatus: cp.status };
+  };
+  const u1 = await mkUser('boarda', '张三', 'BoardA2026!');
+  const u2 = await mkUser('boardb', '李四', 'BoardB2026!');
+  t('建榜测试用户 1 成功并完成首登改密', u1.status === 200 && !!u1.token, JSON.stringify(u1));
+  t('建榜测试用户 2 成功并完成首登改密', u2.status === 200 && !!u2.token, JSON.stringify(u2));
+
+  /* 张三 320（历史+本周），李四 288（历史），另给李四本周更高分 350。
+     ⚠️ 分数取高位：前面【游戏数据上云】段已建了 gameruser01（snake_hi=128），
+        它也在同一张榜上，用 120/88 会排到它后面，断言就分不清「排序对」
+        还是「数据串了」。取 2xx/3xx 让本轮用户稳稳占据前两名。 */
+  const U1_HI = 320, U2_HI = 288, U2_WEEK = 350;
+  await call('/api/data', { method: 'PUT', token: u1.token, body: { items: { 'cls_game_snake_hi': U1_HI } } });
+  await call('/api/data', { method: 'PUT', token: u1.token, body: { items: { 'cls_game_week_snake': { week: 1, score: U1_HI, at: '2026-10-07T10:00:00Z' } } } });
+  await call('/api/data', { method: 'PUT', token: u2.token, body: { items: { 'cls_game_snake_hi': U2_HI } } });
+  await call('/api/data', { method: 'PUT', token: u2.token, body: { items: { 'cls_game_week_snake': { week: 1, score: U2_WEEK, at: '2026-10-07T11:00:00Z' } } } });
+
+  /* ---- 历史总榜：320 应在 288 前面，且都排在前两名 ---- */
+  const all = await call('/api/games?action=leaderboard&game=snake&range=all', { token: adminToken });
+  t('总榜读取成功', all.status === 200 && all.body.ok);
+  const ranksAll = (all.body.games && all.body.games.snake && all.body.games.snake.ranks) || [];
+  t('总榜至少 3 人（含前面用例的 gameruser01）', ranksAll.length >= 3, '实际 ' + ranksAll.length);
+  t('总榜第 1 名是 320 分', ranksAll[0] && ranksAll[0].score === U1_HI, JSON.stringify(ranksAll[0]));
+  t('总榜第 1 名带姓名', ranksAll[0] && ranksAll[0].name === '张三', JSON.stringify(ranksAll[0]));
+  t('总榜第 2 名是 288 分', ranksAll[1] && ranksAll[1].score === U2_HI, JSON.stringify(ranksAll[1]));
+  t('总榜第 2 名是李四', ranksAll[1] && ranksAll[1].name === '李四', JSON.stringify(ranksAll[1]));
+  t('名次连续从 1 开始', ranksAll[0].rank === 1 && ranksAll[1].rank === 2);
+  t('总榜按分数降序', ranksAll.every((r, i) => i === 0 || ranksAll[i - 1].score >= r.score));
+
+  /* ---- 周榜：350 应排第一 ---- */
+  const wk = await call('/api/games?action=leaderboard&game=snake&range=week', { token: adminToken });
+  const ranksWk = (wk.body.games && wk.body.games.snake && wk.body.games.snake.ranks) || [];
+  t('周榜读取成功', wk.status === 200 && wk.body.ok);
+  t('周榜 range 回显 week', wk.body.range === 'week');
+  t('周榜第 1 名是 350 分（本周分）', ranksWk[0] && ranksWk[0].score === U2_WEEK, JSON.stringify(ranksWk[0]));
+  t('周榜第 1 名是李四（本周反超）', ranksWk[0] && ranksWk[0].name === '李四');
+  t('周榜第 2 名是张三（320 本周）', ranksWk[1] && ranksWk[1].name === '张三' && ranksWk[1].score === U1_HI,
+    JSON.stringify(ranksWk[1]));
+  t('周榜不含没交本周分的用户（gameruser01）',
+    ranksWk.every((r) => r.name !== 'gameruser01'), JSON.stringify(ranksWk.map((r) => r.name)));
+
+  /* ---- 不泄露 userId / 其它数据 ---- */
+  t('榜单不回 userId', !('user_id' in (ranksAll[0] || {})) && !('userId' in (ranksAll[0] || {})));
+  const raw = JSON.stringify(all.body);
+  t('榜单响应不含密码字段', raw.indexOf('password') < 0);
+  t('榜单响应不含 token', raw.indexOf('token') < 0);
+
+  /* ---- 参数护栏 ---- */
+  const badGame = await call('/api/games?action=leaderboard&game=notagame', { token: adminToken });
+  t('未知 game 参数被拒（400）', badGame.status === 400, '实际 ' + badGame.status);
+  const badAct = await call('/api/games?action=nope', { token: adminToken });
+  t('未知 action 被拒（400）', badAct.status === 400, '实际 ' + badAct.status);
+  const limitCap = await call('/api/games?action=leaderboard&limit=9999', { token: adminToken });
+  t('limit 超上限被压回 100', limitCap.body.limit === 100, String(limitCap.body.limit));
+
+  /* ---- 前端接入检查 ---- */
+  const page = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('前端定义 openGameBoard', page.indexOf('function openGameBoard(') >= 0);
+  t('前端定义 boardLoad', page.indexOf('function boardLoad(') >= 0);
+  t('前端定义 boardPaint', page.indexOf('function boardPaint(') >= 0);
+  t('前端定义 boardRange', page.indexOf('function boardRange(') >= 0);
+  t('弹窗 #gameBoardMask 已加', page.indexOf('id="gameBoardMask"') >= 0);
+  t('排行榜卡片已接入娱乐天地', page.indexOf('GAME_LEADERBOARD') >= 0);
+  t('调用 /api/games 接口', page.indexOf("'/games?action=leaderboard") >= 0);
+  t('未登录时不打开榜单（先提示登录）', /function openGameBoard\(\)\{[\s\S]{0,180}isLoggedIn\(\)/.test(page));
+
+  /* ---- games/cloud.js 维护本周最高分 ---- */
+  const cl = fs.readFileSync(new URL('./games/cloud.js', import.meta.url), 'utf8');
+  t('cloud.js 定义 weekStamp()', cl.indexOf('function weekStamp()') >= 0);
+  t('addPlay 写本周最高分 cls_game_week_', cl.indexOf("'cls_game_week_'") >= 0);
+  t('跨周自动重置（比对 wk.week）', /wk\.week !== weekStamp\(\)/.test(cl));
+  t('本周分只在更高时更新', /sc > \(Number\(wk\.score\)/.test(cl));
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }

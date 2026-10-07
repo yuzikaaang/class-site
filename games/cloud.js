@@ -34,6 +34,16 @@ function whoami(){
   if(!a) return null;
   return { name: userName(), role: (a.user && a.user.role) || 'user', username: (a.user && a.user.username) || '' };
 }
+/* 本周的起点时间戳（周一 00:00，本地时区）。
+   与各游戏里 weekKey() 的口径保持一致——周榜的「周」必须同一个定义，
+   否则会出现「游戏说本周已换、榜单还按上周算」的错位。 */
+function weekStamp(){
+  var d = new Date();
+  var day = (d.getDay() + 6) % 7;      /* 周一=0 … 周日=6 */
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - day);
+  return d.getTime();
+}
 function hdrs(a){
   return { 'Content-Type':'application/json', Authorization:'Bearer ' + a.token };
 }
@@ -79,7 +89,9 @@ window.CLS_CLOUD = {
 
   /* ---- 游玩时长（每局结束调用一次）----
      云端读旧值 → 累加本次 → 写回。读改写有并发覆盖风险，
-     但这是单人单端的个人数据，可接受。 */
+     但这是单人单端的个人数据，可接受。
+     第二十七轮 ⑪：顺手维护「本周最高分」cls_game_week_<游戏>
+     （{score, at}），排行榜的周榜直接读它，后端不必做日志聚合。 */
   addPlay: function(game, ms, extra){
     if(!(ms > 0)) ms = 0;
     pull('cls_game_play_' + game, function(old){
@@ -88,11 +100,26 @@ window.CLS_CLOUD = {
       o.totalMs = (o.totalMs || 0) + Math.round(ms);
       o.lastMs  = Math.round(ms);
       o.lastAt  = new Date().toISOString();
-      if(extra && extra.score != null && (o.bestScore == null || extra.score > o.bestScore)){
-        o.bestScore = extra.score;
+      var sc = (extra && extra.score != null) ? Number(extra.score) : null;
+      if(sc != null && (o.bestScore == null || sc > o.bestScore)){
+        o.bestScore = sc;
       }
       var w = {}; w['cls_game_play_' + game] = o;
       push(w);
+
+      /* 周榜：本周最高分。周一为一周起点（与各游戏 weekKey() 口径一致）。 */
+      if(sc != null && sc > 0){
+        pull('cls_game_week_' + game, function(wold){
+          var wk = (wold && typeof wold === 'object') ? wold : {};
+          /* 跨周自动重置：存的周起点与当前周不同 → 视为新的一周 */
+          if(wk.week !== weekStamp()){ wk = { week: weekStamp(), score: 0, at: null }; }
+          if(sc > (Number(wk.score) || 0)){
+            wk.score = sc; wk.at = new Date().toISOString();
+          }
+          var w2 = {}; w2['cls_game_week_' + game] = wk;
+          push(w2);
+        });
+      }
     });
   },
 

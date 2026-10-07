@@ -1119,6 +1119,38 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* 通用兜底：任何弹窗里的 .dj-ex-tag 暗色下都翻浅橙（抽歌面板的「↺ 默认」按钮等） */
 .dark .dj-ex-tag{color:#fdba74!important}
 .dark #djSongsMask .dj-song-title.dj-ex-tag{color:#fdba74!important}
+/* ===== 游戏排行榜（第二十七轮 ⑪）=====
+   配色沿用暖橙主色；文字对比度按 §⑫ 的要求走深色，暗色下翻浅。 */
+.board-meta{display:flex;gap:8px;margin-bottom:10px}
+.board-range{flex:1;padding:8px 10px;border-radius:10px;border:1px solid #ebdccb;background:#fff;color:#57534e;font-size:.82rem;font-weight:700;cursor:pointer}
+.board-range.active{background:#af410f;border-color:#af410f;color:#fff}
+.board-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.board-tab{padding:6px 11px;border-radius:999px;border:1px solid #ebdccb;background:#fff;color:#57534e;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.board-tab.active{background:#fdba74;border-color:#fdba74;color:#7c2d12}
+.board-list{display:flex;flex-direction:column;gap:6px}
+.board-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#fdf8f3;border:1px solid #f1e4d6}
+.board-row.top{background:#fff6ec;border-color:#fbd9ac}
+.board-medal{width:26px;text-align:center;font-size:1rem;flex-shrink:0}
+.board-rank{display:inline-block;min-width:22px;text-align:center;font-size:.78rem;color:#6e635a;font-weight:700}
+.board-name{flex:1;min-width:0;font-size:.86rem;color:#2e2926;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board-score{font-size:.86rem;color:#af410f;font-weight:800;flex-shrink:0}
+.board-score i{font-style:normal;font-size:.7rem;font-weight:600;color:#6e635a}
+.board-empty{padding:22px 12px;text-align:center;font-size:.82rem;color:#6e635a;line-height:1.8}
+.board-hint{margin:12px 0 0;font-size:.72rem;color:#6e635a;line-height:1.7}
+/* 暗色适配：与站内其它弹窗同款深底浅字 */
+.dark #gameBoardMask .board-range,
+.dark #gameBoardMask .board-tab{background:#262220;color:#d6d3d1;border-color:#332d29}
+.dark #gameBoardMask .board-range.active{background:#af410f;color:#fff;border-color:#af410f}
+.dark #gameBoardMask .board-tab.active{background:#fdba74;color:#7c2d12;border-color:#fdba74}
+.dark #gameBoardMask .board-row{background:#262220;border-color:#332d29}
+.dark #gameBoardMask .board-row.top{background:#2f2723;border-color:#4a3a2c}
+.dark #gameBoardMask .board-name{color:#f3ebe3}
+.dark #gameBoardMask .board-rank,
+.dark #gameBoardMask .board-empty,
+.dark #gameBoardMask .board-hint,
+.dark #gameBoardMask .board-score i{color:#b8b1aa}
+.dark #gameBoardMask .board-score{color:#fdba74}
+
 /* 点歌券管理 · 备注分段展示（名字/时间/游戏奖励分色，长备注自动换行，不再单行截断） */
 .cp-note .cp-nm{color:#2e2926;font-weight:700}
 .cp-note .cp-tm{color:#6e635a}
@@ -2056,6 +2088,19 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   </div>
 </div>
 
+<!-- ===== 游戏排行榜（第二十七轮 ⑪）：四款领券游戏的历史总榜 / 本周榜 ===== -->
+<div class="allboard-mask" id="gameBoardMask">
+  <div class="allboard-box" style="max-width:420px">
+    <div class="allboard-head"><span>🏆 游戏排行榜</span><button onclick="closeGameBoard()">关闭</button></div>
+    <div style="padding:12px 16px 16px;text-align:left;flex:1;min-height:0;overflow-y:auto">
+      <div id="boardMeta" class="board-meta"></div>
+      <div id="boardTabs" class="board-tabs"></div>
+      <div id="boardList" class="board-list"></div>
+      <p class="board-hint">榜单只统计已登录同学的账号成绩；每款游戏每周有一次领券机会，分数越高越靠前。</p>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 点歌券管理弹窗（站主：添加 / 查看 / 本地禁用 / 本地隐藏） ===== -->
 <div class="allboard-mask" id="couponAdminMask">
   <div class="allboard-box" style="max-width:480px">
@@ -2562,7 +2607,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.3.4';
+var SITE_VERSION = '2.3.5';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -7516,6 +7561,12 @@ function closeSidebar(){ var s=document.getElementById('sidebar'); var m=documen
 /* ---- 隐藏娱乐天地（彩蛋：点击班徽5次 → 暗号 → 进入） ---- */
 var HIDDEN_SALT = 'cls2505-hide-salt';
 var HIDDEN_PASS_HASH = '0db4949b1a8623cc73323bb6755a91cc9e481dc55c485718c3701c0e7b4ace65';
+var GAME_LEADERBOARD = {
+  icon: "🏆",
+  title: "游戏排行榜",
+  desc: "四款领券游戏的历史总榜与本周榜",
+  action: "openGameBoard"
+};
 var HIDDEN_FUN_LINKS = [
   { icon: "🗂️", title: "云智安（网页应用集合站）", desc: "集合多种网页应用，登录后即可使用，账号密码见下方", url: "https://yqzan.cn/", login: { user: "xsyzclass5", pass: "xsyz985211" } },
   { icon: "🕹️", title: "小霸王游戏厅", desc: "在线复古红白机游戏合集，找回童年", url: "https://yikm.net/" },
@@ -7712,7 +7763,17 @@ function submitHiddenGate(){
 function renderHiddenView(){
   var grid = document.getElementById('hiddenViewGrid');
   if(!grid) return;
-  grid.innerHTML = uiGames().map(function(l){   /* 【自定义设置】小游戏顺序 */
+  /* 排行榜固定排在最前：它是「看结果」的入口，比「去玩」更需要被一眼看到。
+     不写进 HIDDEN_FUN_LINKS 是因为那份列表支持拖拽自定义顺序，
+     排行榜不该被同学拖到列表末尾找不到。 */
+  var boardCard = (function(){
+    var l = GAME_LEADERBOARD;
+    return '<div class="hidden-fun-card" onclick="' + l.action + '()">' +
+      '<span class="hidden-fun-icon">' + esc(l.icon) + '</span>' +
+      '<span style="flex:1;min-width:0"><span class="hidden-fun-title">' + esc(l.title) + '</span><br><span class="hidden-fun-desc">' + esc(l.desc) + '</span></span>' +
+    '</div>';
+  })();
+  grid.innerHTML = boardCard + uiGames().map(function(l){   /* 【自定义设置】小游戏顺序 */
     var loginHtml = l.login
       ? '<div class="hidden-fun-login">' +
         '<span>账号 <b style="color:#af410f">' + esc(l.login.user) + '</b></span>' +
@@ -7723,6 +7784,95 @@ function renderHiddenView(){
     return '<div class="hidden-fun-card" onclick="' + (l.action ? l.action + '()' : "openLink('" + jsq(l.url) + "',true)") + '">' +
       '<span class="hidden-fun-icon">' + esc(l.icon) + '</span>' +
       '<span style="flex:1;min-width:0"><span class="hidden-fun-title">' + esc(l.title) + '</span><br><span class="hidden-fun-desc">' + esc(l.desc) + '</span>' + loginHtml + '</span>' +
+    '</div>';
+  }).join('');
+}
+
+/* ============================================================
+   游戏排行榜（第二十七轮 ⑪）
+   ------------------------------------------------------------
+   数据来自 /api/games?action=leaderboard，后端跨用户聚合
+   cls_game_<key>_hi（历史最高）与 cls_game_week_<game>（本周最高）。
+   必须登录才能看（榜上有姓名，不能匿名拉走）。
+   ============================================================ */
+var BOARD_STATE = { game: 'snake', range: 'all', data: null, loading: false, error: null };
+
+function openGameBoard(){
+  if(!isLoggedIn()){
+    if(typeof uiMsg === 'function') uiMsg('看排行榜需要先登录班级账号', '#af410f');
+    return;
+  }
+  var m = document.getElementById('gameBoardMask');
+  if(!m) return;
+  m.classList.add('show');
+  boardPaint();
+  boardLoad();
+}
+function closeGameBoard(){ var m=document.getElementById('gameBoardMask'); if(m) m.classList.remove('show'); }
+function boardTab(game){ BOARD_STATE.game = game; boardPaint(); SFX.click && SFX.click(); }
+function boardRange(range){ BOARD_STATE.range = range; boardPaint(); boardLoad(); SFX.click && SFX.click(); }
+
+/* 只在首次打开 / 切榜单时真正拉数据，切游戏标签复用已拉到的数据 */
+function boardLoad(){
+  BOARD_STATE.loading = true; BOARD_STATE.error = null;
+  boardPaint();
+  api('/games?action=leaderboard&limit=50')
+    .then(function(j){
+      if(!j || !j.ok) throw new Error((j && j.error) || '接口返回异常');
+      BOARD_STATE.data = j.games || {};
+      BOARD_STATE.loading = false;
+      boardPaint();
+    })
+    .catch(function(e){
+      BOARD_STATE.loading = false;
+      BOARD_STATE.error = String(e && e.message || e);
+      boardPaint();
+    });
+}
+
+function boardPaint(){
+  var tabs = document.getElementById('boardTabs');
+  var list = document.getElementById('boardList');
+  var meta = document.getElementById('boardMeta');
+  if(!tabs || !list) return;
+
+  var GAMES = [
+    { id:'snake',  name:'贪吃蛇',     icon:'🐍', unit:'豆' },
+    { id:'bird',   name:'像素飞鸟',   icon:'🐦', unit:'管' },
+    { id:'tetris', name:'俄罗斯方块', icon:'🧱', unit:'分' },
+    { id:'doodle', name:'涂鸦跳跃',   icon:'🦘', unit:'高度' },
+  ];
+  tabs.innerHTML = GAMES.map(function(g){
+    return '<button class="board-tab' + (BOARD_STATE.game === g.id ? ' active' : '') +
+      '" onclick="boardTab(\'' + g.id + '\')">' + g.icon + ' ' + esc(g.name) + '</button>';
+  }).join('');
+
+  if(meta){
+    meta.innerHTML =
+      '<button class="board-range' + (BOARD_STATE.range === 'all' ? ' active' : '') + '" onclick="boardRange(\'all\')">历史总榜</button>' +
+      '<button class="board-range' + (BOARD_STATE.range === 'week' ? ' active' : '') + '" onclick="boardRange(\'week\')">本周榜</button>';
+  }
+
+  if(BOARD_STATE.loading){ list.innerHTML = '<div class="board-empty">正在读取排行榜…</div>'; return; }
+  if(BOARD_STATE.error){
+    list.innerHTML = '<div class="board-empty">读取失败：' + esc(BOARD_STATE.error) +
+      '<br><button class="btn btn-secondary" style="margin-top:10px" onclick="boardLoad()">重试</button></div>';
+    return;
+  }
+  var g = BOARD_STATE.data && BOARD_STATE.data[BOARD_STATE.game];
+  if(!g || !g.ranks || !g.ranks.length){
+    list.innerHTML = '<div class="board-empty">' +
+      (BOARD_STATE.range === 'week' ? '本周还没有人上榜，快去做第一个！' : '还没有人上榜，快去玩一局！') +
+      '</div>';
+    return;
+  }
+  var medal = ['🥇','🥈','🥉'];
+  list.innerHTML = g.ranks.map(function(r){
+    var m = r.rank <= 3 ? medal[r.rank - 1] : ('<span class="board-rank">' + r.rank + '</span>');
+    return '<div class="board-row' + (r.rank <= 3 ? ' top' : '') + '">' +
+      '<span class="board-medal">' + m + '</span>' +
+      '<span class="board-name">' + esc(r.name) + '</span>' +
+      '<span class="board-score">' + esc(String(r.score)) + ' <i>' + esc(g.meta ? g.meta.unit : '') + '</i></span>' +
     '</div>';
   }).join('');
 }
