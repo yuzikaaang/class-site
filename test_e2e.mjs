@@ -2519,6 +2519,32 @@ console.log('\n【32】第二十八轮·抽歌功能迁移后台（前台删除 
   t('版本类型含 fix / feature / improve', /feature:/.test(adm) && /fix:/.test(adm) && /improve:/.test(adm));
   t('支持标记重点版本', /highlight/.test(adm));
   t('前台不展示版本记录（值为 null）', /release_notes\s*:\s*null/.test(page));
+
+  /* ---- 后台：通用弹窗面板（第二十八轮补做） ---- */
+  /* 前端引擎与字段（第二十七轮已有，这里只验证后台面板与它对齐） */
+  t('前端仍有弹窗引擎 popGetList()', /function popGetList\(\)/.test(page));
+  t('前端引擎字段含 scope/source/dismiss/bubble',
+    /scope:\s*String\(p\.scope/.test(page) && /dismiss:/.test(page) && /bubble:/.test(page));
+
+  t('后台 PAGES 注册了 popups 面板', /id:'popups'/.test(adm));
+  t('后台 go() 映射到 renderPopups', /popups:\s*renderPopups/.test(adm));
+  t('后台定义 renderPopups()', /function renderPopups\(\)/.test(adm));
+  t('后台定义 paintPopups()', /function paintPopups\(\)/.test(adm));
+  t('后台定义 popEdit()', /function popEdit\(/.test(adm));
+  t('后台定义 popSave()', /function popSave\(/.test(adm));
+  t('后台定义 popDelete()', /function popDelete\(/.test(adm));
+  t('后台定义 popMove()', /function popMove\(/.test(adm));
+  t('后台定义 popPreview()', /function popPreview\(/.test(adm));
+  t('后台定义 popNorm()', /function popNorm\(/.test(adm));
+  t('弹窗写入云端 popups 键', /items:\s*\{\s*popups:/.test(adm));
+  /* 字段必须与前端引擎完全对齐，缺一个前端就读不到 */
+  ['id','scope','source','title','body','video','image','linkText','linkUrl','startAt','endAt','dismiss','bubble']
+    .forEach((f) => { t('弹窗字段含 ' + f, new RegExp('\\b' + f + ':').test(adm)); });
+  t('提供进站/板块两类时机', adm.indexOf("id: 'boot'") >= 0 && adm.indexOf("'cat:2'") >= 0);
+  t('提供三种内容来源', /'custom'/.test(adm) && /'announcements'/.test(adm) && /'homework_notice'/.test(adm));
+  t('提供三种关闭策略', /'daily'/.test(adm) && /'once'/.test(adm) && /'always'/.test(adm));
+  t('支持自定义 cat:N 时机', /__custom__/.test(adm));
+  t('同 ID 冲突会先确认（覆盖而非新增）', /已被另一条弹窗占用/.test(adm) && /list\[target\]\s*=\s*item/.test(adm));
 }
 
 console.log('\n【33】第二十八轮·云端字段端到端写入读取');

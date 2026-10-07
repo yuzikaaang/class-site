@@ -823,7 +823,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.3.6';
+var SITE_VERSION = '2.3.7';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -1152,6 +1152,7 @@ var PAGES = [
   { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
   { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
   { id:'releases',      label:'版本更新', icon:'clock',     group:'内容',  title:'版本更新记录' },
+  { id:'popups',        label:'通用弹窗', icon:'bell',      group:'内容',  title:'通用弹窗（开屏弹 / 板块弹）' },
   { id:'quotes',        label:'每日一言', icon:'quote',     group:'内容',  title:'每日一言' },
   { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
@@ -1209,6 +1210,7 @@ function go(page){
     song:          renderSong,
     dj:            renderDj,
     releases:      renderReleases,
+    popups:        renderPopups,
     quotes:        renderQuotes,
     dates:         renderDates,
     games:         renderGames,
@@ -7399,6 +7401,397 @@ function relToday(){
   var d = new Date();
   function p(n){ return (n < 10 ? '0' : '') + n; }
   return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+}
+
+/* ============================================================================
+ * ⑬ 面板：通用弹窗（第二十八轮补做）
+ * ----------------------------------------------------------------------------
+ * 【背景】
+ *   第二十七轮在前端 index.html 做了「通用弹窗引擎」（popGetList / showPop /
+ *   popAutoPop 等），数据来源是 SITE_DATA.popups。但当时只做了前端引擎与
+ *   云端字段（/api/content 的 popups 键），**后台没有可视化编辑入口**，
+ *   站长想加一个弹窗只能去改 index.html 源码。
+ *   本面板补上后台编辑入口，数据写入云端 popups 键，前端自动生效。
+ *
+ * 【字段（必须与 index.html 的 popGetList 完全对齐，多一个少一个都不行）】
+ *   id        —— 唯一标识。改 id 会让「已关闭过」的同学重新收到弹窗
+ *   scope     —— 'boot' 进站弹 / 'cat:N' 进板块 N 弹
+ *   source    —— 'custom' 自带内容 / 'announcements' 取最新公告 / 'homework_notice' 取作业通知
+ *   title     —— source='custom' 时的标题
+ *   body      —— 正文，\n 换行
+ *   video     —— B站分享链接或 mp4 直链
+ *   image     —— 图片直链
+ *   linkText / linkUrl —— 底部按钮（留空不显示）
+ *   startAt / endAt     —— 时间窗（窗内才弹）
+ *   dismiss   —— daily 当天不再弹 / once 只弹一次 / always 每次都弹
+ *   bubble    —— 关掉后右下角留悬浮球
+ * ========================================================================= */
+
+var POP_STATE = { list: [], editing: null };
+
+/* 板块列表（与 index.html 的 SITE_DATA.categories 保持一致）
+   做成内置是为了不依赖前端文件；将来加板块可在此追加，
+   或者用「自定义」输入 cat:N 兜底。 */
+var POP_CATS = [
+  { id: 'boot',  name: '进站时（开屏弹）' },
+  { id: 'cat:1', name: '板块 · 常用服务' },
+  { id: 'cat:2', name: '板块 · 大屏服务' },
+  { id: 'cat:5', name: '板块 · 学习资料' },
+  { id: 'cat:3', name: '板块 · 成绩查询' },
+  { id: 'cat:7', name: '板块 · 班级事务' },
+  { id: 'cat:8', name: '板块 · 其他工具' },
+  { id: 'cat:9', name: '板块 · 安装为应用' },
+];
+var POP_SOURCES = [
+  { id: 'custom',          name: '自定义内容（自己写标题/正文）' },
+  { id: 'announcements',   name: '最新班级公告（自动取置顶或最新一条）' },
+  { id: 'homework_notice', name: '作业通知（自动取当前作业通知）' },
+];
+var POP_DISMISS = [
+  { id: 'daily',  name: '每天弹一次（次日恢复，默认）' },
+  { id: 'once',   name: '只弹一次（此后永不自动弹）' },
+  { id: 'always', name: '每次都弹' },
+];
+
+/* ---- 读取 / 写入云端 ---- */
+function popNorm(v){
+  if(!Array.isArray(v)) return [];
+  var out = [];
+  v.forEach(function(p){
+    if(!p || typeof p !== 'object' || !p.id) return;
+    out.push({
+      id:        String(p.id),
+      scope:     String(p.scope || 'boot'),
+      source:    String(p.source || 'custom'),
+      title:     p.title || '',
+      body:      p.body || '',
+      video:     p.video || '',
+      image:     p.image || '',
+      linkText:  p.linkText || '',
+      linkUrl:   p.linkUrl || '',
+      startAt:   p.startAt || '',
+      endAt:     p.endAt || '',
+      dismiss:   (p.dismiss === 'once' || p.dismiss === 'always') ? p.dismiss : 'daily',
+      bubble:    (p.bubble === false) ? false : true,
+    });
+  });
+  return out;
+}
+function popLoad(){
+  return api('/content').then(function(j){
+    var it = (j && j.items) || {};
+    POP_STATE.list = popNorm(it.popups);
+    return j;
+  });
+}
+function popWrite(list, okMsg){
+  POP_STATE.list = list || [];
+  return api('/content', { method:'PUT', body:{ items:{ popups: POP_STATE.list } } })
+    .then(function(){ if(okMsg) toast(okMsg, 'ok'); return true; })
+    .catch(function(e){ toast('保存失败：' + e.message, 'err', 4000); throw e; });
+}
+
+function renderPopups(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">通用弹窗</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '开屏弹 / 板块弹，支持公告与作业通知自动取数</p></div>'
+    +   '<button class="btn btn-sm btn-secondary" id="popRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +   '<button class="btn btn-sm" id="popAdd">' + svg('plus',14) + ' 新增弹窗</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '这里的每一条都会成为站内弹窗。数据存在云端，配了就生效，不配则前台永不弹（与以前行为一致）。'
+    +   '关闭策略建议用默认的「每天弹一次」。'
+    + '</div>'
+    + '<section class="panel"><div id="popBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('popRefresh').onclick = loadPopups;
+  $('popAdd').onclick = function(){ popEdit(null); };
+  loadPopups();
+}
+
+function loadPopups(){
+  $('popBody').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  popLoad().then(function(){ paintPopups(); })
+    .catch(function(e){ $('popBody').innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>'; });
+}
+
+function popScopeName(scope){
+  for(var i = 0; i < POP_CATS.length; i++) if(POP_CATS[i].id === scope) return POP_CATS[i].name;
+  var m = /^cat:(\d+)$/.exec(scope);
+  if(m) return '板块 · #' + m[1];
+  return scope || '—';
+}
+function popSourceName(src){
+  for(var i = 0; i < POP_SOURCES.length; i++) if(POP_SOURCES[i].id === src) return POP_SOURCES[i].name;
+  return src || '—';
+}
+function popDismissName(d){
+  for(var i = 0; i < POP_DISMISS.length; i++) if(POP_DISMISS[i].id === d) return POP_DISMISS[i].name;
+  return d || '—';
+}
+function popWindowText(p){
+  if(!p.startAt && !p.endAt) return '常驻';
+  var a = p.startAt ? p.startAt.replace('T', ' ') : '不限';
+  var b = p.endAt ? p.endAt.replace('T', ' ') : '不限';
+  return a + ' ~ ' + b;
+}
+
+function paintPopups(){
+  var list = POP_STATE.list || [];
+  if(!list.length){
+    $('popBody').innerHTML = '<div class="empty">'
+      + '<div style="font-size:2rem;margin-bottom:10px">💬</div>'
+      + '还没有任何弹窗。<br>点右上角「新增弹窗」加一条，比如开屏弹一条班级公告。'
+      + '</div>';
+    return;
+  }
+  $('popBody').innerHTML = list.map(function(p, i){
+    var badge = p.scope === 'boot' ? 'badge-green' : 'badge';
+    var media = [];
+    if(p.video) media.push('视频');
+    if(p.image) media.push('图片');
+    if(p.linkUrl) media.push('按钮');
+    return '<div class="panel pop-card" style="margin-bottom:12px">'
+      + '<div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">'
+      +   '<div style="flex:1;min-width:200px">'
+      +     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">'
+      +       '<span class="badge ' + badge + '">' + esc(popScopeName(p.scope)) + '</span>'
+      +       '<b style="font-size:.9rem">' + esc(p.title || '(无标题)') + '</b>'
+      +       '<code class="mono muted" style="font-size:.72rem">' + esc(p.id) + '</code>'
+      +     '</div>'
+      +     '<div class="muted" style="font-size:.78rem;line-height:1.7">'
+      +       '来源：' + esc(popSourceName(p.source))
+      +       ' · 关闭：' + esc(popDismissName(p.dismiss))
+      +       ' · 时间窗：' + esc(popWindowText(p))
+      +       (media.length ? ' · 含 ' + media.join('/') : '')
+      +       (p.bubble === false ? ' · 不留悬浮球' : ' · 留悬浮球')
+      +     '</div>'
+      +     (p.body ? '<div style="margin-top:8px;font-size:.8rem;white-space:pre-wrap;opacity:.85">'
+      +       esc(p.body.length > 120 ? p.body.slice(0,120) + '…' : p.body) + '</div>' : '')
+      +   '</div>'
+      +   '<div style="display:flex;gap:6px;flex-shrink:0">'
+      +     '<button class="btn btn-sm btn-ghost" data-pop-up="' + i + '" title="上移">↑</button>'
+      +     '<button class="btn btn-sm btn-ghost" data-pop-down="' + i + '" title="下移">↓</button>'
+      +     '<button class="btn btn-sm btn-secondary" data-pop-edit="' + i + '">编辑</button>'
+      +     '<button class="btn btn-sm btn-secondary" data-pop-preview="' + i + '">预览</button>'
+      +     '<button class="btn btn-sm btn-ghost" data-pop-del="' + i + '" style="color:var(--danger)">删除</button>'
+      +   '</div>'
+      + '</div></div>';
+  }).join('');
+
+  /* 事件用循环绑定（不用 inline onclick，避免 IIFE 内函数外露） */
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-edit]'), function(b){
+    b.onclick = function(){ popEdit(+b.dataset.popEdit); };
+  });
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-preview]'), function(b){
+    b.onclick = function(){ popPreview(+b.dataset.popPreview); };
+  });
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-del]'), function(b){
+    b.onclick = function(){ popDelete(+b.dataset.popDel); };
+  });
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-up]'), function(b){
+    b.onclick = function(){ popMove(+b.dataset.popUp, -1); };
+  });
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-down]'), function(b){
+    b.onclick = function(){ popMove(+b.dataset.popDown, 1); };
+  });
+}
+
+function popMove(i, dir){
+  var list = POP_STATE.list.slice();
+  var j = i + dir;
+  if(j < 0 || j >= list.length) return;
+  var t = list[i]; list[i] = list[j]; list[j] = t;
+  popWrite(list, '顺序已更新').then(paintPopups).catch(function(){});
+}
+
+function popDelete(i){
+  var p = POP_STATE.list[i];
+  if(!p) return;
+  confirmBox({
+    text: '删除这条弹窗？',
+    detail: '「' + (p.title || p.id) + '」删除后前台不再弹。已关闭过它的同学不受影响。',
+    danger: true,
+    okText: '删除',
+  }).then(function(ok){
+    if(!ok) return;
+    var list = POP_STATE.list.slice();
+    list.splice(i, 1);
+    popWrite(list, '已删除').then(paintPopups).catch(function(){});
+  });
+}
+
+/* 新增 / 编辑：字段较多，用一个较宽的弹窗表单 */
+function popEdit(idx){
+  var editing = (typeof idx === 'number' && idx >= 0);
+  var p = editing
+    ? JSON.parse(JSON.stringify(POP_STATE.list[idx]))
+    : { id: 'pop-' + Date.now().toString(36), scope:'boot', source:'custom', title:'', body:'',
+        video:'', image:'', linkText:'', linkUrl:'', startAt:'', endAt:'', dismiss:'daily', bubble:true };
+
+  function opts(arr, cur){
+    return arr.map(function(o){
+      return '<option value="' + attr(o.id) + '"' + (o.id === cur ? ' selected' : '') + '>' + esc(o.name) + '</option>';
+    }).join('');
+  }
+  var scopeOpts = POP_CATS.map(function(c){
+    return '<option value="' + attr(c.id) + '"' + (c.id === p.scope ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+  }).join('');
+  /* 若 scope 是自定义的 cat:N 且不在内置列表里，补一个选项，避免被吞掉 */
+  var known = POP_CATS.some(function(c){ return c.id === p.scope; });
+  if(!known) scopeOpts += '<option value="' + attr(p.scope) + '" selected>自定义 · ' + esc(p.scope) + '</option>';
+
+  var html =
+    '<div class="field"><label>弹窗 ID</label>'
+    + '<input id="pfId" class="gate-input" value="' + attr(p.id) + '" placeholder="唯一标识，如 boot-hw">'
+    + '<p class="hint">改 ID 会让之前关过它的同学重新收到弹窗；新建建议保持不变。</p></div>'
+
+    + '<div class="field"><label>出现时机</label>'
+    + '<select id="pfScope" class="gate-input">' + scopeOpts
+    + '<option value="__custom__">自定义 cat:N（手填）</option></select>'
+    + '<input id="pfScopeCustom" class="gate-input" style="margin-top:6px;display:none" value="' + attr(p.scope) + '" placeholder="如 cat:12"></div>'
+
+    + '<div class="field"><label>内容来源</label>'
+    + '<select id="pfSource" class="gate-input">' + opts(POP_SOURCES, p.source) + '</select>'
+    + '<p class="hint">选「最新公告 / 作业通知」时，下面标题正文可留空，会自动取站内数据。</p></div>'
+
+    + '<div class="field"><label>标题</label>'
+    + '<input id="pfTitle" class="gate-input" value="' + attr(p.title) + '" placeholder="留空则用默认标题"></div>'
+
+    + '<div class="field"><label>正文</label>'
+    + '<textarea id="pfBody" class="gate-input" rows="4" placeholder="支持换行（直接回车即可）">' + esc(p.body) + '</textarea></div>'
+
+    + '<div class="field"><label>视频链接（可选）</label>'
+    + '<input id="pfVideo" class="gate-input" value="' + attr(p.video) + '" placeholder="B站分享链接 或 mp4 直链"></div>'
+
+    + '<div class="field"><label>图片链接（可选）</label>'
+    + '<input id="pfImage" class="gate-input" value="' + attr(p.image) + '" placeholder="图片直链"></div>'
+
+    + '<div class="field" style="display:flex;gap:10px;flex-wrap:wrap">'
+    +   '<div style="flex:1;min-width:160px"><label>按钮文字（可选）</label>'
+    +     '<input id="pfLinkText" class="gate-input" value="' + attr(p.linkText) + '" placeholder="如 查看详情"></div>'
+    +   '<div style="flex:2;min-width:200px"><label>按钮链接（可选）</label>'
+    +     '<input id="pfLinkUrl" class="gate-input" value="' + attr(p.linkUrl) + '" placeholder="https://..."></div>'
+    + '</div>'
+
+    + '<div class="field" style="display:flex;gap:10px;flex-wrap:wrap">'
+    +   '<div style="flex:1;min-width:160px"><label>开始时间（可选）</label>'
+    +     '<input id="pfStart" class="gate-input" value="' + attr(p.startAt) + '" placeholder="2026-10-13T08:00:00"></div>'
+    +   '<div style="flex:1;min-width:160px"><label>结束时间（可选）</label>'
+    +     '<input id="pfEnd" class="gate-input" value="' + attr(p.endAt) + '" placeholder="2026-10-20T18:00:00"></div>'
+    + '</div>'
+
+    + '<div class="field"><label>关闭后行为</label>'
+    + '<select id="pfDismiss" class="gate-input">' + opts(POP_DISMISS, p.dismiss) + '</select></div>'
+
+    + '<div class="field"><label>关闭后留悬浮球</label>'
+    + '<label style="display:flex;align-items:center;gap:8px;font-weight:400">'
+    +   '<input type="checkbox" id="pfBubble"' + (p.bubble !== false ? ' checked' : '') + '>'
+    +   '勾选后，同学关掉弹窗仍能在右下角点开重看</label></div>';
+
+  openModal({
+    title: editing ? '编辑弹窗' : '新增弹窗',
+    sub: editing ? ('正在编辑 ' + p.id) : '填好后保存即写入云端',
+    body: html,
+    wide: true,
+    foot: '<button class="btn btn-secondary" id="pfCancel">取消</button>'
+        + '<button class="btn" id="pfSave">保存</button>',
+    onMount: function(){
+      var sc = $('pfScope'), scc = $('pfScopeCustom');
+      /* 已选「自定义」时把输入框亮出来 */
+      if(sc.value === '__custom__') scc.style.display = '';
+      sc.onchange = function(){
+        scc.style.display = (sc.value === '__custom__') ? '' : 'none';
+      };
+      $('pfCancel').onclick = closeModal;
+      $('pfSave').onclick = function(){ popSave(idx, editing); };
+    },
+  });
+}
+
+function popSave(idx, editing){
+  var scopeSel = $('pfScope').value;
+  var scope = (scopeSel === '__custom__') ? ($('pfScopeCustom').value || '').trim() : scopeSel;
+  var id = ($('pfId').value || '').trim();
+  if(!id){ toast('弹窗 ID 不能为空', 'err'); return; }
+  if(!scope){ toast('请选择或填写出现时机', 'err'); return; }
+
+  var item = {
+    id:        id,
+    scope:     scope,
+    source:    $('pfSource').value,
+    title:     ($('pfTitle').value || '').trim(),
+    body:      $('pfBody').value || '',
+    video:     ($('pfVideo').value || '').trim(),
+    image:     ($('pfImage').value || '').trim(),
+    linkText:  ($('pfLinkText').value || '').trim(),
+    linkUrl:   ($('pfLinkUrl').value || '').trim(),
+    startAt:   ($('pfStart').value || '').trim(),
+    endAt:     ($('pfEnd').value || '').trim(),
+    dismiss:   $('pfDismiss').value,
+    bubble:    $('pfBubble').checked,
+  };
+
+  var list = POP_STATE.list.slice();
+
+  /* 同 ID 冲突检查（新建撞已有，或编辑时改成别人的 ID） */
+  var clash = -1;
+  list.forEach(function(r, i){ if(r.id === id && (!editing || i !== idx)) clash = i; });
+  var doWrite = function(target){
+    if(target >= 0){ list[target] = item; }        /* 覆盖指定那条（冲突确认后） */
+    else if(editing){ list[idx] = item; }          /* 原地编辑 */
+    else { list.push(item); }                      /* 新增 */
+    popWrite(list, editing ? '已保存' : '已新增').then(function(){
+      closeModal();
+      paintPopups();
+    }).catch(function(){});
+  };
+  if(clash >= 0){
+    confirmBox({
+      text: 'ID 「' + id + '」已被另一条弹窗占用',
+      detail: '继续保存会把它覆盖掉（不会新增一条）。要覆盖吗？',
+      warn: true,
+      okText: '覆盖',
+    }).then(function(ok){ if(ok) doWrite(clash); });
+    return;
+  }
+  doWrite(editing ? idx : -1);
+}
+
+/* 预览：用后台自己的弹窗容器还原前台样子（简化版，只展示能看见的部分） */
+function popPreview(i){
+  var p = POP_STATE.list[i];
+  if(!p) return;
+  var srcNote = '';
+  if(p.source !== 'custom'){
+    srcNote = '<div class="alert warn" style="margin:0 0 12px">'
+      + '这条的内容取自「' + esc(popSourceName(p.source)) + '」，实际显示内容以站内当时的数据为准，'
+      + '下面只是占位示意。</div>';
+    if(p.source === 'announcements') srcNote += '<p style="opacity:.8">（此处会显示最新公告正文）</p>';
+    if(p.source === 'homework_notice') srcNote += '<p style="opacity:.8">（此处会显示当前作业通知正文）</p>';
+  } else {
+    srcNote = '<p style="white-space:pre-wrap;margin:0 0 12px">' + (p.body ? esc(p.body) : '<span class="muted">（无正文）</span>') + '</p>';
+  }
+  var media = '';
+  if(p.video) media += '<p class="muted" style="font-size:.8rem">🎬 视频：<code class="mono">' + esc(p.video) + '</code></p>';
+  if(p.image) media += '<img src="' + attr(p.image) + '" style="max-width:100%;border-radius:8px;margin:8px 0" alt="预览图">';
+  var btn = p.linkUrl
+    ? '<div style="margin-top:12px"><span class="btn btn-sm">' + esc(p.linkText || '查看详情') + '</span></div>'
+    : '';
+
+  openModal({
+    title: p.title || '(无标题)',
+    sub: popScopeName(p.scope) + ' · ' + popDismissName(p.dismiss) + ' · ' + popWindowText(p),
+    body: srcNote + media + btn,
+    foot: '<button class="btn btn-secondary" id="pvClose">关闭预览</button>'
+        + '<button class="btn" id="pvEdit">去编辑</button>',
+    onMount: function(){
+      $('pvClose').onclick = closeModal;
+      $('pvEdit').onclick = function(){ closeModal(); popEdit(i); };
+    },
+  });
 }
 
 })();
