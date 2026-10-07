@@ -1895,7 +1895,11 @@ console.log('\n【20】游戏数据上云 + 后台面板（2026-10-07 新增）'
     const s = fs.readFileSync(new URL('./games/' + f + '.html', import.meta.url), 'utf-8');
     t('games/' + f + '.html 引入了 cloud.js', s.indexOf('src="cloud.js"') >= 0);
     t('games/' + f + '.html 有 findClaimP（云端优先查重）', s.indexOf('function findClaimP') >= 0);
-    t('games/' + f + '.html 发券前检查登录', s.indexOf('CLS_CLOUD.auth()') >= 0);
+    /* 第二十七轮 ⑩：领券身份从「手填姓名」改成「账号身份」，
+       登录检查也随之从 CLS_CLOUD.auth() 升级为 whoami() —— 后者
+       同时给出姓名，既是登录凭据也是署名来源。 */
+    t('games/' + f + '.html 发券前检查登录并取账号身份',
+      s.indexOf('CLS_CLOUD.whoami()') >= 0 || s.indexOf('CLS_CLOUD.auth()') >= 0);
     t('games/' + f + '.html 破纪录上云', s.indexOf('pushHi(') >= 0);
     t('games/' + f + '.html 游玩时长上云', s.indexOf('addPlay(') >= 0);
     t('games/' + f + '.html 券台账上云', s.indexOf('pushLedger(') >= 0);
@@ -2271,6 +2275,47 @@ console.log('\n【29】第二十七轮·自动云同步（1 分钟双向）');
   t('回归：syncPull 仍存在', idxHtml.indexOf('function syncPull(') >= 0);
   t('回归：syncNow 仍存在', idxHtml.indexOf('function syncNow(') >= 0);
   t('回归：syncPush 仍在（个人数据同步）', idxHtml.indexOf('function syncPush(') >= 0);
+}
+
+console.log('\n【30】第二十七轮·点歌券改用账号身份（⑩）');
+{
+  const GAMES = ['snake', 'bird', 'tetris', 'doodle'];
+  const cloudJs = fs.readFileSync(new URL('./games/cloud.js', import.meta.url), 'utf8');
+
+  /* ---- cloud.js 新增身份接口 ---- */
+  t('cloud.js 定义 userName()', cloudJs.indexOf('function userName()') >= 0);
+  t('cloud.js 定义 whoami()', cloudJs.indexOf('function whoami()') >= 0);
+  t('导出了 userName', /userName:\s*userName/.test(cloudJs));
+  t('导出了 whoami', /whoami:\s*whoami/.test(cloudJs));
+  t('userName 优先 displayName', /displayName\s*\|\|\s*u\.username/.test(cloudJs));
+
+  /* ---- 四款游戏逐一检查 ---- */
+  for (const g of GAMES) {
+    const s = fs.readFileSync(new URL('./games/' + g + '.html', import.meta.url), 'utf8');
+    t(`[${g}] 领券弹窗用 CLS_CLOUD.whoami()`, s.indexOf('CLS_CLOUD.whoami()') >= 0);
+    t(`[${g}] 输入框已改为只读`, /id="nmInput"[^>]*readonly/.test(s));
+    t(`[${g}] 移除了手动选名事件（onfocus/oninput nmFilter）`, !/onfocus="nmFilter/.test(s) && !/oninput="nmFilter/.test(s));
+    t(`[${g}] 提示语含「账号身份」`, /账号身份/.test(s));
+    t(`[${g}] 未登录时提示「去主站登录」`, /去主站登录/.test(s));
+    t(`[${g}] 不再从名单校验姓名（去掉 classList().indexOf(name)）`,
+      s.indexOf('classList().indexOf(name)') < 0);
+  }
+
+  /* ---- doodle 上报 bug 修复 ---- */
+  const doodle = fs.readFileSync(new URL('./games/doodle.html', import.meta.url), 'utf8');
+  t('doodle 定义 reportPlay()', doodle.indexOf('function reportPlay()') >= 0);
+  t('doodle 用 __playReported 防重复上报', /__playReported/.test(doodle));
+  t('doodle 掉落分支调用 reportPlay', /playing=false;snd\.fall\(\);[\s\S]{0,120}reportPlay\(\)/.test(doodle));
+  t('doodle 页面隐藏时兜底上报', /visibilitychange[\s\S]{0,140}reportPlay/.test(doodle));
+  t('doodle pagehide 兜底上报', /addEventListener\('pagehide',\s*reportPlay\)/.test(doodle));
+  t('doodle reset 重置上报标记', /__playReported\s*=\s*false/.test(doodle));
+
+  /* ---- 回归：四款游戏仍保留券台账逻辑 ---- */
+  for (const g of GAMES) {
+    const s = fs.readFileSync(new URL('./games/' + g + '.html', import.meta.url), 'utf8');
+    t(`[${g}] 回归：仍用 ledgerHas 判重`, s.indexOf('ledgerHas(') >= 0);
+    t(`[${g}] 回归：仍推送云端台账`, s.indexOf('pushLedger(') >= 0);
+  }
 }
 
 console.log('\n' + '='.repeat(52));

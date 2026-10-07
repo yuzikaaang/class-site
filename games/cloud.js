@@ -19,6 +19,21 @@ function auth(){
     return (o && o.token) ? o : null;
   }catch(e){ return null; }
 }
+/* 当前登录者的姓名（用于点歌券台账、排行榜署名）。
+   优先级：displayName（后台导名单时填的姓名）> username（用户名本身就是姓名）。
+   两者都没有 → 空串，调用方据此判断「还没登录 / 没有可用身份」。 */
+function userName(){
+  var a = auth();
+  if(!a || !a.user) return '';
+  var u = a.user;
+  return String(u.displayName || u.username || '').trim();
+}
+/* 统一取身份信息，便于游戏端一次拿全 */
+function whoami(){
+  var a = auth();
+  if(!a) return null;
+  return { name: userName(), role: (a.user && a.user.role) || 'user', username: (a.user && a.user.username) || '' };
+}
 function hdrs(a){
   return { 'Content-Type':'application/json', Authorization:'Bearer ' + a.token };
 }
@@ -44,6 +59,9 @@ function pull(key, cb){
 
 window.CLS_CLOUD = {
   auth: auth,
+  /* 当前登录者姓名 / 身份（未登录返回 '' 或 null） */
+  userName: userName,
+  whoami: whoami,
 
   /* ---- 最高分 ---- */
   /* 破纪录时调用：localKey 用游戏里原来的键名（如 'snake_hi'） */

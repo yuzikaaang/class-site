@@ -195,12 +195,13 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
   <!-- 领券人填写（每周首张券需填名字，备注留痕：谁·时间·任务） -->
   <div class="reward-mask" id="nameMask">
     <div class="reward-box">
-      <div class="reward-emoji">✍️</div>
-      <div class="reward-title">填写领券人</div>
+      <div class="reward-emoji">🎟️</div>
+      <div class="reward-title">领取点歌券</div>
       <div class="reward-sub" id="nmTask">领取：像素飞鸟过 20 管奖励（每周一张）</div>
-      <input type="text" id="nmInput" placeholder="🔍 搜索选择你的名字" maxlength="10" autocomplete="off" onfocus="nmFilter()" oninput="nmFilter()" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid #3a4668;background:#0b0f1f;color:#e9ecff;font-size:15px;text-align:center;margin:8px 0 2px">
-      <div id="nmList" style="display:none;margin-top:6px;background:#0b0f1f;border:1px solid #3a4668;border-radius:10px;max-height:170px;overflow-y:auto;text-align:left"></div>
-      <div class="reward-tip" id="nmTip" style="text-align:center">从名单里选择你的名字（用于核对本周是否已领过券）</div>
+      <!-- 姓名改为只读：以账号身份为准，不再手填/手选（第二十七轮 ⑩） -->
+      <input type="text" id="nmInput" placeholder="正在读取你的账号…" maxlength="10" readonly style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid #3a4668;background:#0b0f1f;color:#e9ecff;font-size:15px;text-align:center;margin:8px 0 2px;opacity:.72">
+      <div id="nmList" style="display:none"></div>
+      <div class="reward-tip" id="nmTip" style="text-align:center">正在核对你的账号…</div>
       <div class="reward-btns" style="margin-top:14px">
         <button class="btn-copy" onclick="doClaim()">✅ 确认领券</button>
         <button class="btn-close" onclick="closeName()">取消</button>
@@ -359,43 +360,48 @@ function showNameAsk(){
   var m=document.getElementById('nameMask'); if(!m) return;
   var sub=document.getElementById('nmTask'); if(sub) sub.textContent='领取：'+REWARD.title+'（每周一张）';
   var inp=document.getElementById('nmInput');
-  if(inp){ try{ inp.value=localStorage.getItem('cls_coupon_name')||''; }catch(e){} }
-  _claimName=inp?inp.value.trim():'';
-  var tip=document.getElementById('nmTip'); if(tip) tip.textContent='从名单里选择你的名字（用于核对本周是否已领过券）';
+  var tip=document.getElementById('nmTip');
   var list=document.getElementById('nmList'); if(list) list.style.display='none';
+
+  /* ── 已登录：直接用账号身份，不再手填姓名（第二十七轮 ⑩）──
+     账号姓名来自后台导入的名单，比让人自己选/自己打更可靠，
+     也就不会再出现「选错名字 → 券记到别人头上」的问题。 */
+  var me = window.CLS_CLOUD ? CLS_CLOUD.whoami() : null;
+  if(me && me.name){
+    _claimName = me.name;
+    if(inp){ inp.value = me.name; inp.readOnly = true; inp.style.opacity = '.72'; }
+    if(tip) tip.innerHTML = '✅ 已用你的账号身份：<b>' + escName(me.name) + '</b>（如需更正姓名，请到主站「我的资料」找管理员）';
+    m.classList.add('show');
+    return;
+  }
+
+  /* ── 未登录：引导去主站登录，不再允许手填 ──
+     以前这里让人从名单里挑名字，谁都能冒领别人的券；现在统一走账号。 */
+  _claimName = '';
+  if(inp){ inp.value = ''; inp.readOnly = true; inp.style.opacity = '.72'; }
+  if(tip) tip.innerHTML = '🔒 领取点歌券需要先登录班级账号。<br>' +
+    '<a href="../index.html" style="color:#7dd3fc;text-decoration:underline">去主站登录</a>' +
+    '，登录后回来再领。';
   m.classList.add('show');
 }
-/* 名字搜索选择（全班名单） */
-function nmFilter(){
-  var inp=document.getElementById('nmInput'); if(!inp) return;
-  var box=document.getElementById('nmList'); if(!box) return;
-  var q=(inp.value||'').trim();
-  if(q && _claimName && q!==_claimName) _claimName='';
-  var list=classList().filter(function(n){ return !q || n.indexOf(q)>=0; });
-  if(list.length){ box.style.display='block'; box.innerHTML=list.map(function(n){ return '<div style="padding:8px 12px;cursor:pointer;font-size:14px;color:#e9ecff" onclick="nmPick(this)" data-n="'+escName(n)+'">'+escName(n)+'</div>'; }).join(''); }
-  else{ box.style.display='none'; }
-}
-function nmPick(el){
-  _claimName=el.getAttribute('data-n');
-  var inp=document.getElementById('nmInput'); if(inp) inp.value=_claimName;
-  var box=document.getElementById('nmList'); if(box) box.style.display='none';
-  var tip=document.getElementById('nmTip'); if(tip) tip.textContent='✅ 已选择：'+_claimName;
-}
+/* 未登录时从弹窗里点「去登录」 */
+function nmGoLogin(){ try{ location.href = '../index.html'; }catch(e){} }
+/* 名字搜索已停用（改为账号身份）；保留空实现以免遗留调用报错 */
+function nmFilter(){}
+function nmPick(){}
 function doClaim(){
-  var name=_claimName;
   var inp=document.getElementById('nmInput');
   /* 领券必须登录（2026-10-07 站主规定）：登录态与主站共享 */
-  if(!(window.CLS_CLOUD && CLS_CLOUD.auth())){
+  var me = window.CLS_CLOUD ? CLS_CLOUD.whoami() : null;
+  if(!me || !me.name){
     var tip0=document.getElementById('nmTip');
     if(tip0) tip0.innerHTML='🔒 领券需要先登录班级账号——<a href="../index.html" style="color:#7dd3fc;text-decoration:underline">去主站登录</a>，登录后回来再领。';
     return;
   }
-  if(!name || classList().indexOf(name)<0){
-    if(inp){ inp.style.borderColor='#ff6b8b'; inp.focus(); }
-    var tip=document.getElementById('nmTip'); if(tip) tip.textContent='⚠️ 请先从名单里选择你的名字再确认';
-    return;
-  }
-  if(inp) inp.style.borderColor='#3a4668';
+  /* 姓名一律以账号身份为准，输入框不再作为来源（防冒领） */
+  var name = me.name;
+  _claimName = name;
+  if(inp){ inp.value = name; inp.style.borderColor='#3a4668'; }
   try{ localStorage.setItem('cls_coupon_name', name); }catch(e){}
   closeName();
   /* 本地台账/设备标记说本周领过 → 不直接拒绝，先跟后台核实：
