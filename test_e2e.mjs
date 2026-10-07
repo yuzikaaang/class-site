@@ -1885,331 +1885,132 @@ console.log('\n【20】游戏数据上云 + 后台面板（2026-10-07 新增）'
   }
 }
 
-console.log('\n【22】作业附件上传 /api/upload（2026-10-07 第二十五轮新增）');
+console.log('\n【21.5】后台作业编辑器支持视频 + 附件行光标定位（2026-10-07 第二十六轮）');
 {
-  /* 背景：站主要求「作业的音频和视频不一定要直链，点击上传到服务器也可以」。
-     这条路走的是 Cloudflare R2。测试里用一个**内存假桶**顶上，
-     目的是把「鉴权 / 类型 / 体积 / 落盘 / 回读」全链路跑通，
-     不依赖真实 R2（CI 里没有凭据）。
+  /* 背景：主站早就认 .video 字段并渲染 <video>，
+     但后台 admin.html 的作业编辑器只做了 img/audio 两个输入框。
+     后果极隐蔽：后台点开一份带视频的作业、什么都不改直接保存，
+     video 字段就会被**静默丢弃**（draft 里根本没这个字段）。
+     用户看到的是「我明明填了视频，过一阵就没了」。
+     这里把它三个环节都锁住：渲染输入框、采集、还原。 */
+  const ad = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf-8');
 
-     ⚠️ 这里的假桶要尽量像真桶，而不只是个「返回 true」的桩 ——
-        本项目踩过「桩比生产宽容 → 测试全绿但线上坏」的坑（见文件头 jsonb 那段）。
-        所以假桶真的按 key 存字节，get 也真的取回来。 */
-  const fakeBucketStore = new Map();
-  const fakeBucket = {
-    async put(key, value, opts) {
-      const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
-      fakeBucketStore.set(key, {
-        body: bytes,
-        httpMetadata: (opts && opts.httpMetadata) || {},
-        size: bytes.length,
-      });
-    },
-    async get(key) {
-      const o = fakeBucketStore.get(key);
-      if (!o) return null;
-      return o;
-    },
-  };
+  t('后台任务行有视频输入框', ad.indexOf('data-f="video"') >= 0);
+  t('后台视频输入框带提示文案', ad.indexOf('🎬 视频链接') >= 0);
+  t('后台 draft 初始化含 video', ad.indexOf("img:'', audio:'', video:'', audioLabel:''") >= 0);
+  t('后台保存时写回 video 字段', ad.indexOf('if(t.video) o.video = t.video.trim();') >= 0);
+  t('后台「无附件存字符串」判断含 video',
+    ad.indexOf('!t.img && !t.audio && !t.video') >= 0);
+  t('后台附件标记识别视频（不然标成「[附件]」丢类别）',
+    ad.indexOf("t.video ? '视频'") >= 0);
+  t('后台占位行按描述匹配还原（防中间删行错位）',
+    ad.indexOf('atts.splice(hit, 1)[0]') >= 0);
+  t('后台不再用按位置配对的 atts.shift() 还原附件',
+    ad.indexOf('var obj = atts.shift();') < 0);
+  /* 保存前的「有没有内容」校验必须算上 video，
+     否则「只挂了视频」的任务会被判成空、整份作业存不下去 */
+  t('后台保存校验把 video 也算作有效内容',
+    ad.indexOf('(t.text || \'\').trim() || t.img || t.audio || t.video') >= 0);
 
-  /* ---- ① 没绑定桶时：必须明确报 503 + needSetup，不能假装成功 ---- */
-  {
-    const before = globalThis.__ENV__.UPLOADS;
-    delete globalThis.__ENV__.UPLOADS;
+  /* 附件行按钮的光标定位：错了会让人多按好几次方向键 */
+  const idx2 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf-8');
+  const a = idx2.indexOf('function caInsertAttRow');
+  const aEnd = idx2.indexOf('function caInsertLine', a);
+  const body = idx2.slice(a, aEnd > 0 ? aEnd : a + 600);
+  t('caInsertAttRow 默认类型是音频', body.indexOf("kind || '音频'") >= 0);
+  t('caInsertAttRow 行的形状含竖线分隔', body.indexOf("]  | ") >= 0);
+}
 
-    const st = await call('/api/upload?action=status');
-    t('未绑存储时 status 返回 enabled:false', st.status === 200 && st.body.enabled === false,
-      JSON.stringify(st.body));
-    t('未绑存储时给出可读提示', /存储桶|不可用/.test(String(st.body.hint || '')), st.body.hint);
+console.log('\n【22】附件方案护栏：只填直链、不做上传（2026-10-07 第二十六轮定案）');
+{
+  /* 背景：第二十五轮做过「作业附件点击上传到服务器」（Cloudflare R2），
+     但站主反馈 R2 开户要绑银行卡；备选的中科院数据胶囊要「国家网络身份认证」
+     实名才给 20GB（不实名仅 1GB）。两者都不适合当班级站点的基础设施，
+     于是**整体撤掉上传功能**，回到「站主手动放文件 + 作业里填直链」。
 
-    const up = await call('/api/upload?action=file', {
-      method: 'POST', token: adminToken,
-      body: { subject: '英语', kind: 'audio', name: 'a.mp3', mime: 'audio/mpeg', data: 'AAAA' },
-    });
-    t('未绑存储时上传返回 503（不是假装成功）', up.status === 503, '实际 ' + up.status);
-    t('503 带 needSetup 标记（前端据此禁按钮）', up.body.needSetup === true, JSON.stringify(up.body));
+     这一节不是为了测一个已删除的功能，而是**防止它悄悄复活**：
+     上传这东西一旦半留着（比如前端按钮回来了、后端 503），
+     会让人以为「能传」，点了却失败 —— 比彻底没有更糟。
+     所以下面全部是「必须不存在」的否定断言。 */
 
-    if (before !== undefined) globalThis.__ENV__.UPLOADS = before;
-  }
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf-8');
+  const wr = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf-8');
+  const ct = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf-8');
 
-  /* ---- ② 绑定假桶后：能力探测 ---- */
-  globalThis.__ENV__.UPLOADS = fakeBucket;
-  {
-    const st = await call('/api/upload?action=status');
-    t('绑定后 status 返回 enabled:true', st.status === 200 && st.body.enabled === true,
-      JSON.stringify(st.body));
-    t('status 暴露体积上限（前端提前拦）', Number(st.body.maxMB) > 0, String(st.body.maxMB));
-  }
+  /* ---- 后端文件与路由 ---- */
+  t('api/upload.js 已删除', !fs.existsSync(new URL('./api/upload.js', import.meta.url)));
+  t('worker 不再 import upload', wr.indexOf("import uploadHandler") < 0);
+  t('worker 不再有 upload 路由', wr.indexOf("case 'upload'") < 0);
+  t('worker 移除二进制直出通道（无人再用）', wr.indexOf('__rawResponse') < 0);
+  t('worker 保留 X-Raw-Response 说明的清理（注释里也不该再提旧通道）',
+    wr.indexOf('X-Raw-Response') < 0);
 
-  /* ---- ③ 鉴权 ---- */
-  const b64 = (s) => Buffer.from(s, 'utf-8').toString('base64');
-  {
-    const anon = await call('/api/upload?action=file', {
-      method: 'POST',
-      body: { subject: '英语', kind: 'audio', name: 'a.mp3', mime: 'audio/mpeg', data: b64('hello') },
-    });
-    t('未登录上传被拒 401', anon.status === 401, '实际 ' + anon.status);
+  /* ---- 前端：不能有任何上传入口 ---- */
+  t('主站不再有 caPick（文件选择）', idx.indexOf('function caPick') < 0);
+  t('主站不再有 caUpload（上传请求）', idx.indexOf('function caUpload') < 0);
+  t('主站不再有 CA_UP 全局状态', idx.indexOf('var CA_UP') < 0);
+  t('主站不再有 CA_UP_MAX',
+    idx.indexOf('CA_UP_MAX') < 0);
+  t('主站不再调 /upload 接口', idx.indexOf("'/upload?action=") < 0);
+  t('主站不再有上传按钮 caUpAudio', idx.indexOf('caUpAudio') < 0);
+  t('主站不再有上传按钮 caUpVideo', idx.indexOf('caUpVideo') < 0);
+  t('主站不再有上传按钮 caUpImage', idx.indexOf('caUpImage') < 0);
+  /* ⚠️ 别写成「整个文件里没有 FileReader」：头像、图片压缩等地方本来就在用
+     FileReader，那是对的。只查作业编辑器 caSave 到 closeCaEditor 这一段。 */
+  const caStart = idx.indexOf('function caSave');
+  const caEnd = idx.indexOf('function closeCaEditor', caStart);
+  const caZone = idx.slice(caStart, caEnd > 0 ? caEnd : caStart + 8000);
+  t('作业编辑器区域不再有 FileReader 残留', caZone.indexOf('FileReader') < 0);
+  t('主站不再有上传进度条节点 caProg', idx.indexOf('id="caProg"') < 0);
+  t('主站不再有上传说明条节点 caUpNote', idx.indexOf('id="caUpNote"') < 0);
 
-    const okUp = await call('/api/upload?action=file', {
-      method: 'POST', token: adminToken,
-      body: { subject: '英语', kind: 'audio', name: 'listening.mp3', mime: 'audio/mpeg', data: b64('MP3DATA') },
-    });
-    t('管理员上传成功', okUp.status === 200 && okUp.body.ok, JSON.stringify(okUp.body).slice(0, 160));
-    t('返回可访问 url', typeof okUp.body.url === 'string' && okUp.body.url.length > 0, okUp.body.url);
-    t('对象名带科目前缀 hw/英语/', String(okUp.body.key || '').startsWith('hw/英语/'), okUp.body.key);
-    t('对象名带 .mp3 扩展名（浏览器才知道怎么播）', /\.mp3$/.test(String(okUp.body.key || '')), okUp.body.key);
-    t('返回字节数与上传内容一致', okUp.body.size === Buffer.from('MP3DATA').length, String(okUp.body.size));
-    /* 真的落进桶了（桩必须真的存） */
-    t('文件真的写进了存储（假桶里有这一条）', fakeBucketStore.has(okUp.body.key), okUp.body.key);
+  /* ---- 前端：编辑器仍要好用（说明文字 + 两个按钮） ---- */
+  t('编辑器保留工具条 .ca-tools', idx.indexOf('class="ca-tools"') >= 0);
+  t('编辑器保留「新增一条任务」按钮', idx.indexOf('caInsertTask()') >= 0);
+  t('编辑器新增「新增附件行」按钮', idx.indexOf('caInsertAttRow()') >= 0);
+  t('caInsertAttRow 已定义', idx.indexOf('function caInsertAttRow') >= 0);
+  t('caInsertLine 已定义（两个按钮共用）', idx.indexOf('function caInsertLine') >= 0);
+  t('编辑器说明文字引导「找站主要」链接',
+    idx.indexOf('附件文件由站主统一上传') >= 0);
+  t('编辑器说明文字保留 📎 占位行写法', idx.indexOf('📎 [音频]') >= 0);
+  t('编辑器说明文字保留「| 链接」写法', idx.indexOf('| 链接') >= 0);
 
-    /* R2 里存的字节要和上传的一致（base64 解码没错） */
-    const stored = fakeBucketStore.get(okUp.body.key);
-    t('存储里的字节与上传内容逐字节一致',
-      Buffer.from(stored.body).toString('utf-8') === 'MP3DATA',
-      Buffer.from(stored.body).toString('utf-8'));
-    t('存储里带了正确的 Content-Type',
-      stored.httpMetadata.contentType === 'audio/mpeg', JSON.stringify(stored.httpMetadata));
-  }
+  /* ---- 附件行插入的定位逻辑 ---- */
+  const ci = idx.indexOf('function caInsertAttRow');
+  const ciEnd = idx.indexOf('function caInsertTask', ci);
+  const attBody = idx.slice(ci, ciEnd > 0 ? ciEnd : ci + 900);
+  t('caInsertAttRow 生成 📎 [音频] 占位', attBody.indexOf("'📎 [' + kind + ']") >= 0);
+  t('caInsertAttRow 带「|」分隔符', attBody.indexOf('| ') >= 0);
+  const cl = idx.indexOf('function caInsertLine');
+  const clEnd = idx.indexOf('function caInsertTask', cl);
+  const lineBody = idx.slice(cl, clEnd > 0 ? clEnd : cl + 1400);
+  t('caInsertLine 光标落在「|」之后（省得手动移）', lineBody.indexOf('line.indexOf('|')') >= 0);
+  t('caInsertLine 会 focus 回文本域', lineBody.indexOf('ta.focus()') >= 0);
 
-  /* ---- ④ 类型与体积 ---- */
-  {
-    const exe = await call('/api/upload?action=file', {
-      method: 'POST', token: adminToken,
-      body: { subject: '英语', kind: 'audio', name: 'x.exe', mime: 'application/x-msdownload', data: b64('MZ') },
-    });
-    t('可执行文件类被拒 400（只允许图片/音频/视频）', exe.status === 400, '实际 ' + exe.status);
-    t('拒绝时说明类型不符', /不支持的文件类型/.test(exe.body.error || ''), exe.body.error);
+  /* ---- 存量附件仍要能渲染（撤了上传不等于撤了附件） ---- */
+  t('主站仍渲染 audio 字段', idx.indexOf('t.audio') >= 0 || idx.indexOf('.audio') >= 0);
+  t('主站仍渲染 video 字段（<video> 标签）', idx.indexOf('<video src=') >= 0);
+  t('主站仍按扩展名识别视频', idx.indexOf('isVid') >= 0);
+  t('content.js 仍放行 video 字段（否则填了存不下）', ct.indexOf('t.video ===') >= 0);
+  t('content.js 仍放行 audio 字段', ct.indexOf('t.audio ===') >= 0);
+  t('content.js 仍放行 img 字段', ct.indexOf('t.img ===') >= 0);
 
-    const mismatch = await call('/api/upload?action=file', {
-      method: 'POST', token: adminToken,
-      body: { subject: '英语', kind: 'audio', name: 'v.mp4', mime: 'video/mp4', data: b64('X') },
-    });
-    t('声明类别与 mime 不符被拒 400', mismatch.status === 400, '实际 ' + mismatch.status);
+  /* ---- 上一轮修的两个真 bug 不能随删除一起丢 ---- */
+  const cs = idx.indexOf('function caSave');
+  const csBody = idx.slice(cs, cs + 6000);
+  t('caSave 仍按描述精确匹配附件对象（防串位）',
+    csBody.indexOf("pool[i].text || '') === desc") >= 0);
+  t('caSave 不再有「匹配不上取队首」的兜底',
+    csBody.indexOf('if(idx < 0 && pool.length) idx = 0;') < 0);
+  t('caSave 三字段判断顺序未变（audio→video→img）',
+    csBody.indexOf("kind === '音频'") >= 0 && csBody.indexOf("kind === '视频'") >= 0);
 
-    const badKind = await call('/api/upload?action=file', {
-      method: 'POST', token: adminToken,
-      body: { subject: '英语', kind: 'zip', name: 'a.zip', mime: 'audio/mpeg', data: b64('X') },
-    });
-    t('不认识的 kind 被拒 400', badKind.status === 400, '实际 ' + badKind.status);
-
-    const noData = await call('/api/upload?action=file', {
-      method: 'POST', token: adminToken,
-      body: { subject: '英语', kind: 'audio', name: 'a.mp3', mime: 'audio/mpeg' },
-    });
-    t('缺文件内容被拒 400', noData.status === 400, '实际 ' + noData.status);
-
-    /* 体积：21MB > 20MB 上限 */
-    const big = 'A'.repeat(Math.ceil(21 * 1024 * 1024 / 3) * 4);
-    const tooBig = await call('/api/upload?action=file', {
-      method: 'POST', token: adminToken,
-      body: { subject: '英语', kind: 'audio', name: 'big.mp3', mime: 'audio/mpeg', data: big },
-    });
-    t('超过 20MB 被拒 400', tooBig.status === 400, '实际 ' + tooBig.status);
-    t('拒绝时说明体积与上限', /太大/.test(tooBig.body.error || ''), tooBig.body.error);
-
-    const badSubj = await call('/api/upload?action=file', {
-      method: 'POST', token: adminToken,
-      body: { subject: '体育', kind: 'audio', name: 'a.mp3', mime: 'audio/mpeg', data: b64('X') },
-    });
-    t('不认识的科目被拒 400', badSubj.status === 400, '实际 ' + badSubj.status);
-  }
-
-  /* ---- ⑤ 课代表科目隔离（本站核心权限模型，必须逐条守住）---- */
-  {
-    /* ⚠️ 不复用【18】里的 hwToken —— 那是块级 const，这里是独立作用域取不到。
-       自己建两个账号：一个当课代表、一个当「什么都没担任的普通同学」。
-       测试互相独立，不依赖执行顺序，才是能长期跑的护栏。 */
-    await call('/api/admin?action=create-user', {
-      method: 'POST', token: adminToken,
-      body: { username: '__up_prof', password: 'Profile12345', displayName: '上传课代表' },
-    });
-    /* saveProfile 直接返回新资料 id，不用再查库 */
-    const profR = await call('/api/admin?action=save-profile', {
-      method: 'POST', token: adminToken,
-      body: { name: '上传课代表', studentId: '__up_prof_sid' },
-    });
-    t('建上传测试资料成功（拿到 profileId）', profR.status === 200 && Number(profR.body.id) > 0,
-      JSON.stringify(profR.body).slice(0, 140));
-    const upProfId = Number(profR.body.id);
-    /* bind-profiles 的参数名是 names（不是 entries） */
-    const bindR = await call('/api/admin?action=bind-profiles', {
-      method: 'POST', token: adminToken,
-      body: { names: [{ name: '上传课代表', username: '__up_prof' }] },
-    });
-    t('上传测试账号绑定资料成功', bindR.status === 200 && bindR.body.bound === 1,
-      JSON.stringify(bindR.body).slice(0, 160));
-
-    await call('/api/admin?action=set-title', {
-      method: 'POST', token: adminToken, body: { id: upProfId, titles: ['语文课代表'] },
-    });
-
-    const login1 = await call('/api/auth?action=login', {
-      method: 'POST', body: { username: '__up_prof', password: 'Profile12345' },
-    });
-    let profToken = login1.body.token;
-    t('课代表账号首次登录成功', !!profToken && login1.status === 200,
-      JSON.stringify(login1.body).slice(0, 120));
-    /* 首登会被强制改密（requireUserReady 拦），这正是要守的行为：
-       改密前传附件必须 403 且带 mustChangePassword 标记。 */
-    const before = await call('/api/upload?action=file', {
-      method: 'POST', token: profToken,
-      body: { subject: '语文', kind: 'audio', name: 'a.mp3', mime: 'audio/mpeg', data: b64('X') },
-    });
-    t('未改初始密码时传附件被拦 403（带 mustChangePassword 标记，前端会弹改密框）',
-      before.status === 403 && before.body.mustChangePassword === true,
-      '实际 ' + before.status + ' ' + JSON.stringify(before.body).slice(0, 120));
-
-    /* 走真实改密流程，拿新 token */
-    const cp = await call('/api/auth?action=change-password', {
-      method: 'POST', token: profToken,
-      body: { oldPassword: 'Profile12345', newPassword: 'ProfileNew12345' },
-    });
-    t('课代表改密成功并换发新 token', cp.status === 200 && !!cp.body.token,
-      JSON.stringify(cp.body).slice(0, 120));
-    profToken = cp.body.token || profToken;
-
-    const cnOk = await call('/api/upload?action=file', {
-      method: 'POST', token: profToken,
-      body: { subject: '语文', kind: 'image', name: 'scan.jpg', mime: 'image/jpeg', data: b64('JPEG') },
-    });
-    t('语文课代表能上传本科目附件 200', cnOk.status === 200 && cnOk.body.ok,
-      '实际 ' + cnOk.status + ' ' + JSON.stringify(cnOk.body).slice(0, 120));
-
-    const mathNo = await call('/api/upload?action=file', {
-      method: 'POST', token: profToken,
-      body: { subject: '数学', kind: 'audio', name: 'a.mp3', mime: 'audio/mpeg', data: b64('X') },
-    });
-    t('语文课代表传数学附件被拒 403（科目隔离）', mathNo.status === 403, '实际 ' + mathNo.status);
-    t('403 提示说明是「不是该科课代表」', /课代表/.test(mathNo.body.error || ''), mathNo.body.error);
-
-    /* 通用「课代表」头衔（不带科目）也不该放行 */
-    await call('/api/admin?action=set-title', {
-      method: 'POST', token: adminToken, body: { id: upProfId, titles: ['课代表'] },
-    });
-    const generic = await call('/api/upload?action=file', {
-      method: 'POST', token: profToken,
-      body: { subject: '语文', kind: 'audio', name: 'a.mp3', mime: 'audio/mpeg', data: b64('X') },
-    });
-    t('通用「课代表」头衔不能传附件 403', generic.status === 403, '实际 ' + generic.status);
-
-    /* 普通同学（无任何头衔）也不能传 */
-    await call('/api/admin?action=create-user', {
-      method: 'POST', token: adminToken,
-      body: { username: '__up_plain', password: 'Plain12345', displayName: '上传普通同学' },
-    });
-    const loginP = await call('/api/auth?action=login', {
-      method: 'POST', body: { username: '__up_plain', password: 'Plain12345' },
-    });
-    let plainToken = loginP.body.token;
-    const cpP = await call('/api/auth?action=change-password', {
-      method: 'POST', token: plainToken,
-      body: { oldPassword: 'Plain12345', newPassword: 'PlainNew12345' },
-    });
-    plainToken = cpP.body.token || plainToken;
-    const plain = await call('/api/upload?action=file', {
-      method: 'POST', token: plainToken,
-      body: { subject: '语文', kind: 'audio', name: 'a.mp3', mime: 'audio/mpeg', data: b64('X') },
-    });
-    t('普通用户（无头衔）传附件被拒 403', plain.status === 403, '实际 ' + plain.status);
-
-    /* 清理测试账号，别留在线上 */
-    for (const uname of ['__up_prof', '__up_plain']) {
-      const u = db.prepare('select id from users where username = ?').get(uname);
-      if (u) {
-        await call('/api/admin?action=delete-user', {
-          method: 'POST', token: adminToken, body: { id: u.id },
-        });
-      }
-    }
-    db.run("delete from profiles where name = '上传课代表'");
-  }
-
-  /* ---- ⑥ 代理读文件：未配公开域时前端就是从这个地址播 ---- */
-  {
-    const up = await call('/api/upload?action=file', {
-      method: 'POST', token: adminToken,
-      body: { subject: '英语', kind: 'audio', name: 'proxy.mp3', mime: 'audio/mpeg', data: b64('PROXYDATA') },
-    });
-    t('代理模式下返回本站相对地址', String(up.body.url || '').includes('/api/upload?action=file'),
-      up.body.url);
-    t('代理模式标记为 proxied:true', up.body.proxied === true, String(up.body.proxied));
-
-    /* 直接 GET 这个地址：因为 src 标签带不上 Authorization，必须免登录可读 */
-    const got = await call('/api/upload?action=file&key=' + encodeURIComponent(up.body.key));
-    t('附件可免登录读取（<audio src> 带不上 token）', got.status === 200, '实际 ' + got.status);
-    /* ⚠️ 二进制必须走原始 Response 通道，不能被字符串化 —— 
-       这里读的是 text，但只要状态 200 且内容对得上就说明没坏 */
-    t('读回的内容与上传一致', got.text === 'PROXYDATA', JSON.stringify(got.text).slice(0, 60));
-    t('读回带 Content-Type（否则浏览器不播）',
-      got.headers.get('content-type') === 'audio/mpeg', got.headers.get('content-type'));
-    t('读回带 Accept-Ranges（音频要能拖进度条）',
-      got.headers.get('accept-ranges') === 'bytes', got.headers.get('accept-ranges'));
-    t('读回声明 nosniff', got.headers.get('x-content-type-options') === 'nosniff');
-
-    /* 路径穿越与越前缀读取必须挡住 */
-    const evil = await call('/api/upload?action=file&key=' + encodeURIComponent('../secret.txt'));
-    t('非 hw/ 前缀的 key 被拒 400', evil.status === 400, '实际 ' + evil.status);
-    const dotdot = await call('/api/upload?action=file&key=' + encodeURIComponent('hw/../../etc/passwd'));
-    t('含 .. 的 key 被拒 400', dotdot.status === 400, '实际 ' + dotdot.status);
-    const missing = await call('/api/upload?action=file&key=' + encodeURIComponent('hw/英语/nope.mp3'));
-    t('不存在的文件返回 404', missing.status === 404, '实际 ' + missing.status);
-  }
-
-  /* ---- ⑦ ca-save-subject 必须放行 video 字段（否则「传得上、存不下」）---- */
-  {
-    const videoTask = [{
-      text: '看这段讲解视频',
-      video: '/api/upload?action=file&key=hw%2F英语%2Fx.mp4',
-    }];
-    const saved = await call('/api/content?action=ca-save-subject', {
-      method: 'POST', token: adminToken,
-      body: { subject: '英语', tasks: videoTask, homeworkId: 'hw-e2e-ca' },
-    });
-    t('带 video 字段的任务能保存（后端已放行）', saved.status === 200 && saved.body.ok,
-      '实际 ' + saved.status + ' ' + JSON.stringify(saved.body).slice(0, 140));
-
-    const back = await call('/api/content', { method: 'GET' });
-    const hwv = ((back.body.items || {}).holiday_homeworks || []).find((h) => h && h.id === 'hw-e2e-ca');
-    const env = hwv && (hwv.items || []).find((it) => it.subject === '英语');
-    t('video 字段被完整读回（没被丢掉）',
-      env && env.tasks[0] && typeof env.tasks[0].video === 'string' && env.tasks[0].video.includes('x.mp4'),
-      JSON.stringify(env && env.tasks[0]));
-  }
-
-  /* ---- ⑧ 前端接入点护栏（改坏了这里立刻红）---- */
-  {
-    const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf-8');
-    t('主站有上传状态探测（不可用时禁按钮而非静默失败）', idx.indexOf('caCheckUpload') >= 0);
-    t('主站有上传按钮（音频/视频/图片）',
-      idx.indexOf("caPick(\\'audio\\')") >= 0 && idx.indexOf("caPick(\\'video\\')") >= 0
-      && idx.indexOf("caPick(\\'image\\')") >= 0);
-    t('主站上传走 JSON+base64（不是 multipart，Workers 会破坏二进制）',
-      idx.indexOf("api('/upload?action=file'") >= 0 && idx.indexOf('readAsDataURL') >= 0);
-    t('主站本地先拦体积（避免白传一趟）', idx.indexOf('CA_UP_MAX') >= 0);
-    t('主站回填时把相对地址补成绝对地址', idx.indexOf('caAbsUrl') >= 0);
-    t('主站渲染 <video>（视频能播）', idx.indexOf('hw-imgs hw-video') >= 0);
-    t('主站每格工具条有「新增一条任务」', idx.indexOf('caInsertTask') >= 0);
-    /* ⚠️ 插入位置必须在点按钮那一刻就记下来。
-       走完文件选择框后焦点已离开 textarea，再读 selectionStart 会拿到末尾，
-       附件就插到别处去了（实测踩过：附件跑到最后一条）。 */
-    t('主站上传前先记录光标位置（否则附件会插错位置）', idx.indexOf('CA_UP.at') >= 0);
-    /* ⚠️ 附件复用只认「描述精确匹配」。
-       曾经写成「匹配不上就取队首」，导致新上传把旧任务的链接顶掉、
-       两条任务串位（实测踩过）。这里匹配带分号的**语句**写法，
-       避免把解释这件事的注释也算成命中。 */
-    t('主站附件复用不做「取队首」兜底（防止新旧附件串位）',
-      idx.indexOf('if(idx < 0 && pool.length) idx = 0;') < 0, '仍存在取队首兜底');
-
-    const wr = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf-8');
-    t('worker 路由已接入 /api/upload', wr.indexOf("case 'upload'") >= 0);
-    t('worker 支持业务层直出二进制（否则附件会静默损坏）',
-      wr.indexOf('__rawResponse') >= 0);
-
-    const up = fs.readFileSync(new URL('./api/upload.js', import.meta.url), 'utf-8');
-    t('upload.js 用 R2 绑定 env.UPLOADS', up.indexOf('env.UPLOADS') >= 0);
-    t('upload.js 限制只允许图片/音频/视频', up.indexOf("['image/', 'audio/', 'video/']") >= 0);
-    t('upload.js 清洗对象名（防路径穿越）', up.indexOf('safeStem') >= 0);
-  }
+  /* ---- wrangler 里不该再有活的 R2 绑定 ---- */
+  const wt = fs.readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf-8');
+  t('wrangler 不再有生效的 r2_buckets 绑定',
+    !/^\s*\[\[r2_buckets\]\]/m.test(wt));
+  t('wrangler 不再声明 UPLOADS 绑定', wt.indexOf('binding     = "UPLOADS"') < 0 || wt.indexOf('# binding     = "UPLOADS"') >= 0);
+  t('wrangler 记录了放弃上传的原因', wt.indexOf('绑银行卡') >= 0 || wt.indexOf('实名') >= 0);
 }
 
 console.log('\n' + '='.repeat(52));

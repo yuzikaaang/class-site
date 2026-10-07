@@ -1172,22 +1172,14 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .dark .hw-edit-btn{background:#2a2523;border-color:#443c35;color:#d8b98f}
 .ca-ta{width:100%;box-sizing:border-box;min-height:180px;padding:10px 12px;border-radius:10px;border:1px solid #e2d5c3;background:#fff;color:#222;font-size:.85rem;line-height:1.7;resize:vertical;font-family:inherit}
 .dark .ca-ta{background:#221f1d;border-color:#443c35;color:#eee}
-/* 作业编辑器：附件上传（2026-10-07 第二十五轮）
-   放一条工具栏在文本域上方，不必让人记住「📎 [音频] 描述 | 链接」这种记法。 */
+/* 作业编辑器：工具条（2026-10-07 第二十六轮改回「只填直链」）
+   只留「新增任务 / 新增附件行」两个按钮，帮人少记格式，不再有上传。 */
 .ca-tools{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
 .ca-tools button{flex:1 1 auto;min-width:132px;padding:9px 10px;border-radius:10px;border:1px dashed #d8c9b4;background:#fffaf3;color:#57534e;font-size:.78rem;cursor:pointer;font-family:inherit;line-height:1.4}
 .ca-tools button:hover:not(:disabled){border-color:#c2410c;color:#c2410c;background:#fff5ea}
 .ca-tools button:disabled{opacity:.5;cursor:not-allowed}
 .dark .ca-tools button{background:#241f1b;border-color:#4a3f36;color:#c9bfb4}
 .dark .ca-tools button:hover:not(:disabled){border-color:#ea8a4d;color:#ea8a4d;background:#2b241e}
-/* 上传进度条：上传中显示，完成/失败后隐藏 */
-.ca-prog{height:6px;border-radius:99px;background:#eee5d9;overflow:hidden;margin:0 0 8px;display:none}
-.ca-prog.show{display:block}
-.ca-prog > i{display:block;height:100%;width:0;background:#c2410c;transition:width .15s linear}
-.dark .ca-prog{background:#3a332c}
-/* 「暂不可用」时的说明条 */
-.ca-note{margin:0 0 8px;padding:8px 10px;border-radius:9px;background:#fff5ea;border:1px solid #f2d7ba;color:#8a5a2b;font-size:.75rem;line-height:1.6}
-.dark .ca-note{background:#2b241e;border-color:#4a3f36;color:#d8ab7c}
 .hw-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:999px;font-size:.82rem;font-weight:800;color:#fff;line-height:1.5;box-shadow:0 2px 6px rgba(0,0,0,.08)}
 .hw-item-body{padding:12px 14px}
 .hw-tasks{margin:0;padding:0;list-style:none}
@@ -2545,7 +2537,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.2.1';
+var SITE_VERSION = '2.2.2';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -8812,237 +8804,83 @@ function openCaEditor(hwId, subject){
     return String(t == null ? '' : t);
   }).join('\n');
 
-  CA_UP = { busy:false, enabled:null };
-
   document.getElementById('caTitle').textContent = '✏️ 编辑「' + subject + '」作业 · ' + CA_CTX.hwLabel;
   document.getElementById('caBody').innerHTML =
       '<p style="margin:0 0 8px;font-size:.78rem;color:#6e635a;line-height:1.7">' +
-      '一行一条任务。<b>直接传文件</b>用下面的按钮；也可以手写 <b>📎 [音频] 描述</b> 占位行，' +
-      '在描述后用 <b>| 链接</b> 带上网址。<br>' +
-      (isAdmin() ? '你是管理员：全部科目都能传、本次保存直接生效。' : '你是本科目课代表：只能改本科目并上传本科目附件。') +
+      '一行一条任务。音频 / 视频 / 图片附件请直接手写 <b>📎 [音频] 描述</b> 占位行，' +
+      '在描述后用 <b>| 链接</b> 带上网址（附件文件由站主统一上传，链接找站主要）。<br>' +
+      (isAdmin() ? '你是管理员：全部科目都能改、本次保存直接生效。' : '你是本科目课代表：只能改本科目。') +
       '</p>' +
       '<div class="ca-tools">' +
-        '<button type="button" id="caUpAudio" onclick="caPick(\'audio\')">' + iconSvg('headphones',14) + ' 上传音频</button>' +
-        '<button type="button" id="caUpVideo" onclick="caPick(\'video\')">🎬 上传视频</button>' +
-        '<button type="button" id="caUpImage" onclick="caPick(\'image\')">🖼️ 上传图片</button>' +
         '<button type="button" onclick="caInsertTask()">＋ 新增一条任务</button>' +
+        '<button type="button" onclick="caInsertAttRow()">📎 新增附件行</button>' +
       '</div>' +
-      '<div class="ca-note" id="caUpNote" style="display:none"></div>' +
-      '<div class="ca-prog" id="caProg"><i></i></div>' +
       '<textarea id="caTa" class="ca-ta"></textarea>' +
       '<button class="acct-btn" id="caGo" style="margin-top:10px" onclick="caSave()">保存修改</button>' +
       '<div class="acct-msg" id="caMsg"></div>';
   document.getElementById('caTa').value = taVal;
   document.getElementById('caMask').classList.add('show');
   if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
-
-  /* 问一下后端能不能上传。不能传就把按钮禁掉并说明原因（比如还没配存储桶），
-     绝不让按钮看起来能点、点了却静默失败。 */
-  caCheckUpload();
 }
 
-/* ---- 附件上传（2026-10-07 第二十五轮，站主需求「点击上传到服务器」） ----
-   为什么不用 multipart：Workers 入口会把请求体读成字符串，二进制会坏。
-   走 JSON + base64，整条链路纯文本（细节见 api/upload.js 的注释）。 */
-var CA_UP = { busy:false, enabled:null };
-var CA_UP_MAX = 20 * 1024 * 1024;
+/* ---- 附件行（2026-10-07 第二十六轮：改回「只填直链」） ----
+   站主决定不再做「点上传到服务器」：附件文件由站主手动放进仓库，
+   拿到直链后填进作业。
+   原因：R2 开户要绑银行卡，中科院数据胶囊要实名，都不适合当班级站点的基础设施。
+   原来的上传实现（/api/upload、base64、CA_UP、进度条）已整体移除。 */
 
-function caUpNote(text, show){
-  var el = document.getElementById('caUpNote');
-  if(!el) return;
-  if(!text){ el.style.display = 'none'; el.textContent = ''; return; }
-  el.textContent = text;
-  el.style.display = show === false ? 'none' : 'block';
-}
-function caProg(p){
-  var wrap = document.getElementById('caProg');
-  if(!wrap) return;
-  if(p === null || p === undefined || p < 0){ wrap.classList.remove('show'); return; }
-  wrap.classList.add('show');
-  var bar = wrap.querySelector('i');
-  if(bar) bar.style.width = Math.max(0, Math.min(100, p)) + '%';
-}
-
-function caCheckUpload(){
-  if(!apiReady()){ caSetUploadEnabled(false, '后端还没配置，附件上传不可用。'); return; }
-  api('/upload?action=status').then(function(j){
-    CA_UP_MAX = Number(j.maxMB || 20) * 1024 * 1024;
-    caSetUploadEnabled(!!j.enabled, j.enabled ? '' : (j.hint || '附件上传暂不可用。'));
-  }).catch(function(){
-    /* 接口拿不到（老版本后端）→ 当成不可用，引导走直链 */
-    caSetUploadEnabled(false, '后端还不支持上传（可能没更新）。可以先用「| 链接」填直链。');
-  });
-}
-
-function caSetUploadEnabled(on, hint){
-  CA_UP.enabled = !!on;
-  ['caUpAudio','caUpVideo','caUpImage'].forEach(function(id){
-    var b = document.getElementById(id);
-    if(b) b.disabled = !on;
-  });
-  caUpNote(on ? '' : (hint || '附件上传暂不可用，请改用「| 链接」填直链。'));
-}
-
-/* 选文件 → 读成 base64 → 调 /api/upload → 把返回的 URL 插进文本域 */
-function caPick(kind){
-  if(CA_UP.busy) return;
-  if(!CA_UP.enabled){
-    if(typeof uiMsg === 'function') uiMsg('附件上传暂不可用，请改用「| 链接」填直链');
-    return;
-  }
-  /* ⚠️ 先把光标位置记下来。
-     点按钮 → 起隐藏 input → 系统文件选择框 → 上传（异步）→ 插入附件，
-     这一路上焦点早就从 textarea 跑掉了，读 selectionStart 拿到的是
-     末尾（或 0），附件就会插到别处去。所以按下去的这一刻就记好位置。 */
-  var ta = document.getElementById('caTa');
-  CA_UP.at = (ta && ta.selectionStart != null) ? ta.selectionStart : 0;
-
-  var accept = kind === 'audio' ? 'audio/*' : kind === 'video' ? 'video/*' : 'image/*';
-  var inp = document.createElement('input');
-  inp.type = 'file';
-  inp.accept = accept;
-  inp.style.display = 'none';
-  document.body.appendChild(inp);
-  inp.onchange = function(){
-    var f = inp.files && inp.files[0];
-    try{ document.body.removeChild(inp); }catch(e){}
-    if(f) caUpload(f, kind);
-  };
-  inp.click();
-}
-
-function caUpload(file, kind){
-  if(!CA_CTX) return;
-  /* 体积先在本地拦一道：20MB 的文件 base64 后要 27MB，
-     推到一半被后端拒掉，不如提前说清楚（也省流量）。 */
-  if(file.size > CA_UP_MAX){
-    caSay('文件太大（' + (file.size/1024/1024).toFixed(1) + 'MB），上限 ' + Math.round(CA_UP_MAX/1024/1024) + 'MB', 'err');
-    return;
-  }
-  CA_UP.busy = true;
-  var btns = ['caUpAudio','caUpVideo','caUpImage'].map(function(id){ return document.getElementById(id); });
-  btns.forEach(function(b){ if(b) b.disabled = true; });
-  caSay('正在上传 ' + file.name + ' …', 'ok');
-  caProg(2);
-
-  var fr = new FileReader();
-  fr.onerror = function(){
-    CA_UP.busy = false; caSetUploadEnabled(true); caProg(null);
-    caSay('文件读不出来，换一个试试');
-  };
-  fr.onload = function(){
-    var dataUrl = String(fr.result || '');
-    var mime = (dataUrl.match(/^data:([^;]+);/) || [])[1] || file.type || '';
-    caProg(12);
-    /* fetch 看不到真实上传进度（要 XHR 才有 upload.onprogress），
-       这里给一个「动画式」估算：先到 30%，请求回来再跳 100%。
-       非要真实进度就得换 XHR，收益不大。 */
-    var anim = setInterval(function(){
-      var bar = document.querySelector('#caProg > i');
-      if(!bar) return;
-      var w = parseFloat(bar.style.width) || 0;
-      if(w < 85) bar.style.width = (w + 3) + '%';
-    }, 220);
-    caProg(30);
-
-    api('/upload?action=file', {
-        method:'POST',
-        body: {
-          subject: CA_CTX.subject,
-          kind: kind,
-          name: file.name,
-          mime: mime,
-          data: dataUrl,
-        },
-      })
-      .then(function(j){
-        clearInterval(anim);
-        caProg(100);
-        CA_UP.busy = false; caSetUploadEnabled(true);
-        setTimeout(function(){ caProg(null); }, 400);
-        var url = (j && j.url) || '';
-        if(!url) throw new Error('后端没返回文件地址');
-        var full = caAbsUrl(url);
-        caInsertAttachment(kind, file.name, full);
-        caSay('✅ 已插入附件，记得点「保存修改」', 'ok');
-      })
-      .catch(function(e){
-        clearInterval(anim);
-        CA_UP.busy = false; caSetUploadEnabled(true); caProg(null);
-        caSay('上传失败：' + ((e && e.message) || '请重试'));
-      });
-  };
-  fr.readAsDataURL(file);
-}
-
-/* 相对地址补成绝对地址：附件要能跨页/跨设备打开（比如在别处引用） */
-function caAbsUrl(u){
-  u = String(u || '');
-  if(/^https?:\/\//i.test(u) || u.indexOf('//') === 0) return u;
-  if(u.charAt(0) !== '/') return u;
-  var base = API_BASE || '';
-  if(!base) return u;
-  return base.replace(/\/+$/, '') + u;
-}
-
-/* 把附件写进文本域。插入位置规则（按优先级）：
-   ① 打开编辑器时（点上传按钮那一刻）光标所在的位置 —— 这才是用户的实际意图，
-      因为文件选择框走完一圈后焦点已经不在文本域上了，现读 selectionStart 不准
-   ② 没有记录时退回读当前 selectionStart
-   ③ 该处是空行 → 就地写入；该行有内容 → 在它之后另起一行（不打断正在写的任务） */
-function caInsertAttachment(kind, name, url){
-  var ta = document.getElementById('caTa');
-  if(!ta) return;
-  var label = kind === 'audio' ? '音频' : kind === 'video' ? '视频' : '图片';
-  /* 描述默认用原文件名（去掉扩展名），太长就截断 */
-  var desc = String(name || '').replace(/\.[^.]+$/, '').slice(0, 40);
-  var line = '📎 [' + label + '] ' + desc + ' | ' + url;
-
-  var v = ta.value;
-  var pos = (CA_UP && CA_UP.at != null) ? CA_UP.at : ta.selectionStart;
-  if(pos === undefined || pos === null || pos > v.length) pos = v.length;
-  if(CA_UP) CA_UP.at = null;
-
-  var head = v.slice(0, pos);
-  var tail = v.slice(pos);
-  var lineStart = head.lastIndexOf('\n') + 1;
-  var curLine = head.slice(lineStart);
-
-  if(curLine.trim() === ''){
-    /* 光标所在是空行：直接填进去 */
-    var before = v.slice(0, lineStart);
-    /* 该行如果只有空格，整行替换 */
-    var after = tail.replace(/^[^\n]*/, '');
-    var nl = after.charAt(0) === '\n' ? after.slice(1) : after;
-    ta.value = before + line + '\n' + nl;
-    var np = (before + line + '\n').length;
-    ta.selectionStart = ta.selectionEnd = np;
-  }else{
-    /* 光标所在行有内容：在这行**之后**新起一行（不去打断正在写的任务） */
-    var eol = v.indexOf('\n', pos);
-    if(eol < 0){
-      ta.value = v + '\n' + line + '\n';
-      ta.selectionStart = ta.selectionEnd = ta.value.length;
-    }else{
-      ta.value = v.slice(0, eol + 1) + line + '\n' + v.slice(eol + 1);
-      var p2 = eol + 1 + line.length + 1;
-      ta.selectionStart = ta.selectionEnd = p2;
-    }
-  }
-  ta.focus();
-}
-
-/* 新增一条空任务，光标落上去，省得手动拉到最后敲回车 */
+/* 新增一条空任务，光标落上去，省得手动拉到最后敲回车。 */
 function caInsertTask(){
+  caInsertLine('');
+}
+
+/* 新增一条附件占位行，形如「📎 [音频]  | 」，光标停在描述位置。
+   把 kind 做成参数是为了以后想按类别预填时不用再改结构。 */
+function caInsertAttRow(kind){
+  kind = kind || '音频';
+  caInsertLine('📎 [' + kind + ']  | ');
+}
+
+/* 在光标处**新起一行**插入 text，并把光标放到合适的位置。
+   规则：
+     · 光标所在行若已有内容 → 插到该行**之后**（不打断正在写的任务）
+     · 光标所在行是空的   → 直接占用那一行（不留空行）
+   光标落点：附件行跳到「|」之后（直接写描述），普通行落在行尾。
+
+   ⚠️ 这里现读 selectionStart 是对的：调用方是按钮点击，焦点还在文本域上。
+      （老上传流程不能现读，因为中间插了文件选择框，见已删除的 CA_UP.at 注释）
+   ⚠️ 曾经写成 `head + '\n' + line + '\n' + tail`，在文末插入空行时会多出一个
+      换行（3 行变 5 行），连点几下就攒出一堆空行。改成按「行」操作。 */
+function caInsertLine(text){
   var ta = document.getElementById('caTa');
   if(!ta) return;
+  var v = ta.value;
+  var line = String(text || '');
   var pos = ta.selectionStart;
-  if(pos === undefined || pos === null) pos = ta.value.length;
-  var head = ta.value.slice(0, pos), tail = ta.value.slice(pos);
-  var needNl = head.length && head.charAt(head.length - 1) !== '\n' ? '\n' : '';
-  ta.value = head + needNl + '\n' + tail;
-  var np = head.length + needNl.length + 1;
-  ta.selectionStart = ta.selectionEnd = np;
+  if(pos === undefined || pos === null || pos > v.length) pos = v.length;
+
+  var lineStart = v.lastIndexOf('\n', pos - 1) + 1;   /* pos 所在行的行首 */
+  var eol = v.indexOf('\n', pos);                     /* pos 所在行的行尾（不含 \n） */
+  if(eol < 0) eol = v.length;
+  var curLine = v.slice(lineStart, eol);
+
+  var next;
+  if(curLine.trim() === ''){
+    /* 光标在空行上 → 就用这一行，不新增空行 */
+    next = v.slice(0, lineStart) + line + v.slice(eol);
+  }else{
+    /* 光标在有内容的行上 → 在这行之后另起一行 */
+    next = v.slice(0, eol) + '\n' + line + v.slice(eol);
+  }
+
+  /* 光标：附件行停在「|」之后，普通行停在插入内容末尾 */
+  var base = (curLine.trim() === '') ? lineStart : (eol + 1);
+  var caret = base + line.length;
+  var bar = line.indexOf('|');
+  if(bar >= 0) caret = base + bar + 1;
+
+  ta.value = next;
+  ta.selectionStart = ta.selectionEnd = Math.max(0, Math.min(caret, next.length));
   ta.focus();
 }
 

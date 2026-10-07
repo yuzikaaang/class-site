@@ -823,7 +823,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.2.1';
+var SITE_VERSION = '2.2.2';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -2789,8 +2789,9 @@ function classContentDialog(idx){
       + '<div class="msg" id="ccMsg"></div>';
   }else if(isHomework){
     /* 作业：结构化编辑。每科 = 科目名 + 任务多行文本（一行一条）。
-       附件任务（图片/音频）在文本里用「📎 [图片] 描述」占位行表示，
-       保存时按出现顺序还原成附件对象；删掉占位行 = 移除该附件。 */
+       附件任务（图片/音频/视频）在文本里用「📎 [图片] 描述」占位行表示，
+       保存时按**描述匹配**还原成附件对象；删掉占位行 = 移除该附件。
+       （2026-10-07：原来按出现顺序配对，中间删行会全体错位，已改。） */
     var src = c ? (c._ref || {}) : {};
     var subs = (c ? hwItemsOf(src) : []);
     bodyHtml =
@@ -2848,7 +2849,9 @@ function classContentDialog(idx){
       if(subjBox){
         var ATT_RE = /^\s*📎\s*\[([^\]]*)\]\s*/;   /* 📎 [图片] 描述 */
         var attMark = function(t){
-          var what = t.img ? '图片' : (t.audio ? '音频' : '附件');
+          /* 三个字段都要认（2026-10-07 补 video）：只判 img/audio 的话，
+             视频附件会被标成「[附件]」，占位行还原时也就跟着丢了类别。 */
+          var what = t.img ? '图片' : (t.audio ? '音频' : (t.video ? '视频' : '附件'));
           return '📎 [' + what + '] ' + (t.text || '');
         };
 
@@ -2869,7 +2872,7 @@ function classContentDialog(idx){
             + '<textarea class="hw-subj-tasks" rows="' + Math.max(3, lines.length + 1) + '" '
             +   'placeholder="一行一条任务；📎 开头的是附件占位行，别改文字部分">'
             + esc(lines.join('\n')) + '</textarea>'
-            + (atts.length ? '<p class="muted" style="font-size:.74rem;margin:6px 0 0">本科有 ' + atts.length + ' 个图片/音频附件，以 📎 行表示；删掉该行 = 移除附件</p>' : '');
+            + (atts.length ? '<p class="muted" style="font-size:.74rem;margin:6px 0 0">本科有 ' + atts.length + ' 个图片/音频/视频附件，以 📎 行表示；删掉该行 = 移除附件</p>' : '');
           blk.__atts = atts;
           blk.querySelector('.hw-subj-del').onclick = function(){ blk.remove(); };
           subjBox.appendChild(blk);
@@ -2937,9 +2940,19 @@ function classContentDialog(idx){
               .map(function(l){ return l.trim(); }).filter(Boolean)
               .map(function(ln){
                 if(ATT_RE.test(ln)){
-                  /* 附件占位行 → 还原为原附件对象；对不上号就退化成纯文本 */
-                  var obj = atts.shift();
-                  return obj || ln.replace(ATT_RE, '');
+                  /* 附件占位行 → 还原为原附件对象。
+                     ⚠️ 这里原来用 atts.shift() 按**位置**配对，有个隐坑：
+                        用户在中间删掉/加了别的行，后面的附件就会全体错位，
+                        而且错得无声无息（链接换到了另一条任务上）。
+                        改成**按描述匹配**，对不上号才退化成纯文本。
+                        主站 caSave 用的是同一套匹配思路，两边保持一致。 */
+                  var desc = ln.replace(ATT_RE, '').split('|')[0].trim();
+                  var hit = -1;
+                  for(var k = 0; k < atts.length; k++){
+                    if(atts[k] && String(atts[k].text || '').trim() === desc){ hit = k; break; }
+                  }
+                  if(hit >= 0) return atts.splice(hit, 1)[0];
+                  return ln.replace(ATT_RE, '');
                 }
                 return ln;
               });
@@ -3175,7 +3188,8 @@ function renderHomeworks(){
     + '<div class="alert info" style="margin-bottom:16px">'
     +   '<b>要新增某个日期的作业</b>：点左上角「＋ 新增作业」→ 填标题（如「国庆假期作业」）、'
     +   '开始 / 结束日期 → 逐科添加任务 → 保存。到日子同学打开「作业」就能看到，日期过了自动归档。<br>'
-    +   '每条任务下面可以单独挂<b>图片 / 音频链接</b>，挂在哪条就显示在哪个任务下面。<br>'
+    +   '每条任务下面可以单独挂<b>图片 / 音频 / 视频链接</b>（填直链），挂在哪条就显示在哪个任务下面。<br>'
+    +   '附件文件由站主统一上传到仓库后给出链接，后台不提供直接上传。<br>'
     +   '日常改本科目作业不用进后台——课代表在自己科目的作业卡上点 ✏️ 即可（只能改自己那科）。'
     + '</div>'
     + '<section class="panel">'
@@ -3364,9 +3378,9 @@ function hwToDraft(h){
           name: it.subject || '',
           tasks: (it.tasks || []).map(function(t){
             if(t && typeof t === 'object'){
-              return { text: t.text || '', img: t.img || '', audio: t.audio || '', audioLabel: t.audioLabel || '' };
+              return { text: t.text || '', img: t.img || '', audio: t.audio || '', video: t.video || '', audioLabel: t.audioLabel || '' };
             }
-            return { text: String(t == null ? '' : t), img:'', audio:'', audioLabel:'' };
+            return { text: String(t == null ? '' : t), img:'', audio:'', video:'', audioLabel:'' };
           }),
         };
       }),
@@ -3376,7 +3390,7 @@ function hwToDraft(h){
   return {
     id: h.id || '', title: h.title || '', start: h.start || '', end: h.end || '',
     subjects: (h.subject || h.content)
-      ? [{ name: h.subject || '', tasks: [{ text: h.content || '', img:'', audio:'', audioLabel:'' }] }]
+      ? [{ name: h.subject || '', tasks: [{ text: h.content || '', img:'', audio:'', video:'', audioLabel:'' }] }]
       : [],
   };
 }
@@ -3392,14 +3406,15 @@ function hwDraftToItem(d, raw){
       subject: s.name.trim() || '未分科',
       tasks: s.tasks.map(function(t){
         var txt = (t.text || '').trim();
-        /* 没图没音频就存字符串（和主站既有数据保持一致，纯文本任务占大多数） */
-        if(!t.img && !t.audio) return txt;
+        /* 没图没音频没视频就存字符串（和主站既有数据保持一致，纯文本任务占大多数） */
+        if(!t.img && !t.audio && !t.video) return txt;
         var o = { text: txt };
         if(t.img)   o.img = t.img.trim();
         if(t.audio){ o.audio = t.audio.trim(); o.audioLabel = (t.audioLabel || '').trim() || '播放听力音频'; }
+        if(t.video) o.video = t.video.trim();
         return o;
       }).filter(function(t){
-        return (typeof t === 'string') ? t.length > 0 : !!(t.text || t.img || t.audio);
+        return (typeof t === 'string') ? t.length > 0 : !!(t.text || t.img || t.audio || t.video);
       }),
     };
   }).filter(function(it){ return it.tasks.length; });
@@ -3418,6 +3433,8 @@ function hwTaskHtml(t, si, ti){
     +   ' value="' + attr(t.img || '') + '" placeholder="🖼 图片链接（可选）：填直链，如 https://… / ./homework/xxx.jpg" maxlength="400">'
     + '<input class="hwed-media" data-si="' + si + '" data-ti="' + ti + '" data-f="audio"'
     +   ' value="' + attr(t.audio || '') + '" placeholder="🎧 音频链接（可选）：填直链，如 https://….mp3" maxlength="400">'
+    + '<input class="hwed-media" data-si="' + si + '" data-ti="' + ti + '" data-f="video"'
+    +   ' value="' + attr(t.video || '') + '" placeholder="🎬 视频链接（可选）：填直链，如 https://….mp4" maxlength="400">'
     + '</div>';
 }
 
@@ -3477,7 +3494,7 @@ function hwPaintEd(){
   Array.prototype.forEach.call(box.querySelectorAll('[data-add-task]'), function(b){
     b.onclick = function(){
       var s = d.subjects[+b.dataset.addTask]; if(!s) return;
-      s.tasks.push({ text:'', img:'', audio:'', audioLabel:'' });
+      s.tasks.push({ text:'', img:'', audio:'', video:'', audioLabel:'' });
       hwPaintEd();
     };
   });
@@ -3491,7 +3508,7 @@ function hwPaintEd(){
   });
   var addS = $('hwedAddSubj');
   if(addS) addS.onclick = function(){
-    d.subjects.push({ name:'', tasks:[{ text:'', img:'', audio:'', audioLabel:'' }] });
+    d.subjects.push({ name:'', tasks:[{ text:'', img:'', audio:'', video:'', audioLabel:'' }] });
     hwPaintEd();
   };
 }
@@ -3520,7 +3537,11 @@ function hwDialog(idx){
     if(d.start > d.end){ toast('开始日期不能晚于结束日期', 'err'); return; }
     var ok2 = d.subjects.some(function(s){
       return s.name.trim() && s.tasks.some(function(t){
-        return (t.text || '').trim() || t.img || t.audio;
+        /* ⚠️ 这里必须把 video 也算上：只判 text/img/audio 的话，
+           一条「只挂了视频」的任务会被判成空任务，
+           整份作业保存时报「至少要有一个科目名和一条任务」——
+           明明填了东西却说没有，用户根本猜不到是漏了这个字段。 */
+        return (t.text || '').trim() || t.img || t.audio || t.video;
       });
     });
     if(!ok2){ toast('至少要有一个科目名和一条任务', 'err'); return; }

@@ -22,7 +22,6 @@ import dataHandler from './data.js';
 import adminHandler from './admin.js';
 import profileHandler from './profile.js';
 import contentHandler from './content.js';
-import uploadHandler from './upload.js';
 import { cors } from './_lib/http.js';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
@@ -30,9 +29,10 @@ async function adaptRequest(request, env) {
   const url = new URL(request.url);
 
   /* 预读请求体（Get / Head 没有 body，跳过）
-     ⚠️ 用 text() 而不是 arrayBuffer()：业务代码全是 JSON（上传附件也走
-        JSON + base64，见 api/upload.js 的说明），纯文本链路最稳。
-        代价是**不能用 multipart/form-data** —— 二进制段经这一趟会坏。 */
+     ⚠️ 用 text() 而不是 arrayBuffer()：业务代码全是 JSON，纯文本链路最稳。
+        代价是**不能用 multipart/form-data** —— 二进制段经这一趟会坏。
+        （曾经有个作业附件上传接口也走这条路，2026-10-07 第二十六轮已移除，
+          附件改回「站主手动放文件 + 填直链」。） */
   let rawBody = '';
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     try {
@@ -125,9 +125,6 @@ export default {
         case 'content':
           await contentHandler(req, res);
           break;
-        case 'upload':
-          await uploadHandler(req, res);
-          break;
         default:
           /* 404 也要回 CORS 头，否则跨域下浏览器会把响应整个拦掉，
              前端只看到含糊的 "Failed to fetch"，分不清是路径写错还是后端没配 */
@@ -156,23 +153,6 @@ export default {
        有个能一眼核对的标记，排查成本从「猜」降到「看一眼」。
        本地开发时没这个变量，就不输出这个头。 */
     if (env && env.BUILD_SHA) state.headers['X-Build-Sha'] = String(env.BUILD_SHA);
-
-    /* ⚠️ 例外通道：业务层要回**二进制流**时，会自己构造 Response
-       挂在 req.__rawResponse 上，并给 res 打 X-Raw-Response 标记。
-
-       为什么不能走下面的 state.body：
-         响应收集器的 end() 会把 body 一律 String(body)，
-         二进制（音频/视频字节）经这一步就毁了 —— 表现为「上传成功、
-         点播放没声音」，且不会有任何报错。这类静默损坏最难查。
-
-       目前只有 api/upload.js 的 ?action=file 用这条通道（代理读附件）。
-       其它接口一律走正常 JSON 路径，别乱用。 */
-    if (req.__rawResponse instanceof Response) {
-      const raw = req.__rawResponse;
-      /* 构建标记也要带上，方便核对线上版本 */
-      if (env && env.BUILD_SHA) raw.headers.set('X-Build-Sha', String(env.BUILD_SHA));
-      return raw;
-    }
 
     return new Response(noBody ? null : state.body, {
       status: state.statusCode,
