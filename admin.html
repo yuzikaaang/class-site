@@ -823,7 +823,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.2.0';
+var SITE_VERSION = '2.2.1';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -2372,11 +2372,49 @@ function renderClassContent(){
  * 拉云端数据并摊平成统一记录数组。
  * 每条记录带 _store 字段标明来源，保存时靠它决定往哪儿写回去。
  */
-/** 公告没有标题字段时，列表/弹窗标题取正文首行（超 42 字截断）。 */
+/** 公告首行（同上，列表/弹窗标题用） */
 function annFirstLine(text){
   var line = String(text || '').split('\n')[0].trim();
   if(!line) return '';
   return line.length > 42 ? line.slice(0, 42) + '…' : line;
+}
+
+/* ============================================================================
+ * 公告置顶（2026-10-07 新增）
+ * ------------------------------------------------------------------------
+ * 站主要求：公告可以设置「显示置顶」或「永久置顶」。
+ * 数据层就两个字段（主站 index.html 的 isImportant() 早就认这两个）：
+ *     important: true                  → 永久置顶
+ *     important: true + importantUntil → 限时置顶，到点自动失效
+ *     important 缺失 / false           → 普通公告
+ * 这次要补的是**后台没有地方设置它们**——之前只能靠我手改数据。
+ *
+ * ⚠️ importantUntil 用 ISO 字符串存；表单用 datetime-local（本地时区，无时区后缀），
+ *    两边靠下面两个函数换算。别把 datetime-local 的值直接塞进 importantUntil，
+ *    那会被当成 UTC 解析，北京时间会差 8 小时。
+ * ========================================================================= */
+function annPinState(a){
+  a = a || {};
+  if(!a.important) return 'none';
+  if(a.importantUntil){
+    if(new Date(a.importantUntil).getTime() <= Date.now()) return 'expired';
+    return 'until';
+  }
+  return 'forever';
+}
+function annPinLabel(st){
+  return st === 'forever' ? '📌 永久置顶'
+       : st === 'until'   ? '⏳ 限时置顶'
+       : st === 'expired' ? '⌛ 置顶已过期'
+       : '';
+}
+/** ISO → datetime-local 输入框的值（本地时区） */
+function isoToLocalInput(iso){
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+       + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
 /** 新公告的发布时间，格式与线上数据一致（YYYY-MM-DD HH:MM，本地时间）。 */
@@ -2532,10 +2570,12 @@ function paintClassContent(){
     var editBtn = (c.kind === '作业')
       ? ''
       : '<button data-cc-edit="' + i + '">' + svg('edit', 14) + '编辑</button>';
+    var pinSt = (c.kind === '公告') ? annPinState(c._ref) : 'none';
     return '<div class="rec">'
       + '<div class="rec-main">'
       +   '<div class="rec-top">'
       +     '<span class="badge ' + kindBadgeClass(c.kind) + '">' + esc(c.kind) + '</span>'
+      +     (pinSt !== 'none' ? '<span class="badge badge-orange">' + esc(annPinLabel(pinSt)) + '</span>' : '')
       +     '<b>' + esc(c.title || '(无标题)') + '</b>'
       +   '</div>'
       +   '<div class="rec-meta">'
@@ -2576,6 +2616,13 @@ function classContentViewDialog(c){
             ? '定向 ' + c.targets.length + ' 人：' + esc(c.targets.join('、'))
             : '全体同学') + '</dd>'
         : '')
+    + (function(){
+        if(c.kind !== '公告') return '';
+        var st = annPinState(c._ref);
+        var tail = (st === 'until' || st === 'expired')
+          ? '　<span class="muted" style="font-size:.78rem">（到 ' + esc(fmt(c._ref.importantUntil)) + ' 结束）</span>' : '';
+        return '<dt>置顶</dt><dd>' + (st === 'none' ? '不置顶' : esc(annPinLabel(st)) + tail) + '</dd>';
+      })()
     + '</dl>';
 
   var body = c.body
@@ -2704,6 +2751,12 @@ function classContentDialog(idx){
   var bodyHtml = '';
 
   if(isAnnounce){
+    /* 置顶三态：不置顶 / 永久置顶 / 限时置顶（到点自动取消） */
+    var _pr = c ? (c._ref || {}) : {};
+    var pinMode = annPinState(_pr);
+    if(pinMode === 'expired') pinMode = 'until';      /* 过期了也按「限时」显示，让人能改时间 */
+    var pinUntilVal = _pr.importantUntil ? isoToLocalInput(_pr.importantUntil) : '';
+
     bodyHtml =
       '<div class="field"><label for="ccBody">公告正文 <span style="color:var(--danger)">*</span></label>'
       + '<textarea id="ccBody" rows="6" placeholder="支持多行，保存后直接显示在班级站首页公告栏">'
@@ -2715,6 +2768,21 @@ function classContentDialog(idx){
           return '<option value="' + attr(k.key) + '"' + (cur === k.key ? ' selected' : '') + '>' + esc(k.name) + '</option>';
         }).join('')
       + '</select></div>'
+      + '<div class="field"><label for="ccPin">置顶</label>'
+      + '<select id="ccPin">'
+      +   [['none', '不置顶'],
+           ['forever', '📌 永久置顶（一直排在最上）'],
+           ['until', '⏳ 限时置顶（到指定时间自动取消）']].map(function(p){
+          return '<option value="' + attr(p[0]) + '"' + (pinMode === p[0] ? ' selected' : '') + '>' + esc(p[1]) + '</option>';
+        }).join('')
+      + '</select>'
+      + '<div id="ccPinUntilWrap" style="margin-top:8px' + (pinMode === 'until' ? '' : ';display:none') + '">'
+      +   '<label for="ccPinUntil">置顶到</label>'
+      +   '<input type="datetime-local" id="ccPinUntil" value="' + attr(pinUntilVal) + '">'
+      +   '<p class="muted" style="font-size:.76rem;margin:4px 0 0">按你手机 / 电脑上的本地时间算，到点自动降为普通公告</p>'
+      + '</div>'
+      + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">置顶公告在班级站公告栏排最上方，并带「置顶」标签</p>'
+      + '</div>'
       + '<div class="field"><label>发布时间</label>'
       + '<input value="' + attr(c ? ((c._ref && c._ref.date) || '') : annNowStr()) + '" disabled>'
       + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">已发布公告的时间不再改动，保证与同学看到的一致</p></div>'
@@ -2766,6 +2834,15 @@ function classContentDialog(idx){
       box.querySelector('[data-cc-cancel]').onclick = closeModal;
       var msg = box.querySelector('#ccMsg');
 
+      /* ================= 公告：置顶方式切换 ================= */
+      var pinSel = box.querySelector('#ccPin');
+      if(pinSel){
+        var wrap = box.querySelector('#ccPinUntilWrap');
+        pinSel.onchange = function(){
+          if(wrap) wrap.style.display = (pinSel.value === 'until') ? '' : 'none';
+        };
+      }
+
       /* ================= 作业：科目编辑器 ================= */
       var subjBox = box.querySelector('#ccHwSubjects');
       if(subjBox){
@@ -2810,7 +2887,21 @@ function classContentDialog(idx){
         if(isAnnounce){
           var textV = box.querySelector('#ccBody').value.trim();
           var cat = box.querySelector('#ccCat').value;
+          var pinV = box.querySelector('#ccPin') ? box.querySelector('#ccPin').value : 'none';
           if(!textV){ msg.className = 'msg err show'; msg.textContent = '请填写公告正文'; return; }
+
+          /* 置顶三态 → important / importantUntil 两个字段。
+             限时置顶必须给到点时间，且必须是未来——否则等于「点了置顶却立刻失效」，
+             后台看着像成功、前台根本不置顶，这种静默不一致最坑。 */
+          var pinUntilIso = '';
+          if(pinV === 'until'){
+            var uv = box.querySelector('#ccPinUntil') ? box.querySelector('#ccPinUntil').value.trim() : '';
+            if(!uv){ msg.className = 'msg err show'; msg.textContent = '选了限时置顶，请填写置顶到什么时候'; return; }
+            var ud = new Date(uv);
+            if(isNaN(ud.getTime())){ msg.className = 'msg err show'; msg.textContent = '置顶时间看不懂，请重新选一个'; return; }
+            if(ud.getTime() <= Date.now()){ msg.className = 'msg err show'; msg.textContent = '置顶结束时间要晚于现在（否则一发布就失效）'; return; }
+            pinUntilIso = ud.toISOString();
+          }
 
           if(editing){
             ref = c._ref || {};
@@ -2824,10 +2915,15 @@ function classContentDialog(idx){
           }else{
             ref = { date: annNowStr(), text: textV, category: cat };
           }
+          /* 置顶字段写回：不置顶要把两个字段都清掉，否则「取消置顶」取消不掉 */
+          if(pinV === 'forever'){ ref.important = true; delete ref.importantUntil; }
+          else if(pinV === 'until'){ ref.important = true; ref.importantUntil = pinUntilIso; }
+          else { delete ref.important; delete ref.importantUntil; }
           rec = {
             _store: 'announcement', _ref: ref, kind: '公告',
             title: ref.title || annFirstLine(ref.text),
-            body: ref.text, targets: ref.targets || [], time: ref.date
+            body: ref.text, targets: ref.targets || [], time: ref.date,
+            pin: annPinState(ref)
           };
 
         }else if(isHomework){

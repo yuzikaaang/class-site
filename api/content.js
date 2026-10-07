@@ -297,11 +297,16 @@ async function caSaveSubject(req, res) {
       continue;
     }
     if (t && typeof t === 'object' && !Array.isArray(t)) {
+      /* video 字段是 2026-10-07 第二十五轮加的（作业视频上传）。
+         ⚠️ 前端 _renderHwItems 会读 .video 并渲染 <video>，
+            校验这里漏放行会导致「前端传上去、保存时报格式不对」，
+            表现是「上传成功但存不了」，很难从报错里看出是校验问题。 */
       const shapeOk = typeof t.text === 'string' && t.text.length <= 500 &&
         (t.img === undefined || t.img === null || typeof t.img === 'string') &&
         (t.audio === undefined || t.audio === null || typeof t.audio === 'string') &&
+        (t.video === undefined || t.video === null || typeof t.video === 'string') &&
         (t.audioLabel === undefined || t.audioLabel === null || typeof t.audioLabel === 'string');
-      if (!shapeOk) return fail(res, 400, '任务条目格式不对（应为文本或 {text, img/audio} 附件对象）');
+      if (!shapeOk) return fail(res, 400, '任务条目格式不对（应为文本或 {text, img/audio/video} 附件对象）');
       continue;
     }
     return fail(res, 400, '任务条目格式不对（应为文本或附件对象）');
