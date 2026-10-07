@@ -37,11 +37,21 @@
 import bcrypt from 'bcryptjs';
 
 /** 默认迭代次数。
- *  选 25000 的考量（2026-10-07）：改密码路径要算 2 次派生，
- *  2 × 25000 ≈ 9.1ms，稳稳低于 Workers 免费版 10ms CPU 上限；
- *  同时仍远高于「在线爆破」的可行成本（有登录限流兜底）。
- *  若线上仍偶发 1102，可继续下调到 20000 / 15000。 */
-export const ITERATIONS = 25000;
+ *
+ *  🔴 第二十七轮（2026-10-07）二次踩坑纠正：
+ *     一开始从 50000 降到 25000，以为「2 × 25000 ≈ 9.1ms < 10ms」够了。
+ *     线上实测**仍 500**。
+ *     原因：10ms 是**整请求**的 CPU 预算，不是只给密码计算的。
+ *     改密码这一请求的 CPU 实际由三部分叠加：
+ *       · requireUser：ensureSchema + join 查询 + profiles 查询 + sha256 ≈ 数 ms
+ *       · verifyPassword：1 次 PBKDF2
+ *       · hashPassword  ：1 次 PBKDF2
+ *     25000 时两次 PBKDF2 单独就 9.4ms，再加前面的库与哈希开销必然越界。
+ *     （登录只跑 1 次 PBKDF2 ≈ 5.2ms，所以登录一直正常。）
+ *     现取 **10000**：两次 PBKDF2 ≈ 3.8ms，给库开销留足余量。
+ *     安全性上，配合「同账号连续失败 5 次锁 15 分钟」的线上限流，
+ *     10000 次 PBKDF2 仍远高于在线爆破的可行成本。 */
+export const ITERATIONS = 10000;
 const SALT_BYTES = 16;
 const KEY_BYTES = 32;
 
@@ -134,6 +144,28 @@ export async function verifyPassword(password, stored) {
 }
 
 /**
+ * 这条哈希串的迭代次数（用于判断是否需要用更省 CPU 的档位重算）。
+ * 非 pbkdf2（bcrypt 老串 / 非法串）一律返回 0，由调用方单独处理。
+ */
+export function hashIterations(stored) {
+  const s = String(stored || '');
+  if (/^\$2[aby]\$/.test(s)) return 0;
+  const parts = s.split('$');
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2') return 0;
+  const n = Number(parts[1]);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** 哈希串是否「太贵」（迭代次数高于当前档位）——这类账号需要用更省 CPU 的档位重算，
+ *  否则改密码时会因为「verify 高开销 + hash 再一次」双双超 Workers CPU 上限而 500。
+ *  注意：**不能**在登录/改密的请求内顺手重算（实测 50000 校验 + 10000 重算 ≈ 12.3ms 仍超限），
+ *  必须走后台重置密码 / 一次性迁移这类「单次只做一件事」的通道。 */
+export function needsDowngrade(stored) {
+  const n = hashIterations(stored);
+  return n > 0 && n > ITERATIONS;
+}
+
+/**
  * 这个哈希串是否需要升级（仅 bcrypt → pbkdf2 这种「算法」层面的升级）。
  *
  * ⚠️ 2026-10-07 第二十七轮重要约束：
@@ -170,4 +202,4 @@ export async function sha256Hex(str) {
  * bcryptjs 直接返回 false 不做计算）。
  */
 export const DECOY_HASH =
-  'pbkdf2$25000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  'pbkdf2$10000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';

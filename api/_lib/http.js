@@ -235,6 +235,51 @@ function bearer(req) {
 }
 
 /**
+ * 轻量版当前用户：只查会话 → 用户，不做 ensureSchema、不查 profiles。
+ *
+ * 用途（2026-10-07 第二十七轮）：改密码这种「还要再跑两次 PBKDF2」的接口，
+ * CPU 预算本来就紧。完整的 currentUser 会先跑一遍 ensureSchema（多条 DDL）
+ * 再查 profiles，叠加两次派生很容易越过 Workers 的 10ms CPU 上限 →
+ * 表现为「原密码正确却 500」。这里只取鉴权与改密必需的字段，把预算留给密码计算。
+ *
+ * 注意：它**不保证** must_change_password 列存在，所以绝不能拿它当通用鉴权用。
+ */
+async function currentUserSlim(req) {
+  const token = bearer(req);
+  if (!token) return null;
+  const sql = getSql();
+  const tokenHash = await sha256Hex(token);
+  const rows = await sql`
+    select u.id, u.username, u.role, u.status, u.display_name
+      from sessions s
+      join users u on u.id = s.user_id
+     where (s.token = ${tokenHash} or s.token = ${token})
+       and s.expires_at > now()
+     limit 1
+  `;
+  if (!rows.length) return null;
+  const u = rows[0];
+  if (u.status !== 'active') return null;
+  return {
+    id: Number(u.id),
+    username: u.username,
+    role: u.role,
+    displayName: u.display_name,
+    isAI: false,
+  };
+}
+
+/** 轻量鉴权：给「CPU 预算紧张」的接口用（目前是改密码）。 */
+export async function requireUserSlim(req, res) {
+  const u = await currentUserSlim(req);
+  if (!u) {
+    fail(res, 401, '未登录或登录已过期，请重新登录');
+    return null;
+  }
+  return u;
+}
+
+/**
  * 解析当前登录用户。
  * @returns {Promise<{id:number,username:string,role:string}|null>}
  */

@@ -2079,6 +2079,43 @@ console.log('\n【27】第二十七轮·令牌哈希存储 + 改密码回归');
   await call('/api/auth?action=change-password', {
     method: 'POST', token: cp.body.token, body: { oldPassword: 'NewPass2026!', newPassword: pwd },
   });
+
+  /* ---- 老账号（高迭代档位哈希）护栏 ----
+     把该用户的哈希改成旧档位（50000），断言改密码接口提前返回 409 + 明确提示，
+     而不是跑到超 CPU 上限（在测试环境不体现，但线上会 500）。
+     这保证「老账号不会再得到莫名其妙的服务器错误」。 */
+  const { hashPassword, needsDowngrade } = await import('./api/_lib/password.js');
+  const legacyHash = await hashPassword(pwd, 50000);
+  db.run("update users set password_hash = ? where id = ?", [legacyHash, uid]);
+  t('老哈希被识别为「需要降级」', needsDowngrade(legacyHash) === true);
+  t('新档位哈希不需要降级', needsDowngrade(await hashPassword(pwd)) === false);
+
+  const relogin2 = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: uname, password: pwd },
+  });
+  t('老账号仍能正常登录', relogin2.status === 200 && relogin2.body.token, JSON.stringify(relogin2.body));
+
+  const cpLegacy = await call('/api/auth?action=change-password', {
+    method: 'POST', token: relogin2.body.token, body: { oldPassword: pwd, newPassword: 'Whatever2026!' },
+  });
+  t('老账号改密码返回 409（不再 500）', cpLegacy.status === 409, 'status ' + cpLegacy.status);
+  t('老账号改密码带 needsAdminReset 标记', cpLegacy.body && cpLegacy.body.needsAdminReset === true,
+    JSON.stringify(cpLegacy.body));
+  t('老账号改密码提示文案提到「重置密码」',
+    !!(cpLegacy.body && /重置密码/.test(cpLegacy.body.error || '')));
+
+  /* 模拟「管理员重置密码」后该账号就能自助改密（重置用的是新档位单次派生） */
+  const { hashPassword: hp2 } = await import('./api/_lib/password.js');
+  db.run("update users set password_hash = ?, must_change_password = 0 where id = ?", [await hp2(pwd), uid]);
+  const relogin3 = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: uname, password: pwd },
+  });
+  const cpAfterReset = await call('/api/auth?action=change-password', {
+    method: 'POST', token: relogin3.body.token, body: { oldPassword: pwd, newPassword: 'FinalPwd2026!' },
+  });
+  t('重置后再改密码返回 200（老账号问题彻底解决）',
+    cpAfterReset.status === 200 && cpAfterReset.body.ok,
+    'status ' + cpAfterReset.status + ' ' + JSON.stringify(cpAfterReset.body));
 }
 
 console.log('\n' + '='.repeat(52));

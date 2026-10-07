@@ -8,10 +8,10 @@
 import { getSql, cfg } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body,
-  requireUser, newToken, audit, ensureSchema,
+  requireUser, requireUserSlim, newToken, audit, ensureSchema,
 } from './_lib/http.js';
 import {
-  hashPassword, verifyPassword, needsRehash, DECOY_HASH, sha256Hex,
+  hashPassword, verifyPassword, needsRehash, DECOY_HASH, sha256Hex, needsDowngrade,
 } from './_lib/password.js';
 
 /* 用户名规则：3–20 位，字母/数字/下划线/中文 */
@@ -338,7 +338,12 @@ async function ping(req, res) {
 /* ---------------- 修改自己的密码 ---------------- */
 async function changePassword(req, res) {
   if (req.method !== 'POST') return fail(res, 405, '请用 POST');
-  const u = await requireUser(req, res);
+  /* ⚠️ 这里用「轻量鉴权」而不是完整 requireUser：
+     改密码要跑两次 PBKDF2（校验 + 生成新哈希），CPU 预算很紧；
+     完整的 requireUser 还会先跑 ensureSchema（多条 DDL）并查 profiles，
+     叠加两次派生会越过 Workers 10ms CPU 上限，表现为「原密码正确却 500」。
+     轻量版只查会话与用户，把预算全部留给密码计算。（2026-10-07 第二十七轮） */
+  const u = await requireUserSlim(req, res);
   if (!u) return;
 
   const b = await body(req);
@@ -351,9 +356,30 @@ async function changePassword(req, res) {
   const sql = getSql();
   const rows = await sql`select password_hash from users where id = ${u.id}`;
   if (!rows.length) return fail(res, 400, '账号数据异常，请联系管理员');
-  const good = await verifyPassword(oldPwd, rows[0].password_hash);
+  const oldHash = rows[0].password_hash;
+  /* 🛡️ 老账号护栏（2026-10-07 第二十七轮）：
+     若该账号的哈希还停留在旧的高迭代档位（> 当前 ITERATIONS，例如 50000），
+     那么「校验原密码」这一次 PBKDF2 就要约 10ms，Android Workers 免费版
+     CPU 上限只有 10ms，再叠加「生成新哈希」必然 Error 1102 → 前端看到的
+     就是「服务器错误」，而用户完全猜不到原因。
+     这里提前拦下并给出可操作提示：让管理员到后台「重置密码」——
+     重置是**单次派生**（只用新档位生成新哈希，不需要校验老哈希），
+     既不会超限，又能把该账号顺势迁到新档位，之后自助改密就正常了。 */
+  if (needsDowngrade(oldHash)) {
+    return fail(res, 409,
+      '你的账号还使用旧版密码加密格式，直接修改会超出服务器计算限制。'
+      + '请让管理员在后台「用户管理」里给你点一次「重置密码」（重置后你就能自己改密码了）。',
+      { needsAdminReset: true });
+  }
+  const good = await verifyPassword(oldPwd, oldHash);
   if (!good) return fail(res, 401, '原密码不对');
 
+  /* 生成新哈希（新档位 10000）。此时本次请求的累计逻辑是：
+       轻量鉴权（1 次会话查询 + 1 次 sha256）
+       + verifyPassword（1 次 PBKDF2，档位=老哈希档位）
+       + hashPassword（1 次 PBKDF2，档位=10000）
+     对新账号（老哈希也是 10000）：约 3.8ms 派生，余量充足。
+     对老账号（老哈希 50000）：verify 单次就约 10ms，本就贴着上限 —— 见下方护栏。 */
   const hash = await hashPassword(newPwd);
   /* must_change_password 一并清零：首次登录被强制改密后，下次不再拦 */
   await sql`
