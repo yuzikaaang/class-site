@@ -40,6 +40,7 @@ const ALLOW_CONTENT_KEYS = [
   'important_dates',    // 重要日期 / 考试范围
   'daily_quote',        // 每日一言
   'site_config',        // 站点通用配置
+  'popups',             // 通用弹窗引擎（第二十七轮）：开屏弹 + 板块弹
 ];
 
 /* 课代表能改的字段——只有作业相关。

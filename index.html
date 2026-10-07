@@ -1926,6 +1926,24 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   </div>
 </div>
 
+<!-- ===== 通用弹窗引擎（第二十七轮）=====
+     由 SITE_DATA.popups 驱动；不配任何条目时此容器永不显示，行为同以前。
+     样式复用 .allboard-mask / .allboard-box，与站内其它弹窗观感一致。 -->
+<div class="allboard-mask" id="popMask">
+  <div class="allboard-box" style="max-width:360px">
+    <div class="allboard-head"><span id="popTitle">提示</span><button onclick="closePop()">关闭</button></div>
+    <div style="padding:18px 22px;text-align:left">
+      <div id="popMedia" style="display:none;margin-bottom:12px"></div>
+      <div id="popBody" style="font-size:.9rem;color:#57534e;line-height:1.85;white-space:pre-line"></div>
+      <div id="popEnd" style="font-size:.78rem;color:#6e635a;margin-top:10px"></div>
+      <button class="btn" id="popLink" style="width:100%;margin-top:14px;display:none" onclick="popGoLink()"></button>
+      <button class="btn btn-secondary" id="popOkBtn" style="width:100%;margin-top:10px" onclick="closePop()">我知道了</button>
+    </div>
+  </div>
+</div>
+<!-- 通用弹窗悬浮球（关闭后出现，点开重看；与其它球统一排布） -->
+<button id="popBubble" onclick="popFromBubble()" title="查看通知" aria-label="查看通知" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(129,140,248,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(129,140,248,.4)">📢<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
+
 <!-- ===== 抽歌排期 · 身份验证弹窗（本地校验，不上传；接入自锁） ===== -->
 <div class="allboard-mask" id="djVerifyMask">
   <div class="allboard-box" style="max-width:340px">
@@ -2544,7 +2562,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.3.1';
+var SITE_VERSION = '2.3.2';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -2631,6 +2649,42 @@ var SITE_DATA = {
   siteLinks: [
     { label: "主链接", url: "https://yuzikaaang.github.io/class-site/" },
     { label: "备用链接", url: "https://a5048c773a210b3d4-25579.app.workbuddy.link/", note: "⚠️ 微信内打不开！请复制链接后用系统浏览器（Safari / Chrome / Edge）打开。主链接正常时优先用主链接。" }
+  ],
+  /* ── 通用弹窗引擎（第二十七轮新增）──
+     一个数组统领全站弹窗：开屏弹 + 板块弹。默认是空数组，
+     什么都不配时**行为与以前完全一致**（不弹任何新窗口）。
+
+     每条字段：
+       id      —— 唯一标识。换内容就改 id，之前关过的同学会重新收到。
+       scope   —— 播放时机：
+                    'boot'   = 进站开屏弹（与其它弹窗排队，不叠）
+                    'cat:2'  = 进入板块 2 时弹（数字 = 板块 id）
+       source  —— 内容来源，复用站内已有数据，不用重复维护：
+                    'announcements'    取最新一条（important 置顶优先）
+                    'homework_notice'  取作业通知（同 hwPopGet）
+                    'custom'           用本条里的 title/body/video/image
+       title   —— source='custom' 时的标题
+       body    —— source='custom' 时的正文，\n 换行
+       video   —— 可选，B站分享链接或 mp4 直链 → 弹窗内嵌视频
+       image   —— 可选，图片直链 → 弹窗内展示图片
+       linkText / linkUrl —— 可选，底部按钮（留空不显示）
+       startAt / endAt     —— 可选，时间窗（"2026-10-13T08:00:00"），窗内才弹
+       dismiss —— 关闭后行为：
+                    'daily'  当天不再弹，次日恢复（默认）
+                    'once'   只弹一次，以后永不自动弹
+                    'always' 每次进站/进板块都弹
+       bubble  —— true = 关掉后右下角留悬浮球，可随时点开重看（默认 true）
+
+     站主用法：想弹什么就往下面数组加一条即可；不用了删掉那条。 */
+  popups: [
+    /* 示例（默认注释，需要时把注释去掉并改内容即可生效）：
+    { id:'boot-hw',  scope:'boot',  source:'homework_notice', dismiss:'daily',  bubble:true },
+    { id:'boot-notice', scope:'boot', source:'announcements',  dismiss:'once',   bubble:true },
+    { id:'anniv', scope:'cat:2', source:'custom',
+      title:'🎉 ClassIsland 三周年', body:'点击下方按钮查看官方纪念短片。',
+      video:'https://www.bilibili.com/video/BV1sJe36ZEb9/',
+      dismiss:'daily', bubble:true },
+    */
   ],
   /* ── 班级活动通知（启用后进站自动弹窗；弹窗关掉后留一个悬浮球，
         点悬浮球可随时重新打开，**到 endAt 活动结束后弹窗与悬浮球都不再出现**）──
@@ -4884,6 +4938,7 @@ var CONTENT_MAP = {
   holiday_homeworks: 'holidayHomeworks',
   homework_notice:   'homeworkNotice',
   daily_quote:       'dailyQuote',
+  popups:            'popups',         /* 通用弹窗引擎（第二十七轮） */
   important_dates:   null,           /* 特殊：落到 IMPORTANT_DATES，见 applyCloudContent() */
   site_config:       null            /* 特殊：见 applySiteConfig() */
 };
@@ -7244,6 +7299,8 @@ function openCat(id){
   else { studyBubbleHide(); }
   /* 板块庆祝：进入该板块时自动弹视频（用户要求「每次进板块都弹」） */
   if(celebForCat(id)){ setTimeout(function(){ celebAutoPop(id); }, 500); }
+  /* 通用弹窗引擎：该板块配了 scope:'cat:N' 就弹一条 */
+  if(typeof popOnCategory === 'function'){ setTimeout(function(){ popOnCategory(id); }, 600); }
   var btns = document.querySelectorAll('#sideCats .side-btn');
   for(var j=0;j<btns.length;j++){ btns[j].classList.remove('active'); }
   var cur = document.querySelector('#sideCats .side-btn[data-cat="'+id+'"]');
@@ -8563,7 +8620,7 @@ function actAutoPopped(){ try{ return localStorage.getItem(actTodayKey())==='1';
 /* 所有右下角悬浮球统一在这里排布：依次从下往上叠，避免互相遮挡。
    ⚠️ 新增悬浮球时**必须**加进这个函数，否则会跟其它球叠在同一个坐标上。 */
 function actSyncBubble(){
-  var ids = ['hwPopBubble','videoBubble','audioBubble','studyBubble','actBubble'];
+  var ids = ['hwPopBubble','videoBubble','audioBubble','studyBubble','actBubble','popBubble'];
   var base = 16, GAP = 58;
   for(var i = 0; i < ids.length; i++){
     var el = document.getElementById(ids[i]);
@@ -8616,6 +8673,258 @@ function actInit(){
   if(actActive() && !actAutoPopped()) setTimeout(actAutoPop, 800);
   /* 每分钟核对一次：到活动结束时间立即撤掉悬浮球 */
   setInterval(actBubbleShow, 60000);
+}
+
+/* ============================================================
+   通用弹窗引擎（第二十七轮新增）
+   ------------------------------------------------------------
+   数据来源：SITE_DATA.popups（数组；可由云端 /api/content 覆盖）。
+   一个引擎管两类时机：
+     · scope:'boot'   —— 进站开屏弹
+     · scope:'cat:N'  —— 进入板块 N 时弹
+   三种来源（source）复用站内已有数据，站主不用重复维护：
+     · 'announcements'  取最新公告
+     · 'homework_notice' 取作业通知
+     · 'custom'         本条自带 title/body/video/image
+   四种关闭策略（dismiss）：daily（当天不再弹）/ once（永不自动弹）/
+   always（每次都弹）。默认 daily + 留悬浮球。
+   ------------------------------------------------------------ */
+
+/* 当前正在展示的那条（供悬浮球 / 关闭按钮回读） */
+var POP_CUR = null;
+/* 已在本会话弹过的 id，避免同一次浏览重复弹 */
+var POP_SESSION = {};
+/* 板块触发用的已弹记录（本次会话内） */
+var POP_CAT_DONE = {};
+
+/** 读取并归一化弹窗列表；任何字段缺失都补默认值，避免渲染时炸 */
+function popGetList(){
+  var list = (window.SITE_DATA && SITE_DATA.popups) || [];
+  if(!Array.isArray(list)) return [];
+  var out = [];
+  for(var i = 0; i < list.length; i++){
+    var p = list[i];
+    if(!p || typeof p !== 'object') continue;
+    if(!p.id) continue;                       /* 没有 id 无法记录「已关」，跳过 */
+    out.push({
+      id:        String(p.id),
+      scope:     String(p.scope || 'boot'),
+      source:    String(p.source || 'custom'),
+      title:     p.title || '',
+      body:      p.body || '',
+      video:     p.video || '',
+      image:     p.image || '',
+      linkText:  p.linkText || '',
+      linkUrl:   p.linkUrl || '',
+      startAt:   p.startAt || '',
+      endAt:     p.endAt || '',
+      dismiss:   (p.dismiss === 'once' || p.dismiss === 'always') ? p.dismiss : 'daily',
+      bubble:    (p.bubble === false) ? false : true
+    });
+  }
+  return out;
+}
+
+/** 时间字符串 → 毫秒；空/非法返回 NaN */
+function popMs(v){
+  if(!v) return NaN;
+  var t = Date.parse(String(v).replace(' ', 'T'));
+  return isNaN(t) ? NaN : t;
+}
+
+/** 是否落在时间窗内（startAt/endAt 都可选） */
+function popInWindow(p){
+  var now = Date.now();
+  var s = popMs(p.startAt), e = popMs(p.endAt);
+  if(!isNaN(s) && now < s) return false;
+  if(!isNaN(e) && now > e) return false;
+  return true;
+}
+
+/** localStorage 键：daily 按天、once 永久 */
+function popSeenKey(p, withDay){
+  if(withDay) return 'cls_pop_' + p.id + '_' + new Date().toDateString();
+  return 'cls_pop_' + p.id;
+}
+function popSeen(p){
+  try{
+    if(localStorage.getItem(popSeenKey(p, false)) === '1') return true;   /* once 已弹 */
+    if(p.dismiss === 'daily' && localStorage.getItem(popSeenKey(p, true)) === '1') return true;
+  }catch(e){}
+  return false;
+}
+function popMarkSeen(p){
+  try{
+    if(p.dismiss === 'once') localStorage.setItem(popSeenKey(p, false), '1');
+    else if(p.dismiss === 'daily') localStorage.setItem(popSeenKey(p, true), '1');
+    /* always 不落库 */
+  }catch(e){}
+}
+
+/** 该条是否应「自动弹」 */
+function popShouldAuto(p){
+  if(POP_SESSION[p.id]) return false;          /* 本次会话已弹过 */
+  if(p.dismiss !== 'always' && popSeen(p)) return false;
+  return popInWindow(p);
+}
+
+/** 把不同 source 归一成 {title, body, media, linkText, linkUrl, endText} */
+function popRender(p){
+  var r = { title:'提示', body:'', media:'', linkText:p.linkText, linkUrl:p.linkUrl, endText:'' };
+
+  if(p.source === 'announcements'){
+    var list = (window.SITE_DATA && SITE_DATA.announcements) || [];
+    var picked = null;
+    /* 先找置顶（important），没有再取最新一条 */
+    for(var i = 0; i < list.length; i++){ if(list[i] && list[i].important){ picked = list[i]; break; } }
+    if(!picked) picked = list[0];
+    if(!picked) return null;                    /* 没有公告就不弹 */
+    r.title = p.title || '📢 班级公告';
+    r.body  = picked.text || '';
+    if(picked.date) r.endText = String(picked.date);
+  }else if(p.source === 'homework_notice'){
+    var n = (typeof hwPopGet === 'function') ? hwPopGet() : ((window.SITE_DATA && SITE_DATA.homeworkNotice) || null);
+    if(!n) return null;
+    r.title = p.title || n.title || '作业已发布';
+    r.body  = p.body || n.text || '';
+    if(n.end) r.endText = '通知有效至 ' + String(n.end);
+  }else{
+    /* custom：直接用本条自带内容 */
+    r.title = p.title || '提示';
+    r.body  = p.body || '';
+  }
+
+  /* 图片 / 视频（视频走站内已有的 openVideo，不重写播放器） */
+  if(p.image){
+    r.media = '<img src="' + esc(p.image) + '" alt="" style="width:100%;border-radius:10px;display:block">';
+  }else if(p.video){
+    r.media = '<button class="btn" style="width:100%" onclick="popPlayVideo()">▶️ 播放视频</button>';
+  }
+  return r;
+}
+
+/** 底部按钮跳转 */
+function popGoLink(){
+  var p = POP_CUR;
+  if(p && p.linkUrl && typeof openLink === 'function') openLink(p.linkUrl, true);
+}
+/** 视频按钮：交给站内通用视频弹窗 */
+function popPlayVideo(){
+  var p = POP_CUR;
+  if(!p || !p.video) return;
+  if(typeof openVideo === 'function') openVideo(p.video, p.title || '视频播放');
+  else if(typeof openLink === 'function') openLink(p.video, true);
+}
+
+/** 显示某条弹窗 */
+function showPop(p){
+  var r = popRender(p);
+  if(!r) return;                                /* 内容取不到（如没有公告）→ 不弹 */
+  POP_CUR = p;
+  var ttl = document.getElementById('popTitle');
+  var body = document.getElementById('popBody');
+  var end = document.getElementById('popEnd');
+  var link = document.getElementById('popLink');
+  var media = document.getElementById('popMedia');
+  if(ttl) ttl.textContent = r.title;
+  if(body) body.textContent = r.body;
+  if(end) end.textContent = r.endText || '';
+  if(media){
+    if(r.media){ media.innerHTML = r.media; media.style.display = ''; }
+    else { media.innerHTML = ''; media.style.display = 'none'; }
+  }
+  if(link){
+    if(r.linkUrl && r.linkText){ link.style.display = ''; link.textContent = r.linkText; }
+    else { link.style.display = 'none'; }
+  }
+  /* 关闭按钮文案随策略微调，让站主/同学知道下次还会不会看到 */
+  var ok = document.getElementById('popOkBtn');
+  if(ok) ok.textContent = p.dismiss === 'always' ? '我知道了'
+                        : (p.dismiss === 'once' ? '我知道了（不再提示）' : '我知道了（今天不再弹）');
+  /* 打开时把悬浮球收起（同 actBubbleShow 的做法） */
+  var b = document.getElementById('popBubble'); if(b) b.style.display = 'none';
+  if(typeof actSyncBubble === 'function') actSyncBubble();
+  var m = document.getElementById('popMask'); if(m) m.classList.add('show');
+  if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
+}
+
+/** 关闭（并落库、按需显示悬浮球） */
+function closePop(fromBubble){
+  var p = POP_CUR;
+  var m = document.getElementById('popMask'); if(m) m.classList.remove('show');
+  if(p && !fromBubble) popMarkSeen(p);
+  popBubbleSync();
+}
+/** 悬浮球点开：不重新计「已弹」，只重看 */
+function popFromBubble(){
+  var p = POP_CUR; if(!p) return;
+  /* 从球打开时，展示逻辑与自动弹一致，但不再变更已读标记 */
+  var r = popRender(p); if(!r) return;
+  var m = document.getElementById('popMask'); if(m) m.classList.add('show');
+  var b = document.getElementById('popBubble'); if(b) b.style.display = 'none';
+  if(typeof actSyncBubble === 'function') actSyncBubble();
+  if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
+}
+
+/** 悬浮球显示规则：有「关了但仍可重看」的弹窗时显示 */
+function popBubbleSync(){
+  var b = document.getElementById('popBubble');
+  if(!b) return;
+  var show = false;
+  if(POP_CUR && POP_CUR.bubble && popInWindow(POP_CUR)){
+    /* 只有「本次会话已经弹过（含自动或手动）」才显示球，
+       否则刚进站还没弹就先亮个球，显得莫名其妙 */
+    show = !!POP_SESSION[POP_CUR.id];
+  }
+  b.style.display = show ? 'flex' : 'none';
+  if(typeof actSyncBubble === 'function') actSyncBubble();
+}
+
+/** 开屏队列：把所有 boot 弹窗按顺序弹完（等前一个关掉再弹下一个，避免叠） */
+function popAutoPop(){
+  var list = popGetList().filter(function(p){ return p.scope === 'boot'; });
+  var idx = 0;
+  (function next(){
+    /* 跳过不需要弹的 */
+    while(idx < list.length && !popShouldAuto(list[idx])) idx++;
+    if(idx >= list.length) return;
+    var p = list[idx++];
+    /* 等其它弹窗（欢迎语 / 门禁 / 活动 / 作业）先关掉 */
+    var tries = 0;
+    (function attempt(){
+      tries++;
+      var busy = document.querySelector('.allboard-mask.show') || document.querySelector('.gate.show');
+      if(busy && tries < 24){ setTimeout(attempt, 500); return; }
+      POP_SESSION[p.id] = 1;
+      showPop(p);
+      /* 关掉这条之后再弹下一条 */
+      var guard = setInterval(function(){
+        var m = document.getElementById('popMask');
+        if(!m || !m.classList.contains('show')){ clearInterval(guard); setTimeout(next, 400); }
+      }, 400);
+    })();
+  })();
+}
+
+/** 板块触发：进入某板块时调用，弹该板块配的弹窗 */
+function popOnCategory(catId){
+  var key = 'cat:' + catId;
+  var list = popGetList().filter(function(p){ return p.scope === key; });
+  if(!list.length) return;
+  /* 板块弹窗直接弹（不再走 busy 等待，因为用户已经在浏览页面了） */
+  for(var i = 0; i < list.length; i++){
+    var p = list[i];
+    if(!popShouldAuto(p)) continue;
+    POP_SESSION[p.id] = 1;
+    showPop(p);
+    break;                                      /* 一个板块一次只弹一条，避免连环 */
+  }
+}
+
+function popInit(){
+  popBubbleSync();
+  var hasBoot = popGetList().some(function(p){ return p.scope === 'boot'; });
+  if(hasBoot) setTimeout(popAutoPop, 1200);     /* 稍晚于活动/作业弹窗，排队靠 busy 检查兜底 */
 }
 
 /* ---- 开屏通知弹窗：大假作业已发布（start~end 期间进站自动弹；可「不再显示」+ 悬浮球）---- */
@@ -10380,6 +10689,7 @@ try{
 contentBoot();
 actInit();   /* 班级活动通知：有进行中的活动则自动弹窗 + 留悬浮球，活动结束自动撤掉 */
 hwPopInit(); /* 开屏通知弹窗：大假作业发布提醒（进站自动弹；可「不再显示」） */
+popInit();   /* 通用弹窗引擎：按 SITE_DATA.popups 排队弹「开屏弹」（默认空，配了才弹） */
 </script>
 <script>
 if ('serviceWorker' in navigator) {

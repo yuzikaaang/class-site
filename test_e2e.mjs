@@ -2162,6 +2162,63 @@ console.log('\n【27】第二十七轮·令牌哈希存储 + 改密码回归');
     'status ' + cpAfterReset.status + ' ' + JSON.stringify(cpAfterReset.body));
 }
 
+console.log('\n【28】第二十七轮·通用弹窗引擎（popups 云端通道）');
+{
+  /* ---- ① 云端通道：写入白名单已含 popups ---- */
+  const sample = [
+    { id: 'boot-1', scope: 'boot', source: 'homework_notice', dismiss: 'daily', bubble: true },
+    { id: 'cat-1', scope: 'cat:2', source: 'custom', title: '成果展示', body: '正文', dismiss: 'once' },
+  ];
+  const wr = await call('/api/content', { method: 'PUT', token: adminToken, body: { key: 'popups', value: sample } });
+  t('管理员写入 popups 成功', wr.status === 200 && wr.body.ok, JSON.stringify(wr.body));
+
+  const rd = await call('/api/content', { method: 'GET' });
+  t('读回内容含 popups 键', rd.status === 200 && !!rd.body.items && Object.prototype.hasOwnProperty.call(rd.body.items, 'popups'),
+    JSON.stringify(rd.body.items && Object.keys(rd.body.items)));
+  t('popups 内容与写入一致（2 条）', Array.isArray(rd.body.items.popups) && rd.body.items.popups.length === 2,
+    '实际 ' + (rd.body.items.popups || []).length);
+  t('popups 首条 id 正确', rd.body.items.popups[0] && rd.body.items.popups[0].id === 'boot-1');
+  t('popups 板块弹 scope 正确', rd.body.items.popups[1] && rd.body.items.popups[1].scope === 'cat:2');
+
+  /* ---- ② 权限：普通用户写 popups 必须 403 ---- */
+  const puname = 'popuser';
+  await call('/api/auth?action=register', { method: 'POST', body: { username: puname, password: 'PopUser2026', displayName: '弹窗测试' } });
+  const plogin = await call('/api/auth?action=login', { method: 'POST', body: { username: puname, password: 'PopUser2026' } });
+  const ptoken = plogin.body.token;
+  const pwr = await call('/api/content', { method: 'PUT', token: ptoken, body: { key: 'popups', value: [{ id: 'x' }] } });
+  t('普通用户写 popups 被拒（403）', pwr.status === 403, '实际 ' + pwr.status + ' ' + JSON.stringify(pwr.body));
+
+  /* ---- ③ 白名单护栏：不在名单里的键仍被拒 ---- */
+  const bwr = await call('/api/content', { method: 'PUT', token: adminToken, body: { key: 'not_a_key', value: [] } });
+  t('白名单外的键仍被拒（400）', bwr.status === 400, '实际 ' + bwr.status + ' ' + JSON.stringify(bwr.body));
+
+  /* ---- ④ 回归：老键 announcements / homework_notice 仍然正常 ---- */
+  const oldwr = await call('/api/content', {
+    method: 'PUT', token: adminToken,
+    body: { items: { announcements: [{ date: '2026-10-08', text: '回归公告' }] } },
+  });
+  t('老键 announcements 仍可写', oldwr.status === 200 && oldwr.body.ok, JSON.stringify(oldwr.body));
+  const rd2 = await call('/api/content', { method: 'GET' });
+  t('写入 popups 后老键未被冲掉', !!rd2.body.items.announcements && rd2.body.items.popups.length === 2,
+    'announcements=' + JSON.stringify(rd2.body.items.announcements) + ' popups=' + (rd2.body.items.popups || []).length);
+
+  /* ---- ⑤ 前端 CONTENT_MAP 与后端白名单必须一致 ---- */
+  const idxHtml = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('前端 CONTENT_MAP 含 popups', /popups:\s*'popups'/.test(idxHtml));
+  const contentJs = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
+  t('后端白名单含 popups', /'popups'/.test(contentJs));
+  t('前端已定义 popGetList', idxHtml.indexOf('function popGetList()') >= 0);
+  t('前端已定义 popShouldAuto', idxHtml.indexOf('function popShouldAuto(') >= 0);
+  t('前端已定义 popRender', idxHtml.indexOf('function popRender(') >= 0);
+  t('前端已定义 popOnCategory', idxHtml.indexOf('function popOnCategory(') >= 0);
+  t('弹窗容器 #popMask 已加', idxHtml.indexOf('id="popMask"') >= 0);
+  t('弹窗悬浮球 #popBubble 已加', idxHtml.indexOf('id="popBubble"') >= 0);
+  t('悬浮球已登记进 actSyncBubble', /ids\s*=\s*\[[^\]]*'popBubble'[^\]]*\]/.test(idxHtml));
+  t('SITE_DATA 含 popups 默认空数组', /popups:\s*\[\s*(\/\*[\s\S]*?\*\/\s*)?\]/.test(idxHtml));
+  t('popInit 已接入启动流程', /^\s*popInit\(\);/m.test(idxHtml));
+  t('进入板块会触发 popOnCategory', idxHtml.indexOf('popOnCategory(id)') >= 0);
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
