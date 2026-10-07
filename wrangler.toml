@@ -11,7 +11,7 @@
 #   npx wrangler secret put SESSION_DAYS
 # ============================================================
 
-name = "class-site-api"
+name = "class-site"
 main = "api/worker.mjs"
 compatibility_date = "2026-10-01"
 
