@@ -2562,7 +2562,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.3.2';
+var SITE_VERSION = '2.3.3';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -5427,11 +5427,13 @@ function acctProfileHtml(){
 
     '<div class="acct-sw">' +
       '<div><span class="t">云同步</span>' +
-        '<span class="s">把本机的主题、设置、作业打勾等同步到云端，换设备也能看到</span></div>' +
-      '<button class="acct-btn" style="width:auto;padding:8px 14px;font-size:.78rem" onclick="syncNow()">立即同步</button>' +
+        '<span class="s">把本机的主题、设置、作业打勾等同步到云端，换设备也能看到</span>' +
+        '<span class="s" id="syncStatusLine" style="opacity:.72;margin-top:2px">自动同步已开启</span></div>' +
+      '<button class="acct-btn" style="width:auto;padding:8px 14px;font-size:.78rem" onclick="syncUploadNow()">上传本机</button>' +
     '</div>' +
     '<div class="acct-row">' +
-      '<button class="acct-btn ghost" onclick="syncPull(false)">从云端恢复</button>' +
+      '<button class="acct-btn ghost" onclick="syncDownloadNow()">拉取云端</button>' +
+      '<button class="acct-btn ghost" onclick="syncNow()">双向同步</button>' +
       '<button class="acct-btn ghost" onclick="showChangePwd()">改密码</button>' +
     '</div>' +
 
@@ -6047,6 +6049,185 @@ function syncNow(){
   }).catch(function(e){
     if(typeof uiMsg === 'function') uiMsg('同步失败：' + e.message, '#c0392b');
   });
+}
+
+/* ============================================================
+   自动云同步（第二十七轮 ⑦）
+   ------------------------------------------------------------
+   目标：不用手动点，改动自己会上去，别人的改动能自己下来。
+   策略：
+     · 每 60 秒跑一轮「双向」——先推本机待发改动，再拉云端最新。
+     · 只在**已登录**时跑；未登录只做只读拉取（公开内容本就无需登录）。
+     · 页面不可见（切后台 / 锁定）时暂停，回到前台立刻补跑一轮，
+       避免后台标签页白白耗电耗流量。
+     · 正在输入（有焦点在 input/textarea）时推迟，别打断打字。
+     · 网络失败自动退避（30s → 60s → 120s，最长 5 分钟），
+       成功一次立刻回到 60 秒。
+     · 状态对外暴露在 SYNC_STATE，界面可显示「上次同步 / 结果」。
+   ============================================================ */
+var SYNC_STATE = {
+  lastAt: null,        /* 上次成功同步时间 */
+  lastResult: 'idle',  /* idle | ok | error | skipped */
+  lastError: null,
+  pushed: 0,
+  pulled: 0,
+  running: false,
+  failStreak: 0
+};
+var SYNC_INTERVAL = 60000;      /* 基准间隔 1 分钟 */
+var SYNC_MAX_BACKOFF = 300000;  /* 退避上限 5 分钟 */
+var __syncTimer = null;
+
+/** 现在适合自动同步吗（页面可见 + 没在输入） */
+function syncShouldRun(){
+  try{ if(document.visibilityState === 'hidden') return false; }catch(e){}
+  try{
+    var a = document.activeElement;
+    if(a){
+      var tag = String(a.tagName || '').toUpperCase();
+      /* 正在打字就别抢，等下一轮 */
+      if((tag === 'INPUT' || tag === 'TEXTAREA' || a.isContentEditable) && a.value !== undefined) return false;
+    }
+  }catch(e){}
+  return true;
+}
+
+/** 跑一轮双向同步 */
+function syncRound(opts){
+  opts = opts || {};
+  if(SYNC_STATE.running) return Promise.resolve({ skipped:'running' });
+  if(!opts.force && !syncShouldRun()){
+    SYNC_STATE.lastResult = 'skipped';
+    return Promise.resolve({ skipped:'busy' });
+  }
+  SYNC_STATE.running = true;
+
+  /* ① 先推：把本机待发的内容改动发出去（未登录会直接跳过） */
+  var pushStep = hasPendingContentSync()
+    ? flushContentSync().catch(function(){ return { ok:false }; })
+    : Promise.resolve({ ok:true, pushed:0 });
+
+  return pushStep.then(function(){
+    /* ② 再拉：把云端最新取回来（无需登录也能读公开内容） */
+    return syncCloudContent(true);
+  }).then(function(r){
+    SYNC_STATE.running = false;
+    if(r && r.ok){
+      SYNC_STATE.lastAt = new Date();
+      SYNC_STATE.lastResult = 'ok';
+      SYNC_STATE.lastError = null;
+      SYNC_STATE.pulled = r.count || 0;
+      SYNC_STATE.failStreak = 0;
+      /* 拉到新内容 → 刷新界面 */
+      if(r.count > 0){
+        try{ if(typeof rerenderAll === 'function') rerenderAll(); }catch(e){}
+        try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
+      }
+      return { ok:true, pulled:r.count };
+    }
+    SYNC_STATE.lastResult = 'error';
+    SYNC_STATE.lastError = (r && r.error) || '未知错误';
+    SYNC_STATE.failStreak++;
+    return { ok:false, error:SYNC_STATE.lastError };
+  }).catch(function(e){
+    SYNC_STATE.running = false;
+    SYNC_STATE.lastResult = 'error';
+    SYNC_STATE.lastError = String(e && e.message || e);
+    SYNC_STATE.failStreak++;
+    return { ok:false, error:SYNC_STATE.lastError };
+  }).then(function(res){
+    syncScheduleNext();
+    syncStatusPaint();
+    return res;
+  });
+}
+
+/** 安排下一次（含失败退避） */
+function syncScheduleNext(){
+  if(__syncTimer) { clearTimeout(__syncTimer); __syncTimer = null; }
+  var wait = SYNC_INTERVAL;
+  if(SYNC_STATE.failStreak > 0){
+    /* 30s → 60s → 120s → 240s，封顶 5 分钟 */
+    wait = Math.min(30000 * Math.pow(2, SYNC_STATE.failStreak - 1), SYNC_MAX_BACKOFF);
+  }
+  __syncTimer = setTimeout(function(){ syncRound(); }, wait);
+}
+
+/** 手动：只上传本机 → 云端 */
+function syncUploadNow(){
+  if(!isLoggedIn()){ if(typeof uiMsg === 'function') uiMsg('请先登录后再上传', '#af410f'); return; }
+  if(typeof uiMsg === 'function') uiMsg('正在上传本机改动…');
+  markAllContentDirty();
+  flushContentSync().then(function(r){
+    SYNC_STATE.lastAt = new Date();
+    syncStatusPaint();
+    if(typeof uiMsg === 'function'){
+      uiMsg(r && (r.pushed > 0) ? ('✅ 已上传 ' + r.pushed + ' 项') : '本机没有待上传的改动');
+    }
+  }).catch(function(e){
+    if(typeof uiMsg === 'function') uiMsg('上传失败：' + e.message, '#c0392b');
+  });
+}
+
+/** 手动：只从云端拉取 */
+function syncDownloadNow(){
+  if(typeof uiMsg === 'function') uiMsg('正在拉取云端最新…');
+  syncCloudContent(true).then(function(r){
+    if(r && r.ok){
+      try{ if(typeof rerenderAll === 'function') rerenderAll(); }catch(e){}
+      try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
+      SYNC_STATE.lastAt = new Date();
+      syncStatusPaint();
+      if(typeof uiMsg === 'function') uiMsg('✅ 已拉取云端最新（' + (r.count || 0) + ' 项有更新）');
+    }else if(typeof uiMsg === 'function'){
+      uiMsg('拉取失败：' + ((r && r.error) || '未知错误'), '#c0392b');
+    }
+  });
+}
+
+/** 把当前所有云键标为待推（手动「上传本机」用） */
+function markAllContentDirty(){
+  try{
+    Object.keys(CONTENT_MAP).forEach(function(k){
+      if(CONTENT_MAP[k] !== null) markContentDirty(k);
+    });
+    /* important_dates / site_config 是特殊键，也一并带上 */
+    markContentDirty('important_dates');
+    markContentDirty('site_config');
+    /* links 不在 CONTENT_MAP 里（前端本地改动，云端不覆盖），不上传 */
+  }catch(e){}
+}
+
+/** 同步状态文案（供界面小字显示） */
+function syncStatusText(){
+  if(!SYNC_STATE.lastAt && SYNC_STATE.lastResult === 'idle') return '自动同步已开启';
+  if(SYNC_STATE.lastResult === 'error') return '同步失败：' + (SYNC_STATE.lastError || '未知');
+  if(SYNC_STATE.lastResult === 'skipped') return '稍后自动同步';
+  var d = SYNC_STATE.lastAt;
+  if(!d) return '自动同步已开启';
+  var hh = ('0' + d.getHours()).slice(-2), mm = ('0' + d.getMinutes()).slice(-2);
+  return '上次同步 ' + hh + ':' + mm;
+}
+function syncStatusPaint(){
+  var el = document.getElementById('syncStatusLine');
+  if(el) el.textContent = syncStatusText();
+}
+
+/** 启动自动同步 */
+function syncAutoInit(){
+  /* 首次延迟 5 秒（让 contentBoot 的首拉先完成），之后按 60 秒节拍 */
+  if(__syncTimer){ clearTimeout(__syncTimer); __syncTimer = null; }
+  __syncTimer = setTimeout(function(){ syncRound(); }, 5000);
+  /* 回到前台：立刻补跑一轮，不必等下一个节拍 */
+  try{
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'visible') syncRound();
+    });
+  }catch(e){}
+  /* 网络恢复：立刻补跑 */
+  try{
+    window.addEventListener('online', function(){ syncRound({ force:true }); });
+  }catch(e){}
 }
 
 /* ============================================================
@@ -10690,6 +10871,7 @@ contentBoot();
 actInit();   /* 班级活动通知：有进行中的活动则自动弹窗 + 留悬浮球，活动结束自动撤掉 */
 hwPopInit(); /* 开屏通知弹窗：大假作业发布提醒（进站自动弹；可「不再显示」） */
 popInit();   /* 通用弹窗引擎：按 SITE_DATA.popups 排队弹「开屏弹」（默认空，配了才弹） */
+syncAutoInit(); /* 自动云同步：每 1 分钟双向同步（推本机 + 拉云端），回前台立刻补跑 */
 </script>
 <script>
 if ('serviceWorker' in navigator) {

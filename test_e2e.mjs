@@ -2219,6 +2219,60 @@ console.log('\n【28】第二十七轮·通用弹窗引擎（popups 云端通道
   t('进入板块会触发 popOnCategory', idxHtml.indexOf('popOnCategory(id)') >= 0);
 }
 
+console.log('\n【29】第二十七轮·自动云同步（1 分钟双向）');
+{
+  const idxHtml = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+
+  /* ---- 结构：状态对象与函数齐全 ---- */
+  t('定义 SYNC_STATE', /var SYNC_STATE\s*=\s*\{/.test(idxHtml));
+  t('定义 syncRound', idxHtml.indexOf('function syncRound(') >= 0);
+  t('定义 syncScheduleNext', idxHtml.indexOf('function syncScheduleNext(') >= 0);
+  t('定义 syncShouldRun', idxHtml.indexOf('function syncShouldRun(') >= 0);
+  t('定义 syncUploadNow（手动上传）', idxHtml.indexOf('function syncUploadNow(') >= 0);
+  t('定义 syncDownloadNow（手动拉取）', idxHtml.indexOf('function syncDownloadNow(') >= 0);
+  t('定义 syncStatusText（状态文案）', idxHtml.indexOf('function syncStatusText(') >= 0);
+  t('定义 syncAutoInit', idxHtml.indexOf('function syncAutoInit(') >= 0);
+  t('定义 markAllContentDirty', idxHtml.indexOf('function markAllContentDirty(') >= 0);
+
+  /* ---- 节拍：基准 60 秒、退避封顶 5 分钟 ---- */
+  t('基准间隔为 60000ms', /var SYNC_INTERVAL\s*=\s*60000/.test(idxHtml));
+  t('退避上限为 300000ms', /var SYNC_MAX_BACKOFF\s*=\s*300000/.test(idxHtml));
+
+  /* ---- 启动接入 ---- */
+  t('启动流程调用 syncAutoInit', /^\s*syncAutoInit\(\);/m.test(idxHtml));
+
+  /* ---- 保守行为：后台不跑、打字不跑 ---- */
+  t('隐藏页面不同步（检查 visibilityState）', /visibilityState\s*===\s*'hidden'/.test(idxHtml));
+  t('输入中不同步（检查 activeElement）', /activeElement/.test(idxHtml));
+
+  /* ---- 双向：既推又拉 ---- */
+  t('同步轮先推（flushContentSync）', /flushContentSync\(\)/.test(idxHtml));
+  t('同步轮后拉（syncCloudContent(true)）', /syncCloudContent\(true\)/.test(idxHtml));
+
+  /* ---- 事件挂钩 ---- */
+  t('回到前台立刻补跑', /visibilitychange[\s\S]{0,200}'visible'/.test(idxHtml));
+  t('网络恢复立刻补跑', /addEventListener\('online'/.test(idxHtml));
+
+  /* ---- 失败退避：指数增长且封顶 ---- */
+  const mk = (n) => (n > 0 ? Math.min(30000 * Math.pow(2, n - 1), 300000) : 60000);
+  t('退避序列 1→30s', mk(1) === 30000);
+  t('退避序列 2→60s', mk(2) === 60000);
+  t('退避序列 3→120s', mk(3) === 120000);
+  t('退避序列 4→240s', mk(4) === 240000);
+  t('退避序列 5→封顶 300s', mk(5) === 300000);
+  t('退避序列 10→仍 300s', mk(10) === 300000);
+
+  /* ---- UI：状态行 + 三个手动入口 ---- */
+  t('面板含同步状态行 #syncStatusLine', idxHtml.indexOf('id="syncStatusLine"') >= 0);
+  t('面板含「上传本机」按钮', idxHtml.indexOf('syncUploadNow()') >= 0);
+  t('面板含「拉取云端」按钮', idxHtml.indexOf('syncDownloadNow()') >= 0);
+
+  /* ---- 回归：老的 syncPull / syncNow / syncPush 仍在（不破坏既有功能） ---- */
+  t('回归：syncPull 仍存在', idxHtml.indexOf('function syncPull(') >= 0);
+  t('回归：syncNow 仍存在', idxHtml.indexOf('function syncNow(') >= 0);
+  t('回归：syncPush 仍在（个人数据同步）', idxHtml.indexOf('function syncPush(') >= 0);
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
