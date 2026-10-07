@@ -37,6 +37,19 @@ export async function ensureSchema(sql) {
       alter table users add column if not exists must_change_password
         boolean not null default false
     `;
+    /* 🔴 2026-10-07 第二十七轮·真根因：
+       登录限流用的这两列只写在 schema.sql 里（需要人工执行才生效），
+       但 ensureSchema（自动自愈）**漏了它们**。线上库没跑过 schema.sql 的话，
+       这两列根本不存在，于是任何写它们的 SQL 都会 500：
+         · auth.js 的 bumpFail / clearFail → 有 try-catch，静默失败
+           （所以「登录」表面正常，其实限流一直没生效）
+         · admin.js 的 reset-password、auth.js 的 change-password
+           → 裸写无保护 → 直接 500「服务器内部错误」
+       这就是「后台重置密码 500」「改密码 500」真正的、唯一的原因
+       （而不是之前以为的 CPU 派生次数——那个是次要影响因素）。
+       补进自愈后，部署即自动建列，不必手动跑 SQL。 */
+    await s`alter table users add column if not exists failed_count int not null default 0`;
+    await s`alter table users add column if not exists locked_until timestamptz`;
     /* 2026-10-07「最后上线」：与 last_login_at（登录时刻）区分，
        由前端心跳 /api/auth?action=ping 刷新，关掉页面后停更 */
     await s`

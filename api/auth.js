@@ -381,15 +381,24 @@ async function changePassword(req, res) {
      对新账号（老哈希也是 10000）：约 3.8ms 派生，余量充足。
      对老账号（老哈希 50000）：verify 单次就约 10ms，本就贴着上限 —— 见下方护栏。 */
   const hash = await hashPassword(newPwd);
-  /* must_change_password 一并清零：首次登录被强制改密后，下次不再拦 */
-  await sql`
-    update users
-       set password_hash = ${hash},
-           must_change_password = false,
-           failed_count = 0,
-           locked_until = null
-     where id = ${u.id}
-  `;
+  /* 核心更新：只写一定存在的列（password_hash）。
+     ⚠️ 2026-10-07：以前这条 UPDATE 一并写 must_change_password / failed_count /
+        locked_until，但线上库若没跑过 schema.sql，后两列不存在 → 整条 500。
+       现在把「可能不存在的列」拆成单独的、带保护的一步（见下），
+       保证即使列还没补上，改密码本身也能成功。 */
+  await sql`update users set password_hash = ${hash} where id = ${u.id}`;
+  /* 次要字段（可能因库结构未升级而缺失）：单独一次、失败不影响改密结果 */
+  try {
+    await sql`
+      update users
+         set must_change_password = false,
+             failed_count = 0,
+             locked_until = null
+       where id = ${u.id}
+    `;
+  } catch (e) {
+    console.warn('[auth] 改密后清零附带字段失败（不影响改密）：', e.message);
+  }
   /* 改密码后踢掉其他设备的登录，只保留当前这台 */
   await sql`delete from sessions where user_id = ${u.id}`;
   const token = await issueSession(sql, u.id);

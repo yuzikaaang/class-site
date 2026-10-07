@@ -34,13 +34,14 @@ create table users (
   role text not null default 'user',
   status text not null default 'active',
   created_at text not null default (datetime('now')),
-  last_login_at text,
-  /* 2026-10-07「最后上线」：与登录时刻分开，由 /api/auth?action=ping 心跳刷新 */
-  last_seen_at text,
-  failed_count integer not null default 0,
-  locked_until text,
-  must_change_password integer not null default 0,
-  is_ai integer not null default 0
+  last_login_at text
+  /* ⚠️ 2026-10-07 第二十七轮教训：这里以前**预先建好了**
+     last_seen_at / failed_count / locked_until / must_change_password / is_ai，
+     于是「ensureSchema 自愈」在桩里永远无事可做，生产缺列导致的 500
+     在测试里根本复现不了 —— 400+ 项全绿，线上却点不动「重置密码」。
+     现在这些列**故意不建**，交给 ensureSchema 去 ADD COLUMN，
+     桩的行为与生产对齐。（本表的其余列仍按 schema.sql 建好，因为
+     schema.sql 也需要人工执行，但这里只针对「自愈覆盖到的列」做对齐。） */
 );
 create table sessions (
   token text primary key,
@@ -137,9 +138,24 @@ let queryLog = [];
 
 function translate(sqlText) {
   let s = sqlText;
-  /* SQLite 的 alter table 不支持 add column if not exists，直接忽略这类语句 */
+  /* ⚠️ 2026-10-07：以前这里把 `alter table ... add column if not exists`
+     直接忽略（返回空查询），于是「ensureSchema 自愈」形同虚设 —— 桩里
+     所有列都在，实际生产缺列时会 500，测试却全绿。
+     这正是「后台重置密码 500 / 改密码 500」能溜过 400+ 项测试的原因。
+     现在改为**真正执行**这条 DDL：由 execAlter 解析后按需 ADD COLUMN。 */
   if (/^\s*alter\s+table[\s\S]*add\s+column\s+if\s+not\s+exists/i.test(s)) {
-    return 'select 1 where 0';
+    return { __alter: s };
+  }
+  /* ⚠️ 2026-10-07：`create table if not exists ...` 在 SQLite 里语法更严：
+       · 列默认值不能写 `default datetime('now')`（函数式默认值必须加括号
+         `default (datetime('now'))`），Postgres 则两种都收；
+       · `bigserial` / `timestamptz` 等 PG 类型 SQLite 不认（虽然 ADD COLUMN
+         时被容错，建表语句里却会直接报 near "(": syntax error）。
+     桩里这些表**已经按 schema.sql 建好了**，所以 ensureSchema 的建表语句
+     语义上应当「什么都不做」。这里直接返回跳过标记，与 Postgres 的
+     IF NOT EXISTS 幂等语义一致，也避免 SQLite 语法差异污染测试结果。 */
+  if (/^\s*create\s+(table|index)\s+if\s+not\s+exists/i.test(s)) {
+    return { __skip: s };
   }
   /* 此时占位符还是 $1 $2 的形式（PG_to_Q 在之后才跑），所以按 \$N 匹配。
      第一步：把 ( $N || ' days' )::interval 压成 datetime 参数片段 */
@@ -183,12 +199,39 @@ function PG_to_Q(s) {
 
 const sqlBridge = (strings, ...values) => {
   let text = strings.reduce((acc, s, i) => acc + s + (i < values.length ? '$' + (i + 1) : ''), '');
-  const translated = PG_to_Q(translate(text));
-  queryLog.push({ sql: translated, values: values.map(v => typeof v) });
+  const tr = translate(text);
 
   return {
     then(resolve, reject) {
       try {
+        /* ---- ensureSchema 的 add column if not exists：真正执行 ----
+           让桩和生产一致：列不存在就加，存在就跳过。
+           这样「生产缺列」类故障能在测试里复现，不会假绿。 */
+        if (tr && typeof tr === 'object' && tr.__alter) {
+          const m = /alter\s+table\s+([\w"]+)\s+add\s+column\s+if\s+not\s+exists\s+([\w"]+)\s+([^;]*)/i.exec(tr.__alter);
+          if (m) {
+            const [, tbl, col, rest] = m;
+            const cols = db.exec(`pragma table_info(${tbl})`);
+            const names = cols.length ? cols[0].values.map((r) => String(r[1])) : [];
+            if (!names.includes(col)) {
+              /* 去掉 Postgres 专有类型，映射到 SQLite 可用类型 */
+              let type = rest.replace(/\s+/g, ' ').trim();
+              type = type.replace(/timestamptz/gi, 'text')
+                         .replace(/bigserial/gi, 'integer')
+                         .replace(/::interval/gi, '');
+              db.run(`alter table ${tbl} add column ${col} ${type}`);
+            }
+          }
+          resolve([]);
+          return;
+        }
+        /* ---- ensureSchema 的 create table/index if not exists：桩里已建好，跳过 ---- */
+        if (tr && typeof tr === 'object' && tr.__skip) {
+          resolve([]);
+          return;
+        }
+        const translated = PG_to_Q(tr);
+        queryLog.push({ sql: translated, values: values.map(v => typeof v) });
         /* ---- 特例：data.js 的 unnest 批量 upsert ----
            Postgres 写法：insert ... select $1, k, v::jsonb, now()
                           from unnest($2::text[], $3::text[]) as t(k, v)
@@ -254,7 +297,8 @@ const sqlBridge = (strings, ...values) => {
         stmt.free();
         resolve(emulateJsonb(translated, rows));
       } catch (e) {
-        reject(new Error('SQL 失败: ' + e.message + '\n  SQL: ' + translated + '\n  值: ' + JSON.stringify(values)));
+        const shown = (tr && typeof tr === 'object') ? JSON.stringify(tr) : tr;
+        reject(new Error('SQL 失败: ' + e.message + '\n  SQL: ' + shown + '\n  值: ' + JSON.stringify(values)));
       }
     },
   };

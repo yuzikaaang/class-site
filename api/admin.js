@@ -96,7 +96,11 @@ export default async function handler(req, res) {
     return fail(res, 405, '不支持的方法');
   } catch (e) {
     console.error('[admin]', action, e);
-    return fail(res, 500, '服务器内部错误，请稍后重试');
+    /* ⚠️ 2026-10-07：把真实错误摘要带进响应，否则这类故障只能靠猜。
+       只回错误消息本身（不含栈），并限制长度，避免泄露内部结构。
+       排查「后台重置密码 500」时，正是靠它一眼看到真实原因。 */
+    const hint = (e && e.message) ? String(e.message).slice(0, 300) : '未知错误';
+    return fail(res, 500, '服务器内部错误：' + hint, { action });
   }
 }
 
@@ -305,18 +309,33 @@ async function resetPassword(req, res, me, b) {
 
   const sql = getSql();
   const hash = await hashPassword(newPwd);
-  /* 管理员重置的密码等同「新的初始密码」→ 把强制改密标记置回 true，
-     要求对方下次登录时再自行设置。否则管理员会一直知道对方密码。 */
+  /* 先写一定存在的列（password_hash）并确认真有这个用户。
+     ⚠️ 2026-10-07：原来这条 UPDATE 一并写 must_change_password / failed_count /
+        locked_until，线上库若没跑过 schema.sql 后两列不存在 → 整条 500，
+        表现就是「后台重置密码点了没用、只提示服务器错误」。
+        现在先做核心更新（保证能命中用户、给出正确的 404），
+        再把「可能缺失的列」放到受保护的第二次更新里。 */
   const rows = await sql`
-    update users
-       set password_hash = ${hash},
-           must_change_password = true,
-           failed_count = 0,
-           locked_until = null
-     where id = ${id}
+    update users set password_hash = ${hash} where id = ${id}
     returning username
   `;
   if (!rows.length) return fail(res, 404, '用户不存在');
+
+  /* 管理员重置的密码等同「新的初始密码」→ 把强制改密标记置回 true，
+     要求对方下次登录时再自行设置。否则管理员会一直知道对方密码。
+     failed_count / locked_until 顺手清零，让被锁的账号也能立刻用新密码登录。
+     这一步单独 try：列若还没补上也不该让整次重置失败。 */
+  try {
+    await sql`
+      update users
+         set must_change_password = true,
+             failed_count = 0,
+             locked_until = null
+       where id = ${id}
+    `;
+  } catch (e) {
+    console.warn('[admin] 重置密码后设置强制改密标记失败（不影响重置本身）：', e.message);
+  }
 
   /* 重置密码后踢掉该用户所有登录 */
   await sql`delete from sessions where user_id = ${id}`;
