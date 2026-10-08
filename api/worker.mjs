@@ -157,6 +157,8 @@ export default {
        有个能一眼核对的标记，排查成本从「猜」降到「看一眼」。
        本地开发时没这个变量，就不输出这个头。 */
     if (env && env.BUILD_SHA) state.headers['X-Build-Sha'] = String(env.BUILD_SHA);
+    /* 2026-10-08：触发一次重部署，让 Cloudflare 新配的 ADMIN_SECRETS_KEY 变量
+       被运行中的 Worker 读到（改环境变量不会自动重部署，需重新发布一次）。 */
 
     return new Response(noBody ? null : state.body, {
       status: state.statusCode,
