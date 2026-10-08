@@ -4858,6 +4858,11 @@ function contentBoot(){
       try{ if(typeof rerenderAll === 'function') rerenderAll(); }catch(e){}
       if(typeof refreshHwViews === 'function') refreshHwViews();
     }
+    /*首次访问没有本地缓存，开屏弹（SITE_DATA.popups）要等云端回来才存在。
+       而 popInit 在启动 1200ms 就跑过一遍「有没有 boot 弹」的检查，
+      首次会跑在数据前面 → 开屏弹被漏掉。这里云端到位后补跑一次；
+      popShouldAuto 靠 POP_SESSION 去重，不会重复弹。（2026-10-08） */
+    if(r.ok){ try{ if(typeof popInit === 'function') popInit(); }catch(e){} }
   });
 }
 
