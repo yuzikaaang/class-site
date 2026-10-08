@@ -1206,6 +1206,10 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .acct-msg.ok{color:#0f8a4d}
 .acct-msg.warn{color:#af410f}
 .acct-hint{font-size:.7rem;color:#a99a8d;line-height:1.6;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(120,53,15,.13)}
+/* 「仅自己可见」勾选项（2026-10-08）：紧贴对应输入框，做成轻量小字行 */
+.acct-priv{display:flex;align-items:center;gap:6px;font-size:.72rem;color:#8a7a6d;
+  margin:-6px 0 10px;padding-left:2px;cursor:pointer;user-select:none}
+.acct-priv input{width:auto;margin:0;flex:0 0 auto;cursor:pointer;accent-color:#c2410c}
 .acct-user{display:flex;align-items:center;gap:12px;padding:13px;background:rgba(120,53,15,.045);border-radius:14px;margin-bottom:15px}
 .acct-avatar{flex:none;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#c2410c,#e8944c);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800}
 .acct-uname{font-size:.92rem;font-weight:800;color:#3f342c;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -2369,7 +2373,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.3.8';
+var SITE_VERSION = '2.3.9';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -5185,7 +5189,7 @@ function acctProfileHtml(){
     /* ---- 我的资料：查看 / 修改 / 认领 ---- */
     '<div class="acct-sw" style="margin-top:14px">' +
       '<div><span class="t">📇 我的资料</span>' +
-        '<span class="s">姓名、学号、准考证号由管理员维护；微信/QQ/手机号可自己填</span></div>' +
+        '<span class="s">姓名、学号、智学网账号由管理员维护；微信/QQ/手机号可自己填</span></div>' +
       '<button class="acct-btn" style="width:auto;padding:8px 14px;font-size:.78rem" onclick="acctTab(\'myprofile\')">查看 / 修改</button>' +
     '</div>' +
 
@@ -5218,7 +5222,7 @@ function acctProfileHtml(){
 /* ---------- 我的资料：查看 / 修改 / 认领 ----------
    需求「点击姓名可以查看与修改个人信息」「学生在哪里新增个人数据」。
 
-   说明：班级资料（姓名/学号/准考证号）由管理员维护，同学**只能认领**已有的那条，
+   说明：班级资料（姓名/学号/智学网账号）由管理员维护，同学**只能认领**已有的那条，
    不能自己新建——否则谁都能往通讯录里塞假名字。
    能自己填的是联系方式（微信/QQ/手机号），提交后等管理员审核。
    认领/修改的入口本来就在首页的「个人资料查询」板块里（那一套逻辑很完整），
@@ -5227,10 +5231,15 @@ function acctProfileHtml(){
    站主要求：点开自己的姓名之后，就能查看并修改个人数据。
    以前这里是「跳到首页资料查询板块去找输入框」，体验绕；
    现在直接在账号弹窗里开一页：只读信息 + 微信/QQ/手机号自助填写。
-   姓名、学号、准考证号、政治面貌由管理员维护，同学改不了（后端也拦）。 */
+   姓名、学号、智学网账号、政治面貌由管理员维护，同学改不了（后端也拦）。 */
 var MY_PROF = null;
 var MY_PROF_STATE = 'idle';    /* idle | loading | ok | none | error */
 var MY_PROF_ERR = '';
+/* 2026-10-08 新增：后端 /profile?action=me 的完整响应里的三个附加字段。
+   ⚠️ 本轮 privateFields 大概率为空（id_card / youth_league_no 只登记了元数据、
+      还没建列）；接口形状先立好，下轮后台加列后前端零改动即可显示。 */
+var MY_PROF_PRIVATE = [];      /* [{field,label,value,sortOrder}] 仅本人可见字段 */
+var MY_PROF_PREF = {};         /* {wechat:false,...} 本人的可见性意愿 */
 
 /* 属性值转义：esc() 只处理 &<>，放进 value="…" 里遇到引号会把属性截断 */
 function attr(s){
@@ -5259,6 +5268,8 @@ function myProfLoad(){
     .then(function(j){
       if(j && j.ok && j.profile){ MY_PROF = j.profile; MY_PROF_STATE = 'ok'; }
       else { MY_PROF = null; MY_PROF_STATE = 'none'; }
+      MY_PROF_PRIVATE = (j && j.privateFields) || [];
+      MY_PROF_PREF = (j && j.visibilityPref) || {};
       PC_MY_PROFILE_ID = MY_PROF ? MY_PROF.id : null;
       if(ACCT_TAB === 'myprofile') renderAccount();
     })
@@ -5299,6 +5310,31 @@ function myProfileHtml(){
   };
   var st = stMap[p.contactStatus] || '';
 
+  /* 「仅自己可见」开关（2026-10-08）：把联系方式收窄为只有自己能看到。
+     ⚠️ 只是**收窄**，不会放宽——后台上限始终是天花板。
+        想放宽（本来是私密想改公开）要找站主，个人中心不提供这个能力。 */
+  var phHidden = (MY_PROF_PREF.phone === false);
+  var wHidden  = (MY_PROF_PREF.wechat === false);
+  var qHidden  = (MY_PROF_PREF.qq === false);
+  var anyHidden = phHidden || wHidden || qHidden;
+
+  /* 仅本人可见区块：有内容才渲染整块（本轮大概率为空） */
+  var privHtml = '';
+  if(MY_PROF_PRIVATE.length){
+    var privRows = '';
+    for(var i=0;i<MY_PROF_PRIVATE.length;i++){
+      var f = MY_PROF_PRIVATE[i];
+      privRows += '<div class="acct-usub" style="margin-top:4px">' +
+        esc(f.label) + '：<b>' + esc(f.value) + '</b></div>';
+    }
+    privHtml = '<div class="acct-sw" style="margin-top:0">' +
+        '<div><span class="t">🔐 仅本人可见</span>' +
+          '<span class="s">这些信息只有你自己看得到，任何人都查不到' +
+          privRows +
+          '</span></div>' +
+      '</div>';
+  }
+
   return '<div class="acct-user" style="margin-bottom:12px">' +
       '<div class="acct-avatar">' + esc((p.name || '?').charAt(0)) + '</div>' +
       '<div style="flex:1;min-width:0">' +
@@ -5310,18 +5346,28 @@ function myProfileHtml(){
     /* 只读区：管理员维护的字段，同学改不了 */
     '<div class="acct-sw" style="margin-top:0">' +
       '<div><span class="t">🔒 班级信息</span>' +
-        '<span class="s">学号 ' + esc(p.studentId || '—') + '　准考证号 ' + esc(p.examNo || '—') +
+        '<span class="s">学号 ' + esc(p.studentId || '—') + '　智学网账号 ' + esc(p.examNo || '—') +
         '　政治面貌 ' + esc(p.politics || '—') + '<br>这部分由管理员维护，自己改不了，有误请找站主</span></div>' +
     '</div>' +
 
+    privHtml +
+
     '<div class="acct-field"><label>💬 微信号</label><input id="mpWechat" value="' + attr(p.wechat || '') + '" placeholder="选填，微信号" autocomplete="off"></div>' +
+    '<label class="acct-priv"><input type="checkbox" id="mpWechatHide"' + (wHidden ? ' checked' : '') + '> 仅自己可见（同学查不到你的微信号）</label>' +
+
     '<div class="acct-field"><label>🐧 QQ 号</label><input id="mpQq" value="' + attr(p.qq || '') + '" placeholder="选填，5–12 位数字" autocomplete="off"></div>' +
+    '<label class="acct-priv"><input type="checkbox" id="mpQqHide"' + (qHidden ? ' checked' : '') + '> 仅自己可见（同学查不到你的 QQ 号）</label>' +
+
     '<div class="acct-field"><label>📱 手机号</label><input id="mpPhone" value="' + attr(p.phone || '') + '" placeholder="选填，手机号" autocomplete="off"></div>' +
+    '<label class="acct-priv"><input type="checkbox" id="mpPhoneHide"' + (phHidden ? ' checked' : '') + '> 仅自己可见（同学查不到你的手机号）</label>' +
 
     '<button class="acct-btn" id="mpSave" onclick="myProfSave()">保存我的联系方式</button>' +
     '<div class="acct-msg" id="mpMsg"></div>' +
     '<p class="acct-hint">' + st + '<br>' +
       '改完会重新提交审核（站主核一遍才对同学可见），这是为了防止有人乱填别人的联系方式。<br>' +
+      (anyHidden
+        ? '⚠️ 你已把部分联系方式设为<b>仅自己可见</b>，同学查不到（但站主在后台仍能看到，方便核对）。<br>'
+        : '') +
       '不想被查到就清空三项再保存。</p>' +
     '<p style="margin:12px 0 0"><button class="acct-btn ghost" onclick="acctTab(\'profile\')">返回</button></p>';
 }
@@ -5337,6 +5383,13 @@ function myProfSave(){
   var ph = (document.getElementById('mpPhone') || {}).value || '';
   w = w.trim(); q = q.trim(); ph = ph.trim();
 
+  /* 可见性开关：勾上「仅自己可见」→ 该字段意愿记为 false（收窄到 self）。
+     未勾 = true（我不反对公开），最终仍受后台上限约束。 */
+  var wHide = !!(document.getElementById('mpWechatHide') || {}).checked;
+  var qHide = !!(document.getElementById('mpQqHide') || {}).checked;
+  var pHide = !!(document.getElementById('mpPhoneHide') || {}).checked;
+  var pref = { wechat: !wHide, qq: !qHide, phone: !pHide };
+
   if(!w && !q && !ph){
     /* 清空：允许，但要提示会撤回公开 */
     if(!confirm('三项都空着，保存会把你的联系方式撤回（同学查不到）。确定吗？')) return;
@@ -5347,7 +5400,9 @@ function myProfSave(){
   var btn = document.getElementById('mpSave');
   if(btn) btn.disabled = true;
   myProfSay('提交中…', 'ok');
-  api('/profile?action=submit', { method:'POST', body:{ wechat:w, qq:q, phone:ph } })
+  /* ⚠️ visibilityPref 必须一起带上：后端把它和联系方式写在同一条 update 里。
+     否则「只改了开关没改内容」的保存会被后端当成「三项全空」拦掉。 */
+  api('/profile?action=submit', { method:'POST', body:{ wechat:w, qq:q, phone:ph, visibilityPref:pref } })
     .then(function(j){
       if(btn) btn.disabled = false;
       myProfSay((j && j.message) || '已提交，等站主审核', 'ok');

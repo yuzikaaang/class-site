@@ -98,6 +98,38 @@ export async function ensureSchema(sql) {
        存英文逗号分隔的纯文本，如 '团支书,课代表'——一个人可兼多职。
        授权判定只认本列的服务端值，绝不接受前端传参。 */
     await s`alter table profiles add column if not exists title text`;
+    /* 本人可见性意愿（2026-10-08 新增）：JSON 文本，存本人愿意公开的字段。
+       最终可见性 = 后台上限（profile_field_meta.visibility）∩ 本人意愿，取更严一侧。 */
+    await s`alter table profiles add column if not exists visibility_pref text`;
+    /* 资料字段元数据（2026-10-08 新增）：可见性分档 + 下轮自定义字段的地基。
+       详见 schema.sql 中该表的注释。 */
+    await s`
+      create table if not exists profile_field_meta (
+        field       text        primary key,
+        label       text        not null,
+        visibility  text        not null default 'public',
+        sort_order  int         not null default 100,
+        is_custom   boolean     not null default false,
+        updated_at  timestamptz not null default now(),
+        constraint pfm_vis_chk check (visibility in ('public','committee','self'))
+      )
+    `;
+    /* 预置字段元数据。on conflict do nothing —— 后台改过之后重跑不会覆盖。 */
+    await s`
+      insert into profile_field_meta (field, label, visibility, sort_order, is_custom) values
+        ('name',            '姓名',         'public', 10,  false),
+        ('student_id',      '学号',         'public', 20,  false),
+        ('politics',        '政治面貌',      'public', 30,  false),
+        ('exam_no',         '智学网账号',    'public', 40,  false),
+        ('role',            '身份',         'public', 50,  false),
+        ('title',           '头衔',         'public', 60,  false),
+        ('wechat',          '微信',         'public', 70,  false),
+        ('qq',              'QQ',          'public', 80,  false),
+        ('phone',           '手机号',       'public', 90,  false),
+        ('id_card',         '身份证号',      'self',   100, false),
+        ('youth_league_no', '发展团员编号',   'self',   110, false)
+      on conflict (field) do nothing
+    `;
     /* 标记 AI 账号，2026-10-05 新增。用于「AI 可编辑云端内容」与后续交接。 */
     await s`
       alter table users add column if not exists is_ai
@@ -374,6 +406,42 @@ export async function requireAdmin(req, res) {
 }
 
 /**
+ * 班委头衔清单（2026-10-08 新增）。
+ *
+ * 用途：资料字段可见性里的 `committee` 档——「班委可见」的字段，
+ * 只有持有下列头衔之一的人（或管理员 / AI 账号）才能查到。
+ *
+ * ⚠️ name 里的值必须与后台「头衔任命」所用的字面量完全一致
+ *    （见 api/admin.js 的 ALLOWED_TITLES）。
+ * ⚠️ 这是**服务端**常量，不接受任何前端传参。
+ */
+export const COMMITTEE_TITLES = ['班长', '副班长', '团支书', '副团支书', '课代表', '电教委', '劳动委员', '纪律委员', '宣传委员', '体育委员', '文娱委员', '卫生委员', '生活委员', '学习委员'];
+
+/** 把 profiles.title 的文本切成头衔数组（与 requireTitle 同一套切分规则） */
+export function splitTitles(raw) {
+  return String(raw || '')
+    .split(/[,，、\s]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 判断当前用户是否算「班委」（可见性 committee 档的门槛）。
+ *
+ * 管理员与 AI 账号天然算（它们本就该能看一切）。
+ * 注意：**不要**把这个判定塞进 currentUser()——那会让每个请求都多算一次；
+ * 只在 profile.js 真正需要分档的接口里调用。
+ *
+ * @param {{role?:string,isAI?:boolean,title?:string}|null} u
+ */
+export function isCommittee(u) {
+  if (!u) return false;
+  if (u.role === 'admin' || u.isAI) return true;
+  const list = splitTitles(u.title);
+  return list.some((t) => COMMITTEE_TITLES.includes(t));
+}
+
+/**
  * 要求持有某个头衔（班长 / 课代表 / 团支书…）。
  *
  * ⚠️ 安全边界：头衔一律以数据库 profiles.title 为准，**绝不接受前端传参**、
@@ -381,16 +449,17 @@ export async function requireAdmin(req, res) {
  *
  * 管理员与 AI 账号天然通过（管理员本来就该能改一切；AI 账号见 is_ai）。
  *
+ * ⚠️ 现状（2026-10-08 核查）：本函数当前**没有任何调用方**——课代表改作业的
+ *    授权是内联在 api/content.js 的 caSaveSubject 里的。保留它供后续复用，
+ *    但**不要**以为改了这里就能改全站授权。
+ *
  * @param {string} need 需要的头衔，如 '课代表'
  */
 export async function requireTitle(req, res, need) {
   const u = await requireUser(req, res);
   if (!u) return null;
   if (u.role === 'admin' || u.isAI) return u;
-  const list = String(u.title || '')
-    .split(/[,，、\s]+/)
-    .map((x) => x.trim())
-    .filter(Boolean);
+  const list = splitTitles(u.title);
   if (!list.includes(String(need || '').trim())) {
     fail(res, 403, `需要「${need}」头衔才能操作`);
     return null;

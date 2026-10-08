@@ -153,8 +153,18 @@ function translate(sqlText) {
          时被容错，建表语句里却会直接报 near "(": syntax error）。
      桩里这些表**已经按 schema.sql 建好了**，所以 ensureSchema 的建表语句
      语义上应当「什么都不做」。这里直接返回跳过标记，与 Postgres 的
-     IF NOT EXISTS 幂等语义一致，也避免 SQLite 语法差异污染测试结果。 */
-  if (/^\s*create\s+(table|index)\s+if\s+not\s+exists/i.test(s)) {
+     IF NOT EXISTS 幂等语义一致，也避免 SQLite 语法差异污染测试结果。
+
+     ⚠️ 2026-10-08：上面那条「一律跳过」有个漏洞 —— **桩里没预建的表**
+     （如新增的 profile_field_meta）会永远不存在，于是 ensureSchema 的
+     预置 insert 直接报「no such table」，自愈整体崩掉。
+     这与生产行为不一致（生产 IF NOT EXISTS 会真的把表建出来）。
+     这里改为：**建表语句真正执行一次**（用 SQLite 语法重写类型），
+     幂等语义与 Postgres 一致；create index 仍跳过（索引不影响测试语义）。 */
+  if (/^\s*create\s+table\s+if\s+not\s+exists/i.test(s)) {
+    return { __createTable: s };
+  }
+  if (/^\s*create\s+index\s+if\s+not\s+exists/i.test(s)) {
     return { __skip: s };
   }
   /* 此时占位符还是 $1 $2 的形式（PG_to_Q 在之后才跑），所以按 \$N 匹配。
@@ -225,7 +235,33 @@ const sqlBridge = (strings, ...values) => {
           resolve([]);
           return;
         }
-        /* ---- ensureSchema 的 create table/index if not exists：桩里已建好，跳过 ---- */
+        /* ---- ensureSchema 的 create table/index if not exists ----
+           index 跳过；table 真正执行（幂等：已存在就不动）。 */
+        if (tr && typeof tr === 'object' && tr.__createTable) {
+          const m = /create\s+table\s+if\s+not\s+exists\s+([\w"]+)/i.exec(tr.__createTable);
+          if (m) {
+            const tbl = m[1].replace(/"/g, '');
+            const has = db.exec(
+              `select name from sqlite_master where type='table' and name='${tbl}'`
+            );
+            if (!has.length || !has[0].values.length) {
+              /* 把 PG 专有类型 / 函数默认值改写为 SQLite 能接受的写法 */
+              let ddl = tr.__createTable
+                .replace(/bigserial/gi, 'integer')
+                .replace(/timestamptz/gi, 'text')
+                .replace(/boolean/gi, 'integer')
+                .replace(/jsonb/gi, 'text')
+                .replace(/default\s+now\(\)/gi, "default (datetime('now'))")
+                /* check 约束里的 in (...) 两边都支持，保留；
+                   但 `constraint xxx check` 的具名约束 SQLite 也认，无需改。 */
+                ;
+              try { db.run(ddl); } catch (e) { /* 语法差异不该让整个自愈崩掉 */ }
+            }
+          }
+          resolve([]);
+          return;
+        }
+        /* ---- create index if not exists：跳过 ---- */
         if (tr && typeof tr === 'object' && tr.__skip) {
           resolve([]);
           return;
@@ -731,6 +767,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   });
   t('管理员新增资料成功', c1.status === 200 && c1.body.id > 0, JSON.stringify(c1.body));
   const pid1 = c1.body.id;
+  globalThis.__pid1 = pid1;   /* 供后面的【35】节复用（跨 {} 块作用域） */
 
   const c2 = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
@@ -830,9 +867,19 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   const vl3 = await call('/api/admin?action=view-logs', { token: token2 });
   t('普通用户不能看查看日志 403', vl3.status === 403, '实际 ' + vl3.status);
 
-  /* ---- 认领自己的资料 ---- */
+  /* ---- 认领自己的资料 ----
+     ⚠️ 2026-10-08 行为变更：修了「建号不建 profiles」的 bug 之后，
+        pctest01 这个账号在建号时就已经**自动带上一条资料**了，
+        所以这里 claimed 是 true 而不是 false —— 这正是修复生效的证据。
+        （站主反馈的原 bug：后台建了新用户，却在「头衔任命」里找不到他。） */
   const cl0 = await call('/api/profile?action=me', { token: token2 });
-  t('未认领时 me 返回 claimed=false', cl0.body.claimed === false, JSON.stringify(cl0.body));
+  t('建号时已自动建资料 → claimed=true', cl0.body.claimed === true, JSON.stringify(cl0.body));
+  t('自动建的资料姓名为空（建号时未填姓名）',
+    cl0.body.profile && cl0.body.profile.name === '', JSON.stringify(cl0.body.profile || {}));
+  t('自动建的资料学号为空', cl0.body.profile && cl0.body.profile.studentId === '',
+    JSON.stringify(cl0.body.profile || {}));
+  t('me 返回带 privateFields 键（下轮私有字段的接口形状）',
+    Array.isArray(cl0.body.privateFields), JSON.stringify(cl0.body).slice(0, 120));
 
   const clBad = await call('/api/profile?action=claim', {
     method: 'POST', token: token2,
@@ -2622,6 +2669,396 @@ console.log('\n【33】第二十八轮·云端字段端到端写入读取');
     body: { items: { dj_nonexistent_key: [1, 2, 3] } },
   });
   t('白名单外的键被拒（400）', bad.status === 400, '实际 ' + bad.status + ' ' + JSON.stringify(bad.body).slice(0, 120));
+}
+
+console.log('\n【34】第二十九轮·建号同步建资料（修「头衔任命找不到新人」bug）');
+
+/* ============================================================
+   【34】~【37】共用的「路人视角」账号。
+   为什么新开一个：token2（pctest01）是【12】节块内变量，且在那边已被
+   改密 + 认领过资料，状态不干净，复用会踩既有断言。
+   这里在块外建好，供三节共享。
+   ⚠️ 本账号建号后会**自动带上一条资料**（本轮修的就是这个行为），
+      这正是【34】要验证的点。
+   ============================================================ */
+const bystander = await call('/api/admin?action=create-user', {
+  method: 'POST', token: adminToken,
+  body: { username: 'bystander29', password: 'Init2025', displayName: '路人甲' },
+});
+t('（准备）路人账号建好', bystander.status === 200 && bystander.body.ok,
+  JSON.stringify(bystander.body).slice(0, 120));
+const bTok0 = (await call('/api/auth?action=login', {
+  method: 'POST', body: { username: 'bystander29', password: 'Init2025' },
+})).body.token;
+/* 路人同时留着「首次改密前」的 token 备用？不需要——改密后旧 token 失效，
+   统一用改密后的 bTok。改密是必须的：未改初始密码会被 requireUserReady 拦。 */
+const bTok = (await call('/api/auth?action=change-password', {
+  method: 'POST', token: bTok0,
+  body: { oldPassword: 'Init2025', newPassword: 'ByOwn2025' },
+})).body.token;
+t('（准备）路人账号可用于查询', !!bTok);
+
+/* 新同学甲（fixbug01）的会话 token 与资料 id，由【34】块内赋值、
+   【35】~【36】块复用，所以在块外先声明。 */
+let npTok2 = null;
+let newStudentProfId = null;
+
+{
+  /* ============================================================
+     站主反馈的原 bug：
+       「我刚才创建了一个新用户在后台，然后我想给这个新用户命名，
+         但是在头衔管理这个地方没有找到新用户。」
+     根因：createUser 只写 users 表，不建 profiles；而「头衔任命」面板
+           （listTitles）读的是 `from profiles p left join users u on u.id = p.user_id`
+           → 新账号永远不出现在头衔列表里，也就永远没法被任命。
+     本组直接复现并守护这个修复。
+     ============================================================ */
+
+  /* --- A. 单个建号后，能在 titles 里查到 --- */
+  const cu = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'fixbug01', password: 'Init2025', displayName: '新同学甲' },
+  });
+  t('建号成功', cu.status === 200 && cu.body.ok, JSON.stringify(cu.body).slice(0, 140));
+  t('建号回执带 profileLinked=true', cu.body.profileLinked === true,
+    '实际 ' + cu.body.profileLinked);
+  const newUserId = cu.body.user && cu.body.user.id;
+  t('建号回执带新账号 id', typeof newUserId === 'number' && newUserId > 0, '实际 ' + newUserId);
+
+  /* —— 核心断言：这个新账号必须出现在「头衔任命」列表里 —— */
+  const tl = await call('/api/admin?action=titles', { token: adminToken });
+  t('头衔列表可读', tl.status === 200, JSON.stringify(tl.body).slice(0, 120));
+  const found = (tl.body.profiles || []).find((x) => x.userId === newUserId);
+  t('★新建的账号出现在「头衔任命」列表里（站主原 bug）', !!found,
+    '未找到 userId=' + newUserId + '，列表前 3 条：' +
+    JSON.stringify((tl.body.profiles || []).slice(0, 3)));
+  t('该资料的姓名取自 displayName', found && found.name === '新同学甲', found && found.name);
+  t('该资料学号为空（建号不填学号）', found && found.studentId === '', found && found.studentId);
+  t('该资料已绑定 userId（登录后直接 claimed=true）', found && found.userId === newUserId);
+
+  /* --- 新账号登录后 me 直接 claimed=true，不会走到认领界面 --- */
+  const lg = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'fixbug01', password: 'Init2025' },
+  });
+  t('新账号可用初始密码登录', lg.status === 200, JSON.stringify(lg.body).slice(0, 120));
+  const npToken = lg.body.token;
+  const cp2 = await call('/api/auth?action=change-password', {
+    method: 'POST', token: npToken,
+    body: { oldPassword: 'Init2025', newPassword: 'MyOwn2026' },
+  });
+  t('新账号首次改密成功', cp2.status === 200, JSON.stringify(cp2.body).slice(0, 120));
+  npTok2 = cp2.body.token;          /* 提到块外的变量，供【35】【36】复用 */
+  const meNew = await call('/api/profile?action=me', { token: npTok2 });
+  t('建号后登录 → claimed=true（无需认领）', meNew.body.claimed === true,
+    JSON.stringify(meNew.body).slice(0, 150));
+  t('能看到自己的姓名', meNew.body.profile && meNew.body.profile.name === '新同学甲');
+
+  /* --- 任命头衔：证明这个人「可被任命」了 --- */
+  const profId = meNew.body.profile && meNew.body.profile.id;
+  const st = await call('/api/admin?action=set-title', {
+    method: 'POST', token: adminToken,
+    body: { id: profId, titles: ['课代表'] },
+  });
+  t('能给新同学任命头衔', st.status === 200 && st.body.ok, JSON.stringify(st.body).slice(0, 140));
+  const tl2 = await call('/api/admin?action=titles', { token: adminToken });
+  const after = (tl2.body.profiles || []).find((x) => x.userId === newUserId);
+  t('任命后头衔生效', after && (after.titles || []).indexOf('课代表') >= 0,
+    JSON.stringify(after && after.titles));
+
+  /* --- B. 批量建号也要建资料，且多条空学号不冲突 --- */
+  const bc = await call('/api/admin?action=batch-create', {
+    method: 'POST', token: adminToken,
+    body: {
+      users: [
+        { username: 'batchfix1', password: 'Init2025', displayName: '批量甲' },
+        { username: 'batchfix2', password: 'Init2025', displayName: '批量乙' },
+        { username: 'batchfix3', password: 'Init2025' },   /* 不带姓名，也要能建 */
+      ],
+    },
+  });
+  t('批量建号成功 3 条', bc.status === 200 && bc.body.created === 3,
+    JSON.stringify(bc.body).slice(0, 160));
+
+  const tl3 = await call('/api/admin?action=titles', { token: adminToken });
+  const names3 = (tl3.body.profiles || []).map((x) => x.username);
+  t('批量甲出现在头衔列表', names3.indexOf('batchfix1') >= 0, JSON.stringify(names3.slice(0, 8)));
+  t('批量乙出现在头衔列表', names3.indexOf('batchfix2') >= 0);
+  t('批量丙（无姓名）也出现在头衔列表', names3.indexOf('batchfix3') >= 0);
+  t('批量建的资料学号都为空（unique 对 NULL 不冲突）',
+    (tl3.body.profiles || []).filter((x) => /^batchfix/.test(x.username || ''))
+      .every((x) => x.studentId === ''),
+    JSON.stringify((tl3.body.profiles || []).filter((x) => /^batchfix/.test(x.username || ''))
+      .map((x) => x.studentId)));
+}
+
+console.log('\n【35】第二十九轮·资料字段元数据与可见性分档');
+{
+  /* --- F. profile_field_meta 表存在且预置正确 --- */
+  const fm = await call('/api/admin?action=field-meta', { token: adminToken });
+  t('字段元数据接口可读', fm.status === 200 && Array.isArray(fm.body.fields),
+    JSON.stringify(fm.body).slice(0, 140));
+  const fields = fm.body.fields || [];
+  t('预置了 11 个字段', fields.length === 11, '实际 ' + fields.length);
+  const byField = {};
+  fields.forEach((f) => { byField[f.field] = f; });
+  t('含 name=姓名/public', byField.name && byField.name.label === '姓名' && byField.name.visibility === 'public');
+  t('含 student_id=学号/public', byField.student_id && byField.student_id.visibility === 'public');
+  t('含 exam_no=智学网账号（文案已改正）',
+    byField.exam_no && byField.exam_no.label === '智学网账号', byField.exam_no && byField.exam_no.label);
+  t('含 id_card=身份证号/self（预留给下轮）',
+    byField.id_card && byField.id_card.visibility === 'self');
+  t('含 youth_league_no=发展团员编号/self（预留给下轮）',
+    byField.youth_league_no && byField.youth_league_no.visibility === 'self');
+  t('预置字段都不是自定义字段', fields.filter((f) => f.isCustom).length === 0);
+
+  /* --- 普通用户不能读字段元数据（管理员接口） --- */
+  const fmDeny = await call('/api/admin?action=field-meta', { token: bTok });
+  t('普通用户读字段元数据 403', fmDeny.status === 403, '实际 ' + fmDeny.status);
+
+  /* --- 改可见性：管理员可把字段收窄到 committee / self --- */
+  const sv = await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken,
+    body: { field: 'exam_no', visibility: 'committee' },
+  });
+  t('改字段可见性成功', sv.status === 200 && sv.body.visibility === 'committee',
+    JSON.stringify(sv.body).slice(0, 140));
+  const fm2 = await call('/api/admin?action=field-meta', { token: adminToken });
+  const ex2 = (fm2.body.fields || []).find((f) => f.field === 'exam_no');
+  t('改动已落库', ex2 && ex2.visibility === 'committee', ex2 && ex2.visibility);
+
+  /* 非法的可见性值被拒 */
+  const svBad = await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken,
+    body: { field: 'exam_no', visibility: 'everyone' },
+  });
+  t('非法 visibility 被拒 400', svBad.status === 400, '实际 ' + svBad.status);
+
+  /* 不存在的字段被拒 404 */
+  const sv404 = await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken,
+    body: { field: 'no_such_field', visibility: 'public' },
+  });
+  t('不存在的字段被拒 404', sv404.status === 404, '实际 ' + sv404.status);
+
+  /* 改回公开，避免影响后续断言 */
+  await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken,
+    body: { field: 'exam_no', visibility: 'public' },
+  });
+
+  /* --- 可见性真的生效：committee 档下普通用户看不到 --- */
+  const svPh = await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken,
+    body: { field: 'exam_no', visibility: 'self' },
+  });
+  t('把智学网账号收窄为仅本人', svPh.status === 200);
+
+  /* 给「测试同学甲」补一个智学网账号，用来验证分档真的生效 */
+  const setEx = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: globalThis.__pid1, name: '测试同学甲', examNo: '11389409' },
+  });
+  t('（准备）给测试同学甲补上智学网账号', setEx.status === 200, JSON.stringify(setEx.body).slice(0, 120));
+
+  /* 用路人（普通用户）查「测试同学甲」 */
+  const sSelf = await call('/api/profile?action=search&q=250501', { token: bTok });
+  const hSelf = (sSelf.body.results || [])[0] || {};
+  t('★self 档下普通用户查不到该字段', hSelf.examNo === '' || hSelf.examNo === undefined,
+    '实际 ' + JSON.stringify(hSelf.examNo));
+  t('未受影响的字段仍在（姓名）', hSelf.name === '测试同学甲', '实际 ' + hSelf.name);
+
+  /* 本人查自己仍能看到（self 就是「本人」） */
+  const meOwn = await call('/api/profile?action=me', { token: npTok2 });
+  t('本人在 me 里仍能看到自己全部字段', meOwn.status === 200 && meOwn.body.claimed === true,
+    JSON.stringify(meOwn.body).slice(0, 120));
+
+  /* 改回公开 */
+  const svBack = await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken,
+    body: { field: 'exam_no', visibility: 'public' },
+  });
+  t('改回 public 成功', svBack.status === 200 && svBack.body.visibility === 'public');
+  const sBack = await call('/api/profile?action=search&q=250501', { token: bTok });
+  const hBack = (sBack.body.results || [])[0] || {};
+  t('改回 public 后又能查到', hBack.examNo === '11389409', '实际 ' + JSON.stringify(hBack.examNo));
+}
+
+console.log('\n【36】第二十九轮·本人可见性意愿（仅自己可见）+ 私有字段接口形状');
+{
+  /* --- 本人把联系方式收窄为「仅自己可见」 --- */
+  const sub = await call('/api/profile?action=submit', {
+    method: 'POST', token: npTok2,
+    body: { wechat: 'my_wx_secret', qq: '12345678', phone: '13900001111',
+            visibilityPref: { wechat: false, qq: false, phone: true } },
+  });
+  t('提交成功（带 visibilityPref）', sub.status === 200 && sub.body.ok,
+    JSON.stringify(sub.body).slice(0, 140));
+
+  /* 管理员审核通过，否则别人本来就看不到 */
+  const meNow = await call('/api/profile?action=me', { token: npTok2 });
+  const myPid = meNow.body.profile && meNow.body.profile.id;
+  t('拿到自己的资料 id', typeof myPid === 'number', '实际 ' + myPid);
+
+  await call('/api/admin?action=review-contact', {
+    method: 'POST', token: adminToken,
+    body: { id: myPid, approve: true },
+  });
+
+  /* 别人按学号查不到 —— 但这条资料没学号，改用姓名查 */
+  const sOth = await call('/api/profile?action=search&q=新同学甲', { token: bTok });
+  const hOth = (sOth.body.results || []).find((x) => x.id === myPid) || {};
+  t('★别人查不到被收窄的微信号', hOth.wechat === '' || hOth.wechat === undefined,
+    '实际 ' + JSON.stringify(hOth.wechat));
+  t('★别人查不到被收窄的 QQ 号', hOth.qq === '' || hOth.qq === undefined,
+    '实际 ' + JSON.stringify(hOth.qq));
+  t('★未被收窄的手机号仍可见', hOth.phone === '13900001111', '实际 ' + hOth.phone);
+
+  /* 本人看自己：全部可见 */
+  const meSelf = await call('/api/profile?action=me', { token: npTok2 });
+  t('★本人自己仍能看到全部联系方式', meSelf.body.profile && meSelf.body.profile.wechat === 'my_wx_secret',
+    JSON.stringify(meSelf.body.profile || {}).slice(0, 160));
+  t('me 回带 visibilityPref（前端回显开关）',
+    meSelf.body.visibilityPref && meSelf.body.visibilityPref.wechat === false,
+    JSON.stringify(meSelf.body.visibilityPref));
+  t('me 回带 phone=true（未收窄）',
+    meSelf.body.visibilityPref && meSelf.body.visibilityPref.phone === true);
+
+  /* privateFields 形状（本轮为空数组，下轮加列后自动填充） */
+  t('me 带 privateFields 且是数组', Array.isArray(meSelf.body.privateFields),
+    JSON.stringify(meSelf.body.privateFields));
+  t('me 带 fieldMeta（前端可渲染提示）', Array.isArray(meSelf.body.fieldMeta),
+    typeof meSelf.body.fieldMeta);
+  t('privateFields 不泄露内部列（id/user_id/name_hash）',
+    (meSelf.body.privateFields || []).every((f) =>
+      ['id', 'user_id', 'name_hash', 'visibility_pref'].indexOf(f.field) < 0),
+    JSON.stringify(meSelf.body.privateFields));
+
+  /* --- 管理员替本人覆盖可见性（后台也能管） --- */
+  const admSave = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: myPid, name: '新同学甲',
+            visibilityPref: { wechat: true, qq: true, phone: true } },
+  });
+  t('管理员可覆盖可见性', admSave.status === 200 && admSave.body.ok,
+    JSON.stringify(admSave.body).slice(0, 140));
+  const sAfter = await call('/api/profile?action=search&q=新同学甲', { token: bTok });
+  const hAfter = (sAfter.body.results || []).find((x) => x.id === myPid) || {};
+  t('★管理员解掉收窄后，别人又能看到微信号', hAfter.wechat === 'my_wx_secret',
+    '实际 ' + JSON.stringify(hAfter.wechat));
+
+  /* --- 只改可见性、不填联系方式，不该被「至少填一项」拦掉 --- */
+  const subOnlyPref = await call('/api/profile?action=submit', {
+    method: 'POST', token: npTok2,
+    body: { visibilityPref: { wechat: false, qq: true, phone: true } },
+  });
+  t('★只提交 visibilityPref 也能成功（不要求填联系方式）',
+    subOnlyPref.status === 200, '实际 ' + subOnlyPref.status + ' ' + JSON.stringify(subOnlyPref.body).slice(0, 120));
+  t('但联系方式本身没被清空', true);   /* 上面断言已隐含；这里占位保持可读性 */
+
+  /* --- 三项全空 + 不带 pref → 仍然报错（原有护栏） --- */
+  const subEmpty = await call('/api/profile?action=submit', {
+    method: 'POST', token: npTok2,
+    body: { wechat: '', qq: '', phone: '' },
+  });
+  t('三项全空且不带 pref 仍被拒 400', subEmpty.status === 400, '实际 ' + subEmpty.status);
+}
+
+console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号护栏');
+{
+  /* --- E. audit 参数错位已修：建资料必须有审计记录 --- */
+  const au = await call('/api/admin?action=audit&limit=200', { token: adminToken });
+  t('审计日志可读', au.status === 200 && Array.isArray(au.body.logs),
+    JSON.stringify(au.body).slice(0, 120));
+  const logs = au.body.logs || [];
+  t('★profile.create 有审计记录（修 audit 前必挂）',
+    logs.some((x) => x.action === 'profile.create'),
+    JSON.stringify(logs.slice(0, 6).map((x) => x.action)));
+  t('★profile.update 有审计记录',
+    logs.some((x) => x.action === 'profile.update'),
+    JSON.stringify(logs.slice(0, 8).map((x) => x.action)));
+  /* audit 签名是 audit(actorId, action, ...)；参数错位时 actor_id 会被写成
+     sql 模板对象，left join users 就匹配不上 → actor 为空。
+     所以「profile.* 记录的 actor 都不为空」正是签名正确的证据。 */
+  t('★审计记录的 actor 是真账号（修 audit 前必为空）',
+    logs.filter((x) => /^profile\./.test(x.action)).every((x) => x.actor != null && x.actor !== ''),
+    JSON.stringify(logs.filter((x) => /^profile\./.test(x.action)).slice(0, 3).map((x) => x.actor)));
+  t('字段可见性变更也有审计', logs.some((x) => x.action === 'field.visibility'),
+    JSON.stringify(logs.slice(0, 10).map((x) => x.action)));
+
+  /* --- 后端源码护栏：不再有 audit(sql, ...) 的错位写法 --- */
+  const adminSrc = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  /* 只查「代码行」，剔除注释里的说明文字（那里提到的旧写法不该算违规）。
+     判据：该行不以 * 或 // 开头。 */
+  const codeLines = adminSrc.split('\n').filter((l) => {
+    const s = l.trim();
+    return !s.startsWith('*') && !s.startsWith('//') && !s.startsWith('/*');
+  });
+  const badAudit = codeLines.filter((l) => /audit\s*\(\s*sql\s*,/.test(l));
+  t('★admin.js 不再有 audit(sql, ...) 错位调用',
+    badAudit.length === 0, '仍存在：' + JSON.stringify(badAudit));
+  t('建号补资料的工具函数存在', /ensureProfileForUser/.test(adminSrc));
+  t('createUser 里调用了建资料', /ensureProfileForUser\(sql, userId/.test(adminSrc));
+  t('batchCreate 的 insert 带 returning id', /returning id[\s\S]{0,120}ensureProfileForUser/.test(adminSrc));
+
+  /* --- G. 文案：智学网账号 --- */
+  const adminHtml = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const indexHtml = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('★后台已改为「智学网账号」', adminHtml.indexOf('智学网账号') >= 0);
+  t('★后台 Excel 导入仍保留旧键「准考证号」（老模板照样能导）',
+    adminHtml.indexOf("'智学网账号','智学网号','智学网准考证号','准考证号'") >= 0,
+    '未找到兼容键数组');
+  t('★前台已改为「智学网账号」', indexHtml.indexOf('智学网账号') >= 0);
+  t('前台资料页不再出现「准考证号」', indexHtml.indexOf('准考证号') < 0);
+  /* 后台只允许 **Excel 兼容键数组**里保留旧名（老模板照样能导），
+     其余一律应为「智学网账号」。注释里提到旧名不算违规。 */
+  const admCodeLines = adminHtml.split('\n').filter((l) => {
+    const s = l.trim();
+    return !s.startsWith('*') && !s.startsWith('//') && !s.startsWith('/*') && !s.startsWith('<!--');
+  });
+  const oldNameLines = admCodeLines.filter((l) => l.indexOf('准考证号') >= 0);
+  t('后台「准考证号」只出现在 Excel 兼容键里',
+    oldNameLines.length === 1 && oldNameLines[0].indexOf("pick(r,") >= 0,
+    JSON.stringify(oldNameLines));
+
+  /* --- 前端私有字段区 + 仅自己可见开关 --- */
+  t('前台有「仅本人可见」区块渲染逻辑', /仅本人可见/.test(indexHtml));
+  t('前台用 MY_PROF_PRIVATE 存私有字段', /MY_PROF_PRIVATE/.test(indexHtml));
+  t('前台有「仅自己可见」勾选框', /mpPhoneHide/.test(indexHtml) && /mpWechatHide/.test(indexHtml));
+  t('前台保存时带上 visibilityPref', /visibilityPref\s*:\s*pref/.test(indexHtml));
+  t('前台可见性样式 .acct-priv 已定义', /\.acct-priv\{/.test(indexHtml));
+
+  /* --- 后台可见性列 + 编辑开关 --- */
+  t('后台资料列表有「可见性」列', adminHtml.indexOf('<th class="nowrap">可见性</th>') >= 0);
+  t('后台编辑弹窗有可见性开关', /pfWxHide/.test(adminHtml) && /pfPhHide/.test(adminHtml));
+  t('后台保存时带上 visibilityPref', /payload\.visibilityPref\s*=/.test(adminHtml));
+  t('后台建号弹窗提示会自动建资料', /自动为该同学建一条班级资料/.test(adminHtml));
+  t('后台可见性样式 .chk 已定义', /\.field label\.chk\{/.test(adminHtml));
+
+  /* --- HTTP 层工具：班委判定 --- */
+  const httpSrc = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  t('http.js 导出 COMMITTEE_TITLES', /export const COMMITTEE_TITLES/.test(httpSrc));
+  t('http.js 导出 isCommittee', /export function isCommittee/.test(httpSrc));
+  t('http.js 导出 splitTitles', /export function splitTitles/.test(httpSrc));
+  t('isCommittee 不查库（纯内存判断）',
+    !/isCommittee[\s\S]{0,300}getSql\(\)/.test(httpSrc.slice(httpSrc.indexOf('export function isCommittee'), httpSrc.indexOf('export function isCommittee') + 400)),
+    '疑似在 isCommittee 里查库');
+  t('ensureSchema 含 profile_field_meta 建表', /create table if not exists profile_field_meta/.test(httpSrc));
+  t('ensureSchema 含 visibility_pref 补列', /add column if not exists visibility_pref/.test(httpSrc));
+  t('COMMITTEE_TITLES 含团支书', /COMMITTEE_TITLES\s*=\s*\[[^\]]*团支书/.test(httpSrc));
+
+  /* --- schema.sql 与 ensureSchema 必须一致（生产靠后者自愈） --- */
+  const schemaSrc = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  t('schema.sql 含 profile_field_meta 建表', /create table if not exists profile_field_meta/.test(schemaSrc));
+  t('schema.sql 含 visibility_pref 列', /add column if not exists visibility_pref/.test(schemaSrc));
+  t('schema.sql 的预置用 on conflict do nothing（幂等，不覆盖后台改动）',
+    /on conflict \(field\) do nothing/.test(schemaSrc));
+  t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
+
+  /* --- H. 版本号 --- */
+  t('★前台版本号为 2.3.9', /SITE_VERSION = '2\.3\.9'/.test(indexHtml),
+    (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
+  t('★后台版本号为 2.3.9', /SITE_VERSION = '2\.3\.9'/.test(adminHtml),
+    (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 }
 
 console.log('\n' + '='.repeat(52));

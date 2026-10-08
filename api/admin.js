@@ -22,6 +22,8 @@
    POST   /api/admin?action=save-profile              新增或修改资料（姓名/学号/政治面貌）
    POST   /api/admin?action=delete-profile            删除一条资料
    POST   /api/admin?action=batch-profiles            批量导入资料
+   GET    /api/admin?action=field-meta                字段元数据（可见性一览，2026-10-08）
+   POST   /api/admin?action=set-visibility            改某字段的可见性上限（2026-10-08）
 
    头衔任命 / AI 交接（2026-10-05 新增）
    GET    /api/admin?action=titles                    头衔列表（谁担任什么职务）
@@ -60,6 +62,7 @@ export default async function handler(req, res) {
       if (action === 'profile')          return await profileDetail(req, res);
       if (action === 'profile-requests') return await profileRequests(req, res);
       if (action === 'view-logs')        return await viewLogs(req, res);
+      if (action === 'field-meta')       return await fieldMeta(req, res);
       if (action === 'titles')           return await listTitles(req, res);
       if (action === 'ai-account')       return await aiAccount(req, res);
       if (action === 'games')            return await gameStats(req, res);
@@ -85,6 +88,7 @@ export default async function handler(req, res) {
         case 'delete-profile': return await deleteProfile(req, res, me, b);
         case 'batch-profiles': return await batchProfiles(req, res, me, b);
         case 'bind-profiles':  return await bindProfiles(req, res, me, b);
+        case 'set-visibility': return await setVisibility(req, res, me, b);
         case 'set-title':      return await setTitle(req, res, me, b);
         case 'handover-ai':    return await handoverAi(req, res, me, b);
         case 'save-secret':    return await saveAdminSecret(req, res, me, b);
@@ -774,12 +778,57 @@ async function createUser(req, res, me, b) {
     values (${username}, ${displayName}, ${hash}, ${role}, true)
     returning id, username
   `;
-  await audit(me.id, 'user.create', 'user', String(rows[0].id), username);
+
+  /* 2026-10-08 修 bug：建号时**同步建一条 profiles**。
+     起因：站主在后台建了新用户，却在整个「头衔任命」面板里找不到他。
+     根因：头衔列表读的是 profiles（left join users on u.id = p.user_id），
+          而这里过去只写 users、不建 profiles → 新账号永远不出现在头衔列表，
+          也永远没法被任命、没法被资料查询命中。 */
+  const userId = Number(rows[0].id);
+  const profileLinked = await ensureProfileForUser(sql, userId, displayName);
+
+  await audit(me.id, 'user.create', 'user', String(userId), username);
 
   return ok(res, {
-    message: '已创建账号 ' + username + '，该同学首次登录需自行修改密码',
-    user: { id: Number(rows[0].id), username: rows[0].username },
+    message: '已创建账号 ' + username + '，该同学首次登录需自行修改密码'
+      + (profileLinked ? '' : '（⚠️ 资料创建失败，请到「资料管理」手动补一条）'),
+    user: { id: userId, username: rows[0].username },
+    profileLinked,
   });
+}
+
+/**
+ * 建号后同步补一条班级资料（2026-10-08 新增）。
+ *
+ * 为什么必须有：头衔任命、资料查询、个人中心全都读 profiles 表；
+ * 账号（users）只是登录凭证。过去建号只写 users，导致新同学在
+ * 「头衔任命」里查不到 → 无法任命职务（站主实际遇到的 bug）。
+ *
+ * 设计取舍：
+ *   ① **不自动匹配已有的同名资料**。自动认领会把两个人错配成一人，
+ *      而这是不可逆的（资料连带联系方式、学号全归错人）。
+ *      宁可出现「一人两条」由管理员到资料管理里手工删除。
+ *   ② **不引入事务**。账号是主、资料是附；profiles 建失败就用 try-catch
+ *      吞掉并记日志，账号照常可登录（最坏退回改动前的状态，可手工补）。
+ *   ③ 学号恒为空。多条 NULL 在 unique 约束下互不冲突（PG/SQLite 同），
+ *      所以批量建号不会打架。
+ *
+ * @returns {Promise<boolean>} 资料是否建成功
+ */
+async function ensureProfileForUser(sql, userId, displayName) {
+  try {
+    /* 已有资料挂在本人名下时不重复建（如先认领过再建号） */
+    const exist = await sql`select id from profiles where user_id = ${userId} limit 1`;
+    if (exist.length) return true;
+    await sql`
+      insert into profiles (name, role, user_id)
+      values (${displayName || null}, '学生', ${userId})
+    `;
+    return true;
+  } catch (e) {
+    console.warn('[admin] 为用户 ' + userId + ' 补建资料失败（账号仍可用）：', e.message);
+    return false;
+  }
 }
 
 /* ---------------- 写：批量创建（Excel 导入用） ----------------
@@ -788,7 +837,12 @@ async function createUser(req, res, me, b) {
    index 是**批内下标**，前端据此换算回 Excel 真实行号。
 
    为避免一次请求算太久（Workers 免费版 CPU 时间有限，PBKDF2 每次约 5–10ms），
-   这里限制单批最多 60 条 —— 由前端分片调用。 */
+   这里限制单批最多 60 条 —— 由前端分片调用。
+
+   ⚠️ 本接口**不接收学号**，建出来的资料学号恒为空。
+      批次内会因此出现多条 NULL：PG 与 SQLite 的 unique 约束都不把 NULL
+      视为相等，所以不会冲突（已由测试 B 护栏）。
+      【禁止】后续随手加个 studentId 入参而不做查重——那会直接撞 unique 报错。 */
 const BATCH_LIMIT = 60;
 
 async function batchCreate(req, res, me, b) {
@@ -836,10 +890,16 @@ async function batchCreate(req, res, me, b) {
         continue;
       }
       const hash = await hashPassword(password);
-      await sql`
+      const ins = await sql`
         insert into users (username, display_name, password_hash, role, must_change_password)
         values (${username}, ${displayName}, ${hash}, ${role}, true)
+        returning id
       `;
+      /* 同步补资料（理由同 createUser，见 ensureProfileForUser 的注释）。
+         失败不阻断本条：账号已建好，资料可由管理员手工补。 */
+      if (ins.length && ins[0].id != null) {
+        await ensureProfileForUser(sql, Number(ins[0].id), displayName);
+      }
       created++;
     } catch (e) {
       /* 唯一索引冲突等并发情况也走这里，不中断整批 */
@@ -975,7 +1035,7 @@ async function listProfiles(req, res) {
   const rows = await sql`
     select p.id, p.name, p.student_id, p.politics, p.exam_no, p.role,
            p.wechat, p.qq, p.phone, p.contact_status, p.reject_reason,
-           p.user_id, p.created_at, p.updated_at,
+           p.user_id, p.created_at, p.updated_at, p.visibility_pref,
            u.username as bound_username
       from profiles p
       left join users u on u.id = p.user_id
@@ -1015,8 +1075,87 @@ async function listProfiles(req, res) {
       boundUsername: r.bound_username || '',
       createdAt: r.created_at,
       updatedAt: r.updated_at,
+      /* 本人可见性意愿（2026-10-08）：后台资料列表用来标「🔒 私密」 */
+      visibilityPref: safeJson(r.visibility_pref),
     })),
   });
+}
+
+/**
+ * 安全解析 JSON 文本列（2026-10-08 新增）。
+ * profiles.visibility_pref 是 text 列存 JSON，脏数据不应把整个接口搞崩。
+ */
+function safeJson(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    const o = JSON.parse(String(raw));
+    return o && typeof o === 'object' ? o : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * 读字段元数据（2026-10-08 新增）。
+ * 失败时返回空数组 —— 老库可能还没自愈出 profile_field_meta 表，
+ * 后台界面不该因此白屏。
+ */
+async function loadFieldMeta() {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      select field, label, visibility, sort_order, is_custom
+        from profile_field_meta order by sort_order, field
+    `;
+    return rows.map((r) => ({
+      field: r.field,
+      label: r.label || r.field,
+      visibility: r.visibility || 'public',
+      sortOrder: Number(r.sort_order || 100),
+      isCustom: !!r.is_custom,
+    }));
+  } catch (e) {
+    console.warn('[admin] 读字段元数据失败（返回空）：', e.message);
+    return [];
+  }
+}
+
+/** 读：字段可见性一览（后台「字段管理」用；本轮无 UI，先通接口） */
+async function fieldMeta(req, res) {
+  return ok(res, { fields: await loadFieldMeta() });
+}
+
+/* ---------------- 写：调整某条资料的可见性上限（管理员权限） ----------------
+   站主原话：「用户可自定义选择是否公开，我后台也可以管理是否公开，以及公开的范围」。
+   前一句由 profile.js 的 submit + visibility_pref 实现（本人收窄）；
+   后一句就是这里 —— 管理员直接改 profile_field_meta.visibility（全局上限）。
+
+   动作：POST /api/admin?action=set-visibility
+   体：{ field, visibility }  visibility ∈ public | committee | self
+
+   ⚠️ 改的是**全局字段**，不是某一个人的资料 —— 因为它本身就是「上限」。
+      想单独收窄某个人，走本人意愿（visibility_pref）。 */
+const ALLOWED_VIS = ['public', 'committee', 'self'];
+
+async function setVisibility(req, res, me, b) {
+  const field = String(b.field || '').trim().slice(0, 40);
+  const vis = String(b.visibility || '').trim();
+  if (!field) return fail(res, 400, '缺少 field');
+  if (ALLOWED_VIS.indexOf(vis) < 0) {
+    return fail(res, 400, 'visibility 只能是 public / committee / self');
+  }
+
+  const sql = getSql();
+  const exists = await sql`select field from profile_field_meta where field = ${field} limit 1`;
+  if (!exists.length) return fail(res, 404, '没有这个字段：' + field);
+
+  await sql`
+    update profile_field_meta set visibility = ${vis}, updated_at = now()
+     where field = ${field}
+  `;
+  await audit(me.id, 'field.visibility', 'profile_field', field, vis);
+  return ok(res, { message: '已把「' + field + '」的可见范围改为 ' + vis, field, visibility: vis });
 }
 
 /** 单条资料详情 */
@@ -1062,6 +1201,10 @@ async function profileDetail(req, res) {
       boundUsername: r.bound_username || '',
       createdAt: r.created_at,
       updatedAt: r.updated_at,
+      /* 本人可见性意愿（2026-10-08）：编辑弹窗里回显「仅自己可见」开关 */
+      visibilityPref: safeJson(r.visibility_pref),
+      /* 字段元数据快照：让后台编辑弹窗知道每个字段的当前可见性上限 */
+      fieldMeta: await loadFieldMeta(),
     },
     views: views.map((v) => ({
       viewer: v.viewer || '(已删除账号)',
@@ -1126,7 +1269,10 @@ async function reviewContact(req, res, me, b) {
   `;
 
   const label = rows[0].name || rows[0].student_id || ('#' + id);
-  await audit(sql, me, approve ? 'profile.contact_approve' : 'profile.contact_reject', 'profile', String(id), label);
+  /* 2026-10-08 修：原为 audit(sql, me, ...)，参数与签名
+     audit(actorId, action, targetType, targetId, detail) 完全错位 →
+     actor_id 被写成 sql 对象、action 被写成 me 对象，整条审计静默失败。 */
+  await audit(me.id, approve ? 'profile.contact_approve' : 'profile.contact_reject', 'profile', String(id), label);
 
   return ok(res, {
     message: approve ? ('已通过 ' + label + ' 的联系方式') : ('已驳回 ' + label + ' 的联系方式'),
@@ -1136,7 +1282,8 @@ async function reviewContact(req, res, me, b) {
 
 /**
  * 新增或修改资料（管理员专用）。
- * body: { id?, name, studentId, politics, examNo?, role, wechat?, qq?, phone?, contactStatus? }
+ * body: { id?, name, studentId, politics, examNo?, role, wechat?, qq?, phone?,
+ *         contactStatus?, visibilityPref? }
  * 带 id = 修改，不带 = 新增。
  */
 async function saveProfile(req, res, me, b) {
@@ -1151,6 +1298,18 @@ async function saveProfile(req, res, me, b) {
   const phone = cContact(b.phone);
   const stRaw = cText(b.contactStatus, 16);
   const st = ['none', 'pending', 'approved', 'rejected'].includes(stRaw) ? stRaw : null;
+
+  /* 可见性意愿（2026-10-08）：管理员可以替任何人设置 / 覆盖。
+     ⚠️ 与前端约定一致：`true` = 同意公开，`false` = 仅本人可见。
+        只有显式传了 visibilityPref 才写库，没传就不动（避免误清空）。 */
+  let prefJson = null;
+  if (b.visibilityPref && typeof b.visibilityPref === 'object') {
+    const clean = {};
+    for (const k of ['wechat', 'qq', 'phone']) {
+      if (k in b.visibilityPref) clean[k] = !!b.visibilityPref[k];
+    }
+    prefJson = JSON.stringify(clean);
+  }
 
   if (!name && !sid) return fail(res, 400, '姓名与学号至少填一项');
 
@@ -1170,21 +1329,40 @@ async function saveProfile(req, res, me, b) {
     if (!cur.length) return fail(res, 404, '资料不存在');
     const c = cur[0];
 
-    await sql`
-      update profiles
-         set name      = ${name || c.name},
-             student_id = ${sid || c.student_id},
-             politics  = ${politics || c.politics},
-             exam_no   = ${examNo || c.exam_no},
-             role      = ${role || c.role},
-             wechat    = ${wechat !== '' ? wechat : c.wechat},
-             qq        = ${qq !== '' ? qq : c.qq},
-             phone     = ${phone !== '' ? phone : c.phone},
-             contact_status = ${st || c.contact_status},
-             updated_at = now()
-       where id = ${id}
-    `;
-    await audit(sql, me, 'profile.update', 'profile', String(id), name || sid);
+    /* 可见性只在传了新值时覆盖；否则保留本人自己设的 */
+    if (prefJson != null) {
+      await sql`
+        update profiles
+           set name      = ${name || c.name},
+               student_id = ${sid || c.student_id},
+               politics  = ${politics || c.politics},
+               exam_no   = ${examNo || c.exam_no},
+               role      = ${role || c.role},
+               wechat    = ${wechat !== '' ? wechat : c.wechat},
+               qq        = ${qq !== '' ? qq : c.qq},
+               phone     = ${phone !== '' ? phone : c.phone},
+               contact_status = ${st || c.contact_status},
+               visibility_pref = ${prefJson},
+               updated_at = now()
+         where id = ${id}
+      `;
+    } else {
+      await sql`
+        update profiles
+           set name      = ${name || c.name},
+               student_id = ${sid || c.student_id},
+               politics  = ${politics || c.politics},
+               exam_no   = ${examNo || c.exam_no},
+               role      = ${role || c.role},
+               wechat    = ${wechat !== '' ? wechat : c.wechat},
+               qq        = ${qq !== '' ? qq : c.qq},
+               phone     = ${phone !== '' ? phone : c.phone},
+               contact_status = ${st || c.contact_status},
+               updated_at = now()
+         where id = ${id}
+      `;
+    }
+    await audit(me.id, 'profile.update', 'profile', String(id), name || sid);
     return ok(res, { message: '已保存', id });
   }
 
@@ -1197,7 +1375,7 @@ async function saveProfile(req, res, me, b) {
     returning id
   `;
   const newId = Number(ins[0].id);
-  await audit(sql, me, 'profile.create', 'profile', String(newId), name || sid);
+  await audit(me.id, 'profile.create', 'profile', String(newId), name || sid);
   return ok(res, { message: '已新增', id: newId });
 }
 
@@ -1209,7 +1387,7 @@ async function deleteProfile(req, res, me, b) {
   const rows = await sql`select name, student_id from profiles where id = ${id} limit 1`;
   if (!rows.length) return fail(res, 404, '资料不存在');
   await sql`delete from profiles where id = ${id}`;
-  await audit(sql, me, 'profile.delete', 'profile', String(id), rows[0].name || rows[0].student_id || '');
+  await audit(me.id, 'profile.delete', 'profile', String(id), rows[0].name || rows[0].student_id || '');
   return ok(res, { message: '已删除' });
 }
 
@@ -1288,7 +1466,7 @@ async function batchProfiles(req, res, me, b) {
   }
 
   if (created || updated) {
-    await audit(sql, me, 'profile.batch', 'profile', '', '新增 ' + created + ' / 更新 ' + updated);
+    await audit(me.id, 'profile.batch', 'profile', '', '新增 ' + created + ' / 更新 ' + updated);
   }
 
   return ok(res, { created, updated, failed: errors.length, errors });

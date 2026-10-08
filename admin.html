@@ -134,6 +134,10 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .field input:focus,.field select:focus,.field textarea:focus{
   border-color:var(--btn-b);box-shadow:0 0 0 3px var(--tint);
 }
+/* 「仅本人可见」勾选项（2026-10-08）：窄行、不上 46px 高度 */
+.field label.chk{display:flex;align-items:center;gap:8px;font-weight:400;font-size:.82rem;
+  color:var(--fg-2);margin:0 0 8px;cursor:pointer;user-select:none}
+.field label.chk input{width:auto;height:auto;margin:0;flex:0 0 auto;cursor:pointer;accent-color:var(--accent)}
 .field .hint{font-size:.72rem;color:var(--fg-3);margin-top:5px}
 /* 独立输入框（不放在 .field 直接子级时用，如联系方式三宫格） */
 .inp{
@@ -823,7 +827,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.3.8';
+var SITE_VERSION = '2.3.9';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -1696,6 +1700,12 @@ function addUserDialog(){
       + '<input id="auName" placeholder="3–20 位，中英文/数字/下划线" autocomplete="off"></div>'
       + '<div class="field"><label for="auDisp">姓名 / 昵称</label>'
       + '<input id="auDisp" placeholder="选填，用于列表显示" autocomplete="off"></div>'
+      + '<div class="alert info" style="margin:0 0 14px;font-size:.8rem">'
+      +   '创建账号时会<b>自动为该同学建一条班级资料</b>（姓名取上面的「姓名/昵称」），'
+      +   '这样他立刻就能出现在「头衔任命」和「资料管理」里。<br>'
+      +   '<b>学号不在这里填</b> —— 建好后到「资料管理」里点「编辑」补上即可，'
+      +   '也可以点「Excel 导入」把全班学号一次填齐。'
+      + '</div>'
       + '<div class="field"><label for="auPwd">初始密码 <span style="color:var(--danger)">*</span></label>'
       + '<input id="auPwd" placeholder="6–64 位" autocomplete="new-password">'
       + '<p class="hint">同学首次登录后会被要求自行修改密码。后台不保存明文，只存哈希。</p></div>'
@@ -4541,6 +4551,18 @@ function paintProfiles(){
       ? '<span class="badge badge-blue">已认领 · ' + esc(p.boundUsername) + '</span>'
       : '<span class="badge badge-gray">未认领</span>';
 
+    /* 可见性（2026-10-08）：展示本人是否把联系方式设为「仅自己可见」。
+       后端 profile.js 会返回 visibilityPref（{wechat:false,...}）。
+       本轮后台只**展示**，覆盖配置走「编辑资料」里的开关。 */
+    var vp = p.visibilityPref || {};
+    var hidden = [];
+    if(vp.wechat === false) hidden.push('微信');
+    if(vp.qq === false) hidden.push('QQ');
+    if(vp.phone === false) hidden.push('手机');
+    var vis = hidden.length
+      ? '<span class="badge badge-orange" title="本人把这几项设为仅自己可见，同学查不到">🔒 ' + esc(hidden.join('/')) + ' 私密</span>'
+      : '<span class="badge badge-gray">公开</span>';
+
     return '<tr>'
       + '<td><div class="cell-user"><div class="av">' + esc(ini) + '</div>'
       +   '<div><b>' + esc(p.name || '(未填姓名)') + '</b>'
@@ -4548,6 +4570,7 @@ function paintProfiles(){
       + '<td class="nowrap">' + esc(p.politics || '—') + '</td>'
       + '<td class="mono nowrap">' + (p.examNo ? esc(p.examNo) : '<span class="muted">—</span>') + '</td>'
       + '<td>' + contacts + '</td>'
+      + '<td class="nowrap">' + vis + '</td>'
       + '<td class="nowrap"><span class="badge ' + st.cls + '">' + st.text + '</span>'
       +   (p.contactStatus === 'rejected' && p.rejectReason
             ? '<div class="muted" style="font-size:.7rem;margin-top:4px;max-width:150px" title="' + attr(p.rejectReason) + '">' + esc(p.rejectReason) + '</div>'
@@ -4564,8 +4587,8 @@ function paintProfiles(){
 
   body.innerHTML =
     '<div class="table-wrap"><table><thead><tr>'
-    + '<th>姓名 / 学号</th><th class="nowrap">政治面貌</th><th class="nowrap">准考证号</th><th>联系方式</th>'
-    + '<th class="nowrap">审核状态</th><th class="nowrap">归属账号</th>'
+    + '<th>姓名 / 学号</th><th class="nowrap">政治面貌</th><th class="nowrap">智学网账号</th><th>联系方式</th>'
+    + '<th class="nowrap">可见性</th><th class="nowrap">审核状态</th><th class="nowrap">归属账号</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
     + '<div class="pager"><span class="info">共 ' + S.list.length + ' 条'
@@ -4610,7 +4633,7 @@ function profileDialog(p){
       + '<div class="field"><label for="pfPol">政治面貌</label>'
       + '<select id="pfPol">' + opts(p ? p.politics : '群众') + '</select></div>'
 
-      + '<div class="field"><label for="pfEx">智学网准考证号</label>'
+      + '<div class="field"><label for="pfEx">智学网账号</label>'
       + '<input id="pfEx" class="inp" maxlength="24" value="' + attr(p ? p.examNo : '') + '" placeholder="如 11399395">'
       + '<p class="hint">不属于隐私字段，同学查询时就能直接看到，不需要审核。</p></div>'
 
@@ -4629,6 +4652,18 @@ function profileDialog(p){
       +   '<option value="pending"' + (p && p.contactStatus === 'pending' ? ' selected' : '') + '>待审核 — 暂不展示</option>'
       +   '<option value="rejected"' + (p && p.contactStatus === 'rejected' ? ' selected' : '') + '>已驳回 — 不展示</option>'
       + '</select></div>'
+
+      /* 可见性（2026-10-08）：管理员可以替本人收窄，也可以解掉本人设的收窄。
+         ⚠️ 这是**本人意愿**（profiles.visibility_pref），只影响这一个人；
+            字段的全局上限在「字段管理」里改（本轮无 UI，接口已通）。 */
+      + (isNew ? '' :
+          '<div class="field"><label>联系方式可见性（这个人）</label>'
+        +   '<p class="hint" style="margin-bottom:8px">勾上 = 仅本人可见，同学查不到；不勾 = 按审核状态对外展示。'
+        +     '站主可以在这里覆盖同学自己的设置。</p>'
+        +   '<label class="chk"><input type="checkbox" id="pfWxHide"' + (p && p.visibilityPref && p.visibilityPref.wechat === false ? ' checked' : '') + '> 微信号仅本人可见</label>'
+        +   '<label class="chk"><input type="checkbox" id="pfQqHide"' + (p && p.visibilityPref && p.visibilityPref.qq === false ? ' checked' : '') + '> QQ 号仅本人可见</label>'
+        +   '<label class="chk"><input type="checkbox" id="pfPhHide"' + (p && p.visibilityPref && p.visibilityPref.phone === false ? ' checked' : '') + '> 手机号仅本人可见</label>'
+        + '</div>')
 
       + '<div class="msg" id="pfMsg"></div>',
 
@@ -4651,8 +4686,19 @@ function profileDialog(p){
           contactStatus: box.querySelector('#pfSt').value
         };
         /* 编辑时带上 id；后端只更新传了的非空字段 */
-        if(!isNew) payload.id = p.id;
-        else payload.role = '学生';
+        if(!isNew){
+          payload.id = p.id;
+          /* 可见性：管理员替本人设置（覆盖本人意愿）。
+             ⚠️ 只有编辑时才有这几个框（新增的人还没有意愿可谈）。 */
+          var wxH = box.querySelector('#pfWxHide');
+          if(wxH){
+            payload.visibilityPref = {
+              wechat: !box.querySelector('#pfWxHide').checked,
+              qq:     !box.querySelector('#pfQqHide').checked,
+              phone:  !box.querySelector('#pfPhHide').checked,
+            };
+          }
+        } else payload.role = '学生';
 
         if(!payload.name && !payload.studentId){
           msg.className = 'msg err show';
@@ -4750,7 +4796,7 @@ function profileExport(){
         '姓名': p.name || '',
         '学号': p.studentId || '',
         '政治面貌': p.politics || '',
-        '准考证号': p.examNo || '',
+        '智学网账号': p.examNo || '',
         '微信': p.wechat || '',
         'QQ': p.qq || '',
         '手机号': p.phone || '',
@@ -4768,7 +4814,7 @@ function profileExport(){
 
 /**
  * Excel 批量导入资料。
- * 表头：姓名 / 学号 / 政治面貌 / 准考证号 / 微信 / QQ / 手机号
+ * 表头：姓名 / 学号 / 政治面貌 / 智学网账号 / 微信 / QQ / 手机号
  * 按学号优先匹配（没有学号则按姓名），命中就更新、没命中就新增。
  * 后端单批上限 60 条，所以这里分片串行提交。
  */
@@ -4778,7 +4824,7 @@ function profileImportDialog(){
 
   openModal({
     title: 'Excel 批量导入资料',
-    sub: '表头需包含：姓名 / 学号 / 政治面貌 / 准考证号 / 微信 / QQ / 手机号',
+    sub: '表头需包含：姓名 / 学号 / 政治面貌 / 智学网账号 / 微信 / QQ / 手机号',
     wide: true,
     body:
       '<div class="alert info" style="margin-bottom:16px">'
@@ -4818,11 +4864,11 @@ function profileImportDialog(){
           if(!XLSX){ toast('模板库加载失败，请检查网络', 'err', 4200); return; }
           var ws = XLSX.utils.json_to_sheet([
             {
-              姓名: '张三', 学号: '250501', 政治面貌: '群众', 准考证号: '11389409',
+              姓名: '张三', 学号: '250501', 政治面貌: '群众', 智学网账号: '11389409',
               微信: '', QQ: '', 手机号: '',
             },
             {
-              姓名: '李四（示例·老师无学号）', 学号: '', 政治面貌: '共青团员', 准考证号: '',
+              姓名: '李四（示例·老师无学号）', 学号: '', 政治面貌: '共青团员', 智学网账号: '',
               微信: 'lisi_wechat', QQ: '10001', 手机号: '13900000000',
             },
           ]);
@@ -4884,7 +4930,7 @@ function profileImportDialog(){
               name:      pick(r, ['姓名','名字','学生姓名']),
               studentId: pick(r, ['学号','学籍号']),
               politics:  pick(r, ['政治面貌','面貌']),
-              examNo:    pick(r, ['准考证号','智学网准考证号','智学网号']),
+              examNo:    pick(r, ['智学网账号','智学网号','智学网准考证号','准考证号']),
               wechat:    pick(r, ['微信','微信号']),
               qq:        pick(r, ['QQ','QQ号']),
               phone:     pick(r, ['手机号','手机','电话','手机号码'])
@@ -4897,7 +4943,7 @@ function profileImportDialog(){
 
           if(!list.length){
             prev.innerHTML = '<div class="alert danger">没有一行同时含「姓名」或「学号」，请检查表头是否为：'
-              + '姓名 / 学号 / 政治面貌 / 准考证号 / 微信 / QQ / 手机号</div>';
+              + '姓名 / 学号 / 政治面貌 / 智学网账号 / 微信 / QQ / 手机号</div>';
             setMsg('err', '没有一行含「姓名」或「学号」，请检查表头');
             return;
           }
@@ -4908,12 +4954,12 @@ function profileImportDialog(){
           var hasPhone = list.filter(function(x){ return x.wechat || x.qq || x.phone; }).length;
 
           /* 预览前 8 行，让管理员能一眼看出列有没有对错 */
-          var head = ['姓名','学号','政治面貌','准考证号','微信','QQ','手机号'];
+          var head = ['姓名','学号','政治面貌','智学网账号','微信','QQ','手机号'];
           var bodyRows = list.slice(0, 8).map(function(x){
             var cells = [x.name, x.studentId, x.politics, x.examNo, x.wechat, x.qq, x.phone];
             return '<tr>' + cells.map(function(c, i){
               var dash = c ? esc(c) : '<span class="muted">—</span>';
-              /* 学号/准考证号用等宽字体，便于肉眼核对数字有没有错位 */
+              /* 学号/智学网账号用等宽字体，便于肉眼核对数字有没有错位 */
               return '<td' + ((i === 1 || i === 3) ? ' class="mono nowrap"' : '') + '>' + dash + '</td>';
             }).join('') + '</tr>';
           }).join('');
@@ -4922,7 +4968,7 @@ function profileImportDialog(){
             '<div class="alert ok" style="margin-bottom:12px">'
             +   '读到 <b>' + list.length + '</b> 条有效数据'
             +   (bad ? '，跳过 ' + bad + ' 条空行' : '')
-            +   '；其中含准考证号 <b>' + hasExam + '</b> 条、含联系方式 <b>' + hasPhone + '</b> 条。'
+            +   '；其中含智学网账号 <b>' + hasExam + '</b> 条、含联系方式 <b>' + hasPhone + '</b> 条。'
             + '</div>'
             + '<p class="muted" style="font-size:.8rem;margin:0 0 8px">'
             +   '预览前 ' + Math.min(8, list.length) + ' 行（确认列没串位再导入）：</p>'
@@ -5065,7 +5111,7 @@ function paintReviews(){
           + '<div class="fields">'
           +   f('微信', r.wechat) + f('QQ', r.qq) + f('手机号', r.phone)
           +   '<div><div class="k">政治面貌</div><div class="v" style="font-family:inherit">' + esc(r.politics || '—') + '</div></div>'
-          +   '<div><div class="k">准考证号</div><div class="v">' + (r.examNo ? esc(r.examNo) : '<span class="muted" style="font-family:inherit;font-weight:400">未填</span>') + '</div></div>'
+          +   '<div><div class="k">智学网账号</div><div class="v">' + (r.examNo ? esc(r.examNo) : '<span class="muted" style="font-family:inherit;font-weight:400">未填</span>') + '</div></div>'
           + '</div>'
           + '</div>';
       }).join('')

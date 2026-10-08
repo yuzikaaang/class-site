@@ -22,7 +22,7 @@
 
 import { getSql } from './_lib/db.js';
 import {
-  cors, handlePreflight, ok, fail, body, requireUser, requireUserReady,
+  cors, handlePreflight, ok, fail, body, requireUser, requireUserReady, isCommittee,
 } from './_lib/http.js';
 
 /** 单次查询返回的最大条数（防止有人拉全表） */
@@ -31,6 +31,87 @@ const MAX_RESULTS = 30;
 const MAX_Q = 40;
 /** 联系方式字段长度上限 */
 const MAX_CONTACT = 64;
+
+/* ============================================================
+   字段可见性分档（2026-10-08 新增）
+   ------------------------------------------------------------
+   三档：public 公开 / committee 班委 / self 仅本人。
+   元数据住在 profile_field_meta 表（见 schema.sql）。
+
+   ⚠️ 双控语义：最终可见性 = 后台上限 ∩ 本人意愿，**取更严的一侧**。
+      · profile_field_meta.visibility = 后台上限（管理员说了算）
+      · profiles.visibility_pref      = 本人意愿（只收窄不放宽）
+
+   本轮预置值不改变现有行为：联系方式上限仍是 public，
+   本人可在个人中心勾选「仅自己可见」自行收窄 —— 所以不会出现
+   「同学突然发现联系方式查不到了」这种意外。
+   ============================================================ */
+
+/** 可见性档位排序：数字越大越严（用于「取更严的一侧」） */
+const VIS_RANK = { public: 0, committee: 1, self: 2 };
+
+/** 从两档里取更严的那个 */
+function stricter(a, b) {
+  const ra = VIS_RANK[a] == null ? 0 : VIS_RANK[a];
+  const rb = VIS_RANK[b] == null ? 0 : VIS_RANK[b];
+  return ra >= rb ? (a || 'public') : (b || 'public');
+}
+
+/**
+ * 读一次字段元数据，返回 { field: 'public'|'committee'|'self' } 的映射。
+ *
+ * ⚠️ 只在 profile.js 的接口里各查一次，**绝不要**放进 currentUser()——
+ *    那会让全站每个请求都多一次查询。
+ * ⚠️ 查询失败（老库尚未自愈）时返回空对象，调用方一律按 'public' 兜底，
+ *    保持改动前的行为，不因新功能把老库打死。
+ */
+async function loadMeta(sql) {
+  try {
+    const rows = await sql`select field, visibility, label, sort_order from profile_field_meta order by sort_order, field`;
+    const map = {};
+    for (const r of rows) map[r.field] = { visibility: r.visibility || 'public', label: r.label || r.field, sortOrder: Number(r.sort_order || 100) };
+    return map;
+  } catch (e) {
+    console.warn('[profile] 读字段元数据失败（按公开处理）：', e.message);
+    return {};
+  }
+}
+
+/**
+ * 解析本人可见性意愿（profiles.visibility_pref，JSON 文本）。
+ * 形状：{ wechat:false, qq:false, phone:true } —— false 表示本人不愿公开。
+ * 解析失败一律当空对象，绝不让脏数据把接口搞崩。
+ */
+function parsePref(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    const o = JSON.parse(String(raw));
+    return o && typeof o === 'object' ? o : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * 算出某个字段对「当前查询者」到底能不能看。
+ *
+ * @param {string} field   字段名
+ * @param {object} meta    loadMeta 的结果
+ * @param {object} pref    该资料的本人意愿
+ * @param {{self:boolean, committee:boolean}} ctx 查询者身份
+ */
+function canSee(field, meta, pref, ctx) {
+  const upper = (meta[field] && meta[field].visibility) || 'public';
+  /* 本人意愿只对白名单里的「联系方式」生效：false = 要收窄到 self */
+  let eff = upper;
+  if (pref[field] === false) eff = stricter(upper, 'self');
+  else if (pref[field] === true) eff = upper;
+
+  if (eff === 'self') return ctx.self;
+  if (eff === 'committee') return ctx.self || ctx.committee;
+  return true;
+}
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
@@ -101,27 +182,40 @@ function maskHalf(v) {
  * 组装对外的资料对象。
  * @param {object} row     profiles 表的一行
  * @param {boolean} full   true = 查询者本人或管理员，返回完整联系方式
+ * @param {object} [meta]  loadMeta 的结果（不传则一切按 public 兜底）
+ * @param {object} [ctx]   查询者身份 {self, committee}；用于让可见性分档生效
+ *
+ * ⚠️ 与改动前保持一致：`full` 仍然能让本人看到自己全部联系方式，
+ *    即使字段被设为 self —— 本人看自己当然看得到。
  */
-function shapeProfile(row, full) {
+function shapeProfile(row, full, meta, ctx) {
   const approved = row.contact_status === 'approved';
   /* 只有审核通过的才对外展示；本人（full）例外，便于确认自己填了什么 */
   const show = full || approved;
+
+  const m = meta || {};
+  const pref = parsePref(row.visibility_pref);
+  const who = ctx || { self: !!full, committee: false };
+  /* 联系方式若被收窄到「仅本人」，则对别人隐藏（但仍给出脱敏预览） */
+  const contactOpen = canSee('phone', m, pref, who);
+
   return {
     id: Number(row.id),
-    name: row.name || '',
-    studentId: row.student_id || '',
-    politics: row.politics || '',
-    /* 准考证号是管理员从名单导入的，属于班内公开信息，不走审核、谁的查询都能看到 */
-    examNo: row.exam_no || '',
+    name: canSee('name', m, pref, who) ? (row.name || '') : '',
+    studentId: canSee('student_id', m, pref, who) ? (row.student_id || '') : '',
+    politics: canSee('politics', m, pref, who) ? (row.politics || '') : '',
+    /* 智学网账号（原「准考证号」文案，2026-10-08 改正）：
+       管理员从名单导入，属于班内公开信息，不走审核。 */
+    examNo: canSee('exam_no', m, pref, who) ? (row.exam_no || '') : '',
     role: row.role || '学生',
     contactStatus: row.contact_status || 'none',
     /* 是否展示了联系方式 —— 前端据此显示「待审核」之类的提示 */
-    contactVisible: show,
-    wechat: show ? (row.wechat || '') : '',
-    qq: show ? (row.qq || '') : '',
-    phone: show ? (row.phone || '') : '',
+    contactVisible: show && contactOpen,
+    wechat: show && contactOpen && canSee('wechat', m, pref, who) ? (row.wechat || '') : '',
+    qq: show && contactOpen && canSee('qq', m, pref, who) ? (row.qq || '') : '',
+    phone: show && contactOpen && canSee('phone', m, pref, who) ? (row.phone || '') : '',
     /* 未通过审核时，给出脱敏预览，让查询者知道「有，但还没核实」 */
-    phoneMasked: !show && row.phone ? maskPhone(row.phone) : '',
+    phoneMasked: !(show && contactOpen) && row.phone ? maskPhone(row.phone) : '',
     updatedAt: row.updated_at,
   };
 }
@@ -133,14 +227,19 @@ async function search(req, res, u) {
 
   const sql = getSql();
 
-  /* 支持四种命中：① 学号前缀 ② 姓名包含 ③ 准考证号前缀 ④ 姓名哈希（老数据兼容）
-     学号/准考证号用前缀匹配方便同学只打几位；姓名用包含匹配贴近搜索习惯。 */
+  /* 支持四种命中：① 学号前缀 ② 姓名包含 ③ 智学网账号前缀 ④ 姓名哈希（老数据兼容）
+     学号/智学网账号用前缀匹配方便同学只打几位；姓名用包含匹配贴近搜索习惯。 */
   const like = '%' + q + '%';
   const sidLike = q + '%';
 
+  /* ⚠️ 2026-10-08：不再「不返回任何记录」。
+     过去是 if (!rows.length) return ok(... 空结果)；现在保持同样语义，
+     但把 meta 查询提到前面 —— 每个请求只查**一次**字段元数据，循环里复用。 */
+  const meta = await loadMeta(sql);
+
   const rows = await sql`
     select id, name, student_id, politics, exam_no, role, wechat, qq, phone,
-           contact_status, updated_at
+           contact_status, visibility_pref, updated_at
       from profiles
      where student_id ilike ${sidLike}
         or name ilike ${like}
@@ -167,12 +266,15 @@ async function search(req, res, u) {
     console.warn('[profile] 写查看日志失败（不影响查询）：', e.message);
   }
 
+  /* 查询者是不是班委，只算一次（isCommittee 不查库，纯内存判断） */
+  const committee = isCommittee(u);
+
   return ok(res, {
     query: q,
     results: rows.map((r) => {
       /* 查到自己 → 返回完整信息，方便在页内直接编辑联系方式 */
-      const isSelf = u.profileId && Number(u.profileId) === Number(r.id);
-      return shapeProfile(r, isSelf);
+      const isSelf = !!(u.profileId && Number(u.profileId) === Number(r.id));
+      return shapeProfile(r, isSelf, meta, { self: isSelf, committee });
     }),
   });
 }
@@ -204,19 +306,55 @@ async function myProfile(req, res, u) {
   const sql = getSql();
   let rows = [];
   if (u.profileId) {
-    rows = await sql`
-      select id, name, student_id, politics, exam_no, role, wechat, qq, phone,
-             contact_status, reject_reason, updated_at
-        from profiles where id = ${u.profileId} limit 1
-    `;
+    /* 2026-10-08：改为 `select p.*` —— 以后 profiles 加列（学籍号、身份证号…）
+       自动带出来，不用回来改这个 select。字段过滤统一交给私有区逻辑处理。 */
+    rows = await sql`select * from profiles where id = ${u.profileId} limit 1`;
   }
   if (!rows.length) {
     /* 尚未认领：返回空壳，前端据此提示「请先认领你的资料」 */
-    return ok(res, { profile: null, claimed: false });
+    return ok(res, { profile: null, claimed: false, privateFields: [], visibilityPref: {} });
   }
-  const p = shapeProfile(rows[0], true);
-  p.rejectReason = rows[0].reject_reason || '';
-  return ok(res, { profile: p, claimed: true });
+  const row = rows[0];
+  const meta = await loadMeta(sql);
+  /* 本人看自己：一律 full=true，可见性一律放行（self 就是「本人」） */
+  const p = shapeProfile(row, true, meta, { self: true, committee: true });
+  p.rejectReason = row.reject_reason || '';
+
+  /* 私有字段：元数据里 visibility='self' 的那些（身份证号、发展团员编号…）。
+     本轮这些列还不存在（只登记了元数据），所以大概率是空数组，
+     但**接口形状先立好** —— 下轮后台加列后，前端不用改一行就能显示。
+
+     ⚠️ 这里的白名单思路：只把「profiles 表里真的有的列」吐出去，
+        避免把 id / user_id / name_hash 之类内部列漏给前端。 */
+  const privateFields = [];
+  const skip = new Set(['id', 'name_hash', 'user_id', 'visibility_pref', 'created_at', 'updated_at', 'reject_reason']);
+  for (const field of Object.keys(meta)) {
+    if (skip.has(field)) continue;
+    if (meta[field].visibility !== 'self') continue;
+    /* 表里没这列就跳过（本轮 id_card / youth_league_no 就属于这种） */
+    if (!(field in row)) continue;
+    const val = row[field];
+    if (val == null || val === '') continue;
+    privateFields.push({
+      field,
+      label: meta[field].label,
+      value: String(val),
+      sortOrder: meta[field].sortOrder,
+    });
+  }
+  privateFields.sort((a, b) => a.sortOrder - b.sortOrder);
+
+  return ok(res, {
+    profile: p,
+    claimed: true,
+    privateFields,
+    /* 本人当前的可见性意愿，供前端回显开关状态 */
+    visibilityPref: parsePref(row.visibility_pref),
+    /* 字段元数据（仅含公开档位信息，不含敏感内容），前端可用来渲染提示 */
+    fieldMeta: Object.keys(meta).map((f) => ({
+      field: f, label: meta[f].label, visibility: meta[f].visibility, sortOrder: meta[f].sortOrder,
+    })),
+  });
 }
 
 /* ---------------- 我提交的联系方式与状态 ---------------- */
@@ -225,7 +363,7 @@ async function mineRequests(req, res, u) {
   if (!u.profileId) return ok(res, { requests: [], claimed: false });
   const rows = await sql`
     select id, name, student_id, wechat, qq, phone, contact_status,
-           reject_reason, updated_at
+           reject_reason, visibility_pref, updated_at
       from profiles where id = ${u.profileId} limit 1
   `;
   if (!rows.length) return ok(res, { requests: [], claimed: false });
@@ -243,6 +381,8 @@ async function mineRequests(req, res, u) {
       rejectReason: r.reject_reason || '',
       updatedAt: r.updated_at,
     }],
+    /* 本人可见性意愿，供「仅自己可见」开关回显 */
+    visibilityPref: parsePref(r.visibility_pref),
   });
 }
 
@@ -286,7 +426,13 @@ async function submit(req, res, u) {
   const qq     = cleanContact(b.qq);
   const phone  = cleanContact(b.phone);
 
-  if (!wechat && !qq && !phone) {
+  /* 2026-10-08：可以只改可见性、不动联系方式。
+     前端「仅自己可见」开关是靠 visibilityPref 单独提交的，
+     若仍然要求「至少填一项联系方式」，已经填过的人想改开关就会被拦。
+     所以只要本次带了 visibilityPref，就跳过「至少一项」校验。 */
+  const hasPref = b.visibilityPref && typeof b.visibilityPref === 'object';
+
+  if (!hasPref && !wechat && !qq && !phone) {
     return fail(res, 400, '请至少填写一项联系方式');
   }
   if (phone && !/^[0-9+\-() ]{6,20}$/.test(phone)) {
@@ -297,18 +443,48 @@ async function submit(req, res, u) {
   }
 
   const sql = getSql();
+
+  /* 可见性意愿：只接受下面这三个键，值是布尔。
+     ⚠️ 本人意愿**只收窄不放宽**——把它写成 false 会把该字段压到 self；
+        写成 true 只是「我不反对公开」，最终仍受后台上限约束。
+        想放宽（本来 self 想改 public）必须走管理员，见下方注释。 */
+  let prefJson = null;
+  if (hasPref) {
+    const allow = ['wechat', 'qq', 'phone'];
+    const cleanPref = {};
+    for (const k of allow) {
+      if (k in b.visibilityPref) cleanPref[k] = !!b.visibilityPref[k];
+    }
+    prefJson = JSON.stringify(cleanPref);
+  }
+
   /* 提交后一律回到 pending：改了内容就要重新核实，这是审核的意义所在。
-     reject_reason 一并清空（那是上一次驳回的理由）。 */
-  await sql`
-    update profiles
-       set wechat = ${wechat || null},
-           qq = ${qq || null},
-           phone = ${phone || null},
-           contact_status = 'pending',
-           reject_reason = null,
-           updated_at = now()
-     where id = ${u.profileId}
-  `;
+     reject_reason 一并清空（那是上一次驳回的理由）。
+     visibility_pref 只在本次带了新值时覆盖，避免「改联系方式顺手把开关重置」。 */
+  if (prefJson != null) {
+    await sql`
+      update profiles
+         set wechat = ${wechat || null},
+             qq = ${qq || null},
+             phone = ${phone || null},
+             contact_status = 'pending',
+             reject_reason = null,
+             visibility_pref = ${prefJson},
+             updated_at = now()
+       where id = ${u.profileId}
+    `;
+  } else {
+    await sql`
+      update profiles
+         set wechat = ${wechat || null},
+             qq = ${qq || null},
+             phone = ${phone || null},
+             contact_status = 'pending',
+             reject_reason = null,
+             updated_at = now()
+       where id = ${u.profileId}
+    `;
+  }
 
   return ok(res, {
     message: '已提交，等待管理员核实后展示',
