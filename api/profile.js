@@ -311,8 +311,19 @@ async function myProfile(req, res, u) {
     rows = await sql`select * from profiles where id = ${u.profileId} limit 1`;
   }
   if (!rows.length) {
-    /* 尚未认领：返回空壳，前端据此提示「请先认领你的资料」 */
-    return ok(res, { profile: null, claimed: false, privateFields: [], visibilityPref: {} });
+    /* 尚未认领：返回空壳，前端据此提示「请先认领你的资料」。
+       ⚠️ 未认领也要回同一套键（privateFields / visibilityPref / fieldMeta），
+          否则前端得写两套判断；接口形状一致比省一次查询更值。 */
+    const meta0 = await loadMeta(sql);
+    return ok(res, {
+      profile: null,
+      claimed: false,
+      privateFields: [],
+      visibilityPref: {},
+      fieldMeta: Object.keys(meta0).map((f) => ({
+        field: f, label: meta0[f].label, visibility: meta0[f].visibility, sortOrder: meta0[f].sortOrder,
+      })),
+    });
   }
   const row = rows[0];
   const meta = await loadMeta(sql);

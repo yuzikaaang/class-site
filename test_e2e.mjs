@@ -2928,7 +2928,7 @@ console.log('\n【36】第二十九轮·本人可见性意愿（仅自己可见�
     JSON.stringify(meSelf.body.privateFields));
   t('me 带 fieldMeta（前端可渲染提示）', Array.isArray(meSelf.body.fieldMeta),
     typeof meSelf.body.fieldMeta);
-  t('privateFields 不泄露内部列（id/user_id/name_hash）',
+  t('me 返回值不泄露内部列（id/user_id/name_hash）',
     (meSelf.body.privateFields || []).every((f) =>
       ['id', 'user_id', 'name_hash', 'visibility_pref'].indexOf(f.field) < 0),
     JSON.stringify(meSelf.body.privateFields));
@@ -3059,6 +3059,13 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
   t('★后台版本号为 2.3.9', /SITE_VERSION = '2\.3\.9'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
+
+  /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
+     线上实测发现过这个坑：未认领时 fieldMeta 是 undefined，
+     前端 if(Array.isArray(...)) 判断就会走偏。这里用源码护栏固化。 */
+  const profSrc = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
+  t('★未认领分支也返回 privateFields', /claimed: false[\s\S]{0,400}privateFields/.test(profSrc));
+  t('★未认领分支也返回 fieldMeta', /claimed: false[\s\S]{0,600}fieldMeta/.test(profSrc));
 }
 
 console.log('\n' + '='.repeat(52));
