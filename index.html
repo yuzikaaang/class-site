@@ -885,9 +885,6 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 /* 链接弹窗里的使用限制提示（亮/暗双模式高对比） */
 .link-note{color:#af410f;font-size:.74rem;margin-top:6px;line-height:1.5;font-weight:600}
 .dark .link-note{color:#fdba74}
-/* 班级活动通知弹窗 暗色文字适配 */
-.dark #actMask #actBody{color:#d6d3d1!important}
-.dark #actMask #actEnd{color:#b8b1aa!important}
 .confetti-box p{font-size:0.9375rem;line-height:1.7;margin:0 0 16px}
 #confettiCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9992}
 .qr-box{background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -1461,6 +1458,27 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   .sw.ripping .rip{animation:none}
 }
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+/* 弹窗主题：迎新橙卡（后台「通用弹窗」theme=welcome 时启用，对齐原欢迎卡片观感）
+   ⚠️ 选择器带上 .allboard-mask 提高优先级：.allboard-box 本身被玻璃拟态规则
+      （background:var(--glass-bg)，暗色下为 rgba(38,34,32,.56)）覆盖，
+      若只用 .pop-theme-welcome .allboard-box 会被其压掉背景色。 */
+.allboard-mask.pop-theme-welcome .allboard-box{
+  background:linear-gradient(135deg,#9a3412,#af410f)!important;
+  background-image:linear-gradient(135deg,#9a3412,#af410f)!important;
+  -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+  color:#fff;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+}
+.allboard-mask.pop-theme-welcome .allboard-head{
+  background:transparent;color:#fff;
+  border-bottom:1px solid rgba(255,255,255,.25);
+}
+.allboard-mask.pop-theme-welcome .allboard-head button{ background:rgba(255,255,255,.22);color:#fff; }
+.allboard-mask.pop-theme-welcome #popBody{ color:rgba(255,255,255,.95); }
+.allboard-mask.pop-theme-welcome #popEnd{ color:rgba(255,255,255,.8); }
+.allboard-mask.pop-theme-welcome #popOkBtn{ background:#fff;color:#af410f; }
+.allboard-mask.pop-theme-welcome #popLink{ background:rgba(255,255,255,.9);color:#af410f; }
+
 </style>
 </head>
 <body>
@@ -1606,19 +1624,6 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   </div>
 </div>
 
-<!-- ===== 首次打开欢迎弹窗 ===== -->
-<div class="welcome-mask" id="welcomeMask">
-  <div class="welcome-box">
-    <p class="welcome-title">欢迎来到5班服务站 ✧⁺⸜(●˙▾˙●)⸝⁺✧</p>
-    <p class="welcome-desc">这里汇总咱们班级线上常用工具，后续功能也会持续更新维护！</p>
-    <div class="welcome-list">
-      <p class="welcome-list-title">站内现有功能一览</p>
-      <p class="welcome-list-body">▫ 班级点歌台<br>▫ 作业查询<br>▫ 班级大屏应用跳转<br>▫ 每日日报资讯<br>▫ 考试 / 假期倒计时<br>▫ 班级重要公告<br>…………等待开发</p>
-    </div>
-    <p class="welcome-desc">所有班级通知、线上工具都会同步在这里，记得常来看看哦~<br>✨ 祝你新学期一切顺利！</p>
-    <button class="welcome-btn" onclick="closeWelcome()">进入服务站</button>
-  </div>
-</div>
 
 <!-- ===== 登录引导弹窗（首次打开时，未登录才弹一次） =====
      目的：让同学知道「登录后能把自己的设置/作业打勾同步到云端，换设备不用重弄」。
@@ -1854,21 +1859,6 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 <!-- 学习资料提示悬浮球（关闭弹窗后出现，带红点；已勾选不再显示则不出现） -->
 <button id="studyBubble" onclick="showStudyNotice()" title="查看访问提示" aria-label="查看访问提示" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(249,115,22,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(194,65,12,.22)">💬<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
 
-<!-- 班级活动通知悬浮球（进站弹窗关闭后出现；活动结束自动消失，可点开重新查看） -->
-<button id="actBubble" onclick="showAct()" title="查看班级活动" aria-label="查看班级活动" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(253,186,116,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(253,186,116,.4)">🎉<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
-
-<!-- ===== 班级活动通知弹窗（进站自动弹出；关闭后留悬浮球，到活动结束才不再出现） ===== -->
-<div class="allboard-mask" id="actMask">
-  <div class="allboard-box" style="max-width:360px">
-    <div class="allboard-head"><span id="actTitle">🎉 班级活动</span><button onclick="closeAct()">关闭</button></div>
-    <div style="padding:18px 22px;text-align:left">
-      <div id="actBody" style="font-size:.9rem;color:#57534e;line-height:1.85;white-space:pre-line"></div>
-      <div id="actEnd" style="font-size:.78rem;color:#6e635a;margin-top:10px"></div>
-      <button class="btn" id="actLink" style="width:100%;margin-top:14px;display:none" onclick="actGoLink()"></button>
-      <button class="btn btn-secondary" style="width:100%;margin-top:10px" onclick="closeAct()">我知道了（今天不再自动弹）</button>
-    </div>
-  </div>
-</div>
 
 <!-- ===== 复制链接弹窗（主链接 + 备用链接） ===== -->
 <div class="allboard-mask" id="copyLinkMask">
@@ -2379,7 +2369,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.3.7';
+var SITE_VERSION = '2.3.8';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3747,60 +3737,6 @@ function showVideoTip(msg){
   tip.style.animation='none'; void tip.offsetWidth; tip.style.animation='';
 }
 
-/* ---- 板块庆祝（横幅 + 进板块自动弹视频；不占卡片位）---- */
-function celebGet(){
-  var c = (window.SITE_DATA && SITE_DATA.celebrate) || null;
-  return (c && c.enabled && c.video) ? c : null;
-}
-function celebForCat(catId){
-  var c = celebGet();
-  return (c && Number(c.categoryId) === Number(catId)) ? c : null;
-}
-/* 横幅 HTML：渲染进对应板块顶部（无则返回空串） */
-function celebBannerHtml(catId){
-  var c = celebForCat(catId);
-  if(!c) return '';
-  return '<button class="celebrate-banner" onclick="openCelebrate()" title="点击观看">'+
-    '<span class="cb-icon">🎉</span>'+
-    '<span class="cb-text">'+
-      '<span class="cb-title">'+esc(c.title||'庆祝')+'</span>'+
-      (c.bannerText ? '<span class="cb-sub">'+esc(c.bannerText)+'</span>' : '')+
-    '</span>'+
-    '<span class="cb-go">▶ 观看</span>'+
-  '</button>';
-}
-function openCelebrate(){
-  var c = celebGet(); if(!c) return;
-  openVideo(c.video, c.title || '视频播放');
-  var body = document.getElementById('videoBody');
-  var desc = (c.desc||'').trim();
-  if(body && desc){
-    var d = document.createElement('div');
-    d.className = 'video-desc';
-    d.textContent = desc;
-    body.appendChild(d);
-  }
-}
-/* 进板块自动弹：每次进入该板块都弹（everyTime=true 时不记标记） */
-var _celebPopping = false;
-function celebAutoPop(catId){
-  var c = celebForCat(catId);
-  if(!c || _celebPopping) return;
-  if(document.getElementById('videoMask').classList.contains('show')) return; /* 已在弹就别重复 */
-  _celebPopping = true;
-  /* 等其它弹窗（欢迎语 / 门禁 / 公告）先关掉，避免叠加 */
-  var tries = 0;
-  (function attempt(){
-    tries++;
-    var busy = document.querySelector('.allboard-mask.show') || document.querySelector('.gate.show');
-    /* 但自己的视频弹窗不算 busy */
-    if(busy && busy.id === 'videoMask') busy = null;
-    if(busy && tries < 20){ setTimeout(attempt, 400); return; }
-    _celebPopping = false;
-    openCelebrate();
-  })();
-}
-function celebInit(){ /* 预留：进站时的初始化（当前无需自动弹，仅在进板块时弹） */ }
 
 /* ---- 渲染主页面 ---- */
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -4101,7 +4037,7 @@ function render(){
          用户可在「自定义设置 → 动效」里关掉堆叠，回到传统平铺。 */
       inner = (UI.stack !== 0 && inner.length >= 2) ? stackDeckHtml(inner, c.id) : inner.join('');
     }
-    return '<div class="tab-page" id="tab-cat-'+c.id+'">'+celebBannerHtml(c.id)+inner+'</div>';
+    return '<div class="tab-page" id="tab-cat-'+c.id+'">'+popBannerHtml(c.id)+inner+'</div>';
   }).join('');
 
   Array.prototype.forEach.call(grid.querySelectorAll('.tab-page'), function(p){ p.classList.remove('active'); });
@@ -7301,9 +7237,7 @@ function openCat(id){
   if(page) page.classList.add('active');
   if(id === 5){ showStudyNotice(); }
   else { studyBubbleHide(); }
-  /* 板块庆祝：进入该板块时自动弹视频（用户要求「每次进板块都弹」） */
-  if(celebForCat(id)){ setTimeout(function(){ celebAutoPop(id); }, 500); }
-  /* 通用弹窗引擎：该板块配了 scope:'cat:N' 就弹一条 */
+  /* 通用弹窗引擎：该板块配了 scope:'cat:N' 就弹一条（含横幅） */
   if(typeof popOnCategory === 'function'){ setTimeout(function(){ popOnCategory(id); }, 600); }
   var btns = document.querySelectorAll('#sideCats .side-btn');
   for(var j=0;j<btns.length;j++){ btns[j].classList.remove('active'); }
@@ -8046,20 +7980,6 @@ function pcLoadMyProfile(){
   }).catch(function(){ /* 静默失败，不影响查询 */ });
 }
 
-/* ---- 首次打开欢迎弹窗 ---- */
-function showWelcome(){
-  var m = document.getElementById('welcomeMask');
-  if(!m) return;
-  m.classList.add('show');
-}
-function closeWelcome(){
-  var m = document.getElementById('welcomeMask');
-  if(m) m.classList.remove('show');
-  try{ localStorage.setItem('cls_welcome_v1','1'); }catch(e){}
-  /* 看完欢迎弹窗接着问要不要登录——但只在没登录过、也没问过的情况下问 */
-  setTimeout(maybeShowLoginGuide, 400);
-}
-
 /* ---- 登录引导弹窗（需求：开屏引导用户登录来上传云端） ----
    弹的条件（三个都满足才弹）：
      ① 没登录；② 之前没弹过（cls_login_guide_v1）；③ 站点后端配好了（没后端登录也没意义）
@@ -8711,23 +8631,8 @@ function dismissStudyNotice(){
   if(off) studyBubbleHide(); else studyBubbleShow();
 }
 
-/* ---- 班级活动通知（进站自动弹窗；关闭后留悬浮球，活动结束自动撤掉）---- */
-function actGet(){ return (window.SITE_DATA && SITE_DATA.activity) || null; }
-function _actMs(v){ if(!v) return NaN; var t=new Date(v).getTime(); return isNaN(t) ? NaN : t; }
-function actActive(){
-  var a=actGet();
-  if(!a || !a.enabled) return false;
-  var now=Date.now();
-  var s=_actMs(a.startAt), e=_actMs(a.endAt);
-  if(!isNaN(s) && now < s) return false;   /* 还没到开始时间 */
-  if(!isNaN(e) && now > e) return false;   /* 已过结束时间 */
-  return true;
-}
-function actPopKey(){ var a=actGet(); return 'cls_act_pop_'+((a && a.id)||'default'); }
-function actTodayKey(){ return actPopKey()+'_'+new Date().toDateString(); }
-function actAutoPopped(){ try{ return localStorage.getItem(actTodayKey())==='1'; }catch(e){ return false; } }
-/* 所有右下角悬浮球统一在这里排布：依次从下往上叠，避免互相遮挡。
-   ⚠️ 新增悬浮球时**必须**加进这个函数，否则会跟其它球叠在同一个坐标上。 */
+/* 右下角悬浮球统一排布：依次从下往上叠，避免互相遮挡。
+   通用弹窗引擎的 popBubble 也由本函数协调；新增悬浮球务必加进下方 ids 数组。 */
 function actSyncBubble(){
   var ids = ['hwPopBubble','videoBubble','audioBubble','studyBubble','actBubble','popBubble'];
   var base = 16, GAP = 58;
@@ -8737,51 +8642,6 @@ function actSyncBubble(){
     el.style.bottom = base + 'px';
     if(el.style.display === 'flex') base += GAP;
   }
-}
-function actBubbleShow(){
-  var b=document.getElementById('actBubble'); if(!b) return;
-  b.style.display = actActive() ? 'flex' : 'none';
-  actSyncBubble();
-}
-function showAct(){
-  if(!actActive()) return;
-  var a=actGet();
-  var ttl=document.getElementById('actTitle'), body=document.getElementById('actBody');
-  var end=document.getElementById('actEnd'), link=document.getElementById('actLink');
-  if(ttl) ttl.textContent=a.title||'🎉 班级活动';
-  if(body) body.textContent=a.body||'';
-  if(end) end.textContent = a.endAt ? ('活动持续至 '+String(a.endAt).replace('T',' ')) : '';
-  if(link){
-    if(a.linkUrl && a.linkText){ link.style.display=''; link.textContent=a.linkText; }
-    else{ link.style.display='none'; }
-  }
-  var b=document.getElementById('actBubble'); if(b) b.style.display='none';
-  actSyncBubble();
-  var m=document.getElementById('actMask'); if(m) m.classList.add('show');
-  SFX.pop();
-}
-function closeAct(){
-  var m=document.getElementById('actMask'); if(m) m.classList.remove('show');
-  try{ localStorage.setItem(actTodayKey(),'1'); }catch(e){}
-  actBubbleShow();
-}
-function actGoLink(){ var a=actGet(); if(a && a.linkUrl && typeof openLink==='function') openLink(a.linkUrl,true); }
-/* 自动弹窗：等其它弹窗（欢迎语 / 门禁 / 学习资料提示等）关掉后再弹，避免叠在一起 */
-function actAutoPop(){
-  var tries=0;
-  (function attempt(){
-    tries++;
-    var busy=document.querySelector('.allboard-mask.show') || document.querySelector('.gate.show');
-    if(busy && tries<24){ setTimeout(attempt,500); return; }
-    if(!actActive()) return;
-    showAct();
-  })();
-}
-function actInit(){
-  actBubbleShow();
-  if(actActive() && !actAutoPopped()) setTimeout(actAutoPop, 800);
-  /* 每分钟核对一次：到活动结束时间立即撤掉悬浮球 */
-  setInterval(actBubbleShow, 60000);
 }
 
 /* ============================================================
@@ -8828,10 +8688,40 @@ function popGetList(){
       startAt:   p.startAt || '',
       endAt:     p.endAt || '',
       dismiss:   (p.dismiss === 'once' || p.dismiss === 'always') ? p.dismiss : 'daily',
-      bubble:    (p.bubble === false) ? false : true
+      bubble:    (p.bubble === false) ? false : true,
+      bannerText: p.bannerText || '',
+      theme:     p.theme || ''
     });
   }
   return out;
+}
+
+/** 板块顶部横幅 HTML：遍历该板块配的、带 bannerText 的弹窗条目（复用 .celebrate-banner 样式） */
+function popBannerHtml(catId){
+  var list = popGetList().filter(function(p){ return p.scope === 'cat:' + catId && p.bannerText; });
+  if(!list.length) return '';
+  return list.map(function(p){
+    var id = String(p.id).replace(/'/g,'');
+    return '<button class="celebrate-banner" onclick="popBannerPlay(\'' + id + '\')" title="点击观看">'+
+      '<span class="cb-icon">🎉</span>'+
+      '<span class="cb-text">'+
+        '<span class="cb-title">'+esc(p.title||'通知')+'</span>'+
+        '<span class="cb-sub">'+esc(p.bannerText)+'</span>'+
+      '</span>'+
+      '<span class="cb-go">▶ 观看</span>'+
+    '</button>';
+  }).join('');
+}
+/** 点横幅：播放该条目的视频（B站 / 直链都走站内视频弹窗） */
+function popBannerPlay(id){
+  var p = null, arr = popGetList();
+  for(var i = 0; i < arr.length; i++){ if(arr[i].id === id){ p = arr[i]; break; } }
+  if(!p) return;
+  POP_CUR = p;
+  if(p.video){
+    if(typeof openVideo === 'function') openVideo(p.video, p.title || '视频播放');
+    else if(typeof openLink === 'function') openLink(p.video, true);
+  }
 }
 
 /** 时间字符串 → 毫秒；空/非法返回 NaN */
@@ -8953,7 +8843,13 @@ function showPop(p){
   /* 打开时把悬浮球收起（同 actBubbleShow 的做法） */
   var b = document.getElementById('popBubble'); if(b) b.style.display = 'none';
   if(typeof actSyncBubble === 'function') actSyncBubble();
-  var m = document.getElementById('popMask'); if(m) m.classList.add('show');
+  /* 按条目的 theme 应用卡片样式（迎新橙卡等）；无 theme 时清掉，避免串味 */
+  var m = document.getElementById('popMask');
+  if(m){
+    if(p.theme === 'welcome') m.classList.add('pop-theme-welcome');
+    else m.classList.remove('pop-theme-welcome');
+    m.classList.add('show');
+  }
   if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
 }
 
@@ -9925,13 +9821,8 @@ async function submitSiteGate(){
   }
 })();
 try{
-  if(!localStorage.getItem('cls_welcome_v1')){
-    showWelcome();
-  }else{
-    /* 已经看过欢迎弹窗的老用户：给他们补一次登录引导，
-       免得这个功能只对新设备可见。已经登录过或弹过的会自动跳过。 */
-    setTimeout(maybeShowLoginGuide, 1200);
-  }
+  /* 登录引导：首次打开且未登录才弹（maybeShowLoginGuide 内部已判断，弹过即跳过） */
+  setTimeout(maybeShowLoginGuide, 1200);
 }catch(e){}
 /* ⚠️ 顺序要紧：contentBoot() 必须先于 hwPopInit()。
    它会先用本地缓存把 SITE_DATA 覆盖成云端内容，再去后台同步；
@@ -9939,7 +9830,6 @@ try{
    读到的还是 index.html 里写死的旧日期，会出现「内容已是国庆、
    弹窗却按中秋那几天判断」的错位。（2026-09-30 加，改动勿调序） */
 contentBoot();
-actInit();   /* 班级活动通知：有进行中的活动则自动弹窗 + 留悬浮球，活动结束自动撤掉 */
 hwPopInit(); /* 开屏通知弹窗：大假作业发布提醒（进站自动弹；可「不再显示」） */
 popInit();   /* 通用弹窗引擎：按 SITE_DATA.popups 排队弹「开屏弹」（默认空，配了才弹） */
 syncAutoInit(); /* 自动云同步：每 1 分钟双向同步（推本机 + 拉云端），回前台立刻补跑 */

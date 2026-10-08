@@ -2172,6 +2172,10 @@ console.log('\n【28】第二十七轮·通用弹窗引擎（popups 云端通道
   const sample = [
     { id: 'boot-1', scope: 'boot', source: 'homework_notice', dismiss: 'daily', bubble: true },
     { id: 'cat-1', scope: 'cat:2', source: 'custom', title: '成果展示', body: '正文', dismiss: 'once' },
+    { id: 'anniv3', scope: 'cat:2', source: 'custom', title: 'ClassIsland 三周年', body: '看官方纪念短片',
+      video: 'https://www.bilibili.com/video/BV1sJe36ZEb9/',
+      bannerText: '🎉 ClassIsland 三周年纪念 · 点击看官方纪念短片',
+      theme: 'welcome', dismiss: 'once', bubble: false },
   ];
   const wr = await call('/api/content', { method: 'PUT', token: adminToken, body: { key: 'popups', value: sample } });
   t('管理员写入 popups 成功', wr.status === 200 && wr.body.ok, JSON.stringify(wr.body));
@@ -2179,10 +2183,14 @@ console.log('\n【28】第二十七轮·通用弹窗引擎（popups 云端通道
   const rd = await call('/api/content', { method: 'GET' });
   t('读回内容含 popups 键', rd.status === 200 && !!rd.body.items && Object.prototype.hasOwnProperty.call(rd.body.items, 'popups'),
     JSON.stringify(rd.body.items && Object.keys(rd.body.items)));
-  t('popups 内容与写入一致（2 条）', Array.isArray(rd.body.items.popups) && rd.body.items.popups.length === 2,
+  t('popups 内容与写入一致（3 条）', Array.isArray(rd.body.items.popups) && rd.body.items.popups.length === 3,
     '实际 ' + (rd.body.items.popups || []).length);
   t('popups 首条 id 正确', rd.body.items.popups[0] && rd.body.items.popups[0].id === 'boot-1');
   t('popups 板块弹 scope 正确', rd.body.items.popups[1] && rd.body.items.popups[1].scope === 'cat:2');
+  /* 第二十九轮：bannerText / theme 字段必须随弹窗一起落地 */
+  const anniv = (rd.body.items.popups || []).find((x) => x.id === 'anniv3') || {};
+  t('bannerText 已随弹窗持久化', anniv.bannerText === '🎉 ClassIsland 三周年纪念 · 点击看官方纪念短片', anniv.bannerText);
+  t('theme 已随弹窗持久化', anniv.theme === 'welcome', anniv.theme);
 
   /* ---- ② 权限：普通用户写 popups 必须 403 ---- */
   const puname = 'popuser';
@@ -2203,7 +2211,7 @@ console.log('\n【28】第二十七轮·通用弹窗引擎（popups 云端通道
   });
   t('老键 announcements 仍可写', oldwr.status === 200 && oldwr.body.ok, JSON.stringify(oldwr.body));
   const rd2 = await call('/api/content', { method: 'GET' });
-  t('写入 popups 后老键未被冲掉', !!rd2.body.items.announcements && rd2.body.items.popups.length === 2,
+  t('写入 popups 后老键未被冲掉', !!rd2.body.items.announcements && rd2.body.items.popups.length === 3,
     'announcements=' + JSON.stringify(rd2.body.items.announcements) + ' popups=' + (rd2.body.items.popups || []).length);
 
   /* ---- ⑤ 前端 CONTENT_MAP 与后端白名单必须一致 ---- */
@@ -2221,6 +2229,18 @@ console.log('\n【28】第二十七轮·通用弹窗引擎（popups 云端通道
   t('SITE_DATA 含 popups 默认空数组', /popups:\s*\[\s*(\/\*[\s\S]*?\*\/\s*)?\]/.test(idxHtml));
   t('popInit 已接入启动流程', /^\s*popInit\(\);/m.test(idxHtml));
   t('进入板块会触发 popOnCategory', idxHtml.indexOf('popOnCategory(id)') >= 0);
+  /* 第二十九轮：横幅 + 迎新橙卡主题 相关实现必须齐活 */
+  t('前端已定义 popBannerHtml（板块顶部横幅）', idxHtml.indexOf('function popBannerHtml(') >= 0);
+  t('前端已定义 popBannerPlay（点横幅播视频）', idxHtml.indexOf('function popBannerPlay(') >= 0);
+  t('板块渲染已接 popBannerHtml', idxHtml.indexOf('popBannerHtml(c.id)') >= 0);
+  t('迎新橙卡主题 CSS 已加（.pop-theme-welcome）', /pop-theme-welcome/.test(idxHtml));
+  t('showPop 按 theme 切橙卡样式', /if\(p\.theme === 'welcome'\)\s*m\.classList\.add\('pop-theme-welcome'\)/.test(idxHtml));
+
+  const adminHtml = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('后台已定义 POP_THEMES 主题表', adminHtml.indexOf('var POP_THEMES') >= 0);
+  t('后台表单含横幅输入框 pfBanner', adminHtml.indexOf('id="pfBanner"') >= 0);
+  t('后台表单含样式下拉 pfTheme', adminHtml.indexOf('id="pfTheme"') >= 0);
+  t('后台预览会显示横幅', adminHtml.indexOf('📌 横幅') >= 0);
 }
 
 console.log('\n【29】第二十七轮·自动云同步（1 分钟双向）');

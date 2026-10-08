@@ -823,7 +823,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.3.7';
+var SITE_VERSION = '2.3.8';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -7452,6 +7452,10 @@ var POP_DISMISS = [
   { id: 'once',   name: '只弹一次（此后永不自动弹）' },
   { id: 'always', name: '每次都弹' },
 ];
+var POP_THEMES = [
+  { id: '',        name: '默认白卡' },
+  { id: 'welcome', name: '迎新橙卡（橙底白字，用于首次访问欢迎）' },
+];
 
 /* ---- 读取 / 写入云端 ---- */
 function popNorm(v){
@@ -7473,6 +7477,8 @@ function popNorm(v){
       endAt:     p.endAt || '',
       dismiss:   (p.dismiss === 'once' || p.dismiss === 'always') ? p.dismiss : 'daily',
       bubble:    (p.bubble === false) ? false : true,
+      bannerText: p.bannerText || '',
+      theme:      p.theme || '',
     });
   });
   return out;
@@ -7567,6 +7573,8 @@ function paintPopups(){
       +       ' · 时间窗：' + esc(popWindowText(p))
       +       (media.length ? ' · 含 ' + media.join('/') : '')
       +       (p.bubble === false ? ' · 不留悬浮球' : ' · 留悬浮球')
+      +       (p.bannerText ? ' · 横幅' : '')
+      +       (p.theme ? ' · 样式:' + esc(p.theme) : '')
       +     '</div>'
       +     (p.body ? '<div style="margin-top:8px;font-size:.8rem;white-space:pre-wrap;opacity:.85">'
       +       esc(p.body.length > 120 ? p.body.slice(0,120) + '…' : p.body) + '</div>' : '')
@@ -7629,7 +7637,7 @@ function popEdit(idx){
   var p = editing
     ? JSON.parse(JSON.stringify(POP_STATE.list[idx]))
     : { id: 'pop-' + Date.now().toString(36), scope:'boot', source:'custom', title:'', body:'',
-        video:'', image:'', linkText:'', linkUrl:'', startAt:'', endAt:'', dismiss:'daily', bubble:true };
+        video:'', image:'', linkText:'', linkUrl:'', startAt:'', endAt:'', dismiss:'daily', bubble:true, bannerText:'', theme:'' };
 
   function opts(arr, cur){
     return arr.map(function(o){
@@ -7689,7 +7697,13 @@ function popEdit(idx){
     + '<div class="field"><label>关闭后留悬浮球</label>'
     + '<label style="display:flex;align-items:center;gap:8px;font-weight:400">'
     +   '<input type="checkbox" id="pfBubble"' + (p.bubble !== false ? ' checked' : '') + '>'
-    +   '勾选后，同学关掉弹窗仍能在右下角点开重看</label></div>';
+    +   '勾选后，同学关掉弹窗仍能在右下角点开重看</label></div>'
+
+    + '<div class="field"><label>横幅文字（仅「进板块」弹窗生效）</label>'
+    + '<input id="pfBanner" class="gate-input" value="' + attr(p.bannerText) + '" placeholder="进板块时板块顶部显示的横幅，留空则不显示"></div>'
+
+    + '<div class="field"><label>卡片样式</label>'
+    + '<select id="pfTheme" class="gate-input">' + POP_THEMES.map(function(t){ return '<option value="' + attr(t.id) + '"' + (t.id === p.theme ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select></div>';
 
   openModal({
     title: editing ? '编辑弹窗' : '新增弹窗',
@@ -7732,6 +7746,8 @@ function popSave(idx, editing){
     endAt:     ($('pfEnd').value || '').trim(),
     dismiss:   $('pfDismiss').value,
     bubble:    $('pfBubble').checked,
+    bannerText: ($('pfBanner').value || '').trim(),
+    theme:      $('pfTheme').value,
   };
 
   var list = POP_STATE.list.slice();
@@ -7777,13 +7793,16 @@ function popPreview(i){
   var media = '';
   if(p.video) media += '<p class="muted" style="font-size:.8rem">🎬 视频：<code class="mono">' + esc(p.video) + '</code></p>';
   if(p.image) media += '<img src="' + attr(p.image) + '" style="max-width:100%;border-radius:8px;margin:8px 0" alt="预览图">';
+  if(p.bannerText) media += '<p class="muted" style="font-size:.8rem">📌 横幅：' + esc(p.bannerText) + '</p>';
   var btn = p.linkUrl
     ? '<div style="margin-top:12px"><span class="btn btn-sm">' + esc(p.linkText || '查看详情') + '</span></div>'
     : '';
 
   openModal({
     title: p.title || '(无标题)',
-    sub: popScopeName(p.scope) + ' · ' + popDismissName(p.dismiss) + ' · ' + popWindowText(p),
+    sub: popScopeName(p.scope) + ' · ' + popDismissName(p.dismiss) + ' · ' + popWindowText(p)
+        + (p.theme ? ' · 样式:' + esc(p.theme) : '')
+        + (p.bannerText ? ' · 横幅' : ''),
     body: srcNote + media + btn,
     foot: '<button class="btn btn-secondary" id="pvClose">关闭预览</button>'
         + '<button class="btn" id="pvEdit">去编辑</button>',
