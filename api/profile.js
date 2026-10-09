@@ -33,16 +33,19 @@ const MAX_Q = 40;
 const MAX_CONTACT = 64;
 
 /* ============================================================
-   字段可见性分档（2026-10-08 新增）
+   字段可见性分档（2026-10-08 新增，2026-10-09 v2.4.0 升级为三层）
    ------------------------------------------------------------
    三档：public 公开 / committee 班委 / self 仅本人。
    元数据住在 profile_field_meta 表（见 schema.sql）。
 
-   ⚠️ 双控语义：最终可见性 = 后台上限 ∩ 本人意愿，**取更严的一侧**。
-      · profile_field_meta.visibility = 后台上限（管理员说了算）
-      · profiles.visibility_pref      = 本人意愿（只收窄不放宽）
+   ⚠️ 三层取严语义（v2.4.0 起）：
+     最终可见性 = 全班默认 ∩ 本人意愿 ∩ 单人例外  →  取最严的一侧
+       · profile_field_meta.visibility = 全班默认上限（管理员在「字段管理」里改）
+       · profiles.visibility_pref      = 本人意愿（只收窄不放宽，键限 wechat/qq/phone）
+       · profiles.field_vis            = 单人例外（管理员在编辑弹窗/快捷切换里改，
+                                          可放宽也可收窄）
 
-   本轮预置值不改变现有行为：联系方式上限仍是 public，
+   预置值不改变现有行为：联系方式默认仍是 public，
    本人可在个人中心勾选「仅自己可见」自行收窄 —— 所以不会出现
    「同学突然发现联系方式查不到了」这种意外。
    ============================================================ */
@@ -58,7 +61,7 @@ function stricter(a, b) {
 }
 
 /**
- * 读一次字段元数据，返回 { field: 'public'|'committee'|'self' } 的映射。
+ * 读一次字段元数据，返回 { field: {visibility,label,sortOrder,isCustom} } 的映射。
  *
  * ⚠️ 只在 profile.js 的接口里各查一次，**绝不要**放进 currentUser()——
  *    那会让全站每个请求都多一次查询。
@@ -67,9 +70,16 @@ function stricter(a, b) {
  */
 async function loadMeta(sql) {
   try {
-    const rows = await sql`select field, visibility, label, sort_order from profile_field_meta order by sort_order, field`;
+    const rows = await sql`select field, visibility, label, sort_order, is_custom from profile_field_meta order by sort_order, field`;
     const map = {};
-    for (const r of rows) map[r.field] = { visibility: r.visibility || 'public', label: r.label || r.field, sortOrder: Number(r.sort_order || 100) };
+    for (const r of rows) {
+      map[r.field] = {
+        visibility: r.visibility || 'public',
+        label: r.label || r.field,
+        sortOrder: Number(r.sort_order || 100),
+        isCustom: !!r.is_custom,
+      };
+    }
     return map;
   } catch (e) {
     console.warn('[profile] 读字段元数据失败（按公开处理）：', e.message);
@@ -94,19 +104,47 @@ function parsePref(raw) {
 }
 
 /**
+ * 解析单人可见性例外（profiles.field_vis，JSON 文本，v2.4.0 新增）。
+ * 形状：{ student_id:'self', wechat:'public' } —— 值为三档之一。
+ * 与 visibility_pref 不同，这里**可以放宽**（管理员有最终裁量权）。
+ */
+function parseFieldVis(raw) {
+  return parsePref(raw);
+}
+
+/**
+ * 把「本人意愿」里某一字段的值换算成一档可见性。
+ * 兼容两种写法：布尔（老：false=收窄到 self）与档位字符串（新，自定义字段用）。
+ */
+function visFromPref(v) {
+  if (v === false) return 'self';           /* 老写法：仅自己可见 */
+  if (v === true) return null;              /* 老写法：同意公开，不额外收窄 */
+  if (typeof v === 'string' && VIS_RANK[v] != null) return v;
+  return null;
+}
+
+/**
  * 算出某个字段对「当前查询者」到底能不能看。
+ *
+ * v2.4.0 起为**三层取严**：全班默认 ∩ 本人意愿 ∩ 单人例外。
  *
  * @param {string} field   字段名
  * @param {object} meta    loadMeta 的结果
- * @param {object} pref    该资料的本人意愿
+ * @param {object} pref    该资料的本人意愿（visibility_pref）
+ * @param {object} fvis    该资料的单人例外（field_vis）
  * @param {{self:boolean, committee:boolean}} ctx 查询者身份
  */
-function canSee(field, meta, pref, ctx) {
+function canSee(field, meta, pref, fvis, ctx) {
   const upper = (meta[field] && meta[field].visibility) || 'public';
-  /* 本人意愿只对白名单里的「联系方式」生效：false = 要收窄到 self */
+
+  /* 第 2 层：本人意愿（只可能收窄） */
   let eff = upper;
-  if (pref[field] === false) eff = stricter(upper, 'self');
-  else if (pref[field] === true) eff = upper;
+  const p = visFromPref(pref[field]);
+  if (p) eff = stricter(eff, p);
+
+  /* 第 3 层：管理员设的单人例外（可收窄也可放宽） */
+  const f = visFromPref(fvis[field]);
+  if (f) eff = stricter(eff, f);
 
   if (eff === 'self') return ctx.self;
   if (eff === 'committee') return ctx.self || ctx.committee;
@@ -187,6 +225,9 @@ function maskHalf(v) {
  *
  * ⚠️ 与改动前保持一致：`full` 仍然能让本人看到自己全部联系方式，
  *    即使字段被设为 self —— 本人看自己当然看得到。
+ *
+ * v2.4.0：新增 `fields` 数组，装自定义 / 非固定字段的值（按可见性过滤）。
+ *    前端把它当「额外字段」渲染，不用再为每个新字段改代码。
  */
 function shapeProfile(row, full, meta, ctx) {
   const approved = row.contact_status === 'approved';
@@ -195,30 +236,54 @@ function shapeProfile(row, full, meta, ctx) {
 
   const m = meta || {};
   const pref = parsePref(row.visibility_pref);
+  const fvis = parseFieldVis(row.field_vis);
   const who = ctx || { self: !!full, committee: false };
   /* 联系方式若被收窄到「仅本人」，则对别人隐藏（但仍给出脱敏预览） */
-  const contactOpen = canSee('phone', m, pref, who);
+  const contactOpen = canSee('phone', m, pref, fvis, who);
 
-  return {
+  const out = {
     id: Number(row.id),
-    name: canSee('name', m, pref, who) ? (row.name || '') : '',
-    studentId: canSee('student_id', m, pref, who) ? (row.student_id || '') : '',
-    politics: canSee('politics', m, pref, who) ? (row.politics || '') : '',
+    name: canSee('name', m, pref, fvis, who) ? (row.name || '') : '',
+    studentId: canSee('student_id', m, pref, fvis, who) ? (row.student_id || '') : '',
+    politics: canSee('politics', m, pref, fvis, who) ? (row.politics || '') : '',
     /* 智学网账号（原「准考证号」文案，2026-10-08 改正）：
        管理员从名单导入，属于班内公开信息，不走审核。 */
-    examNo: canSee('exam_no', m, pref, who) ? (row.exam_no || '') : '',
+    examNo: canSee('exam_no', m, pref, fvis, who) ? (row.exam_no || '') : '',
     role: row.role || '学生',
     contactStatus: row.contact_status || 'none',
     /* 是否展示了联系方式 —— 前端据此显示「待审核」之类的提示 */
     contactVisible: show && contactOpen,
-    wechat: show && contactOpen && canSee('wechat', m, pref, who) ? (row.wechat || '') : '',
-    qq: show && contactOpen && canSee('qq', m, pref, who) ? (row.qq || '') : '',
-    phone: show && contactOpen && canSee('phone', m, pref, who) ? (row.phone || '') : '',
+    wechat: show && contactOpen && canSee('wechat', m, pref, fvis, who) ? (row.wechat || '') : '',
+    qq: show && contactOpen && canSee('qq', m, pref, fvis, who) ? (row.qq || '') : '',
+    phone: show && contactOpen && canSee('phone', m, pref, fvis, who) ? (row.phone || '') : '',
     /* 未通过审核时，给出脱敏预览，让查询者知道「有，但还没核实」 */
     phoneMasked: !(show && contactOpen) && row.phone ? maskPhone(row.phone) : '',
     updatedAt: row.updated_at,
   };
+
+  /* ---- 额外字段（v2.4.0）：自定义字段 + id_card/youth_league_no 这类
+     不在固定输出里的字段。按三层可见性逐个过筛，看不到的直接不出现
+     （连键都不给），避免前端从「键存在但值为空」推断出信息是否存在。 ---- */
+  const fields = [];
+  for (const field of Object.keys(m)) {
+    if (FIXED_FIELDS.has(field)) continue;
+    /* 表里没这列就跳过（元数据有、列还没建的历史状态） */
+    if (!(field in row)) continue;
+    const v = row[field];
+    if (v == null || v === '') continue;
+    if (!canSee(field, m, pref, fvis, who)) continue;
+    fields.push({ field, label: m[field].label || field, value: String(v) });
+  }
+  out.fields = fields;
+
+  return out;
 }
+
+/**
+ * 已经由 shapeProfile 固定输出的字段 —— 不要在 `fields` 里重复它们。
+ * ⚠️ 改这里的清单时，记得同步 admin.js 的 SPECIAL_FIELDS。
+ */
+const FIXED_FIELDS = new Set(['name', 'student_id', 'politics', 'exam_no', 'role']);
 
 /* ---------------- 查询（核心） ---------------- */
 async function search(req, res, u) {
@@ -238,8 +303,7 @@ async function search(req, res, u) {
   const meta = await loadMeta(sql);
 
   const rows = await sql`
-    select id, name, student_id, politics, exam_no, role, wechat, qq, phone,
-           contact_status, visibility_pref, updated_at
+    select *
       from profiles
      where student_id ilike ${sidLike}
         or name ilike ${like}
@@ -332,17 +396,16 @@ async function myProfile(req, res, u) {
   p.rejectReason = row.reject_reason || '';
 
   /* 私有字段：元数据里 visibility='self' 的那些（身份证号、发展团员编号…）。
-     本轮这些列还不存在（只登记了元数据），所以大概率是空数组，
-     但**接口形状先立好** —— 下轮后台加列后，前端不用改一行就能显示。
+     v2.4.0 起这些列真的存在了（schema.sql 已补列），所以能真正取到值。
 
      ⚠️ 这里的白名单思路：只把「profiles 表里真的有的列」吐出去，
         避免把 id / user_id / name_hash 之类内部列漏给前端。 */
   const privateFields = [];
-  const skip = new Set(['id', 'name_hash', 'user_id', 'visibility_pref', 'created_at', 'updated_at', 'reject_reason']);
+  const skip = new Set(['id', 'name_hash', 'user_id', 'visibility_pref', 'field_vis', 'created_at', 'updated_at', 'reject_reason']);
   for (const field of Object.keys(meta)) {
     if (skip.has(field)) continue;
     if (meta[field].visibility !== 'self') continue;
-    /* 表里没这列就跳过（本轮 id_card / youth_league_no 就属于这种） */
+    /* 表里没这列就跳过（老库还没自愈出列时的兜底） */
     if (!(field in row)) continue;
     const val = row[field];
     if (val == null || val === '') continue;
@@ -355,6 +418,12 @@ async function myProfile(req, res, u) {
   }
   privateFields.sort((a, b) => a.sortOrder - b.sortOrder);
 
+  /* ⚠️ privateFields 与 p.fields 会重叠：本人看自己时 shapeProfile 的 canSee
+     一律放行，self 档字段会同时进 fields。这里把 self 档从 fields 里摘掉，
+     让前端的分工清晰：fields = 可对外展示的额外字段，privateFields = 仅本人可见。 */
+  const privSet = new Set(privateFields.map((f) => f.field));
+  if (p.fields) p.fields = p.fields.filter((f) => !privSet.has(f.field));
+
   return ok(res, {
     profile: p,
     claimed: true,
@@ -363,7 +432,8 @@ async function myProfile(req, res, u) {
     visibilityPref: parsePref(row.visibility_pref),
     /* 字段元数据（仅含公开档位信息，不含敏感内容），前端可用来渲染提示 */
     fieldMeta: Object.keys(meta).map((f) => ({
-      field: f, label: meta[f].label, visibility: meta[f].visibility, sortOrder: meta[f].sortOrder,
+      field: f, label: meta[f].label, visibility: meta[f].visibility,
+      sortOrder: meta[f].sortOrder, isCustom: !!meta[f].isCustom,
     })),
   });
 }

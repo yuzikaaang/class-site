@@ -281,6 +281,9 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .pc-name{font-weight:800;font-size:.98rem;color:#292524;margin-right:2px}
 .dark .pc-name{color:#e4d8cb}
 .pc-contact{display:flex;flex-direction:column;gap:6px}
+/* 额外资料字段（2026-10-09 v2.4.0）：管理员在后台「字段管理」加的自定义字段。
+   和联系方式行同款样式，但整体在联系方式上方，视觉上先看到身份信息。 */
+.pc-extra{display:flex;flex-direction:column;gap:6px;margin-bottom:9px}
 .pc-row{display:flex;align-items:center;gap:8px;background:#f6f1ec;border-radius:10px;padding:7px 10px}
 .dark .pc-row{background:#2e2926}
 .pc-key{flex:none;font-size:.78rem;font-weight:700;color:#6e635a;min-width:34px}
@@ -2373,7 +2376,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.3.9';
+var SITE_VERSION = '2.4.0';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -7943,6 +7946,36 @@ function renderContactResults(id, out, j){
       head.appendChild(pl);
     }
     card.appendChild(head);
+
+    /* ---- 额外资料字段（2026-10-09 v2.4.0）----
+       管理员在后台「字段管理」里加的自定义字段（学籍号、宿舍号…），
+       以及身份证号这类「仅本人可见」的字段，都会出现在 p.fields 里。
+       后端已经按「全班默认 ∩ 本人意愿 ∩ 单人例外」三层取严滤过一遍，
+       看不到的字段**根本不会出现在数组里** —— 前端只管渲染。
+       ⚠️ 所以这里遍历渲染即可，绝不要在前端再做可见性判断（会与后端不一致）。 */
+    if(Array.isArray(p.fields) && p.fields.length){
+      var fx = document.createElement('div');
+      fx.className = 'pc-extra';
+      p.fields.forEach(function(f){
+        if(!f || !f.value) return;
+        var row = document.createElement('div');
+        row.className = 'pc-row';
+        var k = document.createElement('span');
+        k.className = 'pc-key';
+        k.textContent = f.label || f.field;
+        var v = document.createElement('span');
+        v.className = 'pc-val';
+        v.textContent = f.value;
+        var b = document.createElement('button');
+        b.className = 'pc-copy';
+        b.type = 'button';
+        b.textContent = '复制';
+        b.onclick = function(){ copyText(f.value, f.label || f.field); };
+        row.appendChild(k); row.appendChild(v); row.appendChild(b);
+        fx.appendChild(row);
+      });
+      if(fx.childNodes.length) card.appendChild(fx);
+    }
 
     /* ---- 联系方式区 ---- */
     var ct = document.createElement('div');

@@ -146,6 +146,11 @@ function translate(sqlText) {
   if (/^\s*alter\s+table[\s\S]*add\s+column\s+if\s+not\s+exists/i.test(s)) {
     return { __alter: s };
   }
+  /* 2026-10-09 v2.4.0：删自定义字段要真跑 drop column（SQLite 3.35+ 支持）。
+     老版本 sql.js 若不支持，execAlter 里会 catch 后忽略，不影响测试。 */
+  if (/^\s*alter\s+table[\s\S]*drop\s+column\s+if\s+exists/i.test(s)) {
+    return { __dropColumn: s };
+  }
   /* ⚠️ 2026-10-07：`create table if not exists ...` 在 SQLite 里语法更严：
        · 列默认值不能写 `default datetime('now')`（函数式默认值必须加括号
          `default (datetime('now'))`），Postgres 则两种都收；
@@ -208,8 +213,24 @@ function PG_to_Q(s) {
 }
 
 const sqlBridge = (strings, ...values) => {
-  let text = strings.reduce((acc, s, i) => acc + s + (i < values.length ? '$' + (i + 1) : ''), '');
-  const tr = translate(text);
+  let text;
+  /* ---- 兼容两种调用形式（2026-10-09 v2.4.0 加） ----
+     ① 标签模板：sql`select ... ${v}`     → strings 是 TemplateStringsArray，自动编号 $1..$n
+     ② 普通调用：sql('select ... $1', [v]) → strings 是**字符串**，values[0] 是参数数组
+     生产用的 @neondatabase/serverless 两种都支持（见 NeonQueryFunction 的类型定义），
+     桩也必须一致，否则「动态拼列名」那批代码在测试里跑不起来。 */
+  if (typeof strings === 'string') {
+    text = strings;
+    values = Array.isArray(values[0]) ? values[0] : [];
+    const tr0 = translate(text);
+    return makeThenable(tr0, text, values);
+  }
+  text = strings.reduce((acc, s, i) => acc + s + (i < values.length ? '$' + (i + 1) : ''), '');
+  return makeThenable(translate(text), text, values);
+};
+
+/** 把「翻译结果 + 原 SQL + 参数」包成一个 thenable（与原桩行为一致） */
+function makeThenable(tr, rawText, values) {
 
   return {
     then(resolve, reject) {
@@ -230,6 +251,21 @@ const sqlBridge = (strings, ...values) => {
                          .replace(/bigserial/gi, 'integer')
                          .replace(/::interval/gi, '');
               db.run(`alter table ${tbl} add column ${col} ${type}`);
+            }
+          }
+          resolve([]);
+          return;
+        }
+        /* ---- drop column if exists（删自定义字段）---- */
+        if (tr && typeof tr === 'object' && tr.__dropColumn) {
+          const m = /alter\s+table\s+([\w"]+)\s+drop\s+column\s+if\s+exists\s+([\w"]+)/i.exec(tr.__dropColumn);
+          if (m) {
+            const [, tbl, col] = m;
+            const cols = db.exec(`pragma table_info(${tbl})`);
+            const names = cols.length ? cols[0].values.map((r) => String(r[1])) : [];
+            if (names.includes(col)) {
+              try { db.run(`alter table ${tbl} drop column ${col}`); }
+              catch (e) { /* 老 sql.js 不支持 drop column，忽略即可 */ }
             }
           }
           resolve([]);
@@ -338,7 +374,7 @@ const sqlBridge = (strings, ...values) => {
       }
     },
   };
-};
+}
 
 globalThis.__LOCAL_SQL_BRIDGE__ = () => sqlBridge;
 
@@ -3054,10 +3090,10 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
     /on conflict \(field\) do nothing/.test(schemaSrc));
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
-  /* --- H. 版本号 --- */
-  t('★前台版本号为 2.3.9', /SITE_VERSION = '2\.3\.9'/.test(indexHtml),
+  /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
+  t('★前台版本号为 2.4.0', /SITE_VERSION = '2\.4\.0'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.3.9', /SITE_VERSION = '2\.3\.9'/.test(adminHtml),
+  t('★后台版本号为 2.4.0', /SITE_VERSION = '2\.4\.0'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3066,6 +3102,443 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   const profSrc = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
   t('★未认领分支也返回 privateFields', /claimed: false[\s\S]{0,400}privateFields/.test(profSrc));
   t('★未认领分支也返回 fieldMeta', /claimed: false[\s\S]{0,600}fieldMeta/.test(profSrc));
+}
+
+console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
+
+/* ============================================================
+   【38】验证「后台直接新增一个资料字段」的完整链路。
+
+   这是本轮的核心：让站主不用改代码就能加字段（学籍号、宿舍号…）。
+   实现上要 ALTER TABLE 加**真实列**，所以有三个必须验到的点：
+     ① 字段名白名单（否则 alter table 拼列名就是 SQL 注入）
+     ② 真加了列，且值能写能读
+     ③ 三层可见性（全班默认 ∩ 本人意愿 ∩ 单人例外）取严
+   ============================================================ */
+{
+  /* ---- A. 字段名白名单：这是 SQL 注入的唯一防线，必须逐条验 ---- */
+  const httpSrc38 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  t('http.js 导出 checkFieldName', /export function checkFieldName/.test(httpSrc38));
+  t('http.js 导出 FIELD_NAME_RE', /export const FIELD_NAME_RE/.test(httpSrc38));
+  t('http.js 导出 RESERVED_PROFILE_COLS', /export const RESERVED_PROFILE_COLS/.test(httpSrc38));
+  t('★字段名正则禁止大写/连字符/中文', /\/\^\[a-z\]\[a-z0-9_\]\{0,30\}\$\//.test(httpSrc38));
+
+  /* 用真实接口验证：恶意字段名一律被拒 */
+  const evilNames = [
+    'x text; drop table profiles; --',
+    'a-b',
+    'A-b',
+    '1abc',
+    '_x',
+    'a b',
+    'x)',
+    'a;b',
+    'a"b',
+    "a'b",
+  ];
+  for (const evil of evilNames) {
+    const r = await call('/api/admin?action=add-field', {
+      method: 'POST', token: adminToken,
+      body: { field: evil, label: '恶意字段' },
+    });
+    t('恶意字段名被拒：' + JSON.stringify(evil).slice(0, 34),
+      r.status === 400, '实际 ' + r.status + ' ' + JSON.stringify(r.body).slice(0, 90));
+  }
+
+  /* 大写是**归一化**而非拒绝：学校 ID → school_id（对用户友好）。
+     归一化后仍必须落在合法字符集内，所以 A-b 仍被拒（上面已验）。 */
+  const upperCase = await call('/api/admin?action=add-field', {
+    method: 'POST', token: adminToken,
+    body: { field: 'SchoolID', label: '归一化测试' },
+  });
+  t('大写字段名被归一化为小写',
+    upperCase.status === 200 && upperCase.body.field === 'schoolid',
+    JSON.stringify(upperCase.body).slice(0, 120));
+  /* 用完就删，免得污染后面的断言 */
+  await call('/api/admin?action=delete-field', {
+    method: 'POST', token: adminToken, body: { field: 'schoolid' },
+  });
+
+  /* 系统保留列名也必须被拒（撞列名会造成「元数据说有、含义完全不同」） */
+  for (const reserved of ['name', 'student_id', 'user_id', 'id', 'field_vis', 'visibility_pref']) {
+    const r = await call('/api/admin?action=add-field', {
+      method: 'POST', token: adminToken,
+      body: { field: reserved, label: '撞名' },
+    });
+    t('保留列名被拒：' + reserved, r.status === 400,
+      '实际 ' + r.status + ' ' + JSON.stringify(r.body).slice(0, 90));
+  }
+
+  /* SQL 保留字被拒 */
+  const kw = await call('/api/admin?action=add-field', {
+    method: 'POST', token: adminToken, body: { field: 'select', label: '关键字' },
+  });
+  t('SQL 保留字被拒', kw.status === 400, '实际 ' + kw.status);
+
+  /* 缺 label 被拒 */
+  const noLabel = await call('/api/admin?action=add-field', {
+    method: 'POST', token: adminToken, body: { field: 'dorm_no' },
+  });
+  t('缺中文名被拒（400）', noLabel.status === 400, '实际 ' + noLabel.status);
+
+  /* ---- B. 正常新增一个字段：学籍号 school_id ---- */
+  const add = await call('/api/admin?action=add-field', {
+    method: 'POST', token: adminToken,
+    body: { field: 'school_id', label: '学籍号', visibility: 'committee' },
+  });
+  t('★新增字段成功', add.status === 200 && add.body.ok,
+    JSON.stringify(add.body).slice(0, 160));
+  t('新增字段回带 field/label/visibility',
+    add.body.field === 'school_id' && add.body.label === '学籍号' && add.body.visibility === 'committee');
+
+  /* 重复新增被拒（409） */
+  const dupAdd = await call('/api/admin?action=add-field', {
+    method: 'POST', token: adminToken, body: { field: 'school_id', label: '又一遍' },
+  });
+  t('重复新增同一字段被拒（409）', dupAdd.status === 409, '实际 ' + dupAdd.status);
+
+  /* 字段管理列表里能查到，且带 isCustom 标记 */
+  const metaList = await call('/api/admin?action=field-meta', { token: adminToken });
+  t('field-meta 接口可用', metaList.status === 200 && Array.isArray(metaList.body.fields));
+  const fSchool = (metaList.body.fields || []).find((f) => f.field === 'school_id');
+  t('★字段管理列表含新字段', !!fSchool, JSON.stringify((metaList.body.fields || []).map((f) => f.field)));
+  t('新字段标记为 isCustom', fSchool && fSchool.isCustom === true);
+  t('新字段排序排在预置字段之后', fSchool && fSchool.sortOrder >= 110,
+    '实际 ' + (fSchool || {}).sortOrder);
+  const fName = (metaList.body.fields || []).find((f) => f.field === 'name');
+  t('预置字段 isCustom 为 false', fName && fName.isCustom === false);
+  t('field-meta 带 filledCount（填报数）', fSchool && typeof fSchool.filledCount === 'number');
+  t('field-meta 带 totalProfiles', typeof metaList.body.totalProfiles === 'number');
+
+  /* ---- C. 真正能写值、能读回（证明 ALTER TABLE 真加了列） ---- */
+  /* 先备一条资料 */
+  const mkProf = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '字段测试甲', studentId: '260001', role: '学生', extra: { school_id: 'XJ20260001' } },
+  });
+  t('新增资料时可直接写自定义字段', mkProf.status === 200 && mkProf.body.ok,
+    JSON.stringify(mkProf.body).slice(0, 140));
+  const fid = mkProf.body.id;
+
+  const detail = await call('/api/admin?action=profile&id=' + fid, { token: adminToken });
+  t('★单条资料详情带出自定义字段值',
+    detail.body.profile && detail.body.profile.extra && detail.body.profile.extra.school_id === 'XJ20260001',
+    JSON.stringify(detail.body.profile && detail.body.profile.extra).slice(0, 140));
+
+  /* 列表也要带出（Excel 导出靠它） */
+  const listR = await call('/api/admin?action=profiles&q=260001', { token: adminToken });
+  const rowCell = (listR.body.profiles || []).find((p) => p.studentId === '260001');
+  t('★资料列表带出自定义字段值',
+    rowCell && rowCell.extra && rowCell.extra.school_id === 'XJ20260001',
+    JSON.stringify(rowCell && rowCell.extra).slice(0, 140));
+  t('资料列表同时返回 fieldMeta（省一次请求）', Array.isArray(listR.body.fieldMeta));
+
+  /* 改值 */
+  const upd = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: fid, name: '字段测试甲', studentId: '260001', extra: { school_id: 'XJ-改过了' } },
+  });
+  t('可修改自定义字段的值', upd.status === 200 && upd.body.ok);
+  const detail2 = await call('/api/admin?action=profile&id=' + fid, { token: adminToken });
+  t('改后的值读回正确',
+    detail2.body.profile.extra.school_id === 'XJ-改过了',
+    JSON.stringify(detail2.body.profile.extra));
+
+  /* 前端传 meta 表里没有的键，不能写进库（防乱传） */
+  const junk = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: fid, name: '字段测试甲', studentId: '260001', extra: { not_a_field: 'x', school_id: 'XJ-改过了' } },
+  });
+  t('extra 里未登记的键被忽略', junk.status === 200 && junk.body.ok);
+
+  /* ---- D. 三层可见性取严 ---- */
+  /* school_id 当前是 committee 档。让路人（普通学生）查，应当看不到。 */
+  const seenByStudent = await call('/api/profile?action=search&q=260001', { token: bTok });
+  const sRow = ((seenByStudent.body || {}).results || [])[0];
+  t('★班委档字段对普通同学不可见',
+    sRow && !(sRow.fields || []).some((f) => f.field === 'school_id'),
+    JSON.stringify((sRow || {}).fields));
+
+  /* 设为 public 后，普通同学就能看到 */
+  const toPublic = await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken, body: { field: 'school_id', visibility: 'public' },
+  });
+  t('可把字段改为 public', toPublic.status === 200 && toPublic.body.ok);
+  const seen2 = await call('/api/profile?action=search&q=260001', { token: bTok });
+  const sRow2 = ((seen2.body || {}).results || [])[0];
+  t('★改为 public 后普通同学可见',
+    sRow2 && (sRow2.fields || []).some((f) => f.field === 'school_id' && f.value === 'XJ-改过了'),
+    JSON.stringify((sRow2 || {}).fields));
+  t('自定义字段带 label（前端直接显示中文名）',
+    sRow2 && (sRow2.fields || []).some((f) => f.label === '学籍号'));
+
+  /* 单人例外：把「字段测试甲」的 school_id 单独收窄为 self —— 全班仍 public，但他看不见 */
+  const perOne = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: fid, name: '字段测试甲', studentId: '260001', fieldVis: { school_id: 'self' } },
+  });
+  t('可给单个人设置字段例外', perOne.status === 200 && perOne.body.ok,
+    JSON.stringify(perOne.body).slice(0, 140));
+  const detail3 = await call('/api/admin?action=profile&id=' + fid, { token: adminToken });
+  t('★单人例外已存库',
+    detail3.body.profile.fieldVis && detail3.body.profile.fieldVis.school_id === 'self',
+    JSON.stringify(detail3.body.profile.fieldVis));
+
+  const seen3 = await call('/api/profile?action=search&q=260001', { token: bTok });
+  const sRow3 = ((seen3.body || {}).results || [])[0];
+  t('★单人例外收窄后，普通同学看不到该字段',
+    sRow3 && !(sRow3.fields || []).some((f) => f.field === 'school_id'),
+    JSON.stringify((sRow3 || {}).fields));
+
+  /* 本人仍能看到自己（self 档对本人放行） */
+  /* 先把该资料绑到路人账号上，方便用本人视角查 */
+  const privMe = await call('/api/profile?action=me', { token: adminToken });
+  t('me 接口仍正常（回归）', privMe.status === 200 && privMe.body.ok);
+
+  /* 放宽：单人例外设回 public，且全班也是 public → 又能看到 */
+  await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: fid, name: '字段测试甲', studentId: '260001', fieldVis: {} },
+  });
+  const seen4 = await call('/api/profile?action=search&q=260001', { token: bTok });
+  const sRow4 = ((seen4.body || {}).results || [])[0];
+  t('清空单人例外后恢复可见',
+    sRow4 && (sRow4.fields || []).some((f) => f.field === 'school_id'),
+    JSON.stringify((sRow4 || {}).fields));
+
+  /* ---- E. 改字段的名称 / 排序 / 可见性 ---- */
+  const updField = await call('/api/admin?action=update-field', {
+    method: 'POST', token: adminToken,
+    body: { field: 'school_id', label: '全国学籍号', sortOrder: 15 },
+  });
+  t('可改字段显示名与排序', updField.status === 200 && updField.body.ok,
+    JSON.stringify(updField.body).slice(0, 140));
+  const meta2 = await call('/api/admin?action=field-meta', { token: adminToken });
+  const fS2 = (meta2.body.fields || []).find((f) => f.field === 'school_id');
+  t('改名生效', fS2 && fS2.label === '全国学籍号', (fS2 || {}).label);
+  t('改排序生效', fS2 && fS2.sortOrder === 15, String((fS2 || {}).sortOrder));
+
+  const badVis = await call('/api/admin?action=update-field', {
+    method: 'POST', token: adminToken, body: { field: 'school_id', visibility: 'everyone' },
+  });
+  t('非法可见性被拒', badVis.status === 400, '实际 ' + badVis.status);
+
+  /* ---- F. 系统字段不可删，自定义字段可删 ---- */
+  const delSys = await call('/api/admin?action=delete-field', {
+    method: 'POST', token: adminToken, body: { field: 'name' },
+  });
+  t('★系统字段不可删（400）', delSys.status === 400, '实际 ' + delSys.status);
+
+  const delCustom = await call('/api/admin?action=delete-field', {
+    method: 'POST', token: adminToken, body: { field: 'school_id' },
+  });
+  t('★自定义字段可删', delCustom.status === 200 && delCustom.body.ok,
+    JSON.stringify(delCustom.body).slice(0, 140));
+
+  const meta3 = await call('/api/admin?action=field-meta', { token: adminToken });
+  t('删后字段管理列表里不再有它',
+    !(meta3.body.fields || []).some((f) => f.field === 'school_id'));
+
+  /* 删列后原值也不该再被读出来 */
+  const seen5 = await call('/api/profile?action=search&q=260001', { token: bTok });
+  const sRow5 = ((seen5.body || {}).results || [])[0];
+  t('删字段后前台不再返回它',
+    sRow5 && !(sRow5.fields || []).some((f) => f.field === 'school_id'));
+
+  /* ---- G. 存量字段真的建了列（id_card / youth_league_no） ---- */
+  const schemaSrc38 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  t('★schema.sql 给 id_card 建列', /add column if not exists id_card/.test(schemaSrc38));
+  t('★schema.sql 给 youth_league_no 建列', /add column if not exists youth_league_no/.test(schemaSrc38));
+  t('★ensureSchema 同步给 id_card 建列', /add column if not exists id_card/.test(httpSrc38));
+  t('★ensureSchema 同步给 youth_league_no 建列', /add column if not exists youth_league_no/.test(httpSrc38));
+  t('schema.sql 含 field_vis 列',
+    /add column if not exists field_vis/.test(schemaSrc38));
+  t('ensureSchema 含 field_vis 补列', /add column if not exists field_vis/.test(httpSrc38));
+
+  /* 真写一个身份证号，验证「仅本人可见」档真的工作 */
+  const idProf = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '证件测试乙', studentId: '260002', extra: { id_card: '360424201007100011' } },
+  });
+  t('可写入身份证号', idProf.status === 200 && idProf.body.ok);
+  const idDetail = await call('/api/admin?action=profile&id=' + idProf.body.id, { token: adminToken });
+  t('身份证号读回正确',
+    idDetail.body.profile.extra.id_card === '360424201007100011',
+    JSON.stringify(idDetail.body.profile.extra));
+  const idSearch = await call('/api/profile?action=search&q=260002', { token: bTok });
+  const idRow = ((idSearch.body || {}).results || [])[0];
+  t('★身份证号（self 档）对外一律不可见',
+    idRow && !(idRow.fields || []).some((f) => f.field === 'id_card'),
+    JSON.stringify((idRow || {}).fields));
+
+  /* ---- G2. Excel 批量导入也要支持自定义字段（v2.4.0） ----
+     缺口记录（2026-10-09）：batchProfiles 原本硬编码 9 个固定列，
+     前端已经把动态表头解析进 row.extra 了，后端却收不到 → 导入后自定义字段全丢。
+     这一节就是钉死这个行为。 */
+  const addAgain = await call('/api/admin?action=add-field', {
+    method: 'POST', token: adminToken,
+    body: { field: 'school_id', label: '学籍号', visibility: 'public' },
+  });
+  t('重新加回 school_id 字段（供导入测试）', addAgain.status === 200 && addAgain.body.ok,
+    JSON.stringify(addAgain.body).slice(0, 120));
+
+  /* 新增型导入：两条全新记录，带自定义字段 */
+  const batchNew = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: {
+      rows: [
+        { name: '导入甲', studentId: '270001', role: '学生', wechat: 'wx_a',
+          extra: { school_id: 'XJ-BATCH-1' } },
+        { name: '导入乙', studentId: '270002', role: '学生',
+          extra: { school_id: 'XJ-BATCH-2', not_a_field: '应被忽略' } },
+      ],
+    },
+  });
+  t('★批量导入支持 extra（成功 2 条）',
+    batchNew.status === 200 && batchNew.body.created === 2,
+    JSON.stringify(batchNew.body).slice(0, 180));
+
+  const impList = await call('/api/admin?action=profiles&q=270001', { token: adminToken });
+  const impRow = (impList.body.profiles || []).find((p) => p.studentId === '270001');
+  t('★导入的新记录带上了自定义字段值',
+    impRow && impRow.extra && impRow.extra.school_id === 'XJ-BATCH-1',
+    JSON.stringify(impRow && impRow.extra).slice(0, 140));
+
+  const impList2 = await call('/api/admin?action=profiles&q=270002', { token: adminToken });
+  const impRow2 = (impList2.body.profiles || []).find((p) => p.studentId === '270002');
+  t('导入时未登记的 extra 键被丢弃',
+    impRow2 && impRow2.extra && impRow2.extra.school_id === 'XJ-BATCH-2'
+      && !('not_a_field' in impRow2.extra),
+    JSON.stringify(impRow2 && impRow2.extra).slice(0, 140));
+
+  /* 更新型导入：已有记录，改自定义字段值 */
+  const batchUpd = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: [{ name: '导入甲', studentId: '270001', role: '学生', extra: { school_id: 'XJ-BATCH-1-B' } }] },
+  });
+  t('★批量导入可更新已有记录的自定义字段',
+    batchUpd.status === 200 && batchUpd.body.updated === 1,
+    JSON.stringify(batchUpd.body).slice(0, 180));
+  const impList3 = await call('/api/admin?action=profiles&q=270001', { token: adminToken });
+  const impRow3 = (impList3.body.profiles || []).find((p) => p.studentId === '270001');
+  t('更新后的自定义字段值正确',
+    impRow3 && impRow3.extra.school_id === 'XJ-BATCH-1-B',
+    JSON.stringify(impRow3 && impRow3.extra).slice(0, 140));
+
+  /* 恶意列名不能借导入通道绕过白名单（这是 SQL 注入的第二条入口） */
+  const batchEvil = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: [{ name: '导入恶意', studentId: '270003', role: '学生',
+      extra: { 'x text; drop table profiles; --': '1', 'a-b': '2' } }] },
+  });
+  t('★导入通道的非法列名被丢弃（不报错也不执行）',
+    batchEvil.status === 200 && batchEvil.body.created === 1,
+    JSON.stringify(batchEvil.body).slice(0, 180));
+  const stillAlive = await call('/api/admin?action=profiles&q=270003', { token: adminToken });
+  t('★profiles 表仍在（注入未得逞）',
+    stillAlive.status === 200 && (stillAlive.body.profiles || []).length === 1,
+    'HTTP ' + stillAlive.status);
+
+  /* 清理 */
+  for (const sid of ['270001', '270002', '270003']) {
+    const f = await call('/api/admin?action=profiles&q=' + sid, { token: adminToken });
+    const row = (f.body.profiles || [])[0];
+    if (row) await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id: row.id } });
+  }
+
+  /* ---- H. 审计留痕 ---- */
+  const logs38 = await call('/api/admin?action=audit&limit=200', { token: adminToken });
+  const acts = (logs38.body.logs || []).map((x) => x.action);
+  t('字段新增有审计', acts.includes('field.add'), JSON.stringify(acts.slice(0, 20)));
+  t('字段删除有审计', acts.includes('field.delete'));
+  t('字段改名有审计', acts.includes('field.update'));
+  t('字段可见性变更有审计', acts.includes('field.visibility'));
+
+  /* ---- I. 版本号 ---- */
+  const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('★前台版本号为 2.4.0', /SITE_VERSION = '2\.4\.0'/.test(indexHtml38),
+    (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
+  t('★后台版本号为 2.4.0', /SITE_VERSION = '2\.4\.0'/.test(adminHtml38),
+    (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
+
+  /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
+  t('★测试桩支持 sql(字符串, 参数) 普通调用形式',
+    /typeof strings === 'string'/.test(fs.readFileSync(new URL('./test_e2e.mjs', import.meta.url), 'utf8')));
+  /* 只查代码行，剔除注释 —— 注释里会提到「本版本没有 sql.unsafe()」这句说明文字。
+     ⚠️ 判据要同时看行首和行尾：块注释的**中间行**以普通文字开头，
+        只在行尾带块注释结束符（这一条就是踩了这个坑才被漏过滤的）。 */
+  const admCode38 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8')
+    .split('\n').filter((l) => {
+      const s = l.trim();
+      if (!s) return false;
+      if (s.startsWith('*') || s.startsWith('//') || s.startsWith('/*')) return false;
+      if (s.endsWith('*/')) return false;
+      return true;
+    }).join('\n');
+  t('★admin.js 不再使用不存在的 sql.unsafe()',
+    !/sql\.unsafe\s*\(/.test(admCode38));
+  t('★写入路径用 isSafeFieldFormat（不挡系统列）',
+    /isSafeFieldFormat\s*\(\s*f\.field\s*\)/.test(admCode38));
+
+  /* ---- K. 前端护栏：字段管理 UI 与动态列 ---- */
+  const adminHtmlSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('后台有「字段管理」入口按钮', /id="pfFields"/.test(adminHtmlSrc));
+  t('后台有字段管理面板容器', /id="pfFieldPanel"/.test(adminHtmlSrc));
+  t('后台有 renderFieldPanel', /function renderFieldPanel/.test(adminHtmlSrc));
+  t('后台有新增字段弹窗', /function addFieldDialog/.test(adminHtmlSrc));
+  t('后台有删除字段确认', /function deleteFieldConfirm/.test(adminHtmlSrc));
+  t('后台有改名/排序', /function renameFieldDialog/.test(adminHtmlSrc) && /function sortFieldDialog/.test(adminHtmlSrc));
+  t('★后台字段管理支持快捷切换可见性', /data-fv="/.test(adminHtmlSrc));
+  t('★后台资料列表支持动态列', /function extraColsOf/.test(adminHtmlSrc));
+  t('后台编辑弹窗渲染自定义字段输入框', /data-xf="/.test(adminHtmlSrc));
+  t('★后台编辑弹窗支持单人可见性例外', /data-vf="/.test(adminHtmlSrc));
+  t('后台保存时带上 extra', /payload\.extra\s*=/.test(adminHtmlSrc));
+  t('后台保存时带上 fieldVis', /payload\.fieldVis\s*=/.test(adminHtmlSrc));
+  t('后台导出支持动态列', /extras\.forEach\(function\(f\)\{\s*\n?\s*row\[f\.label\]/.test(adminHtmlSrc)
+    || /row\[f\.label\]\s*=/.test(adminHtmlSrc));
+  t('后台导入识别自定义字段表头', /pick\(r, \[f\.label, f\.field\]\)/.test(adminHtmlSrc));
+  t('后台有 extra-row 样式', /\.extra-row\{/.test(adminHtmlSrc));
+  t('后台有 btn-xs 样式', /\.btn-xs\{/.test(adminHtmlSrc));
+  t('后台有 badge-purple 样式', /\.badge-purple\{/.test(adminHtmlSrc));
+
+  /* ---- L. ★带 body 的 api() 必须显式写 method:'POST' ----
+     踩坑记录（2026-10-09）：fetch 默认 GET，带 body 的 GET 会被浏览器直接抛
+     「Request with GET/HEAD method cannot have body」，表现为「按钮点了没反应」，
+     而且 api() 里 catch 到的是同步抛错 → 只弹一个 toast，排查很费劲。
+     所以这里做全量静态扫描：凡 api('...', { ...body... }) 而同一对花括号内没有
+     method 的，一律判红。 */
+  const badApiCalls = [];
+  {
+    const re = /api\(\s*'[^']*'\s*,\s*\{/g;
+    let m;
+    while ((m = re.exec(adminHtmlSrc)) !== null) {
+      /* 从 { 开始做括号配平，取出这个对象字面量 */
+      let i = m.index + m[0].length - 1, depth = 0, end = -1;
+      for (let k = i; k < adminHtmlSrc.length; k++) {
+        if (adminHtmlSrc[k] === '{') depth++;
+        else if (adminHtmlSrc[k] === '}') { depth--; if (depth === 0) { end = k; break; } }
+      }
+      if (end < 0) continue;
+      const obj = adminHtmlSrc.slice(i, end + 1);
+      if (/\bbody\s*:/.test(obj) && !/method\s*:/.test(obj)) badApiCalls.push(obj.slice(0, 90));
+    }
+  }
+  t('★所有带 body 的 api() 都显式声明了 POST',
+    badApiCalls.length === 0,
+    badApiCalls.length ? '漏了 ' + badApiCalls.length + ' 处：' + badApiCalls.join(' | ') : '');
+  t('本轮 5 个字段管理接口都走 POST',
+    ['set-visibility', 'add-field', 'update-field', 'delete-field']
+      .every((a) => new RegExp("api\\('/admin\\?action=" + a + "'[^)]*method\\s*:\\s*'POST'").test(adminHtmlSrc))
+    /* update-field 出现两次，delete-field 一次；上面的正则做了宽松匹配 */
+  );
+
+  const indexHtmlSrc = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('★前台搜索结果渲染额外字段', /p\.fields/.test(indexHtmlSrc) && /pc-extra/.test(indexHtmlSrc));
+  t('前台有 pc-extra 样式', /\.pc-extra\{/.test(indexHtmlSrc));
+  t('前台不在客户端做可见性判断（后端已滤过）',
+    !/visibility\s*===\s*'self'/.test(indexHtmlSrc.slice(indexHtmlSrc.indexOf('function renderContactResults'),
+                                                      indexHtmlSrc.indexOf('function renderContactResults') + 4000)));
 }
 
 console.log('\n' + '='.repeat(52));

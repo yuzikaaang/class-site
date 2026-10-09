@@ -157,6 +157,18 @@ alter table profiles add column if not exists title text;
    测试桩（sql.js）也无需额外适配，避开通配层差异。 */
 alter table profiles add column if not exists visibility_pref text;
 
+/* ---------------- 单人字段可见性例外（2026-10-09 加，幂等） ----------------
+   JSON 文本，存「这一条资料相对于全班默认值的**个人例外**」，例如：
+     {"student_id":"self","wechat":"public"}
+   站主原话：「还可以单独编辑某一个人，哪个对外，哪个不对外」。
+
+   ⚠️ 与 visibility_pref 的区别（两者不可混用）：
+     visibility_pref  —— 本人自己设的意愿，只能「收窄」，键只有 wechat/qq/phone
+     field_vis        —— 管理员设的例外，可收窄**也可放宽**（管理员有最终裁量权），
+                         键可以是任意已登记字段
+   只有管理员能写本列（后台编辑弹窗 / 人员级快捷切换）。 */
+alter table profiles add column if not exists field_vis text;
+
 /* ============================================================
    资料字段元数据（2026-10-08 新增，幂等可重复执行）
    ------------------------------------------------------------
@@ -172,11 +184,11 @@ alter table profiles add column if not exists visibility_pref text;
      committee 班委可见（团支书/班长/课代表等，见 http.js 的 isCommittee）
      self      仅本人可见（只有登录者查自己资料时返回）
 
-   ⚠️ 本列是**上限**，不是最终值。最终可见性还要与 profiles.visibility_pref
-      （本人意愿）取交集，且以更严的一侧为准。
+   ⚠️ 本列是**全班默认上限**，不是某人的最终值。最终可见性要三方取严：
+        本列(全班默认) ∩ profiles.visibility_pref(本人意愿) ∩ profiles.field_vis(单人例外)
 
-   is_custom：预置字段为 false；将来后台新增的自定义字段为 true，
-     便于 UI 区分「系统字段不可删」与「自定义字段可删」。
+   is_custom：预置字段为 false；后台新增的自定义字段为 true。
+     🔒 只有 is_custom = true 的字段允许删除（系统字段删了会带崩代码）。
    ============================================================ */
 create table if not exists profile_field_meta (
   field       text        primary key,                 -- 字段名，与 profiles 的列名 / API 字段名一致
@@ -190,8 +202,8 @@ create table if not exists profile_field_meta (
 
 /* ---------------- 预置字段元数据（幂等：已存在则不动，避免覆盖后台的改动） ----------------
    ⚠️ on conflict do nothing：后台改过 visibility 后，重跑本脚本不会把它改回去。
-   身份证号 / 发展团员编号本轮**只登记不建列**——先占好位置，
-   下轮后台加列后前端零改动即可展示。 */
+   ⚠️ 身份证号 / 发展团员编号于 2026-10-09（v2.4.0）起**真正建列**——
+      此前只登记元数据、profiles 表没有真实列，等于点了没用。 */
 insert into profile_field_meta (field, label, visibility, sort_order, is_custom) values
   ('name',            '姓名',         'public', 10,  false),
   ('student_id',      '学号',         'public', 20,  false),
@@ -205,6 +217,12 @@ insert into profile_field_meta (field, label, visibility, sort_order, is_custom)
   ('id_card',         '身份证号',      'self',   100, false),
   ('youth_league_no', '发展团员编号',   'self',   110, false)
 on conflict (field) do nothing;
+
+/* ---------------- 存量两个「只登记未建列」的字段补真列（2026-10-09，幂等） ----------------
+   默认 self（仅本人可见）：身份证号、团员编号属敏感信息，不该默认对外。
+   想放开由管理员在「资料管理 → 字段管理」里改，不必改代码。 */
+alter table profiles add column if not exists id_card text;
+alter table profiles add column if not exists youth_league_no text;
 
 /* ============================================================
    AI 助手账号（2026-10-05）

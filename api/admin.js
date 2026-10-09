@@ -24,6 +24,9 @@
    POST   /api/admin?action=batch-profiles            批量导入资料
    GET    /api/admin?action=field-meta                字段元数据（可见性一览，2026-10-08）
    POST   /api/admin?action=set-visibility            改某字段的可见性上限（2026-10-08）
+   POST   /api/admin?action=add-field                 新增自定义资料字段（2026-10-09 v2.4.0）
+   POST   /api/admin?action=delete-field              删除自定义资料字段（2026-10-09 v2.4.0）
+   POST   /api/admin?action=update-field              改字段的名称/排序/可见性（2026-10-09 v2.4.0）
 
    头衔任命 / AI 交接（2026-10-05 新增）
    GET    /api/admin?action=titles                    头衔列表（谁担任什么职务）
@@ -36,6 +39,7 @@
 import { getSql } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireAdmin, audit,
+  checkFieldName, isSafeFieldFormat, RESERVED_PROFILE_COLS,
 } from './_lib/http.js';
 import { hashPassword } from './_lib/password.js';
 import { listSecrets, saveSecret, deleteSecret } from './_lib/secrets-store.js';
@@ -89,6 +93,9 @@ export default async function handler(req, res) {
         case 'batch-profiles': return await batchProfiles(req, res, me, b);
         case 'bind-profiles':  return await bindProfiles(req, res, me, b);
         case 'set-visibility': return await setVisibility(req, res, me, b);
+        case 'add-field':      return await addField(req, res, me, b);
+        case 'delete-field':   return await deleteField(req, res, me, b);
+        case 'update-field':   return await updateField(req, res, me, b);
         case 'set-title':      return await setTitle(req, res, me, b);
         case 'handover-ai':    return await handoverAi(req, res, me, b);
         case 'save-secret':    return await saveAdminSecret(req, res, me, b);
@@ -1033,10 +1040,7 @@ async function listProfiles(req, res) {
   const st = cText(req.query.status, 16);   /* '' | none | pending | approved | rejected */
 
   const rows = await sql`
-    select p.id, p.name, p.student_id, p.politics, p.exam_no, p.role,
-           p.wechat, p.qq, p.phone, p.contact_status, p.reject_reason,
-           p.user_id, p.created_at, p.updated_at, p.visibility_pref,
-           u.username as bound_username
+    select p.*, u.username as bound_username
       from profiles p
       left join users u on u.id = p.user_id
      where (${q} = '' or coalesce(p.name,'') like '%' || ${q} || '%'
@@ -1056,9 +1060,14 @@ async function listProfiles(req, res) {
       from profiles
   `;
 
+  /* 自定义字段清单：列表要带出它们的值（Excel 导出、后台动态列都靠它） */
+  const editable = await loadEditableFields();
+
   return ok(res, {
     total: rows.length,
     counts: cnt[0] || { total: 0, pending: 0, approved: 0, claimed: 0 },
+    /* 字段元数据一并返回，后台可直接据此渲染动态列，省一次请求 */
+    fieldMeta: await loadFieldMeta(),
     profiles: rows.map((r) => ({
       id: Number(r.id),
       name: r.name || '',
@@ -1077,6 +1086,17 @@ async function listProfiles(req, res) {
       updatedAt: r.updated_at,
       /* 本人可见性意愿（2026-10-08）：后台资料列表用来标「🔒 私密」 */
       visibilityPref: safeJson(r.visibility_pref),
+      /* 单人可见性例外（2026-10-09 v2.4.0）：管理员给该条资料设的例外 */
+      fieldVis: safeJson(r.field_vis),
+      /* 自定义 / 可编辑字段的值（2026-10-09 v2.4.0）：键即字段名 */
+      extra: (() => {
+        const o = {};
+        for (const f of editable) {
+          const v = r[f.field];
+          if (v != null && v !== '') o[f.field] = String(v);
+        }
+        return o;
+      })(),
     })),
   });
 }
@@ -1121,9 +1141,97 @@ async function loadFieldMeta() {
   }
 }
 
-/** 读：字段可见性一览（后台「字段管理」用；本轮无 UI，先通接口） */
+/** 读：字段元数据一览（后台「字段管理」用） */
 async function fieldMeta(req, res) {
-  return ok(res, { fields: await loadFieldMeta() });
+  const fields = await loadFieldMeta();
+  /* 顺手带上每个字段「有多少条资料填了值」，后台一眼看出哪些字段是空摆设。
+     ⚠️ 用 sum(case when ...) 而不用 count(*) filter (where ...)：
+        filter 子句在部分驱动 / 测试桩（SQLite 老版本）上不支持，
+        会导致整个统计查询报错、counts 全空（表现为前端看不到填报数）。 */
+  const sql = getSql();
+  let counts = {};
+  let total = 0;
+  try {
+    /* 统计哪些列：固定列 + 全部登记过的字段（含自定义）。
+       ⚠️ 列名来自 meta 表（当初过了白名单），拼前再用 isSafeFieldFormat 复核。
+          这里**不能**用 checkFieldName —— 它含「禁止撞系统列名」黑名单，
+          会把 id_card / youth_league_no 这类系统列自己挡掉，统计永远为 0。 */
+    const cols = ['name', 'student_id', 'politics', 'exam_no', 'wechat', 'qq', 'phone']
+      .concat(fields.map((f) => f.field).filter((f) => {
+        const c = isSafeFieldFormat(f);
+        return c.ok && !['name', 'student_id', 'politics', 'exam_no', 'wechat', 'qq', 'phone', 'role', 'title'].includes(f);
+      }));
+    const uniq = [...new Set(cols)];
+    const cntExpr = (col) => `sum(case when coalesce(${col},'') <> '' then 1 else 0 end) as ${col}`;
+    const rows = await sql(
+      'select count(*) as total, ' + uniq.map(cntExpr).join(', ') + ' from profiles'
+    );
+    const r0 = rows[0] || {};
+    total = Number(r0.total || 0);
+    for (const k of Object.keys(r0)) {
+      if (k === 'total') continue;
+      counts[k] = Number(r0[k] || 0);
+    }
+  } catch (e) {
+    /* 老库可能还没补出 id_card/youth_league_no 列；计数失败不影响字段列表 */
+    console.warn('[admin] 统计字段填报数失败（忽略）：', e.message);
+    counts = {};
+  }
+  return ok(res, {
+    fields: fields.map((f) => ({ ...f, filledCount: counts[f.field] })),
+    totalProfiles: total,
+  });
+}
+
+/* ============================================================
+   动态字段的读写工具（2026-10-09 v2.4.0 新增）
+   ------------------------------------------------------------
+   自定义字段是 profiles 的真实列，读的时候 `select *` 就能拿到；
+   写的时候列名要拼进 SQL，所以必须：
+     ① 列名来自 meta 表（当初经过 checkFieldName 白名单）
+     ② 拼之前再过一次 checkFieldName，防历史脏数据
+     ③ 值一律用参数化
+   ============================================================ */
+
+/** 这些字段名有专门的处理逻辑（长度限制/审核状态等），不走「通用文本」通道 */
+const SPECIAL_FIELDS = ['name', 'student_id', 'politics', 'exam_no', 'role',
+  'wechat', 'qq', 'phone', 'contact_status', 'reject_reason', 'title'];
+
+/**
+ * 取出「可自定义字段」清单（系统字段里除特殊处理外 + 全部自定义字段）。
+ * 例如 id_card / youth_league_no 虽是系统字段（is_custom=false），
+ * 但也该能在编辑弹窗里填值 —— 它们不在 SPECIAL_FIELDS 里。
+ */
+async function loadEditableFields() {
+  const all = await loadFieldMeta();
+  return all.filter((f) => !SPECIAL_FIELDS.includes(f.field));
+}
+
+/**
+ * 从请求体里挑出某个自定义字段的值。
+ * 非字符串一律忽略（避免前端传对象把列写坏）；超长截断。
+ */
+function pickCustomValue(raw, maxLen = 200) {
+  if (raw == null) return null;
+  if (typeof raw === 'object') return null;
+  const s = String(raw).trim();
+  return s ? s.slice(0, maxLen) : '';
+}
+
+/**
+ * 校验并整理前端传来的「单人可见性例外」。
+ * 只保留 meta 表里登记过、且值合法的键。
+ * @returns {string|null} JSON 文本；无有效内容时返回 null
+ */
+function buildFieldVis(raw, allowedFields) {
+  if (!raw || typeof raw !== 'object') return null;
+  const clean = {};
+  for (const k of Object.keys(raw)) {
+    if (!allowedFields.includes(k)) continue;
+    const v = String(raw[k] || '').trim();
+    if (ALLOWED_VIS.includes(v)) clean[k] = v;
+  }
+  return Object.keys(clean).length ? JSON.stringify(clean) : null;
 }
 
 /* ---------------- 写：调整某条资料的可见性上限（管理员权限） ----------------
@@ -1156,6 +1264,183 @@ async function setVisibility(req, res, me, b) {
   `;
   await audit(me.id, 'field.visibility', 'profile_field', field, vis);
   return ok(res, { message: '已把「' + field + '」的可见范围改为 ' + vis, field, visibility: vis });
+}
+
+/* ============================================================
+   自定义资料字段的增 / 删 / 改（2026-10-09 v2.4.0 新增）
+   ------------------------------------------------------------
+   站主原话：「以后如果可以的话，我能不能在后台直接加……比如新增用户
+             资料的某个区域」。
+
+   实现路线：profiles 表加**真实列**（而非 JSON 塞一列）。理由：
+     · 加真实列后，Excel 导出/导入、检索、排序全都能直接复用现有 SQL，
+       不用为每个字段写一套 JSON 取值逻辑
+     · 代价是字段名要拼进 DDL —— 由 http.js 的 checkFieldName 严格白名单兜住
+
+   🔴 三条铁律（改本段代码前务必确认）：
+     1. 任何拼进 SQL 的字段名**必须先过 checkFieldName**
+     2. 新增字段的 alter table **绝不放进 ensureSchema**（见那里的注释：
+        schemaReady 单次标记 + catch 吞错，一个坏字段能让整段自愈失效）
+     3. 只有 is_custom = true 的字段允许删除，系统字段一律拒绝
+   ============================================================ */
+
+/** 读单个字段的元数据 */
+async function readFieldRow(sql, field) {
+  const rows = await sql`
+    select field, label, visibility, sort_order, is_custom
+      from profile_field_meta where field = ${field} limit 1
+  `;
+  return rows.length ? rows[0] : null;
+}
+
+/**
+ * 新增自定义资料字段。
+ * body: { field: 'school_id', label: '学籍号', visibility?: 'public|committee|self', sortOrder?: 120 }
+ *
+ * 步骤：校验字段名 → 查重 → alter table 建列 → insert meta 行。
+ * ⚠️ 建列成功但 insert meta 失败时，要回滚把列删掉，避免留下「有列无元数据」
+ *    的幽灵字段（前台永远看不到它，但 Excel 导出会多一列，极难排查）。
+ */
+async function addField(req, res, me, b) {
+  const chk = checkFieldName(b.field);
+  if (!chk.ok) return fail(res, 400, chk.reason);
+  const field = chk.field;
+
+  const label = cText(b.label, 20);
+  if (!label) return fail(res, 400, '请填写字段的中文名称（如「学籍号」）');
+
+  const visRaw = String(b.visibility || 'self').trim();
+  const visibility = ALLOWED_VIS.includes(visRaw) ? visRaw : 'self';
+  /* 新字段默认排到最后：取当前最大 sort_order + 10 */
+  let sortOrder = Number(b.sortOrder);
+  if (!Number.isFinite(sortOrder) || sortOrder < 0) sortOrder = 0;
+
+  const sql = getSql();
+
+  const exists = await readFieldRow(sql, field);
+  if (exists) return fail(res, 409, '字段「' + field + '」已存在（' + (exists.label || '') + '）');
+
+  if (RESERVED_PROFILE_COLS.includes(field)) {
+    return fail(res, 400, '「' + field + '」是系统保留列名，不能用作自定义字段');
+  }
+
+  if (!sortOrder) {
+    const mx = await sql`select coalesce(max(sort_order), 0) as m from profile_field_meta`;
+    sortOrder = Number((mx[0] && mx[0].m) || 0) + 10;
+  }
+
+  /* 🔴 字段名已过白名单校验，这里可以安全拼接（列名无法参数化）。
+     ⚠️ 调用形式是 sql(字符串, 参数) —— @neondatabase/serverless 0.10.4
+        的标签函数本身把整条 SQL 作为 query 发出、params 单独传，
+        所以 DDL 走普通调用形式即可；本版本**没有** sql.unsafe()。 */
+  try {
+    await sql(`alter table profiles add column if not exists ${field} text`);
+  } catch (e) {
+    return fail(res, 500, '建列失败：' + String(e.message || e).slice(0, 200));
+  }
+
+  try {
+    await sql`
+      insert into profile_field_meta (field, label, visibility, sort_order, is_custom)
+      values (${field}, ${label}, ${visibility}, ${sortOrder}, true)
+    `;
+  } catch (e) {
+    /* 回滚：把刚建的列删掉，避免幽灵字段 */
+    try {
+      await sql(`alter table profiles drop column if exists ${field}`);
+    } catch (e2) {
+      console.warn('[admin] 回滚自定义字段列失败：', field, e2.message);
+    }
+    return fail(res, 500, '登记字段失败：' + String(e.message || e).slice(0, 200));
+  }
+
+  await audit(me.id, 'field.add', 'profile_field', field, label + '/' + visibility);
+  return ok(res, {
+    message: '已新增字段「' + label + '」（' + field + '）',
+    field, label, visibility, sortOrder,
+  });
+}
+
+/**
+ * 删除自定义资料字段。
+ * body: { field }
+ * 只允许删 is_custom = true 的字段；系统字段一律拒绝（删了会带崩代码）。
+ * 先删 meta 行再删列：万一删列失败，至少前台不会再展示这个字段。
+ */
+async function deleteField(req, res, me, b) {
+  const field = String(b.field || '').trim().toLowerCase();
+  if (!field) return fail(res, 400, '缺少 field');
+
+  const sql = getSql();
+  const row = await readFieldRow(sql, field);
+  if (!row) return fail(res, 404, '没有这个字段：' + field);
+  if (!row.is_custom) {
+    return fail(res, 400, '「' + (row.label || field) + '」是系统字段，不能删除（只能改可见性或名称）');
+  }
+
+  await sql`delete from profile_field_meta where field = ${field}`;
+
+  /* 列名已确认来自 meta 表（即当初经过白名单的），再校验一次以防历史脏数据 */
+  const chk = isSafeFieldFormat(field);
+  if (chk.ok) {
+    try {
+      await sql(`alter table profiles drop column if exists ${field}`);
+    } catch (e) {
+      console.warn('[admin] 删自定义字段的列失败（meta 已删，前台不再展示）：', field, e.message);
+    }
+  }
+
+  await audit(me.id, 'field.delete', 'profile_field', field, row.label || '');
+  return ok(res, { message: '已删除字段「' + (row.label || field) + '」', field });
+}
+
+/**
+ * 修改字段的显示名 / 排序 / 可见性默认值。
+ * body: { field, label?, sortOrder?, visibility? }
+ * ⚠️ 字段名（列名）本身不可改 —— 改列名要动数据，风险远大于收益。
+ *    想换名字就删了重建（自定义字段）或只改 label（系统字段）。
+ */
+async function updateField(req, res, me, b) {
+  const field = String(b.field || '').trim().toLowerCase();
+  if (!field) return fail(res, 400, '缺少 field');
+
+  const sql = getSql();
+  const row = await readFieldRow(sql, field);
+  if (!row) return fail(res, 404, '没有这个字段：' + field);
+
+  const label = b.label != null ? cText(b.label, 20) : null;
+  if (b.label != null && !label) return fail(res, 400, '字段名称不能为空');
+
+  let visibility = null;
+  if (b.visibility != null) {
+    const v = String(b.visibility).trim();
+    if (!ALLOWED_VIS.includes(v)) return fail(res, 400, '可见性只能是 public / committee / self');
+    visibility = v;
+  }
+
+  let sortOrder = null;
+  if (b.sortOrder != null) {
+    const n = Number(b.sortOrder);
+    if (!Number.isFinite(n)) return fail(res, 400, '排序值必须是数字');
+    sortOrder = Math.max(0, Math.min(9999, Math.round(n)));
+  }
+
+  if (label == null && visibility == null && sortOrder == null) {
+    return fail(res, 400, '没有要修改的内容');
+  }
+
+  await sql`
+    update profile_field_meta
+       set label      = ${label != null ? label : row.label},
+           visibility = ${visibility != null ? visibility : row.visibility},
+           sort_order = ${sortOrder != null ? sortOrder : row.sort_order},
+           updated_at = now()
+     where field = ${field}
+  `;
+
+  await audit(me.id, 'field.update', 'profile_field', field,
+    [label, visibility, sortOrder].filter((x) => x != null).join('/'));
+  return ok(res, { message: '已更新字段「' + (label || row.label || field) + '」', field });
 }
 
 /** 单条资料详情 */
@@ -1203,6 +1488,17 @@ async function profileDetail(req, res) {
       updatedAt: r.updated_at,
       /* 本人可见性意愿（2026-10-08）：编辑弹窗里回显「仅自己可见」开关 */
       visibilityPref: safeJson(r.visibility_pref),
+      /* 单人可见性例外（2026-10-09 v2.4.0）：管理员给这一条资料设的字段例外 */
+      fieldVis: safeJson(r.field_vis),
+      /* 可编辑字段（自定义 + id_card/youth_league_no）的当前值 */
+      extra: await (async () => {
+        const o = {};
+        for (const f of await loadEditableFields()) {
+          const v = r[f.field];
+          if (v != null && v !== '') o[f.field] = String(v);
+        }
+        return o;
+      })(),
       /* 字段元数据快照：让后台编辑弹窗知道每个字段的当前可见性上限 */
       fieldMeta: await loadFieldMeta(),
     },
@@ -1311,6 +1607,22 @@ async function saveProfile(req, res, me, b) {
     prefJson = JSON.stringify(clean);
   }
 
+  /* 单人可见性例外（2026-10-09 v2.4.0）：管理员给这一条资料设的字段例外。
+     ⚠️ 与 visibilityPref 的区别：这个是**管理员**设的，可以放宽也可以收窄；
+        visibilityPref 是本人设的，只能收窄。两者最后一起与全班默认取严。 */
+  const editable = await loadEditableFields();
+  const editableNames = editable.map((f) => f.field);
+  const fieldVisJson = buildFieldVis(b.fieldVis, editableNames);
+
+  /* 自定义字段的值：只接受 meta 表登记过的键，避免前端乱传键名。
+     值统一按「短文本」处理（<200 字），空字符串表示「清空该字段」。 */
+  const customVals = {};
+  if (b.extra && typeof b.extra === 'object') {
+    for (const f of editable) {
+      if (f.field in b.extra) customVals[f.field] = pickCustomValue(b.extra[f.field]);
+    }
+  }
+
   if (!name && !sid) return fail(res, 400, '姓名与学号至少填一项');
 
   const sql = getSql();
@@ -1323,57 +1635,88 @@ async function saveProfile(req, res, me, b) {
     }
   }
 
+  /* ---- 动态拼 UPDATE 的列（2026-10-09 v2.4.0） ----
+     固定列用参数化；自定义列的**列名**来自 meta 表（当初过了白名单），
+     拼之前再用 checkFieldName 复核一次，值仍然走参数化。 */
+  const sets = [
+    'name = $1', 'student_id = $2', 'politics = $3', 'exam_no = $4', 'role = $5',
+    'wechat = $6', 'qq = $7', 'phone = $8', 'contact_status = $9',
+  ];
+
   if (id) {
     /* 修改：只更新传了的字段，避免把没传的字段清空 */
     const cur = await sql`select * from profiles where id = ${id} limit 1`;
     if (!cur.length) return fail(res, 404, '资料不存在');
     const c = cur[0];
 
-    /* 可见性只在传了新值时覆盖；否则保留本人自己设的 */
+    const params = [
+      name || c.name, sid || c.student_id, politics || c.politics,
+      examNo || c.exam_no, role || c.role,
+      wechat !== '' ? wechat : c.wechat,
+      qq !== '' ? qq : c.qq,
+      phone !== '' ? phone : c.phone,
+      st || c.contact_status,
+    ];
+
+    /* 可见性意愿：只在传了新值时覆盖；否则保留本人自己设的 */
     if (prefJson != null) {
-      await sql`
-        update profiles
-           set name      = ${name || c.name},
-               student_id = ${sid || c.student_id},
-               politics  = ${politics || c.politics},
-               exam_no   = ${examNo || c.exam_no},
-               role      = ${role || c.role},
-               wechat    = ${wechat !== '' ? wechat : c.wechat},
-               qq        = ${qq !== '' ? qq : c.qq},
-               phone     = ${phone !== '' ? phone : c.phone},
-               contact_status = ${st || c.contact_status},
-               visibility_pref = ${prefJson},
-               updated_at = now()
-         where id = ${id}
-      `;
-    } else {
-      await sql`
-        update profiles
-           set name      = ${name || c.name},
-               student_id = ${sid || c.student_id},
-               politics  = ${politics || c.politics},
-               exam_no   = ${examNo || c.exam_no},
-               role      = ${role || c.role},
-               wechat    = ${wechat !== '' ? wechat : c.wechat},
-               qq        = ${qq !== '' ? qq : c.qq},
-               phone     = ${phone !== '' ? phone : c.phone},
-               contact_status = ${st || c.contact_status},
-               updated_at = now()
-         where id = ${id}
-      `;
+      params.push(prefJson);
+      sets.push('visibility_pref = $' + params.length);
     }
+    /* 单人例外：传了 fieldVis（哪怕是 {}）就覆盖，方便管理员清空 */
+    if (b.fieldVis && typeof b.fieldVis === 'object') {
+      params.push(fieldVisJson);
+      sets.push('field_vis = $' + params.length);
+    }
+
+    /* 自定义字段：传了的才写 */
+    for (const f of editable) {
+      if (!(f.field in customVals)) continue;
+      /* ⚠️ 这里用 isSafeFieldFormat 而不是 checkFieldName：
+         后者含「禁止撞系统列名」的黑名单，而 id_card / youth_league_no
+         本身就是系统列 —— 用 checkFieldName 会把它们自己挡掉，
+         表现为「保存返回成功但值没写进去」。 */
+      const chk = isSafeFieldFormat(f.field);
+      if (!chk.ok) continue;   /* 历史脏字段直接跳过，不让它把整个保存搞挂 */
+      params.push(customVals[f.field]);
+      sets.push(chk.field + ' = $' + params.length);
+    }
+
+    params.push(id);
+    await sql(
+      'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
+      params
+    );
     await audit(me.id, 'profile.update', 'profile', String(id), name || sid);
     return ok(res, { message: '已保存', id });
   }
 
-  /* 新增 */
-  const ins = await sql`
-    insert into profiles (name, student_id, politics, exam_no, role, wechat, qq, phone, contact_status)
-    values (${name || null}, ${sid || null}, ${politics || null}, ${examNo || null}, ${role},
-            ${wechat || null}, ${qq || null}, ${phone || null},
-            ${st || (wechat || qq || phone ? 'approved' : 'none')})
-    returning id
-  `;
+  /* ---- 新增 ---- */
+  const insCols = ['name', 'student_id', 'politics', 'exam_no', 'role',
+    'wechat', 'qq', 'phone', 'contact_status'];
+  const insVals = [name || null, sid || null, politics || null, examNo || null, role,
+    wechat || null, qq || null, phone || null,
+    st || (wechat || qq || phone ? 'approved' : 'none')];
+  const insParams = ['$1', '$2', '$3', '$4', '$5', '$6', '$7', '$8', '$9'];
+
+  if (b.fieldVis && typeof b.fieldVis === 'object') {
+    insCols.push('field_vis');
+    insVals.push(fieldVisJson);
+    insParams.push('$' + insVals.length);
+  }
+  for (const f of editable) {
+    if (!(f.field in customVals)) continue;
+    const chk = isSafeFieldFormat(f.field);   /* 同上：不能挡系统列 */
+    if (!chk.ok) continue;
+    insCols.push(chk.field);
+    insVals.push(customVals[f.field]);
+    insParams.push('$' + insVals.length);
+  }
+
+  const ins = await sql(
+    'insert into profiles (' + insCols.join(', ') + ') values (' + insParams.join(', ') + ') returning id',
+    insVals
+  );
   const newId = Number(ins[0].id);
   await audit(me.id, 'profile.create', 'profile', String(newId), name || sid);
   return ok(res, { message: '已新增', id: newId });
@@ -1393,10 +1736,14 @@ async function deleteProfile(req, res, me, b) {
 
 /**
  * 批量导入资料。
- * body: { rows: [{ name, studentId, politics, examNo?, role, wechat?, qq?, phone? }, ...] }
+ * body: { rows: [{ name, studentId, politics, examNo?, role, wechat?, qq?, phone?,
+ *                  extra?: { [字段名]: 值 } }, ...] }
  * 按学号或姓名判断是新增还是更新（有就更新，没有就插入）。
  * 单批上限与用户批量导入保持一致（60 条），由前端分片调用。
  * 逐条返回错误与行号，方便对照 Excel 修数据。
+ *
+ * v2.4.0（2026-10-09）：支持 extra —— Excel 表头里的自定义 / 额外字段。
+ * 后端按 profile_field_meta 登记过的字段名收，其余键一律忽略（防脏数据）。
  */
 async function batchProfiles(req, res, me, b) {
   const list = Array.isArray(b.rows) ? b.rows : [];
@@ -1406,6 +1753,11 @@ async function batchProfiles(req, res, me, b) {
   const sql = getSql();
   let created = 0, updated = 0;
   const errors = [];
+
+  /* 自定义 / 额外字段（2026-10-09 v2.4.0）：Excel 导入的表头里可能有站主自己加的字段，
+     前端会按中文表头识别出来塞进 raw.extra。这里先把可写字段名单拉一份，
+     循环里逐条拼进 SQL —— 否则导入进来这些值会被静默丢掉（只写固定的 8 列）。 */
+  const editable = await loadEditableFields();
 
   for (let i = 0; i < list.length; i++) {
     const raw = list[i] || {};
@@ -1419,6 +1771,17 @@ async function batchProfiles(req, res, me, b) {
       const qq = cContact(raw.qq);
       const phone = cContact(raw.phone);
 
+      /* 该行实际带了的自定义字段值（键必须是 meta 表登记过的） */
+      const ex = {};
+      if (raw.extra && typeof raw.extra === 'object') {
+        for (const f of editable) {
+          if (f.field in raw.extra) ex[f.field] = pickCustomValue(raw.extra[f.field]);
+        }
+      }
+      /* 复核列名安全性：列名无法参数化，必须白名单兜住。
+         用 isSafeFieldFormat（不查重名），因为 id_card 等本身就是系统列。 */
+      const exCols = Object.keys(ex).filter((k) => isSafeFieldFormat(k).ok);
+
       if (!name && !sid) {
         errors.push({ index: i, name, studentId: sid, reason: '姓名与学号都为空' });
         continue;
@@ -1431,28 +1794,38 @@ async function batchProfiles(req, res, me, b) {
 
       if (hit.length) {
         const pid = Number(hit[0].id);
-        await sql`
-          update profiles
-             set name = ${name || null},
-                 student_id = ${sid || null},
-                 politics = ${politics || null},
-                 exam_no = ${examNo || null},
-                 role = ${role},
-                 wechat = ${wechat || null},
-                 qq = ${qq || null},
-                 phone = ${phone || null},
-                 contact_status = ${(wechat || qq || phone) ? 'approved' : 'none'},
-                 updated_at = now()
-           where id = ${pid}
-        `;
+        const params = [
+          name || null, sid || null, politics || null, examNo || null, role,
+          wechat || null, qq || null, phone || null,
+          (wechat || qq || phone) ? 'approved' : 'none',
+        ];
+        const sets = [
+          'name = $1', 'student_id = $2', 'politics = $3', 'exam_no = $4', 'role = $5',
+          'wechat = $6', 'qq = $7', 'phone = $8', 'contact_status = $9',
+        ];
+        for (const col of exCols) {
+          params.push(ex[col]);
+          sets.push(col + ' = $' + params.length);
+        }
+        params.push(pid);
+        await sql(
+          'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
+          params
+        );
         updated++;
       } else {
-        await sql`
-          insert into profiles (name, student_id, politics, exam_no, role, wechat, qq, phone, contact_status)
-          values (${name || null}, ${sid || null}, ${politics || null}, ${examNo || null}, ${role},
-                  ${wechat || null}, ${qq || null}, ${phone || null},
-                  ${(wechat || qq || phone) ? 'approved' : 'none'})
-        `;
+        const cols = ['name', 'student_id', 'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status', ...exCols];
+        const params = [
+          name || null, sid || null, politics || null, examNo || null, role,
+          wechat || null, qq || null, phone || null,
+          (wechat || qq || phone) ? 'approved' : 'none',
+        ];
+        for (const col of exCols) params.push(ex[col]);
+        const ph = params.map((_, k) => '$' + (k + 1)).join(', ');
+        await sql(
+          'insert into profiles (' + cols.join(', ') + ') values (' + ph + ')',
+          params
+        );
         created++;
       }
     } catch (e) {

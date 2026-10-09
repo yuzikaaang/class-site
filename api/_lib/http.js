@@ -99,9 +99,12 @@ export async function ensureSchema(sql) {
        授权判定只认本列的服务端值，绝不接受前端传参。 */
     await s`alter table profiles add column if not exists title text`;
     /* 本人可见性意愿（2026-10-08 新增）：JSON 文本，存本人愿意公开的字段。
-       最终可见性 = 后台上限（profile_field_meta.visibility）∩ 本人意愿，取更严一侧。 */
+       最终可见性 = 全班默认（profile_field_meta.visibility）∩ 本人意愿 ∩ 单人例外，取最严一侧。 */
     await s`alter table profiles add column if not exists visibility_pref text`;
-    /* 资料字段元数据（2026-10-08 新增）：可见性分档 + 下轮自定义字段的地基。
+    /* 单人字段可见性例外（2026-10-09 新增）：JSON 文本，管理员给某一条资料设的例外。
+       与 visibility_pref 的区别见 schema.sql 该列的注释。 */
+    await s`alter table profiles add column if not exists field_vis text`;
+    /* 资料字段元数据（2026-10-08 新增）：可见性分档 + 自定义字段的地基。
        详见 schema.sql 中该表的注释。 */
     await s`
       create table if not exists profile_field_meta (
@@ -130,6 +133,15 @@ export async function ensureSchema(sql) {
         ('youth_league_no', '发展团员编号',   'self',   110, false)
       on conflict (field) do nothing
     `;
+    /* 2026-10-09（v2.4.0）：让上面两个「只登记未建列」的字段真正有列。
+       ⚠️ 这里只补**预置**字段的列。
+          后台新增的自定义字段**绝不能**放进来：
+          schemaReady 是「每实例只跑一次」的标记，而本 try-catch 一旦在
+          某条 DDL 上报错就会吞掉异常、跳过后面所有语句 —— 把动态字段
+          塞进来，一个坏字段就能让整段自愈失效。自定义字段一律在
+          api/admin.js 的 addField 里「当场 alter table」。 */
+    await s`alter table profiles add column if not exists id_card text`;
+    await s`alter table profiles add column if not exists youth_league_no text`;
     /* 标记 AI 账号，2026-10-05 新增。用于「AI 可编辑云端内容」与后续交接。 */
     await s`
       alter table users add column if not exists is_ai
@@ -439,6 +451,122 @@ export function isCommittee(u) {
   if (u.role === 'admin' || u.isAI) return true;
   const list = splitTitles(u.title);
   return list.some((t) => COMMITTEE_TITLES.includes(t));
+}
+
+/* ============================================================
+   自定义资料字段：字段名校验（2026-10-09 v2.4.0 新增）
+   ------------------------------------------------------------
+   🔴 这是本功能**唯一的 SQL 注入防线**，改动前请先读完本段。
+
+   为什么必须白名单：
+     站主需求是「后台直接新增一个资料字段」，实现上要执行
+       alter table profiles add column <字段名> text
+     —— 而 `sql` 模板标记只能参数化**值**，**列名/表名无法参数化**。
+     字段名只能字符串拼接进 SQL。若不校验，管理员（或任何拿到管理员
+     令牌的人）传 field = `x text; drop table profiles; --`
+     就是一条完整的 SQL 注入。
+     所以：**只允许严格匹配下面正则的字段名**，其余一律拒绝。
+
+   为什么要黑名单：
+     即便格式合法，若字段名撞上 profiles 已有列，`add column` 会报错
+     或被 if not exists 静默跳过 —— 而 meta 表却新增了一行，
+     造成「元数据说有、列也有但含义完全不同」的错位。
+     最危险的是 name_hash / user_id / visibility_pref 这类**有业务语义**的列。
+     所以格式校验通过后还要再挡一层列名黑名单。
+   ============================================================ */
+
+/** 字段名格式：小写字母开头，后跟小写字母/数字/下划线，总长 ≤ 31 */
+export const FIELD_NAME_RE = /^[a-z][a-z0-9_]{0,30}$/;
+
+/**
+ * profiles 表**已有**的列名 —— 自定义字段禁止占用。
+ * 与 api/schema.sql 的 profiles 建表保持一致；加列后请同步更新本清单。
+ */
+export const RESERVED_PROFILE_COLS = [
+  'id', 'name', 'name_hash', 'student_id', 'politics', 'exam_no', 'role',
+  'wechat', 'qq', 'phone', 'contact_status', 'reject_reason', 'user_id',
+  'created_at', 'updated_at',
+  'title', 'visibility_pref', 'field_vis',
+  'id_card', 'youth_league_no',
+];
+
+/**
+ * 校验自定义字段名是否可用。
+ * @param {string} raw 前端传来的字段名
+ * @returns {{ok:true, field:string} | {ok:false, reason:string}}
+ */
+export function checkFieldName(raw) {
+  const field = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (!field) return { ok: false, reason: '缺少字段名' };
+  if (field.length > 31) return { ok: false, reason: '字段名最长 31 个字符' };
+  if (!FIELD_NAME_RE.test(field)) {
+    return {
+      ok: false,
+      reason: '字段名只能用小写字母开头，由小写字母、数字、下划线组成（如 school_id）',
+    };
+  }
+  /* SQL 关键字也挡一下：虽然加了引号后 PG 能容忍，但拼进 SQL 容易出意外 */
+  if (SQL_KEYWORDS.has(field)) {
+    return { ok: false, reason: '「' + field + '」是数据库保留字，请换一个名字' };
+  }
+  if (RESERVED_PROFILE_COLS.includes(field)) {
+    return { ok: false, reason: '「' + field + '」与系统已有字段重名，请换一个名字' };
+  }
+  return { ok: true, field };
+}
+
+/**
+ * 只验「格式是否合法」，不查重名黑名单。
+ *
+ * 用途：写入路径校验**已在 meta 表里登记过**的字段名。
+ *   meta 表里的字段当初都过了 checkFieldName（含重名检查），
+ *   所以这里只需防「历史脏数据 / 迁移异常」混进非法字符即可。
+ *
+ * ⚠️ 不要用它替代 checkFieldName 的「新增字段」入口校验 ——
+ *    新增字段必须用 checkFieldName（要挡住撞名与保留字）。
+ *    两者混用的典型 bug：id_card 这类**系统字段**在
+ *    RESERVED_PROFILE_COLS 里，若写入路径也用 checkFieldName，
+ *    它会被自己的黑名单挡掉，表现为「保存成功但值没写进去」
+ *    （2026-10-09 实际踩过，测试第 38 节抓出来的）。
+ *
+ * @param {string} raw
+ * @returns {{ok:true, field:string} | {ok:false, reason:string}}
+ */
+export function isSafeFieldFormat(raw) {
+  const field = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (!field) return { ok: false, reason: '缺少字段名' };
+  if (field.length > 31) return { ok: false, reason: '字段名最长 31 个字符' };
+  if (!FIELD_NAME_RE.test(field)) return { ok: false, reason: '字段名格式非法' };
+  if (SQL_KEYWORDS.has(field)) return { ok: false, reason: '字段名是数据库保留字' };
+  return { ok: true, field };
+}
+
+/** 常见 SQL 保留字（做成字段名会跟拼接逻辑打架，一律挡掉） */
+const SQL_KEYWORDS = new Set([
+  'select', 'insert', 'update', 'delete', 'drop', 'table', 'where', 'from',
+  'order', 'group', 'by', 'index', 'view', 'user', 'column', 'constraint',
+  'primary', 'foreign', 'references', 'check', 'default', 'null', 'and', 'or',
+  'not', 'join', 'left', 'right', 'inner', 'outer', 'union', 'values', 'set',
+  'into', 'alter', 'add', 'create', 'grant', 'revoke', 'limit', 'offset',
+  'distinct', 'having', 'case', 'when', 'then', 'else', 'end', 'as', 'on',
+  'text', 'int', 'bigint', 'boolean', 'json', 'jsonb', 'timestamp', 'timestamptz',
+]);
+
+/**
+ * 可见性三档的严格程度排序（数字越大越严）。
+ * 用于「三方取严」：全班默认 ∩ 本人意愿 ∩ 单人例外。
+ */
+export const VIS_RANK = { public: 0, committee: 1, self: 2 };
+
+/** 取两档中更严的一档；任一为 undefined 时返回另一方 */
+export function stricterVis(a, b) {
+  if (a == null) return b;
+  if (b == null) return a;
+  const ra = VIS_RANK[a];
+  const rb = VIS_RANK[b];
+  if (ra == null) return b;
+  if (rb == null) return a;
+  return ra >= rb ? a : b;
 }
 
 /**

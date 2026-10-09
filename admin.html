@@ -347,6 +347,18 @@ tbody tr.sel{background:var(--tint-2)}
 /* 「当前在线」小绿点（配合最后上线时间显示） */
 .dot-on{display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:5px;vertical-align:middle;box-shadow:0 0 0 3px rgba(34,197,94,.16)}
 .badge-blue{background:var(--info-bg);color:var(--info)}
+/* 紫色 badge：标「管理员给这条资料设过字段例外」（2026-10-09 v2.4.0） */
+.badge-purple{background:#f3e8ff;color:#7e22ce}
+/* 超小按钮：字段管理里的「公开/班委可见/仅本人」快捷切换（2026-10-09 v2.4.0） */
+.btn-xs{height:26px;padding:0 9px;font-size:.71rem;border-radius:7px}
+.btn-xs[disabled]{opacity:.45;cursor:not-allowed}
+/* 编辑弹窗里的「自定义字段 + 可见范围」行：标签 / 输入框 / 下拉三段（2026-10-09 v2.4.0） */
+.extra-row{display:grid;grid-template-columns:96px 1fr 118px;gap:8px;align-items:center;margin-bottom:8px}
+.extra-lab{font-size:.8rem;color:var(--fg-2);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.extra-vis{font-size:.76rem}
+@media (max-width:560px){
+  .extra-row{grid-template-columns:1fr;gap:5px}
+}
 /* 头衔任命弹窗的选项网格（2026-10-05 加） */
 .tt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
 .tt-item{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:.8rem;user-select:none;transition:.15s}
@@ -827,7 +839,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.3.9';
+var SITE_VERSION = '2.4.0';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -4458,6 +4470,7 @@ function renderProfiles(){
     +   '<button class="btn btn-sm" id="pfAdd">' + svg('plus', 14) + '新增资料</button>'
     +   '<button class="btn btn-sm btn-secondary" id="pfImport">' + svg('upload', 14) + 'Excel 导入</button>'
     +   '<button class="btn btn-sm btn-secondary" id="pfExport">' + svg('download', 14) + '导出</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="pfFields">' + svg('layers', 14) + '字段管理</button>'
     +   '<span style="flex:1"></span>'
     +   '<span class="muted" style="font-size:.78rem" id="pfClaim"></span>'
     + '</div>'
@@ -4468,6 +4481,12 @@ function renderProfiles(){
     +   '每一次查询都会记进「查看记录」。'
     + '</div>'
 
+    /* 字段管理区（2026-10-09 v2.4.0）：默认折叠，点「字段管理」展开。
+       站主原话：「以后如果可以的话，我能不能在后台直接加……比如新增用户资料的某个区域」。 */
+    + '<section class="panel" id="pfFieldPanel" style="display:none;margin-bottom:16px">'
+    +   '<div id="pfFieldBody"><div class="loading"><div class="spinner"></div>加载字段…</div></div>'
+    + '</section>'
+
     + '<section class="panel"><div id="pfBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
 
   $('pfSearch').oninput = debounce(function(e){
@@ -4477,6 +4496,12 @@ function renderProfiles(){
   $('pfAdd').onclick     = function(){ profileDialog(null); };
   $('pfImport').onclick  = profileImportDialog;
   $('pfExport').onclick  = profileExport;
+  $('pfFields').onclick  = function(){
+    var panel = $('pfFieldPanel');
+    var open = panel.style.display !== 'none';
+    panel.style.display = open ? 'none' : 'block';
+    if(!open){ renderFieldPanel(); panel.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+  };
 
   Array.prototype.forEach.call($('pfChips').querySelectorAll('[data-st]'), function(b){
     b.onclick = function(){
@@ -4497,11 +4522,240 @@ function loadProfiles(){
     S.list   = j.profiles || [];
     S.total  = j.total || 0;
     S.counts = j.counts || {};
+    /* 字段元数据（2026-10-09 v2.4.0）：列表要按它渲染动态列 */
+    if(Array.isArray(j.fieldMeta)) S.fieldMeta = j.fieldMeta;
     paintProfiles();
   }).catch(function(e){
     var b = $('pfBody');
     if(b) b.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
   });
+}
+
+/* ============================================================================
+ * 字段管理（2026-10-09 v2.4.0）
+ * ----------------------------------------------------------------------------
+ * 站主原话：「以后如果可以的话，我能不能在后台直接加……比如新增用户资料的某个区域」。
+ *
+ * 三个能力：
+ *   ① 看：列出所有字段（中文名 / 英文键 / 可见性 / 排序 / 填报数 / 是否自定义）
+ *   ② 加：新增自定义字段（自动 ALTER TABLE 加真列）
+ *   ③ 改：改中文名、改排序、快捷切换可见性（公开 / 班委 / 仅本人）
+ *   ④ 删：只能删自定义字段（系统字段删了会带崩代码）
+ *
+ * ⚠️ 英文键名只能是小写字母开头 + 小写字母/数字/下划线，服务端有严格白名单
+ *    （因为列名要拼进 ALTER TABLE，无法参数化）。前端这里先挡一道，体验更好。
+ * ========================================================================= */
+var VIS_LABEL = { public:'公开', committee:'班委可见', self:'仅本人' };
+var VIS_DESC  = {
+  public:    '已登录的同学都能查到',
+  committee: '只有班委（班长/团支书/课代表等）能查到',
+  self:      '只有本人查自己时能看到'
+};
+
+function loadFieldMeta(){
+  return api('/admin?action=field-meta').then(function(j){
+    STATE.profiles.fieldMeta = j.fields || [];
+    STATE.profiles.totalProfiles = j.totalProfiles || 0;
+    return STATE.profiles.fieldMeta;
+  });
+}
+
+function renderFieldPanel(){
+  var body = $('pfFieldBody');
+  if(!body) return;
+  body.innerHTML = '<div class="loading"><div class="spinner"></div>加载字段…</div>';
+
+  loadFieldMeta().then(function(list){
+    paintFieldPanel(list);
+  }).catch(function(e){
+    body.innerHTML = '<div class="alert danger" style="margin:14px">加载字段失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function paintFieldPanel(list){
+  var body = $('pfFieldBody');
+  if(!body) return;
+  var total = STATE.profiles.totalProfiles || 0;
+
+  var rows = list.map(function(f){
+    var visBadge = '<span class="badge ' + (f.visibility === 'public' ? 'badge-gray'
+                   : f.visibility === 'committee' ? 'badge-blue' : 'badge-orange') + '">'
+                   + esc(VIS_LABEL[f.visibility] || f.visibility) + '</span>';
+    var filled = f.filledCount == null ? '<span class="muted">—</span>'
+                   : '<span class="mono">' + f.filledCount + ' / ' + total + '</span>';
+
+    /* 快捷切换可见性：三个小按钮，当前档高亮 */
+    var quick = ['public', 'committee', 'self'].map(function(v){
+      return '<button class="btn btn-xs' + (f.visibility === v ? '' : ' btn-secondary')
+        + '" data-fv="' + v + '" data-ff="' + attr(f.field) + '" title="' + attr(VIS_DESC[v]) + '">'
+        + esc(VIS_LABEL[v]) + '</button>';
+    }).join(' ');
+
+    var tag = f.isCustom
+      ? '<span class="badge badge-green">自定义</span>'
+      : '<span class="badge badge-gray">系统</span>';
+
+    return '<tr>'
+      + '<td><b>' + esc(f.label) + '</b>'
+      +   '<div class="mono muted" style="font-size:.72rem">' + esc(f.field) + '</div></td>'
+      + '<td class="nowrap">' + visBadge + '</td>'
+      + '<td class="nowrap">' + quick + '</td>'
+      + '<td class="nowrap mono">' + (f.sortOrder != null ? f.sortOrder : '—') + '</td>'
+      + '<td class="nowrap">' + filled + '</td>'
+      + '<td class="nowrap">' + tag + '</td>'
+      + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
+      +   '<button data-fe="rename" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '">改名</button>'
+      +   '<button data-fe="sort" data-ff="' + attr(f.field) + '" data-fs="' + (f.sortOrder || 0) + '">排序</button>'
+      +   (f.isCustom
+          ? '<button class="danger" data-fe="del" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '">删除</button>'
+          : '<button disabled title="系统字段不可删除（删了会带崩代码），只能改名称与可见性">删除</button>')
+      + '</div></td>'
+      + '</tr>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="panel-head" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px 0">'
+    + '<h3 style="margin:0;font-size:.95rem">字段管理</h3>'
+    + '<span class="muted" style="font-size:.76rem">共 ' + list.length + ' 个字段'
+    +   '（其中自定义 ' + list.filter(function(f){ return f.isCustom; }).length + ' 个）</span>'
+    + '<span style="flex:1"></span>'
+    + '<button class="btn btn-sm" id="ffAdd">' + svg('plus', 14) + '新增字段</button>'
+    + '<button class="btn btn-sm btn-secondary" id="ffRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin:14px 16px 0">'
+    +   '可见性是<b>全班默认</b>：改这里会影响所有同学。想只调某一个人，'
+    +   '去他的「编辑」弹窗里改（那里的设置只对该同学生效）。'
+    +   '本人也可以在个人中心把联系方式收窄为「仅自己可见」。'
+    + '</div>'
+    + '<div class="table-wrap" style="margin-top:12px"><table><thead><tr>'
+    + '<th>字段</th><th class="nowrap">可见性</th><th class="nowrap">快捷切换</th>'
+    + '<th class="nowrap">排序</th><th class="nowrap">已填</th><th class="nowrap">类型</th>'
+    + '<th style="text-align:right">操作</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  var addBtn = $('ffAdd');
+  if(addBtn) addBtn.onclick = addFieldDialog;
+  var rfBtn = $('ffRefresh');
+  if(rfBtn) rfBtn.onclick = renderFieldPanel;
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-fv]'), function(b){
+    b.onclick = function(){
+      var f = b.dataset.ff, v = b.dataset.fv;
+      api('/admin?action=set-visibility', { method:'POST', body:{ field:f, visibility:v } })
+        .then(function(){ toast('已把「' + f + '」改为' + VIS_LABEL[v]); renderFieldPanel(); })
+        .catch(function(e){ toast(e.message, 'danger'); });
+    };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-fe]'), function(b){
+    var f = b.dataset.ff;
+    if(b.dataset.fe === 'rename') b.onclick = function(){ renameFieldDialog(f, b.dataset.fl); };
+    if(b.dataset.fe === 'sort')   b.onclick = function(){ sortFieldDialog(f, Number(b.dataset.fs || 0)); };
+    if(b.dataset.fe === 'del')    b.onclick = function(){ deleteFieldConfirm(f, b.dataset.fl); };
+  });
+}
+
+/** 新增自定义字段弹窗 */
+function addFieldDialog(){
+  var html =
+    '<div class="dialog-mask" id="ffMask"><div class="dialog" style="max-width:480px">'
+    + '<h3>新增资料字段</h3>'
+    + '<div class="alert info" style="margin:0 0 14px">'
+    +   '加完之后，每位同学都能在「编辑资料」里填这个字段，'
+    +   '前台也会按你设的可见性展示。'
+    + '</div>'
+    + '<div class="field"><label>中文名称 <span class="muted">（同学看到的名字）</span></label>'
+    +   '<input id="ffLabel" placeholder="例如：学籍号" maxlength="20" autocomplete="off"></div>'
+    + '<div class="field"><label>英文键名 <span class="muted">（内部用，只能小写字母 / 数字 / 下划线）</span></label>'
+    +   '<input id="ffKey" placeholder="例如：school_id" maxlength="31" autocomplete="off"></div>'
+    + '<div class="field"><label>可见范围</label>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap" id="ffVis">'
+    +     ['public','committee','self'].map(function(v, i){
+            return '<button class="btn btn-sm ' + (i === 2 ? '' : 'btn-secondary')
+              + '" data-ffv="' + v + '">' + esc(VIS_LABEL[v]) + '</button>';
+          }).join('')
+    +   '</div>'
+    +   '<div class="muted" style="font-size:.74rem;margin-top:6px" id="ffVisHint">' + esc(VIS_DESC.self) + '</div>'
+    + '</div>'
+    + '<div class="dialog-actions">'
+    +   '<button class="btn btn-secondary" id="ffCancel">取消</button>'
+    +   '<button class="btn" id="ffOk">' + svg('plus', 14) + '创建字段</button>'
+    + '</div></div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+  var vis = 'self';
+  $('ffVisHint').textContent = VIS_DESC[vis];
+
+  Array.prototype.forEach.call($('ffVis').querySelectorAll('[data-ffv]'), function(b){
+    b.onclick = function(){
+      vis = b.dataset.ffv;
+      Array.prototype.forEach.call($('ffVis').querySelectorAll('[data-ffv]'), function(x){
+        x.className = 'btn btn-sm ' + (x.dataset.ffv === vis ? '' : 'btn-secondary');
+      });
+      $('ffVisHint').textContent = VIS_DESC[vis];
+    };
+  });
+
+  /* 中文名自动推英文键名：学籍号 → 用拼音首字母不合适（会撞），
+     所以只做「无中文时原样小写」，中文时留空让用户自己填。 */
+  function close(){ var m = $('ffMask'); if(m) m.remove(); }
+  $('ffCancel').onclick = close;
+  $('ffMask').onclick = function(e){ if(e.target === $('ffMask')) close(); };
+  $('ffOk').onclick = function(){
+    var label = ($('ffLabel').value || '').trim();
+    var key   = ($('ffKey').value || '').trim().toLowerCase();
+    if(!label) return toast('请填写中文名称', 'danger');
+    if(!key)   return toast('请填写英文键名（如 school_id）', 'danger');
+    if(!/^[a-z][a-z0-9_]{0,30}$/.test(key)){
+      return toast('英文键名只能小写字母开头，由小写字母、数字、下划线组成', 'danger');
+    }
+    api('/admin?action=add-field', { method:'POST', body:{ field:key, label:label, visibility:vis } })
+      .then(function(j){ close(); toast(j.message || '已新增'); renderFieldPanel(); loadProfiles(); })
+      .catch(function(e){ toast(e.message, 'danger'); });
+  };
+  setTimeout(function(){ var el = $('ffLabel'); if(el) el.focus(); }, 60);
+}
+
+/** 改字段中文名 */
+function renameFieldDialog(field, curLabel){
+  var v = prompt('把字段「' + field + '」的中文名称改为：', curLabel || '');
+  if(v == null) return;
+  v = String(v).trim();
+  if(!v) return toast('名称不能为空', 'danger');
+  api('/admin?action=update-field', { method:'POST', body:{ field:field, label:v } })
+    .then(function(){ toast('已改名'); renderFieldPanel(); loadProfiles(); })
+    .catch(function(e){ toast(e.message, 'danger'); });
+}
+
+/** 改字段排序 */
+function sortFieldDialog(field, cur){
+  var v = prompt('「' + field + '」的排序值（小的在前，例如 10 / 20 / 100）：', String(cur || 100));
+  if(v == null) return;
+  var n = Number(v);
+  if(!isFinite(n)) return toast('请填数字', 'danger');
+  api('/admin?action=update-field', { method:'POST', body:{ field:field, sortOrder:n } })
+    .then(function(){ toast('已调整排序'); renderFieldPanel(); loadProfiles(); })
+    .catch(function(e){ toast(e.message, 'danger'); });
+}
+
+/** 删字段：危险操作，二次确认 + 说明后果 */
+function deleteFieldConfirm(field, label){
+  if(!confirm('删除字段「' + (label || field) + '」？\n\n'
+    + '· 全班同学这个人资料里的该字段值都会被一起删掉，无法恢复。\n'
+    + '· 如果只是不想让大家看到，建议改成「仅本人」，而不是删除。\n\n'
+    + '确定要删除吗？')) return;
+  api('/admin?action=delete-field', { method:'POST', body:{ field:field } })
+    .then(function(j){ toast(j.message || '已删除'); renderFieldPanel(); loadProfiles(); })
+    .catch(function(e){ toast(e.message, 'danger'); });
+}
+
+/**
+ * 算出某条资料上「可编辑额外字段」的展示单元（v2.4.0）。
+ * 额外字段 = 字段元数据里不在固定列中的那些（含自定义字段与 id_card 等）。
+ */
+function extraColsOf(){
+  var meta = STATE.profiles.fieldMeta || [];
+  var FIXED = ['name','student_id','politics','exam_no','role','title','wechat','qq','phone'];
+  return meta.filter(function(f){ return FIXED.indexOf(f.field) < 0; });
 }
 
 function paintProfiles(){
@@ -4532,6 +4786,10 @@ function paintProfiles(){
     return;
   }
 
+  /* 动态列（2026-10-09 v2.4.0）：每个自定义/额外字段一列。
+     站主在「字段管理」里加一个字段，这里就自动多一列，不用改代码。 */
+  var extras = extraColsOf();
+
   var rows = S.list.map(function(p){
     var st  = CONTACT_LABEL[p.contactStatus] || CONTACT_LABEL.none;
     var ini = String(p.name || p.studentId || '?').charAt(0);
@@ -4552,16 +4810,37 @@ function paintProfiles(){
       : '<span class="badge badge-gray">未认领</span>';
 
     /* 可见性（2026-10-08）：展示本人是否把联系方式设为「仅自己可见」。
-       后端 profile.js 会返回 visibilityPref（{wechat:false,...}）。
-       本轮后台只**展示**，覆盖配置走「编辑资料」里的开关。 */
+       v2.4.0 起还要展示**管理员设的单人例外**（fieldVis）。 */
     var vp = p.visibilityPref || {};
     var hidden = [];
     if(vp.wechat === false) hidden.push('微信');
     if(vp.qq === false) hidden.push('QQ');
     if(vp.phone === false) hidden.push('手机');
-    var vis = hidden.length
-      ? '<span class="badge badge-orange" title="本人把这几项设为仅自己可见，同学查不到">🔒 ' + esc(hidden.join('/')) + ' 私密</span>'
-      : '<span class="badge badge-gray">公开</span>';
+    var fv = p.fieldVis || {};
+    var fvKeys = Object.keys(fv);
+    var fvLabelOf = function(k){
+      var m = (S.fieldMeta || []).find(function(x){ return x.field === k; });
+      return m ? m.label : k;
+    };
+    var vis;
+    if(fvKeys.length){
+      vis = '<span class="badge badge-purple" title="管理员单独设置了这些字段的可见范围（只对该同学生效）">'
+          + '⚙ ' + esc(fvKeys.map(fvLabelOf).join('/')) + '</span>';
+      if(hidden.length){
+        vis += '<div class="muted" style="font-size:.68rem;margin-top:3px">本人私密：' + esc(hidden.join('/')) + '</div>';
+      }
+    } else if(hidden.length){
+      vis = '<span class="badge badge-orange" title="本人把这几项设为仅自己可见，同学查不到">🔒 ' + esc(hidden.join('/')) + ' 私密</span>';
+    } else {
+      vis = '<span class="badge badge-gray">公开</span>';
+    }
+
+    /* 额外字段的单元格 */
+    var extraTds = extras.map(function(f){
+      var v = (p.extra || {})[f.field];
+      return '<td class="nowrap">' + (v ? '<span class="mono">' + esc(v) + '</span>'
+                                          : '<span class="muted">—</span>') + '</td>';
+    }).join('');
 
     return '<tr>'
       + '<td><div class="cell-user"><div class="av">' + esc(ini) + '</div>'
@@ -4569,6 +4848,7 @@ function paintProfiles(){
       +   '<i class="mono">' + esc(p.studentId || '无学号') + '</i></div></div></td>'
       + '<td class="nowrap">' + esc(p.politics || '—') + '</td>'
       + '<td class="mono nowrap">' + (p.examNo ? esc(p.examNo) : '<span class="muted">—</span>') + '</td>'
+      + extraTds
       + '<td>' + contacts + '</td>'
       + '<td class="nowrap">' + vis + '</td>'
       + '<td class="nowrap"><span class="badge ' + st.cls + '">' + st.text + '</span>'
@@ -4585,9 +4865,15 @@ function paintProfiles(){
       + '</tr>';
   }).join('');
 
+  var extraTh = extras.map(function(f){
+    return '<th class="nowrap">' + esc(f.label) + '</th>';
+  }).join('');
+
   body.innerHTML =
     '<div class="table-wrap"><table><thead><tr>'
-    + '<th>姓名 / 学号</th><th class="nowrap">政治面貌</th><th class="nowrap">智学网账号</th><th>联系方式</th>'
+    + '<th>姓名 / 学号</th><th class="nowrap">政治面貌</th><th class="nowrap">智学网账号</th>'
+    + extraTh
+    + '<th>联系方式</th>'
     + '<th class="nowrap">可见性</th><th class="nowrap">审核状态</th><th class="nowrap">归属账号</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
@@ -4655,7 +4941,7 @@ function profileDialog(p){
 
       /* 可见性（2026-10-08）：管理员可以替本人收窄，也可以解掉本人设的收窄。
          ⚠️ 这是**本人意愿**（profiles.visibility_pref），只影响这一个人；
-            字段的全局上限在「字段管理」里改（本轮无 UI，接口已通）。 */
+            字段的全局上限在「字段管理」里改。 */
       + (isNew ? '' :
           '<div class="field"><label>联系方式可见性（这个人）</label>'
         +   '<p class="hint" style="margin-bottom:8px">勾上 = 仅本人可见，同学查不到；不勾 = 按审核状态对外展示。'
@@ -4665,6 +4951,42 @@ function profileDialog(p){
         +   '<label class="chk"><input type="checkbox" id="pfPhHide"' + (p && p.visibilityPref && p.visibilityPref.phone === false ? ' checked' : '') + '> 手机号仅本人可见</label>'
         + '</div>')
 
+      /* 额外字段（2026-10-09 v2.4.0）：站主在「字段管理」里加的自定义字段，
+         以及 id_card / youth_league_no 这类不在固定项里的字段，在这里自动出现。
+         每个字段带一个「可见范围」下拉 —— 那是**只对这个人生效**的例外，
+         默认「跟全班一样」，可单独收紧或放宽。 */
+      + (function(){
+          var extras = extraColsOf();
+          if(!extras.length) return '';
+          var cur = (p && p.extra) || {};
+          var fv  = (p && p.fieldVis) || {};
+          var globalVis = function(field){
+            var m = (STATE.profiles.fieldMeta || []).find(function(x){ return x.field === field; });
+            return m ? m.visibility : 'public';
+          };
+          return '<div class="field"><label>其他资料字段</label>'
+            + '<p class="hint" style="margin-bottom:8px">'
+            +   '这些是「字段管理」里登记的字段。<b>可见范围</b>默认跟随全班设置，'
+            +     '也可以只给这一个人单独调整（改完只影响他）。</p>'
+            + extras.map(function(f){
+                var val = cur[f.field] || '';
+                var curFv = fv[f.field] || '';
+                var gv = globalVis(f.field);
+                return '<div class="extra-row">'
+                  + '<label class="extra-lab" for="pfX_' + attr(f.field) + '">' + esc(f.label) + '</label>'
+                  + '<input id="pfX_' + attr(f.field) + '" class="inp" maxlength="200"'
+                  +   ' data-xf="' + attr(f.field) + '" value="' + attr(val) + '"'
+                  +   ' placeholder="' + attr(f.label) + '">'
+                  + '<select class="inp extra-vis" data-vf="' + attr(f.field) + '" title="只对这个人生效的可见范围">'
+                  +   '<option value=""' + (curFv ? '' : ' selected') + '>跟随全班（' + esc(VIS_LABEL[gv] || gv) + '）</option>'
+                  +   '<option value="public"' + (curFv === 'public' ? ' selected' : '') + '>公开</option>'
+                  +   '<option value="committee"' + (curFv === 'committee' ? ' selected' : '') + '>班委可见</option>'
+                  +   '<option value="self"' + (curFv === 'self' ? ' selected' : '') + '>仅本人</option>'
+                  + '</select>'
+                  + '</div>';
+              }).join('')
+            + '</div>';
+        })()
       + '<div class="msg" id="pfMsg"></div>',
 
     foot: '<button class="btn btn-ghost" data-no>取消</button>'
@@ -4699,6 +5021,24 @@ function profileDialog(p){
             };
           }
         } else payload.role = '学生';
+
+        /* 额外字段的值 + 单人可见性例外（2026-10-09 v2.4.0）。
+           ⚠️ payload.extra 的键必须与「字段管理」里的英文键名一致，
+              后端只认 meta 表登记过的键（乱传的会被忽略）。 */
+        var extraVals = {};
+        Array.prototype.forEach.call(box.querySelectorAll('[data-xf]'), function(inp){
+          extraVals[inp.dataset.xf] = inp.value.trim();
+        });
+        payload.extra = extraVals;
+
+        /* 单人可见性例外：只把「不跟随全班」的那些收进来。
+           全选「跟随全班」→ fieldVis 空对象 → 后端会清掉之前的例外设置。 */
+        var fvVals = {};
+        Array.prototype.forEach.call(box.querySelectorAll('[data-vf]'), function(sel){
+          if(sel.value) fvVals[sel.dataset.vf] = sel.value;
+        });
+        /* 新增时也允许带（默认都是「跟随全班」，即空对象） */
+        payload.fieldVis = fvVals;
 
         if(!payload.name && !payload.studentId){
           msg.className = 'msg err show';
@@ -4786,23 +5126,32 @@ function profileViewsDialog(id){
   });
 }
 
-/** 导出全部资料为 Excel */
+/** 导出全部资料为 Excel
+ * ⚠️ 2026-10-09 v2.4.0：自定义字段跟着「智学网账号」之后动态追加，
+ *    表头用中文名（label），这样导出的文件直接拿去导入也能对上。 */
 function profileExport(){
   api('/admin?action=profiles').then(function(j){
     var list = j.profiles || [];
     if(!list.length){ toast('没有可导出的资料', 'err'); return; }
+    /* 先拉一份最新字段元数据（loadProfiles 可能还没跑过） */
+    var extras = extraColsOf();
     var data = list.map(function(p){
-      return {
+      var row = {
         '姓名': p.name || '',
         '学号': p.studentId || '',
         '政治面貌': p.politics || '',
         '智学网账号': p.examNo || '',
-        '微信': p.wechat || '',
-        'QQ': p.qq || '',
-        '手机号': p.phone || '',
-        '审核状态': (CONTACT_LABEL[p.contactStatus] || CONTACT_LABEL.none).text,
-        '归属账号': p.boundUsername || '未认领'
       };
+      /* 自定义字段：中文表头 → 值 */
+      extras.forEach(function(f){
+        row[f.label] = (p.extra || {})[f.field] || '';
+      });
+      row['微信'] = p.wechat || '';
+      row['QQ'] = p.qq || '';
+      row['手机号'] = p.phone || '';
+      row['审核状态'] = (CONTACT_LABEL[p.contactStatus] || CONTACT_LABEL.none).text;
+      row['归属账号'] = p.boundUsername || '未认领';
+      return row;
     });
     var ws = XLSX.utils.json_to_sheet(data);
     var wb = XLSX.utils.book_new();
@@ -4824,12 +5173,13 @@ function profileImportDialog(){
 
   openModal({
     title: 'Excel 批量导入资料',
-    sub: '表头需包含：姓名 / 学号 / 政治面貌 / 智学网账号 / 微信 / QQ / 手机号',
+    sub: '表头需包含：姓名 / 学号 / 政治面貌 / 智学网账号 / 微信 / QQ / 手机号（自定义字段按中文名自动识别）',
     wide: true,
     body:
       '<div class="alert info" style="margin-bottom:16px">'
       +   '按 <b>学号</b> 匹配已有资料（没有学号则按姓名），命中就更新、没命中就新增。'
-      +   '导入的数据会连带把联系方式记为「已通过」。单次请控制在 900 条以内。'
+      +   '导入的数据会连带把联系方式记为「已通过」。单次请控制在 900 条以内。<br>'
+      +   '「字段管理」里加过的自定义字段，只要表头写上<b>它的中文名</b>（如「学籍号」）就会被一起导入。'
       + '</div>'
 
       /* 第一步：先给模板，再选文件 */
@@ -4924,9 +5274,14 @@ function profileImportDialog(){
             return '';
           };
 
+          /* 动态字段（2026-10-09 v2.4.0）：按「字段管理」里的中文名匹配表头。
+             例如站主加了「学籍号」字段，Excel 里就有「学籍号」这一列。
+             同时兼容用英文键名当表头（导出文件用的是中文名，但手写表头也可能直接写键名）。 */
+          var extras = extraColsOf();
+
           var bad = 0;
           var list = rows.map(function(r){
-            return {
+            var o = {
               name:      pick(r, ['姓名','名字','学生姓名']),
               studentId: pick(r, ['学号','学籍号']),
               politics:  pick(r, ['政治面貌','面貌']),
@@ -4935,6 +5290,14 @@ function profileImportDialog(){
               qq:        pick(r, ['QQ','QQ号']),
               phone:     pick(r, ['手机号','手机','电话','手机号码'])
             };
+            /* 自定义字段：中文名优先，其次英文字段名 */
+            var ex = {};
+            extras.forEach(function(f){
+              var v = pick(r, [f.label, f.field]);
+              if(v) ex[f.field] = v;
+            });
+            if(Object.keys(ex).length) o.extra = ex;
+            return o;
           }).filter(function(x){
             /* 姓名和学号都空的算无效行，单独计数提示 */
             if(!x.name && !x.studentId){ bad++; return false; }
@@ -4952,15 +5315,24 @@ function profileImportDialog(){
           yes.disabled = false;
           var hasExam  = list.filter(function(x){ return x.examNo; }).length;
           var hasPhone = list.filter(function(x){ return x.wechat || x.qq || x.phone; }).length;
+          /* 本次真正读到的自定义字段（只列非空的，避免一堆空列） */
+          var hitExtras = extras.filter(function(f){
+            return list.some(function(x){ return (x.extra || {})[f.field]; });
+          });
 
           /* 预览前 8 行，让管理员能一眼看出列有没有对错 */
-          var head = ['姓名','学号','政治面貌','智学网账号','微信','QQ','手机号'];
+          var head = ['姓名','学号','政治面貌','智学网账号']
+            .concat(hitExtras.map(function(f){ return f.label; }))
+            .concat(['微信','QQ','手机号']);
           var bodyRows = list.slice(0, 8).map(function(x){
-            var cells = [x.name, x.studentId, x.politics, x.examNo, x.wechat, x.qq, x.phone];
+            var cells = [x.name, x.studentId, x.politics, x.examNo]
+              .concat(hitExtras.map(function(f){ return (x.extra || {})[f.field] || ''; }))
+              .concat([x.wechat, x.qq, x.phone]);
             return '<tr>' + cells.map(function(c, i){
               var dash = c ? esc(c) : '<span class="muted">—</span>';
-              /* 学号/智学网账号用等宽字体，便于肉眼核对数字有没有错位 */
-              return '<td' + ((i === 1 || i === 3) ? ' class="mono nowrap"' : '') + '>' + dash + '</td>';
+              /* 学号/智学网账号/自定义字段用等宽字体，便于肉眼核对数字有没有错位 */
+              var mono = (i === 1 || i === 3 || (hitExtras.length && i > 3 && i < 4 + hitExtras.length));
+              return '<td' + (mono ? ' class="mono nowrap"' : '') + '>' + dash + '</td>';
             }).join('') + '</tr>';
           }).join('');
 
@@ -4969,6 +5341,7 @@ function profileImportDialog(){
             +   '读到 <b>' + list.length + '</b> 条有效数据'
             +   (bad ? '，跳过 ' + bad + ' 条空行' : '')
             +   '；其中含智学网账号 <b>' + hasExam + '</b> 条、含联系方式 <b>' + hasPhone + '</b> 条。'
+            +   (hitExtras.length ? '识别到自定义字段：<b>' + hitExtras.map(function(f){ return esc(f.label); }).join('、') + '</b>。' : '')
             + '</div>'
             + '<p class="muted" style="font-size:.8rem;margin:0 0 8px">'
             +   '预览前 ' + Math.min(8, list.length) + ' 行（确认列没串位再导入）：</p>'
