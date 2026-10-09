@@ -113,10 +113,17 @@ export async function ensureSchema(sql) {
         visibility  text        not null default 'public',
         sort_order  int         not null default 100,
         is_custom   boolean     not null default false,
+        vis_locked  boolean     not null default false,
         updated_at  timestamptz not null default now(),
         constraint pfm_vis_chk check (visibility in ('public','committee','self'))
       )
     `;
+    /* vis_locked 补列（2026-10-09 v2.4.1）：老库升级用。
+       true = 站主在后台设过该字段的可见性 → 以站主为准，同学自己的
+       「仅自己可见」不再生效（站主要求「后台权力最大」）。
+       ⚠️ 不能靠「visibility 是否等于出厂值」来判断「动没动过」——
+          站主可能把字段设成它本来就有的档（值没变），比对法分辨不出来。 */
+    await s`alter table profile_field_meta add column if not exists vis_locked boolean not null default false`;
     /* 预置字段元数据。on conflict do nothing —— 后台改过之后重跑不会覆盖。 */
     await s`
       insert into profile_field_meta (field, label, visibility, sort_order, is_custom) values

@@ -196,9 +196,21 @@ create table if not exists profile_field_meta (
   visibility  text        not null default 'public',   -- public | committee | self
   sort_order  int         not null default 100,        -- 展示顺序（小的在前）
   is_custom   boolean     not null default false,      -- true = 后台新增的自定义字段
+  vis_locked  boolean     not null default false,      -- true = 站主在后台设过可见性，以站主为准
   updated_at  timestamptz not null default now(),
   constraint pfm_vis_chk check (visibility in ('public','committee','self'))
 );
+
+/* ---------------- vis_locked 补列（2026-10-09 v2.4.1，幂等） ----------------
+   站主原话：「后台的权力是最大的，即使他修改了可见范围，但是后台还是可以修改」。
+   规则：**站主动过这个字段的可见性 → 同学自己设的「仅自己可见」不再生效**。
+
+   ⚠️ 为什么需要这一列，而不能靠「visibility 与出厂值比对」判断：
+      站主完全可能把一个字段设成它本来就是这个档（比如 wechat 出厂就是 public，
+      他点了「公开」按钮）—— 值没变化，比对法就分辨不出「动过」和「没动过」，
+      表现为「站主明明改了，同学的私密设置却依然生效」。必须显式记录。
+   is_custom = true 的字段由站主新增时指定可见性，视为天然已锁定。 */
+alter table profile_field_meta add column if not exists vis_locked boolean not null default false;
 
 /* ---------------- 预置字段元数据（幂等：已存在则不动，避免覆盖后台的改动） ----------------
    ⚠️ on conflict do nothing：后台改过 visibility 后，重跑本脚本不会把它改回去。

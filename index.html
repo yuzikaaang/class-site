@@ -2376,7 +2376,7 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.4.0';
+var SITE_VERSION = '2.4.1';
 var VER_DATE = '2026-10-07';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -5369,7 +5369,9 @@ function myProfileHtml(){
     '<p class="acct-hint">' + st + '<br>' +
       '改完会重新提交审核（站主核一遍才对同学可见），这是为了防止有人乱填别人的联系方式。<br>' +
       (anyHidden
-        ? '⚠️ 你已把部分联系方式设为<b>仅自己可见</b>，同学查不到（但站主在后台仍能看到，方便核对）。<br>'
+        ? '⚠️ 你已把部分联系方式设为<b>仅自己可见</b>，同学查不到。<br>'
+          + '<span style="font-size:.94em;opacity:.85">说明：站主为核对资料，在后台仍能看到；'
+          + '若站主在「字段管理」里调整过该字段的可见范围，则以站主设置为准。</span><br>'
         : '') +
       '不想被查到就清空三项再保存。</p>' +
     '<p style="margin:12px 0 0"><button class="acct-btn ghost" onclick="acctTab(\'profile\')">返回</button></p>';

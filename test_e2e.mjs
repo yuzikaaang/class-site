@@ -3091,9 +3091,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.4.0', /SITE_VERSION = '2\.4\.0'/.test(indexHtml),
+  t('★前台版本号为 2.4.1', /SITE_VERSION = '2\.4\.1'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.4.0', /SITE_VERSION = '2\.4\.0'/.test(adminHtml),
+  t('★后台版本号为 2.4.1', /SITE_VERSION = '2\.4\.1'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3457,9 +3457,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.4.0', /SITE_VERSION = '2\.4\.0'/.test(indexHtml38),
+  t('★前台版本号为 2.4.1', /SITE_VERSION = '2\.4\.1'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.4.0', /SITE_VERSION = '2\.4\.0'/.test(adminHtml38),
+  t('★后台版本号为 2.4.1', /SITE_VERSION = '2\.4\.1'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -3539,6 +3539,233 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   t('前台不在客户端做可见性判断（后端已滤过）',
     !/visibility\s*===\s*'self'/.test(indexHtmlSrc.slice(indexHtmlSrc.indexOf('function renderContactResults'),
                                                       indexHtmlSrc.indexOf('function renderContactResults') + 4000)));
+}
+
+console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）');
+
+/* ============================================================
+   【39】站主原话：「记住，后台的权力是最大的，即使他修改了可见范围，
+   但是后台还是可以修改」。
+
+   这条推翻了 v2.4.0 的「三层取严」设计 —— 取严意味着管理员**永远无法放宽**
+   （同学设了 self，管理员改 public 也白改）。现改为三级优先级：
+     ① field_vis（管理员单人例外）     → 直接生效，覆盖同学
+     ② meta.visibility ≠ 出厂值        → 直接生效，覆盖同学
+     ③ 以上都没有 → 用同学意愿兜底，此时只能收窄
+   即：**站主动过这个字段，同学说的就不算；站主没动过，同学的隐私仍被尊重**。
+   ============================================================ */
+{
+  /* ---- A. 源码层：确认不再是无条件取严，且判据是显式锁标记 ---- */
+  const profSrc39 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
+  const admSrc39raw = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const canSeeBody = profSrc39.slice(profSrc39.indexOf('function canSee'),
+                                     profSrc39.indexOf('function canSee') + 2200);
+  /* 🔴 v2.4.1 血的教训：buildFieldVis 的白名单必须来自 loadFieldMeta()，
+     不能用 loadEditableFields() —— 后者滤掉了 SPECIAL_FIELDS，
+     而 wechat / qq / phone 恰在其中，于是站主给某人设的微信例外被静默丢弃，
+     表现为「点了保存但对方还是看不到」，极难排查。 */
+  t('★fieldVis 白名单用 loadFieldMeta（不能滤掉 wechat/qq/phone）',
+    /buildFieldVis\(b\.fieldVis,\s*allMeta\.map\(/.test(admSrc39raw));
+  t('★canSee 已不再对 field_vis 取严',
+    !/stricter\s*\(\s*eff\s*,\s*f\s*\)/.test(canSeeBody));
+  /* 判据必须是**显式锁定标记**，不能是「visibility 和出厂值比对」——
+     站主可以把字段设成它本来就是的档（wechat 出厂 public，他点「公开」），
+     值不变但确实动过，比对法分辨不出来。 */
+  t('★已彻底删除 FACTORY_VIS 比对法（profile.js）',
+    !/FACTORY_VIS/.test(profSrc39));
+  t('★已彻底删除 FACTORY_VIS 比对法（admin.js）',
+    !/FACTORY_VIS/.test(admSrc39raw));
+  t('★canSee 用 visLocked 判据决定是否忽略同学意愿',
+    /m\.visLocked/.test(canSeeBody) && /eff\s*=\s*group/.test(canSeeBody));
+  t('★loadMeta 输出 visLocked 标记', /visLocked\s*:/.test(profSrc39));
+  t('★profile.js 把 is_custom 也视为天然已锁定',
+    /visLocked\s*:\s*!!r\.vis_locked\s*\|\|\s*!!r\.is_custom/.test(profSrc39));
+  t('★admin.js loadFieldMeta 读 vis_locked 并输出 adminSet',
+    /vis_locked/.test(admSrc39raw) && /adminSet\s*:/.test(admSrc39raw));
+  t('★setVisibility 写入 vis_locked = true',
+    /set visibility = \$\{vis\}, vis_locked = true/.test(admSrc39raw));
+  t('★addField 建自定义字段时 vis_locked 默认 true',
+    /is_custom, vis_locked\)[\s\S]{0,120}true, true\)/.test(admSrc39raw));
+  t('★updateField 改 visibility 时置 vis_locked = true', /const lockIt = visibility != null/.test(admSrc39raw));
+  t('★updateField 只改 label/sort 时不误锁（保住同学隐私）',
+    /vis_locked = \$\{lockIt \? true/.test(admSrc39raw));
+  /* schema 与 ensureSchema 都要有这一列（老库升级靠补列语句） */
+  const schemaSrc39 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  t('★schema.sql 的 profile_field_meta 含 vis_locked 列',
+    /vis_locked\s+boolean\s+not null\s+default\s+false/.test(schemaSrc39));
+  t('★schema.sql 含 vis_locked 幂等补列语句',
+    /alter table profile_field_meta add column if not exists vis_locked/.test(schemaSrc39));
+  const httpSrc39 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  t('★ensureSchema 含 vis_locked 建表列',
+    /is_custom\s+boolean\s+not null\s+default\s+false,\s*\n?\s*vis_locked/.test(httpSrc39));
+  t('★ensureSchema 含 vis_locked 补列语句',
+    /alter table profile_field_meta add column if not exists vis_locked/.test(httpSrc39));
+
+  /* ---- B. 行为层：真跑接口 ----
+     准备：一条资料 + 同学把微信设成「仅自己可见」 */
+  const mk39 = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '权限测试丙', studentId: '280001', role: '学生',
+            wechat: 'wx_perm_test', qq: '88001', phone: '18800000001' },
+  });
+  t('（准备）建一条带联系方式的资料', mk39.status === 200 && mk39.body.ok,
+    JSON.stringify(mk39.body).slice(0, 120));
+  const pid39 = mk39.body.id;
+
+  /* 同学本人在个人中心把微信设为仅自己可见 */
+  const sub39 = await call('/api/profile?action=submit', {
+    method: 'POST', token: bTok,
+    body: { wechat: 'wx_perm_test', qq: '88001', phone: '18800000001',
+            visibilityPref: { wechat: false, qq: true, phone: true } },
+  });
+  t('（准备）同学设了「微信仅自己可见」', sub39.status === 200, JSON.stringify(sub39.body).slice(0, 120));
+
+  /* 站主审核通过，让资料对外可见。
+     ⚠️ 注意：contact_status 是**独立于可见性**的一道门 ——
+        只有 approved 才对外展示（防乱填）。所以验可见性前必须先让它 approved，
+        否则无论可见性怎么调都看不到，测试会误判成「后台改不动」。 */
+  await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: pid39, name: '权限测试丙', studentId: '280001',
+            contactStatus: 'approved', visibilityPref: { wechat: false } },
+  });
+  /* 确认前置条件成立 */
+  const chk39 = await call('/api/admin?action=profile&id=' + pid39, { token: adminToken });
+  t('（准备）资料已审核通过',
+    chk39.body.profile && chk39.body.profile.contactStatus === 'approved',
+    JSON.stringify((chk39.body.profile || {}).contactStatus));
+  t('（准备）同学意愿已存为微信私密',
+    chk39.body.profile && chk39.body.profile.visibilityPref
+      && chk39.body.profile.visibilityPref.wechat === false,
+    JSON.stringify((chk39.body.profile || {}).visibilityPref));
+
+  const q39 = async (label) => {
+    const r = await call('/api/profile?action=search&q=280001', { token: bTok });
+    const p = ((r.body || {}).results || [])[0] || {};
+    return { hasWechat: !!p.wechat, vis: p.contactVisible, label,
+             raw: { wechat: p.wechat, qq: p.qq, phone: p.phone,
+                    contactStatus: p.contactStatus, contactVisible: p.contactVisible,
+                    phoneMasked: p.phoneMasked } };
+  };
+
+  /* 场景 1：站主没动过 wechat 字段 → 同学的「仅自己可见」生效 */
+  let st1 = await q39('admin-untouched');
+  t('★场景1 站主未动过该字段 → 同学设的私密生效（看不到微信）',
+    st1.hasWechat === false, JSON.stringify(st1));
+
+  /* 场景 2：站主在字段管理里把 wechat 放宽为 public → 应当覆盖同学的设置 */
+  const setPub = await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken, body: { field: 'wechat', visibility: 'public' },
+  });
+  t('（准备）站主把 wechat 全班默认改为 public', setPub.status === 200);
+  let st2 = await q39('admin-widened');
+  t('★★后台权力最大：站主放宽后，同学的「仅自己可见」被覆盖，微信可见',
+    st2.hasWechat === true, JSON.stringify(st2));
+  console.log('      [debug] st2 =', JSON.stringify(st2));
+
+  /* 场景 3：站主再收窄为 self → 同样直接生效 */
+  await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken, body: { field: 'wechat', visibility: 'self' },
+  });
+  let st3 = await q39('admin-narrowed');
+  t('★站主收窄为 self 后，微信不可见', st3.hasWechat === false, JSON.stringify(st3));
+
+  /* 场景 4：单人例外可以放宽 —— 全班默认 self，但给这一条单独设 public */
+  const perOpen = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: pid39, name: '权限测试丙', studentId: '280001', fieldVis: { wechat: 'public' } },
+  });
+  t('（准备）给单人设例外 wechat=public', perOpen.status === 200,
+    JSON.stringify(perOpen.body).slice(0, 120));
+  let st4 = await q39('perperson-widen');
+  t('★★单人例外可放宽：全班 self 但这一条单独 public → 可见',
+    st4.hasWechat === true, JSON.stringify(st4));
+
+  /* 场景 5：单人例外也能收窄（即使全班默认 public） */
+  await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken, body: { field: 'wechat', visibility: 'public' },
+  });
+  await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: pid39, name: '权限测试丙', studentId: '280001', fieldVis: { wechat: 'self' } },
+  });
+  let st5 = await q39('perperson-narrow');
+  t('★单人例外可收窄：全班 public 但这一条单独 self → 不可见',
+    st5.hasWechat === false, JSON.stringify(st5));
+
+  /* 场景 6：清掉单人例外 → 回落到全班默认（public）→ 可见 */
+  await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: pid39, name: '权限测试丙', studentId: '280001', fieldVis: {} },
+  });
+  let st6 = await q39('clear-exception');
+  t('★清掉单人例外后回落到全班默认（public）→ 可见',
+    st6.hasWechat === true, JSON.stringify(st6));
+
+  /* ---- C. 锁定标记（adminSet）行为 ----
+     ⚠️ v2.4.1 语义已变：**不能**靠「visibility 是否等于出厂值」判断站主动没动过。
+        站主完全可以把字段设成它本来就是的档（wechat 出厂 public，他点「公开」），
+        值没变但确实动过 —— 比对法分辨不出来，这就是本轮 3 项失败的真根因。
+        现在判据是 profile_field_meta.vis_locked，由 set-visibility / update-field 写入。 */
+  const meta39 = await call('/api/admin?action=field-meta', { token: adminToken });
+  const fWx = (meta39.body.fields || []).find((f) => f.field === 'wechat');
+  t('field-meta 输出 adminSet 字段', fWx && typeof fWx.adminSet === 'boolean',
+    JSON.stringify(fWx));
+  /* 上面场景 2/3/4/5 反复 set-visibility 改过 wechat → 必已锁定 */
+  t('★wechat 被站主改过 → adminSet 为 true（即使值恰好是 public）',
+    fWx && fWx.adminSet === true, String(fWx && fWx.adminSet));
+
+  /* 锁定标记是**单向**的：改回原值不会解锁（这正是比对法做不到的） */
+  await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken, body: { field: 'wechat', visibility: 'public' },
+  });
+  const meta39c = await call('/api/admin?action=field-meta', { token: adminToken });
+  const fWx2 = (meta39c.body.fields || []).find((f) => f.field === 'wechat');
+  t('★把 wechat 改回 public 后 adminSet 仍为 true（锁定单向）',
+    fWx2 && fWx2.adminSet === true, String(fWx2 && fWx2.adminSet));
+
+  /* 没动过的字段保持 false（尊重同学的那一类） */
+  const fQq = (meta39c.body.fields || []).find((f) => f.field === 'qq');
+  t('★没动过的 qq → adminSet 为 false（此字段仍尊重同学意愿）',
+    fQq && fQq.adminSet === false, String(fQq && fQq.adminSet));
+
+  /* 只改 label 不该顺手锁住可见性 —— 否则站主改个中文名就把同学隐私作废了 */
+  await call('/api/admin?action=update-field', {
+    method: 'POST', token: adminToken, body: { field: 'qq', label: 'QQ（改名前测试）' },
+  });
+  const meta39d = await call('/api/admin?action=field-meta', { token: adminToken });
+  const fQq2 = (meta39d.body.fields || []).find((f) => f.field === 'qq');
+  t('★只改 label 不锁可见性（adminSet 仍为 false）',
+    fQq2 && fQq2.adminSet === false, String(fQq2 && fQq2.adminSet));
+  /* 恢复 qq 的名字 */
+  await call('/api/admin?action=update-field', {
+    method: 'POST', token: adminToken, body: { field: 'qq', label: 'QQ 号' },
+  });
+  /* 通过 update-field 改 visibility 则要锁定 */
+  await call('/api/admin?action=update-field', {
+    method: 'POST', token: adminToken, body: { field: 'qq', visibility: 'committee' },
+  });
+  const meta39e = await call('/api/admin?action=field-meta', { token: adminToken });
+  const fQq3 = (meta39e.body.fields || []).find((f) => f.field === 'qq');
+  t('★通过 update-field 改 visibility 也会锁定（adminSet 变 true）',
+    fQq3 && fQq3.adminSet === true, String(fQq3 && fQq3.adminSet));
+  /* 恢复 qq 原状：visibility 回 public（已锁，但值对即可） */
+  await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken, body: { field: 'qq', visibility: 'public' },
+  });
+
+  /* ---- D. 前端护栏：后台要提醒「本人已设为私密」 ---- */
+  const adminHtml39 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('★后台编辑弹窗标出「本人已设为私密」', /本人已设为私密/.test(adminHtml39));
+  t('★后台标出「已被你覆盖」的情况', /已被你覆盖/.test(adminHtml39));
+  t('后台文案说明「后台权力最大」', /后台权力最大/.test(adminHtml39));
+  const indexHtml39 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('★前台告知同学「以站主设置为准」', /以站主设置为准|则以站主设置为准/.test(indexHtml39));
+
+  /* 清理 */
+  await call('/api/admin?action=delete-profile', {
+    method: 'POST', token: adminToken, body: { id: pid39 },
+  });
 }
 
 console.log('\n' + '='.repeat(52));

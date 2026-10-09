@@ -134,11 +134,15 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .field input:focus,.field select:focus,.field textarea:focus{
   border-color:var(--btn-b);box-shadow:0 0 0 3px var(--tint);
 }
-/* 「仅本人可见」勾选项（2026-10-08）：窄行、不上 46px 高度 */
+/* 「仅本人可见」勾选项（2026-10-08）：窄行、不上 46px 高度。
+   ⚠️ 2026-10-09 修复：原来没写 width，被后面第 608 行的全局 `.chk{width:15px}`
+      （那是给表格里真复选框用的）命中 —— label 本身被压成 15px 宽，
+      文字逐字换行并和上下元素重叠。这里必须显式把尺寸夺回来。 */
 .field label.chk{display:flex;align-items:center;gap:8px;font-weight:400;font-size:.82rem;
+  width:auto;height:auto;min-height:22px;
   color:var(--fg-2);margin:0 0 8px;cursor:pointer;user-select:none}
-.field label.chk input{width:auto;height:auto;margin:0;flex:0 0 auto;cursor:pointer;accent-color:var(--accent)}
-.field .hint{font-size:.72rem;color:var(--fg-3);margin-top:5px}
+.field label.chk input{width:15px;height:15px;margin:0;flex:0 0 15px;cursor:pointer;accent-color:var(--accent)}
+.field .hint{font-size:.72rem;color:var(--fg-3);margin:5px 0 0;line-height:1.55}
 /* 独立输入框（不放在 .field 直接子级时用，如联系方式三宫格） */
 .inp{
   width:100%;height:42px;padding:0 13px;border:1px solid var(--border-2);
@@ -315,7 +319,12 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 }
 .toolbar select:focus{border-color:var(--btn-b);box-shadow:0 0 0 3px var(--tint)}
 
-.table-wrap{overflow-x:auto;border-radius:var(--radius-md);border:1px solid var(--border)}
+/* 表格容器：宽屏正常铺满；窄屏改为「保持可读最小宽度 + 横向滚动」，
+   避免把列压扁导致文字竖排（2026-10-09 修复）。
+   -webkit-overflow-scrolling 让 iOS 上滑起来跟手。 */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--radius-md);border:1px solid var(--border)}
+/* 窄屏滚动时的提示：右上角一个小箭头，告诉用户还能往右滑 */
+.table-wrap{position:relative}
 table{width:100%;border-collapse:collapse;font-size:.84rem}
 thead th{
   padding:11px 13px;text-align:left;font-size:.68rem;font-weight:800;letter-spacing:.09em;
@@ -323,6 +332,11 @@ thead th{
   border-bottom:1px solid var(--border);white-space:nowrap;
 }
 tbody td{padding:11px 13px;border-bottom:1px solid var(--border);vertical-align:middle}
+/* 数据行里的短内容也禁止断行（2026-10-09）：窄屏下「姓名」被压成几十像素、
+   字被挤成一列一列地竖排，就是这里缺 nowrap + 表格没设最小宽导致的。
+   需要折行的长文本（公告正文等）自己在单元格里加 class 覆盖。 */
+tbody td.nowrap{white-space:nowrap}
+tbody td b{word-break:keep-all}
 tbody tr:last-child td{border-bottom:none}
 tbody tr{transition:background var(--t-fast)}
 tbody tr:hover{background:var(--tint)}
@@ -604,8 +618,13 @@ tbody tr.sel{background:var(--tint-2)}
 .field-grid input{width:15px;height:15px;accent-color:var(--btn-b);cursor:pointer}
 .field-grid label.on{background:var(--tint);border-color:var(--btn-b);color:var(--accent-ink)}
 
-/* 复选框列 */
-.chk{width:15px;height:15px;accent-color:var(--btn-b);cursor:pointer;display:block}
+/* 复选框列（表格里那种真复选框）。
+   ⚠️ 2026-10-09：原来是无作用域的 `.chk`，会把 `<label class="chk">`（表单里的
+      "仅本人可见"勾选项）也一起命中、压成 15px 方块。改成只作用于 input，
+      并给 label 兜一条 width:auto —— 双保险，以后再加同类结构不会再撞。 */
+.chk{accent-color:var(--btn-b);cursor:pointer}
+input.chk{width:15px;height:15px;display:block}
+label.chk{width:auto;height:auto;display:flex;align-items:center}
 
 /* 用户选择器（定向公告） */
 .picker{max-height:230px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);padding:8px}
@@ -674,6 +693,13 @@ tbody tr.sel{background:var(--tint-2)}
   .field-grid{grid-template-columns:1fr 1fr}
   #toasts{right:12px;bottom:12px;left:12px}
   .toast{max-width:none}
+
+  /* --- 表格：窄屏不许压扁列，改为横向滚动（2026-10-09 修复） ---
+     站主反馈「翻页后名字没显示在一行，都是一列一列的」——
+     根因是 table{width:100%} 在 390px 屏上把 5 列表格每列压到 ~70px，
+     中文两字就超出、被逐字断行。设 min-width 后交给 .table-wrap 横向滚动。 */
+  .table-wrap table{min-width:640px}
+  .table-wrap{padding-bottom:2px}
 
   /* --- 记录列表：窄屏堆叠成卡片，按钮铺满一行 --- */
   .rec{padding:13px 12px;gap:10px}
@@ -839,7 +865,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.4.0';
+var SITE_VERSION = '2.4.1';
 var VER_DATE = '2026-10-07';
 
 /* ---- 运行时状态 ---- */
@@ -857,7 +883,7 @@ var STATE = {
   /* 班级内容：公告 + 内容合并成一个列表（2026-10-06） */
   classcontent: { list: [], cat: '全部', sort: 'new', q: '' },
   /* 2026-10-05 新增面板的状态 */
-  titles: { list: [], allowed: [], aiAccount: null, q: '', onlySet: false },
+  titles: { list: [], allowed: [], aiAccount: null, q: '', onlySet: false, page: 1, size: 30 },
   homeworks: { list: [], notice: '', draft: null },
   song: { list: [], cards: [] },
   /* 2026-10-06 新增 */
@@ -3069,11 +3095,12 @@ function renderTitles(){
     + '<section class="panel"><div id="ttBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
 
   $('ttSearch').oninput = debounce(function(e){
-    S.q = e.target.value.trim(); loadTitles();
+    /* 换了搜索词就回第 1 页 —— 否则停在旧页码上，结果变少时会看到空白页 */
+    S.q = e.target.value.trim(); S.page = 1; loadTitles();
   }, 320);
-  $('ttRefresh').onclick = function(){ loadTitles(); };
+  $('ttRefresh').onclick = function(){ S.page = 1; loadTitles(); };
   var onlyBox = $('ttOnly');
-  if(onlyBox) onlyBox.onchange = function(){ S.onlySet = !!onlyBox.checked; paintTitles(); };
+  if(onlyBox) onlyBox.onchange = function(){ S.onlySet = !!onlyBox.checked; S.page = 1; paintTitles(); };
 
   loadTitles();
 }
@@ -3112,11 +3139,23 @@ function paintTitles(){
     return;
   }
 
+  /* ---- 分页（2026-10-09 修复） ----
+     原实现一次性渲染全部 list，全班 60+ 人时既看不到底、也没有翻页入口。
+     这里按 S.page / S.size 切片，并把筛选变化时的页码夹回合法范围。 */
+  var size  = S.size;
+  var total = list.length;
+  var pages = Math.max(1, Math.ceil(total / size));
+  if(S.page > pages) S.page = pages;
+  if(S.page < 1) S.page = 1;
+  var from  = (S.page - 1) * size;
+  var slice = list.slice(from, from + size);
+  var shownTo = Math.min(from + size, total);
+
   body.innerHTML = '<div class="table-wrap"><table><thead><tr>'
     + '<th>姓名</th><th>学号</th><th>当前头衔</th><th>绑定账号</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>'
-    + list.map(function(p){
+    + slice.map(function(p){
         var tags = (p.titles || []);
         var tagHtml = tags.length
           ? tags.map(function(t){
@@ -3125,16 +3164,42 @@ function paintTitles(){
             }).join(' ')
           : '<span class="muted">—</span>';
         return '<tr>'
-          + '<td><b>' + esc(p.name || '(未填)') + '</b></td>'
-          + '<td class="muted">' + esc(p.studentId || '—') + '</td>'
+          + '<td class="nowrap"><b>' + esc(p.name || '(未填)') + '</b></td>'
+          + '<td class="nowrap muted">' + esc(p.studentId || '—') + '</td>'
           + '<td>' + tagHtml + '</td>'
-          + '<td class="muted" style="font-size:.78rem">'
+          + '<td class="nowrap muted" style="font-size:.78rem">'
             + (p.username ? esc(p.username) : '<span style="opacity:.6">未认领</span>') + '</td>'
-          + '<td style="text-align:right"><div class="row-actions">'
+          + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
           +   '<button data-tt-edit="' + p.id + '">任命</button>'
           + '</div></td></tr>';
       }).join('')
-    + '</tbody></table></div>';
+    + '</tbody></table></div>'
+    + '<div class="pager">'
+    +   '<span class="info">共 ' + total + ' 人'
+    +     (S.onlySet || kw ? '（已按条件筛选，全班共 ' + S.list.length + ' 人）' : '')
+    +     '，当前显示第 ' + (from + 1) + '–' + shownTo + ' 条</span>'
+    +   '<span class="pages">'
+    +     '<button data-ttp="first"' + (S.page <= 1 ? ' disabled' : '') + '>首页</button>'
+    +     '<button data-ttp="prev"'  + (S.page <= 1 ? ' disabled' : '') + '>上一页</button>'
+    +     '<button class="on">' + S.page + ' / ' + pages + '</button>'
+    +     '<button data-ttp="next"'  + (shownTo >= total ? ' disabled' : '') + '>下一页</button>'
+    +     '<button data-ttp="last"'  + (shownTo >= total ? ' disabled' : '') + '>末页</button>'
+    +   '</span>'
+    + '</div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-ttp]'), function(b){
+    b.onclick = function(){
+      var a = b.dataset.ttp;
+      if(a === 'first') S.page = 1;
+      else if(a === 'last') S.page = pages;
+      else if(a === 'prev') S.page = Math.max(1, S.page - 1);
+      else if(a === 'next') S.page = Math.min(pages, S.page + 1);
+      paintTitles();
+      /* 翻页后滚回列表顶部，免得停在半空 */
+      var p = $('ttBody');
+      if(p && p.scrollIntoView) p.scrollIntoView({ block:'start', behavior:'smooth' });
+    };
+  });
 
   Array.prototype.forEach.call(body.querySelectorAll('[data-tt-edit]'), function(b){
     b.onclick = function(){
@@ -4939,17 +5004,42 @@ function profileDialog(p){
       +   '<option value="rejected"' + (p && p.contactStatus === 'rejected' ? ' selected' : '') + '>已驳回 — 不展示</option>'
       + '</select></div>'
 
-      /* 可见性（2026-10-08）：管理员可以替本人收窄，也可以解掉本人设的收窄。
-         ⚠️ 这是**本人意愿**（profiles.visibility_pref），只影响这一个人；
-            字段的全局上限在「字段管理」里改。 */
+      /* 可见性（2026-10-08，2026-10-09 v2.4.1 语义修正）：
+         这两个勾选框写的是**本人意愿**（profiles.visibility_pref），
+         只在站主没在「字段管理」里动过该字段时才算数。
+         ⚠️ 站主明确要求「后台权力最大」：他一旦在字段管理里改过某字段，
+            同学自己设的「仅自己可见」就不再生效。所以这里要**明确标出**
+            哪些字段同学已设私密、以及站主改了会不会压过他。 */
       + (isNew ? '' :
-          '<div class="field"><label>联系方式可见性（这个人）</label>'
-        +   '<p class="hint" style="margin-bottom:8px">勾上 = 仅本人可见，同学查不到；不勾 = 按审核状态对外展示。'
-        +     '站主可以在这里覆盖同学自己的设置。</p>'
-        +   '<label class="chk"><input type="checkbox" id="pfWxHide"' + (p && p.visibilityPref && p.visibilityPref.wechat === false ? ' checked' : '') + '> 微信号仅本人可见</label>'
-        +   '<label class="chk"><input type="checkbox" id="pfQqHide"' + (p && p.visibilityPref && p.visibilityPref.qq === false ? ' checked' : '') + '> QQ 号仅本人可见</label>'
-        +   '<label class="chk"><input type="checkbox" id="pfPhHide"' + (p && p.visibilityPref && p.visibilityPref.phone === false ? ' checked' : '') + '> 手机号仅本人可见</label>'
-        + '</div>')
+          (function(){
+            var vp0 = (p && p.visibilityPref) || {};
+            var meta0 = STATE.profiles.fieldMeta || [];
+            /* 该字段站主是否调过（后端 loadFieldMeta 给 adminSet） */
+            var adminTouched = function(field){
+              var m = meta0.find(function(x){ return x.field === field; });
+              return m ? !!m.adminSet : false;
+            };
+            /* 同学自己设了私密、但站主已在字段管理里动过 → 标出「已失效」 */
+            function note(field, who){
+              if(vp0[field] !== false) return '';
+              return adminTouched(field)
+                ? '<span class="badge badge-purple" style="margin-left:6px" title="同学自己设过「仅自己可见」，'
+                  + '但你在「字段管理」里改过这个字段的可见范围，以你为准，他的设置已失效">本人设过私密 · 已被你覆盖</span>'
+                : '<span class="badge badge-orange" style="margin-left:6px" title="同学自己把这项设成了仅自己可见，'
+                  + '你没有改过这个字段，所以他的设置生效中">本人已设为私密</span>';
+            }
+            return '<div class="field"><label>联系方式可见性（这个人）</label>'
+            +   '<p class="hint" style="margin-bottom:8px">勾上 = 仅本人可见，同学查不到；不勾 = 按审核状态对外展示。'
+            +     '<br><b>后台权力最大</b>：只要你在「字段管理」里改过某个字段的全班可见范围，'
+            +     '同学自己在个人中心设的设置就<b>不再生效</b>，以你为准。</p>'
+            +   '<label class="chk"><input type="checkbox" id="pfWxHide"'
+            +     (vp0.wechat === false ? ' checked' : '') + '> 微信号仅本人可见' + note('wechat') + '</label>'
+            +   '<label class="chk"><input type="checkbox" id="pfQqHide"'
+            +     (vp0.qq === false ? ' checked' : '') + '> QQ 号仅本人可见' + note('qq') + '</label>'
+            +   '<label class="chk"><input type="checkbox" id="pfPhHide"'
+            +     (vp0.phone === false ? ' checked' : '') + '> 手机号仅本人可见' + note('phone') + '</label>'
+            + '</div>';
+          })())
 
       /* 额外字段（2026-10-09 v2.4.0）：站主在「字段管理」里加的自定义字段，
          以及 id_card / youth_league_no 这类不在固定项里的字段，在这里自动出现。

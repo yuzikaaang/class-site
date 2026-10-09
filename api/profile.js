@@ -70,7 +70,7 @@ function stricter(a, b) {
  */
 async function loadMeta(sql) {
   try {
-    const rows = await sql`select field, visibility, label, sort_order, is_custom from profile_field_meta order by sort_order, field`;
+    const rows = await sql`select field, visibility, label, sort_order, is_custom, vis_locked from profile_field_meta order by sort_order, field`;
     const map = {};
     for (const r of rows) {
       map[r.field] = {
@@ -78,6 +78,10 @@ async function loadMeta(sql) {
         label: r.label || r.field,
         sortOrder: Number(r.sort_order || 100),
         isCustom: !!r.is_custom,
+        /* 站主是否设过这个字段的可见性（2026-10-09 v2.4.1）。
+           设过 → 以站主为准，同学自己的「仅自己可见」不再生效。
+           自定义字段由站主新增时指定可见性，视为天然已锁定。 */
+        visLocked: !!r.vis_locked || !!r.is_custom,
       };
     }
     return map;
@@ -134,17 +138,41 @@ function visFromPref(v) {
  * @param {object} fvis    该资料的单人例外（field_vis）
  * @param {{self:boolean, committee:boolean}} ctx 查询者身份
  */
+/**
+ * 单条字段对当前访客是否可见。
+ *
+ * 优先级（2026-10-09 v2.4.1 改，站主要求「后台权力最大」）：
+ *   ① 管理员为该同学设的单人例外 profiles.field_vis —— **直接生效，不取严**
+ *      （可以放宽也可以收窄，覆盖同学自己的意愿）
+ *   ② 管理员在「字段管理」里设过可见性的字段（meta.vis_locked = true）—— 同样直接生效
+ *   ③ 以上都没有 → 用同学自己的意愿 profiles.visibility_pref 兜底，且只能收窄
+ *
+ * 即：**站主动过这个字段，同学说的就不算；站主没动过，同学的隐私仍被尊重**。
+ *
+ * ⚠️ 判断「站主动过没有」用的是 meta.vis_locked 这个**显式标记**，
+ *    而不是「visibility 是否等于出厂值」—— 后者分辨不出「站主把它设成了
+ *    它本来就是这个档」的情况（值没变，但意图是存在的），会表现为
+ *    「站主明明改了，同学的私密设置却依然生效」。
+ */
 function canSee(field, meta, pref, fvis, ctx) {
-  const upper = (meta[field] && meta[field].visibility) || 'public';
+  const m = meta[field] || {};
+  const group = m.visibility || 'public';
 
-  /* 第 2 层：本人意愿（只可能收窄） */
-  let eff = upper;
-  const p = visFromPref(pref[field]);
-  if (p) eff = stricter(eff, p);
+  let eff;
 
-  /* 第 3 层：管理员设的单人例外（可收窄也可放宽） */
+  /* ① 单人例外：站主为这一个人专门设的，最强 */
   const f = visFromPref(fvis[field]);
-  if (f) eff = stricter(eff, f);
+  if (f) {
+    eff = f;
+  } else if (m.visLocked) {
+    /* ② 站主在字段管理里设过 → 以站主为准，忽略同学意愿 */
+    eff = group;
+  } else {
+    /* ③ 站主没动过 → 用同学自己的意愿兜底（只能收窄） */
+    eff = group;
+    const p = visFromPref(pref[field]);
+    if (p) eff = stricter(eff, p);
+  }
 
   if (eff === 'self') return ctx.self;
   if (eff === 'committee') return ctx.self || ctx.committee;

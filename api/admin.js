@@ -1125,7 +1125,7 @@ async function loadFieldMeta() {
   try {
     const sql = getSql();
     const rows = await sql`
-      select field, label, visibility, sort_order, is_custom
+      select field, label, visibility, sort_order, is_custom, vis_locked
         from profile_field_meta order by sort_order, field
     `;
     return rows.map((r) => ({
@@ -1134,6 +1134,10 @@ async function loadFieldMeta() {
       visibility: r.visibility || 'public',
       sortOrder: Number(r.sort_order || 100),
       isCustom: !!r.is_custom,
+      /* 站主是否设过该字段的可见性（2026-10-09 v2.4.1）。
+         设过 → 同学自己的「仅自己可见」不再生效（后台权力最大）。
+         自定义字段天然算设过。 */
+      adminSet: !!r.vis_locked || !!r.is_custom,
     }));
   } catch (e) {
     console.warn('[admin] 读字段元数据失败（返回空）：', e.message);
@@ -1258,12 +1262,23 @@ async function setVisibility(req, res, me, b) {
   const exists = await sql`select field from profile_field_meta where field = ${field} limit 1`;
   if (!exists.length) return fail(res, 404, '没有这个字段：' + field);
 
+  /* 🔴 vis_locked = true（2026-10-09 v2.4.1）：
+     这一列 = 「站主动过这个字段的可见性」。置 true 后，同学在个人中心设的
+     「仅自己可见」对**这个字段**不再生效 —— 后台权力最大，以站主为准。
+     站主原话：「即使他修改了可见范围但是后台还是可以修改」。
+     ⚠️ 不能靠「visibility 是否等于出厂值」来判断站主动没动过（站主可以把
+        字段设成它本来就是的档，值不变但确实动过），必须显式打标记。 */
   await sql`
-    update profile_field_meta set visibility = ${vis}, updated_at = now()
+    update profile_field_meta
+       set visibility = ${vis}, vis_locked = true, updated_at = now()
      where field = ${field}
   `;
   await audit(me.id, 'field.visibility', 'profile_field', field, vis);
-  return ok(res, { message: '已把「' + field + '」的可见范围改为 ' + vis, field, visibility: vis });
+  return ok(res, {
+    message: '已把「' + field + '」的可见范围改为 ' + vis
+      + '（此字段已锁定：同学自己的「仅自己可见」不再生效）',
+    field, visibility: vis, adminSet: true,
+  });
 }
 
 /* ============================================================
@@ -1287,7 +1302,7 @@ async function setVisibility(req, res, me, b) {
 /** 读单个字段的元数据 */
 async function readFieldRow(sql, field) {
   const rows = await sql`
-    select field, label, visibility, sort_order, is_custom
+    select field, label, visibility, sort_order, is_custom, vis_locked
       from profile_field_meta where field = ${field} limit 1
   `;
   return rows.length ? rows[0] : null;
@@ -1340,9 +1355,11 @@ async function addField(req, res, me, b) {
   }
 
   try {
+    /* vis_locked = true：自定义字段是站主亲自建的、可见性也是他定的，
+       天然属于「站主说了算」，同学自己设的私密不覆盖它。 */
     await sql`
-      insert into profile_field_meta (field, label, visibility, sort_order, is_custom)
-      values (${field}, ${label}, ${visibility}, ${sortOrder}, true)
+      insert into profile_field_meta (field, label, visibility, sort_order, is_custom, vis_locked)
+      values (${field}, ${label}, ${visibility}, ${sortOrder}, true, true)
     `;
   } catch (e) {
     /* 回滚：把刚建的列删掉，避免幽灵字段 */
@@ -1429,18 +1446,28 @@ async function updateField(req, res, me, b) {
     return fail(res, 400, '没有要修改的内容');
   }
 
+  /* visibility 一旦被站主改过就置 vis_locked = true（见 setVisibility 处的长注释）。
+     只改 label / sort_order 时**不动**锁定标记 —— 那是排版类修改，
+     不应该顺手把同学的隐私设置作废。 */
+  const lockIt = visibility != null;
+
   await sql`
     update profile_field_meta
        set label      = ${label != null ? label : row.label},
            visibility = ${visibility != null ? visibility : row.visibility},
            sort_order = ${sortOrder != null ? sortOrder : row.sort_order},
+           vis_locked = ${lockIt ? true : (row.vis_locked === true || row.vis_locked === 1)},
            updated_at = now()
      where field = ${field}
   `;
 
   await audit(me.id, 'field.update', 'profile_field', field,
     [label, visibility, sortOrder].filter((x) => x != null).join('/'));
-  return ok(res, { message: '已更新字段「' + (label || row.label || field) + '」', field });
+  return ok(res, {
+    message: '已更新字段「' + (label || row.label || field) + '」'
+      + (lockIt ? '（可见性已锁定：同学自己的设置不再生效）' : ''),
+    field, adminSet: lockIt || !!row.is_custom,
+  });
 }
 
 /** 单条资料详情 */
@@ -1609,10 +1636,17 @@ async function saveProfile(req, res, me, b) {
 
   /* 单人可见性例外（2026-10-09 v2.4.0）：管理员给这一条资料设的字段例外。
      ⚠️ 与 visibilityPref 的区别：这个是**管理员**设的，可以放宽也可以收窄；
-        visibilityPref 是本人设的，只能收窄。两者最后一起与全班默认取严。 */
+        visibilityPref 是本人设的，只能收窄。
+
+     🔴 v2.4.1 修复：白名单**不能**用 loadEditableFields()（它滤掉了
+        SPECIAL_FIELDS，而 wechat/qq/phone 正在其中）—— 那会导致站主在
+        编辑弹窗里给某人的微信设例外时，值被静默丢弃、完全没生效。
+        例外本来就该覆盖**任何**在字段管理里出现过的字段，所以用 loadFieldMeta()。 */
+  const allMeta = await loadFieldMeta();
+  const fieldVisJson = buildFieldVis(b.fieldVis, allMeta.map((f) => f.field));
+
+  /* 可自定义取值的字段（用于 extra 的键白名单）。 */
   const editable = await loadEditableFields();
-  const editableNames = editable.map((f) => f.field);
-  const fieldVisJson = buildFieldVis(b.fieldVis, editableNames);
 
   /* 自定义字段的值：只接受 meta 表登记过的键，避免前端乱传键名。
      值统一按「短文本」处理（<200 字），空字符串表示「清空该字段」。 */
