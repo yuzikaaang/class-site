@@ -799,6 +799,14 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
         </button>
         <h2 id="pageTitle">数据概览</h2>
+        <!-- 版本号：2026-10-10 起放在顶栏（手机上也能一眼看到）。
+             ⚠️ 以前它只在左侧边栏底部的 #adminVer 里 —— 而手机上侧边栏要
+                点汉堡菜单才展开，站主根本看不到，于是无法判断自己打开的是
+                不是缓存的旧页面，反复反馈「我改了但没生效」。
+                现在顶栏常驻，点一下可回查线上后端构建号。 -->
+        <span id="headVer" onclick="checkAdminVer()"
+              style="flex:0 0 auto;font-size:.66rem;opacity:.55;cursor:pointer;white-space:nowrap"
+              title="点击回查线上后端构建号，核对改动有没有推上线">v—</span>
       </div>
       <div class="head-actions">
         <!-- 需求：可以点击后台的图标返回主界面 -->
@@ -6657,23 +6665,36 @@ function initTheme(){
 /* ============================================================================
  * 版本号显示 + 在线心跳（2026-10-07）
  * -------------------------------------------------------------------------- */
+/* 版本号显示 + 在线心跳（2026-10-07）
+   ⚠️ 2026-10-10：版本号要同时写进**顶栏 #headVer** 和侧边栏 #adminVer。
+      手机上侧边栏默认收起，只有顶栏那个看得见 —— 站主靠它判断自己打开的是
+      不是缓存的旧页面（此前反复出现「改了却没生效」，其实是手机缓存）。 */
 function paintAdminVer(){
-  var el = $('adminVer');
-  if(el) el.textContent = 'v' + SITE_VERSION + ' · ' + VER_DATE;
+  var txt = 'v' + SITE_VERSION + ' · ' + VER_DATE;
+  var a = $('adminVer'); if(a) a.textContent = txt;
+  var h = $('headVer');  if(h) h.textContent = 'v' + SITE_VERSION;
 }
 /* 点一下回查线上后端构建号：等于最新 commit 前 7 位说明已经是新代码 */
 function checkAdminVer(){
-  var el = $('adminVer');
+  var el = $('adminVer') || $('headVer');
   if(!el) return;
-  el.textContent = 'v' + SITE_VERSION + ' · 回查中…';
+  var txt = 'v' + SITE_VERSION + ' · 回查中…';
+  var a = $('adminVer'); if(a) a.textContent = txt;
+  var h = $('headVer');  if(h) h.textContent = 'v' + SITE_VERSION + ' ·…';
   var t = new Date();
   var hhmm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
   fetch((API_BASE || '') + '/api/content', { cache:'no-store' })
     .then(function(r){
       var sha = r.headers.get('x-build-sha') || '';
-      el.textContent = 'v' + SITE_VERSION + ' · ' + VER_DATE + ' · 线上构建 ' + (sha || '未知') + ' ' + hhmm;
+      var full = 'v' + SITE_VERSION + ' · ' + VER_DATE + ' · 线上构建 ' + (sha || '未知') + ' ' + hhmm;
+      var a2 = $('adminVer'); if(a2) a2.textContent = full;
+      var h2 = $('headVer');  if(h2) h2.textContent = 'v' + SITE_VERSION + ' · ' + (sha || '未知');
     })
-    .catch(function(){ el.textContent = 'v' + SITE_VERSION + ' · ' + VER_DATE + ' · 回查失败'; });
+    .catch(function(){
+      var full = 'v' + SITE_VERSION + ' · ' + VER_DATE + ' · 回查失败';
+      var a3 = $('adminVer'); if(a3) a3.textContent = full;
+      var h3 = $('headVer');  if(h3) h3.textContent = 'v' + SITE_VERSION + ' · 回查失败';
+    });
 }
 /* 后台也算「在线」：站主自己在后台挂着也要体现在最后上线里 */
 function startAdminHeartbeat(){

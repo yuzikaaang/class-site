@@ -3794,7 +3794,19 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
     method: 'POST', token: adminToken, body: { id: newId39 },
   });
 
-  /* ---- F. 前端护栏：后台要提醒「本人已设为私密」 ---- */
+  /* ---- F. 版本号必须在手机上也能看见（2026-10-10） ----
+     ⚠️ 以前版本号只在左侧边栏底部的 #adminVer —— 手机上侧边栏默认收起，
+        站主根本看不到，于是无法判断自己打开的是不是缓存的旧页面，
+        反复反馈「我改了但没生效」（其实是手机缓存）。顶栏必须也有一份。 */
+  const adminHtml39b = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('★后台顶栏有版本号元素 #headVer（手机上可见）', /id="headVer"/.test(adminHtml39b));
+  t('★#headVer 在 header.head 里（不是藏在侧边栏里）',
+    /<header class="head">[\s\S]{0,1200}id="headVer"/.test(adminHtml39b));
+  t('★paintAdminVer 同时写顶栏和侧边栏',
+    /var h = \$\('headVer'\);\s*if\(h\) h\.textContent/.test(adminHtml39b));
+  t('★点顶栏版本号能回查线上构建号', /id="headVer"[^>]*onclick="checkAdminVer\(\)"/.test(adminHtml39b));
+
+  /* ---- G. 前端护栏：后台要提醒「本人已设为私密」 ---- */
   const adminHtml39 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   t('★后台编辑弹窗标出「本人已设为私密」', /本人已设为私密/.test(adminHtml39));
   t('★后台标出「已被你覆盖」的情况', /已被你覆盖/.test(adminHtml39));
