@@ -3754,7 +3754,47 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
     method: 'POST', token: adminToken, body: { field: 'qq', visibility: 'public' },
   });
 
-  /* ---- D. 前端护栏：后台要提醒「本人已设为私密」 ---- */
+  /* ---- E. 新增资料时必须带上 visibility_pref（v2.4.1 修） ----
+     🔴 原来 prefJson 只在 UPDATE 分支被用到，INSERT 分支没带这一列 ——
+        站主给同学设了「仅自己可见」后新建资料，意愿被**静默丢弃**，
+        读回来永远是 {}。这个 bug 静态测试查不出来，是线上验收抓到的。 */
+  const mkNew = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '意愿新建测试', studentId: '280777', role: '学生',
+            wechat: 'wx_pref_new', contactStatus: 'approved',
+            visibilityPref: { wechat: false, qq: true, phone: true } },
+  });
+  t('★新增资料时 visibilityPref 被写入（不再静默丢弃）',
+    mkNew.status === 200 && mkNew.body.ok, JSON.stringify(mkNew.body).slice(0, 120));
+  const newId39 = mkNew.body.id;
+  const newDet = await call('/api/admin?action=profile&id=' + newId39, { token: adminToken });
+  const np = (newDet.body.profile || {}).visibilityPref || {};
+  t('★★新建资料的 visibilityPref.wechat === false',
+    np.wechat === false, JSON.stringify(np));
+  t('★新建资料的 visibilityPref 三项都在',
+    ('wechat' in np) && ('qq' in np) && ('phone' in np), JSON.stringify(np));
+
+  /* 行为层：这条新建资料对外查询时，微信应当被同学意愿挡住。
+     此时 wechat 已被前面的场景锁上（adminSet=true），同学意愿会被忽略 ——
+     正好用来做**对照**：先在锁定态验「站主说了算」，再解锁验「同学意愿生效」。 */
+  const srchLocked = await call('/api/profile?action=search&q=280777', { token: bTok });
+  const spLocked = ((srchLocked.body || {}).results || [])[0] || {};
+  t('★（对照）wechat 处于锁定态 → 站主说了算，微信可见',
+    !!spLocked.wechat, JSON.stringify({ wechat: spLocked.wechat }));
+
+  /* 临时解锁 wechat，验「同学意愿真的存进去了、且在未被站主动过时生效」 */
+  db.run("update profile_field_meta set vis_locked = 0 where field = 'wechat'");
+  const srch39 = await call('/api/profile?action=search&q=280777', { token: bTok });
+  const sp39 = ((srch39.body || {}).results || [])[0] || {};
+  t('★解锁后同学的「微信仅自己可见」生效（查不到微信）',
+    !sp39.wechat, JSON.stringify({ wechat: sp39.wechat, qq: sp39.qq }));
+  /* 恢复锁定（前面场景已把 wechat 锁上，这里只是临时解锁来验这条路径） */
+  db.run("update profile_field_meta set vis_locked = 1 where field = 'wechat'");
+  await call('/api/admin?action=delete-profile', {
+    method: 'POST', token: adminToken, body: { id: newId39 },
+  });
+
+  /* ---- F. 前端护栏：后台要提醒「本人已设为私密」 ---- */
   const adminHtml39 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   t('★后台编辑弹窗标出「本人已设为私密」', /本人已设为私密/.test(adminHtml39));
   t('★后台标出「已被你覆盖」的情况', /已被你覆盖/.test(adminHtml39));

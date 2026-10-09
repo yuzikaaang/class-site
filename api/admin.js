@@ -1733,6 +1733,17 @@ async function saveProfile(req, res, me, b) {
     st || (wechat || qq || phone ? 'approved' : 'none')];
   const insParams = ['$1', '$2', '$3', '$4', '$5', '$6', '$7', '$8', '$9'];
 
+  /* 🔴 v2.4.1 修复：新增时也要写 visibility_pref。
+     原来 prefJson 只在 UPDATE 分支被用到，INSERT 分支完全没带这一列 ——
+     于是站主在前台/后台给同学设「微信仅自己可见」后**新建资料**，
+     这份意愿会被静默丢弃，读回来永远是 {}。表现就是「我明明勾了，他不生效」。
+     与 fieldVis 一样，只在显式传了对象时才带（null 表示不写，用列默认值）。 */
+  if (prefJson != null) {
+    insCols.push('visibility_pref');
+    insVals.push(prefJson);
+    insParams.push('$' + insVals.length);
+  }
+
   if (b.fieldVis && typeof b.fieldVis === 'object') {
     insCols.push('field_vis');
     insVals.push(fieldVisJson);
