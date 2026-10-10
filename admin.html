@@ -246,6 +246,9 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 }
 .icon-btn:hover{background:var(--danger-bg);color:var(--danger)}
 .icon-btn svg{width:16px;height:16px}
+/* v2.5.0：运行时把 emoji 换成 SVG 后的内联容器（对齐与间距） */
+.ico-inline{display:inline-flex;align-items:center;vertical-align:-2px}
+.ico-inline>svg{width:15px;height:15px;vertical-align:0}
 
 .head{
   position:sticky;top:0;z-index:50;height:var(--head-h);
@@ -873,8 +876,8 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.4.1';
-var VER_DATE = '2026-10-07';
+var SITE_VERSION = '2.5.0';
+var VER_DATE = '2026-10-11';
 
 /* ---- 运行时状态 ---- */
 var STATE = {
@@ -1067,6 +1070,82 @@ function svg(name, size){
        + 'stroke-linecap="round" stroke-linejoin="round" width="' + s + '" height="' + s + '">' + p + '</svg>';
 }
 
+/* -----------------------------------------------------
+   v2.5.0 去 emoji：后台与主站同一套做法 —— 页面加载后跑**一次**把写死的 emoji 换成 SVG。
+   只跑一次、**不监听 DOM 变化**，跑完即止，不会和任何定时刷新打架。
+   后台没有主站那套 85 个 emoji 的映射表，这里用一张精简表（覆盖后台实际用到的）。
+   ----------------------------------------------------- */
+var ADM_EMOJI_MAP = {
+  '⚠':'alert','✅':'check','❌':'x','💡':'sun','🔒':'lock','🔐':'lock','📌':'file','🎉':'activity',
+  '📝':'edit','🔔':'bell','🌙':'sun','☀':'sun','📋':'layers','📅':'calendar','📱':'file','🔗':'globe',
+  '🌐':'globe','💾':'download','🗑':'trash','🏫':'globe','🚫':'ban','✨':'activity','🎮':'activity',
+  '📥':'download','📤':'upload','🔍':'search','📡':'activity','💭':'quote','👤':'user','➕':'plus',
+  '🗂':'layers','🕹':'activity','🧩':'layers','🎯':'activity','🐍':'activity','🔨':'settings',
+  '🐦':'activity','🍬':'activity','💣':'alert','🦘':'activity','⚫':'ban','⭕':'ban','♟':'file',
+  '✈':'upload','🖥':'dashboard','🍎':'file','⚙':'settings','☰':'grip','🏠':'dashboard','📊':'chart',
+  '📦':'layers','🎁':'activity','🎵':'music','🎟':'ticket','🎼':'music','📜':'file','💬':'quote',
+  '👥':'users','🥇':'activity','🥈':'activity','🥉':'activity','✏':'edit','🗓':'calendar',
+  '👍':'activity','🔥':'activity','🖼':'file','🎧':'music','🎬':'file','📎':'file','⏳':'clock',
+  '⚡':'activity','🔤':'file','📖':'file','📐':'file','⚛':'file','🧪':'file','🧬':'file','☁':'globe',
+  '📢':'megaphone','📲':'file','👁':'eye','🔓':'lock','🧹':'trash','🔄':'refresh','📇':'user','🏆':'activity'
+};
+var ADM_EMOJI_CHARS = Object.keys(ADM_EMOJI_MAP).sort(function(a,b){ return b.length-a.length; });
+var ADM_EMOJI_RE = new RegExp('(' + ADM_EMOJI_CHARS.map(function(c){
+  return c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+}).join('|') + ')\\uFE0F?', 'g');
+function admEmojiSvg(text, size){
+  var t = String(text == null ? '' : text);
+  if(!t) return t;
+  ADM_EMOJI_RE.lastIndex = 0;
+  if(!ADM_EMOJI_RE.test(t)) return t;
+  ADM_EMOJI_RE.lastIndex = 0;
+  var out = '', last = 0, m;
+  while((m = ADM_EMOJI_RE.exec(t))){
+    if(m.index > last) out += t.slice(last, m.index);
+    var key = m[0].replace(/\uFE0F/g,'');
+    out += svg(ADM_EMOJI_MAP[key] || ADM_EMOJI_MAP[m[0]] || 'file', size || 15);
+    last = m.index + m[0].length;
+    if(m[0].length === 0) ADM_EMOJI_RE.lastIndex++;
+  }
+  if(last < t.length) out += t.slice(last);
+  return out;
+}
+/* 去掉纯文本里的 emoji（toast / option 这类放不了 SVG 的位置）。 */
+function admStripEmoji(text){
+  var t = String(text == null ? '' : text);
+  ADM_EMOJI_RE.lastIndex = 0;
+  return t.replace(ADM_EMOJI_RE, '').replace(/^\s+/, '');
+}
+var ADM_ICONIFY_SKIP = {SCRIPT:1, STYLE:1, TEXTAREA:1, OPTION:1, TITLE:1};
+function admIconify(root){
+  var base = root || document.body;
+  if(!base) return;
+  var walker = document.createTreeWalker(base, NodeFilter.SHOW_TEXT, {
+    acceptNode: function(node){
+      var p = node.parentNode;
+      if(!p || ADM_ICONIFY_SKIP[p.nodeName]) return NodeFilter.FILTER_REJECT;
+      if(p.closest && p.closest('[data-no-icon]')) return NodeFilter.FILTER_REJECT;
+      ADM_EMOJI_RE.lastIndex = 0;
+      return ADM_EMOJI_RE.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+  });
+  var targets = [], n;
+  while((n = walker.nextNode())) targets.push(n);
+  for(var i = 0; i < targets.length; i++){
+    var node = targets[i];
+    var span = document.createElement('span');
+    span.className = 'ico-inline';
+    span.innerHTML = admEmojiSvg(node.nodeValue, 15);
+    if(node.parentNode) node.parentNode.replaceChild(span, node);
+  }
+}
+/* option 放不了 SVG，统一去 emoji 保留文字 */
+function admStripOptions(root){
+  var base = root || document;
+  var opts = base.querySelectorAll ? base.querySelectorAll('option') : [];
+  for(var i = 0; i < opts.length; i++) opts[i].textContent = admStripEmoji(opts[i].textContent);
+}
+
 /* ============================================================================
  * ④ 通用 UI
  * ========================================================================= */
@@ -1075,7 +1154,8 @@ function toast(msg, kind, ms){
   if(!box) return;
   var el = document.createElement('div');
   el.className = 'toast ' + (kind || '');
-  el.textContent = msg;
+  /* v2.5.0：toast 是纯文本，放不了 SVG，统一去 emoji 只留文字 */
+  el.textContent = typeof admStripEmoji === 'function' ? admStripEmoji(msg || '') : msg;
   box.appendChild(el);
   setTimeout(function(){
     el.style.transition = 'opacity .25s, transform .25s';
@@ -1295,8 +1375,8 @@ function renderOverview(){
         foot: '今日 ' + (lg.today || 0) + ' 次' },
       { icon:'database', tone:'',       label:'云端数据条数', value: d.rows || 0,
         foot: '占用 ' + bytes(d.bytes) },
-      { icon:'shield',   tone:'green',  label:'在线会话',   value: j.activeSessions || 0,
-        foot: (u.banned || 0) + ' 个账号被禁用' },
+      { icon:'shield',   tone:'green',  label:'当前在线',   value: j.onlineUsers || 0,
+        foot: '在线会话 ' + (j.onlineSessions || 0) + ' 个 · 共 ' + (j.activeSessions || 0) + ' 个有效会话' },
       { icon:'inbox',    tone:'blue',   label:'班级资料',   value: pf.total || 0,
         foot: '已认领 ' + (pf.claimed || 0) + ' 条' },
       { icon:'check',    tone: (pf.pending ? 'amber' : 'green'), label:'待审联系方式', value: pf.pending || 0,
@@ -1383,12 +1463,18 @@ function renderOverview(){
 /* ============================================================================
  * ⑦ 面板：用户管理（核心，深度对标 VoiceHub）
  * ========================================================================= */
-/* 「现在就在站上吗」：5 分钟内有心跳即算在线（2026-10-07） */
+/* 「现在就在站上吗」（v2.5.0 改为服务端会话级判定）
+   后端按 sessions.last_seen_at（90 秒内有心跳）算好 online 字段直接给，
+   这里不再自己拿时间戳猜 —— 那样只能看出「最近 5 分钟登录过」，
+   登录一次就挂好几天，数字永远虚高。 */
 function isOnlineNow(u){
-  var t = u && (u.lastSeenAt || u.lastLoginAt);
+  if(!u) return false;
+  if(typeof u.online === 'boolean') return u.online;
+  /* 兜底：老接口没给 online 时退回时间戳判断 */
+  var t = u.sessionLastSeen || u.lastSeenAt || u.lastLoginAt;
   if(!t) return false;
   var ms = Date.now() - new Date(t).getTime();
-  return ms >= 0 && ms < 5 * 60 * 1000;
+  return ms >= 0 && ms < 2 * 60 * 1000;
 }
 function renderUsers(){
   var view = $('view');
@@ -1480,11 +1566,15 @@ function paintUsers(){
       +   '<div><b>' + esc(u.displayName || u.username) + '</b>'
       +   '<i class="mono">' + esc(u.username) + '</i></div></div></td>'
       + '<td class="nowrap">' + badges + '</td>'
-      /* 「最后上线」：优先用心跳时间 lastSeenAt，没有才退回登录时间。
-         5 分钟内有心跳 = 现在就在站上，给个绿点（2026-10-07 站主要求：要看的是什么时候上过线，不是什么时候输过密码） */
-      + '<td class="nowrap muted" title="' + attr(fmt(u.lastSeenAt || u.lastLoginAt)) + '">'
-      +   (isOnlineNow(u) ? '<span class="dot-on" title="当前在线"></span>' : '')
-      +   esc(u.lastSeenAt ? ago(u.lastSeenAt) : (u.lastLoginAt ? ago(u.lastLoginAt) : '从未上线'))
+      /* 「最后上线」：v2.5.0 起用**会话心跳**口径（服务端判定 online）。
+         在线 → 绿点 +「在线中」；离线 → 显示最后一次心跳的「多久以前」，
+         没有心跳记录才退回登录时间。这才回答得了「是不是真的此刻在站上」。 */
+      + '<td class="nowrap muted" title="' + attr(fmt(u.sessionLastSeen || u.lastSeenAt || u.lastLoginAt)) + '">'
+      +   (isOnlineNow(u)
+            ? '<span class="dot-on" title="当前在线"></span>在线中'
+              + (u.onlineSessions > 1 ? '<span style="opacity:.7">（' + u.onlineSessions + ' 端）</span>' : '')
+            : esc(u.sessionLastSeen ? ago(u.sessionLastSeen)
+                 : (u.lastSeenAt ? ago(u.lastSeenAt) : (u.lastLoginAt ? ago(u.lastLoginAt) : '从未上线'))))
       + '</td>'
       + '<td class="nowrap muted">' + esc(fmt(u.createdAt, 'date')) + '</td>'
       + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
@@ -5888,7 +5978,7 @@ function paintGames(){
   var sm = S.summary || {};
   var head = '<div class="stat-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
     + '<div class="mini-card"><span class="mc-label">上报人数</span><b>' + (sm.players || 0) + '</b></div>'
-    + '<div class="mini-card"><span class="mc-label">累计游玩</span><b>' + fmtDur(sm.totalMs) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">累计游玩</span><b>' + (sm.totalPlays || 0) + ' 局</b></div>'
     + '<div class="mini-card"><span class="mc-label">点歌券发放</span><b>' + (sm.coupons || 0) + ' 张</b></div>'
     + '</div>';
 
@@ -5924,7 +6014,6 @@ function paintPlay(list){
       + '<td><b>' + esc(u.name || '(未填)') + '</b></td>'
       + '<td class="muted" style="font-size:.78rem">' + esc(u.username || '—') + '</td>'
       + his
-      + '<td style="text-align:right"><b>' + fmtDur(u.totalMs) + '</b></td>'
       + '<td style="max-width:280px;font-size:.76rem" class="muted">' + (plays || '—') + '</td>'
       + '<td class="muted" style="font-size:.76rem">' + (last ? esc(fmt(last)) : '—') + '</td>'
       + '</tr>';
@@ -5932,7 +6021,7 @@ function paintPlay(list){
 
   return '<div class="table-wrap"><table><thead><tr>'
     + '<th>姓名</th><th>账号</th>' + cols
-    + '<th style="text-align:right">总时长</th><th>各游戏局数 / 时长</th><th>最近游玩</th>'
+    + '<th>各游戏局数 / 时长</th><th>最近游玩</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
@@ -6797,6 +6886,12 @@ if(document.readyState === 'loading'){
 }else{
   boot();
 }
+/* v2.5.0 去 emoji：启动后把后台界面里写死的 emoji 一次性换成 SVG 图标。
+   ⚠️ 只跑一次、不监听 DOM；option 放不了 SVG，单独去 emoji。 */
+setTimeout(function(){
+  try{ admIconify(document.body); }catch(e){}
+  try{ admStripOptions(document); }catch(e){}
+}, 0);
 
 /* ============================================================================
  * ⑫ 面板：抽歌排期（第二十八轮，从主站 index.html 整体搬迁）

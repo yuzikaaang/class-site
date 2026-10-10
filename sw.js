@@ -65,7 +65,7 @@
 //       （此前用 XOR 混淆存放，密钥就在同一份 JS 里，等于明文；公开站点藏不住，故彻底删除）。
 //       清理仓库内全部历史备份包（backup/ 与根目录 class-site-backup.zip），改用 git 做版本留档。
 //       升版本清旧缓存。
-const CACHE = 'class-site-v47'
+const CACHE = 'class-site-v48'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

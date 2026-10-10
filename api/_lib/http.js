@@ -55,6 +55,13 @@ export async function ensureSchema(sql) {
     await s`
       alter table users add column if not exists last_seen_at timestamptz
     `;
+    /* v2.5.0「真·在线检测」：会话粒度的在线时间。
+       以前只有 users.last_seen_at（用户粒度），只能知道「这个人最近在不在」，
+       分不清同一账号的多台设备，也无法精确到「此刻这个会话还在不在」。
+       心跳每 60 秒刷新该列，后台按「90 秒内有更新」判定在线。 */
+    await s`
+      alter table sessions add column if not exists last_seen_at timestamptz
+    `;
     await s`
       create table if not exists login_log (
         id         bigserial   primary key,
@@ -360,7 +367,7 @@ export async function currentUser(req) {
     select u.id, u.username, u.role, u.status, u.display_name, u.created_at,
            coalesce(u.must_change_password, false) as must_change_password,
            coalesce(u.is_ai, false) as is_ai,
-           s.expires_at
+           s.expires_at, s.token as session_token
       from sessions s
       join users u on u.id = s.user_id
      where (s.token = ${tokenHash} or s.token = ${token})
@@ -400,6 +407,9 @@ export async function currentUser(req) {
     profileRole,
     title,
     isAI: !!u.is_ai,
+    /* 当前会话标识（sha256 后的 token）。心跳拿它精确更新「这个会话」的
+       last_seen_at，从而支持按设备/会话判定在线；不下发给前端。 */
+    sessionToken: u.session_token || '',
   };
 }
 

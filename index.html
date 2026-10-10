@@ -312,6 +312,9 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .dark .pc-edit-tip{color:#a8a29e}
 .licon{display:inline-block;flex:none;vertical-align:-2px}
 .lic-fb{display:inline-block;background:currentColor;opacity:.35;border-radius:3px}
+/* v2.5.0：运行时把静态 HTML 里的 emoji 换成 SVG 后，包一层 inline span 保证对齐与间距 */
+.ico-inline{display:inline-flex;align-items:center;vertical-align:-2px}
+.ico-inline>.licon{vertical-align:0}
 .hw-badge .licon,.badge .licon{vertical-align:-1px}
 .hw-audio{display:inline-flex;align-items:center;gap:7px;margin:8px 0 4px 26px;background:linear-gradient(135deg,#f6f1ec,#fff1e7);border:1px solid #fee2d5;color:#af410f;border-radius:10px;padding:7px 12px;font-size:.82rem;font-weight:800;cursor:pointer;transition:transform .14s,box-shadow .14s}
 .hw-audio:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(194,65,12,.18)}
@@ -1209,6 +1212,57 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .acct-msg.ok{color:#0f8a4d}
 .acct-msg.warn{color:#af410f}
 .acct-hint{font-size:.7rem;color:#a99a8d;line-height:1.6;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(120,53,15,.13)}
+/* ── 滑块拼图验证（v2.5.0）──
+   纯前端实现：canvas 画底图 + 缺口，拖动滑块把拼图块送进缺口。
+   不联网、不上传、不收集任何信息，目的是挡掉脚本批量注册 / 撞库。 */
+.cap-wrap{position:relative;border-radius:12px;overflow:hidden;background:rgba(120,53,15,.055);
+  border:1px solid rgba(120,53,15,.12);margin-bottom:9px;touch-action:none}
+.cap-stage{position:relative;width:100%;height:118px;overflow:hidden}
+.cap-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.cap-piece{position:absolute;top:0;left:0;height:100%;will-change:transform;filter:drop-shadow(0 1px 3px rgba(0,0,0,.28))}
+.cap-note{position:absolute;right:8px;bottom:6px;font-size:.62rem;color:#fff;opacity:.72;
+  text-shadow:0 1px 2px rgba(0,0,0,.55);pointer-events:none}
+.cap-track{position:relative;height:40px;background:rgba(120,53,15,.08);border-top:1px solid rgba(120,53,15,.1);
+  user-select:none;touch-action:none}
+.cap-fill{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,rgba(224,138,76,.2),rgba(194,65,12,.24))}
+.cap-handle{position:absolute;top:3px;left:3px;width:52px;height:34px;border-radius:9px;
+  background:#fff;border:1px solid rgba(120,53,15,.16);box-shadow:0 2px 7px rgba(120,53,15,.2);
+  display:flex;align-items:center;justify-content:center;cursor:grab;font-size:1rem;color:#c2410c;
+  transition:background .15s,border-color .15s}
+.cap-handle:active{cursor:grabbing}
+.cap-tip{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:.74rem;font-weight:600;color:#8a7a6d;pointer-events:none}
+.cap-wrap.ok{border-color:rgba(15,138,77,.4)}
+.cap-wrap.ok .cap-track{background:rgba(15,138,77,.1)}
+.cap-wrap.ok .cap-handle{background:#0f8a4d;color:#fff;border-color:#0f8a4d}
+.cap-wrap.ok .cap-tip{color:#0f8a4d}
+.cap-wrap.bad .cap-track{animation:capShake .38s}
+.cap-wrap.bad .cap-handle{border-color:#c0392b;color:#c0392b}
+@keyframes capShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}
+  40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+.cap-refresh{position:absolute;right:5px;top:5px;width:26px;height:26px;border-radius:8px;border:none;
+  background:rgba(0,0,0,.32);color:#fff;font-size:.8rem;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;padding:0;line-height:1}
+.cap-refresh:hover{background:rgba(0,0,0,.5)}
+.dark .cap-wrap{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.11)}
+.dark .cap-track{background:rgba(255,255,255,.07);border-top-color:rgba(255,255,255,.09)}
+.dark .cap-handle{background:#3a332e;border-color:rgba(255,255,255,.14);color:#f0a868}
+/* ── 离线横幅（v2.5.0）──
+   心跳实测连不上服务端时从顶部滑入，恢复后自动收起。
+   文案：检查网络 / 切换流量（移动数据）。 */
+.offline-bar{position:fixed;left:50%;top:8px;z-index:99990;transform:translate(-50%,-140%);
+  display:flex;align-items:center;gap:9px;max-width:min(94vw,560px);
+  padding:9px 12px;border-radius:13px;background:#7c2d12;color:#fff;
+  box-shadow:0 8px 26px rgba(80,30,10,.34);font-size:.76rem;line-height:1.45;
+  opacity:0;pointer-events:none;transition:transform .34s cubic-bezier(.22,1,.36,1),opacity .3s}
+.offline-bar.show{transform:translate(-50%,0);opacity:1;pointer-events:auto}
+.off-ico{flex:none;font-size:.95rem}
+.off-txt{flex:1;min-width:0}
+.off-btn{flex:none;padding:5px 11px;border-radius:9px;border:1px solid rgba(255,255,255,.45);
+  background:rgba(255,255,255,.14);color:#fff;font-size:.72rem;font-weight:700;
+  font-family:inherit;cursor:pointer;transition:background .15s}
+.off-btn:hover{background:rgba(255,255,255,.26)}
+.dark .offline-bar{background:#4a1d0a;border:1px solid rgba(255,255,255,.1)}
 /* 「仅自己可见」勾选项（2026-10-08）：紧贴对应输入框，做成轻量小字行 */
 .acct-priv{display:flex;align-items:center;gap:6px;font-size:.72rem;color:#8a7a6d;
   margin:-6px 0 10px;padding-left:2px;cursor:pointer;user-select:none}
@@ -1867,12 +1921,12 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 <button id="studyBubble" onclick="showStudyNotice()" title="查看访问提示" aria-label="查看访问提示" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(249,115,22,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(194,65,12,.22)">💬<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
 
 
-<!-- ===== 复制链接弹窗（主链接 + 备用链接） ===== -->
+<!-- ===== 复制链接弹窗（主链接，唯一入口） ===== -->
 <div class="allboard-mask" id="copyLinkMask">
   <div class="allboard-box" style="max-width:360px">
     <div class="allboard-head"><span>🔗 复制链接</span><button onclick="closeCopyLink()">关闭</button></div>
     <div style="padding:16px 20px">
-      <p style="font-size:.82rem;color:#57534e;line-height:1.7;margin:0 0 12px">复制班级服务站链接，粘贴到微信 / QQ 即可分享给同学。平时用<b>主链接</b>；主链接打不开时再用<b>备用链接</b>，备用链接<b>在微信内无法打开</b>，需复制链接到系统浏览器（Safari / Chrome / Edge）打开。</p>
+      <p style="font-size:.82rem;color:#57534e;line-height:1.7;margin:0 0 12px">复制班级服务站链接，粘贴到微信 / QQ 即可分享给同学。<b>微信内可直接打开</b>。</p>
       <div id="siteLinkList"></div>
     </div>
   </div>
@@ -2178,8 +2232,8 @@ function normAnswer(s){
    内联数据来自 lucide-static v1.48.0（官方 1854 图标，此处仅内联本站用到的 84 个）。
    若某个图标名不在内联表内，iconSvg() 会自动回退到 CDN 加载（见 lucideFallback）。
    ===================================================== */
-var LUCIDE_ICONS={"app-window":"<rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"/><path d=\"M10 4v4\"/><path d=\"M2 8h20\"/><path d=\"M6 4v4\"/>","arrow-right":"<path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/>","atom":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><path d=\"M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z\"/><path d=\"M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z\"/>","ban":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M4.929 4.929 19.07 19.071\"/>","bell":"<path d=\"M10.268 21a2 2 0 0 0 3.464 0\"/><path d=\"M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326\"/>","bird":"<path d=\"M16 7h.01\"/><path d=\"M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20\"/><path d=\"m20 7 2 .5-2 .5\"/><path d=\"M10 18v3\"/><path d=\"M14 17.75V21\"/><path d=\"M7 18a6 6 0 0 0 3.84-10.61\"/>","blocks":"<path d=\"M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2\"/><rect x=\"14\" y=\"2\" width=\"8\" height=\"8\" rx=\"1\"/>","bomb":"<circle cx=\"11\" cy=\"13\" r=\"9\"/><path d=\"M14.35 4.65 16.3 2.7a2.41 2.41 0 0 1 3.4 0l1.6 1.6a2.4 2.4 0 0 1 0 3.4l-1.95 1.95\"/><path d=\"m22 2-1.5 1.5\"/>","book-open":"<path d=\"M12 5v16\"/><path d=\"M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z\"/>","calendar":"<path d=\"M8 2v3\"/><path d=\"M16 2v3\"/><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><path d=\"M3 9h18\"/>","candy":"<path d=\"M10 7v10.9\"/><path d=\"M14 6.1V17\"/><path d=\"M16 7V3a1 1 0 0 1 1.707-.707 2.5 2.5 0 0 0 2.152.717 1 1 0 0 1 1.131 1.131 2.5 2.5 0 0 0 .717 2.152A1 1 0 0 1 21 8h-4\"/><path d=\"M16.536 7.465a5 5 0 0 0-7.072 0l-2 2a5 5 0 0 0 0 7.07 5 5 0 0 0 7.072 0l2-2a5 5 0 0 0 0-7.07\"/><path d=\"M8 17v4a1 1 0 0 1-1.707.707 2.5 2.5 0 0 0-2.152-.717 1 1 0 0 1-1.131-1.131 2.5 2.5 0 0 0-.717-2.152A1 1 0 0 1 3 16h4\"/>","chart-column":"<path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/><path d=\"M18 17V9\"/><path d=\"M13 17V5\"/><path d=\"M8 17v-3\"/>","circle":"<circle cx=\"12\" cy=\"12\" r=\"10\"/>","circle-check":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m16 9-5.5 5.5L8 12\"/>","circle-check-big":"<path d=\"M21.801 10A10 10 0 1 1 17 3.335\"/><path d=\"m9 11 3 3L22 4\"/>","circle-x":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m15 9-6 6\"/><path d=\"m9 9 6 6\"/>","clapperboard":"<path d=\"m12.296 3.464 3.02 3.956\"/><path d=\"M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z\"/><path d=\"M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><path d=\"m6.18 5.276 3.1 3.899\"/>","clipboard-copy":"<rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\" ry=\"1\"/><path d=\"M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2\"/><path d=\"M16 4h2a2 2 0 0 1 2 2v4\"/><path d=\"M21 14H11\"/><path d=\"m15 10-4 4 4 4\"/>","contact":"<path d=\"M16 2v2\"/><path d=\"M7 21v-2a2 2 0 012-2h6a2 2 0 012 2v2\"/><path d=\"M8 2v2\"/><circle cx=\"12\" cy=\"10\" r=\"3\"/><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/>","crown":"<path d=\"M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z\"/><path d=\"M5 21h14\"/>","dices":"<rect width=\"12\" height=\"12\" x=\"2\" y=\"10\" rx=\"2\" ry=\"2\"/><path d=\"m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6\"/><path d=\"M6 18h.01\"/><path d=\"M10 14h.01\"/><path d=\"M15 6h.01\"/><path d=\"M18 9h.01\"/>","dna":"<path d=\"m10 16 1.5 1.5\"/><path d=\"m14 8-1.5-1.5\"/><path d=\"M15 2c-1.798 1.998-2.518 3.995-2.807 5.993\"/><path d=\"m16.5 10.5 1 1\"/><path d=\"m17 6-2.891-2.891\"/><path d=\"M2 15c6.667-6 13.333 0 20-6\"/><path d=\"m20 9 .891.891\"/><path d=\"M3.109 14.109 4 15\"/><path d=\"m6.5 12.5 1 1\"/><path d=\"m7 18 2.891 2.891\"/><path d=\"M9 22c1.798-1.998 2.518-3.995 2.807-5.993\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","eraser":"<path d=\"M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21\"/><path d=\"m5.082 11.09 8.828 8.828\"/>","flame":"<path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/>","flask-conical":"<path d=\"M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2\"/><path d=\"M6.453 15h11.094\"/><path d=\"M8.5 2h7\"/>","folder":"<path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","gamepad":"<line x1=\"6\" x2=\"10\" y1=\"12\" y2=\"12\"/><line x1=\"8\" x2=\"8\" y1=\"10\" y2=\"14\"/><line x1=\"15\" x2=\"15.01\" y1=\"13\" y2=\"13\"/><line x1=\"18\" x2=\"18.01\" y1=\"11\" y2=\"11\"/><rect width=\"20\" height=\"12\" x=\"2\" y=\"6\" rx=\"2\"/>","gamepad-2":"<line x1=\"6\" x2=\"10\" y1=\"11\" y2=\"11\"/><line x1=\"8\" x2=\"8\" y1=\"9\" y2=\"13\"/><line x1=\"15\" x2=\"15.01\" y1=\"12\" y2=\"12\"/><line x1=\"18\" x2=\"18.01\" y1=\"10\" y2=\"10\"/><path d=\"M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z\"/>","gift":"<path d=\"M12 7v14\"/><path d=\"M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8\"/><path d=\"M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5\"/><rect x=\"3\" y=\"7\" width=\"18\" height=\"4\" rx=\"1\"/>","globe":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20\"/><path d=\"M2 12h20\"/>","grid-3x3":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M3 9h18\"/><path d=\"M3 15h18\"/><path d=\"M9 3v18\"/><path d=\"M15 3v18\"/>","hammer":"<path d=\"m15 12-9.373 9.373a1 1 0 0 1-3.001-3L12 9\"/><path d=\"m18 15 4-4\"/><path d=\"m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172v-.344a2 2 0 0 0-.586-1.414l-1.657-1.657A6 6 0 0 0 12.516 3H9l1.243 1.243A6 6 0 0 1 12 8.485V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5\"/>","house":"<path d=\"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8\"/><path d=\"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/>","keyboard":"<path d=\"M10 8h.01\"/><path d=\"M12 12h.01\"/><path d=\"M14 8h.01\"/><path d=\"M16 12h.01\"/><path d=\"M18 8h.01\"/><path d=\"M6 8h.01\"/><path d=\"M7 16h10\"/><path d=\"M8 12h.01\"/><rect width=\"20\" height=\"16\" x=\"2\" y=\"4\" rx=\"2\"/>","layers":"<path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/>","lightbulb":"<path d=\"M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5\"/><path d=\"M9 18h6\"/><path d=\"M10 22h4\"/>","link":"<path d=\"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\"/><path d=\"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71\"/>","list-music":"<path d=\"M16 5H3\"/><path d=\"M11 12H3\"/><path d=\"M11 19H3\"/><path d=\"M21 16V5\"/><circle cx=\"18\" cy=\"16\" r=\"3\"/>","lock":"<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/>","lock-keyhole":"<circle cx=\"12\" cy=\"16\" r=\"1\"/><rect x=\"3\" y=\"10\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"M7 10V7a5 5 0 0 1 10 0v3\"/>","lock-open":"<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 9.9-1\"/>","mail":"<path d=\"m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7\"/><rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"/>","maximize":"<path d=\"M8 3H5a2 2 0 0 0-2 2v3\"/><path d=\"M21 8V5a2 2 0 0 0-2-2h-3\"/><path d=\"M3 16v3a2 2 0 0 0 2 2h3\"/><path d=\"M16 21h3a2 2 0 0 0 2-2v-3\"/>","megaphone":"<path d=\"M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z\"/><path d=\"M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14\"/><path d=\"M8 6v8\"/>","menu":"<path d=\"M4 5h16\"/><path d=\"M4 12h16\"/><path d=\"M4 19h16\"/>","message-circle":"<path d=\"M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719\"/>","message-square":"<path d=\"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z\"/>","mic":"<path d=\"M12 19v3\"/><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"/><rect x=\"9\" y=\"2\" width=\"6\" height=\"13\" rx=\"3\"/>","monitor":"<rect width=\"20\" height=\"14\" x=\"2\" y=\"3\" rx=\"2\"/><line x1=\"8\" x2=\"16\" y1=\"21\" y2=\"21\"/><line x1=\"12\" x2=\"12\" y1=\"17\" y2=\"21\"/>","moon":"<path d=\"M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401\"/>","moon-star":"<path d=\"M18 5h4\"/><path d=\"M20 3v4\"/><path d=\"M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401\"/>","music":"<path d=\"M9 18V5l12-2v13\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><circle cx=\"18\" cy=\"16\" r=\"3\"/>","package":"<path d=\"M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z\"/><path d=\"M12 22V12\"/><polyline points=\"3.29 7 12 12 20.71 7\"/><path d=\"m7.5 4.27 9 5.15\"/>","party-popper":"<path d=\"M5.8 11.3 2 22l10.7-3.79\"/><path d=\"M4 3h.01\"/><path d=\"M22 8h.01\"/><path d=\"M15 2h.01\"/><path d=\"M22 20h.01\"/><path d=\"m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10\"/><path d=\"m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17\"/><path d=\"m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7\"/><path d=\"M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z\"/>","pin":"<path d=\"M12 17v5\"/><path d=\"M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z\"/>","plane":"<path d=\"M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","pause":"<rect x=\"14\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/><rect x=\"5\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/>","volume-2":"<path d=\"M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z\"/><path d=\"M16 9a5 5 0 0 1 0 6\"/><path d=\"M19.364 18.364a9 9 0 0 0 0-12.728\"/>","volume-x":"<path d=\"M11 4.702a.7.7 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.7.7 0 0 0 11 19.298z\"/><path d=\"m16.5 14.5 5-5\"/><path d=\"m16.5 9.5 5 5\"/>","volume-1":"<path d=\"M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z\"/><path d=\"M16 9a5 5 0 0 1 0 6\"/>","music":"<path d=\"M9 18V5l12-2v13\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><circle cx=\"18\" cy=\"16\" r=\"3\"/>","disc-3":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M6 12c0-1.7.7-3.2 1.8-4.2\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M18 12c0 1.7-.7 3.2-1.8 4.2\"/>","audio-lines":"<path d=\"M2 10v3\"/><path d=\"M6 6v11\"/><path d=\"M10 3v18\"/><path d=\"M14 8v7\"/><path d=\"M18 5v13\"/><path d=\"M22 10v3\"/>","rewind":"<path d=\"M12 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 12 18z\"/><path d=\"M22 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 22 18z\"/>","fast-forward":"<path d=\"M12 6a2 2 0 0 1 3.414-1.414l6 6a2 2 0 0 1 0 2.828l-6 6A2 2 0 0 1 12 18z\"/><path d=\"M2 6a2 2 0 0 1 3.414-1.414l6 6a2 2 0 0 1 0 2.828l-6 6A2 2 0 0 1 2 18z\"/>","plus":"<path d=\"M5 12h14\"/><path d=\"M12 5v14\"/>","puzzle":"<path d=\"M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z\"/>","rabbit":"<path d=\"M13 16a3 3 0 0 1 2.24 5\"/><path d=\"M18 12h.01\"/><path d=\"M18 21h-8a4 4 0 0 1-4-4 7 7 0 0 1 7-7h.2L9.6 6.4a1 1 0 1 1 2.8-2.8L15.8 7h.2c3.3 0 6 2.7 6 6v1a2 2 0 0 1-2 2h-1a3 3 0 0 0-3 3\"/><path d=\"M20 8.54V4a2 2 0 1 0-4 0v3\"/><path d=\"M7.612 12.524a3 3 0 1 0-1.6 4.3\"/>","radio-tower":"<path d=\"M4.9 16.1C1 12.2 1 5.8 4.9 1.9\"/><path d=\"M7.8 4.7a6.14 6.14 0 0 0-.8 7.5\"/><circle cx=\"12\" cy=\"9\" r=\"2\"/><path d=\"M16.2 4.8c2 2 2.26 5.11.8 7.47\"/><path d=\"M19.1 1.9a9.96 9.96 0 0 1 0 14.1\"/><path d=\"M9.5 18h5\"/><path d=\"m8 22 4-11 4 11\"/>","rotate-cw":"<path d=\"M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/>","ruler":"<path d=\"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z\"/><path d=\"m14.5 12.5 2-2\"/><path d=\"m11.5 9.5 2-2\"/><path d=\"m8.5 6.5 2-2\"/><path d=\"m17.5 15.5 2-2\"/>","save":"<path d=\"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z\"/><path d=\"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7\"/><path d=\"M7 3v4a1 1 0 0 0 1 1h7\"/>","school":"<path d=\"M14 21v-3a2 2 0 0 0-4 0v3\"/><path d=\"M18 4.933V21\"/><path d=\"m4 6 7.106-3.79a2 2 0 0 1 1.788 0L20 6\"/><path d=\"m6 11-3.52 2.147a1 1 0 0 0-.48.854V19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5a1 1 0 0 0-.48-.853L18 11\"/><path d=\"M6 4.933V21\"/><circle cx=\"12\" cy=\"9\" r=\"2\"/>","scroll-text":"<path d=\"M15 12h-5\"/><path d=\"M15 8h-5\"/><path d=\"M19 17V5a2 2 0 0 0-2-2H4\"/><path d=\"M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","smartphone":"<rect width=\"14\" height=\"20\" x=\"5\" y=\"2\" rx=\"2\" ry=\"2\"/><path d=\"M12 18h.01\"/>","sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","square-pen":"<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"m17.66 17.66 1.41 1.41\"/><path d=\"M2 12h2\"/><path d=\"M20 12h2\"/><path d=\"m6.34 17.66-1.41 1.41\"/><path d=\"m19.07 4.93-1.41 1.41\"/>","target":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"6\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/>","thumbs-up":"<path d=\"M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z\"/><path d=\"M7 10v12\"/>","ticket":"<path d=\"M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z\"/><path d=\"M13 5v2\"/><path d=\"M13 17v2\"/><path d=\"M13 11v2\"/>","timer":"<line x1=\"10\" x2=\"14\" y1=\"2\" y2=\"2\"/><line x1=\"12\" x2=\"15\" y1=\"14\" y2=\"11\"/><circle cx=\"12\" cy=\"14\" r=\"8\"/>","trash":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","tv":"<path d=\"m17 2-5 5-5-5\"/><rect width=\"20\" height=\"15\" x=\"2\" y=\"7\" rx=\"2\"/>","upload":"<path d=\"M12 3v12\"/><path d=\"m17 8-5-5-5 5\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/>","user":"<path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/>","worm":"<path d=\"m19 12-1.5 3\"/><path d=\"M19.63 18.81 22 20\"/><path d=\"M6.47 8.23a1.68 1.68 0 0 1 2.44 1.93l-.64 2.08a6.76 6.76 0 0 0 10.16 7.67l.42-.27a1 1 0 1 0-2.73-4.21l-.42.27a1.76 1.76 0 0 1-2.63-1.99l.64-2.08A6.66 6.66 0 0 0 3.94 3.9l-.7.4a1 1 0 1 0 2.55 4.34z\"/>","wrench":"<path d=\"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","zap":"<path d=\"M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z\"/>","headphones":"<path d=\"M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3\"/>","circle-play":"<path d=\"M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z\"/><circle cx=\"12\" cy=\"12\" r=\"10\"/>"};
-var EMOJI_ICON_MAP={"⚠":"triangle-alert","✅":"circle-check-big","💡":"lightbulb","🔒":"lock","📌":"pin","🎉":"party-popper","❌":"circle-x","📝":"square-pen","🔔":"bell","🌙":"moon","🔐":"lock-keyhole","📋":"clipboard-copy","📅":"calendar","⛶":"maximize","📱":"smartphone","🔗":"link","🌐":"globe","🌕":"moon","💾":"save","🗑":"trash","🏫":"school","☀":"sun","🚫":"ban","🎲":"dices","✨":"sparkles","🎮":"gamepad-2","📥":"download","🔍":"search","📡":"radio-tower","💭":"message-square","🎼":"list-music","🎟":"ticket","✕":"x","📲":"app-window","📤":"upload","📦":"package","💬":"message-circle","📜":"scroll-text","👤":"user","➕":"plus","🔤":"keyboard","🔄":"rotate-cw","📇":"contact","🧱":"blocks","🎬":"clapperboard","👉":"arrow-right","🧹":"eraser","📚":"book-open","🎤":"mic","🎵":"music","🎧":"headphones","🛠":"wrench","🏠":"house","☰":"menu","📊":"chart-column","🎁":"gift","🍅":"timer","📮":"mail","📺":"tv","🎈":"sparkles","📢":"megaphone","⛔":"ban","🖥":"monitor","⚡":"zap","🍎":"smartphone","🗂":"folder","🕹":"gamepad","🧩":"puzzle","🎯":"target","🐍":"worm","🔨":"hammer","🃏":"layers","🐦":"bird","🍬":"candy","💣":"bomb","🦘":"rabbit","⚫":"circle","⭕":"grid-3x3","♟":"crown","✈":"plane","🔎":"search","🔓":"lock-open","📖":"book-open","📐":"ruler","⚛":"atom","🧪":"flask-conical","🧬":"dna","🌗":"moon-star","🌓":"moon-star","🌒":"moon-star","👍":"thumbs-up","🟢":"circle-check","🔴":"circle-x","⚪":"circle","🔥":"flame"};
+var LUCIDE_ICONS={"cloud":"<path d=\"M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z\"/>","app-window":"<rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"/><path d=\"M10 4v4\"/><path d=\"M2 8h20\"/><path d=\"M6 4v4\"/>","arrow-right":"<path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/>","atom":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><path d=\"M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z\"/><path d=\"M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z\"/>","ban":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M4.929 4.929 19.07 19.071\"/>","bell":"<path d=\"M10.268 21a2 2 0 0 0 3.464 0\"/><path d=\"M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326\"/>","bird":"<path d=\"M16 7h.01\"/><path d=\"M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20\"/><path d=\"m20 7 2 .5-2 .5\"/><path d=\"M10 18v3\"/><path d=\"M14 17.75V21\"/><path d=\"M7 18a6 6 0 0 0 3.84-10.61\"/>","blocks":"<path d=\"M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2\"/><rect x=\"14\" y=\"2\" width=\"8\" height=\"8\" rx=\"1\"/>","bomb":"<circle cx=\"11\" cy=\"13\" r=\"9\"/><path d=\"M14.35 4.65 16.3 2.7a2.41 2.41 0 0 1 3.4 0l1.6 1.6a2.4 2.4 0 0 1 0 3.4l-1.95 1.95\"/><path d=\"m22 2-1.5 1.5\"/>","book-open":"<path d=\"M12 5v16\"/><path d=\"M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z\"/>","calendar":"<path d=\"M8 2v3\"/><path d=\"M16 2v3\"/><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><path d=\"M3 9h18\"/>","candy":"<path d=\"M10 7v10.9\"/><path d=\"M14 6.1V17\"/><path d=\"M16 7V3a1 1 0 0 1 1.707-.707 2.5 2.5 0 0 0 2.152.717 1 1 0 0 1 1.131 1.131 2.5 2.5 0 0 0 .717 2.152A1 1 0 0 1 21 8h-4\"/><path d=\"M16.536 7.465a5 5 0 0 0-7.072 0l-2 2a5 5 0 0 0 0 7.07 5 5 0 0 0 7.072 0l2-2a5 5 0 0 0 0-7.07\"/><path d=\"M8 17v4a1 1 0 0 1-1.707.707 2.5 2.5 0 0 0-2.152-.717 1 1 0 0 1-1.131-1.131 2.5 2.5 0 0 0-.717-2.152A1 1 0 0 1 3 16h4\"/>","chart-column":"<path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/><path d=\"M18 17V9\"/><path d=\"M13 17V5\"/><path d=\"M8 17v-3\"/>","circle":"<circle cx=\"12\" cy=\"12\" r=\"10\"/>","circle-check":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m16 9-5.5 5.5L8 12\"/>","circle-check-big":"<path d=\"M21.801 10A10 10 0 1 1 17 3.335\"/><path d=\"m9 11 3 3L22 4\"/>","circle-x":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m15 9-6 6\"/><path d=\"m9 9 6 6\"/>","clapperboard":"<path d=\"m12.296 3.464 3.02 3.956\"/><path d=\"M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z\"/><path d=\"M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><path d=\"m6.18 5.276 3.1 3.899\"/>","clipboard-copy":"<rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\" ry=\"1\"/><path d=\"M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2\"/><path d=\"M16 4h2a2 2 0 0 1 2 2v4\"/><path d=\"M21 14H11\"/><path d=\"m15 10-4 4 4 4\"/>","contact":"<path d=\"M16 2v2\"/><path d=\"M7 21v-2a2 2 0 012-2h6a2 2 0 012 2v2\"/><path d=\"M8 2v2\"/><circle cx=\"12\" cy=\"10\" r=\"3\"/><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/>","crown":"<path d=\"M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z\"/><path d=\"M5 21h14\"/>","dices":"<rect width=\"12\" height=\"12\" x=\"2\" y=\"10\" rx=\"2\" ry=\"2\"/><path d=\"m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6\"/><path d=\"M6 18h.01\"/><path d=\"M10 14h.01\"/><path d=\"M15 6h.01\"/><path d=\"M18 9h.01\"/>","dna":"<path d=\"m10 16 1.5 1.5\"/><path d=\"m14 8-1.5-1.5\"/><path d=\"M15 2c-1.798 1.998-2.518 3.995-2.807 5.993\"/><path d=\"m16.5 10.5 1 1\"/><path d=\"m17 6-2.891-2.891\"/><path d=\"M2 15c6.667-6 13.333 0 20-6\"/><path d=\"m20 9 .891.891\"/><path d=\"M3.109 14.109 4 15\"/><path d=\"m6.5 12.5 1 1\"/><path d=\"m7 18 2.891 2.891\"/><path d=\"M9 22c1.798-1.998 2.518-3.995 2.807-5.993\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","eraser":"<path d=\"M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21\"/><path d=\"m5.082 11.09 8.828 8.828\"/>","flame":"<path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/>","flask-conical":"<path d=\"M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2\"/><path d=\"M6.453 15h11.094\"/><path d=\"M8.5 2h7\"/>","folder":"<path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","gamepad":"<line x1=\"6\" x2=\"10\" y1=\"12\" y2=\"12\"/><line x1=\"8\" x2=\"8\" y1=\"10\" y2=\"14\"/><line x1=\"15\" x2=\"15.01\" y1=\"13\" y2=\"13\"/><line x1=\"18\" x2=\"18.01\" y1=\"11\" y2=\"11\"/><rect width=\"20\" height=\"12\" x=\"2\" y=\"6\" rx=\"2\"/>","gamepad-2":"<line x1=\"6\" x2=\"10\" y1=\"11\" y2=\"11\"/><line x1=\"8\" x2=\"8\" y1=\"9\" y2=\"13\"/><line x1=\"15\" x2=\"15.01\" y1=\"12\" y2=\"12\"/><line x1=\"18\" x2=\"18.01\" y1=\"10\" y2=\"10\"/><path d=\"M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z\"/>","gift":"<path d=\"M12 7v14\"/><path d=\"M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8\"/><path d=\"M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5\"/><rect x=\"3\" y=\"7\" width=\"18\" height=\"4\" rx=\"1\"/>","globe":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20\"/><path d=\"M2 12h20\"/>","grid-3x3":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M3 9h18\"/><path d=\"M3 15h18\"/><path d=\"M9 3v18\"/><path d=\"M15 3v18\"/>","hammer":"<path d=\"m15 12-9.373 9.373a1 1 0 0 1-3.001-3L12 9\"/><path d=\"m18 15 4-4\"/><path d=\"m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172v-.344a2 2 0 0 0-.586-1.414l-1.657-1.657A6 6 0 0 0 12.516 3H9l1.243 1.243A6 6 0 0 1 12 8.485V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5\"/>","house":"<path d=\"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8\"/><path d=\"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/>","keyboard":"<path d=\"M10 8h.01\"/><path d=\"M12 12h.01\"/><path d=\"M14 8h.01\"/><path d=\"M16 12h.01\"/><path d=\"M18 8h.01\"/><path d=\"M6 8h.01\"/><path d=\"M7 16h10\"/><path d=\"M8 12h.01\"/><rect width=\"20\" height=\"16\" x=\"2\" y=\"4\" rx=\"2\"/>","layers":"<path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/>","lightbulb":"<path d=\"M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5\"/><path d=\"M9 18h6\"/><path d=\"M10 22h4\"/>","link":"<path d=\"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\"/><path d=\"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71\"/>","list-music":"<path d=\"M16 5H3\"/><path d=\"M11 12H3\"/><path d=\"M11 19H3\"/><path d=\"M21 16V5\"/><circle cx=\"18\" cy=\"16\" r=\"3\"/>","lock":"<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/>","lock-keyhole":"<circle cx=\"12\" cy=\"16\" r=\"1\"/><rect x=\"3\" y=\"10\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"M7 10V7a5 5 0 0 1 10 0v3\"/>","lock-open":"<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 9.9-1\"/>","mail":"<path d=\"m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7\"/><rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"/>","maximize":"<path d=\"M8 3H5a2 2 0 0 0-2 2v3\"/><path d=\"M21 8V5a2 2 0 0 0-2-2h-3\"/><path d=\"M3 16v3a2 2 0 0 0 2 2h3\"/><path d=\"M16 21h3a2 2 0 0 0 2-2v-3\"/>","medal":"<path d=\"M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15\"/><path d=\"M11 12 5.12 2.2\"/><path d=\"m13 12 5.88-9.8\"/><path d=\"M8 7h8\"/><circle cx=\"12\" cy=\"17\" r=\"5\"/><path d=\"M12 18v-2h-.5\"/>","megaphone":"<path d=\"M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z\"/><path d=\"M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14\"/><path d=\"M8 6v8\"/>","menu":"<path d=\"M4 5h16\"/><path d=\"M4 12h16\"/><path d=\"M4 19h16\"/>","message-circle":"<path d=\"M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719\"/>","message-square":"<path d=\"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z\"/>","mic":"<path d=\"M12 19v3\"/><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"/><rect x=\"9\" y=\"2\" width=\"6\" height=\"13\" rx=\"3\"/>","monitor":"<rect width=\"20\" height=\"14\" x=\"2\" y=\"3\" rx=\"2\"/><line x1=\"8\" x2=\"16\" y1=\"21\" y2=\"21\"/><line x1=\"12\" x2=\"12\" y1=\"17\" y2=\"21\"/>","moon":"<path d=\"M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401\"/>","moon-star":"<path d=\"M18 5h4\"/><path d=\"M20 3v4\"/><path d=\"M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401\"/>","music":"<path d=\"M9 18V5l12-2v13\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><circle cx=\"18\" cy=\"16\" r=\"3\"/>","package":"<path d=\"M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z\"/><path d=\"M12 22V12\"/><polyline points=\"3.29 7 12 12 20.71 7\"/><path d=\"m7.5 4.27 9 5.15\"/>","party-popper":"<path d=\"M5.8 11.3 2 22l10.7-3.79\"/><path d=\"M4 3h.01\"/><path d=\"M22 8h.01\"/><path d=\"M15 2h.01\"/><path d=\"M22 20h.01\"/><path d=\"m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10\"/><path d=\"m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17\"/><path d=\"m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7\"/><path d=\"M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z\"/>","pin":"<path d=\"M12 17v5\"/><path d=\"M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z\"/>","plane":"<path d=\"M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","pause":"<rect x=\"14\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/><rect x=\"5\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/>","volume-2":"<path d=\"M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z\"/><path d=\"M16 9a5 5 0 0 1 0 6\"/><path d=\"M19.364 18.364a9 9 0 0 0 0-12.728\"/>","volume-x":"<path d=\"M11 4.702a.7.7 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.7.7 0 0 0 11 19.298z\"/><path d=\"m16.5 14.5 5-5\"/><path d=\"m16.5 9.5 5 5\"/>","volume-1":"<path d=\"M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z\"/><path d=\"M16 9a5 5 0 0 1 0 6\"/>","music":"<path d=\"M9 18V5l12-2v13\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><circle cx=\"18\" cy=\"16\" r=\"3\"/>","disc-3":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M6 12c0-1.7.7-3.2 1.8-4.2\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M18 12c0 1.7-.7 3.2-1.8 4.2\"/>","audio-lines":"<path d=\"M2 10v3\"/><path d=\"M6 6v11\"/><path d=\"M10 3v18\"/><path d=\"M14 8v7\"/><path d=\"M18 5v13\"/><path d=\"M22 10v3\"/>","rewind":"<path d=\"M12 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 12 18z\"/><path d=\"M22 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 22 18z\"/>","fast-forward":"<path d=\"M12 6a2 2 0 0 1 3.414-1.414l6 6a2 2 0 0 1 0 2.828l-6 6A2 2 0 0 1 12 18z\"/><path d=\"M2 6a2 2 0 0 1 3.414-1.414l6 6a2 2 0 0 1 0 2.828l-6 6A2 2 0 0 1 2 18z\"/>","plus":"<path d=\"M5 12h14\"/><path d=\"M12 5v14\"/>","puzzle":"<path d=\"M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z\"/>","rabbit":"<path d=\"M13 16a3 3 0 0 1 2.24 5\"/><path d=\"M18 12h.01\"/><path d=\"M18 21h-8a4 4 0 0 1-4-4 7 7 0 0 1 7-7h.2L9.6 6.4a1 1 0 1 1 2.8-2.8L15.8 7h.2c3.3 0 6 2.7 6 6v1a2 2 0 0 1-2 2h-1a3 3 0 0 0-3 3\"/><path d=\"M20 8.54V4a2 2 0 1 0-4 0v3\"/><path d=\"M7.612 12.524a3 3 0 1 0-1.6 4.3\"/>","radio-tower":"<path d=\"M4.9 16.1C1 12.2 1 5.8 4.9 1.9\"/><path d=\"M7.8 4.7a6.14 6.14 0 0 0-.8 7.5\"/><circle cx=\"12\" cy=\"9\" r=\"2\"/><path d=\"M16.2 4.8c2 2 2.26 5.11.8 7.47\"/><path d=\"M19.1 1.9a9.96 9.96 0 0 1 0 14.1\"/><path d=\"M9.5 18h5\"/><path d=\"m8 22 4-11 4 11\"/>","rotate-cw":"<path d=\"M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/>","ruler":"<path d=\"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z\"/><path d=\"m14.5 12.5 2-2\"/><path d=\"m11.5 9.5 2-2\"/><path d=\"m8.5 6.5 2-2\"/><path d=\"m17.5 15.5 2-2\"/>","save":"<path d=\"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z\"/><path d=\"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7\"/><path d=\"M7 3v4a1 1 0 0 0 1 1h7\"/>","school":"<path d=\"M14 21v-3a2 2 0 0 0-4 0v3\"/><path d=\"M18 4.933V21\"/><path d=\"m4 6 7.106-3.79a2 2 0 0 1 1.788 0L20 6\"/><path d=\"m6 11-3.52 2.147a1 1 0 0 0-.48.854V19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5a1 1 0 0 0-.48-.853L18 11\"/><path d=\"M6 4.933V21\"/><circle cx=\"12\" cy=\"9\" r=\"2\"/>","scroll-text":"<path d=\"M15 12h-5\"/><path d=\"M15 8h-5\"/><path d=\"M19 17V5a2 2 0 0 0-2-2H4\"/><path d=\"M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","smartphone":"<rect width=\"14\" height=\"20\" x=\"5\" y=\"2\" rx=\"2\" ry=\"2\"/><path d=\"M12 18h.01\"/>","sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","square-pen":"<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"m17.66 17.66 1.41 1.41\"/><path d=\"M2 12h2\"/><path d=\"M20 12h2\"/><path d=\"m6.34 17.66-1.41 1.41\"/><path d=\"m19.07 4.93-1.41 1.41\"/>","target":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"6\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/>","thumbs-up":"<path d=\"M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z\"/><path d=\"M7 10v12\"/>","ticket":"<path d=\"M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z\"/><path d=\"M13 5v2\"/><path d=\"M13 17v2\"/><path d=\"M13 11v2\"/>","timer":"<line x1=\"10\" x2=\"14\" y1=\"2\" y2=\"2\"/><line x1=\"12\" x2=\"15\" y1=\"14\" y2=\"11\"/><circle cx=\"12\" cy=\"14\" r=\"8\"/>","trash":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","tv":"<path d=\"m17 2-5 5-5-5\"/><rect width=\"20\" height=\"15\" x=\"2\" y=\"7\" rx=\"2\"/>","upload":"<path d=\"M12 3v12\"/><path d=\"m17 8-5-5-5 5\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/>","user":"<path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/>","worm":"<path d=\"m19 12-1.5 3\"/><path d=\"M19.63 18.81 22 20\"/><path d=\"M6.47 8.23a1.68 1.68 0 0 1 2.44 1.93l-.64 2.08a6.76 6.76 0 0 0 10.16 7.67l.42-.27a1 1 0 1 0-2.73-4.21l-.42.27a1.76 1.76 0 0 1-2.63-1.99l.64-2.08A6.66 6.66 0 0 0 3.94 3.9l-.7.4a1 1 0 1 0 2.55 4.34z\"/>","wrench":"<path d=\"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","zap":"<path d=\"M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z\"/>","headphones":"<path d=\"M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3\"/>","paperclip":"<path d=\"m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551\"/>","circle-play":"<path d=\"M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z\"/><circle cx=\"12\" cy=\"12\" r=\"10\"/>"};
+var EMOJI_ICON_MAP={"⚠":"triangle-alert","✅":"circle-check-big","💡":"lightbulb","🔒":"lock","📌":"pin","🎉":"party-popper","❌":"circle-x","📝":"square-pen","🔔":"bell","🌙":"moon","🔐":"lock-keyhole","📋":"clipboard-copy","📅":"calendar","⛶":"maximize","📱":"smartphone","🔗":"link","🌐":"globe","🌕":"moon","💾":"save","🗑":"trash","🏫":"school","☀":"sun","🚫":"ban","🎲":"dices","✨":"sparkles","🎮":"gamepad-2","📥":"download","🔍":"search","📡":"radio-tower","💭":"message-square","🎼":"list-music","🎟":"ticket","✕":"x","📲":"app-window","📤":"upload","📦":"package","💬":"message-circle","📜":"scroll-text","👤":"user","➕":"plus","🔤":"keyboard","🔄":"rotate-cw","📇":"contact","🧱":"blocks","🎬":"clapperboard","👉":"arrow-right","🧹":"eraser","📚":"book-open","🎤":"mic","🎵":"music","🎧":"headphones","🛠":"wrench","🏠":"house","☰":"menu","📊":"chart-column","🎁":"gift","🍅":"timer","📮":"mail","📺":"tv","🎈":"sparkles","📢":"megaphone","⛔":"ban","🖥":"monitor","⚡":"zap","🍎":"smartphone","🗂":"folder","🕹":"gamepad","🧩":"puzzle","🎯":"target","🐍":"worm","🔨":"hammer","🃏":"layers","🐦":"bird","🍬":"candy","💣":"bomb","🦘":"rabbit","⚫":"circle","⭕":"grid-3x3","♟":"crown","✈":"plane","🔎":"search","🔓":"lock-open","📖":"book-open","📐":"ruler","⚛":"atom","🧪":"flask-conical","🧬":"dna","🌗":"moon-star","🌓":"moon-star","🌒":"moon-star","👍":"thumbs-up","🟢":"circle-check","🔴":"circle-x","⚪":"circle","🔥":"flame","🥇":"medal","🥈":"medal","🥉":"medal","☁":"cloud","🏆":"medal","✏":"square-pen","🎨":"layers","🎋":"sparkles","📣":"megaphone","🔣":"keyboard","👁":"search","✓":"circle-check-big","📎":"paperclip"};
 /* 生成一个 Lucide 图标的 SVG 字符串（stroke 风格，24x24 网格） */
 function iconSvg(name, size, extra){
   var s=size||16, e=extra||'';
@@ -2231,11 +2285,23 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 })();
 
 /* =====================================================
-   emoji → Lucide 图标：运行时替换引擎
-   全站功能图标统一只用 Lucide 一套。这里把页面上（含公告正文、
-   作业科目等动态渲染内容）的 emoji 字符换成同功能 Lucide 图标。
-   正文里的序号 ①②③④ 与文字箭头 → 不在映射表内，保持原样（它们是排版文字，不是功能图标）。
+   emoji → Lucide 图标（v2.5.0：改为「渲染时一次性转换」）
+   -----------------------------------------------------
+   站主要求：「所有本地 emoji 都取消掉，统一用图标库」，并点名倒计时
+   「每 1 秒 emoji 都会闪一下」。
+
+   闪烁根因：旧实现是运行时引擎 —— MutationObserver 盯着整个 body，
+   倒计时每秒重写 innerHTML → 触发 observer → 60ms 后重扫全页把 emoji
+   换成 SVG → 下一秒又重写 → 又换回去。于是每秒 SVG/emoji 交替闪。
+
+   新做法：**不再有运行时引擎**。
+     · 界面里写死的 emoji：直接换成 iconSvg(name) 调用（编译期就定好）。
+     · 动态文本（公告正文、作业内容、弹窗等云端内容里同学/站主写的 emoji）：
+       渲染时调 emojiToSvgText() 一次性转成 SVG 字符串再插进 DOM。
+   没有任何监听器，也就没有任何东西会跟倒计时打架 —— 闪烁从根上消失。
    ===================================================== */
+
+/* emoji 识别表 / 正则 / 名称解析：转换与去 emoji 都要用，保留。 */
 var EMOJI_CHARS = Object.keys(EMOJI_ICON_MAP).sort(function(a,b){ return b.length-a.length; });
 var EMOJI_RE = new RegExp('(' + EMOJI_CHARS.map(function(c){
   return c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
@@ -2244,123 +2310,79 @@ function emojiIconName(ch){
   var k = ch.replace(/\uFE0F/g,'');
   return EMOJI_ICON_MAP[k] || EMOJI_ICON_MAP[ch] || 'circle';
 }
-function emojiSvgNode(ch, size){
-  var box=document.createElement('div');
-  box.innerHTML = iconSvg(emojiIconName(ch), size||16);
-  return box.firstChild;
-}
-function emojiifyText(node, size){
-  var t=node.nodeValue;
-  if(!t) return false;
-  EMOJI_RE.lastIndex=0;
-  if(!EMOJI_RE.test(t)) return false;
-  EMOJI_RE.lastIndex=0;
-  var frag=document.createDocumentFragment(), last=0, m;
-  while((m=EMOJI_RE.exec(t))){
-    if(m.index>last) frag.appendChild(document.createTextNode(t.slice(last,m.index)));
-    frag.appendChild(emojiSvgNode(m[0], size));
-    last=m.index+m[0].length;
-    if(m[0].length===0) EMOJI_RE.lastIndex++;
+
+/* 把一段纯文本里的 emoji 换成内联 SVG 字符串（返回 HTML，调用方负责已转义的其余部分）。
+   ⚠️ 只用于「已经过 esc() 转义」的文本，或本身可信的站内常量；
+      因为返回的是 HTML 字符串。emoji 字符本身不含 HTML 元字符，替换是安全的。 */
+function emojiToSvgText(text, size){
+  var t = String(text == null ? '' : text);
+  if(!t) return t;
+  EMOJI_RE.lastIndex = 0;
+  if(!EMOJI_RE.test(t)) return t;
+  EMOJI_RE.lastIndex = 0;
+  var out = '', last = 0, m;
+  while((m = EMOJI_RE.exec(t))){
+    if(m.index > last) out += t.slice(last, m.index);
+    out += iconSvg(emojiIconName(m[0]), size || 15, 'vertical-align:-2px');
+    last = m.index + m[0].length;
+    if(m[0].length === 0) EMOJI_RE.lastIndex++;
   }
-  if(last<t.length) frag.appendChild(document.createTextNode(t.slice(last)));
-  if(node.parentNode) node.parentNode.replaceChild(frag, node);
-  return true;
+  if(last < t.length) out += t.slice(last);
+  return out;
 }
-var EMOJI_SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,NOSCRIPT:1,TITLE:1,SVG:1,IFRAME:1,OPTION:1,SELECT:1};
-function emojiify(root){
-  root = root || document.body;
-  if(!root) return 0;
-  var changed=0, sizeCache={};
-  try{
-    var tw=document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false), list=[], n;
-    while((n=tw.nextNode())){
-      var p=n.parentNode;
-      if(!p || EMOJI_SKIP[p.nodeName] || !n.nodeValue) continue;
-      list.push(n);
+
+/* 与上面等价，但输入是**未转义**的原文：先 esc 再转图标。
+   公告 / 作业正文走这条，既保证安全又能把 emoji 变成图标。 */
+function emojiEscHtml(text, size){
+  return emojiToSvgText(typeof esc === 'function' ? esc(text) : String(text == null ? '' : text), size);
+}
+
+/* 去掉文本里的 emoji（用于 <option>、placeholder 这类只能放纯文本的位置）。 */
+function stripEmoji(text){
+  var t = String(text == null ? '' : text);
+  EMOJI_RE.lastIndex = 0;
+  return t.replace(EMOJI_RE, '').replace(/^\s+/, '');
+}
+
+/* -----------------------------------------------------
+   静态界面图标化：页面加载后跑**一次**，把写死在 HTML 里的 emoji 换成 SVG。
+   ⚠️ 只跑一次、**不监听任何 DOM 变化** —— 这是和旧引擎的本质区别。
+      旧引擎用 MutationObserver 盯 body，倒计时每秒重写就被反复触发 → 闪烁。
+      这里跑完即止，之后页面怎么更新都与它无关，不可能再闪。
+   跳过区域：script / style / textarea / option / input(placeholder) —— 这些不能放 SVG。
+   ----------------------------------------------------- */
+var ICONIFY_SKIP = {SCRIPT:1, STYLE:1, TEXTAREA:1, OPTION:1, TITLE:1};
+function iconifyStatic(root){
+  var base = root || document.body;
+  if(!base) return;
+  var walker = document.createTreeWalker(base, NodeFilter.SHOW_TEXT, {
+    acceptNode: function(node){
+      var p = node.parentNode;
+      if(!p || ICONIFY_SKIP[p.nodeName]) return NodeFilter.FILTER_REJECT;
+      if(p.closest && p.closest('[data-no-icon]')) return NodeFilter.FILTER_REJECT;
+      EMOJI_RE.lastIndex = 0;
+      return EMOJI_RE.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     }
-    for(var i=0;i<list.length;i++){
-      var pe=list[i].parentElement, sz=16;
-      if(pe){
-        if(sizeCache[pe.nodeName]===undefined){
-          try{ var fs=parseFloat(getComputedStyle(pe).fontSize)||15; sizeCache[pe.nodeName]=Math.max(12,Math.min(22,Math.round(fs*1.05))); }
-          catch(e){ sizeCache[pe.nodeName]=16; }
-        }
-        sz=sizeCache[pe.nodeName];
-      }
-      if(emojiifyText(list[i], sz)) changed++;
-    }
-    changed += emojiifyPlaceholders(root);
-    changed += emojiifyOptions(root);
-  }catch(e){}
-  return changed;
-}
-/* <option> 里无法内嵌 SVG（HTML 规范限制，浏览器会丢弃子元素），
-   这类下拉选项里的 emoji 只能去掉图形、保留文字 */
-function emojiifyOptions(root){
-  var opts=[], hit=0;
-  try{ opts = root.querySelectorAll('option'); }catch(e){ return 0; }
-  for(var i=0;i<opts.length;i++){
-    var el=opts[i], t=el.textContent||'';
-    EMOJI_RE.lastIndex=0;
-    if(!EMOJI_RE.test(t)) continue;
-    el.textContent = t.replace(EMOJI_RE,'').replace(/^\s+/,'');
-    hit++;
+  });
+  var targets = [], n;
+  while((n = walker.nextNode())) targets.push(n);
+  for(var i = 0; i < targets.length; i++){
+    var node = targets[i];
+    var span = document.createElement('span');
+    span.className = 'ico-inline';
+    span.innerHTML = emojiToSvgText(node.nodeValue, 15);
+    if(node.parentNode) node.parentNode.replaceChild(span, node);
   }
-  return hit;
 }
-/* 输入框 placeholder 里的 emoji：placeholder 只能放纯文本，
-   改成行内 SVG 背景图标（Lucide 官方图形），placeholder 文字去掉 emoji */
-function emojiifyPlaceholders(root){
-  var ins=[], hit=0;
-  try{ ins = root.querySelectorAll('input[placeholder],textarea[placeholder]'); }catch(e){ return 0; }
-  for(var i=0;i<ins.length;i++){
-    var el=ins[i];
-    if(el.getAttribute('data-emo-ico')) continue;
-    var ph=el.getAttribute('placeholder')||'';
-    EMOJI_RE.lastIndex=0;
-    var m=EMOJI_RE.exec(ph);
-    if(!m) continue;
-    el.setAttribute('data-emo-ico','1');
-    el.setAttribute('placeholder', ph.replace(m[0],'').replace(/^\s+/,''));
-    try{
-      var svg=iconSvg(emojiIconName(m[0]),16,'color:#8a827b');
-      el.style.backgroundImage='url("data:image/svg+xml;utf8,'+encodeURIComponent(svg)+'")';
-      el.style.backgroundRepeat='no-repeat';
-      el.style.backgroundPosition='10px center';
-      el.style.backgroundSize='16px 16px';
-      var pl=parseFloat(getComputedStyle(el).paddingLeft)||10;
-      if(pl<34) el.style.paddingLeft='34px';
-    }catch(e){}
-    hit++;
+/* 选择框（<select> 里的 <option>）不能放 SVG，统一去 emoji 保留文字。 */
+function stripEmojiInOptions(root){
+  var base = root || document;
+  var opts = base.querySelectorAll ? base.querySelectorAll('option') : [];
+  for(var i = 0; i < opts.length; i++){
+    var t = stripEmoji(opts[i].textContent);
+    if(t !== opts[i].textContent) opts[i].textContent = t;
   }
-  return hit;
 }
-/* 自动跟随动态内容：公告、作业、弹窗、券包等渲染后插入的 emoji 也会补换 */
-var _emoBusy=false, _emoTimer=null, _emoAgain=false;
-function emojiifySoon(){
-  if(_emoBusy){ _emoAgain=true; return; }
-  if(_emoTimer) return;
-  _emoTimer=setTimeout(function(){
-    _emoTimer=null;
-    if(_emoBusy) return;
-    _emoBusy=true;
-    try{ emojiify(document.body); }catch(e){}
-    _emoBusy=false;
-    if(_emoAgain){ _emoAgain=false; emojiifySoon(); }
-  },60);
-}
-function emojiStart(){
-  try{ emojiify(document.body); }catch(e){}
-  if(window.MutationObserver){
-    try{
-      var mo=new MutationObserver(emojiifySoon);
-      mo.observe(document.body,{childList:true,subtree:true,characterData:true});
-    }catch(e){}
-  }
-  [400,1200,3000].forEach(function(d){ setTimeout(function(){ try{ emojiify(document.body); }catch(e){} }, d); });
-}
-if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',emojiStart);
-else setTimeout(emojiStart,0);
 
 /* =====================================================
    站点版本号（2026-10-07 新增）
@@ -2376,8 +2398,8 @@ else setTimeout(emojiStart,0);
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.4.1';
-var VER_DATE = '2026-10-07';
+var SITE_VERSION = '2.5.0';
+var VER_DATE = '2026-10-11';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
   gitee:  'https://gitee.com/zikang0529/class-site',
@@ -2427,9 +2449,19 @@ function openRepo(which){
   openLink(url, true);
 }
 
-/* ---------- 在线心跳（后台「最后上线」用，2026-10-07） ----------
-   登录后在页面可见时每 60 秒打一次，切到别的标签页就不打了。
-   后端节流 30 秒，所以就算网络把请求堆在一起也不会狂写库。 */
+/* ---------- 在线心跳（v2.5.0 升级为双向） ----------
+   站主要求：「每隔一分钟双向发一个数据包，收到就说明在线」。
+   所以这里不是「发完就算」，而是**必须收到服务端回的 pong** 才算在线：
+     · 发出去（去程）→ 收到 { pong, online:true }（回程）→ ONLINE=true
+     · 超时 / 网络错误 / 非 2xx                         → ONLINE=false
+   比 navigator.onLine 可靠（后者只看网卡，网卡通但连不上服务器时它照样 true）。
+
+   后端按**会话粒度**记录（sessions.last_seen_at），间隔 60 秒、判定窗口 90 秒。
+   连续失败 2 次（约 2 分钟）才弹离线横幅，避免偶发抖动误报。 */
+var ONLINE = true;            /* 最近一次心跳的结果 */
+var ONLINE_FAILS = 0;         /* 连续失败次数 */
+var ONLINE_WINDOW_SEC = 90;   /* 与后端保持一致的判定窗口 */
+
 function startHeartbeat(){
   if(!(typeof AUTH !== 'undefined' && AUTH && AUTH.token)) return;
   if(window.__hbTimer) { clearInterval(window.__hbTimer); window.__hbTimer = 0; }
@@ -2438,14 +2470,124 @@ function startHeartbeat(){
     if(!AUTH || !AUTH.token) return;
     var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
     if(!base) return;
+
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var to = ctrl ? setTimeout(function(){ ctrl.abort(); }, 12000) : null;
+
     fetch(base + '/auth?action=ping', {
       method:'GET', cache:'no-store',
-      headers:{ Authorization:'Bearer ' + AUTH.token }
-    }).then(function(){}).catch(function(){});   /* 心跳失败无所谓，下次再打 */
+      headers:{ Authorization:'Bearer ' + AUTH.token },
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function(r){
+      if(to) clearTimeout(to);
+      if(!r || !r.ok) throw new Error('ping ' + (r ? r.status : 'no response'));
+      return r.json();
+    }).then(function(j){
+      /* 收到回程数据包 = 在线 */
+      if(!j || !j.online) throw new Error('bad pong');
+      markNetOk();
+      if(typeof window.__onPong === 'function') window.__onPong(j);
+    }).catch(function(){
+      if(to) clearTimeout(to);
+      markNetFail();
+      if(typeof window.__onPongFail === 'function') window.__onPongFail(ONLINE_FAILS);
+    });
   };
   beat();
   window.__hbTimer = setInterval(beat, 60000);
+  /* 页面重新回到前台时立刻补一次心跳（后台标签页里是不打的） */
+  if(!window.__hbVisBound){
+    window.__hbVisBound = true;
+    document.addEventListener('visibilitychange', function(){
+      if(!document.hidden && typeof AUTH !== 'undefined' && AUTH && AUTH.token){
+        if(typeof window.__hbNow === 'function') window.__hbNow();
+      }
+    });
+  }
+  window.__hbNow = beat;
 }
+
+/* ---------- 网络健康计数（心跳与 api() 共用一套防抖）----------
+   连不上服务端就是连不上，不管哪条请求先发现 —— 所以共用同一个状态。
+   但**不能只数次数**：页面启动时 content / roster / ping 会并发发好几条，
+   全失败瞬间就凑够 2 次，等于「秒弹」，用户刚要打开就看见报错，体验很差。
+
+   改用**时间窗**：第一次失败开始计时，持续 25 秒仍然连不上才提示。
+   这期间只要成功一次立刻清零（说明只是抖动）。
+   25 秒 ≈ 心跳间隔的一半多一点，正常用户不会察觉延迟，
+   但真正的断网 / 移动数据切 Wi-Fi 时很快就会看到提示。 */
+var OFFLINE_GRACE_MS = 25 * 1000;
+var NET_FAIL_SINCE = 0;   /* 本轮「持续失败」的起始时刻，0 = 当前是好的 */
+
+function markNetOk(){
+  ONLINE = true;
+  ONLINE_FAILS = 0;
+  NET_FAIL_SINCE = 0;
+  setOfflineBanner(false);
+}
+function markNetFail(){
+  ONLINE_FAILS++;
+  ONLINE = false;
+  var now = Date.now();
+  if(!NET_FAIL_SINCE) NET_FAIL_SINCE = now;
+  /* 持续连不上超过宽限期才提示 */
+  if(now - NET_FAIL_SINCE >= OFFLINE_GRACE_MS) setOfflineBanner(true);
+  else scheduleOfflineCheck();
+}
+
+/* 宽限期内安排一次复查：到点了还没恢复就弹横幅。
+   没有它的话，如果失败都发生在宽限期内、之后不再有请求，
+   横幅永远不会出现。 */
+function scheduleOfflineCheck(){
+  if(window.__offCheckTimer) return;
+  var left = Math.max(200, OFFLINE_GRACE_MS - (Date.now() - NET_FAIL_SINCE) + 60);
+  window.__offCheckTimer = setTimeout(function(){
+    window.__offCheckTimer = 0;
+    if(!NET_FAIL_SINCE) return;         /* 期间已恢复 */
+    if(Date.now() - NET_FAIL_SINCE >= OFFLINE_GRACE_MS) setOfflineBanner(true);
+    else scheduleOfflineCheck();
+  }, left);
+}
+
+/* ---------- 离线横幅（v2.5.0）----------
+   连不上服务端时给出可操作提示：检查网络 / 切换流量。用的是心跳实测结果，
+   不看 navigator.onLine。恢复后自动收起。
+   文案与 README「断网 / 连不上服务器时」一节保持一致。 */
+function setOfflineBanner(show){
+  var el = document.getElementById('offlineBar');
+  if(!el){
+    if(!show) return;
+    el = document.createElement('div');
+    el.id = 'offlineBar';
+    el.className = 'offline-bar';
+    el.innerHTML = '<span class="off-ico">' + iconSvg('radio-tower',16) + '</span>'
+      + '<span class="off-txt">连接不到服务端，当前显示的是本地缓存 · '
+      + '请检查网络，或切换到流量（移动数据）再试</span>'
+      + '<button class="off-btn" onclick="heartbeatNow()">重试</button>';
+    document.body.appendChild(el);
+    /* 下一帧再加 show，让过渡动画生效 */
+    setTimeout(function(){ el.classList.add('show'); }, 30);
+    return;
+  }
+  if(show){
+    if(!el.classList.contains('show')){
+      el.classList.add('show');
+      if(typeof SFX !== 'undefined' && SFX && SFX.error) SFX.error();
+    }
+  } else {
+    el.classList.remove('show');
+    setTimeout(function(){
+      var e2 = document.getElementById('offlineBar');
+      if(e2 && !e2.classList.contains('show')) e2.remove();
+    }, 400);
+  }
+}
+
+/* 手动重试：立刻打一次心跳 */
+function heartbeatNow(){
+  if(typeof window.__hbNow === 'function') window.__hbNow();
+}
+
 
 /* =====================================================
    站点数据（管理员修改此区域后重新发布即可）
@@ -2459,10 +2601,12 @@ var SITE_DATA = {
      注意：Gitee Pages 已于 2024 年永久下线，站点主链接走 GitHub Pages，
      源码也以 GitHub 仓库为准，所以这里指向 GitHub。 */
   repoUrl: "https://github.com/yuzikaaang/class-site",
-  /* 复制链接：主链接 + 备用链接（Gitee Pages 已于 2024 永久下线，旧链接失效；备用入口为 WorkBuddy 静态托管，note 用于展示使用限制提示） */
+  /* 复制链接：只保留主链接（唯一入口）。
+     历史：Gitee Pages 已于 2024 年永久下线，旧的 Gitee 备用链接早失效；
+     WorkBuddy 静态托管那条备用入口也已取消 —— 微信内打不开，反而容易误导同学。
+     现在全站只有 GitHub Pages 一个入口。 */
   siteLinks: [
-    { label: "主链接", url: "https://yuzikaaang.github.io/class-site/" },
-    { label: "备用链接", url: "https://a5048c773a210b3d4-25579.app.workbuddy.link/", note: "⚠️ 微信内打不开！请复制链接后用系统浏览器（Safari / Chrome / Edge）打开。主链接正常时优先用主链接。" }
+    { label: "主链接", url: "https://yuzikaaang.github.io/class-site/", note: "微信内可直接打开。建议「添加到主屏幕」当 App 用。" }
   ],
   /* ── 通用弹窗引擎（第二十七轮新增）──
      一个数组统领全站弹窗：开屏弹 + 板块弹。默认是空数组，
@@ -2541,6 +2685,10 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-10-11 12:00", text: "🎨 全站图标统一升级：所有 emoji 全部换成 Lucide 图标，倒计时不再闪动。", category: "site" },
+    { date: "2026-10-11 11:50", text: "🔒 登录新增滑块安全验证，进一步保护你的账号。", category: "site" },
+    { date: "2026-10-11 11:40", text: "📡 在线状态改为实时检测（每分钟双向心跳），管理后台能准确看到谁在线。", category: "site" },
+    { date: "2026-10-11 11:30", text: "💡 连不上服务器时，页面顶部会提示你切换网络或改用流量，此期间显示的是本地缓存。", category: "site" },
     { date: "2026-09-30 15:56", text: "🎉 国庆假期作业已发布", category: "activity" },
     { date: "2026-09-29 23:02", text: "📅 第一次段考时间已公布：10月13日—14日。\n各科考试范围可在「重要日期倒计时」→「查看全部」→「查看考试范围」中查看。", category: "activity" },
     { date: "2026-09-27 09:32", text: "🎨 新增自定义设置：排序、字号、背景", category: "site" },
@@ -3788,7 +3936,7 @@ function updateCountdown(){
     .sort(function(a,b){ return a.d - b.d; })
     .filter(function(d){ var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); return d.d >= t; });
   var semHtml = '<div class="cd-sem">' +
-    '<div class="cd-head">📅 重要日期倒计时<span class="cd-viewall" onclick="openAllImp()" style="cursor:pointer">查看全部</span></div>' +
+    '<div class="cd-head">'+iconSvg('calendar',15)+' 重要日期倒计时<span class="cd-viewall" onclick="openAllImp()" style="cursor:pointer">查看全部</span></div>' +
     (semList.length === 0 ? '<div class="cd-empty">暂无重要日期</div>' :
       '<div class="imp-mobile">' +
         '<div class="imp-area">' +
@@ -3812,8 +3960,8 @@ function updateCountdown(){
     .sort(function(a,b){ return a.d - b.d; })
     .slice(0,3);
   var holHtml = '<div class="cd-hol cd-clickable" onclick="openAllHol()" role="button" tabindex="0">' +
-    '<div class="cd-head">⏰ 节假日倒计时<span class="cd-viewall">查看全部</span></div>' +
-    (upcoming.length===0 ? '<div class="cd-empty">本学期暂无更多法定节假日 🎈</div>' :
+    '<div class="cd-head">'+iconSvg('timer',15)+' 节假日倒计时<span class="cd-viewall">查看全部</span></div>' +
+    (upcoming.length===0 ? '<div class="cd-empty">本学期暂无更多法定节假日 '+iconSvg('party-popper',15)+'</div>' :
       '<ul class="flex flex-col justify-center gap-2 md:gap-2.5">' +
       upcoming.map(function(h){
         var left = Math.ceil((h.d.getTime()-now.getTime())/86400000);
@@ -3870,7 +4018,7 @@ function renderBoard(){
           /* 永久置顶显示「置顶」，限时置顶显示「限时置顶」——让同学知道它什么时候会掉下来 */
           (isImportant(a) ? '<span class="board-pin">' + (a.importantUntil ? '限时置顶' : '置顶') + '</span>' : '') +
         '</div>' +
-        '<p class="board-text' + (isImportant(a) ? ' important' : '') + '">' + esc(a.text) + '</p>' +
+        '<p class="board-text' + (isImportant(a) ? ' important' : '') + '">' + emojiEscHtml(a.text) + '</p>' +
       '</li>';
     }).join('') + '</ul>';
   }
@@ -3944,7 +4092,7 @@ function render(){
         var passed = gatePassed(l) || !gateOn();
         var contentHtml = '<div class="card-content"><h3>'+esc(l.title)+'</h3>'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
         if(l.paused){
-          contentHtml += '<div class="paused-box">'+(l.pausedMsg ? esc(l.pausedMsg) : '⛔ 因网络问题，暂时关闭，恢复开放时间另行通知')+'</div>';
+          contentHtml += '<div class="paused-box">'+(l.pausedMsg ? emojiEscHtml(l.pausedMsg) : (iconSvg('ban',15)+' 因网络问题，暂时关闭，恢复开放时间另行通知'))+'</div>';
         }else if(l.gate && !passed){
           var _lr = lockRemain('gate_'+l.id);
           var _lockMsg = _lr > 0 ? '🔒 连续输错次数过多，请 ' + Math.ceil(_lr/1000) + ' 秒后再试' : '';
@@ -4485,7 +4633,7 @@ function syncThemeToBg(){
     localStorage.setItem('cls_theme_auto', 'off');   /* 否则白天会被自动切回去 */
   }catch(e){}
   var t = document.getElementById('themeToggle');
-  if(t) t.textContent = want ? '☀️' : '🌙';
+  if(t) t.innerHTML = want ? iconSvg('sun',17) : iconSvg('moon',17);
   if(typeof uiMsg === 'function')
     uiMsg(want ? '背景偏深，已自动切到夜间模式（并关闭昼夜自动切换）'
                : '背景偏亮，已自动切回日间模式（并关闭昼夜自动切换）');
@@ -4638,6 +4786,18 @@ function api(path, opts){
         }
         return j;
       });
+  }).catch(function(e){
+    /* 网络层失败（DNS / 断网 / CORS / 超时）时 fetch 直接 reject，
+       原始错误是裸的 TypeError: Failed to fetch，既没有 status 也看不出
+       到底该怪谁。这里统一包装成可读文案，并打上 offline 标记。
+       横幅**不在这里直接弹** —— 走 markNetFail() 统一防抖，
+       避免某条请求偶发失败就弹一次、导致横幅闪烁。 */
+    if(e && e.status) throw e;   /* 业务错误（401/403/400…）原样抛出 */
+    var netErr = new Error('连接不到服务端，请检查网络，或切换到流量（移动数据）再试');
+    netErr.offline = true;
+    netErr.cause = e;
+    try{ if(typeof markNetFail === 'function') markNetFail(); }catch(_){}
+    throw netErr;
   });
 }
 
@@ -4712,7 +4872,10 @@ var CONTENT_MAP = {
 var CONTENT_CACHE_KEY = 'cls_content_cache_v1';
 var CONTENT_SINCE_KEY = 'cls_content_since_v1';
 /* 内容同步状态，供界面显示「已是最新 / 使用本地数据」 */
-var CONTENT_STATE = { status:'idle', lastAt:null, count:0, error:null };
+/* 内容同步状态（供 UI 反映「现在看到的是云端还是缓存」）
+   usedCache：本次渲染的数据是从本地缓存来的（说明没连上服务端）。
+   v2.5.0 起由离线横幅统一呈现，这个标记保留给后续细化提示用。 */
+var CONTENT_STATE = { status:'idle', lastAt:null, count:0, error:null, usedCache:false };
 
 /** 读本地缓存（上次拉到的云端内容） */
 function contentCacheGet(){
@@ -4810,7 +4973,7 @@ function renderDailyQuote(){
   el.innerHTML =
     '<div class="quote-mark">❝</div>'+
     '<div class="quote-body">'+
-      '<div class="quote-text">'+esc(q.text)+'</div>'+
+      '<div class="quote-text">'+emojiEscHtml(q.text)+'</div>'+
       (q.from ? '<div class="quote-from">—— '+esc(q.from)+'</div>' : '')+
     '</div>';
 }
@@ -4823,8 +4986,8 @@ function renderDailyQuote(){
  */
 function syncCloudContent(force){
   if(!apiReady()){
-    CONTENT_STATE = { status:'unavailable', lastAt:null, count:0, error:'后端未配置' };
-    return Promise.resolve({ ok:false, count:0, error:'后端未配置' });
+    CONTENT_STATE = { status:'unavailable', lastAt:null, count:0, error:'后端未配置', usedCache:true };
+    return Promise.resolve({ ok:false, count:0, error:'后端未配置', usedCache:true });
   }
   var since = null;
   if(!force){
@@ -4841,11 +5004,12 @@ function syncCloudContent(force){
     if(j.serverTime){
       try{ localStorage.setItem(CONTENT_SINCE_KEY, new Date(j.serverTime).getTime()); }catch(e){}
     }
-    CONTENT_STATE = { status:'ok', lastAt:new Date(), count:n, error:null };
-    return { ok:true, count:n, changed:n > 0 };
+    CONTENT_STATE = { status:'ok', lastAt:new Date(), count:n, error:null, usedCache:false };
+    return { ok:true, count:n, changed:n > 0, usedCache:false };
   }).catch(function(e){
-    CONTENT_STATE = { status:'error', lastAt:null, count:0, error:String(e && e.message || e) };
-    return { ok:false, count:0, error:CONTENT_STATE.error };
+    CONTENT_STATE = { status:'error', lastAt:null, count:0,
+      error:String(e && e.message || e), usedCache:true };
+    return { ok:false, count:0, error:CONTENT_STATE.error, usedCache:true };
   });
 }
 
@@ -4898,11 +5062,11 @@ function refreshAcctBtn(){
 
   if(isLoggedIn()){
     var name = AUTH.user.displayName || AUTH.user.username;
-    var badge = isAdmin() ? ' 🛠' : '';
+    var badge = isAdmin() ? ' ' + iconSvg('wrench',13) : '';
     var t = (AUTH.user.title || '').trim();
     /* 头衔取第一个展示，多了放不下 */
     var titleTag = t ? '「' + esc(t.split(/[,，、]/)[0]) + '」' : '';
-    b.innerHTML = '👤 ' + titleTag + esc(name) + badge;
+    b.innerHTML = iconSvg('user',14) + ' ' + titleTag + esc(name) + badge;
     b.classList.add('acct-on');
     b.disabled = false;
     b.removeAttribute('aria-disabled');
@@ -4910,7 +5074,7 @@ function refreshAcctBtn(){
     b.title = '查看 / 修改我的个人信息';
   }else{
     /* 未登录：按钮可点，打开登录弹窗（账号由管理员导入，注册入口关闭） */
-    b.innerHTML = '👤 登录';
+    b.innerHTML = iconSvg('user',14) + ' 登录';
     b.classList.remove('acct-on');
     b.disabled = false;
     b.removeAttribute('aria-disabled');
@@ -4953,7 +5117,7 @@ function renderAccount(){
   /* 已登录 → 个人中心（首次登录强制改密态优先，不允许跳过） */
   if(isLoggedIn()){
     if(ACCT_TAB === 'forcepwd'){
-      if(title) title.textContent = '🔒 设置新密码';
+      if(title) title.innerHTML = iconSvg('lock',15) + ' 设置新密码';
       box.innerHTML = acctForcePwdHtml();
       acctCloseHidden(true);
       var fpWrap = document.getElementById('acctBody');
@@ -4969,18 +5133,18 @@ function renderAccount(){
     acctCloseHidden(false);
     /* 个人资料页（账号弹窗内嵌，不跳转；2026-10-06 站主要求「点开姓名就能改」） */
     if(ACCT_TAB === 'myprofile'){
-      if(title) title.textContent = '📇 我的资料';
+      if(title) title.innerHTML = iconSvg('contact',15) + ' 我的资料';
       box.innerHTML = myProfileHtml();
       if(MY_PROF_STATE === 'idle') myProfLoad();
       return;
     }
-    if(title) title.textContent = '👤 我的账号';
+    if(title) title.innerHTML = iconSvg('user',15) + ' 我的账号';
     box.innerHTML = acctProfileHtml();
     return;
   }
   acctCloseHidden(false);
 
-  if(title) title.textContent = ACCT_TAB === 'register' ? '📝 注册账号' : '👤 登录账号';
+  if(title) title.innerHTML = ACCT_TAB === 'register' ? (iconSvg('square-pen',15) + ' 注册账号') : (iconSvg('user',15) + ' 登录账号');
 
   /* 注册未开放时干脆不渲染 tab 栏，免得用户点了没反应更困惑 */
   var tabs = REGISTER_OPEN
@@ -4995,9 +5159,11 @@ function renderAccount(){
       '<div class="acct-field"><label>显示名（可选）</label><input id="acctD" placeholder="同学们看到的名字" autocomplete="nickname"></div>' +
       '<div class="acct-field"><label>密码</label><input id="acctP" type="password" placeholder="至少 6 位" autocomplete="new-password"></div>' +
       '<div class="acct-field"><label>确认密码</label><input id="acctP2" type="password" placeholder="再输一次" autocomplete="new-password"></div>' +
+      '<div class="acct-field"><label>安全验证</label>' + capHtml() + '</div>' +
       '<button class="acct-btn" id="acctGo" onclick="doRegister()">注册并登录</button>'
     : '<div class="acct-field"><label>用户名</label><input id="acctU" placeholder="输入用户名" autocomplete="username"></div>' +
       '<div class="acct-field"><label>密码</label><input id="acctP" type="password" placeholder="输入密码" autocomplete="current-password"></div>' +
+      '<div class="acct-field"><label>安全验证</label>' + capHtml() + '</div>' +
       '<p class="acct-hint" style="margin:2px 0 10px">💡 用户名就是你的<b>姓名</b>，初始密码是<b>出生日期 8 位数字</b>（如 2010 年 7 月 10 日生 → <code>20100710</code>）。</p>' +
       '<button class="acct-btn" id="acctGo" onclick="doLogin()">登录</button>';
 
@@ -5006,6 +5172,12 @@ function renderAccount(){
     '<p class="acct-hint">🔒 密码经 bcrypt 加密后存储，站主也看不到明文。<br>' +
     '登录后可以把自己的设置、作业打勾等同步到云端，换设备不用重新弄。<br>' +
     '<b>不登录也完全不影响使用</b>，数据照样存在你自己手机上。</p>';
+
+  /* 渲染并绑定滑块验证（每次进登录页都是一张全新的图） */
+  capInit();
+  capBind();
+  var rf = document.getElementById('capRefresh');
+  if(rf) rf.addEventListener('click', function(){ if(!CAP_STATE.ok) capInit(); });
 
   /* 回车提交 */
   var wrap = document.getElementById('acctBody');
@@ -5016,6 +5188,8 @@ function renderAccount(){
       });
     });
   }
+  /* v2.5.0：账号面板每次重绘，就地再图标化一次（不挂监听）。 */
+  try{ iconifyStatic(box); }catch(e){}
 }
 
 function acctMsg(t, cls){
@@ -5053,12 +5227,295 @@ function acctBusy(on, text){
 
 function val(id){ var e = document.getElementById(id); return e ? e.value.trim() : ''; }
 
+/* ---------- 滑块拼图验证码（v2.5.0）----------
+   纯前端人机验证：随机生成一张渐变底图 + 一个拼图缺口，
+   用户拖动滑块把拼图块送进缺口。误差在容差内即通过。
+   目的不是「高安全性加密」，而是拦掉脚本无脑批量尝试 —— 因此
+   不联网、不上传、不采集任何指纹信息，通过状态只存在内存里。 */
+var CAP_STATE = { ok: false, busy: false };
+/* capBind() 生成的位置设置函数，供 capInit() 复位时复用 */
+var CAP_SETX = null;
+
+/* 一次验证的生命周期：initCaptcha() 渲染 → 用户拖动 → 通过则 CAP_STATE.ok */
+function capHtml(){
+  return '<div class="cap-wrap" id="capWrap">'
+    + '<div class="cap-stage" id="capStage">'
+      + '<canvas id="capBg"></canvas>'
+      + '<canvas class="cap-piece" id="capPiece"></canvas>'
+      + '<button type="button" class="cap-refresh" id="capRefresh" title="换一张">↻</button>'
+      + '<span class="cap-note">拖动下方滑块对齐缺口</span>'
+    + '</div>'
+    + '<div class="cap-track" id="capTrack">'
+      + '<div class="cap-fill" id="capFill"></div>'
+      + '<div class="cap-handle" id="capHandle">→</div>'
+      + '<span class="cap-tip" id="capTip">按住滑块，拖到最右边</span>'
+    + '</div>'
+    + '</div>';
+}
+
+/* 拼图块尺寸（CSS 像素）：宽 42、高 42，缺口在垂直方向随机落点 */
+var CAP_PIECE_W = 42;
+
+function capRand(a, b){ return a + Math.random() * (b - a); }
+
+/* 画一张底图：随机色相的多层渐变 + 噪点，保证每张都不一样 */
+function capPaintBg(ctx, w, h){
+  var hue = Math.floor(capRand(0, 360));
+  var g = ctx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, 'hsl(' + hue + ',68%,58%)');
+  g.addColorStop(.5, 'hsl(' + ((hue + 42) % 360) + ',62%,48%)');
+  g.addColorStop(1, 'hsl(' + ((hue + 96) % 360) + ',58%,38%)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+
+  /* 叠几团半透明圆斑，让画面更「花」，机器难以简单匹配 */
+  for (var i = 0; i < 14; i++){
+    ctx.beginPath();
+    ctx.fillStyle = 'hsla(' + ((hue + i * 27) % 360) + ',72%,' + Math.floor(capRand(42, 74)) + '%,.34)';
+    ctx.arc(capRand(0, w), capRand(0, h), capRand(12, 46), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  /* 噪点：细碎的点阵，进一步干扰 */
+  for (var j = 0; j < 320; j++){
+    ctx.fillStyle = 'rgba(255,255,255,' + capRand(.04, .16).toFixed(2) + ')';
+    ctx.fillRect(capRand(0, w), capRand(0, h), 1.6, 1.6);
+  }
+}
+
+/* 拼图块路径：方形 + 左侧凸起，形状固定（简洁、好实现，够用） */
+function capPiecePath(ctx, x, y, s){
+  var r = 5, bump = s * 0.24;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + s - r, y);
+  ctx.quadraticCurveTo(x + s, y, x + s, y + r);
+  ctx.lineTo(x + s, y + s * 0.5 - bump);
+  /* 右侧挖进去一个半圆，和缺口配合形成「拼图」观感 */
+  ctx.arc(x + s, y + s * 0.5, bump, -Math.PI / 2, Math.PI / 2, true);
+  ctx.lineTo(x + s, y + s - r);
+  ctx.quadraticCurveTo(x + s, y + s, x + s - r, y + s);
+  ctx.lineTo(x + r, y + s);
+  ctx.quadraticCurveTo(x, y + s, x, y + s - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function capInit(){
+  var wrap = document.getElementById('capWrap');
+  if(!wrap) return;
+  var stage = document.getElementById('capStage');
+  var bg = document.getElementById('capBg');
+  var piece = document.getElementById('capPiece');
+  if(!stage || !bg || !piece) return;
+
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  /* 用 offsetWidth 取实际渲染宽度；弹窗刚插入时可能还是 0，退到 CSS 宽度兜底 */
+  var w = Math.round(stage.clientWidth || 300);
+  var h = Math.round(stage.clientHeight || 118);
+  if(w < 60) w = 300;
+
+  [bg, piece].forEach(function(c){
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+  });
+  piece.style.width = w + 'px';
+  var bx = bg.getContext('2d');
+  bx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  var px = piece.getContext('2d');
+  px.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  capPaintBg(bx, w, h);
+
+  /* 缺口位置：左右各留边距，避免贴边看不出「拖到位」的感觉 */
+  var s = CAP_PIECE_W;
+  var targetX = Math.round(capRand(w * 0.5, w - s - 12));
+  var targetY = Math.round(capRand(10, Math.max(11, h - s - 10)));
+
+  /* 在底图上挖出缺口：先清空该区域，再叠一层暗色让它像「洞」 */
+  bx.save();
+  capPiecePath(bx, targetX, targetY, s);
+  bx.globalCompositeOperation = 'destination-out';
+  bx.fill();
+  bx.restore();
+  bx.save();
+  capPiecePath(bx, targetX, targetY, s);
+  bx.fillStyle = 'rgba(0,0,0,.42)';
+  bx.fill();
+  bx.strokeStyle = 'rgba(255,255,255,.55)';
+  bx.lineWidth = 1.4;
+  bx.stroke();
+  bx.restore();
+
+  /* 拼图块画布：块本身固定画在画布左上角（x=0），靠 CSS translateX 移动。
+     形状要和缺口一致 —— 缺口在底图上按 (targetX, targetY) 挖，
+     块在自画布上按 (0, targetY) 画，这样竖直方向天然对齐，水平方向全靠位移。
+     注意：块画布的 y 必须都用 targetY，否则竖直位置对不上缺口。 */
+  px.clearRect(0, 0, w, h);
+  px.save();
+  capPiecePath(px, 0, targetY, s);
+  px.clip();
+  px.drawImage(bg, 0, 0, w, h);
+  px.restore();
+  px.save();
+  capPiecePath(px, 0, targetY, s);
+  px.strokeStyle = 'rgba(255,255,255,.85)';
+  px.lineWidth = 1.4;
+  px.stroke();
+  px.restore();
+
+  CAP_STATE.ok = false;
+  CAP_STATE.curX = 0;
+  CAP_STATE.startX = 0;
+  CAP_STATE.maxX = 0;
+  CAP_STATE.targetX = targetX;
+  CAP_STATE.pieceTop = targetY;
+
+  var handle = document.getElementById('capHandle');
+  if(handle){ handle.style.transform = 'translateX(0)'; handle.textContent = '→'; }
+  var fill = document.getElementById('capFill');
+  if(fill) fill.style.width = '0';
+  var tip = document.getElementById('capTip');
+  if(tip){ tip.textContent = '按住滑块，拖到最右边'; }
+  wrap.classList.remove('ok', 'bad');
+  /* 统一走 setX(0) 摆正滑块与拼图块的初始位置（块此时位于左边界外，拖出来才看得到） */
+  if(typeof CAP_SETX === 'function') CAP_SETX(0);
+}
+
+/* 绑定拖动交互（只绑一次，用 pointer 事件统一鼠标 / 触摸 / 触控笔） */
+function capBind(){
+  var track = document.getElementById('capTrack');
+  var wrap = document.getElementById('capWrap');
+  var handle = document.getElementById('capHandle');
+  var fill = document.getElementById('capFill');
+  var tip = document.getElementById('capTip');
+  var piece = document.getElementById('capPiece');
+  var stage = document.getElementById('capStage');
+  if(!track || track.dataset.bound) return;
+  track.dataset.bound = '1';
+
+  var handleW = 52;
+  var dragging = false;
+
+  function setX(x){
+    var max = capMaxX();
+    if(x < 0) x = 0;
+    if(x > max) x = max;
+    CAP_STATE.curX = x;
+    if(handle) handle.style.transform = 'translateX(' + x + 'px)';
+    if(fill) fill.style.width = (x + handleW) + 'px';
+    /* 拼图块从 -targetX 位移滑到 0 —— 即「滑块拖到底 = 块回到缺口」。
+       这样容差判定天然就落在「拖动进度」上，和视觉完全一致。 */
+    if(piece){
+      piece.style.transform = 'translateX(' + (-(CAP_STATE.targetX || 0) * (1 - (max > 0 ? x / max : 0))) + 'px)';
+    }
+  }
+  function capMaxX(){
+    var tw = track.clientWidth || 300;
+    return Math.max(1, tw - handleW - 6);
+  }
+  function capPieceMaxX(){
+    var sw = (stage && stage.clientWidth) || 300;
+    return Math.max(1, sw - CAP_PIECE_W);
+  }
+
+  function start(e){
+    if(CAP_STATE.ok) return;
+    dragging = true;
+    CAP_STATE.startX = (e.clientX || 0) - (CAP_STATE.curX || 0);
+    if(handle) handle.style.cursor = 'grabbing';
+    if(tip) tip.textContent = '';
+  }
+  function move(e){
+    if(!dragging || CAP_STATE.ok) return;
+    if(e.cancelable) e.preventDefault();
+    setX((e.clientX || 0) - CAP_STATE.startX);
+  }
+  function end(){
+    if(!dragging || CAP_STATE.ok) return;
+    dragging = false;
+    if(handle) handle.style.cursor = 'grab';
+    capVerify();
+  }
+
+  track.addEventListener('pointerdown', function(e){
+    if(CAP_STATE.ok) return;
+    /* 点到轨道任意位置也能直接开始拖 */
+    if(e.target !== handle){ setX(e.clientX - track.getBoundingClientRect().left - handleW / 2); }
+    start(e);
+    try{ track.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  track.addEventListener('pointermove', move);
+  track.addEventListener('pointerup', end);
+  track.addEventListener('pointercancel', end);
+  window.addEventListener('pointerup', end);
+  /* 键盘可达：焦点在滑块上时，方向键微调 */
+  if(handle){
+    handle.setAttribute('tabindex', '0');
+    handle.addEventListener('keydown', function(e){
+      if(CAP_STATE.ok) return;
+      if(e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
+        e.preventDefault();
+        setX((CAP_STATE.curX || 0) + (e.key === 'ArrowRight' ? 6 : -6));
+      }
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); capVerify(); }
+    });
+  }
+  /* 供 capInit() 复位时复用，保证滑块与拼图块位置始终同步 */
+  CAP_SETX = setX;
+  setX(0);
+}
+
+/* 判定：拼图块位移越接近 0（即滑块越接近拖到底）越准。
+   换算成像素偏差 = 滑块剩余行程所占的拼图块位移量。 */
+function capVerify(){
+  var wrap = document.getElementById('capWrap');
+  var tip = document.getElementById('capTip');
+  if(!wrap) return;
+  var track = document.getElementById('capTrack');
+  var max = Math.max(1, (track ? track.clientWidth : 300) - 52 - 6);
+  var left = Math.max(0, max - (CAP_STATE.curX || 0));
+  /* 剩余行程折算成拼图块还差多少像素到位 */
+  var diff = (CAP_STATE.targetX || 0) * (left / max);
+
+  if(diff <= 6){
+    CAP_STATE.ok = true;
+    wrap.classList.remove('bad');
+    wrap.classList.add('ok');
+    var fill = document.getElementById('capFill');
+    if(fill) fill.style.background = 'rgba(15,138,77,.24)';
+    if(tip) tip.textContent = '✓ 验证通过';
+    var handle = document.getElementById('capHandle');
+    if(handle) handle.textContent = '✓';
+    if(typeof SFX !== 'undefined' && SFX && SFX.success) SFX.success();
+  } else {
+    CAP_STATE.ok = false;
+    wrap.classList.remove('ok');
+    wrap.classList.add('bad');
+    if(tip) tip.textContent = '没对准，再试一次';
+    if(typeof SFX !== 'undefined' && SFX && SFX.error) SFX.error();
+    /* 回弹 + 抖动结束后自动换一张全新底图，避免「试出答案」 */
+    setTimeout(function(){
+      wrap.classList.remove('bad');
+      capInit();
+    }, 620);
+  }
+}
+
+/* 校验入口：通过返回 true，未通过则提示并返回 false */
+function capPassed(){
+  if(CAP_STATE.ok) return true;
+  capInit();
+  return false;
+}
+
 /* ---------- 注册 ---------- */
 function doRegister(){
   var u = val('acctU'), p = val('acctP'), p2 = val('acctP2'), d = val('acctD');
   if(!u || !p){ acctMsg('请填写用户名和密码', 'err'); return; }
   if(p !== p2){ acctMsg('两次输入的密码不一样', 'err'); return; }
   if(p.length < 6){ acctMsg('密码至少 6 位', 'err'); return; }
+  if(!capPassed()){ acctMsg('请先拖动滑块完成安全验证', 'err'); return; }
 
   acctBusy(true, '注册中…');
   api('/auth?action=register', { method:'POST', body:{ username:u, password:p, displayName:d } })
@@ -5082,6 +5539,7 @@ function doRegister(){
 function doLogin(){
   var u = val('acctU'), p = val('acctP');
   if(!u || !p){ acctMsg('请填写用户名和密码', 'err'); return; }
+  if(!capPassed()){ acctMsg('请先拖动滑块完成安全验证', 'err'); return; }
 
   acctBusy(true, '登录中…');
   api('/auth?action=login', { method:'POST', body:{ username:u, password:p } })
@@ -6414,7 +6872,7 @@ function applyThemeSwitch(next){
   d.classList.toggle('dark', next);
   applyBg();
   var b = document.getElementById('themeToggle');
-  if(b) b.textContent = next ? '☀️' : '🌙';
+  if(b) b.innerHTML = next ? iconSvg('sun',17) : iconSvg('moon',17);
 }
 
 function radialTheme(x, y, next){
@@ -6584,7 +7042,7 @@ function makeSnapSlider(host, opts){
 
 /* ⚠️ 三条硬约束：
    ① 让位动画只能用 transform，绝不在拖动中 insertBefore
-      —— emojiify 的 MutationObserver 监听 childList，每次 DOM 变动都会全文档重扫
+      —— 拖动中改 DOM 会让浏览器反复重排，手感发涩
    ② 不能误触发卡片自身的 onclick（如 .card 的 openVideo）→ capture 阶段拦截
    ③ 不能误触发全局音效 → 由 __dragBlockClick 守卫（在音效监听里已加判断） */
 var __dragBlockClick = false;
@@ -6783,7 +7241,8 @@ function uiSec(k){
 }
 function uiMsg(t, color){
   var el = document.getElementById('uiMsg'); if(!el) return;
-  el.textContent = t || '';
+  /* v2.5.0：纯文本提示条放不下 SVG，统一去 emoji，只留文字（读起来更干净）。 */
+  el.textContent = typeof stripEmoji === 'function' ? stripEmoji(t || '') : (t || '');
   el.style.color = color || '#0a7d42';
   if(t) setTimeout(function(){ if(el.textContent === t) el.textContent = ''; }, 4000);
 }
@@ -6892,7 +7351,7 @@ function renderSettings(){
     });
   }
   if(UI_SEC === 'order') renderSortList();
-  /* emojiify 由 MutationObserver 自动接管，无需手动触发 */
+  /* v2.5.0 起已无运行时 emoji 引擎（图标都在渲染时就地生成），无需任何触发 */
 }
 
 /* ---------- 排序列表渲染 ---------- */
@@ -7563,6 +8022,8 @@ function renderHiddenView(){
       '<span style="flex:1;min-width:0"><span class="hidden-fun-title">' + esc(l.title) + '</span><br><span class="hidden-fun-desc">' + esc(l.desc) + '</span>' + loginHtml + '</span>' +
     '</div>';
   }).join('');
+  /* v2.5.0：游戏列表里的图标 emoji 统一换成 SVG（列表每次重绘，这里就地转一次，不挂监听）。 */
+  try{ iconifyStatic(grid); }catch(e){}
 }
 
 /* ============================================================
@@ -7614,14 +8075,14 @@ function boardPaint(){
   if(!tabs || !list) return;
 
   var GAMES = [
-    { id:'snake',  name:'贪吃蛇',     icon:'🐍', unit:'豆' },
-    { id:'bird',   name:'像素飞鸟',   icon:'🐦', unit:'管' },
-    { id:'tetris', name:'俄罗斯方块', icon:'🧱', unit:'分' },
-    { id:'doodle', name:'涂鸦跳跃',   icon:'🦘', unit:'高度' },
+    { id:'snake',  name:'贪吃蛇',     icon:'worm',   unit:'豆' },
+    { id:'bird',   name:'像素飞鸟',   icon:'bird',   unit:'管' },
+    { id:'tetris', name:'俄罗斯方块', icon:'blocks', unit:'分' },
+    { id:'doodle', name:'涂鸦跳跃',   icon:'rabbit', unit:'高度' },
   ];
   tabs.innerHTML = GAMES.map(function(g){
     return '<button class="board-tab' + (BOARD_STATE.game === g.id ? ' active' : '') +
-      '" onclick="boardTab(\'' + g.id + '\')">' + g.icon + ' ' + esc(g.name) + '</button>';
+      '" onclick="boardTab(\'' + g.id + '\')">' + iconSvg(g.icon,15) + ' ' + esc(g.name) + '</button>';
   }).join('');
 
   if(meta){
@@ -7643,9 +8104,8 @@ function boardPaint(){
       '</div>';
     return;
   }
-  var medal = ['🥇','🥈','🥉'];
   list.innerHTML = g.ranks.map(function(r){
-    var m = r.rank <= 3 ? medal[r.rank - 1] : ('<span class="board-rank">' + r.rank + '</span>');
+    var m = r.rank <= 3 ? iconSvg('medal',16) : ('<span class="board-rank">' + r.rank + '</span>');
     return '<div class="board-row' + (r.rank <= 3 ? ' top' : '') + '">' +
       '<span class="board-medal">' + m + '</span>' +
       '<span class="board-name">' + esc(r.name) + '</span>' +
@@ -8006,7 +8466,7 @@ function renderContactResults(id, out, j){
     }else if(p.contactStatus === 'pending'){
       ct.innerHTML = '<span class="pc-pending">⏳ 联系方式已提交，等待管理员核实后展示</span>';
     }else if(p.contactStatus === 'rejected'){
-      ct.innerHTML = '<span class="pc-pending">⚠️ 联系方式未通过核实，暂不展示</span>';
+      ct.innerHTML = '<span class="pc-pending">' + iconSvg('triangle-alert',14) + ' 联系方式未通过核实，暂不展示</span>';
     }else{
       ct.innerHTML = '<span class="pc-pending">该同学还没有填写联系方式</span>';
     }
@@ -8151,7 +8611,7 @@ function annMatch(a,q){
   return false;
 }
 function annHighlight(a,q){
-  var html=esc(a.text);
+  var html=emojiEscHtml(a.text);
   var toks=annExpand(q).sort(function(x,y){ return y.length-x.length; });
   for(var i=0;i<toks.length;i++){
     var k=toks[i]; if(!k) continue;
@@ -8240,7 +8700,7 @@ function renderAllBoard(){
           return '<li class="ann-item"><div class="board-meta">'+
             '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(a.date.slice(5))+'</span>'+
             (isImportant(a)?'<span class="board-pin">'+(a.importantUntil?'限时置顶':'置顶')+'</span>':'')+'</div>'+
-            '<p class="board-text">'+esc(a.text)+'</p></li>';
+            '<p class="board-text">'+emojiEscHtml(a.text)+'</p></li>';
         }).join('')+'</ul></li>';
     }).filter(Boolean).join('') || '<li style="padding:18px;color:#6e635a;text-align:center">暂无公告</li>';
     list.innerHTML=html;
@@ -8463,7 +8923,7 @@ function ledgerAdd(name,game,src){
 }
 function ledgerAll(){ return ledgerLoad(); }
 
-function dataMsg(t,c){ var m=document.getElementById('dataMsg'); if(m){ m.textContent=t; m.style.color=c||'#0a7d42'; } }
+function dataMsg(t,c){ var m=document.getElementById('dataMsg'); if(m){ m.textContent = typeof stripEmoji === 'function' ? stripEmoji(t||'') : (t||''); m.style.color=c||'#0a7d42'; } }
 function collectAllData(){
   var out={};
   try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); out[k]=localStorage.getItem(k); } }catch(e){}
@@ -8580,7 +9040,6 @@ function openCopyLink(){
   var list=document.getElementById('siteLinkList');
   if(list){
     var links=(SITE_DATA.siteLinks||[]);
-    var hasBackup=links.some(function(l){ return l.label.indexOf('备用')>=0; });
     var html=links.map(function(l,i){
       return '<div style="background:#f6f1ec;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
         '<div style="display:flex;align-items:center;gap:10px">'+
@@ -8589,11 +9048,6 @@ function openCopyLink(){
         (l.note ? '<div class="link-note">'+esc(l.note)+'</div>' : '')+
         '</div>';
     }).join('');
-    if(!hasBackup){
-      html += '<div style="display:flex;align-items:center;gap:10px;background:#f4ede6;border-radius:12px;padding:10px 12px;opacity:.75">'+
-        '<span style="flex:1;font-size:.85rem;color:#6e635a">🔄 备用链接</span>'+
-        '<span style="font-size:.78rem;color:#6e635a">敬请期待</span></div>';
-    }
     list.innerHTML=html;
   }
   var m=document.getElementById('copyLinkMask'); if(m) m.classList.add('show');
@@ -9107,13 +9561,13 @@ function hwPopInit(){
 
 /* ---- 大假作业（当前作业 / 日历）---- */
 var HW_SUBJECT_STYLE = {
-  '语文': { c:'#e8543f', e:'📖' },
-  '数学': { c:'#0ea5e9', e:'📐' },
-  '英语': { c:'#16a085', e:'🔤' },
-  '物理': { c:'#8b5cf6', e:'⚛️' },
-  '化学': { c:'#e67e22', e:'🧪' },
-  '生物': { c:'#27ae60', e:'🧬' },
-  '其他': { c:'#8a827b', e:'📌' }
+  '语文': { c:'#e8543f', e:'book-open' },
+  '数学': { c:'#0ea5e9', e:'ruler' },
+  '英语': { c:'#16a085', e:'keyboard' },
+  '物理': { c:'#8b5cf6', e:'atom' },
+  '化学': { c:'#e67e22', e:'flask-conical' },
+  '生物': { c:'#27ae60', e:'dna' },
+  '其他': { c:'#8a827b', e:'pin' }
 };
 /* 作业「已完成」状态：按 hwId + 科目 + 任务序号存 localStorage */
 function _hwDoneKey(hwId){ return 'cls_hw_done_' + hwId; }
@@ -9143,7 +9597,7 @@ function toggleHwDone(hwId, subject, ti, el){
 function _renderHwItems(items, hwId){
   if(!items || !items.length) return '<div style="padding:18px;text-align:center;color:#6e635a">该作业暂无具体科目内容。</div>';
   return items.map(function(it){
-    var s = HW_SUBJECT_STYLE[it.subject] || { c:'#6e635a', e:'📝' };
+    var s = HW_SUBJECT_STYLE[it.subject] || { c:'#6e635a', e:'square-pen' };
     var total = (it.tasks||[]).length;
     var tasks = (it.tasks||[]).map(function(t, ti){
       var text, img, audio, video, audioLabel;
@@ -9176,10 +9630,10 @@ function _renderHwItems(items, hwId){
     var progHtml = total ? '<span class="hw-progress">'+doneCnt+'/'+total+' 已完成</span>' : '';
     /* 课代表编辑入口（2026-10-06）：登录 + 本科目课代表（或管理员）才显示 */
     var editBtnHtml = _canEditSubject(it.subject)
-      ? '<button class="hw-edit-btn" onclick="event.stopPropagation();openCaEditor(\''+esc(hwId)+'\',\''+esc(it.subject)+'\')" title="修改本科目作业">✏️ 编辑</button>'
+      ? '<button class="hw-edit-btn" onclick="event.stopPropagation();openCaEditor(\''+esc(hwId)+'\',\''+esc(it.subject)+'\')" title="修改本科目作业">'+iconSvg('square-pen',13)+' 编辑</button>'
       : '';
     return '<div class="hw-item">'
-      + '<div class="hw-item-head"><span class="hw-badge" style="background:'+s.c+'">'+s.e+' '+esc(it.subject)+'</span>'+progHtml+editBtnHtml+'</div>'
+      + '<div class="hw-item-head"><span class="hw-badge" style="background:'+s.c+'">'+iconSvg(s.e,13)+' '+esc(it.subject)+'</span>'+progHtml+editBtnHtml+'</div>'
       + '<div class="hw-item-body">'+tasks+'</div>'
       + '</div>';
   }).join('');
@@ -9585,7 +10039,7 @@ function _renderHwCalendar(){
       if(!detail) return;
       detail.style.display = 'block';
       if(hw){
-        detail.innerHTML = '<div style="font-weight:700;color:#af410f;margin:0 0 8px">'+esc(hw.title)+'（'+hw.start+' ~ '+hw.end+'）</div>' +
+        detail.innerHTML = '<div style="font-weight:700;color:#af410f;margin:0 0 8px">'+emojiEscHtml(hw.title)+'（'+hw.start+' ~ '+hw.end+'）</div>' +
           (hw.isDemo ? '<div style="background:#fff7ed;border:1px solid #ffd8a8;color:#d46b08;padding:8px 10px;border-radius:8px;font-size:.78rem;font-weight:700;margin-bottom:8px">⚠️ 示例测试数据，并非真实作业</div>' : '') +
           _renderHwItems(hw.items, hw.id);
       }else{
@@ -9662,6 +10116,11 @@ function submitExport(){
 loadUI();
 applyUICfg();   /* 【自定义设置】初始化：应用字号/背景/动效/首页顺序 */
 render();
+/* v2.5.0 去 emoji：把写死在 HTML 里的 emoji 一次性换成 SVG 图标。
+   ⚠️ 只在这里跑一次，且**不注册任何 DOM 监听** —— 倒计时每秒重写也影响不到它，
+      这是「不再闪烁」的关键。option 里放不了 SVG，单独去 emoji 保留文字。 */
+try{ iconifyStatic(document.body); }catch(e){}
+try{ stripEmojiInOptions(document); }catch(e){}
 applyHash();
 updateCountdown();
 setInterval(updateCountdown, 1000);
@@ -9719,7 +10178,7 @@ function applyAutoTheme(){
     document.documentElement.classList.toggle('dark', wantDark);
     try{ localStorage.setItem('cls_theme', wantDark?'dark':'light'); }catch(e){}
     var b=document.getElementById('themeToggle');
-    if(b) b.textContent=wantDark?'☀️':'🌙';
+    if(b) b.innerHTML=wantDark?iconSvg('sun',17):iconSvg('moon',17);
     if(typeof applyBg === 'function') applyBg();   /* 【自定义设置】蒙层随主题切换 */
   }
 }
@@ -9730,7 +10189,7 @@ function applyLightTheme(){
   var d=document.documentElement;
   if(d.classList.contains('dark')) d.classList.remove('dark');
   try{ localStorage.setItem('cls_theme','light'); }catch(e){}
-  var b=document.getElementById('themeToggle'); if(b) b.textContent='🌙';
+  var b=document.getElementById('themeToggle'); if(b) b.innerHTML=iconSvg('moon',17);
 }
 function themeAskOnce(){
   closeThemeAutoAsk();
@@ -9863,7 +10322,7 @@ function initTheme(){
   try{ dark = localStorage.getItem('cls_theme') === 'dark'; }catch(e){}
   if(dark) document.documentElement.classList.add('dark');
   var b = document.getElementById('themeToggle');
-  if(b) b.textContent = dark ? '☀️' : '🌙';
+  if(b) b.innerHTML = dark ? iconSvg('sun',17) : iconSvg('moon',17);
   /* 自动暗色模式：加载时应用 + 每 30s 检查 18:30 / 7:30 边界 */
   applyAutoTheme();
   setInterval(function(){

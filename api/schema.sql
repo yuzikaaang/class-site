@@ -59,7 +59,11 @@ create table if not exists sessions (
   token      text        primary key,
   user_id    bigint      not null references users(id) on delete cascade,
   created_at timestamptz not null default now(),
-  expires_at timestamptz not null
+  expires_at timestamptz not null,
+  -- 会话粒度在线时间：前端每次心跳更新。
+  -- 与 users.last_seen_at（用户粒度）不同，这里能区分「同一账号的多台设备」，
+  -- 也是后台「谁在线」的唯一依据（v2.5.0）。
+  last_seen_at timestamptz
 );
 create index if not exists sessions_user_idx    on sessions (user_id);
 create index if not exists sessions_expires_idx on sessions (expires_at);

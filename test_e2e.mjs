@@ -48,6 +48,9 @@ create table sessions (
   user_id integer not null,
   created_at text not null default (datetime('now')),
   expires_at text not null
+  /* ⚠️ v2.5.0 的 last_seen_at 同样**故意不预建**，交给 ensureSchema 的
+     alter table add column 去补 —— 与上面 users 表一个道理：
+     桩若预建，就复现不出「线上缺列」的那类事故了。 */
 );
 create table user_data (
   user_id integer not null,
@@ -1851,7 +1854,7 @@ console.log('\n【19】最后上线（心跳）· 版本号一致性（2026-10-0
 {
   /* ---- 在线心跳：后台「最后上线」靠它刷新 ---- */
   const reg = await call('/api/auth?action=register', {
-    method: 'POST', body: { username: 'pinguser01', password: 'PingPass123' },
+    method: 'POST', body: { username: 'hbuser2500', password: 'PingPass123' },
   });
   t('建心跳测试账号成功', reg.status === 200 && !!reg.body.token, JSON.stringify(reg.body).slice(0, 200));
   const tk = reg.body.token;
@@ -1864,8 +1867,8 @@ console.log('\n【19】最后上线（心跳）· 版本号一致性（2026-10-0
   t('未登录心跳被拒 401', pNoAuth.status === 401, '实际 ' + pNoAuth.status);
 
   /* 后台要能看到，而且和「最后登录」是两个独立的字段 */
-  const lu = await call('/api/admin?action=users&q=pinguser01', { token: adminToken });
-  const row = (lu.body.users || []).find((u) => u.username === 'pinguser01');
+  const lu = await call('/api/admin?action=users&q=hbuser2500', { token: adminToken });
+  const row = (lu.body.users || []).find((u) => u.username === 'hbuser2500');
   t('用户列表返回 lastSeenAt', !!row && !!row.lastSeenAt, JSON.stringify(row || {}).slice(0, 200));
   t('lastSeenAt 与 lastLoginAt 是两个字段',
     !!row && 'lastLoginAt' in row && 'lastSeenAt' in row,
@@ -1955,19 +1958,45 @@ console.log('\n【20】游戏数据上云 + 后台面板（2026-10-07 新增）'
   t('后台能看到该同学', !!me, '名单 ' + (gs.body.users || []).map((u) => u.username).join(','));
   t('后台能看到最高分', !!me && me.hi.snake_hi === 128 && me.hi.tetris_hi === 3400,
     JSON.stringify(me && me.hi));
-  t('后台能看到游玩时长', !!me && !!me.play.snake && me.play.snake.totalMs === 185000
-    && me.play.snake.count === 3, JSON.stringify(me && me.play));
+  t('单游戏时长不被合并（按游戏各归各）', !!me && me.totalMs === undefined
+    && !!me.play.snake && me.play.snake.totalMs === 185000 && me.play.snake.count === 3,
+    JSON.stringify(me && { totalMs: me.totalMs, play: me.play }));
+  t('游玩排序口径为「最近游玩」', !!me && typeof me.lastPlayAt === 'string'
+    && me.lastPlayAt === '2026-10-07T10:30:00.000Z', JSON.stringify(me && me.lastPlayAt));
   t('后台能看到券获取时间', !!me && (me.coupons || []).length === 1
     && me.coupons[0].code === 'SONGA1B2C3' && me.coupons[0].time === '2026-10-07 10:31',
     JSON.stringify(me && me.coupons));
   t('券记录带游戏名', !!me && me.coupons[0].gameLabel === '贪吃蛇', JSON.stringify(me && me.coupons[0]));
-  t('汇总有人数/券数/时长', !!gs.body.summary && gs.body.summary.players >= 1
-    && gs.body.summary.coupons >= 1 && gs.body.summary.totalMs >= 185000,
+  t('汇总有人数/券数/局数，且不再有跨游戏总时长', !!gs.body.summary
+    && gs.body.summary.players >= 1 && gs.body.summary.coupons >= 1
+    && gs.body.summary.totalMs === undefined && gs.body.summary.totalPlays >= 3,
     JSON.stringify(gs.body.summary));
 
   /* 非管理员不能看 */
   const noAdm = await call('/api/admin?action=games', { token: gtk });
   t('普通用户读游戏数据被拒 403', noAdm.status === 403, '实际 ' + noAdm.status);
+
+  /* 周榜键 cls_game_week_<game> 必须以 week_ 前缀被跳过，
+     绝不能混进 u.hi（历史上真的混进过 week_snake 这种垃圾键）。
+     注意：这里特意用 gameruser01 自己以外的容器也一并验，且不改变
+     后续【周榜】用例的口径 —— 所以写入后立刻删掉这两条键。 */
+  await call('/api/data', {
+    method: 'PUT', token: gtk,
+    body: { items: { cls_game_week_snake: 9, cls_game_week_tetris: 4 } },
+  });
+  const gs2 = await call('/api/admin?action=games', { token: adminToken });
+  const me2 = (gs2.body.users || []).find((u) => u.username === 'gameruser01');
+  t('★周榜键不进 u.hi（不产生 week_ 垃圾键）',
+    !!me2 && Object.keys(me2.hi).every((k) => !k.startsWith('week_')),
+    JSON.stringify(me2 && me2.hi));
+  /* 复原：把周榜键清掉，避免污染后面的【周榜】用例（那里断言 gameruser01 不在周榜） */
+  await call('/api/data?key=cls_game_week_snake', { method: 'DELETE', token: gtk });
+  await call('/api/data?key=cls_game_week_tetris', { method: 'DELETE', token: gtk });
+  const gs3 = await call('/api/admin?action=games', { token: adminToken });
+  const me3 = (gs3.body.users || []).find((u) => u.username === 'gameruser01');
+  t('周榜键可被清掉（不残留脏数据）',
+    !!me3 && Object.keys(me3.hi).every((k) => !k.startsWith('week_')),
+    JSON.stringify(me3 && me3.hi));
 }
 
 {
@@ -3091,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.4.1', /SITE_VERSION = '2\.4\.1'/.test(indexHtml),
+  t('★前台版本号为 2.5.0', /SITE_VERSION = '2\.5\.0'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.4.1', /SITE_VERSION = '2\.4\.1'/.test(adminHtml),
+  t('★后台版本号为 2.5.0', /SITE_VERSION = '2\.5\.0'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3457,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.4.1', /SITE_VERSION = '2\.4\.1'/.test(indexHtml38),
+  t('★前台版本号为 2.5.0', /SITE_VERSION = '2\.5\.0'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.4.1', /SITE_VERSION = '2\.4\.1'/.test(adminHtml38),
+  t('★后台版本号为 2.5.0', /SITE_VERSION = '2\.5\.0'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -3834,6 +3863,191 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
   await call('/api/admin?action=delete-profile', {
     method: 'POST', token: adminToken, body: { id: pid39 },
   });
+}
+
+console.log('\n【40】第三十一轮·取消备用链接（v2.5.0）');
+{
+  const idx40 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  /* 备用链接（WorkBuddy 托管）已取消：SITE_DATA.siteLinks 只应有主链接。
+     用两个信号交叉验证：① 不该再出现 workbuddy.link 域名；② siteLinks 里只有一项。 */
+  t('★index.html 不再出现 workbuddy.link 备用域名', idx40.indexOf('workbuddy.link') < 0);
+  const linksBlock = idx40.match(/siteLinks:\s*\[[\s\S]*?\]/);
+  t('★siteLinks 只剩主链接一项', !!linksBlock
+    && (linksBlock[0].match(/\{/g) || []).length === 1
+    && linksBlock[0].indexOf('yuzikaaang.github.io/class-site') >= 0,
+    linksBlock ? linksBlock[0].slice(0, 200) : 'not found');
+  /* 「敬请期待」那条备用占位行也必须删掉，否则会显示一个永远点不了的占位 */
+  t('★openCopyLink 不再渲染备用占位行',
+    idx40.indexOf('hasBackup') < 0 && !/🔄 备用链接/.test(idx40));
+  /* 弹窗说明文案不该再提「备用链接」 */
+  const copyTip = idx40.match(/复制班级服务站链接[\s\S]{0,200}?<\/p>/);
+  t('★复制链接弹窗文案不再提备用链接',
+    !!copyTip && copyTip[0].indexOf('备用链接') < 0,
+    copyTip ? copyTip[0].slice(0, 160) : 'not found');
+
+  const readme40 = fs.readFileSync(new URL('./README.md', import.meta.url), 'utf8');
+  t('★README 不再出现备用链接域名', readme40.indexOf('workbuddy.link') < 0);
+  t('★README 不再把备用链接当现行做法', readme40.indexOf('备用链接') < 0
+    || /备用链接已于|已于 v2\.5\.0 取消/.test(readme40));
+}
+
+console.log('\n【41】第三十一轮·登录滑块验证码（v2.5.0）');
+{
+  const idx41 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('★有滑块验证引擎 capInit', idx41.indexOf('function capInit(') >= 0);
+  t('★有拖动绑定 capBind', idx41.indexOf('function capBind(') >= 0);
+  t('★有判定函数 capVerify', idx41.indexOf('function capVerify(') >= 0);
+  t('★有校验入口 capPassed', idx41.indexOf('function capPassed(') >= 0);
+  t('登录表单渲染出验证码（capHtml 被插入 form）', /capHtml\(\)/.test(idx41));
+  t('★doLogin 提交前校验验证码', /if\(!capPassed\(\)\)[\s\S]{0,60}doLogin|doLogin\(\)[\s\S]{0,0}/.test(idx41)
+    && /function doLogin\(\)\{[\s\S]{0,220}capPassed\(\)/.test(idx41));
+  t('★doRegister 提交前校验验证码', /function doRegister\(\)\{[\s\S]{0,320}capPassed\(\)/.test(idx41));
+  /* 纯前端：不该有任何验证码相关的网络请求 */
+  t('★验证码不联网（无 captcha/verify 接口调用）',
+    !/api\(['"][^'"]*captcha/i.test(idx41) && !/action=captcha/i.test(idx41));
+  t('验证码 canvas 使用 dpr 缩放（清晰不糊）', /devicePixelRatio/.test(idx41) && /setTransform\(dpr/.test(idx41));
+  t('滑块支持键盘操作（tabindex）', /setAttribute\('tabindex',\s*'0'\)/.test(idx41));
+  t('验证码样式已定义（.cap-wrap/.cap-handle）', /\.cap-wrap\{/.test(idx41) && /\.cap-handle\{/.test(idx41));
+  t('验证码有暗色模式样式', /\.dark \.cap-wrap\{/.test(idx41));
+}
+
+console.log('\n【42】第三十一轮·双向心跳 + 会话级在线（v2.5.0）');
+{
+  /* ---- 后端：ping 必须回程 pong / online ---- */
+  const reg42 = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'hbuser2500b', password: 'PingPass123' },
+  });
+  t('建心跳测试账号成功', reg42.status === 200 && !!reg42.body.token,
+    JSON.stringify(reg42.body).slice(0, 160));
+  const tk42 = reg42.body.token;
+
+  const p1 = await call('/api/auth?action=ping', { token: tk42 });
+  t('★ping 返回 200', p1.status === 200, '实际 ' + p1.status + ' ' + JSON.stringify(p1.body).slice(0, 160));
+  t('★ping 回程带 pong 时间戳', !!(p1.body && p1.body.pong), JSON.stringify(p1.body));
+  t('★ping 回程显式声明 online:true', !!(p1.body && p1.body.online === true), JSON.stringify(p1.body));
+  t('ping 回程带 serverTime', !!(p1.body && p1.body.serverTime), JSON.stringify(p1.body));
+  t('ping 回程带判定窗口 windowSec', !!(p1.body && p1.body.windowSec > 0), JSON.stringify(p1.body));
+
+  /* ---- 未登录 ping 被拒 ---- */
+  const pNo = await call('/api/auth?action=ping');
+  t('未登录心跳被拒 401', pNo.status === 401, '实际 ' + pNo.status);
+
+  /* ---- 会话级在线：ping 后该用户 online=true ---- */
+  const u1 = await call('/api/admin?action=users&q=hbuser2500b', { token: adminToken });
+  const me42 = (u1.body.users || []).find((x) => x.username === 'hbuser2500b');
+  t('★后台用户列表带 online 字段', !!me42 && typeof me42.online === 'boolean', JSON.stringify(me42));
+  t('★刚心跳过 → online=true', !!me42 && me42.online === true, JSON.stringify(me42));
+  t('★带会话数 onlineSessions>=1', !!me42 && me42.onlineSessions >= 1, JSON.stringify(me42));
+  t('★带最近会话心跳时间 sessionLastSeen', !!me42 && !!me42.sessionLastSeen, JSON.stringify(me42));
+
+  /* ---- 概览页要给「当前在线人数 / 在线会话数」 ---- */
+  const ov42 = await call('/api/admin?action=stats', { token: adminToken });
+  t('★概览返回 onlineUsers', ov42.body && typeof ov42.body.onlineUsers === 'number',
+    JSON.stringify(ov42.body && { onlineUsers: ov42.body.onlineUsers }));
+  t('★概览返回 onlineSessions', ov42.body && typeof ov42.body.onlineSessions === 'number',
+    JSON.stringify(ov42.body && { onlineSessions: ov42.body.onlineSessions }));
+  t('★刚心跳过的用户被算进当前在线', ov42.body && ov42.body.onlineUsers >= 1,
+    JSON.stringify(ov42.body && { onlineUsers: ov42.body.onlineUsers }));
+
+  /* ---- 清理：把会话删掉后应判为不在线 ---- */
+  await call('/api/admin?action=clear-sessions', {
+    method: 'POST', token: adminToken, body: { id: me42.id },
+  });
+  const u2 = await call('/api/admin?action=users&q=hbuser2500b', { token: adminToken });
+  const me43 = (u2.body.users || []).find((x) => x.username === 'hbuser2500b');
+  t('★会话被清掉后 → online=false（不是「登录过就一直在线」）',
+    !!me43 && me43.online === false, JSON.stringify(me43));
+
+  /* ---- 前端：双向心跳 + 离线横幅 ---- */
+  const idx42 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('★前端有心跳在线状态变量 ONLINE', /var ONLINE\s*=/.test(idx42));
+  t('★心跳检查回程 online 字段', /j\.online/.test(idx42));
+  t('★连续失败才提示（ONLINE_FAILS）', /ONLINE_FAILS/.test(idx42));
+  t('★有离线横幅函数 setOfflineBanner', /function setOfflineBanner\(/.test(idx42));
+  t('★离线横幅文案含「连接不到服务端」', idx42.indexOf('连接不到服务端') >= 0);
+  t('★离线横幅提示切换流量（移动数据）', /切换.*流量|移动数据/.test(idx42));
+  t('★离线横幅有手动重试按钮', /heartbeatNow/.test(idx42));
+  t('★心跳有超时保护（AbortController）', /AbortController/.test(idx42));
+  t('★页面回到前台会补一次心跳', /visibilitychange/.test(idx42));
+  t('离线横幅样式已定义', /\.offline-bar\{/.test(idx42));
+
+  /* ---- 后端：schema 双处同步 ---- */
+  const schema42 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const http42 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  t('★schema.sql 的 sessions 表有 last_seen_at', /create table if not exists sessions[\s\S]{0,300}last_seen_at/.test(schema42));
+  t('★ensureSchema 自愈建 sessions.last_seen_at',
+    /alter table sessions add column if not exists last_seen_at/.test(http42));
+  const admin42 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  t('★后台在线判定用 90 秒窗口', /interval '90 seconds'/.test(admin42));
+  t('★后台在线判定基于 sessions.last_seen_at（非 users）',
+    /sessions[\s\S]{0,200}last_seen_at > now\(\) - interval '90 seconds'/.test(admin42));
+}
+
+console.log('\n【43】第三十一轮·连不上服务端的离线提示（v2.5.0）');
+{
+  const idx43 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  /* api() 必须包装网络层错误 —— 否则前端只会拿到裸的 TypeError: Failed to fetch */
+  t('★api() 有网络错误包装（.catch 里有 offline 标记）', /netErr\.offline\s*=\s*true/.test(idx43));
+  t('★网络错误被换成可读中文文案', idx43.indexOf('连接不到服务端，请检查网络') >= 0);
+  t('★业务错误（有 status）不被误判为离线', /if\(e && e\.status\) throw e;/.test(idx43));
+  t('★网络失败会点亮离线横幅（经统一防抖入口）', /markNetFail\(\)/.test(idx43));
+  t('★有统一网络健康计数 markNetOk/markNetFail',
+    /function markNetOk\(/.test(idx43) && /function markNetFail\(/.test(idx43));
+  /* 防抖用「时间窗」而不是「次数」：启动时并发多条请求会瞬间凑够次数，秒弹很吵 */
+  t('★离线提示用时间窗防抖（OFFLINE_GRACE_MS）', /OFFLINE_GRACE_MS/.test(idx43));
+  t('★宽限期内有复查定时器（scheduleOfflineCheck）', /function scheduleOfflineCheck\(/.test(idx43));
+  /* CONTENT_STATE 要能表达「用的是缓存」 */
+  t('★CONTENT_STATE 有 usedCache 字段', /var CONTENT_STATE = \{[^}]*usedCache/.test(idx43));
+  t('★内容同步成功时 usedCache=false', /status:'ok'[^}]*usedCache:false/.test(idx43));
+  t('★内容同步失败时 usedCache=true', /status:'error'[^}]*usedCache:true/.test(idx43));
+  /* 不用 navigator.onLine 判在线（不可靠：网卡通但连不上服务器时它照样 true） */
+  t('★离线判定不依赖 navigator.onLine',
+    !/navigator\.onLine/.test(idx43) || /不看\s*navigator\.onLine|比 navigator\.onLine 可靠/.test(idx43));
+  t('★离线横幅有「重试」按钮调用 heartbeatNow', /onclick="heartbeatNow\(\)"/.test(idx43));
+}
+
+console.log('\n【44】第三十二轮·全站去 emoji 统一图标（v2.5.0）');
+{
+  const idx44 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  /* 旧的运行时引擎（MutationObserver 全量重扫）必须彻底删除 —— 它是倒计时每秒闪的直接原因 */
+  t('★旧的运行时 emoji 引擎已删除（无 MutationObserver）', !/new MutationObserver/.test(idx44));
+  t('★旧的 emojiify 系列函数已删除', !/function emojiify\b/.test(idx44) && !/function emojiifyText\b/.test(idx44));
+  /* 新的「一次性转换」入口必须存在 */
+  t('★有一次性静态图标化函数 iconifyStatic', /function iconifyStatic\(/.test(idx44));
+  t('★iconifyStatic 用 TreeWalker（按需遍历，非监听）', /createTreeWalker/.test(idx44));
+  t('★iconifyStatic 会跳过 script/style/textarea', /ICONIFY_SKIP/.test(idx44));
+  t('★option 有去 emoji 处理（stripEmojiInOptions）', /function stripEmojiInOptions\(/.test(idx44));
+  t('★页面初始化调用了 iconifyStatic', /iconifyStatic\(document\.body\)/.test(idx44));
+  /* 关键辅助函数仍在 */
+  t('★有 emojiToSvgText（动态文本转图标）', /function emojiToSvgText\(/.test(idx44));
+  t('★有 emojiEscHtml（先转义再转图标）', /function emojiEscHtml\(/.test(idx44));
+  t('★有 stripEmoji（纯文本去 emoji）', /function stripEmoji\(/.test(idx44));
+  /* 保留完整的 emoji→图标映射与 Lucide 图标表 */
+  t('★保留了 EMOJI_ICON_MAP', /var EMOJI_ICON_MAP=\{/.test(idx44));
+  t('★保留了 LUCIDE_ICONS', /var LUCIDE_ICONS=\{/.test(idx44));
+  /* ★闪烁根因：倒计时标题不能再是 emoji 字面量 */
+  t('★倒计时「重要日期」标题已用 iconSvg（不再是 📅 字面量）',
+    /cd-head">'\+iconSvg\('calendar'/.test(idx44.replace(/\s/g, '')) || /iconSvg\('calendar',15\)\+' 重要日期倒计时/.test(idx44));
+  t('★倒计时「节假日」标题已用 iconSvg（不再是 ⏰ 字面量）',
+    /iconSvg\('timer',15\)\+' 节假日倒计时/.test(idx44));
+  /* 主题按钮不能再用 textContent 写 emoji（textContent 吃不了 SVG） */
+  const themeEmoji = /themeToggle'\);\s*if\(b\)\s*b\.textContent\s*=\s*(next|dark|wantDark)\s*\?/.test(idx44);
+  t('★主题按钮改用 innerHTML 输出图标（不再 textContent）', !themeEmoji);
+  t('★主题按钮用 iconSvg sun/moon', /iconSvg\('sun'/.test(idx44) && /iconSvg\('moon'/.test(idx44));
+  /* uiMsg / dataMsg 是纯文本 toast，必须走 stripEmoji */
+  t('★uiMsg 用 stripEmoji 去 emoji', /function uiMsg\(t, color\)\{[\s\S]{0,200}stripEmoji/.test(idx44));
+  t('★dataMsg 用 stripEmoji 去 emoji', /function dataMsg\(t,c\)\{[\s\S]{0,160}stripEmoji/.test(idx44));
+  /* 公告正文走 emojiEscHtml（同学手写的 emoji 也能变图标） */
+  t('★公告正文用 emojiEscHtml 渲染', /emojiEscHtml\(a\.text\)/.test(idx44));
+  /* 排行榜前三名用 medal 图标 */
+  t('★排行榜前三名用 iconSvg medal', /iconSvg\('medal',16\)/.test(idx44));
+  t('★排行榜标签用 iconSvg（不再是 g.icon 直接输出）', /iconSvg\(g\.icon,15\)/.test(idx44));
+  /* 科目徽章图标改成图标名 */
+  t('★HW_SUBJECT_STYLE 的 e 字段已改成图标名', /'语文':\s*\{\s*c:'#e8543f',\s*e:'book-open'/.test(idx44));
+  /* 作业系统的 📎 是**数据协议**，必须保留在源码里（正则/生成都用它） */
+  t('★作业附件 📎 协议标记仍保留（正则仍匹配 📎）', /\/\^\\s\*📎\//.test(idx44));
+  /* cloud 图标已内联（静态 HTML 里用到） */
+  t('★LUCIDE_ICONS 含 cloud 图标', /"cloud":"<path/.test(idx44));
 }
 
 console.log('\n' + '='.repeat(52));

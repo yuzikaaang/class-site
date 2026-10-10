@@ -135,11 +135,23 @@ async function listUsers(req, res) {
     select u.id, u.username, u.display_name, u.role, u.status,
            u.created_at, u.last_login_at, u.last_seen_at,
            coalesce(u.must_change_password, false) as must_change_password,
-           coalesce(d.n, 0)::int as data_count
+           coalesce(d.n, 0)::int as data_count,
+           coalesce(sess.sess_n, 0)::int as online_sessions,
+           sess.max_seen as online_last_seen
       from users u
       left join (
         select user_id, count(*)::int as n from user_data group by user_id
       ) d on d.user_id = u.id
+      left join (
+        select user_id,
+               count(*) filter (
+                 where expires_at > now()
+                   and last_seen_at > now() - interval '90 seconds'
+               )::int as sess_n,
+               max(last_seen_at) as max_seen
+          from sessions
+         group by user_id
+      ) sess on sess.user_id = u.id
      where (${q} = '' or lower(u.username) like '%' || ${q} || '%'
                          or lower(coalesce(u.display_name,'')) like '%' || ${q} || '%')
      order by u.id
@@ -158,6 +170,11 @@ async function listUsers(req, res) {
       createdAt: r.created_at,
       lastLoginAt: r.last_login_at,
       lastSeenAt: r.last_seen_at || null,
+      /* v2.5.0 真·在线：按会话心跳判定（90 秒窗口），不是「登录过就一直在线」 */
+      online: Number(r.online_sessions) > 0,
+      onlineSessions: Number(r.online_sessions) || 0,
+      /* 该用户所有会话里最近一次心跳时刻（用于显示「最后活跃」） */
+      sessionLastSeen: r.online_last_seen || null,
       mustChangePassword: !!r.must_change_password,
       dataCount: r.data_count,
     })),
@@ -227,7 +244,26 @@ async function stats(req, res) {
   `;
   const [d] = await sql`select count(*)::int as rows, coalesce(sum(pg_column_size(data_value)),0)::bigint as bytes from user_data`;
   const [s] = await sql`select count(*)::int as n from sessions where expires_at > now()`;
-
+  /* v2.5.0「真·在线」：90 秒内有心跳的**会话**数（不是 token 未过期数）。
+     以前 activeSessions 是「所有未过期会话」，登录一次就挂在那儿好几天，
+     所以数字永远虚高。现在按心跳实测口径统计。 */
+  let onlineSessions = 0;
+  let onlineUsers = 0;
+  try {
+    const [os] = await sql`
+      select count(*)::int as sess,
+             count(distinct user_id)::int as usr
+        from sessions
+       where expires_at > now()
+         and last_seen_at > now() - interval '90 seconds'
+    `;
+    onlineSessions = os.sess;
+    onlineUsers = os.usr;
+  } catch (e) {
+    /* sessions.last_seen_at 还没建出来时（老库首次部署）降级为 0，
+       不能让整个概览页报错。下次请求 ensureSchema 建好列后即恢复。 */
+    console.warn('[admin] sessions.last_seen_at 不可用：', e.message);
+  }
   /* 哪些键用得最多（了解同学最在意什么功能） */
   const topKeys = await sql`
     select data_key, count(*)::int as n from user_data
@@ -290,6 +326,9 @@ async function stats(req, res) {
     users: u,
     data: { rows: d.rows, bytes: Number(d.bytes) },
     activeSessions: s.n,
+    /* 真实在线：90 秒内有心跳的会话数 / 人数 */
+    onlineSessions,
+    onlineUsers,
     topKeys: topKeys.map((k) => ({ key: k.data_key, count: k.n })),
     login: { total: loginTotal, today: loginToday, recent: recentLogins },
     profiles: profileStats,
@@ -560,6 +599,10 @@ async function gameStats(req, res) {
 
     if (k.startsWith('cls_game_')) {
       const localKey = k.slice('cls_game_'.length);
+      /* cls_game_week_<game> 是「本周榜」用的周计数，不是最高分记录；
+         它和 cls_game_<game>_hi 长的很像，早期版本会被错当成 hi 收进来，
+         导致 u.hi 里混进 week_snake 之类的垃圾键。这里直接跳过。 */
+      if (localKey.startsWith('week_')) continue;
       const num = Number(v);
       if (Number.isFinite(num)) u.hi[localKey] = num;
       else u.hi[localKey] = v;
@@ -568,18 +611,40 @@ async function gameStats(req, res) {
 
   const users = Array.from(byUser.values());
   users.forEach((u) => {
-    u.totalMs = Object.values(u.play).reduce((s, p) => s + (p.totalMs || 0), 0);
+    /* 不再跨游戏把时长加成一个大数（上午玩贪吃蛇、下午玩飞鸟，是两码事，
+       合成一个「总时长」没有意义）。各游戏的数据在 u.play[game] 里各归各的。 */
+    u.lastPlayAt = lastPlayAt(u);
     u.coupons.sort((a, b) => String(b.time).localeCompare(String(a.time)));
   });
-  users.sort((a, b) => b.totalMs - a.totalMs);
+  /* 排序口径也改成「最近玩过谁」，而不是谁的时间加起来最长。 */
+  users.sort((a, b) => {
+    if (a.lastPlayAt === b.lastPlayAt) return 0;
+    if (!a.lastPlayAt) return 1;
+    if (!b.lastPlayAt) return -1;
+    return a.lastPlayAt < b.lastPlayAt ? 1 : -1;
+  });
 
   const summary = {
     players: users.length,
     coupons: users.reduce((s, u) => s + u.coupons.length, 0),
-    totalMs: users.reduce((s, u) => s + u.totalMs, 0),
+    /* 「累计游玩」= 各游戏局数之和，单位统一（局），不再是混着小时/分钟的时长。 */
+    totalPlays: users.reduce(
+      (s, u) => s + Object.values(u.play).reduce((n, p) => n + (p.count || 0), 0),
+      0,
+    ),
   };
 
   return ok(res, { games: GAME_META, users, summary });
+}
+
+/* 取某人在所有游戏里最晚一次游玩时间（ISO 串），没有记录返回 null。 */
+function lastPlayAt(u) {
+  let best = null;
+  for (const p of Object.values(u.play || {})) {
+    const at = p && p.lastAt ? String(p.lastAt) : '';
+    if (at && (!best || at > best)) best = at;
+  }
+  return best;
 }
 
 /* ---------------- 写：任命 / 撤销头衔 ---------------- */

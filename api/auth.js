@@ -307,32 +307,67 @@ async function me(req, res) {
   });
 }
 
-/* ---------------- 在线心跳（2026-10-07） ----------------
+/* ---------------- 在线心跳（v2.5.0 升级为双向） ----------------
    GET /api/auth?action=ping
 
-   用途：后台「用户管理」要看的是同学**最后一次在线**的时间，
-   而不是最后一次输密码登录的时间（登录一次 token 能用很多天，
-   只看 last_login_at 会以为人家好几天没来，其实天天在站上）。
+   站主要求：「每隔一分钟双向发一个数据包，收到就说明在线」。
+   所以这个接口从「单向写一下 last_seen_at」升级成**真正的双向握手**：
+     · 前端带 token 请求（去程）
+     · 服务端校验 token 有效 → 回 { pong, serverTime, online:true }（回程）
+   前端只有**真的收到 pong** 才算「在线」，超时/网络错误即判离线。
+   这比 navigator.onLine 可靠得多（后者只看网卡，连不上服务器照样 true）。
 
-   前端在页面可见时每 60 秒打一次；切到后台标签页就不打了。
-   写库很轻（一条 update），但为了不白白刷库，做了 30 秒节流：
-   30 秒内的重复心跳直接回 ok 不写库。 */
+   在线粒度：**会话级**（sessions.last_seen_at），而不是用户级。
+   同一个账号在两台设备登录，是两个会话，各自有自己的心跳时间。
+
+   判定窗口：90 秒（心跳间隔 60 秒 + 抖动余量）。后台按
+   「last_seen_at > now() - 90s」判在线。 */
 const PING_THROTTLE_MS = 30 * 1000;
+/* 与后台判定口径保持一致，前端也用它做本地急判 */
+const ONLINE_WINDOW_SEC = 90;
+
 async function ping(req, res) {
   const u = await requireUser(req, res);
   if (!u) return;
   const sql = getSql();
+  const now = Date.now();
   try {
+    /* 优先精确更新「当前这个会话」的 last_seen_at。
+       currentUser 已把 sha256(token) 放在 sessionToken 里；
+       万一拿不到（老数据 / 兼容分支），退化为按 user_id 更新该用户所有会话。 */
+    if (u.sessionToken) {
+      await sql`
+        update sessions set last_seen_at = now()
+         where token = ${u.sessionToken}
+           and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')
+      `;
+    } else {
+      await sql`
+        update sessions set last_seen_at = now()
+         where user_id = ${u.id}
+           and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')
+      `;
+    }
+    /* 用户级 last_seen_at 保留（后台部分旧视图仍用它做「最近活跃」），
+       但不再作为「是否在线」的依据。 */
     await sql`
       update users set last_seen_at = now()
        where id = ${u.id}
          and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')
     `;
   } catch (e) {
-    /* last_seen_at 列还没建出来（老库首次部署）时不能让心跳把前端搞崩 */
+    /* sessions.last_seen_at 列还没建出来（老库首次部署）时不能让心跳把前端搞崩 */
     console.warn('[auth] ping 更新失败：', e.message);
   }
-  return ok(res, { pong: Date.now() });
+  /* 回程数据包：前端收到它才认为「在线」 */
+  return ok(res, {
+    pong: now,
+    serverTime: new Date().toISOString(),
+    online: true,
+    windowSec: ONLINE_WINDOW_SEC,
+    mustChangePassword: !!u.mustChangePassword,
+    username: u.username,
+  });
 }
 
 /* ---------------- 修改自己的密码 ---------------- */
