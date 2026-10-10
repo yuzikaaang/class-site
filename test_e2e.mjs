@@ -3806,7 +3806,23 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
     /var h = \$\('headVer'\);\s*if\(h\) h\.textContent/.test(adminHtml39b));
   t('★点顶栏版本号能回查线上构建号', /id="headVer"[^>]*onclick="checkAdminVer\(\)"/.test(adminHtml39b));
 
-  /* ---- G. 前端护栏：后台要提醒「本人已设为私密」 ---- */
+  /* ---- G. 进「头衔任命」必须回到第 1 页（2026-10-10 修） ----
+     🔴 站主反馈「头衔那里还是没显示啊，比如冷思敏的名字」的真根因：
+        STATE.titles 是**跨页面存活**的模块状态，renderTitles 结尾只写
+        loadTitles() 没重置 S.page —— 站主翻到 3/3 页后切走再回来，
+        页码仍是 3，只看到最后 2 个人（梁咏佳/冷伟明），
+        而冷思敏在**第 1 页**（索引 19/62），于是以为名单没显示全。
+        这个 bug 只有「翻到末页 → 离开 → 回来」才复现，静态断言必须盯死。 */
+  const rt = adminHtml39b.slice(adminHtml39b.indexOf('function renderTitles'),
+                                adminHtml39b.indexOf('function loadTitles'));
+  t('★切进「头衔任命」页会强制回到第 1 页', /S\.page\s*=\s*1;\s*\n\s*loadTitles\(\);/.test(rt));
+  t('★「刷新」按钮也重置页码', /ttRefresh'\)\.onclick\s*=\s*function\(\)\{\s*S\.page\s*=\s*1;/.test(adminHtml39b));
+  t('★改搜索词也重置页码', /S\.q\s*=\s*e\.target\.value\.trim\(\);\s*S\.page\s*=\s*1;/.test(adminHtml39b));
+  t('★「只看已任命」也重置页码', /S\.onlySet\s*=\s*!!onlyBox\.checked;\s*S\.page\s*=\s*1;/.test(adminHtml39b));
+  /* 末页要有「前面还有 N 页」的显式提示，否则在末页找第 1 页的人会找不到 */
+  t('★末页提示「前面还有 N 页」', /前面还有\s*' \+ \(pages - 1\) \+ ' 页/.test(adminHtml39b));
+
+  /* ---- H. 前端护栏：后台要提醒「本人已设为私密」 ---- */
   const adminHtml39 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   t('★后台编辑弹窗标出「本人已设为私密」', /本人已设为私密/.test(adminHtml39));
   t('★后台标出「已被你覆盖」的情况', /已被你覆盖/.test(adminHtml39));

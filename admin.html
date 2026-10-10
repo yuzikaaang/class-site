@@ -3110,6 +3110,13 @@ function renderTitles(){
   var onlyBox = $('ttOnly');
   if(onlyBox) onlyBox.onchange = function(){ S.onlySet = !!onlyBox.checked; S.page = 1; paintTitles(); };
 
+  /* ⚠️ 2026-10-10：进页面必须**强制回到第 1 页**（S.page = 1）。
+     原来这里只写 loadTitles()，而 STATE.titles 是**跨页面存活**的模块状态：
+     站主翻到 3/3 页 → 切到别的页 → 再回来，页码仍停在 3，
+     于是只看到最后 2 个人，还以为是「名单没显示全」。
+     （站主反馈「头衔那里还是没显示啊，比如冷思敏的名字」就是这个 ——
+       冷思敏在第 1 页，而他一直停在末页。） */
+  S.page = 1;
   loadTitles();
 }
 
@@ -3185,7 +3192,14 @@ function paintTitles(){
     + '<div class="pager">'
     +   '<span class="info">共 ' + total + ' 人'
     +     (S.onlySet || kw ? '（已按条件筛选，全班共 ' + S.list.length + ' 人）' : '')
-    +     '，当前显示第 ' + (from + 1) + '–' + shownTo + ' 条</span>'
+    +     '，当前显示第 ' + (from + 1) + '–' + shownTo + ' 条'
+    /* ⚠️ 2026-10-10：末页时明确提示「还有前面几页」。
+        站主曾在末页找一个人找不到（那人在第 1 页），误以为名单没显示全。
+        光有页码按钮不够 —— 在末页时要主动说一句。 */
+    +     (pages > 1 && S.page >= pages
+              ? '<b style="color:var(--accent-ink)"> · 前面还有 ' + (pages - 1) + ' 页，点「首页」看全部</b>'
+              : '')
+    +   '</span>'
     +   '<span class="pages">'
     +     '<button data-ttp="first"' + (S.page <= 1 ? ' disabled' : '') + '>首页</button>'
     +     '<button data-ttp="prev"'  + (S.page <= 1 ? ' disabled' : '') + '>上一页</button>'
