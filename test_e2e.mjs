@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.5.0', /SITE_VERSION = '2\.5\.0'/.test(indexHtml),
+  t('★前台版本号为 2.5.1', /SITE_VERSION = '2\.5\.1'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.5.0', /SITE_VERSION = '2\.5\.0'/.test(adminHtml),
+  t('★后台版本号为 2.5.1', /SITE_VERSION = '2\.5\.1'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.5.0', /SITE_VERSION = '2\.5\.0'/.test(indexHtml38),
+  t('★前台版本号为 2.5.1', /SITE_VERSION = '2\.5\.1'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.5.0', /SITE_VERSION = '2\.5\.0'/.test(adminHtml38),
+  t('★后台版本号为 2.5.1', /SITE_VERSION = '2\.5\.1'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -3909,6 +3909,19 @@ console.log('\n【41】第三十一轮·登录滑块验证码（v2.5.0）');
   t('滑块支持键盘操作（tabindex）', /setAttribute\('tabindex',\s*'0'\)/.test(idx41));
   t('验证码样式已定义（.cap-wrap/.cap-handle）', /\.cap-wrap\{/.test(idx41) && /\.cap-handle\{/.test(idx41));
   t('验证码有暗色模式样式', /\.dark \.cap-wrap\{/.test(idx41));
+
+  /* ---- v2.5.1 回归护栏：拼图块与缺口的对齐 ----
+     曾经的 bug：拼图块画在自画布 x=0，于是只能在 [-targetX, 0] 之间滑动（贴左边缘），
+     而缺口在 targetX（右半边），**永远对不上**；判定却按「拖到底=通过」照常放行，
+     表现为「拖到底也提示验证码不匹配」（站主实测反馈）。
+     正确做法：块与缺口画在同一坐标 (targetX, targetY)，位移从 -targetX 滑到 0 正好嵌入。 */
+  t('★拼图块画在缺口位置 targetX（而非 x=0）',
+    /capPiecePath\(px,\s*targetX,\s*targetY,\s*s\)/.test(idx41)
+    && /capPiecePath\(px,\s*0,\s*targetY/.test(idx41) === false);
+  t('★块与缺口坐标一致（缺口 targetX / 块 targetX 两处都改）',
+    (idx41.match(/capPiecePath\(px,\s*targetX,/g) || []).length === 2);
+  t('★画布尺寸取不到时有 rAF 重试（避免退到兜底宽 300 造成错位）',
+    /requestAnimationFrame\(capInit\)/.test(idx41) && /capTry/.test(idx41));
 }
 
 console.log('\n【42】第三十一轮·双向心跳 + 会话级在线（v2.5.0）');
