@@ -332,32 +332,55 @@ async function ping(req, res) {
   const sql = getSql();
   const now = Date.now();
   try {
-    /* 优先精确更新「当前这个会话」的 last_seen_at。
+    /* 🚀 2026-10-11 v2.5.2 性能修复（站主反馈「正常联网却显示连不到服务器」）：
+       ------------------------------------------------------------
+       这里原本是**两条串行的 UPDATE**：
+         ① update sessions set last_seen_at = now() where ...   ← 等它回来
+         ② update users    set last_seen_at = now() where ...   ← 再发第二次
+       Neon 走 HTTP 传输（见 db.js 注释），**每条 SQL 就是一次 HTTPS 往返**。
+       串行 → 心跳光这一段就 2 次往返；叠加上游 requireUser 的若干次，
+       实测最慢一次要 10.1 秒，而前端超时只有 12 秒 —— 差 1.9 秒就误判离线，
+       于是「网络明明是好的却弹连不到服务器」。
+
+       修复：两条 UPDATE **并发发出**（Promise.all），耗时 ≈ 较慢的那一条，
+       而不是两者之和。用 allSettled 是为了让「其中一条失败」不影响另一条，
+       与原来的 try-catch 宽处理保持一致。
+
+       ⚠️ 两条 UPDATE 里的**过滤条件是刻意的节流**：只在 30 秒没更新过时才写，
+       避免每次心跳都产生一次写盘。并发不改变这个语义。 */
+    const jobs = [
+      /* 用户级 last_seen_at（后台旧视图仍用它看「最近活跃」） */
+      sql`
+        update users set last_seen_at = now()
+         where id = ${u.id}
+           and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')
+      `,
+    ];
+    /* 会话级 last_seen_at（v2.5.0 起「是否在线」的真正依据）。
        currentUser 已把 sha256(token) 放在 sessionToken 里；
        万一拿不到（老数据 / 兼容分支），退化为按 user_id 更新该用户所有会话。 */
     if (u.sessionToken) {
-      await sql`
+      jobs.push(sql`
         update sessions set last_seen_at = now()
          where token = ${u.sessionToken}
            and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')
-      `;
+      `);
     } else {
-      await sql`
+      jobs.push(sql`
         update sessions set last_seen_at = now()
          where user_id = ${u.id}
            and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')
-      `;
+      `);
     }
-    /* 用户级 last_seen_at 保留（后台部分旧视图仍用它做「最近活跃」），
-       但不再作为「是否在线」的依据。 */
-    await sql`
-      update users set last_seen_at = now()
-       where id = ${u.id}
-         and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')
-    `;
+    const settled = await Promise.allSettled(jobs);
+    settled.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        console.warn('[auth] ping 更新失败(' + (i ? 'sessions' : 'users') + ')：', r.reason && r.reason.message);
+      }
+    });
   } catch (e) {
     /* sessions.last_seen_at 列还没建出来（老库首次部署）时不能让心跳把前端搞崩 */
-    console.warn('[auth] ping 更新失败：', e.message);
+    console.warn('[auth] ping 更新异常：', e.message);
   }
   /* 回程数据包：前端收到它才认为「在线」 */
   return ok(res, {

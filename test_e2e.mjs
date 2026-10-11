@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.5.1', /SITE_VERSION = '2\.5\.1'/.test(indexHtml),
+  t('★前台版本号为 2.5.2', /SITE_VERSION = '2\.5\.2'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.5.1', /SITE_VERSION = '2\.5\.1'/.test(adminHtml),
+  t('★后台版本号为 2.5.2', /SITE_VERSION = '2\.5\.2'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.5.1', /SITE_VERSION = '2\.5\.1'/.test(indexHtml38),
+  t('★前台版本号为 2.5.2', /SITE_VERSION = '2\.5\.2'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.5.1', /SITE_VERSION = '2\.5\.1'/.test(adminHtml38),
+  t('★后台版本号为 2.5.2', /SITE_VERSION = '2\.5\.2'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -3922,6 +3922,30 @@ console.log('\n【41】第三十一轮·登录滑块验证码（v2.5.0）');
     (idx41.match(/capPiecePath\(px,\s*targetX,/g) || []).length === 2);
   t('★画布尺寸取不到时有 rAF 重试（避免退到兜底宽 300 造成错位）',
     /requestAnimationFrame\(capInit\)/.test(idx41) && /capTry/.test(idx41));
+
+  /* ---- v2.5.2 回归护栏：心跳超时误报（站主反馈「正常联网却显示连不到服务器」）----
+     根因是**服务端慢**而非站主网络差：实测 TCP 握手只要 0.2s（网络正常），
+     但带 token 心跳首字节要 1.4–10.1s（Neon HTTP 逐条 SQL 往返叠加），
+     而前端超时只有 12s —— 最慢一次 10.1s，只差 1.9s 就误判离线；
+     手机移动数据延更大，必然突破 12s → 弹「连不到服务端」。
+     修复：超时 12s→30s、宽限期 25s→60s，且「服务器慢」与「真断网」分两种文案。 */
+  t('★心跳超时常量已提升到 30 秒（HB_TIMEOUT_MS）',
+    /var HB_TIMEOUT_MS = 30 \* 1000/.test(idx41));
+  t('★心跳不再用硬编码 12000 超时（会导致误报）',
+    /setTimeout\(function\(\)\{ timedOut = true; ctrl\.abort\(\); \}, HB_TIMEOUT_MS\)/.test(idx41)
+    && /ctrl\.abort\(\); \}, 12000\)/.test(idx41) === false);
+  t('★离线宽限期已提升到 60 秒',
+    /var OFFLINE_GRACE_MS = 60 \* 1000/.test(idx41));
+  t('★区分「服务器慢」与「真断网」两种文案',
+    /OFFLINE_TEXT = \{/.test(idx41) && /slow:/.test(idx41) && /offline:/.test(idx41));
+  t('★markNetFail 接受失败原因参数（slow/offline）',
+    /function markNetFail\(kind\)/.test(idx41));
+  t('★心跳超时时标记为 slow（而非 offline）',
+    /markNetFail\(timedOut \? 'slow' : 'offline'\)/.test(idx41));
+  t('★api() 里 5xx 记为 slow、4xx 不误记',
+    /if\(e\.status >= 500\)/.test(idx41) && /markNetFail\('slow'\)/.test(idx41));
+  t('★服务端慢的文案不再让用户去换流量',
+    /服务器响应较慢/.test(idx41));
 }
 
 console.log('\n【42】第三十一轮·双向心跳 + 会话级在线（v2.5.0）');
@@ -4002,8 +4026,10 @@ console.log('\n【43】第三十一轮·连不上服务端的离线提示（v2.5
   /* api() 必须包装网络层错误 —— 否则前端只会拿到裸的 TypeError: Failed to fetch */
   t('★api() 有网络错误包装（.catch 里有 offline 标记）', /netErr\.offline\s*=\s*true/.test(idx43));
   t('★网络错误被换成可读中文文案', idx43.indexOf('连接不到服务端，请检查网络') >= 0);
-  t('★业务错误（有 status）不被误判为离线', /if\(e && e\.status\) throw e;/.test(idx43));
-  t('★网络失败会点亮离线横幅（经统一防抖入口）', /markNetFail\(\)/.test(idx43));
+  /* v2.5.2：业务错误仍原样抛出，但 5xx 要记为 slow（服务端忙），4xx 不记 */
+  t('★业务错误（有 status）不被误判为离线',
+    /if\(e && e\.status\)\{/.test(idx43) && /e\.status >= 500/.test(idx43));
+  t('★网络失败会点亮离线横幅（经统一防抖入口）', /markNetFail\('offline'\)/.test(idx43));
   t('★有统一网络健康计数 markNetOk/markNetFail',
     /function markNetOk\(/.test(idx43) && /function markNetFail\(/.test(idx43));
   /* 防抖用「时间窗」而不是「次数」：启动时并发多条请求会瞬间凑够次数，秒弹很吵 */
