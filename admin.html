@@ -885,7 +885,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.6.0';
+var SITE_VERSION = '2.6.1';
 var VER_DATE = '2026-10-11';
 
 /* ---- 运行时状态 ---- */
@@ -4448,6 +4448,10 @@ function renderStudy(){
     + '<div class="alert info" style="margin-bottom:16px">'
     +   '首页「学习卡片」每次刷新随机出一条内容。这里配的是<b>全班默认</b>；'
     +   '同学在首页「自定义设置 → 学习卡片」里改过的话，以他自己的为准。'
+    + '</div>'
+    + '<div class="alert warn" style="margin-bottom:16px">'
+    +   svg('alert', 14) + ' <b>当前已暂时隐藏</b>：v2.6.1 起首页不再显示学习卡片'
+    +   '（还有几处问题待修）。这里的配置会照常保存，改回显示后立即生效，无需重新配。'
     + '</div>'
     + '<section class="panel"><div id="stBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
 

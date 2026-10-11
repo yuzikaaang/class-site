@@ -65,7 +65,13 @@
 //       （此前用 XOR 混淆存放，密钥就在同一份 JS 里，等于明文；公开站点藏不住，故彻底删除）。
 //       清理仓库内全部历史备份包（backup/ 与根目录 class-site-backup.zip），改用 git 做版本留档。
 //       升版本清旧缓存。
-const CACHE = 'class-site-v52'
+// v53（对应 v2.6.1）：心跳判定的时间窗防抖改为「连续失败计数」——
+//       以前任一条请求偶尔失败就会点亮红条（api 失败计入但 api 成功不清零，
+//       且复查时刻与心跳间隔几乎重合 → 红条闪一下），现在只有连续 2 次心跳
+//       失败才提示，任意一次成功即清零。「重试」按钮改成 60 秒倒计时
+//       （正在刷新… 剩余 N 秒 → 连接已恢复）。学习卡片暂时隐藏。
+//       升版本清旧缓存。
+const CACHE = 'class-site-v53'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

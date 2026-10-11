@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.6.0', /SITE_VERSION = '2\.6\.0'/.test(indexHtml),
+  t('★前台版本号为 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.0', /SITE_VERSION = '2\.6\.0'/.test(adminHtml),
+  t('★后台版本号为 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.6.0', /SITE_VERSION = '2\.6\.0'/.test(indexHtml38),
+  t('★前台版本号为 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.0', /SITE_VERSION = '2\.6\.0'/.test(adminHtml38),
+  t('★后台版本号为 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -3934,16 +3934,26 @@ console.log('\n【41】第三十一轮·登录滑块验证码（v2.5.0）');
   t('★心跳不再用硬编码 12000 超时（会导致误报）',
     /setTimeout\(function\(\)\{ timedOut = true; ctrl\.abort\(\); \}, HB_TIMEOUT_MS\)/.test(idx41)
     && /ctrl\.abort\(\); \}, 12000\)/.test(idx41) === false);
-  t('★离线宽限期已提升到 60 秒',
-    /var OFFLINE_GRACE_MS = 60 \* 1000/.test(idx41));
+  t('★v2.6.1 已去掉时间窗防抖（改数连续失败次数，不再有宽限期）',
+    /var OFFLINE_GRACE_MS/.test(idx41) === false
+    && /function scheduleOfflineCheck\(/.test(idx41) === false
+    && /var NET_FAILS_MAX = 2/.test(idx41));
   t('★区分「服务器慢」与「真断网」两种文案',
     /OFFLINE_TEXT = \{/.test(idx41) && /slow:/.test(idx41) && /offline:/.test(idx41));
   t('★markNetFail 接受失败原因参数（slow/offline）',
     /function markNetFail\(kind\)/.test(idx41));
-  t('★心跳超时时标记为 slow（而非 offline）',
-    /markNetFail\(timedOut \? 'slow' : 'offline'\)/.test(idx41));
-  t('★api() 里 5xx 记为 slow、4xx 不误记',
-    /if\(e\.status >= 500\)/.test(idx41) && /markNetFail\('slow'\)/.test(idx41));
+  t('★心跳超时 / 5xx 都标记为 slow（而非 offline）',
+    /var kind = \(timedOut \|\| \(e && e\.serverBusy\)\) \? 'slow' : 'offline'/.test(idx41));
+  t('★心跳把 5xx 归入「服务器忙」而不是用户的网络问题',
+    /e\.serverBusy = !!\(r && r\.status >= 500\)/.test(idx41));
+  /* 🚀 v2.6.1 核心修复：api() 成功也要清零。
+     旧实现只有心跳成功才清零，api 失败点着的计时器要等下一次心跳来灭，
+     中间就可能先弹横幅 —— 这正是「明明有网却提示连不上」的根因。 */
+  t('★api() 成功时顺手清零在线状态（关键修复）',
+    /if\(typeof markNetOk === 'function'\) markNetOk\(\);/.test(idx41));
+  t('★api() 不再自己点亮离线横幅（避免启动并发误报）',
+    /markNetFail\('offline'\)/.test(idx41) === false
+    && /markNetFail\('slow'\)/.test(idx41) === false);
   t('★服务端慢的文案不再让用户去换流量',
     /服务器响应较慢/.test(idx41));
 }
@@ -3999,7 +4009,8 @@ console.log('\n【42】第三十一轮·双向心跳 + 会话级在线（v2.5.0�
   const idx42 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   t('★前端有心跳在线状态变量 ONLINE', /var ONLINE\s*=/.test(idx42));
   t('★心跳检查回程 online 字段', /j\.online/.test(idx42));
-  t('★连续失败才提示（ONLINE_FAILS）', /ONLINE_FAILS/.test(idx42));
+  /* v2.6.1：计数变量由 ONLINE_FAILS 改名 NET_FAILS（含义收窄为「心跳连续失败」） */
+  t('★连续失败才提示（NET_FAILS）', /NET_FAILS/.test(idx42) && /ONLINE_FAILS/.test(idx42) === false);
   t('★有离线横幅函数 setOfflineBanner', /function setOfflineBanner\(/.test(idx42));
   t('★离线横幅文案含「连接不到服务端」', idx42.indexOf('连接不到服务端') >= 0);
   t('★离线横幅提示切换流量（移动数据）', /切换.*流量|移动数据/.test(idx42));
@@ -4026,15 +4037,17 @@ console.log('\n【43】第三十一轮·连不上服务端的离线提示（v2.5
   /* api() 必须包装网络层错误 —— 否则前端只会拿到裸的 TypeError: Failed to fetch */
   t('★api() 有网络错误包装（.catch 里有 offline 标记）', /netErr\.offline\s*=\s*true/.test(idx43));
   t('★网络错误被换成可读中文文案', idx43.indexOf('连接不到服务端，请检查网络') >= 0);
-  /* v2.5.2：业务错误仍原样抛出，但 5xx 要记为 slow（服务端忙），4xx 不记 */
-  t('★业务错误（有 status）不被误判为离线',
-    /if\(e && e\.status\)\{/.test(idx43) && /e\.status >= 500/.test(idx43));
-  t('★网络失败会点亮离线横幅（经统一防抖入口）', /markNetFail\('offline'\)/.test(idx43));
+  /* v2.6.1：api 的业务错误仍原样抛出（调用方自己提示），但不再参与在线判定 */
+  t('★业务错误（有 status）原样抛出、不参与在线判定',
+    /if\(e && e\.status\) throw e;/.test(idx43));
   t('★有统一网络健康计数 markNetOk/markNetFail',
     /function markNetOk\(/.test(idx43) && /function markNetFail\(/.test(idx43));
-  /* 防抖用「时间窗」而不是「次数」：启动时并发多条请求会瞬间凑够次数，秒弹很吵 */
-  t('★离线提示用时间窗防抖（OFFLINE_GRACE_MS）', /OFFLINE_GRACE_MS/.test(idx43));
-  t('★宽限期内有复查定时器（scheduleOfflineCheck）', /function scheduleOfflineCheck\(/.test(idx43));
+  /* v2.6.1 防抖改用「连续失败次数」：时间窗要维护起始时刻 + 复查定时器，
+     且必须和心跳节奏对齐（对不齐就会「先弹后收」闪一下），已整体移除 */
+  t('★v2.6.1 防抖改为连续失败计数（NET_FAILS_MAX）',
+    /var NET_FAILS_MAX = 2/.test(idx43) && /NET_FAILS\+\+/.test(idx43));
+  t('★连续失败未达阈值时安排一次补打确认（scheduleConfirm）',
+    /function scheduleConfirm\(/.test(idx43) && /FAIL_CONFIRM_DELAY_MS/.test(idx43));
   /* CONTENT_STATE 要能表达「用的是缓存」 */
   t('★CONTENT_STATE 有 usedCache 字段', /var CONTENT_STATE = \{[^}]*usedCache/.test(idx43));
   t('★内容同步成功时 usedCache=false', /status:'ok'[^}]*usedCache:false/.test(idx43));
@@ -4335,6 +4348,91 @@ console.log('\n【46】第三十四轮·公告时间纪律 + 每日一言随机 
   t('★保存前校验「至少勾一个类型」（否则首页空白像 bug）',
     /至少要勾一个内容类型/.test(adm46));
   t('★勾了知识点但没选学科会拦下', /至少要选一个学科/.test(adm46));
+}
+
+console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重试倒计时（v2.6.1）');
+{
+  const idx47 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm47 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const sw47  = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+
+  /* ===== ① 心跳判定简化（消除「明明有网却弹连不上」）=====
+     站主反馈「再简化在线心跳，还是有可能显示不了」——实测是**误弹**（不该弹却弹了）。
+     根因：api() 失败能把防抖计时器点着，但 api() 成功却不清零（只有心跳成功才清）；
+     而复查定时器（宽限期 +60ms）与心跳间隔（60s）几乎重合 → 先弹一次、
+     心跳成功又立刻收起 = 用户看到「红条闪一下」。 */
+  t('★v2.6.1 去掉时间窗三件套（宽限期 / 起始时刻 / 复查定时器）',
+    /OFFLINE_GRACE_MS/.test(idx47) === false
+    && /NET_FAIL_SINCE/.test(idx47) === false
+    && /scheduleOfflineCheck/.test(idx47) === false);
+  t('★判定改为连续失败计数，阈值 2 次',
+    /var NET_FAILS = 0/.test(idx47) && /var NET_FAILS_MAX = 2/.test(idx47)
+    && /if\(NET_FAILS >= NET_FAILS_MAX\)/.test(idx47));
+  t('★心跳成功即清零并收起',
+    /function markNetOk\(fromHeartbeat\)/.test(idx47) && /NET_FAILS = 0;/.test(idx47));
+  /* 真机测试抓到：重试态下自动云同步的 /api/content 先成功，把重试给结束了，
+     可心跳其实还在失败 → 会「已恢复 → 又报警」闪一下。所以只有心跳报的成功
+     才算「真恢复」，api 成功只负责清零、不结束重试。 */
+  t('★重试态下只有心跳成功才算真恢复（api 成功不算）',
+    /if\(wasRetrying && !fromHeartbeat\)\{/.test(idx47));
+  t('★心跳调用时明确传 true（markNetOk(true)）', /markNetOk\(true\)/.test(idx47));
+  t('★api() 成功也清零 —— 误弹的真正修复点',
+    /if\(typeof markNetOk === 'function'\) markNetOk\(\);/.test(idx47));
+  t('★api() 的失败不再计入在线判定（避免启动并发误报）',
+    /markNetFail\('offline'\)/.test(idx47) === false
+    && /markNetFail\('slow'\)/.test(idx47) === false);
+  t('★未达阈值时 15 秒补打一次确认（真断网也能及时提示）',
+    /var FAIL_CONFIRM_DELAY_MS = 15 \* 1000/.test(idx47)
+    && /function scheduleConfirm\(/.test(idx47));
+  t('★「真连不上」不会被后续「服务器慢」降级展示',
+    /if\(kind === 'offline'\) NET_FAIL_KIND = 'offline';/.test(idx47));
+  t('★重试期间失败不会把横幅刷成失败文案（倒计时优先）',
+    /function paintOfflineBar\(\)/.test(idx47) && /if\(_retryTimer\)\{/.test(idx47));
+
+  /* ===== ② 重试 → 「正在刷新」+ 60 秒倒计时 =====
+     站主原话：「不然用户会觉得你点了重试没有反应」 */
+  t('★重试倒计时 60 秒', /var RETRY_SECONDS = 60/.test(idx47));
+  t('★「重试」按钮改为进入倒计时重试态',
+    /function heartbeatNow\(\)\{\s*startRetry\(\);/.test(idx47));
+  t('★倒计时文案是「正在刷新… 剩余 N 秒」',
+    /正在刷新… 剩余 <b>' \+ _retryLeft \+ '<\/b> 秒/.test(idx47));
+  t('★倒计时每秒递减（setInterval 1000）',
+    /_retryLeft--;/.test(idx47) && /\}, 1000\);/.test(idx47));
+  t('★倒计时期间每 10 秒真的再试一次（不是干等）',
+    /_retryLeft % 10 === 0/.test(idx47));
+  t('★倒计时走完仍失败 → 回到失败文案 + 重试按钮（可以再点）',
+    /stopRetry\(\);\s*setOfflineBanner\(true\);/.test(idx47));
+  t('★重复点重试不会叠出多个倒计时（_retryTimer 守卫）',
+    /if\(_retryTimer\) return;/.test(idx47));
+  /* 真机测试抓到的 bug：paintOfflineBar 靠 _retryTimer 判断是否处于重试态，
+     若先重绘再赋值，第一帧会被画成失败文案 —— 用户点了「重试」却看不到
+     「正在刷新」。必须「先赋值 _retryTimer，再 paintOfflineBar」。 */
+  t('★startRetry 先赋值 _retryTimer 再重绘（否则第一帧看不到「正在刷新」）',
+    /_retryTimer = setInterval\(function\(\)\{[\s\S]*?\}, 1000\);\s*paintOfflineBar\(\);/.test(idx47));
+  t('★重试成功给「连接已恢复」反馈后自动收起',
+    /function showRecoveredBanner\(\)/.test(idx47) && /连接已恢复/.test(idx47));
+  t('★转圈动画 CSS 存在，且尊重系统「减少动态效果」',
+    /\.off-spin\{animation:offSpin/.test(idx47) && /prefers-reduced-motion:reduce/.test(idx47));
+  t('★「已恢复」绿色态 CSS 存在', /\.offline-bar\.off-ok\{/.test(idx47));
+
+  /* ===== ③ 学习卡片暂时隐藏（站主：bug 有点多，等后续再修）===== */
+  t('★v2.6.1 总开关 STUDY_CARD_ENABLED = false',
+    /var STUDY_CARD_ENABLED = false/.test(idx47));
+  t('★总开关关闭时直接不渲染卡片',
+    /if\(!STUDY_CARD_ENABLED\)\{ el\.innerHTML = ''; el\.style\.display = 'none'; return; \}/.test(idx47));
+  t('★总开关关闭时不发起 /api/study 联网请求',
+    /if\(!STUDY_CARD_ENABLED\) return;/.test(idx47));
+  t('★用 display:none 隐藏（不留空白高度）',
+    /el\.style\.display = 'none'/.test(idx47));
+  t('★代码与后台面板都保留（改回 true 即可整体恢复）',
+    /function renderStudyCard\(\)/.test(idx47) && /function renderStudy\(\)/.test(adm47));
+  t('★后台面板明确提示「当前已暂时隐藏」', /当前已暂时隐藏/.test(adm47));
+
+  /* ===== ④ 版本号 / 缓存 ===== */
+  t('★前台版本号 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(idx47));
+  t('★后台版本号 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(adm47));
+  t('★service worker 缓存版本升到 v53（旧缓存要作废）',
+    /class-site-v53/.test(sw47));
 }
 
 console.log('\n' + '='.repeat(52));
