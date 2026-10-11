@@ -30,6 +30,7 @@ const ALLOW_KEYS = [
   'cls_theme',              // 主题（亮/暗）
   'cls_theme_auto',         // 旧的「是否自动」开关（v2.5.3 起降级为兼容键）
   'cls_theme_auto2',        // v2.5.3 主题自动模式：off / system / sun
+  'cls_study_cfg',          // v2.6.0 学习卡片配置（开关 / 类型 / 学科）
   'cls_ui_cfg',             // 界面设置（字号/背景/排序/动效）
   'cls_ui_bgimg',           // 自定义背景图
   'cls_sfx',                // 音效开关

@@ -396,6 +396,15 @@ tbody tr.sel{background:var(--tint-2)}
 .row-actions button.view{color:var(--info);border-color:var(--border-2)}
 .row-actions button.view:hover{background:var(--info-bg);color:var(--info);border-color:var(--info)}
 .row-actions button.icon{display:inline-flex;align-items:center;gap:4px}
+
+/* 学习卡片面板（v2.6.0）：勾选行 */
+.st-list{display:flex;flex-direction:column;gap:8px}
+.st-row{display:flex;align-items:flex-start;gap:11px;padding:10px 13px;border:1px solid var(--border-2);border-radius:12px;cursor:pointer;transition:all var(--t-fast)}
+.st-row:hover{background:var(--tint);border-color:var(--btn-b)}
+.st-row input{width:17px;height:17px;flex:0 0 auto;margin:2px 0 0;accent-color:var(--accent);cursor:pointer}
+.st-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+.st-info b{font-size:.86rem;font-weight:700;color:var(--fg)}
+.st-info i{font-size:.75rem;font-style:normal;color:var(--fg-3);line-height:1.5}
 .row-actions button.icon svg{width:13px;height:13px}
 
 /* ============================================================
@@ -876,7 +885,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.5.3';
+var SITE_VERSION = '2.6.0';
 var VER_DATE = '2026-10-11';
 
 /* ---- 运行时状态 ---- */
@@ -899,6 +908,7 @@ var STATE = {
   song: { list: [], cards: [] },
   /* 2026-10-06 新增 */
   quotes: { list: [] },
+  study: null,
   dates:  { list: [] },
   secrets: { list: [], encrypted: false, hasKey: false },
   /* 2026-10-07 新增：游戏数据（最高分 / 游玩时长 / 券获取时间） */
@@ -1284,6 +1294,7 @@ var PAGES = [
   { id:'releases',      label:'版本更新', icon:'clock',     group:'内容',  title:'版本更新记录' },
   { id:'popups',        label:'通用弹窗', icon:'bell',      group:'内容',  title:'通用弹窗（开屏弹 / 板块弹）' },
   { id:'quotes',        label:'每日一言', icon:'quote',     group:'内容',  title:'每日一言' },
+  { id:'study',         label:'学习卡片', icon:'inbox',     group:'内容',  title:'学习卡片（知识点 / 每日一词 / 古诗文 / 每日一题）' },
   { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
@@ -1342,6 +1353,7 @@ function go(page){
     releases:      renderReleases,
     popups:        renderPopups,
     quotes:        renderQuotes,
+    study:         renderStudy,
     dates:         renderDates,
     games:         renderGames,
     logins:        renderLogins,
@@ -2577,6 +2589,26 @@ function annNowStr(){
        + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
+/**
+ * 校验后台手填的公告时间。
+ * 接受 YYYY-MM-DD HH:MM（也容许用 M/D/YYYY H:MM、YYYY/MM/DD HH:MM 这类宽松写法），
+ * 返回规范化后的 "YYYY-MM-DD HH:MM"；看不懂就返回 ''，由调用方回退到当前时间。
+ *
+ * ⚠️ 为什么不直接 new Date(str)：Safari 对 "2026-10-11 17:05" 这种带空格的
+ *    写法解析结果不稳定（部分版本返回 Invalid Date）。所以自己拆字段。
+ */
+function annParseDate(str){
+  var s = String(str || '').trim();
+  if(!s) return '';
+  var m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{1,2})$/);
+  if(!m) m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})[ T](\d{1,2}):(\d{1,2})$/), m && (m = [m[0], m[3], m[1], m[2], m[4], m[5]]);
+  if(!m) return '';
+  var Y = +m[1], Mo = +m[2], D = +m[3], H = +m[4], Mi = +m[5];
+  if(Mo < 1 || Mo > 12 || D < 1 || D > 31 || H > 23 || Mi > 59) return '';
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return Y + '-' + p(Mo) + '-' + p(D) + ' ' + p(H) + ':' + p(Mi);
+}
+
 function loadClassContent(){
   var S = STATE.classcontent;
   api('/content').then(function(j){
@@ -2935,9 +2967,12 @@ function classContentDialog(idx){
       + '</div>'
       + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">置顶公告在班级站公告栏排最上方，并带「置顶」标签</p>'
       + '</div>'
-      + '<div class="field"><label>发布时间</label>'
-      + '<input value="' + attr(c ? ((c._ref && c._ref.date) || '') : annNowStr()) + '" disabled>'
-      + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">已发布公告的时间不再改动，保证与同学看到的一致</p></div>'
+      + '<div class="field"><label for="ccDate">发布时间</label>'
+      + '<div style="display:flex;gap:8px;align-items:center">'
+      +   '<input id="ccDate" value="' + attr(c ? ((c._ref && c._ref.date) || '') : annNowStr()) + '" placeholder="YYYY-MM-DD HH:MM" style="flex:1;min-width:0">'
+      +   '<button type="button" class="btn btn-sm btn-secondary" id="ccDateNow" style="white-space:nowrap">填入当前时间</button>'
+      + '</div>'
+      + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">格式 <b>YYYY-MM-DD HH:MM</b>，按你设备上的本地时间。留空或格式不对会自动按当前时间填。</p></div>'
       + '<div class="msg" id="ccMsg"></div>';
   }else if(isHomework){
     /* 作业：结构化编辑。每科 = 科目名 + 任务多行文本（一行一条）。
@@ -2993,6 +3028,17 @@ function classContentDialog(idx){
         var wrap = box.querySelector('#ccPinUntilWrap');
         pinSel.onchange = function(){
           if(wrap) wrap.style.display = (pinSel.value === 'until') ? '' : 'none';
+        };
+      }
+
+      /* ================= 公告：发布时间「填入当前时间」（2026-10-11 站主要求）=================
+         站主反馈「AI 发出来的时间总是错的」——根因是时间戳凭感觉手写。
+         这个按钮让站主一键取设备真实时间，不会再写出未来/过去的错时间。 */
+      var dateNowBtn = box.querySelector('#ccDateNow');
+      if(dateNowBtn){
+        dateNowBtn.onclick = function(){
+          var inp = box.querySelector('#ccDate');
+          if(inp){ inp.value = annNowStr(); inp.focus(); }
         };
       }
 
@@ -3058,6 +3104,18 @@ function classContentDialog(idx){
             pinUntilIso = ud.toISOString();
           }
 
+          /* 发布时间：优先用站主填的值（v2.6.0 解禁，之前是 disabled 只读）。
+             填了但格式看不懂 → 明确报错而不是悄悄丢掉，否则站主会以为改成功了。 */
+          var dateInp = box.querySelector('#ccDate');
+          var dateRaw = dateInp ? dateInp.value.trim() : '';
+          var dateV = annParseDate(dateRaw);
+          if(dateRaw && !dateV){
+            msg.className = 'msg err show';
+            msg.textContent = '发布时间格式看不懂，请用「YYYY-MM-DD HH:MM」，或点「填入当前时间」';
+            return;
+          }
+          if(!dateV) dateV = annNowStr();   /* 留空 = 用当前时间 */
+
           if(editing){
             ref = c._ref || {};
             ref.text = textV; ref.category = cat;
@@ -3066,9 +3124,9 @@ function classContentDialog(idx){
                有就一起更新，写回后对象内自洽。 */
             if('body' in ref) ref.body = textV;
             if('title' in ref) ref.title = annFirstLine(textV);
-            if(!ref.date) ref.date = annNowStr();      /* 老数据没有 date 就补上 */
+            ref.date = dateV;                          /* v2.6.0：以时间框为准 */
           }else{
-            ref = { date: annNowStr(), text: textV, category: cat };
+            ref = { date: dateV, text: textV, category: cat };
           }
           /* 置顶字段写回：不置顶要把两个字段都清掉，否则「取消置顶」取消不掉 */
           if(pinV === 'forever'){ ref.important = true; delete ref.importantUntil; }
@@ -4349,6 +4407,151 @@ function dqDelete(idx){
     api('/content', { method:'PUT', body:{ items:{ daily_quote: next } } })
       .then(function(){ toast('已删除', 'ok'); loadQuotes(); })
       .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+  });
+}
+
+/* ============================================================================
+ * ⑪-F2 面板：学习卡片（v2.6.0 新增）
+ * ---------------------------------------------------------------------------
+ * 站主要求：「不要做一个专门的板块，就跟每日一言一样，在选择好想随机
+ *           出现的学科知识点之后就可以联网更新」
+ *
+ * 云端字段：study_card
+ *   { on:true, types:{know,word,poem,quiz}, subjects:{physics,chemistry,biology} }
+ *
+ * 这里的配置是**全班默认值**：同学在首页「自定义设置」里改过就以个人的为准，
+ * 没改过就用这里配的。字段名必须与 index.html 的 STUDY_DEFAULT_CFG 一致，
+ * 少一个键前端会退回代码常量（不会崩，但站主会以为「设置了没生效」）。
+ *
+ * 内容本身（135 条知识点 + 30 道英语题）内置于 index.html，
+ * 不在这里维护 —— 后台只管「显示哪些类型」。
+ * ========================================================================= */
+var STUDY_TYPES = [
+  { k: 'know', name: '学科知识点', desc: '物理 / 化学 / 生物 必修一知识点与公式（内置，离线可用）' },
+  { k: 'quiz', name: '每日一题',   desc: '英语选词填空，每题一问，含答案与解析（内置）' },
+  { k: 'word', name: '每日一词',   desc: '联网获取英文单词的音标、中文释义与例句' },
+  { k: 'poem', name: '古诗文',     desc: '联网获取今日诗词，含朝代、作者与出处' },
+];
+var STUDY_SUBJECTS = [
+  { k: 'physics',   name: '物理', desc: '必修第一册 · 力与运动' },
+  { k: 'chemistry', name: '化学', desc: '必修第一册 · 物质变化 / 钠氯 / 铁 / 周期律' },
+  { k: 'biology',   name: '生物', desc: '必修1 · 分子与细胞' },
+];
+
+function renderStudy(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<button class="btn btn-sm" id="stSave">' + svg('check', 14) + '保存</button>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="stRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '首页「学习卡片」每次刷新随机出一条内容。这里配的是<b>全班默认</b>；'
+    +   '同学在首页「自定义设置 → 学习卡片」里改过的话，以他自己的为准。'
+    + '</div>'
+    + '<section class="panel"><div id="stBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('stSave').onclick    = saveStudy;
+  $('stRefresh').onclick = loadStudy;
+  loadStudy();
+}
+
+function loadStudy(){
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    var raw = items.study_card;
+    /* 归一化：历史/异常数据一律退回默认，保证界面永远有可勾的值 */
+    var cfg = { on: true,
+      types: { know: true, word: true, poem: true, quiz: true },
+      subjects: { physics: true, chemistry: true, biology: true } };
+    if(raw && typeof raw === 'object'){
+      if(raw.on === false) cfg.on = false;
+      ['know', 'word', 'poem', 'quiz'].forEach(function(k){
+        if(raw.types && raw.types[k] === false) cfg.types[k] = false;
+      });
+      ['physics', 'chemistry', 'biology'].forEach(function(k){
+        if(raw.subjects && raw.subjects[k] === false) cfg.subjects[k] = false;
+      });
+    }
+    STATE.study = cfg;
+    paintStudy();
+  }).catch(function(e){
+    var b = $('stBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintStudy(){
+  var body = $('stBody');
+  if(!body) return;
+  var c = STATE.study || {};
+  var typeRows = STUDY_TYPES.map(function(t){
+    var on = !c.types || c.types[t.k] !== false;
+    return '<label class="st-row">'
+      + '<input type="checkbox" data-st-type="' + t.k + '"' + (on ? ' checked' : '') + '>'
+      + '<span class="st-info"><b>' + esc(t.name) + '</b><i>' + esc(t.desc) + '</i></span>'
+      + '</label>';
+  }).join('');
+  var subjRows = STUDY_SUBJECTS.map(function(s){
+    var on = !c.subjects || c.subjects[s.k] !== false;
+    return '<label class="st-row">'
+      + '<input type="checkbox" data-st-subj="' + s.k + '"' + (on ? ' checked' : '') + '>'
+      + '<span class="st-info"><b>' + esc(s.name) + '</b><i>' + esc(s.desc) + '</i></span>'
+      + '</label>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="field" style="margin-bottom:18px">'
+    +   '<label class="st-row" style="border:1px solid var(--btn-b);border-radius:12px;padding:11px 14px">'
+    +     '<input type="checkbox" id="stOn"' + (c.on !== false ? ' checked' : '') + '>'
+    +     '<span class="st-info"><b>启用学习卡片</b><i>关掉后首页不再显示这张卡片（同学自己的开关优先）</i></span>'
+    +   '</label>'
+    + '</div>'
+    + '<h4 style="margin:0 0 8px;font-size:.9rem">内容类型</h4>'
+    + '<div class="st-list">' + typeRows + '</div>'
+    + '<h4 style="margin:20px 0 8px;font-size:.9rem">学科知识点范围</h4>'
+    + '<p class="muted" style="font-size:.78rem;margin:0 0 8px">'
+    +   '只在勾选「学科知识点」时生效。每科条目数：物理 24 · 化学 33 · 生物 48。'
+    + '</p>'
+    + '<div class="st-list">' + subjRows + '</div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-st-type]'), function(cb){
+    cb.onchange = function(){ c.types[cb.dataset.stType] = cb.checked; };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-st-subj]'), function(cb){
+    cb.onchange = function(){ c.subjects[cb.dataset.stSubj] = cb.checked; };
+  });
+  var onBox = body.querySelector('#stOn');
+  if(onBox) onBox.onchange = function(){ c.on = onBox.checked; };
+}
+
+function saveStudy(){
+  var c = STATE.study;
+  if(!c){ toast('还没加载完，稍等一下', 'err'); return; }
+  var typeBox = $('stBody').querySelector('#stOn');
+  if(typeBox) c.on = typeBox.checked;
+
+  /* 校验：至少留一个内容类型，否则首页整块空白，站主以为是 bug */
+  var anyType = Object.keys(c.types).some(function(k){ return c.types[k]; });
+  if(c.on && !anyType){ toast('至少要勾一个内容类型', 'err', 3600); return; }
+  var anySubj = Object.keys(c.subjects).some(function(k){ return c.subjects[k]; });
+  if(c.on && c.types.know && !anySubj){ toast('勾了「学科知识点」，至少要选一个学科', 'err', 3600); return; }
+
+  var btn = $('stSave');
+  btn.disabled = true;
+  /* 走 /content PUT：要带上完整 items（后端是整份替换），
+     所以先 GET 一次拿全量，只改 study_card 这一个键。 */
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    items.study_card = c;
+    return api('/content', { method: 'PUT', body: { items: items } });
+  }).then(function(j){
+    if(j && j.ok === false) throw new Error(j.error || '保存失败');
+    btn.disabled = false;
+    toast('已保存，同学刷新首页即可看到', 'ok');
+  }).catch(function(e){
+    btn.disabled = false;
+    toast('保存失败：' + e.message, 'err', 4200);
   });
 }
 

@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.5.3', /SITE_VERSION = '2\.5\.3'/.test(indexHtml),
+  t('★前台版本号为 2.6.0', /SITE_VERSION = '2\.6\.0'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.5.3', /SITE_VERSION = '2\.5\.3'/.test(adminHtml),
+  t('★后台版本号为 2.6.0', /SITE_VERSION = '2\.6\.0'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.5.3', /SITE_VERSION = '2\.5\.3'/.test(indexHtml38),
+  t('★前台版本号为 2.6.0', /SITE_VERSION = '2\.6\.0'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.5.3', /SITE_VERSION = '2\.5\.3'/.test(adminHtml38),
+  t('★后台版本号为 2.6.0', /SITE_VERSION = '2\.6\.0'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4175,6 +4175,166 @@ console.log('\n【45】第三十三轮·主题自动切换三选一（v2.5.3）'
   t('★后端 ALLOW_KEYS 含 cls_theme_auto2', /'cls_theme_auto2'/.test(data45));
   t('★cls_theme_hold 刻意不同步（临时意愿不该跨设备）',
     /cls_theme_hold（「仅这次切换」的当天软标记）\*\*刻意不同步\*\*/.test(idx45));
+}
+
+console.log('\n【46】第三十四轮·公告时间纪律 + 每日一言随机 + 学习卡片（v2.6.0）');
+{
+  const idx46 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm46 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const stu46 = fs.readFileSync(new URL('./api/study.js', import.meta.url), 'utf8');
+  const wrk46 = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  const dat46 = fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf8');
+  const cnt46 = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
+
+  /* ===== ① 公告时间纪律 =====
+     站主原话：「以后同步公告的时候先看现实世界，你发出来的时间总是错的」。
+     根因是 AI 凭感觉手写时间戳。这里固化两条：
+       · 公告数组必须严格按时间倒序（渲染层虽然会重排，但数据本身要干净）；
+       · 不允许出现「未来时间」的公告（那必然是手写错的）。 */
+  const annSeg = idx46.slice(idx46.indexOf('announcements: ['), idx46.indexOf('\n  ],', idx46.indexOf('announcements: [')));
+  const annDates = [...annSeg.matchAll(/date:\s*["']([^"']+)["']/g)].map(m => m[1]);
+  t('★公告数组非空（没被脚本改坏）', annDates.length > 50);
+  let outOfOrder = 0;
+  for (let i = 1; i < annDates.length; i++) if (annDates[i] > annDates[i - 1]) outOfOrder++;
+  t('★公告数组严格倒序（' + annDates.length + ' 条，逆序对 ' + outOfOrder + '）', outOfOrder === 0);
+  /* 公告时间不得晚于「今天结束」——晚于今天就是写错（AI 手写时间戳的典型症状） */
+  const nowD = new Date();
+  const pad = n => (n < 10 ? '0' : '') + n;
+  const todayEnd = nowD.getFullYear() + '-' + pad(nowD.getMonth() + 1) + '-' + pad(nowD.getDate()) + ' 23:59';
+  const future = annDates.filter(d => d > todayEnd);
+  t('★没有「未来时间」的公告（手写时间戳的典型症状）', future.length === 0);
+
+  /* ===== ② 后台公告时间可编辑 ===== */
+  t('★后台公告时间输入框已解禁（不再是 disabled）',
+    /id="ccDate"/.test(adm46) && !/id="ccDate"[^>]*disabled/.test(adm46));
+  t('★有「填入当前时间」按钮',
+    /id="ccDateNow"/.test(adm46) && /填入当前时间/.test(adm46));
+  t('★按钮绑定了 annNowStr（取设备真实时间）',
+    /ccDateNow[\s\S]{0,220}inp\.value = annNowStr\(\)/.test(adm46));
+  t('★有时间格式校验函数 annParseDate', /function annParseDate\(str\)/.test(adm46));
+  /* 真值表：把 annParseDate 从源码里抠出来单独跑，确保解析行为正确。
+     （admin.html 的主脚本是 IIFE 包裹，真机测试无法从外部调用它，
+       所以逻辑校验放在这里做。） */
+  {
+    const m = adm46.match(/function annParseDate\(str\)\{[\s\S]*?\n\}/);
+    if (!m) {
+      t('★annParseDate 逻辑可提取并正确解析', false, '未能从源码提取函数体');
+    } else {
+      let fn = null;
+      try {
+        fn = new Function('return ' + m[0].replace(/^function annParseDate/, 'function') + ';')();
+      } catch (e) { /* 提取失败见下 */ }
+      const cases = [
+        ['2026-10-11 17:05', '2026-10-11 17:05'],
+        ['2026-10-11 9:7', '2026-10-11 09:07'],
+        ['2026/10/11 17:05', '2026-10-11 17:05'],
+        ['2026-10-11T17:05', '2026-10-11 17:05'],
+        ['', ''],
+        ['乱写', ''],
+        ['2026-13-11 17:05', ''],
+        ['2026-10-11 25:05', ''],
+      ];
+      const bad = fn ? cases.filter(c => fn(c[0]) !== c[1]) : cases;
+      t('★annParseDate 逻辑正确（' + cases.length + ' 个用例全过）', fn && bad.length === 0,
+        bad.map(c => JSON.stringify(c[0]) + '→' + (fn ? JSON.stringify(fn(c[0])) : 'n/a')).join('; '));
+    }
+  }
+  t('★格式不对会明确报错（不是悄悄丢掉）',
+    /发布时间格式看不懂/.test(adm46));
+  t('★保存时以时间框为准（ref.date = dateV）', /ref\.date = dateV/.test(adm46));
+
+  /* ---- ③ 每日一言随机 + 联网 ----
+     注意：断言要避开注释里的「旧写法对比」（注释里故意留了 items[seed % ...] 作说明），
+     所以先剥掉注释再检查代码。 */
+  const idx46Code = idx46.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  t('★每日一言已去掉「按日期取模」的顺序轮播',
+    !/seed % items\.length\]/.test(idx46Code));
+  t('★改用 Math.random 随机取', /Math\.floor\(Math\.random\(\) \* items\.length\)/.test(idx46Code));
+  t('★有会话内不重复（避开上次下标）',
+    /function pickRandom\(items\)/.test(idx46) && /i === _quoteLastIdx/.test(idx46));
+  t('★每日一言联网走 hitokoto',
+    /v1\.hitokoto\.cn/.test(idx46) && /function fetchRemoteQuote\(\)/.test(idx46));
+  t('★联网失败静默（本地兜底不受影响）',
+    /\.catch\(function\(\)\{ clearTimeout\(timer\); _quoteFetching = false; \}\)/.test(idx46));
+  t('★联网结果带超时保护（AbortController）',
+    /AbortController/.test(idx46) && /ctrl\.abort\(\)/.test(idx46));
+
+  /* ===== ④ 学习卡片 —— 数据 ===== */
+  t('★内置物理知识点 STUDY_PHYSICS', /var STUDY_PHYSICS = \[/.test(idx46));
+  t('★内置化学知识点 STUDY_CHEMISTRY', /var STUDY_CHEMISTRY = \[/.test(idx46));
+  t('★内置生物知识点 STUDY_BIOLOGY', /var STUDY_BIOLOGY = \[/.test(idx46));
+  t('★内置英语每日一题 STUDY_ENGLISH', /var STUDY_ENGLISH = \[/.test(idx46));
+  t('★四类数据汇总为 STUDY_DATA', /var STUDY_DATA = \{[\s\S]{0,300}english:   STUDY_ENGLISH/.test(idx46));
+  /* 统计知识点：只数 STUDY_PHYSICS ~ STUDY_ENGLISH 之间、以 { ch: ' 开头的条目。
+     （不能用「第..章」去匹配 —— 章节名里有「铁 金属材料」这种带空格的） */
+  const knowStart = idx46.indexOf('var STUDY_PHYSICS');
+  const knowEnd = idx46.indexOf('var STUDY_ENGLISH');
+  const knowSeg = idx46.slice(knowStart, knowEnd);
+  const cntKnow = (knowSeg.match(/\{ ch: '/g) || []).length;
+  t('★知识点条目数充足（≥100 条，实测 ' + cntKnow + '）', cntKnow >= 100);
+  const cntQuiz = (idx46.match(/\{ q: '/g) || []).length;
+  t('★英语题目数充足（≥25 道，实测 ' + cntQuiz + '）', cntQuiz >= 25);
+  /* 每题必须是四选一 + 合法答案下标 + 有解析 */
+  const quizObjs = [...idx46.matchAll(/\{ q: '([^']*)', opts: \[([^\]]*)\], a: (\d), ex: '([^']*)' \}/g)];
+  t('★每道题的选项都是 4 个', quizObjs.every(m => m[2].split("', '").length === 4 || m[2].split("',\s*'").length === 4));
+  t('★每道题的答案下标在 0~3 内', quizObjs.every(m => +m[3] >= 0 && +m[3] <= 3));
+  t('★每道题都有解析', quizObjs.every(m => m[4] && m[4].length > 8));
+
+  /* ===== ④ 学习卡片 —— 前端逻辑 ===== */
+  t('★首页有学习卡片容器 #studyCard', /<section class="study" id="studyCard">/.test(idx46));
+  t('★有 .study 样式体系（含暗色模式）',
+    /\.study\{background:#fff/.test(idx46) && /\.dark \.study\{/.test(idx46));
+  t('★有渲染入口 renderStudyCard', /function renderStudyCard\(\)/.test(idx46));
+  t('★render() 里调用了 renderStudyCard',
+    /renderStudyCard\(\);\s*\/\* v2\.6\.0/.test(idx46));
+  t('★有「换一条」刷新按钮', /refreshStudyCard\(\)/.test(idx46));
+  t('★每日一题的答案默认折叠（点「看答案」才展开）',
+    /id="studyAns"/.test(idx46) && /study-ans\{[\s\S]{0,200}display:none/.test(idx46));
+  t('★知识点抽取按学科等概率（不合成大 pool）',
+    /抽一科，再从该科里抽一条/.test(idx46));
+  t('★配置读取优先级：本地个人 → 云端默认 → 常量',
+    /SITE_DATA\.studyCard/.test(idx46) && /STUDY_DEFAULT_CFG/.test(idx46));
+  t('★联网失败时保持本地内容（不会整块空白）',
+    /拿不到 → 保持本地内容不变/.test(idx46));
+
+  /* ===== ④ 学习卡片 —— 后端代理 ===== */
+  t('★新建了 api/study.js 代理', /export default async function handler/.test(stu46));
+  t('★代理了今日诗词 jinrishici', /v2\.jinrishici\.com\/one\.json/.test(stu46));
+  t('★代理了有道词典', /dict\.youdao\.com\/jsonapi/.test(stu46));
+  t('★上游请求带浏览器 UA（否则被拒）',
+    /BROWSER_HEADERS/.test(stu46) && /Mozilla\/5\.0/.test(stu46));
+  t('★上游有超时保护（不挂死）',
+    /UPSTREAM_TIMEOUT_MS/.test(stu46) && /AbortController/.test(stu46));
+  t('★上游失败返回空字段而非 500（前端不该走 catch）',
+    /因为「这次没拿到联网内容」不是错误/.test(stu46));
+  t('★有实例级缓存（同一天全班只打一次上游）',
+    /function cacheGet/.test(stu46) && /function cacheSet/.test(stu46));
+  t('★每日一词用日期当种子（同一天全班同一个词）',
+    /seed % WORD_POOL\.length/.test(stu46));
+  t('★词库是高中高频词（不是随机字母组合）',
+    /const WORD_POOL = \[/.test(stu46) && /abandon/.test(stu46) && /sophisticated/.test(stu46));
+
+  /* ===== ④ 学习卡片 —— 路由与白名单 ===== */
+  t('★worker 注册了 study 路由',
+    /import studyHandler from '\.\/study\.js'/.test(wrk46) && /case 'study':/.test(wrk46));
+  t('★worker 头部注释已更新接口清单', /\/api\/study/.test(wrk46));
+  t('★前端 CLOUD_KEYS 含 cls_study_cfg', /'cls_study_cfg'/.test(idx46));
+  t('★后端 ALLOW_KEYS 含 cls_study_cfg', /'cls_study_cfg'/.test(dat46));
+  t('★content 白名单含 study_card（后台配置能写上去）',
+    /'study_card'/.test(cnt46));
+  t('★前端 CONTENT_MAP 含 study_card → studyCard',
+    /study_card:\s*'studyCard'/.test(idx46));
+  t('★study_card 变化时会重绘卡片',
+    /if\(key === 'study_card'\) renderStudyCard\(\)/.test(idx46));
+
+  /* ===== ④ 学习卡片 —— 后台面板 ===== */
+  t('★后台注册了学习卡片页面', /id:'study',/.test(adm46));
+  t('★后台有 renderStudy 面板函数', /function renderStudy\(\)/.test(adm46));
+  t('★后台面板含四类内容勾选', /STUDY_TYPES = \[/.test(adm46) && /know.*quiz.*word.*poem/s.test(adm46));
+  t('★后台面板含三科勾选', /STUDY_SUBJECTS = \[/.test(adm46));
+  t('★保存前校验「至少勾一个类型」（否则首页空白像 bug）',
+    /至少要勾一个内容类型/.test(adm46));
+  t('★勾了知识点但没选学科会拦下', /至少要选一个学科/.test(adm46));
 }
 
 console.log('\n' + '='.repeat(52));

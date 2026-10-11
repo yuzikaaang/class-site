@@ -39,6 +39,7 @@ const ALLOW_CONTENT_KEYS = [
   'homework_notice',    // 作业通知
   'important_dates',    // 重要日期 / 考试范围
   'daily_quote',        // 每日一言
+  'study_card',         // v2.6.0 学习卡片默认配置（开关/类型/学科），前端首屏读它
   'site_config',        // 站点通用配置
   'popups',             // 通用弹窗引擎（第二十七轮）：开屏弹 + 板块弹
   'dj_schedule',        // 抽歌排期批次（第二十八轮）：从主站本机 localStorage 迁到云端
