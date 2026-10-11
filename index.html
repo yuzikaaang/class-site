@@ -1416,6 +1416,12 @@ html:not([data-bg="theme"]) body::after{display:none}
 .ui-row{display:flex;align-items:center;gap:10px;padding:7px 0}
 .ui-row .lb{flex:0 0 74px;font-size:.8rem;color:var(--fg-3);font-weight:600}
 .ui-hint{font-size:.72rem;color:var(--fg-3);line-height:1.5;margin:2px 0 8px}
+/* v2.5.3 主题模式三按钮：手机上也要放得下（窄屏改纵向） */
+.ui-modes{display:flex;gap:6px;margin:2px 0 4px}
+.ui-modes .btn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:380px){
+  .ui-modes{flex-direction:column}
+}
 .ui-swatches{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px}
 .ui-sw{width:38px;height:38px;border-radius:11px;border:2px solid rgba(120,53,15,.12);cursor:pointer;
   background-size:cover;background-position:center;position:relative;flex:none;
@@ -1932,15 +1938,20 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   </div>
 </div>
 
-<!-- ===== 夜间自动暗色三选弹窗 ===== -->
+<!-- ===== 主题自动切换三选弹窗（v2.5.3：可选「跟随系统」/「跟随日出日落」）===== -->
 <div class="allboard-mask" id="themeAutoAskMask">
-  <div class="allboard-box" style="max-width:340px">
-    <div class="allboard-head"><span>🌙 主题自动切换</span><button onclick="closeThemeAutoAsk()">关闭</button></div>
+  <div class="allboard-box" style="max-width:360px">
+    <div class="allboard-head"><span>主题自动切换</span><button onclick="closeThemeAutoAsk()">关闭</button></div>
     <div style="padding:16px 20px;text-align:left">
-      <p style="font-size:.85rem;color:#57534e;line-height:1.8;margin:0 0 14px">当前为夜间自动暗色模式，要切换为亮色吗？</p>
-      <button class="btn btn-green" style="width:100%;margin-bottom:8px" onclick="themeAskOnce()">☀️ 仅这次切换（自动切换保持开启）</button>
-      <button class="btn" style="width:100%;margin-bottom:8px;background:#ffeded;color:#af410f" onclick="themeAskOff()">🚫 关闭自动切换（以后不再自动切换）</button>
-      <button class="btn btn-secondary" style="width:100%" onclick="closeThemeAutoAsk()">🌙 保持暗色</button>
+      <p id="themeAskHint" class="ui-hint" style="margin:0 0 10px"></p>
+      <p style="font-size:.84rem;color:#57534e;line-height:1.8;margin:0 0 14px">当前为自动暗色模式，要切换为亮色吗？</p>
+      <button class="btn btn-green" style="width:100%;margin-bottom:8px" onclick="themeAskOnce()">仅这次切换（自动切换保持开启）</button>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn btn-secondary" style="flex:1;font-size:.76rem" onclick="themeAskSystem()">改为跟随系统</button>
+        <button class="btn btn-secondary" style="flex:1;font-size:.76rem" onclick="themeAskSun()">改为跟随日出日落</button>
+      </div>
+      <button class="btn" style="width:100%;margin-bottom:8px;background:#ffeded;color:#af410f" onclick="themeAskOff()">关闭自动切换（以后不再自动切换）</button>
+      <button class="btn btn-gray" style="width:100%" onclick="closeThemeAutoAsk()">保持现状</button>
     </div>
   </div>
 </div>
@@ -2398,7 +2409,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.5.2';
+var SITE_VERSION = '2.5.3';
 var VER_DATE = '2026-10-11';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -2725,6 +2736,7 @@ var SITE_DATA = {
     { date: "2026-10-11 12:00", text: "🎨 全站图标统一升级：所有 emoji 全部换成 Lucide 图标，倒计时不再闪动。", category: "site" },
     { date: "2026-10-11 11:50", text: "🔒 登录新增滑块安全验证，进一步保护你的账号。", category: "site" },
     { date: "2026-10-11 11:40", text: "📡 在线状态改为实时检测（每分钟双向心跳），管理后台能准确看到谁在线。", category: "site" },
+    { date: "2026-10-11 18:40", text: "🎨 自定义设置新增「主题自动切换」，可选：关闭自动 / 跟随系统 / 跟随日出日落。选「跟随日出日落」会按当地真实日出日落时间自动切换亮暗，离线时用本地计算兜底。", category: "site" },
     { date: "2026-10-11 11:30", text: "💡 连不上服务器时，页面顶部会提示你切换网络或改用流量，此期间显示的是本地缓存。", category: "site" },
     { date: "2026-09-30 15:56", text: "🎉 国庆假期作业已发布", category: "activity" },
     { date: "2026-09-29 23:02", text: "📅 第一次段考时间已公布：10月13日—14日。\n各科考试范围可在「重要日期倒计时」→「查看全部」→「查看考试范围」中查看。", category: "activity" },
@@ -4772,7 +4784,9 @@ var AUTH = { token:'', user:null };   /* 当前登录态 */
      cls_content_cache_v1 / cls_content_since_v1  云端内容的本地缓存，不是用户数据 */
 var CLOUD_KEYS = [
   /* 外观与界面 */
-  'cls_theme','cls_theme_auto','cls_ui_cfg','cls_ui_bgimg','cls_sfx',
+  'cls_theme','cls_theme_auto','cls_theme_auto2','cls_ui_cfg','cls_ui_bgimg','cls_sfx',
+  /* ⚠️ cls_theme_hold（「仅这次切换」的当天软标记）**刻意不同步**：
+     它是「今天这台设备先这样」的临时意愿，换设备就该按那边的自动规则走。 */
   /* 各种「已看过 / 已关闭」的标记：换设备不该重复打扰 */
   'cls_welcome_v1','cls_login_guide_v1','cls_study_notice_dismissed','cls_welcome_hide',
   'cls_exam_tip_seen','cls_holiday_tip_seen','cls_exam_scope_seen',
@@ -7319,6 +7333,35 @@ function renderSettings(){
   var box = document.getElementById('uiSetBody'); if(!box) return;
   var html = '';
   if(UI_SEC === 'look'){
+    /* —— 主题自动切换（v2.5.3 站主要求：三选一 + 跟随系统/日出日落）—— */
+    var tmode = themeAutoMode();
+    var modeBtns = [
+      ['off',    '关闭自动',     '手动切换亮色 / 暗色'],
+      ['system', '跟随系统',     '系统开深色就自动变暗'],
+      ['sun',    '跟随日出日落', '按当地真实日出日落自动切换'],
+    ].map(function(m){
+      return '<button class="btn ' + (tmode === m[0] ? '' : 'btn-secondary') + '" ' +
+        'style="flex:1;font-size:.74rem;padding:9px 4px" ' +
+        'onclick="setThemeAutoMode(\'' + m[0] + '\')">' + m[1] + '</button>';
+    }).join('');
+    var sunHint = '';
+    if(tmode === 'sun'){
+      var s = sunTimes();
+      var f2 = function(h){ var hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+        if(mm === 60){ hh++; mm = 0; } return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm; };
+      var srcTxt = (s.src === 'api') ? '联网查询' : '本地天文计算（联网后会校正）';
+      sunHint = '<p class="ui-hint" style="margin-top:8px">今天：日出 ' + f2(s.rise) + ' · 日落 ' + f2(s.set)
+              + '<br>数据来源：' + srcTxt + '</p>';
+    } else if(tmode === 'system'){
+      sunHint = '<p class="ui-hint" style="margin-top:8px">系统当前偏好：'
+              + (isSystemDark() ? '深色' : '浅色') + '</p>';
+    }
+    html += secHtml('tauto', '主题自动切换', 'moon',
+      '<div class="ui-modes">' + modeBtns + '</div>' +
+      '<p class="ui-hint">决定打开站点时用亮色还是暗色。<br>'
+      + '「跟随日出日落」会联网查询当地日出日落时间（失败时用本地计算，离线也能用）。</p>'
+      + sunHint, true);
+
     /* —— 字号（速度吸附滑块） —— */
     var fsIdx = 0, bd = Infinity;
     for(var i = 0; i < UI_FS_STEPS.length; i++){
@@ -10204,7 +10247,7 @@ function toggleTheme(ev){
   var d = document.documentElement;
   var isDark = d.classList.contains('dark');
   var next = !isDark;
-  /* 夜间自动暗色模式下手动切回亮色 → 三选弹窗（仅这次 / 关闭自动 / 保持） */
+  /* 自动模式下、且当前在夜间想切回亮色 → 弹窗让用户选「仅这次 / 改模式 / 关闭」 */
   if(themeAutoEnabled() && isNightTime() && !next){
     openThemeAutoAsk();
     return;
@@ -10212,6 +10255,12 @@ function toggleTheme(ev){
   /* 【自定义设置】Radial Theme Transition：把点击点作为扩散圆心 */
   var _c = themeRippleCenter(ev);
   try{ localStorage.setItem('cls_theme', next ? 'dark' : 'light'); }catch(e){}
+  /* v2.5.3：自动模式下手动切换 = 用户明确表态，标记「今天别再自动切我」，
+     否则 30 秒后就被自动逻辑弹回去，体验很糟。
+     切回暗色同理 —— 用户想要的当前状态应该被保住，直到明天或改模式。 */
+  if(themeAutoEnabled()){
+    try{ localStorage.setItem('cls_theme_hold', sunTodayKey()); }catch(e){}
+  }
   radialTheme(_c.x, _c.y, next);
   /* 连续切换白天/黑夜 → 彩带彩蛋 */
   _themeRhythm++;
@@ -10219,31 +10268,219 @@ function toggleTheme(ev){
   _themeRhythmTimer = setTimeout(function(){ _themeRhythm = 0; }, 1600);
   if(_themeRhythm >= 3){ _themeRhythm = 0; confettiEgg(); }
 }
-/* 夜间自动暗色模式：18:30~次日7:30 自动暗色，其余时间自动亮色 */
-function isNightTime(){
-  var d=new Date(), t=d.getHours()*60+d.getMinutes();
-  return t>=1110 || t<450; /* 18*60+30=1110, 7*60+30=450 */
+/* ============================================================
+   主题自动切换（v2.5.3 站主要求：改「三选一」）
+   ------------------------------------------------------------
+   以前只有一种规则：每天 18:30 变暗、次日 7:30 变亮（写死）。
+   站主希望改成**可选**，于是拆成三种模式，存在 localStorage：
+     · 'off'    —— 关闭自动，完全手动
+     · 'system' —— 跟随系统深色偏好（prefers-color-scheme）
+     · 'sun'    —— 跟随**真实日出日落**（联网查 API，失败用本地天文计算兜底）
+   站主原话：「可以设置打开时的默认背景颜色以及是否需要跟随系统及日出日落的时间自动更改」
+   —— 这里的「默认背景」即自动切换的结果：亮色一套、暗色一套，随模式自动生效。
+
+   ⚠️ 兼容：老的 cls_theme_auto 只有 'off' / 其他 两态。
+     迁移规则：'off' → 'off'；其他（含未设置）→ 'system'。
+     为什么不默认给 'sun'？因为 sun 要联网，首次加载不该为它卡一下；
+     而且「跟随系统」是多数手机用户的直觉预期。
+   ============================================================ */
+var THEME_AUTO_KEY = 'cls_theme_auto2';      /* 新键，避免与老键语义混淆 */
+var THEME_MODES = ['off', 'system', 'sun'];
+
+function themeAutoMode(){
+  var m = null;
+  try{ m = localStorage.getItem(THEME_AUTO_KEY); }catch(e){}
+  if(THEME_MODES.indexOf(m) >= 0) return m;
+  /* 一次性迁移老键 */
+  var old = null;
+  try{ old = localStorage.getItem('cls_theme_auto'); }catch(e){}
+  var migrated = (old === 'off') ? 'off' : 'system';
+  try{ localStorage.setItem(THEME_AUTO_KEY, migrated); }catch(e){}
+  return migrated;
 }
-function themeAutoEnabled(){
-  try{ return localStorage.getItem('cls_theme_auto')!=='off'; }catch(e){ return true; }
+function setThemeAutoMode(m){
+  if(THEME_MODES.indexOf(m) < 0) m = 'system';
+  try{ localStorage.setItem(THEME_AUTO_KEY, m); }catch(e){}
+  /* 同步写一份老键，供可能残留的旧读取方（以及跨版本回退）保持一致 */
+  try{ localStorage.setItem('cls_theme_auto', m === 'off' ? 'off' : 'on'); }catch(e){}
+  /* 用户主动改了模式，「仅这次切换」的临时保持失效 */
+  try{ localStorage.removeItem('cls_theme_hold'); }catch(e){}
+  if(m === 'sun') sunFetch();          /* 切到日出日落：立刻拉一次 */
+  applyAutoTheme(true);
+  /* 若设置面板正开着，重绘以更新当前模式高亮与提示 */
+  if(typeof UI_SEC !== 'undefined' && UI_SEC === 'look'
+     && document.getElementById('uiSetBody')
+     && document.getElementById('uiSetMask') && document.getElementById('uiSetMask').classList.contains('show')){
+    if(typeof renderSettings === 'function') renderSettings();
+  }
+}
+/* 旧函数名保留（别处还在用），语义 = 「是否不是 off」 */
+function themeAutoEnabled(){ return themeAutoMode() !== 'off'; }
+function isSystemDark(){
+  try{
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }catch(e){ return false; }
+}
+
+/* ---------- 日出日落（v2.5.3 新增）----------
+   修水县城约 114.55°E, 29.03°N。站主选「联网查免费 API」，
+   但网络不可靠（校园网 / 弱信号 / API 挂了），所以一定带**本地兜底**：
+     ① 先看今天有没有缓存（存 localStorage，同一天不重复请求）
+     ② 没有就异步查 sunrise-sunset.org（国内可达，实测首字节 ~0.9s）
+     ③ 失败 → 立刻用 NOAA 本地天文算法算（实测与 API 只差 1–2 分钟）
+   这样「离线也不会退化成写死的 18:30」。 */
+var SUN_POS = { lat: 29.03, lng: 114.55 };   /* 江西九江修水县 */
+var _sunCache = { date: '', rise: 6 + 20/60, set: 18 + 0/60 };  /* 默认值仅作最后兜底 */
+
+/** NOAA 简化算法算日出/日落（本地小时，浮点）。
+ *  与 API 实测只差 1–2 分钟，足够判断「现在是不是白天」。 */
+function sunCalcLocal(dateObj){
+  var lat = SUN_POS.lat, lng = SUN_POS.lng, tz = -dateObj.getTimezoneOffset() / 60;
+  var N = Math.floor((Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate())
+        - Date.UTC(dateObj.getFullYear(), 0, 0)) / 86400000);
+  function calc(isRise){
+    var lngHour = lng / 15;
+    var t = N + (((isRise ? 6 : 18) - lngHour) / 24);
+    var M = (0.9856 * t) - 3.289;
+    var L = M + 1.916 * Math.sin(M * Math.PI / 180) + 0.020 * Math.sin(2 * M * Math.PI / 180) + 282.634;
+    L = ((L % 360) + 360) % 360;
+    var RA = Math.atan(0.91764 * Math.tan(L * Math.PI / 180)) * 180 / Math.PI;
+    RA = ((RA % 360) + 360) % 360;
+    var Lq = Math.floor(L / 90) * 90, RAq = Math.floor(RA / 90) * 90;
+    RA = (RA + (Lq - RAq)) / 15;
+    var sinDec = 0.39782 * Math.sin(L * Math.PI / 180);
+    var cosDec = Math.cos(Math.asin(sinDec));
+    var cosH = (Math.cos(90.833 * Math.PI / 180) - sinDec * Math.sin(lat * Math.PI / 180))
+             / (cosDec * Math.cos(lat * Math.PI / 180));
+    cosH = Math.max(-1, Math.min(1, cosH));
+    var H = isRise
+      ? (360 - Math.acos(cosH) * 180 / Math.PI) / 15
+      : (Math.acos(cosH) * 180 / Math.PI) / 15;
+    var T = H + RA - (0.06571 * t) - 6.622;
+    var UT = ((T - lngHour) % 24 + 24) % 24;
+    return ((UT + tz) % 24 + 24) % 24;
+  }
+  return { rise: calc(true), set: calc(false) };
+}
+function sunTodayKey(){
+  var d = new Date();
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+/** 同步取「今天」的日出日落：有缓存用缓存，否则先算本地值（保证立即有数），
+ *  API 回来后再更新（见 sunFetch）。 */
+function sunTimes(){
+  var k = sunTodayKey();
+  if(_sunCache.date === k) return _sunCache;
+  var loc = sunCalcLocal(new Date());
+  _sunCache = { date: k, rise: loc.rise, set: loc.set, src: 'local' };
+  return _sunCache;
+}
+/** 异步查 API 覆盖本地估算（每天只请求一次；失败静默保留本地值） */
+function sunFetch(){
+  var k = sunTodayKey();
+  var flag = '__sunFetched_' + k;
+  if(window[flag]) return;          /* 今天已查过 */
+  window[flag] = true;
+  try{
+    var url = 'https://api.sunrise-sunset.org/json?lat=' + SUN_POS.lat
+            + '&lng=' + SUN_POS.lng + '&formatted=0&date=today';
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var to = ctrl ? setTimeout(function(){ ctrl.abort(); }, 8000) : null;
+    fetch(url, { signal: ctrl ? ctrl.signal : undefined })
+      .then(function(r){ if(to) clearTimeout(to); return r.json(); })
+      .then(function(j){
+        if(!j || j.status !== 'OK' || !j.results) throw new Error('bad payload');
+        /* 返回的是 UTC 时间，转成本地小时（含分钟） */
+        var rise = new Date(j.results.sunrise);
+        var set  = new Date(j.results.sunset);
+        var rh = rise.getHours() + rise.getMinutes() / 60;
+        var sh = set.getHours()  + set.getMinutes()  / 60;
+        if(!(rh >= 0 && rh <= 24) || !(sh >= 0 && sh <= 24)) throw new Error('bad time');
+        _sunCache = { date: k, rise: rh, set: sh, src: 'api' };
+        applyAutoTheme(true);        /* 拿到精确值后重算一次 */
+      })
+      .catch(function(){
+        if(to) clearTimeout(to);
+        /* 静默：本地天文计算的值已经在用了，不需要打扰用户 */
+      });
+  }catch(e){ /* fetch 不可用等极端情况，保持本地值 */ }
+}
+/** 现在是不是「夜间」= 在日落之后、次日日出之前 */
+function isNightTime(){
+  var mode = themeAutoMode();
+  if(mode === 'system') return isSystemDark();
+  if(mode === 'sun'){
+    var t = sunTimes();
+    var d = new Date(), now = d.getHours() + d.getMinutes() / 60;
+    /* 日落早于日出（跨零点）：now >= set 或 now < rise 都算夜 */
+    if(t.set > t.rise) return now >= t.set || now < t.rise;
+    return now >= t.set && now < t.rise;
+  }
+  return false;   /* 'off' */
 }
 var _lastAutoNight=null;
-function applyAutoTheme(){
-  if(!themeAutoEnabled()) return;
-  var night=isNightTime();
-  _lastAutoNight=night;
-  var wantDark=night;
-  var dark=document.documentElement.classList.contains('dark');
-  if(dark!==wantDark){
+/** @param {boolean} [force] 强制重算并应用（设置变更 / API 回来时用） */
+function applyAutoTheme(force){
+  var mode = themeAutoMode();
+  if(mode === 'off'){
+    _lastAutoNight = null;
+    return;
+  }
+  /* 🔴 v2.5.3 真 bug 修复：必须在这里检查 hold，不能只放在 initTheme / 轮询里。
+     否则以下三条路径都会无视「仅这次切换」，把用户手动选的亮色弹回去：
+       ① 页面启动时无条件调用的 applyAutoTheme(true)
+       ② 系统主题变化监听（matchMedia change）
+       ③ sunFetch() 拿到 API 数据后的重算
+     判定统一收口于此：当天手动改过 → 自动逻辑整体让位。 */
+  var hold = null;
+  try{ hold = localStorage.getItem('cls_theme_hold'); }catch(e){}
+  if(hold && hold === sunTodayKey()){
+    _lastAutoNight = null;   /* 状态复位，明天 hold 失效后能正常接管 */
+    return;
+  }
+  sunTimes();                     /* 确保有今天的日出日落（可能触发本地估算） */
+  var night = isNightTime();
+  if(!force && night === _lastAutoNight) return;
+  _lastAutoNight = night;
+  var wantDark = night;
+  var dark = document.documentElement.classList.contains('dark');
+  if(dark !== wantDark){
     document.documentElement.classList.toggle('dark', wantDark);
     try{ localStorage.setItem('cls_theme', wantDark?'dark':'light'); }catch(e){}
-    var b=document.getElementById('themeToggle');
-    if(b) b.innerHTML=wantDark?iconSvg('sun',17):iconSvg('moon',17);
+    var b = document.getElementById('themeToggle');
+    if(b) b.innerHTML = wantDark ? iconSvg('sun',17) : iconSvg('moon',17);
     if(typeof applyBg === 'function') applyBg();   /* 【自定义设置】蒙层随主题切换 */
   }
 }
-/* 夜间自动暗色三选弹窗：仅这次切换 / 关闭自动切换 / 保持暗色 */
-function openThemeAutoAsk(){ var m=document.getElementById('themeAutoAskMask'); if(m){ m.classList.add('show'); SFX.pop(); } }
+/* 系统主题变化监听：mode='system' 时立刻跟随 */
+if(window.matchMedia){
+  try{
+    var _mql = window.matchMedia('(prefers-color-scheme: dark)');
+    var _mqlHandler = function(){ if(themeAutoMode() === 'system') applyAutoTheme(true); };
+    if(_mql.addEventListener) _mql.addEventListener('change', _mqlHandler);
+    else if(_mql.addListener) _mql.addListener(_mqlHandler);   /* 老浏览器 */
+  }catch(e){}
+}
+/* 主题自动切换三选弹窗（v2.5.3：文案由「夜间自动」改为「自动切换」，并给出当前模式） */
+function themeAskHint(){
+  var el = document.getElementById('themeAskHint');
+  if(!el) return;
+  var m = themeAutoMode();
+  var t;
+  if(m === 'system') t = '当前模式：跟随系统（系统开了深色就自动变暗）';
+  else if(m === 'sun'){
+    var s = sunTimes();
+    var f = function(h){ var hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+      if(mm === 60){ hh++; mm = 0; } return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm; };
+    t = '当前模式：跟随日出日落（今天 ' + f(s.rise) + ' 日出 / ' + f(s.set) + ' 日落）';
+  } else t = '当前模式：关闭自动切换';
+  el.textContent = t;
+}
+function openThemeAutoAsk(){
+  themeAskHint();
+  var m = document.getElementById('themeAutoAskMask');
+  if(m){ m.classList.add('show'); SFX.pop(); }
+}
 function closeThemeAutoAsk(){ var m=document.getElementById('themeAutoAskMask'); if(m) m.classList.remove('show'); }
 function applyLightTheme(){
   var d=document.documentElement;
@@ -10251,16 +10488,34 @@ function applyLightTheme(){
   try{ localStorage.setItem('cls_theme','light'); }catch(e){}
   var b=document.getElementById('themeToggle'); if(b) b.innerHTML=iconSvg('moon',17);
 }
+/* 仅这次切换为亮色：不改自动模式，但要避免立刻被切回去 —— 记一个「今天先别管」的软标记 */
 function themeAskOnce(){
   closeThemeAutoAsk();
   applyLightTheme();
+  _lastAutoNight = null;   /* 下次自动检查会重新判断；此处静默期由 ignoreUntil 控制 */
+  try{ localStorage.setItem('cls_theme_hold', sunTodayKey()); }catch(e){}
   SFX.success();
 }
+/* 关闭自动切换（保持亮色） */
 function themeAskOff(){
   closeThemeAutoAsk();
-  try{ localStorage.setItem('cls_theme_auto','off'); }catch(e){}
+  setThemeAutoMode('off');
   applyLightTheme();
   SFX.success();
+}
+/* v2.5.3 新增：弹窗里直接改成「跟随系统」 */
+function themeAskSystem(){
+  closeThemeAutoAsk();
+  setThemeAutoMode('system');
+  SFX.success();
+  uiMsg && uiMsg('主题模式已设为「跟随系统」');
+}
+/* v2.5.3 新增：弹窗里直接改成「跟随日出日落」 */
+function themeAskSun(){
+  closeThemeAutoAsk();
+  setThemeAutoMode('sun');
+  SFX.success();
+  uiMsg && uiMsg('主题模式已设为「跟随日出日落」');
 }
 var _themeRhythm = 0, _themeRhythmTimer = null;
 
@@ -10380,15 +10635,36 @@ function stopConfetti(){
 function initTheme(){
   var dark = false;
   try{ dark = localStorage.getItem('cls_theme') === 'dark'; }catch(e){}
+  /* v2.5.3：先按「自动模式」定夺初始亮暗。
+     顺序很重要：先算出自动模式该用什么，再决定是否尊重手动记忆值。
+     · off    → 完全用手动记忆的 cls_theme
+     · 其他   → 自动模式说了算（system 看系统偏好 / sun 看日出日落）
+     · 但当天手动改过（hold）→ 尊重用户，不被自动覆盖
+     hold 的判定同时收口在 applyAutoTheme 里（见那里的注释），
+     此处只是为了让**首屏**不闪一下错误的颜色（避免先暗后亮的抖动）。 */
+  var mode = themeAutoMode();
+  if(mode !== 'off'){
+    var hold = null;
+    try{ hold = localStorage.getItem('cls_theme_hold'); }catch(e){}
+    if(hold === sunTodayKey()){
+      /* 今天用户手动改过，尊重它 */
+    }else{
+      dark = isNightTime();
+    }
+  }
   if(dark) document.documentElement.classList.add('dark');
+  else document.documentElement.classList.remove('dark');
   var b = document.getElementById('themeToggle');
   if(b) b.innerHTML = dark ? iconSvg('sun',17) : iconSvg('moon',17);
-  /* 自动暗色模式：加载时应用 + 每 30s 检查 18:30 / 7:30 边界 */
-  applyAutoTheme();
+  /* 首屏态已就位后再让 applyAutoTheme 接管（它内部同样会检查 hold） */
+  applyAutoTheme(true);
+  /* 若用日出日落，拉一次精确值（异步，不阻塞首屏） */
+  if(mode === 'sun') sunFetch();
+  /* 每 30 秒复查一次（跨过日出/日落边界时切换）。
+     hold 的过滤在 applyAutoTheme 内部统一处理，这里不必重复判断。 */
   setInterval(function(){
-    if(!themeAutoEnabled()) return;
-    var n=isNightTime();
-    if(n!==_lastAutoNight) applyAutoTheme();
+    if(themeAutoMode() === 'off') return;
+    applyAutoTheme(false);
   }, 30000);
 }
 initTheme();

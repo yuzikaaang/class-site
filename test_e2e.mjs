@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.5.2', /SITE_VERSION = '2\.5\.2'/.test(indexHtml),
+  t('★前台版本号为 2.5.3', /SITE_VERSION = '2\.5\.3'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.5.2', /SITE_VERSION = '2\.5\.2'/.test(adminHtml),
+  t('★后台版本号为 2.5.3', /SITE_VERSION = '2\.5\.3'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.5.2', /SITE_VERSION = '2\.5\.2'/.test(indexHtml38),
+  t('★前台版本号为 2.5.3', /SITE_VERSION = '2\.5\.3'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.5.2', /SITE_VERSION = '2\.5\.2'/.test(adminHtml38),
+  t('★后台版本号为 2.5.3', /SITE_VERSION = '2\.5\.3'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4087,6 +4087,94 @@ console.log('\n【44】第三十二轮·全站去 emoji 统一图标（v2.5.0）
   t('★作业附件 📎 协议标记仍保留（正则仍匹配 📎）', /\/\^\\s\*📎\//.test(idx44));
   /* cloud 图标已内联（静态 HTML 里用到） */
   t('★LUCIDE_ICONS 含 cloud 图标', /"cloud":"<path/.test(idx44));
+}
+
+console.log('\n【45】第三十三轮·主题自动切换三选一（v2.5.3）');
+{
+  const idx45 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const data45 = fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf8');
+
+  /* ---- 三种模式与存储键 ---- */
+  t('★有主题自动模式常量 THEME_MODES（off/system/sun）',
+    /var THEME_MODES = \['off', 'system', 'sun'\]/.test(idx45));
+  t('★模式存在独立的 localStorage 键 THEME_AUTO_KEY',
+    /var THEME_AUTO_KEY = 'cls_theme_auto2'/.test(idx45));
+  t('★themeAutoMode() 会迁移老键 cls_theme_auto',
+    /localStorage\.getItem\('cls_theme_auto'\)/.test(idx45)
+    && /old === 'off'\) \? 'off' : 'system'/.test(idx45));
+  t('★setThemeAutoMode 同步写老键（跨版本回退一致）',
+    /localStorage\.setItem\('cls_theme_auto', m === 'off' \? 'off' : 'on'\)/.test(idx45));
+
+  /* ---- 跟随系统 ---- */
+  t('★有 isSystemDark 读 prefers-color-scheme',
+    /function isSystemDark\(\)/.test(idx45) && /prefers-color-scheme: dark/.test(idx45));
+  t('★监听系统主题变化（matchMedia change）',
+    /_mql\.addEventListener\('change'/.test(idx45) && /_mql\.addListener\(_mqlHandler\)/.test(idx45));
+
+  /* ---- 跟随日出日落 ---- */
+  t('★有日出日落 API 请求（sunrise-sunset.org）',
+    /api\.sunrise-sunset\.org\/json/.test(idx45));
+  t('★有本地天文计算兜底 sunCalcLocal（离线可用）',
+    /function sunCalcLocal\(/.test(idx45) && /90\.833/.test(idx45));
+  t('★修水坐标已内置（29.03 / 114.55）',
+    /SUN_POS = \{ lat: 29\.03, lng: 114\.55 \}/.test(idx45));
+  t('★API 失败时静默保留本地值（不影响用户）',
+    /静默：本地天文计算的值已经在用了/.test(idx45));
+  t('★每天只请求一次（__sunFetched_ 守卫）',
+    /'__sunFetched_' \+ k/.test(idx45));
+  t('★跨零点判断正确（set > rise 分支）',
+    /if\(t\.set > t\.rise\) return now >= t\.set \|\| now < t\.rise;/.test(idx45));
+
+  /* ---- 旧硬编码必须消失 ---- */
+  t('★旧的固定 18:30/7:30 硬编码已移除',
+    !/return t>=1110 \|\| t<450;/.test(idx45));
+  t('★isNightTime 已按模式分派（system/sun）',
+    /if\(mode === 'system'\) return isSystemDark\(\);/.test(idx45)
+    && /if\(mode === 'sun'\)\{/.test(idx45));
+
+  /* ---- 设置面板 ---- */
+  t('★外观面板有「主题自动切换」分区',
+    /secHtml\('tauto', '主题自动切换', 'moon'/.test(idx45));
+  t('★三个模式按钮由数据驱动生成并绑定 setThemeAutoMode',
+    /\['off',\s*'关闭自动',/.test(idx45)
+    && /\['system',\s*'跟随系统',/.test(idx45)
+    && /\['sun',\s*'跟随日出日落',/.test(idx45)
+    /* 按钮 onclick 是动态拼接（模板里含 setThemeAutoMode 与 m[0] 的字符串相加）。
+       这里避开多层转义，只断言两个稳定特征同时存在。 */
+    && idx45.indexOf('onclick="setThemeAutoMode(') >= 0
+    && /setThemeAutoMode\([\s\S]{0,12}\+ m\[0\] \+/.test(idx45));
+  t('★面板会显示当天日出日落时间',
+    /今天：日出 ' \+ f2\(s\.rise\) \+ ' · 日落 ' \+ f2\(s\.set\)/.test(idx45));
+  t('★模式按钮有窄屏适配样式 .ui-modes',
+    /\.ui-modes\{display:flex/.test(idx45) && /@media \(max-width:380px\)/.test(idx45));
+
+  /* ---- 手动切换不被立刻弹回 ---- */
+  t('★手动切换后写当天 hold 标记（不再被自动弹回）',
+    /setItem\('cls_theme_hold', sunTodayKey\(\)\)/.test(idx45));
+  t('★hold 为当天时自动逻辑跳过',
+    /if\(hold === sunTodayKey\(\)\) return;/.test(idx45)
+    || /if\(hold && hold === sunTodayKey\(\)\)\{/.test(idx45));
+  /* 🔴 v2.5.3 真 bug 回归护栏：hold 检查必须在 applyAutoTheme 内部，
+     否则启动 / 系统主题变化 / API 回填 三条路径都会把用户手动选的色弹回去。 */
+  t('★hold 检查收口在 applyAutoTheme 内部（不只放在外层）',
+    /function applyAutoTheme\(force\)\{[\s\S]{0,700}hold && hold === sunTodayKey\(\)/.test(idx45));
+  t('★改模式时清掉 hold（新规则立即生效）',
+    /localStorage\.removeItem\('cls_theme_hold'\)/.test(idx45));
+
+  /* ---- 弹窗新按钮 ---- */
+  t('★弹窗有「改为跟随系统」按钮', /onclick="themeAskSystem\(\)"/.test(idx45));
+  t('★弹窗有「改为跟随日出日落」按钮', /onclick="themeAskSun\(\)"/.test(idx45));
+  t('★弹窗会显示当前模式（themeAskHint）',
+    /function themeAskHint\(/.test(idx45) && /id="themeAskHint"/.test(idx45));
+  t('★主题弹窗已去 emoji（无 🌙/☀️/🚫 字面量）',
+    !/🌙 主题自动切换|☀️ 仅这次切换|🚫 关闭自动切换/.test(idx45));
+
+  /* ---- 云同步白名单（前端与后端必须同步）---- */
+  t('★前端 CLOUD_KEYS 含 cls_theme_auto2',
+    /'cls_theme','cls_theme_auto','cls_theme_auto2'/.test(idx45));
+  t('★后端 ALLOW_KEYS 含 cls_theme_auto2', /'cls_theme_auto2'/.test(data45));
+  t('★cls_theme_hold 刻意不同步（临时意愿不该跨设备）',
+    /cls_theme_hold（「仅这次切换」的当天软标记）\*\*刻意不同步\*\*/.test(idx45));
 }
 
 console.log('\n' + '='.repeat(52));
