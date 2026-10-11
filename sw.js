@@ -71,7 +71,11 @@
 //       失败才提示，任意一次成功即清零。「重试」按钮改成 60 秒倒计时
 //       （正在刷新… 剩余 N 秒 → 连接已恢复）。学习卡片暂时隐藏。
 //       升版本清旧缓存。
-const CACHE = 'class-site-v53'
+// v54（对应 v2.6.2）：后台导航把「每日一言」与「学习卡片」合并为一个板块
+//       「首页卡片」（内容组 10 项 → 9 项，原来太碎不好找）。面板内分上下两块，
+//       各自复用原逻辑与云端键（daily_quote / study_card），互不干扰。
+//       纯后台结构调整，同学侧无变化。升版本清旧缓存。
+const CACHE = 'class-site-v54'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

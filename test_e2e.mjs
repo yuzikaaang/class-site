@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(indexHtml),
+  t('★前台版本号为 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(adminHtml),
+  t('★后台版本号为 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(indexHtml38),
+  t('★前台版本号为 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(adminHtml38),
+  t('★后台版本号为 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4340,9 +4340,21 @@ console.log('\n【46】第三十四轮·公告时间纪律 + 每日一言随机 
   t('★study_card 变化时会重绘卡片',
     /if\(key === 'study_card'\) renderStudyCard\(\)/.test(idx46));
 
-  /* ===== ④ 学习卡片 —— 后台面板 ===== */
-  t('★后台注册了学习卡片页面', /id:'study',/.test(adm46));
-  t('★后台有 renderStudy 面板函数', /function renderStudy\(\)/.test(adm46));
+  /* ===== ④ 学习卡片 —— 后台面板（v2.6.1 起并入「首页卡片」板块）===== */
+  t('★后台注册了「首页卡片」页面（每日一言 + 学习卡片合并）', /id:'cards',/.test(adm46));
+  t('★后台有 renderCards 面板函数', /function renderCards\(\)/.test(adm46));
+  t('★合并后不再有独立的每日一言 / 学习卡片入口',
+    /id:'quotes',/.test(adm46) === false && /id:'study',/.test(adm46) === false);
+  t('★同一面板内含两块（每日一言 + 学习卡片）',
+    /每日一言<\/h3>/.test(adm46) && /学习卡片<\/h3>/.test(adm46));
+  t('★两块各自的容器都在（dqBody / stBody）',
+    /id="dqBody"/.test(adm46) && /id="stBody"/.test(adm46));
+  t('★两块各自的按钮都绑定了（新增一句/刷新/保存/刷新）',
+    /dqAdd/.test(adm46) && /dqRefresh/.test(adm46) && /stSave/.test(adm46) && /stRefresh/.test(adm46));
+  t('★合并后两块各自加载（loadQuotes + loadStudy 都被调用）',
+    /loadQuotes\(\);/.test(adm46) && /loadStudy\(\);/.test(adm46));
+  t('★旧的独立面板函数已移除（避免死代码）',
+    /function renderQuotes\(\)/.test(adm46) === false && /function renderStudy\(\)/.test(adm46) === false);
   t('★后台面板含四类内容勾选', /STUDY_TYPES = \[/.test(adm46) && /know.*quiz.*word.*poem/s.test(adm46));
   t('★后台面板含三科勾选', /STUDY_SUBJECTS = \[/.test(adm46));
   t('★保存前校验「至少勾一个类型」（否则首页空白像 bug）',
@@ -4425,14 +4437,25 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★用 display:none 隐藏（不留空白高度）',
     /el\.style\.display = 'none'/.test(idx47));
   t('★代码与后台面板都保留（改回 true 即可整体恢复）',
-    /function renderStudyCard\(\)/.test(idx47) && /function renderStudy\(\)/.test(adm47));
+    /function renderStudyCard\(\)/.test(idx47) && /function renderCards\(\)/.test(adm47));
   t('★后台面板明确提示「当前已暂时隐藏」', /当前已暂时隐藏/.test(adm47));
 
+  /* ===== ③+ 后台「每日一言」+「学习卡片」合并为「首页卡片」=====
+     站主要求：「后台的每日一言和学习卡片的古诗词那些放到一个板块」。
+     两者本质都是「首页那张小卡片」的配置，拆两个入口反而不好找。 */
+  t('★后台两块已合并为「首页卡片」板块',
+    /id:'cards',/.test(adm47) && /function renderCards\(\)/.test(adm47));
+  t('★内容组导航项由 10 项减为 9 项（合并生效）',
+    (adm47.match(/group:'内容'/g) || []).length === 9,
+    '实际 ' + (adm47.match(/group:'内容'/g) || []).length + ' 项');
+  t('★合并后的面板路由已注册（cards → renderCards）',
+    /cards:\s*renderCards,/.test(adm47));
+
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(idx47));
-  t('★后台版本号 2.6.1', /SITE_VERSION = '2\.6\.1'/.test(adm47));
-  t('★service worker 缓存版本升到 v53（旧缓存要作废）',
-    /class-site-v53/.test(sw47));
+  t('★前台版本号 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(idx47));
+  t('★后台版本号 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(adm47));
+  t('★service worker 缓存版本升到 v54（旧缓存要作废）',
+    /class-site-v54/.test(sw47));
 }
 
 console.log('\n' + '='.repeat(52));

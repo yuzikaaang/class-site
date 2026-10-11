@@ -885,7 +885,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.6.1';
+var SITE_VERSION = '2.6.2';
 var VER_DATE = '2026-10-11';
 
 /* ---- 运行时状态 ---- */
@@ -1293,8 +1293,7 @@ var PAGES = [
   { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
   { id:'releases',      label:'版本更新', icon:'clock',     group:'内容',  title:'版本更新记录' },
   { id:'popups',        label:'通用弹窗', icon:'bell',      group:'内容',  title:'通用弹窗（开屏弹 / 板块弹）' },
-  { id:'quotes',        label:'每日一言', icon:'quote',     group:'内容',  title:'每日一言' },
-  { id:'study',         label:'学习卡片', icon:'inbox',     group:'内容',  title:'学习卡片（知识点 / 每日一词 / 古诗文 / 每日一题）' },
+  { id:'cards',         label:'首页卡片', icon:'layers',    group:'内容',  title:'首页卡片（每日一言 / 学习卡片）' },
   { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
@@ -1352,8 +1351,7 @@ function go(page){
     dj:            renderDj,
     releases:      renderReleases,
     popups:        renderPopups,
-    quotes:        renderQuotes,
-    study:         renderStudy,
+    cards:         renderCards,
     dates:         renderDates,
     games:         renderGames,
     logins:        renderLogins,
@@ -4265,22 +4263,61 @@ function songRefundDialog(){
  * ⚠️ 把数组清空 → 主站那边整块「每日一言」卡片直接不渲染（不留空壳）。
  *    这是刻意设计：后台删干净，首页就干净。
  * ========================================================================= */
-function renderQuotes(){
+/* 🚀 v2.6.1 站主要求：原先「每日一言」和「学习卡片」在导航里是两个独立入口
+   （内容组本来就有 10 项，太碎），合并成一个板块「首页卡片」，
+   面板内分上下两块 —— 两者本质都是「首页那张小卡片」的配置，放一起更好找。
+
+   两块各自复用原来的加载/渲染逻辑，互不干扰：
+     · 每日一言 → loadQuotes() / paintQuotes() / dqDialog()，数据键 daily_quote
+     · 学习卡片 → loadStudy()  / paintStudy()  / saveStudy()，数据键 study_card */
+function renderCards(){
   $('view').innerHTML =
-    '<div class="toolbar" style="background:var(--panel)">'
-    +   '<button class="btn btn-sm" id="dqAdd">' + svg('plus', 14) + '新增一句</button>'
-    +   '<span style="flex:1"></span>'
-    +   '<button class="btn btn-sm btn-secondary" id="dqRefresh">' + svg('refresh', 14) + '刷新</button>'
+    /* ---------- 区块一：每日一言 ---------- */
+    '<section class="panel" style="margin-bottom:18px">'
+    + '<div class="panel-head">'
+    +   '<div><h3>' + svg('quote') + '每日一言</h3>'
+    +     '<p class="sub">首页每天自动换一句，同学不用手动刷</p></div>'
+    +   '<div style="display:flex;gap:8px">'
+    +     '<button class="btn btn-sm" id="dqAdd">' + svg('plus', 14) + '新增一句</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="dqRefresh">' + svg('refresh', 14) + '刷新</button>'
+    +   '</div>'
     + '</div>'
-    + '<div class="alert info" style="margin-bottom:16px">'
-    +   '首页「每日一言」每天自动换一句（按日期轮换），同学不用手动刷。'
-    +   '这里保存后，<b>改动会在下一天自然生效</b>；想让今天立刻变，让同学刷新一下页面即可。'
+    + '<div class="panel-body">'
+    +   '<div class="alert info" style="margin-bottom:14px">'
+    +     '这里保存后，<b>改动会在下一天自然生效</b>；想让今天立刻变，让同学刷新一下页面即可。'
+    +   '</div>'
+    +   '<div id="dqBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
     + '</div>'
-    + '<section class="panel"><div id="dqBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+    + '</section>'
+    /* ---------- 区块二：学习卡片 ---------- */
+    + '<section class="panel">'
+    + '<div class="panel-head">'
+    +   '<div><h3>' + svg('inbox') + '学习卡片</h3>'
+    +     '<p class="sub">知识点 / 每日一词 / 古诗文 / 每日一题</p></div>'
+    +   '<div style="display:flex;gap:8px">'
+    +     '<button class="btn btn-sm" id="stSave">' + svg('check', 14) + '保存</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="stRefresh">' + svg('refresh', 14) + '刷新</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="panel-body">'
+    +   '<div class="alert info" style="margin-bottom:14px">'
+    +     '首页「学习卡片」每次刷新随机出一条内容。这里配的是<b>全班默认</b>；'
+    +     '同学在首页「自定义设置 → 学习卡片」里改过的话，以他自己的为准。'
+    +   '</div>'
+    +   '<div class="alert warn" style="margin-bottom:14px">'
+    +     svg('alert', 14) + ' <b>当前已暂时隐藏</b>：v2.6.1 起首页不再显示学习卡片'
+    +     '（还有几处问题待修）。这里的配置会照常保存，改回显示后立即生效，无需重新配。'
+    +   '</div>'
+    +   '<div id="stBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    + '</div>'
+    + '</section>';
 
   $('dqAdd').onclick     = function(){ dqDialog(null); };
   $('dqRefresh').onclick = function(){ loadQuotes(); };
+  $('stSave').onclick    = saveStudy;
+  $('stRefresh').onclick = loadStudy;
   loadQuotes();
+  loadStudy();
 }
 
 function dqNormalize(list){
@@ -4438,27 +4475,8 @@ var STUDY_SUBJECTS = [
   { k: 'biology',   name: '生物', desc: '必修1 · 分子与细胞' },
 ];
 
-function renderStudy(){
-  $('view').innerHTML =
-    '<div class="toolbar" style="background:var(--panel)">'
-    +   '<button class="btn btn-sm" id="stSave">' + svg('check', 14) + '保存</button>'
-    +   '<span style="flex:1"></span>'
-    +   '<button class="btn btn-sm btn-secondary" id="stRefresh">' + svg('refresh', 14) + '刷新</button>'
-    + '</div>'
-    + '<div class="alert info" style="margin-bottom:16px">'
-    +   '首页「学习卡片」每次刷新随机出一条内容。这里配的是<b>全班默认</b>；'
-    +   '同学在首页「自定义设置 → 学习卡片」里改过的话，以他自己的为准。'
-    + '</div>'
-    + '<div class="alert warn" style="margin-bottom:16px">'
-    +   svg('alert', 14) + ' <b>当前已暂时隐藏</b>：v2.6.1 起首页不再显示学习卡片'
-    +   '（还有几处问题待修）。这里的配置会照常保存，改回显示后立即生效，无需重新配。'
-    + '</div>'
-    + '<section class="panel"><div id="stBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
-
-  $('stSave').onclick    = saveStudy;
-  $('stRefresh').onclick = loadStudy;
-  loadStudy();
-}
+/* 注：本区块原先有独立的 renderStudy() 页面，v2.6.1 起并入上方 renderCards()
+   （「首页卡片」板块），这里只保留数据加载与勾选渲染逻辑。 */
 
 function loadStudy(){
   api('/content').then(function(j){
