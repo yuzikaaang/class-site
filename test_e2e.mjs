@@ -4523,6 +4523,15 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
      线上每 5 分钟查一次，一天就能往 CacheStorage 塞几百份 index.html 副本。 */
   t('★sw.js 让版本探测（?_=）与强制刷新（?_r=）请求绕过缓存',
     /u\.searchParams\.has\('_'\) \|\| u\.searchParams\.has\('_r'\)/.test(sw48));
+  /* 预缓存里塞 index.html（600KB）会让 install 慢到装不完 ——
+     真机实测 SW 卡在 installing 25 秒，连带「检查更新」一起失效。
+     首页交给 fetch handler 运行时缓存，离线兜底照样有。 */
+  {
+    const pc = /const PRECACHE = \[([^\]]*)\]/.exec(sw48);
+    t('★预缓存清单里不含 600KB 的 index.html（否则 SW 装不完）',
+      !!pc && !/index\.html/.test(pc[1]) && !/'\.\/'/.test(pc[1]),
+      pc ? pc[1] : '(未找到 PRECACHE)');
+  }
 
   /* ===== ② 前端：三个「主动催检查」的时机 =====
      只靠浏览器自己的节奏在 iOS 上等于不检查，必须自己催。 */

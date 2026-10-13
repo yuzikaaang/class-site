@@ -100,7 +100,13 @@
 const SITE_VER = '2.6.4'
 
 const CACHE = 'class-site-v57'
-const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
+/* 预缓存清单：**只放小文件**。
+   ⚠️ 不要把 index.html（600KB）放进来 —— install 会因为它变慢一大截，
+   弱网下甚至装不完（真机实测 SW 卡在 installing 25 秒都没装好，
+   而 SW 装不上，前端的「检查更新」也就跟着失效）。
+   首页交给下面 fetch handler 的「网络优先 + 写缓存」在首次访问时自然缓存，
+   断网时照样能用 caches.match('./index.html') 兜底，功能不受影响。 */
+const PRECACHE = ['./favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
