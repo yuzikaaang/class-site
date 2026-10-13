@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(indexHtml),
+  t('★前台版本号为 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(adminHtml),
+  t('★后台版本号为 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(indexHtml38),
+  t('★前台版本号为 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(adminHtml38),
+  t('★后台版本号为 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -3891,37 +3891,82 @@ console.log('\n【40】第三十一轮·取消备用链接（v2.5.0）');
     || /备用链接已于|已于 v2\.5\.0 取消/.test(readme40));
 }
 
-console.log('\n【41】第三十一轮·登录滑块验证码（v2.5.0）');
+console.log('\n【41】第三十一轮·登录验证码（v2.5.0 滑块 → v2.6.3 改输入式图形码）');
 {
   const idx41 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
-  t('★有滑块验证引擎 capInit', idx41.indexOf('function capInit(') >= 0);
-  t('★有拖动绑定 capBind', idx41.indexOf('function capBind(') >= 0);
-  t('★有判定函数 capVerify', idx41.indexOf('function capVerify(') >= 0);
+  t('★有验证码引擎 capInit', idx41.indexOf('function capInit(') >= 0);
+  t('★有交互绑定 capBind', idx41.indexOf('function capBind(') >= 0);
   t('★有校验入口 capPassed', idx41.indexOf('function capPassed(') >= 0);
   t('登录表单渲染出验证码（capHtml 被插入 form）', /capHtml\(\)/.test(idx41));
-  t('★doLogin 提交前校验验证码', /if\(!capPassed\(\)\)[\s\S]{0,60}doLogin|doLogin\(\)[\s\S]{0,0}/.test(idx41)
-    && /function doLogin\(\)\{[\s\S]{0,220}capPassed\(\)/.test(idx41));
+  t('★doLogin 提交前校验验证码',
+    /function doLogin\(\)\{[\s\S]{0,220}capPassed\(\)/.test(idx41));
   t('★doRegister 提交前校验验证码', /function doRegister\(\)\{[\s\S]{0,320}capPassed\(\)/.test(idx41));
   /* 纯前端：不该有任何验证码相关的网络请求 */
   t('★验证码不联网（无 captcha/verify 接口调用）',
     !/api\(['"][^'"]*captcha/i.test(idx41) && !/action=captcha/i.test(idx41));
-  t('验证码 canvas 使用 dpr 缩放（清晰不糊）', /devicePixelRatio/.test(idx41) && /setTransform\(dpr/.test(idx41));
-  t('滑块支持键盘操作（tabindex）', /setAttribute\('tabindex',\s*'0'\)/.test(idx41));
-  t('验证码样式已定义（.cap-wrap/.cap-handle）', /\.cap-wrap\{/.test(idx41) && /\.cap-handle\{/.test(idx41));
-  t('验证码有暗色模式样式', /\.dark \.cap-wrap\{/.test(idx41));
+  t('验证码 canvas 使用 dpr 缩放（清晰不糊）',
+    /devicePixelRatio/.test(idx41) && /setTransform\(dpr/.test(idx41));
 
-  /* ---- v2.5.1 回归护栏：拼图块与缺口的对齐 ----
-     曾经的 bug：拼图块画在自画布 x=0，于是只能在 [-targetX, 0] 之间滑动（贴左边缘），
-     而缺口在 targetX（右半边），**永远对不上**；判定却按「拖到底=通过」照常放行，
-     表现为「拖到底也提示验证码不匹配」（站主实测反馈）。
-     正确做法：块与缺口画在同一坐标 (targetX, targetY)，位移从 -targetX 滑到 0 正好嵌入。 */
-  t('★拼图块画在缺口位置 targetX（而非 x=0）',
-    /capPiecePath\(px,\s*targetX,\s*targetY,\s*s\)/.test(idx41)
-    && /capPiecePath\(px,\s*0,\s*targetY/.test(idx41) === false);
-  t('★块与缺口坐标一致（缺口 targetX / 块 targetX 两处都改）',
-    (idx41.match(/capPiecePath\(px,\s*targetX,/g) || []).length === 2);
-  t('★画布尺寸取不到时有 rAF 重试（避免退到兜底宽 300 造成错位）',
+  /* ---- 🚀 v2.6.3：滑块 → 输入式图形验证码（站主要求） ----
+     站主反馈「滑块验证在有些老的手机屏幕上用不了」。根因两条：
+       ① 滑块走 **Pointer Events** —— 老浏览器（iOS Safari < 13 /
+          Android Chrome < 55）根本不支持，事件一个都不触发，滑块纹丝不动；
+       ② 拖动还要求手指精准，屏幕旧了 / 触摸不灵时很难完成。
+     改成输入式后只看「键盘能不能打字」，不再依赖任何手势。 */
+  /* 取验证码代码区间单独检查 —— 页面别处（音量条 / 播放进度条）本来就用
+     pointer 事件，那是正常的，断言不能扫全文，否则会误伤。 */
+  const capBlock = idx41.slice(idx41.indexOf('function capHtml('),
+                               idx41.indexOf('function doRegister('));
+  t('★滑块已彻底移除（拼图块 / 轨道 / 拖动 / Pointer 事件全清）',
+    capBlock.length > 1000
+    && /capPiecePath|capPaintBg|capTrack|capHandle|capFill|capVerify|CAP_SETX|CAP_PIECE_W/.test(capBlock) === false
+    && /pointerdown|pointermove|pointerup|setPointerCapture/.test(capBlock) === false);
+  t('★验证码改为输入框（capInput）', /id="capInput"/.test(idx41));
+  /* 老手机适配核心：数字键盘。inputmode 是标准写法，
+     pattern 是老 iOS 也认的兼容写法，两个都给上。 */
+  t('★输入框弹数字键盘（inputmode=numeric + pattern，老 iOS 也认）',
+    /inputmode="numeric"/.test(idx41) && /pattern="\[0-9\]\*"/.test(idx41));
+  t('★只收数字：输入时过滤非数字并按位数截断',
+    /replace\(\/\\D\/g, ''\)\.slice\(0, CAP_LEN\)/.test(idx41));
+  t('★验证码为 4 位数字', /var CAP_LEN = 4/.test(idx41));
+  t('★比对时也过滤非数字（多打了空格不被冤枉）',
+    /String\(inp\.value \|\| ''\)\.replace\(\/\\D\/g, ''\)/.test(idx41));
+  t('★每次校验失败都换一张新码（防手工试错）',
+    /setTimeout\(function\(\)\{\s*if\(wrap\) wrap\.classList\.remove\('bad'\);\s*capInit\(\);/.test(idx41));
+  /* 老设备兼容：hsla/hsl 在个别老浏览器上支持不全，画出来会透明或发黑，
+     等于验证码看不见 —— 统一用 rgb/rgba 拼字符串。 */
+  t('★画图颜色统一用 rgb/rgba（不用 hsl/hsla，老浏览器支持不全）',
+    /function capRGBA\(/.test(idx41) && /hsl?\(/.test(idx41) === false);
+  t('★画图只用最基础的 Canvas API + 系统字体（不依赖自定义字体）',
+    /ctx\.fillText\(/.test(idx41) && /'bold ' \+ Math\.round\(capRand\([\d, ]+\)\) \+ 'px sans-serif'/.test(idx41));
+  t('验证码样式已定义（.cap-wrap/.cap-input）',
+    /\.cap-wrap\{/.test(idx41) && /\.cap-input\{/.test(idx41));
+  /* ⚠️ 特异性坑（真机截图才发现）：验证码是插在 `.acct-field` 里的，
+     而 `.acct-field input`（带元素名，(0,1,1)）会压掉只写一个 class 的
+     `.cap-input`（(0,1,0)）—— 表现是输入框突然变成白底带边框的默认样式、
+     比图高出一截。必须写成两个 class。 */
+  t('★验证码输入框用双 class 选择器（否则被 .acct-field input 压掉）',
+    /\.cap-wrap \.cap-input\{/.test(idx41)
+    && /^\.cap-input\{/m.test(idx41) === false);
+  t('★验证码卡片背景不透明（半透明会让下层文字透出来）',
+    /\.cap-wrap\{position:relative;[^}]*background:#fdfbf9/.test(idx41));
+  t('★验证码跟随主题（暗色用深底浅字，夜里不闪一块亮色）',
+    /var dark = document\.documentElement\.classList\.contains\('dark'\)/.test(idx41)
+    && /ctx\.fillStyle = dark \? '#2b2622' : '#fdfbf9'/.test(idx41));
+  t('★主题判定用 .dark class（本项目不用 data-theme 属性，写错会永不生效）',
+    /document\.documentElement\.getAttribute\('data-theme'\)/.test(idx41) === false);
+  t('★切主题时只重画当前码、不换新码（不打断正在输入的人）',
+    /capPaint\(cv, CAP_STATE\.code\)/.test(idx41));
+  t('验证码有暗色模式样式',
+    /\.dark \.cap-wrap\{/.test(idx41) && /\.dark \.cap-wrap \.cap-input\{/.test(idx41));
+  t('★尊重系统「减少动态效果」（抖动动画可关）',
+    /prefers-reduced-motion:reduce\)\{\.cap-wrap\.bad\{animation:none/.test(idx41));
+  t('★画布尺寸取不到时有 rAF 重试（弹窗刚插入还没完成布局）',
     /requestAnimationFrame\(capInit\)/.test(idx41) && /capTry/.test(idx41));
+  t('★「换一张」只在 capBind 里绑一次（避免重复绑定）',
+    /id="capRefresh"/.test(idx41) && /rf\.addEventListener\('click', function\(\)\{ capInit\(\); \}\)/.test(idx41));
+  t('★登录提示文案已同步为「请输入验证码」',
+    /请先输入图中的验证码/.test(idx41) && /请先拖动滑块/.test(idx41) === false);
 
   /* ---- v2.5.2 回归护栏：心跳超时误报（站主反馈「正常联网却显示连不到服务器」）----
      根因是**服务端慢**而非站主网络差：实测 TCP 握手只要 0.2s（网络正常），
@@ -4452,10 +4497,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(idx47));
-  t('★后台版本号 2.6.2', /SITE_VERSION = '2\.6\.2'/.test(adm47));
-  t('★service worker 缓存版本升到 v54（旧缓存要作废）',
-    /class-site-v54/.test(sw47));
+  t('★前台版本号 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(idx47));
+  t('★后台版本号 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(adm47));
+  t('★service worker 缓存版本升到 v55（旧缓存要作废）',
+    /class-site-v55/.test(sw47));
 }
 
 console.log('\n' + '='.repeat(52));

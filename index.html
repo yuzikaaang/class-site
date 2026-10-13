@@ -1259,41 +1259,49 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .acct-msg.ok{color:#0f8a4d}
 .acct-msg.warn{color:#af410f}
 .acct-hint{font-size:.7rem;color:#a99a8d;line-height:1.6;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(120,53,15,.13)}
-/* ── 滑块拼图验证（v2.5.0）──
-   纯前端实现：canvas 画底图 + 缺口，拖动滑块把拼图块送进缺口。
-   不联网、不上传、不收集任何信息，目的是挡掉脚本批量注册 / 撞库。 */
-.cap-wrap{position:relative;border-radius:12px;overflow:hidden;background:rgba(120,53,15,.055);
-  border:1px solid rgba(120,53,15,.12);margin-bottom:9px;touch-action:none}
-.cap-stage{position:relative;width:100%;height:118px;overflow:hidden}
-.cap-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-.cap-piece{position:absolute;top:0;left:0;height:100%;will-change:transform;filter:drop-shadow(0 1px 3px rgba(0,0,0,.28))}
-.cap-note{position:absolute;right:8px;bottom:6px;font-size:.62rem;color:#fff;opacity:.72;
-  text-shadow:0 1px 2px rgba(0,0,0,.55);pointer-events:none}
-.cap-track{position:relative;height:40px;background:rgba(120,53,15,.08);border-top:1px solid rgba(120,53,15,.1);
-  user-select:none;touch-action:none}
-.cap-fill{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,rgba(224,138,76,.2),rgba(194,65,12,.24))}
-.cap-handle{position:absolute;top:3px;left:3px;width:52px;height:34px;border-radius:9px;
-  background:#fff;border:1px solid rgba(120,53,15,.16);box-shadow:0 2px 7px rgba(120,53,15,.2);
-  display:flex;align-items:center;justify-content:center;cursor:grab;font-size:1rem;color:#c2410c;
-  transition:background .15s,border-color .15s}
-.cap-handle:active{cursor:grabbing}
-.cap-tip{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-size:.74rem;font-weight:600;color:#8a7a6d;pointer-events:none}
-.cap-wrap.ok{border-color:rgba(15,138,77,.4)}
-.cap-wrap.ok .cap-track{background:rgba(15,138,77,.1)}
-.cap-wrap.ok .cap-handle{background:#0f8a4d;color:#fff;border-color:#0f8a4d}
-.cap-wrap.ok .cap-tip{color:#0f8a4d}
-.cap-wrap.bad .cap-track{animation:capShake .38s}
-.cap-wrap.bad .cap-handle{border-color:#c0392b;color:#c0392b}
+/* ── 图形验证码（v2.6.3，替换原滑块拼图）──
+   站主反馈「滑块在有些老的手机屏幕上用不了」，改成**输入式**：看几位数字照着输。
+
+   ⚠️ 老手机适配要点（改动的真正原因）：
+     ① 原滑块用 Pointer Events —— 老浏览器（iOS Safari < 13 / Android Chrome < 55）
+        根本不支持，事件一个都不触发，滑块完全拖不动；
+     ② 拖动本身还要求手指精准，屏幕旧了 / 触摸不灵时也很难完成。
+     现在只看「键盘能不能打字」，门槛低得多。
+
+   安全定位：纯前端校验，能拦住**手工试密码**，但拦不住直接调接口的脚本 ——
+   真正的防线是服务端的失败锁定。这与原滑块方案一致，本轮**不降低**安全性。
+   不联网、不上传、不采集任何信息，通过状态只存在内存里。 */
+.cap-wrap{position:relative;border-radius:12px;overflow:hidden;background:#fdfbf9;
+  border:1px solid rgba(120,53,15,.12);margin-bottom:9px}
+.cap-stage{position:relative;width:100%;height:58px;overflow:hidden;
+  border-bottom:1px solid rgba(120,53,15,.1);background:#fdfbf9}
+.cap-stage canvas{display:block;width:100%;height:100%}
+/* ⚠️ 选择器必须写成 `.cap-wrap .cap-input`（两个 class）。
+   只写 `.cap-input`（一个 class）会**被登录面板的 `.acct-field input` 压掉**
+   （那个选择器带元素名，特异性 (0,1,1) > (0,1,0)），表现为验证码输入框
+   突然变成白底带边框的默认样式、还比图高出一截 —— 实测踩过。 */
+.cap-wrap .cap-input{width:100%;box-sizing:border-box;border:none;outline:none;background:transparent;
+  padding:11px 13px;font-size:1.02rem;font-weight:700;letter-spacing:.36em;text-align:center;
+  color:#3f342c;font-family:inherit;text-indent:.36em;border-radius:0;box-shadow:none}
+.cap-wrap .cap-input:focus{border:none;box-shadow:none}
+.cap-wrap .cap-input::placeholder{font-weight:500;letter-spacing:normal;color:#a89c92;text-indent:0}
+.cap-tip{display:block;padding:0 13px 9px;font-size:.68rem;color:#8a7a6d;min-height:1em}
+.cap-wrap.ok{border-color:rgba(15,138,77,.45)}
+.cap-wrap.ok .cap-input,.cap-wrap.ok .cap-tip{color:#0f8a4d}
+.cap-wrap.bad{border-color:rgba(192,57,43,.5);animation:capShake .38s}
+.cap-wrap.bad .cap-input,.cap-wrap.bad .cap-tip{color:#c0392b}
 @keyframes capShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}
   40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
 .cap-refresh{position:absolute;right:5px;top:5px;width:26px;height:26px;border-radius:8px;border:none;
   background:rgba(0,0,0,.32);color:#fff;font-size:.8rem;cursor:pointer;display:flex;
   align-items:center;justify-content:center;padding:0;line-height:1}
 .cap-refresh:hover{background:rgba(0,0,0,.5)}
-.dark .cap-wrap{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.11)}
-.dark .cap-track{background:rgba(255,255,255,.07);border-top-color:rgba(255,255,255,.09)}
-.dark .cap-handle{background:#3a332e;border-color:rgba(255,255,255,.14);color:#f0a868}
+.dark .cap-wrap{background:#2b2622;border-color:rgba(255,255,255,.11)}
+.dark .cap-stage{background:#2b2622;border-bottom-color:rgba(255,255,255,.1)}
+.dark .cap-wrap .cap-input{color:#f2e9e1}
+.dark .cap-wrap .cap-input::placeholder{color:#8b7d72}
+/* 尊重系统「减少动态效果」 */
+@media (prefers-reduced-motion:reduce){.cap-wrap.bad{animation:none}}
 /* ── 离线横幅（v2.5.0）──
    心跳实测连不上服务端时从顶部滑入，恢复后自动收起。
    文案：检查网络 / 切换流量（移动数据）。 */
@@ -2464,7 +2472,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.6.2';
+var SITE_VERSION = '2.6.3';
 var VER_DATE = '2026-10-11';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -5910,11 +5918,10 @@ function renderAccount(){
     '登录后可以把自己的设置、作业打勾等同步到云端，换设备不用重新弄。<br>' +
     '<b>不登录也完全不影响使用</b>，数据照样存在你自己手机上。</p>';
 
-  /* 渲染并绑定滑块验证（每次进登录页都是一张全新的图） */
+  /* 渲染并绑定图形验证码（每次进登录页都是一张全新的图）。
+     「换一张」的点击由 capBind() 内部绑定，这里不再重复绑一遍。 */
   capInit();
   capBind();
-  var rf = document.getElementById('capRefresh');
-  if(rf) rf.addEventListener('click', function(){ if(!CAP_STATE.ok) capInit(); });
 
   /* 回车提交 */
   var wrap = document.getElementById('acctBody');
@@ -5964,299 +5971,186 @@ function acctBusy(on, text){
 
 function val(id){ var e = document.getElementById(id); return e ? e.value.trim() : ''; }
 
-/* ---------- 滑块拼图验证码（v2.5.0）----------
-   纯前端人机验证：随机生成一张渐变底图 + 一个拼图缺口，
-   用户拖动滑块把拼图块送进缺口。误差在容差内即通过。
-   目的不是「高安全性加密」，而是拦掉脚本无脑批量尝试 —— 因此
-   不联网、不上传、不采集任何指纹信息，通过状态只存在内存里。 */
-var CAP_STATE = { ok: false, busy: false };
-/* capBind() 生成的位置设置函数，供 capInit() 复位时复用 */
-var CAP_SETX = null;
+/* ---------- 图形验证码（v2.6.3，替换原滑块拼图）----------
+   站主反馈「滑块验证在有些老的手机屏幕上用不了」，改成**输入式**：
+   屏幕上显示 4 位数字，照着输进去即可。
 
-/* 一次验证的生命周期：initCaptcha() 渲染 → 用户拖动 → 通过则 CAP_STATE.ok */
+   为什么老手机用不了滑块（改动的真正原因）：
+     ① 原实现走 Pointer Events —— 老浏览器（iOS Safari < 13 /
+        Android Chrome < 55）**根本不支持**，事件一个都不触发，滑块完全拖不动；
+     ② 拖动还要求手指精准，屏幕旧了 / 触摸不灵时也很难完成。
+   现在只看「键盘能不能打字」，门槛低得多，也不再依赖任何手势。
+
+   安全定位（如实说）：纯前端校验，能拦住**手工试密码**，
+   但拦不住直接调接口的脚本 —— 真正的防线是服务端的失败锁定。
+   这与原滑块方案是同一档，本轮**不降低**安全性。
+   不联网、不上传、不采集任何指纹信息，通过状态只存在内存里。 */
+var CAP_STATE = { ok: false, code: '' };
+var CAP_LEN = 4;          /* 验证码位数 */
+var CAP_H   = 58;         /* 图片高度（CSS 像素） */
+
 function capHtml(){
   return '<div class="cap-wrap" id="capWrap">'
     + '<div class="cap-stage" id="capStage">'
-      + '<canvas id="capBg"></canvas>'
-      + '<canvas class="cap-piece" id="capPiece"></canvas>'
+      + '<canvas id="capImg"></canvas>'
       + '<button type="button" class="cap-refresh" id="capRefresh" title="换一张">↻</button>'
-      + '<span class="cap-note">拖动下方滑块对齐缺口</span>'
     + '</div>'
-    + '<div class="cap-track" id="capTrack">'
-      + '<div class="cap-fill" id="capFill"></div>'
-      + '<div class="cap-handle" id="capHandle">→</div>'
-      + '<span class="cap-tip" id="capTip">按住滑块，拖到最右边</span>'
-    + '</div>'
+    + '<input class="cap-input" id="capInput" type="text" inputmode="numeric"'
+      + ' pattern="[0-9]*" maxlength="' + CAP_LEN + '" autocomplete="off"'
+      + ' spellcheck="false" placeholder="输入图中 ' + CAP_LEN + ' 位数字">'
+    + '<span class="cap-tip" id="capTip"></span>'
     + '</div>';
 }
 
-/* 拼图块尺寸（CSS 像素）：宽 42、高 42，缺口在垂直方向随机落点 */
-var CAP_PIECE_W = 42;
-
 function capRand(a, b){ return a + Math.random() * (b - a); }
+/* 随机颜色统一用 rgb/rgba 拼字符串（不用 hsl/hsla —— 个别老浏览器
+   对 hsl 支持不全，画出来会是透明或黑色，等于验证码看不见） */
+function capRGBA(a){
+  var f = function(){ return Math.floor(capRand(0, 255)); };
+  return 'rgba(' + f() + ',' + f() + ',' + f() + ',' + (a === undefined ? 1 : a) + ')';
+}
 
-/* 画一张底图：随机色相的多层渐变 + 噪点，保证每张都不一样 */
-function capPaintBg(ctx, w, h){
-  var hue = Math.floor(capRand(0, 360));
-  var g = ctx.createLinearGradient(0, 0, w, h);
-  g.addColorStop(0, 'hsl(' + hue + ',68%,58%)');
-  g.addColorStop(.5, 'hsl(' + ((hue + 42) % 360) + ',62%,48%)');
-  g.addColorStop(1, 'hsl(' + ((hue + 96) % 360) + ',58%,38%)');
-  ctx.fillStyle = g;
+/* 画一张验证码图：浅底 + 噪点 + 干扰线 + 随机旋转/偏移的数字。
+   只用最基础的 Canvas 2D API（fillRect / arc / lineTo / fillText / rotate），
+   老设备也支持；字体走系统 sans-serif，不依赖任何自定义字体。 */
+function capPaint(cv, code){
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var stage = cv.parentNode;
+  var w = Math.round((stage && stage.clientWidth) || 0);
+  var h = CAP_H;
+  if(w < 80) w = 240;                  /* 布局还没完成时的兜底宽度 */
+  cv.width  = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width  = w + 'px';
+  cv.style.height = h + 'px';
+
+  var ctx = cv.getContext('2d');
+  if(!ctx) return false;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  /* 跟随主题：暗色模式下用深底浅字，和 .cap-stage 的 CSS 底色保持一致，
+     否则夜里打开登录框会突然弹出一块刺眼的亮色区域。
+     ⚠️ 本项目主题是挂在 <html> 上的 **`.dark` class**（不是 data-theme 属性），
+        写成 getAttribute('data-theme') 会永远拿到 null、暗色判断永不成立。 */
+  var dark = document.documentElement.classList.contains('dark');
+  ctx.fillStyle = dark ? '#2b2622' : '#fdfbf9';
   ctx.fillRect(0, 0, w, h);
 
-  /* 叠几团半透明圆斑，让画面更「花」，机器难以简单匹配 */
-  for (var i = 0; i < 14; i++){
+  /* 彩色噪点 */
+  for(var i = 0; i < 140; i++){
+    ctx.fillStyle = capRGBA(capRand(dark ? .16 : .10, dark ? .40 : .30).toFixed(2));
     ctx.beginPath();
-    ctx.fillStyle = 'hsla(' + ((hue + i * 27) % 360) + ',72%,' + Math.floor(capRand(42, 74)) + '%,.34)';
-    ctx.arc(capRand(0, w), capRand(0, h), capRand(12, 46), 0, Math.PI * 2);
+    ctx.arc(capRand(0, w), capRand(0, h), capRand(1, 2.6), 0, Math.PI * 2);
     ctx.fill();
   }
-  /* 噪点：细碎的点阵，进一步干扰 */
-  for (var j = 0; j < 320; j++){
-    ctx.fillStyle = 'rgba(255,255,255,' + capRand(.04, .16).toFixed(2) + ')';
-    ctx.fillRect(capRand(0, w), capRand(0, h), 1.6, 1.6);
+
+  /* 干扰线：几条随机折线，淡但看得见 */
+  for(var j = 0; j < 4; j++){
+    ctx.strokeStyle = capRGBA(dark ? .5 : .42);
+    ctx.lineWidth = capRand(1, 1.8);
+    ctx.beginPath();
+    var y0 = capRand(6, h - 6);
+    ctx.moveTo(0, y0);
+    for(var x = 0; x <= w; x += Math.max(18, w / 6)){
+      ctx.lineTo(x, y0 + capRand(-9, 9));
+    }
+    ctx.stroke();
   }
+
+  /* 数字：每个单独随机旋转、上下偏移、换色。
+     浅底用深字、深底用浅字，保证任何主题下都读得清。 */
+  var slot = (w - 24) / CAP_LEN;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for(var k = 0; k < code.length; k++){
+    var cx = 12 + slot * k + slot / 2;
+    var cy = h / 2 + capRand(-5, 5);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(capRand(-0.30, 0.30));        /* 约 ±17° */
+    ctx.font = 'bold ' + Math.round(capRand(28, 33)) + 'px sans-serif';
+    ctx.fillStyle = dark
+      ? 'rgb(' + Math.floor(capRand(190, 235)) + ',' + Math.floor(capRand(185, 225)) + ',' + Math.floor(capRand(180, 215)) + ')'
+      : 'rgb(' + Math.floor(capRand(35, 80)) + ',' + Math.floor(capRand(35, 80)) + ',' + Math.floor(capRand(35, 80)) + ')';
+    ctx.fillText(code[k], 0, 0);
+    ctx.restore();
+  }
+  return true;
 }
 
-/* 拼图块路径：方形 + 左侧凸起，形状固定（简洁、好实现，够用） */
-function capPiecePath(ctx, x, y, s){
-  var r = 5, bump = s * 0.24;
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + s - r, y);
-  ctx.quadraticCurveTo(x + s, y, x + s, y + r);
-  ctx.lineTo(x + s, y + s * 0.5 - bump);
-  /* 右侧挖进去一个半圆，和缺口配合形成「拼图」观感 */
-  ctx.arc(x + s, y + s * 0.5, bump, -Math.PI / 2, Math.PI / 2, true);
-  ctx.lineTo(x + s, y + s - r);
-  ctx.quadraticCurveTo(x + s, y + s, x + s - r, y + s);
-  ctx.lineTo(x + r, y + s);
-  ctx.quadraticCurveTo(x, y + s, x, y + s - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
+/* 生成一张全新的验证码（进登录页时、以及每次校验失败后都会调） */
 function capInit(){
   var wrap = document.getElementById('capWrap');
-  if(!wrap) return;
-  var stage = document.getElementById('capStage');
-  var bg = document.getElementById('capBg');
-  var piece = document.getElementById('capPiece');
-  if(!stage || !bg || !piece) return;
+  var cv   = document.getElementById('capImg');
+  if(!wrap || !cv) return;
 
-  var dpr = Math.min(window.devicePixelRatio || 1, 2);
-  /* 用 clientWidth 取实际渲染宽度。弹窗刚插入时可能还没完成布局（拿到 0），
-     若直接退回兜底宽度，画布宽度会与真实宽度不符（实测 300 vs 346），
-     块与缺口就会横向错位。所以先 rAF 重试几帧，仍拿不到才用兜底值。 */
-  var w = Math.round(stage.clientWidth || 0);
-  var h = Math.round(stage.clientHeight || 0);
-  if(w < 60 || h < 40){
+  var code = '';
+  for(var i = 0; i < CAP_LEN; i++){ code += String(Math.floor(Math.random() * 10)); }
+  CAP_STATE.code = code;
+  CAP_STATE.ok = false;
+
+  var ok = capPaint(cv, code);
+  var w = cv.parentNode ? cv.parentNode.clientWidth : 0;
+  /* 弹窗刚插入时可能还没完成布局（宽度拿到 0），先 rAF 重试几帧 */
+  if(!ok || !w){
     var tries = parseInt(wrap.dataset.capTry || '0', 10);
     if(tries < 5){
       wrap.dataset.capTry = String(tries + 1);
       requestAnimationFrame(capInit);
       return;
     }
-    w = 300; h = 118;
   }
   wrap.dataset.capTry = '0';
 
-  [bg, piece].forEach(function(c){
-    c.width = Math.round(w * dpr);
-    c.height = Math.round(h * dpr);
+  var inp = document.getElementById('capInput');
+  if(inp) inp.value = '';
+  var tip = document.getElementById('capTip');
+  if(tip){ tip.textContent = '看不清？点右上角换一张'; tip.className = 'cap-tip'; }
+  wrap.classList.remove('ok', 'bad');
+}
+
+/* 绑定交互：换一张按钮 + 输入框（只收数字、自动截断） */
+function capBind(){
+  var inp = document.getElementById('capInput');
+  var rf  = document.getElementById('capRefresh');
+  if(rf && !rf.dataset.bound){
+    rf.dataset.bound = '1';
+    rf.addEventListener('click', function(){ capInit(); });
+  }
+  if(!inp || inp.dataset.bound) return;
+  inp.dataset.bound = '1';
+  /* 手机数字键盘也能打出别的字符（粘贴 / 输入法候选），统一过滤掉非数字，
+     免得用户看着图输对了、却因为多了个空格被判错。 */
+  inp.addEventListener('input', function(){
+    var v = String(inp.value || '').replace(/\D/g, '').slice(0, CAP_LEN);
+    if(v !== inp.value) inp.value = v;
   });
-  piece.style.width = w + 'px';
-  var bx = bg.getContext('2d');
-  bx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  var px = piece.getContext('2d');
-  px.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
 
-  capPaintBg(bx, w, h);
+/* 校验入口：通过返回 true；未通过则提示 + 换一张新码，返回 false。
+   ⚠️ 每次失败都换新码 —— 让手工试错的人每次都得重新读图。 */
+function capPassed(){
+  var wrap = document.getElementById('capWrap');
+  var tip  = document.getElementById('capTip');
+  var inp  = document.getElementById('capInput');
+  var typed = inp ? String(inp.value || '').replace(/\D/g, '') : '';
 
-  /* 缺口位置：左右各留边距，避免贴边看不出「拖到位」的感觉 */
-  var s = CAP_PIECE_W;
-  var targetX = Math.round(capRand(w * 0.5, w - s - 12));
-  var targetY = Math.round(capRand(10, Math.max(11, h - s - 10)));
-
-  /* 在底图上挖出缺口：先清空该区域，再叠一层暗色让它像「洞」 */
-  bx.save();
-  capPiecePath(bx, targetX, targetY, s);
-  bx.globalCompositeOperation = 'destination-out';
-  bx.fill();
-  bx.restore();
-  bx.save();
-  capPiecePath(bx, targetX, targetY, s);
-  bx.fillStyle = 'rgba(0,0,0,.42)';
-  bx.fill();
-  bx.strokeStyle = 'rgba(255,255,255,.55)';
-  bx.lineWidth = 1.4;
-  bx.stroke();
-  bx.restore();
-
-  /* 拼图块画布：块画在「缺口所在位置 (targetX, targetY)」，靠 CSS translateX 移动。
-     形状与底色都和缺口一致 —— 缺口在底图上按 (targetX, targetY) 挖，
-     块在自画布上按同一坐标画，图案取自底图同一处，天然吻合；
-     位移为 0 时块正好落进缺口。
-     ⚠️ 曾经的错：这里误画在 x=0，块只能在 [-targetX, 0] 间滑动（左边缘附近），
-        而缺口在 targetX（右半边），永远对不上；判定却按「拖到底=通过」放行，
-        表现为「拖到底也提示不匹配」。 */
-  px.clearRect(0, 0, w, h);
-  px.save();
-  capPiecePath(px, targetX, targetY, s);
-  px.clip();
-  px.drawImage(bg, 0, 0, w, h);
-  px.restore();
-  px.save();
-  capPiecePath(px, targetX, targetY, s);
-  px.strokeStyle = 'rgba(255,255,255,.85)';
-  px.lineWidth = 1.4;
-  px.stroke();
-  px.restore();
+  if(typed && typed === CAP_STATE.code){
+    CAP_STATE.ok = true;
+    if(wrap){ wrap.classList.remove('bad'); wrap.classList.add('ok'); }
+    if(tip) tip.textContent = '✓ 验证通过';
+    if(typeof SFX !== 'undefined' && SFX && SFX.success) SFX.success();
+    return true;
+  }
 
   CAP_STATE.ok = false;
-  CAP_STATE.curX = 0;
-  CAP_STATE.startX = 0;
-  CAP_STATE.maxX = 0;
-  CAP_STATE.targetX = targetX;
-  CAP_STATE.pieceTop = targetY;
-
-  var handle = document.getElementById('capHandle');
-  if(handle){ handle.style.transform = 'translateX(0)'; handle.textContent = '→'; }
-  var fill = document.getElementById('capFill');
-  if(fill) fill.style.width = '0';
-  var tip = document.getElementById('capTip');
-  if(tip){ tip.textContent = '按住滑块，拖到最右边'; }
-  wrap.classList.remove('ok', 'bad');
-  /* 统一走 setX(0) 摆正滑块与拼图块的初始位置（块此时位于左边界外，拖出来才看得到） */
-  if(typeof CAP_SETX === 'function') CAP_SETX(0);
-}
-
-/* 绑定拖动交互（只绑一次，用 pointer 事件统一鼠标 / 触摸 / 触控笔） */
-function capBind(){
-  var track = document.getElementById('capTrack');
-  var wrap = document.getElementById('capWrap');
-  var handle = document.getElementById('capHandle');
-  var fill = document.getElementById('capFill');
-  var tip = document.getElementById('capTip');
-  var piece = document.getElementById('capPiece');
-  var stage = document.getElementById('capStage');
-  if(!track || track.dataset.bound) return;
-  track.dataset.bound = '1';
-
-  var handleW = 52;
-  var dragging = false;
-
-  function setX(x){
-    var max = capMaxX();
-    if(x < 0) x = 0;
-    if(x > max) x = max;
-    CAP_STATE.curX = x;
-    if(handle) handle.style.transform = 'translateX(' + x + 'px)';
-    if(fill) fill.style.width = (x + handleW) + 'px';
-    /* 拼图块从 -targetX 位移滑到 0 —— 即「滑块拖到底 = 块回到缺口」。
-       这样容差判定天然就落在「拖动进度」上，和视觉完全一致。 */
-    if(piece){
-      piece.style.transform = 'translateX(' + (-(CAP_STATE.targetX || 0) * (1 - (max > 0 ? x / max : 0))) + 'px)';
-    }
-  }
-  function capMaxX(){
-    var tw = track.clientWidth || 300;
-    return Math.max(1, tw - handleW - 6);
-  }
-  function capPieceMaxX(){
-    var sw = (stage && stage.clientWidth) || 300;
-    return Math.max(1, sw - CAP_PIECE_W);
-  }
-
-  function start(e){
-    if(CAP_STATE.ok) return;
-    dragging = true;
-    CAP_STATE.startX = (e.clientX || 0) - (CAP_STATE.curX || 0);
-    if(handle) handle.style.cursor = 'grabbing';
-    if(tip) tip.textContent = '';
-  }
-  function move(e){
-    if(!dragging || CAP_STATE.ok) return;
-    if(e.cancelable) e.preventDefault();
-    setX((e.clientX || 0) - CAP_STATE.startX);
-  }
-  function end(){
-    if(!dragging || CAP_STATE.ok) return;
-    dragging = false;
-    if(handle) handle.style.cursor = 'grab';
-    capVerify();
-  }
-
-  track.addEventListener('pointerdown', function(e){
-    if(CAP_STATE.ok) return;
-    /* 点到轨道任意位置也能直接开始拖 */
-    if(e.target !== handle){ setX(e.clientX - track.getBoundingClientRect().left - handleW / 2); }
-    start(e);
-    try{ track.setPointerCapture(e.pointerId); }catch(_){}
-  });
-  track.addEventListener('pointermove', move);
-  track.addEventListener('pointerup', end);
-  track.addEventListener('pointercancel', end);
-  window.addEventListener('pointerup', end);
-  /* 键盘可达：焦点在滑块上时，方向键微调 */
-  if(handle){
-    handle.setAttribute('tabindex', '0');
-    handle.addEventListener('keydown', function(e){
-      if(CAP_STATE.ok) return;
-      if(e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
-        e.preventDefault();
-        setX((CAP_STATE.curX || 0) + (e.key === 'ArrowRight' ? 6 : -6));
-      }
-      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); capVerify(); }
-    });
-  }
-  /* 供 capInit() 复位时复用，保证滑块与拼图块位置始终同步 */
-  CAP_SETX = setX;
-  setX(0);
-}
-
-/* 判定：拼图块位移越接近 0（即滑块越接近拖到底）越准。
-   换算成像素偏差 = 滑块剩余行程所占的拼图块位移量。 */
-function capVerify(){
-  var wrap = document.getElementById('capWrap');
-  var tip = document.getElementById('capTip');
-  if(!wrap) return;
-  var track = document.getElementById('capTrack');
-  var max = Math.max(1, (track ? track.clientWidth : 300) - 52 - 6);
-  var left = Math.max(0, max - (CAP_STATE.curX || 0));
-  /* 剩余行程折算成拼图块还差多少像素到位 */
-  var diff = (CAP_STATE.targetX || 0) * (left / max);
-
-  if(diff <= 6){
-    CAP_STATE.ok = true;
-    wrap.classList.remove('bad');
-    wrap.classList.add('ok');
-    var fill = document.getElementById('capFill');
-    if(fill) fill.style.background = 'rgba(15,138,77,.24)';
-    if(tip) tip.textContent = '✓ 验证通过';
-    var handle = document.getElementById('capHandle');
-    if(handle) handle.textContent = '✓';
-    if(typeof SFX !== 'undefined' && SFX && SFX.success) SFX.success();
-  } else {
-    CAP_STATE.ok = false;
-    wrap.classList.remove('ok');
-    wrap.classList.add('bad');
-    if(tip) tip.textContent = '没对准，再试一次';
-    if(typeof SFX !== 'undefined' && SFX && SFX.error) SFX.error();
-    /* 回弹 + 抖动结束后自动换一张全新底图，避免「试出答案」 */
-    setTimeout(function(){
-      wrap.classList.remove('bad');
-      capInit();
-    }, 620);
-  }
-}
-
-/* 校验入口：通过返回 true，未通过则提示并返回 false */
-function capPassed(){
-  if(CAP_STATE.ok) return true;
-  capInit();
+  if(wrap){ wrap.classList.remove('ok'); wrap.classList.add('bad'); }
+  if(tip) tip.textContent = typed ? '验证码不对，已换一张新的' : '请先输入图中的数字';
+  if(typeof SFX !== 'undefined' && SFX && SFX.error) SFX.error();
+  setTimeout(function(){
+    if(wrap) wrap.classList.remove('bad');
+    capInit();
+  }, 620);
   return false;
 }
 
@@ -6266,7 +6160,7 @@ function doRegister(){
   if(!u || !p){ acctMsg('请填写用户名和密码', 'err'); return; }
   if(p !== p2){ acctMsg('两次输入的密码不一样', 'err'); return; }
   if(p.length < 6){ acctMsg('密码至少 6 位', 'err'); return; }
-  if(!capPassed()){ acctMsg('请先拖动滑块完成安全验证', 'err'); return; }
+  if(!capPassed()){ acctMsg('请先输入图中的验证码', 'err'); return; }
 
   acctBusy(true, '注册中…');
   api('/auth?action=register', { method:'POST', body:{ username:u, password:p, displayName:d } })
@@ -6290,7 +6184,7 @@ function doRegister(){
 function doLogin(){
   var u = val('acctU'), p = val('acctP');
   if(!u || !p){ acctMsg('请填写用户名和密码', 'err'); return; }
-  if(!capPassed()){ acctMsg('请先拖动滑块完成安全验证', 'err'); return; }
+  if(!capPassed()){ acctMsg('请先输入图中的验证码', 'err'); return; }
 
   acctBusy(true, '登录中…');
   api('/auth?action=login', { method:'POST', body:{ username:u, password:p } })
@@ -7625,6 +7519,15 @@ function applyThemeSwitch(next){
   applyBg();
   var b = document.getElementById('themeToggle');
   if(b) b.innerHTML = next ? iconSvg('sun',17) : iconSvg('moon',17);
+  /* 验证码是 canvas 画的、颜色写死在像素里，换主题得重画一次，
+     否则暗色下会留一块亮底。只**重画当前这张**、不换新码
+     （用户可能正在看着图输入，换码会把人打乱）。 */
+  try{
+    var cv = document.getElementById('capImg');
+    if(cv && typeof capPaint === 'function' && typeof CAP_STATE !== 'undefined' && CAP_STATE.code){
+      capPaint(cv, CAP_STATE.code);
+    }
+  }catch(e){}
 }
 
 function radialTheme(x, y, next){

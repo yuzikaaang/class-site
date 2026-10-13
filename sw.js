@@ -75,7 +75,13 @@
 //       「首页卡片」（内容组 10 项 → 9 项，原来太碎不好找）。面板内分上下两块，
 //       各自复用原逻辑与云端键（daily_quote / study_card），互不干扰。
 //       纯后台结构调整，同学侧无变化。升版本清旧缓存。
-const CACHE = 'class-site-v54'
+// v55（对应 v2.6.3）：登录验证码由「拖动滑块拼图」改为「输入 4 位数字图形码」。
+//       站主反馈滑块在部分老手机屏幕上用不了 —— 根因是原实现走 Pointer Events，
+//       老浏览器（iOS Safari < 13 / Android Chrome < 55）根本不支持，事件不触发；
+//       且拖动要求手指精准。改成输入式后只看「键盘能不能打字」，
+//       配合数字键盘（inputmode=numeric + pattern）输入门槛最低。
+//       升版本清旧缓存。
+const CACHE = 'class-site-v55'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
