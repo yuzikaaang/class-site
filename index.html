@@ -81,7 +81,13 @@
   --sh-accent-lg:0 8px 24px rgba(251,146,60,.38);
 }
 
-body{background:linear-gradient(135deg,var(--bg-1) 0%,var(--bg-2) 50%,var(--bg-3) 100%);min-height:100vh;color:var(--fg);margin:0;position:relative;overflow-x:hidden}
+/* ⚠️ 横向溢出裁剪放在 html 上，**不要放 body**（v2.6.6 修 iPad 弹窗不居中）：
+   body 上设 overflow 时，WebKit 会把 position:fixed 子元素的定位基准变成 body，
+   于是弹窗变成「相对整份文档居中」而不是「相对屏幕居中」——
+   页面只要比视口高一点（我们的 body 有 min-height:100vh），弹窗就肉眼可见地偏下。
+   html 是根元素，在它上面设 overflow 不会影响 fixed 的定位基准（规范行为）。 */
+html{overflow-x:hidden}
+body{background:linear-gradient(135deg,var(--bg-1) 0%,var(--bg-2) 50%,var(--bg-3) 100%);min-height:100vh;min-height:100dvh;color:var(--fg);margin:0;position:relative}
 /* —— 顶部径向辉光（newsnow 做法）+ 两处角落光斑 ——
    辉光用 filter:blur 模拟参考里的 blur-[150px]，不透明度压在 3~6%，
    只在角落制造"氛围温暖"，不干扰文字可读性。 */
@@ -415,9 +421,17 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .site-gate-box{background:#fff;border-radius:24px;padding:28px 26px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .board-more{display:block;width:100%;border-top:1px solid #f0e6dc;background:#fdf8f3;color:#af410f;font-size:.85rem;font-weight:600;padding:10px;cursor:pointer;border:none}
 .board-more:hover{background:#f4ede6}
-.allboard-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9997;align-items:center;justify-content:center;padding:20px}
-.allboard-mask.show{display:flex}
-.allboard-box{background:#fffdfb;border-radius:20px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:80vh;display:flex;flex-direction:column}
+/* 弹窗居中（v2.6.6 重做，修 iPad 不居中 / 长内容被裁顶）
+   改前用 align-items:center + justify-content:center，有两个 iOS 上的坑：
+     ① 内容比容器高时，flex 居中会把**顶部推到视口外且滚不到**（经典 flex 居中 bug）；
+     ② 整块依赖「视口高度算得对」，而 iOS 的 100vh 会把地址栏也算进去。
+   现在改为：外层 display:flex + overflow-y:auto（内容超高可滚动），
+   盒子用 margin:auto 自动吸收四周剩余空间 —— 居中不依赖 align-items，
+   内容超长时 margin 自动归零、从顶部开始正常滚动，不会再把头切掉。
+   高度上限也从 80vh 换成 dvh（动态视口高度，iOS 上才是真实可视高）。 */
+.allboard-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9997;padding:20px;overscroll-behavior:contain}
+.allboard-mask.show{display:flex;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.allboard-box{background:#fffdfb;border-radius:20px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);display:flex;flex-direction:column;margin:auto}
 .allboard-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#9a3412,#af410f);color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
 .allboard-head button{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:999px;padding:4px 12px;font-size:.75rem;cursor:pointer}
 .allboard-list{overflow-y:auto;list-style:none;margin:0;padding:0;max-height:60vh}
@@ -693,9 +707,11 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .card-sub{color:var(--fg-3);font-size:.76rem;font-weight:600;margin-top:2px;margin-bottom:8px}
 
 /* 首次欢迎弹窗 */
-.welcome-mask{display:none;position:fixed;inset:0;z-index:9998;align-items:center;justify-content:center;background:rgba(0,0,0,.6);padding:24px}
-.welcome-mask.show{display:flex}
-.welcome-box{max-width:360px;width:100%;background:linear-gradient(135deg,#9a3412,#af410f);border-radius:24px;padding:28px 24px;text-align:center;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+/* 登录引导弹窗：居中方式与 .allboard-mask 保持一致（见上方注释），
+   同样是「外层 flex + overflow-y:auto + 盒子 margin:auto」。 */
+.welcome-mask{display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.6);padding:24px;overscroll-behavior:contain}
+.welcome-mask.show{display:flex;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.welcome-box{max-width:360px;width:100%;background:linear-gradient(135deg,#9a3412,#af410f);border-radius:24px;padding:28px 24px;text-align:center;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35);margin:auto}
 .welcome-title{font-size:1.2rem;font-weight:800;line-height:1.5;margin-bottom:12px}
 .welcome-desc{font-size:.85rem;line-height:1.7;opacity:.95;margin-bottom:14px}
 .welcome-list{background:rgba(255,255,255,.15);border-radius:16px;padding:14px 16px;text-align:left;margin-bottom:14px}
@@ -2492,7 +2508,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.6.5';
+var SITE_VERSION = '2.6.6';
 var VER_DATE = '2026-10-13';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -10332,10 +10348,62 @@ function popRender(p){
   return r;
 }
 
-/** 底部按钮跳转 */
+/* 底部按钮跳转（v2.6.6：支持跳站内页面）
+   ------------------------------------------------------------
+   站主原话：「那个通用弹窗可以设置点击然后就自动跳转到某个页面，
+   比如说跳转到成绩分析那个页面，或者说跳转到作业页面等等。当然也可以直接关闭」。
+
+   linkUrl 现在支持三种写法（不配则不显示按钮，只能用「我知道了」关闭）：
+     https://...      → 外部链接（原行为，不变）
+     cat:5            → 打开站内第 5 个板块（常用服务 / 学习资料 / 成绩分析…）
+     fn:函数名        → 打开某个站内页面（如 fn:showCurrentHomework 当前作业），
+                        函数名有**白名单**校验，避免被塞任意代码
+
+   实现细节：先校验目标存在再关弹窗 —— 否则目标写错时弹窗已经关了，
+   用户只看到一片空白，不知道发生了什么。 */
+var POP_JUMP_FN = {
+  showCurrentHomework: 1, showHomeworkCalendar: 1, openClassworks: 1,
+  openSettings: 1, openMyProfile: 1, openClassSign: 1,
+  openAllImp: 1, openAllHol: 1, openGameBoard: 1, openData: 1, openRepoDialog: 1
+};
 function popGoLink(){
   var p = POP_CUR;
-  if(p && p.linkUrl && typeof openLink === 'function') openLink(p.linkUrl, true);
+  if(!p) return;
+  var u = String(p.linkUrl || '').trim();
+  if(!u) return;
+  var warn = function(msg){
+    if(typeof uiMsg === 'function') uiMsg(msg, '#b45309');
+    else alert(msg);
+  };
+
+  /* ① 站内板块 */
+  var mc = /^cat:(\d+)$/.exec(u);
+  if(mc){
+    var cid = parseInt(mc[1], 10);
+    if(!document.getElementById('tab-cat-' + cid)){
+      warn('跳转失败：没有找到编号 ' + cid + ' 的板块');
+      return;                       /* 不关弹窗，好让站主看到问题在哪 */
+    }
+    closePop();
+    setTimeout(function(){ if(typeof openCat === 'function') openCat(cid); }, 120);
+    return;
+  }
+
+  /* ② 站内页面（白名单函数） */
+  var mf = /^fn:([A-Za-z_$][\w$]*)$/.exec(u);
+  if(mf){
+    var fn = mf[1];
+    if(!POP_JUMP_FN[fn] || typeof window[fn] !== 'function'){
+      warn('跳转失败：不支持的目标「' + fn + '」');
+      return;
+    }
+    closePop();
+    setTimeout(function(){ try{ window[fn](); }catch(e){} }, 120);
+    return;
+  }
+
+  /* ③ 外部链接（原行为） */
+  if(typeof openLink === 'function') openLink(u, true);
 }
 /** 视频按钮：交给站内通用视频弹窗 */
 function popPlayVideo(){

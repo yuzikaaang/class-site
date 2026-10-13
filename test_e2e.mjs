@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(indexHtml),
+  t('★前台版本号为 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(adminHtml),
+  t('★后台版本号为 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(indexHtml38),
+  t('★前台版本号为 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(adminHtml38),
+  t('★后台版本号为 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4497,10 +4497,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(idx47));
-  t('★后台版本号 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(adm47));
-  t('★service worker 缓存版本升到 v58（旧缓存要作废）',
-    /class-site-v58/.test(sw47));
+  t('★前台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(idx47));
+  t('★后台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(adm47));
+  t('★service worker 缓存版本升到 v59（旧缓存要作废）',
+    /class-site-v59/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4584,7 +4584,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.6.5');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.6.6');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4684,9 +4684,76 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(idx48));
+  t('★前台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-13', /VER_DATE = '2026-10-13'/.test(idx48));
-  t('★service worker 缓存版本升到 v58', /class-site-v58/.test(sw48));
+  t('★service worker 缓存版本升到 v59', /class-site-v59/.test(sw48));
+}
+
+console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
+{
+  const idx49 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm49 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* ===== ① iPad 弹窗不居中 =====
+     Chromium 各尺寸都居中，是 Safari 特有的兼容问题，三个隐患一起修。 */
+  t('★横向溢出裁剪挂在 html 上、body 不再设 overflow（否则 WebKit 会让 fixed 相对 body 定位）',
+    /html\{overflow-x:hidden\}/.test(idx49)
+    && /body\{[^}]*overflow-x:hidden/.test(idx49) === false);
+  t('★弹窗改为「外层 flex + overflow-y:auto + 盒子 margin:auto」',
+    /\.allboard-mask\.show\{display:flex;overflow-y:auto/.test(idx49)
+    && /\.allboard-mask\{[^}]*padding:20px/.test(idx49)
+    && /\.allboard-box\{[^}]*margin:auto\}/.test(idx49)
+    && /\.welcome-mask\.show\{display:flex;overflow-y:auto/.test(idx49)
+    && /\.welcome-box\{[^}]*margin:auto\}/.test(idx49));
+  /* align-items:center 的经典坑：内容比容器高时顶部被推到视口外且滚不到 */
+  t('★不再用 align-items:center 居中（长内容不会再把顶部裁掉）',
+    /\.allboard-mask\{display:none;position:fixed;inset:0;background:rgba\(0,0,0,\.6\);z-index:9997;padding:20px/.test(idx49)
+    && /\.welcome-mask\{display:none;position:fixed;inset:0;z-index:9998;background/.test(idx49));
+  t('★弹窗高度上限用 dvh（iOS 的 vh 会把地址栏算进去）',
+    /max-height:calc\(100vh - 40px\);max-height:calc\(100dvh - 40px\)/.test(idx49));
+  t('★body 高度补了 dvh 回退链', /min-height:100vh;min-height:100dvh/.test(idx49));
+  t('★保留 overscroll-behavior 防止弹窗滚到底后带动背景页',
+    /overscroll-behavior:contain/.test(idx49));
+
+  /* ===== ② 通用弹窗跳转（站主要求：点按钮跳到成绩分析/作业页，也能只关闭）===== */
+  t('★按钮支持跳站内板块（cat:N）',
+    /var mc = \/\^cat:\(\\d\+\)\$\/\.exec\(u\)/.test(idx49));
+  t('★按钮支持跳站内页面（fn:名字，走白名单）',
+    /var mf = \/\^fn:\(\[A-Za-z_\$\]\[\\w\$\]\*\)\$\/\.exec\(u\)/.test(idx49)
+    && /var POP_JUMP_FN = \{/.test(idx49));
+  t('★白名单外的函数被拒绝执行（不让配置内容决定能调什么）',
+    /if\(!POP_JUMP_FN\[fn\] \|\| typeof window\[fn\] !== 'function'\)/.test(idx49));
+  t('★板块不存在时给提示且**不关弹窗**（否则用户白点、只看到空白）',
+    /if\(!document\.getElementById\('tab-cat-' \+ cid\)\)/.test(idx49)
+    && /没有找到编号/.test(idx49));
+  t('★外链行为保持不变（向后兼容）', /openLink\(u, true\)/.test(idx49));
+  t('★白名单含「当前作业 / 历史作业」等常用页面',
+    /showCurrentHomework: 1/.test(idx49) && /showHomeworkCalendar: 1/.test(idx49)
+    && /openSettings: 1/.test(idx49));
+  t('★不配跳转时按钮不显示、只剩「我知道了」',
+    /if\(r\.linkUrl && r\.linkText\)\{ link\.style\.display = ''/.test(idx49));
+
+  /* ===== ③ 后台编辑面板 ===== */
+  t('★后台有跳转目标常量与选项生成函数',
+    /var POP_JUMP_FNS = \[/.test(adm49)
+    && /function pfLinkOptions\(/.test(adm49)
+    && /function pfLinkPickChange\(/.test(adm49)
+    && /function pfLinkIsCustom\(/.test(adm49));
+  /* admin.html 主脚本是 IIFE 包裹 —— 内联 onchange 在全局作用域执行，
+     找不到里面的函数，真机表现是「选了没反应且不报错」，极难查。 */
+  t('★下拉联动用 JS 绑定而非内联 onchange（IIFE 内的函数内联属性够不着）',
+    /pick\.onchange = pfLinkPickChange;/.test(adm49)
+    && /onchange="pfLinkPickChange\(\)"/.test(adm49) === false);
+  t('★板块列表复用 POP_CATS 且排除 boot（boot 是「弹在哪」不是「跳到哪」）',
+    /if\(c\.id === 'boot'\) return;/.test(adm49));
+  t('★自定义链接输入框按需显隐（选具体目标就收起）',
+    /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
+
+  /* ===== ④ 版本 ===== */
+  t('★前台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(idx49));
+  t('★后台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(adm49));
+  t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
+  t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
 
 console.log('\n' + '='.repeat(52));

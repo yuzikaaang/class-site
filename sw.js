@@ -93,14 +93,17 @@
 //       30 秒都下不完、还每次白耗流量 —— 改为读本文件里的 SITE_VER（12KB，
 //       快约 40 倍）；② 检查更新加 withTimeout 兜底，不再卡在「正在检查更新…」。
 //       v58（对应 v2.6.5）：页脚「页面由 Work Buddy 辅助生成」改为「页面由 AI 辅助生成」。
+//       v59（对应 v2.6.6）：① 修 iPad 弹窗不居中（body 的 overflow-x 会让
+//       WebKit 把 fixed 定位基准变成 body；弹窗改 flex+margin:auto，长内容不再裁顶；
+//       高度上限换 dvh）；② 通用弹窗的按钮支持跳站内页面（cat:N 板块 / fn:函数白名单）。
 /* ⚠️ 这个常量必须和 index.html 里的 SITE_VERSION 保持一致。
    前端的「检查更新」就是读这里的值来判断线上有没有新版 ——
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '2.6.5'
+const SITE_VER = '2.6.6'
 
-const CACHE = 'class-site-v58'
+const CACHE = 'class-site-v59'
 /* 预缓存清单：**只放小文件**。
    ⚠️ 不要把 index.html（600KB）放进来 —— install 会因为它变慢一大截，
    弱网下甚至装不完（真机实测 SW 卡在 installing 25 秒都没装好，

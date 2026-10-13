@@ -885,7 +885,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.6.5';
+var SITE_VERSION = '2.6.6';
 var VER_DATE = '2026-10-13';
 
 /* ---- 运行时状态 ---- */
@@ -8306,6 +8306,71 @@ var POP_CATS = [
   { id: 'cat:8', name: '板块 · 其他工具' },
   { id: 'cat:9', name: '板块 · 安装为应用' },
 ];
+/* 弹窗按钮可跳转的「站内页面」（v2.6.6 站主要求）
+   为什么用白名单而不是让站主随便写函数名：linkUrl 会被前端直接执行，
+   开放任意函数名等于把「能调什么」的决定权交给了配置内容。
+   白名单里的都是确认安全、且对同学有意义的页面入口。
+   想加新的：在这里追加一行，并在 index.html 的 POP_JUMP_FN 里同步加。 */
+var POP_JUMP_FNS = [
+  { id: 'fn:showCurrentHomework',  name: '站内页 · 当前作业' },
+  { id: 'fn:showHomeworkCalendar', name: '站内页 · 历史作业（按日期）' },
+  { id: 'fn:openClassworks',       name: '站内页 · Classworks 作业入口' },
+  { id: 'fn:openSettings',         name: '站内页 · 自定义设置' },
+  { id: 'fn:openMyProfile',        name: '站内页 · 我的资料' },
+  { id: 'fn:openClassSign',        name: '站内页 · 班级签到' },
+  { id: 'fn:openAllImp',           name: '站内页 · 重要日期（全部）' },
+  { id: 'fn:openAllHol',           name: '站内页 · 法定节假日' },
+  { id: 'fn:openGameBoard',        name: '站内页 · 游戏排行榜' },
+  { id: 'fn:openData',             name: '站内页 · 数据管理' },
+  { id: 'fn:openRepoDialog',       name: '站内页 · 仓库入口' },
+];
+
+/** 这个 linkUrl 是不是「需要手填」的自定义值？（不在已知列表里就是） */
+function pfLinkIsCustom(cur){
+  cur = String(cur || '').trim();
+  if(!cur) return false;
+  var known = {};
+  POP_CATS.forEach(function(c){ if(c.id !== 'boot') known[c.id] = 1; });
+  POP_JUMP_FNS.forEach(function(f){ known[f.id] = 1; });
+  return !known[cur];
+}
+
+/** 生成「按钮跳转到」下拉的选项；current 是当前 linkUrl，用来回显选中 */
+function pfLinkOptions(current){
+  var cur = String(current || '').trim();
+  var html = '<option value=""' + (cur ? '' : ' selected') + '>不跳转（只有一个关闭按钮）</option>';
+  html += '<optgroup label="站内板块">';
+  POP_CATS.forEach(function(c){
+    if(c.id === 'boot') return;      /* boot 是「弹在哪」，不是「跳到哪」 */
+    html += '<option value="' + attr(c.id) + '"' + (cur === c.id ? ' selected' : '') + '>'
+          + esc(c.name.replace('板块 · ', '')) + '</option>';
+  });
+  html += '</optgroup><optgroup label="站内页面">';
+  POP_JUMP_FNS.forEach(function(f){
+    html += '<option value="' + attr(f.id) + '"' + (cur === f.id ? ' selected' : '') + '>'
+          + esc(f.name.replace('站内页 · ', '')) + '</option>';
+  });
+  html += '</optgroup><option value="__custom"' + (pfLinkIsCustom(cur) ? ' selected' : '')
+        + '>自定义链接…（外部网址 / 手写 cat: / fn:）</option>';
+  return html;
+}
+
+/** 下拉联动：选具体目标写进输入框；选「自定义」才露出输入框 */
+function pfLinkPickChange(){
+  var sel = $('pfLinkPick'), inp = $('pfLinkUrl'), wrap = $('pfLinkUrlWrap'), txt = $('pfLinkText');
+  if(!sel || !inp) return;
+  var v = sel.value;
+  if(v === '__custom'){
+    if(wrap) wrap.style.display = '';
+    inp.focus();
+    return;
+  }
+  inp.value = v || '';
+  if(wrap) wrap.style.display = 'none';
+  /* 没写按钮文案时给个像样的默认，免得按钮显示成空白 */
+  if(v && txt && !txt.value.trim()) txt.value = v.indexOf('fn:') === 0 ? '前往查看' : '去看看';
+}
+
 var POP_SOURCES = [
   { id: 'custom',          name: '自定义内容（自己写标题/正文）' },
   { id: 'announcements',   name: '最新班级公告（自动取置顶或最新一条）' },
@@ -8544,8 +8609,18 @@ function popEdit(idx){
     + '<div class="field" style="display:flex;gap:10px;flex-wrap:wrap">'
     +   '<div style="flex:1;min-width:160px"><label>按钮文字（可选）</label>'
     +     '<input id="pfLinkText" class="gate-input" value="' + attr(p.linkText) + '" placeholder="如 查看详情"></div>'
-    +   '<div style="flex:2;min-width:200px"><label>按钮链接（可选）</label>'
-    +     '<input id="pfLinkUrl" class="gate-input" value="' + attr(p.linkUrl) + '" placeholder="https://..."></div>'
+    +   '<div style="flex:2;min-width:200px"><label>按钮跳转到</label>'
+    +     '<select id="pfLinkPick" class="gate-input">'
+    +       pfLinkOptions(p.linkUrl)
+    +     '</select></div>'
+    + '</div>'
+
+    + '<div class="field" id="pfLinkUrlWrap" style="display:' + (pfLinkIsCustom(p.linkUrl) ? '' : 'none') + '">'
+    +   '<label>跳转地址</label>'
+    +   '<input id="pfLinkUrl" class="gate-input" value="' + attr(p.linkUrl) + '" placeholder="https://... 或 cat:5 / fn:showCurrentHomework">'
+    +   '<p class="hint">三种写法：<b>https://…</b> 外部链接；<b>cat:编号</b> 打开站内板块；'
+    +   '<b>fn:函数名</b> 打开站内页面（如 fn:showCurrentHomework 当前作业）。'
+    +   '留空则弹窗只有一个「我知道了」关闭按钮。</p>'
     + '</div>'
 
     + '<div class="field" style="display:flex;gap:10px;flex-wrap:wrap">'
@@ -8583,6 +8658,12 @@ function popEdit(idx){
       sc.onchange = function(){
         scc.style.display = (sc.value === '__custom__') ? '' : 'none';
       };
+      /* 「按钮跳转到」下拉的联动。
+         ⚠️ 这里必须用 JS 赋值绑定，**不能写成内联的 onchange 属性**：
+         本文件的主脚本是 IIFE 包裹的，内联属性在全局作用域执行，根本找不到
+         IIFE 里的函数（真机上表现为「选了没反应」，且不报错，很难查）。 */
+      var pick = $('pfLinkPick');
+      if(pick) pick.onchange = pfLinkPickChange;
       $('pfCancel').onclick = closeModal;
       $('pfSave').onclick = function(){ popSave(idx, editing); };
     },
