@@ -2537,6 +2537,17 @@ function cmpVer(a, b){
   return 0;
 }
 
+/* 给任何 Promise 加「最多等多久」的上限，超时就按兜底值继续。
+   为什么必须有：检查更新走的是网络，网络差时 fetch 可能长时间不返回，
+   界面就会一直卡在「正在检查更新…」，用户以为坏了。
+   （线上实测踩过：后端构建号那次请求慢，把整个检查拖住。） */
+function withTimeout(p, ms, fallback){
+  return Promise.race([
+    p,
+    new Promise(function(res){ setTimeout(function(){ res(fallback); }, ms); })
+  ]);
+}
+
 /* 取线上站点版本：抓首页源码里的 SITE_VERSION。
    带时间戳 + no-store 双保险 —— 否则可能拿到被缓存的那份，等于白查。 */
 function fetchOnlineSiteVersion(){
@@ -2578,11 +2589,13 @@ function checkOnlineVersion(){
   var t = new Date();
   var hhmm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
 
-  var verP = fetchOnlineSiteVersion();
+  var verP = withTimeout(fetchOnlineSiteVersion(), 6000, '');
   var shaP = base
-    ? fetch(base + '/content', { method: 'GET', cache: 'no-store' })
-        .then(function(r){ return r.headers.get('x-build-sha') || ''; })
-        .catch(function(){ return ''; })
+    ? withTimeout(
+        fetch(base + '/content', { method: 'GET', cache: 'no-store' })
+          .then(function(r){ return r.headers.get('x-build-sha') || ''; })
+          .catch(function(){ return ''; }),
+        6000, '')
     : Promise.resolve('');
 
   Promise.all([verP, shaP]).then(function(res){
@@ -8299,7 +8312,7 @@ function renderSettings(){
 function checkUpdateFromSettings(){
   var el = document.getElementById('upOnline');
   if(el){ el.textContent = '检查中…'; el.className = 'v'; }
-  fetchOnlineSiteVersion().then(function(v){
+  withTimeout(fetchOnlineSiteVersion(), 6000, '').then(function(v){
     var e2 = document.getElementById('upOnline');
     if(!e2) return;
     if(!v){ e2.textContent = '查询失败（可能没网）'; e2.className = 'v'; return; }

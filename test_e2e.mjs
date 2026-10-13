@@ -4572,6 +4572,20 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   const verRe = /SITE_VERSION\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从首页源码取出版本号',
     verRe.exec(idx48) && verRe.exec(idx48)[1] === '2.6.4');
+  /* 线上实测踩过：后端构建号那次请求慢，把整个检查拖住，界面一直停在
+     「正在检查更新…」。版本检查不能依赖后端的快慢，必须各自设上限。 */
+  t('★有超时兜底工具（网络慢时不至于卡在「正在检查更新…」）',
+    /function withTimeout\(p, ms, fallback\)/.test(idx48)
+    && /Promise\.race/.test(idx48));
+  {
+    const coAt = idx48.indexOf('function checkOnlineVersion()');
+    const coBody = idx48.slice(coAt, coAt + 1400);
+    t('★版本检查与后端构建号都套了超时（各 6 秒上限）',
+      (coBody.match(/withTimeout\(/g) || []).length === 2,
+      '实际 ' + (coBody.match(/withTimeout\(/g) || []).length + ' 处');
+    t('★面板里的检查更新也套了超时',
+      /withTimeout\(fetchOnlineSiteVersion\(\), 6000, ''\)\.then/.test(idx48));
+  }
 
   /* ===== ⑤ 强制刷新：iOS 忽略 reload(true)，必须自己清 ===== */
   t('★强制刷新会清空全部 CacheStorage',
