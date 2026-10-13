@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(indexHtml),
+  t('★前台版本号为 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(adminHtml),
+  t('★后台版本号为 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(indexHtml38),
+  t('★前台版本号为 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(adminHtml38),
+  t('★后台版本号为 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4497,10 +4497,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(idx47));
-  t('★后台版本号 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(adm47));
-  t('★service worker 缓存版本升到 v57（旧缓存要作废）',
-    /class-site-v57/.test(sw47));
+  t('★前台版本号 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(idx47));
+  t('★后台版本号 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(adm47));
+  t('★service worker 缓存版本升到 v58（旧缓存要作废）',
+    /class-site-v58/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4584,7 +4584,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.6.4');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.6.5');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4684,9 +4684,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(idx48));
+  t('★前台版本号 2.6.5', /SITE_VERSION = '2\.6\.5'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-13', /VER_DATE = '2026-10-13'/.test(idx48));
-  t('★service worker 缓存版本升到 v57', /class-site-v57/.test(sw48));
+  t('★service worker 缓存版本升到 v58', /class-site-v58/.test(sw48));
 }
 
 console.log('\n' + '='.repeat(52));

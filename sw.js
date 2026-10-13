@@ -86,20 +86,21 @@
 //       （尤其「添加到主屏」后只在导航时 + 最长 24 小时检查一次），而旧页面即使新 SW
 //       已激活也不会自己重新加载，于是永远停在旧版本。配套改动：sw.js 新增 message
 //       监听 SKIP_WAITING（页面可主动让新 SW 立刻接管）；前端注册后主动 update()、
-//       回到前台再 update()、定时 update()，并对比线上 index.html 的 SITE_VERSION
+//       回到前台再 update()、定时 update()，并对比本文件里的 SITE_VER（见下方常量）
 //       判断是否落后；提供「强制刷新」（清空 CacheStorage + 注销 SW + 带时间戳跳转
 //       绕开 HTTP 缓存）。升版本清旧缓存。
 //       v57（同 v2.6.4 补丁）：① 检查更新原先要下载整个 600KB 首页，弱网下
 //       30 秒都下不完、还每次白耗流量 —— 改为读本文件里的 SITE_VER（12KB，
 //       快约 40 倍）；② 检查更新加 withTimeout 兜底，不再卡在「正在检查更新…」。
+//       v58（对应 v2.6.5）：页脚「页面由 Work Buddy 辅助生成」改为「页面由 AI 辅助生成」。
 /* ⚠️ 这个常量必须和 index.html 里的 SITE_VERSION 保持一致。
    前端的「检查更新」就是读这里的值来判断线上有没有新版 ——
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '2.6.4'
+const SITE_VER = '2.6.5'
 
-const CACHE = 'class-site-v57'
+const CACHE = 'class-site-v58'
 /* 预缓存清单：**只放小文件**。
    ⚠️ 不要把 index.html（600KB）放进来 —— install 会因为它变慢一大截，
    弱网下甚至装不完（真机实测 SW 卡在 installing 25 秒都没装好，
