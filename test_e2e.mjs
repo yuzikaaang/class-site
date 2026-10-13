@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(indexHtml),
+  t('★前台版本号为 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(adminHtml),
+  t('★后台版本号为 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(indexHtml38),
+  t('★前台版本号为 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(adminHtml38),
+  t('★后台版本号为 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4497,10 +4497,160 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(idx47));
-  t('★后台版本号 2.6.3', /SITE_VERSION = '2\.6\.3'/.test(adm47));
-  t('★service worker 缓存版本升到 v55（旧缓存要作废）',
-    /class-site-v55/.test(sw47));
+  t('★前台版本号 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(idx47));
+  t('★后台版本号 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(adm47));
+  t('★service worker 缓存版本升到 v56（旧缓存要作废）',
+    /class-site-v56/.test(sw47));
+}
+
+console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
+{
+  const idx48 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const sw48  = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+
+  /* ===== ① sw.js：让页面能主动催新 SW 接管 =====
+     站主反馈「iOS 端无法正常刷新，线上已是 2.6.3，我这边还是 2.6.2」。
+     根因不是代码没推上去，而是 iOS 极少主动检查 SW 更新
+     （尤其「添加到主屏」后只在导航时 + 最长 24 小时查一次），
+     且新 SW 装好后已打开的页面不会自己重新加载。 */
+  t('★sw.js 监听 SKIP_WAITING 消息（页面可主动让新 SW 立刻接管）',
+    /addEventListener\('message'/.test(sw48)
+    && /d\.type === 'SKIP_WAITING'/.test(sw48)
+    && /self\.skipWaiting\(\)/.test(sw48));
+  t('★sw.js 接管后主动通知页面（iOS 上 controllerchange 偶有不触发）',
+    /type: 'SW_ACTIVATED'/.test(sw48) && /clients\.matchAll/.test(sw48));
+  /* 版本探测 / 强制刷新的 URL 每次都带一个新时间戳，若照常走「网络优先 + 写缓存」，
+     线上每 5 分钟查一次，一天就能往 CacheStorage 塞几百份 index.html 副本。 */
+  t('★sw.js 让版本探测（?_=）与强制刷新（?_r=）请求绕过缓存',
+    /u\.searchParams\.has\('_'\) \|\| u\.searchParams\.has\('_r'\)/.test(sw48));
+
+  /* ===== ② 前端：三个「主动催检查」的时机 =====
+     只靠浏览器自己的节奏在 iOS 上等于不检查，必须自己催。 */
+  t('★注册后立刻催一次更新检查（reg.update）',
+    /function swRegister\(\)/.test(idx48) && /reg\.update\(\)/.test(idx48));
+  t('★回到前台再催一次（iOS 最典型的使用路径：切出去又切回来）',
+    /visibilitychange/.test(idx48) && /visibilityState === 'visible'\) swCheckUpdate\(false\)/.test(idx48));
+  t('★定时兜底：每 5 分钟催一次（长时间挂着不停在旧版）',
+    /setInterval\(function\(\)\{ swCheckUpdate\(false\); \}, 5 \* 60 \* 1000\)/.test(idx48));
+  t('★页面末尾改为调用 swRegister（不再直接 register）',
+    /typeof swRegister === 'function'\) swRegister\(\)/.test(idx48)
+    && /navigator\.serviceWorker\.register\('\.\/sw\.js'\)\.catch\(function \(\) \{\}\);\s*\}\)\;/.test(idx48) === false);
+  /* 挂在 load 上会「等所有图片加载完」才注册，网络差时可能拖几十秒 ——
+     真机测试里图床慢时整整 12 秒都没完成注册。改挂 DOMContentLoaded。 */
+  t('★注册改挂 DOMContentLoaded（不等所有图片，避免更新检查被拖后）',
+    /document\.addEventListener\('DOMContentLoaded'/.test(idx48)
+    && /window\.addEventListener\('load', function \(\) \{\s*\n\s*if \(typeof swRegister === 'function'\) swRegister\(\);/.test(idx48) === false);
+  t('★若脚本执行时 DOM 已就绪则立即注册（不等事件）',
+    /else if \(typeof swRegister === 'function'\) \{\s*\n\s*swRegister\(\);/.test(idx48));
+
+  /* ===== ③ 版本比较必须按「数字」比，不能按字符串 =====
+     字符串比较下 '2.6.10' < '2.6.9'（逐字符 '1' < '9'），会误判成有新版。
+     把函数体抠出来单独跑真值表（比正则断言可靠得多）。 */
+  const cmpBody = /function cmpVer\(a, b\)\{([\s\S]*?)\n\}/.exec(idx48);
+  t('★有版本比较函数 cmpVer（语义化比较）', !!cmpBody);
+  if (cmpBody) {
+    const cmpVer = new Function('a', 'b', cmpBody[1]);
+    const cases = [
+      ['2.6.4', '2.6.3',  1], ['2.6.3', '2.6.4', -1], ['2.6.4', '2.6.4',  0],
+      ['2.6',   '2.6.0',  0], ['2.10.0','2.9.9',  1], ['2.6.10','2.6.9',  1],
+      ['3.0.0', '2.99.99',1], ['2.6.4', '',       1], ['',      '2.6.4', -1],
+    ];
+    let ok = 0, bad = [];
+    for (const [a, b, want] of cases) {
+      const got = cmpVer(a, b);
+      if (got === want) ok++; else bad.push(`${a} vs ${b} 期望 ${want} 得到 ${got}`);
+    }
+    t('★cmpVer 真值表 9/9（含 2.6.10 > 2.6.9 这类字符串比较会翻车的用例）',
+      ok === cases.length, bad.join(' | '));
+  }
+
+  /* ===== ④ 取线上版本：必须绕开缓存，否则查的还是旧的 ===== */
+  t('★取线上版本带时间戳 + no-store（双保险，避免拿到缓存那份）',
+    /fetchOnlineSiteVersion/.test(idx48)
+    && /index\.html\?_=' \+ Date\.now\(\)/.test(idx48)
+    && /cache: 'no-store'/.test(idx48));
+  const verRe = /SITE_VERSION\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
+  t('★版本提取正则能从首页源码取出版本号',
+    verRe.exec(idx48) && verRe.exec(idx48)[1] === '2.6.4');
+
+  /* ===== ⑤ 强制刷新：iOS 忽略 reload(true)，必须自己清 ===== */
+  t('★强制刷新会清空全部 CacheStorage',
+    /function hardRefresh\(\)/.test(idx48)
+    && /caches\.keys\(\)/.test(idx48)
+    && /caches\.delete\(k\)/.test(idx48));
+  t('★强制刷新会注销 Service Worker',
+    /getRegistrations\(\)/.test(idx48) && /\.unregister\(\)/.test(idx48));
+  /* 真机抓到：清完缓存后又冒出一个 class-site-v56 —— SW 还活着时它的
+     fetch handler 是「网络优先 + 写缓存」，这边刚删它那边又建回来。
+     所以必须**先注销、再清**，并且连清两轮覆盖「注销到真正停服」的窗口。 */
+  {
+    const hrAt = idx48.indexOf('function hardRefresh()');
+    const hrBody = idx48.slice(hrAt, hrAt + 2400);
+    t('★先注销 SW、再清缓存（顺序反了 SW 会把缓存写回来）',
+      /\.then\(unregisterAll\)\s*\/\* ①/.test(hrBody)
+      && hrBody.indexOf('.then(unregisterAll)') < hrBody.indexOf('.then(wipeCaches)'),
+      hrBody.indexOf('.then(unregisterAll)') + ' vs ' + hrBody.indexOf('.then(wipeCaches)'));
+    t('★缓存连清两轮（覆盖注销与停服之间的窗口）',
+      (hrBody.match(/\.then\(wipeCaches\)/g) || []).length === 2,
+      '实际 ' + (hrBody.match(/\.then\(wipeCaches\)/g) || []).length + ' 轮');
+  }
+  t('★强制刷新带时间戳跳转（绕开 GitHub Pages 给 HTML 的 max-age=600）',
+    /location\.origin \+ location\.pathname \+ '\?_r=' \+ Date\.now\(\)/.test(idx48)
+    && /location\.replace\(u\)/.test(idx48));
+  t('★清理失败也要放行（不能把用户卡在「正在清理…」）',
+    /\.then\(function\(\)\{ setTimeout\(go, 300\); \}\)[\s\S]{0,80}\.catch\(function\(\)\{ setTimeout\(go, 300\); \}\)/.test(idx48));
+  t('★强制刷新后清掉地址栏的 ?_r= 标记（收藏 / 分享不带时间戳）',
+    /searchParams\.has\('_r'\)/.test(idx48) && /history\.replaceState/.test(idx48));
+
+  /* ===== ⑥ 别打断正在用的人 ===== */
+  t('★页面打开 15 秒内发现更新 → 自动刷新（用户无感）',
+    /var SW_AUTO_WINDOW = 15000/.test(idx48)
+    && /Date\.now\(\) - SW_BOOT_AT < SW_AUTO_WINDOW/.test(idx48)
+    && /location\.reload\(\)/.test(idx48));
+  t('★用了一会儿则只提示不打断（页脚标记，等用户点）',
+    /SW_HAS_UPDATE = true;\s*\n\s*paintVersion\(\);/.test(idx48));
+  t('★首次安装不算「更新」（不做提示也不刷新）',
+    /if\(!hadController\)\{ hadController = true; return; \}/.test(idx48));
+  t('★防重复刷新（SW_RELOADING 守卫）', /if\(SW_RELOADING\) return;/.test(idx48));
+
+  /* ===== ⑦ 页脚三态 ===== */
+  t('★页脚：有新版时切成醒目提示',
+    /if\(SW_HAS_UPDATE\)\{/.test(idx48) && /发现新版本/.test(idx48)
+    && /el\.classList\.add\('ver-new'\)/.test(idx48));
+  t('★页脚：已最新时显示「已是最新版本」',
+    /已是最新版本 v/.test(idx48));
+  t('★页脚：再次点击 = 直接更新（不用先检查）',
+    /if\(SW_HAS_UPDATE\)\{ hardRefresh\(\); return; \}/.test(idx48));
+  t('★「发现新版本」样式已定义（含暗色 + 减少动效）',
+    /\.footer-sub\.ver-new\{/.test(idx48)
+    && /\.dark \.footer-sub\.ver-new\{/.test(idx48)
+    && /prefers-reduced-motion:reduce\)\{\.footer-sub\.ver-new\{animation:none\}\}/.test(idx48));
+
+  /* ===== ⑧ 设置面板：当前 / 线上版本 + 两个按钮 ===== */
+  t('★设置面板新增「版本与更新」区块（标题带上当前版本号，折叠时也看得见）',
+    /secHtml\('up','版本与更新（v' \+ SITE_VERSION \+ '）','rotate-cw'/.test(idx48));
+  t('★该区块默认展开（找进来的就是刷不出版本的人，让他少点一步）',
+    /onclick="hardRefresh\(\)">强制刷新<\/button>' \+\s*\n\s*'<\/div>', true\);/.test(idx48));
+  t('★面板显示当前版本与线上版本两行',
+    /id="upCur"/.test(idx48) && /id="upOnline"/.test(idx48));
+  t('★面板有「检查更新」与「强制刷新」两个按钮',
+    /onclick="checkUpdateFromSettings\(\)"/.test(idx48)
+    && /onclick="hardRefresh\(\)"/.test(idx48));
+  t('★面板的检查更新有独立函数', /function checkUpdateFromSettings\(\)/.test(idx48));
+  t('★面板提示了 iOS 的兜底办法（完全关掉再打开）', /完全关掉/.test(idx48));
+  /* 截图抓到的：说明文字里误用了 Markdown 的 **加粗**，在 HTML 里会显示成
+     一串字面星号。HTML 里只能用 <b>。 */
+  t('★说明文字用 <b> 而不是 Markdown 的 **（否则页面显示成星号）',
+    /把页面<b>完全关掉<\/b>再重新打开/.test(idx48));
+  t('★版本信息行样式已定义（含暗色）',
+    /\.up-row\{/.test(idx48) && /\.dark \.up-row .v\{/.test(idx48));
+  /* 图标名必须真在库里有，否则会渲染成空白 */
+  t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
+
+  /* ===== ⑨ 版本号 / 缓存 ===== */
+  t('★前台版本号 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(idx48));
+  t('★前台更新日期已同步为 2026-10-13', /VER_DATE = '2026-10-13'/.test(idx48));
+  t('★service worker 缓存版本升到 v56', /class-site-v56/.test(sw48));
 }
 
 console.log('\n' + '='.repeat(52));

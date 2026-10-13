@@ -81,7 +81,15 @@
 //       且拖动要求手指精准。改成输入式后只看「键盘能不能打字」，
 //       配合数字键盘（inputmode=numeric + pattern）输入门槛最低。
 //       升版本清旧缓存。
-const CACHE = 'class-site-v55'
+// v56（对应 v2.6.4）：新增【更新检测与一键强制刷新】—— 站主反馈「iOS 端无法正常
+//       刷新，线上已经是 2.6.3，我的还是 2.6.2」。根因：**iOS 极少主动去检查 SW 更新**
+//       （尤其「添加到主屏」后只在导航时 + 最长 24 小时检查一次），而旧页面即使新 SW
+//       已激活也不会自己重新加载，于是永远停在旧版本。配套改动：sw.js 新增 message
+//       监听 SKIP_WAITING（页面可主动让新 SW 立刻接管）；前端注册后主动 update()、
+//       回到前台再 update()、定时 update()，并对比线上 index.html 的 SITE_VERSION
+//       判断是否落后；提供「强制刷新」（清空 CacheStorage + 注销 SW + 带时间戳跳转
+//       绕开 HTTP 缓存）。升版本清旧缓存。
+const CACHE = 'class-site-v56'
 const PRECACHE = ['./', './index.html', './favicon.svg', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
@@ -94,8 +102,22 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    )
+      .then(() => self.clients.claim())
+      /* v2.6.4：接管完成后通知所有开着的页面「我换了」。
+         页面按此判断要不要重新加载。iOS 上 controllerchange 偶有不触发，
+         多给一条信号源能让「更新后仍显示旧版」少发生。 */
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then((cs) => cs.forEach((c) => c.postMessage({ type: 'SW_ACTIVATED', cache: CACHE })))
+      .catch(() => {})
   )
+})
+
+/* v2.6.4：页面可主动要求新 SW **立刻接管**（点「立即更新 / 强制刷新」时用）。
+   install 里本来就有 skipWaiting()，但「已在等待中的旧 SW」需要这条消息推一把。 */
+self.addEventListener('message', (event) => {
+  const d = event.data
+  if (d && d.type === 'SKIP_WAITING') self.skipWaiting()
 })
 
 self.addEventListener('fetch', (event) => {
@@ -110,6 +132,11 @@ self.addEventListener('fetch', (event) => {
     const u = new URL(request.url)
     if (u.origin !== self.location.origin &&
         (u.hostname.indexOf('dpdns.org') >= 0 || u.pathname.indexOf('/api/') === 0)) return
+    /* v2.6.4：版本探测（?_=）与强制刷新（?_r=）的请求**不进缓存**。
+       这两种 URL 每次都带一个新时间戳，缓存只会越堆越多（线上每 5 分钟查一次，
+       一天就能塞进几百份 index.html 副本）；而且它们本来就是「我就要最新的」语义，
+       缓存毫无意义。直接放行走网络。 */
+    if (u.searchParams.has('_') || u.searchParams.has('_r')) return
   } catch (e) { /* URL 解析失败就按原逻辑走 */ }
 
   // 导航请求：网络优先，失败回退缓存首页

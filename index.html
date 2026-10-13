@@ -556,6 +556,25 @@ mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:500;font-size:.9rem}
 .footer-sub{margin-top:4px;font-size:.75rem;color:#6e635a}
 .dark .footer-sub{color:#a8a29e}
+/* 发现新版本时页脚那行要显眼（v2.6.4）：否则没人会注意到可以更新 */
+.footer-sub.ver-new{color:#c2410c;font-weight:700;margin-top:8px;
+  padding:7px 12px;border-radius:9px;display:inline-block;
+  background:rgba(194,65,12,.09);border:1px solid rgba(194,65,12,.24);
+  animation:verPulse 2s ease-in-out infinite}
+@keyframes verPulse{0%,100%{opacity:1}50%{opacity:.62}}
+@media (prefers-reduced-motion:reduce){.footer-sub.ver-new{animation:none}}
+.dark .footer-sub.ver-new{color:#f0a868;background:rgba(240,168,104,.12);border-color:rgba(240,168,104,.3)}
+/* 设置面板里的版本信息行 */
+.up-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:9px 0;border-bottom:1px dashed #eee3d9;font-size:.78rem}
+.up-row:last-of-type{border-bottom:none}
+.up-row .k{color:#8a7a6d}
+.up-row .v{font-weight:700;color:#3f342c;font-family:ui-monospace,Menlo,Consolas,monospace}
+.dark .up-row{border-bottom-color:#3a332e}
+.dark .up-row .k{color:#a8a29e}
+.dark .up-row .v{color:#f2e9e1}
+.up-row .v.new{color:#c2410c}
+.dark .up-row .v.new{color:#f0a868}
 
 /* 公告栏 */
 .board{background:#fffdfb;border-radius:16px;box-shadow:0 8px 25px rgba(0,0,0,.06);overflow:hidden;margin-bottom:28px}
@@ -2180,9 +2199,10 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
       <p class="footer-sub">内容更新请联系管理员 · 全站可在微信内直接访问</p>
       <p class="footer-sub">页面由 Work Buddy 辅助生成</p>
       <!-- 版本号：站主用来核对「改动到底推上线没有」。
-           点击可立刻回查线上构建号（x-build-sha），不用去 GitHub Actions 页面看。 -->
+           v2.6.4 起点击为「检查更新」：会同时比对线上前端版本与后端构建号；
+           若线上更新则这行会变成醒目的「发现新版本 · 点击立即更新」。 -->
       <p class="footer-sub" id="verLine" onclick="checkOnlineVersion()" style="cursor:pointer"
-         title="点击查看线上是否已是最新版本"></p>
+         title="点击检查是否有新版本"></p>
     </footer>
   </main>
 </div>
@@ -2472,40 +2492,258 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.6.3';
-var VER_DATE = '2026-10-11';
+var SITE_VERSION = '2.6.4';
+var VER_DATE = '2026-10-13';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
   gitee:  'https://gitee.com/zikang0529/class-site',
   github: 'https://github.com/yuzikaaang/class-site'
 };
 
-/* ---------- 版本号显示与线上回查 ---------- */
+/* ---------- 版本号显示 / 更新检测 / 强制刷新（v2.6.4 大改） ----------
+   背景：站主在 iOS 上发现「线上已经 2.6.3，我这边还是 2.6.2」。
+
+   根因不是代码没推上去，而是 **iOS 极少主动检查 Service Worker 更新** ——
+   尤其「添加到主屏」后，浏览器只在导航时、且最长 24 小时才查一次；
+   即使新 SW 装好了，已打开的页面也不会自己重新加载，于是永远停在旧版。
+
+   所以这里补齐三件事：
+     ① **主动催检查** —— 注册后、回到前台、定时各催一次（见 swRegister）
+     ② **明确说清落后了** —— 对比线上 index.html 里的 SITE_VERSION
+     ③ **一键强制刷新** —— 清空 CacheStorage + 注销 SW + 带时间戳跳转
+
+   为什么「强制刷新」要这么麻烦：iOS Safari **忽略 location.reload(true) 的
+   强制参数**，只 reload 一定还会命中旧缓存，必须自己动手清。
+
+   此外还要顾及「别打断正在用的人」：页面刚打开（15 秒内）发现更新就直接刷新，
+   用户无感拿到新版；已经用了一会儿则只做提示，等他自己点。 */
+var SW_REG = null;          /* ServiceWorkerRegistration */
+var SW_HAS_UPDATE = false;  /* 已检测到有新版本 */
+var SW_NEW_VER = '';        /* 线上具体版本号（拿得到才有） */
+var SW_RELOADING = false;   /* 防止 controllerchange 反复触发刷新 */
+var SW_BUSY = false;        /* 正在检查更新，避免连点 */
+var SW_BOOT_AT = Date.now();/* 页面打开时刻，用于判断「能不能直接自动刷新」 */
+var SW_AUTO_WINDOW = 15000; /* 打开后多少毫秒内发现更新 = 直接自动刷新 */
+
+/* 版本号比较：a > b 返回 1，a < b 返回 -1，相等 0。缺位补 0（2.6 等价 2.6.0） */
+function cmpVer(a, b){
+  var x = String(a || '').split('.'), y = String(b || '').split('.');
+  var n = Math.max(x.length, y.length);
+  for(var i = 0; i < n; i++){
+    var p = parseInt(x[i], 10) || 0, q = parseInt(y[i], 10) || 0;
+    if(p > q) return 1;
+    if(p < q) return -1;
+  }
+  return 0;
+}
+
+/* 取线上站点版本：抓首页源码里的 SITE_VERSION。
+   带时间戳 + no-store 双保险 —— 否则可能拿到被缓存的那份，等于白查。 */
+function fetchOnlineSiteVersion(){
+  return fetch('./index.html?_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.ok ? r.text() : ''; })
+    .then(function(t){
+      var m = /SITE_VERSION\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/.exec(t || '');
+      return m ? m[1] : '';
+    })
+    .catch(function(){ return ''; });
+}
+
+/* ---------- 版本号渲染（三态） ---------- */
 function paintVersion(){
   var el = document.getElementById('verLine');
   if(!el) return;
-  el.textContent = '站点版本 v' + SITE_VERSION + ' · ' + VER_DATE + ' 更新（点击查看线上是否同步）';
+  if(SW_HAS_UPDATE){
+    var v = SW_NEW_VER ? ('v' + SW_NEW_VER + ' ') : '';
+    el.textContent = '发现新版本 ' + v + '· 点击立即更新（当前 v' + SITE_VERSION + '）';
+    el.classList.add('ver-new');
+    return;
+  }
+  el.classList.remove('ver-new');
+  el.textContent = '站点版本 v' + SITE_VERSION + ' · ' + VER_DATE + ' 更新（点击检查更新）';
 }
-/* 点版本号：回查线上后端构建号，省得去 GitHub Actions 页面翻。
-   线上若是刚刚推的代码，这里显示的短 SHA 应该等于最新一次 commit 的前 7 位。 */
+
+/* ---------- 点版本号：检查更新 ----------
+   同时查「前端线上版本」和「后端构建号」——两者一起看才知道到底哪一层没同步。
+   已经知道有新版时，再点一次就是直接更新。 */
 function checkOnlineVersion(){
   var el = document.getElementById('verLine');
   if(!el) return;
-  el.textContent = '站点版本 v' + SITE_VERSION + ' · 正在回查线上…';
+  if(SW_HAS_UPDATE){ hardRefresh(); return; }   /* 已知有新版本，直接刷新 */
+  if(SW_BUSY) return;
+  SW_BUSY = true;
+  el.textContent = '正在检查更新…';
+
   var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
-  if(!base){ el.textContent = '站点版本 v' + SITE_VERSION + ' · ' + VER_DATE + ' 更新'; return; }
   var t = new Date();
   var hhmm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
-  fetch(base + '/content', { method:'GET', cache:'no-store' })
-    .then(function(r){
-      var sha = r.headers.get('x-build-sha') || '';
-      el.textContent = '站点版本 v' + SITE_VERSION + ' · ' + VER_DATE
-        + ' · 线上后端构建 ' + (sha || '未知') + '（' + hhmm + ' 回查）';
-    })
-    .catch(function(){
-      el.textContent = '站点版本 v' + SITE_VERSION + ' · ' + VER_DATE + ' · 线上回查失败（可能没网）';
-    });
+
+  var verP = fetchOnlineSiteVersion();
+  var shaP = base
+    ? fetch(base + '/content', { method: 'GET', cache: 'no-store' })
+        .then(function(r){ return r.headers.get('x-build-sha') || ''; })
+        .catch(function(){ return ''; })
+    : Promise.resolve('');
+
+  Promise.all([verP, shaP]).then(function(res){
+    var online = res[0], sha = res[1] || '';
+    SW_BUSY = false;
+    swCheckUpdate(false);            /* 顺手也催一次 SW */
+    if(!online){
+      el.textContent = '站点版本 v' + SITE_VERSION + ' · 线上版本查询失败（可能没网）';
+      return;
+    }
+    if(cmpVer(online, SITE_VERSION) > 0){
+      SW_HAS_UPDATE = true;
+      SW_NEW_VER = online;
+      paintVersion();                /* 切成「点击立即更新」态 */
+      return;
+    }
+    el.textContent = '已是最新版本 v' + SITE_VERSION
+      + (sha ? ' · 后端 ' + sha : '') + '（' + hhmm + ' 检查）';
+  }).catch(function(){
+    SW_BUSY = false;
+    el.textContent = '站点版本 v' + SITE_VERSION + ' · 检查失败（可能没网）';
+  });
 }
+
+/* ---------- 一键强制刷新 ----------
+   步骤：注销 Service Worker → 清空 CacheStorage → 带时间戳重新进入。
+   最后那个时间戳是为了绕开浏览器对 HTML 的 HTTP 缓存
+   （GitHub Pages 给 HTML 的 max-age 是 600 秒，光 reload 会命中它）。
+
+   ⚠️ 顺序不能反：**先注销 SW、再清缓存**。
+   SW 活着的时候它的 fetch handler 是「网络优先 + 写缓存」——
+   我们这边刚 caches.delete，它那边收到一个请求又 caches.open 建回来
+   （真机测试抓到过：清完还剩一个 class-site-v56）。
+   即便如此，注销与真正停服之间仍有个小窗口，所以缓存**清两轮**兜底。 */
+function hardRefresh(){
+  try{ if(typeof SFX !== 'undefined' && SFX && SFX.click) SFX.click(); }catch(e){}
+  var el = document.getElementById('verLine');
+  if(el) el.textContent = '正在清理缓存并重新加载…';
+
+  var go = function(){
+    var u;
+    try{
+      var x = new URL(location.href);
+      x.searchParams.delete('_r');            /* 先清掉可能已有的旧标记，避免越堆越长 */
+      x.searchParams.set('_r', Date.now());
+      u = x.toString();
+    }catch(e){
+      u = location.origin + location.pathname + '?_r=' + Date.now();
+    }
+    try{ location.replace(u); }catch(e){ location.href = u; }
+  };
+
+  var unregisterAll = function(){
+    if(navigator.serviceWorker && navigator.serviceWorker.getRegistrations){
+      return navigator.serviceWorker.getRegistrations().then(function(rs){
+        return Promise.all(rs.map(function(r){ return r.unregister().catch(function(){}); }));
+      }).catch(function(){});
+    }
+  };
+  var wipeCaches = function(){
+    if(window.caches && caches.keys){
+      return caches.keys()
+        .then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+        .catch(function(){});
+    }
+  };
+
+  var step = Promise.resolve()
+    .then(unregisterAll)     /* ① 先让 SW 退场，免得它把缓存又写回来 */
+    .then(wipeCaches)        /* ② 清空所有缓存 */
+    .then(wipeCaches);       /* ③ 再清一轮：覆盖「注销到真正停服」之间的窗口 */
+
+  /* 无论清理成败都要走 —— 万一某个步骤抛错，也不能把用户卡在「正在清理…」 */
+  step.then(function(){ setTimeout(go, 300); })
+      .catch(function(){ setTimeout(go, 300); });
+}
+
+/* ---------- 主动催一次 SW 更新检查 ---------- */
+function swCheckUpdate(manual){
+  if(!('serviceWorker' in navigator)){
+    if(manual && typeof uiMsg === 'function') uiMsg('当前环境不支持自动更新，请手动刷新页面', '#b45309');
+    return;
+  }
+  if(SW_REG){ SW_REG.update().catch(function(){}); return; }
+  navigator.serviceWorker.getRegistration().then(function(reg){
+    if(reg){ SW_REG = reg; reg.update().catch(function(){}); }
+  }).catch(function(){});
+}
+
+/* ---------- 发现新版本 ----------
+   页面刚打开（还没开始做事）→ 直接让新 SW 立刻接管，接管后会自动刷新，
+   用户无感拿到新版；已经用了一会儿 → 只做提示，不打断。 */
+function swOnUpdateFound(worker){
+  if(Date.now() - SW_BOOT_AT < SW_AUTO_WINDOW && worker){
+    try{ worker.postMessage({ type: 'SKIP_WAITING' }); }catch(e){}
+    return;
+  }
+  SW_HAS_UPDATE = true;
+  paintVersion();
+}
+
+function swWatchInstall(reg){
+  if(!reg) return;
+  /* 已经有装好等着接管的（页面开着期间更新的典型状态） */
+  if(reg.waiting && navigator.serviceWorker.controller){ swOnUpdateFound(reg.waiting); }
+  reg.addEventListener('updatefound', function(){
+    var nw = reg.installing;
+    if(!nw) return;
+    nw.addEventListener('statechange', function(){
+      if(nw.state !== 'installed') return;
+      /* 没有 controller = 首次安装，不算「更新」，别提示也别刷 */
+      if(!navigator.serviceWorker.controller) return;
+      swOnUpdateFound(nw);
+    });
+  });
+}
+
+/* ---------- 注册 SW 并建立「主动催更新」的三个时机 ---------- */
+function swRegister(){
+  if(!('serviceWorker' in navigator)) return;
+  var hadController = !!navigator.serviceWorker.controller;
+
+  navigator.serviceWorker.register('./sw.js').then(function(reg){
+    SW_REG = reg;
+    swWatchInstall(reg);
+    reg.update().catch(function(){});   /* 进站先催一次：iOS 自己基本不查 */
+  }).catch(function(){});
+
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    /* 首次安装时 controller 从「无」到「有」也会触发，那不算更新 */
+    if(!hadController){ hadController = true; return; }
+    if(SW_RELOADING) return;
+    if(Date.now() - SW_BOOT_AT < SW_AUTO_WINDOW){
+      /* 刚打开不久 → 直接刷，用户几乎无感 */
+      SW_RELOADING = true;
+      location.reload();
+      return;
+    }
+    /* 已经用了一会儿 → 不打断，只在页脚标出来等用户点 */
+    SW_HAS_UPDATE = true;
+    paintVersion();
+  });
+
+  /* 回到前台立刻查一次 —— iOS 上「切出去又切回来」是最常见的使用路径 */
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') swCheckUpdate(false);
+  });
+
+  /* 定时兜底：长时间挂着也不会一直停在旧版本 */
+  setInterval(function(){ swCheckUpdate(false); }, 5 * 60 * 1000);
+}
+
+/* ---------- 清理强制刷新留下的 ?_r= 标记 ----------
+   刷新后立刻把地址栏还原干净，免得被收藏 / 分享时带着一串时间戳。 */
+try{
+  var _u = new URL(location.href);
+  if(_u.searchParams.has('_r')){
+    _u.searchParams.delete('_r');
+    history.replaceState(null, '', _u.pathname + (_u.search || '') + _u.hash);
+  }
+}catch(e){}
 
 /* ---------- 仓库入口二选（Gitee / GitHub） ---------- */
 function openRepoDialog(){
@@ -8023,6 +8261,24 @@ function renderSettings(){
     html += secHtml('rs','恢复默认','rotate-ccw',
       '<p class="ui-hint">把所有自定义项还原成初始状态，不影响公告、作业、游戏记录。</p>' +
       '<button class="btn btn-gray" style="font-size:.76rem;padding:9px 12px" onclick="resetUICfg()">恢复默认设置</button>', false);
+    /* v2.6.4 新增：站主反馈 iPhone 上刷新不管用、一直停在旧版本。
+       这里给出「当前 / 线上」两个版本号，并提供一键强制刷新。
+       默认**展开**（open=true）—— 找进来的多半就是「刷不出版本」的人，
+       让他少点一步。 */
+    html += secHtml('up','版本与更新（v' + SITE_VERSION + '）','rotate-cw',
+      '<div class="up-row"><span class="k">当前版本</span>' +
+        '<span class="v" id="upCur">v' + SITE_VERSION + '</span></div>' +
+      '<div class="up-row"><span class="k">线上版本</span>' +
+        '<span class="v" id="upOnline">点「检查更新」获取</span></div>' +
+      '<p class="ui-hint">页面会自动检查更新。手机上如果一直显示旧版本，' +
+        '先点「强制刷新」；还是不行就把页面<b>完全关掉</b>再重新打开一次' +
+        '（下拉刷新不一定管用）。</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn" style="flex:1;min-width:110px;font-size:.76rem;padding:9px 6px" ' +
+          'onclick="checkUpdateFromSettings()">检查更新</button>' +
+        '<button class="btn btn-secondary" style="flex:1;min-width:110px;font-size:.76rem;padding:9px 6px" ' +
+          'onclick="hardRefresh()">强制刷新</button>' +
+      '</div>', true);
   }
   box.innerHTML = html;
 
@@ -8036,6 +8292,30 @@ function renderSettings(){
   }
   if(UI_SEC === 'order') renderSortList();
   /* v2.5.0 起已无运行时 emoji 引擎（图标都在渲染时就地生成），无需任何触发 */
+}
+
+/* ---------- 设置面板里的「检查更新」（v2.6.4） ----------
+   把结果写回面板那两行，不用去页脚看。 */
+function checkUpdateFromSettings(){
+  var el = document.getElementById('upOnline');
+  if(el){ el.textContent = '检查中…'; el.className = 'v'; }
+  fetchOnlineSiteVersion().then(function(v){
+    var e2 = document.getElementById('upOnline');
+    if(!e2) return;
+    if(!v){ e2.textContent = '查询失败（可能没网）'; e2.className = 'v'; return; }
+    if(cmpVer(v, SITE_VERSION) > 0){
+      e2.textContent = 'v' + v + ' ← 有新版，请点「强制刷新」';
+      e2.className = 'v new';
+      SW_HAS_UPDATE = true;
+      SW_NEW_VER = v;
+      paintVersion();               /* 页脚同步切成「点击立即更新」 */
+      if(typeof uiMsg === 'function') uiMsg('发现新版本 v' + v + '，请点「强制刷新」', '#b45309');
+    } else {
+      e2.textContent = 'v' + v + '（已是最新）';
+      e2.className = 'v';
+    }
+  });
+  swCheckUpdate(false);             /* 顺手也催一次 SW */
 }
 
 /* ---------- 排序列表渲染 ---------- */
@@ -11306,10 +11586,23 @@ popInit();   /* 通用弹窗引擎：按 SITE_DATA.popups 排队弹「开屏弹�
 syncAutoInit(); /* 自动云同步：每 1 分钟双向同步（推本机 + 拉云端），回前台立刻补跑 */
 </script>
 <script>
+/* Service Worker 注册。
+   v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
+   （注册后 / 回到前台 / 每 5 分钟）与「新版本处理」（刚打开就自动刷新、
+   用得久了则提示），详见文件里 swRegister / swWatchInstall 的注释。
+
+   ⚠️ 挂在 DOMContentLoaded 而不是 load：load 要等**所有图片**加载完，
+   网络不好时可能拖几十秒，那「检查更新」也就跟着推迟 —— 而 iOS 本来就
+   不主动查 SW 更新，我们更不能把这一步往后拖。（真机测试踩过：图床慢时
+   整整 12 秒都没完成注册。） */
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('./sw.js').catch(function () {});
-  });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof swRegister === 'function') swRegister();
+    });
+  } else if (typeof swRegister === 'function') {
+    swRegister();
+  }
 }
 </script>
   <!-- 51LA 网站统计：匿名访问统计（PV/UV/来源/设备），详见站内公告。hashMode 适配本站单页 PWA 翻页 -->
