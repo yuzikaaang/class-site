@@ -2548,13 +2548,17 @@ function withTimeout(p, ms, fallback){
   ]);
 }
 
-/* 取线上站点版本：抓首页源码里的 SITE_VERSION。
-   带时间戳 + no-store 双保险 —— 否则可能拿到被缓存的那份，等于白查。 */
+/* 取线上站点版本：读 sw.js 里的 SITE_VER（和 index.html 的 SITE_VERSION 同步）。
+
+   ⚠️ 为什么不去读 index.html：首页有 600KB，线上实测**弱网下 30 秒都下不完**
+   （检查更新会一直卡着，最后报「查询失败」）；而 sw.js 只有 12KB，1~5 秒就好。
+   而且 sw.js 本来就随版本更新，把版本号放这里最自然。
+   带时间戳 + no-store 双保险，否则可能拿到被缓存的那份，等于白查。 */
 function fetchOnlineSiteVersion(){
-  return fetch('./index.html?_=' + Date.now(), { cache: 'no-store' })
+  return fetch('./sw.js?_=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.ok ? r.text() : ''; })
     .then(function(t){
-      var m = /SITE_VERSION\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/.exec(t || '');
+      var m = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/.exec(t || '');
       return m ? m[1] : '';
     })
     .catch(function(){ return ''; });

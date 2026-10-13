@@ -4499,8 +4499,8 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   /* ===== ④ 版本号 / 缓存 ===== */
   t('★前台版本号 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(idx47));
   t('★后台版本号 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(adm47));
-  t('★service worker 缓存版本升到 v56（旧缓存要作废）',
-    /class-site-v56/.test(sw47));
+  t('★service worker 缓存版本升到 v57（旧缓存要作废）',
+    /class-site-v57/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4565,13 +4565,26 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   }
 
   /* ===== ④ 取线上版本：必须绕开缓存，否则查的还是旧的 ===== */
-  t('★取线上版本带时间戳 + no-store（双保险，避免拿到缓存那份）',
+  /* ⚠️ 一开始读的是 index.html 来取版本号 —— 线上实测**弱网下首页 30 秒都下不完**
+     （600KB vs sw.js 的 12KB），检查更新必然报「查询失败」，而且每次都在白耗流量。
+     改读 sw.js。 */
+  t('★取线上版本读的是 12KB 的 sw.js，不是 600KB 的首页（弱网下才查得出来）',
     /fetchOnlineSiteVersion/.test(idx48)
-    && /index\.html\?_=' \+ Date\.now\(\)/.test(idx48)
+    && /fetch\('\.\/sw\.js\?_=' \+ Date\.now\(\)/.test(idx48)
+    && /fetch\('\.\/index\.html\?_=/.test(idx48) === false
     && /cache: 'no-store'/.test(idx48));
-  const verRe = /SITE_VERSION\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
-  t('★版本提取正则能从首页源码取出版本号',
-    verRe.exec(idx48) && verRe.exec(idx48)[1] === '2.6.4');
+  const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
+  t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.6.4');
+  /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
+     一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
+  {
+    const fromIdx = /var SITE_VERSION = '([0-9.]+)';/.exec(idx48);
+    const fromSw  = /const SITE_VER = '([0-9.]+)'/.exec(sw48);
+    t('★index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER 一致（防版本号漂移）',
+      !!fromIdx && !!fromSw && fromIdx[1] === fromSw[1],
+      'index=' + (fromIdx && fromIdx[1]) + ' sw=' + (fromSw && fromSw[1]));
+  }
   /* 线上实测踩过：后端构建号那次请求慢，把整个检查拖住，界面一直停在
      「正在检查更新…」。版本检查不能依赖后端的快慢，必须各自设上限。 */
   t('★有超时兜底工具（网络慢时不至于卡在「正在检查更新…」）',
@@ -4664,7 +4677,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   /* ===== ⑨ 版本号 / 缓存 ===== */
   t('★前台版本号 2.6.4', /SITE_VERSION = '2\.6\.4'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-13', /VER_DATE = '2026-10-13'/.test(idx48));
-  t('★service worker 缓存版本升到 v56', /class-site-v56/.test(sw48));
+  t('★service worker 缓存版本升到 v57', /class-site-v57/.test(sw48));
 }
 
 console.log('\n' + '='.repeat(52));
