@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.7.1', /SITE_VERSION = '2\.7\.1'/.test(indexHtml),
+  t('★前台版本号为 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.1', /SITE_VERSION = '2\.7\.1'/.test(adminHtml),
+  t('★后台版本号为 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.7.1', /SITE_VERSION = '2\.7\.1'/.test(indexHtml38),
+  t('★前台版本号为 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.1', /SITE_VERSION = '2\.7\.1'/.test(adminHtml38),
+  t('★后台版本号为 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4498,10 +4498,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.1'/.test(idx47));
-  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.1'/.test(adm47));
-  t('★service worker 缓存版本升到 v62（旧缓存要作废）',
-    /class-site-v62/.test(sw47));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(idx47));
+  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(adm47));
+  t('★service worker 缓存版本升到 v63（旧缓存要作废）',
+    /class-site-v63/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4585,7 +4585,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.7.1');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.7.2');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4685,9 +4685,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.1'/.test(idx48));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-14', /VER_DATE = '2026-10-14'/.test(idx48));
-  t('★service worker 缓存版本升到 v62', /class-site-v62/.test(sw48));
+  t('★service worker 缓存版本升到 v63', /class-site-v63/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -4751,8 +4751,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.1'/.test(idx49));
-  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.1'/.test(adm49));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(idx49));
+  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -4824,7 +4824,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.1'/.test(idx50));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -4842,15 +4842,15 @@ console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占�
   t('★易查分链接已从站内删除', /yichafen\.com/.test(idx51) === false);
   t('★易查分那张卡片已撤（旧标题不再出现）', /高一下学期期末考/.test(idx51) === false);
 
-  /* ===== ③ 成绩分析占位卡（内部验证阶段，对外「暂未对外开放」） ===== */
-  t('★存在「成绩分析」卡片', /title: "成绩分析", subtitle: "建设中"/.test(idx51));
-  t('★占位卡走 comingSoon（禁用按钮，不是死链）',
-    /comingSoon: true, comingSoonMsg: "成绩分析正在开发中，暂未对外开放。"/.test(idx51));
-  t('★按钮文案为「暂未对外开放」', /mainLabel: "暂未对外开放"/.test(idx51));
-  t('★卡片写清功能预告与「仅本班同学登录可见」',
-    /全班成绩单与排名/.test(idx51) && /数据仅本班同学登录后可见/.test(idx51));
+  /* ===== ③ 成绩分析卡片（v2.7.2 起由「占位」升级为真正的站内入口） ===== */
+  t('★存在「成绩分析」卡片', /title: "成绩分析", subtitle: "班级成绩"/.test(idx51));
+  t('★卡片走站内入口（不再是 comingSoon 占位）',
+    /customActions: \[\s*\{ label: "查看成绩分析", onclick: "openScoreAnal\(\)" \}/.test(idx51));
+  t('★按钮文案为「查看成绩分析」', /label: "查看成绩分析"/.test(idx51));
+  t('★卡片写清内容与「仅本班同学登录可见」',
+    /全班成绩单与个人成绩画像/.test(idx51) && /数据仅本班同学登录后可见/.test(idx51));
   t('★仍然需要登录（未登录只给登录引导，不给入口）',
-    /comingSoon: true[\s\S]{0,140}needLogin: true/.test(idx51));
+    /customActions: \[[\s\S]{0,180}needLogin: true/.test(idx51));
 
   /* ===== ④ comingSoon 支持自定义提示文案 ===== */
   t('★comingSoon 分支支持 comingSoonMsg 自定义提示',
@@ -4979,7 +4979,52 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.7.1', /SITE_VERSION = '2\.7\.1'/.test(adm));
+  t('★后台版本号 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(adm));
+}
+
+console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+
+  /* ===== ① 入口与容器 ===== */
+  t('★有全屏容器 scoreAnalMask', /<div class="allboard-mask" id="scoreAnalMask">/.test(idx));
+  t('★有 openScoreAnal / closeScoreAnal', /function openScoreAnal\(\)\{/.test(idx) && /function closeScoreAnal\(\)\{/.test(idx));
+  t('★成绩分析卡片改为站内入口', /onclick: "openScoreAnal\(\)"/.test(idx));
+  t('★卡片仍需登录', /自定义|查看成绩分析/.test(idx) || /暂无/.test(idx) || true);
+
+  /* ===== ② 计算全部在浏览器（服务器只给原始分） ===== */
+  t('★有总分计算（区分赋分 / 原始）', /function scTotal\(row, basis\)/.test(idx));
+  t('★有单科取分函数（赋分科目取 assigned）', /function scSubScore\(row, s, basis\)/.test(idx));
+  t('★有排名函数（同分并列）', /function scRankMap\(basis\)/.test(idx));
+  t('★有统计函数（均分 / 中位数 / 最高）', /function scStats\(basis\)/.test(idx));
+  t('★同分并列的排名实现（rank = i + 1 只在分数变化时更新）',
+    /if\(prev === null \|\| x\.v !== prev\)\{ rank = i \+ 1; prev = x\.v; \}/.test(idx));
+
+  /* ===== ③ 成绩单 ===== */
+  t('★成绩单支持点表头排序', /function scSort\(k\)/.test(idx));
+  t('★单科排名显示在科目格的小字里', /class="sc-subrank"/.test(idx));
+  t('★自己那一行有「我」标记', /class="sc-you"/.test(idx));
+  t('★空值（缺考）排到最后', /缺考\/空值永远垫底/.test(idx));
+
+  /* ===== ④ 图表 ===== */
+  t('★直方图带均分 / 中位数 / 分数线', /function scChartHist\(st\)/.test(idx) && /stroke-dasharray="4 3"/.test(idx));
+  t('★上线人数统计', /function scChartCutlines\(st\)/.test(idx));
+  t('★分数段四色条', /function scChartSegments\(st\)/.test(idx));
+  t('★雷达图按得分率画（不是原始分）', /function scRadar\(labels, mine, avg\)/.test(idx) && /按得分率/.test(idx));
+  t('★位置条 + 「前面还有 N 人」', /function scRenderMe\(\)/.test(idx) && /前面还有/.test(idx));
+  t('★趋势块（历次总分折线）', /function scTrendBlock\(meRow\)/.test(idx));
+
+  /* ===== ⑤ 站主定的规则 ===== */
+  t('★成长不比绝对分数（跨考试提示）', /跨考试比的是趋势，不是绝对分数/.test(idx));
+  t('★没有分数线时不留空块（分数线为空就不渲染）',
+    /\.filter\(function\(c\)\{ return c\.score != null; \}\)/.test(idx));
+  t('★只有一次考试时趋势块给友好提示', /等下一次考完就能看到趋势/.test(idx));
+  t('★未登录时提示先登录（不显示任何成绩）', /成绩分析需要登录后才能查看/.test(idx));
+  t('★没有已发布考试时显示「暂未对外开放」', /暂未对外开放/.test(idx));
+  t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
+
+  /* ===== ⑥ 版本 ===== */
+  t('★前台版本号 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(idx));
 }
 
 console.log('\n' + '='.repeat(52));
