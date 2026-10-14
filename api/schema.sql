@@ -269,3 +269,76 @@ create table if not exists profile_view_log (
 create index if not exists pvl_viewer_idx on profile_view_log (viewer_id, created_at desc);
 create index if not exists pvl_target_idx on profile_view_log (target_id, created_at desc);
 create index if not exists pvl_time_idx   on profile_view_log (created_at desc);
+
+/* ============================================================
+   成绩分析（第四十三轮 · v2.7.0 起）
+   ------------------------------------------------------------
+   四张表：exams（考试） / exam_scores（成绩） / share_links（分享） /
+           score_config（配置）
+
+   设计要点：
+     · **只存原始分**。排名 / 均分 / 分数段 / 上线人数 / 进退步
+       全部由浏览器实时算 —— 服务器只搬数据、不算账。
+       这样改一个分数之后所有统计立刻自洽，不会留下过期的排名。
+     · 分数线允许为空：空 = 这次学校没公布（不画、不统计）。
+     · 认人按姓名（站主要求：成绩表不保证按学号排，班上有转学生）。
+       所以**不建唯一索引** —— 同名同学要能各占一行；
+       导入语义是「整体替换本次」，重名由 api/scores.js 在导入时提示。
+     · 未发布的考试（status='draft'）学生看不到，接口层就拦掉。
+   ============================================================ */
+
+create table if not exists exams (
+  id           bigserial   primary key,
+  name         text        not null,                     -- 考试名称（趋势图上的标签）
+  exam_date    date        not null,                     -- 考试时间（趋势与进退步全靠它排序）
+  exam_type    text,                                     -- 全校联考 / 校际联考 / 月考 / 期中 / 期末
+  subjects     jsonb       not null default '[]'::jsonb,  -- [{key,name,full,graded}]
+  cutlines     jsonb       not null default '[]'::jsonb,  -- [{key,label,score,color}]，score 空 = 本次没公布
+  grade_ref    jsonb,                                     -- {students, avgTotal, avgSubject} 年级参照，可空
+  note         text,                                      -- 备注（如「本次生物未考」）
+  status       text        not null default 'draft',       -- draft | published
+  published_at timestamptz,
+  created_by   bigint      references users(id) on delete set null,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index if not exists exams_date_idx   on exams (exam_date desc, id desc);
+create index if not exists exams_status_idx on exams (status);
+
+create table if not exists exam_scores (
+  id           bigserial   primary key,
+  exam_id      bigint      not null references exams(id) on delete cascade,
+  user_id      bigint      references users(id) on delete set null,  -- 绑定账号后学生才能看到自己那条
+  student_name text        not null,
+  student_no   text,                                     -- 学号（可选信息，不做匹配依据）
+  scores       jsonb       not null default '{}'::jsonb,  -- {科目key:{raw,assigned}}
+  school_rank  int,                                      -- 校排名（系统算不出全校，只能导入）
+  league_rank  int,                                      -- 联考排名（可选）
+  note         text,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index if not exists exam_scores_exam_idx on exam_scores (exam_id, id);
+create index if not exists exam_scores_user_idx on exam_scores (user_id);
+
+create table if not exists share_links (
+  id         bigserial   primary key,
+  token      text        not null unique,                 -- 随机串，就是链接尾巴
+  scope      text        not null default 'self',          -- self 自己 / picked 自选 / class 全班
+  owner_id   bigint      references users(id) on delete cascade,
+  target_ids bigint[],                                    -- 分享给谁（scope=picked 时用）
+  exam_ids   bigint[],                                    -- 包含哪几次考试
+  sections   jsonb       not null default '{}'::jsonb,     -- 显示哪些板块
+  expires_at timestamptz,                                 -- 到期时间
+  max_views  int,                                         -- 最多被打开几次
+  views      int         not null default 0,
+  revoked    boolean     not null default false,           -- 撤销开关
+  created_at timestamptz not null default now()
+);
+create index if not exists share_links_owner_idx on share_links (owner_id, created_at desc);
+
+create table if not exists score_config (
+  id         int         primary key default 1,
+  data       jsonb       not null default '{}'::jsonb,     -- 见 api/scores.js 的 DEFAULT_CONFIG
+  updated_at timestamptz not null default now()
+);

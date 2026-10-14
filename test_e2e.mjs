@@ -4858,6 +4858,78 @@ console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占�
     /comingSoon: true, active: false/.test(idx51));
 }
 
+console.log('\n【52】第四十三轮·成绩分析后端地基（v2.7.0）');
+{
+  const scoresSrc = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
+  const httpSrc   = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const workerSrc = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  const schemaSrc = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+
+  /* ===== ① 文件与路由 ===== */
+  t('★api/scores.js 存在并导出默认 handler',
+    /export default async function handler\(req, res\)/.test(scoresSrc));
+  t('★worker 注册了 /api/scores 路由',
+    /import scoresHandler from '\.\/scores\.js'/.test(workerSrc) && /case 'scores':/.test(workerSrc));
+
+  /* ===== ② 四张表（ensureSchema 自愈 + schema.sql 手工执行，两边都要有） ===== */
+  ['exams', 'exam_scores', 'share_links', 'score_config'].forEach((tb) => {
+    t(`★ensureSchema 建表 ${tb}`,
+      new RegExp('create table if not exists ' + tb + '\\s*\\(').test(httpSrc));
+    t(`★schema.sql 同步建表 ${tb}`,
+      new RegExp('create table if not exists ' + tb + '\\s*\\(').test(schemaSrc));
+  });
+
+  /* ===== ③ 权限：未登录什么都看不到；草稿只有管理员能看 ===== */
+  t('★读接口一律要求登录（requireUser 至少 5 处）',
+    (scoresSrc.match(/requireUser\(req, res\)/g) || []).length >= 5);
+  t('★写接口一律要求管理员（requireAdmin 至少 7 处）',
+    (scoresSrc.match(/requireAdmin\(req, res\)/g) || []).length >= 7);
+  t('★未发布的考试对学生拦掉（draft 只有管理员能取）',
+    /status !== 'published' && u\.role !== 'admin'/.test(scoresSrc));
+  t('★学生的考试列表只查已发布',
+    /where e\.status = 'published'/.test(scoresSrc));
+
+  /* ===== ④ 服务器只搬数据、不算账 ===== */
+  t('★只存原始分：不出现总分类列（总分与排名一律前端实时算）',
+    !/total_(raw|graded)/.test(scoresSrc));
+  t('★每科存 {raw, assigned} 结构（化学/生物赋分要两个值）',
+    /assigned/.test(scoresSrc) && /cleanScores/.test(scoresSrc));
+
+  /* ===== ⑤ 分数线允许留空（学校没公布就不画不统计） ===== */
+  t('★分数线 score 允许为空',
+    /Number\.isFinite\(score\) \? Math\.round\(score\) : null/.test(scoresSrc));
+
+  /* ===== ⑥ 认人按姓名，不建唯一索引 ===== */
+  t('★认人按姓名（站主要求），库里不建唯一索引',
+    /不建唯一索引/.test(scoresSrc) && /不建唯一索引/.test(schemaSrc));
+  t('★导入时顺手按姓名绑定站点账号',
+    /async function matchUserId/.test(scoresSrc) && /byName/.test(scoresSrc));
+
+  /* ===== ⑦ 导入＝整体替换本次 ===== */
+  t('★导入先清空该次考试再批量写入',
+    /delete from exam_scores where exam_id = \$\{examId\}/.test(scoresSrc));
+  t('★重复姓名会被拦下并提示（只保留第一行）',
+    /同名重复/.test(scoresSrc));
+
+  /* ===== ⑧ 动作齐全 ===== */
+  ['list', 'board', 'me', 'config', 'meta'].forEach((a) => {
+    t(`★读动作 ${a} 已实现`, new RegExp("case '" + a + "':").test(scoresSrc));
+  });
+  ['exam-save', 'exam-delete', 'exam-publish', 'scores-import', 'scores-save', 'row-delete', 'config-save']
+    .forEach((a) => {
+      t(`★写动作 ${a} 已实现`, new RegExp("case '" + a + "':").test(scoresSrc));
+    });
+
+  /* ===== ⑨ 默认配置：站主定的口径 ===== */
+  t('★默认排名口径为总分赋分',
+    /rankBasis: 'graded'/.test(scoresSrc));
+  t('★标签类默认「完全隐藏」（退步榜/需关注/四象限/诊断卡先不对外）',
+    /tailRank: 'hide'/.test(scoresSrc) && /watchList: 'hide'/.test(scoresSrc)
+    && /quadrant: 'hide'/.test(scoresSrc) && /diagnosis: 'hide'/.test(scoresSrc));
+  t('★学生分享默认「只能分自己」',
+    /shareByStudent: 'self'/.test(scoresSrc));
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }

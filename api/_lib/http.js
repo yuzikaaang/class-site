@@ -180,6 +180,77 @@ export async function ensureSchema(sql) {
     await s`create index if not exists pvl_viewer_idx on profile_view_log (viewer_id, created_at desc)`;
     await s`create index if not exists pvl_target_idx on profile_view_log (target_id, created_at desc)`;
     await s`create index if not exists pvl_time_idx   on profile_view_log (created_at desc)`;
+
+    /* ===== 成绩分析（第四十三轮·v2.7.0 起）=====
+       四张表：考试 / 成绩 / 分享链接 / 配置。
+       设计要点：**只存原始分**，排名与统计全部交给浏览器实时算 ——
+       服务器只搬数据、不算账（详见 api/scores.js 顶部注释）。
+
+       ⚠️ 放在 ensureSchema 的最末尾是有意的：本 try-catch 一旦在某条 DDL
+          上报错就会吞掉异常并跳过后面所有语句（见上方 2026-10-09 的教训），
+          放在最后可以保证「即使成绩表建不出来，登录等既有功能也不受影响」。 */
+    await s`
+      create table if not exists exams (
+        id           bigserial   primary key,
+        name         text        not null,
+        exam_date    date        not null,
+        exam_type    text,
+        subjects     jsonb       not null default '[]'::jsonb,
+        cutlines     jsonb       not null default '[]'::jsonb,
+        grade_ref    jsonb,
+        note         text,
+        status       text        not null default 'draft',
+        published_at timestamptz,
+        created_by   bigint      references users(id) on delete set null,
+        created_at   timestamptz not null default now(),
+        updated_at   timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists exams_date_idx   on exams (exam_date desc, id desc)`;
+    await s`create index if not exists exams_status_idx on exams (status)`;
+    /* 认人按姓名（站主要求）：不建唯一索引 —— 同名同学要能各占一行，
+       导入语义是「整体替换本次」，重名由 api/scores.js 在导入时提示。 */
+    await s`
+      create table if not exists exam_scores (
+        id           bigserial   primary key,
+        exam_id      bigint      not null references exams(id) on delete cascade,
+        user_id      bigint      references users(id) on delete set null,
+        student_name text        not null,
+        student_no   text,
+        scores       jsonb       not null default '{}'::jsonb,
+        school_rank  int,
+        league_rank  int,
+        note         text,
+        created_at   timestamptz not null default now(),
+        updated_at   timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists exam_scores_exam_idx on exam_scores (exam_id, id)`;
+    await s`create index if not exists exam_scores_user_idx on exam_scores (user_id)`;
+    await s`
+      create table if not exists share_links (
+        id         bigserial   primary key,
+        token      text        not null unique,
+        scope      text        not null default 'self',
+        owner_id   bigint      references users(id) on delete cascade,
+        target_ids bigint[],
+        exam_ids   bigint[],
+        sections   jsonb       not null default '{}'::jsonb,
+        expires_at timestamptz,
+        max_views  int,
+        views      int         not null default 0,
+        revoked    boolean     not null default false,
+        created_at timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists share_links_owner_idx on share_links (owner_id, created_at desc)`;
+    await s`
+      create table if not exists score_config (
+        id         int         primary key default 1,
+        data       jsonb       not null default '{}'::jsonb,
+        updated_at timestamptz not null default now()
+      )
+    `;
   } catch (e) {
     /* 自愈失败不抛错：老库的基本功能仍可用（只是少了强制改密与登录记录）。
        只警告一次，避免每次请求都刷日志把真正的问题淹没。

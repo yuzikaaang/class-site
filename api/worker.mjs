@@ -2,7 +2,7 @@
    Cloudflare Workers 统一入口
    ------------------------------------------------------------
    一个 Worker 接管多个接口：/api/auth、/api/data、/api/admin、
-   /api/profile、/api/content、/api/games、/api/study。
+   /api/profile、/api/content、/api/games、/api/study、/api/scores。
    与 Vercel / 阿里云 FC 版本的 auth.js / data.js / admin.js
    共用同一套业务代码，互不干扰（那些文件保持原样即可）。
 
@@ -25,6 +25,7 @@ import profileHandler from './profile.js';
 import contentHandler from './content.js';
 import gamesHandler from './games.js';
 import studyHandler from './study.js';
+import scoresHandler from './scores.js';
 import { cors } from './_lib/http.js';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
@@ -135,6 +136,12 @@ export default {
           /* v2.6.0：学习卡片联网内容代理（今日诗词 / 有道词典）
              —— 这两个上游没有 CORS 头，浏览器直连会被拦，必须中转 */
           await studyHandler(req, res);
+          break;
+        case 'scores':
+          /* v2.7.0（第四十三轮）：成绩分析。
+             服务器只搬数据、不算账 —— 排名 / 均分 / 分数段 / 上线人数
+             全部由浏览器实时算，这里只返回原始分。 */
+          await scoresHandler(req, res);
           break;
         default:
           /* 404 也要回 CORS 头，否则跨域下浏览器会把响应整个拦掉，
