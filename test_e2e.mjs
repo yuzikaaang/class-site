@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(indexHtml),
+  t('★前台版本号为 2.7.0', /SITE_VERSION = '2\.7\.0'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(adminHtml),
+  t('★后台版本号为 2.7.0', /SITE_VERSION = '2\.7\.0'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(indexHtml38),
+  t('★前台版本号为 2.7.0', /SITE_VERSION = '2\.7\.0'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(adminHtml38),
+  t('★后台版本号为 2.7.0', /SITE_VERSION = '2\.7\.0'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4497,10 +4497,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(idx47));
-  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(adm47));
-  t('★service worker 缓存版本升到 v59（旧缓存要作废）',
-    /class-site-v60/.test(sw47));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.0'/.test(idx47));
+  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.0'/.test(adm47));
+  t('★service worker 缓存版本升到 v61（旧缓存要作废）',
+    /class-site-v61/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4584,7 +4584,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.6.7');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.7.0');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4684,9 +4684,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(idx48));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.0'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-14', /VER_DATE = '2026-10-14'/.test(idx48));
-  t('★service worker 缓存版本升到 v59', /class-site-v60/.test(sw48));
+  t('★service worker 缓存版本升到 v61', /class-site-v61/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -4750,8 +4750,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(idx49));
-  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(adm49));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.0'/.test(idx49));
+  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.0'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -4823,7 +4823,39 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(idx50));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.0'/.test(idx50));
+}
+
+console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
+{
+  const idx51 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm51 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* ===== ① 板块改名（站主 2026-10-14：「把名字改为成绩分析」） ===== */
+  t('★板块名改为「成绩分析」', /\{ id: 3, name: "成绩分析" \}/.test(idx51));
+  t('★不再出现「成绩查询」板块名', /\{ id: 3, name: "成绩查询" \}/.test(idx51) === false);
+  t('★后台弹窗跳转目标同步改名',
+    /'板块 · 成绩分析'/.test(adm51) && /'板块 · 成绩查询'/.test(adm51) === false);
+
+  /* ===== ② 易查分外链彻底删除（R2 已定） ===== */
+  t('★易查分链接已从站内删除', /yichafen\.com/.test(idx51) === false);
+  t('★易查分那张卡片已撤（旧标题不再出现）', /高一下学期期末考/.test(idx51) === false);
+
+  /* ===== ③ 成绩分析占位卡（内部验证阶段，对外「暂未对外开放」） ===== */
+  t('★存在「成绩分析」卡片', /title: "成绩分析", subtitle: "建设中"/.test(idx51));
+  t('★占位卡走 comingSoon（禁用按钮，不是死链）',
+    /comingSoon: true, comingSoonMsg: "成绩分析正在开发中，暂未对外开放。"/.test(idx51));
+  t('★按钮文案为「暂未对外开放」', /mainLabel: "暂未对外开放"/.test(idx51));
+  t('★卡片写清功能预告与「仅本班同学登录可见」',
+    /全班成绩单与排名/.test(idx51) && /数据仅本班同学登录后可见/.test(idx51));
+  t('★仍然需要登录（未登录只给登录引导，不给入口）',
+    /comingSoon: true[\s\S]{0,140}needLogin: true/.test(idx51));
+
+  /* ===== ④ comingSoon 支持自定义提示文案 ===== */
+  t('★comingSoon 分支支持 comingSoonMsg 自定义提示',
+    /comingSoonMsg \|\| '功能开发中，敬请期待'/.test(idx51));
+  t('★排行榜等旧卡片不受影响（无 msg 时回退默认文案）',
+    /comingSoon: true, active: false/.test(idx51));
 }
 
 console.log('\n' + '='.repeat(52));

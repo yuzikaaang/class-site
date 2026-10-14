@@ -2517,7 +2517,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.6.7';
+var SITE_VERSION = '2.7.0';
 var VER_DATE = '2026-10-14';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3560,7 +3560,7 @@ var SITE_DATA = {
     { id: 1, name: "常用服务" },
     { id: 2, name: "大屏服务" },
     { id: 5, name: "学习资料" },
-    { id: 3, name: "成绩查询" },
+    { id: 3, name: "成绩分析" },
     { id: 7, name: "班级事务" },
     { id: 8, name: "其他工具" },
     { id: 9, name: "📲 安装为应用" }
@@ -3646,10 +3646,11 @@ var SITE_DATA = {
     },
     {
       id: 9,
-      categoryId: 3, title: "高一下学期期末考", subtitle: "易查分", icon: "", iconText: "成绩",
-      desc: "",
-      mainLabel: "查询成绩", mainUrl: "https://u5p5aq6d.yichafen.com/qz/166mKITWTt", mainWechatOk: true,
+      categoryId: 3, title: "成绩分析", subtitle: "建设中", icon: "", iconText: "分析",
+      desc: "本站自建的成绩分析功能，正在开发中。\n上线后可查看：全班成绩单与排名、个人成绩画像、历次高低变化趋势、分数线与上线统计。\n数据仅本班同学登录后可见。\n当前为内部验证阶段，暂未对外开放。",
+      mainLabel: "暂未对外开放", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
+      comingSoon: true, comingSoonMsg: "成绩分析正在开发中，暂未对外开放。",
       needLogin: true
     },
     {
@@ -4898,7 +4899,8 @@ function render(){
             actionsHtml = '<span class="gate-tip">答对后获取访问码</span>';
           }
         }else if(l.comingSoon){
-          actionsHtml = '<button class="btn btn-disabled" onclick="alert(\'功能开发中，敬请期待\')">'+esc(l.mainLabel||'待开发')+'</button>';
+          var _csMsg = l.comingSoonMsg || '功能开发中，敬请期待';
+          actionsHtml = '<button class="btn btn-disabled" onclick="alert(\''+jsq(_csMsg)+'\')">'+esc(l.mainLabel||'待开发')+'</button>';
         }else if(l.contactQuery){
           actionsHtml = '<span class="gate-tip">输入姓名查询</span>';
         }else if(l.needLogin && !isLoggedIn()){
