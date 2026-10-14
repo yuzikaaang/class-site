@@ -1743,10 +1743,42 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-sub-bar{height:5px;border-radius:999px;background:#f5efe8;margin-top:7px;overflow:hidden}
 .sc-sub-bar i{display:block;height:100%;background:#e6a97a;border-radius:999px}
 .sc-seg-sm button{padding:5px 9px;font-size:.72rem}
+.sc-seg-icon button{font-size:.75rem}
+.sc-seg-icon button:hover{background:#fdf8f3}
 .sc-trendhead{font-size:.82rem;color:#57534e;margin-bottom:8px}
 .sc-trendhead.up b{color:#0f8a4d}
 .sc-trendhead.down b{color:#c0392b}
 .sc-trendhead span{font-size:.74rem}
+/* ===== A4 打印：只印成绩分析这一屏，去掉按钮/工具栏/滚动截断 ===== */
+@media print{
+  @page{margin:12mm}
+  html,body{background:#fff !important}
+  body *{visibility:hidden !important}
+  #scoreAnalMask,#scoreAnalMask *{visibility:visible !important}
+  #scoreAnalMask.show{display:block !important;position:static !important;inset:auto !important;
+    background:#fff !important;padding:0 !important;overflow:visible !important}
+  #scoreAnalMask .allboard-box{max-width:none !important;max-height:none !important;width:100% !important;
+    margin:0 !important;border:none !important;border-radius:0 !important;box-shadow:none !important}
+  #scoreAnalMask .allboard-head,
+  #scoreAnalMask .sc-bar,
+  #scoreAnalMask .sc-tabs,
+  #scoreAnalMask .sc-seg{display:none !important}
+  #scoreAnalMask .sc-pane{overflow:visible !important;max-height:none !important;padding:0 !important}
+  #scoreAnalMask .sc-tblwrap{max-height:none !important;overflow:visible !important;border:none !important}
+  #scoreAnalMask .sc-tbl{min-width:0 !important;border-collapse:collapse !important;font-size:10pt}
+  #scoreAnalMask .sc-tbl thead{display:table-header-group}   /* 表头每页重复 */
+  #scoreAnalMask .sc-tbl th,#scoreAnalMask .sc-tbl td{position:static !important;padding:3.5px 3px !important}
+  #scoreAnalMask .sc-tbl tr{break-inside:avoid}
+  #scoreAnalMask .sc-tbl th{background:#f5efe8 !important;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #scoreAnalMask .sc-card{break-inside:avoid;border:1px solid #e6ddd4 !important;margin-top:9px !important}
+  #scoreAnalMask .sc-stats{grid-template-columns:repeat(4,1fr) !important}
+  #scoreAnalMask .sc-figcap,#scoreAnalMask .sc-hint{font-size:8.5pt}
+  #scoreAnalMask .sc-svg{min-width:0 !important}
+  #scoreAnalMask .sc-pos-me span{background:#292524 !important;color:#fff !important;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+
 @media (max-width:560px){
   .sc-tblwrap{max-height:56vh}
   .sc-stats{grid-template-columns:repeat(2,1fr)}
@@ -2630,7 +2662,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.7.4';
+var SITE_VERSION = '2.8.0';
 var VER_DATE = '2026-10-14';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -11195,6 +11227,7 @@ var SC = {
   basis: 'graded',/* graded 总分赋分 | raw 总分原始 */
   sortKey: 'rank',
   sortAsc: true,
+  allRows: null,  /* 懒加载的历次全班成绩 { examId: {exam, rows} }，用于上线率趋势 */
   loaded: false,
   loading: false,
 };
@@ -11412,6 +11445,10 @@ function scRenderBar(){
     + '<div class="sc-seg">'
     +   '<button class="' + (SC.basis === 'graded' ? 'on' : '') + '" onclick="scSetBasis(\'graded\')">总分赋分</button>'
     +   '<button class="' + (SC.basis === 'raw' ? 'on' : '') + '" onclick="scSetBasis(\'raw\')">总分原始</button>'
+    + '</div>'
+    + '<div class="sc-seg sc-seg-icon">'
+    +   '<button onclick="scExportCard()" title="把我的成绩卡存成图片（可直接发微信）">导出图片</button>'
+    +   '<button onclick="scPrint()" title="按 A4 版式打印当前页面">打印</button>'
     + '</div>'
     + '</div>'
     + '<div class="sc-meta">'
@@ -11782,6 +11819,15 @@ function scRenderMe(){
   /* ⑥ 趋势与进退步（用历次数据） */
   html += scTrendBlock(meRow);
 
+  /* ⑦ 各科趋势网格（每科一张小卡 + 迷你折线） */
+  html += scSubjTrend();
+
+  /* ⑧ 年级进退步（靠校排名，和班排名分开看） */
+  html += scGradeTrend();
+
+  /* ⑨ 跨考试上线率（懒加载，点一下才算） */
+  html += scCutTrend();
+
   scPane(html);
 }
 
@@ -11904,6 +11950,396 @@ function scTrendBlock(meRow){
     + '<div class="sc-figcap">看的是 ' + pts.length + ' 次（共录了 ' + totalPts + ' 次），覆盖 ' + esc(spanTxt)
     +   '。<b>跨考试比的是趋势，不是绝对分数</b> —— 卷子难度不同，分高分低说明不了什么。</div>'
     + '</div>';
+}
+
+
+/* ============================================================
+   增强块（v2.8.0）：各科趋势网格 / 年级进退步 / 跨考试上线率
+   —— 全部浏览器实时算，服务器只给原始分
+   ============================================================ */
+
+/* ---------- 各科趋势网格：每科一张小卡（本次 / 班均 / 较上次 / 小折线） ---------- */
+function scSubjTrend(){
+  var items = SC.me || [];
+  if(items.length < 1) return '';
+  var subs = SC.exam.subjects || [];
+
+  function at(it, sub){
+    var v = it.s && it.s[sub.key];
+    if(!v) return null;
+    var val = (SC.basis === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+    return val == null ? null : val;
+  }
+
+  var cards = [];
+  subs.forEach(function(sub){
+    var pts = [];
+    items.forEach(function(it){
+      var v = at(it, sub);
+      if(v != null) pts.push({ name: it.name, v: v });
+    });
+    if(!pts.length) return;
+
+    var cur = pts[pts.length - 1].v;
+    var prev = pts.length > 1 ? pts[pts.length - 2].v : null;
+    var d = prev == null ? null : Math.round((cur - prev) * 10) / 10;
+
+    var all = [];
+    SC.rows.forEach(function(r){
+      var x = scSubScore(r, sub, SC.basis);
+      if(x != null) all.push(x);
+    });
+    var avg = all.length ? all.reduce(function(a, b){ return a + b; }, 0) / all.length : null;
+
+    /* 迷你折线：按分数变化分段着色（涨绿跌红），一眼看出哪科在掉 */
+    var mini = '';
+    if(pts.length >= 2){
+      var mw = 132, mh = 30;
+      var mv = pts.map(function(x){ return x.v; });
+      var vmax = Math.max.apply(null, mv), vmin = Math.min.apply(null, mv);
+      var sp = Math.max(1, vmax - vmin);
+      var px = function(i){ return 4 + (mw - 10) * i / (pts.length - 1); };
+      var py = function(v){ return 5 + (mh - 12) * (1 - (v - vmin) / sp); };
+      var segs = '';
+      for(var i = 1; i < pts.length; i++){
+        var up = pts[i].v >= pts[i - 1].v;
+        segs += '<line x1="' + px(i - 1).toFixed(1) + '" y1="' + py(pts[i - 1].v).toFixed(1)
+             +  '" x2="' + px(i).toFixed(1) + '" y2="' + py(pts[i].v).toFixed(1)
+             +  '" stroke="' + (up ? '#0f8a4d' : '#c0392b') + '" stroke-width="1.8" stroke-linecap="round"/>';
+      }
+      var dots = pts.map(function(x, i){
+        return '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(x.v).toFixed(1)
+             + '" r="2.2" fill="#fff" stroke="#c9b8a8" stroke-width="1.1"/>';
+      }).join('');
+      mini = '<svg viewBox="0 0 ' + mw + ' ' + mh + '" style="width:100%;height:30px;display:block;margin-top:5px">'
+           + segs + dots + '</svg>';
+    }
+
+    cards.push('<div class="sc-sub">'
+      + '<div class="sc-sub-top"><b>' + esc(sub.name) + '</b>'
+      +   (sub.graded ? '<span class="sc-tag">赋分</span>' : '')
+      +   '<span class="sc-sub-rk">' + pts.length + ' 次</span></div>'
+      + '<div class="sc-sub-score">' + fmtNum(cur) + '<small>/' + sub.full + '</small></div>'
+      + (avg == null ? '' : '<div class="sc-sub-diff ' + (cur - avg >= 0 ? 'up' : 'down') + '">'
+          + (cur - avg >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(cur - avg)) + ' 分</div>')
+      + (d == null
+          ? '<div class="sc-sub-diff sc-dim">首次考试，暂无对比</div>'
+          : '<div class="sc-sub-diff ' + (d > 0 ? 'up' : d < 0 ? 'down' : '') + '">较上次 '
+            + (d > 0 ? '↑ ' : d < 0 ? '↓ ' : '— ') + fmtNum(Math.abs(d)) + ' 分</div>')
+      + mini
+      + '</div>');
+  });
+
+  if(!cards.length) return '';
+  return '<div class="sc-card"><div class="sc-card-h">各科趋势（' + (SC.basis === 'graded' ? '赋分口径' : '原始口径') + '）</div>'
+    + '<div class="sc-subs">' + cards.join('') + '</div>'
+    + '<div class="sc-figcap">每张小卡：本次分数 / 满分、与班均差、较上次变化；下面那条折线是这科的历次走势，'
+    + '<span style="color:#0f8a4d">变绿＝涨</span>、<span style="color:#c0392b">变红＝跌</span>，哪科在掉不用读数就能看出来。</div>'
+    + '</div>';
+}
+
+/* ---------- 年级进退步（用校排名；系统算不出全校，只能靠导入） ---------- */
+function scGradeTrend(){
+  var items = SC.me || [];
+  var pts = items.filter(function(it){ return it.schoolRank != null; });
+  if(!pts.length) return '';
+
+  var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
+
+  var svg = '';
+  if(pts.length >= 2){
+    var W = 640, H = 170, L = 46, B = 28, T = 18, R = 16;
+    var vs = pts.map(function(p){ return p.schoolRank; });
+    var mx = Math.max.apply(null, vs), mn = Math.min.apply(null, vs);
+    if(mx === mn) mx = mn + 1;
+    var xOf = function(i){ return L + (W - L - R) * i / (pts.length - 1); };
+    /* 名次越小越好 → y 轴反向，靠前的人在上面 */
+    var yOf = function(v){ return T + (H - T - B) * ((v - mn) / (mx - mn)); };
+    var path = pts.map(function(p, i){
+      return (i ? 'L' : 'M') + xOf(i).toFixed(1) + ' ' + yOf(p.schoolRank).toFixed(1);
+    }).join(' ');
+    var dots = pts.map(function(p, i){
+      return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.schoolRank).toFixed(1) + '" r="3.4" fill="#7c3aed"/>'
+        + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.schoolRank) - 8).toFixed(1)
+        +   '" font-size="9.5" fill="#7c3aed" text-anchor="middle">' + p.schoolRank + '</text>'
+        + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
+            ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" fill="#a8968a" text-anchor="middle">'
+              + esc(shortName(p.name)) + '</text>'
+            : '');
+    }).join('');
+    svg = '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">'
+      + '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" stroke="#e2d5c8" stroke-width="1.2"/>'
+      + '<path d="' + path + '" fill="none" stroke="#7c3aed" stroke-width="2"/>'
+      + dots + '</svg></div>';
+  }
+
+  var last = pts[pts.length - 1];
+  var prev = pts.length > 1 ? pts[pts.length - 2] : null;
+  var dv = prev ? prev.schoolRank - last.schoolRank : null;   /* 正数 = 名次前进 = 进步 */
+  var head = '';
+  if(dv != null){
+    head = '<div class="sc-trendhead ' + (dv > 0 ? 'up' : dv < 0 ? 'down' : '') + '">最近一次：<b>'
+      + (dv > 0 ? '↑ 年级进步 ' + dv + ' 名' : dv < 0 ? '↓ 年级退步 ' + (-dv) + ' 名' : '— 年级排名持平')
+      + '</b><span class="sc-dim">（' + esc(prev.name) + ' 第 ' + prev.schoolRank + ' → '
+      + esc(last.name) + ' 第 ' + last.schoolRank + '）</span></div>';
+  }
+  var pct = (gradeN && last.schoolRank) ? (last.schoolRank / gradeN * 100) : null;
+
+  return '<div class="sc-card"><div class="sc-card-h">年级进退步（按校排名）</div>'
+    + head
+    + svg
+    + '<div class="sc-ov-items" style="margin-top:10px">'
+    +   scOvItem('本次校排名', last.schoolRank + (gradeN ? ' / ' + gradeN : ''))
+    +   scOvItem('年级位置', pct == null ? '—' : '前 ' + pct.toFixed(1) + '%')
+    + '</div>'
+    + '<div class="sc-figcap">'
+    +   '<b>班排名和年级排名会打架，而且打架是对的</b> —— 完全可能你班排名退步、年级排名反而进步（全班都考砸了，你砸得少）。所以两套都显示，不用猜。'
+    +   (gradeN ? '' : '<br><span class="sc-dim">（在后台把「年级人数」填上，才会算年级百分位。）</span>')
+    +   '</div></div>';
+}
+
+/* ---------- 跨考试上线率趋势（懒加载：点一下才去读历次全班成绩） ---------- */
+function scLoadAllRows(){
+  var need = SC.exams.filter(function(e){ return !SC.allRows || !SC.allRows[e.id]; });
+  if(!need.length){ scRenderPane(); return; }
+  scPane('<div class="sc-empty"><div class="spinner"></div><p>正在读取历次成绩…</p></div>');
+  SC.allRows = SC.allRows || {};
+  Promise.all(need.map(function(e){
+    return api('/scores?action=board&exam=' + e.id).then(function(d){
+      SC.allRows[e.id] = { exam: d.exam, rows: d.rows || [] };
+    }).catch(function(){ SC.allRows[e.id] = null; });
+  })).then(function(){ scRenderPane(); });
+}
+
+function scCutTrend(){
+  var items = SC.me || [];
+  var withCut = items.filter(function(it){
+    return (it.cutlines || []).some(function(c){ return c.score != null; });
+  });
+  if(withCut.length < 2) return '';
+
+  if(!SC.allRows){
+    return '<div class="sc-card"><div class="sc-card-h">历次上线率</div>'
+      + '<div class="sc-dim" style="padding:4px 0 10px">要看上线率怎么变，需要把每次考试的全班成绩都读一遍（几秒钟，一次就够）。</div>'
+      + '<button class="btn btn-sm" onclick="scLoadAllRows()">开始计算</button></div>';
+  }
+
+  /* 收集所有出现过的分数线（按 label 归并） */
+  var lines = [];
+  withCut.forEach(function(it){
+    (it.cutlines || []).forEach(function(c){
+      if(c.score == null) return;
+      if(!lines.some(function(x){ return x.label === c.label; })) {
+        lines.push({ label: c.label, color: c.color || '#b45309' });
+      }
+    });
+  });
+  if(!lines.length) return '';
+
+  var rowsTxt = withCut.map(function(it){
+    var pack = SC.allRows[it.examId];
+    if(!pack){ return ''; }
+    var subs = (pack.exam && pack.exam.subjects) || it.subjects || [];
+    var totals = [];
+    (pack.rows || []).forEach(function(r){
+      var t = 0, any = false;
+      subs.forEach(function(sub){
+        var v = r.s && r.s[sub.key];
+        if(!v) return;
+        var val = (SC.basis === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+        if(val == null) return;
+        t += val; any = true;
+      });
+      if(any) totals.push(t);
+    });
+    if(!totals.length) return '';
+    var cells = lines.map(function(ln){
+      var cut = (it.cutlines || []).find(function(c){ return c.label === ln.label && c.score != null; });
+      if(!cut) return '<td><span class="sc-dim">未填</span></td>';
+      var n = totals.filter(function(v){ return v >= cut.score; }).length;
+      var pctv = n / totals.length * 100;
+      return '<td><b>' + n + '</b> <span class="sc-dim">(' + pctv.toFixed(0) + '%)</span></td>';
+    }).join('');
+    return '<tr><td class="sc-name">' + esc(shortName(it.name)) + '<span class="sc-subrank">' + esc(it.date) + '</span></td>'
+      + cells + '<td>' + totals.length + '</td></tr>';
+  }).join('');
+
+  return '<div class="sc-card"><div class="sc-card-h">历次上线率</div>'
+    + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
+    + '<thead><tr><th>考试</th>'
+    +   lines.map(function(ln){
+        return '<th><span class="sc-cut-dot" style="display:inline-block;background:' + esc(ln.color) + '"></span> ' + esc(ln.label) + '</th>';
+      }).join('')
+    +   '<th>参考</th></tr></thead>'
+    + '<tbody>' + rowsTxt + '</tbody></table></div>'
+    + '<div class="sc-figcap">每格是<b>上线人数（占比）</b>。分数线每次都要手填，学校没公布的那次会显示「未填」。</div>'
+    + '</div>';
+}
+
+/* ---------- 导出成绩卡（PNG，纯 canvas，不引第三方库） ---------- */
+function scExportCard(){
+  var meRow = scMyRow();
+  if(!meRow){ alert('这次考试的成绩里没有你，导不出来。'); return; }
+  var subs = SC.exam.subjects || [];
+  var rk = scRankMap(SC.basis);
+  var st = scStats(SC.basis);
+  var myTotal = scTotal(meRow, SC.basis);
+  var myRank = rk.total[meRow.id];
+  var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
+  var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
+
+  var W = 760, pad = 36;
+  var rowH = 40;
+  var H = 250 + subs.length * rowH + (cuts.length ? 60 + cuts.length * 30 : 20) + 70;
+  var SCALE = 2;
+
+  var cv = document.createElement('canvas');
+  cv.width = W * SCALE; cv.height = H * SCALE;
+  var g = cv.getContext('2d');
+  g.scale(SCALE, SCALE);
+
+  var FONT = '-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif';
+  var f = function(size, bold){
+    g.font = (bold ? 'bold ' : '') + size + 'px ' + FONT;
+  };
+
+  /* 背景 + 顶部色条 */
+  g.fillStyle = '#fffdfb'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#c2410c'; g.fillRect(0, 0, W, 8);
+
+  /* 标题 */
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = '#292524';
+  f(25, true); g.fillText(SC.exam.name, pad, 62);
+  f(13);
+  g.fillStyle = '#6e635a';
+  g.fillText((SC.exam.type || '考试') + '　' + scDateRange(SC.exam) + '　'
+    + (SC.basis === 'graded' ? '赋分口径' : '原始口径'), pad, 88);
+
+  /* 姓名 + 总分 */
+  g.fillStyle = '#c2410c';
+  f(38, true);
+  g.fillText(meRow.name, pad, 152);
+  var nameW = g.measureText(meRow.name).width;
+
+  g.fillStyle = '#292524';
+  f(40, true);
+  g.font = 'bold 40px ' + FONT;
+  var totalTxt = myTotal == null ? '—' : String(fmtNum(myTotal));
+  g.fillText(totalTxt, pad + nameW + 22, 152);
+  var totalW = g.measureText(totalTxt).width;
+  f(14);
+  g.fillStyle = '#a8968a';
+  g.fillText('/ ' + scFullMark() + ' 总分', pad + nameW + 22 + totalW + 8, 152);
+
+  /* 四个指标 */
+  var items = [
+    ['班排名', myRank ? myRank + ' / ' + st.n : '—'],
+    ['校排名', meRow.schoolRank != null ? meRow.schoolRank + (gradeN ? ' / ' + gradeN : '') : '—'],
+    ['与班均', myTotal != null ? fmtDiff(myTotal - st.avg) : '—'],
+    ['联考排名', meRow.leagueRank != null ? String(meRow.leagueRank) : '—'],
+  ];
+  var boxW = (W - pad * 2 - 12 * 3) / 4;
+  items.forEach(function(it, i){
+    var x = pad + i * (boxW + 12), y = 180;
+    g.fillStyle = '#fdf8f3';
+    g.fillRect(x, y, boxW, 56);
+    g.fillStyle = '#a8968a'; f(11);
+    g.fillText(it[0], x + 12, y + 22);
+    g.fillStyle = '#292524'; f(17, true);
+    g.fillText(it[1], x + 12, y + 46);
+  });
+
+  /* 各科 */
+  var y = 272;
+  g.fillStyle = '#57534e'; f(15, true);
+  g.fillText('各科成绩', pad, y);
+  y += 14;
+  subs.forEach(function(sub){
+    var v = scSubScore(meRow, sub, SC.basis);
+    var all = [];
+    SC.rows.forEach(function(r){
+      var x2 = scSubScore(r, sub, SC.basis);
+      if(x2 != null) all.push(x2);
+    });
+    var avg = all.length ? all.reduce(function(a, b){ return a + b; }, 0) / all.length : 0;
+
+    y += rowH;
+    g.fillStyle = '#fdf8f3';
+    g.fillRect(pad, y - 26, W - pad * 2, 34);
+
+    g.fillStyle = '#57534e'; f(14, true);
+    g.fillText(sub.name + (sub.graded ? '（赋分）' : ''), pad + 12, y - 3);
+
+    /* 得分率条 */
+    var barX = pad + 190, barW = W - pad * 2 - 190 - 170;
+    g.fillStyle = '#f0e7de';
+    g.fillRect(barX, y - 18, barW, 8);
+    if(v != null && sub.full){
+      g.fillStyle = '#e6a97a';
+      g.fillRect(barX, y - 18, barW * Math.min(1, v / sub.full), 8);
+    }
+
+    g.fillStyle = '#292524'; f(15, true);
+    g.textAlign = 'right';
+    g.fillText(v == null ? '未考' : (fmtNum(v) + ' / ' + sub.full), W - pad - 118, y - 3);
+    g.fillStyle = (v != null && v - avg >= 0) ? '#0f8a4d' : '#c0392b';
+    f(12);
+    g.fillText(v == null ? '' : ((v - avg >= 0 ? '+' : '−') + fmtNum(Math.abs(v - avg))), W - pad - 14, y - 3);
+    g.textAlign = 'left';
+  });
+
+  /* 上线情况 */
+  y += 44;
+  if(cuts.length){
+    g.fillStyle = '#57534e'; f(15, true);
+    g.fillText('上线情况', pad, y);
+    cuts.forEach(function(c){
+      y += 30;
+      var ok = myTotal != null && myTotal >= c.score;
+      g.fillStyle = c.color || '#b45309';
+      g.beginPath(); g.arc(pad + 6, y - 5, 5, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#57534e'; f(14);
+      g.fillText(c.label + '　' + fmtNum(c.score) + ' 分', pad + 20, y);
+      g.fillStyle = ok ? '#0f8a4d' : '#c0392b';
+      f(14, true);
+      g.fillText(myTotal == null ? '' : (ok ? '已超 ' + fmtNum(myTotal - c.score) + ' 分' : '还差 ' + fmtNum(c.score - myTotal) + ' 分'),
+        W - pad, y);
+      g.textAlign = 'right';
+      g.fillText(myTotal == null ? '' : (ok ? '已超 ' + fmtNum(myTotal - c.score) + ' 分' : '还差 ' + fmtNum(c.score - myTotal) + ' 分'), W - pad, y);
+      g.textAlign = 'left';
+    });
+    y += 10;
+  }
+
+  /* 页脚水印 */
+  y = H - 26;
+  g.fillStyle = '#c9b8a8'; f(11);
+  g.fillText('本班内部数据 · 请勿外传　|　导出于 ' + new Date().toLocaleDateString('zh-CN'), pad, y);
+  g.textAlign = 'right';
+  g.fillText('班级站点 · 成绩分析', W - pad, y);
+  g.textAlign = 'left';
+
+  var fileName = SC.exam.name + '-' + meRow.name + '-成绩卡.png';
+  if(cv.toBlob){
+    cv.toBlob(function(blob){
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }, 1500);
+    }, 'image/png');
+  } else {
+    var a2 = document.createElement('a');
+    a2.href = cv.toDataURL('image/png'); a2.download = fileName;
+    document.body.appendChild(a2); a2.click();
+    setTimeout(function(){ if(a2.parentNode) a2.parentNode.removeChild(a2); }, 1500);
+  }
+}
+
+/* ---------- A4 打印（@media print 见样式表） ---------- */
+function scPrint(){
+  window.print();
 }
 
 function scSetTrendN(n){

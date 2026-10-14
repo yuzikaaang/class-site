@@ -166,13 +166,18 @@ async function getMe(req, res) {
   if (!u) return;
 
   const sql = getSql();
+  const isAdmin = u.role === 'admin';
+  /* 管理员能看到草稿（方便发布前自查趋势），学生只看已发布 —— 与 list 一致。
+     另外把每次考试的分数线与年级参照一并返回：前端的「跨考试上线率趋势」
+     和「年级百分位」都要用，省得前端为每次考试再跑一趟 board。 */
   const rows = await sql`
-    select e.id as exam_id, e.name, e.exam_date, e.exam_type, e.subjects,
+    select e.id as exam_id, e.name, e.exam_date, e.exam_end_date, e.exam_type,
+           e.subjects, e.cutlines, e.grade_ref,
            s.scores, s.school_rank, s.league_rank, s.student_name
       from exam_scores s
       join exams e on e.id = s.exam_id
      where s.user_id = ${u.id}
-       and e.status = 'published'
+       and (e.status = 'published' or ${isAdmin})
      order by e.exam_date asc, e.id asc`;
 
   ok(res, {
@@ -180,8 +185,11 @@ async function getMe(req, res) {
       examId: Number(r.exam_id),
       name: r.name,
       date: fmtDate(r.exam_date),
+      endDate: r.exam_end_date ? fmtDate(r.exam_end_date) : null,
       type: r.exam_type || '',
       subjects: jsonCol(r.subjects) || [],
+      cutlines: jsonCol(r.cutlines) || [],
+      gradeRef: jsonCol(r.grade_ref) || null,
       s: jsonCol(r.scores) || {},
       schoolRank: r.school_rank == null ? null : Number(r.school_rank),
       leagueRank: r.league_rank == null ? null : Number(r.league_rank),
