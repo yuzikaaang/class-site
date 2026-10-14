@@ -186,7 +186,7 @@ async function getMe(req, res) {
       schoolRank: r.school_rank == null ? null : Number(r.school_rank),
       leagueRank: r.league_rank == null ? null : Number(r.league_rank),
     })),
-    userName: u.name || u.username || '',
+    userName: u.displayName || u.username || '',
     serverTime: Date.now(),
   });
 }
@@ -397,10 +397,10 @@ async function scoresImport(req, res) {
   if (!clean.length) return fail(res, 400, '清洗后没有有效数据，请检查表格');
 
   /* 姓名 → 站点用户 id：导入时顺手把成绩绑到账号上，学生登录后就能看到自己 */
-  const users = await sql`select id, name, username from users where status = 'active'`;
+  const users = await sql`select id, display_name, username from users where status = 'active'`;
   const byName = new Map();
   users.forEach((x) => {
-    const n = String(x.name || '').trim();
+    const n = String(x.display_name || '').trim();
     if (n && !byName.has(n)) byName.set(n, Number(x.id));
     const un = String(x.username || '').trim();
     if (un && !byName.has(un)) byName.set(un, Number(x.id));
@@ -660,13 +660,14 @@ function toIntOrNull(v) {
   return n == null ? null : Math.round(n);
 }
 
-/** 按姓名找站点账号（导入/新增时顺手绑定） */
+/** 按姓名找站点账号（导入/新增时顺手绑定）
+ *  ⚠️ users 表的显示名列叫 display_name（不是 name），别写错。 */
 async function matchUserId(sql, name) {
   const n = String(name || '').trim();
   if (!n) return null;
   const r = await sql`
     select id from users
-     where status = 'active' and (name = ${n} or username = ${n})
+     where status = 'active' and (display_name = ${n} or username = ${n})
      order by id limit 1`;
   return r.length ? Number(r[0].id) : null;
 }
