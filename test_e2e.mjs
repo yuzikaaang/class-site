@@ -4897,8 +4897,8 @@ console.log('\n【52】第四十三轮·成绩分析后端地基（v2.7.0）');
     /assigned/.test(scoresSrc) && /cleanScores/.test(scoresSrc));
 
   /* ===== ⑤ 分数线允许留空（学校没公布就不画不统计） ===== */
-  t('★分数线 score 允许为空',
-    /Number\.isFinite\(score\) \? Math\.round\(score\) : null/.test(scoresSrc));
+  t('★分数线 score 允许为空，且支持一位小数（真实划线常有半分，如本科线 361.5）',
+    /Number\.isFinite\(score\) && score >= 0 && score <= 1500\) \? Math\.round\(score \* 10\) \/ 10 : null/.test(scoresSrc));
 
   /* ===== ⑥ 认人按姓名，不建唯一索引 ===== */
   t('★认人按姓名（站主要求），库里不建唯一索引',
