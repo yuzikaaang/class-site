@@ -784,6 +784,17 @@ function getKV() {
    （2026-10-14 演练踩到的第二个坑。） */
 function isoDay(v) {
   if (v == null) return null;
+  /* ⚠️ 必须单独处理 Date 对象：Neon 驱动把 date 列还原成 Date 实例，
+     而 String(dateObj) 得到的是 "Wed Jul 02 2026 00:00:00 GMT+0000..."，
+     **不是** ISO 串 —— 光写正则会静默返回 null，快照里的日期就全丢了。
+     （2026-10-14 演练抓到的第四个坑：这一条被后面的「日期不能识别就拒绝还原」
+       拦住了，没让危险操作落地 —— 那道校验是有用的。） */
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) return null;
+    return v.getUTCFullYear() + '-'
+      + String(v.getUTCMonth() + 1).padStart(2, '0') + '-'
+      + String(v.getUTCDate()).padStart(2, '0');
+  }
   const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v));
   return m ? m[1] : null;
 }
