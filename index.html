@@ -2662,7 +2662,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.8.0';
+var SITE_VERSION = '2.8.1';
 var VER_DATE = '2026-10-14';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -12044,7 +12044,11 @@ function scGradeTrend(){
   var pts = items.filter(function(it){ return it.schoolRank != null; });
   if(!pts.length) return '';
 
-  var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
+  /* 年级人数取「最近一次填过的」—— 当前这次可能没填，但上一次填了也算数 */
+  var gradeN = null;
+  for(var gi = items.length - 1; gi >= 0; gi--){
+    if(items[gi].gradeRef && items[gi].gradeRef.students){ gradeN = items[gi].gradeRef.students; break; }
+  }
 
   var svg = '';
   if(pts.length >= 2){
@@ -12321,15 +12325,35 @@ function scExportCard(){
   g.textAlign = 'left';
 
   var fileName = SC.exam.name + '-' + meRow.name + '-成绩卡.png';
+
+  /* 存成本地文件（桌面浏览器走这条路） */
+  function scSaveBlob(blob){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }, 1500);
+  }
+
+  /* 手机上优先走系统分享面板（可以直接发微信）；
+     系统不支持、或被拒时，自动退回下载。 */
+  function scEmit(blob){
+    try{
+      if(window.File && navigator.canShare){
+        var file = new File([blob], fileName, { type: 'image/png' });
+        if(navigator.canShare({ files: [file] })){
+          navigator.share({ files: [file], title: '我的成绩卡' }).catch(function(){ scSaveBlob(blob); });
+          return;
+        }
+      }
+    }catch(e){}
+    scSaveBlob(blob);
+  }
+
   if(cv.toBlob){
-    cv.toBlob(function(blob){
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url; a.download = fileName;
-      document.body.appendChild(a); a.click();
-      setTimeout(function(){ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }, 1500);
-    }, 'image/png');
+    cv.toBlob(scEmit, 'image/png');
   } else {
+    /* 老浏览器没有 toBlob，退回 dataURL 下载 */
     var a2 = document.createElement('a');
     a2.href = cv.toDataURL('image/png'); a2.download = fileName;
     document.body.appendChild(a2); a2.click();
