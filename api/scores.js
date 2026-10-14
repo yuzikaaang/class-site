@@ -982,11 +982,6 @@ async function backupRestore(req, res) {
     try { await kv.put(safetyKey, JSON.stringify(safety)); } catch (e) { safetyKey = null; }
   }
 
-  /* 覆盖式还原：先清空成绩相关的表，再按快照写回 */
-  await sql`delete from exam_scores`;
-  await sql`delete from share_links`;
-  await sql`delete from exams`;
-
   /* 兼容旧快照：日期统一截成 YYYY-MM-DD 再灌 */
   const fixExams = (t.exams || []).map((e) => Object.assign({}, e, {
     exam_date: isoDay(e.exam_date),
@@ -996,14 +991,21 @@ async function backupRestore(req, res) {
     return fail(res, 400, '快照里有考试的日期无法识别，不能还原（请换一份快照）');
   }
 
-  /* ⚠️ 必须**批量**插入，不能逐条 insert。
-     Cloudflare Workers 免费版每个请求最多 50 个子请求，而 Neon 的每次查询
-     就是一次子请求 —— 逐条插入 121 条成绩会直接超限。
-     （2026-10-14 还原演练实测：只插进去 37 条就 500 了。
-       这就是「做了备份也要真演练一次」的意义 —— 不演练永远发现不了。）
-     改用 jsonb_to_recordset，两条 SQL 灌完。 */
-  if (t.exams.length) {
-    await sql`
+  /* ============================================================
+     ⚠️ 必须**放在一个事务里**执行。
+     2026-10-14 的还原演练炸过一次：delete 全部成功、insert 中途失败，
+     结果数据被清空、插不回去 —— 这是最坏的情况，比不做还原还糟。
+     放进事务后就只会是「全成功」或「全回滚」两种结果。
+     顺带也解决了「逐条 insert 撞 Workers 50 子请求上限」的问题：
+     整套动作只占 1 次数据库往返。
+     ============================================================ */
+  const tx = [];
+  tx.push(sql`delete from exam_scores`);
+  tx.push(sql`delete from share_links`);
+  tx.push(sql`delete from exams`);
+
+  if (fixExams.length) {
+    tx.push(sql`
       insert into exams (id, name, exam_date, exam_end_date, exam_type, subjects, cutlines,
                          grade_ref, note, status, published_at, created_by, created_at, updated_at)
       select x.id, x.name, x.exam_date, x.exam_end_date, x.exam_type,
@@ -1013,11 +1015,10 @@ async function backupRestore(req, res) {
         from jsonb_to_recordset(${JSON.stringify(fixExams)}::jsonb) as x(
           id bigint, name text, exam_date date, exam_end_date date, exam_type text,
           subjects jsonb, cutlines jsonb, grade_ref jsonb, note text, status text,
-          published_at timestamptz, created_by bigint, created_at timestamptz, updated_at timestamptz)
-      on conflict (id) do nothing`;
+          published_at timestamptz, created_by bigint, created_at timestamptz, updated_at timestamptz)`);
   }
   if (Array.isArray(t.exam_scores) && t.exam_scores.length) {
-    await sql`
+    tx.push(sql`
       insert into exam_scores (id, exam_id, user_id, student_name, student_no, scores,
                                school_rank, league_rank, note, created_at, updated_at)
       select x.id, x.exam_id, x.user_id, x.student_name, x.student_no,
@@ -1026,11 +1027,10 @@ async function backupRestore(req, res) {
         from jsonb_to_recordset(${JSON.stringify(t.exam_scores)}::jsonb) as x(
           id bigint, exam_id bigint, user_id bigint, student_name text, student_no text,
           scores jsonb, school_rank int, league_rank int, note text,
-          created_at timestamptz, updated_at timestamptz)
-      on conflict (id) do nothing`;
+          created_at timestamptz, updated_at timestamptz)`);
   }
   if (Array.isArray(t.share_links) && t.share_links.length) {
-    await sql`
+    tx.push(sql`
       insert into share_links (id, token, scope, owner_id, target_names, exam_ids,
                                expires_at, max_views, views, revoked, created_at)
       select x.id, x.token, coalesce(x.scope, 'self'), x.owner_id, x.target_names, x.exam_ids,
@@ -1038,22 +1038,26 @@ async function backupRestore(req, res) {
              coalesce(x.created_at, now())
         from jsonb_to_recordset(${JSON.stringify(t.share_links)}::jsonb) as x(
           id bigint, token text, scope text, owner_id bigint, target_names jsonb, exam_ids bigint[],
-          expires_at timestamptz, max_views int, views int, revoked boolean, created_at timestamptz)
-      on conflict (id) do nothing`;
+          expires_at timestamptz, max_views int, views int, revoked boolean, created_at timestamptz)`);
   }
-  if (Array.isArray(t.score_config) && t.score_config.length && t.score_config[0].data) {
-    await sql`
+  if (Array.isArray(t.score_config) && t.score_config.length && t.score_config[0] && t.score_config[0].data) {
+    tx.push(sql`
       insert into score_config (id, data, updated_at)
       values (1, ${JSON.stringify(jsonCol(t.score_config[0].data))}::jsonb, now())
-      on conflict (id) do update set data = ${JSON.stringify(jsonCol(t.score_config[0].data))}::jsonb, updated_at = now()`;
+      on conflict (id) do update set data = ${JSON.stringify(jsonCol(t.score_config[0].data))}::jsonb, updated_at = now()`);
   }
-
   /* bigserial 的自增值要跟着最大 id 修，否则下次插入会撞主键 */
+  tx.push(sql`select setval(pg_get_serial_sequence('exams','id'), greatest(coalesce((select max(id) from exams), 1), 1))`);
+  tx.push(sql`select setval(pg_get_serial_sequence('exam_scores','id'), greatest(coalesce((select max(id) from exam_scores), 1), 1))`);
+  tx.push(sql`select setval(pg_get_serial_sequence('share_links','id'), greatest(coalesce((select max(id) from share_links), 1), 1))`);
+
   try {
-    await sql`select setval(pg_get_serial_sequence('exams','id'), coalesce((select max(id) from exams), 1))`;
-    await sql`select setval(pg_get_serial_sequence('exam_scores','id'), coalesce((select max(id) from exam_scores), 1))`;
-    await sql`select setval(pg_get_serial_sequence('share_links','id'), coalesce((select max(id) from share_links), 1))`;
-  } catch (e) { /* 序列修不了不致命 */ }
+    await sql.transaction(tx);
+  } catch (e) {
+    /* 事务已回滚，原数据完好 —— 把真实原因回给站主，别只说「服务器内部错误」 */
+    console.error('[restore]', e && e.stack ? e.stack : e);
+    return fail(res, 500, '还原失败（已回滚，数据没动）：' + (e && e.message ? e.message : '未知错误'));
+  }
 
   await audit(u.id, 'score-backup-restore', 'backup', 0, 'restored');
   ok(res, {
