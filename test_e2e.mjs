@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(indexHtml),
+  t('★前台版本号为 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(adminHtml),
+  t('★后台版本号为 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(indexHtml38),
+  t('★前台版本号为 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(adminHtml38),
+  t('★后台版本号为 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4497,10 +4497,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(idx47));
-  t('★后台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(adm47));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(idx47));
+  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(adm47));
   t('★service worker 缓存版本升到 v59（旧缓存要作废）',
-    /class-site-v59/.test(sw47));
+    /class-site-v60/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4584,7 +4584,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.6.6');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.6.7');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4684,9 +4684,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(idx48));
-  t('★前台更新日期已同步为 2026-10-13', /VER_DATE = '2026-10-13'/.test(idx48));
-  t('★service worker 缓存版本升到 v59', /class-site-v59/.test(sw48));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(idx48));
+  t('★前台更新日期已同步为 2026-10-14', /VER_DATE = '2026-10-14'/.test(idx48));
+  t('★service worker 缓存版本升到 v59', /class-site-v60/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -4750,10 +4750,80 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(idx49));
-  t('★后台版本号 2.6.6', /SITE_VERSION = '2\.6\.6'/.test(adm49));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(idx49));
+  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
+}
+
+console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动隐藏（v2.6.7）');
+{
+  const idx50 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+
+  /* ===== ① 三态判定函数 =====
+     站主 2026-10-14 的规则：
+       · 单点事项（无 endDate）—— 到点即结束，不再显示（「到那个地方然后就过了」）
+       · 范围事项（有 endDate）—— 区间内显示「进行中」三个字，区间结束才消失 */
+  t('★新增 impEndOf / impState / impRightText 三个判定函数',
+    /function impEndOf\(it\)\{/.test(idx50)
+    && /function impState\(it, now\)\{/.test(idx50)
+    && /function impRightText\(it, now\)\{/.test(idx50));
+
+  /* 把纯函数从页面里抽出来**真跑一遍** —— 比只 match 字符串靠谱得多。
+     这类「边界日期算错一天」的 bug 靠读代码是看不出来的。 */
+  const pickFn = (name) => {
+    const m = idx50.match(new RegExp('function ' + name + '\\([^)]*\\)\\{[\\s\\S]*?\\n\\}'));
+    if (!m) throw new Error('抽不到函数：' + name);
+    return m[0];
+  };
+  const impStateRun = new Function(
+    pickFn('impEndOf') + '\n' + pickFn('impState') + '\nreturn impState;')();
+  const D = (s) => new Date(s);
+
+  t('★单点事项 未到 → before（继续倒计时）',
+    impStateRun({ date: '2027-01-30T00:00:00' }, D('2026-10-14T13:00:00')) === 'before');
+  t('★单点事项 到点即 over（不留「0天0时0分」的尴尬）',
+    impStateRun({ date: '2026-08-31T18:00:00' }, D('2026-10-14T13:00:00')) === 'over'
+    && impStateRun({ date: '2026-10-14T08:00:00' }, D('2026-10-14T08:00:01')) === 'over');
+  t('★范围事项 区间内 → during（显示「进行中」）',
+    impStateRun({ date: '2026-10-14T08:00:00', endDate: '2026-10-15' }, D('2026-10-14T13:00:00')) === 'during');
+  /* 关键边界：结束日按 23:59:59 收尾，不是零点就结束 —— 否则最后一天下午就没了 */
+  t('★范围事项 结束日当天仍算进行中（按 23:59:59 收尾）',
+    impStateRun({ date: '2026-10-14T08:00:00', endDate: '2026-10-15' }, D('2026-10-15T23:59:00')) === 'during');
+  t('★范围事项 区间结束次日 → over（整条隐藏）',
+    impStateRun({ date: '2026-10-14T08:00:00', endDate: '2026-10-15' }, D('2026-10-16T00:10:00')) === 'over');
+  t('★范围事项 还没开始 → before',
+    impStateRun({ date: '2026-11-01T08:00:00', endDate: '2026-11-02' }, D('2026-10-14T13:00:00')) === 'before');
+  t('★只填了日期没填 endDate 的事项按单点处理（不会误判成「进行中」）',
+    impStateRun({ date: '2026-10-14T08:00:00' }, D('2026-10-14T13:00:00')) === 'over');
+
+  /* ===== ② 首页面板：已结束的整条不显示 ===== */
+  t('★首页过滤改为按 impState（不再拿「今天零点」比日期）',
+    /\.filter\(function\(d\)\{ return impState\(d, now\) !== 'over'; \}\)/.test(idx50)
+    && /d\.d >= t; \}\)/.test(idx50) === false);
+  t('★手机版主体：进行中显示「进行中」三个字',
+    /impState\(semList\[0\], now\)==='during' \? '<span class="imp-during">进行中<\/span>'/.test(idx50));
+  t('★桌面版每行复用 impRightText（两处逻辑不会各走各的）',
+    /semList\.slice\(0,4\)\.map\(function\(d\)\{[\s\S]{0,160}impRightText\(d, now\)/.test(idx50));
+  t('★首页面板带 endDate 传给判定函数（否则范围事项退化成单点）',
+    /return \{ name:d\.name, date:d\.date, endDate:d\.endDate, d:new Date\(d\.date\) \}/.test(idx50));
+
+  /* ===== ③ 全部重要日期弹窗：三态 + 保留历史 ===== */
+  t('★弹窗里进行中给「进行中」徽标、已过给「已过」徽标',
+    /imp-during-pin">进行中/.test(idx50) && /background:#6e635a">已过/.test(idx50));
+  t('★弹窗保留历史条目（只有首页面板才隐藏已结束的）',
+    /imp-right[\s\S]{0,200}imp-over">已结束/.test(idx50) || /'<span class="imp-over">已结束<\/span>'/.test(idx50));
+
+  /* ===== ④ 样式：对比度 + 动效可关 ===== */
+  t('★「进行中」颜色继承父级（不另起一套色，避免重演对比度问题）',
+    /\.imp-during\{font-weight:800;letter-spacing:\.06em\}/.test(idx50));
+  t('★状态绿点带呼吸动效，且尊重 prefers-reduced-motion',
+    /@keyframes impPulse/.test(idx50)
+    && /@media\(prefers-reduced-motion:reduce\)\{\.imp-during::before\{animation:none\}\}/.test(idx50));
+  t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
+
+  /* ===== ⑤ 版本 ===== */
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.6\.7'/.test(idx50));
 }
 
 console.log('\n' + '='.repeat(52));

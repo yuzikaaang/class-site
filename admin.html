@@ -885,8 +885,8 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.6.6';
-var VER_DATE = '2026-10-13';
+var SITE_VERSION = '2.6.7';
+var VER_DATE = '2026-10-14';
 
 /* ---- 运行时状态 ---- */
 var STATE = {
@@ -2940,9 +2940,14 @@ function classContentDialog(idx){
     var pinUntilVal = _pr.importantUntil ? isoToLocalInput(_pr.importantUntil) : '';
 
     bodyHtml =
-      '<div class="field"><label for="ccBody">公告正文 <span style="color:var(--danger)">*</span></label>'
-      + '<textarea id="ccBody" rows="6" placeholder="支持多行，保存后直接显示在班级站首页公告栏">'
-      + esc(c ? (c.body || '') : '') + '</textarea></div>'
+      '<div class="field"><label for="ccBody">公告正文 <span style="color:var(--danger)">*</span>'
+      + '<span id="ccBodyCount" style="float:right;font-weight:400;color:#8a827b"></span></label>'
+      + '<textarea id="ccBody" rows="6" placeholder="官方、简洁。一句话说清改了什么，建议 20 字以内。">'
+      + esc(c ? (c.body || '') : '') + '</textarea>'
+      /* 站主 2026-10-14：公告要官方、简洁，字越少越好。
+         同学看公告只关心「有什么变化」，过程和不必要的语气都该省掉。 */
+      + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">面向全班，<b>字越少越好</b>：说清「改了什么」即可，不必解释过程，不用语气词、感叹号。</p>'
+      + '</div>'
       + '<div class="field"><label for="ccCat">分类</label>'
       + '<select id="ccCat">'
       + ANN_CATS.map(function(k){
@@ -3019,6 +3024,20 @@ function classContentDialog(idx){
     onMount: function(box){
       box.querySelector('[data-cc-cancel]').onclick = closeModal;
       var msg = box.querySelector('#ccMsg');
+
+      /* 公告正文实时字数（站主 2026-10-14：公告要官方简洁，字越少越好）
+         超过 40 字变橙，提示「该收了」—— 但只是提示，不拦保存。 */
+      var bodyTa = box.querySelector('#ccBody');
+      var bodyCnt = box.querySelector('#ccBodyCount');
+      if(bodyTa && bodyCnt){
+        var syncBodyCnt = function(){
+          var n = bodyTa.value.trim().length;
+          bodyCnt.textContent = n ? (n + ' 字') : '';
+          bodyCnt.style.color = (n > 40) ? '#b45309' : '#8a827b';
+        };
+        bodyTa.addEventListener('input', syncBodyCnt);
+        syncBodyCnt();
+      }
 
       /* ================= 公告：置顶方式切换 ================= */
       var pinSel = box.querySelector('#ccPin');

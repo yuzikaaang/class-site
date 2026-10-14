@@ -668,6 +668,15 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .imp-fold:active{transform:scale(0.98)}
 .imp-fold-name{font-size:.72rem;opacity:.85;margin-bottom:3px}
 .imp-fold-main{font-size:.92rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:-0.01em}
+/* 「进行中」（v2.6.7）：范围类事项进入区间后不再显示倒计时数字，改显示「进行中」。
+   颜色一律继承父级，避免又踩对比度的坑；前面那颗绿点是状态标识，亮暗底上都看得见。 */
+.imp-during{font-weight:800;letter-spacing:.06em}
+.imp-during::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:#22c55e;margin-right:5px;vertical-align:1px;animation:impPulse 1.6s ease-in-out infinite}
+@keyframes impPulse{0%,100%{opacity:1}50%{opacity:.32}}
+@media(prefers-reduced-motion:reduce){.imp-during::before{animation:none}}
+.imp-during-pin{background:#047857!important}
+.imp-over{opacity:.55;font-weight:700}
 .imp-desktop ul{flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px}
 .imp-desktop ul li{background:rgba(255,255,255,.18);border-radius:12px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
 @media(min-width:1024px){
@@ -2508,8 +2517,8 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.6.6';
-var VER_DATE = '2026-10-13';
+var SITE_VERSION = '2.6.7';
+var VER_DATE = '2026-10-14';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
   gitee:  'https://gitee.com/zikang0529/class-site',
@@ -4632,13 +4641,38 @@ function impRemainFold(target, from){
   var m = Math.floor((sec%3600)/60);
   return d+'天 '+h+'时 '+m+'分';
 }
+/* 重要日期的结束时刻：
+   单日事项 = 它自己的时刻；范围事项（填了 endDate）= 结束日的 23:59:59 */
+function impEndOf(it){
+  return it.endDate ? new Date(it.endDate + 'T23:59:59') : new Date(it.date);
+}
+/* 一条重要日期此刻的状态（站主 2026-10-14 定的规则）：
+     'before' 未开始 —— 正常显示倒计时
+     'during' 进行中 —— 范围事项已进入区间，显示「进行中」三个字
+     'over'   已结束 —— 倒计时面板直接隐藏，不再占位
+   单日事项没有「进行中」：到点即结束（「到那个地方然后就过了」）。
+   范围事项必须有 endDate 才有「进行中」，否则按单日处理。 */
+function impState(it, now){
+  var start = new Date(it.date);
+  var end = impEndOf(it);
+  if(now.getTime() > end.getTime()) return 'over';
+  if(it.endDate && now.getTime() >= start.getTime()) return 'during';
+  return 'before';
+}
+/* 右侧文案：进行中 → 三个字；否则 → 精确到秒的倒计时 */
+function impRightText(it, now){
+  if(impState(it, now) === 'during') return '<span class="imp-during">进行中</span>';
+  var f = calendarDiff(new Date(it.date), now);
+  return f.months+'月 '+f.days+'天 '+pad2(f.hours)+'时 '+pad2(f.minutes)+'分 '+pad2(f.seconds)+'秒';
+}
 function updateCountdown(){
   var box = document.getElementById('countdown');
   if(!box) return;
   var now = new Date();
-  var semList = IMPORTANT_DATES.map(function(d){ return { name:d.name, date:d.date, d:new Date(d.date) }; })
+  /* 只保留「未开始 / 进行中」，已结束的整条从首页面板消失 */
+  var semList = IMPORTANT_DATES.map(function(d){ return { name:d.name, date:d.date, endDate:d.endDate, d:new Date(d.date) }; })
     .sort(function(a,b){ return a.d - b.d; })
-    .filter(function(d){ var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); return d.d >= t; });
+    .filter(function(d){ return impState(d, now) !== 'over'; });
   var semHtml = '<div class="cd-sem">' +
     '<div class="cd-head">'+iconSvg('calendar',15)+' 重要日期倒计时<span class="cd-viewall" onclick="openAllImp()" style="cursor:pointer">查看全部</span></div>' +
     (semList.length === 0 ? '<div class="cd-empty">暂无重要日期</div>' :
@@ -4646,15 +4680,14 @@ function updateCountdown(){
         '<div class="imp-area">' +
           '<div class="imp-fold" onclick="openAllImp()" tabindex="0" role="button" aria-label="查看全部重要日期">' +
             '<div class="imp-fold-name">'+esc(semList[0].name)+'</div>'+
-            '<div class="imp-fold-main">'+impRemainFold(semList[0].d, now)+'</div>'+
+            '<div class="imp-fold-main">'+(impState(semList[0], now)==='during' ? '<span class="imp-during">进行中</span>' : impRemainFold(semList[0].d, now))+'</div>'+
           '</div>' +
         '</div>' +
       '</div>' +
       '<div class="imp-desktop">' +
         '<ul>' +
         semList.slice(0,4).map(function(d){
-          var f = calendarDiff(d.d, now);
-          return '<li class="imp-desk-row"><span class="cd-name">'+esc(d.name)+'</span><span class="imp-full">'+f.months+'月 '+f.days+'天 '+pad2(f.hours)+'时 '+pad2(f.minutes)+'分 '+pad2(f.seconds)+'秒</span></li>';
+          return '<li class="imp-desk-row"><span class="cd-name">'+esc(d.name)+'</span><span class="imp-full">'+impRightText(d, now)+'</span></li>';
         }).join('') +
         '</ul>' +
       '</div>'
@@ -9743,20 +9776,25 @@ function renderAllImp(){
   })
     .sort(function(a,b){ return a.d - b.d; });
   list.innerHTML = arr.map(function(d){
-    var diff = calendarDiff(d.d, now);
-    var isPast = d.d < today;
+    /* 三种状态（v2.6.7）：未开始→倒计时；进行中→「进行中」；已结束→「已结束」。
+       列表里保留历史条目（带「已过」标记），只有首页那个小面板才会把已结束的整条隐去。 */
+    var st = impState(d, now);
     /* 日期行：跨天的事项（如段考 13—14 日）显示区间，单日的照旧显示完整时间 */
     var dateText = d.endDate
       ? fmtDayCn(new Date(d.date)) + ' — ' + fmtDayCn(new Date(d.endDate + 'T00:00:00'))
       : fmtFullDate(d.d);
+    var badge = st === 'during'
+      ? '<span class="board-pin imp-during-pin">进行中</span>'
+      : (st === 'over' ? '<span class="board-pin" style="background:#6e635a">已过</span>' : '');
+    var right = st === 'during' ? '<span class="imp-during">进行中</span>'
+      : (st === 'over' ? '<span class="imp-over">已结束</span>' : impRightText(d, now));
     return '<li>'+
       '<div class="board-meta">'+
-        '<span class="board-date">'+esc(d.name)+'</span>'+
-        (isPast ? '<span class="board-pin" style="background:#6e635a">已过</span>' : '')+
+        '<span class="board-date">'+esc(d.name)+'</span>'+ badge +
       '</div>'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">'+
         '<span class="imp-date" style="font-size:.78rem">'+esc(dateText)+'</span>'+
-        '<span class="imp-remain" style="font-size:.85rem;font-weight:800;white-space:nowrap">'+(isPast?'0月 0天 0时 0分 0秒':diff.months+'月 '+diff.days+'天 '+pad2(diff.hours)+'时 '+pad2(diff.minutes)+'分 '+pad2(diff.seconds)+'秒')+'</span>'+
+        '<span class="imp-remain" style="font-size:.85rem;font-weight:800;white-space:nowrap">'+right+'</span>'+
       '</div>'+
       /* 只有配了 scope 的事项才有这个入口，普通日期不会出现多余的按钮 */
       (d.scope && d.scope.length
