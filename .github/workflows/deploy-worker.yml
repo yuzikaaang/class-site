@@ -108,7 +108,11 @@ jobs:
           # 用 sed 替换而不是追加：wrangler.toml 的 [vars] 里已有 BUILD_SHA = "local"，
           # 同表追加重复键是非法 TOML，实测旧值会赢（2026-10-06 首跑踩坑：部署成功但
           # x-build-sha 停在 local）。替换 49 行那处定义，保持键唯一。
-          sed -i "s/^BUILD_SHA = \"local\"$/BUILD_SHA = \"$SHA\"/" wrangler.toml
+          # 用宽松匹配（行首 BUILD_SHA、任意空格、替换整行），
+          # 免得哪天 wrangler.toml 那行被改动（多一个空格、换个默认值）
+          # 就静默匹配不上 —— 那种情况下部署会「成功」但 build 标记停在旧值，
+          # 回查步骤报失败，看日志还得猜半天（2026-10-14 踩过）。
+          sed -i -E "s|^BUILD_SHA[[:space:]]*=.*$|BUILD_SHA = \"$SHA\"|" wrangler.toml
           echo "$SHA" > /tmp/build_sha.txt
           grep -n 'BUILD_SHA' wrangler.toml
 
