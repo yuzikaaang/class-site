@@ -2704,7 +2704,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.9.0';
+var SITE_VERSION = '2.9.1';
 var VER_DATE = '2026-10-14';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -12742,17 +12742,23 @@ function scWatchList(){
 function scTailRank(){
   var mode = scAllowed('tailRank');
   if(mode === 'hide') return '';
-  var items = SC.me || [];
+  /* 优先用「我的历次成绩」这条链（学生只拿得到自己的，也最省请求）；
+     站主账号本身没有学生成绩时，退回用考试列表 —— 站主照样能看全班进退步。 */
+  var items = (SC.me && SC.me.length >= 2)
+    ? SC.me
+    : (SC.exams || []).slice().sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  var eidOf = function(x){ return x.examId != null ? x.examId : x.id; };
+
   if(items.length < 2 || !SC.allRows){
     return '<div class="sc-card sc-card-admin"><div class="sc-card-h">进退步榜<span class="sc-only-admin">仅站主可见</span></div>'
       + '<div class="sc-dim" style="padding:4px 0 10px">要和上一次考试比，得先把历次成绩读一遍（一次就够）。</div>'
       + '<button class="btn btn-sm" onclick="scLoadAllRows()">开始计算</button></div>';
   }
   var idx = -1;
-  for(var i = 0; i < items.length; i++) if(items[i].examId === SC.exam.id) idx = i;
+  for(var i = 0; i < items.length; i++) if(eidOf(items[i]) === SC.exam.id) idx = i;
   if(idx < 1) return '';
-  var cur = scTotalsOf(SC.allRows[items[idx].examId]);
-  var prev = scTotalsOf(SC.allRows[items[idx - 1].examId]);
+  var cur = scTotalsOf(SC.allRows[eidOf(items[idx])]);
+  var prev = scTotalsOf(SC.allRows[eidOf(items[idx - 1])]);
   if(!Object.keys(cur).length || !Object.keys(prev).length) return '';
 
   /* 名次变化比分数变化更公平（卷子难度不同） */

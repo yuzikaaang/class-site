@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.9\.0'/.test(indexHtml),
+  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.9\.1'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.9\.0'/.test(adminHtml),
+  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.9\.1'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.9\.0'/.test(indexHtml38),
+  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.9\.1'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.9\.0'/.test(adminHtml38),
+  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.9\.1'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4498,10 +4498,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx47));
-  t('★后台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(adm47));
-  t('★service worker 缓存版本升到 v69（旧缓存要作废）',
-    /class-site-v69/.test(sw47));
+  t('★前台版本号 2.9.1', /SITE_VERSION = '2\.9\.1'/.test(idx47));
+  t('★后台版本号 2.9.1', /SITE_VERSION = '2\.9\.1'/.test(adm47));
+  t('★service worker 缓存版本升到 v70（旧缓存要作废）',
+    /class-site-v70/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4585,7 +4585,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.0');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.1');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4685,9 +4685,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx48));
+  t('★前台版本号 2.9.1', /SITE_VERSION = '2\.9\.1'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-14', /VER_DATE = '2026-10-14'/.test(idx48));
-  t('★service worker 缓存版本升到 v69', /class-site-v69/.test(sw48));
+  t('★service worker 缓存版本升到 v70', /class-site-v70/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -4751,8 +4751,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx49));
-  t('★后台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(adm49));
+  t('★前台版本号 2.9.1', /SITE_VERSION = '2\.9\.1'/.test(idx49));
+  t('★后台版本号 2.9.1', /SITE_VERSION = '2\.9\.1'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -4824,7 +4824,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx50));
+  t('★前台版本号 2.9.1', /SITE_VERSION = '2\.9\.1'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -4979,7 +4979,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(adm));
+  t('★后台版本号 2.9.1', /SITE_VERSION = '2\.9\.1'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5024,7 +5024,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx));
+  t('★前台版本号 2.9.1', /SITE_VERSION = '2\.9\.1'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5147,7 +5147,8 @@ console.log('\n【57】第四十八轮·站主侧五件套 + 三档开关（v2.8
   /* ===== ④ 进退步榜：比名次不比分数 ===== */
   t('★有「比的是名次不是分数」的说明', /比的是<b>名次<\/b>不是分数/.test(idx));
   t('★名次并列处理（同分同名次）', /if\(last === null \|\| x\.v !== last\)\{ k = i \+ 1; last = x\.v; \}/.test(idx));
-  t('★依赖历次成绩（懒加载）', /scTotalsOf\(SC\.allRows\[items\[idx - 1\]\.examId\]\)/.test(idx));
+  t('★依赖历次成绩（懒加载）', /scTotalsOf\(SC\.allRows\[eidOf\(items\[idx - 1\]\)\]\)/.test(idx)
+    && /var eidOf = function\(x\)\{ return x\.examId != null \? x\.examId : x\.id; \};/.test(idx));
 
   /* ===== ⑤ 四象限 / 热力图 ===== */
   t('★四象限十字线＝两条班均', /十字＝班均/.test(idx));
@@ -5246,6 +5247,18 @@ console.log('\n【58】第四十九轮·分享链接 + 每日备份（v2.9.0）'
   t('★还原后修 bigserial 序列（否则下次插入撞主键）',
     /setval\(pg_get_serial_sequence\('exams','id'\)/.test(sc));
   t('★备份含内容数据（公告 / 作业 等 user_data）', /from user_data order by user_id, data_key/.test(sc));
+
+  /* ===== ④.5 【演练抓到的真 bug】批量写入（Workers 免费版 50 子请求上限） ===== */
+  t('★还原用批量插入（jsonb_to_recordset），不再逐条 insert',
+    /jsonb_to_recordset\(\$\{JSON\.stringify\(t\.exams\)\}/.test(sc)
+    && /jsonb_to_recordset\(\$\{JSON\.stringify\(t\.exam_scores\)\}/.test(sc));
+  t('★还原不再有「逐条 for 循环 insert」', /for \(const e of t\.exams\)/.test(sc) === false
+    && /for \(const r of \(t\.exam_scores \|\| \[\]\)\)/.test(sc) === false);
+  t('★改分也改批量 upsert（块粘贴几十行不会 500）',
+    /update exam_scores t\s*\n\s*set student_name = x\.student_name/.test(sc)
+    && /left join \(select id as uid, display_name from users where status = 'active'\) y/.test(sc));
+  t('★代码里写明了 50 子请求上限的原因（防后人改回去）',
+    /每个请求最多 50 个子请求/.test(sc));
 
   /* ===== ⑤ 备份：定时任务 + 前端 ===== */
   t('★worker 有 scheduled（Cron 自动备份）', /async scheduled\(event, env, ctx\)/.test(wk));

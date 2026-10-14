@@ -489,34 +489,54 @@ async function scoresSave(req, res) {
   if (!ex.length) return fail(res, 404, '该考试不存在或已被删除');
   const subKeys = (jsonCol(ex[0].subjects) || []).map((s) => String(s.key));
 
-  let updated = 0, inserted = 0;
-
+  /* ⚠️ 一样要批量：Workers 免费版每请求上限 50 个子请求，
+     逐条 update 的话「块粘贴」几十行就会 500。分两批：有 id 的整批更新、没 id 的整批新增。 */
+  const upd = [], ins = [];
   for (const r of rows) {
     const id = Number(r.id || 0);
     const name = String(r.name || '').trim();
     if (!name) continue;
+    const item = {
+      id,
+      student_name: name,
+      student_no: String(r.no || '').trim().slice(0, 30) || null,
+      scores: cleanScores(r.s, subKeys),
+      school_rank: toIntOrNull(r.schoolRank),
+      league_rank: toIntOrNull(r.leagueRank),
+      note: String(r.note || '').trim().slice(0, MAX_NOTE) || null,
+    };
+    if (id) upd.push(item); else ins.push(item);
+  }
 
-    const s = cleanScores(r.s, subKeys);
-    const no = String(r.no || '').trim().slice(0, 30) || null;
-    const sr = toIntOrNull(r.schoolRank);
-    const lr = toIntOrNull(r.leagueRank);
-    const nt = String(r.note || '').trim().slice(0, MAX_NOTE) || null;
+  let updated = 0, inserted = 0;
 
-    if (id) {
-      await sql`
-        update exam_scores
-           set student_name = ${name}, student_no = ${no}, scores = ${JSON.stringify(s)}::jsonb,
-               school_rank = ${sr}, league_rank = ${lr}, note = ${nt}, updated_at = now()
-         where id = ${id} and exam_id = ${examId}`;
-      updated++;
-    } else {
-      /* 新增行（比如中途转来的同学）——顺手按姓名绑账号 */
-      const uid = await matchUserId(sql, name);
-      await sql`
-        insert into exam_scores (exam_id, student_name, student_no, user_id, scores, school_rank, league_rank, note)
-        values (${examId}, ${name}, ${no}, ${uid}, ${JSON.stringify(s)}::jsonb, ${sr}, ${lr}, ${nt})`;
-      inserted++;
-    }
+  if (upd.length) {
+    const back = await sql`
+      update exam_scores t
+         set student_name = x.student_name, student_no = x.student_no,
+             scores = coalesce(x.scores, '{}'::jsonb),
+             school_rank = x.school_rank, league_rank = x.league_rank,
+             note = x.note, updated_at = now()
+        from jsonb_to_recordset(${JSON.stringify(upd)}::jsonb) as x(
+          id bigint, student_name text, student_no text, scores jsonb,
+          school_rank int, league_rank int, note text)
+       where t.id = x.id and t.exam_id = ${examId}
+      returning t.id`;
+    updated = back.length;
+  }
+
+  if (ins.length) {
+    /* 新增行（比如中途转来的同学）——一条 SQL 里顺便按姓名绑上站点账号 */
+    const back = await sql`
+      insert into exam_scores (exam_id, user_id, student_name, student_no, scores, school_rank, league_rank, note)
+      select ${examId}, y.uid, x.student_name, x.student_no,
+             coalesce(x.scores, '{}'::jsonb), x.school_rank, x.league_rank, x.note
+        from jsonb_to_recordset(${JSON.stringify(ins)}::jsonb) as x(
+          student_name text, student_no text, scores jsonb, school_rank int, league_rank int, note text)
+        left join (select id as uid, display_name from users where status = 'active') y
+               on y.display_name = x.student_name
+      returning id`;
+    inserted = back.length;
   }
 
   await audit(u.id, 'score-save', 'exam', examId, `更新 ${updated} 行 / 新增 ${inserted} 行`);
@@ -953,28 +973,49 @@ async function backupRestore(req, res) {
   await sql`delete from share_links`;
   await sql`delete from exams`;
 
-  for (const e of t.exams) {
+  /* ⚠️ 必须**批量**插入，不能逐条 insert。
+     Cloudflare Workers 免费版每个请求最多 50 个子请求，而 Neon 的每次查询
+     就是一次子请求 —— 逐条插入 121 条成绩会直接超限。
+     （2026-10-14 还原演练实测：只插进去 37 条就 500 了。
+       这就是「做了备份也要真演练一次」的意义 —— 不演练永远发现不了。）
+     改用 jsonb_to_recordset，两条 SQL 灌完。 */
+  if (t.exams.length) {
     await sql`
       insert into exams (id, name, exam_date, exam_end_date, exam_type, subjects, cutlines,
                          grade_ref, note, status, published_at, created_by, created_at, updated_at)
-      values (${e.id}, ${e.name}, ${e.exam_date}, ${e.exam_end_date || null}, ${e.exam_type || null},
-              ${JSON.stringify(jsonCol(e.subjects) || [])}::jsonb,
-              ${JSON.stringify(jsonCol(e.cutlines) || [])}::jsonb,
-              ${e.grade_ref ? JSON.stringify(jsonCol(e.grade_ref)) : null}::jsonb,
-              ${e.note || null}, ${e.status || 'draft'},
-              ${e.published_at || null}, ${e.created_by || null},
-              ${e.created_at || new Date()}, ${e.updated_at || new Date()})
+      select x.id, x.name, x.exam_date, x.exam_end_date, x.exam_type,
+             coalesce(x.subjects, '[]'::jsonb), coalesce(x.cutlines, '[]'::jsonb),
+             x.grade_ref, x.note, coalesce(x.status, 'draft'),
+             x.published_at, x.created_by, coalesce(x.created_at, now()), coalesce(x.updated_at, now())
+        from jsonb_to_recordset(${JSON.stringify(t.exams)}::jsonb) as x(
+          id bigint, name text, exam_date date, exam_end_date date, exam_type text,
+          subjects jsonb, cutlines jsonb, grade_ref jsonb, note text, status text,
+          published_at timestamptz, created_by bigint, created_at timestamptz, updated_at timestamptz)
       on conflict (id) do nothing`;
   }
-  for (const r of (t.exam_scores || [])) {
+  if (Array.isArray(t.exam_scores) && t.exam_scores.length) {
     await sql`
       insert into exam_scores (id, exam_id, user_id, student_name, student_no, scores,
                                school_rank, league_rank, note, created_at, updated_at)
-      values (${r.id}, ${r.exam_id}, ${r.user_id || null}, ${r.student_name}, ${r.student_no || null},
-              ${JSON.stringify(jsonCol(r.scores) || {})}::jsonb,
-              ${r.school_rank == null ? null : r.school_rank},
-              ${r.league_rank == null ? null : r.league_rank},
-              ${r.note || null}, ${r.created_at || new Date()}, ${r.updated_at || new Date()})
+      select x.id, x.exam_id, x.user_id, x.student_name, x.student_no,
+             coalesce(x.scores, '{}'::jsonb), x.school_rank, x.league_rank,
+             x.note, coalesce(x.created_at, now()), coalesce(x.updated_at, now())
+        from jsonb_to_recordset(${JSON.stringify(t.exam_scores)}::jsonb) as x(
+          id bigint, exam_id bigint, user_id bigint, student_name text, student_no text,
+          scores jsonb, school_rank int, league_rank int, note text,
+          created_at timestamptz, updated_at timestamptz)
+      on conflict (id) do nothing`;
+  }
+  if (Array.isArray(t.share_links) && t.share_links.length) {
+    await sql`
+      insert into share_links (id, token, scope, owner_id, target_names, exam_ids,
+                               expires_at, max_views, views, revoked, created_at)
+      select x.id, x.token, coalesce(x.scope, 'self'), x.owner_id, x.target_names, x.exam_ids,
+             x.expires_at, x.max_views, coalesce(x.views, 0), coalesce(x.revoked, false),
+             coalesce(x.created_at, now())
+        from jsonb_to_recordset(${JSON.stringify(t.share_links)}::jsonb) as x(
+          id bigint, token text, scope text, owner_id bigint, target_names jsonb, exam_ids bigint[],
+          expires_at timestamptz, max_views int, views int, revoked boolean, created_at timestamptz)
       on conflict (id) do nothing`;
   }
   if (Array.isArray(t.score_config) && t.score_config.length && t.score_config[0].data) {
