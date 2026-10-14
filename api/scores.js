@@ -602,7 +602,10 @@ function normalizeCutlines(raw) {
     out.push({
       key: String(c.key || label).trim().slice(0, 20),
       label,
-      score: Number.isFinite(score) ? Math.round(score) : null,
+      /* ⚠️ 分数线必须支持小数 —— 真实划线经常是半分（例：本科线 361.5）。
+         所以这里只保留一位小数、**不取整**，否则 361.5 会被悄悄变成 362，
+         上线人数就跟着算错一个人。 */
+      score: (Number.isFinite(score) && score >= 0 && score <= 1500) ? Math.round(score * 10) / 10 : null,
       color: /^#[0-9a-fA-F]{3,8}$/.test(String(c.color || '')) ? String(c.color) : '#b45309',
     });
     if (out.length >= MAX_CUTLINES) break;

@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(indexHtml),
+  t('★前台版本号为 2.7.3', /SITE_VERSION = '2\.7\.3'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(adminHtml),
+  t('★后台版本号为 2.7.3', /SITE_VERSION = '2\.7\.3'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(indexHtml38),
+  t('★前台版本号为 2.7.3', /SITE_VERSION = '2\.7\.3'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(adminHtml38),
+  t('★后台版本号为 2.7.3', /SITE_VERSION = '2\.7\.3'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4498,10 +4498,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(idx47));
-  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(adm47));
-  t('★service worker 缓存版本升到 v63（旧缓存要作废）',
-    /class-site-v63/.test(sw47));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(idx47));
+  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(adm47));
+  t('★service worker 缓存版本升到 v64（旧缓存要作废）',
+    /class-site-v64/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4585,7 +4585,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.7.2');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.7.3');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4685,9 +4685,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(idx48));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-14', /VER_DATE = '2026-10-14'/.test(idx48));
-  t('★service worker 缓存版本升到 v63', /class-site-v63/.test(sw48));
+  t('★service worker 缓存版本升到 v64', /class-site-v64/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -4751,8 +4751,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(idx49));
-  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(adm49));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(idx49));
+  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -4824,7 +4824,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.2'/.test(idx50));
+  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -4979,7 +4979,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(adm));
+  t('★后台版本号 2.7.2', /SITE_VERSION = '2\.7\.3'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5024,7 +5024,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.7.2', /SITE_VERSION = '2\.7\.2'/.test(idx));
+  t('★前台版本号 2.7.2', /SITE_VERSION = '2\.7\.3'/.test(idx));
 }
 
 console.log('\n' + '='.repeat(52));

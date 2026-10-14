@@ -2623,7 +2623,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.7.2';
+var SITE_VERSION = '2.7.3';
 var VER_DATE = '2026-10-14';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -11694,7 +11694,7 @@ function scRenderMe(){
           return '<div class="sc-cutmine ' + (ok ? 'ok' : 'no') + '">'
             + '<span class="sc-cut-dot" style="background:' + esc(c.color || '#b45309') + '"></span>'
             + '<b>' + esc(c.label) + '</b>'
-            + '<span>' + (ok ? '已超 ' + d + ' 分' : '还差 ' + d + ' 分') + '</span>'
+            + '<span>' + (ok ? '已超 ' + fmtNum(d) + ' 分' : '还差 ' + fmtNum(d) + ' 分') + '</span>'
             + '</div>';
         }).join('')
       + '</div></div>';
@@ -11732,7 +11732,7 @@ function scRenderMe(){
           +   '<span class="sc-sub-rk">' + (sr ? '班内第 ' + sr + ' / ' + cnt : '—') + '</span></div>'
           + '<div class="sc-sub-score">' + (v == null ? '<span class="sc-dim">未考</span>' : v + '<small>/' + s.full + '</small>') + '</div>'
           + (v == null ? '' : '<div class="sc-sub-diff ' + (v - avg >= 0 ? 'up' : 'down') + '">'
-              + (v - avg >= 0 ? '高于班均 ' : '低于班均 ') + Math.abs(v - avg).toFixed(1) + ' 分</div>')
+              + (v - avg >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(v - avg)) + ' 分</div>')
           + (rate == null ? '' : '<div class="sc-sub-bar"><i style="width:' + (rate * 100).toFixed(1) + '%"></i></div>')
           + '</div>';
       }).join('')
@@ -11769,7 +11769,14 @@ function scOvItem(k, v){
 }
 function fmtDiff(d){
   var s = d >= 0 ? '+' : '−';
-  return s + Math.abs(d).toFixed(1);
+  return s + fmtNum(Math.abs(d), 1);
+}
+/* 数字显示：整数不带小数点，非整数最多留一位（避免 12.499999 这种浮点尾巴） */
+function fmtNum(v, maxDec){
+  if(v == null || !isFinite(v)) return '—';
+  var d = maxDec == null ? 1 : maxDec;
+  var r = Math.round(v * Math.pow(10, d)) / Math.pow(10, d);
+  return (Math.abs(r - Math.round(r)) < 1e-9) ? String(Math.round(r)) : String(r);
 }
 
 /* 雷达图（纯 SVG） */
