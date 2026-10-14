@@ -290,7 +290,8 @@ create index if not exists pvl_time_idx   on profile_view_log (created_at desc);
 create table if not exists exams (
   id           bigserial   primary key,
   name         text        not null,                     -- 考试名称（趋势图上的标签）
-  exam_date    date        not null,                     -- 考试时间（趋势与进退步全靠它排序）
+  exam_date    date        not null,                     -- 考试开始日（趋势与进退步全靠它排序）
+  exam_end_date date,                                    -- 考试结束日（跨天联考才填；空＝只考一天）
   exam_type    text,                                     -- 全校联考 / 校际联考 / 月考 / 期中 / 期末
   subjects     jsonb       not null default '[]'::jsonb,  -- [{key,name,full,graded}]
   cutlines     jsonb       not null default '[]'::jsonb,  -- [{key,label,score,color}]，score 空 = 本次没公布

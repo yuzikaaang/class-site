@@ -885,7 +885,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.7.3';
+var SITE_VERSION = '2.7.4';
 var VER_DATE = '2026-10-14';
 
 /* ---- 运行时状态 ---- */
@@ -8478,6 +8478,14 @@ var SC_STATE = {
 };
 
 /* ---------------- 入口 ---------------- */
+/* 考试日期的显示文案：跨天显示成 2026-05-14 ~ 05-15 */
+function scDateTxt(e){
+  if(!e) return '';
+  var a = e.date || '', b = e.endDate || '';
+  if(!b || b === a) return a;
+  return a.slice(0, 4) === b.slice(0, 4) ? (a + ' ~ ' + b.slice(5)) : (a + ' ~ ' + b);
+}
+
 function renderScores(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel)">'
@@ -8551,7 +8559,7 @@ function scExamCard(e){
     +       (n ? '' : '<span class="badge badge-gray">还没有成绩</span>')
     +     '</div>'
     +     '<p class="muted" style="margin:5px 0 0;font-size:.8rem">'
-    +       esc(e.date) + (e.type ? ' · ' + esc(e.type) : '') + ' · ' + n + ' 人'
+    +       esc(scDateTxt(e)) + (e.type ? ' · ' + esc(e.type) : '') + ' · ' + n + ' 人'
     +       (cuts.length ? '<br>分数线：' + cuts.map(function(c){
               return esc(c.label) + ' ' + c.score;
             }).join(' ／ ') : '<br>分数线：本次未填')
@@ -8634,9 +8642,11 @@ function scEditExam(id){
         '<div class="field"><label>考试名称 <span style="color:var(--danger)">*</span></label>'
       +   '<input id="scName" maxlength="60" placeholder="例：高二上·第一次段考" value="' + esc(e ? e.name : '') + '"></div>'
       + '<div style="display:flex;gap:12px;flex-wrap:wrap">'
-      +   '<div class="field" style="flex:1;min-width:150px"><label>考试时间 <span style="color:var(--danger)">*</span></label>'
+      +   '<div class="field" style="flex:1;min-width:140px"><label>考试开始 <span style="color:var(--danger)">*</span></label>'
       +     '<input id="scDate" type="date" value="' + esc(e ? e.date : today) + '"></div>'
-      +   '<div class="field" style="flex:1;min-width:150px"><label>考试类型</label>'
+      +   '<div class="field" style="flex:1;min-width:140px"><label>结束日期（不跨天就留空）</label>'
+      +     '<input id="scEndDate" type="date" value="' + esc(e && e.endDate ? e.endDate : '') + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:140px"><label>考试类型</label>'
       +     '<select id="scType">' + types.map(function(t){
               return '<option value="' + esc(t) + '"' + (e && e.type === t ? ' selected' : '') + '>' + esc(t) + '</option>';
             }).join('') + '</select></div>'
@@ -8730,7 +8740,14 @@ function scCollectExam(box){
   var name = (box.querySelector('#scName').value || '').trim();
   if(!name){ toast('请填考试名称', 'err'); return null; }
   var date = (box.querySelector('#scDate').value || '').trim();
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ toast('请选考试时间', 'err'); return null; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ toast('请选考试开始日期', 'err'); return null; }
+  /* 跨天考试：结束日期可空；填了就不能早于开始日 */
+  var endDate = (box.querySelector('#scEndDate').value || '').trim();
+  if(endDate){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(endDate)){ toast('结束日期格式不对', 'err'); return null; }
+    if(endDate < date){ toast('结束日期不能早于开始日期', 'err'); return null; }
+    if(endDate === date) endDate = '';
+  }
 
   var subjects = [];
   Array.prototype.forEach.call(box.querySelectorAll('.sc-subj'), function(el){
@@ -8772,6 +8789,7 @@ function scCollectExam(box){
   return {
     name: name,
     exam_date: date,
+    exam_end_date: endDate || '',
     exam_type: box.querySelector('#scType').value || '',
     subjects: subjects,
     cutlines: cutlines,

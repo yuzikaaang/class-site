@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.7.3', /SITE_VERSION = '2\.7\.3'/.test(indexHtml),
+  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.3', /SITE_VERSION = '2\.7\.3'/.test(adminHtml),
+  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.7.3', /SITE_VERSION = '2\.7\.3'/.test(indexHtml38),
+  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.3', /SITE_VERSION = '2\.7\.3'/.test(adminHtml38),
+  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4498,10 +4498,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(idx47));
-  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(adm47));
-  t('★service worker 缓存版本升到 v64（旧缓存要作废）',
-    /class-site-v64/.test(sw47));
+  t('★前台版本号 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(idx47));
+  t('★后台版本号 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(adm47));
+  t('★service worker 缓存版本升到 v65（旧缓存要作废）',
+    /class-site-v65/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4585,7 +4585,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.7.3');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.7.4');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4685,9 +4685,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(idx48));
+  t('★前台版本号 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-14', /VER_DATE = '2026-10-14'/.test(idx48));
-  t('★service worker 缓存版本升到 v64', /class-site-v64/.test(sw48));
+  t('★service worker 缓存版本升到 v65', /class-site-v65/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -4751,8 +4751,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(idx49));
-  t('★后台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(adm49));
+  t('★前台版本号 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(idx49));
+  t('★后台版本号 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -4824,7 +4824,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.6.7', /SITE_VERSION = '2\.7\.3'/.test(idx50));
+  t('★前台版本号 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -4979,7 +4979,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.7.2', /SITE_VERSION = '2\.7\.3'/.test(adm));
+  t('★后台版本号 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5024,7 +5024,49 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.7.2', /SITE_VERSION = '2\.7\.3'/.test(idx));
+  t('★前台版本号 2.7.4', /SITE_VERSION = '2\.7\.4'/.test(idx));
+}
+
+console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const sc  = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
+  const http= fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+
+  /* ===== ① 表头 / 姓名列吸附（手机上横向拖动不会看错行） ===== */
+  t('★表格容器可纵向滚动（sticky 生效的前提）', /\.sc-tblwrap\{max-height:min\(60vh,460px\);overflow:auto/.test(idx));
+  t('★表头 sticky 吸顶', /\.sc-tbl th\{position:sticky;top:0;z-index:3/.test(idx));
+  t('★班排列吸附左侧', /\.sc-tbl th:nth-child\(1\),\.sc-tbl td:nth-child\(1\)\{position:sticky;left:0/.test(idx));
+  t('★姓名列吸附在其右侧（left:46px）', /\.sc-tbl th:nth-child\(2\),\.sc-tbl td:nth-child\(2\)\{position:sticky;left:46px/.test(idx));
+  t('★表头两列 z-index 更高（压住滚动内容）', /th:nth-child\(1\),\.sc-tbl th:nth-child\(2\)\{z-index:4/.test(idx));
+  t('★吸附单元格有不透明背景（否则会透出后面的字）',
+    /\.sc-tbl td\{[^}]*background:#fff/.test(idx));
+  t('★「我」那一行的吸附背景也跟着高亮', /\.sc-tbl \.sc-me-row td\{background:#fff8f2\}/.test(idx));
+  t('★窄屏给了更矮的表体高度', /@media \(max-width:560px\)\{\s*\.sc-tblwrap\{max-height:56vh\}/.test(idx));
+  t('★顺手把 border-collapse 改成 separate（collapse 下 sticky 边框会丢）',
+    /\.sc-tbl\{width:100%;border-collapse:separate/.test(idx));
+
+  /* ===== ② 考试一律按时间排序 ===== */
+  t('★前端对考试列表按日期重排（最近的在前）',
+    /SC\.exams = \(j\.exams \|\| \[\]\)\.slice\(\)\.sort\(function\(a, b\)\{/.test(idx));
+  t('★同一天时按 id 兜底倒序', /return \(b\.id \|\| 0\) - \(a\.id \|\| 0\)/.test(idx));
+  t('★后端 exam 列表也是按日期倒序', /order by e\.exam_date desc, e\.id desc/.test(sc));
+
+  /* ===== ③ 考试可以跨天 ===== */
+  t('★后端返回 endDate', /endDate: r\.exam_end_date \? fmtDate\(r\.exam_end_date\) : null/.test(sc));
+  t('★后端校验：结束日期不能早于开始日', /结束日期不能早于开始日期/.test(sc) && /endDate < date/.test(sc));
+  t('★同一天等于没填（自动清空）', /if \(endDate === date\) endDate = ''/.test(sc));
+  t('★建表语句带 exam_end_date', /exam_end_date date,/.test(fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8')));
+  t('★老库靠 ensureSchema 自愈加列', /alter table exams add column if not exists exam_end_date date/.test(http));
+  t('★后台表单有「结束日期」输入框', /id="scEndDate"/.test(adm) && /结束日期（不跨天就留空）/.test(adm));
+  t('★后台提交时带上 exam_end_date', /exam_end_date: endDate \|\| ''/.test(adm));
+
+  /* ===== ④ 日期范围的显示 ===== */
+  t('★前端有日期范围格式化函数', /function scDateRange\(ex\)\{/.test(idx));
+  t('★后台也有（列表里显示）', /function scDateTxt\(e\)\{/.test(adm));
+  t('★同年份时省略年份（2026-05-14 ~ 05-15）', /a\.slice\(0, 4\) === b\.slice\(0, 4\)/.test(idx));
+  t('★下拉与副标题都用它', /esc\(scDateRange\(e\)\)/.test(idx) && /esc\(scDateRange\(SC\.exam\)\)/.test(idx));
 }
 
 console.log('\n' + '='.repeat(52));

@@ -206,6 +206,8 @@ export async function ensureSchema(sql) {
         updated_at   timestamptz not null default now()
       )
     `;
+    /* 考试跨天支持（v2.7.4）：5/14—15 这种联考要能存起止。老库靠这句自愈。 */
+    await s`alter table exams add column if not exists exam_end_date date`;
     await s`create index if not exists exams_date_idx   on exams (exam_date desc, id desc)`;
     await s`create index if not exists exams_status_idx on exams (status)`;
     /* 认人按姓名（站主要求）：不建唯一索引 —— 同名同学要能各占一行，

@@ -1675,11 +1675,17 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-stat{background:#fff;border:1px solid #f0e7de;border-radius:12px;padding:9px 6px;text-align:center}
 .sc-stat b{display:block;font-size:1.05rem;color:#b45309;font-variant-numeric:tabular-nums}
 .sc-stat span{font-size:.72rem;color:#6e635a}
-.sc-tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #f0e7de;border-radius:12px;background:#fff}
-.sc-tbl{width:100%;border-collapse:collapse;font-size:.82rem;min-width:620px}
-.sc-tbl th{position:sticky;top:0;background:#fdf8f3;padding:9px 6px;font-weight:700;color:#57534e;font-size:.76rem;white-space:nowrap;border-bottom:1.5px solid #f0e7de;cursor:pointer;user-select:none}
-.sc-tbl td{padding:8px 6px;text-align:center;border-bottom:1px solid #faf5f0;font-variant-numeric:tabular-nums}
+.sc-tblwrap{max-height:min(60vh,460px);overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #f0e7de;border-radius:12px;background:#fff;overscroll-behavior:contain}
+.sc-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem;min-width:620px}
+.sc-tbl th{position:sticky;top:0;z-index:3;background:#fdf8f3;padding:9px 6px;font-weight:700;color:#57534e;font-size:.76rem;white-space:nowrap;border-bottom:1.5px solid #f0e7de;cursor:pointer;user-select:none}
+.sc-tbl td{padding:8px 6px;text-align:center;border-bottom:1px solid #faf5f0;font-variant-numeric:tabular-nums;background:#fff}
 .sc-tbl tbody tr:last-child td{border-bottom:none}
+/* 前两列（班排 / 姓名）横向吸住 —— 手机上左右拖动时不会看错行。
+   宽度写死，因为 sticky 的 left 偏移必须是个确定值。 */
+.sc-tbl th:nth-child(1),.sc-tbl td:nth-child(1){position:sticky;left:0;z-index:2;width:46px;min-width:46px;max-width:46px;padding-left:0;padding-right:0}
+.sc-tbl th:nth-child(2),.sc-tbl td:nth-child(2){position:sticky;left:46px;z-index:2;box-shadow:1px 0 0 #f0e7de}
+.sc-tbl th:nth-child(1),.sc-tbl th:nth-child(2){z-index:4;background:#fdf8f3}
+.sc-tbl .sc-me-row td{background:#fff8f2}
 .sc-tbl .sc-name{font-weight:700;text-align:left;padding-left:10px;white-space:nowrap}
 .sc-tbl .sc-total{font-weight:800;color:#b45309}
 .sc-me-row{background:#fff8f2}
@@ -1742,6 +1748,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-trendhead.down b{color:#c0392b}
 .sc-trendhead span{font-size:.74rem}
 @media (max-width:560px){
+  .sc-tblwrap{max-height:56vh}
   .sc-stats{grid-template-columns:repeat(2,1fr)}
   .sc-ov-items{grid-template-columns:1fr 1fr}
   .sc-pane{padding:12px 12px 22px}
@@ -2623,7 +2630,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.7.3';
+var SITE_VERSION = '2.7.4';
 var VER_DATE = '2026-10-14';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -11224,7 +11231,12 @@ function scLoad(){
   SC.loading = true;
   scLoading('正在读取成绩…');
   api('/scores?action=list').then(function(j){
-    SC.exams = (j.exams || []);
+    /* 考试一律按日期排序（最近的在前）—— 后端已经排过，这里再排一次兜底：
+       早期几次考试的日期填得不规范，出现过"顺序看着不对"的情况。 */
+    SC.exams = (j.exams || []).slice().sort(function(a, b){
+      if(a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (b.id || 0) - (a.id || 0);
+    });
     SC.loaded = true;
     if(!SC.exams.length){
       SC.loading = false;
@@ -11379,10 +11391,19 @@ function scRenderAll(){
   scRenderPane();
 }
 
+/* 考试日期的显示文案：跨天显示成 2026-05-14 ~ 05-15，单日就一个日期 */
+function scDateRange(ex){
+  if(!ex) return '';
+  var a = ex.date || '', b = ex.endDate || '';
+  if(!b || b === a) return a;
+  if(a.slice(0, 4) === b.slice(0, 4)) return a + ' ~ ' + b.slice(5);
+  return a + ' ~ ' + b;
+}
+
 function scRenderBar(){
   var opts = SC.exams.map(function(e){
     return '<option value="' + e.id + '"' + (SC.exam && e.id === SC.exam.id ? ' selected' : '') + '>'
-      + esc(e.name) + '　' + esc(e.date) + '</option>';
+      + esc(e.name) + '　' + esc(scDateRange(e)) + '</option>';
   }).join('');
 
   document.getElementById('scBar').innerHTML =
@@ -11394,7 +11415,7 @@ function scRenderBar(){
     + '</div>'
     + '</div>'
     + '<div class="sc-meta">'
-    +   esc(SC.exam.type || '考试') + '　' + esc(SC.exam.date) + '　共 ' + SC.rows.length + ' 人'
+    +   esc(SC.exam.type || '考试') + '　' + esc(scDateRange(SC.exam)) + '　共 ' + SC.rows.length + ' 人'
     +   (SC.exam.note ? '　·　' + esc(SC.exam.note) : '')
     + '</div>';
 }

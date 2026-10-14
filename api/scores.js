@@ -248,6 +248,16 @@ async function examSave(req, res) {
     return fail(res, 400, '考试时间格式应为 YYYY-MM-DD（进退步和趋势全靠它排序）');
   }
 
+  /* 考试可以跨天（如 5/14—15 的联考）。结束日期可空；填了就必须不早于开始日期。 */
+  let endDate = String(b.exam_end_date || '').trim();
+  if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    return fail(res, 400, '结束日期格式应为 YYYY-MM-DD（不跨天就留空）');
+  }
+  if (endDate && endDate < date) {
+    return fail(res, 400, '结束日期不能早于开始日期');
+  }
+  if (endDate === date) endDate = '';   /* 同一天等于没填 */
+
   const typeRaw = String(b.exam_type || '').trim();
   const examType = typeRaw.length > 20 ? typeRaw.slice(0, 20) : typeRaw;
 
@@ -268,6 +278,7 @@ async function examSave(req, res) {
       update exams
          set name = ${name},
              exam_date = ${date},
+             exam_end_date = ${endDate || null},
              exam_type = ${examType || null},
              subjects = ${JSON.stringify(subjects)}::jsonb,
              cutlines = ${JSON.stringify(cutlines)}::jsonb,
@@ -282,8 +293,8 @@ async function examSave(req, res) {
   }
 
   const ins = await sql`
-    insert into exams (name, exam_date, exam_type, subjects, cutlines, grade_ref, note, status, created_by)
-    values (${name}, ${date}, ${examType || null},
+    insert into exams (name, exam_date, exam_end_date, exam_type, subjects, cutlines, grade_ref, note, status, created_by)
+    values (${name}, ${date}, ${endDate || null}, ${examType || null},
             ${JSON.stringify(subjects)}::jsonb,
             ${JSON.stringify(cutlines)}::jsonb,
             ${gradeRef ? JSON.stringify(gradeRef) : null}::jsonb,
@@ -541,6 +552,8 @@ function normalizeExam(r) {
     id: Number(r.id),
     name: r.name,
     date: fmtDate(r.exam_date),
+    /* 考试可以跨天（例：5 月 14—15 日联考）。只考一天时为空。 */
+    endDate: r.exam_end_date ? fmtDate(r.exam_end_date) : null,
     type: r.exam_type || '',
     note: r.note || '',
     status: r.status === 'published' ? 'published' : 'draft',
