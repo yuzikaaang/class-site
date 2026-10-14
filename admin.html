@@ -885,7 +885,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.7.0';
+var SITE_VERSION = '2.7.1';
 var VER_DATE = '2026-10-14';
 
 /* ---- 运行时状态 ---- */
@@ -1291,6 +1291,7 @@ var PAGES = [
   { id:'homeworks',     label:'作业管理', icon:'file',      group:'内容',  title:'作业管理' },
   { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
   { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
+  { id:'scores',        label:'成绩分析', icon:'activity',  group:'内容',  title:'成绩分析（考试 / 导入 / 改分 / 发布）' },
   { id:'releases',      label:'版本更新', icon:'clock',     group:'内容',  title:'版本更新记录' },
   { id:'popups',        label:'通用弹窗', icon:'bell',      group:'内容',  title:'通用弹窗（开屏弹 / 板块弹）' },
   { id:'cards',         label:'首页卡片', icon:'layers',    group:'内容',  title:'首页卡片（每日一言 / 学习卡片）' },
@@ -1349,6 +1350,7 @@ function go(page){
     homeworks:     renderHomeworks,
     song:          renderSong,
     dj:            renderDj,
+    scores:        renderScores,
     releases:      renderReleases,
     popups:        renderPopups,
     cards:         renderCards,
@@ -8443,6 +8445,782 @@ function popWrite(list, okMsg){
   return api('/content', { method:'PUT', body:{ items:{ popups: POP_STATE.list } } })
     .then(function(){ if(okMsg) toast(okMsg, 'ok'); return true; })
     .catch(function(e){ toast('保存失败：' + e.message, 'err', 4000); throw e; });
+}
+
+/* ============================================================================
+ * ⑭ 面板：成绩分析（第四十三轮 · v2.7.1 起）
+ * ----------------------------------------------------------------------------
+ * 站主要求（2026-10-14 原话）：
+ *   · 后台要能「改一切」—— 从"导入工具"变成"编辑工具"：
+ *     新建空考试、改考试信息、像 Excel 一样改分数（点格改 / 失焦自动保存）、
+ *     增删学生行、**发布之后仍然可以改**。
+ *   · 分数线由站主手填（学校是按年级划线的，我们班拿不到那个基数），
+ *     学校没公布就留空；三条线不继承上次。
+ *   · 只录大型考试（全校 / 校际联考、月考），一年不超过 10 次。
+ *
+ * 【为什么导入是「整体替换本次」】
+ *   站主导入的是一张完整成绩单，「本次 = 表里这些行」最符合直觉。
+ *   好处：不存在重名冲突（同名同学各占一行），也不会导入两次把人搞重复。
+ *
+ * 【为什么改分走「增量保存」】
+ *   改一格就全量重传既慢又容易覆盖别处的改动；这里只提交改动过的行
+ *   （带行 id），失焦后防抖 1.5 秒自动提交，页面顶部显示保存状态。
+ * ========================================================================= */
+
+var SC_STATE = {
+  exams: [],       /* 考试列表 */
+  meta: null,      /* 默认科目 / 分数线 / 类型（只取一次） */
+  cur: null,       /* 当前打开的考试 */
+  rows: [],        /* 当前考试的成绩行 */
+  dirty: {},       /* 待保存的行：{ 行id: true }（新增行用 'new:序号'） */
+  timer: null,     /* 自动保存防抖计时器 */
+  saving: false,
+};
+
+/* ---------------- 入口 ---------------- */
+function renderScores(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +  '<div style="flex:1;min-width:0"><b style="font-size:.92rem">成绩分析</b>'
+    +    '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +      '只录大型考试（全校 / 校际联考、月考）。导入或手填 → 核对 → 发布，同学才看得到。'
+    +    '</p></div>'
+    +  '<button class="btn btn-sm btn-secondary" id="scRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +  '<button class="btn btn-sm" id="scNew">' + svg('plus',14) + ' 新建考试</button>'
+    + '</div>'
+    + '<section class="panel"><div id="scBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('scRefresh').onclick = scLoad;
+  $('scNew').onclick = function(){ scEditExam(null); };
+  scLoad();
+}
+
+function scLoad(){
+  $('scBody').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  var jobs = [ api('/scores?action=list') ];
+  if(!SC_STATE.meta) jobs.push(api('/scores?action=meta'));
+
+  Promise.all(jobs).then(function(r){
+    SC_STATE.exams = (r[0] && r[0].exams) || [];
+    if(r[1]) SC_STATE.meta = r[1];
+    scPaintExams();
+  }).catch(function(e){
+    $('scBody').innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+  });
+}
+
+/* ---------------- 考试列表 ---------------- */
+function scPaintExams(){
+  var list = SC_STATE.exams;
+  if(!list.length){
+    $('scBody').innerHTML = '<div class="empty">'
+      + '<div style="font-size:2rem;margin-bottom:10px">📊</div>'
+      + '还没有任何考试。<br>点右上角「新建考试」建一次（填名称、时间、分数线），'
+      + '再「导入成绩」或直接手填。'
+      + '</div>';
+    return;
+  }
+
+  $('scBody').innerHTML = list.map(scExamCard).join('');
+  $('scBody').onclick = function(ev){
+    var b = ev.target.closest ? ev.target.closest('[data-sc-act]') : null;
+    if(!b) return;
+    var id = Number(b.getAttribute('data-sc-id'));
+    var act = b.getAttribute('data-sc-act');
+    if(act === 'edit')        scEditExam(id);
+    else if(act === 'import') scImport(id);
+    else if(act === 'rows')   scEditRows(id);
+    else if(act === 'pub')    scPublish(id, true);
+    else if(act === 'unpub')  scPublish(id, false);
+    else if(act === 'del')    scDeleteExam(id);
+  };
+}
+
+function scExamCard(e){
+  var pub = e.status === 'published';
+  var cuts = (e.cutlines || []).filter(function(c){ return c.score != null; });
+  var n = e.rowCount || 0;
+
+  return '<section class="panel" style="margin-bottom:12px;padding:14px 16px">'
+    + '<div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">'
+    +   '<div style="flex:1;min-width:200px">'
+    +     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+    +       '<b style="font-size:.95rem">' + esc(e.name) + '</b>'
+    +       (pub ? '<span class="badge badge-green">已发布</span>'
+              : '<span class="badge badge-gray">草稿（同学看不到）</span>')
+    +       (n ? '' : '<span class="badge badge-gray">还没有成绩</span>')
+    +     '</div>'
+    +     '<p class="muted" style="margin:5px 0 0;font-size:.8rem">'
+    +       esc(e.date) + (e.type ? ' · ' + esc(e.type) : '') + ' · ' + n + ' 人'
+    +       (cuts.length ? '<br>分数线：' + cuts.map(function(c){
+              return esc(c.label) + ' ' + c.score;
+            }).join(' ／ ') : '<br>分数线：本次未填')
+    +     '</p>'
+    +     (e.note ? '<p class="muted" style="margin:4px 0 0;font-size:.78rem">备注：' + esc(e.note) + '</p>' : '')
+    +   '</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +     '<button class="btn btn-sm btn-secondary" data-sc-act="edit" data-sc-id="' + e.id + '">考试信息</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-sc-act="import" data-sc-id="' + e.id + '">导入成绩</button>'
+    +     '<button class="btn btn-sm" data-sc-act="rows" data-sc-id="' + e.id + '">改分 / 查看</button>'
+    +     (pub
+        ? '<button class="btn btn-sm btn-secondary" data-sc-act="unpub" data-sc-id="' + e.id + '">撤回</button>'
+        : '<button class="btn btn-sm btn-green" data-sc-act="pub" data-sc-id="' + e.id + '">发布</button>')
+    +     '<button class="btn btn-sm btn-danger" data-sc-act="del" data-sc-id="' + e.id + '">删除</button>'
+    +   '</div>'
+    + '</div></section>';
+}
+
+/* ---------------- 发布 / 删除 ---------------- */
+function scPublish(id, publish){
+  var e = scFindExam(id);
+  var msg = publish
+    ? '发布后，本班同学登录就能看到这次考试的成绩单与自己的画像。\n\n确认发布「' + (e ? e.name : id) + '」？'
+    : '撤回后，同学立刻看不到这次考试（数据仍在，随时能再发布）。\n\n确认撤回？';
+  if(!confirm(msg)) return;
+  api('/scores?action=exam-publish', { method:'POST', body: { id: id, publish: !!publish } })
+    .then(function(){
+      toast(publish ? '已发布' : '已撤回', 'ok');
+      scLoad();
+    }).catch(function(e2){ toast('操作失败：' + e2.message, 'err', 4000); });
+}
+
+function scDeleteExam(id){
+  var e = scFindExam(id);
+  var n = e ? (e.rowCount || 0) : 0;
+  if(!confirm('删除「' + (e ? e.name : id) + '」？\n\n这会连它下面 ' + n + ' 条成绩一起删掉，无法恢复。')) return;
+  api('/scores?action=exam-delete', { method:'POST', body: { id: id } })
+    .then(function(){ toast('已删除', 'ok'); scLoad(); })
+    .catch(function(e2){ toast('删除失败：' + e2.message, 'err', 4000); });
+}
+
+function scFindExam(id){
+  for(var i = 0; i < SC_STATE.exams.length; i++) if(SC_STATE.exams[i].id === id) return SC_STATE.exams[i];
+  return null;
+}
+
+/* ============================================================================
+ * 新建 / 编辑考试
+ * ========================================================================= */
+function scEditExam(id){
+  var e = id ? scFindExam(id) : null;
+  var meta = SC_STATE.meta || {};
+  var subs = (e && e.subjects && e.subjects.length ? e.subjects : (meta.defaultSubjects || []))
+    .map(function(s){ return { key:s.key, name:s.name, full:s.full, graded:!!s.graded, on:true }; });
+  /* 兜底：后端 meta 没回来时也要能用 */
+  if(!subs.length) subs = [
+    { key:'chinese', name:'语文', full:150, graded:false, on:true },
+    { key:'math', name:'数学', full:150, graded:false, on:true },
+    { key:'english', name:'英语', full:150, graded:false, on:true },
+    { key:'physics', name:'物理', full:100, graded:false, on:true },
+    { key:'chemistry', name:'化学', full:100, graded:true, on:true },
+    { key:'biology', name:'生物', full:100, graded:true, on:true },
+  ];
+  var cuts = (e && e.cutlines && e.cutlines.length ? e.cutlines : (meta.defaultCutlines || []))
+    .map(function(c){ return { key:c.key, label:c.label, score:c.score, color:c.color }; });
+  if(!cuts.length) cuts = [
+    { key:'special', label:'特控线', score:null, color:'#b45309' },
+    { key:'undergrad', label:'本科线', score:null, color:'#c0392b' },
+    { key:'line600', label:'600 分线', score:600, color:'#7c3aed' },
+  ];
+  var types = meta.examTypes || ['全校联考','校际联考','月考','期中','期末','其他'];
+  var d = new Date();
+  var today = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+
+  openModal({
+    title: e ? '编辑考试信息' : '新建考试',
+    sub: '名称和时间必填，其余可以先空着，之后随时改',
+    wide: true,
+    body:
+        '<div class="field"><label>考试名称 <span style="color:var(--danger)">*</span></label>'
+      +   '<input id="scName" maxlength="60" placeholder="例：高二上·第一次段考" value="' + esc(e ? e.name : '') + '"></div>'
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      +   '<div class="field" style="flex:1;min-width:150px"><label>考试时间 <span style="color:var(--danger)">*</span></label>'
+      +     '<input id="scDate" type="date" value="' + esc(e ? e.date : today) + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:150px"><label>考试类型</label>'
+      +     '<select id="scType">' + types.map(function(t){
+              return '<option value="' + esc(t) + '"' + (e && e.type === t ? ' selected' : '') + '>' + esc(t) + '</option>';
+            }).join('') + '</select></div>'
+      + '</div>'
+      + '<div class="field"><label>科目与满分（勾掉本次没考的科目；化学 / 生物按你们的规则默认赋分）</label>'
+      +   '<div id="scSubjBox" style="margin-top:6px">'
+      +     subs.map(scSubjRow).join('')
+      +   '</div></div>'
+      + '<div class="field"><label>分数线（学校没公布就留空，留空=不画也不统计）</label>'
+      +   '<div id="scCutBox" style="margin-top:6px">' + cuts.map(scCutRow).join('') + '</div>'
+      +   '<button type="button" class="btn btn-sm btn-secondary" id="scCutAdd" style="margin-top:6px">'
+      +     svg('plus',13) + ' 再加一条线</button></div>'
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      +   '<div class="field" style="flex:1;min-width:150px"><label>年级人数（可空）</label>'
+      +     '<input id="scGradeN" type="number" min="1" placeholder="例：760" value="'
+      +       (e && e.gradeRef && e.gradeRef.students != null ? e.gradeRef.students : '') + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:150px"><label>年级均分（可空）</label>'
+      +     '<input id="scGradeAvg" type="number" step="0.1" placeholder="例：480" value="'
+      +       (e && e.gradeRef && e.gradeRef.avgTotal != null ? e.gradeRef.avgTotal : '') + '"></div>'
+      + '</div>'
+      + '<div class="field"><label>备注（可空）</label>'
+      +   '<input id="scNote" maxlength="200" placeholder="例：本次生物未考" value="' + esc(e ? e.note : '') + '"></div>'
+      + '<div class="alert info" style="margin-top:4px">填了年级人数就能算「你在年级前百分之几」；'
+      +   '填了年级均分还能看「本班 vs 年级」的变化。都没有就留空，不影响别的功能。</div>',
+    foot: '<button class="btn btn-secondary" id="scCancel">取消</button>'
+        + '<button class="btn" id="scSave">' + (e ? '保存修改' : '创建考试') + '</button>',
+    onMount: function(box){
+      box.querySelector('#scCancel').onclick = closeModal;
+      box.querySelector('#scCutAdd').onclick = function(){
+        var arr = cuts.concat([{ key:'line' + Date.now(), label:'', score:null, color:'#6b7280' }]);
+        cuts = arr;
+        box.querySelector('#scCutBox').innerHTML = cuts.map(scCutRow).join('');
+      };
+      box.querySelector('#scSave').onclick = function(){
+        var payload = scCollectExam(box);
+        if(!payload) return;
+        var btn = box.querySelector('#scSave');
+        btn.disabled = true;
+        api('/scores?action=exam-save', { method:'POST', body: Object.assign({ id: e ? e.id : 0 }, payload) })
+          .then(function(j){
+            toast(e ? '已保存' : '考试已创建', 'ok');
+            closeModal();
+            if(!e && j && j.exam){
+              /* 新建后直接问要不要导入 */
+              SC_STATE.meta = null;
+              scLoad();
+              setTimeout(function(){
+                if(confirm('考试已创建。现在导入这次考试的成绩表吗？')) scImport(j.exam.id);
+              }, 260);
+            } else {
+              scLoad();
+            }
+          })
+          .catch(function(err){ btn.disabled = false; toast('保存失败：' + err.message, 'err', 4200); });
+      };
+      /* 分数线删除用事件委托（行是动态生成的） */
+      box.querySelector('#scCutBox').onclick = function(ev){
+        var b = ev.target.closest ? ev.target.closest('[data-cut-del]') : null;
+        if(!b) return;
+        var i = Number(b.getAttribute('data-cut-del'));
+        cuts.splice(i, 1);
+        box.querySelector('#scCutBox').innerHTML = cuts.map(scCutRow).join('');
+      };
+    },
+  });
+}
+
+function scSubjRow(s){
+  return '<div class="sc-subj" data-key="' + esc(s.key) + '" data-name="' + esc(s.name) + '" '
+    + 'style="display:flex;gap:10px;align-items:center;margin-bottom:8px">'
+    + '<label style="display:flex;align-items:center;gap:6px;min-width:86px;font-weight:700">'
+    +   '<input type="checkbox" data-f="on"' + (s.on !== false ? ' checked' : '') + '>' + esc(s.name) + '</label>'
+    + '<input class="inp" style="width:90px" type="number" min="1" max="1000" data-f="full" value="' + (s.full || 100) + '">'
+    + '<span class="muted" style="font-size:.78rem">满分</span>'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:.82rem">'
+    +   '<input type="checkbox" data-f="graded"' + (s.graded ? ' checked' : '') + '>赋分</label>'
+    + '</div>';
+}
+
+function scCutRow(c, i){
+  return '<div class="sc-cut" data-i="' + i + '" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'
+    + '<input class="inp" style="width:120px" data-f="label" maxlength="20" placeholder="线名（如 特控线）" value="' + esc(c.label || '') + '">'
+    + '<input class="inp" style="width:100px" type="number" data-f="score" placeholder="分数（可空）" value="' + (c.score == null ? '' : c.score) + '">'
+    + '<input class="inp" style="width:52px;padding:6px" type="color" data-f="color" value="' + esc(c.color || '#b45309') + '">'
+    + '<button type="button" class="btn btn-sm btn-secondary" data-cut-del="' + i + '">删</button>'
+    + '</div>';
+}
+
+/* 收集表单 → 提交体；校验不过返回 null 并提示 */
+function scCollectExam(box){
+  var name = (box.querySelector('#scName').value || '').trim();
+  if(!name){ toast('请填考试名称', 'err'); return null; }
+  var date = (box.querySelector('#scDate').value || '').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ toast('请选考试时间', 'err'); return null; }
+
+  var subjects = [];
+  Array.prototype.forEach.call(box.querySelectorAll('.sc-subj'), function(el){
+    if(!el.querySelector('[data-f="on"]').checked) return;
+    var full = Number(el.querySelector('[data-f="full"]').value);
+    subjects.push({
+      key: el.getAttribute('data-key'),
+      name: el.getAttribute('data-name'),
+      full: Number.isFinite(full) && full > 0 ? full : 100,
+      graded: el.querySelector('[data-f="graded"]').checked,
+    });
+  });
+  if(!subjects.length){ toast('至少要保留一科', 'err'); return null; }
+
+  var cutlines = [];
+  Array.prototype.forEach.call(box.querySelectorAll('.sc-cut'), function(el){
+    var label = (el.querySelector('[data-f="label"]').value || '').trim();
+    if(!label) return;
+    var sv = el.querySelector('[data-f="score"]').value;
+    cutlines.push({
+      key: 'c' + cutlines.length,
+      label: label,
+      score: sv === '' ? null : Number(sv),
+      color: el.querySelector('[data-f="color"]').value || '#b45309',
+    });
+  });
+
+  var gn = box.querySelector('#scGradeN').value;
+  var ga = box.querySelector('#scGradeAvg').value;
+  var gradeRef = null;
+  if(gn !== '' || ga !== ''){
+    gradeRef = {
+      students: gn === '' ? null : Number(gn),
+      avgTotal: ga === '' ? null : Number(ga),
+      avgSubject: {},
+    };
+  }
+
+  return {
+    name: name,
+    exam_date: date,
+    exam_type: box.querySelector('#scType').value || '',
+    subjects: subjects,
+    cutlines: cutlines,
+    grade_ref: gradeRef,
+    note: (box.querySelector('#scNote').value || '').trim(),
+  };
+}
+
+/* ============================================================================
+ * 导入成绩（浏览器解析 Excel → 预览校验 → 提交 JSON）
+ * ----------------------------------------------------------------------------
+ * 为什么不直接上传文件：后端 Worker 的入口为了让 body 可重复读，
+ * 用的是 text() 预读，**收不了 multipart**。所以文件在前端解析成 JSON 再发，
+ * 后端只认 JSON —— 这条路同时也让"预览校验"成为可能。
+ * ========================================================================= */
+function scImport(examId){
+  var e = scFindExam(examId);
+  if(!e) return;
+  var subs = e.subjects || [];
+  var subNames = subs.map(function(s){ return s.name; }).join('、');
+
+  openModal({
+    title: '导入成绩 —— ' + e.name,
+    sub: '表里建议有：姓名 / 学号 / ' + subNames + ' / 校排名 / 联考排名。缺哪列都能导。',
+    wide: true,
+    body:
+        '<div class="alert warn">导入是<b>整体替换本次</b>：导入后这次考试的成绩就等于表里这些行。'
+      +   '同名同学会各占一行并提示你；导入后每格都还能手改。</div>'
+      + '<div class="field"><label>① 选择文件（.xlsx / .xls / .csv）</label>'
+      +   '<input type="file" id="scFile" accept=".xlsx,.xls,.csv"></div>'
+      + '<div class="field"><label>或者：② 从 Excel 直接复制，粘到这里（制表符分隔）</label>'
+      +   '<textarea id="scPaste" rows="4" placeholder="从 Excel 选中区域复制，Ctrl+V 粘进这里"></textarea></div>'
+      + '<div id="scPrev"></div>',
+    foot: '<button class="btn btn-secondary" id="scImpCancel">取消</button>'
+        + '<button class="btn" id="scImpGo" disabled>导入</button>',
+    onMount: function(box){
+      var parsed = null;   /* { header:[], rows:[], map:{} } */
+      var btn = box.querySelector('#scImpGo');
+
+      box.querySelector('#scImpCancel').onclick = closeModal;
+      box.querySelector('#scFile').onchange = function(ev){
+        var f = ev.target.files && ev.target.files[0];
+        if(!f) return;
+        box.querySelector('#scPrev').innerHTML = '<div class="loading"><div class="spinner"></div>解析中…</div>';
+        loadXLSX().then(function(XLSX){
+          if(!XLSX){ box.querySelector('#scPrev').innerHTML = '<div class="empty">表格解析库加载失败，请检查网络</div>'; return; }
+          var rd = new FileReader();
+          rd.onload = function(){
+            try{
+              var wb = XLSX.read(new Uint8Array(rd.result), { type:'array' });
+              var ws = wb.Sheets[wb.SheetNames[0]];
+              var aoa = XLSX.utils.sheet_to_json(ws, { header:1, blankrows:false, defval:'' });
+              parsed = scParseAOA(aoa, subs);
+              scPaintPreview(box, parsed, subs, btn);
+            }catch(err){
+              box.querySelector('#scPrev').innerHTML = '<div class="empty">解析失败：' + esc(err.message) + '</div>';
+            }
+          };
+          rd.readAsArrayBuffer(f);
+        });
+      };
+
+      box.querySelector('#scPaste').oninput = function(ev){
+        var txt = ev.target.value || '';
+        if(!txt.trim()){ parsed = null; btn.disabled = true; box.querySelector('#scPrev').innerHTML = ''; return; }
+        var aoa = txt.replace(/\r/g,'').split('\n').filter(function(l){ return l.trim(); })
+                     .map(function(l){ return l.split('\t'); });
+        parsed = scParseAOA(aoa, subs);
+        scPaintPreview(box, parsed, subs, btn);
+      };
+
+      btn.onclick = function(){
+        if(!parsed) return;
+        btn.disabled = true;
+        api('/scores?action=scores-import', { method:'POST', body: { exam: examId, rows: parsed.rows } })
+          .then(function(j){
+            var msg = '导入成功：' + j.imported + ' 行';
+            if(j.skippedCount) msg += '，跳过 ' + j.skippedCount + ' 行';
+            toast(msg, 'ok', 4200);
+            closeModal();
+            scLoad();
+            /* 异常汇总：合并成一条提示，并延后到列表刷新之后再弹。
+               以前这里是两个 alert 连着弹（300ms / 700ms），会把页面连续卡住两次，
+               期间列表一直刷新不出来，体验很差。 */
+            if(j.unmatchedCount || j.skippedCount){
+              var lines = [];
+              if(j.skippedCount){
+                lines.push('· 跳过 ' + j.skippedCount + ' 行：\n  ' + (j.skipped || []).join('\n  '));
+              }
+              if(j.unmatchedCount){
+                lines.push('· ' + j.unmatchedCount + ' 位同学在站点里没有同名账号：\n  '
+                  + (j.unmatched || []).join('、')
+                  + '\n\n  成绩已经存好了（不影响其他同学查看），'
+                  + '等他们的账号建好、或姓名对上，再导入一次就会自动绑定。');
+              }
+              setTimeout(function(){ alert('导入完成，有几点要留意：\n\n' + lines.join('\n\n')); }, 1600);
+            }
+          })
+          .catch(function(err){ btn.disabled = false; toast('导入失败：' + err.message, 'err', 4600); });
+      };
+    },
+  });
+}
+
+/* AOA（二维数组）→ { header, rows, map }；第一行当表头 */
+function scParseAOA(aoa, subs){
+  if(!aoa || !aoa.length) return { header: [], rows: [], map: null };
+  var header = (aoa[0] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
+  var body = aoa.slice(1).filter(function(r){
+    return r && r.some(function(c){ return String(c == null ? '' : c).trim() !== ''; });
+  });
+  return { header: header, rows: scMapRows(header, body, subs, null), map: scGuessMap(header, subs), body: body };
+}
+
+/* 表头自动识别 */
+function scGuessMap(header, subs){
+  var H = header.map(function(s){ return String(s || '').replace(/[\s()（）\[\]【】]/g, ''); });
+  var pick = function(list){
+    for(var i = 0; i < H.length; i++) for(var j = 0; j < list.length; j++) if(H[i] === list[j]) return i;
+    for(var i2 = 0; i2 < H.length; i2++) for(var j2 = 0; j2 < list.length; j2++) if(H[i2].indexOf(list[j2]) >= 0) return i2;
+    return -1;
+  };
+  var map = {
+    name: pick(['姓名','名字','学生姓名','学生']),
+    no: pick(['学号','考号','准考证']),   /* 用「准考证」前缀匹配，能命中各种带「考号」的写法 */
+    schoolRank: pick(['校排名','校名次','学校排名','年级排名','年级名次']),
+    leagueRank: pick(['联考排名','联考名次','市排名']),
+    subj: {},
+  };
+  (subs || []).forEach(function(s){
+    var raw = -1, asg = -1;
+    for(var i = 0; i < H.length; i++){
+      if(H[i].indexOf(s.name) < 0) continue;
+      if(/赋分|分级|等级/.test(H[i])){ if(asg < 0) asg = i; }
+      else if(raw < 0) raw = i;
+    }
+    map.subj[s.key] = { raw: raw, assigned: asg };
+  });
+  return map;
+}
+
+/* 按映射把 AOA 转成后端要的行 */
+function scMapRows(header, body, subs, map){
+  if(!map) map = scGuessMap(header, subs);
+  var num = function(v){
+    var s = String(v == null ? '' : v).trim();
+    if(s === '' || s === '-' || s === '—' || s === '/' || /缺考|免考/.test(s)) return null;
+    var n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+  var out = [];
+  body.forEach(function(r){
+    var name = map.name >= 0 ? String(r[map.name] == null ? '' : r[map.name]).trim() : '';
+    if(!name) return;
+    var s = {};
+    (subs || []).forEach(function(su){
+      var m = map.subj[su.key] || { raw:-1, assigned:-1 };
+      var raw = m.raw >= 0 ? num(r[m.raw]) : null;
+      var asg = m.assigned >= 0 ? num(r[m.assigned]) : null;
+      if(raw == null && asg == null) return;
+      s[su.key] = (su.graded && asg != null) ? { raw: raw, assigned: asg } : { raw: raw == null ? asg : raw };
+    });
+    out.push({
+      name: name,
+      no: map.no >= 0 ? String(r[map.no] == null ? '' : r[map.no]).trim() : '',
+      s: s,
+      schoolRank: map.schoolRank >= 0 ? num(r[map.schoolRank]) : null,
+      leagueRank: map.leagueRank >= 0 ? num(r[map.leagueRank]) : null,
+    });
+  });
+  return out;
+}
+
+function scPaintPreview(box, parsed, subs, btn){
+  var host = box.querySelector('#scPrev');
+  if(!parsed || !parsed.rows.length){
+    host.innerHTML = '<div class="empty">没解析出有效数据 —— 检查一下第一行是不是表头、有没有「姓名」列</div>';
+    if(btn) btn.disabled = true;
+    return;
+  }
+  var m = parsed.map || {};
+  var hit = function(i){ return i >= 0 ? esc(parsed.header[i] || ('第' + (i+1) + '列')) : '<span style="color:var(--danger)">未找到</span>'; };
+
+  host.innerHTML =
+      '<div class="alert ok" style="margin-top:8px"><b>解析到 ' + parsed.rows.length + ' 行。</b>'
+    +   '列对应关系：姓名→' + hit(m.name) + '　学号→' + hit(m.no)
+    +   '　校排名→' + hit(m.schoolRank) + '　联考排名→' + hit(m.leagueRank) + '<br>'
+    +   (subs || []).map(function(s){
+          var mm = (m.subj || {})[s.key] || {};
+          return esc(s.name) + '→' + hit(mm.raw) + (mm.assigned >= 0 ? '（赋分 ' + hit(mm.assigned) + '）' : '');
+        }).join('　')
+    + '</div>'
+    + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table style="font-size:.8rem">'
+    +   '<thead><tr><th>姓名</th>' + (subs || []).map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
+    +   '<th>校排名</th><th>联考</th></tr></thead><tbody>'
+    +   parsed.rows.slice(0, 30).map(function(r){
+          return '<tr><td style="font-weight:700">' + esc(r.name) + '</td>'
+            + (subs || []).map(function(s){
+                var v = r.s[s.key];
+                if(!v) return '<td class="muted">—</td>';
+                return '<td>' + (v.raw == null ? '—' : v.raw)
+                  + (v.assigned != null ? ' <span class="muted">/' + v.assigned + '</span>' : '') + '</td>';
+              }).join('')
+            + '<td>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</td>'
+            + '<td>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</td></tr>';
+        }).join('')
+    + '</tbody></table></div>'
+    + (parsed.rows.length > 30 ? '<p class="muted" style="font-size:.78rem;margin-top:6px">只预览前 30 行</p>' : '');
+
+  if(btn) btn.disabled = false;
+}
+
+/* ============================================================================
+ * 成绩编辑表（像 Excel 一样改分）
+ * ----------------------------------------------------------------------------
+ * 站主要求「导入之后我也可以改」「失焦自动保存」。
+ * 做法：每个可编辑格是 <input>，改动后标脏 + 防抖 1.5 秒自动提交；
+ *      只提交脏行（带行 id），新增行没有 id 也能提交（后端会插入）。
+ * ========================================================================= */
+function scEditRows(examId){
+  SC_STATE.cur = examId;
+  SC_STATE.dirty = {};
+  renderScoreRows(examId);
+}
+
+function renderScoreRows(examId){
+  var e = scFindExam(examId);
+  if(!e) return;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +  '<button class="btn btn-sm btn-secondary" id="scBack">' + svg('arrow-left',14) + ' 返回列表</button>'
+    +  '<div style="flex:1;min-width:0;margin-left:8px"><b style="font-size:.92rem">' + esc(e.name) + '</b>'
+    +    '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +      '点格子直接改，离开格子会自动保存。加分/减分都可以，改完不用再点别的。'
+    +    '</p></div>'
+    +  '<span id="scSaveState" class="badge badge-gray">未改动</span>'
+    +  '<button class="btn btn-sm btn-secondary" id="scAddRow">' + svg('plus',14) + ' 加一行</button>'
+    +  '<button class="btn btn-sm btn-secondary" id="scReload">刷新</button>'
+    + '</div>'
+    + '<section class="panel"><div id="scRows"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('scBack').onclick = function(){ renderScores(); };
+  $('scReload').onclick = function(){ loadScoreRows(examId); };
+  $('scAddRow').onclick = function(){ scAddRow(examId); };
+  loadScoreRows(examId);
+}
+
+function loadScoreRows(examId){
+  SC_STATE.dirty = {};
+  $('scRows').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/scores?action=board&exam=' + examId).then(function(j){
+    SC_STATE.curExam = j.exam;
+    SC_STATE.rows = j.rows || [];
+    scPaintRows();
+  }).catch(function(err){
+    $('scRows').innerHTML = '<div class="empty">加载失败：' + esc(err.message) + '</div>';
+  });
+}
+
+function scPaintRows(){
+  var ex = SC_STATE.curExam || {};
+  var subs = ex.subjects || [];
+  var rows = SC_STATE.rows || [];
+
+  if(!rows.length){
+    $('scRows').innerHTML = '<div class="empty">这次考试还没有成绩。<br>'
+      + '点上面「加一行」手填，或者回列表用「导入成绩」传一张表。</div>';
+    return;
+  }
+
+  var head = '<tr><th style="min-width:88px">姓名</th><th style="min-width:76px">学号</th>'
+    + subs.map(function(s){
+        return '<th style="min-width:70px">' + esc(s.name) + (s.graded ? '<br><span class="muted" style="font-weight:400">原始/赋分</span>' : '') + '</th>';
+      }).join('')
+    + '<th style="min-width:70px">校排名</th><th style="min-width:70px">联考</th><th style="min-width:52px">操作</th></tr>';
+
+  var body = rows.map(function(r, idx){
+    var cells = subs.map(function(s){
+      var v = r.s[s.key] || {};
+      if(s.graded){
+        return '<td style="white-space:nowrap">'
+          + '<input class="inp" style="width:52px;padding:5px 6px" type="number" data-row="' + r.id + '" data-sub="' + s.key + '" data-f="raw" value="' + (v.raw == null ? '' : v.raw) + '">'
+          + '<span class="muted" style="margin:0 2px">/</span>'
+          + '<input class="inp" style="width:52px;padding:5px 6px" type="number" data-row="' + r.id + '" data-sub="' + s.key + '" data-f="assigned" value="' + (v.assigned == null ? '' : v.assigned) + '">'
+          + '</td>';
+      }
+      return '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + r.id + '" data-sub="' + s.key + '" data-f="raw" value="' + (v.raw == null ? '' : v.raw) + '"></td>';
+    }).join('');
+
+    return '<tr data-idx="' + idx + '">'
+      + '<td><input class="inp" style="width:82px;padding:5px 6px" data-row="' + r.id + '" data-f="name" value="' + esc(r.name) + '"></td>'
+      + '<td><input class="inp" style="width:70px;padding:5px 6px" data-row="' + r.id + '" data-f="no" value="' + esc(r.no || '') + '"></td>'
+      + cells
+      + '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + r.id + '" data-f="schoolRank" value="' + (r.schoolRank == null ? '' : r.schoolRank) + '"></td>'
+      + '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + r.id + '" data-f="leagueRank" value="' + (r.leagueRank == null ? '' : r.leagueRank) + '"></td>'
+      + '<td><button class="btn btn-sm btn-danger" data-del-row="' + r.id + '">删</button></td>'
+      + '</tr>';
+  }).join('');
+
+  $('scRows').innerHTML = '<div class="table-wrap"><table style="font-size:.82rem">'
+    + '<thead>' + head + '</thead><tbody id="scTbody">' + body + '</tbody></table></div>';
+
+  /* 改动即排队 + 防抖保存；删除按钮单独绑 */
+  var host = $('scRows');
+  host.oninput = function(ev){
+    var t = ev.target;
+    if(!t || !t.getAttribute || !t.getAttribute('data-row')) return;
+    scMarkDirty(t.getAttribute('data-row'));
+  };
+  host.onchange = function(ev){
+    var t = ev.target;
+    if(t && t.getAttribute && t.getAttribute('data-row')) scMarkDirty(t.getAttribute('data-row'));
+  };
+  host.onclick = function(ev){
+    var b = ev.target.closest ? ev.target.closest('[data-del-row]') : null;
+    if(!b) return;
+    var rid = Number(b.getAttribute('data-del-row'));
+    if(!confirm('删掉这一行？（保存后生效，无法恢复）')) return;
+    scDeleteRow(rid);
+  };
+}
+
+function scMarkDirty(rowId){
+  SC_STATE.dirty[rowId] = true;
+  scSetSaveState('待保存');
+  if(SC_STATE.timer) clearTimeout(SC_STATE.timer);
+  SC_STATE.timer = setTimeout(scFlush, 1500);
+}
+
+function scSetSaveState(txt, kind){
+  var el = $('scSaveState');
+  if(!el) return;
+  el.textContent = txt;
+  el.className = 'badge ' + (kind === 'ok' ? 'badge-green' : kind === 'err' ? 'badge-red' : 'badge-gray');
+}
+
+/* 把当前表格里"脏行"的内容收集起来提交 */
+function scFlush(){
+  if(SC_STATE.saving) return;
+  var ids = Object.keys(SC_STATE.dirty);
+  if(!ids.length) return;
+
+  var subs = (SC_STATE.curExam && SC_STATE.curExam.subjects) || [];
+  var rows = [];
+  ids.forEach(function(rowId){
+    var row = scReadRow(rowId, subs);
+    if(row) rows.push(row);
+  });
+  if(!rows.length){ SC_STATE.dirty = {}; return; }
+
+  SC_STATE.saving = true;
+  scSetSaveState('保存中…');
+  api('/scores?action=scores-save', { method:'POST', body: { exam: SC_STATE.cur, rows: rows } })
+    .then(function(){
+      SC_STATE.saving = false;
+      SC_STATE.dirty = {};
+      scSetSaveState('已保存', 'ok');
+    })
+    .catch(function(err){
+      SC_STATE.saving = false;
+      scSetSaveState('保存失败', 'err');
+      toast('保存失败：' + err.message, 'err', 4200);
+    });
+}
+
+/* 从 DOM 里读一行的当前值 */
+function scReadRow(rowId, subs){
+  var sel = '[data-row="' + rowId + '"]';
+  var nameEl = document.querySelector(sel + '[data-f="name"]');
+  if(!nameEl) return null;             /* 行已被删掉 */
+  var noEl   = document.querySelector(sel + '[data-f="no"]');
+  var srEl   = document.querySelector(sel + '[data-f="schoolRank"]');
+  var lrEl   = document.querySelector(sel + '[data-f="leagueRank"]');
+  var s = {};
+  subs.forEach(function(su){
+    var rEl = document.querySelector(sel + '[data-sub="' + su.key + '"][data-f="raw"]');
+    var aEl = document.querySelector(sel + '[data-sub="' + su.key + '"][data-f="assigned"]');
+    var raw = rEl ? scNumOrNull(rEl.value) : null;
+    var asg = aEl ? scNumOrNull(aEl.value) : null;
+    if(raw == null && asg == null) return;
+    s[su.key] = su.graded ? { raw: raw, assigned: asg } : { raw: raw };
+  });
+  return {
+    id: Number(rowId),
+    name: (nameEl.value || '').trim(),
+    no: noEl ? (noEl.value || '').trim() : '',
+    s: s,
+    schoolRank: srEl ? scNumOrNull(srEl.value) : null,
+    leagueRank: lrEl ? scNumOrNull(lrEl.value) : null,
+  };
+}
+
+function scNumOrNull(v){
+  var s = String(v == null ? '' : v).trim();
+  if(s === '') return null;
+  var n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/* 新增空行（转学生、或者补录一个漏掉的人） */
+function scAddRow(examId){
+  var ex = SC_STATE.curExam || scFindExam(examId) || {};
+  var subs = ex.subjects || [];
+  if(!subs.length){ toast('这次考试还没配置科目', 'err'); return; }
+  var tmpId = 'new' + Date.now();
+  var tbody = $('scTbody');
+  if(!tbody){ /* 空表时先铺个骨架 */
+    var head = '<tr><th style="min-width:88px">姓名</th><th style="min-width:76px">学号</th>'
+      + subs.map(function(s){ return '<th style="min-width:70px">' + esc(s.name) + '</th>'; }).join('')
+      + '<th style="min-width:70px">校排名</th><th style="min-width:70px">联考</th><th style="min-width:52px">操作</th></tr>';
+    $('scRows').innerHTML = '<div class="table-wrap"><table style="font-size:.82rem"><thead>' + head + '</thead><tbody id="scTbody"></tbody></table></div>';
+    var host0 = $('scRows');
+    host0.oninput = function(ev){ var t = ev.target; if(t && t.getAttribute && t.getAttribute('data-row')) scMarkDirty(t.getAttribute('data-row')); };
+    host0.onclick = function(ev){
+      var b = ev.target.closest ? ev.target.closest('[data-del-row]') : null;
+      if(!b) return;
+      scDeleteRow(Number(b.getAttribute('data-del-row')));
+    };
+    tbody = $('scTbody');
+  }
+  var tr = document.createElement('tr');
+  tr.innerHTML = '<td><input class="inp" style="width:82px;padding:5px 6px" data-row="' + tmpId + '" data-f="name" placeholder="姓名"></td>'
+    + '<td><input class="inp" style="width:70px;padding:5px 6px" data-row="' + tmpId + '" data-f="no"></td>'
+    + subs.map(function(s){
+        return '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + tmpId + '" data-sub="' + s.key + '" data-f="raw"></td>';
+      }).join('')
+    + '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + tmpId + '" data-f="schoolRank"></td>'
+    + '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + tmpId + '" data-f="leagueRank"></td>'
+    + '<td><button class="btn btn-sm btn-danger" data-del-row="' + tmpId + '">删</button></td>';
+  tbody.appendChild(tr);
+  var first = tr.querySelector('input');
+  if(first) first.focus();
+}
+
+function scDeleteRow(rowId){
+  /* 立刻从界面上移除，避免误看；保存时会一并提交 */
+  var el = document.querySelector('[data-row="' + rowId + '"][data-f="name"]');
+  if(el){
+    var tr = el.closest ? el.closest('tr') : null;
+    if(tr) tr.remove();
+  }
+  var idNum = Number(rowId);
+  if(Number.isFinite(idNum) && idNum > 0){
+    api('/scores?action=row-delete', { method:'POST', body: { id: idNum, exam: SC_STATE.cur } })
+      .then(function(){ toast('已删除', 'ok'); })
+      .catch(function(err){ toast('删除失败：' + err.message, 'err', 4000); });
+  } else {
+    delete SC_STATE.dirty[rowId];   /* 还没入库的新行，直接丢弃 */
+  }
 }
 
 function renderPopups(){
