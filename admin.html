@@ -885,7 +885,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.8.1';
+var SITE_VERSION = '2.8.2';
 var VER_DATE = '2026-10-14';
 
 /* ---- 运行时状态 ---- */
@@ -8486,6 +8486,94 @@ function scDateTxt(e){
   return a.slice(0, 4) === b.slice(0, 4) ? (a + ' ~ ' + b.slice(5)) : (a + ' ~ ' + b);
 }
 
+/* ============================================================
+   对外展示（三档开关）
+   —— 「标签类」内容（退步榜 / 需关注 / 四象限 / 诊断卡）落到学生手里
+      可能是公开处刑，所以默认一律「完全隐藏」，要放开由站主自己决定。
+   ============================================================ */
+var SC_CFG = null;
+
+var SC_DISPLAY_ITEMS = [
+  { key: 'diagnosis', name: '诊断卡', hint: '「本次最值得做的事」——班均、最薄弱一科、过线人数' },
+  { key: 'watchList', name: '需关注学生', hint: '低于班均 10 分的学生 + 自动识别的拖后腿科目' },
+  { key: 'tailRank',  name: '进退步榜', hint: '和上一次考试比名次，进步/退步最多的几个' },
+  { key: 'quadrant',  name: '四象限 + 热力图', hint: '分层教学散点图、学生 × 科目热力图' },
+];
+
+function scCfgOpt(cur, val, label){
+  return '<option value="' + val + '"' + (cur === val ? ' selected' : '') + '>' + label + '</option>';
+}
+
+function scEditDisplay(){
+  api('/scores?action=config').then(function(j){
+    SC_CFG = j.config || {};
+    var c = SC_CFG;
+    var body =
+        '<div class="field"><label>整个「成绩分析」对学生开放吗</label>'
+      +   '<select id="cfAccess">'
+      +     scCfgOpt(c.access, 'off', '关闭 —— 学生打开只看到「暂未对外开放」')
+      +     scCfgOpt(c.access, 'published', '开放 —— 学生能看到已发布的考试')
+      +   '</select>'
+      +   '<p class="muted" style="font-size:.78rem;margin:6px 0 0">刚上手时建议先关着，等录完成绩、核对无误再开。</p></div>'
+
+      + '<div class="field"><label>默认排名口径</label>'
+      +   '<select id="cfBasis">'
+      +     scCfgOpt(c.rankBasis, 'graded', '总分（赋分）—— 化学 / 生物用赋分后的分')
+      +     scCfgOpt(c.rankBasis, 'raw', '总分（原始）')
+      +   '</select>'
+      +   '<p class="muted" style="font-size:.78rem;margin:6px 0 0">学生仍然可以在页面上自己切换。</p></div>'
+
+      + '<div class="field"><label>趋势默认看几次</label>'
+      +   '<select id="cfTrend">'
+      +     scCfgOpt(c.trendDefault, 'all', '全部（推荐 —— 你们一年才 6~8 次大考）')
+      +     scCfgOpt(c.trendDefault, '5', '近 5 次')
+      +     scCfgOpt(c.trendDefault, '3', '近 3 次')
+      +   '</select></div>'
+
+      + '<div class="field"><label>下面这些内容的「可见范围」</label>'
+      +   '<p class="muted" style="font-size:.78rem;margin:6px 0 8px">'
+      +     '这几块都是<b>给你看的分析</b>，落到学生手里容易变成公开处刑，所以默认全部隐藏。'
+      +     '你自己任何时候都能看到。</p>'
+      +   SC_DISPLAY_ITEMS.map(function(it){
+          return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)">'
+            + '<div style="flex:1;min-width:170px"><b style="font-size:.86rem">' + esc(it.name) + '</b>'
+            +   '<p class="muted" style="font-size:.76rem;margin:3px 0 0">' + esc(it.hint) + '</p></div>'
+            + '<select id="cf_' + it.key + '" style="min-width:170px">'
+            +   scCfgOpt(c[it.key], 'hide', '完全隐藏（只有我能看）')
+            +   scCfgOpt(c[it.key], 'self', '只给本人看自己那条')
+            +   scCfgOpt(c[it.key], 'all', '全班可见')
+            + '</select></div>';
+        }).join('')
+      + '</div>';
+
+    var box = openModal({
+      title: '对外展示',
+      sub: '控制哪些内容学生能看到。改动立刻生效，学生刷新即可。',
+      wide: true,
+      body: body,
+      actions: [
+        { label: '取消', cls: 'btn-secondary', onClick: closeModal },
+        { label: '保存', cls: 'btn', id: 'cfSave' },
+      ],
+      onMount: function(bx){
+        bx.querySelector('#cfSave').onclick = function(){
+          var patch = {
+            access: bx.querySelector('#cfAccess').value,
+            rankBasis: bx.querySelector('#cfBasis').value,
+            trendDefault: bx.querySelector('#cfTrend').value,
+          };
+          SC_DISPLAY_ITEMS.forEach(function(it){
+            patch[it.key] = bx.querySelector('#cf_' + it.key).value;
+          });
+          api('/scores?action=config-save', { method: 'POST', body: { config: patch } })
+            .then(function(){ closeModal(); toast('已保存，学生刷新就能看到新设置'); })
+            .catch(function(e){ toast('保存失败：' + (e.message || e), 'err'); });
+        };
+      },
+    });
+  }).catch(function(e){ toast('读不到配置：' + (e.message || e), 'err'); });
+}
+
 function renderScores(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel)">'
@@ -8494,12 +8582,14 @@ function renderScores(){
     +      '只录大型考试（全校 / 校际联考、月考）。导入或手填 → 核对 → 发布，同学才看得到。'
     +    '</p></div>'
     +  '<button class="btn btn-sm btn-secondary" id="scRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +  '<button class="btn btn-sm btn-secondary" id="scDisplay">对外展示</button>'
     +  '<button class="btn btn-sm" id="scNew">' + svg('plus',14) + ' 新建考试</button>'
     + '</div>'
     + '<section class="panel"><div id="scBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
 
   $('scRefresh').onclick = scLoad;
   $('scNew').onclick = function(){ scEditExam(null); };
+  $('scDisplay').onclick = scEditDisplay;
   scLoad();
 }
 
