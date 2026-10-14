@@ -777,6 +777,17 @@ function getKV() {
   return null;
 }
 
+/** 把数据库返回的 date 变成 YYYY-MM-DD。
+    ⚠️ 必须做：Postgres 的 date 经驱动出来是 Date 对象，序列化后变成
+   `2026-07-02T00:00:00.000Z` —— 这种格式喂回 exam-save 会被「格式应为 YYYY-MM-DD」
+   挡下；直接塞给 jsonb_to_recordset 也不稳。快照里就存干净的日期。
+   （2026-10-14 演练踩到的第二个坑。） */
+function isoDay(v) {
+  if (v == null) return null;
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v));
+  return m ? m[1] : null;
+}
+
 /** 打包一份快照：成绩 + 内容数据（用户表只留脱敏信息，不还原） */
 async function buildSnapshot(sql) {
   const exams = await sql`select * from exams order by id`;
@@ -809,7 +820,10 @@ async function buildSnapshot(sql) {
       users: users.length,
     },
     tables: {
-      exams,
+      exams: exams.map((e) => Object.assign({}, e, {
+        exam_date: isoDay(e.exam_date),
+        exam_end_date: isoDay(e.exam_end_date),
+      })),
       exam_scores: scores,
       share_links: shares,
       score_config: cfg,
@@ -973,6 +987,15 @@ async function backupRestore(req, res) {
   await sql`delete from share_links`;
   await sql`delete from exams`;
 
+  /* 兼容旧快照：日期统一截成 YYYY-MM-DD 再灌 */
+  const fixExams = (t.exams || []).map((e) => Object.assign({}, e, {
+    exam_date: isoDay(e.exam_date),
+    exam_end_date: isoDay(e.exam_end_date),
+  }));
+  if (fixExams.some((e) => !e.exam_date)) {
+    return fail(res, 400, '快照里有考试的日期无法识别，不能还原（请换一份快照）');
+  }
+
   /* ⚠️ 必须**批量**插入，不能逐条 insert。
      Cloudflare Workers 免费版每个请求最多 50 个子请求，而 Neon 的每次查询
      就是一次子请求 —— 逐条插入 121 条成绩会直接超限。
@@ -987,7 +1010,7 @@ async function backupRestore(req, res) {
              coalesce(x.subjects, '[]'::jsonb), coalesce(x.cutlines, '[]'::jsonb),
              x.grade_ref, x.note, coalesce(x.status, 'draft'),
              x.published_at, x.created_by, coalesce(x.created_at, now()), coalesce(x.updated_at, now())
-        from jsonb_to_recordset(${JSON.stringify(t.exams)}::jsonb) as x(
+        from jsonb_to_recordset(${JSON.stringify(fixExams)}::jsonb) as x(
           id bigint, name text, exam_date date, exam_end_date date, exam_type text,
           subjects jsonb, cutlines jsonb, grade_ref jsonb, note text, status text,
           published_at timestamptz, created_by bigint, created_at timestamptz, updated_at timestamptz)
