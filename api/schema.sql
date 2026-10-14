@@ -327,7 +327,8 @@ create table if not exists share_links (
   token      text        not null unique,                 -- 随机串，就是链接尾巴
   scope      text        not null default 'self',          -- self 自己 / picked 自选 / class 全班
   owner_id   bigint      references users(id) on delete cascade,
-  target_ids bigint[],                                    -- 分享给谁（scope=picked 时用）
+  target_ids bigint[],                                    -- （旧字段，未用）
+  target_names jsonb,                                     -- 分享给谁（scope=picked 时用，存姓名）
   exam_ids   bigint[],                                    -- 包含哪几次考试
   sections   jsonb       not null default '{}'::jsonb,     -- 显示哪些板块
   expires_at timestamptz,                                 -- 到期时间

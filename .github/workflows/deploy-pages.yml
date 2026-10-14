@@ -67,6 +67,7 @@ jobs:
           SOURCE_FILES=(
             index.html
             admin.html
+            share.html
             sw.js
             manifest.webmanifest
             favicon.svg

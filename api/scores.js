@@ -84,6 +84,11 @@ async function handleGet(req, res, action) {
     case 'me':     return await getMe(req, res);
     case 'config': return await getConfig(req, res);
     case 'meta':   return await getMeta(req, res);
+    /* 分享链接取数：**免登录**（链接本身就是凭证） */
+    case 'share-get': return await shareGet(req, res);
+    case 'backup-list':   return await backupList(req, res);
+    case 'backup-get':    return await backupGet(req, res);
+    case 'backup-export': return await backupExport(req, res);
     default:       return fail(res, 400, '未知的读取动作：' + (action || '(空)'));
   }
 }
@@ -234,7 +239,12 @@ async function handlePost(req, res, action) {
     case 'scores-import': return await scoresImport(req, res);
     case 'scores-save':  return await scoresSave(req, res);
     case 'row-delete':   return await rowDelete(req, res);
-    case 'config-save':  return await configSave(req, res);
+    case 'config-save':    return await configSave(req, res);
+    case 'share-create':   return await shareCreate(req, res);
+    case 'share-revoke':   return await shareRevoke(req, res);
+    case 'share-list':     return await shareList(req, res);
+    case 'backup-run':     return await backupRun(req, res);
+    case 'backup-restore': return await backupRestore(req, res);
     default:             return fail(res, 400, '未知的写入动作：' + (action || '(空)'));
   }
 }
@@ -530,6 +540,467 @@ async function rowDelete(req, res) {
 }
 
 /** 保存成绩分析的全局配置 */
+/* ============================================================
+   分享链接（R38）
+   ------------------------------------------------------------
+   免登录只读。**谁能拿到链接谁就能看，转发出去控制不了**，
+   所以默认给得保守：学生只能分自己、默认 7 天、可撤销、可限次数。
+   ============================================================ */
+
+/** 随机 token（24 字节 → 32 位 base64url，够用且短） */
+function shareToken() {
+  const buf = new Uint8Array(24);
+  crypto.getRandomValues(buf);
+  return btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function shareCreate(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return;
+
+  const b = await body(req);
+  const sql = getSql();
+  const cfg = await loadConfig(sql);
+  const isAdmin = u.role === 'admin';
+
+  let scope = String(b.scope || 'self');
+  if (['self', 'picked', 'class'].indexOf(scope) < 0) return fail(res, 400, '分享范围不对');
+
+  /* 学生受后台开关限制 */
+  if (!isAdmin) {
+    const allow = cfg.shareByStudent || 'none';
+    if (allow === 'none') return fail(res, 403, '老师还没有开放分享功能');
+    if (allow === 'self' && scope !== 'self') return fail(res, 403, '只能分享自己的成绩');
+  }
+
+  /* 有效期：0 表示永久 */
+  let days = Number(b.days);
+  if (!Number.isFinite(days) || days < 0) days = Number(cfg.shareDays) || 7;
+  if (days > 3650) days = 3650;
+
+  const examIds = (Array.isArray(b.examIds) ? b.examIds : [])
+    .map(Number).filter(Number.isFinite).slice(0, 50);
+
+  let names = [];
+  if (scope === 'picked') {
+    names = (Array.isArray(b.names) ? b.names : [])
+      .map((x) => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 120);
+    if (!names.length) return fail(res, 400, '自选分享至少要选一位同学');
+  }
+
+  const maxViews = Number.isFinite(Number(b.maxViews)) && Number(b.maxViews) > 0
+    ? Math.min(100000, Math.round(Number(b.maxViews))) : null;
+
+  const token = shareToken();
+
+  const ins = await sql`
+    insert into share_links (token, scope, owner_id, target_names, exam_ids, expires_at, max_views)
+    values (${token}, ${scope}, ${u.id},
+            ${names.length ? JSON.stringify(names) : null}::jsonb,
+            ${examIds.length ? examIds : null},
+            ${days > 0 ? new Date(Date.now() + days * 86400000) : null},
+            ${maxViews})
+    returning id`;
+
+  await audit(u.id, 'score-share-create', 'share_link', Number(ins[0].id), scope + '/' + days + 'd');
+
+  ok(res, {
+    id: Number(ins[0].id),
+    token,
+    url: '/share.html?t=' + token,
+    scope,
+    days,
+    expiresAt: days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null,
+  });
+}
+
+async function shareRevoke(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return;
+  const b = await body(req);
+  const id = Number(b.id || 0);
+  if (!id) return fail(res, 400, '缺少分享 id');
+
+  const sql = getSql();
+  const rows = await sql`select id, owner_id from share_links where id = ${id}`;
+  if (!rows.length) return fail(res, 404, '找不到这条分享');
+  if (u.role !== 'admin' && Number(rows[0].owner_id) !== Number(u.id)) {
+    return fail(res, 403, '只能撤销自己建的分享');
+  }
+  await sql`update share_links set revoked = true where id = ${id}`;
+  await audit(u.id, 'score-share-revoke', 'share_link', id, '');
+  ok(res, { revoked: id });
+}
+
+async function shareList(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return;
+  const sql = getSql();
+  const isAdmin = u.role === 'admin';
+  const rows = isAdmin
+    ? await sql`
+        select s.*, u.display_name as owner_name
+          from share_links s left join users u on u.id = s.owner_id
+         order by s.created_at desc limit 100`
+    : await sql`
+        select s.*, u.display_name as owner_name
+          from share_links s left join users u on u.id = s.owner_id
+         where s.owner_id = ${u.id}
+         order by s.created_at desc limit 100`;
+
+  ok(res, { isAdmin, shares: rows.map(shareShape) });
+}
+
+function shareShape(r) {
+  const expired = r.expires_at ? new Date(r.expires_at).getTime() < Date.now() : false;
+  const used = r.max_views != null && Number(r.views) >= Number(r.max_views);
+  return {
+    id: Number(r.id),
+    token: r.token,
+    url: '/share.html?t=' + r.token,
+    scope: r.scope,
+    ownerName: r.owner_name || '',
+    names: jsonCol(r.target_names) || [],
+    examIds: Array.isArray(r.exam_ids) ? r.exam_ids.map(Number) : [],
+    createdAt: r.created_at ? String(r.created_at) : null,
+    expiresAt: r.expires_at ? String(r.expires_at) : null,
+    maxViews: r.max_views == null ? null : Number(r.max_views),
+    views: Number(r.views) || 0,
+    revoked: !!r.revoked,
+    expired,
+    usedUp: used,
+    alive: !r.revoked && !expired && !used,
+  };
+}
+
+/** 免登录取数：链接本身就是凭证 */
+async function shareGet(req, res) {
+  const token = String(req.query.t || '').trim();
+  if (!token || token.length > 80) return fail(res, 400, '缺少链接标识');
+
+  const sql = getSql();
+  const rows = await sql`select * from share_links where token = ${token}`;
+  if (!rows.length) return fail(res, 404, '这个分享链接不存在（可能已被删除）');
+  const s0 = rows[0];
+
+  if (s0.revoked) return fail(res, 410, '这个分享已被撤销');
+  if (s0.expires_at && new Date(s0.expires_at).getTime() < Date.now()) return fail(res, 410, '这个分享已过期');
+  if (s0.max_views != null && Number(s0.views) >= Number(s0.max_views)) {
+    return fail(res, 410, '这个分享的查看次数已用完');
+  }
+  await sql`update share_links set views = views + 1 where id = ${s0.id}`;
+
+  const ids = Array.isArray(s0.exam_ids) ? s0.exam_ids.map(Number).filter(Number.isFinite) : [];
+  const exams = ids.length
+    ? await sql`
+        select * from exams
+         where id = any(${ids}::bigint[])
+         order by exam_date asc, id asc`
+    : await sql`
+        select * from exams
+         where status = 'published'
+         order by exam_date asc, id asc`;
+
+  if (!exams.length) return ok(res, { share: shareShape(s0), exams: [], rows: [] });
+
+  const examList = exams.map(normalizeExam);
+  const examMap = new Map(examList.map((e) => [e.id, e]));
+
+  const sc = await sql`
+    select exam_id, user_id, student_name, scores, school_rank, league_rank
+      from exam_scores
+     where exam_id = any(${examList.map((e) => e.id)}::bigint[])
+     order by exam_id, id`;
+
+  const names = jsonCol(s0.target_names) || [];
+  const out = [];
+  sc.forEach((r) => {
+    const eid = Number(r.exam_id);
+    /* 范围过滤：self 只给分享者自己；picked 只给点名的那些 */
+    if (s0.scope === 'self' && Number(r.user_id) !== Number(s0.owner_id)) return;
+    if (s0.scope === 'picked' && names.indexOf(String(r.student_name)) < 0) return;
+    out.push({
+      examId: eid,
+      name: r.student_name,
+      s: jsonCol(r.scores) || {},
+      schoolRank: r.school_rank == null ? null : Number(r.school_rank),
+      leagueRank: r.league_rank == null ? null : Number(r.league_rank),
+      isOwner: Number(r.user_id) === Number(s0.owner_id),
+    });
+  });
+
+  ok(res, {
+    share: shareShape(s0),
+    exams: examList,
+    rows: out,
+  });
+}
+
+/* ============================================================
+   每日备份（KV）· R37
+   ------------------------------------------------------------
+   ⚠️ **备份必须跨服务商**：数据在 Neon，备份放 Cloudflare KV，
+      这算「异地」；如果两边都在一家，那不算真备份。
+   ⚠️ **备份绝不能进公开仓库**：站点仓库是 public，
+      一提交等于全班成绩公开。所以走 KV，不走 Git。
+   没配 KV 时所有备份接口都会明确说「还没配存储」，不影响其它功能。
+   ============================================================ */
+const BACKUP_PREFIX = 'backup/';
+const BACKUP_KEEP = 14;          /* KV 里最多留 14 份（两周） */
+
+/** 取 KV 绑定（没配就返回 null） */
+function getKV() {
+  try {
+    const env = globalThis.__ENV__;
+    if (env && env.SITE_KV && typeof env.SITE_KV.get === 'function') return env.SITE_KV;
+  } catch (e) {}
+  return null;
+}
+
+/** 打包一份快照：成绩 + 内容数据（用户表只留脱敏信息，不还原） */
+async function buildSnapshot(sql) {
+  const exams = await sql`select * from exams order by id`;
+  const scores = await sql`select * from exam_scores order by id`;
+  const shares = await sql`
+    select id, token, scope, owner_id, target_names, exam_ids,
+           expires_at, max_views, views, revoked, created_at
+      from share_links order by id`;
+  const cfg = await sql`select data from score_config where id = 1`;
+  /* 公告 / 作业 / 弹窗 / 每日一言 等全部存在 user_data 里，一并备份 */
+  let userData = [];
+  try {
+    userData = await sql`select user_id, data_key, data_value, updated_at from user_data order by user_id, data_key`;
+  } catch (e) { userData = []; }
+
+  let users = [];
+  try {
+    users = await sql`select id, username, display_name, role, status from users order by id`;
+  } catch (e) { users = []; }
+
+  return {
+    version: 1,
+    at: new Date().toISOString(),
+    kind: 'class-site-backup',
+    counts: {
+      exams: exams.length,
+      examScores: scores.length,
+      shareLinks: shares.length,
+      userData: userData.length,
+      users: users.length,
+    },
+    tables: {
+      exams,
+      exam_scores: scores,
+      share_links: shares,
+      score_config: cfg,
+      user_data: userData,
+      /* ⚠️ 只记 id / 姓名，**不含密码哈希**，还原时也不会动 users 表 */
+      users,
+    },
+  };
+}
+
+/** 供 Cron 调用：无人值守的每日备份（不经过 HTTP） */
+export async function runDailyBackup() {
+  const kv = getKV();
+  if (!kv) return { skipped: 'no-kv' };
+  const sql = getSql();
+  const snap = await buildSnapshot(sql);
+  const key = BACKUP_PREFIX + snap.at.replace(/[:.]/g, '-') + '.json';
+  await kv.put(key, JSON.stringify(snap));
+  try {
+    const list = await kv.list({ prefix: BACKUP_PREFIX, limit: 100 });
+    const keys = (list.keys || []).map((k) => k.name).sort();
+    while (keys.length > BACKUP_KEEP) {
+      const oldKey = keys.shift();
+      if (oldKey !== key) await kv.delete(oldKey);
+    }
+  } catch (e) {}
+  return { key, counts: snap.counts };
+}
+
+async function backupRun(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+  const sql = getSql();
+  const snap = await buildSnapshot(sql);
+
+  const kv = getKV();
+  if (!kv) {
+    /* 没配 KV 也把快照返回去，站主可以自己存一份，不至于白跑 */
+    await audit(u.id, 'score-backup-run', 'backup', 0, 'no-kv');
+    return ok(res, {
+      stored: false,
+      kv: false,
+      snapshot: snap,
+      hint: '还没配置备份存储（KV），所以这份快照只是回给你，请自己保存好。',
+    });
+  }
+
+  const key = BACKUP_PREFIX + snap.at.replace(/[:.]/g, '-') + '.json';
+  await kv.put(key, JSON.stringify(snap));
+
+  /* 清掉多余的旧快照 */
+  try {
+    const list = await kv.list({ prefix: BACKUP_PREFIX, limit: 100 });
+    const keys = (list.keys || []).map((k) => k.name).sort();
+    while (keys.length > BACKUP_KEEP) {
+      const old = keys.shift();
+      if (old !== key) await kv.delete(old);
+    }
+  } catch (e) { /* 清理失败不影响本次备份 */ }
+
+  await audit(u.id, 'score-backup-run', 'backup', 0, key);
+  ok(res, { stored: true, kv: true, key, counts: snap.counts });
+}
+
+async function backupList(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+  const kv = getKV();
+  if (!kv) return fail(res, 503, '还没配置备份存储（KV）—— 见站点文档「备份」一节');
+  const list = await kv.list({ prefix: BACKUP_PREFIX, limit: 100 });
+  const keys = (list.keys || []).map((k) => k.name).sort().reverse();
+  ok(res, {
+    kv: true,
+    keep: BACKUP_KEEP,
+    items: keys.map((k) => ({
+      key: k,
+      at: k.replace(BACKUP_PREFIX, '').replace(/\.json$/, '').replace(/-/g, (m, i) => m),
+    })),
+  });
+}
+
+async function backupGet(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+  const key = String(req.query.key || '').trim();
+  if (!key || key.indexOf(BACKUP_PREFIX) !== 0) return fail(res, 400, '快照标识不对');
+  const kv = getKV();
+  if (!kv) return fail(res, 503, '还没配置备份存储（KV）');
+  const raw = await kv.get(key);
+  if (!raw) return fail(res, 404, '这份快照已经不在存储里了');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.statusCode = 200;
+  res.end(raw);   /* 原样吐出 JSON，浏览器会直接下载 */
+}
+
+/** 直接导出一份（不依赖 KV）—— 站主想自己留底时用 */
+async function backupExport(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+  const sql = getSql();
+  const snap = await buildSnapshot(sql);
+  await audit(u.id, 'score-backup-export', 'backup', 0, 'download');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.statusCode = 200;
+  res.end(JSON.stringify(snap));
+}
+
+/** 从快照还原（只动成绩相关的表；users 表绝不碰） */
+async function backupRestore(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+  const b = await body(req);
+  if (String(b.confirm || '') !== 'RESTORE') {
+    return fail(res, 400, '危险操作：请在 confirm 里原样填写 RESTORE');
+  }
+  const sql = getSql();
+
+  let snap = null;
+  if (b.snapshot && typeof b.snapshot === 'object') {
+    snap = b.snapshot;
+  } else if (b.key) {
+    const kv = getKV();
+    if (!kv) return fail(res, 503, '还没配置备份存储（KV），没法按标识取快照');
+    const raw = await kv.get(String(b.key));
+    if (!raw) return fail(res, 404, '这份快照已经不在存储里了');
+    try { snap = JSON.parse(raw); } catch (e) { return fail(res, 400, '快照内容不是合法 JSON'); }
+  } else {
+    return fail(res, 400, '要么给 key，要么直接给 snapshot');
+  }
+
+  const t = (snap && snap.tables) || {};
+  if (!Array.isArray(t.exams)) return fail(res, 400, '快照里没有考试数据，不能还原');
+
+  /* 只预览不写库 */
+  if (b.dry) {
+    const cur = await sql`select count(*)::int as n from exams`;
+    const curS = await sql`select count(*)::int as n from exam_scores`;
+    return ok(res, {
+      dry: true,
+      will: {
+        exams: (t.exams || []).length,
+        examScores: (t.exam_scores || []).length,
+        shareLinks: (t.share_links || []).length,
+      },
+      now: { exams: Number(cur[0].n), examScores: Number(curS[0].n) },
+      at: snap.at || null,
+    });
+  }
+
+  /* 还原前先自动留一份「现在的样子」，万一还原错了还能退回来 */
+  const safety = await buildSnapshot(sql);
+  const kv = getKV();
+  let safetyKey = null;
+  if (kv) {
+    safetyKey = BACKUP_PREFIX + 'before-restore-' + Date.now() + '.json';
+    try { await kv.put(safetyKey, JSON.stringify(safety)); } catch (e) { safetyKey = null; }
+  }
+
+  /* 覆盖式还原：先清空成绩相关的表，再按快照写回 */
+  await sql`delete from exam_scores`;
+  await sql`delete from share_links`;
+  await sql`delete from exams`;
+
+  for (const e of t.exams) {
+    await sql`
+      insert into exams (id, name, exam_date, exam_end_date, exam_type, subjects, cutlines,
+                         grade_ref, note, status, published_at, created_by, created_at, updated_at)
+      values (${e.id}, ${e.name}, ${e.exam_date}, ${e.exam_end_date || null}, ${e.exam_type || null},
+              ${JSON.stringify(jsonCol(e.subjects) || [])}::jsonb,
+              ${JSON.stringify(jsonCol(e.cutlines) || [])}::jsonb,
+              ${e.grade_ref ? JSON.stringify(jsonCol(e.grade_ref)) : null}::jsonb,
+              ${e.note || null}, ${e.status || 'draft'},
+              ${e.published_at || null}, ${e.created_by || null},
+              ${e.created_at || new Date()}, ${e.updated_at || new Date()})
+      on conflict (id) do nothing`;
+  }
+  for (const r of (t.exam_scores || [])) {
+    await sql`
+      insert into exam_scores (id, exam_id, user_id, student_name, student_no, scores,
+                               school_rank, league_rank, note, created_at, updated_at)
+      values (${r.id}, ${r.exam_id}, ${r.user_id || null}, ${r.student_name}, ${r.student_no || null},
+              ${JSON.stringify(jsonCol(r.scores) || {})}::jsonb,
+              ${r.school_rank == null ? null : r.school_rank},
+              ${r.league_rank == null ? null : r.league_rank},
+              ${r.note || null}, ${r.created_at || new Date()}, ${r.updated_at || new Date()})
+      on conflict (id) do nothing`;
+  }
+  if (Array.isArray(t.score_config) && t.score_config.length && t.score_config[0].data) {
+    await sql`
+      insert into score_config (id, data, updated_at)
+      values (1, ${JSON.stringify(jsonCol(t.score_config[0].data))}::jsonb, now())
+      on conflict (id) do update set data = ${JSON.stringify(jsonCol(t.score_config[0].data))}::jsonb, updated_at = now()`;
+  }
+
+  /* bigserial 的自增值要跟着最大 id 修，否则下次插入会撞主键 */
+  try {
+    await sql`select setval(pg_get_serial_sequence('exams','id'), coalesce((select max(id) from exams), 1))`;
+    await sql`select setval(pg_get_serial_sequence('exam_scores','id'), coalesce((select max(id) from exam_scores), 1))`;
+    await sql`select setval(pg_get_serial_sequence('share_links','id'), coalesce((select max(id) from share_links), 1))`;
+  } catch (e) { /* 序列修不了不致命 */ }
+
+  await audit(u.id, 'score-backup-restore', 'backup', 0, 'restored');
+  ok(res, {
+    restored: {
+      exams: (t.exams || []).length,
+      examScores: (t.exam_scores || []).length,
+    },
+    beforeRestoreKey: safetyKey,
+  });
+}
+
 async function configSave(req, res) {
   const u = await requireAdmin(req, res);
   if (!u) return;

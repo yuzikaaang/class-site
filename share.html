@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fffdfb">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>成绩分享</title>
+<style>
+:root{
+  --bg:#fffdfb; --panel:#fff; --line:#f0e7de; --line2:#e2d5c8;
+  --ink:#292524; --ink2:#57534e; --dim:#a8968a; --brand:#c2410c; --brand2:#b45309;
+  --ok:#0f8a4d; --bad:#c0392b; --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+html{overflow-x:hidden}
+body{
+  background:linear-gradient(180deg,#fff8f2,#fffdfb 320px);
+  color:var(--ink);min-height:100vh;
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:860px;margin:0 auto;padding:18px 16px 60px}
+.watermark{
+  background:#fdf8f3;border:1px solid var(--line);border-radius:10px;
+  padding:9px 13px;font-size:.76rem;color:#6e635a;line-height:1.7;
+  display:flex;gap:8px;align-items:flex-start;margin-bottom:16px;
+}
+.watermark b{color:var(--brand2)}
+.head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.head h1{font-size:1.15rem;margin:0;font-weight:800}
+.head .sub{font-size:.78rem;color:var(--dim)}
+.selbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+select{
+  flex:1;min-width:180px;padding:10px 12px;border:1.5px solid var(--line2);border-radius:10px;
+  background:#fff;font-size:.86rem;color:var(--ink);font-family:inherit;
+}
+.seg{display:inline-flex;border:1.5px solid var(--line2);border-radius:10px;overflow:hidden;flex-shrink:0}
+.seg button{padding:9px 12px;border:none;background:#fff;color:#6e635a;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}
+.seg button.on{background:var(--brand);color:#fff}
+.meta{font-size:.78rem;color:#6e635a;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 6px;text-align:center}
+.stat b{display:block;font-size:1.05rem;color:var(--brand2);font-variant-numeric:tabular-nums}
+.stat span{font-size:.72rem;color:#6e635a}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-top:12px}
+.card h2{font-size:.86rem;margin:0 0 10px;color:var(--ink2);font-weight:800}
+.tblwrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:#fff;max-height:62vh}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem;min-width:560px}
+th{position:sticky;top:0;z-index:3;background:#fdf8f3;padding:9px 6px;font-weight:700;
+  color:var(--ink2);font-size:.76rem;white-space:nowrap;border-bottom:1.5px solid var(--line)}
+td{padding:8px 6px;text-align:center;border-bottom:1px solid #faf5f0;font-variant-numeric:tabular-nums;background:#fff}
+tbody tr:last-child td{border-bottom:none}
+th:nth-child(1),td:nth-child(1){position:sticky;left:0;z-index:2;width:46px;min-width:46px}
+th:nth-child(2),td:nth-child(2){position:sticky;left:46px;z-index:2;box-shadow:1px 0 0 var(--line)}
+th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
+.name{font-weight:700;text-align:left;padding-left:10px;white-space:nowrap;background:#fff}
+.subrank{display:block;font-size:.62rem;color:var(--dim);line-height:1}
+.total{font-weight:800;color:var(--brand2)}
+.me{background:#fff8f2 !important}
+.big{background:linear-gradient(135deg,#fff8f2,#fffdfb);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
+.big-top{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.big-name{font-size:1.5rem;font-weight:800;color:var(--brand)}
+.big-total{font-size:2.2rem;font-weight:800;color:var(--ink);line-height:1;font-variant-numeric:tabular-nums}
+.big-total small{font-size:.8rem;color:var(--dim);font-weight:400;margin-left:4px}
+.ov{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:14px}
+.ov div{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 11px;
+  display:flex;justify-content:space-between;gap:8px;font-size:.78rem}
+.ov span{color:#6e635a;white-space:nowrap}
+.ov b{color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.subs{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:9px}
+.sub{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 11px}
+.sub .t{font-size:.78rem;color:var(--ink2);display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.sub .tag{font-size:.6rem;background:#f3ecfe;color:#7c3aed;border-radius:4px;padding:1px 4px;font-weight:700}
+.sub .v{font-size:1.25rem;font-weight:800;font-variant-numeric:tabular-nums}
+.sub .v small{font-size:.68rem;color:var(--dim);font-weight:400}
+.sub .d{font-size:.72rem;margin-top:3px;font-weight:700}
+.up{color:var(--ok)} .down{color:var(--bad)}
+.bar{height:5px;border-radius:999px;background:#f5efe8;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:#e6a97a;border-radius:999px}
+.cuts{display:flex;flex-direction:column;gap:8px}
+.cut{display:flex;align-items:center;gap:8px;font-size:.84rem;padding:9px 11px;border-radius:10px;background:#faf5f0}
+.cut.ok{background:#f0f9f2}
+.cut.no{background:#fdf2f0}
+.cut i{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.cut b{flex:1;color:var(--ink2)}
+.cut span{font-weight:700}
+.cut.ok span{color:var(--ok)} .cut.no span{color:var(--bad)}
+.fig{font-size:.72rem;color:var(--dim);line-height:1.7;margin-top:9px}
+.empty{text-align:center;padding:56px 16px;color:#6e635a}
+.empty .ico{font-size:2.2rem;margin-bottom:12px}
+.empty p{margin:6px 0;font-size:.88rem;line-height:1.8}
+.empty .dim{color:var(--dim);font-size:.8rem}
+.spin{width:26px;height:26px;border:3px solid #f0e7de;border-top-color:var(--brand);
+  border-radius:50%;margin:0 auto 14px;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.foot{margin-top:26px;text-align:center;font-size:.72rem;color:var(--dim);line-height:1.9}
+.foot a{color:var(--brand2);text-decoration:none}
+@media (max-width:560px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .tblwrap{max-height:56vh}
+  .wrap{padding:14px 12px 48px}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="empty"><div class="spin"></div><p>正在打开分享…</p></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  var API = 'https://api.classsite.dpdns.org';
+  var app = document.getElementById('app');
+
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+  function fmtNum(v, maxDec){
+    if(v == null || !isFinite(v)) return '—';
+    var d = maxDec == null ? 1 : maxDec;
+    var r = Math.round(v * Math.pow(10, d)) / Math.pow(10, d);
+    return (Math.abs(r - Math.round(r)) < 1e-9) ? String(Math.round(r)) : String(r);
+  }
+  function token(){
+    var m = /(?:^|[?&])t=([^&]+)/.exec(location.search);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  function dateRange(e){
+    var a = e.date || '', b = e.endDate || '';
+    if(!b || b === a) return a;
+    return a.slice(0,4) === b.slice(0,4) ? (a + ' ~ ' + b.slice(5)) : (a + ' ~ ' + b);
+  }
+  function untilText(iso){
+    if(!iso) return '永久有效';
+    var d = new Date(iso);
+    return '有效期至 ' + d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  var T = token();
+  if(!T){
+    app.innerHTML = '<div class="empty"><div class="ico">🔗</div>'
+      + '<p><b>链接不完整</b></p><p class="dim">这个地址里没有分享标识，请向分享给你的同学要完整链接。</p></div>';
+    return;
+  }
+
+  fetch(API + '/api/scores?action=share-get&t=' + encodeURIComponent(T))
+    .then(function(r){ return r.json().then(function(j){ return { status: r.status, j: j }; }); })
+    .then(function(res){
+      if(!res.j || !res.j.ok){
+        var msg = (res.j && res.j.error) || '打不开这个分享';
+        app.innerHTML = '<div class="empty"><div class="ico">🔒</div>'
+          + '<p><b>' + esc(msg) + '</b></p>'
+          + '<p class="dim">如果这是老师或同学发给你的，可以让他重新生成一个链接。</p></div>';
+        return;
+      }
+      render(res.j);
+    })
+    .catch(function(){
+      app.innerHTML = '<div class="empty"><div class="ico">📡</div>'
+        + '<p><b>网络不给力，没能打开</b></p><p class="dim">检查一下网络，再刷新试试。</p></div>';
+    });
+
+  var DATA = null, EX = null, BASIS = 'graded';
+
+  function render(d){
+    DATA = d;
+    var sh = d.share || {};
+    var exams = d.exams || [];
+    if(!exams.length){
+      app.innerHTML = '<div class="empty"><div class="ico">📊</div><p><b>暂时没有可看的成绩</b></p>'
+        + '<p class="dim">老师可能还没发布成绩，过几天再来看看。</p></div>';
+      return;
+    }
+    var scopeTxt = sh.scope === 'self' ? '本人的成绩' : sh.scope === 'picked' ? '指定同学的' : '全班';
+    var wm = '<div class="watermark"><span>🔗</span><div>'
+      + '本页由 <b>' + esc(sh.ownerName || '同学') + '</b> 分享（' + esc(scopeTxt) + '成绩）· '
+      + esc(untilText(sh.expiresAt))
+      + '<br><b>仅在本班内查看，请勿截图外传。</b></div></div>';
+
+    app.innerHTML = wm
+      + '<div class="head"><h1>成绩单</h1><span class="sub">共 ' + exams.length + ' 次考试</span></div>'
+      + '<div class="selbar"><select id="exSel"></select>'
+      +   '<div class="seg">'
+      +     '<button data-b="graded">总分赋分</button>'
+      +     '<button data-b="raw">总分原始</button>'
+      +   '</div></div>'
+      + '<div class="meta" id="meta"></div>'
+      + '<div id="body"></div>'
+      + '<div class="foot">班级站点 · 成绩分析<br>这是一个只读分享页，不用登录，也不会存你的任何信息。</div>';
+
+    var sel = document.getElementById('exSel');
+    sel.innerHTML = exams.map(function(e, i){
+      return '<option value="' + i + '">' + esc(e.name) + '　' + esc(dateRange(e)) + '</option>';
+    }).join('');
+    sel.value = String(exams.length - 1);
+    sel.onchange = function(){ pick(Number(sel.value)); };
+    Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function(b){
+      b.onclick = function(){ BASIS = b.getAttribute('data-b'); markSeg(); pick(Number(sel.value)); };
+    });
+    markSeg();
+    pick(exams.length - 1);
+  }
+
+  function markSeg(){
+    Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function(b){
+      b.classList.toggle('on', b.getAttribute('data-b') === BASIS);
+    });
+  }
+
+  function subScore(row, sub){
+    var v = row.s && row.s[sub.key];
+    if(!v) return null;
+    var val = (BASIS === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+    return val == null ? null : val;
+  }
+  function total(row, subs){
+    var t = 0, any = false;
+    subs.forEach(function(sub){ var v = subScore(row, sub); if(v != null){ t += v; any = true; } });
+    return any ? t : null;
+  }
+  function ranks(rows, subs){
+    var tot = [], subj = {};
+    rows.forEach(function(r){
+      var t = total(r, subs);
+      if(t != null) tot.push({ r: r, v: t });
+    });
+    tot.sort(function(a, b){ return b.v - a.v; });
+    var tr = {}, k = 0, last = null;
+    tot.forEach(function(x, i){
+      if(last === null || x.v !== last){ k = i + 1; last = x.v; }
+      tr[x.r.idx] = k;
+    });
+    subs.forEach(function(sub){
+      var arr = [];
+      rows.forEach(function(r){ var v = subScore(r, sub); if(v != null) arr.push({ r: r, v: v }); });
+      arr.sort(function(a, b){ return b.v - a.v; });
+      var m = {}, kk = 0, ll = null;
+      arr.forEach(function(x, i){
+        if(ll === null || x.v !== ll){ kk = i + 1; ll = x.v; }
+        m[x.r.idx] = kk;
+      });
+      subj[sub.key] = { rank: m, count: arr.length };
+    });
+    return { total: tr, subj: subj, list: tot.map(function(x){ return x.v; }) };
+  }
+
+  function pick(i){
+    EX = DATA.exams[i];
+    var subs = EX.subjects || [];
+    var rows = (DATA.rows || []).filter(function(r){ return r.examId === EX.id; });
+    rows.forEach(function(r, idx){ r.idx = idx; });
+
+    var mt = document.getElementById('meta');
+    var body = document.getElementById('body');
+    if(!rows.length){
+      mt.textContent = (EX.type || '考试') + '　' + dateRange(EX);
+      body.innerHTML = '<div class="card"><div class="empty" style="padding:34px 10px">'
+        + '<p>这次考试没有可看的成绩。</p></div></div>';
+      return;
+    }
+
+    var rk = ranks(rows, subs);
+    var tot = rk.list.slice().sort(function(a, b){ return a - b; });
+    var n = tot.length;
+    var avg = n ? tot.reduce(function(a, b){ return a + b; }, 0) / n : 0;
+    var med = !n ? 0 : (n % 2 ? tot[(n - 1) / 2] : (tot[n / 2 - 1] + tot[n / 2]) / 2);
+
+    mt.textContent = (EX.type || '考试') + '　' + dateRange(EX) + '　共 ' + n + ' 人'
+      + (EX.note ? '　·　' + EX.note : '');
+
+    var html = '<div class="stats">'
+      + '<div class="stat"><b>' + fmtNum(avg) + '</b><span>班均分</span></div>'
+      + '<div class="stat"><b>' + fmtNum(med) + '</b><span>中位数</span></div>'
+      + '<div class="stat"><b>' + fmtNum(tot[n - 1]) + '</b><span>最高</span></div>'
+      + '<div class="stat"><b>' + n + ' 人</b><span>参考</span></div>'
+      + '</div>';
+
+    /* 只有一个人 → 直接给一张成绩卡，比表格友好 */
+    if(rows.length === 1){
+      html += oneCard(rows[0], subs, rk, avg, n);
+      body.innerHTML = html;
+      return;
+    }
+
+    /* 多人 → 只读成绩单 */
+    var head = '<tr><th>班排</th><th>姓名</th>'
+      + subs.map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
+      + '<th>总分</th><th>校排</th></tr>';
+    var trs = rows.slice().sort(function(a, b){
+      var x = rk.total[a.idx] || 9999, y = rk.total[b.idx] || 9999;
+      return x - y;
+    }).map(function(r){
+      var st = rk.total[r.idx];
+      var t = total(r, subs);
+      return '<tr class="' + (r.isOwner ? 'me' : '') + '">'
+        + '<td>' + (st == null ? '—' : st) + '</td>'
+        + '<td class="name">' + esc(r.name) + '</td>'
+        + subs.map(function(sub){
+            var v = subScore(r, sub);
+            var sr = (rk.subj[sub.key] || {}).rank[r.idx];
+            return '<td>' + (v == null ? '<span style="color:var(--dim)">—</span>' : v)
+              + (v != null && sr ? '<span class="subrank">' + sr + '</span>' : '') + '</td>';
+          }).join('')
+        + '<td class="total">' + (t == null ? '—' : fmtNum(t)) + '</td>'
+        + '<td>' + (r.schoolRank == null ? '<span style="color:var(--dim)">—</span>' : r.schoolRank) + '</td>'
+        + '</tr>';
+    }).join('');
+    html += '<div class="card"><h2>成绩单</h2><div class="tblwrap"><table><thead>' + head + '</thead><tbody>' + trs + '</tbody></table></div>'
+      + '<div class="fig">科目格右下角的小字是<b>该科班内排名</b>。' + (BASIS === 'graded' ? '化学、生物按赋分计入总分。' : '当前按原始分计算。') + '</div></div>';
+
+    /* 上线情况 */
+    var cuts = (EX.cutlines || []).filter(function(c){ return c.score != null; });
+    if(cuts.length){
+      html += '<div class="card"><h2>上线情况</h2><div class="cuts">'
+        + cuts.map(function(c){
+            var k = tot.filter(function(v){ return v >= c.score; }).length;
+            return '<div class="cut"><i style="background:' + esc(c.color || '#b45309') + '"></i>'
+              + '<b>' + esc(c.label) + '　' + fmtNum(c.score) + ' 分</b>'
+              + '<span>' + k + ' 人（' + (k / n * 100).toFixed(0) + '%）</span></div>';
+          }).join('') + '</div></div>';
+    }
+    body.innerHTML = html;
+  }
+
+  function oneCard(r, subs, rk, avg, n){
+    var t = total(r, subs);
+    var st = rk.total[r.idx];
+    var html = '<div class="big"><div class="big-top">'
+      + '<div class="big-name">' + esc(r.name) + '</div>'
+      + '<div class="big-total">' + (t == null ? '—' : fmtNum(t)) + '<small>/ ' + fullOf(subs) + ' 总分</small></div>'
+      + '</div>'
+      + '<div class="ov">'
+      +   '<div><span>班排名</span><b>' + (st ? st + ' / ' + n : '—') + '</b></div>'
+      +   '<div><span>校排名</span><b>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</b></div>'
+      +   '<div><span>与班均</span><b>' + (t == null ? '—' : (t - avg >= 0 ? '+' : '−') + fmtNum(Math.abs(t - avg))) + '</b></div>'
+      +   '<div><span>联考排名</span><b>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</b></div>'
+      + '</div></div>';
+
+    html += '<div class="card"><h2>各科成绩</h2><div class="subs">'
+      + subs.map(function(sub){
+          var v = subScore(r, sub);
+          var sr = (rk.subj[sub.key] || {}).rank[r.idx];
+          var all = [];
+          DATA.rows.filter(function(x){ return x.examId === EX.id; }).forEach(function(x){
+            var y = subScore(x, sub); if(y != null) all.push(y);
+          });
+          var a = all.length ? all.reduce(function(p, q){ return p + q; }, 0) / all.length : 0;
+          var rate = (v != null && sub.full) ? v / sub.full : null;
+          return '<div class="sub">'
+            + '<div class="t"><b>' + esc(sub.name) + '</b>' + (sub.graded ? '<span class="tag">赋分</span>' : '') + '</div>'
+            + '<div class="v">' + (v == null ? '<small>未考</small>' : fmtNum(v) + '<small>/' + sub.full + '</small>') + '</div>'
+            + (v == null ? '' : '<div class="d ' + (v - a >= 0 ? 'up' : 'down') + '">'
+                + (v - a >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(v - a)) + ' 分'
+                + (sr ? '　班内第 ' + sr : '') + '</div>')
+            + (rate == null ? '' : '<div class="bar"><i style="width:' + (rate * 100).toFixed(1) + '%"></i></div>')
+            + '</div>';
+        }).join('') + '</div></div>';
+
+    var cuts = (EX.cutlines || []).filter(function(c){ return c.score != null; });
+    if(cuts.length && t != null){
+      html += '<div class="card"><h2>上线情况</h2><div class="cuts">'
+        + cuts.map(function(c){
+            var ok = t >= c.score;
+            return '<div class="cut ' + (ok ? 'ok' : 'no') + '"><i style="background:' + esc(c.color || '#b45309') + '"></i>'
+              + '<b>' + esc(c.label) + '</b>'
+              + '<span>' + (ok ? '已超 ' + fmtNum(t - c.score) + ' 分' : '还差 ' + fmtNum(c.score - t) + ' 分') + '</span></div>';
+          }).join('') + '</div></div>';
+    }
+    return html;
+  }
+
+  function fullOf(subs){
+    var f = 0;
+    subs.forEach(function(s){ f += (s.full || 0); });
+    return f || 750;
+  }
+})();
+</script>
+</body>
+</html>

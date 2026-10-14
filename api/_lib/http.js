@@ -246,6 +246,8 @@ export async function ensureSchema(sql) {
       )
     `;
     await s`create index if not exists share_links_owner_idx on share_links (owner_id, created_at desc)`;
+    /* 自选分享的名单（v2.8.3 分享链接） */
+    await s`alter table share_links add column if not exists target_names jsonb`;
     await s`
       create table if not exists score_config (
         id         int         primary key default 1,

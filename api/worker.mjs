@@ -179,4 +179,19 @@ export default {
       headers: state.headers,
     });
   },
+
+  /* ------------------------------------------------------------
+     定时任务：每天自动备份一次（Cloudflare Cron Trigger）
+     —— 配置见 wrangler.toml。没配 KV 时会直接跳过，不会报错。
+     ------------------------------------------------------------ */
+  async scheduled(event, env, ctx) {
+    globalThis.__ENV__ = env || {};
+    try {
+      const m = await import('./scores.js');
+      const r = await m.runDailyBackup();
+      console.log('[cron] daily backup:', JSON.stringify(r));
+    } catch (e) {
+      console.error('[cron] daily backup failed:', e && e.stack ? e.stack : e);
+    }
+  },
 };

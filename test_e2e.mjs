@@ -3120,9 +3120,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.8\.2'/.test(indexHtml),
+  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.9\.0'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.8\.2'/.test(adminHtml),
+  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.9\.0'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3486,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.8\.2'/.test(indexHtml38),
+  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.9\.0'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.8\.2'/.test(adminHtml38),
+  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.9\.0'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4498,10 +4498,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.8.2', /SITE_VERSION = '2\.8\.2'/.test(idx47));
-  t('★后台版本号 2.8.2', /SITE_VERSION = '2\.8\.2'/.test(adm47));
-  t('★service worker 缓存版本升到 v68（旧缓存要作废）',
-    /class-site-v68/.test(sw47));
+  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx47));
+  t('★后台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(adm47));
+  t('★service worker 缓存版本升到 v69（旧缓存要作废）',
+    /class-site-v69/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4585,7 +4585,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.8.2');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.0');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4685,9 +4685,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.8.2', /SITE_VERSION = '2\.8\.2'/.test(idx48));
+  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-14', /VER_DATE = '2026-10-14'/.test(idx48));
-  t('★service worker 缓存版本升到 v68', /class-site-v68/.test(sw48));
+  t('★service worker 缓存版本升到 v69', /class-site-v69/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -4751,8 +4751,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.8.2', /SITE_VERSION = '2\.8\.2'/.test(idx49));
-  t('★后台版本号 2.8.2', /SITE_VERSION = '2\.8\.2'/.test(adm49));
+  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx49));
+  t('★后台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -4824,7 +4824,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.8.2', /SITE_VERSION = '2\.8\.2'/.test(idx50));
+  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -4979,7 +4979,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.8.2', /SITE_VERSION = '2\.8\.2'/.test(adm));
+  t('★后台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5024,7 +5024,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.8.2', /SITE_VERSION = '2\.8\.2'/.test(idx));
+  t('★前台版本号 2.9.0', /SITE_VERSION = '2\.9\.0'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5180,6 +5180,82 @@ console.log('\n【57】第四十八轮·站主侧五件套 + 三档开关（v2.8
     /tailRank: 'hide'/.test(sc) && /watchList: 'hide'/.test(sc)
     && /quadrant: 'hide'/.test(sc) && /diagnosis: 'hide'/.test(sc));
   t('★默认 access 为 published（站主可一键关掉）', /access: 'published'/.test(sc));
+}
+
+console.log('\n【58】第四十九轮·分享链接 + 每日备份（v2.9.0）');
+{
+  const idx  = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm  = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const sc   = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
+  const wk   = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  const share= fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
+  const wf   = fs.readFileSync(new URL('./.github/workflows/deploy-pages.yml', import.meta.url), 'utf8');
+
+  /* ===== ① 分享链接：后端 ===== */
+  ['share-create', 'share-revoke', 'share-list'].forEach(function(a){
+    t('★POST 路由 ' + a, new RegExp("case '" + a + "':").test(sc));
+  });
+  t('★GET 路由 share-get（免登录）', /case 'share-get': return await shareGet/.test(sc));
+  t('★token 用 crypto 随机生成', /crypto\.getRandomValues\(buf\)/.test(sc) && /function shareToken\(\)/.test(sc));
+  t('★三种范围 self/picked/class', /\['self', 'picked', 'class'\]\.indexOf\(scope\) < 0/.test(sc));
+  t('★学生分享受后台开关限制', /if \(allow === 'none'\) return fail\(res, 403/.test(sc));
+  t('★过期 / 撤销 / 次数用完 三种失效都拦', /这个分享已被撤销/.test(sc) && /这个分享已过期/.test(sc) && /查看次数已用完/.test(sc));
+  t('★每次打开都给 views +1', /update share_links set views = views \+ 1/.test(sc));
+  t('★self 范围只给分享者自己', /s0\.scope === 'self' && Number\(r\.user_id\) !== Number\(s0\.owner_id\)/.test(sc));
+  t('★picked 范围按姓名过滤', /s0\.scope === 'picked' && names\.indexOf/.test(sc));
+  t('★撤销只能撤自己建的（管理员例外）', /只能撤销自己建的分享/.test(sc));
+  t('★分享表加了 target_names 列（自愈 + schema 双写）',
+    /alter table share_links add column if not exists target_names jsonb/.test(
+      fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8'))
+    && /target_names jsonb/.test(fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8')));
+
+  /* ===== ② 分享页 ===== */
+  t('★share.html 存在且是独立页', /^<!DOCTYPE html>/i.test(share.trim()));
+  t('★分享页禁止搜索引擎收录', /noindex,nofollow,noarchive/.test(share));
+  t('★分享页不依赖登录（只认链接里的 t）', /share-get&t=/.test(share) && /localStorage/.test(share) === false);
+  t('★分享页带水印（谁分享的 / 有效期 / 请勿外传）', /本页由/.test(share) && /请勿截图外传/.test(share));
+  t('★分享页也支持赋分 / 原始切换', /data-b="graded"/.test(share) && /data-b="raw"/.test(share));
+  t('★只有自己一个人的分享 → 直接给成绩卡', /rows\.length === 1/.test(share) && /function oneCard/.test(share));
+  t('★share.html 已加入部署清单', /^\s+share\.html$/m.test(wf));
+
+  /* ===== ③ 分享：前端入口 ===== */
+  t('★工具栏有「分享」', /onclick="scShareDialog\(\)"/.test(idx));
+  t('★弹窗可设范围 / 考试 / 有效期 / 次数', /id="shScope"/.test(idx) && /id="shDays"/.test(idx) && /id="shMax"/.test(idx));
+  t('★站主可选「全班」与「挑几位同学」', /'<option value="class">全班成绩<\/option>'/.test(idx) && /value="picked"/.test(idx));
+  t('★学生默认只能分自己', /var allow = isAdmin \? 'all' : \(cfg\.shareByStudent \|\| 'none'\)/.test(idx));
+  t('★能看已建分享并撤销', /function scShareList\(\)/.test(idx) && /不能再转发|撤销后这个链接立刻失效/.test(idx));
+  t('★明确提示「谁拿到链接谁就能看」', /谁拿到链接谁就能看/.test(idx));
+
+  /* ===== ④ 备份：后端 ===== */
+  ['backup-run', 'backup-restore'].forEach(function(a){
+    t('★POST 路由 ' + a, new RegExp("case '" + a + "':").test(sc));
+  });
+  ['backup-list', 'backup-get', 'backup-export'].forEach(function(a){
+    t('★GET 路由 ' + a, new RegExp("case '" + a + "':").test(sc));
+  });
+  t('★备份全部要管理员', (sc.match(/backup(Run|List|Get|Export|Restore)[^{]*\{\s*\n\s*const u = await requireAdmin/g) || []).length >= 3);
+  t('★快照不含密码哈希（users 只留 id/姓名/角色）',
+    /select id, username, display_name, role, status from users/.test(sc)
+    && /不含密码哈希/.test(sc));
+  t('★没配 KV 时优雅降级（不报 500）', /还没配置备份存储（KV）/.test(sc) && /function getKV\(\)/.test(sc));
+  t('★KV 只留最近 14 份', /const BACKUP_KEEP = 14;/.test(sc));
+  t('★还原要求输入 RESTORE 二次确认', /String\(b\.confirm \|\| ''\) !== 'RESTORE'/.test(sc));
+  t('★还原支持 dry 预览', /if \(b\.dry\)/.test(sc));
+  t('★还原前自动留一份「现在的样子」', /before-restore-/.test(sc) && /safetyKey/.test(sc));
+  t('★还原不碰 users 表', /users 表（账号）<b>不会<\/b>被改动|users 表绝不碰/.test(adm + sc));
+  t('★还原后修 bigserial 序列（否则下次插入撞主键）',
+    /setval\(pg_get_serial_sequence\('exams','id'\)/.test(sc));
+  t('★备份含内容数据（公告 / 作业 等 user_data）', /from user_data order by user_id, data_key/.test(sc));
+
+  /* ===== ⑤ 备份：定时任务 + 前端 ===== */
+  t('★worker 有 scheduled（Cron 自动备份）', /async scheduled\(event, env, ctx\)/.test(wk));
+  t('★导出了 runDailyBackup 供 Cron 调用', /export async function runDailyBackup\(\)/.test(sc));
+  t('★wrangler.toml 写了 KV 绑定与 cron 的填法', /\[\[kv_namespaces\]\]/.test(
+      fs.readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8')));
+  t('★后台有「备份」入口', /id="scBackup"/.test(adm) && /scBackupDialog/.test(adm));
+  t('★后台能立即备份 / 下载 / 还原', /bkRun/.test(adm) && /bkDl/.test(adm) && /bkRestore/.test(adm));
+  t('★下载走带鉴权的 fetch（不是裸链）',
+    /action=backup-export', \{\s*\n\s*headers: \{ Authorization/.test(adm));
 }
 
 console.log('\n' + '='.repeat(52));

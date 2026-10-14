@@ -885,7 +885,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.8.2';
+var SITE_VERSION = '2.9.0';
 var VER_DATE = '2026-10-14';
 
 /* ---- 运行时状态 ---- */
@@ -8574,6 +8574,135 @@ function scEditDisplay(){
   }).catch(function(e){ toast('读不到配置：' + (e.message || e), 'err'); });
 }
 
+/* ============================================================
+   备份（KV）· R37
+   ------------------------------------------------------------
+   为什么要做：现在所有成绩、公告、作业都只有云端一份，
+   数据库出一次问题就全没了。备份**必须跨服务商**（数据在 Neon、
+   备份在 Cloudflare），也必须**不进公开仓库**（仓库是 public 的）。
+   ============================================================ */
+function scBackupDialog(){
+  var body =
+      '<div class="field"><label>现在做一次备份</label>'
+    +   '<p class="muted" style="font-size:.8rem;margin:4px 0 10px">'
+    +     '备份内容：成绩（考试 + 成绩 + 分享链接 + 配置）+ 内容数据（公告 / 作业 / 弹窗等）。'
+    +     '<b>不含任何密码</b>。</p>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +     '<button class="btn btn-sm" id="bkRun">立即备份到云端</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="bkDl">下载一份到本地</button>'
+    +   '</div>'
+    +   '<div id="bkMsg" style="margin-top:10px"></div></div>'
+    + '<div class="field"><label>云端快照</label><div id="bkList" class="muted" style="font-size:.82rem">读取中…</div></div>'
+    + '<div class="field"><label>从快照还原（危险）</label>'
+    +   '<p class="muted" style="font-size:.8rem;margin:4px 0 8px">'
+    +     '还原会<b>覆盖</b>现有的考试与成绩。还原之前系统会自动先存一份「还原前的样子」，出错还能退回来。'
+    +     'users 表（账号）<b>不会</b>被改动。</p>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+    +     '<input id="bkKey" placeholder="要还原的快照标识（点上面对话框里的「还原」自动填）" style="flex:1;min-width:220px">'
+    +     '<input id="bkConfirm" placeholder="输入 RESTORE 确认" style="width:170px">'
+    +     '<button class="btn btn-sm btn-danger" id="bkRestore">还原</button>'
+    +   '</div></div>';
+
+  openModal({
+    title: '备份与还原',
+    sub: '建议每周点一次「立即备份」。开了定时任务后它会自己跑，这里主要用来手动兜底和演练还原。',
+    wide: true,
+    body: body,
+    actions: [{ label: '关闭', cls: 'btn-secondary', onClick: closeModal }],
+    onMount: function(bx){
+      var msg = bx.querySelector('#bkMsg');
+      var say = function(t, ok){
+        msg.innerHTML = '<div class="muted" style="font-size:.82rem;color:' + (ok ? 'var(--ok)' : 'var(--danger)') + '">' + esc(t) + '</div>';
+      };
+
+      bx.querySelector('#bkRun').onclick = function(){
+        say('正在打包…');
+        api('/scores?action=backup-run', { method:'POST' }).then(function(j){
+          if(j.stored){
+            say('已备份到云端：' + j.key + '（考试 ' + j.counts.exams + ' 次 / 成绩 ' + j.counts.examScores + ' 条）', true);
+            scBackupList(bx);
+          } else {
+            say((j.hint || '还没配置备份存储') + ' —— 已经帮你把快照准备好，点「下载一份到本地」就能存下来。');
+          }
+        }).catch(function(e){ say('备份失败：' + (e.message || e)); });
+      };
+
+      bx.querySelector('#bkDl').onclick = function(){
+        say('正在生成文件…');
+        fetch(API_BASE + '/api/scores?action=backup-export', {
+          headers: { Authorization: 'Bearer ' + STATE.token },
+        }).then(function(r){
+          if(!r.ok) throw new Error('HTTP ' + r.status);
+          return r.blob();
+        }).then(function(blob){
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'class-site-backup-' + new Date().toISOString().slice(0,10) + '.json';
+          document.body.appendChild(a); a.click();
+          setTimeout(function(){ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }, 1500);
+          say('已开始下载（请自己保存好，这份文件包含全班成绩，别外传）', true);
+        }).catch(function(e){ say('下载失败：' + (e.message || e)); });
+      };
+
+      bx.querySelector('#bkRestore').onclick = function(){
+        var key = (bx.querySelector('#bkKey').value || '').trim();
+        var cf = (bx.querySelector('#bkConfirm').value || '').trim();
+        if(!key){ say('先填要还原的快照标识'); return; }
+        if(cf !== 'RESTORE'){ say('请在确认框里原样输入 RESTORE'); return; }
+        if(!confirm('确定要还原吗？现在的考试与成绩会被覆盖。')) return;
+        say('正在还原…');
+        api('/scores?action=backup-restore', { method:'POST', body: { key: key, confirm: 'RESTORE' } })
+          .then(function(j){
+            say('还原完成：考试 ' + j.restored.exams + ' 次 / 成绩 ' + j.restored.examScores + ' 条'
+              + (j.beforeRestoreKey ? '（还原前那份存为 ' + j.beforeRestoreKey + '）' : ''), true);
+            scLoad();
+          }).catch(function(e){ say('还原失败：' + (e.message || e)); });
+      };
+
+      scBackupList(bx);
+    },
+  });
+}
+
+function scBackupList(bx){
+  var box = bx.querySelector('#bkList');
+  api('/scores?action=backup-list').then(function(j){
+    var items = j.items || [];
+    if(!items.length){ box.innerHTML = '云端还没有快照 —— 点上面的「立即备份到云端」建一份。'; return; }
+    box.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">'
+      + items.map(function(x){
+          return '<div style="display:flex;align-items:center;gap:9px;padding:6px 10px;border:1px solid var(--line);border-radius:9px">'
+            + '<span style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:.76rem">' + esc(x.key.replace('backup/','')) + '</span>'
+            + '<button class="btn btn-sm btn-secondary" data-bkdl="' + esc(x.key) + '">下载</button>'
+            + '<button class="btn btn-sm btn-secondary" data-bkrs="' + esc(x.key) + '">还原</button>'
+            + '</div>';
+        }).join('') + '</div>'
+      + '<p class="muted" style="font-size:.76rem;margin:8px 0 0">云端最多保留 ' + j.keep + ' 份，超出的会自动删最旧的。</p>';
+
+    Array.prototype.forEach.call(box.querySelectorAll('[data-bkdl]'), function(b){
+      b.onclick = function(){
+        var k = b.getAttribute('data-bkdl');
+        fetch(API_BASE + '/api/scores?action=backup-get&key=' + encodeURIComponent(k), {
+          headers: { Authorization: 'Bearer ' + STATE.token },
+        }).then(function(r){ return r.blob(); }).then(function(blob){
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url; a.download = k.replace('backup/', '');
+          document.body.appendChild(a); a.click();
+          setTimeout(function(){ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }, 1500);
+        });
+      };
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-bkrs]'), function(b){
+      b.onclick = function(){ bx.querySelector('#bkKey').value = b.getAttribute('data-bkrs'); bx.querySelector('#bkConfirm').focus(); };
+    });
+  }).catch(function(e){
+    box.innerHTML = '<span style="color:var(--danger)">' + esc(e.message || '读不到快照列表') + '</span>'
+      + '<br><span class="muted" style="font-size:.78rem">（多半是还没在 Cloudflare 建 KV 命名空间 —— 见仓库文档「备份」一节）</span>';
+  });
+}
+
 function renderScores(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel)">'
@@ -8583,6 +8712,7 @@ function renderScores(){
     +    '</p></div>'
     +  '<button class="btn btn-sm btn-secondary" id="scRefresh">' + svg('refresh',14) + ' 刷新</button>'
     +  '<button class="btn btn-sm btn-secondary" id="scDisplay">对外展示</button>'
+    +  '<button class="btn btn-sm btn-secondary" id="scBackup">备份</button>'
     +  '<button class="btn btn-sm" id="scNew">' + svg('plus',14) + ' 新建考试</button>'
     + '</div>'
     + '<section class="panel"><div id="scBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
@@ -8590,6 +8720,7 @@ function renderScores(){
   $('scRefresh').onclick = scLoad;
   $('scNew').onclick = function(){ scEditExam(null); };
   $('scDisplay').onclick = scEditDisplay;
+  $('scBackup').onclick = scBackupDialog;
   scLoad();
 }
 

@@ -1743,6 +1743,24 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-sub-bar{height:5px;border-radius:999px;background:#f5efe8;margin-top:7px;overflow:hidden}
 .sc-sub-bar i{display:block;height:100%;background:#e6a97a;border-radius:999px}
 .sc-seg-sm button{padding:5px 9px;font-size:.72rem}
+/* ===== 分享弹窗（v2.8.3） ===== */
+.sc-sh-exs{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow:auto;padding:8px 10px;
+  border:1px solid #f0e7de;border-radius:10px;background:#fdfbf9}
+.sc-sh-ex{display:flex;align-items:center;gap:7px;font-size:.82rem;color:#57534e}
+.sc-sh-names{display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow:auto;padding:8px 10px;
+  border:1px solid #f0e7de;border-radius:10px;background:#fdfbf9}
+.sc-sh-n{padding:4px 10px;border:1px solid #e2d5c8;background:#fff;border-radius:999px;
+  font-size:.78rem;cursor:pointer;color:#57534e;font-family:inherit}
+.sc-sh-n.on{background:#c2410c;border-color:#c2410c;color:#fff}
+.sc-sh-url{display:flex;gap:8px;margin-top:9px}
+.sc-sh-url input{flex:1;min-width:0;padding:9px 11px;border:1.5px solid #e2d5c8;border-radius:10px;
+  font-size:.8rem;font-family:ui-monospace,Menlo,monospace;color:#57534e;background:#fff}
+.sc-sh-list{display:flex;flex-direction:column;gap:7px}
+.sc-sh-item{display:flex;align-items:center;gap:9px;font-size:.8rem;padding:7px 10px;
+  border:1px solid #f0e7de;border-radius:10px;background:#fff}
+.sc-sh-item b{flex:1;color:#57534e}
+.sc-sh-state{font-size:.68rem;font-weight:800;color:#a8968a;background:#f5efe8;border-radius:999px;padding:2px 8px}
+.sc-sh-state.on{color:#fff;background:#0f8a4d}
 /* ===== 站主侧块（v2.8.2） ===== */
 .sc-only-admin{display:inline-block;font-size:.6rem;font-weight:800;color:#fff;background:#b0a094;
   border-radius:999px;padding:1px 7px;margin-left:7px;vertical-align:middle;letter-spacing:.02em}
@@ -2686,7 +2704,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.8.2';
+var SITE_VERSION = '2.9.0';
 var VER_DATE = '2026-10-14';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -11502,6 +11520,7 @@ function scRenderBar(){
     + '<div class="sc-seg sc-seg-icon">'
     +   '<button onclick="scExportCard()" title="把我的成绩卡存成图片（可直接发微信）">导出图片</button>'
     +   '<button onclick="scPrint()" title="按 A4 版式打印当前页面">打印</button>'
+    +   '<button onclick="scShareDialog()" title="生成一个免登录的只读链接">分享</button>'
     + '</div>'
     + '</div>'
     + '<div class="sc-meta">'
@@ -12414,6 +12433,152 @@ function scExportCard(){
     document.body.appendChild(a2); a2.click();
     setTimeout(function(){ if(a2.parentNode) a2.parentNode.removeChild(a2); }, 1500);
   }
+}
+
+/* ---------- 分享链接（R38）：免登录只读 ---------- */
+function scShareDialog(){
+  var cfg = SC.config || {};
+  var isAdmin = scIsAdmin();
+  var allow = isAdmin ? 'all' : (cfg.shareByStudent || 'none');
+  if(allow === 'none'){ alert('老师还没有开放分享功能。'); return; }
+
+  var exOpts = SC.exams.map(function(e, i){
+    return '<label class="sc-sh-ex"><input type="checkbox" value="' + e.id + '" checked> '
+      + esc(e.name) + ' <span class="sc-dim">' + esc(scDateRange(e)) + '</span></label>';
+  }).join('');
+
+  var scopeSel = '<select id="shScope" class="sc-sel">'
+    + '<option value="self">只分享我的成绩</option>'
+    + (allow === 'all' ? '<option value="class">全班成绩</option>' : '')
+    + (allow === 'all' && isAdmin ? '<option value="picked">我挑几位同学</option>' : '')
+    + '</select>';
+
+  var html = '<div class="allboard-mask show" id="scShMask"><div class="allboard-box sc-box" style="max-width:600px">'
+    + '<div class="allboard-head"><span>分享成绩</span><button onclick="scShareClose()">关闭</button></div>'
+    + '<div class="sc-pane" style="max-height:70vh">'
+    +   '<div class="sc-hint">生成一个<b>免登录、只读</b>的链接。<br>'
+    +     '<b>谁拿到链接谁就能看，转发出去我控制不了</b> —— 所以默认只给 7 天，随时可以撤销。</div>'
+    +   '<div class="field" style="margin-bottom:12px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">分享范围</label>'
+    +     scopeSel + '</div>'
+    +   '<div id="shNamesWrap" style="display:none;margin-bottom:12px">'
+    +     '<label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">挑同学（点一下选中）</label>'
+    +     '<div id="shNames" class="sc-sh-names">'
+    +       SC.rows.map(function(r){
+              return '<button type="button" class="sc-sh-n" data-n="' + esc(r.name) + '">' + esc(r.name) + '</button>';
+            }).join('')
+    +     '</div></div>'
+    +   '<div style="margin-bottom:12px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">包含哪几次考试</label>'
+    +     '<div class="sc-sh-exs">' + exOpts + '</div></div>'
+    +   '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+    +     '<div style="flex:1;min-width:150px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">有效期</label>'
+    +       '<select id="shDays" class="sc-sel">'
+    +         '<option value="1">1 天</option><option value="7" selected>7 天</option>'
+    +         '<option value="30">30 天</option><option value="0">永久</option>'
+    +       '</select></div>'
+    +     '<div style="flex:1;min-width:150px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">最多被打开（可空）</label>'
+    +       '<input id="shMax" type="number" min="1" class="sc-sel" placeholder="不填＝不限"></div>'
+    +   '</div>'
+    +   '<button class="btn" id="shGo" style="width:100%">生成链接</button>'
+    +   '<div id="shOut" style="margin-top:14px"></div>'
+    +   '<div id="shList" style="margin-top:18px"></div>'
+    + '</div></div></div>';
+
+  var wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  document.body.appendChild(wrap.firstChild);
+
+  var mask = document.getElementById('scShMask');
+  var pickScope = function(){
+    document.getElementById('shNamesWrap').style.display =
+      (document.getElementById('shScope').value === 'picked') ? 'block' : 'none';
+  };
+  document.getElementById('shScope').onchange = pickScope;
+  Array.prototype.forEach.call(document.querySelectorAll('.sc-sh-n'), function(b){
+    b.onclick = function(){ b.classList.toggle('on'); };
+  });
+  document.getElementById('shGo').onclick = function(){ scShareCreate(); };
+  mask.addEventListener('click', function(e){ if(e.target === mask) scShareClose(); });
+  scShareList();
+}
+
+function scShareClose(){
+  var m = document.getElementById('scShMask');
+  if(m && m.parentNode) m.parentNode.removeChild(m);
+}
+
+function scShareCreate(){
+  var btn = document.getElementById('shGo');
+  var ids = [];
+  Array.prototype.forEach.call(document.querySelectorAll('.sc-sh-ex'), function(l){
+    var cb = l.querySelector('input');
+    if(cb && cb.checked) ids.push(Number(cb.value));
+  });
+  var names = [];
+  Array.prototype.forEach.call(document.querySelectorAll('.sc-sh-n.on'), function(b){
+    names.push(b.getAttribute('data-n'));
+  });
+  var scope = document.getElementById('shScope').value;
+  if(scope === 'picked' && !names.length){ alert('至少挑一位同学'); return; }
+
+  var maxV = document.getElementById('shMax').value;
+  btn.disabled = true; btn.textContent = '正在生成…';
+  api('/scores?action=share-create', { method: 'POST', body: {
+    scope: scope,
+    examIds: ids,
+    names: names,
+    days: Number(document.getElementById('shDays').value),
+    maxViews: maxV ? Number(maxV) : null,
+  } }).then(function(j){
+    btn.disabled = false; btn.textContent = '生成链接';
+    if(!j || !j.ok){ alert('生成失败：' + ((j && j.error) || '未知错误')); return; }
+    var url = location.origin + j.url;
+    document.getElementById('shOut').innerHTML =
+        '<div class="sc-hint" style="background:#f0f9f2;border-color:#cfe9d8">'
+      + '<b>链接已生成。</b>把它发给要看的人就行 —— 对方不用登录。</div>'
+      + '<div class="sc-sh-url"><input id="shUrl" readonly value="' + esc(url) + '">'
+      + '<button class="btn btn-sm" id="shCopy">复制</button></div>';
+    document.getElementById('shCopy').onclick = function(){
+      var inp = document.getElementById('shUrl');
+      inp.select();
+      try{
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(inp.value).then(function(){ btn.textContent = '已复制'; setTimeout(function(){ btn.textContent = '生成链接'; }, 1200); });
+        } else { document.execCommand('copy'); }
+      }catch(e){ document.execCommand('copy'); }
+      alert('链接已复制：\n' + inp.value);
+    };
+    scShareList();
+  }).catch(function(e){
+    btn.disabled = false; btn.textContent = '生成链接';
+    alert('生成失败：' + (e.message || e));
+  });
+}
+
+function scShareList(){
+  api('/scores?action=share-list', { method: 'POST' }).then(function(j){
+    var box = document.getElementById('shList');
+    if(!box || !j || !j.ok) return;
+    var list = j.shares || [];
+    if(!list.length){ box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="sc-card-h">我建过的分享</div>'
+      + '<div class="sc-sh-list">' + list.slice(0, 8).map(function(x){
+          var state = x.revoked ? '已撤销' : x.expired ? '已过期' : x.usedUp ? '次数用完' : '有效';
+          var scopeTxt = x.scope === 'self' ? '我' : x.scope === 'picked' ? '自选 ' + (x.names || []).length + ' 人' : '全班';
+          return '<div class="sc-sh-item">'
+            + '<span class="sc-sh-state' + (x.alive ? ' on' : '') + '">' + state + '</span>'
+            + '<b>' + esc(scopeTxt) + '</b>'
+            + '<span class="sc-dim">看过 ' + x.views + ' 次' + (x.maxViews ? ' / ' + x.maxViews : '') + '</span>'
+            + (x.alive ? '<button class="btn btn-sm btn-secondary" data-rev="' + x.id + '">撤销</button>' : '')
+            + '</div>';
+        }).join('') + '</div>';
+    Array.prototype.forEach.call(box.querySelectorAll('[data-rev]'), function(b){
+      b.onclick = function(){
+        if(!confirm('撤销后这个链接立刻失效，确定吗？')) return;
+        api('/scores?action=share-revoke', { method: 'POST', body: { id: Number(b.getAttribute('data-rev')) } })
+          .then(function(){ scShareList(); });
+      };
+    });
+  }).catch(function(){});
 }
 
 /* ---------- A4 打印（@media print 见样式表） ---------- */
