@@ -1782,7 +1782,8 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-hm-row.me{background:#fff8f2}
 .sc-hm-name{width:62px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#57534e}
 .sc-hm-cells{flex:1;display:flex;gap:3px}
-.sc-hm{margin:0;width:auto;height:14px;flex:1;border-radius:3px;display:block}
+.sc-hm{margin:0;width:auto;height:18px;flex:1;border-radius:3px;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;font-style:normal;line-height:1;letter-spacing:-.02em;overflow:hidden}
 .sc-hm-total{width:46px;flex-shrink:0;text-align:right;font-weight:800;color:#b45309;
   font-size:.74rem;font-variant-numeric:tabular-nums}
 .sc-seg-icon button{font-size:.75rem}
@@ -2704,8 +2705,8 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.9.4';
-var VER_DATE = '2026-10-14';
+var SITE_VERSION = '2.9.5';
+var VER_DATE = '2026-10-15';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
   gitee:  'https://gitee.com/zikang0529/class-site',
@@ -11468,18 +11469,27 @@ function scFullMark(){
   return f || 750;
 }
 
-/* 我的那一行（用姓名与账号名匹配；导入时会按姓名绑定 uid） */
+/* 我的那一行。三条路依次试，认出来就行：
+   ① 后端标好的 uid；② 后端给的 mine 标记（含「姓名对照」别名，改过名也认）；
+   ③ 本地按姓名比一次（纯兜底）。 */
 function scMyRow(){
   var u = AUTH.user || {};
   var myName = u.displayName || u.name || '';
   var myId = u.id;
   var hit = null;
-  SC.rows.forEach(function(r){
-    if(hit) return;
-    if(myId && r.uid && String(r.uid) === String(myId)) hit = r;
-  });
-  if(hit) return hit;
-  if(myName){
+  if(myId){
+    SC.rows.forEach(function(r){
+      if(hit) return;
+      if(r.uid && String(r.uid) === String(myId)) hit = r;
+    });
+  }
+  if(!hit){
+    SC.rows.forEach(function(r){
+      if(hit) return;
+      if(r.mine) hit = r;
+    });
+  }
+  if(!hit && myName){
     SC.rows.forEach(function(r){
       if(hit) return;
       if(r.name === myName) hit = r;
@@ -11582,7 +11592,7 @@ function scRenderBoard(){
         return '<th class="sc-th-sort" onclick="scSort(\'' + s.key + '\')">' + esc(s.name) + scArrow(s.key) + '</th>';
       }).join('')
     + '<th class="sc-th-sort" onclick="scSort(\'total\')">总分' + scArrow('total') + '</th>'
-    + '<th class="sc-th-sort" onclick="scSort(\'schoolRank\')">校排' + scArrow('schoolRank') + '</th>'
+    + '<th class="sc-th-sort" onclick="scSort(\'schoolRank\')">年级排名' + scArrow('schoolRank') + '</th>'
     + '</tr>';
 
   var body = arr.map(function(o){
@@ -11661,10 +11671,16 @@ function scChartHist(st){
   var xOf = function(i){ return L + i * bw; };
   var yOf = function(c){ return T + (H - T - B) * (1 - c / maxC); };
 
+  /* 柱顶直接写「这一格多少人」——手机上看图不用去对纵轴 */
   var bars = slice.map(function(c, i){
     var h = H - B - yOf(c);
-    return '<rect x="' + (xOf(i) + 1).toFixed(1) + '" y="' + yOf(c).toFixed(1) + '" width="' + Math.max(1, bw - 2).toFixed(1)
+    var rect = '<rect x="' + (xOf(i) + 1).toFixed(1) + '" y="' + yOf(c).toFixed(1) + '" width="' + Math.max(1, bw - 2).toFixed(1)
       + '" height="' + Math.max(0, h).toFixed(1) + '" fill="#f0c9a3" rx="2"/>';
+    if(c <= 0) return rect;
+    /* 柱子窄的时候字号跟着缩，宁可小也别糊成一团 */
+    var fs = bw < 13 ? 7 : (bw < 18 ? 8.5 : 9.5);
+    return rect + '<text x="' + (xOf(i) + bw / 2).toFixed(1) + '" y="' + Math.max(8.5, yOf(c) - 3).toFixed(1)
+      + '" font-size="' + fs + '" font-weight="700" fill="#8a6a4a" text-anchor="middle">' + c + '</text>';
   }).join('');
 
   var axis = '';
@@ -11695,7 +11711,10 @@ function scChartHist(st){
     if(c.score < first * step || c.score > (last + 1) * step) return;
     var x = xForValue(c.score);
     marks += '<line x1="' + x.toFixed(1) + '" y1="' + (T - 4) + '" x2="' + x.toFixed(1) + '" y2="' + (H - B) + '" stroke="' + esc(c.color || '#b45309') + '" stroke-width="1.8"/>';
-    marks += '<text x="' + (x + 3).toFixed(1) + '" y="' + (T + 22) + '" font-size="9.5" font-weight="700" fill="' + esc(c.color || '#b45309') + '">'
+    /* 贴到右边的线（如 600 分线）标签往左写，不然会被切掉 */
+    var near = x > W - R - 10;
+    marks += '<text x="' + (near ? x - 3 : x + 3).toFixed(1) + '" y="' + (T + 22) + '" font-size="9.5" font-weight="700"'
+      + ' text-anchor="' + (near ? 'end' : 'start') + '" fill="' + esc(c.color || '#b45309') + '">'
       + esc(c.label) + ' ' + c.score + '</text>';
   });
 
@@ -11717,7 +11736,7 @@ function scChartHist(st){
     +   axis + bars + marks + myMark
     +   '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" stroke="#e2d5c8" stroke-width="1.2"/>'
     + '</svg></div>'
-    + '<div class="sc-figcap">每格 ' + step + ' 分；虚线是均分与中位数，实线是分数线，红点是你</div>'
+    + '<div class="sc-figcap">每格 ' + step + ' 分，<b>柱顶数字＝这一格有多少人</b>；虚线是均分与中位数，实线是分数线，红点是你</div>'
     + '</div>';
 }
 
@@ -11809,7 +11828,7 @@ function scRenderMe(){
     +   '<div class="sc-ov-total"><b>' + (myTotal == null ? '—' : myTotal) + '</b><span>总分（' + (SC.basis === 'graded' ? '赋分' : '原始') + '）</span></div>'
     +   '<div class="sc-ov-items">'
     +     scOvItem('班排名', myRank ? myRank + ' / ' + st.n : '—')
-    +     scOvItem('校排名', meRow.schoolRank != null ? meRow.schoolRank + (SC.exam.gradeRef && SC.exam.gradeRef.students ? ' / ' + SC.exam.gradeRef.students : '') : '—')
+    +     scOvItem('年级排名', meRow.schoolRank != null ? meRow.schoolRank + (SC.exam.gradeRef && SC.exam.gradeRef.students ? ' / ' + SC.exam.gradeRef.students : '') : '—')
     +     scOvItem('与班均', myTotal != null ? fmtDiff(myTotal - st.avg) : '—')
     +     scOvItem('联考排名', meRow.leagueRank != null ? meRow.leagueRank : '—')
     +   '</div>'
@@ -11871,7 +11890,7 @@ function scRenderMe(){
     + '</div></div>';
 
   /* ⑤ 雷达图（按得分率，否则语数英 150 分会把物化生压扁） */
-  var rates = [], avgRates = [];
+  var rates = [], avgRates = [], radarTips = [];
   subs.forEach(function(s){
     var v = scSubScore(meRow, s, SC.basis);
     var all = [];
@@ -11882,11 +11901,13 @@ function scRenderMe(){
     var avg = all.length ? all.reduce(function(a, b){ return a + b; }, 0) / all.length : 0;
     rates.push(v != null && s.full ? v / s.full : 0);
     avgRates.push(s.full ? avg / s.full : 0);
+    /* 图上直接写分数（站主要求：不用去别处对） */
+    radarTips.push(v == null ? '未考' : fmtNum(v) + '/' + s.full);
   });
   if(subs.length >= 3){
     html += '<div class="sc-card"><div class="sc-card-h">六科画像（按得分率）</div>'
-      + scRadar(subs.map(function(s){ return s.name; }), rates, avgRates)
-      + '<div class="sc-figcap">实线是你，虚线是班均。<b>按得分率</b>画是故意的 —— 语数英满分 150，物理化学生物 100，直接用分数画会把后三科压扁。</div>'
+      + scRadar(subs.map(function(s){ return s.name; }), rates, avgRates, radarTips)
+      + '<div class="sc-figcap">每个角上都写了你的分数。实线是你，虚线是班均。<b>按得分率</b>画是故意的 —— 语数英满分 150，物理化学生物 100，直接用分数画会把后三科压扁。</div>'
       + '</div>';
   }
 
@@ -11920,10 +11941,12 @@ function fmtNum(v, maxDec){
   return (Math.abs(r - Math.round(r)) < 1e-9) ? String(Math.round(r)) : String(r);
 }
 
-/* 雷达图（纯 SVG） */
-function scRadar(labels, mine, avg){
+/* 雷达图（纯 SVG）
+   tips：每个轴要直接写在图上的具体数值（如「114.5/150」）——
+   站主要求图上能直接看到分数，不用去别处对。 */
+function scRadar(labels, mine, avg, tips){
   var n = labels.length;
-  var W = 640, H = 300, cx = 320, cy = 148, R = 104;
+  var W = 640, H = 322, cx = 320, cy = 154, R = 100;
   var pt = function(i, r){
     var a = (-90 + i * 360 / n) * Math.PI / 180;
     return [cx + Math.cos(a) * R * r, cy + Math.sin(a) * R * r];
@@ -11943,8 +11966,12 @@ function scRadar(labels, mine, avg){
   for(var i = 0; i < n; i++){
     var p = pt(i, 1);
     g += '<line x1="' + cx + '" y1="' + cy + '" x2="' + p[0].toFixed(1) + '" y2="' + p[1].toFixed(1) + '" stroke="#ece2d8" stroke-width="1"/>';
-    var lp = pt(i, 1.22);
-    g += '<text x="' + lp[0].toFixed(1) + '" y="' + (lp[1] + 3).toFixed(1) + '" font-size="11" fill="#6e635a" text-anchor="middle">' + esc(labels[i]) + '</text>';
+    var lp = pt(i, 1.16);
+    g += '<text x="' + lp[0].toFixed(1) + '" y="' + (lp[1] + 2).toFixed(1) + '" font-size="11" fill="#6e635a" text-anchor="middle">' + esc(labels[i]) + '</text>';
+    if(tips && tips[i]){
+      g += '<text x="' + lp[0].toFixed(1) + '" y="' + (lp[1] + 15).toFixed(1)
+        + '" font-size="10" font-weight="700" fill="#c0392b" text-anchor="middle">' + esc(tips[i]) + '</text>';
+    }
   }
   g += '<polygon points="' + poly(avg, 1) + '" fill="none" stroke="#a8968a" stroke-width="1.4" stroke-dasharray="4 3"/>';
   g += '<polygon points="' + poly(mine, 1) + '" fill="rgba(192,57,43,.16)" stroke="#c0392b" stroke-width="2"/>';
@@ -11952,6 +11979,9 @@ function scRadar(labels, mine, avg){
     var q = pt(j, Math.max(0, Math.min(1, mine[j])));
     g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="3.2" fill="#c0392b"/>';
   }
+  /* 圈是得分率刻度 —— 不写出来容易被误读成绝对分数 */
+  g += '<text x="6" y="14" font-size="9.5" fill="#a8968a">外圈＝满分</text>';
+  g += '<text x="6" y="27" font-size="9.5" fill="#a8968a">实线＝我　虚线＝班均</text>';
   return '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">' + g + '</svg></div>';
 }
 
@@ -11994,10 +12024,12 @@ function scTrendBlock(meRow){
 
   var path = pts.map(function(p, i){ return (i ? 'L' : 'M') + xOf(i).toFixed(1) + ' ' + yOf(p.total).toFixed(1); }).join(' ');
   var dots = pts.map(function(p, i){
+    /* 首尾两个日期标签贴边写：居中的话最后一格会被 viewBox 切掉（手机上尤其明显） */
+    var anc = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
     return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.total).toFixed(1) + '" r="3.4" fill="#c0392b"/>'
       + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.total) - 8).toFixed(1) + '" font-size="9.5" fill="#c0392b" text-anchor="middle">' + p.total + '</text>'
       + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
-          ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" fill="#a8968a" text-anchor="middle">' + esc(shortName(p.name)) + '</text>'
+          ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" fill="#a8968a" text-anchor="' + anc + '">' + esc(shortName(p.name)) + '</text>'
           : '');
   }).join('');
 
@@ -12068,12 +12100,13 @@ function scSubjTrend(){
     /* 迷你折线：按分数变化分段着色（涨绿跌红），一眼看出哪科在掉 */
     var mini = '';
     if(pts.length >= 2){
-      var mw = 132, mh = 30;
+      var mw = 132, mh = 38;
       var mv = pts.map(function(x){ return x.v; });
       var vmax = Math.max.apply(null, mv), vmin = Math.min.apply(null, mv);
       var sp = Math.max(1, vmax - vmin);
-      var px = function(i){ return 4 + (mw - 10) * i / (pts.length - 1); };
-      var py = function(v){ return 5 + (mh - 12) * (1 - (v - vmin) / sp); };
+      var px = function(i){ return 5 + (mw - 10) * i / (pts.length - 1); };
+      /* 上下各留 13px 给数字，折线不贴边 */
+      var py = function(v){ return 13 + (mh - 26) * (1 - (v - vmin) / sp); };
       var segs = '';
       for(var i = 1; i < pts.length; i++){
         var up = pts[i].v >= pts[i - 1].v;
@@ -12081,12 +12114,20 @@ function scSubjTrend(){
              +  '" x2="' + px(i).toFixed(1) + '" y2="' + py(pts[i].v).toFixed(1)
              +  '" stroke="' + (up ? '#0f8a4d' : '#c0392b') + '" stroke-width="1.8" stroke-linecap="round"/>';
       }
+      /* 每个点都写分数 —— 手机端没有鼠标悬浮，不写出来就看不到 */
+      var nums = pts.map(function(x, i){
+        if(pts.length > 6 && i !== 0 && i !== pts.length - 1 && i !== Math.floor(pts.length / 2)) return '';
+        var tx = Math.min(Math.max(px(i), 13), mw - 13);
+        return '<text x="' + tx.toFixed(1) + '" y="' + (py(x.v) - 4.5).toFixed(1)
+             + '" font-size="8" font-weight="700" fill="#7a6a5d" text-anchor="middle"'
+             + ' stroke="#fffdfb" stroke-width="2.6" paint-order="stroke">' + fmtNum(x.v) + '</text>';
+      }).join('');
       var dots = pts.map(function(x, i){
         return '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(x.v).toFixed(1)
              + '" r="2.2" fill="#fff" stroke="#c9b8a8" stroke-width="1.1"/>';
       }).join('');
-      mini = '<svg viewBox="0 0 ' + mw + ' ' + mh + '" style="width:100%;height:30px;display:block;margin-top:5px">'
-           + segs + dots + '</svg>';
+      mini = '<svg viewBox="0 0 ' + mw + ' ' + mh + '" style="width:100%;height:38px;display:block;margin-top:4px">'
+           + segs + nums + dots + '</svg>';
     }
 
     cards.push('<div class="sc-sub">'
@@ -12137,11 +12178,13 @@ function scGradeTrend(){
       return (i ? 'L' : 'M') + xOf(i).toFixed(1) + ' ' + yOf(p.schoolRank).toFixed(1);
     }).join(' ');
     var dots = pts.map(function(p, i){
+      /* 首尾标签贴边写，避免最后一格被 viewBox 切掉 */
+      var anc = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
       return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.schoolRank).toFixed(1) + '" r="3.4" fill="#7c3aed"/>'
         + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.schoolRank) - 8).toFixed(1)
         +   '" font-size="9.5" fill="#7c3aed" text-anchor="middle">' + p.schoolRank + '</text>'
         + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
-            ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" fill="#a8968a" text-anchor="middle">'
+            ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" fill="#a8968a" text-anchor="' + anc + '">'
               + esc(shortName(p.name)) + '</text>'
             : '');
     }).join('');
@@ -12163,15 +12206,16 @@ function scGradeTrend(){
   }
   var pct = (gradeN && last.schoolRank) ? (last.schoolRank / gradeN * 100) : null;
 
-  return '<div class="sc-card"><div class="sc-card-h">年级进退步（按校排名）</div>'
+  return '<div class="sc-card"><div class="sc-card-h">年级排名变化</div>'
     + head
     + svg
     + '<div class="sc-ov-items" style="margin-top:10px">'
-    +   scOvItem('本次校排名', last.schoolRank + (gradeN ? ' / ' + gradeN : ''))
+    +   scOvItem('本次年级排名', last.schoolRank + (gradeN ? ' / ' + gradeN : ''))
     +   scOvItem('年级位置', pct == null ? '—' : '前 ' + pct.toFixed(1) + '%')
     + '</div>'
     + '<div class="sc-figcap">'
-    +   '<b>班排名和年级排名会打架，而且打架是对的</b> —— 完全可能你班排名退步、年级排名反而进步（全班都考砸了，你砸得少）。所以两套都显示，不用猜。'
+    +   '<b>年级排名就是校排名，同一个东西</b>，只是不同地方叫法不一样 —— 别当成两套排名。'
+    +   '<br><b>班排名和年级排名会打架，而且打架是对的</b> —— 完全可能你班排名退步、年级排名反而进步（全班都考砸了，你砸得少）。所以两套都显示，不用猜。'
     +   (gradeN ? '' : '<br><span class="sc-dim">（在后台把「年级人数」填上，才会算年级百分位。）</span>')
     +   '</div></div>';
 }
@@ -12313,7 +12357,7 @@ function scExportCard(){
   /* 四个指标 */
   var items = [
     ['班排名', myRank ? myRank + ' / ' + st.n : '—'],
-    ['校排名', meRow.schoolRank != null ? meRow.schoolRank + (gradeN ? ' / ' + gradeN : '') : '—'],
+    ['年级排名', meRow.schoolRank != null ? meRow.schoolRank + (gradeN ? ' / ' + gradeN : '') : '—'],
     ['与班均', myTotal != null ? fmtDiff(myTotal - st.avg) : '—'],
     ['联考排名', meRow.leagueRank != null ? String(meRow.leagueRank) : '—'],
   ];
@@ -12862,10 +12906,30 @@ function scQuadrant(){
     { x: L, y: my, w: mx - L, h: H - B - my, c: '#f4faf6', t: '总分低 / 单科强（单科尖子）' },
     { x: mx, y: my, w: W - R - mx, h: H - B - my, c: '#fdf8f3', t: '总分强 / 单科强' },
   ];
+  /* 手机上点不动、也悬停不了，所以名字必须直接写在图上。
+     但 60 个点全写会糊成一团 —— 只写「最该被点名」的：
+     偏科预警象限（总分够、这一科却拖后腿）＋ 我自己。 */
+  var warns = pts.filter(function(p){ return p.x >= st.avg && p.y < subAvg; });
+  if(warns.length > 14){
+    warns = warns.slice().sort(function(a, b){ return (a.y - subAvg) - (b.y - subAvg); }).slice(0, 14);
+  }
+  var labeled = {};
+  warns.forEach(function(p){ labeled[p.name] = 1; });
+
   var dots = pts.map(function(p){
-    return '<circle cx="' + xOf(p.x).toFixed(1) + '" cy="' + yOf(p.y).toFixed(1) + '" r="' + (p.me ? 5.5 : 3.6)
+    var cx = xOf(p.x), cy = yOf(p.y);
+    var g = '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (p.me ? 5.5 : 3.6)
       + '" fill="' + (p.me ? '#c2410c' : '#7c3aed') + '" fill-opacity="' + (p.me ? 1 : 0.55) + '">'
       + '<title>' + esc(p.name) + '　总分 ' + fmtNum(p.x) + '　' + esc(sub.name) + ' ' + fmtNum(p.y) + '</title></circle>';
+    if(p.me || labeled[p.name]){
+      var txt = p.me ? ('我 ' + fmtNum(p.x) + '·' + fmtNum(p.y)) : (p.name + ' ' + fmtNum(p.y));
+      var tx = cx + 7, anc = 'start';
+      if(cx + 7 + txt.length * 9 > W - R){ tx = cx - 7; anc = 'end'; }
+      g += '<text x="' + tx.toFixed(1) + '" y="' + (cy + 3.2).toFixed(1) + '" font-size="9" font-weight="700"'
+        + ' fill="' + (p.me ? '#c2410c' : '#6d4bb8') + '" text-anchor="' + anc + '"'
+        + ' stroke="#fffdfb" stroke-width="2.6" paint-order="stroke">' + esc(txt) + '</text>';
+    }
+    return g;
   }).join('');
 
   return '<div class="sc-card sc-card-admin"><div class="sc-card-h">分层教学四象限'
@@ -12886,7 +12950,8 @@ function scQuadrant(){
     + '<div class="sc-quadpick">看哪一科：' + subs.map(function(x){
         return '<button class="' + (x.key === sub.key ? 'on' : '') + '" onclick="scSetQuad(\'' + x.key + '\')">' + esc(x.name) + '</button>';
       }).join('') + '</div>'
-    + '<div class="sc-figcap">横轴总分、纵轴单科，十字是两条班均线。<b>右上＝双强，左上＝单科尖子，右下＝偏科预警</b>（总分够但这一科拖后腿，最该单独谈）。鼠标停在点上能看是谁。</div>'
+    + '<div class="sc-figcap">横轴总分、纵轴单科，十字是两条班均线。<b>右上＝双强，左上＝单科尖子，右下＝偏科预警</b>（总分够但这一科拖后腿，最该单独谈）。'
+    + '<b>图上已经直接标了名字和这一科分数</b> —— 标出来的是偏科预警象限的同学（最多 14 个），橙色的「我」是你自己；其余点把鼠标停上去也能看。</div>'
     + '</div>';
 }
 function scSetQuad(k){ SC.quadKey = k; scRenderPane(); }
@@ -12899,19 +12964,31 @@ function scHeatmap(){
   if(!subs.length || SC.rows.length < 2) return '';
 
   /* 每科按班内名次映射颜色：越靠前越暖（橙），越靠后越冷（灰） */
+  var rk = scRankMap(SC.basis);   /* 提出来算一次：原先每格都重算，60 行 × 6 科白跑 360 遍 */
   var rowsHtml = SC.rows.map(function(r){
     var t = scTotal(r, SC.basis);
     var cells = subs.map(function(sub){
       var v = scSubScore(r, sub, SC.basis);
       if(v == null) return '<i class="sc-hm" style="background:#f5efe8"></i>';
-      var rank = (scRankMap(SC.basis).subj[sub.key] || {}).rank[r.id];
-      var cnt = (scRankMap(SC.basis).subj[sub.key] || {}).count || 1;
+      var pack = rk.subj[sub.key] || {};
+      var rank = pack.rank[r.id], cnt = pack.count || 1;
       var p = cnt > 1 ? (rank - 1) / (cnt - 1) : 0;   /* 0 = 最好 */
       /* 用「好→橙、差→浅灰蓝」两段插值，避免红绿混淆 */
-      var col = p < 0.5
-        ? 'rgb(' + Math.round(194 + (230 - 194) * (p / 0.5)) + ',' + Math.round(65 + (200 - 65) * (p / 0.5)) + ',' + Math.round(12 + (170 - 12) * (p / 0.5)) + ')'
-        : 'rgb(' + Math.round(230 + (229 - 230) * ((p - 0.5) / 0.5)) + ',' + Math.round(200 + (231 - 200) * ((p - 0.5) / 0.5)) + ',' + Math.round(170 + (235 - 170) * ((p - 0.5) / 0.5)) + ')';
-      return '<i class="sc-hm" style="background:' + col + '" title="' + esc(r.name) + '　' + esc(sub.name) + ' ' + fmtNum(v) + '（班内第 ' + rank + '）"></i>';
+      var cr, cg, cb, q;
+      if(p < 0.5){
+        cr = Math.round(194 + (230 - 194) * (p / 0.5));
+        cg = Math.round(65 + (200 - 65) * (p / 0.5));
+        cb = Math.round(12 + (170 - 12) * (p / 0.5));
+      } else {
+        q = (p - 0.5) / 0.5;
+        cr = Math.round(230 + (229 - 230) * q);
+        cg = Math.round(200 + (231 - 200) * q);
+        cb = Math.round(170 + (235 - 170) * q);
+      }
+      /* 底色深就写白字、底色浅就写深字 —— 站主要求格子里直接看到分数 */
+      var dark = (0.299 * cr + 0.587 * cg + 0.114 * cb) < 168;
+      return '<i class="sc-hm" style="background:rgb(' + cr + ',' + cg + ',' + cb + ');color:' + (dark ? '#fff' : '#6b5443') + '"'
+        + ' title="' + esc(r.name) + '　' + esc(sub.name) + ' ' + fmtNum(v) + '（班内第 ' + rank + '）">' + fmtNum(v) + '</i>';
     }).join('');
     return '<div class="sc-hm-row' + (scIsMe(r) ? ' me' : '') + '">'
       + '<span class="sc-hm-name">' + esc(r.name) + '</span>'
@@ -12927,8 +13004,8 @@ function scHeatmap(){
     +   subs.map(function(sub){ return '<b>' + esc(sub.name) + '</b>'; }).join('')
     + '</span><span class="sc-hm-total">总分</span></div>'
     + '<div class="sc-hm-body">' + rowsHtml + '</div>'
-    + '<div class="sc-figcap">越<b style="color:#c2410c">橙</b>＝这科越靠前，越<b style="color:#a8968a">浅</b>＝越靠后。'
-    + '一屏看完谁偏科、偏在哪一科，比翻表格快得多。（手机上会自动换成横向表格）</div>'
+    + '<div class="sc-figcap"><b>每个格子里就是这个同学的这一科分数</b>；越<b style="color:#c2410c">橙</b>＝这科越靠前，越<b style="color:#a8968a">浅</b>＝越靠后。'
+    + '一屏看完谁偏科、偏在哪一科，比翻表格快得多。（电脑上把鼠标停在格子上，还能看到班内名次）</div>'
     + '</div>';
 }
 

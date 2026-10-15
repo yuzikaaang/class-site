@@ -289,7 +289,7 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     /* 多人 → 只读成绩单 */
     var head = '<tr><th>班排</th><th>姓名</th>'
       + subs.map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
-      + '<th>总分</th><th>校排</th></tr>';
+      + '<th>总分</th><th>年级排名</th></tr>';
     var trs = rows.slice().sort(function(a, b){
       var x = rk.total[a.idx] || 9999, y = rk.total[b.idx] || 9999;
       return x - y;
@@ -335,7 +335,7 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       + '</div>'
       + '<div class="ov">'
       +   '<div><span>班排名</span><b>' + (st ? st + ' / ' + n : '—') + '</b></div>'
-      +   '<div><span>校排名</span><b>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</b></div>'
+      +   '<div><span>年级排名</span><b>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</b></div>'
       +   '<div><span>与班均</span><b>' + (t == null ? '—' : (t - avg >= 0 ? '+' : '−') + fmtNum(Math.abs(t - avg))) + '</b></div>'
       +   '<div><span>联考排名</span><b>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</b></div>'
       + '</div></div>';

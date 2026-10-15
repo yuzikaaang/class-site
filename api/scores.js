@@ -84,6 +84,8 @@ async function handleGet(req, res, action) {
     case 'me':     return await getMe(req, res);
     case 'config': return await getConfig(req, res);
     case 'meta':   return await getMeta(req, res);
+    /* 姓名对照（v2.9.5）：列出成绩表里没绑上账号的姓名，供站主一键关联 */
+    case 'unbound': return await unboundNames(req, res);
     /* 分享链接取数：**免登录**（链接本身就是凭证） */
     case 'share-get': return await shareGet(req, res);
     case 'backup-list':   return await backupList(req, res);
@@ -101,15 +103,18 @@ async function getList(req, res) {
   const sql = getSql();
   const isAdmin = u.role === 'admin';
 
+  /* ⚠️ exam_end_date 必须选出来：v2.7.4 加了「考试可跨天」，但列表这条 SQL
+     当时漏了这个字段 → normalizeExam 拿不到 → 列表里永远显示成单日。
+     （后台新建时填了 5/14—15，列表里还是只显示 5/14，就是这么来的。） */
   const rows = isAdmin
     ? await sql`
-        select e.id, e.name, e.exam_date, e.exam_type, e.subjects, e.cutlines,
+        select e.id, e.name, e.exam_date, e.exam_end_date, e.exam_type, e.subjects, e.cutlines,
                e.grade_ref, e.note, e.status, e.published_at, e.updated_at,
                (select count(*) from exam_scores s where s.exam_id = e.id) as row_count
           from exams e
          order by e.exam_date desc, e.id desc`
     : await sql`
-        select e.id, e.name, e.exam_date, e.exam_type, e.subjects, e.cutlines,
+        select e.id, e.name, e.exam_date, e.exam_end_date, e.exam_type, e.subjects, e.cutlines,
                e.grade_ref, e.note, e.status, e.published_at, e.updated_at,
                (select count(*) from exam_scores s where s.exam_id = e.id) as row_count
           from exams e
@@ -143,6 +148,9 @@ async function getBoard(req, res) {
     return fail(res, 403, '该次考试尚未发布');
   }
 
+  const cfg = await loadConfig(sql);
+  const myNames = namesOfUser(u, cfg.nameMap);
+
   const rows = await sql`
     select id, student_name, student_no, user_id, scores, school_rank, league_rank, note
       from exam_scores
@@ -160,6 +168,11 @@ async function getBoard(req, res) {
       schoolRank: r.school_rank == null ? null : Number(r.school_rank),
       leagueRank: r.league_rank == null ? null : Number(r.league_rank),
       note: r.note || '',
+      /* 「这条是不是我的」由后端算好：成绩表里写成别名（改过名）也能认出来。
+         没绑 uid 的行才需要按姓名比 —— 绑了就以 uid 为准。 */
+      mine: r.user_id == null
+        ? myNames.indexOf(String(r.student_name || '').trim()) >= 0
+        : Number(r.user_id) === Number(u.id),
     })),
     serverTime: Date.now(),
   });
@@ -172,6 +185,10 @@ async function getMe(req, res) {
 
   const sql = getSql();
   const isAdmin = u.role === 'admin';
+  /* 认人认两路：绑好的 user_id，以及「姓名（含别名）对得上」。
+     后者是为了兜住 uid 没绑上的情况（改过名、历史导入），学生照样能看到自己。 */
+  const cfg = await loadConfig(sql);
+  const myNames = namesOfUser(u, cfg.nameMap);
   /* 管理员能看到草稿（方便发布前自查趋势），学生只看已发布 —— 与 list 一致。
      另外把每次考试的分数线与年级参照一并返回：前端的「跨考试上线率趋势」
      和「年级百分位」都要用，省得前端为每次考试再跑一趟 board。 */
@@ -181,7 +198,7 @@ async function getMe(req, res) {
            s.scores, s.school_rank, s.league_rank, s.student_name
       from exam_scores s
       join exams e on e.id = s.exam_id
-     where s.user_id = ${u.id}
+     where (s.user_id = ${u.id} or s.student_name = any(${myNames}::text[]))
        and (e.status = 'published' or ${isAdmin})
      order by e.exam_date asc, e.id asc`;
 
@@ -211,9 +228,12 @@ async function getConfig(req, res) {
 
   const sql = getSql();
   const cfg = await loadConfig(sql);
-  /* 配置里有面向学生的开关，也有偏管理项的项；学生只拿到该看的。
-     （目前全是展示开关，没有机密内容，整份返回即可。） */
-  ok(res, { config: cfg, isAdmin: u.role === 'admin' });
+  const isAdmin = u.role === 'admin';
+  /* 姓名对照是「谁的两种叫法」，属于隐私，只给站主。
+     （其余都是展示开关，没有机密内容，整份返回即可。） */
+  const safe = Object.assign({}, cfg);
+  if (!isAdmin) delete safe.nameMap;
+  ok(res, { config: safe, isAdmin });
 }
 
 /** 建考试用的元数据：默认科目、默认分数线、可选类型 */
@@ -240,6 +260,7 @@ async function handlePost(req, res, action) {
     case 'scores-save':  return await scoresSave(req, res);
     case 'row-delete':   return await rowDelete(req, res);
     case 'config-save':    return await configSave(req, res);
+    case 'name-bind':      return await nameBind(req, res);
     case 'share-create':   return await shareCreate(req, res);
     case 'share-revoke':   return await shareRevoke(req, res);
     case 'share-list':     return await shareList(req, res);
@@ -425,7 +446,10 @@ async function scoresImport(req, res) {
 
   if (!clean.length) return fail(res, 400, '清洗后没有有效数据，请检查表格');
 
-  /* 姓名 → 站点用户 id：导入时顺手把成绩绑到账号上，学生登录后就能看到自己 */
+  /* 姓名 → 站点用户 id：导入时顺手把成绩绑到账号上，学生登录后就能看到自己。
+     匹配前先过一遍「姓名对照」——成绩表写「雷博雅」、账号叫「雷其桐」也认得出是同一个人。 */
+  const cfg = await loadConfig(sql);
+  const nameMap = cfg.nameMap || {};
   const users = await sql`select id, display_name, username from users where status = 'active'`;
   const byName = new Map();
   users.forEach((x) => {
@@ -436,7 +460,7 @@ async function scoresImport(req, res) {
   });
   const unmatched = [];
   clean.forEach((r) => {
-    const uid = byName.get(r.name);
+    const uid = byName.get(canonName(r.name, nameMap));
     if (uid) r.uid = uid;
     else unmatched.push(r.name);
   });
@@ -490,7 +514,19 @@ async function scoresSave(req, res) {
   const subKeys = (jsonCol(ex[0].subjects) || []).map((s) => String(s.key));
 
   /* ⚠️ 一样要批量：Workers 免费版每请求上限 50 个子请求，
-     逐条 update 的话「块粘贴」几十行就会 500。分两批：有 id 的整批更新、没 id 的整批新增。 */
+     逐条 update 的话「块粘贴」几十行就会 500。分两批：有 id 的整批更新、没 id 的整批新增。
+     顺手按姓名（过一遍「姓名对照」）重算一次该绑哪个账号 —— 改过名字或新配了对照，这里就自动跟上。 */
+  const cfg = await loadConfig(sql);
+  const nameMap = cfg.nameMap || {};
+  const users = await sql`select id, display_name, username from users where status = 'active'`;
+  const byName = new Map();
+  users.forEach((x) => {
+    const n = String(x.display_name || '').trim();
+    if (n && !byName.has(n)) byName.set(n, Number(x.id));
+    const un = String(x.username || '').trim();
+    if (un && !byName.has(un)) byName.set(un, Number(x.id));
+  });
+
   const upd = [], ins = [];
   for (const r of rows) {
     const id = Number(r.id || 0);
@@ -500,6 +536,7 @@ async function scoresSave(req, res) {
       id,
       student_name: name,
       student_no: String(r.no || '').trim().slice(0, 30) || null,
+      uid: byName.get(canonName(name, nameMap)) || null,
       scores: cleanScores(r.s, subKeys),
       school_rank: toIntOrNull(r.schoolRank),
       league_rank: toIntOrNull(r.leagueRank),
@@ -514,27 +551,26 @@ async function scoresSave(req, res) {
     const back = await sql`
       update exam_scores t
          set student_name = x.student_name, student_no = x.student_no,
+             user_id = coalesce(x.uid, t.user_id),
              scores = coalesce(x.scores, '{}'::jsonb),
              school_rank = x.school_rank, league_rank = x.league_rank,
              note = x.note, updated_at = now()
         from jsonb_to_recordset(${JSON.stringify(upd)}::jsonb) as x(
           id bigint, student_name text, student_no text, scores jsonb,
-          school_rank int, league_rank int, note text)
+          school_rank int, league_rank int, note text, uid bigint)
        where t.id = x.id and t.exam_id = ${examId}
       returning t.id`;
     updated = back.length;
   }
 
   if (ins.length) {
-    /* 新增行（比如中途转来的同学）——一条 SQL 里顺便按姓名绑上站点账号 */
+    /* 新增行（比如中途转来的同学）——账号在这一批里就已经算好了，不用再 join 一次 */
     const back = await sql`
       insert into exam_scores (exam_id, user_id, student_name, student_no, scores, school_rank, league_rank, note)
-      select ${examId}, y.uid, x.student_name, x.student_no,
+      select ${examId}, x.uid, x.student_name, x.student_no,
              coalesce(x.scores, '{}'::jsonb), x.school_rank, x.league_rank, x.note
         from jsonb_to_recordset(${JSON.stringify(ins)}::jsonb) as x(
-          student_name text, student_no text, scores jsonb, school_rank int, league_rank int, note text)
-        left join (select id as uid, display_name from users where status = 'active') y
-               on y.display_name = x.student_name
+          student_name text, student_no text, scores jsonb, school_rank int, league_rank int, note text, uid bigint)
       returning id`;
     inserted = back.length;
   }
@@ -1100,6 +1136,94 @@ async function configSave(req, res) {
 }
 
 /* ============================================================
+   姓名对照（v2.9.5）
+   ------------------------------------------------------------
+   站主原话：「雷其桐就是雷博雅」。同一个人，成绩表里写的名字和站点
+   账号里的名字不一样，系统就认不出来 —— 他登录后看不到自己。
+   与其去改账号（登录名是凭据，动它风险大），不如记一张对照表：
+   导入、绑账号、找「我」时都先过一遍，问题自然就没了。
+   ============================================================ */
+
+/** 列出「成绩表里出现过、但没绑上账号」的姓名，外加一份账号名单供选择 */
+async function unboundNames(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+
+  const sql = getSql();
+  const cfg = await loadConfig(sql);
+  const groups = await sql`
+    select student_name, max(user_id) as uid, count(*) as n
+      from exam_scores
+     group by student_name
+     order by student_name`;
+
+  const unbound = [];
+  groups.forEach((r) => {
+    if (r.uid != null) return;
+    const nm = String(r.student_name || '');
+    unbound.push({ name: nm, count: Number(r.n) || 0, alias: (cfg.nameMap || {})[nm] || '' });
+  });
+
+  const users = await sql`
+    select id, display_name, username from users
+     where status = 'active' order by id`;
+
+  ok(res, {
+    nameMap: cfg.nameMap || {},
+    unbound,
+    boundCount: groups.length - unbound.length,
+    users: users.map((x) => ({
+      id: Number(x.id),
+      name: String(x.display_name || x.username || ''),
+      username: String(x.username || ''),
+    })),
+  });
+}
+
+/** 把「成绩表里的某个姓名」关联到某个账号（传空 target 即取消关联），并写回对照表 */
+async function nameBind(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+
+  const b = await body(req);
+  const name = String((b && b.name) || '').trim().slice(0, 30);
+  if (!name) return fail(res, 400, '缺少姓名');
+  const target = String((b && b.target) || '').trim().slice(0, 30);
+
+  const sql = getSql();
+  const cfg = await loadConfig(sql);
+  const map = Object.assign({}, cfg.nameMap || {});
+  if (target && target !== name) map[name] = target;
+  else delete map[name];
+
+  /* target 必须真的对得上某个账号才绑；取消关联就把这些行解绑 */
+  const users = await sql`select id, display_name, username from users where status = 'active'`;
+  const byName = new Map();
+  users.forEach((x) => {
+    const n = String(x.display_name || '').trim();
+    if (n && !byName.has(n)) byName.set(n, Number(x.id));
+    const un = String(x.username || '').trim();
+    if (un && !byName.has(un)) byName.set(un, Number(x.id));
+  });
+  const uid = target ? (byName.get(target) || null) : null;
+  if (target && !uid) return fail(res, 400, '找不到账号「' + target + '」，请从名单里选一个');
+
+  const back = await sql`
+    update exam_scores set user_id = ${uid}, updated_at = now()
+     where student_name = ${name}
+    returning id`;
+
+  const next = Object.assign({}, cfg, { nameMap: map });
+  await sql`
+    insert into score_config (id, data, updated_at)
+    values (1, ${JSON.stringify(next)}::jsonb, now())
+    on conflict (id) do update set data = ${JSON.stringify(next)}::jsonb, updated_at = now()`;
+
+  await audit(u.id, 'score-name-bind', 'exam_score', 0, name + ' → ' + (target || '（取消关联）'));
+  ok(res, { nameMap: map, changed: back.length, uid, name: name });
+}
+
+/* ============================================================
  * 工具
  * ============================================================ */
 
@@ -1263,6 +1387,10 @@ const DEFAULT_CONFIG = {
   rankBasis: 'graded',
   /* 成绩分析总开关：'published' 学生可见已发布 | 'off' 整个功能对学生关闭 */
   access: 'published',
+  /* 姓名对照：成绩表里的姓名 → 站点账号里的姓名（同一个人的两种叫法）
+     例：{ '雷博雅': '雷其桐' }（同一个人，成绩表写的是新名字、账号还是旧的）。
+     导入、绑账号、找「我」都会先过一遍这张表，所以改一次名字不用动成绩数据。 */
+  nameMap: {},
 };
 
 async function loadConfig(sql) {
@@ -1293,5 +1421,50 @@ function sanitizeConfig(patch) {
     const n = Number(patch.shareDays);
     if (Number.isFinite(n) && n >= 1 && n <= 3650) out.shareDays = Math.round(n);
   }
+  /* 姓名对照：{ 成绩表姓名: 站点姓名 }。整体替换（不是增量），两边都限长限条数，
+     并且不允许自己映射自己 —— 没意义，还容易把自己绕成环。 */
+  if (patch.nameMap !== undefined) {
+    const src = (patch.nameMap && typeof patch.nameMap === 'object' && !Array.isArray(patch.nameMap))
+      ? patch.nameMap : {};
+    const map = {};
+    let n = 0;
+    for (const alias of Object.keys(src)) {
+      if (n >= 200) break;
+      const a = String(alias || '').trim().slice(0, 30);
+      const t = String(src[alias] || '').trim().slice(0, 30);
+      if (!a || !t || a === t) continue;
+      map[a] = t;
+      n++;
+    }
+    out.nameMap = map;
+  }
+  return out;
+}
+
+/** 姓名归一：把「成绩表里写的名字」映射成「站点账号里的名字」。
+ *  没配对照时原样返回 —— 绝大多数人都是这种情况。 */
+function canonName(name, nameMap) {
+  const n = String(name || '').trim();
+  if (!n) return '';
+  const t = nameMap && nameMap[n];
+  return t ? String(t).trim() : n;
+}
+
+/** 某个账号「可能被写成哪些姓名」：账号名 + 用户名 + 所有指向它的别名。
+ *  用来判断「这一行成绩是不是我的」—— 比只比 uid 稳，uid 没绑上也不会漏。 */
+function namesOfUser(u, nameMap) {
+  const out = [];
+  const push = (v) => {
+    const s = String(v || '').trim();
+    if (s && out.indexOf(s) < 0) out.push(s);
+  };
+  push(u && u.displayName);
+  push(u && u.username);
+  const base = out.slice();
+  const map = nameMap || {};
+  Object.keys(map).forEach((alias) => {
+    const target = String(map[alias] || '').trim();
+    if (target && base.indexOf(target) >= 0) push(alias);
+  });
   return out;
 }

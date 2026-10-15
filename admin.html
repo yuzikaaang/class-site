@@ -885,8 +885,8 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.9.4';
-var VER_DATE = '2026-10-14';
+var SITE_VERSION = '2.9.5';
+var VER_DATE = '2026-10-15';
 
 /* ---- 运行时状态 ---- */
 var STATE = {
@@ -7995,62 +7995,499 @@ function relTypeOf(t){
   return REL_TYPES[t] || { label: t || '其他', cls: 'badge-gray' };
 }
 
-/* ---- 初始数据：站主选了「只放最近几轮」，来源是 internal/notes.md ---- */
 function relSeed(){
+  /* 内置「一键填入」用的种子数据 —— v2.9.5 补全为全量历史（2.3.0 ~ 2.9.5），
+     与云端 release_notes 完全同源，避免两边内容对不上。
+     ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
+     后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
     {
-      version: '2.3.5', date: '2026-10-07', title: '游戏排行榜', type: 'feature', highlight: false,
-      items: [
-        '新增四款领券游戏（贪吃蛇 / 像素飞鸟 / 俄罗斯方块 / 涂鸦跳跃）的跨用户排行榜',
-        '支持「历史总榜 / 本周榜」切换，名次带金银铜，分数带单位',
-        '入口固定在娱乐天地第一位，需登录才能看；接口只回姓名与分数，不回账号 ID',
-      ],
+      "version": "2.9.5",
+      "date": "2026-10-15",
+      "title": "图表直接标数据 + 姓名对照 + 「校排名」统一叫「年级排名」",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "所有成绩图表上都能直接看到数字：直方图柱顶写人数、雷达图每个角写分数、热力图格子里写分数",
+        "分层教学四象限直接标出姓名与单科分（标的是「偏科预警」象限的同学）；各科迷你折线每个点都写分数",
+        "热力图按底色深浅自动换字色（深底白字），并修掉「每格都重算一遍名次」的老毛病",
+        "「校排名」统一改叫「年级排名」，并写明二者是同一个东西，不同地方叫法不一样",
+        "新增「姓名对照」（后台 → 成绩分析 → 姓名对照）：成绩表里的名字和账号对不上的（比如改过名的），一键关联，他登录后就能看到自己的成绩",
+        "导入、改分、找「我」全都会先过这张对照表；对照关系存云端，换设备不丢，也不会改动账号本身"
+      ]
     },
     {
-      version: '2.3.4', date: '2026-10-07', title: '点歌券改用账号身份取券', type: 'improve', highlight: false,
-      items: [
-        '领券不再从全班名单里手搜名字，改为自动使用登录账号的真名，输入框锁定不可改 —— 从根上防冒领',
-        '未登录时提示先去登录，不再允许手填姓名',
-        '修复涂鸦跳跃达标后直接退出、整局游玩数据不上报的问题',
-      ],
+      "version": "2.9.4",
+      "date": "2026-10-14",
+      "title": "备份还原演练：连着揪出四个真 bug（v2.9.1 – v2.9.4）",
+      "type": "fix",
+      "highlight": true,
+      "items": [
+        "做备份却从没验证过能不能恢复，等于没做 —— 这轮真刀真枪演练了一次，结果连炸四个",
+        "其一：还原逐条 insert 撞上 Workers「每请求最多 50 个子请求」上限，121 条只插进 37 条就 500 → 改批量灌",
+        "其二：快照里的日期是 ISO 串（2026-07-02T00:00:00.000Z），喂回去不认 → 统一成 YYYY-MM-DD",
+        "其三：还原是「先 delete 再 insert」，insert 失败就变成「数据被清空且插不回去」，比不做还原还糟 → 整套动作放进事务，只会全成功或全回滚",
+        "其四：数据库返回的 date 是 Date 对象，String() 得到的不是 ISO 串，正则静默失配 → 单独处理 Date 实例",
+        "顺带：改分原本也是逐条写，块粘贴几十行同样会 500，一并改成批量；还原失败现在会回传真实原因",
+        "演练最终 12/12 全绿：还原后 121 条成绩一条不少、抽样总分一致、分享记录恢复、还原后新建考试不撞主键"
+      ]
     },
     {
-      version: '2.3.3', date: '2026-10-07', title: '自动云同步', type: 'feature', highlight: false,
-      items: [
-        '每 60 秒自动双向同步一次（先推本机改动、再拉云端最新）',
-        '失败自动退避：30 秒 → 1 分 → 2 分 → 4 分，封顶 5 分钟，成功一次即恢复',
-        '保守策略：切到后台不跑、正在打字不跑，恢复可见或恢复网络立刻补跑',
-        '账号面板新增「上传本机 / 拉取云端 / 双向同步」三个手动入口与上次同步时间',
-      ],
+      "version": "2.9.0",
+      "date": "2026-10-14",
+      "title": "分享链接 + 每日备份",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "新增独立分享页：不用登录，链接本身就是凭证；带水印，且禁搜索引擎收录",
+        "范围三档（只分我 / 我挑几位 / 全班）、可选哪几次考试、多久过期、最多被打开几次，可随时撤销",
+        "每日备份到 Cloudflare KV：含成绩（考试 + 成绩 + 分享链接 + 配置）与内容数据，不含任何密码",
+        "后台可立即备份 / 下载到本地 / 从快照还原；还原前自动再存一份「还原前的样子」，并要输 RESTORE 二次确认"
+      ]
     },
     {
-      version: '2.3.2', date: '2026-10-07', title: '通用弹窗引擎', type: 'feature', highlight: false,
-      items: [
-        '新增统一的弹窗配置，支持「进站弹」与「进某个板块才弹」两种场景',
-        '可设置按天弹 / 只弹一次 / 每次都弹，支持时间窗、按钮、视频与图片',
-        '关闭后可留一个悬浮球，方便同学回头再看',
-        '开屏弹会排队，等欢迎语、门禁、活动弹窗关掉后再弹，不会几个框叠在一起',
-      ],
+      "version": "2.8.2",
+      "date": "2026-10-14",
+      "title": "站主侧五件套 + 对外展示三档开关",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "诊断卡：班均 / 中位数 / 最高、最薄弱一科、各线过线人数、班内最强与最弱相差多少个百分点",
+        "需关注学生：低于班均 10 分自动挑出，并自动识别「拖后腿科目」",
+        "进退步榜：和上一次考试比名次（不比分数 —— 卷子难度不同）",
+        "分层教学四象限：总分 × 单科散点，十字线是两条班均，可切换看哪一科",
+        "学生 × 科目热力图：颜色＝该科班内位置，一屏看完谁偏科、偏在哪一科",
+        "四块标签内容各有三档：完全隐藏（默认）/ 只给本人看自己那条 / 全班可见"
+      ]
     },
     {
-      version: '2.3.1', date: '2026-10-07', title: '修改密码 / 重置密码「服务器错误」修复', type: 'fix', highlight: true,
-      items: [
-        '修好了困扰许久的「改密码报服务器错误」：真因是用户表缺两个字段，而自动建表逻辑漏补了它们',
-        '现在部署时会自动补齐缺失字段，不再需要手动执行 SQL',
-        '登录失败次数限制顺带恢复生效（之前因为容错代码把异常吞掉了，实际上一直没起作用）',
-        '改进测试方式：让测试环境真实执行建表语句，这类「线上缺字段」的故障以后能在测试里提前发现',
-      ],
+      "version": "2.8.1",
+      "date": "2026-10-14",
+      "title": "修两处 + 补护栏",
+      "type": "fix",
+      "highlight": false,
+      "items": [
+        "年级人数改为「取最近一次填过的」：原先只看当前这次，最新那次没填就整块不显示",
+        "导出图片加手机端系统分享兜底（可直接发微信），不支持时退回下载"
+      ]
     },
     {
-      version: '2.3.0', date: '2026-10-07', title: '多项修复与安全加固', type: 'security', highlight: false,
-      items: [
-        '会话令牌改为加密存储，数据库里不再保留明文；老账号平滑过渡，不用全员重新登录',
-        '后台与主站登录状态打通，修好「后台显示旧身份」「在线状态不显示」',
-        '作业附件直链只允许管理员增改，课代表编辑作业时原附件只读保留',
-        '成绩查询、意见反馈改为需登录才能进入',
-        '修正若干处文字对比度过低、看不清的问题',
-      ],
+      "version": "2.8.0",
+      "date": "2026-10-14",
+      "title": "成绩分析增强：各科趋势 / 年级排名变化 / 导出 / 打印",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "各科趋势网格：每科一张小卡 + 迷你折线（涨绿跌红），哪科在掉不用读数",
+        "年级排名变化：按年级排名画折线 + 年级百分位，并讲清「班排名和年级排名会打架，而且是对的」",
+        "跨考试上线率：历次「上线人数（占比）」表，点一下才加载",
+        "导出成绩卡图片（纯 canvas 画，2 倍图，不引第三方库）",
+        "A4 打印：只印成绩分析这一屏，表头每页重复、卡片不跨页切"
+      ]
     },
+    {
+      "version": "2.7.4",
+      "date": "2026-10-14",
+      "title": "成绩单表头吸附 + 考试按时间排序 + 考试支持跨天",
+      "type": "fix",
+      "highlight": false,
+      "items": [
+        "成绩单前两列横向吸住、表头吸顶，手机上左右拖动不会看错行",
+        "考试列表一律按日期排序",
+        "考试支持起止日期（如 5/14—15 的联考），前后台统一显示成「2026-05-14 ~ 05-15」"
+      ]
+    },
+    {
+      "version": "2.7.3",
+      "date": "2026-10-14",
+      "title": "分数线支持一位小数",
+      "type": "fix",
+      "highlight": false,
+      "items": [
+        "真实划线常有半分（本科线 361.5），原先后端会取整成 362 —— 上线人数可能差一个人"
+      ]
+    },
+    {
+      "version": "2.7.2",
+      "date": "2026-10-14",
+      "title": "前台成绩分析页（全班成绩单 + 个人画像 + 图表）",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "全班成绩单：班排 / 姓名 / 各科（格内小字是该科班内排名）/ 总分 / 年级排名，点表头排序，自己那行标「我」",
+        "个人画像：概览卡、上线情况（已超 / 还差 N 分）、班级位置条、各科卡片、六科雷达图（按得分率）",
+        "图表：总分分布直方图（叠加均分 / 中位数 / 分数线 / 我）、上线统计、分数段四色横条",
+        "排名口径可切（总分赋分 / 总分原始），切换后表格与图表全部同步",
+        "未登录只给登录引导；没有已发布考试时显示「暂未对外开放」"
+      ]
+    },
+    {
+      "version": "2.7.1",
+      "date": "2026-10-14",
+      "title": "后台成绩分析面板（考试管理 / 导入 / 改分 / 发布）",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "新建 / 编辑 / 删除考试：科目配置、分数线、年级参照、备注，可勾掉本次没考的科",
+        "导入支持 xlsx / xls / csv，也支持从 Excel 直接复制粘贴；表头自动识别",
+        "改分像 Excel：改完离开格子 1.5 秒自动保存，只提交改动过的行；可加行可删行",
+        "发布 / 撤回，草稿状态明确标注「同学看不到」",
+        "修掉导入后连弹两个 alert 把页面卡住的问题"
+      ]
+    },
+    {
+      "version": "2.7.0",
+      "date": "2026-10-14",
+      "title": "成绩分析开工：入口改名 + 后端地基",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "板块「成绩查询」改为「成绩分析」，删除易查分外链，新增站内入口卡",
+        "新建 api/scores.js 与四张表（exams / exam_scores / share_links / score_config）",
+        "只存原始分：排名、均分、分数段、上线人数、进退步全部由浏览器实时算",
+        "认人按姓名（成绩表不保证按学号排，班上有转学生）；分数线允许留空",
+        "未发布的考试对学生直接拦掉，接口层就拦，不靠前端隐藏"
+      ]
+    },
+    {
+      "version": "2.6.7",
+      "date": "2026-10-14",
+      "title": "倒计时「进行中」与到期隐藏 + 公告文案规范化",
+      "type": "improve",
+      "highlight": false,
+      "items": [
+        "单点事项（放假、报到）到点即整条隐藏，不再挂着「0月 0天 0时 0分 0秒」",
+        "范围事项（如两天段考）进入区间后显示「进行中」，不再倒数",
+        "结束日按 23:59:59 收尾，不是零点 —— 否则最后一天下午就没了",
+        "公告编辑器加实时字数与写作提示；云端 82 条公告里 14 条偏口语的精简了"
+      ]
+    },
+    {
+      "version": "2.6.6",
+      "date": "2026-10-13",
+      "title": "iPad 弹窗居中修复 + 弹窗可跳转站内页面",
+      "type": "fix",
+      "highlight": false,
+      "items": [
+        "修 iPad 上弹窗不居中：overflow-x 的定位基准、align-items:center 把超高内容顶出视口、vh 把地址栏也算进去 —— 三处一起改",
+        "弹窗按钮支持三种目标：外链、打开站内板块（cat:5）、打开站内页面（fn:xxx）",
+        "站内页面走白名单，不让配置内容决定能调什么；目标写错时给提示且不关弹窗",
+        "后台「通用弹窗」加了目标下拉，不用记语法"
+      ]
+    },
+    {
+      "version": "2.6.5",
+      "date": "2026-10-13",
+      "title": "页脚署名改为「页面由 AI 辅助生成」",
+      "type": "improve",
+      "highlight": false,
+      "items": [
+        "站主要求：把页脚的「页面由 Work Buddy 辅助生成」改为「页面由 AI 辅助生成」"
+      ]
+    },
+    {
+      "version": "2.6.4",
+      "date": "2026-10-13",
+      "title": "自动检查更新 + 一键强制刷新",
+      "type": "fix",
+      "highlight": false,
+      "items": [
+        "修掉「手机上怎么刷新都停在旧版本」：页面现在会自己检查更新，不用手动刷",
+        "进站查一次、从后台切回来再查一次、之后每 5 分钟查一次",
+        "发现线上版本更新时，页面最底下的版本号会变成醒目的「发现新版本 · 点击立即更新」",
+        "点它会自动清掉旧缓存并重新加载到最新版",
+        "设置面板「数据」页新增「版本与更新」：能看到当前版本和线上版本，还有「检查更新」「强制刷新」两个按钮",
+        "页面刚打开就发现更新时会直接静默刷成新版；已经用了一会儿则只做提示，不打断你",
+        "顺带修掉两处隐患：重复检查会在缓存里堆积无用副本；强制刷新时缓存可能被重新写回"
+      ]
+    },
+    {
+      "version": "2.6.3",
+      "date": "2026-10-13",
+      "title": "登录验证码改成「输数字」",
+      "type": "improve",
+      "highlight": false,
+      "items": [
+        "原先的滑块在某些老手机屏幕上用不了，现在改成照着图输入 4 位数字",
+        "手机会自动弹出数字键盘，只要键盘能打字就能过，不再依赖手指拖动",
+        "多打出来的空格、字母会自动滤掉；看不清可以点右上角换一张",
+        "输错会立刻提示并换一张新图，防止有人一条条试",
+        "夜间模式下自动变成深色底浅色字，不会闪出一块亮色"
+      ]
+    },
+    {
+      "version": "2.6.2",
+      "date": "2026-10-11",
+      "title": "后台合并「首页卡片」板块（每日一言 + 学习卡片）",
+      "type": "improve",
+      "highlight": false,
+      "items": [
+        "后台导航原来「每日一言」和「学习卡片」是两个独立入口，光内容分组就有 10 项，太碎不好找",
+        "现在合并成一个板块「首页卡片」，面板内分上下两块：上面管每日一言列表，下面管学习卡片的四类内容与学科范围",
+        "两块各自复用原来的逻辑和数据，互不干扰，之前配过的内容与开关都不用重设",
+        "纯后台结构调整，同学在首页看到的东西没有任何变化"
+      ]
+    },
+    {
+      "version": "2.6.1",
+      "date": "2026-10-11",
+      "title": "心跳判定大简化 + 重试倒计时 + 学习卡片暂时隐藏",
+      "type": "fix",
+      "highlight": true,
+      "items": [
+        "修掉「明明有网却提示连接不到服务器」：以前任意一条请求偶尔失败就会点亮红条，现在改成必须连续两次失败才提示",
+        "反过来，只要有任意一次请求成功（心跳或任何接口）就立刻清零、收起提示 —— 有一条能通就说明网络没问题",
+        "失败后 15 秒会自动补打一次心跳确认：真断网时能及时提示，只是抖了一下的话这次多半成功、直接不打扰你",
+        "「重试」按钮不再像没反应：点了会显示「正在刷新… 剩余 60 秒」并每秒走动，期间每 10 秒真的再试一次",
+        "连上后显示「连接已恢复」再自动收起；60 秒还没成功就回到原来的提示，按钮还在、可以再点",
+        "修掉重试时的两个小毛病：点了第一眼看不到「正在刷新」、以及后台自动同步恰好成功会误把重试结束掉",
+        "首页「学习卡片」暂时下线（还有几处问题要打磨），代码与配置全部保留，修好后一个开关即可恢复"
+      ]
+    },
+    {
+      "version": "2.6.0",
+      "date": "2026-10-11",
+      "title": "学习卡片 + 每日一言完全随机 + 公告时间可改",
+      "type": "feature",
+      "highlight": true,
+      "items": [
+        "首页新增「学习卡片」：位置在「每日一言」下面，不做成独立板块，就是一张同款卡片，每次刷新随机出一条内容",
+        "卡片四类内容：物理/化学/生物 知识点公式、英语选词填空（带答案解析），以及联网抓取的「每日一词」和「古诗文」",
+        "学科知识点内置 105 条（物理 24 / 化学 33 / 生物 48），覆盖必修一全册，不依赖外部服务、打开即用",
+        "英语选词填空内置 30 道题，每题四选一并附答案解析，点「看答案」才展开",
+        "抽学科时先随机抽一科、再从该科抽一条，避免条目多的科目被抽中太频繁，三科机会均等",
+        "「自定义设置」新增学习卡片面板：四类内容可分别开关，学科可只保留自己选的那几门",
+        "「每日一言」改为完全随机切换，不再按日期顺序轮播；连续两次刷新不会撞同一句",
+        "「每日一言」接入网络名言库，联网成功会自动换一句，失败就静默保留本地那句",
+        "后台公告支持手动修改发布时间，旁边新增「填入当前时间」一键按钮，格式填错会给出明确提示",
+        "修正此前一条公告的时间写错（比真实时间早了 1 个多小时），并全量重排公告为严格倒序"
+      ]
+    },
+    {
+      "version": "2.5.3",
+      "date": "2026-10-11",
+      "title": "自定义设置新增「主题自动切换」三选一",
+      "type": "feature",
+      "highlight": true,
+      "items": [
+        "以前主题只有一种自动规则：每天 18:30 变暗、次日 7:30 变亮（写死的）。现在改成可选，在「自定义设置 → 外观 → 主题自动切换」里挑一个",
+        "关闭自动：完全手动，自己点顶部按钮切换",
+        "跟随系统：手机/电脑开了深色模式就自动变暗，改了立刻跟着变",
+        "跟随日出日落：按当地真实的日出日落时间自动切换亮暗",
+        "日出日落优先联网查询，联网失败或离线时自动改用本地天文计算兜底（实测两者只差 1 到 2 分钟），所以校园网限制或没信号也不会退化成写死的固定时间",
+        "打开页面时先用本地计算立即定好亮暗，联网拿到精确值后无缝校正，不会卡顿也不会闪",
+        "手动切换过主题后，当天不会再被自动逻辑弹回去（第二天自动恢复）"
+      ]
+    },
+    {
+      "version": "2.5.2",
+      "date": "2026-10-11",
+      "title": "修复「正常联网却提示连不到服务器」",
+      "type": "fix",
+      "highlight": true,
+      "items": [
+        "站主反馈手机明明连着网，页面却弹「连接不到服务端」。排查发现根因不在网络，而在服务端响应太慢被误判：实测网络握手只要 0.2 秒（网络完全正常），但带登录态的心跳请求要 1.4–10.1 秒，而前端超时阈值只有 12 秒——最慢的一次只差 1.9 秒就被判成离线",
+        "手机在移动数据或信号弱时延更大，必然突破 12 秒，于是弹出了那句误导人的提示",
+        "服务端提速：心跳里原本有两条串行的数据库更新语句，现在改为并发发出，耗时从「两者之和」降到「较慢的那一条」",
+        "前端超时放宽：心跳超时 12 秒 → 30 秒；连续连不上的宽限期 25 秒 → 60 秒，只有真的连续两轮都收不到回应才提示",
+        "提示文案不再误导：真的连不上时提示「检查网络 / 切换流量」；如果是服务器响应慢，则如实提示「服务器响应较慢，正在自动重试」，不再让人白折腾去换流量"
+      ]
+    },
+    {
+      "version": "2.5.1",
+      "date": "2026-10-11",
+      "title": "修复登录滑块验证码",
+      "type": "fix",
+      "highlight": true,
+      "items": [
+        "修复（重要）：登录 / 注册的滑块验证码「拖到底也提示不匹配」，怎么拖都过不去。根因是拼图块被画在了画布的左上角，只能在左边缘附近滑动，而缺口开在右半边 —— 两者永远对不上；偏偏判定逻辑又按「拖到底 = 通过」放行，于是出现「判定说通过、眼睛看没对齐」的错位，让人以为是自己没拖准。现在拼图块与缺口画在同一个位置，拖到底正好嵌进缺口，视觉与判定完全一致。",
+        "一并修复：验证码画布宽度曾在弹窗刚打开、布局还没完成时取不到值，退回了兜底宽度，与真实宽度不符，又叠了一层横向错位。现在改成先重试几帧、拿到真实宽度再绘制。",
+        "其他：新增 3 条回归测试断言（包括「禁止把拼图块画在左上角」），防止这个问题再犯。"
+      ]
+    },
+    {
+      "version": "2.5.0",
+      "date": "2026-10-11",
+      "title": "真在线状态 · 登录验证码 · 全站图标统一",
+      "type": "feature",
+      "highlight": true,
+      "items": [
+        "新增：真·在线检测。以前「在线」只能看最后一次登录时间，你登过一次就一直挂着「在线」，很容易误判。现在登录后每分钟双向发一次心跳，按「本次会话」记录最后活跃时间，超过 90 秒没响应就算离线。后台「用户管理」和「在线会话」都按这个口径显示，谁真的在线一眼就看得出。",
+        "新增：登录 / 注册加人机验证。需要拖动滑块把拼图对上去才能提交，纯前端实现（不联网、不上传、不收集任何信息），用来挡住脚本批量注册和撞库。",
+        "调整：游戏数据不再跨游戏合并。以前后台会把一个人在所有游戏里的时长加成「总时长」并据此排序 —— 但上午玩贪吃蛇、下午玩飞鸟是两码事，加在一起没有意义。现在各个游戏独立展示（各自的最高分 / 局数 / 时长），排序改成「最近玩过谁」，汇总口径改成「累计局数（局）」。",
+        "优化（重要）：全站图标统一升级。以前界面里混着一堆 emoji 小图标，其中倒计时区域每秒刷新一次，导致 emoji 反复闪动、很晃眼。现在全部换成统一的矢量图标（SVG），彻底不再闪。公告、作业正文里同学手写的 emoji 也会在显示时自动转成图标。",
+        "新增：连不上服务端时有明确提示。网络断开或服务端不可达时，页面顶部会显示「连接不到服务端，当前显示本地缓存 · 请检查网络，或切换到流量（移动数据）再试」，恢复后自动消失。此期间你看到的是本地缓存内容，不会丢数据。",
+        "调整：取消备用链接。旧的 Gitee Pages 早已下线，WorkBuddy 托管的那条在微信里又打不开，留着反而误导同学。现在全站只有 GitHub Pages 一个入口。",
+        "其他：README 与站内常见问题同步更新，把已经不适用旧说明清理掉。"
+      ]
+    },
+    {
+      "version": "2.4.1",
+      "date": "2026-10-09",
+      "title": "后台权力最大 + 手机端排版修复",
+      "type": "fix",
+      "highlight": false,
+      "items": [
+        "调整：可见性规则改为「你调过的字段你说了算，你没动过的尊重同学」。原来三个来源取最严，副作用是你永远无法放宽（同学设了「仅自己可见」，你改成「公开」也白改）。现在：① 你在「字段管理」里改过某个字段 → 以你为准，可放宽可收窄；② 你在某个同学的编辑弹窗里设过例外 → 以你为准，只对他一人生效；③ 你没动过的字段 → 同学说不想公开就一定不公开",
+        "新增：后台编辑弹窗会反向提醒你 —— 某个同学自己把某项设成了「仅自己可见」时标一行小字；如果你已经覆盖了他，会标「已被你覆盖」",
+        "新增：前台同步告知同学「站主为核对资料在后台仍能看到；若站主调整过该字段的可见范围，则以站主设置为准」，知情权清清楚楚",
+        "修复（重要）：在编辑弹窗里给某个人单独设的可见范围例外，对「微信 / QQ / 手机号」三项完全不生效 —— 点了保存也被静默丢弃（这个 bug 从上一版就存在）",
+        "修复（重要）：给同学设了「仅自己可见」后【新建】资料，这份意愿会被丢掉、永远存不进去（只有走「编辑」才生效）",
+        "修复：后台「个人信息可见性」那三个勾选项排版重叠、文字被挤成一竖排",
+        "修复：头衔任命页只看得到第一页、没有换页按钮（全班 60 多人时看不全）。现在有「首页 / 上一页 / 页码 / 下一页 / 末页」，并显示「共 N 人，当前显示第 X–Y 条」；搜索和刷新会自动回到第 1 页",
+        "修复：手机上翻页后表格排版乱掉、名字一列一列竖着排。窄屏下表格现在保持可读最小宽度、可以左右滑动，单元格内文字不再逐字换行"
+      ]
+    },
+    {
+      "version": "2.4.0",
+      "date": "2026-10-09",
+      "title": "资料字段可以自己加了",
+      "type": "feature",
+      "highlight": true,
+      "items": [
+        "新增：后台「资料管理 → 字段管理」可以直接给同学资料加新字段（学籍号、宿舍号…），填个中文名 + 英文键名就生效，前台、后台、Excel 三处自动跟着变，不用改代码",
+        "新增：字段可改名、可排序、可删除。排序值决定它排在资料表第几列；删除仅限自己加的字段（系统字段删了会带崩代码，已禁用），且会二次确认提醒「全班该字段的值一起消失」",
+        "新增：可见范围两级快捷切换 —— 字段管理里一键切全班默认档；某个同学的编辑弹窗里可再单独设「只对他一个人生效」的例外",
+        "升级：可见性改为三层取严（全班默认 ∩ 本人意愿 ∩ 单人例外），任何人说自己不想公开就一定不公开",
+        "新增：身份证号、发展团员编号真正建了列（此前只登记未建列，等于点了没用），统一按「仅本人可见」处理",
+        "升级：Excel 导入导出吃自定义字段 —— 导出表头用中文名，导入按中文表头自动认字段，认不出的列不会乱写",
+        "修复：资料管理页「字段管理」里点快捷切换按钮没反应（请求方法漏传，浏览器直接拦下）",
+        "修复：Excel 批量导入会把自定义字段静默丢掉"
+      ]
+    },
+    {
+      "version": "2.3.9",
+      "date": "2026-10-08",
+      "title": "资料体系改造：修「新建账号找不到」+ 字段可见性分档",
+      "type": "fix",
+      "highlight": true,
+      "items": [
+        "修复：后台新建账号后，该同学在「头衔任命」里根本找不到（从 v1 起就有的老 bug）——现在建号时会自动为他建一条班级资料",
+        "新增：资料字段可见性分档（公开 / 班委 / 本人）",
+        "新增：个人中心可以把微信、QQ、手机号设为「仅自己可见」",
+        "新增：后台可替任何人设置或覆盖可见性",
+        "文案改正：旧称统一为「智学网账号」（Excel 导入仍兼容旧模板表头）",
+        "修复：5 处操作日志参数错位导致的静默失败",
+        "为下一步「后台自定义资料字段」打好了结构地基"
+      ]
+    },
+    {
+      "version": "2.3.8",
+      "date": "2026-10-08",
+      "title": "弹窗完全统一到后台",
+      "type": "feature",
+      "highlight": true,
+      "items": [
+        "三周年庆祝 / 首次迎新 / 班级活动三套硬编码弹窗全部下线，统一由后台「通用弹窗」面板配置",
+        "新增横幅字段：可为任意板块配置顶部横幅（复用三周年横幅样式），点击直达视频",
+        "新增卡片样式：迎新欢迎卡可一键套用橙卡主题，观感与原欢迎弹一致",
+        "后台修复：弹窗从云端载入时不再丢失横幅/样式字段（此前编辑保存会把横幅覆盖掉）",
+        "修复迎新橙卡背景被玻璃拟态样式压住的 CSS 优先级问题"
+      ]
+    },
+    {
+      "version": "2.3.7",
+      "date": "2026-10-07",
+      "title": "后台「通用弹窗」编辑面板",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "新增后台「通用弹窗」可视化编辑面板（此前只有前端引擎，没有后台编辑入口）",
+        "支持开屏弹 / 进板块弹，内容含标题、正文、视频、图片、按钮，支持时间窗与关闭策略（按天弹 / 只弹一次 / 每次都弹）",
+        "列表可编辑、预览、上移下移、删除；同 ID 冲突时确认后覆盖（修正了误新增为第 3 条的 bug）",
+        "数据存云端 popups 字段，配了才弹，不配不影响现有站点"
+      ]
+    },
+    {
+      "version": "2.3.6",
+      "date": "2026-10-07",
+      "title": "抽歌功能迁移后台 + 版本更新记录板块",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "抽歌排期整套功能从前端搬到后台「抽歌排期」面板（抽签 / 歌单排除 / 历史公示），前端零残留",
+        "抽歌数据上云（dj_schedule + dj_excluded 两键），全班管理员共享一份，支持旧本机数据一键迁移",
+        "后台新增「版本更新」板块（仿 GitHub Release）：增改删、排序、类型色标、同版本确认，仅后台可见",
+        "修复部署红叉根因：wrangler.toml 的 Worker 名与 Cloudflare 线上不一致（class-site-api → class-site）"
+      ]
+    },
+    {
+      "version": "2.3.5",
+      "date": "2026-10-07",
+      "title": "游戏排行榜",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "新增四款领券游戏（贪吃蛇 / 像素飞鸟 / 俄罗斯方块 / 涂鸦跳跃）的跨用户排行榜",
+        "支持「历史总榜 / 本周榜」切换，名次带金银铜，分数带单位",
+        "入口固定在娱乐天地第一位，需登录才能看；接口只回姓名与分数，不回账号 ID"
+      ]
+    },
+    {
+      "version": "2.3.4",
+      "date": "2026-10-07",
+      "title": "点歌券改用账号身份取券",
+      "type": "improve",
+      "highlight": false,
+      "items": [
+        "领券不再从全班名单里手搜名字，改为自动使用登录账号的真名，输入框锁定不可改 —— 从根上防冒领",
+        "未登录时提示先去登录，不再允许手填姓名",
+        "修复涂鸦跳跃达标后直接退出、整局游玩数据不上报的问题"
+      ]
+    },
+    {
+      "version": "2.3.3",
+      "date": "2026-10-07",
+      "title": "自动云同步",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "每 60 秒自动双向同步一次（先推本机改动、再拉云端最新）",
+        "失败自动退避：30 秒 → 1 分 → 2 分 → 4 分，封顶 5 分钟，成功一次即恢复",
+        "保守策略：切到后台不跑、正在打字不跑，恢复可见或恢复网络立刻补跑",
+        "账号面板新增「上传本机 / 拉取云端 / 双向同步」三个手动入口与上次同步时间"
+      ]
+    },
+    {
+      "version": "2.3.2",
+      "date": "2026-10-07",
+      "title": "通用弹窗引擎",
+      "type": "feature",
+      "highlight": false,
+      "items": [
+        "新增统一的弹窗配置，支持「进站弹」与「进某个板块才弹」两种场景",
+        "可设置按天弹 / 只弹一次 / 每次都弹，支持时间窗、按钮、视频与图片",
+        "关闭后可留一个悬浮球，方便同学回头再看",
+        "开屏弹会排队，等欢迎语、门禁、活动弹窗关掉后再弹，不会几个框叠在一起"
+      ]
+    },
+    {
+      "version": "2.3.1",
+      "date": "2026-10-07",
+      "title": "修改密码 / 重置密码「服务器错误」修复",
+      "type": "fix",
+      "highlight": true,
+      "items": [
+        "修好了困扰许久的「改密码报服务器错误」：真因是用户表缺两个字段，而自动建表逻辑漏补了它们",
+        "现在部署时会自动补齐缺失字段，不再需要手动执行 SQL",
+        "登录失败次数限制顺带恢复生效（之前因为容错代码把异常吞掉了，实际上一直没起作用）",
+        "改进测试方式：让测试环境真实执行建表语句，这类「线上缺字段」的故障以后能在测试里提前发现"
+      ]
+    },
+    {
+      "version": "2.3.0",
+      "date": "2026-10-07",
+      "title": "多项修复与安全加固",
+      "type": "security",
+      "highlight": false,
+      "items": [
+        "会话令牌改为加密存储，数据库里不再保留明文；老账号平滑过渡，不用全员重新登录",
+        "后台与主站登录状态打通，修好「后台显示旧身份」「在线状态不显示」",
+        "作业附件直链只允许管理员增改，课代表编辑作业时原附件只读保留",
+        "成绩查询、意见反馈改为需登录才能进入",
+        "修正若干处文字对比度过低、看不清的问题"
+      ]
+    }
   ];
 }
 
@@ -8100,6 +8537,11 @@ function relVerNum(v){
   if(!m) return 0;
   return (+m[1]) * 1000000 + (+m[2]) * 1000 + (+m[3]);
 }
+/* 版本号显示：数据里允许带 v 前缀（历史遗留），统一成 vX.Y.Z —— 别出现「vv2.6.4」 */
+function relVerLabel(v){
+  var s = String(v || '?').trim();
+  return /^v/i.test(s) ? s : ('v' + s);
+}
 
 function paintReleases(){
   var body = $('relBody');
@@ -8119,7 +8561,7 @@ function paintReleases(){
     }).join('');
     return '<div class="panel" style="margin:0 0 14px;padding:14px 16px' + (r.highlight ? ';border-left:3px solid #af410f' : '') + '">'
       + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
-      +   '<b style="font-size:1rem">v' + esc(r.version || '?') + '</b>'
+      +   '<b style="font-size:1rem">' + esc(relVerLabel(r.version)) + '</b>'
       +   '<span class="badge ' + ty.cls + '">' + esc(ty.label) + '</span>'
       +   (r.highlight ? '<span class="badge badge-green">重点</span>' : '')
       +   '<span class="muted" style="font-size:.82rem">' + esc(r.date || '') + '</span>'
@@ -8170,7 +8612,7 @@ function relEdit(idx){
   if(!r) return;
 
   openModal({
-    title: isNew ? '新增版本记录' : ('编辑 v' + esc(r.version || '')),
+    title: isNew ? '新增版本记录' : ('编辑 ' + esc(relVerLabel(r.version))),
     sub: isNew ? '版本号与日期已按当前站点预填，可直接改' : '',
     wide: true,
     body:
@@ -8221,8 +8663,8 @@ function relSave(idx){
     var dup = -1;
     for(var i = 0; i < list.length; i++){ if(String(list[i].version) === ver){ dup = i; break; } }
     if(dup >= 0){
-      confirmBox({ text: 'v' + ver + ' 已经存在了', detail: '要继续的话会覆盖那条记录。', okText: '覆盖' })
-        .then(function(yes){ if(yes){ list[dup] = rec; relWrite(list, '已覆盖 v' + ver); } });
+      confirmBox({ text: relVerLabel(ver) + ' 已经存在了', detail: '要继续的话会覆盖那条记录。', okText: '覆盖' })
+        .then(function(yes){ if(yes){ list[dup] = rec; relWrite(list, '已覆盖 ' + relVerLabel(ver)); } });
       return;
     }
     list.push(rec);
@@ -8246,7 +8688,7 @@ function relWrite(list, okMsg){
 function relDelete(idx){
   var r = REL_STATE.list[idx];
   if(!r) return;
-  confirmBox({ text: '确定删除 v' + (r.version || '?') + ' 的记录吗？', detail: '删除后不可恢复。', danger: true, okText: '删除' })
+  confirmBox({ text: '确定删除 ' + relVerLabel(r.version) + ' 的记录吗？', detail: '删除后不可恢复。', danger: true, okText: '删除' })
     .then(function(yes){
       if(!yes) return;
       var list = (REL_STATE.list || []).slice();
@@ -8712,6 +9154,7 @@ function renderScores(){
     +    '</p></div>'
     +  '<button class="btn btn-sm btn-secondary" id="scRefresh">' + svg('refresh',14) + ' 刷新</button>'
     +  '<button class="btn btn-sm btn-secondary" id="scDisplay">对外展示</button>'
+    +  '<button class="btn btn-sm btn-secondary" id="scNames">姓名对照</button>'
     +  '<button class="btn btn-sm btn-secondary" id="scBackup">备份</button>'
     +  '<button class="btn btn-sm" id="scNew">' + svg('plus',14) + ' 新建考试</button>'
     + '</div>'
@@ -8720,8 +9163,136 @@ function renderScores(){
   $('scRefresh').onclick = scLoad;
   $('scNew').onclick = function(){ scEditExam(null); };
   $('scDisplay').onclick = scEditDisplay;
+  $('scNames').onclick = scNameDialog;
   $('scBackup').onclick = scBackupDialog;
   scLoad();
+}
+
+/* ============================================================
+ * 姓名对照（v2.9.5）
+ * ------------------------------------------------------------
+ * 站主原话：「雷其桐就是雷博雅」。同一个人，成绩表里写的名字和站点账号
+ * 不一样，系统就认不出来 —— 他登录后看不到自己。
+ * 这里列出「成绩表里出现过、却没绑上账号」的姓名：选一下他是班里的谁，
+ * 对照关系就存到云端（score_config 的 nameMap），以后导入自动生效。
+ * 说明：**不动账号本身**。登录名是凭据（改名要连带改登录），
+ *       而且成绩表的名字将来还可能再变 —— 记一张表最省事也最安全。
+ * ============================================================ */
+var SC_NAME = { users: [], map: {}, unbound: [], bound: 0 };
+
+function scNameDialog(){
+  openModal({
+    title: '姓名对照',
+    sub: '成绩表里的名字 → 班里的账号（同一个人两种叫法）',
+    wide: true,
+    body: '<div id="scNameBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>',
+    foot: '<button class="btn btn-ghost" data-nm-close>关闭</button>'
+        + '<button class="btn btn-secondary" data-nm-reload>' + svg('refresh',14) + ' 重新检查</button>',
+    onMount: function(box){
+      box.querySelector('[data-nm-close]').onclick = closeModal;
+      box.querySelector('[data-nm-reload]').onclick = scNameLoad;
+      scNameLoad();
+    },
+  });
+}
+
+function scNameLoad(){
+  var el = $('scNameBody');
+  if(el) el.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/scores?action=unbound').then(function(j){
+    SC_NAME.users = j.users || [];
+    SC_NAME.map = j.nameMap || {};
+    SC_NAME.unbound = j.unbound || [];
+    SC_NAME.bound = j.boundCount || 0;
+    scNamePaint();
+  }).catch(function(e){
+    if(el) el.innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+  });
+}
+
+function scNamePaint(){
+  var el = $('scNameBody');
+  if(!el) return;
+  var mapKeys = Object.keys(SC_NAME.map || {});
+  var rows = SC_NAME.unbound || [];
+  var opts = SC_NAME.users.map(function(u){
+    return '<option value="' + attr(u.name) + '">' + esc(u.name) + '</option>';
+  }).join('');
+
+  var html = '<div class="alert info" style="margin-bottom:14px">'
+    + '成绩表里的姓名和站点账号对不上的同学会列在下面（比如改了名）。给他选一个账号、点「关联」，'
+    + '他登录后就能看到自己的成绩了。<b>不会改动账号本身</b>，只是记一条对照关系，存在云端。'
+    + '</div>';
+
+  if(rows.length){
+    html += '<div style="font-weight:700;margin-bottom:8px">还没对上的姓名（' + rows.length + ' 个）</div>'
+      + '<div style="max-width:100%;overflow:auto"><table style="width:100%">'
+      + '<thead><tr><th>成绩表里的姓名</th><th>出现次数</th><th>他是班里的谁</th><th></th></tr></thead><tbody>'
+      + rows.map(function(x){
+          return '<tr>'
+            + '<td><b>' + esc(x.name) + '</b>' + (x.alias ? '<span class="badge badge-gray" style="margin-left:6px">已配 ' + esc(x.alias) + '</span>' : '') + '</td>'
+            + '<td class="muted">' + x.count + ' 次考试</td>'
+            + '<td><select data-nm-pick="' + attr(x.name) + '" style="max-width:190px">'
+            +   '<option value="">— 选择账号 —</option>' + opts
+            + '</select></td>'
+            + '<td><button class="btn btn-sm" data-nm-bind="' + attr(x.name) + '">关联</button></td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  } else {
+    html += '<div class="alert ok" style="margin-bottom:14px">'
+      + '成绩表里的姓名全都对得上账号了（已对上 ' + SC_NAME.bound + ' 个），没有需要处理的。</div>';
+  }
+
+  if(mapKeys.length){
+    html += '<div style="font-weight:700;margin:16px 0 8px">已配好的对照（' + mapKeys.length + ' 条）</div>'
+      + '<div style="max-width:100%;overflow:auto"><table style="width:100%">'
+      + '<thead><tr><th>成绩表里的姓名</th><th>认作</th><th></th></tr></thead><tbody>'
+      + mapKeys.map(function(k){
+          return '<tr><td>' + esc(k) + '</td><td><b>' + esc(SC_NAME.map[k]) + '</b></td>'
+            + '<td><button class="btn btn-sm btn-ghost" data-nm-unbind="' + attr(k) + '" style="color:#b3261e">取消关联</button></td></tr>';
+        }).join('')
+      + '</tbody></table></div>'
+      + '<p class="muted" style="font-size:.8rem;margin:8px 0 0">取消关联后，这些成绩行会解绑账号（成绩数据不动，只是他个人页看不到自己的那部分）。</p>';
+  }
+
+  el.innerHTML = html;
+
+  Array.prototype.forEach.call(el.querySelectorAll('[data-nm-bind]'), function(b){
+    b.onclick = function(){
+      var name = b.getAttribute('data-nm-bind');
+      var sel = el.querySelector('[data-nm-pick]');
+      /* 一行一个下拉，按姓名找那一个（避免同名 DOM 选择器踩到引号） */
+      Array.prototype.forEach.call(el.querySelectorAll('[data-nm-pick]'), function(s){
+        if(s.getAttribute('data-nm-pick') === name) sel = s;
+      });
+      var target = sel ? sel.value : '';
+      if(!target){ toast('先给他选一个账号', 'err'); return; }
+      scNameBind(name, target);
+    };
+  });
+  Array.prototype.forEach.call(el.querySelectorAll('[data-nm-unbind]'), function(b){
+    b.onclick = function(){ scNameBind(b.getAttribute('data-nm-unbind'), ''); };
+  });
+}
+
+function scNameBind(name, target){
+  var btn = null;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-nm-bind]'), function(b){
+    if(b.getAttribute('data-nm-bind') === name) btn = b;
+  });
+  if(btn){ btn.disabled = true; btn.textContent = '处理中…'; }
+  api('/scores?action=name-bind', { method:'POST', body:{ name: name, target: target } })
+    .then(function(j){
+      toast(target
+        ? ('已把「' + name + '」关联到「' + target + '」，影响 ' + (j.changed || 0) + ' 行成绩')
+        : ('已取消「' + name + '」的关联（影响 ' + (j.changed || 0) + ' 行）'), 'ok', 4200);
+      scNameLoad();
+    })
+    .catch(function(e){
+      if(btn){ btn.disabled = false; btn.textContent = '关联'; }
+      toast('保存失败：' + (e.message || e), 'err', 4200);
+    });
 }
 
 function scLoad(){
@@ -9034,7 +9605,7 @@ function scImport(examId){
 
   openModal({
     title: '导入成绩 —— ' + e.name,
-    sub: '表里建议有：姓名 / 学号 / ' + subNames + ' / 校排名 / 联考排名。缺哪列都能导。',
+    sub: '表里建议有：姓名 / 学号 / ' + subNames + ' / 年级排名（校排名）/ 联考排名。缺哪列都能导。',
     wide: true,
     body:
         '<div class="alert warn">导入是<b>整体替换本次</b>：导入后这次考试的成绩就等于表里这些行。'
@@ -9197,7 +9768,7 @@ function scPaintPreview(box, parsed, subs, btn){
   host.innerHTML =
       '<div class="alert ok" style="margin-top:8px"><b>解析到 ' + parsed.rows.length + ' 行。</b>'
     +   '列对应关系：姓名→' + hit(m.name) + '　学号→' + hit(m.no)
-    +   '　校排名→' + hit(m.schoolRank) + '　联考排名→' + hit(m.leagueRank) + '<br>'
+    +   '　年级排名→' + hit(m.schoolRank) + '　联考排名→' + hit(m.leagueRank) + '<br>'
     +   (subs || []).map(function(s){
           var mm = (m.subj || {})[s.key] || {};
           return esc(s.name) + '→' + hit(mm.raw) + (mm.assigned >= 0 ? '（赋分 ' + hit(mm.assigned) + '）' : '');
@@ -9205,7 +9776,7 @@ function scPaintPreview(box, parsed, subs, btn){
     + '</div>'
     + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table style="font-size:.8rem">'
     +   '<thead><tr><th>姓名</th>' + (subs || []).map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
-    +   '<th>校排名</th><th>联考</th></tr></thead><tbody>'
+    +   '<th>年级排名</th><th>联考</th></tr></thead><tbody>'
     +   parsed.rows.slice(0, 30).map(function(r){
           return '<tr><td style="font-weight:700">' + esc(r.name) + '</td>'
             + (subs || []).map(function(s){
@@ -9285,7 +9856,7 @@ function scPaintRows(){
     + subs.map(function(s){
         return '<th style="min-width:70px">' + esc(s.name) + (s.graded ? '<br><span class="muted" style="font-weight:400">原始/赋分</span>' : '') + '</th>';
       }).join('')
-    + '<th style="min-width:70px">校排名</th><th style="min-width:70px">联考</th><th style="min-width:52px">操作</th></tr>';
+    + '<th style="min-width:70px">年级排名</th><th style="min-width:70px">联考</th><th style="min-width:52px">操作</th></tr>';
 
   var body = rows.map(function(r, idx){
     var cells = subs.map(function(s){
@@ -9420,7 +9991,7 @@ function scAddRow(examId){
   if(!tbody){ /* 空表时先铺个骨架 */
     var head = '<tr><th style="min-width:88px">姓名</th><th style="min-width:76px">学号</th>'
       + subs.map(function(s){ return '<th style="min-width:70px">' + esc(s.name) + '</th>'; }).join('')
-      + '<th style="min-width:70px">校排名</th><th style="min-width:70px">联考</th><th style="min-width:52px">操作</th></tr>';
+      + '<th style="min-width:70px">年级排名</th><th style="min-width:70px">联考</th><th style="min-width:52px">操作</th></tr>';
     $('scRows').innerHTML = '<div class="table-wrap"><table style="font-size:.82rem"><thead>' + head + '</thead><tbody id="scTbody"></tbody></table></div>';
     var host0 = $('scRows');
     host0.oninput = function(ev){ var t = ev.target; if(t && t.getAttribute && t.getAttribute('data-row')) scMarkDirty(t.getAttribute('data-row')); };

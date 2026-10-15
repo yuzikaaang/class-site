@@ -102,6 +102,61 @@ create table profile_view_log (
   ip text,
   created_at text not null default (datetime('now'))
 );
+/* ---- 成绩分析四张表（v2.9.5 补进桩里）----
+   ⚠️ 以前桩里**没有**这四张表：ensureSchema 的建表语句带 Postgres 专有语法
+   （jsonb / timestamptz / bigserial / '{}'::jsonb），SQLite 走到第一条就报错、
+   整个 try 被 catch 吞掉 —— 从 exams 往后的表一张都建不出来。
+   后果是「成绩分析」这条链路其实**从没在测试里真跑过**，只有源码字符串断言。
+   现在按 SQLite 能懂的写法补上（类型名随它去、默认值去掉 ::jsonb），
+   让建考试 / 导入 / 发布 / 姓名对照 / 个人成绩这些真流程都能被真跑一遍。 */
+create table exams (
+  id integer primary key autoincrement,
+  name text not null,
+  exam_date text not null,
+  exam_end_date text,
+  exam_type text,
+  subjects jsonb,
+  cutlines jsonb,
+  grade_ref jsonb,
+  note text,
+  status text not null default 'draft',
+  published_at text,
+  created_by integer,
+  created_at text not null default (datetime('now')),
+  updated_at text not null default (datetime('now'))
+);
+create table exam_scores (
+  id integer primary key autoincrement,
+  exam_id integer not null,
+  user_id integer,
+  student_name text not null,
+  student_no text,
+  scores jsonb not null default '{}',
+  school_rank integer,
+  league_rank integer,
+  note text,
+  created_at text not null default (datetime('now')),
+  updated_at text not null default (datetime('now'))
+);
+create table share_links (
+  id integer primary key autoincrement,
+  token text not null unique,
+  scope text not null default 'self',
+  owner_id integer,
+  target_ids text,
+  exam_ids text,
+  sections jsonb not null default '{}',
+  expires_at text,
+  max_views integer,
+  views integer not null default 0,
+  revoked boolean not null default 0,
+  created_at text not null default (datetime('now'))
+);
+create table score_config (
+  id integer primary key default 1,
+  data jsonb not null default '{}',
+  updated_at text not null default (datetime('now'))
+);
 `);
 
 /* ---------- 3.5 SQLite 兼容：补上 Postgres 有、SQLite 没有的函数 ---------- */
@@ -207,6 +262,22 @@ function translate(sqlText) {
   s = s.replace(/\s+nulls\s+(last|first)/gi, '');
   /* 剥掉其余类型转换 */
   s = s.replace(/::\s*(int|integer|text|jsonb|boolean|bigint|timestamptz|interval)(\s*\[\s*\])?/gi, '');
+
+  /* ---- jsonb_to_recordset：把 JSON 数组一次摊成「多行多列」 ----
+     Postgres 专有（本项目用它把整批成绩当**一个**参数灌进去，绕开
+     Workers 每请求 50 个子请求的上限）。SQLite 用 json_each 展开数组、
+     json_extract 取顶层字段，语义等价，且同样只占一个绑定参数。
+     位置必须在剥类型之后 —— 那时括号里已经是干净的 $N。 */
+  s = s.replace(
+    /jsonb_to_recordset\s*\(\s*(\$\d+)\s*\)\s*as\s+(\w+)\s*\(([^)]*)\)/gi,
+    (m, ph, alias, cols) => {
+      const parts = cols.split(',').map((c) => c.trim()).filter(Boolean).map((c) => {
+        const nm = c.split(/\s+/)[0].replace(/"/g, '');
+        return "json_extract(j.value, '$." + nm + "') as " + nm;
+      }).join(', ');
+      return '(select ' + parts + ' from json_each(' + ph + ') as j) as ' + alias;
+    }
+  );
   return s;
 }
 
@@ -2646,8 +2717,8 @@ console.log('\n【32】第二十八轮·抽歌功能迁移后台（前台删除 
   t('后台定义 relWrite()', /function relWrite\(/.test(adm));
   t('版本记录写入云端 release_notes', /items:\s*\{\s*release_notes:/.test(adm));
   t('有「填入最近几轮」初始数据', /function relSeed\(\)/.test(adm));
-  t('初始数据含 v2.3.5 排行榜', /version:\s*'2\.3\.5'/.test(adm));
-  t('初始数据含 v2.3.1 改密修复', /version:\s*'2\.3\.1'/.test(adm));
+  t('初始数据含 v2.3.5 排行榜', /"version":\s*"2\.3\.5"/.test(adm));
+  t('初始数据含 v2.3.1 改密修复', /"version":\s*"2\.3\.1"/.test(adm));
   t('版本类型含 fix / feature / improve', /feature:/.test(adm) && /fix:/.test(adm) && /improve:/.test(adm));
   t('支持标记重点版本', /highlight/.test(adm));
   t('前台不展示版本记录（值为 null）', /release_notes\s*:\s*null/.test(page));
@@ -3120,9 +3191,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.9\.4'/.test(indexHtml),
+  t('★前台版本号为 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.9\.4'/.test(adminHtml),
+  t('★后台版本号为 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3486,9 +3557,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.7.4', /SITE_VERSION = '2\.9\.4'/.test(indexHtml38),
+  t('★前台版本号为 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.7.4', /SITE_VERSION = '2\.9\.4'/.test(adminHtml38),
+  t('★后台版本号为 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4498,10 +4569,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.4', /SITE_VERSION = '2\.9\.4'/.test(idx47));
-  t('★后台版本号 2.9.4', /SITE_VERSION = '2\.9\.4'/.test(adm47));
-  t('★service worker 缓存版本升到 v73（旧缓存要作废）',
-    /class-site-v73/.test(sw47));
+  t('★前台版本号 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(idx47));
+  t('★后台版本号 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(adm47));
+  t('★service worker 缓存版本升到 v74（旧缓存要作废）',
+    /class-site-v74/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4585,7 +4656,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.4');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.5');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4685,9 +4756,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.4', /SITE_VERSION = '2\.9\.4'/.test(idx48));
-  t('★前台更新日期已同步为 2026-10-14', /VER_DATE = '2026-10-14'/.test(idx48));
-  t('★service worker 缓存版本升到 v73', /class-site-v73/.test(sw48));
+  t('★前台版本号 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(idx48));
+  t('★前台更新日期已同步为 2026-10-15', /VER_DATE = '2026-10-15'/.test(idx48));
+  t('★service worker 缓存版本升到 v74', /class-site-v74/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -4751,8 +4822,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.9.4', /SITE_VERSION = '2\.9\.4'/.test(idx49));
-  t('★后台版本号 2.9.4', /SITE_VERSION = '2\.9\.4'/.test(adm49));
+  t('★前台版本号 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(idx49));
+  t('★后台版本号 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -4824,7 +4895,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.9.4', /SITE_VERSION = '2\.9\.4'/.test(idx50));
+  t('★前台版本号 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -4979,7 +5050,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.9.4', /SITE_VERSION = '2\.9\.4'/.test(adm));
+  t('★后台版本号 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5010,9 +5081,30 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★直方图带均分 / 中位数 / 分数线', /function scChartHist\(st\)/.test(idx) && /stroke-dasharray="4 3"/.test(idx));
   t('★上线人数统计', /function scChartCutlines\(st\)/.test(idx));
   t('★分数段四色条', /function scChartSegments\(st\)/.test(idx));
-  t('★雷达图按得分率画（不是原始分）', /function scRadar\(labels, mine, avg\)/.test(idx) && /按得分率/.test(idx));
+  t('★雷达图按得分率画（不是原始分）', /function scRadar\(labels, mine, avg, tips\)/.test(idx) && /按得分率/.test(idx));
+  t('★雷达图上直接写分数（不用去别处对）', /radarTips\.push/.test(idx) && /每个角上都写了你的分数/.test(idx));
   t('★位置条 + 「前面还有 N 人」', /function scRenderMe\(\)/.test(idx) && /前面还有/.test(idx));
   t('★趋势块（历次总分折线）', /function scTrendBlock\(meRow\)/.test(idx));
+
+  /* ===== ④.5 图表数据标注（v2.9.5：站主要求每张图上都能直接看到数字） ===== */
+  t('★直方图柱顶写人数', /柱顶数字＝这一格有多少人/.test(idx));
+  t('★热力图格子里写分数', /color:' \+ \(dark \? '#fff' : '#6b5443'\)/.test(idx) && /格子里就是这个同学的这一科分数/.test(idx));
+  t('★热力图按底色深浅自动换字色（深底白字，保证看得清）',
+    /0\.299 \* cr \+ 0\.587 \* cg \+ 0\.114 \* cb/.test(idx));
+  t('★热力图不再每格重算名次（一次算好，60 行 × 6 科不再白跑 360 遍）',
+    /var rk = scRankMap\(SC\.basis\);/.test(idx) && /原先每格都重算/.test(idx));
+  t('★四象限直接标姓名 + 那一科分数', /labeled\[p\.name\]/.test(idx) && /图上已经直接标了名字和这一科分数/.test(idx));
+  t('★四象限只标该点名的（偏科预警 + 我），不至糊成一团', /总分够、这一科却拖后腿/.test(idx));
+  t('★各科迷你折线每个点都写分数', /手机端没有鼠标悬浮，不写出来就看不到/.test(idx));
+
+  /* ===== ④.6 术语统一：校排名＝年级排名，同一个东西（v2.9.5 站主原话） ===== */
+  const adm54 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const sh54  = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
+  t('★界面上不再混用「校排名」', /scOvItem\('校排名'/.test(idx) === false && /\['校排名'/.test(idx) === false);
+  t('★明确写了「年级排名就是校排名」', /年级排名就是校排名，同一个东西/.test(idx));
+  t('★分享页也叫年级排名', /校排名/.test(sh54) === false && /年级排名/.test(sh54));
+  t('★后台列头也叫年级排名，但导入仍两种列名都认',
+    /<th>年级排名<\/th>/.test(adm54) && /\['校排名','校名次','学校排名','年级排名','年级名次'\]/.test(adm54));
 
   /* ===== ⑤ 站主定的规则 ===== */
   t('★成长不比绝对分数（跨考试提示）', /跨考试比的是趋势，不是绝对分数/.test(idx));
@@ -5024,7 +5116,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.9.4', /SITE_VERSION = '2\.9\.4'/.test(idx));
+  t('★前台版本号 2.9.5', /SITE_VERSION = '2\.9\.5'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5257,7 +5349,8 @@ console.log('\n【58】第四十九轮·分享链接 + 每日备份（v2.9.0）'
     && /for \(const r of \(t\.exam_scores \|\| \[\]\)\)/.test(sc) === false);
   t('★改分也改批量 upsert（块粘贴几十行不会 500）',
     /update exam_scores t\s*\n\s*set student_name = x\.student_name/.test(sc)
-    && /left join \(select id as uid, display_name from users where status = 'active'\) y/.test(sc));
+    && /user_id = coalesce\(x\.uid, t\.user_id\)/.test(sc)
+    && /jsonb_to_recordset\(\$\{JSON\.stringify\(ins\)\}/.test(sc));
   t('★代码里写明了 50 子请求上限的原因（防后人改回去）',
     /50 个子请求/.test(sc) && /50 子请求上限/.test(sc));
 
@@ -5295,6 +5388,152 @@ console.log('\n【58】第四十九轮·分享链接 + 每日备份（v2.9.0）'
   t('★后台能立即备份 / 下载 / 还原', /bkRun/.test(adm) && /bkDl/.test(adm) && /bkRestore/.test(adm));
   t('★下载走带鉴权的 fetch（不是裸链）',
     /action=backup-export', \{\s*\n\s*headers: \{ Authorization/.test(adm));
+}
+
+console.log('\n【59】第五十二轮·姓名对照：同一个人两个名字（v2.9.5）');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const sc  = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
+
+  /* ===== ① 机制齐了没 ===== */
+  t('★后端有 canonName（成绩表姓名 → 站点姓名）', /function canonName\(name, nameMap\)/.test(sc));
+  t('★后端有 namesOfUser（含别名反查）', /function namesOfUser\(u, nameMap\)/.test(sc));
+  t('★默认配置里有 nameMap', /nameMap: \{\}/.test(sc));
+  t('★导入时先过姓名对照再绑账号', /byName\.get\(canonName\(r\.name, nameMap\)\)/.test(sc));
+  t('★「我」由后端标（mine），别名也认得出', /mine: r\.user_id == null/.test(sc));
+  t('★我的历次成绩也认别名（any 数组）',
+    /s\.user_id = \$\{u\.id\} or s\.student_name = any\(\$\{myNames\}::text\[\]\)/.test(sc));
+  t('★有 unbound 接口（列出没对上的姓名）', /case 'unbound':\s+return await unboundNames/.test(sc));
+  t('★有 name-bind 接口（关联 / 取消关联）', /case 'name-bind':\s+return await nameBind/.test(sc));
+  t('★姓名对照只给站主看（学生拿不到 nameMap）', /delete safe\.nameMap/.test(sc));
+  t('★改分表也顺手重算该绑哪个账号', /user_id = coalesce\(x\.uid, t\.user_id\)/.test(sc));
+  /* ⚠️ v2.7.4 的跨天支持有个漏网：列表 SQL 忘了选 exam_end_date，
+     于是「考试可跨天」建了却从来显示不出来。这条守住它。 */
+  t('★列表接口带出结束日期（跨天才会显示成 5/14 ~ 5/15）',
+    /select e\.id, e\.name, e\.exam_date, e\.exam_end_date, e\.exam_type/.test(sc));
+  t('★后台有「姓名对照」入口', /id="scNames"/.test(adm) && /scNameDialog/.test(adm));
+  t('★后台能取消关联', /scNameBind/.test(adm) && /取消关联/.test(adm));
+  t('★前端「我」的判定会看 mine', /if\(r\.mine\) hit = r;/.test(idx));
+
+  /* ===== ③ 后台「版本更新记录」补全（站主：之前的记得补上） ===== */
+  /* ⚠️ 记录本体在云端 release_notes，测试只能守代码里的内置种子 —— 它必须与云端同源，
+     否则「一键填入最近几轮」会把列表拉回旧内容。 */
+  const seedV = (adm.match(/"version":\s*"([\d.]+)"/g) || []).map((x) => x.match(/"([\d.]+)"/)[1]);
+  t('★内置版本种子补到 2.9.5', seedV.indexOf('2.9.5') >= 0, '共 ' + seedV.length + ' 条');
+  t('★中间几轮也补上了（2.7.0 / 2.8.0 / 2.9.0）',
+    ['2.7.0', '2.8.0', '2.9.0'].every((v) => seedV.indexOf(v) >= 0), seedV.join(','));
+  t('★种子够全（≥30 条，覆盖 2.3.0 ~ 2.9.5）', seedV.length >= 30, '实际 ' + seedV.length);
+  t('★每条都带标题与条目', (adm.match(/"version":\s*"[\d.]+",\s*"date":/g) || []).length === seedV.length);
+  t('★版本号显示统一（不再出现「vv2.6.4」）',
+    /function relVerLabel/.test(adm) && /esc\(relVerLabel\(r\.version\)\)/.test(adm));
+  t('★版本号显示有护栏（已带 v 就不再叠一层）', /\/\^v\/i\.test\(s\) \? s : \('v' \+ s\)/.test(adm));
+
+  /* ===== ② 真跑一遍：导入 → 没对上 → 关联 → 学生就看得见了 ===== */
+  /* 单独建一个学生账号来测（前面的用例可能已经把老账号的会话搞失效了） */
+  const reg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'namemapstu', password: 'NameMap2026', displayName: '测试生甲' },
+  });
+  t('建一个测试学生账号', reg.status === 200 && reg.body.ok, JSON.stringify(reg.body));
+  const stuToken = reg.body.token;
+
+  const mk = await call('/api/scores?action=exam-save', {
+    method: 'POST', token: adminToken,
+    body: {
+      name: '姓名对照测试考', exam_date: '2026-09-01',
+      subjects: [{ key: 'chinese', name: '语文', full: 150 }, { key: 'math', name: '数学', full: 150 }],
+    },
+  });
+  t('建一次考试（测试用）', mk.status === 200 && mk.body.ok, JSON.stringify(mk.body));
+  const eid = mk.body.exam && mk.body.exam.id;
+
+  const im = await call('/api/scores?action=scores-import', {
+    method: 'POST', token: adminToken,
+    body: { exam: eid, rows: [
+      { name: '测试生甲', s: { chinese: 100, math: 110 } },
+      { name: '测试生乙', s: { chinese: 90, math: 80 } },
+    ] },
+  });
+  t('导入两行：一个对得上账号、一个对不上',
+    im.status === 200 && im.body.imported === 2 && (im.body.unmatched || []).indexOf('测试生乙') >= 0,
+    JSON.stringify(im.body));
+
+  await call('/api/scores?action=exam-publish', { method: 'POST', token: adminToken, body: { id: eid, publish: true } });
+
+  const ub = await call('/api/scores?action=unbound', { token: adminToken });
+  t('unbound 列出「测试生乙」',
+    ub.status === 200 && (ub.body.unbound || []).some((x) => x.name === '测试生乙'),
+    JSON.stringify(ub.body.unbound));
+  t('unbound 不列已经对上的「测试生甲」', !(ub.body.unbound || []).some((x) => x.name === '测试生甲'));
+  t('unbound 带回账号名单供选择', (ub.body.users || []).some((x) => x.name === '测试生甲'));
+  t('unbound 给出已对上的数量', (ub.body.boundCount || 0) >= 1);
+
+  const me1 = await call('/api/scores?action=me', { token: stuToken });
+  t('关联前：学生只看到自己那 1 条', me1.status === 200 && (me1.body.items || []).length === 1,
+    '实际 ' + JSON.stringify(me1.body).slice(0, 200));
+
+  const bind = await call('/api/scores?action=name-bind', {
+    method: 'POST', token: adminToken, body: { name: '测试生乙', target: '测试生甲' },
+  });
+  t('关联成功并回写对照表', bind.status === 200 && bind.body.nameMap['测试生乙'] === '测试生甲',
+    JSON.stringify(bind.body));
+  t('关联顺手把这些成绩行绑上账号', bind.body.changed === 1, '影响 ' + bind.body.changed + ' 行');
+
+  const me2 = await call('/api/scores?action=me', { token: stuToken });
+  t('★关联后：学生两个名字的成绩都看得到（2 条）',
+    me2.status === 200 && (me2.body.items || []).length === 2, '实际 ' + JSON.stringify(me2.body).slice(0, 200));
+
+  const bd = await call('/api/scores?action=board&exam=' + eid, { token: stuToken });
+  const mineRows = (bd.body.rows || []).filter((r) => r.mine);
+  t('★成绩单里「测试生乙」那行也被标成「我」',
+    mineRows.length === 2 && mineRows.some((r) => r.name === '测试生乙'));
+
+  const bindBad = await call('/api/scores?action=name-bind', {
+    method: 'POST', token: adminToken, body: { name: '测试生乙', target: '查无此人' },
+  });
+  t('关联到不存在的账号会被拒（不写脏数据）', bindBad.status === 400, '实际 ' + bindBad.status);
+
+  const bind2 = await call('/api/scores?action=name-bind', {
+    method: 'POST', token: adminToken, body: { name: '测试生乙', target: '' },
+  });
+  t('取消关联：对照表里这条被删掉',
+    bind2.status === 200 && bind2.body.nameMap['测试生乙'] === undefined);
+
+  const me3 = await call('/api/scores?action=me', { token: stuToken });
+  t('取消关联后：又只剩自己那 1 条', (me3.body.items || []).length === 1,
+    '实际 ' + JSON.stringify(me3.body).slice(0, 200));
+
+  /* 站主配好对照，再导入一次 —— 导入路径也应该自动绑上 */
+  await call('/api/scores?action=name-bind', {
+    method: 'POST', token: adminToken, body: { name: '测试生乙', target: '测试生甲' },
+  });
+  const im2 = await call('/api/scores?action=scores-import', {
+    method: 'POST', token: adminToken,
+    body: { exam: eid, rows: [
+      { name: '测试生甲', s: { chinese: 100, math: 110 } },
+      { name: '测试生乙', s: { chinese: 90, math: 80 } },
+    ] },
+  });
+  t('★配好对照后重新导入：不再报「没对上」',
+    im2.status === 200 && (im2.body.unmatched || []).length === 0, JSON.stringify(im2.body));
+  const bd2 = await call('/api/scores?action=board&exam=' + eid, { token: stuToken });
+  t('★导入时就直接绑好了账号（uid 非空）',
+    (bd2.body.rows || []).filter((r) => r.name === '测试生乙' && r.uid != null).length === 1);
+
+  /* 学生拿不到别人的对照表 */
+  const stCfg = await call('/api/scores?action=config', { token: stuToken });
+  t('★学生拿到的配置里没有 nameMap', stCfg.status === 200 && stCfg.body.config.nameMap === undefined);
+
+  /* 清场：删考试 + 清对照表 + 删测试账号 */
+  await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: eid } });
+  const clr = await call('/api/scores?action=config-save', {
+    method: 'POST', token: adminToken, body: { config: { nameMap: {} } },
+  });
+  t('清场：对照表清空（不留脏数据）', clr.status === 200 && Object.keys(clr.body.config.nameMap).length === 0);
+  const delu = await call('/api/admin?action=delete-user', {
+    method: 'POST', token: adminToken, body: { id: reg.body.user.id },
+  });
+  t('清场：删掉测试学生账号', delu.status === 200, JSON.stringify(delu.body).slice(0, 120));
 }
 
 console.log('\n' + '='.repeat(52));
