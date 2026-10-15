@@ -254,6 +254,16 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     var rows = (DATA.rows || []).filter(function(r){ return r.examId === EX.id; });
     rows.forEach(function(r, idx){ r.idx = idx; });
 
+    /* 分享哪些内容由分享人决定（v2.9.7）。
+       老链接没写过 sections → 按「都有」处理，别让老链接变空白。 */
+    var sec = (DATA.share && DATA.share.sections) || {};
+    var wantBoard = sec.board !== false;
+    var wantCard = sec.card !== false;
+    var useCard = wantCard && rows.length === 1;
+    /* 只勾了「个人成绩卡」但这次是好几个人 → 卡片用不上，
+       退回成绩单，不然页面是空的（宁可多给，别给空白）。 */
+    var useBoard = wantBoard || !useCard;
+
     var mt = document.getElementById('meta');
     var body = document.getElementById('body');
     if(!rows.length){
@@ -272,15 +282,18 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     mt.textContent = (EX.type || '考试') + '　' + dateRange(EX) + '　共 ' + n + ' 人'
       + (EX.note ? '　·　' + EX.note : '');
 
-    var html = '<div class="stats">'
-      + '<div class="stat"><b>' + fmtNum(avg) + '</b><span>班均分</span></div>'
-      + '<div class="stat"><b>' + fmtNum(med) + '</b><span>中位数</span></div>'
-      + '<div class="stat"><b>' + fmtNum(tot[n - 1]) + '</b><span>最高</span></div>'
-      + '<div class="stat"><b>' + n + ' 人</b><span>参考</span></div>'
-      + '</div>';
+    var html = '';
+    if(useBoard){
+      html += '<div class="stats">'
+        + '<div class="stat"><b>' + fmtNum(avg) + '</b><span>班均分</span></div>'
+        + '<div class="stat"><b>' + fmtNum(med) + '</b><span>中位数</span></div>'
+        + '<div class="stat"><b>' + fmtNum(tot[n - 1]) + '</b><span>最高</span></div>'
+        + '<div class="stat"><b>' + n + ' 人</b><span>参考</span></div>'
+        + '</div>';
+    }
 
     /* 只有一个人 → 直接给一张成绩卡，比表格友好 */
-    if(rows.length === 1){
+    if(useCard){
       html += oneCard(rows[0], subs, rk, avg, n);
       body.innerHTML = html;
       return;

@@ -248,6 +248,10 @@ export async function ensureSchema(sql) {
     await s`create index if not exists share_links_owner_idx on share_links (owner_id, created_at desc)`;
     /* 自选分享的名单（v2.8.3 分享链接） */
     await s`alter table share_links add column if not exists target_names jsonb`;
+    /* 分享内容开关（v2.9.7：分析也可以自定义分享内容）——
+       老库的 share_links 已经建好了，光改 create table 是加不上列的，
+       必须显式 alter，否则线上写 sections 直接报错。 */
+    await s`alter table share_links add column if not exists sections jsonb not null default '{}'::jsonb`;
     await s`
       create table if not exists score_config (
         id         int         primary key default 1,

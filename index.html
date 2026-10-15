@@ -1665,12 +1665,26 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-embed .sc-pane{overflow:visible;padding:14px 16px 20px}
 .dark .sc-embed{background:#262220;border-color:rgba(255,255,255,.06);
   box-shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.45)}
+/* 导出内容勾选（v2.9.7 站主：「图片导出可以自定义导出的分析内容」） */
+.sc-ex-row{display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid #f0e7de;
+  border-radius:12px;background:#fff;margin-bottom:8px;cursor:pointer}
+.sc-ex-row input{margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:#c2410c}
+.sc-ex-row .t{font-size:.86rem;font-weight:700;color:#292524}
+.sc-ex-row .s{display:block;font-size:.74rem;color:#a8968a;font-weight:400;margin-top:3px;line-height:1.5}
+.sc-ex-row.off{opacity:.68;cursor:default;background:#fdfaf7}
+/* 分享内容勾选（同轮） */
+.sc-sh-secs{display:flex;flex-wrap:wrap;gap:8px}
+.sc-sh-sec{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1.5px solid #e2d5c8;
+  border-radius:10px;background:#fff;font-size:.82rem;color:#292524;cursor:pointer}
+.sc-sh-sec input{width:15px;height:15px;accent-color:#c2410c;margin:0}
+.sc-sh-sec.on{border-color:#c2410c;background:#fff8f2;font-weight:700}
 .sc-bar{padding:12px 18px 10px;border-bottom:1px solid #f5efe8}
 .sc-bar-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .sc-sel{flex:1;min-width:160px;padding:9px 12px;border:1.5px solid #e2d5c8;border-radius:10px;background:#fff;font-size:.86rem;color:#292524;font-family:inherit}
 .sc-seg{display:inline-flex;border:1.5px solid #e2d5c8;border-radius:10px;overflow:hidden;flex-shrink:0}
 .sc-seg button{padding:8px 12px;border:none;background:#fff;color:#6e635a;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}
 .sc-seg button.on{background:#c2410c;color:#fff}
+.sc-segbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:2px 0 10px}
 .sc-meta{padding:8px 0 0;font-size:.78rem;color:#6e635a}
 .sc-tabs{display:flex;gap:8px;padding:10px 18px 0;border-bottom:1px solid #f5efe8}
 .sc-tabs button{padding:8px 14px;border:none;background:none;color:#6e635a;font-size:.85rem;font-weight:700;cursor:pointer;border-bottom:2.5px solid transparent;font-family:inherit;margin-bottom:-1px}
@@ -1762,6 +1776,12 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-sh-n{padding:4px 10px;border:1px solid #e2d5c8;background:#fff;border-radius:999px;
   font-size:.78rem;cursor:pointer;color:#57534e;font-family:inherit}
 .sc-sh-n.on{background:#c2410c;border-color:#c2410c;color:#fff}
+.sc-sh-secs{display:flex;flex-direction:column;gap:7px}
+.sc-sh-sec{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid #f0e7de;
+  border-radius:10px;background:#fdfbf9;cursor:pointer}
+.sc-sh-sec input{margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:#c2410c}
+.sc-sh-sec .t{font-size:.84rem;font-weight:700;color:#292524}
+.sc-sh-sec .s{display:block;font-size:.73rem;color:#a8968a;font-weight:400;margin-top:2px;line-height:1.5}
 .sc-sh-url{display:flex;gap:8px;margin-top:9px}
 .sc-sh-url input{flex:1;min-width:0;padding:9px 11px;border:1.5px solid #e2d5c8;border-radius:10px;
   font-size:.8rem;font-family:ui-monospace,Menlo,monospace;color:#57534e;background:#fff}
@@ -2711,7 +2731,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.9.6';
+var SITE_VERSION = '2.9.7';
 var VER_DATE = '2026-10-15';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3116,6 +3136,13 @@ function startHeartbeat(){
      改成数次数之后没有这些时序问题，行为也好预测：连错两次才说话。 */
 var NET_FAIL_KIND = 'offline';  /* 失败原因：'slow' 服务器慢 / 'offline' 真连不上 */
 
+/* 「网络状态提示」开关：默认**关**（站主 2026-10-15：「网络检测暂时关闭」）。
+   开关值存在 UI 配置里（随账号走），可在「自定义设置 → 动效」里随时打开。
+   注意：关的只是提示 UI，心跳还在跑 —— 后台「在线」状态不受影响。 */
+function netWatchOn(){
+  return !!(typeof UI !== 'undefined' && UI && UI.netWatch);
+}
+
 /**
  * 网络恢复（任意一条请求成功都能调它）。
  * @param {boolean} [fromHeartbeat] 是否是**心跳**报的成功。
@@ -3149,6 +3176,12 @@ function markNetOk(fromHeartbeat){
  *   'offline' = 网络层直接失败（DNS / 断网 / CORS），该换网络。
  */
 function markNetFail(kind){
+  /* 🚀 2026-10-15 站主：「网络检测暂时关闭」。
+     关掉的是「检测到连不上就弹横幅 + 重试倒计时」这整套提示 ——
+     **心跳本身照旧在跑**（后台的「谁在线」靠它记 last_seen_at），只是不再打扰用户。
+     想打开：设置 → 动效 → 「网络状态提示」。下面这套逻辑一行没删，随时能回来。 */
+  if(!netWatchOn()){ NET_FAILS = 0; return; }
+
   ONLINE = false;
   /* 'offline' 更严重，一旦出现就以它为准（不被后面的 'slow' 降级） */
   if(kind === 'offline') NET_FAIL_KIND = 'offline';
@@ -5365,6 +5398,9 @@ function uiDefault(){
     motion: 1,          /* 1 = 完整动效，0 = 精简 */
     stack: 0,           /* 【卡片堆叠 v35】1 = 多卡片分类层叠展示，0 = 传统平铺
                            默认关闭：堆叠效果仍在试验中，观感不理想，暂不作为默认（站主拍板） */
+    netWatch: 0,        /* 【网络状态提示】1 = 连不上时弹横幅并倒计时重试，0 = 不打扰
+                           2026-10-15 站主要求「网络检测暂时关闭」，故默认 0。
+                           心跳照旧在跑（后台在线状态靠它），这里只控制弹不弹提示。 */
     bg: { type:'theme', color:'#fffbf7', grad:'', veil:55 },  /* theme|solid|grad|image */
     order: {
       home: ['ann','sign','daily','countdown'],
@@ -8505,6 +8541,8 @@ function renderSettings(){
         swHtml(UI.motion !== 0, 'toggleMotion(event)') + '</div>' +
       '<div class="sw-row"><span class="t">卡片堆叠（测试中）<span class="s">同一板块的多个入口层叠展示，可点 ↑↓ 上下轮换。效果还在试验，可能随时调整</span></span>' +
         swHtml(UI.stack !== 0, 'toggleStack(event)') + '</div>' +
+      '<div class="sw-row"><span class="t">网络状态提示<span class="s">连不上服务器时，页面顶部弹一条提示并可点「重试」。<b>当前默认关闭</b> —— 关了不影响任何功能，也不影响后台的在线状态</span></span>' +
+        swHtml(netWatchOn(), 'toggleNetWatch(event)') + '</div>' +
       '<p class="ui-hint">关闭后所有动效立即静止（跟随系统的「减少动态效果」设置也同理）。<br>「卡片堆叠」是试验功能，默认关闭，觉得不好用可随时关掉。</p>', true);
     html += secHtml('sfx','音效','droplet',
       '<div class="sw-row"><span class="t">界面音效<span class="s">点击、成功、错误提示音</span></span>' +
@@ -8725,6 +8763,20 @@ function toggleStack(ev){
   }else{
     uiMsg('已恢复平铺');
   }
+}
+
+/* 【网络状态提示】开关：默认关（站主 2026-10-15「网络检测暂时关闭」）。
+   打开 = 恢复「连不上服务器就弹横幅 + 倒计时重试」；关闭 = 只是不打扰用户，功能一切照旧。 */
+function toggleNetWatch(ev){
+  UI.netWatch = netWatchOn() ? 0 : 1;
+  saveUI();
+  var btn = ev && ev.target && ev.target.closest ? ev.target.closest('.sw') : null;
+  rippleOn(btn, ev);
+  /* 关掉的时候顺手把可能正显示着的横幅收起来，别留一条挂着 */
+  if(!UI.netWatch && typeof setOfflineBanner === 'function'){ stopRetry(); setOfflineBanner(false); }
+  renderSettings();
+  SFX.click();
+  uiMsg(UI.netWatch ? '已开启网络状态提示' : '已关闭网络状态提示');
 }
 
 function toggleSfxFromUI(ev){
@@ -11552,7 +11604,7 @@ function scRenderBar(){
     +   '<button class="' + (SC.basis === 'raw' ? 'on' : '') + '" onclick="scSetBasis(\'raw\')">总分原始</button>'
     + '</div>'
     + '<div class="sc-seg sc-seg-icon">'
-    +   '<button onclick="scExportCard()" title="把我的成绩卡存成图片（可直接发微信）">导出图片</button>'
+    +   '<button onclick="scExportDialog()" title="勾选要导出的内容，生成一张图片（可直接发微信）">导出图片</button>'
     +   '<button onclick="scPrint()" title="按 A4 版式打印当前页面">打印</button>'
     +   '<button onclick="scShareDialog()" title="生成一个免登录的只读链接">分享</button>'
     + '</div>'
@@ -12325,7 +12377,99 @@ function scCutTrend(){
 }
 
 /* ---------- 导出成绩卡（PNG，纯 canvas，不引第三方库） ---------- */
-function scExportCard(){
+/* ============================================================
+   导出成绩卡（v2.9.7：勾选要导出的内容）
+   ------------------------------------------------------------
+   站主 2026-10-15：「图片导出可以自定义导出的分析内容」。
+   勾选项见 scExportDialog()；**没勾的段不画、也不占高度**，
+   所以导出来的图高度是按选择算的，不会留一片空白。
+   ============================================================ */
+
+/* 勾选状态（本次会话内记住上次的选择；head 永远为真 —— 图里总得有主角） */
+var SC_EXPORT = { head: true, metrics: true, subjects: true, cutlines: true };
+
+/* 版式步长：算高度和画内容共用同一套，避免两边各写一遍对不上 */
+var SC_EX_STEP = {
+  W: 760, pad: 36,
+  titleY: 62, gap1: 26, gap2: 34,      /* 标题 → 副标题 → 姓名区 */
+  nameAfter: 28,
+  metGap: 26, metBox: 56,
+  subGap: 26, subTitle: 16, subRow: 40,
+  cutGap: 40, cutRow: 30,
+  foot: 62,
+};
+
+/** 按勾选算出成品高度（canvas 必须先定尺寸才能画） */
+function scExportHeight(cfg, nSub, nCut){
+  var S = SC_EX_STEP;
+  var y = S.titleY + S.gap1 + S.gap2 + S.nameAfter;   /* 标题 + 副标题 + 姓名行 */
+  if(cfg.metrics) y += S.metGap + S.metBox;
+  if(cfg.subjects && nSub) y += S.subGap + S.subTitle + nSub * S.subRow;
+  if(cfg.cutlines && nCut) y += S.cutGap + nCut * S.cutRow;
+  return Math.round(y + S.foot);
+}
+
+/** 导出前的勾选面板 */
+function scExportDialog(){
+  var meRow = scMyRow();
+  if(!meRow){ alert('这次考试的成绩里没有你，导不出来。'); return; }
+  var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
+
+  var row = function(key, title, sub, forced){
+    var on = forced ? true : (SC_EXPORT[key] !== false);
+    return '<label class="sc-ex-row' + (forced ? ' off' : '') + '">'
+      + '<input type="checkbox" data-ex="' + key + '"' + (on ? ' checked' : '') + (forced ? ' disabled' : '') + '>'
+      + '<span class="t">' + esc(title) + '<span class="s">' + esc(sub) + '</span></span></label>';
+  };
+
+  var html = '<div class="allboard-mask show" id="scExMask"><div class="allboard-box sc-box" style="max-width:540px">'
+    + '<div class="allboard-head"><span>导出成绩卡</span><button onclick="scExportClose()">关闭</button></div>'
+    + '<div class="sc-pane" style="max-height:70vh">'
+    +   '<div class="sc-hint">勾选要放进图片里的内容 —— <b>没勾的不会出现在图上，也不会留空</b>。<br>'
+    +     '导出后是一张长图，手机上能直接分享到微信。</div>'
+    +   row('head', '总分与排名', '姓名、总分、班排名、年级排名（必选）', true)
+    +   row('metrics', '其它指标', '与班均差、联考排名')
+    +   row('subjects', '各科成绩', '每科分数 / 满分、与班均差、得分率条')
+    +   (cuts.length ? row('cutlines', '上线情况', '每条线过了没有、还差多少分') : '')
+    +   '<div style="display:flex;gap:10px;margin-top:18px">'
+    +     '<button class="btn btn-secondary" style="flex:1" onclick="scExportClose()">取消</button>'
+    +     '<button class="btn" style="flex:1" id="scExGo">导出图片</button>'
+    +   '</div>'
+    +   '<p class="sc-figcap">这次考试：' + esc(SC.exam.name) + '　' + esc(scDateRange(SC.exam))
+    +     (SC.basis === 'graded' ? '　赋分口径' : '　原始口径') + '</p>'
+    + '</div></div></div>';
+
+  var host = document.createElement('div');
+  host.innerHTML = html;
+  document.body.appendChild(host);
+
+  document.getElementById('scExGo').onclick = function(){
+    var box = document.getElementById('scExMask');
+    var next = { head: true, metrics: false, subjects: false, cutlines: false };
+    Array.prototype.forEach.call(box.querySelectorAll('[data-ex]'), function(cb){
+      next[cb.getAttribute('data-ex')] = !!cb.checked;
+    });
+    next.head = true;
+    SC_EXPORT = next;             /* 记住这次的选择，下次打开还是这样 */
+    scExportClose();
+    scExportCard(next);
+  };
+}
+function scExportClose(){
+  var m = document.getElementById('scExMask');
+  if(m && m.parentNode) m.parentNode.removeChild(m);
+}
+
+/** 真正画图。cfg 见 SC_EXPORT（传空则 = 全都要，兼容老调用） */
+function scExportCard(cfg){
+  cfg = cfg || {};
+  var opt = {
+    head: true,                                   /* 永远有：图里得有主角 */
+    metrics: cfg.metrics !== false,
+    subjects: cfg.subjects !== false,
+    cutlines: cfg.cutlines !== false,
+  };
+
   var meRow = scMyRow();
   if(!meRow){ alert('这次考试的成绩里没有你，导不出来。'); return; }
   var subs = SC.exam.subjects || [];
@@ -12334,11 +12478,10 @@ function scExportCard(){
   var myTotal = scTotal(meRow, SC.basis);
   var myRank = rk.total[meRow.id];
   var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
-  var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
+  var cuts = opt.cutlines ? (SC.exam.cutlines || []).filter(function(c){ return c.score != null; }) : [];
 
-  var W = 760, pad = 36;
-  var rowH = 40;
-  var H = 250 + subs.length * rowH + (cuts.length ? 60 + cuts.length * 30 : 20) + 70;
+  var S = SC_EX_STEP, W = S.W, pad = S.pad;
+  var H = scExportHeight(opt, opt.subjects ? subs.length : 0, cuts.length);
   var SCALE = 2;
 
   var cv = document.createElement('canvas');
@@ -12354,110 +12497,97 @@ function scExportCard(){
   /* 背景 + 顶部色条 */
   g.fillStyle = '#fffdfb'; g.fillRect(0, 0, W, H);
   g.fillStyle = '#c2410c'; g.fillRect(0, 0, W, 8);
-
-  /* 标题 */
   g.textBaseline = 'alphabetic';
-  g.fillStyle = '#292524';
-  f(25, true); g.fillText(SC.exam.name, pad, 62);
-  f(13);
-  g.fillStyle = '#6e635a';
+
+  /* ① 标题 + 副标题 */
+  var y = S.titleY;
+  g.fillStyle = '#292524'; f(25, true); g.fillText(SC.exam.name, pad, y);
+  y += S.gap1; f(13); g.fillStyle = '#6e635a';
   g.fillText((SC.exam.type || '考试') + '　' + scDateRange(SC.exam) + '　'
-    + (SC.basis === 'graded' ? '赋分口径' : '原始口径'), pad, 88);
+    + (SC.basis === 'graded' ? '赋分口径' : '原始口径'), pad, y);
+  y += S.gap2 + S.nameAfter;
 
-  /* 姓名 + 总分 */
-  g.fillStyle = '#c2410c';
-  f(38, true);
-  g.fillText(meRow.name, pad, 152);
+  /* ② 姓名 + 总分 */
+  g.fillStyle = '#c2410c'; f(38, true);
+  g.fillText(meRow.name, pad, y);
   var nameW = g.measureText(meRow.name).width;
-
-  g.fillStyle = '#292524';
-  f(40, true);
-  g.font = 'bold 40px ' + FONT;
+  g.fillStyle = '#292524'; g.font = 'bold 40px ' + FONT;
   var totalTxt = myTotal == null ? '—' : String(fmtNum(myTotal));
-  g.fillText(totalTxt, pad + nameW + 22, 152);
+  g.fillText(totalTxt, pad + nameW + 22, y);
   var totalW = g.measureText(totalTxt).width;
-  f(14);
-  g.fillStyle = '#a8968a';
-  g.fillText('/ ' + scFullMark() + ' 总分', pad + nameW + 22 + totalW + 8, 152);
+  f(14); g.fillStyle = '#a8968a';
+  g.fillText('/ ' + scFullMark() + ' 总分', pad + nameW + 22 + totalW + 8, y);
 
-  /* 四个指标 */
-  var items = [
-    ['班排名', myRank ? myRank + ' / ' + st.n : '—'],
-    ['年级排名', meRow.schoolRank != null ? meRow.schoolRank + (gradeN ? ' / ' + gradeN : '') : '—'],
-    ['与班均', myTotal != null ? fmtDiff(myTotal - st.avg) : '—'],
-    ['联考排名', meRow.leagueRank != null ? String(meRow.leagueRank) : '—'],
-  ];
-  var boxW = (W - pad * 2 - 12 * 3) / 4;
-  items.forEach(function(it, i){
-    var x = pad + i * (boxW + 12), y = 180;
-    g.fillStyle = '#fdf8f3';
-    g.fillRect(x, y, boxW, 56);
-    g.fillStyle = '#a8968a'; f(11);
-    g.fillText(it[0], x + 12, y + 22);
-    g.fillStyle = '#292524'; f(17, true);
-    g.fillText(it[1], x + 12, y + 46);
-  });
-
-  /* 各科 */
-  var y = 272;
-  g.fillStyle = '#57534e'; f(15, true);
-  g.fillText('各科成绩', pad, y);
-  y += 14;
-  subs.forEach(function(sub){
-    var v = scSubScore(meRow, sub, SC.basis);
-    var all = [];
-    SC.rows.forEach(function(r){
-      var x2 = scSubScore(r, sub, SC.basis);
-      if(x2 != null) all.push(x2);
+  /* ③ 四个指标 */
+  if(opt.metrics){
+    y += S.metGap;
+    var items = [
+      ['班排名', myRank ? myRank + ' / ' + st.n : '—'],
+      ['年级排名', meRow.schoolRank != null ? meRow.schoolRank + (gradeN ? ' / ' + gradeN : '') : '—'],
+      ['与班均', myTotal != null ? fmtDiff(myTotal - st.avg) : '—'],
+      ['联考排名', meRow.leagueRank != null ? String(meRow.leagueRank) : '—'],
+    ];
+    var boxW = (W - pad * 2 - 12 * 3) / 4;
+    items.forEach(function(it, i){
+      var x = pad + i * (boxW + 12);
+      g.fillStyle = '#fdf8f3'; g.fillRect(x, y, boxW, S.metBox);
+      g.fillStyle = '#a8968a'; f(11); g.fillText(it[0], x + 12, y + 22);
+      g.fillStyle = '#292524'; f(17, true); g.fillText(it[1], x + 12, y + 46);
     });
-    var avg = all.length ? all.reduce(function(a, b){ return a + b; }, 0) / all.length : 0;
+    y += S.metBox;
+  }
 
-    y += rowH;
-    g.fillStyle = '#fdf8f3';
-    g.fillRect(pad, y - 26, W - pad * 2, 34);
+  /* ④ 各科 */
+  if(opt.subjects && subs.length){
+    y += S.subGap;
+    g.fillStyle = '#57534e'; f(15, true); g.fillText('各科成绩', pad, y);
+    y += S.subTitle;
+    subs.forEach(function(sub){
+      var v = scSubScore(meRow, sub, SC.basis);
+      var all = [];
+      SC.rows.forEach(function(r){
+        var x2 = scSubScore(r, sub, SC.basis);
+        if(x2 != null) all.push(x2);
+      });
+      var avg = all.length ? all.reduce(function(a, b){ return a + b; }, 0) / all.length : 0;
 
-    g.fillStyle = '#57534e'; f(14, true);
-    g.fillText(sub.name + (sub.graded ? '（赋分）' : ''), pad + 12, y - 3);
+      g.fillStyle = '#fdf8f3'; g.fillRect(pad, y, W - pad * 2, 34);
+      g.fillStyle = '#57534e'; f(14, true);
+      g.fillText(sub.name + (sub.graded ? '（赋分）' : ''), pad + 12, y + 23);
 
-    /* 得分率条 */
-    var barX = pad + 190, barW = W - pad * 2 - 190 - 170;
-    g.fillStyle = '#f0e7de';
-    g.fillRect(barX, y - 18, barW, 8);
-    if(v != null && sub.full){
-      g.fillStyle = '#e6a97a';
-      g.fillRect(barX, y - 18, barW * Math.min(1, v / sub.full), 8);
-    }
+      var barX = pad + 190, barW = W - pad * 2 - 190 - 170;
+      g.fillStyle = '#f0e7de'; g.fillRect(barX, y + 8, barW, 8);
+      if(v != null && sub.full){
+        g.fillStyle = '#e6a97a';
+        g.fillRect(barX, y + 8, barW * Math.min(1, v / sub.full), 8);
+      }
 
-    g.fillStyle = '#292524'; f(15, true);
-    g.textAlign = 'right';
-    g.fillText(v == null ? '未考' : (fmtNum(v) + ' / ' + sub.full), W - pad - 118, y - 3);
-    g.fillStyle = (v != null && v - avg >= 0) ? '#0f8a4d' : '#c0392b';
-    f(12);
-    g.fillText(v == null ? '' : ((v - avg >= 0 ? '+' : '−') + fmtNum(Math.abs(v - avg))), W - pad - 14, y - 3);
-    g.textAlign = 'left';
-  });
+      g.fillStyle = '#292524'; f(15, true); g.textAlign = 'right';
+      g.fillText(v == null ? '未考' : (fmtNum(v) + ' / ' + sub.full), W - pad - 118, y + 23);
+      g.fillStyle = (v != null && v - avg >= 0) ? '#0f8a4d' : '#c0392b'; f(12);
+      g.fillText(v == null ? '' : ((v - avg >= 0 ? '+' : '−') + fmtNum(Math.abs(v - avg))), W - pad - 14, y + 23);
+      g.textAlign = 'left';
 
-  /* 上线情况 */
-  y += 44;
+      y += S.subRow;
+    });
+  }
+
+  /* ⑤ 上线情况（原来这里把同一句文字画了两遍，位置还不一样 —— 一并修掉） */
   if(cuts.length){
-    g.fillStyle = '#57534e'; f(15, true);
-    g.fillText('上线情况', pad, y);
+    y += S.cutGap;
+    g.fillStyle = '#57534e'; f(15, true); g.fillText('上线情况', pad, y);
     cuts.forEach(function(c){
-      y += 30;
+      y += S.cutRow;
       var ok = myTotal != null && myTotal >= c.score;
       g.fillStyle = c.color || '#b45309';
       g.beginPath(); g.arc(pad + 6, y - 5, 5, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#57534e'; f(14);
       g.fillText(c.label + '　' + fmtNum(c.score) + ' 分', pad + 20, y);
-      g.fillStyle = ok ? '#0f8a4d' : '#c0392b';
-      f(14, true);
-      g.fillText(myTotal == null ? '' : (ok ? '已超 ' + fmtNum(myTotal - c.score) + ' 分' : '还差 ' + fmtNum(c.score - myTotal) + ' 分'),
-        W - pad, y);
-      g.textAlign = 'right';
-      g.fillText(myTotal == null ? '' : (ok ? '已超 ' + fmtNum(myTotal - c.score) + ' 分' : '还差 ' + fmtNum(c.score - myTotal) + ' 分'), W - pad, y);
+      g.fillStyle = ok ? '#0f8a4d' : '#c0392b'; f(14, true); g.textAlign = 'right';
+      g.fillText(myTotal == null ? '' : (ok ? '已超 ' + fmtNum(myTotal - c.score) + ' 分'
+                                            : '还差 ' + fmtNum(c.score - myTotal) + ' 分'), W - pad, y);
       g.textAlign = 'left';
     });
-    y += 10;
   }
 
   /* 页脚水印 */
@@ -12537,6 +12667,13 @@ function scShareDialog(){
               return '<button type="button" class="sc-sh-n" data-n="' + esc(r.name) + '">' + esc(r.name) + '</button>';
             }).join('')
     +     '</div></div>'
+    +   '<div style="margin-bottom:12px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">分享哪些内容</label>'
+    +     '<div class="sc-sh-secs">'
+    +       '<label class="sc-sh-sec"><input type="checkbox" data-sec="board" checked>'
+    +         '<span class="t">成绩单（全班／选中同学）<span class="s">统计、名次表、上线情况</span></span></label>'
+    +       '<label class="sc-sh-sec"><input type="checkbox" data-sec="card" checked>'
+    +         '<span class="t">个人成绩卡<span class="s">只有一个人时更友好，多科明细</span></span></label>'
+    +     '</div></div>'
     +   '<div style="margin-bottom:12px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">包含哪几次考试</label>'
     +     '<div class="sc-sh-exs">' + exOpts + '</div></div>'
     +   '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
@@ -12590,18 +12727,31 @@ function scShareCreate(){
   var scope = document.getElementById('shScope').value;
   if(scope === 'picked' && !names.length){ alert('至少挑一位同学'); return; }
 
+  /* 分享哪些内容（v2.9.7）：至少留一项，否则对方点开是空白页 */
+  var sections = { board: false, card: false };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-sec]'), function(cb){
+    sections[cb.getAttribute('data-sec')] = !!cb.checked;
+  });
+  if(!sections.board && !sections.card){ alert('至少要勾一项分享内容，不然对方点开是空的。'); return; }
+
   var maxV = document.getElementById('shMax').value;
   btn.disabled = true; btn.textContent = '正在生成…';
   api('/scores?action=share-create', { method: 'POST', body: {
     scope: scope,
     examIds: ids,
     names: names,
+    sections: sections,
     days: Number(document.getElementById('shDays').value),
     maxViews: maxV ? Number(maxV) : null,
   } }).then(function(j){
     btn.disabled = false; btn.textContent = '生成链接';
     if(!j || !j.ok){ alert('生成失败：' + ((j && j.error) || '未知错误')); return; }
-    var url = location.origin + j.url;
+    /* ⚠️ 别用 location.origin + j.url —— 站点挂在子目录（GitHub Pages 的 /class-site/）下，
+       那样拼出来会丢掉目录前缀，得到 https://xxx.github.io/share.html → 404。
+       这里把后端给的「站点根路径」转成相对当前页面的路径再解析：
+       /share.html?t=x  →  share.html?t=x  →  相对 index.html 所在目录 → .../class-site/share.html?t=x
+       换到任何部署位置（根目录 / 子目录）都对。 */
+    var url = new URL(String(j.url || '').replace(/^\/+/, ''), location.href).href;
     document.getElementById('shOut').innerHTML =
         '<div class="sc-hint" style="background:#f0f9f2;border-color:#cfe9d8">'
       + '<b>链接已生成。</b>把它发给要看的人就行 —— 对方不用登录。</div>'
@@ -12808,7 +12958,28 @@ function scWatchList(){
     + '</div>';
 }
 
-/* ---------- ③ 进退步榜（和上一次考试比总分的名次变化） ---------- */
+/* ---------- ③ 进退步榜（和上一次考试比名次变化） ----------
+   v2.9.7 站主：「进退步榜可以切换年级和班级和班级单科进退步」
+   三种口径：
+     · class   —— 班级总分名次（默认，最常用）
+     · grade   —— 年级名次（靠导入的校排名，系统算不出全校）
+     · subject —— 班级某一科的名次（看某科单独退没退）
+   都统一成「名次」，因为名次能跨卷子比，分数不能。            */
+var SC_TAIL = { basis: 'class', sub: null };
+
+function scTailSet(basis){
+  SC_TAIL.basis = basis;
+  if(basis === 'subject' && !SC_TAIL.sub){
+    var subs = (SC.exam && SC.exam.subjects) || [];
+    if(subs.length) SC_TAIL.sub = subs[0].key;
+  }
+  scRenderPane();
+}
+function scTailSubj(key){
+  SC_TAIL.sub = key;
+  scRenderPane();
+}
+
 function scTailRank(){
   var mode = scAllowed('tailRank');
   if(mode === 'hide') return '';
@@ -12827,12 +12998,44 @@ function scTailRank(){
   var idx = -1;
   for(var i = 0; i < items.length; i++) if(eidOf(items[i]) === SC.exam.id) idx = i;
   if(idx < 1) return '';
-  var cur = scTotalsOf(SC.allRows[eidOf(items[idx])]);
-  var prev = scTotalsOf(SC.allRows[eidOf(items[idx - 1])]);
-  if(!Object.keys(cur).length || !Object.keys(prev).length) return '';
 
-  /* 名次变化比分数变化更公平（卷子难度不同） */
-  var names = Object.keys(cur).filter(function(n){ return prev[n] != null; });
+  var curPack = SC.allRows[eidOf(items[idx])];
+  var prevPack = SC.allRows[eidOf(items[idx - 1])];
+
+  /* 单科口径先定下是哪一科 */
+  var subs = (SC.exam && SC.exam.subjects) || [];
+  var sub = null;
+  if(SC_TAIL.basis === 'subject'){
+    subs.forEach(function(x){ if(x.key === SC_TAIL.sub) sub = x; });
+    if(!sub) sub = subs[0] || null;
+  }
+  var basis = (SC_TAIL.basis === 'subject' && sub) ? 'subject'
+            : (SC_TAIL.basis === 'grade' ? 'grade' : 'class');
+
+  /* 总分表（三种口径都要用：年级口径的「分数变化」也看总分） */
+  function totalsOf(pack){ return scTotalsOf(pack); }
+  /* 某一科的分（赋分口径跟着全局来） */
+  function subjOf(pack, s){
+    var m = {};
+    if(!pack) return m;
+    (pack.rows || []).forEach(function(r){
+      var v = r.s && r.s[s.key];
+      if(!v) return;
+      var val = (SC.basis === 'graded' && s.graded && v.assigned != null) ? v.assigned : v.raw;
+      if(val != null) m[r.name] = val;
+    });
+    return m;
+  }
+  /* 导入的年级名次（越小越好） */
+  function gradeOf(pack){
+    var m = {};
+    if(!pack) return m;
+    (pack.rows || []).forEach(function(r){
+      if(r.schoolRank != null) m[r.name] = r.schoolRank;
+    });
+    return m;
+  }
+  /* 把「越大越好」的分数压成 1..N 名次 */
   function rankMapOf(m){
     var arr = Object.keys(m).map(function(n){ return { n: n, v: m[n] }; }).sort(function(a, b){ return b.v - a.v; });
     var r = {}, k = 0, last = null;
@@ -12842,45 +13045,109 @@ function scTailRank(){
     });
     return r;
   }
-  var rc = rankMapOf(cur), rp = rankMapOf(prev);
+
+  var curTot = totalsOf(curPack), prevTot = totalsOf(prevPack);
+
+  var curPos, prevPos, curVal, prevVal;
+  if(basis === 'grade'){
+    /* 年级口径：名次直接用导入的校排名，分数变化用总分 */
+    curPos = gradeOf(curPack); prevPos = gradeOf(prevPack);
+    curVal = curTot; prevVal = prevTot;
+  } else if(basis === 'subject'){
+    var cm = subjOf(curPack, sub), pm = subjOf(prevPack, sub);
+    curPos = rankMapOf(cm); prevPos = rankMapOf(pm);
+    curVal = cm; prevVal = pm;
+  } else {
+    curPos = rankMapOf(curTot); prevPos = rankMapOf(prevTot);
+    curVal = curTot; prevVal = prevTot;
+  }
+
+  var names = Object.keys(curPos).filter(function(n){ return prevPos[n] != null; });
+  if(!names.length){
+    return '<div class="sc-card sc-card-admin"><div class="sc-card-h">进退步榜'
+      + '<span class="sc-h-note">' + esc(items[idx - 1].name) + ' → ' + esc(SC.exam.name) + '</span>'
+      + '<span class="sc-only-admin">仅站主可见</span></div>'
+      + scTailSwitch(basis, subs)
+      + '<div class="sc-dim" style="padding:4px 0 10px">这两次考试按这个口径<b>对不上人</b>'
+      + (basis === 'grade' ? '（导入的成绩里没有年级排名）' : basis === 'subject' ? '（这一科有人没考）' : '')
+      + '，换个口径看看。</div></div>';
+  }
+
   var moved = names.map(function(n){
-    return { name: n, from: rp[n], to: rc[n], d: rp[n] - rc[n], dc: cur[n] - prev[n], me: false };
+    return {
+      name: n,
+      from: prevPos[n], to: curPos[n],
+      d: prevPos[n] - curPos[n],
+      dc: (curVal[n] != null && prevVal[n] != null) ? (curVal[n] - prevVal[n]) : null,
+      me: false,
+    };
   });
   var meRow = scMyRow();
   if(meRow) moved.forEach(function(x){ if(x.name === meRow.name) x.me = true; });
 
-  var up = moved.slice().sort(function(a, b){ return b.d - a.d; }).slice(0, 5);
-  var down = moved.slice().sort(function(a, b){ return a.d - b.d; }).slice(0, 5);
+  var up = moved.slice().sort(function(a, b){ return b.d - a.d || b.dc - a.dc; }).slice(0, 5);
+  var down = moved.slice().sort(function(a, b){ return a.d - b.d || a.dc - b.dc; }).slice(0, 5);
   if(mode === 'self'){
     up = up.filter(function(x){ return x.me; });
     down = down.filter(function(x){ return x.me; });
     if(!up.length && !down.length) return '';
   }
 
-  function row(x, good){
+  function row(x){
     var arrow = x.d > 0 ? '↑' : x.d < 0 ? '↓' : '—';
     return '<tr' + (x.me ? ' class="sc-me-row"' : '') + '>'
       + '<td class="sc-name">' + esc(x.name) + (x.me ? '<span class="sc-you">我</span>' : '') + '</td>'
       + '<td>' + x.from + ' → ' + x.to + '</td>'
       + '<td class="' + (x.d > 0 ? 'sc-good' : x.d < 0 ? 'sc-warn' : '') + '">'
       +   arrow + ' ' + Math.abs(x.d) + ' 名</td>'
-      + '<td>' + (x.dc > 0 ? '+' : '') + fmtNum(x.dc) + '</td>'
+      + '<td>' + (x.dc == null ? '—' : (x.dc > 0 ? '+' : '') + fmtNum(x.dc)) + '</td>'
       + '</tr>';
   }
-  var tbl = function(title, arr, good){
+  var tbl = function(title, arr){
     if(!arr.length) return '';
     return '<div class="sc-rank-sub">' + title + '</div>'
       + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
       + '<thead><tr><th>姓名</th><th>名次</th><th>变化</th><th>分数变化</th></tr></thead><tbody>'
-      + arr.map(function(x){ return row(x, good); }).join('') + '</tbody></table></div>';
+      + arr.map(row).join('') + '</tbody></table></div>';
   };
+
+  var basisTxt = basis === 'grade' ? '年级名次'
+               : basis === 'subject' ? '班级' + sub.name + '名次'
+               : '班级总分名次';
+  var cap = basis === 'grade'
+    ? '年级名次是导入进来的（系统算不出全校）。<b>班排名和年级名次可能打架，而且打架是对的</b> —— 全班都考砸时，你班名次退步、年级名次反而进步。'
+    : basis === 'subject'
+      ? '只看<b>' + esc(sub.name) + '</b>这一科的班内名次，别科不参与。' + (sub.graded && SC.basis === 'graded' ? '按赋分口径算。' : '')
+      : '比的是<b>名次</b>不是分数 —— 卷子难度不同，分数高低说明不了什么。';
 
   return '<div class="sc-card sc-card-admin"><div class="sc-card-h">进退步榜'
     + '<span class="sc-h-note">' + esc(items[idx - 1].name) + ' → ' + esc(SC.exam.name) + '</span>'
     + '<span class="sc-only-admin">仅站主可见</span></div>'
-    + '<div class="sc-figcap" style="margin-bottom:8px">比的是<b>名次</b>不是分数 —— 卷子难度不同，分数高低说明不了什么。</div>'
-    + tbl('进步最多', up, true) + tbl('退步最多', down, false)
+    + scTailSwitch(basis, subs)
+    + '<div class="sc-figcap" style="margin-bottom:8px">' + cap + '</div>'
+    + tbl('进步最多', up) + tbl('退步最多', down)
+    + '<div class="sc-figcap" style="margin-top:8px">口径：<b>' + esc(basisTxt) + '</b>　共比了 ' + moved.length + ' 人。</div>'
     + '</div>';
+}
+
+/** 口径切换条：班级 / 年级 / 班级单科（单科时再多一个科目下拉） */
+function scTailSwitch(basis, subs){
+  var b = function(key, txt){
+    return '<button class="' + (basis === key ? 'on' : '') + '" onclick="scTailSet(\'' + key + '\')">' + txt + '</button>';
+  };
+  var h = '<div class="sc-seg">'
+    + b('class', '班级总分') + b('grade', '年级') + b('subject', '班级单科')
+    + '</div>';
+  if(basis === 'subject' && subs.length){
+    h += '<select class="sc-sel" style="margin-left:8px;min-width:110px;font-size:.8rem;padding:6px 8px" '
+      +   'onchange="scTailSubj(this.value)">'
+      + subs.map(function(s){
+          return '<option value="' + esc(s.key) + '"' + (s.key === SC_TAIL.sub ? ' selected' : '') + '>'
+            + esc(s.name) + '</option>';
+        }).join('')
+      + '</select>';
+  }
+  return '<div class="sc-segbar">' + h + '</div>';
 }
 
 /* ---------- ④ 分层教学四象限（总分 × 指定单科） ---------- */

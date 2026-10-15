@@ -647,13 +647,24 @@ async function shareCreate(req, res) {
   const maxViews = Number.isFinite(Number(b.maxViews)) && Number(b.maxViews) > 0
     ? Math.min(100000, Math.round(Number(b.maxViews))) : null;
 
+  /* 分享内容（v2.9.7 站主：「分析也可以自定义分享内容」）。
+     支持 board（全班成绩单）/ card（个人成绩卡）。
+     老链接没有这个字段，读取时一律按「都有」处理 —— 向后兼容。 */
+  const rawSec = (b.sections && typeof b.sections === 'object' && !Array.isArray(b.sections)) ? b.sections : {};
+  const sections = {
+    board: rawSec.board !== false,
+    card: rawSec.card !== false,
+  };
+  if (!sections.board && !sections.card) return fail(res, 400, '至少选一项分享内容，不然点开是空白');
+
   const token = shareToken();
 
   const ins = await sql`
-    insert into share_links (token, scope, owner_id, target_names, exam_ids, expires_at, max_views)
+    insert into share_links (token, scope, owner_id, target_names, exam_ids, sections, expires_at, max_views)
     values (${token}, ${scope}, ${u.id},
             ${names.length ? JSON.stringify(names) : null}::jsonb,
             ${examIds.length ? examIds : null},
+            ${JSON.stringify(sections)}::jsonb,
             ${days > 0 ? new Date(Date.now() + days * 86400000) : null},
             ${maxViews})
     returning id`;
@@ -665,6 +676,7 @@ async function shareCreate(req, res) {
     token,
     url: '/share.html?t=' + token,
     scope,
+    sections,
     days,
     expiresAt: days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null,
   });
@@ -710,11 +722,18 @@ async function shareList(req, res) {
 function shareShape(r) {
   const expired = r.expires_at ? new Date(r.expires_at).getTime() < Date.now() : false;
   const used = r.max_views != null && Number(r.views) >= Number(r.max_views);
+  /* 老链接没写过 sections → 按「都有」处理（向后兼容，别让老链接变空白） */
+  const sec = jsonCol(r.sections) || {};
+  const sections = {
+    board: sec.board !== false,
+    card: sec.card !== false,
+  };
   return {
     id: Number(r.id),
     token: r.token,
     url: '/share.html?t=' + r.token,
     scope: r.scope,
+    sections,
     ownerName: r.owner_name || '',
     names: jsonCol(r.target_names) || [],
     examIds: Array.isArray(r.exam_ids) ? r.exam_ids.map(Number) : [],
