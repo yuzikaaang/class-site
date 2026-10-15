@@ -1655,6 +1655,16 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 
 /* ===== 成绩分析页（第四十五轮 · v2.7.2）===== */
 .sc-box{max-width:920px}
+/* 内嵌模式（v2.9.6）—— 站主 2026-10-15 原话：「点开成绩分析直接展示而不是卡片+弹窗」。
+   所以这一块不再是「一张卡片 → 点开全屏弹窗」，而是直接铺进「成绩分析」板块：
+   点左侧导航就看见内容，跟着页面一起滚，不再有自己的滚动条和遮罩。 */
+.sc-embed{background:#fffdfb;border:1px solid #f0e7de;border-radius:18px;overflow:hidden;
+  box-shadow:0 1px 2px rgba(120,53,15,.05),0 8px 24px rgba(120,53,15,.07)}
+.sc-embed .sc-bar{padding:14px 16px 10px}
+.sc-embed .sc-tabs{padding:0 16px}
+.sc-embed .sc-pane{overflow:visible;padding:14px 16px 20px}
+.dark .sc-embed{background:#262220;border-color:rgba(255,255,255,.06);
+  box-shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.45)}
 .sc-bar{padding:12px 18px 10px;border-bottom:1px solid #f5efe8}
 .sc-bar-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .sc-sel{flex:1;min-width:160px;padding:9px 12px;border:1.5px solid #e2d5c8;border-radius:10px;background:#fff;font-size:.86rem;color:#292524;font-family:inherit}
@@ -1792,34 +1802,34 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-trendhead.up b{color:#0f8a4d}
 .sc-trendhead.down b{color:#c0392b}
 .sc-trendhead span{font-size:.74rem}
-/* ===== A4 打印：只印成绩分析这一屏，去掉按钮/工具栏/滚动截断 ===== */
+/* ===== A4 打印：只印成绩分析这一块，去掉按钮/工具栏/滚动截断 =====
+   ⚠️ v2.9.6 起成绩分析改为内嵌（见 .sc-embed），选择器整体从 #scoreAnalMask
+   换成 .sc-embed —— 这行注释写给以后的自己：别再照抄旧选择器。 */
 @media print{
   @page{margin:12mm}
   html,body{background:#fff !important}
   body *{visibility:hidden !important}
-  #scoreAnalMask,#scoreAnalMask *{visibility:visible !important}
-  #scoreAnalMask.show{display:block !important;position:static !important;inset:auto !important;
-    background:#fff !important;padding:0 !important;overflow:visible !important}
-  #scoreAnalMask .allboard-box{max-width:none !important;max-height:none !important;width:100% !important;
-    margin:0 !important;border:none !important;border-radius:0 !important;box-shadow:none !important}
-  #scoreAnalMask .allboard-head,
-  #scoreAnalMask .sc-bar,
-  #scoreAnalMask .sc-tabs,
-  #scoreAnalMask .sc-seg{display:none !important}
-  #scoreAnalMask .sc-pane{overflow:visible !important;max-height:none !important;padding:0 !important}
-  #scoreAnalMask .sc-tblwrap{max-height:none !important;overflow:visible !important;border:none !important}
-  #scoreAnalMask .sc-tbl{min-width:0 !important;border-collapse:collapse !important;font-size:10pt}
-  #scoreAnalMask .sc-tbl thead{display:table-header-group}   /* 表头每页重复 */
-  #scoreAnalMask .sc-tbl th,#scoreAnalMask .sc-tbl td{position:static !important;padding:3.5px 3px !important}
-  #scoreAnalMask .sc-tbl tr{break-inside:avoid}
-  #scoreAnalMask .sc-tbl th{background:#f5efe8 !important;
+  .sc-embed,.sc-embed *{visibility:visible !important}
+  .sc-embed{background:#fff !important;border:none !important;border-radius:0 !important;
+    box-shadow:none !important;margin:0 !important;overflow:visible !important}
+  .sc-embed .sc-bar,
+  .sc-embed .sc-tabs,
+  .sc-embed .sc-seg{display:none !important}
+  .sc-embed .sc-pane{overflow:visible !important;max-height:none !important;padding:0 !important}
+  .sc-embed .sc-tblwrap{max-height:none !important;overflow:visible !important;border:none !important}
+  .sc-embed .sc-tbl{min-width:0 !important;border-collapse:collapse !important;font-size:10pt}
+  .sc-embed .sc-tbl thead{display:table-header-group}   /* 表头每页重复 */
+  .sc-embed .sc-tbl th,.sc-embed .sc-tbl td{position:static !important;padding:3.5px 3px !important}
+  .sc-embed .sc-tbl tr{break-inside:avoid}
+  .sc-embed .sc-tbl th{background:#f5efe8 !important;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
-  #scoreAnalMask .sc-card{break-inside:avoid;border:1px solid #e6ddd4 !important;margin-top:9px !important}
-  #scoreAnalMask .sc-stats{grid-template-columns:repeat(4,1fr) !important}
-  #scoreAnalMask .sc-figcap,#scoreAnalMask .sc-hint{font-size:8.5pt}
-  #scoreAnalMask .sc-svg{min-width:0 !important}
-  #scoreAnalMask .sc-pos-me span{background:#292524 !important;color:#fff !important;
+  .sc-embed .sc-card{break-inside:avoid;border:1px solid #e6ddd4 !important;margin-top:9px !important}
+  .sc-embed .sc-stats{grid-template-columns:repeat(4,1fr) !important}
+  .sc-embed .sc-figcap,.sc-embed .sc-hint{font-size:8.5pt}
+  .sc-embed .sc-svg{min-width:0 !important}
+  .sc-embed .sc-pos-me span{background:#292524 !important;color:#fff !important;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 }
 
 @media (max-width:560px){
@@ -2272,15 +2282,11 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 
 <!-- ===== 当前作业弹窗 ===== -->
 
-<!-- ===== 成绩分析（第四十五轮 · v2.7.2）===== -->
-<div class="allboard-mask" id="scoreAnalMask">
-  <div class="allboard-box sc-box">
-    <div class="allboard-head"><span>成绩分析</span><button onclick="closeScoreAnal()">关闭</button></div>
-    <div class="sc-bar" id="scBar"></div>
-    <div class="sc-tabs" id="scTabs"></div>
-    <div class="sc-pane" id="scPaneBox"></div>
-  </div>
-</div>
+<!-- ===== 成绩分析（第四十五轮 · v2.7.2；v2.9.6 改为内嵌）=====
+     原先这里是 `#scoreAnalMask`（全屏遮罩 + 弹窗），点卡片才弹出来。
+     站主要求「点开成绩分析直接展示而不是卡片+弹窗」，所以整块挪进了
+     「成绩分析」板块的 tab-page 里（骨架见 JS 的 scEmbedHtml），
+     这里不再保留任何容器 —— 免得出现两份同 id 的 scBar/scTabs/scPaneBox。 -->
 
 <div class="allboard-mask" id="hwCurrentMask">
   <div class="allboard-box" style="max-width:560px">
@@ -2705,7 +2711,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.9.5';
+var SITE_VERSION = '2.9.6';
 var VER_DATE = '2026-10-15';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3831,17 +3837,6 @@ var SITE_DATA = {
       mainLabel: "前往查看", mainUrl: "https://newsnow.czl.net/c/china", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
       iconText: "日报"
-    },
-    {
-      id: 9,
-      categoryId: 3, title: "成绩分析", subtitle: "班级成绩", icon: "", iconText: "分析",
-      desc: "查看全班成绩单与个人成绩画像。\n包含各科分数与班内排名、总分排名、上线情况、历次趋势与进退步。\n数据仅本班同学登录后可见，请勿截图外传。",
-      mainLabel: "", mainUrl: "", mainWechatOk: true,
-      extraLabel: "", extraUrl: "", extraWechatOk: true,
-      customActions: [
-        { label: "查看成绩分析", onclick: "openScoreAnal()" }
-      ],
-      needLogin: true
     },
     {
       id: 10,
@@ -5008,7 +5003,11 @@ function render(){
   grid.innerHTML = cats.map(function(c,i){
     var links = uiLinks(c.id);   /* 【自定义设置】经顺序覆盖层取 */
     var inner;
-    if(c.id === 9){
+    /* 成绩分析（板块 3）：站主 2026-10-15 原话「点开成绩分析直接展示而不是卡片+弹窗」
+       —— 这个板块不再放卡片，直接把成绩分析本体铺进来（骨架见 scEmbedHtml）。 */
+    if(c.id === 3){
+      inner = scEmbedHtml();
+    }else if(c.id === 9){
       inner = installGuideHtml();
     }else if(links.length === 0){
       inner = '<div class="placeholder"><span>➕</span>该板块内容正在筹备中，敬请期待</div>';
@@ -5142,6 +5141,9 @@ function render(){
   }
   applyHomeOrder();   /* 【自定义设置】首页区块顺序：任何重渲染都顺带纠正 */
   stackApply();       /* 【卡片堆叠 v35】重建后重算层叠位移（门禁答题等触发重渲染时保持堆叠） */
+  /* 成绩分析是内嵌的：这次重建会把 tab-cat-3 里的成绩分析画布一起冲掉，
+     所以只要当前就在那个板块，就重挂一次（数据还在内存里，不会重复请求）。 */
+  if(__activeCat === 3 && typeof scEnsureMounted === 'function'){ scEnsureMounted(); }
 }
 function jsq(u){ return (u||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
@@ -8989,6 +8991,8 @@ function openCat(id){
   for(var j=0;j<btns.length;j++){ btns[j].classList.remove('active'); }
   var cur = document.querySelector('#sideCats .side-btn[data-cat="'+id+'"]');
   if(cur) cur.classList.add('active');
+  /* 成绩分析（板块 3）是内嵌的：一切过去就把它挂起来（没登录就给登录引导） */
+  if(id === 3 && typeof scEnsureMounted === 'function'){ scEnsureMounted(); }
   var homeBtn = document.getElementById('homeBtn');
   if(homeBtn) homeBtn.classList.remove('active');
   /* 【卡片堆叠 v35】切到该分类后卡片才真正可见，此时才能量到高度算统一高度。
@@ -11280,10 +11284,18 @@ var SC = {
 };
 
 /* ---------------- 入口 ---------------- */
+/* 打开成绩分析。
+   v2.9.6 改版（站主原话：「点开成绩分析直接展示而不是卡片+弹窗」）：
+   成绩分析现在**长在板块 3 里**，点侧边栏就看见内容，不再有卡片中转、也不再弹全屏框。
+   这个函数名保留（通知跳转 / 弹窗白名单 / 老引用都指向它），语义改成「切到那个板块并确保已就绪」。 */
 function openScoreAnal(){
-  var mask = document.getElementById('scoreAnalMask');
-  if(!mask) return;
-  mask.classList.add('show');
+  if(typeof openCat === 'function') openCat(3);
+  scEnsureMounted();
+}
+/* 内嵌挂载：切到板块后、以及 render() 重建 DOM 之后，都要调一次。
+   两种情况不一样 —— 第一次要真的去请求，后面只是「容器被重建了，重绘一下」。 */
+function scEnsureMounted(){
+  if(!document.getElementById('scPaneBox')) return;   /* 不在这个板块里，什么都不做 */
   if(!isLoggedIn()){
     document.getElementById('scBar').innerHTML = '';
     document.getElementById('scTabs').innerHTML = '';
@@ -11291,15 +11303,27 @@ function openScoreAnal(){
       '<div class="sc-empty">'
       + '<div class="sc-empty-ico">🔐</div>'
       + '<p>成绩分析需要登录后才能查看。</p>'
-      + '<button class="btn" onclick="closeScoreAnal();openAccount(\'login\')">去登录</button>'
+      + '<button class="btn" onclick="openAccount(\'login\')">去登录</button>'
       + '</div>';
     return;
   }
-  if(!SC.loaded) scLoad();
+  if(!SC.loaded){ scLoad(); return; }
+  /* 数据还在内存里（render() 重建会把容器清空），重绘即可，不必再请求一次 */
+  scRenderAll();
 }
+/* 老函数名兼容：原先用来关弹窗。现在没有弹窗了，就当「返回首页」。 */
 function closeScoreAnal(){
-  var mask = document.getElementById('scoreAnalMask');
-  if(mask) mask.classList.remove('show');
+  if(typeof goHomeView === 'function') goHomeView();
+}
+
+/* 成绩分析板块的内嵌骨架。
+   容器 id 沿用原来的 scBar / scTabs / scPaneBox —— 渲染函数一行都不用改。 */
+function scEmbedHtml(){
+  return '<div class="sc-embed" id="scEmbed">'
+    + '<div class="sc-bar" id="scBar"></div>'
+    + '<div class="sc-tabs" id="scTabs"></div>'
+    + '<div class="sc-pane" id="scPaneBox"></div>'
+    + '</div>';
 }
 function scPane(html){ document.getElementById('scPaneBox').innerHTML = html; }
 function scLoading(txt){
@@ -11536,6 +11560,8 @@ function scRenderBar(){
     + '<div class="sc-meta">'
     +   esc(SC.exam.type || '考试') + '　' + esc(scDateRange(SC.exam)) + '　共 ' + SC.rows.length + ' 人'
     +   (SC.exam.note ? '　·　' + esc(SC.exam.note) : '')
+    /* 原来这句写在「成绩分析」卡片的说明里；v2.9.6 去掉卡片后挪到这里，别丢 */
+    +   '<br>数据仅本班同学登录后可见，请勿截图外传。'
     + '</div>';
 }
 
