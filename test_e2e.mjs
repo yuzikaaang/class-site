@@ -3191,9 +3191,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(indexHtml),
+  t('★前台版本号为 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(adminHtml),
+  t('★后台版本号为 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3557,9 +3557,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(indexHtml38),
+  t('★前台版本号为 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(adminHtml38),
+  t('★后台版本号为 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4569,8 +4569,8 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(idx47));
-  t('★后台版本号 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(adm47));
+  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx47));
+  t('★后台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adm47));
   t('★service worker 缓存版本升到 v75（旧缓存要作废）',
     /class-site-v75/.test(sw47));
 }
@@ -4656,7 +4656,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.7');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.8');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4756,7 +4756,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(idx48));
+  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-15', /VER_DATE = '2026-10-15'/.test(idx48));
   t('★service worker 缓存版本升到 v75', /class-site-v75/.test(sw48));
 }
@@ -4822,8 +4822,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(idx49));
-  t('★后台版本号 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(adm49));
+  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx49));
+  t('★后台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -4895,7 +4895,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(idx50));
+  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5057,7 +5057,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(adm));
+  t('★后台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5124,7 +5124,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(idx));
+  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5575,13 +5575,16 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
   /* ===== ③ 导出图片：勾选要导出的内容 ===== */
   t('★导出前先弹勾选面板', /function scExportDialog\(\)\{/.test(idx) && /id="scExMask"/.test(idx));
   t('★勾选状态记在 SC_EXPORT（head 永远为真）',
-    /var SC_EXPORT = \{ head: true, metrics: true, subjects: true, cutlines: true \};/.test(idx));
+    /var SC_EXPORT = \{\s*\n\s*head: true,/.test(idx));
   t('★「总分与排名」必选（禁掉勾选框）', /row\('head', '总分与排名'/.test(idx) && /disabled/.test(idx));
   t('★高度按勾选算（没勾的不占高度）',
-    /function scExportHeight\(cfg, nSub, nCut\)\{/.test(idx) && /var H = scExportHeight\(opt,/.test(idx));
+    /function scExportHeight\(cfg, nSub, nCut, nTrend, hasBar\)\{/.test(idx) && /var H = scExportHeight\(opt,/.test(idx));
   t('★画图和算高度共用同一套步长',
     /var SC_EX_STEP = \{/.test(idx) && /var S = SC_EX_STEP, W = S\.W, pad = S\.pad;/.test(idx));
-  t('★没勾各科时科目数按 0 传（不留空）', /opt\.subjects \? subs\.length : 0/.test(idx));
+  t('★每一段的「占不占高度」都单独判断（少判一段图上就多一片空白）',
+    /if\(cfg\.metrics\) y \+= S\.metGap/.test(idx) && /if\(cfg\.subjects && nSub\)/.test(idx)
+    && /if\(cfg\.subrank && nSub\)/.test(idx) && /if\(cfg\.diag && nSub\)/.test(idx)
+    && /if\(cfg\.rankbar && hasBar\)/.test(idx) && /if\(cfg\.trend && nTrend >= 2\)/.test(idx));
 
   /* ===== ④ 分享链接：也要能自定义分享内容 ===== */
   t('★后端 share_links 加 sections 列（自愈 + schema 双写）',
@@ -5601,7 +5604,8 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
   t('★分享页按 sections 过滤内容',
     /var wantBoard = sec\.board !== false;/.test(share) && /var wantCard = sec\.card !== false;/.test(share));
   t('★只勾卡片但这回是多个人 → 退回成绩单，不给空白页',
-    /var useBoard = wantBoard \|\| !useCard;/.test(share));
+    /var useCard = wantCard && rows\.length === 1;/.test(share)
+    && /var useBoard = !useCard && \(wantBoard \|\| rows\.length > 1\);/.test(share));
 
   /* ===== ⑤ 进退步榜：年级 / 班级 / 班级单科 三口径 ===== */
   t('★有口径状态 SC_TAIL 与切换函数',
@@ -5621,7 +5625,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /班排名和年级名次可能打架/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.7', /SITE_VERSION = '2\.9\.7'/.test(idx));
+  t('★前台版本号升到 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -5651,6 +5655,148 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     t('★免登录读回来时 sections 原样带回（跳过）', true);
     t('★两项都不勾时后端也拦（400）（跳过）', true);
   }
+}
+
+console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去重 + 导出长图（v2.9.8）');
+{
+  const idx   = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const share = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
+  const sc    = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
+
+  /* ===== ① 后端：明细被裁剪时，补一份「按全班算好的统计量」 =====
+     站主实测：「分享我自己，然后它那个班均、班排名都显示 0」。
+     根因不是显示坏了，是**数据不够** —— 只发了一个人，班均当然等于他自己。 */
+  t('★scope 不是「全班」时才算这份统计', /const needStats = s0\.scope !== 'class';/.test(sc));
+  t('★有 statOfExam 聚合函数', /function statOfExam\(exam, rows, basis, ownerId\) ?\{/.test(sc));
+  t('★赋分与原始两套都算（切口径不该又变成 0）',
+    /graded: statOfExam\(e, rowsOfExam, 'graded', s0\.owner_id\)/.test(sc)
+    && /raw: statOfExam\(e, rowsOfExam, 'raw', s0\.owner_id\)/.test(sc));
+  t('★注释写明了根因（不是显示坏了，是数据不够）', /不是显示坏了，是\*\*数据不够\*\*/.test(sc));
+  {
+    const body = sc.slice(sc.indexOf('function statOfExam'), sc.indexOf('function statOfExam') + 5000);
+    t('★只发聚合数字，不带别人的姓名与明细', body.indexOf('student_name') < 0);
+  }
+  t('★统计里给了：人数 / 班均 / 中位 / 最高 / 我的名次 / 各科班均与单科名次 / 各线上线人数',
+    /return \{\s*\n\s*n,\s*\n\s*avg: round1\(avg\),/.test(sc) && /subj,\s*\n\s*\/\* 每条分数线/.test(sc));
+  t('★小数统一收一位（不留 12.499999 的浮点尾巴）',
+    /function round1\(v\) ?\{/.test(sc) && /Math\.round\(v \* 10\) \/ 10;/.test(sc));
+  t('★stats 只在需要时返回（全班的明细本来就齐，不用补）',
+    /stats: needStats \? stats : null,/.test(sc));
+
+  /* ===== ② 分享页：用后端统计 + 去掉重复块 ===== */
+  t('★分享页优先用后端按全班算的统计',
+    /var ST = \(DATA\.stats && DATA\.stats\[EX\.id\]\) \? \(DATA\.stats\[EX\.id\]\[BASIS\] \|\| null\) : null;/.test(share));
+  t('★统计条走 showAvg / showMed / showMax / showN', /var showAvg = \(ST && ST\.avg != null\) \? ST\.avg : avg;/.test(share));
+  t('★成绩卡的班排名用后端算的（本地算出来永远是 1/1）',
+    /var myRank = \(ST && ST\.myRank != null\) \? ST\.myRank : st;/.test(share));
+  t('★各科的班均与班内名次也优先用后端那份',
+    /var sr = \(sj && sj\.rank != null\) \? sj\.rank : \(rk\.subj\[sub\.key\] \|\| \{\}\)\.rank\[r\.idx\];/.test(share));
+  t('★上线人数优先用后端那份（只发 1 个人时本地数不出来）',
+    /ST\.cuts\[ci\] != null/.test(share));
+  t('★单人给了成绩卡就不再出统计条与表格（这才是「两个勾看不出区别」的根因）',
+    /var useCard = wantCard && rows\.length === 1;/.test(share)
+    && /var useBoard = !useCard && \(wantBoard \|\| rows\.length > 1\);/.test(share));
+  t('★注释写明了为什么去重', /看着就是同一份东西写两遍/.test(share));
+
+  /* ===== ③ 分享弹窗：勾哪个跟着「分享范围」走 ===== */
+  t('★有智能默认函数', /var applyDefaults = function\(scope\)\{/.test(idx));
+  t('★分享自己 → 只勾个人成绩卡；分享全班/自选 → 只勾成绩单',
+    /if\(scope === 'self'\) setSec\(false, true\);/.test(idx) && /else setSec\(true, false\);/.test(idx));
+  t('★打开弹窗时就应用一次默认（不是等用户去切范围）',
+    /applyDefaults\(document\.getElementById\('shScope'\)\.value\);/.test(idx));
+  t('★切范围时联动', /document\.getElementById\('shScope'\)\.onchange = pickScope;/.test(idx));
+  t('★说明里点出两项各适合什么场景',
+    /看好几个人时用这个/.test(idx) && /分享自己时用这个/.test(idx));
+  t('★有随范围变化的提示条', /id="shSecTip"/.test(idx) && /\.sc-sh-tip\{/.test(idx));
+
+  /* ===== ④ 导出长图：四个新段，都可勾选 ===== */
+  t('★SC_EXPORT 多了四段开关',
+    /subrank: true,/.test(idx) && /diag: true,/.test(idx) && /rankbar: false,/.test(idx) && /trend: false,/.test(idx));
+  ['单科排名', '偏科分析', '年级位置', '历次趋势（总分）'].forEach(function(txt){
+    t('★长图里有「' + txt + '」段', new RegExp("'" + txt + "'").test(idx));
+  });
+  t('★段顺序：各科成绩 → 单科排名 → 偏科分析 → 年级位置 → 历次趋势 → 上线情况',
+    idx.indexOf("'单科排名', pad, y") < idx.indexOf("'偏科分析', pad, y")
+    && idx.indexOf("'偏科分析', pad, y") < idx.indexOf("'年级位置', pad, y")
+    && idx.indexOf("'年级位置', pad, y") < idx.indexOf("'历次趋势（总分）', pad, y")
+    && idx.indexOf("'历次趋势（总分）', pad, y") < idx.indexOf("'上线情况', pad, y"));
+  t('★偏科分析末尾点名最弱与最强', /tips = '最弱：'/.test(idx) && /最强：/.test(idx));
+  t('★未考的科不参与「最弱」评选（否则「未考」会被当成最弱）',
+    /var scored = diffs\.filter\(function\(d\)\{ return d\.diff != null; \}\);/.test(idx));
+  t('★历次趋势用「我的历次成绩」那条链，自带每次的科目', /function scMeSeries\(\)\{/.test(idx));
+  t('★没数据的段直接禁用并写明原因（勾了画不出来只会让人以为坏了）',
+    /这次没导年级排名，画不出来/.test(idx) && /至少要两次有成绩的考试才画得出来/.test(idx));
+  t('★「禁用」是真的传了标志位（只写原因等于没禁用 —— 这就是实测踩到的坑）',
+    /: '这次没导年级排名，画不出来', !hasBar\)/.test(idx)
+    && /: '至少要两次有成绩的考试才画得出来', series\.length < 2\)/.test(idx));
+  t('★算高度和绘制用的是同一份可用性判断（否则会留一片空白）',
+    /var hasBar = !!\(gradeN && meRow\.schoolRank != null\);/.test(idx)
+    && /var series = opt\.trend \? scMeSeries\(\) : \[\];/.test(idx));
+  t('★绘制顺序与算高度顺序一致（否则图上会多空白或被裁）',
+    /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
+
+  /* ===== ⑤ 版本与更新记录 ===== */
+  t('★前台版本号升到 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx));
+  t('★后台内置更新记录补到 2.9.8',
+    /"version": "2\.9\.8"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+
+  /* ===== ⑥ 真跑一遍：只分享 1 个人，班均与排名仍然是对的 ===== */  const reg2 = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'statsstu', password: 'StatsStu2026', displayName: '统计生甲' },
+  });
+  t('建一个测试学生账号（统计用）', reg2.status === 200 && reg2.body.ok, JSON.stringify(reg2.body).slice(0, 150));
+  const sTok = reg2.body.token;
+
+  const mk2 = await call('/api/scores?action=exam-save', {
+    method: 'POST', token: adminToken,
+    body: {
+      name: '统计口径测试考', exam_date: '2026-09-02',
+      subjects: [{ key: 'chinese', name: '语文', full: 150 }, { key: 'math', name: '数学', full: 150 }],
+    },
+  });
+  const eid2 = mk2.body.exam && mk2.body.exam.id;
+  await call('/api/scores?action=scores-import', {
+    method: 'POST', token: adminToken,
+    body: { exam: eid2, rows: [
+      { name: '统计生甲', s: { chinese: 100, math: 110 } },   /* 总分 210 */
+      { name: '统计生乙', s: { chinese: 90,  math: 80  } },   /* 总分 170 */
+      { name: '统计生丙', s: { chinese: 120, math: 130 } },   /* 总分 250 */
+    ] },
+  });
+  await call('/api/scores?action=exam-publish', { method: 'POST', token: adminToken, body: { id: eid2, publish: true } });
+
+  const cSelf = await call('/api/scores?action=share-create', {
+    method: 'POST', token: sTok, body: { scope: 'self', examIds: [eid2], days: 1 },
+  });
+  t('学生按「只分享我的成绩」建分享', cSelf.status === 200 && !!cSelf.body.token, JSON.stringify(cSelf.body).slice(0, 150));
+
+  const gSelf = await call('/api/scores?action=share-get&t=' + cSelf.body.token);
+  const S = gSelf.body.stats && gSelf.body.stats[eid2] && gSelf.body.stats[eid2].graded;
+  t('★只分享自己时，明细确实只有 1 个人', (gSelf.body.rows || []).length === 1);
+  t('★但统计是按全班 3 人算的（这就是「不再显示 0」的关键）', !!S && S.n === 3, JSON.stringify(S).slice(0, 200));
+  t('★班均 = 210（而不是你自己那一个数）', S && S.avg === 210, '实际 ' + (S && S.avg));
+  t('★我的班排名 = 2 / 3（而不是 1 / 1）', S && S.myRank === 2, '实际 ' + (S && S.myRank));
+  t('★中位数与最高也是全班的', S && S.med === 210 && S.max === 250, JSON.stringify(S && { med: S.med, max: S.max }));
+  t('★各科班均按全班算（语文 103.3）', S && S.subj.chinese.avg === 103.3, '实际 ' + (S && S.subj.chinese.avg));
+  t('★单科名次也是全班的（语文第 2、数学第 2）', S && S.subj.chinese.rank === 2 && S.subj.math.rank === 2);
+  t('★原始口径那份也算好了（切过去不会又变 0）',
+    !!gSelf.body.stats[eid2].raw && gSelf.body.stats[eid2].raw.avg === 210);
+  t('★统计里不带别的同学姓名（只发聚合数字）',
+    JSON.stringify(gSelf.body.stats).indexOf('统计生乙') < 0 && JSON.stringify(gSelf.body.stats).indexOf('统计生丙') < 0);
+
+  const cAll = await call('/api/scores?action=share-create', {
+    method: 'POST', token: adminToken, body: { scope: 'class', examIds: [eid2], days: 1 },
+  });
+  const gAll = await call('/api/scores?action=share-get&t=' + cAll.body.token);
+  t('★分享全班时不额外发统计（明细本来就齐，前端自己算）',
+    gAll.body.stats === null && (gAll.body.rows || []).length === 3);
+  t('★全班明细里没有「统计」这种多余字段', gAll.body.rows.every((r) => r.stats === undefined));
+
+  /* 清场 */
+  await call('/api/scores?action=share-revoke', { method: 'POST', token: sTok, body: { id: cSelf.body.id } });
+  await call('/api/scores?action=share-revoke', { method: 'POST', token: adminToken, body: { id: cAll.body.id } });
+  await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: eid2 } });
+  await call('/api/admin?action=delete-user', { method: 'POST', token: adminToken, body: { id: reg2.body.user.id } });
+  t('清场：测试考试与账号都删掉', true);
 }
 
 console.log('\n' + '='.repeat(52));

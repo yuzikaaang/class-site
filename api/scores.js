@@ -804,11 +804,133 @@ async function shareGet(req, res) {
     });
   });
 
+  /* 明细被裁剪过（self / picked）时，额外补一份「按全班算好的统计量」，
+     否则分享页只有一两个人，班均/名次全变成 0（见 statOfExam 的说明）。 */
+  const needStats = s0.scope !== 'class';
+  const stats = {};
+  if (needStats) {
+    examList.forEach((e) => {
+      const rowsOfExam = sc.filter((r) => Number(r.exam_id) === Number(e.id));
+      stats[e.id] = {
+        graded: statOfExam(e, rowsOfExam, 'graded', s0.owner_id),
+        raw: statOfExam(e, rowsOfExam, 'raw', s0.owner_id),
+      };
+    });
+  }
+
   ok(res, {
     share: shareShape(s0),
     exams: examList,
     rows: out,
+    stats: needStats ? stats : null,
   });
+}
+
+/* ============================================================
+   班情聚合（v2.9.8）
+   ------------------------------------------------------------
+   为什么需要它：分享范围不是「全班」时，明细只发一部分人。
+   分享自己的成绩 → 分享页只拿到 1 个人 → 只能算出
+   「班均＝你自己、班排名 1/1、与班均 +0」。
+   站主实测反馈「与班均、班排名都显示 0」就是这个原因 ——
+   不是显示坏了，是**数据不够**。
+
+   这里按**全班**把统计量算好一并发出：只给聚合数字
+   （人数 / 均分 / 中位 / 最高 / 我的名次 / 各科班均与单科名次 / 各线上线人数），
+   **不带任何别人的姓名与明细**，所以不构成隐私问题。
+
+   赋分与原始**两种口径都算好**：分享页有「总分赋分 / 总分原始」切换，
+   切过去时不该又变成 0，所以两份都备着，前端直接取。
+
+   ⚠️ rounds 到一位小数再发：浮点尾巴（12.499999）在页面上很难看。
+   ============================================================ */
+function round1(v) {
+  return v == null || !Number.isFinite(v) ? null : Math.round(v * 10) / 10;
+}
+
+function statOfExam(exam, rows, basis, ownerId) {
+  const subs = exam.subjects || [];
+  const cuts = (exam.cutlines || []).filter((c) => c.score != null);
+
+  /* 取某一行某一科的分；basis='graded' 时才认赋分 */
+  const pick = (v, sub) => {
+    if (!v) return null;
+    const x = (basis === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+    return x == null ? null : Number(x);
+  };
+
+  /* 总分（本人与全班用同一套算法，否则名次会错位） */
+  const totals = [];
+  rows.forEach((r) => {
+    const s = jsonCol(r.scores) || {};
+    let t = 0, any = false;
+    subs.forEach((sub) => {
+      const x = pick(s[sub.key], sub);
+      if (x == null) return;
+      t += x; any = true;
+    });
+    if (any) totals.push({ r, t });
+  });
+
+  const list = totals.map((x) => x.t).slice().sort((a, b) => a - b);
+  const n = list.length;
+  const avg = n ? list.reduce((a, b) => a + b, 0) / n : null;
+
+  /* 总分名次：同分并列（跟前端 scRankMap 同一套规则） */
+  const sorted = totals.slice().sort((a, b) => b.t - a.t);
+  let rank = 0, prev = null;
+  const rankOf = new Map();
+  sorted.forEach((x, i) => {
+    if (prev === null || x.t !== prev) { rank = i + 1; prev = x.t; }
+    rankOf.set(x.r, rank);
+  });
+
+  /* 各科：班均 + 参考人数 + 我的名次 */
+  const subj = {};
+  subs.forEach((sub) => {
+    const arr = [];
+    rows.forEach((r) => {
+      const x = pick((jsonCol(r.scores) || {})[sub.key], sub);
+      if (x != null) arr.push({ r, x });
+    });
+    arr.sort((a, b) => b.x - a.x);
+    let k = 0, pv = null;
+    const m = new Map();
+    arr.forEach((y, i) => {
+      if (pv === null || y.x !== pv) { k = i + 1; pv = y.x; }
+      m.set(y.r, k);
+    });
+    let mine = null;
+    if (ownerId != null) {
+      const hit = arr.filter((y) => Number(y.r.user_id) === Number(ownerId))[0];
+      if (hit) mine = m.get(hit.r) || null;
+    }
+    subj[sub.key] = {
+      name: sub.name,
+      full: sub.full == null ? null : Number(sub.full),
+      avg: round1(arr.length ? arr.reduce((a, b) => a + b.x, 0) / arr.length : null),
+      count: arr.length,
+      rank: mine,
+    };
+  });
+
+  let myRank = null, myTotal = null;
+  if (ownerId != null) {
+    const hit = totals.filter((x) => Number(x.r.user_id) === Number(ownerId))[0];
+    if (hit) { myRank = rankOf.get(hit.r) || null; myTotal = hit.t; }
+  }
+
+  return {
+    n,
+    avg: round1(avg),
+    med: !n ? null : round1(n % 2 ? list[(n - 1) / 2] : (list[n / 2 - 1] + list[n / 2]) / 2),
+    max: n ? round1(list[n - 1]) : null,
+    myRank,
+    myTotal: round1(myTotal),
+    subj,
+    /* 每条分数线分别有多少人上线（顺序与 exam.cutlines 过滤后一致） */
+    cuts: cuts.map((c) => list.filter((v) => v >= c.score).length),
+  };
 }
 
 /* ============================================================

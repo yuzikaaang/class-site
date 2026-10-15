@@ -261,10 +261,17 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     var sec = (DATA.share && DATA.share.sections) || {};
     var wantBoard = sec.board !== false;
     var wantCard = sec.card !== false;
+
+    /* ⚠️ v2.9.8：单人且给了成绩卡时，就**不再**出「统计条 + 一行表格」。
+       成绩卡里已经有总分、班排名、年级排名、与班均、各科明细、上线情况，
+       再叠一块统计条和一行表格，看着就是同一份东西写两遍 ——
+       站主反馈「两个勾看不出区别」，根因就在这。 */
     var useCard = wantCard && rows.length === 1;
-    /* 只勾了「个人成绩卡」但这次是好几个人 → 卡片用不上，
-       退回成绩单，不然页面是空的（宁可多给，别给空白）。 */
-    var useBoard = wantBoard || !useCard;
+    var useBoard = !useCard && (wantBoard || rows.length > 1);
+
+    /* 后端按**全班**算好的统计量（只在明细被裁剪时才有）。
+       没有它的话，分享自己时班均＝你自己、班排名 1/1、与班均 +0 —— 全是 0。 */
+    var ST = (DATA.stats && DATA.stats[EX.id]) ? (DATA.stats[EX.id][BASIS] || null) : null;
 
     var mt = document.getElementById('meta');
     var body = document.getElementById('body');
@@ -281,22 +288,28 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     var avg = n ? tot.reduce(function(a, b){ return a + b; }, 0) / n : 0;
     var med = !n ? 0 : (n % 2 ? tot[(n - 1) / 2] : (tot[n / 2 - 1] + tot[n / 2]) / 2);
 
-    mt.textContent = (EX.type || '考试') + '　' + dateRange(EX) + '　共 ' + n + ' 人'
+    /* 显示用的班情：优先用后端按全班算的那份 */
+    var showN = (ST && ST.n) ? ST.n : n;
+    var showAvg = (ST && ST.avg != null) ? ST.avg : avg;
+    var showMed = (ST && ST.med != null) ? ST.med : med;
+    var showMax = (ST && ST.max != null) ? ST.max : tot[n - 1];
+
+    mt.textContent = (EX.type || '考试') + '　' + dateRange(EX) + '　共 ' + showN + ' 人'
       + (EX.note ? '　·　' + EX.note : '');
 
     var html = '';
     if(useBoard){
       html += '<div class="stats">'
-        + '<div class="stat"><b>' + fmtNum(avg) + '</b><span>班均分</span></div>'
-        + '<div class="stat"><b>' + fmtNum(med) + '</b><span>中位数</span></div>'
-        + '<div class="stat"><b>' + fmtNum(tot[n - 1]) + '</b><span>最高</span></div>'
-        + '<div class="stat"><b>' + n + ' 人</b><span>参考</span></div>'
+        + '<div class="stat"><b>' + fmtNum(showAvg) + '</b><span>班均分</span></div>'
+        + '<div class="stat"><b>' + fmtNum(showMed) + '</b><span>中位数</span></div>'
+        + '<div class="stat"><b>' + fmtNum(showMax) + '</b><span>最高</span></div>'
+        + '<div class="stat"><b>' + showN + ' 人</b><span>参考</span></div>'
         + '</div>';
     }
 
     /* 只有一个人 → 直接给一张成绩卡，比表格友好 */
     if(useCard){
-      html += oneCard(rows[0], subs, rk, avg, n);
+      html += oneCard(rows[0], subs, rk, showAvg, showN, ST);
       body.innerHTML = html;
       return;
     }
@@ -331,25 +344,30 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     var cuts = (EX.cutlines || []).filter(function(c){ return c.score != null; });
     if(cuts.length){
       html += '<div class="card"><h2>上线情况</h2><div class="cuts">'
-        + cuts.map(function(c){
-            var k = tot.filter(function(v){ return v >= c.score; }).length;
+        + cuts.map(function(c, ci){
+            var k = (ST && Array.isArray(ST.cuts) && ST.cuts[ci] != null)
+              ? ST.cuts[ci]
+              : tot.filter(function(v){ return v >= c.score; }).length;
+            var base = (ST && ST.n) ? ST.n : n;
             return '<div class="cut"><i style="background:' + esc(c.color || '#b45309') + '"></i>'
               + '<b>' + esc(c.label) + '　' + fmtNum(c.score) + ' 分</b>'
-              + '<span>' + k + ' 人（' + (k / n * 100).toFixed(0) + '%）</span></div>';
+              + '<span>' + k + ' 人（' + (base ? (k / base * 100).toFixed(0) : 0) + '%）</span></div>';
           }).join('') + '</div></div>';
     }
     body.innerHTML = html;
   }
 
-  function oneCard(r, subs, rk, avg, n){
+  function oneCard(r, subs, rk, avg, n, ST){
     var t = total(r, subs);
     var st = rk.total[r.idx];
+    /* 后端按全班算的名次（分享自己时本地算出来永远是 1/1） */
+    var myRank = (ST && ST.myRank != null) ? ST.myRank : st;
     var html = '<div class="big"><div class="big-top">'
       + '<div class="big-name">' + esc(r.name) + '</div>'
       + '<div class="big-total">' + (t == null ? '—' : fmtNum(t)) + '<small>/ ' + fullOf(subs) + ' 总分</small></div>'
       + '</div>'
       + '<div class="ov">'
-      +   '<div><span>班排名</span><b>' + (st ? st + ' / ' + n : '—') + '</b></div>'
+      +   '<div><span>班排名</span><b>' + (myRank ? myRank + ' / ' + n : '—') + '</b></div>'
       +   '<div><span>年级排名</span><b>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</b></div>'
       +   '<div><span>与班均</span><b>' + (t == null ? '—' : (t - avg >= 0 ? '+' : '−') + fmtNum(Math.abs(t - avg))) + '</b></div>'
       +   '<div><span>联考排名</span><b>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</b></div>'
@@ -358,12 +376,18 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     html += '<div class="card"><h2>各科成绩</h2><div class="subs">'
       + subs.map(function(sub){
           var v = subScore(r, sub);
-          var sr = (rk.subj[sub.key] || {}).rank[r.idx];
-          var all = [];
-          DATA.rows.filter(function(x){ return x.examId === EX.id; }).forEach(function(x){
-            var y = subScore(x, sub); if(y != null) all.push(y);
-          });
-          var a = all.length ? all.reduce(function(p, q){ return p + q; }, 0) / all.length : 0;
+          var sj = (ST && ST.subj) ? ST.subj[sub.key] : null;
+          var sr = (sj && sj.rank != null) ? sj.rank : (rk.subj[sub.key] || {}).rank[r.idx];
+          var a;
+          if(sj && sj.avg != null){
+            a = sj.avg;
+          } else {
+            var all = [];
+            DATA.rows.filter(function(x){ return x.examId === EX.id; }).forEach(function(x){
+              var y = subScore(x, sub); if(y != null) all.push(y);
+            });
+            a = all.length ? all.reduce(function(p, q){ return p + q; }, 0) / all.length : 0;
+          }
           var rate = (v != null && sub.full) ? v / sub.full : null;
           return '<div class="sub">'
             + '<div class="t"><b>' + esc(sub.name) + '</b>' + (sub.graded ? '<span class="tag">赋分</span>' : '') + '</div>'

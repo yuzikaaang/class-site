@@ -1782,6 +1782,9 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-sh-sec input{margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:#c2410c}
 .sc-sh-sec .t{font-size:.84rem;font-weight:700;color:#292524}
 .sc-sh-sec .s{display:block;font-size:.73rem;color:#a8968a;font-weight:400;margin-top:2px;line-height:1.5}
+.sc-sh-tip{font-size:.74rem;color:#6e635a;background:#fff8f2;border:1px solid #f3e7dc;border-radius:9px;
+  padding:8px 11px;line-height:1.6}
+.sc-sh-tip b{color:#c2410c}
 .sc-sh-url{display:flex;gap:8px;margin-top:9px}
 .sc-sh-url input{flex:1;min-width:0;padding:9px 11px;border:1.5px solid #e2d5c8;border-radius:10px;
   font-size:.8rem;font-family:ui-monospace,Menlo,monospace;color:#57534e;background:#fff}
@@ -2731,7 +2734,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.9.7';
+var SITE_VERSION = '2.9.8';
 var VER_DATE = '2026-10-15';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -12385,8 +12388,20 @@ function scCutTrend(){
    所以导出来的图高度是按选择算的，不会留一片空白。
    ============================================================ */
 
-/* 勾选状态（本次会话内记住上次的选择；head 永远为真 —— 图里总得有主角） */
-var SC_EXPORT = { head: true, metrics: true, subjects: true, cutlines: true };
+/* 勾选状态（本次会话内记住上次的选择；head 永远为真 —— 图里总得有主角）
+   v2.9.8 站主：「图片分享的时候，我其实想要分享一些长图，就是有更多的功能，
+   比如说在那个下面去接，比如说我具体的成绩分析啊，哪一科弱哪一科怎么样。」
+   —— 于是在各科成绩后面接上四段分析，每段都能单独勾选。 */
+var SC_EXPORT = {
+  head: true,        /* 总分与排名（必选） */
+  metrics: true,     /* 其它指标 */
+  subjects: true,    /* 各科成绩 */
+  subrank: true,     /* 单科班内排名（新） */
+  diag: true,        /* 偏科分析（新） */
+  rankbar: false,    /* 年级位置条（新） */
+  trend: false,      /* 历次趋势（新） */
+  cutlines: true,    /* 上线情况 */
+};
 
 /* 版式步长：算高度和画内容共用同一套，避免两边各写一遍对不上 */
 var SC_EX_STEP = {
@@ -12395,18 +12410,48 @@ var SC_EX_STEP = {
   nameAfter: 28,
   metGap: 26, metBox: 56,
   subGap: 26, subTitle: 16, subRow: 40,
+  rankGap: 26, rankTitle: 16, rankRow: 34,
+  diagGap: 26, diagTitle: 16, diagRow: 26, diagFoot: 34,
+  barGap: 26, barTitle: 16, barBox: 62,
+  trendGap: 26, trendTitle: 16, trendBox: 158,
   cutGap: 40, cutRow: 30,
   foot: 62,
 };
 
-/** 按勾选算出成品高度（canvas 必须先定尺寸才能画） */
-function scExportHeight(cfg, nSub, nCut){
+/** 按勾选算出成品高度（canvas 必须先定尺寸才能画）
+ *  ⚠️ 这里和 scExportCard 的绘制必须严格同进同退 —— 少加一段，图上就会多一片空白；
+ *     多加一段，内容会被裁掉。所以两边都只读 SC_EX_STEP，不写死数字。 */
+function scExportHeight(cfg, nSub, nCut, nTrend, hasBar){
   var S = SC_EX_STEP;
   var y = S.titleY + S.gap1 + S.gap2 + S.nameAfter;   /* 标题 + 副标题 + 姓名行 */
   if(cfg.metrics) y += S.metGap + S.metBox;
   if(cfg.subjects && nSub) y += S.subGap + S.subTitle + nSub * S.subRow;
+  if(cfg.subrank && nSub) y += S.rankGap + S.rankTitle + nSub * S.rankRow;
+  if(cfg.diag && nSub) y += S.diagGap + S.diagTitle + nSub * S.diagRow + S.diagFoot;
+  if(cfg.rankbar && hasBar) y += S.barGap + S.barTitle + S.barBox;
+  if(cfg.trend && nTrend >= 2) y += S.trendGap + S.trendTitle + S.trendBox;
   if(cfg.cutlines && nCut) y += S.cutGap + nCut * S.cutRow;
   return Math.round(y + S.foot);
+}
+
+/** 我的历次总分（长图里的「历次趋势」段用）。
+ *  SC.me 是「我的历次成绩」那条链；每项都自带那一次考试的 subjects，所以不能复用 scTotal。 */
+function scMeSeries(){
+  var arr = [];
+  (SC.me || []).forEach(function(it){
+    var subs = it.subjects || [];
+    var t = 0, any = false;
+    subs.forEach(function(s){
+      var v = it.s && it.s[s.key];
+      if(!v) return;
+      var val = (SC.basis === 'graded' && s.graded && v.assigned != null) ? v.assigned : v.raw;
+      if(val == null) return;
+      t += val; any = true;
+    });
+    if(any) arr.push({ name: it.name, date: it.date || '', v: t });
+  });
+  arr.sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  return arr;
 }
 
 /** 导出前的勾选面板 */
@@ -12414,22 +12459,35 @@ function scExportDialog(){
   var meRow = scMyRow();
   if(!meRow){ alert('这次考试的成绩里没有你，导不出来。'); return; }
   var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
+  var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
+  var hasBar = !!(gradeN && meRow.schoolRank != null);
+  var series = scMeSeries();
 
-  var row = function(key, title, sub, forced){
-    var on = forced ? true : (SC_EXPORT[key] !== false);
-    return '<label class="sc-ex-row' + (forced ? ' off' : '') + '">'
-      + '<input type="checkbox" data-ex="' + key + '"' + (on ? ' checked' : '') + (forced ? ' disabled' : '') + '>'
+  /* dis = 这次没有可画的数据：勾也画不出来，所以直接禁用并写明原因，
+     比「勾了但图上没有」友好（那种情况用户只会以为坏了）。 */
+  var row = function(key, title, sub, dis){
+    var forced = (key === 'head');
+    var on = dis ? false : (forced ? true : (SC_EXPORT[key] !== false));
+    var off = forced || !!dis;
+    return '<label class="sc-ex-row' + (off ? ' off' : '') + '">'
+      + '<input type="checkbox" data-ex="' + key + '"' + (on ? ' checked' : '') + (off ? ' disabled' : '') + '>'
       + '<span class="t">' + esc(title) + '<span class="s">' + esc(sub) + '</span></span></label>';
   };
 
-  var html = '<div class="allboard-mask show" id="scExMask"><div class="allboard-box sc-box" style="max-width:540px">'
-    + '<div class="allboard-head"><span>导出成绩卡</span><button onclick="scExportClose()">关闭</button></div>'
+  var html = '<div class="allboard-mask show" id="scExMask"><div class="allboard-box sc-box" style="max-width:560px">'
+    + '<div class="allboard-head"><span>导出成绩长图</span><button onclick="scExportClose()">关闭</button></div>'
     + '<div class="sc-pane" style="max-height:70vh">'
-    +   '<div class="sc-hint">勾选要放进图片里的内容 —— <b>没勾的不会出现在图上，也不会留空</b>。<br>'
-    +     '导出后是一张长图，手机上能直接分享到微信。</div>'
-    +   row('head', '总分与排名', '姓名、总分、班排名、年级排名（必选）', true)
+    +   '<div class="sc-hint">勾选要放进图里的内容 —— <b>没勾的不会出现在图上，也不会留空</b>。<br>'
+    +     '导出后是一张长图（越往下越细），手机上能直接分享到微信。</div>'
+    +   row('head', '总分与排名', '姓名、总分、班排名、年级排名（必选）')
     +   row('metrics', '其它指标', '与班均差、联考排名')
     +   row('subjects', '各科成绩', '每科分数 / 满分、与班均差、得分率条')
+    +   row('subrank', '单科排名', '每科的班内名次，名次越前条越长')
+    +   row('diag', '偏科分析', '每科相对班均差多少，末尾点名最弱与最强科')
+    +   row('rankbar', '年级位置条', hasBar ? '年级排名换算成百分位（第 ' + meRow.schoolRank + ' / ' + gradeN + '）'
+        : '这次没导年级排名，画不出来', !hasBar)
+    +   row('trend', '历次趋势', series.length >= 2 ? '最近 ' + series.length + ' 次考试的总分折线'
+        : '至少要两次有成绩的考试才画得出来', series.length < 2)
     +   (cuts.length ? row('cutlines', '上线情况', '每条线过了没有、还差多少分') : '')
     +   '<div style="display:flex;gap:10px;margin-top:18px">'
     +     '<button class="btn btn-secondary" style="flex:1" onclick="scExportClose()">取消</button>'
@@ -12445,7 +12503,8 @@ function scExportDialog(){
 
   document.getElementById('scExGo').onclick = function(){
     var box = document.getElementById('scExMask');
-    var next = { head: true, metrics: false, subjects: false, cutlines: false };
+    var next = {};
+    Object.keys(SC_EXPORT).forEach(function(k){ next[k] = false; });
     Array.prototype.forEach.call(box.querySelectorAll('[data-ex]'), function(cb){
       next[cb.getAttribute('data-ex')] = !!cb.checked;
     });
@@ -12460,14 +12519,19 @@ function scExportClose(){
   if(m && m.parentNode) m.parentNode.removeChild(m);
 }
 
-/** 真正画图。cfg 见 SC_EXPORT（传空则 = 全都要，兼容老调用） */
+/** 真正画图。cfg 见 SC_EXPORT（不传的键默认「要」，兼容老调用） */
 function scExportCard(cfg){
   cfg = cfg || {};
+  var pick = function(k){ return cfg[k] === undefined ? true : !!cfg[k]; };
   var opt = {
-    head: true,                                   /* 永远有：图里得有主角 */
-    metrics: cfg.metrics !== false,
-    subjects: cfg.subjects !== false,
-    cutlines: cfg.cutlines !== false,
+    head: true,                     /* 永远有：图里得有主角 */
+    metrics: pick('metrics'),
+    subjects: pick('subjects'),
+    subrank: pick('subrank'),
+    diag: pick('diag'),
+    rankbar: pick('rankbar'),
+    trend: pick('trend'),
+    cutlines: pick('cutlines'),
   };
 
   var meRow = scMyRow();
@@ -12479,9 +12543,11 @@ function scExportCard(cfg){
   var myRank = rk.total[meRow.id];
   var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
   var cuts = opt.cutlines ? (SC.exam.cutlines || []).filter(function(c){ return c.score != null; }) : [];
+  var series = opt.trend ? scMeSeries() : [];
+  var hasBar = !!(gradeN && meRow.schoolRank != null);
 
   var S = SC_EX_STEP, W = S.W, pad = S.pad;
-  var H = scExportHeight(opt, opt.subjects ? subs.length : 0, cuts.length);
+  var H = scExportHeight(opt, subs.length, cuts.length, series.length, hasBar);
   var SCALE = 2;
 
   var cv = document.createElement('canvas');
@@ -12572,7 +12638,146 @@ function scExportCard(cfg){
     });
   }
 
-  /* ⑤ 上线情况（原来这里把同一句文字画了两遍，位置还不一样 —— 一并修掉） */
+  /* ⑤ 单科排名（v2.9.8）—— 光看分数看不出「这科在班里什么位置」 */
+  if(opt.subrank && subs.length){
+    y += S.rankGap;
+    g.fillStyle = '#57534e'; f(15, true); g.fillText('单科排名', pad, y);
+    y += S.rankTitle;
+    subs.forEach(function(sub){
+      var info = rk.subj[sub.key] || {};
+      var mySr = (info.rank || {})[meRow.id];
+      var cnt = info.count || 0;
+      g.fillStyle = '#fdf8f3'; g.fillRect(pad, y, W - pad * 2, 28);
+      g.fillStyle = '#57534e'; f(13, true); g.fillText(sub.name, pad + 12, y + 19);
+
+      var bx = pad + 110, bw = W - pad * 2 - 110 - 160;
+      g.fillStyle = '#f0e7de'; g.fillRect(bx, y + 10, bw, 8);
+      if(mySr && cnt){
+        /* 名次越前条越长：第 1 名满格，最后一名也有个可见的短头 */
+        var frac = Math.max(0.06, 1 - (mySr - 1) / cnt);
+        g.fillStyle = '#e6a97a'; g.fillRect(bx, y + 10, bw * frac, 8);
+      }
+      g.fillStyle = '#292524'; f(13, true); g.textAlign = 'right';
+      g.fillText(mySr ? ('第 ' + mySr + ' 名 / ' + cnt + ' 人') : '未考', W - pad - 12, y + 19);
+      g.textAlign = 'left';
+      y += S.rankRow;
+    });
+  }
+
+  /* ⑥ 偏科分析（v2.9.8）—— 站主原话「哪一科弱哪一科怎么样」 */
+  if(opt.diag && subs.length){
+    y += S.diagGap;
+    g.fillStyle = '#57534e'; f(15, true); g.fillText('偏科分析', pad, y);
+    y += S.diagTitle;
+
+    var dAvg = scSubjAvg();
+    var diffs = subs.map(function(sub){
+      var v = scSubScore(meRow, sub, SC.basis);
+      var a = dAvg[sub.key];
+      return { name: sub.name, diff: (v != null && a != null) ? v - a : null };
+    });
+    var maxAbs = 1;
+    diffs.forEach(function(d){ if(d.diff != null) maxAbs = Math.max(maxAbs, Math.abs(d.diff)); });
+
+    var bx2 = pad + 100, bw2 = 300, mid = bx2 + bw2 / 2;
+    diffs.forEach(function(d){
+      g.fillStyle = '#57534e'; f(13, true); g.fillText(d.name, pad + 12, y + 19);
+      /* 中间那条竖线＝班均，往右是高于、往左是低于 */
+      g.fillStyle = '#e2d5c8'; g.fillRect(mid - 0.5, y + 6, 1, 15);
+      if(d.diff != null){
+        var len = Math.max(2, Math.abs(d.diff) / maxAbs * (bw2 / 2 - 6));
+        g.fillStyle = d.diff >= 0 ? '#0f8a4d' : '#c0392b';
+        if(d.diff >= 0) g.fillRect(mid, y + 10, len, 11);
+        else g.fillRect(mid - len, y + 10, len, 11);
+      }
+      g.fillStyle = (d.diff != null && d.diff >= 0) ? '#0f8a4d' : '#c0392b'; f(13, true);
+      g.textAlign = 'right';
+      g.fillText(d.diff == null ? '未考'
+        : ((d.diff >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(d.diff)) + ' 分'), W - pad - 12, y + 19);
+      g.textAlign = 'left';
+      y += S.diagRow;
+    });
+
+    /* 结论：点名最弱与最强。未考的科不参与，避免「未考」被当成最弱 */
+    var scored = diffs.filter(function(d){ return d.diff != null; });
+    var say = function(d){
+      return d.diff >= 0 ? '高于班均 ' + fmtNum(d.diff) + ' 分'
+                         : '低于班均 ' + fmtNum(Math.abs(d.diff)) + ' 分';
+    };
+    var tips;
+    if(scored.length){
+      var worst = scored.slice().sort(function(a, b){ return a.diff - b.diff; })[0];
+      var best = scored.slice().sort(function(a, b){ return b.diff - a.diff; })[0];
+      tips = '最弱：' + worst.name + '（' + say(worst) + '）';
+      if(best.name !== worst.name) tips += '　·　最强：' + best.name + '（' + say(best) + '）';
+    } else {
+      tips = '这次没有可比对的单科成绩。';
+    }
+    g.fillStyle = '#292524'; f(13, true); g.fillText(tips, pad + 12, y + 22);
+    y += S.diagFoot;
+  }
+
+  /* ⑦ 年级位置条（v2.9.8）—— 名次换算成百分位，比裸数字好懂 */
+  if(opt.rankbar && hasBar){
+    y += S.barGap;
+    g.fillStyle = '#57534e'; f(15, true); g.fillText('年级位置', pad, y);
+    y += S.barTitle;
+    var trackW = W - pad * 2;
+    g.fillStyle = '#f0e7de'; g.fillRect(pad, y + 4, trackW, 16);
+    g.fillStyle = '#e6a97a';
+    g.fillRect(pad, y + 4, Math.max(10, trackW * (1 - (meRow.schoolRank - 1) / gradeN)), 16);
+    g.fillStyle = '#c2410c'; f(14, true);
+    g.fillText('年级第 ' + meRow.schoolRank + ' 名 / ' + gradeN + ' 人　·　前 '
+      + (meRow.schoolRank / gradeN * 100).toFixed(1) + '%', pad, y + 46);
+    y += S.barBox;
+  }
+
+  /* ⑧ 历次趋势（v2.9.8）—— 总分折线，每点标分数 */
+  if(opt.trend && series.length >= 2){
+    y += S.trendGap;
+    g.fillStyle = '#57534e'; f(15, true); g.fillText('历次趋势（总分）', pad, y);
+    y += S.trendTitle;
+
+    var boxW = W - pad * 2;
+    var boxH = S.trendBox - 34;                 /* 底部留一行日期 */
+    var vs = series.map(function(p){ return p.v; });
+    var lo = Math.min.apply(null, vs), hi = Math.max.apply(null, vs);
+    var span = (hi - lo) || 1;
+    var xOf = function(i){ return pad + i * boxW / (series.length - 1); };
+    var yOf = function(v){ return y + boxH - (v - lo) / span * boxH; };
+
+    g.fillStyle = '#fdfbf9'; g.fillRect(pad, y, boxW, boxH + 8);
+    g.strokeStyle = '#f0e7de'; g.lineWidth = 1;
+    [0, 0.5, 1].forEach(function(t){
+      var yy = y + boxH * t;
+      g.beginPath(); g.moveTo(pad, yy); g.lineTo(pad + boxW, yy); g.stroke();
+    });
+
+    g.strokeStyle = '#c2410c'; g.lineWidth = 2;
+    g.beginPath();
+    series.forEach(function(p, i){
+      if(i === 0) g.moveTo(xOf(i), yOf(p.v)); else g.lineTo(xOf(i), yOf(p.v));
+    });
+    g.stroke();
+
+    series.forEach(function(p, i){
+      var px = xOf(i), py = yOf(p.v);
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(px, py, 4.5, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#c2410c'; g.lineWidth = 2; g.stroke();
+      g.fillStyle = '#292524'; f(12, true); g.textAlign = 'center';
+      g.fillText(String(fmtNum(p.v)), px, py - 10);
+      /* 只标首尾日期：点多的时候全标会糊成一团 */
+      if(i === 0 || i === series.length - 1){
+        g.fillStyle = '#a8968a'; f(11);
+        g.textAlign = i === 0 ? 'left' : 'right';
+        g.fillText(p.date ? p.date.slice(5) : p.name, i === 0 ? pad : pad + boxW, y + boxH + 24);
+      }
+      g.textAlign = 'left';
+    });
+    y += S.trendBox;
+  }
+
+  /* ⑨ 上线情况（原来这里把同一句文字画了两遍，位置还不一样 —— 一并修掉） */
   if(cuts.length){
     y += S.cutGap;
     g.fillStyle = '#57534e'; f(15, true); g.fillText('上线情况', pad, y);
@@ -12670,9 +12875,10 @@ function scShareDialog(){
     +   '<div style="margin-bottom:12px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">分享哪些内容</label>'
     +     '<div class="sc-sh-secs">'
     +       '<label class="sc-sh-sec"><input type="checkbox" data-sec="board" checked>'
-    +         '<span class="t">成绩单（全班／选中同学）<span class="s">统计、名次表、上线情况</span></span></label>'
+    +         '<span class="t">成绩单（全班／选中同学）<span class="s">班级统计、名次表、上线情况 —— <b>看好几个人时用这个</b></span></span></label>'
     +       '<label class="sc-sh-sec"><input type="checkbox" data-sec="card" checked>'
-    +         '<span class="t">个人成绩卡<span class="s">只有一个人时更友好，多科明细</span></span></label>'
+    +         '<span class="t">个人成绩卡<span class="s">总分、班排名、年级排名、与班均、各科明细 —— <b>分享自己时用这个</b></span></span></label>'
+    +       '<div class="sc-sh-tip" id="shSecTip"></div>'
     +     '</div></div>'
     +   '<div style="margin-bottom:12px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">包含哪几次考试</label>'
     +     '<div class="sc-sh-exs">' + exOpts + '</div></div>'
@@ -12695,11 +12901,35 @@ function scShareDialog(){
   document.body.appendChild(wrap.firstChild);
 
   var mask = document.getElementById('scShMask');
+
+  /* 智能默认（v2.9.8）：勾哪个应该跟着「分享范围」走。
+     分享自己 → 只勾「个人成绩卡」（成绩单只有你一行，还跟卡片内容重复）；
+     分享全班 / 自选 → 只勾「成绩单」。
+     站主反馈「勾了那两个勾看不出区别」—— 除了页面里去掉重复，
+     默认值也得跟着范围变，不然一打开两个勾都亮着，谁也看不出所以然。 */
+  var secBoxes = document.querySelectorAll('[data-sec]');
+  var setSec = function(board, card){
+    Array.prototype.forEach.call(secBoxes, function(cb){
+      cb.checked = (cb.getAttribute('data-sec') === 'board') ? !!board : !!card;
+    });
+  };
+  var applyDefaults = function(scope){
+    if(scope === 'self') setSec(false, true);
+    else setSec(true, false);
+    var el = document.getElementById('shSecTip');
+    if(el){
+      el.innerHTML = scope === 'self'
+        ? '范围是「只分享我的成绩」，已默认只勾<b>个人成绩卡</b> —— 对方看到的是完整一张卡（总分、排名、各科明细）。'
+        : '对方看到的是<b>名次表</b>。若最终只有 1 个人，页面会自动改用成绩卡（表格只有一行，不如卡片）。';
+    }
+  };
   var pickScope = function(){
-    document.getElementById('shNamesWrap').style.display =
-      (document.getElementById('shScope').value === 'picked') ? 'block' : 'none';
+    var v = document.getElementById('shScope').value;
+    document.getElementById('shNamesWrap').style.display = (v === 'picked') ? 'block' : 'none';
+    applyDefaults(v);
   };
   document.getElementById('shScope').onchange = pickScope;
+  applyDefaults(document.getElementById('shScope').value);
   Array.prototype.forEach.call(document.querySelectorAll('.sc-sh-n'), function(b){
     b.onclick = function(){ b.classList.toggle('on'); };
   });
