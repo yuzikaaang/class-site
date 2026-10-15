@@ -885,7 +885,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.9.8';
+var SITE_VERSION = '2.9.9';
 var VER_DATE = '2026-10-15';
 
 /* ---- 运行时状态 ---- */
@@ -1030,6 +1030,108 @@ function api(path, opts){
       }
       return j;
     });
+  });
+}
+
+/* ============================================================
+ * 【v2.9.9】客户端密码派生（与 index.html 同款同构）
+ * ------------------------------------------------------------
+ * 后台同样改走「浏览器本地 PBKDF2 → 服务端零派生」：
+ *   ① POST /auth?action=salt {username} → {algo, iterations, salt}
+ *   ② crypto.subtle 本地派生 → credential
+ *   ③ login 带 credential；change-password 带 {oldCredential, newHash}
+ * 任一步走不通自动回退明文路径，行为与 v2.9.9 之前一致。
+ * 由来详见 index.html 同名注释块（第五十六轮·根因修复）。
+ * ============================================================ */
+var CLS_KDF_ITER = 50000;
+
+function clsHasSubtle(){
+  return !!(window.crypto && window.crypto.subtle && window.crypto.subtle.deriveKey
+           && window.crypto.subtle.digest && window.TextEncoder);
+}
+function clsB64urlEncode(bytes){
+  var s = '', i;
+  for(i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function clsB64urlDecode(str){
+  var s = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+  while(s.length % 4) s += '=';
+  var bin = atob(s), out = new Uint8Array(bin.length);
+  for(var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function clsDerive(password, saltB64, iterations){
+  if(!clsHasSubtle()) return Promise.reject(new Error('NO_SUBTLE'));
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(String(password)), 'PBKDF2', false, ['deriveBits'])
+    .then(function(base){
+      return crypto.subtle.deriveBits(
+        { name:'PBKDF2', salt: clsB64urlDecode(saltB64), iterations: iterations, hash:'SHA-256' },
+        base, 256
+      );
+    })
+    .then(function(bits){ return clsB64urlEncode(new Uint8Array(bits)); });
+}
+function clsNewHash(password, iterations){
+  var salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  var saltB64 = clsB64urlEncode(salt);
+  return clsDerive(password, saltB64, iterations).then(function(dk){
+    return crypto.subtle.digest('SHA-256', clsB64urlDecode(dk)).then(function(d){
+      return 'pbkdf2c$' + iterations + '$' + saltB64 + '$' + clsB64urlEncode(new Uint8Array(d));
+    });
+  });
+}
+var CLS_SALT_CACHE = {};
+function clsSalt(username){
+  var key = String(username || '').toLowerCase();
+  if(CLS_SALT_CACHE[key]) return Promise.resolve(CLS_SALT_CACHE[key]);
+  return api('/auth?action=salt', { method:'POST', body:{ username: username } }).then(function(j){
+    var p = { algo: j.algo === 'pbkdf2' ? 'pbkdf2' : 'bcrypt', iterations: j.iterations || 0, salt: j.salt || '' };
+    CLS_SALT_CACHE[key] = p;
+    return p;
+  });
+}
+function clsSaltForget(username){ delete CLS_SALT_CACHE[String(username || '').toLowerCase()]; }
+var CLS_FALLBACK = { fallback: true };
+function clsKdfFallback(e){
+  if(e && (e.message === 'NO_SUBTLE' || e.status === 429 || e.status >= 500)) return true;
+  return false;
+}
+function clsLogin(u, p){
+  if(!u) return api('/auth?action=login', { method:'POST', body:{ username:u, password:p } });
+  return clsSalt(u).then(function(sp){
+    if(sp.algo !== 'pbkdf2' || !sp.salt || !sp.iterations) return CLS_FALLBACK;
+    return clsDerive(p, sp.salt, sp.iterations).then(function(cred){
+      return api('/auth?action=login', { method:'POST', body:{ username:u, credential:cred } });
+    });
+  }).catch(function(e){
+    if(clsKdfFallback(e)) return CLS_FALLBACK;
+    throw e;
+  }).then(function(r){
+    if(r === CLS_FALLBACK) return api('/auth?action=login', { method:'POST', body:{ username:u, password:p } });
+    return r;
+  });
+}
+function clsChangePwd(oldPwd, newPwd, username){
+  if(!username) return api('/auth?action=change-password',
+    { method:'POST', body:{ oldPassword: oldPwd, newPassword: newPwd } });
+  return clsSalt(username).then(function(sp){
+    if(sp.algo !== 'pbkdf2' || !sp.salt || !sp.iterations) return CLS_FALLBACK;
+    return clsDerive(oldPwd, sp.salt, sp.iterations).then(function(oldCred){
+      return clsNewHash(newPwd, CLS_KDF_ITER).then(function(newHash){
+        return api('/auth?action=change-password',
+          { method:'POST', body:{ oldCredential: oldCred, newHash: newHash } });
+      });
+    });
+  }).catch(function(e){
+    if(clsKdfFallback(e)) return CLS_FALLBACK;
+    throw e;
+  }).then(function(r){
+    if(username) clsSaltForget(username);
+    if(r === CLS_FALLBACK) return api('/auth?action=change-password',
+      { method:'POST', body:{ oldPassword: oldPwd, newPassword: newPwd } });
+    return r;
   });
 }
 
@@ -6757,7 +6859,8 @@ function renderAccount(){
 
     $('pwGo').disabled = true;
     msg.className = 'msg show warn'; msg.textContent = '正在修改…';
-    api('/auth?action=change-password', { method:'POST', body:{ oldPassword:o, newPassword:n } })
+    /* v2.9.9：客户端派生路径，服务端零派生 */
+    clsChangePwd(o, n, STATE.me && STATE.me.username)
       .then(function(j){
         if(j.token) setToken(j.token);
         msg.className = 'msg ok show';
@@ -6902,7 +7005,8 @@ function doLogin(){
   $('gGo').textContent = '登录中…';
   gateMsg('', '');
 
-  api('/auth?action=login', { method:'POST', body:{ username:u, password:p } })
+  /* v2.9.9：浏览器本地派生 credential，服务端零派生 */
+  clsLogin(u, p)
     .then(function(j){
       if(!j.user || j.user.role !== 'admin'){
         gateMsg('这个账号不是管理员，无法进入后台。');
@@ -6952,7 +7056,8 @@ function openForceChangePwd(){
 
         box.querySelector('#fcGo').disabled = true;
         msg.className = 'msg show warn'; msg.textContent = '正在设置…';
-        api('/auth?action=change-password', { method:'POST', body:{ oldPassword:o, newPassword:n } })
+        /* v2.9.9：客户端派生路径，服务端零派生 */
+        clsChangePwd(o, n, STATE.me && STATE.me.username)
           .then(function(j){
             if(j.token) setToken(j.token);
             toast('密码已设置成功', 'ok');
@@ -8001,6 +8106,20 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "2.9.9",
+      "date": "2026-10-15",
+      "title": "一次性根治「首次登录改密卡死」（密码派生搬到浏览器）",
+      "type": "fix",
+      "highlight": true,
+      "items": [
+        "修复：首次登录设置新密码时反复失败、提示「旧版密码加密格式超限，请联系管理员重置」——经线上实测定位，这是多年前一次误判留下的护栏：Worker 的 CPU 预算其实很宽（单请求连跑 60 次加密运算都没问题），护栏防的是不存在的故障，却把所有同学拦在自助改密门外",
+        "根治方案：把密码加密从服务器搬到浏览器本地完成。服务器不再做任何加密运算，只做一次比对，改密请求不可能再超时；对老手机也友好（本地跑一次约 1–2 秒，页面会转圈等待）",
+        "顺带更安全：密码在库里只存「不可反推的摘要」，即使数据库泄露，也拿不到能直接登录的密钥",
+        "修复：改密前刷新页面会被迫退出重登——现在刷新后仍停留在「设置新密码」页，并会要求再填一次当前密码（初始密码一般是出生日期）",
+        "后台登录、后台改自己的密码、强制改密弹窗走同一条新链路；老浏览器不支持本地加密时自动回退旧方案，行为与以前一致"
+      ]
+    },
     {
       "version": "2.9.8",
       "date": "2026-10-15",

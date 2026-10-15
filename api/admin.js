@@ -42,7 +42,6 @@ import {
   checkFieldName, isSafeFieldFormat, RESERVED_PROFILE_COLS,
 } from './_lib/http.js';
 import { hashPassword } from './_lib/password.js';
-import bcrypt from 'bcryptjs';
 import { listSecrets, saveSecret, deleteSecret } from './_lib/secrets-store.js';
 
 export default async function handler(req, res) {
@@ -72,7 +71,6 @@ export default async function handler(req, res) {
       if (action === 'ai-account')       return await aiAccount(req, res);
       if (action === 'games')            return await gameStats(req, res);
       if (action === 'secrets')          return await listAdminSecrets(req, res);
-      if (action === 'pwd-audit')        return await pwdAudit(req, res);   /* 临时诊断，验收后移除 */
       return fail(res, 404, '未知的 action：' + action);
     }
 
@@ -353,91 +351,19 @@ async function listAudit(req, res) {
 }
 
 /* ============================================================
-   ⚠️ 临时诊断端点（2026-10-15 第五十六轮，问题定位后**移除**）：
-   GET /api/admin?action=pwd-audit[&burn=N]
+   ⚠️ 已移除：临时诊断端点 pwd-audit（2026-10-15 第五十六轮）。
 
-   背景：站主报「用户登录还是卡在设置新密码」（旧版加密格式护栏 409）。
-   要一次性根治，先拿到线上真实数据：
-     ① users 表里 password_hash 的格式分布（bcrypt / pbkdf2 老格式 / 其它），
-        以及 pbkdf2 的迭代次数直方图 —— 决定「客户端派生」方案要兼容几档；
-     ② bcrypt 账号在 Workers 上实测能不能跑（bcrypt.compare 一次看是否
-        触发 CPU 超限）—— 决定老 bcrypt 账号是「服务端兜底」还是「必须迁移」；
-     ③ burn=N 时连续做 N 次 PBKDF2(10000)，实测这个 Worker 的真实 CPU 预算
-        —— 决定批量建号（60 次派生）现在到底能不能用。
+   它当时要回答的三个问题都已收官，结论固化在 password.js 顶部注释里：
+     ① 格式分布：线上 63 个账号 = pbkdf2 63 / bcrypt 0 / pbkdf2c 0；
+        迭代直方图 {10000: 2, 50000: 61}；
+     ② bcrypt 探针：线上 0 个账号，无需实测；
+     ③ CPU 预算：burn=60 连跑 60 次 PBKDF2(10000) 稳定 200，
+        证伪了「免费 Worker 装不下派生」的误判 —— 真凶是
+        ensureSchema 漏建 failed_count/locked_until 列（http.js 已修）。
 
-   只读聚合，不下发任何哈希值本身；仅管理员可调。
+   根治方案（v2.9.9）：PBKDF2 搬到浏览器（见 index.html / admin.html
+   的 clsDerive/clsNewHash/clsLogin/clsChangePwd），服务端零派生。
    ============================================================ */
-async function pwdAudit(req, res) {
-  const sql = getSql();
-  const rows = await sql`select id, username, password_hash from users order by id`;
-
-  const stats = {
-    total: rows.length,
-    bcrypt: 0,
-    pbkdf2: 0,      /* 老格式：pbkdf2$iterations$salt$dk（dk 直接存库里） */
-    pbkdf2c: 0,     /* 新格式：pbkdf2c$iterations$salt$sha256(dk)（客户端派生，见 password.js） */
-    other: 0,
-    otherSamples: [],
-    iterHistogram: {},   /* 迭代次数 → 人数 */
-    highIterUsers: [],   /* 迭代次数 > 10000 的账号（就是被「旧版格式」护栏拦下的那批） */
-  };
-  let firstBcryptHash = '';
-
-  for (const r of rows) {
-    const h = String(r.password_hash || '');
-    if (/^\$2[aby]\$/.test(h)) {
-      stats.bcrypt++;
-      if (!firstBcryptHash && h.length >= 59) firstBcryptHash = h;
-    } else if (h.startsWith('pbkdf2$')) {
-      stats.pbkdf2++;
-      const n = Number(h.split('$')[1]);
-      stats.iterHistogram[n] = (stats.iterHistogram[n] || 0) + 1;
-      if (Number.isFinite(n) && n > 10000) {
-        stats.highIterUsers.push({ id: r.id, username: r.username, iterations: n });
-      }
-    } else if (h.startsWith('pbkdf2c$')) {
-      stats.pbkdf2c++;
-    } else {
-      stats.other++;
-      if (stats.otherSamples.length < 5) {
-        stats.otherSamples.push({ id: r.id, username: r.username, prefix: h.slice(0, 12) });
-      }
-    }
-  }
-
-  /* ② bcrypt 实测：拿第一条 bcrypt 哈希跑一次「错密码」比对。
-     能返回 false = 能跑；抛错（如 Error 1102 CPU 超限）= 跑不动。 */
-  let bcryptProbe = null;
-  if (firstBcryptHash) {
-    const t0 = Date.now();
-    try {
-      const matched = await bcrypt.compare('__pwd_audit_probe__', firstBcryptHash);
-      bcryptProbe = { ran: true, matched: !!matched, ms: Date.now() - t0 };
-    } catch (e) {
-      bcryptProbe = { ran: false, ms: Date.now() - t0, error: String(e && e.message || e).slice(0, 200) };
-    }
-  }
-
-  /* ③ CPU 预算实测：连续 N 次派生。N=0（默认）时跳过。
-     单独用 &burn= 触发，避免一次失败把格式统计也带走。 */
-  let burn = null;
-  const burnN = Math.min(Math.max(Number(req.query.burn || 0) || 0, 0), 200);
-  if (burnN > 0) {
-    const t0 = Date.now();
-    try {
-      let acc = 0;
-      for (let i = 0; i < burnN; i++) {
-        const h = await hashPassword('burn-probe-' + i);
-        acc += h.length;
-      }
-      burn = { n: burnN, ok: true, ms: Date.now() - t0, acc };
-    } catch (e) {
-      burn = { n: burnN, ok: false, ms: Date.now() - t0, error: String(e && e.message || e).slice(0, 200) };
-    }
-  }
-
-  return ok(res, { audit: 'pwd-format', stats, bcryptProbe, burn });
-}
 
 /* ---------------- 写：重置密码 ---------------- */
 async function resetPassword(req, res, me, b) {

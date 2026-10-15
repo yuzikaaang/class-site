@@ -2734,7 +2734,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.9.8';
+var SITE_VERSION = '2.9.9';
 var VER_DATE = '2026-10-15';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -5789,6 +5789,134 @@ function api(path, opts){
   });
 }
 
+/* ============================================================
+ * 【v2.9.9】客户端密码派生（第五十六轮·根因修复）
+ * ------------------------------------------------------------
+ * 由来（一次性解决「首次登录改密卡死」）：
+ *   账号库里 61/63 个账号是 50000 次 PBKDF2 档位。v2.9.8 曾给改密
+ *   加过 needsDowngrade 护栏：高迭代档位禁止自助改密、只能管理员
+ *   「重置密码」——理由是「Worker 单请求 CPU 上限装不下派生」。
+ *   线上实测推翻了这个误判：临时诊断端点单请求连跑 60 次派生
+ *   （合计 60 万次迭代）稳定 200，CPU 预算其实很宽；真凶是
+ *   ensureSchema 漏建 failed_count/locked_until 列（http.js 已修）。
+ *   护栏防的是一个不存在的 500，却把全班首次登录改密全拦死了。
+ *
+ * 根因解法：把 PBKDF2 从 Worker 搬到浏览器。
+ *   · 浏览器没有「单请求 CPU 预算」这回事，老手机跑 50000 次也就一两秒；
+ *   · 服务端零派生、只做一次 sha256 比对，改密请求轻到不可能再超时；
+ *   · 顺带更安全：库里只存 sha256(派生密钥)（pbkdf2c 格式），
+ *     拖库也拿不到可以直接登录的密钥。
+ *
+ * 协议三件套：
+ *   ① POST /auth?action=salt {username} → {algo:'pbkdf2', iterations, salt}
+ *      （未知用户名返回诱饵参数，防用户名枚举；bcrypt 账号返回 algo='bcrypt'）
+ *   ② 浏览器 crypto.subtle 本地 PBKDF2 派生 → credential（base64url）
+ *   ③ login 带 credential；change-password 带 {oldCredential, newHash}
+ * 任一步走不通（老浏览器没 WebCrypto、salt 接口 429/挂掉）都自动
+ * 回退旧明文路径（服务端派生），行为与 v2.9.9 之前完全一致。
+ * ============================================================ */
+var CLS_KDF_ITER = 50000;   /* 新密码派生档位：与名单导入一致，老手机可承受 */
+
+function clsHasSubtle(){
+  return !!(window.crypto && window.crypto.subtle && window.crypto.subtle.deriveKey
+           && window.crypto.subtle.digest && window.TextEncoder);
+}
+function clsB64urlEncode(bytes){
+  var s = '', i;
+  for(i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function clsB64urlDecode(str){
+  var s = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+  while(s.length % 4) s += '=';
+  var bin = atob(s), out = new Uint8Array(bin.length);
+  for(var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+/* 浏览器本地 PBKDF2(password, salt, iterations) → base64url 派生密钥。
+   与后端 password.js 的派生参数逐位对齐（SHA-256 / 256 位）。 */
+function clsDerive(password, saltB64, iterations){
+  if(!clsHasSubtle()) return Promise.reject(new Error('NO_SUBTLE'));
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(String(password)), 'PBKDF2', false, ['deriveBits'])
+    .then(function(base){
+      return crypto.subtle.deriveBits(
+        { name:'PBKDF2', salt: clsB64urlDecode(saltB64), iterations: iterations, hash:'SHA-256' },
+        base, 256
+      );
+    })
+    .then(function(bits){ return clsB64urlEncode(new Uint8Array(bits)); });
+}
+/* 生成新密码的 pbkdf2c 哈希串：随机盐 + 本地派生 + sha256(派生密钥)。
+   库里只存这个摘要，不存可直接登录的密钥。 */
+function clsNewHash(password, iterations){
+  var salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  var saltB64 = clsB64urlEncode(salt);
+  return clsDerive(password, saltB64, iterations).then(function(dk){
+    return crypto.subtle.digest('SHA-256', clsB64urlDecode(dk)).then(function(d){
+      return 'pbkdf2c$' + iterations + '$' + saltB64 + '$' + clsB64urlEncode(new Uint8Array(d));
+    });
+  });
+}
+/* 取某用户的盐参数（内存缓存；改密成功后调用 clsSaltForget 失效） */
+var CLS_SALT_CACHE = {};
+function clsSalt(username){
+  var key = String(username || '').toLowerCase();
+  if(CLS_SALT_CACHE[key]) return Promise.resolve(CLS_SALT_CACHE[key]);
+  return api('/auth?action=salt', { method:'POST', body:{ username: username } }).then(function(j){
+    var p = { algo: j.algo === 'pbkdf2' ? 'pbkdf2' : 'bcrypt', iterations: j.iterations || 0, salt: j.salt || '' };
+    CLS_SALT_CACHE[key] = p;
+    return p;
+  });
+}
+function clsSaltForget(username){ delete CLS_SALT_CACHE[String(username || '').toLowerCase()]; }
+/* 客户端派生走不通时的统一回退标记 */
+var CLS_FALLBACK = { fallback: true };
+function clsKdfFallback(e){
+  /* 只有「这条路不该走 / 暂时走不了」才回退明文路径；
+     密码错误（401）、锁定（429 之外的原因）等真实结果照旧抛出。 */
+  if(e && (e.message === 'NO_SUBTLE' || e.status === 429 || e.status >= 500)) return true;
+  return false;
+}
+/* 登录：优先浏览器派生 credential，失败回退明文 */
+function clsLogin(u, p){
+  if(!u) return api('/auth?action=login', { method:'POST', body:{ username:u, password:p } });
+  return clsSalt(u).then(function(sp){
+    if(sp.algo !== 'pbkdf2' || !sp.salt || !sp.iterations) return CLS_FALLBACK;
+    return clsDerive(p, sp.salt, sp.iterations).then(function(cred){
+      return api('/auth?action=login', { method:'POST', body:{ username:u, credential:cred } });
+    });
+  }).catch(function(e){
+    if(clsKdfFallback(e)) return CLS_FALLBACK;
+    throw e;
+  }).then(function(r){
+    if(r === CLS_FALLBACK) return api('/auth?action=login', { method:'POST', body:{ username:u, password:p } });
+    return r;
+  });
+}
+/* 改密：派生旧密码 credential + 生成新 pbkdf2c 哈希，服务端零派生办完 */
+function clsChangePwd(oldPwd, newPwd, username){
+  if(!username) return api('/auth?action=change-password',
+    { method:'POST', body:{ oldPassword: oldPwd, newPassword: newPwd } });
+  return clsSalt(username).then(function(sp){
+    if(sp.algo !== 'pbkdf2' || !sp.salt || !sp.iterations) return CLS_FALLBACK;
+    return clsDerive(oldPwd, sp.salt, sp.iterations).then(function(oldCred){
+      return clsNewHash(newPwd, CLS_KDF_ITER).then(function(newHash){
+        return api('/auth?action=change-password',
+          { method:'POST', body:{ oldCredential: oldCred, newHash: newHash } });
+      });
+    });
+  }).catch(function(e){
+    if(clsKdfFallback(e)) return CLS_FALLBACK;
+    throw e;
+  }).then(function(r){
+    if(username) clsSaltForget(username);   /* 哈希已换，旧盐参数的缓存作废 */
+    if(r === CLS_FALLBACK) return api('/auth?action=change-password',
+      { method:'POST', body:{ oldPassword: oldPwd, newPassword: newPwd } });
+    return r;
+  });
+}
+
 /* ---------- 登录态持久化 ---------- */
 function loadAuth(){
   try{
@@ -6488,8 +6616,16 @@ function acctCloseHidden(hide){
 
 /* 首次登录强制改密表单（无取消入口，改完才能用） */
 function acctForcePwdHtml(){
+  /* v2.9.9：刷新页面后内存里的初始密码（FORCE_OLD_PWD）就丢了，
+     而强制改密态以前不会恢复 —— 用户只能退出重登。
+     现在 initAuth 的 me 回包会恢复该态，此时补一个「当前密码」输入框
+     （初始密码一般是出生日期，提示写清楚），老路径不受影响。 */
+  var oldField = FORCE_OLD_PWD ? '' :
+      '<div class="acct-field"><label>当前密码（初始密码一般是出生日期）</label>'
+    + '<input id="fpOld" type="password" autocomplete="current-password"></div>';
   return '<div class="acct-hint" style="margin-bottom:10px">你的账号目前用的是初始密码（出生日期），'
     + '太容易被猜到。请先设置一个新密码，之后就可以正常使用了。</div>'
+    + oldField
     + '<div class="acct-field"><label>新密码（至少 6 位）</label>'
     + '<input id="fpP1" type="password" autocomplete="new-password"></div>'
     + '<div class="acct-field"><label>再输一遍确认</label>'
@@ -6724,7 +6860,9 @@ function doLogin(){
   if(!capPassed()){ acctMsg('请先输入图中的验证码', 'err'); return; }
 
   acctBusy(true, '登录中…');
-  api('/auth?action=login', { method:'POST', body:{ username:u, password:p } })
+  /* v2.9.9：优先浏览器本地派生 credential（服务端零派生，根治改密超时）；
+     老浏览器 / salt 接口异常时自动回退明文路径 */
+  clsLogin(u, p)
     .then(function(j){
       AUTH = { token:j.token, user:j.user };
       saveAuth();
@@ -6760,17 +6898,21 @@ var FORCE_OLD_PWD = '';
 /* ---------- 首次登录强制改密 ---------- */
 function doForceChangePwd(){
   var p1 = val('fpP1'), p2 = val('fpP2');
+  /* 刷新页面后 FORCE_OLD_PWD 为空，从补出的输入框里取当前密码 */
+  var oldPwd = FORCE_OLD_PWD || val('fpOld');
   var msg = document.getElementById('fpMsg');
   function say(t, cls){ if(msg){ msg.className = 'msg ' + (cls || 'err') + ' show'; msg.textContent = t; } }
 
+  if(!oldPwd){ say('请输入当前密码（初始密码一般是出生日期）'); return; }
   if(!p1 || p1.length < 6){ say('新密码至少 6 位'); return; }
   if(p1.length > 64){ say('新密码最长 64 位'); return; }
-  if(p1 === FORCE_OLD_PWD){ say('新密码不能和初始密码一样'); return; }
+  if(p1 === oldPwd){ say('新密码不能和当前密码一样'); return; }
   if(p1 !== p2){ say('两次输入的新密码不一致'); return; }
 
   var btn = document.getElementById('fpGo');
   if(btn) btn.disabled = true;
-  api('/auth?action=change-password', { method:'POST', body:{ oldPassword: FORCE_OLD_PWD, newPassword: p1 } })
+  /* v2.9.9：客户端派生路径（服务端零派生，50000 档位一视同仁） */
+  clsChangePwd(oldPwd, p1, AUTH.user && AUTH.user.username)
     .then(function(j){
       /* 接口会踢掉全部旧会话并签发新 token —— 必须更新本地存储，否则后续请求全 401 */
       if(j.token) AUTH = { token:j.token, user: (AUTH.user || {}) };
@@ -7098,7 +7240,8 @@ function doChangePwd(){
   var n = (document.getElementById('pwdNew')||{}).value || '';
   var msg = document.getElementById('pwdMsg');
   if(n.length < 6){ if(msg){ msg.textContent = '新密码至少 6 位'; msg.className = 'acct-msg err'; } return; }
-  api('/auth?action=change-password', { method:'POST', body:{ oldPassword:o, newPassword:n } })
+  /* v2.9.9：客户端派生路径，服务端零派生 */
+  clsChangePwd(o, n, AUTH.user && AUTH.user.username)
     .then(function(j){
       if(j.token){ AUTH.token = j.token; saveAuth(); }
       if(msg){ msg.textContent = j.message || '已修改'; msg.className = 'acct-msg ok'; }
@@ -7966,6 +8109,13 @@ function loadAdminAudit(){
       saveAuth();
       refreshAcctBtn();
       window.__cloudKeyCount = (j.cloudKeys || []).length;
+      /* v2.9.9：刷新后若账号仍带强制改密标志（比如改密前刷新了页面），
+         直接恢复强制改密态 —— 表单会补一个「当前密码」输入框，
+         不用再退出重登。 */
+      if(j.mustChangePassword && ACCT_TAB !== 'forcepwd'){
+        ACCT_TAB = 'forcepwd';
+        renderAccount();
+      }
       /* 顺便拉「我认领的资料」，让资料查询页立刻知道哪条是本人 */
       if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
       /* 登录着就开始心跳，后台「最后上线」才准（2026-10-07） */

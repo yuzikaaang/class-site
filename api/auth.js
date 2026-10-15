@@ -1,8 +1,12 @@
 /* ============================================================
-   POST /api/auth?action=register|login|logout|me|change-password
+   POST /api/auth?action=register|login|logout|me|change-password|salt
    ------------------------------------------------------------
    用 query 参数分子动作，好处是函数数量少（Vercel 免费版有
    函数数量限制），部署轻。
+
+   v2.9.9（2026-10-15 第五十六轮）新增 salt 动作 + 登录/改密的
+   「凭证路径」：PBKDF2 派生搬到浏览器做，服务端零派生。
+   详见 _lib/password.js 顶部说明。
    ============================================================ */
 
 import { getSql, cfg } from './_lib/db.js';
@@ -11,7 +15,8 @@ import {
   requireUser, requireUserSlim, newToken, audit, ensureSchema,
 } from './_lib/http.js';
 import {
-  hashPassword, verifyPassword, needsRehash, DECOY_HASH, sha256Hex, needsDowngrade,
+  hashPassword, verifyPassword, verifyCredential, validateClientHash,
+  needsRehash, DECOY_HASH, sha256Hex, parseHashParams,
 } from './_lib/password.js';
 
 /* 用户名规则：3–20 位，字母/数字/下划线/中文 */
@@ -37,6 +42,7 @@ export default async function handler(req, res) {
       case 'me':       return await me(req, res);
       case 'ping':     return await ping(req, res);
       case 'change-password': return await changePassword(req, res);
+      case 'salt':      return await saltParams(req, res);
       default:
         return fail(res, 404, '未知的 action：' + (action || '(空)'));
     }
@@ -101,8 +107,12 @@ async function login(req, res) {
   const b = await body(req);
   const username = normUsername(b.username);
   const password = String(b.password || '');
+  /* 客户端派生路径（v2.9.9）：浏览器本地跑 PBKDF2，把派生密钥发来，
+     服务端零派生、只做一次 sha256 比对。credential 为空时走旧路径
+     （服务端自己派生），兼容老客户端 / 不支持 WebCrypto 的浏览器。 */
+  const credential = String(b.credential || '');
 
-  if (!username || !password) return fail(res, 400, '请填写用户名和密码');
+  if (!username || (!password && !credential)) return fail(res, 400, '请填写用户名和密码');
 
   const sql = getSql();
 
@@ -128,7 +138,14 @@ async function login(req, res) {
           2026-10-05 —— 换 PBKDF2 后，假串同步改为合法的 pbkdf2 格式。） */
   const u = rows[0];
   const hash = u ? u.password_hash : DECOY_HASH;
-  const good = await verifyPassword(password, hash);
+  let good;
+  if (credential) {
+    /* 凭证路径：比对浏览器派生的密钥。bcrypt 账号此路不通（返回 false），
+        客户端从 salt 接口看到 algo='bcrypt' 时会改走明文路径。 */
+    good = await verifyCredential(credential, hash);
+  } else {
+    good = await verifyPassword(password, hash);
+  }
 
   if (!u || !good) {
     await bumpFail(sql, u ? u.id : null, username);
@@ -138,9 +155,11 @@ async function login(req, res) {
 
   await clearFail(sql, u.id);
 
-  /* 旧算法的哈希在登录成功后顺手升级（bcrypt → pbkdf2，或提高迭代次数）。
-     换算法不影响老用户：能登录就说明密码对，这里只是把它重新存成新格式。 */
-  if (needsRehash(u.password_hash)) {
+  /* 旧算法的哈希在登录成功后顺手升级（bcrypt → pbkdf2）。
+     换算法不影响老用户：能登录就说明密码对，这里只是把它重新存成新格式。
+     ⚠️ 只在明文路径做：凭证路径没有明文可派生；且 pbkdf2c 已是当前格式，
+        needsRehash 对它返回 false，不会触发。 */
+  if (!credential && needsRehash(u.password_hash)) {
     try {
       const upgraded = await hashPassword(password);
       await sql`update users set password_hash = ${upgraded} where id = ${u.id}`;
@@ -294,6 +313,16 @@ async function me(req, res) {
   const sql = getSql();
   /* 顺带返回已同步的键名列表，前端可据此判断云端有什么 */
   const keys = await sql`select data_key, updated_at from user_data where user_id = ${u.id}`;
+  /* v2.9.9：强制改密标志随 me 下发 —— 刷新页面后前端据此恢复强制改密态
+     （以前该标志只有登录响应里有，一刷新就丢，用户被迫退出重登）。
+     coalesce 兜底老库没有这一列的情况（与 login 同款写法）。 */
+  let mustChange = false;
+  try {
+    const mu = await sql`
+      select coalesce(must_change_password, false) as must_change_password
+        from users where id = ${u.id} limit 1`;
+    mustChange = !!(mu[0] && mu[0].must_change_password);
+  } catch (e) { /* 老库缺列时按 false 处理，不影响 me 的其他字段 */ }
   return ok(res, {
     user: {
       id: u.id, username: u.username, displayName: u.displayName,
@@ -303,6 +332,7 @@ async function me(req, res) {
       title: u.title || '', profileRole: u.profileRole || '',
     },
     isAdmin: u.role === 'admin',
+    mustChangePassword: mustChange,
     cloudKeys: keys.map((k) => ({ key: k.data_key, updatedAt: k.updated_at })),
   });
 }
@@ -393,57 +423,108 @@ async function ping(req, res) {
   });
 }
 
+/* ---------------- 盐参数查询（客户端派生用，v2.9.9 新增） ----------------
+   POST /api/auth?action=salt  {username}
+   → {algo:'pbkdf2', iterations, salt}   真实账号（含 pbkdf2 / pbkdf2c 两种格式）
+   → {algo:'bcrypt'}                     老 bcrypt 账号（客户端改走明文路径）
+   → {algo:'pbkdf2', iterations, salt}   不存在的账号（诱饵参数，形状与真实一致）
+
+   为什么不直接下发 password_hash：哈希串的后半段是验证器，泄露等于把
+   离线爆破的材料递出去。盐和迭代次数不是秘密（任何 KDF 方案都默认公开），
+   客户端拿它们就能在本地完成派生，服务端因此一次 PBKDF2 都不用跑。 */
+async function saltParams(req, res) {
+  if (req.method !== 'POST') return fail(res, 405, '请用 POST');
+
+  const b = await body(req);
+  const username = normUsername(b.username);
+  if (!username) return fail(res, 400, '请填写用户名');
+
+  /* 轻量限流：同一用户名每分钟最多 30 次（内存计数，单 colo 近似生效）。
+     这个接口本身不泄密，限流只是防「批量探用户名」和脚本刷派生。 */
+  const now = Date.now();
+  let hit = saltHits.get(username);
+  if (!hit || now - hit.t > 60000) { hit = { n: 0, t: now }; saltHits.set(username, hit); }
+  hit.n++;
+  if (hit.n > 30) {
+    return fail(res, 429, '查询太频繁了，稍等一分钟再试');
+  }
+  /* 顺手清理过期键，避免 Map 无限增长（班级规模下永远到不了几百条） */
+  if (saltHits.size > 500) {
+    for (const [k, v] of saltHits) { if (now - v.t > 60000) saltHits.delete(k); }
+  }
+
+  const sql = getSql();
+  /* 故意不跑 ensureSchema：只查一定存在的 password_hash 列，
+     把 CPU 预算留给密码相关的真正计算（改密链路的第一课）。 */
+  const rows = await sql`
+    select password_hash from users where lower(username) = ${username} limit 1
+  `;
+
+  const stored = rows.length ? rows[0].password_hash : DECOY_HASH;
+  const p = parseHashParams(stored);
+  if (!p) {
+    /* bcrypt 或无法识别的格式：让客户端走明文路径（服务端派生），
+        行为与 v2.9.9 之前完全一致。线上实测 bcrypt 账号数为 0。 */
+    return ok(res, { algo: 'bcrypt' });
+  }
+  return ok(res, { algo: 'pbkdf2', iterations: p.iterations, salt: p.salt });
+}
+const saltHits = new Map();
+
 /* ---------------- 修改自己的密码 ---------------- */
 async function changePassword(req, res) {
   if (req.method !== 'POST') return fail(res, 405, '请用 POST');
   /* ⚠️ 这里用「轻量鉴权」而不是完整 requireUser：
-     改密码要跑两次 PBKDF2（校验 + 生成新哈希），CPU 预算很紧；
-     完整的 requireUser 还会先跑 ensureSchema（多条 DDL）并查 profiles，
-     叠加两次派生会越过 Workers 10ms CPU 上限，表现为「原密码正确却 500」。
-     轻量版只查会话与用户，把预算全部留给密码计算。（2026-10-07 第二十七轮） */
+     完整版会先跑 ensureSchema（多条 DDL）并查 profiles。
+     轻量版只查会话与用户，把预算留给密码计算。（2026-10-07 第二十七轮） */
   const u = await requireUserSlim(req, res);
   if (!u) return;
 
   const b = await body(req);
   const oldPwd = String(b.oldPassword || '');
   const newPwd = String(b.newPassword || '');
-  if (newPwd.length < 6 || newPwd.length > 64) {
+  /* 客户端派生路径（v2.9.9）：oldCredential = 浏览器对「原密码」派生的密钥；
+     newHash = 浏览器对「新密码」生成的完整哈希串（pbkdf2c$…）。
+     两个都在，就零派生办完改密。 */
+  const oldCred = String(b.oldCredential || '');
+  const newHash = String(b.newHash || '');
+  const useClientPath = !!oldCred && !!newHash;
+
+  if (!useClientPath && (newPwd.length < 6 || newPwd.length > 64)) {
     return fail(res, 400, '新密码长度需 6–64 位');
+  }
+  if (useClientPath) {
+    const v = validateClientHash(newHash);
+    if (!v.ok) return fail(res, 400, '新密码数据格式不对：' + v.reason);
   }
 
   const sql = getSql();
   const rows = await sql`select password_hash from users where id = ${u.id}`;
   if (!rows.length) return fail(res, 400, '账号数据异常，请联系管理员');
   const oldHash = rows[0].password_hash;
-  /* 🛡️ 老账号护栏（2026-10-07 第二十七轮）：
-     若该账号的哈希还停留在旧的高迭代档位（> 当前 ITERATIONS，例如 50000），
-     那么「校验原密码」这一次 PBKDF2 就要约 10ms，Android Workers 免费版
-     CPU 上限只有 10ms，再叠加「生成新哈希」必然 Error 1102 → 前端看到的
-     就是「服务器错误」，而用户完全猜不到原因。
-     这里提前拦下并给出可操作提示：让管理员到后台「重置密码」——
-     重置是**单次派生**（只用新档位生成新哈希，不需要校验老哈希），
-     既不会超限，又能把该账号顺势迁到新档位，之后自助改密就正常了。 */
-  if (needsDowngrade(oldHash)) {
-    return fail(res, 409,
-      '你的账号还使用旧版密码加密格式，直接修改会超出服务器计算限制。'
-      + '请让管理员在后台「用户管理」里给你点一次「重置密码」（重置后你就能自己改密码了）。',
-      { needsAdminReset: true });
+
+  let good;
+  if (useClientPath) {
+    /* 凭证路径：比对浏览器派生的旧密钥（一次 sha256，零 PBKDF2）。
+       老账号的 50000 次档位哈希在这里与 10000 次的一视同仁。 */
+    good = await verifyCredential(oldCred, oldHash);
+  } else {
+    good = await verifyPassword(oldPwd, oldHash);
   }
-  const good = await verifyPassword(oldPwd, oldHash);
   if (!good) return fail(res, 401, '原密码不对');
 
-  /* 生成新哈希（新档位 10000）。此时本次请求的累计逻辑是：
-       轻量鉴权（1 次会话查询 + 1 次 sha256）
-       + verifyPassword（1 次 PBKDF2，档位=老哈希档位）
-       + hashPassword（1 次 PBKDF2，档位=10000）
-     对新账号（老哈希也是 10000）：约 3.8ms 派生，余量充足。
-     对老账号（老哈希 50000）：verify 单次就约 10ms，本就贴着上限 —— 见下方护栏。 */
-  const hash = await hashPassword(newPwd);
+  /* 生成新哈希：
+       凭证路径 —— 直接用客户端生成的 pbkdf2c 串（零派生）；
+       明文路径 —— 服务端派生一次（10000 档，约几毫秒）。
+     第五十六轮实测：线上单请求连跑 60 次派生都正常，CPU 预算不是瓶颈；
+     真正卡过改密的是缺列（http.js ensureSchema 已修）和已拆除的
+     needsDowngrade 护栏（它把 61 个 50000 档位的账号全拦在了自助改密外）。 */
+  const hash = useClientPath ? newHash : await hashPassword(newPwd);
   /* 核心更新：只写一定存在的列（password_hash）。
      ⚠️ 2026-10-07：以前这条 UPDATE 一并写 must_change_password / failed_count /
         locked_until，但线上库若没跑过 schema.sql，后两列不存在 → 整条 500。
-       现在把「可能不存在的列」拆成单独的、带保护的一步（见下），
-       保证即使列还没补上，改密码本身也能成功。 */
+        现在把「可能不存在的列」拆成单独的、带保护的一步（见下），
+        保证即使列还没补上，改密码本身也能成功。 */
   await sql`update users set password_hash = ${hash} where id = ${u.id}`;
   /* 次要字段（可能因库结构未升级而缺失）：单独一次、失败不影响改密结果 */
   try {

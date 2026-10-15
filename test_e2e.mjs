@@ -487,6 +487,37 @@ async function call(path, opts) {
   return { status: res.status, headers: res.headers, body: json, text };
 }
 
+/* ---------- 6.5 浏览器端密码派生的复刻（第五十六轮） ----------
+   与 index.html / admin.html 里的 clsDerive / clsNewHash 逐行同构：
+   用 Node 的 webcrypto 模拟「浏览器本地跑 PBKDF2」，以此验证服务端
+   的 salt / credential / newHash 契约。哪天两边逻辑不一致，测试会红。 */
+function tB64urlEncode(bytes) {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function tB64urlDecode(s) {
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + pad;
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function clientDerive(password, saltB64, iterations) {
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(String(password)), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: tB64urlDecode(saltB64), iterations, hash: 'SHA-256' }, key, 256);
+  return tB64urlEncode(new Uint8Array(bits));
+}
+async function clientNewHash(password, iterations) {
+  const salt = tB64urlEncode(crypto.getRandomValues(new Uint8Array(16)));
+  const dk = await clientDerive(password, salt, iterations);
+  const dig = new Uint8Array(await crypto.subtle.digest('SHA-256', tB64urlDecode(dk)));
+  return 'pbkdf2c$' + iterations + '$' + salt + '$' + tB64urlEncode(dig);
+}
+
 /* ============================================================
    开始测试
    ============================================================ */
@@ -2311,42 +2342,219 @@ console.log('\n【27】第二十七轮·令牌哈希存储 + 改密码回归');
     method: 'POST', token: cp.body.token, body: { oldPassword: 'NewPass2026!', newPassword: pwd },
   });
 
-  /* ---- 老账号（高迭代档位哈希）护栏 ----
-     把该用户的哈希改成旧档位（50000），断言改密码接口提前返回 409 + 明确提示，
-     而不是跑到超 CPU 上限（在测试环境不体现，但线上会 500）。
-     这保证「老账号不会再得到莫名其妙的服务器错误」。 */
-  const { hashPassword, needsDowngrade } = await import('./api/_lib/password.js');
+  /* ---- 老账号（高迭代档位哈希）自助改密 ----
+     第五十六轮（2026-10-15）线上实测：单请求连跑 60 次 PBKDF2(10000)
+     稳定 200 —— CPU 预算从来不是瓶颈，当年改密 500 的真凶是缺列
+     （http.js ensureSchema 已修）。旧版 needsDowngrade 护栏基于误判的
+     CPU 焦虑，把线上 61 个 50000 档位账号全拦在自助改密之外，已拆除。
+     这里锁定新行为：高迭代账号明文路径改密直接 200。 */
+  const { hashPassword, validateClientHash } = await import('./api/_lib/password.js');
   const legacyHash = await hashPassword(pwd, 50000);
   db.run("update users set password_hash = ? where id = ?", [legacyHash, uid]);
-  t('老哈希被识别为「需要降级」', needsDowngrade(legacyHash) === true);
-  t('新档位哈希不需要降级', needsDowngrade(await hashPassword(pwd)) === false);
 
   const relogin2 = await call('/api/auth?action=login', {
     method: 'POST', body: { username: uname, password: pwd },
   });
-  t('老账号仍能正常登录', relogin2.status === 200 && relogin2.body.token, JSON.stringify(relogin2.body));
+  t('老账号（50000 档位）仍能正常登录', relogin2.status === 200 && relogin2.body.token, JSON.stringify(relogin2.body));
 
   const cpLegacy = await call('/api/auth?action=change-password', {
     method: 'POST', token: relogin2.body.token, body: { oldPassword: pwd, newPassword: 'Whatever2026!' },
   });
-  t('老账号改密码返回 409（不再 500）', cpLegacy.status === 409, 'status ' + cpLegacy.status);
-  t('老账号改密码带 needsAdminReset 标记', cpLegacy.body && cpLegacy.body.needsAdminReset === true,
-    JSON.stringify(cpLegacy.body));
-  t('老账号改密码提示文案提到「重置密码」',
-    !!(cpLegacy.body && /重置密码/.test(cpLegacy.body.error || '')));
+  t('老账号改密码返回 200（护栏已拆除，不再 409）', cpLegacy.status === 200,
+    'status ' + cpLegacy.status + ' ' + JSON.stringify(cpLegacy.body));
 
-  /* 模拟「管理员重置密码」后该账号就能自助改密（重置用的是新档位单次派生） */
-  const { hashPassword: hp2 } = await import('./api/_lib/password.js');
-  db.run("update users set password_hash = ?, must_change_password = 0 where id = ?", [await hp2(pwd), uid]);
-  const relogin3 = await call('/api/auth?action=login', {
+  const lNew = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: uname, password: 'Whatever2026!' },
+  });
+  t('老账号改密后的新密码可登录', lNew.status === 200);
+  const lOldAgain = await call('/api/auth?action=login', {
     method: 'POST', body: { username: uname, password: pwd },
   });
-  const cpAfterReset = await call('/api/auth?action=change-password', {
-    method: 'POST', token: relogin3.body.token, body: { oldPassword: pwd, newPassword: 'FinalPwd2026!' },
+  t('老密码改密后失效', lOldAgain.status === 401, 'status ' + lOldAgain.status);
+
+  /* 改回原密码，避免污染后续用例 */
+  await call('/api/auth?action=change-password', {
+    method: 'POST', token: lNew.body.token, body: { oldPassword: 'Whatever2026!', newPassword: pwd },
   });
-  t('重置后再改密码返回 200（老账号问题彻底解决）',
-    cpAfterReset.status === 200 && cpAfterReset.body.ok,
-    'status ' + cpAfterReset.status + ' ' + JSON.stringify(cpAfterReset.body));
+
+  /* validateClientHash 的格式护栏（客户端传来的新哈希串必须过硬） */
+  const goodHash = await clientNewHash('SomeGoodPass1', 50000);
+  t('合法 pbkdf2c 串通过校验', validateClientHash(goodHash).ok === true, JSON.stringify(validateClientHash(goodHash)));
+  t('迭代次数过低被拒', validateClientHash(goodHash.replace('50000', '999')).ok === false);
+  t('段数不对被拒', validateClientHash('pbkdf2c$50000$onlysalt').ok === false);
+  t('前缀不对被拒', validateClientHash(goodHash.replace('pbkdf2c', 'pbkdf2')).ok === false);
+  t('盐被截断被拒', validateClientHash(goodHash.replace(/\$[A-Za-z0-9_-]{16,128}\$[A-Za-z0-9_-]{16,128}$/, '$short$' + goodHash.split('$')[3])).ok === false);
+}
+
+/* ============================================================
+   【28.5】第五十六轮·客户端派生协议（salt + credential + newHash）
+   ------------------------------------------------------------
+   背景：站主报「用户登录还是卡在设置新密码」——线上 63 个账号里 61 个是
+   50000 迭代档位，全被旧护栏拦死。根治方案：PBKDF2 派生搬到浏览器，
+   服务端只比盐/摘要。本组用例按真实浏览器逻辑（Node webcrypto 复刻）
+   走完整协议，锁定服务端契约。 */
+console.log('\n【28.5】第五十六轮·客户端派生协议（salt + credential）');
+{
+  const cu = 'kdfuser';
+  const cp1 = 'KdfPass2026';
+  const cp2 = 'KdfSecond2026';
+  const reg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: cu, password: cp1, displayName: '派生测试' },
+  });
+  t('派生测试用户注册成功', reg.status === 200 && reg.body.ok, JSON.stringify(reg.body));
+
+  /* ---- ① salt 接口：真实账号返回 pbkdf2 参数 ---- */
+  const s1 = await call('/api/auth?action=salt', { method: 'POST', body: { username: cu } });
+  t('salt 接口返回 200', s1.status === 200 && s1.body.ok, JSON.stringify(s1.body));
+  t('salt 返回 algo=pbkdf2', s1.body.algo === 'pbkdf2', JSON.stringify(s1.body));
+  t('salt 返回迭代次数（正整数）', Number.isFinite(s1.body.iterations) && s1.body.iterations > 0,
+    'iterations=' + s1.body.iterations);
+  t('salt 返回盐（base64url）', /^[A-Za-z0-9_-]{16,64}$/.test(s1.body.salt || ''), 'salt=' + s1.body.salt);
+  /* 不泄底：响应里不能出现库里存的完整哈希串（盐/迭代次数可以给，验证器不行） */
+  const cuUid = db.exec("select id from users where username = '" + cu + "'")[0].values[0][0];
+  const cuStored = db.exec("select password_hash from users where id = " + cuUid)[0].values[0][0];
+  t('salt 不泄露完整哈希', JSON.stringify(s1.body).indexOf(cuStored) < 0,
+    '响应=' + JSON.stringify(s1.body) + ' 库存=' + cuStored.slice(0, 20) + '…');
+  t('salt 只回 algo/iterations/salt 三个字段',
+    Object.keys(s1.body).sort().join(',') === 'algo,iterations,ok,salt',
+    JSON.stringify(Object.keys(s1.body)));
+
+  /* ---- ② 未知用户名：诱饵参数，形状一致 ---- */
+  const sGhost = await call('/api/auth?action=salt', { method: 'POST', body: { username: 'ghost_user_xyz' } });
+  t('未知用户名的 salt 也是 200 + pbkdf2 形状（诱饵）',
+    sGhost.status === 200 && sGhost.body.algo === 'pbkdf2' && sGhost.body.salt && sGhost.body.iterations > 0,
+    JSON.stringify(sGhost.body));
+
+  /* ---- ③ 凭证登录：浏览器派生后发 credential ---- */
+  const cred1 = await clientDerive(cp1, s1.body.salt, s1.body.iterations);
+  const lc1 = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: cu, credential: cred1 },
+  });
+  t('凭证登录成功', lc1.status === 200 && lc1.body.token, JSON.stringify(lc1.body));
+  t('凭证登录返回用户信息', lc1.body.user && lc1.body.user.username === cu);
+
+  /* 错误凭证 → 401（且不泄露是「凭证错」还是「密码错」） */
+  const credBad = await clientDerive('WrongPassword', s1.body.salt, s1.body.iterations);
+  const lcBad = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: cu, credential: credBad },
+  });
+  t('错误凭证登录返回 401', lcBad.status === 401, 'status ' + lcBad.status);
+  t('401 文案与明文路径一致（不泄底）', /用户名或密码不对/.test(lcBad.body.error || ''), lcBad.body.error);
+
+  /* 未知用户名 + 凭证 → 401（走诱饵比对，不提前返回） */
+  const lcGhost = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'ghost_user_xyz', credential: cred1 },
+  });
+  t('未知用户名凭证登录返回 401', lcGhost.status === 401, 'status ' + lcGhost.status);
+
+  /* ---- ④ 凭证改密：oldCredential + newHash，服务端零派生 ---- */
+  const newHashStr = await clientNewHash(cp2, 50000);
+  const kdfToken = lc1.body.token;
+  const cpKdf = await call('/api/auth?action=change-password', {
+    method: 'POST', token: kdfToken, body: { oldCredential: cred1, newHash: newHashStr },
+  });
+  t('凭证改密返回 200', cpKdf.status === 200 && cpKdf.body.ok, 'status ' + cpKdf.status + ' ' + JSON.stringify(cpKdf.body));
+  t('凭证改密返回新 token', typeof cpKdf.body.token === 'string' && cpKdf.body.token.length === 64);
+
+  /* 库里存的应是 pbkdf2c 串 */
+  const kdfUidRes = db.exec("select id from users where username = '" + cu + "'");
+  const kdfUid = kdfUidRes[0].values[0][0];
+  const kdfStored = db.exec("select password_hash from users where id = " + kdfUid)[0].values[0][0];
+  t('库里存的是 pbkdf2c 新格式', kdfStored.startsWith('pbkdf2c$50000$'), kdfStored.slice(0, 30));
+  t('库里不存派生密钥本身（只存 sha256 摘要）', kdfStored.indexOf(cred1) < 0);
+
+  /* 新密码可登录（凭证 + 明文两条路都通），旧密码两条路都死 */
+  const s2 = await call('/api/auth?action=salt', { method: 'POST', body: { username: cu } });
+  const cred2 = await clientDerive(cp2, s2.body.salt, s2.body.iterations);
+  const lc2 = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: cu, credential: cred2 },
+  });
+  t('新密码凭证登录成功', lc2.status === 200);
+  const lc2p = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: cu, password: cp2 },
+  });
+  t('新密码明文登录也成功（老客户端兼容）', lc2p.status === 200);
+  const lc1again = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: cu, credential: cred1 },
+  });
+  t('旧派生密钥改密后失效', lc1again.status === 401, 'status ' + lc1again.status);
+  const lcOldPwd = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: cu, password: cp1 },
+  });
+  t('旧密码明文登录失效', lcOldPwd.status === 401, 'status ' + lcOldPwd.status);
+
+  /* ---- ⑤ 凭证改密的错误凭证 → 401 ---- */
+  const credWrong = await clientDerive('NotTheOldOne', s2.body.salt, s2.body.iterations);
+  const cpWrong = await call('/api/auth?action=change-password', {
+    method: 'POST', token: lc2.body.token,
+    body: { oldCredential: credWrong, newHash: await clientNewHash('Another2026!', 50000) },
+  });
+  t('错误 oldCredential 改密返回 401', cpWrong.status === 401, 'status ' + cpWrong.status);
+
+  /* ---- ⑥ 畸形 newHash 被拒（防把账号锁死） ---- */
+  const cpBadHash = await call('/api/auth?action=change-password', {
+    method: 'POST', token: lc2.body.token, body: { oldCredential: cred2, newHash: 'pbkdf2c$50000$short' },
+  });
+  t('畸形 newHash 被拒 400', cpBadHash.status === 400, 'status ' + cpBadHash.status);
+  t('400 文案说明原因', /格式/.test(cpBadHash.body.error || ''), cpBadHash.body.error);
+
+  /* ---- ⑦ 明文路径对 pbkdf2c 账号依然可用（改回去再用明文登录） ---- */
+  const cpBack = await call('/api/auth?action=change-password', {
+    method: 'POST', token: lc2.body.token, body: { oldPassword: cp2, newPassword: cp1 },
+  });
+  t('pbkdf2c 账号可走明文路径改密', cpBack.status === 200, 'status ' + cpBack.status);
+  const lFinal = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: cu, password: cp1 },
+  });
+  t('明文改密后明文登录成功', lFinal.status === 200);
+
+  /* ---- ⑧ salt 限流：同一用户名疯狂刷应被 429 ---- */
+  let throttled = false;
+  for (let i = 0; i < 35; i++) {
+    const r = await call('/api/auth?action=salt', { method: 'POST', body: { username: cu } });
+    if (r.status === 429) { throttled = true; break; }
+  }
+  t('salt 接口有限流（连续刷会被 429）', throttled);
+}
+
+/* 【28.6】第五十六轮·me 接口下发强制改密标志（刷新后恢复强制改密态）
+   ------------------------------------------------------------
+   以前 mustChangePassword 只在登录响应里出现，用户改密前刷新页面就丢，
+   只能退出重登。现在 me 也回发该标志，前端据此恢复 forcepwd 标签页。 */
+console.log('\n【28.6】me 接口下发 mustChangePassword');
+{
+  const mu = 'meuser';
+  const mp = 'MePass2026';
+  const reg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: mu, password: mp, displayName: '标志测试' },
+  });
+  t('me 标志测试用户注册成功', reg.status === 200 && reg.body.ok, JSON.stringify(reg.body));
+  const muToken = reg.body.token;
+
+  /* 默认未标记 → me 返回 false */
+  const me1 = await call('/api/auth?action=me', { token: muToken });
+  t('me 返回 ok', me1.status === 200 && me1.body.ok, JSON.stringify(me1.body));
+  t('默认 mustChangePassword=false', me1.body.mustChangePassword === false, JSON.stringify(me1.body.mustChangePassword));
+
+  /* 库里置 true（模拟「导入名单后的初始密码账号」）→ me 返回 true */
+  const muUid = db.exec("select id from users where username = '" + mu + "'")[0].values[0][0];
+  db.run("update users set must_change_password = true where id = ?", [muUid]);
+  const me2 = await call('/api/auth?action=me', { token: muToken });
+  t('标记后 mustChangePassword=true', me2.body.mustChangePassword === true, JSON.stringify(me2.body.mustChangePassword));
+
+  /* 改密后标志清除 → me 返回 false（前端据此离开 forcepwd 态） */
+  const cpMu = await call('/api/auth?action=change-password', {
+    method: 'POST', token: muToken, body: { oldPassword: mp, newPassword: 'MePass2027' },
+  });
+  t('带强制改密标志的账号改密成功', cpMu.status === 200 && cpMu.body.ok, 'status ' + cpMu.status);
+  t('改密响应里 mustChangePassword=false', cpMu.body.mustChangePassword === false);
+  const me3 = await call('/api/auth?action=me', { token: cpMu.body.token });
+  t('改密后 me 也返回 false', me3.body.mustChangePassword === false, JSON.stringify(me3.body.mustChangePassword));
+
+  /* 改回去，避免污染后续手工验证 */
+  await call('/api/auth?action=change-password', {
+    method: 'POST', token: cpMu.body.token, body: { oldPassword: 'MePass2027', newPassword: mp },
+  });
 }
 
 console.log('\n【28】第二十七轮·通用弹窗引擎（popups 云端通道）');
@@ -3191,9 +3399,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(indexHtml),
+  t('★前台版本号为 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adminHtml),
+  t('★后台版本号为 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3557,9 +3765,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(indexHtml38),
+  t('★前台版本号为 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adminHtml38),
+  t('★后台版本号为 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4569,10 +4777,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx47));
-  t('★后台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adm47));
+  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx47));
+  t('★后台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adm47));
   t('★service worker 缓存版本升到 v75（旧缓存要作废）',
-    /class-site-v75/.test(sw47));
+    /class-site-v76/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4656,7 +4864,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.8');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.9');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4756,9 +4964,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx48));
+  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-15', /VER_DATE = '2026-10-15'/.test(idx48));
-  t('★service worker 缓存版本升到 v75', /class-site-v75/.test(sw48));
+  t('★service worker 缓存版本升到 v75', /class-site-v76/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -4822,8 +5030,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx49));
-  t('★后台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adm49));
+  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx49));
+  t('★后台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -4895,7 +5103,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx50));
+  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5057,7 +5265,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(adm));
+  t('★后台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5124,7 +5332,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx));
+  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5625,7 +5833,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /班排名和年级名次可能打架/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx));
+  t('★前台版本号升到 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -5736,9 +5944,9 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.8', /SITE_VERSION = '2\.9\.8'/.test(idx));
-  t('★后台内置更新记录补到 2.9.8',
-    /"version": "2\.9\.8"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+  t('★前台版本号升到 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx));
+  t('★后台内置更新记录补到 2.9.9',
+    /"version": "2\.9\.9"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
   /* ===== ⑥ 真跑一遍：只分享 1 个人，班均与排名仍然是对的 ===== */  const reg2 = await call('/api/auth?action=register', {
     method: 'POST', body: { username: 'statsstu', password: 'StatsStu2026', displayName: '统计生甲' },
@@ -5797,6 +6005,55 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
   await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: eid2 } });
   await call('/api/admin?action=delete-user', { method: 'POST', token: adminToken, body: { id: reg2.body.user.id } });
   t('清场：测试考试与账号都删掉', true);
+}
+
+/* 【61】第五十六轮·客户端派生接线（v2.9.9 一次性根治改密卡死）
+   ------------------------------------------------------------
+   后端契约已由 28.5/28.6 锁定，这里盯前端两个页面是否真的接上了线：
+   任何一处漏接，线上就是「协议支持了但页面还在走老路」。 */
+console.log('\n【61】第五十六轮·客户端派生接线检查（index.html + admin.html）');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* ---- ① 前台：KDF 助手四件套齐全 ---- */
+  t('★index.html 有 clsDerive（浏览器 PBKDF2）', /function clsDerive\(/.test(idx));
+  t('★index.html 有 clsNewHash（生成 pbkdf2c 摘要）', /function clsNewHash\(/.test(idx));
+  t('★index.html 有 clsLogin（登录走派生，失败回退明文）', /function clsLogin\(/.test(idx));
+  t('★index.html 有 clsChangePwd（改密走派生，失败回退明文）', /function clsChangePwd\(/.test(idx));
+  t('★index.html 新密码派生档位为 50000（与名单导入一致）', /CLS_KDF_ITER = 50000/.test(idx));
+  t('★index.html 回退条件含 429/5xx/无 WebCrypto', /NO_SUBTLE/.test(idx) && /e\.status === 429/.test(idx) && /e\.status >= 500/.test(idx));
+
+  /* ---- ② 前台：三个调用点真的换了 ---- */
+  t('★doLogin 调 clsLogin', /clsLogin\(u, p\)/.test(idx));
+  t('★强制改密调 clsChangePwd（带当前用户名）', /clsChangePwd\(oldPwd, p1, AUTH\.user && AUTH\.user\.username\)/.test(idx));
+  t('★设置页改密调 clsChangePwd', /clsChangePwd\(o, n, AUTH\.user && AUTH\.user\.username\)/.test(idx));
+  t('★改密成功后盐缓存失效（旧哈希串作废）', /clsSaltForget\(username\)/.test(idx));
+
+  /* ---- ③ 前台：刷新后恢复强制改密态（补当前密码框） ---- */
+  t('★acctForcePwdHtml 在内存无初始密码时补「当前密码」框', /id="fpOld"/.test(idx));
+  t('★doForceChangePwd 从 fpOld 取回退密码', /FORCE_OLD_PWD \|\| val\('fpOld'\)/.test(idx));
+  t('★initAuth 的 me 回调按 mustChangePassword 恢复 forcepwd',
+    /j\.mustChangePassword && ACCT_TAB !== 'forcepwd'/.test(idx));
+
+  /* ---- ④ 后台：同款接线（登录 + 两处改密） ---- */
+  t('★admin.html 有 clsLogin/clsChangePwd/clsDerive/clsNewHash', /function clsLogin\(/.test(adm)
+    && /function clsChangePwd\(/.test(adm) && /function clsDerive\(/.test(adm) && /function clsNewHash\(/.test(adm));
+  t('★admin.html 后台登录调 clsLogin', /clsLogin\(u, p\)/.test(adm));
+  t('★admin.html 我的改密调 clsChangePwd', /clsChangePwd\(o, n, STATE\.me && STATE\.me\.username\)/.test(adm));
+  t('★admin.html 强制改密弹窗调 clsChangePwd', /clsChangePwd\(o, n, STATE\.me && STATE\.me\.username\)[\s\S]{0,80}then\(function\(j\)\{[\s\S]{0,200}setToken/.test(adm));
+
+  /* ---- ⑤ 诊断端点已移除（只读体检用完了不留着） ---- */
+  const adminSrc = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  t('★pwd-audit 诊断端点已移除', !/pwdAudit/.test(adminSrc));
+  t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
+
+  /* ---- ⑥ 版本三处同步 ---- */
+  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx));
+  t('★后台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adm));
+  const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+  t('★sw.js SITE_VER 2.9.9 且缓存升 v76', /SITE_VER = '2\.9\.9'/.test(swSrc) && /class-site-v76/.test(swSrc));
+  t('★后台内置更新记录有 2.9.9 条目', /"version": "2\.9\.9"/.test(adm));
 }
 
 console.log('\n' + '='.repeat(52));
