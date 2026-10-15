@@ -789,7 +789,7 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
     <nav class="side-nav" id="nav"></nav>
     <div class="side-user">
       <div class="row">
-        <div class="av" id="meAv">管</div>
+        <div class="av ink-auto" id="meAv">管</div>
         <div class="who">
           <b id="meName">—</b>
           <i id="meRole">ADMIN</i>
@@ -885,8 +885,8 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.9.9';
-var VER_DATE = '2026-10-15';
+var SITE_VERSION = '2.9.10';
+var VER_DATE = '2026-10-16';
 
 /* ---- 运行时状态 ---- */
 var STATE = {
@@ -1031,6 +1031,98 @@ function api(path, opts){
       return j;
     });
   });
+}
+
+/* ============================================================
+ * 【v2.9.10】全站共用自适应字色（与 index.html 逐行同构）
+ * ------------------------------------------------------------
+ * 站主原话：「全站字色共用一套逻辑……字体颜色需根据背景颜色实时改变，
+ * 都用对应的相反色，尤其是一些公告什么经常切换白天黑夜的时候
+ * 只有一部分看得清，主页面和后台页面都有这种情况」。
+ *
+ * 规则（以后新写的带背景文字块都按这个来）：
+ *   ① 凡是「文字压在背景上」的渲染，一律经过 clsReadableOn(背景色)
+ *      取相反色 —— 亮底用深字、暗底用白字，不写死；
+ *   ② 主题（白天/黑夜）切换后，clsAutoInk(document.body) 全局重算；
+ *   ③ 新增渲染点只要给容器加 class="ink-auto"（动态背景色用
+ *      data-ink-bg 声明代表色，如渐变的起始色），无需再操心字色。
+ * 与 index.html 保持同一套实现：同函数名、同阈值、同色值，
+ * 改一处必须同步改另一处（render_test.mjs 有断言盯同构）。
+ * ============================================================ */
+var CLS_INK_DARK = '#241f1c';   /* 亮底上的字（暖调近黑，不用纯黑） */
+var CLS_INK_LIGHT = '#ffffff';  /* 暗底上的字 */
+
+/* 解析颜色串 → [r,g,b]；支持 #rgb / #rrggbb / rgb() / rgba()。
+   透明或解析失败返回 null（调用方按「不处理」跳过）。 */
+function clsParseColor(c){
+  var s = String(c || '').trim().toLowerCase();
+  var m;
+  if((m = /^#([0-9a-f]{3})$/.exec(s))){
+    return [parseInt(m[1][0]+m[1][0],16), parseInt(m[1][1]+m[1][1],16), parseInt(m[1][2]+m[1][2],16)];
+  }
+  if((m = /^#([0-9a-f]{6})$/.exec(s))){
+    return [parseInt(m[1].slice(0,2),16), parseInt(m[1].slice(2,4),16), parseInt(m[1].slice(4,6),16)];
+  }
+  if((m = /^rgba?\(([^)]+)\)$/.exec(s))){
+    var p = m[1].split(',').map(function(x){ return parseFloat(x); });
+    if(p.length >= 3 && p.every(function(x){ return isFinite(x); })){
+      if(p.length > 3 && p[3] === 0) return null;   /* 全透明 */
+      return [p[0], p[1], p[2]];
+    }
+  }
+  return null;
+}
+/* 感知亮度 0–1（YIQ 加权，与前台热力图公式一致） */
+function clsLuma(rgb){ return (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255; }
+/* 核心：给定背景色，返回可读的相反色 */
+function clsReadableOn(bg){
+  var c = clsParseColor(bg);
+  if(!c) return '';
+  return clsLuma(c) > 0.6 ? CLS_INK_DARK : CLS_INK_LIGHT;
+}
+/* 扫描 root 内所有 .ink-auto，按实际背景重设字色。
+   data-ink-bg 优先（渐变/图片背景没有单一 computed 色时用）；
+   否则读 computed backgroundColor（transparent 则跳过——
+   让继承色说话，不硬套）；
+   backgroundColor 读不到有效色时，从 background-image 渐变里抓
+   第一个色当代表色（渐变色取自 CSS 变量，换主题会实时变）。 */
+function clsAutoInk(root){
+  root = root || document.body;
+  if(!root || !root.querySelectorAll) return;
+  var els = root.querySelectorAll('.ink-auto');
+  for(var i = 0; i < els.length; i++){
+    var el = els[i];
+    var bg = el.getAttribute('data-ink-bg');
+    if(!bg){
+      try{
+        var cs = getComputedStyle(el);
+        bg = cs.backgroundColor;
+        if(!clsParseColor(bg)){
+          var m = /rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}/.exec(cs.backgroundImage || '');
+          if(m) bg = m[0];
+        }
+      }catch(e){ bg = ''; }
+    }
+    var ink = clsReadableOn(bg);
+    if(ink) el.style.color = ink;
+  }
+}
+
+/* v2.9.10：DOM 变化后自动补扫 .ink-auto —— 面板/表格动态渲染出来的
+   字色也实时正确，不用每个渲染函数后面手动跟一次（debounce 100ms，
+   只查 .ink-auto，且只观察 childList：写 style 不会反触发，无死循环风险）。
+   与 index.html 同款同构。 */
+if(typeof MutationObserver === 'function'){
+  var __inkTimer = null;
+  try{
+    new MutationObserver(function(){
+      if(__inkTimer) return;
+      __inkTimer = setTimeout(function(){
+        __inkTimer = null;
+        try{ clsAutoInk(document.body); }catch(e){}
+      }, 100);
+    }).observe(document.body, { childList:true, subtree:true });
+  }catch(e){}
 }
 
 /* ============================================================
@@ -1502,7 +1594,7 @@ function renderOverview(){
     var html =
       '<div class="stat-grid">' + cards.map(function(c){
         return '<div class="stat">'
-          + '<div class="top"><div class="si ' + c.tone + '">' + svg(c.icon, 21) + '</div></div>'
+          + '<div class="top"><div class="si ink-auto ' + c.tone + '">' + svg(c.icon, 21) + '</div></div>'
           + '<p class="label">' + esc(c.label) + '</p>'
           + '<h3 class="value">' + esc(c.value) + '</h3>'
           + '<p class="foot">' + esc(c.foot) + '</p>'
@@ -1676,7 +1768,7 @@ function paintUsers(){
 
     return '<tr' + (S.selected[u.id] ? ' class="sel"' : '') + '>'
       + '<td><input type="checkbox" class="chk" data-pick="' + u.id + '"' + (S.selected[u.id] ? ' checked' : '') + '></td>'
-      + '<td><div class="cell-user"><div class="av">' + esc(initial) + '</div>'
+      + '<td><div class="cell-user"><div class="av ink-auto">' + esc(initial) + '</div>'
       +   '<div><b>' + esc(u.displayName || u.username) + '</b>'
       +   '<i class="mono">' + esc(u.username) + '</i></div></div></td>'
       + '<td class="nowrap">' + badges + '</td>'
@@ -1958,7 +2050,7 @@ function addUserDialog(){
       + '</div>'
       + '<div class="field"><label for="auPwd">初始密码 <span style="color:var(--danger)">*</span></label>'
       + '<input id="auPwd" placeholder="6–64 位" autocomplete="new-password">'
-      + '<p class="hint">同学首次登录后会被要求自行修改密码。后台不保存明文，只存哈希。</p></div>'
+      + '<p class="hint">同学首次登录后会被要求自行修改密码。</p></div>'
       + '<div class="field"><label for="auRole">角色</label>'
       + '<select id="auRole" style="height:46px;padding:0 12px;border:1px solid var(--border-2);border-radius:var(--radius-md);background:var(--bg-1);color:var(--fg);width:100%">'
       + '<option value="user">普通用户</option><option value="admin">管理员</option></select></div>'
@@ -5368,7 +5460,7 @@ function paintProfiles(){
     }).join('');
 
     return '<tr>'
-      + '<td><div class="cell-user"><div class="av">' + esc(ini) + '</div>'
+      + '<td><div class="cell-user"><div class="av ink-auto">' + esc(ini) + '</div>'
       +   '<div><b>' + esc(p.name || '(未填姓名)') + '</b>'
       +   '<i class="mono">' + esc(p.studentId || '无学号') + '</i></div></div></td>'
       + '<td class="nowrap">' + esc(p.politics || '—') + '</td>'
@@ -6167,7 +6259,8 @@ function paintViewLogs(){
       topEl.innerHTML = '<div class="rank">' + S.top.map(function(t, i){
         var w = Math.max(4, Math.round((t.count / max) * 100));
         return '<div class="rank-row">'
-          + '<div class="n">' + (i + 1) + '</div>'
+          /* 第一名是渐变底（.rank-row:nth-child(1) .n），字色走全站共用 ink-auto */
+          + '<div class="n' + (i === 0 ? ' ink-auto' : '') + '">' + (i + 1) + '</div>'
           + '<div class="nm">' + esc(t.username) + '</div>'
           + '<div class="bar"><i style="width:' + w + '%"></i></div>'
           + '<div class="c">' + t.count + ' 次</div>'
@@ -6210,7 +6303,7 @@ function paintViewLogs(){
     + list.map(function(l){
         var ini = String(l.viewer || '?').charAt(0).toUpperCase();
         return '<tr>'
-          + '<td><div class="cell-user"><div class="av">' + esc(ini) + '</div>'
+          + '<td><div class="cell-user"><div class="av ink-auto">' + esc(ini) + '</div>'
           +   '<div><b>' + esc(l.viewer) + '</b>'
           +   '<i class="mono">#' + (l.viewerId || '—') + '</i></div></div></td>'
           + '<td><b>' + esc(l.targetName) + '</b>'
@@ -6468,7 +6561,7 @@ function loadLogins(page){
       + S.list.map(function(l){
           var initial = String(l.username || '?').charAt(0).toUpperCase();
           return '<tr>'
-            + '<td><div class="cell-user"><div class="av">' + esc(initial) + '</div>'
+            + '<td><div class="cell-user"><div class="av ink-auto">' + esc(initial) + '</div>'
             + '<div><b>' + esc(l.username || '(已删除)') + '</b><i class="mono">#' + l.userId + '</i></div></div></td>'
             + '<td class="nowrap">' + esc(fmt(l.createdAt)) + '<div class="muted" style="font-size:.72rem">' + esc(ago(l.createdAt)) + '</div></td>'
             + '<td class="nowrap mono">' + esc(l.ip || '—') + '</td>'
@@ -7102,6 +7195,9 @@ function enterApp(){
 function applyTheme(t){
   document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : '');
   try{ localStorage.setItem(LS_THEME, t); }catch(e){}
+  /* 字色全站共用逻辑（与 index.html 同款）：主题变了背景全变，
+     所有 .ink-auto 按新背景重算相反色；启动时 initTheme→applyTheme 也会扫到 */
+  try{ clsAutoInk(document.body); }catch(e){}
 }
 function initTheme(){
   var t = '';
@@ -8106,6 +8202,19 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "2.9.10",
+      "date": "2026-10-16",
+      "title": "全站字色自适应（背景亮暗自动取相反色）+ 成绩分析备注官方化",
+      "type": "improve",
+      "highlight": true,
+      "items": [
+        "修复：公告横幅、渐变图标块、成绩分段条等压在彩色背景上的文字，白天/黑夜切换后有的看不清 —— 现在全站共用一套字色逻辑：按背景明暗实时取相反色（亮底深字、暗底白字），切换主题即时重算",
+        "同款逻辑已应用到主页面与后台：后台统计卡图标、用户头像、榜首徽章等渐变元素一并适配",
+        "成绩分析各图说明文字统一改为官方简洁表述，只写「怎么看、怎么用」，不再附带预防误解的长篇解释",
+        "热力图、作业科目徽章的成绩数字不再写死白色，按所在格子/徽章底色自动选择可读颜色"
+      ]
+    },
     {
       "version": "2.9.9",
       "date": "2026-10-16",

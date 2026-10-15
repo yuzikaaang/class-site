@@ -3399,9 +3399,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(indexHtml),
+  t('★前台版本号为 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adminHtml),
+  t('★后台版本号为 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3765,9 +3765,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(indexHtml38),
+  t('★前台版本号为 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adminHtml38),
+  t('★后台版本号为 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4385,8 +4385,11 @@ console.log('\n【43】第三十一轮·连不上服务端的离线提示（v2.5
 console.log('\n【44】第三十二轮·全站去 emoji 统一图标（v2.5.0）');
 {
   const idx44 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
-  /* 旧的运行时引擎（MutationObserver 全量重扫）必须彻底删除 —— 它是倒计时每秒闪的直接原因 */
-  t('★旧的运行时 emoji 引擎已删除（无 MutationObserver）', !/new MutationObserver/.test(idx44));
+  /* 旧的运行时引擎（MutationObserver 全量重扫）必须彻底删除 —— 它是倒计时每秒闪的直接原因。
+     ⚠️ 2026-10-16 v2.9.10 起字色逻辑引入了一个新的 MutationObserver（ink-auto 兜底），
+     所以这里不能简单断言「无 MutationObserver」，改为断言「唯一的 observer 就是字色兜底」。 */
+  t('★旧的运行时 emoji 引擎已删除（仅存字色兜底 observer）',
+    !/function emojiify/.test(idx44) && /new MutationObserver[\s\S]{0,300}clsAutoInk/.test(idx44));
   t('★旧的 emojiify 系列函数已删除', !/function emojiify\b/.test(idx44) && !/function emojiifyText\b/.test(idx44));
   /* 新的「一次性转换」入口必须存在 */
   t('★有一次性静态图标化函数 iconifyStatic', /function iconifyStatic\(/.test(idx44));
@@ -4777,10 +4780,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx47));
-  t('★后台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adm47));
-  t('★service worker 缓存版本升到 v75（旧缓存要作废）',
-    /class-site-v76/.test(sw47));
+  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx47));
+  t('★后台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adm47));
+  t('★service worker 缓存版本升到 v77（旧缓存要作废）',
+    /class-site-v77/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4864,7 +4867,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.9');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.10');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4964,9 +4967,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx48));
-  t('★前台更新日期已同步为 2026-10-15', /VER_DATE = '2026-10-15'/.test(idx48));
-  t('★service worker 缓存版本升到 v75', /class-site-v76/.test(sw48));
+  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx48));
+  t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-16'/.test(idx48));
+  t('★service worker 缓存版本升到 v77', /class-site-v77/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5030,8 +5033,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx49));
-  t('★后台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adm49));
+  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx49));
+  t('★后台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5103,7 +5106,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx50));
+  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5265,7 +5268,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adm));
+  t('★后台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5298,18 +5301,19 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★上线人数统计', /function scChartCutlines\(st\)/.test(idx));
   t('★分数段四色条', /function scChartSegments\(st\)/.test(idx));
   t('★雷达图按得分率画（不是原始分）', /function scRadar\(labels, mine, avg, tips\)/.test(idx) && /按得分率/.test(idx));
-  t('★雷达图上直接写分数（不用去别处对）', /radarTips\.push/.test(idx) && /每个角上都写了你的分数/.test(idx));
+  t('★雷达图上直接写分数（不用去别处对）', /radarTips\.push/.test(idx) && /各顶点标注学科分数/.test(idx));
   t('★位置条 + 「前面还有 N 人」', /function scRenderMe\(\)/.test(idx) && /前面还有/.test(idx));
   t('★趋势块（历次总分折线）', /function scTrendBlock\(meRow\)/.test(idx));
 
   /* ===== ④.5 图表数据标注（v2.9.5：站主要求每张图上都能直接看到数字） ===== */
-  t('★直方图柱顶写人数', /柱顶数字＝这一格有多少人/.test(idx));
-  t('★热力图格子里写分数', /color:' \+ \(dark \? '#fff' : '#6b5443'\)/.test(idx) && /格子里就是这个同学的这一科分数/.test(idx));
-  t('★热力图按底色深浅自动换字色（深底白字，保证看得清）',
-    /0\.299 \* cr \+ 0\.587 \* cg \+ 0\.114 \* cb/.test(idx));
+  t('★直方图柱顶写人数', /柱顶为该段人数/.test(idx));
+  t('★热力图格子里写分数', /var ink = clsReadableOn\('rgb\(' \+ cr/.test(idx) && /每格为该生该科分数/.test(idx));
+  t('★热力图字色走全站共用 clsReadableOn（不再有私有亮度公式）',
+    /var ink = clsReadableOn\('rgb\(' \+ cr \+ ',' \+ cg \+ ',' \+ cb \+ '\)'\)/.test(idx)
+    && !/0\.299 \* cr \+ 0\.587 \* cg \+ 0\.114 \* cb/.test(idx));
   t('★热力图不再每格重算名次（一次算好，60 行 × 6 科不再白跑 360 遍）',
     /var rk = scRankMap\(SC\.basis\);/.test(idx) && /原先每格都重算/.test(idx));
-  t('★四象限直接标姓名 + 那一科分数', /labeled\[p\.name\]/.test(idx) && /图上已经直接标了名字和这一科分数/.test(idx));
+  t('★四象限直接标姓名 + 那一科分数', /labeled\[p\.name\]/.test(idx) && /图中标注姓名与该科分数/.test(idx));
   t('★四象限只标该点名的（偏科预警 + 我），不至糊成一团', /总分够、这一科却拖后腿/.test(idx));
   t('★各科迷你折线每个点都写分数', /手机端没有鼠标悬浮，不写出来就看不到/.test(idx));
 
@@ -5317,13 +5321,13 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   const adm54 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sh54  = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
   t('★界面上不再混用「校排名」', /scOvItem\('校排名'/.test(idx) === false && /\['校排名'/.test(idx) === false);
-  t('★明确写了「年级排名就是校排名」', /年级排名就是校排名，同一个东西/.test(idx));
+  t('★年级/班排名的说明改为官方口径句（不再解释「别当成两套排名」）', /年级排名与班排名分别统计/.test(idx));
   t('★分享页也叫年级排名', /校排名/.test(sh54) === false && /年级排名/.test(sh54));
   t('★后台列头也叫年级排名，但导入仍两种列名都认',
     /<th>年级排名<\/th>/.test(adm54) && /\['校排名','校名次','学校排名','年级排名','年级名次'\]/.test(adm54));
 
   /* ===== ⑤ 站主定的规则 ===== */
-  t('★成长不比绝对分数（跨考试提示）', /跨考试比的是趋势，不是绝对分数/.test(idx));
+  t('★历次趋势只报统计范围（不再解释「说明不了什么」）', /统计 ' \+ pts\.length \+ ' 次考试/.test(idx));
   t('★没有分数线时不留空块（分数线为空就不渲染）',
     /\.filter\(function\(c\)\{ return c\.score != null; \}\)/.test(idx));
   t('★只有一次考试时趋势块给友好提示', /等下一次考完就能看到趋势/.test(idx));
@@ -5332,7 +5336,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx));
+  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5394,7 +5398,7 @@ console.log('\n【56】第四十七轮·成绩分析增强（v2.8.0/2.8.1）');
   t('★用校排名画，且 y 轴反向（名次小在上面）', /名次越小越好 → y 轴反向/.test(idx));
   t('★给出年级百分位', /'前 ' \+ pct\.toFixed\(1\) \+ '%'/.test(idx));
   t('★年级人数取「最近一次填过的」', /年级人数取「最近一次填过的」/.test(idx));
-  t('★文案讲清两套排名会打架', /班排名和年级排名会打架/.test(idx));
+  t('★年级进退步说明改为官方口径句（不再讲「打架」）', /年级排名与班排名分别统计/.test(idx));
 
   /* ===== ③ 跨考试上线率 ===== */
   t('★有 scCutTrend + scLoadAllRows', /function scCutTrend\(\)\{/.test(idx) && /function scLoadAllRows\(\)\{/.test(idx));
@@ -5454,7 +5458,7 @@ console.log('\n【57】第四十八轮·站主侧五件套 + 三档开关（v2.8
   t('★拖后腿科目＝相对班均差得最多', /差得最多的那一科/.test(idx));
 
   /* ===== ④ 进退步榜：比名次不比分数 ===== */
-  t('★有「比的是名次不是分数」的说明', /比的是<b>名次<\/b>不是分数/.test(idx));
+  t('★班级总分口径说明（官方口径句）', /统计口径：班级总分名次/.test(idx));
   t('★名次并列处理（同分同名次）', /if\(last === null \|\| x\.v !== last\)\{ k = i \+ 1; last = x\.v; \}/.test(idx));
   t('★依赖历次成绩（懒加载）', /var curPack = SC\.allRows\[eidOf\(items\[idx\]\)\];/.test(idx)
     && /var eidOf = function\(x\)\{ return x\.examId != null \? x\.examId : x\.id; \};/.test(idx));
@@ -5829,11 +5833,11 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
   t('★三种口径都统一成「名次」，分数变化单列',
     /d: prevPos\[n\] - curPos\[n\]/.test(idx) && /x\.dc == null \? '—'/.test(idx));
   t('★对不上人时给提示而不是空白', /这两次考试按这个口径<b>对不上人<\/b>/.test(idx));
-  t('★年级口径复述「两套排名会打架」的判断',
-    /班排名和年级名次可能打架/.test(idx));
+  t('★年级口径说明改为官方口径句（不再讲「打架」）',
+    /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx));
+  t('★前台版本号升到 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -5944,9 +5948,9 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx));
-  t('★后台内置更新记录补到 2.9.9',
-    /"version": "2\.9\.9"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+  t('★前台版本号升到 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx));
+  t('★后台内置更新记录补到 2.9.10',
+    /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
   /* ===== ⑥ 真跑一遍：只分享 1 个人，班均与排名仍然是对的 ===== */  const reg2 = await call('/api/auth?action=register', {
     method: 'POST', body: { username: 'statsstu', password: 'StatsStu2026', displayName: '统计生甲' },
@@ -6049,11 +6053,105 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(idx));
-  t('★后台版本号 2.9.9', /SITE_VERSION = '2\.9\.9'/.test(adm));
+  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx));
+  t('★后台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 2.9.9 且缓存升 v76', /SITE_VER = '2\.9\.9'/.test(swSrc) && /class-site-v76/.test(swSrc));
-  t('★后台内置更新记录有 2.9.9 条目', /"version": "2\.9\.9"/.test(adm));
+  t('★sw.js SITE_VER 2.9.10 且缓存升 v77', /SITE_VER = '2\.9\.10'/.test(swSrc) && /class-site-v77/.test(swSrc));
+  t('★后台内置更新记录有 2.9.10 条目', /"version": "2\.9\.10"/.test(adm));
+}
+
+/* 【62】第五十七轮·全站字色共用逻辑 + 文案官方化（v2.9.10）
+   ------------------------------------------------------------
+   站主两条新规（均为持续生效的站规级要求，详见 notes.md 第 10 节）：
+   ① 「全站字色共用一套逻辑……字体颜色需根据背景颜色实时改变，都用对应的
+      相反色……主页面和后台页面都有这种情况」
+   ② 「成绩分析的备注……只需写明怎么看怎么用就行，不要猜测用户还可能误解
+      什么，还有站内其他的地方包括后台，以后都是这样」
+   这里盯：函数两页同构、接入点真的接了、热力图私家公式已删除、
+   实时三通道在位、官方化文案锁定、防误解话术清零。 */
+console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检查');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const shr = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
+
+  /* ---- ① 四函数块两页同构（改一套不改另一套 = 没改） ---- */
+  t('★index.html 有 clsParseColor/clsLuma/clsReadableOn/clsAutoInk 四件套',
+    /function clsParseColor\(/.test(idx) && /function clsLuma\(/.test(idx)
+    && /function clsReadableOn\(/.test(idx) && /function clsAutoInk\(/.test(idx));
+  t('★admin.html 有同款四件套（逐行同构）',
+    /function clsParseColor\(/.test(adm) && /function clsLuma\(/.test(adm)
+    && /function clsReadableOn\(/.test(adm) && /function clsAutoInk\(/.test(adm));
+  t('★两页字色常量同值（CLS_INK_DARK #241f1c / CLS_INK_LIGHT #ffffff）',
+    (idx.match(/CLS_INK_DARK = '#241f1c'/g) || []).length === 1
+    && (adm.match(/CLS_INK_DARK = '#241f1c'/g) || []).length === 1
+    && /CLS_INK_LIGHT = '#ffffff'/.test(idx) && /CLS_INK_LIGHT = '#ffffff'/.test(adm));
+  t('★clsReadableOn 阈值 0.6（亮底深字、暗底白字）',
+    /clsLuma\(c\) > 0\.6 \? CLS_INK_DARK : CLS_INK_LIGHT/.test(idx)
+    && /clsLuma\(c\) > 0\.6 \? CLS_INK_DARK : CLS_INK_LIGHT/.test(adm));
+  t('★clsAutoInk 支持 data-ink-bg 优先 + 渐变 background-image 抓代表色',
+    /data-ink-bg/.test(idx) && /backgroundImage/.test(idx)
+    && /data-ink-bg/.test(adm) && /backgroundImage/.test(adm));
+
+  /* ---- ② 前台接入点 ---- */
+  t('★公告横幅 ink-auto + data-ink-bg="#f97316"',
+    /celebrate-banner ink-auto" data-ink-bg="#f97316"/.test(idx));
+  t('★欢迎弹窗设 data-ink-bg="#9a3412"（theme=welcome）',
+    /p\.theme === 'welcome'\) box\.setAttribute\('data-ink-bg', '#9a3412'\)/.test(idx));
+  t('★fab/日报/每日一言/学习卡/签到栏渐变图标块接了 ink-auto',
+    /class="fab ink-auto"/.test(idx) && /daily-icon ink-auto/.test(idx)
+    && /quote-mark ink-auto/.test(idx) && /study-mark ink-auto/.test(idx)
+    && /signbar-icon ink-auto/.test(idx));
+  t('★卡片首字 fallback 两处产出都带 ink-auto',
+    (idx.match(/fallback ink-auto/g) || []).length === 2);
+  t('★作业科目徽章 ink-auto + data-ink-bg=科目色',
+    /hw-badge ink-auto" data-ink-bg="'\+esc\(s\.c\)\+'"/.test(idx));
+  t('★成绩分段条 ink-auto + data-ink-bg=分段色',
+    /sc-seg-bar ink-auto" data-ink-bg="' \+ esc\(s\.color\)/.test(idx));
+
+  /* ---- ③ 热力图私家公式已删除（一套逻辑落到实处） ---- */
+  t('★热力图调 clsReadableOn 取字色', /var ink = clsReadableOn\('rgb\(' \+ cr \+ ',' \+ cg \+ ',' \+ cb \+ '\)'\)/.test(idx));
+  t('★热力图不再有私有 0.299*cr 亮度公式', !/0\.299 \* cr \+ 0\.587 \* cg \+ 0\.114 \* cb/.test(idx));
+  t('★热力图不再有 <168 私有阈值', !/< 168/.test(idx));
+
+  /* ---- ④ 实时三通道 ---- */
+  t('★applyThemeSwitch 末尾 clsAutoInk(document.body) 全局重算',
+    /clsAutoInk\(document\.body\);\s*\}catch\(e\)\{\}\s*\}$/.test(idx) || /try\{ clsAutoInk\(document\.body\); \}catch\(e\)\{\}/.test(idx));
+  t('★initAuth 启动时扫一遍 ink-auto', /paintVersion\(\);\s*\n\s*\/\* v2\.9\.10：启动时按当前主题扫一遍/.test(idx));
+  t('★两页都有 MutationObserver 兜底动态渲染（debounce 100ms）',
+    /new MutationObserver/.test(idx) && /new MutationObserver/.test(adm)
+    && (idx.match(/__inkTimer/g) || []).length >= 3 && (adm.match(/__inkTimer/g) || []).length >= 3);
+  t('★后台 applyTheme 末尾同样全局重算', /try\{ clsAutoInk\(document\.body\); \}catch\(e\)\{\}/.test(adm));
+
+  /* ---- ⑤ 后台接入点 ---- */
+  t('★后台头像（侧栏 + 用户列表 4 处）都带 ink-auto',
+    /class="av ink-auto" id="meAv"/.test(adm) && (adm.match(/cell-user"><div class="av ink-auto">/g) || []).length === 4);
+  t('★后台统计卡图标 ink-auto', /si ink-auto ' \+ c\.tone/.test(adm));
+  t('★排行榜榜首徽章 ink-auto（nth-child 渐变底）', /n' \+ \(i === 0 \? ' ink-auto' : ''\)/.test(adm));
+
+  /* ---- ⑥ 官方化文案锁定（只看「怎么写」，不解释「别误解什么」） ---- */
+  t('★六科画像图注官方句式', /各顶点标注学科分数/.test(idx));
+  t('★总分分布图注官方句式', /柱顶为该段人数/.test(idx));
+  t('★四象限图注官方句式', /图中标注姓名与该科分数/.test(idx));
+  t('★热力图图注官方句式', /每格为该生该科分数/.test(idx));
+  t('★年级排名图注官方句式', /年级排名与班排名分别统计/.test(idx));
+  t('★历次总分趋势只报统计范围', /统计 ' \+ pts\.length \+ ' 次考试/.test(idx));
+  t('★各科趋势图注官方句式', /绿色为上涨，红色为下跌/.test(idx));
+  t('★后台建号提示已精简（去掉「只存哈希」技术解释）', /同学首次登录后会被要求自行修改密码。/.test(adm) && !/后台不保存明文/.test(adm));
+
+  /* ---- ⑦ 防误解话术全站清零（界面文案内；注释/更新记录不在扫描面） ---- */
+  /* relSeed（后台内置历史更新记录）按站规「历史更新记录不改」保留原貌，
+     其中的历史描述文案不属于本轮清理面，扫描前先切除。 */
+  const banned = ['别当成两套排名', '会打架', '是故意的', '不用猜', '说明不了什么', '这不是 bug'];
+  const pages = {
+    'index.html': idx,
+    'admin.html': adm.replace(/function relSeed\(\)\{[\s\S]*?\n\}\n/, ''),
+    'share.html': shr
+  };
+  for (const [name, src] of Object.entries(pages)){
+    const hits = banned.filter(w => new RegExp("(['\"`])(?:(?!\\1)[\\s\\S])*" + w + "(?:(?!\\1)[\\s\\S])*\\1").test(src));
+    t('★' + name + ' 界面文案无防误解话术（' + (hits.length ? hits.join('/') : '零命中') + '）', hits.length === 0);
+  }
 }
 
 console.log('\n' + '='.repeat(52));
