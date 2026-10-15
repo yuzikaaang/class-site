@@ -175,7 +175,9 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
         + '<p class="dim">老师可能还没发布成绩，过几天再来看看。</p></div>';
       return;
     }
-    var scopeTxt = sh.scope === 'self' ? '本人的成绩' : sh.scope === 'picked' ? '指定同学的' : '全班';
+    /* ⚠️ 这里给的是「定语」，后面统一拼「成绩」二字。
+       早期 self 那一支写的是全称，拼出来就成了「成绩」重复两遍（线上实测发现）。 */
+    var scopeTxt = sh.scope === 'self' ? '本人' : sh.scope === 'picked' ? '指定同学的' : '全班';
     var wm = '<div class="watermark"><span>🔗</span><div>'
       + '本页由 <b>' + esc(sh.ownerName || '同学') + '</b> 分享（' + esc(scopeTxt) + '成绩）· '
       + esc(untilText(sh.expiresAt))

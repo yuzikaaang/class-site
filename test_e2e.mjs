@@ -5316,6 +5316,8 @@ console.log('\n【58】第四十九轮·分享链接 + 每日备份（v2.9.0）'
   t('★分享页禁止搜索引擎收录', /noindex,nofollow,noarchive/.test(share));
   t('★分享页不依赖登录（只认链接里的 t）', /share-get&t=/.test(share) && /localStorage/.test(share) === false);
   t('★分享页带水印（谁分享的 / 有效期 / 请勿外传）', /本页由/.test(share) && /请勿截图外传/.test(share));
+  t('★水印里的范围是「定语」写法（不再拼出「本人的成绩成绩」）',
+    /sh\.scope === 'self' \? '本人' :/.test(share) && /本人的成绩成绩/.test(share) === false);
   t('★分享页也支持赋分 / 原始切换', /data-b="graded"/.test(share) && /data-b="raw"/.test(share));
   t('★只有自己一个人的分享 → 直接给成绩卡', /rows\.length === 1/.test(share) && /function oneCard/.test(share));
   t('★share.html 已加入部署清单', /^\s+share\.html$/m.test(wf));
