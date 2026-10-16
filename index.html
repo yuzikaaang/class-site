@@ -659,8 +659,11 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .cd-empty{padding:14px 0;text-align:center;font-size:.85rem;color:#8a827b}
 .cd-clickable{cursor:pointer;transition:transform .2s,box-shadow .2s}
 .cd-clickable:active{transform:scale(0.98)}
-.cd-viewall{margin-left:auto;font-size:.7rem;font-weight:600;background:rgba(255,255,255,.25);padding:3px 10px;border-radius:999px}
-.cd-hol .cd-viewall{background:#f6f1ec;color:#af410f}
+/* v2.9.11：「查看全部」兜底样式与 .cd-hol 内的正式样式合并为
+   浅底深字（#af410f on #f6f1ec = 5.22）。原裸 .cd-viewall 是
+   白字压 rgba(255,255,255,.25)（4.23），暗色同款更是约 2.7，
+   按「最差可能底色选色」的站规直接并成达标的那条。 */
+.cd-viewall{margin-left:auto;font-size:.7rem;font-weight:600;background:#f6f1ec;color:#af410f;padding:3px 10px;border-radius:999px}
 .imp-mobile{display:flex;flex-direction:column;flex:1;min-height:0}
 .imp-area{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:4px 0}
 .imp-desktop{display:none}
@@ -686,7 +689,6 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .allimp-head{background:linear-gradient(90deg,#9a3412,#af410f)}
 .allhol-head{background:linear-gradient(90deg,#3d8f6a,#05a050)}
 .dark .cd-hol .cd-viewall{background:#332d29;color:#d6d3d1}
-.dark .cd-viewall{background:rgba(255,255,255,.2)}
 /* 移动端：隐藏月份格与节假日日期行，更紧凑 */
 .cd-units .cd-box:first-child{display:none}
 .cd-row .cd-sub{display:none}
@@ -723,7 +725,10 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .welcome-box{max-width:360px;width:100%;background:linear-gradient(135deg,#9a3412,#af410f);border-radius:24px;padding:28px 24px;text-align:center;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35);margin:auto}
 .welcome-title{font-size:1.2rem;font-weight:800;line-height:1.5;margin-bottom:12px}
 .welcome-desc{font-size:.85rem;line-height:1.7;opacity:.95;margin-bottom:14px}
-.welcome-list{background:rgba(255,255,255,.15);border-radius:16px;padding:14px 16px;text-align:left;margin-bottom:14px}
+/* v2.9.11：深青/深橙底上的白色半透明「提亮」会稀释字底对比度
+   （白字压 0.15 白蒙层的 #9a3412 只有 4.09:1），改成压暗蒙层
+   rgba(0,0,0,.18)：橙底白字 9.38、青底 7.31，均远达 4.5:1。 */
+.welcome-list{background:rgba(0,0,0,.18);border-radius:16px;padding:14px 16px;text-align:left;margin-bottom:14px}
 .welcome-list-title{font-size:.85rem;font-weight:700;margin-bottom:8px}
 .welcome-list-body{font-size:.85rem;line-height:1.7;opacity:.95}
 .welcome-btn{margin-top:4px;background:#fff;color:#af410f;border:none;border-radius:999px;padding:10px 32px;font-size:.85rem;font-weight:800;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.2)}
@@ -1283,26 +1288,44 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .acct-box{max-width:400px}
 .acct-body{padding:18px 20px 20px;overflow-y:auto;text-align:left}
 .acct-tabs{display:flex;gap:8px;margin-bottom:16px;background:rgba(120,53,15,.055);padding:4px;border-radius:12px}
-.acct-tab{flex:1;padding:8px 10px;border-radius:9px;border:none;background:transparent;font-size:.82rem;font-weight:700;color:#8a7a6d;cursor:pointer;font-family:inherit;transition:all .2s}
+.acct-tab{flex:1;padding:8px 10px;border-radius:9px;border:none;background:transparent;font-size:.82rem;font-weight:700;color:#57493d;cursor:pointer;font-family:inherit;transition:all .2s}
 .acct-tab.active{background:#fff;color:#af410f;box-shadow:0 1px 3px rgba(120,53,15,.12)}
 .dark .acct-tabs{background:rgba(255,255,255,.06)}
 .dark .acct-tab.active{background:#3a332f;color:#ffb27a}
+/* v2.9.11：登录面板次要文字加深（亮色）/提亮（暗色）。
+   原 #8a7a6d 白底仅 4.13、玻璃拟态叠底（账号弹窗压在开屏弹窗上时
+   链式合成 rgb(194,193,193)）仅 2.30，均不达 WCAG 4.5:1；
+   #57493d 白底 8.66 / 叠底 4.82，暗色 #c9b8aa 暗面板 6.44。 */
+.dark .acct-tab{color:#c9b8aa}
 .acct-field{margin-bottom:13px}
-.acct-field label{display:block;font-size:.74rem;font-weight:700;color:#8a7a6d;margin-bottom:5px}
+.acct-field label{display:block;font-size:.74rem;font-weight:700;color:#57493d;margin-bottom:5px}
 .acct-field input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid rgba(120,53,15,.14);border-radius:11px;font-size:.86rem;font-family:inherit;background:#fff;color:#3f342c;outline:none;transition:border-color .2s,box-shadow .2s}
 .acct-field input:focus{border-color:#e08a4c;box-shadow:0 0 0 3px rgba(224,138,76,.13)}
 .dark .acct-field input{background:#2e2926;border-color:rgba(255,255,255,.1);color:#f0e6dc}
-.acct-btn{width:100%;padding:11px;border:none;border-radius:12px;background:linear-gradient(135deg,#c2410c,#e07a3c);color:#fff;font-size:.88rem;font-weight:800;font-family:inherit;cursor:pointer;transition:transform .15s,box-shadow .2s;box-shadow:0 3px 10px rgba(194,65,12,.22)}
+.dark .acct-field label{color:#c9b8aa}
+/* v2.9.11：主按钮渐变两端都按「白字 4.5:1」选色（#b03908→#c2410c，
+   6.11/5.18）。原末端 #e07a3c 白字仅 2.99，连大字 3:1 都不够，
+   而按钮在「我的资料」里还有 .78rem 小号用法（按正文 4.5 要求）。 */
+.acct-btn{width:100%;padding:11px;border:none;border-radius:12px;background:linear-gradient(135deg,#b03908,#c2410c);color:#fff;font-size:.88rem;font-weight:800;font-family:inherit;cursor:pointer;transition:transform .15s,box-shadow .2s;box-shadow:0 3px 10px rgba(194,65,12,.22)}
 .acct-btn:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(194,65,12,.3)}
 .acct-btn:active{transform:translateY(0) scale(.985)}
 .acct-btn:disabled{opacity:.55;cursor:default;transform:none}
-.acct-btn.ghost{background:transparent;color:#8a7a6d;border:1px solid rgba(120,53,15,.16);box-shadow:none}
+.acct-btn.ghost{background:transparent;color:#57493d;border:1px solid rgba(120,53,15,.16);box-shadow:none}
 .acct-btn.ghost:hover{background:rgba(120,53,15,.045);color:#af410f}
+.dark .acct-btn.ghost{color:#c9b8aa}
+.dark .acct-btn.ghost:hover{color:#ffb27a}
 .acct-msg{margin-top:11px;font-size:.76rem;line-height:1.55;min-height:1.1em;font-weight:600}
+/* v2.9.11：提示消息色按 WCAG 选 —— 亮底 #fffdfb 上原 #0f8a4d 仅 4.41（差一点），
+   换 #0b7a43（5.41）；暗底 #262220 上原三色全部 1.9–2.4 不可读，
+   提亮为 #f87171 / #4ade80 / #ffb27a（5.70 / 9.05 / 8+）。 */
 .acct-msg.err{color:#c0392b}
-.acct-msg.ok{color:#0f8a4d}
+.acct-msg.ok{color:#0b7a43}
 .acct-msg.warn{color:#af410f}
-.acct-hint{font-size:.7rem;color:#a99a8d;line-height:1.6;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(120,53,15,.13)}
+.dark .acct-msg.err{color:#f87171}
+.dark .acct-msg.ok{color:#4ade80}
+.dark .acct-msg.warn{color:#ffb27a}
+.acct-hint{font-size:.7rem;color:#57493d;line-height:1.6;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(120,53,15,.13)}
+.dark .acct-hint{color:#c9b8aa}
 /* ── 图形验证码（v2.6.3，替换原滑块拼图）──
    站主反馈「滑块在有些老的手机屏幕上用不了」，改成**输入式**：看几位数字照着输。
 
@@ -1328,21 +1351,30 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   padding:11px 13px;font-size:1.02rem;font-weight:700;letter-spacing:.36em;text-align:center;
   color:#3f342c;font-family:inherit;text-indent:.36em;border-radius:0;box-shadow:none}
 .cap-wrap .cap-input:focus{border:none;box-shadow:none}
-.cap-wrap .cap-input::placeholder{font-weight:500;letter-spacing:normal;color:#a89c92;text-indent:0}
-.cap-tip{display:block;padding:0 13px 9px;font-size:.68rem;color:#8a7a6d;min-height:1em}
+.cap-wrap .cap-input::placeholder{font-weight:500;letter-spacing:normal;color:#7a6a5c;text-indent:0}
+.cap-tip{display:block;padding:0 13px 9px;font-size:.68rem;color:#57493d;min-height:1em}
+/* v2.9.11：验证码状态色达标化 —— 亮底 #fdfbf9 上 #0f8a4d 仅 4.41，
+   换 #0b7a43（5.41）；暗底 #2b2622 上原来两色约 1.9/2.3 不可读，
+   提亮为 #4ade80 / #f87171（9.05 / 5.70）。 */
 .cap-wrap.ok{border-color:rgba(15,138,77,.45)}
-.cap-wrap.ok .cap-input,.cap-wrap.ok .cap-tip{color:#0f8a4d}
+.cap-wrap.ok .cap-input,.cap-wrap.ok .cap-tip{color:#0b7a43}
 .cap-wrap.bad{border-color:rgba(192,57,43,.5);animation:capShake .38s}
 .cap-wrap.bad .cap-input,.cap-wrap.bad .cap-tip{color:#c0392b}
 @keyframes capShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}
   40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+/* v2.9.11：刷新键蒙层 0.32→0.6 —— 原 32% 黑压浅色验证卡合成中灰
+   rgb(172,171,169)，白字仅 2.30:1；0.6 黑合成 rgb(101) 白字 5.83:1
+   （暗底下更是 18+）。按钮只 26×26，加深不影响看码。 */
 .cap-refresh{position:absolute;right:5px;top:5px;width:26px;height:26px;border-radius:8px;border:none;
-  background:rgba(0,0,0,.32);color:#fff;font-size:.8rem;cursor:pointer;display:flex;
+  background:rgba(0,0,0,.6);color:#fff;font-size:.8rem;cursor:pointer;display:flex;
   align-items:center;justify-content:center;padding:0;line-height:1}
-.cap-refresh:hover{background:rgba(0,0,0,.5)}
+.cap-refresh:hover{background:rgba(0,0,0,.75)}
 .dark .cap-wrap{background:#2b2622;border-color:rgba(255,255,255,.11)}
 .dark .cap-stage{background:#2b2622;border-bottom-color:rgba(255,255,255,.1)}
 .dark .cap-wrap .cap-input{color:#f2e9e1}
+.dark .cap-tip{color:#c9b8aa}
+.dark .cap-wrap.ok .cap-input,.dark .cap-wrap.ok .cap-tip{color:#4ade80}
+.dark .cap-wrap.bad .cap-input,.dark .cap-wrap.bad .cap-tip{color:#f87171}
 .dark .cap-wrap .cap-input::placeholder{color:#8b7d72}
 /* 尊重系统「减少动态效果」 */
 @media (prefers-reduced-motion:reduce){.cap-wrap.bad{animation:none}}
@@ -2280,8 +2312,12 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
     <div class="allboard-head"><span id="popTitle">提示</span><button onclick="closePop()">关闭</button></div>
     <div style="padding:18px 22px;text-align:left">
       <div id="popMedia" style="display:none;margin-bottom:12px"></div>
-      <div id="popBody" style="font-size:.9rem;color:#57534e;line-height:1.85;white-space:pre-line"></div>
-      <div id="popEnd" style="font-size:.78rem;color:#6e635a;margin-top:10px"></div>
+      <!-- v2.9.11：popBody/popEnd 不再写 inline color —— inline 会压过
+           .pop-theme-welcome 主题的白字规则（原来深灰字压 #9a3412 只有
+           1.04:1）。常态继承 allboard-box 的字色（ink-auto 已按底色算好），
+           welcome 主题由 1650/1651 行的规则接管。 -->
+      <div id="popBody" style="font-size:.9rem;line-height:1.85;white-space:pre-line"></div>
+      <div id="popEnd" style="font-size:.78rem;margin-top:10px"></div>
       <button class="btn" id="popLink" style="width:100%;margin-top:14px;display:none" onclick="popGoLink()"></button>
       <button class="btn btn-secondary" id="popOkBtn" style="width:100%;margin-top:10px" onclick="closePop()">我知道了</button>
     </div>
@@ -2734,7 +2770,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.9.10';
+var SITE_VERSION = '2.9.11';
 var VER_DATE = '2026-10-16';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -5932,9 +5968,19 @@ function clsChangePwd(oldPwd, newPwd, username){
  *      data-ink-bg 声明代表色，如渐变的起始色），无需再操心字色。
  * 阈值 0.6 与成绩分析热力图原有公式（0.299R+0.587G+0.114B）一致，
  * 热力图的私有实现已改为调用本函数（一套逻辑，两处生效）。
+ *
+ * 【v2.9.11】判定升级：WCAG 相对亮度 + 对比度择优（不再用感知亮度猜）
+ * ------------------------------------------------------------
+ * 站主原话：「还有登录时的弹窗等等，都是字色不达标的后台也有这种情况」。
+ * v2.9.10 用 YIQ 感知亮度阈值 0.6 猜相反色，中间色会误判 ——
+ * 如 #f97316（亮橙）被判「暗底取白字」，实测白字对比度仅 2.80:1，
+ * 够不上 WCAG 正文 4.5:1，而深字 #241f1c 有 5.82:1。
+ * 现在白字、深字各算一遍 WCAG 对比度，谁大用谁，中间色不再靠猜。
  * ============================================================ */
 var CLS_INK_DARK = '#241f1c';   /* 亮底上的字（暖调近黑，不用纯黑） */
 var CLS_INK_LIGHT = '#ffffff';  /* 暗底上的字 */
+var CLS_INK_RGB_DARK = clsParseColor(CLS_INK_DARK);   /* [36,31,28]，择优用 */
+var CLS_INK_RGB_LIGHT = clsParseColor(CLS_INK_LIGHT); /* [255,255,255]，择优用 */
 
 /* 解析颜色串 → [r,g,b]；支持 #rgb / #rrggbb / rgb() / rgba()。
    透明或解析失败返回 null（调用方按「不处理」跳过）。 */
@@ -5956,13 +6002,31 @@ function clsParseColor(c){
   }
   return null;
 }
-/* 感知亮度 0–1（YIQ 加权，与热力图原公式一致） */
-function clsLuma(rgb){ return (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255; }
-/* 核心：给定背景色，返回可读的相反色 */
+/* WCAG 2.x 相对亮度 0–1（sRGB gamma 展开后加权）。
+   注意与「感知亮度」(0.299R+0.587G+0.114B)/255 的区别：那玩意儿
+   在中间色上会和真实对比度打架（#f97316 就是受害者），择优只认这个。 */
+function clsRelLum(rgb){
+  function ch(v){
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+  return 0.2126 * ch(rgb[0]) + 0.7152 * ch(rgb[1]) + 0.0722 * ch(rgb[2]);
+}
+/* WCAG 对比度 1–21 */
+function clsContrast(a, b){
+  var la = clsRelLum(a), lb = clsRelLum(b);
+  var hi = Math.max(la, lb), lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+/* 核心：给定背景色，返回可读的相反色。
+   v2.9.11 起不猜了直接算 —— 白字与深字各算一遍 WCAG 对比度，取大者。
+   实测：#f97316 白 2.80 / 深 5.82 → 深字；#0f766e 白 5.47 / 深 2.98 → 白字；
+   #e07a3c 白 2.99 / 深 5.45 → 深字；#c2410c 白 5.18 / 深 3.15 → 白字。 */
 function clsReadableOn(bg){
   var c = clsParseColor(bg);
   if(!c) return '';
-  return clsLuma(c) > 0.6 ? CLS_INK_DARK : CLS_INK_LIGHT;
+  return clsContrast(CLS_INK_RGB_LIGHT, c) >= clsContrast(CLS_INK_RGB_DARK, c)
+    ? CLS_INK_LIGHT : CLS_INK_DARK;
 }
 /* 扫描root 内所有 .ink-auto，按实际背景重设字色。
    data-ink-bg 优先（渐变/图片背景没有单一 computed 色时用）；
