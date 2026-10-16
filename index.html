@@ -1697,12 +1697,135 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-embed .sc-pane{overflow:visible;padding:14px 16px 20px}
 .dark .sc-embed{background:#262220;border-color:rgba(255,255,255,.06);
   box-shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.45)}
+/* ===== v2.9.12 成绩分析暗色适配（站主反馈：「暗色模式下成绩表的姓名还是看不清，
+   因为表格背景是白色的」）=====
+   根因：sc-* 约 60 条规则的底色/字色全是浅色系、零暗色覆盖；表格 td 又没有显式
+   color，暗色下继承 body 亮字压白底 ≈1.03:1，姓名等于隐形。这一块补齐，硬规则两条：
+   ① 每个字色都按 WCAG 相对亮度在最差可能底色上实测 ≥4.5（小字），不是估的；
+   ② 整块包在 @media screen 里 —— 打印永远走白底（见下方 @media print 的 !important），
+      暗色覆盖不参与打印，避免深字压深底。
+   图表是内联 SVG、颜色写在 JS 字符串里：给元素加了语义 class（sc-g/sc-axis/sc-tip…），
+   暗色只覆盖 fill/stroke —— CSS 跟随 .dark 自动切，主题切换即时生效、不用重渲染。
+   实测底/字搭配（对比度）：卡 #2e2926·主字 #f0e6dc 11.67·次字 #c9b8aa 7.47·弱字 #a8998c 5.20；
+   表头 #332d29·弱字 4.91；高亮行 #3a2f28·弱字 4.70；徽章白/#c2410c 5.18、白/#0b7a43 5.41。 */
+@media screen{
+/* —— 容器与卡片底色 —— */
+.dark .sc-card{background:#2e2926;border-color:#3d3631}
+.dark .sc-overview{background:linear-gradient(135deg,#332d29,#262220)}
+.dark .sc-sub,.dark .sc-stat,.dark .sc-ov-item{background:#2e2926;border-color:#3d3631}
+.dark .sc-hint{background:#2e2926;border-color:#3d3631}
+.dark .sc-sh-tip{background:#3a2f28;border-color:#4d4038}
+.dark .sc-tblwrap{background:#262220;border-color:#3d3631}
+.dark .sc-tbl th{background:#332d29;color:#f0e6dc;border-bottom-color:#3d3631}
+.dark .sc-tbl td{background:#262220;border-bottom-color:#332d29}
+.dark .sc-tbl th:nth-child(1),.dark .sc-tbl th:nth-child(2){background:#332d29}
+.dark .sc-tbl th:nth-child(2),.dark .sc-tbl td:nth-child(2){box-shadow:1px 0 0 #3d3631}
+.dark .sc-tbl .sc-me-row td,.dark .sc-me-row{background:#3a2f28}
+.dark .sc-bar{border-bottom-color:#3d3631}
+.dark .sc-tabs{border-bottom-color:#3d3631}
+.dark .sc-hm-head{border-bottom-color:#3d3631}
+.dark .sc-hm-row{border-bottom-color:#332d29}
+.dark .sc-hm-row.me{background:#3a2f28}
+.dark .sc-cut-row{border-bottom-color:#332d29}
+.dark .sc-segrow{background:#3d3631}
+.dark .sc-cutmine{background:#2e2926}
+.dark .sc-cutmine.ok{background:#26332a}
+.dark .sc-sub-bar{background:#3d3631}
+/* 「你」气泡：亮色是深底白字，暗色卡片上深底几乎隐形 → 反转为浅底深字 */
+.dark .sc-pos-me span{background:#f0e6dc;color:#262220}
+/* —— 表单 / 按钮 / 勾选行 —— */
+.dark .sc-sel{background:#2e2926;border-color:#4a4038;color:#f0e6dc}
+.dark .sc-seg{border-color:#4a4038}
+.dark .sc-seg button{background:#2e2926;color:#c9b8aa}
+.dark .sc-quadpick button{background:#2e2926;border-color:#4a4038;color:#c9b8aa}
+.dark .sc-seg-icon button:hover{background:#3a2f28}
+.dark .sc-ex-row{background:#2e2926;border-color:#3d3631}
+.dark .sc-ex-row.off{background:#262220}
+.dark .sc-sh-sec{background:#2e2926;border-color:#3d3631}
+.dark .sc-sh-sec.on{background:#3a2f28;border-color:#c2410c}
+.dark .sc-sh-exs,.dark .sc-sh-names{background:#262220;border-color:#3d3631}
+.dark .sc-sh-n{background:#2e2926;border-color:#4a4038;color:#f0e6dc}
+.dark .sc-sh-url input{background:#262220;border-color:#4a4038;color:#f0e6dc}
+.dark .sc-sh-item{background:#2e2926;border-color:#3d3631}
+.dark .sc-sh-state{background:#332d29;color:#c9b8aa}
+.dark .sc-sh-state.on{background:#0b7a43;color:#fff}
+.dark .sc-sh-lb{color:#f0e6dc}
+.dark .sc-hint-ok{background:#26332a;border-color:#3c5a44}
+.dark .sc-hint-ok b{color:#4ade80}
+/* 弹窗玻璃底上的字：暗色 box 是实色 #262220，用高 specificity 压过浅色玻璃规则 */
+.dark .allboard-box .sc-sh-lb,.dark .allboard-box .sc-card-h{color:#f0e6dc}
+.dark .allboard-box .sc-figcap{color:#a8998c}
+/* —— 主字 #f0e6dc —— */
+.dark .sc-card-h,.dark .sc-cut-name,.dark .sc-rank,.dark .sc-diag,.dark .sc-sub-top,
+.dark .sc-trendhead,.dark .sc-rank-sub,.dark .sc-hm-name,.dark .sc-sub-score,
+.dark .sc-ov-item b,.dark .sc-cutmine b,.dark .sc-ex-row .t,.dark .sc-sh-sec .t,
+.dark .sc-sh-ex,.dark .sc-sh-item b{color:#f0e6dc}
+/* —— 次字 #c9b8aa —— */
+.dark .sc-meta,.dark .sc-tabs button,.dark .sc-empty,.dark .sc-quadpick,
+.dark .sc-seglegend,.dark .sc-cut-num,.dark .sc-hm-head b,.dark .sc-sh-tip,
+.dark .sc-hint,.dark .sc-stat span,.dark .sc-ov-total span,.dark .sc-ov-item span{color:#c9b8aa}
+/* —— 弱字 #a8998c（小字，最差底色 #332d29 上实测 4.91）—— */
+.dark .sc-dim,.dark .sc-subrank,.dark .sc-sub-rk,.dark .sc-figcap,.dark .sc-cut-pct,
+.dark .sc-sub-score small,.dark .sc-ex-row .s,.dark .sc-sh-sec .s,.dark .sc-h-note,
+.dark .sc-pos-scale{color:#a8998c}
+/* —— 强调橙 #fdba74（旧 #b45309/#c2410c 暗底仅 2.4～3.4，必须提亮）——
+   ⚠️ .sc-total 的基础规则是 .sc-tbl .sc-total（0,2,1），暗色覆盖必须带 .sc-tbl
+   提高特异性，否则压不住（v2.9.12 扫描器实测 3.14 抓出来的）。 */
+.dark .sc-stat b,.dark .sc-tbl .sc-total,.dark .sc-hm-total,.dark .sc-diag b,
+.dark .sc-ov-total b,.dark .sc-arw,.dark .sc-tabs button.on,.dark .sc-sh-tip b{color:#fdba74}
+/* —— 奖牌：金/银/铜 —— */
+.dark .sc-r1{color:#fbbf24}
+.dark .sc-r2{color:#b8b3ae}
+.dark .sc-r3{color:#e8a87c}
+/* —— 状态：涨绿跌红 —— */
+.dark .sc-sub-diff.up,.dark .sc-trendhead.up b,.dark .sc-good,
+.dark .sc-cutmine.ok span:last-child{color:#4ade80}
+.dark .sc-sub-diff.down,.dark .sc-trendhead.down b,.dark .sc-warn,
+.dark .sc-cutmine.no span:last-child{color:#f87171}
+/* —— 赋分标签：紫底紫字 —— */
+.dark .sc-tag{background:#38304f;color:#d9ccff}
+/* ===== 图表 SVG：语义 class 的 fill/stroke 覆盖（颜色默认值仍在 JS 字符串里，
+   亮色模式直接用属性值；这里只治暗色）===== */
+.dark .sc-svg .sc-g{stroke:#3d3631}                    /* 雷达网格/轴 */
+.dark .sc-svg .sc-axis{stroke:#4a4038}                 /* 折线基线/四象限十字 */
+.dark .sc-svg .sc-hgrid{stroke:#332d29}                /* 直方图竖网格 */
+.dark .sc-svg .sc-axlbl{fill:#d9ccbe}                  /* 雷达轴标签 */
+.dark .sc-svg .sc-axdim{fill:#a8998c}                  /* 日期/轴/图例小字 */
+.dark .sc-svg .sc-tip{fill:#f87171}                    /* 图上分数（红） */
+.dark .sc-svg .sc-mine-line{stroke:#f87171}            /* 我的折线 */
+.dark .sc-svg .sc-mine-poly{stroke:#f87171;fill:rgba(248,113,113,.15)} /* 雷达我的多边形 */
+.dark .sc-svg .sc-mine-dot{fill:#f87171}               /* 我的数据点 */
+.dark .sc-svg .sc-avg{stroke:#a8998c}                  /* 雷达班均虚线 */
+.dark .sc-svg line.sc-mk-avg{stroke:#a8998c}           /* 直方图均分线 */
+.dark .sc-svg text.sc-mk-avg{fill:#a8998c}
+.dark .sc-svg line.sc-mk-mid{stroke:#c9b8aa}           /* 直方图中位线 */
+.dark .sc-svg text.sc-mk-mid{fill:#c9b8aa}
+.dark .sc-svg .sc-cut-line{stroke:#e8b184}             /* 分数线：配置色（默认 #b45309）暗底不可读，统一提亮 */
+.dark .sc-svg .sc-cut-txt{fill:#e8b184}
+.dark .sc-svg .sc-bar{fill:#c98d5e}                    /* 直方图柱 */
+.dark .sc-svg .sc-bar-num{fill:#fdba74}                /* 柱顶人数 */
+.dark .sc-svg .sc-grade-line{stroke:#c4b5fd}           /* 年级排名折线（旧 #7c3aed 暗底仅 1.97） */
+.dark .sc-svg .sc-grade-dot{fill:#c4b5fd}
+.dark .sc-svg .sc-grade-num{fill:#c4b5fd}
+.dark .sc-svg .sc-q1{fill:#2e2a38}                     /* 四象限四块底（原浅色 pastel） */
+.dark .sc-svg .sc-q2{fill:#352b26}
+.dark .sc-svg .sc-q3{fill:#26302a}
+.dark .sc-svg .sc-q4{fill:#2e2926}
+.dark .sc-svg .sc-q-dot{fill:#c4b5fd}
+.dark .sc-svg .sc-qme{fill:#fdba74;stroke:#262220}    /* 四象限姓名标签（白描边改深描边） */
+.dark .sc-svg .sc-qnm{fill:#c4b5fd;stroke:#262220}
+/* 迷你折线（各科趋势卡内）：父级没有 .sc-svg（min-width 会撑爆 132px 小图），单独作用域 */
+.dark .sc-mini-svg .sc-up{stroke:#4ade80}
+.dark .sc-mini-svg .sc-down{stroke:#f87171}
+.dark .sc-mini-svg .sc-mini-num{fill:#f0e6dc;stroke:#262220}
+.dark .sc-mini-svg .sc-mini-dot{fill:#262220;stroke:#a8998c}
+}
 /* 导出内容勾选（v2.9.7 站主：「图片导出可以自定义导出的分析内容」） */
 .sc-ex-row{display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid #f0e7de;
   border-radius:12px;background:#fff;margin-bottom:8px;cursor:pointer}
 .sc-ex-row input{margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:#c2410c}
 .sc-ex-row .t{font-size:.86rem;font-weight:700;color:#292524}
-.sc-ex-row .s{display:block;font-size:.74rem;color:#a8968a;font-weight:400;margin-top:3px;line-height:1.5}
+.sc-ex-row .s{display:block;font-size:.74rem;color:#7a6a5c;font-weight:400;margin-top:3px;line-height:1.5}
 .sc-ex-row.off{opacity:.68;cursor:default;background:#fdfaf7}
 /* 分享内容勾选（同轮） */
 .sc-sh-secs{display:flex;flex-wrap:wrap;gap:8px}
@@ -1725,7 +1848,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-empty{padding:44px 16px;text-align:center;color:#6e635a}
 .sc-empty-ico{font-size:2rem;margin-bottom:10px}
 .sc-empty p{margin:6px 0;font-size:.86rem;line-height:1.7}
-.sc-dim{color:#a8968a}
+.sc-dim{color:#7a6a5c}
 .sc-hint{font-size:.78rem;color:#6e635a;background:#fdf8f3;border:1px solid #f0e7de;border-radius:10px;padding:9px 12px;line-height:1.7;margin-bottom:12px}
 .sc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
 .sc-stat{background:#fff;border:1px solid #f0e7de;border-radius:12px;padding:9px 6px;text-align:center}
@@ -1747,20 +1870,20 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-me-row{background:#fff8f2}
 .sc-you{display:inline-block;margin-left:5px;font-size:.62rem;font-weight:800;color:#fff;background:#c2410c;border-radius:999px;padding:1px 6px;vertical-align:middle}
 .sc-rank{font-weight:800;color:#57534e}
-.sc-r1{color:#b8860b}.sc-r2{color:#8a8a8a}.sc-r3{color:#a0522d}
-.sc-subrank{display:block;font-size:.62rem;color:#a8968a;line-height:1}
+.sc-r1{color:#96660a}.sc-r2{color:#6f6f6f}.sc-r3{color:#a0522d}
+.sc-subrank{display:block;font-size:.62rem;color:#7a6a5c;line-height:1}
 .sc-arw{font-style:normal;color:#c2410c;margin-left:2px}
 .sc-card{background:#fff;border:1px solid #f0e7de;border-radius:14px;padding:13px 14px;margin-top:12px}
 .sc-card-h{font-size:.82rem;font-weight:800;color:#57534e;margin-bottom:10px}
 .sc-svgwrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .sc-svg{width:100%;min-width:420px;height:auto;display:block}
-.sc-figcap{font-size:.72rem;color:#a8968a;line-height:1.6;margin-top:8px}
+.sc-figcap{font-size:.72rem;color:#7a6a5c;line-height:1.6;margin-top:8px}
 .sc-cut-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #faf5f0;font-size:.82rem}
 .sc-cut-row:last-child{border-bottom:none}
 .sc-cut-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .sc-cut-name{flex:1;color:#57534e}
 .sc-cut-num{color:#6e635a}
-.sc-cut-pct{color:#a8968a;font-size:.76rem;min-width:48px;text-align:right}
+.sc-cut-pct{color:#7a6a5c;font-size:.76rem;min-width:48px;text-align:right}
 .sc-segrow{display:flex;height:30px;border-radius:8px;overflow:hidden;background:#f5efe8}
 .sc-seg-bar{display:flex;align-items:center;justify-content:center;color:#fff;font-size:.72rem;font-weight:800;transition:width .3s}
 .sc-seglegend{display:flex;flex-wrap:wrap;gap:10px;margin-top:9px;font-size:.74rem;color:#6e635a}
@@ -1778,26 +1901,26 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-cuts{display:flex;flex-direction:column;gap:8px}
 .sc-cutmine{display:flex;align-items:center;gap:8px;font-size:.84rem;padding:9px 11px;border-radius:10px;background:#faf5f0}
 .sc-cutmine.ok{background:#f0f9f2}
-.sc-cutmine.ok span:last-child{color:#0f8a4d;font-weight:700}
+.sc-cutmine.ok span:last-child{color:#0b7a43;font-weight:700}
 .sc-cutmine.no span:last-child{color:#c0392b;font-weight:700}
 .sc-cutmine b{flex:1;color:#57534e}
 .sc-pos{padding:6px 2px}
-.sc-pos-bar{position:relative;height:10px;border-radius:999px;background:linear-gradient(90deg,#0f8a4d,#e6a97a,#c0392b)}
+.sc-pos-bar{position:relative;height:10px;border-radius:999px;background:linear-gradient(90deg,#0f8a4d,#b06a32,#d4756a)}
 .sc-pos-me{position:absolute;top:-5px;transform:translateX(-50%)}
 .sc-pos-me span{display:block;background:#292524;color:#fff;font-size:.68rem;font-weight:800;padding:2px 7px;border-radius:999px;white-space:nowrap;transform:translateY(-20px)}
-.sc-pos-scale{display:flex;justify-content:space-between;font-size:.72rem;color:#a8968a;margin-top:8px}
+.sc-pos-scale{display:flex;justify-content:space-between;font-size:.72rem;color:#7a6a5c;margin-top:8px}
 .sc-subs{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px}
 .sc-sub{background:#fff;border:1px solid #f0e7de;border-radius:12px;padding:10px 11px}
 .sc-sub-top{display:flex;align-items:center;gap:6px;font-size:.8rem;color:#57534e;margin-bottom:6px}
-.sc-sub-rk{margin-left:auto;font-size:.68rem;color:#a8968a}
+.sc-sub-rk{margin-left:auto;font-size:.68rem;color:#7a6a5c}
 .sc-tag{font-size:.6rem;background:#f3ecfe;color:#7c3aed;border-radius:4px;padding:1px 4px;font-weight:700}
 .sc-sub-score{font-size:1.3rem;font-weight:800;color:#292524;font-variant-numeric:tabular-nums}
-.sc-sub-score small{font-size:.7rem;color:#a8968a;font-weight:400}
+.sc-sub-score small{font-size:.7rem;color:#7a6a5c;font-weight:400}
 .sc-sub-diff{font-size:.72rem;margin-top:3px;font-weight:700}
-.sc-sub-diff.up{color:#0f8a4d}
+.sc-sub-diff.up{color:#0b7a43}
 .sc-sub-diff.down{color:#c0392b}
 .sc-sub-bar{height:5px;border-radius:999px;background:#f5efe8;margin-top:7px;overflow:hidden}
-.sc-sub-bar i{display:block;height:100%;background:#e6a97a;border-radius:999px}
+.sc-sub-bar i{display:block;height:100%;background:#b06a32;border-radius:999px}
 .sc-seg-sm button{padding:5px 9px;font-size:.72rem}
 /* ===== 分享弹窗（v2.8.3） ===== */
 .sc-sh-exs{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow:auto;padding:8px 10px;
@@ -1813,10 +1936,20 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   border-radius:10px;background:#fdfbf9;cursor:pointer}
 .sc-sh-sec input{margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:#c2410c}
 .sc-sh-sec .t{font-size:.84rem;font-weight:700;color:#292524}
-.sc-sh-sec .s{display:block;font-size:.73rem;color:#a8968a;font-weight:400;margin-top:2px;line-height:1.5}
+.sc-sh-sec .s{display:block;font-size:.73rem;color:#7a6a5c;font-weight:400;margin-top:2px;line-height:1.5}
 .sc-sh-tip{font-size:.74rem;color:#6e635a;background:#fff8f2;border:1px solid #f3e7dc;border-radius:9px;
   padding:8px 11px;line-height:1.6}
 .sc-sh-tip b{color:#c2410c}
+/* 分享弹窗表单标签 / 链接生成成功提示（v2.9.12：从内联 style 提成类——
+   内联 color 会压过暗色主题规则，分享弹窗在暗色下整块看不见） */
+.sc-sh-lb{font-size:.8rem;color:#57534e;display:block;margin-bottom:6px}
+.sc-hint-ok{background:#f0f9f2;border-color:#cfe9d8}
+.sc-hint-ok b{color:#0b7a43}
+/* v2.9.12：弹窗玻璃底（.allboard-box）上直接放的字 —— 亮色模式下玻璃会叠出约
+   rgb(194,193,193) 的中灰（扫描器实测），#57534e 压上去只有 4.25、#7a6a5c 只有 2.89。
+   统一加深到 #57493d（实测 4.82；v2.9.11 给账号弹窗立过同样的规矩）。
+   暗色下的对应值见上方 @media screen 块（ specificity 更高，不受本条顺序影响）。 */
+.allboard-box .sc-sh-lb,.allboard-box .sc-figcap,.allboard-box .sc-card-h{color:#57493d}
 .sc-sh-url{display:flex;gap:8px;margin-top:9px}
 .sc-sh-url input{flex:1;min-width:0;padding:9px 11px;border:1.5px solid #e2d5c8;border-radius:10px;
   font-size:.8rem;font-family:ui-monospace,Menlo,monospace;color:#57534e;background:#fff}
@@ -1824,16 +1957,16 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-sh-item{display:flex;align-items:center;gap:9px;font-size:.8rem;padding:7px 10px;
   border:1px solid #f0e7de;border-radius:10px;background:#fff}
 .sc-sh-item b{flex:1;color:#57534e}
-.sc-sh-state{font-size:.68rem;font-weight:800;color:#a8968a;background:#f5efe8;border-radius:999px;padding:2px 8px}
-.sc-sh-state.on{color:#fff;background:#0f8a4d}
+.sc-sh-state{font-size:.68rem;font-weight:800;color:#7a6a5c;background:#f5efe8;border-radius:999px;padding:2px 8px}
+.sc-sh-state.on{color:#fff;background:#0b7a43}
 /* ===== 站主侧块（v2.8.2） ===== */
-.sc-only-admin{display:inline-block;font-size:.6rem;font-weight:800;color:#fff;background:#b0a094;
+.sc-only-admin{display:inline-block;font-size:.6rem;font-weight:800;color:#fff;background:#6e5d50;
   border-radius:999px;padding:1px 7px;margin-left:7px;vertical-align:middle;letter-spacing:.02em}
-.sc-h-note{font-size:.7rem;color:#a8968a;font-weight:400;margin-left:8px}
+.sc-h-note{font-size:.7rem;color:#7a6a5c;font-weight:400;margin-left:8px}
 .sc-diag{margin:0;padding-left:19px;font-size:.82rem;line-height:1.95;color:#57534e}
 .sc-diag b{color:#b45309}
 .sc-warn{color:#c0392b;font-weight:700}
-.sc-good{color:#0f8a4d;font-weight:700}
+.sc-good{color:#0b7a43;font-weight:700}
 .sc-rank-sub{font-size:.78rem;font-weight:800;color:#57534e;margin:11px 0 5px}
 .sc-quadpick{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;font-size:.72rem;color:#6e635a;align-items:center}
 .sc-quadpick button{padding:4px 9px;border:1px solid #e2d5c8;background:#fff;border-radius:8px;
@@ -1854,7 +1987,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-seg-icon button{font-size:.75rem}
 .sc-seg-icon button:hover{background:#fdf8f3}
 .sc-trendhead{font-size:.82rem;color:#57534e;margin-bottom:8px}
-.sc-trendhead.up b{color:#0f8a4d}
+.sc-trendhead.up b{color:#0b7a43}
 .sc-trendhead.down b{color:#c0392b}
 .sc-trendhead span{font-size:.74rem}
 /* ===== A4 打印：只印成绩分析这一块，去掉按钮/工具栏/滚动截断 =====
@@ -2770,7 +2903,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.9.11';
+var SITE_VERSION = '2.9.12';
 var VER_DATE = '2026-10-16';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -12076,19 +12209,19 @@ function scChartHist(st){
   var bars = slice.map(function(c, i){
     var h = H - B - yOf(c);
     var rect = '<rect x="' + (xOf(i) + 1).toFixed(1) + '" y="' + yOf(c).toFixed(1) + '" width="' + Math.max(1, bw - 2).toFixed(1)
-      + '" height="' + Math.max(0, h).toFixed(1) + '" fill="#f0c9a3" rx="2"/>';
+      + '" height="' + Math.max(0, h).toFixed(1) + '" class="sc-bar" fill="#f0c9a3" rx="2"/>';
     if(c <= 0) return rect;
     /* 柱子窄的时候字号跟着缩，宁可小也别糊成一团 */
     var fs = bw < 13 ? 7 : (bw < 18 ? 8.5 : 9.5);
     return rect + '<text x="' + (xOf(i) + bw / 2).toFixed(1) + '" y="' + Math.max(8.5, yOf(c) - 3).toFixed(1)
-      + '" font-size="' + fs + '" font-weight="700" fill="#8a6a4a" text-anchor="middle">' + c + '</text>';
+      + '" font-size="' + fs + '" font-weight="700" class="sc-bar-num" fill="#8a6a4a" text-anchor="middle">' + c + '</text>';
   }).join('');
 
   var axis = '';
   for(var i = 0; i <= slice.length; i += Math.ceil(slice.length / 8)){
     var val = (first + i) * step;
-    axis += '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 8) + '" font-size="9" fill="#a8968a" text-anchor="middle">' + val + '</text>';
-    axis += '<line x1="' + xOf(i).toFixed(1) + '" y1="' + T + '" x2="' + xOf(i).toFixed(1) + '" y2="' + (H - B) + '" stroke="#f5efe8" stroke-width="1"/>';
+    axis += '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 8) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="middle">' + val + '</text>';
+    axis += '<line x1="' + xOf(i).toFixed(1) + '" y1="' + T + '" x2="' + xOf(i).toFixed(1) + '" y2="' + (H - B) + '" class="sc-hgrid" stroke="#f5efe8" stroke-width="1"/>';
   }
 
   /* 辅助线：均分 / 中位数（虚线）+ 分数线（实线） */
@@ -12098,23 +12231,23 @@ function scChartHist(st){
     return xOf(f);
   };
   var dashed = [
-    { v: st.avg, label: '均分', color: '#9c8f83' },
-    { v: st.median, label: '中位数', color: '#c9bdb1' },
+    { v: st.avg, label: '均分', color: '#7d7268', cls: 'sc-mk-avg' },
+    { v: st.median, label: '中位数', color: '#6e635a', cls: 'sc-mk-mid' },
   ];
   dashed.forEach(function(d){
     if(d.v < first * step || d.v > (last + 1) * step) return;
     var x = xForValue(d.v);
-    marks += '<line x1="' + x.toFixed(1) + '" y1="' + T + '" x2="' + x.toFixed(1) + '" y2="' + (H - B) + '" stroke="' + d.color + '" stroke-width="1.2" stroke-dasharray="4 3"/>';
-    marks += '<text x="' + (x + 3).toFixed(1) + '" y="' + (T + 10) + '" font-size="9" fill="' + d.color + '">' + d.label + '</text>';
+    marks += '<line x1="' + x.toFixed(1) + '" y1="' + T + '" x2="' + x.toFixed(1) + '" y2="' + (H - B) + '" class="' + d.cls + '" stroke="' + d.color + '" stroke-width="1.2" stroke-dasharray="4 3"/>';
+    marks += '<text x="' + (x + 3).toFixed(1) + '" y="' + (T + 10) + '" font-size="9" class="' + d.cls + '" fill="' + d.color + '">' + d.label + '</text>';
   });
   var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
   cuts.forEach(function(c){
     if(c.score < first * step || c.score > (last + 1) * step) return;
     var x = xForValue(c.score);
-    marks += '<line x1="' + x.toFixed(1) + '" y1="' + (T - 4) + '" x2="' + x.toFixed(1) + '" y2="' + (H - B) + '" stroke="' + esc(c.color || '#b45309') + '" stroke-width="1.8"/>';
+    marks += '<line x1="' + x.toFixed(1) + '" y1="' + (T - 4) + '" x2="' + x.toFixed(1) + '" y2="' + (H - B) + '" class="sc-cut-line" stroke="' + esc(c.color || '#b45309') + '" stroke-width="1.8"/>';
     /* 贴到右边的线（如 600 分线）标签往左写，不然会被切掉 */
     var near = x > W - R - 10;
-    marks += '<text x="' + (near ? x - 3 : x + 3).toFixed(1) + '" y="' + (T + 22) + '" font-size="9.5" font-weight="700"'
+    marks += '<text x="' + (near ? x - 3 : x + 3).toFixed(1) + '" y="' + (T + 22) + '" font-size="9.5" font-weight="700" class="sc-cut-txt"'
       + ' text-anchor="' + (near ? 'end' : 'start') + '" fill="' + esc(c.color || '#b45309') + '">'
       + esc(c.label) + ' ' + c.score + '</text>';
   });
@@ -12126,8 +12259,8 @@ function scChartHist(st){
     var myT = scTotal(meRow, SC.basis);
     if(myT != null && myT >= first * step && myT <= (last + 1) * step){
       var mx = xForValue(myT);
-      myMark = '<circle cx="' + mx.toFixed(1) + '" cy="' + (H - B) + '" r="4" fill="#c0392b"/>'
-        + '<text x="' + mx.toFixed(1) + '" y="' + (H - B + 16) + '" font-size="9.5" font-weight="700" fill="#c0392b" text-anchor="middle">我 ' + myT + '</text>';
+      myMark = '<circle cx="' + mx.toFixed(1) + '" cy="' + (H - B) + '" r="4" class="sc-mine-dot" fill="#c0392b"/>'
+        + '<text x="' + mx.toFixed(1) + '" y="' + (H - B + 16) + '" font-size="9.5" font-weight="700" class="sc-tip" fill="#c0392b" text-anchor="middle">我 ' + myT + '</text>';
     }
   }
 
@@ -12135,7 +12268,7 @@ function scChartHist(st){
     + '<div class="sc-card-h">总分分布</div>'
     + '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">'
     +   axis + bars + marks + myMark
-    +   '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" stroke="#e2d5c8" stroke-width="1.2"/>'
+    +   '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" class="sc-axis" stroke="#e2d5c8" stroke-width="1.2"/>'
     + '</svg></div>'
     + '<div class="sc-figcap">每格 ' + step + ' 分；柱顶为该段人数，虚线为均分与中位数，实线为分数线，红点为你</div>'
     + '</div>';
@@ -12172,14 +12305,18 @@ function scChartSegments(st){
       segs.push({ label: c.label + ' 及以上', n: n, color: c.color || '#b45309' });
       prev = c.score - 1;
     });
-    segs.push({ label: '其他', n: st.list.filter(function(v){ return v < byCut[byCut.length - 1].score; }).length, color: '#a8968a' });
+    segs.push({ label: '其他', n: st.list.filter(function(v){ return v < byCut[byCut.length - 1].score; }).length, color: '#99887a' });
   } else {
     var full = scFullMark();
+    /* ⚠️ v2.9.12：色板按「柱体图形 ≥3:1 + 柱内计数深字 ≥4.5」双达标重选——
+       旧 #e6a97a/#e0776b/#a8968a 在白卡上只有 2.0～2.8，且亮度落在 WCAG 死区
+       （0.18～0.24）时 ink-auto 两种字色都到不了 4.5。新值亮度 ≥0.2376 走深字，
+       且对白卡/暗卡（无暗色覆盖的内联背景）两头都 ≥3。 */
     var bands = [
       { label: '85% 以上（优秀）', lo: full * 0.85, color: '#2f9e44' },
       { label: '70%～85%（良好）', lo: full * 0.7, color: '#4c8fd6' },
-      { label: '60%～70%（及格）', lo: full * 0.6, color: '#e6a97a' },
-      { label: '60% 以下', lo: 0, color: '#e0776b' },
+      { label: '60%～70%（及格）', lo: full * 0.6, color: '#c07a3e' },
+      { label: '60% 以下', lo: 0, color: '#d4756a' },
     ];
     var hi = max + 1;
     bands.forEach(function(b){
@@ -12363,27 +12500,27 @@ function scRadar(labels, mine, avg, tips){
   };
   var g = '';
   [0.25, 0.5, 0.75, 1].forEach(function(k){
-    g += '<polygon points="' + poly(labels.map(function(){ return 1; }), k) + '" fill="none" stroke="#ece2d8" stroke-width="1"/>';
+    g += '<polygon points="' + poly(labels.map(function(){ return 1; }), k) + '" class="sc-g" fill="none" stroke="#ece2d8" stroke-width="1"/>';
   });
   for(var i = 0; i < n; i++){
     var p = pt(i, 1);
-    g += '<line x1="' + cx + '" y1="' + cy + '" x2="' + p[0].toFixed(1) + '" y2="' + p[1].toFixed(1) + '" stroke="#ece2d8" stroke-width="1"/>';
+    g += '<line x1="' + cx + '" y1="' + cy + '" x2="' + p[0].toFixed(1) + '" y2="' + p[1].toFixed(1) + '" class="sc-g" stroke="#ece2d8" stroke-width="1"/>';
     var lp = pt(i, 1.16);
-    g += '<text x="' + lp[0].toFixed(1) + '" y="' + (lp[1] + 2).toFixed(1) + '" font-size="11" fill="#6e635a" text-anchor="middle">' + esc(labels[i]) + '</text>';
+    g += '<text x="' + lp[0].toFixed(1) + '" y="' + (lp[1] + 2).toFixed(1) + '" font-size="11" class="sc-axlbl" fill="#6e635a" text-anchor="middle">' + esc(labels[i]) + '</text>';
     if(tips && tips[i]){
       g += '<text x="' + lp[0].toFixed(1) + '" y="' + (lp[1] + 15).toFixed(1)
-        + '" font-size="10" font-weight="700" fill="#c0392b" text-anchor="middle">' + esc(tips[i]) + '</text>';
+        + '" font-size="10" font-weight="700" class="sc-tip" fill="#c0392b" text-anchor="middle">' + esc(tips[i]) + '</text>';
     }
   }
-  g += '<polygon points="' + poly(avg, 1) + '" fill="none" stroke="#a8968a" stroke-width="1.4" stroke-dasharray="4 3"/>';
-  g += '<polygon points="' + poly(mine, 1) + '" fill="rgba(192,57,43,.16)" stroke="#c0392b" stroke-width="2"/>';
+  g += '<polygon points="' + poly(avg, 1) + '" class="sc-avg" fill="none" stroke="#857468" stroke-width="1.4" stroke-dasharray="4 3"/>';
+  g += '<polygon points="' + poly(mine, 1) + '" class="sc-mine-poly" fill="rgba(192,57,43,.16)" stroke="#c0392b" stroke-width="2"/>';
   for(var j = 0; j < n; j++){
     var q = pt(j, Math.max(0, Math.min(1, mine[j])));
-    g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="3.2" fill="#c0392b"/>';
+    g += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="3.2" class="sc-mine-dot" fill="#c0392b"/>';
   }
   /* 圈是得分率刻度 —— 不写出来容易被误读成绝对分数 */
-  g += '<text x="6" y="14" font-size="9.5" fill="#a8968a">外圈＝满分</text>';
-  g += '<text x="6" y="27" font-size="9.5" fill="#a8968a">实线＝我　虚线＝班均</text>';
+  g += '<text x="6" y="14" font-size="9.5" class="sc-axdim" fill="#7a6a5c">外圈＝满分</text>';
+  g += '<text x="6" y="27" font-size="9.5" class="sc-axdim" fill="#7a6a5c">实线＝我　虚线＝班均</text>';
   return '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">' + g + '</svg></div>';
 }
 
@@ -12428,10 +12565,10 @@ function scTrendBlock(meRow){
   var dots = pts.map(function(p, i){
     /* 首尾两个日期标签贴边写：居中的话最后一格会被 viewBox 切掉（手机上尤其明显） */
     var anc = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
-    return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.total).toFixed(1) + '" r="3.4" fill="#c0392b"/>'
-      + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.total) - 8).toFixed(1) + '" font-size="9.5" fill="#c0392b" text-anchor="middle">' + p.total + '</text>'
+    return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.total).toFixed(1) + '" r="3.4" class="sc-mine-dot" fill="#c0392b"/>'
+      + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.total) - 8).toFixed(1) + '" font-size="9.5" class="sc-tip" fill="#c0392b" text-anchor="middle">' + p.total + '</text>'
       + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
-          ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" fill="#a8968a" text-anchor="' + anc + '">' + esc(shortName(p.name)) + '</text>'
+          ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">' + esc(shortName(p.name)) + '</text>'
           : '');
   }).join('');
 
@@ -12451,8 +12588,8 @@ function scTrendBlock(meRow){
     + '<div class="sc-trendhead ' + cls + '">最近一次较上次：<b>' + arrow + ' ' + Math.abs(d) + ' 分</b>'
     +   '<span class="sc-dim">（' + esc(prev.name) + ' → ' + esc(last.name) + '）</span></div>'
     + '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">'
-    +   '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" stroke="#e2d5c8" stroke-width="1.2"/>'
-    +   '<path d="' + path + '" fill="none" stroke="#c0392b" stroke-width="2"/>'
+    +   '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" class="sc-axis" stroke="#e2d5c8" stroke-width="1.2"/>'
+    +   '<path d="' + path + '" class="sc-mine-line" fill="none" stroke="#c0392b" stroke-width="2"/>'
     +   dots
     + '</svg></div>'
     + '<div class="sc-figcap">统计 ' + pts.length + ' 次考试（共录入 ' + totalPts + ' 次），覆盖 ' + esc(spanTxt) + '。</div>'
@@ -12513,21 +12650,21 @@ function scSubjTrend(){
         var up = pts[i].v >= pts[i - 1].v;
         segs += '<line x1="' + px(i - 1).toFixed(1) + '" y1="' + py(pts[i - 1].v).toFixed(1)
              +  '" x2="' + px(i).toFixed(1) + '" y2="' + py(pts[i].v).toFixed(1)
-             +  '" stroke="' + (up ? '#0f8a4d' : '#c0392b') + '" stroke-width="1.8" stroke-linecap="round"/>';
+             +  '" class="' + (up ? 'sc-up' : 'sc-down') + '" stroke="' + (up ? '#0b7a43' : '#c0392b') + '" stroke-width="1.8" stroke-linecap="round"/>';
       }
       /* 每个点都写分数 —— 手机端没有鼠标悬浮，不写出来就看不到 */
       var nums = pts.map(function(x, i){
         if(pts.length > 6 && i !== 0 && i !== pts.length - 1 && i !== Math.floor(pts.length / 2)) return '';
         var tx = Math.min(Math.max(px(i), 13), mw - 13);
         return '<text x="' + tx.toFixed(1) + '" y="' + (py(x.v) - 4.5).toFixed(1)
-             + '" font-size="8" font-weight="700" fill="#7a6a5d" text-anchor="middle"'
+             + '" font-size="8" font-weight="700" class="sc-mini-num" fill="#7a6a5d" text-anchor="middle"'
              + ' stroke="#fffdfb" stroke-width="2.6" paint-order="stroke">' + fmtNum(x.v) + '</text>';
       }).join('');
       var dots = pts.map(function(x, i){
         return '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(x.v).toFixed(1)
-             + '" r="2.2" fill="#fff" stroke="#c9b8a8" stroke-width="1.1"/>';
+             + '" r="2.2" class="sc-mini-dot" fill="#fff" stroke="#857468" stroke-width="1.1"/>';
       }).join('');
-      mini = '<svg viewBox="0 0 ' + mw + ' ' + mh + '" style="width:100%;height:38px;display:block;margin-top:4px">'
+      mini = '<svg viewBox="0 0 ' + mw + ' ' + mh + '" class="sc-mini-svg" style="width:100%;height:38px;display:block;margin-top:4px">'
            + segs + nums + dots + '</svg>';
     }
 
@@ -12580,17 +12717,17 @@ function scGradeTrend(){
     var dots = pts.map(function(p, i){
       /* 首尾标签贴边写，避免最后一格被 viewBox 切掉 */
       var anc = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
-      return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.schoolRank).toFixed(1) + '" r="3.4" fill="#7c3aed"/>'
+      return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.schoolRank).toFixed(1) + '" r="3.4" class="sc-grade-dot" fill="#7c3aed"/>'
         + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.schoolRank) - 8).toFixed(1)
-        +   '" font-size="9.5" fill="#7c3aed" text-anchor="middle">' + p.schoolRank + '</text>'
+        +   '" font-size="9.5" class="sc-grade-num" fill="#7c3aed" text-anchor="middle">' + p.schoolRank + '</text>'
         + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
-            ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" fill="#a8968a" text-anchor="' + anc + '">'
+            ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">'
               + esc(shortName(p.name)) + '</text>'
             : '');
     }).join('');
     svg = '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">'
-      + '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" stroke="#e2d5c8" stroke-width="1.2"/>'
-      + '<path d="' + path + '" fill="none" stroke="#7c3aed" stroke-width="2"/>'
+      + '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" class="sc-axis" stroke="#e2d5c8" stroke-width="1.2"/>'
+      + '<path d="' + path + '" class="sc-grade-line" fill="none" stroke="#7c3aed" stroke-width="2"/>'
       + dots + '</svg></div>';
   }
 
@@ -12878,6 +13015,10 @@ function scExportCard(cfg){
   };
 
   /* 背景 + 顶部色条 */
+  /* ⚠️ v2.9.12：导出长图是 canvas，DOM 扫描器扫不到内部文字 —— 已按 WCAG 逐色
+     人工核算（底色 #fffdfb / #fdf8f3 / #fdfbf9）：旧 #a8968a（2.80）、#c9b8a8（1.90）、
+     #0f8a4d 小字（4.27～4.35）不达标 → #7a6a5c / #0b7a43；进度条填充旧 #e6a97a
+     压 #f0e7de 轨道仅 1.67 → #b06a32。本图永远浅色（同打印基线），无暗色变体。 */
   g.fillStyle = '#fffdfb'; g.fillRect(0, 0, W, H);
   g.fillStyle = '#c2410c'; g.fillRect(0, 0, W, 8);
   g.textBaseline = 'alphabetic';
@@ -12898,7 +13039,7 @@ function scExportCard(cfg){
   var totalTxt = myTotal == null ? '—' : String(fmtNum(myTotal));
   g.fillText(totalTxt, pad + nameW + 22, y);
   var totalW = g.measureText(totalTxt).width;
-  f(14); g.fillStyle = '#a8968a';
+  f(14); g.fillStyle = '#7a6a5c';
   g.fillText('/ ' + scFullMark() + ' 总分', pad + nameW + 22 + totalW + 8, y);
 
   /* ③ 四个指标 */
@@ -12914,7 +13055,7 @@ function scExportCard(cfg){
     items.forEach(function(it, i){
       var x = pad + i * (boxW + 12);
       g.fillStyle = '#fdf8f3'; g.fillRect(x, y, boxW, S.metBox);
-      g.fillStyle = '#a8968a'; f(11); g.fillText(it[0], x + 12, y + 22);
+      g.fillStyle = '#7a6a5c'; f(11); g.fillText(it[0], x + 12, y + 22);
       g.fillStyle = '#292524'; f(17, true); g.fillText(it[1], x + 12, y + 46);
     });
     y += S.metBox;
@@ -12941,13 +13082,13 @@ function scExportCard(cfg){
       var barX = pad + 190, barW = W - pad * 2 - 190 - 170;
       g.fillStyle = '#f0e7de'; g.fillRect(barX, y + 8, barW, 8);
       if(v != null && sub.full){
-        g.fillStyle = '#e6a97a';
+        g.fillStyle = '#b06a32';
         g.fillRect(barX, y + 8, barW * Math.min(1, v / sub.full), 8);
       }
 
       g.fillStyle = '#292524'; f(15, true); g.textAlign = 'right';
       g.fillText(v == null ? '未考' : (fmtNum(v) + ' / ' + sub.full), W - pad - 118, y + 23);
-      g.fillStyle = (v != null && v - avg >= 0) ? '#0f8a4d' : '#c0392b'; f(12);
+      g.fillStyle = (v != null && v - avg >= 0) ? '#0b7a43' : '#c0392b'; f(12);
       g.fillText(v == null ? '' : ((v - avg >= 0 ? '+' : '−') + fmtNum(Math.abs(v - avg))), W - pad - 14, y + 23);
       g.textAlign = 'left';
 
@@ -12972,7 +13113,7 @@ function scExportCard(cfg){
       if(mySr && cnt){
         /* 名次越前条越长：第 1 名满格，最后一名也有个可见的短头 */
         var frac = Math.max(0.06, 1 - (mySr - 1) / cnt);
-        g.fillStyle = '#e6a97a'; g.fillRect(bx, y + 10, bw * frac, 8);
+        g.fillStyle = '#b06a32'; g.fillRect(bx, y + 10, bw * frac, 8);
       }
       g.fillStyle = '#292524'; f(13, true); g.textAlign = 'right';
       g.fillText(mySr ? ('第 ' + mySr + ' 名 / ' + cnt + ' 人') : '未考', W - pad - 12, y + 19);
@@ -13003,11 +13144,11 @@ function scExportCard(cfg){
       g.fillStyle = '#e2d5c8'; g.fillRect(mid - 0.5, y + 6, 1, 15);
       if(d.diff != null){
         var len = Math.max(2, Math.abs(d.diff) / maxAbs * (bw2 / 2 - 6));
-        g.fillStyle = d.diff >= 0 ? '#0f8a4d' : '#c0392b';
+        g.fillStyle = d.diff >= 0 ? '#0b7a43' : '#c0392b';
         if(d.diff >= 0) g.fillRect(mid, y + 10, len, 11);
         else g.fillRect(mid - len, y + 10, len, 11);
       }
-      g.fillStyle = (d.diff != null && d.diff >= 0) ? '#0f8a4d' : '#c0392b'; f(13, true);
+      g.fillStyle = (d.diff != null && d.diff >= 0) ? '#0b7a43' : '#c0392b'; f(13, true);
       g.textAlign = 'right';
       g.fillText(d.diff == null ? '未考'
         : ((d.diff >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(d.diff)) + ' 分'), W - pad - 12, y + 19);
@@ -13041,7 +13182,7 @@ function scExportCard(cfg){
     y += S.barTitle;
     var trackW = W - pad * 2;
     g.fillStyle = '#f0e7de'; g.fillRect(pad, y + 4, trackW, 16);
-    g.fillStyle = '#e6a97a';
+    g.fillStyle = '#b06a32';
     g.fillRect(pad, y + 4, Math.max(10, trackW * (1 - (meRow.schoolRank - 1) / gradeN)), 16);
     g.fillStyle = '#c2410c'; f(14, true);
     g.fillText('年级第 ' + meRow.schoolRank + ' 名 / ' + gradeN + ' 人　·　前 '
@@ -13085,7 +13226,7 @@ function scExportCard(cfg){
       g.fillText(String(fmtNum(p.v)), px, py - 10);
       /* 只标首尾日期：点多的时候全标会糊成一团 */
       if(i === 0 || i === series.length - 1){
-        g.fillStyle = '#a8968a'; f(11);
+        g.fillStyle = '#7a6a5c'; f(11);
         g.textAlign = i === 0 ? 'left' : 'right';
         g.fillText(p.date ? p.date.slice(5) : p.name, i === 0 ? pad : pad + boxW, y + boxH + 24);
       }
@@ -13105,7 +13246,7 @@ function scExportCard(cfg){
       g.beginPath(); g.arc(pad + 6, y - 5, 5, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#57534e'; f(14);
       g.fillText(c.label + '　' + fmtNum(c.score) + ' 分', pad + 20, y);
-      g.fillStyle = ok ? '#0f8a4d' : '#c0392b'; f(14, true); g.textAlign = 'right';
+      g.fillStyle = ok ? '#0b7a43' : '#c0392b'; f(14, true); g.textAlign = 'right';
       g.fillText(myTotal == null ? '' : (ok ? '已超 ' + fmtNum(myTotal - c.score) + ' 分'
                                             : '还差 ' + fmtNum(c.score - myTotal) + ' 分'), W - pad, y);
       g.textAlign = 'left';
@@ -13114,7 +13255,7 @@ function scExportCard(cfg){
 
   /* 页脚水印 */
   y = H - 26;
-  g.fillStyle = '#c9b8a8'; f(11);
+  g.fillStyle = '#7a6a5c'; f(11);
   g.fillText('本班内部数据 · 请勿外传　|　导出于 ' + new Date().toLocaleDateString('zh-CN'), pad, y);
   g.textAlign = 'right';
   g.fillText('班级站点 · 成绩分析', W - pad, y);
@@ -13180,16 +13321,16 @@ function scShareDialog(){
     + '<div class="sc-pane" style="max-height:70vh">'
     +   '<div class="sc-hint">生成一个<b>免登录、只读</b>的链接。<br>'
     +     '<b>谁拿到链接谁就能看，转发出去我控制不了</b> —— 所以默认只给 7 天，随时可以撤销。</div>'
-    +   '<div class="field" style="margin-bottom:12px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">分享范围</label>'
+    +   '<div class="field" style="margin-bottom:12px"><label class="sc-sh-lb">分享范围</label>'
     +     scopeSel + '</div>'
     +   '<div id="shNamesWrap" style="display:none;margin-bottom:12px">'
-    +     '<label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">挑同学（点一下选中）</label>'
+    +     '<label class="sc-sh-lb">挑同学（点一下选中）</label>'
     +     '<div id="shNames" class="sc-sh-names">'
     +       SC.rows.map(function(r){
               return '<button type="button" class="sc-sh-n" data-n="' + esc(r.name) + '">' + esc(r.name) + '</button>';
             }).join('')
     +     '</div></div>'
-    +   '<div style="margin-bottom:12px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">分享哪些内容</label>'
+    +   '<div style="margin-bottom:12px"><label class="sc-sh-lb">分享哪些内容</label>'
     +     '<div class="sc-sh-secs">'
     +       '<label class="sc-sh-sec"><input type="checkbox" data-sec="board" checked>'
     +         '<span class="t">成绩单（全班／选中同学）<span class="s">班级统计、名次表、上线情况 —— <b>看好几个人时用这个</b></span></span></label>'
@@ -13197,15 +13338,15 @@ function scShareDialog(){
     +         '<span class="t">个人成绩卡<span class="s">总分、班排名、年级排名、与班均、各科明细 —— <b>分享自己时用这个</b></span></span></label>'
     +       '<div class="sc-sh-tip" id="shSecTip"></div>'
     +     '</div></div>'
-    +   '<div style="margin-bottom:12px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">包含哪几次考试</label>'
+    +   '<div style="margin-bottom:12px"><label class="sc-sh-lb">包含哪几次考试</label>'
     +     '<div class="sc-sh-exs">' + exOpts + '</div></div>'
     +   '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
-    +     '<div style="flex:1;min-width:150px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">有效期</label>'
+    +     '<div style="flex:1;min-width:150px"><label class="sc-sh-lb">有效期</label>'
     +       '<select id="shDays" class="sc-sel">'
     +         '<option value="1">1 天</option><option value="7" selected>7 天</option>'
     +         '<option value="30">30 天</option><option value="0">永久</option>'
     +       '</select></div>'
-    +     '<div style="flex:1;min-width:150px"><label style="font-size:.8rem;color:#57534e;display:block;margin-bottom:6px">最多被打开（可空）</label>'
+    +     '<div style="flex:1;min-width:150px"><label class="sc-sh-lb">最多被打开（可空）</label>'
     +       '<input id="shMax" type="number" min="1" class="sc-sel" placeholder="不填＝不限"></div>'
     +   '</div>'
     +   '<button class="btn" id="shGo" style="width:100%">生成链接</button>'
@@ -13300,7 +13441,7 @@ function scShareCreate(){
        换到任何部署位置（根目录 / 子目录）都对。 */
     var url = new URL(String(j.url || '').replace(/^\/+/, ''), location.href).href;
     document.getElementById('shOut').innerHTML =
-        '<div class="sc-hint" style="background:#f0f9f2;border-color:#cfe9d8">'
+        '<div class="sc-hint sc-hint-ok">'
       + '<b>链接已生成。</b>把它发给要看的人就行 —— 对方不用登录。</div>'
       + '<div class="sc-sh-url"><input id="shUrl" readonly value="' + esc(url) + '">'
       + '<button class="btn btn-sm" id="shCopy">复制</button></div>';
@@ -13741,10 +13882,10 @@ function scQuadrant(){
   var mx = xOf(st.avg), my = yOf(subAvg);
 
   var quads = [
-    { x: L, y: T, w: mx - L, h: my - T, c: '#f6f2ff', t: '总分低 / 单科弱' },
-    { x: mx, y: T, w: W - R - mx, h: my - T, c: '#fff6f0', t: '总分强 / 单科弱（偏科预警）' },
-    { x: L, y: my, w: mx - L, h: H - B - my, c: '#f4faf6', t: '总分低 / 单科强（单科尖子）' },
-    { x: mx, y: my, w: W - R - mx, h: H - B - my, c: '#fdf8f3', t: '总分强 / 单科强' },
+    { x: L, y: T, w: mx - L, h: my - T, c: '#f6f2ff', t: '总分低 / 单科弱', cls: 'sc-q1' },
+    { x: mx, y: T, w: W - R - mx, h: my - T, c: '#fff6f0', t: '总分强 / 单科弱（偏科预警）', cls: 'sc-q2' },
+    { x: L, y: my, w: mx - L, h: H - B - my, c: '#f4faf6', t: '总分低 / 单科强（单科尖子）', cls: 'sc-q3' },
+    { x: mx, y: my, w: W - R - mx, h: H - B - my, c: '#fdf8f3', t: '总分强 / 单科强', cls: 'sc-q4' },
   ];
   /* 手机上点不动、也悬停不了，所以名字必须直接写在图上。
      但 60 个点全写会糊成一团 —— 只写「最该被点名」的：
@@ -13759,14 +13900,14 @@ function scQuadrant(){
   var dots = pts.map(function(p){
     var cx = xOf(p.x), cy = yOf(p.y);
     var g = '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (p.me ? 5.5 : 3.6)
-      + '" fill="' + (p.me ? '#c2410c' : '#7c3aed') + '" fill-opacity="' + (p.me ? 1 : 0.55) + '">'
+      + '" class="' + (p.me ? 'sc-mine-dot' : 'sc-q-dot') + '" fill="' + (p.me ? '#c2410c' : '#7c3aed') + '" fill-opacity="' + (p.me ? 1 : 0.55) + '">'
       + '<title>' + esc(p.name) + '　总分 ' + fmtNum(p.x) + '　' + esc(sub.name) + ' ' + fmtNum(p.y) + '</title></circle>';
     if(p.me || labeled[p.name]){
       var txt = p.me ? ('我 ' + fmtNum(p.x) + '·' + fmtNum(p.y)) : (p.name + ' ' + fmtNum(p.y));
       var tx = cx + 7, anc = 'start';
       if(cx + 7 + txt.length * 9 > W - R){ tx = cx - 7; anc = 'end'; }
       g += '<text x="' + tx.toFixed(1) + '" y="' + (cy + 3.2).toFixed(1) + '" font-size="9" font-weight="700"'
-        + ' fill="' + (p.me ? '#c2410c' : '#6d4bb8') + '" text-anchor="' + anc + '"'
+        + ' class="' + (p.me ? 'sc-qme' : 'sc-qnm') + '" fill="' + (p.me ? '#c2410c' : '#6d4bb8') + '" text-anchor="' + anc + '"'
         + ' stroke="#fffdfb" stroke-width="2.6" paint-order="stroke">' + esc(txt) + '</text>';
     }
     return g;
@@ -13778,14 +13919,14 @@ function scQuadrant(){
     + '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">'
     + quads.map(function(q){
         return '<rect x="' + q.x.toFixed(1) + '" y="' + q.y.toFixed(1) + '" width="' + Math.max(0, q.w).toFixed(1)
-          + '" height="' + Math.max(0, q.h).toFixed(1) + '" fill="' + q.c + '"/>';
+          + '" height="' + Math.max(0, q.h).toFixed(1) + '" class="' + q.cls + '" fill="' + q.c + '"/>';
       }).join('')
-    + '<line x1="' + mx.toFixed(1) + '" y1="' + T + '" x2="' + mx.toFixed(1) + '" y2="' + (H - B) + '" stroke="#e2d5c8" stroke-dasharray="4 3"/>'
-    + '<line x1="' + L + '" y1="' + my.toFixed(1) + '" x2="' + (W - R) + '" y2="' + my.toFixed(1) + '" stroke="#e2d5c8" stroke-dasharray="4 3"/>'
+    + '<line x1="' + mx.toFixed(1) + '" y1="' + T + '" x2="' + mx.toFixed(1) + '" y2="' + (H - B) + '" class="sc-axis" stroke="#e2d5c8" stroke-dasharray="4 3"/>'
+    + '<line x1="' + L + '" y1="' + my.toFixed(1) + '" x2="' + (W - R) + '" y2="' + my.toFixed(1) + '" class="sc-axis" stroke="#e2d5c8" stroke-dasharray="4 3"/>'
     + dots
-    + '<text x="' + (W - R) + '" y="' + (H - B + 22) + '" font-size="10" fill="#a8968a" text-anchor="end">总分 →</text>'
-    + '<text x="' + (L - 8) + '" y="' + (T + 12) + '" font-size="10" fill="#a8968a" text-anchor="end">' + esc(sub.name) + '</text>'
-    + '<text x="' + (mx + 6).toFixed(1) + '" y="' + (my - 6).toFixed(1) + '" font-size="9.5" fill="#a8968a">十字＝班均</text>'
+    + '<text x="' + (W - R) + '" y="' + (H - B + 22) + '" font-size="10" class="sc-axdim" fill="#7a6a5c" text-anchor="end">总分 →</text>'
+    + '<text x="' + (L - 8) + '" y="' + (T + 12) + '" font-size="10" class="sc-axdim" fill="#7a6a5c" text-anchor="end">' + esc(sub.name) + '</text>'
+    + '<text x="' + (mx + 6).toFixed(1) + '" y="' + (my - 6).toFixed(1) + '" font-size="9.5" class="sc-axdim" fill="#7a6a5c">十字＝班均</text>'
     + '</svg></div>'
     + '<div class="sc-quadpick">看哪一科：' + subs.map(function(x){
         return '<button class="' + (x.key === sub.key ? 'on' : '') + '" onclick="scSetQuad(\'' + x.key + '\')">' + esc(x.name) + '</button>';
@@ -13813,17 +13954,21 @@ function scHeatmap(){
       var pack = rk.subj[sub.key] || {};
       var rank = pack.rank[r.id], cnt = pack.count || 1;
       var p = cnt > 1 ? (rank - 1) / (cnt - 1) : 0;   /* 0 = 最好 */
-      /* 用「好→橙、差→浅灰蓝」两段插值，避免红绿混淆 */
+      /* 用「好→深橙、差→浅奶油」两段插值，避免红绿混淆。
+         ⚠️ v2.9.12：原来是一条从深橙到近白的连续渐变，中间必然穿过 WCAG 死区
+         （底色亮度落在 0.18～0.24 时，白字和深字都到不了 4.5 —— 扫描器实测
+         白字仅 4.22）。连续渐变绕不开死区，所以改成两段各自待在安全区：
+         前 50% 深橙区（白字 ≥4.5），后 50% 浅奶油区（深字 ≥4.5）。 */
       var cr, cg, cb, q;
       if(p < 0.5){
-        cr = Math.round(194 + (230 - 194) * (p / 0.5));
-        cg = Math.round(65 + (200 - 65) * (p / 0.5));
-        cb = Math.round(12 + (170 - 12) * (p / 0.5));
+        cr = Math.round(150 + (175 - 150) * (p / 0.5));
+        cg = Math.round(40 + (70 - 40) * (p / 0.5));
+        cb = Math.round(8 + (25 - 8) * (p / 0.5));
       } else {
         q = (p - 0.5) / 0.5;
-        cr = Math.round(230 + (229 - 230) * q);
-        cg = Math.round(200 + (231 - 200) * q);
-        cb = Math.round(170 + (235 - 170) * q);
+        cr = Math.round(243 + (229 - 243) * q);
+        cg = Math.round(228 + (231 - 228) * q);
+        cb = Math.round(214 + (235 - 214) * q);
       }
       /* 字色走全站共用 clsReadableOn：底色亮取深字、底色暗取白字，一套逻辑 */
       var ink = clsReadableOn('rgb(' + cr + ',' + cg + ',' + cb + ')') || '#6b5443';
