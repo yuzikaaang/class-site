@@ -3399,9 +3399,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(indexHtml),
+  t('★前台版本号为 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adminHtml),
+  t('★后台版本号为 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3765,9 +3765,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(indexHtml38),
+  t('★前台版本号为 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adminHtml38),
+  t('★后台版本号为 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4780,10 +4780,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx47));
-  t('★后台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adm47));
+  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx47));
+  t('★后台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adm47));
   t('★service worker 缓存版本升到 v77（旧缓存要作废）',
-    /class-site-v77/.test(sw47));
+    /class-site-v78/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4867,7 +4867,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.10');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.11');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4967,9 +4967,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx48));
+  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-16'/.test(idx48));
-  t('★service worker 缓存版本升到 v77', /class-site-v77/.test(sw48));
+  t('★service worker 缓存版本升到 v77', /class-site-v78/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5033,8 +5033,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx49));
-  t('★后台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adm49));
+  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx49));
+  t('★后台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5106,7 +5106,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx50));
+  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5268,7 +5268,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adm));
+  t('★后台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5336,7 +5336,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx));
+  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5837,7 +5837,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx));
+  t('★前台版本号升到 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -5948,8 +5948,8 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx));
-  t('★后台内置更新记录补到 2.9.10',
+  t('★前台版本号升到 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx));
+  t('★后台内置更新记录补到 2.9.11',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
   /* ===== ⑥ 真跑一遍：只分享 1 个人，班均与排名仍然是对的 ===== */  const reg2 = await call('/api/auth?action=register', {
@@ -6053,11 +6053,11 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(idx));
-  t('★后台版本号 2.9.10', /SITE_VERSION = '2\.9\.10'/.test(adm));
+  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx));
+  t('★后台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 2.9.10 且缓存升 v77', /SITE_VER = '2\.9\.10'/.test(swSrc) && /class-site-v77/.test(swSrc));
-  t('★后台内置更新记录有 2.9.10 条目', /"version": "2\.9\.10"/.test(adm));
+  t('★sw.js SITE_VER 2.9.11 且缓存升 v77', /SITE_VER = '2\.9\.11'/.test(swSrc) && /class-site-v78/.test(swSrc));
+  t('★后台内置更新记录有 2.9.11 条目', /"version": "2\.9\.11"/.test(adm));
 }
 
 /* 【62】第五十七轮·全站字色共用逻辑 + 文案官方化（v2.9.10）
@@ -6075,20 +6075,30 @@ console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检�
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const shr = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
 
-  /* ---- ① 四函数块两页同构（改一套不改另一套 = 没改） ---- */
-  t('★index.html 有 clsParseColor/clsLuma/clsReadableOn/clsAutoInk 四件套',
-    /function clsParseColor\(/.test(idx) && /function clsLuma\(/.test(idx)
+  /* ---- ① 函数块两页同构（改一套不改另一套 = 没改） ---- */
+  t('★index.html 有 clsParseColor/clsRelLum/clsContrast/clsReadableOn/clsAutoInk',
+    /function clsParseColor\(/.test(idx) && /function clsRelLum\(/.test(idx)
+    && /function clsContrast\(/.test(idx)
     && /function clsReadableOn\(/.test(idx) && /function clsAutoInk\(/.test(idx));
-  t('★admin.html 有同款四件套（逐行同构）',
-    /function clsParseColor\(/.test(adm) && /function clsLuma\(/.test(adm)
+  t('★admin.html 有同款（逐行同构）',
+    /function clsParseColor\(/.test(adm) && /function clsRelLum\(/.test(adm)
+    && /function clsContrast\(/.test(adm)
     && /function clsReadableOn\(/.test(adm) && /function clsAutoInk\(/.test(adm));
   t('★两页字色常量同值（CLS_INK_DARK #241f1c / CLS_INK_LIGHT #ffffff）',
     (idx.match(/CLS_INK_DARK = '#241f1c'/g) || []).length === 1
     && (adm.match(/CLS_INK_DARK = '#241f1c'/g) || []).length === 1
     && /CLS_INK_LIGHT = '#ffffff'/.test(idx) && /CLS_INK_LIGHT = '#ffffff'/.test(adm));
-  t('★clsReadableOn 阈值 0.6（亮底深字、暗底白字）',
-    /clsLuma\(c\) > 0\.6 \? CLS_INK_DARK : CLS_INK_LIGHT/.test(idx)
-    && /clsLuma\(c\) > 0\.6 \? CLS_INK_DARK : CLS_INK_LIGHT/.test(adm));
+  /* v2.9.11：YIQ 阈值 0.6 → WCAG 对比度择优（白字/深字各算一遍取大者）。
+     旧断言 clsLuma(c) > 0.6 正是登录弹窗字色不达标的根因（#f97316 被误判白字）。 */
+  t('★clsReadableOn 走 WCAG 对比度择优（白字/深字取大者）',
+    /clsContrast\(CLS_INK_RGB_LIGHT, c\) >= clsContrast\(CLS_INK_RGB_DARK, c\)/.test(idx)
+    && /clsContrast\(CLS_INK_RGB_LIGHT, c\) >= clsContrast\(CLS_INK_RGB_DARK, c\)/.test(adm));
+  t('★择优色值三元组同源解析（CLS_INK_RGB_DARK/LIGHT 各只定义一次）',
+    (idx.match(/var CLS_INK_RGB_DARK = clsParseColor/g) || []).length === 1
+    && (adm.match(/var CLS_INK_RGB_DARK = clsParseColor/g) || []).length === 1
+    && /var CLS_INK_RGB_LIGHT = clsParseColor/.test(idx) && /var CLS_INK_RGB_LIGHT = clsParseColor/.test(adm));
+  t('★旧的 YIQ 阈值判定已删除（两页都不再有 clsLuma）',
+    !/function clsLuma\(/.test(idx) && !/function clsLuma\(/.test(adm));
   t('★clsAutoInk 支持 data-ink-bg 优先 + 渐变 background-image 抓代表色',
     /data-ink-bg/.test(idx) && /backgroundImage/.test(idx)
     && /data-ink-bg/.test(adm) && /backgroundImage/.test(adm));
@@ -6152,6 +6162,79 @@ console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检�
     const hits = banned.filter(w => new RegExp("(['\"`])(?:(?!\\1)[\\s\\S])*" + w + "(?:(?!\\1)[\\s\\S])*\\1").test(src));
     t('★' + name + ' 界面文案无防误解话术（' + (hits.length ? hits.join('/') : '零命中') + '）', hits.length === 0);
   }
+}
+
+/* 【63】第五十八轮·登录弹窗字色达标（v2.9.11）
+   ------------------------------------------------------------
+   站主原话：「还有登录时的弹窗等等，都是字色不达标的后台也有这种情况」。
+   根因两层：① clsReadableOn 用 YIQ 阈值 0.6 猜相反色，中间色误判
+   （#f97316 白字仅 2.80:1）→ 已升级 WCAG 对比度择优（【62】① 盯住）；
+   ② 登录弹窗组件一批写死的浅色字 + welcome 主题被 inline color 压过。
+   这里盯：加深/提亮后的色值真的落进 CSS、暗色覆盖齐全、
+   玻璃拟态叠底场景按最差底色选色、welcome 主题链路不再被 inline 压。 */
+console.log('\n【63】第五十八轮·登录弹窗字色达标检查');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* ---- ① 登录面板次要文字：亮色 #57493d（玻璃叠底 rgb(194,193,193) 上 4.82、
+             白底 8.66），暗色 #c9b8aa（暗面板 6.44）；旧 #8a7a6d/#a99a8d 清零 ---- */
+  t('★acct-tab/field label/cap-tip/acct-hint/ghost 亮色统一 #57493d',
+    /\.acct-tab\{[^}]*color:#57493d/.test(idx) && /\.acct-field label\{[^}]*color:#57493d/.test(idx)
+    && /\.cap-tip\{[^}]*color:#57493d/.test(idx) && /\.acct-hint\{[^}]*color:#57493d/.test(idx)
+    && /\.acct-btn\.ghost\{[^}]*color:#57493d/.test(idx));
+  t('★登录面板这些选择器不再用 #8a7a6d / #a99a8d',
+    !/\.acct-tab\{[^}]*#8a7a6d/.test(idx) && !/\.acct-field label\{[^}]*#8a7a6d/.test(idx)
+    && !/\.cap-tip\{[^}]*#8a7a6d/.test(idx) && !/\.acct-hint\{[^}]*#a99a8d/.test(idx)
+    && !/\.acct-btn\.ghost\{[^}]*#8a7a6d/.test(idx));
+  t('★登录面板次要文字暗色覆盖 #c9b8aa（tab/label/hint/cap-tip/ghost 五处）',
+    /\.dark \.acct-tab\{color:#c9b8aa\}/.test(idx)
+    && /\.dark \.acct-field label\{color:#c9b8aa\}/.test(idx)
+    && /\.dark \.acct-hint\{color:#c9b8aa\}/.test(idx)
+    && /\.dark \.cap-tip\{color:#c9b8aa\}/.test(idx)
+    && /\.dark \.acct-btn\.ghost\{color:#c9b8aa\}/.test(idx));
+
+  /* ---- ② 主按钮渐变两端白字都 ≥4.5（#b03908 6.11 / #c2410c 5.18）---- */
+  t('★acct-btn 渐变 #b03908→#c2410c（原末端 #e07a3c 白字仅 2.99）',
+    /\.acct-btn\{[^}]*linear-gradient\(135deg,#b03908,#c2410c\)/.test(idx)
+    && !/linear-gradient\(135deg,#c2410c,#e07a3c\)/.test(idx));
+
+  /* ---- ③ 提示消息与验证码状态色 ---- */
+  t('★acct-msg ok 亮色 #0b7a43（原 #0f8a4d 仅 4.41）',
+    /\.acct-msg\.ok\{color:#0b7a43\}/.test(idx) && !/\.acct-msg\.ok\{color:#0f8a4d\}/.test(idx));
+  t('★acct-msg 暗色三态提亮（#f87171/#4ade80/#ffb27a）',
+    /\.dark \.acct-msg\.err\{color:#f87171\}/.test(idx)
+    && /\.dark \.acct-msg\.ok\{color:#4ade80\}/.test(idx)
+    && /\.dark \.acct-msg\.warn\{color:#ffb27a\}/.test(idx));
+  t('★验证码 ok 亮色 #0b7a43、bad #c0392b；暗色 #4ade80/#f87171',
+    /\.cap-wrap\.ok \.cap-input,\.cap-wrap\.ok \.cap-tip\{color:#0b7a43\}/.test(idx)
+    && /\.cap-wrap\.bad \.cap-input,\.cap-wrap\.bad \.cap-tip\{color:#c0392b\}/.test(idx)
+    && /\.dark \.cap-wrap\.ok \.cap-input,\.dark \.cap-wrap\.ok \.cap-tip\{color:#4ade80\}/.test(idx)
+    && /\.dark \.cap-wrap\.bad \.cap-input,\.dark \.cap-wrap\.bad \.cap-tip\{color:#f87171\}/.test(idx));
+  t('★验证码占位符加深 #7a6a5c（原 #a89c92 仅 2.60）',
+    /\.cap-wrap \.cap-input::placeholder\{[^}]*color:#7a6a5c/.test(idx));
+  t('★刷新键蒙层 0.32→0.6（白字 2.30→5.83，全站无 .32 残留）',
+    /\.cap-refresh\{[^}]*rgba\(0,0,0,\.6\)/.test(idx) && !/rgba\(0,0,0,\.32\)/.test(idx));
+
+  /* ---- ④ welcome 主题链路：inline color 是根因 ---- */
+  t('★popBody/popEnd 无 inline color（welcome 主题白字不再被压，1.04→9+）',
+    /<div id="popBody" style="font-size:\.9rem;line-height:1\.85;white-space:pre-line"><\/div>/.test(idx)
+    && /<div id="popEnd" style="font-size:\.78rem;margin-top:10px"><\/div>/.test(idx)
+    && !/<div id="popBody"[^>]*color:/.test(idx) && !/<div id="popEnd"[^>]*color:/.test(idx));
+  t('★welcome-list 压暗蒙层 rgba(0,0,0,.18)（原 0.15 白提亮仅 4.09）',
+    /\.welcome-list\{background:rgba\(0,0,0,\.18\)/.test(idx)
+    && !/\.welcome-list\{background:rgba\(255,255,255,\.15\)/.test(idx));
+
+  /* ---- ⑤ 倒计时「查看全部」兜底合并为浅底深字 ---- */
+  t('★cd-viewall 兜底即浅底深字 #af410f on #f6f1ec（5.22）',
+    /\.cd-viewall\{margin-left:auto;[^}]*background:#f6f1ec;color:#af410f/.test(idx));
+  t('★裸 .cd-viewall 白字兜底与 .dark 白底兜底已删除',
+    !/\.cd-viewall\{[^}]*rgba\(255,255,255,\.25\)/.test(idx)
+    && !/\.dark \.cd-viewall\{/.test(idx));
+
+  /* ---- ⑥ 后台登录门 mark 接 ink-auto（--grad 亮橙白字仅 2.80）---- */
+  t('★后台登录门/侧栏两处 mark 都接 ink-auto',
+    (adm.match(/<div class="mark ink-auto">班<\/div>/g) || []).length === 2);
 }
 
 console.log('\n' + '='.repeat(52));
