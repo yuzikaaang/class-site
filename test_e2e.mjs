@@ -7508,6 +7508,159 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('★后台更新记录仍保留 2.10.0 条目', /"version": "2\.10\.0"/.test(admSrc));
 }
 
+console.log('\n【71】第六十二轮·后台内容时间不再多算 8 小时（v2.10.1）');
+{
+  const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* ---- ① 静态结构 ---- */
+  t('★新增 fmtWall（墙钟时间，不碰时区）', /function fmtWall\(v, mode\)\{/.test(admSrc));
+  t('★新增 fmtRecTime：按 timeKind 分派 db / wall', /function fmtRecTime\(c\)\{/.test(admSrc));
+  t('★fmtWall 注释写明「不再补 Z 按 UTC 解析」的根因',
+    /补 Z 按 UTC 解析/.test(admSrc) && /多加 8 小时/.test(admSrc));
+  t('★公告记录标注 timeKind（createdAt/updatedAt 才是 db）',
+    /timeKind: \(a\.createdAt \|\| a\.updatedAt\) \? 'db' : 'wall'/.test(admSrc));
+  t('★作业记录标注 timeKind（updatedAt 才是 db）',
+    /timeKind: \(!c\.updatedAt && t\) \? 'wall' : 'db'/.test(admSrc));
+  t('★列表与详情都改用 fmtRecTime',
+    (admSrc.match(/fmtRecTime\(c\)/g) || []).length >= 2);
+
+  /* ---- ② 行为测试：把函数抽出来真跑一遍 ----
+     fmtWall 不依赖 DOM，可直接 eval 出来验；fmt 用桩替换，
+     这样能确证「db 走 fmt、wall 走 fmtWall」的分派是真的。 */
+  const pick = (name) => {
+    const m = admSrc.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}'));
+    if (!m) throw new Error('抽不到函数：' + name);
+    return m[0];
+  };
+  const built = new Function('fmt',
+    pick('fmtWall') + '\n' + pick('fmtRecTime') + '\nreturn { fmtWall, fmtRecTime };')(
+    (v) => 'DB:' + v
+  );
+
+  t('墙钟：手填时间原样输出（不再 +8）',
+    built.fmtWall('2026-10-16 21:30') === '2026-10-16 21:30',
+    built.fmtWall('2026-10-16 21:30'));
+  t('墙钟：带秒的手填串也不会被当 UTC',
+    built.fmtWall('2026-10-16 21:30:05') === '2026-10-16 21:30',
+    built.fmtWall('2026-10-16 21:30:05'));
+  t('墙钟：作业起止区间两段都格式化（旧实现整串解析失败显示「—」）',
+    built.fmtWall('2026-10-16 ~ 2026-11-01') === '2026-10-16 ~ 2026-11-01',
+    built.fmtWall('2026-10-16 ~ 2026-11-01'));
+  t('墙钟：缺失的一端显示 ?（不吞掉）',
+    built.fmtWall('? ~ 2026-11-01') === '? ~ 2026-11-01',
+    built.fmtWall('? ~ 2026-11-01'));
+  t('墙钟：单日期不带时间时只显示日期',
+    built.fmtWall('2026-10-16') === '2026-10-16');
+  t('墙钟：认不出的串原样输出，不擅自换算',
+    built.fmtWall('待定') === '待定');
+  t('墙钟：空值显示破折号', built.fmtWall('') === '—' && built.fmtWall(null) === '—');
+  t('分派：timeKind=db 走 fmt（数据库 UTC 时间戳）',
+    built.fmtRecTime({ time: '2026-10-16 13:30:00', timeKind: 'db' }) === 'DB:2026-10-16 13:30:00');
+  t('分派：公告手填时间走 fmtWall（原样）',
+    built.fmtRecTime({ time: '2026-10-16 21:30', timeKind: 'wall' }) === '2026-10-16 21:30');
+  t('分派：无时间显示破折号', built.fmtRecTime({ time: null }) === '—');
+}
+
+console.log('\n【72】第六十二轮·成绩模版导入（两行表头按列解析，v2.10.1）');
+{
+  const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* ---- ① 静态护栏 ---- */
+  ['scTemplateXlsx', 'scParseTwoRow', 'scFillMerged', 'scIsTwoRowHeader', 'scSubKind', 'scRowTotal', 'scClassRanks']
+    .forEach((fn) => t('★新增函数 ' + fn, new RegExp('function ' + fn + '\\(').test(admSrc)));
+  t('★scParseAOA 检测两行表头后转走模版解析',
+    /scIsTwoRowHeader\(aoa\[0\] \|\| \[\], aoa\[1\] \|\| \[\]\)\) return scParseTwoRow/.test(admSrc));
+  t('★导入弹窗有「下载模版」按钮', /id="scTpl"/.test(admSrc) && /scTemplateXlsx\(e\)/.test(admSrc));
+  t('★导出模版带合并单元格（!merges）', /ws\['!merges'\]\s*=\s*merges/.test(admSrc));
+  t('★赋分科目生成四列（原始分/排名/赋分/排名）',
+    /graded \? 4 : 2/.test(admSrc) && /r1\.push\('赋分'\)/.test(admSrc));
+  t('★预览加「班排」列并说明当场计算', /<th>班排<\/th>/.test(admSrc) && /班排与总分是<b>当场按各科分数算的<\/b>/.test(admSrc));
+
+  /* ---- ② 行为测试：抽函数真跑一遍模版解析 ----
+     AOA 完全照样主模版的形状造：第 1 行大类（合并 → 续格读出来是空）、
+     第 2 行子字段。这样能验「合并填充 + 按列取数」是真的работает。 */
+  const pick = (name) => {
+    const m = admSrc.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}'));
+    if (!m) throw new Error('抽不到函数：' + name);
+    return m[0];
+  };
+  const src = ['scFillMerged', 'scIsTwoRowHeader', 'scSubKind', 'scMapRows', 'scGuessMap',
+               'scParseTwoRow', 'scParseAOA', 'scRowTotal', 'scClassRanks']
+    .map(pick).join('\n');
+  const api = new Function(src + '\nreturn { scParseAOA, scRowTotal, scClassRanks, scFillMerged };')();
+
+  const subs = [
+    { key: 'chinese',  name: '语文', full: 150 },
+    { key: 'math',     name: '数学', full: 150 },
+    { key: 'english',  name: '英语', full: 150 },
+    { key: 'physics',  name: '物理', full: 100 },
+    { key: 'chemistry', name: '化学', full: 100, graded: true },
+    { key: 'biology',  name: '生物', full: 100, graded: true },
+  ];
+
+  /* 列布局**照着站主真实模版**造（27 列，合并区与表格里的一模一样）：
+     A考号 B姓名 | C..H 总分块(C1:H1 合并，含两组三元组) | I:J 语文 | K:L 数学 |
+     M:N 英语 | O:P 物理 | Q:T 化学(原始/排名/赋分/排名) | U:X 生物 | Y/Z/AA 分数线 */
+  const row0 = ['基本信息','', '总分','','','','','', '语文','', '数学','', '英语','', '物理','',
+                '化学','','','', '生物','','','', '600线','特控线','本科线'];
+  const row1 = ['考号/学号','姓名','总分','年级排名','联考排名','原始分','年级排名','联考排名',
+                '分数','年级排名','分数','年级排名','分数','年级排名','分数','年级排名',
+                '原始分','年级排名','赋分','年级排名','原始分','年级排名','赋分','年级排名',
+                '600','',''];
+  const data = [
+    ['25010001','张三','620','12','30','610','15','33','110','15','130','8','120','10','90','20','85','25','88','18','80','30','82','22','','',''],
+    ['25010002','李四','','','','','','','100','','120','','110','','','','','','','','','','','','','',''],
+    ['25010003','王五','','','','','','','-','','/','','缺考','','','','','','','','','','','','','',''],
+  ];
+  const aoa = [row0, row1].concat(data);
+
+  const p = api.scParseAOA(aoa, subs);
+  t('模版：识别为两行表头', p.twoRow === true);
+  t('模版：解析出 3 行（含缺考行）', p.rows.length === 3, '实得 ' + p.rows.length);
+  const zhang = p.rows[0], li = p.rows[1], wang = p.rows[2];
+  t('模版：姓名/学号按列取到', zhang.name === '张三' && zhang.no === '25010001',
+    zhang.name + '/' + zhang.no);
+  t('模版：各科分数按列取到',
+    zhang.s.chinese.raw === 110 && zhang.s.math.raw === 130 && zhang.s.english.raw === 120
+    && zhang.s.physics.raw === 90,
+    JSON.stringify(zhang.s));
+  t('模版：赋分科目拆成原始分 + 赋分',
+    zhang.s.chemistry.raw === 85 && zhang.s.chemistry.assigned === 88
+    && zhang.s.biology.raw === 80 && zhang.s.biology.assigned === 82,
+    JSON.stringify(zhang.s.chemistry) + JSON.stringify(zhang.s.biology));
+  t('模版：总分年级排名 / 联考排名取总分组第一列（D/E，不是 F/G/H）',
+    zhang.schoolRank === 12 && zhang.leagueRank === 30,
+    zhang.schoolRank + '/' + zhang.leagueRank);
+  t('模版：总分本身不入库（系统按各科算）', zhang.s.total === undefined);
+  t('模版：空白单元格 = 不知（没填的科目不产生数据）',
+    li.s.physics === undefined && li.s.chemistry === undefined && li.schoolRank === null,
+    JSON.stringify(Object.keys(li.s)));
+  t('模版：- / / / 缺考 一律当不知',
+    wang.s.chinese === undefined && wang.s.math === undefined && wang.s.english === undefined);
+  t('模版：各科年级排名 + 总分块重复列都如实登记、不悄悄丢',
+    p.ignored.length === 11, '实得 ' + p.ignored.length);
+  t('模版：分数线列被识别为参考信息（不写库）',
+    p.cutlines.length === 3 && p.cutlines[0].label === '600线',
+    JSON.stringify(p.cutlines.map(c => c.label)));
+
+  /* 班排当场算 */
+  const ranks = api.scClassRanks(p.rows, subs);
+  t('班排：按各科累加当场排名（张三最高 → 1）', ranks[0] === 1, '实得 ' + ranks[0]);
+  t('班排：总分累加含赋分（110+130+120+90+88+82=620）',
+    api.scRowTotal(zhang, subs) === 620, '实得 ' + api.scRowTotal(zhang, subs));
+  t('班排：缺考同学只按已填科目累计，不报错',
+    api.scRowTotal(li, subs) === 330, '实得 ' + api.scRowTotal(li, subs));
+
+  /* 单行表头（老路径）不受影响 */
+  const flat = api.scParseAOA([['姓名','学号','语文','数学'], ['赵六','25010009','99','88']], subs);
+  t('回归：单行表头仍走老路径（twoRow 不置位）', !flat.twoRow && flat.rows.length === 1);
+  t('回归：单行表头姓名/科目仍解析正确',
+    flat.rows[0].name === '赵六' && flat.rows[0].s.chinese.raw === 99,
+    JSON.stringify(flat.rows[0].s));
+  t('回归：合并填充不越界（第 1 列就非空时不受影响）',
+    api.scFillMerged(['甲','','乙'])[1] === '甲' && api.scFillMerged(['甲','','乙'])[2] === '乙');
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }

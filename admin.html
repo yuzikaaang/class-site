@@ -966,6 +966,39 @@ function fmt(v, mode){
   if(mode === 'time') return h + ':' + m;
   return Y + '-' + M + '-' + D + ' ' + h + ':' + m + ':' + sec;
 }
+
+/**
+ * 本地墙钟字符串原样格式化（**不碰时区**）。
+ *
+ * ⚠️ 2026-10-16 站主反馈修的坑：公告的发布时间、作业的起止日期是**站主手填 /
+ *    设备本地写下的墙钟字符串**（如 "2026-10-16 21:30"），前端是直接
+ *    `a.date.slice(5)` 原样显示的（见 index.html 公告栏）。
+ *    而 fmt() 会给没有时区标记的串补 Z 按 UTC 解析 —— 于是站主填 21:30，
+ *    后台小字显示成次日 05:30，正好多加 8 小时（前端不加，两边就对不上）。
+ *    含 "~" 的区间（作业起止）以前还会因为整串解析失败直接显示「—」。
+ *    所以内容类时间一律走这里：认得出就规范化，认不出就原样输出，绝不换算。
+ */
+function fmtWall(v, mode){
+  var s = String(v == null ? '' : v).trim();
+  if(!s) return '—';
+  if(s.indexOf('~') >= 0){
+    return s.split('~').map(function(x){ return fmtWall(x.trim(), mode); }).join(' ~ ');
+  }
+  var m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/);
+  if(!m) return s;
+  var p = function(n){ return String(n).padStart(2,'0'); };
+  var d0 = m[1] + '-' + p(m[2]) + '-' + p(m[3]);
+  if(mode === 'date' || m[4] === undefined) return d0;
+  return d0 + ' ' + p(m[4]) + ':' + p(m[5]);
+}
+
+/** 内容记录（公告 / 作业 / 其它内容）的时间展示。
+ *  只有 timeKind === 'db' 才是数据库时间戳（UTC，要转本地）；
+ *  其余都是站主手填的本地墙钟串，原样显示。 */
+function fmtRecTime(c){
+  if(!c || !c.time) return '—';
+  return c.timeKind === 'db' ? fmt(c.time) : fmtWall(c.time);
+}
 /** 相对时间："3 分钟前" */
 function ago(v){
   var d = parseTime(v);
@@ -3288,7 +3321,11 @@ function loadClassContent(){
         title: a.title || annFirstLine(text),
         body: text,
         targets: a.targets || [],
-        time: a.createdAt || a.updatedAt || a.date || null
+        /* timeKind：只有 createdAt / updatedAt 是数据库 UTC 时间戳（要转本地）；
+           a.date 是站主手填的本地墙钟串，原样显示 —— 2026-10-16 站主反馈的
+           「编辑完的小字比填的晚 8 小时」就出在这里。 */
+        time: a.createdAt || a.updatedAt || a.date || null,
+        timeKind: (a.createdAt || a.updatedAt) ? 'db' : 'wall'
       });
     });
 
@@ -3310,7 +3347,9 @@ function loadClassContent(){
           ? ((c._src.start || '?') + ' ~ ' + (c._src.end || '?')) : ''),
         body: c.body || '',
         targets: [],
-        time: t
+        time: t,
+        /* updatedAt 是数据库 UTC 时间戳；作业的「起 ~ 止」是手填墙钟串（原样显示） */
+        timeKind: (!c.updatedAt && t) ? 'wall' : 'db'
       });
     });
 
@@ -3403,7 +3442,7 @@ function paintClassContent(){
 
   panel.innerHTML = '<div class="rec-list">' + rows.map(function(c){
     var i = S.list.indexOf(c);
-    var timeTxt = c.time ? fmt(c.time) : '—';
+    var timeTxt = fmtRecTime(c);
     var scope = (c.kind === '公告')
       ? (c.targets && c.targets.length ? '定向 ' + c.targets.length + ' 人' : '全体同学')
       : '';
@@ -3451,7 +3490,7 @@ function classContentViewDialog(c){
     '<dl class="view-kv">'
     + '<dt>类型</dt><dd><span class="badge ' + kindBadgeClass(c.kind) + '">' + esc(c.kind) + '</span></dd>'
     + '<dt>标题</dt><dd>' + esc(c.title || '(无标题)') + '</dd>'
-    + '<dt>时间</dt><dd>' + esc(c.time ? fmt(c.time) : '—') + '</dd>'
+    + '<dt>时间</dt><dd>' + esc(fmtRecTime(c)) + '</dd>'
     + (c.kind === '公告'
         ? '<dt>发布对象</dt><dd>' + ((c.targets && c.targets.length)
             ? '定向 ' + c.targets.length + ' 人：' + esc(c.targets.join('、'))
@@ -10121,23 +10160,75 @@ function scCollectExam(box){
  * 用的是 text() 预读，**收不了 multipart**。所以文件在前端解析成 JSON 再发，
  * 后端只认 JSON —— 这条路同时也让"预览校验"成为可能。
  * ========================================================================= */
+/**
+ * 生成这次考试的导入模版（.xlsx）。
+ * ----------------------------------------------------------------------------
+ * 列结构 = 站主手头那张模版的形状：第 1 行大类（合并单元格）、第 2 行子字段、
+ * 第 3 行起填数据。科目由**本次考试的配置**生成 —— 选了赋分科目的自动多两列
+ * （赋分 + 该科排名），所以「对应的模版」永远和考试设置对得上。
+ * 生成后解析器认的就是它（见 scParseTwoRow），不用来回试格式。
+ */
+function scTemplateXlsx(e){
+  loadXLSX().then(function(XLSX){
+    if(!XLSX){ toast('表格组件加载失败（三个 CDN 都不可达），请检查网络后重试', 'err', 4200); return; }
+    var subs = e.subjects || [];
+    var r0 = ['基本信息', ''];
+    var r1 = ['考号/学号', '姓名'];
+    var merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+    var c = 2;
+
+    /* 总分组：总分 + 年级排名 + 联考排名（总分本身不用填，系统按各科算） */
+    r0.push('总分'); r1.push('总分');
+    r0.push('');     r1.push('年级排名');
+    r0.push('');     r1.push('联考排名');
+    merges.push({ s: { r: 0, c: c }, e: { r: 0, c: c + 2 } });
+    c += 3;
+
+    /* 各科：赋分科目四列（原始分 / 年级排名 / 赋分 / 年级排名），其余两列 */
+    subs.forEach(function(s){
+      var graded = !!s.graded;
+      r0.push(s.name); r1.push(graded ? '原始分' : '分数');
+      r0.push('');     r1.push('年级排名');
+      if(graded){ r0.push(''); r1.push('赋分'); r0.push(''); r1.push('年级排名'); }
+      merges.push({ s: { r: 0, c: c }, e: { r: 0, c: c + (graded ? 4 : 2) - 1 } });
+      c += graded ? 4 : 2;
+    });
+
+    /* 分数线参考列：只作填写时的参照，系统不读（要设分数线请到考试设置里填） */
+    ['600线', '特控线', '本科线'].forEach(function(nm){ r0.push(nm); r1.push(''); });
+
+    var ws = XLSX.utils.aoa_to_sheet([r0, r1]);
+    ws['!merges'] = merges;
+    ws['!cols'] = r0.map(function(_, i){ return { wch: i < 2 ? 12 : 10 }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, String(e.name || '成绩表').slice(0, 25) || '成绩表');
+    XLSX.writeFile(wb, String(e.name || '成绩导入模版') + '_模版.xlsx');
+    toast('模版已下载，填好后用「选择文件」导回来即可', 'ok', 4200);
+  });
+}
+
 function scImport(examId){
   var e = scFindExam(examId);
   if(!e) return;
   var subs = e.subjects || [];
-  var subNames = subs.map(function(s){ return s.name; }).join('、');
 
   openModal({
     title: '导入成绩 —— ' + e.name,
-    sub: '表里建议有：姓名 / 学号 / ' + subNames + ' / 年级排名（校排名）/ 联考排名。缺哪列都能导。',
+    sub: '按模版填：考号·学号 / 姓名 / 各科分数（化学·生物带赋分）/ 总分的年级排名与联考排名。班排不用填，系统当场算。',
     wide: true,
     body:
-        '<div class="alert warn">导入是<b>整体替换本次</b>：导入后这次考试的成绩就等于表里这些行。'
+        '<div class="alert info" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">'
+      +   '<span><b>建议用模版填。</b>模版的列头会按本次考试的科目自动对齐，'
+      +     '没填的格留空即可（系统记成「不知」，不计入统计）。</span>'
+      +   '<button type="button" class="btn btn-sm btn-secondary" id="scTpl" style="white-space:nowrap">'
+      +     svg('download', 13) + ' 下载模版</button>'
+      + '</div>'
+      + '<div class="alert warn">导入是<b>整体替换本次</b>：导入后这次考试的成绩就等于表里这些行。'
       +   '同名同学会各占一行并提示你；导入后每格都还能手改。</div>'
       + '<div class="field"><label>① 选择文件（.xlsx / .xls / .csv）</label>'
       +   '<input type="file" id="scFile" accept=".xlsx,.xls,.csv"></div>'
       + '<div class="field"><label>或者：② 从 Excel 直接复制，粘到这里（制表符分隔）</label>'
-      +   '<textarea id="scPaste" rows="4" placeholder="从 Excel 选中区域复制，Ctrl+V 粘进这里"></textarea></div>'
+      +   '<textarea id="scPaste" rows="4" placeholder="从 Excel 选中区域复制，Ctrl+V 粘进这里（含模版的两行表头也行）"></textarea></div>'
       + '<div id="scPrev"></div>',
     foot: '<button class="btn btn-secondary" id="scImpCancel">取消</button>'
         + '<button class="btn" id="scImpGo" disabled>导入</button>',
@@ -10146,6 +10237,7 @@ function scImport(examId){
       var btn = box.querySelector('#scImpGo');
 
       box.querySelector('#scImpCancel').onclick = closeModal;
+      box.querySelector('#scTpl').onclick = function(){ scTemplateXlsx(e); };
       box.querySelector('#scFile').onchange = function(ev){
         var f = ev.target.files && ev.target.files[0];
         if(!f) return;
@@ -10213,11 +10305,156 @@ function scImport(examId){
 /* AOA（二维数组）→ { header, rows, map }；第一行当表头 */
 function scParseAOA(aoa, subs){
   if(!aoa || !aoa.length) return { header: [], rows: [], map: null };
+  /* ① 两行表头（站主的模版）→ 走按列解析 */
+  if(scIsTwoRowHeader(aoa[0] || [], aoa[1] || [])) return scParseTwoRow(aoa, subs);
+  /* ② 单行表头（直接粘贴 / 自制的简单表）→ 老路径，表头自动识别 */
   var header = (aoa[0] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
   var body = aoa.slice(1).filter(function(r){
     return r && r.some(function(c){ return String(c == null ? '' : c).trim() !== ''; });
   });
   return { header: header, rows: scMapRows(header, body, subs, null), map: scGuessMap(header, subs), body: body };
+}
+
+/* ============================================================================
+ * 模版导入（2026-10-16 第六十二轮）
+ * ----------------------------------------------------------------------------
+ * 站主的成绩模版是**两行表头**：
+ *   第 1 行 = 大类（基本信息 / 总分 / 语文 / 数学 / 英语 / 物理 / 化学 / 生物 / 600线 / 特控线 / 本科线）
+ *   第 2 行 = 子字段（考号·学号 / 姓名 / 总分 / 年级排名 / 联考排名 / 分数 / 原始分 / 赋分 …），
+ *   第 3 行起才是学生数据。
+ *
+ * ⚠️ 为什么老解析认不出这张表：它把第 1 行当表头，而第 1 行的「基本信息」「总分」
+ *   「语文」是**合并单元格** —— 合并区只有左上角有值，其余格读出来是**空**，
+ *   于是姓名列和各科列全成了空表头，自动识别全线失败。
+ *
+ * 所以这条路**按列位置解析**（模版是固定的，不猜）：
+ *   · 大类行先做「合并填充」（空 = 沿用左边最近的非空标签）
+ *   · 科目列靠大类名与考试配置里的科目名对上，子字段决定它是分数 / 赋分 / 排名
+ *   · 空单元格、-、—、/、缺考、免考 一律当「不知」（后端存 null，不参与统计）
+ *   · 各科的「年级排名」列系统不存（库里只有各科分数 + 总分的年级/联考排名），
+ *     解析时识别出来并在预览里如实告诉你，不悄悄丢
+ * ========================================================================= */
+
+/** 合并单元格的大类行向右填充：合并区只有左上角有值，其余读出来是空。 */
+function scFillMerged(row){
+  var out = [], last = '';
+  for(var i = 0; i < (row || []).length; i++){
+    var v = String(row[i] == null ? '' : row[i]).trim();
+    if(v) last = v;
+    out.push(v || last);
+  }
+  return out;
+}
+
+/** 两行表头判定：第 2 行有「姓名」而第 1 行没有 —— 站主模版就是这个形状。 */
+function scIsTwoRowHeader(r0, r1){
+  var has = function(row, re){
+    return (row || []).some(function(c){ return re.test(String(c == null ? '' : c).trim()); });
+  };
+  return has(r1, /^(姓名|名字|学生姓名|学生)$/) && !has(r0, /姓名|名字/);
+}
+
+/** 科目组里某个子字段属于哪一类。 */
+function scSubKind(label, subjName){
+  var s = String(label || '').replace(/[\s()（）\[\]【】]/g, '');
+  if(!s) return 'score';
+  if(/赋分|等级分|分级/.test(s)) return 'assigned';
+  if(/联考排名|联考名次|市排名/.test(s)) return 'subLeague';
+  if(/年级排名|年级名次|校排名|校名次|排名|名次/.test(s)) return 'subRank';
+  if(/分数|成绩|原始分/.test(s) || s === subjName) return 'score';
+  return 'other';
+}
+
+function scParseTwoRow(aoa, subs){
+  var catRow = scFillMerged(aoa[0] || []);
+  var subRow = (aoa[1] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
+  var body = aoa.slice(2).filter(function(r){
+    return r && r.some(function(c){ return String(c == null ? '' : c).trim() !== ''; });
+  });
+
+  var nameCol = -1, noCol = -1, srCol = -1, lrCol = -1;
+  var subjCols = {};
+  var cutlines = [];   /* 分数线参考列：只识别回报，不写库 */
+  var ignored  = [];   /* 识别到但不导入的列：预览里如实说明 */
+
+  var maxLen = Math.max(catRow.length, subRow.length);
+  for(var i = 0; i < maxLen; i++){
+    var cat = String(catRow[i] || '').trim();
+    var sub = String(subRow[i] || '').trim();
+    var label = (cat && cat !== sub ? cat + '·' : '') + (sub || '（空）');
+
+    /* ① 姓名 / 学号 */
+    if(/^(姓名|名字|学生姓名|学生)$/.test(sub)){ if(nameCol < 0) nameCol = i; continue; }
+    if(/学号|考号|准考证/.test(sub) || /学号|考号/.test(cat)){ if(noCol < 0) noCol = i; continue; }
+
+    /* ② 分数线（600线 / 特控线 / 本科线）—— 表头参考信息，不属于学生数据 */
+    if(/线$|分数线/.test(cat) && !/排名/.test(sub)){ cutlines.push({ i: i, label: cat }); continue; }
+
+    /* ③ 科目列：大类名与考试配置里的科目名对得上 */
+    var su = null;
+    (subs || []).forEach(function(s){
+      if(su) return;
+      var n = String(s.name || '').trim();
+      if(!n) return;
+      if(cat === n || (cat && (cat.indexOf(n) >= 0 || n.indexOf(cat) >= 0))) su = s;
+    });
+    if(su){
+      var g = subjCols[su.key] || (subjCols[su.key] = { raw: -1, assigned: -1 });
+      var k = scSubKind(sub, su.name);
+      if(k === 'assigned'){ if(g.assigned < 0) g.assigned = i; else ignored.push({ label: label, why: '赋分列重复，只取第一列' }); }
+      else if(k === 'score'){ if(g.raw < 0) g.raw = i; else ignored.push({ label: label, why: '分数列重复，只取第一列' }); }
+      else ignored.push({ label: label, why: '系统只存各科分数与总分排名，各科排名不导入' });
+      continue;
+    }
+
+    /* ④ 总分组：总分本身不存（系统按各科实时算），只取总分的年级 / 联考排名 */
+    if(/联考排名|联考名次|市排名/.test(sub)){
+      if(lrCol < 0) lrCol = i; else ignored.push({ label: label, why: '联考排名重复，只取第一列' });
+      continue;
+    }
+    if(/年级排名|年级名次|校排名|校名次/.test(sub)){
+      if(srCol < 0) srCol = i; else ignored.push({ label: label, why: '年级排名重复，只取第一列' });
+      continue;
+    }
+    if(/总分|总成绩/.test(sub)) continue;
+
+    ignored.push({ label: label, why: '未识别，已跳过' });
+  }
+
+  var map = { name: nameCol, no: noCol, schoolRank: srCol, leagueRank: lrCol, subj: subjCols };
+  var header = subRow.map(function(x, i){ return x ? x : (catRow[i] || ''); });
+  return {
+    header: header,
+    rows: scMapRows(header, body, subs, map),
+    map: map,
+    body: body,
+    twoRow: true,
+    cutlines: cutlines,
+    ignored: ignored
+  };
+}
+
+/** 单行的总分（各科累加：赋分科目取赋分，其余取原始分）。预览里算班排用。 */
+function scRowTotal(r, subs){
+  var t = 0, any = false;
+  (subs || []).forEach(function(s){
+    var v = r.s ? r.s[s.key] : null;
+    if(!v) return;
+    var n = (v.assigned != null) ? v.assigned : v.raw;
+    if(n == null) return;
+    t += n; any = true;
+  });
+  return any ? t : null;
+}
+
+/** 按总分当场算班排（1 = 最高）。模版里没有班排列，就是这么来的。 */
+function scClassRanks(rows, subs){
+  var scored = rows.map(function(r, i){ return { i: i, t: scRowTotal(r, subs) }; })
+                   .filter(function(x){ return x.t != null; });
+  scored.sort(function(a, b){ return b.t - a.t; });
+  var out = {};
+  scored.forEach(function(x, idx){ out[x.i] = idx + 1; });
+  return out;
 }
 
 /* 表头自动识别 */
@@ -10289,31 +10526,60 @@ function scPaintPreview(box, parsed, subs, btn){
   var m = parsed.map || {};
   var hit = function(i){ return i >= 0 ? esc(parsed.header[i] || ('第' + (i+1) + '列')) : '<span style="color:var(--danger)">未找到</span>'; };
 
+  /* 班排当场算：模版里没有班排列，名次由各科分数累加后现排 */
+  var ranks = scClassRanks(parsed.rows, subs);
+  var totalOf = function(r){ return scRowTotal(r, subs); };
+
+  /* 识别到但不导入的列 / 分数线列：如实列出来，别让人以为导进去了 */
+  var notes = '';
+  if((parsed.ignored && parsed.ignored.length) || (parsed.cutlines && parsed.cutlines.length)){
+    var li = [];
+    if(parsed.cutlines && parsed.cutlines.length){
+      li.push('分数线列（' + parsed.cutlines.map(function(c){ return esc(c.label); }).join('、')
+        + '）只是表头参考信息，不会写进系统 —— 要设分数线请在考试设置里填');
+    }
+    if(parsed.ignored && parsed.ignored.length){
+      li.push('这些列不导入：' + parsed.ignored.slice(0, 12).map(function(g){
+        return esc(g.label) + '<span class="muted">（' + esc(g.why) + '）</span>';
+      }).join('、') + (parsed.ignored.length > 12 ? ' ……' : ''));
+    }
+    notes = '<div class="alert warn" style="margin-top:8px">' + li.join('<br>') + '</div>';
+  }
+
   host.innerHTML =
       '<div class="alert ok" style="margin-top:8px"><b>解析到 ' + parsed.rows.length + ' 行。</b>'
+    +   (parsed.twoRow ? '（<b>两行表头模版</b>，按列位置解析）' : '')
     +   '列对应关系：姓名→' + hit(m.name) + '　学号→' + hit(m.no)
     +   '　年级排名→' + hit(m.schoolRank) + '　联考排名→' + hit(m.leagueRank) + '<br>'
     +   (subs || []).map(function(s){
           var mm = (m.subj || {})[s.key] || {};
           return esc(s.name) + '→' + hit(mm.raw) + (mm.assigned >= 0 ? '（赋分 ' + hit(mm.assigned) + '）' : '');
         }).join('　')
+    +   '<br><span class="muted" style="font-size:.78rem">空单元格 / - / / / 缺考 都会记成「不知」，不计入统计。</span>'
     + '</div>'
+    + notes
     + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table style="font-size:.8rem">'
-    +   '<thead><tr><th>姓名</th>' + (subs || []).map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
-    +   '<th>年级排名</th><th>联考</th></tr></thead><tbody>'
-    +   parsed.rows.slice(0, 30).map(function(r){
-          return '<tr><td style="font-weight:700">' + esc(r.name) + '</td>'
+    +   '<thead><tr><th>班排</th><th>姓名</th>' + (subs || []).map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
+    +   '<th>总分</th><th>年级排名</th><th>联考</th></tr></thead><tbody>'
+    +   parsed.rows.slice(0, 30).map(function(r, i){
+          var tt = totalOf(r);
+          return '<tr><td class="muted">' + (ranks[i] || '—') + '</td>'
+            + '<td style="font-weight:700">' + esc(r.name) + '</td>'
             + (subs || []).map(function(s){
                 var v = r.s[s.key];
                 if(!v) return '<td class="muted">—</td>';
                 return '<td>' + (v.raw == null ? '—' : v.raw)
                   + (v.assigned != null ? ' <span class="muted">/' + v.assigned + '</span>' : '') + '</td>';
               }).join('')
+            + '<td>' + (tt == null ? '—' : tt) + '</td>'
             + '<td>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</td>'
             + '<td>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</td></tr>';
         }).join('')
     + '</tbody></table></div>'
-    + (parsed.rows.length > 30 ? '<p class="muted" style="font-size:.78rem;margin-top:6px">只预览前 30 行</p>' : '');
+    + '<p class="muted" style="font-size:.78rem;margin-top:6px">'
+    +   '班排与总分是<b>当场按各科分数算的</b>（模版里没有这两列，也不需要填）；'
+    +   (parsed.rows.length > 30 ? '只预览前 30 行，导入时会处理全部。' : '')
+    + '</p>';
 
   if(btn) btn.disabled = false;
 }
