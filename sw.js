@@ -101,16 +101,20 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '2.9.12'
+const SITE_VER = '2.10.0'
 
-const CACHE = 'class-site-v79'
+const CACHE = 'class-site-v81'
 /* 预缓存清单：**只放小文件**。
    ⚠️ 不要把 index.html（600KB）放进来 —— install 会因为它变慢一大截，
    弱网下甚至装不完（真机实测 SW 卡在 installing 25 秒都没装好，
    而 SW 装不上，前端的「检查更新」也就跟着失效）。
    首页交给下面 fetch handler 的「网络优先 + 写缓存」在首次访问时自然缓存，
-   断网时照样能用 caches.match('./index.html') 兜底，功能不受影响。 */
-const PRECACHE = ['./favicon.svg', './manifest.webmanifest']
+   断网时照样能用 caches.match('./index.html') 兜底，功能不受影响。
+   v80（v2.10.0）：加入两个字体的 latin 子集 woff2（共约 78KB）——
+   同源自托管替代 Google Fonts 外链（微信内置浏览器拦截外部字体域），
+   预缓存保证首次离线访问英文字形也不掉。 */
+const PRECACHE = ['./favicon.svg', './manifest.webmanifest',
+  './fonts/inter-latin.woff2', './fonts/jetbrains-mono-latin.woff2']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

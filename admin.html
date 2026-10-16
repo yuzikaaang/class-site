@@ -376,6 +376,14 @@ tbody tr.sel{background:var(--tint-2)}
 @media (max-width:560px){
   .extra-row{grid-template-columns:1fr;gap:5px}
 }
+/* 成员长表单（v2.10.0 #172）：上下两段（账号 / 档案）不折叠，段间有分隔 */
+.mb-form-sec{border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 16px 6px;background:var(--bg-1)}
+.mb-form-sec>h4{display:flex;align-items:center;gap:7px;margin:0 0 4px;font-size:.92rem}
+.mb-form-sec>h4 svg{color:var(--accent-ink)}
+.mb-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:560px){
+  .mb-form-grid{grid-template-columns:1fr}
+}
 /* 头衔任命弹窗的选项网格（2026-10-05 加） */
 .tt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
 .tt-item{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:.8rem;user-select:none;transition:.15s}
@@ -888,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.9.12';
+var SITE_VERSION = '2.10.0';
 var VER_DATE = '2026-10-16';
 
 /* ---- 运行时状态 ---- */
@@ -897,8 +905,10 @@ var STATE = {
   me: null,
   page: 'overview',
   /* 各面板的临时状态 */
-  users: { list: [], total: 0, page: 1, size: 50, q: '', role: '', status: '', selected: {} },
+  /* v2.10.0 #172：成员与档案合并页（原 users / profiles 两页合一） */
+  members: { list: [], total: 0, counts: {}, page: 1, size: 50, q: '', role: '', status: '', scene: '', selected: {} },
   logs:  { list: [], total: 0, page: 1, size: 30 },
+  actionlogs: { list: [], total: 0, page: 1, size: 50, q: '', action: '', day: '', stats: null },
   logins:{ list: [], total: 0, page: 1, size: 30, userId: 0 },
   profiles: { list: [], total: 0, counts: {}, page: 1, size: 30, q: '', status: '' },
   reviews:  { list: [], total: 0, page: 1, size: 30 },
@@ -1508,9 +1518,8 @@ function promptBox(o){
  * ========================================================================= */
 var PAGES = [
   { id:'overview',      label:'数据概览', icon:'dashboard', group:'概览',  title:'数据概览' },
-  { id:'users',         label:'用户管理', icon:'users',     group:'用户',  title:'用户管理' },
+  { id:'members',       label:'成员与档案', icon:'users',   group:'用户',  title:'成员与档案（账号 + 班级档案）' },
   { id:'titles',        label:'头衔任命', icon:'shield',    group:'用户',  title:'头衔任命' },
-  { id:'profiles',      label:'资料管理', icon:'inbox',     group:'用户',  title:'班级资料' },
   { id:'reviews',       label:'联系方式审核', icon:'check', group:'用户',  title:'联系方式审核' },
   { id:'viewlogs',      label:'查看记录', icon:'eye',       group:'用户',  title:'资料查看记录' },
   { id:'classcontent',  label:'班级内容', icon:'layers',    group:'内容',  title:'班级内容（公告 / 作业 / 活动）' },
@@ -1525,6 +1534,7 @@ var PAGES = [
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
   { id:'logs',          label:'操作日志', icon:'file',      group:'安全',  title:'操作日志' },
+  { id:'actionlogs',    label:'行为日志', icon:'activity',  group:'安全',  title:'用户操作日志（点击行为）' },
   { id:'secrets',       label:'令牌管理', icon:'key',       group:'系统',  title:'系统令牌' },
   { id:'settings',      label:'系统设置', icon:'settings',  group:'系统',  title:'系统设置' },
   { id:'account',       label:'我的账户', icon:'lock',      group:'系统',  title:'我的账户' }
@@ -1567,9 +1577,8 @@ function go(page){
 
   var fn = ({
     overview:      renderOverview,
-    users:         renderUsers,
+    members:       renderMembers,
     titles:        renderTitles,
-    profiles:      renderProfiles,
     reviews:       renderReviews,
     viewlogs:      renderViewLogs,
     classcontent:  renderClassContent,
@@ -1584,6 +1593,7 @@ function go(page){
     games:         renderGames,
     logins:        renderLogins,
     logs:          renderLogs,
+    actionlogs:    renderActionLogs,
     secrets:       renderSecrets,
     settings:      renderSettings,
     account:       renderAccount
@@ -1699,132 +1709,289 @@ function renderOverview(){
 }
 
 /* ============================================================================
- * ⑦ 面板：用户管理（核心，深度对标 VoiceHub）
+ * ⑦ 面板：成员与档案（v2.10.0 第六十轮 #172，「用户管理」+「资料管理」合并）
+ * ---------------------------------------------------------------------------
+ * 背景：站主指出同一批人被「用户管理」「资料管理」分两处存储，改一处另一处
+ * 对不上（根因：users.display_name 与 profiles.name 双写）。
+ * 现在合并成一个页面、一个长表单：
+ *   · 列表一次拉齐（GET /admin?action=members），每行带 scene 场景标记
+ *   · 长表单不用折叠面板：上半「系统账号」下半「班级档案」，一次提交
+ *     （POST /admin?action=save-member 内部按场景编排）
+ *   · 姓名改为单数据源：profiles.name 是权威源，保存时后端同步
+ *     users.display_name（见 api/admin.js upsertProfileCore）
+ *
+ * 四种场景（scene）：
+ *   both         有账号 + 有档案（正常态）
+ *   user-only    有账号暂无档案（建号时补档案失败 / 历史数据）
+ *   profile-only 有档案无账号（通讯录先建、人还没领账号）
+ *
+ * 「头衔任命 / 联系方式审核 / 查看记录」保持独立页面，不并入本页。
  * ========================================================================= */
-/* 「现在就在站上吗」（v2.5.0 改为服务端会话级判定）
-   后端按 sessions.last_seen_at（90 秒内有心跳）算好 online 字段直接给，
-   这里不再自己拿时间戳猜 —— 那样只能看出「最近 5 分钟登录过」，
-   登录一次就挂好几天，数字永远虚高。 */
+/* 「现在就在站上吗」（v2.5.0 起服务端会话级判定，口径与旧用户管理页一致） */
 function isOnlineNow(u){
   if(!u) return false;
   if(typeof u.online === 'boolean') return u.online;
-  /* 兜底：老接口没给 online 时退回时间戳判断 */
   var t = u.sessionLastSeen || u.lastSeenAt || u.lastLoginAt;
   if(!t) return false;
   var ms = Date.now() - new Date(t).getTime();
   return ms >= 0 && ms < 2 * 60 * 1000;
 }
-function renderUsers(){
-  var view = $('view');
-  var S = STATE.users;
 
-  view.innerHTML =
+var MEMBER_SCENE = {
+  both:         { text:'账号 · 档案', cls:'badge-blue'   },
+  'user-only':  { text:'缺档案',      cls:'badge-amber'  },
+  'profile-only': { text:'未认领',    cls:'badge-gray'   }
+};
+
+function renderMembers(){
+  var S = STATE.members;
+  var c = S.counts || {};
+
+  $('view').innerHTML =
     '<div class="toolbar">'
-    +   '<div class="search">' + svg('search', 15) + '<input id="uSearch" placeholder="搜索用户名或姓名…" value="' + attr(S.q) + '"></div>'
-    +   '<select id="uRole">'
+    +   '<div class="search">' + svg('search', 15)
+    +     '<input id="mbSearch" placeholder="搜索用户名 / 姓名 / 学号…" value="' + attr(S.q) + '" maxlength="40"></div>'
+    +   '<select id="mbRole">'
     +     '<option value="">全部角色</option>'
     +     '<option value="user"' + (S.role === 'user' ? ' selected' : '') + '>普通用户</option>'
     +     '<option value="admin"' + (S.role === 'admin' ? ' selected' : '') + '>管理员</option>'
     +   '</select>'
-    +   '<select id="uStatus">'
+    +   '<select id="mbStatus">'
     +     '<option value="">全部状态</option>'
     +     '<option value="active"' + (S.status === 'active' ? ' selected' : '') + '>正常</option>'
+    +     '<option value="pending"' + (S.status === 'pending' ? ' selected' : '') + '>待审核</option>'
     +     '<option value="banned"' + (S.status === 'banned' ? ' selected' : '') + '>已禁用</option>'
     +   '</select>'
-    +   '<button class="btn btn-sm btn-secondary" id="uRefresh">' + svg('refresh', 14) + '刷新</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbRefresh">' + svg('refresh', 14) + '刷新</button>'
     + '</div>'
 
     + '<div class="toolbar" style="background:var(--panel)">'
-    +   '<button class="btn btn-sm" id="uAdd">' + svg('plus', 14) + '添加用户</button>'
-    +   '<button class="btn btn-sm btn-secondary" id="uImport">' + svg('upload', 14) + 'Excel 导入</button>'
-    +   '<button class="btn btn-sm btn-secondary" id="uExport">' + svg('download', 14) + '导出</button>'
+    +   '<button class="btn btn-sm" id="mbAdd">' + svg('plus', 14) + '新增成员</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbImportUser">' + svg('upload', 14) + '账号导入</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbImportProfile">' + svg('upload', 14) + '资料导入</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbExport">' + svg('download', 14) + '导出</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbFields">' + svg('layers', 14) + '字段管理</button>'
     +   '<span style="flex:1"></span>'
     +   '<span data-bulk class="muted" style="font-size:.8rem"></span>'
     + '</div>'
 
-    + '<section class="panel"><div id="uBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+    + '<div class="chips" id="mbChips" style="margin-bottom:14px">'
+    +   '<button class="chip' + (S.scene === '' ? ' on' : '') + '" data-sc="">全部 <b>' + (c.total || 0) + '</b></button>'
+    +   '<button class="chip' + (S.scene === 'user-only' ? ' on' : '') + '" data-sc="user-only">缺档案 <b>' + (c.userOnly || 0) + '</b></button>'
+    +   '<button class="chip' + (S.scene === 'profile-only' ? ' on' : '') + '" data-sc="profile-only">未认领 <b>' + (c.profileOnly || 0) + '</b></button>'
+    +   '<button class="chip' + (S.scene === 'pending-review' ? ' on' : '') + '" data-sc="pending-review">待审联系方式 <b>' + (c.pendingReview || 0) + '</b></button>'
+    + '</div>'
 
-  $('uSearch').oninput = debounce(function(e){ S.q = e.target.value.trim(); S.page = 1; loadUsers(); }, 320);
-  $('uRole').onchange   = function(e){ S.role = e.target.value; S.page = 1; loadUsers(); };
-  $('uStatus').onchange = function(e){ S.status = e.target.value; S.page = 1; loadUsers(); };
-  $('uRefresh').onclick = function(){ loadUsers(); };
-  $('uAdd').onclick     = addUserDialog;
-  $('uImport').onclick  = importDialog;
-  $('uExport').onclick  = exportDialog;
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '全班成员与他们的班级档案现在<b>合并在同一页</b>：一条记录同时管账号与档案，保存时两处自动同步。'
+    +   '「<b>未认领</b>」是只有通讯录、还没登录账号的同学；「<b>缺档案</b>」是建号时没配上档案的账号，点「编辑」即可补上。'
+    + '</div>'
 
-  loadUsers();
-}
+    /* 字段管理区（2026-10-09 v2.4.0）：默认折叠，点「字段管理」展开 */
+    + '<section class="panel" id="mbFieldPanel" style="display:none;margin-bottom:16px">'
+    +   '<div id="mbFieldBody"><div class="loading"><div class="spinner"></div>加载字段…</div></div>'
+    + '</section>'
 
-function loadUsers(){
-  var S = STATE.users;
-  var qs = '/admin?action=users&limit=' + S.size + '&offset=' + ((S.page - 1) * S.size)
-         + '&q=' + encodeURIComponent(S.q || '');
+    + '<section class="panel"><div id="mbBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
 
-  api(qs).then(function(j){
-    S.list = j.users || [];
-    S.total = j.total || 0;
-    /* 保持已选中项（翻页后仍在） */
-    paintUsers();
-  }).catch(function(e){
-    $('uBody').innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  $('mbSearch').oninput = debounce(function(e){ S.q = e.target.value.trim(); S.page = 1; loadMembers(); }, 320);
+  $('mbRole').onchange   = function(e){ S.role = e.target.value; S.page = 1; loadMembers(); };
+  $('mbStatus').onchange = function(e){ S.status = e.target.value; S.page = 1; loadMembers(); };
+  $('mbRefresh').onclick = function(){ loadMembers(); };
+  $('mbAdd').onclick     = function(){ memberDialog(null); };
+  $('mbImportUser').onclick   = importDialog;
+  $('mbImportProfile').onclick = profileImportDialog;
+  $('mbExport').onclick  = memberExport;
+  $('mbFields').onclick  = function(){
+    var panel = $('mbFieldPanel');
+    var open = panel.style.display !== 'none';
+    panel.style.display = open ? 'none' : 'block';
+    if(!open){ renderFieldPanel(); panel.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+  };
+
+  Array.prototype.forEach.call($('mbChips').querySelectorAll('[data-sc]'), function(b){
+    b.onclick = function(){
+      S.scene = b.dataset.sc === 'pending-review' ? 'pending-review' : b.dataset.sc;
+      S.page = 1;
+      Array.prototype.forEach.call($('mbChips').querySelectorAll('.chip'), function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      loadMembers();
+    };
   });
+
+  loadMembers();
 }
 
-function paintUsers(){
-  var S = STATE.users;
-  var body = $('uBody');
+function loadMembers(){
+  var S = STATE.members;
+  /* pending-review 是档案维度的筛选，后端不认这个 scene 值 —— 前端本地过滤 */
+  var sceneQ = S.scene === 'pending-review' ? '' : S.scene;
+  api('/admin?action=members&limit=' + S.size + '&offset=' + ((S.page - 1) * S.size)
+      + '&q=' + encodeURIComponent(S.q || '')
+      + '&role=' + encodeURIComponent(S.role || '')
+      + '&status=' + encodeURIComponent(S.status || '')
+      + '&scene=' + encodeURIComponent(sceneQ || ''))
+    .then(function(j){
+      S.list = j.members || [];
+      S.total = j.total || 0;
+      S.counts = j.counts || {};
+      if(Array.isArray(j.fieldMeta)) S.fieldMeta = j.fieldMeta;
+      /* 待审联系方式：后端按 profiles 口径给总数，这里本地筛出这一批 */
+      if(S.scene === 'pending-review'){
+        S.list = S.list.filter(function(m){ return m.contactStatus === 'pending'; });
+        S.total = S.list.length;
+      }
+      paintMembers();
+    })
+    .catch(function(e){
+      var b = $('mbBody');
+      if(b) b.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+    });
+}
+
+/** 行唯一键：有账号用 u+userId，无账号用 p+profileId（跨场景不撞车） */
+function mkey(m){
+  return (m.userId != null ? 'u' : 'p') + (m.userId != null ? m.userId : m.profileId);
+}
+
+/** 列表显示名：档案姓名是权威源，无档案退回账号显示名 */
+function memberName(m){
+  return m.name || m.displayName || m.username || '(未命名)';
+}
+
+function paintMembers(){
+  var S = STATE.members;
+  var body = $('mbBody');
   if(!body) return;
 
+  /* 胶囊数字跟着最新统计刷新 */
+  var chipAll = $('mbChips') && $('mbChips').querySelector('[data-sc=""] b');
+  var chipUO  = $('mbChips') && $('mbChips').querySelector('[data-sc="user-only"] b');
+  var chipPO  = $('mbChips') && $('mbChips').querySelector('[data-sc="profile-only"] b');
+  var chipPR  = $('mbChips') && $('mbChips').querySelector('[data-sc="pending-review"] b');
+  if(chipAll) chipAll.textContent = S.counts.total || 0;
+  if(chipUO)  chipUO.textContent  = S.counts.userOnly || 0;
+  if(chipPO)  chipPO.textContent  = S.counts.profileOnly || 0;
+  if(chipPR)  chipPR.textContent  = S.counts.pendingReview || 0;
+
   if(!S.list.length){
-    body.innerHTML = '<div class="empty">' + svg('inbox', 38) + '<p>没有匹配的用户</p></div>';
+    body.innerHTML = '<div class="empty">' + svg('users', 38)
+      + '<p>' + (S.q || S.role || S.status || S.scene ? '没有匹配的成员' : '还没有任何成员') + '</p>'
+      + (S.q || S.role || S.status || S.scene ? '' : '<p style="font-size:.78rem;margin-top:8px">点「新增成员」把第一位同学加进来</p>')
+      + '</div>';
     return;
   }
 
-  /* 前端筛选（角色/状态）：后端 users 接口目前只支持 q，
-     角色与状态在本地过滤，保证筛选即时生效、不额外压后端。 */
-  var list = S.list.filter(function(u){
-    if(S.role && u.role !== S.role) return false;
-    if(S.status && u.status !== S.status) return false;
-    return true;
-  });
+  var extras = extraColsOf();
+  var allChecked = S.list.length > 0 && S.list.every(function(m){ return S.selected[mkey(m)]; });
 
-  var allChecked = list.length > 0 && list.every(function(u){ return S.selected[u.id]; });
+  var rows = S.list.map(function(m){
+    var key = mkey(m);
+    var sc = MEMBER_SCENE[m.scene] || MEMBER_SCENE.both;
+    var ini = String(memberName(m)).charAt(0);
+    var sub = m.userId != null
+      ? '<i class="mono">@' + esc(m.username) + (m.studentId ? ' · ' + esc(m.studentId) : '') + '</i>'
+      : '<i class="mono">' + esc(m.studentId ? '学号 ' + m.studentId : '未认领 · 无账号') + '</i>';
 
-  var rows = list.map(function(u){
-    var initial = String(u.displayName || u.username || '?').charAt(0).toUpperCase();
+    /* 账号徽章：管理员 / 三态 / 待改密 */
     var badges = '';
-    if(u.role === 'admin') badges += '<span class="badge badge-orange">管理员</span> ';
-    if(u.status === 'banned') badges += '<span class="badge badge-red">已禁用</span>';
-    else badges += '<span class="badge badge-green">正常</span>';
-    if(u.mustChangePassword) badges += ' <span class="badge badge-amber">待改密</span>';
+    if(m.role === 'admin') badges += '<span class="badge badge-orange">管理员</span> ';
+    if(m.status === 'pending') badges += '<span class="badge badge-amber">待审核</span> ';
+    else if(m.status === 'banned') badges += '<span class="badge badge-red">已禁用</span> ';
+    else if(m.userId != null) badges += '<span class="badge badge-green">正常</span> ';
+    if(m.mustChangePassword) badges += ' <span class="badge badge-amber">待改密</span>';
 
-    return '<tr' + (S.selected[u.id] ? ' class="sel"' : '') + '>'
-      + '<td><input type="checkbox" class="chk" data-pick="' + u.id + '"' + (S.selected[u.id] ? ' checked' : '') + '></td>'
-      + '<td><div class="cell-user"><div class="av ink-auto">' + esc(initial) + '</div>'
-      +   '<div><b>' + esc(u.displayName || u.username) + '</b>'
-      +   '<i class="mono">' + esc(u.username) + '</i></div></div></td>'
+    /* 联系方式：三个字段紧凑铺开 */
+    var ct = function(label, v){
+      return '<div class="ct"><i>' + label + '</i>'
+        + (v ? '<span title="' + attr(v) + '">' + esc(v) + '</span>'
+             : '<span class="none">—</span>')
+        + '</div>';
+    };
+    var contacts = '<div class="ct-grid">'
+      + ct('微信', m.wechat) + ct('QQ', m.qq) + ct('手机', m.phone)
+      + '</div>';
+
+    var cst = CONTACT_LABEL[m.contactStatus] || CONTACT_LABEL.none;
+
+    /* 可见性（2026-10-08）：本人私密意愿 + 管理员单人例外，两个徽章都展示 */
+    var vp = m.visibilityPref || {};
+    var hidden = [];
+    if(vp.wechat === false) hidden.push('微信');
+    if(vp.qq === false) hidden.push('QQ');
+    if(vp.phone === false) hidden.push('手机');
+    var fv = m.fieldVis || {};
+    var fvKeys = Object.keys(fv);
+    var fvLabelOf = function(k){
+      var mm = (STATE.members.fieldMeta || []).find(function(x){ return x.field === k; });
+      return mm ? mm.label : k;
+    };
+    var vis;
+    if(fvKeys.length){
+      vis = '<span class="badge badge-purple" title="管理员单独设置了这些字段的可见范围（只对该同学生效）">'
+          + '⚙ ' + esc(fvKeys.map(fvLabelOf).join('/')) + '</span>';
+      if(hidden.length){
+        vis += '<div class="muted" style="font-size:.68rem;margin-top:3px">本人私密：' + esc(hidden.join('/')) + '</div>';
+      }
+    } else if(hidden.length){
+      vis = '<span class="badge badge-orange" title="本人把这几项设为仅自己可见，同学查不到">🔒 ' + esc(hidden.join('/')) + ' 私密</span>';
+    } else {
+      vis = '<span class="badge badge-gray">公开</span>';
+    }
+
+    var extraTds = extras.map(function(f){
+      var v = (m.extra || {})[f.field];
+      return '<td class="nowrap">' + (v ? '<span class="mono">' + esc(v) + '</span>'
+                                          : '<span class="muted">—</span>') + '</td>';
+    }).join('');
+
+    /* 行内操作：账号类操作仅对有账号的行开放 */
+    var acts = '<button data-mb="edit" data-key="' + attr(key) + '">编辑</button>'
+      + (m.userId != null
+          ? '<button data-mb="detail" data-key="' + attr(key) + '">详情</button>'
+            + '<button data-mb="pwd" data-key="' + attr(key) + '">重置密码</button>'
+            + (m.status === 'pending'
+                ? '<button class="ok" data-mb="approve" data-key="' + attr(key) + '">通过</button>'
+                  + '<button class="danger" data-mb="reject" data-key="' + attr(key) + '">驳回</button>'
+                : (m.status === 'banned'
+                    ? '<button class="ok" data-mb="unban" data-key="' + attr(key) + '">解禁</button>'
+                    : '<button class="danger" data-mb="ban" data-key="' + attr(key) + '">禁用</button>'))
+          : '')
+      + (m.profileId != null
+          ? '<button data-mb="views" data-key="' + attr(key) + '">查看记录</button>'
+          : '');
+
+    return '<tr' + (S.selected[key] ? ' class="sel"' : '') + '>'
+      + '<td><input type="checkbox" class="chk" data-pick="' + attr(key) + '"' + (S.selected[key] ? ' checked' : '') + '></td>'
+      + '<td><div class="cell-user"><div class="av ink-auto">' + esc(ini) + '</div>'
+      +   '<div><b>' + esc(memberName(m)) + '</b>' + sub + '</div></div></td>'
+      + '<td class="nowrap"><span class="badge ' + sc.cls + '">' + sc.text + '</span></td>'
       + '<td class="nowrap">' + badges + '</td>'
-      /* 「最后上线」：v2.5.0 起用**会话心跳**口径（服务端判定 online）。
-         在线 → 绿点 +「在线中」；离线 → 显示最后一次心跳的「多久以前」，
-         没有心跳记录才退回登录时间。这才回答得了「是不是真的此刻在站上」。 */
-      + '<td class="nowrap muted" title="' + attr(fmt(u.sessionLastSeen || u.lastSeenAt || u.lastLoginAt)) + '">'
-      +   (isOnlineNow(u)
-            ? '<span class="dot-on" title="当前在线"></span>在线中'
-              + (u.onlineSessions > 1 ? '<span style="opacity:.7">（' + u.onlineSessions + ' 端）</span>' : '')
-            : esc(u.sessionLastSeen ? ago(u.sessionLastSeen)
-                 : (u.lastSeenAt ? ago(u.lastSeenAt) : (u.lastLoginAt ? ago(u.lastLoginAt) : '从未上线'))))
+      + extraTds
+      + '<td>' + contacts + '</td>'
+      + '<td class="nowrap">' + vis + '</td>'
+      + '<td class="nowrap"><span class="badge ' + cst.cls + '">' + cst.text + '</span></td>'
+      + '<td class="nowrap muted" title="' + attr(fmt(m.sessionLastSeen || m.lastSeenAt || m.lastLoginAt)) + '">'
+      +   (m.userId == null ? '—'
+            : (isOnlineNow(m)
+                ? '<span class="dot-on" title="当前在线"></span>在线中'
+                  + (m.onlineSessions > 1 ? '<span style="opacity:.7">（' + m.onlineSessions + ' 端）</span>' : '')
+                : esc(m.sessionLastSeen ? ago(m.sessionLastSeen)
+                     : (m.lastSeenAt ? ago(m.lastSeenAt) : (m.lastLoginAt ? ago(m.lastLoginAt) : '从未上线')))))
       + '</td>'
-      + '<td class="nowrap muted">' + esc(fmt(u.createdAt, 'date')) + '</td>'
-      + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
-      +   '<button data-act="detail" data-id="' + u.id + '">详情</button>'
-      +   '<button data-act="pwd" data-id="' + u.id + '">重置密码</button>'
-      +   (u.status === 'banned'
-            ? '<button class="ok" data-act="unban" data-id="' + u.id + '">解禁</button>'
-            : '<button class="danger" data-act="ban" data-id="' + u.id + '">禁用</button>')
-      +   '<button class="danger" data-act="del" data-id="' + u.id + '"'
-      +     (STATE.me && u.id === STATE.me.id ? ' disabled title="不能删除自己"' : '') + '>删除</button>'
+      + '<td class="nowrap" style="text-align:right"><div class="row-actions">' + acts
+      +   (m.userId != null
+            ? '<button class="danger" data-mb="del" data-key="' + attr(key) + '"'
+              + (STATE.me && m.userId === STATE.me.id ? ' disabled title="不能删除自己"' : '') + '>删除</button>'
+            : (m.profileId != null
+                ? '<button class="danger" data-mb="delprofile" data-key="' + attr(key) + '">删档案</button>'
+                : ''))
       + '</div></td>'
       + '</tr>';
+  }).join('');
+
+  var extraTh = extras.map(function(f){
+    return '<th class="nowrap">' + esc(f.label) + '</th>';
   }).join('');
 
   var size = S.size;
@@ -1833,11 +2000,13 @@ function paintUsers(){
   body.innerHTML =
     '<div class="table-wrap"><table><thead><tr>'
     + '<th style="width:38px"><input type="checkbox" class="chk" data-pick-all' + (allChecked ? ' checked' : '') + '></th>'
-    + '<th>用户</th><th class="nowrap">角色 / 状态</th><th class="nowrap">最后上线</th><th class="nowrap">创建时间</th>'
+    + '<th>成员</th><th class="nowrap">场景</th><th class="nowrap">角色 / 状态</th>'
+    + extraTh
+    + '<th>联系方式</th><th class="nowrap">可见性</th><th class="nowrap">审核状态</th><th class="nowrap">最后上线</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
     + '<div class="pager">'
-    +   '<span class="info">共 ' + S.total + ' 人，当前显示第 ' + ((S.page - 1) * size + 1) + '–' + shownTo + ' 条</span>'
+    +   '<span class="info">共 ' + S.total + ' 条，当前显示第 ' + ((S.page - 1) * size + 1) + '–' + shownTo + ' 条</span>'
     +   '<span class="pages">'
     +     '<button data-pg="prev"' + (S.page <= 1 ? ' disabled' : '') + '>上一页</button>'
     +     '<button class="on">' + S.page + '</button>'
@@ -1847,155 +2016,244 @@ function paintUsers(){
 
   /* --- 事件绑定 --- */
   Array.prototype.forEach.call(body.querySelectorAll('[data-pick]'), function(cb){
-    cb.onchange = function(){ S.selected[cb.dataset.pick] = cb.checked; paintPick(); paintUsers(); };
+    cb.onchange = function(){ S.selected[cb.dataset.pick] = cb.checked; paintPick(); paintMembers(); };
   });
   var allCb = body.querySelector('[data-pick-all]');
   if(allCb){
     allCb.onchange = function(){
-      list.forEach(function(u){ S.selected[u.id] = allCb.checked; });
-      paintUsers();
+      S.list.forEach(function(m){ S.selected[mkey(m)] = allCb.checked; });
+      paintMembers();
     };
   }
-  Array.prototype.forEach.call(body.querySelectorAll('[data-act]'), function(b){
-    b.onclick = function(){ userAction(b.dataset.act, Number(b.dataset.id)); };
+  Array.prototype.forEach.call(body.querySelectorAll('[data-mb]'), function(b){
+    b.onclick = function(){ memberAction(b.dataset.mb, b.dataset.key); };
   });
   Array.prototype.forEach.call(body.querySelectorAll('[data-pg]'), function(b){
     b.onclick = function(){
       if(b.disabled) return;
       S.page += (b.dataset.pg === 'next' ? 1 : -1);
-      loadUsers();
+      loadMembers();
     };
   });
 
   paintPick();
 }
 
-/** 绘制批量操作提示条 */
+/** 按 key 找回行对象（key = 'u'+userId 或 'p'+profileId） */
+function memberByKey(key){
+  var S = STATE.members;
+  for(var i = 0; i < S.list.length; i++){
+    var m = S.list[i];
+    if(mkey(m) === key) return m;
+  }
+  return null;
+}
+
+/** 绘制批量操作提示条（只对有账号的行开放账号类批量操作） */
 function paintPick(){
-  var S = STATE.users;
+  var S = STATE.members;
   var ids = Object.keys(S.selected).filter(function(k){ return S.selected[k]; });
   var el = document.querySelector('[data-bulk]');
   if(!el) return;
   if(!ids.length){
-    el.textContent = '';
     el.className = 'muted';
     el.innerHTML = '';
     return;
   }
+  /* 只有带账号的行能批量重置密码 / 禁用 / 删除 */
+  var withAccount = ids.filter(function(k){ var m = memberByKey(k); return m && m.userId != null; });
   el.className = '';
-  el.innerHTML = '已选 <b style="color:var(--accent-ink)">' + ids.length + '</b> 人 '
-    + '<button class="btn btn-sm btn-ghost" data-bulk-pwd style="margin-left:6px">批量重置密码</button> '
-    + '<button class="btn btn-sm btn-ghost" data-bulk-ban style="margin-left:4px">批量禁用</button> '
-    + '<button class="btn btn-sm btn-ghost" data-bulk-del style="margin-left:4px;color:var(--danger)">批量删除</button> '
+  el.innerHTML = '已选 <b style="color:var(--accent-ink)">' + ids.length + '</b> 人'
+    + (withAccount.length
+        ? ' <button class="btn btn-sm btn-ghost" data-bulk-pwd style="margin-left:6px">批量重置密码</button> '
+          + '<button class="btn btn-sm btn-ghost" data-bulk-ban style="margin-left:4px">批量禁用</button> '
+          + '<button class="btn btn-sm btn-ghost" data-bulk-del style="margin-left:4px;color:var(--danger)">批量删除</button> '
+        : ' <span class="muted" style="font-size:.76rem">（选中的都没有账号，仅能逐个编辑档案）</span> ')
     + '<button class="btn btn-sm btn-ghost" data-bulk-clear style="margin-left:4px">取消选择</button>';
 
-  el.querySelector('[data-bulk-pwd]').onclick = function(){ bulkResetPwd(ids); };
-  el.querySelector('[data-bulk-ban]').onclick = function(){ bulkBan(ids); };
-  el.querySelector('[data-bulk-del]').onclick = function(){ bulkDelUsers(ids); };
-  el.querySelector('[data-bulk-clear]').onclick = function(){
-    STATE.users.selected = {}; paintUsers();
+  var q = function(sel){ return el.querySelector(sel); };
+  if(q('[data-bulk-pwd]')) q('[data-bulk-pwd]').onclick = function(){ bulkResetPwd(withAccount); };
+  if(q('[data-bulk-ban]')) q('[data-bulk-ban]').onclick = function(){ bulkBan(withAccount); };
+  if(q('[data-bulk-del]')) q('[data-bulk-del]').onclick = function(){ bulkDelMembers(withAccount); };
+  q('[data-bulk-clear]').onclick = function(){
+    STATE.members.selected = {}; paintMembers();
   };
 }
 
-/** 批量删除用户：先把「选到自己」剔除，再逐个串行删（后端只支持单个删除） */
-function bulkDelUsers(ids){
+/** 批量删除成员：先剔自己，再逐个串行删；有档案的追加一问「是否连带删档案」 */
+function bulkDelMembers(ids){
   var mineId = STATE.me ? STATE.me.id : 0;
-  var target = ids.filter(function(k){ return Number(k) !== Number(mineId); });
-  if(!target.length){ toast('选中的只有你自己的账号，不能删除', 'err', 3800); return; }
-
+  var target = ids.filter(function(k){
+    var m = memberByKey(k);
+    return m && m.userId != null && Number(m.userId) !== Number(mineId);
+  });
+  if(!target.length){ toast('选中的只有你自己的账号或没有账号，不能删除', 'err', 3800); return; }
   var skipped = ids.length - target.length;
+  var hasProfile = target.some(function(k){ var m = memberByKey(k); return m && m.profileId != null; });
 
   confirmBox({
-    title: '批量删除用户',
-    html: '确定要删除选中的 <b>' + target.length + '</b> 个用户吗？',
-    detail: '他们的云端数据会一并清除。'
+    title: '批量删除成员',
+    html: '确定要删除选中的 <b>' + target.length + '</b> 个成员吗？',
+    detail: '他们的账号与云端数据会一并清除；班级档案默认保留（变为「未认领」）。'
           + (skipped ? '\n已自动跳过你自己的账号。' : ''),
     warn: '不可撤销。如果只是想暂时阻止登录，请改用「批量禁用」。',
     danger: true,
     okText: '确认删除',
   }).then(function(ok){
     if(!ok) return;
-
-    var doneN = 0, failN = 0, firstErr = '';
-    var idx = 0;
-
-    /* 串行删：并发删除容易撞外键级联，也让审计日志顺序乱掉 */
-    var step = function(){
-      if(idx >= target.length) return finish();
-      var id = Number(target[idx]);
-      return api('/admin?action=delete-user', { method:'POST', body: { id: id } })
-        .then(function(){ doneN++; })
-        .catch(function(e){ failN++; if(!firstErr) firstErr = e.message; })
-        .then(function(){ idx++; return step(); });
+    var step2 = function(alsoProfile){
+      var doneN = 0, failN = 0, firstErr = '';
+      var idx = 0;
+      var step = function(){
+        if(idx >= target.length) return finish();
+        var m = memberByKey(target[idx]);
+        return api('/admin?action=delete-user', { method:'POST', body:{ id:m.userId, alsoProfile:!!alsoProfile } })
+          .then(function(){ doneN++; })
+          .catch(function(e){ failN++; if(!firstErr) firstErr = e.message; })
+          .then(function(){ idx++; return step(); });
+      };
+      var finish = function(){
+        STATE.members.selected = {};
+        loadMembers();
+        var msg = '已删除 ' + doneN + ' 个成员';
+        if(failN) msg += '，失败 ' + failN + ' 个（' + firstErr + '）';
+        toast(msg, failN ? 'err' : 'ok', 4200);
+      };
+      step();
     };
-
-    var finish = function(){
-      STATE.users.selected = {};
-      loadUsers();
-      var msg = '已删除 ' + doneN + ' 个账号';
-      if(failN) msg += '，失败 ' + failN + ' 个（' + firstErr + '）';
-      toast(msg, failN ? 'err' : 'ok', 4200);
-    };
-
-    step();
+    /* 有档案的追问一句：档案是通讯录，删不删要让站长明确选 */
+    if(hasProfile){
+      confirmBox({
+        title: '是否连带删除班级档案',
+        text: '这 ' + target.length + ' 人里有人挂着班级档案（含联系方式）。删除账号后档案默认保留为「未认领」，要一并删掉吗？',
+        detail: '选「保留档案」：人还能在通讯录里，只是没了登录账号。\n选「一并删除」：档案与联系方式彻底消失。',
+        danger: true,
+        okText: '一并删除', noText: '保留档案',
+      }).then(function(yes){ step2(!!yes); });
+    } else {
+      step2(false);
+    }
   });
 }
 
-/* ---------------- 用户操作分发 ---------------- */
-function userAction(act, id){
-  var u = STATE.users.list.find(function(x){ return x.id === id; });
-  if(act === 'detail') return userDetailDialog(id);
-  if(act === 'pwd')    return resetPwdDialog(id, u);
-  if(act === 'ban')    return setStatus(id, u, 'banned');
-  if(act === 'unban')  return setStatus(id, u, 'active');
-  if(act === 'del')    return deleteUserDialog(id, u);
+/* ---------------- 行内操作分发 ---------------- */
+function memberAction(act, key){
+  var m = memberByKey(key);
+  if(!m) return;
+  if(act === 'edit')       return memberDialog(m);
+  if(act === 'detail')     return userDetailDialog(m.userId);
+  if(act === 'pwd')        return resetPwdDialog(m.userId, m);
+  if(act === 'views')      return profileViewsDialog(m.profileId);
+  if(act === 'ban')        return memberSetStatus(m, 'banned');
+  if(act === 'unban')      return memberSetStatus(m, 'active');
+  if(act === 'del')        return deleteMemberDialog(m);
+  if(act === 'delprofile') return deleteProfileOfMember(m);
+  /* v2.10.0：注册审核 */
+  if(act === 'approve')    return reviewMember(m, 'approve');
+  if(act === 'reject')     return reviewMember(m, 'reject');
 }
 
-/** 删除单个用户：二次确认 + 明确告知连带后果 */
-function deleteUserDialog(id, u){
-  if(!u) return;
-  if(STATE.me && id === STATE.me.id){ toast('不能删除自己的账号', 'err'); return; }
+/** 禁用 / 解禁（账号类操作，仅对有账号的行开放） */
+function memberSetStatus(m, status){
+  if(!m || m.userId == null) return;
+  if(STATE.me && m.userId === STATE.me.id){ toast('不能禁用自己的账号', 'err'); return; }
+  var isBan = status === 'banned';
+  confirmBox({
+    title: isBan ? '禁用成员' : '解除禁用',
+    text: isBan
+      ? '确定禁用「' + memberName(m) + '」吗？对方会被立刻踢下线且无法再登录。'
+      : '确定恢复「' + memberName(m) + '」的登录吗？',
+    danger: isBan,
+    okText: isBan ? '禁用' : '解禁',
+  }).then(function(yes){
+    if(!yes) return;
+    api('/admin?action=set-status', { method:'POST', body:{ id:m.userId, status:status } })
+      .then(function(j){ toast(j.message || '已更新', 'ok', 3600); loadMembers(); })
+      .catch(function(e){ toast(e.message, 'err', 4200); });
+  });
+}
 
-  var label = u.displayName ? (u.displayName + '（' + u.username + '）') : u.username;
+/** v2.10.0：审核注册成员（通过 = 立即可登录；驳回 = 禁用并踢会话） */
+function reviewMember(m, decision){
+  if(!m || m.userId == null) return;
+  var approve = decision === 'approve';
+  confirmBox({
+    title: approve ? '通过注册审核' : '驳回注册申请',
+    text: approve
+      ? '确定通过「' + memberName(m) + '」的注册吗？通过后对方即可登录。'
+      : '确定驳回「' + memberName(m) + '」的注册吗？驳回后该账号将被禁用。',
+    danger: !approve,
+    okText: approve ? '通过审核' : '驳回',
+  }).then(function(ok){
+    if(!ok) return;
+    api('/admin?action=user-review', { method:'POST', body:{ id:m.userId, decision:decision } })
+      .then(function(j){
+        toast(j.message || '已审核', 'ok', 3600);
+        loadMembers();
+      })
+      .catch(function(e){ toast('审核失败：' + e.message, 'err', 4200); });
+  });
+}
+
+/** 删除成员（账号）。档案默认保留为「未认领」，可选择连带删除。 */
+function deleteMemberDialog(m){
+  if(!m || m.userId == null) return;
+  if(STATE.me && m.userId === STATE.me.id){ toast('不能删除自己的账号', 'err'); return; }
+  var label = memberName(m) + (m.username ? '（@' + m.username + '）' : '');
 
   confirmBox({
-    title: '删除用户',
+    title: '删除成员',
     html: '确定要删除 <b>' + esc(label) + '</b> 吗？',
-    detail: '他的云端数据（点歌记录、作业提交、会话）会被一并清除。',
+    detail: '账号与云端数据（点歌记录、作业提交、会话）会一并清除。'
+          + (m.profileId != null ? '\n他的班级档案默认保留为「未认领」，可在下一步选择一并删除。' : ''),
     warn: '不可撤销。如果只是想暂时阻止登录，请改用「禁用」。',
     danger: true,
     okText: '确认删除',
   }).then(function(ok){
     if(!ok) return;
-    api('/admin?action=delete-user', { method:'POST', body: { id: id } })
-      .then(function(j){
-        toast(j.message || '已删除', 'ok', 3600);
-        delete STATE.users.selected[id];
-        loadUsers();
-      })
-      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+    var go = function(alsoProfile){
+      api('/admin?action=delete-user', { method:'POST', body:{ id:m.userId, alsoProfile:!!alsoProfile } })
+        .then(function(j){
+          toast(j.message || '已删除', 'ok', 3600);
+          delete STATE.members.selected[mkey(m)];
+          loadMembers();
+        })
+        .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+    };
+    if(m.profileId != null){
+      confirmBox({
+        title: '是否连带删除班级档案',
+        text: '「' + memberName(m) + '」挂着班级档案（含联系方式）。要一并删掉吗？',
+        detail: '选「保留档案」：人还在通讯录里，只是没了登录账号。\n选「一并删除」：档案与联系方式彻底消失。',
+        danger: true,
+        okText: '一并删除', noText: '保留档案',
+      }).then(function(yes){ go(!!yes); });
+    } else {
+      go(false);
+    }
   });
 }
 
-function setStatus(id, u, status){
-  var isBan = status === 'banned';
+/** 删除档案（无账号的通讯录条目，或只清档案不动账号） */
+function deleteProfileOfMember(m){
+  if(!m || m.profileId == null) return;
   confirmBox({
-    title: isBan ? '禁用账号' : '解除禁用',
-    text: isBan
-      ? '确定禁用「' + (u && (u.displayName || u.username)) + '」吗？该账号将立即在所有设备退出登录，无法再登录。'
-      : '确定解除「' + (u && (u.displayName || u.username)) + '」的禁用吗？',
-    danger: isBan,
-    okText: isBan ? '确认禁用' : '确认解禁'
+    title: '删除班级档案',
+    html: '确定要删除 <b>' + esc(memberName(m)) + '</b> 的档案吗？',
+    warn: '删除后该条通讯录及其联系方式会一并消失。此操作不可撤销。',
+    danger: true,
+    okText: '删除',
   }).then(function(yes){
     if(!yes) return;
-    api('/admin?action=set-status', { method:'POST', body:{ id:id, status:status } })
-      .then(function(j){ toast(j.message || '操作成功', 'ok'); loadUsers(); })
+    api('/admin?action=delete-profile', { method:'POST', body:{ id:m.profileId } })
+      .then(function(j){ toast(j.message || '已删除', 'ok'); loadMembers(); })
       .catch(function(e){ toast(e.message, 'err', 4000); });
   });
 }
 
-function resetPwdDialog(id, u){
-  var name = u ? (u.displayName || u.username) : ('#' + id);
+/** 重置密码（账号类操作；m 用于显示名，缺省时按 id 显示） */
+function resetPwdDialog(id, m){
+  var name = m ? memberName(m) : ('#' + id);
   promptBox({
     title: '重置密码',
     sub: '为「' + name + '」设置一个新的初始密码',
@@ -2008,111 +2266,398 @@ function resetPwdDialog(id, u){
   }).then(function(v){
     if(v === null) return;
     api('/admin?action=reset-password', { method:'POST', body:{ id:id, newPassword:v } })
-      .then(function(j){ toast(j.message || '已重置', 'ok', 4000); loadUsers(); })
+      .then(function(j){ toast(j.message || '已重置', 'ok', 4000); loadMembers(); })
       .catch(function(e){ toast(e.message, 'err', 4000); });
   });
 }
 
-/* ---------------- 批量操作 ---------------- */
-function bulkResetPwd(ids){
+/* ---------------- 批量操作（仅对带账号的行） ---------------- */
+function bulkResetPwd(keys){
+  var targets = keys.map(function(k){ return memberByKey(k); })
+    .filter(function(m){ return m && m.userId != null; });
+  if(!targets.length){ toast('选中的成员都没有账号', 'err'); return; }
   promptBox({
     title: '批量重置密码',
-    sub: '已选择 ' + ids.length + ' 个账号',
+    sub: '已选择 ' + targets.length + ' 个账号',
     label: '统一的新初始密码（6–64 位）',
     placeholder: '例如 Class2025',
-    hint: '这 ' + ids.length + ' 个账号都会被设为该密码，并强制下次登录时改密。',
+    hint: '这 ' + targets.length + ' 个账号都会被设为该密码，并强制下次登录时改密。',
     okText: '批量重置',
     validate: function(v){ return (v.length < 6 || v.length > 64) ? '密码长度需 6–64 位' : ''; }
   }).then(function(v){
     if(v === null) return;
     var ok = 0, bad = 0;
     var seq = Promise.resolve();
-    ids.forEach(function(id){
+    targets.forEach(function(m){
       seq = seq.then(function(){
-        return api('/admin?action=reset-password', { method:'POST', body:{ id:Number(id), newPassword:v } })
+        return api('/admin?action=reset-password', { method:'POST', body:{ id:m.userId, newPassword:v } })
           .then(function(){ ok++; }).catch(function(){ bad++; });
       });
     });
     seq.then(function(){
       toast('批量重置完成：成功 ' + ok + ' 个' + (bad ? '，失败 ' + bad + ' 个' : ''), bad ? 'warn' : 'ok', 4200);
-      STATE.users.selected = {};
-      loadUsers();
+      STATE.members.selected = {};
+      loadMembers();
     });
   });
 }
 
-function bulkBan(ids){
+function bulkBan(keys){
+  var targets = keys.map(function(k){ return memberByKey(k); })
+    .filter(function(m){ return m && m.userId != null; });
+  if(!targets.length){ toast('选中的成员都没有账号', 'err'); return; }
+  var mineId = STATE.me ? STATE.me.id : 0;
+  targets = targets.filter(function(m){ return Number(m.userId) !== Number(mineId); });
+  if(!targets.length){ toast('选中的只有你自己的账号，不能禁用', 'err'); return; }
   confirmBox({
     title: '批量禁用',
-    text: '确定为所选的 ' + ids.length + ' 个账号全部禁用吗？他们会被立刻踢下线且无法再登录。',
+    text: '确定为所选的 ' + targets.length + ' 个账号全部禁用吗？他们会被立刻踢下线且无法再登录。',
     danger: true, okText: '全部禁用'
   }).then(function(yes){
     if(!yes) return;
     var ok = 0, bad = 0;
     var seq = Promise.resolve();
-    ids.forEach(function(id){
+    targets.forEach(function(m){
       seq = seq.then(function(){
-        return api('/admin?action=set-status', { method:'POST', body:{ id:Number(id), status:'banned' } })
+        return api('/admin?action=set-status', { method:'POST', body:{ id:m.userId, status:'banned' } })
           .then(function(){ ok++; }).catch(function(){ bad++; });
       });
     });
     seq.then(function(){
       toast('批量禁用完成：成功 ' + ok + ' 个' + (bad ? '，失败 ' + bad + ' 个' : ''), bad ? 'warn' : 'ok', 4200);
-      STATE.users.selected = {};
-      loadUsers();
+      STATE.members.selected = {};
+      loadMembers();
     });
   });
 }
 
-/* ---------------- 添加单个用户 ---------------- */
-function addUserDialog(){
+/**
+ * 合并导出：账号 + 档案一张表（v2.10.0 #172）。
+ * 走 members 接口当前筛选（搜索/角色/状态/场景），自定义字段动态追加列。
+ * 导的是「管理员视图」：含联系方式原文，文件请妥善保管。
+ */
+function memberExport(){
+  var S = STATE.members;
+  var sceneQ = S.scene === 'pending-review' ? '' : S.scene;
+  loadXLSX().then(function(XLSX){
+    if(!XLSX){ toast('表格组件加载失败（三个 CDN 都不可达），请检查网络后重试', 'err', 4200); return; }
+    var qs = '/admin?action=members&limit=500'
+           + '&q=' + encodeURIComponent(S.q || '')
+           + '&role=' + encodeURIComponent(S.role || '')
+           + '&status=' + encodeURIComponent(S.status || '')
+           + '&scene=' + encodeURIComponent(sceneQ || '');
+    api(qs).then(function(j){
+      var list = j.members || [];
+      if(!list.length){ toast('当前筛选条件下没有成员可导出', 'err'); return; }
+      var extras = extraColsOf();
+      var head = ['姓名', '学号', '用户名', '角色', '状态', '政治面貌', '智学网账号']
+        .concat(extras.map(function(f){ return f.label; }))
+        .concat(['微信', 'QQ', '手机号', '审核状态', '场景', '最后上线']);
+      var data = [head].concat(list.map(function(m){
+        var base = [
+          memberName(m),
+          m.studentId || '',
+          m.username || '（未开通）',
+          m.role === 'admin' ? '管理员' : (m.userId != null ? '普通用户' : ''),
+          m.status === 'banned' ? '已禁用' : (m.status === 'pending' ? '待审核' : (m.userId != null ? '正常' : '')),
+          m.politics || '',
+          m.examNo || '',
+        ];
+        var ex = extras.map(function(f){ return (m.extra || {})[f.field] || ''; });
+        var tail = [
+          m.wechat || '', m.qq || '', m.phone || '',
+          (CONTACT_LABEL[m.contactStatus] || CONTACT_LABEL.none).text,
+          (MEMBER_SCENE[m.scene] || MEMBER_SCENE.both).text,
+          m.lastLoginAt ? fmt(m.lastLoginAt) : (m.lastSeenAt ? fmt(m.lastSeenAt) : ''),
+        ];
+        return base.concat(ex).concat(tail);
+      }));
+      var ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = head.map(function(h){ return { wch: Math.max(10, String(h).length * 2 + 4) }; });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '成员与档案');
+      XLSX.writeFile(wb, '成员与档案_' + fmt(new Date(), 'date').replace(/-/g, '') + '.xlsx');
+      toast('已导出 ' + list.length + ' 条记录', 'ok');
+    }).catch(function(e){ toast(e.message || '导出失败', 'err', 4000); });
+  });
+}
+
+/**
+ * v2.10.0 #172：成员长表单（新增 / 编辑通用）。
+ * 不用折叠面板——按站主要求「上半系统账号信息、下半班级档案」直接铺开，
+ * 一次提交（POST /admin?action=save-member），后端按场景编排。
+ *
+ * 四种场景在表单里的表现：
+ *   新增（都无）        账号段：用户名 + 初始密码必填；档案段全空待填
+ *   both                账号段：用户名只读 + 角色/状态可改；档案段带现值
+ *   user-only           账号段同 both；档案段空 + 提示「填任一字段即自动补建」
+ *   profile-only        账号段：未开通 + 「开通账号」勾选（展开用户名/密码）；
+ *                       档案段带现值
+ */
+function memberDialog(m){
+  var isNew = !m;
+  var hasUser = !isNew && m.userId != null;
+  var hasProfile = !isNew && m.profileId != null;
+  var POL = ['普通学生', '共青团员', '共青团员 · 团支书', '中共党员', '中共预备党员', '群众'];
+  var name0 = isNew ? '' : (m.name || m.displayName || '');
+
+  function polOpts(cur){
+    var list = POL.slice();
+    if(cur && list.indexOf(cur) < 0) list.unshift(cur);
+    return list.map(function(x){
+      return '<option value="' + attr(x) + '"' + (x === cur ? ' selected' : '') + '>' + esc(x) + '</option>';
+    }).join('');
+  }
+
+  /* ---- ① 系统账号段 ---- */
+  var accountSec =
+    '<div class="mb-form-sec">'
+    + '<h4>' + svg('lock', 15) + ' 系统账号</h4>'
+    + '<p class="hint" style="margin:-4px 0 12px">账号是登录凭证。用户名创建后不可修改，密码不在这里改（用行内「重置密码」）。</p>'
+
+    /* 用户名：已有账号只读；否则（新增 / 给未认领成员开号）可填 */
+    + (hasUser
+        ? '<div class="field"><label>用户名</label>'
+          + '<input value="' + attr(m.username) + '" disabled>'
+          + '<p class="hint">登录名不可修改。要换登录名只能删除账号重建（档案不受影响）。</p></div>'
+        : '<div class="field"><label for="mbUser">用户名 <span style="color:var(--danger)">*</span></label>'
+          + '<input id="mbUser" placeholder="3–20 位，中英文/数字/下划线" autocomplete="off">'
+          + '<p class="hint">' + (isNew ? '同学用它登录，告诉他初始密码。' : '给这位只有通讯录的同学开一个登录账号。') + '</p></div>'
+          + '<div class="field"><label for="mbPwd">初始密码 <span style="color:var(--danger)">*</span></label>'
+          + '<input id="mbPwd" placeholder="6–64 位" autocomplete="new-password">'
+          + '<p class="hint">首次登录后会建议他自己改密码。</p></div>')
+
+    /* 未认领场景：开不开号由站长选（不开就只存通讯录） */
+    + (!isNew && !hasUser
+        ? '<label class="chk" style="margin-bottom:12px"><input type="checkbox" id="mbOpen" checked>'
+          + ' 顺便开通登录账号（勾选后上面两项必填；不勾则只保存通讯录）</label>'
+        : '')
+
+    /* 姓名：单数据源，档案与账号显示名同一个框 */
+    + '<div class="field"><label for="mbName">姓名</label>'
+    + '<input id="mbName" maxlength="30" value="' + attr(name0) + '" placeholder="如 余子康">'
+    + '<p class="hint">这一个框同时写进<b>班级档案</b>与<b>账号显示名</b>（单数据源，不会再出现两处对不上）。</p></div>'
+
+    /* 角色 / 状态：仅对（将有）账号有意义 */
+    + '<div class="mb-form-grid">'
+    +   '<div class="field"><label for="mbRole">角色</label>'
+    +     '<select id="mbRole">'
+    +       '<option value="user"' + (!isNew && m.role === 'admin' ? '' : ' selected') + '>普通用户</option>'
+    +       '<option value="admin"' + (!isNew && m.role === 'admin' ? ' selected' : '') + '>管理员</option>'
+    +     '</select></div>'
+    +   '<div class="field"><label for="mbStatus">状态</label>'
+    +     '<select id="mbStatus"'
+    +       (hasUser ? '' : ' disabled title="还没有账号，开通后生效"') + '>'
+    +       '<option value="active"' + (!isNew && m.status === 'active' ? ' selected' : '') + '>正常</option>'
+    +       '<option value="pending"' + (!isNew && m.status === 'pending' ? ' selected' : '') + '>待审核</option>'
+    +       '<option value="banned"' + (!isNew && m.status === 'banned' ? ' selected' : '') + '>已禁用</option>'
+    +     '</select></div>'
+    + '</div>'
+
+    /* 账号只读信息（编辑已有账号时） */
+    + (hasUser
+        ? '<dl class="kv" style="margin-top:4px">'
+          + '<dt>账号 ID</dt><dd class="mono">' + m.userId + '</dd>'
+          + '<dt>创建时间</dt><dd>' + esc(fmt(m.createdAt)) + '</dd>'
+          + '<dt>最后登录</dt><dd>' + (m.lastLoginAt ? esc(fmt(m.lastLoginAt) + '（' + ago(m.lastLoginAt) + '）') : '从未登录') + '</dd>'
+          + '<dt>最后上线</dt><dd>' + (isOnlineNow(m)
+              ? '<span class="badge badge-green">在线中</span>'
+              : esc(m.lastSeenAt ? fmt(m.lastSeenAt) + '（' + ago(m.lastSeenAt) + '）' : '未记录')) + '</dd>'
+          + '<dt>云端数据</dt><dd>' + (m.dataCount || 0) + ' 条</dd>'
+          + '<dt>首次改密</dt><dd>' + (m.mustChangePassword
+              ? '<span class="badge badge-amber">待改密</span>'
+              : '<span class="badge badge-green">已改密</span>') + '</dd>'
+          + '</dl>'
+        : '')
+    + '</div>';
+
+  /* ---- ② 班级档案段 ---- */
+  var vp0 = (!isNew && m.visibilityPref) || {};
+  var profileSec =
+    '<div class="mb-form-sec" style="margin-top:20px">'
+    + '<h4>' + svg('inbox', 15) + ' 班级档案</h4>'
+    + '<p class="hint" style="margin:-4px 0 12px">'
+    +   (hasProfile
+        ? '姓名 / 学号 / 政治面貌只有管理员能改；联系方式管理员填写视为已核实。'
+        : (hasUser
+            ? '这个账号还没有班级档案——下面填任一字段，保存时自动补建并绑定。'
+            : '通讯录信息。暂时不开账号也可以先只存档案。'))
+    + '</p>'
+
+    + '<div class="mb-form-grid">'
+    +   '<div class="field"><label for="mbSid">学号</label>'
+    +     '<input id="mbSid" maxlength="20" value="' + attr(isNew ? '' : m.studentId) + '" placeholder="如 250501">'
+    +     '<p class="hint">全部成员里唯一，重复会报错。</p></div>'
+    +   '<div class="field"><label for="mbPol">政治面貌</label>'
+    +     '<select id="mbPol">' + polOpts(isNew ? '群众' : m.politics) + '</select></div>'
+    + '</div>'
+
+    + '<div class="field"><label for="mbEx">智学网账号</label>'
+    + '<input id="mbEx" class="inp" maxlength="24" value="' + attr(isNew ? '' : m.examNo) + '" placeholder="如 11399395">'
+    + '<p class="hint">不属于隐私字段，同学查询时直接可见，不需要审核。</p></div>'
+
+    + '<div class="field"><label>联系方式</label>'
+    +   '<div class="ct-grid" style="gap:10px">'
+    +     '<input id="mbWx" class="inp" maxlength="64" placeholder="微信号" value="' + attr(isNew ? '' : m.wechat) + '">'
+    +     '<input id="mbQq" class="inp" maxlength="64" placeholder="QQ 号" value="' + attr(isNew ? '' : m.qq) + '">'
+    +     '<input id="mbPh" class="inp" maxlength="64" placeholder="手机号" value="' + attr(isNew ? '' : m.phone) + '">'
+    +   '</div>'
+    +   '<p class="hint">管理员在这里填的视为已核实，直接按下面的状态对外展示。</p></div>'
+
+    + '<div class="field"><label for="mbCst">联系方式审核状态</label>'
+    + '<select id="mbCst">'
+    +   '<option value="none"' + (!isNew && m.contactStatus === 'none' ? ' selected' : '') + '>未填写 — 不对外展示</option>'
+    +   '<option value="approved"' + ((isNew && !(m && m.contactStatus)) || (!isNew && m.contactStatus === 'approved') ? ' selected' : '') + '>已通过 — 同学查询时可见</option>'
+    +   '<option value="pending"' + (!isNew && m.contactStatus === 'pending' ? ' selected' : '') + '>待审核 — 暂不展示</option>'
+    +   '<option value="rejected"' + (!isNew && m.contactStatus === 'rejected' ? ' selected' : '') + '>已驳回 — 不展示</option>'
+    + '</select></div>'
+
+    /* 联系方式可见性（仅编辑已有档案时出现） */
+    + (hasProfile
+        ? (function(){
+            var meta0 = STATE.members.fieldMeta || [];
+            var adminTouched = function(field){
+              var mm = meta0.find(function(x){ return x.field === field; });
+              return mm ? !!mm.adminSet : false;
+            };
+            function note(field){
+              if(vp0[field] !== false) return '';
+              return adminTouched(field)
+                ? '<span class="badge badge-purple" style="margin-left:6px" title="同学设过私密，但你在字段管理里改过该字段，以你为准">本人设过私密 · 已被你覆盖</span>'
+                : '<span class="badge badge-orange" style="margin-left:6px" title="同学把这项设成了仅自己可见">本人已设为私密</span>';
+            }
+            return '<div class="field"><label>联系方式可见性（这个人）</label>'
+            +   '<p class="hint" style="margin-bottom:8px">勾上 = 仅本人可见，同学查不到。'
+            +     '<b>后台权力最大</b>：你在「字段管理」里改过的字段，以你的设置为准。</p>'
+            +   '<label class="chk"><input type="checkbox" id="mbWxHide"' + (vp0.wechat === false ? ' checked' : '') + '> 微信号仅本人可见' + note('wechat') + '</label>'
+            +   '<label class="chk"><input type="checkbox" id="mbQqHide"' + (vp0.qq === false ? ' checked' : '') + '> QQ 号仅本人可见' + note('qq') + '</label>'
+            +   '<label class="chk"><input type="checkbox" id="mbPhHide"' + (vp0.phone === false ? ' checked' : '') + '> 手机号仅本人可见' + note('phone') + '</label>'
+            + '</div>';
+          })()
+        : '')
+
+    /* 其他资料字段（动态，2026-10-09 v2.4.0） */
+    + (function(){
+        var extras = extraColsOf();
+        if(!extras.length) return '';
+        var cur = (!isNew && m.extra) || {};
+        var fv  = (!isNew && m.fieldVis) || {};
+        return '<div class="field"><label>其他资料字段</label>'
+          + '<p class="hint" style="margin-bottom:8px">「字段管理」里登记的字段。可见范围默认跟随全班，也可只给这一个人单独调整。</p>'
+          + extras.map(function(f){
+              var val = cur[f.field] || '';
+              var curFv = fv[f.field] || '';
+              var gv = (function(){
+                var mm = (STATE.members.fieldMeta || []).find(function(x){ return x.field === f.field; });
+                return mm ? mm.visibility : 'public';
+              })();
+              return '<div class="extra-row">'
+                + '<label class="extra-lab" for="mbX_' + attr(f.field) + '">' + esc(f.label) + '</label>'
+                + '<input id="mbX_' + attr(f.field) + '" class="inp" maxlength="200"'
+                +   ' data-xf="' + attr(f.field) + '" value="' + attr(val) + '" placeholder="' + attr(f.label) + '">'
+                + '<select class="inp extra-vis" data-vf="' + attr(f.field) + '" title="只对这个人生效的可见范围">'
+                +   '<option value=""' + (curFv ? '' : ' selected') + '>跟随全班（' + esc(VIS_LABEL[gv] || gv) + '）</option>'
+                +   '<option value="public"' + (curFv === 'public' ? ' selected' : '') + '>公开</option>'
+                +   '<option value="committee"' + (curFv === 'committee' ? ' selected' : '') + '>班委可见</option>'
+                +   '<option value="self"' + (curFv === 'self' ? ' selected' : '') + '>仅本人</option>'
+                + '</select>'
+                + '</div>';
+            }).join('')
+          + '</div>';
+      })()
+    + '<div class="msg" id="mbMsg"></div>'
+    + '</div>';
+
   openModal({
-    title: '添加用户',
-    sub: '为同学创建一个账号，然后把用户名和初始密码告诉他',
-    body:
-      '<div class="field"><label for="auName">用户名 <span style="color:var(--danger)">*</span></label>'
-      + '<input id="auName" placeholder="3–20 位，中英文/数字/下划线" autocomplete="off"></div>'
-      + '<div class="field"><label for="auDisp">姓名 / 昵称</label>'
-      + '<input id="auDisp" placeholder="选填，用于列表显示" autocomplete="off"></div>'
-      + '<div class="alert info" style="margin:0 0 14px;font-size:.8rem">'
-      +   '创建账号时会<b>自动为该同学建一条班级资料</b>（姓名取上面的「姓名/昵称」），'
-      +   '这样他立刻就能出现在「头衔任命」和「资料管理」里。<br>'
-      +   '<b>学号不在这里填</b> —— 建好后到「资料管理」里点「编辑」补上即可，'
-      +   '也可以点「Excel 导入」把全班学号一次填齐。'
-      + '</div>'
-      + '<div class="field"><label for="auPwd">初始密码 <span style="color:var(--danger)">*</span></label>'
-      + '<input id="auPwd" placeholder="6–64 位" autocomplete="new-password">'
-      + '<p class="hint">同学首次登录后会被要求自行修改密码。</p></div>'
-      + '<div class="field"><label for="auRole">角色</label>'
-      + '<select id="auRole" style="height:46px;padding:0 12px;border:1px solid var(--border-2);border-radius:var(--radius-md);background:var(--bg-1);color:var(--fg);width:100%">'
-      + '<option value="user">普通用户</option><option value="admin">管理员</option></select></div>'
-      + '<div class="msg" id="auMsg"></div>',
-    foot: '<button class="btn btn-ghost" data-close2>取消</button><button class="btn" id="auGo">创建账号</button>',
+    title: isNew ? '新增成员' : ('编辑成员：' + memberName(m)),
+    sub: isNew ? '一张表单同时建账号与档案' : '同一张表单管理账号与班级档案，保存时两处自动同步',
+    wide: true,
+    body: accountSec + profileSec,
+    foot: '<button class="btn btn-ghost" data-no>取消</button><button class="btn" data-yes>'
+      + (isNew ? '创建' : '保存') + '</button>',
     onMount: function(box){
-      box.querySelector('[data-close2]').onclick = closeModal;
-      var go = function(){
-        var msg = box.querySelector('#auMsg');
-        var body = {
-          username: box.querySelector('#auName').value.trim(),
-          displayName: box.querySelector('#auDisp').value.trim(),
-          password: box.querySelector('#auPwd').value,
-          role: box.querySelector('#auRole').value
+      var msg = box.querySelector('#mbMsg');
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var btn = this;
+        var openAcc = box.querySelector('#mbOpen');
+        var willCreateAccount = isNew || (openAcc && openAcc.checked);
+
+        /* 档案段是否有实质内容 */
+        var g = function(id){ var el = box.querySelector(id); return el ? el.value.trim() : ''; };
+        var nameV = g('#mbName');
+        var hasProfileData = nameV || g('#mbSid') || g('#mbEx') || g('#mbWx') || g('#mbQq') || g('#mbPh');
+
+        var payload = {
+          userId:    hasUser ? m.userId : 0,
+          profileId: hasProfile ? m.profileId : 0,
+          createAccount: willCreateAccount && !hasUser,
+          role:      box.querySelector('#mbRole').value,
+          status:    hasUser ? box.querySelector('#mbStatus').value : 'active',
+          /* 档案段 */
+          name: nameV,
+          studentId: g('#mbSid'),
+          politics:  box.querySelector('#mbPol').value,
+          examNo:    g('#mbEx'),
+          wechat:    g('#mbWx'),
+          qq:        g('#mbQq'),
+          phone:     g('#mbPh'),
+          contactStatus: box.querySelector('#mbCst').value,
         };
-        if(!body.username){ msg.className = 'msg err show'; msg.textContent = '请填写用户名'; return; }
-        if(!body.password){ msg.className = 'msg err show'; msg.textContent = '请填写初始密码'; return; }
-        box.querySelector('#auGo').disabled = true;
-        api('/admin?action=create-user', { method:'POST', body:body }).then(function(j){
-          toast(j.message || '已创建', 'ok', 3600);
+
+        /* 账号段校验（新建 / 开号时用户名+密码必填） */
+        if(payload.createAccount){
+          payload.username = g('#mbUser');
+          payload.password = box.querySelector('#mbPwd').value;
+          if(!payload.username){ msg.className = 'msg err show'; msg.textContent = '请填写用户名'; return; }
+          if(!payload.password){ msg.className = 'msg err show'; msg.textContent = '请填写初始密码'; return; }
+        }
+
+        /* 没有任何可保存内容时挡住（比如空表单直接点保存） */
+        if(!payload.userId && !payload.profileId && !payload.createAccount && !hasProfileData){
+          msg.className = 'msg err show';
+          msg.textContent = '请至少填写一项：账号信息或档案信息';
+          return;
+        }
+
+        /* 可见性：仅编辑已有档案时带（adminSet 语义见 upsertProfileCore） */
+        if(hasProfile){
+          var wxH = box.querySelector('#mbWxHide');
+          if(wxH){
+            payload.visibilityPref = {
+              wechat: !wxH.checked,
+              qq:     !box.querySelector('#mbQqHide').checked,
+              phone:  !box.querySelector('#mbPhHide').checked,
+            };
+          }
+          var fvVals = {};
+          Array.prototype.forEach.call(box.querySelectorAll('[data-vf]'), function(sel){
+            if(sel.value) fvVals[sel.dataset.vf] = sel.value;
+          });
+          payload.fieldVis = fvVals;
+        }
+        /* 额外字段值（新增时也允许带，默认都是「跟随全班」） */
+        var extraVals = {};
+        Array.prototype.forEach.call(box.querySelectorAll('[data-xf]'), function(inp){
+          extraVals[inp.dataset.xf] = inp.value.trim();
+        });
+        payload.extra = extraVals;
+
+        btn.disabled = true;
+        api('/admin?action=save-member', { method:'POST', body: payload }).then(function(j){
           closeModal();
-          loadUsers();
+          toast(j.message || '已保存', 'ok', 3800);
+          loadMembers();
         }).catch(function(e){
           msg.className = 'msg err show';
           msg.textContent = e.message;
-          box.querySelector('#auGo').disabled = false;
+          btn.disabled = false;
         });
       };
-      box.querySelector('#auGo').onclick = go;
-      setTimeout(function(){ box.querySelector('#auName').focus(); }, 80);
+      setTimeout(function(){
+        var first = box.querySelector(isNew ? '#mbUser' : '#mbName');
+        if(first) first.focus();
+      }, 80);
     }
   });
 }
@@ -2156,9 +2701,15 @@ function userDetailDialog(id){
 
         var dataBox = '<div class="panel"><div class="panel-head"><h3>' + svg('database') + '云端数据</h3></div>'
           + '<div class="panel-body">' + (data.length
-              ? '<div class="table-wrap"><table><thead><tr><th>键</th><th>更新时间</th><th style="text-align:right">操作</th></tr></thead><tbody>'
+              ? '<div class="table-wrap"><table><thead><tr><th class="nowrap">分类</th><th>数据</th><th class="nowrap">更新时间</th><th style="text-align:right">操作</th></tr></thead><tbody>'
                 + data.map(function(d){
-                    return '<tr><td class="mono">' + esc(d.key) + '</td>'
+                    /* #178：中文名 + 键名小字。label 与键名相同时（未归类键）
+                       只显示键名，不重复一遍。 */
+                    var showKey = (d.label && d.label !== d.key)
+                      ? esc(d.label) + ' <span class="mono muted" style="font-size:.72rem">' + esc(d.key) + '</span>'
+                      : '<span class="mono">' + esc(d.key) + '</span>';
+                    return '<tr><td class="nowrap">' + esc(d.catLabel || '—') + '</td>'
+                      + '<td>' + showKey + '</td>'
                       + '<td class="nowrap muted">' + esc(fmt(d.updatedAt)) + '</td>'
                       + '<td style="text-align:right"><div class="row-actions">'
                       + '<button data-view-key="' + attr(d.key) + '">查看</button>'
@@ -2457,7 +3008,7 @@ function importDialog(){
               errBox.innerHTML = '<p style="font-size:.8rem;font-weight:700;color:var(--danger);margin:0 0 7px">失败明细</p>'
                 + '<div class="err-list">' + allErrors.map(esc).join('\n') + '</div>';
             }
-            loadUsers();
+            loadMembers();
             return;
           }
           var batch = batches[bi];
@@ -2487,126 +3038,6 @@ function importDialog(){
       };
     }
   });
-}
-
-/* ============================================================================
- * ⑨ Excel 导出（字段自选，跟随当前筛选）
- * ========================================================================= */
-var EXPORT_FIELDS = [
-  { key:'id',           label:'ID',           on:false },
-  { key:'username',     label:'用户名',        on:true  },
-  { key:'displayName',  label:'姓名 / 昵称',   on:true  },
-  { key:'role',         label:'角色',         on:true  },
-  { key:'status',       label:'状态',         on:true  },
-  { key:'mustChangePassword', label:'待改密',  on:true  },
-  { key:'createdAt',    label:'创建时间',      on:true  },
-  { key:'lastSeenAt',   label:'最后上线',      on:true  },
-  { key:'lastLoginAt',  label:'最后登录',      on:true  },
-  { key:'loginCount',   label:'累计登录次数',  on:true  },
-  { key:'dataCount',    label:'云端数据条数',  on:false }
-];
-
-function exportDialog(){
-  var S = STATE.users;
-  openModal({
-    title: '导出用户数据',
-    sub: '导出为 .xlsx，可直接用 Excel 打开',
-    body:
-      '<div class="alert info">导出范围会<b>跟随当前筛选条件</b>（搜索词 / 角色 / 状态），做到「所见即所得」。'
-      + (S.q || S.role || S.status
-          ? '<br>当前筛选：' + [S.q ? '搜索「' + esc(S.q) + '」' : '', S.role ? '角色 ' + esc(S.role) : '', S.status ? '状态 ' + esc(S.status) : ''].filter(Boolean).join(' · ')
-          : '<br>当前无筛选，将导出全部用户。')
-      + '</div>'
-      + '<p style="font-size:.85rem;font-weight:800;margin:0 0 10px">选择要导出的字段</p>'
-      + '<div class="field-grid" id="exFields">'
-      + EXPORT_FIELDS.map(function(f){
-          return '<label' + (f.on ? ' class="on"' : '') + '><input type="checkbox" data-f="' + f.key + '"' + (f.on ? ' checked' : '') + '>'
-            + esc(f.label) + '</label>';
-        }).join('')
-      + '</div>'
-      + '<div class="msg" id="exMsg"></div>',
-    foot: '<button class="btn btn-ghost" data-close5>取消</button><button class="btn" id="exGo">' + svg('download', 14) + '导出 Excel</button>',
-    onMount: function(box){
-      box.querySelector('[data-close5]').onclick = closeModal;
-      var fieldsBox = box.querySelector('#exFields');
-      Array.prototype.forEach.call(fieldsBox.querySelectorAll('input'), function(cb){
-        cb.onchange = function(){
-          cb.parentElement.classList.toggle('on', cb.checked);
-        };
-      });
-
-      box.querySelector('#exGo').onclick = function(){
-        var btn = box.querySelector('#exGo');
-        var msg = box.querySelector('#exMsg');
-        var picked = Array.prototype.filter.call(fieldsBox.querySelectorAll('input'), function(c){ return c.checked; })
-          .map(function(c){ return c.dataset.f; });
-        if(!picked.length){
-          msg.className = 'msg err show'; msg.textContent = '请至少选择一个字段';
-          return;
-        }
-
-        btn.disabled = true;
-        msg.className = 'msg'; msg.textContent = '';
-
-        loadXLSX().then(function(XLSX){
-          if(!XLSX){
-            msg.className = 'msg err show';
-            msg.textContent = '表格组件加载失败（三个 CDN 都不可达），请检查网络后重试。';
-            btn.disabled = false;
-            return;
-          }
-          var qs = '/admin?action=export&q=' + encodeURIComponent(S.q || '')
-                 + '&role=' + encodeURIComponent(S.role || '')
-                 + '&status=' + encodeURIComponent(S.status || '');
-
-          return api(qs).then(function(j){
-            var rows = j.users || [];
-            if(!rows.length){
-              msg.className = 'msg warn show'; msg.textContent = '当前筛选条件下没有用户可导出';
-              btn.disabled = false;
-              return;
-            }
-            var labels = {};
-            EXPORT_FIELDS.forEach(function(f){ labels[f.key] = f.label; });
-            var head = picked.map(function(k){ return labels[k] || k; });
-
-            var data = [head].concat(rows.map(function(u){
-              return picked.map(function(k){ return cellText(k, u); });
-            }));
-
-            var ws = XLSX.utils.aoa_to_sheet(data);
-            ws['!cols'] = picked.map(function(k){ return { wch: k === 'createdAt' || k === 'lastLoginAt' ? 20 : Math.max(10, (labels[k] || '').length * 2 + 4) }; });
-            var wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, '用户数据');
-            XLSX.writeFile(wb, '班级站用户_' + fmt(new Date(), 'date').replace(/-/g, '') + '.xlsx');
-
-            toast('已导出 ' + rows.length + ' 条记录', 'ok');
-            closeModal();
-          });
-        }).catch(function(e){
-          msg.className = 'msg err show';
-          msg.textContent = e.message || '导出失败';
-          btn.disabled = false;
-        });
-      };
-    }
-  });
-}
-
-/** 导出时把某个字段格式化成可读文本（角色/状态转中文，时间转本地） */
-function cellText(key, u){
-  switch(key){
-    case 'role':        return u.role === 'admin' ? '管理员' : '普通用户';
-    case 'status':      return u.status === 'banned' ? '已禁用' : '正常';
-    case 'mustChangePassword': return u.mustChangePassword ? '是' : '否';
-    case 'createdAt':   return fmt(u.createdAt);
-    case 'lastSeenAt':  return u.lastSeenAt ? fmt(u.lastSeenAt) : '未记录';
-    case 'lastLoginAt': return u.lastLoginAt ? fmt(u.lastLoginAt) : '从未登录';
-    case 'loginCount':  return u.loginCount || 0;
-    case 'dataCount':   return u.dataCount || 0;
-    case 'displayName': return u.displayName || '';
-    default:            return u[key] === null || u[key] === undefined ? '' : u[key];
-  }
 }
 
 /* ============================================================================
@@ -3541,7 +3972,7 @@ function paintTitles(){
 
   if(!list.length){
     body.innerHTML = '<div class="empty">' + svg('shield', 38) + '<p>'
-      + (!S.list.length ? '还没有资料，请先到「资料管理」导入全班名单'
+      + (!S.list.length ? '还没有成员，请先到「成员与档案」导入全班名单'
          : (S.onlySet ? '当前全班还没有人被任命头衔（取消勾选「只看已任命」看全部同学）' : '没找到匹配的同学'))
       + '</p></div>';
     return;
@@ -5097,89 +5528,6 @@ var CONTACT_LABEL = {
   rejected: { text:'已驳回',  cls:'badge-red'   }
 };
 
-function renderProfiles(){
-  var S = STATE.profiles;
-  var c = S.counts || {};
-
-  $('view').innerHTML =
-    '<div class="toolbar" style="background:var(--panel)">'
-    +   '<div class="search">' + svg('search')
-    +     '<input id="pfSearch" placeholder="搜索姓名或学号…" value="' + attr(S.q) + '" maxlength="40">'
-    +   '</div>'
-    +   '<div class="chips" id="pfChips">'
-    +     '<button class="chip' + (S.status === '' ? ' on' : '') + '" data-st="">全部 <b>' + (c.total || 0) + '</b></button>'
-    +     '<button class="chip' + (S.status === 'pending' ? ' on' : '') + '" data-st="pending">待审核 <b>' + (c.pending || 0) + '</b></button>'
-    +     '<button class="chip' + (S.status === 'approved' ? ' on' : '') + '" data-st="approved">已通过 <b>' + (c.approved || 0) + '</b></button>'
-    +   '</div>'
-    +   '<span style="flex:1"></span>'
-    +   '<button class="btn btn-sm btn-secondary" id="pfRefresh">' + svg('refresh', 14) + '刷新</button>'
-    + '</div>'
-
-    + '<div class="toolbar" style="background:var(--panel)">'
-    +   '<button class="btn btn-sm" id="pfAdd">' + svg('plus', 14) + '新增资料</button>'
-    +   '<button class="btn btn-sm btn-secondary" id="pfImport">' + svg('upload', 14) + 'Excel 导入</button>'
-    +   '<button class="btn btn-sm btn-secondary" id="pfExport">' + svg('download', 14) + '导出</button>'
-    +   '<button class="btn btn-sm btn-secondary" id="pfFields">' + svg('layers', 14) + '字段管理</button>'
-    +   '<span style="flex:1"></span>'
-    +   '<span class="muted" style="font-size:.78rem" id="pfClaim"></span>'
-    + '</div>'
-
-    + '<div class="alert info" style="margin-bottom:16px">'
-    +   '这里存的是全班通讯录，<b>只有管理员能看到明文</b>。同学查询需要先登录，'
-    +   '且只有审核通过的微信号 / QQ / 手机号才会展示给对方，未通过的只显示打码号码。'
-    +   '每一次查询都会记进「查看记录」。'
-    + '</div>'
-
-    /* 字段管理区（2026-10-09 v2.4.0）：默认折叠，点「字段管理」展开。
-       站主原话：「以后如果可以的话，我能不能在后台直接加……比如新增用户资料的某个区域」。 */
-    + '<section class="panel" id="pfFieldPanel" style="display:none;margin-bottom:16px">'
-    +   '<div id="pfFieldBody"><div class="loading"><div class="spinner"></div>加载字段…</div></div>'
-    + '</section>'
-
-    + '<section class="panel"><div id="pfBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
-
-  $('pfSearch').oninput = debounce(function(e){
-    S.q = e.target.value.trim(); loadProfiles();
-  }, 320);
-  $('pfRefresh').onclick = function(){ loadProfiles(); };
-  $('pfAdd').onclick     = function(){ profileDialog(null); };
-  $('pfImport').onclick  = profileImportDialog;
-  $('pfExport').onclick  = profileExport;
-  $('pfFields').onclick  = function(){
-    var panel = $('pfFieldPanel');
-    var open = panel.style.display !== 'none';
-    panel.style.display = open ? 'none' : 'block';
-    if(!open){ renderFieldPanel(); panel.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
-  };
-
-  Array.prototype.forEach.call($('pfChips').querySelectorAll('[data-st]'), function(b){
-    b.onclick = function(){
-      S.status = b.dataset.st;
-      Array.prototype.forEach.call($('pfChips').querySelectorAll('.chip'), function(x){ x.classList.remove('on'); });
-      b.classList.add('on');
-      loadProfiles();
-    };
-  });
-
-  loadProfiles();
-}
-
-function loadProfiles(){
-  var S = STATE.profiles;
-  api('/admin?action=profiles&q=' + encodeURIComponent(S.q || '')
-      + '&status=' + encodeURIComponent(S.status || '')).then(function(j){
-    S.list   = j.profiles || [];
-    S.total  = j.total || 0;
-    S.counts = j.counts || {};
-    /* 字段元数据（2026-10-09 v2.4.0）：列表要按它渲染动态列 */
-    if(Array.isArray(j.fieldMeta)) S.fieldMeta = j.fieldMeta;
-    paintProfiles();
-  }).catch(function(e){
-    var b = $('pfBody');
-    if(b) b.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
-  });
-}
-
 /* ============================================================================
  * 字段管理（2026-10-09 v2.4.0）
  * ----------------------------------------------------------------------------
@@ -5203,14 +5551,14 @@ var VIS_DESC  = {
 
 function loadFieldMeta(){
   return api('/admin?action=field-meta').then(function(j){
-    STATE.profiles.fieldMeta = j.fields || [];
-    STATE.profiles.totalProfiles = j.totalProfiles || 0;
-    return STATE.profiles.fieldMeta;
+    STATE.members.fieldMeta = j.fields || [];
+    STATE.members.totalProfiles = j.totalProfiles || 0;
+    return STATE.members.fieldMeta;
   });
 }
 
 function renderFieldPanel(){
-  var body = $('pfFieldBody');
+  var body = $('mbFieldBody');
   if(!body) return;
   body.innerHTML = '<div class="loading"><div class="spinner"></div>加载字段…</div>';
 
@@ -5222,9 +5570,9 @@ function renderFieldPanel(){
 }
 
 function paintFieldPanel(list){
-  var body = $('pfFieldBody');
+  var body = $('mbFieldBody');
   if(!body) return;
-  var total = STATE.profiles.totalProfiles || 0;
+  var total = STATE.members.totalProfiles || 0;
 
   var rows = list.map(function(f){
     var visBadge = '<span class="badge ' + (f.visibility === 'public' ? 'badge-gray'
@@ -5358,7 +5706,7 @@ function addFieldDialog(){
       return toast('英文键名只能小写字母开头，由小写字母、数字、下划线组成', 'danger');
     }
     api('/admin?action=add-field', { method:'POST', body:{ field:key, label:label, visibility:vis } })
-      .then(function(j){ close(); toast(j.message || '已新增'); renderFieldPanel(); loadProfiles(); })
+      .then(function(j){ close(); toast(j.message || '已新增'); renderFieldPanel(); loadMembers(); })
       .catch(function(e){ toast(e.message, 'danger'); });
   };
   setTimeout(function(){ var el = $('ffLabel'); if(el) el.focus(); }, 60);
@@ -5371,7 +5719,7 @@ function renameFieldDialog(field, curLabel){
   v = String(v).trim();
   if(!v) return toast('名称不能为空', 'danger');
   api('/admin?action=update-field', { method:'POST', body:{ field:field, label:v } })
-    .then(function(){ toast('已改名'); renderFieldPanel(); loadProfiles(); })
+    .then(function(){ toast('已改名'); renderFieldPanel(); loadMembers(); })
     .catch(function(e){ toast(e.message, 'danger'); });
 }
 
@@ -5382,7 +5730,7 @@ function sortFieldDialog(field, cur){
   var n = Number(v);
   if(!isFinite(n)) return toast('请填数字', 'danger');
   api('/admin?action=update-field', { method:'POST', body:{ field:field, sortOrder:n } })
-    .then(function(){ toast('已调整排序'); renderFieldPanel(); loadProfiles(); })
+    .then(function(){ toast('已调整排序'); renderFieldPanel(); loadMembers(); })
     .catch(function(e){ toast(e.message, 'danger'); });
 }
 
@@ -5393,7 +5741,7 @@ function deleteFieldConfirm(field, label){
     + '· 如果只是不想让大家看到，建议改成「仅本人」，而不是删除。\n\n'
     + '确定要删除吗？')) return;
   api('/admin?action=delete-field', { method:'POST', body:{ field:field } })
-    .then(function(j){ toast(j.message || '已删除'); renderFieldPanel(); loadProfiles(); })
+    .then(function(j){ toast(j.message || '已删除'); renderFieldPanel(); loadMembers(); })
     .catch(function(e){ toast(e.message, 'danger'); });
 }
 
@@ -5402,354 +5750,9 @@ function deleteFieldConfirm(field, label){
  * 额外字段 = 字段元数据里不在固定列中的那些（含自定义字段与 id_card 等）。
  */
 function extraColsOf(){
-  var meta = STATE.profiles.fieldMeta || [];
+  var meta = STATE.members.fieldMeta || STATE.profiles.fieldMeta || [];
   var FIXED = ['name','student_id','politics','exam_no','role','title','wechat','qq','phone'];
   return meta.filter(function(f){ return FIXED.indexOf(f.field) < 0; });
-}
-
-function paintProfiles(){
-  var S = STATE.profiles;
-  var body = $('pfBody');
-  if(!body) return;
-
-  /* 顶部的已认领统计 */
-  var c = S.counts || {};
-  var claim = $('pfClaim');
-  if(claim){
-    claim.innerHTML = '已认领 <b style="color:var(--accent-ink)">' + (c.claimed || 0) + '</b> / ' + (c.total || 0) + ' 条';
-  }
-
-  /* 筛选胶囊上的数字要跟着最新统计刷新 */
-  var chipAll = $('pfChips') && $('pfChips').querySelector('[data-st=""] b');
-  var chipPen = $('pfChips') && $('pfChips').querySelector('[data-st="pending"] b');
-  var chipApp = $('pfChips') && $('pfChips').querySelector('[data-st="approved"] b');
-  if(chipAll) chipAll.textContent = c.total || 0;
-  if(chipPen) chipPen.textContent = c.pending || 0;
-  if(chipApp) chipApp.textContent = c.approved || 0;
-
-  if(!S.list.length){
-    body.innerHTML = '<div class="empty">' + svg('inbox', 38)
-      + '<p>' + (S.q || S.status ? '没有匹配的资料' : '还没有任何班级资料') + '</p>'
-      + (S.q || S.status ? '' : '<p style="font-size:.78rem;margin-top:8px">点上面「新增资料」或「Excel 导入」把通讯录搬进来</p>')
-      + '</div>';
-    return;
-  }
-
-  /* 动态列（2026-10-09 v2.4.0）：每个自定义/额外字段一列。
-     站主在「字段管理」里加一个字段，这里就自动多一列，不用改代码。 */
-  var extras = extraColsOf();
-
-  var rows = S.list.map(function(p){
-    var st  = CONTACT_LABEL[p.contactStatus] || CONTACT_LABEL.none;
-    var ini = String(p.name || p.studentId || '?').charAt(0);
-
-    /* 联系方式：三个字段紧凑铺开，空的显示「—」 */
-    var ct = function(label, v){
-      return '<div class="ct"><i>' + label + '</i>'
-        + (v ? '<span title="' + attr(v) + '">' + esc(v) + '</span>'
-             : '<span class="none">—</span>')
-        + '</div>';
-    };
-    var contacts = '<div class="ct-grid">'
-      + ct('微信', p.wechat) + ct('QQ', p.qq) + ct('手机', p.phone)
-      + '</div>';
-
-    var owner = p.boundUsername
-      ? '<span class="badge badge-blue">已认领 · ' + esc(p.boundUsername) + '</span>'
-      : '<span class="badge badge-gray">未认领</span>';
-
-    /* 可见性（2026-10-08）：展示本人是否把联系方式设为「仅自己可见」。
-       v2.4.0 起还要展示**管理员设的单人例外**（fieldVis）。 */
-    var vp = p.visibilityPref || {};
-    var hidden = [];
-    if(vp.wechat === false) hidden.push('微信');
-    if(vp.qq === false) hidden.push('QQ');
-    if(vp.phone === false) hidden.push('手机');
-    var fv = p.fieldVis || {};
-    var fvKeys = Object.keys(fv);
-    var fvLabelOf = function(k){
-      var m = (S.fieldMeta || []).find(function(x){ return x.field === k; });
-      return m ? m.label : k;
-    };
-    var vis;
-    if(fvKeys.length){
-      vis = '<span class="badge badge-purple" title="管理员单独设置了这些字段的可见范围（只对该同学生效）">'
-          + '⚙ ' + esc(fvKeys.map(fvLabelOf).join('/')) + '</span>';
-      if(hidden.length){
-        vis += '<div class="muted" style="font-size:.68rem;margin-top:3px">本人私密：' + esc(hidden.join('/')) + '</div>';
-      }
-    } else if(hidden.length){
-      vis = '<span class="badge badge-orange" title="本人把这几项设为仅自己可见，同学查不到">🔒 ' + esc(hidden.join('/')) + ' 私密</span>';
-    } else {
-      vis = '<span class="badge badge-gray">公开</span>';
-    }
-
-    /* 额外字段的单元格 */
-    var extraTds = extras.map(function(f){
-      var v = (p.extra || {})[f.field];
-      return '<td class="nowrap">' + (v ? '<span class="mono">' + esc(v) + '</span>'
-                                          : '<span class="muted">—</span>') + '</td>';
-    }).join('');
-
-    return '<tr>'
-      + '<td><div class="cell-user"><div class="av ink-auto">' + esc(ini) + '</div>'
-      +   '<div><b>' + esc(p.name || '(未填姓名)') + '</b>'
-      +   '<i class="mono">' + esc(p.studentId || '无学号') + '</i></div></div></td>'
-      + '<td class="nowrap">' + esc(p.politics || '—') + '</td>'
-      + '<td class="mono nowrap">' + (p.examNo ? esc(p.examNo) : '<span class="muted">—</span>') + '</td>'
-      + extraTds
-      + '<td>' + contacts + '</td>'
-      + '<td class="nowrap">' + vis + '</td>'
-      + '<td class="nowrap"><span class="badge ' + st.cls + '">' + st.text + '</span>'
-      +   (p.contactStatus === 'rejected' && p.rejectReason
-            ? '<div class="muted" style="font-size:.7rem;margin-top:4px;max-width:150px" title="' + attr(p.rejectReason) + '">' + esc(p.rejectReason) + '</div>'
-            : '')
-      + '</td>'
-      + '<td class="nowrap">' + owner + '</td>'
-      + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
-      +   '<button data-pf="edit" data-id="' + p.id + '">编辑</button>'
-      +   '<button data-pf="views" data-id="' + p.id + '">查看记录</button>'
-      +   '<button class="danger" data-pf="del" data-id="' + p.id + '">删除</button>'
-      + '</div></td>'
-      + '</tr>';
-  }).join('');
-
-  var extraTh = extras.map(function(f){
-    return '<th class="nowrap">' + esc(f.label) + '</th>';
-  }).join('');
-
-  body.innerHTML =
-    '<div class="table-wrap"><table><thead><tr>'
-    + '<th>姓名 / 学号</th><th class="nowrap">政治面貌</th><th class="nowrap">智学网账号</th>'
-    + extraTh
-    + '<th>联系方式</th>'
-    + '<th class="nowrap">可见性</th><th class="nowrap">审核状态</th><th class="nowrap">归属账号</th>'
-    + '<th style="text-align:right">操作</th>'
-    + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-    + '<div class="pager"><span class="info">共 ' + S.list.length + ' 条'
-    +   (S.list.length >= 1000 ? '（已达单次上限 1000，请用搜索缩小范围）' : '') + '</span></div>';
-
-  Array.prototype.forEach.call(body.querySelectorAll('[data-pf]'), function(b){
-    var id = Number(b.dataset.id);
-    if(b.dataset.pf === 'edit')  b.onclick = function(){ profileDialog(S.list.find(function(x){ return x.id === id; })); };
-    if(b.dataset.pf === 'del')   b.onclick = function(){ deleteProfileDialog(S.list.find(function(x){ return x.id === id; })); };
-    if(b.dataset.pf === 'views') b.onclick = function(){ profileViewsDialog(id); };
-  });
-}
-
-/**
- * 新增 / 编辑资料。
- * 传 null = 新增；传资料对象 = 编辑。
- */
-function profileDialog(p){
-  var isNew = !p;
-  var POL = ['普通学生', '共青团员', '共青团员 · 团支书', '中共党员', '中共预备党员', '群众'];
-
-  function opts(cur){
-    var list = POL.slice();
-    if(cur && list.indexOf(cur) < 0) list.unshift(cur);
-    return list.map(function(x){
-      return '<option value="' + attr(x) + '"' + (x === cur ? ' selected' : '') + '>' + esc(x) + '</option>';
-    }).join('');
-  }
-
-  openModal({
-    title: isNew ? '新增班级资料' : ('编辑 ' + (p.name || p.studentId || '资料')),
-    sub: isNew ? '姓名与学号至少填一项' : '留空表示不修改该字段',
-    body:
-      '<div class="field"><label for="pfName">姓名</label>'
-      + '<input id="pfName" maxlength="30" value="' + attr(p ? p.name : '') + '" placeholder="如 张三">'
-      + '<p class="hint">姓名不能由同学自己改，只能管理员在这里维护。</p></div>'
-
-      + '<div class="field"><label for="pfSid">学号</label>'
-      + '<input id="pfSid" maxlength="20" value="' + attr(p ? p.studentId : '') + '" placeholder="如 250501">'
-      + '<p class="hint">学号在全部资料里必须唯一，重复会报错。</p></div>'
-
-      + '<div class="field"><label for="pfPol">政治面貌</label>'
-      + '<select id="pfPol">' + opts(p ? p.politics : '群众') + '</select></div>'
-
-      + '<div class="field"><label for="pfEx">智学网账号</label>'
-      + '<input id="pfEx" class="inp" maxlength="24" value="' + attr(p ? p.examNo : '') + '" placeholder="如 11399395">'
-      + '<p class="hint">不属于隐私字段，同学查询时就能直接看到，不需要审核。</p></div>'
-
-      + '<div class="field"><label>联系方式</label>'
-      +   '<div class="ct-grid" style="gap:10px">'
-      +     '<input id="pfWx" class="inp" maxlength="64" placeholder="微信号" value="' + attr(p ? p.wechat : '') + '">'
-      +     '<input id="pfQq" class="inp" maxlength="64" placeholder="QQ 号" value="' + attr(p ? p.qq : '') + '">'
-      +     '<input id="pfPh" class="inp" maxlength="64" placeholder="手机号" value="' + attr(p ? p.phone : '') + '">'
-      +   '</div>'
-      +   '<p class="hint">管理员在这里填的视为已核实，直接按下面选的状态对外展示。</p></div>'
-
-      + '<div class="field"><label for="pfSt">联系方式审核状态</label>'
-      + '<select id="pfSt">'
-      +   '<option value="none"' + (p && p.contactStatus === 'none' ? ' selected' : '') + '>未填写 — 不对外展示</option>'
-      +   '<option value="approved"' + ((p && p.contactStatus === 'approved') || isNew ? ' selected' : '') + '>已通过 — 同学查询时可见</option>'
-      +   '<option value="pending"' + (p && p.contactStatus === 'pending' ? ' selected' : '') + '>待审核 — 暂不展示</option>'
-      +   '<option value="rejected"' + (p && p.contactStatus === 'rejected' ? ' selected' : '') + '>已驳回 — 不展示</option>'
-      + '</select></div>'
-
-      /* 可见性（2026-10-08，2026-10-09 v2.4.1 语义修正）：
-         这两个勾选框写的是**本人意愿**（profiles.visibility_pref），
-         只在站主没在「字段管理」里动过该字段时才算数。
-         ⚠️ 站主明确要求「后台权力最大」：他一旦在字段管理里改过某字段，
-            同学自己设的「仅自己可见」就不再生效。所以这里要**明确标出**
-            哪些字段同学已设私密、以及站主改了会不会压过他。 */
-      + (isNew ? '' :
-          (function(){
-            var vp0 = (p && p.visibilityPref) || {};
-            var meta0 = STATE.profiles.fieldMeta || [];
-            /* 该字段站主是否调过（后端 loadFieldMeta 给 adminSet） */
-            var adminTouched = function(field){
-              var m = meta0.find(function(x){ return x.field === field; });
-              return m ? !!m.adminSet : false;
-            };
-            /* 同学自己设了私密、但站主已在字段管理里动过 → 标出「已失效」 */
-            function note(field, who){
-              if(vp0[field] !== false) return '';
-              return adminTouched(field)
-                ? '<span class="badge badge-purple" style="margin-left:6px" title="同学自己设过「仅自己可见」，'
-                  + '但你在「字段管理」里改过这个字段的可见范围，以你为准，他的设置已失效">本人设过私密 · 已被你覆盖</span>'
-                : '<span class="badge badge-orange" style="margin-left:6px" title="同学自己把这项设成了仅自己可见，'
-                  + '你没有改过这个字段，所以他的设置生效中">本人已设为私密</span>';
-            }
-            return '<div class="field"><label>联系方式可见性（这个人）</label>'
-            +   '<p class="hint" style="margin-bottom:8px">勾上 = 仅本人可见，同学查不到；不勾 = 按审核状态对外展示。'
-            +     '<br><b>后台权力最大</b>：只要你在「字段管理」里改过某个字段的全班可见范围，'
-            +     '同学自己在个人中心设的设置就<b>不再生效</b>，以你为准。</p>'
-            +   '<label class="chk"><input type="checkbox" id="pfWxHide"'
-            +     (vp0.wechat === false ? ' checked' : '') + '> 微信号仅本人可见' + note('wechat') + '</label>'
-            +   '<label class="chk"><input type="checkbox" id="pfQqHide"'
-            +     (vp0.qq === false ? ' checked' : '') + '> QQ 号仅本人可见' + note('qq') + '</label>'
-            +   '<label class="chk"><input type="checkbox" id="pfPhHide"'
-            +     (vp0.phone === false ? ' checked' : '') + '> 手机号仅本人可见' + note('phone') + '</label>'
-            + '</div>';
-          })())
-
-      /* 额外字段（2026-10-09 v2.4.0）：站主在「字段管理」里加的自定义字段，
-         以及 id_card / youth_league_no 这类不在固定项里的字段，在这里自动出现。
-         每个字段带一个「可见范围」下拉 —— 那是**只对这个人生效**的例外，
-         默认「跟全班一样」，可单独收紧或放宽。 */
-      + (function(){
-          var extras = extraColsOf();
-          if(!extras.length) return '';
-          var cur = (p && p.extra) || {};
-          var fv  = (p && p.fieldVis) || {};
-          var globalVis = function(field){
-            var m = (STATE.profiles.fieldMeta || []).find(function(x){ return x.field === field; });
-            return m ? m.visibility : 'public';
-          };
-          return '<div class="field"><label>其他资料字段</label>'
-            + '<p class="hint" style="margin-bottom:8px">'
-            +   '这些是「字段管理」里登记的字段。<b>可见范围</b>默认跟随全班设置，'
-            +     '也可以只给这一个人单独调整（改完只影响他）。</p>'
-            + extras.map(function(f){
-                var val = cur[f.field] || '';
-                var curFv = fv[f.field] || '';
-                var gv = globalVis(f.field);
-                return '<div class="extra-row">'
-                  + '<label class="extra-lab" for="pfX_' + attr(f.field) + '">' + esc(f.label) + '</label>'
-                  + '<input id="pfX_' + attr(f.field) + '" class="inp" maxlength="200"'
-                  +   ' data-xf="' + attr(f.field) + '" value="' + attr(val) + '"'
-                  +   ' placeholder="' + attr(f.label) + '">'
-                  + '<select class="inp extra-vis" data-vf="' + attr(f.field) + '" title="只对这个人生效的可见范围">'
-                  +   '<option value=""' + (curFv ? '' : ' selected') + '>跟随全班（' + esc(VIS_LABEL[gv] || gv) + '）</option>'
-                  +   '<option value="public"' + (curFv === 'public' ? ' selected' : '') + '>公开</option>'
-                  +   '<option value="committee"' + (curFv === 'committee' ? ' selected' : '') + '>班委可见</option>'
-                  +   '<option value="self"' + (curFv === 'self' ? ' selected' : '') + '>仅本人</option>'
-                  + '</select>'
-                  + '</div>';
-              }).join('')
-            + '</div>';
-        })()
-      + '<div class="msg" id="pfMsg"></div>',
-
-    foot: '<button class="btn btn-ghost" data-no>取消</button>'
-        + '<button class="btn" data-yes>' + (isNew ? '新增' : '保存') + '</button>',
-
-    onMount: function(box){
-      var msg = box.querySelector('#pfMsg');
-      box.querySelector('[data-no]').onclick = closeModal;
-      box.querySelector('[data-yes]').onclick = function(){
-        var btn = this;
-        var payload = {
-          name:      box.querySelector('#pfName').value.trim(),
-          studentId: box.querySelector('#pfSid').value.trim(),
-          politics:  box.querySelector('#pfPol').value,
-          examNo:    box.querySelector('#pfEx').value.trim(),
-          wechat:    box.querySelector('#pfWx').value.trim(),
-          qq:        box.querySelector('#pfQq').value.trim(),
-          phone:     box.querySelector('#pfPh').value.trim(),
-          contactStatus: box.querySelector('#pfSt').value
-        };
-        /* 编辑时带上 id；后端只更新传了的非空字段 */
-        if(!isNew){
-          payload.id = p.id;
-          /* 可见性：管理员替本人设置（覆盖本人意愿）。
-             ⚠️ 只有编辑时才有这几个框（新增的人还没有意愿可谈）。 */
-          var wxH = box.querySelector('#pfWxHide');
-          if(wxH){
-            payload.visibilityPref = {
-              wechat: !box.querySelector('#pfWxHide').checked,
-              qq:     !box.querySelector('#pfQqHide').checked,
-              phone:  !box.querySelector('#pfPhHide').checked,
-            };
-          }
-        } else payload.role = '学生';
-
-        /* 额外字段的值 + 单人可见性例外（2026-10-09 v2.4.0）。
-           ⚠️ payload.extra 的键必须与「字段管理」里的英文键名一致，
-              后端只认 meta 表登记过的键（乱传的会被忽略）。 */
-        var extraVals = {};
-        Array.prototype.forEach.call(box.querySelectorAll('[data-xf]'), function(inp){
-          extraVals[inp.dataset.xf] = inp.value.trim();
-        });
-        payload.extra = extraVals;
-
-        /* 单人可见性例外：只把「不跟随全班」的那些收进来。
-           全选「跟随全班」→ fieldVis 空对象 → 后端会清掉之前的例外设置。 */
-        var fvVals = {};
-        Array.prototype.forEach.call(box.querySelectorAll('[data-vf]'), function(sel){
-          if(sel.value) fvVals[sel.dataset.vf] = sel.value;
-        });
-        /* 新增时也允许带（默认都是「跟随全班」，即空对象） */
-        payload.fieldVis = fvVals;
-
-        if(!payload.name && !payload.studentId){
-          msg.className = 'msg err show';
-          msg.textContent = '姓名与学号至少填一项';
-          return;
-        }
-
-        btn.disabled = true;
-        api('/admin?action=save-profile', { method:'POST', body: payload }).then(function(j){
-          closeModal();
-          toast(j.message || '已保存', 'ok');
-          loadProfiles();
-        }).catch(function(e){
-          msg.className = 'msg err show';
-          msg.textContent = e.message;
-          btn.disabled = false;
-        });
-      };
-    }
-  });
-}
-
-function deleteProfileDialog(p){
-  if(!p) return;
-  confirmBox({
-    title: '删除资料',
-    html: '确定要删除 <b>' + esc(p.name || p.studentId || ('#' + p.id)) + '</b> 的资料吗？',
-    warn: '删除后该条通讯录及其联系方式会一并消失，同学的「我的资料」也会断开绑定。此操作不可撤销。',
-    okText: '删除',
-    danger: true
-  }).then(function(yes){
-    if(!yes) return;
-    api('/admin?action=delete-profile', { method:'POST', body: { id: p.id } }).then(function(j){
-      toast(j.message || '已删除', 'ok');
-      loadProfiles();
-    }).catch(function(e){ toast(e.message, 'err', 4000); });
-  });
 }
 
 /** 单条资料的查看记录（谁在什么时候看过这个人） */
@@ -5798,41 +5801,6 @@ function profileViewsDialog(id){
       });
     }
   });
-}
-
-/** 导出全部资料为 Excel
- * ⚠️ 2026-10-09 v2.4.0：自定义字段跟着「智学网账号」之后动态追加，
- *    表头用中文名（label），这样导出的文件直接拿去导入也能对上。 */
-function profileExport(){
-  api('/admin?action=profiles').then(function(j){
-    var list = j.profiles || [];
-    if(!list.length){ toast('没有可导出的资料', 'err'); return; }
-    /* 先拉一份最新字段元数据（loadProfiles 可能还没跑过） */
-    var extras = extraColsOf();
-    var data = list.map(function(p){
-      var row = {
-        '姓名': p.name || '',
-        '学号': p.studentId || '',
-        '政治面貌': p.politics || '',
-        '智学网账号': p.examNo || '',
-      };
-      /* 自定义字段：中文表头 → 值 */
-      extras.forEach(function(f){
-        row[f.label] = (p.extra || {})[f.field] || '';
-      });
-      row['微信'] = p.wechat || '';
-      row['QQ'] = p.qq || '';
-      row['手机号'] = p.phone || '';
-      row['审核状态'] = (CONTACT_LABEL[p.contactStatus] || CONTACT_LABEL.none).text;
-      row['归属账号'] = p.boundUsername || '未认领';
-      return row;
-    });
-    var ws = XLSX.utils.json_to_sheet(data);
-    var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '班级资料');
-    XLSX.writeFile(wb, '班级资料_' + fmt(new Date(), 'date') + '.xlsx');
-    toast('已导出 ' + list.length + ' 条资料', 'ok');
-  }).catch(function(e){ toast(e.message, 'err', 4000); });
 }
 
 /**
@@ -6072,7 +6040,7 @@ function profileImportDialog(){
           setMsg(failed ? 'warn' : 'ok',
             '导入完成：' + parts.join('，') + (firstErr ? ('\n首个错误 ' + firstErr) : ''));
           toast('导入完成，新增 ' + created + ' 更新 ' + updated, 'ok', 4000);
-          loadProfiles();
+          loadMembers();
           btn.textContent = '再导一次';
           btn.disabled = false;
         };
@@ -6082,7 +6050,7 @@ function profileImportDialog(){
             '导入中断：' + e.message
             + '\n（已成功的批次已入库，可以修完数据再导一次，重复的会走更新）');
           btn.disabled = false;
-          loadProfiles();
+          loadMembers();
         });
       };
     }
@@ -6248,7 +6216,7 @@ function renderViewLogs(){
     +         '这份记录只有管理员能看，用来在出现纠纷或信息被滥用时追溯。'
     +       '</p>'
     +       '<p style="margin:14px 0 0;font-size:.83rem;line-height:1.85;color:var(--fg-2)">'
-    +         '如果某位同学的资料被反复查看，可以点开「资料管理」里那一行的'
+    +         '如果某位同学的资料被反复查看，可以点开「成员与档案」里那一行的'
     +         '<b>查看记录</b>按钮，单独看这条资料被谁查过。'
     +       '</p>'
     +     '</div>'
@@ -6684,6 +6652,161 @@ function loadAudit(){
 }
 
 /* ============================================================================
+ * ⑱ 面板：行为日志（v2.10.0 用户操作日志）
+ * ----------------------------------------------------------------------------
+ * 与上面「操作日志」（管理员审计）分工：
+ *   · 操作日志 = 管理员改了系统什么（audit_log）
+ *   · 行为日志 = 每个用户点了什么（user_action_log，全点击上报）
+ * 本面板 = 统计卡片 + 热门页面条形图 + 明细表（可按用户/类型/日期筛）。
+ * 英文路由/键名在这里统一翻译成中文展示（站主要求 ⑨）。
+ * ============================================================================ */
+
+/* 动作类型 → 中文（后端存的是英文短码） */
+var ACT_ACTION_CN = { click:'点击', jump:'页面跳转', switch:'切换标签', submit:'表单提交' };
+/* 页面名翻译表：前端一般直接发中文名，这里是英文兜底（历史数据/直调） */
+var ACT_PAGE_CN = {
+  home:'首页', index:'首页', score:'成绩分析', scores:'成绩分析',
+  compare:'成绩对比', homework:'作业查看', classworks:'作业查看',
+  tools:'其他工具', affairs:'班级事务', study:'学习资料', screen:'大屏服务',
+  account:'账号弹窗', profile:'我的资料', popup:'通知弹窗'
+};
+function actActionCn(a){ return ACT_ACTION_CN[a] || a || '—'; }
+function actPageCn(p){
+  if(!p) return '—';
+  var k = String(p).toLowerCase();
+  return ACT_PAGE_CN[k] || p;
+}
+
+function renderActionLogs(){
+  var S = STATE.actionlogs;
+  $('view').innerHTML =
+    /* ---- 统计面板 ---- */
+    '<div class="grid-2" id="alStats" style="margin-bottom:16px">'
+    +   '<section class="panel"><div class="panel-body" style="display:flex;gap:18px;flex-wrap:wrap">'
+    +     '<div><div class="muted" style="font-size:.76rem">今日点击</div><b style="font-size:1.5rem" id="alToday">—</b></div>'
+    +     '<div><div class="muted" style="font-size:.76rem">近 7 天点击</div><b style="font-size:1.5rem" id="alWeek">—</b></div>'
+    +     '<div><div class="muted" style="font-size:.76rem">7 日活跃用户</div><b style="font-size:1.5rem" id="alUsers">—</b></div>'
+    +   '</div></section>'
+    +   '<section class="panel"><div class="panel-head"><div><h3>热门页面（近 7 天）</h3></div></div>'
+    +     '<div class="panel-body" id="alTopPages"><div class="muted">加载中…</div></div></section>'
+    + '</div>'
+
+    /* ---- 筛选工具条 ---- */
+    + '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div class="search">' + svg('search', 15) + '<input id="alSearch" placeholder="搜索用户名或姓名…" value="' + attr(S.q) + '"></div>'
+    +   '<select id="alAction">'
+    +     '<option value="">全部类型</option>'
+    +     '<option value="click"' + (S.action === 'click' ? ' selected' : '') + '>点击</option>'
+    +     '<option value="jump"' + (S.action === 'jump' ? ' selected' : '') + '>页面跳转</option>'
+    +     '<option value="switch"' + (S.action === 'switch' ? ' selected' : '') + '>切换标签</option>'
+    +     '<option value="submit"' + (S.action === 'submit' ? ' selected' : '') + '>表单提交</option>'
+    +   '</select>'
+    +   '<input id="alDay" type="date" value="' + attr(S.day) + '" title="按某一天筛选（北京时间）">'
+    +   '<button class="btn btn-sm btn-secondary" id="alRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+
+    + '<section class="panel"><div id="alBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('alSearch').oninput = debounce(function(e){ S.q = e.target.value.trim(); S.page = 1; loadActionLogs(); }, 320);
+  $('alAction').onchange = function(e){ S.action = e.target.value; S.page = 1; loadActionLogs(); };
+  $('alDay').onchange = function(e){ S.day = e.target.value; S.page = 1; loadActionLogs(); };
+  $('alRefresh').onclick = function(){ loadActionStats(); loadActionLogs(); };
+
+  loadActionStats();
+  loadActionLogs();
+}
+
+/** 统计卡片 + 热门页面条形图 */
+function loadActionStats(){
+  api('/admin?action=action-stats').then(function(j){
+    var t = $('alToday'), w = $('alWeek'), u = $('alUsers');
+    if(t) t.textContent = j.today || 0;
+    if(w) w.textContent = j.week || 0;
+    if(u) u.textContent = j.activeUsers7d || 0;
+    var box = $('alTopPages');
+    if(!box) return;
+    var list = j.topPages || [];
+    if(!list.length){ box.innerHTML = '<div class="muted">近 7 天还没有数据</div>'; return; }
+    var max = list[0].n || 1;
+    box.innerHTML = list.map(function(r){
+      var pct = Math.max(4, Math.round(r.n / max * 100));
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+        + '<span style="flex:none;width:88px;font-size:.8rem;text-align:right">' + esc(actPageCn(r.page)) + '</span>'
+        + '<span style="flex:1;background:var(--tint,rgba(120,53,15,.08));border-radius:6px;height:16px;overflow:hidden">'
+        +   '<i style="display:block;height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--grad-a,#c2410c),var(--grad-b,#ea580c));border-radius:6px"></i>'
+        + '</span>'
+        + '<b style="flex:none;font-size:.8rem;min-width:36px">' + r.n + '</b>'
+        + '</div>';
+    }).join('');
+  }).catch(function(){
+    var box = $('alTopPages');
+    if(box) box.innerHTML = '<div class="muted">统计读取失败（表可能刚建出，无数据）</div>';
+  });
+}
+
+function loadActionLogs(){
+  var S = STATE.actionlogs;
+  api('/admin?action=action-logs&page=' + S.page + '&size=' + S.size
+      + '&q=' + encodeURIComponent(S.q || '')
+      + '&type=' + encodeURIComponent(S.action || '')
+      + '&day=' + encodeURIComponent(S.day || '')).then(function(j){
+    S.list = j.logs || [];
+    S.total = j.total || 0;
+    paintActionLogs();
+  }).catch(function(e){
+    var b = $('alBody');
+    if(b) b.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function paintActionLogs(){
+  var S = STATE.actionlogs;
+  var body = $('alBody');
+  if(!body) return;
+  if(!S.list.length){
+    body.innerHTML = '<div class="empty">' + svg('activity', 38) + '<p>没有匹配的记录</p>'
+      + '<p class="muted" style="font-size:.78rem">用户登录后的每一次点击都会记在这里（明细保留 90 天）</p></div>';
+    return;
+  }
+  var page = S.page, size = S.size;
+  var shownTo = Math.min(page * size, S.total);
+
+  body.innerHTML =
+    '<div class="table-wrap"><table><thead><tr>'
+    + '<th class="nowrap">时间</th><th>用户</th><th class="nowrap">动作</th>'
+    + '<th class="nowrap">页面</th><th>点击目标</th>'
+    + '</tr></thead><tbody>'
+    + S.list.map(function(l){
+        return '<tr>'
+          + '<td class="nowrap muted">' + esc(fmt(l.createdAt)) + '<div class="muted" style="font-size:.72rem">' + esc(ago(l.createdAt)) + '</div></td>'
+          + '<td class="nowrap"><b>' + esc(l.displayName || l.username) + '</b><div class="muted" style="font-size:.72rem">@' + esc(l.username) + '</div></td>'
+          + '<td class="nowrap"><span class="badge badge-blue">' + esc(actActionCn(l.action)) + '</span></td>'
+          + '<td class="nowrap">' + esc(actPageCn(l.page)) + '</td>'
+          + '<td class="muted" style="font-size:.8rem;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + attr(l.target || '') + '">'
+          +   esc(l.target || '—') + (l.detail ? '<div class="muted" style="font-size:.72rem">' + esc(l.detail) + '</div>' : '')
+          + '</td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>'
+    + '<div class="pager">'
+    +   '<span class="info">共 ' + S.total + ' 条，当前显示第 ' + ((page - 1) * size + 1) + '–' + shownTo + ' 条</span>'
+    +   '<span class="pages">'
+    +     '<button data-alp="prev"' + (page <= 1 ? ' disabled' : '') + '>上一页</button>'
+    +     '<button class="on">' + page + '</button>'
+    +     '<button data-alp="next"' + (shownTo >= S.total ? ' disabled' : '') + '>下一页</button>'
+    +   '</span>'
+    + '</div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-alp]'), function(b){
+    b.onclick = function(){
+      if(b.disabled) return;
+      S.page = page + (b.dataset.alp === 'next' ? 1 : -1);
+      loadActionLogs();
+    };
+  });
+}
+
+/* ============================================================================
  * ⑰ 面板：系统令牌（仅管理员可见）
  * ---------------------------------------------------------------------------
  * Cloudflare / Gitee / VoiceHub 等第三方令牌统一存这里。
@@ -6859,18 +6982,36 @@ function renderSettings(){
 
     + '<section class="panel">'
     +   '<div class="panel-head"><div><h3>' + svg('shield') + '账号策略</h3>'
-    +     '<p class="sub">当前后端运行状态</p></div></div>'
+    +     '<p class="sub">站点级开关，保存后立即生效（无需重新部署）</p></div></div>'
     +   '<div class="panel-body">'
-    +     '<dl class="kv" style="grid-template-columns:130px 1fr">'
-    +     '<dt>自助注册</dt><dd><span class="badge badge-red">已关闭</span>'
-    +       '<div class="muted" style="font-size:.76rem;margin-top:5px">同学无法自己注册，账号由你在「用户管理」里创建</div></dd>'
-    +     '<dt>首次登录</dt><dd><span class="badge badge-green">强制改密</span>'
-    +       '<div class="muted" style="font-size:.76rem;margin-top:5px">同学用初始密码登录后，必须自行设置新密码才能使用</div></dd>'
+
+    /* v2.10.0：注册总开关 + 注册审核，真开关真保存。
+       数据走 /admin?action=settings 与 set-settings（site_settings 表）。 */
+    +   '<div class="field">'
+    +     '<label style="display:flex;align-items:center;gap:10px;cursor:pointer">'
+    +       '<input type="checkbox" id="stRegOpen" style="width:auto;margin:0">'
+    +       '<span><b>开放自助注册</b><br>'
+    +       '<span class="muted" style="font-size:.76rem">关闭后：登录页不显示注册入口，注册接口直接拒绝。账号只能由你在「成员与档案」里创建</span></span>'
+    +     '</label>'
+    +   '</div>'
+    +   '<div class="field">'
+    +     '<label style="display:flex;align-items:center;gap:10px;cursor:pointer">'
+    +       '<input type="checkbox" id="stRegReview" style="width:auto;margin:0">'
+    +       '<span><b>注册需管理员审核</b><br>'
+    +       '<span class="muted" style="font-size:.76rem">开启后：新注册的账号状态为「待审核」，在「成员与档案」里通过后才能登录；未审核账号无法登录</span></span>'
+    +     '</label>'
+    +   '</div>'
+    +   '<button class="btn" id="stPolicySave">' + svg('check', 14) + '保存策略</button>'
+    +   '<div class="msg" id="stPolicyMsg"></div>'
+
+    +   '<dl class="kv" style="grid-template-columns:130px 1fr;margin-top:18px">'
+    +     '<dt>首次登录</dt><dd><span class="badge badge-green">建议改密</span>'
+    +       '<div class="muted" style="font-size:.76rem;margin-top:5px">v2.10.0 起：用初始密码登录后只是<b>建议</b>修改，可点「暂不修改」跳过，个人中心会常驻提醒</div></dd>'
     +     '<dt>密码存储</dt><dd><span class="badge badge-gray">PBKDF2-SHA256</span>'
     +       '<div class="muted" style="font-size:.76rem;margin-top:5px">只存哈希，管理员也无法查看明文密码</div></dd>'
     +     '<dt>登录限流</dt><dd><span class="badge badge-blue">5 次错误锁 15 分钟</span></dd>'
-    +     '</dl>'
-    +   '</div>'
+    +   '</dl>'
+    + '</div>'
     + '</section>'
 
     + '</div>'
@@ -6905,6 +7046,30 @@ function renderSettings(){
     var msg = $('stMsg');
     msg.className = 'msg show ok';
     msg.textContent = '站点信息目前由 index.html 里的 SITE_DATA 控制，改这里需要同步修改前端代码。此处仅作展示。';
+  };
+
+  /* v2.10.0：注册策略（总开关 + 审核）—— 读当前值，保存写 site_settings。
+     register_open 为 null = 从未设置过，此时展示环境变量兜底值（envDefault），
+     管理员一旦保存即以 DB 值为准。 */
+  api('/admin?action=settings').then(function(j){
+    var s = (j && j.settings) || {};
+    var ro = $('stRegOpen'), rr = $('stRegReview');
+    if(ro) ro.checked = s.register_open === null || s.register_open === undefined
+      ? !!(j && j.envDefault && j.envDefault.register_open) : !!s.register_open;
+    if(rr) rr.checked = (s.register_review === null || s.register_review === undefined) ? true : !!s.register_review;
+  }).catch(function(){ /* 读不到就保持默认勾选态，保存时以界面为准 */ });
+
+  $('stPolicySave').onclick = function(){
+    var msg = $('stPolicyMsg');
+    msg.className = 'msg show warn'; msg.textContent = '保存中…';
+    api('/admin?action=set-settings', { method:'POST', body: {
+      register_open: $('stRegOpen').checked,
+      register_review: $('stRegReview').checked,
+    }}).then(function(j){
+      msg.className = 'msg ok show'; msg.textContent = j.message || '已保存，立即生效';
+    }).catch(function(e){
+      msg.className = 'msg err show'; msg.textContent = '保存失败：' + e.message;
+    });
   };
 }
 
@@ -8234,6 +8399,23 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "2.10.0",
+      "date": "2026-10-16",
+      "title": "成员与档案合并 + 注册审核 + 操作日志 + 云端数据管理",
+      "type": "feature",
+      "highlight": true,
+      "items": [
+        "后台「用户管理」和「资料管理」合并成一个页面「成员与档案」：同一个长表单，上半系统账号信息、下半班级档案，一次提交同时保存两边。底层统一为单数据源——改档案姓名会自动同步账号显示名，两处再也不会对不上",
+        "四种人员场景一套表单全覆盖：有账号有档案 / 有档案没账号（未认领，可一键开号）/ 有账号没档案（可补建）/ 全新成员（建号加档案一次提交）。列表带场景徽章和计数，删账号时班级档案默认保留为「未认领」，也可选择连带删除",
+        "注册收归后台管控：总开关 + 注册审核。新注册账号进入「待审核」，不签发登录态；管理员通过后才可登录，驳回有理由。批量导入、后台开号不受影响",
+        "新增用户操作日志：页面跳转、按钮点击、切换标签、表单提交都会上报，后台可看统计面板（今日/7日/热门页面）。明细保留 90 天",
+        "登录密码流程改「建议制」：首次登录不再强制弹改密拦截，改为显眼提醒，用户可自行决定何时改",
+        "成绩分析新增「成绩对比 PK」页：任选两位同学比总分和单科，强弱项、每科差距一目了然，可分享",
+        "新增「我的云端数据」：按分类（外观与界面/点歌/作业标记/班级签/游戏等）列出云端同步了哪些数据，英文键名全部翻成中文，可单条删除或清空全部。删除前需要验证登录密码，借手机也删不掉你的数据",
+        "修复：跨设备作业同步偶发不刷新（改为云端优先）；微信内置浏览器字体加载异常；考试列表排序不稳定（空日期统一排最后）"
+      ]
+    },
     {
       "version": "2.9.12",
       "date": "2026-10-16",

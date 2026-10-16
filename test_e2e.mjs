@@ -179,16 +179,21 @@ db.create_function('pg_column_size', (v) => (v === null || v === undefined ? 0 :
    教训：桩比生产宽容 = 测试通过是假信号。这里把读出来的值还原成对象，
    让桩的行为和生产对齐。 */
 function emulateJsonb(sqlText, rows) {
-  if (!/from\s+user_data/i.test(sqlText)) return rows;
-  if (!/\bdata_value\b/i.test(sqlText)) return rows;
+  /* v2.10.0：site_settings.data 也是 jsonb 列（PG 语义），读取时同样要
+     还原成对象，否则 getSiteSetting 的 data[key] 永远拿到 undefined、
+     设置开关全部「读不回」。 */
+  const isSite = /from\s+site_settings/i.test(sqlText) && /\bdata\b/i.test(sqlText);
+  const isUser = /from\s+user_data/i.test(sqlText) && /\bdata_value\b/i.test(sqlText);
+  if (!isSite && !isUser) return rows;
+  const col = isSite ? 'data' : 'data_value';
   return rows.map((r) => {
-    if (!Object.prototype.hasOwnProperty.call(r, 'data_value')) return r;
-    if (typeof r.data_value !== 'string') return r;
-    const s = r.data_value.trim();
+    if (!Object.prototype.hasOwnProperty.call(r, col)) return r;
+    if (typeof r[col] !== 'string') return r;
+    const s = r[col].trim();
     if (!s) return r;
     let v;
     try { v = JSON.parse(s); } catch { return r; }   // 不是合法 JSON：原样返回
-    return Object.assign({}, r, { data_value: v });
+    return Object.assign({}, r, { [col]: v });
   });
 }
 
@@ -208,6 +213,17 @@ function translate(sqlText) {
      老版本 sql.js 若不支持，execAlter 里会 catch 后忽略，不影响测试。 */
   if (/^\s*alter\s+table[\s\S]*drop\s+column\s+if\s+exists/i.test(s)) {
     return { __dropColumn: s };
+  }
+  /* v2.10.0：SQLite 的 ALTER TABLE 只认 RENAME / ADD COLUMN / DROP COLUMN，
+     **不支持 DROP/ADD CONSTRAINT**（PG 把 users.status 的 check 扩到
+     'pending' 必须「先删后加」）。桩的 users 表按 schema.sql 建、本就
+     不带 check 约束，'pending' 插入不受限 —— 两条约束 DDL 在桩上一律
+     按 no-op 跳过；约束本身的覆盖由生产 schema.sql（人工执行）保证。 */
+  if (/^\s*alter\s+table[\s\S]*drop\s+constraint\s+if\s+exists/i.test(s)) {
+    return { __skip: s };
+  }
+  if (/^\s*alter\s+table[\s\S]*add\s+constraint/i.test(s)) {
+    return { __skip: s };
   }
   /* ⚠️ 2026-10-07：`create table if not exists ...` 在 SQLite 里语法更严：
        · 列默认值不能写 `default datetime('now')`（函数式默认值必须加括号
@@ -252,6 +268,15 @@ function translate(sqlText) {
     /date_trunc\s*\(\s*'day'\s*,\s*([^)]+)\)/gi,
     (m, inner) => "date(" + inner.trim() + ")"
   );
+  /* v2.10.0：(X at time zone 'Zone')::date → date(X)
+     「按天筛选」在 PG 上要按时区归日；SQLite 桩无时区概念，
+     剥成 date(X) 保证同一段 SQL 在桩上也能跑（时区换算本身不在测试范围）。 */
+  s = s.replace(
+    /\(\s*([^()]+?)\s+at\s+time\s+zone\s+'[^']+'\s*\)\s*::\s*date/gi,
+    (m, inner) => "date(" + inner.trim() + ")"
+  );
+  /* 其余 at time zone 'Zone' → 剥掉（PG 时区转换，桩不仿真） */
+  s = s.replace(/\s+at\s+time\s+zone\s+'[^']+'/gi, '');
   /* 剩余 now() */
   s = s.replace(/\bnow\(\)/gi, "datetime('now')");
   /* ilike → like：SQLite 的 LIKE 对 ASCII 本来就大小写不敏感，
@@ -261,7 +286,11 @@ function translate(sqlText) {
      但 sql.js 版本可能偏低，直接剥掉（测试不依赖 null 的排序位置） */
   s = s.replace(/\s+nulls\s+(last|first)/gi, '');
   /* 剥掉其余类型转换 */
-  s = s.replace(/::\s*(int|integer|text|jsonb|boolean|bigint|timestamptz|interval)(\s*\[\s*\])?/gi, '');
+  s = s.replace(/::\s*(int|integer|text|jsonb|boolean|bigint|timestamptz|interval|date)(\s*\[\s*\])?/gi, '');
+  /* v2.10.0 站点设置 upsert：PG 的 jsonb `||` 合并 → SQLite 的 json_patch
+     （sql.js 内置 JSON1，语义等价：两个 JSON 对象按键深合并）。
+     必须写在本行之前没有其它规则先动 `||` —— 这里是唯一接触它的地方。 */
+  s = s.replace(/(site_settings\.data)\s*\|\|\s*(excluded\.data)/gi, 'json_patch($1, $2)');
 
   /* ---- jsonb_to_recordset：把 JSON 数组一次摊成「多行多列」 ----
      Postgres 专有（本项目用它把整批成绩当**一个**参数灌进去，绕开
@@ -362,6 +391,10 @@ function makeThenable(tr, rawText, values) {
                 .replace(/boolean/gi, 'integer')
                 .replace(/jsonb/gi, 'text')
                 .replace(/default\s+now\(\)/gi, "default (datetime('now'))")
+                /* v2.10.0：DDL 里的 ::jsonb 之类 Cast 也要剥 —— SQLite 的
+                   DEFAULT 只认字面量或括号表达式，`default '{}'::text`
+                   会直接语法错误（site_settings 建表就这么挂过）。 */
+                .replace(/::\s*(int|integer|text|jsonb|boolean|bigint|timestamptz|interval|date)\b/gi, '')
                 /* check 约束里的 in (...) 两边都支持，保留；
                    但 `constraint xxx check` 的具名约束 SQLite 也认，无需改。 */
                 ;
@@ -434,6 +467,10 @@ function makeThenable(tr, rawText, values) {
         const stmt = db.prepare(translated);
         stmt.bind(values.map((v) => {
           if (v === undefined || v === null) return null;
+          /* v2.10.0：Date 不能走下面那句 JSON.stringify —— 会存成
+             带引号的 "\"2026-..\""，时间比较（>= 今天）全错。
+             PG driver 原生把 Date 绑成 timestamptz，这里绑 ISO 字符串等价。 */
+          if (v instanceof Date) return v.toISOString();
           if (typeof v === 'boolean') return v ? 1 : 0;
           if (typeof v === 'object') return JSON.stringify(v);
           return v;
@@ -554,6 +591,17 @@ let adminToken = null;
   t('响应不含密码哈希', !r.text.includes('password_hash') && !r.text.includes('pbkdf2$'));
   adminToken = r.body.token;
 
+  /* v2.10.0 注册审核默认开启（安全默认值）——但本文件后续十几个段落
+     都靠「注册即得 token」推进（登录态是绝大多数测试的前置）。
+     这里先用管理员令牌把审核关掉，恢复旧行为；审核流本身在新段
+     【65】专门验证（开 → 注册 pending → 403 → 通过/驳回 → 恢复）。 */
+  const regOff = await call('/api/admin?action=set-settings', {
+    method: 'POST', token: adminToken,
+    body: { register_open: true, register_review: false },
+  });
+  t('管理员可关注册审核（后续段落回归所需）',
+    regOff.status === 200 && !!regOff.body.ok, JSON.stringify(regOff.body).slice(0, 160));
+
   const dup = await call('/api/auth?action=register', {
     method: 'POST', body: { username: 'yuzikang', password: 'Another123' },
   });
@@ -665,10 +713,12 @@ console.log('\n【6】数据云同步');
   });
   t('白名单外的 key 被拒', badKey.status === 400, '实际 ' + badKey.status);
 
-  const d = await call('/api/data?key=cls_theme', { method: 'DELETE', token: adminToken });
-  t('删除成功', d.status === 200);
-  const after = await call('/api/data', { method: 'GET', token: adminToken });
-  t('删除后只剩 1 条', after.body.count === 1, '实际 ' + after.body.count);
+  /* v2.10.0 #178：删除云端数据前必须先验密码（wt = wipeToken）——
+     旧「直接删」路径已收紧，这里锁定新行为：无 wt 一律 403。 */
+  const dNoWt = await call('/api/data?key=cls_theme', { method: 'DELETE', token: adminToken });
+  t('删除前未验证密码 403', dNoWt.status === 403, '实际 ' + dNoWt.status);
+  const afterNoWt = await call('/api/data', { method: 'GET', token: adminToken });
+  t('未验证的删除不生效（仍 2 条）', afterNoWt.body.count === 2, '实际 ' + afterNoWt.body.count);
 
   // 用户隔离
   const other = await call('/api/data?key=cls_sfx', { method: 'GET', token: userToken });
@@ -2091,9 +2141,16 @@ console.log('\n【20】游戏数据上云 + 后台面板（2026-10-07 新增）'
   t('★周榜键不进 u.hi（不产生 week_ 垃圾键）',
     !!me2 && Object.keys(me2.hi).every((k) => !k.startsWith('week_')),
     JSON.stringify(me2 && me2.hi));
-  /* 复原：把周榜键清掉，避免污染后面的【周榜】用例（那里断言 gameruser01 不在周榜） */
-  await call('/api/data?key=cls_game_week_snake', { method: 'DELETE', token: gtk });
-  await call('/api/data?key=cls_game_week_tetris', { method: 'DELETE', token: gtk });
+  /* 复原：把周榜键清掉，避免污染后面的【周榜】用例（那里断言 gameruser01 不在周榜）。
+     v2.10.0 #178 起删云端数据要先验密码，这里走完整流程（验 → 拿 wt → 删）。 */
+  const gVerify = await call('/api/data?action=verify', {
+    method: 'POST', token: gtk, body: { password: 'GamePass123' },
+  });
+  t('游戏段清理前验密码通过', gVerify.status === 200 && !!gVerify.body.wipeToken,
+    JSON.stringify(gVerify.body).slice(0, 160));
+  const gwt = gVerify.body.wipeToken || '';
+  await call('/api/data?key=cls_game_week_snake&wt=' + gwt, { method: 'DELETE', token: gtk });
+  await call('/api/data?key=cls_game_week_tetris&wt=' + gwt, { method: 'DELETE', token: gtk });
   const gs3 = await call('/api/admin?action=games', { token: adminToken });
   const me3 = (gs3.body.users || []).find((u) => u.username === 'gameruser01');
   t('周榜键可被清掉（不残留脏数据）',
@@ -3373,9 +3430,10 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
 
   /* --- 后台可见性列 + 编辑开关 --- */
   t('后台资料列表有「可见性」列', adminHtml.indexOf('<th class="nowrap">可见性</th>') >= 0);
-  t('后台编辑弹窗有可见性开关', /pfWxHide/.test(adminHtml) && /pfPhHide/.test(adminHtml));
+  t('后台编辑弹窗有可见性开关', /mbWxHide/.test(adminHtml) && /mbPhHide/.test(adminHtml));
   t('后台保存时带上 visibilityPref', /payload\.visibilityPref\s*=/.test(adminHtml));
-  t('后台建号弹窗提示会自动建资料', /自动为该同学建一条班级资料/.test(adminHtml));
+  t('★成员长表单姓名为单数据源（一个框同写档案与账号显示名）',
+    /这一个框同时写进/.test(adminHtml) && /单数据源/.test(adminHtml));
   t('后台可见性样式 .chk 已定义', /\.field label\.chk\{/.test(adminHtml));
 
   /* --- HTTP 层工具：班委判定 --- */
@@ -3399,9 +3457,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(indexHtml),
+  t('★前台版本号为 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adminHtml),
+  t('★后台版本号为 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3765,9 +3823,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(indexHtml38),
+  t('★前台版本号为 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adminHtml38),
+  t('★后台版本号为 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -3791,8 +3849,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
 
   /* ---- K. 前端护栏：字段管理 UI 与动态列 ---- */
   const adminHtmlSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('后台有「字段管理」入口按钮', /id="pfFields"/.test(adminHtmlSrc));
-  t('后台有字段管理面板容器', /id="pfFieldPanel"/.test(adminHtmlSrc));
+  t('后台有「字段管理」入口按钮', /id="mbFields"/.test(adminHtmlSrc));
+  t('后台有字段管理面板容器', /id="mbFieldPanel"/.test(adminHtmlSrc)
+    && /id="mbFieldBody"/.test(adminHtmlSrc));
   t('后台有 renderFieldPanel', /function renderFieldPanel/.test(adminHtmlSrc));
   t('后台有新增字段弹窗', /function addFieldDialog/.test(adminHtmlSrc));
   t('后台有删除字段确认', /function deleteFieldConfirm/.test(adminHtmlSrc));
@@ -3803,8 +3862,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   t('★后台编辑弹窗支持单人可见性例外', /data-vf="/.test(adminHtmlSrc));
   t('后台保存时带上 extra', /payload\.extra\s*=/.test(adminHtmlSrc));
   t('后台保存时带上 fieldVis', /payload\.fieldVis\s*=/.test(adminHtmlSrc));
-  t('后台导出支持动态列', /extras\.forEach\(function\(f\)\{\s*\n?\s*row\[f\.label\]/.test(adminHtmlSrc)
-    || /row\[f\.label\]\s*=/.test(adminHtmlSrc));
+  t('★合并导出支持动态列（账号+档案一张表）',
+    /extras\.map\(function\(f\)\{ return \(m\.extra \|\| \{\}\)\[f\.field\]/.test(adminHtmlSrc)
+    && /成员与档案_' \+ fmt\(new Date\(\), 'date'\)/.test(adminHtmlSrc));
   t('后台导入识别自定义字段表头', /pick\(r, \[f\.label, f\.field\]\)/.test(adminHtmlSrc));
   t('后台有 extra-row 样式', /\.extra-row\{/.test(adminHtmlSrc));
   t('后台有 btn-xs 样式', /\.btn-xs\{/.test(adminHtmlSrc));
@@ -4780,10 +4840,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx47));
-  t('★后台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adm47));
-  t('★service worker 缓存版本升到 v77（旧缓存要作废）',
-    /class-site-v79/.test(sw47));
+  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx47));
+  t('★后台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adm47));
+  t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
+    /class-site-v81/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4867,7 +4927,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.12');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.0');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4967,9 +5027,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx48));
+  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-16'/.test(idx48));
-  t('★service worker 缓存版本升到 v77', /class-site-v79/.test(sw48));
+  t('★service worker 缓存版本升到 v80', /class-site-v81/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5033,8 +5093,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx49));
-  t('★后台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adm49));
+  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx49));
+  t('★后台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5106,7 +5166,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx50));
+  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5268,7 +5328,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adm));
+  t('★后台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5336,7 +5396,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx));
+  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5363,7 +5423,11 @@ console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间�
   t('★前端对考试列表按日期重排（最近的在前）',
     /SC\.exams = \(j\.exams \|\| \[\]\)\.slice\(\)\.sort\(function\(a, b\)\{/.test(idx));
   t('★同一天时按 id 兜底倒序', /return \(b\.id \|\| 0\) - \(a\.id \|\| 0\)/.test(idx));
-  t('★后端 exam 列表也是按日期倒序', /order by e\.exam_date desc, e\.id desc/.test(sc));
+  /* v2.10.0：desc 端点必须显式 nulls last —— PG 的 desc 默认 NULLS FIRST，
+     空日期考试会漂到列表顶部（录入时序混乱观感的根因）。 */
+  t('★后端 exam 列表按日期倒序且空日期沉底（nulls last）',
+    /order by e\.exam_date desc nulls last, e\.id desc/.test(sc)
+    && (sc.match(/order by e\.exam_date desc nulls last, e\.id desc/g) || []).length === 2);
 
   /* ===== ③ 考试可以跨天 ===== */
   t('★后端返回 endDate', /endDate: r\.exam_end_date \? fmtDate\(r\.exam_end_date\) : null/.test(sc));
@@ -5837,7 +5901,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx));
+  t('★前台版本号升到 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -5948,8 +6012,8 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx));
-  t('★后台内置更新记录补到 2.9.12',
+  t('★前台版本号升到 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx));
+  t('★后台内置更新记录补到 2.10.0',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
   /* ===== ⑥ 真跑一遍：只分享 1 个人，班均与排名仍然是对的 ===== */  const reg2 = await call('/api/auth?action=register', {
@@ -6053,11 +6117,11 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx));
-  t('★后台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adm));
+  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx));
+  t('★后台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 2.9.12 且缓存升 v79', /SITE_VER = '2\.9\.12'/.test(swSrc) && /class-site-v79/.test(swSrc));
-  t('★后台内置更新记录有 2.9.12 条目', /"version": "2\.9\.12"/.test(adm));
+  t('★sw.js SITE_VER 2.10.0 且缓存升 v80', /SITE_VER = '2\.10\.0'/.test(swSrc) && /class-site-v81/.test(swSrc));
+  t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
 /* 【62】第五十七轮·全站字色共用逻辑 + 文案官方化（v2.9.10）
@@ -6134,8 +6198,9 @@ console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检�
   t('★后台 applyTheme 末尾同样全局重算', /try\{ clsAutoInk\(document\.body\); \}catch\(e\)\{\}/.test(adm));
 
   /* ---- ⑤ 后台接入点 ---- */
-  t('★后台头像（侧栏 + 用户列表 4 处）都带 ink-auto',
-    /class="av ink-auto" id="meAv"/.test(adm) && (adm.match(/cell-user"><div class="av ink-auto">/g) || []).length === 4);
+  t('★后台头像（侧栏 + 各列表）都带 ink-auto',
+    /class="av ink-auto" id="meAv"/.test(adm) && (adm.match(/cell-user"><div class="av ink-auto">/g) || []).length === 3,
+    '成员表 / 头衔表 / 游戏表各一处（用户与资料两表已合并为成员表）');
   t('★后台统计卡图标 ink-auto', /si ink-auto ' \+ c\.tone/.test(adm));
   t('★排行榜榜首徽章 ink-auto（nth-child 渐变底）', /n' \+ \(i === 0 \? ' ink-auto' : ''\)/.test(adm));
 
@@ -6147,7 +6212,7 @@ console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检�
   t('★年级排名图注官方句式', /年级排名与班排名分别统计/.test(idx));
   t('★历次总分趋势只报统计范围', /统计 ' \+ pts\.length \+ ' 次考试/.test(idx));
   t('★各科趋势图注官方句式', /绿色为上涨，红色为下跌/.test(idx));
-  t('★后台建号提示已精简（去掉「只存哈希」技术解释）', /同学首次登录后会被要求自行修改密码。/.test(adm) && !/后台不保存明文/.test(adm));
+  t('★后台建号提示已精简（去掉「只存哈希」技术解释）', /首次登录后会建议他自己改密码/.test(adm) && !/后台不保存明文/.test(adm));
 
   /* ---- ⑦ 防误解话术全站清零（界面文案内；注释/更新记录不在扫描面） ---- */
   /* relSeed（后台内置历史更新记录）按站规「历史更新记录不改」保留原貌，
@@ -6385,6 +6450,1022 @@ console.log('\n【64】第五十九轮·成绩分析暗色全覆盖检查');
     && !/stroke="#c9b8a8"/.test(idx));
   t('★暗色「你」气泡反转为浅底深字（深底 #292524 压暗卡 ≈0.95 隐形）',
     /\.dark \.sc-pos-me span\{background:#f0e6dc;color:#262220\}/.test(idx));
+}
+
+console.log('\n【65】第六十轮·注册审核 + 站点设置 + 用户操作日志 + 资料去重（v2.10.0）');
+{
+  /* ---- ① register-config：公开接口，无需登录 ----
+     【2】里已把 register_review 关掉，这里应看到 {open:true, review:false} */
+  const rc = await call('/api/auth?action=register-config', {});
+  t('register-config 公开可读（无需登录）',
+    rc.status === 200 && rc.body.open === true && rc.body.review === false,
+    JSON.stringify(rc.body));
+
+  /* ---- ② 审核流：开审核 → 注册拿不到 token → 登录 403 → 通过后才放行 ---- */
+  const revOn = await call('/api/admin?action=set-settings', {
+    method: 'POST', token: adminToken,
+    body: { register_open: true, register_review: true },
+  });
+  t('管理员可开启注册审核', revOn.status === 200 && !!revOn.body.ok,
+    JSON.stringify(revOn.body).slice(0, 160));
+
+  const pend = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'penduser01', password: 'PendPass2026', displayName: '待审核同学' },
+  });
+  t('开启审核后注册成功但进入待审核（200、无 token）',
+    pend.status === 200 && pend.body.pending === true && !pend.body.token,
+    JSON.stringify(pend.body).slice(0, 200));
+  t('待审核提示语说明「等审核」', /审核/.test(pend.body.message || ''), pend.body.message);
+
+  const pendLogin = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'penduser01', password: 'PendPass2026' },
+  });
+  t('待审核账号不能登录 403', pendLogin.status === 403, '实际 ' + pendLogin.status);
+  t('待审核与封禁提示语区分（等着 ≠ 被封）', /审核中/.test(pendLogin.body.error || ''),
+    pendLogin.body.error);
+
+  /* 后台用户列表应带 pending 状态（前端徽章三态的数据来源） */
+  const ul = await call('/api/admin?action=users', { token: adminToken });
+  const pendRow = (ul.body.users || []).find(x => x.username === 'penduser01');
+  t('后台用户列表能看到待审核状态', !!pendRow && pendRow.status === 'pending',
+    JSON.stringify(pendRow));
+
+  /* 管理员通过审核 */
+  const ok1 = await call('/api/admin?action=user-review', {
+    method: 'POST', token: adminToken,
+    body: { id: pendRow.id, decision: 'approve' },
+  });
+  t('管理员通过审核成功', ok1.status === 200 && !!ok1.body.ok,
+    JSON.stringify(ok1.body).slice(0, 160));
+
+  const okLogin = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'penduser01', password: 'PendPass2026' },
+  });
+  t('审核通过后即可登录（拿到 token）', okLogin.status === 200 && !!okLogin.body.token,
+    '实际 ' + okLogin.status);
+  const pendToken = okLogin.body.token;
+  const pendMe = await call('/api/data', { method: 'GET', token: pendToken });
+  t('审核通过后的账号能正常用受保护接口', pendMe.status === 200, '实际 ' + pendMe.status);
+
+  /* 已通过的账号不能重复审核（只有 pending 可审） */
+  const okAgain = await call('/api/admin?action=user-review', {
+    method: 'POST', token: adminToken,
+    body: { id: pendRow.id, decision: 'approve' },
+  });
+  t('非待审核状态不能重复审核 404', okAgain.status === 404, '实际 ' + okAgain.status);
+
+  /* ---- ③ 驳回路径 ---- */
+  const pend2 = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'penduser02', password: 'PendPass2026', displayName: '驳回同学' },
+  });
+  t('第二个待审核用户注册成功', pend2.status === 200 && pend2.body.pending === true);
+  const ul2 = await call('/api/admin?action=users', { token: adminToken });
+  const pend2Row = (ul2.body.users || []).find(x => x.username === 'penduser02');
+  const rej = await call('/api/admin?action=user-review', {
+    method: 'POST', token: adminToken,
+    body: { id: pend2Row.id, decision: 'reject' },
+  });
+  t('管理员驳回注册成功', rej.status === 200 && !!rej.body.ok,
+    JSON.stringify(rej.body).slice(0, 160));
+  const rejLogin = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'penduser02', password: 'PendPass2026' },
+  });
+  t('被驳回账号不能登录 403', rejLogin.status === 403, '实际 ' + rejLogin.status);
+  t('驳回提示走「已禁用」文案', /禁用/.test(rejLogin.body.error || ''), rejLogin.body.error);
+
+  /* ---- ④ 站点设置护栏 ---- */
+  const st = await call('/api/admin?action=settings', { token: adminToken });
+  t('读取站点设置（含 env 兜底值）',
+    st.status === 200 && st.body.settings && st.body.settings.register_review === true
+    && st.body.envDefault && st.body.envDefault.register_open === true,
+    JSON.stringify(st.body).slice(0, 200));
+
+  /* 管理员后台开号（create-user 不走注册审核，直接 active） */
+  const guard = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'setguard', password: 'GuardPass2026' },
+  });
+  t('管理员后台开号（不受注册审核限制）', guard.status === 200 && !!guard.body.ok,
+    JSON.stringify(guard.body).slice(0, 160));
+  const gLogin = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'setguard', password: 'GuardPass2026' },
+  });
+  t('后台开的号登录即 active（无审核卡点）', gLogin.status === 200 && !!gLogin.body.token,
+    '实际 ' + gLogin.status);
+  const gTok = gLogin.body.token;
+
+  const denySet = await call('/api/admin?action=set-settings', {
+    method: 'POST', token: gTok, body: { register_open: false },
+  });
+  t('普通用户不能改站点设置 403', denySet.status === 403, '实际 ' + denySet.status);
+
+  const badKey = await call('/api/admin?action=set-settings', {
+    method: 'POST', token: adminToken, body: { not_a_key: true },
+  });
+  t('白名单外的设置键被拒 400', badKey.status === 400, '实际 ' + badKey.status);
+
+  const badType = await call('/api/admin?action=set-settings', {
+    method: 'POST', token: adminToken, body: { register_open: 'yes' },
+  });
+  t('设置值必须是布尔 400', badType.status === 400, '实际 ' + badType.status);
+
+  /* ---- ⑤ 关掉审核，恢复「注册即用」，供后面的日志测试造号 ---- */
+  const revOff = await call('/api/admin?action=set-settings', {
+    method: 'POST', token: adminToken,
+    body: { register_open: true, register_review: false },
+  });
+  t('管理员可关注册审核', revOff.status === 200 && !!revOff.body.ok);
+  const rc2 = await call('/api/auth?action=register-config', {});
+  t('register-config 反映关闭后的状态', rc2.body.review === false, JSON.stringify(rc2.body));
+
+  /* ---- ⑥ 用户操作日志：攒批上报 → 统计 → 明细 ---- */
+  const logReg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'loguser01', password: 'LogPass2026', displayName: '日志同学' },
+  });
+  t('关审核后注册即得 token', logReg.status === 200 && !!logReg.body.token);
+  const logTok = logReg.body.token;
+
+  const evs = [
+    { a: 'jump', p: '成绩分析', t: '成绩对比', d: '', ts: Date.now() },
+    { a: 'click', p: '成绩分析', t: '导出长图', d: '', ts: Date.now() },
+    { a: 'submit', p: '班级事务', t: '作业提交', d: '', ts: Date.now() },
+  ];
+  const lg = await call('/api/data?action=log', {
+    method: 'POST', token: logTok, body: { events: evs },
+  });
+  t('攒批上报 3 条点击日志', lg.status === 200 && lg.body.written === 3, JSON.stringify(lg.body));
+
+  const lgEmpty = await call('/api/data?action=log', {
+    method: 'POST', token: logTok, body: { events: [] },
+  });
+  t('空批次不报错', lgEmpty.status === 200 && lgEmpty.body.written === 0);
+
+  const lgBad = await call('/api/data?action=log', {
+    method: 'POST', token: logTok,
+    body: { events: [{ a: 'click', p: 'x'.repeat(500), t: 't', d: 'd', ts: 'not-a-number' }] },
+  });
+  t('脏数据（超长字段/坏时间戳）被服务端截断照收',
+    lgBad.status === 200 && lgBad.body.written === 1, JSON.stringify(lgBad.body));
+
+  const noAuthLog = await call('/api/data?action=log', {
+    method: 'POST', body: { events: evs },
+  });
+  t('未登录不能上报日志 401', noAuthLog.status === 401, '实际 ' + noAuthLog.status);
+
+  const lgGet = await call('/api/data?action=log', { token: logTok });
+  t('log 通道只接受 POST 405', lgGet.status === 405, '实际 ' + lgGet.status);
+
+  /* 批量上限：一批最多 50 条 */
+  const many = Array.from({ length: 60 }, (_, i) => (
+    { a: 'click', p: '截断测试', t: 't' + i, d: '', ts: Date.now() }
+  ));
+  const lgCap = await call('/api/data?action=log', {
+    method: 'POST', token: logTok, body: { events: many },
+  });
+  t('单批最多收 50 条（LOG_MAX_BATCH）', lgCap.status === 200 && lgCap.body.written === 50,
+    JSON.stringify(lgCap.body));
+
+  /* 统计面板 */
+  const stats = await call('/api/admin?action=action-stats', { token: adminToken });
+  t('统计面板：今日点击 ≥ 54', stats.status === 200 && stats.body.today >= 54,
+    JSON.stringify(stats.body).slice(0, 160));
+  t('统计面板：7 日活跃用户 ≥ 1', stats.body.activeUsers7d >= 1, JSON.stringify(stats.body));
+  t('统计面板：热门页面含「成绩分析」',
+    (stats.body.topPages || []).some(x => x.page === '成绩分析' && x.n >= 2),
+    JSON.stringify(stats.body.topPages));
+  t('统计面板：动作分布含 jump/click/submit',
+    ['jump', 'click', 'submit'].every(a => (stats.body.byAction || []).some(x => x.action === a)),
+    JSON.stringify(stats.body.byAction));
+
+  /* 明细 + 筛选 */
+  const logs = await call('/api/admin?action=action-logs', { token: adminToken });
+  t('日志明细能读到上报记录（首页满 50 条）', logs.status === 200 && logs.body.total >= 54
+    && (logs.body.logs || []).length === 50, 'total ' + logs.body.total
+    + ' / 首页 ' + (logs.body.logs || []).length);
+  const q1 = await call('/api/admin?action=action-logs&q=' + encodeURIComponent('导出长图'),
+    { token: adminToken });
+  t('按关键词筛选（命中 target）', q1.status === 200 && q1.body.total >= 1, 'total ' + q1.body.total);
+  /* 注意：上面 50 条「截断测试」事件比它更新，会把首页占满 —— 字段断言
+     改在 q 筛选结果上做（顺带验证 q 真能搜到 target，不只是用户名）。 */
+  const q1hit = (q1.body.logs || [])[0] || {};
+  t('明细带用户名/页面/目标字段',
+    q1hit.username === 'loguser01' && q1hit.page === '成绩分析'
+    && q1hit.target === '导出长图' && q1hit.action === 'click',
+    JSON.stringify(q1hit).slice(0, 160));
+
+  const a1 = await call('/api/admin?action=action-logs&type=submit', { token: adminToken });
+  t('按动作类型筛选', a1.status === 200 && a1.body.total >= 1
+    && (a1.body.logs || []).every(x => x.action === 'submit'), 'total ' + a1.body.total);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const d1 = await call('/api/admin?action=action-logs&day=' + today, { token: adminToken });
+  t('按日期筛选能查到今日记录', d1.status === 200 && d1.body.total >= 54, 'total ' + d1.body.total);
+  const d0 = await call('/api/admin?action=action-logs&day=2020-01-01', { token: adminToken });
+  t('按日期筛选：往日无记录', d0.status === 200 && d0.body.total === 0, 'total ' + d0.body.total);
+
+  /* 非管理员不能看日志 */
+  const denyLog = await call('/api/admin?action=action-logs', { token: gTok });
+  t('普通用户不能看行为日志 403', denyLog.status === 403, '实际 ' + denyLog.status);
+
+  /* ---- ⑦ 信息查询字段去重（v2.10.0 根因修复回归）---- */
+  /* 造一条带全部联系方式的资料（管理员直录 = 已核实） */
+  const pd = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: {
+      name: '查重同学', studentId: '259901',
+      phone: '13900139000', wechat: 'wx_chachong', qq: '123456789',
+    },
+  });
+  t('管理员录入带联系方式的资料成功', pd.status === 200 && !!pd.body.id,
+    JSON.stringify(pd.body).slice(0, 160));
+
+  const ps = await call('/api/profile?action=search&q=查重同学', { token: pendToken });
+  const hit = (ps.body.results || [])[0] || {};
+  t('按姓名能查到新资料', hit.name === '查重同学', JSON.stringify(hit).slice(0, 120));
+  t('已核实联系方式仍走固定通道输出（phone/wechat/qq 顶层字段）',
+    hit.phone === '13900139000' && hit.wechat === 'wx_chachong' && hit.qq === '123456789',
+    JSON.stringify({ p: hit.phone, w: hit.wechat, q: hit.qq }));
+  t('★修复重复渲染：fields 数组里不再出现 wechat/qq/phone',
+    Array.isArray(hit.fields)
+    && hit.fields.every(f => !['wechat', 'qq', 'phone'].includes(f.field)),
+    JSON.stringify(hit.fields));
+}
+
+console.log('\n【66】第六十轮·微信内置浏览器字体修复：同源自托管（v2.10.0）');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const sw = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+
+  /* ① 外部字体域清零（微信 X5 内核拦截 fonts.* 的 CSS 与字体文件）。
+     ⚠️ 只查**实际资源引用**（<link href> / url()）—— 注释里说明背景时
+        提到域名是故意的，不算引用。 */
+  t('★index.html 不再外链 fonts.* 的 CSS（微信屏蔽源清零）',
+    !/<link[^>]+href=["']https?:\/\/fonts\./.test(idx)
+    && !/url\(\s*['"]?https?:\/\/fonts\./.test(idx));
+  t('★没有残留 preconnect 到外部字体域', !/preconnect[^>]*fonts\./.test(idx));
+
+  /* ② 同域 @font-face：两个字体、woff2、swap、latin 子集 */
+  t('★Inter 同域 @font-face（可变字重 100 900 + swap + latin 子集）',
+    /@font-face\{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url\('\.\/fonts\/inter-latin\.woff2'\) format\('woff2'\);unicode-range:U\+0000-00FF/.test(idx));
+  t('★JetBrains Mono 同域 @font-face（可变字重 100 800）',
+    /@font-face\{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url\('\.\/fonts\/jetbrains-mono-latin\.woff2'\) format\('woff2'\);unicode-range:U\+0000-00FF/.test(idx));
+
+  /* ③ 字体文件真实存在、非空、woff2 魔数（防「引用了但文件没传仓库」） */
+  const fontFiles = ['./fonts/inter-latin.woff2', './fonts/jetbrains-mono-latin.woff2'];
+  for (const f of fontFiles) {
+    const buf = fs.readFileSync(new URL('.' + f.slice(1), import.meta.url));
+    t('★字体文件在位且是合法 woff2：' + f,
+      buf.length > 20000 && buf.subarray(0, 4).toString('latin1') === 'wOF2',
+      buf.length + ' bytes');
+  }
+
+  /* ④ 字体栈首位仍是 Inter（同域字体生效后英文数字用它） */
+  t('★全局字体栈首位仍是 Inter（中文仍落系统字体）',
+    /\*\{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;font-family:'Inter','PingFang SC'/.test(idx));
+
+  /* ⑤ SW 预缓存两个字体的文件（首次离线访问英文字形不掉） */
+  t('★sw.js PRECACHE 含两个同域字体文件',
+    /const PRECACHE = \['\.\/favicon\.svg', '\.\/manifest\.webmanifest',\s*'\.\/fonts\/inter-latin\.woff2', '\.\/fonts\/jetbrains-mono-latin\.woff2'\]/.test(sw));
+}
+
+console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+
+  /* 工具：按函数名截取函数体（嵌套 function 是缩进的，不会误截） */
+  function fnBody(name) {
+    const i = idx.indexOf('function ' + name + '(');
+    if (i < 0) return '';
+    const j = idx.indexOf('\nfunction ', i + 10);
+    return idx.slice(i, j > i ? j : i + 9000);
+  }
+
+  /* ---- ① 静态：tab 与分发 ---- */
+  t('★成绩分析 tab 有第三个「成绩对比」',
+    /onclick="scSetTab\(\\'pk\\'\)">成绩对比<\/button>/.test(idx));
+  t('★scRenderPane 分发到 scRenderPk', /else if\(SC\.tab === 'pk'\) scRenderPk\(\);/.test(idx));
+  t('★换考试重置 PK 选择（旧行 id 全部失效）',
+    /SC\.pkA = null; SC\.pkB = null;/.test(idx));
+  t('★SC 状态有 pkA/pkB 两个字段',
+    /pkA: null,\s*\/\* 成绩对比 PK：A 方成绩行 id（v2\.10\.0） \*\//.test(idx)
+    && /pkB: null,\s*\/\* 成绩对比 PK：B 方成绩行 id（v2\.10\.0） \*\//.test(idx));
+
+  /* ---- ② 静态：函数齐全 ---- */
+  ['scPkDefaults', 'scPkRow', 'scPkSubjAvg', 'scPkPick', 'scPkSwap',
+   'scRenderPk', 'scPkTotalCard', 'scPkSubjCard', 'scPkCards'].forEach((n) => {
+    t('★PK 函数在位：' + n, idx.includes('function ' + n + '('));
+  });
+  t('★不新增后端接口（PK 只用当前考试的 SC.rows）',
+    /scores\?action=/.test(idx) && !/scores\?action=pk/.test(idx));
+
+  /* ---- ③ 静态：CSS 亮色 + 暗色 ---- */
+  t('★PK 亮色：A 橙 B 蓝 + 分差红绿 + 语义 class',
+    /\.sc-pk-bar-a\{fill:#c2410c\}/.test(idx) && /\.sc-pk-bar-b\{fill:#2563eb\}/.test(idx)
+    && /\.sc-pk-num-a\{fill:#9a3412\}/.test(idx) && /\.sc-pk-num-b\{fill:#1e40af\}/.test(idx)
+    && /\.sc-pk-diff-up\{fill:#0b7a43\}/.test(idx) && /\.sc-pk-diff-down\{fill:#c0392b\}/.test(idx));
+  t('★PK 暗色覆盖（fill/stroke 全套，跟 .dark 自动切）',
+    /\.dark \.sc-pk-bar-a\{fill:#fdba74\}/.test(idx) && /\.dark \.sc-pk-bar-b\{fill:#93c5fd\}/.test(idx)
+    && /\.dark \.sc-pk-num-a\{fill:#fdba74\}/.test(idx) && /\.dark \.sc-pk-num-b\{fill:#93c5fd\}/.test(idx)
+    && /\.dark \.sc-pk-name\{fill:#c9b8aa\}/.test(idx) && /\.dark \.sc-pk-sub\{fill:#a8998c\}/.test(idx)
+    && /\.dark \.sc-pk-grid\{stroke:#3d3631\}/.test(idx) && /\.dark \.sc-pk-avg\{stroke:#a8998c\}/.test(idx)
+    && /\.dark \.sc-pk-diff-up\{fill:#4ade80\}/.test(idx) && /\.dark \.sc-pk-diff-down\{fill:#f87171\}/.test(idx)
+    && /\.dark \.sc-pk-diff-eq\{fill:#a8998c\}/.test(idx));
+  t('★暗色覆盖整块包在 @media screen（打印走白底，不参与暗色）',
+    /@media screen\{[\s\S]*?\.dark \.sc-pk-bar-a\{fill:#fdba74\}[\s\S]*?\n\}/.test(idx));
+  t('★PK 暗色按钮/标签/分隔线也覆盖（不只图表）',
+    /\.dark \.sc-pk-swap\{background:#2e2926;border-color:#4a4038;color:#c9b8aa\}/.test(idx)
+    && /\.dark \.sc-pk-side label\{color:#a8998c\}/.test(idx)
+    && /\.dark \.sc-pk-row\{border-bottom-color:#3d3631\}/.test(idx));
+  t('★PK 卡窄屏单列（max-width:560px）',
+    /@media \(max-width:560px\)\{\.sc-pk-cards\{grid-template-columns:1fr\}\}/.test(idx));
+
+  /* ---- ④ 真值表：把 PK 相关函数抠出来真跑一遍 ---- */
+  const names = ['esc', 'fmtNum', 'fmtDiff', 'scSubScore', 'scTotal', 'scFullMark',
+    'scStats', 'scRankMap', 'scMyRow', 'scPane', 'scPkDefaults', 'scPkRow',
+    'scPkSubjAvg', 'scPkPick', 'scPkSwap',
+    'scRenderPk', 'scPkTotalCard', 'scPkSubjCard', 'scPkCards'];
+  const missing = names.filter((n) => !fnBody(n));
+  t('★PK 依赖函数全部可提取（真值表前提）', missing.length === 0,
+    missing.join(',') || '齐全');
+
+  if (!missing.length) {
+    const src = names.map((n) => fnBody(n)).join('\n');
+    const pane = {};
+    const docStub = { getElementById: () => pane };
+    const SC = {
+      exams: [{ id: 1, name: '十月联考', subjects: [
+        { key: 'yw', name: '语文', full: 150, graded: false },
+        { key: 'sx', name: '数学', full: 150, graded: false },
+        { key: 'yy', name: '英语', full: 150, graded: false },
+        { key: 'wl', name: '物理', full: 100, graded: false },
+      ] }],
+      exam: null, rows: [], basis: 'graded', tab: 'pk', pkA: null, pkB: null,
+    };
+    const AUTH = { user: { id: 1, displayName: '余子康' } };
+    SC.exam = SC.exams[0];
+    SC.rows = [
+      { id: 11, name: '余子康', no: '01', uid: 1, mine: true,
+        s: { yw: { raw: 128 }, sx: { raw: 135 }, yy: { raw: 112 }, wl: { raw: 88 } } },
+      { id: 12, name: '陈曦', no: '02', uid: 2, mine: false,
+        s: { yw: { raw: 120 }, sx: { raw: 118 }, yy: { raw: 131 }, wl: { raw: 95 } } },
+      { id: 13, name: '王五', no: '03', uid: 3, mine: false,
+        s: { yw: { raw: 105 }, sx: { raw: 96 }, yy: { raw: 90 } } },  /* 物理缺考 */
+    ];
+    const api = new Function('SC', 'AUTH', 'document', src + `
+      function scRenderPane(){ scRenderPk(); }   /* 桩：PK 只有一个 pane，直接重绘 */
+      return { scRenderPk, scPkSwap, scPkPick, scPkDefaults, scPkRow, scTotal, scPkSubjAvg };
+    `)(SC, AUTH, docStub);
+
+    /* 默认规则：A = 我（uid 1），B = 总分第一（余子康 463 > 陈曦 464？算一下：
+       余 128+135+112+88=463，陈 120+118+131+95=464，王 105+96+90=291 → B 应为陈曦 */
+    api.scRenderPk();
+    const html = pane.innerHTML;
+    t('★默认 A 方选中「我」（余子康）',
+      /value="11" selected/.test(html) && /余子康/.test(html));
+    t('★默认 B 方选中总分第一（陈曦 464 分）',
+      /value="12" selected/.test(html));
+    t('★渲染含选人区 / 交换按钮 / 两个下拉',
+      html.includes('sc-pk-pick') && html.includes('sc-pk-swap')
+      && (html.match(/<select/g) || []).length === 2);
+    t('★「同一场考试」标注当前考试名',
+      html.includes('同一场考试：十月联考'));
+    t('★总分对比卡：班均参考线 + 班排 + 领先结论',
+      html.includes('总分对比') && html.includes('sc-pk-avg')
+      && html.includes('班均') && html.includes('班排')
+      && /B 领先 \d+(\.\d)? 分/.test(html));
+    t('★各科对比卡：每科 A/B 两柱 + 组顶分差 + 科名满分',
+      html.includes('各科对比')
+      && (html.match(/class="sc-pk-bar-a"/g) || []).length === 5   /* 总分 1 + 四科 4 */
+      && (html.match(/class="sc-pk-bar-b"/g) || []).length === 5
+      && html.includes('sc-pk-diff-up') && html.includes('sc-pk-diff-down')
+      && html.includes('语文') && html.includes('满分 150') && html.includes('满分 100'));
+    t('★强弱项卡：最强/最弱/综合超班均（超班均口径，不是原始分）',
+      html.includes('最强项') && html.includes('最弱项') && html.includes('综合超班均')
+      && (html.match(/sc-pk-cards/g) || []).length >= 1
+      && (html.match(/sc-pk-card/g) || []).length >= 3);   /* 容器 + 两张卡 */
+    /* 强弱项数字核对：余子康 语128/数135/英112/物88，
+       班均 语117.67 数116.33 英111 物91.5（物理跳过缺考的王五）
+       → 最强 数学 +18.7 / 最弱 物理 −3.5 / 综合累加 +26.5 */
+    t('★强弱项按超班均计算（最强 数学+18.7 / 最弱 物理−3.5 / 综合 +26.5）',
+      html.includes('数学') && html.includes('+18.7')
+      && html.includes('物理') && html.includes('−3.5') && html.includes('+26.5'));
+
+    /* 交换：A/B 对调后 selected 也跟着换 */
+    api.scPkSwap();
+    var selParts = pane.innerHTML.split('<select');
+    t('★交换后 A/B 对调（A 下拉选中 12、B 下拉选中 11）',
+      /value="12" selected/.test(selParts[1] || '') && /value="11" selected/.test(selParts[2] || ''));
+
+    /* 手动选人：把 A 换成王五（缺考那位） */
+    api.scPkPick('a', 13);
+    t('★手动选人即时重绘（A 换王五，含缺考柱处理）',
+      /value="13" selected/.test(pane.innerHTML) && pane.innerHTML.includes('>缺<'));
+    t('★缺考生不画柱只标「缺」（王五物理：10 根柱变 9 根）',
+      (pane.innerHTML.match(/class="sc-pk-bar-[ab]"/g) || []).length === 9);
+
+    /* 人数不足的兜底 */
+    SC.rows = [SC.rows[0]];
+    SC.pkA = null; SC.pkB = null;
+    api.scRenderPk();
+    t('★不足两人时给友好提示（不炸）',
+      pane.innerHTML.includes('人还不够') && pane.innerHTML.includes('sc-empty'));
+  }
+}
+
+console.log('\n【68】第六十一轮·成员与档案合并（单数据源长表单 + 四场景，v2.10.0）');
+{
+  /* ============================================================
+     背景（#172）：后台原「用户管理」「资料管理」把同一批人分两处存储，
+     改一处另一处对不上。现在合并成一个页面 / 一个长表单 / 一次提交。
+     本段覆盖：members 列表四场景与筛选、save-member 四场景编排、
+     姓名单数据源同步、delete-user 连带删档案、旧接口回归。
+     ============================================================ */
+
+  /* ---- ① 造四种场景的种子数据 ---- */
+  /* 场景 both：建号（自动补档案） */
+  const seed1 = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'mbuser01', password: 'MbUser0123', displayName: '成员甲', role: 'user' },
+  });
+  t('种子①：建号成功（自动补档案）', seed1.status === 200 && !!seed1.body.user,
+    JSON.stringify(seed1.body).slice(0, 160));
+  const seed1Id = seed1.body.user.id;
+
+  /* 场景 profile-only：只建通讯录，不建号 */
+  const seed2 = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '通讯录乙', studentId: '259902', politics: '群众' },
+  });
+  t('种子②：纯档案（未认领）建成', seed2.status === 200 && !!seed2.body.id,
+    JSON.stringify(seed2.body).slice(0, 160));
+  const seed2Pid = seed2.body.id;
+
+  /* 场景 user-only：建号后把自动补的档案删掉 → 有账号暂无档案 */
+  const seed3 = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'mbuser03', password: 'MbUser0323', displayName: '缺档案丙', role: 'user' },
+  });
+  const seed3Id = seed3.body.user.id;
+  const profList = await call('/api/admin?action=profiles&q=缺档案丙', { token: adminToken });
+  const seed3Prof = (profList.body.profiles || [])[0] || {};
+  const delProf = await call('/api/admin?action=delete-profile', {
+    method: 'POST', token: adminToken, body: { id: seed3Prof.id },
+  });
+  t('种子③：删掉自动档案，造出「有账号暂无档案」', delProf.status === 200,
+    JSON.stringify(delProf.body).slice(0, 120));
+
+  /* ---- ② members 列表：四场景 + counts ---- */
+  const denyMb = await call('/api/admin?action=members', { token: null });
+  t('members 未登录不可读 401', denyMb.status === 401, '实际 ' + denyMb.status);
+
+  const mb = await call('/api/admin?action=members&limit=500', { token: adminToken });
+  t('members 200 且带 counts / fieldMeta',
+    mb.status === 200 && Array.isArray(mb.body.members) && !!mb.body.counts
+    && Array.isArray(mb.body.fieldMeta),
+    JSON.stringify({ total: mb.body.total, c: mb.body.counts }).slice(0, 200));
+
+  const row1 = (mb.body.members || []).find(x => x.username === 'mbuser01');
+  const row2 = (mb.body.members || []).find(x => x.name === '通讯录乙');
+  const row3 = (mb.body.members || []).find(x => x.username === 'mbuser03');
+  t('★场景 both：有账号 + 有档案',
+    !!row1 && row1.scene === 'both' && row1.userId === seed1Id && row1.profileId != null
+    && row1.name === '成员甲',
+    JSON.stringify(row1).slice(0, 220));
+  t('★场景 profile-only：有档案无账号（userId 为空）',
+    !!row2 && row2.scene === 'profile-only' && row2.userId == null && row2.profileId === seed2Pid,
+    JSON.stringify(row2).slice(0, 220));
+  t('★场景 user-only：有账号暂无档案（profileId 为空）',
+    !!row3 && row3.scene === 'user-only' && row3.userId === seed3Id && row3.profileId == null,
+    JSON.stringify(row3).slice(0, 220));
+  t('counts 三场景计数都 >= 1',
+    mb.body.counts.both >= 1 && mb.body.counts.profileOnly >= 1 && mb.body.counts.userOnly >= 1,
+    JSON.stringify(mb.body.counts));
+  t('counts.total = 三种场景之和（一行不重不漏）',
+    mb.body.counts.total === mb.body.counts.both + mb.body.counts.profileOnly + mb.body.counts.userOnly,
+    JSON.stringify(mb.body.counts));
+  t('成员行带账号在线口径字段（与旧 users 接口一致）',
+    !!row1 && typeof row1.online === 'boolean' && typeof row1.onlineSessions === 'number'
+    && typeof row1.dataCount === 'number',
+    JSON.stringify({ o: row1.online, s: row1.onlineSessions, d: row1.dataCount }));
+
+  /* ---- ③ 筛选 ---- */
+  const qName = await call('/api/admin?action=members&q=' + encodeURIComponent('成员甲'), { token: adminToken });
+  t('q 按姓名命中（档案名）', qName.status === 200
+    && (qName.body.members || []).some(x => x.username === 'mbuser01'),
+    'total ' + qName.body.total);
+  const qUser = await call('/api/admin?action=members&q=' + encodeURIComponent('mbuser03'), { token: adminToken });
+  t('q 按用户名命中', (qUser.body.members || []).some(x => x.username === 'mbuser03'));
+  const qSid = await call('/api/admin?action=members&q=' + encodeURIComponent('259902'), { token: adminToken });
+  t('q 按学号命中（未认领行）', (qSid.body.members || []).some(x => x.name === '通讯录乙'));
+  const fRole = await call('/api/admin?action=members&role=admin', { token: adminToken });
+  t('role=admin 只回管理员', fRole.status === 200
+    && (fRole.body.members || []).length > 0
+    && (fRole.body.members || []).every(x => x.role === 'admin'));
+  const fSt = await call('/api/admin?action=members&status=active', { token: adminToken });
+  t('status=active 只回正常账号', (fSt.body.members || []).every(x => x.status === 'active'));
+  const fScene1 = await call('/api/admin?action=members&scene=profile-only', { token: adminToken });
+  t('scene=profile-only 只回未认领',
+    (fScene1.body.members || []).length > 0
+    && (fScene1.body.members || []).every(x => x.scene === 'profile-only'));
+  const fScene2 = await call('/api/admin?action=members&scene=user-only', { token: adminToken });
+  t('scene=user-only 只回缺档案',
+    (fScene2.body.members || []).length > 0
+    && (fScene2.body.members || []).every(x => x.scene === 'user-only'));
+  const fLimit = await call('/api/admin?action=members&limit=2&offset=0', { token: adminToken });
+  t('limit 生效（分页基线）', fLimit.status === 200 && (fLimit.body.members || []).length === 2,
+    '实得 ' + (fLimit.body.members || []).length);
+
+  /* ---- ④ save-member 场景①：both → 改角色/状态/档案 + 姓名单数据源 ---- */
+  const sv1 = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: {
+      userId: seed1Id, profileId: row1.profileId,
+      role: 'user', status: 'active',
+      name: '成员甲改', studentId: '259911', politics: '共青团员',
+      phone: '13700137000',
+    },
+  });
+  t('场景① both 保存成功', sv1.status === 200 && !!sv1.body.ok,
+    JSON.stringify(sv1.body).slice(0, 200));
+  t('场景① 返回两边的 id', sv1.body.userId === seed1Id && sv1.body.profileId === row1.profileId,
+    JSON.stringify({ u: sv1.body.userId, p: sv1.body.profileId }));
+
+  /* 姓名单数据源：users.display_name 与 profiles.name 必须一致 */
+  const ud = await call('/api/admin?action=user&id=' + seed1Id, { token: adminToken });
+  const pf = await call('/api/admin?action=profiles&q=' + encodeURIComponent('成员甲改'), { token: adminToken });
+  const pfRow = (pf.body.profiles || [])[0] || {};
+  t('★姓名单数据源：users.display_name 同步为新姓名',
+    ud.body.user && ud.body.user.displayName === '成员甲改',
+    JSON.stringify(ud.body.user && ud.body.user.displayName));
+  t('★姓名单数据源：profiles.name 同为新姓名',
+    pfRow.name === '成员甲改', JSON.stringify(pfRow.name));
+  t('场景① 档案字段已更新（政治面貌/手机号/学号）',
+    pfRow.politics === '共青团员' && pfRow.phone === '13700137000' && pfRow.studentId === '259911',
+    JSON.stringify({ p: pfRow.politics, ph: pfRow.phone, s: pfRow.studentId }));
+
+  /* 用户名不可改：payload 里塞 username 也应被忽略 */
+  const svName = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: { userId: seed1Id, profileId: row1.profileId, username: 'hacked01', role: 'user' },
+  });
+  const loginOld = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'mbuser01', password: 'MbUser0123' },
+  });
+  const loginNew = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'hacked01', password: 'MbUser0123' },
+  });
+  t('★已有账号的用户名不可改（老用户名照常登录）',
+    svName.status === 200 && loginOld.status === 200 && loginNew.status !== 200,
+    'old ' + loginOld.status + ' / new ' + loginNew.status);
+
+  /* ---- ⑤ save-member 场景②：profile-only + createAccount → 开号并绑定 ---- */
+  const sv2 = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: {
+      profileId: seed2Pid, createAccount: true,
+      username: 'mbuser02', password: 'MbUser0223',
+      name: '通讯录乙', role: 'user',
+    },
+  });
+  t('场景② 给未认领成员开号成功', sv2.status === 200 && !!sv2.body.ok && !!sv2.body.userId,
+    JSON.stringify(sv2.body).slice(0, 200));
+  const sv2Login = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'mbuser02', password: 'MbUser0223' },
+  });
+  t('场景② 新账号可登录', sv2Login.status === 200 && !!sv2Login.body.token,
+    '实际 ' + sv2Login.status);
+  const mb2 = await call('/api/admin?action=members&q=' + encodeURIComponent('通讯录乙'), { token: adminToken });
+  const row2b = (mb2.body.members || [])[0] || {};
+  t('★场景② 不开第二档案：该姓名仍只有一行，且变为 both',
+    (mb2.body.members || []).length === 1 && row2b.scene === 'both'
+    && row2b.userId === sv2.body.userId && row2b.profileId === seed2Pid,
+    JSON.stringify(row2b).slice(0, 220));
+  const dup2 = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: { profileId: seed2Pid, createAccount: true, username: 'mbuser02', password: 'MbUser0223' },
+  });
+  t('场景② 重复用户名 409', dup2.status === 409, '实际 ' + dup2.status);
+
+  /* ---- ⑥ save-member 场景③：user-only → 补建档案并绑定 ---- */
+  const sv3 = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: {
+      userId: seed3Id,
+      name: '缺档案丙', studentId: '259903', politics: '群众',
+      wechat: 'wx_bingdangan', contactStatus: 'approved',
+    },
+  });
+  t('场景③ 补建档案成功', sv3.status === 200 && !!sv3.body.ok && !!sv3.body.profileId,
+    JSON.stringify(sv3.body).slice(0, 200));
+  const mb3 = await call('/api/admin?action=members&q=' + encodeURIComponent('缺档案丙'), { token: adminToken });
+  const row3b = (mb3.body.members || [])[0] || {};
+  t('★场景③ 一行变 both：档案绑到该账号',
+    row3b.scene === 'both' && row3b.userId === seed3Id
+    && row3b.profileId === sv3.body.profileId && row3b.wechat === 'wx_bingdangan',
+    JSON.stringify(row3b).slice(0, 220));
+  const ud3 = await call('/api/admin?action=user&id=' + seed3Id, { token: adminToken });
+  t('场景③ 账号显示名同步为档案姓名', ud3.body.user.displayName === '缺档案丙',
+    JSON.stringify(ud3.body.user.displayName));
+
+  /* ---- ⑦ save-member 场景④：全新成员（建号 + 档案一次提交） ---- */
+  const sv4 = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: {
+      createAccount: true,
+      username: 'mbuser04', password: 'MbUser0423',
+      name: '全新丁', studentId: '259904', politics: '共青团员',
+      examNo: '11400004', qq: '100000004', contactStatus: 'approved',
+      role: 'user',
+    },
+  });
+  t('场景④ 全新成员一次提交成功', sv4.status === 200 && !!sv4.body.ok
+    && !!sv4.body.userId && !!sv4.body.profileId,
+    JSON.stringify(sv4.body).slice(0, 200));
+  const sv4Login = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'mbuser04', password: 'MbUser0423' },
+  });
+  t('场景④ 新账号可登录', sv4Login.status === 200 && !!sv4Login.body.token,
+    '实际 ' + sv4Login.status);
+  const mb4 = await call('/api/admin?action=members&q=' + encodeURIComponent('全新丁'), { token: adminToken });
+  const row4 = (mb4.body.members || [])[0] || {};
+  t('★场景④ 账号档案都落地（both，字段齐全）',
+    row4.scene === 'both' && row4.username === 'mbuser04' && row4.studentId === '259904'
+    && row4.examNo === '11400004' && row4.qq === '100000004'
+    && row4.contactStatus === 'approved',
+    JSON.stringify(row4).slice(0, 240));
+
+  /* ---- ⑧ 护栏 ---- */
+  const gTok2 = (await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'mbguest01', password: 'MbGuest0123', displayName: '围观群众' },
+  })).body.token;
+  const denySave = await call('/api/admin?action=save-member', {
+    method: 'POST', token: gTok2,
+    body: { createAccount: true, username: 'x', password: 'x', name: 'x' },
+  });
+  t('普通用户不能 save-member 403', denySave.status === 403, '实际 ' + denySave.status);
+
+  const empty = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken, body: { name: '空表单' },
+  });
+  t('空表单（无账号无档案）400', empty.status === 400, '实际 ' + empty.status);
+
+  const noPwd = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: { createAccount: true, username: 'mbuser05', name: '没密码' },
+  });
+  t('开号不填密码 400', noPwd.status === 400, '实际 ' + noPwd.status);
+
+  const badRole = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: { userId: seed1Id, role: 'superadmin' },
+  });
+  t('非法 role 400', badRole.status === 400, '实际 ' + badRole.status);
+  const badSt = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: { userId: seed1Id, status: 'deleted' },
+  });
+  t('非法 status 400', badSt.status === 400, '实际 ' + badSt.status);
+
+  const dupSid = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: { profileId: seed2Pid, studentId: '259904' },   /* 259904 已被全新丁占用 */
+  });
+  t('学号重复 409', dupSid.status === 409, '实际 ' + dupSid.status);
+
+  /* 只改账号状态、不碰档案：hasProfileData=false 时档案段整体不动 */
+  const svOnlyAcc = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken,
+    body: { userId: seed1Id, status: 'banned' },
+  });
+  const pfKeep = await call('/api/admin?action=profiles&q=' + encodeURIComponent('成员甲改'), { token: adminToken });
+  t('只改状态不动档案（200 且档案姓名依旧）',
+    svOnlyAcc.status === 200 && ((pfKeep.body.profiles || [])[0] || {}).name === '成员甲改',
+    JSON.stringify(svOnlyAcc.body).slice(0, 160));
+  const svUnban = await call('/api/admin?action=save-member', {
+    method: 'POST', token: adminToken, body: { userId: seed1Id, status: 'active' },
+  });
+  t('解禁恢复 active', svUnban.status === 200);
+
+  /* ---- ⑨ save-profile 老路径也姓同步（单数据源回归） ---- */
+  const svOld = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: row1.profileId, name: '成员甲终版' },
+  });
+  const udOld = await call('/api/admin?action=user&id=' + seed1Id, { token: adminToken });
+  t('★老 save-profile 改名也同步 users.display_name',
+    svOld.status === 200 && udOld.body.user.displayName === '成员甲终版',
+    JSON.stringify(udOld.body.user.displayName));
+
+  /* ---- ⑩ delete-user：alsoProfile 两种行为 ---- */
+  /* a. 连带删档案 */
+  const del1 = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'mbdel01', password: 'MbDel0123', displayName: '连带删除', role: 'user' },
+  });
+  const del1Id = del1.body.user.id;
+  const delA = await call('/api/admin?action=delete-user', {
+    method: 'POST', token: adminToken, body: { id: del1Id, alsoProfile: true },
+  });
+  const mbA = await call('/api/admin?action=members&q=' + encodeURIComponent('连带删除'), { token: adminToken });
+  t('delete-user alsoProfile：账号档案都没了',
+    delA.status === 200 && (mbA.body.members || []).length === 0,
+    '剩余 ' + (mbA.body.members || []).length);
+
+  /* b. 默认保留档案（变未认领） */
+  const del2 = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'mbdel02', password: 'MbDel0223', displayName: '保留档案', role: 'user' },
+  });
+  const del2Id = del2.body.user.id;
+  const delB = await call('/api/admin?action=delete-user', {
+    method: 'POST', token: adminToken, body: { id: del2Id },
+  });
+  const mbB = await call('/api/admin?action=members&q=' + encodeURIComponent('保留档案'), { token: adminToken });
+  const rowB = (mbB.body.members || [])[0] || {};
+  t('delete-user 默认保留档案（变为未认领）',
+    delB.status === 200 && rowB.scene === 'profile-only' && rowB.userId == null,
+    JSON.stringify(rowB).slice(0, 200));
+  /* ---- ⑪ 旧接口回归（头衔/审核/查看记录等页还在用） ---- */
+  const oldU = await call('/api/admin?action=users', { token: adminToken });
+  const selfId = (oldU.body.users || []).find(x => x.username === 'yuzikang').id;
+  const delSelf = await call('/api/admin?action=delete-user', {
+    method: 'POST', token: adminToken, body: { id: selfId },
+  });
+  t('不能删除自己 400', delSelf.status === 400, '实际 ' + delSelf.status);
+  const oldP = await call('/api/admin?action=profiles', { token: adminToken });
+  const oldPd = await call('/api/admin?action=profile&id=' + row1.profileId, { token: adminToken });
+  t('旧 users / profiles / profile 接口照旧可用（头衔等独立页不受影响）',
+    oldU.status === 200 && Array.isArray(oldU.body.users)
+    && oldP.status === 200 && Array.isArray(oldP.body.profiles)
+    && oldPd.status === 200 && !!oldPd.body.profile,
+    'users ' + oldU.status + ' / profiles ' + oldP.status + ' / profile ' + oldPd.status);
+  t('旧 profiles 接口仍带 fieldMeta（动态列数据源）', Array.isArray(oldP.body.fieldMeta));
+
+  /* ---- ⑫ 前端静态护栏：单入口 + 长表单 + 四场景 ---- */
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('★导航只剩「成员与档案」单入口（users/profiles 两页已撤）',
+    /id:'members',\s*label:'成员与档案'/.test(adm)
+    && !/id:'users'/.test(adm) && !/id:'profiles'/.test(adm));
+  t('go() 分发到 renderMembers', /members:\s*renderMembers,/.test(adm));
+  t('STATE 有 members 状态（含 scene 筛选位）', /members: \{ list: \[\], total: 0, counts: \{\}/.test(adm));
+  t('★长表单分上下两段（系统账号 / 班级档案，类名 mb-form-sec 两处）',
+    (adm.match(/class="mb-form-sec"/g) || []).length === 2
+    && /系统账号/.test(adm) && /班级档案/.test(adm));
+  /* 收窄到 memberDialog 函数体内：admin.html 别处（table 的 border-collapse）
+     本来就会出现 collapse 字样，不能误伤 */
+  const dlgFrom = adm.indexOf('function memberDialog(');
+  const dlgTo = adm.indexOf('\nfunction ', dlgFrom + 10);
+  const dlg = adm.slice(dlgFrom, dlgTo > dlgFrom ? dlgTo : dlgFrom + 9000);
+  t('★长表单不用折叠面板（memberDialog 内无 details / collapse 结构）',
+    !/<details/.test(dlg) && !/collapse/.test(dlg));
+  t('★姓名单数据源写进表单提示',
+    /这一个框同时写进/.test(adm) && /单数据源/.test(adm));
+  t('★四场景徽章定义齐全（both / user-only / profile-only）',
+    /var MEMBER_SCENE = \{/.test(adm) && /both:/.test(adm) && /'user-only':/.test(adm) && /'profile-only':/.test(adm));
+  t('成员页拉合并接口 members', /action=members&limit=/.test(adm));
+  t('成员页保存走 save-member', /action=save-member/.test(adm));
+  t('未认领行可一键开号（createAccount 勾选）', /id="mbOpen" checked/.test(adm));
+  t('删除账号二次确认说明档案默认保留', /班级档案默认保留/.test(adm));
+  t('删除账号可连带删档案（alsoProfile）', /alsoProfile/.test(adm));
+  t('可见性列保留在成员表（能力不丢）', /<th class="nowrap">可见性<\/th>/.test(adm));
+  t('字段管理面板挂到成员页（mbFieldBody）', /id="mbFieldBody"/.test(adm));
+  t('合并导出含账号+档案列（成员与档案_ 文件名）',
+    /成员与档案_' \+ fmt\(new Date\(\), 'date'\)/.test(adm));
+  t('renderMembers / paintMembers / memberDialog / memberAction / memberExport 全部在位',
+    ['renderMembers', 'loadMembers', 'paintMembers', 'memberDialog', 'memberAction',
+     'memberExport', 'mkey', 'memberByKey', 'paintPick'].every(f => new RegExp('function ' + f + '\\b').test(adm)));
+  t('旧 users/profiles 页面函数已退场（不死代码）',
+    !/function renderUsers\(/.test(adm) && !/function renderProfiles\(/.test(adm)
+    && !/function paintProfiles\(/.test(adm) && !/function addUserDialog\(/.test(adm));
+}
+
+console.log('\n【69】第六十一轮·云端个人数据管理（#178：分类视图 + 中文翻译 + 删除前密码验证）');
+{
+  /* ============================================================
+     背景（#178）：站主要求「云端个人数据管理」——
+       ① 个人端能看到自己云端存了哪些数据（分类细化到条目）
+       ② 英文键名翻中文（cls_theme → 主题（亮/暗））
+       ③ 删除前必须验证登录密码（防借手机误删/恶意删）
+       ④ KV 预留但不开发（ALLOW_KEYS 不放行、UI 不渲染）
+     分类与翻译的单一来源在后端 data.js 的 KEY_GROUPS，
+     个人端（?view=cats）与管理员后台（user 详情的 data 数组）共用。
+     ============================================================ */
+
+  /* ---- ① 造一个专测用户，写入覆盖各分类的键 ---- */
+  const cld = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'clduser01', password: 'CloudPass123', displayName: '云端同学' },
+  });
+  t('建 #178 测试账号成功', cld.status === 200 && !!cld.body.token,
+    JSON.stringify(cld.body).slice(0, 160));
+  const cldTok = cld.body.token;
+  const cldId = (cld.body.user || {}).id;
+
+  const cldPut = await call('/api/data', {
+    method: 'PUT', token: cldTok,
+    body: { items: {
+      cls_theme: 'dark',                    /* 外观与界面（精确键） */
+      cls_ui_cfg: { fontSize: 16 },         /* 外观与界面（精确键） */
+      cls_welcome_v1: '1',                  /* 已看过标记 */
+      cls_dj_note: '周日点歌',               /* 点歌 */
+      cls_notice_read: { a1: 1 },           /* 学习与班级事务 */
+      cls_ann_filter: 'site',               /* 站内偏好 */
+      'cls_hw_done_42': true,               /* 作业完成标记（前缀键） */
+      'cls_sign_2026-10-16': '签文',         /* 每日班级签（前缀键） */
+      cls_game_snake_hi: 128,               /* 游戏数据（前缀键） */
+    } },
+  });
+  t('九类键写入成功', cldPut.status === 200 && cldPut.body.written === 9,
+    JSON.stringify(cldPut.body).slice(0, 160));
+
+  /* ---- ② view=cats 分类视图 ---- */
+  const cats = await call('/api/data?view=cats', { token: cldTok });
+  t('view=cats 200 且带 groups', cats.status === 200 && Array.isArray(cats.body.groups),
+    JSON.stringify(cats.body).slice(0, 200));
+  t('分类视图 total=9 / bytes>0', cats.body.total === 9 && cats.body.bytes > 0,
+    JSON.stringify({ total: cats.body.total, bytes: cats.body.bytes }));
+  const gApp = (cats.body.groups || []).find(g => g.cat === 'appearance');
+  const gHw  = (cats.body.groups || []).find(g => g.cat === 'hw');
+  const gSign = (cats.body.groups || []).find(g => g.cat === 'sign');
+  const gGame = (cats.body.groups || []).find(g => g.cat === 'game');
+  t('★英文键名翻中文：cls_theme → 主题（亮/暗）',
+    !!gApp && gApp.items.some(i => i.key === 'cls_theme' && i.name === '主题（亮/暗）'),
+    JSON.stringify(gApp && gApp.items));
+  t('★分类细化到条目：外观与界面含 cls_ui_cfg → 界面设置',
+    !!gApp && gApp.items.some(i => i.key === 'cls_ui_cfg' && i.name === '界面设置（字号/背景/排序/动效）'));
+  t('★前缀键按条目展开：cls_hw_done_42 → 作业完成标记 · 42',
+    !!gHw && gHw.items.length === 1 && gHw.items[0].name === '作业完成标记 · 42',
+    JSON.stringify(gHw && gHw.items));
+  t('★前缀键按条目展开：cls_sign_2026-10-16 → 每日班级签 · 2026-10-16',
+    !!gSign && gSign.items[0].name === '每日班级签 · 2026-10-16',
+    JSON.stringify(gSign && gSign.items));
+  t('★前缀键按条目展开：cls_game_snake_hi → 游戏数据 · snake_hi',
+    !!gGame && gGame.items[0].name === '游戏数据 · snake_hi');
+  t('每条带 bytes 与 updatedAt', (cats.body.groups || []).every(g =>
+    g.items.every(i => typeof i.bytes === 'number' && !!i.updatedAt)));
+  /* 组序按 KEY_GROUPS 定义走（appearance 是第一个分类），「其他」恒在末尾 */
+  t('分类顺序稳定（按后端定义序，不随键字典序飘）',
+    (cats.body.groups || [])[0].cat === 'appearance'
+    && (cats.body.groups || []).every((g, i, arr) => i === 0 || arr[i - 1].cat !== 'other' || g.cat !== 'other'));
+  t('各分类 count 之和 = total（一条不重不漏）',
+    (cats.body.groups || []).reduce((s, g) => s + g.count, 0) === cats.body.total);
+
+  /* 老结构回归：不带 view 的 GET 仍是 count/items/times 三件套 */
+  const plain = await call('/api/data', { token: cldTok });
+  t('不带 view 的 GET 结构不变（同步主路径回归）',
+    plain.status === 200 && plain.body.count === 9
+    && plain.body.items && plain.body.items.cls_theme !== undefined
+    && plain.body.times && !!plain.body.times.cls_theme);
+
+  /* ---- ③ verify 密码验证 + wt 门禁 ---- */
+  const vNoPwd = await call('/api/data?action=verify', { method: 'POST', token: cldTok, body: {} });
+  t('verify 不填密码 400', vNoPwd.status === 400, '实际 ' + vNoPwd.status);
+  const vGet = await call('/api/data?action=verify', { token: cldTok });
+  t('verify 只接受 POST 405', vGet.status === 405, '实际 ' + vGet.status);
+  const vBad = await call('/api/data?action=verify', {
+    method: 'POST', token: cldTok, body: { password: 'WrongPass999' },
+  });
+  t('★删除前密码验证：错误密码 401', vBad.status === 401, '实际 ' + vBad.status);
+  const vOk = await call('/api/data?action=verify', {
+    method: 'POST', token: cldTok, body: { password: 'CloudPass123' },
+  });
+  t('★删除前密码验证：正确密码 200 且发 wipeToken',
+    vOk.status === 200 && vOk.body.ok === true && typeof vOk.body.wipeToken === 'string'
+    && vOk.body.wipeToken.length >= 32 && vOk.body.expiresIn === 300,
+    JSON.stringify(vOk.body).slice(0, 160));
+  const wt = vOk.body.wipeToken;
+
+  const delNoWt = await call('/api/data?key=cls_theme', { method: 'DELETE', token: cldTok });
+  t('★有 token 但无 wt：删除被 403 拦下', delNoWt.status === 403, '实际 ' + delNoWt.status);
+  const delBadWt = await call('/api/data?key=cls_theme&wt=deadbeef', { method: 'DELETE', token: cldTok });
+  t('假 wt 删除被 403 拦下', delBadWt.status === 403, '实际 ' + delBadWt.status);
+  const stillThere = await call('/api/data?key=cls_theme', { token: cldTok });
+  t('被拦下的删除不生效（数据还在）', stillThere.body.value !== null);
+
+  const delOk = await call('/api/data?key=cls_theme&wt=' + wt, { method: 'DELETE', token: cldTok });
+  t('带 wt 删除成功 200', delOk.status === 200, '实际 ' + delOk.status);
+  const gone = await call('/api/data?key=cls_theme', { token: cldTok });
+  t('删除后该键真的没了', gone.body.value === null, JSON.stringify(gone.body));
+
+  /* ---- ④ all=1 清空全部（wt 用掉即焚） ---- */
+  const wipe = await call('/api/data?all=1&wt=' + wt, { method: 'DELETE', token: cldTok });
+  t('all=1 清空全部云端数据', wipe.status === 200 && wipe.body.deleted === 8,
+    JSON.stringify(wipe.body).slice(0, 160));
+  const afterWipe = await call('/api/data?view=cats', { token: cldTok });
+  t('清空后分类视图为空（groups 空数组）',
+    afterWipe.body.total === 0 && (afterWipe.body.groups || []).length === 0,
+    JSON.stringify(afterWipe.body).slice(0, 160));
+  const wtBurned = await call('/api/data?key=cls_sfx&wt=' + wt, { method: 'DELETE', token: cldTok });
+  t('清空后 wt 用掉即焚（再删 403）', wtBurned.status === 403, '实际 ' + wtBurned.status);
+
+  /* ---- ⑤ 凭证路径（浏览器派生的密钥，服务端零派生） ---- */
+  /* 与登录同构：先取盐参数，本地 PBKDF2 派生，发 credential */
+  const saltJ = await call('/api/auth?action=salt', {
+    method: 'POST', body: { username: 'clduser01' },
+  });
+  t('salt 接口返回 pbkdf2 参数', saltJ.status === 200 && saltJ.body.algo === 'pbkdf2'
+    && !!saltJ.body.salt && saltJ.body.iterations > 0,
+    JSON.stringify(saltJ.body).slice(0, 160));
+  let cred = '';
+  try {
+    const enc = new TextEncoder();
+    const saltBytes = Buffer.from(String(saltJ.body.salt).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    const key = await crypto.subtle.importKey('raw', enc.encode('CloudPass123'), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: saltBytes, iterations: Number(saltJ.body.iterations), hash: 'SHA-256' },
+      key, 256
+    );
+    cred = Buffer.from(bits).toString('base64url');
+  } catch (e) { cred = ''; }
+  t('Node 侧成功派生 credential（与浏览器同参数）', cred.length >= 40, 'len ' + cred.length);
+  const vCred = await call('/api/data?action=verify', {
+    method: 'POST', token: cldTok, body: { credential: cred },
+  });
+  t('★凭证路径验证通过（服务端零派生）', vCred.status === 200 && !!vCred.body.wipeToken,
+    JSON.stringify(vCred.body).slice(0, 160));
+  const vCredBad = await call('/api/data?action=verify', {
+    method: 'POST', token: cldTok, body: { credential: 'A'.repeat(43) },
+  });
+  t('错误 credential 401', vCredBad.status === 401, '实际 ' + vCredBad.status);
+
+  /* ---- ⑥ 限流：同一用户每分钟最多 10 次验证 ---- */
+  const cld2 = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'clduser02', password: 'CloudPass223', displayName: '限流同学' },
+  });
+  const cld2Tok = cld2.body.token;
+  let lastStatus = 0, saw401 = 0;
+  for (let i = 0; i < 11; i++) {
+    const r = await call('/api/data?action=verify', {
+      method: 'POST', token: cld2Tok, body: { password: 'WrongPass999' },
+    });
+    lastStatus = r.status;
+    if (r.status === 401) saw401++;
+  }
+  t('★验证限流：前 10 次正常 401，第 11 次起 429',
+    saw401 === 10 && lastStatus === 429, '401 次数 ' + saw401 + ' / 末次 ' + lastStatus);
+
+  /* ---- ⑦ 管理员后台：用户详情的 data 带中文分类 ---- */
+  await call('/api/data', {
+    method: 'PUT', token: cldTok,
+    body: { items: { cls_theme: 'light', 'cls_hw_done_7': false } },
+  });
+  const ud = await call('/api/admin?action=user&id=' + cldId, { token: adminToken });
+  const udTheme = ((ud.body.data || [])).find(d => d.key === 'cls_theme') || {};
+  const udHw = ((ud.body.data || [])).find(d => d.key === 'cls_hw_done_7') || {};
+  t('★后台用户详情：data 带 cat/catLabel/label 中文分类',
+    ud.status === 200 && udTheme.cat === 'appearance' && udTheme.catLabel === '外观与界面'
+    && udTheme.label === '主题（亮/暗）' && udHw.label === '作业完成标记 · 7',
+    JSON.stringify({ t: udTheme, h: udHw }).slice(0, 240));
+  /* 管理员删用户数据走 admin?action=delete-data，不受 wt 限制（后台权威） */
+  const admDel = await call('/api/admin?action=delete-data', {
+    method: 'POST', token: adminToken, body: { userId: cldId, key: 'cls_hw_done_7' },
+  });
+  t('管理员后台删用户数据不要求 wt（权威通道）', admDel.status === 200, '实际 ' + admDel.status);
+
+  /* ---- ⑧ classifyKey 单元直测（含「其他」兜底） ---- */
+  const { classifyKey } = await import('/tmp/class-site/api/data.js');
+  t('classifyKey：精确键命中', classifyKey('cls_sfx').name === '音效开关'
+    && classifyKey('cls_sfx').cat === 'appearance');
+  t('classifyKey：前缀键命中且带后缀', classifyKey('cls_claim_abc').cat === 'coupon'
+    && classifyKey('cls_claim_abc').name === '点歌券领取台账 · abc');
+  t('classifyKey：未命中分类归「其他」', classifyKey('some_future_key').cat === 'other'
+    && classifyKey('some_future_key').name === 'some_future_key');
+  t('classifyKey：空/非法输入不炸', classifyKey('').cat === 'other' && classifyKey(null).cat === 'other');
+
+  /* ---- ⑨ 预留 KV 不开发（#178 站主要求） ---- */
+  const dataSrc = fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf8');
+  const allowBlock = dataSrc.slice(
+    dataSrc.indexOf('const ALLOW_KEYS'),
+    dataSrc.indexOf('const MAX_VALUE_CHARS')
+  );
+  t('★预留 KV 不开发：白名单里没有任何 kv_ 键', !/kv_/.test(allowBlock));
+  t('★预留 KV 不开发：分类表里 kv 位只是注释（占位不渲染）',
+    /预留位（不开发/.test(dataSrc)
+    && /\/\/\s*\{\s*cat:\s*'kv'/.test(dataSrc)
+    && (dataSrc.match(/^\s*\{\s*cat:\s*'kv'/gm) || []).length === 0);
+
+  /* ---- ⑩ 前端静态护栏（个人端 + 后台） ---- */
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('★个人端：数据管理弹窗有「我的云端数据」入口', /onclick="openCloudData\(\)"/.test(idx));
+  t('★个人端：分类视图弹窗与密码验证弹窗都在位',
+    /id="cloudDataMask"/.test(idx) && /id="cloudPwdMask"/.test(idx));
+  t('★个人端：拉取 view=cats 分类视图', /'\/data\?view=cats'/.test(idx));
+  t('★个人端：verify 双路径（credential 派生 + password 回退）',
+    /action=verify', \{ method:'POST', body:\{ credential: cred \}/.test(idx)
+    && /action=verify', \{ method:'POST', body:\{ password: pwd \}/.test(idx));
+  t('★个人端：删除带 wt，清空走 all=1',
+    /key='\+encodeURIComponent\(key\)\+'&wt='/.test(idx) && /\/data\?all=1&wt='/.test(idx));
+  t('★个人端：无有效 wt 时先弹密码框（cloudAskPwd）',
+    /function cloudAskPwd\(/.test(idx) && /cloudWtOk\(\)/.test(idx));
+  t('★个人端：验密复用登录的派生链（clsSalt/clsDerive/CLS_FALLBACK）',
+    /function cloudVerify\(/.test(idx) && /clsSalt\(username\)/.test(idx) && /clsDerive\(pwd/.test(idx));
+  t('个人端集群函数齐全',
+    ['openCloudData', 'closeCloudData', 'loadCloudData', 'cloudDel', 'cloudWipeAll',
+     'submitCloudPwd', 'fmtBytes'].every(f => new RegExp('function ' + f + '\\b').test(idx)));
+  t('★后台：用户详情表格有「分类」列',
+    /<th class="nowrap">分类<\/th><th>数据<\/th>/.test(adm));
+  t('★后台：键名旁展示中文名（label 与键名去重）',
+    /d\.label && d\.label !== d\.key/.test(adm) && /esc\(d\.catLabel/.test(adm));
 }
 
 console.log('\n' + '='.repeat(52));

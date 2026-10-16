@@ -4,16 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>25级05班班级服务站</title>
-<!-- 字体：Inter（拉丁/数字）+ JetBrains Mono（标签徽章），走 Google Fonts 国内镜像。
-     ⚠️ 为什么不用 fonts.googleapis.com：国内（尤其校园网）基本访问不到，会白等几秒。
-        这里用 fonts.googleapis.cn / fonts.gstatic.cn 镜像，实测字体文件可下载（约 10KB 子集）。
-     ⚠️ 中文字体不走 CDN：思源黑体等动辄数 MB，会严重拖慢首屏；中文仍用系统字体
-        （PingFang / 鸿蒙 / 微软雅黑），这些字体在手机电脑上本就存在，零加载成本。
-     ⚠️ 兜底：font-display:swap + 系统字体栈，CDN 挂了也只影响英文数字的字形，
-        中文显示与页面功能完全不受影响。 -->
-<link rel="preconnect" href="https://fonts.googleapis.cn" crossorigin>
-<link rel="preconnect" href="https://fonts.gstatic.cn" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.cn/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<!-- 字体：Inter（拉丁/数字）+ JetBrains Mono（标签徽章），同源自托管。
+     ⚠️ v2.10.0（2026-10-16）：原来走 fonts.googleapis.cn 国内镜像，实测
+        **微信内置浏览器（X5/XWEB 内核）整个不加载** —— 该内核会拦截
+        fonts.* 外部域的 CSS 与字体文件请求，Chrome 正常、微信里英文
+        数字全落系统字体。同域资源微信没有理由拦，故把两个字体的 latin
+        子集 woff2（可变字体，共约 78KB）下载到本站 fonts/ 目录自托管。
+     ⚠️ 中文字体依旧不走 CDN：思源黑体等动辄数 MB 会严重拖慢首屏；
+        中文仍用系统字体（PingFang / 鸿蒙 / 微软雅黑），零加载成本。
+     ⚠️ 兜底：font-display:swap + 系统字体栈，字体文件挂了也只影响
+        英文数字的字形，中文显示与页面功能完全不受影响。 -->
+<style>
+/* ===== 线上字体：同源自托管（v2.10.0 微信内置浏览器修复）=====
+   背景：微信内置浏览器（X5/XWEB 内核）会拦截 fonts.googleapis.cn /
+   fonts.gstatic.cn 的 CSS 与字体文件请求 —— Chrome 正常、微信里 Inter
+   整个不加载，英文数字全落系统字体。同域资源微信没有理由拦，所以把
+   Inter / JetBrains Mono 的 latin 子集 woff2 下载到本站 fonts/ 目录，
+   <link> 外链改成本组 @font-face（两个可变字体文件共约 78KB）。
+   中文仍走系统字体（PingFang/鸿蒙/雅黑），零加载成本，不受影响。 */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url('./fonts/inter-latin.woff2') format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('./fonts/jetbrains-mono-latin.woff2') format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+</style>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-512.png">
 <meta name="theme-color" content="#141210">
@@ -1326,6 +1337,14 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .dark .acct-msg.warn{color:#ffb27a}
 .acct-hint{font-size:.7rem;color:#57493d;line-height:1.6;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(120,53,15,.13)}
 .dark .acct-hint{color:#c9b8aa}
+/* 2026-10-16 v2.10.0：初始密码提示条（建议制改密）。
+   登录时不再强制改密，但个人中心常驻一条琥珀色提示，用户随时能去改。
+   配色沿用站点琥珀体系（#af410f 系），暗色提亮到 #ffb27a 保 WCAG。 */
+.acct-pwd-tip{display:flex;align-items:center;flex-wrap:wrap;gap:8px;
+  background:#fff7ed;border:1px solid #ffd8a8;color:#9a3412;
+  border-radius:12px;padding:10px 12px;font-size:.78rem;line-height:1.6;margin-top:12px}
+.dark .acct-pwd-tip{background:rgba(255,178,122,.10);border-color:rgba(255,178,122,.32);color:#ffb27a}
+.acct-pwd-tip .acct-btn{flex:none}
 /* ── 图形验证码（v2.6.3，替换原滑块拼图）──
    站主反馈「滑块在有些老的手机屏幕上用不了」，改成**输入式**：看几位数字照着输。
 
@@ -1819,6 +1838,22 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .dark .sc-mini-svg .sc-down{stroke:#f87171}
 .dark .sc-mini-svg .sc-mini-num{fill:#f0e6dc;stroke:#262220}
 .dark .sc-mini-svg .sc-mini-dot{fill:#262220;stroke:#a8998c}
+/* —— 成绩对比 PK（v2.10.0）—— */
+.dark .sc-pk-bar-a{fill:#fdba74}
+.dark .sc-pk-bar-b{fill:#93c5fd}
+.dark .sc-pk-num-a{fill:#fdba74}
+.dark .sc-pk-num-b{fill:#93c5fd}
+.dark .sc-pk-name{fill:#c9b8aa}
+.dark .sc-pk-sub{fill:#a8998c}
+.dark .sc-pk-grid{stroke:#3d3631}
+.dark .sc-pk-avg{stroke:#a8998c}
+.dark .sc-pk-diff-up{fill:#4ade80}
+.dark .sc-pk-diff-down{fill:#f87171}
+.dark .sc-pk-diff-eq{fill:#a8998c}
+.dark .sc-pk-swap{background:#2e2926;border-color:#4a4038;color:#c9b8aa}
+.dark .sc-pk-side label{color:#a8998c}
+.dark .sc-pk-row{border-bottom-color:#3d3631}
+.dark .sc-pk-dot-b{background:#93c5fd}
 }
 /* 导出内容勾选（v2.9.7 站主：「图片导出可以自定义导出的分析内容」） */
 .sc-ex-row{display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid #f0e7de;
@@ -1990,6 +2025,43 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-trendhead.up b{color:#0b7a43}
 .sc-trendhead.down b{color:#c0392b}
 .sc-trendhead span{font-size:.74rem}
+/* ===== 成绩对比 PK（第六十轮 · v2.10.0）=====
+   任选两人 + 同一场考试：总分/各科柱状图 + 强弱项 + 各科分差。
+   配色语义与全站图表一致：A 方主题橙、B 方蓝；分差跟随成绩分析既有
+   口径（领先=绿 up / 落后=红 down，见 .sc-sub-diff）。SVG 元素全部挂
+   语义 class，暗色只覆盖 fill/stroke（上方 @media screen 块）。 */
+.sc-pk-pick{display:flex;align-items:flex-end;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.sc-pk-side{flex:1;min-width:150px}
+.sc-pk-side label{display:block;font-size:.75rem;font-weight:700;color:#7a6a5c;margin-bottom:5px}
+.sc-pk-side select{width:100%}
+.sc-pk-swap{height:36px;padding:0 14px;border:1px solid #e8ddd2;background:#fffdfb;border-radius:10px;
+  font-size:.8rem;font-weight:700;color:#6e635a;cursor:pointer;font-family:inherit;flex-shrink:0}
+.sc-pk-swap:active{transform:scale(.95)}
+.sc-pk-legend{display:flex;gap:16px;font-size:.75rem;color:#6e635a;margin:4px 0 2px;flex-wrap:wrap}
+.sc-pk-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.sc-pk-dot-a{background:#c2410c}
+.sc-pk-dot-b{background:#2563eb}
+.sc-pk-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:560px){.sc-pk-cards{grid-template-columns:1fr}}
+.sc-pk-card h4{font-size:.85rem;margin-bottom:8px;display:flex;align-items:center;gap:6px;color:#57534e}
+.sc-pk-card h4 i{width:10px;height:10px;border-radius:3px;display:inline-block;flex-shrink:0}
+.sc-pk-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:.8rem;
+  padding:6px 0;border-bottom:1px dashed #f0e7de;color:#57534e}
+.sc-pk-row:last-child{border-bottom:none}
+.sc-pk-row b{font-weight:800;font-variant-numeric:tabular-nums}
+.sc-pk-row .sc-sub-diff{margin-top:0}
+/* SVG 语义 class（亮色默认值；暗色覆盖在上方 @media screen） */
+.sc-pk-bar-a{fill:#c2410c}
+.sc-pk-bar-b{fill:#2563eb}
+.sc-pk-num-a{fill:#9a3412}
+.sc-pk-num-b{fill:#1e40af}
+.sc-pk-name{fill:#57534e}
+.sc-pk-sub{fill:#6e635a}
+.sc-pk-grid{stroke:#f5efe8}
+.sc-pk-avg{stroke:#a8998c}
+.sc-pk-diff-up{fill:#0b7a43}
+.sc-pk-diff-down{fill:#c0392b}
+.sc-pk-diff-eq{fill:#7a6a5c}
 /* ===== A4 打印：只印成绩分析这一块，去掉按钮/工具栏/滚动截断 =====
    ⚠️ v2.9.6 起成绩分析改为内嵌（见 .sc-embed），选择器整体从 #scoreAnalMask
    换成 .sc-embed —— 这行注释写给以后的自己：别再照抄旧选择器。 */
@@ -2305,6 +2377,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
     <div class="allboard-head"><span>💾 数据管理</span><button onclick="closeData()">关闭</button></div>
     <div style="padding:16px 20px;text-align:left">
       <p style="font-size:.8rem;color:#57534e;margin:0 0 12px">导出本机数据会加密，导入需同一密码，请记住。</p>
+      <button class="btn" style="width:100%;margin-bottom:8px" onclick="openCloudData()">☁️ 我的云端数据</button>
       <button class="btn" style="width:100%;margin-bottom:8px" onclick="exportData()">📤 导出数据（加密 .json）</button>
       <button class="btn" style="width:100%;margin-bottom:8px;background:#f6f1ec;color:#af410f" onclick="copyDataText()">📋 复制加密数据文本</button>
       <div style="display:flex;gap:8px;margin-bottom:8px">
@@ -2330,6 +2403,32 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
       <input id="dataEncPass2" type="text" placeholder="请再输入一次密码" class="gate-input pwd-mask" autocomplete="off" style="width:100%;text-align:center;margin-top:8px" onkeydown="if(event.key==='Enter')submitDataEnc()">
       <p id="dataEncErr" style="color:#af410f;font-size:.8rem;margin-top:8px;display:none"></p>
       <button class="btn" style="width:100%;margin-top:14px" onclick="submitDataEnc()">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 我的云端数据（分类视图，v2.10.0 #178） ===== -->
+<div class="allboard-mask" id="cloudDataMask">
+  <div class="allboard-box" style="max-width:460px">
+    <div class="allboard-head"><span>☁️ 我的云端数据</span><button onclick="closeCloudData()">关闭</button></div>
+    <div style="padding:14px 20px;text-align:left">
+      <p id="cloudSummary" style="font-size:.78rem;color:#57534e;margin:0 0 10px">加载中…</p>
+      <div id="cloudGroups" style="max-height:52vh;overflow:auto"></div>
+      <button class="btn" style="width:100%;background:#ffeded;color:#af410f;margin-top:12px" onclick="cloudWipeAll()">🧹 清空全部云端数据</button>
+      <p id="cloudMsg" style="font-size:.8rem;margin:10px 0 0;color:#0a7d42;min-height:1.2em"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 删除云端数据前的密码验证（v2.10.0 #178） ===== -->
+<div class="allboard-mask" id="cloudPwdMask">
+  <div class="allboard-box" style="max-width:340px">
+    <div class="allboard-head"><span id="cloudPwdTitle">🔐 验证登录密码</span><button onclick="closeCloudPwd()">关闭</button></div>
+    <div style="padding:18px 22px;text-align:center">
+      <p id="cloudPwdDesc" style="font-size:.82rem;color:#57534e;line-height:1.7;margin:0 0 14px">删除云端数据前，请先输入登录密码验证身份。</p>
+      <input id="cloudPwdInput" type="password" placeholder="登录密码" class="gate-input pwd-mask" autocomplete="off" style="width:100%;text-align:center" onkeydown="if(event.key==='Enter')submitCloudPwd()">
+      <p id="cloudPwdErr" style="color:#af410f;font-size:.8rem;margin-top:8px;display:none"></p>
+      <button class="btn" style="width:100%;margin-top:14px" onclick="submitCloudPwd()">验证并继续</button>
     </div>
   </div>
 </div>
@@ -2903,7 +3002,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.9.12';
+var SITE_VERSION = '2.10.0';
 var VER_DATE = '2026-10-16';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3957,11 +4056,15 @@ var SITE_DATA = {
   ],
   categories: [
     { id: 1, name: "常用服务" },
-    { id: 2, name: "大屏服务" },
-    { id: 5, name: "学习资料" },
     { id: 3, name: "成绩分析" },
     { id: 7, name: "班级事务" },
     { id: 8, name: "其他工具" },
+    /* 2026-10-16 v2.10.0：站主要求「大屏服务」下移到【其他工具】分类下方 */
+    { id: 2, name: "大屏服务" },
+    /* 2026-10-16 v2.10.0：站主要求隐藏侧边栏【学习资料】按钮。
+       active:false = uiCats() 直接过滤掉，入口不再渲染；
+       数据保留（链接/暂停文案还在），以后想恢复只需删这个标记。 */
+    { id: 5, name: "学习资料", active: false },
     { id: 9, name: "📲 安装为应用" }
   ],
   links: [
@@ -6750,9 +6853,26 @@ function refreshHwViews(){
    位置：公告栏「公众号」左边（2026-10-05 从侧边栏挪过来的）。
 
    2026-10-06 起账号体系正式启用：账号由管理员批量导入（用户名=姓名，
-   初始密码=8位出生日期，首次登录强制改密）。所以未登录时按钮**可点**，
-   打开登录弹窗；自助注册仍然关闭（REGISTER_OPEN 控制注册 tab 不渲染）。 */
+   初始密码=8位出生日期，首次登录建议改密）。所以未登录时按钮**可点**，
+   打开登录弹窗；自助注册由后台总开关控制（REGISTER_OPEN）。
+
+   v2.10.0：REGISTER_OPEN 不再写死 —— 启动时拉 /auth?action=register-config
+   （后台「系统设置 → 开放自助注册」），读不到/无后端时保持 false，
+   与历史行为一致（不显示注册入口）。 */
 var REGISTER_OPEN = false;
+
+/** v2.10.0：拉取注册配置（总开关 + 审核），决定注册 tab 显隐 */
+function loadRegisterConfig(){
+  if(!apiReady()) return;
+  api('/auth?action=register-config').then(function(j){
+    REGISTER_OPEN = !!(j && j.open);
+    /* 账号弹窗正开着、停在登录 tab → 重渲染一次，让 tab 随开关出现/消失 */
+    var m = document.getElementById('acctMask');
+    if(m && m.classList.contains('show') && ACCT_TAB === 'login' && !isLoggedIn()){
+      renderAccount();
+    }
+  }).catch(function(){ /* 拉不到就维持 false：不显示注册入口 */ });
+}
 
 function refreshAcctBtn(){
   var b = document.getElementById('acctBtn');
@@ -6803,6 +6923,11 @@ function closeAccount(){
 function acctTab(k){
   if(k === 'register' && !REGISTER_OPEN && !isLoggedIn()) return;
   ACCT_TAB = k;
+  /* v2.10.0：操作日志 —— 账号弹窗内切换标签 */
+  if(typeof actLog === 'function'){
+    var _tabNames = { login:'登录', register:'注册', profile:'我的账号', myprofile:'我的资料', forcepwd:'设置新密码' };
+    actLog('switch', _tabNames[k] || String(k), '', '账号弹窗');
+  }
   renderAccount();
   if(typeof SFX !== 'undefined' && SFX && SFX.click) SFX.click();
 }
@@ -6901,7 +7026,7 @@ function acctCloseHidden(hide){
   if(btn) btn.style.display = hide ? 'none' : '';
 }
 
-/* 首次登录强制改密表单（无取消入口，改完才能用） */
+/* 首次登录改密表单（v2.10.0 起改为「建议制」：可跳过，不再强制） */
 function acctForcePwdHtml(){
   /* v2.9.9：刷新页面后内存里的初始密码（FORCE_OLD_PWD）就丢了，
      而强制改密态以前不会恢复 —— 用户只能退出重登。
@@ -6910,15 +7035,42 @@ function acctForcePwdHtml(){
   var oldField = FORCE_OLD_PWD ? '' :
       '<div class="acct-field"><label>当前密码（初始密码一般是出生日期）</label>'
     + '<input id="fpOld" type="password" autocomplete="current-password"></div>';
+  /* v2.10.0：站主要求「不再强制修改初始密码，改为建议修改」。
+     文案从「请先设置才能使用」改成安全建议口吻；新增【暂不修改】，
+     跳过不清服务端标志（后台「待改密」徽章仍有意义），只记本地，
+     之后个人中心常驻提示条，随时能改。 */
   return '<div class="acct-hint" style="margin-bottom:10px">你的账号目前用的是初始密码（出生日期），'
-    + '太容易被猜到。请先设置一个新密码，之后就可以正常使用了。</div>'
+    + '太容易被猜到。<b>建议</b>换一个只有自己知道的密码。'
+    + '不想现在改也没关系，点「暂不修改」即可跳过，之后随时可以在「我的账号」里改。</div>'
     + oldField
     + '<div class="acct-field"><label>新密码（至少 6 位）</label>'
     + '<input id="fpP1" type="password" autocomplete="new-password"></div>'
     + '<div class="acct-field"><label>再输一遍确认</label>'
     + '<input id="fpP2" type="password" autocomplete="new-password"></div>'
     + '<button class="acct-btn" id="fpGo" onclick="doForceChangePwd()">保存并继续</button>'
+    + '<button class="acct-btn ghost" style="margin-top:8px" onclick="skipForceChangePwd()">暂不修改</button>'
     + '<div class="acct-msg" id="fpMsg"></div>';
+}
+
+/* ---------- v2.10.0：建议制改密 · 跳过 ----------
+   ① 回个人中心（弹窗不关，琥珀色提示条就在眼前，想改随时能改）
+   ② 本地按用户名记一笔：刷新页面、下次登录都不再弹强制态
+   ③ 服务端 mustChangePassword 不动：后台用户列表的「待改密」徽章仍然显示 */
+function skipForceChangePwd(){
+  try{
+    if(AUTH.user && AUTH.user.username){
+      localStorage.setItem('cls_pwd_skip_' + AUTH.user.username, '1');
+    }
+  }catch(e){}
+  ACCT_TAB = 'profile';
+  renderAccount();
+}
+/** 这个账号以前有没有跳过过改密（跳过 → 不再强制弹） */
+function pwdSkipped(){
+  try{
+    return !!(AUTH.user && AUTH.user.username &&
+      localStorage.getItem('cls_pwd_skip_' + AUTH.user.username) === '1');
+  }catch(e){ return false; }
 }
 
 function acctBusy(on, text){
@@ -7125,10 +7277,16 @@ function doRegister(){
   acctBusy(true, '注册中…');
   api('/auth?action=register', { method:'POST', body:{ username:u, password:p, displayName:d } })
     .then(function(j){
+      acctBusy(false);
+      /* v2.10.0：开启注册审核后，后端不签发 token —— 注册成功但无法登录，
+         明确提示「等待审核」，不走后面的自动登录流程。 */
+      if(j.pending || !j.token){
+        acctMsg(j.message || '注册成功，等待管理员审核通过后即可登录', 'ok');
+        return;
+      }
       AUTH = { token:j.token, user:j.user };
       saveAuth();
       refreshAcctBtn();
-      acctBusy(false);
       acctMsg(j.message || '注册成功', 'ok');
       startHeartbeat();
       syncRoster();   /* 登录后名单改从云端拉（2026-10-07） */
@@ -7158,14 +7316,17 @@ function doLogin(){
       startHeartbeat();
       syncRoster();   /* 登录后名单改从云端拉（2026-10-07） */
 
-      /* 首次登录（管理员批量导入的初始密码）→ 强制改密，改完才能继续。
+      /* 首次登录（管理员批量导入的初始密码）→ 建议改密。
+         v2.10.0 起改为建议制：以前跳过过的账号不再弹强制态，
+         只走正常登录流程（个人中心有常驻提示条）。
          初始密码要在内存里暂存一下，作为改密接口的「原密码」参数。 */
-      if(j.mustChangePassword){
+      if(j.mustChangePassword && !pwdSkipped()){
         FORCE_OLD_PWD = p;
         ACCT_TAB = 'forcepwd';
         renderAccount();
         return;
       }
+      if(AUTH.user) AUTH.user.mustChangePassword = !!j.mustChangePassword;
 
       acctMsg('登录成功，正在读取云端数据…', 'ok');
       /* 拉一次「我认领的资料」，供资料查询页判断哪条是本人（可就地编辑联系方式） */
@@ -7204,6 +7365,15 @@ function doForceChangePwd(){
       /* 接口会踢掉全部旧会话并签发新 token —— 必须更新本地存储，否则后续请求全 401 */
       if(j.token) AUTH = { token:j.token, user: (AUTH.user || {}) };
       FORCE_OLD_PWD = '';
+      /* v2.10.0：改密成功 → 清掉「跳过」记录与本地标志，个人中心提示条消失 */
+      if(AUTH.user){
+        AUTH.user.mustChangePassword = false;
+        try{
+          if(AUTH.user.username){
+            localStorage.removeItem('cls_pwd_skip_' + AUTH.user.username);
+          }
+        }catch(e){}
+      }
       saveAuth();
       startHeartbeat();
       syncRoster();   /* 改密成功后才算真正登录，这时才拉名单（2026-10-07） */
@@ -7257,6 +7427,14 @@ function acctProfileHtml(){
         '<div class="acct-usub">@' + esc(u.username) + ' · 云端已存 ' + cloudCount + ' 项</div>' +
       '</div>' +
     '</div>' +
+
+    /* v2.10.0：初始密码常驻提示（建议制改密的「建议」落点）。
+       登录时跳过了改密 ≠ 再也不提 —— 个人中心顶部一直显示，
+       点「去修改」打开同一个改密表单（可再次暂不修改）。 */
+    (u.mustChangePassword
+      ? '<div class="acct-pwd-tip"><span>⚠️ 账号还在使用初始密码，建议换成只有自己知道的密码</span>'
+        + '<button class="acct-btn" onclick="acctTab(\'forcepwd\')">去修改</button></div>'
+      : '') +
 
     /* ---- 我的资料：查看 / 修改 / 认领 ---- */
     '<div class="acct-sw" style="margin-top:14px">' +
@@ -7531,6 +7709,13 @@ function doChangePwd(){
   clsChangePwd(o, n, AUTH.user && AUTH.user.username)
     .then(function(j){
       if(j.token){ AUTH.token = j.token; saveAuth(); }
+      /* v2.10.0：这里改密成功同样要清「初始密码」标志与跳过记录，
+         否则个人中心顶部提示条不消失（本路径改的也是当前账号密码） */
+      if(AUTH.user){
+        AUTH.user.mustChangePassword = false;
+        try{ localStorage.removeItem('cls_pwd_skip_' + AUTH.user.username); }catch(e){}
+        saveAuth();
+      }
       if(msg){ msg.textContent = j.message || '已修改'; msg.className = 'acct-msg ok'; }
       setTimeout(function(){ var b = document.getElementById('acctPwdBox'); if(b) b.innerHTML = ''; }, 1500);
       if(typeof uiMsg === 'function') uiMsg('✅ 密码已修改');
@@ -7595,13 +7780,16 @@ function syncPull(ask){
       if(!doIt) return { pulled:0 };
     }
     var cnt = 0;
-    Object.keys(items).forEach(function(k){
-      if(!isCloudKey(k)) return;   /* 双保险：非白名单键不写本机 */
-      try{
-        localStorage.setItem(k, JSON.stringify(items[k]));
-        cnt++;
-      }catch(e){}
-    });
+    window.__cloudPulling = true;   /* v2.10.0：回写不登记脏键（见 hookLocalStorage） */
+    try{
+      Object.keys(items).forEach(function(k){
+        if(!isCloudKey(k)) return;   /* 双保险：非白名单键不写本机 */
+        try{
+          localStorage.setItem(k, JSON.stringify(items[k]));
+          cnt++;
+        }catch(e){}
+      });
+    }finally{ window.__cloudPulling = false; }
     /* 让界面按新数据重绘 */
     if(typeof loadUI === 'function' && k0In(items, 'cls_ui_cfg')){
       loadUI(); applyUICfg();
@@ -7611,6 +7799,53 @@ function syncPull(ask){
     if(typeof uiMsg === 'function') uiMsg('✅ 已从云端恢复 ' + cnt + ' 项数据');
     return { pulled: cnt };
   });
+}
+
+/**
+ * v2.10.0：静默拉取个人云端数据（云端优先，覆盖本机过期缓存）。
+ *
+ * 修复的 BUG（站主原话）：「A 设备云端勾选同步后，B 设备拉取数据还是旧勾选状态」。
+ * 根因：个人数据（/api/data，含 cls_hw_done_ 作业勾选）从来只有「上行」——
+ *   周期同步 syncRound 只推共享内容、拉共享内容，不碰个人数据；
+ *   个人数据唯一的下行是登录时那次 syncPull(true)，而它带确认框，
+ *   同学一路点取消 → 旧本地数据永久留存，换设备永远看到旧状态。
+ *
+ * 本函数的语义：
+ *   · 不弹框（静默），云端值直接覆盖本机 —— 「优先读取云端最新数据」
+ *   · DIRTY_KEYS 里的键跳过：本机有未推送改动，不能被旧云端值冲掉
+ *     （正常流程里 syncRound 会先 flush 再拉，双保险）
+ *   · 写了才重绘，没变不动界面
+ */
+function syncPullSilent(){
+  if(!isLoggedIn()) return Promise.resolve({ pulled:0 });
+  return api('/data').then(function(j){
+    var items = j.items || {};
+    var n = Object.keys(items).length;
+    window.__cloudKeyCount = n;
+    if(n === 0) return { pulled:0 };
+    var cnt = 0;
+    window.__cloudPulling = true;
+    try{
+      Object.keys(items).forEach(function(k){
+        if(!isCloudKey(k)) return;
+        if(DIRTY_KEYS[k]) return;          /* 本机有未推送改动 → 保护，不覆盖 */
+        var raw;
+        try{ raw = JSON.stringify(items[k]); }catch(e){ return; }
+        var cur = null;
+        try{ cur = localStorage.getItem(k); }catch(e){}
+        if(cur === raw) return;            /* 一样就不写，省一次重绘 */
+        try{ localStorage.setItem(k, raw); cnt++; }catch(e){}
+      });
+    }finally{ window.__cloudPulling = false; }
+    if(cnt > 0){
+      /* 作业勾选 / 签到 / UI 配置都吃这些键 —— 按新数据重绘 */
+      try{ if(typeof loadUI === 'function' && k0In(items, 'cls_ui_cfg')){ loadUI(); applyUICfg(); } }catch(e){}
+      try{ if(typeof rerenderAll === 'function') rerenderAll(); }catch(e){}
+      try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
+      try{ if(typeof updateCountdown === 'function') updateCountdown(); }catch(e){}
+    }
+    return { pulled: cnt };
+  }).catch(function(){ return { pulled:0 }; });   /* 静默失败，不打扰用户 */
 }
 
 function k0In(o, k){ return Object.prototype.hasOwnProperty.call(o, k); }
@@ -7911,12 +8146,18 @@ function saveContentLocal(key, value){
 
     proto.setItem = function(k, v){
       rawSet(k, v);
+      /* v2.10.0：云端拉取回写时打 __cloudPulling 标 ——
+         「从云端拉下来的值」不是「本机改动」，不能被 markCloudDirty
+         登记成待推送（否则每轮拉取都会产生一次无意义回推，
+         更糟的是脏键保护会让后续轮次跳过这些键，新云端值再也拉不下来）。 */
+      if(window.__cloudPulling) return;
       /* 写失败会抛异常，能走到这里说明写成功了 */
       try{ markCloudDirty(String(k)); }catch(e){}
     };
     /* 删除也算改动：云端要跟着删掉，否则换设备又冒出来 */
     proto.removeItem = function(k){
       rawRemove(k);
+      if(window.__cloudPulling) return;
       try{ markCloudDirty(String(k)); }catch(e){}
     };
     proto.__clsHooked = true;
@@ -7931,16 +8172,142 @@ try{
     if(document.visibilityState === 'hidden'){
       if(hasPendingCloudSync()) flushCloudSync();
       if(hasPendingContentSync()) flushContentSync();   /* 共享内容走另一条线路 */
+      actLogFlush();                                     /* v2.10.0：操作日志也趁离开前发走 */
+      actLogSave();
     }
   });
 }catch(e){}
+
+/* ============================================================
+   用户操作日志上报（v2.10.0 · 2026-10-16 第六十轮）
+   ------------------------------------------------------------
+   站主要求：「记录全部点击交互行为：页面跳转、按钮点击、切换标签、
+   表单提交等，每一次点击都作为操作上报日志」。
+
+   实现：
+     · 全局 click 捕获（捕获阶段，阻止冒泡的点击也拿得到）→ 'click'
+     · openCat / acctTab 包装 → 'jump'（页面跳转）/ 'switch'（标签切换）
+     · 表单提交由「点提交按钮的那条 click」承载（target 即按钮文本），
+       不另开通道 —— 全站没有 <form> 直提，提交都走按钮点击
+   节流：攒 20 条或 30 秒发一批；页面隐藏立即发；队列落 localStorage，
+        刷新/闪退不丢（最多保留 200 条）。
+   隐私：只记「做了什么」，不记任何输入内容；detail 只放字段名级摘要。
+   未登录 / 无后端：不上报（没有归属用户，发了也白发）。
+   ============================================================ */
+var ACT_LOG_Q = [];               /* 待上报队列（内存 + localStorage 双份） */
+var ACT_LOG_MAX = 20;             /* 攒够这么多就发 */
+var ACT_LOG_WAIT = 30000;         /* 或者等了这么久就发 */
+var ACT_LOG_KEY = 'cls_act_log_q';
+var __actLogTimer = null;
+var __actLogFirstAt = 0;
+
+function actLogLoad(){
+  try{
+    var raw = localStorage.getItem(ACT_LOG_KEY);
+    if(raw){
+      var a = JSON.parse(raw);
+      if(Array.isArray(a)) ACT_LOG_Q = a.slice(-200);
+    }
+  }catch(e){}
+}
+function actLogSave(){
+  try{
+    if(ACT_LOG_Q.length) localStorage.setItem(ACT_LOG_KEY, JSON.stringify(ACT_LOG_Q.slice(-200)));
+    else localStorage.removeItem(ACT_LOG_KEY);
+  }catch(e){}
+}
+/** 当前页面中文名（日志的 page 字段；弹窗优先于板块） */
+function actCurPage(){
+  try{
+    var m = document.getElementById('acctMask');
+    if(m && m.classList.contains('show')) return '账号弹窗';
+    var p = document.getElementById('popMask');
+    if(p && p.classList.contains('show')) return '通知弹窗';
+    if(typeof __activeCat !== 'undefined' && __activeCat){
+      var cats = (window.SITE_DATA && SITE_DATA.categories) || [];
+      for(var i = 0; i < cats.length; i++){
+        if(cats[i].id === __activeCat) return cats[i].name || ('板块' + __activeCat);
+      }
+    }
+    return '首页';
+  }catch(e){ return ''; }
+}
+/** 记一条。type: click | jump | switch | submit；pg 可覆盖当前页名（跳转类用） */
+function actLog(type, target, detail, pg){
+  if(!isLoggedIn()) return;
+  if(!apiReady()) return;
+  ACT_LOG_Q.push({
+    a: String(type || 'click').slice(0, 20),
+    t: String(target == null ? '' : target).slice(0, 120),
+    d: String(detail == null ? '' : detail).slice(0, 120),
+    p: pg != null ? String(pg).slice(0, 60) : actCurPage(),
+    ts: Date.now()
+  });
+  if(ACT_LOG_Q.length > 200) ACT_LOG_Q = ACT_LOG_Q.slice(-200);
+  if(ACT_LOG_Q.length >= ACT_LOG_MAX) actLogFlush();
+  else actLogSchedule();
+}
+function actLogSchedule(){
+  if(__actLogTimer) return;
+  var now = Date.now();
+  if(!__actLogFirstAt) __actLogFirstAt = now;
+  var left = ACT_LOG_WAIT - (now - __actLogFirstAt);
+  if(left <= 0){ actLogFlush(); return; }
+  __actLogTimer = setTimeout(function(){ __actLogTimer = null; actLogFlush(); }, left);
+}
+function actLogFlush(){
+  if(__actLogTimer){ clearTimeout(__actLogTimer); __actLogTimer = null; }
+  __actLogFirstAt = 0;
+  if(!ACT_LOG_Q.length) return;
+  if(!isLoggedIn() || !apiReady()) return;
+  var batch = ACT_LOG_Q.slice(0, 50);
+  api('/data?action=log', { method:'POST', body:{ events: batch } })
+    .then(function(j){
+      if(j && j.ok){
+        ACT_LOG_Q = ACT_LOG_Q.slice(batch.length);
+        actLogSave();
+        if(ACT_LOG_Q.length) setTimeout(actLogFlush, 600);   /* 还有剩的（罕见）继续发 */
+      }
+    })
+    .catch(function(){ /* 失败保留队列，下批带上重试 */ });
+}
+
+/* 全局 click 捕获：每一次点击都记（target 描述 = 标签 + id/标题/文本） */
+try{
+  document.addEventListener('click', function(ev){
+    var el = ev.target;
+    if(!el || el.nodeType !== 1) return;
+    var tag = String(el.tagName || '').toLowerCase();
+    var desc = '';
+    try{
+      if(el.id) desc = '#' + el.id;
+      if(!desc && el.getAttribute){
+        desc = el.getAttribute('data-act') ? '[' + el.getAttribute('data-act') + ']'
+             : (el.getAttribute('title') || el.getAttribute('alt') || '');
+      }
+      if(!desc) desc = (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+    }catch(e){}
+    actLog('click', (tag ? tag + ' ' : '') + (desc || 'unknown'));
+  }, true);
+}catch(e){}
+
+/* 启动：恢复上次未来得及发的队列；登录态变化时会跟着发 */
+actLogLoad();
 
 /** 立即同步：先推本机 → 云端，再把云端最新拉回来，保证一致 */
 function syncNow(){
   if(!isLoggedIn()){ if(typeof uiMsg === 'function') uiMsg('请先登录', '#af410f'); return; }
   if(typeof uiMsg === 'function') uiMsg('正在同步…');
-  syncPush().then(function(r){
-    if(typeof uiMsg === 'function') uiMsg('✅ 已同步 ' + r.pushed + ' 项到云端');
+  /* v2.10.0：原名「上传本机」实为推送-only，与「双向同步」的按钮名不符。
+     现在推完立刻静默拉一次个人数据（云端优先），真·双向。 */
+  flushCloudSync().then(function(){
+    return syncPullSilent();
+  }).then(function(r){
+    if(typeof uiMsg === 'function'){
+      uiMsg(r && r.pulled
+        ? ('✅ 已同步，并从云端更新 ' + r.pulled + ' 项')
+        : '✅ 已同步，云端与本机一致');
+    }
   }).catch(function(e){
     if(typeof uiMsg === 'function') uiMsg('同步失败：' + e.message, '#c0392b');
   });
@@ -8004,7 +8371,23 @@ function syncRound(opts){
 
   return pushStep.then(function(){
     /* ② 再拉：把云端最新取回来（无需登录也能读公开内容） */
-    return syncCloudContent(true);
+    return syncCloudContent(true).then(function(rc){
+      /* v2.10.0 ③ 个人数据双向同步（修复跨设备作业勾选不同步）：
+           · 已登录才跑；先推本机脏键（flush），再云端优先拉取（silent pull）
+           · 先推后拉的顺序保证本机改动先上云，拉回时不会被旧值冲掉；
+             syncPullSilent 内部还会跳过脏键，双保险
+           · 拉取失败不影响内容同步的结果上报（个人数据是增强，不是主干） */
+      if(!isLoggedIn()) return rc;
+      var personal = hasPendingCloudSync()
+        ? flushCloudSync().catch(function(){ return { pushed:0 }; }).then(function(){ return syncPullSilent(); })
+        : syncPullSilent();
+      return personal.then(function(rp){
+        if(rc && rc.ok){
+          return { ok:true, count:(rc.count || 0) + (rp.pulled || 0), personalPulled: rp.pulled || 0 };
+        }
+        return rc;
+      }).catch(function(){ return rc; });
+    });
   }).then(function(r){
     SYNC_STATE.running = false;
     if(r && r.ok){
@@ -8067,16 +8450,24 @@ function syncUploadNow(){
 /** 手动：只从云端拉取 */
 function syncDownloadNow(){
   if(typeof uiMsg === 'function') uiMsg('正在拉取云端最新…');
+  /* v2.10.0：原来只拉共享内容，个人数据（作业勾选等）不拉 —
+     「拉取云端」按钮名不副实，跨设备旧数据问题也在这。
+     现在内容 + 个人数据都拉，个人数据走云端优先的静默拉取。 */
   syncCloudContent(true).then(function(r){
-    if(r && r.ok){
-      try{ if(typeof rerenderAll === 'function') rerenderAll(); }catch(e){}
-      try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
+    var contentOk = r && r.ok;
+    return syncPullSilent().then(function(rp){
       SYNC_STATE.lastAt = new Date();
       syncStatusPaint();
-      if(typeof uiMsg === 'function') uiMsg('✅ 已拉取云端最新（' + (r.count || 0) + ' 项有更新）');
-    }else if(typeof uiMsg === 'function'){
-      uiMsg('拉取失败：' + ((r && r.error) || '未知错误'), '#c0392b');
-    }
+      try{ if(typeof rerenderAll === 'function') rerenderAll(); }catch(e){}
+      try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
+      if(typeof uiMsg === 'function'){
+        uiMsg(contentOk
+          ? ('✅ 已拉取云端最新（内容 ' + (r.count || 0) + ' 项、个人数据 ' + (rp.pulled || 0) + ' 项有更新）')
+          : '✅ 个人数据已更新 ' + (rp.pulled || 0) + ' 项（共享内容拉取失败）');
+      }
+    });
+  }).catch(function(e){
+    if(typeof uiMsg === 'function') uiMsg('拉取失败：' + (e.message || e), '#c0392b');
   });
 }
 
@@ -8389,6 +8780,7 @@ function loadAdminAudit(){
 (function initAuth(){
   loadAuth();
   refreshAcctBtn();
+  loadRegisterConfig();   /* v2.10.0：后台注册总开关 → 注册 tab 显隐 */
   /* 有 token 就静默校验一次（顺带拿云端数据条数），失效会自动清掉 */
   if(AUTH.token){
     api('/auth?action=me').then(function(j){
@@ -8398,8 +8790,11 @@ function loadAdminAudit(){
       window.__cloudKeyCount = (j.cloudKeys || []).length;
       /* v2.9.9：刷新后若账号仍带强制改密标志（比如改密前刷新了页面），
          直接恢复强制改密态 —— 表单会补一个「当前密码」输入框，
-         不用再退出重登。 */
-      if(j.mustChangePassword && ACCT_TAB !== 'forcepwd'){
+         不用再退出重登。
+         v2.10.0：建议制后，跳过过的账号不再恢复强制态；
+         未跳过的才恢复（表单里可点「暂不修改」跳过）。 */
+      AUTH.user.mustChangePassword = !!j.mustChangePassword;
+      if(j.mustChangePassword && ACCT_TAB !== 'forcepwd' && !pwdSkipped()){
         ACCT_TAB = 'forcepwd';
         renderAccount();
       }
@@ -9461,6 +9856,15 @@ function buildSidebar(){
 }
 var __activeCat = null;
 function openCat(id){
+  /* v2.10.0：操作日志 —— 页面跳转（page 记目标板块，不是来源板块） */
+  if(typeof actLog === 'function'){
+    var _cn = '';
+    try{
+      var _cats = (window.SITE_DATA && SITE_DATA.categories) || [];
+      for(var _i = 0; _i < _cats.length; _i++){ if(_cats[_i].id === id){ _cn = _cats[_i].name; break; } }
+    }catch(e){}
+    actLog('jump', '板块#' + id, '', _cn || ('板块' + id));
+  }
   /* 安装为应用：微信内无法直接安装，先引导用浏览器打开（与 voicehub 等入口一致） */
   if(id === 9 && isWeChat()){
     closeSidebar();
@@ -10718,6 +11122,160 @@ function submitDataEnc(){
 }
 (function(){ var m=document.getElementById('dataEncMask'); if(m) m.addEventListener('click',function(e){ if(e.target.id==='dataEncMask') closeDataEnc(); }); })();
 
+/* ============================================================
+   【v2.10.0 #178】我的云端数据（分类视图 + 删除前密码验证）
+   ------------------------------------------------------------
+   站主要求：分类细化到条目、英文键名翻中文、删除前验密码。
+   分类与翻译由后端 KEY_GROUPS 单一来源下发（?view=cats），
+   前端只负责渲染——两边永远不会对不上。
+   删除流程：先 POST /data?action=verify 验密码换一枚 5 分钟
+   有效的 wipeToken，DELETE 带 wt 才放行；未验证直接 403。
+   ============================================================ */
+var CLOUD_WT = '';          /* wipeToken（验证通过后持有，5 分钟有效） */
+var CLOUD_WT_EXP = 0;
+var __cloudPwdCb = null;    /* 验证通过后要继续做的事 */
+
+function cloudMsg(t,c){ var m=document.getElementById('cloudMsg'); if(m){ m.textContent=t||''; m.style.color=c||'#0a7d42'; } }
+function fmtBytes(n){
+  n = Number(n)||0;
+  if(n < 1024) return n + ' B';
+  if(n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(2) + ' MB';
+}
+function cloudFmtTime(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return '—';
+  var pad = function(x){ return x<10?'0'+x:x; };
+  return pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function openCloudData(){
+  var m=document.getElementById('cloudDataMask'); if(m) m.classList.add('show');
+  loadCloudData();
+}
+function closeCloudData(){ var m=document.getElementById('cloudDataMask'); if(m) m.classList.remove('show'); }
+(function(){ var m=document.getElementById('cloudDataMask'); if(m) m.addEventListener('click',function(e){ if(e.target.id==='cloudDataMask') closeCloudData(); }); })();
+
+function loadCloudData(){
+  var box=document.getElementById('cloudGroups'), sum=document.getElementById('cloudSummary');
+  cloudMsg('');
+  if(box) box.innerHTML='<div class="loading" style="padding:26px"><div class="spinner"></div></div>';
+  api('/data?view=cats').then(function(j){
+    if(sum) sum.textContent='共 '+(j.total||0)+' 条，约 '+fmtBytes(j.bytes||0)+'。删除前需要验证登录密码。';
+    if(!j.groups || !j.groups.length){
+      if(box) box.innerHTML='<p style="font-size:.82rem;color:#57534e;margin:0">云端还没有数据。主题、作业勾选、班级签、点歌记录等会自动同步上来。</p>';
+      return;
+    }
+    if(box) box.innerHTML=j.groups.map(function(g){
+      return '<div style="margin-bottom:14px">'
+        + '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">'
+        + '<span style="font-size:.85rem;font-weight:700;color:#292524">'+esc(g.label)+'</span>'
+        + '<span style="font-size:.72rem;color:#a8a29e">'+g.count+' 条 · '+fmtBytes(g.bytes)+'</span>'
+        + '</div>'
+        + g.items.map(function(it){
+            return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f6f1ec;border-radius:10px;margin-bottom:6px">'
+              + '<div style="flex:1;min-width:0">'
+              + '<div style="font-size:.8rem;color:#292524;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(it.name)+'</div>'
+              + '<div style="font-size:.68rem;color:#a8a29e;font-family:ui-monospace,SFMono-Regular,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(it.key)+' · '+fmtBytes(it.bytes)+' · '+cloudFmtTime(it.updatedAt)+'</div>'
+              + '</div>'
+              + '<button class="btn" style="min-width:52px;padding:6px 10px;font-size:.75rem;background:#ffeded;color:#af410f" onclick="cloudDel(\''+attr(it.key)+'\')">删除</button>'
+              + '</div>';
+          }).join('')
+        + '</div>';
+    }).join('');
+  }).catch(function(e){
+    if(box) box.innerHTML='<p style="font-size:.82rem;color:#af410f;margin:0">加载失败：'+esc(e.message)+'</p>';
+  });
+}
+
+/* ---- 密码验证：与登录同构（优先浏览器派生，失败回退明文） ---- */
+function cloudVerify(pwd){
+  var username = AUTH.user && AUTH.user.username;
+  if(!username) return Promise.reject(new Error('未登录'));
+  if(!clsHasSubtle()){
+    return api('/data?action=verify', { method:'POST', body:{ password: pwd } });
+  }
+  return clsSalt(username).then(function(sp){
+    if(sp.algo !== 'pbkdf2' || !sp.salt || !sp.iterations) return CLS_FALLBACK;
+    return clsDerive(pwd, sp.salt, sp.iterations).then(function(cred){
+      return api('/data?action=verify', { method:'POST', body:{ credential: cred } });
+    });
+  }).catch(function(e){
+    if(clsKdfFallback(e)) return CLS_FALLBACK;
+    throw e;
+  }).then(function(r){
+    if(r === CLS_FALLBACK) return api('/data?action=verify', { method:'POST', body:{ password: pwd } });
+    CLOUD_WT = r.wipeToken || '';
+    CLOUD_WT_EXP = Date.now() + (Number(r.expiresIn)||300)*1000;
+    return r;
+  });
+}
+function cloudWtOk(){ return !!CLOUD_WT && Date.now() < CLOUD_WT_EXP; }
+
+function cloudAskPwd(cb){
+  __cloudPwdCb = cb;
+  var err=document.getElementById('cloudPwdErr');
+  if(err) err.style.display='none';
+  var p=document.getElementById('cloudPwdInput'); if(p){ p.value=''; }
+  var m=document.getElementById('cloudPwdMask'); if(m) m.classList.add('show');
+  setTimeout(function(){ if(p) p.focus(); },120);
+}
+function closeCloudPwd(){
+  var m=document.getElementById('cloudPwdMask'); if(m) m.classList.remove('show');
+  __cloudPwdCb=null;
+}
+(function(){ var m=document.getElementById('cloudPwdMask'); if(m) m.addEventListener('click',function(e){ if(e.target.id==='cloudPwdMask') closeCloudPwd(); }); })();
+function submitCloudPwd(){
+  var p=document.getElementById('cloudPwdInput'), err=document.getElementById('cloudPwdErr');
+  var v=p?p.value:'';
+  if(!v){ if(err){ err.style.display='block'; err.textContent='请输入登录密码'; } return; }
+  if(err) err.style.display='none';
+  cloudVerify(v).then(function(){
+    closeCloudPwd();
+    cloudMsg('✅ 身份已验证（5 分钟内删除不再追问）');
+    SFX.success();
+    var cb=__cloudPwdCb; __cloudPwdCb=null;
+    if(cb) cb();
+  }).catch(function(e){
+    if(err){ err.style.display='block'; err.textContent = e.status===429 ? '验证太频繁，请稍后再试' : (e.message||'验证失败'); }
+  });
+}
+
+/* ---- 删除：无有效 wipeToken 先弹密码框，通过后再删 ---- */
+function cloudDel(key){
+  var go=function(){
+    api('/data?key='+encodeURIComponent(key)+'&wt='+encodeURIComponent(CLOUD_WT), { method:'DELETE' })
+      .then(function(j){
+        cloudMsg('🗑 '+(j.message||'已删除'));
+        loadCloudData();
+      })
+      .catch(function(e){
+        if(e.status===403){ CLOUD_WT=''; cloudAskPwd(function(){ cloudDel(key); }); return; }
+        cloudMsg('❌ '+e.message, '#af410f');
+      });
+  };
+  if(!confirm('确定删除这条云端数据吗？删除后换设备也找不回了。')) return;
+  if(!cloudWtOk()){ cloudAskPwd(go); return; }
+  go();
+}
+function cloudWipeAll(){
+  var go=function(){
+    api('/data?all=1&wt='+encodeURIComponent(CLOUD_WT), { method:'DELETE' })
+      .then(function(j){
+        CLOUD_WT='';
+        cloudMsg('🧹 '+(j.message||'已清空'));
+        loadCloudData();
+      })
+      .catch(function(e){
+        if(e.status===403){ cloudAskPwd(function(){ cloudWipeAll(); }); return; }
+        cloudMsg('❌ '+e.message, '#af410f');
+      });
+  };
+  if(!confirm('确定清空云端全部数据吗？此操作不可恢复（本机数据不受影响）。')) return;
+  if(!cloudWtOk()){ cloudAskPwd(go); return; }
+  go();
+}
+
 function _dlJSON(json,name){
   var blob=new Blob([json],{type:'application/json'});
   var url=URL.createObjectURL(blob);
@@ -11785,6 +12343,8 @@ var SC = {
   allRows: null,  /* 懒加载的历次全班成绩 { examId: {exam, rows} }，用于上线率趋势 */
   config: null,   /* 后台配置（对外展示档位等），进页面时取一次 */
   quadKey: null,  /* 四象限当前看哪一科 */
+  pkA: null,      /* 成绩对比 PK：A 方成绩行 id（v2.10.0） */
+  pkB: null,      /* 成绩对比 PK：B 方成绩行 id（v2.10.0） */
   basisSet: false,/* 用户是否自己切过口径（切过就不再被后台默认值覆盖） */
   trendSet: false,
   loaded: false,
@@ -11905,6 +12465,8 @@ function scPickExam(id){
     var d = r[0];
     SC.exam = d.exam;
     SC.rows = d.rows || [];
+    /* v2.10.0：换考试后旧的行 id 全部失效，PK 选择重置为默认（我 + 总分第一） */
+    SC.pkA = null; SC.pkB = null;
     if(r[1] && r[1].items) SC.me = r[1].items;
     SC.loading = false;
     scRenderAll();
@@ -12083,12 +12645,15 @@ function scRenderTabs(){
   var hasMe = !!scMyRow();
   document.getElementById('scTabs').innerHTML =
     '<button class="' + (SC.tab === 'board' ? 'on' : '') + '" onclick="scSetTab(\'board\')">全班成绩单</button>'
-    + '<button class="' + (SC.tab === 'me' ? 'on' : '') + '" onclick="scSetTab(\'me\')">我的画像</button>';
+    + '<button class="' + (SC.tab === 'me' ? 'on' : '') + '" onclick="scSetTab(\'me\')">我的画像</button>'
+    /* v2.10.0 成绩对比 PK：任选两人 + 同一场考试（数据用当前考试的 SC.rows） */
+    + '<button class="' + (SC.tab === 'pk' ? 'on' : '') + '" onclick="scSetTab(\'pk\')">成绩对比</button>';
 }
 function scSetTab(t){ SC.tab = t; scRenderTabs(); scRenderPane(); }
 
 function scRenderPane(){
   if(SC.tab === 'me') scRenderMe();
+  else if(SC.tab === 'pk') scRenderPk();
   else scRenderBoard();
 }
 
@@ -12463,6 +13028,259 @@ function scRenderMe(){
   html += scCutTrend();
 
   scPane(html);
+}
+
+/* ----------------------------------------------------------------------------
+ * 成绩对比 PK（第六十轮 · v2.10.0）
+ * 站主要求（成绩分析下方）：从本班考生记录里任选两人 + 同一场考试，
+ * 看总分/各科柱状图、强弱项对比、各科分差标注。
+ * 实现要点：
+ *   · 数据全部来自当前考试的 SC.rows（board 接口已返回全场各科分），
+ *     前端实时算，不新增后端接口 —— 站主改分后刷新即自洽。
+ *   · 与「我的画像」共用口径：SC.basis（总分赋分/原始）跟着全局切换。
+ *   · 「同一场考试」= scBar 里当前选中的考试；换考试自动重置双方选择。
+ * -------------------------------------------------------------------------- */
+
+/* 双方默认选择：A 优先「我」，B 选总分第一；都不满足就取前两行。 */
+function scPkDefaults(){
+  var me = scMyRow();
+  var best = null, bestT = null;
+  SC.rows.forEach(function(r){
+    var t = scTotal(r, SC.basis);
+    if(t == null) return;
+    if(bestT == null || t > bestT){ bestT = t; best = r; }
+  });
+  var first = SC.rows[0] || null;
+  SC.pkA = me ? me.id : (first ? first.id : null);
+  if(best && best.id !== SC.pkA) SC.pkB = best.id;
+  else if(first && first.id !== SC.pkA) SC.pkB = first.id;
+  else SC.pkB = SC.rows[1] ? SC.rows[1].id : null;
+}
+function scPkRow(id){
+  for(var i = 0; i < SC.rows.length; i++) if(SC.rows[i].id === id) return SC.rows[i];
+  return null;
+}
+/* 各科班均（按当前口径；缺考不计入）—— 强弱项用「超班均」衡量，
+   这样满分不同的科目之间也可比（150 的语文超 10 分和 100 的数学超 10 分
+   在这里是一回事：都是甩开班里平均水平 10 分）。 */
+function scPkSubjAvg(){
+  var subs = SC.exam.subjects || [];
+  var out = {};
+  subs.forEach(function(s){
+    var sum = 0, n = 0;
+    SC.rows.forEach(function(r){
+      var v = scSubScore(r, s, SC.basis);
+      if(v == null) return;
+      sum += v; n++;
+    });
+    out[s.key] = n ? sum / n : null;
+  });
+  return out;
+}
+function scPkPick(side, id){
+  if(side === 'a') SC.pkA = id; else SC.pkB = id;
+  scRenderPane();
+}
+function scPkSwap(){
+  var t = SC.pkA; SC.pkA = SC.pkB; SC.pkB = t;
+  scRenderPane();
+}
+
+function scRenderPk(){
+  /* 换过考试 / 首次进入：选择失效就按默认规则重选 */
+  if(SC.pkA == null || SC.pkB == null || !scPkRow(SC.pkA) || !scPkRow(SC.pkB)) scPkDefaults();
+  if(SC.rows.length < 2 || !scPkRow(SC.pkA) || !scPkRow(SC.pkB)){
+    scPane('<div class="sc-empty">'
+      + '<div class="sc-empty-ico">⚔️</div>'
+      + '<p><b>人还不够</b></p>'
+      + '<p class="sc-dim">成绩对比需要至少两名同学的成绩，等老师录入更多人之后再来。</p>'
+      + '</div>');
+    return;
+  }
+  var A = scPkRow(SC.pkA), B = scPkRow(SC.pkB);
+  var opts = SC.rows.map(function(r){
+    return '<option value="' + r.id + '">' + esc(r.name || ('#' + r.id)) + '</option>';
+  }).join('');
+  var html = '<div class="sc-pk">'
+    /* ① 选人区 */
+    + '<div class="sc-pk-pick">'
+    +   '<div class="sc-pk-side"><label>A 方（橙）</label>'
+    +     '<select class="sc-sel" onchange="scPkPick(\'a\', Number(this.value))">'
+    +       opts.replace('value="' + A.id + '"', 'value="' + A.id + '" selected') + '</select></div>'
+    +   '<button class="sc-pk-swap" onclick="scPkSwap()" title="交换双方">交换</button>'
+    +   '<div class="sc-pk-side"><label>B 方（蓝）</label>'
+    +     '<select class="sc-sel" onchange="scPkPick(\'b\', Number(this.value))">'
+    +       opts.replace('value="' + B.id + '"', 'value="' + B.id + '" selected') + '</select></div>'
+    + '</div>'
+    + '<div class="sc-pk-legend">'
+    +   '<span><i class="sc-pk-dot-a"></i>' + esc(A.name || 'A 方') + '</span>'
+    +   '<span><i class="sc-pk-dot-b"></i>' + esc(B.name || 'B 方') + '</span>'
+    +   '<span class="sc-dim">同一场考试：' + esc(SC.exam.name || '') + '</span>'
+    + '</div>'
+    /* ② 总分柱状图 */
+    + scPkTotalCard(A, B)
+    /* ③ 各科分组柱状图 */
+    + scPkSubjCard(A, B)
+    /* ④ 强弱项对比卡 */
+    + scPkCards(A, B)
+    + '</div>';
+  scPane(html);
+}
+
+/* ② 总分对比：两根大柱 + 班均参考线 + 分差结论 */
+function scPkTotalCard(A, B){
+  var ta = scTotal(A, SC.basis), tb = scTotal(B, SC.basis);
+  var st = scStats(SC.basis);
+  var rk = scRankMap(SC.basis);
+  var W = 640, H = 210, L = 40, R = 20, T = 26, Bp = 46;
+  var full = scFullMark();
+  var maxV = Math.max(ta == null ? 0 : ta, tb == null ? 0 : 1);
+  /* 纵轴封顶取「满分」与「两人较高者」的较大值，柱子不会被压扁 */
+  var top = Math.max(full, maxV) * 1.04;
+  var yOf = function(v){ return T + (H - T - Bp) * (1 - v / top); };
+  var bw = 96, gap = 150;
+  var xa = W / 2 - gap / 2 - bw, xb = W / 2 + gap / 2;
+  var svg = '<svg class="sc-svg" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">';
+  /* 网格 + 纵轴刻度（按满分比例取 4 档） */
+  for(var g = 0; g <= 4; g++){
+    var gv = top * g / 4;
+    var gy = yOf(gv);
+    svg += '<line x1="' + L + '" y1="' + gy.toFixed(1) + '" x2="' + (W - R) + '" y2="' + gy.toFixed(1)
+      + '" class="sc-pk-grid" stroke-width="1"/>'
+      + '<text x="' + (L - 6) + '" y="' + (gy + 3).toFixed(1) + '" font-size="9" class="sc-pk-sub" text-anchor="end">'
+      + Math.round(gv) + '</text>';
+  }
+  /* 班均参考线（虚线）—— 两人站在班里是什么水平，一眼的事 */
+  if(st.avg > 0 && st.avg <= top){
+    var ay = yOf(st.avg);
+    svg += '<line x1="' + L + '" y1="' + ay.toFixed(1) + '" x2="' + (W - R) + '" y2="' + ay.toFixed(1)
+      + '" class="sc-pk-avg" stroke-width="1.2" stroke-dasharray="5 4"/>'
+      + '<text x="' + (W - R) + '" y="' + (ay - 4).toFixed(1) + '" font-size="9" class="sc-pk-avg" text-anchor="end">班均 '
+      + fmtNum(st.avg) + '</text>';
+  }
+  function bar(x, v, barCls, numCls, row){
+    if(v == null) return '<text x="' + (x + bw / 2) + '" y="' + (H - Bp - 6) + '" font-size="10" class="sc-pk-sub" text-anchor="middle">缺考</text>';
+    var y = yOf(v), h = H - Bp - y;
+    return '<rect x="' + x + '" y="' + y.toFixed(1) + '" width="' + bw + '" height="' + Math.max(1, h).toFixed(1)
+      + '" class="sc-pk-bar-' + barCls + '" rx="4"/>'
+      + '<text x="' + (x + bw / 2) + '" y="' + (y - 7).toFixed(1) + '" font-size="15" font-weight="800" class="sc-pk-num-' + numCls
+      + '" text-anchor="middle">' + v + '</text>'
+      + '<text x="' + (x + bw / 2) + '" y="' + (H - Bp + 16) + '" font-size="11" font-weight="700" class="sc-pk-name" text-anchor="middle">'
+      + esc(row.name || '') + '</text>'
+      + '<text x="' + (x + bw / 2) + '" y="' + (H - Bp + 32) + '" font-size="9.5" class="sc-pk-sub" text-anchor="middle">班排 '
+      + (rk.total[row.id] || '—') + ' / ' + st.n + '</text>';
+  }
+  svg += bar(xa, ta, 'a', 'a', A) + bar(xb, tb, 'b', 'b', B);
+  /* 中间结论徽章：谁领先多少 */
+  var verdict = '';
+  if(ta != null && tb != null){
+    var d = ta - tb;
+    var cls = d > 0 ? 'sc-pk-diff-up' : (d < 0 ? 'sc-pk-diff-down' : 'sc-pk-diff-eq');
+    var txt = d === 0 ? '总分持平' : (d > 0 ? 'A 领先 ' + fmtNum(Math.abs(d)) + ' 分' : 'B 领先 ' + fmtNum(Math.abs(d)) + ' 分');
+    verdict = '<text x="' + (W / 2) + '" y="' + (T + 4) + '" font-size="12" font-weight="800" class="' + cls
+      + '" text-anchor="middle">' + txt + '</text>';
+  }
+  svg += verdict + '</svg>';
+  return '<div class="sc-card">'
+    + '<div class="sc-card-h">总分对比（' + (SC.basis === 'graded' ? '赋分' : '原始') + '，满分 ' + full + '）</div>'
+    + '<div class="sc-svgwrap">' + svg + '</div>'
+    + '</div>';
+}
+
+/* ③ 各科分组柱状图：每科两根柱（A 橙 / B 蓝），柱顶标分，组顶标分差 */
+function scPkSubjCard(A, B){
+  var subs = SC.exam.subjects || [];
+  if(!subs.length) return '';
+  var W = 640, groupH = 118, T = 22, Bp = 30;
+  var H = T + groupH * subs.length + Bp;
+  var L = 44, R = 12;
+  var gw = (W - L - R) / subs.length;
+  var svg = '<svg class="sc-svg" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">';
+  subs.forEach(function(s, i){
+    var va = scSubScore(A, s, SC.basis), vb = scSubScore(B, s, SC.basis);
+    var gx = L + i * gw;
+    var cx = gx + gw / 2;
+    /* 组内两柱：按本科满分归一（150 与 100 的科目柱高才可比） */
+    var full = s.full || 100;
+    var top = full * 1.06;
+    var yOf = function(v){ return T + (groupH - 8) * (1 - v / top); };
+    /* 组底基线 */
+    var base = T + groupH - 8;
+    svg += '<line x1="' + gx.toFixed(1) + '" y1="' + base + '" x2="' + (gx + gw).toFixed(1) + '" y2="' + base
+      + '" class="sc-pk-grid" stroke-width="1"/>';
+    /* 25% / 50% / 75% 淡网格 */
+    for(var q = 1; q <= 3; q++){
+      var qy = yOf(full * q / 4);
+      svg += '<line x1="' + gx.toFixed(1) + '" y1="' + qy.toFixed(1) + '" x2="' + (gx + gw).toFixed(1) + '" y2="' + qy.toFixed(1)
+        + '" class="sc-pk-grid" stroke-width="1" opacity=".6"/>';
+    }
+    var bw = Math.min(26, gw * 0.3);
+    var xa = cx - bw - 3, xb = cx + 3;
+    function one(x, v, barCls, numCls){
+      if(v == null) return '<text x="' + (x + bw / 2) + '" y="' + (base - 5) + '" font-size="9" class="sc-pk-sub" text-anchor="middle">缺</text>';
+      var y = yOf(v), h = base - y;
+      return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw + '" height="' + Math.max(1, h).toFixed(1)
+        + '" class="sc-pk-bar-' + barCls + '" rx="3"/>'
+        + '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" font-size="10.5" font-weight="800" class="sc-pk-num-' + numCls
+        + '" text-anchor="middle">' + fmtNum(v) + '</text>';
+    }
+    svg += one(xa, va, 'a', 'a') + one(xb, vb, 'b', 'b');
+    /* 组顶分差标注：A − B（跟随成绩分析口径：领先绿、落后红） */
+    if(va != null && vb != null){
+      var d = va - vb;
+      var cls = d > 0 ? 'sc-pk-diff-up' : (d < 0 ? 'sc-pk-diff-down' : 'sc-pk-diff-eq');
+      var dtxt = d === 0 ? '±0' : (d > 0 ? '+' + fmtNum(d) : '−' + fmtNum(Math.abs(d)));
+      svg += '<text x="' + cx.toFixed(1) + '" y="' + (T - 7) + '" font-size="11" font-weight="800" class="' + cls
+        + '" text-anchor="middle">' + dtxt + '</text>';
+    }
+    /* 组底：科名 + 满分 */
+    svg += '<text x="' + cx.toFixed(1) + '" y="' + (base + 15) + '" font-size="10.5" font-weight="700" class="sc-pk-name" text-anchor="middle">'
+      + esc(s.name || s.key) + '</text>'
+      + '<text x="' + cx.toFixed(1) + '" y="' + (base + 27) + '" font-size="8.5" class="sc-pk-sub" text-anchor="middle">满分 '
+      + full + '</text>';
+  });
+  svg += '</svg>';
+  return '<div class="sc-card">'
+    + '<div class="sc-card-h">各科对比（柱顶为得分，组顶为 A−B 分差；柱高按本科满分归一）</div>'
+    + '<div class="sc-svgwrap">' + svg + '</div>'
+    + '</div>';
+}
+
+/* ④ 强弱项对比：以「超班均」衡量（各科满分不同，直接比分不公平） */
+function scPkCards(A, B){
+  var avg = scPkSubjAvg();
+  function card(row, dotCls, title){
+    var subs = SC.exam.subjects || [];
+    var list = [];
+    subs.forEach(function(s){
+      var v = scSubScore(row, s, SC.basis);
+      var a = avg[s.key];
+      if(v == null || a == null) return;
+      list.push({ name: s.name || s.key, d: v - a });
+    });
+    if(!list.length) return '';
+    var best = list[0], worst = list[0];
+    list.forEach(function(x){
+      if(x.d > best.d) best = x;
+      if(x.d < worst.d) worst = x;
+    });
+    var sum = 0;
+    list.forEach(function(x){ sum += x.d; });
+    return '<div class="sc-card sc-pk-card">'
+      + '<h4><i class="' + dotCls + '"></i>' + esc(title) + '</h4>'
+      + '<div class="sc-pk-row"><span>最强项</span><b>' + esc(best.name)
+      +   ' <span class="sc-sub-diff ' + (best.d >= 0 ? 'up' : 'down') + '">' + fmtDiff(best.d) + '</span></b></div>'
+      + '<div class="sc-pk-row"><span>最弱项</span><b>' + esc(worst.name)
+      +   ' <span class="sc-sub-diff ' + (worst.d >= 0 ? 'up' : 'down') + '">' + fmtDiff(worst.d) + '</span></b></div>'
+      + '<div class="sc-pk-row"><span>综合超班均（各科累加）</span><b><span class="sc-sub-diff '
+      +   (sum >= 0 ? 'up' : 'down') + '">' + fmtDiff(sum) + '</span></b></div>'
+      + '</div>';
+  }
+  var html = '<div class="sc-pk-cards">'
+    + card(A, 'sc-pk-dot-a', A.name || 'A 方')
+    + card(B, 'sc-pk-dot-b', B.name || 'B 方')
+    + '</div>';
+  return html;
 }
 
 function scOvItem(k, v){

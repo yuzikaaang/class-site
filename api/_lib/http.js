@@ -259,6 +259,38 @@ export async function ensureSchema(sql) {
         updated_at timestamptz not null default now()
       )
     `;
+    /* ===== v2.10.0 注册审核 + 站点设置（第六十轮）=====
+       ① users.status 增加 'pending'（待审核）：
+          改约束只能「先删后加」，drop if exists 保证幂等。
+       ② site_settings：单行 jsonb，存后台可改的站点级开关
+          （register_open 注册总开关 / register_review 注册审核）。
+       依旧放在 ensureSchema 最末尾：前面的语句出错会吞异常跳过后面，
+       新功能不能影响既有功能的建表。 */
+    await s`alter table users drop constraint if exists users_status_chk`;
+    await s`alter table users add constraint users_status_chk check (status in ('active','banned','pending'))`;
+    await s`
+      create table if not exists site_settings (
+        id         int         primary key default 1,
+        data       jsonb       not null default '{}'::jsonb,
+        updated_at timestamptz not null default now()
+      )
+    `;
+    /* v2.10.0 用户操作日志表：全点击交互上报（攒批写入）。
+       索引按「管理后台两种查法」建：按时间倒序翻页 + 按用户查。 */
+    await s`
+      create table if not exists user_action_log (
+        id         bigserial   primary key,
+        user_id    bigint      not null references users(id) on delete cascade,
+        action     text        not null default 'click',
+        page       text        not null default '',
+        target     text        not null default '',
+        detail     text        not null default '',
+        ip         text,
+        created_at timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists ual_time_idx on user_action_log (created_at desc)`;
+    await s`create index if not exists ual_user_idx on user_action_log (user_id, created_at desc)`;
   } catch (e) {
     /* 自愈失败不抛错：老库的基本功能仍可用（只是少了强制改密与登录记录）。
        只警告一次，避免每次请求都刷日志把真正的问题淹没。

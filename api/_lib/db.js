@@ -118,3 +118,36 @@ export function cfg() {
     allowRegister: (getEnv('ALLOW_REGISTER') || '1') !== '0',
   };
 }
+
+/* ---------------- 站点设置（v2.10.0，单行 jsonb 表） ----------------
+   后台【系统设置】可改的站点级开关。与 cfg() 的环境变量分工：
+     · cfg()        = 部署期变量（Worker 环境变量，改要重新部署）
+     · site_settings = 运行期开关（管理员在后台随时改，立即生效）
+   已知键：
+     register_open   是否开放自助注册（未设置时回退到 env ALLOW_REGISTER）
+     register_review 注册是否需管理员审核（默认 true）
+   读取全部容错：表不存在 / 行为空都返回 fallback，绝不让设置读失败拖垮业务。 */
+export async function getSiteSetting(sql, key, fallback = null) {
+  try {
+    const s = sql || getSql();
+    const rows = await s`select data from site_settings where id = 1`;
+    if (!rows.length || !rows[0].data) return fallback;
+    const v = rows[0].data[key];
+    return v === undefined ? fallback : v;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+/** 合并写入一个键（不动其他键）。value 会被 JSON 序列化后以 jsonb 并入。 */
+export async function setSiteSetting(sql, key, value) {
+  const s = sql || getSql();
+  const patch = JSON.stringify({ [key]: value });
+  await s`
+    insert into site_settings (id, data, updated_at)
+    values (1, ${patch}::jsonb, now())
+    on conflict (id) do update
+      set data = site_settings.data || excluded.data,
+          updated_at = now()
+  `;
+}

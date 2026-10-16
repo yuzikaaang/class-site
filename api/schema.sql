@@ -16,11 +16,18 @@ create table if not exists users (
   last_login_at timestamptz,
   /* 约束：角色和状态只能是约定值，防止脏数据 */
   constraint users_role_chk   check (role   in ('user','admin')),
-  constraint users_status_chk check (status in ('active','banned'))
+  constraint users_status_chk check (status in ('active','banned','pending'))
 );
 
 /* 用户名统一小写，方便大小写不敏感登录 */
 create unique index if not exists users_username_lower_idx on users (lower(username));
+
+/* ---------------- 注册审核：status 增加 'pending'（2026-10-16 v2.10.0，幂等） ----------------
+   待审核账号不签发会话、无法登录，管理员在后台通过/驳回。
+   改约束只能「先删后加」（PG 不支持 alter constraint），
+   drop if exists 保证本文件可重复执行。与 ensureSchema 的语句一致。 */
+alter table users drop constraint if exists users_status_chk;
+alter table users add  constraint users_status_chk check (status in ('active','banned','pending'));
 
 /* ---------------- 登录限流所需的两列（2026-09-30 加，幂等可重复执行） ----------------
    老库直接执行本文件即可补上，不需要重建表。 */
@@ -91,6 +98,34 @@ create table if not exists audit_log (
 );
 create index if not exists audit_log_actor_idx  on audit_log (actor_id);
 create index if not exists audit_log_time_idx   on audit_log (created_at desc);
+
+/* ---------------- 站点设置表（2026-10-16 v2.10.0，幂等） ----------------
+   单行 jsonb（id 恒为 1），存管理员在后台随时改、立即生效的站点级开关：
+   register_open（注册总开关）/ register_review（注册是否需审核）。
+   与 ensureSchema 的建表语句一致——新库先执行本文件，老库靠自愈补。 */
+create table if not exists site_settings (
+  id         int         primary key default 1,
+  data       jsonb       not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+/* ---------------- 用户操作日志表（2026-10-16 v2.10.0，幂等） ----------------
+   站主要求「记录全部点击交互行为」：页面跳转、按钮点击、切换标签、
+   表单提交等，前端攒批（20 条或 30 秒）POST 到 /api/data?action=log。
+   保留 90 天明细（写入时顺手节流清理），统计聚合约了长期价值。
+   索引按管理后台两种查法建：按时间倒序翻页 + 按用户查。 */
+create table if not exists user_action_log (
+  id         bigserial   primary key,
+  user_id    bigint      not null references users(id) on delete cascade,
+  action     text        not null default 'click',      -- click | nav | submit | switch
+  page       text        not null default '',           -- 所在页面/板块
+  target     text        not null default '',           -- 点击目标（按钮/标签名）
+  detail     text        not null default '',           -- 补充信息（表单摘要等）
+  ip         text,
+  created_at timestamptz not null default now()
+);
+create index if not exists ual_time_idx on user_action_log (created_at desc);
+create index if not exists ual_user_idx on user_action_log (user_id, created_at desc);
 
 /* ---------------- 自动清理过期会话（可选，建议配 Neon 定时任务） ---------------- */
 -- 手动清理： delete from sessions where expires_at < now();

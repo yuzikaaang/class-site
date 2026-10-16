@@ -310,8 +310,19 @@ function shapeProfile(row, full, meta, ctx) {
 /**
  * 已经由 shapeProfile 固定输出的字段 —— 不要在 `fields` 里重复它们。
  * ⚠️ 改这里的清单时，记得同步 admin.js 的 SPECIAL_FIELDS。
+ *
+ * 2026-10-16 v2.10.0：补入 wechat/qq/phone，修复「信息查询字段重复渲染」BUG。
+ * 根因：这三个字段在 profile_field_meta 里有预置元数据（微信/QQ/手机号），
+ * 但不在本排除集里 → shapeProfile 把它们输出两遍：
+ *   ① 固定联系方式区（p.wechat/p.qq/p.phone，受 contact_status 审核门控）
+ *   ② fields 额外字段区（只过可见性、不过审核门控）
+ * 前端两个区块都渲染 → 用户看到「QQ/微信、手机/手机号」重复。
+ * 更隐蔽的是第 ② 条通道还会把**未过审核**的联系方式漏出去（fields 只查
+ * canSee 不查 contact_status）。联系方式是审核门控字段，必须只走固定通道，
+ * 严禁进入通用 fields 数组 —— 与 admin.js SPECIAL_FIELDS 保持一致。
  */
-const FIXED_FIELDS = new Set(['name', 'student_id', 'politics', 'exam_no', 'role']);
+const FIXED_FIELDS = new Set(['name', 'student_id', 'politics', 'exam_no', 'role',
+  'wechat', 'qq', 'phone']);
 
 /* ---------------- 查询（核心） ---------------- */
 async function search(req, res, u) {

@@ -34,15 +34,32 @@
    GET    /api/admin?action=games                     游戏数据：最高分 / 游玩时长 / 券获取时间
    POST   /api/admin?action=set-title                 任命/撤销头衔
    POST   /api/admin?action=handover-ai               把 AI 助手身份转交给另一个账号
+
+   v2.10.0 注册审核 + 站点设置（2026-10-16 第六十轮）
+   GET    /api/admin?action=settings                  读取站点设置（注册开关等）
+   POST   /api/admin?action=set-settings              保存站点设置
+   POST   /api/admin?action=user-review               注册审核：通过 / 驳回
+
+   v2.10.0 用户操作日志（2026-10-16 第六十轮）
+   GET    /api/admin?action=action-logs               操作明细（按用户/类型/日期筛）
+   GET    /api/admin?action=action-stats              统计面板（今日/7日/热门页面）
+
+   v2.10.0 成员与档案合并（2026-10-16 第六十轮）
+   GET    /api/admin?action=members                   合并列表（账号+档案一行，带场景标记）
+   POST   /api/admin?action=save-member               长表单合并保存（四场景编排）
    ============================================================ */
 
-import { getSql } from './_lib/db.js';
+import { getSql, getSiteSetting, setSiteSetting, cfg } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireAdmin, audit,
   checkFieldName, isSafeFieldFormat, RESERVED_PROFILE_COLS,
 } from './_lib/http.js';
 import { hashPassword } from './_lib/password.js';
 import { listSecrets, saveSecret, deleteSecret } from './_lib/secrets-store.js';
+/* #178：用户详情的云端数据按分类翻中文。分类元数据的单一来源在
+   data.js（个人端「我的云端数据」共用），这里直接 import 复用，
+   避免两边各存一份翻译表后慢慢对不上。 */
+import { classifyKey } from './data.js';
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
@@ -58,6 +75,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       if (action === 'users')      return await listUsers(req, res);
       if (action === 'user')       return await userDetail(req, res);
+      if (action === 'members')    return await listMembers(req, res);
       if (action === 'stats')      return await stats(req, res);
       if (action === 'audit')      return await listAudit(req, res);
       if (action === 'login-logs') return await loginLogs(req, res);
@@ -71,6 +89,9 @@ export default async function handler(req, res) {
       if (action === 'ai-account')       return await aiAccount(req, res);
       if (action === 'games')            return await gameStats(req, res);
       if (action === 'secrets')          return await listAdminSecrets(req, res);
+      if (action === 'settings')         return await getSettings(req, res);
+      if (action === 'action-logs')      return await listActionLogs(req, res);
+      if (action === 'action-stats')     return await actionStats(req, res);
       return fail(res, 404, '未知的 action：' + action);
     }
 
@@ -89,6 +110,7 @@ export default async function handler(req, res) {
         case 'clear-sessions': return await clearSessions(req, res, me, b);
         case 'review-contact': return await reviewContact(req, res, me, b);
         case 'save-profile':   return await saveProfile(req, res, me, b);
+        case 'save-member':    return await saveMember(req, res, me, b);
         case 'delete-profile': return await deleteProfile(req, res, me, b);
         case 'batch-profiles': return await batchProfiles(req, res, me, b);
         case 'bind-profiles':  return await bindProfiles(req, res, me, b);
@@ -100,6 +122,8 @@ export default async function handler(req, res) {
         case 'handover-ai':    return await handoverAi(req, res, me, b);
         case 'save-secret':    return await saveAdminSecret(req, res, me, b);
         case 'delete-secret':  return await deleteAdminSecret(req, res, me, b);
+        case 'user-review':    return await reviewUser(req, res, me, b);
+        case 'set-settings':   return await saveSettings(req, res, me, b);
         default:               return fail(res, 404, '未知的 action：' + action);
       }
     }
@@ -214,11 +238,19 @@ async function userDetail(req, res) {
       lastLoginAt: u.last_login_at,
       lastSeenAt: u.last_seen_at || null,
     },
-    data: data.map((d) => ({
-      key: d.data_key,
-      value: d.data_value,
-      updatedAt: d.updated_at,
-    })),
+    /* #178：每条云端数据带上中文分类（cat/catLabel/label），
+       后台详情表格直接展示，不用前端再翻一遍。 */
+    data: data.map((d) => {
+      const c = classifyKey(d.data_key);
+      return {
+        key: d.data_key,
+        cat: c.cat,
+        catLabel: c.label,
+        label: c.name,
+        value: d.data_value,
+        updatedAt: d.updated_at,
+      };
+    }),
     /* token 只显示前 8 位，避免完整凭据出现在前端 */
     sessions: sessions.map((s) => ({
       tokenPrefix: String(s.token).slice(0, 8) + '…',
@@ -430,6 +462,70 @@ async function setStatus(req, res, me, b) {
   await audit(me.id, 'user.set_status', 'user', String(id), status);
 
   return ok(res, { message: (status === 'banned' ? '已禁用 ' : '已启用 ') + rows[0].username });
+}
+
+/* ---------------- v2.10.0：注册审核（通过 / 驳回） ----------------
+   与 set-status 分工：set-status 管 active/banned 双向，
+   本动作专管「待审核 → 通过 / 驳回」，语义更清晰、审计也好读。
+   通过 = status 改 active（账号立即可登录）；
+   驳回 = status 改 banned 并踢掉全部会话（防审核前混进去的残留会话）。 */
+async function reviewUser(req, res, me, b) {
+  const id = Number(b.id);
+  const decision = String(b.decision || '');
+  if (!id) return fail(res, 400, '缺少 id');
+  if (!['approve', 'reject'].includes(decision)) {
+    return fail(res, 400, 'decision 只能是 approve 或 reject');
+  }
+  if (id === me.id) return fail(res, 400, '不能审核自己的账号');
+
+  const sql = getSql();
+  const rows = await sql`
+    update users set status = ${decision === 'approve' ? 'active' : 'banned'}
+     where id = ${id} and status = 'pending'
+    returning username
+  `;
+  if (!rows.length) return fail(res, 404, '该用户不存在或不是待审核状态');
+
+  if (decision === 'reject') await sql`delete from sessions where user_id = ${id}`;
+  await audit(me.id, 'user.review', 'user', String(id), decision);
+
+  return ok(res, {
+    message: decision === 'approve'
+      ? ('已通过 ' + rows[0].username + ' 的注册，对方现在可以登录了')
+      : ('已驳回 ' + rows[0].username + ' 的注册'),
+  });
+}
+
+/* ---------------- v2.10.0：站点设置（后台可改的站点级开关） ----------------
+   目前两个键：
+     register_open   注册总开关（关掉后注册入口隐藏、接口 403）
+     register_review 注册是否需管理员审核
+   白名单收口：不在表里的键一律忽略，防止脏数据把设置表当垃圾桶。 */
+const SETTING_KEYS = ['register_open', 'register_review'];
+async function getSettings(req, res) {
+  const sql = getSql();
+  const out = {};
+  for (const k of SETTING_KEYS) {
+    const v = await getSiteSetting(sql, k, null);
+    out[k] = v;
+  }
+  /* 一并给出「环境变量默认值」，后台展示「未设置时的兜底」有据可查 */
+  return ok(res, { settings: out, envDefault: { register_open: !!cfg().allowRegister } });
+}
+
+async function saveSettings(req, res, me, b) {
+  const sql = getSql();
+  const done = [];
+  for (const k of SETTING_KEYS) {
+    if (!(k in b)) continue;
+    const v = b[k];
+    if (typeof v !== 'boolean') return fail(res, 400, k + ' 必须是布尔值');
+    await setSiteSetting(sql, k, v);
+    done.push(k);
+  }
+  if (!done.length) return fail(res, 400, '没有要保存的设置');
+  await audit(me.id, 'site.save_settings', 'site', 'settings', JSON.stringify(b));
+  return ok(res, { message: '已保存', saved: done });
 }
 
 /* ---------------- 写：设为管理员/普通用户 ---------------- */
@@ -807,19 +903,35 @@ async function deleteData(req, res, me, b) {
   return ok(res, { message: '已删除', key });
 }
 
-/* ---------------- 写：删号 ---------------- */
+/* ---------------- 写：删号 ----------------
+   v2.10.0（#172）：alsoProfile = true 时连带删除其班级档案。
+   默认不删——档案是通讯录，账号没了人可能还在班里。
+   ⚠️ 必须先删档案再删号：users 删掉后外键 on delete set null 会把
+      profiles.user_id 清空，事后再按 user_id 就再也找不到那些档案了。 */
 async function deleteUser(req, res, me, b) {
   const id = Number(b.id);
   if (!id) return fail(res, 400, '缺少 id');
   if (id === me.id) return fail(res, 400, '不能删除自己的账号');
 
   const sql = getSql();
+  const alsoProfile = !!b.alsoProfile;
+  if (alsoProfile) {
+    await sql`delete from profiles where user_id = ${id}`;
+  } else {
+    /* 显式摘绑：不依赖外键 on delete set null（测试桩/兼容层不模拟外键行为，
+       否则删号后档案仍指向已删用户，合并列表里会整行消失而不是「未认领」）。 */
+    await sql`update profiles set user_id = null, updated_at = now() where user_id = ${id}`;
+  }
   const rows = await sql`delete from users where id = ${id} returning username`;
   if (!rows.length) return fail(res, 404, '用户不存在');
 
   /* user_data / sessions 由外键 on delete cascade 自动清理 */
-  await audit(me.id, 'user.delete', 'user', String(id), rows[0].username);
-  return ok(res, { message: '已删除账号 ' + rows[0].username + '（其云端数据一并清除）' });
+  await audit(me.id, 'user.delete', 'user', String(id),
+    rows[0].username + (alsoProfile ? '（含班级档案）' : ''));
+  return ok(res, {
+    message: '已删除账号 ' + rows[0].username
+      + (alsoProfile ? '（其班级档案一并清除）' : '（其云端数据一并清除）'),
+  });
 }
 
 /* ---------------- 写：强制下线 ---------------- */
@@ -841,23 +953,42 @@ async function clearSessions(req, res, me, b) {
  *   ③ 管理员始终看不到明文密码（库里只有 PBKDF2 哈希），只能重置
  * ============================================================ */
 
-/* ---------------- 写：创建单个用户 ---------------- */
+/* ---------------- 写：创建单个用户 ----------------
+   v2.10.0（第六十轮 #172）：主体抽成 createUserCore，
+   供「成员与档案」合并保存（save-member）复用 —— 那里要按四种场景
+   编排「建号 / 绑档案 / 补档案」，不能再各自拼一套建号逻辑。 */
 async function createUser(req, res, me, b) {
+  const sql = getSql();
+  const r = await createUserCore(sql, me, b);
+  if (!r.ok) return fail(res, r.code, r.error);
+  return ok(res, {
+    message: '已创建账号 ' + r.username + '，该同学首次登录需自行修改密码'
+      + (r.profileLinked ? '' : '（⚠️ 资料创建失败，请到「成员与档案」手动补一条）'),
+    user: { id: r.userId, username: r.username },
+    profileLinked: r.profileLinked,
+  });
+}
+
+/**
+ * 建号核心（不写 HTTP 响应，返回 { ok, ... } 供多处编排）。
+ * @param skipProfile true 时不自动建班级档案 —— 调用方自己接管档案
+ *   （「有档案无账号」场景下自动建会出现一人两条，必须由调用方绑定）。
+ */
+async function createUserCore(sql, me, b) {
   const username = normUsername(b.username);
   const password = String(b.password || '');
   const displayName = String(b.displayName || '').trim().slice(0, 30) || null;
   const role = b.role === 'admin' ? 'admin' : 'user';
 
   if (!validUsername(username)) {
-    return fail(res, 400, '用户名需 3–20 位，仅限中英文、数字、下划线');
+    return { ok: false, code: 400, error: '用户名需 3–20 位，仅限中英文、数字、下划线' };
   }
   if (password.length < 6 || password.length > 64) {
-    return fail(res, 400, '初始密码长度需 6–64 位');
+    return { ok: false, code: 400, error: '初始密码长度需 6–64 位' };
   }
 
-  const sql = getSql();
   const dup = await sql`select id from users where lower(username) = ${username} limit 1`;
-  if (dup.length) return fail(res, 409, '用户名 ' + username + ' 已存在');
+  if (dup.length) return { ok: false, code: 409, error: '用户名 ' + username + ' 已存在' };
 
   const hash = await hashPassword(password);
   const rows = await sql`
@@ -872,16 +1003,11 @@ async function createUser(req, res, me, b) {
           而这里过去只写 users、不建 profiles → 新账号永远不出现在头衔列表，
           也永远没法被任命、没法被资料查询命中。 */
   const userId = Number(rows[0].id);
-  const profileLinked = await ensureProfileForUser(sql, userId, displayName);
+  const profileLinked = b.skipProfile ? false : await ensureProfileForUser(sql, userId, displayName);
 
   await audit(me.id, 'user.create', 'user', String(userId), username);
 
-  return ok(res, {
-    message: '已创建账号 ' + username + '，该同学首次登录需自行修改密码'
-      + (profileLinked ? '' : '（⚠️ 资料创建失败，请到「资料管理」手动补一条）'),
-    user: { id: userId, username: rows[0].username },
-    profileLinked,
-  });
+  return { ok: true, userId, username: rows[0].username, profileLinked };
 }
 
 /**
@@ -1194,6 +1320,171 @@ function safeJson(raw) {
   } catch (e) {
     return {};
   }
+}
+
+/**
+ * v2.10.0（第六十轮 #172）：把 profiles 行整形成管理端扁平结构。
+ * listMembers 与 save-member 的回显都用它，保证两处口径一致。
+ * @param editable loadEditableFields() 的结果（自定义字段白名单）
+ */
+function shapeProfileAdmin(r, editable) {
+  const extra = {};
+  for (const f of editable) {
+    const v = r[f.field];
+    if (v != null && v !== '') extra[f.field] = String(v);
+  }
+  return {
+    profileId: Number(r.id),
+    name: r.name || '',
+    studentId: r.student_id || '',
+    politics: r.politics || '',
+    examNo: r.exam_no || '',
+    role: r.role || '学生',
+    title: r.title || '',
+    wechat: r.wechat || '',
+    qq: r.qq || '',
+    phone: r.phone || '',
+    contactStatus: r.contact_status || 'none',
+    rejectReason: r.reject_reason || '',
+    visibilityPref: safeJson(r.visibility_pref),
+    fieldVis: safeJson(r.field_vis),
+    extra,
+    boundUsername: r.bound_username || '',
+  };
+}
+
+/* ============================================================
+   v2.10.0「成员与档案」合并列表（第六十轮 #172）
+   ------------------------------------------------------------
+   背景：站主指出后台「用户管理」「资料管理」把同一批人分两处存储，
+   改一处另一处对不上。本接口把 users 与 profiles 合并成一个列表，
+   每行带 scene 标记，覆盖四种场景：
+     both          有账号 + 有档案（正常态）
+     user-only     有账号暂无档案（建号时补档案失败 / 历史数据）
+     profile-only  有档案无账号（通讯录先建、人还没领账号）
+   姓名口径：profiles.name 为权威源；无档案时退回 users.display_name
+   （保存侧由 upsertProfileCore 同步两处，见那里的注释）。
+   ============================================================ */
+async function listMembers(req, res) {
+  const sql = getSql();
+  const q = String(req.query.q || '').trim().toLowerCase().slice(0, 40).replace(/[%_\\]/g, '');
+  const role = cText(req.query.role, 16).toLowerCase();
+  const status = cText(req.query.status, 16).toLowerCase();
+  const scene = cText(req.query.scene, 16).toLowerCase();
+  const limit = Math.min(Number(req.query.limit || 200), 500);
+  const offset = Math.max(Number(req.query.offset || 0), 0);
+
+  /* ① 账号侧（在线/数据条数口径与 users 接口完全一致，避免两页数字打架） */
+  const urows = await sql`
+    select u.id, u.username, u.display_name, u.role, u.status,
+           u.created_at, u.last_login_at, u.last_seen_at,
+           coalesce(u.must_change_password, false) as must_change_password,
+           coalesce(d.n, 0)::int as data_count,
+           coalesce(sess.sess_n, 0)::int as online_sessions,
+           sess.max_seen as online_last_seen
+      from users u
+      left join (
+        select user_id, count(*)::int as n from user_data group by user_id
+      ) d on d.user_id = u.id
+      left join (
+        select user_id,
+               count(*) filter (
+                 where expires_at > now()
+                   and last_seen_at > now() - interval '90 seconds'
+               )::int as sess_n,
+               max(last_seen_at) as max_seen
+          from sessions
+         group by user_id
+      ) sess on sess.user_id = u.id
+     order by u.id
+     limit 1000
+  `;
+
+  /* ② 档案侧（含绑定账号名与自定义字段值） */
+  const prows = await sql`
+    select p.*, u.username as bound_username
+      from profiles p
+      left join users u on u.id = p.user_id
+     order by p.student_id nulls last, p.name
+     limit 1000
+  `;
+  const editable = await loadEditableFields();
+
+  /* ③ JS 合并：一个账号只认第一条档案（脏数据不放大成重复行）；
+        user_id 为空的档案是「未认领」，单独成行。 */
+  const byUser = new Map();
+  const orphans = [];
+  for (const r of prows) {
+    const uid = r.user_id == null ? null : Number(r.user_id);
+    const shaped = shapeProfileAdmin(r, editable);
+    if (uid == null) orphans.push(shaped);
+    else if (!byUser.has(uid)) byUser.set(uid, shaped);
+  }
+
+  const all = [];
+  for (const u of urows) {
+    const uid = Number(u.id);
+    const p = byUser.get(uid) || null;
+    /* 账号字段放在档案字段之后应用：档案默认值里也有 role:'学生'，
+       若先应用账号字段会被冲掉（both 行全变学生，管理员徽章/筛选全错）。 */
+    all.push(Object.assign(p || {
+      profileId: null, name: '', studentId: '', politics: '', examNo: '', role: '学生',
+      title: '', wechat: '', qq: '', phone: '', contactStatus: 'none', rejectReason: '',
+      visibilityPref: {}, fieldVis: {}, extra: {}, boundUsername: '',
+    }, {
+      scene: p ? 'both' : 'user-only',
+      userId: uid,
+      username: u.username,
+      displayName: u.display_name,
+      role: u.role,
+      status: u.status,
+      mustChangePassword: !!u.must_change_password,
+      createdAt: u.created_at,
+      lastLoginAt: u.last_login_at,
+      lastSeenAt: u.last_seen_at || null,
+      online: Number(u.online_sessions) > 0,
+      onlineSessions: Number(u.online_sessions) || 0,
+      sessionLastSeen: u.online_last_seen || null,
+      dataCount: Number(u.data_count) || 0,
+    }));
+  }
+  for (const p of orphans) {
+    all.push(Object.assign({
+      scene: 'profile-only',
+      userId: null, username: '', displayName: '', role: '', status: '',
+      mustChangePassword: false, createdAt: null, lastLoginAt: null, lastSeenAt: null,
+      online: false, onlineSessions: 0, sessionLastSeen: null, dataCount: 0,
+    }, p));
+  }
+
+  /* ④ 筛选（角色/状态对 profile-only 行天然不命中——它们没有账号属性） */
+  const match = (m) => {
+    if (scene && m.scene !== scene) return false;
+    if (role && (m.role || '') !== role) return false;
+    if (status && (m.status || '') !== status) return false;
+    if (q) {
+      const hay = [m.username, m.displayName, m.name, m.studentId].join('\n').toLowerCase();
+      if (hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  };
+  const filtered = all.filter(match);
+
+  const counts = {
+    total: all.length,
+    both: all.filter((m) => m.scene === 'both').length,
+    userOnly: all.filter((m) => m.scene === 'user-only').length,
+    profileOnly: all.filter((m) => m.scene === 'profile-only').length,
+    pendingReview: all.filter((m) => m.contactStatus === 'pending').length,
+    claimed: all.filter((m) => m.userId != null).length,
+  };
+
+  return ok(res, {
+    total: filtered.length,
+    counts,
+    fieldMeta: await loadFieldMeta(),
+    members: filtered.slice(offset, offset + limit),
+  });
 }
 
 /**
@@ -1689,7 +1980,133 @@ async function reviewContact(req, res, me, b) {
  *         contactStatus?, visibilityPref? }
  * 带 id = 修改，不带 = 新增。
  */
+/* v2.10.0（第六十轮 #172）：主体抽成 upsertProfileCore，
+   供 save-profile 与「成员与档案」合并保存（save-member）共用。
+   顺带落地「姓名单数据源」：profiles.name 是权威源，
+   保存时同步 users.display_name，消除合并前两处各存一份、对不上的问题。 */
 async function saveProfile(req, res, me, b) {
+  const r = await upsertProfileCore(getSql(), me, b);
+  if (!r.ok) return fail(res, r.code, r.error);
+  return ok(res, { message: r.message, id: r.id });
+}
+
+/* ============================================================
+   v2.10.0「成员与档案」合并保存（第六十轮 #172）
+   ------------------------------------------------------------
+   一个长表单同时提交账号段 + 档案段，按四种场景编排：
+     ① userId + profileId   → 账号改角色/状态，档案走 upsertProfileCore
+     ② 仅 profileId + createAccount
+                            → 建号（不自动建空档案，避免一人两条），
+                              再把这条档案绑到新账号
+     ③ 仅 userId（暂无档案）→ 档案段有内容就补建一条并绑定该账号
+     ④ 都没有 + createAccount
+                            → 建号（自动建档案），再用档案段回填
+   用户名对已有账号一律不可改（登录凭证，改了别人登录不上）；
+   要换登录名只能删号重建。密码也不走本接口——单独走 reset-password。
+   ============================================================ */
+async function saveMember(req, res, me, b) {
+  const sql = getSql();
+  const userId = Number(b.userId || 0) || null;
+  const profileId = Number(b.profileId || 0) || null;
+  const wantAccount = !!b.createAccount;
+  const notes = [];
+
+  let finalUserId = userId;
+  let finalProfileId = profileId;
+
+  /* ---------- 账号段 ---------- */
+  if (userId) {
+    /* 角色 / 状态：传了才改，白名单与 set-role / set-status 一致 */
+    if (b.role != null && b.role !== '') {
+      if (!['user', 'admin'].includes(b.role)) {
+        return fail(res, 400, 'role 只能是 user 或 admin');
+      }
+      if (userId === me.id && b.role !== 'admin') {
+        return fail(res, 400, '不能取消自己的管理员身份');
+      }
+      const r = await sql`update users set role = ${b.role} where id = ${userId} returning username`;
+      if (!r.length) return fail(res, 404, '用户不存在');
+      notes.push('角色已更新');
+    }
+    if (b.status != null && b.status !== '') {
+      if (!['active', 'banned', 'pending'].includes(b.status)) {
+        return fail(res, 400, 'status 只能是 active / banned / pending');
+      }
+      if (userId === me.id) return fail(res, 400, '不能修改自己的账号状态');
+      const r = await sql`update users set status = ${b.status} where id = ${userId} returning username`;
+      if (!r.length) return fail(res, 404, '用户不存在');
+      if (b.status !== 'active') await sql`delete from sessions where user_id = ${userId}`;
+      notes.push('状态已更新');
+    }
+  } else if (wantAccount) {
+    /* 建号。有档案要绑时 skipProfile：createUserCore 会自动补一条空档案，
+       不跳过就会出现「一人两条」，必须由下面显式绑定。 */
+    const r = await createUserCore(sql, me, {
+      username: b.username,
+      password: b.password,
+      displayName: b.name || b.displayName || '',
+      role: b.role,
+      skipProfile: !!profileId,
+    });
+    if (!r.ok) return fail(res, r.code, r.error);
+    finalUserId = r.userId;
+    notes.push('已开通账号 ' + r.username);
+
+    if (profileId) {
+      const cur = await sql`select user_id from profiles where id = ${profileId} limit 1`;
+      if (!cur.length) return fail(res, 404, '档案不存在');
+      if (cur[0].user_id != null && Number(cur[0].user_id) !== finalUserId) {
+        return fail(res, 409, '这条档案已绑定其他账号，请先解绑再开通');
+      }
+      await sql`update profiles set user_id = ${finalUserId}, updated_at = now() where id = ${profileId}`;
+      notes.push('档案已绑定到新账号');
+    } else {
+      /* 没传档案：建号时自动补的那条就是要回填的档案 */
+      const np = await sql`select id from profiles where user_id = ${finalUserId} limit 1`;
+      if (np.length) finalProfileId = Number(np[0].id);
+    }
+  } else if (profileId) {
+    /* 只存档案、不开号——合法（通讯录里本来就有无账号的人，如外班朋友） */
+  } else {
+    return fail(res, 400, '没有可保存的对象：请填写档案信息，或勾选「开通账号」');
+  }
+
+  /* ---------- 档案段 ---------- */
+  /* 档案段是否有实质内容（任一非空才算要存；全空 = 本次只改账号） */
+  const hasProfileData = ['name', 'studentId', 'politics', 'examNo', 'wechat', 'qq', 'phone']
+    .some((k) => String(b[k] == null ? '' : b[k]).trim());
+
+  if (finalProfileId) {
+    if (hasProfileData) {
+      const r = await upsertProfileCore(sql, me, Object.assign({}, b, { id: finalProfileId }));
+      if (!r.ok) return fail(res, r.code, r.error);
+      notes.push(r.message);
+    }
+  } else if (finalUserId && hasProfileData) {
+    /* 有账号暂无档案：补建一条并绑定（userId 由 upsertProfileCore 写入） */
+    const r = await upsertProfileCore(sql, me, Object.assign({}, b, { id: 0, userId: finalUserId }));
+    if (!r.ok) return fail(res, r.code, r.error);
+    finalProfileId = r.id;
+    notes.push(r.message);
+  }
+
+  await audit(me.id, 'member.save', 'member',
+    String(finalUserId || finalProfileId || ''), notes.join('；') || '无变更');
+
+  return ok(res, {
+    message: notes.length ? notes.join('；') : '已保存',
+    userId: finalUserId,
+    profileId: finalProfileId,
+    notes,
+  });
+}
+
+/**
+ * 资料保存核心（不写 HTTP 响应）。
+ * @returns {{ ok:true, id:number, message:string } | { ok:false, code:number, error:string }}
+ * @param b.userId 新增时可选：直接把这条资料绑到某个账号（「有账号暂无档案」场景）
+ */
+async function upsertProfileCore(sql, me, b) {
   const id = Number(b.id || 0);
   const name = cText(b.name, 30);
   const sid = cText(b.studentId, 20);
@@ -1737,15 +2154,13 @@ async function saveProfile(req, res, me, b) {
     }
   }
 
-  if (!name && !sid) return fail(res, 400, '姓名与学号至少填一项');
-
-  const sql = getSql();
+  if (!name && !sid) return { ok: false, code: 400, error: '姓名与学号至少填一项' };
 
   /* 学号唯一性检查：同一个学号不能挂两条资料 */
   if (sid) {
     const dup = await sql`select id from profiles where student_id = ${sid} limit 1`;
     if (dup.length && Number(dup[0].id) !== id) {
-      return fail(res, 409, '学号 ' + sid + ' 已被另一条资料占用');
+      return { ok: false, code: 409, error: '学号 ' + sid + ' 已被另一条资料占用' };
     }
   }
 
@@ -1760,7 +2175,7 @@ async function saveProfile(req, res, me, b) {
   if (id) {
     /* 修改：只更新传了的字段，避免把没传的字段清空 */
     const cur = await sql`select * from profiles where id = ${id} limit 1`;
-    if (!cur.length) return fail(res, 404, '资料不存在');
+    if (!cur.length) return { ok: false, code: 404, error: '资料不存在' };
     const c = cur[0];
 
     const params = [
@@ -1801,8 +2216,17 @@ async function saveProfile(req, res, me, b) {
       'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
       params
     );
+
+    /* 姓名单数据源（v2.10.0）：profiles.name 是权威源。
+       档案挂了账号就把 users.display_name 同步成最新姓名，
+       消除「成员与档案」合并前两处各存一份、改一处另一处对不上的问题。
+       只同步非空姓名；display_name 为空（纯账号无姓名）时不动它。 */
+    if (name && c.user_id) {
+      await sql`update users set display_name = ${name} where id = ${c.user_id}`;
+    }
+
     await audit(me.id, 'profile.update', 'profile', String(id), name || sid);
-    return ok(res, { message: '已保存', id });
+    return { ok: true, id, message: '已保存' };
   }
 
   /* ---- 新增 ---- */
@@ -1829,6 +2253,14 @@ async function saveProfile(req, res, me, b) {
     insVals.push(fieldVisJson);
     insParams.push('$' + insVals.length);
   }
+  /* 新增时绑定账号（v2.10.0「有账号暂无档案」场景：合并页补建档案）。
+     只在显式传了 userId 时写；顺带把账号显示名同步成档案姓名。 */
+  const bindUserId = Number(b.userId || 0) || null;
+  if (bindUserId) {
+    insCols.push('user_id');
+    insVals.push(bindUserId);
+    insParams.push('$' + insVals.length);
+  }
   for (const f of editable) {
     if (!(f.field in customVals)) continue;
     const chk = isSafeFieldFormat(f.field);   /* 同上：不能挡系统列 */
@@ -1843,8 +2275,11 @@ async function saveProfile(req, res, me, b) {
     insVals
   );
   const newId = Number(ins[0].id);
+  if (bindUserId && name) {
+    await sql`update users set display_name = ${name} where id = ${bindUserId}`;
+  }
   await audit(me.id, 'profile.create', 'profile', String(newId), name || sid);
-  return ok(res, { message: '已新增', id: newId });
+  return { ok: true, id: newId, message: '已新增' };
 }
 
 /** 删除一条资料 */
@@ -2152,4 +2587,119 @@ async function bindProfiles(req, res, me, b) {
   }
 
   return ok(res, Object.assign({ message: dry ? '预检完成（未写入）' : ('已绑定 ' + out.bound + ' 人') }, out));
+}
+
+/* ============================================================
+   v2.10.0 用户操作日志（2026-10-16 第六十轮）
+   ------------------------------------------------------------
+   数据由前端全点击上报（/api/data?action=log，攒批写入）。
+   后台两个读接口：明细列表 + 统计面板。
+   时区口径：站主在江西（UTC+8），统计与日期筛选一律按
+   Asia/Shanghai 归日，避免「昨天的点击算进了今天」。
+   ============================================================ */
+
+/** 明细列表：按用户名 / 动作类型 / 日期（上海时区）筛选 */
+async function listActionLogs(req, res) {
+  const sql = getSql();
+  const page = Math.max(Number(req.query.page || 1), 1);
+  const size = Math.min(Number(req.query.size || 50), 200);
+  const offset = (page - 1) * size;
+  const q = String(req.query.q || '').trim().toLowerCase();
+  /* ⚠️ v2.10.0 参数名必须叫 type，不能叫 action —— 路由自己就占着
+     ?action=action-logs，同名的筛选参数会被 query 解析器的「取第一个」
+     吃掉（永远等于 'action-logs'，筛任何类型都返回空）。 */
+  const act = String(req.query.type || '').trim();
+  const day = String(req.query.day || '').trim();   /* YYYY-MM-DD（上海时区） */
+
+  let rows = [], total = 0;
+  try {
+    rows = await sql`
+      select l.id, l.action, l.page, l.target, l.detail, l.created_at,
+             u.id as user_id, u.username, u.display_name
+        from user_action_log l
+        join users u on u.id = l.user_id
+       where (${q} = '' or lower(u.username) like '%' || ${q} || '%'
+                           or lower(coalesce(u.display_name, '')) like '%' || ${q} || '%'
+                           or lower(l.page) like '%' || ${q} || '%'
+                           or lower(l.target) like '%' || ${q} || '%'
+                           or lower(l.action) like '%' || ${q} || '%')
+         and (${act} = '' or l.action = ${act})
+         and (${day} = '' or (l.created_at at time zone 'Asia/Shanghai')::date = ${day}::date)
+       order by l.created_at desc
+       limit ${size} offset ${offset}
+    `;
+    total = (await sql`
+      select count(*)::int as n
+        from user_action_log l
+        join users u on u.id = l.user_id
+       where (${q} = '' or lower(u.username) like '%' || ${q} || '%'
+                           or lower(coalesce(u.display_name, '')) like '%' || ${q} || '%'
+                           or lower(l.page) like '%' || ${q} || '%'
+                           or lower(l.target) like '%' || ${q} || '%'
+                           or lower(l.action) like '%' || ${q} || '%')
+         and (${act} = '' or l.action = ${act})
+         and (${day} = '' or (l.created_at at time zone 'Asia/Shanghai')::date = ${day}::date)
+    `)[0].n;
+  } catch (e) {
+    /* 表还没建出来（新库首次）→ 返回空，不炸页面 */
+    return ok(res, { total: 0, logs: [], page, size });
+  }
+
+  return ok(res, {
+    total,
+    page,
+    size,
+    logs: rows.map((r) => ({
+      id: Number(r.id),
+      userId: Number(r.user_id),
+      username: r.username,
+      displayName: r.display_name,
+      action: r.action,
+      page: r.page,
+      target: r.target,
+      detail: r.detail,
+      createdAt: r.created_at ? String(r.created_at) : null,
+    })),
+  });
+}
+
+/** 统计面板：今日点击 / 7 日活跃用户 / 热门页面 / 动作分布 */
+async function actionStats(req, res) {
+  const sql = getSql();
+  const zero = { today: 0, week: 0, activeUsers7d: 0, topPages: [], byAction: [] };
+  try {
+    const today = (await sql`
+      select count(*)::int as n
+        from user_action_log
+       where created_at >= date_trunc('day', now() at time zone 'Asia/Shanghai')
+                             at time zone 'Asia/Shanghai'
+    `)[0].n;
+    const week = (await sql`
+      select count(*)::int as n from user_action_log
+       where created_at >= now() - interval '7 days'
+    `)[0].n;
+    const activeUsers7d = (await sql`
+      select count(distinct user_id)::int as n from user_action_log
+       where created_at >= now() - interval '7 days'
+    `)[0].n;
+    const topPages = await sql`
+      select page, count(*)::int as n
+        from user_action_log
+       where page <> '' and created_at >= now() - interval '7 days'
+       group by page order by n desc limit 8
+    `;
+    const byAction = await sql`
+      select action, count(*)::int as n
+        from user_action_log
+       where created_at >= now() - interval '7 days'
+       group by action order by n desc
+    `;
+    return ok(res, {
+      today, week, activeUsers7d,
+      topPages: topPages.map((r) => ({ page: r.page, n: Number(r.n) })),
+      byAction: byAction.map((r) => ({ action: r.action, n: Number(r.n) })),
+    });
+  } catch (e) {
+    return ok(res, zero);
+  }
 }

@@ -9,7 +9,7 @@
    详见 _lib/password.js 顶部说明。
    ============================================================ */
 
-import { getSql, cfg } from './_lib/db.js';
+import { getSql, cfg, getSiteSetting, setSiteSetting } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body,
   requireUser, requireUserSlim, newToken, audit, ensureSchema,
@@ -43,6 +43,9 @@ export default async function handler(req, res) {
       case 'ping':     return await ping(req, res);
       case 'change-password': return await changePassword(req, res);
       case 'salt':      return await saltParams(req, res);
+      /* v2.10.0：公开的注册配置（登录页据此显示/隐藏注册入口、提示审核）。
+         不需要登录 —— 没登录的人才是需要看这个的人。 */
+      case 'register-config': return await registerConfig(req, res);
       default:
         return fail(res, 404, '未知的 action：' + (action || '(空)'));
     }
@@ -52,12 +55,23 @@ export default async function handler(req, res) {
   }
 }
 
-/* ---------------- 注册 ---------------- */
+/* ---------------- 注册 ----------------
+   v2.10.0（2026-10-16 第六十轮）注册权限后台管控：
+     · 总开关：site_settings.register_open（未设置时回退 env ALLOW_REGISTER）
+     · 审核流：site_settings.register_review（默认 true）——
+       开启时注册用户 status='pending'，不签发 token，
+       管理员在后台审核通过（→active）后才能登录。 */
 async function register(req, res) {
   if (req.method !== 'POST') return fail(res, 405, '请用 POST');
 
-  const { allowRegister } = cfg();
-  if (!allowRegister) return fail(res, 403, '本站暂未开放自助注册，请联系管理员开号');
+  const sql = getSql();
+  await ensureSchema(sql);
+
+  /* 总开关：DB 优先，未配置过回退部署期环境变量（保持老行为） */
+  const registerOpen = await getSiteSetting(sql, 'register_open', cfg().allowRegister);
+  if (!registerOpen) return fail(res, 403, '本站暂未开放自助注册，请联系管理员开号');
+
+  const review = await getSiteSetting(sql, 'register_review', true);
 
   const b = await body(req);
   const username = normUsername(b.username);
@@ -71,25 +85,33 @@ async function register(req, res) {
     return fail(res, 400, '密码长度需 6–64 位');
   }
 
-  const sql = getSql();
-
   /* 查重（用 lower 索引，避免 Tom/tom 重复注册） */
   const dup = await sql`select id from users where lower(username) = ${username} limit 1`;
   if (dup.length) return fail(res, 409, '这个用户名已经被注册了，换一个吧');
 
   const hash = await hashPassword(password);
 
-  /* 首个注册者 / 配置里指定的用户名，自动成为管理员 */
+  /* 首个注册者 / 配置里指定的用户名，自动成为管理员。
+     ⚠️ 管理员不走审核：第一个账号往往是站主自己，卡审核会把站主关在门外。 */
   const { adminUsers } = cfg();
   const isFirst = (await sql`select count(*)::int as n from users`)[0].n === 0;
   const role = (isFirst || adminUsers.includes(username)) ? 'admin' : 'user';
+  const status = review && role !== 'admin' ? 'pending' : 'active';
 
   const rows = await sql`
-    insert into users (username, display_name, password_hash, role)
-    values (${username}, ${displayName}, ${hash}, ${role})
+    insert into users (username, display_name, password_hash, role, status)
+    values (${username}, ${displayName}, ${hash}, ${role}, ${status})
     returning id, username, display_name, role, status, created_at
   `;
   const u = rows[0];
+
+  /* 待审核：不签发 token，也拿不到登录态 —— 审核通过前无法登录 */
+  if (u.status === 'pending') {
+    return ok(res, {
+      message: '注册成功，等待管理员审核。审核通过后即可登录，请耐心等待。',
+      pending: true,
+    });
+  }
 
   const token = await issueSession(sql, u.id);
 
@@ -98,6 +120,14 @@ async function register(req, res) {
     token,
     user: shape(u),
   });
+}
+
+/** 公开：注册配置（总开关 + 是否需审核）。无需登录。 */
+async function registerConfig(req, res) {
+  const sql = getSql();
+  const registerOpen = await getSiteSetting(sql, 'register_open', cfg().allowRegister);
+  const review = await getSiteSetting(sql, 'register_review', true);
+  return ok(res, { open: !!registerOpen, review: !!review });
 }
 
 /* ---------------- 登录 ---------------- */
@@ -151,7 +181,14 @@ async function login(req, res) {
     await bumpFail(sql, u ? u.id : null, username);
     return fail(res, 401, '用户名或密码不对');
   }
-  if (u.status !== 'active') return fail(res, 403, '该账号已被禁用，请联系管理员');
+  if (u.status !== 'active') {
+    /* v2.10.0：区分「待审核」与「已禁用」—— 提示语不同，
+       待审核用户要知道的是「等着，不是被封了」。 */
+    if (u.status === 'pending') {
+      return fail(res, 403, '账号正在审核中，管理员通过后即可登录');
+    }
+    return fail(res, 403, '该账号已被禁用，请联系管理员');
+  }
 
   await clearFail(sql, u.id);
 

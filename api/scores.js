@@ -112,14 +112,22 @@ async function getList(req, res) {
                e.grade_ref, e.note, e.status, e.published_at, e.updated_at,
                (select count(*) from exam_scores s where s.exam_id = e.id) as row_count
           from exams e
-         order by e.exam_date desc, e.id desc`
+         /* 2026-10-16 v2.10.0：补 nulls last。
+            PG 的 DESC 默认 NULLS FIRST —— 没填日期的考试会漂到列表最顶部，
+            表现为「录入时序混乱」。站主要求：录入顺序不受限，一律按考试时间排，
+            空日期沉底（asc 的端点 PG 默认就是 NULLS LAST，无需改）。 */
+         order by e.exam_date desc nulls last, e.id desc`
     : await sql`
         select e.id, e.name, e.exam_date, e.exam_end_date, e.exam_type, e.subjects, e.cutlines,
                e.grade_ref, e.note, e.status, e.published_at, e.updated_at,
                (select count(*) from exam_scores s where s.exam_id = e.id) as row_count
           from exams e
          where e.status = 'published'
-         order by e.exam_date desc, e.id desc`;
+         /* 2026-10-16 v2.10.0：补 nulls last。
+            PG 的 DESC 默认 NULLS FIRST —— 没填日期的考试会漂到列表最顶部，
+            表现为「录入时序混乱」。站主要求：录入顺序不受限，一律按考试时间排，
+            空日期沉底（asc 的端点 PG 默认就是 NULLS LAST，无需改）。 */
+         order by e.exam_date desc nulls last, e.id desc`;
 
   ok(res, {
     exams: rows.map(normalizeExam),
