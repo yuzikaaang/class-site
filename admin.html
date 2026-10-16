@@ -750,7 +750,10 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 <div id="gate">
   <div class="gate-card">
     <div class="gate-logo">
-      <div class="mark">班</div>
+      <!-- v2.9.11：mark 接 ink-auto —— 底色是 --grad 渐变（亮 #f97316 /
+           暗 #fb923c），原写死白字仅 2.80/2.2 不达标；ink-auto 抓渐变
+           首色按 WCAG 择优取深字（5.82 / 6+）。 -->
+      <div class="mark ink-auto">班</div>
       <div>
         <h1>25级05班 · 管理后台</h1>
         <p>Admin Console</p>
@@ -780,7 +783,7 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 
   <aside class="side" id="side">
     <div class="side-brand">
-      <div class="mark">班</div>
+      <div class="mark ink-auto">班</div>
       <div>
         <h1>管理后台</h1>
         <p>25级05班</p>
@@ -885,7 +888,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.9.10';
+var SITE_VERSION = '2.9.11';
 var VER_DATE = '2026-10-16';
 
 /* ---- 运行时状态 ---- */
@@ -1046,11 +1049,21 @@ function api(path, opts){
  *   ② 主题（白天/黑夜）切换后，clsAutoInk(document.body) 全局重算；
  *   ③ 新增渲染点只要给容器加 class="ink-auto"（动态背景色用
  *      data-ink-bg 声明代表色，如渐变的起始色），无需再操心字色。
- * 与 index.html 保持同一套实现：同函数名、同阈值、同色值，
+ * 与 index.html 保持同一套实现：同函数名、同择优逻辑、同色值，
  * 改一处必须同步改另一处（render_test.mjs 有断言盯同构）。
+ *
+ * 【v2.9.11】判定升级：WCAG 相对亮度 + 对比度择优（不再用感知亮度猜）
+ * ------------------------------------------------------------
+ * 站主原话：「还有登录时的弹窗等等，都是字色不达标的后台也有这种情况」。
+ * v2.9.10 用 YIQ 感知亮度阈值 0.6 猜相反色，中间色会误判 ——
+ * 如 #f97316（亮橙）被判「暗底取白字」，实测白字对比度仅 2.80:1，
+ * 够不上 WCAG 正文 4.5:1，而深字 #241f1c 有 5.82:1。
+ * 现在白字、深字各算一遍 WCAG 对比度，谁大用谁，中间色不再靠猜。
  * ============================================================ */
 var CLS_INK_DARK = '#241f1c';   /* 亮底上的字（暖调近黑，不用纯黑） */
 var CLS_INK_LIGHT = '#ffffff';  /* 暗底上的字 */
+var CLS_INK_RGB_DARK = clsParseColor(CLS_INK_DARK);   /* [36,31,28]，择优用 */
+var CLS_INK_RGB_LIGHT = clsParseColor(CLS_INK_LIGHT); /* [255,255,255]，择优用 */
 
 /* 解析颜色串 → [r,g,b]；支持 #rgb / #rrggbb / rgb() / rgba()。
    透明或解析失败返回 null（调用方按「不处理」跳过）。 */
@@ -1072,13 +1085,32 @@ function clsParseColor(c){
   }
   return null;
 }
-/* 感知亮度 0–1（YIQ 加权，与前台热力图公式一致） */
-function clsLuma(rgb){ return (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255; }
-/* 核心：给定背景色，返回可读的相反色 */
+/* WCAG 2.x 相对亮度 0–1（sRGB gamma 展开后加权）。
+   注意与「感知亮度」(0.299R+0.587G+0.114B)/255 的区别：那玩意儿
+   在中间色上会和真实对比度打架（#f97316 就是受害者），择优只认这个。 */
+function clsRelLum(rgb){
+  function ch(v){
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+  return 0.2126 * ch(rgb[0]) + 0.7152 * ch(rgb[1]) + 0.0722 * ch(rgb[2]);
+}
+/* WCAG 对比度 1–21 */
+function clsContrast(a, b){
+  var la = clsRelLum(a), lb = clsRelLum(b);
+  var hi = Math.max(la, lb), lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+/* 核心：给定背景色，返回可读的相反色。
+   v2.9.11 起不猜了直接算 —— 白字与深字各算一遍 WCAG 对比度，取大者。
+   实测：#f97316 白 2.80 / 深 5.82 → 深字；#0f766e 白 5.47 / 深 2.98 → 白字；
+   #e07a3c 白 2.99 / 深 5.45 → 深字；#c2410c 白 5.18 / 深 3.15 → 白字。
+   与 index.html 逐行同构。 */
 function clsReadableOn(bg){
   var c = clsParseColor(bg);
   if(!c) return '';
-  return clsLuma(c) > 0.6 ? CLS_INK_DARK : CLS_INK_LIGHT;
+  return clsContrast(CLS_INK_RGB_LIGHT, c) >= clsContrast(CLS_INK_RGB_DARK, c)
+    ? CLS_INK_LIGHT : CLS_INK_DARK;
 }
 /* 扫描 root 内所有 .ink-auto，按实际背景重设字色。
    data-ink-bg 优先（渐变/图片背景没有单一 computed 色时用）；
@@ -8202,6 +8234,19 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "2.9.11",
+      "date": "2026-10-16",
+      "title": "登录弹窗字色达标（WCAG 对比度择优 + 组件级加深/提亮）",
+      "type": "improve",
+      "highlight": true,
+      "items": [
+        "修复：登录/注册弹窗、验证码、迎新开屏弹窗、后台登录门等处的浅色文字在部分底色上对比度不达标 —— 全站字色逻辑升级为 WCAG 对比度择优：白字、深字各算一遍对比度，谁大用谁，中间色（如亮橙 #f97316）不再误判",
+        "登录面板标签、提示、验证码说明等次要文字亮色统一加深、暗色统一提亮，玻璃拟态弹窗叠在开屏弹窗上时也可读",
+        "迎新开屏弹窗正文不再被固定深灰色压过，主题白字正常生效；列表底改为压暗蒙层",
+        "后台登录门与侧栏 Logo 字同样接入自适应字色；登录按钮渐变两端按「白字 4.5:1」重新选色"
+      ]
+    },
     {
       "version": "2.9.10",
       "date": "2026-10-16",
