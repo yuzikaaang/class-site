@@ -3457,9 +3457,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(indexHtml),
+  t('★前台版本号为 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adminHtml),
+  t('★后台版本号为 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3823,9 +3823,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(indexHtml38),
+  t('★前台版本号为 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adminHtml38),
+  t('★后台版本号为 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4840,10 +4840,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx47));
-  t('★后台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adm47));
+  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx47));
+  t('★后台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adm47));
   t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
-    /class-site-v81/.test(sw47));
+    /class-site-v82/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4927,7 +4927,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.0');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.1');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5027,9 +5027,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx48));
+  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-16'/.test(idx48));
-  t('★service worker 缓存版本升到 v80', /class-site-v81/.test(sw48));
+  t('★service worker 缓存版本升到 v80', /class-site-v82/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5093,8 +5093,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx49));
-  t('★后台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adm49));
+  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx49));
+  t('★后台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5166,7 +5166,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx50));
+  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5328,7 +5328,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adm));
+  t('★后台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5396,7 +5396,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx));
+  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5901,7 +5901,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx));
+  t('★前台版本号升到 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6012,7 +6012,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx));
+  t('★前台版本号升到 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx));
   t('★后台内置更新记录补到 2.10.0',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6117,10 +6117,10 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(idx));
-  t('★后台版本号 2.10.0', /SITE_VERSION = '2\.10\.0'/.test(adm));
+  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx));
+  t('★后台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 2.10.0 且缓存升 v80', /SITE_VER = '2\.10\.0'/.test(swSrc) && /class-site-v81/.test(swSrc));
+  t('★sw.js SITE_VER 2.10.1 且缓存升 v82', /SITE_VER = '2\.10\.1'/.test(swSrc) && /class-site-v82/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7466,6 +7466,46 @@ console.log('\n【69】第六十一轮·云端个人数据管理（#178：分类
     /<th class="nowrap">分类<\/th><th>数据<\/th>/.test(adm));
   t('★后台：键名旁展示中文名（label 与键名去重）',
     /d\.label && d\.label !== d\.key/.test(adm) && /esc\(d\.catLabel/.test(adm));
+}
+
+console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
+{
+  const httpSrc = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const authSrc = fs.readFileSync(new URL('./api/auth.js', import.meta.url), 'utf8');
+  const swSrc   = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+
+  /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
+     背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
+     46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
+  t('★SCHEMA_VER 常量存在且随版本升到 2.10.1',
+    /const SCHEMA_VER = '2\.10\.1'/.test(httpSrc));
+  t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
+    /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
+  t('★版本一致直接 return（不再跑全量 DDL）',
+    /if \(row && row\.v === SCHEMA_VER\) return;/.test(httpSrc));
+  t('★老库过渡：批次已跑过但没盖章 → 只补盖章、跳过 45 次往返',
+    /if \(row && row\.has_ual\)/.test(httpSrc));
+  t('★全量跑完盖章，且用 || 合并（不冲掉 register_open 等后台开关）',
+    /set data = site_settings\.data \|\| excluded\.data/.test(httpSrc));
+  t('★闸门注释留了根因与「改 DDL 必须升 SCHEMA_VER」的纪律',
+    /Too many subrequests/.test(httpSrc) && /SCHEMA_VER 往上加一格/.test(httpSrc));
+
+  /* ---- ② 登录侧：非关键写操作全部有保护 ---- */
+  t('★last_login_at 更新有 try-catch（非关键写不再把登录打成 500）',
+    /\[auth\] last_login_at 更新失败/.test(authSrc));
+  t('★会话签发失败明确返回 500，且不回显内部错误细节',
+    /登录成功但会话签发失败，请稍后重试/.test(authSrc) && !/会话签发失败：' \+/.test(authSrc));
+  t('★诊断残留已清理（无 __diag / getLastSchemaError）',
+    !/__diag/.test(authSrc) && !/getLastSchemaError/.test(httpSrc));
+
+  /* ---- ③ 版本与缓存同步 ---- */
+  t('★sw.js 缓存升 v82、版本 2.10.1',
+    /class-site-v82/.test(swSrc) && /SITE_VER = '2\.10\.1'/.test(swSrc));
+
+  /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
+  const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('★后台更新记录有 2.10.1 条目', /"version": "2\.10\.1"/.test(admSrc));
+  t('★后台更新记录仍保留 2.10.0 条目', /"version": "2\.10\.0"/.test(admSrc));
 }
 
 console.log('\n' + '='.repeat(52));

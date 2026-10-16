@@ -12,7 +12,7 @@
 import { getSql, cfg, getSiteSetting, setSiteSetting } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body,
-  requireUser, requireUserSlim, newToken, audit, ensureSchema, getLastSchemaError,
+  requireUser, requireUserSlim, newToken, audit, ensureSchema,
 } from './_lib/http.js';
 import {
   hashPassword, verifyPassword, verifyCredential, validateClientHash,
@@ -205,24 +205,22 @@ async function login(req, res) {
     }
   }
 
-  /* 🔍 2026-10-16 诊断期临时改动：线上登录 500，错误被 worker 顶层吞掉。
-     给两个无保护写操作加 try-catch（与 logLogin/bumpFail/clearFail 风格一致），
-     并把真实错误回显到响应体。定位根因后移除 __diag 字段、保留 try-catch。 */
-  const __diag = {};
+  /* 非关键写操作统一加保护（2026-10-16）：任何一条失败都不应该把登录
+     整体打成 500 —— 与 logLogin / bumpFail / clearFail 的处理保持一致。
+     （线上实测：last_login_at 更新曾因缺列把登录打成 500，防的就是这类。）
+     会话签发是硬依赖（没有 token 登录不成立），失败必须报错。 */
   try {
     await sql`update users set last_login_at = now(), last_seen_at = now() where id = ${u.id}`;
   } catch (e) {
-    __diag.lastLogin = e && e.message ? e.message : String(e);
-    console.warn('[auth] last_login_at 更新失败：', __diag.lastLogin);
+    console.warn('[auth] last_login_at 更新失败（不影响登录）：', e && e.message);
   }
   await logLogin(sql, req, u.id);
   let token;
   try {
     token = await issueSession(sql, u.id);
   } catch (e) {
-    __diag.session = e && e.message ? e.message : String(e);
-    console.warn('[auth] 会话签发失败：', __diag.session);
-    return fail(res, 500, '登录校验通过但会话签发失败：' + __diag.session);
+    console.warn('[auth] 会话签发失败：', e && e.message);
+    return fail(res, 500, '登录成功但会话签发失败，请稍后重试');
   }
 
   /* 头衔一并返回：前端据此显示「课代表编辑」入口（2026-10-06）。
@@ -239,7 +237,6 @@ async function login(req, res) {
     user: Object.assign(shape(u), { title: loginTitle }),
     /* 首次登录（或管理员重置过密码）→ 前端强制弹改密，不给跳过 */
     mustChangePassword: !!u.must_change_password,
-    __diag: Object.assign({ schema: getLastSchemaError() }, __diag),
   });
 }
 

@@ -25,20 +25,60 @@ import { sha256Hex } from './password.js';
 
    任何失败都只记录警告、不抛错：自愈逻辑绝不能变成新的故障点。
    （若数据库账号没有 DDL 权限，补全失败，但老库的基本登录仍可正常。）
-   ------------------------------------------------------------ */
-let schemaReady = false;
-/** 🔍 2026-10-16 诊断期：ensureSchema 失败原因暂存（登录响应回显用）。
- *  正常为 null；自愈失败时为最后一条报错语句的 message。定位后移除。 */
-let lastSchemaError = null;
-export function getLastSchemaError() { return lastSchemaError; }
 
+   🔴 2026-10-16（v2.10.1 热修）·版本闸门：
+   线上登录 500「Too many subrequests by single Worker invocation」的根因。
+   Cloudflare Workers **免费版单次请求子请求上限 50 次**，而 Neon 走 HTTP
+   传输（见 db.js 注释），**每条 SQL = 一次子请求**。本函数有 46 条 DDL，
+   叠加登录自身约 7 次查询 = 53 次 → 撞线：校验通过、签会话时直接抛错。
+   （「登录要等 10 秒」也是这个原因：53 次串行 HTTPS 往返的累积。）
+
+   而 schemaReady 只是**每实例一次**，低流量下 Cloudflare 几乎每个请求都
+   落在新实例上 → 每条请求都重跑这 46 条 DDL，纯属浪费。
+
+   所以这里加一道「版本闸门」：先花 1 次往返读库里的表结构版本，
+   一致就直接返回；全量 DDL 只在真正需要时（全新库 / 版本升级）才跑。
+   稳态下每请求 1 次子请求，登录子请求数 53 → 7。
+   ⚠️ 凡是改动下方 DDL 清单，必须同步把 SCHEMA_VER 往上加一格，
+      否则老库不会重跑 —— 自愈能力就断了。
+   ------------------------------------------------------------ */
+/** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
+const SCHEMA_VER = '2.10.1';
+let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
   /* 先置位再执行：无论成功失败都只尝试一次，避免每次请求都刷一遍日志 */
   schemaReady = true;
-  lastSchemaError = null;
   const s = sql || getSql();
   try {
+    /* ---------- 版本闸门（详见本函数顶部说明）----------
+       一次往返同时问两件事：
+         · v       库里已盖的版本章
+         · has_ual user_action_log 表在不在（v2.10.0 批次最后建的表）
+       已盖章且版本一致 → 直接返回（1 次子请求）。
+       没盖章但 2.10.0 批次已跑过（历史线上库，那时还没盖章机制）→
+       只补盖章、跳过 DDL，避免白白浪费 45 次子请求把首个请求顶到 50 上限。
+       to_regclass 对不存在的表返回 null 而不报错，正好用来探存在性。 */
+    try {
+      const r = await s`
+        select
+          (select data->>'schema_ver' from site_settings where id = 1) as v,
+          to_regclass('public.user_action_log') is not null as has_ual
+      `;
+      const row = r && r[0];
+      if (row && row.v === SCHEMA_VER) return;
+      if (row && row.has_ual) {
+        await s`
+          insert into site_settings (id, data, updated_at)
+          values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
+          on conflict (id) do update
+            set data = site_settings.data || excluded.data, updated_at = now()
+        `;
+        return;
+      }
+    } catch (e) {
+      /* site_settings / user_action_log 都不存在（全新库）→ 继续跑全量 DDL */
+    }
     await s`
       alter table users add column if not exists must_change_password
         boolean not null default false
@@ -297,12 +337,21 @@ export async function ensureSchema(sql) {
     `;
     await s`create index if not exists ual_time_idx on user_action_log (created_at desc)`;
     await s`create index if not exists ual_user_idx on user_action_log (user_id, created_at desc)`;
+
+    /* 全量跑完 → 盖章。下一条请求起走「版本一致直接返回」的捷径。
+       用 || 合并而不是整行覆盖：site_settings 里还存着 register_open /
+       register_review 等后台开关（见 db.js 的 setSiteSetting），不能冲掉。 */
+    await s`
+      insert into site_settings (id, data, updated_at)
+      values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
+      on conflict (id) do update
+        set data = site_settings.data || excluded.data, updated_at = now()
+    `;
   } catch (e) {
     /* 自愈失败不抛错：老库的基本功能仍可用（只是少了强制改密与登录记录）。
        只警告一次，避免每次请求都刷日志把真正的问题淹没。
        （测试桩 SQLite 不支持 ADD COLUMN IF NOT EXISTS，会走到这里，属预期。） */
-    lastSchemaError = e && e.message ? e.message : String(e);
-    console.warn('[schema] 表结构自愈未完成（不影响基本功能）：', lastSchemaError);
+    console.warn('[schema] 表结构自愈未完成（不影响基本功能）：', e.message);
   }
 }
 
