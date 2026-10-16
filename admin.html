@@ -2732,7 +2732,13 @@ function userDetailDialog(id){
           + '<p class="sub">该用户的最近登录历史</p></div></div>'
           + '<div id="udLogins"><div class="loading" style="padding:26px"><div class="spinner"></div></div></div></div>';
 
-        var dataBox = '<div class="panel"><div class="panel-head"><h3>' + svg('database') + '云端数据</h3></div>'
+        /* v2.10.1 需求⑬：管理员可「选择性删除」（每行一个删除按钮）
+           也可「批量删除」（面板右上角清空全部）。 */
+        var dataBox = '<div class="panel"><div class="panel-head"><h3>' + svg('database') + '云端数据</h3>'
+          + (data.length
+              ? '<button class="btn btn-sm btn-ghost" id="udDelAll" style="margin-left:auto;color:var(--danger)">清空全部</button>'
+              : '')
+          + '</div>'
           + '<div class="panel-body">' + (data.length
               ? '<div class="table-wrap"><table><thead><tr><th class="nowrap">分类</th><th>数据</th><th class="nowrap">更新时间</th><th style="text-align:right">操作</th></tr></thead><tbody>'
                 + data.map(function(d){
@@ -2805,6 +2811,25 @@ function userDetailDialog(id){
               });
           };
         });
+        /* 批量删除：清空该用户全部云端数据（需求⑬） */
+        var delAllBtn = box.querySelector('#udDelAll');
+        if(delAllBtn){
+          delAllBtn.onclick = function(){
+            confirmBox({
+              title: '清空全部云端数据',
+              text: '会删除这位同学在云端的全部 ' + data.length + ' 条数据（点歌记录、作业标记、界面设置等），不可恢复。\n\n只想删某几条的话，请用每行右侧的「删除」。',
+              danger: true, okText: '清空全部'
+            }).then(function(yes){
+              if(!yes) return;
+              api('/admin?action=delete-data', { method: 'POST', body: { userId: id, all: true } })
+                .then(function(j){
+                  toast('已清空 ' + (j.deleted || 0) + ' 条云端数据', 'ok');
+                  userDetailDialog(id);   /* 重新拉一次，列表与条数一起刷新 */
+                })
+                .catch(function(e){ toast(e.message, 'err'); });
+            });
+          };
+        }
       }).catch(function(e){
         box.querySelector('.modal-body').innerHTML = '<div class="alert danger">加载失败：' + esc(e.message) + '</div>';
       });

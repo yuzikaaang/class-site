@@ -891,13 +891,26 @@ async function setData(req, res, me, b) {
   return ok(res, { message: '已保存', key });
 }
 
-/* ---------------- 写：删除某用户的某条数据 ---------------- */
+/* ---------------- 写：删除某用户的云端数据 ----------------
+   两种用法（v2.10.1 需求⑬）：
+     · 传 key    = 选择性删除，只删这一条
+     · 传 all=1  = 批量删除，清空该用户全部云端数据
+   两条路都写审计，且都要求管理员（requireAdmin 在入口处已过）。 */
 async function deleteData(req, res, me, b) {
   const userId = Number(b.userId);
   const key = String(b.key || '');
-  if (!userId || !key) return fail(res, 400, '缺少 userId 或 key');
+  const all = !!b.all;
+  if (!userId || (!all && !key)) return fail(res, 400, '缺少 userId 或 key');
 
   const sql = getSql();
+  if (all) {
+    const rows = await sql`
+      delete from user_data where user_id = ${userId} returning data_key
+    `;
+    await audit(me.id, 'data.delete_all', 'data', String(userId), `清空 ${rows.length} 条`);
+    return ok(res, { message: '已清空该用户的全部云端数据', deleted: rows.length });
+  }
+
   await sql`delete from user_data where user_id = ${userId} and data_key = ${key}`;
   await audit(me.id, 'data.delete', 'data', userId + '/' + key, null);
   return ok(res, { message: '已删除', key });

@@ -7661,6 +7661,82 @@ console.log('\n【72】第六十二轮·成绩模版导入（两行表头按列�
     api.scFillMerged(['甲','','乙'])[1] === '甲' && api.scFillMerged(['甲','','乙'])[2] === '乙');
 }
 
+console.log('\n【73】第六十二轮·需求⑬ 管理员批量删除云端数据（v2.10.1）');
+{
+  /* 准备：管理员建一个账号，登录后写入三条云端数据 */
+  const mk = await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken,
+    body: { username: 'bulkdata01', password: 'Init2025', displayName: '批量数据甲' },
+  });
+  t('（准备）测试账号建好', mk.status === 200 && mk.body.ok, JSON.stringify(mk.body).slice(0, 120));
+  const lg = await call('/api/auth?action=login', {
+    method: 'POST', body: { username: 'bulkdata01', password: 'Init2025' },
+  });
+  const bId = lg.body.user && lg.body.user.id;
+  const tok0 = lg.body.token;
+  /* 建号时带了「首次改密」标记，requireUserReady 会拦住未改密账号，
+     所以先改一次密再用（与【34】路人账号同一套路）。 */
+  const bTok = (await call('/api/auth?action=change-password', {
+    method: 'POST', token: tok0,
+    body: { oldPassword: 'Init2025', newPassword: 'ByOwn2025' },
+  })).body.token || tok0;
+  t('（准备）拿到测试账号的 id 与 token', !!bId && typeof bTok === 'string', JSON.stringify(lg.body).slice(0, 140));
+
+  await call('/api/data', {
+    method: 'PUT', token: bTok,
+    body: { items: { cls_theme: 'light', cls_sfx: false, cls_hw_done_9: true } },
+  });
+  const d0 = await call('/api/admin?action=user&id=' + bId, { token: adminToken });
+  t('（准备）三条云端数据已写入', ((d0.body.data || [])).length === 3,
+    '实得 ' + ((d0.body.data || [])).length);
+
+  /* ---- ① 批量删除：all=1 一次清空 ---- */
+  const bulk = await call('/api/admin?action=delete-data', {
+    method: 'POST', token: adminToken, body: { userId: bId, all: true },
+  });
+  t('★批量清空云端数据返回 200', bulk.status === 200, '实际 ' + bulk.status);
+  t('★批量清空返回实际删除条数（3 条）',
+    bulk.body.deleted === 3, '实得 ' + bulk.body.deleted);
+  const d1 = await call('/api/admin?action=user&id=' + bId, { token: adminToken });
+  t('★清空后该用户云端数据归零', ((d1.body.data || [])).length === 0,
+    '实得 ' + ((d1.body.data || [])).length);
+
+  /* ---- ② 参数校验：缺 userId / 既无 key 也无 all ---- */
+  const noId = await call('/api/admin?action=delete-data', {
+    method: 'POST', token: adminToken, body: { all: true },
+  });
+  t('★缺 userId → 400（不会误清空别人）', noId.status === 400, '实际 ' + noId.status);
+  const noKey = await call('/api/admin?action=delete-data', {
+    method: 'POST', token: adminToken, body: { userId: bId },
+  });
+  t('★既不给 key 也不给 all → 400', noKey.status === 400, '实际 ' + noKey.status);
+
+  /* ---- ③ 回归：选择性删除（按 key）仍然只删那一条 ---- */
+  await call('/api/data', {
+    method: 'PUT', token: bTok,
+    body: { items: { cls_theme: 'dark', cls_sfx: true } },
+  });
+  const one = await call('/api/admin?action=delete-data', {
+    method: 'POST', token: adminToken, body: { userId: bId, key: 'cls_sfx' },
+  });
+  t('回归：按 key 单条删除返回 200', one.status === 200, '实际 ' + one.status);
+  const d2 = await call('/api/admin?action=user&id=' + bId, { token: adminToken });
+  const left = (d2.body.data || []).map((x) => x.key);
+  t('回归：只删掉指定那条，另一条还在',
+    left.length === 1 && left[0] === 'cls_theme', JSON.stringify(left));
+
+  /* ---- ④ 前端静态护栏 ---- */
+  const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const adminSrc = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  t('★后台用户详情有「清空全部」按钮', /id="udDelAll"/.test(admSrc));
+  t('★清空按钮走 all:true 且二次确认',
+    /userId: id, all: true/.test(admSrc) && /confirmBox\(\{\s*title: '清空全部云端数据'/.test(admSrc));
+  t('★后端 delete-data 支持 all 分支并回传删除条数',
+    /const all = !!b\.all/.test(adminSrc) && /delete from user_data where user_id = \$\{userId\} returning data_key/.test(adminSrc));
+  t('★批量删除写审计（与单条区分 delete_all）',
+    /'data\.delete_all'/.test(adminSrc));
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
