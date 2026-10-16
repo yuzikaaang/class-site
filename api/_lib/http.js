@@ -27,10 +27,16 @@ import { sha256Hex } from './password.js';
    （若数据库账号没有 DDL 权限，补全失败，但老库的基本登录仍可正常。）
    ------------------------------------------------------------ */
 let schemaReady = false;
+/** 🔍 2026-10-16 诊断期：ensureSchema 失败原因暂存（登录响应回显用）。
+ *  正常为 null；自愈失败时为最后一条报错语句的 message。定位后移除。 */
+let lastSchemaError = null;
+export function getLastSchemaError() { return lastSchemaError; }
+
 export async function ensureSchema(sql) {
   if (schemaReady) return;
   /* 先置位再执行：无论成功失败都只尝试一次，避免每次请求都刷一遍日志 */
   schemaReady = true;
+  lastSchemaError = null;
   const s = sql || getSql();
   try {
     await s`
@@ -295,7 +301,8 @@ export async function ensureSchema(sql) {
     /* 自愈失败不抛错：老库的基本功能仍可用（只是少了强制改密与登录记录）。
        只警告一次，避免每次请求都刷日志把真正的问题淹没。
        （测试桩 SQLite 不支持 ADD COLUMN IF NOT EXISTS，会走到这里，属预期。） */
-    console.warn('[schema] 表结构自愈未完成（不影响基本功能）：', e.message);
+    lastSchemaError = e && e.message ? e.message : String(e);
+    console.warn('[schema] 表结构自愈未完成（不影响基本功能）：', lastSchemaError);
   }
 }
 

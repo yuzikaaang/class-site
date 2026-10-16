@@ -12,7 +12,7 @@
 import { getSql, cfg, getSiteSetting, setSiteSetting } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body,
-  requireUser, requireUserSlim, newToken, audit, ensureSchema,
+  requireUser, requireUserSlim, newToken, audit, ensureSchema, getLastSchemaError,
 } from './_lib/http.js';
 import {
   hashPassword, verifyPassword, verifyCredential, validateClientHash,
@@ -205,9 +205,25 @@ async function login(req, res) {
     }
   }
 
-  await sql`update users set last_login_at = now(), last_seen_at = now() where id = ${u.id}`;
+  /* 🔍 2026-10-16 诊断期临时改动：线上登录 500，错误被 worker 顶层吞掉。
+     给两个无保护写操作加 try-catch（与 logLogin/bumpFail/clearFail 风格一致），
+     并把真实错误回显到响应体。定位根因后移除 __diag 字段、保留 try-catch。 */
+  const __diag = {};
+  try {
+    await sql`update users set last_login_at = now(), last_seen_at = now() where id = ${u.id}`;
+  } catch (e) {
+    __diag.lastLogin = e && e.message ? e.message : String(e);
+    console.warn('[auth] last_login_at 更新失败：', __diag.lastLogin);
+  }
   await logLogin(sql, req, u.id);
-  const token = await issueSession(sql, u.id);
+  let token;
+  try {
+    token = await issueSession(sql, u.id);
+  } catch (e) {
+    __diag.session = e && e.message ? e.message : String(e);
+    console.warn('[auth] 会话签发失败：', __diag.session);
+    return fail(res, 500, '登录校验通过但会话签发失败：' + __diag.session);
+  }
 
   /* 头衔一并返回：前端据此显示「课代表编辑」入口（2026-10-06）。
      登录不频繁，多一次查询可接受；老库无 profiles 表时静默跳过。 */
@@ -223,6 +239,7 @@ async function login(req, res) {
     user: Object.assign(shape(u), { title: loginTitle }),
     /* 首次登录（或管理员重置过密码）→ 前端强制弹改密，不给跳过 */
     mustChangePassword: !!u.must_change_password,
+    __diag: Object.assign({ schema: getLastSchemaError() }, __diag),
   });
 }
 
