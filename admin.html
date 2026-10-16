@@ -10530,7 +10530,8 @@ function scPaintPreview(box, parsed, subs, btn){
   var ranks = scClassRanks(parsed.rows, subs);
   var totalOf = function(r){ return scRowTotal(r, subs); };
 
-  /* 识别到但不导入的列 / 分数线列：如实列出来，别让人以为导进去了 */
+  /* 识别到但不导入的列 / 分数线列：如实列出来，别让人以为导进去了。
+     按原因归组——同一原因（如「各科年级排名」）只写一遍，否则 8 列刷 8 行。 */
   var notes = '';
   if((parsed.ignored && parsed.ignored.length) || (parsed.cutlines && parsed.cutlines.length)){
     var li = [];
@@ -10539,9 +10540,14 @@ function scPaintPreview(box, parsed, subs, btn){
         + '）只是表头参考信息，不会写进系统 —— 要设分数线请在考试设置里填');
     }
     if(parsed.ignored && parsed.ignored.length){
-      li.push('这些列不导入：' + parsed.ignored.slice(0, 12).map(function(g){
-        return esc(g.label) + '<span class="muted">（' + esc(g.why) + '）</span>';
-      }).join('、') + (parsed.ignored.length > 12 ? ' ……' : ''));
+      var byWhy = {};
+      parsed.ignored.forEach(function(g){ (byWhy[g.why] = byWhy[g.why] || []).push(g.label); });
+      li.push('这些列不导入：' + Object.keys(byWhy).map(function(w){
+        var names = byWhy[w];
+        return names.slice(0, 5).map(esc).join('、')
+          + (names.length > 5 ? ' 等 ' + names.length + ' 列' : '')
+          + '<span class="muted">（' + esc(w) + '）</span>';
+      }).join('；'));
     }
     notes = '<div class="alert warn" style="margin-top:8px">' + li.join('<br>') + '</div>';
   }
@@ -10557,7 +10563,6 @@ function scPaintPreview(box, parsed, subs, btn){
         }).join('　')
     +   '<br><span class="muted" style="font-size:.78rem">空单元格 / - / / / 缺考 都会记成「不知」，不计入统计。</span>'
     + '</div>'
-    + notes
     + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table style="font-size:.8rem">'
     +   '<thead><tr><th>班排</th><th>姓名</th>' + (subs || []).map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
     +   '<th>总分</th><th>年级排名</th><th>联考</th></tr></thead><tbody>'
@@ -10579,7 +10584,8 @@ function scPaintPreview(box, parsed, subs, btn){
     + '<p class="muted" style="font-size:.78rem;margin-top:6px">'
     +   '班排与总分是<b>当场按各科分数算的</b>（模版里没有这两列，也不需要填）；'
     +   (parsed.rows.length > 30 ? '只预览前 30 行，导入时会处理全部。' : '')
-    + '</p>';
+    + '</p>'
+    + notes;
 
   if(btn) btn.disabled = false;
 }
