@@ -3399,9 +3399,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(indexHtml),
+  t('★前台版本号为 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adminHtml),
+  t('★后台版本号为 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3765,9 +3765,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(indexHtml38),
+  t('★前台版本号为 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adminHtml38),
+  t('★后台版本号为 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4780,10 +4780,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx47));
-  t('★后台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adm47));
+  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx47));
+  t('★后台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adm47));
   t('★service worker 缓存版本升到 v77（旧缓存要作废）',
-    /class-site-v78/.test(sw47));
+    /class-site-v79/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4867,7 +4867,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.11');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.9.12');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -4967,9 +4967,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx48));
+  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-16'/.test(idx48));
-  t('★service worker 缓存版本升到 v77', /class-site-v78/.test(sw48));
+  t('★service worker 缓存版本升到 v77', /class-site-v79/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5033,8 +5033,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx49));
-  t('★后台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adm49));
+  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx49));
+  t('★后台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5106,7 +5106,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx50));
+  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5268,7 +5268,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adm));
+  t('★后台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5336,7 +5336,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx));
+  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5389,7 +5389,7 @@ console.log('\n【56】第四十七轮·成绩分析增强（v2.8.0/2.8.1）');
   /* ===== ① 各科趋势网格 ===== */
   t('★有 scSubjTrend（各科趋势网格）', /function scSubjTrend\(\)\{/.test(idx));
   t('★迷你折线按涨跌分段着色（涨绿跌红）',
-    /stroke="' \+ \(up \? '#0f8a4d' : '#c0392b'\)/.test(idx));
+    /stroke="' \+ \(up \? '#0b7a43' : '#c0392b'\)/.test(idx));
   t('★每科卡显示「较上次」变化', /较上次/.test(idx));
   t('★只有一次考试时给「首次考试，暂无对比」', /首次考试，暂无对比/.test(idx));
 
@@ -5837,7 +5837,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx));
+  t('★前台版本号升到 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -5948,8 +5948,8 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx));
-  t('★后台内置更新记录补到 2.9.11',
+  t('★前台版本号升到 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx));
+  t('★后台内置更新记录补到 2.9.12',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
   /* ===== ⑥ 真跑一遍：只分享 1 个人，班均与排名仍然是对的 ===== */  const reg2 = await call('/api/auth?action=register', {
@@ -6053,11 +6053,11 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(idx));
-  t('★后台版本号 2.9.11', /SITE_VERSION = '2\.9\.11'/.test(adm));
+  t('★前台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(idx));
+  t('★后台版本号 2.9.12', /SITE_VERSION = '2\.9\.12'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 2.9.11 且缓存升 v77', /SITE_VER = '2\.9\.11'/.test(swSrc) && /class-site-v78/.test(swSrc));
-  t('★后台内置更新记录有 2.9.11 条目', /"version": "2\.9\.11"/.test(adm));
+  t('★sw.js SITE_VER 2.9.12 且缓存升 v79', /SITE_VER = '2\.9\.12'/.test(swSrc) && /class-site-v79/.test(swSrc));
+  t('★后台内置更新记录有 2.9.12 条目', /"version": "2\.9\.12"/.test(adm));
 }
 
 /* 【62】第五十七轮·全站字色共用逻辑 + 文案官方化（v2.9.10）
@@ -6235,6 +6235,156 @@ console.log('\n【63】第五十八轮·登录弹窗字色达标检查');
   /* ---- ⑥ 后台登录门 mark 接 ink-auto（--grad 亮橙白字仅 2.80）---- */
   t('★后台登录门/侧栏两处 mark 都接 ink-auto',
     (adm.match(/<div class="mark ink-auto">班<\/div>/g) || []).length === 2);
+}
+
+/* 【64】第五十九轮·成绩分析暗色全覆盖（v2.9.12）
+   ------------------------------------------------------------
+   站主原话：「暗色模式下成绩表的姓名还是看不清，由于表格背景是白色的」。
+   根因：sc-* 约 45 条规则硬编码浅底/深字、零暗色覆盖，表格 td 无显式 color，
+   暗色下继承 body 亮字压白底 ≈1.03:1 —— 姓名等于隐形。
+   本轮：① 表格/卡片暗色底色 ② 六个图表函数 SVG 元素加语义 class + 暗色 fill/stroke
+   覆盖 ③ 亮色历史欠账按 WCAG 重修 ④ 内联 style 提类（压过暗色规则）⑤ 热力图绕
+   WCAG 死区改两段安全区 ⑥ 导出 canvas（DOM 扫描器盲区）人工逐色核算。
+   验收方式：Playwright 扫描器 18 场景（前台 10 + 成绩分析 8）亮/暗全达标。 */
+console.log('\n【64】第五十九轮·成绩分析暗色全覆盖检查');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+
+  /* 工具：按函数名截取函数体（SVG class 接线必须落在各自函数里，全局计数会误判） */
+  function fnBody(name) {
+    const i = idx.indexOf('function ' + name + '(');
+    if (i < 0) return '';
+    const j = idx.indexOf('\nfunction ', i + 10);
+    return idx.slice(i, j > i ? j : i + 9000);
+  }
+
+  /* ---- ① 表格暗色底色（原始抱怨：白底 + 继承亮字 = 姓名隐形）---- */
+  t('★sc-tbl 暗色三件套：td/th 非白底 + me-row 高亮行',
+    /\.dark \.sc-tbl td\{background:#262220;border-bottom-color:#332d29\}/.test(idx)
+    && /\.dark \.sc-tbl th\{background:#332d29;color:#f0e6dc;border-bottom-color:#3d3631\}/.test(idx)
+    && /\.dark \.sc-tbl \.sc-me-row td,\.dark \.sc-me-row\{background:#3a2f28\}/.test(idx));
+  t('★sc-tblwrap/th:nth-child/冻结列阴影暗色覆盖齐全',
+    /\.dark \.sc-tblwrap\{background:#262220;border-color:#3d3631\}/.test(idx)
+    && /\.dark \.sc-tbl th:nth-child\(1\),\.dark \.sc-tbl th:nth-child\(2\)\{background:#332d29\}/.test(idx)
+    && /\.dark \.sc-tbl th:nth-child\(2\),\.dark \.sc-tbl td:nth-child\(2\)\{box-shadow:1px 0 0 #3d3631\}/.test(idx));
+
+  /* ---- ② 暗色块整块包 @media screen（打印永远走白底基线，零额外 print reset）---- */
+  t('★sc-* 暗色覆盖在 @media screen 块内（打印不参与暗色，避免深字压深底）',
+    /@media screen\{\s*\/\* —— 容器与卡片底色 —— \*\/\s*\.dark \.sc-card\{background:#2e2926/.test(idx));
+
+  /* ---- ③ 六个图表函数 SVG 语义 class 接线（函数体内断言）---- */
+  t('★scChartHist 接线：柱/柱顶数/轴字/网格/均分线/中位线/分数线/我的标记',
+    ['class="sc-bar"', 'sc-bar-num', 'sc-axdim', 'sc-hgrid', 'sc-mk-avg', 'sc-mk-mid',
+     'sc-cut-line', 'sc-cut-txt', 'sc-mine-dot', 'sc-tip', 'sc-axis']
+      .every(c => fnBody('scChartHist').includes(c)));
+  t('★scRadar 接线：网格/辐条/轴标签/tips/班均虚线/我的多边形/顶点/图例',
+    ['class="sc-g"', 'sc-axlbl', 'sc-tip', 'class="sc-avg"', 'sc-mine-poly', 'sc-mine-dot', 'sc-axdim']
+      .every(c => fnBody('scRadar').includes(c)));
+  t('★scTrendBlock 接线：基线/折线/点/分数/日期',
+    ['sc-axis', 'sc-mine-line', 'sc-mine-dot', 'sc-tip', 'sc-axdim']
+      .every(c => fnBody('scTrendBlock').includes(c)));
+  t('★scSubjTrend 接线：迷你线段/数字/点，且 svg 用 sc-mini-svg 不用 sc-svg',
+    ['class="sc-mini-svg"', 'sc-up', 'sc-down', 'sc-mini-num', 'sc-mini-dot']
+      .every(c => fnBody('scSubjTrend').includes(c))
+    && !fnBody('scSubjTrend').includes('class="sc-svg"'));
+  t('★scGradeTrend 接线：折线/点/数字/日期/基线',
+    ['sc-grade-line', 'sc-grade-dot', 'sc-grade-num', 'sc-axdim', 'sc-axis']
+      .every(c => fnBody('scGradeTrend').includes(c)));
+  t('★scQuadrant 接线：四象限 cls/我的点/他人点/姓名标签/十字线/轴文字',
+    ['sc-q1', 'sc-q2', 'sc-q3', 'sc-q4', 'sc-mine-dot', 'sc-q-dot', 'sc-qme', 'sc-qnm',
+     'sc-axis', 'sc-axdim']
+      .every(c => fnBody('scQuadrant').includes(c)));
+
+  /* ---- ④ 暗色 SVG fill/stroke 覆盖（line/text 分开，避免 text 被 stroke 描边）---- */
+  t('★暗色 SVG 覆盖：网格/轴/轴标签/我的线/我的点/班均/柱/年级折线全提亮',
+    /\.dark \.sc-svg \.sc-g\{stroke:#3d3631\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-axis\{stroke:#4a4038\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-axlbl\{fill:#d9ccbe\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-mine-line\{stroke:#f87171\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-mine-dot\{fill:#f87171\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-avg\{stroke:#a8998c\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-bar\{fill:#c98d5e\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-grade-line\{stroke:#c4b5fd\}/.test(idx));
+  t('★直方图均分/中位线 line 与 text 分开覆盖（旧写法会把文字也描边）',
+    /\.dark \.sc-svg line\.sc-mk-avg\{stroke:#a8998c\}/.test(idx)
+    && /\.dark \.sc-svg text\.sc-mk-avg\{fill:#a8998c\}/.test(idx)
+    && /\.dark \.sc-svg line\.sc-mk-mid\{stroke:#c9b8aa\}/.test(idx)
+    && /\.dark \.sc-svg text\.sc-mk-mid\{fill:#c9b8aa\}/.test(idx));
+  t('★迷你图暗色覆盖 + 姓名标签描边改深（旧白描边 #fffdfb 暗底糊）',
+    /\.dark \.sc-mini-svg \.sc-up\{stroke:#4ade80\}/.test(idx)
+    && /\.dark \.sc-mini-svg \.sc-down\{stroke:#f87171\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-qme\{fill:#fdba74;stroke:#262220\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-qnm\{fill:#c4b5fd;stroke:#262220\}/.test(idx));
+
+  /* ---- ⑤ 热力图两段安全区插值（连续渐变必穿 WCAG 死区，白字实测仅 4.22）---- */
+  t('★热力图改两段插值：前 50% 深橙白字、后 50% 浅奶油深字，死区注释在位',
+    /WCAG 死区/.test(idx) && /连续渐变绕不开死区，所以改成两段各自待在安全区/.test(idx)
+    && /if\(p < 0\.5\)\{[\s\S]{0,200}cr = Math\.round\(150 \+ \(175 - 150\) \* \(p \/ 0\.5\)\)/.test(idx)
+    && /q = \(p - 0\.5\) \/ 0\.5;[\s\S]{0,120}cr = Math\.round\(243 \+ \(229 - 243\) \* q\)/.test(idx)
+    && /var ink = clsReadableOn\('rgb\(' \+ cr \+ ',' \+ cg \+ ',' \+ cb \+ '\)'\)/.test(idx));
+
+  /* ---- ⑥ 内联 style 提类（内联 color/background 压过一切 class 规则）---- */
+  t('★分享弹窗 6 个 label 提成 .sc-sh-lb（原 inline #57534e 压过暗色规则）',
+    (idx.match(/<label class="sc-sh-lb">/g) || []).length === 6
+    && !/<label class="sc-sh-lb"[^>]*style="[^"]*color:/.test(idx)
+    && /\.sc-sh-lb\{font-size:\.8rem;color:#57534e;display:block;margin-bottom:6px\}/.test(idx)
+    && /\.dark \.sc-sh-lb\{color:#f0e6dc\}/.test(idx));
+  t('★链接生成提示框提成 .sc-hint.sc-hint-ok（原 inline 绿底无暗色变体）',
+    /<div class="sc-hint sc-hint-ok">/.test(idx)
+    && /\.sc-hint-ok\{background:#f0f9f2;border-color:#cfe9d8\}/.test(idx)
+    && /\.dark \.sc-hint-ok\{background:#26332a;border-color:#3c5a44\}/.test(idx)
+    && /\.dark \.sc-hint-ok b\{color:#4ade80\}/.test(idx));
+
+  /* ---- ⑦ 亮色历史欠账按 WCAG 重修（扫描器实测逼出来的）---- */
+  t('★sc-dim 族浅色 #a8968a → #7a6a5c（11 条规则，白底 2.83 → 5.11）',
+    /\.sc-dim\{[^}]*color:#7a6a5c/.test(idx)
+    && !/\.sc-(dim|subrank|sub-rk|figcap|cut-pct|pos-scale|h-note)\{[^}]*#a8968a/.test(idx));
+  t('★均分/中位线/雷达班均虚线加深（均分 4.69、中位 5.84、虚线图形 3.36）',
+    /color: '#7d7268', cls: 'sc-mk-avg'/.test(idx) && /color: '#6e635a', cls: 'sc-mk-mid'/.test(idx)
+    && /stroke="#857468"/.test(idx));
+  t('★状态绿 #0f8a4d → #0b7a43（5 处文字，白底 4.41 → 5.41）',
+    /\.sc-sub-diff\.up\{color:#0b7a43\}/.test(idx)
+    && /\.sc-sh-state\.on\{background:#0b7a43;color:#fff\}/.test(idx)
+    && !/\.sc-(sub-diff\.up|trendhead\.up b|good|sh-state\.on)\{[^}]*#0f8a4d/.test(idx));
+  t('★奖牌/徽章加深：金 #96660a、银 #6f6f6f、only-admin 底 #6e5d50',
+    /\.sc-r1\{color:#96660a\}/.test(idx) && /\.sc-r2\{color:#6f6f6f\}/.test(idx)
+    && /\.sc-only-admin\{[^}]*background:#6e5d50/.test(idx));
+  t('★玻璃拟态叠底（实测 rgb(194,193,193) 中灰）直接放字 #57493d（4.82）',
+    /\.allboard-box \.sc-sh-lb,\.allboard-box \.sc-figcap,\.allboard-box \.sc-card-h\{color:#57493d\}/.test(idx)
+    && /\.dark \.allboard-box \.sc-sh-lb,\.dark \.allboard-box \.sc-card-h\{color:#f0e6dc\}/.test(idx)
+    && /\.dark \.allboard-box \.sc-figcap\{color:#a8998c\}/.test(idx));
+
+  /* ---- ⑧ span 变体补全（暗色块只覆盖 b 变体，span 漏网实测 2.32/2.46）---- */
+  t('★概览卡 span 变体暗色补全（ov-total/ov-item，渐变 #332d29 上 7.05）',
+    /\.dark \.sc-stat span,\.dark \.sc-ov-total span,\.dark \.sc-ov-item span\{color:#c9b8aa\}/.test(idx));
+  t('★.sc-total 暗色覆盖带 .sc-tbl 提高特异性（基础规则 0,2,1，裸写实测仅 3.14）',
+    /\.dark \.sc-tbl \.sc-total/.test(idx) && !/\.dark \.sc-total\{color:/.test(idx));
+
+  /* ---- ⑨ 导出 canvas 审计（DOM 扫描器盲区，人工按 WCAG 逐色核算过）---- */
+  t('★canvas 弱字 #a8968a/#c9b8a8 → #7a6a5c（原 2.80/1.90，新 5.11）',
+    (idx.match(/g\.fillStyle = '#7a6a5c';/g) || []).length === 4
+    && !/g\.fillStyle = '#a8968a';/.test(idx) && !/g\.fillStyle = '#c9b8a8';/.test(idx));
+  t('★canvas 差分红字小字 #0f8a4d → #0b7a43（12/13px 原 4.27/4.35，新 5.25+）',
+    (idx.match(/'#0b7a43' : '#c0392b'/g) || []).length === 5
+    && !/g\.fillStyle = ok \? '#0f8a4d'/.test(idx));
+  t('★canvas 进度条填充 #e6a97a → #b06a32（压 #f0e7de 轨道原 1.67，新 3.71）',
+    (idx.match(/g\.fillStyle = '#b06a32';/g) || []).length === 3
+    && !/g\.fillStyle = '#e6a97a';/.test(idx));
+
+  /* ---- ⑩ 直方图色板双达标（图形 ≥3 + 柱内计数深字 ≥4.5，白/暗卡两头）---- */
+  t('★直方图色板重选：及格 #c07a3e、不及格 #d4756a、其他 #99887a（旧值白底 2.0～2.8）',
+    /color: '#c07a3e' \}/.test(idx) && /color: '#d4756a' \}/.test(idx)
+    && /color: '#99887a' \}/.test(idx)
+    && !/color: '#e6a97a' \}/.test(idx) && !/color: '#e0776b' \}/.test(idx)
+    && !/color: '#a8968a' \}/.test(idx));
+  t('★pos-bar 渐变与 sub-bar 填充改 #b06a32，末端 #d4756a（暗卡也 ≥3）',
+    /\.sc-pos-bar\{[^}]*linear-gradient\(90deg,#0f8a4d,#b06a32,#d4756a\)/.test(idx)
+    && /\.sc-sub-bar i\{display:block;height:100%;background:#b06a32/.test(idx));
+  t('★mini-dot 描边 #c9b8a8 → #857468（白底 1.89 → 4.41；暗色有覆盖）',
+    /stroke="#857468" stroke-width="1\.1"/.test(idx)
+    && !/stroke="#c9b8a8"/.test(idx));
+  t('★暗色「你」气泡反转为浅底深字（深底 #292524 压暗卡 ≈0.95 隐形）',
+    /\.dark \.sc-pos-me span\{background:#f0e6dc;color:#262220\}/.test(idx));
 }
 
 console.log('\n' + '='.repeat(52));
