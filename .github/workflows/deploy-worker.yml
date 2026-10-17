@@ -122,6 +122,14 @@ jobs:
       # ------------------------------------------------------------
       - name: 部署到 Cloudflare Workers
         id: deploy
+        # ⚠️ 2026-10-17 v3.2.1：这一步允许失败，**由下面的回查决定 job 红不红**。
+        #    原因：实测这个项目真正把 Worker 发上去的是 Cloudflare 自己的 Git 集成
+        #    （线上 x-build-sha 一直是 local，且推送后 45 秒新代码就生效），
+        #    而 Actions 里这步可能因 Token 权限/账户 ID 报错 —— 那种情况下
+        #    线上其实已经是新代码，却因为这一步红而让整个 job 变红，白折腾。
+        #    所以改成「部署失败不直接判死，回查发现线上确实是本次代码就算通过」，
+        #    同时在日志与小结里把失败原因明明白白写出来（不藏）。
+        continue-on-error: true
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -144,6 +152,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          DEPLOY_OUTCOME='${{ steps.deploy.outcome }}'
+          if [ "$DEPLOY_OUTCOME" != "success" ]; then
+            echo "⚠️  『部署到 Cloudflare Workers』这一步没成功（outcome=$DEPLOY_OUTCOME）。"
+            echo "    不急着判死：先看下面回查 —— 线上若是本次代码，说明是 Cloudflare 的 Git 集成发的，"
+            echo "    那这步的失败只影响 CI 自己（建议顺手检查 CLOUDFLARE_API_TOKEN 的权限 / ACCOUNT_ID）。"
+            echo ""
+          fi
           WANT=$(cat /tmp/build_sha.txt)
           # 代码里带的版本号（与前台 SITE_VERSION 同步）—— 见 api/worker.mjs 的 API_VER
           WANT_VER=$(grep -oE "const API_VER = '[^']+'" api/worker.mjs | head -1 | sed -E "s/.*'([^']+)'.*/\1/")
@@ -200,6 +215,7 @@ jobs:
           echo "## 后端部署结果" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- 提交：\`$(cat /tmp/build_sha.txt 2>/dev/null || echo '未知')\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- wrangler 部署步骤：\`${{ steps.deploy.outcome }}\`（不等于 success 时看回查结论：线上是本次代码就不算失败）" >> "$GITHUB_STEP_SUMMARY"
           echo "- 接口：<https://api.classsite.dpdns.org/api/content>" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "核对方式（终端里跑，看 X-Build-Sha 是否等于上面的提交号）：" >> "$GITHUB_STEP_SUMMARY"

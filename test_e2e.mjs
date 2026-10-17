@@ -8389,6 +8389,8 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
     wf.includes('WANT_VER=$(grep -oE') && wf.includes('api/worker.mjs')
     && wf.includes('const API_VER'));
   t('Worker 失败时回显线上实际标记与期望值', /线上实际：x-build-sha=/.test(wf) && /本次期望：x-build-sha=/.test(wf));
+  t('★wrangler 步骤允许失败（Cloudflare Git 集成在真正部署，回查说了算）',
+    /continue-on-error: true/.test(wf) && /不急着判死/.test(wf) && /steps\.deploy\.outcome/.test(wf));
 
   /* ④ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
