@@ -8392,7 +8392,13 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   t('★wrangler 步骤允许失败（Cloudflare Git 集成在真正部署，回查说了算）',
     /continue-on-error: true/.test(wf) && /不急着判死/.test(wf) && /steps\.deploy\.outcome/.test(wf));
 
-  /* ④ 模拟 CI 里那行解析，确认能取到版本号 */
+  /* ④ 单一部署路径：Worker 只留手动触发（否则和 Cloudflare Git 集成撞车，同一份代码部署两遍） */
+  t('★Worker 工作流取消 push 自动触发（改由 Cloudflare Git 集成负责）',
+    !/^on:\s*\n\s*push:/m.test(wf) && /workflow_dispatch:/.test(wf)
+    && /Cloudflare 自己的 Git 集成/.test(wf));
+  t('★Pages 工作流仍保留 push 自动发布（前端只有这一条路径）', /^on:\s*\n\s*push:/m.test(pg));
+
+  /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
   t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.2.1', 'parsed=' + parsed);
 }
