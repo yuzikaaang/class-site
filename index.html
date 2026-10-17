@@ -2062,8 +2062,32 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-hm-cells{flex:1;display:flex;gap:3px}
 .sc-hm{margin:0;width:auto;height:18px;flex:1;border-radius:3px;display:flex;align-items:center;justify-content:center;
   font-size:9px;font-weight:700;font-style:normal;line-height:1;letter-spacing:-.02em;overflow:hidden}
+/* v3.3.0 热力图手机点选：每格都可点（触屏最小命中区 22px 高、指针手型），选中描边 */
+.sc-hm-hit{cursor:pointer;transition:box-shadow .1s,transform .1s;-webkit-tap-highlight-color:transparent}
+.sc-hm-hit:active{transform:scale(.94)}
+.sc-hm.on{outline:2px solid #c2410c;outline-offset:1px;box-shadow:0 0 0 2px rgba(194,65,12,.18);position:relative;z-index:2}
+/* 缺考格：浅底 + 淡破折号，点了也照样能看明细（知道这科没考） */
+.sc-hm-na{cursor:pointer;background:#f5efe8;color:#b9a894 !important}
+.sc-hm-na::after{content:'—'}
+/* 需关注学生：单科不达标的科目小标签 */
+.sc-lowsub{display:inline-flex;flex-wrap:wrap;gap:3px}
+.sc-lowsub b{font-weight:700;color:#8a4a10;margin-right:1px}
+.sc-lowsub em{font-style:normal;font-size:.66rem;color:#c2410c;margin-left:1px;margin-right:5px;text-decoration:none}
+.sc-tagonly{display:inline-block;margin-left:5px;font-size:.6rem;font-weight:700;color:#8a7968;
+  background:#f5efe8;border-radius:4px;padding:1px 4px;vertical-align:1px}
+.dark .sc-lowsub b{color:#f0b880}
+.dark .sc-lowsub em{color:#f87171}
+.dark .sc-tagonly{background:#332d29;color:#a8998c}
+.dark .sc-hm-na{background:#332d29;color:#7a6a5c !important}
+.dark .sc-hm.on{outline-color:#c2410c;box-shadow:0 0 0 2px rgba(194,65,12,.28)}
 .sc-hm-total{width:46px;flex-shrink:0;text-align:right;font-weight:800;color:#b45309;
   font-size:.74rem;font-variant-numeric:tabular-nums}
+/* 手机：格子拉高到 22px、字号回正，手指点得中 */
+@media (max-width:640px){
+  .sc-hm{height:22px;font-size:10px;border-radius:4px}
+  .sc-hm-name{width:52px;font-size:.72rem}
+  .sc-hm-total{width:38px}
+}
 .sc-seg-icon button{font-size:.75rem}
 .sc-seg-icon button:hover{background:#fdf8f3}
 .sc-trendhead{font-size:.82rem;color:#57534e;margin-bottom:8px}
@@ -3047,7 +3071,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.2.1';
+var SITE_VERSION = '3.3.0';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3936,6 +3960,7 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-10-17 13:41", text: "📊 成绩分析三处改动（v3.3.0）：①「需关注学生」不再只看总分，某一科拖后腿也会被单独点名（表格里直接写「化学 60 −30.2」，并标出是「仅单科」还是总分也不达标）；②「进退步榜」把进步和退步合成一张表，全部同学都在里面，点表头就能排序（名次、变化、分数都能排），班级 / 年级 / 单科三种筛选照旧；③「学生 × 科目热力图」手机端点任意一格就能看这个人的明细，再点一次收起。", category: "site" },
     { date: "2026-10-17 12:05", text: "📉 「我的画像 → 各科趋势」现在能看<b>名次</b>了：右上角切「分数 / 名次」，名次视角下折线越靠上就是名次越前，每张卡直接写「第几 名 / 全年级人数」和「较上次 名次升/降多少」，本次分数也保留在下面。哪次没导入年级排名会写「暂无名次」。", category: "site" },
     { date: "2026-10-17 11:29", text: "🔧 修好了分享的一个毛病：以前点「编辑」改分享范围，保存后其实没生效（页面读到的还是旧弹窗里的选项）。现在编辑保存会真正生效，链接不变；而且改范围时不会再把已经勾好的「成绩单 / 个人成绩卡」清掉。", category: "site" },
     { date: "2026-10-17 10:48", text: "📈 「我的画像」新增「各科进退步」：最近几次考试，每科的分数和年级排名逐次列出，还标出分数增减、名次升降和稳定性（波动大小）。分享出去的成绩页也能看到这张表。", category: "site" },
@@ -12483,6 +12508,10 @@ var SC = {
   quadSel: null,  /* 四象限当前点开了哪个象限（0..3，null=没点开）——手机点开看名单 */
   quadDot: null,  /* 四象限当前点中的那一个人（下标，null=没点） */
   subTrend: 'score',  /* 各科趋势看分数还是看名次（'score' | 'rank'） */
+  tailSortKey: 'd',   /* 进退步榜排序键（v3.3.0：合并成一张表，点表头排） */
+  tailSortAsc: false, /* 默认按名次变化降序＝进步最多的在最上面 */
+  hmSel: null,        /* 热力图上点中的格子（单元格下标，null=没点） */
+  _hm: null,          /* 热力图每格的数据（供点选时出明细，不重新渲染） */
   _quad: null,    /* 最近一次四象限渲染的点数据（供点选时算名单，不重新渲染） */
   pkA: null,      /* 成绩对比 PK：A 方成绩行 id（v2.10.0） */
   pkB: null,      /* 成绩对比 PK：B 方成绩行 id（v2.10.0） */
@@ -12734,7 +12763,20 @@ function scMyRow(){
 }
 
 /* ---------------- 渲染 ---------------- */
+/* v3.3.0 热力图点选：走事件委托，只在文档上挂一次 —— 整张表重渲染也不用重新绑定 */
+function scHeatBind(){
+  if(window.__scHeatBound) return;
+  window.__scHeatBound = 1;
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    if(!t || !t.closest) return;
+    var cell = t.closest('.sc-hm-hit');
+    if(cell && cell.closest('.sc-hm-body')){ scHeatTap(cell); }
+  }, false);
+}
+
 function scRenderAll(){
+  scHeatBind();
   scRenderBar();
   scRenderTabs();
   scRenderPane();
@@ -12883,6 +12925,8 @@ function scArrow(k){
 function scSort(k){
   if(SC.sortKey === k) SC.sortAsc = !SC.sortAsc;
   else { SC.sortKey = k; SC.sortAsc = (k === 'rank' || k === 'name'); }
+  /* 重排整表会把下方所有块重建，热力图上正点开的格子也就跟着没了 —— 顺手清掉选中态 */
+  SC.hmSel = null;
   scRenderBoard();
 }
 
@@ -14761,48 +14805,127 @@ function scDiagCard(){
     + '</div>';
 }
 
-/* ---------- ② 需关注学生（低于班均 10 分 + 拖后腿科目） ---------- */
+/* ---------- ② 需关注学生 ----------
+   v3.3.0 站主要求：不能只盯总分，单科也得单独判。
+
+   ⚠️ 阈值的刻度问题（这轮最重要的一处判断）：
+   站主原话是「单科低于总分的均分 − 20」。按字面直接减会失效 ——
+   总分班均 550 时这条线是 530，可任一单科满分才 100~150，永远达不到，
+   等于这条规则一次都不会触发。所以统一换算成**相对比例**：
+
+     总分线     = 班均总分 − 总分满分 × 1.5%      （750 分制 ≈ 班均 − 11 分）
+     单科线(n)  = 该科班均 − 该科满分 × 1.5%      （150 分制 ≈ 班均 − 2.3 分，100 分制 ≈ 班均 − 1.5 分）
+
+   1.5% 这个系数从站主的「20 分」倒推而来：20 ÷ 750 ≈ 2.7%，但那条线对所有科目都过严，
+   取 1.5% 后 750 分制落在「班均 − 11 分」，跟原来写死的「低于班均 10 分」几乎一致，
+   等于把旧口径平滑升格成比例口径 —— 站主原来看到的人数不会突变。
+   好处：六科刻度不一也能公平比较（150 分的语文掉 2 分和 100 分的化学掉 1.5 分等价），
+   而且换卷子、换满分都不用手动调阈值。                                    */
+var SC_ALERT_RATIO = 0.015;   /* 统一阈值系数：满分的 1.5% */
+
+function scAlertLines(){
+  var subs = SC.exam.subjects || [];
+  var st = scStats(SC.basis);
+  var avgs = scSubjAvg();
+  var full = scFullMark();
+  var gap = full * SC_ALERT_RATIO;                 /* 总分要掉多少 */
+  var totalLine = st.avg - gap;
+  var subLines = {};
+  subs.forEach(function(sub){
+    var f = sub.full || 0;
+    subLines[sub.key] = (avgs[sub.key] == null || !f) ? null : (avgs[sub.key] - f * SC_ALERT_RATIO);
+  });
+  return { totalLine: totalLine, gap: gap, subLines: subLines, subs: subs, avgs: avgs, st: st, full: full };
+}
+
 function scWatchList(){
   var mode = scAllowed('watchList');
   if(mode === 'hide') return '';
-  var st = scStats(SC.basis);
+  var L = scAlertLines();
+  var st = L.st, subs = L.subs, avgs = L.avgs;
   if(!st.n) return '';
-  var subs = SC.exam.subjects || [];
-  var avgs = scSubjAvg();
-  var thr = st.avg - 10;
+  var thr = L.totalLine;
 
   var list = [];
   SC.rows.forEach(function(r){
     var t = scTotal(r, SC.basis);
-    if(t == null || t >= thr) return;
     if(mode === 'self' && !scIsMe(r)) return;
-    var worst = null;
+
+    /* 单科：低于「该科班均 − 该科满分的 1.5%」的科目；
+       worst 仍取相对该科班均差得最多的那一科（绝对值，不折比例，方便直观看分） */
+    var lowSubs = [], worst = null;
     subs.forEach(function(sub){
       var v = scSubScore(r, sub, SC.basis);
-      if(v == null || avgs[sub.key] == null) return;
+      if(v == null) return;
+      var line = L.subLines[sub.key];
+      if(line != null && v < line) lowSubs.push({ name: sub.name, v: v, d: v - line, line: line });
+      if(avgs[sub.key] == null) return;
       var d = v - avgs[sub.key];
       if(!worst || d < worst.d) worst = { name: sub.name, d: d };
     });
-    list.push({ name: r.name, total: t, worst: worst, me: scIsMe(r) });
+
+    var lowTotal = (t != null && t < thr);
+    if(!lowTotal && !lowSubs.length) return;
+    list.push({
+      name: r.name, total: t, worst: worst, me: scIsMe(r),
+      lowTotal: lowTotal, lowSubs: lowSubs,
+    });
   });
   if(!list.length) return '';
-  list.sort(function(a, b){ return a.total - b.total; });
+
+  /* 排序：总分不达标的先按总分从低到高；只栽在单科上的排在后面，按最惨那一科从低到高 */
+  list.sort(function(a, b){
+    if(a.lowTotal !== b.lowTotal) return a.lowTotal ? -1 : 1;
+    if(a.lowTotal){
+      var ta = a.total == null ? 1e9 : a.total, tb = b.total == null ? 1e9 : b.total;
+      if(ta !== tb) return ta - tb;
+      return b.lowSubs.length - a.lowSubs.length;
+    }
+    var wa = a.lowSubs.length ? a.lowSubs[0].d : 0;
+    var wb = b.lowSubs.length ? b.lowSubs[0].d : 0;
+    return wa - wb;
+  });
+
+  var nLowTotal = list.filter(function(x){ return x.lowTotal; }).length;
+  var nLowSub = list.filter(function(x){ return x.lowSubs.length; }).length;
 
   return '<div class="sc-card sc-card-admin"><div class="sc-card-h">需关注学生'
-    + '<span class="sc-h-note">低于班均 10 分（' + fmtNum(thr) + ' 分）</span>'
+    + '<span class="sc-h-note">总分低于 ' + fmtNum(thr) + ' 分，或某科低于该科班均 ' + (SC_ALERT_RATIO * 100).toFixed(1) + '% 满分</span>'
     + '<span class="sc-only-admin">仅站主可见</span></div>'
-    + '<div class="sc-tblwrap" style="max-height:340px"><table class="sc-tbl" style="min-width:auto">'
-    + '<thead><tr><th>姓名</th><th>总分</th><th>低于班均</th><th>拖后腿科目</th></tr></thead><tbody>'
+    + '<div class="sc-tblwrap" style="max-height:420px"><table class="sc-tbl" style="min-width:auto">'
+    + '<thead><tr><th>姓名</th><th>总分</th><th>总分差</th><th>拖后腿的单科</th><th>最弱一科</th></tr></thead><tbody>'
     + list.map(function(x){
+        /* 单科那块用「科目 分数（比该科线低多少）」的小标签，没有就给淡横杠 */
+        var lowHtml = '—';
+        if(x.lowSubs.length){
+          lowHtml = '<span class="sc-lowsub">' + x.lowSubs.map(function(s){
+            return '<b>' + esc(s.name) + '</b>' + fmtNum(s.v) + '<em>' + fmtNum(s.d) + '</em>';
+          }).join('') + '</span>';
+        }
         return '<tr' + (x.me ? ' class="sc-me-row"' : '') + '>'
-          + '<td class="sc-name">' + esc(x.name) + (x.me ? '<span class="sc-you">我</span>' : '') + '</td>'
-          + '<td class="sc-total">' + fmtNum(x.total) + '</td>'
-          + '<td class="sc-warn">−' + fmtNum(st.avg - x.total) + '</td>'
+          + '<td class="sc-name">' + esc(x.name)
+          +   (x.me ? '<span class="sc-you">我</span>' : '')
+          +   (x.lowTotal ? '' : '<span class="sc-tagonly">仅单科</span>') + '</td>'
+          + '<td class="sc-total">' + (x.total == null ? '—' : fmtNum(x.total)) + '</td>'
+          + '<td>' + (x.total == null ? '—'
+                : '<span class="' + (x.total < thr ? 'sc-warn' : 'sc-good') + '">' + fmtDiff(x.total - st.avg) + '</span>') + '</td>'
+          + '<td>' + lowHtml + '</td>'
           + '<td>' + (x.worst ? esc(x.worst.name) + ' <span class="sc-warn">' + fmtNum(x.worst.d) + '</span>' : '—') + '</td>'
           + '</tr>';
       }).join('')
     + '</tbody></table></div>'
-    + '<div class="sc-figcap">「拖后腿科目」＝这个人相对班均差得最多的那一科，自动算出来的。</div>'
+    + '<div class="sc-figcap">共 <b>' + list.length + '</b> 人上榜：总分不达标 <b>' + nLowTotal
+    + '</b> 人，单科不达标 <b>' + nLowSub + '</b> 人（可能重叠）。'
+    + '「总分差」＝ 本人总分 − 班均总分。'
+    + '「拖后腿的单科」格子里，粗体是科目、紧跟分数，斜体小字是<b>比该科的线还低多少</b>（越低越该补）。'
+    + '「最弱一科」＝相对该科班均差得最多的那一科（按原始分差算，不折比例）。'
+    + '<br>阈值说明：总分线 = 班均总分 − 总分满分 × ' + (SC_ALERT_RATIO * 100).toFixed(1) + '%（本次 '
+    + fmtNum(L.full) + ' 分制 → 掉 ' + fmtNum(L.gap) + ' 分即上榜）；'
+    + '单科线按各科满分同比例折算（' + subs.map(function(sub){
+        var l = L.subLines[sub.key];
+        return esc(sub.name) + (l == null ? '—' : fmtNum(l));
+      }).join(' / ') + '），这样 150 分的语文和 100 分的化学才能放在一起比。'
+    + '</div>'
     + '</div>';
 }
 
@@ -14932,32 +15055,59 @@ function scTailRank(){
   });
   var meRow = scMyRow();
   if(meRow) moved.forEach(function(x){ if(x.name === meRow.name) x.me = true; });
-
-  var up = moved.slice().sort(function(a, b){ return b.d - a.d || b.dc - a.dc; }).slice(0, 5);
-  var down = moved.slice().sort(function(a, b){ return a.d - b.d || a.dc - b.dc; }).slice(0, 5);
   if(mode === 'self'){
-    up = up.filter(function(x){ return x.me; });
-    down = down.filter(function(x){ return x.me; });
-    if(!up.length && !down.length) return '';
+    moved = moved.filter(function(x){ return x.me; });
+    if(!moved.length) return '';
   }
 
-  function row(x){
-    var arrow = x.d > 0 ? '↑' : x.d < 0 ? '↓' : '—';
+  /* v3.3.0 站主要求：进步/退步合成一张表、列全部人、点表头排序。
+     排序口径跟「全班成绩单」一致（缺值永远垫底、同值稳定）。
+     注意 changed 用「名次变化」而不是「名次」—— 想看谁升得最多就按变化排，
+     想看名次靠前的人就按名次排，两种需求都给到。 */
+  var key = SC.tailSortKey, asc = SC.tailSortAsc;
+  var arr = moved.slice();
+  arr.sort(function(a, b){
+    var x, y;
+    if(key === 'name'){ x = a.name; y = b.name; return asc ? (x > y ? 1 : x < y ? -1 : 0) : (x < y ? 1 : x > y ? -1 : 0); }
+    x = a[key]; y = b[key];
+    if(x == null && y == null) return 0;
+    if(x == null) return 1;
+    if(y == null) return -1;
+    return asc ? x - y : y - x;
+  });
+  var nUp = moved.filter(function(x){ return x.d > 0; }).length;
+  var nDn = moved.filter(function(x){ return x.d < 0; }).length;
+  var nEq = moved.length - nUp - nDn;
+
+  var arrowOf = function(k){
+    if(SC.tailSortKey !== k) return '';
+    return '<i class="sc-arw">' + (SC.tailSortAsc ? '↑' : '↓') + '</i>';
+  };
+  var cell = function(x, k){
+    var v = x[k];
+    if(v == null) return '<td class="sc-dim">—</td>';
+    if(k === 'd'){
+      var ar = v > 0 ? '↑' : v < 0 ? '↓' : '—';
+      return '<td class="' + (v > 0 ? 'sc-good' : v < 0 ? 'sc-warn' : 'sc-dim') + '">' + ar + ' ' + Math.abs(v) + '</td>';
+    }
+    if(k === 'dc') return '<td class="' + (v > 0 ? 'sc-good' : v < 0 ? 'sc-warn' : '') + '">' + (v > 0 ? '+' : '') + fmtNum(v) + '</td>';
+    return '<td>' + fmtNum(v, 0) + '</td>';
+  };
+
+  var head = '<tr>'
+    + '<th class="sc-th-sort" onclick="scTailSort(\'name\')">姓名' + arrowOf('name') + '</th>'
+    + '<th class="sc-th-sort" onclick="scTailSort(\'from\')">上次名次' + arrowOf('from') + '</th>'
+    + '<th class="sc-th-sort" onclick="scTailSort(\'to\')">本次名次' + arrowOf('to') + '</th>'
+    + '<th class="sc-th-sort" onclick="scTailSort(\'d\')">名次变化' + arrowOf('d') + '</th>'
+    + '<th class="sc-th-sort" onclick="scTailSort(\'dc\')">分数变化' + arrowOf('dc') + '</th>'
+    + '</tr>';
+
+  var body = arr.map(function(x){
     return '<tr' + (x.me ? ' class="sc-me-row"' : '') + '>'
       + '<td class="sc-name">' + esc(x.name) + (x.me ? '<span class="sc-you">我</span>' : '') + '</td>'
-      + '<td>' + x.from + ' → ' + x.to + '</td>'
-      + '<td class="' + (x.d > 0 ? 'sc-good' : x.d < 0 ? 'sc-warn' : '') + '">'
-      +   arrow + ' ' + Math.abs(x.d) + ' 名</td>'
-      + '<td>' + (x.dc == null ? '—' : (x.dc > 0 ? '+' : '') + fmtNum(x.dc)) + '</td>'
+      + cell(x, 'from') + cell(x, 'to') + cell(x, 'd') + cell(x, 'dc')
       + '</tr>';
-  }
-  var tbl = function(title, arr){
-    if(!arr.length) return '';
-    return '<div class="sc-rank-sub">' + title + '</div>'
-      + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
-      + '<thead><tr><th>姓名</th><th>名次</th><th>变化</th><th>分数变化</th></tr></thead><tbody>'
-      + arr.map(row).join('') + '</tbody></table></div>';
-  };
+  }).join('');
 
   var basisTxt = basis === 'grade' ? '年级名次'
                : basis === 'subject' ? '班级' + sub.name + '名次'
@@ -14973,9 +15123,20 @@ function scTailRank(){
     + '<span class="sc-only-admin">仅站主可见</span></div>'
     + scTailSwitch(basis, subs)
     + '<div class="sc-figcap" style="margin-bottom:8px">' + cap + '</div>'
-    + tbl('进步最多', up) + tbl('退步最多', down)
-    + '<div class="sc-figcap" style="margin-top:8px">口径：<b>' + esc(basisTxt) + '</b>　共比了 ' + moved.length + ' 人。</div>'
+    + '<div class="sc-tblwrap" style="max-height:460px"><table class="sc-tbl" style="min-width:auto">'
+    +   '<thead>' + head + '</thead><tbody>' + body + '</tbody>'
+    + '</table></div>'
+    + '<div class="sc-figcap" style="margin-top:8px">点表头可排序（名次、变化、分数都能排）。'
+    + '共比了 <b>' + moved.length + '</b> 人：进步 <b>' + nUp + '</b> 人、退步 <b>' + nDn + '</b> 人、持平 <b>' + nEq + '</b> 人。'
+    + '口径为 <b>' + esc(basisTxt) + '</b>。名次变化里的 ↑ 是往前挪、↓ 是往后退，数字是挪了几个名次。</div>'
     + '</div>';
+}
+
+/* 进退步榜排序：点表头切换升降序，逻辑跟成绩表 scSort 一致 */
+function scTailSort(k){
+  if(SC.tailSortKey === k) SC.tailSortAsc = !SC.tailSortAsc;
+  else { SC.tailSortKey = k; SC.tailSortAsc = (k === 'name' || k === 'to' || k === 'from'); }
+  scRenderPane();
 }
 
 /** 口径切换条：班级 / 年级 / 班级单科（单科时再多一个科目下拉） */
@@ -15248,11 +15409,30 @@ function scHeatmap(){
 
   /* 每科按班内名次映射颜色：越靠前越暖（橙），越靠后越冷（灰） */
   var rk = scRankMap(SC.basis);   /* 提出来算一次：原先每格都重算，60 行 × 6 科白跑 360 遍 */
+  var st = scStats(SC.basis);
+  var avgs = scSubjAvg();
+  /* v3.3.0：手机端没有悬停，所以每格都能点 —— 点开看这个人的总分 / 这一科 / 与班均差。
+     数据在这里一次性存好（SC._hm），点击只改 DOM，不重渲染整页（否则手机看明细会跳回顶部）。 */
+  var cellIdx = 0;
+  var cellsMeta = [];
   var rowsHtml = SC.rows.map(function(r){
     var t = scTotal(r, SC.basis);
     var cells = subs.map(function(sub){
       var v = scSubScore(r, sub, SC.basis);
-      if(v == null) return '<i class="sc-hm" style="background:#f5efe8"></i>';
+      var myIdx = cellIdx++;
+      var pack0 = (r.s && r.s[sub.key]) || {};
+      var sr0 = (SC.basis === 'graded' && sub.graded && pack0.asgRank != null) ? pack0.asgRank : pack0.rank;
+      cellsMeta.push({
+        name: r.name, me: scIsMe(r), sub: sub.name, subKey: sub.key,
+        v: v, rank: (v == null ? null : (sr0 == null ? null : sr0)),
+        cnt: (rk.subj[sub.key] || {}).count || null,
+        avg: avgs[sub.key], total: t, totalAvg: st.n ? st.avg : null,
+        schoolRank: r.schoolRank == null ? null : r.schoolRank,
+        leagueRank: r.leagueRank == null ? null : r.leagueRank,
+        raw: pack0.raw == null ? null : pack0.raw,
+        asg: pack0.assigned == null ? null : pack0.assigned,
+      });
+      if(v == null) return '<i class="sc-hm sc-hm-na" data-hm="' + myIdx + '"></i>';
       var pack = rk.subj[sub.key] || {};
       var rank = pack.rank[r.id], cnt = pack.count || 1;
       var p = cnt > 1 ? (rank - 1) / (cnt - 1) : 0;   /* 0 = 最好 */
@@ -15274,7 +15454,7 @@ function scHeatmap(){
       }
       /* 字色走全站共用 clsReadableOn：底色亮取深字、底色暗取白字，一套逻辑 */
       var ink = clsReadableOn('rgb(' + cr + ',' + cg + ',' + cb + ')') || '#6b5443';
-      return '<i class="sc-hm" style="background:rgb(' + cr + ',' + cg + ',' + cb + ');color:' + ink + '"'
+      return '<i class="sc-hm sc-hm-hit" data-hm="' + myIdx + '" style="background:rgb(' + cr + ',' + cg + ',' + cb + ');color:' + ink + '"'
         + ' title="' + esc(r.name) + '　' + esc(sub.name) + ' ' + fmtNum(v) + '（班内第 ' + rank + '）">' + fmtNum(v) + '</i>';
     }).join('');
     return '<div class="sc-hm-row' + (scIsMe(r) ? ' me' : '') + '">'
@@ -15283,6 +15463,7 @@ function scHeatmap(){
       + '<span class="sc-hm-total">' + (t == null ? '—' : fmtNum(t)) + '</span>'
       + '</div>';
   }).join('');
+  SC._hm = cellsMeta;
 
   return '<div class="sc-card sc-card-admin"><div class="sc-card-h">学生 × 科目热力图'
     + '<span class="sc-h-note">颜色＝该科班内位置</span>'
@@ -15291,8 +15472,69 @@ function scHeatmap(){
     +   subs.map(function(sub){ return '<b>' + esc(sub.name) + '</b>'; }).join('')
     + '</span><span class="sc-hm-total">总分</span></div>'
     + '<div class="sc-hm-body">' + rowsHtml + '</div>'
-    + '<div class="sc-figcap">每格为该生该科分数；颜色越橙越靠前，越浅越靠后。电脑端鼠标悬停可查看班内名次。</div>'
+    + '<div id="scHmList" class="sc-qlist"></div>'
+    + '<div class="sc-figcap">每格为该生该科分数；颜色越橙越靠前，越浅越靠后。'
+    + '<b>点任意一格看这一格的明细</b>（总分、该科比班均高/低多少、班内与年级名次），再点一次收起。</div>'
     + '</div>';
+}
+
+/* 点热力图某格：只更新下方明细区，不动整张表 */
+function scHeatTap(el){
+  var list = SC._hm;
+  var box = document.getElementById('scHmList');
+  if(!list || !box) return;
+  if(!el){                                  /* 收起按钮：只清选中态 */
+    SC.hmSel = null;
+    box.innerHTML = '';
+    scHmPaint();
+    return;
+  }
+  var i = parseInt(el.getAttribute('data-hm'), 10);
+  var c = list[i];
+  if(!c){ box.innerHTML = ''; return; }
+
+  /* 再点同一格 → 收起 */
+  if(SC.hmSel === i){
+    SC.hmSel = null;
+    box.innerHTML = '';
+    scHmPaint();
+    return;
+  }
+  SC.hmSel = i;
+  scHmPaint();
+
+  var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
+  box.innerHTML = '<div class="sc-qwho">'
+    + '<div class="sc-qwho-h"><b>' + esc(c.name) + '</b>'
+    +   (c.me ? '<em class="sc-qwho-me">我</em>' : '')
+    +   '<span class="sc-dim">' + esc(c.sub) + '</span>'
+    +   '<button class="sc-qlist-x" onclick="scHeatTap(null)">收起</button></div>'
+    + '<div class="sc-qwho-body">'
+    +   '<div class="sc-qwho-row"><i>' + esc(c.sub) + '</i><b>' + (c.v == null ? '未考' : fmtNum(c.v)) + '</b>'
+    +     '<span>' + (c.v == null ? '' : esc(scQGap(c.v, c.avg))) + '</span>'
+    +     (c.rank != null ? '<em>班内第 ' + c.rank + (c.cnt ? ' / ' + c.cnt : '') + '</em>' : '') + '</div>'
+    +   '<div class="sc-qwho-row"><i>总分</i><b>' + (c.total == null ? '—' : fmtNum(c.total)) + '</b>'
+    +     '<span>' + (c.total == null ? '' : esc(scQGap(c.total, c.totalAvg))) + '</span></div>'
+    +   (c.schoolRank != null
+          ? '<div class="sc-qwho-row"><i>年级排名</i><b>' + c.schoolRank + (gradeN ? ' / ' + gradeN : '') + '</b><span></span></div>'
+          : '')
+    +   (c.leagueRank != null
+          ? '<div class="sc-qwho-row"><i>联考排名</i><b>' + c.leagueRank + '</b><span></span></div>'
+          : '')
+    +   (c.raw != null && c.asg != null && Math.abs(c.raw - c.asg) > 0.001
+          ? '<div class="sc-qwho-row"><i>原始 / 赋分</i><b>' + fmtNum(c.raw) + ' → ' + fmtNum(c.asg) + '</b><span></span></div>'
+          : '')
+    + '</div></div>';
+}
+
+/* 给被点中的格子加个描边（只改 class，不重建 DOM） */
+function scHmPaint(){
+  var body = document.querySelector('.sc-hm-body');
+  if(!body) return;
+  Array.prototype.forEach.call(body.querySelectorAll('.sc-hm'), function(e){
+    var on = (SC.hmSel != null && parseInt(e.getAttribute('data-hm'), 10) === SC.hmSel);
+    e.classList.toggle('on', on);
+  });
 }
 
 function scSetTrendN(n){

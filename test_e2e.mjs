@@ -3472,9 +3472,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(indexHtml),
+  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adminHtml),
+  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3838,9 +3838,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(indexHtml38),
+  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adminHtml38),
+  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4855,10 +4855,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx47));
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adm47));
+  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx47));
+  t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm47));
   t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
-    /class-site-v91/.test(sw47));
+    /class-site-v9[0-9]/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4942,7 +4942,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.2.1');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.3.0');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5042,9 +5042,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx48));
+  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-17'/.test(idx48));
-  t('★service worker 缓存版本升到 v80', /class-site-v91/.test(sw48));
+  t('★service worker 缓存版本升到 v80', /class-site-v9[0-9]/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5109,8 +5109,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx49));
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adm49));
+  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx49));
+  t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5182,7 +5182,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx50));
+  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5353,7 +5353,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/导入完成，有几点要留意/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adm));
+  t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5421,7 +5421,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx));
+  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5543,7 +5543,15 @@ console.log('\n【57】第四十八轮·站主侧五件套 + 三档开关（v2.8
 
   /* ===== ③ 诊断卡与需关注的口径 ===== */
   t('★最薄弱一科＝班均得分率最低', /最薄弱一科：/.test(idx) && /rate < weak\.rate/.test(idx));
-  t('★需关注门槛＝低于班均 10 分', /var thr = st\.avg - 10;/.test(idx));
+  /* v3.3.0：门槛从写死的「班均 10 分」改成按满分比例（SC_ALERT_RATIO = 1.5%），
+     750 分制 ≈ 班均 − 11 分；单科线按各科满分同比例折算，不再用「总分班均 − 20」。 */
+  t('★需关注门槛改按满分比例（不再写死「班均 − 10」）',
+    /SC_ALERT_RATIO = 0\.015/.test(idx) && /var gap = full \* SC_ALERT_RATIO/.test(idx)
+    && !/var thr = st\.avg - 10;/.test(idx));
+  t('★单科也单独判（该科班均 − 该科满分 × 1.5%）',
+    /subLines\[sub\.key\] = \(avgs\[sub\.key\] == null \|\| !f\) \? null : \(avgs\[sub\.key\] - f \* SC_ALERT_RATIO\)/.test(idx));
+  t('★总分与单科两条路任一命中就上榜（lowTotal / lowSubs）',
+    /var lowTotal = \(t != null && t < thr\);/.test(idx) && /if\(!lowTotal && !lowSubs\.length\) return;/.test(idx));
   t('★拖后腿科目＝相对班均差得最多', /差得最多的那一科/.test(idx));
 
   /* ===== ④ 进退步榜：比名次不比分数 ===== */
@@ -5921,13 +5929,19 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /curPos = rankMapOf\(cm\); prevPos = rankMapOf\(pm\);/.test(idx));
   t('★单科口径有科目下拉可换科', /onchange="scTailSubj\(this\.value\)"/.test(idx));
   t('★三种口径都统一成「名次」，分数变化单列',
-    /d: prevPos\[n\] - curPos\[n\]/.test(idx) && /x\.dc == null \? '—'/.test(idx));
+    /d: prevPos\[n\] - curPos\[n\]/.test(idx) && /dc: \(curVal\[n\] != null && prevVal\[n\] != null\)/.test(idx));
+  /* v3.3.0：进步 / 退步合并成一张表、列所有人、点表头排序（不再各取前五） */
+  t('★进步退步合并成一张表（不再 slice(0,5) 各取前五）',
+    !/slice\(0, 5\)/.test(idx) && /moved\.length/.test(idx) && /进步 <b>'/.test(idx));
+  t('★全量展示 + 表头排序（scTailSort，逻辑同成绩表）',
+    /function scTailSort\(k\)\{/.test(idx) && /scTailSort/.test(idx) && /tailSortKey/.test(idx)
+    && /tailSortKey: 'd'/.test(idx) && /tailSortAsc: false/.test(idx));
   t('★对不上人时给提示而不是空白', /这两次考试按这个口径<b>对不上人<\/b>/.test(idx));
   t('★年级口径说明改为官方口径句（不再讲「打架」）',
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx));
+  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6038,7 +6052,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx));
+  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台内置更新记录补到 2.10.0',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6143,10 +6157,10 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx));
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adm));
+  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
+  t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 3.1.0 且缓存升 v91', /SITE_VER = '3\.2\.1'/.test(swSrc) && /class-site-v91/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.3\.0'/.test(swSrc) && /class-site-v92/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7526,8 +7540,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     !/__diag/.test(authSrc) && !/getLastSchemaError/.test(httpSrc));
 
   /* ---- ③ 版本与缓存同步 ---- */
-  t('★sw.js 缓存升 v82、版本 2.10.1',
-    /class-site-v91/.test(swSrc) && /SITE_VER = '3\.2\.1'/.test(swSrc));
+  t('★sw.js 缓存号符合 vNN 且与当前版本号同步',
+    /class-site-v\d+/.test(swSrc) && /SITE_VER = '3\.[0-9]+\.[0-9]+'/.test(swSrc));
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
   const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -8174,7 +8188,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.2.1', /SITE_VERSION = '3[.]2[.]1'/.test(idx) && /SITE_VERSION = '3[.]2[.]1'/.test(adm) && /SITE_VER = '3[.]2[.]1'/.test(sw));
+  t('版本号三处同步 3.3.0', /SITE_VERSION = '3[.]3[.]0'/.test(idx) && /SITE_VERSION = '3[.]3[.]0'/.test(adm) && /SITE_VER = '3[.]3[.]0'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8267,8 +8281,8 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.2.1',
-    /SITE_VERSION = '3[.]2[.]1'/.test(idx) && /SITE_VERSION = '3[.]2[.]1'/.test(adm) && /SITE_VER = '3[.]2[.]1'/.test(sw));
+  t('版本号三处同步 3.3.0',
+    /SITE_VERSION = '3[.]3[.]0'/.test(idx) && /SITE_VERSION = '3[.]3[.]0'/.test(adm) && /SITE_VER = '3[.]3[.]0'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8354,8 +8368,8 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.2.1',
-    /SITE_VERSION = '3[.]2[.]1'/.test(idx) && /SITE_VERSION = '3[.]2[.]1'/.test(adm));
+  t('版本号三处同步 3.3.0',
+    /SITE_VERSION = '3[.]3[.]0'/.test(idx) && /SITE_VERSION = '3[.]3[.]0'/.test(adm));
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8374,7 +8388,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]2[.]1'/.test(adm) && /SITE_VER = '3[.]2[.]1'/.test(sw));
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]3[.]0'/.test(adm) && /SITE_VER = '3[.]3[.]0'/.test(sw));
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8400,7 +8414,199 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.2.1', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.3.0', 'parsed=' + parsed);
+}
+
+
+console.log('\n【85】第七十三轮·v3.3.0 需关注学生加单科线（比例口径）/ 进退步榜合并全量可排序 / 热力图点选');
+{
+  /* 这一轮的三项都长在前端的渲染函数里，光靠正则查字符串证明不了「算得对」。
+     所以在 vm 沙箱里把 index.html 的主脚本真跑一遍（DOM 用最小桩），
+     直接调 scWatchList / scTailRank / scHeatmap，断言看到的是**算出来的数**。
+     —— 上一轮「编辑分享保存无效」就是正则全绿、实际行为错，教训在这儿。 */
+  const vmMod = await import('node:vm');
+  const rawIdx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const big = rawIdx.match(/<script>([\s\S]*?)<\/script>/g)[0].slice(8, -9);
+
+  const mkEl = (tag) => ({
+    tagName: (tag || 'div').toUpperCase(), _attrs: {},
+    innerHTML: '', textContent: '', children: [], childNodes: [], parentNode: null, dataset: {},
+    style: { setProperty() {}, removeProperty() {}, getPropertyValue: () => '' },
+    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    addEventListener() {}, removeEventListener() {}, appendChild() {}, removeChild() {},
+    setAttribute(k, v) { this._attrs[k] = v; }, getAttribute(k) { return this._attrs[k] ?? null; },
+    removeAttribute() {}, hasAttribute() { return false; }, closest() { return null; },
+    insertBefore() {}, replaceChild() {}, matches() { return false; }, cloneNode() { return mkEl(tag); },
+    querySelector() { return null; }, querySelectorAll() { return []; },
+    focus() {}, blur() {}, remove() {}, click() {}, dispatchEvent() {},
+    getBoundingClientRect() { return { top: 0, left: 0, width: 0, height: 0 }; },
+    offsetWidth: 0, offsetHeight: 0,
+  });
+  const reg = [];
+  const doc = {
+    documentElement: mkEl('html'), body: mkEl('body'), head: mkEl('head'), _els: {},
+    getElementById(id) { if (!this._els[id]) { this._els[id] = mkEl(); this._els[id].id = id; } return this._els[id]; },
+    querySelector() { return null; }, querySelectorAll() { return []; },
+    createElement: mkEl, createTextNode: () => mkEl(),
+    addEventListener(t, fn) { reg.push({ t, fn }); }, removeEventListener() {},
+    readyState: 'complete', cookie: '', title: '', fonts: { ready: Promise.resolve() },
+  };
+  const st54 = {};
+  const win = {
+    document: doc,
+    localStorage: { getItem: k => (k in st54 ? st54[k] : null), setItem: (k, v) => { st54[k] = String(v); }, removeItem: k => { delete st54[k]; }, key: i => Object.keys(st54)[i], length: 0 },
+    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    location: { href: 'https://x/', hash: '', search: '', protocol: 'https:', host: 'x', pathname: '/' },
+    navigator: { userAgent: 'node', language: 'zh-CN', onLine: true, clipboard: null },
+    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }),
+    fetch: () => Promise.reject(new Error('offline')),
+    addEventListener() {}, removeEventListener() {},
+    setTimeout, clearTimeout, setInterval: () => 0, clearInterval() {},
+    requestAnimationFrame: () => 0, cancelAnimationFrame() {},
+    getComputedStyle: () => ({ getPropertyValue: () => '' }),
+    alert() {}, confirm: () => false, prompt: () => '', console,
+    innerWidth: 390, innerHeight: 844, devicePixelRatio: 2, scrollY: 0, scrollX: 0, scrollTo() {},
+    URL: { createObjectURL: () => '', revokeObjectURL() {} },
+    Blob: function () {}, FormData: function () {}, FileReader: function () {},
+    Map, Set, Promise, JSON, Math, Date, parseInt, parseFloat, isFinite, encodeURIComponent, decodeURIComponent,
+    crypto: { subtle: {} }, IndexedDB: {}, WebSocket: function () {},
+    Audio: function () { return { play() {}, pause() {}, cloneNode() { return this; } }; },
+  };
+  win.window = win; win.globalThis = win; win.self = win; win.top = win; win.parent = win;
+
+  let ctx = null, runErr = null;
+  try { ctx = vmMod.createContext(win); vmMod.runInContext(big, ctx, { filename: 'index.js' }); }
+  catch (e) { runErr = e; }
+  t('★index.html 主脚本能在空 DOM 上跑完（渲染函数可被直接调用）', !runErr && !!ctx && !!ctx.SC, runErr ? runErr.message : 'ok');
+  if (runErr || !ctx || !ctx.SC) { /* 后面都依赖它，直接跳过 */ }
+  else {
+    const SC = ctx.SC;
+    const strip = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    /* ---------- ① 需关注学生：总分线 + 单科线（比例口径） ---------- */
+    const subs6 = [
+      { key: 'yw', name: '语文', full: 150 }, { key: 'sx', name: '数学', full: 150 }, { key: 'yy', name: '英语', full: 150 },
+      { key: 'wl', name: '物理', full: 100 }, { key: 'hx', name: '化学', full: 100, graded: true }, { key: 'sw', name: '生物', full: 100, graded: true },
+    ];
+    const KEYS = ['yw', 'sx', 'yy', 'wl', 'hx', 'sw'];
+    const cvt = a => [a[0] + 10, a[1] + 10, a[2] + 10, a[3] + 30, a[4] + 30, a[5] + 30];
+    const mk = (id, nm, raw5, grade) => {
+      const s = {};
+      KEYS.forEach((k, i) => { s[k] = { raw: raw5[i], assigned: grade ? grade[i] : cvt(raw5)[i], rank: 1, asgRank: 1 }; });
+      return { id, uid: id, name: nm, s, schoolRank: id * 10, leagueRank: id * 30 };
+    };
+    const rows6 = [
+      mk(1, '甲', [120, 130, 125, 85, 82, 80], cvt([120, 130, 125, 85, 82, 80])),
+      mk(2, '乙', [95, 100, 98, 62, 50, 48], cvt([95, 100, 98, 62, 50, 48])),
+      mk(3, '丙', [105, 115, 110, 72, 30, 68], cvt([105, 115, 110, 72, 30, 68])),
+      mk(4, '丁', [130, 140, 132, 90, 85, 88], cvt([130, 140, 132, 90, 85, 88])),
+    ];
+    ctx.AUTH.user = { id: 1, role: 'admin', displayName: '甲' };
+    SC.exam = { id: 10, name: '六科测试', date: '2026-10-02', subjects: subs6, cutlines: [] };
+    SC.rows = rows6; SC.basis = 'graded'; SC.config = {}; SC.me = [];
+
+    const stt = ctx.scStats('graded');
+    t('（自检）六科班均可算', Math.abs(stt.avg - 620) < 1e-9, 'avg=' + stt.avg);
+    t('★阈值系数 SC_ALERT_RATIO = 1.5%（把「20 分」换算成满分的比例）', ctx.SC_ALERT_RATIO === 0.015, String(ctx.SC_ALERT_RATIO));
+
+    const L = ctx.scAlertLines();
+    t('★总分线 = 班均 − 总分满分 × 1.5%（750 制 → 掉 11.25 分）',
+      Math.abs(L.totalLine - (620 - 11.25)) < 1e-9, 'line=' + L.totalLine);
+    t('★单科线按各科满分割算（语文 150→掉 2.25；化学 100→掉 1.5）',
+      Math.abs(L.subLines.yw - (L.avgs.yw - 2.25)) < 1e-9 && Math.abs(L.subLines.hx - (L.avgs.hx - 1.5)) < 1e-9,
+      'yw=' + L.subLines.yw.toFixed(2) + ' hx=' + L.subLines.hx.toFixed(2));
+    t('★★单科线落在各科量程内（按字面「总分班均−20」会永远够不到，这条防回归）',
+      Object.keys(L.subLines).every(k => {
+        const sub = subs6.find(x => x.key === k);
+        return L.subLines[k] > 0 && L.subLines[k] < sub.full;
+      }));
+
+    const hw = ctx.scWatchList();
+    const tw = strip(hw);
+    t('需关注学生卡渲染', /需关注学生/.test(tw));
+    t('★卡片标题写明比例口径', /某科低于该科班均 1\.5% 满分/.test(tw), tw.slice(0, 120));
+    t('★新增「拖后腿的单科」列', /拖后腿的单科/.test(tw));
+    t('★脚注列出每科的具体阈值（语文… / 数学…）', /单科线按各科满分同比例折算/.test(tw) && /语文[\d.]+ \/ 数学[\d.]+/.test(tw));
+    t('★总分掉队的人上榜（乙 513）', /乙/.test(tw));
+    t('★★总分不差但某科掉队的人上榜（丙：化学 60，远低于该科线）',
+      /丙[\s\S]{0,140}化学/.test(tw), (tw.match(/丙[\s\S]{0,100}/) || [''])[0]);
+    t('★单科标签给出「科目 分数 低于该科线多少」', /化学 60 -\d/.test(tw), (tw.match(/化学 60\s*[-\d.]*/) || [''])[0]);
+    t('总分不达标的人不标「仅单科」', !/乙\s*仅单科/.test(tw));
+    t('脚注分开统计两个口径的人数', /总分不达标/.test(tw) && /单科不达标/.test(tw));
+
+    /* ---------- ② 进退步榜：合并成一张表 / 全量 / 点表头排序 ---------- */
+    const prevRows = [
+      mk(1, '甲', [100, 110, 105, 70, 65, 68]), mk(2, '乙', [100, 105, 100, 66, 62, 64]),
+      mk(3, '丙', [100, 110, 105, 68, 60, 62]), mk(4, '丁', [120, 130, 125, 85, 80, 82]),
+    ];
+    SC.allRows = { 9: { exam: { id: 9, name: '上次', date: '2026-09-01', subjects: subs6 }, rows: prevRows }, 10: { exam: SC.exam, rows: rows6 } };
+    SC.exams = [{ id: 9, name: '上次', date: '2026-09-01' }, { id: 10, name: '六科测试', date: '2026-10-02' }];
+
+    const ht = ctx.scTailRank();
+    const tt = strip(ht);
+    t('进退步榜渲染', /进退步榜/.test(tt));
+    t('★不再拆成「进步最多 / 退步最多」两张表', !/进步最多/.test(tt) && !/退步最多/.test(tt));
+    t('★合并成一张表、全部人都在（共比了 4 人）', /共比了 4 人/.test(tt), tt.slice(-150));
+    t('★表头 5 项都可点排序', /scTailSort\('name'\)/.test(ht) && /scTailSort\('from'\)/.test(ht)
+      && /scTailSort\('to'\)/.test(ht) && /scTailSort\('d'\)/.test(ht) && /scTailSort\('dc'\)/.test(ht));
+    t('★仍可按班级 / 年级 / 单科筛选', /scTailSet\('class'\)/.test(ht) && /scTailSet\('grade'\)/.test(ht) && /scTailSet\('subject'\)/.test(ht));
+    t('给出进步 / 退步 / 持平人数', /进步 \d+ 人/.test(tt) && /退步 \d+ 人/.test(tt) && /持平 \d+ 人/.test(tt));
+    t('默认按「名次变化」降序（进步最多的在最前）', SC.tailSortKey === 'd' && SC.tailSortAsc === false);
+
+    ctx.scTailSort('name');
+    t('★点「姓名」→ 改按姓名升序', SC.tailSortKey === 'name' && SC.tailSortAsc === true);
+    ctx.scTailSort('name');
+    t('★再点「姓名」→ 反转降序', SC.tailSortAsc === false);
+    ctx.scTailSort('d');
+    t('★点「名次变化」→ 回到变化降序', SC.tailSortKey === 'd' && SC.tailSortAsc === false);
+    t('排序后照常渲染', /共比了 4 人/.test(strip(ctx.scTailRank())));
+    ctx.scTailSet('grade');
+    t('切「年级」口径可算（靠导入的校排名）', !!ctx.scTailRank());
+    ctx.scTailSet('subject');
+    t('切「单科」口径可算', !!ctx.scTailRank());
+
+    /* ---------- ③ 热力图：手机端点一格看明细 ---------- */
+    const hh = ctx.scHeatmap();
+    t('热力图渲染', /学生 × 科目热力图/.test(hh));
+    t('★24 格全部可点（class 里带 sc-hm-hit 和 data-hm）',
+      (hh.match(/class="sc-hm sc-hm-hit"/g) || []).length === 24);
+    t('★明细区 #scHmList 就挂在表下面', /id="scHmList"/.test(hh));
+    t('SC._hm 缓存了 24 格数据（点选时不用重算）', Array.isArray(SC._hm) && SC._hm.length === 24);
+    t('每格数据含姓名/科目/分数/该科班均/总分/总分班均', (() => {
+      const c = SC._hm[7];
+      return c && c.name && c.sub && c.avg != null && c.total != null && c.totalAvg != null;
+    })());
+
+    doc.getElementById('scPaneBox').innerHTML = hh;
+    ctx.scHeatBind();
+    const clicks = reg.filter(r => r.t === 'click');
+    t('点选走 document 事件委托', clicks.length >= 1);
+    const before35 = clicks.length;
+    ctx.scHeatBind();
+    t('★重复调用不重复绑定（__scHeatBound 守卫）', reg.filter(r => r.t === 'click').length === before35);
+
+    const fakeCell = (id) => {
+      const cell = {
+        getAttribute: k => (k === 'data-hm' ? String(id) : null),
+        closest: sel => (sel === '.sc-hm-body' ? {} : (sel === '.sc-hm-hit' ? cell : null)),
+      };
+      return cell;
+    };
+    const fire = (target) => clicks.forEach(r => r.fn({ target }));
+    const box = doc.getElementById('scHmList');
+
+    fire(fakeCell(7));
+    const d1 = strip(box.innerHTML);
+    t('★点一格弹出这一格的明细（乙 · 数学）', /乙/.test(d1) && /数学/.test(d1), d1.slice(0, 120));
+    t('★明细里给出该科比班均高/低多少', /班均/.test(d1));
+    t('★明细里给出总分、年级排名、联考排名', /总分/.test(d1) && /年级排名/.test(d1) && /联考排名/.test(d1));
+    t('★明细里给出原始 / 赋分对照', /原始/.test(d1));
+    t('SC.hmSel 记住选中格', SC.hmSel === 7);
+    fire(fakeCell(7));
+    t('★再点同一格收起', SC.hmSel === null && strip(box.innerHTML) === '');
+    ctx.scHeatTap(null);
+    t('收起按钮传 null 不报错', SC.hmSel === null);
+  }
 }
 
 console.log('\n' + '='.repeat(52));
