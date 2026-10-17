@@ -5077,18 +5077,18 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /\.off-spin\{animation:offSpin/.test(idx47) && /prefers-reduced-motion:reduce/.test(idx47));
   t('★「已恢复」绿色态 CSS 存在', /\.offline-bar\.off-ok\{/.test(idx47));
 
-  /* ===== ③ 学习卡片暂时隐藏（站主：bug 有点多，等后续再修）===== */
-  t('★v2.6.1 总开关 STUDY_CARD_ENABLED = false',
-    /var STUDY_CARD_ENABLED = false/.test(idx47));
-  t('★总开关关闭时直接不渲染卡片',
-    /if\(!STUDY_CARD_ENABLED\)\{ el\.innerHTML = ''; el\.style\.display = 'none'; return; \}/.test(idx47));
-  t('★总开关关闭时不发起 /api/study 联网请求',
-    /if\(!STUDY_CARD_ENABLED\) return;/.test(idx47));
-  t('★用 display:none 隐藏（不留空白高度）',
-    /el\.style\.display = 'none'/.test(idx47));
-  t('★代码与后台面板都保留（改回 true 即可整体恢复）',
-    /function renderStudyCard\(\)/.test(idx47) && /function renderCards\(\)/.test(adm47));
-  t('★后台面板明确提示「当前已暂时隐藏」', /当前已暂时隐藏/.test(adm47));
+  /* ===== ③ 学习卡片（v3.5.9 站主要求：不强制隐藏，恢复显示 + 保留手动隐藏按钮）===== */
+  t('★学习卡片已恢复显示（STUDY_CARD_ENABLED = true）',
+    /var STUDY_CARD_ENABLED = true/.test(idx47));
+  t('★保留手动隐藏按钮（hideStudyCard）',
+    /function hideStudyCard\(\)/.test(idx47) && /onclick="hideStudyCard\(\)"/.test(idx47));
+  t('★隐藏是本地偏好，存在 cls_study_hidden',
+    /STUDY_HIDE_KEY = 'cls_study_hidden'/.test(idx47) && /function studyHidden\(\)/.test(idx47));
+  t('★隐藏后不渲染卡片、也不联网',
+    /if\(!STUDY_CARD_ENABLED \|\| studyHidden\(\)\)\{ el\.innerHTML = ''; el\.style\.display = 'none'; return; \}/.test(idx47));
+  t('★自定义设置里能从隐藏恢复（showStudyCard）',
+    /function showStudyCard\(\)/.test(idx47) && /已隐藏 · 点此恢复/.test(idx47));
+  t('★后台面板不再写「当前已暂时隐藏」', !/当前已暂时隐藏/.test(adm47));
 
   /* ===== ③+ 后台「每日一言」+「学习卡片」合并为「首页卡片」=====
      站主要求：「后台的每日一言和学习卡片的古诗词那些放到一个板块」。
@@ -9507,6 +9507,7 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   const sqlSrc = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
   const idxV = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const admV = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const contSrc = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
 
   /* 本块自带一个学生账号（不依赖其它块里的局部变量），要带密码走「首次改密」放行 */
   const vUser = 'voter91', vPwd0 = 'Init2025', vPwd = 'MyOwn2025';
@@ -9537,9 +9538,15 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /id:'votes'/.test(admV) && /votes:\s*renderVotes,/.test(admV));
   t('★点歌加权函数在前台后台都就位',
     /function djWeightedIdx/.test(admV) && /function djWeightOf/.test(admV));
-  t('★每日一言来源开关三处齐全（默认值/normalize/守卫）',
-    /quoteNet: 1/.test(idxV) && /out\.quoteNet = \(o\.quoteNet === 0\) \? 0 : 1/.test(idxV)
-    && /if\(typeof UI !== 'undefined' && UI\.quoteNet === 0\) return;/.test(idxV));
+  /* v3.5.9 站主：「后台的首页卡片里面没有改」→ 来源改由后台统一控制 */
+  t('★每日一言来源走后端内容键 quote_source（白名单已放行）',
+    /'quote_source'/.test(contSrc) && /quote_source/.test(idxV));
+  t('★后台首页卡片有来源开关（联网 API / 本地库）',
+    /function qsPick/.test(admV) && /id="qsNet"/.test(admV) && /id="qsLocal"/.test(admV));
+  t('★前端统一判定 quoteNetAllowed（后台配置优先于本机偏好）',
+    /function quoteNetAllowed/.test(idxV) && /if\(!quoteNetAllowed\(\)\) return;/.test(idxV));
+  t('★自定义设置里不再给同学切换来源（只读展示）',
+    !/onclick="setQuoteNet/.test(idxV) && /由管理员在后台「首页卡片 → 每日一言」统一设置/.test(idxV));
 
   t('★三个版本号同步（index/admin/worker 彼此一致）',
     (idxV.match(/SITE_VERSION = '([\d.]+)'/)||[])[1] === (admV.match(/SITE_VERSION = '([\d.]+)'/)||[])[1]

@@ -402,6 +402,11 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 ## 9. 更新记录
 
+### v3.5.9（2026-10-17）
+- **教训：功能做在「用户本机偏好」里，站主等于没有这个功能**。每日一言来源 v3.5.6 放在了 UI.quoteNet（localStorage 个人偏好），后台首页卡片面板里根本看不到。站主验收时直接说「没有改」。凡是「全班统一」的策略，必须走后端内容键，不能塞进 UI 偏好。
+- 新增内容键 quote_source = { net: 0|1 }：三处齐改（api/content.js 白名单、index.html CONTENT_MAP 设 null 走 applyCloudContent 特殊分支、applyCloudContent 里落 SITE_DATA.quoteSource）。
+- 学习卡片 STUDY_CARD_ENABLED 恢复 true，隐藏改为本地偏好 cls_study_hidden + 卡片内「隐藏」按钮 + 设置里恢复。
+
 ### v3.5.8（2026-10-17）
 - **回归教训**：改数据加载方式（预载→懒加载）时，下游所有依赖点都要过一遍「数据可能还没到」的分支。scTailRank 依赖 SC.allRows 两场齐全，懒加载后部分缺失走到了「对不上人」误报分支。修复 = 缺数据自动 scLoadAllRows() 补载。
 - 三类统计（优秀/及格/低分率）整体下线：函数、调用、CSS、e2e 全清，反向断言防回潮。

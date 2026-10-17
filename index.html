@@ -3285,7 +3285,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.8';
+var SITE_VERSION = '3.5.9';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -6678,6 +6678,7 @@ var CONTENT_MAP = {
   holiday_homeworks: 'holidayHomeworks',
   homework_notice:   'homeworkNotice',
   daily_quote:       'dailyQuote',
+  quote_source:      null,             /* v3.5.9 每日一言来源（后台配）→ 落到 SITE_DATA.quoteSource，见 applyCloudContent */
   study_card:        'studyCard',      /* v2.6.0 学习卡片默认配置（后台配、前台读） */
   popups:            'popups',         /* 通用弹窗引擎（第二十七轮） */
   /* 以下三键（第二十八轮）主站**不消费**，值一律 null —— 加它们只为满足
@@ -6725,6 +6726,14 @@ function applyCloudContent(items, opts){
     /* 云端没这个键（null）时跳过——不能把本地数据抹成 null */
     if(v === null || v === undefined) return;
     if(k === 'site_config'){ applySiteConfig(v); n++; return; }
+    /* v3.5.9 每日一言来源：后台「首页卡片」统一配置，落到 SITE_DATA.quoteSource */
+    if(k === 'quote_source'){
+      if(typeof v !== 'object' || Array.isArray(v)) return;   /* 类型护栏 */
+      if(v.net !== 0 && v.net !== 1) return;
+      SITE_DATA.quoteSource = { net: v.net };
+      n++;
+      return;
+    }
     /* 重要日期落在独立变量 IMPORTANT_DATES 上，不在 SITE_DATA 里。
        必须整体替换数组（渲染函数都现取 IMPORTANT_DATES，替换后立刻生效），
        不做逐项 patch——避免两份数据混在一起对不上。 */
@@ -6808,6 +6817,20 @@ function dailyQuoteOfToday(){
   return pickRandom(quoteItems());
 }
 
+/* v3.5.9 站主：「后台的首页卡片里面没有改」——每日一言来源原来只是每个同学
+   自己在本机的偏好（UI.quoteNet），后台管不到。现在改成**后台统一配置**：
+   内容键 quote_source = { net: 1|0 }，站主在后台「首页卡片」里切，全站生效。
+   优先级：后台云端配置 > 同学本机偏好 > 代码默认（联网）。
+     · 后台配了「联网」→ 所有人都走 API（本机选过本地也以站主为准）
+     · 后台配了「本地库」→ 所有人都不联网，零外部请求
+     · 后台没配（老数据）→ 退回同学本机偏好，行为与升级前一致 */
+function quoteNetAllowed(){
+  var cloud = (window.SITE_DATA && SITE_DATA.quoteSource && typeof SITE_DATA.quoteSource === 'object')
+    ? SITE_DATA.quoteSource : null;
+  if(cloud && (cloud.net === 0 || cloud.net === 1)) return cloud.net === 1;
+  return !(typeof UI !== 'undefined' && UI.quoteNet === 0);
+}
+
 function renderDailyQuote(){
   var el = document.getElementById('dailyQuoteBar');
   if(!el) return;
@@ -6832,7 +6855,7 @@ function renderDailyQuote(){
 var _quoteFetching = false;
 function fetchRemoteQuote(){
   if(_quoteFetching || _quoteRemote) return;
-  if(typeof UI !== 'undefined' && UI.quoteNet === 0) return;   /* 用户选了只用本地库 */
+  if(!quoteNetAllowed()) return;   /* 后台配了本地库 / 同学自己选了本地库 */
   _quoteFetching = true;
   var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 6000);
@@ -6872,7 +6895,7 @@ function fetchRemoteQuote(){
 /* 🚀 v2.6.1 站主要求：暂时隐藏整个学习卡片（bug 较多，等后续再修）。
    ⚠️ 这是**总开关**：false 时首页不渲染卡片、也不发起 /api/study 联网请求，
       容器直接不占高度。改回 true 即可整体恢复，其余代码与后台配置面板都保留。 */
-var STUDY_CARD_ENABLED = false;
+var STUDY_CARD_ENABLED = true;   /* v3.5.9 站主：「保留手动隐藏按钮」→ 恢复显示，同学可在自定义设置里关 */
 
 var STUDY_CFG_KEY = 'cls_study_cfg';
 /* 默认配置：四类全开，三科全选 —— 同学第一次打开就有内容看 */
@@ -7047,7 +7070,7 @@ function renderStudyCard(){
   if(!el) return;
   /* v2.6.1 总开关：整块暂时隐藏（站主要求，bug 修好后再开）。
      容器直接 display:none，不留空白、也不触发任何联网请求。 */
-  if(!STUDY_CARD_ENABLED){ el.innerHTML = ''; el.style.display = 'none'; return; }
+  if(!STUDY_CARD_ENABLED || studyHidden()){ el.innerHTML = ''; el.style.display = 'none'; return; }
   el.style.display = '';
   var cfg = studyCfg();
   if(!cfg.on){ el.innerHTML = ''; return; }
@@ -7086,8 +7109,28 @@ function renderStudyCard(){
       '<div class="study-act">' +
         (picked === 'quiz' ? '<button onclick="studyShowAns()">看答案</button>' : '') +
         '<button onclick="refreshStudyCard()">换一条</button>' +
+        '<button onclick="hideStudyCard()" title="不再显示学习卡片">隐藏</button>' +
       '</div>' +
     '</div>' + r.html;
+}
+
+/* v3.5.9 站主要求「学习卡片不强制隐藏，保留手动隐藏按钮」：
+   点了就记在本机，之后首页不再出现卡片；想恢复在「自定义设置」里重新打开。 */
+var STUDY_HIDE_KEY = 'cls_study_hidden';
+function hideStudyCard(){
+  try{ localStorage.setItem(STUDY_HIDE_KEY, '1'); }catch(e){}
+  var el = document.getElementById('studyCard');
+  if(el){ el.innerHTML = ''; el.style.display = 'none'; }
+  if(typeof uiMsg === 'function') uiMsg('已隐藏学习卡片，可在「自定义设置」里重新打开');
+}
+function studyHidden(){
+  try{ return localStorage.getItem(STUDY_HIDE_KEY) === '1'; }catch(e){ return false; }
+}
+function showStudyCard(){
+  try{ localStorage.removeItem(STUDY_HIDE_KEY); }catch(e){}
+  renderSettings();
+  renderStudyCard();
+  if(typeof uiMsg === 'function') uiMsg('学习卡片已恢复');
 }
 
 /* 每日一题：展开答案 */
@@ -8463,6 +8506,7 @@ function saveContentLocal(key, value){
   try{
     if(key === 'announcements' || key === 'daily_quote') rerenderAll();
     if(key === 'study_card') renderStudyCard();   /* v2.6.0 学习卡片配置变了就重画 */
+    if(key === 'quote_source'){ _quoteRemote = null; fetchRemoteQuote(); renderDailyQuote(); }   /* v3.5.9 来源切了立刻重来 */
     if(key === 'holiday_homeworks' || key === 'homework_notice') refreshHwViews();
     if(key === 'important_dates'){ renderAllImp(); updateCountdown(); }
   }catch(e){}
@@ -9727,20 +9771,29 @@ function renderSettings(){
       '</div>' +
       '<p class="ui-hint">只缩放文字，不影响卡片与间距。</p>', true);
 
-    /* —— 每日一言来源（v3.5.6 新增）—— */
-    var qModes = [
-      ['net',  '联网 API', 'hitokoto 开放接口，动画 / 漫画 / 文学 / 诗词类'],
-      ['local','本地库',   '只用管理员在后台配的句子，不联网'],
-    ].map(function(m){
-      var cur = (UI.quoteNet !== 0) ? 'net' : 'local';
-      return '<button class="btn ' + (cur === m[0] ? '' : 'btn-secondary') + '" ' +
-        'style="flex:1;font-size:.74rem;padding:9px 4px" ' +
-        'onclick="setQuoteNet(\'' + (m[0] === 'net' ? 1 : 0) + '\')">' + m[1] + '</button>';
-    }).join('');
+    /* —— 每日一言来源（v3.5.6 新增；v3.5.9 改为后台统一控制）——
+       站主反馈「后台的首页卡片里面没有改」：来源应该由站主在后台定，
+       不该让每个同学各选各的。这里只展示当前状态，不给切换按钮。 */
+    var qNetOn = (typeof quoteNetAllowed === 'function') ? quoteNetAllowed() : true;
     html += secHtml('quote','每日一言','message-circle',
-      '<div class="ui-modes">' + qModes + '</div>' +
-      '<p class="ui-hint">联网模式下每次刷新随机换一句（hitokoto 公共文库）；'
-      + '连不上时自动回退本地库。本地库由管理员在后台「班级内容 → 每日一言」配置。</p>', false);
+      '<div class="ui-modes">'
+      + '<button class="btn" style="flex:1;font-size:.74rem;padding:9px 4px;opacity:1;cursor:default">'
+      + (qNetOn ? '联网 API（当前）' : '本地库（当前）') + '</button>'
+      + '</div>' +
+      '<p class="ui-hint">内容来源由管理员在后台「首页卡片 → 每日一言」统一设置，'
+      + '全班一致。（' + (qNetOn ? '现在从 hitokoto 公共文库随机取句，连不上自动回退本地库' : '现在只用管理员配的句子，不联网') + '）</p>', false);
+
+    /* —— 学习卡片（v3.5.9 恢复显示 + 手动隐藏入口）—— */
+    if(typeof STUDY_CARD_ENABLED !== 'undefined' && STUDY_CARD_ENABLED){
+      html += secHtml('study','学习卡片','inbox',
+        '<div class="ui-modes">'
+        + '<button class="btn ' + (studyHidden() ? 'btn-secondary' : '') + '" style="flex:1;font-size:.74rem;padding:9px 4px" '
+        + 'onclick="' + (studyHidden() ? 'showStudyCard()' : 'hideStudyCard()') + '">'
+        + (studyHidden() ? '已隐藏 · 点此恢复' : '显示中 · 点此隐藏') + '</button>'
+        + '</div>' +
+        '<p class="ui-hint">首页每刷新一次随机出一条（知识点 / 每日一词 / 古诗文 / 每日一题）。'
+        + '不想看可以隐藏，内容类型由管理员在后台「首页卡片」配置。</p>', false);
+    }
 
     /* —— 背景 —— */
     var btypes = [['theme','跟随主题'],['solid','纯色'],['grad','渐变'],['image','图片']];

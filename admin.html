@@ -899,7 +899,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.8';
+var SITE_VERSION = '3.5.9';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -910,6 +910,7 @@ var STATE = {
   /* 各面板的临时状态 */
   /* v2.10.0 #172：成员与档案合并页（原 users / profiles 两页合一） */
   members: { list: [], total: 0, counts: {}, page: 1, size: 50, q: '', role: '', status: '', scene: '', selected: {} },
+  quoteSource: 1,   /* v3.5.9 每日一言来源：1=联网 API，0=本地库 */
   logs:  { list: [], total: 0, page: 1, size: 30 },
   actionlogs: { list: [], total: 0, page: 1, size: 50, q: '', action: '', day: '', stats: null },
   logins:{ list: [], total: 0, page: 1, size: 30, userId: 0 },
@@ -5046,19 +5047,35 @@ function songRefundDialog(){
      · 学习卡片 → loadStudy()  / paintStudy()  / saveStudy()，数据键 study_card */
 function renderCards(){
   $('view').innerHTML =
-    /* ---------- 区块一：每日一言 ---------- */
+    /* ---------- 区块一：每日一言（含来源开关 v3.5.9） ---------- */
     '<section class="panel" style="margin-bottom:18px">'
     + '<div class="panel-head">'
     +   '<div><h3>' + svg('quote') + '每日一言</h3>'
-    +     '<p class="sub">首页每天自动换一句，同学不用手动刷</p></div>'
+    +     '<p class="sub">首页自动换一句，同学不用手动刷</p></div>'
     +   '<div style="display:flex;gap:8px">'
     +     '<button class="btn btn-sm" id="dqAdd">' + svg('plus', 14) + '新增一句</button>'
     +     '<button class="btn btn-sm btn-secondary" id="dqRefresh">' + svg('refresh', 14) + '刷新</button>'
     +   '</div>'
     + '</div>'
     + '<div class="panel-body">'
+    /* —— 来源开关（v3.5.9）：站主要求「改为展示 API 拉取内容」，这里一刀切全站 —— */
+    +   '<div style="margin-bottom:16px;padding:14px;border:1px solid #eee3d8;border-radius:12px;background:#fffdfa">'
+    +     '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+    +       '<b style="font-size:.9rem">内容来源</b>'
+    +       '<span class="muted" style="font-size:.76rem">改完点「保存来源」，全站立即生效</span>'
+    +     '</div>'
+    +     '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +       '<button class="btn" id="qsNet" style="flex:1;min-width:130px"></button>'
+    +       '<button class="btn" id="qsLocal" style="flex:1;min-width:130px"></button>'
+    +     '</div>'
+    +     '<p class="muted" style="font-size:.76rem;margin:10px 0 0;line-height:1.7">'
+    +       '<b>联网 API</b>：从 hitokoto 公共文库拉取（动画 / 漫画 / 文学 / 诗词），每次刷新随机换一句，连不上自动回退本地库。<br>'
+    +       '<b>本地库</b>：只用下面这个列表里的句子，不发任何外部请求。'
+    +     '</p>'
+    +     '<div id="qsMsg" style="font-size:.78rem;margin-top:8px"></div>'
+    +   '</div>'
     +   '<div class="alert info" style="margin-bottom:14px">'
-    +     '这里保存后，<b>改动会在下一天自然生效</b>；想让今天立刻变，让同学刷新一下页面即可。'
+    +     '列表改动保存后，让同学刷新一下页面就能看到最新内容。'
     +   '</div>'
     +   '<div id="dqBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
     + '</div>'
@@ -5069,18 +5086,14 @@ function renderCards(){
     +   '<div><h3>' + svg('inbox') + '学习卡片</h3>'
     +     '<p class="sub">知识点 / 每日一词 / 古诗文 / 每日一题</p></div>'
     +   '<div style="display:flex;gap:8px">'
-    +     '<button class="btn btn-sm" id="stSave">' + svg('check', 14) + '保存</button>'
-    +     '<button class="btn btn-sm btn-secondary" id="stRefresh">' + svg('refresh', 14) + '刷新</button>'
+    +     '<button class="btn btn-sm" id="stSave">' + svg('check', 14) + ' 保存</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="stRefresh">' + svg('refresh', 14) + ' 刷新</button>'
     +   '</div>'
     + '</div>'
     + '<div class="panel-body">'
     +   '<div class="alert info" style="margin-bottom:14px">'
     +     '首页「学习卡片」每次刷新随机出一条内容。这里配的是<b>全班默认</b>；'
-    +     '同学在首页「自定义设置 → 学习卡片」里改过的话，以他自己的为准。'
-    +   '</div>'
-    +   '<div class="alert warn" style="margin-bottom:14px">'
-    +     svg('alert', 14) + ' <b>当前已暂时隐藏</b>：v2.6.1 起首页不再显示学习卡片'
-    +     '（还有几处问题待修）。这里的配置会照常保存，改回显示后立即生效，无需重新配。'
+    +     '同学在首页「自定义设置 → 学习卡片」里改过、或手动关掉的，以他自己的为准。'
     +   '</div>'
     +   '<div id="stBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
     + '</div>'
@@ -5090,8 +5103,52 @@ function renderCards(){
   $('dqRefresh').onclick = function(){ loadQuotes(); };
   $('stSave').onclick    = saveStudy;
   $('stRefresh').onclick = loadStudy;
+  $('qsNet').onclick     = function(){ qsPick(1); };
+  $('qsLocal').onclick   = function(){ qsPick(0); };
+  loadQuoteSource();
   loadQuotes();
   loadStudy();
+}
+
+/* v3.5.9 每日一言来源（内容键 quote_source）：站主要在「首页卡片」里直接改，
+   不再让每个同学自己在「自定义设置」里点。 */
+function loadQuoteSource(){
+  api('/content').then(function(j){
+    var raw = (j && j.items) ? j.items.quote_source : null;
+    /* 没配过就默认联网（与 v3.5.6 起的行为一致） */
+    STATE.quoteSource = (raw && raw.net === 0) ? 0 : 1;
+    paintQuoteSource();
+  }).catch(function(){ STATE.quoteSource = 1; paintQuoteSource(); });
+}
+
+function paintQuoteSource(){
+  var net = $('qsNet'), loc = $('qsLocal');
+  if(!net || !loc) return;
+  var cur = (STATE.quoteSource === 0) ? 0 : 1;
+  net.textContent = (cur === 1 ? '✓ ' : '') + '联网 API（推荐）';
+  loc.textContent = (cur === 0 ? '✓ ' : '') + '本地库';
+  net.className = 'btn' + (cur === 1 ? '' : ' btn-secondary');
+  loc.className = 'btn' + (cur === 0 ? '' : ' btn-secondary');
+  net.style.flex = loc.style.flex = '1';
+  net.style.minWidth = loc.style.minWidth = '130px';
+}
+
+function qsPick(m){
+  var next = (m === 0) ? 0 : 1;
+  if(STATE.quoteSource === next){ paintQuoteSource(); return; }
+  var msg = $('qsMsg');
+  if(msg){ msg.innerHTML = '<span class="muted">保存中…</span>'; }
+  api('/content', { method: 'PUT', body: { items: { quote_source: { net: next } } } })
+    .then(function(j){
+      if(j && j.ok === false) throw new Error(j.error || '保存失败');
+      STATE.quoteSource = next;
+      paintQuoteSource();
+      if(msg){ msg.innerHTML = '<span style="color:#2f9e44">✅ 已切换为「'
+        + (next === 1 ? '联网 API' : '本地库') + '」，同学刷新页面即生效。</span>'; }
+    })
+    .catch(function(e){
+      if(msg){ msg.innerHTML = '<span style="color:#b3261e">保存失败：' + esc(e.message || e) + '</span>'; }
+    });
 }
 
 function dqNormalize(list){
