@@ -9945,6 +9945,8 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('#9 撤回重投接口 retract', /case 'retract'/.test(vot) && /async function retractVote\(/.test(vot));
   t('#9 前端点赞按钮、无提交表单', /data-vote-toggle/.test(idx) && /function voteToggle\(/.test(idx) && !/data-vote-submit/.test(idx));
   t('#9 撤回按钮与次数提示', /data-vote-retract/.test(idx) && /撤回重投/.test(idx));
+  t('#9 未截止一律出点赞按钮（管理员也能投，不再被结果视图挡住）',
+    /if\(closed\)\{/.test(idx) && !/if\(closed \|\| v\.results\)\{/.test(idx));
   t('#9 最多/最少票数后端校验', /maxChoices/.test(vot) && /minChoices/.test(vot) && /最多选/.test(vot));
   t('#9 后台三个配额输入', /id="voMaxChoices"/.test(adm) && /id="voMinChoices"/.test(adm) && /id="voRetractLimit"/.test(adm));
   t('#9 retract_used 两条 DDL 路径都有', (http2.match(/retract_used/g) || []).length >= 2);
