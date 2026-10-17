@@ -241,7 +241,7 @@ create table if not exists profile_field_meta (
   is_custom   boolean     not null default false,      -- true = 后台新增的自定义字段
   vis_locked  boolean     not null default false,      -- true = 站主在后台设过可见性，以站主为准
   updated_at  timestamptz not null default now(),
-  constraint pfm_vis_chk check (visibility in ('public','committee','self'))
+  constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))
 );
 
 /* ---------------- vis_locked 补列（2026-10-09 v2.4.1，幂等） ----------------

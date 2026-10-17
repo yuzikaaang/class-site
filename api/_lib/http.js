@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.2';
+const SCHEMA_VER = '3.5.4';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -84,6 +84,15 @@ export async function ensureSchema(sql) {
         try { await s`create index if not exists profiles_name_bidx_idx on profiles (name_bidx)`; } catch (e) {}
         try { await s`create index if not exists profiles_sid_bidx_idx  on profiles (student_id_bidx)`; } catch (e) {}
         try { await s`alter table profiles drop constraint if exists profiles_student_id_key`; } catch (e) {}
+        /* 🔴 v3.5.4 热修：字段「仅管理员」可见档 500。
+           根因：v3.4.1 加了第四档 admin，应用层 ALLOWED_VIS 放了行，
+           但 pfm_vis_chk 检查约束从没加这个值 —— create table if not exists
+           对老库不生效，线上约束一直是三值版，点「仅管理员」就
+           violates check constraint "pfm_vis_chk" → 500。
+           修法：老库 drop + add 重建约束（幂等），全新库路径的
+           create table 里直接写上 admin。 */
+        try { await s`alter table profile_field_meta drop constraint if exists pfm_vis_chk`; } catch (e) {}
+        try { await s`alter table profile_field_meta add constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))`; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
@@ -184,7 +193,7 @@ export async function ensureSchema(sql) {
         is_custom   boolean     not null default false,
         vis_locked  boolean     not null default false,
         updated_at  timestamptz not null default now(),
-        constraint pfm_vis_chk check (visibility in ('public','committee','self'))
+        constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))
       )
     `;
     /* vis_locked 补列（2026-10-09 v2.4.1）：老库升级用。

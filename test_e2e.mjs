@@ -4951,7 +4951,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.3');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.4');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -6172,7 +6172,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.3'/.test(swSrc) && /class-site-v98/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.4'/.test(swSrc) && /class-site-v99/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -6720,6 +6720,18 @@ console.log('\n【65】第六十轮·注册审核 + 站点设置 + 用户操作�
   /* 非管理员不能看日志 */
   const denyLog = await call('/api/admin?action=action-logs', { token: gTok });
   t('普通用户不能看行为日志 403', denyLog.status === 403, '实际 ' + denyLog.status);
+
+  /* 🔴 v3.5.4：线上「统计面板有 2361 条、明细永远 0 条」的根因是
+     listActionLogs 的 catch 把一切错误吞成「无数据」。纪律护栏：
+     只有 42P01（表不存在）才配返回空，其它错误必须 500 大声失败。 */
+  const admjs80 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  t('★action-logs 的 catch 只放行 42P01（表不存在），其它错误大声 500',
+    /if \(e && e\.code === '42P01'\) \{\s*return ok\(res, \{ total: 0, logs: \[\], page, size \}\);/.test(admjs80)
+    && /console\.error\('\[admin\/action-logs\] 查询失败：', e\)/.test(admjs80)
+    && /return fail\(res, 500, '日志查询失败：'/.test(admjs80));
+  t('★action-stats 的 catch 同样只放行 42P01',
+    /if \(e && e\.code === '42P01'\) return ok\(res, zero\);/.test(admjs80)
+    && /console\.error\('\[admin\/action-stats\] 查询失败：', e\)/.test(admjs80));
 
   /* ---- ⑦ 信息查询字段去重（v2.10.0 根因修复回归）---- */
   /* 造一条带全部联系方式的资料（管理员直录 = 已核实） */
@@ -7550,8 +7562,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.2',
-    /const SCHEMA_VER = '3\.5\.2'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.4',
+    /const SCHEMA_VER = '3\.5\.4'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -7569,6 +7581,18 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && (httpSrc.match(/alter table profiles drop constraint if exists profiles_student_id_key/g) || []).length >= 2);
   t('★全量跑完盖章，且用 || 合并（不冲掉 register_open 等后台开关）',
     /set data = site_settings\.data \|\| excluded\.data/.test(httpSrc));
+  /* v3.5.4 热修（同一类教训的第二次）：字段「仅管理员」档（admin）v3.4.1
+     就加进了应用层，但 pfm_vis_chk 检查约束从没加这个值 —— 老库的
+     create table if not exists 不生效，点「仅管理员」就 500。
+     护栏：admin 档必须在升级路径（drop+add 重建）和全量路径
+     （create table 的 check 子句）都出现。 */
+  t('★pfm_vis_chk 约束的 admin 档在升级路径与全量路径都有（v3.5.4 护栏）',
+    (httpSrc.match(/alter table profile_field_meta drop constraint if exists pfm_vis_chk/g) || []).length >= 1
+    && (httpSrc.match(/alter table profile_field_meta add constraint pfm_vis_chk check \(visibility in \('public','committee','self','admin'\)\)/g) || []).length >= 1
+    && (httpSrc.match(/constraint pfm_vis_chk check \(visibility in \('public','committee','self','admin'\)\)/g) || []).length >= 2);
+  t('★schema.sql 的 pfm_vis_chk 也含 admin（人工执行的脚本不能掉队）',
+    fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8')
+      .includes("constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))"));
   t('★闸门注释留了根因与「改 DDL 必须升 SCHEMA_VER」的纪律',
     /Too many subrequests/.test(httpSrc) && /SCHEMA_VER 往上加一格/.test(httpSrc));
 
@@ -8229,7 +8253,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.5.3', /SITE_VERSION = '3[.]5[.]3'/.test(idx) && /SITE_VERSION = '3[.]5[.]3'/.test(adm) && /SITE_VER = '3[.]5[.]3'/.test(sw));
+  t('版本号三处同步 3.5.4', /SITE_VERSION = '3[.]5[.]4'/.test(idx) && /SITE_VERSION = '3[.]5[.]4'/.test(adm) && /SITE_VER = '3[.]5[.]4'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8322,8 +8346,8 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.5.3',
-    /SITE_VERSION = '3[.]5[.]3'/.test(idx) && /SITE_VERSION = '3[.]5[.]3'/.test(adm) && /SITE_VER = '3[.]5[.]3'/.test(sw));
+  t('版本号三处同步 3.5.4',
+    /SITE_VERSION = '3[.]5[.]4'/.test(idx) && /SITE_VERSION = '3[.]5[.]4'/.test(adm) && /SITE_VER = '3[.]5[.]4'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8409,8 +8433,8 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.5.3',
-    /SITE_VERSION = '3[.]5[.]3'/.test(idx) && /SITE_VERSION = '3[.]5[.]3'/.test(adm));
+  t('版本号三处同步 3.5.4',
+    /SITE_VERSION = '3[.]5[.]4'/.test(idx) && /SITE_VERSION = '3[.]5[.]4'/.test(adm));
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8429,7 +8453,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]3'/.test(adm) && /SITE_VER = '3[.]5[.]3'/.test(sw));
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]4'/.test(adm) && /SITE_VER = '3[.]5[.]4'/.test(sw));
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8455,7 +8479,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.3', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.4', 'parsed=' + parsed);
 }
 
 

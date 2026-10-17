@@ -1859,7 +1859,7 @@ async function updateField(req, res, me, b) {
   let visibility = null;
   if (b.visibility != null) {
     const v = String(b.visibility).trim();
-    if (!ALLOWED_VIS.includes(v)) return fail(res, 400, '可见性只能是 public / committee / self');
+    if (!ALLOWED_VIS.includes(v)) return fail(res, 400, '可见性只能是 public / committee / self / admin');
     visibility = v;
   }
 
@@ -2955,8 +2955,17 @@ async function listActionLogs(req, res) {
          and (${day} = '' or (l.created_at at time zone 'Asia/Shanghai')::date = ${day}::date)
     `)[0].n;
   } catch (e) {
-    /* 表还没建出来（新库首次）→ 返回空，不炸页面 */
-    return ok(res, { total: 0, logs: [], page, size });
+    /* 🔴 v3.5.4 止血：原来这里把**一切**错误都吞成「无数据」返回，
+       线上「统计面板有 2361 条、明细列表永远 0 条」被这个 catch 藏了
+       整整一天（2026-10-17 站主截图反馈才发现）。
+       纪律：只有「表还没建出来」（Postgres 42P01 undefined_table）
+       才配返回空列表；其它错误必须大声失败，让后台看到真实原因，
+       而不是对着一句「没有匹配的记录」干瞪眼。 */
+    if (e && e.code === '42P01') {
+      return ok(res, { total: 0, logs: [], page, size });
+    }
+    console.error('[admin/action-logs] 查询失败：', e);
+    return fail(res, 500, '日志查询失败：' + String((e && e.message) || e).slice(0, 300));
   }
 
   return ok(res, {
@@ -3014,6 +3023,10 @@ async function actionStats(req, res) {
       byAction: byAction.map((r) => ({ action: r.action, n: Number(r.n) })),
     });
   } catch (e) {
-    return ok(res, zero);
+    /* v3.5.4：同 listActionLogs 的纪律 —— 只有表不存在（42P01）才返回
+       全零；其它错误大声失败，不再把「查询挂了」演成「今天没人点」。 */
+    if (e && e.code === '42P01') return ok(res, zero);
+    console.error('[admin/action-stats] 查询失败：', e);
+    return fail(res, 500, '日志统计查询失败：' + String((e && e.message) || e).slice(0, 300));
   }
 }
