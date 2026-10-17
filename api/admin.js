@@ -2467,6 +2467,10 @@ async function batchProfiles(req, res, me, b) {
       const wechat = cContact(raw.wechat);
       const qq = cContact(raw.qq);
       const phone = cContact(raw.phone);
+      /* v3.5.3：身份证号/发展团员编号本就是 profiles 内置列（单条编辑一直支持），
+         批量导入却始终不认——站长的模板里一直有这两列，数据被静默丢弃。这次补上。 */
+      const idCard = cText(raw.idCard, 30);
+      const youthLeagueNo = cText(raw.youthLeagueNo, 40);
 
       /* 该行实际带了的自定义字段值（键必须是 meta 表登记过的） */
       const ex = {};
@@ -2509,6 +2513,8 @@ async function batchProfiles(req, res, me, b) {
       const eWechat = await encField(pkey, wechat || null);
       const eQq = await encField(pkey, qq || null);
       const ePhone = await encField(pkey, phone || null);
+      const eIdCard = await encField(pkey, idCard || null);
+      const eYln = await encField(pkey, youthLeagueNo || null);
       const cst = (wechat || qq || phone) ? 'approved' : 'none';
 
       if (hit.length) {
@@ -2526,6 +2532,10 @@ async function batchProfiles(req, res, me, b) {
           params.push(await encField(pkey, ex[col]));
           sets.push(col + ' = $' + params.length);
         }
+        /* v3.5.3：身份证号/发展团员编号仅当本行非空才写。
+           模板里常有人没填（未入团、还没办身份证），空值不能把库里已有的值抹掉。 */
+        if (idCard)        { params.push(eIdCard); sets.push('id_card = $' + params.length); }
+        if (youthLeagueNo) { params.push(eYln);    sets.push('youth_league_no = $' + params.length); }
         params.push(pid);
         await sql(
           'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
@@ -2534,10 +2544,11 @@ async function batchProfiles(req, res, me, b) {
         updated++;
       } else {
         const cols = ['name', 'student_id', 'name_bidx', 'student_id_bidx',
-          'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status', ...exCols];
+          'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status',
+          'id_card', 'youth_league_no', ...exCols];
         const params = [
           eName, eSid, nameBidx, sidBidx, ePolitics, eExamNo, role,
-          eWechat, eQq, ePhone, cst,
+          eWechat, eQq, ePhone, cst, eIdCard, eYln,
         ];
         for (const col of exCols) params.push(await encField(pkey, ex[col]));
         const ph = params.map((_, k) => '$' + (k + 1)).join(', ');

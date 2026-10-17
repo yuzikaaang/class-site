@@ -81,6 +81,7 @@ jobs:
             qrcode.jpg
             games
             homework
+            vendor
           )
 
           for f in "${SOURCE_FILES[@]}"; do

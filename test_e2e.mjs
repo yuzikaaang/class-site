@@ -4951,7 +4951,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.2');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.3');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -6172,7 +6172,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.2'/.test(swSrc) && /class-site-v97/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.3'/.test(swSrc) && /class-site-v98/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7550,7 +7550,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.1',
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.2',
     /const SCHEMA_VER = '3\.5\.2'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
@@ -8229,7 +8229,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.5.2', /SITE_VERSION = '3[.]5[.]2'/.test(idx) && /SITE_VERSION = '3[.]5[.]2'/.test(adm) && /SITE_VER = '3[.]5[.]2'/.test(sw));
+  t('版本号三处同步 3.5.3', /SITE_VERSION = '3[.]5[.]3'/.test(idx) && /SITE_VERSION = '3[.]5[.]3'/.test(adm) && /SITE_VER = '3[.]5[.]3'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8322,8 +8322,8 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.5.2',
-    /SITE_VERSION = '3[.]5[.]2'/.test(idx) && /SITE_VERSION = '3[.]5[.]2'/.test(adm) && /SITE_VER = '3[.]5[.]2'/.test(sw));
+  t('版本号三处同步 3.5.3',
+    /SITE_VERSION = '3[.]5[.]3'/.test(idx) && /SITE_VERSION = '3[.]5[.]3'/.test(adm) && /SITE_VER = '3[.]5[.]3'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8409,8 +8409,8 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.5.2',
-    /SITE_VERSION = '3[.]5[.]2'/.test(idx) && /SITE_VERSION = '3[.]5[.]2'/.test(adm));
+  t('版本号三处同步 3.5.3',
+    /SITE_VERSION = '3[.]5[.]3'/.test(idx) && /SITE_VERSION = '3[.]5[.]3'/.test(adm));
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8429,7 +8429,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]2'/.test(adm) && /SITE_VER = '3[.]5[.]2'/.test(sw));
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]3'/.test(adm) && /SITE_VER = '3[.]5[.]3'/.test(sw));
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8455,7 +8455,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.2', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.3', 'parsed=' + parsed);
 }
 
 
@@ -8991,6 +8991,136 @@ console.log('\n【89】第七十七轮·v3.5.1 存量资料一键加密 + 成绩
     ['总分','总分差','拖后腿的单科','最弱一科'].every((k) => idx.indexOf('data-label="' + k + '"') >= 0)
     && /\.sc-embed \.sc-tbl-watch thead\{display:table-header-group !important\}/.test(idx));
   t('★暗色模式同步适配', /\.dark \.sc-tbl-watch tbody tr\{background:#2b2521/.test(idx));
+}
+
+console.log('\n【90】第七十八轮·v3.5.3 修「解析失败: XLSX is not defined」+ 导入补身份证号/发展团员编号');
+{
+  const rd = (f) => fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8');
+  const adm = rd('admin.html'), admjs = rd('api/admin.js');
+
+  /* --- ① 解析库本地化：同源 vendor/ 优先，CDN 只兜底 --- */
+  const vendorStat = fs.statSync(new URL('./vendor/xlsx.full.min.js', import.meta.url));
+  t('★vendor/xlsx.full.min.js 随仓库发布且非空（>500KB）',
+    vendorStat.isFile() && vendorStat.size > 500 * 1024,
+    '实际 ' + vendorStat.size + ' 字节');
+  t('★loadXLSX 第一源是本地 vendor（国内不再被 CDN 抽风卡住）',
+    /var urls = \[\s*'vendor\/xlsx\.full\.min\.js'/.test(adm));
+  t('★CDN 三个兜底源都还在（本地挂了仍能救）',
+    /cdn\.jsdelivr\.net\/npm\/xlsx@0\.18\.5/.test(adm)
+    && /unpkg\.com\/xlsx@0\.18\.5/.test(adm)
+    && /cdnjs\.cloudflare\.com\/ajax\/libs\/xlsx\/0\.18\.5/.test(adm));
+  t('★onload 后没拿到 window.XLSX 会继续试下一个源（兜底链不能断）',
+    /s\.onload = function\(\)\{ if\(window\.XLSX\) resolve\(window\.XLSX\); else next\(\); \};/.test(adm));
+  t('★部署流水线把 vendor/ 一起发上 Pages',
+    rd('.github/workflows/deploy-pages.yml').includes('vendor'));
+
+  /* --- ② 资料导入对话框：reader.onload 整段包进 loadXLSX().then ---
+     2026-10-17 站主实测报错「解析失败: XLSX is not defined」：
+     以前直接用裸全局 XLSX.read()，用户没点过「下载模板」时库从未开始
+     加载 → 当场 ReferenceError。护栏：reader.onload 开头必须看到
+     loadXLSX().then(function(XLSX){，且三处 XLSX.read 全在回调内。 */
+  t('★reader.onload 先等库就位再读文件（v3.5.3 崩点的根因修复）',
+    /reader\.onload = function\(ev\)\{[\s\S]{0,600}loadXLSX\(\)\.then\(function\(XLSX\)\{/.test(adm));
+  t('★库没到位时给出人话提示，不是白屏',
+    /表格解析库加载失败，请检查网络后重试/.test(adm));
+  /* 只数真正的读取调用（XLSX.read(new Uint8Array…），注释里提到的
+     「XLSX.read(...)」不算 —— 那正是被修掉的旧写法。 */
+  const readCalls = (adm.match(/XLSX\.read\(new Uint8Array/g) || []).length;
+  const readInCb = (adm.match(/loadXLSX\(\)\.then\(function\(XLSX\)\{[\s\S]*?XLSX\.read\(new Uint8Array/g) || []).length;
+  t('★三处 XLSX.read 全部位于 loadXLSX 回调内（标识符来自回调参数，不是裸全局）',
+    readCalls === 3 && readInCb === 3, 'read 调用 ' + readCalls + ' 处 / 回调内 ' + readInCb + ' 处');
+
+  /* --- ③ 导入字段映射补 idCard / youthLeagueNo --- */
+  t('★pick 映射认「身份证号」（含别名）',
+    /idCard:\s*pick\(r, \['身份证号','身份证','证件号'\]\)/.test(adm));
+  t('★pick 映射认「发展团员编号」（含别名）',
+    /youthLeagueNo:\s*pick\(r, \['发展团员编号','团员编号','入团编号'\]\)/.test(adm));
+  t('★预览表头追加「身份证号 / 发展团员编号」两列',
+    /\.concat\(\['微信','QQ','手机号','身份证号','发展团员编号'\]\)/.test(adm));
+  t('★汇总提示点数含身份证号/发展团员编号条数',
+    /var hasId\s+= list\.filter\(function\(x\)\{ return x\.idCard; \}\)\.length/.test(adm)
+    && /var hasYln\s+= list\.filter\(function\(x\)\{ return x\.youthLeagueNo; \}\)\.length/.test(adm)
+    && /含身份证号 <b>' \+ hasId/.test(adm)
+    && /含发展团员编号 <b>' \+ hasYln/.test(adm));
+
+  /* --- ④ 后端 batchProfiles 收下这两列并加密 --- */
+  t('★batchProfiles 读取 idCard / youthLeagueNo',
+    /const idCard = cText\(raw\.idCard, 30\);/.test(admjs)
+    && /const youthLeagueNo = cText\(raw\.youthLeagueNo, 40\);/.test(admjs));
+  t('★两列落库前统一走 encField 加密（与其它敏感字段同待遇）',
+    /const eIdCard = await encField\(pkey, idCard \|\| null\);/.test(admjs)
+    && /const eYln = await encField\(pkey, youthLeagueNo \|\| null\);/.test(admjs));
+  t('★UPDATE 分支非空才写（导第二次不带这两列不会把库里有数据抹成空）',
+    /if \(idCard\)\s*\{ params\.push\(eIdCard\); sets\.push\('id_card = \$' \+ params\.length\); \}/.test(admjs)
+    && /if \(youthLeagueNo\)\s*\{ params\.push\(eYln\);\s+sets\.push\('youth_league_no = \$' \+ params\.length\); \}/.test(admjs));
+  t('★INSERT 分支带上 id_card / youth_league_no 两列',
+    /'id_card', 'youth_league_no', \.\.\.exCols\]/.test(admjs));
+
+  /* --- ⑤ 真实数据流：带两列导入 → 读回 → 空值不抹库 --- */
+  const impIdA = '910001', impIdB = '910002';
+  const batchImp = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: [
+      { name: '导入证件甲', studentId: impIdA, role: '学生',
+        idCard: '36042420100101001X', youthLeagueNo: 'TQ20240001' },
+      { name: '导入证件乙', studentId: impIdB, role: '学生',
+        idCard: '36042420100202002Y' },
+    ] },
+  });
+  t('★带身份证号/发展团员编号的批量导入成功 2 条',
+    batchImp.status === 200 && batchImp.body.created === 2,
+    JSON.stringify(batchImp.body).slice(0, 180));
+
+  const detImp = await call('/api/admin?action=profiles&q=' + impIdA, { token: adminToken });
+  const rowImp = ((detImp.body || {}).profiles || [])[0];
+  const detA = await call('/api/admin?action=profile&id=' + rowImp.id, { token: adminToken });
+  const pa = ((detA.body || {}).profile || {});
+  t('★导入的身份证号读回正确',
+    (pa.extra || {}).id_card === '36042420100101001X',
+    JSON.stringify((pa.extra || {}).id_card));
+  t('★导入的发展团员编号读回正确',
+    (pa.extra || {}).youth_league_no === 'TQ20240001',
+    JSON.stringify((pa.extra || {}).youth_league_no));
+
+  /* 库里必须是密文（加密模式）或明文（--plain），不能出现既非空又非预期形态。
+     注意：加密模式下 student_id 列本身也是密文，只能按主键 id 查。 */
+  if (!PLAIN_MODE) {
+    const rawRow = db.prepare('select id_card, youth_league_no from profiles where id = ?');
+    rawRow.bind([rowImp.id]);
+    rawRow.step();
+    const rawVals = rawRow.getAsObject();
+    rawRow.free();
+    t('★加密模式下库里 id_card 是密文',
+      String(rawVals.id_card).startsWith('enc:v1:'), String(rawVals.id_card).slice(0, 24));
+    t('★加密模式下库里 youth_league_no 是密文',
+      String(rawVals.youth_league_no).startsWith('enc:v1:'), String(rawVals.youth_league_no).slice(0, 24));
+  } else {
+    console.log('  · 明文模式（--plain）：跳过密文形态断言');
+  }
+
+  /* 第二次导入同一个人、但不带这两列 → 库里的值不许被抹掉 */
+  const batchImp2 = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: [{ name: '导入证件甲', studentId: impIdA, role: '学生', politics: '群众' }] },
+  });
+  t('★二次导入同一人（不带证件列）走更新分支',
+    batchImp2.status === 200 && batchImp2.body.updated === 1,
+    JSON.stringify(batchImp2.body).slice(0, 160));
+  const detA2 = await call('/api/admin?action=profile&id=' + rowImp.id, { token: adminToken });
+  const pa2 = ((detA2.body || {}).profile || {});
+  t('★二次导入后身份证号仍在（空值没抹掉库里有数据）',
+    (pa2.extra || {}).id_card === '36042420100101001X',
+    JSON.stringify((pa2.extra || {}).id_card));
+  t('★二次导入后发展团员编号仍在',
+    (pa2.extra || {}).youth_league_no === 'TQ20240001',
+    JSON.stringify((pa2.extra || {}).youth_league_no));
+
+  /* 清理 */
+  for (const sid of [impIdA, impIdB]) {
+    const f = await call('/api/admin?action=profiles&q=' + sid, { token: adminToken });
+    const row = (f.body.profiles || [])[0];
+    if (row) await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id: row.id } });
+  }
 }
 
 console.log('\n' + '='.repeat(52));

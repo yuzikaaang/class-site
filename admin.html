@@ -896,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.2';
+var SITE_VERSION = '3.5.3';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -2871,8 +2871,13 @@ function loadXLSX(){
   if(window.XLSX) return Promise.resolve(window.XLSX);
   if(_xlsxLoading) return _xlsxLoading;
 
-  /* 三个 CDN 依次回退：jsdelivr 国内有时不稳，unpkg / cdnjs 兜底 */
+  /* v3.5.3：本地内置优先。解析库（SheetJS 0.18.5）跟着仓库一起发布到
+     Pages（vendor/xlsx.full.min.js，881KB），同源永远可达；三个 CDN
+     只作兜底——国内访问 jsdelivr/unpkg/cdnjs 时常抽风，以前「直接选文件
+     就报 XLSX is not defined」一半原因就是库还在路上、根本没加载。
+     ⚠️ 以后升级 SheetJS：换 vendor/ 里的文件 + 下面 URL 的版本号一起改。 */
   var urls = [
+    'vendor/xlsx.full.min.js',
     'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
     'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
@@ -2886,7 +2891,9 @@ function loadXLSX(){
       var s = document.createElement('script');
       s.src = url;
       s.async = true;
-      s.onload = function(){ resolve(window.XLSX || null); };
+      /* onload 后没拿到 window.XLSX（本地文件缺失/被墙的 CDN 返回空壳）
+         不能就此 resolve(null——继续试下一个源，这条链才真的是兜底链。 */
+      s.onload = function(){ if(window.XLSX) resolve(window.XLSX); else next(); };
       s.onerror = function(){ s.remove(); next(); };
       document.head.appendChild(s);
     })();
@@ -6047,16 +6054,27 @@ function profileImportDialog(){
 
         var reader = new FileReader();
         reader.onload = function(ev){
-          var rows;
-          try{
-            var wb = XLSX.read(new Uint8Array(ev.target.result), { type:'array' });
-            var ws = wb.Sheets[wb.SheetNames[0]];
-            rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
-          }catch(err){
-            prev.innerHTML = '<div class="alert danger">解析失败：' + esc(err.message) + '</div>';
-            setMsg('err', '解析失败：' + err.message);
-            return;
-          }
+          /* v3.5.3：先等解析库就位，再读文件内容。
+             以前这里直接用裸全局 XLSX.read(...) —— 用户没点过「下载模板」时
+             库从未开始加载，当场 ReferenceError，报「解析失败: XLSX is not defined」。
+             现在统一走 loadXLSX()（本地 vendor/ 优先，CDN 兜底）。
+             下面整段都包在 .then 里，逻辑一行没动，只是挪进了回调。 */
+          loadXLSX().then(function(XLSX){
+            if(!XLSX){
+              prev.innerHTML = '<div class="alert danger">表格解析库加载失败，请检查网络后重试</div>';
+              setMsg('err', '表格解析库加载失败，请检查网络后重试');
+              return;
+            }
+            var rows;
+            try{
+              var wb = XLSX.read(new Uint8Array(ev.target.result), { type:'array' });
+              var ws = wb.Sheets[wb.SheetNames[0]];
+              rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+            }catch(err){
+              prev.innerHTML = '<div class="alert danger">解析失败：' + esc(err.message) + '</div>';
+              setMsg('err', '解析失败：' + err.message);
+              return;
+            }
           if(!rows.length){
             prev.innerHTML = '<div class="alert danger">文件里没有读到数据行。</div>';
             setMsg('err', '文件里没有读到数据行');
@@ -6086,7 +6104,12 @@ function profileImportDialog(){
               examNo:    pick(r, ['智学网账号','智学网号','智学网准考证号','准考证号']),
               wechat:    pick(r, ['微信','微信号']),
               qq:        pick(r, ['QQ','QQ号']),
-              phone:     pick(r, ['手机号','手机','电话','手机号码'])
+              phone:     pick(r, ['手机号','手机','电话','手机号码']),
+              /* v3.5.3：站长的模板里一直有「身份证号 / 发展团员编号」两列，
+                 而这两列本来就是 profiles 的内置列（单条编辑一直支持），
+                 批量导入却始终不认 —— 数据被静默丢弃。这次补上。 */
+              idCard:        pick(r, ['身份证号','身份证','证件号']),
+              youthLeagueNo: pick(r, ['发展团员编号','团员编号','入团编号'])
             };
             /* 自定义字段：中文名优先，其次英文字段名 */
             var ex = {};
@@ -6113,6 +6136,8 @@ function profileImportDialog(){
           yes.disabled = false;
           var hasExam  = list.filter(function(x){ return x.examNo; }).length;
           var hasPhone = list.filter(function(x){ return x.wechat || x.qq || x.phone; }).length;
+          var hasId    = list.filter(function(x){ return x.idCard; }).length;
+          var hasYln   = list.filter(function(x){ return x.youthLeagueNo; }).length;
           /* 本次真正读到的自定义字段（只列非空的，避免一堆空列） */
           var hitExtras = extras.filter(function(f){
             return list.some(function(x){ return (x.extra || {})[f.field]; });
@@ -6121,11 +6146,11 @@ function profileImportDialog(){
           /* 预览前 8 行，让管理员能一眼看出列有没有对错 */
           var head = ['姓名','学号','政治面貌','智学网账号']
             .concat(hitExtras.map(function(f){ return f.label; }))
-            .concat(['微信','QQ','手机号']);
+            .concat(['微信','QQ','手机号','身份证号','发展团员编号']);
           var bodyRows = list.slice(0, 8).map(function(x){
             var cells = [x.name, x.studentId, x.politics, x.examNo]
               .concat(hitExtras.map(function(f){ return (x.extra || {})[f.field] || ''; }))
-              .concat([x.wechat, x.qq, x.phone]);
+              .concat([x.wechat, x.qq, x.phone, x.idCard, x.youthLeagueNo]);
             return '<tr>' + cells.map(function(c, i){
               var dash = c ? esc(c) : '<span class="muted">—</span>';
               /* 学号/智学网账号/自定义字段用等宽字体，便于肉眼核对数字有没有错位 */
@@ -6139,6 +6164,8 @@ function profileImportDialog(){
             +   '读到 <b>' + list.length + '</b> 条有效数据'
             +   (bad ? '，跳过 ' + bad + ' 条空行' : '')
             +   '；其中含智学网账号 <b>' + hasExam + '</b> 条、含联系方式 <b>' + hasPhone + '</b> 条。'
+            +   (hasId  ? '含身份证号 <b>' + hasId + '</b> 条。' : '')
+            +   (hasYln ? '含发展团员编号 <b>' + hasYln + '</b> 条。' : '')
             +   (hitExtras.length ? '识别到自定义字段：<b>' + hitExtras.map(function(f){ return esc(f.label); }).join('、') + '</b>。' : '')
             + '</div>'
             + '<p class="muted" style="font-size:.8rem;margin:0 0 8px">'
@@ -6151,6 +6178,7 @@ function profileImportDialog(){
                 : '');
 
           setMsg('info', '已选择：' + f.name + '（' + bytes(f.size) + '），确认预览无误后点「开始导入」。');
+          });
         };
         reader.onerror = function(){
           prev.innerHTML = '<div class="alert danger">读取文件失败。</div>';
@@ -8555,6 +8583,16 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "3.5.3",
+      "date": "2026-10-17",
+      "title": "修复 Excel 批量导入报「XLSX is not defined」+ 导入补身份证号/发展团员编号",
+      "items": [
+        "修复后台「Excel 批量导入资料」选择文件后报「解析失败: XLSX is not defined」的问题：解析库以前要等点过「下载模板」才开始从国外 CDN 加载，直接选文件时库还在路上；现在解析库（SheetJS）改随网站一起发布，同源优先加载，三个 CDN 只作兜底，国内访问不再受 CDN 抽风影响",
+        "导入映射补上「身份证号」「发展团员编号」两列：这两列本来就是资料的内置字段（单条编辑一直支持），批量导入却始终不认、数据被静默丢弃；现在预览和汇总也会分别点数，后端同步落库并加密",
+        "导入更新已有资料时，这两列留空不会再把库里已有的值抹掉（非空才写）"
+      ]
+    },
     {
       "version": "3.5.2",
       "date": "2026-10-17",
