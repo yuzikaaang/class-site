@@ -118,6 +118,7 @@ create table exams (
   subjects jsonb,
   cutlines jsonb,
   grade_ref jsonb,
+  visible_to jsonb,
   note text,
   status text not null default 'draft',
   published_at text,
@@ -3471,9 +3472,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(indexHtml),
+  t('★前台版本号为 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adminHtml),
+  t('★后台版本号为 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3837,9 +3838,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(indexHtml38),
+  t('★前台版本号为 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adminHtml38),
+  t('★后台版本号为 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4854,10 +4855,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx47));
-  t('★后台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adm47));
+  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx47));
+  t('★后台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adm47));
   t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
-    /class-site-v84/.test(sw47));
+    /class-site-v85/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4941,7 +4942,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.3');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.4');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5041,9 +5042,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx48));
+  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-17'/.test(idx48));
-  t('★service worker 缓存版本升到 v80', /class-site-v84/.test(sw48));
+  t('★service worker 缓存版本升到 v80', /class-site-v85/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5108,8 +5109,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx49));
-  t('★后台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adm49));
+  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx49));
+  t('★后台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5181,7 +5182,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx50));
+  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5345,13 +5346,14 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
   t('★有发布与撤回入口', /data-sc-act="pub"/.test(adm) && /data-sc-act="unpub"/.test(adm));
   t('★草稿会明确标注「同学看不到」', /草稿（同学看不到）/.test(adm));
 
-  /* ===== ⑥ 体验：导入异常只弹一条 ===== */
-  t('★导入异常合并成一条提示（不再连弹两个 alert）',
-    /导入完成，有几点要留意/.test(adm)
-    && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
+  /* ===== ⑥ 体验：导入未识别姓名 → 弹窗直接改（2026-10-17 站主要求） ===== */
+  t('★导入未识别姓名改为弹窗修正（不再是一条干巴巴的提示）',
+    /function scFixNamesDialog\(examId, names\)/.test(adm)
+    && /if\(j\.unmatchedCount\)\{\s*setTimeout\(function\(\)\{ scFixNamesDialog\(examId/.test(adm)
+    && !/导入完成，有几点要留意/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adm));
+  t('★后台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5419,7 +5421,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx));
+  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5924,7 +5926,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx));
+  t('★前台版本号升到 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6035,7 +6037,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx));
+  t('★前台版本号升到 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx));
   t('★后台内置更新记录补到 2.10.0',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6140,10 +6142,10 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx));
-  t('★后台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adm));
+  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx));
+  t('★后台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 2.10.3 且缓存升 v83', /SITE_VER = '2\.10\.3'/.test(swSrc) && /class-site-v84/.test(swSrc));
+  t('★sw.js SITE_VER 2.10.4 且缓存升 v83', /SITE_VER = '2\.10\.4'/.test(swSrc) && /class-site-v85/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7500,8 +7502,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 2.10.3',
-    /const SCHEMA_VER = '2\.10\.2'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 2.10.4',
+    /const SCHEMA_VER = '2\.10\.4'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -7523,7 +7525,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
 
   /* ---- ③ 版本与缓存同步 ---- */
   t('★sw.js 缓存升 v82、版本 2.10.1',
-    /class-site-v84/.test(swSrc) && /SITE_VER = '2\.10\.3'/.test(swSrc));
+    /class-site-v85/.test(swSrc) && /SITE_VER = '2\.10\.4'/.test(swSrc));
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
   const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -7976,6 +7978,108 @@ console.log('\n【78】第六十四轮·四象限手机点选 / 六科画像数�
   t('★全班成绩单：原始口径不画三线', /SC\.basis === 'graded' \? \(SC\.exam\.cutlines \|\| \[\]\)\.filter/.test(idx));
   t('★导出图：原始口径不与三线比较', /\(opt\.cutlines && SC\.basis === 'graded'\)/.test(idx));
 })();
+
+console.log('\n【79】第六十五轮·导入未识别姓名弹窗修正 + 发布可见范围（个人/全体）');
+{
+  /* ---------- 静态护栏 ---------- */
+  const httpSrc79 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const schemaSrc79 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const scSrc79 = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
+  const adm79 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('schema.sql 的 exams 含 visible_to', /visible_to\s+jsonb/.test(schemaSrc79));
+  t('ensureSchema 含 visible_to 补列', /add column if not exists visible_to jsonb/.test(httpSrc79));
+  t('scores.js 有 fix-names 动作 + 函数', /case 'fix-names'/.test(scSrc79) && /async function fixNames\(/.test(scSrc79));
+  t('scores.js 发布写入 visible_to', /visible_to = \$\{vis \?/.test(scSrc79));
+  t('前端有 scFixNamesDialog 弹窗', /function scFixNamesDialog\(examId, names\)/.test(adm79));
+  t('前端发布前弹「选可见范围」', /function scPublishDialog\(id\)/.test(adm79) && /scPubMode/.test(adm79));
+  t('考试卡显示可见范围（全体/指定 N 人）', /指定 ' \+ visN \+ ' 人/.test(adm79));
+
+  /* ---------- A. fix-names：导入错名 → 改名并重绑 ---------- */
+  const mkA = await call('/api/scores?action=exam-save', {
+    method: 'POST', token: adminToken,
+    body: { name: '改名测试考', exam_date: '2026-10-17',
+      subjects: [{ key: 'chinese', name: '语文', full: 150 }] },
+  });
+  const exA = mkA.body.exam && mkA.body.exam.id;
+  t('（准备）建改名测试考试', !!exA, JSON.stringify(mkA.body).slice(0, 120));
+
+  const impA = await call('/api/scores?action=scores-import', {
+    method: 'POST', token: adminToken,
+    body: { exam: exA, rows: [
+      { name: '余子糠', no: '1', s: { chinese: { raw: 100 } } },   /* 「糠」是「康」的错别字 */
+    ] },
+  });
+  t('导入错名行成功，并报告未识别 1 人',
+    impA.status === 200 && impA.body.unmatchedCount === 1, JSON.stringify(impA.body).slice(0, 160));
+
+  const fixA = await call('/api/scores?action=fix-names', {
+    method: 'POST', token: adminToken,
+    body: { exam: exA, fixes: [{ from: '余子糠', to: '余子康' }] },
+  });
+  t('fix-names 改名 1 行', fixA.status === 200 && fixA.body.renamed === 1, JSON.stringify(fixA.body).slice(0, 160));
+
+  const bA = await call('/api/scores?action=board&exam=' + exA, { token: adminToken });
+  const rowA = (bA.body.rows || [])[0] || {};
+  t('★改名后姓名已改正', rowA.name === '余子康', JSON.stringify(rowA).slice(0, 120));
+  t('★改名后自动绑定了账号（uid 非空）', rowA.uid != null, 'uid=' + rowA.uid);
+  t('★改完不再有未识别姓名', (fixA.body.stillUnmatched || []).length === 0, JSON.stringify(fixA.body.stillUnmatched));
+  await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: exA } });
+
+  /* ---------- B. 发布可见范围：指定同学 / 全体 ---------- */
+  const reg = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'vistest', password: 'VisTestPass123', displayName: '可见性测试生' },
+  });
+  const stuToken = reg.body.token;
+  const stuId = reg.body.user && reg.body.user.id;
+  t('（准备）临时学生账号可登录', !!stuToken && !!stuId, JSON.stringify(reg.body).slice(0, 120));
+
+  const mkB = await call('/api/scores?action=exam-save', {
+    method: 'POST', token: adminToken,
+    body: { name: '可见范围测试考', exam_date: '2026-10-17',
+      subjects: [{ key: 'chinese', name: '语文', full: 150 }] },
+  });
+  const exB = mkB.body.exam && mkB.body.exam.id;
+  t('（准备）建可见范围测试考试', !!exB, JSON.stringify(mkB.body).slice(0, 120));
+  await call('/api/scores?action=scores-import', {
+    method: 'POST', token: adminToken,
+    body: { exam: exB, rows: [{ name: '可见性测试生', no: '2', s: { chinese: { raw: 120 } } }] },
+  });
+
+  /* 只给「别人」（一个不存在的 uid）→ 该学生看不到、取不到 */
+  const pubOther = await call('/api/scores?action=exam-publish', {
+    method: 'POST', token: adminToken, body: { id: exB, publish: true, visibleTo: [999999] },
+  });
+  t('发布（指定别人可见）成功', pubOther.status === 200, JSON.stringify(pubOther.body).slice(0, 120));
+  const listStu1 = await call('/api/scores?action=list', { token: stuToken });
+  t('★名单外的学生列表里看不到这次考试', !(listStu1.body.exams || []).some((e) => e.id === exB),
+    'exams=' + (listStu1.body.exams || []).map((e) => e.id).join(','));
+  const boardStu1 = await call('/api/scores?action=board&exam=' + exB, { token: stuToken });
+  t('★名单外的学生取成绩被拦（403）', boardStu1.status === 403, 'status=' + boardStu1.status);
+  const listAdm = await call('/api/scores?action=list', { token: adminToken });
+  t('★管理员仍能看到该考试', (listAdm.body.exams || []).some((e) => e.id === exB));
+
+  /* 改为只给该学生本人 → 能看到、能取 */
+  const pubSelf = await call('/api/scores?action=exam-publish', {
+    method: 'POST', token: adminToken, body: { id: exB, publish: true, visibleTo: [stuId] },
+  });
+  t('发布（指定本人可见）成功', pubSelf.status === 200, JSON.stringify(pubSelf.body).slice(0, 120));
+  const listStu2 = await call('/api/scores?action=list', { token: stuToken });
+  t('★名单内的学生能看到这次考试', (listStu2.body.exams || []).some((e) => e.id === exB),
+    'exams=' + (listStu2.body.exams || []).map((e) => e.id).join(','));
+  const boardStu2 = await call('/api/scores?action=board&exam=' + exB, { token: stuToken });
+  t('★名单内的学生能取到成绩', boardStu2.status === 200 && Array.isArray(boardStu2.body.rows),
+    'status=' + boardStu2.status);
+
+  /* 改回全体 */
+  await call('/api/scores?action=exam-publish', {
+    method: 'POST', token: adminToken, body: { id: exB, publish: true, visibleTo: [] },
+  });
+  const listStu3 = await call('/api/scores?action=list', { token: stuToken });
+  t('★改回全体后学生仍能看到', (listStu3.body.exams || []).some((e) => e.id === exB),
+    'exams=' + (listStu3.body.exams || []).map((e) => e.id).join(','));
+
+  await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: exB } });
+}
 
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');

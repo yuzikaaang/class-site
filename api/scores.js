@@ -109,7 +109,7 @@ async function getList(req, res) {
   const rows = isAdmin
     ? await sql`
         select e.id, e.name, e.exam_date, e.exam_end_date, e.exam_type, e.subjects, e.cutlines,
-               e.grade_ref, e.note, e.status, e.published_at, e.updated_at,
+               e.grade_ref, e.note, e.status, e.published_at, e.updated_at, e.visible_to,
                (select count(*) from exam_scores s where s.exam_id = e.id) as row_count
           from exams e
          /* 2026-10-16 v2.10.0：补 nulls last。
@@ -119,7 +119,7 @@ async function getList(req, res) {
          order by e.exam_date desc nulls last, e.id desc`
     : await sql`
         select e.id, e.name, e.exam_date, e.exam_end_date, e.exam_type, e.subjects, e.cutlines,
-               e.grade_ref, e.note, e.status, e.published_at, e.updated_at,
+               e.grade_ref, e.note, e.status, e.published_at, e.updated_at, e.visible_to,
                (select count(*) from exam_scores s where s.exam_id = e.id) as row_count
           from exams e
          where e.status = 'published'
@@ -129,11 +129,24 @@ async function getList(req, res) {
             空日期沉底（asc 的端点 PG 默认就是 NULLS LAST，无需改）。 */
          order by e.exam_date desc nulls last, e.id desc`;
 
+  /* 发布可见范围在 JS 里过滤（不写进 SQL）：
+     ① 名单为空 = 全体；② 数据库里 visible_to 可能是对象/字符串，统一走 jsonCol；
+     ③ 不用 SQL 的 jsonb @> 包含运算符 —— 测试桩是 SQLite，不认这个运算符。 */
+  const visibleRows = isAdmin
+    ? rows
+    : rows.filter((r) => visAllows(jsonCol(r.visible_to), u.id));
+
   ok(res, {
-    exams: rows.map(normalizeExam),
+    exams: visibleRows.map(normalizeExam),
     isAdmin,
     serverTime: Date.now(),
   });
+}
+
+/** 发布可见范围判定：null / 空数组 = 全体；否则 uid 必须在名单里。 */
+function visAllows(vis, uid) {
+  if (!Array.isArray(vis) || !vis.length) return true;
+  return vis.map((x) => Number(x)).indexOf(Number(uid)) >= 0;
 }
 
 /** 某次考试的原始成绩（整班）。发布前只有管理员能取。 */
@@ -146,7 +159,7 @@ async function getBoard(req, res) {
 
   const sql = getSql();
   const ex = await sql`
-    select id, name, exam_date, exam_type, subjects, cutlines, grade_ref,
+    select id, name, exam_date, exam_type, subjects, cutlines, grade_ref, visible_to,
            note, status, published_at, updated_at
       from exams where id = ${id}`;
   if (!ex.length) return fail(res, 404, '该考试不存在或已被删除');
@@ -154,6 +167,11 @@ async function getBoard(req, res) {
   const exam = normalizeExam(ex[0]);
   if (exam.status !== 'published' && u.role !== 'admin') {
     return fail(res, 403, '该次考试尚未发布');
+  }
+  /* 发布可见范围：限定了名单的考试，名单外的人（非管理员）看不到。 */
+  if (u.role !== 'admin' && Array.isArray(exam.visibleTo) && exam.visibleTo.length) {
+    const allowed = exam.visibleTo.map((x) => Number(x));
+    if (allowed.indexOf(Number(u.id)) < 0) return fail(res, 403, '这次考试暂未向你开放');
   }
 
   const cfg = await loadConfig(sql);
@@ -202,7 +220,7 @@ async function getMe(req, res) {
      和「年级百分位」都要用，省得前端为每次考试再跑一趟 board。 */
   const rows = await sql`
     select e.id as exam_id, e.name, e.exam_date, e.exam_end_date, e.exam_type,
-           e.subjects, e.cutlines, e.grade_ref,
+           e.subjects, e.cutlines, e.grade_ref, e.visible_to,
            s.scores, s.school_rank, s.league_rank, s.student_name
       from exam_scores s
       join exams e on e.id = s.exam_id
@@ -210,8 +228,10 @@ async function getMe(req, res) {
        and (e.status = 'published' or ${isAdmin})
      order by e.exam_date asc, e.id asc`;
 
+  /* 发布可见范围：限定名单的考试，名单外的人不返回（管理员全见）。 */
+  const visible = rows.filter((r) => isAdmin || visAllows(jsonCol(r.visible_to), u.id));
   ok(res, {
-    items: rows.map((r) => ({
+    items: visible.map((r) => ({
       examId: Number(r.exam_id),
       name: r.name,
       date: fmtDate(r.exam_date),
@@ -266,6 +286,7 @@ async function handlePost(req, res, action) {
     case 'exam-publish': return await examPublish(req, res);
     case 'scores-import': return await scoresImport(req, res);
     case 'scores-save':  return await scoresSave(req, res);
+    case 'fix-names':    return await fixNames(req, res);
     case 'row-delete':   return await rowDelete(req, res);
     case 'config-save':    return await configSave(req, res);
     case 'name-bind':      return await nameBind(req, res);
@@ -276,6 +297,72 @@ async function handlePost(req, res, action) {
     case 'backup-restore': return await backupRestore(req, res);
     default:             return fail(res, 400, '未知的写入动作：' + (action || '(空)'));
   }
+}
+
+/**
+ * 修正导入时打错的姓名（2026-10-17 站主要求）。
+ * 站主前提：考试名单里的人都在站点用户里，所以「导入后未识别」一定是名字打错。
+ * 这里把某次考试里 from→to 的行改名，并顺手重绑账号、把 from→to 记进姓名对照，
+ * 以后同样的错名再导入会自动认。返回改了多少行、以及「改完仍没对上账号」的名单。
+ */
+async function fixNames(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+
+  const b = await body(req);
+  const examId = Number(b.exam || b.examId || 0);
+  if (!examId) return fail(res, 400, '缺少考试 id');
+
+  const fixes = Array.isArray(b.fixes) ? b.fixes.slice(0, MAX_ROWS) : [];
+  if (!fixes.length) return fail(res, 400, '没有要修正的姓名');
+
+  const sql = getSql();
+  const ex = await sql`select id from exams where id = ${examId}`;
+  if (!ex.length) return fail(res, 404, '该考试不存在或已被删除');
+
+  const cfg = await loadConfig(sql);
+  const map = Object.assign({}, cfg.nameMap || {});
+  const done = [];
+  let renamed = 0;
+  const skipped = [];
+
+  for (const f of fixes) {
+    const from = String((f && f.from) || '').trim().slice(0, 30);
+    const to = String((f && f.to) || '').trim().slice(0, 30);
+    if (!from || !to || from === to) continue;
+    /* 目标姓名必须真的对得上某个账号，否则改了也还是认不出。 */
+    const hit = await sql`
+      select id from users
+       where status = 'active' and (display_name = ${to} or username = ${to})
+       order by id limit 1`;
+    const uid = hit.length ? Number(hit[0].id) : null;
+    const back = await sql`
+      update exam_scores
+         set student_name = ${to}, user_id = ${uid}, updated_at = now()
+       where exam_id = ${examId} and student_name = ${from}
+      returning id`;
+    if (!back.length) { skipped.push(from); continue; }
+    renamed += back.length;
+    done.push({ from, to, bound: !!uid });
+    if (uid) map[from] = to;   /* 记进对照：下次导入同样写错也能自动对上 */
+  }
+
+  if (renamed) {
+    const next = { ...cfg, nameMap: map };
+    await sql`
+      insert into score_config (id, data, updated_at)
+      values (1, ${JSON.stringify(next)}::jsonb, now())
+      on conflict (id) do update set data = ${JSON.stringify(next)}::jsonb, updated_at = now()`;
+  }
+
+  /* 改完还剩下哪些没绑上账号 —— 让站主知道还有没有漏网的 */
+  const rest = await sql`
+    select distinct student_name from exam_scores
+     where exam_id = ${examId} and user_id is null`;
+  const stillUnmatched = rest.map((r) => String(r.student_name || '')).filter(Boolean);
+
+  await audit(u.id, 'score-fix-names', 'exam', examId, `改名 ${renamed} 行`);
+  ok(res, { renamed, done, skipped, stillUnmatched });
 }
 
 /** 新建 / 更新一次考试（带 id 就是更新） */
@@ -386,15 +473,27 @@ async function examPublish(req, res) {
     return fail(res, 400, '这次考试还没有任何成绩，先导入或录入再发布');
   }
 
+  /* 发布可见范围（2026-10-17 站主要求「发布给个人或全体」）：
+     不传 / 传 'all' / 传空数组 = 全体；传 uid 数组 = 只给这些同学看。 */
+  let vis = null;
+  if (Array.isArray(b.visibleTo)) {
+    const ids = Array.from(new Set(
+      b.visibleTo.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0)
+    ));
+    if (ids.length) vis = ids.slice(0, 1000);
+  }
+
   await sql`
     update exams
        set status = ${publish ? 'published' : 'draft'},
            published_at = ${publish ? new Date().toISOString() : null},
+           visible_to = ${vis ? JSON.stringify(vis) : null}::jsonb,
            updated_at = now()
      where id = ${id}`;
 
-  await audit(u.id, publish ? 'score-exam-publish' : 'score-exam-unpublish', 'exam', id, '');
-  ok(res, { id, status: publish ? 'published' : 'draft' });
+  await audit(u.id, publish ? 'score-exam-publish' : 'score-exam-unpublish', 'exam', id,
+    vis ? `限 ${vis.length} 人可见` : '全体可见');
+  ok(res, { id, status: publish ? 'published' : 'draft', visibleTo: vis });
 }
 
 /**
@@ -1393,6 +1492,8 @@ function normalizeExam(r) {
     subjects: jsonCol(r.subjects) || [],
     cutlines: jsonCol(r.cutlines) || [],
     gradeRef: jsonCol(r.grade_ref) || null,
+    /* 发布可见范围：null = 全体；数组 = 只给这些 uid（见 examPublish） */
+    visibleTo: jsonCol(r.visible_to) || null,
     rowCount: r.row_count == null ? undefined : Number(r.row_count),
   };
 }

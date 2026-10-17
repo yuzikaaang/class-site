@@ -896,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.10.3';
+var SITE_VERSION = '2.10.4';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -9943,13 +9943,14 @@ function scExamCard(e){
   var pub = e.status === 'published';
   var cuts = (e.cutlines || []).filter(function(c){ return c.score != null; });
   var n = e.rowCount || 0;
+  var visN = (e.visibleTo && e.visibleTo.length) ? e.visibleTo.length : 0;
 
   return '<section class="panel" style="margin-bottom:12px;padding:14px 16px">'
     + '<div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">'
     +   '<div style="flex:1;min-width:200px">'
     +     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
     +       '<b style="font-size:.95rem">' + esc(e.name) + '</b>'
-    +       (pub ? '<span class="badge badge-green">已发布</span>'
+    +       (pub ? '<span class="badge badge-green">已发布' + (visN ? ' · 指定 ' + visN + ' 人' : ' · 全体') + '</span>'
               : '<span class="badge badge-gray">草稿（同学看不到）</span>')
     +       (n ? '' : '<span class="badge badge-gray">还没有成绩</span>')
     +     '</div>'
@@ -9974,17 +9975,62 @@ function scExamCard(e){
 }
 
 /* ---------------- 发布 / 删除 ---------------- */
+/* 发布（2026-10-17 站主要求）：先选「全体 / 指定同学」，再发。 */
 function scPublish(id, publish){
+  if(!publish){
+    if(!confirm('撤回后，同学立刻看不到这次考试（数据仍在，随时能再发布）。\n\n确认撤回？')) return;
+    return scDoPublish(id, false, null);
+  }
+  scPublishDialog(id);
+}
+
+function scDoPublish(id, publish, visibleTo){
+  api('/scores?action=exam-publish', { method:'POST', body: { id: id, publish: !!publish, visibleTo: visibleTo || undefined } })
+    .then(function(){ toast(publish ? '已发布' : '已撤回', 'ok'); scLoad(); })
+    .catch(function(e){ toast('操作失败：' + e.message, 'err', 4200); });
+}
+
+function scPublishDialog(id){
   var e = scFindExam(id);
-  var msg = publish
-    ? '发布后，本班同学登录就能看到这次考试的成绩单与自己的画像。\n\n确认发布「' + (e ? e.name : id) + '」？'
-    : '撤回后，同学立刻看不到这次考试（数据仍在，随时能再发布）。\n\n确认撤回？';
-  if(!confirm(msg)) return;
-  api('/scores?action=exam-publish', { method:'POST', body: { id: id, publish: !!publish } })
-    .then(function(){
-      toast(publish ? '已发布' : '已撤回', 'ok');
-      scLoad();
-    }).catch(function(e2){ toast('操作失败：' + e2.message, 'err', 4000); });
+  api('/scores?action=unbound').then(function(j){
+    var users = (j && j.users) || [];
+    if(!users.length){ toast('还没有可选的用户，先在「成员与档案」里建好账号', 'err', 4200); return; }
+    var list = users.map(function(x){
+      return '<label style="display:inline-block;min-width:104px;margin:3px 8px 3px 0;font-size:.82rem">'
+        + '<input type="checkbox" class="sc-pub-ck" value="' + Number(x.id) + '"> '
+        + esc(x.name || x.username || '') + '</label>';
+    }).join('');
+    openModal({
+      title: '发布成绩 · 选择谁可见',
+      sub: '「' + (e ? e.name : id) + '」发布给：全体同学，或只给指定同学。',
+      wide: true,
+      body: '<div class="sc-pub-mode">'
+        +   '<label style="display:block;font-size:.86rem;color:#57534e"><input type="radio" name="scPubMode" value="all" checked> 全体同学（本班登录都能看）</label>'
+        +   '<label style="display:block;margin-top:8px;font-size:.86rem;color:#57534e"><input type="radio" name="scPubMode" value="some"> 只给指定同学</label>'
+        + '</div>'
+        + '<div id="scPubList" style="display:none;margin-top:10px;max-height:320px;overflow:auto;border:1px solid #efe6da;border-radius:8px;padding:8px 10px">' + list + '</div>'
+        + '<div class="alert info" style="margin-top:10px">指定发布时，名单外的人登录看不到这次考试（管理员不受限）。</div>',
+      foot: '<button class="btn btn-secondary" id="scPubCancel">取消</button>'
+          + '<button class="btn" id="scPubGo">发布</button>',
+      onMount: function(box){
+        var listBox = box.querySelector('#scPubList');
+        box.querySelector('#scPubCancel').onclick = closeModal;
+        Array.prototype.forEach.call(box.querySelectorAll('input[name="scPubMode"]'), function(r){
+          r.onchange = function(){ listBox.style.display = (r.value === 'some' && r.checked) ? 'block' : 'none'; };
+        });
+        box.querySelector('#scPubGo').onclick = function(){
+          var mode = (box.querySelector('input[name="scPubMode"]:checked') || {}).value || 'all';
+          var ids = [];
+          if(mode === 'some'){
+            Array.prototype.forEach.call(box.querySelectorAll('.sc-pub-ck'), function(c){ if(c.checked) ids.push(Number(c.value)); });
+            if(!ids.length){ toast('请至少勾一位同学，或改选「全体」', 'err'); return; }
+          }
+          closeModal();
+          scDoPublish(id, true, mode === 'some' ? ids : null);
+        };
+      },
+    });
+  }).catch(function(err){ toast('读取用户名单失败：' + err.message, 'err', 4500); });
 }
 
 function scDeleteExam(id){
@@ -10325,27 +10371,82 @@ function scImport(examId){
             toast(msg, 'ok', 4200);
             closeModal();
             scLoad();
-            /* 异常汇总：合并成一条提示，并延后到列表刷新之后再弹。
-               以前这里是两个 alert 连着弹（300ms / 700ms），会把页面连续卡住两次，
-               期间列表一直刷新不出来，体验很差。 */
-            if(j.unmatchedCount || j.skippedCount){
-              var lines = [];
-              if(j.skippedCount){
-                lines.push('· 跳过 ' + j.skippedCount + ' 行：\n  ' + (j.skipped || []).join('\n  '));
-              }
-              if(j.unmatchedCount){
-                lines.push('· ' + j.unmatchedCount + ' 位同学在站点里没有同名账号：\n  '
-                  + (j.unmatched || []).join('、')
-                  + '\n\n  成绩已经存好了（不影响其他同学查看），'
-                  + '等他们的账号建好、或姓名对上，再导入一次就会自动绑定。');
-              }
-              setTimeout(function(){ alert('导入完成，有几点要留意：\n\n' + lines.join('\n\n')); }, 1600);
+            /* 未识别姓名 = 多半打错了（站主 2026-10-17：名单里的人都在用户里）：
+               直接弹窗让站主改，不用一个个去找。跳过的行（空姓名/同名重复）单独提示一下。 */
+            if(j.skippedCount){
+              setTimeout(function(){
+                alert('有 ' + j.skippedCount + ' 行被跳过：\n  ' + (j.skipped || []).join('\n  '));
+              }, 1200);
+            }
+            if(j.unmatchedCount){
+              setTimeout(function(){ scFixNamesDialog(examId, j.unmatched || []); }, 700);
             }
           })
           .catch(function(err){ btn.disabled = false; toast('导入失败：' + err.message, 'err', 4600); });
       };
     },
   });
+}
+
+/**
+ * 导入后「未识别姓名」修正弹窗（2026-10-17 站主要求）。
+ * 前提：考试名单里的人都在站点用户里，所以导入后对不上账号，一定是名字打错了。
+ * 这里把每个对不上的姓名列出来，右边填/选正确姓名，确认后一次性改名并自动绑定，
+ * 不用站主自己一个个去翻。候选姓名来自后台用户（/scores?action=unbound 的 users）。
+ */
+function scFixNamesDialog(examId, names){
+  names = (names || []).filter(Boolean);
+  if(!names.length){ toast('导入完成，全部姓名都已对上账号', 'ok', 3500); return; }
+  api('/scores?action=unbound').then(function(j){
+    var users = (j && j.users) || [];
+    var opts = users.map(function(x){ return String(x.name || '').trim(); }).filter(Boolean);
+    var dl = '<datalist id="scFixDl">' + opts.map(function(n){ return '<option value="' + attr(n) + '">'; }).join('') + '</datalist>';
+    var rows = names.map(function(nm){
+      return '<div style="display:flex;gap:8px;align-items:center;margin:7px 0">'
+        + '<span style="min-width:120px;font-size:.85rem;font-weight:700;color:#c0392b">' + esc(nm) + '</span>'
+        + '<span style="color:#8a7968">→</span>'
+        + '<input class="sc-fix-to" data-from="' + attr(nm) + '" list="scFixDl" autocomplete="off" '
+        + 'placeholder="输入或下拉选择正确姓名" '
+        + 'style="flex:1;min-width:140px;padding:7px 9px;border:1px solid #e2d5c8;border-radius:7px;font-family:inherit;font-size:.85rem">'
+        + '</div>';
+    }).join('');
+    openModal({
+      title: '导入完成 · 有 ' + names.length + ' 个姓名没对上账号',
+      sub: '这些姓名在用户里找不到。按站规名单都在用户里，多半是打错字 —— 右边填上正确姓名，确认后一次性改名并自动绑好账号。',
+      wide: true,
+      body: '<div class="alert warn" style="margin-bottom:10px">只填要改的那几个即可，留空的保持原样。</div>'
+        + dl + rows,
+      foot: '<button class="btn btn-secondary" id="scFixSkip">以后再说</button>'
+          + '<button class="btn" id="scFixGo">确认修正</button>',
+      onMount: function(box){
+        box.querySelector('#scFixSkip').onclick = closeModal;
+        box.querySelector('#scFixGo').onclick = function(){
+          var inputs = box.querySelectorAll('.sc-fix-to');
+          var fixes = [];
+          Array.prototype.forEach.call(inputs, function(inp){
+            var from = inp.getAttribute('data-from');
+            var to = (inp.value || '').trim();
+            if(to && to !== from) fixes.push({ from: from, to: to });
+          });
+          if(!fixes.length){ toast('还没有填要改成的姓名', 'err'); return; }
+          var go = box.querySelector('#scFixGo'); go.disabled = true;
+          api('/scores?action=fix-names', { method:'POST', body: { exam: examId, fixes: fixes } })
+            .then(function(r){
+              closeModal();
+              scLoad();
+              var rest = (r && r.stillUnmatched) || [];
+              if(rest.length){
+                toast('已修正 ' + (r.renamed || 0) + ' 行，还有 ' + rest.length + ' 个没对上', 'ok', 4200);
+                setTimeout(function(){ scFixNamesDialog(examId, rest); }, 250);
+              }else{
+                toast('已修正 ' + (r.renamed || 0) + ' 行，全部对上账号了', 'ok', 4200);
+              }
+            })
+            .catch(function(e){ go.disabled = false; toast('修正失败：' + e.message, 'err', 4600); });
+        };
+      },
+    });
+  }).catch(function(e){ toast('读取用户名单失败：' + e.message, 'err', 4500); });
 }
 
 /* AOA（二维数组）→ { header, rows, map }；第一行当表头 */

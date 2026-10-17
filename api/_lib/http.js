@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '2.10.2';
+const SCHEMA_VER = '2.10.4';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -68,6 +68,11 @@ export async function ensureSchema(sql) {
       const row = r && r[0];
       if (row && row.v === SCHEMA_VER) return;
       if (row && row.has_ual) {
+        /* 升级路径：老库表都在，这里只补「本次新增的列」，再盖章。
+           不能直接 return 不盖章（版本永远对不上、每次请求都重跑闸门）；
+           也不能放开跑全量 DDL（46 条 + 请求自身查询会撞 50 子请求上限）。
+           ⚠️ 以后每次加列，这里要同步补上这一句，否则老库永远加不上列。 */
+        try { await s`alter table exams add column if not exists visible_to jsonb`; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
@@ -244,6 +249,7 @@ export async function ensureSchema(sql) {
         subjects     jsonb       not null default '[]'::jsonb,
         cutlines     jsonb       not null default '[]'::jsonb,
         grade_ref    jsonb,
+        visible_to   jsonb,      -- 发布可见范围：null=全体；[uid,...]=只给这些同学
         note         text,
         status       text        not null default 'draft',
         published_at timestamptz,

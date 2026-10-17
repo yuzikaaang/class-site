@@ -331,6 +331,7 @@ create table if not exists exams (
   subjects     jsonb       not null default '[]'::jsonb,  -- [{key,name,full,graded}]
   cutlines     jsonb       not null default '[]'::jsonb,  -- [{key,label,score,color}]，score 空 = 本次没公布
   grade_ref    jsonb,                                     -- {students, avgTotal, avgSubject} 年级参照，可空
+  visible_to   jsonb,                                     -- 发布可见范围：null=全体；[uid,...]=只给这些同学
   note         text,                                      -- 备注（如「本次生物未考」）
   status       text        not null default 'draft',       -- draft | published
   published_at timestamptz,
