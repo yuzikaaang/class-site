@@ -7455,6 +7455,17 @@ function acctProfileHtml(){
       '<button class="acct-btn ghost" onclick="showChangePwd()">改密码</button>' +
     '</div>' +
 
+    /* v2.10.1 需求⑧：云端数据的查看 / 删除入口。
+       ⚠️ 原先这个方法只能从侧边栏「💾 数据管理」弹窗里进，而那个按钮
+          2026-10-07 起被设成 display:none 隐藏了 —— 等于功能做完了却没人点得到
+          （2026-10-17 站主问「我的云端数据在哪里查看」，就是这个问题）。
+          现在把入口放在个人中心「云同步」下面，和它是一套东西，最好找。 */
+    '<div class="acct-sw">' +
+      '<div><span class="t">☁️ 我的云端数据</span>' +
+        '<span class="s">看云端存了哪些数据（主题、作业勾选、班级签、点歌记录…），可单条删除或清空</span></div>' +
+      '<button class="acct-btn" style="width:auto;padding:8px 14px;font-size:.78rem" onclick="openCloudDataFromAccount()">查看 / 删除</button>' +
+    '</div>' +
+
     (isAdmin()
       ? '<div class="acct-row" style="margin-top:14px">' +
           '<button class="acct-btn" onclick="gotoAdminPage()">🛠 进入管理后台</button>' +
@@ -9388,6 +9399,11 @@ function renderSettings(){
         swHtml(SFX.isOn(), 'toggleSfxFromUI(event)') + '</div>', false);
   }
   else {
+    /* 云端数据入口（v2.10.1 需求⑧）：数据类操作统一收在「自定义设置」里，
+       和下面的导出/导入放一起。未登录时先引导登录（云端接口要登录才给读）。 */
+    html += secHtml('cloud','云端数据','database',
+      '<p class="ui-hint">查看云端同步了哪些数据（主题、作业勾选、班级签、点歌记录等），<br>可以按条删除或清空全部。删除前需要验证登录密码。</p>' +
+      '<button class="btn" style="font-size:.76rem;padding:9px 12px" onclick="openCloudDataFromSettings()">查看我的云端数据</button>', true);
     html += secHtml('io','导出与导入','download',
       '<p class="ui-hint">配置文件包含：字号、背景、动效开关、全部排序。<br>不含游戏记录与个人数据。</p>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
@@ -11148,6 +11164,17 @@ function cloudFmtTime(iso){
   if(isNaN(d.getTime())) return '—';
   var pad = function(x){ return x<10?'0'+x:x; };
   return pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+/* v2.10.1 需求⑧：两个可见入口。
+   ⚠️ 原来只能从侧边栏「💾 数据管理」进，而那个按钮 2026-10-07 起被隐藏了。 */
+function openCloudDataFromAccount(){
+  closeAccount();          /* 先关账号弹窗，避免两层遮罩叠着 */
+  openCloudData();
+}
+function openCloudDataFromSettings(){
+  closeSettings();
+  if(!isLoggedIn()){ openAccount(); return; }   /* 未登录先引导登录：云端接口要登录才给读 */
+  openCloudData();
 }
 function openCloudData(){
   var m=document.getElementById('cloudDataMask'); if(m) m.classList.add('show');

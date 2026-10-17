@@ -7753,6 +7753,27 @@ console.log('\n【74】第六十三轮·Pages 回查判据改内容哈希（修�
     /写死的判据会随代码演进腐烂/.test(wf) && /假红灯/.test(wf));
 }
 
+console.log('\n【75】第六十三轮·「我的云端数据」入口暴露（原来点不到）');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('★个人中心有云端数据入口（调用 openCloudDataFromAccount）',
+    /openCloudDataFromAccount\(\)/.test(idx) && /☁️ 我的云端数据/.test(idx));
+  t('★「自定义设置」也有入口（调用 openCloudDataFromSettings）',
+    /openCloudDataFromSettings\(\)/.test(idx) && /secHtml\('cloud','云端数据'/.test(idx));
+  t('★两个入口函数都存在且会先关掉上层弹窗',
+    /function openCloudDataFromAccount\(\)\{\s*closeAccount\(\);/.test(idx)
+    && /function openCloudDataFromSettings\(\)\{\s*closeSettings\(\);/.test(idx));
+  t('★设置入口未登录时先引导登录（云端接口要登录才给读）',
+    /if\(!isLoggedIn\(\)\)\{ openAccount\(\); return; \}/.test(idx));
+  t('★真正的数据弹窗函数仍是 openCloudData（两个入口都指向它）',
+    /function openCloudData\(\)\{/.test(idx) && /class="allboard-mask" id="cloudDataMask"/.test(idx));
+  /* 背景：唯一入口原先藏在侧边栏「数据管理」里，而那个按钮是 display:none */
+  t('背景确认：侧边栏「数据管理」按钮确实是隐藏的（所以才要点不到）',
+    /onclick="openData\(\)" style="display:none"/.test(idx));
+  t('★个人中心入口带说明文案（可单条删除或清空）',
+    /看云端存了哪些数据[\s\S]{0,40}可单条删除或清空/.test(idx));
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
