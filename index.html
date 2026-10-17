@@ -2244,16 +2244,6 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .dark .sc-care-sum b{color:#f0b880}
 
 /* 三类统计：三栏并排，手机端落成一列 */
-.sc-bands{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:6px 0 4px}
-.sc-band{padding:10px 12px;border:1px solid #eee3d8;border-radius:10px;background:#fffdfa}
-.sc-band-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:7px}
-.sc-band-top b{font-size:.82rem;font-weight:700;color:#57534e}
-.sc-band-pct{font-size:1.02rem;font-weight:800;font-variant-numeric:tabular-nums}
-.sc-band-line{height:6px;border-radius:999px;background:#f0e8df;overflow:hidden}
-.sc-band-line i{display:block;height:100%;border-radius:999px;transition:width .35s}
-.sc-band-meta{margin-top:6px;font-size:.7rem;color:#8a7968}
-.dark .sc-band{background:#2a2622;border-color:#3b342e}
-.dark .sc-band-top b{color:#d6c8b8}
 .dark .sc-band-line{background:#3b342e}
 .dark .sc-band-meta{color:#a8998c}
 @media (max-width:640px){
@@ -3295,7 +3285,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.7';
+var SITE_VERSION = '3.5.8';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13510,7 +13500,6 @@ function scRenderBoard(){
     +   scStatCard('最高', st.max)
     +   scStatCard('参考', st.n + ' 人')
     + '</div>'
-    + scBandCard(st)
     + '<div class="sc-tblwrap"><table class="sc-tbl sc-fix2">'
     +   '<thead>' + head + '</thead><tbody>' + body + '</tbody>'
     + '</table></div>'
@@ -14402,6 +14391,75 @@ function scPkTrendCard(A, B){
   if(!pA) missed.push(A.name || 'A 方');
   if(!pB) missed.push(B.name || 'B 方');
 
+  /* v3.5.7 需求 4：对比文字分析 —— 点明差距、强弱项与改进建议（本地规则生成） */
+  function analyze(p, c, prevExam, isA){
+    if(!p || !c) return null;
+    var name = c.name || (isA ? 'A 方' : 'B 方');
+    var pt = tot(p, prevExam), ct = tot(c, SC.exam);
+    var out = { name: name };
+    out.td = (pt != null && ct != null) ? ct - pt : null;
+    out.dRank = (pRk[p.id] != null && curRk[c.id] != null) ? curRk[c.id] - pRk[p.id] : null;
+    /* 各科变化（按当前考试科目） */
+    var ds = [];
+    (SC.exam.subjects || []).forEach(function(s){
+      function val(row, exam){
+        var v = row && row.s && row.s[s.key];
+        if(!v) return null;
+        return (SC.basis === 'graded' && s.graded && v.assigned != null) ? v.assigned : v.raw;
+      }
+      var pv = val(p, prevExam), cv = val(c, SC.exam);
+      if(pv != null && cv != null && pv !== cv) ds.push({ sub: s.name || s.key, d: cv - pv, full: s.full || 0 });
+    });
+    ds.sort(function(a, b){ return b.d - a.d; });
+    out.up = ds[0] || null;
+    out.dn = ds.length ? ds[ds.length - 1] : null;
+    out.flat = !ds.length;
+    return out;
+  }
+  var anA = analyze(pA, A, prevExam, true), anB = analyze(pB, B, prevExam, false);
+  function oneSide(x){
+    if(!x) return '';
+    var bits = [];
+    if(x.td != null) bits.push('总分' + (x.td > 0 ? '上升 ' : x.td < 0 ? '下降 ' : '持平（') + fmtNum(Math.abs(x.td)) + ' 分' + (x.td === 0 ? '）' : ''));
+    if(x.dRank != null && x.dRank !== 0) bits.push('班排' + (x.dRank < 0 ? '进步 ' : '退步 ') + Math.abs(x.dRank) + ' 名');
+    if(x.up) bits.push(x.up.sub + ' 进步最多（+' + fmtNum(x.up.d) + ' 分）');
+    if(x.dn && x.dn.d < 0) bits.push(x.dn.sub + ' 掉得最多（' + fmtNum(x.dn.d) + ' 分）');
+    if(x.flat) bits.push('各科分数都没变');
+    return '· <b>' + esc(x.name) + '</b>：' + (bits.join('，') || '两次成绩基本持平') + '。';
+  }
+  function suggest(x){
+    if(!x) return '';
+    var tips = [];
+    if(x.dn && x.dn.d < 0){
+      var ratio = x.dn.full ? Math.abs(x.dn.d) / x.dn.full : 0;
+      tips.push('优先补一补 ' + esc(x.dn.sub) + (ratio > 0.1 ? '（这次掉了满分的 ' + (ratio * 100).toFixed(0) + '%，落差偏大）' : ''));
+    }
+    if(x.up && x.up.d > 0) tips.push(esc(x.up.sub) + '的势头保持住');
+    if(x.td != null && x.td < 0 && x.dRank != null && x.dRank > 0) tips.push('总分和名次都在退，建议把这几次的错题归一下类，找共性漏洞');
+    if(x.td != null && x.td > 0 && x.dRank != null && x.dRank < 0) tips.push('总分在涨、名次也在升，按现在的节奏继续');
+    return tips.length ? '<div class="sc-dim" style="margin-top:4px">　↳ 建议：' + tips.join('；') + '。</div>' : '';
+  }
+  var gapTxt = '';
+  if(anA && anB && anA.td != null && anB.td != null){
+    var prevGap = tot(pA, prevExam) - tot(pB, prevExam);
+    var curGap = scTotal(A, SC.basis) - scTotal(B, SC.basis);
+    if(prevGap != null && curGap != null && prevGap !== curGap){
+      var wider = Math.abs(curGap) > Math.abs(prevGap);
+      gapTxt = '<div style="margin-top:6px">· <b>两人差距</b>：总分差从 ' + fmtNum(Math.abs(prevGap)) + ' 分变成 '
+        + fmtNum(Math.abs(curGap)) + ' 分（' + (wider ? '拉开了' : '缩小了') + Math.abs(Math.abs(curGap) - Math.abs(prevGap)).toFixed(1) + ' 分'
+        + '，现在 ' + (curGap > 0 ? esc(anA.name) : esc(anB.name)) + ' 领先）。</div>';
+    }
+  }
+  var analysisHtml = (anA || anB)
+    ? '<div class="sc-card" style="margin-top:12px"><div class="sc-card-h">对比分析</div>'
+      + '<div style="font-size:.86rem;line-height:1.9">'
+      + oneSide(anA) + '<br>' + oneSide(anB)
+      + gapTxt
+      + suggest(anA) + suggest(anB)
+      + '</div>'
+      + '<div class="sc-figcap">以上由本地规则根据两次成绩自动生成，仅供参考。</div></div>'
+    : '';
+
   return '<div class="sc-card"><div class="sc-card-h">跨考试进退步（'
     + esc(shortName(prevExam.name || '')) + ' → ' + esc(shortName(SC.exam.name || '')) + '）'
     + '<span class="sc-h-note">' + esc(scDateRange(prevExam) || '') + '</span></div>'
@@ -14413,7 +14471,8 @@ function scPkTrendCard(A, B){
     + '<div class="sc-figcap">「↑」为进步、「↓」为退步；名次越小越好。两场考试的科目或满分不同时，'
     + '各科按各自的科目配置取分，口径为' + (SC.basis === 'graded' ? '赋分' : '原始') + '。'
     + (missed.length ? '注意：' + esc(missed.join('、')) + ' 在「' + esc(shortName(prevExam.name || '')) + '」里没找到对应成绩（未考或未录入），相关格显示 —。' : '')
-    + '</div></div>';
+    + '</div></div>'
+    + analysisHtml;
 }
 
 function scOvItem(k, v){
@@ -15753,77 +15812,6 @@ var SC_ALERT_RATIO = 0.015;   /* 统一阈值系数：满分的 1.5% */
    为什么要区分「及格」—— 60% 是通行标准（150 分制 = 90 分），
    但 750 分制的 60% 是 450 分，跟「本科线」不是一回事，
    所以有官方线时以线为准，没线时才用百分比兜底。            */
-var SC_BANDS = [
-  { key: 'excellent', label: '优秀', pct: 0.85, color: '#2f9e44' },
-  { key: 'pass',      label: '及格', pct: 0.60, color: '#4c8fd6' },
-  { key: 'low',       label: '低分', pct: 0.40, color: '#d4756a' },
-];
-
-/* 取三个档的分数线：能挂上考试分数线的就挂，挂不上按满分折算。
-   优先顺序：本科线（最接近「及格」概念）→ 特控线（优秀）→ 600 线。
-   返回 { excellent:{v,src}, pass:{v,src}, low:{v,src} }，src = 'line' | 'pct' */
-function scBands(){
-  var full = scFullMark();
-  var cuts = (SC.exam && SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
-  /* 按分数从高到低排，第 1 条当「优秀」，最低那条当「及格」 */
-  var sorted = cuts.slice().sort(function(a, b){ return b.score - a.score; });
-  var out = {};
-  SC_BANDS.forEach(function(b){ out[b.key] = { v: full * b.pct, src: 'pct', label: b.label, color: b.color }; });
-
-  if(sorted.length){
-    /* 最高那条线以上 = 优秀 */
-    out.excellent = { v: sorted[0].score, src: 'line', label: '优秀（' + (sorted[0].label || '最高线') + '）', color: '#2f9e44' };
-    /* 最低那条线以上 = 及格 */
-    var last = sorted[sorted.length - 1];
-    out.pass = { v: last.score, src: 'line', label: '及格（' + (last.label || '最低线') + '）', color: '#4c8fd6' };
-    /* 低分仍按百分比：没有「低分线」这种官方说法，用 40% 兜底更稳 */
-  }
-  return out;
-}
-
-/* 三类率：对一组总分值算 n / 占比 */
-function scBandStats(list, bands){
-  bands = bands || scBands();
-  var n = list.length;
-  var r = {};
-  SC_BANDS.forEach(function(b){
-    var line = bands[b.key].v;
-    /* 低分是「低于」，其余是「不低于」 */
-    var c = b.key === 'low'
-      ? list.filter(function(v){ return v < line; }).length
-      : list.filter(function(v){ return v >= line; }).length;
-    r[b.key] = { n: c, pct: n ? c / n * 100 : 0, line: line, src: bands[b.key].src, label: bands[b.key].label, color: bands[b.key].color };
-  });
-  r.n = n;
-  return r;
-}
-
-/* 三类统计卡（全班成绩单用） */
-function scBandCard(st){
-  if(!st.n) return '';
-  var bands = scBands();
-  var bs = scBandStats(st.list, bands);
-  return '<div class="sc-card"><div class="sc-card-h">优秀率 / 及格率 / 低分率'
-    + '<span class="sc-h-note">按' + (bands.pass.src === 'line' ? '本次分数线' : '满分百分比') + '统计</span></div>'
-    + '<div class="sc-bands">'
-    + SC_BANDS.map(function(b){
-        var x = bs[b.key];
-        return '<div class="sc-band">'
-          + '<div class="sc-band-top"><b>' + esc(b.label) + '率</b>'
-          +   '<span class="sc-band-pct" style="color:' + b.color + '">' + x.pct.toFixed(1) + '%</span></div>'
-          + '<div class="sc-band-line"><i style="width:' + Math.min(100, x.pct).toFixed(1) + '%;background:' + b.color + '"></i></div>'
-          + '<div class="sc-band-meta">' + x.n + ' / ' + bs.n + ' 人　线 '
-          +   fmtNum(x.line) + (x.src === 'line' ? '' : '（' + (b.pct * 100).toFixed(0) + '%）') + '</div>'
-          + '</div>';
-      }).join('')
-    + '</div>'
-    + '<div class="sc-figcap">'
-    + (bands.pass.src === 'line'
-        ? '本次考试有分数线，优秀／及格按分数线统计；低分没有官方线，仍按满分 40% 折算。'
-        : '本次考试没有设置分数线，三档都按满分百分比统计（优秀 ≥ 85%、及格 ≥ 60%、低分 < 40%）。')
-    + '</div></div>';
-}
-
 function scAlertLines(){
   var subs = SC.exam.subjects || [];
   var st = scStats(SC.basis);
@@ -16143,6 +16131,14 @@ function scTailRank(){
 
   var curPack = SC.allRows[eidOf(items[idx])];
   var prevPack = SC.allRows[eidOf(items[idx - 1])];
+
+  /* v3.5.7 修复：懒加载可能只载了部分历次成绩（比如上次某一场读取失败被记成 null），
+     缺当前场或上一场时自动补载并提示读取中 —— 不能误报成「对不上人」。 */
+  if(!curPack || !prevPack){
+    scLoadAllRows();
+    return '<div class="sc-card sc-card-admin"><div class="sc-card-h">进退步榜<span class="sc-only-admin">仅站主可见</span></div>'
+      + '<div class="sc-dim" style="padding:4px 0 10px">正在读取这两次考试的全班成绩（几秒钟）…</div></div>';
+  }
 
   /* 单科口径先定下是哪一科 */
   var subs = (SC.exam && SC.exam.subjects) || [];

@@ -9549,10 +9549,14 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('★需关注四档筛选 + 可排序',
     /function scCareFilter/.test(idxV) && /function scCareSort/.test(idxV)
     && /连续两次退步/.test(idxV));
-  t('★三类统计函数齐全（优秀/及格/低分）',
-    /function scBandCard/.test(idxV) && /function scBandStats/.test(idxV) && /SC_BANDS/.test(idxV));
-  t('★三类统计卡已插进全班成绩单',
-    /\+ scBandCard\(st\)[\s\S]{0,120}sc-tblwrap/.test(idxV));
+  /* v3.5.7 站主要求：优秀率/及格率三类统计整体下线 —— 反向断言防它回来 */
+  t('★三类统计已下线（不再出现优秀率/及格率卡）',
+    !/scBandCard|scBandStats|SC_BANDS/.test(idxV));
+  t('★进退步榜缺历次数据时自动补载（不再误报对不上人）',
+    /var curPack = SC\.allRows\[eidOf\(items\[idx\]\)\];[\s\S]{0,400}scLoadAllRows\(\);/.test(idxV)
+    && !/!curPack \|\| !prevPack\)[\s\S]{0,200}对不上人/.test(idxV));
+  t('★成绩对比新增文字分析（对比分析卡）',
+    /function analyze\(p, c, prevExam, isA\)/.test(idxV) && /对比分析/.test(idxV) && /analysisHtml/.test(idxV));
   t('★表格下方自动文字总结',
     /function scCareSummary/.test(idxV) && /sc-care-sum/.test(idxV));
   t('★我的画像 AI 分析卡已挂进渲染链',
@@ -9562,8 +9566,8 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /不联网/.test(idxV) && /不会把成绩发到任何服务器/.test(idxV));
   t('★「连续两次退步」的上一场数据走懒加载（不当场阻塞）',
     /function scLoadPrevPack/.test(idxV) && /scLoadPrevPack\(ex\.id\)/.test(idxV));
-  t('★新增样式都有暗色覆盖（sc-chip / sc-band / sc-ai）',
-    /\.dark \.sc-chip\{/.test(idxV) && /\.dark \.sc-band\{/.test(idxV) && /\.dark \.sc-ai-concl\{/.test(idxV));
+  t('★新增样式都有暗色覆盖（sc-chip / sc-ai）',
+    /\.dark \.sc-chip\{/.test(idxV) && /\.dark \.sc-ai-concl\{/.test(idxV));
 
   /* ============ ② 建投票 ============ */
   const mk = await call('/api/votes?action=create', {
