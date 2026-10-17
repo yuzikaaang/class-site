@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '2.10.4';
+const SCHEMA_VER = '3.5.2';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -73,6 +73,17 @@ export async function ensureSchema(sql) {
            也不能放开跑全量 DDL（46 条 + 请求自身查询会撞 50 子请求上限）。
            ⚠️ 以后每次加列，这里要同步补上这一句，否则老库永远加不上列。 */
         try { await s`alter table exams add column if not exists visible_to jsonb`; } catch (e) {}
+        /* v3.5.1 补：档案加密的盲索引两列 + 去 student_id unique。
+           🔴 v3.5.0 只把它们加进了下方「全新库全量清单」，漏了这条升级路径，
+              且 SCHEMA_VER 也没升 —— 线上老库被闸门直接放行，两列一直没建，
+              一点「一键加密存量」就 500（column "name_bidx" does not exist）。
+              教训写在函数顶部注释里：「改 DDL 清单必须同步升 SCHEMA_VER」，
+           这次两条都犯了，所以这里连 DDL 带版本号一起补。 */
+        try { await s`alter table profiles add column if not exists name_bidx text`; } catch (e) {}
+        try { await s`alter table profiles add column if not exists student_id_bidx text`; } catch (e) {}
+        try { await s`create index if not exists profiles_name_bidx_idx on profiles (name_bidx)`; } catch (e) {}
+        try { await s`create index if not exists profiles_sid_bidx_idx  on profiles (student_id_bidx)`; } catch (e) {}
+        try { await s`alter table profiles drop constraint if exists profiles_student_id_key`; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())

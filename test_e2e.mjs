@@ -4951,7 +4951,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.1');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.2');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -6172,7 +6172,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.1'/.test(swSrc) && /class-site-v96/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.2'/.test(swSrc) && /class-site-v97/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7550,14 +7550,23 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 2.10.4',
-    /const SCHEMA_VER = '2\.10\.4'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.1',
+    /const SCHEMA_VER = '3\.5\.2'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
     /if \(row && row\.v === SCHEMA_VER\) return;/.test(httpSrc));
   t('★老库过渡：批次已跑过但没盖章 → 只补盖章、跳过 45 次往返',
     /if \(row && row\.has_ual\)/.test(httpSrc));
+  /* v3.5.1 血的教训：bidx 两列只加进「全新库全量清单」、漏了「老库升级路径」，
+     且 SCHEMA_VER 没升 → 线上老库被闸门放行，两列一直没建，一键加密就 500。
+     护栏：补列 DDL 必须在两条路径都出现（至少各 1 次 add column + 1 次 index）。 */
+  t('★盲索引补列在升级路径与全量路径都有（v3.5.1 漏老库路径的护栏）',
+    (httpSrc.match(/alter table profiles add column if not exists name_bidx text/g) || []).length >= 2
+    && (httpSrc.match(/alter table profiles add column if not exists student_id_bidx text/g) || []).length >= 2
+    && (httpSrc.match(/create index if not exists profiles_name_bidx_idx/g) || []).length >= 2
+    && (httpSrc.match(/create index if not exists profiles_sid_bidx_idx/g) || []).length >= 2
+    && (httpSrc.match(/alter table profiles drop constraint if exists profiles_student_id_key/g) || []).length >= 2);
   t('★全量跑完盖章，且用 || 合并（不冲掉 register_open 等后台开关）',
     /set data = site_settings\.data \|\| excluded\.data/.test(httpSrc));
   t('★闸门注释留了根因与「改 DDL 必须升 SCHEMA_VER」的纪律',
@@ -8220,7 +8229,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.5.1', /SITE_VERSION = '3[.]5[.]1'/.test(idx) && /SITE_VERSION = '3[.]5[.]1'/.test(adm) && /SITE_VER = '3[.]5[.]1'/.test(sw));
+  t('版本号三处同步 3.5.2', /SITE_VERSION = '3[.]5[.]2'/.test(idx) && /SITE_VERSION = '3[.]5[.]2'/.test(adm) && /SITE_VER = '3[.]5[.]2'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8313,8 +8322,8 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.5.1',
-    /SITE_VERSION = '3[.]5[.]1'/.test(idx) && /SITE_VERSION = '3[.]5[.]1'/.test(adm) && /SITE_VER = '3[.]5[.]1'/.test(sw));
+  t('版本号三处同步 3.5.2',
+    /SITE_VERSION = '3[.]5[.]2'/.test(idx) && /SITE_VERSION = '3[.]5[.]2'/.test(adm) && /SITE_VER = '3[.]5[.]2'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8400,8 +8409,8 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.5.1',
-    /SITE_VERSION = '3[.]5[.]1'/.test(idx) && /SITE_VERSION = '3[.]5[.]1'/.test(adm));
+  t('版本号三处同步 3.5.2',
+    /SITE_VERSION = '3[.]5[.]2'/.test(idx) && /SITE_VERSION = '3[.]5[.]2'/.test(adm));
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8420,7 +8429,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]1'/.test(adm) && /SITE_VER = '3[.]5[.]1'/.test(sw));
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]2'/.test(adm) && /SITE_VER = '3[.]5[.]2'/.test(sw));
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8446,7 +8455,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.1', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.2', 'parsed=' + parsed);
 }
 
 
