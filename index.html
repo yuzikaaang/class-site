@@ -3027,7 +3027,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.10.4';
+var SITE_VERSION = '2.10.5';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3916,7 +3916,8 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
-    { date: "2026-10-17 12:10", text: "🔐 成绩发布更灵活：老师现在可以把某次成绩只发给指定同学，或发给全班。被指定的同学登录就能看到，其他同学不会看到那次考试。", category: "site" },
+    { date: "2026-10-17 10:47", text: "🔗 成绩分享升级：分享页除了每次成绩的具体分值、各科小分和上线情况，现在还多了「历史总分趋势」和「年级排名变化」两张图；「成绩单」和「个人成绩卡」可以同时展示。已建过的分享也能直接改范围，链接不变，不用重新发。", category: "site" },
+    { date: "2026-10-17 10:45", text: "🔐 成绩发布更灵活：老师现在可以把某次成绩只发给指定同学，或发给全班。被指定的同学登录就能看到，其他同学不会看到那次考试。", category: "site" },
     { date: "2026-10-17 10:30", text: "📊 「我的画像」升级：六科画像除了雷达图，还多了一张数值表 —— 每科都能看到「我的分数 / 占总分比例 / 班均 / 与班均差」，一眼看清自己强在哪、差多少。另外，切到「总分原始」口径时，化学、生物不再显示「赋分」标签，也不会再和特控 / 本科 / 600 线硬比（那三条线是按赋分总分划的）。", category: "site" },
     { date: "2026-10-11 17:18", text: "📚 首页新增「学习卡片」：和「每日一言」一样每次刷新随机出一条 —— 物理 / 化学 / 生物 知识点公式，或英语选词填空（带答案解析），也能联网抓「每日一词」和「古诗文」。想只留某几类，去「自定义设置」里勾。", category: "site" },
     { date: "2026-10-11 17:12", text: "🎲 「每日一言」改为完全随机切换，不再按日顺序轮播；同时接入网络名言库，联网时会自动换一句。", category: "site" },
@@ -14270,25 +14271,29 @@ function scExportCard(cfg){
 }
 
 /* ---------- 分享链接（R38）：免登录只读 ---------- */
-function scShareDialog(){
+function scShareDialog(edit){
+  var editId = edit ? Number(edit.id) : 0;
   var cfg = SC.config || {};
   var isAdmin = scIsAdmin();
   var allow = isAdmin ? 'all' : (cfg.shareByStudent || 'none');
   if(allow === 'none'){ alert('老师还没有开放分享功能。'); return; }
 
+  var chosenEx = (edit && (edit.examIds || []).length) ? edit.examIds.map(Number) : null;
   var exOpts = SC.exams.map(function(e, i){
-    return '<label class="sc-sh-ex"><input type="checkbox" value="' + e.id + '" checked> '
+    var ck = (!chosenEx || chosenEx.indexOf(Number(e.id)) >= 0) ? ' checked' : '';
+    return '<label class="sc-sh-ex"><input type="checkbox" value="' + e.id + '"' + ck + '> '
       + esc(e.name) + ' <span class="sc-dim">' + esc(scDateRange(e)) + '</span></label>';
   }).join('');
 
+  var scSel = function(v){ return (edit && edit.scope === v) ? ' selected' : ''; };
   var scopeSel = '<select id="shScope" class="sc-sel">'
-    + '<option value="self">只分享我的成绩</option>'
-    + (allow === 'all' ? '<option value="class">全班成绩</option>' : '')
-    + (allow === 'all' && isAdmin ? '<option value="picked">我挑几位同学</option>' : '')
+    + '<option value="self"' + scSel('self') + '>只分享我的成绩</option>'
+    + (allow === 'all' ? '<option value="class"' + scSel('class') + '>全班成绩</option>' : '')
+    + (allow === 'all' && isAdmin ? '<option value="picked"' + scSel('picked') + '>我挑几位同学</option>' : '')
     + '</select>';
 
   var html = '<div class="allboard-mask show" id="scShMask"><div class="allboard-box sc-box" style="max-width:600px">'
-    + '<div class="allboard-head"><span>分享成绩</span><button onclick="scShareClose()">关闭</button></div>'
+    + '<div class="allboard-head"><span>' + (edit ? '编辑分享' : '分享成绩') + '</span><button onclick="scShareClose()">关闭</button></div>'
     + '<div class="sc-pane" style="max-height:70vh">'
     +   '<div class="sc-hint">生成一个<b>免登录、只读</b>的链接。<br>'
     +     '<b>谁拿到链接谁就能看，转发出去我控制不了</b> —— 所以默认只给 7 天，随时可以撤销。</div>'
@@ -14298,7 +14303,8 @@ function scShareDialog(){
     +     '<label class="sc-sh-lb">挑同学（点一下选中）</label>'
     +     '<div id="shNames" class="sc-sh-names">'
     +       SC.rows.map(function(r){
-              return '<button type="button" class="sc-sh-n" data-n="' + esc(r.name) + '">' + esc(r.name) + '</button>';
+              var on = (edit && (edit.names || []).indexOf(r.name) >= 0) ? ' on' : '';
+              return '<button type="button" class="sc-sh-n' + on + '" data-n="' + esc(r.name) + '">' + esc(r.name) + '</button>';
             }).join('')
     +     '</div></div>'
     +   '<div style="margin-bottom:12px"><label class="sc-sh-lb">分享哪些内容</label>'
@@ -14314,13 +14320,14 @@ function scShareDialog(){
     +   '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
     +     '<div style="flex:1;min-width:150px"><label class="sc-sh-lb">有效期</label>'
     +       '<select id="shDays" class="sc-sel">'
-    +         '<option value="1">1 天</option><option value="7" selected>7 天</option>'
+    +         (edit ? '<option value="keep" selected>保持当前有效期</option>' : '')
+    +         '<option value="1">1 天</option><option value="7"' + (edit ? '' : ' selected') + '>7 天</option>'
     +         '<option value="30">30 天</option><option value="0">永久</option>'
     +       '</select></div>'
     +     '<div style="flex:1;min-width:150px"><label class="sc-sh-lb">最多被打开（可空）</label>'
-    +       '<input id="shMax" type="number" min="1" class="sc-sel" placeholder="不填＝不限"></div>'
+    +       '<input id="shMax" type="number" min="1" class="sc-sel" placeholder="不填＝不限" value="' + ((edit && edit.maxViews) ? edit.maxViews : '') + '"></div>'
     +   '</div>'
-    +   '<button class="btn" id="shGo" style="width:100%">生成链接</button>'
+    +   '<button class="btn" id="shGo" style="width:100%">' + (edit ? '保存修改' : '生成链接') + '</button>'
     +   '<div id="shOut" style="margin-top:14px"></div>'
     +   '<div id="shList" style="margin-top:18px"></div>'
     + '</div></div></div>';
@@ -14358,11 +14365,17 @@ function scShareDialog(){
     applyDefaults(v);
   };
   document.getElementById('shScope').onchange = pickScope;
-  applyDefaults(document.getElementById('shScope').value);
+  if(edit){
+    setSec(edit.sections ? edit.sections.board !== false : true, edit.sections ? edit.sections.card !== false : true);
+    var tip0 = document.getElementById('shSecTip');
+    if(tip0) tip0.innerHTML = '这是<b>修改已有分享</b>：保存后<b>链接不变</b>，之前发出去的照旧能打开。';
+  } else {
+    applyDefaults(document.getElementById('shScope').value);
+  }
   Array.prototype.forEach.call(document.querySelectorAll('.sc-sh-n'), function(b){
     b.onclick = function(){ b.classList.toggle('on'); };
   });
-  document.getElementById('shGo').onclick = function(){ scShareCreate(); };
+  document.getElementById('shGo').onclick = function(){ scShareCreate(editId); };
   mask.addEventListener('click', function(e){ if(e.target === mask) scShareClose(); });
   scShareList();
 }
@@ -14372,7 +14385,7 @@ function scShareClose(){
   if(m && m.parentNode) m.parentNode.removeChild(m);
 }
 
-function scShareCreate(){
+function scShareCreate(editId){
   var btn = document.getElementById('shGo');
   var ids = [];
   Array.prototype.forEach.call(document.querySelectorAll('.sc-sh-ex'), function(l){
@@ -14386,7 +14399,7 @@ function scShareCreate(){
   var scope = document.getElementById('shScope').value;
   if(scope === 'picked' && !names.length){ alert('至少挑一位同学'); return; }
 
-  /* 分享哪些内容（v2.9.7）：至少留一项，否则对方点开是空白页 */
+  /* 分享哪些内容：至少留一项，否则对方点开是空白页 */
   var sections = { board: false, card: false };
   Array.prototype.forEach.call(document.querySelectorAll('[data-sec]'), function(cb){
     sections[cb.getAttribute('data-sec')] = !!cb.checked;
@@ -14394,43 +14407,53 @@ function scShareCreate(){
   if(!sections.board && !sections.card){ alert('至少要勾一项分享内容，不然对方点开是空的。'); return; }
 
   var maxV = document.getElementById('shMax').value;
-  btn.disabled = true; btn.textContent = '正在生成…';
-  api('/scores?action=share-create', { method: 'POST', body: {
+  var daysVal = document.getElementById('shDays').value;
+  var isEdit = !!editId;
+  var req = {
     scope: scope,
     examIds: ids,
     names: names,
     sections: sections,
-    days: Number(document.getElementById('shDays').value),
+    days: (daysVal === 'keep' ? 'keep' : Number(daysVal)),
     maxViews: maxV ? Number(maxV) : null,
-  } }).then(function(j){
-    btn.disabled = false; btn.textContent = '生成链接';
-    if(!j || !j.ok){ alert('生成失败：' + ((j && j.error) || '未知错误')); return; }
-    /* ⚠️ 别用 location.origin + j.url —— 站点挂在子目录（GitHub Pages 的 /class-site/）下，
-       那样拼出来会丢掉目录前缀，得到 https://xxx.github.io/share.html → 404。
-       这里把后端给的「站点根路径」转成相对当前页面的路径再解析：
-       /share.html?t=x  →  share.html?t=x  →  相对 index.html 所在目录 → .../class-site/share.html?t=x
-       换到任何部署位置（根目录 / 子目录）都对。 */
-    var url = new URL(String(j.url || '').replace(/^\/+/, ''), location.href).href;
-    document.getElementById('shOut').innerHTML =
-        '<div class="sc-hint sc-hint-ok">'
-      + '<b>链接已生成。</b>把它发给要看的人就行 —— 对方不用登录。</div>'
-      + '<div class="sc-sh-url"><input id="shUrl" readonly value="' + esc(url) + '">'
-      + '<button class="btn btn-sm" id="shCopy">复制</button></div>';
-    document.getElementById('shCopy').onclick = function(){
-      var inp = document.getElementById('shUrl');
-      inp.select();
-      try{
-        if(navigator.clipboard && navigator.clipboard.writeText){
-          navigator.clipboard.writeText(inp.value).then(function(){ btn.textContent = '已复制'; setTimeout(function(){ btn.textContent = '生成链接'; }, 1200); });
-        } else { document.execCommand('copy'); }
-      }catch(e){ document.execCommand('copy'); }
-      alert('链接已复制：\n' + inp.value);
-    };
-    scShareList();
-  }).catch(function(e){
-    btn.disabled = false; btn.textContent = '生成链接';
-    alert('生成失败：' + (e.message || e));
-  });
+  };
+  if(isEdit) req.id = editId;
+
+  btn.disabled = true; btn.textContent = isEdit ? '正在保存…' : '正在生成…';
+  api('/scores?action=' + (isEdit ? 'share-update' : 'share-create'), { method: 'POST', body: req })
+    .then(function(j){
+      btn.disabled = false; btn.textContent = isEdit ? '保存修改' : '生成链接';
+      if(!j || !j.ok){ alert((isEdit ? '保存失败：' : '生成失败：') + ((j && j.error) || '未知错误')); return; }
+      if(isEdit){
+        /* 改的是同一条分享，token 不变 —— 不用重新发链接 */
+        document.getElementById('shOut').innerHTML =
+          '<div class="sc-hint sc-hint-ok"><b>已保存修改。</b>链接不变，之前发出去的照旧能打开。</div>';
+        scShareList();
+        return;
+      }
+      /* ⚠️ 别用 location.origin + j.url —— 站点挂在子目录下会丢前缀 → 404。
+         把后端给的「站点根路径」转成相对当前页面再解析，任何部署位置都对。 */
+      var url = new URL(String(j.url || '').replace(/^\/+/, ''), location.href).href;
+      document.getElementById('shOut').innerHTML =
+          '<div class="sc-hint sc-hint-ok">'
+        + '<b>链接已生成。</b>把它发给要看的人就行 —— 对方不用登录。</div>'
+        + '<div class="sc-sh-url"><input id="shUrl" readonly value="' + esc(url) + '">'
+        + '<button class="btn btn-sm" id="shCopy">复制</button></div>';
+      document.getElementById('shCopy').onclick = function(){
+        var inp = document.getElementById('shUrl');
+        inp.select();
+        try{
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(inp.value).then(function(){ btn.textContent = '已复制'; setTimeout(function(){ btn.textContent = '生成链接'; }, 1200); });
+          } else { document.execCommand('copy'); }
+        }catch(e){ document.execCommand('copy'); }
+        alert('链接已复制：\n' + inp.value);
+      };
+      scShareList();
+    }).catch(function(e){
+      btn.disabled = false; btn.textContent = isEdit ? '保存修改' : '生成链接';
+      alert((isEdit ? '保存失败：' : '生成失败：') + (e.message || e));
+    });
 }
 
 function scShareList(){
@@ -14447,9 +14470,18 @@ function scShareList(){
             + '<span class="sc-sh-state' + (x.alive ? ' on' : '') + '">' + state + '</span>'
             + '<b>' + esc(scopeTxt) + '</b>'
             + '<span class="sc-dim">看过 ' + x.views + ' 次' + (x.maxViews ? ' / ' + x.maxViews : '') + '</span>'
+            + (x.alive ? '<button class="btn btn-sm btn-secondary" data-edit="' + x.id + '">编辑</button>' : '')
             + (x.alive ? '<button class="btn btn-sm btn-secondary" data-rev="' + x.id + '">撤销</button>' : '')
             + '</div>';
         }).join('') + '</div>';
+    Array.prototype.forEach.call(box.querySelectorAll('[data-edit]'), function(b){
+      b.onclick = function(){
+        var id = Number(b.getAttribute('data-edit'));
+        var sh = null;
+        for(var i = 0; i < list.length; i++){ if(Number(list[i].id) === id){ sh = list[i]; break; } }
+        if(sh) scShareDialog(sh);
+      };
+    });
     Array.prototype.forEach.call(box.querySelectorAll('[data-rev]'), function(b){
       b.onclick = function(){
         if(!confirm('撤销后这个链接立刻失效，确定吗？')) return;

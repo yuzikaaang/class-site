@@ -3472,9 +3472,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(indexHtml),
+  t('★前台版本号为 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adminHtml),
+  t('★后台版本号为 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3838,9 +3838,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(indexHtml38),
+  t('★前台版本号为 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adminHtml38),
+  t('★后台版本号为 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4855,10 +4855,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx47));
-  t('★后台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adm47));
+  t('★前台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(idx47));
+  t('★后台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(adm47));
   t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
-    /class-site-v85/.test(sw47));
+    /class-site-v86/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4942,7 +4942,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.4');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.5');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5042,9 +5042,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx48));
+  t('★前台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-17'/.test(idx48));
-  t('★service worker 缓存版本升到 v80', /class-site-v85/.test(sw48));
+  t('★service worker 缓存版本升到 v80', /class-site-v86/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5109,8 +5109,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx49));
-  t('★后台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adm49));
+  t('★前台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(idx49));
+  t('★后台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5182,7 +5182,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx50));
+  t('★前台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5353,7 +5353,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/导入完成，有几点要留意/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adm));
+  t('★后台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5421,7 +5421,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx));
+  t('★前台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5626,7 +5626,7 @@ console.log('\n【58】第四十九轮·分享链接 + 每日备份（v2.9.0）'
   /* ===== ③ 分享：前端入口 ===== */
   t('★工具栏有「分享」', /onclick="scShareDialog\(\)"/.test(idx));
   t('★弹窗可设范围 / 考试 / 有效期 / 次数', /id="shScope"/.test(idx) && /id="shDays"/.test(idx) && /id="shMax"/.test(idx));
-  t('★站主可选「全班」与「挑几位同学」', /'<option value="class">全班成绩<\/option>'/.test(idx) && /value="picked"/.test(idx));
+  t('★站主可选「全班」与「挑几位同学」', /<option value="class"' \+ scSel\('class'\) \+ '>全班成绩/.test(idx) && /value="picked"/.test(idx));
   t('★学生默认只能分自己', /var allow = isAdmin \? 'all' : \(cfg\.shareByStudent \|\| 'none'\)/.test(idx));
   t('★能看已建分享并撤销', /function scShareList\(\)/.test(idx) && /不能再转发|撤销后这个链接立刻失效/.test(idx));
   t('★明确提示「谁拿到链接谁就能看」', /谁拿到链接谁就能看/.test(idx));
@@ -5904,9 +5904,10 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /至少要勾一项分享内容/.test(idx));
   t('★分享页按 sections 过滤内容',
     /var wantBoard = sec\.board !== false;/.test(share) && /var wantCard = sec\.card !== false;/.test(share));
-  t('★只勾卡片但这回是多个人 → 退回成绩单，不给空白页',
-    /var useCard = wantCard && rows\.length === 1;/.test(share)
-    && /var useBoard = !useCard && \(wantBoard \|\| rows\.length > 1\);/.test(share));
+  t('★成绩单与个人成绩卡可同时展示（不再二选一，2026-10-17）',
+    /var showBoard = wantBoard \|\| \(!wantBoard && !wantCard\);/.test(share)
+    && /if\(wantCard && ownerRow\)\{/.test(share)
+    && /var ownerRow = null;/.test(share));
 
   /* ===== ⑤ 进退步榜：年级 / 班级 / 班级单科 三口径 ===== */
   t('★有口径状态 SC_TAIL 与切换函数',
@@ -5926,7 +5927,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx));
+  t('★前台版本号升到 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -5994,10 +5995,10 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /var sr = \(sj && sj\.rank != null\) \? sj\.rank : \(rk\.subj\[sub\.key\] \|\| \{\}\)\.rank\[r\.idx\];/.test(share));
   t('★上线人数优先用后端那份（只发 1 个人时本地数不出来）',
     /ST\.cuts\[ci\] != null/.test(share));
-  t('★单人给了成绩卡就不再出统计条与表格（这才是「两个勾看不出区别」的根因）',
-    /var useCard = wantCard && rows\.length === 1;/.test(share)
-    && /var useBoard = !useCard && \(wantBoard \|\| rows\.length > 1\);/.test(share));
-  t('★注释写明了为什么去重', /看着就是同一份东西写两遍/.test(share));
+  t('★卡片与成绩单同时渲染（勾了两个就都出，卡在前、单在后）',
+    /if\(wantCard && ownerRow\)\{/.test(share) && /if\(showBoard\)\{/.test(share)
+    && share.indexOf('html += oneCard(ownerRow') < share.indexOf('if(showBoard){'));
+  t('★注释写明了「卡与单可以同时出」', /可以\*\*同时展示\*\*/.test(share));
 
   /* ===== ③ 分享弹窗：勾哪个跟着「分享范围」走 ===== */
   t('★有智能默认函数', /var applyDefaults = function\(scope\)\{/.test(idx));
@@ -6037,7 +6038,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx));
+  t('★前台版本号升到 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(idx));
   t('★后台内置更新记录补到 2.10.0',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6142,10 +6143,10 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(idx));
-  t('★后台版本号 2.10.4', /SITE_VERSION = '2\.10\.4'/.test(adm));
+  t('★前台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(idx));
+  t('★后台版本号 2.10.5', /SITE_VERSION = '2\.10\.5'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 2.10.4 且缓存升 v83', /SITE_VER = '2\.10\.4'/.test(swSrc) && /class-site-v85/.test(swSrc));
+  t('★sw.js SITE_VER 2.10.5 且缓存升 v86', /SITE_VER = '2\.10\.5'/.test(swSrc) && /class-site-v86/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7525,7 +7526,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
 
   /* ---- ③ 版本与缓存同步 ---- */
   t('★sw.js 缓存升 v82、版本 2.10.1',
-    /class-site-v85/.test(swSrc) && /SITE_VER = '2\.10\.4'/.test(swSrc));
+    /class-site-v86/.test(swSrc) && /SITE_VER = '2\.10\.5'/.test(swSrc));
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
   const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -8079,6 +8080,67 @@ console.log('\n【79】第六十五轮·导入未识别姓名弹窗修正 + 发�
     'exams=' + (listStu3.body.exams || []).map((e) => e.id).join(','));
 
   await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: exB } });
+}
+
+console.log('\n【80】第六十七轮·分享页含历史趋势/年级排名 + 卡与单并存 + 已建分享可改（token 不变）');
+{
+  const shareSrc80 = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
+  const idx80 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const sc80 = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
+
+  t('分享页有历史总分趋势 + 年级排名变化',
+    /function trendCards\(\)\{/.test(shareSrc80) && /历史总分趋势/.test(shareSrc80) && /年级排名变化/.test(shareSrc80));
+  t('分享页画线用 SVG', /function lineCard\(title, arr, opts\)\{/.test(shareSrc80) && /<polyline points=/.test(shareSrc80));
+  t('分享页卡与单可同时出（ownerRow + showBoard）',
+    /var showBoard = wantBoard/.test(shareSrc80) && /if\(wantCard && ownerRow\)\{/.test(shareSrc80));
+  t('后端 shareGet 带 history（含 subjects/s/schoolRank）',
+    /history = hist\.map/.test(sc80) && /schoolRank: r\.school_rank == null/.test(sc80));
+  t('后端有 share-update 动作 + 函数', /case 'share-update'/.test(sc80) && /async function shareUpdate\(/.test(sc80));
+  t('前端分享弹窗支持编辑（editId + share-update + 编辑按钮）',
+    /function scShareDialog\(edit\)\{/.test(idx80) && /share-update/.test(idx80) && /data-edit=/.test(idx80));
+  t('编辑时提示「链接不变」', /链接不变/.test(idx80));
+
+  /* ---- 功能：两次已发布考试（都含管理员本人的行）---- */
+  const mkE80 = async (name, date, rows) => {
+    const mk = await call('/api/scores?action=exam-save', { method: 'POST', token: adminToken,
+      body: { name: name, exam_date: date, subjects: [{ key: 'chinese', name: '语文', full: 150 }] } });
+    const id = mk.body.exam && mk.body.exam.id;
+    await call('/api/scores?action=scores-import', { method: 'POST', token: adminToken, body: { exam: id, rows: rows } });
+    await call('/api/scores?action=exam-publish', { method: 'POST', token: adminToken, body: { id: id, publish: true } });
+    return id;
+  };
+  const e1 = await mkE80('分享历史一', '2026-09-01', [{ name: '余子康', no: '1', s: { chinese: { raw: 100 } }, schoolRank: 30 }]);
+  const e2 = await mkE80('分享历史二', '2026-09-02', [
+    { name: '余子康', no: '1', s: { chinese: { raw: 120 } }, schoolRank: 12 },
+    { name: '路人甲', no: '2', s: { chinese: { raw: 90 } } },
+  ]);
+  t('（准备）两次已发布考试建好', !!e1 && !!e2, JSON.stringify({ e1: e1, e2: e2 }));
+
+  const cs = await call('/api/scores?action=share-create', { method: 'POST', token: adminToken,
+    body: { scope: 'self', examIds: [e2], sections: { board: false, card: true }, days: 7 } });
+  const tok = cs.body.token;
+  const g1 = await call('/api/scores?action=share-get&t=' + tok);
+  t('★个人成绩卡分享带历史（>= 2 条）',
+    g1.status === 200 && Array.isArray(g1.body.history) && g1.body.history.length >= 2,
+    'history=' + (g1.body.history ? g1.body.history.length : 'null'));
+  const h0 = (g1.body.history || [])[0] || {};
+  t('★历史条目含科目/分数/年级排名', Array.isArray(h0.subjects) && !!h0.s && ('schoolRank' in h0));
+
+  const beforeExp = g1.body.share.expiresAt;
+  const up = await call('/api/scores?action=share-update', { method: 'POST', token: adminToken,
+    body: { id: cs.body.id, scope: 'self', sections: { board: true, card: true }, days: 'keep' } });
+  t('改分享成功', up.status === 200 && !!up.body.share, JSON.stringify(up.body).slice(0, 140));
+  t('★改完 token 不变（旧链接照旧能用）', up.body.share.token === tok, up.body.share.token + ' vs ' + tok);
+  t('★改完内容确实变了（card+board 都开）', up.body.share.sections.board === true && up.body.share.sections.card === true);
+  t('★days=keep 时有效期不变', String(up.body.share.expiresAt) === String(beforeExp),
+    up.body.share.expiresAt + ' vs ' + beforeExp);
+  const g2 = await call('/api/scores?action=share-get&t=' + tok);
+  t('★旧链接读到新内容（不用重发）', g2.status === 200
+    && g2.body.share.sections.board === true && g2.body.share.sections.card === true);
+
+  await call('/api/scores?action=share-revoke', { method: 'POST', token: adminToken, body: { id: cs.body.id } });
+  await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: e1 } });
+  await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: e2 } });
 }
 
 console.log('\n' + '='.repeat(52));

@@ -291,6 +291,7 @@ async function handlePost(req, res, action) {
     case 'config-save':    return await configSave(req, res);
     case 'name-bind':      return await nameBind(req, res);
     case 'share-create':   return await shareCreate(req, res);
+    case 'share-update':   return await shareUpdate(req, res);
     case 'share-revoke':   return await shareRevoke(req, res);
     case 'share-list':     return await shareList(req, res);
     case 'backup-run':     return await backupRun(req, res);
@@ -789,6 +790,85 @@ async function shareCreate(req, res) {
   });
 }
 
+/**
+ * 修改已建的分享（换范围 / 内容 / 考试 / 有效期），**token 不变**，
+ * 对方手里的旧链接照旧能打开（2026-10-17 站主要求：不用撤销重建）。
+ * 权限与 shareCreate 同一套：本人或管理员；学生仍受后台「能不能分享」开关约束。
+ */
+async function shareUpdate(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return;
+
+  const b = await body(req);
+  const id = Number(b.id || 0);
+  if (!id) return fail(res, 400, '缺少分享 id');
+
+  const sql = getSql();
+  const rows = await sql`select * from share_links where id = ${id}`;
+  if (!rows.length) return fail(res, 404, '找不到这条分享');
+  const old = rows[0];
+  if (u.role !== 'admin' && Number(old.owner_id) !== Number(u.id)) {
+    return fail(res, 403, '只能修改自己建的分享');
+  }
+
+  const cfg = await loadConfig(sql);
+  const isAdmin = u.role === 'admin';
+
+  let scope = String(b.scope || old.scope || 'self');
+  if (['self', 'picked', 'class'].indexOf(scope) < 0) return fail(res, 400, '分享范围不对');
+  if (!isAdmin) {
+    const allow = cfg.shareByStudent || 'none';
+    if (allow === 'none') return fail(res, 403, '老师还没有开放分享功能');
+    if (allow === 'self' && scope !== 'self') return fail(res, 403, '只能分享自己的成绩');
+  }
+
+  const examIds = (Array.isArray(b.examIds) ? b.examIds : [])
+    .map(Number).filter(Number.isFinite).slice(0, 50);
+
+  let names = [];
+  if (scope === 'picked') {
+    names = (Array.isArray(b.names) ? b.names : [])
+      .map((x) => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 120);
+    if (!names.length) return fail(res, 400, '自选分享至少要选一位同学');
+  }
+
+  const rawSec = (b.sections && typeof b.sections === 'object' && !Array.isArray(b.sections)) ? b.sections : {};
+  const sections = { board: rawSec.board !== false, card: rawSec.card !== false };
+  if (!sections.board && !sections.card) return fail(res, 400, '至少选一项分享内容，不然点开是空白');
+
+  const maxViews = (b.maxViews === null || b.maxViews === undefined || b.maxViews === '')
+    ? null
+    : (Number.isFinite(Number(b.maxViews)) && Number(b.maxViews) > 0
+        ? Math.min(100000, Math.round(Number(b.maxViews))) : null);
+
+  /* 有效期：只有显式传了 days 才改；不传或 'keep' = 保持原有效期（不重新计时）。 */
+  const keepExpiry = (b.days === undefined || b.days === null || b.days === 'keep');
+  let expiresAt = old.expires_at;
+  if (!keepExpiry) {
+    let days = Number(b.days);
+    if (!Number.isFinite(days) || days < 0) days = Number(cfg.shareDays) || 7;
+    if (days > 3650) days = 3650;
+    expiresAt = days > 0 ? new Date(Date.now() + days * 86400000) : null;
+  }
+
+  await sql`
+    update share_links
+       set scope = ${scope},
+           target_names = ${names.length ? JSON.stringify(names) : null}::jsonb,
+           exam_ids = ${examIds.length ? examIds : null},
+           sections = ${JSON.stringify(sections)}::jsonb,
+           max_views = ${maxViews},
+           expires_at = ${keepExpiry ? old.expires_at : expiresAt}
+     where id = ${id}`;
+
+  await audit(u.id, 'score-share-update', 'share_link', id, scope);
+  const back = await sql`
+    select s.*, u.display_name as owner_name
+      from share_links s left join users u on u.id = s.owner_id
+     where s.id = ${id}`;
+  ok(res, { share: shareShape(back[0]) });
+}
+
 async function shareRevoke(req, res) {
   const u = await requireUser(req, res);
   if (!u) return;
@@ -925,11 +1005,43 @@ async function shareGet(req, res) {
     });
   }
 
+  /* 个人成绩卡里要展示「历史总分趋势 / 年级排名变化」——
+     需要分享人（owner）历次成绩，不只是本次分享的几次考试。
+     只在分享内容含「个人成绩卡」时返回（卡关了就不必带，省流量也更克制）。 */
+  let history = null;
+  const secOfShare = jsonCol(s0.sections) || {};
+  if (secOfShare.card !== false) {
+    const own = await sql`select display_name, username from users where id = ${s0.owner_id}`;
+    const ownNames = own.length
+      ? [own[0].display_name, own[0].username].map((x) => String(x || '').trim()).filter(Boolean)
+      : [];
+    const nameArr = ownNames.length ? ownNames : ['__none__'];
+    const hist = await sql`
+      select e.id as exam_id, e.name, e.exam_date, e.exam_end_date, e.subjects, e.cutlines,
+             s.scores, s.school_rank, s.league_rank
+        from exam_scores s
+        join exams e on e.id = s.exam_id
+       where (s.user_id = ${s0.owner_id} or s.student_name = any(${nameArr}::text[]))
+         and e.status = 'published'
+       order by e.exam_date asc, e.id asc`;
+    history = hist.map((r) => ({
+      examId: Number(r.exam_id),
+      name: r.name,
+      date: fmtDate(r.exam_date),
+      endDate: r.exam_end_date ? fmtDate(r.exam_end_date) : null,
+      subjects: jsonCol(r.subjects) || [],
+      cutlines: jsonCol(r.cutlines) || [],
+      s: jsonCol(r.scores) || {},
+      schoolRank: r.school_rank == null ? null : Number(r.school_rank),
+    }));
+  }
+
   ok(res, {
     share: shareShape(s0),
     exams: examList,
     rows: out,
     stats: needStats ? stats : null,
+    history,
   });
 }
 

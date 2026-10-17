@@ -262,12 +262,13 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     var wantBoard = sec.board !== false;
     var wantCard = sec.card !== false;
 
-    /* ⚠️ v2.9.8：单人且给了成绩卡时，就**不再**出「统计条 + 一行表格」。
-       成绩卡里已经有总分、班排名、年级排名、与班均、各科明细、上线情况，
-       再叠一块统计条和一行表格，看着就是同一份东西写两遍 ——
-       站主反馈「两个勾看不出区别」，根因就在这。 */
-    var useCard = wantCard && rows.length === 1;
-    var useBoard = !useCard && (wantBoard || rows.length > 1);
+    /* 2026-10-17：成绩单与个人成绩卡可以**同时展示**（原来二选一）。
+       个人卡 = 分享人自己那一行（isOwner）；只有一行时就是那一行。
+       两项都没勾（异常 / 老数据）时兜底给成绩单，别让页面空白。 */
+    var ownerRow = null;
+    for(var oi = 0; oi < rows.length; oi++){ if(rows[oi].isOwner){ ownerRow = rows[oi]; break; } }
+    if(!ownerRow && rows.length === 1) ownerRow = rows[0];
+    var showBoard = wantBoard || (!wantBoard && !wantCard);
 
     /* 后端按**全班**算好的统计量（只在明细被裁剪时才有）。
        没有它的话，分享自己时班均＝你自己、班排名 1/1、与班均 +0 —— 全是 0。 */
@@ -298,63 +299,136 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       + (EX.note ? '　·　' + EX.note : '');
 
     var html = '';
-    if(useBoard){
+
+    /* ① 个人成绩卡（勾了就出；能确定是谁才出） */
+    if(wantCard && ownerRow){
+      html += oneCard(ownerRow, subs, rk, showAvg, showN, ST);
+      html += trendCards();
+    } else if(wantCard && !ownerRow){
+      html += '<div class="card"><div class="fig" style="margin-top:0">这次分享没有包含你本人，所以没有个人成绩卡。</div></div>';
+    }
+
+    /* ② 全班 / 选中同学的成绩单 */
+    if(showBoard){
       html += '<div class="stats">'
         + '<div class="stat"><b>' + fmtNum(showAvg) + '</b><span>班均分</span></div>'
         + '<div class="stat"><b>' + fmtNum(showMed) + '</b><span>中位数</span></div>'
         + '<div class="stat"><b>' + fmtNum(showMax) + '</b><span>最高</span></div>'
         + '<div class="stat"><b>' + showN + ' 人</b><span>参考</span></div>'
         + '</div>';
+
+      var head = '<tr><th>班排</th><th>姓名</th>'
+        + subs.map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
+        + '<th>总分</th><th>年级排名</th></tr>';
+      var trs = rows.slice().sort(function(a, b){
+        var x = rk.total[a.idx] || 9999, y = rk.total[b.idx] || 9999;
+        return x - y;
+      }).map(function(r){
+        var st = rk.total[r.idx];
+        var t = total(r, subs);
+        return '<tr class="' + (r.isOwner ? 'me' : '') + '">'
+          + '<td>' + (st == null ? '—' : st) + '</td>'
+          + '<td class="name">' + esc(r.name) + '</td>'
+          + subs.map(function(sub){
+              var v = subScore(r, sub);
+              var sr = (rk.subj[sub.key] || {}).rank[r.idx];
+              return '<td>' + (v == null ? '<span style="color:var(--dim)">—</span>' : v)
+                + (v != null && sr ? '<span class="subrank">' + sr + '</span>' : '') + '</td>';
+            }).join('')
+          + '<td class="total">' + (t == null ? '—' : fmtNum(t)) + '</td>'
+          + '<td>' + (r.schoolRank == null ? '<span style="color:var(--dim)">—</span>' : r.schoolRank) + '</td>'
+          + '</tr>';
+      }).join('');
+      html += '<div class="card"><h2>成绩单</h2><div class="tblwrap"><table><thead>' + head + '</thead><tbody>' + trs + '</tbody></table></div>'
+        + '<div class="fig">科目格右下角的小字是<b>该科班内排名</b>。' + (BASIS === 'graded' ? '化学、生物按赋分计入总分。' : '当前按原始分计算。') + '</div></div>';
+
+      var cuts = (EX.cutlines || []).filter(function(c){ return c.score != null; });
+      if(cuts.length){
+        html += '<div class="card"><h2>上线情况（全班）</h2><div class="cuts">'
+          + cuts.map(function(c, ci){
+              var k = (ST && Array.isArray(ST.cuts) && ST.cuts[ci] != null)
+                ? ST.cuts[ci]
+                : tot.filter(function(v){ return v >= c.score; }).length;
+              var base = (ST && ST.n) ? ST.n : n;
+              return '<div class="cut"><i style="background:' + esc(c.color || '#b45309') + '"></i>'
+                + '<b>' + esc(c.label) + '　' + fmtNum(c.score) + ' 分</b>'
+                + '<span>' + k + ' 人（' + (base ? (k / base * 100).toFixed(0) : 0) + '%）</span></div>';
+            }).join('') + '</div></div>';
+      }
     }
 
-    /* 只有一个人 → 直接给一张成绩卡，比表格友好 */
-    if(useCard){
-      html += oneCard(rows[0], subs, rk, showAvg, showN, ST);
-      body.innerHTML = html;
-      return;
-    }
-
-    /* 多人 → 只读成绩单 */
-    var head = '<tr><th>班排</th><th>姓名</th>'
-      + subs.map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
-      + '<th>总分</th><th>年级排名</th></tr>';
-    var trs = rows.slice().sort(function(a, b){
-      var x = rk.total[a.idx] || 9999, y = rk.total[b.idx] || 9999;
-      return x - y;
-    }).map(function(r){
-      var st = rk.total[r.idx];
-      var t = total(r, subs);
-      return '<tr class="' + (r.isOwner ? 'me' : '') + '">'
-        + '<td>' + (st == null ? '—' : st) + '</td>'
-        + '<td class="name">' + esc(r.name) + '</td>'
-        + subs.map(function(sub){
-            var v = subScore(r, sub);
-            var sr = (rk.subj[sub.key] || {}).rank[r.idx];
-            return '<td>' + (v == null ? '<span style="color:var(--dim)">—</span>' : v)
-              + (v != null && sr ? '<span class="subrank">' + sr + '</span>' : '') + '</td>';
-          }).join('')
-        + '<td class="total">' + (t == null ? '—' : fmtNum(t)) + '</td>'
-        + '<td>' + (r.schoolRank == null ? '<span style="color:var(--dim)">—</span>' : r.schoolRank) + '</td>'
-        + '</tr>';
-    }).join('');
-    html += '<div class="card"><h2>成绩单</h2><div class="tblwrap"><table><thead>' + head + '</thead><tbody>' + trs + '</tbody></table></div>'
-      + '<div class="fig">科目格右下角的小字是<b>该科班内排名</b>。' + (BASIS === 'graded' ? '化学、生物按赋分计入总分。' : '当前按原始分计算。') + '</div></div>';
-
-    /* 上线情况 */
-    var cuts = (EX.cutlines || []).filter(function(c){ return c.score != null; });
-    if(cuts.length){
-      html += '<div class="card"><h2>上线情况</h2><div class="cuts">'
-        + cuts.map(function(c, ci){
-            var k = (ST && Array.isArray(ST.cuts) && ST.cuts[ci] != null)
-              ? ST.cuts[ci]
-              : tot.filter(function(v){ return v >= c.score; }).length;
-            var base = (ST && ST.n) ? ST.n : n;
-            return '<div class="cut"><i style="background:' + esc(c.color || '#b45309') + '"></i>'
-              + '<b>' + esc(c.label) + '　' + fmtNum(c.score) + ' 分</b>'
-              + '<span>' + k + ' 人（' + (base ? (k / base * 100).toFixed(0) : 0) + '%）</span></div>';
-          }).join('') + '</div></div>';
+    if(!html){
+      html = '<div class="card"><div class="empty" style="padding:30px 10px"><p>这次分享没有可显示的内容。</p></div></div>';
     }
     body.innerHTML = html;
+  }
+
+  /* 某一行某一科的分（跟随当前口径）—— 历史趋势用 */
+  function basisVal(s, sub){
+    if(!s) return null;
+    var v = s[sub.key];
+    if(!v) return null;
+    var x = (BASIS === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+    return x == null ? null : Number(x);
+  }
+
+  /* 历史总分趋势 + 年级排名变化（用分享人历次成绩 DATA.history） */
+  function trendCards(){
+    var h = (DATA.history || []).slice().sort(function(a, b){
+      return String(a.date || '').localeCompare(String(b.date || '')) || (a.examId - b.examId);
+    });
+    if(h.length < 2) return '';
+    var totalPts = [], rankPts = [];
+    h.forEach(function(it){
+      var subs = it.subjects || [];
+      var t = 0, any = false;
+      subs.forEach(function(sub){ var v = basisVal(it.s, sub); if(v != null){ t += v; any = true; } });
+      if(any) totalPts.push({ label: it.date || '', v: t });
+      if(it.schoolRank != null) rankPts.push({ label: it.date || '', v: Number(it.schoolRank) });
+    });
+    var html = '';
+    if(totalPts.length >= 2){
+      html += lineCard('历史总分趋势（' + (BASIS === 'graded' ? '赋分' : '原始') + '）', totalPts,
+        { invert: false, desc: '按历次总分（' + (BASIS === 'graded' ? '赋分' : '原始') + '口径）连线，每个点标分数。' });
+    }
+    if(rankPts.length >= 2){
+      html += lineCard('年级排名变化', rankPts,
+        { invert: true, desc: '越靠上名次越前（数字越小越好）；只画有年级排名的考试。' });
+    }
+    return html;
+  }
+
+  function lineCard(title, arr, opts){
+    opts = opts || {};
+    var W = 720, H = 176, L = 46, R = 18, T = 26, B = 34;
+    var vs = arr.map(function(p){ return p.v; });
+    var vmin = Math.min.apply(null, vs), vmax = Math.max.apply(null, vs);
+    var span = (vmax - vmin) || 1;
+    var n = arr.length;
+    var xOf = function(i){ return L + (W - L - R) * (n <= 1 ? 0.5 : i / (n - 1)); };
+    var yOf = function(v){
+      var norm = (v - vmin) / span;
+      if(opts.invert) norm = 1 - norm;
+      return T + (H - T - B) * (1 - norm);
+    };
+    var pts = arr.map(function(p, i){ return { x: xOf(i), y: yOf(p.v), v: p.v, label: p.label }; });
+    var poly = pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
+    var dots = pts.map(function(p){
+      return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3.4" fill="#c2410c"/>'
+        + '<text x="' + p.x.toFixed(1) + '" y="' + (p.y - 8).toFixed(1) + '" font-size="10.5" font-weight="800" fill="#b45309" text-anchor="middle">' + fmtNum(p.v) + '</text>';
+    }).join('');
+    var xlbl = pts.map(function(p){
+      var d = String(p.label || '');
+      d = d.length >= 10 ? d.slice(5) : d;
+      return '<text x="' + p.x.toFixed(1) + '" y="' + (H - B + 16) + '" font-size="9.5" fill="#a8968a" text-anchor="middle">' + esc(d) + '</text>';
+    }).join('');
+    return '<div class="card"><h2>' + esc(title) + '</h2>'
+      + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block">'
+      + '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" stroke="#e2d5c8" stroke-width="1"/>'
+      + '<polyline points="' + poly + '" fill="none" stroke="#c2410c" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+      + dots + xlbl
+      + '</svg>'
+      + '<div class="fig">' + esc(opts.desc || '') + '</div></div>';
   }
 
   function oneCard(r, subs, rk, avg, n, ST){
