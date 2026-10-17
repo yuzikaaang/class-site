@@ -2924,6 +2924,14 @@ async function listActionLogs(req, res) {
      吃掉（永远等于 'action-logs'，筛任何类型都返回空）。 */
   const act = String(req.query.type || '').trim();
   const day = String(req.query.day || '').trim();   /* YYYY-MM-DD（上海时区） */
+  /* 🔴 v3.5.4 真根因：`(${day} = '' or ... = ${day}::date)` 里的空串强转
+     会把整个查询炸掉 —— Postgres **不保证 OR 短路**，右侧的 ${day}::date
+     即使左边为真也可能被求值，'' 转 date 直接
+     invalid input syntax for type date: ""（线上实测报错原文）。
+     而错误又被下面 catch 吞成「无数据」，于是「统计有 2361 条、明细永远 0」。
+     修法：空日期传 null。null::date 永远合法；且 NULL or TRUE 恒为 TRUE，
+     右侧先求值也只会得到 NULL，不会抛错，不求短路也不会炸。 */
+  const dayOrNull = day || null;
 
   let rows = [], total = 0;
   try {
@@ -2938,7 +2946,7 @@ async function listActionLogs(req, res) {
                            or lower(l.target) like '%' || ${q} || '%'
                            or lower(l.action) like '%' || ${q} || '%')
          and (${act} = '' or l.action = ${act})
-         and (${day} = '' or (l.created_at at time zone 'Asia/Shanghai')::date = ${day}::date)
+         and (${dayOrNull}::date is null or (l.created_at at time zone 'Asia/Shanghai')::date = ${dayOrNull}::date)
        order by l.created_at desc
        limit ${size} offset ${offset}
     `;
@@ -2952,7 +2960,7 @@ async function listActionLogs(req, res) {
                            or lower(l.target) like '%' || ${q} || '%'
                            or lower(l.action) like '%' || ${q} || '%')
          and (${act} = '' or l.action = ${act})
-         and (${day} = '' or (l.created_at at time zone 'Asia/Shanghai')::date = ${day}::date)
+         and (${dayOrNull}::date is null or (l.created_at at time zone 'Asia/Shanghai')::date = ${dayOrNull}::date)
     `)[0].n;
   } catch (e) {
     /* 🔴 v3.5.4 止血：原来这里把**一切**错误都吞成「无数据」返回，

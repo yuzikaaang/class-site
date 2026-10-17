@@ -6732,6 +6732,22 @@ console.log('\n【65】第六十轮·注册审核 + 站点设置 + 用户操作�
   t('★action-stats 的 catch 同样只放行 42P01',
     /if \(e && e\.code === '42P01'\) return ok\(res, zero\);/.test(admjs80)
     && /console\.error\('\[admin\/action-stats\] 查询失败：', e\)/.test(admjs80));
+  /* 🔴 v3.5.4 真根因护栏：Postgres 不保证 OR 短路，`${day}::date` 在
+     day='' 时也会被求值 → invalid input syntax for type date: ""。
+     护栏：日期守卫必须走「null 安全」写法，且全仓不许再出现
+     `${xxx}::date` 这种「可能为空的参数直接强转」。 */
+  t('★日期筛选用 null 安全守卫（dayOrNull::date is null，不再拿空串强转 date）',
+    (admjs80.match(/and \(\$\{dayOrNull\}::date is null or \(l\.created_at at time zone 'Asia\/Shanghai'\)::date = \$\{dayOrNull\}::date\)/g) || []).length === 2);
+  const castOnParam = [];
+  const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  for (const f of ['api/admin.js', 'api/data.js', 'api/profile.js', 'api/auth.js', 'api/scores.js', 'api/content.js', 'api/games.js']) {
+    const src = stripComments(fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8'));
+    (src.match(/\$\{[a-zA-Z_][a-zA-Z0-9_]*\}::(date|int|integer|numeric|bigint)(?!\s*\[)/g) || [])
+      .filter((m) => !/\$\{dayOrNull\}::/.test(m))   /* null 安全形态放行 */
+      .forEach((m) => castOnParam.push(f + ' → ' + m));
+  }
+  t('★全仓没有「可能为空的参数直接 ::date/::int 强转」（v3.5.4 同类坑护栏）',
+    castOnParam.length === 0, castOnParam.join('；'));
 
   /* ---- ⑦ 信息查询字段去重（v2.10.0 根因修复回归）---- */
   /* 造一条带全部联系方式的资料（管理员直录 = 已核实） */
