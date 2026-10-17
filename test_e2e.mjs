@@ -9913,7 +9913,9 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
 
   t('#3 概览格子最小宽度 0（可收缩）', /\.sc-ov-item\{[^}]*min-width:0/.test(idx));
   t('#3 长标签省略号兜底', /\.sc-ov-item span\{[^}]*text-overflow:ellipsis/.test(idx));
-  t('#3 窄屏 430 以下单列', /@media \(max-width:430px\)\{[\s\S]{0,120}\.sc-ov-items\{grid-template-columns:1fr\}/.test(idx));
+  t('#3 窄屏 430 以下单列（且必须排在 560 块之后，否则被覆盖）',
+    /@media \(max-width:430px\)\{[\s\S]{0,160}\.sc-ov-items\{grid-template-columns:1fr\}/.test(idx)
+    && idx.indexOf('@media (max-width:430px){\n  /* v3.5.14 #3') > idx.indexOf('@media (max-width:560px){\n  .sc-tblwrap{max-height:56vh}'));
   t('#3 年级排名用副标签「物理方向」', /scOvItem\('年级排名'/.test(idx) && /'物理方向'\)/.test(idx));
 
   t('#4 迷你折线标考试日期', /sc-mini-x/.test(idx) && /x\.date \? scPointDateLabel/.test(idx));

@@ -2515,17 +2515,18 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   .sc-embed .print-hide{display:none !important}
 }
 
-@media (max-width:430px){
-  /* v3.5.14 #3：390 宽的屏两列放不下「年级排名 + 数值」，直接单列 */
-  .sc-ov-items{grid-template-columns:1fr}
-  .sc-ov-item{font-size:.8rem}
-}
 @media (max-width:560px){
   .sc-tblwrap{max-height:56vh}
   .sc-stats{grid-template-columns:repeat(2,1fr)}
   .sc-ov-items{grid-template-columns:repeat(2,minmax(0,1fr))}
   .sc-pane{padding:12px 12px 22px}
   .sc-bar,.sc-tabs{padding-left:12px;padding-right:12px}
+}
+@media (max-width:430px){
+  /* v3.5.14 #3：390 宽的屏两列放不下「年级排名 + 数值」，直接单列。
+     ⚠️ 必须放在 560 块**之后** —— 同权重规则后写者胜，放前面会被后者覆盖（实测踩到）。 */
+  .sc-ov-items{grid-template-columns:1fr}
+  .sc-ov-item{font-size:.8rem}
 }
 </style>
 </head>
