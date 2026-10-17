@@ -1486,12 +1486,30 @@ function cleanScores(raw, subKeys) {
       const r = numOrNull(v.raw);
       const a = numOrNull(v.assigned);
       if (r == null && a == null) continue;
-      out[k] = a == null ? { raw: r } : { raw: r, assigned: a };
+      const o = a == null ? { raw: r } : { raw: r, assigned: a };
+      /* v2.10.1（#182 站主要求）：每个分数都要对应一个年级排名 ——
+         rank = 原始分/分数的年级排名；asgRank = 赋分那份的年级排名。
+         空值不写（= 不知），绝不补 0。 */
+      const rk = toIntOrNull(v.rank);
+      const ak = toIntOrNull(v.asgRank);
+      if (rk != null) o.rank = rk;
+      if (ak != null && a != null) o.asgRank = ak;
+      out[k] = o;
     } else {
       const n = numOrNull(v);
       if (n == null) continue;
       out[k] = { raw: n };
     }
+  }
+  /* 预留键 _t：总分（赋分前）的年级 / 联考排名。
+     为什么不新开两列：它天然属于「这一行成绩」，放进 scores 里就跟着
+     导入 / 改分 / 备份 / 还原一起走，不用在四个读写点各改一遍。
+     赋分后总分的两个排名仍是 school_rank / league_rank 两列（保持向后兼容）。 */
+  const t = src._t;
+  if (t && typeof t === 'object') {
+    const tr = toIntOrNull(t.rank);
+    const tl = toIntOrNull(t.league);
+    if (tr != null || tl != null) out._t = { rank: tr, league: tl };
   }
   return out;
 }

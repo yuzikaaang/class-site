@@ -896,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.10.1';
+var SITE_VERSION = '2.10.2';
 var VER_DATE = '2026-10-16';
 
 /* ---- 运行时状态 ---- */
@@ -8464,6 +8464,21 @@ function relSeed(){
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
     {
+      "version": "2.10.2",
+      "date": "2026-10-17",
+      "title": "行为日志补全 + 成绩模版支持两种总分口径与各科排名",
+      "type": "improve",
+      "highlight": true,
+      "items": [
+        "点外链（点歌平台、作业查看等）以前后台看不到记录：一是只记了「点了按钮」看不出去了哪里，二是紧接着页面就跳走了、攒批的那条日志被浏览器取消。现在跳转单独记一条「入口名 + 目标网址」，并且改用离开页面也能送达的发送方式；万一没送出去也会存在本机，下次打开站点自动补发",
+        "成绩导入模版改版：总分拆成「赋分前」和「赋分后」两组，每组都带年级排名与联考排名",
+        "每个分数都配一个年级排名：语文/数学/英语/物理是「分数 + 年级排名」，化学/生物是「原始分 + 原始分年级排名 + 赋分 + 赋分年级排名」，两个排名不会填串",
+        "班排仍然不用填：导入时按各科分数当场算；总分也不用填，系统按各科算得出来（赋分后总分＝各科赋分口径累加，赋分前总分＝各科一律取原始分）",
+        "后台改分表同步支持这些列：各科年级排名、两种总分的年级/联考排名都能直接改，改完自动保存",
+        "各科联考排名不导入（系统只存总分的联考排名）；分数线列仍只作参考"
+      ]
+    },
+    {
       "version": "2.10.1",
       "date": "2026-10-16",
       "title": "登录修复：后端单次请求超限",
@@ -10202,21 +10217,27 @@ function scTemplateXlsx(e){
     var merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
     var c = 2;
 
-    /* 总分组：总分 + 年级排名 + 联考排名（总分本身不用填，系统按各科算） */
-    r0.push('总分'); r1.push('总分');
-    r0.push('');     r1.push('年级排名');
-    r0.push('');     r1.push('联考排名');
-    merges.push({ s: { r: 0, c: c }, e: { r: 0, c: c + 2 } });
-    c += 3;
+    /* 总分组：赋分前 / 赋分后两组，每组各带年级排名 + 联考排名。
+       （2026-10-17 站主要求：总分分赋分前与赋分后，两种都要有年级/联考排名；
+         班级排名由系统按分数当场算，模版里不填。）
+       总分本身也不用填 —— 系统按各科分数算得出来。 */
+    var group = function(name, cols){
+      r0.push(name);
+      for(var gi = 1; gi < cols.length; gi++) r0.push('');
+      cols.forEach(function(x){ r1.push(x); });
+      merges.push({ s: { r: 0, c: c }, e: { r: 0, c: c + cols.length - 1 } });
+      c += cols.length;
+    };
+    group('总分（赋分前）', ['年级排名', '联考排名']);
+    group('总分（赋分后）', ['年级排名', '联考排名']);
 
-    /* 各科：赋分科目四列（原始分 / 年级排名 / 赋分 / 年级排名），其余两列 */
+    /* 各科：每个分数都要对应一个年级排名。
+       赋分科目（化学 / 生物）四列：原始分 + 原始分年级排名 + 赋分 + 赋分年级排名；
+       其余两列：分数 + 年级排名。 */
     subs.forEach(function(s){
-      var graded = !!s.graded;
-      r0.push(s.name); r1.push(graded ? '原始分' : '分数');
-      r0.push('');     r1.push('年级排名');
-      if(graded){ r0.push(''); r1.push('赋分'); r0.push(''); r1.push('年级排名'); }
-      merges.push({ s: { r: 0, c: c }, e: { r: 0, c: c + (graded ? 4 : 2) - 1 } });
-      c += graded ? 4 : 2;
+      group(s.name, s.graded
+        ? ['原始分', '年级排名', '赋分', '年级排名']
+        : ['分数', '年级排名']);
     });
 
     /* 分数线参考列：只作填写时的参照，系统不读（要设分数线请到考试设置里填） */
@@ -10398,6 +10419,9 @@ function scParseTwoRow(aoa, subs){
   });
 
   var nameCol = -1, noCol = -1, srCol = -1, lrCol = -1;
+  /* 总分两种口径（2026-10-17 站主要求）：赋分后 = school_rank / league_rank 两列（老口径，保持兼容）；
+     赋分前 = 存进 scores 的 _t（跟着行数据走）。 */
+  var totalRaw = { rank: -1, league: -1 };
   var subjCols = {};
   var cutlines = [];   /* 分数线参考列：只识别回报，不写库 */
   var ignored  = [];   /* 识别到但不导入的列：预览里如实说明 */
@@ -10424,21 +10448,39 @@ function scParseTwoRow(aoa, subs){
       if(cat === n || (cat && (cat.indexOf(n) >= 0 || n.indexOf(cat) >= 0))) su = s;
     });
     if(su){
-      var g = subjCols[su.key] || (subjCols[su.key] = { raw: -1, assigned: -1 });
+      var g = subjCols[su.key] || (subjCols[su.key] = { raw: -1, assigned: -1, rank: -1, asgRank: -1 });
       var k = scSubKind(sub, su.name);
-      if(k === 'assigned'){ if(g.assigned < 0) g.assigned = i; else ignored.push({ label: label, why: '赋分列重复，只取第一列' }); }
-      else if(k === 'score'){ if(g.raw < 0) g.raw = i; else ignored.push({ label: label, why: '分数列重复，只取第一列' }); }
-      else ignored.push({ label: label, why: '系统只存各科分数与总分排名，各科排名不导入' });
+      /* 排名列归属靠**子字段顺序**判定：紧跟在「原始分/分数」后面的那个年级排名 = 该分数的排名；
+         紧跟在「赋分」后面的 = 赋分的排名。所以每组里两个「年级排名」不会串。 */
+      if(k === 'assigned'){ if(g.assigned < 0){ g.assigned = i; g.__last = 'assigned'; } else ignored.push({ label: label, why: '赋分列重复，只取第一列' }); }
+      else if(k === 'score'){ if(g.raw < 0){ g.raw = i; g.__last = 'raw'; } else ignored.push({ label: label, why: '分数列重复，只取第一列' }); }
+      else if(k === 'subRank' || k === 'subLeague'){
+        var slot = (g.__last === 'assigned') ? 'asgRank' : 'rank';
+        if(k === 'subLeague') slot = slot + 'League';   /* 各科联考排名（暂不存，如实登记） */
+        if(slot === 'rank' || slot === 'asgRank'){
+          if(g[slot] < 0) g[slot] = i;
+          else ignored.push({ label: label, why: '该科排名重复，只取第一列' });
+        }else{
+          ignored.push({ label: label, why: '各科联考排名暂不存储（只存总分的联考排名）' });
+        }
+      }
+      else ignored.push({ label: label, why: '未识别，已跳过' });
       continue;
     }
 
-    /* ④ 总分组：总分本身不存（系统按各科实时算），只取总分的年级 / 联考排名 */
-    if(/联考排名|联考名次|市排名/.test(sub)){
-      if(lrCol < 0) lrCol = i; else ignored.push({ label: label, why: '联考排名重复，只取第一列' });
-      continue;
-    }
-    if(/年级排名|年级名次|校排名|校名次/.test(sub)){
-      if(srCol < 0) srCol = i; else ignored.push({ label: label, why: '年级排名重复，只取第一列' });
+    /* ④ 总分组：总分本身不存（系统按各科实时算），只取总分的年级 / 联考排名。
+       看不出赋分前/后时，按「赋分后」处理 —— 与老模版（只有一组总分排名）保持一致。 */
+    if(/总分|总成绩/.test(cat) && /排名|名次/.test(sub)){
+      var isRaw = /赋分前|原始|不加赋分|裸分/.test(cat);
+      var slot2 = isRaw ? totalRaw : null;
+      var isLeague = /联考排名|联考名次|市排名/.test(sub);
+      if(isLeague){
+        if(isRaw){ if(totalRaw.league < 0) totalRaw.league = i; else ignored.push({ label: label, why: '赋分前联考排名重复，只取第一列' }); }
+        else { if(lrCol < 0) lrCol = i; else ignored.push({ label: label, why: '联考排名重复，只取第一列' }); }
+      }else{
+        if(isRaw){ if(totalRaw.rank < 0) totalRaw.rank = i; else ignored.push({ label: label, why: '赋分前年级排名重复，只取第一列' }); }
+        else { if(srCol < 0) srCol = i; else ignored.push({ label: label, why: '年级排名重复，只取第一列' }); }
+      }
       continue;
     }
     if(/总分|总成绩/.test(sub)) continue;
@@ -10446,7 +10488,7 @@ function scParseTwoRow(aoa, subs){
     ignored.push({ label: label, why: '未识别，已跳过' });
   }
 
-  var map = { name: nameCol, no: noCol, schoolRank: srCol, leagueRank: lrCol, subj: subjCols };
+  var map = { name: nameCol, no: noCol, schoolRank: srCol, leagueRank: lrCol, subj: subjCols, totalRaw: totalRaw };
   var header = subRow.map(function(x, i){ return x ? x : (catRow[i] || ''); });
   return {
     header: header,
@@ -10468,6 +10510,17 @@ function scRowTotal(r, subs){
     var n = (v.assigned != null) ? v.assigned : v.raw;
     if(n == null) return;
     t += n; any = true;
+  });
+  return any ? t : null;
+}
+
+/** 单行的「赋分前总分」：各科一律取原始分（估分/裸分口径）。 */
+function scRowTotalRaw(r, subs){
+  var t = 0, any = false;
+  (subs || []).forEach(function(s){
+    var v = r.s ? r.s[s.key] : null;
+    if(!v || v.raw == null) return;
+    t += v.raw; any = true;
   });
   return any ? t : null;
 }
@@ -10524,12 +10577,23 @@ function scMapRows(header, body, subs, map){
     if(!name) return;
     var s = {};
     (subs || []).forEach(function(su){
-      var m = map.subj[su.key] || { raw:-1, assigned:-1 };
+      var m = map.subj[su.key] || { raw:-1, assigned:-1, rank:-1, asgRank:-1 };
       var raw = m.raw >= 0 ? num(r[m.raw]) : null;
       var asg = m.assigned >= 0 ? num(r[m.assigned]) : null;
       if(raw == null && asg == null) return;
-      s[su.key] = (su.graded && asg != null) ? { raw: raw, assigned: asg } : { raw: raw == null ? asg : raw };
+      var o = (su.graded && asg != null) ? { raw: raw, assigned: asg } : { raw: raw == null ? asg : raw };
+      /* 每个分数配一个年级排名（站主要求）。空 = 不知，不写。 */
+      var rk = (m.rank != null && m.rank >= 0) ? num(r[m.rank]) : null;
+      var ak = (m.asgRank != null && m.asgRank >= 0) ? num(r[m.asgRank]) : null;
+      if(rk != null) o.rank = rk;
+      if(ak != null && o.assigned != null) o.asgRank = ak;
+      s[su.key] = o;
     });
+    /* 总分（赋分前）的两个排名：存进 _t，跟着这行数据走 */
+    var tr = map.totalRaw || {};
+    var tRank = (tr.rank >= 0) ? num(r[tr.rank]) : null;
+    var tLeague = (tr.league >= 0) ? num(r[tr.league]) : null;
+    if(tRank != null || tLeague != null) s._t = { rank: tRank, league: tLeague };
     out.push({
       name: name,
       no: map.no >= 0 ? String(r[map.no] == null ? '' : r[map.no]).trim() : '',
@@ -10580,34 +10644,49 @@ function scPaintPreview(box, parsed, subs, btn){
   host.innerHTML =
       '<div class="alert ok" style="margin-top:8px"><b>解析到 ' + parsed.rows.length + ' 行。</b>'
     +   (parsed.twoRow ? '（<b>两行表头模版</b>，按列位置解析）' : '')
-    +   '列对应关系：姓名→' + hit(m.name) + '　学号→' + hit(m.no)
-    +   '　年级排名→' + hit(m.schoolRank) + '　联考排名→' + hit(m.leagueRank) + '<br>'
+    +   '列对应关系：姓名→' + hit(m.name) + '　学号→' + hit(m.no) + '<br>'
+    +   '总分（赋分后）年级排名→' + hit(m.schoolRank) + '　联考→' + hit(m.leagueRank)
+    +   '　总分（赋分前）年级排名→' + hit((m.totalRaw || {}).rank) + '　联考→' + hit((m.totalRaw || {}).league) + '<br>'
     +   (subs || []).map(function(s){
           var mm = (m.subj || {})[s.key] || {};
-          return esc(s.name) + '→' + hit(mm.raw) + (mm.assigned >= 0 ? '（赋分 ' + hit(mm.assigned) + '）' : '');
+          return esc(s.name) + '→' + hit(mm.raw) + '（排名 ' + hit(mm.rank) + '）'
+            + (mm.assigned >= 0 ? '（赋分 ' + hit(mm.assigned) + '，排名 ' + hit(mm.asgRank) + '）' : '');
         }).join('　')
-    +   '<br><span class="muted" style="font-size:.78rem">空单元格 / - / / / 缺考 都会记成「不知」，不计入统计。</span>'
+    +   '<br><span class="muted" style="font-size:.78rem">空单元格 / - / / / 缺考 都会记成「不知」，不计入统计；排名列空着就是「不知」，不会补 0。</span>'
     + '</div>'
     + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table style="font-size:.8rem">'
-    +   '<thead><tr><th>班排</th><th>姓名</th>' + (subs || []).map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
-    +   '<th>总分</th><th>年级排名</th><th>联考</th></tr></thead><tbody>'
+    +   '<thead><tr><th>班排</th><th>姓名</th>'
+    +   (subs || []).map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
+    +   '<th>总分</th><th>年级排名</th><th>联考</th><th>赋分前总分</th><th>其年级</th><th>其联考</th></tr></thead><tbody>'
     +   parsed.rows.slice(0, 30).map(function(r, i){
           var tt = totalOf(r);
+          var tRaw = scRowTotalRaw(r, subs);
+          var t = r.s._t || {};
+          var cell = function(v){
+            if(!v) return '<td class="muted">—</td>';
+            var line1 = (v.raw == null ? '—' : v.raw)
+              + (v.assigned != null ? ' <span class="muted">/' + v.assigned + '</span>' : '');
+            var rk = [];
+            if(v.rank != null) rk.push('排名 ' + v.rank);
+            if(v.asgRank != null) rk.push('赋分排名 ' + v.asgRank);
+            return '<td>' + line1
+              + (rk.length ? '<div class="muted" style="font-size:.7rem;white-space:nowrap">' + rk.join(' · ') + '</div>' : '')
+              + '</td>';
+          };
           return '<tr><td class="muted">' + (ranks[i] || '—') + '</td>'
             + '<td style="font-weight:700">' + esc(r.name) + '</td>'
-            + (subs || []).map(function(s){
-                var v = r.s[s.key];
-                if(!v) return '<td class="muted">—</td>';
-                return '<td>' + (v.raw == null ? '—' : v.raw)
-                  + (v.assigned != null ? ' <span class="muted">/' + v.assigned + '</span>' : '') + '</td>';
-              }).join('')
+            + (subs || []).map(function(s){ return cell(r.s[s.key]); }).join('')
             + '<td>' + (tt == null ? '—' : tt) + '</td>'
             + '<td>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</td>'
-            + '<td>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</td></tr>';
+            + '<td>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</td>'
+            + '<td>' + (tRaw == null ? '—' : tRaw) + '</td>'
+            + '<td>' + (t.rank == null ? '—' : t.rank) + '</td>'
+            + '<td>' + (t.league == null ? '—' : t.league) + '</td></tr>';
         }).join('')
     + '</tbody></table></div>'
     + '<p class="muted" style="font-size:.78rem;margin-top:6px">'
-    +   '班排与总分是<b>当场按各科分数算的</b>（模版里没有这两列，也不需要填）；'
+    +   '班排与总分是<b>当场按各科分数算的</b>（模版里没有这几列，也不需要填）：'
+    +   '总分 = 各科按赋分口径累加；赋分前总分 = 各科一律取原始分。'
     +   (parsed.rows.length > 30 ? '只预览前 30 行，导入时会处理全部。' : '')
     + '</p>'
     + notes;
@@ -10662,6 +10741,49 @@ function loadScoreRows(examId){
   });
 }
 
+/* ---------------- 改分表的表格标记（表头 / 各科格 / 总分格） ----------------
+   抽出来的原因：表头与单元格原来在「渲染」「加一行」「空表骨架」三处各写一遍，
+   2026-10-17 加各科排名与总分赋分前/后两组排名时，三处必须同步改，否则
+   加出来的行会缺列、一改分就把新字段冲掉。现在只有这一份。 */
+function scInpTd(rid, sub, f, val, w, small){
+  return '<input class="inp" style="width:' + w + 'px;padding:' + (small ? '3px 5px;font-size:.74rem' : '5px 6px') + '" type="number"'
+    + ' data-row="' + rid + '"' + (sub ? ' data-sub="' + sub + '"' : '') + ' data-f="' + f + '"'
+    + ' value="' + (val == null ? '' : val) + '">';
+}
+function scGridHeadHtml(subs){
+  return '<tr><th style="min-width:88px">姓名</th><th style="min-width:76px">学号</th>'
+    + subs.map(function(s){
+        return '<th style="min-width:104px">' + esc(s.name)
+          + '<br><span class="muted" style="font-weight:400;font-size:.7rem">'
+          + (s.graded ? '原始·排名 / 赋分·排名' : '分数 · 年级排名') + '</span></th>';
+      }).join('')
+    + '<th style="min-width:112px">总分（赋分前）<br><span class="muted" style="font-weight:400;font-size:.7rem">年级 · 联考</span></th>'
+    + '<th style="min-width:112px">总分（赋分后）<br><span class="muted" style="font-weight:400;font-size:.7rem">年级 · 联考</span></th>'
+    + '<th style="min-width:52px">操作</th></tr>';
+}
+/** 一个科目格：分数（赋分科目再加赋分）+ 各自对应的年级排名。空 = 不知。 */
+function scSubCellHtml(rid, su, v){
+  v = v || {};
+  if(su.graded){
+    return '<td style="white-space:nowrap">'
+      + scInpTd(rid, su.key, 'raw', v.raw, 52) + '<span class="muted" style="margin:0 2px">/</span>' + scInpTd(rid, su.key, 'assigned', v.assigned, 52)
+      + '<div style="margin-top:3px">' + scInpTd(rid, su.key, 'rank', v.rank, 50, 1)
+      + '<span class="muted" style="margin:0 2px">/</span>' + scInpTd(rid, su.key, 'asgRank', v.asgRank, 50, 1) + '</div>'
+      + '</td>';
+  }
+  return '<td style="white-space:nowrap">' + scInpTd(rid, su.key, 'raw', v.raw, 64)
+    + '<div style="margin-top:3px">' + scInpTd(rid, su.key, 'rank', v.rank, 58, 1) + '</div>'
+    + '</td>';
+}
+/** 总分布：左=赋分前（存 s._t），右=赋分后（仍是 school_rank / league_rank 两列）。 */
+function scTotalCellsHtml(rid, r){
+  var t = (r.s && r.s._t) || {};
+  return '<td style="white-space:nowrap">' + scInpTd(rid, null, 'tRankRaw', t.rank, 50)
+      + '<span class="muted" style="margin:0 2px">·</span>' + scInpTd(rid, null, 'tLeagueRaw', t.league, 50) + '</td>'
+    + '<td style="white-space:nowrap">' + scInpTd(rid, null, 'schoolRank', r.schoolRank, 50)
+      + '<span class="muted" style="margin:0 2px">·</span>' + scInpTd(rid, null, 'leagueRank', r.leagueRank, 50) + '</td>';
+}
+
 function scPaintRows(){
   var ex = SC_STATE.curExam || {};
   var subs = ex.subjects || [];
@@ -10673,31 +10795,14 @@ function scPaintRows(){
     return;
   }
 
-  var head = '<tr><th style="min-width:88px">姓名</th><th style="min-width:76px">学号</th>'
-    + subs.map(function(s){
-        return '<th style="min-width:70px">' + esc(s.name) + (s.graded ? '<br><span class="muted" style="font-weight:400">原始/赋分</span>' : '') + '</th>';
-      }).join('')
-    + '<th style="min-width:70px">年级排名</th><th style="min-width:70px">联考</th><th style="min-width:52px">操作</th></tr>';
+  var head = scGridHeadHtml(subs);
 
   var body = rows.map(function(r, idx){
-    var cells = subs.map(function(s){
-      var v = r.s[s.key] || {};
-      if(s.graded){
-        return '<td style="white-space:nowrap">'
-          + '<input class="inp" style="width:52px;padding:5px 6px" type="number" data-row="' + r.id + '" data-sub="' + s.key + '" data-f="raw" value="' + (v.raw == null ? '' : v.raw) + '">'
-          + '<span class="muted" style="margin:0 2px">/</span>'
-          + '<input class="inp" style="width:52px;padding:5px 6px" type="number" data-row="' + r.id + '" data-sub="' + s.key + '" data-f="assigned" value="' + (v.assigned == null ? '' : v.assigned) + '">'
-          + '</td>';
-      }
-      return '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + r.id + '" data-sub="' + s.key + '" data-f="raw" value="' + (v.raw == null ? '' : v.raw) + '"></td>';
-    }).join('');
-
     return '<tr data-idx="' + idx + '">'
       + '<td><input class="inp" style="width:82px;padding:5px 6px" data-row="' + r.id + '" data-f="name" value="' + esc(r.name) + '"></td>'
       + '<td><input class="inp" style="width:70px;padding:5px 6px" data-row="' + r.id + '" data-f="no" value="' + esc(r.no || '') + '"></td>'
-      + cells
-      + '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + r.id + '" data-f="schoolRank" value="' + (r.schoolRank == null ? '' : r.schoolRank) + '"></td>'
-      + '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + r.id + '" data-f="leagueRank" value="' + (r.leagueRank == null ? '' : r.leagueRank) + '"></td>'
+      + subs.map(function(s){ return scSubCellHtml(r.id, s, r.s[s.key]); }).join('')
+      + scTotalCellsHtml(r.id, r)
       + '<td><button class="btn btn-sm btn-danger" data-del-row="' + r.id + '">删</button></td>'
       + '</tr>';
   }).join('');
@@ -10774,24 +10879,36 @@ function scReadRow(rowId, subs){
   var nameEl = document.querySelector(sel + '[data-f="name"]');
   if(!nameEl) return null;             /* 行已被删掉 */
   var noEl   = document.querySelector(sel + '[data-f="no"]');
-  var srEl   = document.querySelector(sel + '[data-f="schoolRank"]');
-  var lrEl   = document.querySelector(sel + '[data-f="leagueRank"]');
+  /* 按 data-f 取值。⚠️ 这里必须把「各科排名 + 总分两组排名」一起读回来：
+     整行是从 DOM 重建的，漏读哪个字段，保存时就会被整行覆盖掉（= 数据丢失）。
+     2026-10-17 加各科排名与总分赋分前/后时，就是靠这条注释提醒别漏的。 */
+  var pickInp = function(sub, f){
+    var el = document.querySelector(sel + (sub ? '[data-sub="' + sub + '"]' : '') + '[data-f="' + f + '"]');
+    return el ? scNumOrNull(el.value) : null;
+  };
   var s = {};
   subs.forEach(function(su){
-    var rEl = document.querySelector(sel + '[data-sub="' + su.key + '"][data-f="raw"]');
-    var aEl = document.querySelector(sel + '[data-sub="' + su.key + '"][data-f="assigned"]');
-    var raw = rEl ? scNumOrNull(rEl.value) : null;
-    var asg = aEl ? scNumOrNull(aEl.value) : null;
+    var raw = pickInp(su.key, 'raw');
+    var asg = pickInp(su.key, 'assigned');
     if(raw == null && asg == null) return;
-    s[su.key] = su.graded ? { raw: raw, assigned: asg } : { raw: raw };
+    var o = su.graded ? { raw: raw, assigned: asg } : { raw: raw };
+    var rk = pickInp(su.key, 'rank');
+    var ak = pickInp(su.key, 'asgRank');
+    if(rk != null) o.rank = rk;
+    if(ak != null && asg != null) o.asgRank = ak;
+    s[su.key] = o;
   });
+  /* 总分（赋分前）的两个排名存进 _t；两个都空就不带（= 不知） */
+  var tRank = pickInp(null, 'tRankRaw');
+  var tLeague = pickInp(null, 'tLeagueRaw');
+  if(tRank != null || tLeague != null) s._t = { rank: tRank, league: tLeague };
   return {
     id: Number(rowId),
     name: (nameEl.value || '').trim(),
     no: noEl ? (noEl.value || '').trim() : '',
     s: s,
-    schoolRank: srEl ? scNumOrNull(srEl.value) : null,
-    leagueRank: lrEl ? scNumOrNull(lrEl.value) : null,
+    schoolRank: pickInp(null, 'schoolRank'),
+    leagueRank: pickInp(null, 'leagueRank'),
   };
 }
 
@@ -10810,10 +10927,8 @@ function scAddRow(examId){
   var tmpId = 'new' + Date.now();
   var tbody = $('scTbody');
   if(!tbody){ /* 空表时先铺个骨架 */
-    var head = '<tr><th style="min-width:88px">姓名</th><th style="min-width:76px">学号</th>'
-      + subs.map(function(s){ return '<th style="min-width:70px">' + esc(s.name) + '</th>'; }).join('')
-      + '<th style="min-width:70px">年级排名</th><th style="min-width:70px">联考</th><th style="min-width:52px">操作</th></tr>';
-    $('scRows').innerHTML = '<div class="table-wrap"><table style="font-size:.82rem"><thead>' + head + '</thead><tbody id="scTbody"></tbody></table></div>';
+    $('scRows').innerHTML = '<div class="table-wrap"><table style="font-size:.82rem"><thead>'
+      + scGridHeadHtml(subs) + '</thead><tbody id="scTbody"></tbody></table></div>';
     var host0 = $('scRows');
     host0.oninput = function(ev){ var t = ev.target; if(t && t.getAttribute && t.getAttribute('data-row')) scMarkDirty(t.getAttribute('data-row')); };
     host0.onclick = function(ev){
@@ -10826,11 +10941,8 @@ function scAddRow(examId){
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><input class="inp" style="width:82px;padding:5px 6px" data-row="' + tmpId + '" data-f="name" placeholder="姓名"></td>'
     + '<td><input class="inp" style="width:70px;padding:5px 6px" data-row="' + tmpId + '" data-f="no"></td>'
-    + subs.map(function(s){
-        return '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + tmpId + '" data-sub="' + s.key + '" data-f="raw"></td>';
-      }).join('')
-    + '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + tmpId + '" data-f="schoolRank"></td>'
-    + '<td><input class="inp" style="width:62px;padding:5px 6px" type="number" data-row="' + tmpId + '" data-f="leagueRank"></td>'
+    + subs.map(function(s){ return scSubCellHtml(tmpId, s, null); }).join('')
+    + scTotalCellsHtml(tmpId, {})
     + '<td><button class="btn btn-sm btn-danger" data-del-row="' + tmpId + '">删</button></td>';
   tbody.appendChild(tr);
   var first = tr.querySelector('input');

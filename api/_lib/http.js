@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '2.10.1';
+const SCHEMA_VER = '2.10.2';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;

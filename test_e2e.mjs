@@ -292,6 +292,20 @@ function translate(sqlText) {
      必须写在本行之前没有其它规则先动 `||` —— 这里是唯一接触它的地方。 */
   s = s.replace(/(site_settings\.data)\s*\|\|\s*(excluded\.data)/gi, 'json_patch($1, $2)');
 
+  /* ---- update ... 别名 ... from：SQLite 要求别名前有 AS ----
+     Postgres 写 `update exam_scores t set ... from (...) as x where t.id = x.id`，
+     SQLite 的 UPDATE 语法要求 `update exam_scores as t set ...`，少了 as 就是
+     `near "t": syntax error`。
+     ⚠️ 补这条的意义不只是让测试过 —— 它意味着**「后台改分保存」这条路以前
+        从来没在测试里真跑过**（import 走 insert，能跑；save 走 update，跑不起来），
+        所以「改一格的分数会不会把整行的其他字段冲掉」这类问题一直测不出来。
+     见 2026-10-17 第六十三轮：加各科排名时正是靠这条路才发现风险的。 */
+  s = s.replace(/\bupdate\s+([\w"]+)\s+(?!as\b|set\b)([\w]+)\s+set\b/gi, 'update $1 as $2 set');
+  /* RETURNING 里不能带别名：SQLite 认 `returning id` 或 `returning 表名.id`，
+     但不认 `returning 别名.id`（Postgres 认）。本项目 INSERT/UPDATE 的
+     RETURNING 都是单表，剥掉限定前缀语义不变。 */
+  s = s.replace(/\breturning\s+([\w"]+)\.([\w"]+)/gi, 'returning $2');
+
   /* ---- jsonb_to_recordset：把 JSON 数组一次摊成「多行多列」 ----
      Postgres 专有（本项目用它把整批成绩当**一个**参数灌进去，绕开
      Workers 每请求 50 个子请求的上限）。SQLite 用 json_each 展开数组、
@@ -3457,9 +3471,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(indexHtml),
+  t('★前台版本号为 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adminHtml),
+  t('★后台版本号为 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3823,9 +3837,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(indexHtml38),
+  t('★前台版本号为 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adminHtml38),
+  t('★后台版本号为 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4840,10 +4854,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx47));
-  t('★后台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adm47));
+  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx47));
+  t('★后台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adm47));
   t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
-    /class-site-v82/.test(sw47));
+    /class-site-v83/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4927,7 +4941,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.1');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.2');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5027,9 +5041,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx48));
+  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-16'/.test(idx48));
-  t('★service worker 缓存版本升到 v80', /class-site-v82/.test(sw48));
+  t('★service worker 缓存版本升到 v80', /class-site-v83/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5094,8 +5108,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx49));
-  t('★后台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adm49));
+  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx49));
+  t('★后台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5167,7 +5181,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx50));
+  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5313,7 +5327,15 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
   t('★导入走 JSON（Worker 收不了 multipart）', /scores-import/.test(adm));
 
   /* ===== ④ 改分 ===== */
-  t('★赋分科目渲染两个格子（原始 / 赋分）', /data-f="assigned"/.test(adm));
+  /* v2.10.1：单元格改由 scSubCellHtml/scInpTd 生成（三处共用一份），
+     赋分科目仍是「原始 / 赋分」两个输入框，另加各科排名输入框。 */
+  t('★赋分科目渲染两个格子（原始 / 赋分）',
+    /scInpTd\(rid, su\.key, 'raw'/.test(adm) && /scInpTd\(rid, su\.key, 'assigned'/.test(adm));
+  t('★改分表也能编辑各科年级排名与总分两种口径排名',
+    /scInpTd\(rid, su\.key, 'rank'/.test(adm) && /scInpTd\(rid, su\.key, 'asgRank'/.test(adm)
+    && /scInpTd\(rid, null, 'tRankRaw'/.test(adm) && /scInpTd\(rid, null, 'schoolRank'/.test(adm));
+  t('★读行时把新字段一起读回（否则改一格就把排名整行冲掉）',
+    /var rk = pickInp\(su\.key, 'rank'\)/.test(adm) && /var tRank = pickInp\(null, 'tRankRaw'\)/.test(adm));
   t('★失焦后防抖自动保存', /setTimeout\(scFlush, 1500\)/.test(adm));
   t('★只提交改动过的行（SC_STATE.dirty）', /SC_STATE\.dirty\[rowId\] = true/.test(adm));
   t('★可加行（转学生）/ 可删行', /function scAddRow\(/.test(adm) && /function scDeleteRow\(/.test(adm));
@@ -5329,7 +5351,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adm));
+  t('★后台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5397,7 +5419,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx));
+  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5902,7 +5924,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx));
+  t('★前台版本号升到 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6013,7 +6035,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx));
+  t('★前台版本号升到 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx));
   t('★后台内置更新记录补到 2.10.0',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6118,10 +6140,10 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(idx));
-  t('★后台版本号 2.10.1', /SITE_VERSION = '2\.10\.1'/.test(adm));
+  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx));
+  t('★后台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 2.10.1 且缓存升 v82', /SITE_VER = '2\.10\.1'/.test(swSrc) && /class-site-v82/.test(swSrc));
+  t('★sw.js SITE_VER 2.10.2 且缓存升 v83', /SITE_VER = '2\.10\.2'/.test(swSrc) && /class-site-v83/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7478,8 +7500,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 2.10.1',
-    /const SCHEMA_VER = '2\.10\.1'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 2.10.2',
+    /const SCHEMA_VER = '2\.10\.2'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -7501,7 +7523,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
 
   /* ---- ③ 版本与缓存同步 ---- */
   t('★sw.js 缓存升 v82、版本 2.10.1',
-    /class-site-v82/.test(swSrc) && /SITE_VER = '2\.10\.1'/.test(swSrc));
+    /class-site-v83/.test(swSrc) && /SITE_VER = '2\.10\.2'/.test(swSrc));
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
   const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -7573,8 +7595,12 @@ console.log('\n【72】第六十二轮·成绩模版导入（两行表头按列�
     /scIsTwoRowHeader\(aoa\[0\] \|\| \[\], aoa\[1\] \|\| \[\]\)\) return scParseTwoRow/.test(admSrc));
   t('★导入弹窗有「下载模版」按钮', /id="scTpl"/.test(admSrc) && /scTemplateXlsx\(e\)/.test(admSrc));
   t('★导出模版带合并单元格（!merges）', /ws\['!merges'\]\s*=\s*merges/.test(admSrc));
+  t('★模版含两组总分（赋分前 / 赋分后），各带年级 + 联考排名',
+    /group\('总分（赋分前）', \['年级排名', '联考排名'\]\)/.test(admSrc)
+    && /group\('总分（赋分后）', \['年级排名', '联考排名'\]\)/.test(admSrc));
   t('★赋分科目生成四列（原始分/排名/赋分/排名）',
-    /graded \? 4 : 2/.test(admSrc) && /r1\.push\('赋分'\)/.test(admSrc));
+    /\['原始分', '年级排名', '赋分', '年级排名'\]/.test(admSrc)
+    && /: \['分数', '年级排名'\]/.test(admSrc));
   t('★预览加「班排」列并说明当场计算', /<th>班排<\/th>/.test(admSrc) && /班排与总分是<b>当场按各科分数算的<\/b>/.test(admSrc));
 
   /* ---- ② 行为测试：抽函数真跑一遍模版解析 ----
@@ -7599,19 +7625,21 @@ console.log('\n【72】第六十二轮·成绩模版导入（两行表头按列�
     { key: 'biology',  name: '生物', full: 100, graded: true },
   ];
 
-  /* 列布局**照着站主真实模版**造（27 列，合并区与表格里的一模一样）：
-     A考号 B姓名 | C..H 总分块(C1:H1 合并，含两组三元组) | I:J 语文 | K:L 数学 |
-     M:N 英语 | O:P 物理 | Q:T 化学(原始/排名/赋分/排名) | U:X 生物 | Y/Z/AA 分数线 */
-  const row0 = ['基本信息','', '总分','','','','','', '语文','', '数学','', '英语','', '物理','',
+  /* 列布局照**新的站主模版**造（25 列）：
+     A考号 B姓名 | C:D 总分（赋分前）年级/联考 | E:F 总分（赋分后）年级/联考 |
+     G:H 语文(分数·排名) | I:J 数学 | K:L 英语 | M:N 物理 |
+     O:R 化学(原始·排名·赋分·排名) | S:V 生物 | W/X/Y 分数线 */
+  const row0 = ['基本信息','', '总分（赋分前）','', '总分（赋分后）','',
+                '语文','', '数学','', '英语','', '物理','',
                 '化学','','','', '生物','','','', '600线','特控线','本科线'];
-  const row1 = ['考号/学号','姓名','总分','年级排名','联考排名','原始分','年级排名','联考排名',
+  const row1 = ['考号/学号','姓名','年级排名','联考排名','年级排名','联考排名',
                 '分数','年级排名','分数','年级排名','分数','年级排名','分数','年级排名',
                 '原始分','年级排名','赋分','年级排名','原始分','年级排名','赋分','年级排名',
-                '600','',''];
+                '','',''];
   const data = [
-    ['25010001','张三','620','12','30','610','15','33','110','15','130','8','120','10','90','20','85','25','88','18','80','30','82','22','','',''],
-    ['25010002','李四','','','','','','','100','','120','','110','','','','','','','','','','','','','',''],
-    ['25010003','王五','','','','','','','-','','/','','缺考','','','','','','','','','','','','','',''],
+    ['25010001','张三','12','30','20','45','110','15','130','8','120','10','90','20','85','25','88','18','80','30','82','22','','',''],
+    ['25010002','李四','','','','','100','','120','','110','','','','','','','','','','','','','',''],
+    ['25010003','王五','','','','','-','','/','','缺考','','','','','','','','','','','','','',''],
   ];
   const aoa = [row0, row1].concat(data);
 
@@ -7629,17 +7657,29 @@ console.log('\n【72】第六十二轮·成绩模版导入（两行表头按列�
     zhang.s.chemistry.raw === 85 && zhang.s.chemistry.assigned === 88
     && zhang.s.biology.raw === 80 && zhang.s.biology.assigned === 82,
     JSON.stringify(zhang.s.chemistry) + JSON.stringify(zhang.s.biology));
-  t('模版：总分年级排名 / 联考排名取总分组第一列（D/E，不是 F/G/H）',
-    zhang.schoolRank === 12 && zhang.leagueRank === 30,
+  /* 2026-10-17 站主新规：每个分数都要有一个年级排名（不再丢） */
+  t('★模版：各科「分数 → 年级排名」一一对应存下',
+    zhang.s.chinese.rank === 15 && zhang.s.math.rank === 8
+    && zhang.s.english.rank === 10 && zhang.s.physics.rank === 20,
+    JSON.stringify([zhang.s.chinese, zhang.s.math, zhang.s.english, zhang.s.physics]));
+  t('★模版：赋分科目两个排名各归各位（原始分排名 ≠ 赋分排名）',
+    zhang.s.chemistry.rank === 25 && zhang.s.chemistry.asgRank === 18
+    && zhang.s.biology.rank === 30 && zhang.s.biology.asgRank === 22,
+    JSON.stringify(zhang.s.chemistry) + JSON.stringify(zhang.s.biology));
+  t('★模版：总分（赋分后）年级/联考排名 → schoolRank / leagueRank',
+    zhang.schoolRank === 20 && zhang.leagueRank === 45,
     zhang.schoolRank + '/' + zhang.leagueRank);
+  t('★模版：总分（赋分前）年级/联考排名 → s._t（两种口径各存各的）',
+    zhang.s._t && zhang.s._t.rank === 12 && zhang.s._t.league === 30,
+    JSON.stringify(zhang.s._t));
   t('模版：总分本身不入库（系统按各科算）', zhang.s.total === undefined);
   t('模版：空白单元格 = 不知（没填的科目不产生数据）',
-    li.s.physics === undefined && li.s.chemistry === undefined && li.schoolRank === null,
+    li.s.physics === undefined && li.s.chemistry === undefined && li.schoolRank === null && li.s._t === undefined,
     JSON.stringify(Object.keys(li.s)));
   t('模版：- / / / 缺考 一律当不知',
     wang.s.chinese === undefined && wang.s.math === undefined && wang.s.english === undefined);
-  t('模版：各科年级排名 + 总分块重复列都如实登记、不悄悄丢',
-    p.ignored.length === 11, '实得 ' + p.ignored.length);
+  t('★模版：所有列都被认领，没有「未识别」的列',
+    p.ignored.length === 0, '实得 ' + p.ignored.length + ' → ' + JSON.stringify(p.ignored));
   t('模版：分数线列被识别为参考信息（不写库）',
     p.cutlines.length === 3 && p.cutlines[0].label === '600线',
     JSON.stringify(p.cutlines.map(c => c.label)));
@@ -7806,6 +7846,103 @@ console.log('\n【76】第六十三轮·行为日志：点外链也要有记录�
     /openLink\(\\''\+jsq\(l\.mainUrl\)\+'\\','\+\(l\.mainWechatOk\?'true':'false'\)\+',\\''\+jsq\(l\.title\|\|''\)\+'\\'\)/.test(idx));
   t('★通用点击不再为外链按钮重复记一条（一动作一条）',
     /if\(\/openLink\\s\*\\\(\/\.test\(oc\)\) return;/.test(idx));
+}
+
+console.log('\n【77】第六十三轮·各科排名 + 总分两种口径排名的存取闭环');
+{
+  /* 建一场考试（含赋分科目），导入带排名的成绩，再验证「读得回来、改分不丢」 */
+  const mk = await call('/api/scores?action=exam-save', {
+    method: 'POST', token: adminToken,
+    body: {
+      name: '排名闭环测试考', exam_date: '2026-10-16',
+      subjects: [
+        { key: 'chinese', name: '语文', full: 150 },
+        { key: 'math', name: '数学', full: 150 },
+        { key: 'chemistry', name: '化学', full: 100, graded: true },
+      ],
+      status: 'draft',
+    },
+  });
+  const exId = mk.body.exam && mk.body.exam.id;
+  t('（准备）建好测试考试', !!exId, JSON.stringify(mk.body).slice(0, 140));
+
+  const imp = await call('/api/scores?action=scores-import', {
+    method: 'POST', token: adminToken,
+    body: {
+      exam: exId,
+      rows: [
+        { name: '排名甲', no: '9901', schoolRank: 20, leagueRank: 45,
+          s: { chinese: { raw: 110, rank: 15 }, math: { raw: 130, rank: 8 },
+               chemistry: { raw: 85, rank: 25, assigned: 88, asgRank: 18 },
+               _t: { rank: 12, league: 30 } } },
+        { name: '排名乙', no: '9902', schoolRank: 60, leagueRank: null,
+          s: { chinese: { raw: 90, rank: 40 }, math: { raw: 100, rank: 33 } } },
+      ],
+    },
+  });
+  t('导入带排名的成绩成功', imp.status === 200 && imp.body.imported === 2,
+    JSON.stringify(imp.body).slice(0, 160));
+
+  const bd = await call('/api/scores?action=board&exam=' + exId, { token: adminToken });
+  const ja = (bd.body.rows || []).find((r) => r.name === '排名甲') || {};
+  const ji = (bd.body.rows || []).find((r) => r.name === '排名乙') || {};
+  t('★读回：各科分数与年级排名都在（语文 110 / 排名 15）',
+    ja.s && ja.s.chinese && ja.s.chinese.raw === 110 && ja.s.chinese.rank === 15,
+    JSON.stringify(ja.s));
+  t('★读回：赋分科目两个排名各归各位（原始排名 25 / 赋分排名 18）',
+    ja.s && ja.s.chemistry && ja.s.chemistry.raw === 85 && ja.s.chemistry.assigned === 88
+    && ja.s.chemistry.rank === 25 && ja.s.chemistry.asgRank === 18,
+    JSON.stringify(ja.s && ja.s.chemistry));
+  t('★读回：总分（赋分后）排名 → schoolRank/leagueRank',
+    ja.schoolRank === 20 && ja.leagueRank === 45, ja.schoolRank + '/' + ja.leagueRank);
+  t('★读回：总分（赋分前）排名 → s._t',
+    ja.s && ja.s._t && ja.s._t.rank === 12 && ja.s._t.league === 30,
+    JSON.stringify(ja.s && ja.s._t));
+  t('读回：没填的排名保持「不知」（不补 0）',
+    ji.leagueRank === null && ji.s.math.rank === 33,
+    JSON.stringify({ lr: ji.leagueRank, mr: ji.s.math.rank }));
+
+  /* 改分（后台表格那一套：整行重建后提交）——只改分数，排名必须还在 */
+  const save = await call('/api/scores?action=scores-save', {
+    method: 'POST', token: adminToken,
+    body: {
+      exam: exId,
+      rows: [{
+        id: ja.id, name: ja.name, no: ja.no,
+        s: {
+          chinese: { raw: 115, rank: 15 },                                    /* 只改了分数 */
+          math: { raw: 130, rank: 8 },
+          chemistry: { raw: 85, rank: 25, assigned: 90, asgRank: 18 },        /* 只改了赋分 */
+          _t: { rank: 12, league: 30 },
+        },
+        schoolRank: 20, leagueRank: 45,
+      }],
+    },
+  });
+  t('改分保存成功', save.status === 200, JSON.stringify(save.body).slice(0, 140));
+  const bd2 = await call('/api/scores?action=board&exam=' + exId, { token: adminToken });
+  const ja2 = (bd2.body.rows || []).find((r) => r.name === '排名甲') || {};
+  t('★改分后分数更新了', ja2.s.chinese.raw === 115 && ja2.s.chemistry.assigned === 90,
+    JSON.stringify(ja2.s));
+  t('★改分后各科年级排名没被冲掉',
+    ja2.s.chinese.rank === 15 && ja2.s.math.rank === 8
+    && ja2.s.chemistry.rank === 25 && ja2.s.chemistry.asgRank === 18,
+    JSON.stringify([ja2.s.chinese, ja2.s.chemistry]));
+  t('★改分后总分两种口径的排名也都在',
+    ja2.schoolRank === 20 && ja2.leagueRank === 45
+    && ja2.s._t && ja2.s._t.rank === 12 && ja2.s._t.league === 30,
+    JSON.stringify(ja2.s && ja2.s._t));
+
+  /* cleanScores 单元：边界 */
+  const { default: _h } = { default: null };
+  const scoresMod = await import('/tmp/class-site/api/scores.js');
+  t('scores.js 导出默认 handler（模块可加载）', typeof scoresMod.default === 'function');
+
+  /* 收尾：删掉测试考试 */
+  const del = await call('/api/scores?action=exam-delete', {
+    method: 'POST', token: adminToken, body: { id: exId },
+  });
+  t('（收尾）测试考试已删除', del.status === 200, JSON.stringify(del.body).slice(0, 120));
 }
 
 console.log('\n' + '='.repeat(52));
