@@ -3953,6 +3953,50 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
     gfSave.status === 200 && gfSave.body.ok,
     JSON.stringify(gfSave.body).slice(0, 160));
 
+  /* ⑤.5 学生端 submit 同守规则（服务端唯一裁判的第二条入口）：
+     注册同学 → 建带手机号的档案 → 认领 → submit 试三种值。 */
+  const sbReg = await call('/api/auth?action=register', {
+    method: 'POST',
+    body: { username: 'rulestu01', password: 'RuleStu2026', displayName: '规则生' },
+  });
+  t('（准备）注册规则测试同学', sbReg.status === 200 && sbReg.body.ok,
+    JSON.stringify(sbReg.body).slice(0, 120));
+  const sbTok = sbReg.body.token;
+  const sbProf = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '规则生', studentId: '290005', phone: '13900139000' },
+  });
+  t('（准备）建带手机号的档案', sbProf.status === 200 && sbProf.body.ok,
+    JSON.stringify(sbProf.body).slice(0, 120));
+  const sbClaim = await call('/api/profile?action=claim', {
+    method: 'POST', token: sbTok,
+    body: { name: '规则生', studentId: '290005' },
+  });
+  t('（准备）同学认领成功', sbClaim.status === 200,
+    JSON.stringify(sbClaim.body).slice(0, 120));
+  /* a. 改成 10 位手机号：过了 submit 旧 regex（6-20 位数字符号），撞新规则 → 400 + 人话 */
+  const sbBad = await call('/api/profile?action=submit', {
+    method: 'POST', token: sbTok, body: { phone: '1380013800' },
+  });
+  t('★v3.5.5 学生端 submit 10 位手机号被规则拒 400',
+    sbBad.status === 400 && /手机号/.test(sbBad.body.error || ''),
+    sbBad.status + ' ' + JSON.stringify(sbBad.body).slice(0, 140));
+  /* b. grandfather：交回原值 + 只改可见性开关 —— 与现值相同不校，可保存 */
+  const sbGf = await call('/api/profile?action=submit', {
+    method: 'POST', token: sbTok,
+    body: { phone: '13900139000', visibilityPref: { phone: false } },
+  });
+  t('★v3.5.5 学生端 grandfather：原值不改只动开关可保存',
+    sbGf.status === 200 && sbGf.body.ok,
+    JSON.stringify(sbGf.body).slice(0, 140));
+  /* c. 合法新手机号 → 200（主动改值守新规则且放行合规值） */
+  const sbOk = await call('/api/profile?action=submit', {
+    method: 'POST', token: sbTok, body: { phone: '13700137000' },
+  });
+  t('★v3.5.5 学生端 submit 合法新手机号通过',
+    sbOk.status === 200 && sbOk.body.ok,
+    JSON.stringify(sbOk.body).slice(0, 140));
+
   /* ⑥ 批量导入逐行复核：非法行记错跳过，合法行照常入 */
   const batchRule = await call('/api/admin?action=batch-profiles', {
     method: 'POST', token: adminToken,
@@ -4018,7 +4062,7 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
     JSON.stringify(dirtyR));
 
   /* 清理本轮造的资料 */
-  for (const sid of ['290001', '290002', '290003', '290004']) {
+  for (const sid of ['290001', '290002', '290003', '290004', '290005']) {
     const f = await call('/api/admin?action=profiles&q=' + sid, { token: adminToken });
     const row = (f.body.profiles || [])[0];
     if (row) await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id: row.id } });
