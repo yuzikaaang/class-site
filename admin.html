@@ -899,7 +899,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.9';
+var SITE_VERSION = '3.5.10';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -5131,6 +5131,20 @@ function paintQuoteSource(){
   loc.className = 'btn' + (cur === 0 ? '' : ' btn-secondary');
   net.style.flex = loc.style.flex = '1';
   net.style.minWidth = loc.style.minWidth = '130px';
+  /* v3.5.10 站主反馈「本地库可以新增，你把新增按钮删掉了」：
+     新增按钮一直在面板右上角（+ 新增一句），但太不显眼 —— 本地库时在这里明确指路。 */
+  var msg = $('qsMsg');
+  if(msg && !msg.innerHTML){
+    msg.innerHTML = (cur === 0)
+      ? '<span class="muted">当前用本地库：点右上角 <b>＋ 新增一句</b> 往库里加句子，列表里每条都能编辑和删除。</span>'
+      : '<span class="muted">当前联网取句。右上角 <b>＋ 新增一句</b> 维护的是本地库 —— 联网失败时自动用它兜底。</span>';
+  }
+  /* 本地库模式下把「新增一句」按钮换成主色高亮，一眼能看到 */
+  var add = $('dqAdd');
+  if(add){
+    add.className = 'btn btn-sm' + (cur === 0 ? '' : ' btn-secondary');
+    add.innerHTML = svg('plus', 14) + (cur === 0 ? '新增一句（本地库）' : '新增一句');
+  }
 }
 
 function qsPick(m){
@@ -5144,7 +5158,9 @@ function qsPick(m){
       STATE.quoteSource = next;
       paintQuoteSource();
       if(msg){ msg.innerHTML = '<span style="color:#2f9e44">✅ 已切换为「'
-        + (next === 1 ? '联网 API' : '本地库') + '」，同学刷新页面即生效。</span>'; }
+        + (next === 1 ? '联网 API' : '本地库') + '」，同学刷新页面即生效。'
+        + (next === 0 ? '本地库的句子用右上角 <b>＋ 新增一句</b> 添加。' : '')
+        + '</span>'; }
     })
     .catch(function(e){
       if(msg){ msg.innerHTML = '<span style="color:#b3261e">保存失败：' + esc(e.message || e) + '</span>'; }
