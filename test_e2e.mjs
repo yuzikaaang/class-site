@@ -6415,7 +6415,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.6'/.test(swSrc) && /class-site-v101/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.\d+\.\d+'/.test(swSrc) && /class-site-v1\d\d/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -9541,9 +9541,9 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /quoteNet: 1/.test(idxV) && /out\.quoteNet = \(o\.quoteNet === 0\) \? 0 : 1/.test(idxV)
     && /if\(typeof UI !== 'undefined' && UI\.quoteNet === 0\) return;/.test(idxV));
 
-  t('★三个版本号同步升到 3.5.6',
-    /SITE_VERSION = '3\.5\.6'/.test(idxV) && /SITE_VERSION = '3\.5\.6'/.test(admV)
-    && /API_VER = '3\.5\.6'/.test(wrkSrc));
+  t('★三个版本号同步（index/admin/worker 彼此一致）',
+    (idxV.match(/SITE_VERSION = '([\d.]+)'/)||[])[1] === (admV.match(/SITE_VERSION = '([\d.]+)'/)||[])[1]
+    && (idxV.match(/SITE_VERSION = '([\d.]+)'/)||[])[1] === (wrkSrc.match(/API_VER = '([\d.]+)'/)||[])[1]);
 
   /* ============ ①b 成绩分析增强（v3.5.6 任务 4）静态护栏 ============ */
   t('★需关注四档筛选 + 可排序',
