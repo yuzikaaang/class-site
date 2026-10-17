@@ -896,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '2.10.5';
+var SITE_VERSION = '3.0.1';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -8464,6 +8464,25 @@ function relSeed(){
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
     {
+      "version": "3.0.1",
+      "date": "2026-10-17",
+      "title": "大版本 3.0.1：分享升级 + 成绩导出 + 发布可见范围 + 导入纠错 + KV 备份",
+      "type": "feature",
+      "highlight": true,
+      "items": [
+        "成绩分享升级：除了每次成绩的具体分值、各科小分、上线情况，新增「历史总分趋势」和「年级排名变化」两张折线图",
+        "「成绩单」和「个人成绩卡」可以同时展示，不再二选一（以前勾了两个只显示成绩单）",
+        "已建的分享可以直接改范围 / 内容 / 考试 / 有效期，链接不变，别人手里的旧链接照旧能看（不用撤销重建）",
+        "成绩导出：后台每场考试可导出 Excel（.xlsx）或 PDF，含考试名称 / 日期、分数线、各科分数、总分、班排、年级排名、联考排名",
+        "分数发布可选可见范围：发布给全班，或只给指定同学；名单外的同学看不到该次考试",
+        "导入成绩后若有姓名对不上账号，直接弹窗列出，填正确姓名即可改名并自动绑定（不用一个个找）",
+        "分层教学四象限支持手机点击查看该象限的具体同学",
+        "六科画像新增数值对比表：我的 / 占总分 / 班均 / 与班均",
+        "原始分口径下，化学、生物不再显示「赋分」标签，也不与分数线（赋分线）硬比",
+        "每日备份接入 Cloudflare KV（成绩 + 内容，保留 14 份），跨服务商给数据库兜底"
+      ]
+    },
+    {
       "version": "2.10.2",
       "date": "2026-10-17",
       "title": "行为日志补全 + 成绩模版支持两种总分口径与各科排名",
@@ -9933,6 +9952,7 @@ function scPaintExams(){
     if(act === 'edit')        scEditExam(id);
     else if(act === 'import') scImport(id);
     else if(act === 'rows')   scEditRows(id);
+    else if(act === 'export') scExportDialog(id);
     else if(act === 'pub')    scPublish(id, true);
     else if(act === 'unpub')  scPublish(id, false);
     else if(act === 'del')    scDeleteExam(id);
@@ -9966,6 +9986,7 @@ function scExamCard(e){
     +     '<button class="btn btn-sm btn-secondary" data-sc-act="edit" data-sc-id="' + e.id + '">考试信息</button>'
     +     '<button class="btn btn-sm btn-secondary" data-sc-act="import" data-sc-id="' + e.id + '">导入成绩</button>'
     +     '<button class="btn btn-sm" data-sc-act="rows" data-sc-id="' + e.id + '">改分 / 查看</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-sc-act="export" data-sc-id="' + e.id + '">导出</button>'
     +     (pub
         ? '<button class="btn btn-sm btn-secondary" data-sc-act="unpub" data-sc-id="' + e.id + '">撤回</button>'
         : '<button class="btn btn-sm btn-green" data-sc-act="pub" data-sc-id="' + e.id + '">发布</button>')
@@ -10040,6 +10061,109 @@ function scDeleteExam(id){
   api('/scores?action=exam-delete', { method:'POST', body: { id: id } })
     .then(function(){ toast('已删除', 'ok'); scLoad(); })
     .catch(function(e2){ toast('删除失败：' + e2.message, 'err', 4000); });
+}
+
+/* ---------------- 成绩导出（Excel / PDF · 2026-10-17 站主要求） ----------------
+   内容：考试名称/日期/分数线 + 各科分数 + 总分 + 班排 + 年级排名 + 联考排名。
+   班排当场按赋分口径总分排序算（系统不存班排）。 */
+function scExportPrep(j){
+  var e = j.exam || {}, rows = (j.rows || []).slice(), subs = e.subjects || [];
+  var pick = function(r, sub){
+    var v = r.s && r.s[sub.key];
+    if(!v) return null;
+    var x = (sub.graded && v.assigned != null) ? v.assigned : v.raw;
+    return x == null ? null : Number(x);
+  };
+  rows.forEach(function(r){
+    var t = 0, any = false;
+    subs.forEach(function(sub){ var v = pick(r, sub); if(v != null){ t += v; any = true; } });
+    r._total = any ? t : null;
+  });
+  var sorted = rows.filter(function(r){ return r._total != null; }).sort(function(a, b){ return b._total - a._total; });
+  var rk = 0, prev = null;
+  sorted.forEach(function(r, i){ if(prev === null || r._total !== prev){ rk = i + 1; prev = r._total; } r._rank = rk; });
+  return { e: e, rows: rows, subs: subs, pick: pick, cuts: (e.cutlines || []).filter(function(c){ return c.score != null; }) };
+}
+function scExportMeta(e, cuts){
+  var l = [];
+  var d = (e.date || '') + (e.endDate && e.endDate !== e.date ? ' ~ ' + e.endDate : '');
+  l.push((e.type || '考试') + '　' + d);
+  if(cuts.length) l.push('分数线：' + cuts.map(function(c){ return c.label + ' ' + c.score; }).join('　'));
+  return l;
+}
+function scExportDialog(id){
+  var e = scFindExam(id);
+  openModal({
+    title: '导出成绩 · ' + (e ? e.name : id),
+    sub: '含考试名称 / 日期、分数线、各科分数、总分、班排、年级排名、联考排名。',
+    body: '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+      + '<button class="btn" id="exXlsx">导出 Excel（.xlsx）</button>'
+      + '<button class="btn btn-secondary" id="exPdf">导出 PDF（打印后另存为 PDF）</button></div>'
+      + '<p class="muted" style="margin-top:10px;font-size:.8rem">PDF：会打开打印窗口，在「目标打印机」里选「另存为 PDF」即可。</p>',
+    foot: '<button class="btn btn-secondary" onclick="closeModal()">关闭</button>',
+    onMount: function(box){
+      box.querySelector('#exXlsx').onclick = function(){ closeModal(); scExportXlsx(id); };
+      box.querySelector('#exPdf').onclick = function(){ closeModal(); scExportPdf(id); };
+    },
+  });
+}
+function scExportXlsx(id){
+  api('/scores?action=board&exam=' + id).then(function(j){
+    loadXLSX().then(function(XLSX){
+      if(!XLSX){ toast('表格组件加载失败（CDN 不可达），请稍后重试', 'err', 4000); return; }
+      var P = scExportPrep(j), e = P.e, subs = P.subs;
+      var aoa = [[e.name + '　成绩表']];
+      scExportMeta(e, P.cuts).forEach(function(x){ aoa.push([x]); });
+      aoa.push([]);
+      var head = ['班排', '姓名', '学号'].concat(subs.map(function(s){ return s.name + (s.graded ? '（赋分）' : ''); }))
+        .concat(['总分（赋分）', '年级排名', '联考排名']);
+      aoa.push(head);
+      P.rows.slice().sort(function(a, b){ return (a._rank || 9999) - (b._rank || 9999); }).forEach(function(r){
+        var line = [r._rank == null ? '' : r._rank, r.name || '', r.no || ''];
+        subs.forEach(function(s){ var v = P.pick(r, s); line.push(v == null ? '' : v); });
+        line.push(r._total == null ? '' : Math.round(r._total * 10) / 10,
+                  r.schoolRank == null ? '' : r.schoolRank,
+                  r.leagueRank == null ? '' : r.leagueRank);
+        aoa.push(line);
+      });
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: head.length - 1 } }];
+      ws['!cols'] = head.map(function(_, i){ return { wch: i < 3 ? 10 : 9 }; });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '成绩表');
+      XLSX.writeFile(wb, String(e.name || '成绩') + '_成绩.xlsx');
+      toast('已导出 Excel', 'ok', 3000);
+    });
+  }).catch(function(err){ toast('导出失败：' + err.message, 'err', 4200); });
+}
+function scExportPdf(id){
+  api('/scores?action=board&exam=' + id).then(function(j){
+    var P = scExportPrep(j), e = P.e, subs = P.subs;
+    var head = ['班排', '姓名', '学号'].concat(subs.map(function(s){ return esc(s.name) + (s.graded ? '<br><span style="font-size:9px;color:#888">赋分</span>' : ''); }))
+      .concat(['总分', '年级排名', '联考排名']);
+    var trs = P.rows.slice().sort(function(a, b){ return (a._rank || 9999) - (b._rank || 9999); }).map(function(r){
+      return '<tr><td>' + (r._rank == null ? '' : r._rank) + '</td><td>' + esc(r.name || '') + '</td><td>' + esc(r.no || '') + '</td>'
+        + subs.map(function(s){ var v = P.pick(r, s); return '<td>' + (v == null ? '—' : v) + '</td>'; }).join('')
+        + '<td><b>' + (r._total == null ? '—' : (Math.round(r._total * 10) / 10)) + '</b></td>'
+        + '<td>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</td>'
+        + '<td>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</td></tr>';
+    }).join('');
+    var meta = scExportMeta(e, P.cuts).map(function(x){ return '<div>' + esc(x) + '</div>'; }).join('');
+    var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(e.name || '成绩') + ' 成绩表</title>'
+      + '<style>body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#222;padding:16px}'
+      + 'h1{font-size:18px;margin:0 0 6px}.meta{font-size:12px;color:#555;margin-bottom:10px;line-height:1.7}'
+      + 'table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #bbb;padding:4px 5px;text-align:center}'
+      + 'th{background:#f0f0f0}@media print{@page{size:A4 landscape;margin:10mm}}</style></head><body>'
+      + '<h1>' + esc(e.name || '成绩') + '　成绩表</h1><div class="meta">' + meta + '</div>'
+      + '<table><thead><tr>' + head.map(function(h){ return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + trs + '</tbody></table>'
+      + '<div style="font-size:11px;color:#777;margin-top:10px">共 ' + P.rows.length + ' 人　·　总分按赋分口径累加　·　化学/生物为赋分</div>'
+      + '</body></html>';
+    var w = window.open('', '_blank');
+    if(!w){ toast('浏览器拦截了新窗口，请允许弹窗后重试', 'err', 4200); return; }
+    w.document.write(html); w.document.close();
+    w.focus();
+    setTimeout(function(){ try { w.print(); } catch(e){} }, 350);
+  }).catch(function(err){ toast('导出失败：' + err.message, 'err', 4200); });
 }
 
 function scFindExam(id){
