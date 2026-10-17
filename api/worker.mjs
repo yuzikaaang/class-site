@@ -28,6 +28,16 @@ import studyHandler from './study.js';
 import scoresHandler from './scores.js';
 import { cors } from './_lib/http.js';
 
+/* 后端代码版本号（v3.2.1 新增）。
+   ------------------------------------------------------------
+   为什么需要它：部署回查原来只看 X-Build-Sha（CI 用 sed 写进 wrangler.toml
+   的 commit 号）。但实测线上这个头一直是 "local" —— 说明实际生效的那次部署
+   是 Cloudflare 自己的 Git 集成跑的（它不会注入我们的变量），
+   于是回查永远对不上提交号、每次都红了 120 秒后判失败：job 红，线上其实是新的。
+   所以加一个**由代码本身带出去**的版本号：只要线上换了代码，它就会变。
+   纪律：每轮发布与前台 SITE_VERSION 同步（测试里有断言锁死两者相等）。 */
+const API_VER = '3.2.1';
+
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
 async function adaptRequest(request, env) {
   const url = new URL(request.url);
@@ -171,6 +181,8 @@ export default {
        有个能一眼核对的标记，排查成本从「猜」降到「看一眼」。
        本地开发时没这个变量，就不输出这个头。 */
     if (env && env.BUILD_SHA) state.headers['X-Build-Sha'] = String(env.BUILD_SHA);
+    /* 代码版本号：不管谁部署的（CI 还是 Cloudflare Git 集成），都会带上它 */
+    state.headers['X-Api-Ver'] = API_VER;
     /* 2026-10-08：触发一次重部署，让 Cloudflare 新配的 ADMIN_SECRETS_KEY 变量
        被运行中的 Worker 读到（改环境变量不会自动重部署，需重新发布一次）。 */
 

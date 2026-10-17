@@ -166,8 +166,18 @@ jobs:
           BASE="https://yuzikaaang.github.io/class-site"
 
           # 取线上文件的 sha256（取不到给个明显的错值，好让比较失败、进入重试）
+          #
+          # 🔴 2026-10-17 修「部署总是失败（假红灯）」的另一半原因：
+          #    Pages 的响应头是 `cache-control: max-age=600`（10 分钟），
+          #    部署刚完成时 CDN 边缘很可能还端着旧副本。原来直接 GET 同一个 URL，
+          #    12 次 ×10 秒 = 120 秒 < 600 秒，**必然**等不到新内容 → 判失败。
+          #    线上其实早就是新的（实测同一提交下本地与线上 sha256 完全一致）。
+          #    解法：加随机查询串做缓存穿透 + 显式 no-cache，让边缘回源取最新的。
           live_sha() {
-            curl -s --max-time 20 "$BASE/$1" 2>/dev/null | sha256sum | cut -d' ' -f1
+            local cb="cb=$(date +%s%N)-$RANDOM"
+            curl -s --max-time 25 \
+                 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+                 "$BASE/$1?$cb" 2>/dev/null | sha256sum | cut -d' ' -f1
           }
 
           echo "本次发布的内容指纹："
@@ -175,9 +185,9 @@ jobs:
           echo "  admin.html  $WANT_ADMIN"
           echo "  sw.js       $WANT_SW"
           echo ""
-          echo "等待 Pages 生效（最多重试 12 次，每次 10 秒）…"
+          echo "等待 Pages 生效（最多重试 18 次，每次 10 秒；已做缓存穿透）…"
 
-          for i in $(seq 1 12); do
+          for i in $(seq 1 18); do
             GOT_INDEX=$(live_sha index.html)
             GOT_ADMIN=$(live_sha admin.html)
             GOT_SW=$(live_sha sw.js)
@@ -197,6 +207,9 @@ jobs:
           done
 
           echo ""
-          echo "❌ 回查失败：等了 120 秒，线上仍有文件与本次发布内容不一致。"
-          echo "   请到 https://github.com/yuzikaaang/class-site/deployments 查看部署状态。"
+          echo "❌ 回查失败：等了 180 秒（已做缓存穿透），线上仍有文件与本次发布内容不一致。"
+          echo "   先到 https://github.com/yuzikaaang/class-site/deployments 看『发布到 GitHub Pages』"
+          echo "   这一步是成功还是失败："
+          echo "   · 部署那步是绿的 → 只是回查没等到，过几分钟手动重跑一次即可（内容是新的）"
+          echo "   · 部署那步是红的 → 才是真失败，看那一步的报错"
           exit 1

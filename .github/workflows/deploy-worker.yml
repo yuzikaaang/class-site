@@ -145,40 +145,52 @@ jobs:
         run: |
           set -euo pipefail
           WANT=$(cat /tmp/build_sha.txt)
+          # 代码里带的版本号（与前台 SITE_VERSION 同步）—— 见 api/worker.mjs 的 API_VER
+          WANT_VER=$(grep -oE "const API_VER = '[^']+'" api/worker.mjs | head -1 | sed -E "s/.*'([^']+)'.*/\1/")
           URL="https://api.classsite.dpdns.org/api/content"
           echo ""
-          echo "期望线上构建标记：$WANT"
+          echo "期望构建标记（CI 注入）：$WANT"
+          echo "期望代码版本（代码自带）：$WANT_VER"
           echo "回查地址：$URL"
+          echo ""
+          echo "说明：这个项目实际生效的部署有时是 Cloudflare 自己的 Git 集成跑的，"
+          echo "      它不会注入我们的 BUILD_SHA（线上一直是 local），所以两个信号有一个对上就算成功。"
           echo ""
 
           # Workers 全球生效需要一点时间，多试几次
           for i in $(seq 1 15); do
             HDRS=$(curl -sS -D - -o /dev/null "$URL" 2>/dev/null || echo "")
-            GOT=$(echo "$HDRS" | tr -d '\r' \
-                  | awk -F': ' 'tolower($1)=="x-build-sha" {print $2}' | tail -1)
+            GOT_SHA=$(echo "$HDRS" | tr -d '\r' \
+                      | awk -F': ' 'tolower($1)=="x-build-sha" {print $2}' | tail -1)
+            GOT_VER=$(echo "$HDRS" | tr -d '\r' \
+                      | awk -F': ' 'tolower($1)=="x-api-ver" {print $2}' | tail -1)
 
-            if [ -n "$GOT" ]; then
-              echo "  第 $i 次：线上标记 = $GOT"
-              if [ "$GOT" = "$WANT" ]; then
-                echo ""
-                echo "✅ 回查通过：线上跑的正是本次提交（$WANT）"
-                exit 0
-              fi
-            else
-              echo "  第 $i 次：还没拿到构建标记（正在生效）"
+            echo "  第 $i 次：x-build-sha=${GOT_SHA:-（空）}  x-api-ver=${GOT_VER:-（空）}"
+
+            if [ -n "$WANT" ] && [ "$GOT_SHA" = "$WANT" ]; then
+              echo ""
+              echo "✅ 回查通过：线上构建标记就是本次提交（$WANT），CI 部署生效"
+              exit 0
+            fi
+            if [ -n "$WANT_VER" ] && [ -n "$GOT_VER" ] && [ "$GOT_VER" = "$WANT_VER" ]; then
+              echo ""
+              echo "✅ 回查通过：线上代码版本 = $WANT_VER（由 Cloudflare Git 集成部署，代码已是本次的）"
+              exit 0
             fi
             sleep 8
           done
 
           echo ""
-          echo "❌ 回查失败：等了 120 秒，线上构建标记仍不等于 $WANT"
+          echo "❌ 回查失败：等了 120 秒，线上既不是本次提交、也不是本次的代码版本。"
           echo ""
-          echo "  已见的标记：${GOT:-（空 —— 可能是旧版本还没带这个头）}"
+          echo "  线上实际：x-build-sha=${GOT_SHA:-（空）}  x-api-ver=${GOT_VER:-（空）}"
+          echo "  本次期望：x-build-sha=$WANT  x-api-ver=$WANT_VER"
           echo ""
           echo "  排查顺序："
-          echo "   1. Actions 日志里 wrangler 是否报了认证/权限错误"
-          echo "   2. api.classsite.dpdns.org 这个自定义域是否指向了这个 Worker"
-          echo "   3. 若是首次部署，旧版本没有 X-Build-Sha 头属正常，重跑一次即可"
+          echo "   1. 往上看『部署到 Cloudflare Workers』这一步是否报错（多半是 API Token 权限/账户 ID）"
+          echo "   2. api.classsite.dpdns.org 这个自定义域是否指向了别的 Worker"
+          echo "   3. 如果代码版本号没变，先确认这轮是不是忘了同步 API_VER（前台 SITE_VERSION 要一起改）"
+          echo "   4. 只是等不及的话，过几分钟重跑这个 workflow 即可，别急着改代码"
           exit 1
 
       - name: 部署小结

@@ -3472,9 +3472,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(indexHtml),
+  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(adminHtml),
+  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3838,9 +3838,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(indexHtml38),
+  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(adminHtml38),
+  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4855,10 +4855,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(idx47));
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(adm47));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx47));
+  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adm47));
   t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
-    /class-site-v90/.test(sw47));
+    /class-site-v91/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4942,7 +4942,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.2.0');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.2.1');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5042,9 +5042,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(idx48));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-17'/.test(idx48));
-  t('★service worker 缓存版本升到 v80', /class-site-v90/.test(sw48));
+  t('★service worker 缓存版本升到 v80', /class-site-v91/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5109,8 +5109,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(idx49));
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(adm49));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx49));
+  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5182,7 +5182,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(idx50));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5353,7 +5353,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/导入完成，有几点要留意/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(adm));
+  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5421,7 +5421,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(idx));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5927,7 +5927,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(idx));
+  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6038,7 +6038,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(idx));
+  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx));
   t('★后台内置更新记录补到 2.10.0',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6143,10 +6143,10 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(idx));
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.0'/.test(adm));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(idx));
+  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.2\.1'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 3.1.0 且缓存升 v90', /SITE_VER = '3\.2\.0'/.test(swSrc) && /class-site-v90/.test(swSrc));
+  t('★sw.js SITE_VER 3.1.0 且缓存升 v91', /SITE_VER = '3\.2\.1'/.test(swSrc) && /class-site-v91/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7527,7 +7527,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
 
   /* ---- ③ 版本与缓存同步 ---- */
   t('★sw.js 缓存升 v82、版本 2.10.1',
-    /class-site-v90/.test(swSrc) && /SITE_VER = '3\.2\.0'/.test(swSrc));
+    /class-site-v91/.test(swSrc) && /SITE_VER = '3\.2\.1'/.test(swSrc));
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
   const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -8174,7 +8174,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.2.0', /SITE_VERSION = '3[.]2[.]0'/.test(idx) && /SITE_VERSION = '3[.]2[.]0'/.test(adm) && /SITE_VER = '3[.]2[.]0'/.test(sw));
+  t('版本号三处同步 3.2.1', /SITE_VERSION = '3[.]2[.]1'/.test(idx) && /SITE_VERSION = '3[.]2[.]1'/.test(adm) && /SITE_VER = '3[.]2[.]1'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8267,8 +8267,8 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.2.0',
-    /SITE_VERSION = '3[.]2[.]0'/.test(idx) && /SITE_VERSION = '3[.]2[.]0'/.test(adm) && /SITE_VER = '3[.]2[.]0'/.test(sw));
+  t('版本号三处同步 3.2.1',
+    /SITE_VERSION = '3[.]2[.]1'/.test(idx) && /SITE_VERSION = '3[.]2[.]1'/.test(adm) && /SITE_VER = '3[.]2[.]1'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8354,8 +8354,45 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.2.0',
-    /SITE_VERSION = '3[.]2[.]0'/.test(idx) && /SITE_VERSION = '3[.]2[.]0'/.test(adm));
+  t('版本号三处同步 3.2.1',
+    /SITE_VERSION = '3[.]2[.]1'/.test(idx) && /SITE_VERSION = '3[.]2[.]1'/.test(adm));
+}
+
+console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const sw = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+  const wrk = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  const pg = fs.readFileSync(new URL('./.github/workflows/deploy-pages.yml', import.meta.url), 'utf8');
+  const wf = fs.readFileSync(new URL('./.github/workflows/deploy-worker.yml', import.meta.url), 'utf8');
+
+  /* ① 后端代码自带版本号（Cloudflare Git 集成部署时 BUILD_SHA 是 local，只能靠它） */
+  t('Worker 有 API_VER 常量并输出 X-Api-Ver 头',
+    /const API_VER = '[^']+'/.test(wrk) && /state\.headers\['X-Api-Ver'\] = API_VER;/.test(wrk));
+  const apiVer = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
+  const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
+  t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
+    'api=' + apiVer + ' site=' + siteVer);
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]2[.]1'/.test(adm) && /SITE_VER = '3[.]2[.]1'/.test(sw));
+
+  /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
+  t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
+  t('★Pages 回查显式 no-cache', /Cache-Control: no-cache/.test(pg) && /Pragma: no-cache/.test(pg));
+  t('Pages 回查重试窗口 ≥180 秒', /seq 1 18/.test(pg) && /等了 180 秒/.test(pg));
+  t('Pages 失败提示区分「部署那步绿/红」', /部署那步是绿的/.test(pg) && /部署那步是红的/.test(pg));
+
+  /* ③ Worker 回查：两个信号任一命中即算成功，并打印线上实际值 */
+  t('★Worker 回查接受 x-api-ver（不再只认 BUILD_SHA）',
+    /x-api-ver/.test(wf) && /\[ "\$GOT_VER" = "\$WANT_VER" \]/.test(wf));
+  t('★Worker 回查从 api/worker.mjs 现读版本号，不写死',
+    wf.includes('WANT_VER=$(grep -oE') && wf.includes('api/worker.mjs')
+    && wf.includes('const API_VER'));
+  t('Worker 失败时回显线上实际标记与期望值', /线上实际：x-build-sha=/.test(wf) && /本次期望：x-build-sha=/.test(wf));
+
+  /* ④ 模拟 CI 里那行解析，确认能取到版本号 */
+  const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.2.1', 'parsed=' + parsed);
 }
 
 console.log('\n' + '='.repeat(52));
