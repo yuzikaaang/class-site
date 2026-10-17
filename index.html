@@ -1841,6 +1841,11 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .dark .sc-qchip{background:#2a2536;border-color:#3d3652;color:#cbb9f0}
 .dark .sc-qchip em{color:#a8998c}
 .dark .sc-qchip.me{background:#3a2a20;border-color:#5a3a28;color:#f0a878}
+.dark .sc-qwho{background:#262220;border-color:#3d3652}
+.dark .sc-qwho-h{color:#e8e0d8}
+.dark .sc-qwho-row{color:#c9c0b8}
+.dark .sc-qwho-row i{color:#a8998c}
+.dark .sc-qwho-row b{color:#f0e8e0}
 .dark .sc-qlist-x{color:#a8998c;border-color:#4a4038}
 /* 迷你折线（各科趋势卡内）：父级没有 .sc-svg（min-width 会撑爆 132px 小图），单独作用域 */
 .dark .sc-mini-svg .sc-up{stroke:#4ade80}
@@ -1981,6 +1986,18 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-qchip{display:inline-flex;align-items:baseline;gap:5px;background:#f6f2ff;border:1px solid #e6dcf7;color:#4c3b74;border-radius:999px;padding:3px 10px;font-size:.78rem}
 .sc-qchip em{font-style:normal;font-size:.66rem;color:#8a7968}
 .sc-qchip.me{background:#fff3ea;border-color:#f5c9a8;color:#c2410c}
+/* 点某个圆点 → 这一个人的明细（v3.1.1） */
+.sc-qwho{margin-top:8px;border:1px solid #f0e2d2;border-radius:10px;padding:8px 10px;background:#fffdfb}
+.sc-qwho-h{display:flex;align-items:center;gap:8px;font-size:.84rem;color:#3f3a36}
+.sc-qwho-h b{color:#c2410c}
+.sc-qwho-me{font-style:normal;font-size:.66rem;background:#fff3ea;color:#c2410c;border:1px solid #f5c9a8;border-radius:999px;padding:1px 6px}
+.sc-qwho-body{margin-top:6px;display:flex;flex-direction:column;gap:4px}
+.sc-qwho-row{display:flex;align-items:baseline;gap:8px;font-size:.78rem;color:#57534e}
+.sc-qwho-row i{font-style:normal;color:#8a7968;min-width:74px}
+.sc-qwho-row b{color:#3f3a36}
+.sc-qwho-row em{font-style:normal;color:#8a7968;font-size:.72rem;margin-left:auto}
+.sc-qchip{cursor:pointer;font-family:inherit}
+.sc-qg:hover circle:last-of-type{fill-opacity:1}
 .sc-seg-sm button{padding:5px 9px;font-size:.72rem}
 /* ===== 分享弹窗（v2.8.3） ===== */
 .sc-sh-exs{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow:auto;padding:8px 10px;
@@ -3027,7 +3044,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.1.0';
+var SITE_VERSION = '3.1.1';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3916,6 +3933,7 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-10-17 11:29", text: "🔧 修好了分享的一个毛病：以前点「编辑」改分享范围，保存后其实没生效（页面读到的还是旧弹窗里的选项）。现在编辑保存会真正生效，链接不变；而且改范围时不会再把已经勾好的「成绩单 / 个人成绩卡」清掉。", category: "site" },
     { date: "2026-10-17 10:48", text: "📈 「我的画像」新增「各科进退步」：最近几次考试，每科的分数和年级排名逐次列出，还标出分数增减、名次升降和稳定性（波动大小）。分享出去的成绩页也能看到这张表。", category: "site" },
     { date: "2026-10-17 10:47", text: "🔗 成绩分享升级：分享页除了每次成绩的具体分值、各科小分和上线情况，现在还多了「历史总分趋势」和「年级排名变化」两张图；「成绩单」和「个人成绩卡」可以同时展示。已建过的分享也能直接改范围，链接不变，不用重新发。", category: "site" },
     { date: "2026-10-17 10:45", text: "🔐 成绩发布更灵活：老师现在可以把某次成绩只发给指定同学，或发给全班。被指定的同学登录就能看到，其他同学不会看到那次考试。", category: "site" },
@@ -12459,6 +12477,7 @@ var SC = {
   config: null,   /* 后台配置（对外展示档位等），进页面时取一次 */
   quadKey: null,  /* 四象限当前看哪一科 */
   quadSel: null,  /* 四象限当前点开了哪个象限（0..3，null=没点开）——手机点开看名单 */
+  quadDot: null,  /* 四象限当前点中的那一个人（下标，null=没点） */
   _quad: null,    /* 最近一次四象限渲染的点数据（供点选时算名单，不重新渲染） */
   pkA: null,      /* 成绩对比 PK：A 方成绩行 id（v2.10.0） */
   pkB: null,      /* 成绩对比 PK：B 方成绩行 id（v2.10.0） */
@@ -14320,7 +14339,25 @@ function scExportCard(cfg){
 }
 
 /* ---------- 分享链接（R38）：免登录只读 ---------- */
+/* v3.1.1：分享弹窗里的 DOM 查询必须「只在自己这层弹窗里找」。
+   原来用 document.getElementById —— 点「编辑」时会再叠一层新弹窗，
+   getElementById 命中的却是**下面那层旧弹窗**的 select（id 重复），
+   于是保存时发出去的是旧范围，看着就是「编辑分享保存无效」。 */
+function scShRoot(){
+  var all = document.querySelectorAll('#scShMask');
+  return all.length ? all[all.length - 1] : null;
+}
+function scShEl(id){
+  var r = scShRoot();
+  return (r && r.querySelector('#' + id)) || document.getElementById(id);
+}
+function scShAll(sel){
+  var r = scShRoot();
+  return (r || document).querySelectorAll(sel);
+}
+
 function scShareDialog(edit){
+  scShareClose();   /* 先清掉旧弹窗，保证 id 唯一、表单不会读到上一层 */
   var editId = edit ? Number(edit.id) : 0;
   var cfg = SC.config || {};
   var isAdmin = scIsAdmin();
@@ -14392,7 +14429,9 @@ function scShareDialog(edit){
      分享全班 / 自选 → 只勾「成绩单」。
      站主反馈「勾了那两个勾看不出区别」—— 除了页面里去掉重复，
      默认值也得跟着范围变，不然一打开两个勾都亮着，谁也看不出所以然。 */
-  var secBoxes = document.querySelectorAll('[data-sec]');
+  /* 只选分享弹窗里的两个勾。原来写 [data-sec] 会把「外观/排序/动效/数据」四个
+     设置页签按钮也一起选进来（同属性名），既没意义又会串味。 */
+  var secBoxes = scShAll('.sc-sh-sec input[data-sec]');
   var setSec = function(board, card){
     Array.prototype.forEach.call(secBoxes, function(cb){
       cb.checked = (cb.getAttribute('data-sec') === 'board') ? !!board : !!card;
@@ -14401,7 +14440,7 @@ function scShareDialog(edit){
   var applyDefaults = function(scope){
     if(scope === 'self') setSec(false, true);
     else setSec(true, false);
-    var el = document.getElementById('shSecTip');
+    var el = scShEl('shSecTip');
     if(el){
       el.innerHTML = scope === 'self'
         ? '范围是「只分享我的成绩」，已默认只勾<b>个人成绩卡</b> —— 对方看到的是完整一张卡（总分、排名、各科明细）。'
@@ -14409,54 +14448,67 @@ function scShareDialog(edit){
     }
   };
   var pickScope = function(){
-    var v = document.getElementById('shScope').value;
-    document.getElementById('shNamesWrap').style.display = (v === 'picked') ? 'block' : 'none';
+    var v = scShEl('shScope').value;
+    scShEl('shNamesWrap').style.display = (v === 'picked') ? 'block' : 'none';
+    /* 编辑已有分享时**不要**重置勾选：你已经勾好的「成绩单 / 个人成绩卡」
+       不能因为切一下范围就被默认值冲掉（那也是「改完没生效」的一半原因）。 */
+    if(edit){
+      var tip1 = scShEl('shSecTip');
+      if(tip1) tip1.innerHTML = '改完点<b>保存修改</b>：链接不变，之前发出去的照旧能打开。';
+      return;
+    }
     applyDefaults(v);
   };
-  document.getElementById('shScope').onchange = pickScope;
+  scShEl('shScope').onchange = pickScope;
   if(edit){
     setSec(edit.sections ? edit.sections.board !== false : true, edit.sections ? edit.sections.card !== false : true);
-    var tip0 = document.getElementById('shSecTip');
+    /* 「自选同学」的分享在编辑时把名单展开，之前是 display:none 等于藏起来 */
+    scShEl('shNamesWrap').style.display = (edit.scope === 'picked') ? 'block' : 'none';
+    var tip0 = scShEl('shSecTip');
     if(tip0) tip0.innerHTML = '这是<b>修改已有分享</b>：保存后<b>链接不变</b>，之前发出去的照旧能打开。';
   } else {
-    applyDefaults(document.getElementById('shScope').value);
+    applyDefaults(scShEl('shScope').value);
   }
-  Array.prototype.forEach.call(document.querySelectorAll('.sc-sh-n'), function(b){
+  Array.prototype.forEach.call(scShAll('.sc-sh-n'), function(b){
     b.onclick = function(){ b.classList.toggle('on'); };
   });
-  document.getElementById('shGo').onclick = function(){ scShareCreate(editId); };
+  scShEl('shGo').onclick = function(){ scShareCreate(editId); };
   mask.addEventListener('click', function(e){ if(e.target === mask) scShareClose(); });
   scShareList();
 }
 
 function scShareClose(){
-  var m = document.getElementById('scShMask');
-  if(m && m.parentNode) m.parentNode.removeChild(m);
+  /* 可能同时开着两层（从「我建过的分享」点编辑时会再开一层），全部关掉 */
+  var all = document.querySelectorAll('#scShMask');
+  for(var i = 0; i < all.length; i++){
+    if(all[i].parentNode) all[i].parentNode.removeChild(all[i]);
+  }
 }
 
 function scShareCreate(editId){
-  var btn = document.getElementById('shGo');
+  var btn = scShEl('shGo');
   var ids = [];
-  Array.prototype.forEach.call(document.querySelectorAll('.sc-sh-ex'), function(l){
+  Array.prototype.forEach.call(scShAll('.sc-sh-ex'), function(l){
     var cb = l.querySelector('input');
     if(cb && cb.checked) ids.push(Number(cb.value));
   });
   var names = [];
-  Array.prototype.forEach.call(document.querySelectorAll('.sc-sh-n.on'), function(b){
+  Array.prototype.forEach.call(scShAll('.sc-sh-n.on'), function(b){
     names.push(b.getAttribute('data-n'));
   });
-  var scope = document.getElementById('shScope').value;
+  var scope = scShEl('shScope').value;
   if(scope === 'picked' && !names.length){ alert('至少挑一位同学'); return; }
 
   /* 分享哪些内容：至少留一项，否则对方点开是空白页 */
   var sections = { board: false, card: false };
-  Array.prototype.forEach.call(document.querySelectorAll('[data-sec]'), function(cb){
-    sections[cb.getAttribute('data-sec')] = !!cb.checked;
+  Array.prototype.forEach.call(scShAll('.sc-sh-sec input[data-sec]'), function(cb){
+    var k = cb.getAttribute('data-sec');
+    if(k === 'board' || k === 'card') sections[k] = !!cb.checked;
   });
   if(!sections.board && !sections.card){ alert('至少要勾一项分享内容，不然对方点开是空的。'); return; }
 
-  var maxV = document.getElementById('shMax').value;
-  var daysVal = document.getElementById('shDays').value;
+  var maxV = scShEl('shMax').value;
+  var daysVal = scShEl('shDays').value;
   var isEdit = !!editId;
   var req = {
     scope: scope,
@@ -14475,7 +14527,7 @@ function scShareCreate(editId){
       if(!j || !j.ok){ alert((isEdit ? '保存失败：' : '生成失败：') + ((j && j.error) || '未知错误')); return; }
       if(isEdit){
         /* 改的是同一条分享，token 不变 —— 不用重新发链接 */
-        document.getElementById('shOut').innerHTML =
+        scShEl('shOut').innerHTML =
           '<div class="sc-hint sc-hint-ok"><b>已保存修改。</b>链接不变，之前发出去的照旧能打开。</div>';
         scShareList();
         return;
@@ -14483,13 +14535,13 @@ function scShareCreate(editId){
       /* ⚠️ 别用 location.origin + j.url —— 站点挂在子目录下会丢前缀 → 404。
          把后端给的「站点根路径」转成相对当前页面再解析，任何部署位置都对。 */
       var url = new URL(String(j.url || '').replace(/^\/+/, ''), location.href).href;
-      document.getElementById('shOut').innerHTML =
+      scShEl('shOut').innerHTML =
           '<div class="sc-hint sc-hint-ok">'
         + '<b>链接已生成。</b>把它发给要看的人就行 —— 对方不用登录。</div>'
         + '<div class="sc-sh-url"><input id="shUrl" readonly value="' + esc(url) + '">'
         + '<button class="btn btn-sm" id="shCopy">复制</button></div>';
-      document.getElementById('shCopy').onclick = function(){
-        var inp = document.getElementById('shUrl');
+      scShEl('shCopy').onclick = function(){
+        var inp = scShEl('shUrl');
         inp.select();
         try{
           if(navigator.clipboard && navigator.clipboard.writeText){
@@ -14507,7 +14559,7 @@ function scShareCreate(editId){
 
 function scShareList(){
   api('/scores?action=share-list', { method: 'POST' }).then(function(j){
-    var box = document.getElementById('shList');
+    var box = scShEl('shList');
     if(!box || !j || !j.ok) return;
     var list = j.shares || [];
     if(!list.length){ box.innerHTML = ''; return; }
@@ -14919,7 +14971,18 @@ function scQuadrant(){
   var pts = SC.rows.map(function(r){
     var t = scTotal(r, SC.basis), v = scSubScore(r, sub, SC.basis);
     if(t == null || v == null) return null;
-    return { name: r.name, x: t, y: v, me: scIsMe(r) };
+    var pack = (r.s && r.s[sub.key]) || {};
+    /* 单科排名跟着口径走：赋分口径看赋分排名，原始口径看原始排名（没有就退回原始排名） */
+    var subRank = (SC.basis === 'graded' && sub.graded && pack.asgRank != null) ? pack.asgRank
+                : (pack.rank == null ? null : pack.rank);
+    return {
+      name: r.name, x: t, y: v, me: scIsMe(r),
+      schoolRank: r.schoolRank == null ? null : r.schoolRank,
+      leagueRank: r.leagueRank == null ? null : r.leagueRank,
+      subRank: subRank,
+      subRaw: pack.raw == null ? null : pack.raw,
+      subAsg: pack.assigned == null ? null : pack.assigned,
+    };
   }).filter(Boolean);
   if(pts.length < 3) return '';
 
@@ -14933,19 +14996,34 @@ function scQuadrant(){
   var yOf = function(v){ return T + (H - T - B) * (1 - (v - ymin) / (ymax - ymin)); };
   var mx = xOf(st.avg), my = yOf(subAvg);
 
+  /* ⚠️ v3.1.1 修正：块的顺序必须和下面 qOf() 的下标严格一一对应
+     （0=总分低·单科弱 左下；1=总分强·单科弱 右下；2=总分低·单科强 左上；3=总分强·单科强 右上）。
+     SVG 的 y 轴是反的（y 越小＝分数越高），原来按「从上往下」写，
+     结果块上的标题和图上的位置上下颠倒 —— 站主反馈「点开名单和图对不上」就是这个。
+     顺带用 Math.max(0, …) 兜住班均正好压在边界上时的负宽高。 */
   var quads = [
-    { x: L, y: T, w: mx - L, h: my - T, c: '#f6f2ff', t: '总分低 / 单科弱', cls: 'sc-q1' },
-    { x: mx, y: T, w: W - R - mx, h: my - T, c: '#fff6f0', t: '总分强 / 单科弱（偏科预警）', cls: 'sc-q2' },
-    { x: L, y: my, w: mx - L, h: H - B - my, c: '#f4faf6', t: '总分低 / 单科强（单科尖子）', cls: 'sc-q3' },
-    { x: mx, y: my, w: W - R - mx, h: H - B - my, c: '#fdf8f3', t: '总分强 / 单科强', cls: 'sc-q4' },
+    { x: L,  y: my, w: mx - L,     h: H - B - my, c: '#f6f2ff', t: '总分低 / 单科弱', cls: 'sc-q1' },
+    { x: mx, y: my, w: W - R - mx, h: H - B - my, c: '#fff6f0', t: '总分强 / 单科弱（偏科预警）', cls: 'sc-q2' },
+    { x: L,  y: T,  w: mx - L,     h: my - T,     c: '#f4faf6', t: '总分低 / 单科强（单科尖子）', cls: 'sc-q3' },
+    { x: mx, y: T,  w: W - R - mx, h: my - T,     c: '#fdf8f3', t: '总分强 / 单科强', cls: 'sc-q4' },
   ];
   /* 每个点属于哪个象限：0=总分低·单科弱 1=总分强·单科弱 2=总分低·单科强 3=总分强·单科强。
      手机没有悬停 —— 点象限（或圆点）就在下方列出该象限的具体同学。 */
   var qOf = function(p){ return (p.x >= st.avg ? 1 : 0) + (p.y >= subAvg ? 2 : 0); };
   SC.quadSel = null;
+  SC.quadDot = null;
   SC._quad = {
     titles: quads.map(function(q){ return q.t; }),
-    pts: pts.map(function(p){ return { name: p.name, x: p.x, y: p.y, me: p.me, q: qOf(p) }; }),
+    subName: sub.name,
+    totalAvg: st.avg,
+    subAvg: subAvg,
+    pts: pts.map(function(p){
+      return {
+        name: p.name, x: p.x, y: p.y, me: p.me, q: qOf(p),
+        schoolRank: p.schoolRank, leagueRank: p.leagueRank,
+        subRank: p.subRank, subRaw: p.subRaw, subAsg: p.subAsg,
+      };
+    }),
   };
   /* 手机上点不动、也悬停不了，所以名字必须直接写在图上。
      但 60 个点全写会糊成一团 —— 只写「最该被点名」的：
@@ -14957,11 +15035,14 @@ function scQuadrant(){
   var labeled = {};
   warns.forEach(function(p){ labeled[p.name] = 1; });
 
-  var dots = pts.map(function(p){
+  var dots = pts.map(function(p, pi){
     var cx = xOf(p.x), cy = yOf(p.y);
-    var g = '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (p.me ? 5.5 : 3.6)
-      + '" class="' + (p.me ? 'sc-mine-dot' : 'sc-q-dot') + '" fill="' + (p.me ? '#c2410c' : '#7c3aed') + '" fill-opacity="' + (p.me ? 1 : 0.55) + '"'
-      + ' style="cursor:pointer" onclick="scQuadTap(' + qOf(p) + ')">'
+    /* v3.1.1：每个点单独可点 —— 点谁就只说这一个人（原来点哪个点都是「整个象限」）。
+       手指点 3.6px 的圆点很难命中，所以外面套一个透明 r=11 的命中圈。 */
+    var g = '<g class="sc-qg" style="cursor:pointer" onclick="scQuadDot(' + pi + ')">'
+      + '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="11" fill="transparent"/>'
+      + '<circle id="scQdot' + pi + '" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (p.me ? 5.5 : 3.6)
+      + '" class="' + (p.me ? 'sc-mine-dot' : 'sc-q-dot') + '" fill="' + (p.me ? '#c2410c' : '#7c3aed') + '" fill-opacity="' + (p.me ? 1 : 0.55) + '">'
       + '<title>' + esc(p.name) + '　总分 ' + fmtNum(p.x) + '　' + esc(sub.name) + ' ' + fmtNum(p.y) + '</title></circle>';
     if(p.me || labeled[p.name]){
       var txt = p.me ? ('我 ' + fmtNum(p.x) + '·' + fmtNum(p.y)) : (p.name + ' ' + fmtNum(p.y));
@@ -14971,6 +15052,7 @@ function scQuadrant(){
         + ' class="' + (p.me ? 'sc-qme' : 'sc-qnm') + '" fill="' + (p.me ? '#c2410c' : '#6d4bb8') + '" text-anchor="' + anc + '"'
         + ' stroke="#fffdfb" stroke-width="2.6" paint-order="stroke">' + esc(txt) + '</text>';
     }
+    g += '</g>';
     return g;
   }).join('');
 
@@ -14993,42 +15075,113 @@ function scQuadrant(){
     + '<div class="sc-quadpick">看哪一科：' + subs.map(function(x){
         return '<button class="' + (x.key === sub.key ? 'on' : '') + '" onclick="scSetQuad(\'' + x.key + '\')">' + esc(x.name) + '</button>';
       }).join('') + '</div>'
-    + '<div class="sc-figcap">横轴总分、纵轴单科，十字为班均线；右上＝双强，左上＝单科优势，右下＝偏科。'
-    + '图中标注姓名与该科分数，橙色「我」为本人；电脑端可悬停，手机点象限或圆点即可看该象限具体同学。</div>'
+    + '<div class="sc-figcap">横轴总分、纵轴单科，十字为班均线；右上＝双强，左上＝单科尖子，右下＝偏科预警。'
+    + '图中标注姓名与该科分数，橙色「我」为本人。<b>点某个圆点＝只看这个人</b>，点彩色底块＝看整个象限的同学。</div>'
     + '<div id="scQList" class="sc-qlist"></div>'
     + '</div>';
 }
-/* 点象限 / 圆点 → 在下方列出该象限的具体同学（手机没有悬停，必须能点开看）。
+/* 点底块 → 列出该象限的同学；点圆点 → 只看这一个人。
    只改 DOM、不整页重渲染，避免手机上看名单时页面跳回顶部。 */
 function scQuadTap(i){
   var qd = SC._quad;
   if(!qd) return;
   SC.quadSel = (SC.quadSel === i) ? null : i;   /* 再点一次收起 */
+  SC.quadDot = null;
+  scQuadPaint();
+  scQuadRender();
+}
+
+/* 点圆点：选中/取消某一个人（不连带展开整个象限） */
+function scQuadDot(i){
+  var qd = SC._quad;
+  if(!qd || !qd.pts[i]) return;
+  SC.quadDot = (SC.quadDot === i) ? null : i;
+  SC.quadSel = null;
+  scQuadPaint();
+  scQuadRender();
+}
+
+/* 只改描边/半径，不动整页 */
+function scQuadPaint(){
   for(var k = 0; k < 4; k++){
     var el = document.getElementById('scQrect' + k);
-    if(el){
-      var on = (SC.quadSel === k);
-      el.setAttribute('stroke', on ? '#c2410c' : 'none');
-      el.setAttribute('stroke-width', on ? '1.8' : '0');
-    }
+    if(!el) continue;
+    var on = (SC.quadSel === k);
+    el.setAttribute('stroke', on ? '#c2410c' : 'none');
+    el.setAttribute('stroke-width', on ? '1.8' : '0');
   }
+  var qd = SC._quad;
+  if(!qd || !qd.pts) return;
+  for(var j = 0; j < qd.pts.length; j++){
+    var d = document.getElementById('scQdot' + j);
+    if(!d) continue;
+    var sel = (SC.quadDot === j);
+    d.setAttribute('stroke', sel ? '#c2410c' : 'none');
+    d.setAttribute('stroke-width', sel ? 2.4 : '0');
+    d.setAttribute('r', sel ? 7.2 : (qd.pts[j].me ? 5.5 : 3.6));
+  }
+}
+
+/* 与班均的差，写成「班均 520，高 12.4」这种能直接读的句子 */
+function scQGap(v, avg){
+  if(v == null || avg == null) return '';
+  var d = v - avg;
+  if(Math.abs(d) < 0.05) return '班均 ' + fmtNum(avg) + '，正好持平';
+  return '班均 ' + fmtNum(avg) + '，' + (d > 0 ? '高 ' : '低 ') + fmtNum(Math.abs(d));
+}
+
+function scQWhoItem(label, val, avg, rank, gradeN){
+  return '<div class="sc-qwho-row"><i>' + esc(label) + '</i>'
+    + '<b>' + (val == null ? '—' : fmtNum(val)) + '</b>'
+    + '<span>' + esc(scQGap(val, avg)) + '</span>'
+    + (rank != null ? '<em>年级第 ' + rank + (gradeN ? ' / ' + gradeN : '') + '</em>' : '<em>年级排名缺</em>')
+    + '</div>';
+}
+
+function scQuadRender(){
+  var qd = SC._quad;
   var box = document.getElementById('scQList');
-  if(!box) return;
+  if(!qd || !box) return;
+
+  /* ① 只看某一个人 */
+  if(SC.quadDot != null){
+    var p = qd.pts[SC.quadDot];
+    if(!p){ box.innerHTML = ''; return; }
+    var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
+    box.innerHTML = '<div class="sc-qwho">'
+      + '<div class="sc-qwho-h"><b>' + esc(p.name) + '</b>'
+      +   (p.me ? '<em class="sc-qwho-me">我</em>' : '')
+      +   '<span class="sc-dim">' + esc(qd.titles[p.q]) + '</span>'
+      +   '<button class="sc-qlist-x" onclick="scQuadDot(' + SC.quadDot + ')">收起</button></div>'
+      + '<div class="sc-qwho-body">'
+      +   scQWhoItem('总分', p.x, qd.totalAvg, p.schoolRank, gradeN)
+      +   scQWhoItem(qd.subName, p.y, qd.subAvg, p.subRank, gradeN)
+      +   (p.leagueRank != null ? '<div class="sc-qwho-row"><i>联考排名</i><b>' + p.leagueRank + '</b><span></span></div>' : '')
+      +   (p.subRaw != null && p.subAsg != null && Math.abs(p.subRaw - p.subAsg) > 0.001
+            ? '<div class="sc-qwho-row"><i>' + esc(qd.subName) + '原始/赋分</i><b>' + fmtNum(p.subRaw) + ' → ' + fmtNum(p.subAsg) + '</b><span></span></div>'
+            : '')
+      + '</div></div>';
+    return;
+  }
+
+  /* ② 看整个象限 */
   if(SC.quadSel == null){ box.innerHTML = ''; return; }
   var list = qd.pts.filter(function(p){ return p.q === SC.quadSel; });
-  /* 偏科预警象限（总分强·单科弱）按单科从低到高，先看最该补的；其余按单科从高到低 */
+  /* 偏科预警象限（总分强·单科弱，下标 1）按单科从低到高，先看最该补的；其余按单科从高到低 */
   if(SC.quadSel === 1){ list.sort(function(a, b){ return a.y - b.y; }); }
   else { list.sort(function(a, b){ return b.y - a.y; }); }
   var chips = list.map(function(p){
-    return '<span class="sc-qchip' + (p.me ? ' me' : '') + '">' + esc(p.name)
-      + '<em>总分 ' + fmtNum(p.x) + ' · ' + fmtNum(p.y) + '</em></span>';
+    return '<button class="sc-qchip' + (p.me ? ' me' : '') + '" onclick="scQuadDot(' + qd.pts.indexOf(p) + ')">'
+      + esc(p.name) + '<em>总分 ' + fmtNum(p.x) + ' · ' + fmtNum(p.y) + '</em></button>';
   }).join('');
   box.innerHTML = '<div class="sc-qlist-h"><b>' + esc(qd.titles[SC.quadSel]) + '</b>　共 ' + list.length + ' 人'
     + '<button class="sc-qlist-x" onclick="scQuadTap(' + SC.quadSel + ')">收起</button></div>'
     + (list.length ? '<div class="sc-qlist-body">' + chips + '</div>'
-                   : '<div class="sc-dim" style="padding:4px 2px">该象限暂无同学。</div>');
+                   : '<div class="sc-dim" style="padding:4px 2px">该象限暂无同学。</div>')
+    + (list.length ? '<div class="sc-dim" style="margin-top:6px;font-size:.72rem">点名字看这个人</div>' : '');
 }
-function scSetQuad(k){ SC.quadKey = k; SC.quadSel = null; scRenderPane(); }
+
+function scSetQuad(k){ SC.quadKey = k; SC.quadSel = null; SC.quadDot = null; scRenderPane(); }
 
 /* ---------- ⑤ 学生 × 科目热力图 ---------- */
 function scHeatmap(){

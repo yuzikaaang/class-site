@@ -3472,9 +3472,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(indexHtml),
+  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(adminHtml),
+  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3838,9 +3838,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(indexHtml38),
+  t('★前台版本号为 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(adminHtml38),
+  t('★后台版本号为 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4855,10 +4855,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(idx47));
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(adm47));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(idx47));
+  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(adm47));
   t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
-    /class-site-v88/.test(sw47));
+    /class-site-v89/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4942,7 +4942,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.1.0');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.1.1');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5042,9 +5042,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(idx48));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-17'/.test(idx48));
-  t('★service worker 缓存版本升到 v80', /class-site-v88/.test(sw48));
+  t('★service worker 缓存版本升到 v80', /class-site-v89/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5109,8 +5109,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(idx49));
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(adm49));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(idx49));
+  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5182,7 +5182,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(idx50));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5353,7 +5353,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/导入完成，有几点要留意/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(adm));
+  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5421,7 +5421,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(idx));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5927,7 +5927,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(idx));
+  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6005,8 +6005,8 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
   t('★分享自己 → 只勾个人成绩卡；分享全班/自选 → 只勾成绩单',
     /if\(scope === 'self'\) setSec\(false, true\);/.test(idx) && /else setSec\(true, false\);/.test(idx));
   t('★打开弹窗时就应用一次默认（不是等用户去切范围）',
-    /applyDefaults\(document\.getElementById\('shScope'\)\.value\);/.test(idx));
-  t('★切范围时联动', /document\.getElementById\('shScope'\)\.onchange = pickScope;/.test(idx));
+    /applyDefaults\(scShEl\('shScope'\)\.value\);/.test(idx));
+  t('★切范围时联动', /scShEl\('shScope'\)\.onchange = pickScope;/.test(idx));
   t('★说明里点出两项各适合什么场景',
     /看好几个人时用这个/.test(idx) && /分享自己时用这个/.test(idx));
   t('★有随范围变化的提示条', /id="shSecTip"/.test(idx) && /\.sc-sh-tip\{/.test(idx));
@@ -6038,7 +6038,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(idx));
+  t('★前台版本号升到 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(idx));
   t('★后台内置更新记录补到 2.10.0',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6143,10 +6143,10 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(idx));
-  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.1\.0'/.test(adm));
+  t('★前台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(idx));
+  t('★后台版本号 3.1.0', /SITE_VERSION = '3\.1\.1'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 3.1.0 且缓存升 v88', /SITE_VER = '3\.1\.0'/.test(swSrc) && /class-site-v88/.test(swSrc));
+  t('★sw.js SITE_VER 3.1.0 且缓存升 v89', /SITE_VER = '3\.1\.1'/.test(swSrc) && /class-site-v89/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7526,7 +7526,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
 
   /* ---- ③ 版本与缓存同步 ---- */
   t('★sw.js 缓存升 v82、版本 2.10.1',
-    /class-site-v88/.test(swSrc) && /SITE_VER = '3\.1\.0'/.test(swSrc));
+    /class-site-v89/.test(swSrc) && /SITE_VER = '3\.1\.1'/.test(swSrc));
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
   const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -7956,7 +7956,9 @@ console.log('\n【78】第六十四轮·四象限手机点选 / 六科画像数�
   /* ① 四象限：点象限 / 圆点 → 列名单（手机可用，不用悬停） */
   t('★四象限有点选处理函数 scQuadTap', /function scQuadTap\(i\)\{/.test(idx));
   t('★四象限矩形块可点（onclick=scQuadTap(序号)）', /onclick="scQuadTap\(' \+ qi \+ '\)"/.test(idx));
-  t('★四象限圆点也可点', /onclick="scQuadTap\(' \+ qOf\(p\) \+ '\)"/.test(idx));
+  t('★四象限圆点按「一个人」点（scQuadDot），不是整个象限',
+    /onclick="scQuadDot\(' \+ pi \+ '\)"/.test(idx) && /function scQuadDot\(i\)\{/.test(idx));
+  t('★圆点有透明命中圈（手机上点得中）', /r="11" fill="transparent"/.test(idx));
   t('★四象限有名单容器 scQList', /id="scQList"/.test(idx));
   t('★四象限矩形带 id 以便高亮所选', /id="scQrect' \+ qi \+ '"/.test(idx));
   t('★再点一次收起（toggle）', /SC\.quadSel = \(SC\.quadSel === i\) \? null : i;/.test(idx));
@@ -8170,9 +8172,102 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
     (shr.match(/BASIS === 'graded'\) \? \(EX\.cutlines/g) || []).length >= 2);
 
   /* 版本与记录 */
-  t('版本记录含 3.1.0 与 3.0.1', /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.1.0', /SITE_VERSION = '3[.]1[.]0'/.test(idx) && /SITE_VERSION = '3[.]1[.]0'/.test(adm) && /SITE_VER = '3[.]1[.]0'/.test(sw));
+  t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
+  t('版本号三处同步 3.1.1', /SITE_VERSION = '3[.]1[.]1'/.test(idx) && /SITE_VERSION = '3[.]1[.]1'/.test(adm) && /SITE_VER = '3[.]1[.]1'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
+}
+
+console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象限名单与图对齐 / 点圆点只看一个人');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const sw = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+
+  /* ① 分享弹窗：所有取值只在自己那一层里找 —— 否则「编辑」时读到旧弹窗就是保存无效 */
+  t('★打开弹窗前先清掉旧弹窗（scShareClose 清所有 #scShMask）',
+    /var all = document\.querySelectorAll\('#scShMask'\);/.test(idx)
+    && /function scShareDialog\(edit\)\{\s*scShareClose\(\);/.test(idx));
+  t('★弹窗内有作用域助手 scShEl（当前层优先）',
+    /function scShEl\(id\)\{/.test(idx) && /return \(r && r\.querySelector\('#' \+ id\)\) \|\| document\.getElementById\(id\);/.test(idx));
+  t('★弹窗内不再用 document.getElementById 取自身字段',
+    !/document\.getElementById\('sh(Scope|Days|Max|Go|List|Out|Url|Copy|Names|SecTip)/.test(idx));
+  t('★编辑时切范围不重置已勾的分享内容（原来会被默认值冲掉）',
+    /if\(edit\)\{\s*var tip1 = scShEl\('shSecTip'\);[\s\S]{0,160}return;\s*\}/.test(idx));
+  t('★自选同学的分享在编辑时名单是展开的',
+    /scShEl\('shNamesWrap'\)\.style\.display = \(edit\.scope === 'picked'\) \? 'block' : 'none';/.test(idx));
+  t('★勾选框只认分享弹窗里的两个（不再把设置页签按钮卷进来）',
+    /scShAll\('\.sc-sh-sec input\[data-sec\]'\)/.test(idx)
+    && /if\(k === 'board' \|\| k === 'card'\) sections\[k\] = !!cb\.checked;/.test(idx));
+
+  /* ② 四象限：真的把四块算一遍，验证「下标 = 高分方向」与标题一致 */
+  let quadOK = false, quadDetail = '';
+  const qm = idx.match(/var quads = \[([\s\S]*?)\n  \];/);
+  if (qm) {
+    const W = 640, H = 380, L = 54, R = 24, T = 22, B = 46, mx = 300, my = 180;
+    const quads = new Function('L', 'mx', 'T', 'my', 'W', 'R', 'H', 'B', 'return [' + qm[1] + '];')(L, mx, T, my, W, R, H, B);
+    const want = ['总分低 / 单科弱', '总分强 / 单科弱', '总分低 / 单科强', '总分强 / 单科强'];
+    const cases = [
+      { dx: -1, dy: -1, i: 0 }, { dx: 1, dy: -1, i: 1 },
+      { dx: -1, dy: 1, i: 2 }, { dx: 1, dy: 1, i: 3 },
+    ];
+    quadOK = cases.every((c) => {
+      const q = quads[c.i];
+      const cx = mx + c.dx * 40, cy = my - c.dy * 40;   /* SVG 纵轴反向：单科强 → y 更小 */
+      return q && q.t.indexOf(want[c.i]) === 0
+        && cx >= q.x - 0.01 && cx <= q.x + q.w + 0.01
+        && cy >= q.y - 0.01 && cy <= q.y + q.h + 0.01;
+    });
+    quadDetail = quads.map((q) => q.t + '@' + Math.round(q.y)).join(' | ');
+  }
+  t('★四象限 0..3 的下标、位置、标题三者一致（几何校验）', quadOK, quadDetail);
+  t('★点圆点＝只看这一个人（scQuadDot + 个人明细）',
+    /function scQuadDot\(i\)\{/.test(idx) && /onclick="scQuadDot\(' \+ pi \+ '\)"/.test(idx)
+    && /function scQuadRender\(\)\{/.test(idx) && /class="sc-qwho"/.test(idx));
+  t('★点彩色底块才看整个象限的名单',
+    /onclick="scQuadTap\(' \+ qi \+ '\)"/.test(idx) && /SC\.quadSel = \(SC\.quadSel === i\) \? null : i;/.test(idx));
+  t('★个人明细含总分/该科/与班均差/年级排名',
+    /scQWhoItem\('总分'/.test(idx) && /scQWhoItem\(qd\.subName/.test(idx) && /年级第 ' \+ rank/.test(idx));
+  t('★切科目/口径时把「选中的那个人」也清掉',
+    /function scSetQuad\(k\)\{ SC\.quadKey = k; SC\.quadSel = null; SC\.quadDot = null;/.test(idx));
+
+  /* ③ 功能：改 scope 真的生效（self → class → self） */
+  const mk = await call('/api/scores?action=exam-save', { method: 'POST', token: adminToken,
+    body: { name: '分享范围改动验证', exam_date: '2026-10-05', subjects: [{ key: 'chinese', name: '语文', full: 150 }] } });
+  const eid = mk.body.exam && mk.body.exam.id;
+  await call('/api/scores?action=scores-import', { method: 'POST', token: adminToken, body: { exam: eid, rows: [
+    { name: '余子康', no: '1', s: { chinese: { raw: 120 } }, schoolRank: 8 },
+    { name: '路人乙', no: '2', s: { chinese: { raw: 95 } }, schoolRank: 40 },
+  ] } });
+  await call('/api/scores?action=exam-publish', { method: 'POST', token: adminToken, body: { id: eid, publish: true } });
+
+  const cs = await call('/api/scores?action=share-create', { method: 'POST', token: adminToken,
+    body: { scope: 'self', examIds: [eid], sections: { board: true, card: false }, days: 7 } });
+  const tok = cs.body.token;
+  const g1 = await call('/api/scores?action=share-get&t=' + tok);
+  t('（准备）scope=self 时只看到自己那一行', g1.status === 200 && (g1.body.rows || []).length === 1,
+    'rows=' + ((g1.body.rows || []).length));
+
+  const up = await call('/api/scores?action=share-update', { method: 'POST', token: adminToken,
+    body: { id: cs.body.id, scope: 'class', sections: { board: true, card: false }, days: 'keep' } });
+  t('★改成 class 后返回的 scope 就是 class', up.status === 200 && up.body.share.scope === 'class',
+    JSON.stringify(up.body.share && up.body.share.scope));
+  const g2 = await call('/api/scores?action=share-get&t=' + tok);
+  t('★旧链接立刻按新范围给数据（1 行 → 2 行）',
+    g2.status === 200 && (g2.body.rows || []).length === 2, 'rows=' + ((g2.body.rows || []).length));
+
+  const up2 = await call('/api/scores?action=share-update', { method: 'POST', token: adminToken,
+    body: { id: cs.body.id, scope: 'self', sections: { board: true, card: false }, days: 'keep' } });
+  const g3 = await call('/api/scores?action=share-get&t=' + tok);
+  t('★再改回 self 也生效（2 行 → 1 行）',
+    up2.status === 200 && (g3.body.rows || []).length === 1, 'rows=' + ((g3.body.rows || []).length));
+
+  await call('/api/scores?action=share-revoke', { method: 'POST', token: adminToken, body: { id: cs.body.id } });
+  await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: eid } });
+
+  /* ④ 版本与记录 */
+  t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
+  t('版本号三处同步 3.1.1',
+    /SITE_VERSION = '3[.]1[.]1'/.test(idx) && /SITE_VERSION = '3[.]1[.]1'/.test(adm) && /SITE_VER = '3[.]1[.]1'/.test(sw));
 }
 
 console.log('\n' + '='.repeat(52));
