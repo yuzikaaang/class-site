@@ -8585,6 +8585,23 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
+  /* v3.5.7 护栏：投票结果排序 + admin 无一元加号 NaN 坑 + 时区本地化 */
+  {
+    const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+    const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+    const votesjs = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
+    t('★投票后端 results 按票数降序（shapeVote sort）',
+      /v\.results = \(v\.options \|\| \[\]\)\.map[\s\S]{0,200}\.sort\(\(a, b\) => b\.n - a\.n\)/.test(votesjs));
+    t('★投票前端结果视图按票数降序（兜底 sort）',
+      idx.includes("(v.results || v.options).slice().sort(function(a, b){ return (b.n || 0) - (a.n || 0); })"));
+    t('★admin 投票列表无一元加号拼接坑（st.text 后不再跟 "+ +"）',
+      !/st\.text\s*\n\s*\+\s*\+/.test(adm));
+    t('★admin 截止时间走 voTimeText 本地时区（不再切 UTC 字符串）',
+      adm.includes("voTimeText(v.deadline)") && adm.includes('function voTimeText('));
+    t('★admin 编辑器 datetime-local 回填用本地时区（voLocalInput）',
+      adm.includes('voLocalInput(v.deadline)') && adm.includes('function voLocalInput('));
+  }
+
 console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象限名单与图对齐 / 点圆点只看一个人');
 {
   const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');

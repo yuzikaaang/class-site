@@ -899,7 +899,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.6';
+var SITE_VERSION = '3.5.7';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -9919,6 +9919,22 @@ function voLoad(){
   });
 }
 
+/* 截止时间统一按本地时区展示（此前直接切 UTC 字符串，比北京时间少 8 小时） */
+function voTimeText(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+/* datetime-local 输入框值（本地时区，T 分隔） */
+function voLocalInput(iso){
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0, 16);
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
 function voStatusText(v){
   if(v.status === 'closed') return { text: '已截止', cls: 'muted' };
   if(!v.deadline) return { text: '进行中 · 不限截止', cls: 'ok' };
@@ -9941,7 +9957,7 @@ function voPaint(){
     (v.results || []).forEach(function(r){ total += r.n; if(r.n > maxN) maxN = r.n; });
     var resHtml = '';
     if(v.results){
-      resHtml = '<div style="margin-top:10px">' + v.results.map(function(r){
+      resHtml = '<div style="margin-top:10px">' + v.results.slice().sort(function(a, b){ return b.n - a.n; }).map(function(r){
         var pct = maxN > 0 ? Math.round(r.n / maxN * 100) : 0;
         return '<div style="position:relative;padding:7px 10px;border-radius:8px;background:var(--bg-2,#faf6f2);margin-bottom:6px;overflow:hidden">'
           + '<div style="position:absolute;left:0;top:0;bottom:0;width:' + pct + '%;background:#ffe4cf"></div>'
@@ -9974,10 +9990,10 @@ function voPaint(){
       +     (v.kind === 'song' ? '<span class="badge" style="margin-left:6px">歌单</span>' : '')
       +     '<div class="muted" style="font-size:.76rem;margin-top:3px">'
       +       st.text
-      +       + (v.deadline ? ' · 截止 ' + esc(String(v.deadline).slice(0, 16).replace('T', ' ')) : '')
-      +       + (v.multi ? ' · 多选' : ' · 单选')
-      +       + (v.allowAdd ? ' · 允许同学加选项' : '')
-      +       + (v.results ? ' · ' + (v.voters || total) + ' 人参与' : '')
+      +       (v.deadline ? ' · 截止 ' + esc(voTimeText(v.deadline)) : '')
+      +       (v.multi ? ' · 多选' : ' · 单选')
+      +       (v.allowAdd ? ' · 允许同学加选项' : '')
+      +       (v.results ? ' · ' + (v.voters || total) + ' 人参与' : '')
       +     '</div>'
       +   '</div>'
       +   '<div style="display:flex;gap:6px;flex-wrap:wrap">'
@@ -10096,7 +10112,7 @@ function voEditorDialog(v){
       +   '</div>'
       + '<div id="voSongPick" style="display:none;margin-bottom:12px"></div>'
       + '<div class="field"><label>截止时间（留空 = 不限截止）</label>'
-      +   '<input type="datetime-local" id="voDeadline" value="' + attr((v && v.deadline) ? String(v.deadline).slice(0, 16) : '') + '"></div>'
+      +   '<input type="datetime-local" id="voDeadline" value="' + attr((v && v.deadline) ? voLocalInput(v.deadline) : '') + '"></div>'
       + '<div class="field"><label>说明（选填）</label>'
       +   '<input id="voNote" maxlength="200" placeholder="投票说明，会显示在标题下方" value="' + attr((v && v.note) || '') + '"></div>'
       + '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.86rem;margin-bottom:8px">'

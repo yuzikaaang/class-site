@@ -402,6 +402,11 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 ## 9. 更新记录
 
+### v3.5.7（2026-10-17）
+- **admin.html 一元加号坑（重要教训）**：字符串拼接换行时误写成 `+ st.text + + (cond ? str : '')`，第二个 `+` 是一元加号，空串转数字得 0、非空串得 NaN → 页面显示 `NaNNaNNaNNaN`。浏览器控制台零报错，只有真机渲染才能看到。以后多行拼接要整体检查 `+ +`。
+- 投票 results 排序：后端 `shapeVote` 加 `.sort((a,b)=>b.n-a.n)`，前端结果视图兜底排序，后台结果块同步。
+- 时区：admin 投票列表与编辑器不再直接切 UTC ISO 字符串，走 `voTimeText` / `voLocalInput` 本地时区。
+
 | 日期 | 内容 |
 |------|------|
 | 2026-10-17（第七十九轮 · v3.5.6 四块任务） | 🗳️ **站主原话**：「入团时间你决定，剩下的4个任务赶紧做掉」。四块全做完了。<br>**① 投票管理**：新建 `api/votes.js`（约 420 行）+ 两张表 `class_votes` / `class_vote_ballots`，`SCHEMA_VER` 3.5.5→3.5.6。**关键设计**：results 只在下发时按 `status='closed'` 才给（进行中显式给 `null`，防带票）；`class_vote_ballots` 以 `(vote_id,user_id)` 为主键，改票是 `on conflict do update` 覆盖；改选项时**按 label 匹配保留老 id**，已投票不丢。前台挂在**板块 7（班级事务）顶部拼接**——⚠️ 这里踩过一个坑：一开始写成 `else if(c.id===7){ inner = voteEmbedHtml(); }` **独占**板块，会把该板块原有的 3 张卡片全盖掉（`grep -o "categoryId:\s*[0-9]*" \| sort \| uniq -c` 查出 `categoryId:7` 有 3 条才发现），已改为 `popBannerHtml + voteEmbedHtml + inner` 拼接。<br>**② 成绩分析增强**：需关注加四档筛选（全部/总分不达标/仅单科/**连续两次退步**）+ 表头排序；新增 `scBands/scBandStats/scBandCard` 三类统计（有分数线按最高/最低线，无线按满分 85/60/40% 兜底，低分恒 40%）；`scCareSummary` 表格下方自动文字总结；`scMeAnalysis` 我的画像 AI 分析卡——**纯本地规则引擎，不联网**（成绩含真实姓名，不该往外发；规则可解释可复现，不像模型会幻觉）。「连续两次退步」要跟上一场比，走 `scLoadPrevPack` 懒加载 + 缓存，拉不到就当没有（筛选 0 人，不误报）。<br>**③ 点歌加权**：`djWeightOf/djWeightedIdx` 加权采样，只作用于随机段，「高赞必选」不掺权重；进步 +2、班委 +1 可调；`djRankByName` 与前台 `scRankMap` 同算法（同分并列 1,2,2,4）。<br>**④ 每日一言**：`quoteNet` 三处（默认值 / normalize / fetch 守卫），联网类别改 `c=a&c=b&c=d&c=i`（去掉了会返回毛主席语录的 `c=k` 哲学类）。<br>**踩到的弹窗 API 坑（重要）**：`confirmBox(o)` 返回 **Promise**、只认 `title/text/html/detail/warn/danger/okText`，**没有 `onOk`**；`openModal` 只认 `title/sub/wide/body/foot/locked/onMount`，**也没有 `okText/onOk`**。我最初按 `onOk` 写，`danger`/`okText` 生效但 `onOk` 被静默忽略 → 点「删除」什么也不发生（不报错，最难查的那种）。已改成 `confirmBox({...}).then(yes=>...)` 和 `openModal({foot:'<button data-yes>', onMount(box){ box.querySelector('[data-yes]').onclick = submit; }})`。**以后写弹窗只认这两个签名。**<br>**顺带**：生产库删掉重复字段 `youth_time`（63 条档案零值、全仓零代码引用），字段 19→18。测试断言从「钉死版本号」改成「三处彼此一致」——每轮升版都要改 10 处硬编码太脆。双模式 **2474 / 2429 全绿**。 |

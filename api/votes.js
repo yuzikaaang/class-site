@@ -141,10 +141,11 @@ function shapeVote(r, uid, isAdmin, myChoices, counts) {
   const closed = !v.open;
   /* 截止后：所有人看结果；截止前：只有管理员看（后台要能预览） */
   if (closed || isAdmin) {
+    /* 结果按票数降序（同票保持原顺序） */
     v.results = (v.options || []).map((o) => ({
       id: o.id, label: o.label, by: o.by,
       n: (counts && counts[o.id]) || 0,
-    }));
+    })).sort((a, b) => b.n - a.n);
     v.voters = counts ? counts.__voters || 0 : 0;
   } else {
     v.results = null;

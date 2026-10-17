@@ -3295,7 +3295,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.6';
+var SITE_VERSION = '3.5.7';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -12902,8 +12902,8 @@ function voteCardHtml(v){
 
   var optsHtml;
   if(closed || v.results){
-    /* 结果视图：条形 + 票数 */
-    optsHtml = (v.results || v.options).map(function(o){
+    /* 结果视图：条形 + 票数（按票数降序，同票保持原顺序；后端已排，这里兜底） */
+    optsHtml = (v.results || v.options).slice().sort(function(a, b){ return (b.n || 0) - (a.n || 0); }).map(function(o){
       var n = o.n || 0;
       var pct = maxN > 0 ? Math.round(n / maxN * 100) : 0;
       var mine = (v.myChoices || []).indexOf(o.id) >= 0;
