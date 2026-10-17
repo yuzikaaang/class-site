@@ -161,12 +161,13 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       }
       render(res.j);
     })
-    .catch(function(){
+    .catch(function(e){ console.error('share-get 失败：', e);
       app.innerHTML = '<div class="empty"><div class="ico">📡</div>'
         + '<p><b>网络不给力，没能打开</b></p><p class="dim">检查一下网络，再刷新试试。</p></div>';
     });
 
   var DATA = null, EX = null, BASIS = 'graded';
+  var SEC = {};   /* v3.5.13 热修：分享块开关提为模块级 —— trendCards 以前引用 pick() 的局部变量 wantRankChg，直接 ReferenceError，被 .catch 吞成「网络不给力」 */
 
   function render(d){
     DATA = d;
@@ -264,6 +265,7 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     /* v3.5.12 #7：分享也支持**逐块**勾选（与打印 / 导出同一套键名）。
        老链接没写子键 → undefined 一律当「有」，不会突然变空白。 */
     var sw = function(k){ return sec[k] !== false; };
+    SEC = sec;
     var wantBoard = sw('board');
     var wantCard = sw('card');
     var wantAvg = sw('avg'), wantTable = sw('table'), wantCut = sw('cut');
@@ -405,7 +407,7 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       html += lineCard('历史总分趋势（' + (BASIS === 'graded' ? '赋分' : '原始') + '）', totalPts,
         { invert: false, desc: '按历次总分（' + (BASIS === 'graded' ? '赋分' : '原始') + '口径）连线，每个点标分数。' });
     }
-    if(wantRankChg && rankPts.length >= 2){
+    if(SEC.rankchg !== false && rankPts.length >= 2){
       html += lineCard('年级排名变化', rankPts,
         { invert: true, desc: '越靠上名次越前（数字越小越好）；只画有年级排名的考试。' });
     }
