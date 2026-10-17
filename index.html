@@ -1833,6 +1833,15 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .dark .sc-svg .sc-q-dot{fill:#c4b5fd}
 .dark .sc-svg .sc-qme{fill:#fdba74;stroke:#262220}    /* 四象限姓名标签（白描边改深描边） */
 .dark .sc-svg .sc-qnm{fill:#c4b5fd;stroke:#262220}
+/* 六科画像数值表 / 四象限名单（暗色） */
+.dark .sc-sixtbl th,.dark .sc-sixtbl td{border-color:#3d3631}
+.dark .sc-sixtbl thead th{color:#a8998c;border-color:#4a4038}
+.dark .sc-sixtbl th:first-child,.dark .sc-sixtbl td.k{color:#e7dccf}
+.dark .sc-sixtbl tfoot td{background:#2a2521;border-color:#4a4038}
+.dark .sc-qchip{background:#2a2536;border-color:#3d3652;color:#cbb9f0}
+.dark .sc-qchip em{color:#a8998c}
+.dark .sc-qchip.me{background:#3a2a20;border-color:#5a3a28;color:#f0a878}
+.dark .sc-qlist-x{color:#a8998c;border-color:#4a4038}
 /* 迷你折线（各科趋势卡内）：父级没有 .sc-svg（min-width 会撑爆 132px 小图），单独作用域 */
 .dark .sc-mini-svg .sc-up{stroke:#4ade80}
 .dark .sc-mini-svg .sc-down{stroke:#f87171}
@@ -1956,6 +1965,22 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-sub-diff.down{color:#c0392b}
 .sc-sub-bar{height:5px;border-radius:999px;background:#f5efe8;margin-top:7px;overflow:hidden}
 .sc-sub-bar i{display:block;height:100%;background:#b06a32;border-radius:999px}
+/* 六科画像数值表（个人 × 总分占比 × 班均） */
+.sc-sixtbl{width:100%;border-collapse:collapse;margin-top:10px;font-size:.8rem;font-variant-numeric:tabular-nums}
+.sc-sixtbl th,.sc-sixtbl td{padding:5px 6px;text-align:right;border-bottom:1px solid #efe6da}
+.sc-sixtbl th:first-child,.sc-sixtbl td.k{text-align:left;font-weight:700;color:#57534e}
+.sc-sixtbl thead th{font-size:.68rem;color:#8a7968;font-weight:700;border-bottom:1.5px solid #e2d5c8}
+.sc-sixtbl tfoot td{font-weight:800;border-top:1.5px solid #e2d5c8;border-bottom:none;background:#fbf7f1}
+/* 四象限：点象限/圆点列名单（手机无悬停，必须能点开看） */
+.sc-qhit{transition:opacity .12s}
+.sc-qlist{margin-top:2px}
+.sc-qlist-h{display:flex;align-items:center;gap:8px;font-size:.8rem;color:#57534e;margin-top:8px}
+.sc-qlist-h b{color:#c2410c}
+.sc-qlist-x{margin-left:auto;font-size:.72rem;color:#8a7968;background:none;border:1px solid #e2d5c8;border-radius:6px;padding:2px 8px;cursor:pointer;font-family:inherit}
+.sc-qlist-body{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.sc-qchip{display:inline-flex;align-items:baseline;gap:5px;background:#f6f2ff;border:1px solid #e6dcf7;color:#4c3b74;border-radius:999px;padding:3px 10px;font-size:.78rem}
+.sc-qchip em{font-style:normal;font-size:.66rem;color:#8a7968}
+.sc-qchip.me{background:#fff3ea;border-color:#f5c9a8;color:#c2410c}
 .sc-seg-sm button{padding:5px 9px;font-size:.72rem}
 /* ===== 分享弹窗（v2.8.3） ===== */
 .sc-sh-exs{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow:auto;padding:8px 10px;
@@ -3002,8 +3027,8 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '2.10.2';
-var VER_DATE = '2026-10-16';
+var SITE_VERSION = '2.10.3';
+var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
   gitee:  'https://gitee.com/zikang0529/class-site',
@@ -3891,6 +3916,7 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-10-17 10:30", text: "📊 「我的画像」升级：六科画像除了雷达图，还多了一张数值表 —— 每科都能看到「我的分数 / 占总分比例 / 班均 / 与班均差」，一眼看清自己强在哪、差多少。另外，切到「总分原始」口径时，化学、生物不再显示「赋分」标签，也不会再和特控 / 本科 / 600 线硬比（那三条线是按赋分总分划的）。", category: "site" },
     { date: "2026-10-11 17:18", text: "📚 首页新增「学习卡片」：和「每日一言」一样每次刷新随机出一条 —— 物理 / 化学 / 生物 知识点公式，或英语选词填空（带答案解析），也能联网抓「每日一词」和「古诗文」。想只留某几类，去「自定义设置」里勾。", category: "site" },
     { date: "2026-10-11 17:12", text: "🎲 「每日一言」改为完全随机切换，不再按日顺序轮播；同时接入网络名言库，联网时会自动换一句。", category: "site" },
     { date: "2026-10-11 17:06", text: "🛠 后台公告支持手动改发布时间，旁边加了「填入当前时间」按钮，时间填错也能自己修正。", category: "site" },
@@ -12429,6 +12455,8 @@ var SC = {
   allRows: null,  /* 懒加载的历次全班成绩 { examId: {exam, rows} }，用于上线率趋势 */
   config: null,   /* 后台配置（对外展示档位等），进页面时取一次 */
   quadKey: null,  /* 四象限当前看哪一科 */
+  quadSel: null,  /* 四象限当前点开了哪个象限（0..3，null=没点开）——手机点开看名单 */
+  _quad: null,    /* 最近一次四象限渲染的点数据（供点选时算名单，不重新渲染） */
   pkA: null,      /* 成绩对比 PK：A 方成绩行 id（v2.10.0） */
   pkB: null,      /* 成绩对比 PK：B 方成绩行 id（v2.10.0） */
   basisSet: false,/* 用户是否自己切过口径（切过就不再被后台默认值覆盖） */
@@ -12891,7 +12919,8 @@ function scChartHist(st){
     marks += '<line x1="' + x.toFixed(1) + '" y1="' + T + '" x2="' + x.toFixed(1) + '" y2="' + (H - B) + '" class="' + d.cls + '" stroke="' + d.color + '" stroke-width="1.2" stroke-dasharray="4 3"/>';
     marks += '<text x="' + (x + 3).toFixed(1) + '" y="' + (T + 10) + '" font-size="9" class="' + d.cls + '" fill="' + d.color + '">' + d.label + '</text>';
   });
-  var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
+  /* 分数线按赋分总分划：原始口径下不画三线（否则原始分被拿去和赋分线比，没意义） */
+  var cuts = SC.basis === 'graded' ? (SC.exam.cutlines || []).filter(function(c){ return c.score != null; }) : [];
   cuts.forEach(function(c){
     if(c.score < first * step || c.score > (last + 1) * step) return;
     var x = xForValue(c.score);
@@ -12927,6 +12956,7 @@ function scChartHist(st){
 
 /* ---------- 图表：分数线上线统计 ---------- */
 function scChartCutlines(st){
+  if(SC.basis !== 'graded') return '';   /* 分数线按赋分总分划，原始口径不可比 */
   var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
   if(!cuts.length) return '';
   var rows = cuts.map(function(c){
@@ -12946,8 +12976,10 @@ function scChartCutlines(st){
 function scChartSegments(st){
   if(!st.n) return '';
   var segs = [];
-  var byCut = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; })
-    .sort(function(a, b){ return b.score - a.score; });
+  /* 原始口径下不用三线切段（线是赋分线），退回按满分比例分段 */
+  var byCut = SC.basis === 'graded'
+    ? (SC.exam.cutlines || []).filter(function(c){ return c.score != null; }).sort(function(a, b){ return b.score - a.score; })
+    : [];
   var max = st.max;
   if(byCut.length){
     var prev = max;
@@ -13025,20 +13057,27 @@ function scRenderMe(){
     + '</div>'
     + '</div>';
 
-  /* ② 上线情况 */
+  /* ② 上线情况 —— 特控/本科/600 三条线都是按「赋分总分」划的，
+     原始口径下总分与它们不可比（站主要求：原始分不跟三线比较），故只在赋分口径显示。 */
   var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
   if(cuts.length && myTotal != null){
-    html += '<div class="sc-card"><div class="sc-card-h">上线情况</div><div class="sc-cuts">'
-      + cuts.map(function(c){
-          var ok = myTotal >= c.score;
-          var d = Math.abs(myTotal - c.score);
-          return '<div class="sc-cutmine ' + (ok ? 'ok' : 'no') + '">'
-            + '<span class="sc-cut-dot" style="background:' + esc(c.color || '#b45309') + '"></span>'
-            + '<b>' + esc(c.label) + '</b>'
-            + '<span>' + (ok ? '已超 ' + fmtNum(d) + ' 分' : '还差 ' + fmtNum(d) + ' 分') + '</span>'
-            + '</div>';
-        }).join('')
-      + '</div></div>';
+    if(SC.basis === 'graded'){
+      html += '<div class="sc-card"><div class="sc-card-h">上线情况</div><div class="sc-cuts">'
+        + cuts.map(function(c){
+            var ok = myTotal >= c.score;
+            var d = Math.abs(myTotal - c.score);
+            return '<div class="sc-cutmine ' + (ok ? 'ok' : 'no') + '">'
+              + '<span class="sc-cut-dot" style="background:' + esc(c.color || '#b45309') + '"></span>'
+              + '<b>' + esc(c.label) + '</b>'
+              + '<span>' + (ok ? '已超 ' + fmtNum(d) + ' 分' : '还差 ' + fmtNum(d) + ' 分') + '</span>'
+              + '</div>';
+          }).join('')
+        + '</div></div>';
+    }else{
+      html += '<div class="sc-card"><div class="sc-card-h">上线情况</div>'
+        + '<div class="sc-dim" style="padding:4px 2px 2px">当前是「原始分」口径。特控线 / 本科线 / 600 线都是按<b>赋分总分</b>划的，'
+        + '原始分与它们不好直接比 —— 切到「总分赋分」即可看上线情况。</div></div>';
+    }
   }
 
   /* ③ 位置条 */
@@ -13069,7 +13108,7 @@ function scRenderMe(){
         var rate = (v != null && s.full) ? v / s.full : null;
         return '<div class="sc-sub">'
           + '<div class="sc-sub-top"><b>' + esc(s.name) + '</b>'
-          +   (s.graded ? '<span class="sc-tag">赋分</span>' : '')
+          +   (s.graded && SC.basis === 'graded' ? '<span class="sc-tag">赋分</span>' : '')
           +   '<span class="sc-sub-rk">' + (sr ? '班内第 ' + sr + ' / ' + cnt : '—') + '</span></div>'
           + '<div class="sc-sub-score">' + (v == null ? '<span class="sc-dim">未考</span>' : v + '<small>/' + s.full + '</small>') + '</div>'
           + (v == null ? '' : '<div class="sc-sub-diff ' + (v - avg >= 0 ? 'up' : 'down') + '">'
@@ -13080,7 +13119,7 @@ function scRenderMe(){
     + '</div></div>';
 
   /* ⑤ 雷达图（按得分率，否则语数英 150 分会把物化生压扁） */
-  var rates = [], avgRates = [], radarTips = [];
+  var rates = [], avgRates = [], radarTips = [], sixNums = [];
   subs.forEach(function(s){
     var v = scSubScore(meRow, s, SC.basis);
     var all = [];
@@ -13093,11 +13132,33 @@ function scRenderMe(){
     avgRates.push(s.full ? avg / s.full : 0);
     /* 图上直接写分数（站主要求：不用去别处对） */
     radarTips.push(v == null ? '未考' : fmtNum(v) + '/' + s.full);
+    sixNums.push({ name: s.name, v: v, avg: all.length ? avg : null });
   });
   if(subs.length >= 3){
+    /* 六科画像：雷达（形状）+ 数值表。站主要求——既能看「个人与总分」
+       的数值关系（每科占总分多少），又能看「个人与班均」的数值对比（差多少分）。 */
+    var sixRowsHtml = sixNums.map(function(x){
+      var share = (x.v != null && myTotal) ? (x.v / myTotal * 100) : null;
+      var diff = (x.v != null && x.avg != null) ? x.v - x.avg : null;
+      return '<tr><td class="k">' + esc(x.name) + '</td>'
+        + '<td>' + (x.v == null ? '<span class="sc-dim">未考</span>' : fmtNum(x.v)) + '</td>'
+        + '<td>' + (share == null ? '—' : share.toFixed(1) + '%') + '</td>'
+        + '<td>' + (x.avg == null ? '—' : fmtNum(x.avg)) + '</td>'
+        + '<td>' + (diff == null ? '—' : '<span class="sc-sub-diff ' + (diff >= 0 ? 'up' : 'down') + '">' + fmtDiff(diff) + '</span>') + '</td></tr>';
+    }).join('');
+    var totalDiff = (myTotal != null && st.n) ? myTotal - st.avg : null;
+    var sixTable = '<table class="sc-sixtbl"><thead><tr><th>科目</th><th>我的</th><th>占总分</th><th>班均</th><th>与班均</th></tr></thead>'
+      + '<tbody>' + sixRowsHtml + '</tbody>'
+      + '<tfoot><tr><td class="k">总分</td>'
+      +   '<td>' + (myTotal == null ? '—' : fmtNum(myTotal)) + '</td><td>100%</td>'
+      +   '<td>' + (st.n ? fmtNum(st.avg) : '—') + '</td>'
+      +   '<td>' + (totalDiff == null ? '—' : '<span class="sc-sub-diff ' + (totalDiff >= 0 ? 'up' : 'down') + '">' + fmtDiff(totalDiff) + '</span>') + '</td>'
+      + '</tr></tfoot></table>';
     html += '<div class="sc-card"><div class="sc-card-h">六科画像（按得分率）</div>'
       + scRadar(subs.map(function(s){ return s.name; }), rates, avgRates, radarTips)
       + '<div class="sc-figcap">实线为本人，虚线为班均；各顶点标注学科分数。按得分率绘制，图形越向外越强。</div>'
+      + sixTable
+      + '<div class="sc-figcap">「占总分」＝ 该科得分 ÷ 我的总分；「与班均」＝ 我的分数 − 全班该科平均分。</div>'
       + '</div>';
   }
 
@@ -13574,7 +13635,7 @@ function scSubjTrend(){
 
     cards.push('<div class="sc-sub">'
       + '<div class="sc-sub-top"><b>' + esc(sub.name) + '</b>'
-      +   (sub.graded ? '<span class="sc-tag">赋分</span>' : '')
+      +   (sub.graded && SC.basis === 'graded' ? '<span class="sc-tag">赋分</span>' : '')
       +   '<span class="sc-sub-rk">' + pts.length + ' 次</span></div>'
       + '<div class="sc-sub-score">' + fmtNum(cur) + '<small>/' + sub.full + '</small></div>'
       + (avg == null ? '' : '<div class="sc-sub-diff ' + (cur - avg >= 0 ? 'up' : 'down') + '">'
@@ -13673,6 +13734,10 @@ function scLoadAllRows(){
 }
 
 function scCutTrend(){
+  if(SC.basis !== 'graded'){
+    return '<div class="sc-card"><div class="sc-card-h">历次上线率</div>'
+      + '<div class="sc-dim" style="padding:4px 2px 2px">分数线是按赋分总分划定的，原始口径下不与三线比较 —— 切到「总分赋分」即可看历次上线率。</div></div>';
+  }
   var items = SC.me || [];
   var withCut = items.filter(function(it){
     return (it.cutlines || []).some(function(c){ return c.score != null; });
@@ -13900,7 +13965,8 @@ function scExportCard(cfg){
   var myTotal = scTotal(meRow, SC.basis);
   var myRank = rk.total[meRow.id];
   var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
-  var cuts = opt.cutlines ? (SC.exam.cutlines || []).filter(function(c){ return c.score != null; }) : [];
+  /* 分数线是赋分线：原始口径下导出图里也不与三线比较 */
+  var cuts = (opt.cutlines && SC.basis === 'graded') ? (SC.exam.cutlines || []).filter(function(c){ return c.score != null; }) : [];
   var series = opt.trend ? scMeSeries() : [];
   var hasBar = !!(gradeN && meRow.schoolRank != null);
 
@@ -13981,7 +14047,7 @@ function scExportCard(cfg){
 
       g.fillStyle = '#fdf8f3'; g.fillRect(pad, y, W - pad * 2, 34);
       g.fillStyle = '#57534e'; f(14, true);
-      g.fillText(sub.name + (sub.graded ? '（赋分）' : ''), pad + 12, y + 23);
+      g.fillText(sub.name + (sub.graded && SC.basis === 'graded' ? '（赋分）' : ''), pad + 12, y + 23);
 
       var barX = pad + 190, barW = W - pad * 2 - 190 - 170;
       g.fillStyle = '#f0e7de'; g.fillRect(barX, y + 8, barW, 8);
@@ -14791,6 +14857,14 @@ function scQuadrant(){
     { x: L, y: my, w: mx - L, h: H - B - my, c: '#f4faf6', t: '总分低 / 单科强（单科尖子）', cls: 'sc-q3' },
     { x: mx, y: my, w: W - R - mx, h: H - B - my, c: '#fdf8f3', t: '总分强 / 单科强', cls: 'sc-q4' },
   ];
+  /* 每个点属于哪个象限：0=总分低·单科弱 1=总分强·单科弱 2=总分低·单科强 3=总分强·单科强。
+     手机没有悬停 —— 点象限（或圆点）就在下方列出该象限的具体同学。 */
+  var qOf = function(p){ return (p.x >= st.avg ? 1 : 0) + (p.y >= subAvg ? 2 : 0); };
+  SC.quadSel = null;
+  SC._quad = {
+    titles: quads.map(function(q){ return q.t; }),
+    pts: pts.map(function(p){ return { name: p.name, x: p.x, y: p.y, me: p.me, q: qOf(p) }; }),
+  };
   /* 手机上点不动、也悬停不了，所以名字必须直接写在图上。
      但 60 个点全写会糊成一团 —— 只写「最该被点名」的：
      偏科预警象限（总分够、这一科却拖后腿）＋ 我自己。 */
@@ -14804,7 +14878,8 @@ function scQuadrant(){
   var dots = pts.map(function(p){
     var cx = xOf(p.x), cy = yOf(p.y);
     var g = '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (p.me ? 5.5 : 3.6)
-      + '" class="' + (p.me ? 'sc-mine-dot' : 'sc-q-dot') + '" fill="' + (p.me ? '#c2410c' : '#7c3aed') + '" fill-opacity="' + (p.me ? 1 : 0.55) + '">'
+      + '" class="' + (p.me ? 'sc-mine-dot' : 'sc-q-dot') + '" fill="' + (p.me ? '#c2410c' : '#7c3aed') + '" fill-opacity="' + (p.me ? 1 : 0.55) + '"'
+      + ' style="cursor:pointer" onclick="scQuadTap(' + qOf(p) + ')">'
       + '<title>' + esc(p.name) + '　总分 ' + fmtNum(p.x) + '　' + esc(sub.name) + ' ' + fmtNum(p.y) + '</title></circle>';
     if(p.me || labeled[p.name]){
       var txt = p.me ? ('我 ' + fmtNum(p.x) + '·' + fmtNum(p.y)) : (p.name + ' ' + fmtNum(p.y));
@@ -14821,9 +14896,10 @@ function scQuadrant(){
     + '<span class="sc-h-note">总分 × ' + esc(sub.name) + '</span>'
     + '<span class="sc-only-admin">仅站主可见</span></div>'
     + '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">'
-    + quads.map(function(q){
-        return '<rect x="' + q.x.toFixed(1) + '" y="' + q.y.toFixed(1) + '" width="' + Math.max(0, q.w).toFixed(1)
-          + '" height="' + Math.max(0, q.h).toFixed(1) + '" class="' + q.cls + '" fill="' + q.c + '"/>';
+    + quads.map(function(q, qi){
+        return '<rect id="scQrect' + qi + '" x="' + q.x.toFixed(1) + '" y="' + q.y.toFixed(1) + '" width="' + Math.max(0, q.w).toFixed(1)
+          + '" height="' + Math.max(0, q.h).toFixed(1) + '" class="' + q.cls + ' sc-qhit" style="cursor:pointer" fill="' + q.c
+          + '" onclick="scQuadTap(' + qi + ')"/>';
       }).join('')
     + '<line x1="' + mx.toFixed(1) + '" y1="' + T + '" x2="' + mx.toFixed(1) + '" y2="' + (H - B) + '" class="sc-axis" stroke="#e2d5c8" stroke-dasharray="4 3"/>'
     + '<line x1="' + L + '" y1="' + my.toFixed(1) + '" x2="' + (W - R) + '" y2="' + my.toFixed(1) + '" class="sc-axis" stroke="#e2d5c8" stroke-dasharray="4 3"/>'
@@ -14836,10 +14912,41 @@ function scQuadrant(){
         return '<button class="' + (x.key === sub.key ? 'on' : '') + '" onclick="scSetQuad(\'' + x.key + '\')">' + esc(x.name) + '</button>';
       }).join('') + '</div>'
     + '<div class="sc-figcap">横轴总分、纵轴单科，十字为班均线；右上＝双强，左上＝单科优势，右下＝偏科。'
-    + '图中标注姓名与该科分数，橙色「我」为本人；电脑端鼠标悬停可查看其余各点。</div>'
+    + '图中标注姓名与该科分数，橙色「我」为本人；电脑端可悬停，手机点象限或圆点即可看该象限具体同学。</div>'
+    + '<div id="scQList" class="sc-qlist"></div>'
     + '</div>';
 }
-function scSetQuad(k){ SC.quadKey = k; scRenderPane(); }
+/* 点象限 / 圆点 → 在下方列出该象限的具体同学（手机没有悬停，必须能点开看）。
+   只改 DOM、不整页重渲染，避免手机上看名单时页面跳回顶部。 */
+function scQuadTap(i){
+  var qd = SC._quad;
+  if(!qd) return;
+  SC.quadSel = (SC.quadSel === i) ? null : i;   /* 再点一次收起 */
+  for(var k = 0; k < 4; k++){
+    var el = document.getElementById('scQrect' + k);
+    if(el){
+      var on = (SC.quadSel === k);
+      el.setAttribute('stroke', on ? '#c2410c' : 'none');
+      el.setAttribute('stroke-width', on ? '1.8' : '0');
+    }
+  }
+  var box = document.getElementById('scQList');
+  if(!box) return;
+  if(SC.quadSel == null){ box.innerHTML = ''; return; }
+  var list = qd.pts.filter(function(p){ return p.q === SC.quadSel; });
+  /* 偏科预警象限（总分强·单科弱）按单科从低到高，先看最该补的；其余按单科从高到低 */
+  if(SC.quadSel === 1){ list.sort(function(a, b){ return a.y - b.y; }); }
+  else { list.sort(function(a, b){ return b.y - a.y; }); }
+  var chips = list.map(function(p){
+    return '<span class="sc-qchip' + (p.me ? ' me' : '') + '">' + esc(p.name)
+      + '<em>总分 ' + fmtNum(p.x) + ' · ' + fmtNum(p.y) + '</em></span>';
+  }).join('');
+  box.innerHTML = '<div class="sc-qlist-h"><b>' + esc(qd.titles[SC.quadSel]) + '</b>　共 ' + list.length + ' 人'
+    + '<button class="sc-qlist-x" onclick="scQuadTap(' + SC.quadSel + ')">收起</button></div>'
+    + (list.length ? '<div class="sc-qlist-body">' + chips + '</div>'
+                   : '<div class="sc-dim" style="padding:4px 2px">该象限暂无同学。</div>');
+}
+function scSetQuad(k){ SC.quadKey = k; SC.quadSel = null; scRenderPane(); }
 
 /* ---------- ⑤ 学生 × 科目热力图 ---------- */
 function scHeatmap(){

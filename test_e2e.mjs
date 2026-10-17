@@ -3471,9 +3471,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(indexHtml),
+  t('★前台版本号为 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adminHtml),
+  t('★后台版本号为 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -3837,9 +3837,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(indexHtml38),
+  t('★前台版本号为 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adminHtml38),
+  t('★后台版本号为 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -4854,10 +4854,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx47));
-  t('★后台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adm47));
+  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx47));
+  t('★后台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adm47));
   t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
-    /class-site-v83/.test(sw47));
+    /class-site-v84/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4941,7 +4941,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.2');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '2.10.3');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5041,9 +5041,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx48));
-  t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-16'/.test(idx48));
-  t('★service worker 缓存版本升到 v80', /class-site-v83/.test(sw48));
+  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx48));
+  t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-17'/.test(idx48));
+  t('★service worker 缓存版本升到 v80', /class-site-v84/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5108,8 +5108,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx49));
-  t('★后台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adm49));
+  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx49));
+  t('★后台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5181,7 +5181,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx50));
+  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5351,7 +5351,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/if\(j\.skippedCount\)\{\s*setTimeout\(function\(\)\{\s*alert/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adm));
+  t('★后台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -5419,7 +5419,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx));
+  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -5924,7 +5924,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx));
+  t('★前台版本号升到 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx));
   t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
     /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6035,7 +6035,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号升到 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx));
+  t('★前台版本号升到 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx));
   t('★后台内置更新记录补到 2.10.0',
     /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 
@@ -6140,10 +6140,10 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(idx));
-  t('★后台版本号 2.10.2', /SITE_VERSION = '2\.10\.2'/.test(adm));
+  t('★前台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(idx));
+  t('★后台版本号 2.10.3', /SITE_VERSION = '2\.10\.3'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js SITE_VER 2.10.2 且缓存升 v83', /SITE_VER = '2\.10\.2'/.test(swSrc) && /class-site-v83/.test(swSrc));
+  t('★sw.js SITE_VER 2.10.3 且缓存升 v83', /SITE_VER = '2\.10\.3'/.test(swSrc) && /class-site-v84/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7500,7 +7500,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 2.10.2',
+  t('★SCHEMA_VER 常量存在且随版本升到 2.10.3',
     /const SCHEMA_VER = '2\.10\.2'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
@@ -7523,7 +7523,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
 
   /* ---- ③ 版本与缓存同步 ---- */
   t('★sw.js 缓存升 v82、版本 2.10.1',
-    /class-site-v83/.test(swSrc) && /SITE_VER = '2\.10\.2'/.test(swSrc));
+    /class-site-v84/.test(swSrc) && /SITE_VER = '2\.10\.3'/.test(swSrc));
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
   const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -7944,6 +7944,38 @@ console.log('\n【77】第六十三轮·各科排名 + 总分两种口径排名�
   });
   t('（收尾）测试考试已删除', del.status === 200, JSON.stringify(del.body).slice(0, 120));
 }
+
+console.log('\n【78】第六十四轮·四象限手机点选 / 六科画像数值对比 / 原始口径不显赋分头衔且不比三线');
+
+(function(){
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+
+  /* ① 四象限：点象限 / 圆点 → 列名单（手机可用，不用悬停） */
+  t('★四象限有点选处理函数 scQuadTap', /function scQuadTap\(i\)\{/.test(idx));
+  t('★四象限矩形块可点（onclick=scQuadTap(序号)）', /onclick="scQuadTap\(' \+ qi \+ '\)"/.test(idx));
+  t('★四象限圆点也可点', /onclick="scQuadTap\(' \+ qOf\(p\) \+ '\)"/.test(idx));
+  t('★四象限有名单容器 scQList', /id="scQList"/.test(idx));
+  t('★四象限矩形带 id 以便高亮所选', /id="scQrect' \+ qi \+ '"/.test(idx));
+  t('★再点一次收起（toggle）', /SC\.quadSel = \(SC\.quadSel === i\) \? null : i;/.test(idx));
+  t('★名单用 chip 展示姓名 + 总分·单科', /sc-qchip/.test(idx) && /总分 ' \+ fmtNum\(p\.x\) \+ ' · ' \+ fmtNum\(p\.y\)/.test(idx));
+  t('★点选只改 DOM 不整页重渲染（避免跳回顶部）', /document\.getElementById\('scQList'\)/.test(idx) && /box\.innerHTML = '<div class="sc-qlist-h">/.test(idx));
+
+  /* ② 六科画像：数值表（个人 vs 总分占比、个人 vs 班均） */
+  t('★六科画像有数值表 sc-sixtbl', /class="sc-sixtbl"/.test(idx));
+  t('★数值表含「占总分」列', /<th>占总分<\/th>/.test(idx));
+  t('★数值表含「班均」「与班均」列', /<th>班均<\/th><th>与班均<\/th>/.test(idx));
+  t('★个人与总分：每科占总分百分比', /x\.v \/ myTotal \* 100/.test(idx));
+  t('★个人与班均：每科差值', /x\.v - x\.avg/.test(idx));
+  t('★个人与班均：总分那一行的差', /myTotal - st\.avg/.test(idx));
+
+  /* ③ 原始口径：不显化/生「赋分」头衔，且不与三线比较 */
+  t('★各科情况：赋分头衔只在赋分口径显示', /\(s\.graded && SC\.basis === 'graded' \? '<span class="sc-tag">赋分<\/span>' : ''\)/.test(idx));
+  t('★各科趋势：赋分头衔只在赋分口径显示', /\(sub\.graded && SC\.basis === 'graded' \? '<span class="sc-tag">赋分<\/span>' : ''\)/.test(idx));
+  t('★个人画像上线情况：原始口径改为提示、不硬比', /当前是「原始分」口径。特控线/.test(idx));
+  t('★历次上线率：原始口径不比较', /function scCutTrend\(\)\{\s*\n\s*if\(SC\.basis !== 'graded'\)\{/.test(idx));
+  t('★全班成绩单：原始口径不画三线', /SC\.basis === 'graded' \? \(SC\.exam\.cutlines \|\| \[\]\)\.filter/.test(idx));
+  t('★导出图：原始口径不与三线比较', /\(opt\.cutlines && SC\.basis === 'graded'\)/.test(idx));
+})();
 
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
