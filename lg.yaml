@@ -1,0 +1,100 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - generic [ref=f1e5]: 欢迎来到5班服务站 ✧⁺⸜(●˙▾˙●)⸝⁺✧
+      - button "关闭" [ref=f1e6] [cursor=pointer]
+    - generic [ref=f1e7]:
+      - generic [ref=f1e8]: 这里汇总咱们班级线上常用工具，后续功能也会持续更新维护！ 站内现有功能一览 ▫ 班级点歌台 ▫ 作业查询 ▫ 班级大屏应用跳转 ▫ 每日日报资讯 ▫ 考试 / 假期倒计时 ▫ 班级重要公告 …………等待开发 所有班级通知、线上工具都会同步在这里，记得常来看看哦~ ✨ 祝你新学期一切顺利！
+      - button "我知道了（不再提示）" [ref=f1e9] [cursor=pointer]
+  - generic [ref=f1e10]:
+    - complementary [ref=f1e11]:
+      - generic [ref=f1e12]: 站点应用入口在侧边栏中，点击下方板块即可打开
+      - button "首页" [ref=f1e16] [cursor=pointer]
+      - generic [ref=f1e21]:
+        - button "常用服务" [ref=f1e22] [cursor=pointer]
+        - button "成绩分析" [ref=f1e23] [cursor=pointer]
+        - button "班级事务" [ref=f1e24] [cursor=pointer]
+        - button "其他工具" [ref=f1e25] [cursor=pointer]
+        - button "大屏服务" [ref=f1e26] [cursor=pointer]
+        - button "📲 安装为应用" [ref=f1e27] [cursor=pointer]
+      - button "音效：开" [ref=f1e28] [cursor=pointer]
+      - button "自定义设置" [ref=f1e33] [cursor=pointer]
+    - main [ref=f1e37]:
+      - generic [ref=f1e38]:
+        - button "切换主题" [ref=f1e39] [cursor=pointer]
+        - heading "25级05班班级服务站" [level=1] [ref=f1e42]
+        - paragraph [ref=f1e49]: 一站式获取班级服务 · 资源 · 工具
+        - img "班徽" [ref=f1e51]
+      - generic [ref=f1e52]:
+        - generic [ref=f1e53]:
+          - generic [ref=f1e54]:
+            - heading "📢 公告" [level=2] [ref=f1e55]
+            - generic [ref=f1e56]: 86 条
+            - button "登录" [ref=f1e57] [cursor=pointer]
+            - button "公众号" [ref=f1e61] [cursor=pointer]
+            - button "仓库" [ref=f1e62] [cursor=pointer]
+          - generic [ref=f1e63]:
+            - button "📡 网站内部" [ref=f1e64] [cursor=pointer]
+            - button "🔔 重要更新" [ref=f1e65] [cursor=pointer]
+            - button "🏫 班级事务" [ref=f1e66] [cursor=pointer]
+            - button "💭 站主杂谈" [ref=f1e67] [cursor=pointer]
+            - button "总览" [ref=f1e68] [cursor=pointer]
+          - list [ref=f1e69]:
+            - listitem [ref=f1e70]:
+              - generic [ref=f1e71]: 10-17 02:09
+              - paragraph [ref=f1e73]: 班级服务站已更新：成员管理改版、注册改为管理员审核、新增操作日志与「我的云端数据」；成绩分析新增「成绩对比 PK」，成绩导入支持按模版填。此前登录报错的问题已修复。
+            - listitem [ref=f1e74]:
+              - generic [ref=f1e75]: 10-16 14:30
+              - paragraph [ref=f1e77]: 成绩分析板块已按暗色模式全面适配：全班成绩单、个人画像、图表与导出长图，在白天、黑夜模式下都清晰可读。
+          - button "查看全部 84 条公告" [ref=f1e78] [cursor=pointer]
+        - generic [ref=f1e79]:
+          - generic [ref=f1e80]: 签
+          - generic [ref=f1e81]:
+            - generic [ref=f1e82]: 今日班级签
+            - generic [ref=f1e83]: 一天一签 · 有好也有坏，看运气
+          - button "抽一签" [ref=f1e84] [cursor=pointer]
+        - generic [ref=f1e86]:
+          - generic [ref=f1e87]: 日报
+          - generic [ref=f1e88]:
+            - generic [ref=f1e89]: 每日日报
+            - generic [ref=f1e90]: 实时热点资讯聚合
+          - button "前往查看" [ref=f1e91] [cursor=pointer]
+        - generic [ref=f1e92]:
+          - generic [ref=f1e135]:
+            - generic [ref=f1e136]:
+              - text: 重要日期倒计时
+              - generic [ref=f1e139] [cursor=pointer]: 查看全部
+            - list [ref=f1e141]:
+              - listitem [ref=f1e142]:
+                - generic [ref=f1e143]: 寒假
+                - generic [ref=f1e144]: 3月 11天 23时 07分 55秒
+          - button "节假日倒计时 查看全部 元旦 01-01 放假 3 天 75天 春节 02-06 放假 7 天 111天 清明节 04-05 放假 3 天 169天" [ref=f1e145] [cursor=pointer]:
+            - generic [ref=f1e146]:
+              - text: 节假日倒计时
+              - generic [ref=f1e150]: 查看全部
+            - list [ref=f1e151]:
+              - listitem [ref=f1e152]:
+                - generic [ref=f1e153]:
+                  - generic [ref=f1e154]: 元旦
+                  - generic [ref=f1e155]: 01-01 放假 3 天
+                - generic [ref=f1e156]: 75天
+              - listitem [ref=f1e157]:
+                - generic [ref=f1e158]:
+                  - generic [ref=f1e159]: 春节
+                  - generic [ref=f1e160]: 02-06 放假 7 天
+                - generic [ref=f1e161]: 111天
+              - listitem [ref=f1e162]:
+                - generic [ref=f1e163]:
+                  - generic [ref=f1e164]: 清明节
+                  - generic [ref=f1e165]: 04-05 放假 3 天
+                - generic [ref=f1e166]: 169天
+        - generic [ref=f1e125]:
+          - generic [ref=f1e126]: ❝
+          - generic [ref=f1e127]:
+            - generic [ref=f1e128]: 没有永远的敌人或朋友，只有永远的责任。
+            - generic [ref=f1e129]: "—— 刘慈欣《三体II: 黑暗森林》"
+      - generic [ref=f1e130]:
+        - paragraph [ref=f1e131]: © 25级05班班级服务站
+        - paragraph [ref=f1e132]: 内容更新请联系管理员 · 全站可在微信内直接访问
+        - paragraph [ref=f1e133]: 页面由 AI 辅助生成
+        - paragraph [ref=f1e134] [cursor=pointer]: 站点版本 v3.5.13 · 2026-10-17 更新（点击检查更新）
