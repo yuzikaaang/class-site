@@ -7737,6 +7737,22 @@ console.log('\n【73】第六十二轮·需求⑬ 管理员批量删除云端数
     /'data\.delete_all'/.test(adminSrc));
 }
 
+console.log('\n【74】第六十三轮·Pages 回查判据改内容哈希（修「假红灯」）');
+{
+  const wf = fs.readFileSync(new URL('./.github/workflows/deploy-pages.yml', import.meta.url), 'utf8');
+  t('★build 把三个内容哈希当 job outputs 传给 deploy',
+    /outputs:[\s\S]{0,200}index_sha: \$\{\{ steps\.fingerprint\.outputs\.index_sha \}\}/.test(wf));
+  t('★指纹步骤对 index/admin/sw 三个文件算 sha256',
+    /sha256sum _site\/index\.html/.test(wf) && /sha256sum _site\/admin\.html/.test(wf)
+    && /sha256sum _site\/sw\.js/.test(wf));
+  t('★回查改用哈希比对，不再 grep 写死的字符串',
+    /MISS="\$MISS admin\.html"/.test(wf) && !/grep -q\s+"[A-Za-z_]+"/.test(wf));
+  t('★三个文件任一不一致就继续等（不是只看一个）',
+    /MISS="\$MISS index\.html"/.test(wf) && /MISS="\$MISS sw\.js"/.test(wf));
+  t('★注释留了根因（写死判据会腐烂，且表现为假红灯）',
+    /写死的判据会随代码演进腐烂/.test(wf) && /假红灯/.test(wf));
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }

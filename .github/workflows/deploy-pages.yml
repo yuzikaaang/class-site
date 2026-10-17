@@ -47,6 +47,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 把本次上线内容的 sha256 传给 deploy 做回查判据（见下方「记录指纹」）
+    outputs:
+      index_sha: ${{ steps.fingerprint.outputs.index_sha }}
+      admin_sha: ${{ steps.fingerprint.outputs.admin_sha }}
+      sw_sha:    ${{ steps.fingerprint.outputs.sw_sha }}
     steps:
       - name: 拉取仓库内容
         uses: actions/checkout@v4
@@ -105,6 +110,34 @@ jobs:
       - name: 配置 Pages
         uses: actions/configure-pages@v5
 
+      # ------------------------------------------------------------
+      # 记录本次上线内容的指纹（sha256），供 deploy 阶段回查比对。
+      #
+      # 🔴 为什么用内容哈希，而不是写死的字符串：
+      #    2026-10-17 排查「部署总是失败」。原来的回查是在线上 admin.html 里
+      #    `grep renderProfiles` —— 而 renderProfiles 这个函数在 v2.10.0
+      #    合并后台「用户管理」「资料管理」两页时已经被删掉了。于是从那一次
+      #    提交起，回查**永远匹配不到**，白等 120 秒后判失败：
+      #    job 是红的，线上内容其实每次都发布成功了（实测同一提交下
+      #    本地与线上 admin.html 的 sha256 完全一致）。
+      #    写死的判据会随代码演进腐烂，而且腐烂后表现为**假红灯**，
+      #    与当年 peaceiris 那版「假绿灯」是同一类病。
+      #    内容哈希不会腐烂：线上只要真的换了文件，哈希必然相等。
+      # ------------------------------------------------------------
+      - name: 记录本次上线内容的指纹
+        id: fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in index.html admin.html sw.js; do
+            [ -e "_site/$f" ] || { echo "❌ 上线目录里没有 $f，无法生成指纹"; exit 1; }
+          done
+          echo "index_sha=$(sha256sum _site/index.html | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "admin_sha=$(sha256sum _site/admin.html | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "sw_sha=$(sha256sum _site/sw.js      | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "本次上线内容指纹："
+          sha256sum _site/index.html _site/admin.html _site/sw.js
+
       - name: 打包为 Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -124,28 +157,46 @@ jobs:
       # 发布完立刻回查线上真实内容，避免再次出现「job 绿了但线上没变」
       - name: 回查线上是否真的更新
         shell: bash
+        env:
+          WANT_INDEX: ${{ needs.build.outputs.index_sha }}
+          WANT_ADMIN: ${{ needs.build.outputs.admin_sha }}
+          WANT_SW:    ${{ needs.build.outputs.sw_sha }}
         run: |
           set -euo pipefail
-          URL="https://yuzikaaang.github.io/class-site/admin.html"
+          BASE="https://yuzikaaang.github.io/class-site"
+
+          # 取线上文件的 sha256（取不到给个明显的错值，好让比较失败、进入重试）
+          live_sha() {
+            curl -s --max-time 20 "$BASE/$1" 2>/dev/null | sha256sum | cut -d' ' -f1
+          }
+
+          echo "本次发布的内容指纹："
+          echo "  index.html  $WANT_INDEX"
+          echo "  admin.html  $WANT_ADMIN"
+          echo "  sw.js       $WANT_SW"
+          echo ""
           echo "等待 Pages 生效（最多重试 12 次，每次 10 秒）…"
 
           for i in $(seq 1 12); do
-            CODE=$(curl -s -o /tmp/live_admin.html -w '%{http_code}' "$URL" || echo 000)
-            if [ "$CODE" = "200" ]; then
-              LIVE_SIZE=$(wc -c < /tmp/live_admin.html)
-              echo "  第 $i 次：HTTP $CODE，线上 $LIVE_SIZE 字节"
-              if grep -q "renderProfiles" /tmp/live_admin.html; then
-                echo ""
-                echo "✅ 回查通过：线上 admin.html 已包含本次发布的内容"
-                exit 0
-              fi
-            else
-              echo "  第 $i 次：HTTP $CODE（还没生效）"
+            GOT_INDEX=$(live_sha index.html)
+            GOT_ADMIN=$(live_sha admin.html)
+            GOT_SW=$(live_sha sw.js)
+            MISS=""
+            [ "$GOT_INDEX" = "$WANT_INDEX" ] || MISS="$MISS index.html"
+            [ "$GOT_ADMIN" = "$WANT_ADMIN" ] || MISS="$MISS admin.html"
+            [ "$GOT_SW"    = "$WANT_SW"    ] || MISS="$MISS sw.js"
+
+            if [ -z "$MISS" ]; then
+              echo "  第 $i 次：三个文件都与本次发布内容一致"
+              echo ""
+              echo "✅ 回查通过：线上跑的就是本次提交"
+              exit 0
             fi
+            echo "  第 $i 次：尚未更新（$MISS ）"
             sleep 10
           done
 
           echo ""
-          echo "❌ 回查失败：等了 120 秒，线上仍未出现新内容。"
+          echo "❌ 回查失败：等了 120 秒，线上仍有文件与本次发布内容不一致。"
           echo "   请到 https://github.com/yuzikaaang/class-site/deployments 查看部署状态。"
           exit 1
