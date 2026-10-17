@@ -13,6 +13,11 @@ import crypto from 'crypto';
 import fs from 'node:fs';
 
 /* ---------- 1. 桥接环境变量 ---------- */
+/* v3.5.0：档案字段加密（AES-256-GCM）默认**开启**，因为线上站主一旦配了
+   ADMIN_SECRETS_KEY 就会走这条路，测试必须覆盖真实形态。
+   想看「没配密钥、全站退化为明文」的老行为，用 `node test_e2e.mjs --plain`。
+   两套环境跑的是同一份 2248 项，任何一边红都算回归。 */
+const PLAIN_MODE = process.argv.includes('--plain');
 globalThis.__ENV__ = {
   ALLOW_ORIGINS: 'https://yuzikaaang.github.io',
   ADMIN_USERS: 'yuzikang',
@@ -20,6 +25,10 @@ globalThis.__ENV__ = {
   ALLOW_REGISTER: '1',
   DATABASE_URL: 'postgres://stub',   // 实际不连，走桥接
 };
+if (!PLAIN_MODE) {
+  /* 固定的 32 字节测试密钥（不是线上那把，仅用于本测试） */
+  globalThis.__ENV__.ADMIN_SECRETS_KEY = Buffer.alloc(32, 7).toString('base64');
+}
 
 /* ---------- 2. 起 SQLite 并建表（对应 schema.sql） ---------- */
 const SQL = await initSqlJs();
@@ -4942,7 +4951,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.4.1');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.0');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -6163,7 +6172,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.4\.1'/.test(swSrc) && /class-site-v94/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.0'/.test(swSrc) && /class-site-v95/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -8211,7 +8220,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.4.0', /SITE_VERSION = '3[.]4[.]1'/.test(idx) && /SITE_VERSION = '3[.]4[.]1'/.test(adm) && /SITE_VER = '3[.]4[.]1'/.test(sw));
+  t('版本号三处同步 3.5.0', /SITE_VERSION = '3[.]5[.]0'/.test(idx) && /SITE_VERSION = '3[.]5[.]0'/.test(adm) && /SITE_VER = '3[.]5[.]0'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8304,8 +8313,8 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.4.0',
-    /SITE_VERSION = '3[.]4[.]1'/.test(idx) && /SITE_VERSION = '3[.]4[.]1'/.test(adm) && /SITE_VER = '3[.]4[.]1'/.test(sw));
+  t('版本号三处同步 3.5.0',
+    /SITE_VERSION = '3[.]5[.]0'/.test(idx) && /SITE_VERSION = '3[.]5[.]0'/.test(adm) && /SITE_VER = '3[.]5[.]0'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8391,8 +8400,8 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.4.0',
-    /SITE_VERSION = '3[.]4[.]1'/.test(idx) && /SITE_VERSION = '3[.]4[.]1'/.test(adm));
+  t('版本号三处同步 3.5.0',
+    /SITE_VERSION = '3[.]5[.]0'/.test(idx) && /SITE_VERSION = '3[.]5[.]0'/.test(adm));
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8411,7 +8420,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]4[.]1'/.test(adm) && /SITE_VER = '3[.]4[.]1'/.test(sw));
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]0'/.test(adm) && /SITE_VER = '3[.]5[.]0'/.test(sw));
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8437,7 +8446,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.4.1', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.0', 'parsed=' + parsed);
 }
 
 
@@ -8632,11 +8641,8 @@ console.log('\n【85】第七十三轮·v3.3.0 需关注学生加单科线（比
   }
 }
 
-console.log('\n' + '='.repeat(52));
-console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
-if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
-console.log('实际执行 SQL 查询: ' + queryLog.length + ' 条');
-console.log('='.repeat(52));
+/* 结果汇总放到文件最末尾：后面还有【87】【88】等「只看源码」的静态断言段，
+   早打印就会漏计它们（历史上踩过：process.exit 提前退出导致追加段不执行）。 */
 console.log('\n【87】第七十五轮·v3.4.1 字段可见性新增「仅管理员」档');
 {
   const rd = (f) => fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8');
@@ -8656,5 +8662,202 @@ console.log('\n【87】第七十五轮·v3.4.1 字段可见性新增「仅管理
   t('★前台无档位枚举（档位判定全在服务端，前端只渲染给到的字段）',
     !idx.includes("'committee'"));
 }
+
+
+console.log('\n【88】第七十六轮·v3.5.0 成员档案字段全量加密');
+{
+  const rd = (f) => fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8');
+  const admjs = rd('api/admin.js'), prof = rd('api/profile.js');
+  const crypt = rd('api/_lib/profile-crypt.js'), schemaSrc = rd('api/schema.sql');
+  const httpSrc = rd('api/_lib/http.js');
+
+  /* --- ① 模块与接线 --- */
+  t('★profile-crypt.js 用 AES-256-GCM（Workers 原生 Web Crypto）',
+    crypt.includes('AES-GCM') && crypt.includes("const ENC_PREFIX = 'enc:v1:'"));
+  t('★密文格式带哨兵前缀 enc:v1:（迁移期靠它区分明文/密文）',
+    crypt.includes("return ENC_PREFIX + bufToB64(all)"));
+  t('★decField 对非密文原样返回（存量明文不受影响）',
+    /if \(s\.slice\(0, ENC_PREFIX\.length\) !== ENC_PREFIX\) return s;/.test(crypt));
+  t('★admin.js 与 profile.js 都 import 了加密模块',
+    admjs.includes("from './_lib/profile-crypt.js'") && prof.includes("from './_lib/profile-crypt.js'"));
+
+  /* --- ② 写路径：所有落库字段都过 encField --- */
+  t('★admin.js upsertProfileCore 落库前加密姓名/学号/政治面貌/准考证号',
+    /await encField\(pkey, plainName\)/.test(admjs)
+    && /await encField\(pkey, plainSid\)/.test(admjs)
+    && /await encField\(pkey, plainPolitics\)/.test(admjs)
+    && /await encField\(pkey, plainExamNo\)/.test(admjs));
+  t('★admin.js 联系方式（微信/QQ/手机）同样加密',
+    /await encField\(pkey, await keep\(wechat, c\.wechat\)\)/.test(admjs)
+    && /await encField\(pkey, await keep\(phone, c\.phone\)\)/.test(admjs));
+  t('★admin.js UPDATE 分支「没传就保留」先解密再加密（防空转叠层）',
+    /const keep = async \(incoming, stored\) =>/.test(admjs)
+    && /: await decField\(pkey, stored\);/.test(admjs));
+  t('★admin.js 自定义字段（含身份证/团员编号）值也加密',
+    (admjs.match(/await encField\(pkey, customVals\[f\.field\]\)/g) || []).length === 2
+    && (admjs.match(/await encField\(pkey, ex\[col\]\)/g) || []).length === 2);
+  t('★profile.js 同学自己提交联系方式时也加密',
+    /const eWechat = await encField\(pkey, wechat \|\| null\)/.test(prof));
+  t('★建号自动补档案时姓名加密',
+    /insert into profiles \(name, name_bidx, role, user_id\)/.test(admjs));
+
+  /* --- ③ 检索：学号唯一性 / 姓名查找改走盲索引 --- */
+  t('★学号查重走 student_id_bidx（密文等值比较永远不等）',
+    admjs.includes('where student_id_bidx = ${await blindIndex(pkey, sid)}'));
+  t('★批量导入按学号/姓名查重也走 bidx',
+    admjs.includes('where student_id_bidx = ${sidBidx}') && admjs.includes('where name_bidx = ${nameBidx}'));
+  t('★盲索引是 HMAC-SHA256（不含原值，拿库也反推不出姓名）',
+    crypt.includes("'HMAC'") && crypt.includes("hash: 'SHA-256'"));
+  t('★盲索引对原值做空白归一（" 张三 " 与 "张三" 命中同一条）',
+    /String\(plain\)\.replace\(\/\\s\+\/g, ' '\)\.trim\(\)/.test(crypt));
+
+  /* --- ④ 读路径：每个吐明文的读点都解密 --- */
+  t('★admin.js 有统一的 decProfileRow 解密助手', /async function decProfileRow\(key, row\)/.test(admjs));
+  t('★profileDetail / profileRequests / titles / view-logs 各读点都解密',
+    (admjs.match(/decProfileRow\(/g) || []).length >= 4);
+  t('★profile.js 有 decRow，search/roster/me/mine-requests/claim 都过一遍',
+    /async function decRow\(key, row\)/.test(prof) && (prof.match(/decRow\(pkey|decRow\(await profileKey\(req\)/g) || []).length >= 4);
+  t('★查看日志写的是明文姓名（存密文等于白存）',
+    /const r = await decRow\(pkey, r0\);/.test(prof));
+  t('★查看日志读取时也解密资料真名', /const realName = r\.target_real_name \? await decField/.test(admjs));
+  t('★本人私有字段跳过 bidx 两列（内部列不外泄）',
+    prof.includes("'name_bidx', 'student_id_bidx'"));
+
+  /* --- ⑤ schema / 自愈 --- */
+  t('★schema.sql 补 name_bidx / student_id_bidx 两列',
+    schemaSrc.includes('add column if not exists name_bidx')
+    && schemaSrc.includes('add column if not exists student_id_bidx'));
+  t('★schema.sql 去掉 student_id 的 unique（密文永不相等，留着会误报）',
+    /student_id    text,                                  -- 学号（管理员维护，密文存储）/.test(schemaSrc)
+    && /drop constraint if exists profiles_student_id_key/.test(schemaSrc));
+  t('★http.js 自愈也补这两列与索引（老库不用手工迁移）',
+    /add column if not exists name_bidx/.test(httpSrc)
+    && /profiles_sid_bidx_idx/.test(httpSrc));
+
+  /* --- ⑥ 没配密钥时整体退化 --- */
+  t('★profileKey 拿不到密钥返回 null（全站退化明文，不打死后台）',
+    /if \(!raw\) return null;/.test(crypt));
+  t('★encField 在 key 为 null 时原样返回',
+    /if \(!key\) return plain == null \? plain : String\(plain\);/.test(crypt));
+  t('★解不出时给出可操作提示，而不是抛错',
+    crypt.includes('【已加密，但未配置 ADMIN_SECRETS_KEY，无法解密】'));
+  t('★解密占位符有专门判定函数（isUndecryptable）',
+    /export function isUndecryptable\(v\)/.test(crypt));
+  t('★写入侧拦截占位符（避免把「【解密失败】」当输入覆盖掉原密文）',
+    /!isUndecryptable\(incoming\)/.test(admjs)
+    && /if \(isUndecryptable\(customVals\[f\.field\]\)\) continue;/.test(admjs));
+
+  /* --- ⑦ 真实数据流：库里是密文、接口返回明文（只在加密模式可测） --- */
+  if (!PLAIN_MODE) {
+    const q1 = (sqlText, params) => {
+      const st = db.prepare(sqlText);
+      st.bind(params || []);
+      const out = [];
+      while (st.step()) out.push(st.getAsObject());
+      st.free();
+      return out;
+    };
+    /* 造一条干净资料：姓名/学号/微信/身份证全填 */
+    const made = await call('/api/admin?action=save-profile', {
+      method: 'POST', token: adminToken,
+      body: {
+        name: '密文测试丁', studentId: '99000001', politics: '共青团员',
+        wechat: 'wx_secret_ding', qq: '123456789', phone: '13800001111',
+        extra: { id_card: '360424201007100011' },
+      },
+    });
+    t('★造出来的资料保存成功', made.status === 200 && made.body.id > 0, JSON.stringify(made.body));
+    const pid = made.body.id;
+
+    const rawRow = q1('select * from profiles where id = ?', [pid])[0] || {};
+    const isCipher = (v) => typeof v === 'string' && v.startsWith('enc:v1:');
+    t('★库里姓名是密文（不是明文）', isCipher(rawRow.name), String(rawRow.name).slice(0, 24));
+    t('★库里学号是密文', isCipher(rawRow.student_id));
+    t('★库里微信是密文', isCipher(rawRow.wechat));
+    t('★库里身份证是密文', isCipher(rawRow.id_card), String(rawRow.id_card).slice(0, 24));
+    t('★库里查不到明文姓名（select 出来没有「密文测试丁」）',
+      !JSON.stringify(rawRow).includes('密文测试丁'));
+    t('★同名 bidx 两列已写入（能按学号去重）',
+      typeof rawRow.name_bidx === 'string' && rawRow.name_bidx.length > 20
+      && typeof rawRow.student_id_bidx === 'string' && rawRow.student_id_bidx.length > 20);
+
+    /* 接口读回来必须是明文 */
+    const det = await call('/api/admin?action=profile&id=' + pid, { token: adminToken });
+    const p1 = (det.body || {}).profile || {};
+    t('★后台详情接口返回明文姓名', p1.name === '密文测试丁', JSON.stringify(p1.name));
+    t('★后台详情接口返回明文学号', p1.studentId === '99000001');
+    t('★后台详情接口返回明文微信', p1.wechat === 'wx_secret_ding');
+    t('★后台详情接口返回明文身份证', (p1.extra || {}).id_card === '360424201007100011',
+      JSON.stringify(p1.extra));
+
+    /* 前台搜索仍能按姓名/学号命中 */
+    const sByName = await call('/api/profile?action=search&q=' + encodeURIComponent('密文测试丁'), { token: adminToken });
+    t('★前台按全名仍能搜到（内存解密后过滤）',
+      (sByName.body.results || []).some((x) => x.name === '密文测试丁'));
+    const sBySid = await call('/api/profile?action=search&q=99000001', { token: adminToken });
+    t('★前台按学号仍能搜到',
+      (sBySid.body.results || []).some((x) => x.studentId === '99000001'));
+
+    /* 再保存一次：只改微信、姓名/学号原样传回 →
+       这是最容易踩「把库里密文再封一层」的路径（keep 逻辑就在这儿） */
+    const again = await call('/api/admin?action=save-profile', {
+      method: 'POST', token: adminToken,
+      body: { id: pid, name: '密文测试丁', studentId: '99000001', role: '学生', wechat: 'wx_changed_ding' },
+    });
+    t('★只改一个字段也能保存', again.status === 200, JSON.stringify(again.body));
+    const det2 = await call('/api/admin?action=profile&id=' + pid, { token: adminToken });
+    const p2 = (det2.body || {}).profile || {};
+    t('★姓名没被二次加密（decField 不再出现 enc:v1: 前缀）',
+      p2.name === '密文测试丁', JSON.stringify(p2.name));
+    t('★学号没被二次加密', p2.studentId === '99000001', JSON.stringify(p2.studentId));
+    t('★改的微信生效', p2.wechat === 'wx_changed_ding');
+
+    /* 学号唯一性：同样学号再建一条必须 409 */
+    const dupSid = await call('/api/admin?action=save-profile', {
+      method: 'POST', token: adminToken,
+      body: { name: '另一个人', studentId: '99000001' },
+    });
+    t('★同学号重复新增被拦 409（盲索引去重生效）', dupSid.status === 409, '实际 ' + dupSid.status + ' ' + JSON.stringify(dupSid.body));
+
+    /* 批量导入也加密 */
+    const bi = await call('/api/admin?action=batch-profiles', {
+      method: 'POST', token: adminToken,
+      body: { rows: [{ name: '批量加密戊', studentId: '99000002', wechat: 'wx_batch_wu' }] },
+    });
+    t('★批量导入成功', bi.status === 200 && bi.body.created === 1, JSON.stringify(bi.body));
+    const rawBatch = q1("select * from profiles where name_bidx is not null and name like 'enc:v1:%'") || [];
+    t('★批量导入的姓名也是密文',
+      rawBatch.length > 0 && rawBatch.every((r) => isCipher(r.name)));
+
+    /* 走一遍「成员与档案」合并保存（这条路径最容易漏加密）。
+       save-member 是合并编辑入口，必须带 profileId 才进档案段。 */
+    const sm = await call('/api/admin?action=save-member', {
+      method: 'POST', token: adminToken,
+      body: { profileId: pid, name: '合并保存己', studentId: '99000001', phone: '13900002222' },
+    });
+    t('★成员与档案合并保存成功', sm.status === 200, JSON.stringify(sm.body).slice(0, 160));
+    const smDet = await call('/api/admin?action=profile&id=' + pid, { token: adminToken });
+    const p3 = (smDet.body || {}).profile || {};
+    t('★合并保存的姓名解密正常', p3.name === '合并保存己', JSON.stringify(p3.name));
+    t('★合并保存的手机号解密正常', p3.phone === '13900002222', JSON.stringify(p3.phone));
+    const rawSm = q1('select * from profiles where id = ?', [pid])[0] || {};
+    t('★合并保存的姓名在库里是密文', isCipher(rawSm.name));
+    t('★合并保存后学号仍是同一条（bidx 跟着更新，没被写歪）',
+      isCipher(rawSm.student_id) && typeof rawSm.student_id_bidx === 'string');
+
+    /* 清理这几条，避免污染后面的统计类断言（本段在文件末尾，纯粹是好习惯） */
+    try {
+      q1('delete from profiles where student_id_bidx is not null and id in (?, ?, ?)', [pid, pid, pid]);
+    } catch (e) { /* 忽略 */ }
+  } else {
+    console.log('  · 明文模式（--plain）：跳过「库内是密文」的实测断言');
+  }
+}
+
+console.log('\n' + '='.repeat(52));
+console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
+if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
+console.log('实际执行 SQL 查询: ' + queryLog.length + ' 条');
+console.log('='.repeat(52));
 
 process.exit(fail ? 1 : 0);

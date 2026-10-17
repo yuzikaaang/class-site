@@ -154,8 +154,12 @@ create table if not exists profiles (
      保留仅为兼容老数据，代码中不要再用。等确认无任何引用后再删列。 */
   name_hash     text        unique,                    -- [废弃] 姓名 SHA-256（精确匹配用，可空）
   /* 学号可空：班主任等「无账号但有资料」的人也建 profiles，不强制填学号。
-     PG 的 unique 约束对多行 NULL 不冲突（SQLite 同），故批量建号可留空。 */
-  student_id    text        unique,                    -- 学号（管理员维护，唯一，可空）
+     PG 的 unique 约束对多行 NULL 不冲突（SQLite 同），故批量建号可留空。
+
+     🔴 v3.5.0 起本列**不再有 unique 约束**（见文件末尾的 drop constraint）：
+        加密后同一学号每次加密的 IV 不同，密文永远互不相等，unique 形同虚设；
+        唯一性改由 student_id_bidx（盲索引）在应用层保证。 */
+  student_id    text,                                  -- 学号（管理员维护，密文存储）
   politics      text,                                  -- 政治面貌：共青团员 / 群众 / 中共党员 等
   exam_no       text,                                  -- 智学网准考证号（管理员维护，同学查询时直接可见）
   role          text        not null default '学生',    -- 学生 | 老师 | 管理员  /* ---- 以下三项由同学自填，需管理员审核后展示 ---- */
@@ -274,6 +278,66 @@ on conflict (field) do nothing;
    想放开由管理员在「资料管理 → 字段管理」里改，不必改代码。 */
 alter table profiles add column if not exists id_card text;
 alter table profiles add column if not exists youth_league_no text;
+
+/* ============================================================
+   档案字段加密（v3.5.0）
+   ------------------------------------------------------------
+   站主原话：「成员档案里的所有信息，比如姓名，学号，身份证，微信等等
+   全部也加密储存」。
+
+   ① 加密方式是 **应用层加密**（AES-256-GCM，见 api/_lib/profile-crypt.js），
+      密钥取环境变量 ADMIN_SECRETS_KEY（与令牌库同一个）。数据库里存的是
+      `enc:v1:<base64(iv|ct)>` 这样的文本，直接 select 出来是看不懂的乱码。
+      本文件无需改列类型（本来就是 text）。
+
+   ② 为什么要两个 bidx 列：
+      密文带随机 IV，同一原值的密文互不相等，`where name = ?` /
+      `where student_id = ?` 永远查不到东西。所以另存一列
+      **盲索引** = HMAC-SHA256(同一密钥, 规范化原值)：
+        · 等值匹配（学号去重、后台按全名搜索）可命中；
+        · 不含原值信息，拿到库也反推不出姓名（密钥不在库里）。
+      其余字段（身份证 / 微信 / QQ / 手机 / 准考证号…）不做索引，
+      读出整行后在内存中解密过滤即可。
+
+   ③ name_hash 那列是早期「SHA-256 精确匹配」的遗留物，已被本次的
+      name_bidx 完全取代（同样的思路，但多了密钥，彩虹表打不动）。
+      保留列不删，避免动到线上已有数据。
+
+   ④ 学号唯一性：unique 约束必须去掉 —— 密文永不相等，留着也拦不住重复，
+      反而会因为「同一学号更新时又插一条」而误报。改由应用层查
+      student_id_bidx 保证（见 api/admin.js 的 upsertProfileCore）。
+   ============================================================ */
+alter table profiles add column if not exists name_bidx       text;
+alter table profiles add column if not exists student_id_bidx text;
+create index if not exists profiles_name_bidx_idx on profiles (name_bidx);
+create index if not exists profiles_sid_bidx_idx  on profiles (student_id_bidx);
+/* 去掉老库上的 unique 约束（约束名由 create table 自动生成，先按已知名删，
+   再用 DO 块兜一遍「列上有唯一索引但名字不同」的情况）。 */
+alter table profiles drop constraint if exists profiles_student_id_key;
+do $$
+declare
+  idx_name text;
+begin
+  for idx_name in
+    select i.relname
+      from pg_index x
+      join pg_class i on i.oid = x.indexrelid
+      join pg_class t on t.oid = x.indrelid
+     where t.relname = 'profiles'
+       and x.indisunique
+       and not x.indisprimary
+       and (
+         select array_agg(a.attname order by a.attname)
+           from pg_attribute a
+          where a.attrelid = t.oid and a.attnum = any (x.indkey)
+       ) = array['student_id']::name[]
+  loop
+    execute format('drop index if exists %I', idx_name);
+  end loop;
+exception when others then
+  /* 权限不足或老版本 PG 不支持时静默跳过 —— 唯一性反正已由应用层保证 */
+  null;
+end $$;
 
 /* ============================================================
    AI 助手账号（2026-10-05）

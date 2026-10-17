@@ -56,6 +56,10 @@ import {
 } from './_lib/http.js';
 import { hashPassword } from './_lib/password.js';
 import { listSecrets, saveSecret, deleteSecret } from './_lib/secrets-store.js';
+/* v3.5.0：成员档案字段（姓名/学号/联系方式/自定义字段…）加密存储。
+   与令牌库共用同一个 ADMIN_SECRETS_KEY；未配置时整体退化为明文，
+   行为与改造前完全一致（见 profile-crypt.js 顶部说明）。 */
+import { profileKey, encField, decField, blindIndex, isEnc, isUndecryptable } from './_lib/profile-crypt.js';
 /* #178：用户详情的云端数据按分类翻中文。分类元数据的单一来源在
    data.js（个人端「我的云端数据」共用），这里直接 import 复用，
    避免两边各存一份翻译表后慢慢对不上。 */
@@ -593,13 +597,16 @@ async function listTitles(req, res) {
      列表 0 条，站主在「头衔任命」面板看到「还没有资料，请先导入名单」，
      根本没法任命——而任命不了就永远进不了这个列表。
      现在改为返回全部资料，由前端按 onlySet 过滤（默认只看未任命/全部可切）。 */
-  const rows = await sql`
+  const rawRows = await sql`
     select p.id, p.name, p.student_id, p.title, p.role, p.user_id,
            u.username, u.display_name
       from profiles p
       left join users u on u.id = p.user_id
      order by (coalesce(p.title, '') <> '') desc, p.id
   `;
+  /* v3.5.0：姓名/学号是密文，头衔任命面板要显示明文姓名 */
+  const tkey = await profileKey(req);
+  const rows = await Promise.all(rawRows.map((r) => decProfileRow(tkey, r)));
   const ai = await sql`
     select id, username, display_name from users
      where is_ai = true order by id limit 1
@@ -972,7 +979,7 @@ async function clearSessions(req, res, me, b) {
    编排「建号 / 绑档案 / 补档案」，不能再各自拼一套建号逻辑。 */
 async function createUser(req, res, me, b) {
   const sql = getSql();
-  const r = await createUserCore(sql, me, b);
+  const r = await createUserCore(sql, me, b, req);
   if (!r.ok) return fail(res, r.code, r.error);
   return ok(res, {
     message: '已创建账号 ' + r.username + '，该同学首次登录需自行修改密码'
@@ -987,7 +994,7 @@ async function createUser(req, res, me, b) {
  * @param skipProfile true 时不自动建班级档案 —— 调用方自己接管档案
  *   （「有档案无账号」场景下自动建会出现一人两条，必须由调用方绑定）。
  */
-async function createUserCore(sql, me, b) {
+async function createUserCore(sql, me, b, req) {
   const username = normUsername(b.username);
   const password = String(b.password || '');
   const displayName = String(b.displayName || '').trim().slice(0, 30) || null;
@@ -1016,7 +1023,8 @@ async function createUserCore(sql, me, b) {
           而这里过去只写 users、不建 profiles → 新账号永远不出现在头衔列表，
           也永远没法被任命、没法被资料查询命中。 */
   const userId = Number(rows[0].id);
-  const profileLinked = b.skipProfile ? false : await ensureProfileForUser(sql, userId, displayName);
+  const profileLinked = b.skipProfile ? false
+    : await ensureProfileForUser(sql, userId, displayName, await profileKey(req));
 
   await audit(me.id, 'user.create', 'user', String(userId), username);
 
@@ -1036,19 +1044,23 @@ async function createUserCore(sql, me, b) {
  *      宁可出现「一人两条」由管理员到资料管理里手工删除。
  *   ② **不引入事务**。账号是主、资料是附；profiles 建失败就用 try-catch
  *      吞掉并记日志，账号照常可登录（最坏退回改动前的状态，可手工补）。
- *   ③ 学号恒为空。多条 NULL 在 unique 约束下互不冲突（PG/SQLite 同），
- *      所以批量建号不会打架。
+ *   ③ 学号恒为空。多条 NULL 互不冲突，所以批量建号不会打架。
  *
+ *   v3.5.0：姓名同样要加密（站主要求「档案里的所有信息」都加密）。
+ *     这里没有 req 可拿，密钥从 envKey 参数传入；不传则写明文（老行为）。
+ *
+ * @param {object|null} [pkey] profileKey(req) 的结果
  * @returns {Promise<boolean>} 资料是否建成功
  */
-async function ensureProfileForUser(sql, userId, displayName) {
+async function ensureProfileForUser(sql, userId, displayName, pkey) {
   try {
     /* 已有资料挂在本人名下时不重复建（如先认领过再建号） */
     const exist = await sql`select id from profiles where user_id = ${userId} limit 1`;
     if (exist.length) return true;
+    const nm = displayName || null;
     await sql`
-      insert into profiles (name, role, user_id)
-      values (${displayName || null}, '学生', ${userId})
+      insert into profiles (name, name_bidx, role, user_id)
+      values (${await encField(pkey, nm)}, ${await blindIndex(pkey, nm)}, '学生', ${userId})
     `;
     return true;
   } catch (e) {
@@ -1082,6 +1094,8 @@ async function batchCreate(req, res, me, b) {
   const sql = getSql();
   const errors = [];
   let created = 0;
+  /* v3.5.0：批量建号会顺带建 profiles，姓名照样加密，密钥这里取一次复用 */
+  const pkey = await profileKey(req);
 
   /* ① 先做一次批内查重，减少无谓的哈希计算 */
   const seen = new Set();
@@ -1124,7 +1138,7 @@ async function batchCreate(req, res, me, b) {
       /* 同步补资料（理由同 createUser，见 ensureProfileForUser 的注释）。
          失败不阻断本条：账号已建好，资料可由管理员手工补。 */
       if (ins.length && ins[0].id != null) {
-        await ensureProfileForUser(sql, Number(ins[0].id), displayName);
+        await ensureProfileForUser(sql, Number(ins[0].id), displayName, pkey);
       }
       created++;
     } catch (e) {
@@ -1258,16 +1272,34 @@ async function listProfiles(req, res) {
   const q = cText(req.query.q, 40).replace(/[%_\\]/g, '');
   const st = cText(req.query.status, 16);   /* '' | none | pending | approved | rejected */
 
+  /* v3.5.0：姓名/学号加密后 SQL 无法再 like 检索 ——
+     配了密钥时改为「全表取回 → 解密 → 内存过滤」；
+     没配密钥（明文库）则保持原来的 SQL 检索，行为不变。
+     条数上限 1000 行，内存过滤的代价可以接受。 */
+  const pkey = await profileKey(req);
   const rows = await sql`
     select p.*, u.username as bound_username
       from profiles p
       left join users u on u.id = p.user_id
-     where (${q} = '' or coalesce(p.name,'') like '%' || ${q} || '%'
-                         or coalesce(p.student_id,'') like '%' || ${q} || '%')
+     where (${q === '' || pkey ? true : false} = true
+            or coalesce(p.name,'') like '%' || ${q} || '%'
+            or coalesce(p.student_id,'') like '%' || ${q} || '%')
        and (${st} = '' or p.contact_status = ${st})
      order by p.student_id nulls last, p.name
      limit 1000
   `;
+  /* 加密模式下在内存里按姓名/学号过滤（明文字段先解出来再比） */
+  let filtered = rows;
+  if (q && pkey) {
+    const needle = q.toLowerCase();
+    const keep = [];
+    for (const r of rows) {
+      const nm = String((await decField(pkey, r.name)) || '').toLowerCase();
+      const sid = String((await decField(pkey, r.student_id)) || '').toLowerCase();
+      if (nm.indexOf(needle) >= 0 || sid.indexOf(needle) >= 0) keep.push(r);
+    }
+    filtered = keep;
+  }
 
   /* 统计各状态数量，供后台顶部标签显示 */
   const cnt = await sql`
@@ -1283,39 +1315,42 @@ async function listProfiles(req, res) {
   const editable = await loadEditableFields();
 
   return ok(res, {
-    total: rows.length,
+    total: filtered.length,
     counts: cnt[0] || { total: 0, pending: 0, approved: 0, claimed: 0 },
     /* 字段元数据一并返回，后台可直接据此渲染动态列，省一次请求 */
     fieldMeta: await loadFieldMeta(),
-    profiles: rows.map((r) => ({
-      id: Number(r.id),
-      name: r.name || '',
-      studentId: r.student_id || '',
-      politics: r.politics || '',
-      examNo: r.exam_no || '',
-      role: r.role || '学生',
-      wechat: r.wechat || '',
-      qq: r.qq || '',
-      phone: r.phone || '',
-      contactStatus: r.contact_status || 'none',
-      rejectReason: r.reject_reason || '',
-      userId: r.user_id ? Number(r.user_id) : null,
-      boundUsername: r.bound_username || '',
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-      /* 本人可见性意愿（2026-10-08）：后台资料列表用来标「🔒 私密」 */
-      visibilityPref: safeJson(r.visibility_pref),
-      /* 单人可见性例外（2026-10-09 v2.4.0）：管理员给该条资料设的例外 */
-      fieldVis: safeJson(r.field_vis),
-      /* 自定义 / 可编辑字段的值（2026-10-09 v2.4.0）：键即字段名 */
-      extra: (() => {
-        const o = {};
-        for (const f of editable) {
-          const v = r[f.field];
-          if (v != null && v !== '') o[f.field] = String(v);
-        }
-        return o;
-      })(),
+    /* v3.5.0：这里同样要先解密（Promise.all 而不是 for-await，
+       几十条并发解密比串行快得多，免费版子请求数不受影响——纯 CPU） */
+    profiles: await Promise.all(filtered.map(async (r) => {
+      const d = (v) => decField(pkey, v);
+      const extra = {};
+      for (const f of editable) {
+        const v = r[f.field];
+        if (v != null && v !== '') extra[f.field] = String(await d(v));
+      }
+      return {
+        id: Number(r.id),
+        name: (await d(r.name)) || '',
+        studentId: (await d(r.student_id)) || '',
+        politics: (await d(r.politics)) || '',
+        examNo: (await d(r.exam_no)) || '',
+        role: r.role || '学生',
+        wechat: (await d(r.wechat)) || '',
+        qq: (await d(r.qq)) || '',
+        phone: (await d(r.phone)) || '',
+        contactStatus: r.contact_status || 'none',
+        rejectReason: r.reject_reason || '',
+        userId: r.user_id ? Number(r.user_id) : null,
+        boundUsername: r.bound_username || '',
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        /* 本人可见性意愿（2026-10-08）：后台资料列表用来标「🔒 私密」 */
+        visibilityPref: safeJson(r.visibility_pref),
+        /* 单人可见性例外（2026-10-09 v2.4.0）：管理员给该条资料设的例外 */
+        fieldVis: safeJson(r.field_vis),
+        /* 自定义 / 可编辑字段的值（2026-10-09 v2.4.0）：键即字段名 */
+        extra,
+      };
     })),
   });
 }
@@ -1338,25 +1373,32 @@ function safeJson(raw) {
 /**
  * v2.10.0（第六十轮 #172）：把 profiles 行整形成管理端扁平结构。
  * listMembers 与 save-member 的回显都用它，保证两处口径一致。
+ *
+ * v3.5.0：档案字段加密后，这里必须**先解密再整形**。
+ *   数据流：DB(密文) → [本函数解密] → 前端(明文)
+ *   明文/密文在库里混存（存量明文还没被管理员保存过），decField 对明文原样返回，
+ *   所以这里不需要区分，逐个字段过一遍即可。
  * @param editable loadEditableFields() 的结果（自定义字段白名单）
+ * @param key      profileKey(req) 的结果；null = 未配密钥，全站退化为明文
  */
-function shapeProfileAdmin(r, editable) {
+async function shapeProfileAdmin(r, editable, key) {
+  const dec = (v) => decField(key, v);
   const extra = {};
   for (const f of editable) {
     const v = r[f.field];
-    if (v != null && v !== '') extra[f.field] = String(v);
+    if (v != null && v !== '') extra[f.field] = String(await dec(v));
   }
   return {
     profileId: Number(r.id),
-    name: r.name || '',
-    studentId: r.student_id || '',
-    politics: r.politics || '',
-    examNo: r.exam_no || '',
+    name: (await dec(r.name)) || '',
+    studentId: (await dec(r.student_id)) || '',
+    politics: (await dec(r.politics)) || '',
+    examNo: (await dec(r.exam_no)) || '',
     role: r.role || '学生',
     title: r.title || '',
-    wechat: r.wechat || '',
-    qq: r.qq || '',
-    phone: r.phone || '',
+    wechat: (await dec(r.wechat)) || '',
+    qq: (await dec(r.qq)) || '',
+    phone: (await dec(r.phone)) || '',
     contactStatus: r.contact_status || 'none',
     rejectReason: r.reject_reason || '',
     visibilityPref: safeJson(r.visibility_pref),
@@ -1422,14 +1464,15 @@ async function listMembers(req, res) {
      limit 1000
   `;
   const editable = await loadEditableFields();
+  const pkey = await profileKey(req);
 
   /* ③ JS 合并：一个账号只认第一条档案（脏数据不放大成重复行）；
-        user_id 为空的档案是「未认领」，单独成行。 */
+       user_id 为空的档案是「未认领」，单独成行。 */
   const byUser = new Map();
   const orphans = [];
   for (const r of prows) {
     const uid = r.user_id == null ? null : Number(r.user_id);
-    const shaped = shapeProfileAdmin(r, editable);
+    const shaped = await shapeProfileAdmin(r, editable, pkey);
     if (uid == null) orphans.push(shaped);
     else if (!byUser.has(uid)) byUser.set(uid, shaped);
   }
@@ -1854,6 +1897,23 @@ async function updateField(req, res, me, b) {
   });
 }
 
+/**
+ * 整行解密（v3.5.0）。
+ * 库里 profiles 的文本列都是密文，凡是要往外吐明文的读点都得先过一遍。
+ * 明文/密文混存期 decField 对明文原样返回，所以无需判断。
+ * key 为 null（未配 ADMIN_SECRETS_KEY）时直接原样返回，零开销。
+ */
+async function decProfileRow(key, row) {
+  if (!key || !row || typeof row !== 'object') return row;
+  const keys = Object.keys(row);
+  const vals = await Promise.all(keys.map((k) => (
+    typeof row[k] === 'string' ? decField(key, row[k]) : row[k]
+  )));
+  const out = {};
+  for (let i = 0; i < keys.length; i++) out[keys[i]] = vals[i];
+  return out;
+}
+
 /** 单条资料详情 */
 async function profileDetail(req, res) {
   const id = Number(req.query.id || 0);
@@ -1865,7 +1925,8 @@ async function profileDetail(req, res) {
      where p.id = ${id} limit 1
   `;
   if (!rows.length) return fail(res, 404, '资料不存在');
-  const r = rows[0];
+  /* v3.5.0：整行解密后再整形（管理员视图本就该看到明文） */
+  const r = await decProfileRow(await profileKey(req), rows[0]);
 
   /* 顺带给出该资料的查看记录（最近 20 条），管理员点开就能看到谁查过 */
   let views = [];
@@ -1925,7 +1986,7 @@ async function profileDetail(req, res) {
 /** 待审核列表（只返回 pending，后台「待审核」页用） */
 async function profileRequests(req, res) {
   const sql = getSql();
-  const rows = await sql`
+  const raw = await sql`
     select p.id, p.name, p.student_id, p.politics, p.exam_no, p.wechat, p.qq, p.phone,
            p.contact_status, p.updated_at, u.username as bound_username
       from profiles p
@@ -1934,6 +1995,9 @@ async function profileRequests(req, res) {
      order by p.updated_at desc
      limit 500
   `;
+  /* v3.5.0：待审核的是联系方式（全被加密），必须先解密才能给管理员看 */
+  const pkey = await profileKey(req);
+  const rows = await Promise.all(raw.map((r) => decProfileRow(pkey, r)));
   return ok(res, {
     total: rows.length,
     requests: rows.map((r) => ({
@@ -1998,7 +2062,7 @@ async function reviewContact(req, res, me, b) {
    顺带落地「姓名单数据源」：profiles.name 是权威源，
    保存时同步 users.display_name，消除合并前两处各存一份、对不上的问题。 */
 async function saveProfile(req, res, me, b) {
-  const r = await upsertProfileCore(getSql(), me, b);
+  const r = await upsertProfileCore(getSql(), me, b, req);
   if (!r.ok) return fail(res, r.code, r.error);
   return ok(res, { message: r.message, id: r.id });
 }
@@ -2060,7 +2124,7 @@ async function saveMember(req, res, me, b) {
       displayName: b.name || b.displayName || '',
       role: b.role,
       skipProfile: !!profileId,
-    });
+    }, req);
     if (!r.ok) return fail(res, r.code, r.error);
     finalUserId = r.userId;
     notes.push('已开通账号 ' + r.username);
@@ -2091,13 +2155,13 @@ async function saveMember(req, res, me, b) {
 
   if (finalProfileId) {
     if (hasProfileData) {
-      const r = await upsertProfileCore(sql, me, Object.assign({}, b, { id: finalProfileId }));
+      const r = await upsertProfileCore(sql, me, Object.assign({}, b, { id: finalProfileId }), req);
       if (!r.ok) return fail(res, r.code, r.error);
       notes.push(r.message);
     }
   } else if (finalUserId && hasProfileData) {
     /* 有账号暂无档案：补建一条并绑定（userId 由 upsertProfileCore 写入） */
-    const r = await upsertProfileCore(sql, me, Object.assign({}, b, { id: 0, userId: finalUserId }));
+    const r = await upsertProfileCore(sql, me, Object.assign({}, b, { id: 0, userId: finalUserId }), req);
     if (!r.ok) return fail(res, r.code, r.error);
     finalProfileId = r.id;
     notes.push(r.message);
@@ -2118,8 +2182,21 @@ async function saveMember(req, res, me, b) {
  * 资料保存核心（不写 HTTP 响应）。
  * @returns {{ ok:true, id:number, message:string } | { ok:false, code:number, error:string }}
  * @param b.userId 新增时可选：直接把这条资料绑到某个账号（「有账号暂无档案」场景）
+ * @param req      仅用于取环境变量里的 ADMIN_SECRETS_KEY（v3.5.0 字段加密）；
+ *                 传 null 时退化为明文写入（测试桩 / 内部调用兼容）
+ *
+ * v3.5.0 字段加密改造要点（站主原话：「成员档案里的所有信息…全部也加密储存」）：
+ *   ① 所有身份与联系方式字段「落库前」统一过 encField，库里只有密文。
+ *   ② 学号唯一性不再用 `student_id = ?`（那列已经是密文，等值比不出来），
+ *      改查盲索引列 student_id_bidx。
+ *   ③ UPDATE 分支的「没传就保留原值」必须**先解密再加密回写**——
+ *      否则会把库里的密文再封一层（enc 套 enc），越存越不可读。
+ *   ④ users.display_name 仍写明文：前端按姓名比对、登录后顶部显示都靠它，
+ *      它不在「档案敏感字段」范围内（站主要加密的是档案表）。
+ *   ⑤ 没配密钥（pkey = null）时所有 encField 原样返回 —— 行为与改造前一致。
  */
-async function upsertProfileCore(sql, me, b) {
+async function upsertProfileCore(sql, me, b, req) {
+  const pkey = await profileKey(req);
   const id = Number(b.id || 0);
   const name = cText(b.name, 30);
   const sid = cText(b.studentId, 20);
@@ -2169,9 +2246,16 @@ async function upsertProfileCore(sql, me, b) {
 
   if (!name && !sid) return { ok: false, code: 400, error: '姓名与学号至少填一项' };
 
-  /* 学号唯一性检查：同一个学号不能挂两条资料 */
+  /* 学号唯一性检查：同一个学号不能挂两条资料。
+     v3.5.0：列里存的是密文，等值比较没意义（同一学号每次加密的 IV 不同，
+     密文永远不相等），必须用盲索引列 student_id_bidx。
+     · 配了密钥 → 查 bidx（老数据还没生成 bidx 的，靠下面的明文兜底查不到，
+       但那种数据本来也没被保存过，属可接受的迁移期空窗）；
+     · 没配密钥 → 保持原来的明文等值查。 */
   if (sid) {
-    const dup = await sql`select id from profiles where student_id = ${sid} limit 1`;
+    const dup = pkey
+      ? await sql`select id from profiles where student_id_bidx = ${await blindIndex(pkey, sid)} limit 1`
+      : await sql`select id from profiles where student_id = ${sid} limit 1`;
     if (dup.length && Number(dup[0].id) !== id) {
       return { ok: false, code: 409, error: '学号 ' + sid + ' 已被另一条资料占用' };
     }
@@ -2179,11 +2263,17 @@ async function upsertProfileCore(sql, me, b) {
 
   /* ---- 动态拼 UPDATE 的列（2026-10-09 v2.4.0） ----
      固定列用参数化；自定义列的**列名**来自 meta 表（当初过了白名单），
-     拼之前再用 checkFieldName 复核一次，值仍然走参数化。 */
+     拼之前再用 checkFieldName 复核一次，值仍然走参数化。
+
+     v3.5.0：固定列多了两个盲索引列（name_bidx / student_id_bidx），
+     所以列顺序变成 name, student_id, name_bidx, student_id_bidx, politics, …
+     —— 下面 params 的顺序必须严格跟着走，错一位就会把密文写进错误的列。 */
   const sets = [
-    'name = $1', 'student_id = $2', 'politics = $3', 'exam_no = $4', 'role = $5',
-    'wechat = $6', 'qq = $7', 'phone = $8', 'contact_status = $9',
+    'name = $1', 'student_id = $2', 'name_bidx = $3', 'student_id_bidx = $4',
+    'politics = $5', 'exam_no = $6', 'role = $7',
+    'wechat = $8', 'qq = $9', 'phone = $10', 'contact_status = $11',
   ];
+  const BASE_N = 11;   /* sets 里固定占用的参数个数，后面 push 从这个数继续编号 */
 
   if (id) {
     /* 修改：只更新传了的字段，避免把没传的字段清空 */
@@ -2191,12 +2281,33 @@ async function upsertProfileCore(sql, me, b) {
     if (!cur.length) return { ok: false, code: 404, error: '资料不存在' };
     const c = cur[0];
 
+    /* 🔴 v3.5.0 关键点：`name || c.name` 这种「没传就保留原值」的写法，
+       在加密后必须先把 c.xxx **解出明文**再重新加密。直接回写 c.xxx
+       （密文）会被 encField 再封一层，变成 enc:v1:<上面还套着 enc:v1:…>，
+       存两次就再也解不回来了（解密只剥一层）。 */
+    /* 占位符（【解密失败】/【已加密但未配密钥】）绝不能当成用户输入写回库 ——
+       那会把原来的密文覆盖掉，数据就永久丢了。见到它一律视为「没改」。 */
+    const keep = async (incoming, stored) =>
+      (incoming !== '' && incoming != null && !isUndecryptable(incoming))
+        ? incoming
+        : await decField(pkey, stored);
+
+    const plainName = await keep(name, c.name);
+    const plainSid = await keep(sid, c.student_id);
+    const plainPolitics = await keep(politics, c.politics);
+    const plainExamNo = await keep(examNo, c.exam_no);
+
     const params = [
-      name || c.name, sid || c.student_id, politics || c.politics,
-      examNo || c.exam_no, role || c.role,
-      wechat !== '' ? wechat : c.wechat,
-      qq !== '' ? qq : c.qq,
-      phone !== '' ? phone : c.phone,
+      await encField(pkey, plainName),
+      await encField(pkey, plainSid),
+      await blindIndex(pkey, plainName),
+      await blindIndex(pkey, plainSid),
+      await encField(pkey, plainPolitics),
+      await encField(pkey, plainExamNo),
+      role || c.role,
+      await encField(pkey, await keep(wechat, c.wechat)),
+      await encField(pkey, await keep(qq, c.qq)),
+      await encField(pkey, await keep(phone, c.phone)),
       st || c.contact_status,
     ];
 
@@ -2220,7 +2331,9 @@ async function upsertProfileCore(sql, me, b) {
          表现为「保存返回成功但值没写进去」。 */
       const chk = isSafeFieldFormat(f.field);
       if (!chk.ok) continue;   /* 历史脏字段直接跳过，不让它把整个保存搞挂 */
-      params.push(customVals[f.field]);
+      /* 同理：解不出来的占位符不写回，直接跳过这一列（库里保留原值） */
+      if (isUndecryptable(customVals[f.field])) continue;
+      params.push(await encField(pkey, customVals[f.field]));
       sets.push(chk.field + ' = $' + params.length);
     }
 
@@ -2242,13 +2355,21 @@ async function upsertProfileCore(sql, me, b) {
     return { ok: true, id, message: '已保存' };
   }
 
-  /* ---- 新增 ---- */
-  const insCols = ['name', 'student_id', 'politics', 'exam_no', 'role',
-    'wechat', 'qq', 'phone', 'contact_status'];
-  const insVals = [name || null, sid || null, politics || null, examNo || null, role,
-    wechat || null, qq || null, phone || null,
-    st || (wechat || qq || phone ? 'approved' : 'none')];
-  const insParams = ['$1', '$2', '$3', '$4', '$5', '$6', '$7', '$8', '$9'];
+  /* ---- 新增 ----
+     v3.5.0：列里一律写密文，另外补写两个盲索引列（搜索 / 学号去重靠它）。 */
+  const encName = await encField(pkey, name || null);
+  const encSid = await encField(pkey, sid || null);
+  const insCols = ['name', 'student_id', 'name_bidx', 'student_id_bidx',
+    'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status'];
+  const insVals = [
+    encName, encSid,
+    await blindIndex(pkey, name || null), await blindIndex(pkey, sid || null),
+    await encField(pkey, politics || null), await encField(pkey, examNo || null), role,
+    await encField(pkey, wechat || null), await encField(pkey, qq || null),
+    await encField(pkey, phone || null),
+    st || (wechat || qq || phone ? 'approved' : 'none'),
+  ];
+  const insParams = insCols.map((_, i) => '$' + (i + 1));
 
   /* 🔴 v2.4.1 修复：新增时也要写 visibility_pref。
      原来 prefJson 只在 UPDATE 分支被用到，INSERT 分支完全没带这一列 ——
@@ -2279,7 +2400,7 @@ async function upsertProfileCore(sql, me, b) {
     const chk = isSafeFieldFormat(f.field);   /* 同上：不能挡系统列 */
     if (!chk.ok) continue;
     insCols.push(chk.field);
-    insVals.push(customVals[f.field]);
+    insVals.push(await encField(pkey, customVals[f.field]));
     insParams.push('$' + insVals.length);
   }
 
@@ -2331,6 +2452,8 @@ async function batchProfiles(req, res, me, b) {
      前端会按中文表头识别出来塞进 raw.extra。这里先把可写字段名单拉一份，
      循环里逐条拼进 SQL —— 否则导入进来这些值会被静默丢掉（只写固定的 8 列）。 */
   const editable = await loadEditableFields();
+  /* v3.5.0：导入同样是「落库」，全部字段照样加密；查找已存在记录改走盲索引。 */
+  const pkey = await profileKey(req);
 
   for (let i = 0; i < list.length; i++) {
     const raw = list[i] || {};
@@ -2360,24 +2483,46 @@ async function batchProfiles(req, res, me, b) {
         continue;
       }
 
-      /* 先按学号找，再按姓名找 */
+      /* 先按学号找，再按姓名找。
+         v3.5.0：这两列现在是密文，必须走盲索引（bidx）。
+         没配密钥时保持原来的明文等值查，行为不变。 */
+      const sidBidx = await blindIndex(pkey, sid || null);
+      const nameBidx = await blindIndex(pkey, name || null);
       let hit = [];
-      if (sid) hit = await sql`select id from profiles where student_id = ${sid} limit 1`;
-      if (!hit.length && name) hit = await sql`select id from profiles where name = ${name} limit 1`;
+      if (sid) {
+        hit = pkey
+          ? await sql`select id from profiles where student_id_bidx = ${sidBidx} limit 1`
+          : await sql`select id from profiles where student_id = ${sid} limit 1`;
+      }
+      if (!hit.length && name) {
+        hit = pkey
+          ? await sql`select id from profiles where name_bidx = ${nameBidx} limit 1`
+          : await sql`select id from profiles where name = ${name} limit 1`;
+      }
+
+      /* 加密后的值（每行算一次，UPDATE / INSERT 两处复用） */
+      const eName = await encField(pkey, name || null);
+      const eSid = await encField(pkey, sid || null);
+      const ePolitics = await encField(pkey, politics || null);
+      const eExamNo = await encField(pkey, examNo || null);
+      const eWechat = await encField(pkey, wechat || null);
+      const eQq = await encField(pkey, qq || null);
+      const ePhone = await encField(pkey, phone || null);
+      const cst = (wechat || qq || phone) ? 'approved' : 'none';
 
       if (hit.length) {
         const pid = Number(hit[0].id);
         const params = [
-          name || null, sid || null, politics || null, examNo || null, role,
-          wechat || null, qq || null, phone || null,
-          (wechat || qq || phone) ? 'approved' : 'none',
+          eName, eSid, nameBidx, sidBidx, ePolitics, eExamNo, role,
+          eWechat, eQq, ePhone, cst,
         ];
         const sets = [
-          'name = $1', 'student_id = $2', 'politics = $3', 'exam_no = $4', 'role = $5',
-          'wechat = $6', 'qq = $7', 'phone = $8', 'contact_status = $9',
+          'name = $1', 'student_id = $2', 'name_bidx = $3', 'student_id_bidx = $4',
+          'politics = $5', 'exam_no = $6', 'role = $7',
+          'wechat = $8', 'qq = $9', 'phone = $10', 'contact_status = $11',
         ];
         for (const col of exCols) {
-          params.push(ex[col]);
+          params.push(await encField(pkey, ex[col]));
           sets.push(col + ' = $' + params.length);
         }
         params.push(pid);
@@ -2387,13 +2532,13 @@ async function batchProfiles(req, res, me, b) {
         );
         updated++;
       } else {
-        const cols = ['name', 'student_id', 'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status', ...exCols];
+        const cols = ['name', 'student_id', 'name_bidx', 'student_id_bidx',
+          'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status', ...exCols];
         const params = [
-          name || null, sid || null, politics || null, examNo || null, role,
-          wechat || null, qq || null, phone || null,
-          (wechat || qq || phone) ? 'approved' : 'none',
+          eName, eSid, nameBidx, sidBidx, ePolitics, eExamNo, role,
+          eWechat, eQq, ePhone, cst,
         ];
-        for (const col of exCols) params.push(ex[col]);
+        for (const col of exCols) params.push(await encField(pkey, ex[col]));
         const ph = params.map((_, k) => '$' + (k + 1)).join(', ');
         await sql(
           'insert into profiles (' + cols.join(', ') + ') values (' + ph + ')',
@@ -2464,19 +2609,30 @@ async function viewLogs(req, res) {
     `;
   } catch (e) { /* 忽略 */ }
 
-  return ok(res, {
-    total: rows.length,
-    logs: rows.map((r) => ({
+  /* v3.5.0：t.name / t.student_id 现在是密文，必须先解密。
+     日志表自带的 target_name 是**查询当时写的明文快照**，优先级更高
+     （即使那条资料后来被删/改名，日志仍然看得懂）；解出的真名作兜底。 */
+  const vkey = await profileKey(req);
+  const logs = [];
+  for (const r of rows) {
+    const realName = r.target_real_name ? await decField(vkey, r.target_real_name) : '';
+    const realSid = r.target_sid ? await decField(vkey, r.target_sid) : '';
+    logs.push({
       id: Number(r.id),
       viewerId: r.viewer_id ? Number(r.viewer_id) : null,
       viewer: r.viewer_display || r.viewer_name || '(已删除账号)',
       targetId: r.target_id ? Number(r.target_id) : null,
-      targetName: r.target_real_name || r.target_name || '(已删除)',
-      targetStudentId: r.target_sid || '',
+      targetName: r.target_name || realName || '(已删除)',
+      targetStudentId: realSid || '',
       keyword: r.keyword || '',
       ip: r.ip || '',
       createdAt: r.created_at,
-    })),
+    });
+  }
+
+  return ok(res, {
+    total: logs.length,
+    logs,
     top: top.map((t) => ({ username: t.username || '(已删除)', count: t.n })),
   });
 }
@@ -2553,6 +2709,9 @@ async function bindProfiles(req, res, me, b) {
 
   const dry = !!b.dryRun;
   const sql = getSql();
+  /* v3.5.0：姓名是密文，按姓名找资料改走盲索引（全名精确匹配，
+     与本接口原本的 `where name = ?` 语义完全一致）。 */
+  const pkey = await profileKey(req);
   const out = { bound: 0, skipped: 0, noAccount: [], noProfile: [], conflict: [], boundNames: [] };
 
   for (const raw of names) {
@@ -2576,9 +2735,9 @@ async function bindProfiles(req, res, me, b) {
     if (!acc.length) { out.noAccount.push(name); continue; }
     const uid = Number(acc[0].id);
 
-    const prof = await sql`
-      select id, user_id, name from profiles where name = ${name} limit 1
-    `;
+    const prof = pkey
+      ? await sql`select id, user_id, name from profiles where name_bidx = ${await blindIndex(pkey, name)} limit 1`
+      : await sql`select id, user_id, name from profiles where name = ${name} limit 1`;
     if (!prof.length) { out.noProfile.push(name); continue; }
     const pid = Number(prof[0].id);
     const owner = prof[0].user_id == null ? null : Number(prof[0].user_id);

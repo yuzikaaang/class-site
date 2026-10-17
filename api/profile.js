@@ -24,9 +24,15 @@ import { getSql } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireUser, requireUserReady, isCommittee,
 } from './_lib/http.js';
+/* v3.5.0：档案字段在库里是密文（AES-256-GCM），凡是要往外吐明文的地方都得解密。
+   数据流：DB(密文) → [decRow 解密] → shapeProfile(按可见性裁剪) → 前端(明文)。 */
+import { profileKey, encField, decField, blindIndex } from './_lib/profile-crypt.js';
 
 /** 单次查询返回的最大条数（防止有人拉全表） */
 const MAX_RESULTS = 30;
+/* v3.5.0：姓名/学号加密后无法用 SQL 过滤，改为「取回候选行 → 解密 → 内存过滤」。
+   候选行的上限，比出参上限大 3 倍，保证 A 命中不了的 B 还能补上。 */
+const SCAN_ROWS = MAX_RESULTS * 3;
 /** 关键词长度上限 */
 const MAX_Q = 40;
 /** 联系方式字段长度上限 */
@@ -229,6 +235,32 @@ function cleanContact(s) {
   return clean(s, MAX_CONTACT).replace(/[<>"']/g, '');
 }
 
+/* ============================================================
+   v3.5.0 解密工具
+   ------------------------------------------------------------
+   库里存的是 enc:v1:<...> 密文（见 _lib/profile-crypt.js）。
+   迁移期明文/密文混存，decField 对明文原样返回，所以这里不用判断，
+   整行所有列过一遍即可 —— 代价是每行多几十次内存里的前缀比对，
+   相比数据库往返可以忽略。
+
+   ⚠️ 为什么用「整行解密」而不是「只解密要输出的字段」：
+      可见性判断（canSee）本身要看字段值是否存在、是否为空，
+      提前解密一遍最省心，也不会漏掉某个字段让前端看到乱码。
+   ============================================================ */
+async function decRow(key, row) {
+  if (!key || !row || typeof row !== 'object') return row;
+  const out = {};
+  const keys = Object.keys(row);
+  const vals = await Promise.all(keys.map((k) => {
+    const v = row[k];
+    /* 只处理字符串列：id/时间戳/布尔 等不必解密（decField 也会原样返回，
+       但少一次调用少一次 await） */
+    return typeof v === 'string' ? decField(key, v) : v;
+  }));
+  for (let i = 0; i < keys.length; i++) out[keys[i]] = vals[i];
+  return out;
+}
+
 /**
  * 脱敏：把中间字符换成 *，用于「搜索结果列表」这类不需要完整信息的场景。
  * 例：13812345678 → 138****5678
@@ -343,25 +375,90 @@ async function search(req, res, u) {
      但把 meta 查询提到前面 —— 每个请求只查**一次**字段元数据，循环里复用。 */
   const meta = await loadMeta(sql);
 
-  const rows = await sql`
-    select *
-      from profiles
-     where student_id ilike ${sidLike}
-        or name ilike ${like}
-        or exam_no like ${sidLike}
-     order by student_id nulls last, name
-     limit ${MAX_RESULTS}
-  `;
+  /* v3.5.0：姓名 / 学号在库里是密文，`ilike` / `=` 一律命中不了。
+     策略分两条路，**都保留原语义**：
+       · 没配密钥（明文库）→ 沿用原来的 SQL 检索，一字不改；
+       · 配了密钥 → 取回候选行（exam_no 仍是明文，仍可用前缀命中），
+         整行解密后在内存里按「① 学号前缀 ② 姓名包含 ③ 智学网账号前缀」过滤。
+     代价是每次查询多读几十行，个人通讯录量级完全承受得住。 */
+  const pkey = await profileKey(req);
+
+  let rows;
+  if (!pkey) {
+    rows = await sql`
+      select *
+        from profiles
+       where student_id ilike ${sidLike}
+          or name ilike ${like}
+          or exam_no like ${sidLike}
+       order by student_id nulls last, name
+       limit ${MAX_RESULTS}
+    `;
+  } else {
+    const raw = await sql`
+      select *
+        from profiles
+       where exam_no like ${sidLike}
+       order by student_id nulls last, name
+       limit ${SCAN_ROWS}
+    `;
+    const qLow = q.toLowerCase();
+    const pooled = new Map();
+    for (const r of raw) {
+      const d = await decRow(pkey, r);
+      const nm = String(d.name || '');
+      const sidV = String(d.student_id || '');
+      const exam = String(d.exam_no || '');
+      const hitSid = sidV.toLowerCase().startsWith(qLow);
+      const hitName = nm.toLowerCase().indexOf(qLow) >= 0;
+      const hitExam = exam.toLowerCase().startsWith(qLow);
+      if (hitSid || hitName || hitExam) pooled.set(Number(d.id), d);
+    }
+    /* 学号/姓名都可能是密文而 exam_no 命中不到 —— 再兜一次「全表扫」，
+       条数上限同样受 SCAN_ROWS 约束，避免有人拿空关键词拉全表。 */
+    if (pooled.size < MAX_RESULTS) {
+      const more = await sql`
+        select * from profiles
+         where coalesce(name, '') <> '' or coalesce(student_id, '') <> ''
+         order by student_id nulls last, name
+         limit ${SCAN_ROWS}
+      `;
+      for (const r of more) {
+        if (pooled.size >= MAX_RESULTS) break;
+        const id = Number(r.id);
+        if (pooled.has(id)) continue;
+        const d = await decRow(pkey, r);
+        const nm = String(d.name || '').toLowerCase();
+        const sidV = String(d.student_id || '').toLowerCase();
+        const exam = String(d.exam_no || '').toLowerCase();
+        if (sidV.startsWith(qLow) || nm.indexOf(qLow) >= 0 || exam.startsWith(qLow)) pooled.set(id, d);
+      }
+    }
+    /* 保持与 SQL 分支一致的排序：学号升序（空的排最后），再按姓名 */
+    rows = Array.from(pooled.values()).slice(0, MAX_RESULTS).sort((a, b) => {
+      const sa = String(a.student_id || '');
+      const sb = String(b.student_id || '');
+      if (!sa && sb) return 1;
+      if (sa && !sb) return -1;
+      if (sa !== sb) return sa < sb ? -1 : 1;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }
 
   if (!rows.length) {
     return ok(res, { query: q, results: [], message: '未找到匹配的资料' });
   }
 
-  /* 写查看日志：每个命中都记一条。日志失败不影响查询结果。 */
+  /* 写查看日志：每个命中都记一条。日志失败不影响查询结果。
+     v3.5.0：这里写的是**明文姓名**，不是库里的密文 ——
+     日志给人看（站主要知道「谁查了谁」），存密文等于白存；
+     而且 profile_view_log 只是一份审计流水，不属于「成员档案信息」。
+     行里可能还是密文（没配密钥时才是明文），统一过一遍 decRow 取真名。 */
   try {
     const h = req.headers || {};
     const ip = String(h['cf-connecting-ip'] || (h['x-forwarded-for'] || '').split(',')[0] || h['x-real-ip'] || '').slice(0, 64);
-    for (const r of rows) {
+    for (const r0 of rows) {
+      const r = await decRow(pkey, r0);
       await sql`
         insert into profile_view_log (viewer_id, target_id, target_name, keyword, ip)
         values (${u.id}, ${r.id}, ${r.name || r.student_id || ''}, ${q}, ${ip || null})
@@ -392,17 +489,33 @@ async function search(req, res, u) {
    ⚠️ 只返回姓名与学号，**不含任何联系方式**（微信 / QQ / 手机号一律不下发）。 */
 async function roster(req, res) {
   const sql = getSql();
-  const rows = await sql`
+  /* v3.5.0：姓名/学号是密文，`where coalesce(name,'') <> ''` 对密文照样成立
+     （密文非空），但排序与展示必须用明文，所以整行解密后再排。 */
+  const pkey = await profileKey(req);
+  const raw = await sql`
     select name, student_id
       from profiles
      where coalesce(name, '') <> ''
      order by student_id nulls last, name
   `;
+  const rows = [];
+  for (const r of raw) {
+    const d = await decRow(pkey, r);
+    rows.push({ name: d.name || '', studentId: d.student_id || '' });
+  }
+  if (pkey) {
+    rows.sort((a, b) => {
+      if (!a.studentId && b.studentId) return 1;
+      if (a.studentId && !b.studentId) return -1;
+      if (a.studentId !== b.studentId) return a.studentId < b.studentId ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
   return ok(res, {
     count: rows.length,
     names: rows.map((r) => r.name),
     /* 学号只在前端做排序 / 去重备用，同样是班内公开信息 */
-    students: rows.map((r) => ({ name: r.name, studentId: r.student_id || '' })),
+    students: rows.map((r) => ({ name: r.name, studentId: r.studentId || '' })),
   });
 }
 
@@ -430,7 +543,7 @@ async function myProfile(req, res, u) {
       })),
     });
   }
-  const row = rows[0];
+  const row = await decRow(await profileKey(req), rows[0]);
   const meta = await loadMeta(sql);
   /* 本人看自己：一律 full=true，可见性一律放行（self 就是「本人」）。
      v3.4.1：admin 档例外 —— 「仅管理员可见」的字段本人也看不到，
@@ -444,7 +557,9 @@ async function myProfile(req, res, u) {
      ⚠️ 这里的白名单思路：只把「profiles 表里真的有的列」吐出去，
         避免把 id / user_id / name_hash 之类内部列漏给前端。 */
   const privateFields = [];
-  const skip = new Set(['id', 'name_hash', 'user_id', 'visibility_pref', 'field_vis', 'created_at', 'updated_at', 'reject_reason']);
+  const skip = new Set(['id', 'name_hash', 'user_id', 'visibility_pref', 'field_vis', 'created_at', 'updated_at', 'reject_reason',
+    /* v3.5.0 盲索引列：内部检索用，绝不能吐给前端（虽然是哈希，但没必要外泄） */
+    'name_bidx', 'student_id_bidx']);
   for (const field of Object.keys(meta)) {
     if (skip.has(field)) continue;
     if (meta[field].visibility !== 'self') continue;
@@ -491,7 +606,7 @@ async function mineRequests(req, res, u) {
       from profiles where id = ${u.profileId} limit 1
   `;
   if (!rows.length) return ok(res, { requests: [], claimed: false });
-  const r = rows[0];
+  const r = await decRow(await profileKey(req), rows[0]);
   return ok(res, {
     claimed: true,
     requests: [{
@@ -520,11 +635,36 @@ async function claim(req, res, u) {
 
   const sql = getSql();
 
+  /* v3.5.0：这两列都是密文，认领时的「学号 + 姓名双校验」改为走盲索引 ——
+     两个 HMAC 值同时命中才算对上，安全性不变（甚至更严：不再依赖字符串比较），
+     而且拿不到明文也猜不出学号。没配密钥时退回原来的明文等值查。 */
+  const pkey = await profileKey(req);
+
   /* 已被别人认领过就拒绝，避免互相顶掉 */
-  const exists = await sql`
-    select id, user_id, name, student_id from profiles
-     where student_id = ${sid} and name = ${name} limit 1
-  `;
+  let exists;
+  if (pkey) {
+    exists = await sql`
+      select id, user_id, name, student_id from profiles
+       where student_id_bidx = ${await blindIndex(pkey, sid)}
+         and name_bidx = ${await blindIndex(pkey, name)}
+       limit 1
+    `;
+    /* 迁移期兜底：存量明文资料（从没被管理员保存过）没有 bidx，
+       走一次内存比对，保证老同学还能正常认领。 */
+    if (!exists.length) {
+      const cand = await sql`select id, user_id, name, student_id from profiles
+                              where coalesce(student_id, '') <> '' limit 500`;
+      for (const r of cand) {
+        const d = await decRow(pkey, r);
+        if (String(d.student_id || '') === sid && String(d.name || '') === name) { exists = [d]; break; }
+      }
+    }
+  } else {
+    exists = await sql`
+      select id, user_id, name, student_id from profiles
+       where student_id = ${sid} and name = ${name} limit 1
+    `;
+  }
   if (!exists.length) {
     return fail(res, 404, '学号与姓名对不上，请核对后重试；若确有误请联系管理员');
   }
@@ -584,13 +724,20 @@ async function submit(req, res, u) {
 
   /* 提交后一律回到 pending：改了内容就要重新核实，这是审核的意义所在。
      reject_reason 一并清空（那是上一次驳回的理由）。
-     visibility_pref 只在本次带了新值时覆盖，避免「改联系方式顺手把开关重置」。 */
+     visibility_pref 只在本次带了新值时覆盖，避免「改联系方式顺手把开关重置」。
+
+     v3.5.0：联系方式落库前统一加密（站主要求档案"所有信息"加密）。 */
+  const pkey = await profileKey(req);
+  const eWechat = await encField(pkey, wechat || null);
+  const eQq = await encField(pkey, qq || null);
+  const ePhone = await encField(pkey, phone || null);
+
   if (prefJson != null) {
     await sql`
       update profiles
-         set wechat = ${wechat || null},
-             qq = ${qq || null},
-             phone = ${phone || null},
+         set wechat = ${eWechat},
+             qq = ${eQq},
+             phone = ${ePhone},
              contact_status = 'pending',
              reject_reason = null,
              visibility_pref = ${prefJson},
@@ -600,9 +747,9 @@ async function submit(req, res, u) {
   } else {
     await sql`
       update profiles
-         set wechat = ${wechat || null},
-             qq = ${qq || null},
-             phone = ${phone || null},
+         set wechat = ${eWechat},
+             qq = ${eQq},
+             phone = ${ePhone},
              contact_status = 'pending',
              reject_reason = null,
              updated_at = now()

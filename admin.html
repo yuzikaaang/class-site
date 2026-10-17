@@ -896,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.4.1';
+var SITE_VERSION = '3.5.0';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -6885,7 +6885,7 @@ function paintActionLogs(){
 function renderSecrets(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel)">'
-    +   '<span class="muted" style="font-size:.82rem">仅管理员可查看。建议开启 ADMIN_SECRETS_KEY 加密，否则数据库里明文存储。</span>'
+    +   '<span class="muted" style="font-size:.82rem">仅管理员可查看。这把密钥同时用于加密<b>令牌库</b>和<b>成员档案</b>（v3.5.0 起：姓名、学号、身份证、微信等全部密文存储），不开则两边都是明文。</span>'
     +   '<span style="flex:1"></span>'
     +   '<button class="btn btn-sm" id="scAdd">' + svg('plus', 14) + '新增令牌</button>'
     +   '<button class="btn btn-sm btn-secondary" id="scRefresh">' + svg('refresh', 14) + '刷新</button>'
@@ -6911,7 +6911,7 @@ function loadSecrets(){
         warn.textContent = j.warning;
       }else if(!j.hasKey){
         warn.style.display = 'block';
-        warn.textContent = '当前未配置 ADMIN_SECRETS_KEY，令牌在数据库里明文存储。如需加密，到 Cloudflare Workers 设置环境变量 ADMIN_SECRETS_KEY（值用 openssl rand -base64 32 生成）。';
+        warn.textContent = '当前未配置 ADMIN_SECRETS_KEY：令牌与成员档案（姓名/学号/身份证/微信等）都在数据库里明文存储。如需加密，到 Cloudflare Workers 设置环境变量 ADMIN_SECRETS_KEY（值用 openssl rand -base64 32 生成）。配置后新保存的资料立刻变密文，存量资料在管理员下次保存时自动转换。';
       }else{
         warn.style.display = 'none';
       }
@@ -8469,6 +8469,19 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "3.5.0",
+      "date": "2026-10-17",
+      "title": "成员档案全量加密存储（AES-256-GCM）",
+      "items": [
+        "姓名、学号、政治面貌、智学网账号、微信、QQ、手机号、身份证号、团员编号与所有自定义字段，落库前一律加密；数据库里是 enc:v1: 开头的密文，直接看库看不到任何真实信息",
+        "密钥复用「秘钥管理」里那把 ADMIN_SECRETS_KEY（与令牌库同一把），不需要额外配置；没配密钥时整体退化为明文，行为与升级前完全一致",
+        "加密后无法再做 SQL 等值比较，新增 name_bidx / student_id_bidx 两列盲索引（HMAC-SHA256）：学号查重、后台按全名搜索、认领校验都改走它，功能不减",
+        "前台按姓名/学号查询改为「取回候选行 → 解密 → 内存过滤」，语义不变（学号前缀 / 姓名包含 / 智学网账号前缀三种命中都保留）",
+        "老库自动补列，无需手工迁移；存量明文在管理员下次保存该条资料时自动转成密文（迁移期明文密文混存是正常状态）",
+        "⚠️ 密钥务必牢记：删掉或改掉之后就再也解不开已有密文（后台会显示「已加密但无法解密」）"
+      ]
+    },
     {
       "version": "3.4.1",
       "date": "2026-10-17",

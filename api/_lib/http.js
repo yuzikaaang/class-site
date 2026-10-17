@@ -136,7 +136,7 @@ export async function ensureSchema(sql) {
         id             bigserial   primary key,
         name           text,
         name_hash      text        unique,
-        student_id     text        unique,
+        student_id     text,
         politics       text,
         exam_no        text,
         role           text        not null default '学生',
@@ -207,6 +207,18 @@ export async function ensureSchema(sql) {
           api/admin.js 的 addField 里「当场 alter table」。 */
     await s`alter table profiles add column if not exists id_card text`;
     await s`alter table profiles add column if not exists youth_league_no text`;
+    /* 档案字段加密的盲索引列（v3.5.0）。
+       name / student_id 存密文后无法 like / = 检索，另存一列
+       HMAC-SHA256(密钥, 规范化原值) 供等值匹配（学号去重、后台全名搜索）。
+       详见 api/_lib/profile-crypt.js 与 schema.sql 末段的说明。 */
+    await s`alter table profiles add column if not exists name_bidx text`;
+    await s`alter table profiles add column if not exists student_id_bidx text`;
+    await s`create index if not exists profiles_name_bidx_idx on profiles (name_bidx)`;
+    await s`create index if not exists profiles_sid_bidx_idx  on profiles (student_id_bidx)`;
+    /* 去掉 student_id 的 unique 约束：加密后同一学号每次密文都不同，
+       unique 永远拦不住重复，反倒在「更新同一学号」时误报唯一冲突。
+       学号唯一性改由应用层查 student_id_bidx 保证（api/admin.js）。 */
+    await s`alter table profiles drop constraint if exists profiles_student_id_key`;
     /* 标记 AI 账号，2026-10-05 新增。用于「AI 可编辑云端内容」与后续交接。 */
     await s`
       alter table users add column if not exists is_ai
