@@ -118,6 +118,7 @@ export default async function handler(req, res) {
         case 'delete-profile': return await deleteProfile(req, res, me, b);
         case 'batch-profiles': return await batchProfiles(req, res, me, b);
         case 'bind-profiles':  return await bindProfiles(req, res, me, b);
+        case 'encrypt-profiles': return await encryptProfiles(req, res, me, b);
         case 'set-visibility': return await setVisibility(req, res, me, b);
         case 'add-field':      return await addField(req, res, me, b);
         case 'delete-field':   return await deleteField(req, res, me, b);
@@ -2561,6 +2562,136 @@ async function batchProfiles(req, res, me, b) {
   }
 
   return ok(res, { created, updated, failed: errors.length, errors });
+}
+
+/* ============================================================
+   v3.5.1 存量资料一键加密（站主要求）
+   ------------------------------------------------------------
+   背景：v3.5.0 上了档案加密，但存量资料是「谁保存过谁转密文」——
+   全班 50 多人一条条点开保存不现实，站主原话「我不可能重新再导一次，量太多了」。
+
+   做法：扫一遍 profiles，凡**还是明文**的字段就地加密，同时补 bidx；
+   已经是密文的跳过（幂等，随便重跑，不会叠层）。
+
+   ⚠️ 为什么必须分批（limit 15）：Workers 免费版单个请求最多 50 个子请求，
+      一行资料的 UPDATE 算一次。60 人一次跑完会直接 500，所以由前端循环调，
+      每次传 offset，直到 remaining = 0。
+
+   ⚠️ 只加密「有值的字段」：空值不碰（密文化一个 NULL 毫无意义，
+      还会把 name_bidx 写成垃圾）。bidx 只在姓名/学号有明文时才需要重算。
+   ============================================================ */
+async function encryptProfiles(req, res, me, b) {
+  const pkey = await profileKey(req);
+  if (!pkey) {
+    return fail(res, 400,
+      '尚未配置 ADMIN_SECRETS_KEY，无法加密。请先在 Cloudflare Workers 里配上这个环境变量'
+      + '（值用 openssl rand -base64 32 生成），再回来点这个按钮。');
+  }
+  const sql = getSql();
+  /* ⚠️ 没有 offset 参数：每批都是重新查「还有明文字段」的行 ——
+     加密后它们就不再匹配 where，天然就是下一批。传 offset 反而会跳过数据。 */
+  const limit = Math.min(Math.max(Number(b.limit || 15), 1), 20);
+
+  /* 待处理总数：还没加密的资料条数（姓名仍是明文）。
+     name 为 NULL 的老资料（纯账号补出来的空档案）不算待处理 —— 没内容可加密。 */
+  const totalRows = await sql`
+    select
+      count(*)::int as all_n,
+      count(*) filter (where name is not null and name <> '' and name not like 'enc:v1:%')::int as plain_n
+      from profiles
+  `;
+  const allN = totalRows[0] ? Number(totalRows[0].all_n) : 0;
+  const plainN = totalRows[0] ? Number(totalRows[0].plain_n) : 0;
+
+  /* 一次拿 limit 条「还有明文字段」的资料。拿宽一点（limit + 5），
+     因为可能有些行扫完发现没有明文字段（全密文），凑不满 limit。 */
+  const rows = await sql`
+    select * from profiles
+     where (name is null or name = '' or name not like 'enc:v1:%')
+        or (student_id is not null and student_id <> '' and student_id not like 'enc:v1:%')
+        or (politics is not null and politics <> '' and politics not like 'enc:v1:%')
+        or (exam_no is not null and exam_no <> '' and exam_no not like 'enc:v1:%')
+        or (wechat is not null and wechat <> '' and wechat not like 'enc:v1:%')
+        or (qq is not null and qq <> '' and qq not like 'enc:v1:%')
+        or (phone is not null and phone <> '' and phone not like 'enc:v1:%')
+        or (id_card is not null and id_card <> '' and id_card not like 'enc:v1:%')
+        or (youth_league_no is not null and youth_league_no <> '' and youth_league_no not like 'enc:v1:%')
+     order by id
+     limit ${limit + 5}
+  `;
+
+  /* 自定义字段也要加密：列名来自 meta 表（当初过了白名单） */
+  const editable = await loadEditableFields();
+
+  let done = 0, skipped = 0;
+  const changedIds = [];
+  for (const r of rows) {
+    if (done >= limit) break;
+    const sets = [];
+    const params = [];
+    const put = async (col, val) => {
+      if (val == null || val === '') return;          /* 空值不加密 */
+      if (isEnc(val)) return;                          /* 已是密文，跳过 */
+      params.push(await encField(pkey, val));
+      sets.push(col + ' = $' + params.length);
+    };
+    await put('name', r.name);
+    await put('student_id', r.student_id);
+    await put('politics', r.politics);
+    await put('exam_no', r.exam_no);
+    await put('wechat', r.wechat);
+    await put('qq', r.qq);
+    await put('phone', r.phone);
+    await put('id_card', r.id_card);
+    await put('youth_league_no', r.youth_league_no);
+    for (const f of editable) {
+      if (f.field in r) {
+        const chk = isSafeFieldFormat(f.field);
+        if (chk.ok) await put(chk.field, r[f.field]);
+      }
+    }
+    if (!sets.length) { skipped++; continue; }
+
+    /* bidx 与密文必须同源：明文算一次索引，加密后写进去。
+       姓名/学号若本来就是密文（半迁移状态），bidx 补算一份 ——
+       解密后重新算，保证「密文有主、索引也有主」。 */
+    if (r.name_bidx == null) {
+      const nm = await decField(pkey, r.name);
+      if (nm && !isUndecryptable(nm)) {
+        params.push(await blindIndex(pkey, nm));
+        sets.push('name_bidx = $' + params.length);
+      }
+    }
+    if (r.student_id_bidx == null) {
+      const sid = await decField(pkey, r.student_id);
+      if (sid && !isUndecryptable(sid)) {
+        params.push(await blindIndex(pkey, sid));
+        sets.push('student_id_bidx = $' + params.length);
+      }
+    }
+
+    params.push(Number(r.id));
+    await sql(
+      'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
+      params
+    );
+    changedIds.push(Number(r.id));
+    done++;
+  }
+
+  const remaining = Math.max(0, plainN - done);
+  await audit(me.id, 'profile.encrypt', 'profile', '',
+    '存量加密：本批 ' + done + ' 条（跳过 ' + skipped + '），剩余约 ' + remaining + ' 条');
+
+  return ok(res, {
+    encrypted: done,
+    skipped,
+    remaining,
+    totalProfiles: allN,
+    plainLeft: Math.max(0, plainN - done),
+    done: remaining === 0,
+    ids: changedIds,
+  });
 }
 
 /**

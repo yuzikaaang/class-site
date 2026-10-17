@@ -4951,7 +4951,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.0');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.1');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -6172,7 +6172,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.0'/.test(swSrc) && /class-site-v95/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.1'/.test(swSrc) && /class-site-v96/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -8220,7 +8220,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.5.0', /SITE_VERSION = '3[.]5[.]0'/.test(idx) && /SITE_VERSION = '3[.]5[.]0'/.test(adm) && /SITE_VER = '3[.]5[.]0'/.test(sw));
+  t('版本号三处同步 3.5.1', /SITE_VERSION = '3[.]5[.]1'/.test(idx) && /SITE_VERSION = '3[.]5[.]1'/.test(adm) && /SITE_VER = '3[.]5[.]1'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8313,8 +8313,8 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.5.0',
-    /SITE_VERSION = '3[.]5[.]0'/.test(idx) && /SITE_VERSION = '3[.]5[.]0'/.test(adm) && /SITE_VER = '3[.]5[.]0'/.test(sw));
+  t('版本号三处同步 3.5.1',
+    /SITE_VERSION = '3[.]5[.]1'/.test(idx) && /SITE_VERSION = '3[.]5[.]1'/.test(adm) && /SITE_VER = '3[.]5[.]1'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8400,8 +8400,8 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.5.0',
-    /SITE_VERSION = '3[.]5[.]0'/.test(idx) && /SITE_VERSION = '3[.]5[.]0'/.test(adm));
+  t('版本号三处同步 3.5.1',
+    /SITE_VERSION = '3[.]5[.]1'/.test(idx) && /SITE_VERSION = '3[.]5[.]1'/.test(adm));
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8420,7 +8420,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]0'/.test(adm) && /SITE_VER = '3[.]5[.]0'/.test(sw));
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]1'/.test(adm) && /SITE_VER = '3[.]5[.]1'/.test(sw));
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8446,7 +8446,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.0', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.1', 'parsed=' + parsed);
 }
 
 
@@ -8852,6 +8852,136 @@ console.log('\n【88】第七十六轮·v3.5.0 成员档案字段全量加密');
   } else {
     console.log('  · 明文模式（--plain）：跳过「库内是密文」的实测断言');
   }
+}
+
+
+
+console.log('\n【89】第七十七轮·v3.5.1 存量资料一键加密 + 成绩分析两处修复');
+{
+  const rd = (f) => fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8');
+  const admjs = rd('api/admin.js'), prof = rd('api/profile.js');
+  const idx = rd('index.html'), adm = rd('admin.html');
+  const schemaSrc = rd('api/schema.sql');
+
+  /* --- ① 存量加密接口 --- */
+  t('★admin.js 有 encrypt-profiles 路由',
+    admjs.includes("case 'encrypt-profiles': return await encryptProfiles(req, res, me, b);"));
+  t('★没配密钥时给出「先配密钥」的可操作报错，而不是静默跳过',
+    /尚未配置 ADMIN_SECRETS_KEY，无法加密/.test(admjs));
+  t('★只处理「还有明文字段」的行（已是密文的跳过，幂等可重跑）',
+    /name not like 'enc:v1:%'/.test(admjs) && /if \(isEnc\(val\)\) return;/.test(admjs));
+  t('★单批上限 20（Workers 免费版 50 子请求的红线）',
+    /Math\.min\(Math\.max\(Number\(b\.limit \|\| 15\), 1\), 20\)/.test(admjs));
+  t('★每批重新查而未加密行（不传 offset，传了反而跳过数据）',
+    /没有 offset 参数/.test(admjs));
+  t('★加密同时补 bidx（老资料原本没有盲索引，不补就搜不到）',
+    /if \(r\.name_bidx == null\)/.test(admjs) && /if \(r\.student_id_bidx == null\)/.test(admjs));
+  t('★返回进度字段供前端循环（encrypted / plainLeft / done）',
+    /encrypted: done/.test(admjs) && /plainLeft: Math\.max\(0, plainN - done\)/.test(admjs)
+    && /done: remaining === 0/.test(admjs));
+  t('★写审计日志（profile.encrypt）', admjs.includes("'profile.encrypt'"));
+
+  /* --- ② 前端按钮 --- */
+  t('★admin.html 工具栏有「一键加密存量」按钮',
+    adm.includes('id="mbEncrypt"') && adm.includes('一键加密存量'));
+  t('★admin.html 有分批循环 + 进度条 + 防重复点击',
+    /function encryptAllProfiles/.test(adm)
+    && /batch >= 12/.test(adm)
+    && /encBarIn/.test(adm)
+    && /go\.disabled = true/.test(adm));
+  t('★密钥页提示已说明这把密钥也保护成员档案',
+    adm.includes('这把密钥同时用于加密'));
+
+  /* --- ③ 真实数据流：明文老资料一键加密后仍是同一条、能搜到 --- */
+  if (!PLAIN_MODE) {
+    const q1 = (sqlText, params) => {
+      const st = db.prepare(sqlText);
+      st.bind(params || []);
+      const out = [];
+      while (st.step()) out.push(st.getAsObject());
+      st.free();
+      return out;
+    };
+    /* 造一条「老资料」：绕过 save-profile 的加密，直接插明文 + 老 schema 形态 */
+    const pid = q1('select max(id) as m from profiles')[0].m + 1;
+    db.run('insert into profiles (id, name, student_id, politics, exam_no, wechat, qq, phone, id_card, role, contact_status) values (?,?,?,?,?,?,?,?,?,?,?)',
+      [pid, '存量明文甲', '88000001', '群众', 'ZK8801', 'wx_plain_1', '111222', '13700000001', '360424201001010011', '学生', 'approved']);
+    const before = q1('select * from profiles where id = ?', [pid])[0];
+    t('★造的老资料姓名是明文（模拟 v3.5.0 之前导入的数据）',
+      before.name === '存量明文甲' && !String(before.name).startsWith('enc:v1:'));
+    t('★老资料没有 bidx（模拟线上真实状态）',
+      before.name_bidx == null && before.student_id_bidx == null);
+
+    /* 调一键加密接口 */
+    const enc = await call('/api/admin?action=encrypt-profiles', {
+      method: 'POST', token: adminToken, body: { limit: 15 },
+    });
+    t('★一键加密返回 200', enc.status === 200, JSON.stringify(enc.body).slice(0, 160));
+    t('★本批至少加密了我们那条', (enc.body.encrypted || 0) >= 1, JSON.stringify(enc.body).slice(0, 160));
+
+    const after = q1('select * from profiles where id = ?', [pid])[0];
+    const isCipher = (v) => typeof v === 'string' && v.startsWith('enc:v1:');
+    t('★加密后姓名变密文', isCipher(after.name), String(after.name).slice(0, 24));
+    t('★加密后学号变密文', isCipher(after.student_id));
+    t('★加密后微信变密文', isCipher(after.wechat));
+    t('★加密后身份证变密文', isCipher(after.id_card));
+    t('★加密后 bidx 也补上了（能按姓名/学号搜到）',
+      typeof after.name_bidx === 'string' && after.name_bidx.length > 20
+      && typeof after.student_id_bidx === 'string' && after.student_id_bidx.length > 20);
+    t('★库里已查不到明文姓名', !JSON.stringify(after).includes('存量明文甲'));
+
+    /* 数据没丢：后台读回来还是同样内容 */
+    const det = await call('/api/admin?action=profile&id=' + pid, { token: adminToken });
+    const pp = (det.body || {}).profile || {};
+    t('★加密后后台仍显示同样姓名（数据没丢）', pp.name === '存量明文甲', JSON.stringify(pp.name));
+    t('★加密后后台仍显示同样学号', pp.studentId === '88000001');
+    t('★加密后后台仍显示同样微信', pp.wechat === 'wx_plain_1');
+    t('★加密后后台仍显示同样身份证', (pp.extra || {}).id_card === '360424201001010011');
+
+    /* 检索仍然命中（bidx 生效） */
+    const sByName = await call('/api/profile?action=search&q=' + encodeURIComponent('存量明文甲'), { token: adminToken });
+    t('★一键加密后前台按姓名仍能搜到', (sByName.body.results || []).some((x) => x.name === '存量明文甲'));
+
+    /* 再跑一次：幂等，不会二次加密 */
+    const enc2 = await call('/api/admin?action=encrypt-profiles', {
+      method: 'POST', token: adminToken, body: { limit: 15 },
+    });
+    t('★再跑一次不重复加密（幂等）', enc2.status === 200, JSON.stringify(enc2.body).slice(0, 120));
+    const after2 = q1('select * from profiles where id = ?', [pid])[0];
+    t('★二次运行后姓名仍是同一段密文（没有叠层）', after2.name === after.name);
+    const det2 = await call('/api/admin?action=profile&id=' + pid, { token: adminToken });
+    t('★二次运行后仍能正常解密', ((det2.body || {}).profile || {}).name === '存量明文甲');
+
+    /* 清理 */
+    q1('delete from profiles where id = ?', [pid]);
+  } else {
+    console.log('  · 明文模式（--plain）：跳过存量加密实测');
+  }
+
+  /* --- ④ 热力图排名口径修复（站主报：校排 350 被当成班排） --- */
+  t('★热力图明细的「班内第 X」改用现场算的班内名次',
+    /var clsRank0 = \(v == null\) \? null : \(\(rk\.subj\[sub\.key\] \|\| \{\}\)\.rank \|\| \{\}\)\[r\.id\];/.test(idx));
+  t('★导入的年级排名单独一行显示（不再冒充班排）',
+    /var subjRank0 = \(v == null \|\| sr0 == null\) \? null : sr0;/.test(idx)
+    && /c\.subjRank != null/.test(idx)
+    && /<i>' \+ esc\(c\.sub\) \+ '年级排名<\/i>/.test(idx));
+  t('★总分年级排名改名为「总分年级排名」避免与该科排名混淆',
+    /<i>总分年级排名（物理方向）<\/i>/.test(idx));
+  t('★其他排名口径未被动过（四象限仍显示「年级第 X」）',
+    /年级第 ' \+ rank/.test(idx));
+
+  /* --- ⑤ 需关注学生手机端适配 --- */
+  t('★需关注表加专用类 sc-tbl-watch', idx.includes('class="sc-tbl sc-tbl-watch"'));
+  t('★姓名列不再被全局 46px 吸列规则压扁',
+    /\.sc-tbl-watch th:nth-child\(1\),\.sc-tbl-watch td:nth-child\(1\)\{/.test(idx)
+    && /position:static;width:auto;min-width:0;max-width:none;/.test(idx));
+  t('★手机端表格转卡片（一人一张，列名用 attr(data-label)）',
+    /\.sc-tbl-watch thead\{display:none\}/.test(idx)
+    && /content:attr\(data-label\)/.test(idx));
+  t('★每格都带 data-label（桌面表格不受影响，打印还原成表格）',
+    ['总分','总分差','拖后腿的单科','最弱一科'].every((k) => idx.indexOf('data-label="' + k + '"') >= 0)
+    && /\.sc-embed \.sc-tbl-watch thead\{display:table-header-group !important\}/.test(idx));
+  t('★暗色模式同步适配', /\.dark \.sc-tbl-watch tbody tr\{background:#2b2521/.test(idx));
 }
 
 console.log('\n' + '='.repeat(52));

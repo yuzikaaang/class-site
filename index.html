@@ -2078,6 +2078,42 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 /* 缺考格：浅底 + 淡破折号，点了也照样能看明细（知道这科没考） */
 .sc-hm-na{cursor:pointer;background:#f5efe8;color:#b9a894 !important}
 .sc-hm-na::after{content:'—'}
+/* ===== 需关注学生：姓名列不吸列 + 手机端转卡片（v3.5.1）=====
+   两个坑一起修：
+   ① .sc-tbl 的全局规则把第一列吸住并写死 46px（为「班排」数字设计的），
+      需关注表第一列是**姓名**，被压成 46px 后姓名叠字、标签顶开，
+      手机上根本没法看 —— 站主截图报「这么乱我怎么看」。
+   ② 手机上 5 列横排必然溢出。改为**一人一张卡片**：姓名当卡头，
+      其余列竖排，列名用 CSS content(attr(data-label)) 显示，
+      不用改任何渲染逻辑（桌面照旧是表格）。 */
+.sc-tbl-watch th:nth-child(1),.sc-tbl-watch td:nth-child(1){
+  position:static;width:auto;min-width:0;max-width:none;
+  padding-left:8px;padding-right:8px;text-align:left;white-space:normal}
+.sc-tbl-watch td.sc-name{text-align:left}
+@media (max-width:560px){
+  .sc-tbl-watch{min-width:0}
+  .sc-tbl-watch thead{display:none}
+  .sc-tbl-watch tbody tr{display:block;margin:0 0 9px;padding:9px 11px 7px;
+    border:1px solid #f0e7de;border-radius:12px;background:#fff}
+  .sc-tbl-watch tbody tr:last-child{margin-bottom:0}
+  .sc-tbl-watch td{display:flex;align-items:baseline;justify-content:space-between;
+    gap:10px;padding:5px 0;border-bottom:1px dashed #f5efe8;text-align:right}
+  .sc-tbl-watch td:last-child{border-bottom:none;padding-bottom:2px}
+  .sc-tbl-watch td::before{content:attr(data-label);flex:none;
+    font-size:.72rem;font-weight:400;color:#8a7a6c}
+  .sc-tbl-watch td.sc-name{display:block;padding:0 0 7px;margin-bottom:3px;
+    border-bottom:1.5px solid #f0e7de;font-weight:800;font-size:.9rem;color:#57534e}
+  .sc-tbl-watch td.sc-name::before{content:none}
+  .sc-tbl-watch td[data-label="拖后腿的单科"]{align-items:flex-start}
+  .sc-tbl-watch td[data-label="拖后腿的单科"]::before{padding-top:1px}
+  .sc-tbl-watch .sc-lowsub{justify-content:flex-end;max-width:62%}
+}
+.dark .sc-tbl-watch td::before{color:#a8998c}
+.dark .sc-tbl-watch td{border-bottom-color:#3a332e}
+@media (max-width:560px){
+  .dark .sc-tbl-watch tbody tr{background:#2b2521;border-color:#3d3631}
+  .dark .sc-tbl-watch td.sc-name{border-bottom-color:#3d3631}
+}
 /* 需关注学生：单科不达标的科目小标签 */
 .sc-lowsub{display:inline-flex;flex-wrap:wrap;gap:3px}
 .sc-lowsub b{font-weight:700;color:#8a4a10;margin-right:1px}
@@ -2156,6 +2192,16 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   .sc-embed .sc-pane{overflow:visible !important;max-height:none !important;padding:0 !important}
   .sc-embed .sc-tblwrap{max-height:none !important;overflow:visible !important;border:none !important}
   .sc-embed .sc-tbl{min-width:0 !important;border-collapse:collapse !important;font-size:10pt}
+  .sc-embed .sc-tbl-watch thead{display:table-header-group !important}
+  .sc-embed .sc-tbl-watch tbody tr{display:table-row !important;border:none !important;
+    margin:0 !important;padding:0 !important;background:none !important}
+  .sc-embed .sc-tbl-watch td{display:table-cell !important;padding:3.5px 3px !important;
+    text-align:center !important;border-bottom:1px solid #faf5f0 !important}
+  .sc-embed .sc-tbl-watch td.sc-name{display:table-cell !important;padding:3.5px 3px !important;
+    font-weight:400 !important;font-size:10pt !important;border-bottom:1px solid #faf5f0 !important}
+  .sc-embed .sc-tbl-watch td::before{content:none !important}
+  .sc-embed .sc-tbl-watch th:nth-child(1),.sc-embed .sc-tbl-watch td:nth-child(1){
+    position:static !important;width:auto !important;min-width:0 !important;max-width:none !important}
   .sc-embed .sc-tbl thead{display:table-header-group}   /* 表头每页重复 */
   .sc-embed .sc-tbl th,.sc-embed .sc-tbl td{position:static !important;padding:3.5px 3px !important}
   .sc-embed .sc-tbl tr{break-inside:avoid}
@@ -3080,7 +3126,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.0';
+var SITE_VERSION = '3.5.1';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3969,6 +4015,7 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-10-17 20:30", text: "🔒 存量资料一键加密（v3.5.1）：加密上线前导入的资料不用再手动重导了 —— 后台「成员与档案」新增「🔒 一键加密存量」按钮，点一下自动分批把老资料转成密文，带进度条、断了能接着跑、重复点也不会重复加密。另外修了两个问题：① 学科热力图点开的明细里，「班内排名」之前误用了年级排名（比如校排 350 显示成班排 350），现在班内名次按本班实际成绩重新算，年级排名单独一行摆着；② 「需关注学生」表格适配手机端，一人一张卡片，列名齐全，不再挤成一团。", category: "site" },
     { date: "2026-10-17 18:20", text: "🔒 成员档案全量加密（v3.5.0）：姓名、学号、政治面貌、智学网账号、微信、QQ、手机号、身份证号、团员编号以及后台自定义的所有字段，现在全部以 AES-256-GCM 密文存进数据库 —— 直接打开数据库看到的是 <code>enc:v1:...</code> 这样的乱码，看不到任何真实信息。密钥就是你后台「秘钥管理」里那把 ADMIN_SECRETS_KEY（和令牌库同一把，不用另外配）。后台和前台照常显示明文，查询、认领、导入导出都不受影响。⚠️ 存量资料是「谁保存过、谁就转成密文」，没动过的仍是明文，慢慢会全部转完；⚠️ 密钥千万别删，删了就解不开了。", category: "site" },
     { date: "2026-10-17 16:50", text: "🔐 字段管理新增「仅管理员」可见级别（v3.4.1）：某些敏感字段（如身份证号、家庭信息）现在可以设为只有你在后台能看到 —— 前台查询里连本人都看不到，连键都不会下发。新增字段、快捷切换、单人例外三处都能选这一档。", category: "site" },
     { date: "2026-10-17 15:30", text: "⚔️ 成绩分析更新（v3.4.0）：①「成绩对比」可以再选一场考试放在一起比（最多 2 场），新增「跨考试进退步」表——两位同学的总分 / 班排 / 年级排名 / 各科分数逐项对比，进步退步一目了然，总分柱下也补了年级排名；② 个人画像「各科进退步」只固定科目列了，第一次考试那一列不再被误固定（进退步榜、需关注等表同样修好）；③ 年级排名各处都标注了是「物理方向」的年级排名，不是全校；④「历次上线率」开放给管理员查看；⑤ 页面顶部加了小横幅：成绩由人工手动录入，若有错误请联系管理员修改；⑥ 后台「新增字段」弹窗修复了不居中的问题。", category: "site" },
@@ -15071,7 +15118,7 @@ function scWatchList(){
   return '<div class="sc-card sc-card-admin"><div class="sc-card-h">需关注学生'
     + '<span class="sc-h-note">总分低于 ' + fmtNum(thr) + ' 分，或某科低于该科班均 ' + (SC_ALERT_RATIO * 100).toFixed(1) + '% 满分</span>'
     + '<span class="sc-only-admin">仅站主可见</span></div>'
-    + '<div class="sc-tblwrap" style="max-height:420px"><table class="sc-tbl" style="min-width:auto">'
+    + '<div class="sc-tblwrap" style="max-height:420px"><table class="sc-tbl sc-tbl-watch" style="min-width:auto">'
     + '<thead><tr><th>姓名</th><th>总分</th><th>总分差</th><th>拖后腿的单科</th><th>最弱一科</th></tr></thead><tbody>'
     + list.map(function(x){
         /* 单科那块用「科目 分数（比该科线低多少）」的小标签，没有就给淡横杠 */
@@ -15085,11 +15132,11 @@ function scWatchList(){
           + '<td class="sc-name">' + esc(x.name)
           +   (x.me ? '<span class="sc-you">我</span>' : '')
           +   (x.lowTotal ? '' : '<span class="sc-tagonly">仅单科</span>') + '</td>'
-          + '<td class="sc-total">' + (x.total == null ? '—' : fmtNum(x.total)) + '</td>'
-          + '<td>' + (x.total == null ? '—'
+          + '<td data-label="总分">' + (x.total == null ? '—' : fmtNum(x.total)) + '</td>'
+          + '<td data-label="总分差">' + (x.total == null ? '—'
                 : '<span class="' + (x.total < thr ? 'sc-warn' : 'sc-good') + '">' + fmtDiff(x.total - st.avg) + '</span>') + '</td>'
-          + '<td>' + lowHtml + '</td>'
-          + '<td>' + (x.worst ? esc(x.worst.name) + ' <span class="sc-warn">' + fmtNum(x.worst.d) + '</span>' : '—') + '</td>'
+          + '<td data-label="拖后腿的单科">' + lowHtml + '</td>'
+          + '<td data-label="最弱一科">' + (x.worst ? esc(x.worst.name) + ' <span class="sc-warn">' + fmtNum(x.worst.d) + '</span>' : '—') + '</td>'
           + '</tr>';
       }).join('')
     + '</tbody></table></div>'
@@ -15601,9 +15648,20 @@ function scHeatmap(){
       var myIdx = cellIdx++;
       var pack0 = (r.s && r.s[sub.key]) || {};
       var sr0 = (SC.basis === 'graded' && sub.graded && pack0.asgRank != null) ? pack0.asgRank : pack0.rank;
+      /* 🔴 v3.5.1 修（站主报：「他明明是校排 350，你后面写个班排 350-60」）：
+         原来 rank 直接取导入的 pack0.rank —— 那是**年级排名**（导入模版里
+         「分数/年级排名」列，见 api/scores.js 的 normalizeScores 注释），
+         而 cnt 取的是班内统计人数，于是出现「班内第 350 / 55」这种荒唐输出。
+         现在拆成两个口径，各自归位：
+           rank      班内名次 —— 用 rk.subj 现场算（格子颜色本来就用它，同源）
+           subjRank  该科年级排名 —— 导入才有，没导就不显示这一行
+         没导入班排（现在就是这样）也永远有班内名次，不再拿年级排名冒充。 */
+      var subjRank0 = (v == null || sr0 == null) ? null : sr0;
+      var clsRank0 = (v == null) ? null : ((rk.subj[sub.key] || {}).rank || {})[r.id];
       cellsMeta.push({
         name: r.name, me: scIsMe(r), sub: sub.name, subKey: sub.key,
-        v: v, rank: (v == null ? null : (sr0 == null ? null : sr0)),
+        v: v, rank: (clsRank0 == null ? null : clsRank0),
+        subjRank: subjRank0,
         cnt: (rk.subj[sub.key] || {}).count || null,
         avg: avgs[sub.key], total: t, totalAvg: st.n ? st.avg : null,
         schoolRank: r.schoolRank == null ? null : r.schoolRank,
@@ -15694,8 +15752,11 @@ function scHeatTap(el){
     +     (c.rank != null ? '<em>班内第 ' + c.rank + (c.cnt ? ' / ' + c.cnt : '') + '</em>' : '') + '</div>'
     +   '<div class="sc-qwho-row"><i>总分</i><b>' + (c.total == null ? '—' : fmtNum(c.total)) + '</b>'
     +     '<span>' + (c.total == null ? '' : esc(scQGap(c.total, c.totalAvg))) + '</span></div>'
+    +   (c.subjRank != null
+          ? '<div class="sc-qwho-row"><i>' + esc(c.sub) + '年级排名</i><b>' + c.subjRank + (gradeN ? ' / ' + gradeN : '') + '</b><span></span></div>'
+          : '')
     +   (c.schoolRank != null
-          ? '<div class="sc-qwho-row"><i>年级排名（物理方向）</i><b>' + c.schoolRank + (gradeN ? ' / ' + gradeN : '') + '</b><span></span></div>'
+          ? '<div class="sc-qwho-row"><i>总分年级排名（物理方向）</i><b>' + c.schoolRank + (gradeN ? ' / ' + gradeN : '') + '</b><span></span></div>'
           : '')
     +   (c.leagueRank != null
           ? '<div class="sc-qwho-row"><i>联考排名</i><b>' + c.leagueRank + '</b><span></span></div>'

@@ -896,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.0';
+var SITE_VERSION = '3.5.1';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -1804,6 +1804,7 @@ function renderMembers(){
     +   '<button class="btn btn-sm btn-secondary" id="mbImportProfile">' + svg('upload', 14) + '资料导入</button>'
     +   '<button class="btn btn-sm btn-secondary" id="mbExport">' + svg('download', 14) + '导出</button>'
     +   '<button class="btn btn-sm btn-secondary" id="mbFields">' + svg('layers', 14) + '字段管理</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbEncrypt" title="把还没加密的资料就地加密，不用重新导入">' + svg('lock', 14) + '一键加密存量</button>'
     +   '<span style="flex:1"></span>'
     +   '<span data-bulk class="muted" style="font-size:.8rem"></span>'
     + '</div>'
@@ -1841,6 +1842,7 @@ function renderMembers(){
     panel.style.display = open ? 'none' : 'block';
     if(!open){ renderFieldPanel(); panel.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
   };
+  $('mbEncrypt').onclick = function(){ encryptAllProfiles(); };
 
   Array.prototype.forEach.call($('mbChips').querySelectorAll('[data-sc]'), function(b){
     b.onclick = function(){
@@ -5625,6 +5627,90 @@ function loadFieldMeta(){
   });
 }
 
+/* ============================================================================
+ * 一键加密存量资料（v3.5.1）
+ * ---------------------------------------------------------------------------
+ * 站主要求：「之前的那些资料，在更改加密方式之前的，现在可以加密吗？
+ * 我不可能重新再导一次，因为量太多了。」
+ *
+ * 于是有了这个按钮：扫一遍数据库，把**还是明文**的字段就地加密，
+ * 已经是密文的自动跳过（幂等，中途断了再点一次就行，不会叠层）。
+ *
+ * ⚠️ 为什么前端要循环调用而不是一次搞定：
+ *    Cloudflare Workers 免费版单个请求最多 50 个子请求，一行资料的 UPDATE
+ *    算一次。全班 50 多人一次跑完会 500，所以每批 15 条、循环到 remaining=0。
+ * ⚠️ 按钮运行期间禁用，防止重复点导致两批并发写同一行。
+ * ========================================================================= */
+function encryptAllProfiles(){
+  openModal({
+    title: '一键加密存量资料',
+    sub: '把数据库中还是明文的资料就地加密（姓名、学号、身份证、微信等）',
+    body:
+      '<div class="alert info" style="margin:0 0 12px">'
+    + '  v3.5.0 起新保存的资料会自动加密，<b>以前导入的资料仍是明文</b>。'
+    + '  这个按钮会把它们<b>就地</b>转成密文 —— 不用重新导入、不会改动任何内容，'
+    + '  前台与后台的显示也完全不变。<br>'
+    + '  全班约 50 人会分几批处理，每批 15 条，<b>请保持页面打开</b>直到提示完成。'
+    + '</div>'
+    + '<div id="encStat" class="muted" style="font-size:.82rem;line-height:1.8">准备开始…</div>'
+    + '<div id="encBar" style="height:6px;border-radius:999px;background:#f0e7de;overflow:hidden;margin-top:10px">'
+    + '  <div id="encBarIn" style="height:100%;width:0;background:#b45309;transition:width .25s"></div>'
+    + '</div>',
+    foot:
+      '<button class="btn btn-secondary" id="encClose">关闭</button>'
+    + '<button class="btn" id="encGo">开始加密</button>',
+    onMount: function(){
+      var stat = $('encStat'), bar = $('encBarIn');
+      var go = $('encGo'), close = $('encClose');
+      close.onclick = closeModal;
+      go.onclick = function(){ go.disabled = true; go.textContent = '处理中…'; run(); };
+
+      function setText(t, pct){
+        if(stat) stat.innerHTML = t;
+        if(bar && pct != null) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      }
+
+      /* 每批 15 条，最多跑 12 批（= 180 条，够一个年级；防死循环） */
+      function run(){
+        var batch = 0, total = 0;
+        function step(){
+          if(batch >= 12){
+            setText('⚠️ 已处理 12 批仍未完成，请再点一次「开始加密」继续。', 100);
+            go.disabled = false; go.textContent = '再跑一批';
+            return;
+          }
+          api('/admin?action=encrypt-profiles', {
+            method: 'POST',
+            body: { limit: 15 },
+          }).then(function(j){
+            total += (j.encrypted || 0);
+            batch++;
+            var all = j.totalProfiles || 0;
+            var left = j.plainLeft || 0;
+            var pct = all ? ((all - left) / all * 100) : 100;
+            if(j.done || left === 0){
+              setText('✅ 全部完成：共加密 <b>' + total + '</b> 条资料'
+                + (j.skipped ? '（' + j.skipped + ' 条本就无需处理）' : '')
+                + '。<br>现在数据库里这些字段都是密文了，前台后台照常显示。', 100);
+              go.textContent = '已完成';
+              go.disabled = true;
+              loadMembers();
+              return;
+            }
+            setText('正在处理… 已加密 <b>' + total + '</b> 条，还剩约 <b>' + left + '</b> 条', pct);
+            setTimeout(step, 60);
+          }).catch(function(e){
+            setText('❌ 出错了：' + esc(e.message)
+              + '<br>已成功的批次不会丢，点「开始加密」会从没处理过的地方继续。', null);
+            go.disabled = false; go.textContent = '继续';
+          });
+        }
+        step();
+      }
+    },
+  });
+}
+
 function renderFieldPanel(){
   var body = $('mbFieldBody');
   if(!body) return;
@@ -8469,6 +8555,18 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "3.5.1",
+      "date": "2026-10-17",
+      "title": "存量资料一键加密 + 热力图排名口径修正 + 需关注学生手机端",
+      "items": [
+        "「成员与档案」新增「🔒 一键加密存量」按钮：加密上线前导入的老资料不用重导，点一下自动分批扫描还在明文的字段并转成密文，带进度条、失败可跳过继续、重复跑不会叠层；跑完自动刷新列表",
+        "前端每批只传 15 条（Workers 免费版单请求最多 50 个子请求的限制内循环调用），后端每批重新查「还有明文字段」的行，中途新增的资料也不会漏",
+        "修复学科热力图明细的排名口径：「班内排名」之前误用了导入的年级排名（校排 350 会显示成班排 350），现在班内名次按本班实际成绩现场计算，导入的年级排名单独一行「<科目>年级排名」展示，没有公布年级排名的科目不硬凑",
+        "「需关注学生」适配手机端：窄屏下一人一张卡片（列名走 data-label 显示），修掉全局 46px 吸列把姓名列压扁的问题；打印时仍还原为表格",
+        "修复 UPDATE 分支「没传的字段保留原值」在加密后会把密文再封一层的问题（改为先解密再加密），以及解密失败占位符误回写库导致数据丢失的隐患"
+      ]
+    },
     {
       "version": "3.5.0",
       "date": "2026-10-17",
