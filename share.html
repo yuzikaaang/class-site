@@ -102,6 +102,8 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
   .tblwrap{max-height:56vh}
   .wrap{padding:14px 12px 48px}
 }
+.prg th,.prg td{position:static!important;box-shadow:none!important}
+.prg{min-width:420px}
 </style>
 </head>
 <body>
@@ -304,6 +306,7 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     if(wantCard && ownerRow){
       html += oneCard(ownerRow, subs, rk, showAvg, showN, ST);
       html += trendCards();
+      html += progressCard();
     } else if(wantCard && !ownerRow){
       html += '<div class="card"><div class="fig" style="margin-top:0">这次分享没有包含你本人，所以没有个人成绩卡。</div></div>';
     }
@@ -342,7 +345,8 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       html += '<div class="card"><h2>成绩单</h2><div class="tblwrap"><table><thead>' + head + '</thead><tbody>' + trs + '</tbody></table></div>'
         + '<div class="fig">科目格右下角的小字是<b>该科班内排名</b>。' + (BASIS === 'graded' ? '化学、生物按赋分计入总分。' : '当前按原始分计算。') + '</div></div>';
 
-      var cuts = (EX.cutlines || []).filter(function(c){ return c.score != null; });
+      /* 分数线按赋分总分划定：原始口径下不与三线比较（分享页同样适用） */
+      var cuts = (BASIS === 'graded') ? (EX.cutlines || []).filter(function(c){ return c.score != null; }) : [];
       if(cuts.length){
         html += '<div class="card"><h2>上线情况（全班）</h2><div class="cuts">'
           + cuts.map(function(c, ci){
@@ -431,6 +435,50 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       + '<div class="fig">' + esc(opts.desc || '') + '</div></div>';
   }
 
+  /* 各科进退步（最近几次）：分数 + 年级排名，较上次升降，稳定性 */
+  function progressCard(){
+    var h = (DATA.history || []).slice().sort(function(a, b){
+      return String(a.date || '').localeCompare(String(b.date || '')) || (a.examId - b.examId);
+    });
+    if(h.length < 2) return '';
+    var recent = h.slice(-5);
+    var subs = (recent[recent.length - 1].subjects || []).slice();
+    if(!subs.length) return '';
+    var head = '<tr><th>科目</th>' + recent.map(function(it){
+      return '<th>' + esc((it.date || '').slice(5)) + '</th>';
+    }).join('') + '<th>较上次</th><th>稳定性</th></tr>';
+    var rows = subs.map(function(sub){
+      var cells = '', scores = [], ranks = [];
+      recent.forEach(function(it){
+        var v = it.s && it.s[sub.key];
+        if(!v){ cells += '<td style="color:#a8968a">—</td>'; return; }
+        var val = (BASIS === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+        var rk = v.rank;
+        if(val != null) scores.push(Number(val));
+        if(rk != null) ranks.push(Number(rk));
+        cells += '<td>' + (val == null ? '—' : fmtNum(val))
+          + (rk != null ? '<span style="display:block;font-size:.62rem;color:#a8968a">第' + rk + '</span>' : '') + '</td>';
+      });
+      var ds = scores.length >= 2 ? scores[scores.length - 1] - scores[scores.length - 2] : null;
+      var dr = ranks.length >= 2 ? ranks[ranks.length - 2] - ranks[ranks.length - 1] : null;
+      var dsTxt = ds == null ? '—' : (ds > 0 ? '↑ ' : ds < 0 ? '↓ ' : '— ') + fmtNum(Math.abs(ds));
+      var drTxt = dr == null ? '' : (dr > 0 ? '名次↑' + dr : dr < 0 ? '名次↓' + Math.abs(dr) : '名次持平');
+      var sd = null;
+      if(scores.length >= 2){
+        var m = scores.reduce(function(a, b){ return a + b; }, 0) / scores.length;
+        sd = Math.sqrt(scores.reduce(function(a, b){ return a + (b - m) * (b - m); }, 0) / scores.length);
+      }
+      var cls = ds > 0 ? 'up' : ds < 0 ? 'down' : '';
+      return '<tr><td style="text-align:left;font-weight:700;padding-left:10px">' + esc(sub.name) + '</td>' + cells
+        + '<td><span class="' + cls + '" style="font-weight:700">' + dsTxt + '</span>'
+        + (drTxt ? '<span style="display:block;font-size:.62rem;color:#a8968a">' + drTxt + '</span>' : '') + '</td>'
+        + '<td>' + (sd == null ? '—' : '±' + fmtNum(sd)) + '</td></tr>';
+    }).join('');
+    return '<div class="card"><h2>各科进退步（最近 ' + recent.length + ' 次）</h2>'
+      + '<div style="overflow:auto"><table class="prg"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div>'
+      + '<div class="fig">每格上排分数、下排小字为年级排名；「较上次」为分数增减与名次升降（名次↑为进步）；「稳定性」为标准差，越小越稳。</div></div>';
+  }
+
   function oneCard(r, subs, rk, avg, n, ST){
     var t = total(r, subs);
     var st = rk.total[r.idx];
@@ -464,7 +512,7 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
           }
           var rate = (v != null && sub.full) ? v / sub.full : null;
           return '<div class="sub">'
-            + '<div class="t"><b>' + esc(sub.name) + '</b>' + (sub.graded ? '<span class="tag">赋分</span>' : '') + '</div>'
+            + '<div class="t"><b>' + esc(sub.name) + '</b>' + (sub.graded && BASIS === 'graded' ? '<span class="tag">赋分</span>' : '') + '</div>'
             + '<div class="v">' + (v == null ? '<small>未考</small>' : fmtNum(v) + '<small>/' + sub.full + '</small>') + '</div>'
             + (v == null ? '' : '<div class="d ' + (v - a >= 0 ? 'up' : 'down') + '">'
                 + (v - a >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(v - a)) + ' 分'
@@ -473,7 +521,8 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
             + '</div>';
         }).join('') + '</div></div>';
 
-    var cuts = (EX.cutlines || []).filter(function(c){ return c.score != null; });
+    /* 原始口径下不与三线比较（线是赋分线） */
+    var cuts = (BASIS === 'graded') ? (EX.cutlines || []).filter(function(c){ return c.score != null; }) : [];
     if(cuts.length && t != null){
       html += '<div class="card"><h2>上线情况</h2><div class="cuts">'
         + cuts.map(function(c){

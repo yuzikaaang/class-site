@@ -86,13 +86,11 @@ BUILD_SHA = "local"
 #    GitHub Secrets / Cloudflare 后台，绝不入库。
 # ============================================================
 
-# ⚠️ 2026-10-17 暂时注释：CI（GitHub Actions）用的 Cloudflare API Token 没有
-#    「Workers KV Storage: Edit」权限，带着 [[kv_namespaces]] 部署 worker 会失败。
-#    给令牌补上该权限（Cloudflare → 我的个人资料 → API 令牌 → 编辑 → 加权限）后，
-#    把下面两段前的 # 去掉即可恢复每日备份。KV 不用重建，id 已填好。
-# [[kv_namespaces]]
-# binding = "SITE_KV"
-# id = "22e3639970c94a618916e850d20791f9"
-#
-# [triggers]
-# crons = ["0 18 * * *"]
+# 2026-10-17：API Token 已补「Workers KV Storage: Edit」，KV 绑定恢复启用。
+# 每日 18:00 UTC（北京次日 02:00）自动备份；键前缀 backup/，留 14 份。
+[[kv_namespaces]]
+binding = "SITE_KV"
+id = "22e3639970c94a618916e850d20791f9"
+
+[triggers]
+crons = ["0 18 * * *"]

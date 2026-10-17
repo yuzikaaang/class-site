@@ -3027,7 +3027,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.0.1';
+var SITE_VERSION = '3.1.0';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3916,6 +3916,7 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-10-17 10:48", text: "📈 「我的画像」新增「各科进退步」：最近几次考试，每科的分数和年级排名逐次列出，还标出分数增减、名次升降和稳定性（波动大小）。分享出去的成绩页也能看到这张表。", category: "site" },
     { date: "2026-10-17 10:47", text: "🔗 成绩分享升级：分享页除了每次成绩的具体分值、各科小分和上线情况，现在还多了「历史总分趋势」和「年级排名变化」两张图；「成绩单」和「个人成绩卡」可以同时展示。已建过的分享也能直接改范围，链接不变，不用重新发。", category: "site" },
     { date: "2026-10-17 10:45", text: "🔐 成绩发布更灵活：老师现在可以把某次成绩只发给指定同学，或发给全班。被指定的同学登录就能看到，其他同学不会看到那次考试。", category: "site" },
     { date: "2026-10-17 10:30", text: "📊 「我的画像」升级：六科画像除了雷达图，还多了一张数值表 —— 每科都能看到「我的分数 / 占总分比例 / 班均 / 与班均差」，一眼看清自己强在哪、差多少。另外，切到「总分原始」口径时，化学、生物不再显示「赋分」标签，也不会再和特控 / 本科 / 600 线硬比（那三条线是按赋分总分划的）。", category: "site" },
@@ -13169,6 +13170,8 @@ function scRenderMe(){
 
   /* ⑦ 各科趋势网格（每科一张小卡 + 迷你折线） */
   html += scSubjTrend();
+  /* ⑦b 各科进退步（近几次分数 + 年级排名逐次对比） */
+  html += scSubjectProgress();
 
   /* ⑧ 年级进退步（靠校排名，和班排名分开看） */
   html += scGradeTrend();
@@ -13658,6 +13661,52 @@ function scSubjTrend(){
 }
 
 /* ---------- 年级进退步（用校排名；系统算不出全校，只能靠导入） ---------- */
+/* 各科进退步（最近几次对比）：分数 + 年级排名，较上次升降，稳定性 ——
+   站主 2026-10-17「着重对比近几次各科分数与排名的进退」。 */
+function scSubjectProgress(){
+  var items = (SC.me || []).slice().sort(function(a, b){
+    return String(a.date || '').localeCompare(String(b.date || '')) || (a.examId - b.examId);
+  });
+  if(items.length < 2) return '';
+  var recent = items.slice(-5);
+  var subs = (SC.exam.subjects || []).slice();
+  if(!subs.length) return '';
+  var head = '<tr><th>科目</th>' + recent.map(function(it){
+    return '<th>' + esc(shortName(it.name)) + '<br><span class="sc-dim" style="font-weight:400">' + esc((it.date || '').slice(5)) + '</span></th>';
+  }).join('') + '<th>较上次</th><th>稳定性</th></tr>';
+  var rows = subs.map(function(sub){
+    var cells = '', scores = [], ranks = [];
+    recent.forEach(function(it){
+      var v = it.s && it.s[sub.key];
+      if(!v){ cells += '<td class="sc-dim">—</td>'; return; }
+      var val = (SC.basis === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+      var rk = v.rank;
+      if(val != null) scores.push(Number(val));
+      if(rk != null) ranks.push(Number(rk));
+      cells += '<td>' + (val == null ? '—' : fmtNum(val))
+        + (rk != null ? '<span style="display:block;font-size:.62rem;color:#a8968a">第' + rk + '</span>' : '') + '</td>';
+    });
+    var ds = scores.length >= 2 ? scores[scores.length - 1] - scores[scores.length - 2] : null;
+    var dr = ranks.length >= 2 ? ranks[ranks.length - 2] - ranks[ranks.length - 1] : null;
+    var dsTxt = ds == null ? '—' : (ds > 0 ? '↑ ' : ds < 0 ? '↓ ' : '— ') + fmtNum(Math.abs(ds));
+    var drTxt = dr == null ? '' : (dr > 0 ? '名次↑' + dr : dr < 0 ? '名次↓' + Math.abs(dr) : '名次持平');
+    var sd = null;
+    if(scores.length >= 2){
+      var m = scores.reduce(function(a, b){ return a + b; }, 0) / scores.length;
+      sd = Math.sqrt(scores.reduce(function(a, b){ return a + (b - m) * (b - m); }, 0) / scores.length);
+    }
+    var cls = ds > 0 ? 'up' : ds < 0 ? 'down' : '';
+    return '<tr><td class="sc-name">' + esc(sub.name) + '</td>' + cells
+      + '<td><span class="sc-sub-diff ' + cls + '" style="margin-top:0">' + dsTxt + '</span>'
+      + (drTxt ? '<span style="display:block;font-size:.66rem;color:#a8968a">' + drTxt + '</span>' : '') + '</td>'
+      + '<td>' + (sd == null ? '—' : '±' + fmtNum(sd)) + '</td></tr>';
+  }).join('');
+  return '<div class="sc-card"><div class="sc-card-h">各科进退步（最近 ' + recent.length + ' 次）</div>'
+    + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
+    + '<thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div>'
+    + '<div class="sc-figcap">每格上排分数、下排小字为年级排名；「较上次」为分数增减与名次升降（名次↑为进步）；「稳定性」为标准差，越小越稳。</div></div>';
+}
+
 function scGradeTrend(){
   var items = SC.me || [];
   var pts = items.filter(function(it){ return it.schoolRank != null; });
