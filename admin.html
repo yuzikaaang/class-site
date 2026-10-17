@@ -896,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.3.0';
+var SITE_VERSION = '3.4.0';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -5715,12 +5715,15 @@ function paintFieldPanel(list){
   });
 }
 
-/** 新增自定义字段弹窗 */
+/** 新增自定义字段弹窗。
+ *  v3.4.0 站主报「弹窗不在中央、被遮挡」：原来手写的 .dialog-mask/.dialog
+ *  在全站样式里根本没有定义（只有这一处在用），结果是按普通文档流渲染，
+ *  掉在成员长表格的下面（页面底部）。改用通用 openModal() 体系，
+ *  fixed + flex 居中，与其它弹窗行为一致。 */
 function addFieldDialog(){
-  var html =
-    '<div class="dialog-mask" id="ffMask"><div class="dialog" style="max-width:480px">'
-    + '<h3>新增资料字段</h3>'
-    + '<div class="alert info" style="margin:0 0 14px">'
+  var vis = 'self';
+  var body =
+    '<div class="alert info" style="margin:0 0 14px">'
     +   '加完之后，每位同学都能在「编辑资料」里填这个字段，'
     +   '前台也会按你设的可见性展示。'
     + '</div>'
@@ -5735,45 +5738,44 @@ function addFieldDialog(){
               + '" data-ffv="' + v + '">' + esc(VIS_LABEL[v]) + '</button>';
           }).join('')
     +   '</div>'
-    +   '<div class="muted" style="font-size:.74rem;margin-top:6px" id="ffVisHint">' + esc(VIS_DESC.self) + '</div>'
-    + '</div>'
-    + '<div class="dialog-actions">'
-    +   '<button class="btn btn-secondary" id="ffCancel">取消</button>'
-    +   '<button class="btn" id="ffOk">' + svg('plus', 14) + '创建字段</button>'
-    + '</div></div></div>';
+    +   '<div class="muted" style="font-size:.74rem;margin-top:6px" id="ffVisHint">' + esc(VIS_DESC[vis]) + '</div>'
+    + '</div>';
+  var foot =
+    '<button class="btn btn-secondary" id="ffCancel">取消</button>'
+    + '<button class="btn" id="ffOk">' + svg('plus', 14) + '创建字段</button>';
 
-  document.body.insertAdjacentHTML('beforeend', html);
-  var vis = 'self';
-  $('ffVisHint').textContent = VIS_DESC[vis];
-
-  Array.prototype.forEach.call($('ffVis').querySelectorAll('[data-ffv]'), function(b){
-    b.onclick = function(){
-      vis = b.dataset.ffv;
-      Array.prototype.forEach.call($('ffVis').querySelectorAll('[data-ffv]'), function(x){
-        x.className = 'btn btn-sm ' + (x.dataset.ffv === vis ? '' : 'btn-secondary');
+  openModal({
+    title: '新增资料字段',
+    sub: '前台将按可见范围展示这个字段',
+    body: body,
+    foot: foot,
+    onMount: function(){
+      Array.prototype.forEach.call($('ffVis').querySelectorAll('[data-ffv]'), function(b){
+        b.onclick = function(){
+          vis = b.dataset.ffv;
+          Array.prototype.forEach.call($('ffVis').querySelectorAll('[data-ffv]'), function(x){
+            x.className = 'btn btn-sm ' + (x.dataset.ffv === vis ? '' : 'btn-secondary');
+          });
+          $('ffVisHint').textContent = VIS_DESC[vis];
+        };
       });
-      $('ffVisHint').textContent = VIS_DESC[vis];
-    };
-  });
 
-  /* 中文名自动推英文键名：学籍号 → 用拼音首字母不合适（会撞），
-     所以只做「无中文时原样小写」，中文时留空让用户自己填。 */
-  function close(){ var m = $('ffMask'); if(m) m.remove(); }
-  $('ffCancel').onclick = close;
-  $('ffMask').onclick = function(e){ if(e.target === $('ffMask')) close(); };
-  $('ffOk').onclick = function(){
-    var label = ($('ffLabel').value || '').trim();
-    var key   = ($('ffKey').value || '').trim().toLowerCase();
-    if(!label) return toast('请填写中文名称', 'danger');
-    if(!key)   return toast('请填写英文键名（如 school_id）', 'danger');
-    if(!/^[a-z][a-z0-9_]{0,30}$/.test(key)){
-      return toast('英文键名只能小写字母开头，由小写字母、数字、下划线组成', 'danger');
-    }
-    api('/admin?action=add-field', { method:'POST', body:{ field:key, label:label, visibility:vis } })
-      .then(function(j){ close(); toast(j.message || '已新增'); renderFieldPanel(); loadMembers(); })
-      .catch(function(e){ toast(e.message, 'danger'); });
-  };
-  setTimeout(function(){ var el = $('ffLabel'); if(el) el.focus(); }, 60);
+      $('ffCancel').onclick = closeModal;
+      $('ffOk').onclick = function(){
+        var label = ($('ffLabel').value || '').trim();
+        var key   = ($('ffKey').value || '').trim().toLowerCase();
+        if(!label) return toast('请填写中文名称', 'danger');
+        if(!key)   return toast('请填写英文键名（如 school_id）', 'danger');
+        if(!/^[a-z][a-z0-9_]{0,30}$/.test(key)){
+          return toast('英文键名只能小写字母开头，由小写字母、数字、下划线组成', 'danger');
+        }
+        api('/admin?action=add-field', { method:'POST', body:{ field:key, label:label, visibility:vis } })
+          .then(function(j){ closeModal(); toast(j.message || '已新增'); renderFieldPanel(); loadMembers(); })
+          .catch(function(e){ toast(e.message, 'danger'); });
+      };
+      setTimeout(function(){ var el = $('ffLabel'); if(el) el.focus(); }, 60);
+    },
+  });
 }
 
 /** 改字段中文名 */
@@ -8463,6 +8465,20 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "3.4.0",
+      "date": "2026-10-17",
+      "title": "成绩对比支持跨考试（最多 2 场）+ 一批体验修复",
+      "items": [
+        "「成绩对比」可以再选一场考试放在一起比（单次最多 2 场）：新增「跨考试进退步」表，把两位同学在这两场之间的总分、班排、年级排名、各科分数逐项对比，↑ 进步 ↓ 退步一目了然；上次缺考的人会明确标注",
+        "总分对比柱状图下补了年级排名（物理方向）；对比考试的全班成绩懒加载并缓存，与「历次上线率」共用同一份缓存",
+        "修复「个人画像 → 各科进退步」把第一次考试那一列也固定的问题：现在只固定「科目」列（进退步榜、需关注学生等表格的第二列误吸问题一并修好）",
+        "年级排名各处（成绩表表头、概览卡、年级排名变化卡、导出图片、分享页）都标注了「物理方向」——本站成绩单里的年级排名均为物理方向排名，不是全校排名",
+        "「历次上线率」开放给管理员：管理员本人不在成绩表里也能看（数据从历次考试懒加载现算）",
+        "成绩分析顶部新增小横幅：成绩由人工手动录入，若有错误请联系管理员修改",
+        "修复后台「成员与档案 → 字段管理 → 新增字段」弹窗不在中央、被页面内容挡住的问题（改用通用居中弹窗）"
+      ]
+    },
     {
       "version": "3.3.0",
       "date": "2026-10-17",

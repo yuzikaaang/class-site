@@ -4942,7 +4942,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.3.0');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.4.0');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5435,8 +5435,11 @@ console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间�
   t('★表格容器可纵向滚动（sticky 生效的前提）', /\.sc-tblwrap\{max-height:min\(60vh,460px\);overflow:auto/.test(idx));
   t('★表头 sticky 吸顶', /\.sc-tbl th\{position:sticky;top:0;z-index:3/.test(idx));
   t('★班排列吸附左侧', /\.sc-tbl th:nth-child\(1\),\.sc-tbl td:nth-child\(1\)\{position:sticky;left:0/.test(idx));
-  t('★姓名列吸附在其右侧（left:46px）', /\.sc-tbl th:nth-child\(2\),\.sc-tbl td:nth-child\(2\)\{position:sticky;left:46px/.test(idx));
-  t('★表头两列 z-index 更高（压住滚动内容）', /th:nth-child\(1\),\.sc-tbl th:nth-child\(2\)\{z-index:4/.test(idx));
+  /* v3.4.0：第二列吸列只在带 .sc-fix2 的表上生效（全班成绩单），
+     其余卡片（各科进退步、进退步榜、需关注…）的第二列不再被误固定 */
+  t('★姓名列吸附在其右侧（left:46px，仅 .sc-fix2）', /\.sc-tbl\.sc-fix2 th:nth-child\(2\),\.sc-tbl\.sc-fix2 td:nth-child\(2\)\{position:sticky;left:46px/.test(idx));
+  t('★表头两列 z-index 更高（压住滚动内容）', /th:nth-child\(1\)\{z-index:4;background:#fdf8f3\}/.test(idx) && /\.sc-tbl\.sc-fix2 th:nth-child\(2\)\{z-index:4/.test(idx));
+  t('★非 fix2 表第二列不再吸列（普通数据列）', (idx.match(/\.sc-tbl th:nth-child\(2\),\.sc-tbl td:nth-child\(2\)\{position:sticky/g) || []).length === 0);
   t('★吸附单元格有不透明背景（否则会透出后面的字）',
     /\.sc-tbl td\{[^}]*background:#fff/.test(idx));
   t('★「我」那一行的吸附背景也跟着高亮', /\.sc-tbl \.sc-me-row td\{background:#fff8f2\}/.test(idx));
@@ -6160,7 +6163,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.3\.0'/.test(swSrc) && /class-site-v92/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.4\.0'/.test(swSrc) && /class-site-v93/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -6370,8 +6373,9 @@ console.log('\n【64】第五十九轮·成绩分析暗色全覆盖检查');
     && /\.dark \.sc-tbl \.sc-me-row td,\.dark \.sc-me-row\{background:#3a2f28\}/.test(idx));
   t('★sc-tblwrap/th:nth-child/冻结列阴影暗色覆盖齐全',
     /\.dark \.sc-tblwrap\{background:#262220;border-color:#3d3631\}/.test(idx)
-    && /\.dark \.sc-tbl th:nth-child\(1\),\.dark \.sc-tbl th:nth-child\(2\)\{background:#332d29\}/.test(idx)
-    && /\.dark \.sc-tbl th:nth-child\(2\),\.dark \.sc-tbl td:nth-child\(2\)\{box-shadow:1px 0 0 #3d3631\}/.test(idx));
+    && /\.dark \.sc-tbl th:nth-child\(1\)\{background:#332d29\}/.test(idx)
+    && /\.dark \.sc-tbl\.sc-fix2 th:nth-child\(2\)\{background:#332d29\}/.test(idx)
+    && /\.dark \.sc-tbl\.sc-fix2 th:nth-child\(2\),\.dark \.sc-tbl\.sc-fix2 td:nth-child\(2\)\{box-shadow:1px 0 0 #3d3631\}/.test(idx));
 
   /* ---- ② 暗色块整块包 @media screen（打印永远走白底基线，零额外 print reset）---- */
   t('★sc-* 暗色覆盖在 @media screen 块内（打印不参与暗色，避免深字压深底）',
@@ -6823,8 +6827,8 @@ console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
   /* ---- ④ 真值表：把 PK 相关函数抠出来真跑一遍 ---- */
   const names = ['esc', 'fmtNum', 'fmtDiff', 'scSubScore', 'scTotal', 'scFullMark',
     'scStats', 'scRankMap', 'scMyRow', 'scPane', 'scPkDefaults', 'scPkRow',
-    'scPkSubjAvg', 'scPkPick', 'scPkSwap',
-    'scRenderPk', 'scPkTotalCard', 'scPkSubjCard', 'scPkCards'];
+    'scPkSubjAvg', 'scPkPick', 'scPkSwap', 'scDateRange', 'shortName',
+    'scRenderPk', 'scPkExam2', 'scPkTrendCard', 'scPkTotalCard', 'scPkSubjCard', 'scPkCards'];
   const missing = names.filter((n) => !fnBody(n));
   t('★PK 依赖函数全部可提取（真值表前提）', missing.length === 0,
     missing.join(',') || '齐全');
@@ -6854,7 +6858,7 @@ console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
     ];
     const api = new Function('SC', 'AUTH', 'document', src + `
       function scRenderPane(){ scRenderPk(); }   /* 桩：PK 只有一个 pane，直接重绘 */
-      return { scRenderPk, scPkSwap, scPkPick, scPkDefaults, scPkRow, scTotal, scPkSubjAvg };
+      return { scRenderPk, scPkSwap, scPkPick, scPkDefaults, scPkRow, scTotal, scPkSubjAvg, scPkExam2 };
     `)(SC, AUTH, docStub);
 
     /* 默认规则：A = 我（uid 1），B = 总分第一（余子康 463 > 陈曦 464？算一下：
@@ -6865,9 +6869,10 @@ console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
       /value="11" selected/.test(html) && /余子康/.test(html));
     t('★默认 B 方选中总分第一（陈曦 464 分）',
       /value="12" selected/.test(html));
-    t('★渲染含选人区 / 交换按钮 / 两个下拉',
+    t('★渲染含选人区 / 交换按钮 / 三个下拉（A、B、对比考试）',
       html.includes('sc-pk-pick') && html.includes('sc-pk-swap')
-      && (html.match(/<select/g) || []).length === 2);
+      && (html.match(/<select/g) || []).length === 3
+      && html.includes('scPkExam2') && html.includes('不对比（只看本场）'));
     t('★「同一场考试」标注当前考试名',
       html.includes('同一场考试：十月联考'));
     t('★总分对比卡：班均参考线 + 班排 + 领先结论',
@@ -6903,6 +6908,24 @@ console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
       /value="13" selected/.test(pane.innerHTML) && pane.innerHTML.includes('>缺<'));
     t('★缺考生不画柱只标「缺」（王五物理：10 根柱变 9 根）',
       (pane.innerHTML.match(/class="sc-pk-bar-[ab]"/g) || []).length === 9);
+
+    /* v3.4.0 跨考试对比：选第二场 → 出「跨考试进退步」卡 */
+    t('★默认不出跨考试卡（pkExam2 为空）',
+      !pane.innerHTML.includes('跨考试进退步'));
+    SC.allRows = { 1: { exam: SC.exams[0], rows: SC.rows } };   /* 桩：免拉数据 */
+    api.scPkExam2('1');
+    const trendHtml = pane.innerHTML;
+    t('★选了第二场出现「跨考试进退步」卡',
+      trendHtml.includes('跨考试进退步') && trendHtml.includes('指标')
+      && trendHtml.includes('年级排名（物理方向）'));
+    t('★跨考试卡数字：B 方余子康总分 463 → 463（前面步骤后 A=王五、B=余子康）',
+      trendHtml.includes('463 → 463'));
+    t('★跨考试卡标注缺考人（王五若上场会被点名）',
+      trendHtml.includes('没找到对应成绩') === /在「十月联考」里没找到对应成绩/.test(trendHtml));
+    SC.pkExam2 = null;
+    api.scPkExam2('');
+    t('★清空对比考试后卡片消失',
+      !pane.innerHTML.includes('跨考试进退步'));
 
     /* 人数不足的兜底 */
     SC.rows = [SC.rows[0]];
@@ -8188,7 +8211,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.3.0', /SITE_VERSION = '3[.]3[.]0'/.test(idx) && /SITE_VERSION = '3[.]3[.]0'/.test(adm) && /SITE_VER = '3[.]3[.]0'/.test(sw));
+  t('版本号三处同步 3.4.0', /SITE_VERSION = '3[.]4[.]0'/.test(idx) && /SITE_VERSION = '3[.]4[.]0'/.test(adm) && /SITE_VER = '3[.]4[.]0'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8281,8 +8304,8 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.3.0',
-    /SITE_VERSION = '3[.]3[.]0'/.test(idx) && /SITE_VERSION = '3[.]3[.]0'/.test(adm) && /SITE_VER = '3[.]3[.]0'/.test(sw));
+  t('版本号三处同步 3.4.0',
+    /SITE_VERSION = '3[.]4[.]0'/.test(idx) && /SITE_VERSION = '3[.]4[.]0'/.test(adm) && /SITE_VER = '3[.]4[.]0'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8368,8 +8391,8 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.3.0',
-    /SITE_VERSION = '3[.]3[.]0'/.test(idx) && /SITE_VERSION = '3[.]3[.]0'/.test(adm));
+  t('版本号三处同步 3.4.0',
+    /SITE_VERSION = '3[.]4[.]0'/.test(idx) && /SITE_VERSION = '3[.]4[.]0'/.test(adm));
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8388,7 +8411,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]3[.]0'/.test(adm) && /SITE_VER = '3[.]3[.]0'/.test(sw));
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]4[.]0'/.test(adm) && /SITE_VER = '3[.]4[.]0'/.test(sw));
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8414,7 +8437,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.3.0', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.4.0', 'parsed=' + parsed);
 }
 
 

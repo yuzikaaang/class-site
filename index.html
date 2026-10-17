@@ -1737,8 +1737,9 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .dark .sc-tblwrap{background:#262220;border-color:#3d3631}
 .dark .sc-tbl th{background:#332d29;color:#f0e6dc;border-bottom-color:#3d3631}
 .dark .sc-tbl td{background:#262220;border-bottom-color:#332d29}
-.dark .sc-tbl th:nth-child(1),.dark .sc-tbl th:nth-child(2){background:#332d29}
-.dark .sc-tbl th:nth-child(2),.dark .sc-tbl td:nth-child(2){box-shadow:1px 0 0 #3d3631}
+.dark .sc-tbl th:nth-child(1){background:#332d29}
+.dark .sc-tbl.sc-fix2 th:nth-child(2){background:#332d29}
+.dark .sc-tbl.sc-fix2 th:nth-child(2),.dark .sc-tbl.sc-fix2 td:nth-child(2){box-shadow:1px 0 0 #3d3631}
 .dark .sc-tbl .sc-me-row td,.dark .sc-me-row{background:#3a2f28}
 .dark .sc-bar{border-bottom-color:#3d3631}
 .dark .sc-tabs{border-bottom-color:#3d3631}
@@ -1904,6 +1905,9 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-stat b{display:block;font-size:1.05rem;color:#b45309;font-variant-numeric:tabular-nums}
 .sc-stat span{font-size:.72rem;color:#6e635a}
 .sc-tblwrap{max-height:min(60vh,460px);overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #f0e7de;border-radius:12px;background:#fff;overscroll-behavior:contain}
+/* v3.4.0 站主：「成绩分析新增一个小横幅，成绩由人工手动录入」——淡黄提示条 */
+.sc-notebar{font-size:.74rem;color:#8a5a13;background:#fdf3e0;border:1px solid #f3e2c2;border-radius:10px;padding:6px 12px;margin-bottom:8px;line-height:1.5}
+.dark .sc-notebar{color:#e8c98a;background:#332b20;border-color:#4d4030}
 .sc-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem;min-width:620px}
 .sc-tbl th{position:sticky;top:0;z-index:3;background:#fdf8f3;padding:9px 6px;font-weight:700;color:#57534e;font-size:.76rem;white-space:nowrap;border-bottom:1.5px solid #f0e7de;cursor:pointer;user-select:none}
 .sc-tbl td{padding:8px 6px;text-align:center;border-bottom:1px solid #faf5f0;font-variant-numeric:tabular-nums;background:#fff}
@@ -1911,8 +1915,13 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 /* 前两列（班排 / 姓名）横向吸住 —— 手机上左右拖动时不会看错行。
    宽度写死，因为 sticky 的 left 偏移必须是个确定值。 */
 .sc-tbl th:nth-child(1),.sc-tbl td:nth-child(1){position:sticky;left:0;z-index:2;width:46px;min-width:46px;max-width:46px;padding-left:0;padding-right:0}
-.sc-tbl th:nth-child(2),.sc-tbl td:nth-child(2){position:sticky;left:46px;z-index:2;box-shadow:1px 0 0 #f0e7de}
-.sc-tbl th:nth-child(1),.sc-tbl th:nth-child(2){z-index:4;background:#fdf8f3}
+/* v3.4.0：第二列吸列只在带 .sc-fix2 的表上生效（目前只有全班成绩单：
+   班排+姓名 两列都吸）。其余卡片的表（各科进退步、进退步榜、需关注…）
+   第二列是普通数据列，之前被这条全局规则误吸住 —— 站主报告
+   「个人画像的各科进退步把第一次考试那一栏也固定了」，即此因。 */
+.sc-tbl.sc-fix2 th:nth-child(2),.sc-tbl.sc-fix2 td:nth-child(2){position:sticky;left:46px;z-index:2;box-shadow:1px 0 0 #f0e7de}
+.sc-tbl th:nth-child(1){z-index:4;background:#fdf8f3}
+.sc-tbl.sc-fix2 th:nth-child(2){z-index:4;background:#fdf8f3}
 .sc-tbl .sc-me-row td{background:#fff8f2}
 .sc-tbl .sc-name{font-weight:700;text-align:left;padding-left:10px;white-space:nowrap}
 .sc-tbl .sc-total{font-weight:800;color:#b45309}
@@ -3071,7 +3080,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.3.0';
+var SITE_VERSION = '3.4.0';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3960,6 +3969,7 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-10-17 15:30", text: "⚔️ 成绩分析更新（v3.4.0）：①「成绩对比」可以再选一场考试放在一起比（最多 2 场），新增「跨考试进退步」表——两位同学的总分 / 班排 / 年级排名 / 各科分数逐项对比，进步退步一目了然，总分柱下也补了年级排名；② 个人画像「各科进退步」只固定科目列了，第一次考试那一列不再被误固定（进退步榜、需关注等表同样修好）；③ 年级排名各处都标注了是「物理方向」的年级排名，不是全校；④「历次上线率」开放给管理员查看；⑤ 页面顶部加了小横幅：成绩由人工手动录入，若有错误请联系管理员修改；⑥ 后台「新增字段」弹窗修复了不居中的问题。", category: "site" },
     { date: "2026-10-17 13:41", text: "📊 成绩分析三处改动（v3.3.0）：①「需关注学生」不再只看总分，某一科拖后腿也会被单独点名（表格里直接写「化学 60 −30.2」，并标出是「仅单科」还是总分也不达标）；②「进退步榜」把进步和退步合成一张表，全部同学都在里面，点表头就能排序（名次、变化、分数都能排），班级 / 年级 / 单科三种筛选照旧；③「学生 × 科目热力图」手机端点任意一格就能看这个人的明细，再点一次收起。", category: "site" },
     { date: "2026-10-17 12:05", text: "📉 「我的画像 → 各科趋势」现在能看<b>名次</b>了：右上角切「分数 / 名次」，名次视角下折线越靠上就是名次越前，每张卡直接写「第几 名 / 全年级人数」和「较上次 名次升/降多少」，本次分数也保留在下面。哪次没导入年级排名会写「暂无名次」。", category: "site" },
     { date: "2026-10-17 11:29", text: "🔧 修好了分享的一个毛病：以前点「编辑」改分享范围，保存后其实没生效（页面读到的还是旧弹窗里的选项）。现在编辑保存会真正生效，链接不变；而且改范围时不会再把已经勾好的「成绩单 / 个人成绩卡」清掉。", category: "site" },
@@ -12515,6 +12525,7 @@ var SC = {
   _quad: null,    /* 最近一次四象限渲染的点数据（供点选时算名单，不重新渲染） */
   pkA: null,      /* 成绩对比 PK：A 方成绩行 id（v2.10.0） */
   pkB: null,      /* 成绩对比 PK：B 方成绩行 id（v2.10.0） */
+  pkExam2: null,  /* v3.4.0：跨考试对比的第二场考试 id（null = 只看本场） */
   basisSet: false,/* 用户是否自己切过口径（切过就不再被后台默认值覆盖） */
   trendSet: false,
   loaded: false,
@@ -12558,6 +12569,7 @@ function closeScoreAnal(){
    容器 id 沿用原来的 scBar / scTabs / scPaneBox —— 渲染函数一行都不用改。 */
 function scEmbedHtml(){
   return '<div class="sc-embed" id="scEmbed">'
+    + '<div class="sc-notebar">✍️ 成绩由人工手动录入，若有错误请联系管理员修改</div>'
     + '<div class="sc-bar" id="scBar"></div>'
     + '<div class="sc-tabs" id="scTabs"></div>'
     + '<div class="sc-pane" id="scPaneBox"></div>'
@@ -12637,6 +12649,8 @@ function scPickExam(id){
     SC.rows = d.rows || [];
     /* v2.10.0：换考试后旧的行 id 全部失效，PK 选择重置为默认（我 + 总分第一） */
     SC.pkA = null; SC.pkB = null;
+    /* v3.4.0：第二场考试若与新的当前考试相同，也一并清掉 */
+    if(SC.pkExam2 != null && SC.pkExam2 === ex.id) SC.pkExam2 = null;
     if(r[1] && r[1].items) SC.me = r[1].items;
     SC.loading = false;
     scRenderAll();
@@ -12874,7 +12888,7 @@ function scRenderBoard(){
         return '<th class="sc-th-sort" onclick="scSort(\'' + s.key + '\')">' + esc(s.name) + scArrow(s.key) + '</th>';
       }).join('')
     + '<th class="sc-th-sort" onclick="scSort(\'total\')">总分' + scArrow('total') + '</th>'
-    + '<th class="sc-th-sort" onclick="scSort(\'schoolRank\')">年级排名' + scArrow('schoolRank') + '</th>'
+    + '<th class="sc-th-sort" onclick="scSort(\'schoolRank\')">年级排名<span class="sc-subrank" style="font-weight:400">物理方向</span>' + scArrow('schoolRank') + '</th>'
     + '</tr>';
 
   var body = arr.map(function(o){
@@ -12905,7 +12919,7 @@ function scRenderBoard(){
     +   scStatCard('最高', st.max)
     +   scStatCard('参考', st.n + ' 人')
     + '</div>'
-    + '<div class="sc-tblwrap"><table class="sc-tbl">'
+    + '<div class="sc-tblwrap"><table class="sc-tbl sc-fix2">'
     +   '<thead>' + head + '</thead><tbody>' + body + '</tbody>'
     + '</table></div>'
     + scChartHist(st)
@@ -13099,6 +13113,14 @@ function scChartSegments(st){
 function scRenderMe(){
   var meRow = scMyRow();
   if(!meRow){
+    /* v3.4.0 站主：历次上线率开放给管理员。管理员本人可能不在成绩表里
+       （没有 meRow），此时个人画像的其余卡片都画不出来，
+       就只给「历次上线率」这一张管理员卡。 */
+    if(scIsAdmin()){
+      scPane('<div class="sc-hint">你是管理员，但这次考试的成绩里没有你的名字 —— 个人画像需要本人成绩才有数据。'
+        + '下方是管理员可看的「历次上线率」。</div>' + (scCutTrend() || '<div class="sc-empty"><p>还没有可统计的上线率数据。</p></div>'));
+      return;
+    }
     scPane('<div class="sc-empty">'
       + '<div class="sc-empty-ico">🙋</div>'
       + '<p>这次考试的成绩里没有找到你的名字。</p>'
@@ -13121,7 +13143,7 @@ function scRenderMe(){
     +   '<div class="sc-ov-total"><b>' + (myTotal == null ? '—' : myTotal) + '</b><span>总分（' + (SC.basis === 'graded' ? '赋分' : '原始') + '）</span></div>'
     +   '<div class="sc-ov-items">'
     +     scOvItem('班排名', myRank ? myRank + ' / ' + st.n : '—')
-    +     scOvItem('年级排名', meRow.schoolRank != null ? meRow.schoolRank + (SC.exam.gradeRef && SC.exam.gradeRef.students ? ' / ' + SC.exam.gradeRef.students : '') : '—')
+    +     scOvItem('年级排名（物理方向）', meRow.schoolRank != null ? meRow.schoolRank + (SC.exam.gradeRef && SC.exam.gradeRef.students ? ' / ' + SC.exam.gradeRef.students : '') : '—')
     +     scOvItem('与班均', myTotal != null ? fmtDiff(myTotal - st.avg) : '—')
     +     scOvItem('联考排名', meRow.leagueRank != null ? meRow.leagueRank : '—')
     +   '</div>'
@@ -13306,6 +13328,25 @@ function scPkSwap(){
   scRenderPane();
 }
 
+/* v3.4.0 站主：「成绩对比可以多场考试放在一起对比（单次最多2场）」。
+   选第二场考试后，懒加载那场考试的全班 board（缓存在 SC.allRows，
+   与历次上线率共用），再由 scPkTrendCard 出两位同学的跨考试进退步。 */
+function scPkExam2(v){
+  var id = v ? Number(v) : null;
+  /* 幂等守卫：只在选了考试时生效 —— 若对 null 也短路，
+     从「有对比」切回「不对比」就不会重渲染（卡片残留在页面上） */
+  if(id != null && SC.pkExam2 === id) return;
+  SC.pkExam2 = id;
+  if(id != null && !(SC.allRows && SC.allRows[id])){
+    SC.allRows = SC.allRows || {};
+    api('/scores?action=board&exam=' + id).then(function(d){
+      SC.allRows[id] = { exam: d.exam, rows: d.rows || [] };
+      if(SC.tab === 'pk' && SC.pkExam2 === id) scRenderPane();
+    }).catch(function(){ /* 拉不到就保持无数据，卡里会显示「读取失败」 */ });
+  }
+  scRenderPane();
+}
+
 function scRenderPk(){
   /* 换过考试 / 首次进入：选择失效就按默认规则重选 */
   if(SC.pkA == null || SC.pkB == null || !scPkRow(SC.pkA) || !scPkRow(SC.pkB)) scPkDefaults();
@@ -13337,10 +13378,23 @@ function scRenderPk(){
     +   '<span><i class="sc-pk-dot-b"></i>' + esc(B.name || 'B 方') + '</span>'
     +   '<span class="sc-dim">同一场考试：' + esc(SC.exam.name || '') + '</span>'
     + '</div>'
+    /* v3.4.0：跨考试对比（最多再选 1 场，即最多 2 场同屏） */
+    + '<div class="sc-pk-legend" style="margin-top:-2px">'
+    +   '<label class="sc-dim" style="font-size:.76rem">对比另一场：</label>'
+    +   '<select class="sc-sel" style="max-width:220px" onchange="scPkExam2(this.value)">'
+    +     '<option value="">不对比（只看本场）</option>'
+    +     SC.exams.map(function(e){
+            return '<option value="' + e.id + '"' + (SC.pkExam2 === e.id ? ' selected' : '') + '>'
+              + esc(e.name) + '　' + esc(scDateRange(e)) + '</option>';
+          }).join('')
+    +   '</select>'
+    + '</div>'
     /* ② 总分柱状图 */
     + scPkTotalCard(A, B)
     /* ③ 各科分组柱状图 */
     + scPkSubjCard(A, B)
+    /* ③b 跨考试进退步与趋势（v3.4.0，选了第二场才出现） */
+    + scPkTrendCard(A, B)
     /* ④ 强弱项对比卡 */
     + scPkCards(A, B)
     + '</div>';
@@ -13352,7 +13406,7 @@ function scPkTotalCard(A, B){
   var ta = scTotal(A, SC.basis), tb = scTotal(B, SC.basis);
   var st = scStats(SC.basis);
   var rk = scRankMap(SC.basis);
-  var W = 640, H = 210, L = 40, R = 20, T = 26, Bp = 46;
+  var W = 640, H = 210, L = 40, R = 20, T = 26, Bp = 60;
   var full = scFullMark();
   var maxV = Math.max(ta == null ? 0 : ta, tb == null ? 0 : 1);
   /* 纵轴封顶取「满分」与「两人较高者」的较大值，柱子不会被压扁 */
@@ -13388,7 +13442,11 @@ function scPkTotalCard(A, B){
       + '<text x="' + (x + bw / 2) + '" y="' + (H - Bp + 16) + '" font-size="11" font-weight="700" class="sc-pk-name" text-anchor="middle">'
       + esc(row.name || '') + '</text>'
       + '<text x="' + (x + bw / 2) + '" y="' + (H - Bp + 32) + '" font-size="9.5" class="sc-pk-sub" text-anchor="middle">班排 '
-      + (rk.total[row.id] || '—') + ' / ' + st.n + '</text>';
+      + (rk.total[row.id] || '—') + ' / ' + st.n + '</text>'
+      + (row.schoolRank != null
+          ? '<text x="' + (x + bw / 2) + '" y="' + (H - Bp + 46) + '" font-size="9.5" class="sc-pk-sub" text-anchor="middle">年级第 '
+            + row.schoolRank + '（物理方向）</text>'
+          : '');
   }
   svg += bar(xa, ta, 'a', 'a', A) + bar(xb, tb, 'b', 'b', B);
   /* 中间结论徽章：谁领先多少 */
@@ -13501,6 +13559,118 @@ function scPkCards(A, B){
     + card(B, 'sc-pk-dot-b', B.name || 'B 方')
     + '</div>';
   return html;
+}
+
+/* ③b 跨考试进退步与趋势（v3.4.0）：选了第二场考试后出现。
+   站主原话「pk 的内容全一点，比如具体的进退步情况和趋势等等」——
+   这里给两位同学在这两场之间的：总分 / 班排 / 年级排名 / 各科分数 的逐项变化。 */
+function scPkTrendCard(A, B){
+  if(SC.pkExam2 == null) return '';
+  var pack = (SC.allRows || {})[SC.pkExam2];
+  if(!pack){
+    return '<div class="sc-card"><div class="sc-card-h">跨考试进退步</div>'
+      + '<div class="sc-dim" style="padding:6px 0">正在读取对比考试的全班成绩（几秒钟）…读不到的话稍后再试。</div></div>';
+  }
+  var prevExam = pack.exam, prows = pack.rows || [];
+  /* 在旧成绩里认人：先按绑定的 uid，认不上再按姓名兜底 */
+  function findRow(r){
+    var hit = null;
+    if(r && r.uid) prows.forEach(function(x){ if(!hit && x.uid && String(x.uid) === String(r.uid)) hit = x; });
+    if(!hit && r) prows.forEach(function(x){ if(!hit && x.name === r.name) hit = x; });
+    return hit;
+  }
+  var pA = findRow(A), pB = findRow(B);
+
+  /* 总分：按各场考试自己的科目配置算（两场科目或满分不同也能对） */
+  function tot(row, exam){
+    var t = 0, any = false;
+    ((exam && exam.subjects) || []).forEach(function(s){
+      var v = row && row.s && row.s[s.key];
+      if(!v) return;
+      var val = (SC.basis === 'graded' && s.graded && v.assigned != null) ? v.assigned : v.raw;
+      if(val == null) return;
+      t += val; any = true;
+    });
+    return any ? t : null;
+  }
+  /* 旧考试的班排（同分并列，与 scRankMap 同规则） */
+  var pRk = (function(){
+    var list = [];
+    prows.forEach(function(r){
+      var t = tot(r, prevExam);
+      if(t != null) list.push({ id: r.id, t: t });
+    });
+    list.sort(function(a, b){ return b.t - a.t; });
+    var rk = {}, lastT = null, lastRank = 0;
+    list.forEach(function(o, i){
+      if(o.t !== lastT){ lastRank = i + 1; lastT = o.t; }
+      rk[o.id] = lastRank;
+    });
+    return rk;
+  })();
+  var curRk = scRankMap(SC.basis).total;
+
+  /* 单元格：上次 → 本次（变化箭头）。名次是越小越好，分数越大越好。 */
+  function cell(p, c, isRank, unit){
+    if(p == null && c == null) return '<td class="sc-dim">—</td>';
+    var fmt = function(v){ return v == null ? '—' : fmtNum(v); };
+    var main = (isRank ? '第 ' : '') + fmt(p) + ' → ' + (isRank ? '第 ' : '') + fmt(c);
+    var sub = '';
+    if(p != null && c != null){
+      var d = c - p;
+      if(d === 0) sub = '<span class="sc-dim">持平</span>';
+      else{
+        var good = isRank ? d < 0 : d > 0;
+        sub = '<span class="sc-sub-diff ' + (good ? 'up' : 'down') + '">'
+          + (good ? '↑ ' : '↓ ') + fmtNum(Math.abs(d)) + (unit || '') + '</span>';
+      }
+    }else sub = '<span class="sc-dim">' + (p == null ? '上次缺考' : '本次缺考') + '</span>';
+    return '<td>' + main + '<span style="display:block;font-size:.66rem">' + sub + '</span></td>';
+  }
+  function rowHtml(label, pa, ca, pb, cb, isRank, unit){
+    return '<tr><td class="sc-name">' + esc(label) + '</td>'
+      + cell(pa, ca, isRank, unit) + cell(pb, cb, isRank, unit) + '</tr>';
+  }
+
+  var body = '';
+  /* 总分 + 名次三行 */
+  body += rowHtml('总分',
+    pA ? tot(pA, prevExam) : null, scTotal(A, SC.basis),
+    pB ? tot(pB, prevExam) : null, scTotal(B, SC.basis), false, ' 分');
+  body += rowHtml('班排',
+    pA ? pRk[pA.id] : null, curRk[A.id],
+    pB ? pRk[pB.id] : null, curRk[B.id], true, ' 名');
+  body += rowHtml('年级排名（物理方向）',
+    pA ? pA.schoolRank : null, A.schoolRank,
+    pB ? pB.schoolRank : null, B.schoolRank, true, ' 名');
+  /* 各科分数变化（按当前考试的科目逐科对） */
+  (SC.exam.subjects || []).forEach(function(s){
+    function val(row, exam){
+      var v = row && row.s && row.s[s.key];
+      if(!v) return null;
+      return (SC.basis === 'graded' && s.graded && v.assigned != null) ? v.assigned : v.raw;
+    }
+    body += rowHtml(s.name || s.key,
+      pA ? val(pA, prevExam) : null, scSubScore(A, s, SC.basis),
+      pB ? val(pB, prevExam) : null, scSubScore(B, s, SC.basis), false, ' 分');
+  });
+
+  var missed = [];
+  if(!pA) missed.push(A.name || 'A 方');
+  if(!pB) missed.push(B.name || 'B 方');
+
+  return '<div class="sc-card"><div class="sc-card-h">跨考试进退步（'
+    + esc(shortName(prevExam.name || '')) + ' → ' + esc(shortName(SC.exam.name || '')) + '）'
+    + '<span class="sc-h-note">' + esc(scDateRange(prevExam) || '') + '</span></div>'
+    + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
+    + '<thead><tr><th>指标</th>'
+    + '<th><i class="sc-pk-dot-a" style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px"></i> ' + esc(A.name || 'A 方') + '</th>'
+    + '<th><i class="sc-pk-dot-b" style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px"></i> ' + esc(B.name || 'B 方') + '</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>'
+    + '<div class="sc-figcap">「↑」为进步、「↓」为退步；名次越小越好。两场考试的科目或满分不同时，'
+    + '各科按各自的科目配置取分，口径为' + (SC.basis === 'graded' ? '赋分' : '原始') + '。'
+    + (missed.length ? '注意：' + esc(missed.join('、')) + ' 在「' + esc(shortName(prevExam.name || '')) + '」里没找到对应成绩（未考或未录入），相关格显示 —。' : '')
+    + '</div></div>';
 }
 
 function scOvItem(k, v){
@@ -13772,7 +13942,7 @@ function scSubjTrend(){
     + '<div class="sc-subs">' + cards.join('') + '</div>'
     + '<div class="sc-figcap">'
     +   (mode === 'rank'
-        ? '折线是该科历次<b>年级排名</b>：越靠上名次越前，绿色＝名次前进、红色＝后退。'
+        ? '折线是该科历次<b>年级排名（物理方向）</b>：越靠上名次越前，绿色＝名次前进、红色＝后退。'
         : '折线为该科历次走势：绿色为上涨，红色为下跌。')
     + '</div>'
     + '</div>';
@@ -13823,7 +13993,7 @@ function scSubjectProgress(){
   return '<div class="sc-card"><div class="sc-card-h">各科进退步（最近 ' + recent.length + ' 次）</div>'
     + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
     + '<thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div>'
-    + '<div class="sc-figcap">每格上排分数、下排小字为年级排名；「较上次」为分数增减与名次升降（名次↑为进步）；「稳定性」为标准差，越小越稳。</div></div>';
+    + '<div class="sc-figcap">每格上排分数、下排小字为年级排名（物理方向）；「较上次」为分数增减与名次升降（名次↑为进步）；「稳定性」为标准差，越小越稳。</div></div>';
 }
 
 function scGradeTrend(){
@@ -13878,14 +14048,14 @@ function scGradeTrend(){
   }
   var pct = (gradeN && last.schoolRank) ? (last.schoolRank / gradeN * 100) : null;
 
-  return '<div class="sc-card"><div class="sc-card-h">年级排名变化</div>'
+  return '<div class="sc-card"><div class="sc-card-h">年级排名变化（物理方向）</div>'
     + head
     + svg
     + '<div class="sc-ov-items" style="margin-top:10px">'
     +   scOvItem('本次年级排名', last.schoolRank + (gradeN ? ' / ' + gradeN : ''))
     +   scOvItem('年级位置', pct == null ? '—' : '前 ' + pct.toFixed(1) + '%')
     + '</div>'
-    + '<div class="sc-figcap">年级排名与班排名分别统计，可对照查看。'
+    + '<div class="sc-figcap">年级排名与班排名分别统计，可对照查看。这里的年级排名是<b>物理方向</b>的年级排名，不是全校排名；本站成绩单里的年级排名均为物理方向口径。'
     +   (gradeN ? '' : '<br><span class="sc-dim">未填年级人数，不显示百分位。</span>')
     +   '</div></div>';
 }
@@ -13908,7 +14078,14 @@ function scCutTrend(){
     return '<div class="sc-card"><div class="sc-card-h">历次上线率</div>'
       + '<div class="sc-dim" style="padding:4px 2px 2px">分数线是按赋分总分划定的，原始口径下不与三线比较 —— 切到「总分赋分」即可看历次上线率。</div></div>';
   }
-  var items = SC.me || [];
+  /* v3.4.0 站主：历次上线率开放给管理员。管理员本人可能不在成绩表里
+     （SC.me 为空），改用考试列表（含每次考试的 cutlines）当骨架；
+     全班总分从 SC.allRows（懒加载的历次 board）里现算，与 SC.me 路径一致。 */
+  var items = scIsAdmin()
+    ? (SC.exams || []).map(function(e){
+        return { examId: e.id, name: e.name, date: e.date || '', cutlines: e.cutlines || [], subjects: e.subjects || [] };
+      })
+    : (SC.me || []);
   var withCut = items.filter(function(it){
     return (it.cutlines || []).some(function(c){ return c.score != null; });
   });
@@ -14072,7 +14249,7 @@ function scExportDialog(){
     + '<div class="sc-pane" style="max-height:70vh">'
     +   '<div class="sc-hint">勾选要放进图里的内容 —— <b>没勾的不会出现在图上，也不会留空</b>。<br>'
     +     '导出后是一张长图（越往下越细），手机上能直接分享到微信。</div>'
-    +   row('head', '总分与排名', '姓名、总分、班排名、年级排名（必选）')
+    +   row('head', '总分与排名', '姓名、总分、班排名、年级排名（物理方向，必选）')
     +   row('metrics', '其它指标', '与班均差、联考排名')
     +   row('subjects', '各科成绩', '每科分数 / 满分、与班均差、得分率条')
     +   row('subrank', '单科排名', '每科的班内名次，名次越前条越长')
@@ -14187,7 +14364,7 @@ function scExportCard(cfg){
     y += S.metGap;
     var items = [
       ['班排名', myRank ? myRank + ' / ' + st.n : '—'],
-      ['年级排名', meRow.schoolRank != null ? meRow.schoolRank + (gradeN ? ' / ' + gradeN : '') : '—'],
+      ['年级排名（物理）', meRow.schoolRank != null ? meRow.schoolRank + (gradeN ? ' / ' + gradeN : '') : '—'],
       ['与班均', myTotal != null ? fmtDiff(myTotal - st.avg) : '—'],
       ['联考排名', meRow.leagueRank != null ? String(meRow.leagueRank) : '—'],
     ];
@@ -14325,7 +14502,7 @@ function scExportCard(cfg){
     g.fillStyle = '#b06a32';
     g.fillRect(pad, y + 4, Math.max(10, trackW * (1 - (meRow.schoolRank - 1) / gradeN)), 16);
     g.fillStyle = '#c2410c'; f(14, true);
-    g.fillText('年级第 ' + meRow.schoolRank + ' 名 / ' + gradeN + ' 人　·　前 '
+    g.fillText('年级第 ' + meRow.schoolRank + ' 名 / ' + gradeN + ' 人（物理方向）　·　前 '
       + (meRow.schoolRank / gradeN * 100).toFixed(1) + '%', pad, y + 46);
     y += S.barBox;
   }
@@ -15351,7 +15528,7 @@ function scQWhoItem(label, val, avg, rank, gradeN){
   return '<div class="sc-qwho-row"><i>' + esc(label) + '</i>'
     + '<b>' + (val == null ? '—' : fmtNum(val)) + '</b>'
     + '<span>' + esc(scQGap(val, avg)) + '</span>'
-    + (rank != null ? '<em>年级第 ' + rank + (gradeN ? ' / ' + gradeN : '') + '</em>' : '<em>年级排名缺</em>')
+    + (rank != null ? '<em>年级第 ' + rank + (gradeN ? ' / ' + gradeN : '') + '（物理方向）</em>' : '<em>年级排名缺</em>')
     + '</div>';
 }
 
@@ -15516,7 +15693,7 @@ function scHeatTap(el){
     +   '<div class="sc-qwho-row"><i>总分</i><b>' + (c.total == null ? '—' : fmtNum(c.total)) + '</b>'
     +     '<span>' + (c.total == null ? '' : esc(scQGap(c.total, c.totalAvg))) + '</span></div>'
     +   (c.schoolRank != null
-          ? '<div class="sc-qwho-row"><i>年级排名</i><b>' + c.schoolRank + (gradeN ? ' / ' + gradeN : '') + '</b><span></span></div>'
+          ? '<div class="sc-qwho-row"><i>年级排名（物理方向）</i><b>' + c.schoolRank + (gradeN ? ' / ' + gradeN : '') + '</b><span></span></div>'
           : '')
     +   (c.leagueRank != null
           ? '<div class="sc-qwho-row"><i>联考排名</i><b>' + c.leagueRank + '</b><span></span></div>'
