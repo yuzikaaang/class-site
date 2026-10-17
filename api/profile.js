@@ -50,8 +50,9 @@ const MAX_CONTACT = 64;
    「同学突然发现联系方式查不到了」这种意外。
    ============================================================ */
 
-/** 可见性档位排序：数字越大越严（用于「取更严的一侧」） */
-const VIS_RANK = { public: 0, committee: 1, self: 2 };
+/** 可见性档位排序：数字越大越严（用于「取更严的一侧」）
+ *  v3.4.1 新增 admin 档：仅管理员可见（本人也看不到）。 */
+const VIS_RANK = { public: 0, committee: 1, self: 2, admin: 3 };
 
 /** 从两档里取更严的那个 */
 function stricter(a, b) {
@@ -174,6 +175,7 @@ function canSee(field, meta, pref, fvis, ctx) {
     if (p) eff = stricter(eff, p);
   }
 
+  if (eff === 'admin') return !!ctx.admin;   /* v3.4.1：仅管理员可见 —— 本人、班委都看不到 */
   if (eff === 'self') return ctx.self;
   if (eff === 'committee') return ctx.self || ctx.committee;
   return true;
@@ -377,7 +379,7 @@ async function search(req, res, u) {
     results: rows.map((r) => {
       /* 查到自己 → 返回完整信息，方便在页内直接编辑联系方式 */
       const isSelf = !!(u.profileId && Number(u.profileId) === Number(r.id));
-      return shapeProfile(r, isSelf, meta, { self: isSelf, committee });
+      return shapeProfile(r, isSelf, meta, { self: isSelf, committee, admin: u.role === 'admin' });
     }),
   });
 }
@@ -430,8 +432,10 @@ async function myProfile(req, res, u) {
   }
   const row = rows[0];
   const meta = await loadMeta(sql);
-  /* 本人看自己：一律 full=true，可见性一律放行（self 就是「本人」） */
-  const p = shapeProfile(row, true, meta, { self: true, committee: true });
+  /* 本人看自己：一律 full=true，可见性一律放行（self 就是「本人」）。
+     v3.4.1：admin 档例外 —— 「仅管理员可见」的字段本人也看不到，
+     ctx.admin 只有查询者真的是管理员时才为 true。 */
+  const p = shapeProfile(row, true, meta, { self: true, committee: true, admin: u.role === 'admin' });
   p.rejectReason = row.reject_reason || '';
 
   /* 私有字段：元数据里 visibility='self' 的那些（身份证号、发展团员编号…）。

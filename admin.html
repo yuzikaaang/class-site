@@ -896,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.4.0';
+var SITE_VERSION = '3.4.1';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -2593,6 +2593,7 @@ function memberDialog(m){
                 +   '<option value="public"' + (curFv === 'public' ? ' selected' : '') + '>公开</option>'
                 +   '<option value="committee"' + (curFv === 'committee' ? ' selected' : '') + '>班委可见</option>'
                 +   '<option value="self"' + (curFv === 'self' ? ' selected' : '') + '>仅本人</option>'
+                +   '<option value="admin"' + (curFv === 'admin' ? ' selected' : '') + '>仅管理员</option>'
                 + '</select>'
                 + '</div>';
             }).join('')
@@ -5606,11 +5607,14 @@ var CONTACT_LABEL = {
  * ⚠️ 英文键名只能是小写字母开头 + 小写字母/数字/下划线，服务端有严格白名单
  *    （因为列名要拼进 ALTER TABLE，无法参数化）。前端这里先挡一道，体验更好。
  * ========================================================================= */
-var VIS_LABEL = { public:'公开', committee:'班委可见', self:'仅本人' };
+/* v3.4.1 新增 admin 档：仅管理员可见（后台能看到，前台连本人都看不到）。
+   展示链路：api/profile.js 的 canSee 对非管理员一概隐藏（连键都不给）。 */
+var VIS_LABEL = { public:'公开', committee:'班委可见', self:'仅本人', admin:'仅管理员' };
 var VIS_DESC  = {
   public:    '已登录的同学都能查到',
   committee: '只有班委（班长/团支书/课代表等）能查到',
-  self:      '只有本人查自己时能看到'
+  self:      '只有本人查自己时能看到',
+  admin:     '只有管理员在后台能看到，前台连本人都看不到'
 };
 
 function loadFieldMeta(){
@@ -5646,7 +5650,7 @@ function paintFieldPanel(list){
                    : '<span class="mono">' + f.filledCount + ' / ' + total + '</span>';
 
     /* 快捷切换可见性：三个小按钮，当前档高亮 */
-    var quick = ['public', 'committee', 'self'].map(function(v){
+    var quick = ['public', 'committee', 'self', 'admin'].map(function(v){
       return '<button class="btn btn-xs' + (f.visibility === v ? '' : ' btn-secondary')
         + '" data-fv="' + v + '" data-ff="' + attr(f.field) + '" title="' + attr(VIS_DESC[v]) + '">'
         + esc(VIS_LABEL[v]) + '</button>';
@@ -5733,7 +5737,7 @@ function addFieldDialog(){
     +   '<input id="ffKey" placeholder="例如：school_id" maxlength="31" autocomplete="off"></div>'
     + '<div class="field"><label>可见范围</label>'
     +   '<div style="display:flex;gap:8px;flex-wrap:wrap" id="ffVis">'
-    +     ['public','committee','self'].map(function(v, i){
+    +     ['public','committee','self','admin'].map(function(v, i){
             return '<button class="btn btn-sm ' + (i === 2 ? '' : 'btn-secondary')
               + '" data-ffv="' + v + '">' + esc(VIS_LABEL[v]) + '</button>';
           }).join('')
@@ -8465,6 +8469,15 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "3.4.1",
+      "date": "2026-10-17",
+      "title": "字段可见性新增「仅管理员」档",
+      "items": [
+        "字段管理新增第四档「仅管理员」：设为该档的字段只有管理员在后台能看到，前台查询里连本人都看不到（接口连字段键都不下发，无法从响应推断值是否存在）",
+        "新增字段、快捷切换、单人编辑里的「单人例外」三处都能选这一档；已有档位（公开 / 班委可见 / 仅本人）行为不变"
+      ]
+    },
     {
       "version": "3.4.0",
       "date": "2026-10-17",

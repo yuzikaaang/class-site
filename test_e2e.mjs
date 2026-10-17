@@ -4942,7 +4942,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.4.0');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.4.1');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -6163,7 +6163,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.4\.0'/.test(swSrc) && /class-site-v93/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.4\.1'/.test(swSrc) && /class-site-v94/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -8211,7 +8211,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.4.0', /SITE_VERSION = '3[.]4[.]0'/.test(idx) && /SITE_VERSION = '3[.]4[.]0'/.test(adm) && /SITE_VER = '3[.]4[.]0'/.test(sw));
+  t('版本号三处同步 3.4.0', /SITE_VERSION = '3[.]4[.]1'/.test(idx) && /SITE_VERSION = '3[.]4[.]1'/.test(adm) && /SITE_VER = '3[.]4[.]1'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8305,7 +8305,7 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
   t('版本号三处同步 3.4.0',
-    /SITE_VERSION = '3[.]4[.]0'/.test(idx) && /SITE_VERSION = '3[.]4[.]0'/.test(adm) && /SITE_VER = '3[.]4[.]0'/.test(sw));
+    /SITE_VERSION = '3[.]4[.]1'/.test(idx) && /SITE_VERSION = '3[.]4[.]1'/.test(adm) && /SITE_VER = '3[.]4[.]1'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8392,7 +8392,7 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
 
   /* ④ 版本 */
   t('版本号三处同步 3.4.0',
-    /SITE_VERSION = '3[.]4[.]0'/.test(idx) && /SITE_VERSION = '3[.]4[.]0'/.test(adm));
+    /SITE_VERSION = '3[.]4[.]1'/.test(idx) && /SITE_VERSION = '3[.]4[.]1'/.test(adm));
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8411,7 +8411,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]4[.]0'/.test(adm) && /SITE_VER = '3[.]4[.]0'/.test(sw));
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]4[.]1'/.test(adm) && /SITE_VER = '3[.]4[.]1'/.test(sw));
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8437,7 +8437,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.4.0', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.4.1', 'parsed=' + parsed);
 }
 
 
@@ -8637,4 +8637,24 @@ console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + 
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
 console.log('实际执行 SQL 查询: ' + queryLog.length + ' 条');
 console.log('='.repeat(52));
+console.log('\n【87】第七十五轮·v3.4.1 字段可见性新增「仅管理员」档');
+{
+  const rd = (f) => fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8');
+  const idx = rd('index.html'), adm = rd('admin.html');
+  const prof = rd('api/profile.js'), admjs = rd('api/admin.js');
+  t('★profile.js：VIS_RANK 含 admin 档', /VIS_RANK = \{ public: 0, committee: 1, self: 2, admin: 3 \}/.test(prof));
+  t('★profile.js：canSee 对 admin 档要求 ctx.admin（本人/班委都不放行）',
+    /if \(eff === 'admin'\) return !!ctx\.admin;/.test(prof));
+  t('★profile.js：search 与 myProfile 都把查询者身份传进 ctx',
+    (prof.match(/admin: u\.role === 'admin'/g) || []).length === 2);
+  t('★admin.js：set-visibility / add-field 白名单含 admin',
+    /ALLOWED_VIS = \['public', 'committee', 'self', 'admin'\]/.test(admjs));
+  t('★admin.html：标签/描述/快捷按钮/新增弹窗/单人例外五处在位',
+    /VIS_LABEL = \{ public:'公开', committee:'班委可见', self:'仅本人', admin:'仅管理员' \}/.test(adm)
+    && adm.includes('admin:     ') && (adm.match(/\['public', ?'committee', ?'self', ?'admin'\]/g) || []).length >= 2
+    && adm.includes("value=\"admin\""));
+  t('★前台无档位枚举（档位判定全在服务端，前端只渲染给到的字段）',
+    !idx.includes("'committee'"));
+}
+
 process.exit(fail ? 1 : 0);

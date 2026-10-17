@@ -1632,14 +1632,14 @@ function buildFieldVis(raw, allowedFields) {
 
    ⚠️ 改的是**全局字段**，不是某一个人的资料 —— 因为它本身就是「上限」。
       想单独收窄某个人，走本人意愿（visibility_pref）。 */
-const ALLOWED_VIS = ['public', 'committee', 'self'];
+const ALLOWED_VIS = ['public', 'committee', 'self', 'admin'];
 
 async function setVisibility(req, res, me, b) {
   const field = String(b.field || '').trim().slice(0, 40);
   const vis = String(b.visibility || '').trim();
   if (!field) return fail(res, 400, '缺少 field');
   if (ALLOWED_VIS.indexOf(vis) < 0) {
-    return fail(res, 400, 'visibility 只能是 public / committee / self');
+    return fail(res, 400, 'visibility 只能是 public / committee / self / admin');
   }
 
   const sql = getSql();
