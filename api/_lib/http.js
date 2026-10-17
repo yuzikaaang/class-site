@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.7';
+const SCHEMA_VER = '3.5.8';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -174,6 +174,15 @@ export async function ensureSchema(sql) {
            column "proposer" does not exist → 500。
            和 v3.5.2 盲索引、v3.5.4 可见档是同一类错误，第三次了。 */
         try { await s`alter table class_votes add column if not exists proposer text not null default ''`; } catch (e) {}
+        /* 🔴 v3.5.14 #9：投票票数配额与撤回次数。
+           纪律（已踩三次坑）：升级路径 + 全新库清单 + schema.sql 三处必须同时改，
+           并升 SCHEMA_VER —— 少一处就是线上 500。
+           升级路径合并成 2 条 ALTER，避免撞 Workers 免费版 50 子请求上限。 */
+        try { await s`alter table class_votes
+          add column if not exists max_choices smallint,
+          add column if not exists min_choices smallint,
+          add column if not exists retract_limit smallint not null default 1`; } catch (e) {}
+        try { await s`alter table class_vote_ballots add column if not exists retract_used smallint not null default 0`; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
@@ -523,21 +532,33 @@ export async function ensureSchema(sql) {
         status     text        not null default 'open',
         created_by bigint,
         proposer   text        not null default '',
+        max_choices   smallint,
+        min_choices   smallint,
+        retract_limit smallint not null default 1,
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       )
     `;
     /* v3.5.12 #10：老库补 proposer 列（提出人）。幂等，重复跑无害。 */
     await s`alter table class_votes add column if not exists proposer text not null default ''`;
+    /* v3.5.14 #9：票数配额 + 撤回次数（class_votes 已建好，直接补列） */
+    await s`alter table class_votes
+      add column if not exists max_choices smallint,
+      add column if not exists min_choices smallint,
+      add column if not exists retract_limit smallint not null default 1`;
     await s`
       create table if not exists class_vote_ballots (
         vote_id    bigint      not null,
         user_id    bigint      not null,
         choices    jsonb       not null default '[]'::jsonb,
+        retract_used smallint  not null default 0,
         updated_at timestamptz not null default now(),
         primary key (vote_id, user_id)
       )
     `;
+    /* ⚠️ 顺序要紧：ALTER 必须在建表之后 —— 全新库先 alter 会报
+       no such table 并中断整段 DDL（v3.5.14 实测踩到） */
+    await s`alter table class_vote_ballots add column if not exists retract_used smallint not null default 0`;
     await s`create index if not exists cvb_vote_idx on class_vote_ballots (vote_id)`;
 
     /* 全量跑完 → 盖章。下一条请求起走「版本一致直接返回」的捷径。

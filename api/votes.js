@@ -30,6 +30,8 @@ const MAX_OPTION_LEN = 40;     // 单个选项文字
 const MAX_OPTIONS = 30;        // 选项数上限（含学生新增）
 const MAX_NOTE = 200;          // 备注
 const MAX_PROPOSER = 20;       // v3.5.12 提出人（不填 = 记成当前管理员）
+/* v3.5.14 #9：票数配额与撤回次数 */
+const MAX_RETRACT_LIMIT = 5;   // 撤回次数上限（默认 1）
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
@@ -45,6 +47,10 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       switch (action) {
         case 'vote':       return await castVote(req, res);
+        /* v3.5.14 #9：每个选项一个点赞按钮，点一下即投 / 再点取消 */
+        case 'toggle':     return await toggleVote(req, res);
+        /* v3.5.14 #9：撤回重投（每人限 1 次；多选即全部撤回） */
+        case 'retract':    return await retractVote(req, res);
         case 'add-option': return await addOption(req, res);
         case 'create':     return await createVote(req, res);
         case 'update':     return await updateVote(req, res);
@@ -107,6 +113,21 @@ function normOptions(raw) {
   return out.slice(0, MAX_OPTIONS);
 }
 
+/** 数字型配额：空 / 非法 → null（= 不限）；否则取整并夹到 1..选项数 */
+function normQuota(v, max) {
+  if (v == null || v === '') return null;
+  const n = Math.floor(Number(v));
+  if (!isFinite(n) || n < 1) return null;
+  return Math.max(1, Math.min(max, n));
+}
+/** 撤回次数：缺省 1，0 = 不允许撤回 */
+function normRetract(v) {
+  if (v == null || v === '') return 1;
+  const n = Math.floor(Number(v));
+  if (!isFinite(n) || n < 0) return 1;
+  return Math.min(MAX_RETRACT_LIMIT, n);
+}
+
 /** 校验并整理 create/update 的入参，返回 { error } 或 { data } */
 function parseVoteInput(b) {
   const title = String(b.title || '').trim().slice(0, MAX_TITLE);
@@ -123,11 +144,21 @@ function parseVoteInput(b) {
   if (b.deadline != null && b.deadline !== '' && !deadline) {
     return { error: '截止时间格式不对' };
   }
-  return { data: { title, kind, options, multi, allowAdd, note, deadline, proposer } };
+  /* v3.5.14 #9：后台可设「最多选几项」「至少选几项」，留空 = 不限 */
+  const maxChoices = normQuota(b.maxChoices != null ? b.maxChoices : b.max_choices, options.length);
+  const minChoices = normQuota(b.minChoices != null ? b.minChoices : b.min_choices, options.length);
+  if (maxChoices != null && minChoices != null && minChoices > maxChoices) {
+    return { error: '「至少选」不能大于「最多选」' };
+  }
+  if (!multi && maxChoices != null && maxChoices > 1) {
+    return { error: '单选投票的「最多选」只能是 1' };
+  }
+  const retractLimit = normRetract(b.retractLimit != null ? b.retractLimit : b.retract_limit);
+  return { data: { title, kind, options, multi, allowAdd, note, deadline, proposer, maxChoices, minChoices, retractLimit } };
 }
 
 /** 行 → 前端结构。results 只有「已截止」才给。 */
-function shapeVote(r, uid, isAdmin, myChoices, counts) {
+function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed) {
   const v = {
     id: Number(r.id),
     title: r.title,
@@ -148,6 +179,12 @@ function shapeVote(r, uid, isAdmin, myChoices, counts) {
     createdByDisplay: r.creator_display || '',
     /* 提出的日期：只给「YYYY-MM-DD」，前端要显示「2026-10-17 提出」这种短格式 */
     createdDate: r.created_at ? String(r.created_at).slice(0, 10) : null,
+    /* v3.5.14 #9：票数配额与撤回 */
+    maxChoices: r.max_choices == null ? null : Number(r.max_choices),
+    minChoices: r.min_choices == null ? null : Number(r.min_choices),
+    retractLimit: r.retract_limit == null ? 1 : Number(r.retract_limit),
+    retractUsed: Number(myUsed || 0),
+    canRetract: !!uid && (myChoices || []).length > 0 && Number(myUsed || 0) < (r.retract_limit == null ? 1 : Number(r.retract_limit)),
   };
   const closed = !v.open;
   /* 截止后：所有人看结果；截止前：只有管理员看（后台要能预览） */
@@ -163,6 +200,7 @@ function shapeVote(r, uid, isAdmin, myChoices, counts) {
   }
   if (uid) v.myChoices = myChoices || [];
   v.mine = uid ? (myChoices && myChoices.length > 0) : false;
+  v.myComplete = v.minChoices == null ? v.mine : ((myChoices || []).length >= v.minChoices);
   return v;
 }
 
@@ -176,6 +214,7 @@ async function listVotes(req, res) {
   const rows = await sql`
     select v.id, v.title, v.kind, v.options, v.multi, v.allow_add, v.note,
            v.deadline, v.status, v.created_at, v.created_by, v.proposer,
+           v.max_choices, v.min_choices, v.retract_limit,
            u.username as creator_username,
            u.display_name as creator_display
       from class_votes v
@@ -188,10 +227,13 @@ async function listVotes(req, res) {
   /* 我的选择 + 各选项票数（一次查全部投票的票） */
   const voteIds = rows.map((r) => Number(r.id));
   const myRows = await sql`
-    select vote_id, choices from class_vote_ballots where user_id = ${u.id}
+    select vote_id, choices, retract_used from class_vote_ballots where user_id = ${u.id}
   `;
-  const myMap = {};
-  myRows.forEach((r) => { myMap[Number(r.vote_id)] = jsonCol(r.choices) || []; });
+  const myMap = {}, myUsed = {};
+  myRows.forEach((r) => {
+    myMap[Number(r.vote_id)] = jsonCol(r.choices) || [];
+    myUsed[Number(r.vote_id)] = Number(r.retract_used || 0);
+  });
 
   const ballotRows = await sql`
     select vote_id, choices from class_vote_ballots
@@ -208,8 +250,103 @@ async function listVotes(req, res) {
     });
   });
 
-  const votes = rows.map((r) => shapeVote(r, u.id, u.role === 'admin', myMap[Number(r.id)], countMap[Number(r.id)]));
+  const votes = rows.map((r) => shapeVote(r, u.id, u.role === 'admin', myMap[Number(r.id)], countMap[Number(r.id)], myUsed[Number(r.id)]));
   return ok(res, { votes, isAdmin: u.role === 'admin', serverTime: Date.now() });
+}
+
+/* ---------------- 学生：点赞即投（v3.5.14 #9） ----------------
+   前端每个选项一个点赞按钮，点一下调这个接口：
+   · 单选：点谁就是谁；再点同一个 = 取消（不消耗撤回次数）
+   · 多选：有则移除、无则追加；追加上限看后台设的「最多选几项」
+   服务端是唯一真相，前端只做乐观更新。 */
+async function toggleVote(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return;
+
+  const b = await body(req);
+  const voteId = Number(b.voteId || b.vote_id || 0);
+  const optionId = String(b.optionId || b.option_id || '');
+  if (!voteId) return fail(res, 400, '缺少 voteId');
+  if (!optionId) return fail(res, 400, '缺少 optionId');
+
+  const sql = getSql();
+  const rows = await sql`select * from class_votes where id = ${voteId}`;
+  if (!rows.length) return fail(res, 404, '投票不存在或已删除');
+  const v = rows[0];
+  if (!isOpen(v)) return fail(res, 400, '投票已截止或已关闭，不能再投票');
+
+  const options = jsonCol(v.options) || [];
+  if (!options.some((o) => String(o.id) === optionId)) return fail(res, 400, '这个选项不存在');
+
+  const bl = await sql`
+    select choices from class_vote_ballots where vote_id = ${voteId} and user_id = ${u.id}
+  `;
+  const cur = (bl.length ? (jsonCol(bl[0].choices) || []) : []).map(String);
+
+  if (v.multi) {
+    const i = cur.indexOf(optionId);
+    if (i >= 0) cur.splice(i, 1);
+    else {
+      const max = (v.max_choices == null) ? null : Number(v.max_choices);
+      if (max != null && cur.length >= max) {
+        return fail(res, 400, '这场投票最多选 ' + max + ' 项，先点掉一个再选');
+      }
+      cur.push(optionId);
+    }
+  } else {
+    /* 单选：再点同一个 = 取消；点别的 = 直接改投 */
+    if (cur[0] === optionId) cur.length = 0;
+    else { cur.length = 0; cur.push(optionId); }
+  }
+
+  await sql`
+    insert into class_vote_ballots (vote_id, user_id, choices, updated_at)
+    values (${voteId}, ${u.id}, ${JSON.stringify(cur)}::jsonb, now())
+    on conflict (vote_id, user_id)
+    do update set choices = excluded.choices, updated_at = now()
+  `;
+  return ok(res, {
+    message: cur.length ? (v.multi ? '已选上，可继续点其他项' : '已投票') : '已取消这一项',
+    voteId, choices: cur, mine: cur.length > 0,
+  });
+}
+
+/* ---------------- 学生：撤回重投（v3.5.14 #9） ----------------
+   每场投票每人限 1 次（后台可改，0 = 不允许）；多选即全部撤回。 */
+async function retractVote(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return;
+
+  const b = await body(req);
+  const voteId = Number(b.voteId || b.vote_id || 0);
+  if (!voteId) return fail(res, 400, '缺少 voteId');
+
+  const sql = getSql();
+  const rows = await sql`select * from class_votes where id = ${voteId}`;
+  if (!rows.length) return fail(res, 404, '投票不存在或已删除');
+  const v = rows[0];
+  if (!isOpen(v)) return fail(res, 400, '投票已截止，不能再撤回');
+
+  const limit = (v.retract_limit == null) ? 1 : Number(v.retract_limit);
+  if (limit <= 0) return fail(res, 400, '这场投票不开放撤回');
+
+  const bl = await sql`
+    select choices, retract_used from class_vote_ballots
+     where vote_id = ${voteId} and user_id = ${u.id}
+  `;
+  if (!bl.length || !(jsonCol(bl[0].choices) || []).length) return fail(res, 400, '你还没有投票，不用撤回');
+  const used = Number(bl[0].retract_used || 0);
+  if (used >= limit) return fail(res, 400, '这场投票的撤回机会已经用完了（每人 ' + limit + ' 次）');
+
+  await sql`
+    update class_vote_ballots
+       set choices = '[]'::jsonb, retract_used = ${used + 1}, updated_at = now()
+     where vote_id = ${voteId} and user_id = ${u.id}
+  `;
+  return ok(res, {
+    message: '已撤回，可以重新投票' + (v.multi ? '（多选已全部撤回）' : ''),
+    voteId, retractUsed: used + 1, retractLeft: Math.max(0, limit - used - 1),
+  });
 }
 
 /* ---------------- 学生：投票 / 改票 ---------------- */
@@ -301,10 +438,12 @@ async function createVote(req, res) {
   /* v3.5.12 #10：提出人。前台没填就用操作人的显示名兜底（总不能空着） */
   const proposer = p.data.proposer || me.displayName || me.display_name || me.username || '';
   const rows = await sql`
-    insert into class_votes (title, kind, options, multi, allow_add, note, deadline, status, created_by, proposer, created_at, updated_at)
+    insert into class_votes (title, kind, options, multi, allow_add, note, deadline, status,
+                             created_by, proposer, max_choices, min_choices, retract_limit, created_at, updated_at)
     values (${p.data.title}, ${p.data.kind}, ${JSON.stringify(p.data.options)}::jsonb,
             ${p.data.multi}, ${p.data.allowAdd}, ${p.data.note}, ${p.data.deadline}::timestamptz,
-            'open', ${me.id}, ${proposer}, now(), now())
+            'open', ${me.id}, ${proposer},
+            ${p.data.maxChoices}, ${p.data.minChoices}, ${p.data.retractLimit}, now(), now())
     returning id
   `;
   await audit(me.id, 'vote.create', 'class_votes', String(rows[0].id), p.data.title);
@@ -362,6 +501,8 @@ async function updateVote(req, res) {
     update class_votes
        set title = ${p.data.title}, kind = ${p.data.kind}, options = ${JSON.stringify(merged)}::jsonb,
            multi = ${p.data.multi}, allow_add = ${p.data.allowAdd}, note = ${p.data.note},
+           max_choices = ${p.data.maxChoices}, min_choices = ${p.data.minChoices},
+           retract_limit = ${p.data.retractLimit},
            deadline = ${p.data.deadline}::timestamptz, updated_at = now()
      where id = ${voteId}
   `;

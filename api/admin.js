@@ -127,6 +127,8 @@ export default async function handler(req, res) {
         case 'add-field':      return await addField(req, res, me, b);
         case 'delete-field':   return await deleteField(req, res, me, b);
         case 'update-field':   return await updateField(req, res, me, b);
+        /* v3.5.14 #7：字段拖拽排序 —— 一次批量写，避免 N 次子请求 */
+        case 'reorder-fields': return await reorderFields(req, res, me, b);
         case 'set-title':      return await setTitle(req, res, me, b);
         case 'handover-ai':    return await handoverAi(req, res, me, b);
         case 'save-secret':    return await saveAdminSecret(req, res, me, b);
@@ -1872,8 +1874,16 @@ async function deleteField(req, res, me, b) {
   const sql = getSql();
   const row = await readFieldRow(sql, field);
   if (!row) return fail(res, 404, '没有这个字段：' + field);
-  if (!row.is_custom) {
-    return fail(res, 400, '「' + (row.label || field) + '」是系统字段，不能删除（只能改可见性或名称）');
+  /* v3.5.14 #7（站主要求「字段管理无法删除」）：系统预置字段也允许删，
+     但「姓名 / 学号」是站点身份主键 —— 删了登录、成绩、导出全崩，
+     属于结构性列，永远拒绝。其它预置字段（学校、班级、民族、入团日期等）
+     传 force:true 才能删，前端配「手输字段名」的二次确认。 */
+  const HARD_PROTECTED = ['name', 'student_id'];
+  if (HARD_PROTECTED.includes(field)) {
+    return fail(res, 400, '「' + (row.label || field) + '」是身份主键（姓名 / 学号），删了全站都会出错，不能删除');
+  }
+  if (!row.is_custom && b.force !== true) {
+    return fail(res, 400, '「' + (row.label || field) + '」是系统预置字段，确认删除请传 force=true');
   }
 
   await sql`delete from profile_field_meta where field = ${field}`;
@@ -1890,6 +1900,34 @@ async function deleteField(req, res, me, b) {
 
   await audit(me.id, 'field.delete', 'profile_field', field, row.label || '');
   return ok(res, { message: '已删除字段「' + (row.label || field) + '」', field });
+}
+
+/**
+ * v3.5.14 #7：字段拖拽排序。
+ * body: { fields: ['name','student_id',...] } —— 按新顺序排列的字段名数组。
+ * 一次 update ... from unnest 写完全部 sort_order，只算 1 次子请求。
+ */
+async function reorderFields(req, res, me, b) {
+  const list = Array.isArray(b.fields) ? b.fields.map((x) => String(x || '').trim().toLowerCase()).filter(Boolean) : [];
+  if (!list.length) return fail(res, 400, '缺少 fields');
+  if (list.length > 200) return fail(res, 400, '字段太多了');
+
+  const sql = getSql();
+  const rows = await sql`select field from profile_field_meta`;
+  const exist = new Set(rows.map((r) => String(r.field)));
+  const bad = list.filter((f) => !exist.has(f));
+  if (bad.length) return fail(res, 400, '这些字段不存在：' + bad.join('、'));
+
+  /* 只重排传进来的字段；没传的保持原 sort_order（排在后面） */
+  const orders = list.map((_, i) => (i + 1) * 10);
+  await sql`
+    update profile_field_meta m
+       set sort_order = v.ord
+      from (select * from unnest(${list}::text[], ${orders}::int[]) as t(field, ord)) v
+     where m.field = v.field
+  `;
+  await audit(me.id, 'field.reorder', 'profile_field_meta', '', list.join(','));
+  return ok(res, { message: '排序已保存，共 ' + list.length + ' 个字段' });
 }
 
 /**

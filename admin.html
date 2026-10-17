@@ -30,6 +30,9 @@
   --btn-a:#7c2d12; --btn-b:#9a3412;
   /* 强调文字（四种底色实测全部 ≥4.5:1） */
   --accent-ink:#af410f;
+  /* v3.5.14 #8：--accent 之前从未定义，却有 5 处 var(--accent) 在用 ——
+     解析失败 = 背景透明 + 白字，暗色下直接看不见。这里补齐。 */
+  --accent:#c2410c;
   /* 暖调中性底 */
   --bg-1:#fffbf7; --bg-2:#fff7f0; --bg-3:#fdede0;
   --tint:#fff1e7; --tint-2:#fee2d5;
@@ -63,6 +66,7 @@ html[data-theme="dark"]{
   --grad-a:#fb923c; --grad-b:#fdba74;
   --btn-a:#7c2d12; --btn-b:#9a3412;
   --accent-ink:#fb923c;
+  --accent:#ea580c;
   --bg-1:#1c1a18; --bg-2:#1f1d1e; --bg-3:#252324;
   --tint:rgba(251,146,60,.12); --tint-2:rgba(251,146,60,.2);
   --fg:#f5f5f4; --fg-2:#d6d3d1; --fg-3:#a8a29e; --fg-muted:#a8a29e;
@@ -78,7 +82,38 @@ html[data-theme="dark"]{
   --sh-lg:0 10px 15px rgba(0,0,0,.4);
   --sh-xl:0 20px 25px rgba(0,0,0,.45);
   --sh-accent:0 4px 14px rgba(251,146,60,.28);
+  --sh-xl:0 20px 25px rgba(0,0,0,.45);
 }
+/* v3.5.14 #8：后台组件级暗色适配。
+   之前后台只有上面那一条 token 覆盖，组件里写死的浅色（白底、浅灰分隔线、
+   浅色 badge 底）全都不跟随，首页卡片设置面板看着像贴了张白纸。
+   原则：只补「写死颜色」的组件，全部走 token，不动亮色值。 */
+html[data-theme="dark"] table{color:var(--fg)}
+html[data-theme="dark"] table th{background:var(--bg-2);color:var(--fg-2);border-bottom-color:var(--border)}
+html[data-theme="dark"] table td{border-bottom-color:var(--border)}
+html[data-theme="dark"] table tbody tr:hover{background:var(--bg-2)}
+html[data-theme="dark"] .modal,
+html[data-theme="dark"] .modal-box{background:var(--panel);border-color:var(--border);color:var(--fg)}
+html[data-theme="dark"] .modal-mask{background:rgba(0,0,0,.62)}
+html[data-theme="dark"] .alert.info{background:var(--info-bg);color:var(--info);border-color:rgba(147,180,253,.28)}
+html[data-theme="dark"] .alert.ok{background:var(--ok-bg);color:var(--ok)}
+html[data-theme="dark"] .alert.danger{background:var(--danger-bg);color:var(--danger)}
+html[data-theme="dark"] .alert.warn{background:var(--warn-bg);color:var(--warn)}
+html[data-theme="dark"] .badge-purple{background:rgba(168,85,247,.18);color:#d8b4fe}
+html[data-theme="dark"] .toast{background:var(--panel);color:var(--fg);border-color:var(--border)}
+html[data-theme="dark"] .stat,
+html[data-theme="dark"] .table-wrap,
+html[data-theme="dark"] .field input,
+html[data-theme="dark"] .field select,
+html[data-theme="dark"] .field textarea{background:var(--bg-2);border-color:var(--border-2);color:var(--fg)}
+html[data-theme="dark"] .btn-secondary{background:var(--bg-3);color:var(--fg);border-color:var(--border-2)}
+html[data-theme="dark"] .btn-secondary:hover{background:var(--bg-2);border-color:var(--border-2)}
+html[data-theme="dark"] .tab-strip button{background:var(--bg-2);color:var(--fg-2);border-color:var(--border)}
+html[data-theme="dark"] .tab-strip button.on{background:var(--accent);color:#fff;border-color:transparent}
+html[data-theme="dark"] .chip{background:var(--bg-2);border-color:var(--border);color:var(--fg-2)}
+html[data-theme="dark"] .pager button{background:var(--bg-2);border-color:var(--border);color:var(--fg-2)}
+html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+html[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator{filter:invert(.8)}
 
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -486,6 +521,14 @@ tbody tr.sel{background:var(--tint-2)}
 .hwv-subj h4::before{content:'';width:3px;height:13px;border-radius:2px;background:linear-gradient(180deg,var(--grad-a),var(--grad-b))}
 .hwv-subj ul{margin:0;padding-left:20px;font-size:.84rem;line-height:1.72}
 .hwv-subj li{word-break:break-word}
+
+/* v3.5.14 #7：字段拖动排序把手 */
+.ff-drag{width:30px;text-align:center}
+.ff-grip{display:inline-block;cursor:grab;color:var(--fg-3);font-size:1rem;line-height:1;
+  padding:4px 5px;border-radius:6px;user-select:none;touch-action:none}
+.ff-grip:hover{background:var(--bg-2);color:var(--fg)}
+tr.dragging{opacity:.65;background:var(--bg-2)}
+tr.dragging .ff-grip{cursor:grabbing}
 
 /* ---- v3.5.12 行为日志：按人合并的分组行（可点展开） ---- */
 .al-wrap{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
@@ -930,7 +973,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.13';
+var SITE_VERSION = '3.5.14';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -5371,7 +5414,7 @@ function renderCards(){
     + '</div>'
     + '<div class="panel-body">'
     /* —— 来源开关（v3.5.9）：站主要求「改为展示 API 拉取内容」，这里一刀切全站 —— */
-    +   '<div style="margin-bottom:16px;padding:14px;border:1px solid #eee3d8;border-radius:12px;background:#fffdfa">'
+    +   '<div style="margin-bottom:16px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg-2)">'
     +     '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +       '<b style="font-size:.9rem">内容来源</b>'
     +       '<span class="muted" style="font-size:.76rem">改完点「保存来源」，全站立即生效</span>'
@@ -5720,7 +5763,7 @@ function paintSchedule(){
   }).join('');
 
   host.innerHTML =
-    '<div style="padding:14px;border:1px solid #eee3d8;border-radius:12px;background:#fffdfa">'
+    '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg-2)">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +   '<b style="font-size:.9rem">轮换设置</b>'
     +   '<span class="muted" style="font-size:.76rem">只影响本地库；联网模式下不生效</span>'
@@ -6825,7 +6868,9 @@ function paintFieldPanel(list){
       ? '<span class="badge badge-blue" title="' + attr(rd) + '">' + esc(rd) + '</span>'
       : '<span class="muted">未设置</span>';
 
-    return '<tr>'
+    return '<tr data-ff-row="' + attr(f.field) + '">'
+      /* v3.5.14 #7：拖这个把手调整顺序（原来要点「排序」手输数字） */
+      + '<td class="ff-drag"><span class="ff-grip" title="按住拖动调整顺序">⠿</span></td>'
       + '<td><b>' + esc(f.label) + '</b>'
       +   '<div class="mono muted" style="font-size:.72rem">' + esc(f.field) + '</div></td>'
       + '<td class="nowrap">' + visBadge + '</td>'
@@ -6837,10 +6882,10 @@ function paintFieldPanel(list){
       + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
       +   '<button data-fe="rule" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '" data-fr="' + attr(JSON.stringify(f.rules || {})) + '">规则</button>'
       +   '<button data-fe="rename" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '">改名</button>'
-      +   '<button data-fe="sort" data-ff="' + attr(f.field) + '" data-fs="' + (f.sortOrder || 0) + '">排序</button>'
-      +   (f.isCustom
-          ? '<button class="danger" data-fe="del" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '">删除</button>'
-          : '<button disabled title="系统字段不可删除（删了会带崩代码），只能改名称与可见性">删除</button>')
+      /* v3.5.14 #7：系统字段也允许删（姓名/学号由后端硬保护）。
+         非自定义字段删除时前端会要求手输字段名确认。 */
+      +   '<button class="danger" data-fe="del" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '"'
+      +     (f.isCustom ? '' : ' data-force="1"') + '>删除</button>'
       + '</div></td>'
       + '</tr>';
   }).join('');
@@ -6860,8 +6905,9 @@ function paintFieldPanel(list){
     +   '本人也可以在个人中心把联系方式收窄为「仅自己可见」。'
     + '</div>'
     + '<div class="table-wrap" style="margin-top:12px"><table><thead><tr>'
+    + '<th class="nowrap" title="按住把手上下拖动即可调整顺序">拖动</th>'
     + '<th>字段</th><th class="nowrap">可见性</th><th class="nowrap">快捷切换</th>'
-    + '<th class="nowrap">排序</th><th class="nowrap">已填</th><th class="nowrap">校验规则</th><th class="nowrap">类型</th>'
+    + '<th class="nowrap">已填</th><th class="nowrap">校验规则</th><th class="nowrap">类型</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 
@@ -6882,9 +6928,55 @@ function paintFieldPanel(list){
     var f = b.dataset.ff;
     if(b.dataset.fe === 'rule')   b.onclick = function(){ rulesFieldDialog(f, b.dataset.fl, JSON.parse(b.dataset.fr || '{}')); };
     if(b.dataset.fe === 'rename') b.onclick = function(){ renameFieldDialog(f, b.dataset.fl); };
-    if(b.dataset.fe === 'sort')   b.onclick = function(){ sortFieldDialog(f, Number(b.dataset.fs || 0)); };
-    if(b.dataset.fe === 'del')    b.onclick = function(){ deleteFieldConfirm(f, b.dataset.fl); };
+    if(b.dataset.fe === 'del')    b.onclick = function(){ deleteFieldConfirm(f, b.dataset.fl, b.dataset.force === '1'); };
   });
+
+  /* v3.5.14 #7：字段拖拽排序（后台这版不依赖主站的动效开关，精简实现） */
+  var tbody = body.querySelector('tbody');
+  if(tbody) attachFieldDrag(tbody);
+}
+
+/** 后台字段表拖拽：按住把手上下拖，松手批量保存一次 */
+function attachFieldDrag(tbody){
+  var st = null;
+  function rowsNow(){ return Array.prototype.slice.call(tbody.querySelectorAll('tr[data-ff-row]')); }
+  tbody.addEventListener('pointerdown', function(e){
+    var g = e.target.closest && e.target.closest('.ff-grip');
+    if(!g) return;
+    var row = g.closest('tr[data-ff-row]');
+    if(!row) return;
+    e.preventDefault();
+    st = { row: row, pid: e.pointerId };
+    row.classList.add('dragging');
+    try{ g.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  tbody.addEventListener('pointermove', function(e){
+    if(!st || e.pointerId !== st.pid) return;
+    if(e.cancelable) e.preventDefault();
+    var rows = rowsNow();
+    if(rows.length < 2) return;
+    var cur = rows.indexOf(st.row);
+    var target = cur;
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i].getBoundingClientRect();
+      if(e.clientY < r.top + r.height / 2){ target = i; break; }
+      target = i;
+    }
+    if(target === cur) return;
+    if(target > cur) tbody.insertBefore(st.row, rows[target].nextSibling);
+    else tbody.insertBefore(st.row, rows[target]);
+  });
+  function finish(e){
+    if(!st) return;
+    st.row.classList.remove('dragging');
+    st = null;
+    var order = rowsNow().map(function(r){ return r.getAttribute('data-ff-row'); });
+    api('/admin?action=reorder-fields', { method:'POST', body:{ fields: order } })
+      .then(function(j){ toast(j.message || '排序已保存', 'ok'); renderFieldPanel(); })
+      .catch(function(err){ toast(err.message || String(err), 'danger'); renderFieldPanel(); });
+  }
+  tbody.addEventListener('pointerup', finish);
+  tbody.addEventListener('pointercancel', finish);
 }
 
 /** 新增自定义字段弹窗。
@@ -7005,25 +7097,52 @@ function renameFieldDialog(field, curLabel){
 }
 
 /** 改字段排序 */
-function sortFieldDialog(field, cur){
-  var v = prompt('「' + field + '」的排序值（小的在前，例如 10 / 20 / 100）：', String(cur || 100));
-  if(v == null) return;
-  var n = Number(v);
-  if(!isFinite(n)) return toast('请填数字', 'danger');
-  api('/admin?action=update-field', { method:'POST', body:{ field:field, sortOrder:n } })
-    .then(function(){ toast('已调整排序'); renderFieldPanel(); loadMembers(); })
-    .catch(function(e){ toast(e.message, 'danger'); });
-}
-
 /** 删字段：危险操作，二次确认 + 说明后果 */
-function deleteFieldConfirm(field, label){
-  if(!confirm('删除字段「' + (label || field) + '」？\n\n'
-    + '· 全班同学这个人资料里的该字段值都会被一起删掉，无法恢复。\n'
-    + '· 如果只是不想让大家看到，建议改成「仅本人」，而不是删除。\n\n'
-    + '确定要删除吗？')) return;
-  api('/admin?action=delete-field', { method:'POST', body:{ field:field } })
-    .then(function(j){ toast(j.message || '已删除'); renderFieldPanel(); loadMembers(); })
-    .catch(function(e){ toast(e.message, 'danger'); });
+function deleteFieldConfirm(field, label, isSystem){
+  /* v3.5.14 #7：自定义字段一次确认；系统预置字段要手输字段名才解锁 ——
+     删预置字段会把全班该列的数据一起删掉，误点代价太大。 */
+  var nm = label || field;
+  if(!isSystem){
+    confirmBox({
+      title: '删除字段「' + nm + '」',
+      html: '全班每位同学这个字段的值都会一起删掉，<b>无法恢复</b>。',
+      detail: '如果只是不想让大家看到，建议改成「仅本人」或「仅管理员」，而不是删除。',
+      okText: '确认删除',
+      danger: true,
+    }).then(function(yes){
+      if(!yes) return;
+      api('/admin?action=delete-field', { method:'POST', body:{ field:field } })
+        .then(function(j){ toast(j.message || '已删除', 'ok'); renderFieldPanel(); loadMembers(); })
+        .catch(function(e){ toast(e.message, 'danger'); });
+    });
+    return;
+  }
+  openModal({
+    title: '删除系统预置字段',
+    sub: '「' + nm + '」（' + field + '）',
+    body: '<div class="alert danger" style="margin:0 0 12px">'
+      +   '这是站点预置字段，删除后：全班该字段的值全部消失且不可恢复；'
+      +   '如果有页面 / 导入模版还在引用它，可能出现报错。'
+      +   '<br>「姓名」「学号」是身份主键，系统不允许删除。'
+      + '</div>'
+      + '<div class="field"><label>确认请输入字段名 <b class="mono">' + esc(field) + '</b></label>'
+      +   '<input id="ffDelConfirm" autocomplete="off" placeholder="' + attr(field) + '"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn btn-danger" data-yes disabled>确认删除</button>',
+    onMount: function(box){
+      var inp = box.querySelector('#ffDelConfirm');
+      var yes = box.querySelector('[data-yes]');
+      box.querySelector('[data-no]').onclick = closeModal;
+      inp.oninput = function(){ yes.disabled = (inp.value.trim() !== field); };
+      yes.onclick = function(){
+        yes.disabled = true; yes.textContent = '删除中…';
+        api('/admin?action=delete-field', { method:'POST', body:{ field:field, force:true } })
+          .then(function(j){ closeModal(); toast(j.message || '已删除', 'ok'); renderFieldPanel(); loadMembers(); })
+          .catch(function(e){ yes.disabled = false; yes.textContent = '确认删除'; toast(e.message, 'danger'); });
+      };
+      inp.focus();
+    }
+  });
 }
 
 /**
@@ -10102,6 +10221,24 @@ function relSeed(){
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
     {
+      "version": "3.5.14",
+      "date": "2026-10-18",
+      "title": "首页顺序与排序同步 · 投票点赞即投 · 成绩口径统一 · 无感刷新",
+      "items": [
+        "每日一言默认放到班级签上面；学习卡片不再漂到页面最顶上（老配置自动迁移）",
+        "修好自定义排序存不上云：以前每 60 秒会被云端旧值覆盖一次，现在按内容比较，真正有变化才同步",
+        "投票改为每个选项一个👍，点一下即投票、再点取消，不再需要「提交投票」按钮",
+        "每场投票每人 1 次撤回重投（多选撤回即全部撤回）；后台可设最多选几项、至少选几项（留空=不限）与可撤回次数",
+        "年级排名进退步统一按「本次 vs 最近一次有年级排名的考试」；本次没导入排名会说明原因，不再拿更早的考试冒充本次",
+        "趋势图都标上了考试时间，并注明共几次、其中几次含年级排名",
+        "手机端「年级排名 / 联考排名」不再遮挡：长标签拆两行、窄屏单列",
+        "自动刷新不再把正在看的列表打回顶部（成绩表、公告、热力图等都会保持位置）",
+        "字段管理：所有字段都能删（姓名/学号保留），系统字段删除要手输字段名；排序改成拖动",
+        "后台暗色模式适配（首页卡片设置面板等不再白底）",
+        "版本号 3.5.14，缓存 v109"
+      ]
+    },
+    {
       "version": "3.5.13",
       "date": "2026-10-17",
       "title": "投票公示模版 · 后台点歌管理 · 投票 500 热修 · 成绩对比 AI 分析单场也有",
@@ -11119,6 +11256,9 @@ function voPaint(){
       +       st.text
       +       (v.deadline ? ' · 截止 ' + esc(voTimeText(v.deadline)) : '')
       +       (v.multi ? ' · 多选' : ' · 单选')
+      +       (v.maxChoices ? ' · 最多 ' + v.maxChoices + ' 项' : '')
+      +       (v.minChoices ? ' · 至少 ' + v.minChoices + ' 项' : '')
+      +       (v.retractLimit > 0 ? ' · 可撤回 ' + v.retractLimit + ' 次' : ' · 不可撤回')
       +       (v.allowAdd ? ' · 允许同学加选项' : '')
       +       (v.results ? ' · ' + (v.voters || total) + ' 人参与' : '')
       +     '</div>'
@@ -11457,7 +11597,22 @@ function voEditorDialog(v){
       + '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.86rem;margin-bottom:8px">'
       +   '<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voMulti"' + (v && v.multi ? ' checked' : '') + '> 允许多选</label>'
       +   '<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voAllowAdd"' + (v && v.allowAdd ? ' checked' : '') + '> 允许同学自己加选项</label>'
-      + '</div>',
+      + '</div>'
+      /* v3.5.14 #9：票数配额 + 撤回次数 */
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">'
+      +   '<div class="field" style="flex:1;min-width:130px"><label>最多选几项</label>'
+      +     '<input id="voMaxChoices" type="number" min="1" max="30" inputmode="numeric" placeholder="留空 = 不限" value="'
+      +     attr(v && v.maxChoices != null ? String(v.maxChoices) : '') + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:130px"><label>至少选几项</label>'
+      +     '<input id="voMinChoices" type="number" min="1" max="30" inputmode="numeric" placeholder="留空 = 不限" value="'
+      +     attr(v && v.minChoices != null ? String(v.minChoices) : '') + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:130px"><label>可撤回次数</label>'
+      +     '<input id="voRetractLimit" type="number" min="0" max="5" inputmode="numeric" placeholder="默认 1；0 = 不允许" value="'
+      +     attr(v && v.retractLimit != null ? String(v.retractLimit) : '1') + '"></div>'
+      + '</div>'
+      + '<p class="muted" style="font-size:.76rem;margin:-2px 0 10px">'
+      +   '点赞即投，不再需要提交按钮。多选时「最多选」限制一次能点几项，「至少选」只是提示同学还差几项；两个留空都代表不限。'
+      + '</p>',
     foot: '<button class="btn btn-ghost" data-no>取消</button>'
         + '<button class="btn" data-yes>' + (isNew ? '创建' : '保存') + '</button>',
     onMount: function(box){
@@ -11501,6 +11656,10 @@ function voEditorDialog(v){
       /* v3.5.12 #10：提出人（留空后端记成操作人自己） */
       proposer: String((document.getElementById('voProposer') || {}).value || '').trim(),
       deadline: dl ? new Date(dl).toISOString() : null,
+      /* v3.5.14 #9：票数配额与撤回次数（留空 = 不限） */
+      maxChoices: String((document.getElementById('voMaxChoices') || {}).value || '').trim() || null,
+      minChoices: String((document.getElementById('voMinChoices') || {}).value || '').trim() || null,
+      retractLimit: String((document.getElementById('voRetractLimit') || {}).value || '').trim(),
     };
     if(!isNew) payload.voteId = v.id;
     var btn = document.querySelector('#modalBox [data-yes]');

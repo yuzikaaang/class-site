@@ -4118,7 +4118,8 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   t('后台有 renderFieldPanel', /function renderFieldPanel/.test(adminHtmlSrc));
   t('后台有新增字段弹窗', /function addFieldDialog/.test(adminHtmlSrc));
   t('后台有删除字段确认', /function deleteFieldConfirm/.test(adminHtmlSrc));
-  t('后台有改名/排序', /function renameFieldDialog/.test(adminHtmlSrc) && /function sortFieldDialog/.test(adminHtmlSrc));
+  t('后台有改名/拖拽排序', /function renameFieldDialog/.test(adminHtmlSrc) && /function attachFieldDrag/.test(adminHtmlSrc)
+    && !/function sortFieldDialog/.test(adminHtmlSrc));
   t('★后台字段管理支持快捷切换可见性', /data-fv="/.test(adminHtmlSrc));
   t('★后台资料列表支持动态列', /function extraColsOf/.test(adminHtmlSrc));
   t('后台编辑弹窗渲染自定义字段输入框', /data-xf="/.test(adminHtmlSrc));
@@ -4188,7 +4189,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
 {
   /* ---- A. 源码层：确认不再是无条件取严，且判据是显式锁标记 ---- */
   const profSrc39 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
-  const admSrc39raw = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const ADMJS_SRC39raw = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
   const canSeeBody = profSrc39.slice(profSrc39.indexOf('function canSee'),
                                      profSrc39.indexOf('function canSee') + 2200);
   /* 🔴 v2.4.1 血的教训：buildFieldVis 的白名单必须来自 loadFieldMeta()，
@@ -4196,7 +4197,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
      而 wechat / qq / phone 恰在其中，于是站主给某人设的微信例外被静默丢弃，
      表现为「点了保存但对方还是看不到」，极难排查。 */
   t('★fieldVis 白名单用 loadFieldMeta（不能滤掉 wechat/qq/phone）',
-    /buildFieldVis\(b\.fieldVis,\s*allMeta\.map\(/.test(admSrc39raw));
+    /buildFieldVis\(b\.fieldVis,\s*allMeta\.map\(/.test(ADMJS_SRC39raw));
   t('★canSee 已不再对 field_vis 取严',
     !/stricter\s*\(\s*eff\s*,\s*f\s*\)/.test(canSeeBody));
   /* 判据必须是**显式锁定标记**，不能是「visibility 和出厂值比对」——
@@ -4205,21 +4206,21 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
   t('★已彻底删除 FACTORY_VIS 比对法（profile.js）',
     !/FACTORY_VIS/.test(profSrc39));
   t('★已彻底删除 FACTORY_VIS 比对法（admin.js）',
-    !/FACTORY_VIS/.test(admSrc39raw));
+    !/FACTORY_VIS/.test(ADMJS_SRC39raw));
   t('★canSee 用 visLocked 判据决定是否忽略同学意愿',
     /m\.visLocked/.test(canSeeBody) && /eff\s*=\s*group/.test(canSeeBody));
   t('★loadMeta 输出 visLocked 标记', /visLocked\s*:/.test(profSrc39));
   t('★profile.js 把 is_custom 也视为天然已锁定',
     /visLocked\s*:\s*!!r\.vis_locked\s*\|\|\s*!!r\.is_custom/.test(profSrc39));
   t('★admin.js loadFieldMeta 读 vis_locked 并输出 adminSet',
-    /vis_locked/.test(admSrc39raw) && /adminSet\s*:/.test(admSrc39raw));
+    /vis_locked/.test(ADMJS_SRC39raw) && /adminSet\s*:/.test(ADMJS_SRC39raw));
   t('★setVisibility 写入 vis_locked = true',
-    /set visibility = \$\{vis\}, vis_locked = true/.test(admSrc39raw));
+    /set visibility = \$\{vis\}, vis_locked = true/.test(ADMJS_SRC39raw));
   t('★addField 建自定义字段时 vis_locked 默认 true（insert 带 rules 列）',
-    /is_custom, vis_locked, rules\)[\s\S]{0,160}true, true,/.test(admSrc39raw));
-  t('★updateField 改 visibility 时置 vis_locked = true', /const lockIt = visibility != null/.test(admSrc39raw));
+    /is_custom, vis_locked, rules\)[\s\S]{0,160}true, true,/.test(ADMJS_SRC39raw));
+  t('★updateField 改 visibility 时置 vis_locked = true', /const lockIt = visibility != null/.test(ADMJS_SRC39raw));
   t('★updateField 只改 label/sort 时不误锁（保住同学隐私）',
-    /vis_locked = \$\{lockIt \? true/.test(admSrc39raw));
+    /vis_locked = \$\{lockIt \? true/.test(ADMJS_SRC39raw));
   /* schema 与 ensureSchema 都要有这一列（老库升级靠补列语句） */
   const schemaSrc39 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
   t('★schema.sql 的 profile_field_meta 含 vis_locked 列',
@@ -7112,7 +7113,8 @@ console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
     'scPkSubjAvg', 'scPkPick', 'scPkSwap', 'scDateRange', 'shortName',
     'scRenderPk', 'scPkExam2', 'scPkTrendCard', 'scPkTotalCard', 'scPkSubjCard', 'scPkCards',
     'scPkBothTotalCard',   /* v3.5.12 #8：两场总分并列卡 */
-    'scPkAiData', 'scPkAiCard'];   /* v3.5.13 #8：AI 对比分析抽到顶层（单场也要有） */
+    'scPkAiData', 'scPkAiCard',   /* v3.5.13 #8：AI 对比分析抽到顶层（单场也要有） */
+    'scRankPair', 'scNoRankNotice', 'scExamAnchorIdx', 'scPointDateLabel'];   /* v3.5.14 #4/#5 */
   const missing = names.filter((n) => !fnBody(n));
   t('★PK 依赖函数全部可提取（真值表前提）', missing.length === 0,
     missing.join(',') || '齐全');
@@ -7825,8 +7827,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.7',
-    /const SCHEMA_VER = '3\.5\.7'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.8',
+    /const SCHEMA_VER = '3\.5\.8'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -7864,7 +7866,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
      纪律同 v3.5.1 / v3.5.4：DDL 两路径（老库升级 + 全新库全量）都要有、
      schema.sql 同步、SCHEMA_VER 升格；规则引擎收敛在 _lib/field-rules.js。 ---- */
   const frSrc = fs.readFileSync(new URL('./api/_lib/field-rules.js', import.meta.url), 'utf8');
-  const admSrc355 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const ADMJS_SRC355 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
   const profSrc355 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
   const schemaSrc355 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
   const idxSrc355 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
@@ -7898,17 +7900,17 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
      validateProfileFields 定义 + upsertProfileCore + batchProfiles 两处调用 /
      grandfather 与现值一致的字段跳过校验。 */
   t('★admin.js loadFieldMeta 输出 normalizeRules 收敛后的 rules',
-    /rules: normalizeRules\(r\.rules\)/.test(admSrc355));
+    /rules: normalizeRules\(r\.rules\)/.test(ADMJS_SRC355));
   t('★admin.js addField 建字段时带上 rules 列',
-    /insert into profile_field_meta \(field, label, visibility, sort_order, is_custom, vis_locked, rules\)/.test(admSrc355)
-    && /true, true, \$\{JSON\.stringify\(rules\)\}::jsonb/.test(admSrc355));
+    /insert into profile_field_meta \(field, label, visibility, sort_order, is_custom, vis_locked, rules\)/.test(ADMJS_SRC355)
+    && /true, true, \$\{JSON\.stringify\(rules\)\}::jsonb/.test(ADMJS_SRC355));
   t('★admin.js updateField 条件更新 rules（不传不清空，v3.5.5 自修 bug 护栏）',
-    /rules\s+= case when \$\{rules != null\}::boolean/.test(admSrc355));
+    /rules\s+= case when \$\{rules != null\}::boolean/.test(ADMJS_SRC355));
   t('★admin.js validateProfileFields 定义且被 upsertProfileCore / batchProfiles 调用',
-    /function validateProfileFields\(vals, meta\)/.test(admSrc355)
-    && (admSrc355.match(/validateProfileFields\(/g) || []).length >= 3);
+    /function validateProfileFields\(vals, meta\)/.test(ADMJS_SRC355)
+    && (ADMJS_SRC355.match(/validateProfileFields\(/g) || []).length >= 3);
   t('★admin.js grandfather：与库中现值一致的字段跳过规则校验',
-    /delete ruleVals\[k\]/.test(admSrc355));
+    /delete ruleVals\[k\]/.test(ADMJS_SRC355));
   /* profile.js 学生端 submit：联系方式按规则复核 + grandfather（只改值才校）。 */
   t('★profile.js submit 接线规则复核（import + loadMeta + validateByRules）',
     /import \{ normalizeRules, validateByRules \} from '\.\/_lib\/field-rules\.js';/.test(profSrc355)
@@ -7938,32 +7940,32 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     /class-site-v\d+/.test(swSrc) && /SITE_VER = '3\.[0-9]+\.[0-9]+'/.test(swSrc));
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
-  const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★后台更新记录有 2.10.1 条目', /"version": "2\.10\.1"/.test(admSrc));
-  t('★后台更新记录仍保留 2.10.0 条目', /"version": "2\.10\.0"/.test(admSrc));
+  const ADMJS_SRC = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('★后台更新记录有 2.10.1 条目', /"version": "2\.10\.1"/.test(ADMJS_SRC));
+  t('★后台更新记录仍保留 2.10.0 条目', /"version": "2\.10\.0"/.test(ADMJS_SRC));
 }
 
 console.log('\n【71】第六十二轮·后台内容时间不再多算 8 小时（v2.10.1）');
 {
-  const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const ADMJS_SRC = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ---- ① 静态结构 ---- */
-  t('★新增 fmtWall（墙钟时间，不碰时区）', /function fmtWall\(v, mode\)\{/.test(admSrc));
-  t('★新增 fmtRecTime：按 timeKind 分派 db / wall', /function fmtRecTime\(c\)\{/.test(admSrc));
+  t('★新增 fmtWall（墙钟时间，不碰时区）', /function fmtWall\(v, mode\)\{/.test(ADMJS_SRC));
+  t('★新增 fmtRecTime：按 timeKind 分派 db / wall', /function fmtRecTime\(c\)\{/.test(ADMJS_SRC));
   t('★fmtWall 注释写明「不再补 Z 按 UTC 解析」的根因',
-    /补 Z 按 UTC 解析/.test(admSrc) && /多加 8 小时/.test(admSrc));
+    /补 Z 按 UTC 解析/.test(ADMJS_SRC) && /多加 8 小时/.test(ADMJS_SRC));
   t('★公告记录标注 timeKind（createdAt/updatedAt 才是 db）',
-    /timeKind: \(a\.createdAt \|\| a\.updatedAt\) \? 'db' : 'wall'/.test(admSrc));
+    /timeKind: \(a\.createdAt \|\| a\.updatedAt\) \? 'db' : 'wall'/.test(ADMJS_SRC));
   t('★作业记录标注 timeKind（updatedAt 才是 db）',
-    /timeKind: \(!c\.updatedAt && t\) \? 'wall' : 'db'/.test(admSrc));
+    /timeKind: \(!c\.updatedAt && t\) \? 'wall' : 'db'/.test(ADMJS_SRC));
   t('★列表与详情都改用 fmtRecTime',
-    (admSrc.match(/fmtRecTime\(c\)/g) || []).length >= 2);
+    (ADMJS_SRC.match(/fmtRecTime\(c\)/g) || []).length >= 2);
 
   /* ---- ② 行为测试：把函数抽出来真跑一遍 ----
      fmtWall 不依赖 DOM，可直接 eval 出来验；fmt 用桩替换，
      这样能确证「db 走 fmt、wall 走 fmtWall」的分派是真的。 */
   const pick = (name) => {
-    const m = admSrc.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}'));
+    const m = ADMJS_SRC.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}'));
     if (!m) throw new Error('抽不到函数：' + name);
     return m[0];
   };
@@ -7998,28 +8000,28 @@ console.log('\n【71】第六十二轮·后台内容时间不再多算 8 小时�
 
 console.log('\n【72】第六十二轮·成绩模版导入（两行表头按列解析，v2.10.1）');
 {
-  const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const ADMJS_SRC = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ---- ① 静态护栏 ---- */
   ['scTemplateXlsx', 'scParseTwoRow', 'scFillMerged', 'scIsTwoRowHeader', 'scSubKind', 'scRowTotal', 'scClassRanks']
-    .forEach((fn) => t('★新增函数 ' + fn, new RegExp('function ' + fn + '\\(').test(admSrc)));
+    .forEach((fn) => t('★新增函数 ' + fn, new RegExp('function ' + fn + '\\(').test(ADMJS_SRC)));
   t('★scParseAOA 检测两行表头后转走模版解析',
-    /scIsTwoRowHeader\(aoa\[0\] \|\| \[\], aoa\[1\] \|\| \[\]\)\) return scParseTwoRow/.test(admSrc));
-  t('★导入弹窗有「下载模版」按钮', /id="scTpl"/.test(admSrc) && /scTemplateXlsx\(e\)/.test(admSrc));
-  t('★导出模版带合并单元格（!merges）', /ws\['!merges'\]\s*=\s*merges/.test(admSrc));
+    /scIsTwoRowHeader\(aoa\[0\] \|\| \[\], aoa\[1\] \|\| \[\]\)\) return scParseTwoRow/.test(ADMJS_SRC));
+  t('★导入弹窗有「下载模版」按钮', /id="scTpl"/.test(ADMJS_SRC) && /scTemplateXlsx\(e\)/.test(ADMJS_SRC));
+  t('★导出模版带合并单元格（!merges）', /ws\['!merges'\]\s*=\s*merges/.test(ADMJS_SRC));
   t('★模版含两组总分（赋分前 / 赋分后），各带年级 + 联考排名',
-    /group\('总分（赋分前）', \['年级排名', '联考排名'\]\)/.test(admSrc)
-    && /group\('总分（赋分后）', \['年级排名', '联考排名'\]\)/.test(admSrc));
+    /group\('总分（赋分前）', \['年级排名', '联考排名'\]\)/.test(ADMJS_SRC)
+    && /group\('总分（赋分后）', \['年级排名', '联考排名'\]\)/.test(ADMJS_SRC));
   t('★赋分科目生成四列（原始分/排名/赋分/排名）',
-    /\['原始分', '年级排名', '赋分', '年级排名'\]/.test(admSrc)
-    && /: \['分数', '年级排名'\]/.test(admSrc));
-  t('★预览加「班排」列并说明当场计算', /<th>班排<\/th>/.test(admSrc) && /班排与总分是<b>当场按各科分数算的<\/b>/.test(admSrc));
+    /\['原始分', '年级排名', '赋分', '年级排名'\]/.test(ADMJS_SRC)
+    && /: \['分数', '年级排名'\]/.test(ADMJS_SRC));
+  t('★预览加「班排」列并说明当场计算', /<th>班排<\/th>/.test(ADMJS_SRC) && /班排与总分是<b>当场按各科分数算的<\/b>/.test(ADMJS_SRC));
 
   /* ---- ② 行为测试：抽函数真跑一遍模版解析 ----
      AOA 完全照样主模版的形状造：第 1 行大类（合并 → 续格读出来是空）、
      第 2 行子字段。这样能验「合并填充 + 按列取数」是真的работает。 */
   const pick = (name) => {
-    const m = admSrc.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}'));
+    const m = ADMJS_SRC.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}'));
     if (!m) throw new Error('抽不到函数：' + name);
     return m[0];
   };
@@ -8179,11 +8181,11 @@ console.log('\n【73】第六十二轮·需求⑬ 管理员批量删除云端数
     left.length === 1 && left[0] === 'cls_theme', JSON.stringify(left));
 
   /* ---- ④ 前端静态护栏 ---- */
-  const admSrc = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const ADMJS_SRC = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const adminSrc = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
-  t('★后台用户详情有「清空全部」按钮', /id="udDelAll"/.test(admSrc));
+  t('★后台用户详情有「清空全部」按钮', /id="udDelAll"/.test(ADMJS_SRC));
   t('★清空按钮走 all:true 且二次确认',
-    /userId: id, all: true/.test(admSrc) && /confirmBox\(\{\s*title: '清空全部云端数据'/.test(admSrc));
+    /userId: id, all: true/.test(ADMJS_SRC) && /confirmBox\(\{\s*title: '清空全部云端数据'/.test(ADMJS_SRC));
   t('★后端 delete-data 支持 all 分支并回传删除条数',
     /const all = !!b\.all/.test(adminSrc) && /delete from user_data where user_id = \$\{userId\} returning data_key/.test(adminSrc));
   t('★批量删除写审计（与单条区分 delete_all）',
@@ -9879,8 +9881,8 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   /* ---- #10 投票：点击必须有反应，且写明提出人与日期 ---- */
   t('#10 提交按钮先置「提交中…」再禁用（不再静默）',
     /voteMsg\(vid, '提交中…'\)/.test(idx) && /btn\.disabled = true/.test(idx));
-  t('#10 失败必报错并恢复按钮（可以再点一次）',
-    /可以再点一次提交重试/.test(idx) && /b\.disabled = false/.test(idx));
+  t('#10 失败必报错并恢复（v3.5.14 起点赞即投，撤回当前状态）',
+    /voteMsg\(vid, '❌ ' \+ \(e\.message/.test(idx) && /VOTE\.busy = false/.test(idx));
   t('#10 请求中不重复提交（VOTE.busy 闸门）',
     /if\(VOTE\.busy\) return;/.test(idx));
   t('#10 点击加载中不再重复拉取（voteEnsureMounted 加 loading 闸）',
@@ -9893,6 +9895,61 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /alter table class_votes add column if not exists proposer/.test(http2));
   t('#10 后台投票面板也能填提出人',
     /id="voProposer"/.test(adm) && /function voTodayStr\(/.test(adm));
+
+  const ADMJS_SRC = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  /* ============================================================
+     【92】第八十一轮 · v3.5.14 九项需求
+     ============================================================ */
+  t('#1 默认首页顺序：每日一言在班级签上面', /home: \['ann','quote','sign','daily','study','countdown'\]/.test(idx));
+  t('#1 HOME_BLOCKS 含 studyCard（不再漂到最前）', /study:'studyCard'/.test(idx));
+  t('#1 老配置 v2→v3 迁移把 quote 插到 sign 前', /\(o\.v \|\| 1\) < 3/.test(idx) && /h3\.indexOf\('quote'\)/.test(idx));
+  t('#1 排序面板有「每日一言」中文名', /quote:'每日一言'/.test(idx) && /study:'学习卡片'/.test(idx));
+
+  t('#2 云端比较改语义比较（不再字符串全等）',
+    /function stableStringify\(/.test(idx) && /function sameCloudValue\(/.test(idx) && !/if\(cur === raw\) return;/.test(idx));
+  t('#2 排序改动立即进脏推队列', /hookLocalStorage/.test(idx) && /markCloudDirty\(/.test(idx));
+  t('#2 cls_ui_cfg 前后端白名单双向放行',
+    /'cls_ui_cfg'/.test(idx) && /'cls_ui_cfg'/.test(fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf8')));
+
+  t('#3 概览格子最小宽度 0（可收缩）', /\.sc-ov-item\{[^}]*min-width:0/.test(idx));
+  t('#3 长标签省略号兜底', /\.sc-ov-item span\{[^}]*text-overflow:ellipsis/.test(idx));
+  t('#3 窄屏 430 以下单列', /@media \(max-width:430px\)\{[\s\S]{0,120}\.sc-ov-items\{grid-template-columns:1fr\}/.test(idx));
+  t('#3 年级排名用副标签「物理方向」', /scOvItem\('年级排名'/.test(idx) && /'物理方向'\)/.test(idx));
+
+  t('#4 迷你折线标考试日期', /sc-mini-x/.test(idx) && /x\.date \? scPointDateLabel/.test(idx));
+  t('#4 年级排名图 x 轴两行（考试名 + 日期）',
+    /scPointDateLabel\(p\.date\)/.test(idx) && /H - 14/.test(idx) && /H - 3/.test(idx));
+
+  t('#5 统一口径函数 scRankPair 存在', /function scRankPair\(/.test(idx));
+  t('#5 三处以上调用 scRankPair（画像/对比/各科）', (idx.match(/scRankPair\(/g) || []).length >= 3);
+  t('#5 缺排名统一说明 scNoRankNotice', /function scNoRankNotice\(/.test(idx) && /无法判断年级进退步/.test(idx));
+  t('#5 本次无排名不再冒充「最近一次」', !/var last = pts\[pts\.length - 1\];/.test(idx));
+  t('#5 趋势图说明「只画含年级排名的几次」', /趋势图只画含年级排名的/.test(idx));
+
+  t('#6 滚动快照/恢复三件套', /function snapScroll\(/.test(idx) && /function restoreScroll\(/.test(idx) && /function withScrollPreserve\(/.test(idx));
+  t('#6 rerenderAll 走滚动保护', /function rerenderAll\(opts\)\{[\s\S]{0,120}withScrollPreserve/.test(idx));
+  t('#6 至少 6 个容器标了 data-scroll-keep', (idx.match(/data-scroll-keep/g) || []).length >= 6);
+  t('#6 双 requestAnimationFrame 等布局稳定', /requestAnimationFrame\(function\(\)\{\s*requestAnimationFrame/.test(idx));
+
+  t('#7 字段表有拖拽把手与拖拽实现', /attachFieldDrag\(/.test(adm) && /ff-grip/.test(adm));
+  t('#7 删除按钮不再对系统字段 disabled', !/disabled title="系统字段不可删除/.test(adm));
+  t('#7 系统字段删除要手输字段名', /ffDelConfirm/.test(adm) && /force:true/.test(adm));
+  t('#7 后端批量排序接口', /case 'reorder-fields'/.test(ADMJS_SRC) && /async function reorderFields\(/.test(ADMJS_SRC));
+  t('#7 后端删除支持 force 且姓名/学号硬保护', /b\.force !== true/.test(ADMJS_SRC) && /HARD_PROTECTED/.test(ADMJS_SRC));
+
+  t('#8 补齐 --accent（亮/暗各一条）', (adm.match(/--accent:/g) || []).length >= 2);
+  t('#8 不再有写死的浅色 #fffdfa/#eee3d8', !/fffdfa|eee3d8/.test(adm));
+  t('#8 后台组件级暗色覆盖成块', (adm.match(/html\[data-theme="dark"\]/g) || []).length >= 5);
+
+  t('#9 点赞即投接口 toggle', /case 'toggle'/.test(vot) && /async function toggleVote\(/.test(vot));
+  t('#9 撤回重投接口 retract', /case 'retract'/.test(vot) && /async function retractVote\(/.test(vot));
+  t('#9 前端点赞按钮、无提交表单', /data-vote-toggle/.test(idx) && /function voteToggle\(/.test(idx) && !/data-vote-submit/.test(idx));
+  t('#9 撤回按钮与次数提示', /data-vote-retract/.test(idx) && /撤回重投/.test(idx));
+  t('#9 最多/最少票数后端校验', /maxChoices/.test(vot) && /minChoices/.test(vot) && /最多选/.test(vot));
+  t('#9 后台三个配额输入', /id="voMaxChoices"/.test(adm) && /id="voMinChoices"/.test(adm) && /id="voRetractLimit"/.test(adm));
+  t('#9 retract_used 两条 DDL 路径都有', (http2.match(/retract_used/g) || []).length >= 2);
+  t('#9 全量路径先建 ballots 再 alter（顺序护栏）',
+    http2.indexOf("create table if not exists class_vote_ballots", http2.indexOf("===== v3.5.6 投票管理")) < http2.lastIndexOf("alter table class_vote_ballots add column if not exists retract_used"));
 }
 
 console.log('\n' + '='.repeat(52));

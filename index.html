@@ -1754,6 +1754,15 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
 .dark .vote-box{background:#262220;border-color:#6b5b4c}
 .vote-opt-label{flex:1;min-width:0;line-height:1.5;word-break:break-word}
+/* v3.5.14 #9：选项右侧的点赞按钮 —— 点一下直接投票，不需要提交表单 */
+.vote-like{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;border-radius:50%;font-size:1.05rem;line-height:1;
+  background:#f4ece4;border:1px solid #e8ded4;filter:grayscale(1);opacity:.7;
+  transition:transform .12s,background .15s,opacity .15s,filter .15s}
+.vote-opt:hover .vote-like{opacity:.9}
+.vote-like.on{background:#ffe9d6;border-color:#c2410c;filter:none;opacity:1;transform:scale(1.06)}
+.dark .vote-like{background:#332d29;border-color:#4a4038}
+.dark .vote-like.on{background:#4a2f1c;border-color:#ea580c}
 .vote-tag{display:inline-block;margin-left:6px;padding:0 5px;border-radius:5px;font-size:.66rem;
   background:#eef2ff;color:#4338ca;vertical-align:middle}
 .dark .vote-tag{background:#33305c;color:#c7d2fe}
@@ -2085,10 +2094,22 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-ov-total{text-align:center;min-width:96px}
 .sc-ov-total b{display:block;font-size:2rem;font-weight:800;color:#c2410c;font-variant-numeric:tabular-nums;line-height:1.1}
 .sc-ov-total span{font-size:.72rem;color:#6e635a}
-.sc-ov-items{flex:1;display:grid;grid-template-columns:repeat(2,1fr);gap:8px;min-width:200px}
-.sc-ov-item{background:#fff;border:1px solid #f5efe8;border-radius:10px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center;font-size:.78rem}
-.sc-ov-item span{color:#6e635a;white-space:nowrap}
-.sc-ov-item b{color:#292524;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sc-ov-items{flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-width:0}
+/* v3.5.14 #3：手机端「年级排名（物理方向）」「联考排名」会撑破格子把数值挤出去。
+   给 grid item 加 min-width:0（否则 nowrap 内容不可收缩），标签超长省略，
+   数值 flex:0 0 auto 永不被压。主标签后面的小字副说明在窄屏自动换行。 */
+.sc-ov-item{background:#fff;border:1px solid #f5efe8;border-radius:10px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.78rem;min-width:0}
+.sc-ov-item span{color:#6e635a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sc-ov-item span small{display:block;font-size:.62rem;color:#a8968a;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-ov-item b{color:#292524;font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto;text-align:right}
+/* v3.5.14 #4：迷你折线下面的日期轴 */
+.sc-mini-x{display:flex;justify-content:space-between;gap:4px;margin-top:2px;font-size:.6rem;color:#a8968a;font-variant-numeric:tabular-nums}
+.sc-mini-x span{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* v3.5.14 #5：缺年级排名时的原因说明 */
+.sc-norank{margin-top:8px;padding:9px 11px;border-radius:10px;background:#fdf6ec;border:1px solid #f0e0c8;font-size:.78rem;line-height:1.55;color:#6e635a}
+.sc-norank b{color:#b45309}
+.dark .sc-norank{background:#2a241d;border-color:#4a3b2a;color:#c9b8aa}
+.dark .sc-norank b{color:#fdba74}
 .sc-cuts{display:flex;flex-direction:column;gap:8px}
 .sc-cutmine{display:flex;align-items:center;gap:8px;font-size:.84rem;padding:9px 11px;border-radius:10px;background:#faf5f0}
 .sc-cutmine.ok{background:#f0f9f2}
@@ -2492,10 +2513,15 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   .sc-embed .print-hide{display:none !important}
 }
 
+@media (max-width:430px){
+  /* v3.5.14 #3：390 宽的屏两列放不下「年级排名 + 数值」，直接单列 */
+  .sc-ov-items{grid-template-columns:1fr}
+  .sc-ov-item{font-size:.8rem}
+}
 @media (max-width:560px){
   .sc-tblwrap{max-height:56vh}
   .sc-stats{grid-template-columns:repeat(2,1fr)}
-  .sc-ov-items{grid-template-columns:1fr 1fr}
+  .sc-ov-items{grid-template-columns:repeat(2,minmax(0,1fr))}
   .sc-pane{padding:12px 12px 22px}
   .sc-bar,.sc-tabs{padding-left:12px;padding-right:12px}
 }
@@ -2694,7 +2720,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 <div class="allboard-mask" id="hiddenViewMask">
   <div class="allboard-box" style="max-width:560px">
     <div class="allboard-head"><span>🎮 隐藏娱乐天地</span><button onclick="closeHiddenView()">关闭</button></div>
-    <div class="hidden-view-grid" id="hiddenViewGrid"></div>
+    <div class="hidden-view-grid" id="hiddenViewGrid" data-scroll-keep></div>
     <p class="pop-hint" style="text-align:center;margin:0 0 14px">更多娱乐资源陆续补充中……</p>
   </div>
 </div>
@@ -2813,7 +2839,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
     <div class="allboard-head"><span>☁️ 我的云端数据</span><button onclick="closeCloudData()">关闭</button></div>
     <div style="padding:14px 20px;text-align:left">
       <p id="cloudSummary" style="font-size:.78rem;color:#57534e;margin:0 0 10px">加载中…</p>
-      <div id="cloudGroups" style="max-height:52vh;overflow:auto"></div>
+      <div id="cloudGroups" data-scroll-keep style="max-height:52vh;overflow:auto"></div>
       <button class="btn" style="width:100%;background:#ffeded;color:#af410f;margin-top:12px" onclick="cloudWipeAll()">🧹 清空全部云端数据</button>
       <p id="cloudMsg" style="font-size:.8rem;margin:10px 0 0;color:#0a7d42;min-height:1.2em"></p>
     </div>
@@ -2982,7 +3008,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 <div class="allboard-mask" id="hwCurrentMask">
   <div class="allboard-box" style="max-width:560px">
     <div class="allboard-head"><span id="hwCurrentTitle">当前作业</span><button onclick="closeHwCurrent()">关闭</button></div>
-    <div class="allboard-list" id="hwCurrentList" style="padding:14px 18px;max-height:70vh;overflow:auto"></div>
+    <div class="allboard-list" id="hwCurrentList" data-scroll-keep style="padding:14px 18px;max-height:70vh;overflow:auto"></div>
   </div>
 </div>
 
@@ -2996,7 +3022,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
       <button onclick="closeHwCalendar()" style="margin-left:8px">关闭</button>
     </div>
     <div id="hwCalBody" style="padding:10px 14px"></div>
-    <div id="hwCalDetail" style="padding:10px 16px 14px;border-top:1px solid #f6f1ec;max-height:40vh;overflow:auto"></div>
+    <div id="hwCalDetail" data-scroll-keep style="padding:10px 16px 14px;border-top:1px solid #f6f1ec;max-height:40vh;overflow:auto"></div>
   </div>
 </div>
 
@@ -3041,7 +3067,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
       <button class="ui-tab"        data-sec="motion" onclick="uiSec('motion')">动效</button>
       <button class="ui-tab"        data-sec="data"   onclick="uiSec('data')">数据</button>
     </div>
-    <div class="ui-body" id="uiSetBody"></div>
+    <div class="ui-body" id="uiSetBody" data-scroll-keep></div>
     <div class="ui-foot">
       <button class="btn btn-secondary" onclick="resetUICfg()">恢复默认</button>
       <button class="btn" onclick="exportUICfg(false)">导出配置</button>
@@ -3093,7 +3119,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 
     <!-- 首页视图：公告 / 每日日报 / 每日一言 / 倒计时 -->
     <section class="home-view" id="homeView">
-      <section class="board" id="board"></section>
+      <section class="board" id="board" data-scroll-keep></section>
       <section class="signbar" id="signBar"></section>
       <section class="daily" id="dailyNews"></section>
       <section class="quote" id="dailyQuoteBar"></section>
@@ -3402,7 +3428,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.13';
+var SITE_VERSION = '3.5.14';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -6123,7 +6149,7 @@ function stackToggle(btn){
  *   任何"拖拽后直接改 DOM"的写法都会被下一次 render() 冲掉。
  * ===================================================== */
 
-var UI_KEY = 'cls_ui_cfg', UI_BG_KEY = 'cls_ui_bgimg', UI_V = 2;
+var UI_KEY = 'cls_ui_cfg', UI_BG_KEY = 'cls_ui_bgimg', UI_V = 3;
 /* v2：卡片堆叠默认关闭（试验功能，站主拍板）。v1 时期默认是开，
    升级时把老配置里带上的 stack=1 一并复位，避免老用户一直停在试验状态。 */
 
@@ -6142,7 +6168,7 @@ function uiDefault(){
                            0 = 只用本地库（管理员在后台配的句子）。联网失败时两种模式都回退本地。 */
     bg: { type:'theme', color:'#fffbf7', grad:'', veil:55 },  /* theme|solid|grad|image */
     order: {
-      home: ['ann','sign','daily','countdown'],
+      home: ['ann','quote','sign','daily','study','countdown'],
       cat: [],
       card: {},
       game: [],
@@ -6184,6 +6210,21 @@ function normalizeUI(o){
   /* 【v1→v2 迁移】v1 时期卡片堆叠默认是开，老配置里存的 1 属于「没得选的开」，
      不是用户主动开的，升级到 v2 一律复位为关。用户在 v2 下主动开的才保留。 */
   if((o.v || 1) < 2) out.stack = 0;
+  /* 【v2→v3 迁移 · v3.5.14 #1】老配置的 order.home 里没有 quote / study：
+     quote 插到「今日班级签」前面（站主要求每日一言在班级签上面），
+     study 插到「每日日报」后面。只对显式存过顺序的老配置生效，幂等。 */
+  if((o.v || 1) < 3){
+    var h3 = Array.isArray(out.order.home) ? out.order.home.slice() : [];
+    if(h3.indexOf('quote') < 0){
+      var si3 = h3.indexOf('sign');
+      if(si3 < 0) h3.push('quote'); else h3.splice(si3, 0, 'quote');
+    }
+    if(h3.indexOf('study') < 0){
+      var di3 = h3.indexOf('daily');
+      if(di3 < 0) h3.push('study'); else h3.splice(di3 + 1, 0, 'study');
+    }
+    out.order.home = h3;
+  }
   if(o.bg && typeof o.bg === 'object'){
     out.bg.type = (['theme','solid','grad','image'].indexOf(o.bg.type) >= 0) ? o.bg.type : 'theme';
     out.bg.color = (typeof o.bg.color === 'string') ? o.bg.color : d.bg.color;
@@ -6201,10 +6242,19 @@ function normalizeUI(o){
 }
 
 function loadUI(){
+  var migrated = false;
   try{
     var raw = localStorage.getItem(UI_KEY);
-    UI = raw ? normalizeUI(JSON.parse(raw)) : uiDefault();
+    if(raw){
+      var o = null;
+      try{ o = JSON.parse(raw); }catch(e){}
+      UI = normalizeUI(o);
+      /* v3.5.14 #1：老配置完成迁移后落盘一次，之后跟着 cls_ui_cfg 上云，
+         免得每次打开都重新迁移、云端还是旧顺序 */
+      if(o && (o.v || 1) < UI_V) migrated = true;
+    }else UI = uiDefault();
   }catch(e){ UI = uiDefault(); }
+  if(migrated){ try{ saveUI(); }catch(e){} }
   return UI;
 }
 function saveUI(){
@@ -6254,14 +6304,16 @@ function uiAnnCats(list){
 }
 
 /* 首页 4 区块顺序（用 DOM 移动；#homeView 的子元素是静态 HTML，render 不重建其容器） */
-var HOME_BLOCKS = { ann:'board', sign:'signBar', daily:'dailyNews', quote:'dailyQuoteBar', countdown:'countdown' };
+var HOME_BLOCKS = { ann:'board', quote:'dailyQuoteBar', sign:'signBar', daily:'dailyNews', study:'studyCard', countdown:'countdown' };
 function applyHomeOrder(){
   var hv = document.getElementById('homeView'); if(!hv) return;
-  var ord = UI.order.home || [];
-  /* 未配置过的区块先补到末尾，保证顺序数组始终覆盖全部 4 块 */
-  for(var k in HOME_BLOCKS){
-    if(HOME_BLOCKS.hasOwnProperty(k) && ord.indexOf(k) < 0) ord.push(k);
-  }
+  /* v3.5.14 #2：只读用户顺序，不在渲染里改内存（以前 ord.push 改了 UI 却不 saveUI，
+     内存值与 localStorage / 云端长期不一致，排序看起来「存不上」） */
+  var ord = (UI.order.home || []).slice();
+  /* 未配置过的区块按默认顺序补齐（只在本次渲染生效） */
+  uiDefault().order.home.forEach(function(k){
+    if(ord.indexOf(k) < 0) ord.push(k);
+  });
   for(var i = 0; i < ord.length; i++){
     var el = document.getElementById(HOME_BLOCKS[ord[i]]);
     if(el && el.parentNode === hv) hv.appendChild(el);   /* appendChild = 移到末尾，依次执行得目标序 */
@@ -6362,8 +6414,52 @@ function applyUICfg(){
   if(sb) sb.innerHTML = iconSvg('settings', 15, 'margin-right:7px;vertical-align:-2px') + '自定义设置';
 }
 
+/* ============================================================
+ * v3.5.14 #6 无感刷新：保存 / 恢复滚动位置
+ * ------------------------------------------------------------
+ * 站主原话：手机上看 20-30 名的成绩表，一自动刷新就跳回 5-15 名。
+ * 根因：rerenderAll() → render() 整体重建 #grid.innerHTML，文档高度瞬间归零，
+ *   浏览器把 scrollY 夹到 0；成绩表 .sc-tblwrap 是内滚容器，innerHTML 重写后
+ *   scrollTop 也归零。全程没有任何保存/恢复。
+ * 做法：给需要保位的容器打 data-scroll-keep，重绘前后按「序号」快照恢复；
+ *   用双 requestAnimationFrame 等布局稳定，再按最大可滚距离钳位。
+ * ⚠️ 只在「外来刷新」时恢复；用户主动切 Tab / 换考试要回顶部，传 preserve:false。
+ * ============================================================ */
+function snapScroll(){
+  var out = { x: 0, y: 0, els: [] };
+  try{ out.x = window.scrollX || 0; out.y = window.scrollY || 0; }catch(e){}
+  var ns = document.querySelectorAll('[data-scroll-keep]');
+  for(var i = 0; i < ns.length; i++){
+    var el = ns[i];
+    if(el && (el.scrollTop || el.scrollLeft)) out.els.push({ i: i, t: el.scrollTop, l: el.scrollLeft });
+  }
+  return out;
+}
+function restoreScroll(snap){
+  if(!snap) return;
+  try{ window.scrollTo(snap.x || 0, snap.y || 0); }catch(e){}
+  var ns = document.querySelectorAll('[data-scroll-keep]');
+  (snap.els || []).forEach(function(s){
+    var el = ns[s.i]; if(!el) return;
+    var maxT = Math.max(0, el.scrollHeight - el.clientHeight);
+    var maxL = Math.max(0, el.scrollWidth - el.clientWidth);
+    try{ el.scrollTop = Math.min(s.t, maxT); el.scrollLeft = Math.min(s.l, maxL); }catch(e){}
+  });
+}
+function withScrollPreserve(fn, opts){
+  if(opts && opts.preserve === false) return fn();
+  var snap = snapScroll(), r = fn();
+  try{
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){ restoreScroll(snap); });
+    });
+  }catch(e){ restoreScroll(snap); }
+  return r;
+}
+
 /* 重渲染所有受顺序影响的地方 */
-function rerenderAll(){
+function rerenderAll(opts){
+  return withScrollPreserve(function(){
   render();                 /* 内部已含 renderBoard() + buildSidebar() + applyHomeOrder() */
   /* 重要日期落在独立变量 IMPORTANT_DATES 上，render() 不碰它 ——
      不在这里补一刀，云端内容替换后首页倒计时最久要等 1 秒（下一个 interval tick）
@@ -6373,6 +6469,7 @@ function rerenderAll(){
   renderHiddenView();
   var ab = document.getElementById('allBoardMask');
   if(ab && ab.classList.contains('show')) renderAllBoard();
+  }, opts);
 }
 
 /* ============================================================
@@ -8492,7 +8589,10 @@ function syncPullSilent(){
         try{ raw = JSON.stringify(items[k]); }catch(e){ return; }
         var cur = null;
         try{ cur = localStorage.getItem(k); }catch(e){}
-        if(cur === raw) return;            /* 一样就不写，省一次重绘 */
+        /* v3.5.14 #2：以前是 cur === raw 字符串全等比较 —— jsonb 回来 key 顺序不同，
+           于是每轮都判「有更新」，把本地覆盖一遍还 rerenderAll（顺带把用户翻到一半的
+           列表打回顶部）。改为语义比较：内容一样就不写、不重绘。 */
+        if(cur != null && sameCloudValue(items[k], (function(){ try{ return JSON.parse(cur); }catch(e){ return cur; } })())) return;
         try{ localStorage.setItem(k, raw); cnt++; }catch(e){}
       });
     }finally{ window.__cloudPulling = false; }
@@ -8505,6 +8605,23 @@ function syncPullSilent(){
     }
     return { pulled: cnt };
   }).catch(function(){ return { pulled:0 }; });   /* 静默失败，不打扰用户 */
+}
+
+/** v3.5.14 #2：稳定序列化 —— object 的 key 排序，数组保持原序。
+    云端 data_value 是 jsonb，读回来 key 顺序会被重排、空白会被压缩；
+    直接拿 JSON.stringify 的字符串比，几乎永远不相等 → 每 60 秒误判「有更新」。 */
+function stableStringify(v){
+  if(v === null || typeof v !== 'object') return JSON.stringify(v);
+  if(Array.isArray(v)){
+    return '[' + v.map(function(x){ return stableStringify(x); }).join(',') + ']';
+  }
+  var ks = Object.keys(v).sort();
+  return '{' + ks.map(function(k){ return JSON.stringify(k) + ':' + stableStringify(v[k]); }).join(',') + '}';
+}
+/** 语义比较：内容一致即视为同一个值，与 key 顺序/空白无关 */
+function sameCloudValue(a, b){
+  if(a === b) return true;
+  try{ return stableStringify(a) === stableStringify(b); }catch(e){ return false; }
 }
 
 function k0In(o, k){ return Object.prototype.hasOwnProperty.call(o, k); }
@@ -10232,9 +10349,9 @@ function renderSortList(group, catId){
 
   var items = [], keys = [];
   if(SORT_G === 'home'){
-    var label = { ann:'公告栏', sign:'今日班级签', daily:'每日日报', countdown:'倒计时' };
+    var label = { ann:'公告栏', quote:'每日一言', sign:'今日班级签', daily:'每日日报', study:'学习卡片', countdown:'倒计时' };
     var ord = (UI.order.home || []).slice();
-    for(var k in HOME_BLOCKS){ if(HOME_BLOCKS.hasOwnProperty(k) && ord.indexOf(k) < 0) ord.push(k); }
+    uiDefault().order.home.forEach(function(k){ if(ord.indexOf(k) < 0) ord.push(k); });
     items = ord.map(function(k){ return { key:k, title:label[k] || k, ico:'list' }; });
   }else if(SORT_G === 'cat'){
     items = uiCats().map(function(c){ return { key:c.id, title:c.name, ico:'list' }; });
@@ -13292,13 +13409,15 @@ function voteCardHtml(v){
         + '</div></div>';
     }).join('');
   }else{
-    /* 投票视图：可点选项（checkbox 或 radio 的观感） */
+    /* v3.5.14 #9：每个选项右侧一个点赞按钮，点一下直接投票（不再有提交表单）。
+       站主原话「改了几次点击还是无法投票」—— 以前点选项只是改本地草稿，
+       必须再点「提交投票」才入库，很多人点了选项就走了。 */
     optsHtml = v.options.map(function(o){
       var on = my.indexOf(o.id) >= 0;
-      return '<button class="vote-opt' + (on ? ' on' : '') + '" data-vid="' + v.id + '" data-oid="' + esc(o.id) + '">'
-        + '<span class="vote-box"></span>'
+      return '<button class="vote-opt' + (on ? ' on' : '') + '" data-vote-toggle="' + v.id + '" data-vid="' + v.id + '" data-oid="' + esc(o.id) + '">'
         + '<span class="vote-opt-label">' + esc(o.label)
         +   (o.by === 'student' ? '<span class="vote-tag">同学提</span>' : '') + '</span>'
+        + '<span class="vote-like' + (on ? ' on' : '') + '" aria-label="' + (on ? '取消' : '投票') + '">👍</span>'
         + '</button>';
     }).join('');
   }
@@ -13311,12 +13430,22 @@ function voteCardHtml(v){
       + '</div>';
   }
 
+  /* v3.5.14 #9：不再有「提交投票」按钮 —— 点赞即投。
+     这里只留配额提示 + 撤回重投。 */
   var submitHtml = '';
   if(!closed){
+    var hint = multi ? '可多选' : '单选';
+    if(v.maxChoices) hint += ' · 最多 ' + v.maxChoices + ' 项';
+    if(v.minChoices) hint += ' · 至少 ' + v.minChoices + ' 项';
+    if(multi && v.maxChoices && my.length > v.maxChoices) hint += '（已超出，请点掉几项）';
+    else if(v.maxChoices && my.length) hint += '（已选 ' + my.length + '/' + v.maxChoices + '）';
+    var canRetract = !!(v.mine && v.canRetract);
     submitHtml = '<div class="vote-actions">'
-      + '<button class="btn" data-vote-submit="' + v.id + '"' + (my.length ? '' : ' disabled style="opacity:.5"') + '>'
-      +   (voted ? '修改我的选择' : '提交投票') + '</button>'
-      + (multi ? '<span class="vote-hint">可多选</span>' : '<span class="vote-hint">单选</span>')
+      + '<span class="vote-hint">' + esc(hint) + '</span>'
+      + (canRetract
+          ? '<button class="btn btn-sm btn-secondary" data-vote-retract="' + v.id + '">撤回重投'
+            + (v.retractLimit > 1 ? '（剩 ' + Math.max(0, v.retractLimit - (v.retractUsed || 0)) + ' 次）' : '（限 1 次）') + '</button>'
+          : (v.mine && v.retractLimit > 0 ? '<span class="vote-hint">撤回机会已用完</span>' : ''))
       + '</div>';
   }
 
@@ -13356,27 +13485,15 @@ function voteBind(){
   var body = document.getElementById('voteBody');
   if(!body) return;
 
-  Array.prototype.forEach.call(body.querySelectorAll('[data-oid]'), function(btn){
+  /* v3.5.14 #9：点赞即投 */
+  Array.prototype.forEach.call(body.querySelectorAll('[data-vote-toggle]'), function(btn){
     btn.onclick = function(){
-      var vid = Number(btn.dataset.vid);
-      var oid = btn.dataset.oid;
-      var v = null;
-      for(var i = 0; i < VOTE.votes.length; i++) if(VOTE.votes[i].id === vid) v = VOTE.votes[i];
-      if(!v) return;
-      var cur = (VOTE.picked[vid] != null) ? VOTE.picked[vid].slice() : (v.myChoices || []).slice();
-      var at = cur.indexOf(oid);
-      if(v.multi){
-        if(at >= 0) cur.splice(at, 1); else cur.push(oid);
-      }else{
-        cur = (at >= 0) ? [] : [oid];
-      }
-      VOTE.picked[vid] = cur;
-      voteRenderAll();
+      voteToggle(Number(btn.dataset.voteToggle), btn.dataset.oid);
     };
   });
 
-  Array.prototype.forEach.call(body.querySelectorAll('[data-vote-submit]'), function(btn){
-    btn.onclick = function(){ voteSubmit(Number(btn.dataset.voteSubmit)); };
+  Array.prototype.forEach.call(body.querySelectorAll('[data-vote-retract]'), function(btn){
+    btn.onclick = function(){ voteRetract(Number(btn.dataset.voteRetract)); };
   });
 
   Array.prototype.forEach.call(body.querySelectorAll('[data-vote-add]'), function(btn){
@@ -13390,29 +13507,62 @@ function voteMsg(vid, txt, kind){
   el.innerHTML = txt ? '<span class="vote-msg-' + (kind || 'ok') + '">' + esc(txt) + '</span>' : '';
 }
 
-function voteSubmit(vid){
+/* v3.5.14 #9：点赞即投（乐观更新：先本地生效再发请求，失败回滚） */
+function voteToggle(vid, oid){
   if(VOTE.busy) return;
-  var choices = VOTE.picked[vid] || [];
-  if(!choices.length){ voteMsg(vid, '请先选一个选项', 'err'); return; }
+  var v = null;
+  for(var i = 0; i < VOTE.votes.length; i++) if(VOTE.votes[i].id === vid) v = VOTE.votes[i];
+  if(!v) return;
+  var cur = (v.myChoices || []).slice();
+  var at = cur.indexOf(oid);
+  if(v.multi){
+    if(at >= 0) cur.splice(at, 1);
+    else{
+      if(v.maxChoices && cur.length >= v.maxChoices){
+        voteMsg(vid, '这场投票最多选 ' + v.maxChoices + ' 项，先点掉一个再选', 'err');
+        return;
+      }
+      cur.push(oid);
+    }
+  }else{
+    cur = (at >= 0) ? [] : [oid];
+  }
   VOTE.busy = true;
-  /* v3.5.12 站主反馈「点击了没有反应」：之前提交失败/慢时完全静默，
-     按钮也不防重复。现在全程有反馈：提交中 → 成功提示 → 重渲染；失败必显错误。 */
+  /* 乐观更新 */
+  v.myChoices = cur; v.mine = cur.length > 0;
+  voteRenderAll();
   voteMsg(vid, '提交中…');
-  var btn = document.querySelector('[data-vote-submit="' + vid + '"]');
-  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
-  api('/votes?action=vote', { method: 'POST', body: { voteId: vid, choices: choices } })
+  api('/votes?action=toggle', { method: 'POST', body: { voteId: vid, optionId: oid } })
     .then(function(j){
       VOTE.busy = false;
-      return voteReload().then(function(){
-        /* 重渲染后再提示（重渲染会清掉旧消息） */
-        voteMsg(vid, '✅ ' + (j.message || '投票成功，已记录'), 'ok');
-      });
+      return voteReload().then(function(){ voteMsg(vid, '✅ ' + (j.message || '已记录')); });
     })
     .catch(function(e){
       VOTE.busy = false;
-      voteMsg(vid, '❌ ' + (e.message || String(e)) + '（可以再点一次提交重试）', 'err', 6000);
-      var b = document.querySelector('[data-vote-submit="' + vid + '"]');
-      if(b){ b.disabled = false; b.style.opacity = ''; }
+      return voteReload().then(function(){ voteMsg(vid, '❌ ' + (e.message || String(e)), 'err'); });
+    });
+}
+
+/* v3.5.14 #9：撤回重投（每人限 1 次；多选 = 全部撤回） */
+function voteRetract(vid){
+  if(VOTE.busy) return;
+  var v = null;
+  for(var i = 0; i < VOTE.votes.length; i++) if(VOTE.votes[i].id === vid) v = VOTE.votes[i];
+  if(!v) return;
+  var ask = v.multi
+    ? '撤回会清空你在这场投票里的全部选择，并且这场投票只剩 1 次撤回机会。确定撤回吗？'
+    : '撤回后可以重新投，但这场投票只剩 1 次撤回机会。确定撤回吗？';
+  if(!window.confirm(ask)) return;
+  VOTE.busy = true;
+  voteMsg(vid, '撤回中…');
+  api('/votes?action=retract', { method: 'POST', body: { voteId: vid } })
+    .then(function(j){
+      VOTE.busy = false;
+      return voteReload().then(function(){ voteMsg(vid, '✅ ' + (j.message || '已撤回')); });
+    })
+    .catch(function(e){
+      VOTE.busy = false;
+      voteMsg(vid, '❌ ' + (e.message || String(e)), 'err');
     });
 }
 
@@ -13434,16 +13584,12 @@ function voteAddOption(vid){
     });
 }
 
-/* 重新拉列表但保留草稿（用户可能还有别的投票没提交） */
+/* v3.5.14 #9：不再有本地草稿，服务端就是唯一真相 */
 function voteReload(){
-  var keep = VOTE.picked;
   return api('/votes?action=list').then(function(j){
     VOTE.votes = (j && j.votes) || [];
     VOTE.loaded = true;
-    /* 已提交的投票把草稿清掉（以服务端为准），没提交的保留 */
-    VOTE.votes.forEach(function(v){
-      if(v.mine) delete keep[v.id];
-    });
+    VOTE.picked = {};
     voteRenderAll();
   });
 }
@@ -13905,7 +14051,7 @@ function scRenderBoard(){
     +   scStatCard('最高', st.max)
     +   scStatCard('参考', st.n + ' 人')
     + '</div>'
-    + '<div class="sc-tblwrap" data-scblk="board_table"><table class="sc-tbl sc-fix2">'
+    + '<div class="sc-tblwrap" data-scroll-keep data-scblk="board_table"><table class="sc-tbl sc-fix2">'
     +   '<thead>' + head + '</thead><tbody>' + body + '</tbody>'
     + '</table></div>'
     + scChartHist(st)
@@ -14129,9 +14275,9 @@ function scRenderMe(){
     +   '<div class="sc-ov-total"><b>' + (myTotal == null ? '—' : myTotal) + '</b><span>总分（' + (SC.basis === 'graded' ? '赋分' : '原始') + '）</span></div>'
     +   '<div class="sc-ov-items">'
     +     scOvItem('班排名', myRank ? myRank + ' / ' + st.n : '—')
-    +     scOvItem('年级排名（物理方向）', meRow.schoolRank != null ? meRow.schoolRank + (SC.exam.gradeRef && SC.exam.gradeRef.students ? ' / ' + SC.exam.gradeRef.students : '') : '—')
+    +     scOvItem('年级排名', meRow.schoolRank != null ? meRow.schoolRank + (SC.exam.gradeRef && SC.exam.gradeRef.students ? ' / ' + SC.exam.gradeRef.students : '') : '—', '物理方向')
     +     scOvItem('与班均', myTotal != null ? fmtDiff(myTotal - st.avg) : '—')
-    +     scOvItem('联考排名', meRow.leagueRank != null ? meRow.leagueRank : '—')
+    +     scOvItem('联考排名', meRow.leagueRank != null ? meRow.leagueRank : '—', '年级联考')
     +   '</div>'
     + '</div>'
     + '</div>';
@@ -14925,7 +15071,7 @@ function scPkTrendCard(A, B){
   var curRk = scRankMap(SC.basis).total;
 
   /* 单元格：上次 → 本次（变化箭头）。名次是越小越好，分数越大越好。 */
-  function cell(p, c, isRank, unit){
+  function cell(p, c, isRank, unit, missTxt){
     if(p == null && c == null) return '<td class="sc-dim">—</td>';
     var fmt = function(v){ return v == null ? '—' : fmtNum(v); };
     var main = (isRank ? '第 ' : '') + fmt(p) + ' → ' + (isRank ? '第 ' : '') + fmt(c);
@@ -14938,12 +15084,12 @@ function scPkTrendCard(A, B){
         sub = '<span class="sc-sub-diff ' + (good ? 'up' : 'down') + '">'
           + (good ? '↑ ' : '↓ ') + fmtNum(Math.abs(d)) + (unit || '') + '</span>';
       }
-    }else sub = '<span class="sc-dim">' + (p == null ? '上次缺考' : '本次缺考') + '</span>';
+    }else sub = '<span class="sc-dim">' + (p == null ? (missTxt || '上次缺考') : '本次缺考') + '</span>';
     return '<td>' + main + '<span style="display:block;font-size:.66rem">' + sub + '</span></td>';
   }
-  function rowHtml(label, pa, ca, pb, cb, isRank, unit){
+  function rowHtml(label, pa, ca, pb, cb, isRank, unit, missTxt){
     return '<tr><td class="sc-name">' + esc(label) + '</td>'
-      + cell(pa, ca, isRank, unit) + cell(pb, cb, isRank, unit) + '</tr>';
+      + cell(pa, ca, isRank, unit, missTxt) + cell(pb, cb, isRank, unit, missTxt) + '</tr>';
   }
 
   var body = '';
@@ -14954,9 +15100,12 @@ function scPkTrendCard(A, B){
   body += rowHtml('班排',
     pA ? pRk[pA.id] : null, curRk[A.id],
     pB ? pRk[pB.id] : null, curRk[B.id], true, ' 名');
+  /* v3.5.14 #5：上一次没导入年级排名时，不能再写「上次缺考」——
+     缺考 ≠ 没导入，写错会误导。 */
+  var rankMissing = (pA && pA.schoolRank == null) || (pB && pB.schoolRank == null);
   body += rowHtml('年级排名（物理方向）',
     pA ? pA.schoolRank : null, A.schoolRank,
-    pB ? pB.schoolRank : null, B.schoolRank, true, ' 名');
+    pB ? pB.schoolRank : null, B.schoolRank, true, ' 名', '上次未导入');
   /* 各科分数变化（按当前考试的科目逐科对） */
   (SC.exam.subjects || []).forEach(function(s){
     function val(row, exam){
@@ -15035,7 +15184,7 @@ function scPkTrendCard(A, B){
 
   return '<div class="sc-card" data-scblk="pk_trend"><div class="sc-card-h">跨考试进退步（'
     + esc(shortName(prevExam.name || '')) + ' → ' + esc(shortName(SC.exam.name || '')) + '）'
-    + '<span class="sc-h-note">' + esc(scDateRange(prevExam) || '') + '</span></div>'
+    + '<span class="sc-h-note">' + esc(scDateRange(prevExam) || '') + ' → ' + esc(scDateRange(SC.exam) || '') + '</span></div>'
     + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
     + '<thead><tr><th>指标</th>'
     + '<th><i class="sc-pk-dot-a" style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px"></i> ' + esc(A.name || 'A 方') + '</th>'
@@ -15044,7 +15193,10 @@ function scPkTrendCard(A, B){
     + '<div class="sc-figcap">「↑」为进步、「↓」为退步；名次越小越好。两场考试的科目或满分不同时，'
     + '各科按各自的科目配置取分，口径为' + (SC.basis === 'graded' ? '赋分' : '原始') + '。'
     + (missed.length ? '注意：' + esc(missed.join('、')) + ' 在「' + esc(shortName(prevExam.name || '')) + '」里没找到对应成绩（未考或未录入），相关格显示 —。' : '')
-    + '</div></div>';
+    + (rankMissing ? '<br><span class="sc-dim">年级排名进退步要求两场都导入年级排名；上一次未导入，故该行不展示进退步。</span>' : '')
+    + '</div>'
+    + (rankMissing ? scNoRankNotice({ reason:'cur-no-rank', total:(SC.me||[]).length, withRank:(SC.me||[]).filter(function(it){ return it.schoolRank != null; }).length }) : '')
+    + '</div>';
 }
   /* ===== v3.5.12（#8）对比分析升级 =====
      站主原话：「跟个人画像一样的 AI 分析，只不过着重对比二人数据进行分析与建议」
@@ -15207,8 +15359,12 @@ function scPkAiCard(A, B){
 
 
 
-function scOvItem(k, v){
-  return '<div class="sc-ov-item"><span>' + esc(k) + '</span><b>' + esc(String(v)) + '</b></div>';
+function scOvItem(k, v, sub){
+  /* v3.5.14 #3：第三参是标签下的小字副说明（如「物理方向」），
+     把长标签拆成两行，窄屏不再把数值挤出去 */
+  return '<div class="sc-ov-item"><span>' + esc(k)
+    + (sub ? '<small>' + esc(sub) + '</small>' : '')
+    + '</span><b>' + esc(String(v)) + '</b></div>';
 }
 function fmtDiff(d){
   var s = d >= 0 ? '+' : '−';
@@ -15310,7 +15466,9 @@ function scTrendBlock(meRow){
     return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.total).toFixed(1) + '" r="3.4" class="sc-mine-dot" fill="#c0392b"/>'
       + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.total) - 8).toFixed(1) + '" font-size="9.5" class="sc-tip" fill="#c0392b" text-anchor="middle">' + p.total + '</text>'
       + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
-          ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">' + esc(shortName(p.name)) + '</text>'
+          ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 14) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">' + esc(shortName(p.name)) + '</text>'
+            /* v3.5.14 #4：补考试日期，光有考试名对不上时间 */
+            + '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 3) + '" font-size="8" class="sc-axdim" fill="#a8968a" text-anchor="' + anc + '">' + esc(scPointDateLabel(p.date)) + '</text>'
           : '');
   }).join('');
 
@@ -15343,6 +15501,61 @@ function scTrendBlock(meRow){
    增强块（v2.8.0）：各科趋势网格 / 年级进退步 / 跨考试上线率
    —— 全部浏览器实时算，服务器只给原始分
    ============================================================ */
+
+/* v3.5.14 #4：考试日期 → MM-DD（图上标签用，太长放不下） */
+function scPointDateLabel(d){
+  var s = String(d || '');
+  return s.length >= 10 ? s.slice(5, 10) : s;
+}
+/* v3.5.14 #5：本次考试在 SC.me 里的下标（找不到就取末位） */
+function scExamAnchorIdx(items, examId){
+  if(!items || !items.length) return -1;
+  if(examId != null){
+    for(var i = items.length - 1; i >= 0; i--){
+      if(String(items[i].examId) === String(examId)) return i;
+    }
+  }
+  return items.length - 1;
+}
+/* v3.5.14 #5：年级排名进退步的**唯一**口径
+   · 锚点 = 本次考试；本次没有年级排名 → ok:false, reason:'cur-no-rank'（不许拿更早的冒充本次）
+   · 否则从本次往前找**最近一次有年级排名**的考试当 prev
+   · 返回 skipped（被跳过的考试）与 total/withRank，供「5 次里只有 3 次有排名」的说明 */
+function scRankPair(items, getRank, anchorIdx){
+  items = items || [];
+  var out = { ok:false, cur:null, prev:null, skipped:[], total:items.length, withRank:0, reason:'' };
+  if(!items.length){ out.reason = 'empty'; return out; }
+  out.withRank = items.filter(function(it){ return getRank(it) != null; }).length;
+  var ai = (anchorIdx == null || anchorIdx < 0 || anchorIdx >= items.length) ? items.length - 1 : anchorIdx;
+  var cur = items[ai];
+  out.cur = cur;
+  if(getRank(cur) == null){ out.reason = 'cur-no-rank'; return out; }
+  for(var i = ai - 1; i >= 0; i--){
+    if(getRank(items[i]) != null){
+      out.ok = true; out.prev = items[i];
+      for(var j = i + 1; j < ai; j++) out.skipped.push(items[j]);
+      return out;
+    }
+  }
+  out.reason = 'no-prev-rank';
+  return out;
+}
+/* v3.5.14 #5：缺年级排名时统一文案（三处共用，避免口径说辞不一致） */
+function scNoRankNotice(pair){
+  if(!pair) return '';
+  var tot = pair.total || 0, wr = pair.withRank || 0;
+  var cnt = '已录入 <b>' + tot + '</b> 次考试，其中 <b>' + wr + '</b> 次含年级排名';
+  var msg;
+  if(pair.reason === 'cur-no-rank'){
+    msg = '本次考试没有导入年级排名，<b>无法判断年级进退步</b>。';
+  }else if(pair.reason === 'no-prev-rank'){
+    msg = '本次之前没有可对比的年级排名，<b>暂时无法判断进退步</b>。';
+  }else if(pair.reason === 'empty'){
+    msg = '还没有成绩记录。';
+  }else return '';
+  return '<div class="sc-norank"><b>说明</b>　' + msg + '（' + cnt + '；趋势图只画含年级排名的那几次，不会用更早的考试冒充本次。）'
+    + '<br><span class="sc-dim">原因：年级排名由人工导入，未导入的考试不参与进退步分析。</span></div>';
+}
 
 /* 迷你折线（各科趋势卡内）：分数「高好」、名次「小好」，两种口径共用一套画法。 */
 function scMiniLine(pts, betterIsHigh, fmt){
@@ -15378,8 +15591,26 @@ function scMiniLine(pts, betterIsHigh, fmt){
     return '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(x.v).toFixed(1)
          + '" r="2.2" class="sc-mini-dot" fill="#fff" stroke="#857468" stroke-width="1.1"/>';
   }).join('');
+  /* v3.5.14 #4：图下补一行考试日期（手机端不能悬浮，只能直接写出来）。
+     点多的时候只标首 / 中 / 尾，避免挤成一团。 */
+  var dates = pts.map(function(x){ return x.date ? scPointDateLabel(x.date) : ''; });
+  var hasDate = dates.some(function(d){ return !!d; });
+  var xaxis = '';
+  if(hasDate){
+    var pick = [];
+    if(pts.length <= 4){ pick = dates.map(function(d, i){ return { i:i, d:d }; }); }
+    else{
+      [0, Math.floor((pts.length - 1) / 2), pts.length - 1].forEach(function(i){
+        if(dates[i] && !pick.some(function(p){ return p.i === i; })) pick.push({ i:i, d:dates[i] });
+      });
+    }
+    xaxis = '<div class="sc-mini-x">' + pick.map(function(p){
+      var left = p.i === 0, right = p.i === pts.length - 1;
+      return '<span style="' + (left ? 'text-align:left' : right ? 'text-align:right' : '') + '">' + esc(p.d) + '</span>';
+    }).join('') + '</div>';
+  }
   return '<svg viewBox="0 0 ' + mw + ' ' + mh + '" class="sc-mini-svg" style="width:100%;height:38px;display:block;margin-top:4px">'
-       + segs + nums + dots + '</svg>';
+       + segs + nums + dots + '</svg>' + xaxis;
 }
 
 /* ---------- 各科趋势网格：每科一张小卡（本次 / 班均 / 较上次 / 小折线） ----------
@@ -15407,12 +15638,14 @@ function scSubjTrend(){
   }
 
   var cards = [];
+  var anchorIdx = scExamAnchorIdx(items, SC.exam && SC.exam.id);
   subs.forEach(function(sub){
     var spts = [], rpts = [];
+    /* v3.5.14 #4：点上带考试日期，图下才能标时间 */
     items.forEach(function(it){
       var sc0 = scoreAt(it, sub), rk0 = rankAt(it, sub);
-      if(sc0 != null) spts.push({ v: sc0 });
-      if(rk0 != null) rpts.push({ v: rk0 });
+      if(sc0 != null) spts.push({ v: sc0, date: it.date, name: it.name });
+      if(rk0 != null) rpts.push({ v: rk0, date: it.date, name: it.name });
     });
     if(!spts.length && !rpts.length) return;
 
@@ -15423,11 +15656,20 @@ function scSubjTrend(){
     });
     var avg = all.length ? all.reduce(function(a, b){ return a + b; }, 0) / all.length : null;
 
-    var cur = spts.length ? spts[spts.length - 1].v : null;
-    var prevS = spts.length > 1 ? spts[spts.length - 2].v : null;
+    /* v3.5.14 #5：本次 = 当前选中的考试，不是「最后一个有数据的考试」。
+       以前如果本次这科缺考，会把更早一次当成「本次」，显示成虚假的当前分。 */
+    var curIt = (anchorIdx >= 0 && items[anchorIdx]) ? items[anchorIdx] : null;
+    var cur = curIt ? scoreAt(curIt, sub) : null;
+    var prevS = null;
+    for(var pi = anchorIdx - 1; pi >= 0; pi--){
+      var pv = scoreAt(items[pi], sub);
+      if(pv != null){ prevS = pv; break; }
+    }
     var dS = (cur == null || prevS == null) ? null : Math.round((cur - prevS) * 10) / 10;
-    var rcur = rpts.length ? rpts[rpts.length - 1].v : null;
-    var rprev = rpts.length > 1 ? rpts[rpts.length - 2].v : null;
+    /* 名次同样按「本次 → 往前找最近一次有该科名次」配对 */
+    var rpair = scRankPair(items, function(it){ return rankAt(it, sub); }, anchorIdx);
+    var rcur = rpair.ok ? rankAt(rpair.cur, sub) : null;
+    var rprev = rpair.ok ? rankAt(rpair.prev, sub) : null;
     var dR = (rcur == null || rprev == null) ? null : (rprev - rcur);   /* 正数 = 名次前进 = 进步 */
 
     var body;
@@ -15437,7 +15679,7 @@ function scSubjTrend(){
             + '<div class="sc-sub-diff sc-dim">该科还没导入年级排名</div>'
           : '<div class="sc-sub-score">第 ' + rcur + '<small>' + (gradeN ? '/' + gradeN + ' 名' : '名') + '</small></div>'
             + '<div class="sc-sub-diff ' + (dR == null ? 'sc-dim' : dR > 0 ? 'up' : dR < 0 ? 'down' : '') + '">'
-            +   (dR == null ? '首次考试，暂无对比'
+            +   (dR == null ? (rpair.reason === 'cur-no-rank' ? '本次未导入该科年级排名' : '首次考试，暂无对比')
                            : '较上次 名次' + (dR > 0 ? ' ↑' + dR : dR < 0 ? ' ↓' + Math.abs(dR) : ' 持平'))
             + '</div>'
             + (cur == null ? '' : '<div class="sc-sub-diff sc-dim">分数 ' + fmtNum(cur) + ' / ' + sub.full + '</div>'))
@@ -15460,7 +15702,9 @@ function scSubjTrend(){
     cards.push('<div class="sc-sub">'
       + '<div class="sc-sub-top"><b>' + esc(sub.name) + '</b>'
       +   (sub.graded && SC.basis === 'graded' ? '<span class="sc-tag">赋分</span>' : '')
-      +   '<span class="sc-sub-rk">' + (mode === 'rank' ? rpts.length : spts.length) + ' 次</span></div>'
+      +   '<span class="sc-sub-rk">' + (mode === 'rank'
+            ? (rpts.length === items.length ? rpts.length + ' 次' : rpts.length + ' / ' + items.length + ' 次')
+            : (spts.length === items.length ? spts.length + ' 次' : spts.length + ' / ' + items.length + ' 次')) + '</span></div>'
       + body
       + '</div>');
   });
@@ -15560,8 +15804,11 @@ function scGradeTrend(){
         + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.schoolRank) - 8).toFixed(1)
         +   '" font-size="9.5" class="sc-grade-num" fill="#7c3aed" text-anchor="middle">' + p.schoolRank + '</text>'
         + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
-            ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">'
+            ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 14) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">'
               + esc(shortName(p.name)) + '</text>'
+              /* v3.5.14 #4：每个标注点下面再写考试日期，手机端也能对上时间 */
+              + '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 3) + '" font-size="8" class="sc-axdim" fill="#a8968a" text-anchor="' + anc + '">'
+              + esc(scPointDateLabel(p.date)) + '</text>'
             : '');
     }).join('');
     svg = '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">'
@@ -15570,26 +15817,37 @@ function scGradeTrend(){
       + dots + '</svg></div>';
   }
 
-  var last = pts[pts.length - 1];
-  var prev = pts.length > 1 ? pts[pts.length - 2] : null;
-  var dv = prev ? prev.schoolRank - last.schoolRank : null;   /* 正数 = 名次前进 = 进步 */
+  /* v3.5.14 #5：进退步只认「本次考试 vs 最近一次有年级排名的考试」。
+     以前直接拿 pts 末位当「最近一次」，本次没导入年级排名时会静默用更早一次冒充，
+     属于误导性展示 —— 现在本次缺排名就只说明原因，不给任何进退步数字。 */
+  var anchorIdx = scExamAnchorIdx(items, SC.exam && SC.exam.id);
+  var pair = scRankPair(items, function(it){ return it.schoolRank; }, anchorIdx);
+  var last = pair.cur || (items.length ? items[items.length - 1] : null);
+  var prev = pair.ok ? pair.prev : null;
+  var dv = pair.ok ? (prev.schoolRank - last.schoolRank) : null;   /* 正数 = 名次前进 = 进步 */
   var head = '';
   if(dv != null){
-    head = '<div class="sc-trendhead ' + (dv > 0 ? 'up' : dv < 0 ? 'down' : '') + '">最近一次：<b>'
+    head = '<div class="sc-trendhead ' + (dv > 0 ? 'up' : dv < 0 ? 'down' : '') + '">本次对比上次：<b>'
       + (dv > 0 ? '↑ 年级进步 ' + dv + ' 名' : dv < 0 ? '↓ 年级退步 ' + (-dv) + ' 名' : '— 年级排名持平')
       + '</b><span class="sc-dim">（' + esc(prev.name) + ' 第 ' + prev.schoolRank + ' → '
       + esc(last.name) + ' 第 ' + last.schoolRank + '）</span></div>';
+  }else{
+    head = scNoRankNotice(pair);
   }
-  var pct = (gradeN && last.schoolRank) ? (last.schoolRank / gradeN * 100) : null;
+  var curRank = pair.ok ? last.schoolRank : null;
+  var pct = (gradeN && curRank) ? (curRank / gradeN * 100) : null;
 
   return '<div class="sc-card"><div class="sc-card-h">年级排名变化（物理方向）</div>'
     + head
     + svg
     + '<div class="sc-ov-items" style="margin-top:10px">'
-    +   scOvItem('本次年级排名', last.schoolRank + (gradeN ? ' / ' + gradeN : ''))
+    +   scOvItem('年级排名', curRank == null ? '本次未导入' : (curRank + (gradeN ? ' / ' + gradeN : '')), '物理方向')
     +   scOvItem('年级位置', pct == null ? '—' : '前 ' + pct.toFixed(1) + '%')
     + '</div>'
     + '<div class="sc-figcap">年级排名与班排名分别统计，可对照查看。这里的年级排名是<b>物理方向</b>的年级排名，不是全校排名；本站成绩单里的年级排名均为物理方向口径。'
+    +   (pts.length < items.length
+          ? '<br><span class="sc-dim">趋势图只画含年级排名的 ' + pts.length + ' 次（共录入 ' + items.length + ' 次），没有年级排名的考试未展示。</span>'
+          : '')
     +   (gradeN ? '' : '<br><span class="sc-dim">未填年级人数，不显示百分位。</span>')
     +   '</div></div>';
 }
@@ -17221,6 +17479,28 @@ function scTailRank(){
     return r;
   }
 
+  /* v3.5.14 #5：年级口径下，「上一次」必须是**最近一次导入过年级排名**的考试。
+     以前固定取紧邻的 items[idx-1]，那一场没导入排名就整块放弃或误报「对不上人」。 */
+  var prevIdx = idx - 1;
+  var prevRankExamName = items[prevIdx] ? items[prevIdx].name : '';
+  if(basis === 'grade'){
+    var foundPrev = false;
+    for(var gi2 = idx - 1; gi2 >= 0; gi2--){
+      var pk2 = SC.allRows[eidOf(items[gi2])];
+      if(pk2 && pk2.rows && pk2.rows.some(function(r){ return r.schoolRank != null; })){ prevIdx = gi2; foundPrev = true; break; }
+    }
+    if(!foundPrev){
+      return '<div class="sc-card sc-card-admin"><div class="sc-card-h">进退步榜<span class="sc-only-admin">仅站主可见</span></div>'
+        + scTailSwitch(basis, subs)
+        + scNoRankNotice({ reason:'no-prev-rank', total: items.length, withRank: items.filter(function(x){
+            var p = SC.allRows[eidOf(x)]; return p && p.rows && p.rows.some(function(r){ return r.schoolRank != null; });
+          }).length })
+        + '<div class="sc-dim" style="padding:4px 0 10px">这一场之前没有导入过年级排名，无法按年级口径算进退步。换成班级口径或单科口径可以看到全班进退步。</div></div>';
+    }
+    prevPack = SC.allRows[eidOf(items[prevIdx])] || prevPack;
+    prevRankExamName = items[prevIdx].name;
+  }
+
   var curTot = totalsOf(curPack), prevTot = totalsOf(prevPack);
 
   var curPos, prevPos, curVal, prevVal;
@@ -17240,11 +17520,11 @@ function scTailRank(){
   var names = Object.keys(curPos).filter(function(n){ return prevPos[n] != null; });
   if(!names.length){
     return '<div class="sc-card sc-card-admin"><div class="sc-card-h">进退步榜'
-      + '<span class="sc-h-note">' + esc(items[idx - 1].name) + ' → ' + esc(SC.exam.name) + '</span>'
+      + '<span class="sc-h-note">' + esc(prevRankExamName || '上一场') + ' → ' + esc(SC.exam.name) + '</span>'
       + '<span class="sc-only-admin">仅站主可见</span></div>'
       + scTailSwitch(basis, subs)
       + '<div class="sc-dim" style="padding:4px 0 10px">这两次考试按这个口径<b>对不上人</b>'
-      + (basis === 'grade' ? '（导入的成绩里没有年级排名）' : basis === 'subject' ? '（这一科有人没考）' : '')
+      + (basis === 'grade' ? '（本次成绩里没有导入年级排名）' : basis === 'subject' ? '（这一科有人没考）' : '')
       + '，换个口径看看。</div></div>';
   }
 
@@ -17686,7 +17966,7 @@ function scHeatmap(){
     + '<div class="sc-hm-head"><span class="sc-hm-name"></span><span class="sc-hm-cells">'
     +   subs.map(function(sub){ return '<b>' + esc(sub.name) + '</b>'; }).join('')
     + '</span><span class="sc-hm-total">总分</span></div>'
-    + '<div class="sc-hm-body">' + rowsHtml + '</div>'
+    + '<div class="sc-hm-body" data-scroll-keep>' + rowsHtml + '</div>'
     + '<div id="scHmList" class="sc-qlist"></div>'
     + '<div class="sc-figcap">每格为该生该科分数；颜色越橙越靠前，越浅越靠后。'
     + '<b>点任意一格看这一格的明细</b>（总分、该科比班均高/低多少、班内与年级名次），再点一次收起。</div>'

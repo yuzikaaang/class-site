@@ -490,7 +490,7 @@ create table if not exists score_config (
 --   ① class_votes：一场投票一行。options = [{id,label,by,songId?}]
 --      kind='song' 为歌单投票（选项来自点歌平台）
 --   ② class_vote_ballots：一人一票（vote_id+user_id 主键），改票即覆盖
--- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.5.6
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.5.8
 -- ============================================================
 create table if not exists class_votes (
   id         bigserial   primary key,
@@ -503,6 +503,9 @@ create table if not exists class_votes (
   deadline   timestamptz,                                  -- 空 = 不限截止
   status     text        not null default 'open',          -- open | closed
   created_by bigint,
+  max_choices   smallint,                                   -- v3.5.14 最多选几项（NULL = 不限）
+  min_choices   smallint,                                   -- v3.5.14 至少选几项（NULL = 不限）
+  retract_limit smallint  not null default 1,               -- v3.5.14 可撤回次数（0 = 不允许）
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -512,6 +515,7 @@ create table if not exists class_vote_ballots (
   vote_id    bigint      not null,
   user_id    bigint      not null,
   choices    jsonb       not null default '[]'::jsonb,     -- 选中的选项 id 数组
+  retract_used smallint  not null default 0,                -- v3.5.14 已用撤回次数
   updated_at timestamptz not null default now(),
   primary key (vote_id, user_id)
 );
