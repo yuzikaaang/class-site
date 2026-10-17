@@ -373,6 +373,9 @@ tbody tr.sel{background:var(--tint-2)}
 .extra-row{display:grid;grid-template-columns:96px 1fr 118px;gap:8px;align-items:center;margin-bottom:8px}
 .extra-lab{font-size:.8rem;color:var(--fg-2);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .extra-vis{font-size:.76rem}
+/* v3.5.5：多选字段的复选框组（规则渲染的下拉多选，禁自由输入） */
+.rule-multi{display:flex;flex-wrap:wrap;gap:4px 14px;max-height:132px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md,10px);padding:8px 10px}
+.rule-multi .chk{font-size:.8rem;margin:0}
 @media (max-width:560px){
   .extra-row{grid-template-columns:1fr;gap:5px}
 }
@@ -896,7 +899,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.4';
+var SITE_VERSION = '3.5.5';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -2436,8 +2439,12 @@ function memberDialog(m){
   var POL = ['普通学生', '共青团员', '共青团员 · 团支书', '中共党员', '中共预备党员', '群众'];
   var name0 = isNew ? '' : (m.name || m.displayName || '');
 
+  /* v3.5.5：政治面貌选项跟随「字段管理」里的规则（预置：群众/共青团员）。
+     规则没配时退回老列表；当前值不在选项里时置顶展示（历史值不改库）。 */
   function polOpts(cur){
-    var list = POL.slice();
+    var rule = ruleOf('politics');
+    var list = (rule.type === 'select' && rule.options && rule.options.length)
+      ? rule.options.slice() : POL.slice();
     if(cur && list.indexOf(cur) < 0) list.unshift(cur);
     return list.map(function(x){
       return '<option value="' + attr(x) + '"' + (x === cur ? ' selected' : '') + '>' + esc(x) + '</option>';
@@ -2468,9 +2475,10 @@ function memberDialog(m){
           + ' 顺便开通登录账号（勾选后上面两项必填；不勾则只保存通讯录）</label>'
         : '')
 
-    /* 姓名：单数据源，档案与账号显示名同一个框 */
+    /* 姓名：单数据源，档案与账号显示名同一个框。
+       v3.5.5：maxlength 跟随规则（预置：最多 3 个中文字符）。 */
     + '<div class="field"><label for="mbName">姓名</label>'
-    + '<input id="mbName" maxlength="30" value="' + attr(name0) + '" placeholder="如 余子康">'
+    + '<input id="mbName" maxlength="' + (ruleOf('name').maxLen || 30) + '" value="' + attr(name0) + '" placeholder="如 余子康">'
     + '<p class="hint">这一个框同时写进<b>班级档案</b>与<b>账号显示名</b>（单数据源，不会再出现两处对不上）。</p></div>'
 
     /* 角色 / 状态：仅对（将有）账号有意义 */
@@ -2520,8 +2528,11 @@ function memberDialog(m){
     + '</p>'
 
     + '<div class="mb-form-grid">'
+    /* v3.5.5：学号 / 手机号按规则渲染（预置：学号 6 位数字、手机号 11 位数字）。
+       maxlength + inputmode 只是让正确输入更容易，服务端照样复核。 */
     +   '<div class="field"><label for="mbSid">学号</label>'
-    +     '<input id="mbSid" maxlength="20" value="' + attr(isNew ? '' : m.studentId) + '" placeholder="如 250501">'
+    +     '<input id="mbSid" maxlength="' + (ruleOf('student_id').digits || 20) + '"'
+    +       ' inputmode="numeric" value="' + attr(isNew ? '' : m.studentId) + '" placeholder="如 250501">'
     +     '<p class="hint">全部成员里唯一，重复会报错。</p></div>'
     +   '<div class="field"><label for="mbPol">政治面貌</label>'
     +     '<select id="mbPol">' + polOpts(isNew ? '群众' : m.politics) + '</select></div>'
@@ -2535,7 +2546,8 @@ function memberDialog(m){
     +   '<div class="ct-grid" style="gap:10px">'
     +     '<input id="mbWx" class="inp" maxlength="64" placeholder="微信号" value="' + attr(isNew ? '' : m.wechat) + '">'
     +     '<input id="mbQq" class="inp" maxlength="64" placeholder="QQ 号" value="' + attr(isNew ? '' : m.qq) + '">'
-    +     '<input id="mbPh" class="inp" maxlength="64" placeholder="手机号" value="' + attr(isNew ? '' : m.phone) + '">'
+    +     '<input id="mbPh" class="inp" inputmode="numeric" maxlength="' + (ruleOf('phone').digits || 20) + '"'
+    +       ' placeholder="手机号（' + (ruleOf('phone').digits || '') + ' 位数字）" value="' + attr(isNew ? '' : m.phone) + '">'
     +   '</div>'
     +   '<p class="hint">管理员在这里填的视为已核实，直接按下面的状态对外展示。</p></div>'
 
@@ -2579,17 +2591,19 @@ function memberDialog(m){
         var fv  = (!isNew && m.fieldVis) || {};
         return '<div class="field"><label>其他资料字段</label>'
           + '<p class="hint" style="margin-bottom:8px">「字段管理」里登记的字段。可见范围默认跟随全班，也可只给这一个人单独调整。</p>'
-          + extras.map(function(f){
+          +           extras.map(function(f){
               var val = cur[f.field] || '';
               var curFv = fv[f.field] || '';
               var gv = (function(){
                 var mm = (STATE.members.fieldMeta || []).find(function(x){ return x.field === f.field; });
                 return mm ? mm.visibility : 'public';
               })();
+              /* v3.5.5：按字段规则渲染控件 —— select 出下拉、time 出日期
+                 选择器、number 出数字键盘 + 限长、text 按 maxLen 限长。
+                 禁自由输入的下拉连输入框都不给。 */
               return '<div class="extra-row">'
                 + '<label class="extra-lab" for="mbX_' + attr(f.field) + '">' + esc(f.label) + '</label>'
-                + '<input id="mbX_' + attr(f.field) + '" class="inp" maxlength="200"'
-                +   ' data-xf="' + attr(f.field) + '" value="' + attr(val) + '" placeholder="' + attr(f.label) + '">'
+                + ruleInputHtml(f.field, f.rules, val, 'mbX_' + attr(f.field), f.label)
                 + '<select class="inp extra-vis" data-vf="' + attr(f.field) + '" title="只对这个人生效的可见范围">'
                 +   '<option value=""' + (curFv ? '' : ' selected') + '>跟随全班（' + esc(VIS_LABEL[gv] || gv) + '）</option>'
                 +   '<option value="public"' + (curFv === 'public' ? ' selected' : '') + '>公开</option>'
@@ -2613,6 +2627,12 @@ function memberDialog(m){
       + (isNew ? '创建' : '保存') + '</button>',
     onMount: function(box){
       var msg = box.querySelector('#mbMsg');
+      /* v3.5.5：多选字段的复选框组 → 隐藏输入同步（值仍是逗号分隔文本） */
+      Array.prototype.forEach.call(extraColsOf(), function(f){
+        if(f.rules && f.rules.type === 'select' && f.rules.multi){
+          bindRuleMulti(box, 'mbX_' + f.field);
+        }
+      });
       box.querySelector('[data-no]').onclick = closeModal;
       box.querySelector('[data-yes]').onclick = function(){
         var btn = this;
@@ -5635,6 +5655,237 @@ function loadFieldMeta(){
 }
 
 /* ============================================================================
+ * 字段校验规则（v3.5.5）
+ * ----------------------------------------------------------------------------
+ * 站主要求：「所有字段支持管理员自定义配置校验规则」——
+ *   文本（最大/最小字符数）、数字（固定位数/数值范围/仅允许数字）、
+ *   时间（选择器录入/可限区间）、下拉单选多选（后台自定义选项）。
+ *
+ * ⚠️ 服务端（api/_lib/field-rules.js）是唯一裁判，这里只是让正确输入
+ *    更容易：批量导入 / 直接调 API 都能绕过 UI，规则在服务端复核。
+ * ⚠️ 与服务端 normalizeRules 同语义：空值恒放过、选项去重保序。
+ * ========================================================================= */
+
+/** 取某字段的校验规则（STATE 里已由服务端 normalize 过） */
+function ruleOf(field){
+  var meta = STATE.members.fieldMeta || STATE.profiles.fieldMeta || [];
+  for(var i=0;i<meta.length;i++) if(meta[i].field === field) return meta[i].rules || {};
+  return {};
+}
+
+/** 规则的一句话人话（字段列表 / 报错文案用，与服务端 describeRules 对齐） */
+function ruleDesc(rules){
+  var r = rules || {};
+  if(r.type === 'text'){
+    if(r.minLen && r.maxLen) return '文本 ' + r.minLen + '–' + r.maxLen + ' 字符';
+    if(r.maxLen) return '文本最多 ' + r.maxLen + ' 字符';
+    if(r.minLen) return '文本至少 ' + r.minLen + ' 字符';
+    return '文本';
+  }
+  if(r.type === 'number'){
+    if(r.digits) return '数字固定 ' + r.digits + ' 位';
+    if(r.min != null && r.max != null) return '数字 ' + r.min + '–' + r.max;
+    if(r.min != null) return '数字 ≥ ' + r.min;
+    if(r.max != null) return '数字 ≤ ' + r.max;
+    return '数字';
+  }
+  if(r.type === 'time'){
+    if(r.min && r.max) return '日期 ' + r.min + ' ~ ' + r.max;
+    if(r.min) return '日期不早于 ' + r.min;
+    if(r.max) return '日期不晚于 ' + r.max;
+    return '日期（选择器录入）';
+  }
+  if(r.type === 'select') return (r.multi ? '多选' : '单选') + '：' + (r.options || []).join(' / ');
+  return '';
+}
+
+/**
+ * 按规则渲染输入控件（资料编辑弹窗用）。
+ * @param field  字段键名（写进 data-xf，保存时按它收集值）
+ * @param rules  该字段的规则
+ * @param val    当前值
+ * @param id     元素 id
+ * @param ph     占位提示
+ * @param multiHost 多选的隐藏输入宿主 id 前缀（默认与 id 相同）
+ */
+function ruleInputHtml(field, rules, val, id, ph){
+  var r = rules || {};
+  var v = val == null ? '' : String(val);
+  if(r.type === 'select'){
+    var opts = r.options || [];
+    if(r.multi){
+      /* 多选：复选框组 + 隐藏输入（逗号分隔值），保存路径不改 */
+      var cur = v ? v.split(/[,，]/).map(function(s){ return s.trim(); }).filter(Boolean) : [];
+      var hid = id + '_hid';
+      var h = '<input type="hidden" id="' + attr(hid) + '" data-xf="' + attr(field) + '" value="' + attr(cur.join(',')) + '">';
+      h += '<div id="' + attr(id) + '" class="rule-multi">';
+      opts.forEach(function(o, i){
+        h += '<label class="chk"><input type="checkbox" value="' + attr(o) + '"'
+          + (cur.indexOf(o) >= 0 ? ' checked' : '') + '> ' + esc(o) + '</label>';
+      });
+      h += '</div>';
+      /* 勾选变化 → 同步隐藏输入（onMount 后由调用方绑定，这里用 onchange 内联最省事） */
+      return h;
+    }
+    var s = '<select id="' + attr(id) + '" class="inp" data-xf="' + attr(field) + '">'
+      + '<option value=""' + (v ? '' : ' selected') + '>（未填）</option>';
+    if(v && opts.indexOf(v) < 0){
+      s += '<option value="' + attr(v) + '" selected>' + esc(v) + '（历史值，规则外）</option>';
+    }
+    opts.forEach(function(o){
+      s += '<option value="' + attr(o) + '"' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>';
+    });
+    return s + '</select>';
+  }
+  if(r.type === 'time'){
+    /* 时间选择器弹窗，禁止手动纯文本输入 —— type=date 天然如此 */
+    return '<input id="' + attr(id) + '" class="inp" type="date" data-xf="' + attr(field) + '"'
+      + ' value="' + attr(v) + '"' + (r.min ? ' min="' + attr(r.min) + '"' : '')
+      + (r.max ? ' max="' + attr(r.max) + '"' : '') + '>';
+  }
+  if(r.type === 'number'){
+    return '<input id="' + attr(id) + '" class="inp" inputmode="numeric" data-xf="' + attr(field) + '"'
+      + ' value="' + attr(v) + '" maxlength="' + (r.digits || 20) + '"'
+      + ' placeholder="' + attr(ph || (r.digits ? r.digits + ' 位数字' : '数字')) + '">';
+  }
+  /* text / 无规则：短文本，按 maxLen 限长（无规则时 200） */
+  return '<input id="' + attr(id) + '" class="inp" data-xf="' + attr(field) + '"'
+    + ' value="' + attr(v) + '" maxlength="' + (r.maxLen || 200) + '"'
+    + ' placeholder="' + attr(ph || '') + '">';
+}
+
+/** 多选复选框组 → 隐藏输入同步（ruleInputHtml 的多选分支渲染后调用） */
+function bindRuleMulti(box, id){
+  var host = box.querySelector('#' + id) || box.querySelector('[id="' + id + '"]');
+  var hid  = document.getElementById(id + '_hid');
+  if(!host || !hid) return;
+  Array.prototype.forEach.call(host.querySelectorAll('input[type=checkbox]'), function(cb){
+    cb.onchange = function(){
+      var picked = [];
+      Array.prototype.forEach.call(host.querySelectorAll('input[type=checkbox]'), function(c){
+        if(c.checked) picked.push(c.value);
+      });
+      hid.value = picked.join(',');
+    };
+  });
+}
+
+/* ---- 规则编辑器（新增 / 编辑字段弹窗里共用） ---- */
+var RULE_TYPE_LABEL = {
+  '':   '不校验（随便填）',
+  text: '文本 —— 限字符数',
+  number: '数字 —— 限位数 / 数值范围',
+  time: '日期 —— 选择器录入，可限区间',
+  select: '下拉选择 —— 自定义选项，禁止自由输入'
+};
+
+function ruleEditorHtml(rules){
+  var r = rules || {};
+  var t = r.type || '';
+  var h = '<div class="field"><label>校验规则</label>'
+    + '<select id="ffRuleType" class="inp">'
+    + Object.keys(RULE_TYPE_LABEL).map(function(k){
+        return '<option value="' + attr(k) + '"' + (k === t ? ' selected' : '') + '>'
+          + esc(RULE_TYPE_LABEL[k]) + '</option>';
+      }).join('')
+    + '</select>'
+    + '<div class="muted" style="font-size:.74rem;margin-top:6px">'
+    +   '留空 = 不限制。规则在服务端复核，批量导入同样生效；空值一律放过（没有必填概念）。'
+    + '</div></div>'
+    + '<div id="ffRuleBody"></div>';
+  return h;
+}
+
+/** 按当前选中的类型渲染规则参数区（类型下拉变化时调用） */
+function paintRuleBody(rules){
+  var box = $('ffRuleBody');
+  if(!box) return;
+  var t = ($('ffRuleType') || {}).value || '';
+  var r = rules || {};
+  var h = '';
+  if(t === 'text'){
+    h = '<div class="mb-form-grid">'
+      + '<div class="field"><label>最少字符</label><input id="ffRMinLen" class="inp" inputmode="numeric" maxlength="3" value="' + attr(r.minLen || '') + '" placeholder="不填 = 不限"></div>'
+      + '<div class="field"><label>最多字符</label><input id="ffRMaxLen" class="inp" inputmode="numeric" maxlength="3" value="' + attr(r.maxLen || '') + '" placeholder="不填 = 不限"></div>'
+      + '</div><p class="hint" style="margin-top:-4px">按字符数算，中文一个字算一个。</p>';
+  } else if(t === 'number'){
+    h = '<div class="field"><label>固定位数</label><input id="ffRDigits" class="inp" inputmode="numeric" maxlength="2" value="' + attr(r.digits || '') + '" placeholder="如手机号填 11；与范围二选一或都填"></div>'
+      + '<div class="mb-form-grid"><div class="field"><label>最小值</label><input id="ffRMin" class="inp" inputmode="numeric" value="' + attr(r.min == null ? '' : r.min) + '" placeholder="不限"></div>'
+      + '<div class="field"><label>最大值</label><input id="ffRMax" class="inp" inputmode="numeric" value="' + attr(r.max == null ? '' : r.max) + '" placeholder="不限"></div></div>'
+      + '<p class="hint" style="margin-top:-4px">只能填数字，字母符号一律拒绝。</p>';
+  } else if(t === 'time'){
+    h = '<div class="mb-form-grid">'
+      + '<div class="field"><label>不早于</label><input id="ffRMin" class="inp" type="date" value="' + attr(r.min || '') + '"></div>'
+      + '<div class="field"><label>不晚于</label><input id="ffRMax" class="inp" type="date" value="' + attr(r.max || '') + '"></div>'
+      + '</div><p class="hint" style="margin-top:-4px">同学端弹出日期选择器，不能手动打字。</p>';
+  } else if(t === 'select'){
+    var opts = (r.options || []).slice();
+    h = '<div class="field"><label><label class="chk" style="display:inline-flex"><input type="checkbox" id="ffRMulti"' + (r.multi ? ' checked' : '') + '> 多选</label></label>'
+      + '<div id="ffOpts">'
+      + opts.map(function(o, i){
+          return '<div class="opt-row" style="display:flex;gap:6px;margin-bottom:6px">'
+            + '<input class="inp ff-opt" value="' + attr(o) + '" maxlength="40" placeholder="选项文字">'
+            + '<button class="btn btn-sm btn-secondary ff-opt-del" type="button">删</button></div>';
+        }).join('')
+      + '</div>'
+      + '<button class="btn btn-sm btn-secondary" id="ffOptAdd" type="button">+ 添加选项</button>'
+      + '<p class="hint" style="margin-top:6px">同学只能从这些选项里选，禁止自由输入。</p></div>';
+  }
+  box.innerHTML = h;
+  var add = $('ffOptAdd');
+  if(add) add.onclick = function(){
+    var row = document.createElement('div');
+    row.className = 'opt-row';
+    row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px';
+    row.innerHTML = '<input class="inp ff-opt" maxlength="40" placeholder="选项文字">'
+      + '<button class="btn btn-sm btn-secondary ff-opt-del" type="button">删</button>';
+    $('ffOpts').appendChild(row);
+    row.querySelector('.ff-opt-del').onclick = function(){ row.parentNode.removeChild(row); };
+    row.querySelector('.ff-opt').focus();
+  };
+  Array.prototype.forEach.call(box.querySelectorAll('.ff-opt-del'), function(b){
+    b.onclick = function(){ b.parentNode.parentNode.removeChild(b.parentNode); };
+  });
+}
+
+/** 从规则编辑器收集规则对象（形状交给服务端 normalize 兜底） */
+function collectRules(){
+  var t = ($('ffRuleType') || {}).value || '';
+  if(!t) return {};
+  if(t === 'text'){
+    var o = { type:'text' };
+    var mn = Number(($('ffRMinLen') || {}).value || 0), mx = Number(($('ffRMaxLen') || {}).value || 0);
+    if(mn > 0) o.minLen = mn;
+    if(mx > 0) o.maxLen = mx;
+    return o;
+  }
+  if(t === 'number'){
+    var n = { type:'number' };
+    var d = Number(($('ffRDigits') || {}).value || 0);
+    var lo = ($('ffRMin') || {}).value, hi = ($('ffRMax') || {}).value;
+    if(d > 0) n.digits = d;
+    if(lo !== '' && lo != null && isFinite(Number(lo))) n.min = Number(lo);
+    if(hi !== '' && hi != null && isFinite(Number(hi))) n.max = Number(hi);
+    return n;
+  }
+  if(t === 'time'){
+    var tm = { type:'time' };
+    var a = ($('ffRMin') || {}).value, b2 = ($('ffRMax') || {}).value;
+    if(a) tm.min = a;
+    if(b2) tm.max = b2;
+    return tm;
+  }
+  /* select：选项去空白、去重、保序（与服务端同规则） */
+  var seen = {}, list = [];
+  Array.prototype.forEach.call(document.querySelectorAll('.ff-opt'), function(inp){
+    var s = (inp.value || '').trim();
+    if(!s || seen[s]) return;
+    seen[s] = 1; list.push(s);
+  });
+  return { type:'select', options:list, multi:!!(($('ffRMulti') || {}).checked) };
+}
+
+/* ============================================================================
  * 一键加密存量资料（v3.5.1）
  * ---------------------------------------------------------------------------
  * 站主要求：「之前的那些资料，在更改加密方式之前的，现在可以加密吗？
@@ -5753,6 +6004,12 @@ function paintFieldPanel(list){
       ? '<span class="badge badge-green">自定义</span>'
       : '<span class="badge badge-gray">系统</span>';
 
+    /* v3.5.5 校验规则徽标：一句话人话 + 类型徽章 */
+    var rd = ruleDesc(f.rules);
+    var ruleCell = rd
+      ? '<span class="badge badge-blue" title="' + attr(rd) + '">' + esc(rd) + '</span>'
+      : '<span class="muted">未设置</span>';
+
     return '<tr>'
       + '<td><b>' + esc(f.label) + '</b>'
       +   '<div class="mono muted" style="font-size:.72rem">' + esc(f.field) + '</div></td>'
@@ -5760,8 +6017,10 @@ function paintFieldPanel(list){
       + '<td class="nowrap">' + quick + '</td>'
       + '<td class="nowrap mono">' + (f.sortOrder != null ? f.sortOrder : '—') + '</td>'
       + '<td class="nowrap">' + filled + '</td>'
+      + '<td class="nowrap">' + ruleCell + '</td>'
       + '<td class="nowrap">' + tag + '</td>'
       + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
+      +   '<button data-fe="rule" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '" data-fr="' + attr(JSON.stringify(f.rules || {})) + '">规则</button>'
       +   '<button data-fe="rename" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '">改名</button>'
       +   '<button data-fe="sort" data-ff="' + attr(f.field) + '" data-fs="' + (f.sortOrder || 0) + '">排序</button>'
       +   (f.isCustom
@@ -5787,7 +6046,7 @@ function paintFieldPanel(list){
     + '</div>'
     + '<div class="table-wrap" style="margin-top:12px"><table><thead><tr>'
     + '<th>字段</th><th class="nowrap">可见性</th><th class="nowrap">快捷切换</th>'
-    + '<th class="nowrap">排序</th><th class="nowrap">已填</th><th class="nowrap">类型</th>'
+    + '<th class="nowrap">排序</th><th class="nowrap">已填</th><th class="nowrap">校验规则</th><th class="nowrap">类型</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 
@@ -5806,6 +6065,7 @@ function paintFieldPanel(list){
   });
   Array.prototype.forEach.call(body.querySelectorAll('[data-fe]'), function(b){
     var f = b.dataset.ff;
+    if(b.dataset.fe === 'rule')   b.onclick = function(){ rulesFieldDialog(f, b.dataset.fl, JSON.parse(b.dataset.fr || '{}')); };
     if(b.dataset.fe === 'rename') b.onclick = function(){ renameFieldDialog(f, b.dataset.fl); };
     if(b.dataset.fe === 'sort')   b.onclick = function(){ sortFieldDialog(f, Number(b.dataset.fs || 0)); };
     if(b.dataset.fe === 'del')    b.onclick = function(){ deleteFieldConfirm(f, b.dataset.fl); };
@@ -5816,7 +6076,8 @@ function paintFieldPanel(list){
  *  v3.4.0 站主报「弹窗不在中央、被遮挡」：原来手写的 .dialog-mask/.dialog
  *  在全站样式里根本没有定义（只有这一处在用），结果是按普通文档流渲染，
  *  掉在成员长表格的下面（页面底部）。改用通用 openModal() 体系，
- *  fixed + flex 居中，与其它弹窗行为一致。 */
+ *  fixed + flex 居中，与其它弹窗行为一致。
+ *  v3.5.5：加「校验规则」编辑器（站主：「新增字段都可以自由勾选配置以上规则」）。 */
 function addFieldDialog(){
   var vis = 'self';
   var body =
@@ -5836,7 +6097,8 @@ function addFieldDialog(){
           }).join('')
     +   '</div>'
     +   '<div class="muted" style="font-size:.74rem;margin-top:6px" id="ffVisHint">' + esc(VIS_DESC[vis]) + '</div>'
-    + '</div>';
+    + '</div>'
+    + ruleEditorHtml({});
   var foot =
     '<button class="btn btn-secondary" id="ffCancel">取消</button>'
     + '<button class="btn" id="ffOk">' + svg('plus', 14) + '创建字段</button>';
@@ -5856,6 +6118,8 @@ function addFieldDialog(){
           $('ffVisHint').textContent = VIS_DESC[vis];
         };
       });
+      paintRuleBody({});
+      $('ffRuleType').onchange = function(){ paintRuleBody({}); };
 
       $('ffCancel').onclick = closeModal;
       $('ffOk').onclick = function(){
@@ -5866,11 +6130,50 @@ function addFieldDialog(){
         if(!/^[a-z][a-z0-9_]{0,30}$/.test(key)){
           return toast('英文键名只能小写字母开头，由小写字母、数字、下划线组成', 'danger');
         }
-        api('/admin?action=add-field', { method:'POST', body:{ field:key, label:label, visibility:vis } })
+        var rules = collectRules();
+        if(rules.type === 'select' && !rules.options.length){
+          return toast('下拉字段至少要有一个选项', 'danger');
+        }
+        api('/admin?action=add-field', { method:'POST', body:{ field:key, label:label, visibility:vis, rules:rules } })
           .then(function(j){ closeModal(); toast(j.message || '已新增'); renderFieldPanel(); loadMembers(); })
           .catch(function(e){ toast(e.message, 'danger'); });
       };
       setTimeout(function(){ var el = $('ffLabel'); if(el) el.focus(); }, 60);
+    },
+  });
+}
+
+/** v3.5.5：改某个字段的校验规则（系统字段也能改 —— 预置规则只是出厂值）。 */
+function rulesFieldDialog(field, label, curRules){
+  var body =
+    '<div class="alert info" style="margin:0 0 14px">'
+    +   '规则管的是「<b>填了的时候</b>」长什么样，空值一律放过（本系统没有必填字段）。'
+    +   '批量导入同样按规则复核，不合法的行会报出行号。'
+    + '</div>'
+    + '<div class="field"><label>字段</label><input class="inp" value="' + attr(label || field) + '（' + attr(field) + '）" disabled></div>'
+    + ruleEditorHtml(curRules || {});
+  openModal({
+    title: '校验规则：' + (label || field),
+    sub: '文本限字符数 / 数字限位数范围 / 日期选择器 / 下拉禁自由输入',
+    body: body,
+    foot: '<button class="btn btn-secondary" id="frCancel">取消</button>'
+      + '<button class="btn" id="frOk">保存规则</button>',
+    onMount: function(){
+      paintRuleBody(curRules || {});
+      $('ffRuleType').onchange = function(){ paintRuleBody(curRules || {}); };
+      $('frCancel').onclick = closeModal;
+      $('frOk').onclick = function(){
+        var rules = collectRules();
+        if(rules.type === 'select' && !rules.options.length){
+          return toast('下拉字段至少要有一个选项', 'danger');
+        }
+        api('/admin?action=update-field', { method:'POST', body:{ field:field, rules:rules } })
+          .then(function(j){
+            closeModal(); toast('已保存「' + (label || field) + '」的校验规则');
+            renderFieldPanel(); loadMembers();
+          })
+          .catch(function(e){ toast(e.message, 'danger'); });
+      };
     },
   });
 }
@@ -8583,6 +8886,18 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "3.5.5",
+      "date": "2026-10-17",
+      "title": "字段校验规则：管理员自定义 + 12 个原有字段预置",
+      "items": [
+        "「字段管理」每个字段新增「规则」按钮：文本可限最多/最少字符数，数字可限固定位数与数值范围（只允许数字），时间改为选择器弹窗、禁止手输并可限定区间，下拉单选/多选由后台维护选项列表、前端只能选不能自由填写",
+        "新增字段时可一并勾选校验规则；原有 12 个字段按需求表预置：姓名最多 3 字、学校最多 6 字、班级最多 8 字、家庭住址最多 30 字、政治面貌限群众/共青团员、民族为常用 20 项单选、手机号 11 位数字、学号 6 位数字、身份证号/发展团员编号限定位数、入团时间与出生日期为时间选择器",
+        "同步新增 6 个资料字段：学校、班级、民族、出生日期、家庭住址、入团时间，与姓名学号同规格参与权限分档",
+        "规则由服务端最终把关：批量导入、接口直调都绕不过，不合规的行会在导入汇总里带行号和原因列出，合法行照常入库；只改其它字段时不会拿新规则卡老数据",
+        "同学端（个人中心）编辑联系方式同样受规则约束，手机号带 +86、空格的老数据不主动改就不被卡"
+      ]
+    },
     {
       "version": "3.5.4",
       "date": "2026-10-17",

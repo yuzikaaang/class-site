@@ -27,6 +27,8 @@ import {
 /* v3.5.0：档案字段在库里是密文（AES-256-GCM），凡是要往外吐明文的地方都得解密。
    数据流：DB(密文) → [decRow 解密] → shapeProfile(按可见性裁剪) → 前端(明文)。 */
 import { profileKey, encField, decField, blindIndex } from './_lib/profile-crypt.js';
+/* v3.5.5：字段校验规则（服务端唯一裁判，与 admin.js 同一套实现） */
+import { normalizeRules, validateByRules } from './_lib/field-rules.js';
 
 /** 单次查询返回的最大条数（防止有人拉全表） */
 const MAX_RESULTS = 30;
@@ -77,7 +79,7 @@ function stricter(a, b) {
  */
 async function loadMeta(sql) {
   try {
-    const rows = await sql`select field, visibility, label, sort_order, is_custom, vis_locked from profile_field_meta order by sort_order, field`;
+    const rows = await sql`select field, visibility, label, sort_order, is_custom, vis_locked, rules from profile_field_meta order by sort_order, field`;
     const map = {};
     for (const r of rows) {
       map[r.field] = {
@@ -85,6 +87,8 @@ async function loadMeta(sql) {
         label: r.label || r.field,
         sortOrder: Number(r.sort_order || 100),
         isCustom: !!r.is_custom,
+        /* v3.5.5 校验规则（形状先收敛，防历史脏数据） */
+        rules: normalizeRules(r.rules),
         /* 站主是否设过这个字段的可见性（2026-10-09 v2.4.1）。
            设过 → 以站主为准，同学自己的「仅自己可见」不再生效。
            自定义字段由站主新增时指定可见性，视为天然已锁定。 */
@@ -708,6 +712,33 @@ async function submit(req, res, u) {
 
   const sql = getSql();
 
+  /* v3.5.5 字段规则复核（服务端唯一裁判）：联系方式三字段按站主在
+     「字段管理」里配的规则校（预置：手机号 = 11 位数字）。
+     ⚠️ grandfather 条款：值与库中现值一致时跳过 —— 老资料可能是旧规则
+        下录的（带 +86、空格等），不能因为规则升级把「只改可见性开关」
+        的同学挡死。主动改值就必须守新规则。 */
+  const pkey = await profileKey(req);
+  const curRow = (await sql`select wechat, qq, phone from profiles where id = ${u.profileId} limit 1`)[0];
+  if (curRow) {
+    const metaMap = await loadMeta(sql);
+    const cur = {
+      wechat: await decField(pkey, curRow.wechat),
+      qq:     await decField(pkey, curRow.qq),
+      phone:  await decField(pkey, curRow.phone),
+    };
+    const changed = {};
+    for (const k of ['wechat', 'qq', 'phone']) {
+      const m = metaMap[k];
+      if (!m || !m.rules || !m.rules.type) continue;
+      const incoming = k === 'wechat' ? wechat : k === 'qq' ? qq : phone;
+      if (incoming && incoming !== String(cur[k] == null ? '' : cur[k])) changed[k] = incoming;
+    }
+    for (const k of Object.keys(changed)) {
+      const r = validateByRules(metaMap[k].rules, changed[k], metaMap[k].label);
+      if (!r.ok) return fail(res, 400, r.error);
+    }
+  }
+
   /* 可见性意愿：只接受下面这三个键，值是布尔。
      ⚠️ 本人意愿**只收窄不放宽**——把它写成 false 会把该字段压到 self；
         写成 true 只是「我不反对公开」，最终仍受后台上限约束。
@@ -726,8 +757,8 @@ async function submit(req, res, u) {
      reject_reason 一并清空（那是上一次驳回的理由）。
      visibility_pref 只在本次带了新值时覆盖，避免「改联系方式顺手把开关重置」。
 
-     v3.5.0：联系方式落库前统一加密（站主要求档案"所有信息"加密）。 */
-  const pkey = await profileKey(req);
+     v3.5.0：联系方式落库前统一加密（站主要求档案"所有信息"加密）。
+     pkey 已在上方规则复核处取过（同一请求内密钥不变），直接复用。 */
   const eWechat = await encField(pkey, wechat || null);
   const eQq = await encField(pkey, qq || null);
   const ePhone = await encField(pkey, phone || null);

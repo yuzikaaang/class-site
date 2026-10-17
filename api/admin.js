@@ -56,6 +56,10 @@ import {
 } from './_lib/http.js';
 import { hashPassword } from './_lib/password.js';
 import { listSecrets, saveSecret, deleteSecret } from './_lib/secrets-store.js';
+/* v3.5.5：字段校验规则（站主：「所有字段支持管理员自定义配置校验规则」）。
+   服务端是唯一裁判 —— 批量导入 / 直接调 API 都能绕过前端控件，
+   写库前必须过 validateByRules；规则形状先过 normalizeRules 防脏数据。 */
+import { normalizeRules, validateByRules } from './_lib/field-rules.js';
 /* v3.5.0：成员档案字段（姓名/学号/联系方式/自定义字段…）加密存储。
    与令牌库共用同一个 ADMIN_SECRETS_KEY；未配置时整体退化为明文，
    行为与改造前完全一致（见 profile-crypt.js 顶部说明）。 */
@@ -1059,6 +1063,20 @@ async function ensureProfileForUser(sql, userId, displayName, pkey) {
     const exist = await sql`select id from profiles where user_id = ${userId} limit 1`;
     if (exist.length) return true;
     const nm = displayName || null;
+    /* v3.5.5：姓名也要守字段规则（预置最多 3 字符）。不合规则时不建档案
+       —— 账号照常可用（profileLinked=false，建号回执里会提示去手动补），
+        loud 在日志里，不静默写一条违规数据进去。 */
+    if (nm) {
+      const meta = await loadFieldMeta();
+      const nmRule = (meta.find((f) => f.field === 'name') || {}).rules;
+      if (nmRule && nmRule.type) {
+        const chk = validateByRules(nmRule, nm, '姓名');
+        if (!chk.ok) {
+          console.warn('[admin] 建号显示名不合姓名规则，跳过建档案（账号仍可用）：' + chk.error);
+          return false;
+        }
+      }
+    }
     await sql`
       insert into profiles (name, name_bidx, role, user_id)
       values (${await encField(pkey, nm)}, ${await blindIndex(pkey, nm)}, '学生', ${userId})
@@ -1553,7 +1571,7 @@ async function loadFieldMeta() {
   try {
     const sql = getSql();
     const rows = await sql`
-      select field, label, visibility, sort_order, is_custom, vis_locked
+      select field, label, visibility, sort_order, is_custom, vis_locked, rules
         from profile_field_meta order by sort_order, field
     `;
     return rows.map((r) => ({
@@ -1562,6 +1580,9 @@ async function loadFieldMeta() {
       visibility: r.visibility || 'public',
       sortOrder: Number(r.sort_order || 100),
       isCustom: !!r.is_custom,
+      /* v3.5.5 校验规则：先过 normalizeRules —— 老库可能是 {},
+         历史脏数据也可能奇形怪状，收敛后再给前端渲染控件。 */
+      rules: normalizeRules(r.rules),
       /* 站主是否设过该字段的可见性（2026-10-09 v2.4.1）。
          设过 → 同学自己的「仅自己可见」不再生效（后台权力最大）。
          自定义字段天然算设过。 */
@@ -1666,6 +1687,35 @@ function buildFieldVis(raw, allowedFields) {
   return Object.keys(clean).length ? JSON.stringify(clean) : null;
 }
 
+/**
+ * v3.5.5：按字段规则校验一条资料的录入值（服务端唯一裁判）。
+ *
+ * 站主要求「所有字段支持管理员自定义配置校验规则」—— 前端选择器只是
+ * 「让正确输入更容易」，批量导入 / 直接调 API 都能绕过 UI，所以写库前
+ * 必须在这里复核。没配规则的字段直接放过（空值也一律放过，见
+ * field-rules.js 纪律②：规则约束「填了的时候」长什么样，不强制必填）。
+ *
+ * @param {object} vals  字段名 → 值（已过 cText / cContact 清洗）
+ * @param {Array}  meta  loadFieldMeta() 的结果（含 normalize 过的 rules）
+ * @returns {{ok:true} | {ok:false, error:string}}
+ */
+function validateProfileFields(vals, meta) {
+  if (!vals || typeof vals !== 'object') return { ok: true };
+  const labelOf = {};
+  const ruleOf = {};
+  for (const f of meta || []) {
+    labelOf[f.field] = f.label || f.field;
+    ruleOf[f.field] = f.rules;
+  }
+  for (const field of Object.keys(vals)) {
+    const rule = ruleOf[field];
+    if (!rule || !rule.type) continue;   /* 没配规则 = 不约束 */
+    const r = validateByRules(rule, vals[field], labelOf[field]);
+    if (!r.ok) return r;
+  }
+  return { ok: true };
+}
+
 /* ---------------- 写：调整某条资料的可见性上限（管理员权限） ----------------
    站主原话：「用户可自定义选择是否公开，我后台也可以管理是否公开，以及公开的范围」。
    前一句由 profile.js 的 submit + visibility_pref 实现（本人收窄）；
@@ -1754,6 +1804,9 @@ async function addField(req, res, me, b) {
 
   const visRaw = String(b.visibility || 'self').trim();
   const visibility = ALLOWED_VIS.includes(visRaw) ? visRaw : 'self';
+  /* v3.5.5 校验规则：先 normalize 收敛形状（脏数据 → 最接近合法形态），
+     空对象 = 不校验。前端规则编辑器传什么这里都接得住。 */
+  const rules = normalizeRules(b.rules);
   /* 新字段默认排到最后：取当前最大 sort_order + 10 */
   let sortOrder = Number(b.sortOrder);
   if (!Number.isFinite(sortOrder) || sortOrder < 0) sortOrder = 0;
@@ -1786,8 +1839,8 @@ async function addField(req, res, me, b) {
     /* vis_locked = true：自定义字段是站主亲自建的、可见性也是他定的，
        天然属于「站主说了算」，同学自己设的私密不覆盖它。 */
     await sql`
-      insert into profile_field_meta (field, label, visibility, sort_order, is_custom, vis_locked)
-      values (${field}, ${label}, ${visibility}, ${sortOrder}, true, true)
+      insert into profile_field_meta (field, label, visibility, sort_order, is_custom, vis_locked, rules)
+      values (${field}, ${label}, ${visibility}, ${sortOrder}, true, true, ${JSON.stringify(rules)}::jsonb)
     `;
   } catch (e) {
     /* 回滚：把刚建的列删掉，避免幽灵字段 */
@@ -1802,7 +1855,7 @@ async function addField(req, res, me, b) {
   await audit(me.id, 'field.add', 'profile_field', field, label + '/' + visibility);
   return ok(res, {
     message: '已新增字段「' + label + '」（' + field + '）',
-    field, label, visibility, sortOrder,
+    field, label, visibility, sortOrder, rules,
   });
 }
 
@@ -1870,7 +1923,21 @@ async function updateField(req, res, me, b) {
     sortOrder = Math.max(0, Math.min(9999, Math.round(n)));
   }
 
-  if (label == null && visibility == null && sortOrder == null) {
+  /* v3.5.5 校验规则：b.rules 存在（含 {} = 清除规则）才改，
+     没传这个键就保持原样 —— 与 label/visibility 的「null 不改」语义一致。 */
+  let rules = null;
+  if (b.rules != null) {
+    rules = normalizeRules(b.rules);
+    if (rules.type === 'select' && !rules.options.length) {
+      return fail(res, 400, '下拉字段至少要有一个选项');
+    }
+    if (rules.type === 'number' && rules.digits === 0
+        && rules.min == null && rules.max == null) {
+      return fail(res, 400, '数字字段请填固定位数或数值范围');
+    }
+  }
+
+  if (label == null && visibility == null && sortOrder == null && rules == null) {
     return fail(res, 400, '没有要修改的内容');
   }
 
@@ -1885,16 +1952,20 @@ async function updateField(req, res, me, b) {
            visibility = ${visibility != null ? visibility : row.visibility},
            sort_order = ${sortOrder != null ? sortOrder : row.sort_order},
            vis_locked = ${lockIt ? true : (row.vis_locked === true || row.vis_locked === 1)},
+           rules      = case when ${rules != null}::boolean
+                             then ${JSON.stringify(rules || {})}::jsonb
+                             else rules end,
            updated_at = now()
      where field = ${field}
   `;
 
   await audit(me.id, 'field.update', 'profile_field', field,
-    [label, visibility, sortOrder].filter((x) => x != null).join('/'));
+    [label, visibility, sortOrder, rules != null ? 'rules:' + (rules.type || 'none') : null]
+      .filter((x) => x != null).join('/'));
   return ok(res, {
     message: '已更新字段「' + (label || row.label || field) + '」'
       + (lockIt ? '（可见性已锁定：同学自己的设置不再生效）' : ''),
-    field, adminSet: lockIt || !!row.is_custom,
+    field, adminSet: lockIt || !!row.is_custom, rules,
   });
 }
 
@@ -2245,6 +2316,28 @@ async function upsertProfileCore(sql, me, b, req) {
     }
   }
 
+  /* v3.5.5 字段校验（服务端唯一裁判）：特殊字段（姓名/学号/政治面貌/
+     手机号…有预设规则的）+ 自定义字段一起校。空值一律放过。
+     ⚠️ grandfather 条款（UPDATE）：与库中现值一致的字段跳过校验 ——
+        老资料可能是旧规则下录的（4 字姓名、7 位学号、带 +86 的手机号），
+        不能因为规则升级把「只改别的字段」的管理员挡死。主动改值才守新规则；
+        新增（INSERT）全部校验。 */
+  const ruleVals = {
+    name, student_id: sid, politics, exam_no: examNo,
+    wechat, qq, phone,
+    ...customVals,
+  };
+  if (id) {
+    const curRow = (await sql`select * from profiles where id = ${id} limit 1`)[0];
+    if (!curRow) return { ok: false, code: 404, error: '资料不存在' };
+    for (const k of ['name', 'student_id', 'politics', 'exam_no', 'wechat', 'qq', 'phone']) {
+      const stored = await decField(pkey, curRow[k]);
+      if (ruleVals[k] && ruleVals[k] === String(stored == null ? '' : stored)) delete ruleVals[k];
+    }
+  }
+  const ruleChk = validateProfileFields(ruleVals, allMeta);
+  if (!ruleChk.ok) return { ok: false, code: 400, error: ruleChk.error };
+
   if (!name && !sid) return { ok: false, code: 400, error: '姓名与学号至少填一项' };
 
   /* 学号唯一性检查：同一个学号不能挂两条资料。
@@ -2451,8 +2544,11 @@ async function batchProfiles(req, res, me, b) {
 
   /* 自定义 / 额外字段（2026-10-09 v2.4.0）：Excel 导入的表头里可能有站主自己加的字段，
      前端会按中文表头识别出来塞进 raw.extra。这里先把可写字段名单拉一份，
-     循环里逐条拼进 SQL —— 否则导入进来这些值会被静默丢掉（只写固定的 8 列）。 */
-  const editable = await loadEditableFields();
+     循环里逐条拼进 SQL —— 否则导入进来这些值会被静默丢掉（只写固定的 8 列）。
+     v3.5.5：改成拉全量 meta（editable 从它过滤）—— 逐行规则校验要用到
+     特殊字段（姓名/学号/手机号…）的规则，loadEditableFields 把它们滤掉了。 */
+  const allMeta = await loadFieldMeta();
+  const editable = allMeta.filter((f) => !SPECIAL_FIELDS.includes(f.field));
   /* v3.5.0：导入同样是「落库」，全部字段照样加密；查找已存在记录改走盲索引。 */
   const pkey = await profileKey(req);
 
@@ -2485,6 +2581,18 @@ async function batchProfiles(req, res, me, b) {
 
       if (!name && !sid) {
         errors.push({ index: i, name, studentId: sid, reason: '姓名与学号都为空' });
+        continue;
+      }
+
+      /* v3.5.5 字段校验：逐行按规则校，非法行记错误跳过（不中断整批）——
+         与既有逐行错误模式一致，站主对着行号改 Excel 再重导。 */
+      const ruleChk = validateProfileFields({
+        name, student_id: sid, politics, exam_no: examNo,
+        wechat, qq, phone, id_card: idCard, youth_league_no: youthLeagueNo,
+        ...ex,
+      }, allMeta);
+      if (!ruleChk.ok) {
+        errors.push({ index: i, name, studentId: sid, reason: ruleChk.error });
         continue;
       }
 

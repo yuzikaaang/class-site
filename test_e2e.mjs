@@ -366,18 +366,32 @@ function makeThenable(tr, rawText, values) {
            让桩和生产一致：列不存在就加，存在就跳过。
            这样「生产缺列」类故障能在测试里复现，不会假绿。 */
         if (tr && typeof tr === 'object' && tr.__alter) {
-          const m = /alter\s+table\s+([\w"]+)\s+add\s+column\s+if\s+not\s+exists\s+([\w"]+)\s+([^;]*)/i.exec(tr.__alter);
-          if (m) {
-            const [, tbl, col, rest] = m;
-            const cols = db.exec(`pragma table_info(${tbl})`);
-            const names = cols.length ? cols[0].values.map((r) => String(r[1])) : [];
-            if (!names.includes(col)) {
-              /* 去掉 Postgres 专有类型，映射到 SQLite 可用类型 */
-              let type = rest.replace(/\s+/g, ' ').trim();
-              type = type.replace(/timestamptz/gi, 'text')
-                         .replace(/bigserial/gi, 'integer')
-                         .replace(/::interval/gi, '');
-              db.run(`alter table ${tbl} add column ${col} ${type}`);
+          /* v3.5.5：一条 ALTER 多列（PG 合法、SQLite 不认）——
+             Workers 免费版子请求纪律（单请求 50 上限）要求 ensureSchema
+             多列合并成一条 ALTER，桩必须按逗号逐列拆开、真正执行，
+             与生产语义一致。以前只匹配单列，多列语句整条落穿到 db.run，
+             near ",": syntax error 被 ensureSchema 外层 catch 吞掉，
+             后面的 is_ai / profile_view_log / user_action_log / 版本盖章
+             全部被跳过 →「no such column: u.is_ai」一路红。
+             类型里不带逗号（全仓 ALTER 已核对：text/jsonb/timestamptz/
+             boolean/int/date + default），按 [^,;]+ 切类型安全。 */
+          const tblM = /alter\s+table\s+([\w"]+)/i.exec(tr.__alter);
+          if (tblM) {
+            const tbl = tblM[1].replace(/"/g, '');
+            const re = /add\s+column\s+if\s+not\s+exists\s+([\w"]+)\s+([^,;]+)/gi;
+            let m;
+            while ((m = re.exec(tr.__alter)) !== null) {
+              const col = m[1].replace(/"/g, '');
+              const cols = db.exec(`pragma table_info(${tbl})`);
+              const names = cols.length ? cols[0].values.map((r) => String(r[1])) : [];
+              if (!names.includes(col)) {
+                /* 去掉 Postgres 专有类型，映射到 SQLite 可用类型 */
+                let type = m[2].replace(/\s+/g, ' ').trim();
+                type = type.replace(/timestamptz/gi, 'text')
+                           .replace(/bigserial/gi, 'integer')
+                           .replace(/::\s*\w+/g, '');
+                db.run(`alter table ${tbl} add column ${col} ${type}`);
+              }
             }
           }
           resolve([]);
@@ -978,7 +992,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   /* ---- 管理员建资料 ---- */
   const c1 = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '测试同学甲', studentId: '250501', politics: '共青团员' },
+    body: { name: '测试甲', studentId: '250501', politics: '共青团员' },
   });
   t('管理员新增资料成功', c1.status === 200 && c1.body.id > 0, JSON.stringify(c1.body));
   const pid1 = c1.body.id;
@@ -986,7 +1000,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
 
   const c2 = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '测试老师乙', politics: '中共党员', role: '老师', phone: '13800138000' },
+    body: { name: '老师乙', politics: '共青团员', role: '老师', phone: '13800138000' },
   });
   t('管理员新增老师资料成功', c2.status === 200, JSON.stringify(c2.body));
   const pid2 = c2.body.id;
@@ -994,7 +1008,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   /* 学号唯一性：同一个学号不能挂第二条 */
   const cdup = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '重名测试', studentId: '250501' },
+    body: { name: '重名测', studentId: '250501' },
   });
   t('学号重复被拒绝 409', cdup.status === 409, '实际 ' + cdup.status);
 
@@ -1041,13 +1055,13 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   t('登录后按学号查询成功', s1.status === 200 && (s1.body.results || []).length >= 1,
     JSON.stringify(s1.body).slice(0, 150));
   const hit1 = (s1.body.results || [])[0] || {};
-  t('查询结果带姓名', hit1.name === '测试同学甲', '实际 ' + hit1.name);
+  t('查询结果带姓名', hit1.name === '测试甲', '实际 ' + hit1.name);
   t('查询结果带政治面貌', hit1.politics === '共青团员', '实际 ' + hit1.politics);
 
   /* 老师那条有手机号且 contact_status 默认 approved（管理员直接录入视为已核实） */
-  const s2 = await call('/api/profile?action=search&q=测试老师', { token: token2 });
+  const s2 = await call('/api/profile?action=search&q=老师', { token: token2 });
   const hit2 = (s2.body.results || [])[0] || {};
-  t('按姓名能查到老师', hit2.name === '测试老师乙', '实际 ' + hit2.name);
+  t('按姓名能查到老师', hit2.name === '老师乙', '实际 ' + hit2.name);
   t('已核实的手机号对登录用户可见', hit2.phone === '13800138000', '实际 ' + hit2.phone);
   t('已核实标记正确', hit2.contactVisible === true);
 
@@ -1066,7 +1080,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
     (vl.body.logs || []).some(x => x.viewer === 'pctest01'),
     JSON.stringify((vl.body.logs || []).slice(0, 3)));
   t('查看日志记录了被查者姓名',
-    (vl.body.logs || []).some(x => x.targetName === '测试同学甲'),
+    (vl.body.logs || []).some(x => x.targetName === '测试甲'),
     JSON.stringify((vl.body.logs || []).map(x => x.targetName).slice(0, 5)));
   t('查看日志记录了查询关键词',
     (vl.body.logs || []).some(x => x.keyword === '250501'),
@@ -1104,7 +1118,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
 
   const clOk = await call('/api/profile?action=claim', {
     method: 'POST', token: token2,
-    body: { name: '测试同学甲', studentId: '250501' },
+    body: { name: '测试甲', studentId: '250501' },
   });
   t('认领自己的资料成功', clOk.status === 200, JSON.stringify(clOk.body));
 
@@ -1201,18 +1215,18 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   t('submit 不接受姓名/学号（仅联系方式）', tryRename.status === 200);
   const s8 = await call('/api/profile?action=search&q=250501', { token: token2 });
   const stillName = (s8.body.results || [])[0] || {};
-  t('姓名未被改掉', stillName.name === '测试同学甲', '实际 ' + stillName.name);
+  t('姓名未被改掉', stillName.name === '测试甲', '实际 ' + stillName.name);
   t('学号未被改掉', stillName.studentId === '250501', '实际 ' + stillName.studentId);
 
   /* ---- 管理员编辑资料 ---- */
   const ed = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: pid1, name: '测试同学甲', studentId: '250501', politics: '普通学生' },
+    body: { id: pid1, name: '测试甲', studentId: '250501', politics: '群众' },
   });
   t('管理员修改政治面貌成功', ed.status === 200, JSON.stringify(ed.body));
   const s9 = await call('/api/profile?action=search&q=250501', { token: token2 });
-  t('政治面貌已更新为普通学生',
-    (s9.body.results || [])[0].politics === '普通学生',
+  t('政治面貌已更新为群众',
+    (s9.body.results || [])[0].politics === '群众',
     '实际 ' + (s9.body.results || [])[0].politics);
 
   /* ---- 批量导入 ---- */
@@ -1220,7 +1234,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
     method: 'POST', token: adminToken,
     body: { rows: [
       { name: '批量甲', studentId: '250601', politics: '共青团员' },
-      { name: '批量乙', studentId: '250602', politics: '普通学生' },
+      { name: '批量乙', studentId: '250602', politics: '群众' },
       { name: '', studentId: '' },
       { name: '批量甲', studentId: '250601', politics: '共青团员' },  /* 重复 → 应为更新 */
     ] },
@@ -1281,7 +1295,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   /* 管理员建一条带准考证号的资料 */
   const ce = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '准考证测试生', studentId: '250701', politics: '群众', examNo: '11399999' },
+    body: { name: '准考生', studentId: '250701', politics: '群众', examNo: '11399999' },
   });
   t('新增带准考证号的资料成功', ce.status === 200 && ce.body.id > 0, JSON.stringify(ce.body));
   const eid = ce.body.id;
@@ -1303,7 +1317,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   /* 按准考证号也能搜到人 */
   const se2 = await call('/api/profile?action=search&q=11399999', { token: token2 });
   t('支持用准考证号搜索',
-    (se2.body.results || []).length === 1 && (se2.body.results || [])[0].name === '准考证测试生',
+    (se2.body.results || []).length === 1 && (se2.body.results || [])[0].name === '准考生',
     JSON.stringify(se2.body.results || []).length + ' 条');
 
   /* 后台列表要带上这个字段 */
@@ -1318,7 +1332,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   /* 管理员改准考证号 */
   const ue = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: eid, name: '准考证测试生', studentId: '250701', examNo: '11400001' },
+    body: { id: eid, name: '准考生', studentId: '250701', examNo: '11400001' },
   });
   t('管理员修改准考证号成功', ue.status === 200, JSON.stringify(ue.body));
   const se3 = await call('/api/profile?action=search&q=250701', { token: token2 });
@@ -1329,8 +1343,8 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   const be = await call('/api/admin?action=batch-profiles', {
     method: 'POST', token: adminToken,
     body: { rows: [
-      { name: '批量准考证甲', studentId: '250702', politics: '群众', examNo: '11380001' },
-      { name: '批量准考证乙', studentId: '250703', politics: '共青团员', examNo: '11380002' },
+      { name: '准考甲', studentId: '250702', politics: '群众', examNo: '11380001' },
+      { name: '准考乙', studentId: '250703', politics: '共青团员', examNo: '11380002' },
     ] },
   });
   t('批量导入带准考证号成功', be.status === 200 && be.body.created === 2, JSON.stringify(be.body));
@@ -1349,7 +1363,7 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   for (const id of [eid]) {
     await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id } });
   }
-  const bp = await call('/api/admin?action=profiles&q=批量准考证', { token: adminToken });
+  const bp = await call('/api/admin?action=profiles&q=准考', { token: adminToken });
   for (const x of (bp.body.profiles || [])) {
     await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id: x.id } });
   }
@@ -1645,7 +1659,7 @@ console.log('\n【18】头衔系统与 AI 助手交接（2026-10-05 新增）');
   /* ---- 先造一条资料 + 一个认领它的账号 ---- */
   const mk = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '头衔测试甲', studentId: '9900001', politics: '共青团员' },
+    body: { name: '头衔甲', studentId: '990001', politics: '共青团员' },
   });
   t('建测试资料成功', mk.status === 200 && mk.body.ok, JSON.stringify(mk.body));
   const pid = mk.body.id || (mk.body.profile || {}).id;
@@ -1703,7 +1717,7 @@ console.log('\n【18】头衔系统与 AI 助手交接（2026-10-05 新增）');
      这条断言就是防止那句 where 复活。 */
   const mkNoTitle = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '头衔测试乙', studentId: '9900002', politics: '群众' },
+    body: { name: '头衔乙', studentId: '990002', politics: '群众' },
   });
   const noTitlePid = mkNoTitle.body.id || (mkNoTitle.body.profile || {}).id;
   const list2 = await call('/api/admin?action=titles', { token: adminToken });
@@ -1802,7 +1816,7 @@ console.log('\n【18】头衔系统与 AI 助手交接（2026-10-05 新增）');
      ⚠️ 顺序要紧：先验「无头衔被拒」，再任命头衔，否则前面两条断言会失效。 */
   const mk2 = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '作业课代表', studentId: '9900002' },
+    body: { name: '作业甲', studentId: '990002' },
   });
   const pid2 = mk2.body.id || (mk2.body.profile || {}).id;
   db.run('update profiles set user_id = ? where id = ?', [hwUser.body.user.id, pid2]);
@@ -3123,7 +3137,7 @@ const bTok = (await call('/api/auth?action=change-password', {
 })).body.token;
 t('（准备）路人账号可用于查询', !!bTok);
 
-/* 新同学甲（fixbug01）的会话 token 与资料 id，由【34】块内赋值、
+/* 同学甲（fixbug01）的会话 token 与资料 id，由【34】块内赋值、
    【35】~【36】块复用，所以在块外先声明。 */
 let npTok2 = null;
 let newStudentProfId = null;
@@ -3142,7 +3156,7 @@ let newStudentProfId = null;
   /* --- A. 单个建号后，能在 titles 里查到 --- */
   const cu = await call('/api/admin?action=create-user', {
     method: 'POST', token: adminToken,
-    body: { username: 'fixbug01', password: 'Init2025', displayName: '新同学甲' },
+    body: { username: 'fixbug01', password: 'Init2025', displayName: '同学甲' },
   });
   t('建号成功', cu.status === 200 && cu.body.ok, JSON.stringify(cu.body).slice(0, 140));
   t('建号回执带 profileLinked=true', cu.body.profileLinked === true,
@@ -3157,7 +3171,7 @@ let newStudentProfId = null;
   t('★新建的账号出现在「头衔任命」列表里（站主原 bug）', !!found,
     '未找到 userId=' + newUserId + '，列表前 3 条：' +
     JSON.stringify((tl.body.profiles || []).slice(0, 3)));
-  t('该资料的姓名取自 displayName', found && found.name === '新同学甲', found && found.name);
+  t('该资料的姓名取自 displayName', found && found.name === '同学甲', found && found.name);
   t('该资料学号为空（建号不填学号）', found && found.studentId === '', found && found.studentId);
   t('该资料已绑定 userId（登录后直接 claimed=true）', found && found.userId === newUserId);
 
@@ -3176,7 +3190,7 @@ let newStudentProfId = null;
   const meNew = await call('/api/profile?action=me', { token: npTok2 });
   t('建号后登录 → claimed=true（无需认领）', meNew.body.claimed === true,
     JSON.stringify(meNew.body).slice(0, 150));
-  t('能看到自己的姓名', meNew.body.profile && meNew.body.profile.name === '新同学甲');
+  t('能看到自己的姓名', meNew.body.profile && meNew.body.profile.name === '同学甲');
 
   /* --- 任命头衔：证明这个人「可被任命」了 --- */
   const profId = meNew.body.profile && meNew.body.profile.id;
@@ -3223,7 +3237,8 @@ console.log('\n【35】第二十九轮·资料字段元数据与可见性分档'
   t('字段元数据接口可读', fm.status === 200 && Array.isArray(fm.body.fields),
     JSON.stringify(fm.body).slice(0, 140));
   const fields = fm.body.fields || [];
-  t('预置了 11 个字段', fields.length === 11, '实际 ' + fields.length);
+  t('预置了 17 个字段（v3.5.5 新增学校/班级/民族/出生日期/家庭住址/入团时间）',
+    fields.length === 17, '实际 ' + fields.length);
   const byField = {};
   fields.forEach((f) => { byField[f.field] = f; });
   t('含 name=姓名/public', byField.name && byField.name.label === '姓名' && byField.name.visibility === 'public');
@@ -3281,7 +3296,7 @@ console.log('\n【35】第二十九轮·资料字段元数据与可见性分档'
   /* 给「测试同学甲」补一个智学网账号，用来验证分档真的生效 */
   const setEx = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: globalThis.__pid1, name: '测试同学甲', examNo: '11389409' },
+    body: { id: globalThis.__pid1, name: '测试甲', examNo: '11389409' },
   });
   t('（准备）给测试同学甲补上智学网账号', setEx.status === 200, JSON.stringify(setEx.body).slice(0, 120));
 
@@ -3290,7 +3305,7 @@ console.log('\n【35】第二十九轮·资料字段元数据与可见性分档'
   const hSelf = (sSelf.body.results || [])[0] || {};
   t('★self 档下普通用户查不到该字段', hSelf.examNo === '' || hSelf.examNo === undefined,
     '实际 ' + JSON.stringify(hSelf.examNo));
-  t('未受影响的字段仍在（姓名）', hSelf.name === '测试同学甲', '实际 ' + hSelf.name);
+  t('未受影响的字段仍在（姓名）', hSelf.name === '测试甲', '实际 ' + hSelf.name);
 
   /* 本人查自己仍能看到（self 就是「本人」） */
   const meOwn = await call('/api/profile?action=me', { token: npTok2 });
@@ -3330,7 +3345,7 @@ console.log('\n【36】第二十九轮·本人可见性意愿（仅自己可见�
   });
 
   /* 别人按学号查不到 —— 但这条资料没学号，改用姓名查 */
-  const sOth = await call('/api/profile?action=search&q=新同学甲', { token: bTok });
+  const sOth = await call('/api/profile?action=search&q=同学甲', { token: bTok });
   const hOth = (sOth.body.results || []).find((x) => x.id === myPid) || {};
   t('★别人查不到被收窄的微信号', hOth.wechat === '' || hOth.wechat === undefined,
     '实际 ' + JSON.stringify(hOth.wechat));
@@ -3361,12 +3376,12 @@ console.log('\n【36】第二十九轮·本人可见性意愿（仅自己可见�
   /* --- 管理员替本人覆盖可见性（后台也能管） --- */
   const admSave = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: myPid, name: '新同学甲',
+    body: { id: myPid, name: '同学甲',
             visibilityPref: { wechat: true, qq: true, phone: true } },
   });
   t('管理员可覆盖可见性', admSave.status === 200 && admSave.body.ok,
     JSON.stringify(admSave.body).slice(0, 140));
-  const sAfter = await call('/api/profile?action=search&q=新同学甲', { token: bTok });
+  const sAfter = await call('/api/profile?action=search&q=同学甲', { token: bTok });
   const hAfter = (sAfter.body.results || []).find((x) => x.id === myPid) || {};
   t('★管理员解掉收窄后，别人又能看到微信号', hAfter.wechat === 'my_wx_secret',
     '实际 ' + JSON.stringify(hAfter.wechat));
@@ -3604,7 +3619,7 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* 先备一条资料 */
   const mkProf = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '字段测试甲', studentId: '260001', role: '学生', extra: { school_id: 'XJ20260001' } },
+    body: { name: '字段甲', studentId: '260001', role: '学生', extra: { school_id: 'XJ20260001' } },
   });
   t('新增资料时可直接写自定义字段', mkProf.status === 200 && mkProf.body.ok,
     JSON.stringify(mkProf.body).slice(0, 140));
@@ -3626,7 +3641,7 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* 改值 */
   const upd = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: fid, name: '字段测试甲', studentId: '260001', extra: { school_id: 'XJ-改过了' } },
+    body: { id: fid, name: '字段甲', studentId: '260001', extra: { school_id: 'XJ-改过了' } },
   });
   t('可修改自定义字段的值', upd.status === 200 && upd.body.ok);
   const detail2 = await call('/api/admin?action=profile&id=' + fid, { token: adminToken });
@@ -3637,7 +3652,7 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* 前端传 meta 表里没有的键，不能写进库（防乱传） */
   const junk = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: fid, name: '字段测试甲', studentId: '260001', extra: { not_a_field: 'x', school_id: 'XJ-改过了' } },
+    body: { id: fid, name: '字段甲', studentId: '260001', extra: { not_a_field: 'x', school_id: 'XJ-改过了' } },
   });
   t('extra 里未登记的键被忽略', junk.status === 200 && junk.body.ok);
 
@@ -3662,10 +3677,10 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   t('自定义字段带 label（前端直接显示中文名）',
     sRow2 && (sRow2.fields || []).some((f) => f.label === '学籍号'));
 
-  /* 单人例外：把「字段测试甲」的 school_id 单独收窄为 self —— 全班仍 public，但他看不见 */
+  /* 单人例外：把「字段甲」的 school_id 单独收窄为 self —— 全班仍 public，但他看不见 */
   const perOne = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: fid, name: '字段测试甲', studentId: '260001', fieldVis: { school_id: 'self' } },
+    body: { id: fid, name: '字段甲', studentId: '260001', fieldVis: { school_id: 'self' } },
   });
   t('可给单个人设置字段例外', perOne.status === 200 && perOne.body.ok,
     JSON.stringify(perOne.body).slice(0, 140));
@@ -3688,7 +3703,7 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* 放宽：单人例外设回 public，且全班也是 public → 又能看到 */
   await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: fid, name: '字段测试甲', studentId: '260001', fieldVis: {} },
+    body: { id: fid, name: '字段甲', studentId: '260001', fieldVis: {} },
   });
   const seen4 = await call('/api/profile?action=search&q=260001', { token: bTok });
   const sRow4 = ((seen4.body || {}).results || [])[0];
@@ -3748,7 +3763,7 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* 真写一个身份证号，验证「仅本人可见」档真的工作 */
   const idProf = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '证件测试乙', studentId: '260002', extra: { id_card: '360424201007100011' } },
+    body: { name: '证件乙', studentId: '260002', extra: { id_card: '360424201007100011' } },
   });
   t('可写入身份证号', idProf.status === 200 && idProf.body.ok);
   const idDetail = await call('/api/admin?action=profile&id=' + idProf.body.id, { token: adminToken });
@@ -3818,7 +3833,7 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* 恶意列名不能借导入通道绕过白名单（这是 SQL 注入的第二条入口） */
   const batchEvil = await call('/api/admin?action=batch-profiles', {
     method: 'POST', token: adminToken,
-    body: { rows: [{ name: '导入恶意', studentId: '270003', role: '学生',
+    body: { rows: [{ name: '导入恶', studentId: '270003', role: '学生',
       extra: { 'x text; drop table profiles; --': '1', 'a-b': '2' } }] },
   });
   t('★导入通道的非法列名被丢弃（不报错也不执行）',
@@ -3828,6 +3843,186 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   t('★profiles 表仍在（注入未得逞）',
     stillAlive.status === 200 && (stillAlive.body.profiles || []).length === 1,
     'HTTP ' + stillAlive.status);
+
+  /* ---- G3. v3.5.5 字段校验规则（站主：「所有字段支持管理员自定义配置校验规则」）---- */
+  /* ① 预置规则落库：12 个字段的出厂规则（需求表明细） */
+  const metaR = await call('/api/admin?action=field-meta', { token: adminToken });
+  const rulesOf = (f) => ((metaR.body.fields || []).find((x) => x.field === f) || {}).rules || {};
+  t('★v3.5.5 姓名规则：文本最多 3 字符',
+    rulesOf('name').type === 'text' && rulesOf('name').maxLen === 3,
+    JSON.stringify(rulesOf('name')));
+  t('★v3.5.5 学号规则：数字固定 6 位',
+    rulesOf('student_id').type === 'number' && rulesOf('student_id').digits === 6,
+    JSON.stringify(rulesOf('student_id')));
+  t('★v3.5.5 手机号规则：数字固定 11 位',
+    rulesOf('phone').type === 'number' && rulesOf('phone').digits === 11,
+    JSON.stringify(rulesOf('phone')));
+  t('★v3.5.5 政治面貌规则：单选 群众/共青团员',
+    rulesOf('politics').type === 'select' && rulesOf('politics').multi === false
+    && JSON.stringify(rulesOf('politics').options) === JSON.stringify(['群众', '共青团员']),
+    JSON.stringify(rulesOf('politics')));
+  t('★v3.5.5 身份证号规则：文本最多 18 字符',
+    rulesOf('id_card').type === 'text' && rulesOf('id_card').maxLen === 18,
+    JSON.stringify(rulesOf('id_card')));
+  t('★v3.5.5 发展团员编号规则：文本最多 40 字符',
+    rulesOf('youth_league_no').type === 'text' && rulesOf('youth_league_no').maxLen === 40);
+  t('★v3.5.5 入团时间/出生日期规则：日期选择器',
+    rulesOf('league_date').type === 'time' && rulesOf('birth_date').type === 'time');
+  t('★v3.5.5 学校 6 / 班级 8 / 家庭住址 30 字符',
+    rulesOf('school').maxLen === 6 && rulesOf('class_name').maxLen === 8
+    && rulesOf('home_address').maxLen === 30,
+    JSON.stringify({ s: rulesOf('school'), c: rulesOf('class_name'), h: rulesOf('home_address') }));
+  t('★v3.5.5 民族规则：单选常用民族',
+    rulesOf('ethnicity').type === 'select' && (rulesOf('ethnicity').options || []).length >= 10
+    && rulesOf('ethnicity').options.includes('汉族') && rulesOf('ethnicity').options.includes('畲族'),
+    JSON.stringify(rulesOf('ethnicity')).slice(0, 120));
+
+  /* ② 需求表 6 个新字段真的登记了 */
+  for (const nf of ['school', 'class_name', 'ethnicity', 'birth_date', 'home_address', 'league_date']) {
+    t('★v3.5.5 新预置字段已登记：' + nf,
+      (metaR.body.fields || []).some((x) => x.field === nf));
+  }
+
+  /* ③ 服务端是唯一裁判：非法值一律 400 + 人话报错 */
+  const badName = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '姓名超长甲', studentId: '290001' },
+  });
+  t('★v3.5.5 超长姓名被拒 400', badName.status === 400 && /姓名/.test(badName.body.error || ''),
+    '实际 ' + badName.status + ' ' + JSON.stringify(badName.body).slice(0, 120));
+  const badSid = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '规则甲', studentId: '2900011' },
+  });
+  t('★v3.5.5 7 位学号被拒 400', badSid.status === 400 && /学号/.test(badSid.body.error || ''),
+    '实际 ' + badSid.status + ' ' + JSON.stringify(badSid.body).slice(0, 120));
+  const badPhone = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '规则甲', studentId: '290001', phone: '138001380001' },
+  });
+  t('★v3.5.5 12 位手机号被拒 400', badPhone.status === 400 && /手机号/.test(badPhone.body.error || ''),
+    '实际 ' + badPhone.status + ' ' + JSON.stringify(badPhone.body).slice(0, 120));
+  const badPol = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '规则甲', studentId: '290001', politics: '中共党员' },
+  });
+  t('★v3.5.5 规则外政治面貌被拒 400', badPol.status === 400 && /政治面貌/.test(badPol.body.error || ''),
+    '实际 ' + badPol.status + ' ' + JSON.stringify(badPol.body).slice(0, 120));
+  const badDate = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '规则甲', studentId: '290001', extra: { birth_date: '2026-02-31' } },
+  });
+  t('★v3.5.5 不存在的日期被拒 400', badDate.status === 400 && /日期/.test(badDate.body.error || ''),
+    '实际 ' + badDate.status + ' ' + JSON.stringify(badDate.body).slice(0, 120));
+  const badEth = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '规则甲', studentId: '290001', extra: { ethnicity: '外星族' } },
+  });
+  t('★v3.5.5 规则外民族被拒 400', badEth.status === 400 && /民族/.test(badEth.body.error || ''),
+    '实际 ' + badEth.status + ' ' + JSON.stringify(badEth.body).slice(0, 120));
+
+  /* ④ 全合法值通过（6 个新字段一次写全 + 读回） */
+  const okRule = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: {
+      name: '规则甲', studentId: '290001', politics: '群众', phone: '13800138000',
+      extra: {
+        school: '修水一中', class_name: '高三(5)班', ethnicity: '汉族',
+        birth_date: '2010-07-10', home_address: '江西省九江市修水县', league_date: '2024-05-04',
+        id_card: '360424201007100011', youth_league_no: 'TQ20240001',
+      },
+    },
+  });
+  t('★v3.5.5 全合法值保存成功', okRule.status === 200 && okRule.body.ok,
+    JSON.stringify(okRule.body).slice(0, 160));
+  const rulePid = okRule.body.id;
+  const ruleDet = await call('/api/admin?action=profile&id=' + rulePid, { token: adminToken });
+  const rp = (ruleDet.body.profile || {}).extra || {};
+  t('★v3.5.5 新字段值读回正确',
+    rp.school === '修水一中' && rp.class_name === '高三(5)班' && rp.ethnicity === '汉族'
+    && rp.birth_date === '2010-07-10' && rp.home_address === '江西省九江市修水县'
+    && rp.league_date === '2024-05-04',
+    JSON.stringify(rp).slice(0, 220));
+
+  /* ⑤ grandfather：与原值一致的字段不卡编辑（只改手机号也能保存） */
+  const gfSave = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: rulePid, name: '规则甲', studentId: '290001', phone: '13900139000' },
+  });
+  t('★v3.5.5 只改手机号可保存（grandfather 不卡老数据）',
+    gfSave.status === 200 && gfSave.body.ok,
+    JSON.stringify(gfSave.body).slice(0, 160));
+
+  /* ⑥ 批量导入逐行复核：非法行记错跳过，合法行照常入 */
+  const batchRule = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: [
+      { name: '批量合', studentId: '290002', politics: '共青团员' },
+      { name: '违规批', studentId: '290003', politics: '中共党员' },
+    ] },
+  });
+  t('★v3.5.5 批量导入按规则逐行复核',
+    batchRule.status === 200 && batchRule.body.created === 1 && batchRule.body.failed === 1,
+    JSON.stringify(batchRule.body).slice(0, 220));
+  t('★v3.5.5 批量错误带行号与人话原因',
+    (batchRule.body.errors || [])[0] && batchRule.body.errors[0].index === 1
+    && /政治面貌/.test(batchRule.body.errors[0].reason || ''),
+    JSON.stringify(batchRule.body.errors));
+
+  /* ⑦ 自定义规则：给 school_id 配下拉单选 —— 规则外值被拒、规则内值通过、清规则后放开 */
+  const setSel = await call('/api/admin?action=update-field', {
+    method: 'POST', token: adminToken,
+    body: { field: 'school_id', rules: { type: 'select', options: ['甲校', '乙校'] } },
+  });
+  t('★v3.5.5 给自定义字段配下拉规则成功', setSel.status === 200 && setSel.body.ok,
+    JSON.stringify(setSel.body).slice(0, 140));
+  const metaSel = await call('/api/admin?action=field-meta', { token: adminToken });
+  const selRule = ((metaSel.body.fields || []).find((x) => x.field === 'school_id') || {}).rules || {};
+  t('★v3.5.5 下拉规则落库（normalize 后形状正确）',
+    selRule.type === 'select' && (selRule.options || []).length === 2 && selRule.multi === false,
+    JSON.stringify(selRule));
+  const selBad = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '规则乙', studentId: '290004', extra: { school_id: '丙校' } },
+  });
+  t('★v3.5.5 下拉规则外值被拒 400',
+    selBad.status === 400 && /学籍号/.test(selBad.body.error || ''),
+    '实际 ' + selBad.status + ' ' + JSON.stringify(selBad.body).slice(0, 140));
+  const selOk = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { name: '规则乙', studentId: '290004', extra: { school_id: '甲校' } },
+  });
+  t('★v3.5.5 下拉规则内值通过', selOk.status === 200 && selOk.body.ok,
+    JSON.stringify(selOk.body).slice(0, 140));
+  const clearRule = await call('/api/admin?action=update-field', {
+    method: 'POST', token: adminToken, body: { field: 'school_id', rules: {} },
+  });
+  t('★v3.5.5 清空规则成功', clearRule.status === 200 && clearRule.body.ok);
+  const afterClear = await call('/api/admin?action=save-profile', {
+    method: 'POST', token: adminToken,
+    body: { id: selOk.body.id, name: '规则乙', studentId: '290004', extra: { school_id: '丙校' } },
+  });
+  t('★v3.5.5 清规则后自由值可保存', afterClear.status === 200 && afterClear.body.ok,
+    JSON.stringify(afterClear.body).slice(0, 140));
+
+  /* ⑧ 脏数据规则被 normalize 收敛（选项去重、位数钳位） */
+  const dirtyRule = await call('/api/admin?action=update-field', {
+    method: 'POST', token: adminToken,
+    body: { field: 'school_id', rules: { type: 'select', options: ['甲校', '甲校', ' 乙校 ', null, ''] } },
+  });
+  t('★v3.5.5 脏选项被收敛（去重去空白）', dirtyRule.status === 200 && dirtyRule.body.ok);
+  const metaDirty = await call('/api/admin?action=field-meta', { token: adminToken });
+  const dirtyR = ((metaDirty.body.fields || []).find((x) => x.field === 'school_id') || {}).rules || {};
+  t('★v3.5.5 收敛后只剩两个干净选项',
+    (dirtyR.options || []).length === 2 && dirtyR.options[0] === '甲校' && dirtyR.options[1] === '乙校',
+    JSON.stringify(dirtyR));
+
+  /* 清理本轮造的资料 */
+  for (const sid of ['290001', '290002', '290003', '290004']) {
+    const f = await call('/api/admin?action=profiles&q=' + sid, { token: adminToken });
+    const row = (f.body.profiles || [])[0];
+    if (row) await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id: row.id } });
+  }
 
   /* 清理 */
   for (const sid of ['270001', '270002', '270003']) {
@@ -3976,8 +4171,8 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
     /vis_locked/.test(admSrc39raw) && /adminSet\s*:/.test(admSrc39raw));
   t('★setVisibility 写入 vis_locked = true',
     /set visibility = \$\{vis\}, vis_locked = true/.test(admSrc39raw));
-  t('★addField 建自定义字段时 vis_locked 默认 true',
-    /is_custom, vis_locked\)[\s\S]{0,120}true, true\)/.test(admSrc39raw));
+  t('★addField 建自定义字段时 vis_locked 默认 true（insert 带 rules 列）',
+    /is_custom, vis_locked, rules\)[\s\S]{0,160}true, true,/.test(admSrc39raw));
   t('★updateField 改 visibility 时置 vis_locked = true', /const lockIt = visibility != null/.test(admSrc39raw));
   t('★updateField 只改 label/sort 时不误锁（保住同学隐私）',
     /vis_locked = \$\{lockIt \? true/.test(admSrc39raw));
@@ -3997,7 +4192,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
      准备：一条资料 + 同学把微信设成「仅自己可见」 */
   const mk39 = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '权限测试丙', studentId: '280001', role: '学生',
+    body: { name: '权限丙', studentId: '280001', role: '学生',
             wechat: 'wx_perm_test', qq: '88001', phone: '18800000001' },
   });
   t('（准备）建一条带联系方式的资料', mk39.status === 200 && mk39.body.ok,
@@ -4018,7 +4213,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
         否则无论可见性怎么调都看不到，测试会误判成「后台改不动」。 */
   await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: pid39, name: '权限测试丙', studentId: '280001',
+    body: { id: pid39, name: '权限丙', studentId: '280001',
             contactStatus: 'approved', visibilityPref: { wechat: false } },
   });
   /* 确认前置条件成立 */
@@ -4065,7 +4260,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
   /* 场景 4：单人例外可以放宽 —— 全班默认 self，但给这一条单独设 public */
   const perOpen = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: pid39, name: '权限测试丙', studentId: '280001', fieldVis: { wechat: 'public' } },
+    body: { id: pid39, name: '权限丙', studentId: '280001', fieldVis: { wechat: 'public' } },
   });
   t('（准备）给单人设例外 wechat=public', perOpen.status === 200,
     JSON.stringify(perOpen.body).slice(0, 120));
@@ -4079,7 +4274,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
   });
   await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: pid39, name: '权限测试丙', studentId: '280001', fieldVis: { wechat: 'self' } },
+    body: { id: pid39, name: '权限丙', studentId: '280001', fieldVis: { wechat: 'self' } },
   });
   let st5 = await q39('perperson-narrow');
   t('★单人例外可收窄：全班 public 但这一条单独 self → 不可见',
@@ -4088,7 +4283,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
   /* 场景 6：清掉单人例外 → 回落到全班默认（public）→ 可见 */
   await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: pid39, name: '权限测试丙', studentId: '280001', fieldVis: {} },
+    body: { id: pid39, name: '权限丙', studentId: '280001', fieldVis: {} },
   });
   let st6 = await q39('clear-exception');
   t('★清掉单人例外后回落到全班默认（public）→ 可见',
@@ -4152,7 +4347,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
         读回来永远是 {}。这个 bug 静态测试查不出来，是线上验收抓到的。 */
   const mkNew = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '意愿新建测试', studentId: '280777', role: '学生',
+    body: { name: '意愿新', studentId: '280777', role: '学生',
             wechat: 'wx_pref_new', contactStatus: 'approved',
             visibilityPref: { wechat: false, qq: true, phone: true } },
   });
@@ -4866,8 +5061,8 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   /* ===== ④ 版本号 / 缓存 ===== */
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx47));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm47));
-  t('★service worker 缓存版本升到 v80（同域字体预缓存，旧缓存要作废）',
-    /class-site-v9[0-9]/.test(sw47));
+  t('★service worker 缓存版本升到 v100（旧缓存要作废）',
+    /class-site-v100/.test(sw47));
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -4951,7 +5146,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.4');
+    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.5');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5053,7 +5248,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   /* ===== ⑨ 版本号 / 缓存 ===== */
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-17'/.test(idx48));
-  t('★service worker 缓存版本升到 v80', /class-site-v9[0-9]/.test(sw48));
+  t('★service worker 缓存版本升到 v100', /class-site-v100/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -6172,7 +6367,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.4'/.test(swSrc) && /class-site-v99/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.5'/.test(swSrc) && /class-site-v100/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -6754,16 +6949,16 @@ console.log('\n【65】第六十轮·注册审核 + 站点设置 + 用户操作�
   const pd = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
     body: {
-      name: '查重同学', studentId: '259901',
+      name: '查重', studentId: '259901',
       phone: '13900139000', wechat: 'wx_chachong', qq: '123456789',
     },
   });
   t('管理员录入带联系方式的资料成功', pd.status === 200 && !!pd.body.id,
     JSON.stringify(pd.body).slice(0, 160));
 
-  const ps = await call('/api/profile?action=search&q=查重同学', { token: pendToken });
+  const ps = await call('/api/profile?action=search&q=查重', { token: pendToken });
   const hit = (ps.body.results || [])[0] || {};
-  t('按姓名能查到新资料', hit.name === '查重同学', JSON.stringify(hit).slice(0, 120));
+  t('按姓名能查到新资料', hit.name === '查重', JSON.stringify(hit).slice(0, 120));
   t('已核实联系方式仍走固定通道输出（phone/wechat/qq 顶层字段）',
     hit.phone === '13900139000' && hit.wechat === 'wx_chachong' && hit.qq === '123456789',
     JSON.stringify({ p: hit.phone, w: hit.wechat, q: hit.qq }));
@@ -6995,7 +7190,7 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
   /* 场景 profile-only：只建通讯录，不建号 */
   const seed2 = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { name: '通讯录乙', studentId: '259902', politics: '群众' },
+    body: { name: '通讯乙', studentId: '259902', politics: '群众' },
   });
   t('种子②：纯档案（未认领）建成', seed2.status === 200 && !!seed2.body.id,
     JSON.stringify(seed2.body).slice(0, 160));
@@ -7004,10 +7199,10 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
   /* 场景 user-only：建号后把自动补的档案删掉 → 有账号暂无档案 */
   const seed3 = await call('/api/admin?action=create-user', {
     method: 'POST', token: adminToken,
-    body: { username: 'mbuser03', password: 'MbUser0323', displayName: '缺档案丙', role: 'user' },
+    body: { username: 'mbuser03', password: 'MbUser0323', displayName: '缺档案', role: 'user' },
   });
   const seed3Id = seed3.body.user.id;
-  const profList = await call('/api/admin?action=profiles&q=缺档案丙', { token: adminToken });
+  const profList = await call('/api/admin?action=profiles&q=缺档案', { token: adminToken });
   const seed3Prof = (profList.body.profiles || [])[0] || {};
   const delProf = await call('/api/admin?action=delete-profile', {
     method: 'POST', token: adminToken, body: { id: seed3Prof.id },
@@ -7026,7 +7221,7 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
     JSON.stringify({ total: mb.body.total, c: mb.body.counts }).slice(0, 200));
 
   const row1 = (mb.body.members || []).find(x => x.username === 'mbuser01');
-  const row2 = (mb.body.members || []).find(x => x.name === '通讯录乙');
+  const row2 = (mb.body.members || []).find(x => x.name === '通讯乙');
   const row3 = (mb.body.members || []).find(x => x.username === 'mbuser03');
   t('★场景 both：有账号 + 有档案',
     !!row1 && row1.scene === 'both' && row1.userId === seed1Id && row1.profileId != null
@@ -7057,7 +7252,7 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
   const qUser = await call('/api/admin?action=members&q=' + encodeURIComponent('mbuser03'), { token: adminToken });
   t('q 按用户名命中', (qUser.body.members || []).some(x => x.username === 'mbuser03'));
   const qSid = await call('/api/admin?action=members&q=' + encodeURIComponent('259902'), { token: adminToken });
-  t('q 按学号命中（未认领行）', (qSid.body.members || []).some(x => x.name === '通讯录乙'));
+  t('q 按学号命中（未认领行）', (qSid.body.members || []).some(x => x.name === '通讯乙'));
   const fRole = await call('/api/admin?action=members&role=admin', { token: adminToken });
   t('role=admin 只回管理员', fRole.status === 200
     && (fRole.body.members || []).length > 0
@@ -7082,7 +7277,7 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
     body: {
       userId: seed1Id, profileId: row1.profileId,
       role: 'user', status: 'active',
-      name: '成员甲改', studentId: '259911', politics: '共青团员',
+      name: '成员改', studentId: '259911', politics: '共青团员',
       phone: '13700137000',
     },
   });
@@ -7093,13 +7288,13 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
 
   /* 姓名单数据源：users.display_name 与 profiles.name 必须一致 */
   const ud = await call('/api/admin?action=user&id=' + seed1Id, { token: adminToken });
-  const pf = await call('/api/admin?action=profiles&q=' + encodeURIComponent('成员甲改'), { token: adminToken });
+  const pf = await call('/api/admin?action=profiles&q=' + encodeURIComponent('成员改'), { token: adminToken });
   const pfRow = (pf.body.profiles || [])[0] || {};
   t('★姓名单数据源：users.display_name 同步为新姓名',
-    ud.body.user && ud.body.user.displayName === '成员甲改',
+    ud.body.user && ud.body.user.displayName === '成员改',
     JSON.stringify(ud.body.user && ud.body.user.displayName));
   t('★姓名单数据源：profiles.name 同为新姓名',
-    pfRow.name === '成员甲改', JSON.stringify(pfRow.name));
+    pfRow.name === '成员改', JSON.stringify(pfRow.name));
   t('场景① 档案字段已更新（政治面貌/手机号/学号）',
     pfRow.politics === '共青团员' && pfRow.phone === '13700137000' && pfRow.studentId === '259911',
     JSON.stringify({ p: pfRow.politics, ph: pfRow.phone, s: pfRow.studentId }));
@@ -7125,7 +7320,7 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
     body: {
       profileId: seed2Pid, createAccount: true,
       username: 'mbuser02', password: 'MbUser0223',
-      name: '通讯录乙', role: 'user',
+      name: '通讯乙', role: 'user',
     },
   });
   t('场景② 给未认领成员开号成功', sv2.status === 200 && !!sv2.body.ok && !!sv2.body.userId,
@@ -7135,7 +7330,7 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
   });
   t('场景② 新账号可登录', sv2Login.status === 200 && !!sv2Login.body.token,
     '实际 ' + sv2Login.status);
-  const mb2 = await call('/api/admin?action=members&q=' + encodeURIComponent('通讯录乙'), { token: adminToken });
+  const mb2 = await call('/api/admin?action=members&q=' + encodeURIComponent('通讯乙'), { token: adminToken });
   const row2b = (mb2.body.members || [])[0] || {};
   t('★场景② 不开第二档案：该姓名仍只有一行，且变为 both',
     (mb2.body.members || []).length === 1 && row2b.scene === 'both'
@@ -7152,20 +7347,20 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
     method: 'POST', token: adminToken,
     body: {
       userId: seed3Id,
-      name: '缺档案丙', studentId: '259903', politics: '群众',
+      name: '缺档案', studentId: '259903', politics: '群众',
       wechat: 'wx_bingdangan', contactStatus: 'approved',
     },
   });
   t('场景③ 补建档案成功', sv3.status === 200 && !!sv3.body.ok && !!sv3.body.profileId,
     JSON.stringify(sv3.body).slice(0, 200));
-  const mb3 = await call('/api/admin?action=members&q=' + encodeURIComponent('缺档案丙'), { token: adminToken });
+  const mb3 = await call('/api/admin?action=members&q=' + encodeURIComponent('缺档案'), { token: adminToken });
   const row3b = (mb3.body.members || [])[0] || {};
   t('★场景③ 一行变 both：档案绑到该账号',
     row3b.scene === 'both' && row3b.userId === seed3Id
     && row3b.profileId === sv3.body.profileId && row3b.wechat === 'wx_bingdangan',
     JSON.stringify(row3b).slice(0, 220));
   const ud3 = await call('/api/admin?action=user&id=' + seed3Id, { token: adminToken });
-  t('场景③ 账号显示名同步为档案姓名', ud3.body.user.displayName === '缺档案丙',
+  t('场景③ 账号显示名同步为档案姓名', ud3.body.user.displayName === '缺档案',
     JSON.stringify(ud3.body.user.displayName));
 
   /* ---- ⑦ save-member 场景④：全新成员（建号 + 档案一次提交） ---- */
@@ -7238,9 +7433,9 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
     method: 'POST', token: adminToken,
     body: { userId: seed1Id, status: 'banned' },
   });
-  const pfKeep = await call('/api/admin?action=profiles&q=' + encodeURIComponent('成员甲改'), { token: adminToken });
+  const pfKeep = await call('/api/admin?action=profiles&q=' + encodeURIComponent('成员改'), { token: adminToken });
   t('只改状态不动档案（200 且档案姓名依旧）',
-    svOnlyAcc.status === 200 && ((pfKeep.body.profiles || [])[0] || {}).name === '成员甲改',
+    svOnlyAcc.status === 200 && ((pfKeep.body.profiles || [])[0] || {}).name === '成员改',
     JSON.stringify(svOnlyAcc.body).slice(0, 160));
   const svUnban = await call('/api/admin?action=save-member', {
     method: 'POST', token: adminToken, body: { userId: seed1Id, status: 'active' },
@@ -7250,24 +7445,24 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
   /* ---- ⑨ save-profile 老路径也姓同步（单数据源回归） ---- */
   const svOld = await call('/api/admin?action=save-profile', {
     method: 'POST', token: adminToken,
-    body: { id: row1.profileId, name: '成员甲终版' },
+    body: { id: row1.profileId, name: '成员终' },
   });
   const udOld = await call('/api/admin?action=user&id=' + seed1Id, { token: adminToken });
   t('★老 save-profile 改名也同步 users.display_name',
-    svOld.status === 200 && udOld.body.user.displayName === '成员甲终版',
+    svOld.status === 200 && udOld.body.user.displayName === '成员终',
     JSON.stringify(udOld.body.user.displayName));
 
   /* ---- ⑩ delete-user：alsoProfile 两种行为 ---- */
   /* a. 连带删档案 */
   const del1 = await call('/api/admin?action=create-user', {
     method: 'POST', token: adminToken,
-    body: { username: 'mbdel01', password: 'MbDel0123', displayName: '连带删除', role: 'user' },
+    body: { username: 'mbdel01', password: 'MbDel0123', displayName: '连带删', role: 'user' },
   });
   const del1Id = del1.body.user.id;
   const delA = await call('/api/admin?action=delete-user', {
     method: 'POST', token: adminToken, body: { id: del1Id, alsoProfile: true },
   });
-  const mbA = await call('/api/admin?action=members&q=' + encodeURIComponent('连带删除'), { token: adminToken });
+  const mbA = await call('/api/admin?action=members&q=' + encodeURIComponent('连带删'), { token: adminToken });
   t('delete-user alsoProfile：账号档案都没了',
     delA.status === 200 && (mbA.body.members || []).length === 0,
     '剩余 ' + (mbA.body.members || []).length);
@@ -7275,13 +7470,13 @@ console.log('\n【68】第六十一轮·成员与档案合并（单数据源长�
   /* b. 默认保留档案（变未认领） */
   const del2 = await call('/api/admin?action=create-user', {
     method: 'POST', token: adminToken,
-    body: { username: 'mbdel02', password: 'MbDel0223', displayName: '保留档案', role: 'user' },
+    body: { username: 'mbdel02', password: 'MbDel0223', displayName: '保留档', role: 'user' },
   });
   const del2Id = del2.body.user.id;
   const delB = await call('/api/admin?action=delete-user', {
     method: 'POST', token: adminToken, body: { id: del2Id },
   });
-  const mbB = await call('/api/admin?action=members&q=' + encodeURIComponent('保留档案'), { token: adminToken });
+  const mbB = await call('/api/admin?action=members&q=' + encodeURIComponent('保留档'), { token: adminToken });
   const rowB = (mbB.body.members || [])[0] || {};
   t('delete-user 默认保留档案（变为未认领）',
     delB.status === 200 && rowB.scene === 'profile-only' && rowB.userId == null,
@@ -7578,8 +7773,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.4',
-    /const SCHEMA_VER = '3\.5\.4'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.5',
+    /const SCHEMA_VER = '3\.5\.5'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -7611,6 +7806,72 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
       .includes("constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))"));
   t('★闸门注释留了根因与「改 DDL 必须升 SCHEMA_VER」的纪律',
     /Too many subrequests/.test(httpSrc) && /SCHEMA_VER 往上加一格/.test(httpSrc));
+
+  /* ---- ①.5 v3.5.5 字段校验规则（站主需求：「所有字段支持管理员自定义配置
+     校验规则，支持多类型约束组合；新增字段可自由勾选，原有字段按需求表预设」）。
+     纪律同 v3.5.1 / v3.5.4：DDL 两路径（老库升级 + 全新库全量）都要有、
+     schema.sql 同步、SCHEMA_VER 升格；规则引擎收敛在 _lib/field-rules.js。 ---- */
+  const frSrc = fs.readFileSync(new URL('./api/_lib/field-rules.js', import.meta.url), 'utf8');
+  const admSrc355 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const profSrc355 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
+  const schemaSrc355 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const idxSrc355 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const admHtml355 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('★field-rules.js 三导出齐全（normalize/validate/describe）',
+    /export function normalizeRules\(/.test(frSrc)
+    && /export function validateByRules\(/.test(frSrc)
+    && /export function describeRules\(/.test(frSrc));
+  /* rules 列 DDL 两路径：升级路径一条 ALTER + 全新库建表一列（http.js 内 >=2），
+     schema.sql 的建表同样有这一列。 */
+  t('★rules 列 DDL 在升级路径与全量路径都有（v3.5.5 护栏）',
+    (httpSrc.match(/add column if not exists rules jsonb not null default '\{\}'::jsonb/g) || []).length >= 1
+    && (httpSrc.match(/rules\s+jsonb\s+not null default '\{\}'::jsonb/g) || []).length >= 2
+    && /rules\s+jsonb\s+not null default '\{\}'::jsonb/.test(schemaSrc355));
+  /* 需求表 6 个新字段：升级路径 insert + 全新库预置 insert 两处都要有，
+     schema.sql 的预置 insert 也不能掉队。 */
+  t('★6 个新预置字段在升级路径与全量路径都有（v3.5.5 护栏）',
+    (httpSrc.match(/insert into profile_field_meta \(field, label, visibility, sort_order, is_custom\) values/g) || []).length >= 2
+    && ['school', 'class_name', 'ethnicity', 'birth_date', 'home_address', 'league_date']
+      .every((f) => (httpSrc.match(new RegExp("\\('" + f + "',", 'g')) || []).length >= 2)
+    && ['school', 'class_name', 'ethnicity', 'birth_date', 'home_address', 'league_date']
+      .every((f) => schemaSrc355.includes("('" + f + "',")));
+  /* CASE 预置规则两路径同款；幂等条件（rules 还是 {} 才写）两处都有 ——
+     尊重管理员自定义，重跑不覆盖。 */
+  t('★CASE 预置规则在升级路径与全量路径都有且幂等（v3.5.5 护栏）',
+    (httpSrc.match(/update profile_field_meta set rules = case field/g) || []).length >= 2
+    && (httpSrc.match(/and rules = '\{\}'::jsonb/g) || []).length >= 2
+    && /update profile_field_meta set rules = case field/.test(schemaSrc355));
+  /* admin.js 五处接线：loadFieldMeta 读规则 / addField 带规则 /
+     updateField 条件更新（本次不传 rules 不清空——自修 bug 护栏）/
+     validateProfileFields 定义 + upsertProfileCore + batchProfiles 两处调用 /
+     grandfather 与现值一致的字段跳过校验。 */
+  t('★admin.js loadFieldMeta 输出 normalizeRules 收敛后的 rules',
+    /rules: normalizeRules\(r\.rules\)/.test(admSrc355));
+  t('★admin.js addField 建字段时带上 rules 列',
+    /insert into profile_field_meta \(field, label, visibility, sort_order, is_custom, vis_locked, rules\)/.test(admSrc355)
+    && /true, true, \$\{JSON\.stringify\(rules\)\}::jsonb/.test(admSrc355));
+  t('★admin.js updateField 条件更新 rules（不传不清空，v3.5.5 自修 bug 护栏）',
+    /rules\s+= case when \$\{rules != null\}::boolean/.test(admSrc355));
+  t('★admin.js validateProfileFields 定义且被 upsertProfileCore / batchProfiles 调用',
+    /function validateProfileFields\(vals, meta\)/.test(admSrc355)
+    && (admSrc355.match(/validateProfileFields\(/g) || []).length >= 3);
+  t('★admin.js grandfather：与库中现值一致的字段跳过规则校验',
+    /delete ruleVals\[k\]/.test(admSrc355));
+  /* profile.js 学生端 submit：联系方式按规则复核 + grandfather（只改值才校）。 */
+  t('★profile.js submit 接线规则复核（import + loadMeta + validateByRules）',
+    /import \{ normalizeRules, validateByRules \} from '\.\/_lib\/field-rules\.js';/.test(profSrc355)
+    && /rules: normalizeRules\(r\.rules\)/.test(profSrc355)
+    && /validateByRules\(metaMap\[k\]\.rules, changed\[k\]/.test(profSrc355));
+  /* 前端：admin.html 规则工具层与字段面板「规则」按钮；index.html 手机号
+     grandfather 规范化（仅改值时才清洗，老数据 +86 不被卡）。 */
+  t('★admin.html 规则工具层齐全（输入渲染/编辑器/收集/规则弹窗）',
+    /function ruleInputHtml\(/.test(admHtml355)
+    && /function ruleEditorHtml\(/.test(admHtml355)
+    && /function collectRules\(/.test(admHtml355)
+    && /function rulesFieldDialog\(/.test(admHtml355)
+    && /data-fe="rule"/.test(admHtml355));
+  t('★index.html 手机号 grandfather 规范化（仅改值时才清洗）',
+    idxSrc355.includes("if(ph && ph !== storedPh) ph = ph.replace(/[\\s\\-()]/g, '')"));
 
   /* ---- ② 登录侧：非关键写操作全部有保护 ---- */
   t('★last_login_at 更新有 try-catch（非关键写不再把登录打成 500）',
@@ -8269,7 +8530,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.5.4', /SITE_VERSION = '3[.]5[.]4'/.test(idx) && /SITE_VERSION = '3[.]5[.]4'/.test(adm) && /SITE_VER = '3[.]5[.]4'/.test(sw));
+  t('版本号三处同步 3.5.5', /SITE_VERSION = '3[.]5[.]5'/.test(idx) && /SITE_VERSION = '3[.]5[.]5'/.test(adm) && /SITE_VER = '3[.]5[.]5'/.test(sw));
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8362,8 +8623,8 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.5.4',
-    /SITE_VERSION = '3[.]5[.]4'/.test(idx) && /SITE_VERSION = '3[.]5[.]4'/.test(adm) && /SITE_VER = '3[.]5[.]4'/.test(sw));
+  t('版本号三处同步 3.5.5',
+    /SITE_VERSION = '3[.]5[.]5'/.test(idx) && /SITE_VERSION = '3[.]5[.]5'/.test(adm) && /SITE_VER = '3[.]5[.]5'/.test(sw));
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8449,8 +8710,8 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.5.4',
-    /SITE_VERSION = '3[.]5[.]4'/.test(idx) && /SITE_VERSION = '3[.]5[.]4'/.test(adm));
+  t('版本号三处同步 3.5.5',
+    /SITE_VERSION = '3[.]5[.]5'/.test(idx) && /SITE_VERSION = '3[.]5[.]5'/.test(adm));
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8469,7 +8730,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]4'/.test(adm) && /SITE_VER = '3[.]5[.]4'/.test(sw));
+  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]5'/.test(adm) && /SITE_VER = '3[.]5[.]5'/.test(sw));
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8495,7 +8756,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.4', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.5', 'parsed=' + parsed);
 }
 
 
@@ -8810,7 +9071,7 @@ console.log('\n【88】第七十六轮·v3.5.0 成员档案字段全量加密');
     const made = await call('/api/admin?action=save-profile', {
       method: 'POST', token: adminToken,
       body: {
-        name: '密文测试丁', studentId: '99000001', politics: '共青团员',
+        name: '密文丁', studentId: '990101', politics: '共青团员',
         wechat: 'wx_secret_ding', qq: '123456789', phone: '13800001111',
         extra: { id_card: '360424201007100011' },
       },
@@ -8824,8 +9085,8 @@ console.log('\n【88】第七十六轮·v3.5.0 成员档案字段全量加密');
     t('★库里学号是密文', isCipher(rawRow.student_id));
     t('★库里微信是密文', isCipher(rawRow.wechat));
     t('★库里身份证是密文', isCipher(rawRow.id_card), String(rawRow.id_card).slice(0, 24));
-    t('★库里查不到明文姓名（select 出来没有「密文测试丁」）',
-      !JSON.stringify(rawRow).includes('密文测试丁'));
+    t('★库里查不到明文姓名（select 出来没有「密文丁」）',
+      !JSON.stringify(rawRow).includes('密文丁'));
     t('★同名 bidx 两列已写入（能按学号去重）',
       typeof rawRow.name_bidx === 'string' && rawRow.name_bidx.length > 20
       && typeof rawRow.student_id_bidx === 'string' && rawRow.student_id_bidx.length > 20);
@@ -8833,45 +9094,45 @@ console.log('\n【88】第七十六轮·v3.5.0 成员档案字段全量加密');
     /* 接口读回来必须是明文 */
     const det = await call('/api/admin?action=profile&id=' + pid, { token: adminToken });
     const p1 = (det.body || {}).profile || {};
-    t('★后台详情接口返回明文姓名', p1.name === '密文测试丁', JSON.stringify(p1.name));
-    t('★后台详情接口返回明文学号', p1.studentId === '99000001');
+    t('★后台详情接口返回明文姓名', p1.name === '密文丁', JSON.stringify(p1.name));
+    t('★后台详情接口返回明文学号', p1.studentId === '990101');
     t('★后台详情接口返回明文微信', p1.wechat === 'wx_secret_ding');
     t('★后台详情接口返回明文身份证', (p1.extra || {}).id_card === '360424201007100011',
       JSON.stringify(p1.extra));
 
     /* 前台搜索仍能按姓名/学号命中 */
-    const sByName = await call('/api/profile?action=search&q=' + encodeURIComponent('密文测试丁'), { token: adminToken });
+    const sByName = await call('/api/profile?action=search&q=' + encodeURIComponent('密文丁'), { token: adminToken });
     t('★前台按全名仍能搜到（内存解密后过滤）',
-      (sByName.body.results || []).some((x) => x.name === '密文测试丁'));
-    const sBySid = await call('/api/profile?action=search&q=99000001', { token: adminToken });
+      (sByName.body.results || []).some((x) => x.name === '密文丁'));
+    const sBySid = await call('/api/profile?action=search&q=990101', { token: adminToken });
     t('★前台按学号仍能搜到',
-      (sBySid.body.results || []).some((x) => x.studentId === '99000001'));
+      (sBySid.body.results || []).some((x) => x.studentId === '990101'));
 
     /* 再保存一次：只改微信、姓名/学号原样传回 →
        这是最容易踩「把库里密文再封一层」的路径（keep 逻辑就在这儿） */
     const again = await call('/api/admin?action=save-profile', {
       method: 'POST', token: adminToken,
-      body: { id: pid, name: '密文测试丁', studentId: '99000001', role: '学生', wechat: 'wx_changed_ding' },
+      body: { id: pid, name: '密文丁', studentId: '990101', role: '学生', wechat: 'wx_changed_ding' },
     });
     t('★只改一个字段也能保存', again.status === 200, JSON.stringify(again.body));
     const det2 = await call('/api/admin?action=profile&id=' + pid, { token: adminToken });
     const p2 = (det2.body || {}).profile || {};
     t('★姓名没被二次加密（decField 不再出现 enc:v1: 前缀）',
-      p2.name === '密文测试丁', JSON.stringify(p2.name));
-    t('★学号没被二次加密', p2.studentId === '99000001', JSON.stringify(p2.studentId));
+      p2.name === '密文丁', JSON.stringify(p2.name));
+    t('★学号没被二次加密', p2.studentId === '990101', JSON.stringify(p2.studentId));
     t('★改的微信生效', p2.wechat === 'wx_changed_ding');
 
     /* 学号唯一性：同样学号再建一条必须 409 */
     const dupSid = await call('/api/admin?action=save-profile', {
       method: 'POST', token: adminToken,
-      body: { name: '另一个人', studentId: '99000001' },
+      body: { name: '另个人', studentId: '990101' },
     });
     t('★同学号重复新增被拦 409（盲索引去重生效）', dupSid.status === 409, '实际 ' + dupSid.status + ' ' + JSON.stringify(dupSid.body));
 
     /* 批量导入也加密 */
     const bi = await call('/api/admin?action=batch-profiles', {
       method: 'POST', token: adminToken,
-      body: { rows: [{ name: '批量加密戊', studentId: '99000002', wechat: 'wx_batch_wu' }] },
+      body: { rows: [{ name: '加密戊', studentId: '990102', wechat: 'wx_batch_wu' }] },
     });
     t('★批量导入成功', bi.status === 200 && bi.body.created === 1, JSON.stringify(bi.body));
     const rawBatch = q1("select * from profiles where name_bidx is not null and name like 'enc:v1:%'") || [];
@@ -8882,12 +9143,12 @@ console.log('\n【88】第七十六轮·v3.5.0 成员档案字段全量加密');
        save-member 是合并编辑入口，必须带 profileId 才进档案段。 */
     const sm = await call('/api/admin?action=save-member', {
       method: 'POST', token: adminToken,
-      body: { profileId: pid, name: '合并保存己', studentId: '99000001', phone: '13900002222' },
+      body: { profileId: pid, name: '合并己', studentId: '990101', phone: '13900002222' },
     });
     t('★成员与档案合并保存成功', sm.status === 200, JSON.stringify(sm.body).slice(0, 160));
     const smDet = await call('/api/admin?action=profile&id=' + pid, { token: adminToken });
     const p3 = (smDet.body || {}).profile || {};
-    t('★合并保存的姓名解密正常', p3.name === '合并保存己', JSON.stringify(p3.name));
+    t('★合并保存的姓名解密正常', p3.name === '合并己', JSON.stringify(p3.name));
     t('★合并保存的手机号解密正常', p3.phone === '13900002222', JSON.stringify(p3.phone));
     const rawSm = q1('select * from profiles where id = ?', [pid])[0] || {};
     t('★合并保存的姓名在库里是密文', isCipher(rawSm.name));
@@ -9101,9 +9362,9 @@ console.log('\n【90】第七十八轮·v3.5.3 修「解析失败: XLSX is not d
   const batchImp = await call('/api/admin?action=batch-profiles', {
     method: 'POST', token: adminToken,
     body: { rows: [
-      { name: '导入证件甲', studentId: impIdA, role: '学生',
+      { name: '证甲', studentId: impIdA, role: '学生',
         idCard: '36042420100101001X', youthLeagueNo: 'TQ20240001' },
-      { name: '导入证件乙', studentId: impIdB, role: '学生',
+      { name: '证乙', studentId: impIdB, role: '学生',
         idCard: '36042420100202002Y' },
     ] },
   });
@@ -9141,7 +9402,7 @@ console.log('\n【90】第七十八轮·v3.5.3 修「解析失败: XLSX is not d
   /* 第二次导入同一个人、但不带这两列 → 库里的值不许被抹掉 */
   const batchImp2 = await call('/api/admin?action=batch-profiles', {
     method: 'POST', token: adminToken,
-    body: { rows: [{ name: '导入证件甲', studentId: impIdA, role: '学生', politics: '群众' }] },
+    body: { rows: [{ name: '证甲', studentId: impIdA, role: '学生', politics: '群众' }] },
   });
   t('★二次导入同一人（不带证件列）走更新分支',
     batchImp2.status === 200 && batchImp2.body.updated === 1,

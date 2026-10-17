@@ -241,6 +241,10 @@ create table if not exists profile_field_meta (
   is_custom   boolean     not null default false,      -- true = 后台新增的自定义字段
   vis_locked  boolean     not null default false,      -- true = 站主在后台设过可见性，以站主为准
   updated_at  timestamptz not null default now(),
+  -- v3.5.5 字段校验规则：{type:'text'|'number'|'time'|'select', ...}
+  -- 形状与默认值见 api/_lib/field-rules.js 的 normalizeRules；
+  -- '{}' = 无校验（空值恒放过）。服务端 validateByRules 是唯一裁判。
+  rules       jsonb       not null default '{}'::jsonb,
   constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))
 );
 
@@ -270,14 +274,50 @@ insert into profile_field_meta (field, label, visibility, sort_order, is_custom)
   ('qq',              'QQ',          'public', 80,  false),
   ('phone',           '手机号',       'public', 90,  false),
   ('id_card',         '身份证号',      'self',   100, false),
-  ('youth_league_no', '发展团员编号',   'self',   110, false)
+  ('youth_league_no', '发展团员编号',   'self',   110, false),
+  -- v3.5.5 需求表新增 6 字段（与既有预置字段同规格，is_custom=false 不可删）
+  ('school',          '学校',         'public', 120, false),
+  ('class_name',      '班级',         'public', 130, false),
+  ('ethnicity',       '民族',         'public', 140, false),
+  ('birth_date',      '出生日期',      'self',   150, false),
+  ('home_address',    '家庭住址',      'self',   160, false),
+  ('league_date',     '入团时间',      'self',   170, false)
 on conflict (field) do nothing;
+
+-- ---------------- v3.5.5 预置校验规则（幂等：rules 还是 {} 才写） ----------------
+-- 站主要求「原有字段预设好规则」，12 个字段一条 CASE UPDATE 搞定。
+-- 管理员在后台自定义后 rules 不再是 {}，本句自动跳过、不覆盖。
+update profile_field_meta set rules = case field
+    when 'name'            then '{"type":"text","maxLen":3}'::jsonb
+    when 'school'          then '{"type":"text","maxLen":6}'::jsonb
+    when 'politics'        then '{"type":"select","options":["群众","共青团员"]}'::jsonb
+    when 'phone'           then '{"type":"number","digits":11}'::jsonb
+    when 'id_card'         then '{"type":"text","maxLen":18}'::jsonb
+    when 'youth_league_no' then '{"type":"text","maxLen":40}'::jsonb
+    when 'league_date'     then '{"type":"time"}'::jsonb
+    when 'class_name'      then '{"type":"text","maxLen":8}'::jsonb
+    when 'student_id'      then '{"type":"number","digits":6}'::jsonb
+    when 'ethnicity'       then '{"type":"select","options":["汉族","蒙古族","回族","藏族","维吾尔族","苗族","彝族","壮族","布依族","朝鲜族","满族","侗族","瑶族","白族","土家族","哈尼族","哈萨克族","傣族","黎族","畲族"]}'::jsonb
+    when 'birth_date'      then '{"type":"time"}'::jsonb
+    when 'home_address'    then '{"type":"text","maxLen":30}'::jsonb
+  end
+ where field in ('name','school','politics','phone','id_card','youth_league_no',
+                 'league_date','class_name','student_id','ethnicity','birth_date','home_address')
+   and rules = '{}'::jsonb;
 
 /* ---------------- 存量两个「只登记未建列」的字段补真列（2026-10-09，幂等） ----------------
    默认 self（仅本人可见）：身份证号、团员编号属敏感信息，不该默认对外。
    想放开由管理员在「资料管理 → 字段管理」里改，不必改代码。 */
 alter table profiles add column if not exists id_card text;
 alter table profiles add column if not exists youth_league_no text;
+-- v3.5.5 需求表新增 6 字段的列（预置字段才在这里补，自定义字段由 addField 当场建）
+alter table profiles
+  add column if not exists school       text,
+  add column if not exists class_name   text,
+  add column if not exists ethnicity    text,
+  add column if not exists birth_date   text,
+  add column if not exists home_address text,
+  add column if not exists league_date  text;
 
 /* ============================================================
    档案字段加密（v3.5.0）

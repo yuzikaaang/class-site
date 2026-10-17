@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.4';
+const SCHEMA_VER = '3.5.5';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -93,6 +93,53 @@ export async function ensureSchema(sql) {
            create table 里直接写上 admin。 */
         try { await s`alter table profile_field_meta drop constraint if exists pfm_vis_chk`; } catch (e) {}
         try { await s`alter table profile_field_meta add constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))`; } catch (e) {}
+        /* v3.5.5 字段校验规则（站主：「所有字段支持管理员自定义配置校验规则」）。
+           ① rules 列：jsonb，存 {type,maxLen,...}（形状见 _lib/field-rules.js）；
+           ② 预置 6 个新字段（学校/班级/民族/出生日期/家庭住址/入团时间）——
+              需求表里它们与姓名学号并列，光有规则没有字段等于没有；
+           ③ 预置规则：只在 rules 还是 {}（管理员没自定义过）时才写，
+              且用 case 一条 UPDATE 搞定 12 个字段（省子请求）。
+           ⚠️ 子请求纪律：Workers 免费版单请求 50 上限，这里每条 DDL 一次
+              往返 —— 多列合并成一条 ALTER、CASE 合并成一条 UPDATE。 */
+        try { await s`alter table profile_field_meta add column if not exists rules jsonb not null default '{}'::jsonb`; } catch (e) {}
+        try { await s`
+          alter table profiles
+            add column if not exists school       text,
+            add column if not exists class_name   text,
+            add column if not exists ethnicity    text,
+            add column if not exists birth_date   text,
+            add column if not exists home_address text,
+            add column if not exists league_date  text
+        `; } catch (e) {}
+        try { await s`
+          insert into profile_field_meta (field, label, visibility, sort_order, is_custom) values
+            ('school',       '学校',     'public', 120, false),
+            ('class_name',   '班级',     'public', 130, false),
+            ('ethnicity',    '民族',     'public', 140, false),
+            ('birth_date',   '出生日期', 'self',   150, false),
+            ('home_address', '家庭住址', 'self',   160, false),
+            ('league_date',  '入团时间', 'self',   170, false)
+          on conflict (field) do nothing
+        `; } catch (e) {}
+        try { await s`
+          update profile_field_meta set rules = case field
+              when 'name'            then '{"type":"text","maxLen":3}'::jsonb
+              when 'school'          then '{"type":"text","maxLen":6}'::jsonb
+              when 'politics'        then '{"type":"select","options":["群众","共青团员"]}'::jsonb
+              when 'phone'           then '{"type":"number","digits":11}'::jsonb
+              when 'id_card'         then '{"type":"text","maxLen":18}'::jsonb
+              when 'youth_league_no' then '{"type":"text","maxLen":40}'::jsonb
+              when 'league_date'     then '{"type":"time"}'::jsonb
+              when 'class_name'      then '{"type":"text","maxLen":8}'::jsonb
+              when 'student_id'      then '{"type":"number","digits":6}'::jsonb
+              when 'ethnicity'       then '{"type":"select","options":["汉族","蒙古族","回族","藏族","维吾尔族","苗族","彝族","壮族","布依族","朝鲜族","满族","侗族","瑶族","白族","土家族","哈尼族","哈萨克族","傣族","黎族","畲族"]}'::jsonb
+              when 'birth_date'      then '{"type":"time"}'::jsonb
+              when 'home_address'    then '{"type":"text","maxLen":30}'::jsonb
+            end
+           where field in ('name','school','politics','phone','id_card','youth_league_no',
+                           'league_date','class_name','student_id','ethnicity','birth_date','home_address')
+             and rules = '{}'::jsonb
+        `; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
@@ -193,6 +240,9 @@ export async function ensureSchema(sql) {
         is_custom   boolean     not null default false,
         vis_locked  boolean     not null default false,
         updated_at  timestamptz not null default now(),
+        /* v3.5.5：字段校验规则（{type:'text'|'number'|'time'|'select', ...}），
+           形状与默认值见 _lib/field-rules.js 的 normalizeRules。 */
+        rules       jsonb       not null default '{}'::jsonb,
         constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))
       )
     `;
@@ -215,8 +265,38 @@ export async function ensureSchema(sql) {
         ('qq',              'QQ',          'public', 80,  false),
         ('phone',           '手机号',       'public', 90,  false),
         ('id_card',         '身份证号',      'self',   100, false),
-        ('youth_league_no', '发展团员编号',   'self',   110, false)
+        ('youth_league_no', '发展团员编号',   'self',   110, false),
+        /* v3.5.5 需求表新增 6 字段：学校/班级/民族/出生日期/家庭住址/入团时间。
+           与既有预置字段同规格：is_custom=false（后台不可删），走通用
+           fields 通道受 profile_field_meta.visibility 管辖。 */
+        ('school',          '学校',         'public', 120, false),
+        ('class_name',      '班级',         'public', 130, false),
+        ('ethnicity',       '民族',         'public', 140, false),
+        ('birth_date',      '出生日期',      'self',   150, false),
+        ('home_address',    '家庭住址',      'self',   160, false),
+        ('league_date',     '入团时间',      'self',   170, false)
       on conflict (field) do nothing
+    `;
+    /* v3.5.5 预置规则（与升级路径同款 CASE）：12 个字段的出厂校验规则，
+       只在 rules 还是 {} 时写 —— 尊重管理员自定义，重跑不覆盖。 */
+    await s`
+      update profile_field_meta set rules = case field
+          when 'name'            then '{"type":"text","maxLen":3}'::jsonb
+          when 'school'          then '{"type":"text","maxLen":6}'::jsonb
+          when 'politics'        then '{"type":"select","options":["群众","共青团员"]}'::jsonb
+          when 'phone'           then '{"type":"number","digits":11}'::jsonb
+          when 'id_card'         then '{"type":"text","maxLen":18}'::jsonb
+          when 'youth_league_no' then '{"type":"text","maxLen":40}'::jsonb
+          when 'league_date'     then '{"type":"time"}'::jsonb
+          when 'class_name'      then '{"type":"text","maxLen":8}'::jsonb
+          when 'student_id'      then '{"type":"number","digits":6}'::jsonb
+          when 'ethnicity'       then '{"type":"select","options":["汉族","蒙古族","回族","藏族","维吾尔族","苗族","彝族","壮族","布依族","朝鲜族","满族","侗族","瑶族","白族","土家族","哈尼族","哈萨克族","傣族","黎族","畲族"]}'::jsonb
+          when 'birth_date'      then '{"type":"time"}'::jsonb
+          when 'home_address'    then '{"type":"text","maxLen":30}'::jsonb
+        end
+       where field in ('name','school','politics','phone','id_card','youth_league_no',
+                       'league_date','class_name','student_id','ethnicity','birth_date','home_address')
+         and rules = '{}'::jsonb
     `;
     /* 2026-10-09（v2.4.0）：让上面两个「只登记未建列」的字段真正有列。
        ⚠️ 这里只补**预置**字段的列。
@@ -227,6 +307,17 @@ export async function ensureSchema(sql) {
           api/admin.js 的 addField 里「当场 alter table」。 */
     await s`alter table profiles add column if not exists id_card text`;
     await s`alter table profiles add column if not exists youth_league_no text`;
+    /* v3.5.5：需求表新增 6 字段的列（与升级路径合并 ALTER 对应，
+       全新库这里同样只补预置字段的列，自定义字段仍在 addField 当场建）。 */
+    await s`
+      alter table profiles
+        add column if not exists school       text,
+        add column if not exists class_name   text,
+        add column if not exists ethnicity    text,
+        add column if not exists birth_date   text,
+        add column if not exists home_address text,
+        add column if not exists league_date  text
+    `;
     /* 档案字段加密的盲索引列（v3.5.0）。
        name / student_id 存密文后无法 like / = 检索，另存一列
        HMAC-SHA256(密钥, 规范化原值) 供等值匹配（学号去重、后台全名搜索）。

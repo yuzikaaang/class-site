@@ -3126,7 +3126,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.4';
+var SITE_VERSION = '3.5.5';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -7763,7 +7763,7 @@ function myProfileHtml(){
     '<div class="acct-field"><label>🐧 QQ 号</label><input id="mpQq" value="' + attr(p.qq || '') + '" placeholder="选填，5–12 位数字" autocomplete="off"></div>' +
     '<label class="acct-priv"><input type="checkbox" id="mpQqHide"' + (qHidden ? ' checked' : '') + '> 仅自己可见（同学查不到你的 QQ 号）</label>' +
 
-    '<div class="acct-field"><label>📱 手机号</label><input id="mpPhone" value="' + attr(p.phone || '') + '" placeholder="选填，手机号" autocomplete="off"></div>' +
+    '<div class="acct-field"><label>📱 手机号</label><input id="mpPhone" value="' + attr(p.phone || '') + '" placeholder="选填，11 位手机号" autocomplete="off"></div>' +
     '<label class="acct-priv"><input type="checkbox" id="mpPhoneHide"' + (phHidden ? ' checked' : '') + '> 仅自己可见（同学查不到你的手机号）</label>' +
 
     '<button class="acct-btn" id="mpSave" onclick="myProfSave()">保存我的联系方式</button>' +
@@ -7790,6 +7790,13 @@ function myProfSave(){
   var ph = (document.getElementById('mpPhone') || {}).value || '';
   w = w.trim(); q = q.trim(); ph = ph.trim();
 
+  /* v3.5.5：手机号规则 = 11 位数字（站主在「字段管理」里配的，服务端复核）。
+     ⚠️ grandfather：与库中现值一致时原样提交 —— 老资料可能是旧规则下录的
+        （带 +86、空格等），不能因为规则升级把「只改可见性开关」的同学挡死；
+        主动改值才按新规则规范化（顺手去掉空格 / 横杠 / 括号）。 */
+  var storedPh = (MY_PROF && MY_PROF.phone) || '';
+  if(ph && ph !== storedPh) ph = ph.replace(/[\s\-()]/g, '');
+
   /* 可见性开关：勾上「仅自己可见」→ 该字段意愿记为 false（收窄到 self）。
      未勾 = true（我不反对公开），最终仍受后台上限约束。 */
   var wHide = !!(document.getElementById('mpWechatHide') || {}).checked;
@@ -7801,7 +7808,7 @@ function myProfSave(){
     /* 清空：允许，但要提示会撤回公开 */
     if(!confirm('三项都空着，保存会把你的联系方式撤回（同学查不到）。确定吗？')) return;
   }
-  if(ph && !/^[0-9+\-() ]{6,20}$/.test(ph)){ myProfSay('手机号格式看起来不对'); return; }
+  if(ph && ph !== storedPh && !/^[0-9]{11}$/.test(ph)){ myProfSay('手机号应为 11 位数字'); return; }
   if(q && !/^[0-9]{5,12}$/.test(q)){ myProfSay('QQ 号应为 5–12 位数字'); return; }
 
   var btn = document.getElementById('mpSave');
