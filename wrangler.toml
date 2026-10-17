@@ -74,24 +74,21 @@ BUILD_SHA = "local"
 # ============================================================
 # 每日备份（KV）· R37
 # ------------------------------------------------------------
-# ⚠️ 需要你做一次（大约 2 分钟），做完把下面的 # 去掉、填上 id 再推代码：
-#   1. Cloudflare 后台 → 存储和数据库（Storage & Databases）→ KV
-#   2. 创建一个命名空间，名字随意（建议 class-site-backup）
-#   3. 复制它的 ID，填到 id = "..." 里
-#   4. 把 [[kv_namespaces]] 和 [triggers] 这两段前面的 # 去掉
+# 2026-10-17 已启用：命名空间 class-site-backup，绑定名 SITE_KV。
+# 代码里用 env.SITE_KV 读写（见 api/scores.js 的 getKV）。
+# 每天 18:00 UTC（= 次日 02:00 北京时间）自动备份一次；
+# 备份键前缀 backup/，最多保留 14 份。
 #
-# 没配之前，备份接口会明确提示「还没配置备份存储（KV）」，
-# 其它功能完全不受影响 —— 所以可以先不管，等想开的时候再弄。
-#
-# ⚠️ 如果 CI 部署开始报权限错，说明 GitHub Secret 里那个 Cloudflare
-#    API Token 没有 KV 权限，去 Cloudflare「我的个人资料 → API 令牌」
-#    给那个令牌补上「Workers KV Storage: Edit」即可。
+# ⚠️ 如果 CI 部署报权限错，说明 GitHub Secret 里的 Cloudflare API Token
+#    没有 KV 权限：Cloudflare「我的个人资料 → API 令牌」给它补上
+#    「Workers KV Storage: Edit」即可。
+# 注：KV 命名空间 ID 不是密钥，可以放在仓库里；真正的 API Token 仍只在
+#    GitHub Secrets / Cloudflare 后台，绝不入库。
 # ============================================================
 
-# [[kv_namespaces]]
-# binding = "SITE_KV"
-# id = "在这里填 KV 命名空间 ID"
+[[kv_namespaces]]
+binding = "SITE_KV"
+id = "22e3639970c94a618916e850d20791f9"
 
-# 每天 18:00 UTC（= 次日 02:00 北京时间）自动备份一次
-# [triggers]
-# crons = ["0 18 * * *"]
+[triggers]
+crons = ["0 18 * * *"]
