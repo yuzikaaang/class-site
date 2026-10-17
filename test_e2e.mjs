@@ -5069,7 +5069,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
   t('★板块不存在时给提示且**不关弹窗**（否则用户白点、只看到空白）',
     /if\(!document\.getElementById\('tab-cat-' \+ cid\)\)/.test(idx49)
     && /没有找到编号/.test(idx49));
-  t('★外链行为保持不变（向后兼容）', /openLink\(u, true\)/.test(idx49));
+  /* v2.10.1：openLink 多了一个「入口名」参数（行为日志要记去了哪里），跳转本身不变 */
+  t('★外链行为保持不变（向后兼容）', /openLink\(u, true, '弹窗跳转'\)/.test(idx49));
   t('★白名单含「当前作业 / 历史作业」等常用页面',
     /showCurrentHomework: 1/.test(idx49) && /showHomeworkCalendar: 1/.test(idx49)
     && /openSettings: 1/.test(idx49));
@@ -7772,6 +7773,39 @@ console.log('\n【75】第六十三轮·「我的云端数据」入口暴露（�
     /onclick="openData\(\)" style="display:none"/.test(idx));
   t('★个人中心入口带说明文案（可单条删除或清空）',
     /看云端存了哪些数据[\s\S]{0,40}可单条删除或清空/.test(idx));
+}
+
+console.log('\n【76】第六十三轮·行为日志：点外链也要有记录（且必须发得出去）');
+{
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  /* 背景：站主反馈「跳了点歌平台，后台查不到去了哪里」。两个根因—— */
+  /* ① 离开页面前的最后一次发送走普通 fetch，会被浏览器取消 → 改用 keepalive */
+  t('★新增 keepalive 发送通道', /function actLogFlushKeepalive\(\)\{/.test(idx));
+  t('★keepalive 通道用 fetch 的 keepalive:true（普通 fetch 卸载时会被取消）',
+    /keepalive: true/.test(idx) && /keepalive 的请求体上限 64KB/.test(idx));
+  t('★不改用 sendBeacon（token 只能进 URL，会泄到日志/Referer）',
+    /不能改用 navigator\.sendBeacon/.test(idx));
+  t('★pagehide 里补发一次（关标签页 / 点外链跳走都会走到）',
+    /addEventListener\('pagehide'[\s\S]{0,200}actLogFlushKeepalive\(\)/.test(idx));
+  t('★visibilitychange 也改用 keepalive（切后台不再用会被取消的普通 fetch）',
+    /visibilityState === 'hidden'[\s\S]{0,400}actLogFlushKeepalive\(\)/.test(idx)
+    && !/visibilityState === 'hidden'[\s\S]{0,400}\n\s*actLogFlush\(\);/.test(idx));
+
+  /* ② 入队即落盘 + 下次打开补发 */
+  t('★入队即写 localStorage（跳走/刷新也不丢）',
+    /actLogSave\(\);\s*\/\* 🚀 v2\.10\.1：入队即落盘/.test(idx));
+  t('★启动后补发上次没送出去的队列',
+    /if\(ACT_LOG_Q\.length\) actLogFlush\(\)/.test(idx));
+
+  /* ③ 跳转本身要带上「去了哪里」 */
+  t('★openLink 支持第三个参数（入口名）', /function openLink\(url, wechatOk, label\)\{/.test(idx));
+  t('★跳转记一条 jump，目标带入口名、详情带目标地址',
+    /actLog\('jump', label \? String\(label\) : url, '前往 ' \+ url\)/.test(idx)
+    && /actLogFlushKeepalive\(\);\s*\n\s*\}catch\(e\)\{ \/\* 记日志失败绝不影响跳转/.test(idx));
+  t('★服务卡片把入口名传进 openLink（不再是光秃秃的「前往入口」）',
+    /openLink\(\\''\+jsq\(l\.mainUrl\)\+'\\','\+\(l\.mainWechatOk\?'true':'false'\)\+',\\''\+jsq\(l\.title\|\|''\)\+'\\'\)/.test(idx));
+  t('★通用点击不再为外链按钮重复记一条（一动作一条）',
+    /if\(\/openLink\\s\*\\\(\/\.test\(oc\)\) return;/.test(idx));
 }
 
 console.log('\n' + '='.repeat(52));

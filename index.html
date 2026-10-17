@@ -4452,10 +4452,19 @@ function rememberView(){
   else if(window.__activeCat != null){ v = 'cat_' + window.__activeCat; }
   try{ sessionStorage.setItem('cls_return_view', v); }catch(e){}
 }
-function openLink(url, wechatOk){
+function openLink(url, wechatOk, label){
   rememberView();
   url = (url||'').trim();
   if(!url || url === '#'){ alert('该入口链接暂未配置，请联系管理员补充'); return; }
+  /* 🚀 v2.10.1：跳转单独记一条，带上「入口名 + 目标地址」并立刻发走。
+     站主 2026-10-17 反馈：「跳了点歌平台，后台看不到去了哪里」——两个原因：
+       ① 原来只记通用点击（内容里只有按钮文字「前往入口」，看不出目的地）；
+       ② 紧接着页面就跳走了，攒批队列被浏览器取消，这条记录压根没发出去。
+     label 由调用方传入（卡片标题，如「点歌平台 VoiceHub」）。 */
+  try{
+    actLog('jump', label ? String(label) : url, '前往 ' + url);
+    actLogFlushKeepalive();
+  }catch(e){ /* 记日志失败绝不影响跳转 */ }
   if(isWeChat() && !wechatOk){
     location.hash = '/guide?url=' + encodeURIComponent(url);
   }else if(isWeChat()){
@@ -5294,7 +5303,7 @@ function render(){
         '<div class="daily-card">'+
           '<div class="daily-icon ink-auto">日报</div>'+
           '<div class="daily-info"><div class="daily-title">每日日报</div><div class="daily-sub">实时热点资讯聚合</div></div>'+
-          '<button class="btn daily-btn" onclick="openLink(\''+jsq(dailyLink.mainUrl)+'\','+(dailyLink.mainWechatOk?'true':'false')+')">'+esc(dailyLink.mainLabel||'前往查看')+'</button>'+
+          '<button class="btn daily-btn" onclick="openLink(\''+jsq(dailyLink.mainUrl)+'\','+(dailyLink.mainWechatOk?'true':'false')+',\'每日日报\')">'+esc(dailyLink.mainLabel||'前往查看')+'</button>'+
         '</div>';
     }
   }
@@ -5414,8 +5423,8 @@ function render(){
         }else{
           actionsHtml = (l.qrImage
             ? '<button class="btn btn-green" onclick="openQr(\''+jsq(l.qrImage)+'\')">'+esc(l.mainLabel||'查看公众号')+'</button>'
-            : '<button class="btn" onclick="openLink(\''+jsq(l.mainUrl)+'\','+(l.mainWechatOk?'true':'false')+')">'+esc(l.mainLabel||'前往入口')+'</button>')+
-            (l.extraLabel ? '<button class="btn btn-secondary" onclick="openLink(\''+jsq(l.extraUrl)+'\','+(l.extraWechatOk?'true':'false')+')">'+esc(l.extraLabel)+'</button>' : '')+
+            : '<button class="btn" onclick="openLink(\''+jsq(l.mainUrl)+'\','+(l.mainWechatOk?'true':'false')+',\''+jsq(l.title||'')+'\')">'+esc(l.mainLabel||'前往入口')+'</button>')+
+            (l.extraLabel ? '<button class="btn btn-secondary" onclick="openLink(\''+jsq(l.extraUrl)+'\','+(l.extraWechatOk?'true':'false')+',\''+jsq((l.title||'')+' · '+l.extraLabel)+'\')">'+esc(l.extraLabel)+'</button>' : '')+
             (needBrowser ? '<span class="wechat-hint">微信内请按引导用浏览器打开</span>' : '');
         }
         /* 视频类卡片整卡可点：点卡片任意位置直接弹视频，无需二级按钮 */
@@ -8183,8 +8192,7 @@ try{
     if(document.visibilityState === 'hidden'){
       if(hasPendingCloudSync()) flushCloudSync();
       if(hasPendingContentSync()) flushContentSync();   /* 共享内容走另一条线路 */
-      actLogFlush();                                     /* v2.10.0：操作日志也趁离开前发走 */
-      actLogSave();
+      actLogFlushKeepalive();   /* v2.10.1：改用 keepalive —— 普通 fetch 会被卸载取消 */
     }
   });
 }catch(e){}
@@ -8255,6 +8263,7 @@ function actLog(type, target, detail, pg){
     ts: Date.now()
   });
   if(ACT_LOG_Q.length > 200) ACT_LOG_Q = ACT_LOG_Q.slice(-200);
+  actLogSave();   /* 🚀 v2.10.1：入队即落盘 —— 点完外链直接跳走/直接关页面也不丢 */
   if(ACT_LOG_Q.length >= ACT_LOG_MAX) actLogFlush();
   else actLogSchedule();
 }
@@ -8283,11 +8292,54 @@ function actLogFlush(){
     .catch(function(){ /* 失败保留队列，下批带上重试 */ });
 }
 
+/**
+ * 走人前的最后一次发送（页面卸载 / 跳外链 / 切后台）。
+ *
+ * ⚠️ 2026-10-17 站主反馈「点了常用服务里的点歌平台，后台查不到这条记录」——根因就在这里：
+ *    原来卸载时调的是 actLogFlush()，它走普通 fetch；浏览器在页面卸载/跳转时
+ *    会**直接取消**普通请求，于是刚点的那一条（连同队列里攒着的）全部无声丢失。
+ *    攒批策略本身没错（省请求），错在「离开前的最后一批」也必须送达。
+ *
+ * 解法：改用 fetch 的 **keepalive: true** —— 浏览器保证请求在页面卸载后继续发完。
+ *   · 不能改用 navigator.sendBeacon：它不支持自定义请求头，token 只能塞 URL，
+ *     而 token 进 URL 会被浏览器历史 / 服务器日志 / Referer 记下（站规里已明确否掉）。
+ *   · keepalive 的请求体上限 64KB，这里一批 50 条 ≈ 十几 KB，安全。
+ *   · 队列另外在入队时就写了 localStorage，万一这次也没送出去，下次打开站点会自动补发。
+ */
+function actLogFlushKeepalive(){
+  if(__actLogTimer){ clearTimeout(__actLogTimer); __actLogTimer = null; }
+  __actLogFirstAt = 0;
+  if(!ACT_LOG_Q.length) return;
+  if(!isLoggedIn() || !apiReady()) return;
+  var batch = ACT_LOG_Q.slice(0, 50);
+  try{
+    fetch(apiUrl('/data?action=log'), {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + ((AUTH && AUTH.token) ? AUTH.token : '')
+      },
+      body: JSON.stringify({ events: batch })
+    }).then(function(){
+      ACT_LOG_Q = ACT_LOG_Q.slice(batch.length);
+      actLogSave();
+    }).catch(function(){ /* 留在队列里，下次打开站点补发 */ });
+  }catch(e){ /* 不支持 keepalive 时忽略：队列已落盘，不会真丢 */ }
+}
+
 /* 全局 click 捕获：每一次点击都记（target 描述 = 标签 + id/标题/文本） */
 try{
   document.addEventListener('click', function(ev){
     var el = ev.target;
     if(!el || el.nodeType !== 1) return;
+    /* v2.10.1：openLink 触发的跳转由 openLink 自己记一条「入口名 + 目标地址」，
+       这里就不再记通用点击了 —— 一动作两条记录，后台看着反而乱。 */
+    try{
+      var ocHost = (el.closest ? (el.closest('[onclick]') || el) : el);
+      var oc = ocHost && ocHost.getAttribute ? (ocHost.getAttribute('onclick') || '') : '';
+      if(/openLink\s*\(/.test(oc)) return;
+    }catch(e){}
     var tag = String(el.tagName || '').toLowerCase();
     var desc = '';
     try{
@@ -8304,6 +8356,9 @@ try{
 
 /* 启动：恢复上次未来得及发的队列；登录态变化时会跟着发 */
 actLogLoad();
+/* v2.10.1：上次没送出去的（点了外链直接走掉、或直接关了页面）在这里补发一次。
+   等几秒是为了避开开屏那波请求，也确保登录态已经就绪。 */
+setTimeout(function(){ try{ if(ACT_LOG_Q.length) actLogFlush(); }catch(e){} }, 4000);
 
 /** 立即同步：先推本机 → 云端，再把云端最新拉回来，保证一致 */
 function syncNow(){
@@ -8832,6 +8887,10 @@ function loadAdminAudit(){
    （守住「换设备能拿到完整数据」这个底线）。 */
 window.addEventListener('pagehide', function(){
   if(!isLoggedIn()) return;
+
+  /* v2.10.1：操作日志也要在卸载前发走（用户点外链、关标签页都会走到这里）。
+     这一条是站主反馈「跳点歌平台没记录」的直接修复点。 */
+  try{ actLogFlushKeepalive(); }catch(e){}
 
   /* 共享内容通道也补一次——它走的是 /api/content，与个人数据不是同一条线路。
      sendBeacon 只能带 URL 上的 token，而 /api/content 走 Authorization 头，
@@ -10159,7 +10218,7 @@ function renderHiddenView(){
         '<button type="button" class="btn-qr" style="margin-left:auto;background:#9a3412" onclick="event.stopPropagation();copyText(\'' + jsq(l.login.user + ' / ' + l.login.pass) + '\',\'账号密码\')">复制</button>' +
         '</div>'
       : '';
-    return '<div class="hidden-fun-card" onclick="' + (l.action ? l.action + '()' : "openLink('" + jsq(l.url) + "',true)") + '">' +
+    return '<div class="hidden-fun-card" onclick="' + (l.action ? l.action + '()' : "openLink('" + jsq(l.url) + "',true,'" + jsq(l.title || '隐藏彩蛋') + "')") + '">' +
       '<span class="hidden-fun-icon">' + esc(l.icon) + '</span>' +
       '<span style="flex:1;min-width:0"><span class="hidden-fun-title">' + esc(l.title) + '</span><br><span class="hidden-fun-desc">' + esc(l.desc) + '</span>' + loginHtml + '</span>' +
     '</div>';
@@ -11583,7 +11642,7 @@ function popBannerPlay(id){
   POP_CUR = p;
   if(p.video){
     if(typeof openVideo === 'function') openVideo(p.video, p.title || '视频播放');
-    else if(typeof openLink === 'function') openLink(p.video, true);
+    else if(typeof openLink === 'function') openLink(p.video, true, '弹窗视频');
   }
 }
 
@@ -11720,14 +11779,14 @@ function popGoLink(){
   }
 
   /* ③ 外部链接（原行为） */
-  if(typeof openLink === 'function') openLink(u, true);
+  if(typeof openLink === 'function') openLink(u, true, '弹窗跳转');
 }
 /** 视频按钮：交给站内通用视频弹窗 */
 function popPlayVideo(){
   var p = POP_CUR;
   if(!p || !p.video) return;
   if(typeof openVideo === 'function') openVideo(p.video, p.title || '视频播放');
-  else if(typeof openLink === 'function') openLink(p.video, true);
+  else if(typeof openLink === 'function') openLink(p.video, true, '弹窗视频');
 }
 
 /** 显示某条弹窗 */
