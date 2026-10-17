@@ -3285,7 +3285,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.10';
+var SITE_VERSION = '3.5.11';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -6679,6 +6679,7 @@ var CONTENT_MAP = {
   homework_notice:   'homeworkNotice',
   daily_quote:       'dailyQuote',
   quote_source:      null,             /* v3.5.9 每日一言来源（后台配）→ 落到 SITE_DATA.quoteSource，见 applyCloudContent */
+  quote_schedule:    null,             /* v3.5.11 本地库排期 → 落到 SITE_DATA.quoteSchedule */
   study_card:        'studyCard',      /* v2.6.0 学习卡片默认配置（后台配、前台读） */
   popups:            'popups',         /* 通用弹窗引擎（第二十七轮） */
   /* 以下三键（第二十八轮）主站**不消费**，值一律 null —— 加它们只为满足
@@ -6731,6 +6732,13 @@ function applyCloudContent(items, opts){
       if(typeof v !== 'object' || Array.isArray(v)) return;   /* 类型护栏 */
       if(v.net !== 0 && v.net !== 1) return;
       SITE_DATA.quoteSource = { net: v.net };
+      n++;
+      return;
+    }
+    /* v3.5.11 本地库排期：类型护栏做在 quoteSchedule() 里，这里只负责落值 */
+    if(k === 'quote_schedule'){
+      if(typeof v !== 'object' || Array.isArray(v)) return;
+      SITE_DATA.quoteSchedule = v;
       n++;
       return;
     }
@@ -6811,10 +6819,106 @@ function pickRandom(items){
   return items[i];
 }
 
-/* 当前该显示哪句：联网优先（若已拿到），否则本地随机 */
+/* 当前该显示哪句：联网优先（若已拿到），否则走本地库排期 */
 function dailyQuoteOfToday(){
   if(_quoteRemote && _quoteRemote.text) return _quoteRemote;
+  var q = localQuoteOfToday();
+  if(q) return q;
   return pickRandom(quoteItems());
+}
+
+/* ============================================================
+   v3.5.11 本地库排期（站主：「可以指定这两天是哪些句子，指定怎么轮换」）
+   ------------------------------------------------------------
+   内容键 quote_schedule = {
+     mode: 'random' | 'date' | 'order' | 'rotate',
+     start: 'YYYY-MM-DD',             // order / rotate 的轮换起点
+     fixed: { 'YYYY-MM-DD': [i,j] }   // date 模式下每天指定哪几句（下标，可多句→随机取一句）
+   }
+
+   四种模式：
+     random —— 每次刷新随机（v2.6.0 起的旧行为，默认）
+     order  —— 从起点日期开始每天按列表顺序往下走，走完回头
+     rotate —— 从起点日期起每 N 天换一批（N = 每句停留天数，默认 1）
+     date   —— 指定日期的句子优先；没指定的日子退回「轮换默认」
+
+   ⚠️ 关键约束：**同一天所有同学看到的必须一样**，所以这里一律按日期算，
+      不能随机。只有 random 模式才允许随机。
+   ============================================================ */
+function quoteSchedule(){
+  var raw = (window.SITE_DATA && SITE_DATA.quoteSchedule && typeof SITE_DATA.quoteSchedule === 'object')
+    ? SITE_DATA.quoteSchedule : null;
+  var out = { mode: 'random', start: '', every: 1, fixed: {} };
+  if(!raw) return out;
+  var m = String(raw.mode || '');
+  if(m === 'order' || m === 'rotate' || m === 'date') out.mode = m;
+  if(typeof raw.start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.start)) out.start = raw.start;
+  out.every = (Number(raw.every) > 0) ? Math.min(60, Math.floor(Number(raw.every))) : 1;
+  if(raw.fixed && typeof raw.fixed === 'object' && !Array.isArray(raw.fixed)){
+    Object.keys(raw.fixed).forEach(function(k){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(k)) return;
+      if(!Array.isArray(raw.fixed[k])) return;
+      out.fixed[k] = raw.fixed[k].map(Number).filter(function(x){ return isFinite(x); });
+    });
+  }
+  return out;
+}
+
+/* 本地日期字符串 YYYY-MM-DD（必须用本地时区，不能用 toISOString 切 UTC） */
+function quoteDayStr(d){
+  d = d || new Date();
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+/* 从某个日期到今天差几天（按本地 0 点算，避开夏令时/时分秒误差） */
+function quoteDayDiff(fromStr, toStr){
+  var a = new Date(fromStr + 'T00:00:00');
+  var b = new Date(toStr + 'T00:00:00');
+  if(isNaN(a.getTime()) || isNaN(b.getTime())) return 0;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+/* 算出「今天该显示第几句」。返回列表下标，取不到返回 -1。 */
+function localQuoteIdx(list, todayStr){
+  var cfg = quoteSchedule();
+  var today = todayStr || quoteDayStr();
+  var n = list.length;
+  if(!n) return -1;
+
+  /* ① 指定日期优先（date 模式，或任何模式下填了指定日期都先认它 —— 站主写死的那天必须照办） */
+  var fixed = cfg.fixed[today];
+  if(fixed && fixed.length){
+    var valid = fixed.filter(function(i){ return i >= 0 && i < n; });
+    if(valid.length){
+      /* 指定了多句时，当天固定取第一句（不再随机，保证全班一致） */
+      return valid[0];
+    }
+  }
+
+  if(cfg.mode === 'date') return -1;   /* 只认指定日期，其它天不显示 */
+
+  if(cfg.mode === 'order' || cfg.mode === 'rotate'){
+    var start = cfg.start || today;
+    var diff = quoteDayDiff(start, today);
+    if(diff < 0) diff = ((diff % n) + n) % n;   /* 起点还没到：往回数，别出负数下标 */
+    if(cfg.mode === 'order') return diff % n;
+    /* rotate：每 N 天换一句 */
+    var step = Math.floor(diff / cfg.every);
+    return ((step % n) + n) % n;
+  }
+  return -1;   /* random 模式：交给 pickRandom */
+}
+
+/* 本地库今天这一句（random 模式返回 null，表示该随机） */
+function localQuoteOfToday(){
+  var list = quoteItems();
+  if(!list.length) return null;
+  var cfg = quoteSchedule();
+  var idx = localQuoteIdx(list, quoteDayStr());
+  if(idx >= 0) return list[idx];
+  if(cfg.mode === 'date') return null;   /* date 模式且今天没指定 → 不显示 */
+  return pickRandom(list);
 }
 
 /* v3.5.9 站主：「后台的首页卡片里面没有改」——每日一言来源原来只是每个同学
@@ -8507,6 +8611,7 @@ function saveContentLocal(key, value){
     if(key === 'announcements' || key === 'daily_quote') rerenderAll();
     if(key === 'study_card') renderStudyCard();   /* v2.6.0 学习卡片配置变了就重画 */
     if(key === 'quote_source'){ _quoteRemote = null; fetchRemoteQuote(); renderDailyQuote(); }   /* v3.5.9 来源切了立刻重来 */
+    if(key === 'quote_schedule') renderDailyQuote();   /* v3.5.11 排期改了立刻重画 */
     if(key === 'holiday_homeworks' || key === 'homework_notice') refreshHwViews();
     if(key === 'important_dates'){ renderAllImp(); updateCountdown(); }
   }catch(e){}

@@ -899,7 +899,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.10';
+var SITE_VERSION = '3.5.11';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -911,6 +911,7 @@ var STATE = {
   /* v2.10.0 #172：成员与档案合并页（原 users / profiles 两页合一） */
   members: { list: [], total: 0, counts: {}, page: 1, size: 50, q: '', role: '', status: '', scene: '', selected: {} },
   quoteSource: 1,   /* v3.5.9 每日一言来源：1=联网 API，0=本地库 */
+  quoteSched: { mode:'random', start:'', every:3, fixed:{} },   /* v3.5.11 本地库排期 */
   logs:  { list: [], total: 0, page: 1, size: 30 },
   actionlogs: { list: [], total: 0, page: 1, size: 50, q: '', action: '', day: '', stats: null },
   logins:{ list: [], total: 0, page: 1, size: 30, userId: 0 },
@@ -5052,8 +5053,10 @@ function renderCards(){
     + '<div class="panel-head">'
     +   '<div><h3>' + svg('quote') + '每日一言</h3>'
     +     '<p class="sub">首页自动换一句，同学不用手动刷</p></div>'
-    +   '<div style="display:flex;gap:8px">'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap">'
     +     '<button class="btn btn-sm" id="dqAdd">' + svg('plus', 14) + '新增一句</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="dqBatchAdd">' + svg('plus', 14) + '批量添加</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="dqBatchDel">批量删除</button>'
     +     '<button class="btn btn-sm btn-secondary" id="dqRefresh">' + svg('refresh', 14) + '刷新</button>'
     +   '</div>'
     + '</div>'
@@ -5070,7 +5073,7 @@ function renderCards(){
     +     '</div>'
     +     '<p class="muted" style="font-size:.76rem;margin:10px 0 0;line-height:1.7">'
     +       '<b>联网 API</b>：从 hitokoto 公共文库拉取（动画 / 漫画 / 文学 / 诗词），每次刷新随机换一句，连不上自动回退本地库。<br>'
-    +       '<b>本地库</b>：只用下面这个列表里的句子，不发任何外部请求。'
+    +       '<b>本地库</b>：只用下面这个列表里的句子，不发任何外部请求 —— 哪天显示哪句在下面的「轮换设置」里定。'
     +     '</p>'
     +     '<div id="qsMsg" style="font-size:.78rem;margin-top:8px"></div>'
     +   '</div>'
@@ -5078,6 +5081,7 @@ function renderCards(){
     +     '列表改动保存后，让同学刷新一下页面就能看到最新内容。'
     +   '</div>'
     +   '<div id="dqBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    +   '<div id="dqSched" style="margin-top:18px"></div>'
     + '</div>'
     + '</section>'
     /* ---------- 区块二：学习卡片 ---------- */
@@ -5100,12 +5104,15 @@ function renderCards(){
     + '</section>';
 
   $('dqAdd').onclick     = function(){ dqDialog(null); };
+  $('dqBatchAdd').onclick = dqBatchAdd;
+  $('dqBatchDel').onclick = dqBatchDelete;
   $('dqRefresh').onclick = function(){ loadQuotes(); };
   $('stSave').onclick    = saveStudy;
   $('stRefresh').onclick = loadStudy;
   $('qsNet').onclick     = function(){ qsPick(1); };
   $('qsLocal').onclick   = function(){ qsPick(0); };
   loadQuoteSource();
+  loadSchedule();
   loadQuotes();
   loadStudy();
 }
@@ -5201,20 +5208,32 @@ function paintQuotes(){
     return;
   }
 
-  /* 今天会轮到哪一句：与主站完全相同的取模算法，方便站主对照 */
-  var d = new Date();
-  var seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-  var todayIdx = seed % list.length;
+  /* v3.5.11：今天会轮到哪一句 —— 与主站**完全同一套**算法（含排期），
+     之前这里是自己另算的取模，排期一改就跟前台对不上，站主没法对照。 */
+  var todayStr = dqDayStr(new Date());
+  var todayIdx = dqTodayIdx(list, todayStr);
+  var sched = STATE.quoteSched || { mode:'random' };
 
   body.innerHTML =
-    '<div class="muted" style="font-size:.78rem;margin-bottom:8px">共 <b>' + list.length + '</b> 句</div>'
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +   '<div class="muted" style="font-size:.78rem">共 <b>' + list.length + '</b> 句'
+    +     (todayIdx >= 0 ? '　今天显示第 <b>' + (todayIdx + 1) + '</b> 句' : (sched.mode === 'date' ? '　今天没指定句子' : ''))
+    +   '</div>'
+    +   '<div style="display:flex;align-items:center;gap:8px;font-size:.78rem">'
+    +     '<span class="muted">已选 <b id="dqSelN">0</b> 句</span>'
+    +     '<button class="btn btn-sm btn-ghost" id="dqSelAll">全选</button>'
+    +     '<button class="btn btn-sm btn-ghost" id="dqSelNone">清空</button>'
+    +   '</div>'
+    + '</div>'
     + '<div class="table-wrap"><table><thead><tr>'
-    +   '<th class="nowrap" style="width:36px">#</th>'
+    +   '<th class="nowrap" style="width:34px"><input type="checkbox" id="dqCkAll" title="全选"></th>'
+    +   '<th class="nowrap" style="width:44px">#</th>'
     +   '<th>内容</th><th style="width:180px">出处</th>'
     +   '<th style="text-align:right;width:130px">操作</th>'
     + '</tr></thead><tbody>'
     + list.map(function(q, i){
         return '<tr' + (i === todayIdx ? ' style="background:rgba(175,65,15,.05)"' : '') + '>'
+          + '<td><input type="checkbox" data-dq-ck="' + i + '"></td>'
           + '<td class="muted nowrap">' + (i + 1)
           +   (i === todayIdx ? '<span class="badge badge-blue" style="margin-left:4px">今天</span>' : '')
           + '</td>'
@@ -5232,6 +5251,416 @@ function paintQuotes(){
   });
   Array.prototype.forEach.call(body.querySelectorAll('[data-dq-del]'), function(b){
     b.onclick = function(){ dqDelete(Number(b.dataset.dqDel)); };
+  });
+
+  /* 勾选计数 */
+  function syncSel(){
+    var cks = body.querySelectorAll('[data-dq-ck]');
+    var n = 0;
+    Array.prototype.forEach.call(cks, function(c){ if(c.checked) n++; });
+    var el = $('dqSelN');
+    if(el) el.textContent = String(n);
+    var all = $('dqCkAll');
+    if(all) all.checked = (n > 0 && n === cks.length);
+  }
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){
+    c.onchange = syncSel;
+  });
+  var ckAll = $('dqCkAll');
+  if(ckAll){
+    ckAll.onchange = function(){
+      Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){ c.checked = ckAll.checked; });
+      syncSel();
+    };
+  }
+  var bAll = $('dqSelAll'), bNone = $('dqSelNone');
+  if(bAll) bAll.onclick = function(){
+    Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){ c.checked = true; });
+    if(ckAll) ckAll.checked = true;
+    syncSel();
+  };
+  if(bNone) bNone.onclick = function(){
+    Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){ c.checked = false; });
+    if(ckAll) ckAll.checked = false;
+    syncSel();
+  };
+  syncSel();
+  paintSchedule();
+}
+
+/* ============================================================================
+ * v3.5.11 本地库增强：批量添加 / 批量删除 / 轮换设置
+ * ----------------------------------------------------------------------------
+ * 站主要求（原话）：「可以批量删除或添加，也可以指定这两天是哪些句子，指定怎么轮换」
+ *
+ * 三个能力：
+ *   ① 批量添加 —— 一行一句整段粘贴，自动拆行、去重（与库里已有的比对）、跳过空行
+ *   ② 批量删除 —— 列表勾选后一次删掉，带确认
+ *   ③ 轮换设置 —— 四种模式 + 逐日指定（最多提前 90 天预览排期）
+ *
+ * 数据落在内容键 quote_schedule：
+ *   { mode:'random'|'order'|'rotate'|'date', start:'YYYY-MM-DD', every:N, fixed:{date:[idx]} }
+ * ⚠️ 与前端 index.html 的 quoteSchedule() / localQuoteIdx() 必须保持同一套算法，
+ *    改一边必须改另一边（e2e 有静态断言盯着「两处模式列表一致」）。
+ * ========================================================================= */
+
+/* 本地日期字符串（不能 toISOString，那是 UTC，晚上 8 点后日期会差一天） */
+function dqDayStr(d){
+  d = d || new Date();
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+/* 今天显示第几句（与前台 localQuoteIdx 同算法） */
+function dqTodayIdx(list, todayStr){
+  if(!list || !list.length) return -1;
+  var cfg = STATE.quoteSched || { mode:'random' };
+  var today = todayStr || dqDayStr(new Date());
+  var n = list.length;
+  var fixed = (cfg.fixed || {})[today];
+  if(fixed && fixed.length){
+    var valid = fixed.filter(function(i){ return i >= 0 && i < n; });
+    if(valid.length) return valid[0];
+  }
+  if(cfg.mode === 'date') return -1;
+  if(cfg.mode === 'order' || cfg.mode === 'rotate'){
+    var start = cfg.start || today;
+    var diff = dqDayDiff(start, today);
+    if(diff < 0) diff = ((diff % n) + n) % n;
+    if(cfg.mode === 'order') return diff % n;
+    var step = Math.floor(diff / (cfg.every || 1));
+    return ((step % n) + n) % n;
+  }
+  return -1;   /* random */
+}
+
+function dqDayDiff(fromStr, toStr){
+  var a = new Date(fromStr + 'T00:00:00'), b = new Date(toStr + 'T00:00:00');
+  if(isNaN(a.getTime()) || isNaN(b.getTime())) return 0;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+/* 读云端排期 */
+function loadSchedule(){
+  api('/content').then(function(j){
+    var raw = (j && j.items) ? j.items.quote_schedule : null;
+    STATE.quoteSched = dqNormSched(raw);
+    paintSchedule();
+  }).catch(function(){
+    STATE.quoteSched = dqNormSched(null);
+    paintSchedule();
+  });
+}
+
+/* 归一化：任何脏数据都退回安全默认，保证界面永远可编辑 */
+function dqNormSched(raw){
+  var out = { mode:'random', start:'', every:3, fixed:{} };
+  if(!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  var m = String(raw.mode || '');
+  if(m === 'order' || m === 'rotate' || m === 'date' || m === 'random') out.mode = m;
+  if(typeof raw.start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.start)) out.start = raw.start;
+  var e = Number(raw.every);
+  out.every = (e > 0) ? Math.min(60, Math.floor(e)) : 3;
+  if(raw.fixed && typeof raw.fixed === 'object' && !Array.isArray(raw.fixed)){
+    Object.keys(raw.fixed).forEach(function(k){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(k)) return;
+      if(!Array.isArray(raw.fixed[k])) return;
+      var arr = raw.fixed[k].map(Number).filter(function(x){ return isFinite(x) && x >= 0; });
+      if(arr.length) out.fixed[k] = arr;
+    });
+  }
+  return out;
+}
+
+/* 保存排期 */
+function dqSaveSched(next, okMsg){
+  var body = { mode: next.mode, start: next.start || '', every: next.every || 3, fixed: next.fixed || {} };
+  return api('/content', { method:'PUT', body:{ items:{ quote_schedule: body } } })
+    .then(function(j){
+      if(j && j.ok === false) throw new Error(j.error || '保存失败');
+      STATE.quoteSched = dqNormSched(body);
+      paintSchedule();
+      paintQuotes();          /* 重画列表（今天那句的标记会变） */
+      if(okMsg) toast(okMsg, 'ok', 3000);
+      return true;
+    })
+    .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); return false; });
+}
+
+/* ---------- 轮换设置面板 ---------- */
+function paintSchedule(){
+  var host = $('dqSched');
+  if(!host) return;
+  var cfg = STATE.quoteSched || dqNormSched(null);
+  var list = STATE.quotes.list || [];
+  var modes = [
+    ['random', '每次随机', '每次刷新随机抽一句（旧行为）'],
+    ['order',  '按列表顺序轮换', '从起始日期起每天下一句，走到末尾从头再来'],
+    ['rotate', '每 N 天换一句', '从起始日期起，每句停留 N 天再换'],
+    ['date',   '只按指定日期', '只显示你指定过的那几天，其它天不显示卡片'],
+  ];
+
+  var modeHtml = modes.map(function(m){
+    var on = cfg.mode === m[0];
+    return '<button class="btn ' + (on ? '' : 'btn-secondary') + '" data-dq-mode="' + m[0] + '" '
+      + 'style="text-align:left;display:block;width:100%;padding:10px 12px;margin-bottom:8px">'
+      + '<b style="font-size:.84rem">' + (on ? '✓ ' : '') + m[1] + '</b>'
+      + '<span style="display:block;font-size:.74rem;opacity:.8;margin-top:2px">' + m[2] + '</span></button>';
+  }).join('');
+
+  host.innerHTML =
+    '<div style="padding:14px;border:1px solid #eee3d8;border-radius:12px;background:#fffdfa">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+    +   '<b style="font-size:.9rem">轮换设置</b>'
+    +   '<span class="muted" style="font-size:.76rem">只影响本地库；联网模式下不生效</span>'
+    + '</div>'
+    /* 模式选择 */
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">' + modeHtml + '</div>'
+    /* 起点 + 间隔（order / rotate 才显示） */
+    + ((cfg.mode === 'order' || cfg.mode === 'rotate')
+        ? '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">'
+          + '<div class="field" style="margin:0;flex:1;min-width:160px"><label>起始日期</label>'
+          +   '<input type="date" id="dqStart" value="' + attr(cfg.start || dqDayStr()) + '"></div>'
+          + (cfg.mode === 'rotate'
+              ? '<div class="field" style="margin:0;width:140px"><label>每句停留（天）</label>'
+                + '<input type="number" id="dqEvery" min="1" max="60" value="' + cfg.every + '"></div>'
+              : '')
+          + '<button class="btn" id="dqSaveMode" style="height:40px">保存轮换</button>'
+          + '</div>'
+        : '<div style="margin-top:6px"><button class="btn" id="dqSaveMode">保存设置</button></div>')
+    /* 逐日指定 */
+    + '<div style="margin-top:18px;padding-top:14px;border-top:1px dashed #e7dbcd">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +     '<b style="font-size:.86rem">指定某天显示哪句</b>'
+    +     '<span class="muted" style="font-size:.74rem">指定日期优先级最高，任何模式下都照办</span>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">'
+    +     '<div class="field" style="margin:0;width:170px"><label>日期</label>'
+    +       '<input type="date" id="dqFxDate" value="' + attr(dqDayStr(new Date(Date.now() + 86400000))) + '"></div>'
+    +     '<div class="field" style="margin:0;flex:1;min-width:200px"><label>显示第几句（在「句子列表」里的序号）</label>'
+    +       '<input id="dqFxIdx" type="number" min="1" max="' + Math.max(1, list.length) + '" placeholder="例如 3"></div>'
+    +     '<button class="btn" id="dqFxAdd" style="height:40px">指定</button>'
+    +   '</div>'
+    +   dqFixedTable(cfg, list)
+    + '</div>'
+    /* 未来排期预览 */
+    + '<div style="margin-top:18px;padding-top:14px;border-top:1px dashed #e7dbcd">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +     '<b style="font-size:.86rem">接下来 14 天预览</b>'
+    +     '<span class="muted" style="font-size:.74rem">按当前设置算出来的效果</span>'
+    +   '</div>'
+    +   dqPreviewTable(cfg, list)
+    + '</div>'
+    + '</div>';
+
+  /* 模式按钮：点了立即换（不保存，等点「保存设置」） */
+  Array.prototype.forEach.call(host.querySelectorAll('[data-dq-mode]'), function(b){
+    b.onclick = function(){
+      var next = dqNormSched(STATE.quoteSched);
+      next.mode = b.dataset.dqMode;
+      if(!next.start) next.start = dqDayStr();
+      STATE.quoteSched = next;
+      paintSchedule();
+    };
+  });
+  var sv = $('dqSaveMode');
+  if(sv) sv.onclick = function(){
+    var next = dqNormSched(STATE.quoteSched);
+    next.mode = (STATE.quoteSched && STATE.quoteSched.mode) || 'random';
+    var st = $('dqStart'), ev = $('dqEvery');
+    if(st) next.start = st.value || dqDayStr();
+    if(ev) next.every = Math.max(1, Math.min(60, Number(ev.value) || 3));
+    dqSaveSched(next, '轮换设置已保存');
+  };
+  var fxAdd = $('dqFxAdd');
+  if(fxAdd) fxAdd.onclick = function(){
+    var dv = ($('dqFxDate') || {}).value || '';
+    var iv = Number(($('dqFxIdx') || {}).value);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dv)){ toast('请选择日期', 'err'); return; }
+    if(!iv || iv < 1 || iv > list.length){ toast('序号要在 1 ~ ' + list.length + ' 之间', 'err'); return; }
+    var next = dqNormSched(STATE.quoteSched);
+    next.fixed[dv] = [iv - 1];
+    dqSaveSched(next, dv + ' 已指定为第 ' + iv + ' 句');
+  };
+  Array.prototype.forEach.call(host.querySelectorAll('[data-dq-fxdel]'), function(b){
+    b.onclick = function(){
+      var next = dqNormSched(STATE.quoteSched);
+      delete next.fixed[b.dataset.dqFxdel];
+      dqSaveSched(next, '已取消指定');
+    };
+  });
+}
+
+/* 已达指定日期的表格 */
+function dqFixedTable(cfg, list){
+  var keys = Object.keys(cfg.fixed || {}).sort();
+  if(!keys.length){
+    return '<div class="muted" style="font-size:.78rem;padding:6px 0">还没有指定任何日期。'
+      + '比如想让 10 月 20 号显示第 3 句，就在上面填日期和序号后点「指定」。</div>';
+  }
+  var today = dqDayStr(new Date());
+  return '<div class="table-wrap"><table><thead><tr>'
+    + '<th style="width:120px">日期</th><th style="width:70px">句号</th><th>内容</th>'
+    + '<th style="text-align:right;width:80px">操作</th></tr></thead><tbody>'
+    + keys.map(function(k){
+        var ids = cfg.fixed[k] || [];
+        var txt = ids.map(function(i){
+          var q = list[i];
+          return q ? ('#' + (i + 1) + ' ' + esc(q.text)) : ('#' + (i + 1) + ' （已不存在）');
+        }).join('<br>') || '—';
+        var tag = (k === today) ? ' <span class="badge badge-blue">今天</span>' : '';
+        var past = (k < today) ? ' style="opacity:.5"' : '';
+        return '<tr' + past + '><td class="nowrap">' + esc(k) + tag + '</td>'
+          + '<td class="muted">' + ids.map(function(i){ return '#' + (i + 1); }).join(',') + '</td>'
+          + '<td style="font-size:.8rem">' + txt + '</td>'
+          + '<td style="text-align:right"><div class="row-actions">'
+          + '<button class="danger" data-dq-fxdel="' + esc(k) + '">取消</button>'
+          + '</div></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+/* 未来 14 天预览 */
+function dqPreviewTable(cfg, list){
+  if(!list.length) return '<div class="muted" style="font-size:.78rem">列表还是空的，先加几句再看预览。</div>';
+  var rows = '';
+  for(var i = 0; i < 14; i++){
+    var d = new Date();
+    d.setDate(d.getDate() + i);
+    var ds = dqDayStr(d);
+    var idx = dqTodayIdx(list, ds);
+    var isFixed = !!(cfg.fixed && cfg.fixed[ds]);
+    var txt;
+    if(idx < 0){
+      txt = (cfg.mode === 'date') ? '<span class="muted">（不显示）</span>' : '<span class="muted">随机一句</span>';
+    }else{
+      txt = '<b>#' + (idx + 1) + '</b>　' + esc((list[idx] || {}).text || '');
+    }
+    rows += '<tr' + (i === 0 ? ' style="background:rgba(175,65,15,.05)"' : '') + '>'
+      + '<td class="nowrap muted">' + ds + (i === 0 ? ' <span class="badge badge-blue">今天</span>' : '') + '</td>'
+      + '<td style="font-size:.8rem">' + txt + (isFixed ? ' <span class="badge">指定</span>' : '') + '</td></tr>';
+  }
+  return '<div class="table-wrap"><table><tbody>' + rows + '</tbody></table></div>';
+}
+
+/* ---------- 批量添加 ---------- */
+function dqBatchAdd(){
+  openModal({
+    title: '批量添加每日一言',
+    sub: '一行一句，整段粘贴即可；空行自动跳过，和现有重复的也会跳过',
+    wide: true,
+    body:
+      '<div class="field"><label for="dqbT">句子（一行一句）</label>'
+      + '<textarea id="dqbT" rows="12" style="font-family:inherit;line-height:1.7" '
+      + 'placeholder="慢慢来，比较快&#10;把每天的小事做好&#10;不着急，也不放弃"></textarea></div>'
+      + '<div class="field"><label for="dqbF">统一出处（可选，留空则不带出处）</label>'
+      + '<input id="dqbF" maxlength="60" placeholder="例如：—— 班主任"></div>'
+      + '<div id="dqbHint" class="muted" style="font-size:.78rem"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>添加</button>',
+    onMount: function(box){
+      var ta = box.querySelector('#dqbT');
+      var hint = box.querySelector('#dqbHint');
+      function parse(){
+        var raw = ta.value || '';
+        var lines = raw.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(function(x){ return x; });
+        var seen = {}, exist = {};
+        (STATE.quotes.list || []).forEach(function(q){ exist[String(q.text).trim()] = 1; });
+        var add = [], dup = 0;
+        lines.forEach(function(x){
+          if(exist[x] || seen[x]){ dup++; return; }
+          seen[x] = 1; add.push(x);
+        });
+        return { lines: lines, add: add, dup: dup };
+      }
+      function sync(){
+        var r = parse();
+        hint.innerHTML = r.lines.length
+          ? '识别到 <b>' + r.lines.length + '</b> 行，其中 <b>' + r.add.length + '</b> 句会新增'
+            + (r.dup ? '，<b>' + r.dup + '</b> 句重复已跳过' : '')
+          : '<span class="muted">还没输入内容</span>';
+      }
+      ta.oninput = sync;
+      sync();
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var r = parse();
+        if(!r.add.length){ toast(r.lines.length ? '没有可新增的句子（都重复了）' : '请先输入句子', 'err'); return; }
+        var from = (box.querySelector('#dqbF').value || '').trim();
+        var next = (STATE.quotes.list || []).slice();
+        r.add.forEach(function(t){
+          var item = { text: t };
+          if(from) item.from = from;
+          next.push(item);
+        });
+        api('/content', { method:'PUT', body:{ items:{ daily_quote: next } } })
+          .then(function(j){
+            if(j && j.ok === false) throw new Error(j.error || '保存失败');
+            closeModal();
+            toast('已新增 ' + r.add.length + ' 句' + (r.dup ? '（跳过 ' + r.dup + ' 句重复）' : ''), 'ok', 3500);
+            loadQuotes();
+          })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
+      };
+    }
+  });
+}
+
+/* ---------- 批量删除 ---------- */
+function dqBatchDelete(){
+  var body = $('dqBody');
+  var list = STATE.quotes.list || [];
+  if(!body || !list.length) return;
+  var picked = [];
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){
+    if(c.checked) picked.push(Number(c.dataset.dqCk));
+  });
+  if(!picked.length){
+    toast('请先在列表里勾选要删除的句子（表头复选框可全选）', 'err', 3600);
+    return;
+  }
+  picked.sort(function(a, b){ return a - b; });
+  var preview = picked.slice(0, 5).map(function(i){
+    return '· ' + esc((list[i] || {}).text || '');
+  }).join('<br>');
+  confirmBox({
+    title: '批量删除 ' + picked.length + ' 句',
+    html: '确定删除以下 ' + picked.length + ' 句吗？<br><br>' + preview
+      + (picked.length > 5 ? '<br>…等共 ' + picked.length + ' 句' : ''),
+    detail: '删完不可恢复。如果这些句子被「指定日期」引用过，那些指定会自动失效。',
+    danger: true,
+    okText: '删除 ' + picked.length + ' 句'
+  }).then(function(ok){
+    if(!ok) return;
+    var kill = {};
+    picked.forEach(function(i){ kill[i] = 1; });
+    var next = [];
+    var remap = {};        /* 旧下标 → 新下标，用于修指定日期 */
+    list.forEach(function(q, i){
+      if(kill[i]) return;
+      remap[i] = next.length;
+      next.push(q);
+    });
+    /* 修 fixed：被删的下标去掉，其余重映射；整条空了就删掉这一天 */
+    var sched = dqNormSched(STATE.quoteSched);
+    var fixed = {};
+    Object.keys(sched.fixed).forEach(function(k){
+      var arr = sched.fixed[k].map(function(i){ return remap[i]; })
+        .filter(function(x){ return x !== undefined; });
+      if(arr.length) fixed[k] = arr;
+    });
+    sched.fixed = fixed;
+
+    Promise.all([
+      api('/content', { method:'PUT', body:{ items:{ daily_quote: next } } }),
+      api('/content', { method:'PUT', body:{ items:{ quote_schedule: {
+        mode: sched.mode, start: sched.start, every: sched.every, fixed: sched.fixed
+      } } } }),
+    ]).then(function(){
+      toast('已删除 ' + picked.length + ' 句', 'ok', 3000);
+      STATE.quoteSched = sched;
+      loadQuotes();
+    }).catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
   });
 }
 

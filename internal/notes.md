@@ -402,6 +402,13 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 
 ## 9. 更新记录
 
+### v3.5.11（2026-10-17）
+- 本地库排期：内容键 quote_schedule = { mode, start, every, fixed:{ 'YYYY-MM-DD':[idx] } }。四模式 random/order/rotate/date。
+- **算法必须前后端同源**：index.html 的 quoteSchedule()/localQuoteIdx() 与 admin.html 的 dqNormSched()/dqTodayIdx() 是两份代码，靠冒烟脚本对 240 组（6 配置 × 40 天）逐一比对一致性兜底。改一边必须改另一边。
+- **日期一律本地时区**：toISOString() 是 UTC，晚上 8 点后取日期会差一天，排期就错。统一用 getFullYear/getMonth/getDate 手拼。
+- 批量删除会重映射 fixed 下标（remap），否则删掉一条后所有「指定日期」都会指向错句子 —— 这是最容易埋雷的地方。
+- 后台「今天第几句」原来是独立的一套取模，跟前台对不上，已统一。
+
 ### v3.5.9（2026-10-17）
 - **教训：功能做在「用户本机偏好」里，站主等于没有这个功能**。每日一言来源 v3.5.6 放在了 UI.quoteNet（localStorage 个人偏好），后台首页卡片面板里根本看不到。站主验收时直接说「没有改」。凡是「全班统一」的策略，必须走后端内容键，不能塞进 UI 偏好。
 - 新增内容键 quote_source = { net: 0|1 }：三处齐改（api/content.js 白名单、index.html CONTENT_MAP 设 null 走 applyCloudContent 特殊分支、applyCloudContent 里落 SITE_DATA.quoteSource）。

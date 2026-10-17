@@ -9547,6 +9547,53 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /function quoteNetAllowed/.test(idxV) && /if\(!quoteNetAllowed\(\)\) return;/.test(idxV));
   t('★自定义设置里不再给同学切换来源（只读展示）',
     !/onclick="setQuoteNet/.test(idxV) && /由管理员在后台「首页卡片 → 每日一言」统一设置/.test(idxV));
+  /* ===== v3.5.11 本地库：批量增删 + 排期轮换 ===== */
+  t('★前端有排期引擎（quoteSchedule / localQuoteIdx）',
+    /function quoteSchedule\(\)/.test(idxV) && /function localQuoteIdx\(/.test(idxV)
+    && /function localQuoteOfToday\(\)/.test(idxV));
+  t('★每日一言取句走 localQuoteOfToday（不再直接 pickRandom）',
+    /var q = localQuoteOfToday\(\);/.test(idxV));
+  t('★后台有排期面板与同算法（dqTodayIdx / paintSchedule）',
+    /function dqTodayIdx\(/.test(admV) && /function paintSchedule\(/.test(admV)
+    && /function dqNormSched\(/.test(admV));
+  t('★四种轮换模式前后端完全一致（random/order/rotate/date）',
+    (function(){
+      /* 模式清单在后台是数组字面量，在前端是 normalize 的白名单，两边都要四选一 */
+      var modes = ["random", "order", "rotate", "date"].every(function(m){
+        return admV.indexOf("['" + m + "'") >= 0 || admV.indexOf("'" + m + "'") >= 0;
+      });
+      var admNorm = /if\(m === 'order' \|\| m === 'rotate' \|\| m === 'date' \|\| m === 'random'\)/.test(admV);
+      var idxNorm = /if\(m === 'order' \|\| m === 'rotate' \|\| m === 'date'\)/.test(idxV);
+      return modes && admNorm && idxNorm;
+    })());
+  t('★指定日期优先于任何模式（两处都是 fixed 先判）',
+    /var fixed = \(cfg\.fixed \|\| \{\}\)\[today\];/.test(admV)
+    && /var fixed = cfg\.fixed\[today\];/.test(idxV));
+  t('★批量添加（一行一句 + 自动去重）',
+    /function dqBatchAdd\(/.test(admV) && /句重复已跳过/.test(admV)
+    && /id="dqBatchAdd"/.test(admV));
+  t('★批量删除（勾选 + 删除后自动修指定日期下标）',
+    /function dqBatchDelete\(/.test(admV) && /remap\[i\]/.test(admV)
+    && /data-dq-ck=/.test(admV));
+  t('★列表支持全选 / 清空 / 已选计数',
+    /id="dqCkAll"/.test(admV) && /id="dqSelAll"/.test(admV) && /id="dqSelNone"/.test(admV));
+  t('★后台有 14 天排期预览',
+    /function dqPreviewTable\(/.test(admV) && /接下来 14 天预览/.test(admV));
+  t('★排期内容键三处齐全（白名单 / CONTENT_MAP / applyCloudContent）',
+    /'quote_schedule'/.test(contSrc) && /quote_schedule:\s*null/.test(idxV)
+    && /k === 'quote_schedule'/.test(idxV) && /SITE_DATA\.quoteSchedule = v/.test(idxV));
+  t('★排期日期一律本地时区（不走 toISOString）',
+    (function(){
+      /* 只检查这两个日期函数的函数体内部，不牵连导出文件名等无关用法 */
+      function bodyOf(src, name){
+        var i = src.indexOf('function ' + name + '(');
+        if(i < 0) return '';
+        return src.slice(i, src.indexOf('\n}', i) + 2);
+      }
+      var a = bodyOf(idxV, 'quoteDayStr'), b = bodyOf(admV, 'dqDayStr');
+      return !!a && !!b && a.indexOf('toISOString') < 0 && b.indexOf('toISOString') < 0
+        && a.indexOf('getFullYear') >= 0 && b.indexOf('getFullYear') >= 0;
+    })());
 
   t('★三个版本号同步（index/admin/worker 彼此一致）',
     (idxV.match(/SITE_VERSION = '([\d.]+)'/)||[])[1] === (admV.match(/SITE_VERSION = '([\d.]+)'/)||[])[1]
