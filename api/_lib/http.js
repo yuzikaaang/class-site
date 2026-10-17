@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.5';
+const SCHEMA_VER = '3.5.6';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -139,6 +139,33 @@ export async function ensureSchema(sql) {
            where field in ('name','school','politics','phone','id_card','youth_league_no',
                            'league_date','class_name','student_id','ethnicity','birth_date','home_address')
              and rules = '{}'::jsonb
+        `; } catch (e) {}
+        /* v3.5.6 投票管理：两张新表（全新库路径的建表语句在下方全量清单里，
+           这里给老库补上；create table if not exists 幂等，重复跑无害）。 */
+        try { await s`
+          create table if not exists class_votes (
+            id         bigserial   primary key,
+            title      text        not null,
+            kind       text        not null default 'normal',
+            options    jsonb       not null default '[]'::jsonb,
+            multi      boolean     not null default false,
+            allow_add  boolean     not null default false,
+            note       text        not null default '',
+            deadline   timestamptz,
+            status     text        not null default 'open',
+            created_by bigint,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now()
+          )
+        `; } catch (e) {}
+        try { await s`
+          create table if not exists class_vote_ballots (
+            vote_id    bigint      not null,
+            user_id    bigint      not null,
+            choices    jsonb       not null default '[]'::jsonb,
+            updated_at timestamptz not null default now(),
+            primary key (vote_id, user_id)
+          )
         `; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
@@ -466,6 +493,42 @@ export async function ensureSchema(sql) {
     `;
     await s`create index if not exists ual_time_idx on user_action_log (created_at desc)`;
     await s`create index if not exists ual_user_idx on user_action_log (user_id, created_at desc)`;
+
+    /* ===== v3.5.6 投票管理（class_votes / class_vote_ballots）=====
+       ① class_votes：一场投票一行。options 是 jsonb 数组
+          [{id:'o1', label:'…', by:'admin'|'student', songId?}]；
+          kind='song' 是歌单投票（选项来自点歌平台，songId 回查用）；
+          deadline 为空 = 不限截止；status='closed' = 手动截止。
+       ② class_vote_ballots：一人一行一票（vote_id+user_id 主键），
+          choices 存选中的选项 id 数组；改票 = 覆盖 choices。
+       放在 ensureSchema 最末尾：前面的语句出错会吞异常跳过后面，
+       新功能不能影响既有功能的建表。 */
+    await s`
+      create table if not exists class_votes (
+        id         bigserial   primary key,
+        title      text        not null,
+        kind       text        not null default 'normal',
+        options    jsonb       not null default '[]'::jsonb,
+        multi      boolean     not null default false,
+        allow_add  boolean     not null default false,
+        note       text        not null default '',
+        deadline   timestamptz,
+        status     text        not null default 'open',
+        created_by bigint,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      )
+    `;
+    await s`
+      create table if not exists class_vote_ballots (
+        vote_id    bigint      not null,
+        user_id    bigint      not null,
+        choices    jsonb       not null default '[]'::jsonb,
+        updated_at timestamptz not null default now(),
+        primary key (vote_id, user_id)
+      )
+    `;
+    await s`create index if not exists cvb_vote_idx on class_vote_ballots (vote_id)`;
 
     /* 全量跑完 → 盖章。下一条请求起走「版本一致直接返回」的捷径。
        用 || 合并而不是整行覆盖：site_settings 里还存着 register_open /

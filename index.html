@@ -1704,6 +1704,93 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .allboard-mask.pop-theme-welcome #popLink{ background:rgba(255,255,255,.9);color:#af410f; }
 
 
+/* ===== 班级投票（v3.5.6）=====
+   与成绩分析同一套内嵌卡片的观感：浅底、圆角、细边框；暗色跟随全站变量。
+   颜色只用在「我投的 / 同学提的」两处小标签，避免抢卡片本身的注意力。 */
+.vote-embed{background:#fffdfb;border:1px solid #f0e7de;border-radius:18px;overflow:hidden;
+  box-shadow:0 1px 2px rgba(120,53,15,.05),0 8px 24px rgba(120,53,15,.07);margin-bottom:16px}
+.dark .vote-embed{background:#262220;border-color:rgba(255,255,255,.06)}
+.vote-bar{padding:16px 18px 10px;border-bottom:1px solid #f0e7de}
+.dark .vote-bar{border-bottom-color:#3d3631}
+.vote-head h3{margin:0;font-size:1rem;color:#3b2d22}
+.dark .vote-head h3{color:#f0e6dc}
+.vote-sub{margin:4px 0 0;font-size:.8rem;color:#8a7c6f}
+.dark .vote-sub{color:#a8998c}
+.vote-sub b{color:#c2410c}
+.dark .vote-sub b{color:#fb923c}
+.vote-body{padding:14px 18px 18px}
+.vote-card{border:1px solid #f0e7de;border-radius:14px;padding:14px;margin-bottom:12px;background:#fff}
+.dark .vote-card{background:#2e2926;border-color:#3d3631}
+.vote-card:last-child{margin-bottom:0}
+.vote-card-h .vote-title{font-size:.94rem;font-weight:600;color:#3b2d22;line-height:1.5}
+.dark .vote-card-h .vote-title{color:#f0e6dc}
+.vote-kind{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;
+  font-size:.68rem;font-weight:400;background:#fef3c7;color:#92400e;vertical-align:middle}
+.dark .vote-kind{background:#4a3a1c;color:#fcd34d}
+.vote-meta{margin-top:4px;font-size:.76rem;color:#8a7c6f}
+.dark .vote-meta{color:#a8998c}
+.vote-note{margin:8px 0 0;font-size:.8rem;color:#6e635a;line-height:1.6}
+.dark .vote-note{color:#c9b8aa}
+.vote-opts{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.vote-opt{display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  padding:10px 12px;border:1px solid #e8ded4;border-radius:10px;background:#fffdfb;
+  cursor:pointer;font-size:.86rem;color:#3b2d22;transition:border-color .15s,background .15s}
+.vote-opt:hover{border-color:#e0a878;background:#fff8f1}
+.vote-opt.on{border-color:#c2410c;background:#fff3e9}
+.dark .vote-opt{background:#2e2926;border-color:#3d3631;color:#f0e6dc}
+.dark .vote-opt:hover{background:#332d29;border-color:#5a4a3c}
+.dark .vote-opt.on{background:#3a2f28;border-color:#c2410c}
+.vote-box{flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:1.5px solid #cbb9a8;
+  position:relative;background:#fff}
+.vote-opt.on .vote-box{border-color:#c2410c;background:#c2410c}
+.vote-opt.on .vote-box::after{content:"";position:absolute;left:4px;top:1px;width:5px;height:9px;
+  border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.dark .vote-box{background:#262220;border-color:#6b5b4c}
+.vote-opt-label{flex:1;min-width:0;line-height:1.5;word-break:break-word}
+.vote-tag{display:inline-block;margin-left:6px;padding:0 5px;border-radius:5px;font-size:.66rem;
+  background:#eef2ff;color:#4338ca;vertical-align:middle}
+.dark .vote-tag{background:#33305c;color:#c7d2fe}
+.vote-tag.mine{background:#fff3e9;color:#c2410c}
+.dark .vote-tag.mine{background:#4a2f22;color:#fb923c}
+/* 结果条形 */
+.vote-res{position:relative;padding:9px 12px;border-radius:10px;background:#faf6f2;overflow:hidden}
+.dark .vote-res{background:#332d29}
+.vote-res.mine{background:#fff3e9}
+.dark .vote-res.mine{background:#3a2f28}
+.vote-res-bar{position:absolute;left:0;top:0;bottom:0;background:#ffe4cf;transition:width .35s}
+.dark .vote-res-bar{background:#4a3728}
+.vote-res-in{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.vote-res-label{font-size:.86rem;color:#3b2d22;line-height:1.5;word-break:break-word}
+.dark .vote-res-label{color:#f0e6dc}
+.vote-res-n{flex:0 0 auto;font-size:.78rem;color:#8a7c6f;white-space:nowrap}
+.dark .vote-res-n{color:#a8998c}
+.vote-actions{margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vote-hint{font-size:.74rem;color:#8a7c6f}
+.dark .vote-hint{color:#a8998c}
+.vote-add{margin-top:10px;display:flex;gap:8px}
+.vote-add input{flex:1;min-width:0;padding:8px 10px;border:1px solid #e8ded4;border-radius:9px;
+  font-size:.84rem;background:#fffdfb;color:#3b2d22}
+.dark .vote-add input{background:#2e2926;border-color:#3d3631;color:#f0e6dc}
+.vote-msg{margin-top:8px;font-size:.78rem;min-height:1em}
+.vote-msg-ok{color:#0a7d42}
+.vote-msg-err{color:#b3261e}
+.dark .vote-msg-ok{color:#4ade80}
+.dark .vote-msg-err{color:#f87171}
+.vote-sep{display:flex;align-items:center;gap:10px;margin:16px 0 12px;font-size:.76rem;color:#8a7c6f}
+.vote-sep::before,.vote-sep::after{content:"";flex:1;height:1px;background:#f0e7de}
+.dark .vote-sep{color:#a8998c}
+.dark .vote-sep::before,.dark .vote-sep::after{background:#3d3631}
+.vote-empty{text-align:center;padding:34px 16px;color:#8a7c6f}
+.dark .vote-empty{color:#a8998c}
+.vote-empty-ico{font-size:2rem;margin-bottom:8px}
+.vote-empty p{margin:4px 0;font-size:.86rem}
+.vote-dim{font-size:.78rem;opacity:.85}
+@media (max-width:520px){
+  .vote-bar{padding:14px 14px 8px}
+  .vote-body{padding:12px 14px 14px}
+  .vote-card{padding:12px}
+  .vote-res-label,.vote-opt-label{font-size:.82rem}
+}
 /* ===== 成绩分析页（第四十五轮 · v2.7.2）===== */
 .sc-box{max-width:920px}
 /* 内嵌模式（v2.9.6）—— 站主 2026-10-15 原话：「点开成绩分析直接展示而不是卡片+弹窗」。
@@ -2123,6 +2210,88 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .dark .sc-lowsub b{color:#f0b880}
 .dark .sc-lowsub em{color:#f87171}
 .dark .sc-tagonly{background:#332d29;color:#a8998c}
+
+/* ===== 需关注筛选 / 三类统计 / AI 分析（v3.5.6）===== */
+/* 筛选条：胶囊按钮，右上是人数。用按钮而不是 select —— 手机上少一次点击 */
+.sc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 12px}
+.sc-chip{display:inline-flex;align-items:center;gap:5px;font-size:.76rem;font-weight:600;
+  color:#6b5b4d;background:#f7f2ec;border:1px solid #e8ded3;border-radius:999px;
+  padding:5px 11px;cursor:pointer;line-height:1;transition:.15s}
+.sc-chip:hover{background:#f0e8df}
+.sc-chip em{font-style:normal;font-size:.68rem;font-weight:800;color:#9a8877;
+  background:#fff;border-radius:999px;padding:1px 5px;min-width:16px;text-align:center}
+.sc-chip.on{background:#b45309;border-color:#b45309;color:#fff}
+.sc-chip.on em{background:rgba(255,255,255,.24);color:#fff}
+.sc-chip[disabled]{opacity:.45;cursor:not-allowed}
+.dark .sc-chip{background:#332d29;border-color:#463e37;color:#c8b8a6}
+.dark .sc-chip em{background:#463e37;color:#a8998c}
+.dark .sc-chip.on{background:#c2410c;border-color:#c2410c;color:#fff}
+.dark .sc-chip.on em{background:rgba(255,255,255,.22);color:#fff}
+
+/* 「连退 N」小标签：和「仅单科」并排，配色用退步的绿（中式涨跌：跌=绿） */
+.sc-tagdrop{display:inline-block;margin-left:5px;font-size:.6rem;font-weight:700;color:#0b7a43;
+  background:#e8f5ee;border-radius:4px;padding:1px 4px;vertical-align:1px}
+.dark .sc-tagdrop{background:#1d3329;color:#4ade80}
+
+/* 表格下方的自动总结：左侧竖线 + 段落间距，读起来像结论而不是表格附件 */
+.sc-care-sum{margin:14px 0 4px;padding:10px 0 10px 14px;border-left:3px solid #d97706;
+  background:#fffaf3;border-radius:0 8px 8px 0}
+.sc-care-sum p{margin:0 0 7px;font-size:.82rem;line-height:1.75;color:#4a3f35}
+.sc-care-sum p:last-child{margin-bottom:0}
+.sc-care-sum b{color:#8a4a10}
+.dark .sc-care-sum{background:#2a2320;border-left-color:#c2410c}
+.dark .sc-care-sum p{color:#d6c8b8}
+.dark .sc-care-sum b{color:#f0b880}
+
+/* 三类统计：三栏并排，手机端落成一列 */
+.sc-bands{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:6px 0 4px}
+.sc-band{padding:10px 12px;border:1px solid #eee3d8;border-radius:10px;background:#fffdfa}
+.sc-band-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:7px}
+.sc-band-top b{font-size:.82rem;font-weight:700;color:#57534e}
+.sc-band-pct{font-size:1.02rem;font-weight:800;font-variant-numeric:tabular-nums}
+.sc-band-line{height:6px;border-radius:999px;background:#f0e8df;overflow:hidden}
+.sc-band-line i{display:block;height:100%;border-radius:999px;transition:width .35s}
+.sc-band-meta{margin-top:6px;font-size:.7rem;color:#8a7968}
+.dark .sc-band{background:#2a2622;border-color:#3b342e}
+.dark .sc-band-top b{color:#d6c8b8}
+.dark .sc-band-line{background:#3b342e}
+.dark .sc-band-meta{color:#a8998c}
+@media (max-width:640px){
+  .sc-bands{grid-template-columns:1fr}
+  .sc-chips{gap:5px}
+  .sc-chip{font-size:.72rem;padding:5px 9px}
+}
+
+/* AI 分析卡：一句话结论放大做「摘要」，其余按行排（左标签右正文） */
+.sc-ai-card{border-color:#e4d5f2}
+.sc-ai-concl{font-size:.94rem;line-height:1.8;color:#3f3a35;background:#faf6ff;
+  border-radius:10px;padding:12px 14px;margin:4px 0 12px}
+.sc-ai-concl b{color:#6d28d9}
+.sc-ai-row{display:flex;gap:12px;padding:8px 2px;border-top:1px dashed #ece3f5;font-size:.82rem;line-height:1.75}
+.sc-ai-k{flex:0 0 46px;font-weight:700;color:#7c5aa8;font-size:.74rem;padding-top:2px}
+.sc-ai-v{flex:1;min-width:0;color:#4a4440}
+.sc-ai-v b{color:#5b21b6}
+.sc-ai-todo{margin-top:14px;padding:12px 14px;background:#f6f1ff;border-radius:10px}
+.sc-ai-todo>b{display:block;font-size:.8rem;color:#6d28d9;margin-bottom:8px}
+.sc-ai-todo ol{margin:0;padding-left:20px}
+.sc-ai-todo li{font-size:.82rem;line-height:1.8;color:#443f3a;margin-bottom:7px}
+.sc-ai-todo li:last-child{margin-bottom:0}
+.sc-ai-todo li b{color:#5b21b6}
+.dark .sc-ai-card{border-color:#3d3350}
+.dark .sc-ai-concl{background:#282236;color:#e0d8ee}
+.dark .sc-ai-concl b{color:#c4b5fd}
+.dark .sc-ai-row{border-top-color:#3d3350}
+.dark .sc-ai-k{color:#a78bfa}
+.dark .sc-ai-v{color:#d6cfe0}
+.dark .sc-ai-v b{color:#c4b5fd}
+.dark .sc-ai-todo{background:#282236}
+.dark .sc-ai-todo>b{color:#c4b5fd}
+.dark .sc-ai-todo li{color:#d6cfe0}
+.dark .sc-ai-todo li b{color:#c4b5fd}
+@media (max-width:640px){
+  .sc-ai-row{flex-direction:column;gap:3px}
+  .sc-ai-k{flex:none}
+}
 .dark .sc-hm-na{background:#332d29;color:#7a6a5c !important}
 .dark .sc-hm.on{outline-color:#c2410c;box-shadow:0 0 0 2px rgba(194,65,12,.28)}
 .sc-hm-total{width:46px;flex-shrink:0;text-align:right;font-weight:800;color:#b45309;
@@ -3126,7 +3295,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.5';
+var SITE_VERSION = '3.5.6';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -5575,7 +5744,11 @@ function render(){
          用户可在「自定义设置 → 动效」里关掉堆叠，回到传统平铺。 */
       inner = (UI.stack !== 0 && inner.length >= 2) ? stackDeckHtml(inner, c.id) : inner.join('');
     }
-    return '<div class="tab-page" id="tab-cat-'+c.id+'">'+popBannerHtml(c.id)+inner+'</div>';
+    return '<div class="tab-page" id="tab-cat-'+c.id+'">'+popBannerHtml(c.id)
+      /* v3.5.6 投票专区：挂在「班级事务」板块顶部，原有卡片照旧排在下面
+         （投票是给人看结果/动手的地方，不该被卡片挤到页面底部） */
+      + (c.id === 7 ? voteEmbedHtml() : '')
+      + inner+'</div>';
   }).join('');
 
   Array.prototype.forEach.call(grid.querySelectorAll('.tab-page'), function(p){ p.classList.remove('active'); });
@@ -5596,6 +5769,8 @@ function render(){
   /* 成绩分析是内嵌的：这次重建会把 tab-cat-3 里的成绩分析画布一起冲掉，
      所以只要当前就在那个板块，就重挂一次（数据还在内存里，不会重复请求）。 */
   if(__activeCat === 3 && typeof scEnsureMounted === 'function'){ scEnsureMounted(); }
+  /* v3.5.6 投票专区同理：板块 7 重建后重挂一次 */
+  if(__activeCat === 7 && typeof voteEnsureMounted === 'function'){ voteEnsureMounted(); }
 }
 function jsq(u){ return (u||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
@@ -5820,6 +5995,8 @@ function uiDefault(){
     netWatch: 0,        /* 【网络状态提示】1 = 连不上时弹横幅并倒计时重试，0 = 不打扰
                            2026-10-15 站主要求「网络检测暂时关闭」，故默认 0。
                            心跳照旧在跑（后台在线状态靠它），这里只控制弹不弹提示。 */
+    quoteNet: 1,        /* 【每日一言来源 v3.5.6】1 = 联网 hitokoto（动画/文学/诗词类），
+                           0 = 只用本地库（管理员在后台配的句子）。联网失败时两种模式都回退本地。 */
     bg: { type:'theme', color:'#fffbf7', grad:'', veil:55 },  /* theme|solid|grad|image */
     order: {
       home: ['ann','sign','daily','countdown'],
@@ -5859,6 +6036,8 @@ function normalizeUI(o){
   out.fs = (typeof o.fs === 'number' && o.fs >= 0.7 && o.fs <= 1.6) ? o.fs : 1;
   out.motion = (o.motion === 0) ? 0 : 1;
   out.stack  = (o.stack  === 1) ? 1 : 0;   /* 【卡片堆叠 v35】缺省关，仅显式 1 才开 */
+  /* 【v3.5.6 每日一言来源】缺省联网（1），仅显式 0 才关 */
+  out.quoteNet = (o.quoteNet === 0) ? 0 : 1;
   /* 【v1→v2 迁移】v1 时期卡片堆叠默认是开，老配置里存的 1 属于「没得选的开」，
      不是用户主动开的，升级到 v2 一律复位为关。用户在 v2 下主动开的才保留。 */
   if((o.v || 1) < 2) out.stack = 0;
@@ -6586,10 +6765,11 @@ function applySiteConfig(cfg){
   });
 }
 
-/* ---------------- 每日一言（2026-10-06 新增；v2.6.0 改随机 + 联网）----------------
+/* ---------------- 每日一言（2026-10-06 新增；v2.6.0 改随机 + 联网；v3.5.6 可切来源）----------------
    数据源两级：
-     ① 联网 hitokoto（https://v1.hitokoto.cn/?c=k 文学类）—— CORS 为 *，浏览器可直连；
-     ② 本地 SITE_DATA.dailyQuote（云端内容键 daily_quote）兜底。
+     ① 联网 hitokoto（https://v1.hitokoto.cn/?c=a&c=b&c=d&c=i，动画/漫画/文学/诗词）
+        —— CORS 为 *，浏览器可直连；在「自定义设置 → 每日一言」里可切回只用本地库；
+     ② 本地 SITE_DATA.dailyQuote（云端内容键 daily_quote，管理员在后台配）兜底。
 
    🚀 v2.6.0 站主要求：改成**完全随机**，不再按日期取模顺序轮播。
       旧实现 seed = 年月日，items[seed % items.length] —— 本质是「顺序轮播」，
@@ -6651,15 +6831,22 @@ function renderDailyQuote(){
     '</div>';
 }
 
-/* 联网拉一句（hitokoto 文学类）。失败静默——本地兜底照样能用。
-   每次会话只拉一次，避免反复请求；拿到后若与当前显示的不同就重绘。 */
+/* 联网拉一句（hitokoto）。失败静默——本地兜底照样能用。
+   每次会话只拉一次，避免反复请求；拿到后若与当前显示的不同就重绘。
+
+   v3.5.6 两处改动：
+     ① 类别 c=k（哲学）→ c=a&c=b&c=d&c=i（动画/漫画/文学/诗词）。
+        哲学类会返回政治人物语录，不适合班级站点；这四类内容对学生更合适。
+     ② 新增「每日一言来源」开关（自定义设置里切）：选本地库时本函数直接返回，
+        不再发起联网请求。 */
 var _quoteFetching = false;
 function fetchRemoteQuote(){
   if(_quoteFetching || _quoteRemote) return;
+  if(typeof UI !== 'undefined' && UI.quoteNet === 0) return;   /* 用户选了只用本地库 */
   _quoteFetching = true;
   var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 6000);
-  fetch('https://v1.hitokoto.cn/?c=k&encode=json', ctrl ? { signal: ctrl.signal } : undefined)
+  fetch('https://v1.hitokoto.cn/?c=a&c=b&c=d&c=i&encode=json', ctrl ? { signal: ctrl.signal } : undefined)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(j){
       clearTimeout(timer);
@@ -9550,6 +9737,21 @@ function renderSettings(){
       '</div>' +
       '<p class="ui-hint">只缩放文字，不影响卡片与间距。</p>', true);
 
+    /* —— 每日一言来源（v3.5.6 新增）—— */
+    var qModes = [
+      ['net',  '联网 API', 'hitokoto 开放接口，动画 / 漫画 / 文学 / 诗词类'],
+      ['local','本地库',   '只用管理员在后台配的句子，不联网'],
+    ].map(function(m){
+      var cur = (UI.quoteNet !== 0) ? 'net' : 'local';
+      return '<button class="btn ' + (cur === m[0] ? '' : 'btn-secondary') + '" ' +
+        'style="flex:1;font-size:.74rem;padding:9px 4px" ' +
+        'onclick="setQuoteNet(\'' + (m[0] === 'net' ? 1 : 0) + '\')">' + m[1] + '</button>';
+    }).join('');
+    html += secHtml('quote','每日一言','message-circle',
+      '<div class="ui-modes">' + qModes + '</div>' +
+      '<p class="ui-hint">联网模式下每次刷新随机换一句（hitokoto 公共文库）；'
+      + '连不上时自动回退本地库。本地库由管理员在后台「班级内容 → 每日一言」配置。</p>', false);
+
     /* —— 背景 —— */
     var btypes = [['theme','跟随主题'],['solid','纯色'],['grad','渐变'],['image','图片']];
     var typeHtml = btypes.map(function(t){
@@ -9606,7 +9808,7 @@ function renderSettings(){
       '<p class="ui-hint">查看云端同步了哪些数据（主题、作业勾选、班级签、点歌记录等），<br>可以按条删除或清空全部。删除前需要验证登录密码。</p>' +
       '<button class="btn" style="font-size:.76rem;padding:9px 12px" onclick="openCloudDataFromSettings()">查看我的云端数据</button>', true);
     html += secHtml('io','导出与导入','download',
-      '<p class="ui-hint">配置文件包含：字号、背景、动效开关、全部排序。<br>不含游戏记录与个人数据。</p>' +
+      '<p class="ui-hint">配置文件包含：字号、背景、动效开关、每日一言来源、全部排序。<br>不含游戏记录与个人数据。</p>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
         '<button class="btn" style="flex:1;min-width:100px;font-size:.76rem;padding:9px 6px" onclick="exportUICfg(false)">导出配置</button>' +
         '<button class="btn btn-secondary" style="flex:1;min-width:100px;font-size:.76rem;padding:9px 6px" onclick="exportUICfg(true)">含背景图</button>' +
@@ -9758,6 +9960,16 @@ function setBgType(t){
   if(t === 'image' && !getBgImg()){ uiMsg('请先在下方选择一张本地图片', '#af410f'); UI.bg.type = 'theme'; }
   if(t === 'grad' && !UI.bg.grad) UI.bg.grad = UI_GRADS[0].v;
   saveUI(); applyBg(); renderSettings();
+  SFX.click();
+}
+
+/* v3.5.6 每日一言来源：1 = 联网 hitokoto，0 = 只用本地库。
+   切到本地时把已拿到的联网句子丢掉，立刻重绘成本地那句。 */
+function setQuoteNet(m){
+  UI.quoteNet = (m === 0) ? 0 : 1;
+  if(UI.quoteNet === 0) _quoteRemote = null;
+  saveUI(); renderSettings();
+  if(typeof renderDailyQuote === 'function') renderDailyQuote();
   SFX.click();
 }
 function setBgColor(c){ UI.bg.type = 'solid'; UI.bg.color = c; saveUI(); syncThemeToBg(); applyBg(); renderSettings(); SFX.click(); }
@@ -10110,6 +10322,8 @@ function openCat(id){
   if(cur) cur.classList.add('active');
   /* 成绩分析（板块 3）是内嵌的：一切过去就把它挂起来（没登录就给登录引导） */
   if(id === 3 && typeof scEnsureMounted === 'function'){ scEnsureMounted(); }
+  /* v3.5.6 投票专区（板块 7）：同一套「内嵌即挂载」的路子 */
+  if(id === 7 && typeof voteEnsureMounted === 'function'){ voteEnsureMounted(); }
   var homeBtn = document.getElementById('homeBtn');
   if(homeBtn) homeBtn.classList.remove('active');
   /* 【卡片堆叠 v35】切到该分类后卡片才真正可见，此时才能量到高度算统一高度。
@@ -12543,6 +12757,303 @@ function _findHwByDate(dStr){
   return null;
 }
 /* ============================================================================
+ * 班级投票（v3.5.6 第三块）
+ * ----------------------------------------------------------------------------
+ * 站主需求：后台投票管理 + 前端投票专区 + 歌单投票取前五对应周一至周五。
+ *
+ * 【为什么单独一个板块而不是卡片】
+ *   投票是「看一眼就能动手」的东西，塞进卡片要点两次才看到选项，
+ *   而且投票有截止时间，放在板块里一眼看见哪些还在进行中。
+ *   板块 id = 7（班级事务），与后台「投票管理」面板对应。
+ *
+ * 【结果何时可见】
+ *   进行中且未到截止 → 只显示「已投 / 未投」与总人数，不显示票数（防带票）；
+ *   已截止或手动关闭 → 显示每个选项的票数与条形图。
+ *   管理员在后台始终能看到（要预览）。
+ *
+ * 【一人一票 + 可改票】
+ *   后端 class_vote_ballots 以 (vote_id, user_id) 为主键，改票就是覆盖。
+ *   前端点选项只是选中，点「提交」才写库 —— 与「点了就投」相比，
+ *   多选时不会因为点错一次就交上去。
+ * ========================================================================= */
+var VOTE = {
+  votes: [],
+  loaded: false,
+  loading: false,
+  picked: {},      /* { 投票id: [选项id] } 本地选中的草稿，未提交前只在这里 */
+  busy: false,
+};
+
+/* 板块 7 的挂载点：render() 里 c.id===7 分支会输出这个容器 */
+function voteEmbedHtml(){
+  return '<div class="vote-embed" id="voteEmbed">'
+    + '<div class="vote-bar" id="voteBar"></div>'
+    + '<div class="vote-body" id="voteBody"></div>'
+    + '</div>';
+}
+function voteBody(html){
+  var el = document.getElementById('voteBody');
+  if(el) el.innerHTML = html;
+}
+function voteBarHtml(html){
+  var el = document.getElementById('voteBar');
+  if(el) el.innerHTML = html;
+}
+
+/* 切到板块 7 时调用（openCat 里），render() 重建后也要重挂 */
+function voteEnsureMounted(){
+  if(!document.getElementById('voteEmbed')) return;
+  if(!isLoggedIn()){
+    voteBarHtml('');
+    voteBody('<div class="vote-empty">'
+      + '<div class="vote-empty-ico">🗳️</div>'
+      + '<p>投票需要登录后才能参与。</p>'
+      + '<button class="btn" onclick="openAccount(\'login\')">去登录</button>'
+      + '</div>');
+    return;
+  }
+  if(!VOTE.loaded){ voteLoad(); return; }
+  voteRenderAll();
+}
+
+function voteLoad(){
+  VOTE.loading = true;
+  voteBarHtml('');
+  voteBody('<div class="vote-empty"><div class="spinner"></div><p>正在读取投票…</p></div>');
+  api('/votes?action=list').then(function(j){
+    VOTE.votes = (j && j.votes) || [];
+    VOTE.loaded = true;
+    VOTE.loading = false;
+    voteRenderAll();
+  }).catch(function(e){
+    VOTE.loading = false;
+    voteBody('<div class="vote-empty"><p>读取失败：' + esc(e.message || e) + '</p>'
+      + '<button class="btn" onclick="VOTE.loaded=false;voteLoad()">重试</button></div>');
+  });
+}
+
+/* 剩余时间人话：已截止 / 还剩 X 天 X 小时 / 还剩 X 分钟 */
+function voteRemainText(v){
+  if(v.status === 'closed') return '已截止';
+  if(!v.deadline) return '不限截止';
+  var ms = Date.parse(v.deadline) - Date.now();
+  if(isNaN(ms)) return '';
+  if(ms <= 0) return '已截止';
+  var d = Math.floor(ms / 86400000);
+  var h = Math.floor((ms % 86400000) / 3600000);
+  var m = Math.floor((ms % 3600000) / 60000);
+  if(d > 0) return '还剩 ' + d + ' 天' + (h > 0 ? ' ' + h + ' 小时' : '');
+  if(h > 0) return '还剩 ' + h + ' 小时' + (m > 0 ? ' ' + m + ' 分钟' : '');
+  return '还剩 ' + m + ' 分钟';
+}
+function voteTimeText(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function voteRenderAll(){
+  var list = VOTE.votes || [];
+  var openList = list.filter(function(v){ return v.open; });
+  var doneList = list.filter(function(v){ return !v.open; });
+
+  voteBarHtml(
+    '<div class="vote-head">'
+    + '<h3>🗳️ 投票</h3>'
+    + '<p class="vote-sub">' + (openList.length
+        ? '进行中 <b>' + openList.length + '</b> 个' + (doneList.length ? ' · 已结束 ' + doneList.length + ' 个' : '')
+        : '当前没有进行中的投票' + (doneList.length ? ' · 已结束 ' + doneList.length + ' 个' : ''))
+    + '</p>'
+    + '</div>');
+
+  if(!list.length){
+    voteBody('<div class="vote-empty">'
+      + '<div class="vote-empty-ico">🗳️</div>'
+      + '<p>还没有投票。</p>'
+      + '<p class="vote-dim">管理员在后台发起投票后，这里就会出现。</p>'
+      + '</div>');
+    return;
+  }
+
+  var h = '';
+  if(openList.length){
+    h += openList.map(function(v){ return voteCardHtml(v); }).join('');
+  }
+  if(doneList.length){
+    h += '<div class="vote-sep"><span>已结束</span></div>';
+    h += doneList.map(function(v){ return voteCardHtml(v); }).join('');
+  }
+  voteBody(h);
+  voteBind();
+}
+
+/* 一张投票卡 */
+function voteCardHtml(v){
+  var multi = !!v.multi;
+  var closed = !v.open;
+  var my = (VOTE.picked[v.id] != null) ? VOTE.picked[v.id] : (v.myChoices || []);
+  var voted = (v.myChoices && v.myChoices.length) || !!v.mine;
+  var totalVotes = 0, maxN = 0;
+  if(v.results){
+    v.results.forEach(function(r){ totalVotes += r.n; if(r.n > maxN) maxN = r.n; });
+  }
+
+  var optsHtml;
+  if(closed || v.results){
+    /* 结果视图：条形 + 票数 */
+    optsHtml = (v.results || v.options).map(function(o){
+      var n = o.n || 0;
+      var pct = maxN > 0 ? Math.round(n / maxN * 100) : 0;
+      var mine = (v.myChoices || []).indexOf(o.id) >= 0;
+      return '<div class="vote-res' + (mine ? ' mine' : '') + '">'
+        + '<div class="vote-res-bar" style="width:' + pct + '%"></div>'
+        + '<div class="vote-res-in">'
+        +   '<span class="vote-res-label">' + esc(o.label)
+        +     (o.by === 'student' ? '<span class="vote-tag">同学提</span>' : '')
+        +     (mine ? '<span class="vote-tag mine">我投的</span>' : '') + '</span>'
+        +   '<span class="vote-res-n">' + n + ' 票</span>'
+        + '</div></div>';
+    }).join('');
+  }else{
+    /* 投票视图：可点选项（checkbox 或 radio 的观感） */
+    optsHtml = v.options.map(function(o){
+      var on = my.indexOf(o.id) >= 0;
+      return '<button class="vote-opt' + (on ? ' on' : '') + '" data-vid="' + v.id + '" data-oid="' + esc(o.id) + '">'
+        + '<span class="vote-box"></span>'
+        + '<span class="vote-opt-label">' + esc(o.label)
+        +   (o.by === 'student' ? '<span class="vote-tag">同学提</span>' : '') + '</span>'
+        + '</button>';
+    }).join('');
+  }
+
+  var addHtml = '';
+  if(v.allowAdd && !closed){
+    addHtml = '<div class="vote-add">'
+      + '<input id="voteAddInput' + v.id + '" type="text" maxlength="40" placeholder="想加的选项（最多 40 字）">'
+      + '<button class="btn btn-sm btn-secondary" data-vote-add="' + v.id + '">添加</button>'
+      + '</div>';
+  }
+
+  var submitHtml = '';
+  if(!closed){
+    submitHtml = '<div class="vote-actions">'
+      + '<button class="btn" data-vote-submit="' + v.id + '"' + (my.length ? '' : ' disabled style="opacity:.5"') + '>'
+      +   (voted ? '修改我的选择' : '提交投票') + '</button>'
+      + (multi ? '<span class="vote-hint">可多选</span>' : '<span class="vote-hint">单选</span>')
+      + '</div>';
+  }
+
+  var meta = [];
+  meta.push(closed ? '🔒 ' + (v.status === 'closed' ? '已截止' : '已结束') : '⏳ ' + voteRemainText(v));
+  if(v.deadline) meta.push('截止 ' + voteTimeText(v.deadline));
+  if(v.results) meta.push('共 ' + (v.voters || totalVotes) + ' 人参与');
+  else if(voted) meta.push('你已投票');
+
+  return '<div class="vote-card" data-vote-card="' + v.id + '">'
+    + '<div class="vote-card-h">'
+    +   '<div class="vote-title">' + esc(v.title)
+    +     (v.kind === 'song' ? '<span class="vote-kind">歌单</span>' : '') + '</div>'
+    +   '<div class="vote-meta">' + meta.map(esc).join(' · ') + '</div>'
+    + '</div>'
+    + (v.note ? '<p class="vote-note">' + esc(v.note) + '</p>' : '')
+    + '<div class="vote-opts' + (v.results ? ' is-res' : '') + '">' + optsHtml + '</div>'
+    + addHtml
+    + submitHtml
+    + '<div class="vote-msg" id="voteMsg' + v.id + '"></div>'
+    + '</div>';
+}
+
+/* 事件绑定（innerHTML 重建后要重新绑） */
+function voteBind(){
+  var body = document.getElementById('voteBody');
+  if(!body) return;
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-oid]'), function(btn){
+    btn.onclick = function(){
+      var vid = Number(btn.dataset.vid);
+      var oid = btn.dataset.oid;
+      var v = null;
+      for(var i = 0; i < VOTE.votes.length; i++) if(VOTE.votes[i].id === vid) v = VOTE.votes[i];
+      if(!v) return;
+      var cur = (VOTE.picked[vid] != null) ? VOTE.picked[vid].slice() : (v.myChoices || []).slice();
+      var at = cur.indexOf(oid);
+      if(v.multi){
+        if(at >= 0) cur.splice(at, 1); else cur.push(oid);
+      }else{
+        cur = (at >= 0) ? [] : [oid];
+      }
+      VOTE.picked[vid] = cur;
+      voteRenderAll();
+    };
+  });
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-vote-submit]'), function(btn){
+    btn.onclick = function(){ voteSubmit(Number(btn.dataset.voteSubmit)); };
+  });
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-vote-add]'), function(btn){
+    btn.onclick = function(){ voteAddOption(Number(btn.dataset.voteAdd)); };
+  });
+}
+
+function voteMsg(vid, txt, kind){
+  var el = document.getElementById('voteMsg' + vid);
+  if(!el) return;
+  el.innerHTML = txt ? '<span class="vote-msg-' + (kind || 'ok') + '">' + esc(txt) + '</span>' : '';
+}
+
+function voteSubmit(vid){
+  if(VOTE.busy) return;
+  var choices = VOTE.picked[vid] || [];
+  if(!choices.length){ voteMsg(vid, '请先选一个选项', 'err'); return; }
+  VOTE.busy = true;
+  api('/votes?action=vote', { method: 'POST', body: { voteId: vid, choices: choices } })
+    .then(function(j){
+      VOTE.busy = false;
+      /* 提交成功后重新拉一次，拿到最新的「我投的」与人数 */
+      return voteReload();
+    })
+    .catch(function(e){
+      VOTE.busy = false;
+      voteMsg(vid, e.message || String(e), 'err');
+    });
+}
+
+function voteAddOption(vid){
+  if(VOTE.busy) return;
+  var inp = document.getElementById('voteAddInput' + vid);
+  var label = inp ? String(inp.value || '').trim() : '';
+  if(!label){ voteMsg(vid, '请先填写选项内容', 'err'); return; }
+  VOTE.busy = true;
+  api('/votes?action=add-option', { method: 'POST', body: { voteId: vid, label: label } })
+    .then(function(){
+      VOTE.busy = false;
+      if(inp) inp.value = '';
+      return voteReload();
+    })
+    .catch(function(e){
+      VOTE.busy = false;
+      voteMsg(vid, e.message || String(e), 'err');
+    });
+}
+
+/* 重新拉列表但保留草稿（用户可能还有别的投票没提交） */
+function voteReload(){
+  var keep = VOTE.picked;
+  return api('/votes?action=list').then(function(j){
+    VOTE.votes = (j && j.votes) || [];
+    VOTE.loaded = true;
+    /* 已提交的投票把草稿清掉（以服务端为准），没提交的保留 */
+    VOTE.votes.forEach(function(v){
+      if(v.mine) delete keep[v.id];
+    });
+    voteRenderAll();
+  });
+}
+
+/* ============================================================================
  * 成绩分析（前台 · 第四十五轮 · v2.7.2 起）
  * ----------------------------------------------------------------------------
  * 站主定案（见《成绩分析-需求总表》）：
@@ -12579,6 +13090,10 @@ var SC = {
   hmSel: null,        /* 热力图上点中的格子（单元格下标，null=没点） */
   _hm: null,          /* 热力图每格的数据（供点选时出明细，不重新渲染） */
   _quad: null,    /* 最近一次四象限渲染的点数据（供点选时算名单，不重新渲染） */
+  /* v3.5.6 需关注筛选：all 全部 / total 总分不达标 / subj 仅单科 / drop 连续两次退步 */
+  careFilter: 'all',
+  careSortKey: 'total',
+  careSortAsc: true,
   pkA: null,      /* 成绩对比 PK：A 方成绩行 id（v2.10.0） */
   pkB: null,      /* 成绩对比 PK：B 方成绩行 id（v2.10.0） */
   pkExam2: null,  /* v3.4.0：跨考试对比的第二场考试 id（null = 只看本场） */
@@ -12710,10 +13225,30 @@ function scPickExam(id){
     if(r[1] && r[1].items) SC.me = r[1].items;
     SC.loading = false;
     scRenderAll();
+    /* v3.5.6：需关注里的「连续两次退步」要看上一场，异步补一次，回来再重画这一块 */
+    scLoadPrevPack(ex.id);
   }).catch(function(e){
     scPane('<div class="sc-empty"><p>读取失败：' + esc(e.message || e) + '</p>'
       + '<button class="btn" onclick="scPickExam(' + id + ')">重试</button></div>');
   });
+}
+
+/* v3.5.6 需关注「连续两次退步」的数据源：当前考试之前的那一场（只看紧邻的上一场）。
+   懒加载 + 缓存到 SC._prevPacks[examId]；没有更早的考试就记 null，避免反复请求。
+   回来之后只在「还在看同一场」时才重画，免得切走了又被旧数据冲回来。 */
+function scLoadPrevPack(examId){
+  SC._prevPacks = SC._prevPacks || {};
+  if(Object.prototype.hasOwnProperty.call(SC._prevPacks, examId)) return;
+  /* SC.exams 是时间倒序：当前考试的下一项就是上一场 */
+  var idx = -1;
+  for(var i = 0; i < SC.exams.length; i++) if(SC.exams[i].id === examId){ idx = i; break; }
+  var prev = (idx >= 0 && SC.exams[idx + 1]) ? SC.exams[idx + 1] : null;
+  if(!prev){ SC._prevPacks[examId] = null; return; }
+  SC._prevPacks[examId] = null;   /* 先占位，防止并发重复请求 */
+  api('/scores?action=board&exam=' + prev.id).then(function(d){
+    SC._prevPacks[examId] = { exam: d.exam, rows: d.rows || [] };
+    if(SC.exam && SC.exam.id === examId && SC.tab === 'board') scRenderBoard();
+  }).catch(function(){ /* 拉不到就当没有上一场，筛选显示 0 人，不打扰用户 */ });
 }
 
 /* ---------------- 计算（全部实时算） ---------------- */
@@ -12975,6 +13510,7 @@ function scRenderBoard(){
     +   scStatCard('最高', st.max)
     +   scStatCard('参考', st.n + ' 人')
     + '</div>'
+    + scBandCard(st)
     + '<div class="sc-tblwrap"><table class="sc-tbl sc-fix2">'
     +   '<thead>' + head + '</thead><tbody>' + body + '</tbody>'
     + '</table></div>'
@@ -13311,6 +13847,9 @@ function scRenderMe(){
       + '</div>';
   }
 
+  /* ⑤b AI 分析（v3.5.6）—— 本地规则引擎，不联网、不调模型，隐私不出班 */
+  html += scMeAnalysis(meRow, rk, st, myTotal, myRank, subs);
+
   /* ⑥ 趋势与进退步（用历次数据） */
   html += scTrendBlock(meRow);
 
@@ -13326,6 +13865,154 @@ function scRenderMe(){
   html += scCutTrend();
 
   scPane(html);
+}
+
+/* ----------------------------------------------------------------------------
+ * 我的画像 · AI 分析（v3.5.6）
+ * 站主要求：「我的画像 AI 分析」。
+ *
+ * 设计取舍（为什么是本地规则而不是调大模型）：
+ *   · 成绩是全班真实姓名 + 分数，站点跑在人家自己的 Cloudflare 免费额度上，
+ *     没有 API Key，也不该把学生成绩往外发 —— 所以全部在浏览器里算。
+ *   · 「AI」体现在**把多个维度的数字翻译成人能读的话**：定位（班排/位置）、
+ *     均衡度（偏科）、单科强弱（超/低于班均）、稳定性（历次波动）、
+ *     趋势（最近一次是升是降）、上线距离。每一条都带具体数字，不说空话。
+ *   · 输出固定 5 段：一句话结论 / 亮点 / 短板 / 趋势 / 下一步建议（2～3 条）。
+ *   规则引擎的好处是可解释、可复现 —— 换一次考试重算，结论跟着变，
+ *   不会像模型那样偶发出幻觉。
+ * -------------------------------------------------------------------------- */
+function scMeAnalysis(meRow, rk, st, myTotal, myRank, subs){
+  if(myTotal == null || !st.n) return '';
+
+  var full = scFullMark();
+  var rates = [];          /* 每科得分率 */
+  subs.forEach(function(s){
+    var v = scSubScore(meRow, s, SC.basis);
+    var avg = scSubjAvg()[s.key];
+    rates.push({
+      key: s.key, name: s.name, v: v, avg: avg, full: s.full || 0,
+      rate: (v != null && s.full) ? v / s.full : null,
+      avgRate: (avg != null && s.full) ? avg / s.full : null,
+      d: (v != null && avg != null) ? v - avg : null,
+    });
+  });
+  var valid = rates.filter(function(x){ return x.rate != null; });
+  if(!valid.length) return '';
+
+  /* ---- ① 定位 ---- */
+  var posPct = st.n > 1 ? (myRank - 1) / (st.n - 1) : 0;
+  var tier = posPct <= 0.1 ? '头部队列' : posPct <= 0.3 ? '中上梯队' : posPct <= 0.6 ? '中游偏上' : posPct <= 0.85 ? '中下游' : '后段';
+  var concl = '这次你在班里第 <b>' + myRank + ' / ' + st.n + '</b>，属于<b>' + tier + '</b>；'
+    + '总分 <b>' + fmtNum(myTotal) + '</b>，比班均 <b>' + fmtDiff(myTotal - st.avg) + '</b>。';
+
+  /* ---- ② 亮点：得分率最高的两科 ---- */
+  var byRate = valid.slice().sort(function(a, b){ return b.rate - a.rate; });
+  var strong = byRate.slice(0, Math.min(2, byRate.length)).filter(function(x){ return x.d != null && x.d > 0; });
+  var goodText = strong.length
+    ? '相对班均领先的是 ' + strong.map(function(x){
+        return '<b>' + esc(x.name) + '</b>（' + fmtNum(x.v) + '，超班均 ' + fmtNum(x.d) + ' 分）';
+      }).join(' 和 ') + ' —— 这几科是你的基本盘，稳住就行，不用再压时间。'
+    : '这次没有明显超过班均的科目 —— 说明整体还在追赶阶段，别急着挑科大补，先把最拖后腿那科拉到班均附近最划算。';
+
+  /* ---- ③ 短板：得分率最低的两科 ---- */
+  var weak = byRate.slice(-Math.min(2, byRate.length)).reverse().filter(function(x){ return x.d != null && x.d < 0; });
+  var weakText = weak.length
+    ? '需要盯的是 ' + weak.map(function(x){
+        return '<b>' + esc(x.name) + '</b>（' + fmtNum(x.v) + '，落后班均 ' + fmtNum(Math.abs(x.d)) + ' 分）';
+      }).join(' 和 ') + '。'
+    : '没有低于班均的科目 —— 这次各科都在平均线上，属于少见的齐整状态。';
+
+  /* ---- ④ 均衡度：最强与最弱的得分率差 ---- */
+  var spread = (byRate.length >= 2) ? (byRate[0].rate - byRate[byRate.length - 1].rate) : 0;
+  var balanceText;
+  if(byRate.length < 2) balanceText = '';
+  else if(spread >= 0.25) balanceText = '偏科明显：最强 <b>' + esc(byRate[0].name) + '</b> 与最弱 <b>'
+    + esc(byRate[byRate.length - 1].name) + '</b> 的得分率差 <b>' + (spread * 100).toFixed(0)
+    + '</b> 个百分点。短板科目的提分空间远大于继续给强科加码。';
+  else if(spread >= 0.12) balanceText = '有一定偏科：最强与最弱相差 <b>' + (spread * 100).toFixed(0)
+    + '</b> 个百分点，属于常见范围，把弱科往上提 5～10 分就能明显拉动总分。';
+  else balanceText = '各科比较均衡（最强与最弱只差 <b>' + (spread * 100).toFixed(0)
+    + '</b> 个百分点）—— 总分要再上一个台阶，靠的是整体效率，而不是补某一科。';
+
+  /* ---- ⑤ 趋势：用历次总分 ---- */
+  var series = scMeSeries();
+  var trendText = '';
+  if(series.length >= 2){
+    var last = series[series.length - 1], prev = series[series.length - 2];
+    var dv = last.v - prev.v;
+    var ups = 0, downs = 0;
+    for(var i = 1; i < series.length; i++){
+      if(series[i].v > series[i - 1].v) ups++;
+      else if(series[i].v < series[i - 1].v) downs++;
+    }
+    var volatile = (ups > 0 && downs > 0 && series.length >= 3);
+    trendText = '历次 ' + series.length + ' 次考试：最近一次相比上一次 <b>' + fmtDiff(dv) + '</b> 分，'
+      + '整体' + (ups > downs ? '<b>向上</b>' : ups < downs ? '<b>向下</b>' : '<b>持平震荡</b>')
+      + '（升 ' + ups + ' 次 / 降 ' + downs + ' 次）。'
+      + (volatile ? '成绩上下波动比较明显 —— 稳定性本身就是分数，先把会做的题稳住。'
+        : ups > downs ? '节奏是往上走的，保持现在的做法别乱改。'
+        : downs > ups ? '连续在往下掉，先找原因（时间分配？某科方法不对？状态？），别靠加时间硬扛。'
+        : '基本站住了，想突破需要换方法而不是加时长。');
+  }
+
+  /* ---- ⑥ 上线距离 ---- */
+  var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
+  var cutText = '';
+  if(cuts.length && SC.basis === 'graded'){
+    var nearest = null;
+    cuts.forEach(function(c){
+      var d = c.score - myTotal;
+      if(!nearest || Math.abs(d) < Math.abs(nearest.d)) nearest = { label: c.label, d: d, score: c.score };
+    });
+    if(nearest){
+      cutText = nearest.d > 0
+        ? '离最近的 <b>' + esc(nearest.label) + '</b>（' + fmtNum(nearest.score) + '）还差 <b>' + fmtNum(nearest.d) + '</b> 分。'
+        : '已经过了 <b>' + esc(nearest.label) + '</b>（' + fmtNum(nearest.score) + '），超出 <b>' + fmtNum(-nearest.d) + '</b> 分。';
+    }
+  }
+
+  /* ---- ⑦ 下一步建议：按短板/偏科/趋势组合出 2～3 条，都带具体动作 ---- */
+  var todos = [];
+  if(weak.length){
+    var w0 = weak[0];
+    /* 单科差多少分才到班均 → 折算成「多少道选择/多少分的小题」更好执行 */
+    todos.push('先把 <b>' + esc(w0.name) + '</b> 拉到班均：现在还差 <b>' + fmtNum(Math.abs(w0.d))
+      + '</b> 分。做法别贪多 —— 只补这一科最近两次考试的错题，按错因分类（不会／算错／看错），'
+      + '不会的才需要重新学，其余靠限时重做。');
+  }
+  if(spread >= 0.25 && byRate.length >= 2){
+    todos.push('强科 <b>' + esc(byRate[0].name) + '</b> 已经超过班均，短期内不要再给它追加时间 —— '
+      + '把那部分时间整体挪给弱科，总分的边际收益高得多。');
+  }
+  if(series.length >= 2){
+    var lastD = series[series.length - 1].v - series[series.length - 2].v;
+    if(lastD < 0) todos.push('上一次是退的（<b>' + fmtDiff(lastD) + '</b> 分）。这周先做一件事：把上次的卷子按「会但做错」和「确实不会」分两堆，前者才是最快能捞回来的分。');
+  }
+  if(!todos.length){
+    todos.push('目前没有明显短板。下一步不是补差，而是把 <b>' + esc(byRate[0] ? byRate[0].name : '强科')
+      + '</b> 的稳定性做起来 —— 用限时套卷训练，目标是把「应该拿到的分」全拿到。');
+  }
+  /* 只留 3 条，多了没人看 */
+  todos = todos.slice(0, 3);
+
+  var rowHtml = function(k, v){
+    return v ? '<div class="sc-ai-row"><span class="sc-ai-k">' + k + '</span><span class="sc-ai-v">' + v + '</span></div>' : '';
+  };
+
+  return '<div class="sc-card sc-ai-card">'
+    + '<div class="sc-card-h">AI 分析<span class="sc-h-note">本地规则生成 · 不联网 · 不上传成绩</span></div>'
+    + '<div class="sc-ai-concl">' + concl + '</div>'
+    + rowHtml('亮点', goodText)
+    + rowHtml('短板', weakText)
+    + rowHtml('均衡', balanceText)
+    + rowHtml('趋势', trendText)
+    + rowHtml('上线', cutText)
+    + '<div class="sc-ai-todo"><b>下一步可以这样做</b><ol>'
+    +   todos.map(function(t){ return '<li>' + t + '</li>'; }).join('')
+    + '</ol></div>'
+    + '<div class="sc-figcap">这份分析由浏览器按当前考试数据实时算出（定位 / 单科强弱 / 均衡度 / 历次趋势 / 上线距离五类规则），'
+    + '每次换考试、切换赋分口径都会重算，不会把成绩发到任何服务器。</div>'
+    + '</div>';
 }
 
 /* ----------------------------------------------------------------------------
@@ -15056,6 +15743,87 @@ function scDiagCard(){
    而且换卷子、换满分都不用手动调阈值。                                    */
 var SC_ALERT_RATIO = 0.015;   /* 统一阈值系数：满分的 1.5% */
 
+/* ---------- 三类统计（v3.5.6）----------
+   站主要求：「优秀率 / 及格率 / 低分率 三类统计」。
+   口径问题（这轮最需要交代的一处判断）：
+     · 有分数线（特控/本科/600）时，线是按**赋分总分**划的，所以三类率
+       优先按分数线折算；但三条线未必齐全（有时只有本科线一条），
+       缺的那档就退回「满分百分比」。
+     · 没有分数线时全部退回百分比：优秀 ≥ 85%、及格 ≥ 60%、低分 < 40%。
+   为什么要区分「及格」—— 60% 是通行标准（150 分制 = 90 分），
+   但 750 分制的 60% 是 450 分，跟「本科线」不是一回事，
+   所以有官方线时以线为准，没线时才用百分比兜底。            */
+var SC_BANDS = [
+  { key: 'excellent', label: '优秀', pct: 0.85, color: '#2f9e44' },
+  { key: 'pass',      label: '及格', pct: 0.60, color: '#4c8fd6' },
+  { key: 'low',       label: '低分', pct: 0.40, color: '#d4756a' },
+];
+
+/* 取三个档的分数线：能挂上考试分数线的就挂，挂不上按满分折算。
+   优先顺序：本科线（最接近「及格」概念）→ 特控线（优秀）→ 600 线。
+   返回 { excellent:{v,src}, pass:{v,src}, low:{v,src} }，src = 'line' | 'pct' */
+function scBands(){
+  var full = scFullMark();
+  var cuts = (SC.exam && SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
+  /* 按分数从高到低排，第 1 条当「优秀」，最低那条当「及格」 */
+  var sorted = cuts.slice().sort(function(a, b){ return b.score - a.score; });
+  var out = {};
+  SC_BANDS.forEach(function(b){ out[b.key] = { v: full * b.pct, src: 'pct', label: b.label, color: b.color }; });
+
+  if(sorted.length){
+    /* 最高那条线以上 = 优秀 */
+    out.excellent = { v: sorted[0].score, src: 'line', label: '优秀（' + (sorted[0].label || '最高线') + '）', color: '#2f9e44' };
+    /* 最低那条线以上 = 及格 */
+    var last = sorted[sorted.length - 1];
+    out.pass = { v: last.score, src: 'line', label: '及格（' + (last.label || '最低线') + '）', color: '#4c8fd6' };
+    /* 低分仍按百分比：没有「低分线」这种官方说法，用 40% 兜底更稳 */
+  }
+  return out;
+}
+
+/* 三类率：对一组总分值算 n / 占比 */
+function scBandStats(list, bands){
+  bands = bands || scBands();
+  var n = list.length;
+  var r = {};
+  SC_BANDS.forEach(function(b){
+    var line = bands[b.key].v;
+    /* 低分是「低于」，其余是「不低于」 */
+    var c = b.key === 'low'
+      ? list.filter(function(v){ return v < line; }).length
+      : list.filter(function(v){ return v >= line; }).length;
+    r[b.key] = { n: c, pct: n ? c / n * 100 : 0, line: line, src: bands[b.key].src, label: bands[b.key].label, color: bands[b.key].color };
+  });
+  r.n = n;
+  return r;
+}
+
+/* 三类统计卡（全班成绩单用） */
+function scBandCard(st){
+  if(!st.n) return '';
+  var bands = scBands();
+  var bs = scBandStats(st.list, bands);
+  return '<div class="sc-card"><div class="sc-card-h">优秀率 / 及格率 / 低分率'
+    + '<span class="sc-h-note">按' + (bands.pass.src === 'line' ? '本次分数线' : '满分百分比') + '统计</span></div>'
+    + '<div class="sc-bands">'
+    + SC_BANDS.map(function(b){
+        var x = bs[b.key];
+        return '<div class="sc-band">'
+          + '<div class="sc-band-top"><b>' + esc(b.label) + '率</b>'
+          +   '<span class="sc-band-pct" style="color:' + b.color + '">' + x.pct.toFixed(1) + '%</span></div>'
+          + '<div class="sc-band-line"><i style="width:' + Math.min(100, x.pct).toFixed(1) + '%;background:' + b.color + '"></i></div>'
+          + '<div class="sc-band-meta">' + x.n + ' / ' + bs.n + ' 人　线 '
+          +   fmtNum(x.line) + (x.src === 'line' ? '' : '（' + (b.pct * 100).toFixed(0) + '%）') + '</div>'
+          + '</div>';
+      }).join('')
+    + '</div>'
+    + '<div class="sc-figcap">'
+    + (bands.pass.src === 'line'
+        ? '本次考试有分数线，优秀／及格按分数线统计；低分没有官方线，仍按满分 40% 折算。'
+        : '本次考试没有设置分数线，三档都按满分百分比统计（优秀 ≥ 85%、及格 ≥ 60%、低分 < 40%）。')
+    + '</div></div>';
+}
+
 function scAlertLines(){
   var subs = SC.exam.subjects || [];
   var st = scStats(SC.basis);
@@ -15079,6 +15847,9 @@ function scWatchList(){
   if(!st.n) return '';
   var thr = L.totalLine;
 
+  /* v3.5.6：「连续两次退步」要跟上一场比名次，懒加载上一场（与历次上线率共用 SC.allRows） */
+  var prevDrop = scPrevDropMap();
+
   var list = [];
   SC.rows.forEach(function(r){
     var t = scTotal(r, SC.basis);
@@ -15098,37 +15869,73 @@ function scWatchList(){
     });
 
     var lowTotal = (t != null && t < thr);
-    if(!lowTotal && !lowSubs.length) return;
+    var drop2 = !!prevDrop[r.name];
+    if(!lowTotal && !lowSubs.length && !drop2) return;
     list.push({
       name: r.name, total: t, worst: worst, me: scIsMe(r),
-      lowTotal: lowTotal, lowSubs: lowSubs,
+      lowTotal: lowTotal, lowSubs: lowSubs, drop2: drop2,
+      drop2By: drop2 ? prevDrop[r.name] : 0,
     });
   });
-  if(!list.length) return '';
 
-  /* 排序：总分不达标的先按总分从低到高；只栽在单科上的排在后面，按最惨那一科从低到高 */
-  list.sort(function(a, b){
-    if(a.lowTotal !== b.lowTotal) return a.lowTotal ? -1 : 1;
-    if(a.lowTotal){
-      var ta = a.total == null ? 1e9 : a.total, tb = b.total == null ? 1e9 : b.total;
-      if(ta !== tb) return ta - tb;
-      return b.lowSubs.length - a.lowSubs.length;
-    }
-    var wa = a.lowSubs.length ? a.lowSubs[0].d : 0;
-    var wb = b.lowSubs.length ? b.lowSubs[0].d : 0;
-    return wa - wb;
+  /* v3.5.6 四档筛选 */
+  var ALL = list.slice();
+  var nLowTotal = ALL.filter(function(x){ return x.lowTotal; }).length;
+  var nLowSubOnly = ALL.filter(function(x){ return !x.lowTotal && x.lowSubs.length; }).length;
+  var nAnySub = ALL.filter(function(x){ return x.lowSubs.length; }).length;
+  var nDrop2 = ALL.filter(function(x){ return x.drop2; }).length;
+
+  var FILTERS = [
+    { key: 'all',   label: '全部', n: ALL.length },
+    { key: 'total', label: '总分不达标', n: nLowTotal },
+    { key: 'subj',  label: '仅单科', n: nLowSubOnly },
+    { key: 'drop',  label: '连续两次退步', n: nDrop2 },
+  ];
+  if(SC.careFilter && !FILTERS.some(function(f){ return f.key === SC.careFilter; })) SC.careFilter = 'all';
+  var cur = SC.careFilter || 'all';
+  list = ALL.filter(function(x){
+    if(cur === 'total') return x.lowTotal;
+    if(cur === 'subj')  return !x.lowTotal && x.lowSubs.length > 0;
+    if(cur === 'drop')  return x.drop2;
+    return true;
   });
 
-  var nLowTotal = list.filter(function(x){ return x.lowTotal; }).length;
-  var nLowSub = list.filter(function(x){ return x.lowSubs.length; }).length;
+  /* 排序：默认总分不达标的先按总分从低到高；只栽在单科上的排在后面，按最惨那一科从低到高。
+     v3.5.6 起点表头可换成按姓名/总分/总分差/单科数/最弱一科排。 */
+  var k = SC.careSortKey || 'total', asc = SC.careSortAsc !== false;
+  function cmp(a, b){
+    var va, vb;
+    if(k === 'name'){ return asc ? String(a.name).localeCompare(String(b.name), 'zh') : String(b.name).localeCompare(String(a.name), 'zh'); }
+    if(k === 'total'){ va = a.total == null ? 1e9 : a.total; vb = b.total == null ? 1e9 : b.total; }
+    else if(k === 'diff'){ va = a.total == null ? 1e9 : a.total - st.avg; vb = b.total == null ? 1e9 : b.total - st.avg; }
+    else if(k === 'nsub'){ va = a.lowSubs.length; vb = b.lowSubs.length; }
+    else if(k === 'worst'){ va = a.worst ? a.worst.d : 0; vb = b.worst ? b.worst.d : 0; }
+    else { va = 0; vb = 0; }
+    if(va !== vb) return asc ? va - vb : vb - va;
+    /* 同值时把总分不达标的排前面，视觉上更连贯 */
+    if(a.lowTotal !== b.lowTotal) return a.lowTotal ? -1 : 1;
+    return String(a.name).localeCompare(String(b.name), 'zh');
+  }
+  list.sort(cmp);
 
-  return '<div class="sc-card sc-card-admin"><div class="sc-card-h">需关注学生'
-    + '<span class="sc-h-note">总分低于 ' + fmtNum(thr) + ' 分，或某科低于该科班均 ' + (SC_ALERT_RATIO * 100).toFixed(1) + '% 满分</span>'
-    + '<span class="sc-only-admin">仅站主可见</span></div>'
-    + '<div class="sc-tblwrap" style="max-height:420px"><table class="sc-tbl sc-tbl-watch" style="min-width:auto">'
-    + '<thead><tr><th>姓名</th><th>总分</th><th>总分差</th><th>拖后腿的单科</th><th>最弱一科</th></tr></thead><tbody>'
-    + list.map(function(x){
-        /* 单科那块用「科目 分数（比该科线低多少）」的小标签，没有就给淡横杠 */
+  if(!ALL.length) return '';
+
+  var arrow = function(key){
+    return SC.careSortKey === key ? '<i class="sc-arw">' + (SC.careSortAsc ? '↑' : '↓') + '</i>' : '';
+  };
+  var sortTh = function(key, text){
+    return '<th class="sc-th-sort" onclick="scCareSort(\'' + key + '\')">' + text + arrow(key) + '</th>';
+  };
+
+  var head = '<thead><tr>'
+    + sortTh('name', '姓名')
+    + sortTh('total', '总分')
+    + sortTh('diff', '总分差')
+    + sortTh('nsub', '拖后腿的单科')
+    + sortTh('worst', '最弱一科')
+    + '</tr></thead>';
+
+  var body = list.map(function(x){
         var lowHtml = '—';
         if(x.lowSubs.length){
           lowHtml = '<span class="sc-lowsub">' + x.lowSubs.map(function(s){
@@ -15138,20 +15945,45 @@ function scWatchList(){
         return '<tr' + (x.me ? ' class="sc-me-row"' : '') + '>'
           + '<td class="sc-name">' + esc(x.name)
           +   (x.me ? '<span class="sc-you">我</span>' : '')
-          +   (x.lowTotal ? '' : '<span class="sc-tagonly">仅单科</span>') + '</td>'
+          +   (x.lowTotal ? '' : (x.lowSubs.length ? '<span class="sc-tagonly">仅单科</span>' : ''))
+          +   (x.drop2 ? '<span class="sc-tagdrop" title="比上一次考试掉了 ' + x.drop2By + ' 名">连退 ' + x.drop2By + '</span>' : '')
+          + '</td>'
           + '<td data-label="总分">' + (x.total == null ? '—' : fmtNum(x.total)) + '</td>'
           + '<td data-label="总分差">' + (x.total == null ? '—'
                 : '<span class="' + (x.total < thr ? 'sc-warn' : 'sc-good') + '">' + fmtDiff(x.total - st.avg) + '</span>') + '</td>'
           + '<td data-label="拖后腿的单科">' + lowHtml + '</td>'
           + '<td data-label="最弱一科">' + (x.worst ? esc(x.worst.name) + ' <span class="sc-warn">' + fmtNum(x.worst.d) + '</span>' : '—') + '</td>'
           + '</tr>';
-      }).join('')
-    + '</tbody></table></div>'
-    + '<div class="sc-figcap">共 <b>' + list.length + '</b> 人上榜：总分不达标 <b>' + nLowTotal
-    + '</b> 人，单科不达标 <b>' + nLowSub + '</b> 人（可能重叠）。'
+      }).join('');
+
+  /* ---- 表格下方的自动文字总结（v3.5.6）---- */
+  var summary = scCareSummary({
+    all: ALL, shown: list, cur: cur, st: st, thr: thr,
+    nLowTotal: nLowTotal, nLowSubOnly: nLowSubOnly, nAnySub: nAnySub, nDrop2: nDrop2,
+    L: L, subs: subs,
+  });
+
+  var chips = '<div class="sc-chips">' + FILTERS.map(function(f){
+    return '<button class="sc-chip' + (f.key === cur ? ' on' : '') + '"'
+      + (f.n === 0 ? ' disabled' : '')
+      + ' onclick="scCareFilter(\'' + f.key + '\')">' + esc(f.label)
+      + '<em>' + f.n + '</em></button>';
+  }).join('') + '</div>';
+
+  return '<div class="sc-card sc-card-admin"><div class="sc-card-h">需关注学生'
+    + '<span class="sc-h-note">总分低于 ' + fmtNum(thr) + ' 分，或某科低于该科班均 ' + (SC_ALERT_RATIO * 100).toFixed(1) + '% 满分</span>'
+    + '<span class="sc-only-admin">仅站主可见</span></div>'
+    + chips
+    + (list.length
+        ? '<div class="sc-tblwrap" style="max-height:420px"><table class="sc-tbl sc-tbl-watch" style="min-width:auto">'
+          + head + '<tbody>' + body + '</tbody></table></div>'
+        : '<div class="sc-empty" style="padding:18px 8px"><p>这个筛选下没有人。</p></div>')
+    + (summary ? '<div class="sc-care-sum">' + summary + '</div>' : '')
+    + '<div class="sc-figcap">'
     + '「总分差」＝ 本人总分 − 班均总分。'
     + '「拖后腿的单科」格子里，粗体是科目、紧跟分数，斜体小字是<b>比该科的线还低多少</b>（越低越该补）。'
     + '「最弱一科」＝相对该科班均差得最多的那一科（按原始分差算，不折比例）。'
+    + '「连退 N」＝ 相比上一次考试名次往下掉了 N 名（连续两次都在退）。'
     + '<br>阈值说明：总分线 = 班均总分 − 总分满分 × ' + (SC_ALERT_RATIO * 100).toFixed(1) + '%（本次 '
     + fmtNum(L.full) + ' 分制 → 掉 ' + fmtNum(L.gap) + ' 分即上榜）；'
     + '单科线按各科满分同比例折算（' + subs.map(function(sub){
@@ -15160,6 +15992,112 @@ function scWatchList(){
       }).join(' / ') + '），这样 150 分的语文和 100 分的化学才能放在一起比。'
     + '</div>'
     + '</div>';
+}
+
+/* 需关注：切换筛选 / 排序（都不重新取数，只重画这一块） */
+function scCareFilter(k){ SC.careFilter = k; scRenderBoard(); }
+function scCareSort(k){
+  if(SC.careSortKey === k) SC.careSortAsc = !SC.careSortAsc;
+  else { SC.careSortKey = k; SC.careSortAsc = (k === 'name' || k === 'total' || k === 'diff' || k === 'worst'); }
+  scRenderBoard();
+}
+
+/* 「连续两次退步」所需的上一次考试班排名：姓名 → 掉了多少名
+   拿不到上一场就返回空对象（该筛选自然为 0 人，不会误报）。 */
+function scPrevDropMap(){
+  var out = {};
+  if(!SC._prevPacks) return out;
+  var prev = SC._prevPacks[SC.exam && SC.exam.id];
+  if(!prev || !prev.rows || !prev.rows.length) return out;
+  /* 上一场的班排名（同分并列口径，与 scRankMap 一致） */
+  var psubs = (prev.exam && prev.exam.subjects) || [];
+  var arr = [];
+  (prev.rows || []).forEach(function(r){
+    var t = 0, any = false;
+    psubs.forEach(function(sub){
+      var v = r.s && r.s[sub.key];
+      if(!v) return;
+      var val = (SC.basis === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+      if(val == null) return;
+      t += val; any = true;
+    });
+    if(any) arr.push({ name: r.name, v: t });
+  });
+  arr.sort(function(a, b){ return b.v - a.v; });
+  var rk = 0, pv = null, prevRank = {};
+  arr.forEach(function(x, i){
+    if(pv === null || x.v !== pv){ rk = i + 1; pv = x.v; }
+    prevRank[x.name] = rk;
+  });
+  var now = scRankMap(SC.basis).total;
+  var nowByName = {};
+  SC.rows.forEach(function(r){ if(now[r.id] != null) nowByName[r.name] = now[r.id]; });
+
+  Object.keys(nowByName).forEach(function(name){
+    var p = prevRank[name], n = nowByName[name];
+    if(p == null || n == null) return;
+    var d = n - p;              /* 正数 = 名次数字变大 = 退步 */
+    if(d > 0) out[name] = d;
+  });
+  return out;
+}
+
+/* 需关注表下方的自动文字总结（纯本地规则，不调模型） */
+function scCareSummary(o){
+  var bits = [];
+  var all = o.all || [], st = o.st;
+  if(!all.length){
+    return '本次没有人踩到关注线 —— 全班总分都在班均 ' + fmtNum(o.thr) + ' 分以上，各科也没有明显掉队的。';
+  }
+  bits.push('本次共 <b>' + all.length + '</b> 人需要看一眼（占参考人数的 '
+    + (all.length / st.n * 100).toFixed(0) + '%）：总分不达标 <b>' + o.nLowTotal + '</b> 人，'
+    + '只在单科掉队 <b>' + o.nLowSubOnly + '</b> 人'
+    + (o.nDrop2 ? '，连续两次退步 <b>' + o.nDrop2 + '</b> 人' : '') + '。');
+
+  /* 最集中的短板科目：统计出现在「拖后腿」里的次数 */
+  var cnt = {};
+  all.forEach(function(x){ x.lowSubs.forEach(function(s){ cnt[s.name] = (cnt[s.name] || 0) + 1; }); });
+  var top = Object.keys(cnt).map(function(k){ return { name: k, n: cnt[k] }; })
+    .sort(function(a, b){ return b.n - a.n; });
+  if(top.length){
+    var t = top[0];
+    bits.push('拖后腿最集中的是 <b>' + esc(t.name) + '</b>（' + t.n + ' 人在这科掉队）—— 讲评时值得整班过一遍。');
+    if(top.length >= 2 && top[1].n >= 2){
+      bits.push('其次是 <b>' + esc(top[1].name) + '</b>（' + top[1].n + ' 人）。');
+    }
+  }
+
+  /* 最严重的那一个（总分最低或最惨单科） */
+  var worstOne = null;
+  all.forEach(function(x){
+    var sev = 0;
+    if(x.total != null) sev = Math.max(sev, (o.thr - x.total));
+    x.lowSubs.forEach(function(s){ sev = Math.max(sev, -s.d); });
+    if(!worstOne || sev > worstOne.sev) worstOne = { x: x, sev: sev };
+  });
+  if(worstOne && worstOne.sev > 0){
+    var w = worstOne.x;
+    var why = [];
+    if(w.lowTotal) why.push('总分 ' + fmtNum(w.total) + '，比线低 ' + fmtNum(o.thr - w.total) + ' 分');
+    if(w.lowSubs.length) why.push(w.lowSubs.map(function(s){ return s.name + ' ' + fmtNum(s.v); }).join('、'));
+    bits.push('最需要先谈的是 <b>' + esc(w.name) + '</b>：' + why.join('；') + '。');
+  }
+
+  /* 连续退步：点名变化最大的那位 */
+  var dropTop = null;
+  all.forEach(function(x){ if(x.drop2 && (!dropTop || x.drop2By > dropTop.drop2By)) dropTop = x; });
+  if(dropTop){
+    bits.push('名次上 <b>' + esc(dropTop.name) + '</b> 相比上次掉了 <b>' + dropTop.drop2By
+      + '</b> 名 —— 先确认是不是状态问题（睡眠、手机、情绪），再谈方法。');
+  }
+
+  if(o.cur !== 'all'){
+    bits.push('当前只看「' + scCareFilterLabel(o.cur) + '」这 <b>' + o.shown.length + '</b> 人，点「全部」可以看完整名单。');
+  }
+  return bits.map(function(x){ return '<p>' + x + '</p>'; }).join('');
+}
+function scCareFilterLabel(k){
+  return k === 'total' ? '总分不达标' : k === 'subj' ? '仅单科' : k === 'drop' ? '连续两次退步' : '全部';
 }
 
 /* ---------- ③ 进退步榜（和上一次考试比名次变化） ----------

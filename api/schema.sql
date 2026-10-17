@@ -484,3 +484,35 @@ create table if not exists score_config (
   data       jsonb       not null default '{}'::jsonb,     -- 见 api/scores.js 的 DEFAULT_CONFIG
   updated_at timestamptz not null default now()
 );
+
+-- ============================================================
+-- v3.5.6 投票管理
+--   ① class_votes：一场投票一行。options = [{id,label,by,songId?}]
+--      kind='song' 为歌单投票（选项来自点歌平台）
+--   ② class_vote_ballots：一人一票（vote_id+user_id 主键），改票即覆盖
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.5.6
+-- ============================================================
+create table if not exists class_votes (
+  id         bigserial   primary key,
+  title      text        not null,
+  kind       text        not null default 'normal',        -- normal 普通 | song 歌单
+  options    jsonb       not null default '[]'::jsonb,
+  multi      boolean     not null default false,           -- 普通投票是否多选
+  allow_add  boolean     not null default false,           -- 允许学生新增选项
+  note       text        not null default '',
+  deadline   timestamptz,                                  -- 空 = 不限截止
+  status     text        not null default 'open',          -- open | closed
+  created_by bigint,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists class_votes_status_idx on class_votes (status, deadline);
+
+create table if not exists class_vote_ballots (
+  vote_id    bigint      not null,
+  user_id    bigint      not null,
+  choices    jsonb       not null default '[]'::jsonb,     -- 选中的选项 id 数组
+  updated_at timestamptz not null default now(),
+  primary key (vote_id, user_id)
+);
+create index if not exists class_vote_ballots_vote_idx on class_vote_ballots (vote_id);

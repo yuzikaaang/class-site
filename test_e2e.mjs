@@ -5095,9 +5095,9 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
      两者本质都是「首页那张小卡片」的配置，拆两个入口反而不好找。 */
   t('★后台两块已合并为「首页卡片」板块',
     /id:'cards',/.test(adm47) && /function renderCards\(\)/.test(adm47));
-  /* v2.7.1 起内容组是 10 项：原本合并后的 9 项 + 新增的「成绩分析」 */
-  t('★内容组导航项为 10 项（合并后的 9 项 + 成绩分析）',
-    (adm47.match(/group:'内容'/g) || []).length === 10,
+  /* v2.7.1 起内容组 10 项（合并后的 9 项 + 成绩分析）；v3.5.6 再加「投票管理」= 11 */
+  t('★内容组导航项为 11 项（9 项 + 成绩分析 + 投票管理）',
+    (adm47.match(/group:'内容'/g) || []).length === 11,
     '实际 ' + (adm47.match(/group:'内容'/g) || []).length + ' 项');
   t('★合并后的面板路由已注册（cards → renderCards）',
     /cards:\s*renderCards,/.test(adm47));
@@ -5105,8 +5105,9 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   /* ===== ④ 版本号 / 缓存 ===== */
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx47));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm47));
-  t('★service worker 缓存版本升到 v100（旧缓存要作废）',
-    /class-site-v100/.test(sw47));
+  /* 缓存号只增不减：v3.5.6 起是 v101。这里断言「≥v100 且是 v1xx 形态」，不再钉死具体数字 */
+  t('★service worker 缓存版本已升到 v100 以上（旧缓存要作废）',
+    /class-site-v1[0-9]{2}/.test(sw47) && parseInt((sw47.match(/class-site-v(\d+)/)||[0,'0'])[1],10) >= 100);
 }
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
@@ -5190,7 +5191,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    verRe.exec(sw48) && verRe.exec(sw48)[1] === '3.5.5');
+    !!verRe.exec(sw48) && /^3\.\d+\.\d+$/.test(verRe.exec(sw48)[1]), verRe.exec(sw48) ? verRe.exec(sw48)[1] : 'null');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5292,7 +5293,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   /* ===== ⑨ 版本号 / 缓存 ===== */
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx48));
   t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-17'/.test(idx48));
-  t('★service worker 缓存版本升到 v100', /class-site-v100/.test(sw48));
+  t('★service worker 缓存版本升到 v100 以上', /class-site-v1[0-9]{2}/.test(sw48));
 }
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
@@ -5801,8 +5802,11 @@ console.log('\n【57】第四十八轮·站主侧五件套 + 三档开关（v2.8
     && !/var thr = st\.avg - 10;/.test(idx));
   t('★单科也单独判（该科班均 − 该科满分 × 1.5%）',
     /subLines\[sub\.key\] = \(avgs\[sub\.key\] == null \|\| !f\) \? null : \(avgs\[sub\.key\] - f \* SC_ALERT_RATIO\)/.test(idx));
-  t('★总分与单科两条路任一命中就上榜（lowTotal / lowSubs）',
-    /var lowTotal = \(t != null && t < thr\);/.test(idx) && /if\(!lowTotal && !lowSubs\.length\) return;/.test(idx));
+  /* v3.5.6 起多了第三条路「连续两次退步」，所以守卫变成三选一 */
+  t('★总分 / 单科 / 连退三条路任一命中就上榜',
+    /var lowTotal = \(t != null && t < thr\);/.test(idx)
+    && /var drop2 = !!prevDrop\[r\.name\];/.test(idx)
+    && /if\(!lowTotal && !lowSubs\.length && !drop2\) return;/.test(idx));
   t('★拖后腿科目＝相对班均差得最多', /差得最多的那一科/.test(idx));
 
   /* ===== ④ 进退步榜：比名次不比分数 ===== */
@@ -6411,7 +6415,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.5'/.test(swSrc) && /class-site-v100/.test(swSrc));
+  t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.5\.6'/.test(swSrc) && /class-site-v101/.test(swSrc));
   t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
 }
 
@@ -7817,8 +7821,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.5',
-    /const SCHEMA_VER = '3\.5\.5'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.6',
+    /const SCHEMA_VER = '3\.5\.6'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8574,7 +8578,10 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* 版本与记录 */
   t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  t('版本号三处同步 3.5.5', /SITE_VERSION = '3[.]5[.]5'/.test(idx) && /SITE_VERSION = '3[.]5[.]5'/.test(adm) && /SITE_VER = '3[.]5[.]5'/.test(sw));
+  /* 断言「三处彼此一致 + 形如 3.x.y」，而不是钉死某个数字 —— 每轮升版都要改这里太脆 */
+  t('版本号三处同步（index / admin / sw 彼此一致）',
+    (function(){ var a=(idx.match(/SITE_VERSION = '([^']+)'/)||[])[1], b=(adm.match(/SITE_VERSION = '([^']+)'/)||[])[1], c=(sw.match(/SITE_VER = '([^']+)'/)||[])[1];
+      return !!a && a===b && a===c && /^3\.\d+\.\d+$/.test(a); })());
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -8667,8 +8674,9 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
   /* ④ 版本与记录 */
   t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步 3.5.5',
-    /SITE_VERSION = '3[.]5[.]5'/.test(idx) && /SITE_VERSION = '3[.]5[.]5'/.test(adm) && /SITE_VER = '3[.]5[.]5'/.test(sw));
+  t('版本号三处同步（index / admin / sw 彼此一致）',
+    (function(){ var a=(idx.match(/SITE_VERSION = '([^']+)'/)||[])[1], b=(adm.match(/SITE_VERSION = '([^']+)'/)||[])[1], c=(sw.match(/SITE_VER = '([^']+)'/)||[])[1];
+      return !!a && a===b && a===c; })());
 }
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
@@ -8754,8 +8762,9 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
   }
 
   /* ④ 版本 */
-  t('版本号三处同步 3.5.5',
-    /SITE_VERSION = '3[.]5[.]5'/.test(idx) && /SITE_VERSION = '3[.]5[.]5'/.test(adm));
+  t('版本号三处同步（index / admin 彼此一致）',
+    (function(){ var a=(idx.match(/SITE_VERSION = '([^']+)'/)||[])[1], b=(adm.match(/SITE_VERSION = '([^']+)'/)||[])[1];
+      return !!a && a===b; })());
 }
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
@@ -8774,7 +8783,9 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
   const siteVer = (idx.match(/var SITE_VERSION = '([^']+)'/) || [])[1];
   t('★API_VER 与前台 SITE_VERSION 同步（漏改会被这条抓住）', !!apiVer && apiVer === siteVer,
     'api=' + apiVer + ' site=' + siteVer);
-  t('后台版本号与前台一致', /var SITE_VERSION = '3[.]5[.]5'/.test(adm) && /SITE_VER = '3[.]5[.]5'/.test(sw));
+  t('后台版本号与前台一致',
+    (function(){ var b=(adm.match(/SITE_VERSION = '([^']+)'/)||[])[1], c=(sw.match(/SITE_VER = '([^']+)'/)||[])[1], a=(idx.match(/SITE_VERSION = '([^']+)'/)||[])[1];
+      return !!b && b===a && b===c; })());
 
   /* ② Pages 回查：必须做缓存穿透，否则 CDN 的 10 分钟缓存会一直判失败 */
   t('★Pages 回查带随机查询串做缓存穿透', /local cb="cb=\$\(date \+%s%N\)-\$RANDOM"/.test(pg) && /"\$BASE\/\$1\?\$cb"/.test(pg));
@@ -8800,7 +8811,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', parsed === '3.5.5', 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', /^3\.\d+\.\d+$/.test(String(parsed||'')), 'parsed=' + parsed);
 }
 
 
@@ -8918,7 +8929,10 @@ console.log('\n【85】第七十三轮·v3.3.0 需关注学生加单科线（比
       /丙[\s\S]{0,140}化学/.test(tw), (tw.match(/丙[\s\S]{0,100}/) || [''])[0]);
     t('★单科标签给出「科目 分数 低于该科线多少」', /化学 60 -\d/.test(tw), (tw.match(/化学 60\s*[-\d.]*/) || [''])[0]);
     t('总分不达标的人不标「仅单科」', !/乙\s*仅单科/.test(tw));
-    t('脚注分开统计两个口径的人数', /总分不达标/.test(tw) && /单科不达标/.test(tw));
+    /* v3.5.6：脚注改为「筛选条 + 自动总结」，两个口径的人数挪到筛选条徽标和总结文字里 */
+    t('脚注分开统计两个口径的人数',
+      (/总分不达标/.test(tw) && (/仅单科/.test(tw) || /单科不达标/.test(tw)))
+      && /本次共/.test(tw));
 
     /* ---------- ② 进退步榜：合并成一张表 / 全量 / 点表头排序 ---------- */
     const prevRows = [
@@ -9465,6 +9479,250 @@ console.log('\n【90】第七十八轮·v3.5.3 修「解析失败: XLSX is not d
     const f = await call('/api/admin?action=profiles&q=' + sid, { token: adminToken });
     const row = (f.body.profiles || [])[0];
     if (row) await call('/api/admin?action=delete-profile', { method: 'POST', token: adminToken, body: { id: row.id } });
+  }
+}
+
+console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人一票可改 / 加选项 / 截止后看结果 / 写排期 / 删）');
+{
+  const votesSrc = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
+  const wrkSrc = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  const httpSrc2 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const sqlSrc = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const idxV = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const admV = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* 本块自带一个学生账号（不依赖其它块里的局部变量），要带密码走「首次改密」放行 */
+  const vUser = 'voter91', vPwd0 = 'Init2025', vPwd = 'MyOwn2025';
+  await call('/api/admin?action=create-user', {
+    method: 'POST', token: adminToken, body: { username: vUser, password: vPwd0, displayName: '投票测试生' },
+  });
+  const vl0 = await call('/api/auth?action=login', { method: 'POST', body: { username: vUser, password: vPwd0 } });
+  const vcp = await call('/api/auth?action=change-password', {
+    method: 'POST', token: vl0.body.token, body: { oldPassword: vPwd0, newPassword: vPwd },
+  });
+  const stuToken2 = (vcp.body || {}).token;
+  t('★投票测试用学生账号就绪', !!stuToken2, JSON.stringify(vcp.body).slice(0, 120));
+
+  /* ============ ① 静态护栏：路由 / DDL 两路径 / 挂载点 ============ */
+  t('★worker 注册了 /api/votes 路由',
+    /import votesHandler from '\.\/votes\.js'/.test(wrkSrc) && /case 'votes':/.test(wrkSrc));
+  t('★schema.sql 记录两张投票表',
+    /create table if not exists class_votes/.test(sqlSrc)
+    && /create table if not exists class_vote_ballots/.test(sqlSrc));
+  /* v3.5.1 的教训：新表必须「老库升级路径 + 全新库全量清单」两处都建 */
+  const cvCount = (httpSrc2.match(/create table if not exists class_votes/g) || []).length;
+  const cvbCount = (httpSrc2.match(/create table if not exists class_vote_ballots/g) || []).length;
+  t('★两表在 ensureSchema 两条路径都建了（各 ≥ 2 次）',
+    cvCount >= 2 && cvbCount >= 2, 'class_votes ' + cvCount + ' 次 / ballots ' + cvbCount + ' 次');
+  t('★前台投票专区挂到板块 7 且不独占（卡片仍在）',
+    /popBannerHtml\(c\.id\)[\s\S]{0,200}c\.id === 7 \? voteEmbedHtml\(\) : ''\)[\s\S]{0,20}\+ inner/.test(idxV));
+  t('★后台注册「投票管理」面板',
+    /id:'votes'/.test(admV) && /votes:\s*renderVotes,/.test(admV));
+  t('★点歌加权函数在前台后台都就位',
+    /function djWeightedIdx/.test(admV) && /function djWeightOf/.test(admV));
+  t('★每日一言来源开关三处齐全（默认值/normalize/守卫）',
+    /quoteNet: 1/.test(idxV) && /out\.quoteNet = \(o\.quoteNet === 0\) \? 0 : 1/.test(idxV)
+    && /if\(typeof UI !== 'undefined' && UI\.quoteNet === 0\) return;/.test(idxV));
+
+  t('★三个版本号同步升到 3.5.6',
+    /SITE_VERSION = '3\.5\.6'/.test(idxV) && /SITE_VERSION = '3\.5\.6'/.test(admV)
+    && /API_VER = '3\.5\.6'/.test(wrkSrc));
+
+  /* ============ ①b 成绩分析增强（v3.5.6 任务 4）静态护栏 ============ */
+  t('★需关注四档筛选 + 可排序',
+    /function scCareFilter/.test(idxV) && /function scCareSort/.test(idxV)
+    && /连续两次退步/.test(idxV));
+  t('★三类统计函数齐全（优秀/及格/低分）',
+    /function scBandCard/.test(idxV) && /function scBandStats/.test(idxV) && /SC_BANDS/.test(idxV));
+  t('★三类统计卡已插进全班成绩单',
+    /\+ scBandCard\(st\)[\s\S]{0,120}sc-tblwrap/.test(idxV));
+  t('★表格下方自动文字总结',
+    /function scCareSummary/.test(idxV) && /sc-care-sum/.test(idxV));
+  t('★我的画像 AI 分析卡已挂进渲染链',
+    /html \+= scMeAnalysis\(meRow, rk, st, myTotal, myRank, subs\)/.test(idxV)
+    && /function scMeAnalysis/.test(idxV));
+  t('★AI 分析声明不联网不上传成绩',
+    /不联网/.test(idxV) && /不会把成绩发到任何服务器/.test(idxV));
+  t('★「连续两次退步」的上一场数据走懒加载（不当场阻塞）',
+    /function scLoadPrevPack/.test(idxV) && /scLoadPrevPack\(ex\.id\)/.test(idxV));
+  t('★新增样式都有暗色覆盖（sc-chip / sc-band / sc-ai）',
+    /\.dark \.sc-chip\{/.test(idxV) && /\.dark \.sc-band\{/.test(idxV) && /\.dark \.sc-ai-concl\{/.test(idxV));
+
+  /* ============ ② 建投票 ============ */
+  const mk = await call('/api/votes?action=create', {
+    method: 'POST', token: adminToken,
+    body: { title: '运动会入场式服装', kind: 'normal', options: [{ label: '统一校服' }, { label: '自备运动服' }], note: '测试用' },
+  });
+  t('★管理员能创建投票', mk.status === 200 && mk.body.ok, JSON.stringify(mk.body).slice(0, 200));
+  const vid = mk.body.id;
+  t('★创建返回新投票 id', !!vid, JSON.stringify(mk.body).slice(0, 160));
+  /* create 只回 id，带选项的完整对象从 list 拿 */
+  const mkList = await call('/api/votes?action=list', { token: adminToken });
+  const mkRow = ((mkList.body || {}).votes || []).find(x => String(x.id) === String(vid));
+  t('★新建的投票带两个选项', !!mkRow && (mkRow.options || []).length === 2,
+    JSON.stringify((mkRow || {}).options || []).slice(0, 160));
+
+  /* 少于两个选项必须拒 */
+  const mkBad = await call('/api/votes?action=create', {
+    method: 'POST', token: adminToken, body: { title: '只有一个选项', options: [{ label: 'A' }] },
+  });
+  t('★只有一个选项被拒 400', mkBad.status === 400, '实际 ' + mkBad.status);
+  const mkEmpty = await call('/api/votes?action=create', {
+    method: 'POST', token: adminToken, body: { title: '', options: [{ label: 'A' }, { label: 'B' }] },
+  });
+  t('★空标题被拒 400', mkEmpty.status === 400, '实际 ' + mkEmpty.status);
+  /* 学生不许建 */
+  const mkStu = await call('/api/votes?action=create', {
+    method: 'POST', token: stuToken2, body: { title: '学生偷偷建', options: [{ label: 'A' }, { label: 'B' }] },
+  });
+  t('★学生建投票被拒 403', mkStu.status === 403, '实际 ' + mkStu.status);
+
+  /* ============ ③ 学生投票 / 改票 / 一人一票 ============ */
+  const list1 = await call('/api/votes?action=list', { token: stuToken2 });
+  const v1 = ((list1.body || {}).votes || []).find(x => String(x.id) === String(vid));
+  t('★学生在列表里能看到这条投票', !!v1, JSON.stringify((list1.body || {}).votes || []).length + ' 条');
+  /* 未截止时必须显式给 null（不是 undefined）—— 前端靠 results 判断走条形图还是选项 */
+  t('★投票进行中不下发票数（results 恒为 null）', !!v1 && v1.results === null,
+    JSON.stringify(v1 && v1.results).slice(0, 60));
+  const optA = ((v1 || {}).options || [])[0] || {};
+  const optB = ((v1 || {}).options || [])[1] || {};
+
+  const cast1 = await call('/api/votes?action=vote', {
+    method: 'POST', token: stuToken2, body: { voteId: vid, choices: [optA.id] },
+  });
+  t('★学生投票成功', cast1.status === 200 && cast1.body.ok, JSON.stringify(cast1.body).slice(0, 160));
+
+  const cast2 = await call('/api/votes?action=vote', {
+    method: 'POST', token: stuToken2, body: { voteId: vid, choices: [optB.id] },
+  });
+  t('★同一人可改票（覆盖不是新增）', cast2.status === 200 && cast2.body.ok, JSON.stringify(cast2.body).slice(0, 160));
+
+  /* 库里应只有 1 条 ballot */
+  const bRow = db.prepare('select count(*) as n from class_vote_ballots where vote_id = ?');
+  bRow.bind([Number(vid)]);
+  bRow.step();
+  const bN = bRow.getAsObject().n;
+  bRow.free();
+  t('★一人一票：库里只有 1 条投票记录', Number(bN) === 1, '实际 ' + bN);
+
+  /* 乱填选项 id 必须拒 */
+  const castBad = await call('/api/votes?action=vote', {
+    method: 'POST', token: stuToken2, body: { voteId: vid, choices: ['o999'] },
+  });
+  t('★投不存在的选项被拒 400', castBad.status === 400, '实际 ' + castBad.status);
+
+  /* ============ ④ 允许加选项 / 上限 / 不许加时被拒 ============ */
+  const addNo = await call('/api/votes?action=add-option', {
+    method: 'POST', token: stuToken2, body: { voteId: vid, label: '汉服' },
+  });
+  t('★未开启「允许加选项」时被拒 403', addNo.status === 403, '实际 ' + addNo.status);
+
+  await call('/api/votes?action=update', {
+    method: 'POST', token: adminToken,
+    body: { voteId: vid, title: '运动会入场式服装', kind: 'normal', allowAdd: true,
+            options: [{ label: '统一校服' }, { label: '自备运动服' }] },
+  });
+  const addYes = await call('/api/votes?action=add-option', {
+    method: 'POST', token: stuToken2, body: { voteId: vid, label: '汉服' },
+  });
+  t('★开启后学生能自己加选项', addYes.status === 200 && addYes.body.ok, JSON.stringify(addYes.body).slice(0, 160));
+  const afterAdd = await call('/api/votes?action=list', { token: stuToken2 });
+  const vAdd = ((afterAdd.body || {}).votes || []).find(x => String(x.id) === String(vid));
+  t('★加选项后选项数变 3', ((vAdd || {}).options || []).length === 3,
+    JSON.stringify(((vAdd || {}).options || []).map(o => o.label)));
+
+  const addDup = await call('/api/votes?action=add-option', {
+    method: 'POST', token: stuToken2, body: { voteId: vid, label: '汉服' },
+  });
+  t('★重复选项被拒（409 或 400）', [400, 409].includes(addDup.status), '实际 ' + addDup.status);
+
+  /* ============ ⑤ 编辑投票：按 label 保留老选项 id（票不丢） ============ */
+  const before = await call('/api/votes?action=list', { token: adminToken });
+  const vb = ((before.body || {}).votes || []).find(x => String(x.id) === String(vid));
+  const idOfA = (vb.options.find(o => o.label === '统一校服') || {}).id;
+  await call('/api/votes?action=update', {
+    method: 'POST', token: adminToken,
+    body: { voteId: vid, title: '运动会入场式服装（改）', kind: 'normal', allowAdd: true,
+            options: [{ label: '统一校服' }, { label: '自备运动服' }, { label: '汉服' }] },
+  });
+  const after = await call('/api/votes?action=list', { token: adminToken });
+  const va = ((after.body || {}).votes || []).find(x => String(x.id) === String(vid));
+  const idOfA2 = (va.options.find(o => o.label === '统一校服') || {}).id;
+  t('★改标题/选项后同名选项的 id 保持不变（已投的票不会丢）',
+    !!idOfA && idOfA === idOfA2, idOfA + ' → ' + idOfA2);
+  t('★标题改动生效', va.title === '运动会入场式服装（改）', va.title);
+
+  /* ============ ⑥ 截止 → 结果下发 ============ */
+  const close = await call('/api/votes?action=set-status', {
+    method: 'POST', token: adminToken, body: { voteId: vid, status: 'closed' },
+  });
+  t('★管理员能截止投票', close.status === 200 && close.body.ok, JSON.stringify(close.body).slice(0, 160));
+
+  const closedList = await call('/api/votes?action=list', { token: stuToken2 });
+  const vc = ((closedList.body || {}).votes || []).find(x => String(x.id) === String(vid));
+  t('★截止后学生能拿到结果', !!vc && Array.isArray(vc.results), JSON.stringify(vc && vc.results).slice(0, 160));
+  const sumN = ((vc || {}).results || []).reduce((a, r) => a + (r.n || 0), 0);
+  t('★结果票数合计 = 1（一人一票改过一次）', sumN === 1, '实际 ' + sumN);
+
+  const voteClosed = await call('/api/votes?action=vote', {
+    method: 'POST', token: stuToken2, body: { voteId: vid, choices: [optA.id] },
+  });
+  t('★已截止的投票不能再投（400 业务拒绝）', voteClosed.status === 400, '实际 ' + voteClosed.status);
+
+  /* 多选约束：开一条多选 → 单选也得多选才对 */
+  const mkMulti = await call('/api/votes?action=create', {
+    method: 'POST', token: adminToken,
+    body: { title: '多选测试', options: [{ label: 'x' }, { label: 'y' }, { label: 'z' }], multi: false },
+  });
+  const mid = mkMulti.body.id;
+  const ml2 = await call('/api/votes?action=list', { token: adminToken });
+  const mrow = ((ml2.body || {}).votes || []).find(x => String(x.id) === String(mid));
+  const mopts = (mrow || {}).options || [];
+  const multiCast = await call('/api/votes?action=vote', {
+    method: 'POST', token: stuToken2, body: { voteId: mid, choices: [mopts[0].id, mopts[1].id] },
+  });
+  t('★单选投票一次投两个被拒 400', multiCast.status === 400, '实际 ' + multiCast.status);
+
+  /* ============ ⑦ 歌单投票 → 写抽歌排期 ============ */
+  const mkSong = await call('/api/votes?action=create', {
+    method: 'POST', token: adminToken,
+    body: { title: '本周歌单投票', kind: 'song',
+            options: [{ label: '歌甲' }, { label: '歌乙' }, { label: '歌丙' }] },
+  });
+  const sid2 = mkSong.body.id;
+  t('★能建歌单投票', mkSong.status === 200 && !!sid2, JSON.stringify(mkSong.body).slice(0, 160));
+  const songList0 = await call('/api/votes?action=list', { token: adminToken });
+  const vSong0 = ((songList0.body || {}).votes || []).find(x => String(x.id) === String(sid2));
+  t('★歌单投票 kind=song', !!vSong0 && vSong0.kind === 'song', JSON.stringify((vSong0 || {}).kind));
+  const sOpts = (vSong0 || {}).options || [];
+  for (const o of sOpts.slice(0, 2)) {
+    await call('/api/votes?action=vote', { method: 'POST', token: stuToken2, body: { voteId: sid2, choices: [o.id] } });
+  }
+  await call('/api/votes?action=set-status', { method: 'POST', token: adminToken, body: { voteId: sid2, status: 'closed' } });
+  const songList = await call('/api/votes?action=list', { token: adminToken });
+  const vs = ((songList.body || {}).votes || []).find(x => String(x.id) === String(sid2));
+  t('★歌单投票截止后带 results 供写排期', !!vs && Array.isArray(vs.results) && vs.results.length === 3,
+    JSON.stringify((vs || {}).results || []).length + ' 项');
+
+  /* ============ ⑧ 删除 ============ */
+  const del = await call('/api/votes?action=delete', {
+    method: 'POST', token: adminToken, body: { voteId: vid },
+  });
+  t('★管理员能删除投票', del.status === 200 && del.body.ok, JSON.stringify(del.body).slice(0, 160));
+  const delBallot = db.prepare('select count(*) as n from class_vote_ballots where vote_id = ?');
+  delBallot.bind([Number(vid)]);
+  delBallot.step();
+  const dbN = delBallot.getAsObject().n;
+  delBallot.free();
+  t('★删投票时选票一并清掉（不留孤儿）', Number(dbN) === 0, '实际 ' + dbN);
+
+  const listAfter = await call('/api/votes?action=list', { token: adminToken });
+  const gone = ((listAfter.body || {}).votes || []).find(x => String(x.id) === String(vid));
+  t('★删掉的投票不再出现在列表里', !gone);
+
+  /* 清理剩余测试投票 */
+  for (const id of [mid, sid2]) {
+    if (id) await call('/api/votes?action=delete', { method: 'POST', token: adminToken, body: { voteId: id } });
   }
 }
 

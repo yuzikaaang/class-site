@@ -899,7 +899,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.5';
+var SITE_VERSION = '3.5.6';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -1563,6 +1563,7 @@ var PAGES = [
   { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
   { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
   { id:'scores',        label:'成绩分析', icon:'activity',  group:'内容',  title:'成绩分析（考试 / 导入 / 改分 / 发布）' },
+  { id:'votes',         label:'投票管理', icon:'check',     group:'内容',  title:'投票管理（发起投票 / 截止时间 / 结果）' },
   { id:'releases',      label:'版本更新', icon:'clock',     group:'内容',  title:'版本更新记录' },
   { id:'popups',        label:'通用弹窗', icon:'bell',      group:'内容',  title:'通用弹窗（开屏弹 / 板块弹）' },
   { id:'cards',         label:'首页卡片', icon:'layers',    group:'内容',  title:'首页卡片（每日一言 / 学习卡片）' },
@@ -1622,6 +1623,7 @@ function go(page){
     song:          renderSong,
     dj:            renderDj,
     scores:        renderScores,
+    votes:         renderVotes,
     releases:      renderReleases,
     popups:        renderPopups,
     cards:         renderCards,
@@ -8068,6 +8070,10 @@ var DJ_STATE = {
   pick: [],           /* 本次抽中的歌（用于「复制公示」校验） */
   loaded: false,      /* 云端数据是否已拉过 */
   dirtyLocal: false,  /* 本机是否有可迁移的旧数据 */
+  /* v3.5.6 点歌人加权：考试进步 / 班委身份两个加成，管理员在抽签面板调。
+     wmap = { 点歌人姓名: { prog:进步了没, comm:是不是班委 } }，抽签时按需拉一次 */
+  weight: { on: false, prog: 2, comm: 1 },
+  wmap: null,
 };
 
 /* ---- 兼容读取：云端那份可能被写成数组，也可能写成 {schedule:[...]} ---- */
@@ -8244,6 +8250,16 @@ function renderDj(){
     +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>'
     +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludeSched" checked> 排除已排期</label>'
     +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer" title="同一位同学点的歌，同一次抽签最多上一首"><input type="checkbox" id="djOnePer" checked> 每人限一首</label>'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer" title="考试进步的同学、班委，歌被随机抽中的概率更高"><input type="checkbox" id="djWeightOn"> 点歌人加权</label>'
+    +   '</div>'
+    +   '<div id="djWeightBox" style="display:none;margin-bottom:12px;padding:10px 12px;border:1px solid var(--line,#e5dcd2);border-radius:10px">'
+    +     '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +       '<div class="field" style="margin:0;width:150px"><label>考试进步加成</label>'
+    +         '<input type="number" id="djWProg" min="0" max="20" step="0.5" value="2" title="最近两场考试班内总分排名靠前＝进步，权重加这么多"></div>'
+    +       '<div class="field" style="margin:0;width:150px"><label>班委身份加成</label>'
+    +         '<input type="number" id="djWComm" min="0" max="20" step="0.5" value="1" title="有班级职务（班长/委员/课代表等）＝班委，权重加这么多"></div>'
+    +     '</div>'
+    +     '<p class="muted" style="font-size:.78rem;margin:8px 0 0;line-height:1.6">进步按最近两场有成绩的考试算（总分班内排名靠前）；班委按后台头衔任命算。加成只作用于随机抽取，「高赞必选」不受影响。设为 0 即关闭该项。</p>'
     +   '</div>'
     +   '<button class="btn" id="djRunBtn" style="width:100%">🎲 开始抽签</button>'
     +   '<div id="djResult" style="margin-top:12px"></div>'
@@ -8280,6 +8296,23 @@ function renderDj(){
   $('djClearBtn').onclick = djClear;
 
   $('djTo').value = djNowLocal();
+
+  /* 点歌人加权：勾选才显示两个加成输入框 */
+  var wOn = $('djWeightOn'), wBox = $('djWeightBox');
+  if(wOn && wBox){
+    wOn.checked = !!DJ_STATE.weight.on;
+    var wp = $('djWProg'), wc = $('djWComm');
+    if(wp) wp.value = String(DJ_STATE.weight.prog);
+    if(wc) wc.value = String(DJ_STATE.weight.comm);
+    wBox.style.display = wOn.checked ? '' : 'none';
+    wOn.onchange = function(){
+      DJ_STATE.weight.on = !!wOn.checked;
+      wBox.style.display = wOn.checked ? '' : 'none';
+      if(wOn.checked) djLoadWeightMap().catch(function(){});
+    };
+    if(wp) wp.oninput = function(){ DJ_STATE.weight.prog = Math.max(0, Number(wp.value) || 0); };
+    if(wc) wc.oninput = function(){ DJ_STATE.weight.comm = Math.max(0, Number(wc.value) || 0); };
+  }
 
   /* 拉云端数据；成功后检查要不要提示迁移旧数据 */
   djLoadCloud().then(function(){
@@ -8355,6 +8388,14 @@ function djRun(){
   if(!(topN >= 0)) topN = 0;
   var wantTop = topN;
 
+  /* v3.5.6 点歌人加权：读面板配置；开了就先拉加权数据（头衔 + 最近两场成绩）再抽 */
+  var wOnEl = $('djWeightOn');
+  DJ_STATE.weight.on = !!(wOnEl && wOnEl.checked);
+  if(DJ_STATE.weight.on){
+    DJ_STATE.weight.prog = Math.max(0, Number(($('djWProg') || {}).value) || 0);
+    DJ_STATE.weight.comm = Math.max(0, Number(($('djWComm') || {}).value) || 0);
+  }
+
   var box = $('djResult');
   if(box) box.innerHTML = '<div class="loading" style="padding:12px"><div class="spinner"></div>正在拉取歌单并抽签…</div>';
 
@@ -8362,7 +8403,10 @@ function djRun(){
   var tFrom = f && f.value ? new Date(f.value).getTime() : -Infinity;
   var tTo = t && t.value ? new Date(t.value).getTime() : Infinity;
 
-  djFetchSongs().then(function(songs){
+  djFetchSongs()
+    .then(function(){ return DJ_STATE.weight.on ? djLoadWeightMap() : null; })
+    .then(function(){
+    var songs = DJ_STATE.songs;
     var exIds = djExcludedMap(), exReq = djExcludedReqMap();
     var auto = djAutoExclude();
     var pool = songs.filter(function(s){
@@ -8406,17 +8450,20 @@ function djRun(){
         if(onePer && rqD && usedReq[rqD]) deferred++;
       }
     }
-    /* 2) 其余随机：每中一首，同步剔除同一人的其他歌 */
+    /* 2) 其余随机：每中一首，同步剔除同一人的其他歌。
+       v3.5.6：开了点歌人加权时按权重抽（进步 / 班委加成），否则等概率 */
     var bag = pool.filter(function(s){
       if(usedId[s.id]) return false;
       var rq = djReqName(s);
       return !(onePer && rq && usedReq[rq]);
     });
+    var boosted = 0;
     while(picked.length < n && bag.length){
-      var idx = Math.floor(Math.random() * bag.length);
+      var idx = djWeightedIdx(bag);
       var s = bag[idx];
       bag.splice(idx, 1);
       if(!take(s)) continue;
+      if(djWeightOf(djReqName(s)) > 1) boosted++;
       if(onePer){
         var rq2 = djReqName(s);
         if(rq2){ for(var j = bag.length - 1; j >= 0; j--){ if(djReqName(bag[j]) === rq2) bag.splice(j, 1); } }
@@ -8438,6 +8485,10 @@ function djRun(){
     rec.params = {
       top: guarantee.length, picked: picked.length, onePer: onePer,
       exPlayed: !!excl, exSched: !!exclSched, pool: pool.length, persons: personCnt,
+      /* v3.5.6 点歌人加权（null = 本次没开） */
+      weight: DJ_STATE.weight.on
+        ? { on: true, prog: DJ_STATE.weight.prog, comm: DJ_STATE.weight.comm, boosted: boosted }
+        : null,
     };
     rounds.push(rec);
     DJ_STATE.pick = picked;
@@ -8446,12 +8497,17 @@ function djRun(){
       var gset = {}; guarantee.forEach(function(s){ gset[s.id] = 1; });
       var rows = picked.map(function(s, i){
         var rq = djReqName(s);
-        return (gset[s.id] ? '🔥 ' : '') + (i + 1) + '. ' + esc(s.title || '?') + ' - ' + esc(s.artist || '未知歌手')
+        var wgt = djWeightOf(rq) > 1 ? '⚖ ' : '';
+        return wgt + (gset[s.id] ? '🔥 ' : '') + (i + 1) + '. ' + esc(s.title || '?') + ' - ' + esc(s.artist || '未知歌手')
           + '（' + (rq ? '点歌：' + esc(rq) + ' · ' : '') + '点赞 ' + (s.voteCount || 0) + '）';
       }).join('<br>');
       var mode = (topN > 0 ? '高赞必选 ' + guarantee.length + ' 首 + ' : '') + '随机'
         + (onePer ? ' · 每人限一首' : ' · 不限制每人首数')
         + (excl ? ' · 排除已播放' : '') + (exclSched ? ' · 排除已排期' : '')
+        + (DJ_STATE.weight.on
+            ? ' · 点歌人加权（进步 +' + DJ_STATE.weight.prog + '／班委 +' + DJ_STATE.weight.comm
+              + '，加权中选 ' + boosted + ' 首，⚖ 标记）'
+            : '')
         + ' · 池中 ' + pool.length + ' 首' + (onePer ? ' / ' + personCnt + ' 位同学' : '');
       var shortMsg = '';
       if(picked.length < wantN){
@@ -8493,6 +8549,122 @@ function djFetchSongs(){
     DJ_STATE.songs = list || [];
     return DJ_STATE.songs;
   });
+}
+
+/* ============================ 点歌人加权（v3.5.6）============================
+ * 站主要求：抽签排期能按「考试进退步 / 班委身份」给点歌人加权 ——
+ * 进步的同学、当班委的同学，歌被随机抽中的概率更高。
+ * 权重只作用在**随机那一部分**：「高赞必选」是管理员明确点名要的，不掺权重。
+ *
+ * 数据来源（都是后台已有接口，不新增后端）：
+ *   ① 班委身份 → /api/admin?action=titles：profiles[].titles 非空 = 有班级职务
+ *      （头衔白名单：班长/副班长/团支书/学习委员/纪律委员/生活委员/体育委员/
+ *       文艺委员/电教委/各科课代表）
+ *   ② 考试进退步 → /api/scores?action=list 取最近两场有成绩的考试，
+ *      分别拉 board，按「总分赋分」口径算班内总分排名；新的比旧的排名靠前 = 进步。
+ *      （排名算法与前台成绩分析一致：同分并列 1,2,2,4；赋分科取 assigned）
+ *
+ * 姓名匹配按点歌人姓名精确比对（去空白）。成绩表姓名与账号名不一致时
+ * （姓名对照表那种情况）对不上就不加权，不影响抽签本身。
+ * ========================================================================= */
+function djTotalOfRow(row, subs, basis){
+  var t = 0, any = false;
+  for(var i = 0; i < subs.length; i++){
+    var v = row.s && row.s[subs[i].key];
+    if(!v) continue;
+    var val = (basis === 'graded' && subs[i].graded && v.assigned != null) ? v.assigned : v.raw;
+    if(val == null) continue;
+    t += val; any = true;
+  }
+  return any ? t : null;
+}
+/* 同分并列排名（1,2,2,4）——与前台 scRankMap 同一算法 */
+function djRankByName(rows, subs, basis){
+  var arr = [];
+  rows.forEach(function(r){
+    var t = djTotalOfRow(r, subs, basis);
+    if(t != null) arr.push({ name: String(r.name || '').trim(), v: t });
+  });
+  arr.sort(function(a, b){ return b.v - a.v; });
+  var out = {}, rank = 0, prev = null;
+  arr.forEach(function(x, i){
+    if(prev === null || x.v !== prev){ rank = i + 1; prev = x.v; }
+    if(x.name && out[x.name] == null) out[x.name] = rank;
+  });
+  return out;
+}
+function djLoadWeightMap(){
+  if(DJ_STATE.wmap) return Promise.resolve(DJ_STATE.wmap);
+  var map = {};
+  return Promise.all([
+    api('/admin?action=titles').catch(function(){ return null; }),
+    api('/scores?action=list').catch(function(){ return null; }),
+  ]).then(function(res){
+    /* ① 班委 */
+    var tj = res[0];
+    ((tj && tj.profiles) || []).forEach(function(p){
+      var nm = String(p.name || '').trim();
+      if(!nm) return;
+      var comm = !!(p.titles && p.titles.length);
+      if(!map[nm]) map[nm] = { prog: false, comm: false };
+      map[nm].comm = comm;
+    });
+    /* ② 进退步：最近两场有成绩的考试 */
+    var sj = res[1];
+    var exams = ((sj && sj.exams) || []).filter(function(e){
+      return e && e.id && (e.rowCount == null || e.rowCount > 0);
+    });
+    /* 后端按时间倒序给的，再排一次兜底（空日期沉底） */
+    exams.sort(function(a, b){
+      if(a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (b.id || 0) - (a.id || 0);
+    });
+    var last2 = exams.slice(0, 2);
+    if(last2.length === 2){
+      return Promise.all(last2.map(function(e){
+        return api('/scores?action=board&exam=' + e.id).catch(function(){ return null; });
+      })).then(function(bs){
+        var older = bs[1], newer = bs[0];   /* last2[0] 最新 */
+        if(older && newer && older.rows && newer.rows){
+          var rOld = djRankByName(older.rows, older.exam.subjects || [], 'graded');
+          var rNew = djRankByName(newer.rows, newer.exam.subjects || [], 'graded');
+          Object.keys(rNew).forEach(function(nm){
+            if(rOld[nm] == null) return;               /* 上一场没这个人，无从谈进退步 */
+            if(rNew[nm] < rOld[nm]){                    /* 名次变小 = 进步 */
+              if(!map[nm]) map[nm] = { prog: false, comm: false };
+              map[nm].prog = true;
+            }
+          });
+        }
+        DJ_STATE.wmap = map;
+        return map;
+      });
+    }
+    DJ_STATE.wmap = map;
+    return map;
+  });
+}
+/* 某个点歌人的权重倍数（1 = 不加成） */
+function djWeightOf(name){
+  var w = DJ_STATE.weight;
+  if(!w.on) return 1;
+  var info = DJ_STATE.wmap && DJ_STATE.wmap[name];
+  if(!info) return 1;
+  var mul = 1;
+  if(info.prog && w.prog > 0) mul += w.prog;
+  if(info.comm && w.comm > 0) mul += w.comm;
+  return mul;
+}
+/* 加权随机取一个下标：权重 = 1 + 加成；全部为 1 时行为与等概率一致 */
+function djWeightedIdx(bag){
+  var total = 0, i;
+  for(i = 0; i < bag.length; i++) total += djWeightOf(djReqName(bag[i]));
+  var r = Math.random() * total;
+  for(i = 0; i < bag.length; i++){
+    r -= djWeightOf(djReqName(bag[i]));
+    if(r <= 0) return i;
+  }
+  return bag.length - 1;
 }
 
 /* ============================ 歌单管理（按歌曲 / 按点歌人） ============================ */
@@ -8810,6 +8982,10 @@ function djParamsLine(r, pickedLen){
   if(p.exPlayed) ex.push('已播放');
   if(p.exSched) ex.push('已排期');
   if(ex.length) seg.push('排除' + ex.join('、'));
+  /* v3.5.6 点歌人加权（老批次没有这个字段，不显示） */
+  if(p.weight && p.weight.on){
+    seg.push('点歌人加权（进步 +' + (p.weight.prog || 0) + '／班委 +' + (p.weight.comm || 0) + '）');
+  }
   if(p.pool) seg.push('池中 ' + p.pool + ' 首');
   return seg.join(' · ');
 }
@@ -8886,6 +9062,21 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "3.5.6",
+      "date": "2026-10-17",
+      "title": "投票管理 · 成绩分析增强 · 点歌加权 · 每日一言可切来源",
+      "items": [
+        "新增「投票管理」：可建投票、设截止时间、单选或多选、可选开放「学生自己加选项」；同学在「班级事务 → 投票」里投票，一人一票、投完可改，截止后统一公布结果",
+        "歌单投票：选项直接取点歌平台的歌，结果按票数取前五，对应周一至周五的播放安排，可一键写入抽歌排期",
+        "成绩分析「需关注学生」可按类型筛选：全部、总分不达标、仅单科拖后腿、连续两次退步",
+        "成绩分析新增优秀率 / 及格率 / 低分率三项统计，阈值随分数线自动取，没填分数线时按 85% / 60% / 40% 折算",
+        "全班成绩单下方自动生成一段文字总结：分数段分布、与上次相比的班级均分变化、最值得注意的科目",
+        "「我的画像」新增分析卡片：按最近的成绩给出优势科目、薄弱科目、稳定性评价和改进建议",
+        "抽歌排期支持点歌人加权：考试进步、担任班委的同学被抽中的概率更高，加成比例可自行调整，高赞必选不受影响",
+        "「自定义设置 → 每日一言」可切换联网 API 或仅用本地句库；联网时内容改为动画、漫画、文学、诗词四类"
+      ]
+    },
     {
       "version": "3.5.5",
       "date": "2026-10-17",
@@ -9683,6 +9874,348 @@ function relSeed(){
       ]
     }
   ];
+}
+
+/* ============================================================================
+ * ⑬-B 面板：投票管理（v3.5.6）
+ * ----------------------------------------------------------------------------
+ * 站主需求（v3.5.6.0 清单第三条）：
+ *   「后台投票管理：标题 / 选项 / 截止时间 / 允许学生新增选项开关；
+ *     前端投票专区；歌单投票取前五对应周一至周五。」
+ *
+ * 【数据在哪】后端 /api/votes（api/votes.js），表 class_votes / class_vote_ballots。
+ *   本面板只做「建 / 改 / 截止 / 删 / 看结果」，票数一律信服务端的统计。
+ *
+ * 【歌单投票怎么来】
+ *   选项不从本面板手输，而是从「点歌管理」那套 vhFetchSongs 拉到的歌单里挑。
+ *   挑完写成 kind='song' 的投票，选项里带 songId，结果取前五时能回查歌曲信息。
+ *   前台投票专区显示「歌单」标签，管理员在结果页可一键把前五写进抽歌排期。
+ * ========================================================================= */
+var VO = { list: [], busy: false };
+
+function renderVotes(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">投票管理</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">同学在「班级事务 → 投票」里参与，一人一票，截止后公布结果</p></div>'
+    +   '<button class="btn btn-sm btn-secondary" id="voRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +   '<button class="btn btn-sm" id="voNew">' + svg('plus',14) + ' 新建投票</button>'
+    + '</div>'
+    + '<div id="voList"><div class="loading"><div class="spinner"></div>加载中…</div></div>';
+
+  $('voRefresh').onclick = function(){ voLoad(); };
+  $('voNew').onclick = function(){ voEditorDialog(null); };
+  voLoad();
+}
+
+function voLoad(){
+  var box = $('voList');
+  if(box) box.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/votes?action=list').then(function(j){
+    VO.list = (j && j.votes) || [];
+    voPaint();
+  }).catch(function(e){
+    if(box) box.innerHTML = '<div class="alert danger">读取失败：' + esc(e.message || e) + '</div>';
+  });
+}
+
+function voStatusText(v){
+  if(v.status === 'closed') return { text: '已截止', cls: 'muted' };
+  if(!v.deadline) return { text: '进行中 · 不限截止', cls: 'ok' };
+  var ms = Date.parse(v.deadline) - Date.now();
+  if(ms <= 0) return { text: '已过截止时间', cls: 'muted' };
+  var d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000);
+  return { text: '进行中 · 还剩 ' + (d > 0 ? d + ' 天' : h + ' 小时'), cls: 'ok' };
+}
+
+function voPaint(){
+  var box = $('voList');
+  if(!box) return;
+  if(!VO.list.length){
+    box.innerHTML = '<div class="panel"><p class="muted" style="margin:0;font-size:.86rem">还没有投票。点右上角「新建投票」发起一个。</p></div>';
+    return;
+  }
+  box.innerHTML = VO.list.map(function(v){
+    var st = voStatusText(v);
+    var total = 0, maxN = 0;
+    (v.results || []).forEach(function(r){ total += r.n; if(r.n > maxN) maxN = r.n; });
+    var resHtml = '';
+    if(v.results){
+      resHtml = '<div style="margin-top:10px">' + v.results.map(function(r){
+        var pct = maxN > 0 ? Math.round(r.n / maxN * 100) : 0;
+        return '<div style="position:relative;padding:7px 10px;border-radius:8px;background:var(--bg-2,#faf6f2);margin-bottom:6px;overflow:hidden">'
+          + '<div style="position:absolute;left:0;top:0;bottom:0;width:' + pct + '%;background:#ffe4cf"></div>'
+          + '<div style="position:relative;display:flex;justify-content:space-between;gap:10px;font-size:.82rem">'
+          +   '<span>' + esc(r.label) + (r.by === 'student' ? ' <span class="muted" style="font-size:.7rem">同学提</span>' : '') + '</span>'
+          +   '<span class="muted" style="white-space:nowrap">' + r.n + ' 票</span>'
+          + '</div></div>';
+      }).join('') + '</div>';
+    }else{
+      resHtml = '<p class="muted" style="margin:10px 0 0;font-size:.8rem">'
+        + '进行中，票数在截止后公布（防止看到结果再投）。选项 ' + (v.options || []).length + ' 个。</p>';
+    }
+    var top5 = '';
+    if(v.kind === 'song' && v.results){
+      var top = v.results.slice().sort(function(a, b){ return b.n - a.n; }).slice(0, 5);
+      top5 = '<div style="margin-top:10px;padding:10px;border-radius:8px;background:var(--bg-2,#faf6f2)">'
+        + '<b style="font-size:.82rem">前五（对应周一至周五）</b>'
+        + '<ol style="margin:6px 0 0;padding-left:20px;font-size:.82rem;line-height:1.8">'
+        + top.map(function(o, i){
+            return '<li>' + esc(o.label) + ' <span class="muted">（' + o.n + ' 票 · 周' + '一二三四五'[i] + '）</span></li>';
+          }).join('')
+        + '</ol>'
+        + '<button class="btn btn-sm btn-secondary" style="margin-top:8px" data-vo-top5="' + v.id + '">'
+        +   svg('music',13) + ' 写入抽歌排期</button></div>';
+    }
+    return '<div class="panel" style="margin-bottom:12px">'
+      + '<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">'
+      +   '<div style="flex:1;min-width:160px">'
+      +     '<b style="font-size:.9rem">' + esc(v.title) + '</b>'
+      +     (v.kind === 'song' ? '<span class="badge" style="margin-left:6px">歌单</span>' : '')
+      +     '<div class="muted" style="font-size:.76rem;margin-top:3px">'
+      +       st.text
+      +       + (v.deadline ? ' · 截止 ' + esc(String(v.deadline).slice(0, 16).replace('T', ' ')) : '')
+      +       + (v.multi ? ' · 多选' : ' · 单选')
+      +       + (v.allowAdd ? ' · 允许同学加选项' : '')
+      +       + (v.results ? ' · ' + (v.voters || total) + ' 人参与' : '')
+      +     '</div>'
+      +   '</div>'
+      +   '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      +     '<button class="btn btn-sm btn-ghost" data-vo-edit="' + v.id + '">' + svg('edit',13) + ' 编辑</button>'
+      +     (v.status === 'open'
+              ? '<button class="btn btn-sm btn-ghost" data-vo-close="' + v.id + '">' + svg('lock',13) + ' 截止并公布</button>'
+              : '<button class="btn btn-sm btn-ghost" data-vo-reopen="' + v.id + '">' + svg('unlock',13) + ' 重新打开</button>')
+      +     '<button class="btn btn-sm btn-ghost" style="color:#b3261e" data-vo-del="' + v.id + '">' + svg('trash',13) + ' 删除</button>'
+      +   '</div>'
+      + '</div>'
+      + (v.note ? '<p class="muted" style="font-size:.8rem;margin:8px 0 0">' + esc(v.note) + '</p>' : '')
+      + resHtml
+      + top5
+      + '</div>';
+  }).join('');
+
+  /* 绑定 */
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-edit]'), function(b){
+    b.onclick = function(){ voEditorDialog(voFind(Number(b.dataset.voEdit))); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-close]'), function(b){
+    b.onclick = function(){ voSetStatus(Number(b.dataset.voClose), 'closed'); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-reopen]'), function(b){
+    b.onclick = function(){ voSetStatus(Number(b.dataset.voReopen), 'open'); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-del]'), function(b){
+    b.onclick = function(){ voDelete(Number(b.dataset.voDel)); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-top5]'), function(b){
+    b.onclick = function(){ voWriteTop5(Number(b.dataset.voTop5)); };
+  });
+}
+
+function voFind(id){
+  for(var i = 0; i < VO.list.length; i++) if(VO.list[i].id === id) return VO.list[i];
+  return null;
+}
+
+function voSetStatus(id, st){
+  api('/votes?action=set-status', { method: 'POST', body: { voteId: id, status: st } })
+    .then(function(j){ toast(j.message || '已更新', 'ok'); voLoad(); })
+    .catch(function(e){ toast(e.message || String(e), 'err', 4000); });
+}
+
+function voDelete(id){
+  var v = voFind(id);
+  confirmBox({
+    title: '删除投票',
+    text: '确定删除「' + ((v && v.title) || id) + '」？所有投票记录会一并删除，不可恢复。',
+    danger: true,
+    okText: '删除'
+  }).then(function(yes){
+    if(!yes) return;
+    api('/votes?action=delete', { method: 'POST', body: { voteId: id } })
+      .then(function(j){ toast(j.message || '已删除', 'ok'); voLoad(); })
+      .catch(function(e){ toast(e.message || String(e), 'err', 4000); });
+  });
+}
+
+/* 歌单投票：把前五写进抽歌排期（一个新的「批次」，周一至周五各一首） */
+function voWriteTop5(id){
+  var v = voFind(id);
+  if(!v || !v.results){ toast('还没有结果', 'err'); return; }
+  var top = v.results.slice().sort(function(a, b){ return b.n - a.n; }).slice(0, 5);
+  if(!top.length){ toast('这条投票没有选项', 'err'); return; }
+  var DAYS = ['周一', '周二', '周三', '周四', '周五'];
+  var rec = {
+    id: Date.now(),
+    at: new Date().toLocaleString('zh-CN', { hour12: false }),
+    note: '投票前五：「' + v.title + '」（' + top.map(function(o, i){ return DAYS[i] + ' ' + o.label; }).join('；') + '）',
+    addedToPlatform: false,
+    played: false,
+    songs: top.map(function(o, i){
+      return {
+        id: o.songId != null ? o.songId : ('vote-' + o.id),
+        title: o.label,
+        artist: '投票第 ' + (i + 1) + ' 名',
+        votes: o.n,
+        requester: '',
+      };
+    }),
+    params: { fromVote: id, voteTitle: v.title, days: DAYS.slice(0, top.length) },
+  };
+  api('/content').then(function(j){
+    var cur = (j && j.items && j.items.dj_schedule) || [];
+    var rounds = Array.isArray(cur) ? cur.slice() : (cur && Array.isArray(cur.schedule) ? cur.schedule.slice() : []);
+    rounds.push(rec);
+    return api('/content', { method: 'PUT', body: { items: { dj_schedule: rounds } } });
+  }).then(function(){
+    toast('已写入抽歌排期（' + top.length + ' 首）', 'ok');
+  }).catch(function(e){
+    toast('写入失败：' + (e.message || e), 'err', 4000);
+  });
+}
+
+/* 新建 / 编辑投票的弹窗 */
+function voEditorDialog(v){
+  var isNew = !v;
+  var opts = (v && v.options) ? v.options.map(function(o){ return o.label; }).join('\n') : '';
+  openModal({
+    title: isNew ? '新建投票' : '编辑投票',
+    sub: isNew ? '选项一行一个；至少两个' : '已投的票会按选项文字对应保留',
+    wide: true,
+    body:
+      '<div class="field"><label>投票标题</label>'
+      +   '<input id="voTitle" maxlength="60" placeholder="例如：这次班级活动的主题" value="' + attr((v && v.title) || '') + '"></div>'
+      + '<div class="field"><label>类型</label>'
+      +   '<select id="voKind">'
+      +     '<option value="normal"' + (v && v.kind === 'song' ? '' : ' selected') + '>普通投票</option>'
+      +     '<option value="song"' + (v && v.kind === 'song' ? ' selected' : '') + '>歌单投票（从点歌平台选歌）</option>'
+      +   '</select></div>'
+      + '<div class="field"><label>选项（一行一个）</label>'
+      +   '<textarea id="voOpts" rows="6" placeholder="选项一&#10;选项二">' + esc(opts) + '</textarea>'
+      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">歌单投票可以直接在这里粘贴歌名，也可以用下面的「从点歌平台挑」。</p>'
+      +   '</div>'
+      + '<div id="voSongPick" style="display:none;margin-bottom:12px"></div>'
+      + '<div class="field"><label>截止时间（留空 = 不限截止）</label>'
+      +   '<input type="datetime-local" id="voDeadline" value="' + attr((v && v.deadline) ? String(v.deadline).slice(0, 16) : '') + '"></div>'
+      + '<div class="field"><label>说明（选填）</label>'
+      +   '<input id="voNote" maxlength="200" placeholder="投票说明，会显示在标题下方" value="' + attr((v && v.note) || '') + '"></div>'
+      + '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.86rem;margin-bottom:8px">'
+      +   '<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voMulti"' + (v && v.multi ? ' checked' : '') + '> 允许多选</label>'
+      +   '<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voAllowAdd"' + (v && v.allowAdd ? ' checked' : '') + '> 允许同学自己加选项</label>'
+      + '</div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>' + (isNew ? '创建' : '保存') + '</button>',
+    onMount: function(box){
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = submit;
+
+      /* 类型切到「歌单投票」时才显示挑歌区 */
+      var kindSel = box.querySelector('#voKind');
+      var pick = box.querySelector('#voSongPick');
+      var syncKind = function(){
+        var isSong = kindSel.value === 'song';
+        pick.style.display = isSong ? '' : 'none';
+        if(isSong && !pick.getAttribute('data-ready')){
+          pick.setAttribute('data-ready', '1');
+          voMountSongPick(pick);
+        }
+      };
+      kindSel.onchange = syncKind;
+      syncKind();
+    }
+  });
+
+  /* 校验 → 收集 → 提交。返回 false 时不关弹窗（保留用户输入） */
+  function submit(){
+    var title = String((document.getElementById('voTitle') || {}).value || '').trim();
+    if(!title){ toast('标题不能为空', 'err'); return; }
+    var lines = String((document.getElementById('voOpts') || {}).value || '')
+      .split(/\n+/).map(function(x){ return x.trim(); }).filter(Boolean);
+    /* 去重保序 */
+    var seen = {}, options = [];
+    lines.forEach(function(l){ if(!seen[l]){ seen[l] = 1; options.push({ label: l }); } });
+    if(options.length < 2){ toast('至少填两个选项', 'err'); return; }
+    var dl = String((document.getElementById('voDeadline') || {}).value || '').trim();
+    var payload = {
+      title: title,
+      kind: (document.getElementById('voKind') || {}).value || 'normal',
+      options: options,
+      multi: !!(document.getElementById('voMulti') || {}).checked,
+      allowAdd: !!(document.getElementById('voAllowAdd') || {}).checked,
+      note: String((document.getElementById('voNote') || {}).value || ''),
+      deadline: dl ? new Date(dl).toISOString() : null,
+    };
+    if(!isNew) payload.voteId = v.id;
+    var btn = document.querySelector('#modalBox [data-yes]');
+    if(btn){ btn.disabled = true; btn.textContent = isNew ? '创建中…' : '保存中…'; }
+    api('/votes?action=' + (isNew ? 'create' : 'update'), { method: 'POST', body: payload })
+      .then(function(j){ closeModal(); toast(j.message || '已保存', 'ok'); voLoad(); })
+      .catch(function(e){
+        if(btn){ btn.disabled = false; btn.textContent = isNew ? '创建' : '保存'; }
+        toast(e.message || String(e), 'err', 4000);
+      });
+  }
+}
+
+/* 从点歌平台挑歌，勾中的追加到「选项」文本框 */
+function voMountSongPick(host){
+  host.innerHTML = '<div class="panel" style="padding:12px 14px">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+    +   '<b style="font-size:.86rem">从点歌平台挑歌</b>'
+    +   '<input id="voPickQ" placeholder="搜歌名或歌手" style="flex:1;min-width:140px;max-width:260px;padding:6px 10px;font-size:.82rem">'
+    +   '<button class="btn btn-sm btn-secondary" id="voPickLoad" type="button">刷新歌单</button>'
+    + '</div>'
+    + '<div id="voPickBody" class="muted" style="font-size:.8rem">点「刷新歌单」加载平台上的歌</div>'
+    + '<div style="margin-top:10px"><button class="btn btn-sm btn-secondary" id="voPickAdd" type="button">把勾选的加进选项</button></div>'
+    + '</div>';
+  var body = host.querySelector('#voPickBody');
+  var q = host.querySelector('#voPickQ');
+  var cache = [];
+  host.querySelector('#voPickLoad').onclick = function(){
+    body.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+    /* 复用抽签那套取歌逻辑（分页拉全量），不新增接口 */
+    vhFetchSongs().then(function(list){
+      cache = list || [];
+      paint();
+    }).catch(function(e){
+      body.innerHTML = '<span style="color:var(--danger)">加载失败：' + esc(e.message || e) + '</span>';
+    });
+  };
+  q.oninput = paint;
+  host.querySelector('#voPickAdd').onclick = function(){
+    var checked = body.querySelectorAll('input[data-song]:checked');
+    if(!checked.length){ toast('先勾几首', 'err'); return; }
+    var ta = document.getElementById('voOpts');
+    var cur = String(ta.value || '').split(/\n/).map(function(x){ return x.trim(); }).filter(Boolean);
+    var seen = {}; cur.forEach(function(x){ seen[x] = 1; });
+    var added = 0;
+    Array.prototype.forEach.call(checked, function(el){
+      var label = el.getAttribute('data-song');
+      if(!seen[label]){ seen[label] = 1; cur.push(label); added++; }
+    });
+    ta.value = cur.join('\n');
+    toast('加了 ' + added + ' 首（重复的已跳过）', 'ok');
+  };
+  function paint(){
+    var kw = String(q.value || '').trim().toLowerCase();
+    var rows = cache.filter(function(s){
+      if(!kw) return true;
+      return (String(s.title || '') + ' ' + String(s.artist || '')).toLowerCase().indexOf(kw) >= 0;
+    }).slice(0, 60);
+    if(!rows.length){ body.innerHTML = '<span>没有匹配的歌</span>'; return; }
+    body.innerHTML = '<div style="max-height:220px;overflow:auto;display:grid;gap:2px">'
+      + rows.map(function(s){
+          var name = String(s.title || '').trim();
+          var meta = [s.artist, (s.votes != null ? s.votes + ' 赞' : '')].filter(Boolean).join(' · ');
+          /* 选项文字只放歌名 —— 投票选项是给人看的，歌手名挤进去反而乱 */
+          return '<label style="display:flex;align-items:center;gap:8px;padding:3px 2px;cursor:pointer">'
+            + '<input type="checkbox" data-song="' + attr(name) + '">'
+            + '<span style="font-size:.82rem">' + esc(name) + '</span>'
+            + '<span class="muted" style="font-size:.74rem;margin-left:auto">' + esc(meta) + '</span>'
+            + '</label>';
+        }).join('')
+      + '</div>';
+  }
 }
 
 function renderReleases(){
