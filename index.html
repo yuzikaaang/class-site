@@ -1924,6 +1924,9 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-arw{font-style:normal;color:#c2410c;margin-left:2px}
 .sc-card{background:#fff;border:1px solid #f0e7de;border-radius:14px;padding:13px 14px;margin-top:12px}
 .sc-card-h{font-size:.82rem;font-weight:800;color:#57534e;margin-bottom:10px}
+/* 卡片头带右侧小开关（各科趋势的「分数 / 名次」） */
+.sc-h-flex{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sc-h-flex .sc-seg{margin-left:auto}
 .sc-svgwrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .sc-svg{width:100%;min-width:420px;height:auto;display:block}
 .sc-figcap{font-size:.72rem;color:#7a6a5c;line-height:1.6;margin-top:8px}
@@ -3044,7 +3047,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.1.1';
+var SITE_VERSION = '3.2.0';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3933,6 +3936,7 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
+    { date: "2026-10-17 12:05", text: "📉 「我的画像 → 各科趋势」现在能看<b>名次</b>了：右上角切「分数 / 名次」，名次视角下折线越靠上就是名次越前，每张卡直接写「第几 名 / 全年级人数」和「较上次 名次升/降多少」，本次分数也保留在下面。哪次没导入年级排名会写「暂无名次」。", category: "site" },
     { date: "2026-10-17 11:29", text: "🔧 修好了分享的一个毛病：以前点「编辑」改分享范围，保存后其实没生效（页面读到的还是旧弹窗里的选项）。现在编辑保存会真正生效，链接不变；而且改范围时不会再把已经勾好的「成绩单 / 个人成绩卡」清掉。", category: "site" },
     { date: "2026-10-17 10:48", text: "📈 「我的画像」新增「各科进退步」：最近几次考试，每科的分数和年级排名逐次列出，还标出分数增减、名次升降和稳定性（波动大小）。分享出去的成绩页也能看到这张表。", category: "site" },
     { date: "2026-10-17 10:47", text: "🔗 成绩分享升级：分享页除了每次成绩的具体分值、各科小分和上线情况，现在还多了「历史总分趋势」和「年级排名变化」两张图；「成绩单」和「个人成绩卡」可以同时展示。已建过的分享也能直接改范围，链接不变，不用重新发。", category: "site" },
@@ -12478,6 +12482,7 @@ var SC = {
   quadKey: null,  /* 四象限当前看哪一科 */
   quadSel: null,  /* 四象限当前点开了哪个象限（0..3，null=没点开）——手机点开看名单 */
   quadDot: null,  /* 四象限当前点中的那一个人（下标，null=没点） */
+  subTrend: 'score',  /* 各科趋势看分数还是看名次（'score' | 'rank'） */
   _quad: null,    /* 最近一次四象限渲染的点数据（供点选时算名单，不重新渲染） */
   pkA: null,      /* 成绩对比 PK：A 方成绩行 id（v2.10.0） */
   pkB: null,      /* 成绩对比 PK：B 方成绩行 id（v2.10.0） */
@@ -13591,31 +13596,77 @@ function scTrendBlock(meRow){
    —— 全部浏览器实时算，服务器只给原始分
    ============================================================ */
 
-/* ---------- 各科趋势网格：每科一张小卡（本次 / 班均 / 较上次 / 小折线） ---------- */
+/* 迷你折线（各科趋势卡内）：分数「高好」、名次「小好」，两种口径共用一套画法。 */
+function scMiniLine(pts, betterIsHigh, fmt){
+  if(!pts || pts.length < 2) return '';
+  var mw = 132, mh = 38;
+  var mv = pts.map(function(x){ return x.v; });
+  var vmax = Math.max.apply(null, mv), vmin = Math.min.apply(null, mv);
+  var sp = Math.max(1, vmax - vmin);
+  var px = function(i){ return 5 + (mw - 10) * i / (pts.length - 1); };
+  /* ⚠️ 名次越小越好，所以纵轴要翻过来 —— 好成绩才在上方（跟分数口径同一视觉） */
+  var py = function(v){
+    var t = (v - vmin) / sp;
+    if(!betterIsHigh) t = 1 - t;
+    return 13 + (mh - 26) * (1 - t);
+  };
+  var segs = '';
+  for(var i = 1; i < pts.length; i++){
+    var good = betterIsHigh ? pts[i].v >= pts[i - 1].v : pts[i].v <= pts[i - 1].v;
+    segs += '<line x1="' + px(i - 1).toFixed(1) + '" y1="' + py(pts[i - 1].v).toFixed(1)
+         +  '" x2="' + px(i).toFixed(1) + '" y2="' + py(pts[i].v).toFixed(1)
+         +  '" class="' + (good ? 'sc-up' : 'sc-down') + '" stroke="' + (good ? '#0b7a43' : '#c0392b')
+         +  '" stroke-width="1.8" stroke-linecap="round"/>';
+  }
+  /* 每个点都写数值 —— 手机端没有鼠标悬浮，不写出来就看不到 */
+  var nums = pts.map(function(x, i){
+    if(pts.length > 6 && i !== 0 && i !== pts.length - 1 && i !== Math.floor(pts.length / 2)) return '';
+    var tx = Math.min(Math.max(px(i), 14), mw - 14);
+    return '<text x="' + tx.toFixed(1) + '" y="' + (py(x.v) - 4.5).toFixed(1)
+         + '" font-size="8" font-weight="700" class="sc-mini-num" fill="#7a6a5d" text-anchor="middle"'
+         + ' stroke="#fffdfb" stroke-width="2.6" paint-order="stroke">' + fmt(x.v) + '</text>';
+  }).join('');
+  var dots = pts.map(function(x, i){
+    return '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(x.v).toFixed(1)
+         + '" r="2.2" class="sc-mini-dot" fill="#fff" stroke="#857468" stroke-width="1.1"/>';
+  }).join('');
+  return '<svg viewBox="0 0 ' + mw + ' ' + mh + '" class="sc-mini-svg" style="width:100%;height:38px;display:block;margin-top:4px">'
+       + segs + nums + dots + '</svg>';
+}
+
+/* ---------- 各科趋势网格：每科一张小卡（本次 / 班均 / 较上次 / 小折线） ----------
+   v3.2.0（站主要求「各科趋势还可以看排名变化」）：顶部加「分数 / 名次」切换。
+   名次口径下折线纵轴翻转（越小越靠上），「较上次」换成名次升降。 */
 function scSubjTrend(){
   var items = SC.me || [];
   if(items.length < 1) return '';
   var subs = SC.exam.subjects || [];
+  var mode = (SC.subTrend === 'rank') ? 'rank' : 'score';
+  var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
 
-  function at(it, sub){
+  function scoreAt(it, sub){
     var v = it.s && it.s[sub.key];
     if(!v) return null;
     var val = (SC.basis === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
     return val == null ? null : val;
   }
+  /* 单科年级排名：赋分口径优先用赋分名次，没有就退回原始名次 */
+  function rankAt(it, sub){
+    var v = it.s && it.s[sub.key];
+    if(!v) return null;
+    var r = (SC.basis === 'graded' && sub.graded && v.asgRank != null) ? v.asgRank : v.rank;
+    return r == null ? null : Number(r);
+  }
 
   var cards = [];
   subs.forEach(function(sub){
-    var pts = [];
+    var spts = [], rpts = [];
     items.forEach(function(it){
-      var v = at(it, sub);
-      if(v != null) pts.push({ name: it.name, v: v });
+      var sc0 = scoreAt(it, sub), rk0 = rankAt(it, sub);
+      if(sc0 != null) spts.push({ v: sc0 });
+      if(rk0 != null) rpts.push({ v: rk0 });
     });
-    if(!pts.length) return;
-
-    var cur = pts[pts.length - 1].v;
-    var prev = pts.length > 1 ? pts[pts.length - 2].v : null;
-    var d = prev == null ? null : Math.round((cur - prev) * 10) / 10;
+    if(!spts.length && !rpts.length) return;
 
     var all = [];
     SC.rows.forEach(function(r){
@@ -13624,60 +13675,65 @@ function scSubjTrend(){
     });
     var avg = all.length ? all.reduce(function(a, b){ return a + b; }, 0) / all.length : null;
 
-    /* 迷你折线：按分数变化分段着色（涨绿跌红），一眼看出哪科在掉 */
-    var mini = '';
-    if(pts.length >= 2){
-      var mw = 132, mh = 38;
-      var mv = pts.map(function(x){ return x.v; });
-      var vmax = Math.max.apply(null, mv), vmin = Math.min.apply(null, mv);
-      var sp = Math.max(1, vmax - vmin);
-      var px = function(i){ return 5 + (mw - 10) * i / (pts.length - 1); };
-      /* 上下各留 13px 给数字，折线不贴边 */
-      var py = function(v){ return 13 + (mh - 26) * (1 - (v - vmin) / sp); };
-      var segs = '';
-      for(var i = 1; i < pts.length; i++){
-        var up = pts[i].v >= pts[i - 1].v;
-        segs += '<line x1="' + px(i - 1).toFixed(1) + '" y1="' + py(pts[i - 1].v).toFixed(1)
-             +  '" x2="' + px(i).toFixed(1) + '" y2="' + py(pts[i].v).toFixed(1)
-             +  '" class="' + (up ? 'sc-up' : 'sc-down') + '" stroke="' + (up ? '#0b7a43' : '#c0392b') + '" stroke-width="1.8" stroke-linecap="round"/>';
-      }
-      /* 每个点都写分数 —— 手机端没有鼠标悬浮，不写出来就看不到 */
-      var nums = pts.map(function(x, i){
-        if(pts.length > 6 && i !== 0 && i !== pts.length - 1 && i !== Math.floor(pts.length / 2)) return '';
-        var tx = Math.min(Math.max(px(i), 13), mw - 13);
-        return '<text x="' + tx.toFixed(1) + '" y="' + (py(x.v) - 4.5).toFixed(1)
-             + '" font-size="8" font-weight="700" class="sc-mini-num" fill="#7a6a5d" text-anchor="middle"'
-             + ' stroke="#fffdfb" stroke-width="2.6" paint-order="stroke">' + fmtNum(x.v) + '</text>';
-      }).join('');
-      var dots = pts.map(function(x, i){
-        return '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(x.v).toFixed(1)
-             + '" r="2.2" class="sc-mini-dot" fill="#fff" stroke="#857468" stroke-width="1.1"/>';
-      }).join('');
-      mini = '<svg viewBox="0 0 ' + mw + ' ' + mh + '" class="sc-mini-svg" style="width:100%;height:38px;display:block;margin-top:4px">'
-           + segs + nums + dots + '</svg>';
+    var cur = spts.length ? spts[spts.length - 1].v : null;
+    var prevS = spts.length > 1 ? spts[spts.length - 2].v : null;
+    var dS = (cur == null || prevS == null) ? null : Math.round((cur - prevS) * 10) / 10;
+    var rcur = rpts.length ? rpts[rpts.length - 1].v : null;
+    var rprev = rpts.length > 1 ? rpts[rpts.length - 2].v : null;
+    var dR = (rcur == null || rprev == null) ? null : (rprev - rcur);   /* 正数 = 名次前进 = 进步 */
+
+    var body;
+    if(mode === 'rank'){
+      body = (rcur == null
+          ? '<div class="sc-sub-score sc-dim" style="font-size:1.15rem">暂无名次</div>'
+            + '<div class="sc-sub-diff sc-dim">该科还没导入年级排名</div>'
+          : '<div class="sc-sub-score">第 ' + rcur + '<small>' + (gradeN ? '/' + gradeN + ' 名' : '名') + '</small></div>'
+            + '<div class="sc-sub-diff ' + (dR == null ? 'sc-dim' : dR > 0 ? 'up' : dR < 0 ? 'down' : '') + '">'
+            +   (dR == null ? '首次考试，暂无对比'
+                           : '较上次 名次' + (dR > 0 ? ' ↑' + dR : dR < 0 ? ' ↓' + Math.abs(dR) : ' 持平'))
+            + '</div>'
+            + (cur == null ? '' : '<div class="sc-sub-diff sc-dim">分数 ' + fmtNum(cur) + ' / ' + sub.full + '</div>'))
+        + scMiniLine(rpts, false, function(v){ return String(Math.round(v)); });
+    } else {
+      body = (cur == null
+          ? '<div class="sc-sub-score sc-dim" style="font-size:1.15rem">未考</div>'
+          : '<div class="sc-sub-score">' + fmtNum(cur) + '<small>/' + sub.full + '</small></div>')
+        + (cur != null && avg != null
+            ? '<div class="sc-sub-diff ' + (cur - avg >= 0 ? 'up' : 'down') + '">'
+              + (cur - avg >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(cur - avg)) + ' 分</div>'
+            : '')
+        + (dS == null
+            ? '<div class="sc-sub-diff sc-dim">首次考试，暂无对比</div>'
+            : '<div class="sc-sub-diff ' + (dS > 0 ? 'up' : dS < 0 ? 'down' : '') + '">较上次 '
+              + (dS > 0 ? '↑ ' : dS < 0 ? '↓ ' : '— ') + fmtNum(Math.abs(dS)) + ' 分</div>')
+        + scMiniLine(spts, true, fmtNum);
     }
 
     cards.push('<div class="sc-sub">'
       + '<div class="sc-sub-top"><b>' + esc(sub.name) + '</b>'
       +   (sub.graded && SC.basis === 'graded' ? '<span class="sc-tag">赋分</span>' : '')
-      +   '<span class="sc-sub-rk">' + pts.length + ' 次</span></div>'
-      + '<div class="sc-sub-score">' + fmtNum(cur) + '<small>/' + sub.full + '</small></div>'
-      + (avg == null ? '' : '<div class="sc-sub-diff ' + (cur - avg >= 0 ? 'up' : 'down') + '">'
-          + (cur - avg >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(cur - avg)) + ' 分</div>')
-      + (d == null
-          ? '<div class="sc-sub-diff sc-dim">首次考试，暂无对比</div>'
-          : '<div class="sc-sub-diff ' + (d > 0 ? 'up' : d < 0 ? 'down' : '') + '">较上次 '
-            + (d > 0 ? '↑ ' : d < 0 ? '↓ ' : '— ') + fmtNum(Math.abs(d)) + ' 分</div>')
-      + mini
+      +   '<span class="sc-sub-rk">' + (mode === 'rank' ? rpts.length : spts.length) + ' 次</span></div>'
+      + body
       + '</div>');
   });
 
   if(!cards.length) return '';
-  return '<div class="sc-card"><div class="sc-card-h">各科趋势（' + (SC.basis === 'graded' ? '赋分口径' : '原始口径') + '）</div>'
+  var basisTxt = SC.basis === 'graded' ? '赋分口径' : '原始口径';
+  return '<div class="sc-card"><div class="sc-card-h sc-h-flex">各科趋势（' + basisTxt + ' · '
+    + (mode === 'rank' ? '看名次' : '看分数') + '）'
+    + '<span class="sc-seg sc-seg-sm">'
+    +   '<button class="' + (mode === 'score' ? 'on' : '') + '" onclick="scSetSubTrend(\'score\')">分数</button>'
+    +   '<button class="' + (mode === 'rank' ? 'on' : '') + '" onclick="scSetSubTrend(\'rank\')">名次</button>'
+    + '</span></div>'
     + '<div class="sc-subs">' + cards.join('') + '</div>'
-    + '<div class="sc-figcap">折线为该科历次走势：绿色为上涨，红色为下跌。</div>'
+    + '<div class="sc-figcap">'
+    +   (mode === 'rank'
+        ? '折线是该科历次<b>年级排名</b>：越靠上名次越前，绿色＝名次前进、红色＝后退。'
+        : '折线为该科历次走势：绿色为上涨，红色为下跌。')
+    + '</div>'
     + '</div>';
 }
+function scSetSubTrend(m){ SC.subTrend = (m === 'rank') ? 'rank' : 'score'; scRenderPane(); }
 
 /* ---------- 年级进退步（用校排名；系统算不出全校，只能靠导入） ---------- */
 /* 各科进退步（最近几次对比）：分数 + 年级排名，较上次升降，稳定性 ——

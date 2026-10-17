@@ -896,7 +896,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.1.1';
+var SITE_VERSION = '3.2.0';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -8464,6 +8464,17 @@ function relSeed(){
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
     {
+      "version": "3.2.0",
+      "date": "2026-10-17",
+      "title": "各科趋势可看名次 + 姓名对照支持「选账号」与「直接改名」",
+      "items": [
+        "「我的画像 → 各科趋势」顶部多了「分数 / 名次」切换：看名次时折线纵轴翻转（名次越前越靠上），卡片直接写「第 N / 全年级人数」，并标「较上次 名次 ↑/↓ 多少」，下面仍保留本次分数",
+        "名次口径跟总分口径联动：切「赋分」时化学/生物用赋分名次，切「原始」时用原始名次；哪次没导入年级排名就显示「暂无名次」，不会画一条假的线",
+        "后台「姓名对照」现在两条路都通：① 是同一个人、只是叫法不同 → 选一个账号点「关联」（候选写成「姓名（账号）」，同名也能分清）；② 名字打错了 → 在「改成正确姓名」里填对点「改名」，直接改成绩行里的姓名，不再单独建对照关系",
+        "一个错名出现在多次考试时，可以点「按考试分别改 ▾」，逐次单独改（只改那一次）；若某次考试里本来就有正确姓名那一行，会报出来并跳过，避免同一个人变成两条记录"
+      ]
+    },
+    {
       "version": "3.1.1",
       "date": "2026-10-17",
       "title": "修两处交互：编辑分享保存不生效 / 四象限名单与图对不上",
@@ -9860,28 +9871,56 @@ function scNamePaint(){
   if(!el) return;
   var mapKeys = Object.keys(SC_NAME.map || {});
   var rows = SC_NAME.unbound || [];
+  /* 候选账号写成「姓名（账号）」—— 同名不同账号时也能分清 */
   var opts = SC_NAME.users.map(function(u){
-    return '<option value="' + attr(u.name) + '">' + esc(u.name) + '</option>';
+    var label = u.name + (u.username && u.username !== u.name ? '（' + u.username + '）' : '');
+    return '<option value="' + attr(u.name) + '">' + esc(label) + '</option>';
+  }).join('');
+  var nameOpts = SC_NAME.users.map(function(u){
+    return '<option value="' + attr(u.name) + '">';
   }).join('');
 
-  var html = '<div class="alert info" style="margin-bottom:14px">'
-    + '成绩表里的姓名和站点账号对不上的同学会列在下面（比如改了名）。给他选一个账号、点「关联」，'
-    + '他登录后就能看到自己的成绩了。<b>不会改动账号本身</b>，只是记一条对照关系，存在云端。'
+  var html = '<datalist id="nmNames">' + nameOpts + '</datalist>'
+    + '<div class="alert info" style="margin-bottom:14px">'
+    + '成绩表里的姓名和站点账号对不上的会列在下面，按情况选一种：<br>'
+    + '<b>① 是同一个人、只是叫法不同</b>（比如改名了）→ 右边<b>选一个账号</b>点「关联」，'
+    + '记一条对照关系，以后导入自动认。<br>'
+    + '<b>② 名字压根打错了</b> → 在「改成正确姓名」里填对再点「改名」，'
+    + '直接把成绩行里的名字改掉（<b>不建对照关系</b>）；名字出现在多次考试的，还能「按考试分别改」。<br>'
+    + '两种做法都<b>不会改动账号本身</b>。'
     + '</div>';
 
   if(rows.length){
     html += '<div style="font-weight:700;margin-bottom:8px">还没对上的姓名（' + rows.length + ' 个）</div>'
       + '<div style="max-width:100%;overflow:auto"><table style="width:100%">'
-      + '<thead><tr><th>成绩表里的姓名</th><th>出现次数</th><th>他是班里的谁</th><th></th></tr></thead><tbody>'
+      + '<thead><tr><th>成绩表里的姓名</th><th>出现</th>'
+      +   '<th>① 关联到账号</th><th>② 改成正确姓名</th></tr></thead><tbody>'
       + rows.map(function(x){
+          var exs = x.exams || [];
+          var exRows = exs.map(function(e){
+            return '<tr data-nm-exof="' + attr(x.name) + '" style="display:none">'
+              + '<td colspan="4" style="padding:4px 8px 4px 24px;background:#faf7f3">'
+              +   '<span class="muted" style="font-size:.78rem">' + esc(e.name) + '　' + esc(e.date || '')
+              +     '　' + e.rows + ' 行</span>'
+              +   ' <input data-nm-exinput="' + attr(x.name + '|' + e.id) + '" list="nmNames" '
+              +     'placeholder="正确姓名" style="width:120px;margin:0 6px;padding:3px 6px">'
+              +   ' <button class="btn btn-sm" data-nm-exgo="' + attr(x.name + '|' + e.id) + '">只改这次</button>'
+              + '</td></tr>';
+          }).join('');
           return '<tr>'
-            + '<td><b>' + esc(x.name) + '</b>' + (x.alias ? '<span class="badge badge-gray" style="margin-left:6px">已配 ' + esc(x.alias) + '</span>' : '') + '</td>'
+            + '<td><b>' + esc(x.name) + '</b>'
+            +   (x.alias ? '<span class="badge badge-gray" style="margin-left:6px">已配 ' + esc(x.alias) + '</span>' : '')
+            +   (exs.length > 1 ? '<div><a href="javascript:;" data-nm-toggle="' + attr(x.name) + '" '
+                  + 'style="font-size:.74rem;color:#c2410c">按考试分别改 ▾</a></div>' : '')
+            + '</td>'
             + '<td class="muted">' + x.count + ' 次考试</td>'
-            + '<td><select data-nm-pick="' + attr(x.name) + '" style="max-width:190px">'
-            +   '<option value="">— 选择账号 —</option>' + opts
-            + '</select></td>'
-            + '<td><button class="btn btn-sm" data-nm-bind="' + attr(x.name) + '">关联</button></td>'
-            + '</tr>';
+            + '<td><select data-nm-pick="' + attr(x.name) + '" style="max-width:180px">'
+            +   '<option value="">— 选择账号 —</option>' + opts + '</select>'
+            +   ' <button class="btn btn-sm" data-nm-bind="' + attr(x.name) + '">关联</button></td>'
+            + '<td><input data-nm-rename="' + attr(x.name) + '" list="nmNames" '
+            +   'placeholder="正确姓名" style="width:120px;padding:3px 6px">'
+            +   ' <button class="btn btn-sm btn-secondary" data-nm-rn-go="' + attr(x.name) + '">改名</button></td>'
+            + '</tr>' + exRows;
         }).join('')
       + '</tbody></table></div>';
   } else {
@@ -9898,27 +9937,85 @@ function scNamePaint(){
             + '<td><button class="btn btn-sm btn-ghost" data-nm-unbind="' + attr(k) + '" style="color:#b3261e">取消关联</button></td></tr>';
         }).join('')
       + '</tbody></table></div>'
-      + '<p class="muted" style="font-size:.8rem;margin:8px 0 0">取消关联后，这些成绩行会解绑账号（成绩数据不动，只是他个人页看不到自己的那部分）。</p>';
+      + '<p class="muted" style="font-size:.8rem;margin:8px 0 0">取消关联后，这些成绩行会解绑账号（成绩数据不动，只是他个人页看不到自己的那部分）。'
+      + '如果其实是名字打错了，用上面的「② 改名」更合适 —— 改完就一劳永逸。</p>';
   }
 
   el.innerHTML = html;
 
-  Array.prototype.forEach.call(el.querySelectorAll('[data-nm-bind]'), function(b){
+  var each = Array.prototype.forEach;
+  var pickOf = function(name, attrName){
+    var box = null;
+    each.call(el.querySelectorAll('[' + attrName + ']'), function(x){
+      if(x.getAttribute(attrName) === name) box = x;
+    });
+    return box;
+  };
+
+  each.call(el.querySelectorAll('[data-nm-bind]'), function(b){
     b.onclick = function(){
       var name = b.getAttribute('data-nm-bind');
-      var sel = el.querySelector('[data-nm-pick]');
-      /* 一行一个下拉，按姓名找那一个（避免同名 DOM 选择器踩到引号） */
-      Array.prototype.forEach.call(el.querySelectorAll('[data-nm-pick]'), function(s){
-        if(s.getAttribute('data-nm-pick') === name) sel = s;
-      });
+      var sel = pickOf(name, 'data-nm-pick');
       var target = sel ? sel.value : '';
       if(!target){ toast('先给他选一个账号', 'err'); return; }
       scNameBind(name, target);
     };
   });
-  Array.prototype.forEach.call(el.querySelectorAll('[data-nm-unbind]'), function(b){
+  each.call(el.querySelectorAll('[data-nm-unbind]'), function(b){
     b.onclick = function(){ scNameBind(b.getAttribute('data-nm-unbind'), ''); };
   });
+
+  /* ② 直接改名：全部（这个名字出现在所有考试里） */
+  each.call(el.querySelectorAll('[data-nm-rn-go]'), function(b){
+    b.onclick = function(){
+      var name = b.getAttribute('data-nm-rn-go');
+      var inp = pickOf(name, 'data-nm-rename');
+      var to = inp ? String(inp.value || '').trim() : '';
+      if(!to){ toast('先填要改成的正确姓名', 'err'); return; }
+      if(to === name){ toast('改前和改后是同一个名字', 'err'); return; }
+      scNameRename(name, to, 0);
+    };
+  });
+
+  /* 「按考试分别改」展开/收起 */
+  each.call(el.querySelectorAll('[data-nm-toggle]'), function(a){
+    a.onclick = function(){
+      var name = a.getAttribute('data-nm-toggle');
+      var open = a.getAttribute('data-open') === '1';
+      a.setAttribute('data-open', open ? '0' : '1');
+      a.textContent = open ? '按考试分别改 ▾' : '收起 ▴';
+      each.call(el.querySelectorAll('[data-nm-exof]'), function(tr){
+        if(tr.getAttribute('data-nm-exof') === name) tr.style.display = open ? 'none' : 'table-row';
+      });
+    };
+  });
+  /* ② 直接改名：只改某一次 */
+  each.call(el.querySelectorAll('[data-nm-exgo]'), function(b){
+    b.onclick = function(){
+      var key = b.getAttribute('data-nm-exgo');
+      var k = key.split('|');
+      var inp = pickOf(key, 'data-nm-exinput');
+      var to = inp ? String(inp.value || '').trim() : '';
+      if(!to){ toast('先填要改成的正确姓名', 'err'); return; }
+      if(to === k[0]){ toast('改前和改后是同一个名字', 'err'); return; }
+      scNameRename(k[0], to, Number(k[1] || 0));
+    };
+  });
+}
+
+/* 直接改成绩行里的姓名（不写别名对照）。examId=0 → 这个名字出现的所有考试都改 */
+function scNameRename(from, to, examId){
+  api('/scores?action=name-rename', { method:'POST', body:{ from: from, to: to, exam: examId || 0 } })
+    .then(function(j){
+      if(!j || !j.ok){ toast('改名失败：' + ((j && j.error) || '未知错误'), 'err', 4200); return; }
+      var msg = '已把「' + from + '」改成「' + to + '」，共 ' + (j.renamed || 0) + ' 行';
+      if(!j.bound) msg += '（新姓名没对上账号，可能又打错了）';
+      var bad = (j.conflicts || []).length;
+      if(bad) msg += '；有 ' + bad + ' 次考试里本来就有「' + to + '」，为免重复没动，请到改分表核对';
+      toast(msg, bad || !j.bound ? 'err' : 'ok', 5600);
+      scNameLoad();
+    })
+    .catch(function(e){ toast('改名失败：' + (e.message || e), 'err', 4200); });
 }
 
 function scNameBind(name, target){

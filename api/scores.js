@@ -290,6 +290,7 @@ async function handlePost(req, res, action) {
     case 'row-delete':   return await rowDelete(req, res);
     case 'config-save':    return await configSave(req, res);
     case 'name-bind':      return await nameBind(req, res);
+    case 'name-rename':    return await nameRename(req, res);
     case 'share-create':   return await shareCreate(req, res);
     case 'share-update':   return await shareUpdate(req, res);
     case 'share-revoke':   return await shareRevoke(req, res);
@@ -1517,11 +1518,38 @@ async function unboundNames(req, res) {
      group by student_name
      order by student_name`;
 
+  /* 每个未识别姓名出现在哪几次考试 —— 站主要求「名字打错了就直接改那次的姓名」，
+     所以得让他看见是哪次、并能按考试单独改（2026-10-17 v3.2.0）。 */
+  const det = await sql`
+    select student_name, exam_id, count(*) as n
+      from exam_scores
+     where user_id is null
+     group by student_name, exam_id`;
+  const exRows = await sql`select id, name, exam_date from exams`;
+  const exInfo = new Map(exRows.map((x) => [Number(x.id), {
+    id: Number(x.id), name: String(x.name || ''), date: fmtDate(x.exam_date),
+  }]));
+  const byName = new Map();
+  det.forEach((r) => {
+    const nm = String(r.student_name || '');
+    const e = exInfo.get(Number(r.exam_id));
+    if (!nm || !e) return;
+    if (!byName.has(nm)) byName.set(nm, []);
+    byName.get(nm).push({ id: e.id, name: e.name, date: e.date, rows: Number(r.n) || 0 });
+  });
+
   const unbound = [];
   groups.forEach((r) => {
     if (r.uid != null) return;
     const nm = String(r.student_name || '');
-    unbound.push({ name: nm, count: Number(r.n) || 0, alias: (cfg.nameMap || {})[nm] || '' });
+    const exs = (byName.get(nm) || []).slice().sort((a, b) =>
+      String(a.date || '').localeCompare(String(b.date || '')) || (a.id - b.id));
+    unbound.push({
+      name: nm,
+      count: Number(r.n) || 0,
+      alias: (cfg.nameMap || {})[nm] || '',
+      exams: exs,
+    });
   });
 
   const users = await sql`
@@ -1541,6 +1569,75 @@ async function unboundNames(req, res) {
 }
 
 /** 把「成绩表里的某个姓名」关联到某个账号（传空 target 即取消关联），并写回对照表 */
+/**
+ * 直接把成绩行里的姓名改成正确的（2026-10-17 站主要求）。
+ * 「也有可能是名字打错了，直接修改那次的姓名就行，不需要单独再关联账户」——
+ * 所以这条路**不写 nameMap**（打错不是别名，改完就该一劳永逸），
+ * 改完若新姓名对得上账号就顺手绑上；对不上也照改，只是仍然算「未识别」。
+ * examId 传了就只改那一次考试，不传就改这个名字出现在所有考试里的行。
+ */
+async function nameRename(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+
+  const b = await body(req);
+  const from = String((b && b.from) || '').trim().slice(0, 30);
+  const to = String((b && b.to) || '').trim().slice(0, 30);
+  const examId = Number((b && (b.exam || b.examId)) || 0);
+  if (!from) return fail(res, 400, '缺少原姓名');
+  if (!to) return fail(res, 400, '缺少要改成的新姓名');
+  if (from === to) return fail(res, 400, '改前和改后是同一个名字，不用改');
+
+  const sql = getSql();
+  const hit = await sql`
+    select id from users
+     where status = 'active' and (display_name = ${to} or username = ${to})
+     order by id limit 1`;
+  const uid = hit.length ? Number(hit[0].id) : null;
+
+  /* 目标姓名在同一场考试里已经有行 → 改完会变成一个人两条记录，跳过并如实报告 */
+  const dupRows = examId
+    ? await sql`select exam_id from exam_scores where exam_id = ${examId} and student_name = ${to}`
+    : await sql`select exam_id from exam_scores where student_name = ${to}`;
+  const dup = new Set(dupRows.map((r) => Number(r.exam_id)));
+
+  const conflicts = [];
+  let renamed = 0;
+
+  if (examId) {
+    if (dup.has(examId)) {
+      conflicts.push(examId);
+    } else {
+      const back = await sql`
+        update exam_scores
+           set student_name = ${to}, user_id = ${uid}, updated_at = now()
+         where exam_id = ${examId} and student_name = ${from}
+        returning id`;
+      renamed = back.length;
+    }
+  } else {
+    const targets = await sql`select distinct exam_id from exam_scores where student_name = ${from}`;
+    const ids = targets.map((r) => Number(r.exam_id)).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+    for (const id of ids) {
+      if (dup.has(id)) { conflicts.push(id); continue; }
+      const back = await sql`
+        update exam_scores
+           set student_name = ${to}, user_id = ${uid}, updated_at = now()
+         where exam_id = ${id} and student_name = ${from}
+        returning id`;
+      renamed += back.length;
+    }
+  }
+
+  const rest = await sql`select distinct student_name from exam_scores where user_id is null`;
+  const stillUnmatched = rest.map((r) => String(r.student_name || '')).filter(Boolean);
+
+  await audit(u.id, 'score-name-rename', examId ? 'exam' : 'score_config', examId || 0,
+    `${from} → ${to}${uid ? '' : '（未匹配账号）'}，${renamed} 行`);
+
+  ok(res, { renamed, bound: !!uid, conflicts, stillUnmatched });
+}
+
 async function nameBind(req, res) {
   const u = await requireAdmin(req, res);
   if (!u) return;
