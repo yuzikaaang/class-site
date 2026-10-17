@@ -7111,7 +7111,8 @@ console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
     'scStats', 'scRankMap', 'scMyRow', 'scPane', 'scPkDefaults', 'scPkRow',
     'scPkSubjAvg', 'scPkPick', 'scPkSwap', 'scDateRange', 'shortName',
     'scRenderPk', 'scPkExam2', 'scPkTrendCard', 'scPkTotalCard', 'scPkSubjCard', 'scPkCards',
-    'scPkBothTotalCard'];   /* v3.5.12 #8：两场总分并列卡 */
+    'scPkBothTotalCard',   /* v3.5.12 #8：两场总分并列卡 */
+    'scPkAiData', 'scPkAiCard'];   /* v3.5.13 #8：AI 对比分析抽到顶层（单场也要有） */
   const missing = names.filter((n) => !fnBody(n));
   t('★PK 依赖函数全部可提取（真值表前提）', missing.length === 0,
     missing.join(',') || '齐全');
@@ -7152,8 +7153,8 @@ console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
       /value="11" selected/.test(html) && /余子康/.test(html));
     t('★默认 B 方选中总分第一（陈曦 464 分）',
       /value="12" selected/.test(html));
-    t('★渲染含选人区 / 交换按钮 / 三个下拉（A、B、对比考试）',
-      html.includes('sc-pk-pick') && html.includes('sc-pk-swap')
+    t('★渲染含选人区 / 三个下拉（A、B、对比考试），v3.5.13 起不再有交换按钮',
+      html.includes('sc-pk-pick') && !html.includes('sc-pk-swap')
       && (html.match(/<select/g) || []).length === 3
       && html.includes('scPkExam2') && html.includes('不对比（只看本场）'));
     t('★「同一场考试」标注当前考试名',
@@ -7824,8 +7825,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.6',
-    /const SCHEMA_VER = '3\.5\.6'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.7',
+    /const SCHEMA_VER = '3\.5\.7'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -9612,8 +9613,8 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('★进退步榜缺历次数据时自动补载（不再误报对不上人）',
     /var curPack = SC\.allRows\[eidOf\(items\[idx\]\)\];[\s\S]{0,400}scLoadAllRows\(\);/.test(idxV)
     && !/!curPack \|\| !prevPack\)[\s\S]{0,200}对不上人/.test(idxV));
-  t('★成绩对比新增文字分析（对比分析卡）',
-    /function analyze\(p, c, prevExam, isA\)/.test(idxV) && /对比分析/.test(idxV) && /analysisHtml/.test(idxV));
+  t('★成绩对比新增文字分析（v3.5.13 起抽为顶层 scPkAiData）',
+    /function analyze\(p, c, prevExam, isA\)/.test(idxV) && /对比分析/.test(idxV) && /function scPkAiData\(/.test(idxV));
   t('★表格下方自动文字总结',
     /function scCareSummary/.test(idxV) && /sc-care-sum/.test(idxV));
   t('★我的画像 AI 分析卡已挂进渲染链',
@@ -9868,8 +9869,8 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /function scPkBothTotalCard\(/.test(idx) && /scPkBothTotalCard\(A, B\)/.test(idx));
   t('#8 卡同时给原始分和赋分两口径',
     /mode === 'graded'/.test(idx) && /赋分后的总分/.test(idx));
-  t('#8 AI 对比分析五段齐全',
-    /function pkAI\(/.test(idx)
+  t('#8 AI 对比分析五段齐全（v3.5.13 改名 scPkAiData，单场也要有）',
+    /function scPkAiData\(/.test(idx) && /function scPkAiCard\(/.test(idx)
     && /差距在哪/.test(idx) && /A 方强弱/.test(idx) && /B 方强弱/.test(idx) && /两场变化/.test(idx)
     && /下一步可以这样做/.test(idx));
   t('#8 AI 分析带“本地规则生成 · 不联网”说明',

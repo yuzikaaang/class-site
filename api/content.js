@@ -47,6 +47,7 @@ const ALLOW_CONTENT_KEYS = [
   'dj_schedule',        // 抽歌排期批次（第二十八轮）：从主站本机 localStorage 迁到云端
   'dj_excluded',        // 抽歌排除清单（第二十八轮）：{ songs:[id], reqs:[点歌人] }
   'release_notes',      // 版本更新记录（第二十八轮）：仅后台可见，前台不展示
+  'vote_pub',           // v3.5.13 投票公示：{ templates:[{id,name,template}], byVote:{ [voteId]:{tplId,on} } }
 ];
 
 /* 课代表能改的字段——只有作业相关。

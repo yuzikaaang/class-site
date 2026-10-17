@@ -27,6 +27,7 @@ import gamesHandler from './games.js';
 import studyHandler from './study.js';
 import scoresHandler from './scores.js';
 import votesHandler from './votes.js';
+import voicehubHandler from './voicehub.js';
 import { cors } from './_lib/http.js';
 
 /* 后端代码版本号（v3.2.1 新增）。
@@ -37,7 +38,7 @@ import { cors } from './_lib/http.js';
    于是回查永远对不上提交号、每次都红了 120 秒后判失败：job 红，线上其实是新的。
    所以加一个**由代码本身带出去**的版本号：只要线上换了代码，它就会变。
    纪律：每轮发布与前台 SITE_VERSION 同步（测试里有断言锁死两者相等）。 */
-const API_VER = '3.5.12';
+const API_VER = '3.5.13';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
 async function adaptRequest(request, env) {
@@ -157,6 +158,11 @@ export default {
         case 'votes':
           /* v3.5.6（投票管理）：班级投票。表见 ensureSchema。 */
           await votesHandler(req, res);
+          break;
+        case 'vh':
+          /* v3.5.13（站主 #3）：VoiceHub 点歌平台只读代理。
+             上游实例无 CORS 头，浏览器直连会被拦，走这里中转。 */
+          await voicehubHandler(req, res);
           break;
         default:
           /* 404 也要回 CORS 头，否则跨域下浏览器会把响应整个拦掉，

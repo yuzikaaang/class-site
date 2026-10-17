@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.6';
+const SCHEMA_VER = '3.5.7';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -167,6 +167,13 @@ export async function ensureSchema(sql) {
             primary key (vote_id, user_id)
           )
         `; } catch (e) {}
+        /* 🔴 v3.5.13 热修（站主反馈「投票显示服务器错误无法加载」）：
+           v3.5.12 给 class_votes 加 proposer 列时只进了「全新库全量清单」，
+           漏了这条升级路径且 SCHEMA_VER 没升 —— 线上老库被版本闸门放行，
+           列一直没建，listVotes 一 select v.proposer 就
+           column "proposer" does not exist → 500。
+           和 v3.5.2 盲索引、v3.5.4 可见档是同一类错误，第三次了。 */
+        try { await s`alter table class_votes add column if not exists proposer text not null default ''`; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())

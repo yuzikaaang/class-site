@@ -1779,6 +1779,18 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   font-size:.84rem;background:#fffdfb;color:#3b2d22}
 .dark .vote-add input{background:#2e2926;border-color:#3d3631;color:#f0e6dc}
 .vote-msg{margin-top:8px;font-size:.78rem;min-height:1em}
+/* v3.5.13 投票公示 */
+.vote-pub{margin-top:10px;border:1px solid #f0e0d0;background:#fffaf5;border-radius:12px;padding:12px 14px}
+.vote-pub-h{font-weight:800;font-size:.86rem;color:#b45309;margin-bottom:6px}
+.vote-pub-body{font-size:.84rem;line-height:1.9;color:#44403c;word-break:break-word}
+.vote-pub-tbl{border-collapse:collapse;margin:6px 0;width:100%}
+.vote-pub-tbl th,.vote-pub-tbl td{border:1px solid #eadfce;padding:5px 10px;font-size:.8rem;text-align:left}
+.vote-pub-tbl th{background:#fdf3e7}
+.dark .vote-pub{border-color:#4a3a2a;background:#2a231c}
+.dark .vote-pub-h{color:#fbbf24}
+.dark .vote-pub-body{color:#d6d0c8}
+.dark .vote-pub-tbl th,.dark .vote-pub-tbl td{border-color:#4a3f30}
+.dark .vote-pub-tbl th{background:#332a20}
 .vote-msg-ok{color:#0a7d42}
 .vote-msg-err{color:#b3261e}
 .dark .vote-msg-ok{color:#4ade80}
@@ -1950,6 +1962,8 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 /* —— 成绩对比 PK（v2.10.0）—— */
 .dark .sc-pk-bar-a{fill:#fdba74}
 .dark .sc-pk-bar-b{fill:#93c5fd}
+.dark .sc-pk-bar-a-prev{fill:#fdba74;opacity:.3}
+.dark .sc-pk-bar-b-prev{fill:#93c5fd;opacity:.3}
 .dark .sc-pk-num-a{fill:#fdba74}
 .dark .sc-pk-num-b{fill:#93c5fd}
 .dark .sc-pk-name{fill:#c9b8aa}
@@ -2355,6 +2369,9 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 /* SVG 语义 class（亮色默认值；暗色覆盖在上方 @media screen） */
 .sc-pk-bar-a{fill:#c2410c}
 .sc-pk-bar-b{fill:#2563eb}
+/* v3.5.13：上一场淡柱（总分图选两场时出现） */
+.sc-pk-bar-a-prev{fill:#c2410c;opacity:.28}
+.sc-pk-bar-b-prev{fill:#2563eb;opacity:.28}
 .sc-pk-num-a{fill:#9a3412}
 .sc-pk-num-b{fill:#1e40af}
 .sc-pk-name{fill:#57534e}
@@ -2431,6 +2448,8 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   /* 柱状图两色：A 橙 / B 蓝（打印时类名仍在，不用内联色也能印出来） */
   .sc-embed .sc-pk-bar-a{fill:#c2410c !important;stroke:#c2410c !important}
   .sc-embed .sc-pk-bar-b{fill:#1d4ed8 !important;stroke:#1d4ed8 !important}
+  .sc-embed .sc-pk-bar-a-prev{fill:#c2410c !important;stroke:#c2410c !important;opacity:.35 !important}
+  .sc-embed .sc-pk-bar-b-prev{fill:#1d4ed8 !important;stroke:#1d4ed8 !important;opacity:.35 !important}
   .sc-embed .sc-pk-grid{stroke:#e6ddd4 !important;fill:none !important}
   .sc-embed .sc-pk-avg{stroke:#857468 !important}
   .sc-embed .sc-pk-name{fill:#292524 !important}
@@ -3383,7 +3402,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.12';
+var SITE_VERSION = '3.5.13';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -4852,6 +4871,38 @@ function openLink(url, wechatOk, label){
   rememberView();
   url = (url||'').trim();
   if(!url || url === '#'){ alert('该入口链接暂未配置，请联系管理员补充'); return; }
+
+  /* ===== v3.5.13（站主 #3）：点歌平台投稿上限守卫 =====
+     后台在 site_config 配了 vhGuard:{ on, limit } 时，跳点歌平台前先查
+     这位同学（按姓名匹配 requester）的未播投稿数 —— 达到上限就拦下来，
+     提示去换一首或联系管理员。检查失败/超时不拦（别把入口搞坏）。 */
+  if(SITE_DATA.vhGuard && SITE_DATA.vhGuard.on && SITE_DATA.vhGuard.limit > 0 && /^https?:\/\//i.test(url)){
+    try{
+      var gBase = url.split('/').slice(0, 3).join('/');
+      var myName = (AUTH && AUTH.user && (AUTH.user.displayName || AUTH.user.display_name || AUTH.user.name)) || '';
+      if(myName){
+        var gName = myName;
+        api('/vh?action=songs&base=' + encodeURIComponent(gBase)).then(function(j){
+          try{
+            var songs = (j && j.songs) || [];
+            var mine = songs.filter(function(it){
+              var s = it.song || it;
+              return !it.played && !s.played && String(s.requester || '').trim() === gName;
+            });
+            if(mine.length >= SITE_DATA.vhGuard.limit){
+              if(!window.confirm('你在点歌平台还有 ' + mine.length + ' 首歌没播（上限 ' + SITE_DATA.vhGuard.limit + ' 首）。\n\n先等播完再投稿哦 —— 仍要继续打开点歌平台吗？')) return;
+            }
+          }catch(e){}
+          __openLinkGo(url, wechatOk, label);
+        }).catch(function(){ __openLinkGo(url, wechatOk, label); });
+        return;
+      }
+    }catch(e){}
+  }
+
+  __openLinkGo(url, wechatOk, label);
+}
+function __openLinkGo(url, wechatOk, label){
   /* 🚀 v2.10.1：跳转单独记一条，带上「入口名 + 目标地址」并立刻发走。
      站主 2026-10-17 反馈：「跳了点歌平台，后台看不到去了哪里」——两个原因：
        ① 原来只记通用点击（内容里只有按钮文字「前往入口」，看不出目的地）；
@@ -6790,6 +6841,7 @@ var CONTENT_MAP = {
   dj_schedule:       null,           /* 抽歌排期（后台专用） */
   dj_excluded:       null,           /* 抽歌排除清单（后台专用） */
   release_notes:     null,           /* 版本更新记录（后台专用，前台不展示） */
+  vote_pub:          'votePub',      /* v3.5.13 投票公示（模版 + 每票配置），前台渲染公示 */
   important_dates:   null,           /* 特殊：落到 IMPORTANT_DATES，见 applyCloudContent() */
   site_config:       null            /* 特殊：见 applySiteConfig() */
 };
@@ -6844,6 +6896,13 @@ function applyCloudContent(items, opts){
       n++;
       return;
     }
+    /* v3.5.13 投票公示：{ templates:[...], byVote:{...} }，落到 SITE_DATA.votePub */
+    if(k === 'vote_pub'){
+      if(typeof v !== 'object' || Array.isArray(v)) return;
+      SITE_DATA.votePub = v;
+      n++;
+      return;
+    }
     /* 重要日期落在独立变量 IMPORTANT_DATES 上，不在 SITE_DATA 里。
        必须整体替换数组（渲染函数都现取 IMPORTANT_DATES，替换后立刻生效），
        不做逐项 patch——避免两份数据混在一起对不上。 */
@@ -6872,6 +6931,14 @@ function applySiteConfig(cfg){
   ['siteName','siteSubtitle','gateQuestion','gateAnswer','welcomeTitle'].forEach(function(k){
     if(cfg[k] !== undefined && cfg[k] !== null) SITE_DATA[k] = cfg[k];
   });
+  /* v3.5.13（站主 #3）：点歌投稿上限守卫 { on, limit } —— 后台「点歌管理」配置。
+     走 site_config 管道最省一个内容键；base 地址固定用点歌入口链接本身。 */
+  if(cfg.vhGuard && typeof cfg.vhGuard === 'object'){
+    SITE_DATA.vhGuard = {
+      on: !!cfg.vhGuard.on,
+      limit: Math.max(0, Number(cfg.vhGuard.limit) || 0),
+    };
+  }
 }
 
 /* ---------------- 每日一言（2026-10-06 新增；v2.6.0 改随机 + 联网；v3.5.6 可切来源）----------------
@@ -8825,16 +8892,28 @@ function actCurPage(){
     return '首页';
   }catch(e){ return ''; }
 }
-/** 记一条。type: click | jump | switch | submit；pg 可覆盖当前页名（跳转类用） */
+/** 记一条。type: click | jump | switch | submit；pg 可覆盖当前页名（跳转类用）
+ *  v3.5.13（站主反馈「一秒内三条一模一样的记录，肯定重复获取了」）：
+ *  同一动作 2 秒内重复触发（连点按钮、多层元素各触发一次）只记第一条。 */
+var __actLogLast = null;
 function actLog(type, target, detail, pg){
   if(!isLoggedIn()) return;
   if(!apiReady()) return;
+  var now = Date.now();
+  var page = pg != null ? String(pg).slice(0, 60) : actCurPage();
+  if(__actLogLast && __actLogLast.a === String(type || 'click').slice(0, 20)
+    && __actLogLast.t === String(target == null ? '' : target).slice(0, 120)
+    && __actLogLast.p === page
+    && (now - __actLogLast.ts) < 2000){
+    return;   /* 2 秒内的同款动作 = 连点/重复触发，不记 */
+  }
+  __actLogLast = { a: String(type || 'click').slice(0, 20), t: String(target == null ? '' : target).slice(0, 120), p: page, ts: now };
   ACT_LOG_Q.push({
     a: String(type || 'click').slice(0, 20),
     t: String(target == null ? '' : target).slice(0, 120),
     d: String(detail == null ? '' : detail).slice(0, 120),
-    p: pg != null ? String(pg).slice(0, 60) : actCurPage(),
-    ts: Date.now()
+    p: page,
+    ts: now
   });
   if(ACT_LOG_Q.length > 200) ACT_LOG_Q = ACT_LOG_Q.slice(-200);
   actLogSave();   /* 🚀 v2.10.1：入队即落盘 —— 点完外链直接跳走/直接关页面也不丢 */
@@ -13143,6 +13222,48 @@ function voteRenderAll(){
   voteBind();
 }
 
+/* ===== v3.5.13 投票公示（站主 #2）=====
+   后台在投票管理里选一个模版并开启后，投票卡下方就会按模版渲染公示内容。
+   模版里可用的变量（由后台模版编辑器提供快捷按钮）：
+     {{标题}} {{提出人}} {{提出日期}} {{截止时间}} {{参与人数}}
+     {{第一名}} {{第二名}} {{第三名}} {{结果表}} */
+function votePubRender(v){
+  try{
+    var pub = (SITE_DATA.votePub || {});
+    var cfg = (pub.byVote || {})[v.id];
+    if(!cfg || !cfg.on || !v.results) return '';
+    var tpl = (pub.templates || []).filter(function(t){ return t.id === cfg.tplId; })[0];
+    if(!tpl) return '';
+    var rs = v.results.slice().sort(function(a, b){ return (b.n || 0) - (a.n || 0); });
+    var totalVotes = rs.reduce(function(s, r){ return s + (r.n || 0); }, 0);
+    var voters = v.voters || totalVotes;
+    var map = {
+      '标题': esc(v.title || ''),
+      '提出人': esc(v.proposer || v.createdByDisplay || v.createdByName || '未记录'),
+      '提出日期': esc(v.createdDate || (v.createdAt ? String(v.createdAt).slice(0, 10) : '')),
+      '截止时间': esc(v.deadline ? voteTimeText(v.deadline) : '不限'),
+      '参与人数': String(voters),
+      '总票数': String(totalVotes),
+      '第一名': esc(rs[0] ? rs[0].label : '—'),
+      '第二名': esc(rs[1] ? rs[1].label : '—'),
+      '第三名': esc(rs[2] ? rs[2].label : '—'),
+      '结果表': '<table class="vote-pub-tbl"><thead><tr><th>排名</th><th>选项</th><th>票数</th></tr></thead><tbody>'
+        + rs.map(function(r, i){
+            return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.label)
+              + '</td><td>' + (r.n || 0) + ' 票</td></tr>';
+          }).join('') + '</tbody></table>',
+    };
+    var html = String(tpl.template || '')
+      .replace(/\{\{\s*([^}]+?)\s*\}\}/g, function(m, k){ return map[k] !== undefined ? map[k] : m; })
+      .replace(/&(?![a-zA-Z#0-9]+;)/g, '&amp;')   /* 裸 & 转义，已写好的实体不动 */
+      .split('\n').join('<br>');
+    return '<div class="vote-pub">'
+      + '<div class="vote-pub-h">📋 公示</div>'
+      + '<div class="vote-pub-body">' + html + '</div>'
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
 /* 一张投票卡 */
 function voteCardHtml(v){
   var multi = !!v.multi;
@@ -13226,6 +13347,7 @@ function voteCardHtml(v){
     + addHtml
     + submitHtml
     + '<div class="vote-msg" id="voteMsg' + v.id + '"></div>'
+    + votePubRender(v)
     + '</div>';
 }
 
@@ -14383,7 +14505,6 @@ function scRenderPk(){
     +   '<div class="sc-pk-side"><label>A 方（橙）</label>'
     +     '<select class="sc-sel" onchange="scPkPick(\'a\', Number(this.value))">'
     +       opts.replace('value="' + A.id + '"', 'value="' + A.id + '" selected') + '</select></div>'
-    +   '<button class="sc-pk-swap" onclick="scPkSwap()" title="交换双方">交换</button>'
     +   '<div class="sc-pk-side"><label>B 方（蓝）</label>'
     +     '<select class="sc-sel" onchange="scPkPick(\'b\', Number(this.value))">'
     +       opts.replace('value="' + B.id + '"', 'value="' + B.id + '" selected') + '</select></div>'
@@ -14408,12 +14529,14 @@ function scRenderPk(){
     + scPkTotalCard(A, B)
     /* ②b v3.5.12（#8）：选中第二场时，两场总分同屏 + 赋分前后对比 */
     + scPkBothTotalCard(A, B)
-    /* ③ 各科分组柱状图 */
-    + scPkSubjCard(A, B)
+    /* ③ 各科分组柱状图 —— v3.5.13（#8）：选了两场时各科对比意义不大，隐藏 */
+    + (SC.pkExam2 == null ? scPkSubjCard(A, B) : '')
     /* ③b 跨考试进退步与趋势（v3.4.0，选了第二场才出现） */
     + scPkTrendCard(A, B)
     /* ④ 强弱项对比卡 */
     + scPkCards(A, B)
+    /* ⑤ v3.5.13（#8）：AI 对比分析，单场/两场都有 */
+    + scPkAiCard(A, B)
     + '</div>';
   scPane(html);
 }
@@ -14426,11 +14549,33 @@ function scPkTotalCard(A, B){
   var W = 640, H = 210, L = 40, R = 20, T = 26, Bp = 60;
   var full = scFullMark();
   var maxV = Math.max(ta == null ? 0 : ta, tb == null ? 0 : 1);
+
+  /* v3.5.13（#8 站主「两次考试都要画上去」）：选了第二场且数据在手时，
+     每人画两根柱 —— 淡柱=上一场，实柱=这一场。 */
+  var pack = (SC.pkExam2 != null) ? ((SC.allRows || {})[SC.pkExam2] || null) : null;
+  function prevTot(row){
+    if(!pack || !row) return null;
+    var t = 0, any = false;
+    ((pack.exam && pack.exam.subjects) || []).forEach(function(s){
+      var v = row.s && row.s[s.key];
+      if(!v) return;
+      var val = (SC.basis === 'graded' && s.graded && v.assigned != null) ? v.assigned : v.raw;
+      if(val == null) return;
+      t += val; any = true;
+    });
+    return any ? t : null;
+  }
+  var pa = prevTot(A), pb = prevTot(B);
+  var hasPrevBars = pack && (pa != null || pb != null);
+
+  maxV = Math.max(maxV, pa == null ? 0 : pa, pb == null ? 0 : pb);
   /* 纵轴封顶取「满分」与「两人较高者」的较大值，柱子不会被压扁 */
   var top = Math.max(full, maxV) * 1.04;
   var yOf = function(v){ return T + (H - T - Bp) * (1 - v / top); };
-  var bw = 96, gap = 150;
+  var bw = hasPrevBars ? 68 : 96, gap = hasPrevBars ? 168 : 150;
+  var pbw = 40, pgap = 6;
   var xa = W / 2 - gap / 2 - bw, xb = W / 2 + gap / 2;
+  var xpa = xa - pgap - pbw, xpb = xb - pgap - pbw;
   var svg = '<svg class="sc-svg" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">';
   /* 网格 + 纵轴刻度（按满分比例取 4 档） */
   for(var g = 0; g <= 4; g++){
@@ -14465,6 +14610,15 @@ function scPkTotalCard(A, B){
             + row.schoolRank + '（物理方向）</text>'
           : '');
   }
+  /* v3.5.13：先画上一场淡柱（在主柱左侧），再画主柱 —— 两场考试同屏 */
+  function prevBar(x, v, cls){
+    if(!hasPrevBars || v == null) return '';
+    var y = yOf(v), h = H - Bp - y;
+    return '<rect x="' + x + '" y="' + y.toFixed(1) + '" width="' + pbw + '" height="' + Math.max(1, h).toFixed(1)
+      + '" class="sc-pk-bar-' + cls + '-prev" rx="4"/>'
+      + '<text x="' + (x + pbw / 2) + '" y="' + (y - 6).toFixed(1) + '" font-size="10" font-weight="700" class="sc-pk-sub" text-anchor="middle">' + v + '</text>';
+  }
+  svg += prevBar(xpa, pa, 'a') + prevBar(xpb, pb, 'b');
   svg += bar(xa, ta, 'a', 'a', A) + bar(xb, tb, 'b', 'b', B);
   /* 中间结论徽章：谁领先多少 */
   var verdict = '';
@@ -14477,7 +14631,11 @@ function scPkTotalCard(A, B){
   }
   svg += verdict + '</svg>';
   return '<div class="sc-card" data-scblk="pk_total">'
-    + '<div class="sc-card-h">总分对比（' + (SC.basis === 'graded' ? '赋分' : '原始') + '，满分 ' + full + '）</div>'
+    + '<div class="sc-card-h">总分对比（' + (SC.basis === 'graded' ? '赋分' : '原始') + '，满分 ' + full + '）'
+    + (hasPrevBars
+        ? '<span class="sc-h-note">淡柱 = 上一场「' + esc(shortName((pack.exam || {}).name || '')) + '」 · 实柱 = 这一场</span>'
+        : '')
+    + '</div>'
     + '<div class="sc-svgwrap">' + svg + '</div>'
     + '</div>';
 }
@@ -14875,16 +15033,33 @@ function scPkTrendCard(A, B){
     }
   }
 
+  return '<div class="sc-card" data-scblk="pk_trend"><div class="sc-card-h">跨考试进退步（'
+    + esc(shortName(prevExam.name || '')) + ' → ' + esc(shortName(SC.exam.name || '')) + '）'
+    + '<span class="sc-h-note">' + esc(scDateRange(prevExam) || '') + '</span></div>'
+    + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
+    + '<thead><tr><th>指标</th>'
+    + '<th><i class="sc-pk-dot-a" style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px"></i> ' + esc(A.name || 'A 方') + '</th>'
+    + '<th><i class="sc-pk-dot-b" style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px"></i> ' + esc(B.name || 'B 方') + '</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>'
+    + '<div class="sc-figcap">「↑」为进步、「↓」为退步；名次越小越好。两场考试的科目或满分不同时，'
+    + '各科按各自的科目配置取分，口径为' + (SC.basis === 'graded' ? '赋分' : '原始') + '。'
+    + (missed.length ? '注意：' + esc(missed.join('、')) + ' 在「' + esc(shortName(prevExam.name || '')) + '」里没找到对应成绩（未考或未录入），相关格显示 —。' : '')
+    + '</div></div>';
+}
   /* ===== v3.5.12（#8）对比分析升级 =====
      站主原话：「跟个人画像一样的 AI 分析，只不过着重对比二人数据进行分析与建议」
      所以这里不再只写「谁涨谁跌」，而是按个人画像那套五段结构来写，
      每一段都**把两个人放在一起比**：结论 / 领先在哪 / 短板在哪 / 差距怎么变 / 各自该干什么。 */
-  function pkAI(){
+
+/* ===== v3.5.13（#8）：AI 对比分析抽成顶层函数 —— 站主要求「无论是几场考试都要有」。
+   以前 pkAI 藏在 scPkTrendCard 闭包里，没选第二场就没有 AI 分析；现在单场也能出
+   （少了「两场变化」一段），两场时多一段变化与趋势建议。 ===== */
+function scPkAiData(A, B, ctx){
     if(!A || !B) return null;
     var tA = scTotal(A, SC.basis), tB = scTotal(B, SC.basis);
     if(tA == null || tB == null) return null;
 
-    var rkA = curRk[A.id], rkB = curRk[B.id];
+    var rkA = ctx.curRk[A.id], rkB = ctx.curRk[B.id];
     var lead = tA >= tB ? { w: A, l: B, t: tA, lt: tB, rkw: rkA, rkl: rkB, nmW: A.name || 'A 方', nmL: B.name || 'B 方' }
                         : { w: B, l: A, t: tB, lt: tA, rkw: rkB, rkl: rkA, nmW: B.name || 'B 方', nmL: A.name || 'A 方' };
     var gap = Math.abs(tA - tB);
@@ -14967,8 +15142,8 @@ function scPkTrendCard(A, B){
       todo.push('<b>' + esc(lead.nmW) + '</b> 的优势主要靠 <b>' + esc(bigWin.name) + '</b>，'
         + '这一科要继续稳住；同时注意别在其他科目被对方反超 —— 把最弱那一科守到班均以上就够。');
     }
-    if(anA && anA.td != null && anB && anB.td != null && anA.td !== anB.td){
-      var faster = anA.td > anB.td ? anA.name : anB.name;
+    if(ctx.anA && ctx.anA.td != null && ctx.anB && ctx.anB.td != null && ctx.anA.td !== ctx.anB.td){
+      var faster = ctx.anA.td > ctx.anB.td ? ctx.anA.name : ctx.anB.name;
       todo.push('从这两场的<b>变化速度</b>看，<b>' + esc(faster) + '</b> 涨得更快 —— '
         + '如果这个势头保持下去，' + (gap > 0 ? '下一次考试两人的差距会进一步' + (faster === lead.nmW ? '拉大' : '缩小') : '差距会重新出现')
         + '。');
@@ -14983,9 +15158,9 @@ function scPkTrendCard(A, B){
       contrib: contrib,
       sideA: sideText(swA),
       sideB: sideText(swB),
-      trend: '两场变化 —— ' + esc(A.name || 'A 方') + '：' + trendOf(anA) + '；'
-        + esc(B.name || 'B 方') + '：' + trendOf(anB) + '。',
-      gapTxt: gapTxt,
+      trend: ctx.hasPrev ? ('两场变化 —— ' + esc(A.name || 'A 方') + '：' + trendOf(ctx.anA) + '；'
+        + esc(B.name || 'B 方') + '：' + trendOf(ctx.anB) + '。') : '',
+      gapTxt: ctx.gapTxt,
       todo: todo,
       rowHtml: rowHtml,
       tableHtml: '<div class="sc-tblwrap" style="max-height:none;margin-top:8px">'
@@ -15001,47 +15176,36 @@ function scPkTrendCard(A, B){
           }).join('')
         + '</tbody></table></div>',
     };
-  }
-  var ai = (SC.pkExam2 != null) ? pkAI() : null;
-
-  var analysisHtml = ai
-    ? '<div class="sc-card sc-ai-card" data-scblk="pk_ai" style="margin-top:12px">'
-      + '<div class="sc-card-h">AI 对比分析<span class="sc-h-note">本地规则生成 · 不联网 · 不上传成绩</span></div>'
-      + '<div class="sc-ai-concl">' + ai.concl + '</div>'
-      + ai.rowHtml('差距在哪', ai.contrib)
-      + ai.rowHtml('A 方强弱', ai.sideA)
-      + ai.rowHtml('B 方强弱', ai.sideB)
-      + ai.rowHtml('两场变化', ai.trend)
-      + ai.tableHtml
-      + '<div class="sc-ai-todo"><b>下一步可以这样做</b><ol>'
-      +   ai.todo.map(function(t){ return '<li>' + t + '</li>'; }).join('')
-      + '</ol></div>'
-      + '<div class="sc-figcap">这份对比由浏览器按两场考试数据实时算出（总分差 / 逐科拆解 / 强弱项 / 变化速度四类规则），仅供参考。</div>'
-      + '</div>'
-    : ((anA || anB)
-      ? '<div class="sc-card" style="margin-top:12px"><div class="sc-card-h">对比分析</div>'
-        + '<div style="font-size:.86rem;line-height:1.9">'
-        + oneSide(anA) + '<br>' + oneSide(anB)
-        + gapTxt
-        + suggest(anA) + suggest(anB)
-        + '</div>'
-        + '<div class="sc-figcap">上面这段只看「这一场」，想看更完整的对比分析，请在下方选一场「对比另一场」。</div></div>'
-      : '');
-
-  return '<div class="sc-card" data-scblk="pk_trend"><div class="sc-card-h">跨考试进退步（'
-    + esc(shortName(prevExam.name || '')) + ' → ' + esc(shortName(SC.exam.name || '')) + '）'
-    + '<span class="sc-h-note">' + esc(scDateRange(prevExam) || '') + '</span></div>'
-    + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
-    + '<thead><tr><th>指标</th>'
-    + '<th><i class="sc-pk-dot-a" style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px"></i> ' + esc(A.name || 'A 方') + '</th>'
-    + '<th><i class="sc-pk-dot-b" style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px"></i> ' + esc(B.name || 'B 方') + '</th>'
-    + '</tr></thead><tbody>' + body + '</tbody></table></div>'
-    + '<div class="sc-figcap">「↑」为进步、「↓」为退步；名次越小越好。两场考试的科目或满分不同时，'
-    + '各科按各自的科目配置取分，口径为' + (SC.basis === 'graded' ? '赋分' : '原始') + '。'
-    + (missed.length ? '注意：' + esc(missed.join('、')) + ' 在「' + esc(shortName(prevExam.name || '')) + '」里没找到对应成绩（未考或未录入），相关格显示 —。' : '')
-    + '</div></div>'
-    + analysisHtml;
 }
+
+/** v3.5.13：统一入口 —— 单场/两场都出 AI 对比分析卡 */
+function scPkAiCard(A, B){
+  var hasPrev = SC.pkExam2 != null && !!(SC.allRows || {})[SC.pkExam2];
+  var ctx = { curRk: (scRankMap(SC.basis).total || {}), anA: null, anB: null, gapTxt: '', hasPrev: hasPrev };
+  if(!A || !B) return '';
+  var tA = scTotal(A, SC.basis), tB = scTotal(B, SC.basis);
+  if(tA == null || tB == null) return '';
+  var d = scPkAiData(A, B, ctx);
+  if(!d) return '';
+  var note = hasPrev
+    ? '这份对比由浏览器按两场考试数据实时算出（总分差 / 逐科拆解 / 强弱项 / 变化速度四类规则），仅供参考。'
+    : '这份对比由浏览器按本场数据实时算出（总分差 / 逐科拆解 / 强弱项三类规则）。想看两场进退与趋势，选一场「对比另一场」。';
+  return '<div class="sc-card sc-ai-card" data-scblk="pk_ai" style="margin-top:12px">'
+    + '<div class="sc-card-h">AI 对比分析<span class="sc-h-note">本地规则生成 · 不联网 · 不上传成绩</span></div>'
+    + '<div class="sc-ai-concl">' + d.concl + '</div>'
+    + d.rowHtml('差距在哪', d.contrib)
+    + d.rowHtml('A 方强弱', d.sideA)
+    + d.rowHtml('B 方强弱', d.sideB)
+    + (hasPrev ? d.rowHtml('两场变化', d.trend) : '')
+    + d.tableHtml
+    + '<div class="sc-ai-todo"><b>下一步可以这样做</b><ol>'
+    +   d.todo.map(function(t){ return '<li>' + t + '</li>'; }).join('')
+    + '</ol></div>'
+    + '<div class="sc-figcap">' + note + '</div>'
+    + '</div>';
+}
+
+
 
 function scOvItem(k, v){
   return '<div class="sc-ov-item"><span>' + esc(k) + '</span><b>' + esc(String(v)) + '</b></div>';

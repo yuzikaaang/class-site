@@ -930,7 +930,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.12';
+var SITE_VERSION = '3.5.13';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -1654,7 +1654,35 @@ function renderNav(){
   });
 }
 
+/* ===== v3.5.13（站主 #4）：未保存内容拦截 =====
+   站主给的参照是 VoiceHub 的「您有未保存的排期修改，确定要离开吗？」。
+   后台最怕丢的是成绩录入面板的未保存行（SC_STATE.dirty），
+   其他面板多为即时保存，暂无脏状态。 */
+function unsavedCount(){
+  try{
+    var n = 0;
+    if(typeof SC_STATE !== 'undefined' && SC_STATE && SC_STATE.dirty){
+      for(var k in SC_STATE.dirty) if(SC_STATE.dirty[k]) n++;
+    }
+    return n;
+  }catch(e){ return 0; }
+}
+/* 离开当前页有未保存内容吗？有则弹确认，返回 true = 允许离开 */
+function confirmLeaveUnsaved(){
+  var n = unsavedCount();
+  if(!n) return true;
+  /* confirmBox 是 Promise 风格，但 go() 是同步流 —— 这里用同步 confirm 保住流程简单；
+     站主要求的就是「问一下」，不用做撤销。 */
+  return window.confirm('您有 ' + n + ' 行成绩修改还没保存，确定要离开吗？\n（离开后这些修改会丢失）');
+}
+/* 关页面/刷新也拦一道（浏览器原生对话框） */
+window.addEventListener('beforeunload', function(e){
+  if(unsavedCount() > 0){ e.preventDefault(); e.returnValue = ''; return ''; }
+});
+
 function go(page){
+  /* v3.5.13：切面板前先问 —— 同一成绩面板内重进也拦（避免自己冲掉自己） */
+  if(STATE.page && page !== STATE.page && !confirmLeaveUnsaved()) return;
   STATE.page = page;
   var p = PAGES.find(function(x){ return x.id === page; });
   $('pageTitle').textContent = p ? p.title : '';
@@ -1985,8 +2013,10 @@ function paintMembers(){
 
     /* 🔻 v3.5.12（站主 2026-10-17 #2「成员档案只展示联系方式，其他的通过详情查看」）
        列表只留三样东西：头像+姓名、联系方式（微信/QQ/手机）、操作按钮。
-       学号、身份、头衔、政治面貌、自定字段、可见性、审核状态、最后上线
-       全部收进「详情」弹窗，列表不再堆成一堵墙。 */
+       学号、身份、头衔、政治面貌、自定字段、可见性、审核状态
+       全部收进「详情」弹窗，列表不再堆成一堵墙。
+       v3.5.13 站主补充：「不是把其他的都删了，账号状态、最后上线时间还是要的」
+       → 加回一列精简「状态」：账号在不在 + 最后上线，一眼能扫；其余仍走详情。 */
     var sub = '<div class="muted"><i class="mono">@' + esc(m.username || (m.studentId ? '学号 ' + m.studentId : '未认领'))
       + '</i></div>';
 
@@ -2007,6 +2037,18 @@ function paintMembers(){
     var contacts = '<div class="ct-grid">'
       + ct('微信', m.wechat) + ct('QQ', m.qq) + ct('手机', m.phone)
       + '</div>';
+
+    /* v3.5.13 状态列：账号状态一行字 + 最后上线相对时间 */
+    var acctTxt = m.userId == null ? '无账号'
+      : (m.status === 'banned' ? '已禁用' : m.status === 'pending' ? '待审核' : m.status === 'active' ? '正常' : (m.status || '正常'));
+    var acctCls = m.userId == null ? 'badge-gray'
+      : (m.status === 'banned' ? 'badge-red' : m.status === 'pending' ? 'badge-amber' : 'badge-green');
+    var seenV = m.sessionLastSeen || m.lastSeenAt || m.lastLoginAt;
+    var statusCell = '<div class="mb-status">'
+      + '<span class="badge ' + acctCls + '">' + esc(acctTxt) + '</span>'
+      + (isOnlineNow(m) ? '<span class="badge badge-green">在线</span>' : '')
+      + '<div class="muted" style="font-size:.72rem;margin-top:2px">'
+      +   (seenV ? ago(seenV) : '从未上线') + '</div></div>';
 
     /* 行内操作：详情对所有行开放（v3.5.12 起）；账号类操作仅对有账号的行开放 */
     var acts = '<button class="ok" data-mb="detail" data-key="' + attr(key) + '">详情</button>'
@@ -2029,6 +2071,7 @@ function paintMembers(){
       + '<td><div class="cell-user"><div class="av ink-auto">' + esc(ini) + '</div>'
       +   '<div><b>' + esc(memberName(m)) + '</b> ' + flag + sub + '</div></div></td>'
       + '<td>' + contacts + '</td>'
+      + '<td>' + statusCell + '</td>'
       + '<td class="nowrap" style="text-align:right"><div class="row-actions">' + acts
       +   (m.userId != null
             ? '<button class="danger" data-mb="del" data-key="' + attr(key) + '"'
@@ -2046,7 +2089,7 @@ function paintMembers(){
   body.innerHTML =
     '<div class="table-wrap"><table><thead><tr>'
     + '<th style="width:38px"><input type="checkbox" class="chk" data-pick-all' + (allChecked ? ' checked' : '') + '></th>'
-    + '<th>成员</th><th>联系方式</th>'
+    + '<th>成员</th><th>联系方式</th><th>状态</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
     + '<div class="pager">'
@@ -4895,6 +4938,28 @@ function renderSong(){
     +   '本页数据**实时来自点歌平台**（VoiceHub），不是云端缓存 —— 同学在首页点的歌、'
     +   '领的券都会立刻出现在这里。此处的增删会真实作用到平台上，全班同步生效。'
     + '</div>'
+    /* ===== v3.5.13（站主 #3）：VoiceHub 投稿上限 + 投稿统计 ===== */
+    + '<section class="panel" style="margin-bottom:16px">'
+    +   '<h3 style="margin:0 0 10px;font-size:.9rem">🛡 投稿上限守卫</h3>'
+    +   '<p class="muted" style="margin:0 0 10px;font-size:.78rem">'
+    +     '开启后，同学在班级网站点「点歌平台」入口时，先查 ta 的<b>未播投稿数</b>，'
+    +     '达到上限会弹提示（同名同学会误伤，默认关）。保存后约 1 分钟内全班生效。</p>'
+    +   '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+    +     '<label style="display:flex;align-items:center;gap:6px;font-size:.84rem">'
+    +       '<input type="checkbox" id="vhGuardOn"> 开启守卫</label>'
+    +     '<div class="field" style="margin:0;width:150px"><label>每人未播投稿上限</label>'
+    +       '<input id="vhGuardLimit" type="number" min="1" max="20" value="3"></div>'
+    +     '<button class="btn btn-sm" id="vhGuardSave">保存</button>'
+    +     '<span class="muted" id="vhGuardState" style="font-size:.76rem"></span>'
+    +   '</div>'
+    + '</section>'
+    + '<section class="panel" style="margin-bottom:16px">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'
+    +     '<h3 style="margin:0;font-size:.9rem">📊 投稿统计（未播为准）</h3>'
+    +     '<button class="btn btn-sm btn-ghost" id="vhStatReload">' + svg('refresh', 14) + ' 刷新</button>'
+    +   '</div>'
+    +   '<div id="vhStats"><div class="muted" style="font-size:.8rem">点「刷新」读取。</div></div>'
+    + '</section>'
     + '<section class="panel" style="margin-bottom:16px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'
     +     '<h3 style="margin:0;font-size:.9rem">🎵 实时歌单</h3>'
@@ -4919,6 +4984,72 @@ function renderSong(){
 
   var rb = $('sgReload');
   if(rb) rb.onclick = function(){ loadSong(); };
+  /* v3.5.13 投稿上限守卫：读/存 site_config.vhGuard */
+  (function(){
+    api('/content?keys=site_config').then(function(j){
+      var g = (j && j.items && j.items.site_config && j.items.site_config.vhGuard) || {};
+      var onEl = $('vhGuardOn'), limEl = $('vhGuardLimit'), st = $('vhGuardState');
+      if(onEl) onEl.checked = !!g.on;
+      if(limEl) limEl.value = Math.max(1, Number(g.limit) || 3);
+      if(st) st.textContent = g.on ? ('当前：已开启（上限 ' + (Number(g.limit) || 3) + ' 首）') : '当前：未开启';
+    }).catch(function(){});
+    var sb = $('vhGuardSave');
+    if(sb) sb.onclick = function(){
+      var onEl = $('vhGuardOn'), limEl = $('vhGuardLimit');
+      api('/content?keys=site_config').then(function(j){
+        var cfg = (j && j.items && j.items.site_config) || {};
+        cfg.vhGuard = { on: !!(onEl && onEl.checked), limit: Math.max(1, Number(limEl && limEl.value) || 3) };
+        return api('/content', { method:'PUT', body:{ items:{ site_config: cfg } } });
+      }).then(function(){
+        toast('守卫设置已保存', 'ok');
+        var st = $('vhGuardState');
+        if(st) st.textContent = (onEl && onEl.checked)
+          ? ('当前：已开启（上限 ' + (Number(limEl && limEl.value) || 3) + ' 首）') : '当前：未开启';
+      }).catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+    };
+  })();
+  /* v3.5.13 投稿统计：走后端代理读 VoiceHub 公开歌单（上游无 CORS） */
+  (function(){
+    var btn = $('vhStatReload'), box = $('vhStats');
+    function loadStats(){
+      if(!box) return;
+      box.innerHTML = '<div class="loading"><div class="spinner"></div>读取中…</div>';
+      var base = (VH_API || '').replace(/\/api$/, '');
+      api('/vh?action=songs&base=' + encodeURIComponent(base)).then(function(j){
+        var songs = (j && j.songs) || [];
+        var pending = songs.filter(function(it){ return !(it.played || (it.song && it.song.played)); });
+        var byUser = {};
+        songs.forEach(function(it){
+          var s = it.song || it;
+          var nm = String(s.requester || '').trim() || '匿名';
+          if(!byUser[nm]) byUser[nm] = { total: 0, pending: 0 };
+          byUser[nm].total++;
+          if(!(it.played || s.played)) byUser[nm].pending++;
+        });
+        var rows = Object.keys(byUser).map(function(nm){ return { nm: nm, t: byUser[nm].total, p: byUser[nm].pending }; });
+        rows.sort(function(a, b){ return b.p - a.p || b.t - a.t; });
+        box.innerHTML =
+          '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px">'
+          + '<div><b style="font-size:1.2rem">' + songs.length + '</b> <span class="muted" style="font-size:.78rem">总投稿</span></div>'
+          + '<div><b style="font-size:1.2rem">' + pending.length + '</b> <span class="muted" style="font-size:.78rem">未播</span></div>'
+          + '<div><b style="font-size:1.2rem">' + rows.length + '</b> <span class="muted" style="font-size:.78rem">投稿人数</span></div>'
+          + '</div>'
+          + '<div style="max-height:220px;overflow:auto">'
+          + '<table><thead><tr><th>投稿人</th><th>未播</th><th>累计</th></tr></thead><tbody>'
+          + rows.map(function(r){
+              return '<tr><td>' + esc(r.nm) + '</td>'
+                + '<td>' + (r.p ? '<b style="color:#c2410c">' + r.p + '</b>' : '0') + '</td>'
+                + '<td>' + r.t + '</td></tr>';
+            }).join('')
+          + '</tbody></table></div>'
+          + '<p class="muted" style="font-size:.74rem;margin:8px 0 0">数据来自 VoiceHub 公开歌单（5 分钟缓存）；「排期到某天 / 自动标已播」需要 VoiceHub 登录态，开放 API 暂不支持，见更新记录说明。</p>';
+      }).catch(function(e){
+        box.innerHTML = '<div class="alert danger">读取失败：' + esc(e.message || e) + '</div>';
+      });
+    }
+    if(btn) btn.onclick = loadStats;
+    loadStats();
+  })();
   var rfb = $('sgRefund');
   if(rfb) rfb.onclick = songRefundDialog;
   var cb = $('sgCreate');
@@ -5580,8 +5711,10 @@ function paintSchedule(){
 
   var modeHtml = modes.map(function(m){
     var on = cfg.mode === m[0];
+    /* v3.5.13（站主反馈「文字溢出」）：全局 .btn 是 height:42px + nowrap，
+       两行内容的模式按钮会被硬裁 —— 这里显式放开高度与换行。 */
     return '<button class="btn ' + (on ? '' : 'btn-secondary') + '" data-dq-mode="' + m[0] + '" '
-      + 'style="text-align:left;display:block;width:100%;padding:10px 12px;margin-bottom:8px">'
+      + 'style="text-align:left;display:block;width:100%;height:auto;white-space:normal;padding:10px 12px;margin-bottom:8px;line-height:1.45">'
       + '<b style="font-size:.84rem">' + (on ? '✓ ' : '') + m[1] + '</b>'
       + '<span style="display:block;font-size:.74rem;opacity:.8;margin-top:2px">' + m[2] + '</span></button>';
   }).join('');
@@ -7850,11 +7983,11 @@ function renderActionLogs(){
   var S = STATE.actionlogs;
   $('view').innerHTML =
     /* ---- 统计面板 ---- */
-    '<div class="grid-2" id="alStats" style="margin-bottom:16px">'
-    +   '<section class="panel"><div class="panel-body" style="display:flex;gap:18px;flex-wrap:wrap">'
-    +     '<div><div class="muted" style="font-size:.76rem">今日点击</div><b style="font-size:1.5rem" id="alToday">—</b></div>'
-    +     '<div><div class="muted" style="font-size:.76rem">近 7 天点击</div><b style="font-size:1.5rem" id="alWeek">—</b></div>'
-    +     '<div><div class="muted" style="font-size:.76rem">7 日活跃用户</div><b style="font-size:1.5rem" id="alUsers">—</b></div>'
+    '<div class="grid-2" id="alStats" style="margin-bottom:16px;grid-template-columns:minmax(0,5fr) minmax(0,7fr)">'
+    +   '<section class="panel"><div class="panel-body" style="display:flex;flex-direction:column;justify-content:center;gap:14px">'
+    +     '<div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:1.9rem;min-width:110px" id="alToday">—</b><span class="muted" style="font-size:.8rem">今日点击</span></div>'
+    +     '<div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:1.9rem;min-width:110px" id="alWeek">—</b><span class="muted" style="font-size:.8rem">近 7 天点击</span></div>'
+    +     '<div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:1.9rem;min-width:110px" id="alUsers">—</b><span class="muted" style="font-size:.8rem">7 日活跃用户</span></div>'
     +   '</div></section>'
     +   '<section class="panel"><div class="panel-head"><div><h3>热门页面（近 7 天）</h3></div></div>'
     +     '<div class="panel-body" id="alTopPages"><div class="muted">加载中…</div></div></section>'
@@ -7942,7 +8075,18 @@ function alGroup(list){
   var cur = null;
   (list || []).forEach(function(l){
     var uid = (l.userId != null ? l.userId : ('u:' + l.username));
-    if(cur && cur.uid === uid){
+    /* v3.5.13（站主反馈「不能一面只显示一条」）：同一人连续操作超过
+       10 分钟就切断另起一组 —— 否则长时间挂机的人会把整页合并成一条。 */
+    var gapOk = false;
+    if(cur && cur.uid === uid && cur.items.length){
+      var prevT = parseTime(cur.items[0].createdAt);
+      var curT = parseTime(l.createdAt);
+      if(prevT && curT){
+        var gapMs = Math.abs(prevT.getTime() - curT.getTime());
+        gapOk = gapMs <= 10 * 60 * 1000;
+      }
+    }
+    if(cur && cur.uid === uid && gapOk){
       cur.items.push(l);
     } else {
       cur = { uid: uid, items: [l] };
@@ -9958,6 +10102,23 @@ function relSeed(){
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
     {
+      "version": "3.5.13",
+      "date": "2026-10-17",
+      "title": "投票公示模版 · 后台点歌管理 · 投票 500 热修 · 成绩对比 AI 分析单场也有",
+      "items": [
+        "【紧急修复】投票页「服务器错误无法加载」：v3.5.12 给投票加「提出人」时只写了全新库、漏了老库升级路径，线上老库缺列导致查询 500 —— 已热修并补上防线",
+        "投票公示：投票截止后可按模版生成公示（进前 N / 标题 / 结果表等），后台自带模版管理，支持占位符与数据名称快捷按钮，也能把提示词生成的完整模版导入",
+        "后台点歌管理：新增「投稿上限守卫」（超出未播数量时前端会提醒）与「投稿统计」（总投稿 / 未播 / 按人分组，直连 VoiceHub 公开数据）",
+        "成绩对比：去掉交换按钮；选两场考试时总分图两场都画（淡柱=上一场、实柱=本场）；两场时不再重复显示各科对比；AI 对比分析单场考试也会出",
+        "后台首页卡片文字溢出修复（每日一言排期模式按钮被硬裁）",
+        "后台有未保存的成绩修改时，切换页面或关闭窗口会先弹「是否退出」确认",
+        "成员档案重新加回「状态」列：账号状态徽章 + 在线标记 + 最后上线时间（详情弹窗不变）",
+        "行为日志：数据分析区空白收窄（统计卡改纵向大数字）；一页不再只显示 1 条；同一秒的重复点击只记 1 条",
+        "新增 VoiceHub 只读代理（/api/vh），点歌数据不再受跨域限制",
+        "版本号三处 3.5.13，缓存 v108"
+      ]
+    },
+    {
       "version": "3.5.12",
       "date": "2026-10-17",
       "title": "行为日志合并展开 · 打印/导出/分享逐项可选 · 成绩对比两场总分与赋分对比",
@@ -10803,13 +10964,14 @@ function relSeed(){
  *   挑完写成 kind='song' 的投票，选项里带 songId，结果取前五时能回查歌曲信息。
  *   前台投票专区显示「歌单」标签，管理员在结果页可一键把前五写进抽歌排期。
  * ========================================================================= */
-var VO = { list: [], busy: false };
+var VO = { list: [], busy: false, pub: null };
 
 function renderVotes(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel)">'
     +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">投票管理</b>'
     +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">同学在「班级事务 → 投票」里参与，一人一票，截止后公布结果</p></div>'
+    +   '<button class="btn btn-sm btn-secondary" id="voPubTpl">' + svg('edit',14) + ' 公示模版</button>'
     +   '<button class="btn btn-sm btn-secondary" id="voRefresh">' + svg('refresh',14) + ' 刷新</button>'
     +   '<button class="btn btn-sm" id="voNew">' + svg('plus',14) + ' 新建投票</button>'
     + '</div>'
@@ -10817,7 +10979,49 @@ function renderVotes(){
 
   $('voRefresh').onclick = function(){ voLoad(); };
   $('voNew').onclick = function(){ voEditorDialog(null); };
+  $('voPubTpl').onclick = function(){ voTemplatesDialog(); };
+  voPubLoad();
   voLoad();
+}
+
+/* ===== v3.5.13 投票公示（站主 #2）=====
+   内容键 vote_pub = { templates:[{id,name,template}], byVote:{ [voteId]:{tplId,on} } }。
+   前台在投票卡下方按模版渲染公示（变量替换见 index.html votePubRender）。 */
+var VO_PUB_VARS = ['标题','提出人','提出日期','截止时间','参与人数','总票数','第一名','第二名','第三名','结果表'];
+var VO_PUB_DEFAULT_TPL = {
+  id: 'default', name: '默认公示模版',
+  template: '📋 {{标题}} 投票结果公示\n'
+    + '提出人：{{提出人}}（{{提出日期}} 提出）\n'
+    + '共 {{参与人数}} 人参与投票。\n'
+    + '{{结果表}}\n'
+    + '第一名：{{第一名}}\n'
+    + '感谢大家的参与！',
+};
+function voPubLoad(){
+  return api('/content?keys=vote_pub').then(function(j){
+    var v = j && j.items && j.items.vote_pub;
+    VO.pub = (v && typeof v === 'object' && !Array.isArray(v)) ? v : { templates: [JSON.parse(JSON.stringify(VO_PUB_DEFAULT_TPL))], byVote: {} };
+    if(!Array.isArray(VO.pub.templates)) VO.pub.templates = [JSON.parse(JSON.stringify(VO_PUB_DEFAULT_TPL))];
+    if(!VO.pub.byVote || typeof VO.pub.byVote !== 'object') VO.pub.byVote = {};
+    voPaintPubBadges();
+  }).catch(function(){ VO.pub = { templates: [JSON.parse(JSON.stringify(VO_PUB_DEFAULT_TPL))], byVote: {} }; });
+}
+function voPubSave(){
+  return api('/content', { method:'PUT', body:{ items:{ vote_pub: VO.pub } } });
+}
+/* 每票公示开关变化后，只刷新卡片上的小徽章（不重拉列表） */
+function voPubBadges(){
+  if(!VO.pub) return {};
+  return VO.pub.byVote || {};
+}
+function voPaintPubBadges(){
+  /* voPaint 已把列表画好；这里只更新每张卡的公示徽章文本 */
+  var box = $('voList');
+  if(!box) return;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-pub-badge]'), function(el){
+    var cfg = (VO.pub && VO.pub.byVote || {})[el.getAttribute('data-vo-pub-badge')];
+    el.textContent = (cfg && cfg.on) ? '✓ 公示已开启' : '公示未开启';
+  });
 }
 
 function voLoad(){
@@ -10921,6 +11125,8 @@ function voPaint(){
       +   '</div>'
       +   '<div style="display:flex;gap:6px;flex-wrap:wrap">'
       +     '<button class="btn btn-sm btn-ghost" data-vo-edit="' + v.id + '">' + svg('edit',13) + ' 编辑</button>'
+      +     '<button class="btn btn-sm btn-ghost" data-vo-pub="' + v.id + '">📋 公示'
+      +       '<span class="muted" style="font-size:.68rem;margin-left:4px" data-vo-pub-badge="' + v.id + '"></span></button>'
       +     (v.status === 'open'
               ? '<button class="btn btn-sm btn-ghost" data-vo-close="' + v.id + '">' + svg('lock',13) + ' 截止并公布</button>'
               : '<button class="btn btn-sm btn-ghost" data-vo-reopen="' + v.id + '">' + svg('unlock',13) + ' 重新打开</button>')
@@ -10949,6 +11155,207 @@ function voPaint(){
   Array.prototype.forEach.call(box.querySelectorAll('[data-vo-top5]'), function(b){
     b.onclick = function(){ voWriteTop5(Number(b.dataset.voTop5)); };
   });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-pub]'), function(b){
+    b.onclick = function(){ voPubDialog(Number(b.dataset.voPub)); };
+  });
+  voPaintPubBadges();
+}
+
+/* ---------- 公示模版管理 ---------- */
+function voTemplatesDialog(){
+  var tpls = (VO.pub && VO.pub.templates) || [];
+  var listHtml = tpls.map(function(t){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">'
+      + '<div style="flex:1;min-width:0"><b style="font-size:.86rem">' + esc(t.name) + '</b>'
+      + '<div class="muted" style="font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+      + esc((t.template || '').split('\n')[0]) + '</div></div>'
+      + '<button class="btn btn-sm btn-secondary" data-tpl-edit="' + t.id + '">编辑</button>'
+      + (t.id === 'default' ? '' : '<button class="btn btn-sm btn-ghost" style="color:#b3261e" data-tpl-del="' + t.id + '">删除</button>')
+      + '</div>';
+  }).join('') || '<p class="muted">还没有模版，点「新增模版」创建。</p>';
+  openModal({
+    title: '公示模版管理', sub: '公示时按模版渲染；{{变量}} 会被替换成真实数据',
+    body: listHtml
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">'
+      +   '<button class="btn btn-sm" id="voTplNew">新增模版</button>'
+      +   '<button class="btn btn-sm btn-secondary" id="voTplImport">导入模版（粘贴 JSON）</button>'
+      + '</div>'
+      + '<div class="muted" style="font-size:.74rem;margin-top:10px;line-height:1.8">'
+      + '可用变量：' + VO_PUB_VARS.map(function(v){ return '<code>{{' + v + '}}</code>'; }).join(' ')
+      + '<br>也可以让别的 AI 生成完整模版，再点「导入模版」粘贴进来（支持一条 JSON 或数组）。</div>',
+    onMount: function(box){
+      box.querySelector('#voTplNew').onclick = function(){ voTplEditor(null); };
+      box.querySelector('#voTplImport').onclick = function(){ voTplImport(); };
+      Array.prototype.forEach.call(box.querySelectorAll('[data-tpl-edit]'), function(b){
+        b.onclick = function(){
+          var t = tpls.filter(function(x){ return x.id === b.dataset.tplEdit; })[0];
+          voTplEditor(t);
+        };
+      });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-tpl-del]'), function(b){
+        b.onclick = function(){
+          VO.pub.templates = VO.pub.templates.filter(function(x){ return x.id !== b.dataset.tplDel; });
+          voPubSave().then(function(){ toast('已删除', 'ok'); }).catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+          voTemplatesDialog();   /* 重画 */
+        };
+      });
+    },
+  });
+}
+
+function voTplEditor(tpl){
+  var isNew = !tpl;
+  tpl = tpl || { id: 't' + Date.now(), name: '', template: '' };
+  var varBtns = VO_PUB_VARS.map(function(v){
+    return '<button class="btn btn-sm btn-secondary" data-tplvar="' + v + '" style="margin:0 6px 6px 0">{{' + v + '}}</button>';
+  }).join('');
+  openModal({
+    title: isNew ? '新增公示模版' : '编辑公示模版',
+    body:
+      '<div class="field"><label>模版名称</label><input id="voTplName" maxlength="30" value="' + attr(tpl.name) + '"></div>'
+      + '<div class="field"><label>模版内容（{{变量}} 会被替换）</label>'
+      +   '<div style="margin-bottom:6px"><span class="muted" style="font-size:.74rem">点变量插入到光标处：</span></div>'
+      +   '<div>' + varBtns + '</div>'
+      +   '<textarea id="voTplBody" rows="10" style="width:100%;font-family:var(--mono,monospace);font-size:.8rem;line-height:1.7">'
+      +     esc(tpl.template) + '</textarea></div>'
+      + '<div class="muted" style="font-size:.74rem">「结果表」会渲染成带排名和票数的表格；其余变量替换成纯文本。</div>',
+    foot: '<button class="btn btn-ghost" data-close2>取消</button>'
+      + '<button class="btn" id="voTplSave">保存</button>',
+    onMount: function(box){
+      box.querySelector('[data-close2]').onclick = closeModal;
+      var ta = box.querySelector('#voTplBody');
+      Array.prototype.forEach.call(box.querySelectorAll('[data-tplvar]'), function(b){
+        b.onclick = function(){
+          var v = '{{' + b.dataset.tplvar + '}}';
+          var s = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+          ta.value = ta.value.slice(0, s) + v + ta.value.slice(ta.selectionEnd == null ? s : ta.selectionEnd);
+          ta.focus();
+          try{ ta.setSelectionRange(s + v.length, s + v.length); }catch(e){}
+        };
+      });
+      box.querySelector('#voTplSave').onclick = function(){
+        var name = box.querySelector('#voTplName').value.trim();
+        var body = ta.value;
+        if(!name){ toast('先填模版名称', 'err'); return; }
+        if(!body.trim()){ toast('模版内容不能为空', 'err'); return; }
+        var hit = VO.pub.templates.filter(function(x){ return x.id === tpl.id; })[0];
+        if(hit){ hit.name = name; hit.template = body; }
+        else VO.pub.templates.push({ id: tpl.id, name: name, template: body });
+        voPubSave().then(function(){ toast('模版已保存', 'ok'); closeModal(); voTemplatesDialog(); })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+      };
+    },
+  });
+}
+
+/* 让别的 AI 生成模版后粘贴导入。支持：
+   ① JSON 数组 [{ "name": "...", "template": "..." }, ...]
+   ② 单条对象 { name, template }
+   ③ 纯文本（整段当一条模版，名称取第一行） */
+function voTplImport(){
+  openModal({
+    title: '导入公示模版',
+    sub: '支持 JSON 或纯文本；让别的 AI 生成后整段粘贴进来',
+    body:
+      '<div class="field"><label>粘贴到这里</label>'
+      + '<textarea id="voTplImportTa" rows="10" style="width:100%;font-family:var(--mono,monospace);font-size:.8rem" '
+      + 'placeholder=\'[{ "name": "歌单公示", "template": "..." }]\n或直接粘贴纯文本模版\'></textarea></div>'
+      + '<div class="muted" style="font-size:.74rem">JSON 导入可一次多条；纯文本导入会把第一行当模版名。</div>',
+    foot: '<button class="btn btn-ghost" data-close2>取消</button><button class="btn" id="voTplImportGo">导入</button>',
+    onMount: function(box){
+      box.querySelector('[data-close2]').onclick = closeModal;
+      box.querySelector('#voTplImportGo').onclick = function(){
+        var raw = box.querySelector('#voTplImportTa').value.trim();
+        if(!raw){ toast('先粘贴内容', 'err'); return; }
+        var added = 0;
+        try{
+          var j = JSON.parse(raw);
+          var arr = Array.isArray(j) ? j : [j];
+          arr.forEach(function(o){
+            if(o && typeof o === 'object' && o.template && String(o.template).trim()){
+              VO.pub.templates.push({ id: 't' + Date.now() + '_' + (++added),
+                name: String(o.name || '导入模版 ' + added).slice(0, 30), template: String(o.template) });
+            }
+          });
+        }catch(e){
+          /* 不是 JSON → 纯文本 */
+          var lines = raw.split('\n');
+          VO.pub.templates.push({ id: 't' + Date.now(), name: (lines[0] || '导入模版').slice(0, 30), template: raw });
+          added = 1;
+        }
+        if(!added){ toast('没解析出模版（JSON 里要有 name 和 template 字段）', 'err'); return; }
+        voPubSave().then(function(){ toast('已导入 ' + added + ' 条', 'ok'); closeModal(); voTemplatesDialog(); })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+      };
+    },
+  });
+}
+
+/* ---------- 单票公示配置 ---------- */
+function voPubDialog(voteId){
+  var v = voFind(voteId);
+  if(!v) return;
+  if(!VO.pub) { toast('公示配置还在读取，稍等一下再点', 'err'); return; }
+  var tpls = VO.pub.templates;
+  var cfg = VO.pub.byVote[voteId] || {};
+  var opts = tpls.map(function(t){
+    return '<option value="' + t.id + '"' + (cfg.tplId === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>';
+  }).join('');
+  openModal({
+    title: '投票公示 · ' + v.title,
+    sub: '开启后，同学在投票卡上直接看到按模版渲染的公示',
+    body:
+      (v.results ? '' : '<div class="alert warn" style="margin-bottom:10px">投票还没截止，现在开启公示也行——截止出结果后前台才会显示内容。</div>')
+      + '<div class="field"><label>使用模版</label><select id="voPubTpl" style="width:100%">' + opts + '</select></div>'
+      + '<label style="display:flex;align-items:center;gap:8px;margin:10px 0">'
+      +   '<input type="checkbox" id="voPubOn"' + (cfg.on ? ' checked' : '') + '>'
+      +   '<span>开启公示（前台投票卡下方显示）</span></label>'
+      + '<div class="field"><label>预览</label><div id="voPubPrev" style="border:1px dashed var(--border);border-radius:10px;padding:10px;font-size:.82rem;line-height:1.9;max-height:260px;overflow:auto"></div></div>',
+    foot: '<button class="btn btn-ghost" data-close2>取消</button><button class="btn" id="voPubSave">保存</button>',
+    onMount: function(box){
+      box.querySelector('[data-close2]').onclick = closeModal;
+      var sel = box.querySelector('#voPubTpl'), on = box.querySelector('#voPubOn'), prev = box.querySelector('#voPubPrev');
+      function paint(){
+        var t = tpls.filter(function(x){ return x.id === sel.value; })[0];
+        prev.innerHTML = t ? voPubPreview(t, v) : '';
+      }
+      sel.onchange = paint; on.onchange = paint; paint();
+      box.querySelector('#voPubSave').onclick = function(){
+        VO.pub.byVote[voteId] = { tplId: sel.value, on: on.checked };
+        voPubSave().then(function(){ toast(on.checked ? '公示已开启' : '公示已关闭', 'ok'); closeModal(); })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+      };
+    },
+  });
+}
+
+/* 后台预览渲染（与前台 votePubRender 同一套替换规则） */
+function voPubPreview(tpl, v){
+  var rs = (v.results || []).slice().sort(function(a, b){ return (b.n || 0) - (a.n || 0); });
+  var totalVotes = rs.reduce(function(s, r){ return s + (r.n || 0); }, 0);
+  var map = {
+    '标题': esc(v.title || ''),
+    '提出人': esc(v.proposer || v.createdByName || '未记录'),
+    '提出日期': esc(v.createdDate || ''),
+    '截止时间': esc(v.deadline ? voTimeText(v.deadline) : '不限'),
+    '参与人数': String(v.voters || totalVotes),
+    '总票数': String(totalVotes),
+    '第一名': esc(rs[0] ? rs[0].label : '—'),
+    '第二名': esc(rs[1] ? rs[1].label : '—'),
+    '第三名': esc(rs[2] ? rs[2].label : '—'),
+    '结果表': rs.length
+      ? '<table style="border-collapse:collapse;margin:6px 0;width:100%">'
+        + '<thead><tr>' + ['排名','选项','票数'].map(function(h){ return '<th style="border:1px solid var(--border);padding:4px 8px;background:var(--bg-2,#faf6f2);font-size:.78rem;text-align:left">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + rs.map(function(r, i){
+            return '<tr><td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">' + (i + 1) + '</td>'
+              + '<td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">' + esc(r.label) + '</td>'
+              + '<td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">' + (r.n || 0) + ' 票</td></tr>';
+          }).join('') + '</tbody></table>'
+      : '<span class="muted">（截止后这里显示结果表）</span>',
+  };
+  return String(tpl.template || '')
+    .replace(/\{\{\s*([^}]+?)\s*\}\}/g, function(m, k){ return map[k] !== undefined ? map[k] : m; })
+    .split('\n').join('<br>');
 }
 
 function voFind(id){
