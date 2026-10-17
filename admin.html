@@ -487,6 +487,37 @@ tbody tr.sel{background:var(--tint-2)}
 .hwv-subj ul{margin:0;padding-left:20px;font-size:.84rem;line-height:1.72}
 .hwv-subj li{word-break:break-word}
 
+/* ---- v3.5.12 行为日志：按人合并的分组行（可点展开） ---- */
+.al-wrap{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+.al-g + .al-g{border-top:1px solid var(--border)}
+.al-g-h{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;
+  transition:background var(--t-fast);
+}
+.al-g-h:hover{background:var(--tint)}
+.al-g-caret{flex:none;display:flex;align-items:center;color:var(--fg-3);transition:transform var(--t-fast)}
+.al-g.open .al-g-caret{transform:rotate(90deg)}
+.al-g-time{flex:none;font-variant-numeric:tabular-nums;font-size:.8rem;color:var(--fg-2);min-width:158px}
+.al-g-user{flex:none;min-width:96px;font-size:.86rem}
+.al-g-cnt{flex:none}
+.al-g-brief{flex:1;min-width:0;font-size:.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.al-g-body{display:none;padding:2px 12px 10px 34px;background:var(--bg-3)}
+.al-g.open .al-g-body{display:block}
+.al-row{
+  display:flex;align-items:baseline;gap:10px;padding:5px 0;font-size:.78rem;
+  border-bottom:1px dashed var(--border);
+}
+.al-row:last-child{border-bottom:0}
+.al-row-t{flex:none;font-variant-numeric:tabular-nums;color:var(--fg-3);min-width:150px}
+.al-row-tg{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:720px){
+  .al-g-h{flex-wrap:wrap;gap:6px}
+  .al-g-time{min-width:0}
+  .al-g-brief{flex-basis:100%}
+  .al-row{flex-wrap:wrap;gap:4px 8px}
+  .al-row-t{min-width:0}
+}
+
 .pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 4px 2px;flex-wrap:wrap}
 .pager .info{font-size:.78rem;color:var(--fg-3)}
 .pager .pages{display:flex;gap:6px;align-items:center}
@@ -899,7 +930,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.11';
+var SITE_VERSION = '3.5.12';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -955,11 +986,28 @@ function parseTime(v){
   if(!v) return null;
   if(v instanceof Date) return isNaN(v.getTime()) ? null : v;
   var s = String(v).trim();
+  if(!s) return null;
   if(/^\d+$/.test(s)){ var n = Number(s); return new Date(n > 1e12 ? n : n*1000); }
-  var iso = s.replace(' ','T');
-  if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(iso)) iso += 'Z';
-  var t = Date.parse(iso);
-  return isNaN(t) ? null : new Date(t);
+
+  /* 🔴 v3.5.12 真根因（站主反馈「行为日志没有时间戳」）：
+     线上 /admin?action=action-logs 返回的 createdAt 不是 "2026-10-17T15:01:09Z"，
+     而是 **JS Date 的 toString 形态** —— "Sat Oct 17 2026 15:01:09 GMT+0000
+     (Coordinated Universal Time)"（Neon 驱动把 timestamptz 直接当 Date 序列化）。
+     老代码只做 `replace(' ','T')`（替换第一个空格）→ 得到
+     "SatTOct 17 2026 ..."，Date.parse 必然 NaN → fmt() 返回 '—'，
+     整列时间就永远是个破折号。
+     修法：先认 ISO / 带时区偏移的数字格式；再退回 Date.parse 原生格式
+     （它本来就吃得下 toString 形态）；最后才是补 Z 兜底。 */
+  var iso = s.replace(' ', 'T');
+  if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)){
+    if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(iso)) iso += 'Z';
+    var t1 = Date.parse(iso);
+    if(!isNaN(t1)) return new Date(t1);
+  }
+  var t0 = Date.parse(s);
+  if(!isNaN(t0)) return new Date(t0);
+  var t2 = Date.parse(iso);
+  return isNaN(t2) ? null : new Date(t2);
 }
 function fmt(v, mode){
   var d = parseTime(v);
@@ -1345,7 +1393,10 @@ var ICON = {
   chart:'<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
   database:'<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/>',
   bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
-  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  /* v3.5.12 行为日志分组折叠箭头 */
+  chevronRight:'<path d="m9 6 6 6-6 6"/>',
+  chevronDown:'<path d="m6 9 6 6 6-6"/>'
 };
 function svg(name, size){
   var p = ICON[name] || ICON.file;
@@ -1931,19 +1982,22 @@ function paintMembers(){
     var key = mkey(m);
     var sc = MEMBER_SCENE[m.scene] || MEMBER_SCENE.both;
     var ini = String(memberName(m)).charAt(0);
-    var sub = m.userId != null
-      ? '<i class="mono">@' + esc(m.username) + (m.studentId ? ' · ' + esc(m.studentId) : '') + '</i>'
-      : '<i class="mono">' + esc(m.studentId ? '学号 ' + m.studentId : '未认领 · 无账号') + '</i>';
 
-    /* 账号徽章：管理员 / 三态 / 待改密 */
-    var badges = '';
-    if(m.role === 'admin') badges += '<span class="badge badge-orange">管理员</span> ';
-    if(m.status === 'pending') badges += '<span class="badge badge-amber">待审核</span> ';
-    else if(m.status === 'banned') badges += '<span class="badge badge-red">已禁用</span> ';
-    else if(m.userId != null) badges += '<span class="badge badge-green">正常</span> ';
-    if(m.mustChangePassword) badges += ' <span class="badge badge-amber">待改密</span>';
+    /* 🔻 v3.5.12（站主 2026-10-17 #2「成员档案只展示联系方式，其他的通过详情查看」）
+       列表只留三样东西：头像+姓名、联系方式（微信/QQ/手机）、操作按钮。
+       学号、身份、头衔、政治面貌、自定字段、可见性、审核状态、最后上线
+       全部收进「详情」弹窗，列表不再堆成一堵墙。 */
+    var sub = '<div class="muted"><i class="mono">@' + esc(m.username || (m.studentId ? '学号 ' + m.studentId : '未认领'))
+      + '</i></div>';
 
-    /* 联系方式：三个字段紧凑铺开 */
+    /* 账号状态异常时才在名字后面挂个小徽章，正常状态不占地方 */
+    var flag = '';
+    if(m.role === 'admin') flag += '<span class="badge badge-orange">管理员</span>';
+    if(m.status === 'pending') flag += '<span class="badge badge-amber">待审核</span>';
+    if(m.status === 'banned') flag += '<span class="badge badge-red">已禁用</span>';
+    if(m.mustChangePassword) flag += '<span class="badge badge-amber">待改密</span>';
+    if(!m.name && m.profileId == null) flag += '<span class="badge badge-gray">无档案</span>';
+
     var ct = function(label, v){
       return '<div class="ct"><i>' + label + '</i>'
         + (v ? '<span title="' + attr(v) + '">' + esc(v) + '</span>'
@@ -1954,44 +2008,11 @@ function paintMembers(){
       + ct('微信', m.wechat) + ct('QQ', m.qq) + ct('手机', m.phone)
       + '</div>';
 
-    var cst = CONTACT_LABEL[m.contactStatus] || CONTACT_LABEL.none;
-
-    /* 可见性（2026-10-08）：本人私密意愿 + 管理员单人例外，两个徽章都展示 */
-    var vp = m.visibilityPref || {};
-    var hidden = [];
-    if(vp.wechat === false) hidden.push('微信');
-    if(vp.qq === false) hidden.push('QQ');
-    if(vp.phone === false) hidden.push('手机');
-    var fv = m.fieldVis || {};
-    var fvKeys = Object.keys(fv);
-    var fvLabelOf = function(k){
-      var mm = (STATE.members.fieldMeta || []).find(function(x){ return x.field === k; });
-      return mm ? mm.label : k;
-    };
-    var vis;
-    if(fvKeys.length){
-      vis = '<span class="badge badge-purple" title="管理员单独设置了这些字段的可见范围（只对该同学生效）">'
-          + '⚙ ' + esc(fvKeys.map(fvLabelOf).join('/')) + '</span>';
-      if(hidden.length){
-        vis += '<div class="muted" style="font-size:.68rem;margin-top:3px">本人私密：' + esc(hidden.join('/')) + '</div>';
-      }
-    } else if(hidden.length){
-      vis = '<span class="badge badge-orange" title="本人把这几项设为仅自己可见，同学查不到">🔒 ' + esc(hidden.join('/')) + ' 私密</span>';
-    } else {
-      vis = '<span class="badge badge-gray">公开</span>';
-    }
-
-    var extraTds = extras.map(function(f){
-      var v = (m.extra || {})[f.field];
-      return '<td class="nowrap">' + (v ? '<span class="mono">' + esc(v) + '</span>'
-                                          : '<span class="muted">—</span>') + '</td>';
-    }).join('');
-
-    /* 行内操作：账号类操作仅对有账号的行开放 */
-    var acts = '<button data-mb="edit" data-key="' + attr(key) + '">编辑</button>'
+    /* 行内操作：详情对所有行开放（v3.5.12 起）；账号类操作仅对有账号的行开放 */
+    var acts = '<button class="ok" data-mb="detail" data-key="' + attr(key) + '">详情</button>'
+      + '<button data-mb="edit" data-key="' + attr(key) + '">编辑</button>'
       + (m.userId != null
-          ? '<button data-mb="detail" data-key="' + attr(key) + '">详情</button>'
-            + '<button data-mb="pwd" data-key="' + attr(key) + '">重置密码</button>'
+          ? '<button data-mb="pwd" data-key="' + attr(key) + '">重置密码</button>'
             + (m.status === 'pending'
                 ? '<button class="ok" data-mb="approve" data-key="' + attr(key) + '">通过</button>'
                   + '<button class="danger" data-mb="reject" data-key="' + attr(key) + '">驳回</button>'
@@ -2006,21 +2027,8 @@ function paintMembers(){
     return '<tr' + (S.selected[key] ? ' class="sel"' : '') + '>'
       + '<td><input type="checkbox" class="chk" data-pick="' + attr(key) + '"' + (S.selected[key] ? ' checked' : '') + '></td>'
       + '<td><div class="cell-user"><div class="av ink-auto">' + esc(ini) + '</div>'
-      +   '<div><b>' + esc(memberName(m)) + '</b>' + sub + '</div></div></td>'
-      + '<td class="nowrap"><span class="badge ' + sc.cls + '">' + sc.text + '</span></td>'
-      + '<td class="nowrap">' + badges + '</td>'
-      + extraTds
+      +   '<div><b>' + esc(memberName(m)) + '</b> ' + flag + sub + '</div></div></td>'
       + '<td>' + contacts + '</td>'
-      + '<td class="nowrap">' + vis + '</td>'
-      + '<td class="nowrap"><span class="badge ' + cst.cls + '">' + cst.text + '</span></td>'
-      + '<td class="nowrap muted" title="' + attr(fmt(m.sessionLastSeen || m.lastSeenAt || m.lastLoginAt)) + '">'
-      +   (m.userId == null ? '—'
-            : (isOnlineNow(m)
-                ? '<span class="dot-on" title="当前在线"></span>在线中'
-                  + (m.onlineSessions > 1 ? '<span style="opacity:.7">（' + m.onlineSessions + ' 端）</span>' : '')
-                : esc(m.sessionLastSeen ? ago(m.sessionLastSeen)
-                     : (m.lastSeenAt ? ago(m.lastSeenAt) : (m.lastLoginAt ? ago(m.lastLoginAt) : '从未上线')))))
-      + '</td>'
       + '<td class="nowrap" style="text-align:right"><div class="row-actions">' + acts
       +   (m.userId != null
             ? '<button class="danger" data-mb="del" data-key="' + attr(key) + '"'
@@ -2032,19 +2040,13 @@ function paintMembers(){
       + '</tr>';
   }).join('');
 
-  var extraTh = extras.map(function(f){
-    return '<th class="nowrap">' + esc(f.label) + '</th>';
-  }).join('');
-
   var size = S.size;
   var shownTo = Math.min(S.page * size, S.total);
 
   body.innerHTML =
     '<div class="table-wrap"><table><thead><tr>'
     + '<th style="width:38px"><input type="checkbox" class="chk" data-pick-all' + (allChecked ? ' checked' : '') + '></th>'
-    + '<th>成员</th><th class="nowrap">场景</th><th class="nowrap">角色 / 状态</th>'
-    + extraTh
-    + '<th>联系方式</th><th class="nowrap">可见性</th><th class="nowrap">审核状态</th><th class="nowrap">最后上线</th>'
+    + '<th>成员</th><th>联系方式</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
     + '<div class="pager">'
@@ -2183,7 +2185,8 @@ function memberAction(act, key){
   var m = memberByKey(key);
   if(!m) return;
   if(act === 'edit')       return memberDialog(m);
-  if(act === 'detail')     return userDetailDialog(m.userId);
+  /* v3.5.12：详情对**所有**行开放（含未认领的档案行）；有账号时顺手带出账号信息 */
+  if(act === 'detail')     return memberDetailDialog(m);
   if(act === 'pwd')        return resetPwdDialog(m.userId, m);
   if(act === 'views')      return profileViewsDialog(m.profileId);
   if(act === 'ban')        return memberSetStatus(m, 'banned');
@@ -2723,6 +2726,181 @@ function memberDialog(m){
 }
 
 /* ---------------- 用户详情（含登录记录） ---------------- */
+/**
+ * v3.5.12 成员详情（站主 2026-10-17 #2）
+ * 「成员档案只展示联系方式，其他的通过详情查看」
+ *
+ * 列表瘦身成「姓名 + 联系方式」之后，其余信息全在这里：
+ *   顶部四格速览（场景 / 审核 / 上线 / 云端数据）
+ *   ① 班级档案：学号、身份、头衔、政治面貌、智学网账号 + 所有自定义字段
+ *   ② 联系方式：微信 / QQ / 手机 + 本人私密意愿 + 管理员单人可见性设置
+ *   ③ 账号信息：角色、状态、创建、最后上线/登录、在线会话
+ *   ④ 登录记录（有账号才拉）
+ * 未认领的档案行（profileId 有、userId 无）也能打开，只是账号区显示「无账号」。
+ */
+function memberDetailDialog(m){
+  if(!m) return;
+  var hasUser = m.userId != null;
+
+  function kvRow(dt, dd){
+    return '<dt>' + esc(dt) + '</dt><dd>' + dd + '</dd>';
+  }
+  function v(x){
+    return (x === 0 || x) && String(x).trim() !== ''
+      ? esc(x) : '<span class="muted">—</span>';
+  }
+
+  var sc = MEMBER_SCENE[m.scene] || MEMBER_SCENE.both;
+  var cst = CONTACT_LABEL[m.contactStatus] || CONTACT_LABEL.none;
+
+  var head = '<div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-bottom:18px">'
+    + statMini('场景', sc.text)
+    + statMini('审核', cst.text)
+    + statMini('最后上线', hasUser
+        ? (isOnlineNow(m) ? '在线中' : (m.sessionLastSeen || m.lastSeenAt
+            ? ago(m.sessionLastSeen || m.lastSeenAt) : (m.lastLoginAt ? ago(m.lastLoginAt) : '从未')))
+        : '—')
+    + statMini('云端数据', hasUser ? ((m.dataCount || 0) + ' 条') : '—')
+    + '</div>';
+
+  /* ① 班级档案 */
+  var meta = STATE.members.fieldMeta || [];
+  var FIXED = ['name', 'student_id', 'politics', 'exam_no', 'role', 'title', 'wechat', 'qq', 'phone'];
+  var extraFields = meta.filter(function(f){ return FIXED.indexOf(f.field) < 0; });
+
+  var extraRows = extraFields.map(function(f){
+    var x = (m.extra || {})[f.field];
+    return kvRow(f.label || f.field, v(x));
+  }).join('');
+
+  var archive = m.profileId == null
+    ? '<div class="panel" style="margin-bottom:18px"><div class="panel-head"><h3>' + svg('file') + '班级档案</h3></div>'
+      + '<div class="panel-body"><p class="muted" style="margin:0;font-size:.85rem">'
+      + '这位同学<b>还没有班级档案</b>。点「编辑」可以在同一个表单里补上学号、身份、联系方式。</p></div></div>'
+    : '<div class="panel" style="margin-bottom:18px">'
+      + '<div class="panel-head"><div><h3>' + svg('file') + '班级档案</h3>'
+      +   '<p class="sub">' + esc(m.name || '(未命名)') + ' 的档案字段</p></div></div>'
+      + '<div class="panel-body"><dl class="kv">'
+      +   kvRow('姓名', v(m.name))
+      +   kvRow('学号', v(m.studentId))
+      +   kvRow('身份', v(m.role))
+      +   kvRow('头衔', v(m.title))
+      +   kvRow('政治面貌', v(m.politics))
+      +   kvRow('智学网账号', v(m.examNo))
+      +   extraRows
+      + '</dl></div></div>';
+
+  /* ② 联系方式 + 可见性 */
+  var vp = m.visibilityPref || {};
+  var hidden = [];
+  if(vp.wechat === false) hidden.push('微信');
+  if(vp.qq === false) hidden.push('QQ');
+  if(vp.phone === false) hidden.push('手机');
+
+  var fv = m.fieldVis || {};
+  var fvKeys = Object.keys(fv);
+  var fvLabelOf = function(k){
+    var mm = meta.find(function(x){ return x.field === k; });
+    return mm ? mm.label : k;
+  };
+
+  var visTxt;
+  if(fvKeys.length){
+    visTxt = '<span class="badge badge-purple">⚙ 管理员单独设置：'
+      + esc(fvKeys.map(fvLabelOf).join('/')) + '</span>';
+  } else if(hidden.length){
+    visTxt = '<span class="badge badge-orange">🔒 本人设私密：' + esc(hidden.join('/')) + '</span>';
+  } else {
+    visTxt = '<span class="badge badge-gray">全部公开</span>';
+  }
+
+  var contact = '<div class="panel" style="margin-bottom:18px">'
+    + '<div class="panel-head"><div><h3>' + svg('user') + '联系方式</h3>'
+    +   '<p class="sub">同学之间互相查到的是这三项</p></div></div>'
+    + '<div class="panel-body"><dl class="kv">'
+    +   kvRow('微信', v(m.wechat))
+    +   kvRow('QQ', v(m.qq))
+    +   kvRow('手机', v(m.phone))
+    +   kvRow('可见性', visTxt)
+    +   kvRow('审核状态', '<span class="badge ' + cst.cls + '">' + cst.text + '</span>'
+        + (m.rejectReason ? '<div class="muted" style="font-size:.74rem;margin-top:3px">驳回理由：' + esc(m.rejectReason) + '</div>' : ''))
+    + '</dl></div></div>';
+
+  /* ③ 账号信息 */
+  var account = !hasUser
+    ? '<div class="panel" style="margin-bottom:18px"><div class="panel-head"><h3>' + svg('shield') + '系统账号</h3></div>'
+      + '<div class="panel-body"><p class="muted" style="margin:0;font-size:.85rem">'
+      + '这条记录只有档案，<b>还没有绑定登录账号</b>（同学自己注册后会自动认领，或点「新增成员」直接建号）。</p></div></div>'
+    : '<div class="panel" style="margin-bottom:18px">'
+      + '<div class="panel-head"><h3>' + svg('shield') + '系统账号</h3></div>'
+      + '<div class="panel-body"><dl class="kv">'
+      +   kvRow('用户名', '<span class="mono">' + esc(m.username || '—') + '</span>')
+      +   kvRow('显示名', v(m.displayName))
+      +   kvRow('角色', m.role === 'admin'
+            ? '<span class="badge badge-orange">管理员</span>' : '普通用户')
+      +   kvRow('状态', m.status === 'banned'
+            ? '<span class="badge badge-red">已禁用</span>'
+            : (m.status === 'pending'
+                ? '<span class="badge badge-amber">待审核</span>'
+                : '<span class="badge badge-green">正常</span>')
+            + (m.mustChangePassword ? ' <span class="badge badge-amber">待改密</span>' : ''))
+      +   kvRow('注册时间', v(m.createdAt ? fmt(m.createdAt) : ''))
+      +   kvRow('最后上线', m.sessionLastSeen || m.lastSeenAt
+            ? esc(fmt(m.sessionLastSeen || m.lastSeenAt)) + ' <span class="muted">（' + esc(ago(m.sessionLastSeen || m.lastSeenAt)) + '）</span>'
+            : '<span class="muted">未记录</span>')
+      +   kvRow('最后登录', m.lastLoginAt
+            ? esc(fmt(m.lastLoginAt)) + ' <span class="muted">（' + esc(ago(m.lastLoginAt)) + '）</span>'
+            : '<span class="muted">从未登录</span>')
+      +   kvRow('在线会话', (m.onlineSessions || 0) + ' 个'
+            + (isOnlineNow(m) ? ' <span class="badge badge-green">在线</span>' : ''))
+      + '</dl></div></div>';
+
+  /* ④ 登录记录（有账号才拉） */
+  var loginBox = hasUser
+    ? '<div class="panel"><div class="panel-head"><div><h3>' + svg('clock') + '最近登录</h3>'
+      + '<p class="sub">最近 15 次</p></div>'
+      + '<button class="btn btn-sm btn-ghost" id="mdMore" style="margin-left:auto">完整用户详情</button></div>'
+      + '<div id="mdLogins"><div class="loading" style="padding:22px"><div class="spinner"></div></div></div></div>'
+    : '';
+
+  openModal({
+    title: '成员详情 · ' + (memberName(m) || ''),
+    sub: (hasUser ? '@' + m.username : '未认领') + (m.studentId ? ' · 学号 ' + m.studentId : ''),
+    wide: true,
+    body: head + archive + contact + account + loginBox,
+    foot: '<button class="btn btn-ghost" data-no>关闭</button>'
+      + '<button class="btn" data-edit>编辑这位成员</button>',
+    onMount: function(box){
+      var eb = box.querySelector('[data-edit]');
+      if(eb) eb.onclick = function(){ closeModal(); memberDialog(m); };
+
+      if(hasUser){
+        var more = box.querySelector('#mdMore');
+        if(more) more.onclick = function(){ closeModal(); userDetailDialog(m.userId); };
+
+        api('/admin?action=login-logs&id=' + m.userId + '&limit=15').then(function(lj){
+          var logs = lj.logs || [];
+          var el = box.querySelector('#mdLogins');
+          if(!el) return;
+          el.innerHTML = logs.length
+            ? '<div class="table-wrap"><table><thead><tr><th>时间</th><th>IP</th><th>设备</th></tr></thead><tbody>'
+              + logs.map(function(l){
+                  return '<tr><td class="nowrap">' + esc(fmt(l.createdAt)) + '</td>'
+                    + '<td class="nowrap mono">' + esc(l.ip || '—') + '</td>'
+                    + '<td class="muted" style="font-size:.75rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + attr(l.userAgent || '') + '">'
+                    + esc(shortUA(l.userAgent)) + '</td></tr>';
+                }).join('')
+              + '</tbody></table></div>'
+            : '<div class="empty" style="padding:24px"><p class="muted">暂无登录记录</p></div>';
+        }).catch(function(e){
+          var el = box.querySelector('#mdLogins');
+          if(el) el.innerHTML = '<p class="muted" style="padding:18px;margin:0">读取失败：' + esc(e.message) + '</p>';
+        });
+      }
+    },
+  });
+}
+
 function userDetailDialog(id){
   openModal({
     title: '用户详情',
@@ -7750,6 +7928,40 @@ function loadActionLogs(){
   });
 }
 
+/**
+ * v3.5.12 行为日志分组（站主 2026-10-17 要求）：
+ *   「如果前后都是同一个人那么就合并显示，点击可展开。同一个人但是中途
+ *    有其他人则分多次合并」
+ *
+ * 做法：后端已按 created_at desc 返回，这里顺序扫一遍，**相邻同 userId**
+ * 归为一组；一旦中间夹了别人就断开、后面同一个人再开新组。
+ * 组内顺序保持后端的倒序（最新在上）。
+ */
+function alGroup(list){
+  var groups = [];
+  var cur = null;
+  (list || []).forEach(function(l){
+    var uid = (l.userId != null ? l.userId : ('u:' + l.username));
+    if(cur && cur.uid === uid){
+      cur.items.push(l);
+    } else {
+      cur = { uid: uid, items: [l] };
+      groups.push(cur);
+    }
+  });
+  return groups;
+}
+
+/** 组内时间区间文本：同一分钟只写一个时间，跨分钟写「起 ~ 止」 */
+function alRange(g){
+  var a = g.items[g.items.length - 1];   /* 最早 */
+  var b = g.items[0];                    /* 最新 */
+  var ta = fmt(a.createdAt), tb = fmt(b.createdAt);
+  if(g.items.length === 1) return ta;
+  if(ta === tb) return ta;
+  return ta + ' ~ ' + tb;
+}
+
 function paintActionLogs(){
   var S = STATE.actionlogs;
   var body = $('alBody');
@@ -7761,26 +7973,54 @@ function paintActionLogs(){
   }
   var page = S.page, size = S.size;
   var shownTo = Math.min(page * size, S.total);
+  var groups = alGroup(S.list);
+
+  /* 默认展开状态记在 STATE 里，翻页不丢 */
+  S.open = S.open || {};
+
+  var html = '';
+  groups.forEach(function(g, gi){
+    var head = g.items[0];
+    var key = 'g' + page + '_' + gi;
+    var n = g.items.length;
+    var opened = !!S.open[key];
+
+    /* ---- 组标题行（可点） ---- */
+    html += '<div class="al-g' + (opened ? ' open' : '') + '" data-alg="' + key + '">'
+      + '<div class="al-g-h">'
+      +   '<span class="al-g-caret">' + svg('chevronRight', 14) + '</span>'
+      +   '<span class="al-g-time">' + esc(alRange(g)) + '</span>'
+      +   '<span class="al-g-user"><b>' + esc(head.displayName || head.username) + '</b>'
+      +     '<span class="muted" style="font-size:.72rem"> @' + esc(head.username) + '</span></span>'
+      +   '<span class="al-g-cnt">' + (n > 1
+            ? ('<span class="badge badge-blue">' + n + ' 次操作</span>')
+            : ('<span class="badge badge-gray">1 次操作</span>'))
+      +   '</span>'
+      +   '<span class="al-g-brief muted">' + esc(alBrief(g)) + '</span>'
+      + '</div>';
+
+    /* ---- 组明细（展开后可见） ---- */
+    html += '<div class="al-g-body">';
+    g.items.forEach(function(l){
+      html += '<div class="al-row">'
+        + '<span class="al-row-t muted nowrap">' + esc(fmt(l.createdAt)) + '</span>'
+        + '<span class="nowrap"><span class="badge badge-blue">' + esc(actActionCn(l.action)) + '</span></span>'
+        + '<span class="nowrap muted">' + esc(actPageCn(l.page)) + '</span>'
+        + '<span class="al-row-tg" title="' + attr((l.target || '') + (l.detail ? ' — ' + l.detail : '')) + '">'
+        +   esc(l.target || '—')
+        +   (l.detail ? '<span class="muted" style="font-size:.72rem"> · ' + esc(l.detail) + '</span>' : '')
+        + '</span>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  });
 
   body.innerHTML =
-    '<div class="table-wrap"><table><thead><tr>'
-    + '<th class="nowrap">时间</th><th>用户</th><th class="nowrap">动作</th>'
-    + '<th class="nowrap">页面</th><th>点击目标</th>'
-    + '</tr></thead><tbody>'
-    + S.list.map(function(l){
-        return '<tr>'
-          + '<td class="nowrap muted">' + esc(fmt(l.createdAt)) + '<div class="muted" style="font-size:.72rem">' + esc(ago(l.createdAt)) + '</div></td>'
-          + '<td class="nowrap"><b>' + esc(l.displayName || l.username) + '</b><div class="muted" style="font-size:.72rem">@' + esc(l.username) + '</div></td>'
-          + '<td class="nowrap"><span class="badge badge-blue">' + esc(actActionCn(l.action)) + '</span></td>'
-          + '<td class="nowrap">' + esc(actPageCn(l.page)) + '</td>'
-          + '<td class="muted" style="font-size:.8rem;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + attr(l.target || '') + '">'
-          +   esc(l.target || '—') + (l.detail ? '<div class="muted" style="font-size:.72rem">' + esc(l.detail) + '</div>' : '')
-          + '</td>'
-          + '</tr>';
-      }).join('')
-    + '</tbody></table></div>'
+    '<div class="al-wrap">' + html + '</div>'
     + '<div class="pager">'
-    +   '<span class="info">共 ' + S.total + ' 条，当前显示第 ' + ((page - 1) * size + 1) + '–' + shownTo + ' 条</span>'
+    +   '<span class="info">共 ' + S.total + ' 条（' + groups.length + ' 组），当前显示第 '
+    +     ((page - 1) * size + 1) + '–' + shownTo + ' 条</span>'
+    +   '<span class="muted" style="font-size:.76rem">点整行可展开/收起 · 同一人连续操作已合并</span>'
     +   '<span class="pages">'
     +     '<button data-alp="prev"' + (page <= 1 ? ' disabled' : '') + '>上一页</button>'
     +     '<button class="on">' + page + '</button>'
@@ -7788,6 +8028,13 @@ function paintActionLogs(){
     +   '</span>'
     + '</div>';
 
+  Array.prototype.forEach.call(body.querySelectorAll('[data-alg]'), function(el){
+    el.querySelector('.al-g-h').onclick = function(){
+      var k = el.dataset.alg;
+      S.open[k] = !S.open[k];
+      el.classList.toggle('open', S.open[k]);
+    };
+  });
   Array.prototype.forEach.call(body.querySelectorAll('[data-alp]'), function(b){
     b.onclick = function(){
       if(b.disabled) return;
@@ -7795,6 +8042,19 @@ function paintActionLogs(){
       loadActionLogs();
     };
   });
+}
+
+/** 组摘要：动作 + 页面 去重后的前两项，例如「点击 · 首页、成绩分析」 */
+function alBrief(g){
+  var acts = [], pages = [];
+  g.items.forEach(function(l){
+    var a = actActionCn(l.action), p = actPageCn(l.page);
+    if(acts.indexOf(a) < 0) acts.push(a);
+    if(p && pages.indexOf(p) < 0) pages.push(p);
+  });
+  var t = acts.slice(0, 2).join(' / ');
+  if(pages.length) t += ' · ' + pages.slice(0, 2).join('、') + (pages.length > 2 ? ' 等' : '');
+  return t;
 }
 
 /* ============================================================================
@@ -8576,6 +8836,10 @@ var DJ_STATE = {
      wmap = { 点歌人姓名: { prog:进步了没, comm:是不是班委 } }，抽签时按需拉一次 */
   weight: { on: false, prog: 2, comm: 1 },
   wmap: null,
+  /* v3.5.12 获选原因（站主 2026-10-17 #3）：
+     progTopN = 进步加权只覆盖「班内总分排名进步幅度前 N 名」（0 = 不限，所有进步的人都算）
+     commNames = 班委名单来源（后台头衔）；reasonShort = 公示里允许的最大字数（默认 5） */
+  reason: { progTopN: 0, reasonShort: 5 },
 };
 
 /* ---- 兼容读取：云端那份可能被写成数组，也可能写成 {schedule:[...]} ---- */
@@ -8760,8 +9024,10 @@ function renderDj(){
     +         '<input type="number" id="djWProg" min="0" max="20" step="0.5" value="2" title="最近两场考试班内总分排名靠前＝进步，权重加这么多"></div>'
     +       '<div class="field" style="margin:0;width:150px"><label>班委身份加成</label>'
     +         '<input type="number" id="djWComm" min="0" max="20" step="0.5" value="1" title="有班级职务（班长/委员/课代表等）＝班委，权重加这么多"></div>'
+    +       '<div class="field" style="margin:0;width:190px"><label>进步加权范围</label>'
+    +         '<input type="number" id="djWProgTop" min="0" max="60" step="1" value="0" title="只给「班内总分排名进步幅度前 N 名」加权。0 = 所有进步的人都算"></div>'
     +     '</div>'
-    +     '<p class="muted" style="font-size:.78rem;margin:8px 0 0;line-height:1.6">进步按最近两场有成绩的考试算（总分班内排名靠前）；班委按后台头衔任命算。加成只作用于随机抽取，「高赞必选」不受影响。设为 0 即关闭该项。</p>'
+    +     '<p class="muted" style="font-size:.78rem;margin:8px 0 0;line-height:1.6">进步按最近两场有成绩的考试算（总分班内排名靠前，名次变化越大越靠前）；班委按后台头衔任命算。加成只作用于随机抽取，「高赞必选」不受影响。设为 0 即关闭该项。</p>'
     +   '</div>'
     +   '<button class="btn" id="djRunBtn" style="width:100%">🎲 开始抽签</button>'
     +   '<div id="djResult" style="margin-top:12px"></div>'
@@ -8799,13 +9065,14 @@ function renderDj(){
 
   $('djTo').value = djNowLocal();
 
-  /* 点歌人加权：勾选才显示两个加成输入框 */
+  /* 点歌人加权：勾选才显示加成输入框 */
   var wOn = $('djWeightOn'), wBox = $('djWeightBox');
   if(wOn && wBox){
     wOn.checked = !!DJ_STATE.weight.on;
-    var wp = $('djWProg'), wc = $('djWComm');
+    var wp = $('djWProg'), wc = $('djWComm'), wt = $('djWProgTop');
     if(wp) wp.value = String(DJ_STATE.weight.prog);
     if(wc) wc.value = String(DJ_STATE.weight.comm);
+    if(wt) wt.value = String(Math.max(0, Number(DJ_STATE.reason.progTopN) || 0));
     wBox.style.display = wOn.checked ? '' : 'none';
     wOn.onchange = function(){
       DJ_STATE.weight.on = !!wOn.checked;
@@ -8814,6 +9081,7 @@ function renderDj(){
     };
     if(wp) wp.oninput = function(){ DJ_STATE.weight.prog = Math.max(0, Number(wp.value) || 0); };
     if(wc) wc.oninput = function(){ DJ_STATE.weight.comm = Math.max(0, Number(wc.value) || 0); };
+    if(wt) wt.oninput = function(){ DJ_STATE.reason.progTopN = Math.max(0, Number(wt.value) || 0); };
   }
 
   /* 拉云端数据；成功后检查要不要提示迁移旧数据 */
@@ -8896,6 +9164,7 @@ function djRun(){
   if(DJ_STATE.weight.on){
     DJ_STATE.weight.prog = Math.max(0, Number(($('djWProg') || {}).value) || 0);
     DJ_STATE.weight.comm = Math.max(0, Number(($('djWComm') || {}).value) || 0);
+    DJ_STATE.reason.progTopN = Math.max(0, Number(($('djWProgTop') || {}).value) || 0);
   }
 
   var box = $('djResult');
@@ -8974,12 +9243,24 @@ function djRun(){
 
     /* 存成一个批次（含时间 / 备注 / 已排期 / 已播放标记 + 本次参数） */
     var rounds = (DJ_STATE.rounds || []).slice();
+    /* 高赞必选集合要在生成 songs 之前先算好 —— djReasonOf 靠它判断「高赞必选」 */
+    var gsetForReason = {};
+    guarantee.forEach(function(s){ gsetForReason[s.id] = 1; });
     var rec = {
       id: Date.now(),
       at: new Date().toLocaleString('zh-CN', { hour12:false }),
       note: '', addedToPlatform: false, played: false,
       songs: picked.map(function(s){
-        return { id: s.id, title: s.title, artist: s.artist, votes: s.voteCount || 0, requester: djReqName(s) };
+        /* v3.5.12 #3：每首歌带上「获选原因」——short 用于公示（≤5 字），
+           detail 用于后台结果面板与历史记录（写清楚进步了多少名 / 班干身份） */
+        var why = djReasonOf(s, gsetForReason);
+        return {
+          id: s.id, title: s.title, artist: s.artist, votes: s.voteCount || 0,
+          requester: djReqName(s),
+          reason: why.short, reasonDetail: why.detail,
+          /* 高赞必选的额外标记，公示按「获选原因」一列走，不单列 */
+          top: !!gsetForReason[s.id],
+        };
       }),
     };
     /* 把参数存进批次：公示时用「这一批自己的参数」，
@@ -8987,28 +9268,39 @@ function djRun(){
     rec.params = {
       top: guarantee.length, picked: picked.length, onePer: onePer,
       exPlayed: !!excl, exSched: !!exclSched, pool: pool.length, persons: personCnt,
-      /* v3.5.6 点歌人加权（null = 本次没开） */
+      /* v3.5.6 点歌人加权（null = 本次没开）；v3.5.12 加 progTopN 记录「前 N 名」范围 */
       weight: DJ_STATE.weight.on
-        ? { on: true, prog: DJ_STATE.weight.prog, comm: DJ_STATE.weight.comm, boosted: boosted }
+        ? { on: true, prog: DJ_STATE.weight.prog, comm: DJ_STATE.weight.comm,
+            boosted: boosted, progTopN: Math.max(0, Number(DJ_STATE.reason.progTopN) || 0) }
         : null,
     };
     rounds.push(rec);
     DJ_STATE.pick = picked;
 
     djSaveSchedule(rounds).then(function(){
-      var gset = {}; guarantee.forEach(function(s){ gset[s.id] = 1; });
+      var gset = {};
+      guarantee.forEach(function(s){ gset[s.id] = 1; });
+      /* v3.5.12 #3：结果面板要把「获选原因」写清楚（这是后台看的内部版） */
       var rows = picked.map(function(s, i){
         var rq = djReqName(s);
-        var wgt = djWeightOf(rq) > 1 ? '⚖ ' : '';
-        return wgt + (gset[s.id] ? '🔥 ' : '') + (i + 1) + '. ' + esc(s.title || '?') + ' - ' + esc(s.artist || '未知歌手')
-          + '（' + (rq ? '点歌：' + esc(rq) + ' · ' : '') + '点赞 ' + (s.voteCount || 0) + '）';
-      }).join('<br>');
+        var why = djReasonOf(s, gset);
+        return '<div style="margin-top:4px">'
+          + (i + 1) + '. <b>' + esc(s.title || '?') + '</b> - ' + esc(s.artist || '未知歌手')
+          + (rq ? '（点歌：' + esc(rq) + ' · ' : '（')
+          + '点赞 ' + (s.voteCount || 0) + '）'
+          + '<div style="font-size:.78rem;color:#57534e;margin-left:1.2em">'
+          +   '获选原因：<b style="color:#0a7d42">' + esc(why.short) + '</b>'
+          +   (why.detail ? ' · <span style="color:#af410f">' + esc(why.detail) + '</span>' : '')
+          + '</div></div>';
+      }).join('');
       var mode = (topN > 0 ? '高赞必选 ' + guarantee.length + ' 首 + ' : '') + '随机'
         + (onePer ? ' · 每人限一首' : ' · 不限制每人首数')
         + (excl ? ' · 排除已播放' : '') + (exclSched ? ' · 排除已排期' : '')
         + (DJ_STATE.weight.on
             ? ' · 点歌人加权（进步 +' + DJ_STATE.weight.prog + '／班委 +' + DJ_STATE.weight.comm
-              + '，加权中选 ' + boosted + ' 首，⚖ 标记）'
+              + (Math.max(0, Number(DJ_STATE.reason.progTopN) || 0) > 0
+                  ? '／仅进步前 ' + DJ_STATE.reason.progTopN + ' 名' : '')
+              + '，加权中选 ' + boosted + ' 首）'
             : '')
         + ' · 池中 ' + pool.length + ' 首' + (onePer ? ' / ' + personCnt + ' 位同学' : '');
       var shortMsg = '';
@@ -9095,6 +9387,16 @@ function djRankByName(rows, subs, basis){
   });
   return out;
 }
+
+/**
+ * v3.5.12（#3）把加权映射算出来：{ 姓名: { prog, comm, delta, rankOld, rankNew } }
+ *   prog  : 是否「进步」（名次变小）
+ *   delta : 进步了多少名（正数=进步，负数=退步，0=持平）
+ *   comm  : 是否有班级职务
+ *   rankOld / rankNew : 上一场 / 这一场的班内总分排名
+ *   progRanked : 该人在「按进步幅度降序」里排第几（1 开始，只在进步的人里排）
+ * 有了 delta 才能实现站主要求的「在班级成员学校排名进步最多的前 10 名随机选出」。
+ */
 function djLoadWeightMap(){
   if(DJ_STATE.wmap) return Promise.resolve(DJ_STATE.wmap);
   var map = {};
@@ -9108,7 +9410,7 @@ function djLoadWeightMap(){
       var nm = String(p.name || '').trim();
       if(!nm) return;
       var comm = !!(p.titles && p.titles.length);
-      if(!map[nm]) map[nm] = { prog: false, comm: false };
+      if(!map[nm]) map[nm] = { prog: false, comm: false, delta: 0, rankOld: null, rankNew: null, progRanked: 0 };
       map[nm].comm = comm;
     });
     /* ② 进退步：最近两场有成绩的考试 */
@@ -9130,13 +9432,29 @@ function djLoadWeightMap(){
         if(older && newer && older.rows && newer.rows){
           var rOld = djRankByName(older.rows, older.exam.subjects || [], 'graded');
           var rNew = djRankByName(newer.rows, newer.exam.subjects || [], 'graded');
+          var gains = [];
           Object.keys(rNew).forEach(function(nm){
             if(rOld[nm] == null) return;               /* 上一场没这个人，无从谈进退步 */
-            if(rNew[nm] < rOld[nm]){                    /* 名次变小 = 进步 */
-              if(!map[nm]) map[nm] = { prog: false, comm: false };
-              map[nm].prog = true;
-            }
+            var delta = rOld[nm] - rNew[nm];            /* 正数 = 名次前进 */
+            if(!map[nm]) map[nm] = { prog: false, comm: false, delta: 0, rankOld: null, rankNew: null, progRanked: 0 };
+            map[nm].delta = delta;
+            map[nm].rankOld = rOld[nm];
+            map[nm].rankNew = rNew[nm];
+            map[nm].prog = delta > 0;
+            if(delta > 0) gains.push({ name: nm, delta: delta });
           });
+          /* 「进步最多的前 N 名」：按进步幅度降序排，同幅度并列同名次 */
+          gains.sort(function(a, b){ return b.delta - a.delta; });
+          var rk = 0, prevD = null;
+          gains.forEach(function(g, i){
+            if(prevD === null || g.delta !== prevD){ rk = i + 1; prevD = g.delta; }
+            map[g.name].progRanked = rk;
+          });
+          /* 记下这批进步的名单，公示时要按名次范围写原因 */
+          DJ_STATE.gainTop = rk;
+          DJ_STATE.gainCount = gains.length;
+          DJ_STATE.examOld = older.exam && (older.exam.name || older.exam.title);
+          DJ_STATE.examNew = newer.exam && (newer.exam.name || newer.exam.title);
         }
         DJ_STATE.wmap = map;
         return map;
@@ -9146,16 +9464,78 @@ function djLoadWeightMap(){
     return map;
   });
 }
-/* 某个点歌人的权重倍数（1 = 不加成） */
+/* 某个点歌人的权重倍数（1 = 不加成）
+ * v3.5.12：进步加成受「前 N 名」限制（reason.progTopN，0 = 不限） */
+function djProgEligible(name){
+  var info = DJ_STATE.wmap && DJ_STATE.wmap[name];
+  if(!info || !info.prog) return false;
+  var topN = Math.max(0, Number(DJ_STATE.reason.progTopN) || 0);
+  if(topN > 0 && !(info.progRanked >= 1 && info.progRanked <= topN)) return false;
+  return true;
+}
 function djWeightOf(name){
   var w = DJ_STATE.weight;
   if(!w.on) return 1;
   var info = DJ_STATE.wmap && DJ_STATE.wmap[name];
   if(!info) return 1;
   var mul = 1;
-  if(info.prog && w.prog > 0) mul += w.prog;
+  if(djProgEligible(name) && w.prog > 0) mul += w.prog;
   if(info.comm && w.comm > 0) mul += w.comm;
   return mul;
+}
+
+/**
+ * v3.5.12（#3）获选原因
+ * 「抽歌要备注抽到的歌的原因（班干加权、进步加权，具体进步多少名），
+ *   但公示只需要写明 歌曲-歌手-点歌人-点赞量-获选原因（5 字以内概括，
+ *   没有就是随机抽取）」
+ *
+ * 返回 { short, detail }：
+ *   short  公示用，≤5 字（可调）。没有加成就是「随机抽取」。
+ *   detail 后台内部记录 / 结果面板用，写清楚到底为什么。
+ */
+function djReasonOf(s, gset){
+  var rq = djReqName(s);
+  var info = (DJ_STATE.wmap && DJ_STATE.wmap[rq]) || null;
+  var isTop = !!(gset && gset[s.id]);
+
+  /* 高赞必选：管理员点名要的，最优先说明 */
+  if(isTop){
+    return { short: '高赞必选', detail: '点赞 ' + (s.voteCount || 0) + '，进入高赞必选名额' };
+  }
+  if(!rq) return { short: '随机抽取', detail: '这首没有点歌人信息，纯随机' };
+
+  var parts = [];   /* 内部明细 */
+  var shorts = [];  /* 公示短语候选 */
+
+  if(DJ_STATE.weight.on && info){
+    if(djProgEligible(rq)){
+      var d = Number(info.delta) || 0;
+      var rk = info.progRanked;
+      var topN = Math.max(0, Number(DJ_STATE.reason.progTopN) || 0);
+      var scope = topN > 0
+        ? ('班内总分排名进步最多的前 ' + topN + ' 名中')
+        : '班内总分排名进步';
+      parts.push(scope + '（`' + info.rankOld + '` → `' + info.rankNew + '`，进步 ' + d + ' 名'
+        + (rk ? '，进步幅度第 ' + rk + ' 名' : '') + '）');
+      shorts.push('进步加权');
+    }
+    if(info.comm && DJ_STATE.weight.comm > 0){
+      parts.push('担任班级职务（班干加权 +' + DJ_STATE.weight.comm + '）');
+      shorts.push('班干加权');
+    }
+  }
+
+  if(!shorts.length){
+    return { short: '随机抽取', detail: (rq ? '点歌人 「' + rq + '」 没有满足任何加权条件，等概率随机中选' : '纯随机') };
+  }
+  /* 公示短语：能合并就合并（「进步加权」4 字 + 「班干加权」4 字超 5 字时取第一项） */
+  var maxLen = Math.max(2, Number(DJ_STATE.reason.reasonShort) || 5);
+  var short = shorts.join('+');
+  if(short.length > maxLen){
+    short = shorts.filter(function(x){ return x.length <= maxLen; })[0] || shorts[0].slice(0, maxLen);
+  }
+  return { short: short, detail: parts.join('；') };
 }
 /* 加权随机取一个下标：权重 = 1 + 加成；全部为 1 时行为与等概率一致 */
 function djWeightedIdx(bag){
@@ -9354,8 +9734,12 @@ function paintDjHistory(){
   }
   list.innerHTML = rounds.slice().reverse().map(function(r){
     var songRows = (r.songs || []).map(function(s, j){
+      /* v3.5.12 #3：历史记录也带上获选原因（内部版，写清楚为什么） */
+      var why = s.reason || '随机抽取';
       return (j + 1) + '. ' + esc(s.title || '?') + ' - ' + esc(s.artist || '未知')
-        + (s.requester ? '（点歌：' + esc(s.requester) + '）' : '') + '（点赞 ' + (s.votes || 0) + '）';
+        + (s.requester ? '（点歌：' + esc(s.requester) + '）' : '') + '（点赞 ' + (s.votes || 0) + '）'
+        + ' <span style="color:#0a7d42">· ' + esc(why) + '</span>'
+        + (s.reasonDetail ? '<div class="muted" style="font-size:.72rem;margin-left:1.1em">' + esc(s.reasonDetail) + '</div>' : '');
     }).join('<br>');
     return '<div class="panel" style="margin:0 0 12px;padding:12px 14px;font-size:.85rem">'
       + '<div style="font-weight:700;color:#af410f;margin-bottom:8px">📅 ' + esc(r.at || '') + '</div>'
@@ -9501,10 +9885,19 @@ function djCopy(){
   var rule = djParamsLine(last, (last.songs || []).length);
   if(rule) lines.push('抽签规则：' + rule);
   lines.push('本期中选 ' + (last.songs || []).length + ' 首，累计排期 ' + djScheduleCount() + ' 首：');
+
+  /* v3.5.12 #3 公示格式（站主钦定，一个字都不多写）：
+     歌曲 - 歌手 - 点歌人 - 点赞量 - 获选原因（≤5 字，没有就「随机抽取」）
+     抽签规则那行仍然保留（那是「怎么抽的」），但每首歌这一行不再啰嗦。 */
   (last.songs || []).forEach(function(s, i){
-    lines.push((i + 1) + '. ' + (s.title || '?') + ' - ' + (s.artist || '未知')
-      + (s.requester ? '（点歌：' + s.requester + '）' : '') + '（点赞 ' + (s.votes || 0) + '）');
+    var why = s.reason || '随机抽取';
+    lines.push((i + 1) + '. ' + (s.title || '?')
+      + ' - ' + (s.artist || '未知')
+      + ' - ' + (s.requester || '匿名')
+      + ' - 点赞 ' + (s.votes || 0)
+      + ' - ' + why);
   });
+
   /* 备注统一放最后：批次备注（历史记录里填的）+ 公示备注（默认为空，手填才有） */
   var notes = [];
   if(last.note) notes.push(String(last.note));
@@ -9564,6 +9957,23 @@ function relSeed(){
      ⚠️ 站主原话「版本更新记录记得填写（之前的补上）」：以前这里只到 2.3.5，
      后来几十轮的更新全靠手工补，容易漏。现在一次补齐，以后只需往上加。 */
   return [
+    {
+      "version": "3.5.12",
+      "date": "2026-10-17",
+      "title": "行为日志合并展开 · 打印/导出/分享逐项可选 · 成绩对比两场总分与赋分对比",
+      "items": [
+        "行为日志：修好「时间不显示」的老毛病（后端返回的时间格式前端认不出来，全部显示成「—」）；同一个人连续的操作自动合并成一条，点一下展开看每条明细，中途换人就另起一组",
+        "成员档案：表格只留头像姓名 + 微信/QQ/手机 + 操作，学号、身份、头衔、政治面貌、自定字段、可见性、审核状态、最后上线全部收进「详情」弹窗",
+        "抽歌：每首抽中的歌都记下获选原因（高赞必选 / 进步加权 / 班干加权 / 随机抽取），进步加权可选「只在前 N 名里加权」，公示只写：歌曲 - 歌手 - 点歌人 - 点赞量 - 获选原因（不超过 5 字）",
+        "打印：柱状图、折线、雷达图以前打不出来，现在能打；学生×科目热力图不再只印出前几行（滚动区域打印时全部展开）",
+        "打印 / 导出图片 / 分享：都能逐项勾选要展示什么 —— 全班成绩单（班均中位数、总分分布、上线情况、分数段分布、本次最值、名次表）、我的画像（成绩单、上线情况、班里位置、各科情况、热力图、AI 分析）、成绩对比（总分、两场并列、各科、进退步、AI 分析），支持全选 / 全不选 / 反选",
+        "成绩对比：选了两场考试时新增「两场总分并列」表 —— 上一场与这一场同屏，各给原始分与赋分后总分、班排，末尾一句「两人总分差是拉开了还是缩小了」",
+        "成绩对比：新增 AI 对比分析，结构与个人画像一致（这次谁领先多少、差距主要在哪一科、双方各自强弱、两场怎么变的、下一步该怎么补）",
+        "分享：列表和生成结果里都能「预览」，预览就是同学点开看到的那一页；分享内容同样支持逐项勾选",
+        "投票：修好「点了没反应、投不上去」的问题（提交无反馈 + 静默失败），并在卡片和管理面板写明提出人与提出日期",
+        "首页卡片：隐藏后不再留一条空白条"
+      ]
+    },
     {
       "version": "3.5.6",
       "date": "2026-10-17",
@@ -10422,6 +10832,12 @@ function voLoad(){
 }
 
 /* 截止时间统一按本地时区展示（此前直接切 UTC 字符串，比北京时间少 8 小时） */
+/* v3.5.12 今天的日期（本地时区，YYYY-MM-DD）——投票「提出日期」用 */
+function voTodayStr(){
+  var d = new Date();
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
 function voTimeText(iso){
   if(!iso) return '';
   var d = new Date(iso);
@@ -10430,8 +10846,7 @@ function voTimeText(iso){
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 /* datetime-local 输入框值（本地时区，T 分隔） */
-function voLocalInput(iso){
-  var d = new Date(iso);
+function voLocalInput(iso){  var d = new Date(iso);
   if(isNaN(d.getTime())) return String(iso).slice(0, 16);
   function p(n){ return (n < 10 ? '0' : '') + n; }
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
@@ -10490,6 +10905,12 @@ function voPaint(){
       +   '<div style="flex:1;min-width:160px">'
       +     '<b style="font-size:.9rem">' + esc(v.title) + '</b>'
       +     (v.kind === 'song' ? '<span class="badge" style="margin-left:6px">歌单</span>' : '')
+      /* v3.5.12 #10：提出人 + 提出日期 */
+      +     '<div class="muted" style="font-size:.76rem;margin-top:3px">'
+      +       '提出人 <b style="color:var(--accent-ink,#0f766e)">'
+      +       esc(v.proposer || v.createdByName || '未记录') + '</b>'
+      +       (v.createdDate ? ' · ' + esc(v.createdDate) + ' 提出' : '')
+      +     '</div>'
       +     '<div class="muted" style="font-size:.76rem;margin-top:3px">'
       +       st.text
       +       (v.deadline ? ' · 截止 ' + esc(voTimeText(v.deadline)) : '')
@@ -10615,6 +11036,15 @@ function voEditorDialog(v){
       + '<div id="voSongPick" style="display:none;margin-bottom:12px"></div>'
       + '<div class="field"><label>截止时间（留空 = 不限截止）</label>'
       +   '<input type="datetime-local" id="voDeadline" value="' + attr((v && v.deadline) ? voLocalInput(v.deadline) : '') + '"></div>'
+      /* v3.5.12 #10：提出人 + 提出日期（日期 = 创建时间，自动带出，不用手填） */
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      +   '<div class="field" style="flex:1;min-width:180px"><label>提出人</label>'
+      +     '<input id="voProposer" maxlength="20" placeholder="谁提的？留空=记为你自己" value="'
+      +     attr((v && v.proposer) || '') + '"></div>'
+      +   '<div class="field" style="width:170px"><label>提出日期</label>'
+      +     '<input value="' + attr((v && v.createdDate) || voTodayStr()) + '" disabled '
+      +     'title="自动取创建时间，不能改"></div>'
+      + '</div>'
       + '<div class="field"><label>说明（选填）</label>'
       +   '<input id="voNote" maxlength="200" placeholder="投票说明，会显示在标题下方" value="' + attr((v && v.note) || '') + '"></div>'
       + '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.86rem;margin-bottom:8px">'
@@ -10661,6 +11091,8 @@ function voEditorDialog(v){
       multi: !!(document.getElementById('voMulti') || {}).checked,
       allowAdd: !!(document.getElementById('voAllowAdd') || {}).checked,
       note: String((document.getElementById('voNote') || {}).value || ''),
+      /* v3.5.12 #10：提出人（留空后端记成操作人自己） */
+      proposer: String((document.getElementById('voProposer') || {}).value || '').trim(),
       deadline: dl ? new Date(dl).toISOString() : null,
     };
     if(!isNew) payload.voteId = v.id;

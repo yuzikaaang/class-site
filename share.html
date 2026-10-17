@@ -261,8 +261,13 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
     /* 分享哪些内容由分享人决定（v2.9.7）。
        老链接没写过 sections → 按「都有」处理，别让老链接变空白。 */
     var sec = (DATA.share && DATA.share.sections) || {};
-    var wantBoard = sec.board !== false;
-    var wantCard = sec.card !== false;
+    /* v3.5.12 #7：分享也支持**逐块**勾选（与打印 / 导出同一套键名）。
+       老链接没写子键 → undefined 一律当「有」，不会突然变空白。 */
+    var sw = function(k){ return sec[k] !== false; };
+    var wantBoard = sw('board');
+    var wantCard = sw('card');
+    var wantAvg = sw('avg'), wantTable = sw('table'), wantCut = sw('cut');
+    var wantTrend = sw('trend'), wantProg = sw('prog'), wantRankChg = sw('rankchg');
 
     /* 2026-10-17：成绩单与个人成绩卡可以**同时展示**（原来二选一）。
        个人卡 = 分享人自己那一行（isOwner）；只有一行时就是那一行。
@@ -304,25 +309,28 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
 
     /* ① 个人成绩卡（勾了就出；能确定是谁才出） */
     if(wantCard && ownerRow){
-      html += oneCard(ownerRow, subs, rk, showAvg, showN, ST);
-      html += trendCards();
-      html += progressCard();
+      html += oneCard(ownerRow, subs, rk, showAvg, showN, ST, wantAvg);
+      if(wantTrend) html += trendCards();
+      if(wantProg) html += progressCard();
     } else if(wantCard && !ownerRow){
       html += '<div class="card"><div class="fig" style="margin-top:0">这次分享没有包含你本人，所以没有个人成绩卡。</div></div>';
     }
 
     /* ② 全班 / 选中同学的成绩单 */
     if(showBoard){
-      html += '<div class="stats">'
-        + '<div class="stat"><b>' + fmtNum(showAvg) + '</b><span>班均分</span></div>'
-        + '<div class="stat"><b>' + fmtNum(showMed) + '</b><span>中位数</span></div>'
-        + '<div class="stat"><b>' + fmtNum(showMax) + '</b><span>最高</span></div>'
-        + '<div class="stat"><b>' + showN + ' 人</b><span>参考</span></div>'
-        + '</div>';
+      if(wantAvg){
+        html += '<div class="stats">'
+          + '<div class="stat"><b>' + fmtNum(showAvg) + '</b><span>班均分</span></div>'
+          + '<div class="stat"><b>' + fmtNum(showMed) + '</b><span>中位数</span></div>'
+          + '<div class="stat"><b>' + fmtNum(showMax) + '</b><span>最高</span></div>'
+          + '<div class="stat"><b>' + showN + ' 人</b><span>参考</span></div>'
+          + '</div>';
+      }
 
       var head = '<tr><th>班排</th><th>姓名</th>'
         + subs.map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
-        + '<th>总分</th><th>年级排名</th></tr>';
+        + (wantTable ? '<th>总分</th><th>年级排名</th>' : '')
+        + '</tr>';
       var trs = rows.slice().sort(function(a, b){
         var x = rk.total[a.idx] || 9999, y = rk.total[b.idx] || 9999;
         return x - y;
@@ -342,11 +350,13 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
           + '<td>' + (r.schoolRank == null ? '<span style="color:var(--dim)">—</span>' : r.schoolRank) + '</td>'
           + '</tr>';
       }).join('');
-      html += '<div class="card"><h2>成绩单</h2><div class="tblwrap"><table><thead>' + head + '</thead><tbody>' + trs + '</tbody></table></div>'
-        + '<div class="fig">科目格右下角的小字是<b>该科班内排名</b>。' + (BASIS === 'graded' ? '化学、生物按赋分计入总分。' : '当前按原始分计算。') + '</div></div>';
+      if(wantTable){
+        html += '<div class="card"><h2>成绩单</h2><div class="tblwrap"><table><thead>' + head + '</thead><tbody>' + trs + '</tbody></table></div>'
+          + '<div class="fig">科目格右下角的小字是<b>该科班内排名</b>。' + (BASIS === 'graded' ? '化学、生物按赋分计入总分。' : '当前按原始分计算。') + '</div></div>';
+      }
 
       /* 分数线按赋分总分划定：原始口径下不与三线比较（分享页同样适用） */
-      var cuts = (BASIS === 'graded') ? (EX.cutlines || []).filter(function(c){ return c.score != null; }) : [];
+      var cuts = (wantCut && BASIS === 'graded') ? (EX.cutlines || []).filter(function(c){ return c.score != null; }) : [];
       if(cuts.length){
         html += '<div class="card"><h2>上线情况（全班）</h2><div class="cuts">'
           + cuts.map(function(c, ci){
@@ -395,7 +405,7 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       html += lineCard('历史总分趋势（' + (BASIS === 'graded' ? '赋分' : '原始') + '）', totalPts,
         { invert: false, desc: '按历次总分（' + (BASIS === 'graded' ? '赋分' : '原始') + '口径）连线，每个点标分数。' });
     }
-    if(rankPts.length >= 2){
+    if(wantRankChg && rankPts.length >= 2){
       html += lineCard('年级排名变化', rankPts,
         { invert: true, desc: '越靠上名次越前（数字越小越好）；只画有年级排名的考试。' });
     }
@@ -479,7 +489,10 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       + '<div class="fig">每格上排分数、下排小字为年级排名；「较上次」为分数增减与名次升降（名次↑为进步）；「稳定性」为标准差，越小越稳。</div></div>';
   }
 
-  function oneCard(r, subs, rk, avg, n, ST){
+  /* v3.5.12 #7：wantAvg=false 时藏掉「与班均」「高于/低于班均」两处，
+     其它照旧（分数、名次、得分率条都还在） */
+  function oneCard(r, subs, rk, avg, n, ST, wantAvg){
+    var wA = (wantAvg !== false);
     var t = total(r, subs);
     var st = rk.total[r.idx];
     /* 后端按全班算的名次（分享自己时本地算出来永远是 1/1） */
@@ -491,7 +504,7 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       + '<div class="ov">'
       +   '<div><span>班排名</span><b>' + (myRank ? myRank + ' / ' + n : '—') + '</b></div>'
       +   '<div><span>年级排名</span><b>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</b></div>'
-      +   '<div><span>与班均</span><b>' + (t == null ? '—' : (t - avg >= 0 ? '+' : '−') + fmtNum(Math.abs(t - avg))) + '</b></div>'
+      +   (wA ? '<div><span>与班均</span><b>' + (t == null ? '—' : (t - avg >= 0 ? '+' : '−') + fmtNum(Math.abs(t - avg))) + '</b></div>' : '')
       +   '<div><span>联考排名</span><b>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</b></div>'
       + '</div></div>';
 
@@ -514,9 +527,11 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
           return '<div class="sub">'
             + '<div class="t"><b>' + esc(sub.name) + '</b>' + (sub.graded && BASIS === 'graded' ? '<span class="tag">赋分</span>' : '') + '</div>'
             + '<div class="v">' + (v == null ? '<small>未考</small>' : fmtNum(v) + '<small>/' + sub.full + '</small>') + '</div>'
-            + (v == null ? '' : '<div class="d ' + (v - a >= 0 ? 'up' : 'down') + '">'
-                + (v - a >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(v - a)) + ' 分'
-                + (sr ? '　班内第 ' + sr : '') + '</div>')
+            + (v == null ? '' : (wA
+                ? '<div class="d ' + (v - a >= 0 ? 'up' : 'down') + '">'
+                  + (v - a >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(v - a)) + ' 分'
+                  + (sr ? '　班内第 ' + sr : '') + '</div>'
+                : (sr ? '<div class="d" style="color:var(--dim)">班内第 ' + sr + '</div>' : '')))
             + (rate == null ? '' : '<div class="bar"><i style="width:' + (rate * 100).toFixed(1) + '%"></i></div>')
             + '</div>';
         }).join('') + '</div></div>';

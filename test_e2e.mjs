@@ -6159,14 +6159,16 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
   t('★share-create 把 sections 存进去并回给前端',
     /insert into share_links \(token, scope, owner_id, target_names, exam_ids, sections, expires_at, max_views\)/.test(sc));
   t('★老链接没写过 sections → 按「都有」处理（不返回空白）',
-    /老链接没写过 sections → 按「都有」处理/.test(sc) && /sec\.board !== false/.test(sc));
+    /老链接没写过 sections → 按「都有」处理/.test(sc) && /const s3 = \(v\) => v !== false;/.test(sc)
+    && /board: s3\(sec\.board\)/.test(sc));
   t('★前端分享弹窗加了「分享哪些内容」',
     /分享哪些内容/.test(idx) && /data-sec="board"/.test(idx) && /data-sec="card"/.test(idx));
   t('★前端把 sections 一起提交', /sections: sections,/.test(idx));
   t('★两项都没勾时拦住（不然对方点开是空白）',
     /至少要勾一项分享内容/.test(idx));
   t('★分享页按 sections 过滤内容',
-    /var wantBoard = sec\.board !== false;/.test(share) && /var wantCard = sec\.card !== false;/.test(share));
+    /var sw = function\(k\)\{ return sec\[k\] !== false; \};/.test(share)
+    && /var wantBoard = sw\('board'\);/.test(share) && /var wantCard = sw\('card'\);/.test(share));
   t('★成绩单与个人成绩卡可同时展示（不再二选一，2026-10-17）',
     /var showBoard = wantBoard \|\| \(!wantBoard && !wantCard\);/.test(share)
     && /if\(wantCard && ownerRow\)\{/.test(share)
@@ -7108,7 +7110,8 @@ console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
   const names = ['esc', 'fmtNum', 'fmtDiff', 'scSubScore', 'scTotal', 'scFullMark',
     'scStats', 'scRankMap', 'scMyRow', 'scPane', 'scPkDefaults', 'scPkRow',
     'scPkSubjAvg', 'scPkPick', 'scPkSwap', 'scDateRange', 'shortName',
-    'scRenderPk', 'scPkExam2', 'scPkTrendCard', 'scPkTotalCard', 'scPkSubjCard', 'scPkCards'];
+    'scRenderPk', 'scPkExam2', 'scPkTrendCard', 'scPkTotalCard', 'scPkSubjCard', 'scPkCards',
+    'scPkBothTotalCard'];   /* v3.5.12 #8：两场总分并列卡 */
   const missing = names.filter((n) => !fnBody(n));
   t('★PK 依赖函数全部可提取（真值表前提）', missing.length === 0,
     missing.join(',') || '齐全');
@@ -9799,6 +9802,96 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   for (const id of [mid, sid2]) {
     if (id) await call('/api/votes?action=delete', { method: 'POST', token: adminToken, body: { voteId: id } });
   }
+}
+
+/* ==================== 第 n 轮（v3.5.12）站主 10 项需求回归 ==================== */
+{
+  const fs = await import('node:fs');
+  const idx   = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm   = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const shr   = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
+  const vot   = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
+  const http2 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+
+  /* ---- #1 行为日志：时间戳 + 同人合并展开 ---- */  t('#1 parseTime 认得 Neon 的 Date toString（真根因）',
+    /Sat Oct 17 2026 15:01:09 GMT\+0000/.test(adm) && /Date\.parse\(s\)/.test(adm));
+  t('#1 parseTime 先试 ISO 分支再退回原生格式',
+    adm.includes('if(/^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}/.test(s))')
+    && adm.includes('[zZ]|[+-]\\d{2}:?\\d{2}$'));
+  t('#1 有 alGroup / alRange 分组函数',
+    /function alGroup\(/.test(adm) && /function alRange\(/.test(adm));
+  t('#1 分组结构与展开态（al-g / al-g-body / S.open）',
+    /al-g-h/.test(adm) && /al-g-body/.test(adm) && /'g' \+ page/.test(adm));
+  t('#1 折箭头图标齐全', /chevronRight:/.test(adm) && /chevronDown:/.test(adm));
+
+  /* ---- #2 成员档案：列表只留联系方式，其余进详情 ---- */
+  t('#2 成员表头只留 成员/联系方式/操作',
+    /<th>成员<\/th><th>联系方式<\/th>/.test(adm));
+  t('#2 有 memberDetailDialog 详情弹窗', /function memberDetailDialog\(m\)/.test(adm));
+  t('#2 每行都能打开详情（不限于管理员）', /data-mb="detail"/.test(adm));
+
+  /* ---- #3 抽歌获选原因 + 公示五段格式 ---- */
+  t('#3 有 djReasonOf / djProgEligible',
+    /function djReasonOf\(/.test(adm) && /function djProgEligible\(/.test(adm));
+  t('#3 进步幅度排名 progRanked 与可选范围 progTopN',
+    /progRanked/.test(adm) && /progTopN/.test(adm) && /djWProgTop/.test(adm));
+  t('#3 公示格式：歌 - 歌手 - 点歌人 - 点赞 - 原因',
+    /' - ' \+ \(s\.artist/.test(adm) && /' - 点赞 ' \+ \(s\.votes/.test(adm)
+    && /' - ' \+ why/.test(adm));
+  t('#3 没有加权就写“随机抽取”', /'随机抽取'/.test(adm));
+
+  /* ---- #5 首页卡片隐藏后不留白条 ---- */
+  t('#5 空卡片直接 display:none（不留白条）',
+    /style\.display = 'none'/.test(adm) || /style\.display='none'/.test(adm));
+
+  /* ---- #6 打印：图形出来 + 热力图不截断 ---- */
+  t('#6 打印时滚动容器全部展开（热力图病根）',
+    /max-height:none !important;height:auto !important/.test(idx));
+  t('#6 打印时 SVG 显式上色', /print-color-adjust:exact/.test(idx) && /\.sc-embed svg rect/.test(idx));
+  t('#6 打印隐藏用 display:none（才真的不占纸面）',
+    /\.sc-embed \.print-hide\{display:none !important\}/.test(idx));
+
+  /* ---- #7 打印 / 导出 / 分享 都可勾选内容 ---- */
+  t('#7 三组内容清单齐全（全班成绩单 / 我的画像 / 成绩对比）',
+    /id: 'board', name: '全班成绩单'/.test(idx)
+    && /id: 'me', name: '我的画像'/.test(idx)
+    && /id: 'pk', name: '成绩对比'/.test(idx));
+  t('#7 有全选 / 全不选 / 反选', /全选/.test(idx) && /全不选/.test(idx) && /反选/.test(idx));
+  t('#7 卡片统一打 data-scblk 标记',
+    (idx.match(/data-scblk="/g) || []).length >= 14);
+  t('#7 分享后端 sections 扩到 9 键、undefined 当“有”',
+    /rankchg: s3\(sec\.rankchg\)/.test(fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8')));
+  t('#7 分享页按子键逐块过滤', /sw\('avg'\)/.test(shr) && /sw\('rankchg'\)/.test(shr));
+
+  /* ---- #8 成绩对比：两场总分 + 赋分前后 + AI 分析 ---- */
+  t('#8 两场总分并列卡存在并已挂载',
+    /function scPkBothTotalCard\(/.test(idx) && /scPkBothTotalCard\(A, B\)/.test(idx));
+  t('#8 卡同时给原始分和赋分两口径',
+    /mode === 'graded'/.test(idx) && /赋分后的总分/.test(idx));
+  t('#8 AI 对比分析五段齐全',
+    /function pkAI\(/.test(idx)
+    && /差距在哪/.test(idx) && /A 方强弱/.test(idx) && /B 方强弱/.test(idx) && /两场变化/.test(idx)
+    && /下一步可以这样做/.test(idx));
+  t('#8 AI 分析带“本地规则生成 · 不联网”说明',
+    /本地规则生成/.test(idx));
+
+  /* ---- #10 投票：点击必须有反应，且写明提出人与日期 ---- */
+  t('#10 提交按钮先置「提交中…」再禁用（不再静默）',
+    /voteMsg\(vid, '提交中…'\)/.test(idx) && /btn\.disabled = true/.test(idx));
+  t('#10 失败必报错并恢复按钮（可以再点一次）',
+    /可以再点一次提交重试/.test(idx) && /b\.disabled = false/.test(idx));
+  t('#10 请求中不重复提交（VOTE.busy 闸门）',
+    /if\(VOTE\.busy\) return;/.test(idx));
+  t('#10 点击加载中不再重复拉取（voteEnsureMounted 加 loading 闸）',
+    /if\(!VOTE\.loaded && !VOTE\.loading\)\{ voteLoad\(\); return; \}/.test(idx));
+  t('#10 卡片写明提出人与提出日期',
+    idx.includes("'提出人：<b>'") && idx.includes("' 提出</span>'") && /vote-proposer/.test(idx));
+  t('#10 后端存 proposer 并回传 createdDate',
+    /proposer/.test(vot) && /createdDate: r\.created_at/.test(vot));
+  t('#10 老库自动补 proposer 列（幂等）',
+    /alter table class_votes add column if not exists proposer/.test(http2));
+  t('#10 后台投票面板也能填提出人',
+    /id="voProposer"/.test(adm) && /function voTodayStr\(/.test(adm));
 }
 
 console.log('\n' + '='.repeat(52));

@@ -4,6 +4,15 @@
 > **对外说明一律写 `README.md`**（只写介绍与用法），**本文件只写维护细节、站规、台账**，两者分工不得混淆（详见下方「铁律 · 文档分工」）。
 > **本文件曾命名为 `TUTORIAL.md`**（2026-08-29 移至 `internal/notes.md` 以避人耳目），历史更新记录中出现的「TUTORIAL」旧称均指本文件。
 
+## 0-2. 铁律 · 版本更新同步（2026-10-17 站主钦定）
+
+**每一次改动发布（无论大小），必须同步以下版本动作，缺一不可：**
+1. 三处版本号一起升：`index.html` 与 `admin.html` 的 `SITE_VERSION`、`api/worker.mjs` 的 `API_VER`（sw.js 的 `SITE_VER` 跟随）；
+2. `sw.js` 缓存号 +1（`CACHE = 'class-site-vNNN'`，只增不减）；
+3. `README.md` 顶部更新记录加一条（对人口吻，写清楚改了什么）；
+4. 本文件「## 9. 更新记录」加内部条目（实现细节与踩坑）；
+5. admin.html 后台「版本更新」面板（内容键 release_notes）**追加一条**，让站主在站内能看到本次更新。
+
 ## 0. 模型无关性（最重要）
 
 **本仓库是唯一内容源**。任何 AI（DeepSeek / ChatGPT / Claude / Gemini / 任意模型 / 任意新对话）只要拿到站主直发的 Gitee 令牌（见站规「授权与凭据」）就能推送，再完整读完本文件与 `internal/guide.md`，就能完整接手本项目，**无需依赖任何特定对话的记忆**。
@@ -401,6 +410,17 @@ A：**认人分三路，依次往下试，认出一个就停**：
 A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `index.html` 中实现。
 
 ## 9. 更新记录
+
+### v3.5.12（2026-10-17）
+- **「行为日志没有时间戳」真根因**：Neon 驱动把 timestamptz 当 Date 直接序列化，返回的是 `Sat Oct 17 2026 15:01:09 GMT+0000 (Coordinated Universal Time)`，不是 ISO 串。老 `parseTime` 只做 `replace(' ','T')` → `SatTOct ...` → `Date.parse` 必然 NaN → 全显示「—」。**以后遇到「时间字段全空」，先打印原始值看格式，不要猜前端格式化。**
+- 行为日志按 userId 相邻合并（换人就另起一组），展开态存 `S.open['g'+page+'_'+i]`，故翻页/重绘不丢。
+- 成员档案列表瘦身到 4 列，其余信息进 `memberDetailDialog(m)`。**判断「列表该放什么」的标准：扫一眼就能用的（联系方式）留在表里，要思考才用的进详情。**
+- 抽歌获选原因：`djReasonOf(s, gset)` 单一出口，短原因 ≤5 字（`reasonShort` 可调），公示只输出短原因，详细原因留在后台历史里。进步加权支持 `progTopN` 限定「进步幅度前 N 名」。
+- **打印三件事**：①`display` 控制显隐；②所有滚动/定高容器 `max-height:none + overflow:visible`（热力图只印几行的病根）；③SVG shape 显式 `fill/stroke` + `print-color-adjust:exact`（`visibility:hidden` 救不回来）。**隐藏必须用 `display:none`，`visibility:hidden` 仍占纸面。**
+- 打印/导出/分享统一用 `data-scblk="键名"` 标记 + `scContentGroups()` 同一份清单，新增卡片必须打标记，否则永远无法被勾掉。
+- 成绩对比：`scPkBothTotalCard` 同屏两场（原始分大字 / 赋分小字、两种口径各自班排），`pkAI()` 五段结构与个人画像对齐。
+- 分享页预览不另写渲染，直接 iframe 打开真实 `share.html?t=xxx`，所见即所得。
+- 分享 `sections` 扩到 9 键，`s3 = v !== false` —— **undefined 必须算「有」**，否则老链接点开全白。
 
 ### v3.5.11（2026-10-17）
 - 本地库排期：内容键 quote_schedule = { mode, start, every, fixed:{ 'YYYY-MM-DD':[idx] } }。四模式 random/order/rotate/date。

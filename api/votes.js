@@ -29,6 +29,7 @@ const MAX_TITLE = 60;          // 投票标题
 const MAX_OPTION_LEN = 40;     // 单个选项文字
 const MAX_OPTIONS = 30;        // 选项数上限（含学生新增）
 const MAX_NOTE = 200;          // 备注
+const MAX_PROPOSER = 20;       // v3.5.12 提出人（不填 = 记成当前管理员）
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
@@ -116,11 +117,13 @@ function parseVoteInput(b) {
   const multi = kind === 'normal' && b.multi === true;
   const allowAdd = b.allowAdd === true;
   const note = String(b.note || '').trim().slice(0, MAX_NOTE);
+  /* v3.5.12 #10：谁提出来的。留空则由后端记为当前操作人（created_by 的显示名） */
+  const proposer = String(b.proposer || b.proposedBy || '').trim().slice(0, MAX_PROPOSER);
   const deadline = normDeadline(b.deadline);
   if (b.deadline != null && b.deadline !== '' && !deadline) {
     return { error: '截止时间格式不对' };
   }
-  return { data: { title, kind, options, multi, allowAdd, note, deadline } };
+  return { data: { title, kind, options, multi, allowAdd, note, deadline, proposer } };
 }
 
 /** 行 → 前端结构。results 只有「已截止」才给。 */
@@ -137,6 +140,14 @@ function shapeVote(r, uid, isAdmin, myChoices, counts) {
     status: r.status,
     open: isOpen(r),
     createdAt: r.created_at || null,
+    /* v3.5.12 #10（站主要求）：谁提出来的 + 提出的日期，前端直接展示 */
+    createdBy: r.created_by == null ? null : Number(r.created_by),
+    proposer: r.proposer || '',
+    createdByName: r.creator_display || r.creator_username || '',
+    createdByUsername: r.creator_username || '',
+    createdByDisplay: r.creator_display || '',
+    /* 提出的日期：只给「YYYY-MM-DD」，前端要显示「2026-10-17 提出」这种短格式 */
+    createdDate: r.created_at ? String(r.created_at).slice(0, 10) : null,
   };
   const closed = !v.open;
   /* 截止后：所有人看结果；截止前：只有管理员看（后台要能预览） */
@@ -164,9 +175,11 @@ async function listVotes(req, res) {
   const sql = getSql();
   const rows = await sql`
     select v.id, v.title, v.kind, v.options, v.multi, v.allow_add, v.note,
-           v.deadline, v.status, v.created_at,
-           (select count(*) from class_vote_ballots b where b.vote_id = v.id) as voters
+           v.deadline, v.status, v.created_at, v.created_by, v.proposer,
+           u.username as creator_username,
+           u.display_name as creator_display
       from class_votes v
+      left join users u on u.id = v.created_by
      order by (v.status = 'open') desc, v.deadline asc nulls last, v.id desc
      limit 100
   `;
@@ -285,11 +298,13 @@ async function createVote(req, res) {
   if (p.error) return fail(res, 400, p.error);
 
   const sql = getSql();
+  /* v3.5.12 #10：提出人。前台没填就用操作人的显示名兜底（总不能空着） */
+  const proposer = p.data.proposer || me.displayName || me.display_name || me.username || '';
   const rows = await sql`
-    insert into class_votes (title, kind, options, multi, allow_add, note, deadline, status, created_by, created_at, updated_at)
+    insert into class_votes (title, kind, options, multi, allow_add, note, deadline, status, created_by, proposer, created_at, updated_at)
     values (${p.data.title}, ${p.data.kind}, ${JSON.stringify(p.data.options)}::jsonb,
             ${p.data.multi}, ${p.data.allowAdd}, ${p.data.note}, ${p.data.deadline}::timestamptz,
-            'open', ${me.id}, now(), now())
+            'open', ${me.id}, ${proposer}, now(), now())
     returning id
   `;
   await audit(me.id, 'vote.create', 'class_votes', String(rows[0].id), p.data.title);

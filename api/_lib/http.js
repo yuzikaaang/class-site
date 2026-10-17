@@ -515,10 +515,13 @@ export async function ensureSchema(sql) {
         deadline   timestamptz,
         status     text        not null default 'open',
         created_by bigint,
+        proposer   text        not null default '',
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       )
     `;
+    /* v3.5.12 #10：老库补 proposer 列（提出人）。幂等，重复跑无害。 */
+    await s`alter table class_votes add column if not exists proposer text not null default ''`;
     await s`
       create table if not exists class_vote_ballots (
         vote_id    bigint      not null,

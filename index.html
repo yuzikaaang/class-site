@@ -1729,6 +1729,13 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .dark .vote-kind{background:#4a3a1c;color:#fcd34d}
 .vote-meta{margin-top:4px;font-size:.76rem;color:#8a7c6f}
 .dark .vote-meta{color:#a8998c}
+/* v3.5.12 #10 提出人 + 提出日期 */
+.vote-proposer{margin-top:5px;font-size:.78rem;color:#57534e;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vote-proposer b{color:#0f766e;font-weight:700}
+.dark .vote-proposer{color:#c9b8aa}
+.dark .vote-proposer b{color:#5eead4}
+.vote-proposer-date{font-size:.72rem;color:#8a7c6f;background:#f5f0ea;padding:1px 7px;border-radius:99px}
+.dark .vote-proposer-date{color:#a8998c;background:#2a2520}
 .vote-note{margin:8px 0 0;font-size:.8rem;color:#6e635a;line-height:1.6}
 .dark .vote-note{color:#c9b8aa}
 .vote-opts{margin-top:10px;display:flex;flex-direction:column;gap:8px}
@@ -1964,12 +1971,34 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-ex-row .t{font-size:.86rem;font-weight:700;color:#292524}
 .sc-ex-row .s{display:block;font-size:.74rem;color:#7a6a5c;font-weight:400;margin-top:3px;line-height:1.5}
 .sc-ex-row.off{opacity:.68;cursor:default;background:#fdfaf7}
+/* v3.5.12 #7：打印内容分组（全班成绩单 / 我的画像 / 成绩对比） */
+.sc-pk-group{margin-bottom:16px}
+.sc-pk-group-h{
+  display:flex;align-items:baseline;gap:8px;font-size:.82rem;font-weight:800;color:#9a3412;
+  padding:0 0 7px;margin-bottom:8px;border-bottom:1.5px solid #f0e7de;
+}
+.sc-pk-group-h .sc-dim{font-weight:400;font-size:.74rem}
+.dark .sc-pk-group-h{color:#fdba74;border-bottom-color:#3a322c}
+.dark .sc-ex-row{background:#1f1c19;border-color:#3a322c}
+.dark .sc-ex-row .t{color:#e7e5e4}
+.dark .sc-ex-row .s{color:#a8998c}
+.dark .sc-ex-row.off{background:#181513}
+/* 打印时被取消勾选的块：真的不占纸面 */
+.print-hide{display:none !important}
 /* 分享内容勾选（同轮） */
 .sc-sh-secs{display:flex;flex-wrap:wrap;gap:8px}
 .sc-sh-sec{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1.5px solid #e2d5c8;
   border-radius:10px;background:#fff;font-size:.82rem;color:#292524;cursor:pointer}
 .sc-sh-sec input{width:15px;height:15px;accent-color:#c2410c;margin:0}
 .sc-sh-sec.on{border-color:#c2410c;background:#fff8f2;font-weight:700}
+/* v3.5.12 #7：分享细项 */
+.sc-fine-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.sc-fine{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border:1px solid #ece2d8;
+  border-radius:9px;background:#fff;font-size:.79rem;color:#292524;cursor:pointer;transition:all .12s}
+.sc-fine:hover{border-color:#c2410c}
+.sc-fine input{width:14px;height:14px;accent-color:#c2410c;margin:0}
+.dark .sc-fine{background:#1f1c19;border-color:#3a322c;color:#e7e5e4}
+.dark .sc-pk-group-h{color:#fdba74}
 .sc-bar{padding:12px 18px 10px;border-bottom:1px solid #f5efe8}
 .sc-bar-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .sc-sel{flex:1;min-width:160px;padding:9px 12px;border:1.5px solid #e2d5c8;border-radius:10px;background:#fff;font-size:.86rem;color:#292524;font-family:inherit}
@@ -2337,19 +2366,85 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-pk-diff-eq{fill:#7a6a5c}
 /* ===== A4 打印：只印成绩分析这一块，去掉按钮/工具栏/滚动截断 =====
    ⚠️ v2.9.6 起成绩分析改为内嵌（见 .sc-embed），选择器整体从 #scoreAnalMask
-   换成 .sc-embed —— 这行注释写给以后的自己：别再照抄旧选择器。 */
+   换成 .sc-embed —— 这行注释写给以后的自己：别再照抄旧选择器。
+
+   🔴 v3.5.12（站主 2026-10-17 #6「选择打印的时候一些图形比如柱子会不显示，
+      学生科目热力图打印不完整」）真根因：
+     过去用 `body *{visibility:hidden}` + `.sc-embed *{visibility:visible}`。
+     问题是 visibility 会**继承**，被子元素重新设 visible 只能救「可见」，
+     救不回「被父级的 overflow:hidden / 定高裁掉」的部分，也救不回
+     SVG 里那些靠 CSS 变量上色的图形（打印时变量解析异常就整根柱子消失）。
+     所以这里改成三件事：
+       ① 打印样式覆盖层改用 display 控制（见下方 body.print-sc / .print-only）；
+       ② 所有滚动容器一律 max-height:none + overflow:visible（热力图 420px 就是它）；
+       ③ SVG 内所有 shape 显式给 fill / stroke，并强制 color-adjust:exact。
+   ========================================================================= */
 @media print{
   @page{margin:12mm}
   html,body{background:#fff !important}
   body *{visibility:hidden !important}
   .sc-embed,.sc-embed *{visibility:visible !important}
   .sc-embed{background:#fff !important;border:none !important;border-radius:0 !important;
-    box-shadow:none !important;margin:0 !important;overflow:visible !important}
+    box-shadow:none !important;margin:0 !important;overflow:visible !important;
+    position:static !important}
   .sc-embed .sc-bar,
   .sc-embed .sc-tabs,
   .sc-embed .sc-seg{display:none !important}
-  .sc-embed .sc-pane{overflow:visible !important;max-height:none !important;padding:0 !important}
-  .sc-embed .sc-tblwrap{max-height:none !important;overflow:visible !important;border:none !important}
+  .sc-embed .sc-pane{overflow:visible !important;max-height:none !important;height:auto !important;padding:0 !important}
+
+  /* ---- ② 所有滚动/定高容器在纸上全部展开（热力图不完整的病根） ---- */
+  .sc-embed .sc-tblwrap,
+  .sc-embed .sc-hm-body,
+  .sc-embed .sc-qlist,
+  .sc-embed .sc-svgwrap,
+  .sc-embed .sc-scroll{
+    max-height:none !important;height:auto !important;
+    overflow:visible !important;overflow-y:visible !important;
+    border:none !important;-webkit-overflow-scrolling:auto !important;
+  }
+  .sc-embed .sc-hm-body{display:block !important}
+  .sc-embed .sc-hm-row{display:flex !important;break-inside:avoid !important;
+    page-break-inside:avoid !important}
+  .sc-embed .sc-hm-head{display:flex !important}
+  /* 热力图格子：打印要深底就真深底，别让浏览器把背景色省了 */
+  .sc-embed .sc-hm{
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+    color-adjust:exact !important;
+    break-inside:avoid !important;
+  }
+  .sc-embed .sc-hm.on{outline:none !important;box-shadow:none !important}
+
+  /* ---- ③ SVG 图形：柱状图/折线/雷达图在纸上必须出来 ---- */
+  .sc-embed svg{overflow:visible !important;max-width:100% !important}
+  .sc-embed svg rect,
+  .sc-embed svg path,
+  .sc-embed svg polygon,
+  .sc-embed svg circle,
+  .sc-embed svg line,
+  .sc-embed svg polyline{
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+    color-adjust:exact !important;
+    visibility:visible !important;
+  }
+  /* 柱状图两色：A 橙 / B 蓝（打印时类名仍在，不用内联色也能印出来） */
+  .sc-embed .sc-pk-bar-a{fill:#c2410c !important;stroke:#c2410c !important}
+  .sc-embed .sc-pk-bar-b{fill:#1d4ed8 !important;stroke:#1d4ed8 !important}
+  .sc-embed .sc-pk-grid{stroke:#e6ddd4 !important;fill:none !important}
+  .sc-embed .sc-pk-avg{stroke:#857468 !important}
+  .sc-embed .sc-pk-name{fill:#292524 !important}
+  .sc-embed .sc-pk-sub{fill:#6e635a !important}
+  .sc-embed .sc-pk-num-a{fill:#c2410c !important}
+  .sc-embed .sc-pk-num-b{fill:#1d4ed8 !important}
+  .sc-embed .sc-pk-diff-up{fill:#15803d !important}
+  .sc-embed .sc-pk-diff-down{fill:#b91c1c !important}
+  .sc-embed .sc-pk-diff-eq{fill:#6e635a !important}
+  .sc-embed .sc-axlbl,.sc-embed .sc-tip,.sc-embed .sc-axdim{fill:#6e635a !important}
+  .sc-embed .sc-mine-poly{fill:rgba(192,57,43,.16) !important;stroke:#c0392b !important}
+  .sc-embed .sc-mine-dot{fill:#c0392b !important}
+  .sc-embed .sc-avg{stroke:#857468 !important;fill:none !important}
+
   .sc-embed .sc-tbl{min-width:0 !important;border-collapse:collapse !important;font-size:10pt}
   .sc-embed .sc-tbl-watch thead{display:table-header-group !important}
   .sc-embed .sc-tbl-watch tbody tr{display:table-row !important;border:none !important;
@@ -2366,13 +2461,16 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   .sc-embed .sc-tbl tr{break-inside:avoid}
   .sc-embed .sc-tbl th{background:#f5efe8 !important;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .sc-embed .sc-card{break-inside:avoid;border:1px solid #e6ddd4 !important;margin-top:9px !important}
+  .sc-embed .sc-card{break-inside:avoid;border:1px solid #e6ddd4 !important;margin-top:9px !important;
+    box-shadow:none !important}
   .sc-embed .sc-stats{grid-template-columns:repeat(4,1fr) !important}
   .sc-embed .sc-figcap,.sc-embed .sc-hint{font-size:8.5pt}
   .sc-embed .sc-svg{min-width:0 !important}
   .sc-embed .sc-pos-me span{background:#292524 !important;color:#fff !important;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
-}
+
+  /* ---- ④ v3.5.12（#7）：按勾选项隐藏。用 display:none 才真的不占纸面 ---- */
+  .sc-embed .print-hide{display:none !important}
 }
 
 @media (max-width:560px){
@@ -3285,7 +3383,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.11';
+var SITE_VERSION = '3.5.12';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -3628,14 +3726,18 @@ function startHeartbeat(){
   var beat = function(){
     if(document.hidden) return;
     if(!AUTH || !AUTH.token) return;
-    var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
-    if(!base) return;
+    /* 后端没配置就直接跳过（老逻辑保留） */
+    if(!(typeof API_BASE !== 'undefined' && API_BASE)) return;
 
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var timedOut = false;   /* 区分「服务器慢到超时」与「真的连不上」 */
     var to = ctrl ? setTimeout(function(){ timedOut = true; ctrl.abort(); }, HB_TIMEOUT_MS) : null;
 
-    fetch(base + '/auth?action=ping', {
+    /* v3.5.12：这里必须和 api() 一样带 /api 前缀。
+       老代码写的是 base + '/auth?action=ping'，而 API_BASE 只到域名根
+       （https://api.classsite.dpdns.org），真实路径是 /api/auth —— 少一段，
+       心跳自上线起就没打通过，只是失败被静默吞掉没人发现。 */
+    fetch(apiUrl('/auth?action=ping'), {
       method:'GET', cache:'no-store',
       headers:{ Authorization:'Bearer ' + AUTH.token },
       signal: ctrl ? ctrl.signal : undefined
@@ -6939,7 +7041,10 @@ function renderDailyQuote(){
   var el = document.getElementById('dailyQuoteBar');
   if(!el) return;
   var q = dailyQuoteOfToday();
-  if(!q){ el.innerHTML = ''; return; }   /* 云端没配 + 联网没拿到 → 整块不显示 */
+  /* v3.5.12 站主反馈「隐藏后还会有这种东西」：空内容必须连容器一起藏掉，
+     只清 innerHTML 的话 .quote 的白底圆角 padding 还在 → 页面上留一条空白条 */
+  if(!q){ el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = '';
   el.innerHTML =
     '<div class="quote-mark ink-auto">❝</div>'+
     '<div class="quote-body">'+
@@ -7177,7 +7282,7 @@ function renderStudyCard(){
   if(!STUDY_CARD_ENABLED || studyHidden()){ el.innerHTML = ''; el.style.display = 'none'; return; }
   el.style.display = '';
   var cfg = studyCfg();
-  if(!cfg.on){ el.innerHTML = ''; return; }
+  if(!cfg.on){ el.innerHTML = ''; el.style.display = 'none'; return; }
 
   /* 候选顺序：知识点 → 每日一题 → 每日一词 → 古诗文
      每次刷新只显示**一条**，从中随机取一个「有内容且已开启」的类型。
@@ -7191,7 +7296,8 @@ function renderStudyCard(){
 
   /* 联网类还没回来时，先用本地类顶上；本地类都没开就整块不显示 */
   var picked = cands.length ? cands[Math.floor(Math.random() * cands.length)] : null;
-  if(!picked){ el.innerHTML = ''; return; }
+  if(!picked){ el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = '';
 
   var r = null;
   if(picked === 'know') r = studyKnowHtml();
@@ -12960,7 +13066,7 @@ function voteEnsureMounted(){
       + '</div>');
     return;
   }
-  if(!VOTE.loaded){ voteLoad(); return; }
+  if(!VOTE.loaded && !VOTE.loading){ voteLoad(); return; }
   voteRenderAll();
 }
 
@@ -13098,11 +13204,21 @@ function voteCardHtml(v){
   if(v.deadline) meta.push('截止 ' + voteTimeText(v.deadline));
   if(v.results) meta.push('共 ' + (v.voters || totalVotes) + ' 人参与');
   else if(voted) meta.push('你已投票');
+  /* v3.5.12 #10（站主要求）：谁提出来的 + 提出的日期，直接写在卡片上 */
+  var proposer = v.proposer || v.createdByDisplay || v.createdByName || '';
+  var pdate = v.createdDate || (v.createdAt ? String(v.createdAt).slice(0, 10) : '');
+  var proposeLine = (proposer || pdate)
+    ? '<div class="vote-proposer">'
+      + '提出人：<b>' + esc(proposer || '未记录') + '</b>'
+      + (pdate ? '<span class="vote-proposer-date">' + esc(pdate) + ' 提出</span>' : '')
+      + '</div>'
+    : '';
 
   return '<div class="vote-card" data-vote-card="' + v.id + '">'
     + '<div class="vote-card-h">'
     +   '<div class="vote-title">' + esc(v.title)
     +     (v.kind === 'song' ? '<span class="vote-kind">歌单</span>' : '') + '</div>'
+    +   proposeLine
     +   '<div class="vote-meta">' + meta.map(esc).join(' · ') + '</div>'
     + '</div>'
     + (v.note ? '<p class="vote-note">' + esc(v.note) + '</p>' : '')
@@ -13157,15 +13273,24 @@ function voteSubmit(vid){
   var choices = VOTE.picked[vid] || [];
   if(!choices.length){ voteMsg(vid, '请先选一个选项', 'err'); return; }
   VOTE.busy = true;
+  /* v3.5.12 站主反馈「点击了没有反应」：之前提交失败/慢时完全静默，
+     按钮也不防重复。现在全程有反馈：提交中 → 成功提示 → 重渲染；失败必显错误。 */
+  voteMsg(vid, '提交中…');
+  var btn = document.querySelector('[data-vote-submit="' + vid + '"]');
+  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
   api('/votes?action=vote', { method: 'POST', body: { voteId: vid, choices: choices } })
     .then(function(j){
       VOTE.busy = false;
-      /* 提交成功后重新拉一次，拿到最新的「我投的」与人数 */
-      return voteReload();
+      return voteReload().then(function(){
+        /* 重渲染后再提示（重渲染会清掉旧消息） */
+        voteMsg(vid, '✅ ' + (j.message || '投票成功，已记录'), 'ok');
+      });
     })
     .catch(function(e){
       VOTE.busy = false;
-      voteMsg(vid, e.message || String(e), 'err');
+      voteMsg(vid, '❌ ' + (e.message || String(e)) + '（可以再点一次提交重试）', 'err', 6000);
+      var b = document.querySelector('[data-vote-submit="' + vid + '"]');
+      if(b){ b.disabled = false; b.style.opacity = ''; }
     });
 }
 
@@ -13652,13 +13777,13 @@ function scRenderBoard(){
       '<div class="sc-hint">点表头可排序。科目格右下角的小字是<b>该科班内排名</b>。'
     + (SC.basis === 'graded' ? '化学、生物按赋分计入总分。' : '当前按原始分计算（化学、生物不用赋分）。')
     + '</div>'
-    + '<div class="sc-stats">'
+    + '<div class="sc-stats" data-scblk="board_avg">'
     +   scStatCard('班均分', st.avg.toFixed(1))
     +   scStatCard('中位数', st.median)
     +   scStatCard('最高', st.max)
     +   scStatCard('参考', st.n + ' 人')
     + '</div>'
-    + '<div class="sc-tblwrap"><table class="sc-tbl sc-fix2">'
+    + '<div class="sc-tblwrap" data-scblk="board_table"><table class="sc-tbl sc-fix2">'
     +   '<thead>' + head + '</thead><tbody>' + body + '</tbody>'
     + '</table></div>'
     + scChartHist(st)
@@ -13768,7 +13893,7 @@ function scChartHist(st){
     }
   }
 
-  return '<div class="sc-card">'
+  return '<div class="sc-card" data-scblk="board_dist">'
     + '<div class="sc-card-h">总分分布</div>'
     + '<div class="sc-svgwrap"><svg viewBox="0 0 ' + W + ' ' + H + '" class="sc-svg">'
     +   axis + bars + marks + myMark
@@ -13793,7 +13918,7 @@ function scChartCutlines(st){
       + '<span class="sc-cut-pct">' + pct.toFixed(1) + '%</span>'
       + '</div>';
   }).join('');
-  return '<div class="sc-card"><div class="sc-card-h">上线情况</div>' + rows + '</div>';
+  return '<div class="sc-card" data-scblk="board_cut"><div class="sc-card-h">上线情况</div>' + rows + '</div>';
 }
 
 /* ---------- 图表：分数段四色横条 ---------- */
@@ -13843,7 +13968,7 @@ function scChartSegments(st){
     return '<span class="sc-seg-lg"><i style="background:' + s.color + '"></i>' + esc(s.label) + ' ' + s.n + ' 人</span>';
   }).join('');
 
-  return '<div class="sc-card"><div class="sc-card-h">分数段分布</div>'
+  return '<div class="sc-card" data-scblk="board_band"><div class="sc-card-h">分数段分布</div>'
     + '<div class="sc-segrow">' + bar + '</div>'
     + '<div class="sc-seglegend">' + legend + '</div></div>';
 }
@@ -13894,7 +14019,7 @@ function scRenderMe(){
   var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
   if(cuts.length && myTotal != null){
     if(SC.basis === 'graded'){
-      html += '<div class="sc-card"><div class="sc-card-h">上线情况</div><div class="sc-cuts">'
+      html += '<div class="sc-card" data-scblk="me_cut"><div class="sc-card-h">上线情况</div><div class="sc-cuts">'
         + cuts.map(function(c){
             var ok = myTotal >= c.score;
             var d = Math.abs(myTotal - c.score);
@@ -13906,7 +14031,7 @@ function scRenderMe(){
           }).join('')
         + '</div></div>';
     }else{
-      html += '<div class="sc-card"><div class="sc-card-h">上线情况</div>'
+      html += '<div class="sc-card" data-scblk="me_cut"><div class="sc-card-h">上线情况</div>'
         + '<div class="sc-dim" style="padding:4px 2px 2px">当前是「原始分」口径。特控线 / 本科线 / 600 线都是按<b>赋分总分</b>划的，'
         + '原始分与它们不好直接比 —— 切到「总分赋分」即可看上线情况。</div></div>';
     }
@@ -13916,7 +14041,7 @@ function scRenderMe(){
   if(myRank && st.n > 1){
     var pos = (myRank - 1) / (st.n - 1);   /* 0 = 第 1 名 */
     var leftPct = pos * 100;
-    html += '<div class="sc-card"><div class="sc-card-h">你在班里的位置</div>'
+    html += '<div class="sc-card" data-scblk="me_pos"><div class="sc-card-h">你在班里的位置</div>'
       + '<div class="sc-pos">'
       +   '<div class="sc-pos-bar"><div class="sc-pos-me" style="left:' + leftPct.toFixed(1) + '%"><span>你</span></div></div>'
       +   '<div class="sc-pos-scale"><span>第 1 名</span><span>第 ' + st.n + ' 名</span></div>'
@@ -13926,7 +14051,7 @@ function scRenderMe(){
   }
 
   /* ④ 各科卡片（分数 / 班均 / 班内排名 / 与班均差） */
-  html += '<div class="sc-card"><div class="sc-card-h">各科情况</div><div class="sc-subs">'
+  html += '<div class="sc-card" data-scblk="me_subj"><div class="sc-card-h">各科情况</div><div class="sc-subs">'
     + subs.map(function(s){
         var v = scSubScore(meRow, s, SC.basis);
         var sr = rk.subj[s.key].rank[meRow.id];
@@ -13986,7 +14111,7 @@ function scRenderMe(){
       +   '<td>' + (st.n ? fmtNum(st.avg) : '—') + '</td>'
       +   '<td>' + (totalDiff == null ? '—' : '<span class="sc-sub-diff ' + (totalDiff >= 0 ? 'up' : 'down') + '">' + fmtDiff(totalDiff) + '</span>') + '</td>'
       + '</tr></tfoot></table>';
-    html += '<div class="sc-card"><div class="sc-card-h">六科画像（按得分率）</div>'
+    html += '<div class="sc-card" data-scblk="me_subj"><div class="sc-card-h">六科画像（按得分率）</div>'
       + scRadar(subs.map(function(s){ return s.name; }), rates, avgRates, radarTips)
       + '<div class="sc-figcap">实线为本人，虚线为班均；各顶点标注学科分数。按得分率绘制，图形越向外越强。</div>'
       + sixTable
@@ -14146,7 +14271,7 @@ function scMeAnalysis(meRow, rk, st, myTotal, myRank, subs){
     return v ? '<div class="sc-ai-row"><span class="sc-ai-k">' + k + '</span><span class="sc-ai-v">' + v + '</span></div>' : '';
   };
 
-  return '<div class="sc-card sc-ai-card">'
+  return '<div class="sc-card sc-ai-card" data-scblk="me_ai">'
     + '<div class="sc-card-h">AI 分析<span class="sc-h-note">本地规则生成 · 不联网 · 不上传成绩</span></div>'
     + '<div class="sc-ai-concl">' + concl + '</div>'
     + rowHtml('亮点', goodText)
@@ -14281,6 +14406,8 @@ function scRenderPk(){
     + '</div>'
     /* ② 总分柱状图 */
     + scPkTotalCard(A, B)
+    /* ②b v3.5.12（#8）：选中第二场时，两场总分同屏 + 赋分前后对比 */
+    + scPkBothTotalCard(A, B)
     /* ③ 各科分组柱状图 */
     + scPkSubjCard(A, B)
     /* ③b 跨考试进退步与趋势（v3.4.0，选了第二场才出现） */
@@ -14349,10 +14476,149 @@ function scPkTotalCard(A, B){
       + '" text-anchor="middle">' + txt + '</text>';
   }
   svg += verdict + '</svg>';
-  return '<div class="sc-card">'
+  return '<div class="sc-card" data-scblk="pk_total">'
     + '<div class="sc-card-h">总分对比（' + (SC.basis === 'graded' ? '赋分' : '原始') + '，满分 ' + full + '）</div>'
     + '<div class="sc-svgwrap">' + svg + '</div>'
     + '</div>';
+}
+
+/* ②b v3.5.12（#8 站主反复要求的那一条）
+   「如果选择了两场考试，那两场考试的总分都要显示出来，还有赋分前与赋分后的对比」
+   → 选了两场时，这里用一张表把「上一场 / 这一场」的原始分、赋分、班排、年级排名
+     并排摆出来，两个人各一行。不选第二场就不出这张卡，省得占地方。 */
+function scPkBothTotalCard(A, B){
+  if(SC.pkExam2 == null) return '';
+  var pack = (SC.allRows || {})[SC.pkExam2];
+  if(!pack) return '';
+  var prevExam = pack.exam, prows = pack.rows || [];
+  var curExam = SC.exam;
+
+  function findRow(r){
+    var hit = null;
+    if(r && r.uid) prows.forEach(function(x){ if(!hit && x.uid && String(x.uid) === String(r.uid)) hit = x; });
+    if(!hit && r) prows.forEach(function(x){ if(!hit && x.name === r.name) hit = x; });
+    return hit;
+  }
+  /* 总分：raw = 原始分口径（赋分科取 raw），graded = 赋分口径（赋分科取 assigned） */
+  function tot(row, exam, mode){
+    var t = 0, any = false;
+    ((exam && exam.subjects) || []).forEach(function(s){
+      var v = row && row.s && row.s[s.key];
+      if(!v) return;
+      var val;
+      if(mode === 'graded') val = (s.graded && v.assigned != null) ? v.assigned : v.raw;
+      else val = v.raw;
+      if(val == null) return;
+      t += val; any = true;
+    });
+    return any ? t : null;
+  }
+  function rankOf(rows, exam, mode, target){
+    if(!target) return null;
+    var list = [];
+    rows.forEach(function(r){
+      var t = tot(r, exam, mode);
+      if(t != null) list.push({ id: r.id, t: t });
+    });
+    list.sort(function(a, b){ return b.t - a.t; });
+    var rk = {}, lastT = null, lastRank = 0;
+    list.forEach(function(o, i){
+      if(o.t !== lastT){ lastRank = i + 1; lastT = o.t; }
+      rk[o.id] = lastRank;
+    });
+    return rk[target.id] || null;
+  }
+
+  var pA = findRow(A), pB = findRow(B);
+  var curRows = SC.rows || [];
+
+  var rows = [{ who: A, label: A.name || 'A 方', dot: 'a', prev: pA },
+              { who: B, label: B.name || 'B 方', dot: 'b', prev: pB }];
+
+  function cellHtml(v, sub){
+    if(v == null) return '<td class="sc-dim">—</td>';
+    return '<td><b>' + fmtNum(v) + '</b>'
+      + (sub ? '<span style="display:block;font-size:.66rem">' + sub + '</span>' : '') + '</td>';
+  }
+  function deltaHtml(prev, cur, isRank){
+    if(prev == null || cur == null) return '';
+    var d = cur - prev;
+    if(d === 0) return '<span class="sc-dim">持平</span>';
+    var good = isRank ? d < 0 : d > 0;
+    return '<span class="sc-sub-diff ' + (good ? 'up' : 'down') + '">'
+      + (good ? '↑ ' : '↓ ') + fmtNum(Math.abs(d)) + '</span>';
+  }
+
+  var body = rows.map(function(r){
+    var pp = r.prev;
+    var prevRaw = pp ? tot(pp, prevExam, 'raw') : null;
+    var prevGrd = pp ? tot(pp, prevExam, 'graded') : null;
+    var curRaw  = tot(r.who, curExam, 'raw');
+    var curGrd  = tot(r.who, curExam, 'graded');
+    var prevRkRaw = rankOf(prows, prevExam, 'raw', pp);
+    var prevRkGrd = rankOf(prows, prevExam, 'graded', pp);
+    var curRkRaw  = rankOf(curRows, curExam, 'raw', r.who);
+    var curRkGrd  = rankOf(curRows, curExam, 'graded', r.who);
+    /* 本次考试有没有赋分科 —— 没有的话两列数值一样，下面会提示 */
+    var hasGraded = (curExam.subjects || []).some(function(s){ return s.graded; })
+                 || (prevExam.subjects || []).some(function(s){ return s.graded; });
+
+    return '<tr>'
+      + '<td class="sc-name"><i class="sc-pk-dot-' + r.dot + '" style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px"></i>'
+      + esc(r.label) + '</td>'
+      /* 上一场 */
+      + cellHtml(prevRaw, prevGrd != null && hasGraded ? '赋分 ' + fmtNum(prevGrd) : '')
+      + cellHtml(prevRkRaw, hasGraded ? '赋分班排 ' + (prevRkGrd == null ? '—' : prevRkGrd) : '')
+      /* 这一场 */
+      + cellHtml(curRaw, curGrd != null && hasGraded ? '赋分 ' + fmtNum(curGrd) : '')
+      + cellHtml(curRkRaw, hasGraded ? '赋分班排 ' + (curRkGrd == null ? '—' : curRkGrd) : '')
+      /* 变化 */
+      + '<td>' + (deltaHtml(prevRaw, curRaw, false) || '<span class="sc-dim">—</span>')
+      +   '<span style="display:block;font-size:.66rem">'
+      +     (hasGraded ? '赋分 ' + (deltaHtml(prevGrd, curGrd, false) || '<span class="sc-dim">—</span>') : '')
+      +   '</span></td>'
+      + '<td>' + (deltaHtml(prevRkRaw, curRkRaw, true) || '<span class="sc-dim">—</span>') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  /* 差距行：两场各自的总分差，说明「拉开了还是缩小了」 */
+  var gapRow = '';
+  if(pA && pB){
+    var pr = tot(pA, prevExam, 'raw'), pb = tot(pB, prevExam, 'raw');
+    var cr = tot(A, curExam, 'raw'), cb = tot(B, curExam, 'raw');
+    if(pr != null && pb != null && cr != null && cb != null){
+      var pg = pr - pb, cg = cr - cb;
+      var wider = Math.abs(cg) > Math.abs(pg);
+      gapRow = '<div class="sc-figcap" style="margin-top:2px">'
+        + '两人总分差：上一场 <b>' + fmtNum(Math.abs(pg)) + '</b> 分 → 这一场 <b>' + fmtNum(Math.abs(cg)) + '</b> 分，'
+        + (Math.abs(cg) === Math.abs(pg) ? '没变'
+            : (wider ? '拉开了 ' : '缩小了 ') + fmtNum(Math.abs(Math.abs(cg) - Math.abs(pg))) + ' 分')
+        + '，现在 ' + esc(cg > 0 ? (A.name || 'A 方') : (cg < 0 ? (B.name || 'B 方') : '两人')) 
+        + (cg === 0 ? ' 并列' : ' 领先') + '。</div>';
+    }
+  }
+
+  var hasGradedCur = (curExam.subjects || []).some(function(s){ return s.graded; });
+
+  return '<div class="sc-card" data-scblk="pk_both">'
+    + '<div class="sc-card-h">两场总分并列（' + esc(shortName(prevExam.name || '')) + ' → ' + esc(shortName(curExam.name || '')) + '）'
+    +   '<span class="sc-h-note">上一场 · 这一场 · 赋分前后都在这一张表里</span></div>'
+    + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
+    + '<thead><tr>'
+    +   '<th rowspan="2">同学</th>'
+    +   '<th colspan="2" style="text-align:center">上一场（' + esc(shortName(prevExam.name || '')) + '）</th>'
+    +   '<th colspan="2" style="text-align:center">这一场（' + esc(shortName(curExam.name || '')) + '）</th>'
+    +   '<th colspan="2" style="text-align:center">变化</th>'
+    + '</tr><tr>'
+    +   '<th>总分</th><th>班排</th><th>总分</th><th>班排</th>'
+    +   '<th>总分</th><th>班排</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>'
+    + gapRow
+    + '<div class="sc-figcap">'
+    +   '「总分」列显示<b>原始分</b>，括号小字是<b>赋分后的总分</b>（只有含赋分科的考试才有意义）；'
+    +   '班排同理：大字按原始分排，小字按赋分排。'
+    +   (hasGradedCur ? '' : '这场考试没有赋分科目，所以原始分与赋分相同。')
+    + '</div></div>';
 }
 
 /* ③ 各科分组柱状图：每科两根柱（A 橙 / B 蓝），柱顶标分，组顶标分差 */
@@ -14408,7 +14674,7 @@ function scPkSubjCard(A, B){
       + full + '</text>';
   });
   svg += '</svg>';
-  return '<div class="sc-card">'
+  return '<div class="sc-card" data-scblk="pk_subj">'
     + '<div class="sc-card-h">各科对比（柱顶为得分，组顶为 A−B 分差；柱高按本科满分归一）</div>'
     + '<div class="sc-svgwrap">' + svg + '</div>'
     + '</div>';
@@ -14604,21 +14870,165 @@ function scPkTrendCard(A, B){
     if(prevGap != null && curGap != null && prevGap !== curGap){
       var wider = Math.abs(curGap) > Math.abs(prevGap);
       gapTxt = '<div style="margin-top:6px">· <b>两人差距</b>：总分差从 ' + fmtNum(Math.abs(prevGap)) + ' 分变成 '
-        + fmtNum(Math.abs(curGap)) + ' 分（' + (wider ? '拉开了' : '缩小了') + Math.abs(Math.abs(curGap) - Math.abs(prevGap)).toFixed(1) + ' 分'
+        + fmtNum(Math.abs(curGap)) + ' 分（' + (wider ? '拉开了' : '缩小了') + fmtNum(Math.abs(Math.abs(curGap) - Math.abs(prevGap))) + ' 分'
         + '，现在 ' + (curGap > 0 ? esc(anA.name) : esc(anB.name)) + ' 领先）。</div>';
     }
   }
-  var analysisHtml = (anA || anB)
-    ? '<div class="sc-card" style="margin-top:12px"><div class="sc-card-h">对比分析</div>'
-      + '<div style="font-size:.86rem;line-height:1.9">'
-      + oneSide(anA) + '<br>' + oneSide(anB)
-      + gapTxt
-      + suggest(anA) + suggest(anB)
-      + '</div>'
-      + '<div class="sc-figcap">以上由本地规则根据两次成绩自动生成，仅供参考。</div></div>'
-    : '';
 
-  return '<div class="sc-card"><div class="sc-card-h">跨考试进退步（'
+  /* ===== v3.5.12（#8）对比分析升级 =====
+     站主原话：「跟个人画像一样的 AI 分析，只不过着重对比二人数据进行分析与建议」
+     所以这里不再只写「谁涨谁跌」，而是按个人画像那套五段结构来写，
+     每一段都**把两个人放在一起比**：结论 / 领先在哪 / 短板在哪 / 差距怎么变 / 各自该干什么。 */
+  function pkAI(){
+    if(!A || !B) return null;
+    var tA = scTotal(A, SC.basis), tB = scTotal(B, SC.basis);
+    if(tA == null || tB == null) return null;
+
+    var rkA = curRk[A.id], rkB = curRk[B.id];
+    var lead = tA >= tB ? { w: A, l: B, t: tA, lt: tB, rkw: rkA, rkl: rkB, nmW: A.name || 'A 方', nmL: B.name || 'B 方' }
+                        : { w: B, l: A, t: tB, lt: tA, rkw: rkB, rkl: rkA, nmW: B.name || 'B 方', nmL: A.name || 'A 方' };
+    var gap = Math.abs(tA - tB);
+
+    /* ① 一句话结论 */
+    var concl = gap === 0
+      ? '这次两人总分<b>完全相同</b>（' + fmtNum(tA) + '），班排并列第 <b>' + fmtNum(rkA) + '</b>。'
+      : '这次 <b>' + esc(lead.nmW) + '</b> 领先 <b>' + esc(lead.nmL) + '</b> <b>' + fmtNum(gap) + '</b> 分'
+        + '（' + fmtNum(lead.t) + ' vs ' + fmtNum(lead.lt) + '，班排第 ' + fmtNum(lead.rkw) + ' vs 第 ' + fmtNum(lead.rkl) + '）。';
+
+    /* ② 逐科拆差距：领先方在哪几科赢、落后方在哪几科扳回 */
+    var subs = SC.exam.subjects || [];
+    var per = [];
+    subs.forEach(function(s){
+      var va = scSubScore(A, s, SC.basis), vb = scSubScore(B, s, SC.basis);
+      if(va == null || vb == null) return;
+      per.push({ name: s.name || s.key, a: va, b: vb, d: va - vb, full: s.full || 0 });
+    });
+    if(!per.length) return null;
+    var byAbs = per.slice().sort(function(x, y){ return Math.abs(y.d) - Math.abs(x.d); });
+    var big = byAbs[0];
+    var winnerIsA = big.d > 0;
+    var bigWin = { name: big.name, d: Math.abs(big.d), by: winnerIsA ? (A.name || 'A 方') : (B.name || 'B 方'),
+                   loser: winnerIsA ? (B.name || 'B 方') : (A.name || 'A 方'), full: big.full };
+
+    var contrib = '差距的主要来源是 <b>' + esc(bigWin.name) + '</b>：'
+      + esc(bigWin.by) + ' ' + fmtNum(winnerIsA ? big.a : big.b) + ' 分，'
+      + esc(bigWin.loser) + ' ' + fmtNum(winnerIsA ? big.b : big.a) + ' 分，'
+      + '单这一科就差了 <b>' + fmtNum(bigWin.d) + '</b> 分'
+      + (gap > 0 ? '（占总差距的 ' + Math.min(999, Math.round(bigWin.d / gap * 100)) + '%）' : '') + '。';
+
+    /* 两人各自「超班均最多」和「落后班均最多」的科目 */
+    var avgMap = scPkSubjAvg();
+    function strongWeak(row, nm){
+      var list = [];
+      per.forEach(function(x){
+        var a = avgMap[(subs.filter(function(s){ return (s.name || s.key) === x.name; })[0] || {}).key];
+        var v = x.a === undefined ? null : (row === A ? x.a : x.b);
+        if(v == null || a == null) return;
+        list.push({ name: x.name, d: v - a });
+      });
+      if(!list.length) return null;
+      list.sort(function(p, q){ return q.d - p.d; });
+      return { nm: nm, best: list[0], worst: list[list.length - 1] };
+    }
+    var swA = strongWeak(A, A.name || 'A 方');
+    var swB = strongWeak(B, B.name || 'B 方');
+
+    function sideText(sw){
+      if(!sw) return '';
+      var t = '<b>' + esc(sw.nm) + '</b>：';
+      if(sw.best.d > 0) t += '最强 <b>' + esc(sw.best.name) + '</b>（超班均 ' + fmtNum(sw.best.d) + ' 分）';
+      else t += '没有超过班均的科目';
+      t += '；';
+      if(sw.worst.d < 0) t += '最弱 <b>' + esc(sw.worst.name) + '</b>（落后班均 ' + fmtNum(Math.abs(sw.worst.d)) + ' 分）';
+      else t += '各科都在班均之上';
+      return t + '。';
+    }
+
+    /* ③ 各自这两场的变化（复用 analyze 的结论） */
+    function trendOf(x){
+      if(!x) return '';
+      var bits = [];
+      if(x.td != null) bits.push('总分' + (x.td > 0 ? '↑' + fmtNum(x.td) : x.td < 0 ? '↓' + fmtNum(Math.abs(x.td)) : '持平'));
+      if(x.dRank != null && x.dRank !== 0) bits.push('班排' + (x.dRank < 0 ? '进步 ' + Math.abs(x.dRank) + ' 名' : '退步 ' + x.dRank + ' 名'));
+      if(x.up && x.up.d > 0) bits.push(x.up.sub + ' +' + fmtNum(x.up.d));
+      if(x.dn && x.dn.d < 0) bits.push(x.dn.sub + ' ' + fmtNum(x.dn.d));
+      return bits.length ? bits.join('，') : '两场基本持平';
+    }
+
+    /* ④ 建议：分「领先方怎么守」「落后方怎么追」，都落到具体科目 */
+    var todo = [];
+    if(gap === 0){
+      todo.push('两人这次打成平手，下一步比的是<b>谁先把短板补上去</b>。'
+        + '对照上面的强弱项，各自把落后班均最多的那科当成本月唯一重点。');
+    }else{
+      todo.push('<b>' + esc(lead.nmL) + '</b> 的追赶点很明确：<b>' + esc(bigWin.name) + '</b> 一科就差了 '
+        + fmtNum(bigWin.d) + ' 分，只要把这一科拉到对方水平，总分差距立刻抹平'
+        + (bigWin.d >= gap ? '（甚至反超）' : '') + '。别同时补三科。');
+      todo.push('<b>' + esc(lead.nmW) + '</b> 的优势主要靠 <b>' + esc(bigWin.name) + '</b>，'
+        + '这一科要继续稳住；同时注意别在其他科目被对方反超 —— 把最弱那一科守到班均以上就够。');
+    }
+    if(anA && anA.td != null && anB && anB.td != null && anA.td !== anB.td){
+      var faster = anA.td > anB.td ? anA.name : anB.name;
+      todo.push('从这两场的<b>变化速度</b>看，<b>' + esc(faster) + '</b> 涨得更快 —— '
+        + '如果这个势头保持下去，' + (gap > 0 ? '下一次考试两人的差距会进一步' + (faster === lead.nmW ? '拉大' : '缩小') : '差距会重新出现')
+        + '。');
+    }
+    todo = todo.slice(0, 3);
+
+    var rowHtml = function(k, v){
+      return v ? '<div class="sc-ai-row"><span class="sc-ai-k">' + k + '</span><span class="sc-ai-v">' + v + '</span></div>' : '';
+    };
+    return {
+      concl: concl,
+      contrib: contrib,
+      sideA: sideText(swA),
+      sideB: sideText(swB),
+      trend: '两场变化 —— ' + esc(A.name || 'A 方') + '：' + trendOf(anA) + '；'
+        + esc(B.name || 'B 方') + '：' + trendOf(anB) + '。',
+      gapTxt: gapTxt,
+      todo: todo,
+      rowHtml: rowHtml,
+      tableHtml: '<div class="sc-tblwrap" style="max-height:none;margin-top:8px">'
+        + '<table class="sc-tbl" style="min-width:auto"><thead><tr>'
+        + '<th>科目</th><th>' + esc(A.name || 'A 方') + '</th><th>' + esc(B.name || 'B 方') + '</th><th>差值</th>'
+        + '</tr></thead><tbody>'
+        + per.map(function(x){
+            var cls = x.d > 0 ? 'up' : (x.d < 0 ? 'down' : '');
+            return '<tr><td class="sc-name">' + esc(x.name) + '</td>'
+              + '<td>' + fmtNum(x.a) + '</td><td>' + fmtNum(x.b) + '</td>'
+              + '<td>' + (x.d === 0 ? '<span class="sc-dim">±0</span>'
+                  : '<span class="sc-sub-diff ' + cls + '">' + fmtDiff(x.d) + '</span>') + '</td></tr>';
+          }).join('')
+        + '</tbody></table></div>',
+    };
+  }
+  var ai = (SC.pkExam2 != null) ? pkAI() : null;
+
+  var analysisHtml = ai
+    ? '<div class="sc-card sc-ai-card" data-scblk="pk_ai" style="margin-top:12px">'
+      + '<div class="sc-card-h">AI 对比分析<span class="sc-h-note">本地规则生成 · 不联网 · 不上传成绩</span></div>'
+      + '<div class="sc-ai-concl">' + ai.concl + '</div>'
+      + ai.rowHtml('差距在哪', ai.contrib)
+      + ai.rowHtml('A 方强弱', ai.sideA)
+      + ai.rowHtml('B 方强弱', ai.sideB)
+      + ai.rowHtml('两场变化', ai.trend)
+      + ai.tableHtml
+      + '<div class="sc-ai-todo"><b>下一步可以这样做</b><ol>'
+      +   ai.todo.map(function(t){ return '<li>' + t + '</li>'; }).join('')
+      + '</ol></div>'
+      + '<div class="sc-figcap">这份对比由浏览器按两场考试数据实时算出（总分差 / 逐科拆解 / 强弱项 / 变化速度四类规则），仅供参考。</div>'
+      + '</div>'
+    : ((anA || anB)
+      ? '<div class="sc-card" style="margin-top:12px"><div class="sc-card-h">对比分析</div>'
+        + '<div style="font-size:.86rem;line-height:1.9">'
+        + oneSide(anA) + '<br>' + oneSide(anB)
+        + gapTxt
+        + suggest(anA) + suggest(anB)
+        + '</div>'
+        + '<div class="sc-figcap">上面这段只看「这一场」，想看更完整的对比分析，请在下方选一场「对比另一场」。</div></div>'
+      : '');
+
+  return '<div class="sc-card" data-scblk="pk_trend"><div class="sc-card-h">跨考试进退步（'
     + esc(shortName(prevExam.name || '')) + ' → ' + esc(shortName(SC.exam.name || '')) + '）'
     + '<span class="sc-h-note">' + esc(scDateRange(prevExam) || '') + '</span></div>'
     + '<div class="sc-tblwrap" style="max-height:none"><table class="sc-tbl" style="min-width:auto">'
@@ -15209,6 +15619,11 @@ function scExportDialog(){
     + '<div class="sc-pane" style="max-height:70vh">'
     +   '<div class="sc-hint">勾选要放进图里的内容 —— <b>没勾的不会出现在图上，也不会留空</b>。<br>'
     +     '导出后是一张长图（越往下越细），手机上能直接分享到微信。</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px">'
+    +     '<button class="btn btn-sm btn-secondary" data-exall="1">全选</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-exall="0">全不选</button>'
+    +   '</div>'
+    +   '<div class="sc-pk-group-h">我的画像<span class="sc-dim">这张图只关于你自己</span></div>'
     +   row('head', '总分与排名', '姓名、总分、班排名、年级排名（物理方向，必选）')
     +   row('metrics', '其它指标', '与班均差、联考排名')
     +   row('subjects', '各科成绩', '每科分数 / 满分、与班均差、得分率条')
@@ -15219,6 +15634,9 @@ function scExportDialog(){
     +   row('trend', '历次趋势', series.length >= 2 ? '最近 ' + series.length + ' 次考试的总分折线'
         : '至少要两次有成绩的考试才画得出来', series.length < 2)
     +   (cuts.length ? row('cutlines', '上线情况', '每条线过了没有、还差多少分') : '')
+    +   '<div class="sc-pk-group-h">全班成绩单<span class="sc-dim">长图只画你一个人；要看整班请用「打印」</span></div>'
+    +   '<p class="sc-figcap" style="margin:0 0 6px">导出长图的定位是「发给家人看我自己」，所以不画整班名次表。'
+    +     '需要全班成绩单请点工具栏的<b>打印</b>，那里可以逐项勾选全班成绩单的内容。</p>'
     +   '<div style="display:flex;gap:10px;margin-top:18px">'
     +     '<button class="btn btn-secondary" style="flex:1" onclick="scExportClose()">取消</button>'
     +     '<button class="btn" style="flex:1" id="scExGo">导出图片</button>'
@@ -15230,6 +15648,19 @@ function scExportDialog(){
   var host = document.createElement('div');
   host.innerHTML = html;
   document.body.appendChild(host);
+
+  /* v3.5.12 #7：全选 / 全不选 */
+  Array.prototype.forEach.call(host.querySelectorAll('[data-exall]'), function(b){
+    b.onclick = function(){
+      var v = b.getAttribute('data-exall') === '1';
+      Array.prototype.forEach.call(host.querySelectorAll('[data-ex]'), function(cb){
+        if(!cb.disabled) cb.checked = v;
+      });
+      /* 必选项 head 始终勾着 */
+      var h = host.querySelector('[data-ex="head"]');
+      if(h) h.checked = true;
+    };
+  });
 
   document.getElementById('scExGo').onclick = function(){
     var box = document.getElementById('scExMask');
@@ -15637,7 +16068,23 @@ function scShareDialog(edit){
     +       '<label class="sc-sh-sec"><input type="checkbox" data-sec="card" checked>'
     +         '<span class="t">个人成绩卡<span class="s">总分、班排名、年级排名、与班均、各科明细 —— <b>分享自己时用这个</b></span></span></label>'
     +       '<div class="sc-sh-tip" id="shSecTip"></div>'
-    +     '</div></div>'
+    +     '</div>'
+    /* v3.5.12 #7：细项。跟着上面两个总开关走 —— 总开关没勾，细项就置灰 */
+    +     '<div id="shFine" style="margin-top:10px">'
+    +       '<div class="sc-pk-group-h" data-fineg="board">成绩单里包含<span class="sc-dim">取消勾选的不会出现</span></div>'
+    +       '<div class="sc-fine-row" data-fineg="board">'
+    +         '<label class="sc-fine"><input type="checkbox" data-sec2="avg" checked> 班均 / 中位数 / 最高</label>'
+    +         '<label class="sc-fine"><input type="checkbox" data-sec2="table" checked> 全班名次表</label>'
+    +         '<label class="sc-fine"><input type="checkbox" data-sec2="cut" checked> 上线情况</label>'
+    +       '</div>'
+    +       '<div class="sc-pk-group-h" data-fineg="card">个人成绩卡里包含<span class="sc-dim">取消勾选的不会出现</span></div>'
+    +       '<div class="sc-fine-row" data-fineg="card">'
+    +         '<label class="sc-fine"><input type="checkbox" data-sec2="trend" checked> 历史总分趋势</label>'
+    +         '<label class="sc-fine"><input type="checkbox" data-sec2="prog" checked> 各科进退步</label>'
+    +         '<label class="sc-fine"><input type="checkbox" data-sec2="rankchg" checked> 年级排名变化</label>'
+    +       '</div>'
+    +     '</div>'
+    +   '</div>'
     +   '<div style="margin-bottom:12px"><label class="sc-sh-lb">包含哪几次考试</label>'
     +     '<div class="sc-sh-exs">' + exOpts + '</div></div>'
     +   '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
@@ -15699,6 +16146,12 @@ function scShareDialog(edit){
   scShEl('shScope').onchange = pickScope;
   if(edit){
     setSec(edit.sections ? edit.sections.board !== false : true, edit.sections ? edit.sections.card !== false : true);
+    /* v3.5.12 #7：回填细项（老分享没有子键 → 全勾） */
+    var esec = edit.sections || {};
+    Array.prototype.forEach.call(scShAll('[data-sec2]'), function(cb){
+      var k = cb.getAttribute('data-sec2');
+      cb.checked = (esec[k] !== false);
+    });
     /* 「自选同学」的分享在编辑时把名单展开，之前是 display:none 等于藏起来 */
     scShEl('shNamesWrap').style.display = (edit.scope === 'picked') ? 'block' : 'none';
     var tip0 = scShEl('shSecTip');
@@ -15709,6 +16162,21 @@ function scShareDialog(edit){
   Array.prototype.forEach.call(scShAll('.sc-sh-n'), function(b){
     b.onclick = function(){ b.classList.toggle('on'); };
   });
+  /* v3.5.12 #7：总开关关掉时，对应细项整组置灰（不然勾了也没用，容易误会） */
+  var syncFine = function(){
+    Array.prototype.forEach.call(scShAll('.sc-sh-sec input[data-sec]'), function(cb){
+      var g = cb.getAttribute('data-sec');
+      var on = !!cb.checked;
+      Array.prototype.forEach.call(scShAll('[data-fineg="' + g + '"]'), function(el){
+        el.style.opacity = on ? '' : '.45';
+        el.style.pointerEvents = on ? '' : 'none';
+      });
+    });
+  };
+  Array.prototype.forEach.call(scShAll('.sc-sh-sec input[data-sec]'), function(cb){
+    cb.onchange = syncFine;
+  });
+  syncFine();
   scShEl('shGo').onclick = function(){ scShareCreate(editId); };
   mask.addEventListener('click', function(e){ if(e.target === mask) scShareClose(); });
   scShareList();
@@ -15742,7 +16210,20 @@ function scShareCreate(editId){
     var k = cb.getAttribute('data-sec');
     if(k === 'board' || k === 'card') sections[k] = !!cb.checked;
   });
+  /* v3.5.12 #7 细项：只在总开关打开时生效，关着的项一律记 false */
+  Array.prototype.forEach.call(scShAll('[data-sec2]'), function(cb){
+    var k = cb.getAttribute('data-sec2');
+    var grp = (k === 'avg' || k === 'table' || k === 'cut') ? 'board' : 'card';
+    sections[k] = sections[grp] ? !!cb.checked : false;
+  });
   if(!sections.board && !sections.card){ alert('至少要勾一项分享内容，不然对方点开是空的。'); return; }
+  /* 总开关开了但细项全关 → 那一块等于空的，提醒一下（不拦，让人自己决定） */
+  var fine = function(g, keys){
+    return sections[g] && keys.every(function(k){ return sections[k] === false; });
+  };
+  if(fine('board', ['avg', 'table', 'cut']) || fine('card', ['trend', 'prog', 'rankchg'])){
+    if(!confirm('有一类内容的所有细项都被你取消了，对方打开时那一块会是空的。\n确定就这样生成吗？')) return;
+  }
 
   var maxV = scShEl('shMax').value;
   var daysVal = scShEl('shDays').value;
@@ -15772,11 +16253,20 @@ function scShareCreate(editId){
       /* ⚠️ 别用 location.origin + j.url —— 站点挂在子目录下会丢前缀 → 404。
          把后端给的「站点根路径」转成相对当前页面再解析，任何部署位置都对。 */
       var url = new URL(String(j.url || '').replace(/^\/+/, ''), location.href).href;
+      var newToken = String(j.token || (url.split('t=')[1] || ''));
       scShEl('shOut').innerHTML =
           '<div class="sc-hint sc-hint-ok">'
         + '<b>链接已生成。</b>把它发给要看的人就行 —— 对方不用登录。</div>'
         + '<div class="sc-sh-url"><input id="shUrl" readonly value="' + esc(url) + '">'
-        + '<button class="btn btn-sm" id="shCopy">复制</button></div>';
+        + '<button class="btn btn-sm" id="shCopy">复制</button>'
+        + '<button class="btn btn-sm btn-secondary" id="shPv">预览</button>'
+        + '</div>';
+      /* v3.5.12 #9：生成完直接能看到对方打开的样子 */
+      var pv = scShEl('shPv');
+      if(pv) pv.onclick = function(){
+        if(newToken) scSharePreview(newToken);
+        else window.open(url, '_blank', 'noopener');
+      };
       scShEl('shCopy').onclick = function(){
         var inp = scShEl('shUrl');
         inp.select();
@@ -15808,10 +16298,20 @@ function scShareList(){
             + '<span class="sc-sh-state' + (x.alive ? ' on' : '') + '">' + state + '</span>'
             + '<b>' + esc(scopeTxt) + '</b>'
             + '<span class="sc-dim">看过 ' + x.views + ' 次' + (x.maxViews ? ' / ' + x.maxViews : '') + '</span>'
+            + (x.alive ? '<button class="btn btn-sm btn-secondary" data-view="' + x.id + '" data-token="' + esc(x.token || '') + '">预览</button>' : '')
             + (x.alive ? '<button class="btn btn-sm btn-secondary" data-edit="' + x.id + '">编辑</button>' : '')
             + (x.alive ? '<button class="btn btn-sm btn-secondary" data-rev="' + x.id + '">撤销</button>' : '')
             + '</div>';
         }).join('') + '</div>';
+    /* v3.5.12 #9：预览 —— 就是真的打开那条分享链接，站内全屏弹窗打开，
+       看到的样子和同学点开完全一致（不能展示的本来就被后端裁掉了）。 */
+    Array.prototype.forEach.call(box.querySelectorAll('[data-view]'), function(b){
+      b.onclick = function(){
+        var tk = b.getAttribute('data-token');
+        if(!tk){ alert('这条分享没有拿到预览标识，请刷新列表后重试。'); return; }
+        scSharePreview(tk);
+      };
+    });
     Array.prototype.forEach.call(box.querySelectorAll('[data-edit]'), function(b){
       b.onclick = function(){
         var id = Number(b.getAttribute('data-edit'));
@@ -15830,9 +16330,224 @@ function scShareList(){
   }).catch(function(){});
 }
 
-/* ---------- A4 打印（@media print 见样式表） ---------- */
+/* ---------- 分享页预览（v3.5.12 #9） ----------
+ * 站主要求：「分享页可以预览，页面设计和网站内部的一样，相当于把不能展示的东西隐藏了」
+ *
+ * 做法：**不另写一套预览渲染** —— 直接用 iframe 打开真实的 share.html?t=xxx。
+ * 好处是所见即所得：预览就是同学点开看到的那一页，后端裁到什么样，
+ * 预览就什么样（分享自己时只有一行、班均仍是全班口径、名次按全班算）。
+ * 另写一套「模拟」迟早会和真页面走样，那才是预览最大的坑。
+ */
+function scSharePreview(tk){
+  var url = new URL('share.html?t=' + encodeURIComponent(tk), location.href).href;
+  var mask = document.createElement('div');
+  mask.className = 'allboard-mask show';
+  mask.id = 'scShPvMask';
+  mask.innerHTML = '<div class="allboard-box sc-box" style="max-width:520px;width:96vw">'
+    + '<div class="allboard-head"><span>分享页预览</span>'
+    +   '<span style="display:flex;gap:8px">'
+    +     '<a class="btn btn-sm btn-secondary" href="' + attr(url) + '" target="_blank" rel="noopener">新窗口打开</a>'
+    +     '<button onclick="scSharePreviewClose()">关闭</button>'
+    +   '</span></div>'
+    + '<div style="background:#f4efe9;padding:10px">'
+    +   '<div style="background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e6ddd4">'
+    +     '<iframe src="' + attr(url) + '" style="width:100%;height:66vh;border:0;display:block" '
+    +       'sandbox="allow-scripts allow-same-origin allow-popups"></iframe>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="sc-pane" style="padding:10px 14px 14px">'
+    +   '<p class="sc-figcap" style="margin:0">'
+    +     '这就是同学点开链接后看到的样子 —— <b>不能展示的内容后端原本就不会下发</b>，'
+    +     '所以预览里没有的，别人也看不到。手机上看效果更像，可以点「新窗口打开」再缩窄窗口或用手机打开。</p>'
+    + '</div></div>';
+  document.body.appendChild(mask);
+  mask.addEventListener('click', function(e){ if(e.target === mask) scSharePreviewClose(); });
+}
+function scSharePreviewClose(){
+  var m = document.getElementById('scShPvMask');
+  if(m && m.parentNode) m.parentNode.removeChild(m);
+}
+
+/* ---------- A4 打印（@media print 见样式表） ----------
+ * v3.5.12（站主 2026-10-17 #7）：
+ *   打印前先弹「要印哪些内容」，三类内容逐项勾选，支持全选 / 反选 / 按类型一键全勾。
+ *   没勾的块加 .print-hide 类，@media print 里 display:none —— 不占纸面、不留白条。
+ *   常用组合也记住了，下次打开还是上次那套。
+ */
+var SC_PRINT_KEYS = 'cls_sc_print_keys';
+
+/** 三类内容的分组定义。sel = 该块在 DOM 里的选择器（用于加 print-hide） */
+function scContentGroups(){
+  var cuts = (SC.exam && SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
+  var subs = (SC.exam && SC.exam.subjects) || [];
+  return [
+    {
+      id: 'board', name: '全班成绩单', desc: '整班的名次表与统计',
+      items: [
+        { key: 'board_avg',     name: '班均分 / 中位数', desc: '班级总体水平' },
+        { key: 'board_dist',    name: '总分分布',        desc: '各分数段人数分布图' },
+        { key: 'board_cut',     name: '上线情况',        desc: '特控线 / 本科线过了多少人', dis: !cuts.length, disMsg: '这场没有录入分数线' },
+        { key: 'board_band',    name: '分数段分布',      desc: '按分档列出名单' },
+        { key: 'board_extreme', name: '本次最值',        desc: '最高分 / 最低分 / 进步最大' },
+        { key: 'board_table',   name: '全班名次表',      desc: '一行一人，含各科分数' },
+      ],
+    },
+    {
+      id: 'me', name: '我的画像', desc: '只关于你自己',
+      items: [
+        { key: 'me_card',    name: '成绩单',        desc: '总分、排名、与班均差' },
+        { key: 'me_cut',     name: '上线情况',      desc: '你离各条线还差多少', dis: !cuts.length, disMsg: '这场没有录入分数线' },
+        { key: 'me_pos',     name: '我在班里的位置', desc: '位置条 / 四象限' },
+        { key: 'me_subj',    name: '各科情况',      desc: '每科分数、得分率、与班均差' },
+        { key: 'me_heat',    name: '学生 × 科目热力图', desc: '全班逐科颜色图（含你自己）' },
+        { key: 'me_ai',      name: 'AI 分析',       desc: '本地规则生成的文字结论' },
+      ],
+    },
+    {
+      id: 'pk', name: '成绩对比', desc: '两位同学并排比',
+      items: [
+        { key: 'pk_total',  name: '总分对比',       desc: '两根柱 + 班均参考线' },
+        { key: 'pk_both',   name: '两场总分并列',   desc: '选了第二场才有（含赋分前后）', dis: SC.pkExam2 == null, disMsg: '还没选「对比另一场」' },
+        { key: 'pk_subj',   name: '各科对比',       desc: '每科两根柱与分差' },
+        { key: 'pk_trend',  name: '跨考试进退步',   desc: '两场逐项对照表', dis: SC.pkExam2 == null, disMsg: '还没选「对比另一场」' },
+        { key: 'pk_ai',     name: 'AI 对比分析',    desc: '差距在哪 + 各自该怎么补' },
+      ],
+    },
+  ];
+}
+
+/** 读取记住的勾选状态（默认全勾） */
+function scPrintState(){
+  var st = {};
+  scContentGroups().forEach(function(g){
+    g.items.forEach(function(it){ st[it.key] = !it.dis; });
+  });
+  try{
+    var raw = JSON.parse(localStorage.getItem(SC_PRINT_KEYS) || 'null');
+    if(raw && typeof raw === 'object'){
+      Object.keys(st).forEach(function(k){
+        if(typeof raw[k] === 'boolean') st[k] = raw[k];
+      });
+    }
+  }catch(e){}
+  return st;
+}
+function scPrintSave(st){
+  try{ localStorage.setItem(SC_PRINT_KEYS, JSON.stringify(st)); }catch(e){}
+}
+
+/**
+ * 把状态应用到 DOM：没勾的块加 .print-hide。
+ * v3.5.12：改用统一的 `data-scblk="键名"` 标记（比靠一堆语义类名稳，
+ * 以后加卡片只要加属性，不用改这里）。
+ */
+function scApplyPrintState(st){
+  Array.prototype.forEach.call(document.querySelectorAll('[data-scblk]'), function(el){
+    var k = el.getAttribute('data-scblk');
+    if(!k) return;
+    var on = (st[k] === undefined) ? true : !!st[k];
+    el.classList.toggle('print-hide', !on);
+  });
+}
+
+/** 打印前弹选择框 */
 function scPrint(){
-  window.print();
+  var st = scPrintState();
+  var groups = scContentGroups();
+
+  function itemHtml(it){
+    var on = it.dis ? false : !!st[it.key];
+    return '<label class="sc-ex-row' + (it.dis ? ' off' : '') + '" data-pk="' + it.key + '" data-g="' + it.key.split('_')[0] + '">'
+      + '<input type="checkbox" data-print="' + it.key + '"' + (on ? ' checked' : '') + (it.dis ? ' disabled' : '') + '>'
+      + '<span class="t">' + esc(it.name)
+      +   '<span class="s">' + esc(it.dis ? it.disMsg : it.desc) + '</span></span></label>';
+  }
+
+  var html = '<div class="allboard-mask show" id="scPkMask"><div class="allboard-box sc-box" style="max-width:620px">'
+    + '<div class="allboard-head"><span>打印 · 选择要印的内容</span><button onclick="scPrintClose()">关闭</button></div>'
+    + '<div class="sc-pane" style="max-height:72vh">'
+    +   '<div class="sc-hint">勾哪块印哪块，<b>没勾的不会出现在纸上，也不会留空白</b>。<br>'
+    +     '打印用的是 A4 版式：柱状图、热力图都会完整印出来，不会被截断。</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px">'
+    +     '<button class="btn btn-sm btn-secondary" data-pkall="1">全选</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-pkall="0">全不选</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-pktoggle="1">反选</button>'
+    +     groups.map(function(g){
+            return '<button class="btn btn-sm btn-ghost" data-pkgroup="' + g.id + '">只印「' + esc(g.name) + '」</button>';
+          }).join('')
+    +   '</div>'
+    +   groups.map(function(g){
+          return '<div class="sc-pk-group">'
+            + '<div class="sc-pk-group-h">' + esc(g.name) + '<span class="sc-dim">' + esc(g.desc) + '</span></div>'
+            + g.items.map(itemHtml).join('')
+            + '</div>';
+        }).join('')
+    +   '<div style="display:flex;gap:10px;margin-top:18px">'
+    +     '<button class="btn btn-secondary" style="flex:1" onclick="scPrintClose()">取消</button>'
+    +     '<button class="btn" style="flex:1" id="scPkGo">打印</button>'
+    +   '</div>'
+    +   '<p class="sc-figcap">这次考试：' + esc(SC.exam.name || '') + '　' + esc(scDateRange(SC.exam) || '')
+    +     '　（浏览器打印对话框里请选「另存为 PDF」或直接打印机）</p>'
+    + '</div></div></div>';
+
+  var host = document.createElement('div');
+  host.innerHTML = html;
+  document.body.appendChild(host.firstChild);
+
+  var mask = document.getElementById('scPkMask');
+  var boxes = function(){ return mask.querySelectorAll('[data-print]'); };
+  var collect = function(){
+    var out = {};
+    Array.prototype.forEach.call(boxes(), function(cb){
+      out[cb.getAttribute('data-print')] = !!cb.checked && !cb.disabled;
+    });
+    return out;
+  };
+  var setAll = function(v){
+    Array.prototype.forEach.call(boxes(), function(cb){ if(!cb.disabled) cb.checked = v; });
+  };
+
+  Array.prototype.forEach.call(mask.querySelectorAll('[data-pkall]'), function(b){
+    b.onclick = function(){ setAll(b.getAttribute('data-pkall') === '1'); };
+  });
+  var tg = mask.querySelector('[data-pktoggle]');
+  if(tg) tg.onclick = function(){
+    Array.prototype.forEach.call(boxes(), function(cb){ if(!cb.disabled) cb.checked = !cb.checked; });
+  };
+  Array.prototype.forEach.call(mask.querySelectorAll('[data-pkgroup]'), function(b){
+    b.onclick = function(){
+      var gid = b.getAttribute('data-pkgroup');
+      setAll(false);
+      Array.prototype.forEach.call(boxes(), function(cb){
+        if(cb.disabled) return;
+        if(cb.getAttribute('data-print').split('_')[0] === gid) cb.checked = true;
+      });
+    };
+  });
+  mask.addEventListener('click', function(e){ if(e.target === mask) scPrintClose(); });
+
+  document.getElementById('scPkGo').onclick = function(){
+    var next = collect();
+    scPrintSave(next);
+    scPrintClose();
+    scApplyPrintState(next);
+    /* 给浏览器一帧时间应用 class，再唤起打印 */
+    setTimeout(function(){
+      window.print();
+      /* 打印对话框关掉后恢复（不然页面上那些块就一直藏着了） */
+      setTimeout(function(){ scResetPrintHide(); }, 300);
+    }, 60);
+  };
+}
+function scPrintClose(){
+  var m = document.getElementById('scPkMask');
+  if(m && m.parentNode) m.parentNode.removeChild(m);
+}
+/** 打印完把临时隐藏全部撤掉 */
+function scResetPrintHide(){
+  Array.prototype.forEach.call(document.querySelectorAll('.print-hide'), function(el){
+    el.classList.remove('print-hide');
+  });
 }
 
 
@@ -15936,7 +16651,7 @@ function scDiagCard(){
       + ((best.rate - worst.rate) * 100).toFixed(0) + ' 个百分点');
   }
 
-  return '<div class="sc-card sc-card-admin"><div class="sc-card-h">本次最值得做的事<span class="sc-only-admin">仅站主可见</span></div>'
+  return '<div class="sc-card sc-card-admin" data-scblk="board_extreme"><div class="sc-card-h">本次最值得做的事<span class="sc-only-admin">仅站主可见</span></div>'
     + '<ul class="sc-diag">' + lines.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul>'
     + (weak ? '<div class="sc-figcap">建议优先补 <b>' + esc(weak.name) + '</b> —— 它是全班得分率最低的一科，提升空间最大。</div>' : '')
     + '</div>';
@@ -16801,7 +17516,7 @@ function scHeatmap(){
   }).join('');
   SC._hm = cellsMeta;
 
-  return '<div class="sc-card sc-card-admin"><div class="sc-card-h">学生 × 科目热力图'
+  return '<div class="sc-card sc-card-admin" data-scblk="me_heat"><div class="sc-card-h">学生 × 科目热力图'
     + '<span class="sc-h-note">颜色＝该科班内位置</span>'
     + '<span class="sc-only-admin">仅站主可见</span></div>'
     + '<div class="sc-hm-head"><span class="sc-hm-name"></span><span class="sc-hm-cells">'

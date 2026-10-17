@@ -757,12 +757,22 @@ async function shareCreate(req, res) {
     ? Math.min(100000, Math.round(Number(b.maxViews))) : null;
 
   /* 分享内容（v2.9.7 站主：「分析也可以自定义分享内容」）。
-     支持 board（全班成绩单）/ card（个人成绩卡）。
-     老链接没有这个字段，读取时一律按「都有」处理 —— 向后兼容。 */
+     v3.5.12（#7）：从两项粗粒度扩成**逐块可选**，与打印 / 导出用同一套键名。
+       全班成绩单：board（总开关）/ avg 班均 / table 名次表 / cut 上线 / dist 分布
+       我的画像：card（总开关）/ trend 历次趋势 / prog 各科进退步 / rankchg 年级排名变化
+     老链接没有这些子键 → 一律按「有」处理，向后兼容，老链接不会突然变空白。 */
+  const boolOr = (v, dflt) => (v === undefined || v === null) ? dflt : !!v;
   const rawSec = (b.sections && typeof b.sections === 'object' && !Array.isArray(b.sections)) ? b.sections : {};
   const sections = {
-    board: rawSec.board !== false,
-    card: rawSec.card !== false,
+    board: boolOr(rawSec.board, true),
+    card: boolOr(rawSec.card, true),
+    avg: boolOr(rawSec.avg, true),
+    table: boolOr(rawSec.table, true),
+    cut: boolOr(rawSec.cut, true),
+    dist: boolOr(rawSec.dist, true),
+    trend: boolOr(rawSec.trend, true),
+    prog: boolOr(rawSec.prog, true),
+    rankchg: boolOr(rawSec.rankchg, true),
   };
   if (!sections.board && !sections.card) return fail(res, 400, '至少选一项分享内容，不然点开是空白');
 
@@ -834,7 +844,18 @@ async function shareUpdate(req, res) {
   }
 
   const rawSec = (b.sections && typeof b.sections === 'object' && !Array.isArray(b.sections)) ? b.sections : {};
-  const sections = { board: rawSec.board !== false, card: rawSec.card !== false };
+  const b2 = (v, d) => (v === undefined || v === null) ? d : !!v;
+  const sections = {
+    board: b2(rawSec.board, true),
+    card: b2(rawSec.card, true),
+    avg: b2(rawSec.avg, true),
+    table: b2(rawSec.table, true),
+    cut: b2(rawSec.cut, true),
+    dist: b2(rawSec.dist, true),
+    trend: b2(rawSec.trend, true),
+    prog: b2(rawSec.prog, true),
+    rankchg: b2(rawSec.rankchg, true),
+  };
   if (!sections.board && !sections.card) return fail(res, 400, '至少选一项分享内容，不然点开是空白');
 
   const maxViews = (b.maxViews === null || b.maxViews === undefined || b.maxViews === '')
@@ -912,9 +933,17 @@ function shareShape(r) {
   const used = r.max_views != null && Number(r.views) >= Number(r.max_views);
   /* 老链接没写过 sections → 按「都有」处理（向后兼容，别让老链接变空白） */
   const sec = jsonCol(r.sections) || {};
+  const s3 = (v) => v !== false;   /* undefined 也算有 */
   const sections = {
-    board: sec.board !== false,
-    card: sec.card !== false,
+    board: s3(sec.board),
+    card: s3(sec.card),
+    avg: s3(sec.avg),
+    table: s3(sec.table),
+    cut: s3(sec.cut),
+    dist: s3(sec.dist),
+    trend: s3(sec.trend),
+    prog: s3(sec.prog),
+    rankchg: s3(sec.rankchg),
   };
   return {
     id: Number(r.id),
