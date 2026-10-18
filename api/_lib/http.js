@@ -47,7 +47,7 @@ export { getSql };
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.27';
+const SCHEMA_VER = '3.5.28';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -231,6 +231,12 @@ export async function ensureSchema(sql) {
           )
         `; } catch (e) {}
         try { await s`create index if not exists song_dur_title_idx on song_durations (title)`; } catch (e) {}
+        /* 🔴 v3.5.28：时长库支持「线上搜歌 + 导入清单批量匹配」。
+           匹配走「歌名归一后全等 + 歌手部分符合」，需要按归一歌名找，
+           而 title 列存的是原始歌名（含括号版本名），所以补一个歌手列索引，
+           让 match-list 的全表扫描在几千条时也不至于慢。
+           纪律：三处同步（升级路径 / 全量清单 / schema.sql），SCHEMA_VER 已升到 3.5.28。 */
+        try { await s`create index if not exists song_dur_artist_idx on song_durations (artist)`; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
@@ -643,6 +649,8 @@ export async function ensureSchema(sql) {
       )
     `;
     await s`create index if not exists song_dur_title_idx on song_durations (title)`;
+    /* v3.5.28：导入清单匹配会按歌手做模糊比对，补个歌手索引（与升级路径同步） */
+    await s`create index if not exists song_dur_artist_idx on song_durations (artist)`;
 
     /* 全量跑完 → 盖章。下一条请求起走「版本一致直接返回」的捷径。
        用 || 合并而不是整行覆盖：site_settings 里还存着 register_open /

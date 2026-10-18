@@ -534,7 +534,7 @@ create index if not exists class_vote_ballots_vote_idx on class_vote_ballots (vo
 --   · song_key = 归一化(歌名)|归一化(歌手)，同一首歌只存一行
 --   · source：manual 人工填写（优先级最高，不被自动结果覆盖）
 --             / netease / qq / itunes / auto
--- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.5.27
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.5.28（v3.5.28 增歌手索引）
 -- ============================================================
 create table if not exists song_durations (
   song_key   text        primary key,
@@ -545,3 +545,5 @@ create table if not exists song_durations (
   updated_at timestamptz not null default now()
 );
 create index if not exists song_dur_title_idx on song_durations (title);
+-- v3.5.28：导入清单按「歌名全等 + 歌手部分匹配」比对，补歌手索引
+create index if not exists song_dur_artist_idx on song_durations (artist);

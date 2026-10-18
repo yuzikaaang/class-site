@@ -1009,8 +1009,8 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.27';
-var VER_DATE = '2026-10-17';
+var SITE_VERSION = '3.5.28';
+var VER_DATE = '2026-10-18';
 
 /* ---- 运行时状态 ---- */
 var STATE = {
@@ -5228,12 +5228,24 @@ function vhDurNotice(){
   if(btn) btn.onclick = function(){ voDurManualDialog(keys); };
 }
 
-/** v3.5.27：时长库管理面板 —— 看已收录哪些歌、删掉录错的、补录缺的 */
+/** v3.5.28：时长库管理面板
+ *  站主原话：「时长库那个里面呢也可以搜歌，就是直接线上搜歌，我搜歌名，
+ *  然后匹配出对应的歌手和时间，然后我点击它就可以直接加到时长库。
+ *  也可以直接导入，就是我导入歌名和歌手，如果拉取的歌单里面也有同样的
+ *  歌名和歌手，只要相似就行 —— 歌名完全符合，歌手只要部分符合。
+ *  我打算预先准备一些，你也可以自己先准备好，比如周杰伦的、林俊杰的、方大同的。」
+ *
+ *  于是分成四块（用 tab 切）：
+ *    ① 已收录 —— 看库里有什么、删掉录错的
+ *    ② 线上搜 —— 输歌名 → 网易云 / QQ 音乐候选列表 → 点「加入」直接写库
+ *    ③ 导入清单 —— 一行「歌名 - 歌手」，批量查库；命中显示秒数，没命中可就地线上搜
+ *    ④ 预置歌单 —— 周杰伦/林俊杰/方大同热门曲，一键联网抓时长批量入库
+ */
 function openDurLib(){
-  var libList = [];
+  var state = { tab: 'lib', lib: [], q: '', results: null, searching: false, imp: null };
   openModal({
     title: '🎵 歌曲时长库',
-    sub: '存云端，全班设备共用；网易云 / QQ 音乐查到就自动入库，查不到由你手填',
+    sub: '存云端，全班设备共用；线上搜到点一下就能入库，也能整批导入歌名+歌手',
     wide: true,
     body: '<div id="durLibBody"><div class="loading"><div class="spinner"></div>同步中…</div></div>',
     foot: '<button class="btn btn-ghost" data-no>关闭</button>'
@@ -5247,22 +5259,59 @@ function openDurLib(){
         voDurManualDialog(miss);
       };
       var host = box.querySelector('#durLibBody');
-      vhDurLibPull(true).then(function(){
-        return api('/music?action=lib');
-      }).then(function(j){
-        libList = (j && j.list) || [];
-        paintDurLib(host, libList);
-      }).catch(function(e){
-        host.innerHTML = '<div class="alert danger">读取失败：' + esc(e.message || e) + '</div>';
-      });
+      host.__state = state;
+      host.__reload = function(){ return vhDurLibPull(true).then(function(){ return api('/music?action=lib'); })
+        .then(function(j){ state.lib = (j && j.list) || []; })
+        .catch(function(e){ state.lib = state.lib || []; toast('读取时长库失败：' + (e.message || e), 'err', 4000); }); };
+      host.__reload().then(function(){ paintDurLib(host); });
     },
   });
 }
 
-function paintDurLib(host, list){
+/* ---------- v3.5.28 时长库面板：四个 tab 共用的渲染 ---------- */
+var DUR_SRC_TXT = { manual: '人工', netease: '网易云', qq: 'QQ 音乐', itunes: 'iTunes', auto: '自动' };
+
+/** 面板外壳 + 按当前 tab 渲染内容（每次操作后整块重绘，简单可靠） */
+function paintDurLib(host){
   if(!host) return;
-  var srcTxt = { manual: '人工', netease: '网易云', qq: 'QQ 音乐', itunes: 'iTunes', auto: '自动' };
+  var st = host.__state || { tab: 'lib', lib: [] };
+  var lib = st.lib || [];
   var miss = Object.keys(DUR_MISS);
+
+  var tabs = [
+    ['lib', '已收录 ' + lib.length],
+    ['search', '线上搜'],
+    ['import', '导入清单'],
+    ['preset', '预置歌单'],
+  ];
+  var tabBar = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px">'
+    + tabs.map(function(t){
+        var on = st.tab === t[0];
+        return '<button class="btn btn-sm ' + (on ? '' : 'btn-ghost') + '" data-tab="' + t[0] + '"'
+          + (on ? ' style="pointer-events:none"' : '') + '>' + esc(t[1]) + '</button>';
+      }).join('')
+    + '</div>';
+
+  var body;
+  if(st.tab === 'lib') body = durLibViewLib(lib, miss);
+  else if(st.tab === 'search') body = durLibViewSearch(st);
+  else if(st.tab === 'import') body = durLibViewImport(st);
+  else body = durLibViewPreset(st);
+
+  host.innerHTML = tabBar + body;
+
+  /* tab 切换 */
+  Array.prototype.forEach.call(host.querySelectorAll('[data-tab]'), function(b){
+    b.onclick = function(){ st.tab = b.getAttribute('data-tab'); paintDurLib(host); };
+  });
+  if(st.tab === 'lib') wireDurLibRows(host, st);
+  else if(st.tab === 'search') wireDurLibSearch(host, st);
+  else if(st.tab === 'import') wireDurLibImport(host, st);
+  else wireDurLibPreset(host, st);
+}
+
+/* ---------- ① 已收录 ---------- */
+function durLibViewLib(list, miss){
   var missHtml = miss.length
     ? '<div class="alert warn" style="margin:0 0 10px;font-size:.82rem">还有 <b>' + miss.length + '</b> 首没拿到时长，'
       + '点右下角「补录缺时长的歌」手填。</div>'
@@ -5272,17 +5321,21 @@ function paintDurLib(host, list){
         return '<tr data-k="' + attr(r.key || '') + '">'
           + '<td style="padding:6px 8px">' + esc(r.title || '') + (r.artist ? ' <i class="muted" style="font-style:normal">· ' + esc(r.artist) + '</i>' : '') + '</td>'
           + '<td style="padding:6px 8px;white-space:nowrap;font-variant-numeric:tabular-nums">' + esc(voFmtDur(r.seconds)) + '</td>'
-          + '<td style="padding:6px 8px;white-space:nowrap;font-size:.78rem;color:var(--fg-3)">' + esc(srcTxt[r.source] || r.source || '') + '</td>'
+          + '<td style="padding:6px 8px;white-space:nowrap;font-size:.78rem;color:var(--fg-3)">' + esc(DUR_SRC_TXT[r.source] || r.source || '') + '</td>'
           + '<td style="padding:6px 8px;text-align:right">'
           +   '<button class="btn btn-sm btn-ghost" data-del style="color:#b3261e">删除</button>'
           + '</td></tr>';
       }).join('')
-    : '<tr><td colspan="4" style="padding:14px;text-align:center" class="muted">库里还没有数据</td></tr>';
-  host.innerHTML = missHtml
+    : '<tr><td colspan="4" style="padding:14px;text-align:center" class="muted">库里还没有数据，去「线上搜」或「预置歌单」加一批</td></tr>';
+  return missHtml
     + '<p class="muted" style="font-size:.78rem;margin:0 0 6px">共 ' + list.length + ' 首</p>'
     + '<div style="max-height:44vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
     +   '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table>'
     + '</div>';
+}
+
+function wireDurLibRows(host, st){
+  var list = st.lib || [];
   Array.prototype.forEach.call(host.querySelectorAll('tr[data-k] button[data-del]'), function(btn){
     btn.onclick = function(){
       var tr = btn.closest('tr');
@@ -5301,13 +5354,373 @@ function paintDurLib(host, list){
             delete cache[k];
             vhSaveDurCache(cache);
             try{ localStorage.removeItem(DUR_LIB_AT); }catch(e){}
-            var nl = list.filter(function(x){ return x.key !== k; });
-            list.length = 0; Array.prototype.push.apply(list, nl);
-            paintDurLib(host, list);
+            st.lib = list.filter(function(x){ return x.key !== k; });
+            paintDurLib(host);
           })
           .catch(function(e){ toast('删除失败：' + (e.message || e), 'err', 4000); });
       });
     };
+  });
+}
+
+/* ---------- ② 线上搜 ---------- */
+function durLibViewSearch(st){
+  var head = '<div class="field" style="margin-bottom:12px">'
+    + '<div style="display:flex;gap:8px">'
+    +   '<input id="durLibQ" placeholder="输入歌名（可带歌手，如「晴天」或「晴天 周杰伦」）"'
+    +     ' value="' + attr(st.q || '') + '" style="flex:1;padding:8px 12px;font-size:.86rem">'
+    +   '<button class="btn btn-sm" id="durLibGo" style="white-space:nowrap;height:auto">' + (st.searching ? '搜索中…' : '线上搜') + '</button>'
+    + '</div>'
+    + '<p class="hint" style="margin:6px 0 0">网易云 + QQ 音乐一起搜，都没有才用 iTunes 兜底。'
+    + '点「加入」直接把那一行的秒数写进云端库。</p></div>';
+
+  if(st.searching && !st.results) return head + '<div class="loading"><div class="spinner"></div>联网搜索中…</div>';
+  if(!st.results) return head + '<div class="alert info" style="font-size:.82rem">输个歌名点「线上搜」，下面会列出能查到的版本和时长。</div>';
+
+  var list = st.results;
+  if(!list.length) return head + '<div class="alert warn" style="font-size:.82rem">三个渠道都没搜到「' + esc(st.q) + '」，换个写法（去掉括号里的版本名）再试，或者直接手填。</div>';
+
+  var rows = list.map(function(c, i){
+    var badge = c.inLib
+      ? '<b style="color:#15803d;font-size:.78rem">已在库 ' + esc(voFmtDur(c.libSeconds)) + '</b>'
+      : '<button class="btn btn-sm" data-add="' + i + '">加入</button>';
+    return '<tr data-i="' + i + '">'
+      + '<td style="padding:6px 8px">' + esc(c.title)
+      +   (c.album ? '<i class="muted" style="font-style:normal;font-size:.74rem"> · ' + esc(c.album) + '</i>' : '') + '</td>'
+      + '<td style="padding:6px 8px;font-size:.8rem">' + esc(c.artist || '—') + '</td>'
+      + '<td style="padding:6px 8px;white-space:nowrap;font-variant-numeric:tabular-nums">' + esc(voFmtDur(c.seconds)) + '</td>'
+      + '<td style="padding:6px 8px;white-space:nowrap;font-size:.76rem;color:var(--fg-3)">' + esc(DUR_SRC_TXT[c.source] || c.source) + '</td>'
+      + '<td style="padding:6px 8px;text-align:right;white-space:nowrap">' + badge + '</td>'
+      + '</tr>';
+  }).join('');
+
+  return head
+    + '<p class="muted" style="font-size:.78rem;margin:0 0 6px">搜到 ' + list.length + ' 条（已收录的排最前，歌名完全一致的优先）</p>'
+    + '<div style="max-height:40vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+    +   '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table>'
+    + '</div>';
+}
+
+function wireDurLibSearch(host, st){
+  var qEl = host.querySelector('#durLibQ');
+  var goEl = host.querySelector('#durLibGo');
+  var doSearch = function(){
+    var q = String((qEl && qEl.value) || '').trim();
+    if(!q){ toast('先输入歌名', 'err'); return; }
+    st.q = q; st.searching = true; st.results = null;
+    paintDurLib(host);
+    api('/music?action=search&limit=20&q=' + encodeURIComponent(q))
+      .then(function(j){
+        st.results = (j && j.list) || [];
+        st.searching = false;
+        paintDurLib(host);
+      })
+      .catch(function(e){
+        st.searching = false; st.results = [];
+        paintDurLib(host);
+        toast('搜索失败：' + (e.message || e), 'err', 4000);
+      });
+  };
+  if(goEl) goEl.onclick = doSearch;
+  if(qEl) qEl.onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); doSearch(); } };
+
+  Array.prototype.forEach.call(host.querySelectorAll('[data-add]'), function(btn){
+    btn.onclick = function(){
+      var c = (st.results || [])[Number(btn.getAttribute('data-add'))];
+      if(!c) return;
+      btn.disabled = true; btn.textContent = '写入中…';
+      api('/music', { method: 'POST', body: { action: 'manual', items: [{ title: c.title, artist: c.artist, seconds: c.seconds }] } })
+        .then(function(j){
+          var k = vhDurationKey(c.title, c.artist);
+          var cache = vhDurationCache();
+          cache[k] = Number(c.seconds);
+          vhSaveDurCache(cache);
+          try{ localStorage.removeItem(DUR_LIB_AT); }catch(e){}
+          c.inLib = true; c.libSeconds = Number(c.seconds);
+          st.lib = [{ key: k, title: c.title, artist: c.artist, seconds: Number(c.seconds), source: 'manual' }].concat(st.lib || []);
+          toast('已加入：《' + c.title + '》' + voFmtDur(c.seconds), 'ok');
+          paintDurLib(host);
+        })
+        .catch(function(e){
+          btn.disabled = false; btn.textContent = '加入';
+          toast('加入失败：' + (e.message || e), 'err', 4000);
+        });
+    };
+  });
+}
+
+/* ---------- ③ 导入清单 ---------- */
+function durLibViewImport(st){
+  var box = '<div class="field" style="margin-bottom:10px">'
+    + '<label style="display:block;font-size:.8rem;font-weight:700;margin:0 0 6px">粘贴歌曲清单（一行一首）</label>'
+    + '<textarea id="durImpText" rows="7" placeholder="晴天 - 周杰伦&#10;三人游 - 方大同&#10;江南,林俊杰&#10;（歌名和歌手之间用 - 、, 或 ｜ 隔开都行；只写歌名也行）"'
+    +   ' style="width:100%;padding:8px 12px;font-size:.84rem;resize:vertical;font-family:inherit"></textarea>'
+    + '<p class="hint" style="margin:6px 0 0">匹配规则：<b>歌名完全一致</b>（忽略空格、括号里的版本名），'
+    + '<b>歌手部分符合即可</b> —— 比如歌单里是「周杰伦/费玉清」，你只写「周杰伦」也算命中。</p>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+    +   '<button class="btn btn-sm" id="durImpGo">导入并匹配时长库</button>'
+    +   '<button class="btn btn-sm btn-ghost" id="durImpFill">把没命中的都线上搜一遍</button>'
+    + '</div>';
+
+  if(!st.imp) return box + '<div class="alert info" style="font-size:.82rem">导入只会<b>查</b>时长库，不会改库；'
+    + '想把结果存下来点「加入」。</div>';
+
+  var list = st.imp;
+  var hit = list.filter(function(x){ return x.seconds > 0; }).length;
+  var rows = list.map(function(x, i){
+    var dur = x.seconds > 0
+      ? '<b style="color:#15803d">' + esc(voFmtDur(x.seconds)) + '</b>'
+        + (x.matchedArtist && x.matchedArtist !== x.artist ? '<i class="muted" style="font-style:normal;font-size:.72rem"> · ' + esc(x.matchedArtist) + '</i>' : '')
+      : '<b style="color:#b45309">未收录</b>';
+    var act = x.seconds > 0 ? '' : '<button class="btn btn-sm btn-ghost" data-imp-search="' + i + '" style="font-size:.74rem">线上搜</button>';
+    return '<tr data-i="' + i + '">'
+      + '<td style="padding:6px 8px">' + esc(x.title) + '</td>'
+      + '<td style="padding:6px 8px;font-size:.8rem;color:var(--fg-2)">' + esc(x.artist || '—') + '</td>'
+      + '<td style="padding:6px 8px;white-space:nowrap;font-variant-numeric:tabular-nums">' + dur + '</td>'
+      + '<td style="padding:6px 8px;text-align:right;white-space:nowrap">' + act + '</td></tr>';
+  }).join('');
+
+  return box
+    + '<div class="alert ' + (hit === list.length ? 'info' : 'warn') + '" style="font-size:.82rem;margin:0 0 10px">'
+    +   '共 ' + list.length + ' 首，命中 <b>' + hit + '</b> 首，缺 <b>' + (list.length - hit) + '</b> 首'
+    + '</div>'
+    + '<div style="max-height:36vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+    +   '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table>'
+    + '</div>';
+}
+
+/** 解析一行「歌名 - 歌手」；返回 {title, artist} 或 null */
+function durParseLine(line){
+  var s = String(line || '').trim();
+  if(!s) return null;
+  /* 分隔符优先级：Tab > ｜ > | > - – — > , ， 、（后面必须跟空格或直接结束，避免切坏歌名里的连字符） */
+  var m = s.match(/^(.*?)\t+(.*)$/);
+  if(!m) m = s.match(/^(.*?)\s*[｜|]\s*(.*)$/);
+  if(!m) m = s.match(/^(.*?)\s+[-–—]\s+(.*)$/);
+  if(!m) m = s.match(/^(.*?)[,，、]\s*(.*)$/);
+  if(m && m[1].trim()) return { title: m[1].trim(), artist: (m[2] || '').trim() };
+  return { title: s, artist: '' };
+}
+
+function wireDurLibImport(host, st){
+  var doMatch = function(){
+    var ta = host.querySelector('#durImpText');
+    var raw = String((ta && ta.value) || '');
+    var items = raw.split(/\r?\n/).map(durParseLine).filter(Boolean);
+    if(!items.length){ toast('先粘贴清单（一行一首）', 'err'); return; }
+    if(items.length > 200){ toast('一次最多 200 首，多的分批导', 'err', 4000); items = items.slice(0, 200); }
+    var go = host.querySelector('#durImpGo');
+    if(go){ go.disabled = true; go.textContent = '匹配中…'; }
+    api('/music', { method: 'POST', body: { action: 'match-list', items: items } })
+      .then(function(j){
+        st.imp = (j && j.list) || [];
+        st.impRaw = raw;
+        paintDurLib(host);
+        toast('匹配完成：命中 ' + ((j && j.hit) || 0) + ' / ' + st.imp.length, 'ok');
+      })
+      .catch(function(e){
+        if(go){ go.disabled = false; go.textContent = '导入并匹配时长库'; }
+        toast('匹配失败：' + (e.message || e), 'err', 4000);
+      });
+  };
+  var go = host.querySelector('#durImpGo');
+  if(go) go.onclick = doMatch;
+  var ta = host.querySelector('#durImpText');
+  if(ta && st.impRaw) ta.value = st.impRaw;
+
+  var fill = host.querySelector('#durImpFill');
+  if(fill) fill.onclick = function(){
+    var miss = (st.imp || []).filter(function(x){ return !(x.seconds > 0); });
+    if(!miss.length){ toast('都命中了，没有要搜的', 'ok'); return; }
+    closeModal();
+    durImpLiveSearch(miss);
+  };
+
+  Array.prototype.forEach.call(host.querySelectorAll('[data-imp-search]'), function(btn){
+    btn.onclick = function(){
+      var x = (st.imp || [])[Number(btn.getAttribute('data-imp-search'))];
+      if(!x) return;
+      closeModal();
+      durImpLiveSearch([x]);
+    };
+  });
+}
+
+/** 导入清单里没命中的 → 逐首联网搜（自动取「歌名归一后完全一致」的第一条，拿不到就记进待补录） */
+function durImpLiveSearch(items){
+  /* 简版进度：一个小弹窗列出每首的状态，逐条串行查（避免撞 Workers 子请求上限） */
+  var hostList = items.map(function(x){ return { title: x.title, artist: x.artist, seconds: null, state: '待查' }; });
+  openModal({
+    title: '线上补时长',
+    sub: '逐首查网易云 / QQ 音乐；查到自动写库，查不到的可以手填',
+    wide: true,
+    body: '<div id="durLiveBody"><div class="loading"><div class="spinner"></div>开始查询…</div></div>',
+    foot: '<button class="btn btn-ghost" data-close2>关闭</button>',
+    onMount: function(box){
+      box.querySelector('[data-close2]').onclick = closeModal;
+      var bodyEl = box.querySelector('#durLiveBody');
+      var idx = 0;
+      var paint = function(){
+        var rows = hostList.map(function(x){
+          var d = x.seconds > 0
+            ? '<b style="color:#15803d">' + esc(voFmtDur(x.seconds)) + '</b>'
+            : (x.state === '查不到' ? '<b style="color:#b45309">查不到</b>' : '<span class="muted">' + esc(x.state) + '</span>');
+          return '<tr><td style="padding:6px 8px">' + esc(x.title) + '</td>'
+            + '<td style="padding:6px 8px;font-size:.8rem;color:var(--fg-2)">' + esc(x.artist || '—') + '</td>'
+            + '<td style="padding:6px 8px;white-space:nowrap">' + d + '</td></tr>';
+        }).join('');
+        bodyEl.innerHTML = '<div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+          + '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table></div>';
+      };
+      var tick = function(){
+        if(idx >= hostList.length){
+          var miss = hostList.filter(function(x){ return !(x.seconds > 0); });
+          try{ localStorage.removeItem(DUR_LIB_AT); }catch(e){}
+          if(miss.length){
+            DUR_MISS_RESET();
+            miss.forEach(function(x){ DUR_MISS[vhDurationKey(x.title, x.artist)] = { title: x.title, artist: x.artist }; });
+            toast('查不到 ' + miss.length + ' 首，可在「补录缺时长的歌」里手填', 'warn', 5000);
+          } else {
+            toast('全部补齐了', 'ok');
+          }
+          return;
+        }
+        var x = hostList[idx];
+        x.state = '查询中…'; paint();
+        var kw = (x.title + ' ' + (x.artist || '')).trim();
+        api('/music?action=search&limit=10&q=' + encodeURIComponent(kw)).then(function(j){
+          var cands = ((j && j.list) || []).filter(function(c){ return vhDurationKey(c.title, '') === vhDurationKey(x.title, ''); });
+          if(!cands.length) cands = ((j && j.list) || []).filter(function(c){ return vhDurationKey(c.title, c.artist) === vhDurationKey(x.title, x.artist); });
+          var best = cands[0];
+          if(!best){ x.state = '查不到'; idx++; paint(); return tick(); }
+          return api('/music', { method: 'POST', body: { action: 'save-many', items: [{ title: x.title, artist: x.artist || best.artist, seconds: best.seconds, source: best.source }] } })
+            .then(function(){
+              x.seconds = best.seconds;
+              var cache = vhDurationCache();
+              cache[vhDurationKey(x.title, x.artist)] = best.seconds;
+              cache[vhDurationKey(x.title, best.artist)] = best.seconds;
+              vhSaveDurCache(cache);
+            })
+            .catch(function(){ x.state = '写入失败'; });
+        }).catch(function(){ x.state = '查询失败'; }).then(function(){
+          idx++; paint(); return tick();
+        });
+      };
+      paint();
+      tick();
+    },
+  });
+}
+/** 清空 DUR_MISS（避免把上一轮的待补项带进来） */
+function DUR_MISS_RESET(){ Object.keys(DUR_MISS).forEach(function(k){ delete DUR_MISS[k]; }); }
+
+/* ---------- ④ 预置歌单 ---------- */
+/** 预置歌单来源说明：站主说「你也可以自己先准备好周杰伦、林俊杰、方大同这些」 */
+var DUR_PRESETS = {
+  '周杰伦': ['晴天','七里香','稻香','青花瓷','告白气球','简单爱','夜曲','搁浅','不能说的秘密','蒲公英的约定','发如雪','龙卷风','菊花台','最长的电影','手写的从前','算什么男人','等你下课','说好不哭','莫吉托','花海','默','彩虹','珊瑚海','一路向北','东风破','以父之名','双截棍','千里之外','听妈妈的话','白色风车'],
+  '林俊杰': ['江南','一千年以后','曹操','小酒窝','她说','修炼爱情','可惜没如果','不为谁而作的歌','醉赤壁','背对背拥抱','Always Online','学不会','我还想她','第几个100天','那些你很冒险的梦','爱笑的眼睛','冻结','心跳','杀手','害怕','简简单单','豆浆油条','黑暗骑士','西界','木乃伊','美人鱼','一眼万年','当你','至少还有你','我还年轻我还年轻'],
+  '方大同': ['三人游','爱爱爱','特别的人','春风吹','南音','orange moon','红豆','每天每天','小小虫','黑白','Singalongsong','妹妹','100种表情','over','爱在','巴黎','危险世界','面面','孤独患者','因为你','wonderful tonight','很不低调','lovesong','sorry','会不会','回到过去','认识你','别问','一首简单的歌','爱你'],
+};
+
+function durLibViewPreset(st){
+  var names = Object.keys(DUR_PRESETS);
+  var rows = names.map(function(n){
+    var songs = DUR_PRESETS[n];
+    return '<tr data-n="' + attr(n) + '">'
+      + '<td style="padding:8px">' + esc(n) + '</td>'
+      + '<td style="padding:8px;font-size:.78rem;color:var(--fg-3)">' + songs.length + ' 首</td>'
+      + '<td style="padding:8px;text-align:right">'
+      +   '<button class="btn btn-sm" data-preset="' + attr(n) + '">联网抓时长并入库</button>'
+      + '</td></tr>';
+  }).join('');
+  var tot = names.reduce(function(a, n){ return a + DUR_PRESETS[n].length; }, 0);
+  return '<div class="alert info" style="font-size:.82rem;margin:0 0 10px">'
+      + '这些是常见热门曲，点一下会<b>逐首联网查时长</b>（网易云 → QQ 音乐 → iTunes），'
+      + '查到的写进云端库，查不到的会记进「待补录」。共 ' + tot + ' 首，每首约 1 秒。</div>'
+    + '<div style="border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden">'
+    +   '<table style="width:100%;font-size:.86rem"><tbody>' + rows + '</tbody></table>'
+    + '</div>'
+    + '<p class="hint" style="margin:10px 0 0">补完记得回来「已收录」看一眼条数变了没有。</p>';
+}
+
+function wireDurLibPreset(host, st){
+  Array.prototype.forEach.call(host.querySelectorAll('[data-preset]'), function(btn){
+    btn.onclick = function(){
+      var n = btn.getAttribute('data-preset');
+      var songs = DUR_PRESETS[n] || [];
+      if(!songs.length) return;
+      btn.disabled = true; btn.textContent = '开始…';
+      var items = songs.map(function(t){ return { title: t, artist: n }; });
+      closeModal();
+      durBatchSeed(items, n);
+    };
+  });
+}
+
+/** 批量抓时长入库：8 首一批（= 8 首 × 最多 3 个源的子请求，稳在 Workers 50 上限内） */
+function durBatchSeed(items, label){
+  var total = items.length, ok = 0, fail = [];
+  var idx = 0;
+  var list = items.map(function(x){ return { title: x.title, artist: x.artist, seconds: null, state: '待查' }; });
+  openModal({
+    title: '抓取《' + (label || '预置') + '》的时长',
+    sub: '共 ' + total + ' 首，查到的自动写进云端时长库',
+    wide: true,
+    body: '<div id="durSeedBody"></div>',
+    foot: '<button class="btn btn-ghost" data-c>关闭</button>',
+    onMount: function(box){
+      box.querySelector('[data-c]').onclick = closeModal;
+      var bodyEl = box.querySelector('#durSeedBody');
+      var paint = function(){
+        var hit = list.filter(function(x){ return x.seconds > 0; }).length;
+        var rows = list.map(function(x){
+          var d = x.seconds > 0 ? '<b style="color:#15803d">' + esc(voFmtDur(x.seconds)) + '</b>'
+                                : (x.state === '查不到' ? '<b style="color:#b45309">查不到</b>' : '<span class="muted">' + esc(x.state) + '</span>');
+          return '<tr><td style="padding:5px 8px">' + esc(x.title) + '</td>'
+            + '<td style="padding:5px 8px;font-size:.78rem;color:var(--fg-2)">' + esc(x.artist) + '</td>'
+            + '<td style="padding:5px 8px;white-space:nowrap">' + d + '</td></tr>';
+        }).join('');
+        bodyEl.innerHTML = '<div class="alert ' + (hit === total ? 'info' : 'warn') + '" style="font-size:.82rem;margin:0 0 10px">'
+          + '已拿到 <b>' + hit + '</b> / ' + total + ' 首' + (idx >= total ? '（完成）' : '（进行中…）') + '</div>'
+          + '<div style="max-height:50vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+          + '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table></div>';
+      };
+      var chunks = [];
+      for(var i = 0; i < list.length; i += 8) chunks.push(list.slice(i, i + 8));
+      var ci = 0;
+      var next = function(){
+        if(ci >= chunks.length){
+          try{ localStorage.removeItem(DUR_LIB_AT); }catch(e){}
+          var miss = list.filter(function(x){ return !(x.seconds > 0); });
+          if(miss.length) toast('有 ' + miss.length + ' 首没查到，可在「补录缺时长的歌」手填', 'warn', 5000);
+          else toast('全部入库了', 'ok');
+          paint();
+          return;
+        }
+        var part = chunks[ci++];
+        part.forEach(function(x){ x.state = '查询中…'; });
+        paint();
+        api('/music', { method: 'POST', body: { action: 'batch', items: part.map(function(x){ return { title: x.title, artist: x.artist }; }) } })
+          .then(function(j){
+            var rows = (j && j.list) || [];
+            part.forEach(function(x){
+              var r = rows.filter(function(y){ return vhDurationKey(y.title, y.artist) === vhDurationKey(x.title, x.artist); })[0];
+              var sec = r ? Number(r.seconds) : 0;
+              if(sec > 0){
+                x.seconds = sec;
+                var cache = vhDurationCache();
+                cache[vhDurationKey(x.title, x.artist)] = sec;
+                vhSaveDurCache(cache);
+              } else x.state = '查不到';
+            });
+          })
+          .catch(function(){ part.forEach(function(x){ x.state = '请求失败'; }); })
+          .then(function(){ paint(); next(); });
+      };
+      paint();
+      next();
+    },
   });
 }
 

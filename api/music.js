@@ -24,11 +24,14 @@
 
    接口：
      GET  /api/music?action=duration&title=幻听&artist=许嵩
+     GET  /api/music?action=search&q=晴天&limit=20   // v3.5.28 线上搜歌（列候选，不写库）
      POST /api/music   { action:'batch',   items:[{title,artist}, ...] }  // 最多 12 条
      POST /api/music   { action:'manual',  items:[{title,artist,seconds}, ...] } // 人工补录
      POST /api/music   { action:'save-many', items:[{title,artist,seconds,source}] } // 批量写库
      GET  /api/music?action=lib                     // 拉全量时长库
      POST /api/music   { action:'lib-query', items:[...] } // 只查库、不联网
+     POST /api/music   { action:'match-list', items:[{title,artist}, ...] } // v3.5.28 导入清单批量匹配
+     POST /api/music   { action:'del', items:[...] }        // 删错录的
    ============================================================ */
 
 import { cors, handlePreflight, ok, fail, body, ensureSchema, getSql } from './_lib/http.js';
@@ -272,6 +275,149 @@ function trySql() {
   try { return getSql(); } catch (e) { return null; }
 }
 
+/* ---------------- v3.5.28：线上搜歌（模糊搜索候选） ----------------
+ * 站主要求：「时长库那个里面也可以搜歌，直接线上搜歌，我搜歌名，
+ *   然后匹配出对应的歌手和时长，点击它就加到时长库」。
+ *
+ * 与 queryOne 的区别：
+ *   queryOne 是「精确拿一首的秒数」（歌名必须完全一致）；
+ *   这里要「列出一批候选」，所以把三个源的原始结果都摊平出来，
+ *   带上歌名 / 歌手 / 时长 / 来源，让站主自己挑。
+ * ------------------------------------------------------------------ */
+
+/** 从网易云拿候选（最多 limit 条） */
+async function searchNetease(kw, limit) {
+  const j = await getJson(
+    'https://music.163.com/api/search/get/web?s=' + encodeURIComponent(kw) + '&type=1&limit=' + limit,
+    { Referer: 'https://music.163.com/' }
+  );
+  const songs = (j && j.result && j.result.songs) || [];
+  const out = [];
+  for (const s of songs) {
+    const ms = Number(s.duration);
+    if (!isFinite(ms)) continue;
+    const sec = Math.round(ms / 1000);
+    if (!valid(sec)) continue;
+    const name = String(s.name || '').trim();
+    if (!name) continue;
+    const singers = (s.artists || []).map((a) => a.name || '').filter(Boolean).join('/');
+    out.push({ title: name, artist: singers, seconds: sec, source: 'netease', album: (s.album && s.album.name) || '' });
+  }
+  return out;
+}
+
+/** 从 QQ 音乐拿候选 */
+async function searchQQ(kw, limit) {
+  const j = await getJson(
+    'https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w=' + encodeURIComponent(kw) + '&format=json&n=' + limit + '&cr=1&new_json=1',
+    { Referer: 'https://y.qq.com/' }
+  );
+  const list = (j && j.data && j.data.song && j.data.song.list) || [];
+  const out = [];
+  for (const s of list) {
+    const sec = Number(s.interval);
+    if (!valid(sec)) continue;
+    const name = String(s.name || '').trim();
+    if (!name) continue;
+    const singers = (s.singer || []).map((x) => x.name || '').filter(Boolean).join('/');
+    out.push({ title: name, artist: singers, seconds: sec, source: 'qq', album: (s.album && s.album.name) || '' });
+  }
+  return out;
+}
+
+/** 从 iTunes 拿候选（前两源都没结果时兜底） */
+async function searchItunes(kw, limit) {
+  const j = await getJson('https://itunes.apple.com/search?term=' + encodeURIComponent(kw) + '&entity=song&limit=' + limit);
+  const list = (j && j.results) || [];
+  const out = [];
+  for (const s of list) {
+    const ms = Number(s.trackTimeMillis);
+    if (!isFinite(ms)) continue;
+    const sec = Math.round(ms / 1000);
+    if (!valid(sec)) continue;
+    const name = String(s.trackName || '').trim();
+    if (!name) continue;
+    out.push({ title: name, artist: String(s.artistName || '').trim(), seconds: sec, source: 'itunes', album: String(s.collectionName || '') });
+  }
+  return out;
+}
+
+/** v3.5.28：歌手匹配打分。
+ *  站主要求：「歌名完全符合，歌手只要部分符合就行 —— 歌单里五六个歌手合唱，
+ *  我后台只写了一个歌手，这样也算」。
+ *  3 = 完全一致；2 = 一方包含另一方；1 = 有共同歌手；0 = 都没写歌手；-1 = 完全不沾边 */
+function artistScore(a, b) {
+  const A = norm(a), B = norm(b);
+  if (!A || !B) return 0;
+  if (A === B) return 3;
+  /* 按 / 、& 等分隔符拆成歌手集合 */
+  const split = (x) => String(x || '').split(/[\/、,，&＆+＋·]/).map((y) => norm(y)).filter(Boolean);
+  const sa = split(a), sb = split(b);
+  /* 各取一个歌手互相包含也算（「周杰伦」vs「周杰伦jay」这种） */
+  for (const x of sa) {
+    for (const y of sb) {
+      if (x === y) return 2;
+      if (x.length >= 2 && y.length >= 2 && (x.includes(y) || y.includes(x))) return 2;
+    }
+  }
+  if (A.includes(B) || B.includes(A)) return 2;
+  return -1;
+}
+
+/** 合并去重 + 排序：同一 (歌名, 歌手) 只留一条；标出是否已在库里。
+ *  ⚠️ 实测教训：搜「晴天」时网易云前 8 条全是翻唱（深情版 / 女声版 / Cover），
+ *  原唱周杰伦反而排在 QQ 音乐里。所以不能只按来源顺序堆，
+ *  要按「歌名匹配紧密度」排：完全一致 > 去掉括号后一致 > 只是包含关键字。
+ *  否则站主点第一个点到的就是翻唱版，时长也跟着错。 */
+function mergeCandidates(groups, libMap, keyword) {
+  const seen = new Map();
+  const kw = norm(keyword || '');
+  const titleScore = (t) => {
+    const n = norm(t);
+    if (!n) return 0;
+    if (n === kw) return 3;                         /* 完全一致 */
+    if (kw && n.startsWith(kw)) return 2;           /* 以关键字开头（如「晴天 (Live)」归一后仍是「晴天」→ 其实上面就命中了） */
+    if (kw && n.includes(kw)) return 1;             /* 只是包含 */
+    return 0.5;
+  };
+  for (const g of groups) {
+    for (const c of (g || [])) {
+      const k = libKey(c.title, c.artist);
+      const hit = libMap.get(k);
+      const row = {
+        title: c.title,
+        artist: c.artist,
+        seconds: c.seconds,
+        source: c.source,
+        album: c.album || '',
+        key: k,
+        inLib: !!hit,
+        libSeconds: hit ? hit.seconds : null,
+        libSource: hit ? hit.source : null,
+        /* 排序用，不展示 */
+        _t: titleScore(c.title),
+        _src: SOURCE_RANK[c.source] || 0,
+      };
+      const prev = seen.get(k);
+      if (!prev) { seen.set(k, row); continue; }
+      if (row.inLib && !prev.inLib) seen.set(k, row);
+    }
+  }
+  const list = [...seen.values()];
+  list.sort((a, b) => {
+    /* 已收录的排最前（方便一眼看到「这条已经有了」） */
+    if (a.inLib !== b.inLib) return a.inLib ? -1 : 1;
+    if (b._t !== a._t) return b._t - a._t;          /* 歌名越贴近越前 */
+    if (b._src !== a._src) return b._src - a._src;  /* 同分时网易云/QQ 优先于 iTunes */
+    return a.seconds - b.seconds;
+  });
+  return list.map((x) => {
+    const o = Object.assign({}, x);
+    delete o._t; delete o._src;
+    return o;
+  });
+}
+
 export default async function musicHandler(req, res) {
   if (handlePreflight(req, res)) return;
   cors(req, res);
@@ -285,6 +431,35 @@ export default async function musicHandler(req, res) {
     if (action === 'duration') {
       const r = await queryOne(u.searchParams.get('title'), u.searchParams.get('artist'), sql);
       return ok(res, { seconds: r.seconds == null ? null : r.seconds, source: r.source });
+    }
+
+    /* v3.5.28：线上搜歌 —— 输入歌名（可带歌手），返回一批候选：
+       歌名 / 歌手 / 时长 / 来源，前端点一下就能写进时长库。
+       先用网易云 + QQ 音乐（站主指定），都没有再让 iTunes 兜底。 */
+    if (action === 'search') {
+      const kw = String(u.searchParams.get('q') || '').trim().slice(0, 60);
+      const limit = Math.min(30, Math.max(5, Number(u.searchParams.get('limit')) || 15));
+      if (!kw) return fail(res, 400, '请输入歌名');
+      const [ne, qq] = await Promise.all([
+        searchNetease(kw, limit).catch(() => []),
+        searchQQ(kw, limit).catch(() => []),
+      ]);
+      let groups = [ne, qq];
+      if (!ne.length && !qq.length) {
+        const it = await searchItunes(kw, limit).catch(() => []);
+        groups = [it];
+      }
+      /* 查库用于标注「已收录」 —— 一次 SQL 拿全部候选的 key */
+      let libMap = new Map();
+      if (sql) {
+        try {
+          const all = [];
+          groups.forEach((g) => g.forEach((c) => all.push(libKey(c.title, c.artist))));
+          libMap = await libLookup(sql, all);
+        } catch (e) {}
+      }
+      const list = mergeCandidates(groups, libMap, kw);
+      return ok(res, { list, total: list.length, q: kw });
     }
 
     /* 拉全量时长库：前端一次下载后本地命中，不用每首歌都问一次 */
@@ -395,7 +570,59 @@ export default async function musicHandler(req, res) {
       });
     }
 
-    /* ④ 删除一条（误录 / 查错了想重来）。需管理员：走 /api/admin 太重，
+    /* ④ v3.5.28：按「导入的歌曲清单」批量匹配时长库。
+       站主要求：「我导入歌名和歌手，如果拉取的歌单里面也有同样的歌名和歌手，
+       只要相似就行 —— 歌名完全符合，歌手部分符合（合唱多歌手 vs 我只写一个）也行」。
+       所以这里做「歌名归一后完全相等 + 歌手有交集」的匹配：
+         · 歌单里是「周杰伦/费玉清」，库里写「周杰伦」→ 命中
+         · 歌单里是「周杰伦」，库里写「周杰伦/费玉清」→ 也命中
+       返回每个导入项命中的秒数（没命中给 null，由站主决定去搜/手填）。 */
+    if (act === 'match-list') {
+      const items = rawItems.slice(0, 200);
+      if (!items.length) return fail(res, 400, 'items 不能为空');
+      if (!sql) return fail(res, 500, '数据库未配置');
+      /* 一次性把库里所有条目取回来（时长库通常几百条，一次 select 足够） */
+      let rows = [];
+      try {
+        await ensureSchema(sql);
+        rows = await sql`select song_key, title, artist, seconds, source from song_durations limit 5000`;
+      } catch (e) {
+        return fail(res, 500, '读取时长库失败：' + (e && e.message ? e.message : e));
+      }
+      const byTitle = new Map();     /* 归一歌名 -> [库条目] */
+      for (const r of (rows || [])) {
+        const t = norm(r.title);
+        if (!t) continue;
+        if (!byTitle.has(t)) byTitle.set(t, []);
+        byTitle.get(t).push(r);
+      }
+      const list = items.map((it) => {
+        const title = String((it && it.title) || '').trim();
+        const artist = String((it && it.artist) || '').trim();
+        const bucket = byTitle.get(norm(title)) || [];
+        let best = null;
+        if (bucket.length) {
+          /* 歌手匹配打分：完全一致 3 > 一方包含另一方 2 > 有交集 1 > 无交集 0 */
+          let bestScore = -1;
+          for (const b of bucket) {
+            const score = artistScore(artist, b.artist);
+            if (score > bestScore) { bestScore = score; best = b; }
+          }
+          /* 没写歌手、或库条目也没歌手 —— 只要歌名对上就算命中 */
+          if (bestScore < 0) best = bucket[0];
+        }
+        return {
+          title, artist,
+          seconds: best ? Number(best.seconds) : null,
+          source: best ? best.source : null,
+          matchedTitle: best ? best.title : null,
+          matchedArtist: best ? best.artist : null,
+        };
+      });
+      return ok(res, { list, total: list.length, hit: list.filter((x) => x.seconds > 0).length });
+    }
+
+    /* ⑤ 删除一条（误录 / 查错了想重来）。需管理员：走 /api/admin 太重，
        这里用「必须带 lib 全量拉取过的 key」做弱校验，前端只给后台用。
        ⚠️ 站主单人使用场景，删除只影响时长库，不动任何业务数据。 */
     if (act === 'del') {
@@ -415,7 +642,7 @@ export default async function musicHandler(req, res) {
       return ok(res, { deleted: n, message: '已从时长库删除 ' + n + ' 条' });
     }
 
-    /* ⑤ 批量写库（前端自己已有秒数，只想同步上云） */
+    /* ⑥ 批量写库（前端自己已有秒数，只想同步上云） */
     if (act === 'save-many') {
       if (!sql) return fail(res, 500, '数据库未配置');
       const items = rawItems.slice(0, 40);

@@ -5367,7 +5367,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx48));
-  t('★前台更新日期已同步为 2026-10-16', /VER_DATE = '2026-10-17'/.test(idx48));
+  t('★前台更新日期已同步为 2026-10-18', /VER_DATE = '2026-10-18'/.test(idx48));
   t('★service worker 缓存版本升到 v100 以上', /class-site-v1[0-9]{2}/.test(sw48));
 }
 
@@ -7892,8 +7892,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.27',
-    /const SCHEMA_VER = '3\.5\.27'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.28',
+    /const SCHEMA_VER = '3\.5\.28'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8196,7 +8196,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.27 云端时长库表 song_durations 三处同步（升级路径/全量清单/schema.sql）',
     (HTTP_527.match(/create table if not exists song_durations/g) || []).length >= 2
     && /create table if not exists song_durations/.test(SCH_527)
-    && /const SCHEMA_VER = '3\.5\.27'/.test(HTTP_527));
+    && /const SCHEMA_VER = '3\.5\.28'/.test(HTTP_527));
   t('v3.5.27 后端写库按来源优先级，人工填写不被自动结果覆盖',
     /case song_durations\.source/.test(MUS_527) && /source: 'manual'/.test(MUS_527)
     && /when 'manual' then 3/.test(MUS_527));
@@ -8289,6 +8289,98 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
       method: 'POST', body: { action: 'manual', items: [{ title: '测试歌', artist: 'y', seconds: 5 }] },
     });
     t('★v3.5.27 非法时长被拒 400', bad.status === 400, JSON.stringify(bad.body).slice(0, 160));
+  }
+
+  /* ---- v3.5.28：时长库线上搜歌 + 导入清单（歌名全等 / 歌手部分匹配） ---- */
+  const ADM_528 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const MUS_528 = fs.readFileSync(new URL('./api/music.js', import.meta.url), 'utf8');
+  t('v3.5.28 /api/music 支持 action=search（GET 线上搜歌）',
+    /action === 'search'/.test(MUS_528) && /searchNetease/.test(MUS_528)
+    && /searchQQ/.test(MUS_528) && /searchItunes/.test(MUS_528));
+  t('v3.5.28 搜索优先网易云+QQ 并行，都没有才 iTunes 兜底',
+    /const \[ne, qq\] = await Promise\.all/.test(MUS_528)
+    && /if \(!ne\.length && !qq\.length\)/.test(MUS_528));
+  t('v3.5.28 候选按歌名贴合度排序（防止翻唱版盖过原唱）',
+    /function mergeCandidates\(groups, libMap, keyword\)/.test(MUS_528)
+    && /titleScore/.test(MUS_528) && /翻唱/.test(MUS_528));
+  t('v3.5.28 歌手模糊匹配：一方包含另一方即命中',
+    /function artistScore\(a, b\)/.test(MUS_528) && /x\.includes\(y\) \|\| y\.includes\(x\)/.test(MUS_528));
+  t('v3.5.28 /api/music 支持 action=match-list 批量匹配导入清单',
+    /act === 'match-list'/.test(MUS_528) && /byTitle/.test(MUS_528)
+    && /matchedArtist/.test(MUS_528));
+  t('v3.5.28 时长库面板四个 tab（已收录/线上搜/导入清单/预置歌单）',
+    /function durLibViewLib/.test(ADM_528) && /function durLibViewSearch/.test(ADM_528)
+    && /function durLibViewImport/.test(ADM_528) && /function durLibViewPreset/.test(ADM_528)
+    && /data-tab=/.test(ADM_528));
+  t('v3.5.28 搜到候选点「加入」直接写进云端库',
+    /data-add=/.test(ADM_528) && /action: 'manual', items: \[\{ title: c\.title, artist: c\.artist, seconds: c\.seconds \}\]/.test(ADM_528));
+  t('v3.5.28 导入清单支持 - , ｜ Tab 多种分隔符',
+    /function durParseLine/.test(ADM_528) && /\[｜\|\]/.test(ADM_528)
+    && /\[,，、\]/.test(ADM_528));
+  t('v3.5.28 预置周杰伦/林俊杰/方大同歌单',
+    /DUR_PRESETS/.test(ADM_528) && /'周杰伦':/.test(ADM_528)
+    && /'林俊杰':/.test(ADM_528) && /'方大同':/.test(ADM_528));
+  t('v3.5.28 预置歌单按 8 首一批抓（避开 Workers 子请求上限）',
+    /function durBatchSeed/.test(ADM_528) && /i \+= 8/.test(ADM_528));
+
+  /* v3.5.28 接口级实测：match-list 的「歌名全等 + 歌手部分符合」 */
+  {
+    await call('/api/music', {
+      method: 'POST',
+      body: { action: 'manual', items: [
+        { title: '晴天', artist: '周杰伦', seconds: 279 },
+        { title: '三人游', artist: '方大同', seconds: 250 },
+        { title: '江南', artist: '林俊杰', seconds: 267 },
+      ] },
+    });
+    const ml = await call('/api/music', {
+      method: 'POST',
+      body: { action: 'match-list', items: [
+        { title: '晴天', artist: '周杰伦' },              /* 完全一致 */
+        { title: '晴天', artist: '周杰伦/杨瑞代' },        /* 歌单是合唱，库里只有一个 */
+        { title: '晴天(深情版)', artist: '周杰伦' },       /* 括号后缀归一后仍命中 */
+        { title: '三人游', artist: '方大同、薛凯琪' },      /* 顿号分隔的合唱 */
+        { title: '江南', artist: '张学友' },               /* 歌名对、歌手不对 → 仍按歌名命中 */
+        { title: '不存在歌名zzz', artist: '周杰伦' },      /* 歌名对不上 → 不命中 */
+        { title: '晴天', artist: '' },                    /* 没写歌手 → 按歌名命中 */
+      ] },
+    });
+    const M = (ml.body || {}).list || [];
+    t('★v3.5.28 match-list 歌名全等 + 歌手一致 → 命中',
+      M[0] && M[0].seconds === 279, JSON.stringify(M[0]));
+    t('★v3.5.28 match-list 歌单多歌手、库里只写一个 → 仍命中',
+      M[1] && M[1].seconds === 279, JSON.stringify(M[1]));
+    t('★v3.5.28 match-list 括号版本名归一后命中',
+      M[2] && M[2].seconds === 279, JSON.stringify(M[2]));
+    t('★v3.5.28 match-list 顿号分隔的合唱也命中',
+      M[3] && M[3].seconds === 250, JSON.stringify(M[3]));
+    t('★v3.5.28 match-list 歌名对上就命中（歌手不同也不放过）',
+      M[4] && M[4].seconds === 267, JSON.stringify(M[4]));
+    t('★v3.5.28 match-list 歌名对不上不命中（返回 null）',
+      M[5] && M[5].seconds === null, JSON.stringify(M[5]));
+    t('★v3.5.28 match-list 导入项没写歌手 → 按歌名命中',
+      M[6] && M[6].seconds === 279, JSON.stringify(M[6]));
+    t('★v3.5.28 match-list 返回 matchedTitle/matchedArtist 供前端标注',
+      M[1] && M[1].matchedTitle === '晴天' && !!M[1].matchedArtist, JSON.stringify(M[1]));
+    t('★v3.5.28 match-list 统计命中数', (ml.body || {}).hit === 6, JSON.stringify(ml.body || {}).slice(0, 120));
+
+    /* 空清单 400 */
+    const mlBad = await call('/api/music', { method: 'POST', body: { action: 'match-list', items: [] } });
+    t('★v3.5.28 match-list 空清单被拒 400', mlBad.status === 400, JSON.stringify(mlBad.body).slice(0, 120));
+
+    /* 搜歌接口：没给 q 就 400（不打外网，测参数校验） */
+    const sBad = await call('/api/music?action=search');
+    t('★v3.5.28 搜索没给关键字被拒 400', sBad.status === 400, JSON.stringify(sBad.body).slice(0, 120));
+
+    /* 清理本轮写入的测试数据，避免污染后续断言 */
+    await call('/api/music', {
+      method: 'POST',
+      body: { action: 'del', items: [
+        { title: '晴天', artist: '周杰伦' },
+        { title: '三人游', artist: '方大同' },
+        { title: '江南', artist: '林俊杰' },
+      ] },
+    });
   }
 
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
