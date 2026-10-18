@@ -10804,8 +10804,13 @@ function voPaint(){
       var purpose = sp.purpose === 'music' ? 'music' : 'daily';
       var cap = sp.maxMinutes || 0;
       var top = v.results.slice().sort(function(a, b){ return b.n - a.n; }).slice(0, topN);
+      /* ⚠️ results 只有 {id,label,n}，时长在 options 的 songMeta 里 —— 按 id 对上 */
+      var metaOf = function(o){
+        var op = (v.options || []).filter(function(x){ return String(x.id) === String(o.id); })[0];
+        return (op && op.songMeta) || null;
+      };
       var totalSec = 0;
-      top.forEach(function(o){ totalSec += (o.songMeta && o.songMeta.duration) ? Number(o.songMeta.duration) : 0; });
+      top.forEach(function(o){ var m = metaOf(o); totalSec += (m && m.duration) ? Number(m.duration) : 0; });
       var durTxt = totalSec ? voFmtDur(totalSec) : '';
       var capTxt = cap
         ? (' · 上限 ' + cap + ' 分钟' + (totalSec && totalSec > cap * 60 ? '（<b style="color:#c2410c">已超 ' + voFmtDur(totalSec - cap * 60) + '</b>）' : ''))
@@ -10826,7 +10831,8 @@ function voPaint(){
         + '</div>'
         + '<ol style="margin:6px 0 0;padding-left:20px;font-size:.82rem;line-height:1.8">'
         + top.map(function(o, i){
-            var d = (o.songMeta && o.songMeta.duration) ? voFmtDur(o.songMeta.duration) : '';
+            var mm = metaOf(o);
+            var d = (mm && mm.duration) ? voFmtDur(mm.duration) : '';
             var day = purpose === 'music' ? ('第 ' + (i + 1) + ' 首') : ('周' + '一二三四五'[i]);
             return '<li>' + esc(o.label) + ' <span class="muted">（' + o.n + ' 票 · ' + day + (d ? ' · ' + d : '') + '）</span></li>';
           }).join('')
@@ -11177,10 +11183,15 @@ function voWriteTop5(id){
   var capMin = Number(sp.maxMinutes) || 0;
 
   var sorted = v.results.slice().sort(function(a, b){ return b.n - a.n; });
+  var optMeta = function(o){
+    var op = (v.options || []).filter(function(x){ return String(x.id) === String(o.id); })[0];
+    return (op && op.songMeta) || null;
+  };
   var picked = [], usedSec = 0;
   for(var i = 0; i < sorted.length && picked.length < wantN; i++){
     var o = sorted[i];
-    var d = (o.songMeta && o.songMeta.duration) ? Number(o.songMeta.duration) : 0;
+    var om = optMeta(o);
+    var d = (om && om.duration) ? Number(om.duration) : 0;
     /* 总时长上限：有数据才判断，没时长就不拦（否则全被卡掉） */
     if(capMin > 0 && d > 0 && usedSec + d > capMin * 60) continue;
     picked.push(o);
@@ -11191,7 +11202,8 @@ function voWriteTop5(id){
   var DAYS = ['周一', '周二', '周三', '周四', '周五'];
   var totalTxt = usedSec ? voFmtDur(usedSec) : '';
   var labels = top.map(function(o, i){
-    var d = (o.songMeta && o.songMeta.duration) ? voFmtDur(o.songMeta.duration) : '';
+    var om2 = optMeta(o);
+    var d = (om2 && om2.duration) ? voFmtDur(om2.duration) : '';
     var slot = purpose === 'music' ? ('第 ' + (i + 1) + ' 首') : (DAYS[i] || ('第 ' + (i + 1) + ' 首'));
     return slot + ' ' + o.label + (d ? '（' + d + '）' : '');
   }).join('；');
@@ -11210,8 +11222,8 @@ function voWriteTop5(id){
         title: o.label,
         artist: '投票第 ' + (i + 1) + ' 名',
         votes: o.n,
-        requester: (o.songMeta && o.songMeta.requester) || '',
-        duration: (o.songMeta && o.songMeta.duration) || 0,
+        requester: (optMeta(o) && optMeta(o).requester) || '',
+        duration: (optMeta(o) && optMeta(o).duration) || 0,
       };
     }),
     params: { fromVote: id, voteTitle: v.title, days: DAYS.slice(0, top.length), purpose: purpose, maxMinutes: capMin || null },
