@@ -59,7 +59,8 @@ const MAX_CONTACT = 64;
    ============================================================ */
 
 /** 可见性档位排序：数字越大越严（用于「取更严的一侧」）
- *  v3.4.1 新增 admin 档：仅管理员可见（本人也看不到）。 */
+ *  v3.4.1 新增 admin 档；v3.5.37 更名「仅后端可见」，语义：
+ *    后台详情 + 管理员本人「我的资料」可见；其他人（含普通同学本人）前台不可见。 */
 const VIS_RANK = { public: 0, committee: 1, self: 2, admin: 3 };
 
 /** 从两档里取更严的那个 */
@@ -185,7 +186,10 @@ function canSee(field, meta, pref, fvis, ctx) {
     if (p) eff = stricter(eff, p);
   }
 
-  if (eff === 'admin') return !!ctx.admin;   /* v3.4.1：仅管理员可见 —— 本人、班委都看不到 */
+  if (eff === 'admin') return !!ctx.admin;
+  /* v3.5.37「仅后端可见」：ctx.admin 只在「管理员查自己的我的资料」时为 true；
+     前台查询别人（search 链路）恒为 false —— 查询一视同仁，管理员无特权。
+     所以这条实际效果 = 后台全可见 + 管理员我的资料可见 + 其他人一律不下发。 */
   if (eff === 'self') return ctx.self;
   if (eff === 'committee') return ctx.self || ctx.committee;
   return true;
