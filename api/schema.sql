@@ -75,6 +75,31 @@ create table if not exists sessions (
 create index if not exists sessions_user_idx    on sessions (user_id);
 create index if not exists sessions_expires_idx on sessions (expires_at);
 
+/* ---------------- 在线时段表（v3.5.35） ----------------
+   站主原话：
+   「检测单次在线时长以及历史累计的在线时长……第一次请求到最后一次请求之间的
+     时间，就是它这次上线时间……如果两次请求时间超过了 3 分钟，那就算两次请求」
+
+   落地算法（判定写在 api/auth.js 的 ping() 里）：
+     · 距同会话上一条的 last_ping_at ≤ 180 秒 → 同一次在线，把 stop_at 往后推
+     · 超过 180 秒（或第一次）→ 另起一个时段（插入新行）
+   每条 sessions 一行 = 一次「连续在线」；时长 = stop_at - start_at。
+   last_ping_at 是判定用的锚点，与 sessions.last_seen_at 分开存，
+   因为后者有 30 秒节流，粒度不够做 3 分钟判定。 */
+create table if not exists online_sessions (
+  id            bigserial   primary key,
+  user_id       bigint      not null,
+  session_token text        not null default '',     -- sha256(token)，不存明文
+  start_at      timestamptz not null default now(),  -- 本段第一次心跳
+  stop_at       timestamptz not null default now(),  -- 本段最后一次心跳（随时间前推）
+  last_ping_at  timestamptz not null default now(),  -- 分段判定锚点
+  ping_count    int         not null default 1,      -- 本段累计心跳次数
+  created_at    timestamptz not null default now()
+);
+create index if not exists online_user_start_idx on online_sessions (user_id, start_at desc);
+create index if not exists online_start_idx      on online_sessions (start_at desc);
+create index if not exists online_token_idx      on online_sessions (session_token);
+
 /* ---------------- 用户数据表（云同步核心） ---------------- */
 -- 按 (用户, 键) 存 JSONB，天然适配前端 localStorage 的任意结构
 create table if not exists user_data (
