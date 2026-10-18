@@ -1706,7 +1706,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 
 /* ===== 班级投票（v3.5.6）=====
    与成绩分析同一套内嵌卡片的观感：浅底、圆角、细边框；暗色跟随全站变量。
-   颜色只用在「我投的 / 同学提的」两处小标签，避免抢卡片本身的注意力。 */
+   颜色只用在「我投的 / 他人提的」两处小标签，避免抢卡片本身的注意力。 */
 .vote-embed{background:#fffdfb;border:1px solid #f0e7de;border-radius:18px;overflow:hidden;
   box-shadow:0 1px 2px rgba(120,53,15,.05),0 8px 24px rgba(120,53,15,.07);margin-bottom:16px}
 .dark .vote-embed{background:#262220;border-color:rgba(255,255,255,.06)}
@@ -13405,9 +13405,10 @@ function votePubRender(v){
       '第一名': esc(rs[0] ? rs[0].label : '—'),
       '第二名': esc(rs[1] ? rs[1].label : '—'),
       '第三名': esc(rs[2] ? rs[2].label : '—'),
-      '结果表': '<table class="vote-pub-tbl"><thead><tr><th>排名</th><th>选项</th><th>票数</th></tr></thead><tbody>'
+      '结果表': '<table class="vote-pub-tbl"><thead><tr><th>排名</th><th>选项</th><th>提出人</th><th>票数</th></tr></thead><tbody>'
         + rs.map(function(r, i){
             return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.label)
+              + '</td><td>' + esc(r.byName || (r.by === 'student' ? '同学' : '管理员'))
               + '</td><td>' + (r.n || 0) + ' 票</td></tr>';
           }).join('') + '</tbody></table>',
     };
@@ -13426,6 +13427,12 @@ function votePubRender(v){
 function voteCardHtml(v){
   var multi = !!v.multi;
   var closed = !v.open;
+  /* v3.5.14 站主要求：结束后可选「展示结果公示并隐藏投票」。
+     配了公示才这么干；没配公示就退回只读投票栏，免得整张卡空白。 */
+  if(closed && v.endMode === 'pub'){
+    var onlyPub = votePubRender(v);
+    if(onlyPub) return '<div class="vote-card vote-card-pubonly">' + onlyPub + '</div>';
+  }
   /* v3.5.14 站主新要求：
      · 未提交时，点赞只是**选择**（可随意取消，不消耗撤回次数），选完点「确定」才上传；
      · 已经投过票再点点赞 → 弹窗问「是否撤回重新投票（还剩 N 次）」，确认才撤回并进入重投。 */
@@ -13452,7 +13459,7 @@ function voteCardHtml(v){
         + '<div class="vote-res-bar" style="width:' + pct + '%"></div>'
         + '<div class="vote-res-in">'
         +   '<span class="vote-res-label">' + esc(o.label)
-        +     (o.by === 'student' ? '<span class="vote-tag">同学提</span>' : '')
+        +     (o.by === 'student' ? '<span class="vote-tag">' + esc(o.byName || '同学') + ' 提</span>' : '')
         +     (mine ? '<span class="vote-tag mine">我投的</span>' : '') + '</span>'
         +   '<span class="vote-res-n">' + n + ' 票</span>'
         + '</div></div>';
@@ -13467,7 +13474,7 @@ function voteCardHtml(v){
       if(v.results){ for(var ri = 0; ri < v.results.length; ri++){ if(v.results[ri].id === o.id){ cnt = v.results[ri].n || 0; break; } } }
       return '<button class="vote-opt' + (on ? ' on' : '') + '" data-vote-pick="' + v.id + '" data-vid="' + v.id + '" data-oid="' + esc(o.id) + '">'
         + '<span class="vote-opt-label">' + esc(o.label)
-        +   (o.by === 'student' ? '<span class="vote-tag">同学提</span>' : '') + '</span>'
+        +   (o.by === 'student' ? '<span class="vote-tag">' + esc(o.byName || '同学') + ' 提</span>' : '') + '</span>'
         + (cnt != null ? '<span class="vote-n">' + cnt + ' 票</span>' : '')
         + '<span class="vote-like' + (on ? ' on' : '') + '" aria-label="' + (on ? '取消' : '投票') + '">👍</span>'
         + '</button>';

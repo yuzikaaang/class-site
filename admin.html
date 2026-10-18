@@ -529,9 +529,11 @@ tbody tr.sel{background:var(--tint-2)}
 .only-mobile{display:none}
 @media (max-width:900px){ .only-mobile{display:inline-flex !important} }
 html.force-landscape, html.force-landscape body{overflow:hidden}
+/* ⚠️ 站主反馈「旋转了 180°，倒过来了」：原来用 left:100vw + rotate(90deg)，
+   在手机上方向正好反了。改成 left:0 + top:100vh + rotate(-90deg)，差 180°。 */
 html.force-landscape body{
-  position:fixed; top:0; left:100vw; width:100vh; height:100vw;
-  transform:rotate(90deg); transform-origin:left top; overflow:auto;
+  position:fixed; top:100vh; left:0; width:100vh; height:100vw;
+  transform:rotate(-90deg); transform-origin:left top; overflow:auto;
   -webkit-overflow-scrolling:touch;
 }
 html.force-landscape .side{width:210px}
@@ -10408,6 +10410,7 @@ function voPaint(){
       +       (v.maxChoices ? ' · 最多 ' + v.maxChoices + ' 项' : '')
       +       (v.minChoices ? ' · 至少 ' + v.minChoices + ' 项' : '')
       +       (v.retractLimit > 0 ? ' · 可撤回 ' + v.retractLimit + ' 次' : ' · 不可撤回')
+      +       (v.endMode === 'pub' ? ' · 结束后显示公示' : '')
       +       (v.allowAdd ? ' · 允许同学加选项' : '')
       +       (v.results ? ' · ' + (v.voters || total) + ' 人参与' : '')
       +     '</div>'
@@ -10680,10 +10683,12 @@ function voPubPreview(tpl, v){
     '第三名': esc(rs[2] ? rs[2].label : '—'),
     '结果表': rs.length
       ? '<table style="border-collapse:collapse;margin:6px 0;width:100%">'
-        + '<thead><tr>' + ['排名','选项','票数'].map(function(h){ return '<th style="border:1px solid var(--border);padding:4px 8px;background:var(--bg-2,#faf6f2);font-size:.78rem;text-align:left">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + '<thead><tr>' + ['排名','选项','提出人','票数'].map(function(h){ return '<th style="border:1px solid var(--border);padding:4px 8px;background:var(--bg-2,#faf6f2);font-size:.78rem;text-align:left">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rs.map(function(r, i){
             return '<tr><td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">' + (i + 1) + '</td>'
               + '<td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">' + esc(r.label) + '</td>'
+              + '<td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">'
+              +   esc(r.byName || (r.by === 'student' ? '同学' : '管理员')) + '</td>'
               + '<td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">' + (r.n || 0) + ' 票</td></tr>';
           }).join('') + '</tbody></table>'
       : '<span class="muted">（截止后这里显示结果表）</span>',
@@ -10806,8 +10811,16 @@ function voEditorDialog(v){
       +     attr(v && v.retractLimit != null ? String(v.retractLimit) : '1') + '"></div>'
       + '</div>'
       + '<p class="muted" style="font-size:.76rem;margin:-2px 0 10px">'
-      +   '点赞即投，不再需要提交按钮。多选时「最多选」限制一次能点几项，「至少选」只是提示同学还差几项；两个留空都代表不限。'
-      + '</p>',
+      +   '点👍只是选中，「确定投票」才上传。多选时「最多选」限制一次能点几项，「至少选」是必须选够几项；两个留空都代表不限。'
+      + '</p>'
+      /* v3.5.14：结束后形态 */
+      + '<div class="field"><label>投票结束后</label>'
+      +   '<select id="voEndMode" style="width:100%">'
+      +     '<option value="keep"' + (v && v.endMode === 'pub' ? '' : ' selected') + '>继续显示投票栏（只读，不能投）</option>'
+      +     '<option value="pub"' + (v && v.endMode === 'pub' ? ' selected' : '') + '>展示结果公示并隐藏投票</option>'
+      +   '</select>'
+      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">选「展示公示」要在「公示」里配好模版并开启，否则仍按只读投票栏显示。</p>'
+      + '</div>',
     foot: '<button class="btn btn-ghost" data-no>取消</button>'
         + '<button class="btn" data-yes>' + (isNew ? '创建' : '保存') + '</button>',
     onMount: function(box){
@@ -10855,6 +10868,7 @@ function voEditorDialog(v){
       maxChoices: String((document.getElementById('voMaxChoices') || {}).value || '').trim() || null,
       minChoices: String((document.getElementById('voMinChoices') || {}).value || '').trim() || null,
       retractLimit: String((document.getElementById('voRetractLimit') || {}).value || '').trim(),
+      endMode: (document.getElementById('voEndMode') || {}).value || 'keep',
     };
     if(!isNew) payload.voteId = v.id;
     var btn = document.querySelector('#modalBox [data-yes]');

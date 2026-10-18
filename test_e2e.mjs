@@ -7815,8 +7815,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.8',
-    /const SCHEMA_VER = '3\.5\.8'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.9',
+    /const SCHEMA_VER = '3\.5\.9'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -9957,6 +9957,17 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     !/function relSeed\(/.test(adm) && !/relSeedAsk/.test(adm)
     && /api\('\/content'\)/.test(adm) && /items:\{ release_notes: list \}/.test(adm));
   t('#10b 版本面板文案说明直接写云端', /直接存在云端/.test(adm));
+
+  t('#9c 选项带提出人名字（不再写「同学提」）',
+    /byName/.test(vot) && /esc\(o\.byName \|\| '同学'\)/.test(idx) && !/同学提/.test(idx));
+  t('#9c 后台加的选项记「管理员」', /isStudent \? '同学' : '管理员'/.test(vot));
+  t('#9c 学生新增选项记当前同学名字', /const who = u\.display_name/.test(vot) && /byName: who/.test(vot));
+  t('#9c 公示结果表带「提出人」列',
+    /<th>排名<\/th><th>选项<\/th><th>提出人<\/th>/.test(idx) && /提出人','票数/.test(adm));
+  t('#9c 结束后可选「显示公示并隐藏投票」',
+    /end_mode === 'pub'/.test(vot) && /v\.endMode === 'pub'/.test(idx)
+    && /id="voEndMode"/.test(adm) && /展示结果公示并隐藏投票/.test(adm));
+  t('#9c end_mode 两条 DDL 路径都有', (http2.match(/end_mode/g) || []).length >= 3);
 
   t('#9 retract_used 两条 DDL 路径都有', (http2.match(/retract_used/g) || []).length >= 2);
   t('#4b 日期按点绝对定位（不再 space-between 均分）',

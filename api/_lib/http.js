@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.8';
+const SCHEMA_VER = '3.5.9';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -181,7 +181,8 @@ export async function ensureSchema(sql) {
         try { await s`alter table class_votes
           add column if not exists max_choices smallint,
           add column if not exists min_choices smallint,
-          add column if not exists retract_limit smallint not null default 1`; } catch (e) {}
+          add column if not exists retract_limit smallint not null default 1,
+          add column if not exists end_mode text not null default 'keep'`; } catch (e) {}
         try { await s`alter table class_vote_ballots add column if not exists retract_used smallint not null default 0`; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
@@ -535,6 +536,7 @@ export async function ensureSchema(sql) {
         max_choices   smallint,
         min_choices   smallint,
         retract_limit smallint not null default 1,
+        end_mode      text     not null default 'keep',
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       )
@@ -545,7 +547,8 @@ export async function ensureSchema(sql) {
     await s`alter table class_votes
       add column if not exists max_choices smallint,
       add column if not exists min_choices smallint,
-      add column if not exists retract_limit smallint not null default 1`;
+      add column if not exists retract_limit smallint not null default 1,
+      add column if not exists end_mode text not null default 'keep'`;
     await s`
       create table if not exists class_vote_ballots (
         vote_id    bigint      not null,

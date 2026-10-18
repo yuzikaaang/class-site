@@ -828,3 +828,5 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 | 2026-10-18 | **【v3.5.14 再补·站主三条】**：①投票回到「选择 → 确定上传」：点赞只改本地草稿、可随意取消（不消耗撤回次数），点「确定投票」才 POST /vote；已投状态再点点赞 → 确认弹窗（显示还剩 N 次）→ 撤回后自动选上刚点那项让重投。后端 castVote 补最多/最少票数校验。②后台加横屏按钮（`html.force-landscape` CSS 旋转 + fullscreen 时 `screen.orientation.lock('landscape')`，失败兜底 CSS；手机系统旋转本就自动，按钮解决锁竖屏的情况）。③「时间还是没有对齐」根因：迷你折线 5 个点只标了首/中/尾 3 个日期，中间点没标签；改为 ≤6 个点全标，SVG 趋势图稀疏阈值 6→8。缓存 v111。e2e 2576 全绿。 |
 
 | 2026-10-18 | **【v3.5.14 三补·站主两条】**：①投票改轮播：`voteRenderAll` 输出 `.vote-swipe`（flex+scroll-snap）一屏一张，进行中在前、已结束加角标；`voteSwipeBind` 管圆点/箭头/位置文本，`VOTE.curId` 记住当前场次，刷新回原位。②公示加展示时长：`vote_pub.byVote[id]` 增 `until`，后台弹窗可选永久/1/3/7/30 天/自定义，前台 `votePubRender` 到期 return ''。③后台版本记录去掉 `relSeed` 与「填入最近几轮」（约 900 行内置数据删除），面板只读云端 `/content` 的 release_notes，增删改直接 PUT 回云端。e2e 2569/2524 全绿，缓存 v113。 |
+
+| 2026-10-18 | **【v3.5.14 四补】**：①横屏方向：left:100vw+rotate(90) 实际多转 180°，改 left:0+top:100vh+rotate(-90)。②选项提出人：options 增 byName（后台=管理员，同学=display_name），前台标签显示名字，公示结果表加「提出人」列。③结束后形态：class_votes 加 end_mode（keep|pub），后台编辑器可选；pub 且配了公示时前台只渲染公示块、隐藏投票栏（没配公示自动退回只读）。SCHEMA_VER 3.5.9，三处 DDL 同步。e2e 2575/2530 全绿，缓存 v115。 |

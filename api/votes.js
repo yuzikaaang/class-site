@@ -102,10 +102,15 @@ function normOptions(raw) {
     const label = String((o && (o.label != null ? o.label : o)) || '').trim().slice(0, MAX_OPTION_LEN);
     if (!label || seen[label]) return;
     seen[label] = 1;
+    const isStudent = !!(o && o.by === 'student');
     out.push({
       id: String(o && o.id || '') || nextOptId(out),
       label,
-      by: (o && o.by === 'student') ? 'student' : 'admin',
+      by: isStudent ? 'student' : 'admin',
+      /* v3.5.14 站主要求：选项要写「谁提的」—— 后台加的就是「管理员」，
+         同学在前台加的就是该同学的名字（不是笼统的「同学提」）。 */
+      byName: String((o && (o.byName || o.by_name)) || '').trim().slice(0, 20)
+        || (isStudent ? '同学' : '管理员'),
       /* 歌单投票：带上平台歌曲 id，方便后台取前五时回查 */
       songId: (o && o.songId != null && o.songId !== '') ? Number(o.songId) : null,
     });
@@ -154,7 +159,8 @@ function parseVoteInput(b) {
     return { error: '单选投票的「最多选」只能是 1' };
   }
   const retractLimit = normRetract(b.retractLimit != null ? b.retractLimit : b.retract_limit);
-  return { data: { title, kind, options, multi, allowAdd, note, deadline, proposer, maxChoices, minChoices, retractLimit } };
+  const endMode = (b.endMode === 'pub' || b.end_mode === 'pub') ? 'pub' : 'keep';
+  return { data: { title, kind, options, multi, allowAdd, note, deadline, proposer, maxChoices, minChoices, retractLimit, endMode } };
 }
 
 /** 行 → 前端结构。results 只有「已截止」才给。 */
@@ -163,7 +169,11 @@ function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed) {
     id: Number(r.id),
     title: r.title,
     kind: r.kind,
-    options: (jsonCol(r.options) || []).map((o) => ({ id: o.id, label: o.label, by: o.by, songId: o.songId == null ? null : o.songId })),
+    options: (jsonCol(r.options) || []).map((o) => ({
+      id: o.id, label: o.label, by: o.by,
+      byName: o.byName || (o.by === 'student' ? '同学' : '管理员'),
+      songId: o.songId == null ? null : o.songId,
+    })),
     multi: !!r.multi,
     allowAdd: !!r.allow_add,
     note: r.note || '',
@@ -180,6 +190,8 @@ function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed) {
     /* 提出的日期：只给「YYYY-MM-DD」，前端要显示「2026-10-17 提出」这种短格式 */
     createdDate: r.created_at ? String(r.created_at).slice(0, 10) : null,
     /* v3.5.14 #9：票数配额与撤回 */
+    /* v3.5.14：结束后形态 —— keep 继续显示投票栏（不可投）；pub 自动展示公示并隐藏投票 */
+    endMode: r.end_mode === 'pub' ? 'pub' : 'keep',
     maxChoices: r.max_choices == null ? null : Number(r.max_choices),
     minChoices: r.min_choices == null ? null : Number(r.min_choices),
     retractLimit: r.retract_limit == null ? 1 : Number(r.retract_limit),
@@ -214,7 +226,7 @@ async function listVotes(req, res) {
   const rows = await sql`
     select v.id, v.title, v.kind, v.options, v.multi, v.allow_add, v.note,
            v.deadline, v.status, v.created_at, v.created_by, v.proposer,
-           v.max_choices, v.min_choices, v.retract_limit,
+           v.max_choices, v.min_choices, v.retract_limit, v.end_mode,
            u.username as creator_username,
            u.display_name as creator_display
       from class_votes v
@@ -412,12 +424,16 @@ async function addOption(req, res) {
   if (!isOpen(v)) return fail(res, 400, '投票已截止或已关闭，不能新增选项');
   if (!v.allow_add) return fail(res, 403, '本投票未开放「新增选项」');
 
-  const options = jsonCol(v.options) || [];
+  const options = (jsonCol(v.options) || []).map((o) => ({
+    ...o,
+    byName: o.byName || (o.by === 'student' ? '同学' : '管理员'),
+  }));
   if (options.length >= MAX_OPTIONS) return fail(res, 400, '选项已达上限（' + MAX_OPTIONS + ' 个）');
   if (options.some((o) => String(o.label) === label)) {
     return fail(res, 400, '这个选项已经有人提过了');
   }
-  const opt = { id: nextOptId(options), label, by: 'student', songId: null };
+  const who = u.display_name || u.displayName || u.username || '同学';
+  const opt = { id: nextOptId(options), label, by: 'student', byName: who, songId: null };
   options.push(opt);
 
   await sql`
@@ -447,11 +463,11 @@ async function createVote(req, res) {
   const proposer = p.data.proposer || me.displayName || me.display_name || me.username || '';
   const rows = await sql`
     insert into class_votes (title, kind, options, multi, allow_add, note, deadline, status,
-                             created_by, proposer, max_choices, min_choices, retract_limit, created_at, updated_at)
+                             created_by, proposer, max_choices, min_choices, retract_limit, end_mode, created_at, updated_at)
     values (${p.data.title}, ${p.data.kind}, ${JSON.stringify(p.data.options)}::jsonb,
             ${p.data.multi}, ${p.data.allowAdd}, ${p.data.note}, ${p.data.deadline}::timestamptz,
             'open', ${me.id}, ${proposer},
-            ${p.data.maxChoices}, ${p.data.minChoices}, ${p.data.retractLimit}, now(), now())
+            ${p.data.maxChoices}, ${p.data.minChoices}, ${p.data.retractLimit}, ${p.data.endMode}, now(), now())
     returning id
   `;
   await audit(me.id, 'vote.create', 'class_votes', String(rows[0].id), p.data.title);
@@ -510,7 +526,7 @@ async function updateVote(req, res) {
        set title = ${p.data.title}, kind = ${p.data.kind}, options = ${JSON.stringify(merged)}::jsonb,
            multi = ${p.data.multi}, allow_add = ${p.data.allowAdd}, note = ${p.data.note},
            max_choices = ${p.data.maxChoices}, min_choices = ${p.data.minChoices},
-           retract_limit = ${p.data.retractLimit},
+           retract_limit = ${p.data.retractLimit}, end_mode = ${p.data.endMode},
            deadline = ${p.data.deadline}::timestamptz, updated_at = now()
      where id = ${voteId}
   `;
