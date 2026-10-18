@@ -3019,10 +3019,7 @@ console.log('\n【32】第二十八轮·抽歌功能迁移后台（前台删除 
   t('后台定义 relEdit()', /function relEdit\(/.test(adm));
   t('后台定义 relWrite()', /function relWrite\(/.test(adm));
   t('版本记录写入云端 release_notes', /items:\s*\{\s*release_notes:/.test(adm));
-  t('有「填入最近几轮」初始数据', /function relSeed\(\)/.test(adm));
-  t('初始数据含 v2.3.5 排行榜', /"version":\s*"2\.3\.5"/.test(adm));
-  t('初始数据含 v2.3.1 改密修复', /"version":\s*"2\.3\.1"/.test(adm));
-  t('版本类型含 fix / feature / improve', /feature:/.test(adm) && /fix:/.test(adm) && /improve:/.test(adm));
+        t('版本类型含 fix / feature / improve', /feature:/.test(adm) && /fix:/.test(adm) && /improve:/.test(adm));
   t('支持标记重点版本', /highlight/.test(adm));
   t('前台不展示版本记录（值为 null）', /release_notes\s*:\s*null/.test(page));
 
@@ -5996,11 +5993,7 @@ console.log('\n【59】第五十二轮·姓名对照：同一个人两个名字�
   /* ⚠️ 记录本体在云端 release_notes，测试只能守代码里的内置种子 —— 它必须与云端同源，
      否则「一键填入最近几轮」会把列表拉回旧内容。 */
   const seedV = (adm.match(/"version":\s*"([\d.]+)"/g) || []).map((x) => x.match(/"([\d.]+)"/)[1]);
-  t('★内置版本种子补到 2.9.5', seedV.indexOf('2.9.5') >= 0, '共 ' + seedV.length + ' 条');
-  t('★中间几轮也补上了（2.7.0 / 2.8.0 / 2.9.0）',
-    ['2.7.0', '2.8.0', '2.9.0'].every((v) => seedV.indexOf(v) >= 0), seedV.join(','));
-  t('★种子够全（≥30 条，覆盖 2.3.0 ~ 2.9.5）', seedV.length >= 30, '实际 ' + seedV.length);
-  t('★每条都带标题与条目', (adm.match(/"version":\s*"[\d.]+",\s*"date":/g) || []).length === seedV.length);
+        t('★每条都带标题与条目', (adm.match(/"version":\s*"[\d.]+",\s*"date":/g) || []).length === seedV.length);
   t('★版本号显示统一（不再出现「vv2.6.4」）',
     /function relVerLabel/.test(adm) && /esc\(relVerLabel\(r\.version\)\)/.test(adm));
   t('★版本号显示有护栏（已带 v 就不再叠一层）', /\/\^v\/i\.test\(s\) \? s : \('v' \+ s\)/.test(adm));
@@ -6200,9 +6193,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
 
   /* ===== ⑥ 版本与更新记录 ===== */
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
-  t('★后台内置更新记录补到 2.9.7（站主要求「记得填写」）',
-    /"version": "2\.9\.7"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
-
+  
   /* ===== ⑦ 真实接口：sections 能存能读 ===== */  const ex0 = await call('/api/scores?action=list', { token: adminToken });
   const anyExam = (ex0.body.exams || [])[0];
   if (anyExam) {
@@ -6311,9 +6302,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
 
   /* ===== ⑤ 版本与更新记录 ===== */
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
-  t('★后台内置更新记录补到 2.10.0',
-    /"version": "2\.9\.10"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
-
+  
   /* ===== ⑥ 真跑一遍：只分享 1 个人，班均与排名仍然是对的 ===== */  const reg2 = await call('/api/auth?action=register', {
     method: 'POST', body: { username: 'statsstu', password: 'StatsStu2026', displayName: '统计生甲' },
   });
@@ -6419,8 +6408,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
   t('★sw.js 版本号与缓存号同步（缓存号只增不减）', /SITE_VER = '3\.\d+\.\d+'/.test(swSrc) && /class-site-v1\d\d/.test(swSrc));
-  t('★后台内置更新记录有 2.10.0 条目', /"version": "2\.10\.0"/.test(adm));
-}
+  }
 
 /* 【62】第五十七轮·全站字色共用逻辑 + 文案官方化（v2.9.10）
    ------------------------------------------------------------
@@ -7941,9 +7929,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
   const ADMJS_SRC = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★后台更新记录有 2.10.1 条目', /"version": "2\.10\.1"/.test(ADMJS_SRC));
-  t('★后台更新记录仍保留 2.10.0 条目', /"version": "2\.10\.0"/.test(ADMJS_SRC));
-}
+    }
 
 console.log('\n【71】第六十二轮·后台内容时间不再多算 8 小时（v2.10.1）');
 {
@@ -8583,8 +8569,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
     (shr.match(/BASIS === 'graded'\) \? \(EX\.cutlines/g) || []).length >= 2);
 
   /* 版本与记录 */
-  t('版本记录含 3.1.1 / 3.1.0 / 3.0.1', /"version": "3[.]1[.]1"/.test(adm) && /"version": "3[.]1[.]0"/.test(adm) && /"version": "3[.]0[.]1"/.test(adm));
-  /* 断言「三处彼此一致 + 形如 3.x.y」，而不是钉死某个数字 —— 每轮升版都要改这里太脆 */
+    /* 断言「三处彼此一致 + 形如 3.x.y」，而不是钉死某个数字 —— 每轮升版都要改这里太脆 */
   t('版本号三处同步（index / admin / sw 彼此一致）',
     (function(){ var a=(idx.match(/SITE_VERSION = '([^']+)'/)||[])[1], b=(adm.match(/SITE_VERSION = '([^']+)'/)||[])[1], c=(sw.match(/SITE_VER = '([^']+)'/)||[])[1];
       return !!a && a===b && a===c && /^3\.\d+\.\d+$/.test(a); })());
@@ -8696,8 +8681,7 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
   await call('/api/scores?action=exam-delete', { method: 'POST', token: adminToken, body: { id: eid } });
 
   /* ④ 版本与记录 */
-  t('版本记录含 3.1.1 条目', /"version": "3[.]1[.]1"/.test(adm));
-  t('版本号三处同步（index / admin / sw 彼此一致）',
+    t('版本号三处同步（index / admin / sw 彼此一致）',
     (function(){ var a=(idx.match(/SITE_VERSION = '([^']+)'/)||[])[1], b=(adm.match(/SITE_VERSION = '([^']+)'/)||[])[1], c=(sw.match(/SITE_VER = '([^']+)'/)||[])[1];
       return !!a && a===b && a===c; })());
 }
@@ -9959,6 +9943,21 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /if\(closed\)\{/.test(idx) && !/if\(closed \|\| v\.results\)\{/.test(idx));
   t('#9 最多/最少票数后端校验', /maxChoices/.test(vot) && /minChoices/.test(vot) && /最多选/.test(vot));
   t('#9 后台三个配额输入', /id="voMaxChoices"/.test(adm) && /id="voMinChoices"/.test(adm) && /id="voRetractLimit"/.test(adm));
+  t('#9b 多个投票左右滑动切换（scroll-snap 轮播）',
+    /class="vote-swipe"/.test(idx) && /scroll-snap-type:x mandatory/.test(idx) && /function voteSwipeBind\(/.test(idx));
+  t('#9b 轮播有圆点/箭头/位置提示，刷新后回到原来那一场',
+    /data-vote-dot/.test(idx) && /data-vote-prev/.test(idx) && /VOTE\.curId/.test(idx));
+  t('#9b 公示支持展示截止时间（到点自动隐藏）',
+    /if\(cfg\.until && Date\.now\(\) > new Date\(cfg\.until\)\.getTime\(\)\) return '';/.test(idx)
+    && /id="voPubDur"/.test(adm) && /id="voPubUntil"/.test(adm));
+  t('#9b 后台可设 1/3/7/30 天或自定义结束',
+    /1 天后自动取消/.test(adm) && /30 天后自动取消/.test(adm) && /自定义结束时间/.test(adm));
+
+  t('#10b 版本记录不再内置种子（只读云端 release_notes）',
+    !/function relSeed\(/.test(adm) && !/relSeedAsk/.test(adm)
+    && /api\('\/content'\)/.test(adm) && /items:\{ release_notes: list \}/.test(adm));
+  t('#10b 版本面板文案说明直接写云端', /直接存在云端/.test(adm));
+
   t('#9 retract_used 两条 DDL 路径都有', (http2.match(/retract_used/g) || []).length >= 2);
   t('#4b 日期按点绝对定位（不再 space-between 均分）',
     /\.sc-mini-x\{position:relative/.test(idx) && /left:' \+ pct\.toFixed\(2\)/.test(idx));

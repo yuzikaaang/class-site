@@ -1754,6 +1754,26 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
 .dark .vote-box{background:#262220;border-color:#6b5b4c}
 .vote-opt-label{flex:1;min-width:0;line-height:1.5;word-break:break-word}
+/* v3.5.14：多个投票左右滑动切换（scroll-snap 轮播） */
+.vote-swipe{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;padding-bottom:4px;overscroll-behavior-x:contain}
+.vote-swipe::-webkit-scrollbar{display:none}
+.vote-slide{flex:0 0 100%;min-width:0;scroll-snap-align:start;position:relative}
+.vote-slide-tag{position:absolute;top:10px;right:10px;z-index:2;font-size:.66rem;font-weight:700;
+  padding:2px 8px;border-radius:999px;background:#f1e8df;color:#8a7c6f}
+.dark .vote-slide-tag{background:#3a332d;color:#c9b8aa}
+.vote-pager{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px}
+.vote-pager button{width:34px;height:34px;border-radius:50%;border:1px solid #e8ded4;background:#fffdfb;
+  color:#7a6a5c;font-size:1.1rem;line-height:1;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.vote-pager button:disabled{opacity:.35;cursor:default}
+.dark .vote-pager button{background:#2e2926;border-color:#3d3631;color:#c9b8aa}
+.vote-dots{display:flex;align-items:center;gap:7px}
+.vote-dots i{width:7px;height:7px;border-radius:50%;background:#d9cabb;cursor:pointer;transition:background .15s,transform .15s}
+.vote-dots i.on{background:#c2410c;transform:scale(1.35)}
+.dark .vote-dots i{background:#4a4038}
+.dark .vote-dots i.on{background:#fb923c}
+.vote-pos{text-align:center;font-size:.72rem;color:#8a7c6f;margin-top:6px}
+.dark .vote-pos{color:#a8998c}
 .vote-n{flex:0 0 auto;font-size:.72rem;color:#8a7c6f;font-variant-numeric:tabular-nums;white-space:nowrap}
 .dark .vote-n{color:#a8998c}
 /* v3.5.14 #9：选项右侧的点赞按钮 —— 点一下直接投票，不需要提交表单 */
@@ -13331,16 +13351,31 @@ function voteRenderAll(){
     return;
   }
 
-  var h = '';
-  if(openList.length){
-    h += openList.map(function(v){ return voteCardHtml(v); }).join('');
-  }
-  if(doneList.length){
-    h += '<div class="vote-sep"><span>已结束</span></div>';
-    h += doneList.map(function(v){ return voteCardHtml(v); }).join('');
-  }
+  /* v3.5.14 站主要求：多个投票同时进行时左右滑动切换，不再一长条列出来。
+     进行中的排前面，已结束的接在后面；卡片宽度 = 容器宽，scroll-snap 对齐。 */
+  var all = openList.concat(doneList);
+  VOTE.order = all.map(function(v){ return v.id; });
+  var curIdx = 0;
+  for(var ci = 0; ci < all.length; ci++){ if(all[ci].id === VOTE.curId){ curIdx = ci; break; } }
+  var h = '<div class="vote-swipe" id="voteSwipe">'
+    + all.map(function(v){
+        return '<div class="vote-slide" data-slide-vid="' + v.id + '">'
+          + (v.open ? '' : '<div class="vote-slide-tag">已结束</div>')
+          + voteCardHtml(v)
+          + '</div>';
+      }).join('')
+    + '</div>'
+    + '<div class="vote-pager">'
+    +   '<button type="button" data-vote-prev aria-label="上一个">‹</button>'
+    +   '<div class="vote-dots">' + all.map(function(v, i){
+          return '<i data-vote-dot="' + i + '" class="' + (i === curIdx ? 'on' : '') + '"></i>';
+        }).join('') + '</div>'
+    +   '<button type="button" data-vote-next aria-label="下一个">›</button>'
+    + '</div>'
+    + '<div class="vote-pos"><span id="votePosTxt">第 ' + (curIdx + 1) + ' / ' + all.length + ' 个</span> · 左右滑动切换</div>';
   voteBody(h);
   voteBind();
+  voteSwipeBind(all, curIdx);
 }
 
 /* ===== v3.5.13 投票公示（站主 #2）=====
@@ -13353,6 +13388,8 @@ function votePubRender(v){
     var pub = (SITE_DATA.votePub || {});
     var cfg = (pub.byVote || {})[v.id];
     if(!cfg || !cfg.on || !v.results) return '';
+    /* v3.5.14：后台可设展示截止时间，到点自动取消展示 */
+    if(cfg.until && Date.now() > new Date(cfg.until).getTime()) return '';
     var tpl = (pub.templates || []).filter(function(t){ return t.id === cfg.tplId; })[0];
     if(!tpl) return '';
     var rs = v.results.slice().sort(function(a, b){ return (b.n || 0) - (a.n || 0); });
@@ -13525,6 +13562,60 @@ function voteBind(){
   Array.prototype.forEach.call(body.querySelectorAll('[data-vote-add]'), function(btn){
     btn.onclick = function(){ voteAddOption(Number(btn.dataset.voteAdd)); };
   });
+}
+
+/* v3.5.14：投票轮播 —— scroll-snap 容器 + 圆点 + 左右箭头。
+   刷新后按 VOTE.curId 回到用户原来在看的那一场，不会被打回第一个。 */
+function voteSwipeBind(all, curIdx){
+  var box = document.getElementById('voteSwipe');
+  if(!box) return;
+  var dots = Array.prototype.slice.call(document.querySelectorAll('[data-vote-dot]'));
+  var pos = document.getElementById('votePosTxt');
+  var prev = document.querySelector('[data-vote-prev]');
+  var next = document.querySelector('[data-vote-next]');
+  var idx = curIdx || 0;
+
+  function paint(i){
+    dots.forEach(function(d, k){ d.classList.toggle('on', k === i); });
+    if(pos) pos.textContent = '第 ' + (i + 1) + ' / ' + all.length + ' 个';
+    if(prev) prev.disabled = (i <= 0);
+    if(next) next.disabled = (i >= all.length - 1);
+  }
+  function go(i, smooth){
+    i = Math.max(0, Math.min(all.length - 1, i));
+    idx = i;
+    VOTE.curId = all[i] ? all[i].id : null;
+    try{ box.scrollTo({ left: i * box.clientWidth, behavior: smooth ? 'smooth' : 'auto' }); }
+    catch(e){ box.scrollLeft = i * box.clientWidth; }
+    paint(i);
+  }
+  requestAnimationFrame(function(){ go(idx, false); });
+
+  var t = null;
+  box.onscroll = function(){
+    clearTimeout(t);
+    t = setTimeout(function(){
+      if(!box.clientWidth) return;
+      var i = Math.max(0, Math.min(all.length - 1, Math.round(box.scrollLeft / box.clientWidth)));
+      if(i !== idx){ idx = i; VOTE.curId = all[i] ? all[i].id : null; paint(i); }
+    }, 90);
+  };
+  if(prev) prev.onclick = function(){ go(idx - 1, true); };
+  if(next) next.onclick = function(){ go(idx + 1, true); };
+  dots.forEach(function(d, i){
+    d.onclick = function(){ go(i, true); };
+  });
+  /* 转屏 / 改窗口大小后重新对齐当前页 */
+  if(!window.__voteSwipeResize){
+    window.__voteSwipeResize = true;
+    window.addEventListener('resize', function(){
+      var b2 = document.getElementById('voteSwipe');
+      if(b2 && VOTE.curId != null){
+        var i2 = (VOTE.order || []).indexOf(VOTE.curId);
+        if(i2 >= 0){ try{ b2.scrollLeft = i2 * b2.clientWidth; }catch(e){} }
+      }
+    });
+  }
 }
 
 function voteMsg(vid, txt, kind){
