@@ -31,8 +31,9 @@ const ALLOW_KEYS = [
   'cls_theme_auto',         // 旧的「是否自动」开关（v2.5.3 起降级为兼容键）
   'cls_theme_auto2',        // v2.5.3 主题自动模式：off / system / sun
   'cls_study_cfg',          // v2.6.0 学习卡片配置（开关 / 类型 / 学科）
-  'cls_ui_cfg',             // 界面设置（字号/背景/排序/动效）
-  'cls_ui_bgimg',           // 自定义背景图
+  /* v3.5.34：cls_ui_cfg / cls_ui_bgimg 已移出白名单 ——
+     自定义设置只存本机，不跨设备（每台设备屏幕和使用习惯不同，站主明确要求）。
+     老账号云端残留的这两个键读下来会被 isCloudKey() 挡掉，不再覆盖本机。 */
   'cls_sfx',                // 音效开关
   /* 各种「已看过 / 已关闭」的标记：换设备不该重复打扰 */
   'cls_welcome_v1',         // 欢迎弹窗是否已看过
@@ -108,8 +109,8 @@ const KEY_GROUPS = [
     'cls_theme_auto':       '主题自动切换（旧版兼容键）',
     'cls_theme_auto2':      '主题自动模式',
     'cls_study_cfg':        '学习卡片配置',
-    'cls_ui_cfg':           '界面设置（字号/背景/排序/动效）',
-    'cls_ui_bgimg':         '自定义背景图',
+    /* cls_ui_cfg / cls_ui_bgimg 已于 v3.5.34 移出白名单，分类表同步删掉，
+       否则「我的云端数据」里会留一个永远空的分类项。 */
     'cls_sfx':              '音效开关',
   } },
   { cat: 'seen', label: '已看过标记', keys: {
