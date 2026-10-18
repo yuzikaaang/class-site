@@ -250,6 +250,8 @@ function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed) {
       id: o.id, label: o.label, by: o.by,
       byName: o.byName || (o.by === 'student' ? '同学' : '管理员'),
       songId: o.songId == null ? null : o.songId,
+      /* v3.5.19：选项的结构化信息（点歌人 / 时间 / 赞数 / 时长），前端折叠展示靠它 */
+      songMeta: o.songMeta || null,
     })),
     multi: !!r.multi,
     allowAdd: !!r.allow_add,
