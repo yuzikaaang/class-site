@@ -1878,9 +1878,11 @@ async function deleteField(req, res, me, b) {
      但「姓名 / 学号」是站点身份主键 —— 删了登录、成绩、导出全崩，
      属于结构性列，永远拒绝。其它预置字段（学校、班级、民族、入团日期等）
      传 force:true 才能删，前端配「手输字段名」的二次确认。 */
-  const HARD_PROTECTED = ['name', 'student_id'];
+  /* title 是「头衔任命」功能直接读写的列；role 是身份列。
+     删了页面会 500（站主刚踩到 column p.title does not exist），一并保护。 */
+  const HARD_PROTECTED = ['name', 'student_id', 'title', 'role'];
   if (HARD_PROTECTED.includes(field)) {
-    return fail(res, 400, '「' + (row.label || field) + '」是身份主键（姓名 / 学号），删了全站都会出错，不能删除');
+    return fail(res, 400, '「' + (row.label || field) + '」是站点的结构性字段（姓名 / 学号 / 头衔 / 身份），代码直接依赖，删了会报错，不能删除');
   }
   if (!row.is_custom && b.force !== true) {
     return fail(res, 400, '「' + (row.label || field) + '」是系统预置字段，确认删除请传 force=true');

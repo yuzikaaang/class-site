@@ -289,7 +289,11 @@ input,select,textarea{font-family:inherit;font-size:inherit}
   position:sticky;top:0;z-index:50;height:var(--head-h);
   display:flex;align-items:center;justify-content:space-between;gap:14px;
   padding:0 26px;border-bottom:1px solid var(--border);
-  background:color-mix(in srgb,var(--bg-1) 78%,transparent);
+  /* ⚠️ v3.5.14：老浏览器（部分安卓 Edge / WebView）不支持 color-mix，
+     这一行会整条失效 → 顶栏变透明，下面的内容滚上来和标题叠在一起（站主截图）。
+     先给纯色兜底，再叠半透明版本。 */
+  background:var(--bg-1);
+  background:color-mix(in srgb,var(--bg-1) 94%,transparent);
   backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
 }
 .head h2{margin:0;font-size:1.2rem;font-weight:800;letter-spacing:-.01em}

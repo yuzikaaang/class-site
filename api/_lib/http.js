@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.9';
+const SCHEMA_VER = '3.5.10';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -184,6 +184,16 @@ export async function ensureSchema(sql) {
           add column if not exists retract_limit smallint not null default 1,
           add column if not exists end_mode text not null default 'keep'`; } catch (e) {}
         try { await s`alter table class_vote_ballots add column if not exists retract_used smallint not null default 0`; } catch (e) {}
+        /* 🔴 v3.5.14：站主截图「头衔任命 加载失败：column p.title does not exist」。
+           title / exam_no / visibility_pref / field_vis / id_card / youth_league_no
+           这些列只在「全新库全量清单」里补过，老库走到本分支就 return 了，一直没建。
+           现在按纪律补进升级路径（每条都 if not exists，重复跑无害）。 */
+        try { await s`alter table profiles add column if not exists title text`; } catch (e) {}
+        try { await s`alter table profiles add column if not exists exam_no text`; } catch (e) {}
+        try { await s`alter table profiles add column if not exists visibility_pref text`; } catch (e) {}
+        try { await s`alter table profiles add column if not exists field_vis text`; } catch (e) {}
+        try { await s`alter table profiles add column if not exists id_card text`; } catch (e) {}
+        try { await s`alter table profiles add column if not exists youth_league_no text`; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
