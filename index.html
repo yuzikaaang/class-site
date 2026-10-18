@@ -3475,7 +3475,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.23';
+var SITE_VERSION = '3.5.24';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13627,10 +13627,20 @@ function voteCardHtml(v){
     /* v3.5.14 #9：每个选项右侧一个点赞按钮，点一下直接投票（不再有提交表单）。
        站主原话「改了几次点击还是无法投票」—— 以前点选项只是改本地草稿，
        必须再点「提交投票」才入库，很多人点了选项就走了。 */
-    optsHtml = v.options.map(function(o){
+    /* v3.5.24：排序一律按赞数从高到低（站主：「高赞的放在上面，排行榜实时更新」）。
+       票数来自 v.results —— 每次拉票/投票后会重新渲染，所以是实时的。
+       同票保持原有先后（稳定排序），不该因为刷新而乱跳。 */
+    var cntMap = {};
+    if(v.results){ v.results.forEach(function(r){ cntMap[r.id] = r.n || 0; }); }
+    var rankList = v.options.map(function(o, i){ return { o: o, i: i }; });
+    rankList.sort(function(a, b){
+      var d = (cntMap[b.o.id] || 0) - (cntMap[a.o.id] || 0);
+      return d !== 0 ? d : (a.i - b.i);
+    });
+    optsHtml = rankList.map(function(it){
+      var o = it.o;
       var on = my.indexOf(o.id) >= 0;
-      var cnt = null;
-      if(v.results){ for(var ri = 0; ri < v.results.length; ri++){ if(v.results[ri].id === o.id){ cnt = v.results[ri].n || 0; break; } } }
+      var cnt = (v.results && cntMap[o.id] != null) ? cntMap[o.id] : null;
       return '<button class="vote-opt' + (on ? ' on' : '') + '" data-vote-pick="' + v.id + '" data-vid="' + v.id + '" data-oid="' + esc(o.id) + '">'
         + '<span class="vote-opt-label">' + voteOptLabelHtml(o.label, o.songMeta)
         +   (o.by === 'student' ? '<span class="vote-tag">' + esc(o.byName || '同学') + ' 提</span>' : '') + '</span>'
@@ -13920,7 +13930,12 @@ function voteReload(){
     VOTE.votes = (j && j.votes) || [];
     VOTE.loaded = true;
     VOTE.picked = {};
-    voteRenderAll();
+    /* v3.5.24：重排后（按赞数从高到低）页面会跳 —— 保留投票区的滚动位置与当前那张卡 */
+    if(typeof withScrollPreserve === 'function'){
+      withScrollPreserve(voteRenderAll);
+    }else{
+      voteRenderAll();
+    }
   });
 }
 

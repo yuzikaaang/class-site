@@ -8136,6 +8136,21 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     /'第四名','第五名'/.test(ADM_523) && /map\['第' \+ CN\[rn\] \+ '名'\]/.test(IDX_523));
   t('v3.5.23 投票管理元信息分「状态行 / 规则行」', /规则行/.test(ADM_523));
 
+  /* ---- v3.5.24：投票按赞数排序 / 勾选即选项 / 详情字段可配 ---- */
+  const IDX_524 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const ADM_524 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('v3.5.24 前台投票选项按赞数从高到低排（同票稳定）',
+    /var rankList = v\.options\.map/.test(IDX_524) && /cntMap\[b\.o\.id\]/.test(IDX_524)
+    && /a\.i - b\.i/.test(IDX_524));
+  t('v3.5.24 投票重排后保留滚动位置', /withScrollPreserve\(voteRenderAll\)/.test(IDX_524));
+  t('v3.5.24 挑歌勾选即加入选项（不再需要「加进选项」按钮）',
+    /function applyOne\(el\)/.test(ADM_524) && !/voPickAdd/.test(ADM_524)
+    && /勾选即加入选项/.test(ADM_524));
+  t('v3.5.24 勾选状态由选项文本框反推（刷新/搜索不丢勾）',
+    /function syncChecksFromOptions/.test(ADM_524) && /lineHit\[label\]/.test(ADM_524));
+  t('v3.5.24 编辑器文案明确：歌名歌手直显，其余进详情',
+    /选项「详情」里包含哪些/.test(ADM_524) && /歌名和歌手<b>永远直接显示<\/b>/.test(ADM_524));
+
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const ADMJS_518 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');

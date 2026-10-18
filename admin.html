@@ -1004,7 +1004,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.23';
+var SITE_VERSION = '3.5.24';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -11504,19 +11504,21 @@ function voEditorDialog(v){
       +   '</select></div>'
       + '<div class="field"><label>选项（一行一个）</label>'
       +   '<textarea id="voOpts" rows="6" placeholder="选项一&#10;选项二">' + esc(opts) + '</textarea>'
-      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">歌单投票可以直接在这里粘贴，也可以用下面的「从点歌平台挑」——'
-      +     '挑进来的选项会写成「歌名 - 歌手 - 点歌人 - 点歌时间」。</p>'
+      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">歌单投票：在下面「从点歌平台挑」里<b>勾选即加入</b>，取消勾选即移出，'
+      +     '不用再复制粘贴；这个文本框会跟着自动同步，也可以手改。</p>'
       +   '</div>'
       /* v3.5.19：歌单投票「选项里包含哪些字段」+ 取前 N / 用途 / 时长上限 */
       + '<div id="voSongOpts" style="display:none;margin-bottom:12px">'
-      +   '<div class="field"><label>歌单选项里包含</label>'
+      +   '<div class="field"><label>选项「详情」里包含哪些</label>'
       +     '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.84rem">'
       +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldReq" checked> 点歌人</label>'
       +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldTime" checked> 点歌时间</label>'
       +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldVotes"> 实时赞数</label>'
       +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldDur"> 歌曲时长</label>'
       +     '</div>'
-      +     '<p class="hint" style="margin:6px 0 0">勾了才会写进选项；前台只显示「歌名 - 歌手」，点选项里的「详情」才展开其余信息。</p>'
+      +     '<p class="hint" style="margin:6px 0 0">'
+      +       '歌名和歌手<b>永远直接显示</b>；这里勾的项收进「详情」，同学点一下才展开。'
+      +       '不勾 = 该项完全不展示（也不写进选项）。</p>'
       +   '</div>'
       +   '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">'
       +     '<div class="field" style="width:140px"><label>取前几名</label>'
@@ -11804,7 +11806,9 @@ function voMountSongPick(host){
     +   '<button class="btn btn-sm btn-ghost" id="voPickInv" type="button">反选</button>'
     + '</div>'
     + '<div id="voPickBody" class="muted" style="font-size:.8rem">点「刷新歌单」加载平台上的歌</div>'
-    + '<div style="margin-top:10px"><button class="btn btn-sm btn-secondary" id="voPickAdd" type="button">把勾选的加进选项</button></div>'
+    + '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
+    +   '勾选即加入选项，取消勾选即移出 —— 不用再点「加进选项」。'
+    +   '<b>选项</b>文本框与勾选列表实时同步，也可以手改。</p>'
     + '</div>';
   var body = host.querySelector('#voPickBody');
   var q = host.querySelector('#voPickQ');
@@ -11815,6 +11819,8 @@ function voMountSongPick(host){
     vhFetchSongs().then(function(list){
       cache = list || [];
       paint();
+      /* 打开编辑器时若选项里已有这几首，把勾打上（编辑旧投票不丢状态） */
+      syncChecksFromOptions();
     }).catch(function(e){
       body.innerHTML = '<span style="color:var(--danger)">加载失败：' + esc(e.message || e) + '</span>';
     });
@@ -11823,32 +11829,53 @@ function voMountSongPick(host){
   /* v3.5.21：全选 / 全不选 / 反选（只影响当前筛选结果） */
   function voSetChecks(mode){
     var inps = body.querySelectorAll('input[data-song]');
-    Array.prototype.forEach.call(inps, function(el){ el.checked = (mode === 'inv' ? !el.checked : !!mode); });
+    Array.prototype.forEach.call(inps, function(el){
+      var want = (mode === 'inv' ? !el.checked : !!mode);
+      if(want !== el.checked){ el.checked = want; applyOne(el); }
+    });
   }
   host.querySelector('#voPickAll').onclick = function(){ voSetChecks(true); };
   host.querySelector('#voPickNone').onclick = function(){ voSetChecks(false); };
   host.querySelector('#voPickInv').onclick = function(){ voSetChecks('inv'); };
-  host.querySelector('#voPickAdd').onclick = function(){
-    var checked = body.querySelectorAll('input[data-song]:checked');
-    if(!checked.length){ toast('先勾几首', 'err'); return; }
+
+  /* v3.5.24：勾选即加入选项（站主：「勾选的就是选项，那我就不用再复制了」）
+     · 勾上 → 把 label 追加到「选项」文本框，并记下 songMeta
+     · 取消 → 从文本框里删掉这一行（手改过的行如果对不上就不动，避免误删）
+     · 文本框是唯一数据源，提交时仍按行解析，所以手改照样生效 */
+  function optionsLines(){
     var ta = document.getElementById('voOpts');
-    var cur = String(ta.value || '').split(/\n/).map(function(x){ return x.trim(); }).filter(Boolean);
-    var seen = {}; cur.forEach(function(x){ seen[x] = 1; });
-    var added = 0;
-    Array.prototype.forEach.call(checked, function(el){
-      var label = el.getAttribute('data-song');
-      var metaJson = el.getAttribute('data-meta');
-      if(seen[label]) return;
-      seen[label] = 1;
-      cur.push(label);
-      added++;
-      if(metaJson){
-        try{ VO_PICK_META[label] = JSON.parse(metaJson); }catch(e){}
-      }
+    return String((ta && ta.value) || '').split(/\n/).map(function(x){ return x.trim(); }).filter(Boolean);
+  }
+  function setOptionsLines(lines){
+    var ta = document.getElementById('voOpts');
+    if(ta) ta.value = lines.join('\n');
+  }
+  function applyOne(el){
+    var label = el.getAttribute('data-song');
+    var metaJson = el.getAttribute('data-meta');
+    var lines = optionsLines();
+    var idx = lines.indexOf(label);
+    if(el.checked){
+      if(idx < 0) lines.push(label);
+      if(metaJson){ try{ VO_PICK_META[label] = JSON.parse(metaJson); }catch(e){} }
+    }else if(idx >= 0){
+      lines.splice(idx, 1);
+    }
+    setOptionsLines(lines);
+  }
+  body.addEventListener('change', function(ev){
+    var el = ev.target;
+    if(el && el.matches && el.matches('input[data-song]')) applyOne(el);
+  });
+  /* 用选项里现有的行反推勾选状态（编辑旧投票 / 手动粘贴过选项时） */
+  function syncChecksFromOptions(){
+    var lines = optionsLines();
+    var hit = {};
+    lines.forEach(function(l){ hit[l] = 1; });
+    Array.prototype.forEach.call(body.querySelectorAll('input[data-song]'), function(el){
+      el.checked = !!hit[el.getAttribute('data-song')];
     });
-    ta.value = cur.join('\n');
-    toast('加了 ' + added + ' 首（重复的已跳过）', 'ok');
-  };
+  }
   function paint(){
     var kw = String(q.value || '').trim().toLowerCase();
     var rows = cache.filter(function(s){
@@ -11856,18 +11883,23 @@ function voMountSongPick(host){
       return (String(s.title || '') + ' ' + String(s.artist || '')).toLowerCase().indexOf(kw) >= 0;
     }).slice(0, 60);
     if(!rows.length){ body.innerHTML = '<span>没有匹配的歌</span>'; return; }
-    body.innerHTML = '<div style="max-height:220px;overflow:auto;display:grid;gap:2px">'
+    /* v3.5.24：勾选状态跟着「选项」文本框走 —— 重新渲染（搜索/刷新）也不丢勾。
+       列表右侧那串小字只是给你挑歌时参考，前台不会原样展示：
+       前台只显示「歌名 - 歌手」，其余（点歌人 / 点歌时间 / 赞数 / 时长）点「详情」才展开。 */
+    var curLines = optionsLines();
+    var lineHit = {};
+    curLines.forEach(function(l){ lineHit[l] = 1; });
+    body.innerHTML = '<div style="max-height:240px;overflow:auto;display:grid;gap:2px">'
       + rows.map(function(s){
           var name = String(s.title || '').trim();
-          /* v3.5.17：勾上就按「歌名 - 歌手 - 点歌人 - 点歌时间」整段加进选项；
-             列表里也把四段都露出来，方便对清楚是哪一版/谁点的。 */
           var sp = voSongParts(s);
           var label = sp.label;
           var req = vhReqName(s) || '匿名';
           var when = vhFmtTime(s.requestedAt || s.createdAt);
           var durTxt = voFmtDur(s.durationSeconds);
           return '<label style="display:flex;align-items:center;gap:8px;padding:3px 2px;cursor:pointer">'
-            + '<input type="checkbox" data-song="' + attr(label) + '" data-meta="' + attr(JSON.stringify(sp.meta)) + '">'
+            + '<input type="checkbox" data-song="' + attr(label) + '" data-meta="' + attr(JSON.stringify(sp.meta)) + '"'
+            +   (lineHit[label] ? ' checked' : '') + '>'
             + '<span style="font-size:.82rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
             +   esc(name) + (s.artist ? '<i class="muted" style="font-style:normal"> · ' + esc(s.artist) + '</i>' : '')
             + '</span>'
