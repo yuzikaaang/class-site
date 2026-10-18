@@ -1009,7 +1009,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.36';
+var SITE_VERSION = '3.5.37';
 var VER_DATE = '2026-10-18';
 
 /* ---- 运行时状态 ---- */
@@ -2788,7 +2788,7 @@ function memberDialog(m){
                 +   '<option value="public"' + (curFv === 'public' ? ' selected' : '') + '>公开</option>'
                 +   '<option value="committee"' + (curFv === 'committee' ? ' selected' : '') + '>班委可见</option>'
                 +   '<option value="self"' + (curFv === 'self' ? ' selected' : '') + '>仅本人</option>'
-                +   '<option value="admin"' + (curFv === 'admin' ? ' selected' : '') + '>仅管理员</option>'
+                +   '<option value="admin"' + (curFv === 'admin' ? ' selected' : '') + '>仅后端可见</option>'
                 + '</select>'
                 + '</div>';
             }).join('')
@@ -7368,14 +7368,18 @@ var CONTACT_LABEL = {
  * ⚠️ 英文键名只能是小写字母开头 + 小写字母/数字/下划线，服务端有严格白名单
  *    （因为列名要拼进 ALTER TABLE，无法参数化）。前端这里先挡一道，体验更好。
  * ========================================================================= */
-/* v3.4.1 新增 admin 档：仅管理员可见（后台能看到，前台连本人都看不到）。
-   展示链路：api/profile.js 的 canSee 对非管理员一概隐藏（连键都不给）。 */
-var VIS_LABEL = { public:'公开', committee:'班委可见', self:'仅本人', admin:'仅管理员' };
+/* v3.4.1 新增 admin 档；v3.5.37 按站主要求更名「仅后端可见」并明确语义：
+   · 后台（成员与档案 → 详情）永远能看到 —— 这是「后端」的本意
+   · 管理员自己前台的「我的资料」也能看到（方便站主随时核对）
+   · 其他所有人（包括字段本人的普通同学）前台一律不可见，连键都不下发
+   · 管理员在前台**查询别人**时也没有特权（站主定过的规矩：查询一视同仁），
+     那条链路 api/profile.js 的 ctx.admin 恒为 false */
+var VIS_LABEL = { public:'公开', committee:'班委可见', self:'仅本人', admin:'仅后端可见' };
 var VIS_DESC  = {
   public:    '已登录的同学都能查到',
   committee: '只有班委（班长/团支书/课代表等）能查到',
   self:      '只有本人查自己时能看到',
-  admin:     '只有管理员在后台能看到，前台连本人都看不到'
+  admin:     '只有你能看到：后台档案详情 + 你自己前台的「我的资料」；其他同学（含本人）前台查不到'
 };
 
 function loadFieldMeta(){
@@ -8141,7 +8145,7 @@ function deleteFieldConfirm(field, label, isSystem){
     confirmBox({
       title: '删除字段「' + nm + '」',
       html: '全班每位同学这个字段的值都会一起删掉，<b>无法恢复</b>。',
-      detail: '如果只是不想让大家看到，建议改成「仅本人」或「仅管理员」，而不是删除。',
+      detail: '如果只是不想让大家看到，建议改成「仅本人」或「仅后端可见」，而不是删除。',
       okText: '确认删除',
       danger: true,
     }).then(function(yes){
@@ -13165,6 +13169,13 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.5.37', date: '2026-10-18', type: 'feat', title: '「仅管理员」更名「仅后端可见」，语义更明确',
+    items: [
+      '改名叫「仅后端可见」了，谁能看到一目了然：你（后台档案详情 + 自己前台的「我的资料」）',
+      '其他所有人前台都查不到 —— 包括这个字段的主人本人（普通同学），连键都不会下发',
+      '你在前台查询别的同学时依然没有特权，和大家的查询规则一视同仁',
+      '存储值没变（还是 admin），原来设过的字段不用重新设置'
+    ] },
   { version: '3.5.36', date: '2026-10-18', type: 'fix', title: '游戏全量云同步 · 在线统计覆盖游戏页与后台',
     items: [
       '修复：上一版漏发了主页面文件，导致换设备也停在 3.5.34 —— 现在已正常到 3.5.36',
