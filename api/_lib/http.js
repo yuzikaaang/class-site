@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.10';
+const SCHEMA_VER = '3.5.11';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -188,6 +188,10 @@ export async function ensureSchema(sql) {
            title / exam_no / visibility_pref / field_vis / id_card / youth_league_no
            这些列只在「全新库全量清单」里补过，老库走到本分支就 return 了，一直没建。
            现在按纪律补进升级路径（每条都 if not exists，重复跑无害）。 */
+        /* 实测线上还缺 role（老库更早的建表就没有这一列）：一起补 */
+        try { await s`alter table profiles add column if not exists role text not null default '学生'`; } catch (e) {}
+        try { await s`alter table profiles add column if not exists politics text`; } catch (e) {}
+        try { await s`alter table profiles add column if not exists contact_status text not null default 'none'`; } catch (e) {}
         try { await s`alter table profiles add column if not exists title text`; } catch (e) {}
         try { await s`alter table profiles add column if not exists exam_no text`; } catch (e) {}
         try { await s`alter table profiles add column if not exists visibility_pref text`; } catch (e) {}

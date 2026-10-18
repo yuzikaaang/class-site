@@ -103,7 +103,7 @@
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
 const SITE_VER = '3.5.14'
 
-const CACHE = 'class-site-v117'
+const CACHE = 'class-site-v118'
 /* 预缓存清单：**只放小文件**。
    ⚠️ 不要把 index.html（600KB）放进来 —— install 会因为它变慢一大截，
    弱网下甚至装不完（真机实测 SW 卡在 installing 25 秒都没装好，
