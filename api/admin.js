@@ -598,19 +598,38 @@ function normTitles(input) {
 /* ---------------- 读：头衔一览 ---------------- */
 async function listTitles(req, res) {
   const sql = getSql();
+  /* 🔴 v3.5.14：线上「头衔任命」报 column p.title / p.role does not exist。
+     老库的 profiles 是很早建的，缺这两列；而 ensureSchema 的升级路径要么漏了，
+     要么被「先盖章再补列」的顺序坑过（补列失败被 try 吞掉，版本章却已经写上，
+     下次直接跳过）。这里改成**每次进接口先幂等补列**，不依赖版本章。 */
+  try { await sql`alter table profiles add column if not exists role text not null default '学生'`; } catch (e) {}
+  try { await sql`alter table profiles add column if not exists title text`; } catch (e) {}
   /* ⚠️ 2026-10-07 修复「鸡生蛋」：这里原本有一句
         where coalesce(p.title, '') <> ''
      意思是「只列出已经任命过头衔的人」。后果是全班刚导入、人人头衔为空时
      列表 0 条，站主在「头衔任命」面板看到「还没有资料，请先导入名单」，
      根本没法任命——而任命不了就永远进不了这个列表。
      现在改为返回全部资料，由前端按 onlySet 过滤（默认只看未任命/全部可切）。 */
-  const rawRows = await sql`
-    select p.id, p.name, p.student_id, p.title, p.role, p.user_id,
-           u.username, u.display_name
-      from profiles p
-      left join users u on u.id = p.user_id
-     order by (coalesce(p.title, '') <> '') desc, p.id
-  `;
+  let rawRows;
+  try{
+    rawRows = await sql`
+      select p.id, p.name, p.student_id, p.title, p.role, p.user_id,
+             u.username, u.display_name
+        from profiles p
+        left join users u on u.id = p.user_id
+       order by (coalesce(p.title, '') <> '') desc, p.id
+    `;
+  }catch(e){
+    /* 极端兜底：万一 ALTER 被数据库权限挡住，也不能让整个面板 500 */
+    console.error('[admin] titles 查询缺列，走兜底：', e.message);
+    rawRows = await sql`
+      select p.id, p.name, p.student_id, '' as title, '学生' as role, p.user_id,
+             u.username, u.display_name
+        from profiles p
+        left join users u on u.id = p.user_id
+       order by p.id
+    `;
+  }
   /* v3.5.0：姓名/学号是密文，头衔任命面板要显示明文姓名 */
   const tkey = await profileKey(req);
   const rows = await Promise.all(rawRows.map((r) => decProfileRow(tkey, r)));
