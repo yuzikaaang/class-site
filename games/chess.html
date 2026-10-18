@@ -144,6 +144,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
   <button id="restartBtn">⟳ 重新开始</button>
 </div>
 <div class="tip">红方先手 · 点击选中棋子，再点高亮交点落子 · 吃光对方将帅即胜</div>
+<script src="cloud.js"></script>
 <script>
 var AC=null;
 function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
@@ -170,6 +171,7 @@ function initBoard(){
   board[2][1]=-C;board[2][7]=-C;board[7][1]=C;board[7][7]=C;
 }
 function reset(){
+  window.__csStart=Date.now();   /* v3.5.35 对局计时 */
   initBoard();sel=null;cur=1;playing=true;lastMove=null;moves_history=[];
   document.getElementById('endOv').classList.add('hidden');
   refreshTurn();draw();
@@ -262,6 +264,8 @@ function doMove(m){
     document.getElementById('endInfo').textContent='将军！';
     document.getElementById('turn').textContent='对局结束';
     document.getElementById('endOv').classList.remove('hidden');
+    /* v3.5.35 云同步：对局时长（中国象棋是同屏双人，不记个人战绩） */
+    try{ if(window.CLS_CLOUD) CLS_CLOUD.addPlay('chess', Date.now()-(window.__csStart||Date.now()), {}); }catch(e){}
     draw();return true;
   }
   draw();return false;
