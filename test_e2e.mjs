@@ -5381,16 +5381,17 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
   t('★横向溢出裁剪挂在 html 上、body 不再设 overflow（否则 WebKit 会让 fixed 相对 body 定位）',
     /html\{overflow-x:hidden\}/.test(idx49)
     && /body\{[^}]*overflow-x:hidden/.test(idx49) === false);
-  t('★弹窗改为「外层 flex + overflow-y:auto + 盒子 margin:auto」',
-    /\.allboard-mask\.show\{display:flex;overflow-y:auto/.test(idx49)
-    && /\.allboard-mask\{[^}]*padding:20px/.test(idx49)
+  /* v3.5.31 修：只挂 margin:auto 不足以居中 —— 父级 flex 不设对齐时子项停在 start，
+     弹窗会贴在左上角（站主反馈的现象）。现在显式给 align/justify，
+     同时盒子本身有 max-height:calc(100dvh - 40px) + margin:auto 兜底，
+     不会出现「内容比容器高 → 顶部被推出视口且滚不到」的老问题。 */
+  t('★弹窗居中：外层 flex 显式 align-items/justify-content:center + 盒子 margin:auto 兜底',
+    /\.allboard-mask\.show\{display:flex;align-items:center;justify-content:center;overflow-y:auto/.test(idx49)
+    && /\.welcome-mask\.show\{display:flex;align-items:center;justify-content:center;overflow-y:auto/.test(idx49)
     && /\.allboard-box\{[^}]*margin:auto\}/.test(idx49)
-    && /\.welcome-mask\.show\{display:flex;overflow-y:auto/.test(idx49)
     && /\.welcome-box\{[^}]*margin:auto\}/.test(idx49));
-  /* align-items:center 的经典坑：内容比容器高时顶部被推到视口外且滚不到 */
-  t('★不再用 align-items:center 居中（长内容不会再把顶部裁掉）',
-    /\.allboard-mask\{display:none;position:fixed;inset:0;background:rgba\(0,0,0,\.6\);z-index:9997;padding:20px/.test(idx49)
-    && /\.welcome-mask\{display:none;position:fixed;inset:0;z-index:9998;background/.test(idx49));
+  t('★居中不再是「靠 align-items:center 硬顶」——盒子自带高度上限',
+    /\.allboard-box\{[^}]*max-height:calc\(100dvh - 40px\)/.test(idx49));
   t('★弹窗高度上限用 dvh（iOS 的 vh 会把地址栏算进去）',
     /max-height:calc\(100vh - 40px\);max-height:calc\(100dvh - 40px\)/.test(idx49));
   t('★body 高度补了 dvh 回退链', /min-height:100vh;min-height:100dvh/.test(idx49));
@@ -8463,18 +8464,23 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && /html\[data-lite="1"\] \.card::after\{display:none!important/.test(IDX_530));
   t('v3.5.30 轻量模式把动画压到几乎零时长',
     /html\[data-lite="1"\] \*[\s\S]{0,240}animation-duration:\.01ms!important/.test(IDX_530));
-  t('v3.5.30 自动判定：iPad/iPhone、低内存、少核心、prefers-reduced-motion',
-    /function autoLiteWanted\(\)/.test(IDX_530)
-    && /prefers-reduced-motion/.test(IDX_530)
-    && /iPad\|iPhone\|iPod/.test(IDX_530)
-    && /deviceMemory/.test(IDX_530)
-    && /hardwareConcurrency/.test(IDX_530));
-  t('v3.5.30 手动三档 auto/on/off 且 normalizeUI 认识 lite',
+  t('v3.5.31 轻量模式纯手动：不再有 UA / 内存 / 核数 / 长任务自动探测',
+    !/autoLiteWanted/.test(IDX_530) && !/liteSelfCheck/.test(IDX_530)
+    && !/deviceMemory/.test(IDX_530) && !/hardwareConcurrency/.test(IDX_530)
+    && !/iPad\|iPhone\|iPod/.test(IDX_530) && !/longtask/.test(IDX_530));
+  t('v3.5.31 liteOn 只认 UI.lite === 1',
+    /function liteOn\(\)\{\s*\n\s*return UI\.lite === 1;/.test(IDX_530));
+  t('v3.5.31 默认走完整特效（lite: 0），旧配置里的 null 也回落完整',
+    /lite: 0,/.test(IDX_530)
+    && /out\.lite = \(o\.lite === 1\) \? 1 : 0;/.test(IDX_530));
+  t('v3.5.31 设置面板只有「完整 / 轻量」两档，没有「自动」',
     /function setLiteMode\(/.test(IDX_530) && /secHtml\('perf'/.test(IDX_530)
-    && /out\.lite = \(o\.lite === 1\) \? 1 : \(o\.lite === 0 \? 0 : null\)/.test(IDX_530));
-  t('v3.5.30 长任务自测：>120ms 就自动降级并记忆到 session',
-    /function liteSelfCheck\(\)/.test(IDX_530) && /longtask/.test(IDX_530)
-    && /worst > 120/.test(IDX_530) && /closed-loop|cls_ui_lite_auto/.test(IDX_530));
+    && !/'auto',\s*'自动'/.test(IDX_530) && !/setLiteMode\('auto'\)/.test(IDX_530));
+  t('v3.5.31 setLiteMode 写完立刻落盘并 applyLite',
+    /UI\.lite = \(m === 'on'\) \? 1 : 0;\s*\n\s*saveUI\(\);\s*\n\s*applyLite\(\);/.test(IDX_530));
+  t('v3.5.31 弹窗居中：welcome-mask / allboard-mask 显式 flex 居中（不再贴左上角）',
+    /\.welcome-mask\.show\{display:flex;align-items:center;justify-content:center/.test(IDX_530)
+    && /\.allboard-mask\.show\{display:flex;align-items:center;justify-content:center/.test(IDX_530));
   t('v3.5.30 轻量 CSS 排在 !important 玻璃规则之后（否则压不住）',
     IDX_530.indexOf('html[data-lite="1"] *') > IDX_530.indexOf('backdrop-filter:blur'));
 
