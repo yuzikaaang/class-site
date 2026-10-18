@@ -5228,6 +5228,89 @@ function vhDurNotice(){
   if(btn) btn.onclick = function(){ voDurManualDialog(keys); };
 }
 
+/** v3.5.27：时长库管理面板 —— 看已收录哪些歌、删掉录错的、补录缺的 */
+function openDurLib(){
+  var libList = [];
+  openModal({
+    title: '🎵 歌曲时长库',
+    sub: '存云端，全班设备共用；网易云 / QQ 音乐查到就自动入库，查不到由你手填',
+    wide: true,
+    body: '<div id="durLibBody"><div class="loading"><div class="spinner"></div>同步中…</div></div>',
+    foot: '<button class="btn btn-ghost" data-no>关闭</button>'
+        + '<button class="btn btn-secondary" data-fill>补录缺时长的歌</button>',
+    onMount: function(box){
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-fill]').onclick = function(){
+        var miss = Object.keys(DUR_MISS);
+        if(!miss.length){ toast('当前没有缺时长的歌', 'ok'); return; }
+        closeModal();
+        voDurManualDialog(miss);
+      };
+      var host = box.querySelector('#durLibBody');
+      vhDurLibPull(true).then(function(){
+        return api('/music?action=lib');
+      }).then(function(j){
+        libList = (j && j.list) || [];
+        paintDurLib(host, libList);
+      }).catch(function(e){
+        host.innerHTML = '<div class="alert danger">读取失败：' + esc(e.message || e) + '</div>';
+      });
+    },
+  });
+}
+
+function paintDurLib(host, list){
+  if(!host) return;
+  var srcTxt = { manual: '人工', netease: '网易云', qq: 'QQ 音乐', itunes: 'iTunes', auto: '自动' };
+  var miss = Object.keys(DUR_MISS);
+  var missHtml = miss.length
+    ? '<div class="alert warn" style="margin:0 0 10px;font-size:.82rem">还有 <b>' + miss.length + '</b> 首没拿到时长，'
+      + '点右下角「补录缺时长的歌」手填。</div>'
+    : '<div class="alert info" style="margin:0 0 10px;font-size:.82rem">当前没有缺时长的歌。</div>';
+  var rows = list.length
+    ? list.map(function(r){
+        return '<tr data-k="' + attr(r.key || '') + '">'
+          + '<td style="padding:6px 8px">' + esc(r.title || '') + (r.artist ? ' <i class="muted" style="font-style:normal">· ' + esc(r.artist) + '</i>' : '') + '</td>'
+          + '<td style="padding:6px 8px;white-space:nowrap;font-variant-numeric:tabular-nums">' + esc(voFmtDur(r.seconds)) + '</td>'
+          + '<td style="padding:6px 8px;white-space:nowrap;font-size:.78rem;color:var(--fg-3)">' + esc(srcTxt[r.source] || r.source || '') + '</td>'
+          + '<td style="padding:6px 8px;text-align:right">'
+          +   '<button class="btn btn-sm btn-ghost" data-del style="color:#b3261e">删除</button>'
+          + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="4" style="padding:14px;text-align:center" class="muted">库里还没有数据</td></tr>';
+  host.innerHTML = missHtml
+    + '<p class="muted" style="font-size:.78rem;margin:0 0 6px">共 ' + list.length + ' 首</p>'
+    + '<div style="max-height:44vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+    +   '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table>'
+    + '</div>';
+  Array.prototype.forEach.call(host.querySelectorAll('tr[data-k] button[data-del]'), function(btn){
+    btn.onclick = function(){
+      var tr = btn.closest('tr');
+      var k = tr.getAttribute('data-k');
+      var t = (list.filter(function(x){ return x.key === k; })[0] || {});
+      confirmBox({
+        title: '从时长库删除',
+        text: '删掉「' + (t.title || k) + '」的时长记录？下次用到时会重新联网查一遍。',
+        danger: true, okText: '删除',
+      }).then(function(yes){
+        if(!yes) return;
+        api('/music', { method: 'POST', body: { action: 'del', items: [{ title: t.title || '', artist: t.artist || '' }] } })
+          .then(function(j){
+            toast((j && j.message) || '已删除', 'ok');
+            var cache = vhDurationCache();
+            delete cache[k];
+            vhSaveDurCache(cache);
+            try{ localStorage.removeItem(DUR_LIB_AT); }catch(e){}
+            var nl = list.filter(function(x){ return x.key !== k; });
+            list.length = 0; Array.prototype.push.apply(list, nl);
+            paintDurLib(host, list);
+          })
+          .catch(function(e){ toast('删除失败：' + (e.message || e), 'err', 4000); });
+      });
+    };
+  });
+}
+
 /** 人工补录弹窗：一行一首，填「分:秒」或纯秒数
  *  @param keys   要补的 key 列表（缺省 = 全部 DUR_MISS）
  *  @param onDone 补录成功后的回调（用于「补齐后自动继续刚才那步」） */
@@ -10126,24 +10209,7 @@ function renderDj(){
   $('djRunBtn').onclick = djRun;
   /* v3.5.27：时长库入口 —— 先拉一次云端库，再把缺时长的歌列出来 */
   var durLibBtn = $('djDurLibBtn');
-  if(durLibBtn) durLibBtn.onclick = function(){
-    durLibBtn.disabled = true;
-    durLibBtn.textContent = '同步中…';
-    vhDurLibPull(true).then(function(cache){
-      var keys = Object.keys(cache);
-      var missing = Object.keys(DUR_MISS);
-      if(missing.length){
-        voDurManualDialog(missing);
-      }else{
-        toast('云端时长库已同步，共 ' + keys.length + ' 首；暂时没有缺时长的歌', 'ok', 4000);
-      }
-    }).catch(function(e){
-      toast('同步失败：' + (e.message || e), 'err', 4000);
-    }).then(function(){
-      durLibBtn.disabled = false;
-      durLibBtn.textContent = '时长库 / 补录';
-    });
-  };
+  if(durLibBtn) durLibBtn.onclick = function(){ openDurLib(); };
   vhDurNotice();
   $('djCopyBtn').onclick = djCopy;
 

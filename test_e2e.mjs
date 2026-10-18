@@ -8222,6 +8222,9 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     /缺时长<\/b>/.test(ADM_527) && /durTxt \? ' · ' \+ durTxt/.test(ADM_527));
   t('v3.5.27 voFmtDur 全站只定义一次',
     (ADM_527.match(/function voFmtDur\(/g) || []).length === 1);
+  t('v3.5.27 后台有时长库管理面板（看/删/补录）',
+    /function openDurLib/.test(ADM_527) && /function paintDurLib/.test(ADM_527)
+    && /action: 'del'/.test(ADM_527) && /补录缺时长的歌/.test(ADM_527));
 
   /* v3.5.27 接口级实测：人工补录 → 写库 → lib-query / lib 都能读回 */
   {
@@ -8273,6 +8276,13 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     dbRow2.free();
     t('★v3.5.27 自动结果盖不掉人工填写', autoOver.status === 200 && Number(r2.seconds) === 273,
       JSON.stringify(r2));
+
+    /* 删除接口 */
+    const delR = await call('/api/music', {
+      method: 'POST', body: { action: 'del', items: [{ title: '晴天', artist: '周杰伦' }] },
+    });
+    t('★v3.5.27 能从时长库删除指定条目', delR.status === 200 && delR.body.deleted === 1,
+      JSON.stringify(delR.body).slice(0, 160));
 
     /* 非法时长（< 20 秒）拒收 */
     const bad = await call('/api/music', {

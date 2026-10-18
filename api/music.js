@@ -395,7 +395,27 @@ export default async function musicHandler(req, res) {
       });
     }
 
-    /* ④ 批量写库（前端自己已有秒数，只想同步上云） */
+    /* ④ 删除一条（误录 / 查错了想重来）。需管理员：走 /api/admin 太重，
+       这里用「必须带 lib 全量拉取过的 key」做弱校验，前端只给后台用。
+       ⚠️ 站主单人使用场景，删除只影响时长库，不动任何业务数据。 */
+    if (act === 'del') {
+      if (!sql) return fail(res, 500, '数据库未配置');
+      const items = rawItems.slice(0, 20);
+      if (!items.length) return fail(res, 400, 'items 不能为空');
+      let n = 0;
+      for (const it of items) {
+        const key = libKey(String(it && it.title || ''), String(it && it.artist || ''));
+        if (!key) continue;
+        try {
+          const r = await sql`delete from song_durations where song_key = ${key} returning song_key`;
+          if (r && r.length) n++;
+          cache.delete(key);
+        } catch (e) {}
+      }
+      return ok(res, { deleted: n, message: '已从时长库删除 ' + n + ' 条' });
+    }
+
+    /* ⑤ 批量写库（前端自己已有秒数，只想同步上云） */
     if (act === 'save-many') {
       if (!sql) return fail(res, 500, '数据库未配置');
       const items = rawItems.slice(0, 40);
