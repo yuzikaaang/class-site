@@ -441,7 +441,8 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
    内容超长时 margin 自动归零、从顶部开始正常滚动，不会再把头切掉。
    高度上限也从 80vh 换成 dvh（动态视口高度，iOS 上才是真实可视高）。 */
 .allboard-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9997;padding:20px;overscroll-behavior:contain}
-.allboard-mask.show{display:flex;overflow-y:auto;-webkit-overflow-scrolling:touch}
+/* v3.5.31：同上，显式居中（盒子自身还有 margin:auto 兜底，内容超高时仍可滚动到顶） */
+.allboard-mask.show{display:flex;align-items:center;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .allboard-box{background:#fffdfb;border-radius:20px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);display:flex;flex-direction:column;margin:auto}
 .allboard-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#9a3412,#af410f);color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
 .allboard-head button{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:999px;padding:4px 12px;font-size:.75rem;cursor:pointer}
@@ -732,7 +733,9 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 /* 登录引导弹窗：居中方式与 .allboard-mask 保持一致（见上方注释），
    同样是「外层 flex + overflow-y:auto + 盒子 margin:auto」。 */
 .welcome-mask{display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.6);padding:24px;overscroll-behavior:contain}
-.welcome-mask.show{display:flex;overflow-y:auto;-webkit-overflow-scrolling:touch}
+/* v3.5.31 修：只写 margin:auto 不够 —— flex 子项在主轴/交叉轴上都靠 start 排列时，
+   auto 外边距才会起作用；这里明确给居中，否则弹窗会贴在左上角。 */
+.welcome-mask.show{display:flex;align-items:center;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .welcome-box{max-width:360px;width:100%;background:linear-gradient(135deg,#9a3412,#af410f);border-radius:24px;padding:28px 24px;text-align:center;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35);margin:auto}
 .welcome-title{font-size:1.2rem;font-weight:800;line-height:1.5;margin-bottom:12px}
 .welcome-desc{font-size:.85rem;line-height:1.7;opacity:.95;margin-bottom:14px}
@@ -3530,7 +3533,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.30';
+var SITE_VERSION = '3.5.31';
 var VER_DATE = '2026-10-18';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -6268,14 +6271,16 @@ function uiDefault(){
                            心跳照旧在跑（后台在线状态靠它），这里只控制弹不弹提示。 */
     quoteNet: 1,        /* 【每日一言来源 v3.5.6】1 = 联网 hitokoto（动画/文学/诗词类），
                            0 = 只用本地库（管理员在后台配的句子）。联网失败时两种模式都回退本地。 */
-    /* 【轻量模式 v3.5.30】1 = 关掉玻璃模糊 / 背景光斑 / 流光扫过等重特效，
-       0 = 全开。null/缺省 = 自动判断（见 autoLiteWanted）。
+    /* 【轻量模式 v3.5.30 · v3.5.31 改手动】1 = 关掉玻璃模糊 / 背景光斑 / 流光扫过等重特效，
+       0 = 全开。默认 0（完整）。
        站主原话：「iPad Air 打开完全卡顿，动不了，勉强操作后页面完全变白。
        能不能自定义取消玻璃光效，还有其他动画特效，尽量在确保不卡顿的情况下完善。」
-       —— 卡顿根源是 backdrop-filter（大面积实时模糊，iPad/Safari 上极贵）
+       随后纠正：「这个模式由我手动更改，没有说自动检测。」
+       —— 所以不做任何设备探测，只认用户自己在设置里点的这一下。
+       卡顿根源是 backdrop-filter（大面积实时模糊，iOS/Safari 上极贵）
        加上两张 340/420px、blur(120px) 且带 26s/34s 无限动画的光斑，
-       这三样叠在一起放 iPads 上会直接把 GPU 拖死，页面白屏就是渲染进程被回收了。 */
-    lite: null,
+       这三样叠在 iPad 上会直接把 GPU 拖死，白屏就是渲染进程被回收了。 */
+    lite: 0,
     bg: { type:'theme', color:'#fffbf7', grad:'', veil:55 },  /* theme|solid|grad|image */
     order: {
       home: ['ann','quote','sign','daily','study','countdown'],
@@ -6319,7 +6324,8 @@ function normalizeUI(o){
   out.quoteNet = (o.quoteNet === 0) ? 0 : 1;
   /* 【v3.5.30 轻量模式】null/缺省 = 自动判断；1 = 强制轻量；0 = 强制完整。
      非法值一律当自动，避免老配置里混进奇怪的值把特效开关搞死。 */
-  out.lite = (o.lite === 1) ? 1 : (o.lite === 0 ? 0 : null);
+  /* v3.5.31：只有明确的 1 才算轻量；历史上存过 null 的旧配置一律回落「完整」。 */
+  out.lite = (o.lite === 1) ? 1 : 0;
   /* 【v1→v2 迁移】v1 时期卡片堆叠默认是开，老配置里存的 1 属于「没得选的开」，
      不是用户主动开的，升级到 v2 一律复位为关。用户在 v2 下主动开的才保留。 */
   if((o.v || 1) < 2) out.stack = 0;
@@ -6440,55 +6446,21 @@ function motionOn(){
   return UI.motion !== 0;
 }
 
-/* ---------- v3.5.30 轻量模式（性能兜底） ----------
+/* ---------- v3.5.30 轻量模式（性能兜底）· v3.5.31 改为纯手动 ----------
  * 站主原话：「比如说我这个 iPad 的 Air，打开的时候完全卡顿，动都动不了。
  *   勉强操作一下之后页面完全变白了。比如说自定义是否需要取消掉玻璃光效，
  *   还有其他的一些动画特效。尽量在确保不卡顿的情况下去完善。
  *   当然对高端的手机的话，肯定是更好的体验会更好。」
+ * 随后明确纠正（v3.5.31）：「这个模式由我手动更改，没有说自动检测。」
  *
- * 判断依据（按顺序，任一条命中就自动进轻量模式）：
- *   ① 用户手动设过 UI.lite → 听用户的（最高优先级，永不被自动判断推翻）
- *   ② 系统开了「减少动态效果」→ 大概率是低性能设备或无障碍需求
- *   ③ iPad / iPhone 上的 Safari（含所有 iOS 浏览器，内核都是 WebKit）
- *      —— backdrop-filter 在 iOS 上一直是性能黑洞，实测 iPad Air 直接卡死白屏
- *   ④ 设备内存 ≤ 4GB（deviceMemory 只有 Chromium 系给，Safari 没有）
- *   ⑤ CPU 核数 ≤ 4（hardwareConcurrency，粗筛老设备）
- *   ⑥ 运行期自测：首屏后测一次主线程长任务时长，超 120ms 判为吃力
- *      （这一条会改写 UI.lite 并落盘，所以只判一次，见 liteAutoChecked）
- * 自动模式不落盘、只在本次会话生效，这样「换个浏览器/换台设备」不会互相污染。
+ * 所以这里不再做任何 UA / 内存 / 核数 / 长任务探测 —— 只认一个值：UI.lite。
+ *   UI.lite === 1   →  轻量（手动开启，落盘到 localStorage，长期生效）
+ *   UI.lite === 0   →  完整（手动关闭，落盘，长期生效）
+ *   其它（null）    →  跟随默认 = 完整
+ * 默认给「完整」而不是「轻量」：高端机不该被无端降级，卡的人自己点一下就行。
  */
-var LITE_LS = 'cls_ui_lite_auto';      /* 自动判定结果只做会话记忆，避免每次刷新重算 */
-var liteAutoChecked = false;
-
-/** 自动判断该不该进轻量模式。返回 true / false（不看用户设置）。 */
-function autoLiteWanted(){
-  /* ② 系统减少动效 */
-  try{ if(window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches) return true; }catch(e){}
-  var ua = navigator.userAgent || '';
-  /* ③ iOS / iPadOS —— 包括伪装成 Mac 的 iPad（Macintosh + 触屏） */
-  var iOS = /iPad|iPhone|iPod/.test(ua)
-    || (/Macintosh/.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
-  if(iOS) return true;
-  /* ④ 内存（只有 Chromium 给 deviceMemory） */
-  var mem = Number(navigator.deviceMemory);
-  if(mem && mem <= 4) return true;
-  /* ⑤ CPU 核数 */
-  var cores = Number(navigator.hardwareConcurrency);
-  if(cores && cores <= 4) return true;
-  return false;
-}
-
-/** 当前实际是否走轻量模式（用户显式设置优先） */
 function liteOn(){
-  if(UI.lite === 0) return false;
-  if(UI.lite === 1) return true;
-  /* UI.lite 为 null/undefined = 自动 */
-  try{
-    var memo = sessionStorage.getItem(LITE_LS);
-    if(memo === '1') return true;
-    if(memo === '0') return false;
-  }catch(e){}
-  return autoLiteWanted();
+  return UI.lite === 1;
 }
 
 /** 把轻量模式落到 <html data-lite>，CSS 里所有重特效都挂在这个属性下 */
@@ -6496,45 +6468,14 @@ function applyLite(){
   var on = liteOn();
   var d = document.documentElement;
   if(on) d.setAttribute('data-lite', '1'); else d.removeAttribute('data-lite');
-  /* 顺手把「减少动效」也一起关掉：站主的诉求是「确保不卡顿」，
-     轻量模式下还留着扫光/漂移动画就没意义了。 */
+  /* 轻量模式下顺带把动效也关掉：既然是为了不卡，
+     还留着扫光/漂移动画就没意义了。 */
   if(on){
     d.setAttribute('data-motion', 'off');
   }else{
     d.setAttribute('data-motion', UI.motion ? 'on' : 'off');
   }
   return on;
-}
-
-/** 首屏后自测一次主线程是否吃力：长任务 > 120ms 就自动降级。
- *  只跑一次（liteAutoChecked 保证），用户显式设过 lite 时不插手。
- *  用 PerformanceObserver 而不是 setTimeout 差值：长任务条目直接给出阻塞时长。 */
-function liteSelfCheck(){
-  if(liteAutoChecked) return;
-  liteAutoChecked = true;
-  if(UI.lite === 0 || UI.lite === 1) return;      /* 用户已明确表态，不覆盖 */
-  if(liteOn()) return;                            /* 已经是轻量了，没必要再测 */
-  var worst = 0;
-  try{
-    if(!window.PerformanceObserver) return;
-    var po = new PerformanceObserver(function(list){
-      list.getEntries().forEach(function(e){ if(e.duration > worst) worst = e.duration; });
-    });
-    po.observe({ entryTypes: ['longtask'] });
-    setTimeout(function(){
-      try{ po.disconnect(); }catch(e){}
-      if(worst > 120){
-        try{ sessionStorage.setItem(LITE_LS, '1'); }catch(e){}
-        applyLite();
-        var sb = document.getElementById('uiSetBtn');
-        if(typeof uiMsg === 'function'){
-          uiMsg('检测到设备渲染吃力，已自动切到轻量模式（可在「自定义设置 → 动效」里改回）');
-        }
-      }else{
-        try{ sessionStorage.setItem(LITE_LS, '0'); }catch(e){}
-      }
-    }, 3000);
-  }catch(e){}
 }
 
 function applyFont(){
@@ -10531,39 +10472,22 @@ function renderSettings(){
       '<div class="sw-row"><span class="t">界面音效<span class="s">点击、成功、错误提示音</span></span>' +
         swHtml(SFX.isOn(), 'toggleSfxFromUI(event)') + '</div>', false);
 
-    /* —— 性能 / 轻量模式（v3.5.30）——
-       站主要求：iPad Air 上卡到白屏，希望能自己关掉玻璃光效和动画。
-       三档：自动（默认，按设备能力判断）/ 轻量 / 完整。
-       自动档对 iPad 和低内存设备会走轻量，高端机保持完整特效。 */
-    var liteMode = (UI.lite === 1) ? 'on' : (UI.lite === 0 ? 'off' : 'auto');
+    /* —— 性能 / 轻量模式（v3.5.30，v3.5.31 改为纯手动）——
+       站主明确要求「由我手动更改，没有自动检测」，所以这里只有两档：
+       轻量 / 完整，选完立刻生效并落盘，换设备也记住。 */
+    var liteOnNow = liteOn();
     var liteBtns = [
-      ['auto', '自动', '按设备能力自动选（推荐）'],
-      ['on',   '轻量', '关掉玻璃模糊、背景光斑、扫光等特效'],
-      ['off',  '完整', '全部特效都开，设备够好就用这个'],
+      ['off',  '完整', '全部特效：玻璃模糊、背景光斑、扫光'],
+      ['on',   '轻量', '关掉玻璃模糊 / 光斑 / 扫光 / 入场动画'],
     ].map(function(m){
-      return '<button class="btn ' + (liteMode === m[0] ? '' : 'btn-secondary') + '" ' +
-        'style="flex:1;font-size:.74rem;padding:9px 4px" ' +
+      var active = (m[0] === 'on') === liteOnNow;
+      return '<button class="btn ' + (active ? '' : 'btn-secondary') + '" ' +
+        'style="flex:1;font-size:.76rem;padding:10px 4px" ' +
         'onclick="setLiteMode(\'' + m[0] + '\')">' + m[1] + '</button>';
     }).join('');
-    var liteNow = liteOn();
-    var liteWhy = '';
-    if(liteMode === 'auto'){
-      var ua = navigator.userAgent || '';
-      var iOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-      var mem = Number(navigator.deviceMemory) || 0;
-      var cores = Number(navigator.hardwareConcurrency) || 0;
-      var reasons = [];
-      if(iOS) reasons.push('iOS / iPadOS 设备');
-      if(mem && mem <= 4) reasons.push('内存 ' + mem + 'GB');
-      if(cores && cores <= 4) reasons.push(cores + ' 核 CPU');
-      liteWhy = reasons.length
-        ? ('自动判定：' + reasons.join('、') + ' → 走轻量模式')
-        : '自动判定：设备看起来够用 → 走完整特效';
-    }
     html += secHtml('perf','性能 / 轻量模式','activity',
       '<div class="ui-modes">' + liteBtns + '</div>' +
-      '<p class="ui-hint" style="margin-top:10px">当前：<b>' + (liteNow ? '轻量模式' : '完整特效') + '</b>'
-      + (liteMode === 'auto' ? ('<br>' + liteWhy) : '') + '</p>' +
+      '<p class="ui-hint" style="margin-top:10px">当前：<b>' + (liteOnNow ? '轻量模式' : '完整特效') + '</b></p>' +
       '<p class="ui-hint">轻量模式会关掉：玻璃模糊、背景光斑漂移、卡片流光、入场动画。'
       + '<br>画面不那么「透」，但滚动、切板块会明显跟手。<b>iPad / iPhone 或打开就卡，选「轻量」</b>；'
       + '高端手机看着很顺就选「完整」。</p>', false);
@@ -10777,16 +10701,12 @@ function pickBgImage(input){
  *  · off  → UI.lite = 0
  *  切换后立刻 applyLite()，不用刷新页面。 */
 function setLiteMode(m){
-  if(m === 'on') UI.lite = 1;
-  else if(m === 'off') UI.lite = 0;
-  else UI.lite = null;
+  UI.lite = (m === 'on') ? 1 : 0;
   saveUI();
-  /* 用户手动表态后，之前那次自动判定（sessionStorage 里）作废 */
-  try{ sessionStorage.removeItem(LITE_LS); }catch(e){}
   applyLite();
   renderSettings();
-  uiMsg(m === 'auto' ? '已改为自动判断（当前：' + (liteOn() ? '轻量' : '完整') + '）'
-       : (m === 'on' ? '已切到轻量模式：玻璃模糊与动画已关闭' : '已切到完整特效'));
+  uiMsg(UI.lite === 1 ? '已切到轻量模式：玻璃模糊与重动画已关闭'
+                      : '已切到完整特效');
   if(typeof SFX !== 'undefined' && SFX.click) SFX.click();
 }
 
@@ -18873,10 +18793,6 @@ function submitExport(){
 
 loadUI();
 applyUICfg();   /* 【自定义设置】初始化：应用字号/背景/动效/首页顺序 */
-/* v3.5.30：首屏渲染完再自测一次性能（见 liteSelfCheck 注释）。
-   放在 render() 之后，测的是「真有内容时」的主线程压力，比空页面准。 */
-render();
-setTimeout(liteSelfCheck, 1200);
 /* v2.5.0 去 emoji：把写死在 HTML 里的 emoji 一次性换成 SVG 图标。
    ⚠️ 只在这里跑一次，且**不注册任何 DOM 监听** —— 倒计时每秒重写也影响不到它，
       这是「不再闪烁」的关键。option 里放不了 SVG，单独去 emoji 保留文字。 */
