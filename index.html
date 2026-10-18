@@ -13328,6 +13328,20 @@ function voteRemainText(v){
   if(h > 0) return '还剩 ' + h + ' 小时' + (m > 0 ? ' ' + m + ' 分钟' : '');
   return '还剩 ' + m + ' 分钟';
 }
+/* v3.5.18：只取日期（YYYY-MM-DD）。
+   ⚠️ 后端 createdDate 可能是 Date 对象被 String() 化的结果
+   （"Sun Oct 18 2026 00:00:00 GMT+0800"），slice(0,10) 会得到 "Sun Oct 18" —— 很难看。 */
+function voteDateText(x){
+  if(!x) return '';
+  var d = (x instanceof Date) ? x : new Date(x);
+  if(isNaN(d.getTime())){
+    var m = String(x).match(/\d{4}-\d{2}-\d{2}/);
+    return m ? m[0] : String(x).slice(0, 10);
+  }
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
 function voteTimeText(iso){
   if(!iso) return '';
   var d = new Date(iso);
@@ -13548,7 +13562,7 @@ function voteCardHtml(v){
   else if(voted) meta.push('你已投票');
   /* v3.5.12 #10（站主要求）：谁提出来的 + 提出的日期，直接写在卡片上 */
   var proposer = v.proposer || v.createdByDisplay || v.createdByName || '';
-  var pdate = v.createdDate || (v.createdAt ? String(v.createdAt).slice(0, 10) : '');
+  var pdate = voteDateText(v.createdDate || v.createdAt);
   var proposeLine = (proposer || pdate)
     ? '<div class="vote-proposer">'
       + '提出人：<b>' + esc(proposer || '未记录') + '</b>'
