@@ -316,6 +316,9 @@ function shapeProfile(row, full, meta, ctx) {
        管理员从名单导入，属于班内公开信息，不走审核。 */
     examNo: canSee('exam_no', m, pref, fvis, who) ? (row.exam_no || '') : '',
     role: row.role || '学生',
+    /* v3.5.21：头衔也对外展示（站主要求「前台的查询还可以显示头衔和身份」）。
+       title 是明文列（见 admin.js setTitle），存的是英文逗号分隔的多职。 */
+    title: row.title || '',
     contactStatus: row.contact_status || 'none',
     /* 是否展示了联系方式 —— 前端据此显示「待审核」之类的提示 */
     contactVisible: show && contactOpen,
@@ -359,7 +362,7 @@ function shapeProfile(row, full, meta, ctx) {
  * canSee 不查 contact_status）。联系方式是审核门控字段，必须只走固定通道，
  * 严禁进入通用 fields 数组 —— 与 admin.js SPECIAL_FIELDS 保持一致。
  */
-const FIXED_FIELDS = new Set(['name', 'student_id', 'politics', 'exam_no', 'role',
+const FIXED_FIELDS = new Set(['name', 'student_id', 'politics', 'exam_no', 'role', 'title',
   'wechat', 'qq', 'phone']);
 
 /* ---------------- 查询（核心） ---------------- */
@@ -480,7 +483,11 @@ async function search(req, res, u) {
     results: rows.map((r) => {
       /* 查到自己 → 返回完整信息，方便在页内直接编辑联系方式 */
       const isSelf = !!(u.profileId && Number(u.profileId) === Number(r.id));
-      return shapeProfile(r, isSelf, meta, { self: isSelf, committee, admin: u.role === 'admin' });
+      /* 🔴 v3.5.21：前台查询一视同仁 —— 即便是管理员，也**不**因身份多看到
+         「仅管理员可见」的字段。站主要看详细档案请去后台（成员 → 详情），
+         后台才有权看到全部。否则同一个查询框对不同人返回不同结果，
+         既难解释也没必要（后台本来就全都能看）。 */
+      return shapeProfile(r, isSelf, meta, { self: isSelf, committee, admin: false });
     }),
   });
 }

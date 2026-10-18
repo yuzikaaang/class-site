@@ -1431,7 +1431,18 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .acct-urole.user{background:#7c6f63}
 /* 头衔标签（班长/课代表等），与「管理员/成员」角色徽章区分开用蓝色 */
 .acct-urole.title-tag{background:#0369a1;margin-right:4px}
-.acct-usub{font-size:.7rem;color:#a99a8d;margin-top:3px}
+.acct-usub{font-size:.7rem;color:#8a7a6d;margin-top:3px}
+/* v3.5.21：我的资料明细表 —— 之前把字段值塞进 .acct-sw .s（灰色说明文字），
+   浅色下 #a99a8d、暗色下几乎糊成一团，站主反馈「字色看不清」。
+   现在值走正文色 var(--fg)，标签走 var(--fg-2)，每行右侧带复制。 */
+.mp-list{display:flex;flex-direction:column;gap:6px;margin:10px 0 2px}
+.mp-lrow{display:flex;align-items:center;gap:8px;background:var(--tint);border:1px solid var(--tint-2);border-radius:10px;padding:8px 10px}
+.mp-lk{flex:none;min-width:64px;font-size:.76rem;font-weight:700;color:var(--fg-2)}
+.mp-lv{flex:1;min-width:0;font-size:.86rem;font-weight:600;color:var(--fg);word-break:break-all;line-height:1.45}
+.mp-copy{flex:none;border:none;background:var(--btn-a);color:#fff;border-radius:8px;padding:6px 11px;font-size:.72rem;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s}
+.mp-copy:hover{background:var(--btn-b)}
+.mp-copy:active{transform:scale(.97)}
+.mp-empty{margin:8px 0 0;font-size:.78rem;color:var(--fg-2)}
 .dark .acct-user{background:rgba(255,255,255,.05)}
 .dark .acct-uname{color:#f0e6dc}
 .acct-row{display:flex;gap:9px;margin-top:11px}
@@ -1440,6 +1451,10 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .acct-sw .t{font-size:.82rem;font-weight:700;color:#3f342c}
 .acct-sw .s{font-size:.69rem;color:#a99a8d;margin-top:3px;line-height:1.5;display:block;font-weight:400}
 .dark .acct-sw .t{color:#f0e6dc}
+/* v3.5.21：暗色下说明文字原来仍是暖灰 #a99a8d，落在近黑底上对比不足 */
+.dark .acct-sw .s{color:#c8bbae}
+.dark .acct-usub{color:#b8aa9d}
+.dark .mp-lrow{background:#2e2926;border-color:#3f3833}
 
 /* ---- 管理员后台 ---- */
 .admin-box{max-width:760px}
@@ -3460,7 +3475,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.20';
+var SITE_VERSION = '3.5.21';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -8349,39 +8364,63 @@ function myProfileHtml(){
   var qHidden  = (MY_PROF_PREF.qq === false);
   var anyHidden = phHidden || wHidden || qHidden;
 
-  /* 仅本人可见区块：有内容才渲染整块（本轮大概率为空） */
-  var privHtml = '';
-  if(MY_PROF_PRIVATE.length){
-    var privRows = '';
-    for(var i=0;i<MY_PROF_PRIVATE.length;i++){
-      var f = MY_PROF_PRIVATE[i];
-      privRows += '<div class="acct-usub" style="margin-top:4px">' +
-        esc(f.label) + '：<b>' + esc(f.value) + '</b></div>';
-    }
-    privHtml = '<div class="acct-sw" style="margin-top:0">' +
-        '<div><span class="t">🔐 仅本人可见</span>' +
-          '<span class="s">这些信息只有你自己看得到，任何人都查不到' +
-          privRows +
-          '</span></div>' +
-      '</div>';
+  /* v3.5.21：站主反馈「仅本人可见的字看不清、而且看不全（如智学网账号）」。
+     根因有两条：
+       ① privateFields 被塞进 .acct-sw .s（灰色的说明文字样式）里渲染，
+          浅色主题 #a99a8d、暗色主题更糊 —— 值本身被当成注释在画；
+       ② 档案页只画 privateFields，从没画过 p.fields（公开档的额外字段）
+          和 p.examNo 这类固定字段，所以字段一多就「显示不全」。
+     现在统一成一张明细表：班级信息 + 额外字段 + 仅本人可见，一行一项，
+     值用正文色，右侧带复制按钮（与前台查询的卡片一致）。 */
+  var mpRows = [];
+  function mpPush(label, val, locked){
+    if(val == null) return;
+    var s = String(val);
+    if(!s.trim()) return;
+    mpRows.push({ label: label, value: s, locked: !!locked });
   }
+  mpPush('学号', p.studentId);
+  mpPush('智学网账号', p.examNo);
+  mpPush('政治面貌', p.politics);
+  var myTitles = String(p.title || '').split(/[,，、]/)
+    .map(function(s){ return s.trim(); }).filter(Boolean);
+  if(myTitles.length) mpPush('头衔', myTitles.join('、'));
+  mpPush('身份', p.role);
+  if(Array.isArray(p.fields)){
+    p.fields.forEach(function(f){ if(f && f.value) mpPush(f.label || f.field, f.value); });
+  }
+  if(MY_PROF_PRIVATE.length){
+    MY_PROF_PRIVATE.forEach(function(f){ if(f && f.value) mpPush(f.label || f.field, f.value, true); });
+  }
+
+  var mpList = mpRows.length
+    ? '<div class="mp-list">' + mpRows.map(function(r){
+        return '<div class="mp-lrow">'
+          + '<span class="mp-lk">' + (r.locked ? '🔒 ' : '') + esc(r.label) + '</span>'
+          + '<span class="mp-lv">' + esc(r.value) + '</span>'
+          + '<button class="mp-copy" type="button" onclick="mpCopy(this)"'
+          +   ' data-v="' + attr(r.value) + '" data-l="' + attr(r.label) + '">复制</button>'
+          + '</div>';
+      }).join('') + '</div>'
+    : '<p class="mp-empty">还没有可展示的资料字段。有误请联系站主。</p>';
 
   return '<div class="acct-user" style="margin-bottom:12px">' +
       '<div class="acct-avatar">' + esc((p.name || '?').charAt(0)) + '</div>' +
       '<div style="flex:1;min-width:0">' +
         '<div class="acct-uname">' + esc(p.name) + '</div>' +
-        '<div class="acct-usub">' + esc(p.role || '学生') + (p.studentId ? ' · 学号 ' + esc(p.studentId) : '') + '</div>' +
+        '<div class="acct-usub">' + esc(p.role || '学生') + (p.studentId ? ' · 学号 ' + esc(p.studentId) : '') +
+          (myTitles.length ? ' · ' + esc(myTitles.join(' / ')) : '') + '</div>' +
       '</div>' +
     '</div>' +
 
-    /* 只读区：管理员维护的字段，同学改不了 */
+    /* 只读区：管理员维护的字段 + 本人可见字段，全部可复制 */
     '<div class="acct-sw" style="margin-top:0">' +
-      '<div><span class="t">🔒 班级信息</span>' +
-        '<span class="s">学号 ' + esc(p.studentId || '—') + '　智学网账号 ' + esc(p.examNo || '—') +
-        '　政治面貌 ' + esc(p.politics || '—') + '<br>这部分由管理员维护，自己改不了，有误请找站主</span></div>' +
+      '<div style="width:100%"><span class="t">🔒 我的班级资料</span>' +
+        '<span class="s">这部分由管理员统一维护，自己改不了；发现错误请找站主。<br>' +
+          '带 🔒 的项只有你自己看得到，其他同学（包括管理员）在前台都查不到。</span>' +
+        mpList +
+        '</div>' +
     '</div>' +
-
-    privHtml +
 
     '<div class="acct-field"><label>💬 微信号</label><input id="mpWechat" value="' + attr(p.wechat || '') + '" placeholder="选填，微信号" autocomplete="off"></div>' +
     '<label class="acct-priv"><input type="checkbox" id="mpWechatHide"' + (wHidden ? ' checked' : '') + '> 仅自己可见（同学查不到你的微信号）</label>' +
@@ -8403,6 +8442,14 @@ function myProfileHtml(){
         : '') +
       '不想被查到就清空三项再保存。</p>' +
     '<p style="margin:12px 0 0"><button class="acct-btn ghost" onclick="acctTab(\'profile\')">返回</button></p>';
+}
+
+/** 复制「我的资料」里某一项（v3.5.21）。
+ *  值放在 data-v 里而不是拼进 onclick —— 身份证号、地址这类内容含引号/括号，
+ *  拼字符串很容易把属性截断，attr() 已经统一转义过。 */
+function mpCopy(btn){
+  if(!btn) return;
+  copyText(btn.getAttribute('data-v') || '', btn.getAttribute('data-l') || '资料');
 }
 
 function myProfSay(t, cls){
@@ -11446,37 +11493,55 @@ function renderContactResults(id, out, j){
       pl.textContent = p.politics;
       head.appendChild(pl);
     }
+    /* v3.5.21：头衔（可兼多职，profiles.title 存英文逗号分隔） */
+    var pcTitles = String(p.title || '').split(/[,，、]/).map(function(s){ return s.trim(); }).filter(Boolean);
+    pcTitles.forEach(function(t){
+      var tb = document.createElement('span');
+      tb.className = 'badge badge-purple';
+      tb.textContent = t;
+      head.appendChild(tb);
+    });
     card.appendChild(head);
 
-    /* ---- 额外资料字段（2026-10-09 v2.4.0）----
-       管理员在后台「字段管理」里加的自定义字段（学籍号、宿舍号…），
-       以及身份证号这类「仅本人可见」的字段，都会出现在 p.fields 里。
-       后端已经按「全班默认 ∩ 本人意愿 ∩ 单人例外」三层取严滤过一遍，
-       看不到的字段**根本不会出现在数组里** —— 前端只管渲染。
-       ⚠️ 所以这里遍历渲染即可，绝不要在前端再做可见性判断（会与后端不一致）。 */
+    /* ---- 基础资料 + 额外资料字段（2026-10-09 v2.4.0，v3.5.21 重构）----
+       站主反馈「后台把智学网账号开放成公开，前端还是查不到」——
+       根因是这里只渲染 p.fields（额外字段），而 exam_no / 学号属于固定字段，
+       后端早就返回了 p.examNo，前端却从来没画出来。
+       现在固定字段先行、额外字段随后，统一成「标签 + 值 + 复制」的行，
+       和后台的字段明细保持同一套视觉。 */
+    var fx = document.createElement('div');
+    fx.className = 'pc-extra';
+
+    function pcAddRow(label, val){
+      if(val == null || val === '') return;
+      var row = document.createElement('div');
+      row.className = 'pc-row';
+      var k = document.createElement('span');
+      k.className = 'pc-key';
+      k.textContent = label;
+      var v = document.createElement('span');
+      v.className = 'pc-val';
+      v.textContent = val;
+      var b = document.createElement('button');
+      b.className = 'pc-copy';
+      b.type = 'button';
+      b.textContent = '复制';
+      b.onclick = function(){ copyText(String(val), label); };
+      row.appendChild(k); row.appendChild(v); row.appendChild(b);
+      fx.appendChild(row);
+    }
+
+    pcAddRow('学号', p.studentId);
+    pcAddRow('智学网账号', p.examNo);
+    if(pcTitles.length) pcAddRow('头衔', pcTitles.join('、'));
+
     if(Array.isArray(p.fields) && p.fields.length){
-      var fx = document.createElement('div');
-      fx.className = 'pc-extra';
       p.fields.forEach(function(f){
         if(!f || !f.value) return;
-        var row = document.createElement('div');
-        row.className = 'pc-row';
-        var k = document.createElement('span');
-        k.className = 'pc-key';
-        k.textContent = f.label || f.field;
-        var v = document.createElement('span');
-        v.className = 'pc-val';
-        v.textContent = f.value;
-        var b = document.createElement('button');
-        b.className = 'pc-copy';
-        b.type = 'button';
-        b.textContent = '复制';
-        b.onclick = function(){ copyText(f.value, f.label || f.field); };
-        row.appendChild(k); row.appendChild(v); row.appendChild(b);
-        fx.appendChild(row);
+        pcAddRow(f.label || f.field, f.value);
       });
-      if(fx.childNodes.length) card.appendChild(fx);
     }
+    if(fx.childNodes.length) card.appendChild(fx);
 
     /* ---- 联系方式区 ---- */
     var ct = document.createElement('div');
@@ -13423,6 +13488,15 @@ function votePubRender(v){
     var rs = v.results.slice().sort(function(a, b){ return (b.n || 0) - (a.n || 0); });
     var totalVotes = rs.reduce(function(s, r){ return s + (r.n || 0); }, 0);
     var voters = v.voters || totalVotes;
+    /* v3.5.21：歌单投票公示里可选（有数据就自动）显示时长与总时长 */
+    var anyDur = rs.some(function(r){ return r.songMeta && r.songMeta.duration; });
+    var totalDurSec = anyDur ? rs.reduce(function(s, r){
+      return s + ((r.songMeta && r.songMeta.duration) ? Number(r.songMeta.duration) : 0);
+    }, 0) : 0;
+    var durHead = anyDur ? '<th>时长</th>' : '';
+    var durCell = function(r){
+      return anyDur ? '<td>' + ((r.songMeta && r.songMeta.duration) ? voteFmtDur(r.songMeta.duration) : '—') + '</td>' : '';
+    };
     var map = {
       '标题': esc(v.title || ''),
       '提出人': esc(v.proposer || v.createdByDisplay || v.createdByName || '未记录'),
@@ -13430,14 +13504,15 @@ function votePubRender(v){
       '截止时间': esc(v.deadline ? voteTimeText(v.deadline) : '不限'),
       '参与人数': String(voters),
       '总票数': String(totalVotes),
+      '歌曲总时长': anyDur ? voteFmtDur(totalDurSec) : '—',
       '第一名': esc(rs[0] ? rs[0].label : '—'),
       '第二名': esc(rs[1] ? rs[1].label : '—'),
       '第三名': esc(rs[2] ? rs[2].label : '—'),
-      '结果表': '<table class="vote-pub-tbl"><thead><tr><th>排名</th><th>选项</th><th>提出人</th><th>票数</th></tr></thead><tbody>'
+      '结果表': '<table class="vote-pub-tbl"><thead><tr><th>排名</th><th>选项</th><th>提出人</th>' + durHead + '<th>票数</th></tr></thead><tbody>'
         + rs.map(function(r, i){
             return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.label)
               + '</td><td>' + esc(r.byName || (r.by === 'student' ? '同学' : '管理员'))
-              + '</td><td>' + (r.n || 0) + ' 票</td></tr>';
+              + '</td>' + durCell(r) + '<td>' + (r.n || 0) + ' 票</td></tr>';
           }).join('') + '</tbody></table>',
     };
     var html = String(tpl.template || '')

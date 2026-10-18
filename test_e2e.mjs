@@ -3464,6 +3464,33 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('前台有「仅本人可见」区块渲染逻辑', /仅本人可见/.test(indexHtml));
   t('前台用 MY_PROF_PRIVATE 存私有字段', /MY_PROF_PRIVATE/.test(indexHtml));
   t('前台有「仅自己可见」勾选框', /mpPhoneHide/.test(indexHtml) && /mpWechatHide/.test(indexHtml));
+  /* --- v3.5.21：前台查询补固定字段 / 我的档案明细 / 后台在线编辑与复制 --- */
+  t('v3.5.21 查询卡渲染学号+智学网账号+头衔（以前只画 p.fields，examNo 永远不出现）',
+    /pcAddRow\('学号', p\.studentId\)/.test(indexHtml)
+    && /pcAddRow\('智学网账号', p\.examNo\)/.test(indexHtml)
+    && /var pcTitles = String\(p\.title/.test(indexHtml));
+  t('v3.5.21 我的档案改为明细表（class mp-list，不再塞进 .acct-sw .s）',
+    indexHtml.indexOf('mp-list') >= 0
+    && /function mpPush\(label, val, locked\)/.test(indexHtml)
+    && /mpPush\('智学网账号', p\.examNo\)/.test(indexHtml)
+    && /MY_PROF_PRIVATE\.forEach/.test(indexHtml));
+  t('v3.5.21 我的档案每行可复制（mpCopy 读 data-v）',
+    /function mpCopy\(btn\)/.test(indexHtml) && /data-v="' \+ attr\(r\.value\)/.test(indexHtml));
+  t('v3.5.21 暗色下说明文字提亮（.dark .acct-sw .s）',
+    /\.dark \.acct-sw \.s\{color:#c8bbae\}/.test(indexHtml));
+  t('v3.5.21 后台可在线改身份证号 / 发展团员编号（以前只能导入）',
+    /ruleInputHtml\('id_card'/.test(adminHtml)
+    && /ruleInputHtml\('youth_league_no'/.test(adminHtml)
+    && /cpBtnHtml\('id_card'\)/.test(adminHtml));
+  t('v3.5.21 后台字段级复制（编辑弹窗 + 详情弹窗共用委托）',
+    /function cpBtnHtml/.test(adminHtml) && /function cpv\(/.test(adminHtml)
+    && /function adminCopy/.test(adminHtml)
+    && /closest\('\[data-cpv\]'\)/.test(adminHtml)
+    && /closest\('\[data-cp\]'\)/.test(adminHtml));
+  const profJs3521 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
+  t('v3.5.21 后端 search 输出头衔、且前台不因管理员身份多给字段',
+    /title: row\.title \|\| ''/.test(profJs3521)
+    && /admin: false \}\)/.test(profJs3521));
   t('前台保存时带上 visibilityPref', /visibilityPref\s*:\s*pref/.test(indexHtml));
   t('前台可见性样式 .acct-priv 已定义', /\.acct-priv\{/.test(indexHtml));
 
@@ -8055,6 +8082,23 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('#16 点歌管理/排期显示时长', /voFmtDur\(s\.durationSeconds\)/.test(ADM_519)
     && /总时长 ' \+ voFmtDur\(totSec\)/.test(ADM_519));
 
+  /* ---- v3.5.21：投票/抽签时长二选一 + 批量选择 + 公示时长 ---- */
+  t('v3.5.21 歌单投票「取前几名」与「总时长上限」二选一',
+    /function syncPickCap\(/.test(ADM_519) && /voNIn\.disabled = true/.test(ADM_519)
+    && /topN: cap > 0 \? 0 :/.test(ADM_519));
+  t('v3.5.21 从点歌平台挑歌支持全选/全不选/反选',
+    /id="voPickAll"/.test(ADM_519) && /id="voPickNone"/.test(ADM_519)
+    && /id="voPickInv"/.test(ADM_519) && /function voSetChecks\(/.test(ADM_519));
+  t('v3.5.21 点歌抽签抽取数量与总时长上限二选一',
+    /function syncDjCap\(/.test(ADM_519) && /djCountIn\.disabled = true/.test(ADM_519)
+    && /capMin > 0 \? 9999 :/.test(ADM_519));
+  t('v3.5.21 公示可选显示每首时长与总时长，排期记录也显示总时长',
+    /id="djShowDur"/.test(ADM_519) && /id="djShowTotal"/.test(ADM_519)
+    && /showDur: !!\(showDurEl && showDurEl\.checked\)/.test(ADM_519)
+    && /'歌曲总时长':/.test(IDX_519));
+  t('v3.5.21 投票公示结果表带时长列（歌单投票）',
+    /var anyDur = rs\.some\(/.test(IDX_519) && /durHead/.test(IDX_519));
+
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const ADMJS_518 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
@@ -9232,8 +9276,10 @@ console.log('\n【87】第七十五轮·v3.4.1 字段可见性新增「仅管理
   t('★profile.js：VIS_RANK 含 admin 档', /VIS_RANK = \{ public: 0, committee: 1, self: 2, admin: 3 \}/.test(prof));
   t('★profile.js：canSee 对 admin 档要求 ctx.admin（本人/班委都不放行）',
     /if \(eff === 'admin'\) return !!ctx\.admin;/.test(prof));
-  t('★profile.js：search 与 myProfile 都把查询者身份传进 ctx',
-    (prof.match(/admin: u\.role === 'admin'/g) || []).length === 2);
+  /* v3.5.21：前台查询一视同仁 —— search 固定 admin:false（管理员也没特权，
+     要看详细档案去后台），myProfile 仍按真实身份传（本人看自己）。 */
+  t('★profile.js：search 不因管理员身份多给字段，myProfile 仍传真实身份',
+    /admin: false \}/.test(prof) && /admin: u\.role === 'admin' \}/.test(prof));
   t('★admin.js：set-visibility / add-field 白名单含 admin',
     /ALLOWED_VIS = \['public', 'committee', 'self', 'admin'\]/.test(admjs));
   t('★admin.html：标签/描述/快捷按钮/新增弹窗/单人例外五处在位',

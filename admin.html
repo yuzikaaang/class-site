@@ -409,14 +409,19 @@ tbody tr.sel{background:var(--tint-2)}
 .btn-xs{height:26px;padding:0 9px;font-size:.71rem;border-radius:7px}
 .btn-xs[disabled]{opacity:.45;cursor:not-allowed}
 /* 编辑弹窗里的「自定义字段 + 可见范围」行：标签 / 输入框 / 下拉三段（2026-10-09 v2.4.0） */
-.extra-row{display:grid;grid-template-columns:96px 1fr 118px;gap:8px;align-items:center;margin-bottom:8px}
+.extra-row{display:grid;grid-template-columns:96px 1fr auto 118px;gap:8px;align-items:center;margin-bottom:8px}
 .extra-lab{font-size:.8rem;color:var(--fg-2);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .extra-vis{font-size:.76rem}
+/* v3.5.21：字段级「复制」小按钮（站主要求后台也能像前台一样快捷复制） */
+.cp-mini{padding:4px 8px;font-size:.7rem;line-height:1.2;white-space:nowrap}
+.fld-cp{display:flex;align-items:flex-end;gap:6px}
+.fld-cp .inp,.fld-cp input,.fld-cp select{flex:1;min-width:0}
 /* v3.5.5：多选字段的复选框组（规则渲染的下拉多选，禁自由输入） */
 .rule-multi{display:flex;flex-wrap:wrap;gap:4px 14px;max-height:132px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md,10px);padding:8px 10px}
 .rule-multi .chk{font-size:.8rem;margin:0}
 @media (max-width:560px){
   .extra-row{grid-template-columns:1fr;gap:5px}
+  .fld-cp{flex-direction:column;align-items:stretch}
 }
 /* 成员长表单（v2.10.0 #172）：上下两段（账号 / 档案）不折叠，段间有分隔 */
 .mb-form-sec{border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 16px 6px;background:var(--bg-1)}
@@ -999,7 +1004,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.20';
+var SITE_VERSION = '3.5.21';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -2661,6 +2666,26 @@ function memberDialog(m){
     + '<input id="mbEx" class="inp" maxlength="24" value="' + attr(isNew ? '' : m.examNo) + '" placeholder="如 11399395">'
     + '<p class="hint">不属于隐私字段，同学查询时直接可见，不需要审核。</p></div>'
 
+    /* 🔴 v3.5.21：身份证号 / 发展团员编号以前**只能靠导入**。
+       extraColsOf() 为了防止「同一列传两遍」把它们排除了（v3.5.16），
+       但编辑弹窗里又没补固定输入框 —— 结果这两项在后台无处可填，
+       站主只能改 Excel 重新导入。这里补上，值走 data-xf → payload.extra，
+       服务端 loadEditableFields() 本来就含这两列，会正常写回。 */
+    + '<div class="mb-form-grid">'
+    +   '<div class="field"><label for="mbIdCard">身份证号</label>'
+    +     '<div class="fld-cp">'
+    +       ruleInputHtml('id_card', ruleOf('id_card'), (!isNew && (m.extra || {}).id_card) || '', 'mbIdCard', '18 位身份证号')
+    +       cpBtnHtml('id_card')
+    +     '</div>'
+    +     '<p class="hint">加密存储；前台是否可见由「字段管理」里的可见范围决定。</p></div>'
+    +   '<div class="field"><label for="mbYln">发展团员编号</label>'
+    +     '<div class="fld-cp">'
+    +       ruleInputHtml('youth_league_no', ruleOf('youth_league_no'), (!isNew && (m.extra || {}).youth_league_no) || '', 'mbYln', '团员编号')
+    +       cpBtnHtml('youth_league_no')
+    +     '</div>'
+    +     '<p class="hint">入团时间等自定义字段在下方「其他资料字段」里。</p></div>'
+    + '</div>'
+
     + '<div class="field"><label>联系方式</label>'
     +   '<div class="ct-grid" style="gap:10px">'
     +     '<input id="mbWx" class="inp" maxlength="64" placeholder="微信号" value="' + attr(isNew ? '' : m.wechat) + '">'
@@ -2723,6 +2748,7 @@ function memberDialog(m){
               return '<div class="extra-row">'
                 + '<label class="extra-lab" for="mbX_' + attr(f.field) + '">' + esc(f.label) + '</label>'
                 + ruleInputHtml(f.field, f.rules, val, 'mbX_' + attr(f.field), f.label)
+                + cpBtnHtml(f.field)
                 + '<select class="inp extra-vis" data-vf="' + attr(f.field) + '" title="只对这个人生效的可见范围">'
                 +   '<option value=""' + (curFv ? '' : ' selected') + '>跟随全班（' + esc(VIS_LABEL[gv] || gv) + '）</option>'
                 +   '<option value="public"' + (curFv === 'public' ? ' selected' : '') + '>公开</option>'
@@ -2882,7 +2908,7 @@ function memberDetailDialog(m){
 
   var extraRows = extraFields.map(function(f){
     var x = (m.extra || {})[f.field];
-    return kvRow(f.label || f.field, v(x));
+    return kvRow(f.label || f.field, v(x) + cpv(x, f.label || f.field));
   }).join('');
 
   var archive = m.profileId == null
@@ -2891,14 +2917,14 @@ function memberDetailDialog(m){
       + '这位同学<b>还没有班级档案</b>。点「编辑」可以在同一个表单里补上学号、身份、联系方式。</p></div></div>'
     : '<div class="panel" style="margin-bottom:18px">'
       + '<div class="panel-head"><div><h3>' + svg('file') + '班级档案</h3>'
-      +   '<p class="sub">' + esc(m.name || '(未命名)') + ' 的档案字段</p></div></div>'
+      +   '<p class="sub">' + esc(m.name || '(未命名)') + ' 的档案字段 · 每项可单独复制</p></div></div>'
       + '<div class="panel-body"><dl class="kv">'
-      +   kvRow('姓名', v(m.name))
-      +   kvRow('学号', v(m.studentId))
-      +   kvRow('身份', v(m.role))
-      +   kvRow('头衔', v(m.title))
-      +   kvRow('政治面貌', v(m.politics))
-      +   kvRow('智学网账号', v(m.examNo))
+      +   kvRow('姓名', v(m.name) + cpv(m.name, '姓名'))
+      +   kvRow('学号', v(m.studentId) + cpv(m.studentId, '学号'))
+      +   kvRow('身份', v(m.role) + cpv(m.role, '身份'))
+      +   kvRow('头衔', v(m.title) + cpv(m.title, '头衔'))
+      +   kvRow('政治面貌', v(m.politics) + cpv(m.politics, '政治面貌'))
+      +   kvRow('智学网账号', v(m.examNo) + cpv(m.examNo, '智学网账号'))
       +   extraRows
       + '</dl></div></div>';
 
@@ -2930,9 +2956,9 @@ function memberDetailDialog(m){
     + '<div class="panel-head"><div><h3>' + svg('user') + '联系方式</h3>'
     +   '<p class="sub">同学之间互相查到的是这三项</p></div></div>'
     + '<div class="panel-body"><dl class="kv">'
-    +   kvRow('微信', v(m.wechat))
-    +   kvRow('QQ', v(m.qq))
-    +   kvRow('手机', v(m.phone))
+    +   kvRow('微信', v(m.wechat) + cpv(m.wechat, '微信'))
+    +   kvRow('QQ', v(m.qq) + cpv(m.qq, 'QQ'))
+    +   kvRow('手机', v(m.phone) + cpv(m.phone, '手机'))
     +   kvRow('可见性', visTxt)
     +   kvRow('审核状态', '<span class="badge ' + cst.cls + '">' + cst.text + '</span>'
         + (m.rejectReason ? '<div class="muted" style="font-size:.74rem;margin-top:3px">驳回理由：' + esc(m.rejectReason) + '</div>' : ''))
@@ -7450,6 +7476,58 @@ function deleteFieldConfirm(field, label, isSystem){
  * 算出某条资料上「可编辑额外字段」的展示单元（v2.4.0）。
  * 额外字段 = 字段元数据里不在固定列中的那些（含自定义字段与 id_card 等）。
  */
+/* ============================================================
+   v3.5.21 字段级复制（站主：「后台要可以快捷复制，和前台的查询一样」）
+   ------------------------------------------------------------
+   两种按钮：
+     · cpBtnHtml(field) —— 编辑弹窗里跟在输入框后面的「复制」，
+       点击时按 data-cp 找同弹窗内 [data-xf=field] 的当前值；
+     · cpv(val,label)   —— 详情弹窗里跟在某个值后面的「复制」，
+       值直接写进 data-cpv（不需要再回头查 DOM）。
+   复制走 navigator.clipboard，失败退回 textarea + execCommand。
+   ============================================================ */
+function cpBtnHtml(field){
+  return '<button type="button" class="btn btn-ghost cp-mini" data-cp="' + attr(field) + '"'
+    + ' title="复制这一项的值">复制</button>';
+}
+
+function cpv(val, label){
+  var s = (val == null ? '' : String(val)).trim();
+  if(!s) return '';
+  return ' <button type="button" class="btn btn-ghost cp-mini" data-cpv="' + attr(s) + '"'
+    + ' data-cpl="' + attr(label || '') + '">复制</button>';
+}
+
+function adminCopy(text, label){
+  var t = (text == null ? '' : String(text));
+  if(!t.trim()){ toast('这一项还是空的，没有可复制的内容', 'warn'); return; }
+  var done = function(){ toast((label ? label + ' ' : '') + '已复制', 'ok', 2400); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(done, function(){ djFallbackCopy(t); done(); });
+  }else{ djFallbackCopy(t); done(); }
+}
+
+/* 事件委托：两处按钮都在动态生成的弹窗里，逐个绑定容易漏；
+   挂一次 document 上的监听，后续任何弹窗都能用。 */
+document.addEventListener('click', function(e){
+  var t = e.target;
+  if(!t || !t.closest) return;
+  var b1 = t.closest('[data-cpv]');
+  if(b1){
+    adminCopy(b1.getAttribute('data-cpv'), b1.getAttribute('data-cpl') || '内容');
+    return;
+  }
+  var b2 = t.closest('[data-cp]');
+  if(b2){
+    var f = b2.getAttribute('data-cp');
+    var box = b2.closest('#modalBox') || document;
+    var inp = box.querySelector('[data-xf="' + f + '"]');
+    var wrap = b2.closest('.field, .extra-row');
+    var lab = wrap ? wrap.querySelector('label') : null;
+    adminCopy(inp ? inp.value : '', lab ? lab.textContent.trim() : '内容');
+  }
+});
+
 function extraColsOf(){
   var meta = STATE.members.fieldMeta || STATE.profiles.fieldMeta || [];
   /* v3.5.16：id_card / youth_league_no 也有**固定列**的采集逻辑（顶层 o.idCard），
@@ -9762,15 +9840,16 @@ function renderDj(){
     +     '<button class="btn btn-sm btn-secondary" data-dj-quick="7">近 7 天</button>'
     +     '<button class="btn btn-sm btn-secondary" data-dj-quick="30">近 30 天</button>'
     +   '</div>'
-    +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px">'
+    +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px">'
     +     '<div class="field" style="margin:0;width:120px"><label>抽取数量</label>'
-    +       '<input type="number" id="djCount" min="1" max="50" value="5"></div>'
+    +       '<input type="number" id="djCount" min="1" max="50" placeholder="留空 = 自动" value="5"></div>'
     +     '<div class="field" style="margin:0;width:130px"><label>高赞必选</label>'
     +       '<input type="number" id="djTopN" min="0" max="50" value="0" title="点赞最高的前 N 首必定中选，其余随机"></div>'
     /* v3.5.19：按时长抽取（音乐课常用，比如一节课 40 分钟） */
     +     '<div class="field" style="margin:0;width:150px"><label>总时长上限</label>'
     +       '<input type="number" id="djMaxMin" min="1" max="300" placeholder="留空 = 不限" title="累加歌曲时长，超过就不再抽（缺时长的歌不参与判断）"></div>'
     +   '</div>'
+    +   '<p class="hint" id="djCapHint" style="margin:-2px 0 10px">抽取数量 / 总时长上限二选一：填了总时长上限，系统按歌曲时长自动决定数量。</p>'
     +   '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:.85rem">'
     +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>'
     +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludeSched" checked> 排除已排期</label>'
@@ -9793,6 +9872,11 @@ function renderDj(){
     + '</section>'
     + '<section class="panel">'
     +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">📋 公示</h3></div>'
+    /* v3.5.21：公示文案可选显示每首时长和总时长 */
+    +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 6px;font-size:.84rem">'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djShowDur" checked> 显示每首时长</label>'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djShowTotal" checked> 显示歌曲总时长</label>'
+    +   '</div>'
     +   '<div class="field"><label>公示备注（选填，会加在公示最后）</label>'
     +     '<textarea id="djCopyNote" rows="2" placeholder="选填：例如「本次不随机抽人，是对段考前十的奖励」。抽签规则那行会自动生成，不用填"></textarea>'
     +   '</div>'
@@ -9817,6 +9901,22 @@ function renderDj(){
   $('djHistoryBtn').onclick = openDjHistory;
   $('djRunBtn').onclick = djRun;
   $('djCopyBtn').onclick = djCopy;
+
+  /* v3.5.21：抽取数量与总时长上限二选一。
+     填了总时长上限后，抽取数量由系统按歌曲时长自动决定。 */
+  var djCapIn = $('djMaxMin'), djCountIn = $('djCount'), djCapHint = $('djCapHint');
+  function syncDjCap(){
+    if(!djCapIn || !djCountIn) return;
+    var cap = Number(djCapIn.value || 0);
+    if(cap > 0){
+      djCountIn.value = ''; djCountIn.disabled = true; djCountIn.title = '已设总时长上限，数量由系统自动决定';
+      if(djCapHint) djCapHint.textContent = '已启用总时长上限：系统会按歌曲时长自动决定抽取数量，「抽取数量」此时无效。';
+    }else{
+      djCountIn.disabled = false; djCountIn.title = '';
+      if(djCapHint) djCapHint.textContent = '抽取数量 / 总时长上限二选一：填了总时长上限，系统按歌曲时长自动决定数量。';
+    }
+  }
+  if(djCapIn){ djCapIn.oninput = syncDjCap; syncDjCap(); }
   $('djExportBtn').onclick = djExportRounds;
   $('djImportBtn').onclick = function(){ $('djImportFile').click(); };
   $('djImportFile').onchange = function(){ djImportRounds(this); };
@@ -9906,8 +10006,12 @@ function djQuick(days){
  * 变化只有一处：结果写云端而非 localStorage。
  * ================================================================= */
 function djRun(){
-  var n = parseInt(($('djCount') || {}).value || '5', 10);
-  if(!(n >= 1)) n = 5;
+  /* v3.5.21：抽取数量 / 总时长上限二选一。填了总时长上限时，
+     把数量放宽到足够大，由 take() 里的时长上限来终止。 */
+  var capMin = parseInt(($('djMaxMin') || {}).value || '0', 10);
+  if(!(capMin >= 0)) capMin = 0;
+  var n = capMin > 0 ? 9999 : parseInt(($('djCount') || {}).value || '5', 10);
+  if(capMin <= 0 && !(n >= 1)) n = 5;
   var wantN = n;
   var excl = ($('djExcludePlayed') || {}).checked;
   var exclSched = ($('djExcludeSched') || {}).checked;
@@ -9916,9 +10020,6 @@ function djRun(){
   var topN = parseInt(($('djTopN') || {}).value || '0', 10);
   if(!(topN >= 0)) topN = 0;
   var wantTop = topN;
-  /* v3.5.19：总时长上限（分钟），0 = 不限 */
-  var capMin = parseInt(($('djMaxMin') || {}).value || '0', 10);
-  if(!(capMin >= 0)) capMin = 0;
 
   /* v3.5.6 点歌人加权：读面板配置；开了就先拉加权数据（头衔 + 最近两场成绩）再抽 */
   var wOnEl = $('djWeightOn');
@@ -10033,10 +10134,14 @@ function djRun(){
     };
     /* 把参数存进批次：公示时用「这一批自己的参数」，
        而不是复制时面板上的当前开关（否则抽完又改了开关，公示的规则就对不上歌单了） */
+    /* v3.5.21：公示时是否显示每首时长 / 歌曲总时长（用抽签那一刻的开关，避免复制时改设置导致对不上） */
+    var showDurEl = $('djShowDur'), showTotalEl = $('djShowTotal');
     rec.params = {
       top: guarantee.length, picked: picked.length, onePer: onePer,
       exPlayed: !!excl, exSched: !!exclSched, pool: pool.length, persons: personCnt,
       maxMinutes: capMin || null, totalSeconds: usedSec,          /* v3.5.19 时长约束 */
+      showDur: !!(showDurEl && showDurEl.checked),
+      showTotal: !!(showTotalEl && showTotalEl.checked),
       /* v3.5.6 点歌人加权（null = 本次没开）；v3.5.12 加 progTopN 记录「前 N 名」范围 */
       weight: DJ_STATE.weight.on
         ? { on: true, prog: DJ_STATE.weight.prog, comm: DJ_STATE.weight.comm,
@@ -10057,6 +10162,7 @@ function djRun(){
           + (i + 1) + '. <b>' + esc(s.title || '?') + '</b> - ' + esc(s.artist || '未知歌手')
           + (rq ? '（点歌：' + esc(rq) + ' · ' : '（')
           + '点赞 ' + (s.voteCount || 0) + '）'
+          + (s.durationSeconds ? ' · 时长 ' + voFmtDur(s.durationSeconds) : '')
           + '<div style="font-size:.78rem;color:#57534e;margin-left:1.2em">'
           +   '获选原因：<b style="color:#0a7d42">' + esc(why.short) + '</b>'
           +   (why.detail ? ' · <span style="color:#af410f">' + esc(why.detail) + '</span>' : '')
@@ -10076,7 +10182,9 @@ function djRun(){
       if(picked.length < wantN){
         shortMsg = onePer
           ? '（受「每人限一首」限制：池中 ' + personCnt + ' 位点歌人 + ' + anonCnt + ' 首无点歌人信息，最多只能抽 ' + cap + ' 首）'
-          : '（池中仅 ' + pool.length + ' 首，已全部抽取）';
+          : (capMin > 0
+              ? '（已按总时长上限 ' + capMin + ' 分钟凑够 ' + picked.length + ' 首，再抽会超时）'
+              : '（池中仅 ' + pool.length + ' 首，已全部抽取）');
       }
       var topMsg = (wantTop > 0 && deferred > 0)
         ? '⚠️ 高赞必选里有 ' + deferred + ' 首因「每人限一首」被顺延（同一位同学已有歌中选，名额让给后面的歌）'
@@ -10084,6 +10192,7 @@ function djRun(){
       if(box){
         box.innerHTML = '<div class="alert info" style="line-height:1.9">'
           + '<b style="color:#0a7d42">✅ 已抽中 ' + picked.length + ' 首' + shortMsg
+          + '，总时长 ' + voFmtDur(usedSec)
           + '，已写入云端排期（累计 ' + djScheduleCount() + ' 首）</b><br>'
           + '<span style="color:#af410f">' + mode + '</span><br>'
           + (topMsg ? '<span style="color:#af410f;font-size:.82rem">' + topMsg + '</span><br>' : '')
@@ -10660,17 +10769,27 @@ function djCopy(){
   if(rule) lines.push('抽签规则：' + rule);
   lines.push('本期中选 ' + (last.songs || []).length + ' 首，累计排期 ' + djScheduleCount() + ' 首：');
 
+  /* v3.5.21：公示可选显示每首时长 / 总时长（用抽签时保存的开关，避免复制前乱改设置） */
+  var p = last.params || {};
+  var showDur = p.showDur !== false;   /* 老数据默认显示 */
+  var showTotal = p.showTotal !== false;
+  var totSec = 0;
+  (last.songs || []).forEach(function(s){ totSec += Number(s.duration) || 0; });
+
   /* v3.5.12 #3 公示格式（站主钦定，一个字都不多写）：
      歌曲 - 歌手 - 点歌人 - 点赞量 - 获选原因（≤5 字，没有就「随机抽取」）
      抽签规则那行仍然保留（那是「怎么抽的」），但每首歌这一行不再啰嗦。 */
   (last.songs || []).forEach(function(s, i){
     var why = s.reason || '随机抽取';
-    lines.push((i + 1) + '. ' + (s.title || '?')
+    var line = (i + 1) + '. ' + (s.title || '?')
       + ' - ' + (s.artist || '未知')
       + ' - ' + (s.requester || '匿名')
       + ' - 点赞 ' + (s.votes || 0)
-      + ' - ' + why);
+      + ' - ' + why;
+    if(showDur && s.duration) line += ' - 时长 ' + voFmtDur(s.duration);
+    lines.push(line);
   });
+  if(showTotal && totSec) lines.push('歌曲总时长：' + voFmtDur(totSec));
 
   /* 备注统一放最后：批次备注（历史记录里填的）+ 公示备注（默认为空，手填才有） */
   var notes = [];
@@ -11331,10 +11450,10 @@ function voEditorDialog(v){
       +     '</div>'
       +     '<p class="hint" style="margin:6px 0 0">勾了才会写进选项；前台只显示「歌名 - 歌手」，点选项里的「详情」才展开其余信息。</p>'
       +   '</div>'
-      +   '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      +   '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">'
       +     '<div class="field" style="width:140px"><label>取前几名</label>'
-      +       '<input id="voPickN" type="number" min="1" max="50" inputmode="numeric" value="'
-      +       attr(v && v.songPick && v.songPick.topN ? String(v.songPick.topN) : '5') + '"></div>'
+      +       '<input id="voPickN" type="number" min="1" max="50" inputmode="numeric" placeholder="不限" value="'
+      +       attr(v && v.songPick && v.songPick.topN ? String(v.songPick.topN) : '') + '"></div>'
       +     '<div class="field" style="width:190px"><label>用途</label>'
       +       '<select id="voPickPurpose" style="width:100%">'
       +         '<option value="daily"' + (v && v.songPick && v.songPick.purpose === 'music' ? '' : ' selected') + '>日常（周一至周五）</option>'
@@ -11344,6 +11463,7 @@ function voEditorDialog(v){
       +       '<input id="voPickCap" type="number" min="1" max="300" inputmode="numeric" placeholder="留空 = 不限（分钟）" value="'
       +       attr(v && v.songPick && v.songPick.maxMinutes ? String(v.songPick.maxMinutes) : '') + '"></div>'
       +   '</div>'
+      +   '<p class="hint" id="voPickHint" style="margin:6px 0 0">取前几名 / 总时长上限二选一：填了总时长上限，抽取数量由系统自动按歌曲时长凑，不需要再填「取前几名」。</p>'
       + '</div>'
       + '<div id="voSongPick" style="display:none;margin-bottom:12px"></div>'
       + '<div class="field"><label>截止时间（留空 = 不限截止）</label>'
@@ -11432,6 +11552,24 @@ function voEditorDialog(v){
       if(fmtSel) fmtSel.onchange = syncKind;
       kindSel.onchange = syncKind;
       syncKind();
+
+      /* v3.5.21：歌单投票的「取前几名」与「总时长上限」二选一。
+         填了总时长上限后，抽取数量由系统按歌曲时长自动凑，不需要再填数量。 */
+      var voCapIn = box.querySelector('#voPickCap');
+      var voNIn = box.querySelector('#voPickN');
+      var voHint = box.querySelector('#voPickHint');
+      function syncPickCap(){
+        if(!voCapIn || !voNIn) return;
+        var cap = Number(voCapIn.value || 0);
+        if(cap > 0){
+          voNIn.value = ''; voNIn.disabled = true; voNIn.title = '已设总时长上限，数量由系统自动决定';
+          if(voHint) voHint.textContent = '已启用总时长上限：系统会按歌曲时长自动决定抽取数量，「取前几名」此时无效。';
+        }else{
+          voNIn.disabled = false; voNIn.title = '';
+          if(voHint) voHint.textContent = '取前几名 / 总时长上限二选一：填了总时长上限，抽取数量由系统自动按歌曲时长凑，不需要再填「取前几名」。';
+        }
+      }
+      if(voCapIn){ voCapIn.oninput = syncPickCap; syncPickCap(); }
     }
   });
 
@@ -11483,8 +11621,11 @@ function voEditorDialog(v){
         if((document.getElementById('voKind') || {}).value !== 'song') return null;
         var n = Number((document.getElementById('voPickN') || {}).value || 0);
         var cap = Number((document.getElementById('voPickCap') || {}).value || 0);
+        /* v3.5.21：「取前几名」与「总时长上限」二选一。
+           填了总时长上限时，topN 传 0（后端 normSongPick 不会输出 topN），
+           系统只按 maxMinutes 控制抽取范围。 */
         return {
-          topN: n > 0 ? n : 5,
+          topN: cap > 0 ? 0 : (n > 0 ? n : 5),
           purpose: (document.getElementById('voPickPurpose') || {}).value || 'daily',
           maxMinutes: cap > 0 ? cap : null,
         };
@@ -11571,6 +11712,12 @@ function voMountSongPick(host){
     + '<p class="muted" style="font-size:.74rem;margin:0 0 8px">'
     +   '加进去的选项格式：<b>歌名 - 歌手 - 点歌人 - 点歌时间</b>（缺哪项就跳过）'
     + '</p>'
+    /* v3.5.21：批量选择按钮（站主：「这里可以一键批量选择」） */
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px">'
+    +   '<button class="btn btn-sm btn-ghost" id="voPickAll" type="button">全选</button>'
+    +   '<button class="btn btn-sm btn-ghost" id="voPickNone" type="button">全不选</button>'
+    +   '<button class="btn btn-sm btn-ghost" id="voPickInv" type="button">反选</button>'
+    + '</div>'
     + '<div id="voPickBody" class="muted" style="font-size:.8rem">点「刷新歌单」加载平台上的歌</div>'
     + '<div style="margin-top:10px"><button class="btn btn-sm btn-secondary" id="voPickAdd" type="button">把勾选的加进选项</button></div>'
     + '</div>';
@@ -11588,6 +11735,14 @@ function voMountSongPick(host){
     });
   };
   q.oninput = paint;
+  /* v3.5.21：全选 / 全不选 / 反选（只影响当前筛选结果） */
+  function voSetChecks(mode){
+    var inps = body.querySelectorAll('input[data-song]');
+    Array.prototype.forEach.call(inps, function(el){ el.checked = (mode === 'inv' ? !el.checked : !!mode); });
+  }
+  host.querySelector('#voPickAll').onclick = function(){ voSetChecks(true); };
+  host.querySelector('#voPickNone').onclick = function(){ voSetChecks(false); };
+  host.querySelector('#voPickInv').onclick = function(){ voSetChecks('inv'); };
   host.querySelector('#voPickAdd').onclick = function(){
     var checked = body.querySelectorAll('input[data-song]:checked');
     if(!checked.length){ toast('先勾几首', 'err'); return; }
