@@ -5083,7 +5083,15 @@ function renderSong(){
     function loadStats(){
       if(!box) return;
       box.innerHTML = '<div class="loading"><div class="spinner"></div>读取中…</div>';
-      var base = (VH_API || '').replace(/\/api$/, '');
+      /* v3.5.15 热修：VH_API 是 `.../api/open`，以前用 replace(/\/api$/) 去掉尾巴，
+         结果 base 还带着 `/api/open`，被 /vh 代理的「只收 https 站点」校验挡下，
+         报「base 必须是 https:// 开头的完整站点地址」。改用 URL.origin 取站点根。 */
+      var base = '';
+      try{ base = new URL(VH_API).origin; }catch(e){ base = ''; }
+      if(!base){
+        box.innerHTML = '<div class="alert danger">点歌平台地址配置不对（VH_API = ' + esc(VH_API) + '），无法读取。</div>';
+        return;
+      }
       api('/vh?action=songs&base=' + encodeURIComponent(base)).then(function(j){
         var songs = (j && j.songs) || [];
         var pending = songs.filter(function(it){ return !(it.played || (it.song && it.song.played)); });
@@ -7046,6 +7054,99 @@ function attachFieldDrag(tbody){
   tbody.addEventListener('pointercancel', finish);
 }
 
+/** ============================================================================
+ * v3.5.15：新增字段时「英文键名」按中文名自动生成（站主要求）
+ * ----------------------------------------------------------------------------
+ * 规则（我定的，够用且稳定）：
+ *   ① 先查整词表 —— 班级资料高频字段直接给地道英文（学籍号 → student_no）
+ *   ② 否则逐字转拼音（间 → jian），英文数字原样保留，空格/连字符转下划线
+ *   ③ 认不出的汉字退化成 u+码点（如 㛃 → u36c3），保证键名永远合法
+ *   ④ 结果强制小写字母开头、≤31 字符；真的空就 field_<时间戳后 4 位>
+ *   用户随时能在弹窗里改，改过之后就不再自动覆盖。
+ * ========================================================================= */
+var FIELD_PINYIN = (function(){
+  var raw = '时:shi 间:jian 日:ri 期:qi 年:nian 月:yue 学:xue 号:hao 籍:ji 入:ru 团:tuan '
+    + '家:jia 庭:ting 住:zhu 址:zhi 姓:xing 名:ming 长:zhang 电:dian 话:hua 手:shou 机:ji '
+    + '微:wei 信:xin 邮:you 箱:xiang 身:shen 份:fen 证:zheng 考:kao 试:shi 编:bian 班:ban '
+    + '级:ji 校:xiao 民:min 族:zu 政:zheng 治:zhi 面:mian 貌:mao 性:xing 别:bie 男:nan 女:nv '
+    + '出:chu 生:sheng 宿:su 舍:she 床:chuang 位:wei 寝:qin 室:shi 爱:ai 好:hao 特:te 社:she '
+    + '职:zhi 务:wu 备:bei 注:zhu 分:fen 组:zu 户:hu 贯:guan 监:jian 护:hu 人:ren 联:lian '
+    + '系:xi 方:fang 式:shi 地:di 码:ma 尺:chi 寸:cun 服:fu 体:ti 重:zhong 高:gao 健:jian '
+    + '康:kang 疾:ji 病:bing 过:guo 敏:min 药:yao 物:wu 父:fu 母:mu 亲:qin 哥:ge 姐:jie '
+    + '弟:di 妹:mei 爷:ye 奶:nai 姥:lao 姨:yi 叔:shu 舅:jiu 兴:xing 趣:qu 简:jian 历:li '
+    + '奖:jiang 惩:cheng 义:yi 工:gong 志:zhi 愿:yuan 者:zhe 卡:ka 银:yin 行:hang 支:zhi '
+    + '付:fu 宝:bao 口:kou 座:zuo 楼:lou 层:ceng 门:men 牌:pai 区:qu 县:xian 市:shi 省:sheng '
+    + '镇:zhen 村:cun 路:lu 街:jie 小:xiao 栋:dong 单:dan 元:yuan 称:cheng 全:quan 部:bu '
+    + '类:lei 型:xing 科:ke 目:mu 成:cheng 绩:ji 排:pai 序:xu 总:zong 平:ping 均:jun 最:zui '
+    + '低:di 等:deng 第:di 一:yi 二:er 三:san 四:si 五:wu 六:liu 七:qi 八:ba 九:jiu 十:shi '
+    + '百:bai 千:qian 万:wan 角:jiao 阶:jie 段:duan 次:ci 件:jian 照:zhao 片:pian 头:tou '
+    + '像:xiang 现:xian 居:ju 通:tong 讯:xun 属:shu 朋:peng 友:you 同:tong 老:lao 师:shi '
+    + '主:zhu 任:ren 干:gan 委:wei 员:yuan 课:ke 代:dai 表:biao 支:zhi 书:shu 记:ji 教:jiao '
+    + '活:huo 育:yu 文:wen 艺:yi 宣:xuan 传:chuan 心:xin 理:li 纪:ji 律:lv 定:ding 向:xiang '
+    + '选:xuan 修:xiu 必:bi 班:ban 主:zhu 题:ti 课:ke 亮:liang 点:dian 问:wen 题:ti 需:xu '
+    + '求:qiu 建:jian 议:yi 评:ping 语:yu 寄:ji 语:yu 梦:meng 想:xiang 目:mu 标:biao 座:zuo '
+    + '右:you 铭:ming 格:ge 言:yan 兴:xing 趣:qu 才:cai 艺:yi 运:yun 动:dong 球:qiu 篮:lan '
+    + '足:zu 乒:ping 乓:pang 羽:yu 毛:mao 跑:pao 步:bu 跳:tiao 远:yuan 泳:yong 唱:chang 歌:ge '
+    + '舞:wu 画:hua 琴:qin 棋:qi 书:shu 法:fa 摄:she 影:ying 演:yan 讲:jiang 辩:bian 论:lun '
+    + '科:ke 创:chuang 编:bian 程:cheng 机:ji 器:qi 人:ren 模:mo 型:xing 实:shi 验:yan 室:shi '
+    + '中:zhong 报:bao 说:shuo 明:ming 情:qing 况:kuang 条:tiao 内:nei 容:rong 息:xi 数:shu 据:ju '
+    + '字:zi 言:yan 度:du 水:shui 自:zi 己:ji 其:qi 他:ta 她:ta 与:yu 及:ji 和:he 为:wei 用:yong '
+    + '于:yu 个:ge 把:ba 关:guan 要:yao 可:ke 以:yi 不:bu 有:you 无:wu 多:duo 少:shao 大:da '
+    + '前:qian 后:hou 上:shang 下:xia 里:li 外:wai 东:dong 西:xi 南:nan 北:bei 单:dan 位:wei '
+    + '课:ke 外:wai 补:bu 习:xi 班:ban 排:pai 名:ming 次:ci 段:duan 班:ban 号:hao 座:zuo '
+    + '舍:she 长:zhang 室:shi 友:you 联:lian 系:xi 人:ren 电:dian 子:zi 信:xin 箱:xiang 密:mi 码:ma';
+  var o = {};
+  raw.split(/\s+/).forEach(function(p){
+    var i = p.indexOf(':');
+    if(i > 0) o[p.slice(0, i)] = p.slice(i + 1);
+  });
+  return o;
+})();
+
+/* 整词优先：这些词逐字拼音会变成 sushehao 之类，直接给地道英文 */
+var FIELD_WORDS = {
+  '学籍号': 'student_no', '学号': 'student_id', '考籍号': 'exam_reg_no',
+  '入团时间': 'league_date', '入团日期': 'league_date', '团员编号': 'league_no',
+  '发展团员编号': 'league_no', '家庭住址': 'home_address', '家庭地址': 'home_address',
+  '现居住址': 'current_address', '户籍地址': 'registered_address',
+  '家长姓名': 'parent_name', '家长电话': 'parent_phone', '家长手机': 'parent_phone',
+  '紧急联系人': 'emergency_contact', '紧急联系电话': 'emergency_phone',
+  '宿舍号': 'dorm_no', '宿舍楼': 'dorm_building', '床位号': 'bed_no',
+  '出生日期': 'birth_date', '生日': 'birthday', '身份证号': 'id_card',
+  '电子邮箱': 'email', '邮箱': 'email', '邮政编码': 'zip_code',
+  '校服尺寸': 'uniform_size', '身高': 'height', '体重': 'weight',
+  '兴趣爱好': 'hobbies', '特长': 'specialty', '社团': 'club', '职务': 'duty',
+  '备注': 'remark', '分组': 'group_name', '家长微信': 'parent_wechat',
+  '家长QQ': 'parent_qq', '监护人': 'guardian', '监护人电话': 'guardian_phone',
+  '班级职务': 'class_duty', '学生特长': 'student_specialty', '中考报名号': 'zhongkao_no',
+  '报名号': 'signup_no', '座位号': 'seat_no', '家长单位': 'parent_workplace',
+  '家庭情况': 'family_info', '特殊情况': 'special_note', '是否需要住宿': 'need_dorm',
+  '宿舍长': 'dorm_leader', '寝室长': 'dorm_leader', '班主任': 'head_teacher',
+  '任课老师': 'subject_teacher', '家长联系方式': 'parent_contact'
+};
+
+/** 中文名 → 英文键名（规则见上方注释） */
+function autoFieldKey(label){
+  var s = String(label == null ? '' : label).trim();
+  if(!s) return '';
+  /* 去掉括号里的补充说明：「身高（cm）」→「身高」 */
+  var bare = s.replace(/[（(][^）)]*[）)]/g, '').trim() || s;
+  if(FIELD_WORDS[bare]) return FIELD_WORDS[bare];
+  var out = '';
+  for(var i = 0; i < bare.length; i++){
+    var ch = bare.charAt(i);
+    if(/[A-Za-z0-9]/.test(ch)){ out += ch.toLowerCase(); continue; }
+    if(/[\s_\-·—、,，.。:：/]/.test(ch)){ out += '_'; continue; }
+    if(FIELD_PINYIN[ch]){ out += FIELD_PINYIN[ch]; continue; }
+    var code = ch.charCodeAt(0);
+    if(code > 127) out += 'u' + code.toString(16);   /* 生僻字保底，仍合法 */
+  }
+  out = out.replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(0, 28);
+  if(!out) out = 'field_' + String(Date.now()).slice(-4);
+  if(!/^[a-z]/.test(out)) out = 'f_' + out;
+  return out.slice(0, 31);
+}
+
 /** 新增自定义字段弹窗。
  *  v3.4.0 站主报「弹窗不在中央、被遮挡」：原来手写的 .dialog-mask/.dialog
  *  在全站样式里根本没有定义（只有这一处在用），结果是按普通文档流渲染，
@@ -7062,7 +7163,10 @@ function addFieldDialog(){
     + '<div class="field"><label>中文名称 <span class="muted">（同学看到的名字）</span></label>'
     +   '<input id="ffLabel" placeholder="例如：学籍号" maxlength="20" autocomplete="off"></div>'
     + '<div class="field"><label>英文键名 <span class="muted">（内部用，只能小写字母 / 数字 / 下划线）</span></label>'
-    +   '<input id="ffKey" placeholder="例如：school_id" maxlength="31" autocomplete="off"></div>'
+    +   '<input id="ffKey" placeholder="填了中文名会自动生成，也可自己改" maxlength="31" autocomplete="off">'
+    +   '<div class="muted" style="font-size:.72rem;margin-top:4px" id="ffKeyHint">'
+    +     '英文键名创建后不能再改（它同时是数据库列名）。'
+    +   '</div></div>'
     + '<div class="field"><label>可见范围</label>'
     +   '<div style="display:flex;gap:8px;flex-wrap:wrap" id="ffVis">'
     +     ['public','committee','self','admin'].map(function(v, i){
@@ -7095,10 +7199,34 @@ function addFieldDialog(){
       paintRuleBody({});
       $('ffRuleType').onchange = function(){ paintRuleBody({}); };
 
+      /* v3.5.15：中文名 → 英文键名自动生成。用户一旦自己改过键名，
+         就不再自动覆盖（清空则恢复自动）。 */
+      var labEl = $('ffLabel'), keyEl = $('ffKey'), keyHint = $('ffKeyHint');
+      var keyManual = false;
+      function paintKeyHint(k){
+        if(!keyHint) return;
+        keyHint.textContent = keyManual
+          ? '你已手动指定键名；清空可恢复自动生成。'
+          : (k ? '已按中文名自动生成：' + k + '（可以改）' : '填了中文名会自动生成；英文键名创建后不能再改。');
+      }
+      function syncKey(){
+        if(keyManual) return;
+        var k = autoFieldKey(labEl ? labEl.value : '');
+        if(keyEl) keyEl.value = k;
+        paintKeyHint(k);
+      }
+      if(labEl) labEl.addEventListener('input', syncKey);
+      if(keyEl) keyEl.addEventListener('input', function(){
+        keyManual = keyEl.value.trim() !== '';
+        paintKeyHint('');
+      });
+
       $('ffCancel').onclick = closeModal;
       $('ffOk').onclick = function(){
         var label = ($('ffLabel').value || '').trim();
         var key   = ($('ffKey').value || '').trim().toLowerCase();
+        /* 没填（或事件没触发）时按中文名兜底生成，避免卡在「请填写英文键名」 */
+        if(!key && label) key = autoFieldKey(label);
         if(!label) return toast('请填写中文名称', 'danger');
         if(!key)   return toast('请填写英文键名（如 school_id）', 'danger');
         if(!/^[a-z][a-z0-9_]{0,30}$/.test(key)){
@@ -10391,6 +10519,11 @@ function renderVotes(){
   voPubLoad();
   voLoad();
 }
+
+/* v3.5.15 热修：`VO` 的声明在之前某次清理里被误删了，但下面的
+   voPubLoad / voPaint / voPubDialog 全都在用 —— 后台一进投票页就
+   「读取失败：VO is not defined」。这里补回来。 */
+var VO = { list: [], busy: false, pub: null };
 
 /* ===== v3.5.13 投票公示（站主 #2）=====
    内容键 vote_pub = { templates:[{id,name,template}], byVote:{ [voteId]:{tplId,on} } }。

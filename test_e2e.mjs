@@ -7955,6 +7955,22 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('#11 资料输入控件按精度切换（date / month / 四位年份）',
     /if\(p === 'month'\)\{[\s\S]{0,200}type="month"/.test(admHtml355)
     && /if\(p === 'year'\)\{[\s\S]{0,200}maxlength="4"/.test(admHtml355));
+  /* ---- v3.5.15 热修：后台两处「读取失败」+ 新增字段英文键名自动生成 ---- */
+  t('#12 VO 状态对象已声明（投票页不再报 VO is not defined）',
+    /var VO = \{ list: \[\], busy: false, pub: null \};/.test(admHtml355));
+  t('#12 点歌投稿统计用 URL.origin 取站点根（不再把 /api/open 塞进 base）',
+    /new URL\(VH_API\)\.origin/.test(admHtml355) && !/\(VH_API \|\| ''\)\.replace\(\/\\\/api\$\//.test(admHtml355));
+  t('#12 英文键名自动生成三件套（字表 / 整词表 / 转换函数）',
+    /var FIELD_PINYIN = \(function\(\)\{/.test(admHtml355)
+    && /var FIELD_WORDS = \{/.test(admHtml355) && /function autoFieldKey\(label\)/.test(admHtml355));
+  t('#12 中文名输入即自动填键名，手改后不再覆盖',
+    /function syncKey\(\)\{/.test(admHtml355) && /var keyManual = false/.test(admHtml355)
+    && /addEventListener\('input', syncKey\)/.test(admHtml355));
+  t('#12 创建时键名为空按中文名兜底生成', /if\(!key && label\) key = autoFieldKey\(label\);/.test(admHtml355));
+  t('#12 整词表覆盖高频字段（学籍号/入团时间/家庭住址）',
+    /'学籍号': 'student_no'/.test(admHtml355) && /'入团时间': 'league_date'/.test(admHtml355)
+    && /'家庭住址': 'home_address'/.test(admHtml355));
+
   t('#11 导入失败逐条列出（数据行 / 姓名 / 原因）',
     /var allErrs = \[\]/.test(admHtml355) && /allErrs\.push\(\{ n: n, name:/.test(admHtml355)
     && /<th class="nowrap">数据行<\/th><th class="nowrap">姓名<\/th><th>原因<\/th>/.test(admHtml355));
