@@ -1009,7 +1009,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.29';
+var SITE_VERSION = '3.5.30';
 var VER_DATE = '2026-10-18';
 
 /* ---- 运行时状态 ---- */
@@ -10172,6 +10172,23 @@ function enterApp(){
        一旦系统真的转成横屏（w>h），立刻撤掉 CSS 旋转，页面自然铺满宽屏。
      · 锁方向成功与否都不影响结果，最多差一个「地址栏方向」。 */
 var LAND_ON = false;
+/* v3.5.30：横屏只认「用户显式点过按钮」。
+   ------------------------------------------------------------
+   站主原话：
+     「如果是从主页面进入的后台页面，默认采用竖屏，不用横过来。每次都横过来，
+       但实际上它还是竖屏，因为我你只是改了页面，但是手机没改。」
+     「在后台界面退出了一下 PWA 应用（切到后台做别的事），重新回来时要保持原来状态，
+       不要一回去又变成竖屏了。」
+   于是拆成两层状态：
+     · LAND_ON      —— 当前要不要横屏（唯一真源，只由按钮/恢复流程改）
+     · cls_admin_land —— 持久化 LAND_ON（'1' / '0'），跨 PWA 前后台切换、跨刷新都记住
+   进入后台时不看「上次怎么设的」而看「这次从哪进来的」：
+     从主站跳进来（sessionStorage 有 cls_admin_from_home）→ 一律竖屏，并清掉横屏记忆；
+     外部直接打开网址 / 独立 PWA 入口 → 沿用上次的横屏选择。
+   另外监听 visibilitychange：从后台切回来时重新对齐一次，避免系统把屏幕转回去后
+   CSS 还停在横屏状态（站主抱怨的「回来又变回竖屏」就是这种不同步）。 */
+var LAND_LS = 'cls_admin_land';
+var FROM_HOME_LS = 'cls_admin_from_home';
 
 function syncLandscapeClass(){
   var portrait = window.innerHeight > window.innerWidth;
@@ -10195,7 +10212,7 @@ function unlockLandscape(){
 
 function toggleLandscape(){
   LAND_ON = !LAND_ON;
-  try{ localStorage.setItem('cls_admin_land', LAND_ON ? '1' : '0'); }catch(e){}
+  saveLandIntent();
   if(LAND_ON){
     lockLandscape();
     /* 先按竖屏兜底转一次；350ms 后系统若已转屏会自动撤掉 CSS 旋转 */
@@ -10208,6 +10225,51 @@ function toggleLandscape(){
     setTimeout(syncLandscapeClass, 380);
     toast('已切回竖屏', 'ok');
   }
+}
+
+/** 记住当前横屏意图（'1' / '0'）。显式点按钮、恢复流程都走这里，保证只有一处写盘。 */
+function saveLandIntent(){
+  try{ localStorage.setItem(LAND_LS, LAND_ON ? '1' : '0'); }catch(e){}
+}
+
+/** v3.5.30：进入后台时决定用竖屏还是横屏。
+ *  规则（站主拍板）：
+ *    ① 从主站跳进来 → 一律竖屏，并顺手把横屏记忆清成 '0'
+ *       （否则下次从外部打开又会横过来，等于没改）
+ *    ② 外部直接打开 / 独立 PWA → 沿用上次选择
+ *  注意：这里**不主动调用 lockLandscape()**。站主抱怨「页面横了但手机没横」，
+ *  根因就是以前进来就抢着锁方向；现在只有点了按钮才尝试锁，
+ *  免得一进后台画面就是歪的。 */
+function initLandscape(){
+  var fromHome = false;
+  try{
+    fromHome = sessionStorage.getItem(FROM_HOME_LS) === '1';
+    if(fromHome) sessionStorage.removeItem(FROM_HOME_LS);
+  }catch(e){}
+  if(fromHome){
+    LAND_ON = false;
+    saveLandIntent();
+    document.documentElement.classList.remove('force-landscape');
+  }else{
+    try{ LAND_ON = (localStorage.getItem(LAND_LS) === '1'); }catch(e){ LAND_ON = false; }
+  }
+  syncLandscapeClass();
+  setTimeout(syncLandscapeClass, 400);
+}
+
+/** v3.5.30：从后台切回来 / 页面被恢复时重新对齐。
+ *  只对齐「CSS 兜底旋转」，不重新请求全屏或锁方向 —— 那会打断用户当时的操作。
+ *  如果用户此时已经手动把手机横过来（视口变宽），syncLandscapeClass 会自动撤掉旋转；
+ *  手机又竖回去，也会自动补回来。 */
+function resyncLandscape(){
+  try{
+    syncLandscapeClass();
+    if(LAND_ON){
+      /* 用户要横屏但系统可能被切后台重置了方向 → 再试一次（失败也无副作用） */
+      try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
+      setTimeout(syncLandscapeClass, 320);
+    }
+  }catch(e){}
 }
 
 function applyTheme(t){
@@ -10287,16 +10349,18 @@ function boot(){
   if(rot) rot.onclick = toggleLandscape;
   /* v3.5.14 修：横屏不再「无脑 CSS 旋转」——
      系统（屏幕）真的转成横屏时，页面再转 -90° 就等于又转回竖屏，看着还是竖的。
-     现在只记「用户想让后台横屏」的意图，按实时视口决定要不要 CSS 兜底旋转。 */
-  try{ LAND_ON = (localStorage.getItem('cls_admin_land') === '1'); }catch(e){ LAND_ON = false; }
-  if(LAND_ON && window.innerHeight > window.innerWidth){
-    /* 上次是强制横屏且当前仍是竖屏 → 先按 CSS 兜底显示；顺便尝试锁方向 */
-    try{ lockLandscape(); }catch(e){}
-  }
-  syncLandscapeClass();
-  setTimeout(syncLandscapeClass, 400);
+     现在只记「用户想让后台横屏」的意图，按实时视口决定要不要 CSS 兜底旋转。
+     v3.5.30：意图改为「这次从哪进来」决定，见 initLandscape() 注释。 */
+  initLandscape();
   window.addEventListener('resize', syncLandscapeClass);
   window.addEventListener('orientationchange', function(){ setTimeout(syncLandscapeClass, 260); });
+  /* v3.5.30：PWA 切到后台再回来 —— 系统可能已经悄悄把方向改了，
+     这里重新对齐一次 CSS 横屏状态，保证「回来还是你离开时的样子」。 */
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') setTimeout(resyncLandscape, 120);
+  });
+  /* 页面从往返缓存（bfcache）恢复时同样对齐 */
+  window.addEventListener('pageshow', function(){ setTimeout(resyncLandscape, 120); });
   $('btnTheme').onclick = function(){
     var cur = document.documentElement.getAttribute('data-theme');
     applyTheme(cur === 'dark' ? '' : 'dark');
@@ -12860,16 +12924,21 @@ function renderReleases(){
     +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">版本更新记录</b>'
     +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">只在后台可见，前台不展示</p></div>'
     +   '<button class="btn btn-sm btn-secondary" id="relRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="relSync">' + svg('download',14) + ' 补齐缺失版本</button>'
     +   '<button class="btn btn-sm" id="relAdd">' + svg('plus',14) + ' 新增版本</button>'
     + '</div>'
     + '<div class="alert info" style="margin-bottom:16px">'
     +   '这些记录<b>直接存在云端</b>：打开面板读的就是云端最新数据，新增 / 编辑 / 删除都会立即写回云端，'
     +   '换设备、换浏览器都一致。<b>新增版本</b>会自动带上当前站点版本号与今天的日期，条目一行写一条。'
+    +   '<br><b>补齐缺失版本</b>会把内置的版本清单和云端对比，只补云端没有的那几个号，'
+    +   '已有的记录一个字都不动（防止把你自己写的说明冲掉）。'
     + '</div>'
+    + '<div class="alert warn" style="margin-bottom:16px;display:none" id="relMissBox"></div>'
     + '<section class="panel"><div id="relBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
 
   $('relRefresh').onclick = loadReleases;
   $('relAdd').onclick = function(){ relEdit(null); };
+  $('relSync').onclick = relSyncMissing;
   loadReleases();
 }
 
@@ -12882,6 +12951,131 @@ function loadReleases(){
   }).catch(function(e){
     var b = $('relBody');
     if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+/* ============================================================================
+ * v3.5.30：内置版本清单 + 「补齐缺失版本」
+ * ----------------------------------------------------------------------------
+ * 站主原话：「云端版本数据又有几次没更新了。」
+ *
+ * 根因不是存不住，而是**每次改完代码没人去后台补一条**。云端数据本身没问题
+ * （PUT 写完就在），漏的是「写」这个动作。
+ *
+ * 这份清单是代码里随版本走的，版本号天然与 SITE_VERSION 同步；
+ * 点「补齐缺失版本」时：
+ *   ① 读云端已有记录，收集已有版本号集合
+ *   ② 遍历这份清单，只挑**云端没有的**版本号追加
+ *   ③ 已有的绝不覆盖 —— 站主自己补充过的细节不会被机器文案冲掉
+ * 这样以后就算忘了手动加，进来点一下就能把缺的补齐。
+ * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
+ * ========================================================================= */
+var REL_BUILTIN = [
+  { version: '3.5.30', date: '2026-10-18', title: '兼容性修复 · 轻量模式 · 后台横屏记忆 · 站点名称可编辑', type: 'fix', highlight: true, items: [
+    '新增「轻量模式」：iPad / iPhone 上自动关闭玻璃模糊、背景光斑、卡片流光与入场动画（站主反馈 iPad Air 打开卡死、勉强操作后白屏）',
+    '性能自动判定：iOS 设备 / 内存 ≤4GB / CPU ≤4 核自动走轻量；另加首屏 3 秒长任务自测，超 120ms 自动降级',
+    '自定义设置 → 动效 里新增「性能 / 轻量模式」三档（自动 / 轻量 / 完整），可随时手动切换并记住选择',
+    '从主站进入后台默认竖屏，不再自动横过来；切到后台再回来保持原状态（含 PWA 往返）',
+    '后台「站点信息」里的站点名称与副标题真正可编辑：保存后浏览器标题栏、页头大标题、页脚一起更新',
+    '版本面板新增「补齐缺失版本」：自动对比内置清单，只补云端缺的版本号，不覆盖已有内容',
+  ] },
+  { version: '3.5.29', date: '2026-10-18', title: '站点名称 / 副标题后台可编辑', type: 'feature', items: [
+    '后台「系统设置 → 站点信息」从「仅作展示」改为真读真存，写入 site_config.siteName / siteSubtitle',
+    '保存时先取回整份 site_config 再合并，不会冲掉点歌守卫等其它配置',
+    '主站新增 applyBranding()：站点名同步替换 <title>、页头大标题、页脚版权行；副标题替换页头标语',
+    '清空保存 = 恢复默认（写空字符串而非删键，避免主站残留旧站名清不掉）',
+  ] },
+  { version: '3.5.28', date: '2026-10-18', title: '时长库支持线上搜歌 + 导入清单批量匹配', type: 'feature', items: [
+    '时长库面板改为四个分区：已收录 / 线上搜 / 导入清单 / 预置歌单',
+    '线上搜歌：输入歌名同时查网易云与 QQ 音乐（都没有才用 iTunes 兜底），点「加入」直接写进云端库',
+    '搜索结果按歌名贴合度排序 —— 修掉「搜《晴天》第一条是翻唱」的问题，原唱排最前',
+    '导入清单：一行一首「歌名 - 歌手」，歌名完全一致 + 歌手部分符合即命中（合唱多歌手 vs 只写一个也算）',
+    '预置周杰伦 / 林俊杰 / 方大同热门曲，一键逐批抓时长入库；云端库已预先填充 96 首',
+    'song_durations 补歌手索引（SCHEMA_VER 升到 3.5.28）',
+  ] },
+  { version: '3.5.27', date: '2026-10-18', title: '歌曲时长云端同步 · 缺时长禁止发布与排歌', type: 'feature', highlight: true, items: [
+    '新增云端时长库 song_durations：查到的秒数写进数据库，一次查询永久命中，换设备也不丢',
+    '时长来源优先级 manual > netease/qq > itunes，人工填写永不被自动结果覆盖',
+    '网易云 / QQ 音乐改为严格匹配（歌名必须一致），修掉「查不到时拿搜索结果第一条顶替」的错时长问题',
+    '查不到时返回空并弹「时长补录」，由站主手填（支持 3:45 或 225 两种写法）',
+    '缺时长的歌单投票无法发布、缺时长的歌无法被随机排歌 / 写排期（前后端双保险）',
+    '时长库管理面板：查看已收录、来源标注、删除误录、补录入口',
+  ] },
+  { version: '3.5.26', date: '2026-10-18', title: '歌单投票不再显示「选项（一行一个）」文本框', type: 'fix', items: [
+    '编辑器根节点渲染时即带 data-kind，由 CSS 强制隐藏文本框，不再依赖 onMount 执行时机',
+    '文本框仍作为隐藏数据载体，提交时照常读取，不影响既有投票',
+  ] },
+  { version: '3.5.25', date: '2026-10-18', title: '歌单投票彻底免文本框 · 时长必显示', type: 'improve', items: [
+    '勾选歌曲即成为选项；改动选项字段勾选会自动重算，不用再手动复制',
+    '歌曲时长改为必展示项，直接显示在歌手后面（青绿等宽字色，暗色主题已适配）',
+  ] },
+  { version: '3.5.24', date: '2026-10-18', title: '前台投票按赞数实时排序 · 后台勾选即选项', type: 'improve', items: [
+    '前台投票选项按赞成票从高到低实时排序，同票保持稳定顺序，不打断当前滚动位置',
+    '后台挑歌：勾选即加入选项，与选项列表双向同步',
+    '编辑器明确「歌名歌手直显，点歌人/日期/赞数/时长进详情」',
+  ] },
+  { version: '3.5.23', date: '2026-10-18', title: '投票管理整理 · 公示变量扩展 · 按时长取名', type: 'improve', items: [
+    '老格式歌单投票选项也能折叠（按日期段自动拆分）',
+    '歌单投票禁止同学自行添加选项',
+    '总时长上限模式下按实际时长取名次，不再出现「取前 5 名」这类与时间制冲突的表述',
+    '公示模版变量扩展到第 4~10 名',
+    '投票管理元信息分组（时间 / 取值方式 / 展示项分开）',
+  ] },
+  { version: '3.5.22', date: '2026-10-18', title: '后台人员档案全字段在线编辑 · 身份头衔与账号角色分离', type: 'feature', items: [
+    '身份 / 头衔进入成员表单，与账号角色（管理员 / 同学）互相独立',
+    'title、role 移出特殊字段白名单，可按普通字段配置可见性与编辑权限',
+    '前台查询显示的身份 / 头衔同样受字段可见性管辖',
+    '导出名单补上身份、头衔两列',
+  ] },
+  { version: '3.5.21', date: '2026-10-18', title: '档案字色与字段可复制 · 前台查询显头衔 · 点歌投票批量选择', type: 'feature', items: [
+    '我的档案字色加深、字段内容可一键复制',
+    '前台查询结果直接显示头衔与智学网账号',
+    '后台可在线编辑身份证、团员编号等敏感字段（不再只能靠导入）',
+    '点歌投票支持批量勾选，并可二选一：限定抽取数量或限定总时长',
+    '公示与抽歌排期均显示单曲时长与总时长',
+  ] },
+];
+
+/** 补齐云端缺失的版本记录：只追加云端没有的版本号，已有一律不动 */
+function relSyncMissing(){
+  var box = $('relMissBox');
+  var btn = $('relSync');
+  if(btn){ btn.disabled = true; btn.textContent = '对比中…'; }
+  api('/content').then(function(j){
+    var cur = (j && j.items && j.items.release_notes) || [];
+    cur = Array.isArray(cur) ? cur : [];
+    var have = {};
+    cur.forEach(function(r){ have[String(r && r.version || '').trim()] = 1; });
+    var add = REL_BUILTIN.filter(function(r){ return !have[String(r.version)]; });
+    if(!add.length){
+      if(btn){ btn.disabled = false; btn.innerHTML = svg('download',14) + ' 补齐缺失版本'; }
+      if(box){ box.style.display = 'block'; box.textContent = '云端版本记录是最新的，没有缺号。'; }
+      toast('没有需要补的版本', 'ok');
+      return;
+    }
+    var names = add.map(function(r){ return 'v' + r.version; }).join('、');
+    if(btn){ btn.disabled = false; btn.innerHTML = svg('download',14) + ' 补齐缺失版本'; }
+    confirmBox({
+      title: '补齐 ' + add.length + ' 个版本的记录',
+      text: '云端缺少：' + names,
+      detail: '只会追加这几条，已有的 ' + cur.length + ' 条记录保持不变。补完可以逐条再编辑。',
+      okText: '补齐',
+    }).then(function(yes){
+      if(!yes) return;
+      var merged = cur.concat(add.map(function(r){ return JSON.parse(JSON.stringify(r)); }));
+      api('/content', { method: 'PUT', body: { items: { release_notes: merged } } })
+        .then(function(){
+          REL_STATE.list = merged;
+          relSort();
+          paintReleases();
+          toast('已补齐 ' + add.length + ' 个版本的记录', 'ok');
+          if(box){ box.style.display = 'block'; box.textContent = '已补齐：' + names; }
+        })
+        .catch(function(e){ toast('补齐失败：' + (e.message || e), 'err', 4000); });
+    });
+  }).catch(function(e){
+    if(btn){ btn.disabled = false; btn.innerHTML = svg('download',14) + ' 补齐缺失版本'; }
+    toast('读取云端版本记录失败：' + (e.message || e), 'err', 4000);
   });
 }
 
