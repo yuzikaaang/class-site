@@ -7680,7 +7680,9 @@ console.log('\n【69】第六十一轮·云端个人数据管理（#178：分类
     method: 'PUT', token: cldTok,
     body: { items: {
       cls_theme: 'dark',                    /* 外观与界面（精确键） */
-      cls_ui_cfg: { fontSize: 16 },         /* 外观与界面（精确键） */
+      /* v3.5.34：cls_ui_cfg 已移出白名单（自定义设置只存本机），
+         这里改用同样属于外观分类的 cls_sfx 覆盖该分类。 */
+      cls_sfx: 0,                           /* 外观与界面（音效开关） */
       cls_welcome_v1: '1',                  /* 已看过标记 */
       cls_dj_note: '周日点歌',               /* 点歌 */
       cls_notice_read: { a1: 1 },           /* 学习与班级事务 */
@@ -7706,8 +7708,23 @@ console.log('\n【69】第六十一轮·云端个人数据管理（#178：分类
   t('★英文键名翻中文：cls_theme → 主题（亮/暗）',
     !!gApp && gApp.items.some(i => i.key === 'cls_theme' && i.name === '主题（亮/暗）'),
     JSON.stringify(gApp && gApp.items));
-  t('★分类细化到条目：外观与界面含 cls_ui_cfg → 界面设置',
-    !!gApp && gApp.items.some(i => i.key === 'cls_ui_cfg' && i.name === '界面设置（字号/背景/排序/动效）'));
+  {
+    const djsrc = fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf8');
+    const allowSeg = djsrc.slice(djsrc.indexOf('const ALLOW_KEYS'), djsrc.indexOf('function isAllowedKey'));
+    const idxSrc = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+    const ckSeg = idxSrc.slice(idxSrc.indexOf('var CLOUD_KEYS'), idxSrc.indexOf('var CLOUD_KEY_PREFIX'));
+    t('★v3.5.34 自定义设置不在云白名单（后端 ALLOW_KEYS 无 cls_ui_cfg / cls_ui_bgimg）',
+      !/^\s*'cls_ui_cfg'/.test(allowSeg.replace(/\/\*[\s\S]*?\*\//g, ''))
+      && !/^\s*'cls_ui_bgimg'/.test(allowSeg.replace(/\/\*[\s\S]*?\*\//g, '')),
+      allowSeg.slice(0, 120));
+    t('★v3.5.34 自定义设置不在云白名单（前端 CLOUD_KEYS 不含两者）',
+      !/'cls_ui_cfg'/.test(ckSeg) && !/'cls_ui_bgimg'/.test(ckSeg));
+    t('★v3.5.34 分类视图不再出现这两个键',
+      !(cats.body.groups || []).some(g => (g.items || []).some(i => i.key === 'cls_ui_cfg')));
+  }
+  t('★分类细化到条目：外观与界面含 cls_sfx → 音效开关',
+    !!gApp && gApp.items.some(i => i.key === 'cls_sfx' && i.name === '音效开关'),
+    JSON.stringify(gApp && gApp.items));
   t('★前缀键按条目展开：cls_hw_done_42 → 作业完成标记 · 42',
     !!gHw && gHw.items.length === 1 && gHw.items[0].name === '作业完成标记 · 42',
     JSON.stringify(gHw && gHw.items));
@@ -8464,6 +8481,29 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && /html\[data-lite="1"\] \.card::after\{display:none!important/.test(IDX_530));
   t('v3.5.30 轻量模式把动画压到几乎零时长',
     /html\[data-lite="1"\] \*[\s\S]{0,240}animation-duration:\.01ms!important/.test(IDX_530));
+  /* ---- v3.5.34：自定义设置不上云 / 轻量补媒体特效 / 作业勾选同步加固 ---- */
+  t('v3.5.34 轻量模式关掉听力播放器的唱片旋转与波形条',
+    /html\[data-lite="1"\] \.audio-disc\{display:none!important\}/.test(IDX_530)
+    && /html\[data-lite="1"\] \.audio-wave\{display:none!important\}/.test(IDX_530)
+    && /html\[data-lite="1"\] \.audio-visual\.playing \.audio-wave i\{animation:none!important/.test(IDX_530));
+  t('v3.5.34 轻量模式停掉悬浮球脉冲并简化视频弹窗阴影',
+    /html\[data-lite="1"\] #audioBubble \.dot/.test(IDX_530)
+    && /html\[data-lite="1"\] \.video-box\{box-shadow/.test(IDX_530));
+  t('v3.5.34 轻量模式下作业视频不预加载（preload=none）',
+    /function _hwVidPreload\(\)/.test(IDX_530)
+    && /getAttribute\('data-lite'\) === '1'\) return 'none'/.test(IDX_530)
+    && /_hwVidPreload\(\)/.test(IDX_530));
+  t('v3.5.34 作业勾选后立即 flushCloudSync（不等防抖，防止锁屏丢数据）',
+    /function toggleHwDone\(hwId, subject, ti, el\)\{[\s\S]{0,700}flushCloudSync\(\);/.test(IDX_530));
+  t('v3.5.34 拉取前先推送（syncPullSilent 先 flush 再 syncPullSilent2）',
+    /function syncPullSilent\(\)\{[\s\S]{0,600}hasPendingCloudSync\(\)[\s\S]{0,300}flushCloudSync\(\)[\s\S]{0,200}syncPullSilent2\(\)/.test(IDX_530));
+  t('v3.5.34 孤儿勾选回补：本机有、云端无的 cls_hw_done_ 会被推上去',
+    /function backfillOrphanHwDone\(\)/.test(IDX_530)
+    && /k\.indexOf\('cls_hw_done_'\) !== 0/.test(IDX_530)
+    && /hasOwnProperty\.call\(cloud, k\)/.test(IDX_530)
+    && /api\('\/data', \{ method:'PUT', body:\{ items: items \} \}\)/.test(IDX_530));
+  t('v3.5.34 定时同步与手动拉取都调用回补',
+    (IDX_530.match(/backfillOrphanHwDone\(\)/g) || []).length >= 3);
   t('v3.5.33 轻量选择存在独立的设备级 key（cls_lite_mode），不随版本迁移丢',
     /var LITE_KEY = 'cls_lite_mode';/.test(IDX_530)
     && /function readLitePref\(\)/.test(IDX_530)
@@ -10557,8 +10597,12 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('#2 云端比较改语义比较（不再字符串全等）',
     /function stableStringify\(/.test(idx) && /function sameCloudValue\(/.test(idx) && !/if\(cur === raw\) return;/.test(idx));
   t('#2 排序改动立即进脏推队列', /hookLocalStorage/.test(idx) && /markCloudDirty\(/.test(idx));
-  t('#2 cls_ui_cfg 前后端白名单双向放行',
-    /'cls_ui_cfg'/.test(idx) && /'cls_ui_cfg'/.test(fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf8')));
+  /* v3.5.34 反转：站主要求「自定义设置都不上云端，只保存在浏览器本地」——
+     前后端白名单都必须把它排除，两边保持一致。 */
+  t('#2 v3.5.34 cls_ui_cfg 前后端都不在白名单（自定义设置只存本机）',
+    /var CLOUD_KEYS = \[/.test(idx)
+    && !/CLOUD_KEYS[\s\S]{0,900}'cls_ui_cfg'/.test(idx)
+    && !/const ALLOW_KEYS[\s\S]{0,1400}'cls_ui_cfg'/.test(fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf8')));
 
   t('#3 概览格子最小宽度 0（可收缩）', /\.sc-ov-item\{[^}]*min-width:0/.test(idx));
   t('#3 长标签省略号兜底', /\.sc-ov-item span\{[^}]*text-overflow:ellipsis/.test(idx));
