@@ -2680,8 +2680,17 @@ async function batchProfiles(req, res, me, b) {
         }
       }
       /* 复核列名安全性：列名无法参数化，必须白名单兜住。
-         用 isSafeFieldFormat（不查重名），因为 id_card 等本身就是系统列。 */
-      const exCols = Object.keys(ex).filter((k) => isSafeFieldFormat(k).ok);
+         用 isSafeFieldFormat（不查重名），因为 id_card 等本身就是系统列。
+         🔴 v3.5.16 修复：id_card / youth_league_no 既是系统列、又在
+         loadEditableFields() 返回的「可编辑字段」里，前端会**同时**按固定列
+         （raw.idCard）和自定义字段（raw.extra.id_card）传两遍 —— 于是拼接的
+         UPDATE 里出现 `id_card = $n, id_card = $m`，PG 直接报
+         `multiple assignments to same column "id_card"`，整批 61 行全废。
+         这里把「本函数已按固定列处理过的」列排除，保证每列只写一次。 */
+      const FIXED_COLS_WRITTEN = ['name', 'student_id', 'name_bidx', 'student_id_bidx',
+        'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status',
+        'id_card', 'youth_league_no'];
+      const exCols = Object.keys(ex).filter((k) => isSafeFieldFormat(k).ok && !FIXED_COLS_WRITTEN.includes(k));
 
       if (!name && !sid) {
         errors.push({ index: i, name, studentId: sid, reason: '姓名与学号都为空' });
@@ -2749,15 +2758,25 @@ async function batchProfiles(req, res, me, b) {
         if (idCard)        { params.push(eIdCard); sets.push('id_card = $' + params.length); }
         if (youthLeagueNo) { params.push(eYln);    sets.push('youth_league_no = $' + params.length); }
         params.push(pid);
+        /* 双保险：同一列只保留最后一次赋值（后写的优先），
+           避免再出现 `multiple assignments to same column`。 */
+        const seenCol = new Set(), finalSets = [];
+        for (let si = sets.length - 1; si >= 0; si--) {
+          const col = sets[si].split('=')[0].trim();
+          if (seenCol.has(col)) continue;
+          seenCol.add(col);
+          finalSets.unshift(sets[si]);
+        }
         await sql(
-          'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
+          'update profiles set ' + finalSets.join(', ') + ', updated_at = now() where id = $' + params.length,
           params
         );
         updated++;
       } else {
-        const cols = ['name', 'student_id', 'name_bidx', 'student_id_bidx',
+        /* 双保险：即便 exCols 里混进重复列名，INSERT 也不能出现同名列 */
+        const cols = Array.from(new Set(['name', 'student_id', 'name_bidx', 'student_id_bidx',
           'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status',
-          'id_card', 'youth_league_no', ...exCols];
+          'id_card', 'youth_league_no', ...exCols]));
         const params = [
           eName, eSid, nameBidx, sidBidx, ePolitics, eExamNo, role,
           eWechat, eQq, ePhone, cst, eIdCard, eYln,

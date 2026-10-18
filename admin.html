@@ -999,7 +999,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.15';
+var SITE_VERSION = '3.5.16';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -7351,7 +7351,11 @@ function deleteFieldConfirm(field, label, isSystem){
  */
 function extraColsOf(){
   var meta = STATE.members.fieldMeta || STATE.profiles.fieldMeta || [];
-  var FIXED = ['name','student_id','politics','exam_no','role','title','wechat','qq','phone'];
+  /* v3.5.16：id_card / youth_league_no 也有**固定列**的采集逻辑（顶层 o.idCard），
+     以前这里又当自定义字段收一遍，导致同一列被传两次，服务端拼出
+     `id_card = $n, id_card = $m` 直接报错。这里一律排除。 */
+  var FIXED = ['name','student_id','politics','exam_no','role','title','wechat','qq','phone',
+               'id_card','youth_league_no','contact_status','reject_reason'];
   return meta.filter(function(f){ return FIXED.indexOf(f.field) < 0; });
 }
 

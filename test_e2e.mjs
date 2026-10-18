@@ -3841,6 +3841,38 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
     stillAlive.status === 200 && (stillAlive.body.profiles || []).length === 1,
     'HTTP ' + stillAlive.status);
 
+  /* ---- v3.5.16 回归：id_card 同一列被写两次 ----
+     站主线上报 `multiple assignments to same column "id_card"`，61 行全废。
+     根因：id_card 既在固定列逻辑里（raw.idCard），又在 loadEditableFields()
+     里（raw.extra.id_card），拼接 UPDATE 时出现两个 id_card = $n。
+     ⚠️ SQLite 桩允许重复 SET（后者覆盖），所以这里既跑真值也做静态护栏：
+        静态断言负责防回归，真值断言负责确认正常路径没被改坏。 */
+  const dupIns = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: [{ name: '去重甲', studentId: '270101', role: '学生',
+      idCard: '110101199001011234', extra: { id_card: '110101199001011234' } }] },
+  });
+  t('★导入带身份证号（固定列 + extra 同名列）不失败',
+    dupIns.status === 200 && dupIns.body.failed === 0 && dupIns.body.created === 1,
+    JSON.stringify(dupIns.body).slice(0, 200));
+  const dupUpd = await call('/api/admin?action=batch-profiles', {
+    method: 'POST', token: adminToken,
+    body: { rows: [{ name: '去重甲', studentId: '270101', role: '学生',
+      idCard: '110101199002022345', extra: { id_card: '110101199002022345' } }] },
+  });
+  t('★更新同一行（同名列）也不失败',
+    dupUpd.status === 200 && dupUpd.body.failed === 0 && dupUpd.body.updated === 1,
+    JSON.stringify(dupUpd.body).slice(0, 200));
+  const ADMJS_DUP = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  t('★服务端把固定列从 exCols 里排除（id_card 只写一次）',
+    /FIXED_COLS_WRITTEN/.test(ADMJS_DUP) && /!FIXED_COLS_WRITTEN\.includes\(k\)/.test(ADMJS_DUP));
+  t('★UPDATE 的 SET 列名再去重（防将来加列重犯）',
+    /const seenCol = new Set\(\), finalSets = \[\]/.test(ADMJS_DUP) && /finalSets\.unshift/.test(ADMJS_DUP));
+  t('★INSERT 的列名用 Set 去重', /Array\.from\(new Set\(\['name', 'student_id'/.test(ADMJS_DUP));
+  const ADMHTML_DUP = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('★前端 extraColsOf 排除 id_card / youth_league_no（不再重复采集）',
+    /'id_card','youth_league_no','contact_status','reject_reason'/.test(ADMHTML_DUP));
+
   /* ---- G3. v3.5.5 字段校验规则（站主：「所有字段支持管理员自定义配置校验规则」）---- */
   /* ① 预置规则落库：12 个字段的出厂规则（需求表明细） */
   const metaR = await call('/api/admin?action=field-meta', { token: adminToken });
