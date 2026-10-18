@@ -214,7 +214,9 @@ function parseVoteInput(b) {
   /* v3.5.20：歌单投票也允许多选（站主：「点歌的投票也可以设置多选，我现在更改完就被改回了单选」）
      —— 以前这里硬编码 kind === 'normal'，后台勾了多选也会被吞掉。 */
   const multi = b.multi === true;
-  const allowAdd = b.allowAdd === true;
+  /* v3.5.23：歌单投票不允许同学自己加选项 —— 从点歌平台挑的歌才有 songMeta，
+     同学手打的字符串前台没法折叠展示。后台勾了也一律按 false 处理。 */
+  const allowAdd = (kind !== 'song') && b.allowAdd === true;
   const note = String(b.note || '').trim().slice(0, MAX_NOTE);
   /* v3.5.12 #10：谁提出来的。留空则由后端记为当前操作人（created_by 的显示名） */
   const proposer = String(b.proposer || b.proposedBy || '').trim().slice(0, MAX_PROPOSER);

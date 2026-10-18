@@ -1004,7 +1004,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.22';
+var SITE_VERSION = '3.5.23';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -10912,7 +10912,10 @@ var VO = { list: [], busy: false, pub: null };
 /* ===== v3.5.13 投票公示（站主 #2）=====
    内容键 vote_pub = { templates:[{id,name,template}], byVote:{ [voteId]:{tplId,on} } }。
    前台在投票卡下方按模版渲染公示（变量替换见 index.html votePubRender）。 */
-var VO_PUB_VARS = ['标题','提出人','提出日期','截止时间','参与人数','总票数','第一名','第二名','第三名','结果表'];
+/* v3.5.23：变量补到前十名 + 歌曲总时长（模板里想写第几名都能插） */
+var VO_PUB_VARS = ['标题','提出人','提出日期','截止时间','参与人数','总票数',
+  '第一名','第二名','第三名','第四名','第五名','第六名','第七名','第八名','第九名','第十名',
+  '歌曲总时长','结果表'];
 var VO_PUB_DEFAULT_TPL = {
   id: 'default', name: '默认公示模版',
   template: '📋 {{标题}} 投票结果公示\n'
@@ -11018,26 +11021,40 @@ function voPaint(){
     }
     var top5 = '';
     if(v.kind === 'song' && v.results){
-      /* v3.5.19：前 N 可配、用途（日常/音乐课）、统计总时长 */
+      /* v3.5.19：前 N 可配、用途（日常/音乐课）、统计总时长
+         v3.5.23：总时长上限与取前 N 二选一贯彻到底 ——
+           cap 模式下标题写「按时长上限」，取歌按累加时长截断（同 voWriteTop5），
+           「取前 N 名」输入框禁用，不再出现「前 5 名」这种矛盾文案。 */
       var sp = v.songPick || {};
-      var topN = sp.topN || 5;
-      var purpose = sp.purpose === 'music' ? 'music' : 'daily';
       var cap = sp.maxMinutes || 0;
-      var top = v.results.slice().sort(function(a, b){ return b.n - a.n; }).slice(0, topN);
-      /* ⚠️ results 只有 {id,label,n}，时长在 options 的 songMeta 里 —— 按 id 对上 */
+      var topN = cap > 0 ? 0 : (sp.topN || 5);
+      var purpose = sp.purpose === 'music' ? 'music' : 'daily';
       var metaOf = function(o){
         var op = (v.options || []).filter(function(x){ return String(x.id) === String(o.id); })[0];
         return (op && op.songMeta) || null;
       };
-      var totalSec = 0;
-      top.forEach(function(o){ var m = metaOf(o); totalSec += (m && m.duration) ? Number(m.duration) : 0; });
+      /* 按票数降序，取到「前 N 名」或「总时长不超上限」为止 */
+      var capSec = cap > 0 ? cap * 60 : Infinity;
+      var usedSec = 0;
+      var top = [];
+      var all = v.results.slice().sort(function(a, b){ return b.n - a.n; });
+      for(var ti = 0; ti < all.length; ti++){
+        if(topN > 0 && top.length >= topN) break;
+        var mm0 = metaOf(all[ti]);
+        var d0 = (mm0 && mm0.duration) ? Number(mm0.duration) : 0;
+        /* cap 模式：缺时长的歌不参与判断；超了就跳过这首、看下一首（尽量装满上限） */
+        if(cap > 0 && d0 && usedSec + d0 > capSec) continue;
+        top.push(all[ti]);
+        usedSec += d0;
+      }
+      var totalSec = usedSec;
       var durTxt = totalSec ? voFmtDur(totalSec) : '';
       var capTxt = cap
-        ? (' · 上限 ' + cap + ' 分钟' + (totalSec && totalSec > cap * 60 ? '（<b style="color:#c2410c">已超 ' + voFmtDur(totalSec - cap * 60) + '</b>）' : ''))
+        ? (' · 上限 ' + cap + ' 分钟' + (totalSec && totalSec > capSec ? '（<b style="color:#c2410c">已超 ' + voFmtDur(totalSec - capSec) + '</b>）' : ''))
         : '';
-      var titleTxt = purpose === 'music'
-        ? ('前 ' + topN + ' 名（音乐课）')
-        : ('前 ' + topN + ' 名（对应周一至周五）');
+      var titleTxt = cap > 0
+        ? ('按时长上限 ' + cap + ' 分钟' + (purpose === 'music' ? '（音乐课）' : ''))
+        : (purpose === 'music' ? ('前 ' + topN + ' 名（音乐课）') : ('前 ' + topN + ' 名（对应周一至周五）'));
       top5 = '<div style="margin-top:10px;padding:10px;border-radius:8px;background:var(--bg-2,#faf6f2)">'
         + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
         +   '<b style="font-size:.82rem">' + esc(titleTxt) + '</b>'
@@ -11045,15 +11062,16 @@ function voPaint(){
         +     (durTxt ? '总时长 ' + durTxt : '总时长未知') + capTxt
         +   '</span>'
         +   '<span style="flex:1"></span>'
-        +   '<label class="muted" style="font-size:.74rem">取前'
+        +   (cap > 0 ? '' : '<label class="muted" style="font-size:.74rem">取前'
         +     '<input id="voTopN_' + v.id + '" type="number" min="1" max="50" value="' + topN + '" '
-        +       'style="width:56px;padding:2px 6px;margin:0 4px;font-size:.78rem"> 名</label>'
+        +       'style="width:56px;padding:2px 6px;margin:0 4px;font-size:.78rem"> 名</label>')
         + '</div>'
         + '<ol style="margin:6px 0 0;padding-left:20px;font-size:.82rem;line-height:1.8">'
         + top.map(function(o, i){
             var mm = metaOf(o);
             var d = (mm && mm.duration) ? voFmtDur(mm.duration) : '';
-            var day = purpose === 'music' ? ('第 ' + (i + 1) + ' 首') : ('周' + '一二三四五'[i]);
+            var day = cap > 0 ? ('第 ' + (i + 1) + ' 首')
+              : (purpose === 'music' ? ('第 ' + (i + 1) + ' 首') : ('周' + '一二三四五'[i]));
             return '<li>' + esc(o.label) + ' <span class="muted">（' + o.n + ' 票 · ' + day + (d ? ' · ' + d : '') + '）</span></li>';
           }).join('')
         + '</ol>'
@@ -11065,22 +11083,23 @@ function voPaint(){
       +   '<div style="flex:1;min-width:160px">'
       +     '<b style="font-size:.9rem">' + esc(v.title) + '</b>'
       +     (v.kind === 'song' ? '<span class="badge" style="margin-left:6px">歌单</span>' : '')
-      /* v3.5.12 #10：提出人 + 提出日期 */
+      /* v3.5.12 #10：提出人 + 提出日期
+         v3.5.23：元信息拆成「状态行 / 规则行」两组，不再糊成一条 */
       +     '<div class="muted" style="font-size:.76rem;margin-top:3px">'
-      +       '提出人 <b style="color:var(--accent-ink,#0f766e)">'
-      +       esc(v.proposer || v.createdByName || '未记录') + '</b>'
+      +       esc(v.proposer || v.createdByName || '未记录')
       +       (v.createdDate ? ' · ' + esc(v.createdDate) + ' 提出' : '')
-      +     '</div>'
-      +     '<div class="muted" style="font-size:.76rem;margin-top:3px">'
-      +       st.text
-      +       (v.deadline ? ' · 截止 ' + esc(voTimeText(v.deadline)) : '')
-      +       (v.multi ? ' · 多选' : ' · 单选')
-      +       (v.maxChoices ? ' · 最多 ' + v.maxChoices + ' 项' : '')
-      +       (v.minChoices ? ' · 至少 ' + v.minChoices + ' 项' : '')
-      +       (v.retractLimit > 0 ? ' · 可撤回 ' + v.retractLimit + ' 次' : ' · 不可撤回')
-      +       (v.endMode === 'pub' ? ' · 结束后显示公示' : '')
-      +       (v.allowAdd ? ' · 允许同学加选项' : '')
+      +       ' · ' + st.text
+      +       (v.deadline ? ' · 截止 ' + esc(voTimeText(v.deadline)) : ' · 不限截止')
       +       (v.results ? ' · ' + (v.voters || total) + ' 人参与' : '')
+      +     '</div>'
+      +     '<div class="muted" style="font-size:.72rem;margin-top:2px">'
+      +       [
+              v.multi ? ('多选' + (v.maxChoices ? '（最多 ' + v.maxChoices + ' 项' + (v.minChoices ? ' / 至少 ' + v.minChoices + ' 项' : '') + '）' : ''))
+                      : ('单选' + (v.minChoices ? '（至少 ' + v.minChoices + ' 项）' : '')),
+              v.retractLimit > 0 ? '可撤回 ' + v.retractLimit + ' 次' : '不可撤回',
+              v.endMode === 'pub' ? '结束后显示公示' : '结束后保留投票',
+              v.allowAdd ? '同学可加选项' : '',
+            ].filter(Boolean).map(esc).join(' · ')
       +     '</div>'
       +   '</div>'
       +   '<div style="display:flex;gap:6px;flex-wrap:wrap">'
@@ -11398,9 +11417,12 @@ function voWriteTop5(id){
   if(!v || !v.results){ toast('还没有结果', 'err'); return; }
   var sp = v.songPick || {};
   var nEl = document.getElementById('voTopN_' + id);
-  var wantN = Math.max(1, Number((nEl && nEl.value) || sp.topN || 5));
+  var capMin0 = Number(sp.maxMinutes) || 0;
+  /* v3.5.23：cap 模式下不再有「取前 N」输入（sp.topN = 0），数量由时长上限决定 */
+  var wantN = capMin0 > 0 ? Infinity
+    : Math.max(1, Number((nEl && nEl.value) || sp.topN || 5));
   var purpose = sp.purpose === 'music' ? 'music' : 'daily';
-  var capMin = Number(sp.maxMinutes) || 0;
+  var capMin = capMin0;
 
   var sorted = v.results.slice().sort(function(a, b){ return b.n - a.n; });
   var optMeta = function(o){
@@ -11430,8 +11452,12 @@ function voWriteTop5(id){
   var rec = {
     id: Date.now(),
     at: new Date().toLocaleString('zh-CN', { hour12: false }),
-    note: (purpose === 'music' ? '音乐课投票' : '投票') + '前 ' + top.length + '：「' + v.title + '」'
-      + (totalTxt ? '（总时长 ' + totalTxt + '）' : '') + '：' + labels,
+    /* v3.5.23：cap 模式下备注写「按时长上限」，不再写「前 N」 */
+    note: (capMin0 > 0
+        ? (purpose === 'music' ? '音乐课投票按时长上限 ' + capMin0 + ' 分钟' : '投票按时长上限 ' + capMin0 + ' 分钟')
+        : (purpose === 'music' ? '音乐课投票前 ' + top.length : '投票前 ' + top.length))
+      + '：「' + v.title + '」'
+      + (totalTxt ? '（共 ' + top.length + ' 首 · 总时长 ' + totalTxt + '）' : '') + '：' + labels,
     purpose: purpose,
     totalSeconds: usedSec,
     addedToPlatform: false,
@@ -11586,6 +11612,21 @@ function voEditorDialog(v){
         pick.style.display = isSong ? '' : 'none';
         if(songOpts) songOpts.style.display = isSong ? '' : 'none';
         if(precWrap) precWrap.style.display = (fmtSel && fmtSel.value === 'date') ? '' : 'none';
+        /* v3.5.23：歌单投票没有「同学自己加选项」—— 从点歌平台挑的歌才是有效选项，
+           同学手打出来的字符串没有 songMeta，前台会退化成整条裸奔。直接禁掉。 */
+        var addCb = box.querySelector('#voAllowAdd');
+        if(addCb){
+          if(isSong){
+            addCb.checked = false;
+            addCb.disabled = true;
+            addCb.parentElement.title = '歌单投票只能从点歌平台挑歌，同学不能自己加选项';
+            addCb.parentElement.style.opacity = '.5';
+          }else{
+            addCb.disabled = false;
+            addCb.parentElement.title = '';
+            addCb.parentElement.style.opacity = '';
+          }
+        }
         if(isSong && !pick.getAttribute('data-ready')){
           pick.setAttribute('data-ready', '1');
           voMountSongPick(pick);
@@ -11637,7 +11678,9 @@ function voEditorDialog(v){
       kind: (document.getElementById('voKind') || {}).value || 'normal',
       options: options,
       multi: !!(document.getElementById('voMulti') || {}).checked,
-      allowAdd: !!(document.getElementById('voAllowAdd') || {}).checked,
+      /* v3.5.23：歌单投票强制不允许同学加选项（双保险，后端也会拦） */
+      allowAdd: ((document.getElementById('voKind') || {}).value !== 'song')
+        && !!(document.getElementById('voAllowAdd') || {}).checked,
       note: String((document.getElementById('voNote') || {}).value || ''),
       /* v3.5.12 #10：提出人（留空后端记成操作人自己） */
       proposer: String((document.getElementById('voProposer') || {}).value || '').trim(),

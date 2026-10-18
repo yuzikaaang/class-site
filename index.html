@@ -3475,7 +3475,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.22';
+var SITE_VERSION = '3.5.23';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13505,9 +13505,6 @@ function votePubRender(v){
       '参与人数': String(voters),
       '总票数': String(totalVotes),
       '歌曲总时长': anyDur ? voteFmtDur(totalDurSec) : '—',
-      '第一名': esc(rs[0] ? rs[0].label : '—'),
-      '第二名': esc(rs[1] ? rs[1].label : '—'),
-      '第三名': esc(rs[2] ? rs[2].label : '—'),
       '结果表': '<table class="vote-pub-tbl"><thead><tr><th>排名</th><th>选项</th><th>提出人</th>' + durHead + '<th>票数</th></tr></thead><tbody>'
         + rs.map(function(r, i){
             return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.label)
@@ -13515,6 +13512,11 @@ function votePubRender(v){
               + '</td>' + durCell(r) + '<td>' + (r.n || 0) + ' 票</td></tr>';
           }).join('') + '</tbody></table>',
     };
+    /* v3.5.23：名次变量从「前三名」扩到「前十名」（站主要求：模板里想写第4、5名也得有） */
+    var CN = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    for(var rn = 1; rn <= 10; rn++){
+      map['第' + CN[rn] + '名'] = esc(rs[rn - 1] ? rs[rn - 1].label : '—');
+    }
     var html = String(tpl.template || '')
       .replace(/\{\{\s*([^}]+?)\s*\}\}/g, function(m, k){ return map[k] !== undefined ? map[k] : m; })
       .replace(/&(?![a-zA-Z#0-9]+;)/g, '&amp;')   /* 裸 & 转义，已写好的实体不动 */
@@ -13529,12 +13531,22 @@ function votePubRender(v){
 /* 一张投票卡 */
 /* v3.5.18：歌单投票的选项是「歌名 - 歌手 - 点歌人 - 时间」，整段太长。
    默认只显示「歌名 - 歌手」，点「详情」再展开点歌人和点歌时间。
-   只认末尾形如「 - 某人 - 2026-10-05 21:48」的结构，普通选项不受影响。 */
+   v3.5.23：改成「找日期段」的宽容拆法 —— 老格式/新格式都能折叠：
+     · 歌名 - 歌手 - 点歌人 - 2026-10-05 21:48
+     · 歌名 - 歌手 - 点歌人 - 2026-10-05 21:48 - 1 赞 - 4:29   ← 以前正则不认，整条裸奔
+     · 歌名 - 歌手 - 点歌人 - 时间 - 时长
+   规则：按「 - 」分段，从第 3 段起找到第一个像日期的段，它之前的两段是
+   歌名和歌手，其余全部进「详情」。普通选项（没有日期段）不受影响。 */
 function voteOptSplit(label){
   var s = String(label == null ? '' : label).trim();
-  var m = s.match(/^(.*) - ([^-]{1,20}) - (\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?)$/);
-  if(!m) return null;
-  return { main: m[1].trim(), extra: m[2].trim() + ' · ' + m[3].trim() };
+  var parts = s.split(' - ').map(function(x){ return x.trim(); }).filter(Boolean);
+  if(parts.length < 4) return null;
+  var dateIdx = -1;
+  for(var i = 2; i < parts.length; i++){
+    if(/^\d{4}[-/]\d{1,2}[-/]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/.test(parts[i])){ dateIdx = i; break; }
+  }
+  if(dateIdx < 0) return null;
+  return { main: parts.slice(0, 2).join(' - '), extra: parts.slice(2).join(' · ') };
 }
 /** 秒 → m:ss */
 function voteFmtDur(sec){

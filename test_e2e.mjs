@@ -8119,6 +8119,23 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.22 前台身份/头衔也受字段可见性管辖',
     /role: canSee\('role'/.test(PROF_522) && /title: canSee\('title'/.test(PROF_522));
 
+  /* ---- v3.5.23：歌单投票展示 / 加选项 / 时长上限一致性 / 公示变量 ---- */
+  const IDX_523 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const ADM_523 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const VOTJS_523 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
+  t('v3.5.23 老格式选项（含赞数/时长尾巴）也能折叠 —— 按日期段拆分',
+    /parts\.length < 4/.test(IDX_523) && /dateIdx/.test(IDX_523)
+    && !/\^\(\.\*\) - \(\[\^\-\]/.test(IDX_523));
+  t('v3.5.23 歌单投票不能同学自加选项（前端禁用 + 后端强制）',
+    /kind !== 'song'\) && b\.allowAdd/.test(VOTJS_523)
+    && /addCb\.disabled = true/.test(ADM_523));
+  t('v3.5.23 后台取歌区块按时长上限取名，不再出现「前 N 名」矛盾文案',
+    /titleTxt = cap > 0/.test(ADM_523) && /按时长上限 ' \+ cap \+ ' 分钟/.test(ADM_523)
+    && /var wantN = capMin0 > 0 \? Infinity/.test(ADM_523));
+  t('v3.5.23 公示名次变量扩到前十名',
+    /'第四名','第五名'/.test(ADM_523) && /map\['第' \+ CN\[rn\] \+ '名'\]/.test(IDX_523));
+  t('v3.5.23 投票管理元信息分「状态行 / 规则行」', /规则行/.test(ADM_523));
+
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const ADMJS_518 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
