@@ -2698,7 +2698,12 @@ async function batchProfiles(req, res, me, b) {
      以前一批 60 条 × 每行 3 次查询 = 180+，跑到第 24 行就
      「Too many subrequests by single Worker invocation」，后面全废。
      现在一批最多 12 条（前端也改成 8 条一批），每行压到 2 次查询 + 1 次写。 */
-  if (list.length > 12) return fail(res, 400, '单批最多 12 条，请分批提交');
+  if (list.length > 12) {
+    return fail(res, 400,
+      '单批最多 12 条（当前 ' + list.length + ' 条）。'
+      + '如果你是在「批量导入资料」里看到这条，说明后台页面还是旧版本 —— '
+      + '按 Ctrl+F5（手机：下拉刷新）强制刷新后再导一次即可，新版本会自动 8 条一批。');
+  }
 
   const sql = getSql();
   let created = 0, updated = 0, unchanged = 0;
