@@ -155,6 +155,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
   <p id="endInfo"></p>
   <button id="reBtn">再来一局</button>
 </div>
+<script src="cloud.js"></script>
 <script>
 /* ===== 音效 ===== */
 var AC=null;
@@ -184,6 +185,7 @@ function winnerOf(b){
 function isFull(b){ for(var i=0;i<9;i++) if(!b[i]) return false; return true; }
 
 function reset(){
+  window.__ttStart=Date.now();   /* v3.5.35 对局计时 */
   board=['','','','','','','','',''];playing=true;cur='X';
   mode=document.getElementById('modeSel').value;
   diff=+(document.getElementById('diffSel').value);
@@ -231,6 +233,13 @@ function end(w){
     else { draws++;localStorage.setItem('ttt_d',draws);document.getElementById('draws').textContent=draws; t.textContent='🤝 平局'; info.textContent='势均力敌'; snd.draw(); }
   }
   ov.classList.remove('hidden');
+  /* v3.5.35 云同步：对局时长 + 人机模式胜负平台账（pvp 不记个人战绩） */
+  try{
+    if(window.CLS_CLOUD){
+      CLS_CLOUD.addPlay('tictactoe', Date.now()-(window.__ttStart||Date.now()), {});
+      if(mode==='ai') CLS_CLOUD.record('tictactoe', (w&&w.p==='X') ? {w:1} : (w&&w.p==='O') ? {l:1} : {d:1});
+    }
+  }catch(e){}
 }
 /* ===== AI ===== */
 function aiMove(){
