@@ -283,6 +283,14 @@ function translate(sqlText) {
     /now\(\)\s*([+-])\s*interval\s*'\s*(\d+)\s*(\w+)\s*'/gi,
     (m, sign, num, unit) => "datetime('now', '" + sign + num + " " + unit + "')"
   );
+  /* v3.5.35：extract(epoch from (A - B)) → SQLite 的秒差。
+     PG 里 timestamptz 相减得到 interval，extract(epoch ...) 取出秒数；
+     SQLite 里两个 datetime 串相减没有意义，要换 strftime('%s', ...)。
+     桩的时间列都是 text，'YYYY-MM-DD HH:MM:SS' 格式，strftime 直接吃。 */
+  s = s.replace(
+    /extract\s*\(\s*epoch\s+from\s*\(\s*([\w.]+)\s*-\s*([\w.]+)\s*\)\s*\)/gi,
+    (m, a, b) => "(strftime('%s', " + a + ") - strftime('%s', " + b + "))"
+  );
   /* date_trunc('day', X) → X 的当天起点（SQLite 用 date(X)） */
   s = s.replace(
     /date_trunc\s*\(\s*'day'\s*,\s*([^)]+)\)/gi,
@@ -3331,6 +3339,55 @@ console.log('\n【35】第二十九轮·资料字段元数据与可见性分档'
   const sBack = await call('/api/profile?action=search&q=250501', { token: bTok });
   const hBack = (sBack.body.results || [])[0] || {};
   t('改回 public 后又能查到', hBack.examNo === '11389409', '实际 ' + JSON.stringify(hBack.examNo));
+
+  /* ===== v3.5.37「仅后端可见」（原「仅管理员」档，语义明确化）=====
+     · 后台详情 + 管理员本人「我的资料」可见
+     · 其他人（含普通同学本人）前台查不到，连键都不下发
+     · 管理员在前台查询别人时也无特权（ctx.admin 恒 false） */
+  const svAdm = await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken,
+    body: { field: 'exam_no', visibility: 'admin' },
+  });
+  t('v3.5.37 改为仅后端可见成功', svAdm.status === 200 && svAdm.body.visibility === 'admin',
+    JSON.stringify(svAdm.body).slice(0, 140));
+
+  const sAdm1 = await call('/api/profile?action=search&q=250501', { token: bTok });
+  const hAdm1 = (sAdm1.body.results || [])[0] || {};
+  t('★v3.5.37 普通同学查别人：仅后端可见字段不下发', hAdm1.examNo === '' || hAdm1.examNo === undefined,
+    '实际 ' + JSON.stringify(hAdm1.examNo));
+
+  const sAdm2 = await call('/api/profile?action=search&q=250501', { token: adminToken });
+  const hAdm2 = (sAdm2.body.results || [])[0] || {};
+  t('★v3.5.37 管理员前台查询别人也无特权（不下发）', hAdm2.examNo === '' || hAdm2.examNo === undefined,
+    '实际 ' + JSON.stringify(hAdm2.examNo));
+
+  const meStu = await call('/api/profile?action=me', { token: npTok2 });
+  const stuFields = ((meStu.body || {}).profile || {}).fields || [];
+  t('★v3.5.37 普通同学本人的「我的资料」也不含该字段',
+    !stuFields.some((f) => f.field === 'exam_no'),
+    JSON.stringify(stuFields.map((f) => f.field)));
+
+  /* 管理员自己的「我的资料」：给管理员认领一条档案并填值 */
+  const admProf = await call('/api/profile?action=search&q=' + encodeURIComponent('站主'), { token: adminToken });
+  const admHit = (admProf.body.results || []).find((x) => x.username === 'yuzikang' || x.name === '站主');
+  let admSeen = 'no-profile';
+  if (admHit) {
+    const admMe = await call('/api/profile?action=me', { token: adminToken });
+    const af = ((admMe.body || {}).profile || {}).fields || [];
+    admSeen = af.some((f) => f.field === 'exam_no') ? 'visible' : 'hidden';
+  }
+  /* v3.5.38 站主明确要求：连管理员本人在前台也看不到 —— 只能去后台查 */
+  t('★v3.5.38 管理员本人的「我的资料」也看不到该字段', admSeen !== 'visible',
+    '实际 ' + admSeen + '（v3.5.38 起前台 me 链路的 ctx.admin 恒为 false）');
+  t('★v3.5.38 me 链路 ctx.admin 恒传 false（不依赖调用者角色）',
+    fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8')
+      .includes('shapeProfile(row, true, meta, { self: true, committee: true, admin: false })'));
+
+  /* 改回公开，不留尾巴 */
+  await call('/api/admin?action=set-visibility', {
+    method: 'POST', token: adminToken,
+    body: { field: 'exam_no', visibility: 'public' },
+  });
 }
 
 console.log('\n【36】第二十九轮·本人可见性意愿（仅自己可见）+ 私有字段接口形状');
@@ -6563,8 +6620,9 @@ console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检�
 
   /* ---- ⑤ 后台接入点 ---- */
   t('★后台头像（侧栏 + 各列表）都带 ink-auto',
-    /class="av ink-auto" id="meAv"/.test(adm) && (adm.match(/cell-user"><div class="av ink-auto">/g) || []).length === 3,
-    '成员表 / 头衔表 / 游戏表各一处（用户与资料两表已合并为成员表）');
+    /class="av ink-auto" id="meAv"/.test(adm) && (adm.match(/cell-user"><div class="av ink-auto">/g) || []).length >= 3,
+    '成员表 / 头衔表 / 游戏表各一处（用户与资料两表已合并为成员表；'
+    + 'v3.5.35 在线时长表也补了一处，所以改成「至少 3 处」不再钉死计数）');
   t('★后台统计卡图标 ink-auto', /si ink-auto ' \+ c\.tone/.test(adm));
   t('★排行榜榜首徽章 ink-auto（nth-child 渐变底）', /n' \+ \(i === 0 \? ' ink-auto' : ''\)/.test(adm));
 
@@ -7910,8 +7968,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.28',
-    /const SCHEMA_VER = '3\.5\.28'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.35',
+    /const SCHEMA_VER = '3\.5\.35'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8214,7 +8272,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.27 云端时长库表 song_durations 三处同步（升级路径/全量清单/schema.sql）',
     (HTTP_527.match(/create table if not exists song_durations/g) || []).length >= 2
     && /create table if not exists song_durations/.test(SCH_527)
-    && /const SCHEMA_VER = '3\.5\.28'/.test(HTTP_527));
+    && /const SCHEMA_VER = '3\.5\.35'/.test(HTTP_527));
   t('v3.5.27 后端写库按来源优先级，人工填写不被自动结果覆盖',
     /case song_durations\.source/.test(MUS_527) && /source: 'manual'/.test(MUS_527)
     && /when 'manual' then 3/.test(MUS_527));
@@ -9715,12 +9773,16 @@ console.log('\n【87】第七十五轮·v3.4.1 字段可见性新增「仅管理
     /if \(eff === 'admin'\) return !!ctx\.admin;/.test(prof));
   /* v3.5.21：前台查询一视同仁 —— search 固定 admin:false（管理员也没特权，
      要看详细档案去后台），myProfile 仍按真实身份传（本人看自己）。 */
-  t('★profile.js：search 不因管理员身份多给字段，myProfile 仍传真实身份',
-    /admin: false \}/.test(prof) && /admin: u\.role === 'admin' \}/.test(prof));
+  t('★profile.js：前台两条链路都不因管理员身份多给字段（v3.5.38 收紧）',
+    (prof.match(/admin: false \}/g) || []).length >= 2
+    && !/admin: u\.role === 'admin'/.test(prof));
+  t('★v3.5.38 profile.js 不再按调用者角色放行「仅后端可见」',
+    !/admin: u\.role/.test(prof),
+    '一律 false —— 管理员也只能去后台看');
   t('★admin.js：set-visibility / add-field 白名单含 admin',
     /ALLOWED_VIS = \['public', 'committee', 'self', 'admin'\]/.test(admjs));
   t('★admin.html：标签/描述/快捷按钮/新增弹窗/单人例外五处在位',
-    /VIS_LABEL = \{ public:'公开', committee:'班委可见', self:'仅本人', admin:'仅管理员' \}/.test(adm)
+    /VIS_LABEL = \{ public:'公开', committee:'班委可见', self:'仅本人', admin:'仅后端可见' \}/.test(adm)
     && adm.includes('admin:     ') && (adm.match(/\['public', ?'committee', ?'self', ?'admin'\]/g) || []).length >= 2
     && adm.includes("value=\"admin\""));
   t('★前台无档位枚举（档位判定全在服务端，前端只渲染给到的字段）',
@@ -10704,6 +10766,239 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
 
   t('#9 全量路径先建 ballots 再 alter（顺序护栏）',
     http2.indexOf("create table if not exists class_vote_ballots", http2.indexOf("===== v3.5.6 投票管理")) < http2.lastIndexOf("alter table class_vote_ballots add column if not exists retract_used"));
+}
+
+console.log('\n【85】在线时长统计（v3.5.35）');
+{
+  /* ===== 静态断言：三处 DDL / 常量 / 接口 / 后台面板 ===== */
+  const http535 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const sch535  = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const aut535  = fs.readFileSync(new URL('./api/auth.js', import.meta.url), 'utf8');
+  const adm535  = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const admh535 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  t('v3.5.35 online_sessions 三处同步（升级路径 / 全量清单 / schema.sql）',
+    (http535.match(/create table if not exists online_sessions/g) || []).length >= 2
+    && /create table if not exists online_sessions/.test(sch535)
+    && /const SCHEMA_VER = '3\.5\.35'/.test(http535));
+  t('v3.5.35 三处索引齐（user_start / start / token）',
+    ['online_user_start_idx', 'online_start_idx', 'online_token_idx'].every(function(ix){
+      const n = (http535.match(new RegExp('create index if not exists ' + ix, 'g')) || []).length;
+      return n >= 2 && new RegExp('create index if not exists ' + ix).test(sch535);
+    }));
+  t('v3.5.35 表结构有 start_at / stop_at / last_ping_at / ping_count',
+    /start_at\s+timestamptz/.test(sch535) && /stop_at\s+timestamptz/.test(sch535)
+    && /last_ping_at\s+timestamptz/.test(sch535) && /ping_count\s+int/.test(sch535));
+
+  t('★v3.5.35 分段阈值是 180 秒（站主说的「超过 3 分钟另算一次」）',
+    /const ONLINE_GAP_SEC = 180/.test(aut535),
+    '必须 180，不是 90 —— 90 是在线判定窗口，两者用途不同');
+  t('★v3.5.35 ping 一条 UPDATE 同时完成「续上」和「判断另起」',
+    /update online_sessions o[\s\S]{0,400}from \(/.test(aut535)
+    && /last_ping_at > now\(\) - /.test(aut535));
+  t('★v3.5.35 续上时段时 stop_at / last_ping_at 前推、次数 +1',
+    /set stop_at = now\(\), last_ping_at = now\(\), ping_count = o\.ping_count \+ 1/.test(aut535));
+  t('★v3.5.35 没命中（断了 3 分钟以上）则插入新时段',
+    /returning o\.id/.test(aut535) && /insert into online_sessions/.test(aut535)
+    && /if \(cur\.length\) return 'continue'/.test(aut535));
+  t('v3.5.35 分段按 session_token（同账号两台设备各算各的）',
+    /and session_token = \$\{sessTok\}/.test(aut535));
+  t('v3.5.35 时段统计并入既有并发 jobs（不多花子请求轮次）',
+    /jobs\.push\(\(async \(\) => \{[\s\S]{0,120}online_sessions/.test(aut535));
+
+  t('v3.5.35 后台接口 action=online 已注册',
+    /if \(action === 'online'\)/.test(adm535) && /async function onlineStats/.test(adm535));
+  t('★v3.5.35 按人聚合给出 累计 / 次数 / 最长单次 / 最近在线',
+    /total_secs/.test(adm535) && /session_count/.test(adm535)
+    && /longest_secs/.test(adm535) && /last_at/.test(adm535));
+  t('v3.5.35 带 id 时返回该人时段明细', /userId: id,/.test(adm535) && /sessions: rows\.map/.test(adm535));
+
+  t('v3.5.35 后台导航有「在线时长」入口',
+    /id:'online',\s+label:'在线时长'/.test(admh535) && /online:\s+renderOnline/.test(admh535));
+  t('v3.5.35 后台面板能切时间窗口（今天 / 7 / 30 / 90 天）',
+    /\[1, 7, 30, 90\]\.map/.test(admh535) && /data-ond=/.test(admh535));
+  t('v3.5.35 后台能展开某人的时段明细', /function loadOnlineDetail/.test(admh535)
+    && /function onDetailHtml/.test(admh535) && /data-onu=/.test(admh535));
+
+  /* ===== 行为断言：真跑一遍 ping，看表里到底写了什么 ===== */
+  const reg535 = await call('/api/auth?action=register', {
+    method: 'POST', body: { username: 'onlinetime535', password: 'OnlinePass123' },
+  });
+  t('v3.5.35 建在线时长测试账号', reg535.status === 200 && !!reg535.body.token,
+    JSON.stringify(reg535.body).slice(0, 160));
+  const tk535 = reg535.body.token;
+  const uid535 = reg535.body.user.id;
+
+  const q535 = (sql) => {
+    const r = db.exec(sql);
+    if (!r.length) return [];
+    const cols = r[0].columns;
+    return r[0].values.map((v) => { const o = {}; cols.forEach((c, i) => { o[c] = v[i]; }); return o; });
+  };
+
+  /* 第一次心跳 → 应该出现第一条时段 */
+  await call('/api/auth?action=ping', { token: tk535 });
+  let rows535 = q535('select * from online_sessions where user_id = ' + uid535);
+  t('★v3.5.35 第一次心跳就落一条时段', rows535.length === 1,
+    '实际 ' + rows535.length + ' 行');
+  t('★v3.5.35 新时段 ping_count = 1', rows535.length === 1 && Number(rows535[0].ping_count) === 1,
+    JSON.stringify(rows535[0]));
+  t('★v3.5.35 新时段 start_at = stop_at（此刻还没走过时间）',
+    rows535.length === 1 && rows535[0].start_at === rows535[0].stop_at,
+    'start=' + (rows535[0] || {}).start_at + ' stop=' + (rows535[0] || {}).stop_at);
+
+  /* 再心跳一次 → 还是同一行，次数 +1 */
+  await call('/api/auth?action=ping', { token: tk535 });
+  rows535 = q535('select * from online_sessions where user_id = ' + uid535);
+  t('★v3.5.35 60 秒内的第二次心跳仍是同一段（不新增行）', rows535.length === 1,
+    '实际 ' + rows535.length + ' 行');
+  t('★v3.5.35 同一段 ping_count 累加到 2',
+    rows535.length === 1 && Number(rows535[0].ping_count) === 2,
+    JSON.stringify(rows535[0]));
+
+  /* 把锚点往前拨 4 分钟（模拟「断开超过 3 分钟」）→ 下次心跳应另起一段 */
+  db.run("update online_sessions set last_ping_at = datetime('now', '-4 minutes') where user_id = " + uid535);
+  await call('/api/auth?action=ping', { token: tk535 });
+  rows535 = q535('select * from online_sessions where user_id = ' + uid535 + ' order by id');
+  t('★v3.5.35 断开 4 分钟后心跳另起一段（行数 2）', rows535.length === 2,
+    '实际 ' + rows535.length + ' 行');
+  t('★v3.5.35 新起的那段 ping_count 重置为 1',
+    rows535.length === 2 && Number(rows535[1].ping_count) === 1,
+    JSON.stringify(rows535[1]));
+
+  /* 拨 2 分钟（仍在 180 秒窗口内）→ 应续上，不新增 */
+  db.run("update online_sessions set last_ping_at = datetime('now', '-2 minutes') where user_id = " + uid535
+    + " and id = (select max(id) from online_sessions where user_id = " + uid535 + ")");
+  await call('/api/auth?action=ping', { token: tk535 });
+  rows535 = q535('select * from online_sessions where user_id = ' + uid535);
+  t('★v3.5.35 断开 2 分钟（<180 秒）仍算同一次，不新增行', rows535.length === 2,
+    '实际 ' + rows535.length + ' 行');
+
+  /* ---- 后台接口：聚合 + 明细 ---- */
+  const onAll = await call('/api/admin?action=online&days=30&limit=500', { token: adminToken });
+  t('★v3.5.35 GET admin?action=online 返回 200', onAll.status === 200,
+    '实际 ' + onAll.status + ' ' + JSON.stringify(onAll.body).slice(0, 200));
+  t('★v3.5.35 聚合结果里能找到刚心跳的账号',
+    !!(onAll.body && (onAll.body.users || []).some((x) => x.username === 'onlinetime535')),
+    JSON.stringify((onAll.body || {}).users || []).slice(0, 300));
+  const row535 = ((onAll.body || {}).users || []).find((x) => x.username === 'onlinetime535') || {};
+  t('★v3.5.35 该账号在线次数 = 2 段', row535.sessionCount === 2, JSON.stringify(row535));
+  t('v3.5.35 聚合带 grandSecs / activeUsers 汇总字段',
+    typeof (onAll.body || {}).grandSecs === 'number' && typeof (onAll.body || {}).activeUsers === 'number',
+    JSON.stringify({ g: (onAll.body || {}).grandSecs, a: (onAll.body || {}).activeUsers }));
+
+  const onOne = await call('/api/admin?action=online&id=' + uid535, { token: adminToken });
+  t('★v3.5.35 带 id 返回该人时段明细', onOne.status === 200 && Array.isArray((onOne.body || {}).sessions),
+    JSON.stringify(onOne.body).slice(0, 200));
+  t('★v3.5.35 明细按时间从新到旧', (function(){
+    const l = (onOne.body || {}).sessions || [];
+    if (l.length < 2) return false;
+    return String(l[0].startAt) >= String(l[1].startAt);
+  })(), JSON.stringify(((onOne.body || {}).sessions || []).map((x) => x.startAt)));
+  t('v3.5.35 明细每段带时长 secs 与心跳次数', (function(){
+    const l = (onOne.body || {}).sessions || [];
+    return l.length > 0 && typeof l[0].secs === 'number' && typeof l[0].pingCount === 'number';
+  })(), JSON.stringify(((onOne.body || {}).sessions || [])[0]));
+
+  /* 权限：学生不能看别人的在线时长 */
+  const onDeny = await call('/api/admin?action=online', { token: tk535 });
+  t('★v3.5.35 普通同学调在线时长接口被拒 403', onDeny.status === 403,
+    '实际 ' + onDeny.status + ' ' + JSON.stringify(onDeny.body).slice(0, 120));
+}
+
+console.log('\n【86】前台横屏切换（v3.5.39）');
+{
+  const idx539 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const admh539 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* ---- 前台必须存在与后台同款的一套能力 ---- */
+  t('v3.5.39 前台有 LAND_ON 意图变量', /var\s+LAND_ON\s*=\s*false/.test(idx539));
+  t('v3.5.39 前台持久化 key 用 cls_land（不与后台 cls_admin_land 混用）',
+    /var\s+LAND_LS\s*=\s*'cls_land'/.test(idx539) && !/LAND_LS\s*=\s*'cls_admin_land'/.test(idx539));
+  ['syncLandscapeClass', 'lockLandscape', 'unlockLandscape', 'toggleLandscape',
+   'saveLandIntent', 'initLandscape', 'resyncLandscape'].forEach((fn) => {
+    t('v3.5.39 前台定义 ' + fn + '()', new RegExp('function\\s+' + fn + '\\s*\\(').test(idx539));
+  });
+
+  /* ---- CSS 兜底旋转：方向必须是 left:0 + top:100vh + rotate(-90deg) ---- */
+  t('★v3.5.39 前台有 html.force-landscape body 旋转规则',
+    /html\.force-landscape\s+body\s*\{[^}]*transform\s*:\s*rotate\(-90deg\)/.test(idx539));
+  t('★v3.5.39 旋转方向未回退成 90deg（踩过的坑：方向反了）',
+    !/html\.force-landscape\s+body\s*\{[^}]*rotate\(90deg\)/.test(idx539));
+  t('v3.5.39 旋转锚点 left:0（不是 left:100vw）',
+    /html\.force-landscape\s+body\s*\{[^}]*left\s*:\s*0/.test(idx539)
+    && !/html\.force-landscape\s+body\s*\{[^}]*left\s*:\s*100vw/.test(idx539));
+  t('v3.5.39 旋转锚点 top:100vh + origin left top',
+    /html\.force-landscape\s+body\s*\{[^}]*top\s*:\s*100vh/.test(idx539)
+    && /html\.force-landscape\s+body\s*\{[^}]*transform-origin\s*:\s*left\s+top/.test(idx539));
+  t('v3.5.39 旋转时宽高互换（width:100vh / height:100vw）',
+    /html\.force-landscape\s+body\s*\{[^}]*width\s*:\s*100vh/.test(idx539)
+    && /html\.force-landscape\s+body\s*\{[^}]*height\s*:\s*100vw/.test(idx539));
+
+  /* ---- 按钮位置：侧边栏里，且在「音效」按钮之上 ---- */
+  const iLand539 = idx539.indexOf('id="landBtn"');
+  const iSfx539 = idx539.indexOf('id="sfxBtn"');
+  t('★v3.5.39 侧边栏有横屏按钮 #landBtn', iLand539 > 0);
+  t('★v3.5.39 横屏按钮在「音效」按钮上面（站主要求的位置）',
+    iLand539 > 0 && iSfx539 > 0 && iLand539 < iSfx539, iLand539 + ' vs ' + iSfx539);
+  t('v3.5.39 横屏按钮在 .sidebar 内',
+    idx539.indexOf('<aside class="sidebar"') < iLand539
+    && iLand539 < idx539.indexOf('</aside>'));
+  t('v3.5.39 按钮绑 toggleLandscape()', /id="landBtn"[^>]*onclick="toggleLandscape\(\)"/.test(idx539));
+  t('v3.5.39 按钮有 data-on 状态位（高亮用）', /id="landBtn"[^>]*data-on="0"/.test(idx539));
+  t('v3.5.39 开启时按钮文字变成「横屏查看：开」',
+    idx539.includes("'📱 横屏查看：开'") && idx539.includes("'📱 横屏查看：关'"));
+
+  /* ---- 关键行为纪律 ---- */
+  t('★v3.5.39 进页面不抢锁方向（initLandscape 内不含 lockLandscape 调用）',
+    (function(){
+      const i = idx539.indexOf('function initLandscape(');
+      if (i < 0) return false;
+      const body = idx539.slice(i, idx539.indexOf('\nfunction ', i + 10));
+      return !/lockLandscape\s*\(\s*\)/.test(body);
+    })());
+  t('★v3.5.39 syncLandscapeClass 按视口判断（h>w 才转），避免双重旋转',
+    (function(){
+      const i = idx539.indexOf('function syncLandscapeClass(');
+      if (i < 0) return false;
+      const body = idx539.slice(i, idx539.indexOf('\nfunction ', i + 10));
+      return /innerHeight\s*>\s*window\.innerWidth/.test(body) && /LAND_ON\s*&&\s*portrait/.test(body);
+    })());
+  t('v3.5.39 监听 resize / orientationchange 重新对齐', (function(){
+    const i = idx539.indexOf("addEventListener('resize'");
+    return i > 0 && idx539.includes("addEventListener('orientationchange'");
+  })());
+  t('v3.5.39 监听 visibilitychange + pageshow 做恢复对齐', (function(){
+    const i = idx539.indexOf("addEventListener('visibilitychange'");
+    if (i < 0) return false;
+    return idx539.slice(i, i + 900).includes('resyncLandscape') || idx539.includes("addEventListener('pageshow'");
+  })());
+
+  /* ---- 与后台同源：两边的核心函数体应当等价 ---- */
+  t('★v3.5.39 前台的 toggleLandscape 与后台逻辑一致（都有 380ms 二次对齐）',
+    (function(){
+      const pick = (s) => {
+        const i = s.indexOf('function toggleLandscape(');
+        if (i < 0) return '';
+        return s.slice(i, s.indexOf('\nfunction ', i + 10));
+      };
+      const a = pick(idx539), b = pick(admh539);
+      return a.length > 0 && b.length > 0
+        && a.includes('setTimeout(syncLandscapeClass, 380)')
+        && b.includes('setTimeout(syncLandscapeClass, 380)');
+    })());
+  t('v3.5.39 后台横屏实现未被误改（admin.html 仍有 cls_admin_land）',
+    /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
+
+  /* ---- 版本号三处同步 ---- */
+  t('v3.5.39 index.html SITE_VERSION = 3.5.39', /var SITE_VERSION = '3\.5\.39'/.test(idx539));
+  t('v3.5.39 admin.html SITE_VERSION = 3.5.39', /var SITE_VERSION = '3\.5\.39'/.test(admh539));
+  t('v3.5.39 sw.js SITE_VER = 3.5.39 + CACHE v153',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.5.39'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v153'"));
+  t('v3.5.39 api/worker.mjs API_VER = 3.5.39',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.5.39';"));
+  t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
 console.log('\n' + '='.repeat(52));
