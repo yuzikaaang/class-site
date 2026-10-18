@@ -177,6 +177,22 @@ body::after{box-shadow:none}
 .side-btn:hover{background:#ede3d9}
 .side-btn.active{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;box-shadow:var(--sh-accent)}
 .sidebar-mask{display:none}
+/* ===== 横屏切换（v3.5.39，与 admin.html 同款） =====
+   手机竖着拿、但用户点了「横屏查看」→ 把整个 body 转 -90° 塞进横屏尺寸里。
+   方向在 2026-10 踩过坑：原来用 left:100vw + rotate(90deg) 方向正好反了，
+   现在固定 left:0 + top:100vh + rotate(-90deg) + origin:left top。
+   一旦系统真的把屏幕转成横屏（w>h），JS 会撤掉这个类，页面自然铺满。 */
+html.force-landscape, html.force-landscape body{overflow:hidden}
+html.force-landscape body{
+  position:fixed; top:100vh; left:0; width:100vh; height:100vw;
+  transform:rotate(-90deg); transform-origin:left top; overflow:auto;
+  -webkit-overflow-scrolling:touch;
+}
+/* 横屏后视口宽高互换：侧边栏改按高度算，收窄一点让内容区多留位置 */
+html.force-landscape .sidebar{width:min(290px,42vw)}
+html.force-landscape .content{padding:0 14px 14px}
+html.force-landscape header{padding:26px 22px}
+#landBtn[data-on="1"]{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;box-shadow:var(--sh-accent)}
 
 /* 悬浮按钮：移动端随时唤起侧边栏（桌面侧边栏常驻，故仅移动端显示） */
 .fab{display:none}
@@ -3227,6 +3243,7 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
     <div class="side-tip">💡 站点应用入口在侧边栏中，点击下方板块即可打开</div>
     <button class="side-btn" id="homeBtn" onclick="goHomeView()">🏠 首页</button>
     <div id="sideCats"></div>
+    <button class="side-btn" id="landBtn" onclick="toggleLandscape()" data-on="0">📱 横屏查看：关</button>
     <button class="side-btn" id="sfxBtn" onclick="toggleSfx()" style="margin-top:auto">🔔 音效：开</button>
     <button class="side-btn" id="uiSetBtn" onclick="openSettings()">⚙️ 自定义设置</button>
     <!-- ↓↓↓ 以下三项 2026-10-07 起隐藏（云端同步已接管：数据在云端，链接也由站点分享，
@@ -3308,6 +3325,106 @@ var SFX=(function(){
   };
 })();
 function toggleSfx(){ SFX.setOn(!SFX.isOn()); if(SFX.isOn()) SFX.success(); }
+
+/* ============================================================================
+ * 横屏切换（v3.5.39：与后台 admin.html 完全同款）
+ * ----------------------------------------------------------------------------
+   站主要求：「前端做到跟后端一样可以切换成横屏，要求和后台完全一样，
+            按钮放在侧边栏下面音效的上面」。
+   于是把 admin.html 那一套原样搬过来，只换持久化 key（cls_land，与后台的
+   cls_admin_land 分开存 —— 前台想横屏不代表后台也想横屏）。
+
+   核心规则（踩过的坑都在这）：
+     · LAND_ON  = 用户「要不要横屏」的意图，只有按钮能改，是唯一真源。
+     · syncLandscapeClass() 看**当前视口**：竖着（h>w）才加 .force-landscape
+       做 CSS 兜底旋转；系统真的把屏幕转成横屏后（w>h）立刻撤掉旋转，
+       否则会「转了两次 = 又变回竖的」。
+     · 只有点了按钮才去尝试 fullscreen + orientation.lock，进页面不抢锁方向
+       （否则一进来画面就是歪的）。
+     · 从后台切回来 / 刷新后，用 resyncLandscape() 重新对齐一次。 */
+var LAND_ON = false;
+var LAND_LS = 'cls_land';
+var LAND_FROM_ADMIN_LS = 'cls_land_from_admin';
+
+function syncLandscapeClass(){
+  var portrait = window.innerHeight > window.innerWidth;
+  var need = LAND_ON && portrait;
+  var html = document.documentElement;
+  if(html.classList.contains('force-landscape') !== need){
+    html.classList.toggle('force-landscape', need);
+  }
+  var btn = document.getElementById('landBtn');
+  if(btn){
+    btn.setAttribute('data-on', LAND_ON ? '1' : '0');
+    btn.textContent = LAND_ON ? '📱 横屏查看：开' : '📱 横屏查看：关';
+  }
+}
+
+function lockLandscape(){
+  try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); }catch(e){}
+  try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
+}
+function unlockLandscape(){
+  try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+  try{ if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); }catch(e){}
+}
+
+/** 把横屏意图写盘（'1' / '0'）。点按钮、恢复流程都走这里，只有一处写盘。 */
+function saveLandIntent(){
+  try{ localStorage.setItem(LAND_LS, LAND_ON ? '1' : '0'); }catch(e){}
+}
+
+function toggleLandscape(){
+  LAND_ON = !LAND_ON;
+  saveLandIntent();
+  if(LAND_ON){
+    lockLandscape();
+    /* 先按竖屏兜底转一次；380ms 后系统若已转屏会自动撤掉 CSS 旋转 */
+    syncLandscapeClass();
+    setTimeout(syncLandscapeClass, 380);
+  }else{
+    unlockLandscape();
+    document.documentElement.classList.remove('force-landscape');
+    setTimeout(syncLandscapeClass, 380);
+  }
+  if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
+  closeSidebar();
+}
+
+/** 进页面时决定用竖屏还是横屏。
+ *  规则（跟后台一致）：
+ *    ① 刚从后台点「返回前台」过来 → 一律竖屏，顺手把记忆清成 '0'
+ *       （否则下次一打开又横过来，等于没改）
+ *    ② 正常打开 / 刷新 / 独立 PWA 入口 → 沿用上次选择
+ *  这里**不主动锁方向**，只同步 CSS 兜底。 */
+function initLandscape(){
+  var fromAdmin = false;
+  try{
+    fromAdmin = sessionStorage.getItem(LAND_FROM_ADMIN_LS) === '1';
+    if(fromAdmin) sessionStorage.removeItem(LAND_FROM_ADMIN_LS);
+  }catch(e){}
+  if(fromAdmin){
+    LAND_ON = false;
+    saveLandIntent();
+    document.documentElement.classList.remove('force-landscape');
+  }else{
+    try{ LAND_ON = (localStorage.getItem(LAND_LS) === '1'); }catch(e){ LAND_ON = false; }
+  }
+  syncLandscapeClass();
+  setTimeout(syncLandscapeClass, 400);
+}
+
+/** 从后台切回来 / 页面被恢复时重新对齐：只对齐 CSS 兜底旋转，
+ *  不重新请求全屏 —— 那会打断用户当时的操作。 */
+function resyncLandscape(){
+  try{
+    syncLandscapeClass();
+    if(LAND_ON){
+      try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
+      setTimeout(syncLandscapeClass, 320);
+    }
+  }catch(e){}
+}
 /* 全局轻点击音效（交互元素自动响应） */
 document.addEventListener('click',function(e){
   var t=e.target;
@@ -3559,7 +3676,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.38';
+var SITE_VERSION = '3.5.39';
 var VER_DATE = '2026-10-18';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -5596,6 +5713,29 @@ function toggleAudioFs(){
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+})();
+
+/* ============================================================================
+ * 横屏切换的启动接线（v3.5.39）
+ * ----------------------------------------------------------------------------
+ * 单独一个 IIFE 挂在这，不去动别的启动流程：
+ *   · initLandscape()  —— 决定这次进来是竖还是横
+ *   · resize / orientationchange —— 视口一变重新算要不要 CSS 兜底旋转
+ *   · visibilitychange / pageshow —— 从后台切回来、PWA 被系统恢复时对齐一次
+ * 都只是「对齐」，不抢锁方向，不会打断用户操作。 */
+(function(){
+  function boot(){
+    try{ initLandscape(); }catch(e){}
+    var relayout = function(){ try{ syncLandscapeClass(); }catch(e){} };
+    window.addEventListener('resize', relayout, {passive:true});
+    window.addEventListener('orientationchange', function(){ setTimeout(relayout, 260); }, {passive:true});
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'visible') setTimeout(function(){ try{ resyncLandscape(); }catch(e){} }, 120);
+    });
+    window.addEventListener('pageshow', function(){ setTimeout(function(){ try{ resyncLandscape(); }catch(e){} }, 120); });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
 
 /* ---- 网页内视频播放（支持 B站分享链接 / 云端直链，均在站内播放，不跳转） ---- */
