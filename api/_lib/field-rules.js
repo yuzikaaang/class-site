@@ -9,7 +9,9 @@
      { type:'text',   minLen:2, maxLen:3 }
      { type:'number', digits:11 }              // 固定位数（仅数字）
      { type:'number', min:0, max:100 }         // 数值范围（仅数字）
-     { type:'time',   min:'2024-01-01', max:'2026-12-31' }
+     { type:'time',   min:'2024-01-01', max:'2026-12-31' }          // 默认精确到日
+     { type:'time',   precision:'month', min:'2024-01', max:'2026-12' }  // 只要年月
+     { type:'time',   precision:'year' }                              // 只要年份
      { type:'select', options:['群众','共青团员'], multi:false }
      {}                                        // 无规则：按短文本放过
 
@@ -59,7 +61,12 @@ export function normalizeRules(raw) {
 
   if (type === 'time') {
     out.type = 'time';
-    const min = dateStr(r.min), max = dateStr(r.max);
+    /* v3.5.15：精确到「日 / 月 / 年」。站主原话：「入团时间是精确到月份，
+       没有具体日期，我表格里写 2024-05 可是就显示无法导入」——
+       以前 time 规则死认 YYYY-MM-DD，年月日以外的写法一律判非法。 */
+    const precision = ['day', 'month', 'year'].includes(r.precision) ? r.precision : 'day';
+    out.precision = precision;
+    const min = boundStr(r.min, precision), max = boundStr(r.max, precision);
     if (min) out.min = min;
     if (max) out.max = max;
     return out;
@@ -87,10 +94,71 @@ function numOr(v, dflt, lo, hi) {
   return Math.max(lo, Math.min(hi, Math.round(n)));
 }
 
-/** 只认 YYYY-MM-DD（时间选择器产出的就是它）；别的形态当没填 */
-function dateStr(v) {
-  const s = String(v == null ? '' : v).trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+/** 把常见的手写日期写法收敛成 YYYY-MM-DD / YYYY-MM / YYYY（失败返回 ''）。
+    认：2024-05-13 / 2024-5-3 / 2024/5/3 / 2024.5.3 / 2024年5月3日 / 2024-05 / 2024年5月 / 2024
+    不认：13/05/2024、五月、2024-13（月份越界）等无法无歧义解析的写法。 */
+export function normTimeInput(v) {
+  let s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  /* Excel 有时把日期读成 Date 序列号（45000 这种）—— 交给上层前先挡掉：
+     纯 5 位数字且像序列号的，按 1899-12-30 起算换算。 */
+  if (/^\d{5}(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (n > 20000 && n < 80000) {
+      const dt = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000);
+      const y = dt.getUTCFullYear(), mo = String(dt.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(dt.getUTCDate()).padStart(2, '0');
+      return y + '-' + mo + '-' + d;
+    }
+  }
+  /* 剥掉时间部分：2024-05-13 00:00:00 / 2024-05-13T00:00:00.000Z
+     （Excel 单元格是日期型时，前端 sheet_to_json 会带出这种串） */
+  s = s.replace(/[T\s]\d{1,2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i, '');
+  s = s.replace(/[年\/\.．]/g, '-').replace(/月/g, '-').replace(/日/g, '')
+       .replace(/\s+/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  let m = s.match(/^(\d{4})$/);
+  if (m) return m[1];
+  m = s.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) {
+    const mo = Number(m[2]);
+    if (mo < 1 || mo > 12) return '';
+    return m[1] + '-' + String(mo).padStart(2, '0');
+  }
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) {
+    const mo = Number(m[2]), dd = Number(m[3]);
+    if (mo < 1 || mo > 12 || dd < 1 || dd > 31) return '';
+    return m[1] + '-' + String(mo).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+  }
+  return '';
+}
+
+/** 按精度截断：日 → YYYY-MM-DD，月 → YYYY-MM，年 → YYYY */
+function clipPrecision(s, precision) {
+  if (!s) return '';
+  if (precision === 'year') return s.slice(0, 4);
+  if (precision === 'month') return s.slice(0, 7);
+  return s;
+}
+
+/** 区间边界值：按精度归一 + 截断；解析不了当没填 */
+function boundStr(v, precision) {
+  const n = normTimeInput(v);
+  return n ? clipPrecision(n, precision) : '';
+}
+
+/** 精度对应的示例写法（报错文案用） */
+function timeHint(precision) {
+  if (precision === 'year') return '四位年份，如 2024';
+  if (precision === 'month') return '年月，如 2024-05';
+  return '具体日期，如 2024-05-13';
+}
+
+/** 真日期校验（只对完整到日的值有意义） */
+function isRealDate(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const t = new Date(s + 'T00:00:00Z');
+  return !isNaN(t.getTime()) && t.toISOString().slice(0, 10) === s;
 }
 
 /** 规则的一句话人话描述（后台字段列表 / 报错文案用） */
@@ -111,15 +179,32 @@ export function describeRules(rules) {
     return '数字';
   }
   if (r.type === 'time') {
-    if (r.min && r.max) return '日期 ' + r.min + ' ~ ' + r.max;
-    if (r.min) return '日期不早于 ' + r.min;
-    if (r.max) return '日期不晚于 ' + r.max;
-    return '日期（选择器录入）';
+    const p = r.precision || 'day';
+    const base = p === 'year' ? '年份' : p === 'month' ? '年月' : '日期';
+    const fmt = p === 'year' ? 'YYYY' : p === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
+    if (r.min && r.max) return base + ' ' + fmt + '，' + r.min + ' ~ ' + r.max;
+    if (r.min) return base + ' ' + fmt + '，不早于 ' + r.min;
+    if (r.max) return base + ' ' + fmt + '，不晚于 ' + r.max;
+    return base + '（' + fmt + '）';
   }
   if (r.type === 'select') {
     return (r.multi ? '多选' : '单选') + '：' + r.options.join(' / ');
   }
   return '';
+}
+
+/**
+ * 按规则把值规整成「入库形态」（目前只有时间精度用到）。
+ * 例：规则 precision='month'，填 2024/5/13 → 存 2024-05；2024年5月 → 2024-05。
+ * 解析不了 / 非时间规则 → 原样返回（校验器会另行报错）。
+ */
+export function coerceValueByRules(rules, value) {
+  const r = normalizeRules(rules);
+  if (r.type !== 'time' || value == null) return value;
+  const s = String(value).trim();
+  if (!s) return value;
+  const n = normTimeInput(s);
+  return n ? clipPrecision(n, r.precision || 'day') : value;
 }
 
 /**
@@ -159,16 +244,25 @@ export function validateByRules(rules, value, label) {
   }
 
   if (r.type === 'time') {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-      return { ok: false, error: name + '必须是 YYYY-MM-DD 格式的日期' };
+    /* v3.5.15：按后台配的精度校验 —— 精确到月时「2024-05」就是合法值。
+       同时容忍常见手写：2024/5、2024年5月、2024.5，以及 Excel 的日期序列号。 */
+    const p = r.precision || 'day';
+    const norm = normTimeInput(v);
+    if (!norm) {
+      return { ok: false, error: name + '日期写法看不懂（应为' + timeHint(p) + '），你填的是「' + v + '」' };
     }
-    /* 顺带挡掉 2026-02-31 这种「格式对但不是真日期」的值 */
-    const t = new Date(v + 'T00:00:00Z');
-    if (isNaN(t.getTime()) || t.toISOString().slice(0, 10) !== v) {
-      return { ok: false, error: name + '不是有效的日期' };
+    if (p === 'day' && norm.length < 10) {
+      return { ok: false, error: name + '要精确到日（' + timeHint(p) + '），你填的是「' + v + '」' };
     }
-    if (r.min && v < r.min) return { ok: false, error: name + '不能早于 ' + r.min };
-    if (r.max && v > r.max) return { ok: false, error: name + '不能晚于 ' + r.max };
+    if (p === 'month' && norm.length < 7) {
+      return { ok: false, error: name + '要精确到月（' + timeHint(p) + '），你填的是「' + v + '」' };
+    }
+    if (norm.length === 10 && !isRealDate(norm)) {
+      return { ok: false, error: name + '不是有效的日期：' + norm };
+    }
+    const cv = clipPrecision(norm, p);
+    if (r.min && cv < r.min) return { ok: false, error: name + '不能早于 ' + r.min + '（你填的是 ' + cv + '）' };
+    if (r.max && cv > r.max) return { ok: false, error: name + '不能晚于 ' + r.max + '（你填的是 ' + cv + '）' };
     return { ok: true };
   }
 

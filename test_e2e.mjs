@@ -7915,6 +7915,51 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('★index.html 手机号 grandfather 规范化（仅改值时才清洗）',
     idxSrc355.includes("if(ph && ph !== storedPh) ph = ph.replace(/[\\s\\-()]/g, '')"));
 
+  /* ---- v3.5.15：时间规则支持「精确到 日/月/年」 ----
+     站主原话：「入团时间是精确到月份，没有具体日期，我表格里写 2024-05
+     可是就显示无法导入」。以前 time 规则死认 YYYY-MM-DD。 ---- */
+  const FR315 = await import('/tmp/class-site/api/_lib/field-rules.js');
+  const RM = { type: 'time', precision: 'month' };
+  t('#11 时间规则支持 precision（day/month/year）',
+    /\['day', 'month', 'year'\]\.includes\(r\.precision\)/.test(frSrc) && FR315.normalizeRules(RM).precision === 'month');
+  t('#11 月精度接受 2024-05（站主的核心诉求）',
+    FR315.validateByRules(RM, '2024-05', '入团时间').ok === true);
+  t('#11 月精度容忍 2024/5、2024年5月、2024.5',
+    ['2024/5', '2024年5月', '2024.5', '2024-5'].every((v) => FR315.validateByRules(RM, v, '入团时间').ok));
+  t('#11 月精度也接受带日的写法并规整成 YYYY-MM',
+    FR315.validateByRules(RM, '2024-05-13', '入团时间').ok
+    && FR315.coerceValueByRules(RM, '2024-05-13') === '2024-05'
+    && FR315.coerceValueByRules(RM, '2024年5月') === '2024-05');
+  t('#11 月精度拒绝只写年份与乱写',
+    !FR315.validateByRules(RM, '2024', '入团时间').ok
+    && !FR315.validateByRules(RM, 'abc', '入团时间').ok
+    && !FR315.validateByRules(RM, '2024-13', '入团时间').ok);
+  t('#11 日精度仍然要求完整日期（不漏掉原严格性）',
+    !FR315.validateByRules({ type: 'time' }, '2024-05', '日期').ok
+    && FR315.validateByRules({ type: 'time' }, '2024-05-13', '日期').ok
+    && !FR315.validateByRules({ type: 'time' }, '2024-02-31', '日期').ok);
+  t('#11 年精度接受 2024 / 2024-05 并规整成 YYYY',
+    FR315.validateByRules({ type: 'time', precision: 'year' }, '2024', '年份').ok
+    && FR315.coerceValueByRules({ type: 'time', precision: 'year' }, '2024-05-13') === '2024');
+  t('#11 带时间部分的日期串（Excel 日期型 / ISO）也能识别',
+    FR315.validateByRules(RM, '2024-05-13 00:00:00', '入团时间').ok
+    && FR315.validateByRules(RM, '2024-05-13T00:00:00.000Z', '入团时间').ok);
+  t('#11 区间按精度比较（月精度 min/max 也是年月）',
+    !FR315.validateByRules({ type: 'time', precision: 'month', min: '2024-01', max: '2026-12' }, '2023-12', '入团时间').ok
+    && FR315.validateByRules({ type: 'time', precision: 'month', min: '2024-01', max: '2026-12' }, '2024-05', '入团时间').ok
+    && FR315.describeRules(RM).includes('年月'));
+  t('#11 后台规则编辑器有「精确到」三档并可收集 precision',
+    /id="ffRPrec"/.test(admHtml355) && /日 —— 2024-05-13/.test(admHtml355)
+    && /月 —— 2024-05（入团时间这类只到月份）/.test(admHtml355)
+    && /tm\.precision = pr/.test(admHtml355));
+  t('#11 资料输入控件按精度切换（date / month / 四位年份）',
+    /if\(p === 'month'\)\{[\s\S]{0,200}type="month"/.test(admHtml355)
+    && /if\(p === 'year'\)\{[\s\S]{0,200}maxlength="4"/.test(admHtml355));
+  t('#11 写库前按精度规整（单条保存 + 批量导入两处）',
+    (ADMJS_SRC355.match(/coerceValueByRules\(/g) || []).length >= 2
+    && /customVals\[f\.field\] = coerceValueByRules/.test(ADMJS_SRC355)
+    && /ex\[f\.field\] = coerceValueByRules/.test(ADMJS_SRC355));
+
   /* ---- ② 登录侧：非关键写操作全部有保护 ---- */
   t('★last_login_at 更新有 try-catch（非关键写不再把登录打成 500）',
     /\[auth\] last_login_at 更新失败/.test(authSrc));

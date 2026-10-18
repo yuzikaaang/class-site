@@ -59,7 +59,7 @@ import { listSecrets, saveSecret, deleteSecret } from './_lib/secrets-store.js';
 /* v3.5.5：字段校验规则（站主：「所有字段支持管理员自定义配置校验规则」）。
    服务端是唯一裁判 —— 批量导入 / 直接调 API 都能绕过前端控件，
    写库前必须过 validateByRules；规则形状先过 normalizeRules 防脏数据。 */
-import { normalizeRules, validateByRules } from './_lib/field-rules.js';
+import { normalizeRules, validateByRules, coerceValueByRules } from './_lib/field-rules.js';
 /* v3.5.0：成员档案字段（姓名/学号/联系方式/自定义字段…）加密存储。
    与令牌库共用同一个 ADMIN_SECRETS_KEY；未配置时整体退化为明文，
    行为与改造前完全一致（见 profile-crypt.js 顶部说明）。 */
@@ -2409,7 +2409,11 @@ async function upsertProfileCore(sql, me, b, req) {
   const customVals = {};
   if (b.extra && typeof b.extra === 'object') {
     for (const f of editable) {
-      if (f.field in b.extra) customVals[f.field] = pickCustomValue(b.extra[f.field]);
+      if (f.field in b.extra) {
+        /* v3.5.15：按字段规则把值规整成入库形态 —— 时间类且「精确到月」的字段，
+           填 2024/5/13 或 2024年5月 都统一存成 2024-05，前端校验只管放行。 */
+        customVals[f.field] = coerceValueByRules(f.rules, pickCustomValue(b.extra[f.field]));
+      }
     }
   }
 
@@ -2669,7 +2673,10 @@ async function batchProfiles(req, res, me, b) {
       const ex = {};
       if (raw.extra && typeof raw.extra === 'object') {
         for (const f of editable) {
-          if (f.field in raw.extra) ex[f.field] = pickCustomValue(raw.extra[f.field]);
+          if (f.field in raw.extra) {
+            /* v3.5.15：时间字段按后台配的精度规整（月精度存 2024-05） */
+            ex[f.field] = coerceValueByRules(f.rules, pickCustomValue(raw.extra[f.field]));
+          }
         }
       }
       /* 复核列名安全性：列名无法参数化，必须白名单兜住。

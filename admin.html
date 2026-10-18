@@ -999,7 +999,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.14';
+var SITE_VERSION = '3.5.15';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -6574,10 +6574,14 @@ function ruleDesc(rules){
     return '数字';
   }
   if(r.type === 'time'){
-    if(r.min && r.max) return '日期 ' + r.min + ' ~ ' + r.max;
-    if(r.min) return '日期不早于 ' + r.min;
-    if(r.max) return '日期不晚于 ' + r.max;
-    return '日期（选择器录入）';
+    /* v3.5.15：精确到日 / 月 / 年（入团时间只到月份） */
+    var p = r.precision || 'day';
+    var base = p === 'year' ? '年份' : p === 'month' ? '年月' : '日期';
+    var fmt  = p === 'year' ? 'YYYY' : p === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
+    if(r.min && r.max) return base + ' ' + fmt + '，' + r.min + ' ~ ' + r.max;
+    if(r.min) return base + ' ' + fmt + '，不早于 ' + r.min;
+    if(r.max) return base + ' ' + fmt + '，不晚于 ' + r.max;
+    return base + '（' + fmt + '）';
   }
   if(r.type === 'select') return (r.multi ? '多选' : '单选') + '：' + (r.options || []).join(' / ');
   return '';
@@ -6622,7 +6626,18 @@ function ruleInputHtml(field, rules, val, id, ph){
     return s + '</select>';
   }
   if(r.type === 'time'){
-    /* 时间选择器弹窗，禁止手动纯文本输入 —— type=date 天然如此 */
+    /* v3.5.15：按精度给不同控件 —— 精确到月用 month（选年月），精确到年用四位数字。
+       历史值比精度更细时先截断，否则 type=month 会显示成空。 */
+    var p = r.precision || 'day';
+    if(p === 'year'){
+      return '<input id="' + attr(id) + '" class="inp" inputmode="numeric" maxlength="4" data-xf="' + attr(field) + '"'
+        + ' value="' + attr(v.slice(0, 4)) + '" placeholder="如 2024">';
+    }
+    if(p === 'month'){
+      return '<input id="' + attr(id) + '" class="inp" type="month" data-xf="' + attr(field) + '"'
+        + ' value="' + attr(v.slice(0, 7)) + '"' + (r.min ? ' min="' + attr(r.min) + '"' : '')
+        + (r.max ? ' max="' + attr(r.max) + '"' : '') + '>';
+    }
     return '<input id="' + attr(id) + '" class="inp" type="date" data-xf="' + attr(field) + '"'
       + ' value="' + attr(v) + '"' + (r.min ? ' min="' + attr(r.min) + '"' : '')
       + (r.max ? ' max="' + attr(r.max) + '"' : '') + '>';
@@ -6698,10 +6713,33 @@ function paintRuleBody(rules){
       + '<div class="field"><label>最大值</label><input id="ffRMax" class="inp" inputmode="numeric" value="' + attr(r.max == null ? '' : r.max) + '" placeholder="不限"></div></div>'
       + '<p class="hint" style="margin-top:-4px">只能填数字，字母符号一律拒绝。</p>';
   } else if(t === 'time'){
-    h = '<div class="mb-form-grid">'
-      + '<div class="field"><label>不早于</label><input id="ffRMin" class="inp" type="date" value="' + attr(r.min || '') + '"></div>'
-      + '<div class="field"><label>不晚于</label><input id="ffRMax" class="inp" type="date" value="' + attr(r.max || '') + '"></div>'
-      + '</div><p class="hint" style="margin-top:-4px">同学端弹出日期选择器，不能手动打字。</p>';
+    /* v3.5.15：站主要求「入团时间精确到月份」—— 加「精确到」三档，
+       区间输入框跟着变（date / month / 四位年份）。 */
+    var prec = r.precision || 'day';
+    var boundInput = function(bid, val){
+      if(prec === 'year') return '<input id="' + bid + '" class="inp" inputmode="numeric" maxlength="4" value="' + attr(val || '') + '" placeholder="如 2020">';
+      if(prec === 'month') return '<input id="' + bid + '" class="inp" type="month" value="' + attr(val || '') + '">';
+      return '<input id="' + bid + '" class="inp" type="date" value="' + attr(val || '') + '">';
+    };
+    h = '<div class="field"><label>精确到</label>'
+      + '<select id="ffRPrec" class="inp">'
+      +   '<option value="day"' + (prec === 'day' ? ' selected' : '') + '>日 —— 2024-05-13</option>'
+      +   '<option value="month"' + (prec === 'month' ? ' selected' : '') + '>月 —— 2024-05（入团时间这类只到月份）</option>'
+      +   '<option value="year"' + (prec === 'year' ? ' selected' : '') + '>年 —— 2024</option>'
+      + '</select></div>'
+      + '<div class="mb-form-grid">'
+      + '<div class="field"><label>不早于</label>' + boundInput('ffRMin', r.min) + '</div>'
+      + '<div class="field"><label>不晚于</label>' + boundInput('ffRMax', r.max) + '</div>'
+      + '</div><p class="hint" style="margin-top:-4px">填「月」时，表格里写 2024-05、2024/5、2024年5月 都能导入。</p>';
+    /* 换精度后重建这一块（把已填的区间 / 精度带上，不丢） */
+    setTimeout(function(){
+      var sel = $('ffRPrec');
+      if(!sel) return;
+      sel.onchange = function(){
+        paintRuleBody({ type:'time', precision: sel.value,
+          min: ($('ffRMin') || {}).value || '', max: ($('ffRMax') || {}).value || '' });
+      };
+    }, 0);
   } else if(t === 'select'){
     var opts = (r.options || []).slice();
     h = '<div class="field"><label><label class="chk" style="display:inline-flex"><input type="checkbox" id="ffRMulti"' + (r.multi ? ' checked' : '') + '> 多选</label></label>'
@@ -6754,6 +6792,9 @@ function collectRules(){
   }
   if(t === 'time'){
     var tm = { type:'time' };
+    /* v3.5.15：precision 决定这是「日 / 月 / 年」哪一档 */
+    var pr = ($('ffRPrec') || {}).value || 'day';
+    if(pr !== 'day') tm.precision = pr;
     var a = ($('ffRMin') || {}).value, b2 = ($('ffRMax') || {}).value;
     if(a) tm.min = a;
     if(b2) tm.max = b2;
