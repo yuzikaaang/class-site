@@ -107,7 +107,7 @@ body::before{width:340px;height:340px;background:rgba(249,115,22,.16);top:-110px
 body::after{width:420px;height:420px;background:rgba(251,146,60,.14);bottom:-150px;right:-100px}
 /* 顶部大面积径向渐变（参照 newsnow 的 radial-gradient at 50% -30%） */
 body::after{box-shadow:none}
-.top-glow{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+.top-glow{content:'';position:fixed;top:0;right:0;bottom:0;left:0;pointer-events:none;z-index:0;
   background:radial-gradient(80% 50% at 50% -12%, rgba(249,115,22,.13), rgba(255,255,255,0) 70%)}
 
 /* ============================================================
@@ -149,7 +149,7 @@ body::after{box-shadow:none}
 /* ⑥ 点阵纹理（参照：深色区块上 3% 不透明度的 radial-gradient 点阵）
       用于反相区块，避免大面积纯色显得扁平 */
 .dot-grid{position:relative}
-.dot-grid::before{content:'';position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+.dot-grid::before{content:'';position:absolute;top:0;right:0;bottom:0;left:0;pointer-events:none;border-radius:inherit;
   background-image:radial-gradient(currentColor 1px, transparent 1px);
   background-size:32px 32px;opacity:.035}
 
@@ -206,7 +206,7 @@ body::after{box-shadow:none}
   .layout{display:block;padding:10px}
   .sidebar{position:fixed;left:0;top:0;padding:14px;background:#fffdfb;backdrop-filter:none;height:100vh;z-index:1100;border-radius:0;width:76vw;max-width:280px;transform:translateX(-100%);transition:transform .3s}
   .sidebar.open{transform:translateX(0)}
-  .sidebar-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1050}
+  .sidebar-mask{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.5);z-index:1050}
   .sidebar-mask.show{display:block}
   .content{padding:0 12px 12px}
   .fab{position:fixed;left:14px;top:14px;z-index:1040;width:46px;height:46px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--grad-a),var(--grad-b));color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(194,65,12,.22);backdrop-filter:blur(4px);transition:transform .2s,background .2s;animation:fabIn .3s ease}
@@ -221,11 +221,11 @@ body::after{box-shadow:none}
    用深色底 + 点阵纹理 + 顶部径向辉光，与浅色页面形成戏剧性对比。 */
 header{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));border-radius:24px;padding:40px 30px;color:#fff;box-shadow:var(--sh-accent-lg);margin-bottom:20px;text-align:center;position:relative;overflow:hidden}
 /* 点阵纹理：深色区块上 3.5% 不透明度的点阵，避免大面积纯色扁平 */
-header::before{content:'';position:absolute;inset:0;pointer-events:none;
+header::before{content:'';position:absolute;top:0;right:0;bottom:0;left:0;pointer-events:none;
   background-image:radial-gradient(rgba(255,255,255,.9) 1px, transparent 1px);
   background-size:32px 32px;opacity:.05}
 /* 顶部径向辉光，制造"光源在上方"的暖意 */
-header::after{content:'';position:absolute;inset:0;pointer-events:none;
+header::after{content:'';position:absolute;top:0;right:0;bottom:0;left:0;pointer-events:none;
   background:radial-gradient(70% 100% at 50% -20%, rgba(255,255,255,.22), rgba(255,255,255,0) 65%)}
 header h1{font-size:clamp(1.4rem,4.5vw,2.5rem);font-weight:800;letter-spacing:1px;text-shadow:2px 2px 4px rgba(0,0,0,.15);position:relative}
 header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;position:relative}
@@ -427,7 +427,7 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .dark .signbar-title{color:#b8b1aa}
 .dark .signbar-sub{color:#b8b1aa}
 @media(max-width:768px){.signbar{max-width:none;padding:9px 12px}.signbar-sub{white-space:normal}}
-.site-gate{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:24px}
+.site-gate{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:24px}
 .site-gate.show{display:flex}
 .site-gate-box{background:#fff;border-radius:24px;padding:28px 26px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .board-more{display:block;width:100%;border-top:1px solid #f0e6dc;background:#fdf8f3;color:#af410f;font-size:.85rem;font-weight:600;padding:10px;cursor:pointer;border:none}
@@ -440,7 +440,7 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
    盒子用 margin:auto 自动吸收四周剩余空间 —— 居中不依赖 align-items，
    内容超长时 margin 自动归零、从顶部开始正常滚动，不会再把头切掉。
    高度上限也从 80vh 换成 dvh（动态视口高度，iOS 上才是真实可视高）。 */
-.allboard-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9997;padding:20px;overscroll-behavior:contain}
+.allboard-mask{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.6);z-index:9997;padding:20px;overscroll-behavior:contain}
 /* v3.5.31：同上，显式居中（盒子自身还有 margin:auto 兜底，内容超高时仍可滚动到顶） */
 .allboard-mask.show{display:flex;align-items:center;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .allboard-box{background:#fffdfb;border-radius:20px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);display:flex;flex-direction:column;margin:auto}
@@ -732,7 +732,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 /* 首次欢迎弹窗 */
 /* 登录引导弹窗：居中方式与 .allboard-mask 保持一致（见上方注释），
    同样是「外层 flex + overflow-y:auto + 盒子 margin:auto」。 */
-.welcome-mask{display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.6);padding:24px;overscroll-behavior:contain}
+.welcome-mask{display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:9998;background:rgba(0,0,0,.6);padding:24px;overscroll-behavior:contain}
 /* v3.5.31 修：只写 margin:auto 不够 —— flex 子项在主轴/交叉轴上都靠 start 排列时，
    auto 外边距才会起作用；这里明确给居中，否则弹窗会贴在左上角。 */
 .welcome-mask.show{display:flex;align-items:center;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -750,7 +750,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 
 
 /* 微信引导覆盖层 */
-.guide-overlay{display:none;position:fixed;inset:0;background:#fff;z-index:9999;overflow:auto}
+.guide-overlay{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:#fff;z-index:9999;overflow:auto}
 .guide-overlay.show{display:flex;align-items:center;justify-content:center;padding:20px}
 .guide-arrow{position:fixed;top:14px;right:16px;text-align:center;animation:bounce 1.4s infinite}
 .guide-arrow .tag{display:inline-block;background:#9a3412;color:#fff;font-size:.8rem;font-weight:600;padding:6px 14px;border-radius:999px;box-shadow:0 4px 12px rgba(194,65,12,.22);margin-bottom:4px}
@@ -768,14 +768,14 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .guide-back{display:block;margin-top:14px;color:#6e635a;font-size:.85rem;text-decoration:none}
 
 /* 浏览器打开后的跳转提示层 */
-.jump-overlay{display:none;position:fixed;inset:0;background:linear-gradient(135deg,#faf5ef,#e4ddd6);z-index:9999;align-items:center;justify-content:center;padding:20px}
+.jump-overlay{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:linear-gradient(135deg,#faf5ef,#e4ddd6);z-index:9999;align-items:center;justify-content:center;padding:20px}
 .jump-overlay.show{display:flex}
 .jump-box{max-width:400px;background:#fff;padding:36px 30px;border-radius:20px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.08)}
 .spinner{width:42px;height:42px;border:4px solid #f0e4d8;border-top-color:#9a3412;border-radius:50%;margin:0 auto 16px;animation:spin .9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* 公众号二维码弹窗 */
-.qr-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;padding:24px}
+.qr-mask{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;padding:24px}
 .qr-mask.show{display:flex}
 /* ===== 网页内视频播放弹窗 ===== */
 /* 弹窗整体限制在视口高度内，避免矮视口（手机横屏）溢出被裁 */
@@ -934,7 +934,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
   .video-box{max-width:min(96vw, 1200px)}
   .video-wrap{width:min(100%, calc((100dvh - 91px) * 16 / 9))}
 }
-.video-wrap iframe,.video-wrap video{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
+.video-wrap iframe,.video-wrap video{position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;border:0;background:#000}
 .video-fallback{padding:12px 18px;color:#d6d3d1;font-size:.8rem;line-height:1.7;background:#1a1715}
 .video-fallback a{color:#a8a29e;text-decoration:none}
 .video-fallback a:hover{text-decoration:underline}
@@ -979,7 +979,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 /* 提示条不可见时（横屏态）不参与布局 */
 .video-mask.fs .video-rotate-tip{display:none}
 /* 班级签弹窗 + 彩带彩蛋 */
-.sign-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9990;padding:20px}
+.sign-mask{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9990;padding:20px}
 .sign-mask.show{display:flex}
 .sign-box{background:linear-gradient(160deg,#262220,#2e2926);border:1px solid rgba(255,255,255,.12);border-radius:18px;max-width:340px;width:100%;padding:22px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .sign-box h3{margin:0 0 6px;font-size:1.125rem}
@@ -990,7 +990,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .sign-text{font-size:1rem;line-height:1.7;min-height:60px;margin:6px 0 4px;color:#f3ebe3}
 .sign-sub{font-size:0.75rem;color:#c6bfb8;margin-bottom:16px}
 .sign-box .btn-qr{background:#9a3412;color:#fff;border:none;border-radius:999px;padding:8px 22px;font-weight:700;cursor:pointer}
-.confetti-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:9991;padding:20px}
+.confetti-mask{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:9991;padding:20px}
 .confetti-mask.show{display:flex}
 .confetti-box{background:rgba(38,34,32,.92);border:1px solid rgba(255,255,255,.14);border-radius:18px;max-width:320px;width:100%;padding:22px;text-align:center;color:#f5f5f4}
 .dark .hidden-fun-desc{color:#c6bfb8}
@@ -1002,7 +1002,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .link-note{color:#af410f;font-size:.74rem;margin-top:6px;line-height:1.5;font-weight:600}
 .dark .link-note{color:#fdba74}
 .confetti-box p{font-size:0.9375rem;line-height:1.7;margin:0 0 16px}
-#confettiCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9992}
+#confettiCanvas{position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9992}
 .qr-box{background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .qr-head{display:flex;justify-content:center;align-items:center;margin-bottom:12px}
 .qr-head h3{color:#2f7355;font-size:1rem}
@@ -1536,10 +1536,10 @@ html .licon{transform:scale(var(--ico,1));transform-origin:center}
 
 /* ② 自定义背景层 —— 独立元素，位于画布背景之上、内容之下，
    完全不碰 body 背景，因此 `.dark body` 的硬编码覆盖不受影响。 */
-#bgLayer{position:fixed;inset:0;z-index:-1;pointer-events:none;
+#bgLayer{position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;pointer-events:none;
   background-size:cover;background-position:center;background-repeat:no-repeat;
   transition:opacity .4s var(--ease-out)}
-#bgLayer::after{content:'';position:absolute;inset:0;background:var(--bg-veil,transparent)}
+#bgLayer::after{content:'';position:absolute;top:0;right:0;bottom:0;left:0;background:var(--bg-veil,transparent)}
 :root{--bg-veil:transparent}
 html[data-bg="theme"] #bgLayer{display:none}
 /* 用自定义背景时关掉装饰光斑，否则会盖在用户选的底色上 */
@@ -1561,7 +1561,7 @@ html:not([data-bg="theme"]) body::after{display:none}
 }
 /* B 路径（不支持 VT 的内核）：切换前盖上的「旧主题真实背景」，向按钮收缩后移除。
  * 背景内容由 JS 固化（主题渐变 / 用户自定义图色 + 蒙层），这里只管层与过渡。 */
-.theme-legacy{position:fixed;inset:0;z-index:2147483000;pointer-events:none;
+.theme-legacy{position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483000;pointer-events:none;
   background-size:cover;background-position:center;background-repeat:no-repeat;
   transition:clip-path .48s var(--ease-out),-webkit-clip-path .48s var(--ease-out)}
 
@@ -1603,7 +1603,7 @@ html:not([data-bg="theme"]) body::after{display:none}
   transition:transform .2s var(--ease-out),box-shadow .2s}
 .ui-sw:hover{transform:translateY(-2px)}
 .ui-sw.on{border-color:var(--btn-a);box-shadow:var(--sh-accent)}
-.ui-sw .tick{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+.ui-sw .tick{position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;
   color:#fff;opacity:0;transition:opacity .2s;text-shadow:0 1px 3px rgba(0,0,0,.5)}
 .ui-sw.on .tick{opacity:1}
 
@@ -1676,7 +1676,7 @@ html:not([data-bg="theme"]) body::after{display:none}
 
 /* ⑨ Expanding Tag Selection（公告标签展开：走 ::before 缩放，零重排） */
 .filter-btn{position:relative;overflow:hidden;isolation:isolate;z-index:0}
-.filter-btn::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;
+.filter-btn::before{content:'';position:absolute;top:0;right:0;bottom:0;left:0;z-index:-1;border-radius:inherit;
   background:linear-gradient(135deg,var(--btn-a),var(--btn-b));
   transform:scale(.35);opacity:0;transition:transform .34s var(--ease-out),opacity .22s}
 .filter-btn.active::before{transform:scale(1);opacity:1}
@@ -3533,7 +3533,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.31';
+var SITE_VERSION = '3.5.32';
 var VER_DATE = '2026-10-18';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
