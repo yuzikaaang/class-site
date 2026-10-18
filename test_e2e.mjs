@@ -8412,6 +8412,72 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     /cfg\.siteName = name;/.test(ADM_529) && /delete cfg\.siteName/.test(ADM_529) === false
     && /typeof cfg\[k\] === 'string'/.test(IDX_529));
 
+  /* ---- v3.5.30：① 云端版本记录补齐 ② 从主页进后台默认竖屏 + PWA 往返保状态 ③ 轻量模式 ---- */
+  const IDX_530 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const ADM_530 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* ① 版本记录：内置 3.5.21~3.5.30，按钮只补缺失版本 */
+  t('v3.5.30 内置版本记录覆盖 3.5.21~3.5.30',
+    [30, 29, 28, 27, 26, 25, 24, 23, 22, 21].every(n =>
+      new RegExp("version: '3\\.5\\." + n + "'").test(ADM_530)));
+  t('v3.5.30 版本面板有「补齐缺失版本」按钮',
+    /id="relSync"/.test(ADM_530) && /补齐缺失版本/.test(ADM_530)
+    && /\$\('relSync'\)\.onclick = relSyncMissing;/.test(ADM_530));
+  t('v3.5.30 补齐逻辑：只挑云端没有的版本再 PUT（不覆盖已有记录）',
+    /function relSyncMissing\(\)/.test(ADM_530)
+    && /REL_BUILTIN\.filter\(function\(r\)\{ return !have\[String\(r\.version\)\]; \}\)/.test(ADM_530)
+    && /cur\.concat\(/.test(ADM_530));
+  t('v3.5.30 补齐前先确认，没缺失就只提示不写库',
+    /confirmBox\(\{/.test(ADM_530.slice(ADM_530.indexOf('function relSyncMissing')))
+    && /没有缺号|没有需要补的版本/.test(ADM_530.slice(ADM_530.indexOf('function relSyncMissing'))));
+
+  /* ② 竖屏意图 + PWA 往返 */
+  t('v3.5.30 主页跳后台前打 from_home 标记（两处入口都打）',
+    /cls_admin_from_home/.test(IDX_530)
+    && (IDX_530.match(/cls_admin_from_home',\s*'1'/g) || []).length >= 2);
+  t('v3.5.30 后台 initLandscape：从主页进来强制竖屏并落 localStorage',
+    /var FROM_HOME_LS = 'cls_admin_from_home';/.test(ADM_530)
+    && /function initLandscape\(\)/.test(ADM_530)
+    && /sessionStorage\.getItem\(FROM_HOME_LS\) === '1'/.test(ADM_530)
+    && /LAND_ON = false;\s*\n\s*saveLandIntent\(\);/.test(ADM_530));
+  t('v3.5.30 from_home 标记用后即删（只影响当次进入）',
+    /if\(fromHome\) sessionStorage\.removeItem\(FROM_HOME_LS\);/.test(ADM_530));
+  t('v3.5.30 PWA 回前台重新对齐横竖屏（visibilitychange + pageshow）',
+    /function resyncLandscape\(\)/.test(ADM_530)
+    && /addEventListener\('visibilitychange'/.test(ADM_530)
+    && /document\.visibilityState === 'visible'\) setTimeout\(resyncLandscape/.test(ADM_530)
+    && /addEventListener\('pageshow'/.test(ADM_530));
+  t('v3.5.30 竖屏意图统一走 saveLandIntent，不再散落 localStorage.setItem',
+    /function saveLandIntent\(\)/.test(ADM_530)
+    && /localStorage\.setItem\(LAND_LS, LAND_ON \? '1' : '0'\)/.test(ADM_530));
+
+  /* ③ 轻量模式 */
+  t('v3.5.30 轻量模式开关打 data-lite 到 <html>',
+    /function applyLite\(\)/.test(IDX_530)
+    && /setAttribute\('data-lite',\s*'1'\)/.test(IDX_530)
+    && /removeAttribute\('data-lite'\)/.test(IDX_530));
+  t('v3.5.30 轻量模式关掉全部 backdrop-filter 玻璃光效',
+    /html\[data-lite="1"\] \*[\s\S]{0,200}backdrop-filter:none!important/.test(IDX_530));
+  t('v3.5.30 轻量模式关掉 body 两颗运动光斑与卡片流光',
+    /html\[data-lite="1"\] body::before,\s*\nhtml\[data-lite="1"\] body::after\{display:none!important/.test(IDX_530)
+    && /html\[data-lite="1"\] \.card::after\{display:none!important/.test(IDX_530));
+  t('v3.5.30 轻量模式把动画压到几乎零时长',
+    /html\[data-lite="1"\] \*[\s\S]{0,240}animation-duration:\.01ms!important/.test(IDX_530));
+  t('v3.5.30 自动判定：iPad/iPhone、低内存、少核心、prefers-reduced-motion',
+    /function autoLiteWanted\(\)/.test(IDX_530)
+    && /prefers-reduced-motion/.test(IDX_530)
+    && /iPad\|iPhone\|iPod/.test(IDX_530)
+    && /deviceMemory/.test(IDX_530)
+    && /hardwareConcurrency/.test(IDX_530));
+  t('v3.5.30 手动三档 auto/on/off 且 normalizeUI 认识 lite',
+    /function setLiteMode\(/.test(IDX_530) && /secHtml\('perf'/.test(IDX_530)
+    && /out\.lite = \(o\.lite === 1\) \? 1 : \(o\.lite === 0 \? 0 : null\)/.test(IDX_530));
+  t('v3.5.30 长任务自测：>120ms 就自动降级并记忆到 session',
+    /function liteSelfCheck\(\)/.test(IDX_530) && /longtask/.test(IDX_530)
+    && /worst > 120/.test(IDX_530) && /closed-loop|cls_ui_lite_auto/.test(IDX_530));
+  t('v3.5.30 轻量 CSS 排在 !important 玻璃规则之后（否则压不住）',
+    IDX_530.indexOf('html[data-lite="1"] *') > IDX_530.indexOf('backdrop-filter:blur'));
+
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const ADMJS_518 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
