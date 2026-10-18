@@ -1009,7 +1009,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.26';
+var SITE_VERSION = '3.5.27';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -5079,60 +5079,229 @@ function vhFetchSongs(){
   });
 }
 
-/* v3.5.20：VoiceHub 的 durationSeconds 全是 null（实例没填时长），
-   所以按「歌名 + 歌手」到 QQ 音乐搜一次，补出秒数。
-   · 结果缓存在 localStorage（同名同歌手只查一次）
-   · 每次最多补 60 首、8 首一批，失败就停（不阻塞歌单展示） */
-function vhDurationCache(){
-  try{ return JSON.parse(localStorage.getItem('cls_song_dur_v1') || '{}') || {}; }catch(e){ return {}; }
-}
-function vhFillDurations(list){
-  if(!Array.isArray(list) || !list.length) return Promise.resolve(list);
-  var cache = vhDurationCache();
-  var need = [];
-  list.forEach(function(s){
-    if(!s) return;
-    var d = Number(s.durationSeconds) || 0;
-    if(d > 0) return;                       /* 平台自己有，别覆盖 */
-    var title = String(s.title || '').trim();
-    if(!title) return;
-    var artist = String(s.artist || '').trim();
-    var key = title + '|' + artist;
-    if(cache[key] != null){
-      s.durationSeconds = cache[key];
-      return;
-    }
-    if(need.length >= 60) return;           /* 一次别补太多 */
-    need.push({ key: key, title: title, artist: artist, song: s });
-  });
-  if(!need.length) return Promise.resolve(list);
+/* v3.5.20 → v3.5.27：VoiceHub 的 durationSeconds 全是 null（实例没填时长）。
+   ------------------------------------------------------------
+   站主 v3.5.27 原话：「一定要获取到歌曲时长并同步云端，省的每次都要加载，
+   渠道有网易云和 QQ 音乐，如果两个都没有找到由我人工填写，
+   否则无法发布投票或者随机排歌」。
 
+   因此分成三层：
+     ① 云端时长库（song_durations 表）：/api/music?action=lib 一次拉全量，
+        本地按 key 命中 —— **换设备、清缓存都还在**，不用每次开页面重新搜。
+     ② 库里没有的，批量问 /api/music（服务端查网易云 → QQ 音乐 → iTunes 兜底），
+        查到就自动写进云端库，下次直接命中。
+     ③ 还是查不到的（DUR_MISS），开后台时弹「时长补录」，站主手填秒数后写库
+        （source='manual'，优先级最高，不会被后面的自动结果覆盖）。
+
+   ⚠️ 歌单投票发布 / 抽歌排期前会校验时长，缺口存在就不放行（后端也拦一道）。
+   ------------------------------------------------------------ */
+var DUR_LIB_KEY = 'cls_song_dur_v1';          /* 老版本本地缓存，仍作第一层快查 */
+var DUR_LIB_AT = 'cls_song_dur_at_v1';
+var DUR_LIB_TTL = 10 * 60 * 1000;             /* 本地副本 10 分钟回源一次 */
+var DUR_MISS = {};                            /* key -> { title, artist } 待人工补录 */
+
+function vhDurationCache(){
+  try{ return JSON.parse(localStorage.getItem(DUR_LIB_KEY) || '{}') || {}; }catch(e){ return {}; }
+}
+function vhDurationKey(title, artist){
+  /* 与后端 libKey 一致：去括号、空格、连字符、大小写 —— 同一首歌换个写法也命中 */
+  function n(x){
+    return String(x == null ? '' : x)
+      .replace(/[（(][^）)]*[）)]/g, '')
+      .replace(/[\s·・\-—_]/g, '')
+      .toLowerCase();
+  }
+  return n(title) + '|' + n(artist);
+}
+function vhSaveDurCache(cache){
+  try{ localStorage.setItem(DUR_LIB_KEY, JSON.stringify(cache)); }catch(e){}
+}
+/** 秒 → m:ss（0 / 空返回空串）。v3.5.27：全站唯一一份（原来重复定义过两处） */
+function voFmtDur(sec){
+  var n = Math.round(Number(sec) || 0);
+  if(!n) return '';
+  var m = Math.floor(n / 60), s = n % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+/** ① 从云端拉全量时长库，合并进本地副本（一次请求，返回 Promise<Object>） */
+function vhDurLibPull(force){
+  var cache = vhDurationCache();
+  var at = 0;
+  try{ at = Number(localStorage.getItem(DUR_LIB_AT) || 0); }catch(e){}
+  if(!force && at && (Date.now() - at < DUR_LIB_TTL)) return Promise.resolve(cache);
+  return api('/music?action=lib').then(function(j){
+    var list = (j && j.list) || [];
+    list.forEach(function(r){
+      if(r && r.seconds > 0){
+        var k = r.key || vhDurationKey(r.title, r.artist);
+        cache[k] = Number(r.seconds);
+      }
+    });
+    vhSaveDurCache(cache);
+    try{ localStorage.setItem(DUR_LIB_AT, String(Date.now())); }catch(e){}
+    return cache;
+  }).catch(function(){ return cache; });      /* 拉不到就用本地副本，不阻塞 */
+}
+
+/** ② 缺的批量问服务端（8 首一批），命中的自动写云 */
+function vhDurAskCloud(need){
+  if(!need.length) return Promise.resolve();
   var chunks = [];
   for(var i = 0; i < need.length; i += 8) chunks.push(need.slice(i, i + 8));
   var idx = 0;
   var step = function(){
-    if(idx >= chunks.length){
-      try{ localStorage.setItem('cls_song_dur_v1', JSON.stringify(cache)); }catch(e){}
-      return list;
-    }
+    if(idx >= chunks.length) return Promise.resolve();
     var part = chunks[idx++];
     return api('/music', {
       method: 'POST',
-      body: { items: part.map(function(x){ return { title: x.title, artist: x.artist }; }) },
+      body: { action: 'batch', items: part.map(function(x){ return { title: x.title, artist: x.artist }; }) },
     }).then(function(j){
-      (j && j.list || []).forEach(function(r, k){
-        var src = part[k];
-        if(!src) return;
-        var sec = r && Number(r.seconds);
+      (j && j.list || []).forEach(function(r){
+        var sec = Number(r && r.seconds);
         if(sec > 0){
-          src.song.durationSeconds = sec;
-          cache[src.key] = sec;
+          var k = vhDurationKey(r.title, r.artist);
+          var cache = vhDurationCache();
+          cache[k] = sec;
+          vhSaveDurCache(cache);
+          var x = part.filter(function(y){ return vhDurationKey(y.title, y.artist) === k; })[0];
+          if(x && x.song) x.song.durationSeconds = sec;
+          delete DUR_MISS[k];
         }
       });
       return step();
-    }).catch(function(){ return list; });   /* 查不到就算了，别影响歌单 */
+    }).catch(function(){ return step(); });
   };
-  return step().then(function(){ return list; });
+  return step();
+}
+
+/** 主入口：给歌单补齐时长。返回 Promise<list>，查不到的记进 DUR_MISS */
+function vhFillDurations(list){
+  if(!Array.isArray(list) || !list.length) return Promise.resolve(list);
+  return vhDurLibPull().then(function(cache){
+    var need = [];
+    list.forEach(function(s){
+      if(!s) return;
+      var d = Number(s.durationSeconds) || 0;
+      if(d > 0) return;                       /* 平台自己有，别覆盖 */
+      var title = String(s.title || '').trim();
+      if(!title) return;
+      var artist = String(s.artist || '').trim();
+      var key = vhDurationKey(title, artist);
+      if(cache[key] > 0){
+        s.durationSeconds = cache[key];
+        return;
+      }
+      if(DUR_MISS[key]) return;
+      need.push({ key: key, title: title, artist: artist, song: s });
+    });
+    if(!need.length) return list;
+    /* 只对「本次真要用的歌」联网查：一次最多 40 首，避免开页面卡太久 */
+    var ask = need.slice(0, 40);
+    return vhDurAskCloud(ask).then(function(){
+      var cache2 = vhDurationCache();
+      need.forEach(function(x){
+        if(Number(x.song.durationSeconds) > 0) return;
+        if(cache2[x.key] > 0){ x.song.durationSeconds = cache2[x.key]; return; }
+        /* 查不到 → 挂起，等站主人工补录 */
+        DUR_MISS[x.key] = { title: x.title, artist: x.artist };
+      });
+      if(Object.keys(DUR_MISS).length) vhDurNotice();
+      return list;
+    });
+  }).catch(function(){ return list; });
+}
+
+/** ③ 缺时长的歌：站主手填后写云端 */
+function vhDurNotice(){
+  var keys = Object.keys(DUR_MISS);
+  if(!keys.length) return;
+  var box = document.getElementById('djDurNotice');
+  if(!box) return;
+  box.style.display = '';
+  box.innerHTML = '<div class="alert warn" style="margin:0 0 12px;line-height:1.8">'
+    + '<b>有 ' + keys.length + ' 首歌还没拿到时长</b>（网易云、QQ 音乐都没搜到）。'
+    + '<br>按站规：<b>时长为空不能发布投票、也不能随机排歌</b>，请点右边按钮人工填写。'
+    + '<button class="btn btn-sm" id="djDurFill" style="margin-left:8px">补录时长</button>'
+    + '</div>';
+  var btn = document.getElementById('djDurFill');
+  if(btn) btn.onclick = function(){ voDurManualDialog(keys); };
+}
+
+/** 人工补录弹窗：一行一首，填「分:秒」或纯秒数
+ *  @param keys   要补的 key 列表（缺省 = 全部 DUR_MISS）
+ *  @param onDone 补录成功后的回调（用于「补齐后自动继续刚才那步」） */
+function voDurManualDialog(keys, onDone){
+  keys = keys || Object.keys(DUR_MISS);
+  if(!keys.length){ toast('没有待补录的歌', 'ok'); return; }
+  var rows = keys.map(function(k){
+    var m = DUR_MISS[k] || {};
+    return '<tr data-k="' + attr(k) + '">'
+      + '<td style="padding:6px 8px">' + esc(m.title || '') + (m.artist ? '<i class="muted" style="font-style:normal"> · ' + esc(m.artist) + '</i>' : '') + '</td>'
+      + '<td style="padding:6px 8px;width:120px">'
+      +   '<input class="dur-in" placeholder="3:45 或 225" style="width:100%;padding:5px 8px;font-size:.82rem">'
+      + '</td></tr>';
+  }).join('');
+  openModal({
+    title: '补录歌曲时长',
+    sub: '填「3:45」这种分秒，或直接填秒数 225；范围 20 秒 ~ 30 分钟',
+    wide: true,
+    body: '<div class="field" style="margin-bottom:0">'
+      +   '<p class="hint" style="margin:0 0 8px">人工填写的时长会写进<b>云端时长库</b>'
+      +   '（来源标为「人工」），优先级最高，以后自动搜索也不会覆盖它。</p>'
+      +   '<div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+      +     '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table>'
+      +   '</div></div>',
+    foot: '<button class="btn btn-ghost" data-no>稍后再说</button>'
+        + '<button class="btn" data-yes>保存到云端</button>',
+    onMount: function(box){
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var items = [], bad = 0;
+        Array.prototype.forEach.call(box.querySelectorAll('tr[data-k]'), function(tr){
+          var inp = tr.querySelector('.dur-in');
+          var raw = String((inp && inp.value) || '').trim();
+          if(!raw) return;
+          var sec = 0;
+          var mm = raw.match(/^(\d{1,2})\s*[:：]\s*(\d{1,2})$/);
+          if(mm) sec = Number(mm[1]) * 60 + Number(mm[2]);
+          else if(/^\d+$/.test(raw)) sec = Number(raw);
+          if(!(sec >= 20 && sec <= 1800)){ bad++; tr.style.background = 'rgba(220,38,38,.08)'; return; }
+          var m = DUR_MISS[tr.getAttribute('data-k')] || {};
+          items.push({ title: m.title || '', artist: m.artist || '', seconds: sec });
+        });
+        if(!items.length){
+          toast(bad ? '填的时长不合法（需 20 秒 ~ 30 分钟）' : '至少填一首', 'err');
+          return;
+        }
+        var btn = box.querySelector('[data-yes]');
+        if(btn){ btn.disabled = true; btn.textContent = '保存中…'; }
+        api('/music', { method: 'POST', body: { action: 'manual', items: items } })
+          .then(function(j){
+            var cache = vhDurationCache();
+            items.forEach(function(x){ cache[vhDurationKey(x.title, x.artist)] = x.seconds; });
+            vhSaveDurCache(cache);
+            Object.keys(DUR_MISS).forEach(function(k){
+              var m = DUR_MISS[k];
+              if(items.some(function(x){ return vhDurationKey(x.title, x.artist) === k; })) delete DUR_MISS[k];
+            });
+            closeModal();
+            toast((j && j.message) || '已保存到云端', 'ok');
+            /* 已经打开的投票编辑器 / 歌单面板要跟着更新 */
+            if(typeof window.__voRebuildSongOptions === 'function') window.__voRebuildSongOptions();
+            if(typeof djRefreshDur === 'function') djRefreshDur();
+            vhDurNotice();
+            if(typeof onDone === 'function'){
+              try{ onDone(); }catch(e){}
+            }
+          })
+          .catch(function(e){
+            if(btn){ btn.disabled = false; btn.textContent = '保存到云端'; }
+            toast('保存失败：' + (e.message || e), 'err', 4000);
+          });
+      };
+    },
+  });
 }
 
 function vhFetchSongsRaw(){
@@ -9865,6 +10034,8 @@ function renderDj(){
     +   '歌单实时来自点歌平台，抽签结果会写进云端排期。'
     + '</div>'
     + '<div id="djMigrate"></div>'
+    /* v3.5.27：时长缺口提示（时长为空不能排歌） */
+    + '<div id="djDurNotice" style="display:none"></div>'
     + '<section class="panel" style="margin-bottom:16px">'
     +   '<div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px">'
     +     '<h3 style="margin:0;font-size:.95rem">🎲 抽签</h3>'
@@ -9897,6 +10068,12 @@ function renderDj(){
     +       '<input type="number" id="djMaxMin" min="1" max="300" placeholder="留空 = 不限" title="累加歌曲时长，超过就不再抽（缺时长的歌不参与判断）"></div>'
     +   '</div>'
     +   '<p class="hint" id="djCapHint" style="margin:-2px 0 10px">抽取数量 / 总时长上限二选一：填了总时长上限，系统按歌曲时长自动决定数量。</p>'
+    /* v3.5.27：时长库状态 —— 让站主一眼看到「哪些歌还没时长」入口 */
+    +   '<div id="djDurStat" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;'
+    +     'margin:-4px 0 12px;font-size:.8rem;color:var(--fg-3)">'
+    +     '<span>🎵 歌曲时长：先查<b>云端时长库</b>，没有再查网易云 / QQ 音乐；都没有就得你手填（不填不能排歌）</span>'
+    +     '<button class="btn btn-sm btn-ghost" id="djDurLibBtn" type="button">时长库 / 补录</button>'
+    +   '</div>'
     +   '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:.85rem">'
     +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>'
     +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludeSched" checked> 排除已排期</label>'
@@ -9947,6 +10124,27 @@ function renderDj(){
   $('djSongsBtn').onclick = openDjSongs;
   $('djHistoryBtn').onclick = openDjHistory;
   $('djRunBtn').onclick = djRun;
+  /* v3.5.27：时长库入口 —— 先拉一次云端库，再把缺时长的歌列出来 */
+  var durLibBtn = $('djDurLibBtn');
+  if(durLibBtn) durLibBtn.onclick = function(){
+    durLibBtn.disabled = true;
+    durLibBtn.textContent = '同步中…';
+    vhDurLibPull(true).then(function(cache){
+      var keys = Object.keys(cache);
+      var missing = Object.keys(DUR_MISS);
+      if(missing.length){
+        voDurManualDialog(missing);
+      }else{
+        toast('云端时长库已同步，共 ' + keys.length + ' 首；暂时没有缺时长的歌', 'ok', 4000);
+      }
+    }).catch(function(e){
+      toast('同步失败：' + (e.message || e), 'err', 4000);
+    }).then(function(){
+      durLibBtn.disabled = false;
+      durLibBtn.textContent = '时长库 / 补录';
+    });
+  };
+  vhDurNotice();
   $('djCopyBtn').onclick = djCopy;
 
   /* v3.5.21：抽取数量与总时长上限二选一。
@@ -10100,6 +10298,28 @@ function djRun(){
       if(ts < tFrom || ts > tTo) return false;
       return true;
     });
+    /* 🔴 v3.5.27（站主）：「时长为空不能随机排歌」。
+       先把没时长的歌挑出来单独提示（而不是静默抽出一批时长未知的歌）。 */
+    var noDurSongs = pool.filter(function(s){ return !(Number(s.durationSeconds) >= 20); });
+    if(noDurSongs.length){
+      var map0 = {};
+      noDurSongs.forEach(function(s){
+        map0[vhDurationKey(String(s.title || ''), String(s.artist || ''))] = { title: s.title || '', artist: s.artist || '' };
+      });
+      Object.keys(map0).forEach(function(k){ if(!DUR_MISS[k]) DUR_MISS[k] = map0[k]; });
+      if(box){
+        box.innerHTML = '<div class="alert danger" style="line-height:1.9">'
+          + '<b>有 ' + noDurSongs.length + ' 首歌没有时长，按站规不能排歌</b><br>'
+          + '<span style="font-size:.82rem">' + noDurSongs.slice(0, 8).map(function(s){ return esc(s.title || '?'); }).join('、')
+          + (noDurSongs.length > 8 ? ' 等' : '') + '</span><br>'
+          + '<span style="font-size:.82rem;color:#57534e">时长会先去云端库找，再查网易云 / QQ 音乐；都查不到就得你手填。</span><br>'
+          + '<button class="btn btn-sm" id="djDurFillNow" style="margin-top:8px">立即补录 ' + noDurSongs.length + ' 首的时长</button>'
+          + '</div>';
+        var b0 = document.getElementById('djDurFillNow');
+        if(b0) b0.onclick = function(){ voDurManualDialog(Object.keys(map0)); };
+      }
+      return;
+    }
     if(!pool.length){
       if(box) box.innerHTML = '<div class="alert danger">没有可抽歌曲。试试放宽时间范围，或到「歌单管理」解除排除、取消「排除已播放 / 已排期」。</div>';
       return;
@@ -10120,8 +10340,11 @@ function djRun(){
       var rq = djReqName(s);
       if(onePer && rq && usedReq[rq]) return false;
       var d = Number(s.durationSeconds) || 0;
-      /* 只对有已知时长的歌做判断：没时长的（平台没填）不拦，否则会把整个池子卡死 */
-      if(capMin > 0 && d > 0 && usedSec + d > capMin * 60) return false;
+      /* v3.5.27（站主）：「时长为空不能随机排歌」——
+         以前「没时长就不拦」，结果抽出一批时长未知的歌，总时长统计全是错。
+         现在没时长的歌直接不进池子（在下面 pool 过滤时已经剔除，这里再兜一次）。 */
+      if(!(d >= 20)) return false;
+      if(capMin > 0 && usedSec + d > capMin * 60) return false;
       usedSec += d;
       usedId[s.id] = 1; if(rq) usedReq[rq] = 1; picked.push(s);
       return true;
@@ -10269,6 +10492,22 @@ function djFetchSongs(){
     return DJ_STATE.songs;
   });
 }
+
+/* v3.5.27：人工补录时长成功后刷新面板。
+   已经拉过歌单的，把本地缓存里的秒数补回去；没拉过就等下次自动带上。 */
+function djRefreshDur(){
+  if(!DJ_STATE.songs || !DJ_STATE.songs.length) return;
+  var cache = vhDurationCache();
+  DJ_STATE.songs.forEach(function(s){
+    if(Number(s.durationSeconds) >= 20) return;
+    var sec = cache[vhDurationKey(String(s.title || ''), String(s.artist || ''))];
+    if(sec > 0) s.durationSeconds = Number(sec);
+  });
+  /* 抽屉/列表里显示时长的行要跟着重画 */
+  if(typeof window.__djRepaint === 'function') window.__djRepaint();
+  vhDurNotice();
+}
+window.djRefreshDur = djRefreshDur;
 
 /* ============================ 点歌人加权（v3.5.6）============================
  * 站主要求：抽签排期能按「考试进退步 / 班委身份」给点歌人加权 ——
@@ -11438,13 +11677,36 @@ function voWriteTop5(id){
     var op = (v.options || []).filter(function(x){ return String(x.id) === String(o.id); })[0];
     return (op && op.songMeta) || null;
   };
+  /* 🔴 v3.5.27（站主）：「时长为空不能随机排歌」—— 写排期也是排歌。
+     先把这条投票里所有缺时长的选项列出来拦下，让站主补齐再写。 */
+  var missOp = [];
+  (v.options || []).forEach(function(op){
+    var d = op.songMeta && Number(op.songMeta.duration);
+    if(!(d >= 20)) missOp.push(op);
+  });
+  if(missOp.length){
+    var map = {};
+    missOp.forEach(function(op){
+      var parts = String(op.label || '').split(' - ');
+      var t = (op.songMeta && op.songMeta.title) || parts[0] || '';
+      var a = (op.songMeta && op.songMeta.artist) || parts[1] || '';
+      map[vhDurationKey(t, a)] = { title: t, artist: a };
+    });
+    Object.keys(map).forEach(function(k){ if(!DUR_MISS[k]) DUR_MISS[k] = map[k]; });
+    toast('这条投票里有 ' + missOp.length + ' 首还没时长，补齐后才能写排期', 'err', 4000);
+    voDurManualDialog(Object.keys(map), function(){
+      /* 补录完成后自动重跑一次 —— 站主不用再点一遍 */
+      voWriteTop5(id);
+    });
+    return;
+  }
   var picked = [], usedSec = 0;
   for(var i = 0; i < sorted.length && picked.length < wantN; i++){
     var o = sorted[i];
     var om = optMeta(o);
     var d = (om && om.duration) ? Number(om.duration) : 0;
-    /* 总时长上限：有数据才判断，没时长就不拦（否则全被卡掉） */
-    if(capMin > 0 && d > 0 && usedSec + d > capMin * 60) continue;
+    /* 到这步时长一定齐了；总时长上限只做跳过判断 */
+    if(capMin > 0 && usedSec + d > capMin * 60) continue;
     picked.push(o);
     usedSec += d;
   }
@@ -11652,6 +11914,11 @@ function voEditorDialog(v){
         if(isSong && !pick.getAttribute('data-ready')){
           pick.setAttribute('data-ready', '1');
           voMountSongPick(pick);
+          /* v3.5.27：进歌单模式先把云端时长库拉下来，挑歌时就能看到时长；
+             「已选却没时长」的项会立刻在提示条里列出来。 */
+          vhDurLibPull().then(function(){
+            if(typeof box.__voRebuild === 'function') box.__voRebuild();
+          });
         }
       };
       if(fmtSel) fmtSel.onchange = syncKind;
@@ -11705,6 +11972,29 @@ function voEditorDialog(v){
       options.push(meta ? { label: l, songMeta: meta } : { label: l });
     });
     if(options.length < 2){ toast('至少填两个选项', 'err'); return; }
+    /* 🔴 v3.5.27（站主）：「一定要获取到歌曲时长……否则无法发布投票」。
+       歌单投票每个选项都得有时长 —— 缺口直接拦下，并弹出补录窗口。
+       后端 parseVoteInput 也有一道同样的校验，双保险。 */
+    var kindNow = (document.getElementById('voKind') || {}).value || 'normal';
+    if(kindNow === 'song'){
+      var miss = options.filter(function(o){
+        var d = o.songMeta && Number(o.songMeta.duration);
+        return !(d >= 20 && d <= 1800);
+      });
+      if(miss.length){
+        var map = {};
+        miss.forEach(function(o){
+          var parts = String(o.label || '').split(' - ');
+          var t = (o.songMeta && o.songMeta.title) || parts[0] || '';
+          var a = (o.songMeta && o.songMeta.artist) || parts[1] || '';
+          map[vhDurationKey(t, a)] = { title: t, artist: a };
+        });
+        Object.keys(map).forEach(function(k){ if(!DUR_MISS[k]) DUR_MISS[k] = map[k]; });
+        toast('有 ' + miss.length + ' 首歌还没时长，补齐后才能发布', 'err', 4000);
+        voDurManualDialog(Object.keys(map));
+        return;
+      }
+    }
     var dl = String((document.getElementById('voDeadline') || {}).value || '').trim();
     var payload = {
       title: title,
@@ -11776,14 +12066,6 @@ function voSongFieldPrefs(){
   };
 }
 
-/** 秒 → m:ss（0 / 空返回空串） */
-function voFmtDur(sec){
-  var n = Math.round(Number(sec) || 0);
-  if(!n) return '';
-  var m = Math.floor(n / 60), s = n % 60;
-  return m + ':' + (s < 10 ? '0' : '') + s;
-}
-
 /** 按当前勾选拼 label + meta —— 站主：「只有我勾选了才会填入表单选项」 */
 function voSongParts(s){
   var p = voSongFieldPrefs();
@@ -11841,6 +12123,8 @@ function voMountSongPick(host){
     + '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
     +   '勾选即加入选项，取消勾选即移出 —— 不用再点「加进选项」。'
     +   '<b>选项</b>文本框与勾选列表实时同步，也可以手改。</p>'
+    /* v3.5.27：时长缺口提示条（时长为空不能发布 / 不能排歌） */
+    + '<div id="voDurBar" style="display:none;margin:8px 0 0"></div>'
     + '</div>';
   var body = host.querySelector('#voPickBody');
   var q = host.querySelector('#voPickQ');
@@ -11911,6 +12195,70 @@ function voMountSongPick(host){
     /* 同步 songMeta 表 */
     Object.keys(metas).forEach(function(k){ VO_PICK_META[k] = metas[k]; });
     setOptionsLines(lines);
+    paintDurBar();
+  }
+
+  /* v3.5.27（站主）：「一定要获取到歌曲时长……否则无法发布投票或者随机排歌」。
+     这里实时盘点「已勾的歌里哪些还没有时长」，缺口不为 0 就挂红条 + 补录按钮。
+     时长的获取顺序：平台自带 → 云端时长库 → 网易云/QQ 音乐联网 → 人工填写。 */
+  function durMissing(){
+    var out = [];
+    optionsLines().forEach(function(l){
+      var m = VO_PICK_META[l];
+      var d = m && Number(m.duration);
+      if(d >= 20 && d <= 1800) return;
+      /* 歌名歌手从 songMeta 取；没有就退回拆 label 的前两段 */
+      var parts = String(l).split(' - ');
+      out.push({ label: l, title: (m && m.title) || parts[0] || '', artist: (m && m.artist) || parts[1] || '' });
+    });
+    return out;
+  }
+  function paintDurBar(){
+    var bar = document.getElementById('voDurBar');
+    if(!bar) return;
+    var miss = durMissing();
+    if(!miss.length){
+      var any = optionsLines().length;
+      bar.style.display = any ? '' : 'none';
+      bar.innerHTML = any
+        ? '<div class="alert info" style="margin:0;font-size:.8rem">✅ 已选 ' + any + ' 首歌，时长全部齐了，可以发布。</div>'
+        : '';
+      return;
+    }
+    bar.style.display = '';
+    miss.forEach(function(x){
+      var k = vhDurationKey(x.title, x.artist);
+      if(!DUR_MISS[k]) DUR_MISS[k] = { title: x.title, artist: x.artist };
+    });
+    bar.innerHTML = '<div class="alert warn" style="margin:0;font-size:.8rem;line-height:1.8">'
+      + '<b style="color:#b45309">⚠️ ' + miss.length + ' 首歌还没拿到时长</b>，'
+      + '<b>补齐后才能发布</b>（网易云 / QQ 音乐都没搜到，需要你手填）。'
+      + '<br><span class="muted">' + miss.slice(0, 6).map(function(x){ return esc(x.title || x.label); }).join('、')
+      + (miss.length > 6 ? ' 等' : '') + '</span>'
+      + '<button class="btn btn-sm" id="voDurFillBtn" type="button" style="margin-left:8px">补录时长</button>'
+      + '</div>';
+    var b = document.getElementById('voDurFillBtn');
+    if(b) b.onclick = function(){
+      /* 只补这一批，别把整个 DUR_MISS 都倒出来 */
+      var only = {};
+      miss.forEach(function(x){
+        var k = vhDurationKey(x.title, x.artist);
+        only[k] = { title: x.title, artist: x.artist };
+      });
+      voDurManualDialogFor(only);
+    };
+  }
+  /* 只针对给定集合的补录（不污染全局 DUR_MISS 的显示） */
+  function voDurManualDialogFor(map){
+    var keep = DUR_MISS;
+    var sub = {};
+    Object.keys(map).forEach(function(k){ if(!keep[k]) sub[k] = map[k]; });
+    var restore = {};
+    Object.keys(sub).forEach(function(k){ restore[k] = keep[k]; keep[k] = sub[k]; });
+    voDurManualDialog(Object.keys(map));
+    /* 弹窗已经拿到 keys 快照，恢复全局映射（未填的仍留在 DUR_MISS 里） */
+    Object.keys(sub).forEach(function(k){ delete keep[k]; });
+    Object.keys(restore).forEach(function(k){ if(restore[k]) keep[k] = restore[k]; });
   }
   function applyOne(el){
     rebuildFromChecks();
@@ -11980,7 +12328,8 @@ function voMountSongPick(host){
             + '<span class="muted" style="font-size:.72rem;margin-left:auto;white-space:nowrap">'
             +   esc(req) + (when ? ' · ' + esc(when) : '')
             +   (s.voteCount != null ? ' · ' + Number(s.voteCount) + ' 赞' : '')
-            +   (durTxt ? ' · ' + durTxt : '')
+            /* v3.5.27：没时长的标红 —— 这首歌勾进去也发不了投票，得先补录 */
+            +   (durTxt ? ' · ' + durTxt : ' · <b style="color:#b45309">缺时长</b>')
             + '</span>'
             + '</label>';
         }).join('')

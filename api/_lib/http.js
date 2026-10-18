@@ -11,6 +11,10 @@
 import { getSql, cfg } from './db.js';
 import { sha256Hex } from './password.js';
 
+/* v3.5.27：把 getSql 再导出一次 —— /api/music 要用它读写 song_durations 时长库。
+   不直接 import './db.js' 是为了让「数据库连接」只有一个入口，方便测试桩替换。 */
+export { getSql };
+
 /* ============================================================
    表结构自愈（全站公共）
    ------------------------------------------------------------
@@ -43,7 +47,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.14';
+const SCHEMA_VER = '3.5.27';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -212,6 +216,21 @@ export async function ensureSchema(sql) {
         try { await s`alter table profiles add column if not exists field_vis text`; } catch (e) {}
         try { await s`alter table profiles add column if not exists id_card text`; } catch (e) {}
         try { await s`alter table profiles add column if not exists youth_league_no text`; } catch (e) {}
+        /* 🔴 v3.5.27：歌曲时长云端库（站主「一定要获取到歌曲时长并同步云端，省的每次都要加载」）。
+           以前时长只存 localStorage → 换设备/清缓存全丢，每次开页面都要重新联网搜一遍。
+           现在查到的写库，人工填的 source='manual' 优先级最高。
+           纪律：升级路径 + 全新库全量清单 + schema.sql 三处同步，SCHEMA_VER 已升到 3.5.27。 */
+        try { await s`
+          create table if not exists song_durations (
+            song_key   text        primary key,
+            title      text        not null default '',
+            artist     text        not null default '',
+            seconds    int         not null,
+            source     text        not null default 'auto',
+            updated_at timestamptz not null default now()
+          )
+        `; } catch (e) {}
+        try { await s`create index if not exists song_dur_title_idx on song_durations (title)`; } catch (e) {}
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
@@ -604,6 +623,26 @@ export async function ensureSchema(sql) {
        no such table 并中断整段 DDL（v3.5.14 实测踩到） */
     await s`alter table class_vote_ballots add column if not exists retract_used smallint not null default 0`;
     await s`create index if not exists cvb_vote_idx on class_vote_ballots (vote_id)`;
+
+    /* ===== v3.5.27 歌曲时长云端库（song_durations）=====
+       站主要求：「一定要获取到歌曲时长并同步云端，省的每次都要加载，
+       渠道有网易云和 QQ 音乐，如果两个都没有找到由我人工填写，
+       否则无法发布投票或者随机排歌」。
+       · song_key = 归一化(歌名)|归一化(歌手)，同一首歌全站只存一行
+       · source：manual 人工填写（优先级最高，不被自动结果覆盖）
+                 / netease / qq / itunes / auto
+       放在 Class 投票表之后、盖章之前。 */
+    await s`
+      create table if not exists song_durations (
+        song_key   text        primary key,
+        title      text        not null default '',
+        artist     text        not null default '',
+        seconds    int         not null,
+        source     text        not null default 'auto',
+        updated_at timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists song_dur_title_idx on song_durations (title)`;
 
     /* 全量跑完 → 盖章。下一条请求起走「版本一致直接返回」的捷径。
        用 || 合并而不是整行覆盖：site_settings 里还存着 register_open /

@@ -211,6 +211,23 @@ function parseVoteInput(b) {
   const kind = (b.kind === 'song') ? 'song' : 'normal';
   const options = normOptions(b.options);
   if (options.length < 2) return { error: '至少需要两个选项' };
+  /* 🔴 v3.5.27（站主）：「一定要获取到歌曲时长……否则无法发布投票」。
+     歌单投票的每个选项都必须带合法时长，否则「按时长上限凑歌」「总时长统计」
+     都是错的 —— 缺口直接拒绝发布，让站主在后台把时长补齐。
+     （时长由 /api/music 查网易云 / QQ 音乐并同步云端；查不到由站主人工填） */
+  if (kind === 'song') {
+    const noDur = options.filter((o) => {
+      const d = o.songMeta && Number(o.songMeta.duration);
+      return !(d >= 20 && d <= 1800);
+    });
+    if (noDur.length) {
+      return {
+        error: '这 ' + noDur.length + ' 首歌还没拿到时长，补齐后才能发布：'
+          + noDur.slice(0, 3).map((o) => o.label).join('、')
+          + (noDur.length > 3 ? ' 等' : ''),
+      };
+    }
+  }
   /* v3.5.20：歌单投票也允许多选（站主：「点歌的投票也可以设置多选，我现在更改完就被改回了单选」）
      —— 以前这里硬编码 kind === 'normal'，后台勾了多选也会被吞掉。 */
   const multi = b.multi === true;

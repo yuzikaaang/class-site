@@ -167,6 +167,16 @@ create table score_config (
   data jsonb not null default '{}',
   updated_at text not null default (datetime('now'))
 );
+/* v3.5.27 歌曲时长云端库（对应 schema.sql 最后一段） */
+create table song_durations (
+  song_key   text primary key,
+  title      text not null default '',
+  artist     text not null default '',
+  seconds    integer not null,
+  source     text not null default 'auto',
+  updated_at text not null default (datetime('now'))
+);
+create index song_dur_title_idx on song_durations (title);
 `);
 
 /* ---------- 3.5 SQLite 兼容：补上 Postgres 有、SQLite 没有的函数 ---------- */
@@ -7882,8 +7892,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.14',
-    /const SCHEMA_VER = '3\.5\.14'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.27',
+    /const SCHEMA_VER = '3\.5\.27'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8176,6 +8186,100 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.26 syncKind 同步 data-kind，文本框仍作隐藏数据载体供提交读取',
     /ed\.setAttribute\('data-kind', isSong \? 'song' : 'normal'\)/.test(ADM_526)
     && /document\.getElementById\('voOpts'\) \|\| \{\}\)\.value/.test(ADM_526));
+
+  /* ---- v3.5.27：歌曲时长云端同步 + 缺时长禁止发布/排歌 ---- */
+  const ADM_527 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const MUS_527 = fs.readFileSync(new URL('./api/music.js', import.meta.url), 'utf8');
+  const VOT_527 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
+  const HTTP_527 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const SCH_527 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  t('v3.5.27 云端时长库表 song_durations 三处同步（升级路径/全量清单/schema.sql）',
+    (HTTP_527.match(/create table if not exists song_durations/g) || []).length >= 2
+    && /create table if not exists song_durations/.test(SCH_527)
+    && /const SCHEMA_VER = '3\.5\.27'/.test(HTTP_527));
+  t('v3.5.27 后端写库按来源优先级，人工填写不被自动结果覆盖',
+    /case song_durations\.source/.test(MUS_527) && /source: 'manual'/.test(MUS_527)
+    && /when 'manual' then 3/.test(MUS_527));
+  t('v3.5.27 /api/music 支持 lib / batch / manual / lib-query 四个动作',
+    /action === 'lib'/.test(MUS_527) && /act === 'batch'/.test(MUS_527)
+    && /act === 'manual'/.test(MUS_527) && /act === 'lib-query'/.test(MUS_527));
+  t('v3.5.27 查时长先查云端库再联网（一次查询永久命中）',
+    /await libLookup\(sql, \[key\]\)/.test(MUS_527) && /命中就写云端库/.test(MUS_527));
+  t('v3.5.27 后端拒绝发布缺时长的歌单投票',
+    /if \(kind === 'song'\) \{/.test(VOT_527) && /还没拿到时长，补齐后才能发布/.test(VOT_527)
+    && /d >= 20 && d <= 1800/.test(VOT_527));
+  t('v3.5.27 前端拉云端时长库 + 批量补 + 人工补录三层',
+    /function vhDurLibPull/.test(ADM_527) && /function vhDurAskCloud/.test(ADM_527)
+    && /function voDurManualDialog/.test(ADM_527) && /action: 'manual'/.test(ADM_527));
+  t('v3.5.27 歌单编辑器实时盘点缺时长并挂红条',
+    /function durMissing/.test(ADM_527) && /function paintDurBar/.test(ADM_527)
+    && /id="voDurBar"/.test(ADM_527) && /补齐后才能发布/.test(ADM_527));
+  t('v3.5.27 提交前拦截缺时长的歌单投票（前后端双保险）',
+    /if\(kindNow === 'song'\)\{/.test(ADM_527) && /补齐后才能发布/.test(ADM_527));
+  t('v3.5.27 随机排歌：没时长的歌直接不能抽',
+    /if\(!\(d >= 20\)\) return false;/.test(ADM_527) && /按站规不能排歌/.test(ADM_527));
+  t('v3.5.27 挑歌列表标出「缺时长」',
+    /缺时长<\/b>/.test(ADM_527) && /durTxt \? ' · ' \+ durTxt/.test(ADM_527));
+  t('v3.5.27 voFmtDur 全站只定义一次',
+    (ADM_527.match(/function voFmtDur\(/g) || []).length === 1);
+
+  /* v3.5.27 接口级实测：人工补录 → 写库 → lib-query / lib 都能读回 */
+  {
+    const man = await call('/api/music', {
+      method: 'POST',
+      body: { action: 'manual', items: [
+        { title: '幻听', artist: '许嵩', seconds: 273 },
+        { title: '晴天', artist: '周杰伦', seconds: 279 },
+      ] },
+    });
+    t('★v3.5.27 人工补录写进云端时长库', man.status === 200 && man.body.saved === 2,
+      JSON.stringify(man.body).slice(0, 200));
+    const dbRow = db.prepare("select seconds, source from song_durations where song_key = ?");
+    dbRow.bind(['幻听|许嵩']);
+    dbRow.step();
+    const r1 = dbRow.getAsObject();
+    dbRow.free();
+    t('★v3.5.27 库里记的是人工来源', Number(r1.seconds) === 273 && r1.source === 'manual',
+      JSON.stringify(r1));
+
+    const lq = await call('/api/music', {
+      method: 'POST',
+      body: { action: 'lib-query', items: [
+        { title: '幻听', artist: '许嵩' },
+        { title: '幻听（Live）', artist: '许嵩' },
+        { title: '查不到的歌', artist: 'X' },
+      ] },
+    });
+    const L = (lq.body || {}).list || [];
+    t('★v3.5.27 lib-query 命中库（含括号后缀写法归一）',
+      L[0] && L[0].seconds === 273 && L[1] && L[1].seconds === 273,
+      JSON.stringify(L).slice(0, 240));
+    t('★v3.5.27 lib-query 查不到就返回 null（不瞎猜）',
+      L[2] && L[2].seconds === null, JSON.stringify(L[2]));
+
+    const libAll = await call('/api/music?action=lib');
+    t('★v3.5.27 lib 能拉全量时长库', libAll.status === 200 && (libAll.body.list || []).length >= 2,
+      JSON.stringify((libAll.body || {}).list || []).slice(0, 200));
+
+    /* 人工值不被自动结果覆盖（source 优先级 manual > auto） */
+    const autoOver = await call('/api/music', {
+      method: 'POST',
+      body: { action: 'save-many', items: [{ title: '幻听', artist: '许嵩', seconds: 200, source: 'auto' }] },
+    });
+    const dbRow2 = db.prepare("select seconds, source from song_durations where song_key = ?");
+    dbRow2.bind(['幻听|许嵩']);
+    dbRow2.step();
+    const r2 = dbRow2.getAsObject();
+    dbRow2.free();
+    t('★v3.5.27 自动结果盖不掉人工填写', autoOver.status === 200 && Number(r2.seconds) === 273,
+      JSON.stringify(r2));
+
+    /* 非法时长（< 20 秒）拒收 */
+    const bad = await call('/api/music', {
+      method: 'POST', body: { action: 'manual', items: [{ title: '测试歌', artist: 'y', seconds: 5 }] },
+    });
+    t('★v3.5.27 非法时长被拒 400', bad.status === 400, JSON.stringify(bad.body).slice(0, 160));
+  }
 
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -10081,10 +10185,24 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('★单选投票一次投两个被拒 400', multiCast.status === 400, '实际 ' + multiCast.status);
 
   /* ============ ⑦ 歌单投票 → 写抽歌排期 ============ */
+  /* v3.5.27：歌单投票的选项必须带时长 —— 先验「没时长被拒」，再带时长建成功 */
+  const mkSongNoDur = await call('/api/votes?action=create', {
+    method: 'POST', token: adminToken,
+    body: { title: '缺时长的歌单投票', kind: 'song',
+            options: [{ label: '歌甲 - 歌手甲' }, { label: '歌乙 - 歌手乙' }] },
+  });
+  t('★v3.5.27 缺时长的歌单投票被拒（400）',
+    mkSongNoDur.status === 400 && /时长/.test(String(mkSongNoDur.body && mkSongNoDur.body.error)),
+    JSON.stringify(mkSongNoDur.body).slice(0, 160));
+
+  const songOpt = (label, sec) => ({
+    label,
+    songMeta: { title: label.split(' - ')[0], artist: label.split(' - ')[1], duration: sec, show: ['duration'] },
+  });
   const mkSong = await call('/api/votes?action=create', {
     method: 'POST', token: adminToken,
     body: { title: '本周歌单投票', kind: 'song',
-            options: [{ label: '歌甲' }, { label: '歌乙' }, { label: '歌丙' }] },
+            options: [songOpt('歌甲 - 歌手甲', 225), songOpt('歌乙 - 歌手乙', 198), songOpt('歌丙 - 歌手丙', 240)] },
   });
   const sid2 = mkSong.body.id;
   t('★能建歌单投票', mkSong.status === 200 && !!sid2, JSON.stringify(mkSong.body).slice(0, 160));

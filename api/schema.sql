@@ -523,3 +523,25 @@ create table if not exists class_vote_ballots (
   primary key (vote_id, user_id)
 );
 create index if not exists class_vote_ballots_vote_idx on class_vote_ballots (vote_id);
+
+-- ============================================================
+-- v3.5.27 歌曲时长云端库
+--   站主：「一定要获取到歌曲时长并同步云端，省的每次都要加载，
+--          渠道有网易云和 QQ 音乐，如果两个都没有找到由我人工填写，
+--          否则无法发布投票或者随机排歌」
+--   以前时长只缓存在浏览器 localStorage，换设备/清缓存就全丢，
+--   每次开页面都得重新联网搜。现在查到的写库，全站共享。
+--   · song_key = 归一化(歌名)|归一化(歌手)，同一首歌只存一行
+--   · source：manual 人工填写（优先级最高，不被自动结果覆盖）
+--             / netease / qq / itunes / auto
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.5.27
+-- ============================================================
+create table if not exists song_durations (
+  song_key   text        primary key,
+  title      text        not null default '',
+  artist     text        not null default '',
+  seconds    int         not null,
+  source     text        not null default 'auto',
+  updated_at timestamptz not null default now()
+);
+create index if not exists song_dur_title_idx on song_durations (title);
