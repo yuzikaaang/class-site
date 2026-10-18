@@ -9952,6 +9952,16 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('#9 最多/最少票数后端校验', /maxChoices/.test(vot) && /minChoices/.test(vot) && /最多选/.test(vot));
   t('#9 后台三个配额输入', /id="voMaxChoices"/.test(adm) && /id="voMinChoices"/.test(adm) && /id="voRetractLimit"/.test(adm));
   t('#9 retract_used 两条 DDL 路径都有', (http2.match(/retract_used/g) || []).length >= 2);
+  t('#4b 日期按点绝对定位（不再 space-between 均分）',
+    /\.sc-mini-x\{position:relative/.test(idx) && /left:' \+ pct\.toFixed\(2\)/.test(idx));
+  t('#4b 迷你折线有日期导引虚线', /sc-mini-guide/.test(idx));
+  t('#5b 名次支持班级/年级两套口径',
+    /subRankScope/.test(idx) && /function classRankAt\(/.test(idx) && /function scSetSubRankScope\(/.test(idx));
+  t('#5b 名次卡有「年级 / 班级」切换按钮',
+    idx.includes('scSetSubRankScope') && /年级<\/button>/.test(idx) && /班级<\/button>/.test(idx));
+  t('#5b 班级名次按当次全班现算', /SC\.allRows && SC\.allRows\[it\.examId\]/.test(idx));
+  t('#5b 我的画像不再出历史上线率', !/html \+= scCutTrend\(\);/.test(idx));
+
   t('#9 全量路径先建 ballots 再 alter（顺序护栏）',
     http2.indexOf("create table if not exists class_vote_ballots", http2.indexOf("===== v3.5.6 投票管理")) < http2.lastIndexOf("alter table class_vote_ballots add column if not exists retract_used"));
 }

@@ -2105,8 +2105,9 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-ov-item span small{display:block;font-size:.62rem;color:#a8968a;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-ov-item b{color:#292524;font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto;text-align:right}
 /* v3.5.14 #4：迷你折线下面的日期轴 */
-.sc-mini-x{display:flex;justify-content:space-between;gap:4px;margin-top:2px;font-size:.6rem;color:#a8968a;font-variant-numeric:tabular-nums}
-.sc-mini-x span{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-mini-x{position:relative;height:13px;margin-top:1px;font-size:.6rem;color:#a8968a;font-variant-numeric:tabular-nums}
+.sc-mini-x span{position:absolute;top:0;white-space:nowrap;line-height:1.1}
+.dark .sc-mini-guide{stroke:#4a4038 !important}
 /* v3.5.14 #5：缺年级排名时的原因说明 */
 .sc-norank{margin-top:8px;padding:9px 11px;border-radius:10px;background:#fdf6ec;border:1px solid #f0e0c8;font-size:.78rem;line-height:1.55;color:#6e635a}
 .sc-norank b{color:#b45309}
@@ -14258,8 +14259,9 @@ function scRenderMe(){
        （没有 meRow），此时个人画像的其余卡片都画不出来，
        就只给「历次上线率」这一张管理员卡。 */
     if(scIsAdmin()){
+      /* v3.5.14：站主已下线画像里的「历次上线率」，这里不再兜底展示 */
       scPane('<div class="sc-hint">你是管理员，但这次考试的成绩里没有你的名字 —— 个人画像需要本人成绩才有数据。'
-        + '下方是管理员可看的「历次上线率」。</div>' + (scCutTrend() || '<div class="sc-empty"><p>还没有可统计的上线率数据。</p></div>'));
+        + '可以切到「全班成绩单」看全班情况。</div>');
       return;
     }
     scPane('<div class="sc-empty">'
@@ -14410,8 +14412,8 @@ function scRenderMe(){
   /* ⑧ 年级进退步（靠校排名，和班排名分开看） */
   html += scGradeTrend();
 
-  /* ⑨ 跨考试上线率（懒加载，点一下才算） */
-  html += scCutTrend();
+  /* ⑨ 跨考试上线率 —— v3.5.14 站主要求「我的画像的历史上线率不要了」，已下线。
+     （函数 scCutTrend 保留：管理员没有本人成绩时的兜底卡片还在用） */
 
   scPane(html);
 }
@@ -15476,7 +15478,9 @@ function scTrendBlock(meRow){
       + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.total) - 8).toFixed(1) + '" font-size="9.5" class="sc-tip" fill="#c0392b" text-anchor="middle">' + p.total + '</text>'
       + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
           ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 14) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">' + esc(shortName(p.name)) + '</text>'
-            /* v3.5.14 #4：补考试日期，光有考试名对不上时间 */
+            /* v3.5.14 #4：补考试日期，光有考试名对不上时间；
+               再加一根短刻度线，把日期和上面的点连起来 */
+            + '<line x1="' + xOf(i).toFixed(1) + '" y1="' + (H - B) + '" x2="' + xOf(i).toFixed(1) + '" y2="' + (H - B + 4) + '" class="sc-axis" stroke="#e2d5c8" stroke-width="1"/>'
             + '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 3) + '" font-size="8" class="sc-axdim" fill="#a8968a" text-anchor="' + anc + '">' + esc(scPointDateLabel(p.date)) + '</text>'
           : '');
   }).join('');
@@ -15604,7 +15608,7 @@ function scMiniLine(pts, betterIsHigh, fmt){
      点多的时候只标首 / 中 / 尾，避免挤成一团。 */
   var dates = pts.map(function(x){ return x.date ? scPointDateLabel(x.date) : ''; });
   var hasDate = dates.some(function(d){ return !!d; });
-  var xaxis = '';
+  var xaxis = '', guides = '';
   if(hasDate){
     var pick = [];
     if(pts.length <= 4){ pick = dates.map(function(d, i){ return { i:i, d:d }; }); }
@@ -15613,13 +15617,21 @@ function scMiniLine(pts, betterIsHigh, fmt){
         if(dates[i] && !pick.some(function(p){ return p.i === i; })) pick.push({ i:i, d:dates[i] });
       });
     }
+    /* v3.5.14 修正（站主「时间没有对应具体的点」）：
+       —— 标签按该点真实 x 百分比绝对定位（以前 space-between 均分，点和日期对不上）；
+       —— 同时在图上画一条淡虚线导引到该点，眼睛能直接连起来。 */
+    guides = pick.map(function(p){
+      var x = px(p.i).toFixed(1);
+      return '<line x1="' + x + '" y1="11" x2="' + x + '" y2="' + (mh - 3) + '" class="sc-mini-guide" stroke="#e6dace" stroke-width=".8" stroke-dasharray="2 3"/>';
+    }).join('');
     xaxis = '<div class="sc-mini-x">' + pick.map(function(p){
-      var left = p.i === 0, right = p.i === pts.length - 1;
-      return '<span style="' + (left ? 'text-align:left' : right ? 'text-align:right' : '') + '">' + esc(p.d) + '</span>';
+      var pct = pts.length <= 1 ? 0 : (p.i / (pts.length - 1)) * 100;
+      var tr = p.i === 0 ? 'translateX(0)' : (p.i === pts.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)');
+      return '<span style="left:' + pct.toFixed(2) + '%;transform:' + tr + '">' + esc(p.d) + '</span>';
     }).join('') + '</div>';
   }
   return '<svg viewBox="0 0 ' + mw + ' ' + mh + '" class="sc-mini-svg" style="width:100%;height:38px;display:block;margin-top:4px">'
-       + segs + nums + dots + '</svg>' + xaxis;
+       + guides + segs + nums + dots + '</svg>' + xaxis;
 }
 
 /* ---------- 各科趋势网格：每科一张小卡（本次 / 班均 / 较上次 / 小折线） ----------
@@ -15630,7 +15642,11 @@ function scSubjTrend(){
   if(items.length < 1) return '';
   var subs = SC.exam.subjects || [];
   var mode = (SC.subTrend === 'rank') ? 'rank' : 'score';
+  /* v3.5.14 站主要求：名次能看「班级 / 年级」两套，且不一定每次都有数据 */
+  var scope = (SC.subRankScope === 'class') ? 'class' : 'grade';
   var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
+  var meName = '';
+  try{ meName = (scMyRow() || {}).name || ((SC.me && SC.me[SC.me.length - 1]) || {}).name || ''; }catch(e){}
 
   function scoreAt(it, sub){
     var v = it.s && it.s[sub.key];
@@ -15639,11 +15655,37 @@ function scSubjTrend(){
     return val == null ? null : val;
   }
   /* 单科年级排名：赋分口径优先用赋分名次，没有就退回原始名次 */
-  function rankAt(it, sub){
+  function gradeRankAt(it, sub){
     var v = it.s && it.s[sub.key];
     if(!v) return null;
     var r = (SC.basis === 'graded' && sub.graded && v.asgRank != null) ? v.asgRank : v.rank;
     return r == null ? null : Number(r);
+  }
+  /* 单科班级排名：从历次全班成绩（SC.allRows）现算 —— 历史考试的班名库里没存，
+     只能拿当次全班分数排一遍；同分并列，规则与成绩单一致。 */
+  function classRankAt(it, sub){
+    var pack = SC.allRows && SC.allRows[it.examId];
+    if(!pack || !pack.rows || !pack.rows.length || !meName) return null;
+    var mine = scoreAt(it, sub);
+    if(mine == null) return null;
+    var arr = [];
+    pack.rows.forEach(function(r){
+      var v = r.s && r.s[sub.key];
+      if(!v) return;
+      var x = (SC.basis === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+      if(x != null) arr.push({ n: r.name, v: Number(x) });
+    });
+    if(!arr.length) return null;
+    arr.sort(function(a, b){ return b.v - a.v; });
+    var rank = 0, last = null, hit = null;
+    arr.forEach(function(x, i){
+      if(last === null || x.v !== last){ rank = i + 1; last = x.v; }
+      if(x.n === meName) hit = rank;
+    });
+    return hit;
+  }
+  function rankAt(it, sub){
+    return scope === 'class' ? classRankAt(it, sub) : gradeRankAt(it, sub);
   }
 
   var cards = [];
@@ -15686,7 +15728,11 @@ function scSubjTrend(){
       body = (rcur == null
           ? '<div class="sc-sub-score sc-dim" style="font-size:1.15rem">暂无名次</div>'
             + '<div class="sc-sub-diff sc-dim">该科还没导入年级排名</div>'
-          : '<div class="sc-sub-score">第 ' + rcur + '<small>' + (gradeN ? '/' + gradeN + ' 名' : '名') + '</small></div>'
+          : '<div class="sc-sub-score">第 ' + rcur + '<small>'
+            + (scope === 'class'
+                ? '/' + ((SC.rows && SC.rows.length) || '—') + ' 人（班级）'
+                : (gradeN ? '/' + gradeN + ' 名（年级）' : '名（年级）'))
+            + '</small></div>'
             + '<div class="sc-sub-diff ' + (dR == null ? 'sc-dim' : dR > 0 ? 'up' : dR < 0 ? 'down' : '') + '">'
             +   (dR == null ? (rpair.reason === 'cur-no-rank' ? '本次未导入该科年级排名' : '首次考试，暂无对比')
                            : '较上次 名次' + (dR > 0 ? ' ↑' + dR : dR < 0 ? ' ↓' + Math.abs(dR) : ' 持平'))
@@ -15721,20 +15767,33 @@ function scSubjTrend(){
   if(!cards.length) return '';
   var basisTxt = SC.basis === 'graded' ? '赋分口径' : '原始口径';
   return '<div class="sc-card"><div class="sc-card-h sc-h-flex">各科趋势（' + basisTxt + ' · '
-    + (mode === 'rank' ? '看名次' : '看分数') + '）'
-    + '<span class="sc-seg sc-seg-sm">'
+    + (mode === 'rank' ? '看' + (scope === 'class' ? '班级' : '年级') + '名次' : '看分数') + '）'
+    + (mode === 'rank'
+        ? '<span class="sc-seg sc-seg-sm" style="margin-left:6px">'
+          + '<button class="' + (scope === 'grade' ? 'on' : '') + '" onclick="scSetSubRankScope(\'grade\')">年级</button>'
+          + '<button class="' + (scope === 'class' ? 'on' : '') + '" onclick="scSetSubRankScope(\'class\')">班级</button>'
+          + '</span>' : '')
+    + '<span class="sc-seg sc-seg-sm" style="margin-left:6px">'
     +   '<button class="' + (mode === 'score' ? 'on' : '') + '" onclick="scSetSubTrend(\'score\')">分数</button>'
     +   '<button class="' + (mode === 'rank' ? 'on' : '') + '" onclick="scSetSubTrend(\'rank\')">名次</button>'
     + '</span></div>'
     + '<div class="sc-subs">' + cards.join('') + '</div>'
     + '<div class="sc-figcap">'
     +   (mode === 'rank'
-        ? '折线是该科历次<b>年级排名（物理方向）</b>：越靠上名次越前，绿色＝名次前进、红色＝后退。'
+        ? (scope === 'class'
+            ? '折线是该科历次<b>班级排名</b>（按当次全班分数现算，同分并列）：越靠上名次越前，绿色＝前进、红色＝后退。历史班级名次需要读取历次全班成绩。'
+            : '折线是该科历次<b>年级排名（物理方向）</b>：越靠上名次越前，绿色＝名次前进、红色＝后退。年级排名由人工导入，<b>不是每次都有</b>，缺的那次不画点。')
         : '折线为该科历次走势：绿色为上涨，红色为下跌。')
     + '</div>'
     + '</div>';
 }
 function scSetSubTrend(m){ SC.subTrend = (m === 'rank') ? 'rank' : 'score'; scRenderPane(); }
+/* v3.5.14：名次口径切班级 / 年级。班级名次要读历次全班成绩（懒加载，一次就够）。 */
+function scSetSubRankScope(m){
+  SC.subRankScope = (m === 'class') ? 'class' : 'grade';
+  if(SC.subRankScope === 'class' && !SC.allRows){ scLoadAllRows(); return; }
+  scRenderPane();
+}
 
 /* ---------- 年级进退步（用校排名；系统算不出全校，只能靠导入） ---------- */
 /* 各科进退步（最近几次对比）：分数 + 年级排名，较上次升降，稳定性 ——
@@ -15816,6 +15875,7 @@ function scGradeTrend(){
             ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 14) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">'
               + esc(shortName(p.name)) + '</text>'
               /* v3.5.14 #4：每个标注点下面再写考试日期，手机端也能对上时间 */
+              + '<line x1="' + xOf(i).toFixed(1) + '" y1="' + (H - B) + '" x2="' + xOf(i).toFixed(1) + '" y2="' + (H - B + 4) + '" class="sc-axis" stroke="#e2d5c8" stroke-width="1"/>'
               + '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 3) + '" font-size="8" class="sc-axdim" fill="#a8968a" text-anchor="' + anc + '">'
               + esc(scPointDateLabel(p.date)) + '</text>'
             : '');
