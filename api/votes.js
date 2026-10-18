@@ -26,7 +26,9 @@ import {
 
 /* ---------------- 限额 ---------------- */
 const MAX_TITLE = 60;          // 投票标题
-const MAX_OPTION_LEN = 40;     // 单个选项文字
+/* v3.5.17：歌单投票的选项要写「歌名 - 歌手 - 点歌人 - 点歌时间」四段，
+   40 字会从中间截断（时间就没了），放宽到 80。 */
+const MAX_OPTION_LEN = 80;     // 单个选项文字
 const MAX_OPTIONS = 30;        // 选项数上限（含学生新增）
 const MAX_NOTE = 200;          // 备注
 const MAX_PROPOSER = 20;       // v3.5.12 提出人（不填 = 记成当前管理员）

@@ -3452,7 +3452,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.16';
+var SITE_VERSION = '3.5.17';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13484,7 +13484,7 @@ function voteCardHtml(v){
   var addHtml = '';
   if(v.allowAdd && !closed){
     addHtml = '<div class="vote-add">'
-      + '<input id="voteAddInput' + v.id + '" type="text" maxlength="40" placeholder="想加的选项（最多 40 字）">'
+      + '<input id="voteAddInput' + v.id + '" type="text" maxlength="80" placeholder="想加的选项（最多 80 字）">'
       + '<button class="btn btn-sm btn-secondary" data-vote-add="' + v.id + '">添加</button>'
       + '</div>';
   }

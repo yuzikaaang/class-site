@@ -999,7 +999,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.16';
+var SITE_VERSION = '3.5.17';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -11035,7 +11035,8 @@ function voEditorDialog(v){
       +   '</select></div>'
       + '<div class="field"><label>选项（一行一个）</label>'
       +   '<textarea id="voOpts" rows="6" placeholder="选项一&#10;选项二">' + esc(opts) + '</textarea>'
-      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">歌单投票可以直接在这里粘贴歌名，也可以用下面的「从点歌平台挑」。</p>'
+      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">歌单投票可以直接在这里粘贴，也可以用下面的「从点歌平台挑」——'
+      +     '挑进来的选项会写成「歌名 - 歌手 - 点歌人 - 点歌时间」。</p>'
       +   '</div>'
       + '<div id="voSongPick" style="display:none;margin-bottom:12px"></div>'
       + '<div class="field"><label>截止时间（留空 = 不限截止）</label>'
@@ -11139,6 +11140,20 @@ function voEditorDialog(v){
   }
 }
 
+/** v3.5.17：歌单投票的选项文字 = 歌名 - 歌手 - 点歌人 - 点歌时间。
+ *  站主原话：「这里的选项格式是歌名-歌手-点歌人-点歌时间（这个 api 应该可见）」
+ *  —— 公开歌单里 title / artist / requester / createdAt 都有。
+ *  缺项跳过（匿名点歌、没有时间戳），最后按后端 MAX_OPTION_LEN（80）截断。 */
+function voSongLabel(s){
+  var parts = [
+    String(s.title || '').trim() || '(无歌名)',
+    String(s.artist || '').trim(),
+    vhReqName(s) || '匿名',
+    vhFmtTime(s.createdAt)
+  ].filter(function(x){ return !!x; });
+  return parts.join(' - ').slice(0, 80);
+}
+
 /* 从点歌平台挑歌，勾中的追加到「选项」文本框 */
 function voMountSongPick(host){
   host.innerHTML = '<div class="panel" style="padding:12px 14px">'
@@ -11147,6 +11162,9 @@ function voMountSongPick(host){
     +   '<input id="voPickQ" placeholder="搜歌名或歌手" style="flex:1;min-width:140px;max-width:260px;padding:6px 10px;font-size:.82rem">'
     +   '<button class="btn btn-sm btn-secondary" id="voPickLoad" type="button">刷新歌单</button>'
     + '</div>'
+    + '<p class="muted" style="font-size:.74rem;margin:0 0 8px">'
+    +   '加进去的选项格式：<b>歌名 - 歌手 - 点歌人 - 点歌时间</b>（缺哪项就跳过）'
+    + '</p>'
     + '<div id="voPickBody" class="muted" style="font-size:.8rem">点「刷新歌单」加载平台上的歌</div>'
     + '<div style="margin-top:10px"><button class="btn btn-sm btn-secondary" id="voPickAdd" type="button">把勾选的加进选项</button></div>'
     + '</div>';
@@ -11188,12 +11206,19 @@ function voMountSongPick(host){
     body.innerHTML = '<div style="max-height:220px;overflow:auto;display:grid;gap:2px">'
       + rows.map(function(s){
           var name = String(s.title || '').trim();
-          var meta = [s.artist, (s.votes != null ? s.votes + ' 赞' : '')].filter(Boolean).join(' · ');
-          /* 选项文字只放歌名 —— 投票选项是给人看的，歌手名挤进去反而乱 */
+          /* v3.5.17：勾上就按「歌名 - 歌手 - 点歌人 - 点歌时间」整段加进选项；
+             列表里也把四段都露出来，方便对清楚是哪一版/谁点的。 */
+          var label = voSongLabel(s);
+          var req = vhReqName(s) || '匿名';
+          var when = vhFmtTime(s.createdAt);
           return '<label style="display:flex;align-items:center;gap:8px;padding:3px 2px;cursor:pointer">'
-            + '<input type="checkbox" data-song="' + attr(name) + '">'
-            + '<span style="font-size:.82rem">' + esc(name) + '</span>'
-            + '<span class="muted" style="font-size:.74rem;margin-left:auto">' + esc(meta) + '</span>'
+            + '<input type="checkbox" data-song="' + attr(label) + '">'
+            + '<span style="font-size:.82rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+            +   esc(name) + (s.artist ? '<i class="muted" style="font-style:normal"> · ' + esc(s.artist) + '</i>' : '')
+            + '</span>'
+            + '<span class="muted" style="font-size:.72rem;margin-left:auto;white-space:nowrap">'
+            +   esc(req) + (when ? ' · ' + esc(when) : '')
+            + '</span>'
             + '</label>';
         }).join('')
       + '</div>';

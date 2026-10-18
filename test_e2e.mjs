@@ -7987,6 +7987,22 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('#11 资料输入控件按精度切换（date / month / 四位年份）',
     /if\(p === 'month'\)\{[\s\S]{0,200}type="month"/.test(admHtml355)
     && /if\(p === 'year'\)\{[\s\S]{0,200}maxlength="4"/.test(admHtml355));
+  /* ---- v3.5.17：歌单投票选项 = 歌名 - 歌手 - 点歌人 - 点歌时间 ---- */
+  const VOTES_SRC_517 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
+  const ADM_517 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const IDX_517 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('#14 歌单选项四段拼接（title/artist/requester/createdAt）',
+    /function voSongLabel\(s\)/.test(ADM_517)
+    && /String\(s\.title \|\| ''\)\.trim\(\) \|\| '\(无歌名\)'/.test(ADM_517)
+    && /vhReqName\(s\) \|\| '匿名'/.test(ADM_517)
+    && /vhFmtTime\(s\.createdAt\)/.test(ADM_517));
+  t('#14 勾选写入的是四段 label（不是光秃歌名）',
+    /data-song="' \+ attr\(label\)/.test(ADM_517));
+  t('#14 后端选项长度放宽到 80（40 会把时间截掉）',
+    /const MAX_OPTION_LEN = 80;/.test(VOTES_SRC_517));
+  t('#14 学生加选项输入框同步 80 字', /maxlength="80" placeholder="想加的选项（最多 80 字）"/.test(IDX_517));
+  t('#14 后台提示写明四段格式', /歌名 - 歌手 - 点歌人 - 点歌时间/.test(ADM_517));
+
   /* ---- v3.5.15 热修：后台两处「读取失败」+ 新增字段英文键名自动生成 ---- */
   t('#12 VO 状态对象已声明（投票页不再报 VO is not defined）',
     /var VO = \{ list: \[\], busy: false, pub: null \};/.test(admHtml355));
