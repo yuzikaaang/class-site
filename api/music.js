@@ -21,7 +21,7 @@
 import { cors, handlePreflight, ok, fail, body } from './_lib/http.js';
 
 const TTL_MS = 30 * 60 * 1000;
-const TIMEOUT_MS = 3500;
+const TIMEOUT_MS = 5000;
 const cache = new Map();          /* "title|artist" -> { at, seconds } */
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
@@ -129,14 +129,22 @@ async function queryOne(title, artist) {
   if (!t) return null;
   const key = t + '|' + a;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.seconds;
-
-  let seconds = null;
-  for (const fn of [fromNetease, fromItunes, fromQQ]) {
-    try { seconds = await fn(t, a); } catch (e) { seconds = null; }
-    if (seconds != null) break;
+  if (hit) {
+    const ttl = hit.short ? 3 * 60 * 1000 : TTL_MS;
+    if (Date.now() - hit.at < ttl) return hit.seconds;
   }
-  cache.set(key, { at: Date.now(), seconds });
+
+  /* v3.5.20：改成三源**并行**再取第一个有效值。
+     实测单源串行时经常整条链路都慢（网易云超时 → iTunes 再等 → QQ 被风控），
+     并行后总耗时 = 最慢的那个源，命中率也明显高（任一源有就能拿到）。 */
+  const results = await Promise.all([
+    fromNetease(t, a).catch(() => null),
+    fromItunes(t, a).catch(() => null),
+    fromQQ(t, a).catch(() => null),
+  ]);
+  const seconds = results.find((x) => x != null) || null;
+  /* ⚠️ 只长缓存「成功」结果：null 只存 3 分钟，否则一次网络抖动会把这首歌锁死半小时 */
+  cache.set(key, { at: Date.now(), seconds, short: seconds == null });
   return seconds;
 }
 
