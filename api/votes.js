@@ -242,9 +242,12 @@ async function listVotes(req, res) {
   const countMap = {};
   ballotRows.forEach((r) => {
     const vid = Number(r.vote_id);
+    const ch = jsonCol(r.choices) || [];
+    /* v3.5.14：撤回后 choices 为空，但 ballot 行还在 —— 不能算成「参与人数」 */
+    if (!ch.length) return;
     if (!countMap[vid]) countMap[vid] = { __voters: 0 };
     countMap[vid].__voters++;
-    (jsonCol(r.choices) || []).forEach((cid) => {
+    ch.forEach((cid) => {
       const k = String(cid);
       countMap[vid][k] = (countMap[vid][k] || 0) + 1;
     });
