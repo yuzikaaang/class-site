@@ -830,3 +830,5 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 | 2026-10-18 | **【v3.5.14 三补·站主两条】**：①投票改轮播：`voteRenderAll` 输出 `.vote-swipe`（flex+scroll-snap）一屏一张，进行中在前、已结束加角标；`voteSwipeBind` 管圆点/箭头/位置文本，`VOTE.curId` 记住当前场次，刷新回原位。②公示加展示时长：`vote_pub.byVote[id]` 增 `until`，后台弹窗可选永久/1/3/7/30 天/自定义，前台 `votePubRender` 到期 return ''。③后台版本记录去掉 `relSeed` 与「填入最近几轮」（约 900 行内置数据删除），面板只读云端 `/content` 的 release_notes，增删改直接 PUT 回云端。e2e 2569/2524 全绿，缓存 v113。 |
 
 | 2026-10-18 | **【v3.5.14 四补】**：①横屏方向：left:100vw+rotate(90) 实际多转 180°，改 left:0+top:100vh+rotate(-90)。②选项提出人：options 增 byName（后台=管理员，同学=display_name），前台标签显示名字，公示结果表加「提出人」列。③结束后形态：class_votes 加 end_mode（keep|pub），后台编辑器可选；pub 且配了公示时前台只渲染公示块、隐藏投票栏（没配公示自动退回只读）。SCHEMA_VER 3.5.9，三处 DDL 同步。e2e 2575/2530 全绿，缓存 v115。 |
+
+| 2026-10-18 | 横屏第二个坑：站主反馈「只旋转了手机屏幕，页面没转」。根因是**双重旋转**——fullscreen+orientation.lock 已把视口转成 844×390，CSS 又 rotate(-90) 转回竖屏。改为 LAND_ON（用户意图）+ `syncLandscapeClass()` 按实时视口判断：h>w 才加 .force-landscape，w>h 立即撤掉；监听 resize/orientationchange。验证：390×844 点击→class 生效；模拟系统转 844×390→class 自动移除、body 844×390，截图正常横屏。缓存 v116。 |
