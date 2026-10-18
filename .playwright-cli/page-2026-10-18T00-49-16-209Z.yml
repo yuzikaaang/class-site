@@ -1,0 +1,103 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - paragraph [ref=e4]:
+      - generic [ref=e5]: 登录一下，数据跟着你走
+    - paragraph [ref=e8]: 不登录也能正常用，数据存在你自己手机上。登录之后多这些好处：
+    - paragraph [ref=e10]: ▫ 作业打勾、点歌记录自动上云▫ 换手机 / 换浏览器不用重新设置▫ 班级公告、作业第一时间收到▫ 可以认领并维护自己的班级资料
+    - paragraph [ref=e11]:
+      - text: 登录入口在首页公告栏右上角
+      - generic [ref=e12]: 「 登录」
+    - button "去登录" [ref=e17] [cursor=pointer]
+    - button "先不用，谢谢" [ref=e18] [cursor=pointer]
+  - generic [ref=e19]:
+    - complementary [ref=e20]:
+      - generic [ref=e21]: 站点应用入口在侧边栏中，点击下方板块即可打开
+      - button "首页" [ref=e25] [cursor=pointer]
+      - generic [ref=e30]:
+        - button "常用服务" [ref=e31] [cursor=pointer]
+        - button "成绩分析" [ref=e32] [cursor=pointer]
+        - button "班级事务" [ref=e33] [cursor=pointer]
+        - button "其他工具" [ref=e34] [cursor=pointer]
+        - button "大屏服务" [ref=e35] [cursor=pointer]
+        - button "📲 安装为应用" [ref=e36] [cursor=pointer]
+      - button "音效：开" [ref=e37] [cursor=pointer]
+      - button "自定义设置" [ref=e42] [cursor=pointer]
+    - main [ref=e46]:
+      - generic [ref=e47]:
+        - button "切换主题" [ref=e48] [cursor=pointer]
+        - heading "25级05班班级服务站" [level=1] [ref=e51]
+        - paragraph [ref=e58]: 一站式获取班级服务 · 资源 · 工具
+        - img "班徽" [ref=e60]
+      - generic [ref=e61]:
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - heading "📢 公告" [level=2] [ref=e64]
+            - generic [ref=e65]: 86 条
+            - button "登录" [ref=e66] [cursor=pointer]
+            - button "公众号" [ref=e70] [cursor=pointer]
+            - button "仓库" [ref=e71] [cursor=pointer]
+          - generic [ref=e72]:
+            - button "📡 网站内部" [ref=e73] [cursor=pointer]
+            - button "🔔 重要更新" [ref=e74] [cursor=pointer]
+            - button "🏫 班级事务" [ref=e75] [cursor=pointer]
+            - button "💭 站主杂谈" [ref=e76] [cursor=pointer]
+            - button "总览" [ref=e77] [cursor=pointer]
+          - list [ref=e78]:
+            - listitem [ref=e79]:
+              - generic [ref=e80]: 10-17 02:09
+              - paragraph [ref=e82]: 班级服务站已更新：成员管理改版、注册改为管理员审核、新增操作日志与「我的云端数据」；成绩分析新增「成绩对比 PK」，成绩导入支持按模版填。此前登录报错的问题已修复。
+            - listitem [ref=e83]:
+              - generic [ref=e84]: 10-16 14:30
+              - paragraph [ref=e86]: 成绩分析板块已按暗色模式全面适配：全班成绩单、个人画像、图表与导出长图，在白天、黑夜模式下都清晰可读。
+          - button "查看全部 84 条公告" [ref=e87] [cursor=pointer]
+        - generic [ref=e88]:
+          - generic [ref=e89]: ❝
+          - generic [ref=e90]:
+            - generic [ref=e91]: 人生没有彩排，只有现场直播，所以做最好的自己。
+            - generic [ref=e92]: —— Internet
+        - generic [ref=e93]:
+          - generic [ref=e94]: 签
+          - generic [ref=e95]:
+            - generic [ref=e96]: 今日班级签
+            - generic [ref=e97]: 一天一签 · 有好也有坏，看运气
+          - button "抽一签" [ref=e98] [cursor=pointer]
+        - generic [ref=e100]:
+          - generic [ref=e101]: 日报
+          - generic [ref=e102]:
+            - generic [ref=e103]: 每日日报
+            - generic [ref=e104]: 实时热点资讯聚合
+          - button "前往查看" [ref=e105] [cursor=pointer]
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - generic [ref=e108]:
+              - text: 重要日期倒计时
+              - generic [ref=e111] [cursor=pointer]: 查看全部
+            - list [ref=e113]:
+              - listitem [ref=e114]:
+                - generic [ref=e115]: 寒假
+                - generic [ref=e116]: 3月 11天 15时 10分 45秒
+          - button "节假日倒计时 查看全部 元旦 01-01 放假 3 天 75天 春节 02-06 放假 7 天 111天 清明节 04-05 放假 3 天 169天" [ref=e117] [cursor=pointer]:
+            - generic [ref=e118]:
+              - text: 节假日倒计时
+              - generic [ref=e122]: 查看全部
+            - list [ref=e123]:
+              - listitem [ref=e124]:
+                - generic [ref=e125]:
+                  - generic [ref=e126]: 元旦
+                  - generic [ref=e127]: 01-01 放假 3 天
+                - generic [ref=e128]: 75天
+              - listitem [ref=e129]:
+                - generic [ref=e130]:
+                  - generic [ref=e131]: 春节
+                  - generic [ref=e132]: 02-06 放假 7 天
+                - generic [ref=e133]: 111天
+              - listitem [ref=e134]:
+                - generic [ref=e135]:
+                  - generic [ref=e136]: 清明节
+                  - generic [ref=e137]: 04-05 放假 3 天
+                - generic [ref=e138]: 169天
+      - generic [ref=e139]:
+        - paragraph [ref=e140]: © 25级05班班级服务站
+        - paragraph [ref=e141]: 内容更新请联系管理员 · 全站可在微信内直接访问
+        - paragraph [ref=e142]: 页面由 AI 辅助生成
+        - paragraph [ref=e143] [cursor=pointer]: 站点版本 v3.5.14 · 2026-10-17 更新（点击检查更新）

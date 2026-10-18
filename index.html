@@ -15729,9 +15729,10 @@ function scSubjTrend(){
           ? '<div class="sc-sub-score sc-dim" style="font-size:1.15rem">暂无名次</div>'
             + '<div class="sc-sub-diff sc-dim">该科还没导入年级排名</div>'
           : '<div class="sc-sub-score">第 ' + rcur + '<small>'
+            /* 分母不写「（年级）」「（班级）」—— 窄卡会换行；口径已经在卡片标题上写明 */
             + (scope === 'class'
-                ? '/' + ((SC.rows && SC.rows.length) || '—') + ' 人（班级）'
-                : (gradeN ? '/' + gradeN + ' 名（年级）' : '名（年级）'))
+                ? '/' + ((SC.rows && SC.rows.length) || '—') + ' 人'
+                : (gradeN ? '/' + gradeN + ' 名' : '名'))
             + '</small></div>'
             + '<div class="sc-sub-diff ' + (dR == null ? 'sc-dim' : dR > 0 ? 'up' : dR < 0 ? 'down' : '') + '">'
             +   (dR == null ? (rpair.reason === 'cur-no-rank' ? '本次未导入该科年级排名' : '首次考试，暂无对比')
