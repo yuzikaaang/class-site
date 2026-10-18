@@ -1750,6 +1750,32 @@ html[data-lite="1"] .dark{--glass-bg:rgba(38,34,32,.97);--glass-shadow:0 2px 10p
    直接退回平铺观感更稳（不改变功能，只是不叠）。 */
 html[data-lite="1"] .stack-deck:not(.is-open) .stack-item{filter:none!important}
 
+/* ===== 轻量模式 · 媒体类特效（v3.5.34）=====
+   站主原话：「作业里面的那个听力，我点开之后还是会卡……轻量设置的话，
+   你就不要有什么音频条啊那些东西，就是根据实时音频生成的那种图，
+   还有那个视频播放什么的都会卡。」
+
+   iPad 上真正吃 GPU 的不是音频解码（那是硬件解码，很便宜），而是这些「视觉层」：
+     · 唱片图标 aSpin 无限旋转 —— 每帧重绘一个带 stroke 的 SVG
+     · 12 根波形条 aWave —— 12 个元素各自不同 delay 的高度动画，永不停止
+     · 两者都叠在 radial-gradient 背景 + 半透明弹窗上，
+       再叠加 backdrop-filter 就等于每帧都要重新做一次大面积模糊
+   所以轻量模式下直接把它们藏起来，只留文字进度（「已播 35%」）。
+   播放器功能一个不少：播放/暂停、进度条、快进快退、倍速、音量、全屏都在。 */
+html[data-lite="1"] .audio-visual{background:#1a1715!important;padding:12px 10px!important;gap:8px}
+html[data-lite="1"] .audio-disc{display:none!important}
+html[data-lite="1"] .audio-wave{display:none!important}
+html[data-lite="1"] .audio-disc,
+html[data-lite="1"] .audio-visual.playing .audio-disc{animation:none!important;transform:none!important}
+html[data-lite="1"] .audio-wave i,
+html[data-lite="1"] .audio-visual.playing .audio-wave i{animation:none!important;transition:none!important}
+/* 悬浮球的脉冲呼吸也在轻量下停掉（它是一直在动的） */
+html[data-lite="1"] #audioBubble .dot,
+html[data-lite="1"] #videoBubble .dot{animation:none!important}
+/* 视频弹窗：轻量下不做圆角裁剪 + 大阴影（合成层更简单），但保留播放能力 */
+html[data-lite="1"] .video-box{box-shadow:0 8px 24px rgba(0,0,0,.35)!important}
+html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
+
 /* 弹窗主题：迎新橙卡（后台「通用弹窗」theme=welcome 时启用，对齐原欢迎卡片观感）
    ⚠️ 选择器带上 .allboard-mask 提高优先级：.allboard-box 本身被玻璃拟态规则
       （background:var(--glass-bg)，暗色下为 rgba(38,34,32,.56)）覆盖，
@@ -3533,7 +3559,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.33';
+var SITE_VERSION = '3.5.34';
 var VER_DATE = '2026-10-18';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -6730,8 +6756,13 @@ var AUTH = { token:'', user:null };   /* 当前登录态 */
      cls_device_id    设备标识，本来就该各不相同
      cls_content_cache_v1 / cls_content_since_v1  云端内容的本地缓存，不是用户数据 */
 var CLOUD_KEYS = [
-  /* 外观与界面 */
-  'cls_theme','cls_theme_auto','cls_theme_auto2','cls_ui_cfg','cls_ui_bgimg','cls_sfx',
+  /* 外观与界面 —— v3.5.34：⚠️ 自定义设置**一律不同步**（站主明确要求）。
+     原话：「以后自定义的设置都不上云端，因为每台设备不同，即使是同一个账户，
+     它不同设备可能配置也不同，所以这个就不上云端，只保存在浏览器本地。」
+     于是 cls_ui_cfg（字号/背景/排序/动效/轻量）、cls_ui_bgimg（自定义背景图）
+     全部移出白名单 —— 换设备就该按那台设备的屏幕和使用习惯重新配。
+     留在白名单里的只有「主题」和「音效」这类跟屏幕尺寸无关的开关。 */
+  'cls_theme','cls_theme_auto','cls_theme_auto2','cls_sfx',
   /* v2.6.0 学习卡片：开关 / 内容类型 / 学科选择，属于个人偏好，跟着账号走 */
   'cls_study_cfg',
   /* ⚠️ cls_theme_hold（「仅这次切换」的当天软标记）**刻意不同步**：
@@ -8824,6 +8855,21 @@ function syncPull(ask){
  */
 function syncPullSilent(){
   if(!isLoggedIn()) return Promise.resolve({ pulled:0 });
+  /* v3.5.34：拉之前先把本机待推送的改动抖出去。
+     以前只在 syncRound 里顺序调用，但登录后首次拉取、切回前台等路径
+     可能直接走这里 —— 此时若先拉后推，本机刚打的勾会被云端旧值覆盖。 */
+  if(hasPendingCloudSync()){
+    return flushCloudSync().then(function(){ return syncPullSilent2(); })
+                          .catch(function(){ return syncPullSilent2(); });
+  }
+  return syncPullSilent2();
+}
+
+/** 真正的拉取。v3.5.34 新增「本机独有键回补」：
+ *  某些勾选可能只在这台机器上存在（早期版本没推成功、或用户在那台设备上手滑取消了）。
+ *  云端没有这个键时，不能当成「云端说没有」，要把本机已有值推上去，
+ *  否则这台设备的勾选永远只活在本机。 */
+function syncPullSilent2(){
   return api('/data').then(function(j){
     var items = j.items || {};
     var n = Object.keys(items).length;
@@ -8971,6 +9017,48 @@ function flushCloudSync(){
       return { pushed:0, error:String(e && e.message || e) };
     })
     .then(function(r){ __syncInFlight = false; return r; });
+}
+
+/**
+ * v3.5.34：把「本机有、云端没有」的作业勾选补推上去。
+ *
+ * 站主原话：「前两天我记得我已经打勾的作业，结果在这台设备上它这个还是没有打勾。」
+ * 这类丢失的典型成因：那台设备打勾时没登录 / 网络断了 / 页面在防抖期间被冻结，
+ * 云端从来没有这条记录，之后无论哪台设备拉多少次都看不到。
+ *
+ * 做法：登录后静默读一次云端键名清单，凡是以 cls_hw_done_ 开头、
+ * 本机有值但云端没有的，标记为脏键推一次。只补作业勾选，
+ * 不碰别的键（其他键缺失可能是用户真的删了，不能瞎补）。
+ */
+var __hwBackfillDone = false;
+function backfillOrphanHwDone(){
+  if(__hwBackfillDone) return Promise.resolve(0);
+  if(!isLoggedIn()) return Promise.resolve(0);
+  __hwBackfillDone = true;
+  return api('/data').then(function(j){
+    var cloud = (j && j.items) || {};
+    var orphan = [];
+    try{
+      for(var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i);
+        if(!k || k.indexOf('cls_hw_done_') !== 0) continue;
+        if(Object.prototype.hasOwnProperty.call(cloud, k)) continue;
+        /* 空对象（所有勾都被取消）不用补，补上去反而会让别的设备以为是新数据 */
+        var v = readLocalCloudValue(k);
+        if(v && typeof v === 'object' && Object.keys(v).length) orphan.push(k);
+      }
+    }catch(e){ return 0; }
+    if(!orphan.length) return 0;
+    var items = {};
+    orphan.forEach(function(k){
+      var v = readLocalCloudValue(k);
+      if(v !== undefined) items[k] = v;
+    });
+    if(!Object.keys(items).length) return 0;
+    return api('/data', { method:'PUT', body:{ items: items } })
+      .then(function(){ return orphan.length; })
+      .catch(function(){ return 0; });
+  }).catch(function(){ return 0; });
 }
 
 /* 有改动待上传吗？页面隐藏时用它判断要不要立即发 */
@@ -9464,6 +9552,8 @@ function syncRound(opts){
              syncPullSilent 内部还会跳过脏键，双保险
            · 拉取失败不影响内容同步的结果上报（个人数据是增强，不是主干） */
       if(!isLoggedIn()) return rc;
+      /* v3.5.34：每轮顺手补一次「本机有、云端没有」的作业勾选（只跑一次，见函数注释） */
+      try{ backfillOrphanHwDone(); }catch(e){}
       var personal = hasPendingCloudSync()
         ? flushCloudSync().catch(function(){ return { pushed:0 }; }).then(function(){ return syncPullSilent(); })
         : syncPullSilent();
@@ -9539,6 +9629,9 @@ function syncDownloadNow(){
   /* v2.10.0：原来只拉共享内容，个人数据（作业勾选等）不拉 —
      「拉取云端」按钮名不副实，跨设备旧数据问题也在这。
      现在内容 + 个人数据都拉，个人数据走云端优先的静默拉取。 */
+  /* v3.5.34：先补推「本机有、云端没有」的作业勾选，再拉 ——
+     否则用户点「拉取云端」时，本机尚未上传的勾选会被云端旧值盖掉。 */
+  try{ backfillOrphanHwDone(); }catch(e){}
   syncCloudContent(true).then(function(r){
     var contentOk = r && r.ok;
     return syncPullSilent().then(function(rp){
@@ -10523,9 +10616,12 @@ function renderSettings(){
       '<div class="ui-modes">' + liteBtns + '</div>' +
       '<p class="ui-hint" style="margin-top:10px">当前：<b>' + (liteOnNow ? '轻量模式' : '完整特效') + '</b>'
       + '　<span style="opacity:.75">· 已记在这台设备上，升级新版本不会自己变回去</span></p>' +
-      '<p class="ui-hint">轻量模式会关掉：玻璃模糊、背景光斑漂移、卡片流光、入场动画。'
-      + '<br>画面不那么「透」，但滚动、切板块会明显跟手。<b>iPad / iPhone 或打开就卡，选「轻量」</b>；'
-      + '高端手机看着很顺就选「完整」。</p>', false);
+      '<p class="ui-hint">轻量模式会关掉：<br>'
+      + '· 玻璃模糊、背景光斑漂移、卡片流光、入场动画<br>'
+      + '· 听力播放器的唱片旋转与波形跳动（播放/倍速/拖动都正常）<br>'
+      + '· 作业里视频的预加载（点播放才开始加载）<br>'
+      + '画面不那么「透」，但滚动、切板块、听听力会明显跟手。'
+      + '<b>iPad / iPhone 或打开就卡，选「轻量」</b>；高端手机看着很顺就选「完整」。</p>', false);
   }
   else {
     /* 云端数据入口（v2.10.1 需求⑧）：数据类操作统一收在「自定义设置」里，
@@ -10534,14 +10630,16 @@ function renderSettings(){
       '<p class="ui-hint">查看云端同步了哪些数据（主题、作业勾选、班级签、点歌记录等），<br>可以按条删除或清空全部。删除前需要验证登录密码。</p>' +
       '<button class="btn" style="font-size:.76rem;padding:9px 12px" onclick="openCloudDataFromSettings()">查看我的云端数据</button>', true);
     html += secHtml('io','导出与导入','download',
-      '<p class="ui-hint">配置文件包含：字号、背景、动效开关、每日一言来源、全部排序。<br>不含游戏记录与个人数据。</p>' +
+      '<p class="ui-hint"><b>自定义设置只存在这台设备的浏览器里，不同步云端</b>（每台设备屏幕和习惯不同，各配各的）。<br>'
+      + '换设备 / 换浏览器 / 清了数据后想搬过去，用下面的导出导入手动搬。<br>'
+      + '配置文件包含：字号、背景、动效开关、轻量模式、每日一言来源、全部排序；不含游戏记录与个人数据。</p>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
         '<button class="btn" style="flex:1;min-width:100px;font-size:.76rem;padding:9px 6px" onclick="exportUICfg(false)">导出配置</button>' +
         '<button class="btn btn-secondary" style="flex:1;min-width:100px;font-size:.76rem;padding:9px 6px" onclick="exportUICfg(true)">含背景图</button>' +
         '<button class="btn btn-secondary" style="flex:1;min-width:100px;font-size:.76rem;padding:9px 6px" onclick="openUiImport()">导入配置</button>' +
       '</div>', true);
     html += secHtml('rs','恢复默认','rotate-ccw',
-      '<p class="ui-hint">把所有自定义项还原成初始状态，不影响公告、作业、游戏记录。</p>' +
+      '<p class="ui-hint">把所有自定义项还原成初始状态，<b>只影响这台设备</b>，不影响公告、作业、游戏记录，也不影响其他设备。</p>' +
       '<button class="btn btn-gray" style="font-size:.76rem;padding:9px 12px" onclick="resetUICfg()">恢复默认设置</button>', false);
     /* v2.6.4 新增：站主反馈 iPhone 上刷新不管用、一直停在旧版本。
        这里给出「当前 / 线上」两个版本号，并提供一键强制刷新。
@@ -13122,6 +13220,14 @@ var HW_SUBJECT_STYLE = {
   '其他': { c:'#8a827b', e:'pin' }
 };
 /* 作业「已完成」状态：按 hwId + 科目 + 任务序号存 localStorage */
+/* v3.5.34：轻量模式下作业里的视频不预加载（preload="none"）。
+   作业卡片经常一次挂好几个视频，默认 metadata 会同时发多路请求、
+   一解码就抢占 GPU，iPad 上直接卡住。轻量下改成点了播放才拉流。 */
+function _hwVidPreload(){
+  try{ if(document.documentElement.getAttribute('data-lite') === '1') return 'none'; }catch(e){}
+  return 'metadata';
+}
+
 function _hwDoneKey(hwId){ return 'cls_hw_done_' + hwId; }
 function _getHwDone(hwId){
   try { return JSON.parse(localStorage.getItem(_hwDoneKey(hwId)) || '{}'); } catch(e){ return {}; }
@@ -13135,6 +13241,13 @@ function toggleHwDone(hwId, subject, ti, el){
   if(!d[subject]) d[subject] = {};
   d[subject][ti] = !d[subject][ti];
   try { localStorage.setItem(_hwDoneKey(hwId), JSON.stringify(d)); } catch(e){}
+  /* v3.5.34：勾选后立刻推一次云端。
+     站主反馈「前两天已经打勾的作业，这台设备上还是没打勾」——
+     原逻辑靠 hookLocalStorage 登记脏键 + 1.5 秒防抖，用户打完勾马上
+     锁屏 / 切走 / 关掉 PWA 时，防抖定时器可能还没到点就被冻结，
+     这一笔就永远留在了本机。这里改成勾完立刻发，不等防抖。
+     flushCloudSync 内部有 __syncInFlight 保护，连点也不会乱序。 */
+  try{ if(isLoggedIn()) flushCloudSync(); }catch(e){}
   if(!el) return;
   el.classList.toggle('done', d[subject][ti]);
   var item = el.closest('.hw-item');
@@ -13162,7 +13275,7 @@ function _renderHwItems(items, hwId){
       var isVid = /\.(mp4|webm|mov|m4v|ogv|avi)(\?|#|$)/i.test(String(img || ''));
       var imgHtml = img
         ? (isVid
-            ? '<div class="hw-imgs hw-video"><video src="'+esc(img)+'" controls preload="metadata" playsinline></video></div>'
+            ? '<div class="hw-imgs hw-video"><video src="'+esc(img)+'" controls preload="'+_hwVidPreload()+'" playsinline></video></div>'
             : '<div class="hw-imgs"><img src="'+esc(img)+'" alt="'+esc(it.subject||'作业')+'配图" loading="lazy" onclick="hwZoom(\''+esc(img)+'\')"></div>')
         : '';
       /* 听力音频：站内直接播放，不跳转（点击不触发「已完成」勾选） */
@@ -13171,7 +13284,7 @@ function _renderHwItems(items, hwId){
         + '<span class="hw-audio-sub">站内播放</span></button>') : '';
       /* 独立 video 字段（新格式，比塞进 img 更清楚）：用原生播放器 */
       var videoHtml = video
-        ? '<div class="hw-imgs hw-video"><video src="'+esc(video)+'" controls preload="metadata" playsinline></video></div>'
+        ? '<div class="hw-imgs hw-video"><video src="'+esc(video)+'" controls preload="'+_hwVidPreload()+'" playsinline></video></div>'
         : '';
       return '<div class="hw-task'+(done?' done':'')+'" onclick="toggleHwDone(\''+esc(hwId)+'\',\''+esc(it.subject)+'\','+ti+',this)">'
         + '<span class="hw-check" aria-hidden="true"></span>'
