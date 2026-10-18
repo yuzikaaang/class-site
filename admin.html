@@ -1004,7 +1004,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.24';
+var SITE_VERSION = '3.5.25';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -11120,7 +11120,11 @@ function voPaint(){
 
   /* 绑定 */
   Array.prototype.forEach.call(box.querySelectorAll('[data-vo-edit]'), function(b){
-    b.onclick = function(){ voEditorDialog(voFind(Number(b.dataset.voEdit))); };
+    b.onclick = function(){
+      var one = voFind(Number(b.dataset.voEdit));
+      window.__voEditingId = one ? one.id : -1;
+      voEditorDialog(one);
+    };
   });
   Array.prototype.forEach.call(box.querySelectorAll('[data-vo-close]'), function(b){
     b.onclick = function(){ voSetStatus(Number(b.dataset.voClose), 'closed'); };
@@ -11502,10 +11506,11 @@ function voEditorDialog(v){
       +     '<option value="normal"' + (v && v.kind === 'song' ? '' : ' selected') + '>普通投票</option>'
       +     '<option value="song"' + (v && v.kind === 'song' ? ' selected' : '') + '>歌单投票（从点歌平台选歌）</option>'
       +   '</select></div>'
-      + '<div class="field"><label>选项（一行一个）</label>'
+      /* v3.5.25：选项文本框只给「普通投票」用；歌单投票以勾选为唯一数据源，
+         文本框只作为隐藏的数据载体（保存时从它读，保证提交逻辑不变） */
+      + '<div class="field" id="voOptsWrap"><label>选项（一行一个）</label>'
       +   '<textarea id="voOpts" rows="6" placeholder="选项一&#10;选项二">' + esc(opts) + '</textarea>'
-      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">歌单投票：在下面「从点歌平台挑」里<b>勾选即加入</b>，取消勾选即移出，'
-      +     '不用再复制粘贴；这个文本框会跟着自动同步，也可以手改。</p>'
+      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">每行一个选项。歌单投票请切上面的类型，改用下面的勾选。</p>'
       +   '</div>'
       /* v3.5.19：歌单投票「选项里包含哪些字段」+ 取前 N / 用途 / 时长上限 */
       + '<div id="voSongOpts" style="display:none;margin-bottom:12px">'
@@ -11514,11 +11519,12 @@ function voEditorDialog(v){
       +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldReq" checked> 点歌人</label>'
       +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldTime" checked> 点歌时间</label>'
       +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldVotes"> 实时赞数</label>'
-      +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldDur"> 歌曲时长</label>'
+      +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto" title="时长永远显示，无法关闭">'
+      +         '<input type="checkbox" id="voFldDur" checked disabled> 歌曲时长（必显示）</label>'
       +     '</div>'
       +     '<p class="hint" style="margin:6px 0 0">'
-      +       '歌名和歌手<b>永远直接显示</b>；这里勾的项收进「详情」，同学点一下才展开。'
-      +       '不勾 = 该项完全不展示（也不写进选项）。</p>'
+      +       '歌名、歌手、<b>歌曲时长</b>永远直接显示（时长跟在歌手后面，用另一种字色）；'
+      +       '其余勾了的项收进「详情」，同学点一下才展开。不勾 = 该项不展示（也不写进选项）。</p>'
       +   '</div>'
       +   '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">'
       +     '<div class="field" style="width:140px"><label>取前几名</label>'
@@ -11612,6 +11618,8 @@ function voEditorDialog(v){
       var syncKind = function(){
         var isSong = kindSel.value === 'song';
         pick.style.display = isSong ? '' : 'none';
+        var optsWrap = box.querySelector('#voOptsWrap');
+        if(optsWrap) optsWrap.style.display = isSong ? 'none' : '';
         if(songOpts) songOpts.style.display = isSong ? '' : 'none';
         if(precWrap) precWrap.style.display = (fmtSel && fmtSel.value === 'date') ? '' : 'none';
         /* v3.5.23：歌单投票没有「同学自己加选项」—— 从点歌平台挑的歌才是有效选项，
@@ -11655,6 +11663,17 @@ function voEditorDialog(v){
         }
       }
       if(voCapIn){ voCapIn.oninput = syncPickCap; syncPickCap(); }
+
+      /* v3.5.25：改「详情里包含哪些」时，已勾选歌曲的选项要按新字段重算 ——
+         否则先勾歌、后勾「歌曲时长」，时长就永远写不进选项里。 */
+      ['voFldReq', 'voFldTime', 'voFldVotes', 'voFldDur'].forEach(function(id){
+        var el = box.querySelector('#' + id);
+        if(!el) return;
+        el.onchange = function(){
+          var fn = box.__voRebuild;
+          if(typeof fn === 'function') fn();
+        };
+      });
     }
   });
 
@@ -11740,7 +11759,8 @@ function voSongFieldPrefs(){
     requester: ck('voFldReq', true),
     time: ck('voFldTime', true),
     votes: ck('voFldVotes', false),
-    duration: ck('voFldDur', false),
+    /* v3.5.25：歌曲时长是必展示项 —— 不管勾没勾都要写进选项，否则前台没得显示 */
+    duration: true,
   };
 }
 
@@ -11850,18 +11870,43 @@ function voMountSongPick(host){
     var ta = document.getElementById('voOpts');
     if(ta) ta.value = lines.join('\n');
   }
-  function applyOne(el){
-    var label = el.getAttribute('data-song');
-    var metaJson = el.getAttribute('data-meta');
-    var lines = optionsLines();
-    var idx = lines.indexOf(label);
-    if(el.checked){
-      if(idx < 0) lines.push(label);
-      if(metaJson){ try{ VO_PICK_META[label] = JSON.parse(metaJson); }catch(e){} }
-    }else if(idx >= 0){
-      lines.splice(idx, 1);
-    }
+  /* v3.5.25：按「当前勾选 + 当前勾选的字段」重算整份选项 ——
+     这样改「详情里包含哪些」勾选后，已选歌曲的 label/songMeta 会跟着重算，
+     不会因为先勾歌、后勾「歌曲时长」而漏掉时长。 */
+  function rebuildFromChecks(){
+    var inps = body.querySelectorAll('input[data-song]');
+    var lines = [], metas = {};
+    Array.prototype.forEach.call(inps, function(el){
+      if(!el.checked) return;
+      var song = null;
+      try{ song = JSON.parse(el.getAttribute('data-song-json') || 'null'); }catch(e){}
+      var label;
+      if(song){
+        var sp = voSongParts(song);   /* 用最新字段勾选重算 */
+        label = sp.label;
+        metas[label] = sp.meta;
+      }else{
+        label = el.getAttribute('data-song');   /* 没有原始数据就沿用旧 label */
+        var mj = el.getAttribute('data-meta');
+        if(mj){ try{ metas[label] = JSON.parse(mj); }catch(e){} }
+      }
+      if(lines.indexOf(label) < 0) lines.push(label);
+    });
+    /* 勾选区之外（比如编辑旧投票、手改过）的行要保留 —— 只重建勾选区的部分 */
+    var inCheck = {};
+    Array.prototype.forEach.call(inps, function(el){ inCheck[el.getAttribute('data-song')] = 1; });
+    optionsLines().forEach(function(l){ if(!inCheck[l] && lines.indexOf(l) < 0) lines.push(l); });
+    /* 同步 songMeta 表 */
+    Object.keys(metas).forEach(function(k){ VO_PICK_META[k] = metas[k]; });
     setOptionsLines(lines);
+  }
+  function applyOne(el){
+    rebuildFromChecks();
+    if(el.checked){
+      var mj = el.getAttribute('data-meta');
+      var lab = el.getAttribute('data-song');
+      if(mj && lab && !VO_PICK_META[lab]){ try{ VO_PICK_META[lab] = JSON.parse(mj); }catch(e){} }
+    }
   }
   body.addEventListener('change', function(ev){
     var el = ev.target;
@@ -11875,7 +11920,18 @@ function voMountSongPick(host){
     Array.prototype.forEach.call(body.querySelectorAll('input[data-song]'), function(el){
       el.checked = !!hit[el.getAttribute('data-song')];
     });
+    /* 编辑旧投票时，把选项里存的 songMeta 也恢复过来（否则重算会丢掉已有字段） */
+    var vo = VO.list.filter(function(x){ return x.id === (window.__voEditingId || -1); })[0];
+    if(vo && vo.options){
+      vo.options.forEach(function(o){
+        if(o.songMeta && o.label) VO_PICK_META[o.label] = o.songMeta;
+      });
+    }
   }
+  /* 暴露给 onMount 里的字段勾选处理器 */
+  var modalBox = host.closest('.modal') || document;
+  modalBox.__voRebuild = rebuildFromChecks;
+  window.__voRebuildSongOptions = rebuildFromChecks;
   function paint(){
     var kw = String(q.value || '').trim().toLowerCase();
     var rows = cache.filter(function(s){
@@ -11899,6 +11955,12 @@ function voMountSongPick(host){
           var durTxt = voFmtDur(s.durationSeconds);
           return '<label style="display:flex;align-items:center;gap:8px;padding:3px 2px;cursor:pointer">'
             + '<input type="checkbox" data-song="' + attr(label) + '" data-meta="' + attr(JSON.stringify(sp.meta)) + '"'
+            +   ' data-song-json="' + attr(JSON.stringify({
+                  title: s.title || '', artist: s.artist || '',
+                  requester: s.requester || '', requestedAt: s.requestedAt || s.createdAt || '',
+                  voteCount: (s.voteCount != null ? s.voteCount : null),
+                  durationSeconds: (s.durationSeconds != null ? s.durationSeconds : null),
+                })) + '"'
             +   (lineHit[label] ? ' checked' : '') + '>'
             + '<span style="font-size:.82rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
             +   esc(name) + (s.artist ? '<i class="muted" style="font-style:normal"> · ' + esc(s.artist) + '</i>' : '')

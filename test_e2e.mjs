@@ -8148,8 +8148,23 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && /勾选即加入选项/.test(ADM_524));
   t('v3.5.24 勾选状态由选项文本框反推（刷新/搜索不丢勾）',
     /function syncChecksFromOptions/.test(ADM_524) && /lineHit\[label\]/.test(ADM_524));
+  /* v3.5.25 文案升级为「歌名、歌手、歌曲时长永远直接显示」 */
   t('v3.5.24 编辑器文案明确：歌名歌手直显，其余进详情',
-    /选项「详情」里包含哪些/.test(ADM_524) && /歌名和歌手<b>永远直接显示<\/b>/.test(ADM_524));
+    /选项「详情」里包含哪些/.test(ADM_524)
+    && (/歌名和歌手<b>永远直接显示<\/b>/.test(ADM_524)
+      || /歌名、歌手、<b>歌曲时长<\/b>永远直接显示/.test(ADM_524)));
+
+  /* ---- v3.5.25：歌单投票免文本框 / 时长必显示 ---- */
+  const IDX_525 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const ADM_525 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('v3.5.25 歌单投票模式隐藏选项文本框（普通投票保留）',
+    /id="voOptsWrap"/.test(ADM_525) && /optsWrap\.style\.display = isSong \? 'none' : ''/.test(ADM_525));
+  t('v3.5.25 歌曲时长为必显示项：后台恒选、前台直显在歌手后',
+    /duration: true,/.test(ADM_525) && /checked disabled> 歌曲时长（必显示）/.test(ADM_525)
+    && /vote-opt-dur/.test(IDX_525) && /if\(meta\.duration\) durTxt = voteFmtDur\(meta\.duration\)/.test(IDX_525));
+  t('v3.5.25 改字段勾选时重算已选歌曲（先勾歌后勾时长也能带上）',
+    /function rebuildFromChecks/.test(ADM_525) && /data-song-json=/.test(ADM_525)
+    && /__voRebuild/.test(ADM_525));
 
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');

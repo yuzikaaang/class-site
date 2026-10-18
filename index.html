@@ -1773,6 +1773,11 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .vote-opt-main{display:block;line-height:1.5;word-break:break-word}
 .vote-opt-extra{display:none;font-size:.74rem;color:#8a7c6f;margin-top:2px;line-height:1.45;word-break:break-word}
 .vote-opt.open .vote-opt-extra,.vote-res.open .vote-opt-extra{display:block}
+/* v3.5.25：歌曲时长 —— 跟在歌手后面，换一种字色（青绿、等宽数字），一眼能区分出来 */
+.vote-opt-dur{display:inline-block;margin-left:6px;padding:0 5px;border-radius:5px;
+  font-size:.7rem;font-weight:600;font-variant-numeric:tabular-nums;
+  color:#0f766e;background:rgba(15,118,110,.10)}
+.dark .vote-opt-dur{color:#5eead4;background:rgba(94,234,212,.14)}
 .vote-opt-more{display:inline-block;margin-left:6px;font-size:.66rem;font-weight:400;color:#c2410c;
   border-bottom:1px dashed currentColor;cursor:pointer;white-space:nowrap}
 .dark .vote-opt-extra{color:#a8998c}
@@ -3475,7 +3480,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.24';
+var SITE_VERSION = '3.5.25';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13558,27 +13563,40 @@ function voteFmtDur(sec){
 
 /** 选项标签：默认只显示「歌名 - 歌手」，其余折叠（点「详情」展开）。
  *  v3.5.19：优先用后端带来的 songMeta（勾了哪些字段就显示哪些），
- *  meta 缺失时退回按「 - 」拆 label（老投票兼容）。 */
+ *  meta 缺失时退回按「 - 」拆 label（老投票兼容）。
+ *  v3.5.25（站主要求）：歌曲时长改成**必展示项**，跟在歌手后面、换一种字色，
+ *  不再收进「详情」。其余（点歌人 / 点歌时间 / 赞数）仍按后台勾选折叠。 */
 function voteOptLabelHtml(label, meta, moreText){
-  var main = '', extra = '';
+  var main = '', extra = '', durTxt = '';
   if(meta && (meta.title || meta.artist)){
     main = [meta.title, meta.artist].filter(Boolean).join(' - ');
+    if(meta.duration) durTxt = voteFmtDur(meta.duration);
     var show = meta.show || [];
     var bits = [];
     if(show.indexOf('requester') >= 0 && meta.requester) bits.push(meta.requester);
     if(show.indexOf('time') >= 0 && meta.requestedAt) bits.push(meta.requestedAt);
     if(show.indexOf('votes') >= 0 && meta.voteCount != null) bits.push(meta.voteCount + ' 赞');
-    if(show.indexOf('duration') >= 0 && meta.duration) bits.push(voteFmtDur(meta.duration));
+    /* 时长不再进 extra —— 它已经在 main 后面单独展示了（老数据 show 里可能还有 duration） */
     extra = bits.join(' · ');
     if(!main) main = label;
-    if(!extra) return '<span class="vote-opt-main">' + esc(main) + '</span>';
   }else{
     var sp = voteOptSplit(label);
     if(!sp) return '<span class="vote-opt-main">' + esc(label) + '</span>';
     main = sp.main;
     extra = sp.extra;
+    /* 老投票（没有 songMeta）也从 extra 里把时长捞出来单独展示 */
+    var dm = extra.match(/(^|·\s*)(\d{1,2}:\d{2})(\s*·|$)/);
+    if(dm){
+      durTxt = dm[2];
+      extra = extra.replace(dm[0], dm[1] + dm[3]).replace(/·\s*$/, '').replace(/^\s*·\s*/, '').trim();
+    }
   }
-  return '<span class="vote-opt-main">' + esc(main)
+  /* 时长段：跟在歌手后面，换一种字色（--vote-dur，暗色自动适配） */
+  var durHtml = durTxt ? '<span class="vote-opt-dur">' + esc(durTxt) + '</span>' : '';
+  if(!extra){
+    return '<span class="vote-opt-main">' + esc(main) + durHtml + '</span>';
+  }
+  return '<span class="vote-opt-main">' + esc(main) + durHtml
     + '<span class="vote-opt-more" data-vote-more="1">' + esc(moreText || '详情') + '</span></span>'
     + '<span class="vote-opt-extra">' + esc(extra) + '</span>';
 }
