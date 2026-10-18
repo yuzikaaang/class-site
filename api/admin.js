@@ -671,6 +671,16 @@ const GAME_META = [
   { id: 'tetris', hiKey: 'tetris_hi', label: '俄罗斯方块', icon: '🧱' },
   { id: 'bird',   hiKey: 'bird_hi',   label: '像素飞鸟',   icon: '🐦' },
   { id: 'doodle', hiKey: 'doodle_hi', label: '涂鸦跳跃',   icon: '🦘' },
+  /* v3.5.35：其余 9 款全部接入云同步，这里补齐元数据 */
+  { id: 'breakout',   hiKey: 'breakout_hi', label: '打砖块',   icon: '🧱' },
+  { id: 'whack',      hiKey: 'whack_hi',    label: '打地鼠',   icon: '🔨' },
+  { id: 'match3',     hiKey: 'match3_hi',   label: '消消乐',   icon: '🍬' },
+  { id: 'plane',      hiKey: 'plane_hi',    label: '飞机大战', icon: '✈️' },
+  { id: 'minesweeper',hiKey: 'mine_best',   label: '扫雷（最快用时）', icon: '💣' },
+  { id: 'memory',     hiKey: 'memory_moves',label: '记忆翻牌（最少步数）', icon: '🃏' },
+  { id: 'gomoku',     hiKey: '',            label: '五子棋',   icon: '⚫' },
+  { id: 'tictactoe',  hiKey: '',            label: '井字棋',   icon: '❌' },
+  { id: 'chess',      hiKey: '',            label: '中国象棋', icon: '♟️' },
 ];
 
 async function gameStats(req, res) {
@@ -740,6 +750,22 @@ async function gameStats(req, res) {
           lastMs: Number(v.lastMs) || 0,
           lastAt: v.lastAt || null,
           bestScore: (v.bestScore == null ? null : Number(v.bestScore)),
+          /* v3.5.35：低分更好型成绩（扫雷最快用时 / 翻牌最少步数） */
+          bestLow: (v.bestLow == null ? null : Number(v.bestLow)),
+        };
+      }
+      continue;
+    }
+
+    /* v3.5.35：胜负平台账（五子棋 / 井字棋等棋类），cls_game_rec_<game> = {w,l,d} */
+    if (k.startsWith('cls_game_rec_')) {
+      const g = k.slice('cls_game_rec_'.length);
+      if (v && typeof v === 'object') {
+        u.rec = u.rec || {};
+        u.rec[g] = {
+          w: Number(v.w) || 0,
+          l: Number(v.l) || 0,
+          d: Number(v.d) || 0,
         };
       }
       continue;
@@ -750,7 +776,7 @@ async function gameStats(req, res) {
       /* cls_game_week_<game> 是「本周榜」用的周计数，不是最高分记录；
          它和 cls_game_<game>_hi 长的很像，早期版本会被错当成 hi 收进来，
          导致 u.hi 里混进 week_snake 之类的垃圾键。这里直接跳过。 */
-      if (localKey.startsWith('week_')) continue;
+      if (localKey.startsWith('week_') || localKey.startsWith('rec_')) continue;
       const num = Number(v);
       if (Number.isFinite(num)) u.hi[localKey] = num;
       else u.hi[localKey] = v;
