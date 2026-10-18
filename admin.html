@@ -7508,6 +7508,9 @@ function profileImportDialog(){
         for(var i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
 
         var created = 0, updated = 0, failed = 0, firstErr = '';
+        /* v3.5.15：逐行错误收集起来 —— 站主对着行号改 Excel 才高效，
+           以前只提示「首个错误」，后面的错误完全看不到。 */
+        var allErrs = [];
         var idx = 0;
 
         var step = function(){
@@ -7519,8 +7522,12 @@ function profileImportDialog(){
               created += j.created || 0;
               updated += j.updated || 0;
               failed  += j.failed  || 0;
-              if(!firstErr && j.errors && j.errors.length){
-                firstErr = '第 ' + (idx * CHUNK + j.errors[0].index + 1) + ' 行：' + j.errors[0].reason;
+              if(j.errors && j.errors.length){
+                j.errors.forEach(function(e){
+                  var n = idx * CHUNK + (Number(e.index) || 0) + 1;
+                  allErrs.push({ n: n, name: e.name || '', reason: e.reason || '' });
+                  if(!firstErr) firstErr = '数据第 ' + n + ' 行：' + (e.reason || '');
+                });
               }
               idx++;
               return step();
@@ -7532,6 +7539,23 @@ function profileImportDialog(){
           if(failed) parts.push('失败 ' + failed + ' 条');
           setMsg(failed ? 'warn' : 'ok',
             '导入完成：' + parts.join('，') + (firstErr ? ('\n首个错误 ' + firstErr) : ''));
+          /* v3.5.15：失败行逐条列出来（行号 / 姓名 / 原因），不用再猜为什么导不进去 */
+          if(failed && allErrs.length){
+            prev.innerHTML = '<div class="alert warn" style="margin-bottom:10px">'
+              +   '下面 <b>' + allErrs.length + '</b> 行没有导入（其余已入库）。按原因改完 Excel 再导一次即可，'
+              +   '已导入的会走「更新」，不会重复。'
+              + '</div>'
+              + '<div class="table-wrap" style="max-height:320px;overflow:auto"><table><thead><tr>'
+              +   '<th class="nowrap">数据行</th><th class="nowrap">姓名</th><th>原因</th>'
+              + '</tr></thead><tbody>'
+              + allErrs.slice(0, 50).map(function(e){
+                  return '<tr><td class="mono nowrap">' + e.n + '</td><td class="nowrap">'
+                    + (e.name ? esc(e.name) : '<span class="muted">—</span>')
+                    + '</td><td>' + esc(e.reason) + '</td></tr>';
+                }).join('')
+              + '</tbody></table></div>'
+              + (allErrs.length > 50 ? '<p class="hint" style="margin-top:8px">只列前 50 条，共 ' + allErrs.length + ' 条。</p>' : '');
+          }
           toast('导入完成，新增 ' + created + ' 更新 ' + updated, 'ok', 4000);
           loadMembers();
           btn.textContent = '再导一次';

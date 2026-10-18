@@ -7955,6 +7955,9 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('#11 资料输入控件按精度切换（date / month / 四位年份）',
     /if\(p === 'month'\)\{[\s\S]{0,200}type="month"/.test(admHtml355)
     && /if\(p === 'year'\)\{[\s\S]{0,200}maxlength="4"/.test(admHtml355));
+  t('#11 导入失败逐条列出（数据行 / 姓名 / 原因）',
+    /var allErrs = \[\]/.test(admHtml355) && /allErrs\.push\(\{ n: n, name:/.test(admHtml355)
+    && /<th class="nowrap">数据行<\/th><th class="nowrap">姓名<\/th><th>原因<\/th>/.test(admHtml355));
   t('#11 写库前按精度规整（单条保存 + 批量导入两处）',
     (ADMJS_SRC355.match(/coerceValueByRules\(/g) || []).length >= 2
     && /customVals\[f\.field\] = coerceValueByRules/.test(ADMJS_SRC355)
