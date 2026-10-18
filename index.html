@@ -3533,7 +3533,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.32';
+var SITE_VERSION = '3.5.33';
 var VER_DATE = '2026-10-18';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -6459,7 +6459,41 @@ function motionOn(){
  *   其它（null）    →  跟随默认 = 完整
  * 默认给「完整」而不是「轻量」：高端机不该被无端降级，卡的人自己点一下就行。
  */
+/* ===== 轻量模式：设备级记忆（v3.5.33）=====
+ * 站主原话：「你要记住设备的选择，比如说设备在这个版本已经选择了轻量模式，
+ *   那你不能下个版本你又给它跳回到完整模式。」
+ *
+ * 为什么不能只存在 cls_ui_cfg 里：
+ *   ① cls_ui_cfg 带版本号，normalizeUI 每次升级都会重新计算各字段 —— 轻量开关
+ *      哪天在迁移里漏一行，升级后就悄悄变回完整；
+ *   ② cls_ui_cfg 会跟着「云端个人数据」同步（换设备的场景），
+ *      但这台设备的性能属于「设备属性」，不该被别的设备覆盖；
+ *   ③ 「恢复默认设置」会把 UI 整个换成 uiDefault()，lite 也会跟着回到 0。
+ *
+ * 所以单独用一个 key：cls_lite_mode，值只有 '1'（轻量）/ '0'（完整）。
+ * 一旦写过就永远以它为准，任何版本升级、恢复默认、导入配置都不动它。
+ * 只有用户自己在设置里点，才会改写。 */
+var LITE_KEY = 'cls_lite_mode';
+
+function readLitePref(){
+  try{
+    var v = localStorage.getItem(LITE_KEY);
+    if(v === '1') return 1;
+    if(v === '0') return 0;
+  }catch(e){}
+  return null;      /* 没选过 */
+}
+
+function writeLitePref(v){
+  try{ localStorage.setItem(LITE_KEY, v === 1 ? '1' : '0'); }catch(e){}
+}
+
 function liteOn(){
+  /* 设备级记忆优先：只要这台设备选过，就永远按它来（跨版本、跨恢复默认）。
+     没选过才回落到 UI.lite（用于「配置文件导入」这种显式带过来的场景）。 */
+  var pref = readLitePref();
+  if(pref === 1) return true;
+  if(pref === 0) return false;
   return UI.lite === 1;
 }
 
@@ -10487,7 +10521,8 @@ function renderSettings(){
     }).join('');
     html += secHtml('perf','性能 / 轻量模式','activity',
       '<div class="ui-modes">' + liteBtns + '</div>' +
-      '<p class="ui-hint" style="margin-top:10px">当前：<b>' + (liteOnNow ? '轻量模式' : '完整特效') + '</b></p>' +
+      '<p class="ui-hint" style="margin-top:10px">当前：<b>' + (liteOnNow ? '轻量模式' : '完整特效') + '</b>'
+      + '　<span style="opacity:.75">· 已记在这台设备上，升级新版本不会自己变回去</span></p>' +
       '<p class="ui-hint">轻量模式会关掉：玻璃模糊、背景光斑漂移、卡片流光、入场动画。'
       + '<br>画面不那么「透」，但滚动、切板块会明显跟手。<b>iPad / iPhone 或打开就卡，选「轻量」</b>；'
       + '高端手机看着很顺就选「完整」。</p>', false);
@@ -10702,6 +10737,7 @@ function pickBgImage(input){
  *  切换后立刻 applyLite()，不用刷新页面。 */
 function setLiteMode(m){
   UI.lite = (m === 'on') ? 1 : 0;
+  writeLitePref(UI.lite);      /* 设备级记忆：跨版本永不回退 */
   saveUI();
   applyLite();
   renderSettings();

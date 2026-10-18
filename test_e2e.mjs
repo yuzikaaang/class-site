@@ -8464,12 +8464,23 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && /html\[data-lite="1"\] \.card::after\{display:none!important/.test(IDX_530));
   t('v3.5.30 轻量模式把动画压到几乎零时长',
     /html\[data-lite="1"\] \*[\s\S]{0,240}animation-duration:\.01ms!important/.test(IDX_530));
+  t('v3.5.33 轻量选择存在独立的设备级 key（cls_lite_mode），不随版本迁移丢',
+    /var LITE_KEY = 'cls_lite_mode';/.test(IDX_530)
+    && /function readLitePref\(\)/.test(IDX_530)
+    && /function writeLitePref\(v\)/.test(IDX_530));
+  t('v3.5.33 liteOn 优先读设备级记忆，没选过才回落 UI.lite',
+    /var pref = readLitePref\(\);\s*\n\s*if\(pref === 1\) return true;\s*\n\s*if\(pref === 0\) return false;\s*\n\s*return UI\.lite === 1;/.test(IDX_530));
+  t('v3.5.33 setLiteMode 同时写设备级记忆（升级/恢复默认都不回退）',
+    /writeLitePref\(UI\.lite\);/.test(IDX_530));
+  t('v3.5.33 恢复默认不碰轻量选择（resetUICfg 里无 lite 相关清理）',
+    !/removeItem\(LITE_KEY\)/.test(IDX_530));
+  t('v3.5.33 设置面板说明选择已记在设备上', /已记在这台设备上/.test(IDX_530));
   t('v3.5.31 轻量模式纯手动：不再有 UA / 内存 / 核数 / 长任务自动探测',
     !/autoLiteWanted/.test(IDX_530) && !/liteSelfCheck/.test(IDX_530)
     && !/deviceMemory/.test(IDX_530) && !/hardwareConcurrency/.test(IDX_530)
     && !/iPad\|iPhone\|iPod/.test(IDX_530) && !/longtask/.test(IDX_530));
-  t('v3.5.31 liteOn 只认 UI.lite === 1',
-    /function liteOn\(\)\{\s*\n\s*return UI\.lite === 1;/.test(IDX_530));
+  t('v3.5.31 轻量模式不依赖任何设备探测函数',
+    /function liteOn\(\)/.test(IDX_530) && /UI\.lite === 1/.test(IDX_530));
   t('v3.5.31 默认走完整特效（lite: 0），旧配置里的 null 也回落完整',
     /lite: 0,/.test(IDX_530)
     && /out\.lite = \(o\.lite === 1\) \? 1 : 0;/.test(IDX_530));
@@ -8477,7 +8488,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     /function setLiteMode\(/.test(IDX_530) && /secHtml\('perf'/.test(IDX_530)
     && !/'auto',\s*'自动'/.test(IDX_530) && !/setLiteMode\('auto'\)/.test(IDX_530));
   t('v3.5.31 setLiteMode 写完立刻落盘并 applyLite',
-    /UI\.lite = \(m === 'on'\) \? 1 : 0;\s*\n\s*saveUI\(\);\s*\n\s*applyLite\(\);/.test(IDX_530));
+    /UI\.lite = \(m === 'on'\) \? 1 : 0;/.test(IDX_530)
+    && /saveUI\(\);/.test(IDX_530) && /applyLite\(\);/.test(IDX_530));
   t('v3.5.31 弹窗居中：welcome-mask / allboard-mask 显式 flex 居中（不再贴左上角）',
     /\.welcome-mask\.show\{display:flex;align-items:center;justify-content:center/.test(IDX_530)
     && /\.allboard-mask\.show\{display:flex;align-items:center;justify-content:center/.test(IDX_530));
