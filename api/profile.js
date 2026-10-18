@@ -315,10 +315,11 @@ function shapeProfile(row, full, meta, ctx) {
     /* 智学网账号（原「准考证号」文案，2026-10-08 改正）：
        管理员从名单导入，属于班内公开信息，不走审核。 */
     examNo: canSee('exam_no', m, pref, fvis, who) ? (row.exam_no || '') : '',
-    role: row.role || '学生',
+    /* v3.5.22：身份 / 头衔也走可见性（站主可在「字段管理」里把身份设成不给同学看） */
+    role: canSee('role', m, pref, fvis, who) ? (row.role || '学生') : '',
     /* v3.5.21：头衔也对外展示（站主要求「前台的查询还可以显示头衔和身份」）。
        title 是明文列（见 admin.js setTitle），存的是英文逗号分隔的多职。 */
-    title: row.title || '',
+    title: canSee('title', m, pref, fvis, who) ? (row.title || '') : '',
     contactStatus: row.contact_status || 'none',
     /* 是否展示了联系方式 —— 前端据此显示「待审核」之类的提示 */
     contactVisible: show && contactOpen,

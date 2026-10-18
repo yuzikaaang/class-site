@@ -3488,8 +3488,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
     && /closest\('\[data-cpv\]'\)/.test(adminHtml)
     && /closest\('\[data-cp\]'\)/.test(adminHtml));
   const profJs3521 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
+  /* v3.5.22：title 的返回改成走 visibility（canSee），断言随之更新 */
   t('v3.5.21 后端 search 输出头衔、且前台不因管理员身份多给字段',
-    /title: row\.title \|\| ''/.test(profJs3521)
+    /title: canSee\('title', m, pref, fvis, who\)/.test(profJs3521)
     && /admin: false \}\)/.test(profJs3521));
   t('前台保存时带上 visibilityPref', /visibilityPref\s*:\s*pref/.test(indexHtml));
   t('前台可见性样式 .acct-priv 已定义', /\.acct-priv\{/.test(indexHtml));
@@ -8098,6 +8099,25 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && /'歌曲总时长':/.test(IDX_519));
   t('v3.5.21 投票公示结果表带时长列（歌单投票）',
     /var anyDur = rs\.some\(/.test(IDX_519) && /durHead/.test(IDX_519));
+
+  /* ---- v3.5.22：后台人员档案「全字段」在线编辑 ---- */
+  const ADM_522 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const ADMJS_522 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const PROF_522 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
+  t('v3.5.22 成员表单有「身份」输入框，且与账号角色分开传（identity）',
+    /id="mbIdentity"/.test(ADM_522) && /identity:  g\('#mbIdentity'\)/.test(ADM_522)
+    && /b\.identity != null \? b\.identity : b\.role/.test(ADMJS_522));
+  t('v3.5.22 成员表单有头衔多选，保存走 title 数组',
+    /class="mb-title"/.test(ADM_522) && /title:     titleVals/.test(ADM_522)
+    && /const nt = normTitles\(b\.title\)/.test(ADMJS_522));
+  t('v3.5.22 title / role 已从 SPECIAL_FIELDS 移出（字段管理里可编辑）',
+    !/SPECIAL_FIELDS = \[.*'title'/.test(ADMJS_522)
+    && /'role', 'title'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+  t('v3.5.22 成员列表返回 identity 与 titles',
+    /identity: r\.role \|\| '学生'/.test(ADMJS_522) && /titles: normTitles\(r\.title\)\.list/.test(ADMJS_522));
+  t('v3.5.22 导出表格带身份与头衔列', /'姓名', '学号', '身份', '头衔'/.test(ADM_522));
+  t('v3.5.22 前台身份/头衔也受字段可见性管辖',
+    /role: canSee\('role'/.test(PROF_522) && /title: canSee\('title'/.test(PROF_522));
 
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');

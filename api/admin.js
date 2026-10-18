@@ -1377,6 +1377,11 @@ async function listProfiles(req, res) {
         politics: (await d(r.politics)) || '',
         examNo: (await d(r.exam_no)) || '',
         role: r.role || '学生',
+        /* v3.5.22：档案里的「身份」（profiles.role）单独给一个键，
+           避免与账号角色 role 混淆（前端编辑表单两个都要用） */
+        identity: r.role || '学生',
+        title: r.title || '',
+        titles: normTitles(r.title).list,
         wechat: (await d(r.wechat)) || '',
         qq: (await d(r.qq)) || '',
         phone: (await d(r.phone)) || '',
@@ -1437,7 +1442,9 @@ async function shapeProfileAdmin(r, editable, key) {
     politics: (await dec(r.politics)) || '',
     examNo: (await dec(r.exam_no)) || '',
     role: r.role || '学生',
+    identity: r.role || '学生',
     title: r.title || '',
+    titles: normTitles(r.title).list,
     wechat: (await dec(r.wechat)) || '',
     qq: (await dec(r.qq)) || '',
     phone: (await dec(r.phone)) || '',
@@ -1526,8 +1533,9 @@ async function listMembers(req, res) {
     /* 账号字段放在档案字段之后应用：档案默认值里也有 role:'学生'，
        若先应用账号字段会被冲掉（both 行全变学生，管理员徽章/筛选全错）。 */
     all.push(Object.assign(p || {
-      profileId: null, name: '', studentId: '', politics: '', examNo: '', role: '学生',
-      title: '', wechat: '', qq: '', phone: '', contactStatus: 'none', rejectReason: '',
+      profileId: null, name: '', studentId: '', politics: '', examNo: '',
+      identity: '学生', title: '', titles: [], wechat: '', qq: '', phone: '',
+      contactStatus: 'none', rejectReason: '',
       visibilityPref: {}, fieldVis: {}, extra: {}, boundUsername: '',
     }, {
       scene: p ? 'both' : 'user-only',
@@ -1670,8 +1678,13 @@ async function fieldMeta(req, res) {
    ============================================================ */
 
 /** 这些字段名有专门的处理逻辑（长度限制/审核状态等），不走「通用文本」通道 */
-const SPECIAL_FIELDS = ['name', 'student_id', 'politics', 'exam_no', 'role',
-  'wechat', 'qq', 'phone', 'contact_status', 'reject_reason', 'title'];
+/* v3.5.22：role / title 从特殊字段里放出来 —— 站主要求「后台人员的档案字段全部都可以
+   在线编辑」，身份和头衔也要能直接在成员表单里改（以前只能去「头衔任命」单独操作）。
+   ⚠️ 它们仍是 profiles 表的**固定列**，所以：
+     · upsertProfileCore 里必须显式处理（role 已走 $7；title 见下方的 title 分支）
+     · 前端 extraColsOf() 的 FIXED 名单要继续排除它们，避免同一列传两遍 */
+const SPECIAL_FIELDS = ['name', 'student_id', 'politics', 'exam_no',
+  'wechat', 'qq', 'phone', 'contact_status', 'reject_reason'];
 
 /**
  * 取出「可自定义字段」清单（系统字段里除特殊处理外 + 全部自定义字段）。
@@ -2321,7 +2334,8 @@ async function saveMember(req, res, me, b) {
 
   /* ---------- 档案段 ---------- */
   /* 档案段是否有实质内容（任一非空才算要存；全空 = 本次只改账号） */
-  const hasProfileData = ['name', 'studentId', 'politics', 'examNo', 'wechat', 'qq', 'phone']
+  /* v3.5.22：头衔也算档案内容 —— 否则「只改头衔」会被判成空档案直接跳过保存 */
+  const hasProfileData = ['name', 'studentId', 'politics', 'examNo', 'wechat', 'qq', 'phone', 'title']
     .some((k) => String(b[k] == null ? '' : b[k]).trim());
 
   if (finalProfileId) {
@@ -2373,12 +2387,30 @@ async function upsertProfileCore(sql, me, b, req) {
   const sid = cText(b.studentId, 20);
   const politics = cText(b.politics, 30);
   const examNo = cText(b.examNo, 24);
-  const role = cText(b.role, 10) || '学生';
+  /* v3.5.22：身份改为独立字段 identity（档案标签，如「学生 / 走读」），
+     不再借用 b.role —— b.role 在 save-member 里是**账号角色**（user / admin）。
+     老调用方（导入、补档案）没传 identity 时退回 b.role，保持兼容。 */
+  const identity = cText(b.identity != null ? b.identity : b.role, 10) || '学生';
   const wechat = cContact(b.wechat);
   const qq = cContact(b.qq);
   const phone = cContact(b.phone);
   const stRaw = cText(b.contactStatus, 16);
   const st = ['none', 'pending', 'approved', 'rejected'].includes(stRaw) ? stRaw : null;
+
+  /* v3.5.22：头衔（可多人，逗号分隔）。与 set-title 共用白名单 normTitles，
+     并保持「管理员」永远在列表里（前端有专门的「管理员」徽章，不靠头衔）。
+     只有显式传了 title 才动 —— 老调用方（批量导入 / 单人补档案）不传，不受影响。 */
+  let titleList = null;
+  if (b.title != null) {
+    const nt = normTitles(b.title);
+    if (nt.bad.length) {
+      return { ok: false, code: 400, error: '头衔里有不认识的：' + nt.bad.join('、') };
+    }
+    /* 允许清空（站主在某人的表单里把头衔全取消）；不再强行塞「管理员」——
+       历史数据里那几个自动加上的「管理员」由批量导入的老逻辑残留，
+       在「头衔任命」里取消即可。 */
+    titleList = nt.list.join(',');   /* 空列表 → 空字符串，等于清空 */
+  }
 
   /* 可见性意愿（2026-10-08）：管理员可以替任何人设置 / 覆盖。
      ⚠️ 与前端约定一致：`true` = 同意公开，`false` = 仅本人可见。
@@ -2501,7 +2533,7 @@ async function upsertProfileCore(sql, me, b, req) {
       await blindIndex(pkey, plainSid),
       await encField(pkey, plainPolitics),
       await encField(pkey, plainExamNo),
-      role || c.role,
+      identity || c.role,
       await encField(pkey, await keep(wechat, c.wechat)),
       await encField(pkey, await keep(qq, c.qq)),
       await encField(pkey, await keep(phone, c.phone)),
@@ -2517,6 +2549,12 @@ async function upsertProfileCore(sql, me, b, req) {
     if (b.fieldVis && typeof b.fieldVis === 'object') {
       params.push(fieldVisJson);
       sets.push('field_vis = $' + params.length);
+    }
+
+    /* v3.5.22：头衔（固定列，单独处理） */
+    if (titleList != null) {
+      params.push(titleList);
+      sets.push('title = $' + params.length);
     }
 
     /* 自定义字段：传了的才写 */
@@ -2561,11 +2599,16 @@ async function upsertProfileCore(sql, me, b, req) {
   const insVals = [
     encName, encSid,
     await blindIndex(pkey, name || null), await blindIndex(pkey, sid || null),
-    await encField(pkey, politics || null), await encField(pkey, examNo || null), role,
+    await encField(pkey, politics || null), await encField(pkey, examNo || null), identity,
     await encField(pkey, wechat || null), await encField(pkey, qq || null),
     await encField(pkey, phone || null),
     st || (wechat || qq || phone ? 'approved' : 'none'),
   ];
+  /* v3.5.22：新建时也能带头衔 */
+  if (titleList != null) {
+    insCols.push('title');
+    insVals.push(titleList);
+  }
   const insParams = insCols.map((_, i) => '$' + (i + 1));
 
   /* 🔴 v2.4.1 修复：新增时也要写 visibility_pref。
@@ -2888,7 +2931,7 @@ async function batchProfiles(req, res, me, b) {
           'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status',
           'id_card', 'youth_league_no', ...exCols]));
         const params = [
-          eName, eSid, nameBidx, sidBidx, ePolitics, eExamNo, role,
+          eName, eSid, nameBidx, sidBidx, ePolitics, eExamNo, (roleIn || '学生'),
           eWechat, eQq, ePhone, cst, eIdCard, eYln,
         ];
         for (const col of exCols) params.push(await encField(pkey, ex[col]));

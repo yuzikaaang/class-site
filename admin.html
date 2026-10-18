@@ -1004,7 +1004,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.21';
+var SITE_VERSION = '3.5.22';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -2512,13 +2512,16 @@ function memberExport(){
       var list = j.members || [];
       if(!list.length){ toast('当前筛选条件下没有成员可导出', 'err'); return; }
       var extras = extraColsOf();
-      var head = ['姓名', '学号', '用户名', '角色', '状态', '政治面貌', '智学网账号']
+      /* v3.5.22：补「身份」「头衔」两列 —— 档案全字段可导出 */
+      var head = ['姓名', '学号', '身份', '头衔', '用户名', '角色', '状态', '政治面貌', '智学网账号']
         .concat(extras.map(function(f){ return f.label; }))
         .concat(['微信', 'QQ', '手机号', '审核状态', '场景', '最后上线']);
       var data = [head].concat(list.map(function(m){
         var base = [
           memberName(m),
           m.studentId || '',
+          m.identity || m.role || '',
+          (m.titles && m.titles.length) ? m.titles.join('、') : (m.title || ''),
           m.username || '（未开通）',
           m.role === 'admin' ? '管理员' : (m.userId != null ? '普通用户' : ''),
           m.status === 'banned' ? '已禁用' : (m.status === 'pending' ? '待审核' : (m.userId != null ? '正常' : '')),
@@ -2562,6 +2565,10 @@ function memberDialog(m){
   var hasProfile = !isNew && m.profileId != null;
   var POL = ['普通学生', '共青团员', '共青团员 · 团支书', '中共党员', '中共预备党员', '群众'];
   var name0 = isNew ? '' : (m.name || m.displayName || '');
+  /* v3.5.22：身份（profiles.role）与账号角色（users.role）是两个东西。
+     账号角色管权限（普通用户 / 管理员），身份是档案里给人看的标签（学生 / 走读…）。 */
+  var identity0 = isNew ? '学生' : (m.identity || '学生');
+  var curTitles = (!isNew && m.titles && m.titles.length) ? m.titles : [];
 
   /* v3.5.5：政治面貌选项跟随「字段管理」里的规则（预置：群众/共青团员）。
      规则没配时退回老列表；当前值不在选项里时置顶展示（历史值不改库）。 */
@@ -2651,15 +2658,32 @@ function memberDialog(m){
             : '通讯录信息。暂时不开账号也可以先只存档案。'))
     + '</p>'
 
+    /* 档案 §1：学号 / 身份 / 政治面貌 */
     + '<div class="mb-form-grid">'
-    /* v3.5.5：学号 / 手机号按规则渲染（预置：学号 6 位数字、手机号 11 位数字）。
-       maxlength + inputmode 只是让正确输入更容易，服务端照样复核。 */
     +   '<div class="field"><label for="mbSid">学号</label>'
     +     '<input id="mbSid" maxlength="' + (ruleOf('student_id').digits || 20) + '"'
     +       ' inputmode="numeric" value="' + attr(isNew ? '' : m.studentId) + '" placeholder="如 250501">'
     +     '<p class="hint">全部成员里唯一，重复会报错。</p></div>'
+    +   '<div class="field"><label for="mbIdentity">身份</label>'
+    +     '<div class="fld-cp">'
+    +       '<input id="mbIdentity" class="inp" maxlength="10" value="' + attr(identity0) + '" placeholder="学生">'
+    +       cpBtnHtml('role')
+    +     '</div>'
+    +     '<p class="hint">前台显示在姓名旁，如「学生 / 走读 / 住校」。</p></div>'
+    + '</div>'
+
+    + '<div class="mb-form-grid">'
     +   '<div class="field"><label for="mbPol">政治面貌</label>'
     +     '<select id="mbPol">' + polOpts(isNew ? '群众' : m.politics) + '</select></div>'
+    +   '<div class="field"><label>头衔（可多选）</label>'
+    +     '<div id="mbTitleBox" class="rule-multi" style="max-height:118px;overflow:auto">'
+    +       ((STATE.titles && STATE.titles.allowed && STATE.titles.allowed.length
+              ? STATE.titles.allowed : TITLE_FALLBACK).map(function(t){
+              return '<label class="chk"><input type="checkbox" class="mb-title" value="' + attr(t) + '"'
+                + ((curTitles.indexOf(t) >= 0) ? ' checked' : '') + '> ' + esc(t) + '</label>';
+            }).join(''))
+    +     '</div>'
+    +     '<p class="hint">和「头衔任命」是同一份数据，这里改完那边立刻同步。</p></div>'
     + '</div>'
 
     + '<div class="field"><label for="mbEx">智学网账号</label>'
@@ -2787,7 +2811,13 @@ function memberDialog(m){
         /* 档案段是否有实质内容 */
         var g = function(id){ var el = box.querySelector(id); return el ? el.value.trim() : ''; };
         var nameV = g('#mbName');
-        var hasProfileData = nameV || g('#mbSid') || g('#mbEx') || g('#mbWx') || g('#mbQq') || g('#mbPh');
+        /* v3.5.22：档案段现在「全字段可编辑」—— 身份、头衔也算实质内容 */
+        var titleVals = [];
+        Array.prototype.forEach.call(box.querySelectorAll('input.mb-title'), function(c){
+          if(c.checked) titleVals.push(c.value);
+        });
+        var hasProfileData = nameV || g('#mbSid') || g('#mbEx') || g('#mbWx') || g('#mbQq') || g('#mbPh')
+          || titleVals.length;
 
         var payload = {
           userId:    hasUser ? m.userId : 0,
@@ -2800,6 +2830,9 @@ function memberDialog(m){
           studentId: g('#mbSid'),
           politics:  box.querySelector('#mbPol').value,
           examNo:    g('#mbEx'),
+          /* v3.5.22：身份与头衔都进档案段（以前只能去「头衔任命」单独改） */
+          identity:  g('#mbIdentity') || '学生',
+          title:     titleVals,
           wechat:    g('#mbWx'),
           qq:        g('#mbQq'),
           phone:     g('#mbPh'),
@@ -2921,8 +2954,9 @@ function memberDetailDialog(m){
       + '<div class="panel-body"><dl class="kv">'
       +   kvRow('姓名', v(m.name) + cpv(m.name, '姓名'))
       +   kvRow('学号', v(m.studentId) + cpv(m.studentId, '学号'))
-      +   kvRow('身份', v(m.role) + cpv(m.role, '身份'))
-      +   kvRow('头衔', v(m.title) + cpv(m.title, '头衔'))
+      +   kvRow('身份', v(m.identity || m.role) + cpv(m.identity || m.role, '身份'))
+      +   kvRow('头衔', v((m.titles && m.titles.length) ? m.titles.join('、') : m.title)
+              + cpv((m.titles && m.titles.length) ? m.titles.join('、') : m.title, '头衔'))
       +   kvRow('政治面貌', v(m.politics) + cpv(m.politics, '政治面貌'))
       +   kvRow('智学网账号', v(m.examNo) + cpv(m.examNo, '智学网账号'))
       +   extraRows
@@ -7527,6 +7561,14 @@ document.addEventListener('click', function(e){
     adminCopy(inp ? inp.value : '', lab ? lab.textContent.trim() : '内容');
   }
 });
+
+/* 头衔白名单兜底（与 api/admin.js 的 ALLOWED_TITLES 保持一致）。
+   正常情况下用接口返回的 STATE.titles.allowed，这里只在没加载到时顶上。 */
+var TITLE_FALLBACK = ['班长', '副班长', '团支书', '学习委员', '纪律委员',
+  '生活委员', '体育委员', '文艺委员', '电教委',
+  '语文课代表', '数学课代表', '英语课代表', '物理课代表',
+  '化学课代表', '生物课代表', '政治课代表', '历史课代表',
+  '地理课代表', '课代表'];
 
 function extraColsOf(){
   var meta = STATE.members.fieldMeta || STATE.profiles.fieldMeta || [];
