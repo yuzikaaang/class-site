@@ -9929,6 +9929,10 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('#8b 后台有横屏切换按钮与实现',
     /id="btnRotate"/.test(adm) && /function toggleLandscape\(/.test(adm)
     && /html\.force-landscape body\{/.test(adm) && /screen\.orientation\.lock/.test(adm));
+  t('#8b 横屏按视口判断，避免系统转屏后重复旋转',
+    /function syncLandscapeClass\(/.test(adm)
+    && /window\.innerHeight > window\.innerWidth/.test(adm)
+    && /addEventListener\('orientationchange'/.test(adm));
 
   t('#9 点赞即投接口 toggle', /case 'toggle'/.test(vot) && /async function toggleVote\(/.test(vot));
   t('#9 撤回重投接口 retract', /case 'retract'/.test(vot) && /async function retractVote\(/.test(vot));

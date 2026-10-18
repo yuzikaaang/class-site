@@ -539,6 +539,7 @@ html.force-landscape body{
 html.force-landscape .side{width:210px}
 html.force-landscape .content{padding:14px 16px}
 html.force-landscape table{font-size:.78rem}
+#btnRotate[data-on="1"]{background:var(--tint);color:var(--accent-ink);border-color:var(--border-2)}
 
 /* v3.5.14 #7：字段拖动排序把手 */
 .ff-drag{width:30px;text-align:center}
@@ -8924,19 +8925,54 @@ function enterApp(){
 /* ============================================================================
  * ⑳ 主题
  * ========================================================================= */
-/* v3.5.14：横屏切换。先试系统方向锁（要全屏才生效），失败也不影响 ——
-   兜底是 CSS 旋转，视觉上一样是横屏，只是地址栏方向不跟着变。 */
-function toggleLandscape(){
-  var on = document.documentElement.classList.toggle('force-landscape');
-  try{ localStorage.setItem('cls_admin_land', on ? '1' : '0'); }catch(e){}
-  if(on){
-    try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); }catch(e){}
-    try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
-  }else{
-    try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
-    try{ if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); }catch(e){}
+/* v3.5.14：横屏切换（修正「双重旋转」）
+   ------------------------------------------------------------
+   站主反馈：「只旋转了我的手机屏幕，页面没有一起旋转，还是只能竖着看」。
+   原因是：系统被 fullscreen + orientation.lock 转成横屏后（视口 844×390），
+   CSS 又把 body 转了 -90°，等于转回竖屏。
+
+   现在的规则：
+     · LAND_ON = 用户要不要横屏（只表示意图）
+     · syncLandscapeClass() 看**当前视口**：竖屏（h>w）才加 .force-landscape 旋转兜底；
+       一旦系统真的转成横屏（w>h），立刻撤掉 CSS 旋转，页面自然铺满宽屏。
+     · 锁方向成功与否都不影响结果，最多差一个「地址栏方向」。 */
+var LAND_ON = false;
+
+function syncLandscapeClass(){
+  var portrait = window.innerHeight > window.innerWidth;
+  var need = LAND_ON && portrait;
+  var html = document.documentElement;
+  if(html.classList.contains('force-landscape') !== need){
+    html.classList.toggle('force-landscape', need);
   }
-  toast(on ? '已切到横屏（再点一次切回）' : '已切回竖屏', 'ok');
+  var btn = document.getElementById('btnRotate');
+  if(btn) btn.setAttribute('data-on', LAND_ON ? '1' : '0');
+}
+
+function lockLandscape(){
+  try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); }catch(e){}
+  try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
+}
+function unlockLandscape(){
+  try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+  try{ if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); }catch(e){}
+}
+
+function toggleLandscape(){
+  LAND_ON = !LAND_ON;
+  try{ localStorage.setItem('cls_admin_land', LAND_ON ? '1' : '0'); }catch(e){}
+  if(LAND_ON){
+    lockLandscape();
+    /* 先按竖屏兜底转一次；350ms 后系统若已转屏会自动撤掉 CSS 旋转 */
+    syncLandscapeClass();
+    setTimeout(syncLandscapeClass, 380);
+    toast('已切到横屏（若画面还是竖的，把手机横过来即可）', 'ok');
+  }else{
+    unlockLandscape();
+    document.documentElement.classList.remove('force-landscape');
+    setTimeout(syncLandscapeClass, 380);
+    toast('已切回竖屏', 'ok');
+  }
 }
 
 function applyTheme(t){
@@ -9014,8 +9050,18 @@ function boot(){
   /* 顶栏按钮 */
   var rot = $('btnRotate');
   if(rot) rot.onclick = toggleLandscape;
-  /* 上次强制横屏的，刷新后保持 */
-  try{ if(localStorage.getItem('cls_admin_land') === '1') document.documentElement.classList.add('force-landscape'); }catch(e){}
+  /* v3.5.14 修：横屏不再「无脑 CSS 旋转」——
+     系统（屏幕）真的转成横屏时，页面再转 -90° 就等于又转回竖屏，看着还是竖的。
+     现在只记「用户想让后台横屏」的意图，按实时视口决定要不要 CSS 兜底旋转。 */
+  try{ LAND_ON = (localStorage.getItem('cls_admin_land') === '1'); }catch(e){ LAND_ON = false; }
+  if(LAND_ON && window.innerHeight > window.innerWidth){
+    /* 上次是强制横屏且当前仍是竖屏 → 先按 CSS 兜底显示；顺便尝试锁方向 */
+    try{ lockLandscape(); }catch(e){}
+  }
+  syncLandscapeClass();
+  setTimeout(syncLandscapeClass, 400);
+  window.addEventListener('resize', syncLandscapeClass);
+  window.addEventListener('orientationchange', function(){ setTimeout(syncLandscapeClass, 260); });
   $('btnTheme').onclick = function(){
     var cur = document.documentElement.getAttribute('data-theme');
     applyTheme(cur === 'dark' ? '' : 'dark');
