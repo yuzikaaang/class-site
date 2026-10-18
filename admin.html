@@ -999,7 +999,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.18';
+var SITE_VERSION = '3.5.19';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -4959,18 +4959,59 @@ function vhReqName(s){
   return String(r == null ? '' : r).trim();
 }
 
-/** 平台返回 UTC ISO，直接切片会差 8 小时，这里按本地时区格式化 */
+/** v3.5.19：解析平台时间。
+ *  ⚠️ 这个实例给的是 `2026/6/6 21:44:48`（斜杠 + 本地时间），不是 ISO；
+ *     直接 new Date() 在部分浏览器会 Invalid，点歌时间就显示不出来。 */
+function vhParseTime(x){
+  if(!x) return null;
+  if(x instanceof Date) return isNaN(x.getTime()) ? null : x;
+  var s = String(x).trim();
+  var m = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(m){
+    var d0 = new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+    return isNaN(d0.getTime()) ? null : d0;
+  }
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** 平台时间 → 本地 YYYY-MM-DD HH:mm */
 function vhFmtTime(iso){
   if(!iso) return '';
-  var d = new Date(iso);
-  if(isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
+  var d = vhParseTime(iso);
+  if(!d) return String(iso).slice(0, 16).replace('T', ' ');
   function p(n){ return (n < 10 ? '0' : '') + n; }
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
        + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
-/** 拉全量歌单（平台分页，第一页拿到总页数后再并发拉其余页） */
+/** 拉全量歌单（平台分页，第一页拿到总页数后再并发拉其余页）。
+ *  v3.5.19：加一层本地缓存 —— 站主要求「网络问题导致获取不了则展示缓存，
+ *  直至下次重新获取」。成功就刷新缓存，失败就回退缓存（没有缓存才报错）。 */
 function vhFetchSongs(){
+  var KEY = 'cls_vh_songs_cache_v1';
+  function readCache(){
+    try{
+      var raw = sessionStorage.getItem(KEY);
+      if(!raw) return null;
+      var o = JSON.parse(raw);
+      return (o && Array.isArray(o.list) && o.list.length) ? o.list : null;
+    }catch(e){ return null; }
+  }
+  function writeCache(list){
+    try{ sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), list: list })); }catch(e){}
+  }
+  return vhFetchSongsRaw().then(function(list){
+    if(Array.isArray(list) && list.length) writeCache(list);
+    return list;
+  }).catch(function(err){
+    var cached = readCache();
+    if(cached){ console.warn('[vh] 实时歌单获取失败，使用缓存：', err && err.message); return cached; }
+    throw err;
+  });
+}
+
+function vhFetchSongsRaw(){
   var h = { 'x-api-key': vhDjKey() };
   return fetch(VH_API + '/songs?page=1&limit=100', { headers: h })
     .then(function(r){ return r.json(); })
@@ -5198,7 +5239,7 @@ function paintSongSongs(err){
     + '</div>'
     + '<div class="table-wrap"><table><thead><tr>'
     +   '<th class="nowrap" style="width:36px">#</th>'
-    +   '<th>歌曲</th><th class="nowrap" style="width:70px">👍 点赞</th>'
+    +   '<th>歌曲</th><th class="nowrap" style="width:62px">时长</th><th class="nowrap" style="width:70px">👍 点赞</th>'
     +   '<th>点歌人</th><th class="nowrap" style="width:130px">点歌时间</th>'
     +   '<th class="nowrap" style="width:70px">状态</th>'
     + '</tr></thead><tbody>'
@@ -5208,6 +5249,7 @@ function paintSongSongs(err){
           + '<td class="muted nowrap">' + (i + 1) + '</td>'
           + '<td><b>' + esc(s.title || '(无歌名)') + '</b>'
           +   '<i class="muted" style="display:block;font-size:.75rem;font-style:normal">' + esc(s.artist || '未知歌手') + '</i></td>'
+          + '<td class="nowrap muted" style="font-size:.78rem">' + (voFmtDur(s.durationSeconds) || '—') + '</td>'
           + '<td class="nowrap"><b style="color:#af410f">' + (Number(s.voteCount) || 0) + '</b></td>'
           + '<td class="nowrap">' + esc(req) + '</td>'
           + '<td class="nowrap muted" style="font-size:.76rem">' + esc(vhFmtTime(s.createdAt)) + '</td>'
@@ -9666,6 +9708,9 @@ function renderDj(){
     +       '<input type="number" id="djCount" min="1" max="50" value="5"></div>'
     +     '<div class="field" style="margin:0;width:130px"><label>高赞必选</label>'
     +       '<input type="number" id="djTopN" min="0" max="50" value="0" title="点赞最高的前 N 首必定中选，其余随机"></div>'
+    /* v3.5.19：按时长抽取（音乐课常用，比如一节课 40 分钟） */
+    +     '<div class="field" style="margin:0;width:150px"><label>总时长上限</label>'
+    +       '<input type="number" id="djMaxMin" min="1" max="300" placeholder="留空 = 不限" title="累加歌曲时长，超过就不再抽（缺时长的歌不参与判断）"></div>'
     +   '</div>'
     +   '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:.85rem">'
     +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>'
@@ -9812,6 +9857,9 @@ function djRun(){
   var topN = parseInt(($('djTopN') || {}).value || '0', 10);
   if(!(topN >= 0)) topN = 0;
   var wantTop = topN;
+  /* v3.5.19：总时长上限（分钟），0 = 不限 */
+  var capMin = parseInt(($('djMaxMin') || {}).value || '0', 10);
+  if(!(capMin >= 0)) capMin = 0;
 
   /* v3.5.6 点歌人加权：读面板配置；开了就先拉加权数据（头衔 + 最近两场成绩）再抽 */
   var wOnEl = $('djWeightOn');
@@ -9859,10 +9907,15 @@ function djRun(){
     if(topN > n) topN = n;
 
     var usedId = {}, usedReq = {}, picked = [], guarantee = [];
+    var usedSec = 0;   /* v3.5.19：已抽中歌曲的总时长（秒） */
     function take(s){
       if(!s || usedId[s.id]) return false;
       var rq = djReqName(s);
       if(onePer && rq && usedReq[rq]) return false;
+      var d = Number(s.durationSeconds) || 0;
+      /* 只对有已知时长的歌做判断：没时长的（平台没填）不拦，否则会把整个池子卡死 */
+      if(capMin > 0 && d > 0 && usedSec + d > capMin * 60) return false;
+      usedSec += d;
       usedId[s.id] = 1; if(rq) usedReq[rq] = 1; picked.push(s);
       return true;
     }
@@ -9912,6 +9965,7 @@ function djRun(){
         return {
           id: s.id, title: s.title, artist: s.artist, votes: s.voteCount || 0,
           requester: djReqName(s),
+          duration: Number(s.durationSeconds) || 0,
           reason: why.short, reasonDetail: why.detail,
           /* 高赞必选的额外标记，公示按「获选原因」一列走，不单列 */
           top: !!gsetForReason[s.id],
@@ -9923,6 +9977,7 @@ function djRun(){
     rec.params = {
       top: guarantee.length, picked: picked.length, onePer: onePer,
       exPlayed: !!excl, exSched: !!exclSched, pool: pool.length, persons: personCnt,
+      maxMinutes: capMin || null, totalSeconds: usedSec,          /* v3.5.19 时长约束 */
       /* v3.5.6 点歌人加权（null = 本次没开）；v3.5.12 加 progTopN 记录「前 N 名」范围 */
       weight: DJ_STATE.weight.on
         ? { on: true, prog: DJ_STATE.weight.prog, comm: DJ_STATE.weight.comm,
@@ -10393,11 +10448,16 @@ function paintDjHistory(){
       var why = s.reason || '随机抽取';
       return (j + 1) + '. ' + esc(s.title || '?') + ' - ' + esc(s.artist || '未知')
         + (s.requester ? '（点歌：' + esc(s.requester) + '）' : '') + '（点赞 ' + (s.votes || 0) + '）'
+        + (s.duration ? ' <span class="muted">· ' + voFmtDur(s.duration) + '</span>' : '')
         + ' <span style="color:#0a7d42">· ' + esc(why) + '</span>'
         + (s.reasonDetail ? '<div class="muted" style="font-size:.72rem;margin-left:1.1em">' + esc(s.reasonDetail) + '</div>' : '');
     }).join('<br>');
+    var totSec = 0;
+    (r.songs || []).forEach(function(s){ totSec += Number(s.duration) || 0; });
     return '<div class="panel" style="margin:0 0 12px;padding:12px 14px;font-size:.85rem">'
-      + '<div style="font-weight:700;color:#af410f;margin-bottom:8px">📅 ' + esc(r.at || '') + '</div>'
+      + '<div style="font-weight:700;color:#af410f;margin-bottom:8px">📅 ' + esc(r.at || '')
+      +   (totSec ? '<span class="muted" style="font-weight:400;font-size:.78rem"> · 总时长 ' + voFmtDur(totSec) + '</span>' : '')
+      + '</div>'
       + '<div style="display:flex;gap:8px;margin-bottom:8px">'
       +   '<input data-dj-note="' + attr(String(r.id)) + '" placeholder="备注：本次用于…" value="' + attr(r.note || '') + '" style="flex:1;min-width:0">'
       +   '<button class="btn btn-sm" data-dj-note-save="' + attr(String(r.id)) + '">保存</button>'
@@ -10738,12 +10798,37 @@ function voPaint(){
     }
     var top5 = '';
     if(v.kind === 'song' && v.results){
-      var top = v.results.slice().sort(function(a, b){ return b.n - a.n; }).slice(0, 5);
+      /* v3.5.19：前 N 可配、用途（日常/音乐课）、统计总时长 */
+      var sp = v.songPick || {};
+      var topN = sp.topN || 5;
+      var purpose = sp.purpose === 'music' ? 'music' : 'daily';
+      var cap = sp.maxMinutes || 0;
+      var top = v.results.slice().sort(function(a, b){ return b.n - a.n; }).slice(0, topN);
+      var totalSec = 0;
+      top.forEach(function(o){ totalSec += (o.songMeta && o.songMeta.duration) ? Number(o.songMeta.duration) : 0; });
+      var durTxt = totalSec ? voFmtDur(totalSec) : '';
+      var capTxt = cap
+        ? (' · 上限 ' + cap + ' 分钟' + (totalSec && totalSec > cap * 60 ? '（<b style="color:#c2410c">已超 ' + voFmtDur(totalSec - cap * 60) + '</b>）' : ''))
+        : '';
+      var titleTxt = purpose === 'music'
+        ? ('前 ' + topN + ' 名（音乐课）')
+        : ('前 ' + topN + ' 名（对应周一至周五）');
       top5 = '<div style="margin-top:10px;padding:10px;border-radius:8px;background:var(--bg-2,#faf6f2)">'
-        + '<b style="font-size:.82rem">前五（对应周一至周五）</b>'
+        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+        +   '<b style="font-size:.82rem">' + esc(titleTxt) + '</b>'
+        +   '<span class="muted" style="font-size:.74rem">'
+        +     (durTxt ? '总时长 ' + durTxt : '总时长未知') + capTxt
+        +   '</span>'
+        +   '<span style="flex:1"></span>'
+        +   '<label class="muted" style="font-size:.74rem">取前'
+        +     '<input id="voTopN_' + v.id + '" type="number" min="1" max="50" value="' + topN + '" '
+        +       'style="width:56px;padding:2px 6px;margin:0 4px;font-size:.78rem"> 名</label>'
+        + '</div>'
         + '<ol style="margin:6px 0 0;padding-left:20px;font-size:.82rem;line-height:1.8">'
         + top.map(function(o, i){
-            return '<li>' + esc(o.label) + ' <span class="muted">（' + o.n + ' 票 · 周' + '一二三四五'[i] + '）</span></li>';
+            var d = (o.songMeta && o.songMeta.duration) ? voFmtDur(o.songMeta.duration) : '';
+            var day = purpose === 'music' ? ('第 ' + (i + 1) + ' 首') : ('周' + '一二三四五'[i]);
+            return '<li>' + esc(o.label) + ' <span class="muted">（' + o.n + ' 票 · ' + day + (d ? ' · ' + d : '') + '）</span></li>';
           }).join('')
         + '</ol>'
         + '<button class="btn btn-sm btn-secondary" style="margin-top:8px" data-vo-top5="' + v.id + '">'
@@ -11081,17 +11166,42 @@ function voDelete(id){
   });
 }
 
-/* 歌单投票：把前五写进抽歌排期（一个新的「批次」，周一至周五各一首） */
+/* 歌单投票：把「前 N」写进抽歌排期（v3.5.19：N 可改、用途可选、带时长） */
 function voWriteTop5(id){
   var v = voFind(id);
   if(!v || !v.results){ toast('还没有结果', 'err'); return; }
-  var top = v.results.slice().sort(function(a, b){ return b.n - a.n; }).slice(0, 5);
+  var sp = v.songPick || {};
+  var nEl = document.getElementById('voTopN_' + id);
+  var wantN = Math.max(1, Number((nEl && nEl.value) || sp.topN || 5));
+  var purpose = sp.purpose === 'music' ? 'music' : 'daily';
+  var capMin = Number(sp.maxMinutes) || 0;
+
+  var sorted = v.results.slice().sort(function(a, b){ return b.n - a.n; });
+  var picked = [], usedSec = 0;
+  for(var i = 0; i < sorted.length && picked.length < wantN; i++){
+    var o = sorted[i];
+    var d = (o.songMeta && o.songMeta.duration) ? Number(o.songMeta.duration) : 0;
+    /* 总时长上限：有数据才判断，没时长就不拦（否则全被卡掉） */
+    if(capMin > 0 && d > 0 && usedSec + d > capMin * 60) continue;
+    picked.push(o);
+    usedSec += d;
+  }
+  var top = picked;
   if(!top.length){ toast('这条投票没有选项', 'err'); return; }
   var DAYS = ['周一', '周二', '周三', '周四', '周五'];
+  var totalTxt = usedSec ? voFmtDur(usedSec) : '';
+  var labels = top.map(function(o, i){
+    var d = (o.songMeta && o.songMeta.duration) ? voFmtDur(o.songMeta.duration) : '';
+    var slot = purpose === 'music' ? ('第 ' + (i + 1) + ' 首') : (DAYS[i] || ('第 ' + (i + 1) + ' 首'));
+    return slot + ' ' + o.label + (d ? '（' + d + '）' : '');
+  }).join('；');
   var rec = {
     id: Date.now(),
     at: new Date().toLocaleString('zh-CN', { hour12: false }),
-    note: '投票前五：「' + v.title + '」（' + top.map(function(o, i){ return DAYS[i] + ' ' + o.label; }).join('；') + '）',
+    note: (purpose === 'music' ? '音乐课投票' : '投票') + '前 ' + top.length + '：「' + v.title + '」'
+      + (totalTxt ? '（总时长 ' + totalTxt + '）' : '') + '：' + labels,
+    purpose: purpose,
+    totalSeconds: usedSec,
     addedToPlatform: false,
     played: false,
     songs: top.map(function(o, i){
@@ -11100,10 +11210,11 @@ function voWriteTop5(id){
         title: o.label,
         artist: '投票第 ' + (i + 1) + ' 名',
         votes: o.n,
-        requester: '',
+        requester: (o.songMeta && o.songMeta.requester) || '',
+        duration: (o.songMeta && o.songMeta.duration) || 0,
       };
     }),
-    params: { fromVote: id, voteTitle: v.title, days: DAYS.slice(0, top.length) },
+    params: { fromVote: id, voteTitle: v.title, days: DAYS.slice(0, top.length), purpose: purpose, maxMinutes: capMin || null },
   };
   api('/content').then(function(j){
     var cur = (j && j.items && j.items.dj_schedule) || [];
@@ -11138,6 +11249,31 @@ function voEditorDialog(v){
       +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">歌单投票可以直接在这里粘贴，也可以用下面的「从点歌平台挑」——'
       +     '挑进来的选项会写成「歌名 - 歌手 - 点歌人 - 点歌时间」。</p>'
       +   '</div>'
+      /* v3.5.19：歌单投票「选项里包含哪些字段」+ 取前 N / 用途 / 时长上限 */
+      + '<div id="voSongOpts" style="display:none;margin-bottom:12px">'
+      +   '<div class="field"><label>歌单选项里包含</label>'
+      +     '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.84rem">'
+      +       '<label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="voFldReq" checked> 点歌人</label>'
+      +       '<label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="voFldTime" checked> 点歌时间</label>'
+      +       '<label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="voFldVotes"> 实时赞数</label>'
+      +       '<label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="voFldDur"> 歌曲时长</label>'
+      +     '</div>'
+      +     '<p class="hint" style="margin:6px 0 0">勾了才会写进选项；前台只显示「歌名 - 歌手」，点选项里的「详情」才展开其余信息。</p>'
+      +   '</div>'
+      +   '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      +     '<div class="field" style="width:140px"><label>取前几名</label>'
+      +       '<input id="voPickN" type="number" min="1" max="50" inputmode="numeric" value="'
+      +       attr(v && v.songPick && v.songPick.topN ? String(v.songPick.topN) : '5') + '"></div>'
+      +     '<div class="field" style="width:190px"><label>用途</label>'
+      +       '<select id="voPickPurpose" style="width:100%">'
+      +         '<option value="daily"' + (v && v.songPick && v.songPick.purpose === 'music' ? '' : ' selected') + '>日常（周一至周五）</option>'
+      +         '<option value="music"' + (v && v.songPick && v.songPick.purpose === 'music' ? ' selected' : '') + '>音乐课</option>'
+      +       '</select></div>'
+      +     '<div class="field" style="width:190px"><label>总时长上限</label>'
+      +       '<input id="voPickCap" type="number" min="1" max="300" inputmode="numeric" placeholder="留空 = 不限（分钟）" value="'
+      +       attr(v && v.songPick && v.songPick.maxMinutes ? String(v.songPick.maxMinutes) : '') + '"></div>'
+      +   '</div>'
+      + '</div>'
       + '<div id="voSongPick" style="display:none;margin-bottom:12px"></div>'
       + '<div class="field"><label>截止时间（留空 = 不限截止）</label>'
       +   '<input type="datetime-local" id="voDeadline" value="' + attr((v && v.deadline) ? voLocalInput(v.deadline) : '') + '"></div>'
@@ -11171,6 +11307,27 @@ function voEditorDialog(v){
       + '<p class="muted" style="font-size:.76rem;margin:-2px 0 10px">'
       +   '点👍只是选中，「确定投票」才上传。多选时「最多选」限制一次能点几项，「至少选」是必须选够几项；两个留空都代表不限。'
       + '</p>'
+      /* v3.5.19：同学新增选项的限制（字数 + 格式） */
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">'
+      +   '<div class="field" style="width:150px"><label>新增选项最多</label>'
+      +     '<input id="voOptMax" type="number" min="1" max="80" inputmode="numeric" placeholder="留空 = 不限" value="'
+      +     attr(v && v.optionRule && v.optionRule.maxLen ? String(v.optionRule.maxLen) : '') + '"></div>'
+      +   '<div class="field" style="width:170px"><label>新增选项格式</label>'
+      +     '<select id="voOptFmt" style="width:100%">'
+      +       '<option value=""' + (v && v.optionRule && v.optionRule.format ? '' : ' selected') + '>不限</option>'
+      +       '<option value="number"' + (v && v.optionRule && v.optionRule.format === 'number' ? ' selected' : '') + '>仅数字</option>'
+      +       '<option value="en"' + (v && v.optionRule && v.optionRule.format === 'en' ? ' selected' : '') + '>仅英文</option>'
+      +       '<option value="date"' + (v && v.optionRule && v.optionRule.format === 'date' ? ' selected' : '') + '>仅日期</option>'
+      +     '</select></div>'
+      +   '<div class="field" style="width:170px" id="voOptPrecWrap"><label>日期精确到</label>'
+      +     '<select id="voOptPrec" style="width:100%">'
+      +       ['minute:分','hour:时','day:日','month:月','year:年'].map(function(p){
+                var kv = p.split(':');
+                return '<option value="' + kv[0] + '"' + ((v && v.optionRule && v.optionRule.precision || 'minute') === kv[0] ? ' selected' : '') + '>' + kv[1] + '</option>';
+              }).join('')
+      +     '</select></div>'
+      + '</div>'
+      + '<p class="muted" style="font-size:.74rem;margin:-2px 0 10px">只对「允许同学自己加选项」时同学填的内容生效；后台自己填不受限制。</p>'
       /* v3.5.14：结束后形态 */
       + '<div class="field"><label>投票结束后</label>'
       +   '<select id="voEndMode" style="width:100%">'
@@ -11188,14 +11345,20 @@ function voEditorDialog(v){
       /* 类型切到「歌单投票」时才显示挑歌区 */
       var kindSel = box.querySelector('#voKind');
       var pick = box.querySelector('#voSongPick');
+      var songOpts = box.querySelector('#voSongOpts');
+      var precWrap = box.querySelector('#voOptPrecWrap');
+      var fmtSel = box.querySelector('#voOptFmt');
       var syncKind = function(){
         var isSong = kindSel.value === 'song';
         pick.style.display = isSong ? '' : 'none';
+        if(songOpts) songOpts.style.display = isSong ? '' : 'none';
+        if(precWrap) precWrap.style.display = (fmtSel && fmtSel.value === 'date') ? '' : 'none';
         if(isSong && !pick.getAttribute('data-ready')){
           pick.setAttribute('data-ready', '1');
           voMountSongPick(pick);
         }
       };
+      if(fmtSel) fmtSel.onchange = syncKind;
       kindSel.onchange = syncKind;
       syncKind();
     }
@@ -11209,7 +11372,13 @@ function voEditorDialog(v){
       .split(/\n+/).map(function(x){ return x.trim(); }).filter(Boolean);
     /* 去重保序 */
     var seen = {}, options = [];
-    lines.forEach(function(l){ if(!seen[l]){ seen[l] = 1; options.push({ label: l }); } });
+    lines.forEach(function(l){
+      if(seen[l]) return;
+      seen[l] = 1;
+      /* v3.5.19：从歌单挑进来的选项带上结构化信息（前端折叠展示 + 时长统计用） */
+      var meta = (typeof VO_PICK_META !== 'undefined') ? VO_PICK_META[l] : null;
+      options.push(meta ? { label: l, songMeta: meta } : { label: l });
+    });
     if(options.length < 2){ toast('至少填两个选项', 'err'); return; }
     var dl = String((document.getElementById('voDeadline') || {}).value || '').trim();
     var payload = {
@@ -11227,6 +11396,26 @@ function voEditorDialog(v){
       minChoices: String((document.getElementById('voMinChoices') || {}).value || '').trim() || null,
       retractLimit: String((document.getElementById('voRetractLimit') || {}).value || '').trim(),
       endMode: (document.getElementById('voEndMode') || {}).value || 'keep',
+      /* v3.5.19：同学新增选项限制 + 歌单取歌策略 */
+      optionRule: (function(){
+        var r = {};
+        var ml = Number((document.getElementById('voOptMax') || {}).value || 0);
+        if(ml > 0) r.maxLen = ml;
+        var f = (document.getElementById('voOptFmt') || {}).value || '';
+        if(f) r.format = f;
+        if(f === 'date') r.precision = (document.getElementById('voOptPrec') || {}).value || 'minute';
+        return (r.maxLen || r.format) ? r : null;
+      })(),
+      songPick: (function(){
+        if((document.getElementById('voKind') || {}).value !== 'song') return null;
+        var n = Number((document.getElementById('voPickN') || {}).value || 0);
+        var cap = Number((document.getElementById('voPickCap') || {}).value || 0);
+        return {
+          topN: n > 0 ? n : 5,
+          purpose: (document.getElementById('voPickPurpose') || {}).value || 'daily',
+          maxMinutes: cap > 0 ? cap : null,
+        };
+      })(),
     };
     if(!isNew) payload.voteId = v.id;
     var btn = document.querySelector('#modalBox [data-yes]');
@@ -11240,19 +11429,63 @@ function voEditorDialog(v){
   }
 }
 
-/** v3.5.17：歌单投票的选项文字 = 歌名 - 歌手 - 点歌人 - 点歌时间。
- *  站主原话：「这里的选项格式是歌名-歌手-点歌人-点歌时间（这个 api 应该可见）」
- *  —— 公开歌单里 title / artist / requester / createdAt 都有。
- *  缺项跳过（匿名点歌、没有时间戳），最后按后端 MAX_OPTION_LEN（80）截断。 */
-function voSongLabel(s){
-  var parts = [
-    String(s.title || '').trim() || '(无歌名)',
-    String(s.artist || '').trim(),
-    vhReqName(s) || '匿名',
-    vhFmtTime(s.createdAt)
-  ].filter(function(x){ return !!x; });
-  return parts.join(' - ').slice(0, 80);
+/** v3.5.19：从歌单挑进选项时记录结构化信息（label → songMeta）。
+ *  为什么不用 label 反解：歌名里可能本身就含 " - "，靠字符串拆必错。 */
+var VO_PICK_META = {};
+
+function voSongFieldPrefs(){
+  function ck(id, dflt){ var el = document.getElementById(id); return el ? el.checked : dflt; }
+  return {
+    requester: ck('voFldReq', true),
+    time: ck('voFldTime', true),
+    votes: ck('voFldVotes', false),
+    duration: ck('voFldDur', false),
+  };
 }
+
+/** 秒 → m:ss（0 / 空返回空串） */
+function voFmtDur(sec){
+  var n = Math.round(Number(sec) || 0);
+  if(!n) return '';
+  var m = Math.floor(n / 60), s = n % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+/** 按当前勾选拼 label + meta —— 站主：「只有我勾选了才会填入表单选项」 */
+function voSongParts(s){
+  var p = voSongFieldPrefs();
+  var title = String(s.title || '').trim() || '(无歌名)';
+  var artist = String(s.artist || '').trim();
+  var req = vhReqName(s) || '匿名';
+  /* ⚠️ 平台给的是 requestedAt（2026/6/6 21:44:48），不是 createdAt ——
+     以前取 createdAt 全是空，点歌时间一直显示不出来。 */
+  var atRaw = s.requestedAt || s.createdAt || '';
+  var at = vhFmtTime(atRaw);
+  var votes = (s.voteCount != null) ? Number(s.voteCount) : null;
+  var dur = (s.durationSeconds != null) ? Number(s.durationSeconds) : null;
+
+  var parts = [title, artist];
+  var show = [];
+  if(p.requester){ parts.push(req); show.push('requester'); }
+  if(p.time && at){ parts.push(at); show.push('time'); }
+  if(p.votes && votes != null){ parts.push(votes + ' 赞'); show.push('votes'); }
+  if(p.duration && dur){ parts.push(voFmtDur(dur)); show.push('duration'); }
+
+  return {
+    label: parts.filter(Boolean).join(' - ').slice(0, 80),
+    meta: {
+      title: title, artist: artist,
+      requester: req,
+      requestedAt: at,
+      voteCount: votes,
+      duration: dur,
+      show: show,
+    },
+  };
+}
+
+/* 兼容旧调用 */
+function voSongLabel(s){ return voSongParts(s).label; }
 
 /* 从点歌平台挑歌，勾中的追加到「选项」文本框 */
 function voMountSongPick(host){
@@ -11291,7 +11524,14 @@ function voMountSongPick(host){
     var added = 0;
     Array.prototype.forEach.call(checked, function(el){
       var label = el.getAttribute('data-song');
-      if(!seen[label]){ seen[label] = 1; cur.push(label); added++; }
+      var metaJson = el.getAttribute('data-meta');
+      if(seen[label]) return;
+      seen[label] = 1;
+      cur.push(label);
+      added++;
+      if(metaJson){
+        try{ VO_PICK_META[label] = JSON.parse(metaJson); }catch(e){}
+      }
     });
     ta.value = cur.join('\n');
     toast('加了 ' + added + ' 首（重复的已跳过）', 'ok');
@@ -11308,16 +11548,20 @@ function voMountSongPick(host){
           var name = String(s.title || '').trim();
           /* v3.5.17：勾上就按「歌名 - 歌手 - 点歌人 - 点歌时间」整段加进选项；
              列表里也把四段都露出来，方便对清楚是哪一版/谁点的。 */
-          var label = voSongLabel(s);
+          var sp = voSongParts(s);
+          var label = sp.label;
           var req = vhReqName(s) || '匿名';
-          var when = vhFmtTime(s.createdAt);
+          var when = vhFmtTime(s.requestedAt || s.createdAt);
+          var durTxt = voFmtDur(s.durationSeconds);
           return '<label style="display:flex;align-items:center;gap:8px;padding:3px 2px;cursor:pointer">'
-            + '<input type="checkbox" data-song="' + attr(label) + '">'
+            + '<input type="checkbox" data-song="' + attr(label) + '" data-meta="' + attr(JSON.stringify(sp.meta)) + '">'
             + '<span style="font-size:.82rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
             +   esc(name) + (s.artist ? '<i class="muted" style="font-style:normal"> · ' + esc(s.artist) + '</i>' : '')
             + '</span>'
             + '<span class="muted" style="font-size:.72rem;margin-left:auto;white-space:nowrap">'
             +   esc(req) + (when ? ' · ' + esc(when) : '')
+            +   (s.voteCount != null ? ' · ' + Number(s.voteCount) + ' 赞' : '')
+            +   (durTxt ? ' · ' + durTxt : '')
             + '</span>'
             + '</label>';
         }).join('')

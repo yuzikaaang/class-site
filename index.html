@@ -3460,7 +3460,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.18';
+var SITE_VERSION = '3.5.19';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13455,13 +13455,39 @@ function voteOptSplit(label){
   if(!m) return null;
   return { main: m[1].trim(), extra: m[2].trim() + ' · ' + m[3].trim() };
 }
-/** 选项标签：前两段常显，后两段折叠（moreText 由调用方给） */
-function voteOptLabelHtml(label, moreText){
-  var sp = voteOptSplit(label);
-  if(!sp) return '<span class="vote-opt-main">' + esc(label) + '</span>';
-  return '<span class="vote-opt-main">' + esc(sp.main)
+/** 秒 → m:ss */
+function voteFmtDur(sec){
+  var n = Math.round(Number(sec) || 0);
+  if(!n) return '';
+  var m = Math.floor(n / 60), s = n % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+/** 选项标签：默认只显示「歌名 - 歌手」，其余折叠（点「详情」展开）。
+ *  v3.5.19：优先用后端带来的 songMeta（勾了哪些字段就显示哪些），
+ *  meta 缺失时退回按「 - 」拆 label（老投票兼容）。 */
+function voteOptLabelHtml(label, meta, moreText){
+  var main = '', extra = '';
+  if(meta && (meta.title || meta.artist)){
+    main = [meta.title, meta.artist].filter(Boolean).join(' - ');
+    var show = meta.show || [];
+    var bits = [];
+    if(show.indexOf('requester') >= 0 && meta.requester) bits.push(meta.requester);
+    if(show.indexOf('time') >= 0 && meta.requestedAt) bits.push(meta.requestedAt);
+    if(show.indexOf('votes') >= 0 && meta.voteCount != null) bits.push(meta.voteCount + ' 赞');
+    if(show.indexOf('duration') >= 0 && meta.duration) bits.push(voteFmtDur(meta.duration));
+    extra = bits.join(' · ');
+    if(!main) main = label;
+    if(!extra) return '<span class="vote-opt-main">' + esc(main) + '</span>';
+  }else{
+    var sp = voteOptSplit(label);
+    if(!sp) return '<span class="vote-opt-main">' + esc(label) + '</span>';
+    main = sp.main;
+    extra = sp.extra;
+  }
+  return '<span class="vote-opt-main">' + esc(main)
     + '<span class="vote-opt-more" data-vote-more="1">' + esc(moreText || '详情') + '</span></span>'
-    + '<span class="vote-opt-extra">' + esc(sp.extra) + '</span>';
+    + '<span class="vote-opt-extra">' + esc(extra) + '</span>';
 }
 
 function voteCardHtml(v){
@@ -13498,7 +13524,7 @@ function voteCardHtml(v){
       return '<div class="vote-res' + (mine ? ' mine' : '') + '">'
         + '<div class="vote-res-bar" style="width:' + pct + '%"></div>'
         + '<div class="vote-res-in">'
-        +   '<span class="vote-res-label">' + voteOptLabelHtml(o.label)
+        +   '<span class="vote-res-label">' + voteOptLabelHtml(o.label, o.songMeta)
         +     (o.by === 'student' ? '<span class="vote-tag">' + esc(o.byName || '同学') + ' 提</span>' : '')
         +     (mine ? '<span class="vote-tag mine">我投的</span>' : '') + '</span>'
         +   '<span class="vote-res-n">' + n + ' 票</span>'
@@ -13513,7 +13539,7 @@ function voteCardHtml(v){
       var cnt = null;
       if(v.results){ for(var ri = 0; ri < v.results.length; ri++){ if(v.results[ri].id === o.id){ cnt = v.results[ri].n || 0; break; } } }
       return '<button class="vote-opt' + (on ? ' on' : '') + '" data-vote-pick="' + v.id + '" data-vid="' + v.id + '" data-oid="' + esc(o.id) + '">'
-        + '<span class="vote-opt-label">' + voteOptLabelHtml(o.label)
+        + '<span class="vote-opt-label">' + voteOptLabelHtml(o.label, o.songMeta)
         +   (o.by === 'student' ? '<span class="vote-tag">' + esc(o.byName || '同学') + ' 提</span>' : '') + '</span>'
         + (cnt != null ? '<span class="vote-n">' + cnt + ' 票</span>' : '')
         + '<span class="vote-like' + (on ? ' on' : '') + '" aria-label="' + (on ? '取消' : '投票') + '">👍</span>'

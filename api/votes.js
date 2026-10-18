@@ -96,6 +96,73 @@ function nextOptId(options) {
   return 'o' + (max + 1);
 }
 
+/** v3.5.19：歌单选项的结构化信息（点歌人 / 点歌时间 / 赞数 / 时长）。
+ *  只白名单键，全部截断 —— 前端折叠展示靠它，label 仍保留可读文本。 */
+function normSongMeta(m) {
+  if (!m || typeof m !== 'object') return null;
+  const out = {};
+  const title = String(m.title || '').trim().slice(0, 80);
+  const artist = String(m.artist || '').trim().slice(0, 60);
+  const requester = String(m.requester || '').trim().slice(0, 20);
+  const at = String(m.requestedAt || m.requested_at || '').trim().slice(0, 30);
+  if (title) out.title = title;
+  if (artist) out.artist = artist;
+  if (requester) out.requester = requester;
+  if (at) out.requestedAt = at;
+  if (m.voteCount != null && isFinite(Number(m.voteCount))) out.voteCount = Math.max(0, Math.round(Number(m.voteCount)));
+  if (m.duration != null && isFinite(Number(m.duration)) && Number(m.duration) >= 0) {
+    out.duration = Math.round(Number(m.duration));
+  }
+  const show = Array.isArray(m.show)
+    ? m.show.filter((x) => ['requester', 'time', 'votes', 'duration'].includes(x))
+    : [];
+  if (show.length) out.show = show;
+  return Object.keys(out).length ? out : null;
+}
+
+/** v3.5.19：同学新增选项的限制。maxLen 字数；format: number / en / date */
+function normOptionRule(raw) {
+  const r = (raw && typeof raw === 'object') ? raw : {};
+  const out = {};
+  const ml = Math.floor(Number(r.maxLen != null ? r.maxLen : r.max_len) || 0);
+  if (ml >= 1) out.maxLen = Math.min(MAX_OPTION_LEN, ml);
+  let f = String(r.format || '').trim();
+  if (!['number', 'en', 'date'].includes(f)) f = '';
+  if (f) out.format = f;
+  if (f === 'date') {
+    const p = String(r.precision || '').trim();
+    out.precision = ['year', 'month', 'day', 'hour', 'minute'].includes(p) ? p : 'minute';
+  } else if (f === 'number') {
+    out.precision = null;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** v3.5.19：歌单投票的取歌策略（前 N / 用途 / 时长上限） */
+function normSongPick(raw) {
+  const r = (raw && typeof raw === 'object') ? raw : {};
+  const out = {};
+  const n = Math.floor(Number(r.topN != null ? r.topN : r.top_n) || 0);
+  if (n >= 1) out.topN = Math.min(50, n);
+  out.purpose = (r.purpose === 'music') ? 'music' : 'daily';
+  const cap = Math.floor(Number(r.maxMinutes != null ? r.maxMinutes : r.max_minutes) || 0);
+  if (cap >= 1) out.maxMinutes = Math.min(300, cap);
+  return out;
+}
+
+/** 日期格式校验（同学新增选项时用）：按精度严格匹配 */
+function matchDateFormat(s, precision) {
+  const p = precision || 'minute';
+  const re = {
+    year: /^\d{4}$/,
+    month: /^\d{4}-\d{2}$/,
+    day: /^\d{4}-\d{2}-\d{2}$/,
+    hour: /^\d{4}-\d{2}-\d{2} \d{2}$/,
+    minute: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/,
+  }[p];
+  return re.test(s);
+}
+
 /** 规范化选项数组：{ id, label, by }；过滤空标签，截断超长 */
 function normOptions(raw) {
   const out = [];
@@ -113,8 +180,10 @@ function normOptions(raw) {
          同学在前台加的就是该同学的名字（不是笼统的「同学提」）。 */
       byName: String((o && (o.byName || o.by_name)) || '').trim().slice(0, 20)
         || (isStudent ? '同学' : '管理员'),
-      /* 歌单投票：带上平台歌曲 id，方便后台取前五时回查 */
+      /* 歌单投票：带上平台歌曲 id，方便后台取前 N 时回查 */
       songId: (o && o.songId != null && o.songId !== '') ? Number(o.songId) : null,
+      /* v3.5.19：结构化信息（勾了哪些字段就存哪些），前端折叠展示用 */
+      songMeta: normSongMeta(o && (o.songMeta || o.song_meta)),
     });
   });
   return out.slice(0, MAX_OPTIONS);
@@ -162,7 +231,13 @@ function parseVoteInput(b) {
   }
   const retractLimit = normRetract(b.retractLimit != null ? b.retractLimit : b.retract_limit);
   const endMode = (b.endMode === 'pub' || b.end_mode === 'pub') ? 'pub' : 'keep';
-  return { data: { title, kind, options, multi, allowAdd, note, deadline, proposer, maxChoices, minChoices, retractLimit, endMode } };
+  /* v3.5.19：新增选项限制 + 歌单取歌策略（前 N / 用途 / 时长上限） */
+  const optionRule = normOptionRule(b.optionRule != null ? b.optionRule : b.option_rule);
+  const songPick = (kind === 'song')
+    ? normSongPick(b.songPick != null ? b.songPick : b.song_pick)
+    : null;
+  return { data: { title, kind, options, multi, allowAdd, note, deadline, proposer,
+    maxChoices, minChoices, retractLimit, endMode, optionRule, songPick } };
 }
 
 /** 行 → 前端结构。results 只有「已截止」才给。 */
@@ -194,6 +269,9 @@ function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed) {
     /* v3.5.14 #9：票数配额与撤回 */
     /* v3.5.14：结束后形态 —— keep 继续显示投票栏（不可投）；pub 自动展示公示并隐藏投票 */
     endMode: r.end_mode === 'pub' ? 'pub' : 'keep',
+    /* v3.5.19：新增选项限制 + 歌单取歌策略 */
+    optionRule: jsonCol(r.option_rule) || null,
+    songPick: jsonCol(r.song_pick) || null,
     maxChoices: r.max_choices == null ? null : Number(r.max_choices),
     minChoices: r.min_choices == null ? null : Number(r.min_choices),
     retractLimit: r.retract_limit == null ? 1 : Number(r.retract_limit),
@@ -229,6 +307,7 @@ async function listVotes(req, res) {
     select v.id, v.title, v.kind, v.options, v.multi, v.allow_add, v.note,
            v.deadline, v.status, v.created_at, v.created_by, v.proposer,
            v.max_choices, v.min_choices, v.retract_limit, v.end_mode,
+           v.option_rule, v.song_pick,
            u.username as creator_username,
            u.display_name as creator_display
       from class_votes v
@@ -434,6 +513,21 @@ async function addOption(req, res) {
   if (options.some((o) => String(o.label) === label)) {
     return fail(res, 400, '这个选项已经有人提过了');
   }
+  /* v3.5.19：按投票里配的「新增选项」规则校验（站主要求：字数 + 格式） */
+  const orule = jsonCol(v.option_rule) || {};
+  if (orule.maxLen && [...label].length > orule.maxLen) {
+    return fail(res, 400, '这个投票的选项最多 ' + orule.maxLen + ' 个字');
+  }
+  if (orule.format === 'number' && !/^\d+$/.test(label)) {
+    return fail(res, 400, '这个投票的选项只能是数字');
+  }
+  if (orule.format === 'en' && !/^[A-Za-z0-9\s'.,!?&()\-]+$/.test(label)) {
+    return fail(res, 400, '这个投票的选项只能是英文');
+  }
+  if (orule.format === 'date' && !matchDateFormat(label, orule.precision)) {
+    const fmt = { year: '2024', month: '2024-05', day: '2024-05-13', hour: '2024-05-13 20', minute: '2024-05-13 20:30' };
+    return fail(res, 400, '这个投票的选项要填日期，格式：' + (fmt[orule.precision || 'minute']));
+  }
   const who = u.display_name || u.displayName || u.username || '同学';
   const opt = { id: nextOptId(options), label, by: 'student', byName: who, songId: null };
   options.push(opt);
@@ -465,11 +559,14 @@ async function createVote(req, res) {
   const proposer = p.data.proposer || me.displayName || me.display_name || me.username || '';
   const rows = await sql`
     insert into class_votes (title, kind, options, multi, allow_add, note, deadline, status,
-                             created_by, proposer, max_choices, min_choices, retract_limit, end_mode, created_at, updated_at)
+                             created_by, proposer, max_choices, min_choices, retract_limit, end_mode,
+                             option_rule, song_pick, created_at, updated_at)
     values (${p.data.title}, ${p.data.kind}, ${JSON.stringify(p.data.options)}::jsonb,
             ${p.data.multi}, ${p.data.allowAdd}, ${p.data.note}, ${p.data.deadline}::timestamptz,
             'open', ${me.id}, ${proposer},
-            ${p.data.maxChoices}, ${p.data.minChoices}, ${p.data.retractLimit}, ${p.data.endMode}, now(), now())
+            ${p.data.maxChoices}, ${p.data.minChoices}, ${p.data.retractLimit}, ${p.data.endMode},
+            ${p.data.optionRule ? JSON.stringify(p.data.optionRule) : null}::jsonb,
+            ${p.data.songPick ? JSON.stringify(p.data.songPick) : null}::jsonb, now(), now())
     returning id
   `;
   await audit(me.id, 'vote.create', 'class_votes', String(rows[0].id), p.data.title);
@@ -529,6 +626,8 @@ async function updateVote(req, res) {
            multi = ${p.data.multi}, allow_add = ${p.data.allowAdd}, note = ${p.data.note},
            max_choices = ${p.data.maxChoices}, min_choices = ${p.data.minChoices},
            retract_limit = ${p.data.retractLimit}, end_mode = ${p.data.endMode},
+           option_rule = ${p.data.optionRule ? JSON.stringify(p.data.optionRule) : null}::jsonb,
+           song_pick = ${p.data.songPick ? JSON.stringify(p.data.songPick) : null}::jsonb,
            deadline = ${p.data.deadline}::timestamptz, updated_at = now()
      where id = ${voteId}
   `;

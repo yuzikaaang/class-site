@@ -507,6 +507,8 @@ create table if not exists class_votes (
   min_choices   smallint,                                   -- v3.5.14 至少选几项（NULL = 不限）
   retract_limit smallint  not null default 1,               -- v3.5.14 可撤回次数（0 = 不允许）
   end_mode      text      not null default 'keep',          -- v3.5.14 结束后：keep 显示投票 / pub 显示公示并隐藏投票
+  option_rule   jsonb,                                      -- v3.5.19 同学新增选项的字数/格式限制
+  song_pick     jsonb,                                      -- v3.5.19 歌单投票：取前 N + 用途（daily/music）+ 时长上限
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

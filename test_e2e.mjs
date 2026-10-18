@@ -7854,8 +7854,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.13',
-    /const SCHEMA_VER = '3\.5\.13'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.14',
+    /const SCHEMA_VER = '3\.5\.14'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -7994,6 +7994,42 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('#11 资料输入控件按精度切换（date / month / 四位年份）',
     /if\(p === 'month'\)\{[\s\S]{0,200}type="month"/.test(admHtml355)
     && /if\(p === 'year'\)\{[\s\S]{0,200}maxlength="4"/.test(admHtml355));
+  /* ---- v3.5.19：歌单选项字段可选 / 实时赞数与时长 / 新增选项规则 / 前 N 与按时长抽取 ---- */
+  const ADM_519 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const VOTES_519 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
+  const HTTP_519 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const IDX_519 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('#16 创建表单可勾选选项字段（点歌人/时间/赞数/时长）',
+    /id="voFldReq"/.test(ADM_519) && /id="voFldTime"/.test(ADM_519)
+    && /id="voFldVotes"/.test(ADM_519) && /id="voFldDur"/.test(ADM_519));
+  t('#16 只有勾选的字段才写进 label', /function voSongFieldPrefs\(/.test(ADM_519)
+    && /if\(p\.requester\)\{ parts\.push/.test(ADM_519)
+    && /if\(p\.votes && votes != null\)/.test(ADM_519)
+    && /if\(p\.duration && dur\)/.test(ADM_519));
+  t('#16 选项带结构化 songMeta（前端折叠靠它）',
+    /songMeta: normSongMeta/.test(VOTES_519) && /songMeta: meta/.test(ADM_519)
+    && /voteOptLabelHtml\(o\.label, o\.songMeta\)/.test(IDX_519));
+  t('#16 点歌时间改用 requestedAt（平台没有 createdAt）',
+    /s\.requestedAt \|\| s\.createdAt/.test(ADM_519) && /function vhParseTime\(/.test(ADM_519));
+  t('#16 歌单有本地缓存兜底（网络失败用缓存）',
+    /cls_vh_songs_cache_v1/.test(ADM_519) && /使用缓存/.test(ADM_519));
+  t('#16 新增选项规则：字数 + 数字/英文/日期（精度到分）',
+    /function normOptionRule\(/.test(VOTES_519) && /function matchDateFormat\(/.test(VOTES_519)
+    && /id="voOptFmt"/.test(ADM_519) && /id="voOptPrec"/.test(ADM_519)
+    && /'minute'/.test(VOTES_519));
+  t('#16 同学加选项时按规则校验', /orule\.format === 'number'/.test(VOTES_519)
+    && /orule\.format === 'en'/.test(VOTES_519) && /matchDateFormat\(label/.test(VOTES_519));
+  t('#16 投票存 option_rule / song_pick 两列（三处 DDL）',
+    (HTTP_519.match(/option_rule/g) || []).length >= 3
+    && (HTTP_519.match(/song_pick/g) || []).length >= 3);
+  t('#16 前 N / 用途 / 总时长可配并可临时改 N',
+    /id="voPickN"/.test(ADM_519) && /id="voPickPurpose"/.test(ADM_519)
+    && /id="voPickCap"/.test(ADM_519) && /voTopN_' \+ v\.id/.test(ADM_519));
+  t('#16 写入排期按时长上限挑歌', /usedSec \+ d > capMin \* 60/.test(ADM_519)
+    && /djMaxMin/.test(ADM_519));
+  t('#16 点歌管理/排期显示时长', /voFmtDur\(s\.durationSeconds\)/.test(ADM_519)
+    && /总时长 ' \+ voFmtDur\(totSec\)/.test(ADM_519));
+
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const ADMJS_518 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
