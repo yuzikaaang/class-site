@@ -4,6 +4,7 @@
    GET    /api/admin?action=users                     用户列表（含数据条数）
    GET    /api/admin?action=user&id=1                 单个用户详情 + 其云端数据
    GET    /api/admin?action=stats                     简单统计
+   GET    /api/admin?action=online&days=30            在线时长（按人聚合；带 id 则查该人时段明细）
    GET    /api/admin?action=audit                     操作日志
    POST   /api/admin?action=reset-password            重置某用户密码
    POST   /api/admin?action=set-status                启用/禁用
@@ -87,6 +88,7 @@ export default async function handler(req, res) {
       if (action === 'stats')      return await stats(req, res);
       if (action === 'audit')      return await listAudit(req, res);
       if (action === 'login-logs') return await loginLogs(req, res);
+      if (action === 'online')     return await onlineStats(req, res);
       if (action === 'export')     return await exportUsers(req, res);
       if (action === 'profiles')         return await listProfiles(req, res);
       if (action === 'profile')          return await profileDetail(req, res);
@@ -1240,6 +1242,102 @@ async function loginLogs(req, res) {
       ip: r.ip,
       userAgent: r.user_agent,
       createdAt: r.created_at,
+    })),
+  });
+}
+
+/* ---------------- 读：在线时长（v3.5.35） ----------------
+   GET ?action=online&days=30&id=&limit=&offset=
+
+   · 不传 id → 按人聚合：每人累计时长、时段数、最近一次在线、最长单次
+   · 传 id   → 该人的时段明细（从新到旧）
+
+   时长口径：每条 online_sessions = 一次「连续在线」（心跳间隔 ≤180 秒不断开），
+   时长 = stop_at - start_at。单次只打过一个点的情况（start_at = stop_at = 0 秒）
+   不计入「单次最长」，但计入时段数——那代表「来过一次就走了」。
+
+   days 只作用于「按人聚合」的窗口；明细不分窗口，靠 limit/offset 翻。 */
+async function onlineStats(req, res) {
+  const sql = getSql();
+  const id = Number(req.query.id || 0);
+  const limit = Math.min(Number(req.query.limit || 100), 500);
+  const offset = Math.max(Number(req.query.offset || 0), 0);
+  const days = Math.min(Math.max(Number(req.query.days || 30), 1), 3650);
+
+  if (id) {
+    const rows = await sql`
+      select o.id, o.session_token, o.start_at, o.stop_at, o.last_ping_at, o.ping_count,
+             extract(epoch from (o.stop_at - o.start_at))::int as secs
+        from online_sessions o
+       where o.user_id = ${id}
+       order by o.start_at desc
+       limit ${limit} offset ${offset}
+    `;
+    const total = (await sql`select count(*)::int as n from online_sessions where user_id = ${id}`)[0].n;
+    const sum = (await sql`
+      select coalesce(sum(extract(epoch from (stop_at - start_at))), 0)::int as secs,
+             count(*)::int as n
+        from online_sessions where user_id = ${id}
+    `)[0];
+    return ok(res, {
+      userId: id,
+      total,
+      totalSecs: sum.secs,
+      sessionCount: sum.n,
+      sessions: rows.map((r) => ({
+        id: Number(r.id),
+        startAt: r.start_at,
+        stopAt: r.stop_at,
+        lastPingAt: r.last_ping_at,
+        pingCount: Number(r.ping_count),
+        secs: Math.max(0, Number(r.secs) || 0),
+        device: String(r.session_token || '').slice(0, 8),
+      })),
+    });
+  }
+
+  /* 按人聚合。用户表可能很小，这里直接 join 全量再过滤，比两次往返省一次子请求。
+     注：`max` 用 `filter (where ...)` 取「有长度的单次」，纯单点时段（0 秒）跳过。 */
+  const rows = await sql`
+    select u.id, u.username, u.display_name, u.role,
+           coalesce(sum(extract(epoch from (o.stop_at - o.start_at))), 0)::int as total_secs,
+           count(o.id)::int as session_count,
+           coalesce(max(extract(epoch from (o.stop_at - o.start_at)))
+                    filter (where o.stop_at > o.start_at), 0)::int as longest_secs,
+           max(o.stop_at) as last_at
+      from users u
+      left join online_sessions o
+             on o.user_id = u.id
+            and o.start_at > now() - (${String(days)} || ' days')::interval
+     group by u.id, u.username, u.display_name, u.role
+     order by total_secs desc, u.id
+     limit ${limit} offset ${offset}
+  `;
+
+  /* 全站合计：与上面同一个窗口，方便后台显示「总共在线 X 小时」 */
+  const all = (await sql`
+    select coalesce(sum(extract(epoch from (stop_at - start_at))), 0)::int as secs,
+           count(*)::int as n,
+           count(distinct user_id)::int as users
+      from online_sessions
+     where start_at > now() - (${String(days)} || ' days')::interval
+  `)[0];
+
+  return ok(res, {
+    days,
+    totalUsers: (await sql`select count(*)::int as n from users`)[0].n,
+    grandSecs: all.secs,
+    grandSessions: all.n,
+    activeUsers: all.users,
+    users: rows.map((r) => ({
+      id: Number(r.id),
+      username: r.username,
+      displayName: r.display_name,
+      role: r.role,
+      totalSecs: Math.max(0, Number(r.total_secs) || 0),
+      sessionCount: Number(r.session_count) || 0,
+      longestSecs: Math.max(0, Number(r.longest_secs) || 0),
+      lastAt: r.last_at || null,
     })),
   });
 }
