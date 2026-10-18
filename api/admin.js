@@ -121,6 +121,8 @@ export default async function handler(req, res) {
         case 'save-member':    return await saveMember(req, res, me, b);
         case 'delete-profile': return await deleteProfile(req, res, me, b);
         case 'batch-profiles': return await batchProfiles(req, res, me, b);
+        /* v3.5.18：导入时字段级冲突（库里值 ≠ 导入值）由站主逐条定夺后应用 */
+        case 'resolve-field-conflicts': return await resolveFieldConflicts(req, res, me, b);
         case 'bind-profiles':  return await bindProfiles(req, res, me, b);
         case 'encrypt-profiles': return await encryptProfiles(req, res, me, b);
         case 'set-visibility': return await setVisibility(req, res, me, b);
@@ -2634,14 +2636,76 @@ async function deleteProfile(req, res, me, b) {
  * v2.4.0（2026-10-09）：支持 extra —— Excel 表头里的自定义 / 额外字段。
  * 后端按 profile_field_meta 登记过的字段名收，其余键一律忽略（防脏数据）。
  */
-async function batchProfiles(req, res, me, b) {
-  const list = Array.isArray(b.rows) ? b.rows : [];
-  if (!list.length) return ok(res, { created: 0, updated: 0, failed: 0, errors: [] });
-  if (list.length > 60) return fail(res, 400, '单批最多 60 条，请分批提交');
+/**
+ * v3.5.18：应用「字段冲突」的选择。
+ * ------------------------------------------------------------
+ * 站主原话：「如果 C 的数据库有而且与这次导入的数据不一样，那么由我手动决定
+ * 使用哪一份，另外一份直接删除」—— 导入时冲突字段一律不写，把新旧值一起返回。
+ * 这个接口接收站主勾了「用导入值」的那些字段，逐个覆盖写库；没勾的保持原值
+ * （等价于「另一份直接删除」）。
+ *
+ * body: { items: [{ id, field, value }] }
+ * ⚠️ 每批最多 20 条：一条一次 UPDATE，Workers 免费版单次 50 子请求。
+ */
+async function resolveFieldConflicts(req, res, me, b) {
+  const items = Array.isArray(b.items) ? b.items : [];
+  if (!items.length) return fail(res, 400, '没有要应用的修改');
+  if (items.length > 20) return fail(res, 400, '单批最多 20 条');
 
   const sql = getSql();
-  let created = 0, updated = 0;
+  const pkey = await profileKey(req);
+  const meta = await loadFieldMeta();
+  const allow = new Set(meta.map((f) => f.field));
+  /* 系统列里允许覆盖的（role / title 不在 meta 的情况兜底） */
+  ['role', 'title', 'id_card', 'youth_league_no'].forEach((f) => allow.add(f));
+
+  let applied = 0;
   const errors = [];
+
+  for (const it of items) {
+    const id = Number(it && it.id || 0);
+    const field = String(it && it.field || '').trim().toLowerCase();
+    const val = String(it && it.value == null ? '' : it.value).trim().slice(0, 200);
+    if (!id || !field) { errors.push({ field, reason: '缺少 id 或 field' }); continue; }
+    if (!allow.has(field) || !isSafeFieldFormat(field).ok) {
+      errors.push({ field, reason: '字段不允许这样改' });
+      continue;
+    }
+    try {
+      const ev = await encField(pkey, val);
+      if (field === 'name') {
+        await sql`update profiles set name = ${ev}, name_bidx = ${await blindIndex(pkey, val)}, updated_at = now() where id = ${id}`;
+      } else if (field === 'student_id') {
+        await sql`update profiles set student_id = ${ev}, student_id_bidx = ${await blindIndex(pkey, val)}, updated_at = now() where id = ${id}`;
+      } else {
+        /* 列名来自白名单 + 格式校验，值参数化 */
+        await sql('update profiles set ' + field + ' = $1, updated_at = now() where id = $2', [ev, id]);
+      }
+      applied++;
+    } catch (e) {
+      errors.push({ field, reason: String(e.message || e).slice(0, 120) });
+    }
+  }
+
+  if (applied) await audit(me.id, 'profile.conflict', 'profile', '', '按导入值覆盖 ' + applied + ' 个字段');
+  return ok(res, { applied, failed: errors.length, errors });
+}
+
+async function batchProfiles(req, res, me, b) {
+  const list = Array.isArray(b.rows) ? b.rows : [];
+  if (!list.length) return ok(res, { created: 0, updated: 0, unchanged: 0, failed: 0, errors: [], conflicts: [] });
+  /* 🔴 v3.5.18：Cloudflare Workers 免费版单次调用最多 50 个子请求。
+     以前一批 60 条 × 每行 3 次查询 = 180+，跑到第 24 行就
+     「Too many subrequests by single Worker invocation」，后面全废。
+     现在一批最多 12 条（前端也改成 8 条一批），每行压到 2 次查询 + 1 次写。 */
+  if (list.length > 12) return fail(res, 400, '单批最多 12 条，请分批提交');
+
+  const sql = getSql();
+  let created = 0, updated = 0, unchanged = 0;
+  const errors = [];
+  /* v3.5.18：字段级冲突（库里已有值 ≠ 导入值）—— 不静默覆盖，
+     收集起来交回前端让站主决定用哪一份。 */
+  const conflicts = [];
 
   /* 自定义 / 额外字段（2026-10-09 v2.4.0）：Excel 导入的表头里可能有站主自己加的字段，
      前端会按中文表头识别出来塞进 raw.extra。这里先把可写字段名单拉一份，
@@ -2660,7 +2724,8 @@ async function batchProfiles(req, res, me, b) {
       const sid = cText(raw.studentId, 20);
       const politics = cText(raw.politics, 30);
       const examNo = cText(raw.examNo, 24);
-      const role = cText(raw.role, 10) || '学生';
+      const roleIn = cText(raw.role, 10);          /* Excel 里显式给了才动 */
+      const role = roleIn || '学生';
       const wechat = cContact(raw.wechat);
       const qq = cContact(raw.qq);
       const phone = cContact(raw.phone);
@@ -2709,21 +2774,21 @@ async function batchProfiles(req, res, me, b) {
         continue;
       }
 
-      /* 先按学号找，再按姓名找。
-         v3.5.0：这两列现在是密文，必须走盲索引（bidx）。
-         没配密钥时保持原来的明文等值查，行为不变。 */
+      /* ---- 查找已有记录 ----
+         v3.5.18：改成 select * 一次拿全（以前只取 id，比较现值还得再查一次），
+         每行子请求从 3 次压到 2 次 —— 配合更小的批，绕开 Workers 的 50 次上限。 */
       const sidBidx = await blindIndex(pkey, sid || null);
       const nameBidx = await blindIndex(pkey, name || null);
       let hit = [];
       if (sid) {
         hit = pkey
-          ? await sql`select id from profiles where student_id_bidx = ${sidBidx} limit 1`
-          : await sql`select id from profiles where student_id = ${sid} limit 1`;
+          ? await sql`select * from profiles where student_id_bidx = ${sidBidx} limit 1`
+          : await sql`select * from profiles where student_id = ${sid} limit 1`;
       }
       if (!hit.length && name) {
         hit = pkey
-          ? await sql`select id from profiles where name_bidx = ${nameBidx} limit 1`
-          : await sql`select id from profiles where name = ${name} limit 1`;
+          ? await sql`select * from profiles where name_bidx = ${nameBidx} limit 1`
+          : await sql`select * from profiles where name = ${name} limit 1`;
       }
 
       /* 加密后的值（每行算一次，UPDATE / INSERT 两处复用） */
@@ -2738,28 +2803,68 @@ async function batchProfiles(req, res, me, b) {
       const eYln = await encField(pkey, youthLeagueNo || null);
       const cst = (wechat || qq || phone) ? 'approved' : 'none';
 
+      const labelMap = {};
+      allMeta.forEach((f) => { labelMap[f.field] = f.label || f.field; });
+
       if (hit.length) {
         const pid = Number(hit[0].id);
-        const params = [
-          eName, eSid, nameBidx, sidBidx, ePolitics, eExamNo, role,
-          eWechat, eQq, ePhone, cst,
+        const cur = hit[0];
+        const params = [];
+        const sets = [];
+
+        /* 逐字段三态（站主 v3.5.18 要求）：
+             库里没有值        → 直接写入
+             库里值 == 导入值  → 跳过（不重复写，省子请求）
+             库里值 != 导入值  → 冲突，这一列先不写，交回前端让站主选 */
+        const cand = [
+          ['name', '姓名', name, eName],
+          ['student_id', '学号', sid, eSid],
+          ['politics', '政治面貌', politics, ePolitics],
+          ['exam_no', '智学网账号', examNo, eExamNo],
+          ['wechat', '微信', wechat, eWechat],
+          ['qq', 'QQ', qq, eQq],
+          ['phone', '手机号', phone, ePhone],
+          ['id_card', '身份证号', idCard, eIdCard],
+          ['youth_league_no', '团员编号', youthLeagueNo, eYln],
         ];
-        const sets = [
-          'name = $1', 'student_id = $2', 'name_bidx = $3', 'student_id_bidx = $4',
-          'politics = $5', 'exam_no = $6', 'role = $7',
-          'wechat = $8', 'qq = $9', 'phone = $10', 'contact_status = $11',
-        ];
-        for (const col of exCols) {
-          params.push(await encField(pkey, ex[col]));
-          sets.push(col + ' = $' + params.length);
+        exCols.forEach((c) => { cand.push([c, labelMap[c] || c, ex[c], null]); });
+
+        for (const item of cand) {
+          const col = item[0], lb = item[1], nv = item[2];
+          if (nv == null || String(nv).trim() === '') continue;   /* 导入没填 → 不动 */
+          let ovRaw = null;
+          try { ovRaw = await decField(pkey, cur[col]); } catch (e) { ovRaw = null; }
+          const ov = String(ovRaw == null ? '' : ovRaw).trim();
+          const nvs = String(nv).trim();
+          if (ov === nvs) continue;                                /* 完全一致 → 跳过 */
+          if (!ov) {                                               /* 库里空 → 直接写 */
+            params.push(item[3] != null ? item[3] : await encField(pkey, nvs));
+            sets.push(col + ' = $' + params.length);
+            continue;
+          }
+          conflicts.push({
+            index: i, id: pid, name, field: col, label: lb,
+            /* 完整值回传（供站主判断），前端展示时自己截断 */
+            oldValue: ov.slice(0, 200), newValue: nvs.slice(0, 200),
+          });
         }
-        /* v3.5.3：身份证号/发展团员编号仅当本行非空才写。
-           模板里常有人没填（未入团、还没办身份证），空值不能把库里已有的值抹掉。 */
-        if (idCard)        { params.push(eIdCard); sets.push('id_card = $' + params.length); }
-        if (youthLeagueNo) { params.push(eYln);    sets.push('youth_league_no = $' + params.length); }
+
+        /* role 只在 Excel 显式给了才改，避免把班干/老师刷回「学生」 */
+        if (roleIn && roleIn !== String(cur.role || '')) {
+          params.push(roleIn);
+          sets.push('role = $' + params.length);
+        }
+        /* 联系方式状态跟着联系方式走；没写联系方式就不动 */
+        const touchedContact = sets.some((x) => /^(wechat|qq|phone)\s*=/.test(x));
+        if (touchedContact) {
+          params.push(cst);
+          sets.push('contact_status = $' + params.length);
+        }
+
+        if (!sets.length) { unchanged++; continue; }   /* 全部一致 = 无需更新 */
+
         params.push(pid);
-        /* 双保险：同一列只保留最后一次赋值（后写的优先），
-           避免再出现 `multiple assignments to same column`。 */
+        /* 双保险：同一列只保留最后一次赋值，避免 multiple assignments */
         const seenCol = new Set(), finalSets = [];
         for (let si = sets.length - 1; si >= 0; si--) {
           const col = sets[si].split('=')[0].trim();
@@ -2803,7 +2908,12 @@ async function batchProfiles(req, res, me, b) {
     await audit(me.id, 'profile.batch', 'profile', '', '新增 ' + created + ' / 更新 ' + updated);
   }
 
-  return ok(res, { created, updated, failed: errors.length, errors });
+  return ok(res, {
+    created, updated, unchanged,
+    failed: errors.length, errors,
+    conflicts: conflicts.slice(0, 300),   /* 再多前端也看不过来 */
+    conflictTotal: conflicts.length,
+  });
 }
 
 /* ============================================================

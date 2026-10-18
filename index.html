@@ -1754,6 +1754,14 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
 .dark .vote-box{background:#262220;border-color:#6b5b4c}
 .vote-opt-label{flex:1;min-width:0;line-height:1.5;word-break:break-word}
+/* v3.5.18：歌单选项折叠 —— 默认「歌名 - 歌手」，点「详情」再看点歌人与时间 */
+.vote-opt-main{display:block;line-height:1.5;word-break:break-word}
+.vote-opt-extra{display:none;font-size:.74rem;color:#8a7c6f;margin-top:2px;line-height:1.45;word-break:break-word}
+.vote-opt.open .vote-opt-extra,.vote-res.open .vote-opt-extra{display:block}
+.vote-opt-more{display:inline-block;margin-left:6px;font-size:.66rem;font-weight:400;color:#c2410c;
+  border-bottom:1px dashed currentColor;cursor:pointer;white-space:nowrap}
+.dark .vote-opt-extra{color:#a8998c}
+.dark .vote-opt-more{color:#fdba74}
 /* v3.5.14：多个投票左右滑动切换（scroll-snap 轮播） */
 .vote-swipe{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;scrollbar-width:none;
   -webkit-overflow-scrolling:touch;padding-bottom:4px;overscroll-behavior-x:contain}
@@ -3452,7 +3460,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.17';
+var SITE_VERSION = '3.5.18';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13424,6 +13432,24 @@ function votePubRender(v){
 }
 
 /* 一张投票卡 */
+/* v3.5.18：歌单投票的选项是「歌名 - 歌手 - 点歌人 - 时间」，整段太长。
+   默认只显示「歌名 - 歌手」，点「详情」再展开点歌人和点歌时间。
+   只认末尾形如「 - 某人 - 2026-10-05 21:48」的结构，普通选项不受影响。 */
+function voteOptSplit(label){
+  var s = String(label == null ? '' : label).trim();
+  var m = s.match(/^(.*) - ([^-]{1,20}) - (\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?)$/);
+  if(!m) return null;
+  return { main: m[1].trim(), extra: m[2].trim() + ' · ' + m[3].trim() };
+}
+/** 选项标签：前两段常显，后两段折叠（moreText 由调用方给） */
+function voteOptLabelHtml(label, moreText){
+  var sp = voteOptSplit(label);
+  if(!sp) return '<span class="vote-opt-main">' + esc(label) + '</span>';
+  return '<span class="vote-opt-main">' + esc(sp.main)
+    + '<span class="vote-opt-more" data-vote-more="1">' + esc(moreText || '详情') + '</span></span>'
+    + '<span class="vote-opt-extra">' + esc(sp.extra) + '</span>';
+}
+
 function voteCardHtml(v){
   var multi = !!v.multi;
   var closed = !v.open;
@@ -13458,7 +13484,7 @@ function voteCardHtml(v){
       return '<div class="vote-res' + (mine ? ' mine' : '') + '">'
         + '<div class="vote-res-bar" style="width:' + pct + '%"></div>'
         + '<div class="vote-res-in">'
-        +   '<span class="vote-res-label">' + esc(o.label)
+        +   '<span class="vote-res-label">' + voteOptLabelHtml(o.label)
         +     (o.by === 'student' ? '<span class="vote-tag">' + esc(o.byName || '同学') + ' 提</span>' : '')
         +     (mine ? '<span class="vote-tag mine">我投的</span>' : '') + '</span>'
         +   '<span class="vote-res-n">' + n + ' 票</span>'
@@ -13473,7 +13499,7 @@ function voteCardHtml(v){
       var cnt = null;
       if(v.results){ for(var ri = 0; ri < v.results.length; ri++){ if(v.results[ri].id === o.id){ cnt = v.results[ri].n || 0; break; } } }
       return '<button class="vote-opt' + (on ? ' on' : '') + '" data-vote-pick="' + v.id + '" data-vid="' + v.id + '" data-oid="' + esc(o.id) + '">'
-        + '<span class="vote-opt-label">' + esc(o.label)
+        + '<span class="vote-opt-label">' + voteOptLabelHtml(o.label)
         +   (o.by === 'student' ? '<span class="vote-tag">' + esc(o.byName || '同学') + ' 提</span>' : '') + '</span>'
         + (cnt != null ? '<span class="vote-n">' + cnt + ' 票</span>' : '')
         + '<span class="vote-like' + (on ? ' on' : '') + '" aria-label="' + (on ? '取消' : '投票') + '">👍</span>'
@@ -13560,6 +13586,19 @@ function voteBind(){
 
   Array.prototype.forEach.call(body.querySelectorAll('[data-vote-submit]'), function(btn){
     btn.onclick = function(){ voteSubmitDraft(Number(btn.dataset.voteSubmit)); };
+  });
+
+  /* v3.5.18：选项里的「详情」—— 展开点歌人 / 点歌时间。
+     ⚠️ 必须 stopPropagation：选项本身是投票按钮，冒泡上去会误投一票。 */
+  Array.prototype.forEach.call(body.querySelectorAll('[data-vote-more]'), function(sp){
+    sp.onclick = function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      var host = sp.closest('.vote-opt, .vote-res');
+      if(!host) return;
+      host.classList.toggle('open');
+      sp.textContent = host.classList.contains('open') ? '收起' : '详情';
+    };
   });
 
   Array.prototype.forEach.call(body.querySelectorAll('[data-vote-retract]'), function(btn){

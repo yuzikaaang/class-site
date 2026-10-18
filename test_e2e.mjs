@@ -1241,7 +1241,10 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   });
   t('批量导入成功', batch.status === 200, JSON.stringify(batch.body));
   t('批量导入新增 2 条', batch.body.created === 2, '实际 ' + batch.body.created);
-  t('批量导入更新 1 条', batch.body.updated === 1, '实际 ' + batch.body.updated);
+  /* v3.5.18 语义变化：值完全一致时不再「更新一遍」，而是记为 unchanged（省子请求） */
+  t('批量导入把重复行识别为已有记录（值一致 → 跳过不写）',
+    batch.body.unchanged === 1 && batch.body.updated === 0,
+    'updated=' + batch.body.updated + ' unchanged=' + batch.body.unchanged);
   t('批量导入失败 1 条', batch.body.failed === 1, '实际 ' + batch.body.failed);
   t('批量错误带 index', (batch.body.errors || [])[0] && batch.body.errors[0].index === 2,
     JSON.stringify(batch.body.errors));
@@ -3818,13 +3821,15 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
     method: 'POST', token: adminToken,
     body: { rows: [{ name: '导入甲', studentId: '270001', role: '学生', extra: { school_id: 'XJ-BATCH-1-B' } }] },
   });
-  t('★批量导入可更新已有记录的自定义字段',
-    batchUpd.status === 200 && batchUpd.body.updated === 1,
-    JSON.stringify(batchUpd.body).slice(0, 180));
+  t('★已有记录的自定义字段值不同 → 进冲突列表（不静默覆盖）',
+    batchUpd.status === 200 && batchUpd.body.updated === 0
+    && (batchUpd.body.conflicts || []).some((c) => c.field === 'school_id'
+      && c.oldValue === 'XJ-BATCH-1' && c.newValue === 'XJ-BATCH-1-B'),
+    JSON.stringify(batchUpd.body).slice(0, 220));
   const impList3 = await call('/api/admin?action=profiles&q=270001', { token: adminToken });
   const impRow3 = (impList3.body.profiles || []).find((p) => p.studentId === '270001');
-  t('更新后的自定义字段值正确',
-    impRow3 && impRow3.extra.school_id === 'XJ-BATCH-1-B',
+  t('冲突未定夺前，库里保持原值（等站主选）',
+    impRow3 && impRow3.extra.school_id === 'XJ-BATCH-1',
     JSON.stringify(impRow3 && impRow3.extra).slice(0, 140));
 
   /* 恶意列名不能借导入通道绕过白名单（这是 SQL 注入的第二条入口） */
@@ -3860,8 +3865,10 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
     body: { rows: [{ name: '去重甲', studentId: '270101', role: '学生',
       idCard: '110101199002022345', extra: { id_card: '110101199002022345' } }] },
   });
-  t('★更新同一行（同名列）也不失败',
-    dupUpd.status === 200 && dupUpd.body.failed === 0 && dupUpd.body.updated === 1,
+  /* v3.5.18：身份证号改了值 → 不再静默覆盖，进冲突列表等站主定夺 */
+  t('★更新同一行（同名列）不报错，值不同进冲突',
+    dupUpd.status === 200 && dupUpd.body.failed === 0 && dupUpd.body.updated === 0
+    && (dupUpd.body.conflicts || []).some((c) => c.field === 'id_card'),
     JSON.stringify(dupUpd.body).slice(0, 200));
   const ADMJS_DUP = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
   t('★服务端把固定列从 exCols 里排除（id_card 只写一次）',
@@ -7987,6 +7994,32 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('#11 资料输入控件按精度切换（date / month / 四位年份）',
     /if\(p === 'month'\)\{[\s\S]{0,200}type="month"/.test(admHtml355)
     && /if\(p === 'year'\)\{[\s\S]{0,200}maxlength="4"/.test(admHtml355));
+  /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
+  const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const ADMJS_518 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const IDX_518 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('#15 前端分批 8 条（避开 Workers 50 子请求上限）', /var CHUNK = 8;/.test(ADM_518));
+  t('#15 后端单批上限 12 条', /list\.length > 12/.test(ADMJS_518) && /单批最多 12 条/.test(ADMJS_518));
+  t('#15 查已有记录改 select *（省一次子请求）',
+    /select \* from profiles where student_id_bidx = \$\{sidBidx\} limit 1/.test(ADMJS_518));
+  t('#15 冲突接口 resolve-field-conflicts 存在且白名单校验',
+    /case 'resolve-field-conflicts'/.test(ADMJS_518)
+    && /async function resolveFieldConflicts\(/.test(ADMJS_518)
+    && /!allow\.has\(field\) \|\| !isSafeFieldFormat\(field\)\.ok/.test(ADMJS_518));
+  t('#15 改姓名/学号时同步重算盲索引',
+    /set name = \$\{ev\}, name_bidx = \$\{await blindIndex/.test(ADMJS_518)
+    && /set student_id = \$\{ev\}, student_id_bidx = \$\{await blindIndex/.test(ADMJS_518));
+  t('#15 返回 unchanged / conflicts', /conflicts: conflicts\.slice\(0, 300\)/.test(ADMJS_518));
+  t('#15 导入结果有冲突表 + 全选/全不选/应用', /data-cf-apply/.test(ADM_518)
+    && /data-cf-all/.test(ADM_518) && /data-cf-none/.test(ADM_518)
+    && /resolve-field-conflicts/.test(ADM_518));
+  t('#15 结果出来后「取消」变「确定」', /noBtn\.textContent = '确定'/.test(ADM_518));
+  t('#15 投票选项折叠：只显示歌名-歌手，点详情展开',
+    /function voteOptSplit\(/.test(IDX_518) && /function voteOptLabelHtml\(/.test(IDX_518)
+    && /\.vote-opt\.open \.vote-opt-extra/.test(IDX_518));
+  t('#15 详情按钮不冒泡（避免误投一票）',
+    /ev\.stopPropagation\(\);/.test(IDX_518) && /data-vote-more/.test(IDX_518));
+
   /* ---- v3.5.17：歌单投票选项 = 歌名 - 歌手 - 点歌人 - 点歌时间 ---- */
   const VOTES_SRC_517 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
   const ADM_517 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -9182,7 +9215,8 @@ console.log('\n【88】第七十六轮·v3.5.0 成员档案字段全量加密');
     && /: await decField\(pkey, stored\);/.test(admjs));
   t('★admin.js 自定义字段（含身份证/团员编号）值也加密',
     (admjs.match(/await encField\(pkey, customVals\[f\.field\]\)/g) || []).length === 2
-    && (admjs.match(/await encField\(pkey, ex\[col\]\)/g) || []).length === 2);
+    && /await encField\(pkey, ex\[col\]\)/.test(admjs)          /* 批量导入 INSERT */
+    && /await encField\(pkey, nvs\)/.test(admjs));                /* 批量导入 UPDATE（空值才写）
   t('★profile.js 同学自己提交联系方式时也加密',
     /const eWechat = await encField\(pkey, wechat \|\| null\)/.test(prof));
   t('★建号自动补档案时姓名加密',
@@ -9528,9 +9562,10 @@ console.log('\n【90】第七十八轮·v3.5.3 修「解析失败: XLSX is not d
   t('★两列落库前统一走 encField 加密（与其它敏感字段同待遇）',
     /const eIdCard = await encField\(pkey, idCard \|\| null\);/.test(admjs)
     && /const eYln = await encField\(pkey, youthLeagueNo \|\| null\);/.test(admjs));
-  t('★UPDATE 分支非空才写（导第二次不带这两列不会把库里有数据抹成空）',
-    /if \(idCard\)\s*\{ params\.push\(eIdCard\); sets\.push\('id_card = \$' \+ params\.length\); \}/.test(admjs)
-    && /if \(youthLeagueNo\)\s*\{ params\.push\(eYln\);\s+sets\.push\('youth_league_no = \$' \+ params\.length\); \}/.test(admjs));
+  t('★UPDATE 分支三态：空值才写 / 一致跳过 / 不同进冲突',
+    /if \(!ov\) \{/.test(admjs)
+    && /if \(ov === nvs\) continue;/.test(admjs)
+    && /conflicts\.push\(\{/.test(admjs));
   t('★INSERT 分支带上 id_card / youth_league_no 两列',
     /'id_card', 'youth_league_no', \.\.\.exCols\]/.test(admjs));
 

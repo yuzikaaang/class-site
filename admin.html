@@ -999,7 +999,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.17';
+var SITE_VERSION = '3.5.18';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -7635,30 +7635,45 @@ function profileImportDialog(){
         var btn = yes;
         btn.disabled = true;
 
-        var CHUNK = 60;
+        /* v3.5.18：一批 60 条会撞 Cloudflare 的 50 子请求上限
+           （Too many subrequests by single Worker invocation），
+           改成 8 条一批串行提交 —— 慢一点但稳，62 人也就 8 轮。 */
+        var CHUNK = 8;
         var chunks = [];
         for(var i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
 
-        var created = 0, updated = 0, failed = 0, firstErr = '';
+        var created = 0, updated = 0, unchanged = 0, failed = 0, firstErr = '';
         /* v3.5.15：逐行错误收集起来 —— 站主对着行号改 Excel 才高效，
            以前只提示「首个错误」，后面的错误完全看不到。 */
         var allErrs = [];
+        /* v3.5.18：字段级冲突（库里已有值 ≠ 导入值），等站主定夺 */
+        var allConf = [];
         var idx = 0;
 
         var step = function(){
           if(idx >= chunks.length) return finish();
           var n = idx + 1;
-          setMsg('info', '正在导入… 第 ' + n + '/' + chunks.length + ' 批（' + (idx * CHUNK) + ' / ' + list.length + ' 条）');
+          setMsg('info', '正在导入… 第 ' + n + '/' + chunks.length + ' 批（已处理 ' + (idx * CHUNK) + ' / ' + list.length + ' 条）');
           return api('/admin?action=batch-profiles', { method:'POST', body: { rows: chunks[idx] } })
             .then(function(j){
               created += j.created || 0;
               updated += j.updated || 0;
+              unchanged += j.unchanged || 0;
               failed  += j.failed  || 0;
               if(j.errors && j.errors.length){
                 j.errors.forEach(function(e){
                   var n = idx * CHUNK + (Number(e.index) || 0) + 1;
                   allErrs.push({ n: n, name: e.name || '', reason: e.reason || '' });
                   if(!firstErr) firstErr = '数据第 ' + n + ' 行：' + (e.reason || '');
+                });
+              }
+              if(j.conflicts && j.conflicts.length){
+                j.conflicts.forEach(function(c){
+                  allConf.push({
+                    row: idx * CHUNK + (Number(c.index) || 0) + 1,
+                    id: c.id, name: c.name, field: c.field, label: c.label,
+                    oldValue: c.oldValue, newValue: c.newValue,
+                  });
                 });
               }
               idx++;
@@ -7668,16 +7683,21 @@ function profileImportDialog(){
 
         var finish = function(){
           var parts = ['新增 ' + created + ' 条', '更新 ' + updated + ' 条'];
+          if(unchanged) parts.push('跳过 ' + unchanged + ' 条（与现有完全一致）');
           if(failed) parts.push('失败 ' + failed + ' 条');
-          setMsg(failed ? 'warn' : 'ok',
+          if(allConf.length) parts.push('待定夺 ' + allConf.length + ' 个字段');
+          setMsg((failed || allConf.length) ? 'warn' : 'ok',
             '导入完成：' + parts.join('，') + (firstErr ? ('\n首个错误 ' + firstErr) : ''));
-          /* v3.5.15：失败行逐条列出来（行号 / 姓名 / 原因），不用再猜为什么导不进去 */
+
+          var html = '';
+
+          /* ① 失败行：数据行 / 姓名 / 原因 */
           if(failed && allErrs.length){
-            prev.innerHTML = '<div class="alert warn" style="margin-bottom:10px">'
-              +   '下面 <b>' + allErrs.length + '</b> 行没有导入（其余已入库）。按原因改完 Excel 再导一次即可，'
-              +   '已导入的会走「更新」，不会重复。'
+            html += '<div class="alert warn" style="margin-bottom:10px">'
+              +   '下面 <b>' + allErrs.length + '</b> 行没有导入（其余已入库，不会因为这几行失败而白导）。'
+              +   '按原因改完 Excel 再导一次即可，已导入的会走「更新」，不会重复。'
               + '</div>'
-              + '<div class="table-wrap" style="max-height:320px;overflow:auto"><table><thead><tr>'
+              + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table><thead><tr>'
               +   '<th class="nowrap">数据行</th><th class="nowrap">姓名</th><th>原因</th>'
               + '</tr></thead><tbody>'
               + allErrs.slice(0, 50).map(function(e){
@@ -7688,7 +7708,87 @@ function profileImportDialog(){
               + '</tbody></table></div>'
               + (allErrs.length > 50 ? '<p class="hint" style="margin-top:8px">只列前 50 条，共 ' + allErrs.length + ' 条。</p>' : '');
           }
-          toast('导入完成，新增 ' + created + ' 更新 ' + updated, 'ok', 4000);
+
+          /* ② 字段冲突：库里已有值 ≠ 导入值，先不写，交站主逐条定夺 */
+          if(allConf.length){
+            html += '<div class="alert warn" style="margin:14px 0 10px">'
+              +   '有 <b>' + allConf.length + '</b> 个字段与库里的值不一样，<b>这些字段暂时没有写入</b>。'
+              +   '勾「用导入值」的会被覆盖；没勾的保留现有（等于把导入的那一份丢掉）。'
+              + '</div>'
+              + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+              +   '<button type="button" class="btn btn-xs btn-secondary" data-cf-all>全选用导入</button>'
+              +   '<button type="button" class="btn btn-xs btn-secondary" data-cf-none>全不选</button>'
+              +   '<button type="button" class="btn btn-xs" data-cf-apply>应用选择</button>'
+              + '</div>'
+              + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table><thead><tr>'
+              +   '<th class="nowrap">数据行</th><th class="nowrap">姓名</th><th class="nowrap">字段</th>'
+              +   '<th>现有值</th><th>导入值</th><th class="nowrap">用导入</th>'
+              + '</tr></thead><tbody>'
+              + allConf.map(function(c, ci){
+                  var o = String(c.oldValue == null ? '' : c.oldValue);
+                  var nv = String(c.newValue == null ? '' : c.newValue);
+                  function cut(s){ return esc(s.length > 36 ? s.slice(0, 36) + '…' : s); }
+                  return '<tr><td class="mono nowrap">' + c.row + '</td>'
+                    + '<td class="nowrap">' + (c.name ? esc(c.name) : '<span class="muted">—</span>') + '</td>'
+                    + '<td class="nowrap">' + esc(c.label) + '</td>'
+                    + '<td title="' + attr(o) + '"><span class="mono" style="font-size:.76rem">' + cut(o) + '</span></td>'
+                    + '<td title="' + attr(nv) + '"><span class="mono" style="font-size:.76rem">' + cut(nv) + '</span></td>'
+                    + '<td class="nowrap"><input type="checkbox" data-cf="' + ci + '"></td></tr>';
+                }).join('')
+              + '</tbody></table></div>';
+          }
+
+          prev.innerHTML = html;
+
+          /* 冲突表交互 */
+          if(allConf.length){
+            var bAll = prev.querySelector('[data-cf-all]');
+            var bNone = prev.querySelector('[data-cf-none]');
+            var bApply = prev.querySelector('[data-cf-apply]');
+            if(bAll) bAll.onclick = function(){
+              Array.prototype.forEach.call(prev.querySelectorAll('[data-cf]'), function(el){ el.checked = true; });
+            };
+            if(bNone) bNone.onclick = function(){
+              Array.prototype.forEach.call(prev.querySelectorAll('[data-cf]'), function(el){ el.checked = false; });
+            };
+            if(bApply) bApply.onclick = function(){
+              var picks = [];
+              Array.prototype.forEach.call(prev.querySelectorAll('[data-cf]:checked'), function(el){
+                var c = allConf[Number(el.getAttribute('data-cf'))];
+                if(c && c.id && c.field) picks.push({ id: c.id, field: c.field, value: c.newValue == null ? '' : c.newValue });
+              });
+              if(!picks.length){ toast('没有勾选「用导入值」的字段', 'err'); return; }
+              bApply.disabled = true;
+              bApply.textContent = '应用中…';
+              var CH2 = 20, ci2 = 0, done = 0;
+              var nextPart = function(){
+                if(ci2 >= picks.length){
+                  bApply.textContent = '已应用 ' + done + ' 个字段';
+                  bAll.disabled = bNone.disabled = true;
+                  toast('已按你的选择覆盖 ' + done + ' 个字段', 'ok');
+                  loadMembers();
+                  return;
+                }
+                var part = picks.slice(ci2, ci2 + CH2);
+                return api('/admin?action=resolve-field-conflicts', { method:'POST', body:{ items: part } })
+                  .then(function(r){ done += (r.applied || 0); ci2 += CH2; return nextPart(); })
+                  .catch(function(e){
+                    bApply.disabled = false;
+                    bApply.textContent = '应用选择';
+                    toast('应用失败：' + e.message, 'err');
+                  });
+              };
+              nextPart();
+            };
+          }
+
+          /* 结果出来后「取消」变「确定」—— 让站主明确「这次导入到此为止」，
+             点它只是关窗，已入库的不会撤销。 */
+          var noBtn = box.querySelector('[data-no]');
+          if(noBtn) noBtn.textContent = '确定';
+
+          toast('导入完成：新增 ' + created + '，更新 ' + updated
+            + (unchanged ? '，跳过 ' + unchanged : ''), 'ok', 4200);
           loadMembers();
           btn.textContent = '再导一次';
           btn.disabled = false;
