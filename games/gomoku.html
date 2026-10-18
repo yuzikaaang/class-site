@@ -154,6 +154,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
   <button id="restartBtn">⟳ 重新开始</button>
 </div>
 <div class="tip">黑先白后 · 五连即胜 · 双人模式两人轮流落子</div>
+<script src="cloud.js"></script>
 <script>
 var AC=null;
 function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
@@ -171,6 +172,7 @@ wins=+(localStorage.getItem('gomoku_w')||0);losses=+(localStorage.getItem('gomok
 document.getElementById('wins').textContent=wins;document.getElementById('losses').textContent=losses;
 
 function reset(){
+  window.__gmStart=Date.now();   /* v3.5.35 对局计时 */
   board=[];moves=[];
   for(var r=0;r<N;r++){board[r]=[];for(var c=0;c<N;c++)board[r][c]=0;}
   playing=true;aiThinking=false;cur=1;
@@ -224,6 +226,13 @@ function end(winner){
   }
   document.getElementById('turn').textContent='对局结束';
   document.getElementById('endOv').classList.remove('hidden');
+  /* v3.5.35 云同步：对局时长 + 人机模式胜负台账（pvp 不记个人战绩） */
+  try{
+    if(window.CLS_CLOUD){
+      CLS_CLOUD.addPlay('gomoku', Date.now()-(window.__gmStart||Date.now()), {});
+      if(mode==='ai') CLS_CLOUD.record('gomoku', winner===1 ? {w:1} : {l:1});
+    }
+  }catch(e){}
 }
 /* ===== 评估与 AI ===== */
 function lineScore(r,c,p){
