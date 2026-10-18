@@ -2105,7 +2105,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-ov-item span small{display:block;font-size:.62rem;color:#a8968a;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-ov-item b{color:#292524;font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto;text-align:right}
 /* v3.5.14 #4：迷你折线下面的日期轴 */
-.sc-mini-x{position:relative;height:13px;margin-top:1px;font-size:.55rem;letter-spacing:-.02em;color:#a8968a;font-variant-numeric:tabular-nums}
+.sc-mini-x{position:relative;height:20px;margin-top:1px;font-size:.55rem;letter-spacing:-.02em;color:#a8968a;font-variant-numeric:tabular-nums}
 .sc-mini-x span{position:absolute;top:0;white-space:nowrap;line-height:1.1}
 .dark .sc-mini-guide{stroke:#4a4038 !important}
 /* v3.5.14 #5：缺年级排名时的原因说明 */
@@ -15665,7 +15665,8 @@ function scMiniLine(pts, betterIsHigh, fmt){
     xaxis = '<div class="sc-mini-x">' + pick.map(function(p){
       var pct = pts.length <= 1 ? 0 : (p.i / (pts.length - 1)) * 100;
       var tr = p.i === 0 ? 'translateX(0)' : (p.i === pts.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)');
-      return '<span style="left:' + pct.toFixed(2) + '%;transform:' + tr + '">' + esc(p.d) + '</span>';
+      /* 相邻日期错开一行，5 个标签才不会挤在一起 */
+      return '<span style="left:' + pct.toFixed(2) + '%;top:' + (p.i % 2 ? 7 : 0) + 'px;transform:' + tr + '">' + esc(p.d) + '</span>';
     }).join('') + '</div>';
   }
   return '<svg viewBox="0 0 ' + mw + ' ' + mh + '" class="sc-mini-svg" style="width:100%;height:38px;display:block;margin-top:4px">'
