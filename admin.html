@@ -1009,7 +1009,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.30';
+var SITE_VERSION = '3.5.31';
 var VER_DATE = '2026-10-18';
 
 /* ---- 运行时状态 ---- */
@@ -12971,6 +12971,11 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.5.31', date: '2026-10-18', type: 'fix', title: '轻量模式改纯手动 · 弹窗居中',
+    items: [
+      '轻量模式不再自动检测设备：站主明确「由我手动更改」，设置里只有「完整 / 轻量」两档，选完立刻生效并记住',
+      '修复登录引导等弹窗贴在左上角的问题：遮罩层显式居中，iPad / iPhone / 桌面都居中显示',
+    ] },
   { version: '3.5.30', date: '2026-10-18', title: '兼容性修复 · 轻量模式 · 后台横屏记忆 · 站点名称可编辑', type: 'fix', highlight: true, items: [
     '新增「轻量模式」：iPad / iPhone 上自动关闭玻璃模糊、背景光斑、卡片流光与入场动画（站主反馈 iPad Air 打开卡死、勉强操作后白屏）',
     '性能自动判定：iOS 设备 / 内存 ≤4GB / CPU ≤4 核自动走轻量；另加首屏 3 秒长任务自测，超 120ms 自动降级',
