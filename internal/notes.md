@@ -832,3 +832,5 @@ A：不参与线上，仅作历史追溯。线上所有功能都在根目录 `in
 | 2026-10-18 | **【v3.5.14 四补】**：①横屏方向：left:100vw+rotate(90) 实际多转 180°，改 left:0+top:100vh+rotate(-90)。②选项提出人：options 增 byName（后台=管理员，同学=display_name），前台标签显示名字，公示结果表加「提出人」列。③结束后形态：class_votes 加 end_mode（keep|pub），后台编辑器可选；pub 且配了公示时前台只渲染公示块、隐藏投票栏（没配公示自动退回只读）。SCHEMA_VER 3.5.9，三处 DDL 同步。e2e 2575/2530 全绿，缓存 v115。 |
 
 | 2026-10-18 | 横屏第二个坑：站主反馈「只旋转了手机屏幕，页面没转」。根因是**双重旋转**——fullscreen+orientation.lock 已把视口转成 844×390，CSS 又 rotate(-90) 转回竖屏。改为 LAND_ON（用户意图）+ `syncLandscapeClass()` 按实时视口判断：h>w 才加 .force-landscape，w>h 立即撤掉；监听 resize/orientationchange。验证：390×844 点击→class 生效；模拟系统转 844×390→class 自动移除、body 844×390，截图正常横屏。缓存 v116。 |
+
+| 2026-10-18 | **【v3.5.14 五补·截图两问题】**：①顶栏透字：`.head` 用 `background:color-mix(...78%,transparent)`，老 Edge/WebView 不支持 → 整条失效变透明，内容滚上来和标题重叠；加 `background:var(--bg-1)` 纯色兜底后再叠 color-mix(94%)。②头衔页 500 `column p.title does not exist`：老库 profiles 缺 title/role/politics/contact_status（只在全量清单里补过）；升级路径补列 + SCHEMA_VER 3.5.11，但被「补列失败静默 catch 却已盖章」坑住，最终改为 `listTitles` 进接口先幂等 ALTER（不依赖版本章）+ 查询兜底；title/role 加入 HARD_PROTECTED 防止再被字段管理删掉。线上验证 titles 200、页面列表正常、顶栏滚动无透字。缓存 v119。 |
