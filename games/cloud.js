@@ -67,6 +67,31 @@ function pull(key, cb){
   }catch(e){ cb(null); }
 }
 
+/* ============================================================
+   在线心跳（v3.5.35）—— 站主要求「各个页面都算在线，包括游戏页」。
+   游戏页是独立 html，不带主站的心跳定时器；这里补一个：
+   登录用户每 60 秒打一次 /api/auth?action=ping，标签页隐藏时跳过。
+   服务端 ping() 会把心跳落进 online_sessions（180 秒分段），
+   后台「在线时长」因此能把玩游戏的时间也算进去。
+   失败全部静默 —— 心跳永远不能影响玩游戏。 */
+(function(){
+  var fired = false;
+  function beat(){
+    var a = auth(); if(!a) return;
+    try{
+      fetch('https://api.classsite.dpdns.org/api/auth?action=ping', {
+        method:'GET', cache:'no-store', headers:{ Authorization:'Bearer ' + a.token }
+      }).catch(function(){});
+    }catch(e){}
+  }
+  document.addEventListener('visibilitychange', function(){
+    /* 从后台切回前台时立刻补一拍，避免长时间挂着游戏页被切成两段 */
+    if(document.visibilityState === 'visible' && !fired){ fired = true; beat(); }
+  });
+  setInterval(function(){ if(document.visibilityState !== 'hidden') beat(); }, 60000);
+  beat();   /* 进页面先打一拍：哪怕只玩一分钟也有记录 */
+})();
+
 window.CLS_CLOUD = {
   auth: auth,
   /* 当前登录者姓名 / 身份（未登录返回 '' 或 null） */
@@ -104,6 +129,12 @@ window.CLS_CLOUD = {
       if(sc != null && (o.bestScore == null || sc > o.bestScore)){
         o.bestScore = sc;
       }
+      /* v3.5.35：低分更好型成绩（扫雷用时 / 翻牌步数）——越小越好，
+         与 bestScore（越大越好）分开存，后台展示时口径不混。 */
+      var low = (extra && extra.lowScore != null) ? Number(extra.lowScore) : null;
+      if(low != null && (o.bestLow == null || low < o.bestLow)){
+        o.bestLow = low;
+      }
       var w = {}; w['cls_game_play_' + game] = o;
       push(w);
 
@@ -120,6 +151,21 @@ window.CLS_CLOUD = {
           push(w2);
         });
       }
+    });
+  },
+
+  /* ---- 胜负平台账（v3.5.35，棋类游戏用）----
+     gomoku / tictactoe 这类没有「分数」的游戏，成绩就是胜/负/平次数。
+     读云端旧值 → 累加 → 写回，键 cls_game_rec_<游戏> = {w,l,d}。 */
+  record: function(game, delta){
+    delta = delta || {};
+    pull('cls_game_rec_' + game, function(old){
+      var o = (old && typeof old === 'object') ? old : {};
+      o.w = (o.w || 0) + (Number(delta.w) || 0);
+      o.l = (o.l || 0) + (Number(delta.l) || 0);
+      o.d = (o.d || 0) + (Number(delta.d) || 0);
+      var w = {}; w['cls_game_rec_' + game] = o;
+      push(w);
     });
   },
 
