@@ -1009,7 +1009,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.35';
+var SITE_VERSION = '3.5.36';
 var VER_DATE = '2026-10-18';
 
 /* ---- 运行时状态 ---- */
@@ -10329,6 +10329,26 @@ function enterApp(){
   $('meAv').textContent = String(me.displayName || me.username || '管').charAt(0).toUpperCase();
   $('meRole').textContent = 'ADMIN';
   go('overview');
+  startAdminHeartbeat();
+}
+
+/* v3.5.35：后台也要打心跳 —— 站主开着后台改作业的时间同样算「在线」，
+   否则「在线时长」面板会把站长漏掉。规则与主站一致：60 秒一拍，
+   标签页隐藏时跳过；失败静默，绝不影响后台使用。 */
+function startAdminHeartbeat(){
+  if(window.__adminHbTimer) return;   /* 防重复启动（PWA 往返 / 重新登录） */
+  var beat = function(){
+    if(document.hidden) return;
+    if(!STATE.token) return;
+    try{
+      fetch(apiUrl('/auth?action=ping'), {
+        method:'GET', cache:'no-store',
+        headers:{ Authorization:'Bearer ' + STATE.token }
+      }).catch(function(){});
+    }catch(e){}
+  };
+  beat();
+  window.__adminHbTimer = setInterval(beat, 60000);
 }
 
 /* ============================================================================
@@ -13145,6 +13165,13 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.5.36', date: '2026-10-18', type: 'fix', title: '游戏全量云同步 · 在线统计覆盖游戏页与后台',
+    items: [
+      '修复：上一版漏发了主页面文件，导致换设备也停在 3.5.34 —— 现在已正常到 3.5.36',
+      '其余 9 款游戏（打砖块 / 打地鼠 / 消消乐 / 飞机大战 / 扫雷 / 记忆翻牌 / 五子棋 / 井字棋 / 象棋）全部接入云端：最高分（或最快用时、胜负场）与游玩时长都会统计',
+      '在线时长现在覆盖所有页面：玩游戏的每分钟、后台挂着的每分钟都算在线',
+      '后台「游戏数据」面板支持 13 款游戏的次数 / 时长 / 成绩展示'
+    ] },
   { version: '3.5.35', date: '2026-10-18', type: 'feat', title: '在线时长统计：单次 / 累计一目了然',
     items: [
       '新增「在线时长」面板（后台 → 安全）：每人累计在线、在线次数、最长单次、最近在线，可切 今天 / 7 / 30 / 90 天',
