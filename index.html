@@ -3164,8 +3164,8 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
   <main class="content">
     <header>
       <button class="theme-btn" id="themeToggle" onclick="toggleTheme(event)" aria-label="切换主题">🌙</button>
-      <h1>🏫 25级05班班级服务站</h1>
-      <p>一站式获取班级服务 · 资源 · 工具</p>
+      <h1 id="brandTitle">🏫 25级05班班级服务站</h1>
+      <p id="brandSub">一站式获取班级服务 · 资源 · 工具</p>
       <div class="logo" onclick="badgeClick()"><img src="https://s41.ax1x.com/2026/06/07/pmmhF6H.png" alt="班徽" onerror="this.parentNode.style.display='none'"></div>
     </header>
 
@@ -3183,7 +3183,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
     <div class="grid" id="grid"></div>
 
     <footer>
-      <p>© 25级05班班级服务站</p>
+      <p id="brandFoot">© 25级05班班级服务站</p>
       <p class="footer-sub">内容更新请联系管理员 · 全站可在微信内直接访问</p>
       <p class="footer-sub">页面由 AI 辅助生成</p>
       <!-- 版本号：站主用来核对「改动到底推上线没有」。
@@ -3480,7 +3480,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.28';
+var SITE_VERSION = '3.5.29';
 var VER_DATE = '2026-10-18';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -7077,8 +7077,13 @@ function applyCloudContent(items, opts){
 /** 站点通用配置（站点名、门禁、公告栏问候语等） */
 function applySiteConfig(cfg){
   if(!cfg || typeof cfg !== 'object') return;
-  ['siteName','siteSubtitle','gateQuestion','gateAnswer','welcomeTitle'].forEach(function(k){
+  ['gateQuestion','gateAnswer','welcomeTitle'].forEach(function(k){
     if(cfg[k] !== undefined && cfg[k] !== null) SITE_DATA[k] = cfg[k];
+  });
+  /* v3.5.29：siteName / siteSubtitle —— 后台保存空值时写的是 ''（不是删键），
+     所以这里也要让 '' 覆盖旧值，清空后才能回落到静态默认。 */
+  ['siteName','siteSubtitle'].forEach(function(k){
+    if(typeof cfg[k] === 'string') SITE_DATA[k] = cfg[k];
   });
   /* v3.5.13（站主 #3）：点歌投稿上限守卫 { on, limit } —— 后台「点歌管理」配置。
      走 site_config 管道最省一个内容键；base 地址固定用点歌入口链接本身。 */
@@ -7088,6 +7093,31 @@ function applySiteConfig(cfg){
       limit: Math.max(0, Number(cfg.vhGuard.limit) || 0),
     };
   }
+  /* v3.5.29：站点名称 / 副标题可从后台编辑（站主：「站点的名称及它的一个副名称
+     也可以在后台编辑」）—— 落到 site_config.siteName / siteSubtitle 后，
+     这里把三处静态文案（<title>、页头大标题、页头副标题）一起换掉。 */
+  applyBranding();
+}
+
+/** v3.5.29：把 SITE_DATA.siteName / siteSubtitle 渲染到页面。
+ *  只在云端真配了值才覆盖 —— 没配时保持 index.html 里的静态默认，
+ *  这样老站点不配置行为完全不变。 */
+function applyBranding(){
+  var name = String(SITE_DATA.siteName || '').trim();
+  var sub = String(SITE_DATA.siteSubtitle || '').trim();
+  try{
+    if(name){
+      document.title = name;
+      var h1 = document.getElementById('brandTitle');
+      if(h1) h1.textContent = '🏫 ' + name;
+      var foot = document.getElementById('brandFoot');
+      if(foot) foot.textContent = '© ' + name;
+    }
+    if(sub){
+      var p = document.getElementById('brandSub');
+      if(p) p.textContent = sub;
+    }
+  }catch(e){}
 }
 
 /* ---------------- 每日一言（2026-10-06 新增；v2.6.0 改随机 + 联网；v3.5.6 可切来源）----------------

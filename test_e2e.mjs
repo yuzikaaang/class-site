@@ -8383,6 +8383,35 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     });
   }
 
+  /* ---- v3.5.29：站点名称 / 副标题后台可编辑（site_config.siteName/siteSubtitle → applyBranding） ---- */
+  const IDX_529 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const ADM_529 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('v3.5.29 主站 applyBranding 把站点名/副标题换到 <title>/页头/页脚',
+    /function applyBranding\(\)/.test(IDX_529)
+    && /document\.title = name;/.test(IDX_529)
+    && /getElementById\('brandTitle'\)/.test(IDX_529)
+    && /getElementById\('brandSub'\)/.test(IDX_529)
+    && /getElementById\('brandFoot'\)/.test(IDX_529));
+  t('v3.5.29 静态三处挂了 id（brandTitle/brandSub/brandFoot）',
+    /<h1 id="brandTitle">/.test(IDX_529) && /<p id="brandSub">/.test(IDX_529)
+    && /<p id="brandFoot">/.test(IDX_529));
+  t('v3.5.29 没配站点名时保持静态默认（applyBranding 只在真有值时覆盖）',
+    /var name = String\(SITE_DATA\.siteName \|\| ''\)\.trim\(\);/.test(IDX_529)
+    && /if\(name\)\{/.test(IDX_529) && /if\(sub\)\{/.test(IDX_529));
+  t('v3.5.29 applySiteConfig 落 siteName/siteSubtitle 后调用 applyBranding',
+    /applyBranding\(\);/.test(IDX_529));
+  t('v3.5.29 后台站点信息面板真读真存 site_config（不再只是展示）',
+    /站点名称 \/ 副标题真正可编辑/.test(ADM_529)
+    && /content\?keys=site_config/.test(ADM_529)
+    && /cfg\.siteName = name;/.test(ADM_529)
+    && /cfg\.siteSubtitle = sub;/.test(ADM_529));
+  t('v3.5.29 后台保存走 PUT /content 且先取整 cfg 合并（不冲掉 vhGuard）',
+    /method: 'PUT', body: \{ items: \{ site_config: cfg \} \}/.test(ADM_529)
+    && /站点信息目前由 index\.html 里的 SITE_DATA 控制/.test(ADM_529) === false);
+  t('v3.5.29 清空保存写空字符串（前端才能回落静态默认，不会残留旧名）',
+    /cfg\.siteName = name;/.test(ADM_529) && /delete cfg\.siteName/.test(ADM_529) === false
+    && /typeof cfg\[k\] === 'string'/.test(IDX_529));
+
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const ADMJS_518 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');

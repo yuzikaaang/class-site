@@ -1009,7 +1009,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.28';
+var SITE_VERSION = '3.5.29';
 var VER_DATE = '2026-10-18';
 
 /* ---- 运行时状态 ---- */
@@ -9706,12 +9706,12 @@ function renderSettings(){
 
     + '<section class="panel">'
     +   '<div class="panel-head"><div><h3>' + svg('globe') + '站点信息</h3>'
-    +     '<p class="sub">显示在班级站上的基本信息</p></div></div>'
+    +     '<p class="sub">显示在班级站上的基本信息（v3.5.29 起改这里立即生效，无需改代码）</p></div></div>'
     +   '<div class="panel-body">'
     +     '<div class="field"><label for="stName">站点名称</label>'
-    +     '<input id="stName" value="25级05班班级服务站" placeholder="站点名称"></div>'
+    +     '<input id="stName" placeholder="如 25级05班班级服务站" maxlength="40"></div>'
     +     '<div class="field"><label for="stSlogan">副标题 / 标语</label>'
-    +     '<input id="stSlogan" placeholder="选填"></div>'
+    +     '<input id="stSlogan" placeholder="选填，如 一站式获取班级服务 · 资源 · 工具" maxlength="60"></div>'
     +     '<button class="btn" id="stSave">' + svg('check', 14) + '保存设置</button>'
     +     '<div class="msg" id="stMsg"></div>'
     +   '</div>'
@@ -9779,11 +9779,45 @@ function renderSettings(){
     });
   };
 
-  $('stSave').onclick = function(){
-    var msg = $('stMsg');
-    msg.className = 'msg show ok';
-    msg.textContent = '站点信息目前由 index.html 里的 SITE_DATA 控制，改这里需要同步修改前端代码。此处仅作展示。';
-  };
+  /* v3.5.29：站点名称 / 副标题真正可编辑（站主：「站点的名称及它的一个副名称
+     也可以在这后台编辑」）。读写都走 site_config（与点歌守卫 vhGuard 同一条管道）：
+     · 读  —— GET /content?keys=site_config，回填输入框
+     · 存  —— 整个 cfg 取回 → 改 siteName / siteSubtitle → PUT /content
+       （必须先取整个 cfg 再合并，不然会把 vhGuard 等其它配置冲掉）
+     留空 = 恢复前端 index.html 里的静态默认。主站收到 site_config 后由
+     applySiteConfig → applyBranding 即时换 <title>、页头大标题、副标题、页脚。 */
+  (function(){
+    var nameEl = $('stName'), subEl = $('stSlogan');
+    api('/content?keys=site_config').then(function(j){
+      var cfg = (j && j.items && j.items.site_config) || {};
+      if(nameEl && !nameEl.value) nameEl.value = String(cfg.siteName || '');
+      if(subEl && !subEl.value) subEl.value = String(cfg.siteSubtitle || '');
+    }).catch(function(){});
+    $('stSave').onclick = function(){
+      var msg = $('stMsg');
+      if(!msg) return;
+      msg.className = 'msg show warn';
+      msg.textContent = '保存中…';
+      api('/content?keys=site_config').then(function(j){
+        var cfg = (j && j.items && j.items.site_config) || {};
+        if(typeof cfg !== 'object' || Array.isArray(cfg)) cfg = {};
+        var name = String((nameEl && nameEl.value) || '').trim();
+        var sub = String((subEl && subEl.value) || '').trim();
+        /* ⚠️ 清空时写空字符串而不是 delete：前端 applySiteConfig 只覆盖「键存在」的字段，
+           若 delete 掉，主站 SITE_DATA 会残留旧值，清空就永远不生效了。 */
+        cfg.siteName = name;
+        cfg.siteSubtitle = sub;
+        return api('/content', { method: 'PUT', body: { items: { site_config: cfg } } });
+      }).then(function(){
+        msg.className = 'msg show ok';
+        msg.textContent = '已保存。同学下次打开/刷新班级站就会显示新的站点名称和副标题（浏览器标题栏、页头、页脚一起换）。';
+        toast('站点信息已保存', 'ok');
+      }).catch(function(e){
+        msg.className = 'msg show err';
+        msg.textContent = '保存失败：' + (e.message || e);
+      });
+    };
+  })();
 
   /* v2.10.0：注册策略（总开关 + 审核）—— 读当前值，保存写 site_settings。
      register_open 为 null = 从未设置过，此时展示环境变量兜底值（envDefault），
