@@ -172,6 +172,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
   </div>
 </div>
 <div class="tip">移动端长按格子标旗 · 数字表示周围雷数</div>
+<script src="cloud.js"></script>
 <script>
 var AC=null;
 function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
@@ -200,6 +201,7 @@ function customStart(){
   startGame(12,12,v);
 }
 function reset(){
+  window.__msStart=Date.now();   /* v3.5.35 游玩计时 */
   grid=[];flags=0;revealed=0;playing=true;started=false;t0=0;
   if(timerId)clearInterval(timerId);
   document.getElementById('tm').textContent='0';
@@ -260,6 +262,8 @@ function boom(){
   document.getElementById('ovTitle').textContent='💥 踩雷啦';
   document.getElementById('ovInfo').textContent='坚持了 '+document.getElementById('tm').textContent+' 秒';
   document.getElementById('overOv').classList.remove('hidden');
+  /* v3.5.35 云同步：踩雷也算玩了一局（时长照记，不记成绩） */
+  try{ if(window.CLS_CLOUD) CLS_CLOUD.addPlay('minesweeper', Date.now()-(window.__msStart||Date.now()), {}); }catch(e){}
   draw();
 }
 function win(){
@@ -270,6 +274,8 @@ function win(){
   document.getElementById('ovTitle').textContent='🎉 扫完啦！';
   document.getElementById('ovInfo').textContent='用时 '+sec+' 秒'+(best===sec?'　🏆 新纪录！':'　最快 '+best+'s');
   document.getElementById('overOv').classList.remove('hidden');
+  /* v3.5.35 云同步：时长 + 最快用时（低分更好型） */
+  try{ if(window.CLS_CLOUD) CLS_CLOUD.addPlay('minesweeper', Date.now()-(window.__msStart||Date.now()), {lowScore:sec}); }catch(e){}
 }
 cv.addEventListener('contextmenu',function(e){e.preventDefault();});
 /* 统一用 pointer 事件处理输入：
