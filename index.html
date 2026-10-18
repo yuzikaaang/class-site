@@ -13581,12 +13581,20 @@ function voteSwipeBind(all, curIdx){
     if(prev) prev.disabled = (i <= 0);
     if(next) next.disabled = (i >= all.length - 1);
   }
+  /* 卡片之间有 12px 间距，按「相邻两 slide 的 offsetLeft 差」算步长，
+     不然每翻一页会累积偏 12px（实测 scrollLeft 328 vs 宽 316） */
+  function stepW(){
+    var a = box.children[0], b = box.children[1];
+    if(a && b) return b.offsetLeft - a.offsetLeft;
+    return box.clientWidth || 1;
+  }
   function go(i, smooth){
     i = Math.max(0, Math.min(all.length - 1, i));
     idx = i;
     VOTE.curId = all[i] ? all[i].id : null;
-    try{ box.scrollTo({ left: i * box.clientWidth, behavior: smooth ? 'smooth' : 'auto' }); }
-    catch(e){ box.scrollLeft = i * box.clientWidth; }
+    var x = i * stepW();
+    try{ box.scrollTo({ left: x, behavior: smooth ? 'smooth' : 'auto' }); }
+    catch(e){ box.scrollLeft = x; }
     paint(i);
   }
   requestAnimationFrame(function(){ go(idx, false); });
@@ -13596,7 +13604,7 @@ function voteSwipeBind(all, curIdx){
     clearTimeout(t);
     t = setTimeout(function(){
       if(!box.clientWidth) return;
-      var i = Math.max(0, Math.min(all.length - 1, Math.round(box.scrollLeft / box.clientWidth)));
+      var i = Math.max(0, Math.min(all.length - 1, Math.round(box.scrollLeft / stepW())));
       if(i !== idx){ idx = i; VOTE.curId = all[i] ? all[i].id : null; paint(i); }
     }, 90);
   };
@@ -13612,7 +13620,11 @@ function voteSwipeBind(all, curIdx){
       var b2 = document.getElementById('voteSwipe');
       if(b2 && VOTE.curId != null){
         var i2 = (VOTE.order || []).indexOf(VOTE.curId);
-        if(i2 >= 0){ try{ b2.scrollLeft = i2 * b2.clientWidth; }catch(e){} }
+        if(i2 >= 0){
+          var a2 = b2.children[0], b3 = b2.children[1];
+          var sw = (a2 && b3) ? (b3.offsetLeft - a2.offsetLeft) : b2.clientWidth;
+          try{ b2.scrollLeft = i2 * sw; }catch(e){}
+        }
       }
     });
   }
