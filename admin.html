@@ -1009,7 +1009,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.34';
+var SITE_VERSION = '3.5.35';
 var VER_DATE = '2026-10-18';
 
 /* ---- 运行时状态 ---- */
@@ -1025,6 +1025,9 @@ var STATE = {
   logs:  { list: [], total: 0, page: 1, size: 30 },
   actionlogs: { list: [], total: 0, page: 1, size: 50, q: '', action: '', day: '', stats: null },
   logins:{ list: [], total: 0, page: 1, size: 30, userId: 0 },
+  /* v3.5.35 在线时长：users 是按人聚合，sessions 是单人明细 */
+  online:{ users: [], days: 30, grandSecs: 0, grandSessions: 0, activeUsers: 0, totalUsers: 0,
+           detail: null, detailUser: null, page: 1, size: 50 },
   profiles: { list: [], total: 0, counts: {}, page: 1, size: 30, q: '', status: '' },
   reviews:  { list: [], total: 0, page: 1, size: 30 },
   viewlogs: { list: [], total: 0, page: 1, size: 30, top: [], q: '' },
@@ -1702,6 +1705,7 @@ var PAGES = [
   { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
+  { id:'online',        label:'在线时长', icon:'clock',     group:'安全',  title:'在线时长（单次 / 累计）' },
   { id:'logs',          label:'操作日志', icon:'file',      group:'安全',  title:'操作日志' },
   { id:'actionlogs',    label:'行为日志', icon:'activity',  group:'安全',  title:'用户操作日志（点击行为）' },
   { id:'secrets',       label:'令牌管理', icon:'key',       group:'系统',  title:'系统令牌' },
@@ -1790,6 +1794,7 @@ function go(page){
     dates:         renderDates,
     games:         renderGames,
     logins:        renderLogins,
+    online:        renderOnline,
     logs:          renderLogs,
     actionlogs:    renderActionLogs,
     secrets:       renderSecrets,
@@ -9236,7 +9241,176 @@ function loadLogins(page){
 }
 
 /* ============================================================================
- * ⑯ 面板：操作日志
+ * ⑯-2 面板：在线时长（v3.5.35）
+ *
+ * 站主原话：
+ *   「检测单次在线时长以及历史累计的在线时长……第一次请求到最后一次请求之间
+ *     的时间，就是它这次上线时间……如果两次请求时间它超过了 3 分钟，那就
+ *     算两次请求……历史总的话就把它们加起来。这个在后台我需要能看到历史的数据。」
+ *
+ * 数据来源：online_sessions 表，由心跳接口（/api/auth?action=ping）每 60 秒
+ * 一次的心跳逐段累加。判定规则写在 api/auth.js 的 ping() 里：
+ *   · 距上一条 last_ping_at ≤ 180 秒 → 续上同一段（stop_at 前推）
+ *   · 超过 180 秒 → 另起一段
+ *
+ * 本页两块：
+ *   ① 按人聚合排行（累计时长 / 时段数 / 最长单次 / 最近在线），可切时间窗口
+ *   ② 点某人展开他的时段明细（每段起止时刻 + 时长 + 心跳次数）
+ * ========================================================================= */
+function renderOnline(){
+  var S = STATE.online;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<span class="muted" style="font-size:.82rem">心跳每 60 秒一次；两次心跳超过 3 分钟就另算一次在线</span>'
+    +   '<span style="flex:1"></span>'
+    +   '<span class="seg" id="onDays">'
+    +     [1, 7, 30, 90].map(function(d){
+          return '<button data-ond="' + d + '" class="' + (S.days === d ? 'on' : '') + '">'
+            + (d === 1 ? '今天' : d + ' 天') + '</button>';
+        }).join('')
+    +   '</span>'
+    +   '<button class="btn btn-sm btn-secondary" id="onRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div id="onSummary" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px"></div>'
+    + '<section class="panel"><div id="onBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  Array.prototype.forEach.call($('onDays').querySelectorAll('[data-ond]'), function(b){
+    b.onclick = function(){
+      S.days = Number(b.dataset.ond);
+      S.detail = null; S.detailUser = null;
+      renderOnline();
+    };
+  });
+  $('onRefresh').onclick = function(){ S.detail = null; S.detailUser = null; renderOnline(); };
+  loadOnline();
+}
+
+/* 秒 → 中文时长（0 秒显示成「—」，避免一整列 0 秒看着像故障） */
+function secText(sec){
+  sec = Number(sec) || 0;
+  if(sec <= 0) return '—';
+  return fmtDur(sec * 1000);
+}
+
+function loadOnline(){
+  var S = STATE.online;
+  var body = $('onBody');
+  api('/admin?action=online&days=' + S.days + '&limit=500').then(function(j){
+    S.users = j.users || [];
+    S.grandSecs = j.grandSecs || 0;
+    S.grandSessions = j.grandSessions || 0;
+    S.activeUsers = j.activeUsers || 0;
+    S.totalUsers = j.totalUsers || 0;
+
+    var sum = $('onSummary');
+    if(sum){
+      var cards = [
+        { k:'累计在线', v: secText(S.grandSecs), s: S.grandSessions + ' 个时段' },
+        { k:'有记录的人', v: S.activeUsers + ' / ' + S.totalUsers, s:'窗口内有心跳的同学' },
+        { k:'人均在线', v: secText(S.activeUsers ? Math.round(S.grandSecs / S.activeUsers) : 0), s:'按有记录的人算' }
+      ];
+      sum.innerHTML = cards.map(function(c){
+        return '<div class="panel" style="padding:14px 16px;margin:0">'
+          + '<div class="muted" style="font-size:.76rem">' + esc(c.k) + '</div>'
+          + '<div style="font-size:1.35rem;font-weight:700;margin:4px 0 2px">' + esc(c.v) + '</div>'
+          + '<div class="muted" style="font-size:.72rem">' + esc(c.s) + '</div></div>';
+      }).join('');
+    }
+
+    if(!body) return;
+    if(!S.users.length){
+      body.innerHTML = '<div class="empty">' + svg('inbox', 38) + '<p>还没有任何在线记录</p>'
+        + '<p style="font-size:.78rem;margin-top:8px">前端每 60 秒发一次心跳，第一个心跳到达后这里就会有数据</p></div>';
+      return;
+    }
+
+    body.innerHTML =
+      '<div class="table-wrap"><table><thead><tr>'
+      + '<th>用户</th><th class="nowrap">累计时长</th><th class="nowrap">在线次数</th>'
+      + '<th class="nowrap">最长单次</th><th class="nowrap">最近在线</th><th></th>'
+      + '</tr></thead><tbody>'
+      + S.users.map(function(u){
+          var initial = String(u.displayName || u.username || '?').charAt(0).toUpperCase();
+          var open = S.detailUser === u.id;
+          return '<tr' + (open ? ' style="background:rgba(255,255,255,.03)"' : '') + '>'
+            + '<td><div class="cell-user"><div class="av ink-auto">' + esc(initial) + '</div>'
+            + '<div><b>' + esc(u.displayName || u.username || '(未命名)') + '</b>'
+            + '<i class="mono">' + esc(u.username || '') + ' #' + u.id + '</i></div></div></td>'
+            + '<td class="nowrap"><b>' + esc(secText(u.totalSecs)) + '</b></td>'
+            + '<td class="nowrap">' + u.sessionCount + ' 次</td>'
+            + '<td class="nowrap">' + esc(secText(u.longestSecs)) + '</td>'
+            + '<td class="nowrap muted" style="font-size:.78rem">'
+            +   (u.lastAt ? esc(ago(u.lastAt)) + '<div style="font-size:.7rem">' + esc(fmt(u.lastAt)) + '</div>' : '—')
+            + '</td>'
+            + '<td class="nowrap"><button class="btn btn-sm btn-secondary" data-onu="' + u.id + '">'
+            +   (open ? '收起' : '明细') + '</button></td>'
+            + '</tr>'
+            + (open ? '<tr><td colspan="6" style="padding:0;background:rgba(0,0,0,.16)">'
+                    + '<div id="onDetail" style="padding:12px 14px">'
+                    +   (S.detail === null
+                        ? '<div class="loading"><div class="spinner"></div>加载明细…</div>'
+                        : onDetailHtml(S))
+                    + '</div></td></tr>' : '');
+        }).join('')
+      + '</tbody></table></div>';
+
+    Array.prototype.forEach.call(body.querySelectorAll('[data-onu]'), function(b){
+      b.onclick = function(){
+        var id = Number(b.dataset.onu);
+        if(S.detailUser === id){ S.detailUser = null; S.detail = null; loadOnline(); return; }
+        S.detailUser = id;
+        S.detail = null;
+        loadOnline();
+        loadOnlineDetail(id);
+      };
+    });
+  }).catch(function(e){
+    if(body) body.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function loadOnlineDetail(id){
+  var S = STATE.online;
+  api('/admin?action=online&id=' + id + '&limit=200').then(function(j){
+    if(S.detailUser !== id) return;   /* 用户已经切走了，别覆盖 */
+    S.detail = j;
+    var box = $('onDetail');
+    if(!box) return;
+    box.innerHTML = onDetailHtml(S);
+  }).catch(function(e){
+    var box = $('onDetail');
+    if(box) box.innerHTML = '<div class="alert danger">明细加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function onDetailHtml(S){
+  var d = S.detail;
+  if(!d) return '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  var list = d.sessions || [];
+  if(!list.length) return '<div class="muted" style="font-size:.82rem">这个人还没有在线时段记录</div>';
+  return '<div class="muted" style="font-size:.78rem;margin-bottom:8px">'
+      + '总计 <b>' + esc(secText(d.totalSecs)) + '</b>，共 ' + d.sessionCount + ' 个时段'
+      + '（每段 = 一段连续在线，心跳中断超过 3 分钟就断开）'
+      + (d.total > list.length ? '，下面仅显示最近 ' + list.length + ' 段' : '')
+      + '</div>'
+    + '<div class="table-wrap"><table style="font-size:.82rem"><thead><tr>'
+      + '<th class="nowrap">开始</th><th class="nowrap">结束</th><th class="nowrap">时长</th>'
+      + '<th class="nowrap">心跳次数</th><th>会话</th>'
+      + '</tr></thead><tbody>'
+      + list.map(function(s){
+          return '<tr>'
+            + '<td class="nowrap">' + esc(fmt(s.startAt)) + '</td>'
+            + '<td class="nowrap">' + esc(fmt(s.stopAt)) + '</td>'
+            + '<td class="nowrap"><b>' + esc(secText(s.secs)) + '</b></td>'
+            + '<td class="nowrap">' + s.pingCount + '</td>'
+            + '<td class="mono muted" style="font-size:.72rem">' + esc(s.device || '—') + '</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+}
+
+/* ============================================================================
+ * ⑰ 面板：操作日志
  * ========================================================================= */
 function renderLogs(){
   $('view').innerHTML =
@@ -12971,6 +13145,14 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.5.35', date: '2026-10-18', type: 'feat', title: '在线时长统计：单次 / 累计一目了然',
+    items: [
+      '新增「在线时长」面板（后台 → 安全）：每人累计在线、在线次数、最长单次、最近在线，可切 今天 / 7 / 30 / 90 天',
+      '点「明细」可看每一段连续在线的起止时刻与时长',
+      '判定规则：心跳每 60 秒一次，两次心跳间隔超过 3 分钟就另算一次在线（你提的方案，原样落地）',
+      '同一账号在两台设备登录各算各的，不混在一起',
+      '统计随心跳自动累积，不需要任何人手动打卡'
+    ] },
   { version: '3.5.34', date: '2026-10-18', type: 'fix', title: '自定义设置只存本机 · 轻量补媒体特效 · 作业勾选同步加固',
     items: [
       '自定义设置（字号 / 背景 / 排序 / 动效 / 轻量 / 背景图）不再上传云端，只保存在本机浏览器 —— 每台设备屏幕和习惯不同，各配各的',
