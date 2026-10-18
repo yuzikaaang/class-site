@@ -47,7 +47,7 @@ export { getSql };
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.28';
+const SCHEMA_VER = '3.5.35';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -237,6 +237,41 @@ export async function ensureSchema(sql) {
            让 match-list 的全表扫描在几千条时也不至于慢。
            纪律：三处同步（升级路径 / 全量清单 / schema.sql），SCHEMA_VER 已升到 3.5.28。 */
         try { await s`create index if not exists song_dur_artist_idx on song_durations (artist)`; } catch (e) {}
+        /* 🔴 v3.5.35：在线时长统计（站主需求）
+           ------------------------------------------------------------
+           站主方案原话：「因为不是每过一段时间我们会刷新吗？那刷新它就会向上面
+           请求嘛，然后你就看一下这请求，第一次请求到最后一次请求之间的时间，
+           就是它这次上线时间。然后怎么样才能算作两次呢？就是如果两次请求时间
+           它超过了 3 分钟，那就算两次请求，就算另算这个在线时间。
+           然后历史总的话就把它们加起来。这个在后台我需要能看到历史的数据。」
+
+           落地方案：在心跳（/api/auth?action=ping，前端每 60 秒一次）里判定：
+             · 距上次心跳 ≤ 180 秒 → 同一次在线，把本次时段 stop_at 往后推
+             · 超过 180 秒（或第一次）→ 另起一个时段（插入新行）
+           每条 sessions 一行 = 一次「连续在线」；时长 = stop_at - start_at。
+           last_ping_at 是判定用的锚点，与 sessions.last_seen_at 分开存，
+           因为后者有 30 秒节流，粒度不够做 3 分钟判定。
+
+           用 (user_id, session_token) 定位而不是 sessions.id，是为了：
+             ① 老会话被清理、重新登录后 token 变了也能正确分段；
+             ② 不需要额外查一次 sessions 表（省一个 Neon 往返）。 */
+        try {
+          await s`create table if not exists online_sessions (
+            id            bigserial   primary key,
+            user_id       bigint      not null,
+            session_token text        not null default '',
+            start_at      timestamptz not null default now(),
+            stop_at       timestamptz not null default now(),
+            last_ping_at  timestamptz not null default now(),
+            ping_count    int         not null default 1,
+            created_at    timestamptz not null default now()
+          )`;
+          await s`create index if not exists online_user_start_idx on online_sessions (user_id, start_at desc)`;
+          await s`create index if not exists online_start_idx on online_sessions (start_at desc)`;
+          await s`create index if not exists online_token_idx on online_sessions (session_token)`;
+        } catch (e) {
+          console.warn('[schema] online_sessions 建表失败：', e && e.message);
+        }
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
@@ -294,6 +329,22 @@ export async function ensureSchema(sql) {
       create index if not exists login_log_time_idx
         on login_log (created_at desc)
     `;
+    /* v3.5.35 在线时长统计（见升级路径里的详细说明） */
+    await s`
+      create table if not exists online_sessions (
+        id            bigserial   primary key,
+        user_id       bigint      not null,
+        session_token text        not null default '',
+        start_at      timestamptz not null default now(),
+        stop_at       timestamptz not null default now(),
+        last_ping_at  timestamptz not null default now(),
+        ping_count    int         not null default 1,
+        created_at    timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists online_user_start_idx on online_sessions (user_id, start_at desc)`;
+    await s`create index if not exists online_start_idx on online_sessions (start_at desc)`;
+    await s`create index if not exists online_token_idx on online_sessions (session_token)`;
     /* 班级通讯录 / 个人资料（与 schema.sql 保持一致，见该文件的说明） */
     await s`
       create table if not exists profiles (
