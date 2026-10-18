@@ -8166,6 +8166,17 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     /function rebuildFromChecks/.test(ADM_525) && /data-song-json=/.test(ADM_525)
     && /__voRebuild/.test(ADM_525));
 
+  /* ---- v3.5.26：歌单投票彻底不显示「选项（一行一个）」文本框（CSS 兜底） ---- */
+  const ADM_526 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  t('v3.5.26 选项文本框容器带 .vo-opts-wrap 类名', /class="field vo-opts-wrap" id="voOptsWrap"/.test(ADM_526));
+  t('v3.5.26 编辑器根节点带 data-kind（渲染时就写死，不等 JS）',
+    /id="voEditor" data-kind="/.test(ADM_526) && /\(v && v\.kind === 'song'\) \? 'song' : 'normal'/.test(ADM_526));
+  t('v3.5.26 CSS 规则按 data-kind 隐藏文本框（含 !important 兜底）',
+    /#voEditor\[data-kind="song"\] \.vo-opts-wrap\{display:none !important\}/.test(ADM_526));
+  t('v3.5.26 syncKind 同步 data-kind，文本框仍作隐藏数据载体供提交读取',
+    /ed\.setAttribute\('data-kind', isSong \? 'song' : 'normal'\)/.test(ADM_526)
+    && /document\.getElementById\('voOpts'\) \|\| \{\}\)\.value/.test(ADM_526));
+
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const ADMJS_518 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');

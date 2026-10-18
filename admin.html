@@ -723,6 +723,11 @@ tr.dragging .ff-grip{cursor:grabbing}
 .modal.locked .close-x{display:none}
 .modal.locked{background:rgba(41,37,36,.82)}
 
+/* v3.5.26：投票编辑器 —— 歌单投票彻底不显示「选项（一行一个）」文本框。
+   纯 CSS 兜底：只要 #voEditor 带着 data-kind="song"（渲染时就写死，不等 JS），
+   文本框整块就一定是隐藏的。textarea 仍留在 DOM 里当提交用的数据载体。 */
+#voEditor[data-kind="song"] .vo-opts-wrap{display:none !important}
+
 /* 导入预览表 */
 .preview-table{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md);font-size:.78rem}
 .preview-table table{font-size:.78rem}
@@ -1004,7 +1009,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.25';
+var SITE_VERSION = '3.5.26';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -11499,16 +11504,18 @@ function voEditorDialog(v){
     sub: isNew ? '选项一行一个；至少两个' : '已投的票会按选项文字对应保留',
     wide: true,
     body:
-      '<div class="field"><label>投票标题</label>'
+      '<div id="voEditor" data-kind="' + ((v && v.kind === 'song') ? 'song' : 'normal') + '">'
+      + '<div class="field"><label>投票标题</label>'
       +   '<input id="voTitle" maxlength="60" placeholder="例如：这次班级活动的主题" value="' + attr((v && v.title) || '') + '"></div>'
       + '<div class="field"><label>类型</label>'
       +   '<select id="voKind">'
       +     '<option value="normal"' + (v && v.kind === 'song' ? '' : ' selected') + '>普通投票</option>'
       +     '<option value="song"' + (v && v.kind === 'song' ? ' selected' : '') + '>歌单投票（从点歌平台选歌）</option>'
       +   '</select></div>'
-      /* v3.5.25：选项文本框只给「普通投票」用；歌单投票以勾选为唯一数据源，
-         文本框只作为隐藏的数据载体（保存时从它读，保证提交逻辑不变） */
-      + '<div class="field" id="voOptsWrap"><label>选项（一行一个）</label>'
+      /* v3.5.25：选项文本框只给「普通投票」用；歌单投票以勾选为唯一数据源。
+         v3.5.26：改由 CSS 按 data-kind 控制显隐（纯 CSS，不依赖 onMount 时机）。
+         文本框仍留在 DOM 里当隐藏数据载体，保存时照旧从它读，提交逻辑不变。 */
+      + '<div class="field vo-opts-wrap" id="voOptsWrap"><label>选项（一行一个）</label>'
       +   '<textarea id="voOpts" rows="6" placeholder="选项一&#10;选项二">' + esc(opts) + '</textarea>'
       +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">每行一个选项。歌单投票请切上面的类型，改用下面的勾选。</p>'
       +   '</div>'
@@ -11602,6 +11609,7 @@ function voEditorDialog(v){
       +     '<option value="pub"' + (v && v.endMode === 'pub' ? ' selected' : '') + '>展示结果公示并隐藏投票</option>'
       +   '</select>'
       +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">选「展示公示」要在「公示」里配好模版并开启，否则仍按只读投票栏显示。</p>'
+      + '</div>'
       + '</div>',
     foot: '<button class="btn btn-ghost" data-no>取消</button>'
         + '<button class="btn" data-yes>' + (isNew ? '创建' : '保存') + '</button>',
@@ -11618,6 +11626,10 @@ function voEditorDialog(v){
       var syncKind = function(){
         var isSong = kindSel.value === 'song';
         pick.style.display = isSong ? '' : 'none';
+        /* v3.5.26：选项文本框的显隐交给 CSS（#voEditor[data-kind="song"] .vo-opts-wrap），
+           这里只负责同步 data-kind。以前只靠 style.display，一旦 onMount 没跑到就露出来。 */
+        var ed = box.querySelector('#voEditor');
+        if(ed) ed.setAttribute('data-kind', isSong ? 'song' : 'normal');
         var optsWrap = box.querySelector('#voOptsWrap');
         if(optsWrap) optsWrap.style.display = isSong ? 'none' : '';
         if(songOpts) songOpts.style.display = isSong ? '' : 'none';
