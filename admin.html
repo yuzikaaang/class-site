@@ -7151,15 +7151,20 @@ function deleteFieldConfirm(field, label, isSystem){
       +   '如果有页面 / 导入模版还在引用它，可能出现报错。'
       +   '<br>「姓名」「学号」是身份主键，系统不允许删除。'
       + '</div>'
-      + '<div class="field"><label>确认请输入字段名 <b class="mono">' + esc(field) + '</b></label>'
-      +   '<input id="ffDelConfirm" autocomplete="off" placeholder="' + attr(field) + '"></div>',
+      + '<div class="field"><label>确认请输入字段名 <b class="mono">' + esc(field) + '</b> 或中文名 <b class="mono">' + esc(label || '') + '</b></label>'
+      +   '<input id="ffDelConfirm" autocomplete="off" placeholder="' + attr(field + ' 或 ' + (label || '')) + '"></div>',
     foot: '<button class="btn btn-ghost" data-no>取消</button>'
         + '<button class="btn btn-danger" data-yes disabled>确认删除</button>',
     onMount: function(box){
       var inp = box.querySelector('#ffDelConfirm');
       var yes = box.querySelector('[data-yes]');
       box.querySelector('[data-no]').onclick = closeModal;
-      inp.oninput = function(){ yes.disabled = (inp.value.trim() !== field); };
+      /* 站主可能直接打中文名（出生日期）而不是列名（birth_date）——
+         两种都认，否则按钮永远灰着，看着就是「删不掉」。 */
+      inp.oninput = function(){
+        var v = inp.value.trim();
+        yes.disabled = !(v === field || v === (label || '') || v === nm);
+      };
       yes.onclick = function(){
         yes.disabled = true; yes.textContent = '删除中…';
         api('/admin?action=delete-field', { method:'POST', body:{ field:field, force:true } })

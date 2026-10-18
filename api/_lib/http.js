@@ -43,7 +43,7 @@ import { sha256Hex } from './password.js';
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.11';
+const SCHEMA_VER = '3.5.12';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -120,6 +120,18 @@ export async function ensureSchema(sql) {
             ('home_address', '家庭住址', 'self',   160, false),
             ('league_date',  '入团时间', 'self',   170, false)
           on conflict (field) do nothing
+        `; } catch (e) {}
+        /* 🔴 v3.5.14：站主「出生日期/民族/班级/学校/家庭住址 怎么删都删不掉」。
+           根因：这段预置 insert 是 on conflict do nothing，每升一版又跑一次，
+           删掉的字段被重新插回来。现在删字段时写进 site_settings.data.deleted_fields
+           墓碑，这里把墓碑里的字段再清掉，升级也不会复活。 */
+        try { await s`
+          delete from profile_field_meta
+           where field in (
+             select jsonb_array_elements_text(
+               coalesce((select data->'deleted_fields' from site_settings where id = 1), '[]'::jsonb)
+             )
+           )
         `; } catch (e) {}
         try { await s`
           update profile_field_meta set rules = case field
@@ -335,6 +347,15 @@ export async function ensureSchema(sql) {
         ('league_date',     '入团时间',      'self',   170, false)
       on conflict (field) do nothing
     `;
+    /* v3.5.14：再次应用「已删除」墓碑（升级路径删掉的字段，别被全量清单复活） */
+    try { await s`
+      delete from profile_field_meta
+       where field in (
+         select jsonb_array_elements_text(
+           coalesce((select data->'deleted_fields' from site_settings where id = 1), '[]'::jsonb)
+         )
+       )
+    `; } catch (e) {}
     /* v3.5.5 预置规则（与升级路径同款 CASE）：12 个字段的出厂校验规则，
        只在 rules 还是 {} 时写 —— 尊重管理员自定义，重跑不覆盖。 */
     await s`

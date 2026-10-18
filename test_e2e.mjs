@@ -7815,8 +7815,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.11',
-    /const SCHEMA_VER = '3\.5\.11'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.12',
+    /const SCHEMA_VER = '3\.5\.12'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -9933,6 +9933,11 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /background:var\(--bg-1\);\s*\n\s*background:color-mix/.test(adm));
   t('#8c 头衔/身份列被列入结构性保护', /HARD_PROTECTED = \['name', 'student_id', 'title', 'role'\]/.test(ADMJS_SRC));
   t('#8c 老库升级路径补 title 等列', /alter table profiles add column if not exists title text/.test(http2) && /add column if not exists role text/.test(http2));
+  t('#8d 删除字段写墓碑，升级不再复活预置字段',
+    /deleted_fields/.test(ADMJS_SRC) && /deleted_fields/.test(http2)
+    && /jsonb_array_elements_text/.test(http2));
+  t('#8d 删除确认框同时认列名与中文名',
+    /v === field \|\| v === \(label \|\| ''\)/.test(adm));
   t('#8b 横屏按视口判断，避免系统转屏后重复旋转',
     /function syncLandscapeClass\(/.test(adm)
     && /window\.innerHeight > window\.innerWidth/.test(adm)

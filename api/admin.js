@@ -1816,6 +1816,8 @@ async function readFieldRow(sql, field) {
  *    的幽灵字段（前台永远看不到它，但 Excel 导出会多一列，极难排查）。
  */
 async function addField(req, res, me, b) {
+  /* 若这个字段名以前被删过（墓碑里还在），管理员现在主动加回来 → 解除墓碑，
+     否则下一次 schema 升级会把它再清掉。 */
   const chk = checkFieldName(b.field);
   if (!chk.ok) return fail(res, 400, chk.reason);
   const field = chk.field;
@@ -1873,6 +1875,23 @@ async function addField(req, res, me, b) {
     return fail(res, 500, '登记字段失败：' + String(e.message || e).slice(0, 200));
   }
 
+  /* 重新加回来的字段要解除墓碑，否则下次 schema 升级会被当成「已删除」再清掉 */
+  try {
+    await sql`
+      update site_settings
+         set data = jsonb_set(
+               data, '{deleted_fields}',
+               coalesce((
+                 select jsonb_agg(v)
+                   from jsonb_array_elements_text(coalesce(data->'deleted_fields', '[]'::jsonb)) v
+                  where v <> ${field}
+               ), '[]'::jsonb),
+               true),
+             updated_at = now()
+       where id = 1
+    `;
+  } catch (e) { console.warn('[admin] 解除字段墓碑失败：', e.message); }
+
   await audit(me.id, 'field.add', 'profile_field', field, label + '/' + visibility);
   return ok(res, {
     message: '已新增字段「' + label + '」（' + field + '）',
@@ -1906,6 +1925,25 @@ async function deleteField(req, res, me, b) {
   if (!row.is_custom && b.force !== true) {
     return fail(res, 400, '「' + (row.label || field) + '」是系统预置字段，确认删除请传 force=true');
   }
+
+  /* 先记墓碑：告诉 ensureSchema 的预置种子「这个字段是管理员主动删的，别再插回来」 */
+  try {
+    await sql`
+      insert into site_settings (id, data, updated_at)
+      values (1, ${JSON.stringify({ deleted_fields: [field] })}::jsonb, now())
+      on conflict (id) do update
+        set data = jsonb_set(
+              site_settings.data,
+              '{deleted_fields}',
+              case
+                when coalesce(site_settings.data->'deleted_fields', '[]'::jsonb) @> to_jsonb(${field}::text)
+                  then coalesce(site_settings.data->'deleted_fields', '[]'::jsonb)
+                else coalesce(site_settings.data->'deleted_fields', '[]'::jsonb) || to_jsonb(${field}::text)
+              end,
+              true),
+            updated_at = now()
+    `;
+  } catch (e) { console.warn('[admin] 写字段墓碑失败：', e.message); }
 
   await sql`delete from profile_field_meta where field = ${field}`;
 
