@@ -59,8 +59,9 @@ const MAX_CONTACT = 64;
    ============================================================ */
 
 /** 可见性档位排序：数字越大越严（用于「取更严的一侧」）
- *  v3.4.1 新增 admin 档；v3.5.37 更名「仅后端可见」，语义：
- *    后台详情 + 管理员本人「我的资料」可见；其他人（含普通同学本人）前台不可见。 */
+ *  v3.4.1 新增 admin 档；v3.5.37 更名「仅后端可见」；v3.5.38 语义收紧：
+ *    前台一律不可见 —— 管理员本人在「我的资料」里也看不到，
+ *    只能去后台（成员与档案 → 详情）查。后台是全量直读，不经过这个判定。 */
 const VIS_RANK = { public: 0, committee: 1, self: 2, admin: 3 };
 
 /** 从两档里取更严的那个 */
@@ -187,9 +188,9 @@ function canSee(field, meta, pref, fvis, ctx) {
   }
 
   if (eff === 'admin') return !!ctx.admin;
-  /* v3.5.37「仅后端可见」：ctx.admin 只在「管理员查自己的我的资料」时为 true；
-     前台查询别人（search 链路）恒为 false —— 查询一视同仁，管理员无特权。
-     所以这条实际效果 = 后台全可见 + 管理员我的资料可见 + 其他人一律不下发。 */
+  /* v3.5.38「仅后端可见」：**所有前台请求 ctx.admin 都传 false**
+     （search 链路本来就是 false，me 链路 v3.5.38 起也改成 false）。
+     所以这条实际效果 = 前台任何身份、任何页面都拿不到；只有后台档案详情能看。 */
   if (eff === 'self') return ctx.self;
   if (eff === 'committee') return ctx.self || ctx.committee;
   return true;
@@ -562,9 +563,12 @@ async function myProfile(req, res, u) {
   const row = await decRow(await profileKey(req), rows[0]);
   const meta = await loadMeta(sql);
   /* 本人看自己：一律 full=true，可见性一律放行（self 就是「本人」）。
-     v3.4.1：admin 档例外 —— 「仅管理员可见」的字段本人也看不到，
-     ctx.admin 只有查询者真的是管理员时才为 true。 */
-  const p = shapeProfile(row, true, meta, { self: true, committee: true, admin: u.role === 'admin' });
+     ⚠️ v3.5.38 站主明确要求：「仅后端可见」就是**只能在后端查**。
+        连管理员自己的「我的资料」也不能看到身份证号这类字段 ——
+        要看请去后台（成员与档案 → 详情）。
+        所以这里的 ctx.admin 恒为 false，与查询者是不是管理员无关。
+        注意不能靠「u.role !== admin」来判断，那样管理员换台设备登录就又看见了。 */
+  const p = shapeProfile(row, true, meta, { self: true, committee: true, admin: false });
   p.rejectReason = row.reject_reason || '';
 
   /* 私有字段：元数据里 visibility='self' 的那些（身份证号、发展团员编号…）。
