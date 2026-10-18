@@ -376,6 +376,11 @@ async function castVote(req, res) {
   });
   if (!choices.length) return fail(res, 400, '请至少选择一个选项');
   if (!v.multi && choices.length > 1) return fail(res, 400, '这是单选投票，只能选一项');
+  /* v3.5.14：后台配了「最多选 / 至少选」就在这里兜底 —— 前端只是提示，服务端才是裁判 */
+  const maxN = v.max_choices == null ? null : Number(v.max_choices);
+  const minN = v.min_choices == null ? null : Number(v.min_choices);
+  if (maxN != null && choices.length > maxN) return fail(res, 400, '这场投票最多选 ' + maxN + ' 项，你选了 ' + choices.length + ' 项');
+  if (minN != null && choices.length < minN) return fail(res, 400, '这场投票至少选 ' + minN + ' 项，你只选了 ' + choices.length + ' 项');
 
   await sql`
     insert into class_vote_ballots (vote_id, user_id, choices, updated_at)

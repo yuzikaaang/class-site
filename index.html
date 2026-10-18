@@ -2105,7 +2105,7 @@ html[data-motion="off"] .snap.snapping .snap-thumb{transition:none}
 .sc-ov-item span small{display:block;font-size:.62rem;color:#a8968a;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-ov-item b{color:#292524;font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto;text-align:right}
 /* v3.5.14 #4：迷你折线下面的日期轴 */
-.sc-mini-x{position:relative;height:13px;margin-top:1px;font-size:.6rem;color:#a8968a;font-variant-numeric:tabular-nums}
+.sc-mini-x{position:relative;height:13px;margin-top:1px;font-size:.55rem;letter-spacing:-.02em;color:#a8968a;font-variant-numeric:tabular-nums}
 .sc-mini-x span{position:absolute;top:0;white-space:nowrap;line-height:1.1}
 .dark .sc-mini-guide{stroke:#4a4038 !important}
 /* v3.5.14 #5：缺年级排名时的原因说明 */
@@ -13389,8 +13389,13 @@ function votePubRender(v){
 function voteCardHtml(v){
   var multi = !!v.multi;
   var closed = !v.open;
-  var my = (VOTE.picked[v.id] != null) ? VOTE.picked[v.id] : (v.myChoices || []);
-  var voted = (v.myChoices && v.myChoices.length) || !!v.mine;
+  /* v3.5.14 站主新要求：
+     · 未提交时，点赞只是**选择**（可随意取消，不消耗撤回次数），选完点「确定」才上传；
+     · 已经投过票再点点赞 → 弹窗问「是否撤回重新投票（还剩 N 次）」，确认才撤回并进入重投。 */
+  var draft = VOTE.picked[v.id];
+  var my = (draft != null) ? draft : (v.myChoices || []);
+  var submitted = !!((v.myChoices && v.myChoices.length) || v.mine);
+  var editing = (draft != null);
   var totalVotes = 0, maxN = 0;
   if(v.results){
     v.results.forEach(function(r){ totalVotes += r.n; if(r.n > maxN) maxN = r.n; });
@@ -13423,7 +13428,7 @@ function voteCardHtml(v){
       var on = my.indexOf(o.id) >= 0;
       var cnt = null;
       if(v.results){ for(var ri = 0; ri < v.results.length; ri++){ if(v.results[ri].id === o.id){ cnt = v.results[ri].n || 0; break; } } }
-      return '<button class="vote-opt' + (on ? ' on' : '') + '" data-vote-toggle="' + v.id + '" data-vid="' + v.id + '" data-oid="' + esc(o.id) + '">'
+      return '<button class="vote-opt' + (on ? ' on' : '') + '" data-vote-pick="' + v.id + '" data-vid="' + v.id + '" data-oid="' + esc(o.id) + '">'
         + '<span class="vote-opt-label">' + esc(o.label)
         +   (o.by === 'student' ? '<span class="vote-tag">同学提</span>' : '') + '</span>'
         + (cnt != null ? '<span class="vote-n">' + cnt + ' 票</span>' : '')
@@ -13440,23 +13445,30 @@ function voteCardHtml(v){
       + '</div>';
   }
 
-  /* v3.5.14 #9：不再有「提交投票」按钮 —— 点赞即投。
-     这里只留配额提示 + 撤回重投。 */
+  /* v3.5.14 修正：选完要点「确定」才上传；已投状态下只显示撤回入口。 */
   var submitHtml = '';
   if(!closed){
     var hint = multi ? '可多选' : '单选';
     if(v.maxChoices) hint += ' · 最多 ' + v.maxChoices + ' 项';
     if(v.minChoices) hint += ' · 至少 ' + v.minChoices + ' 项';
-    if(multi && v.maxChoices && my.length > v.maxChoices) hint += '（已超出，请点掉几项）';
-    else if(v.maxChoices && my.length) hint += '（已选 ' + my.length + '/' + v.maxChoices + '）';
-    var canRetract = !!(v.mine && v.canRetract);
-    submitHtml = '<div class="vote-actions">'
-      + '<span class="vote-hint">' + esc(hint) + '</span>'
-      + (canRetract
-          ? '<button class="btn btn-sm btn-secondary" data-vote-retract="' + v.id + '">撤回重投'
-            + (v.retractLimit > 1 ? '（剩 ' + Math.max(0, v.retractLimit - (v.retractUsed || 0)) + ' 次）' : '（限 1 次）') + '</button>'
-          : (v.mine && v.retractLimit > 0 ? '<span class="vote-hint">撤回机会已用完</span>' : ''))
-      + '</div>';
+    if(v.maxChoices) hint += '（已选 ' + my.length + '/' + v.maxChoices + '）';
+    var left = Math.max(0, (v.retractLimit || 1) - (v.retractUsed || 0));
+    if(submitted && !editing){
+      submitHtml = '<div class="vote-actions">'
+        + '<span class="vote-hint">✅ 你已投票' + (left > 0 ? ' · 还可撤回 ' + left + ' 次' : ' · 撤回机会已用完') + '</span>'
+        + (left > 0
+            ? '<button class="btn btn-sm btn-secondary" data-vote-retract="' + v.id + '">撤回重投</button>'
+            : '')
+        + '</div>';
+    }else{
+      submitHtml = '<div class="vote-actions">'
+        + '<span class="vote-hint">' + esc(hint) + '</span>'
+        + '<button class="btn btn-sm" data-vote-submit="' + v.id + '"'
+        +   (my.length ? '' : ' disabled style="opacity:.45"') + '>'
+        +   '确定投票' + (my.length ? '（' + my.length + ' 项）' : '') + '</button>'
+        + (editing ? '<span class="vote-hint">点选项可继续增删，确定后才上传</span>' : '')
+        + '</div>';
+    }
   }
 
   var meta = [];
@@ -13495,15 +13507,19 @@ function voteBind(){
   var body = document.getElementById('voteBody');
   if(!body) return;
 
-  /* v3.5.14 #9：点赞即投 */
-  Array.prototype.forEach.call(body.querySelectorAll('[data-vote-toggle]'), function(btn){
+  /* v3.5.14：点赞 = 选择；确定后才上传；已投再点 → 撤回确认 */
+  Array.prototype.forEach.call(body.querySelectorAll('[data-vote-pick]'), function(btn){
     btn.onclick = function(){
-      voteToggle(Number(btn.dataset.voteToggle), btn.dataset.oid);
+      votePick(Number(btn.dataset.votePick), btn.dataset.oid);
     };
   });
 
+  Array.prototype.forEach.call(body.querySelectorAll('[data-vote-submit]'), function(btn){
+    btn.onclick = function(){ voteSubmitDraft(Number(btn.dataset.voteSubmit)); };
+  });
+
   Array.prototype.forEach.call(body.querySelectorAll('[data-vote-retract]'), function(btn){
-    btn.onclick = function(){ voteRetract(Number(btn.dataset.voteRetract)); };
+    btn.onclick = function(){ voteAskRetract(Number(btn.dataset.voteRetract), null); };
   });
 
   Array.prototype.forEach.call(body.querySelectorAll('[data-vote-add]'), function(btn){
@@ -13517,19 +13533,27 @@ function voteMsg(vid, txt, kind){
   el.innerHTML = txt ? '<span class="vote-msg-' + (kind || 'ok') + '">' + esc(txt) + '</span>' : '';
 }
 
-/* v3.5.14 #9：点赞即投（乐观更新：先本地生效再发请求，失败回滚） */
-function voteToggle(vid, oid){
+/* v3.5.14（站主新要求）
+   · 点赞只改本地选择，可以随便取消 —— 没上传就不算撤回，不消耗次数；
+   · 点「确定投票」才上传；
+   · 已经投过票再点点赞 → 弹窗确认「撤回重新投票（还剩 N 次）」，确认才真的撤回。 */
+function voteFind(vid){
+  for(var i = 0; i < VOTE.votes.length; i++) if(VOTE.votes[i].id === vid) return VOTE.votes[i];
+  return null;
+}
+function votePick(vid, oid){
   if(VOTE.busy) return;
-  var v = null;
-  for(var i = 0; i < VOTE.votes.length; i++) if(VOTE.votes[i].id === vid) v = VOTE.votes[i];
-  if(!v) return;
-  var cur = (v.myChoices || []).slice();
+  var v = voteFind(vid); if(!v) return;
+  var submitted = !!((v.myChoices && v.myChoices.length) || v.mine);
+  /* 已投状态下的第一次点击 = 想改票 → 先问要不要撤回 */
+  if(submitted && VOTE.picked[vid] == null){ voteAskRetract(vid, oid); return; }
+  var cur = (VOTE.picked[vid] || []).slice();
   var at = cur.indexOf(oid);
   if(v.multi){
     if(at >= 0) cur.splice(at, 1);
     else{
       if(v.maxChoices && cur.length >= v.maxChoices){
-        voteMsg(vid, '这场投票最多选 ' + v.maxChoices + ' 项，先点掉一个再选', 'err');
+        voteMsg(vid, '这场投票最多选 ' + v.maxChoices + ' 项，先取消一个再选', 'err');
         return;
       }
       cur.push(oid);
@@ -13537,38 +13561,52 @@ function voteToggle(vid, oid){
   }else{
     cur = (at >= 0) ? [] : [oid];
   }
-  VOTE.busy = true;
-  /* 乐观更新 */
-  v.myChoices = cur; v.mine = cur.length > 0;
+  VOTE.picked[vid] = cur;
   voteRenderAll();
+  voteMsg(vid, cur.length
+    ? '已选择 ' + cur.length + ' 项，点「确定投票」才会上传'
+    : '已取消选择（还没上传，不消耗撤回次数）', 'ok');
+}
+function voteSubmitDraft(vid){
+  if(VOTE.busy) return;
+  var choices = (VOTE.picked[vid] || []).slice();
+  if(!choices.length){ voteMsg(vid, '先点 👍 选一个选项', 'err'); return; }
+  VOTE.busy = true;
   voteMsg(vid, '提交中…');
-  api('/votes?action=toggle', { method: 'POST', body: { voteId: vid, optionId: oid } })
+  api('/votes?action=vote', { method: 'POST', body: { voteId: vid, choices: choices } })
     .then(function(j){
       VOTE.busy = false;
-      return voteReload().then(function(){ voteMsg(vid, '✅ ' + (j.message || '已记录')); });
+      delete VOTE.picked[vid];
+      return voteReload().then(function(){ voteMsg(vid, '✅ ' + (j.message || '投票成功')); });
     })
     .catch(function(e){
       VOTE.busy = false;
-      return voteReload().then(function(){ voteMsg(vid, '❌ ' + (e.message || String(e)), 'err'); });
+      voteMsg(vid, '❌ ' + (e.message || String(e)), 'err');
     });
 }
-
-/* v3.5.14 #9：撤回重投（每人限 1 次；多选 = 全部撤回） */
-function voteRetract(vid){
+/* 撤回确认：oid 有值 = 点了某个选项想改票（撤回后直接把这项选上）；null = 点了「撤回重投」按钮 */
+function voteAskRetract(vid, oid){
   if(VOTE.busy) return;
-  var v = null;
-  for(var i = 0; i < VOTE.votes.length; i++) if(VOTE.votes[i].id === vid) v = VOTE.votes[i];
-  if(!v) return;
-  var ask = v.multi
-    ? '撤回会清空你在这场投票里的全部选择，并且这场投票只剩 1 次撤回机会。确定撤回吗？'
-    : '撤回后可以重新投，但这场投票只剩 1 次撤回机会。确定撤回吗？';
-  if(!window.confirm(ask)) return;
+  var v = voteFind(vid); if(!v) return;
+  var left = Math.max(0, (v.retractLimit == null ? 1 : v.retractLimit) - (v.retractUsed || 0));
+  if(left <= 0){
+    voteMsg(vid, '这场投票的撤回机会已经用完了（每人 ' + (v.retractLimit || 1) + ' 次）', 'err');
+    return;
+  }
+  var msg = '你已经投过这场票了。\n\n撤回后可以重新投票，但会消耗 1 次撤回机会'
+    + '（还剩 ' + left + ' 次）。' + (v.multi ? '\n（多选撤回会清空本场全部选择）' : '')
+    + '\n\n确定撤回吗？';
+  if(!window.confirm(msg)) return;
   VOTE.busy = true;
   voteMsg(vid, '撤回中…');
   api('/votes?action=retract', { method: 'POST', body: { voteId: vid } })
     .then(function(j){
       VOTE.busy = false;
-      return voteReload().then(function(){ voteMsg(vid, '✅ ' + (j.message || '已撤回')); });
+      delete VOTE.picked[vid];
+      return voteReload().then(function(){
+        if(oid){ VOTE.picked[vid] = [oid]; voteRenderAll(); }
+        voteMsg(vid, '✅ ' + (j.message || '已撤回') + (oid ? '，已帮你选上刚才点的那项，确认后上传' : ''));
+      });
     })
     .catch(function(e){
       VOTE.busy = false;
@@ -15476,7 +15514,7 @@ function scTrendBlock(meRow){
     var anc = i === 0 ? 'start' : (i === pts.length - 1 ? 'end' : 'middle');
     return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.total).toFixed(1) + '" r="3.4" class="sc-mine-dot" fill="#c0392b"/>'
       + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.total) - 8).toFixed(1) + '" font-size="9.5" class="sc-tip" fill="#c0392b" text-anchor="middle">' + p.total + '</text>'
-      + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
+      + (i % Math.ceil(pts.length / 8) === 0 || i === pts.length - 1
           ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 14) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">' + esc(shortName(p.name)) + '</text>'
             /* v3.5.14 #4：补考试日期，光有考试名对不上时间；
                再加一根短刻度线，把日期和上面的点连起来 */
@@ -15610,13 +15648,13 @@ function scMiniLine(pts, betterIsHigh, fmt){
   var hasDate = dates.some(function(d){ return !!d; });
   var xaxis = '', guides = '';
   if(hasDate){
+    /* 站主第三次反馈「时间没有对应具体的点」：以前 5 个点只标首/中/尾 3 个，
+       中间两个点没有日期，看着就是没对齐。现在 ≤6 个点**每个都标**（挤不下才隔一个标）。 */
     var pick = [];
-    if(pts.length <= 4){ pick = dates.map(function(d, i){ return { i:i, d:d }; }); }
-    else{
-      [0, Math.floor((pts.length - 1) / 2), pts.length - 1].forEach(function(i){
-        if(dates[i] && !pick.some(function(p){ return p.i === i; })) pick.push({ i:i, d:dates[i] });
-      });
-    }
+    var step = pts.length > 6 ? Math.ceil(pts.length / 6) : 1;
+    dates.forEach(function(d, i){
+      if(d && (i % step === 0 || i === pts.length - 1)) pick.push({ i:i, d:d });
+    });
     /* v3.5.14 修正（站主「时间没有对应具体的点」）：
        —— 标签按该点真实 x 百分比绝对定位（以前 space-between 均分，点和日期对不上）；
        —— 同时在图上画一条淡虚线导引到该点，眼睛能直接连起来。 */
@@ -15872,7 +15910,7 @@ function scGradeTrend(){
       return '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + yOf(p.schoolRank).toFixed(1) + '" r="3.4" class="sc-grade-dot" fill="#7c3aed"/>'
         + '<text x="' + xOf(i).toFixed(1) + '" y="' + (yOf(p.schoolRank) - 8).toFixed(1)
         +   '" font-size="9.5" class="sc-grade-num" fill="#7c3aed" text-anchor="middle">' + p.schoolRank + '</text>'
-        + (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1
+        + (i % Math.ceil(pts.length / 8) === 0 || i === pts.length - 1
             ? '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - 14) + '" font-size="9" class="sc-axdim" fill="#7a6a5c" text-anchor="' + anc + '">'
               + esc(shortName(p.name)) + '</text>'
               /* v3.5.14 #4：每个标注点下面再写考试日期，手机端也能对上时间 */

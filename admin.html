@@ -522,6 +522,22 @@ tbody tr.sel{background:var(--tint-2)}
 .hwv-subj ul{margin:0;padding-left:20px;font-size:.84rem;line-height:1.72}
 .hwv-subj li{word-break:break-word}
 
+/* v3.5.14：手机端横屏查看。
+   手机自己横过来系统会旋转，但很多浏览器锁定竖屏 / 表格太窄，给一个手动开关：
+   用 transform 把整个 body 转 90°（不依赖 fullscreen 也能用），同时在支持时
+   尝试 screen.orientation.lock('landscape')。 */
+.only-mobile{display:none}
+@media (max-width:900px){ .only-mobile{display:inline-flex !important} }
+html.force-landscape, html.force-landscape body{overflow:hidden}
+html.force-landscape body{
+  position:fixed; top:0; left:100vw; width:100vh; height:100vw;
+  transform:rotate(90deg); transform-origin:left top; overflow:auto;
+  -webkit-overflow-scrolling:touch;
+}
+html.force-landscape .side{width:210px}
+html.force-landscape .content{padding:14px 16px}
+html.force-landscape table{font-size:.78rem}
+
 /* v3.5.14 #7：字段拖动排序把手 */
 .ff-drag{width:30px;text-align:center}
 .ff-grip{display:inline-block;cursor:grab;color:var(--fg-3);font-size:1rem;line-height:1;
@@ -912,6 +928,9 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
         <!-- 需求：可以点击后台的图标返回主界面 -->
         <button class="icon-btn" id="btnBackHome" title="返回主界面">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
+        </button>
+        <button class="icon-btn only-mobile" id="btnRotate" title="横屏查看（手机横过来会自动横屏，点这里也能强制切换）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M7 17v3M17 17v3"/></svg>
         </button>
         <button class="icon-btn" id="btnTheme" title="切换主题">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
@@ -8903,6 +8922,21 @@ function enterApp(){
 /* ============================================================================
  * ⑳ 主题
  * ========================================================================= */
+/* v3.5.14：横屏切换。先试系统方向锁（要全屏才生效），失败也不影响 ——
+   兜底是 CSS 旋转，视觉上一样是横屏，只是地址栏方向不跟着变。 */
+function toggleLandscape(){
+  var on = document.documentElement.classList.toggle('force-landscape');
+  try{ localStorage.setItem('cls_admin_land', on ? '1' : '0'); }catch(e){}
+  if(on){
+    try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); }catch(e){}
+    try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
+  }else{
+    try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+    try{ if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); }catch(e){}
+  }
+  toast(on ? '已切到横屏（再点一次切回）' : '已切回竖屏', 'ok');
+}
+
 function applyTheme(t){
   document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : '');
   try{ localStorage.setItem(LS_THEME, t); }catch(e){}
@@ -8976,6 +9010,10 @@ function boot(){
   paintAdminVer();
 
   /* 顶栏按钮 */
+  var rot = $('btnRotate');
+  if(rot) rot.onclick = toggleLandscape;
+  /* 上次强制横屏的，刷新后保持 */
+  try{ if(localStorage.getItem('cls_admin_land') === '1') document.documentElement.classList.add('force-landscape'); }catch(e){}
   $('btnTheme').onclick = function(){
     var cur = document.documentElement.getAttribute('data-theme');
     applyTheme(cur === 'dark' ? '' : 'dark');

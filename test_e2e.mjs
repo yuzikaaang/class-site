@@ -9942,10 +9942,18 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('#8 补齐 --accent（亮/暗各一条）', (adm.match(/--accent:/g) || []).length >= 2);
   t('#8 不再有写死的浅色 #fffdfa/#eee3d8', !/fffdfa|eee3d8/.test(adm));
   t('#8 后台组件级暗色覆盖成块', (adm.match(/html\[data-theme="dark"\]/g) || []).length >= 5);
+  t('#8b 后台有横屏切换按钮与实现',
+    /id="btnRotate"/.test(adm) && /function toggleLandscape\(/.test(adm)
+    && /html\.force-landscape body\{/.test(adm) && /screen\.orientation\.lock/.test(adm));
 
   t('#9 点赞即投接口 toggle', /case 'toggle'/.test(vot) && /async function toggleVote\(/.test(vot));
   t('#9 撤回重投接口 retract', /case 'retract'/.test(vot) && /async function retractVote\(/.test(vot));
-  t('#9 前端点赞按钮、无提交表单', /data-vote-toggle/.test(idx) && /function voteToggle\(/.test(idx) && !/data-vote-submit/.test(idx));
+  t('#9 点赞=选择，点「确定投票」才上传',
+    /data-vote-pick/.test(idx) && /function votePick\(/.test(idx)
+    && /data-vote-submit/.test(idx) && /function voteSubmitDraft\(/.test(idx));
+  t('#9 取消选择不消耗撤回次数（本地草稿）', /已取消选择（还没上传，不消耗撤回次数）/.test(idx));
+  t('#9 已投再点点赞 → 撤回确认弹窗', /function voteAskRetract\(/.test(idx) && /消耗 1 次撤回机会/.test(idx));
+  t('#9 撤回后可直接重投（自动选上刚点的那项）', /已帮你选上刚才点的那项/.test(idx));
   t('#9 撤回按钮与次数提示', /data-vote-retract/.test(idx) && /撤回重投/.test(idx));
   t('#9 未截止一律出点赞按钮（管理员也能投，不再被结果视图挡住）',
     /if\(closed\)\{/.test(idx) && !/if\(closed \|\| v\.results\)\{/.test(idx));
