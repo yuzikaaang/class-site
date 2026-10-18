@@ -7994,6 +7994,31 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('#11 资料输入控件按精度切换（date / month / 四位年份）',
     /if\(p === 'month'\)\{[\s\S]{0,200}type="month"/.test(admHtml355)
     && /if\(p === 'year'\)\{[\s\S]{0,200}maxlength="4"/.test(admHtml355));
+  /* ---- v3.5.20：提出日期 / 歌单多选 / 线上补时长 ---- */
+  const VOTES_520 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
+  const ADM_520 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const IDX_520 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const WRK_520 = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  t('#17 歌单投票也能多选（不再被后端改回单选）',
+    /const multi = b\.multi === true;/.test(VOTES_520) && !/kind === 'normal' && b\.multi/.test(VOTES_520));
+  t('#17 createdDate 走 dateOnly（不再 String(Date).slice 得到 Sun Oct 18）',
+    /function dateOnly\(/.test(VOTES_520) && /createdDate: dateOnly\(r\.created_at\)/.test(VOTES_520)
+    && /Asia\/Shanghai/.test(VOTES_520));
+  t('#17 提出日期可改（后台可选日期并提交）',
+    /id="voCreatedDate"/.test(ADM_520) && /createdDate: \(document\.getElementById\('voCreatedDate'\)/.test(ADM_520)
+    && /songPick, createdDate \}/.test(VOTES_520));
+  t('#17 前端日期显示加年份护栏（<2000 视为无效，避免 2001）',
+    /d\.getFullYear\(\) < 2000 \|\| d\.getFullYear\(\) > 2100/.test(IDX_520));
+  t('#17 新增 /api/music 时长补全代理并挂路由',
+    fs.existsSync(new URL('./api/music.js', import.meta.url))
+    && /case 'music'/.test(WRK_520) && /import musicHandler/.test(WRK_520));
+  t('#17 时长补全走 QQ 音乐搜索并做缓存',
+    /c\.y\.qq\.com\/soso\/fcgi-bin\/client_search_cp/.test(fs.readFileSync(new URL('./api/music.js', import.meta.url), 'utf8'))
+    && /const TTL_MS = 30 \* 60 \* 1000/.test(fs.readFileSync(new URL('./api/music.js', import.meta.url), 'utf8')));
+  t('#17 前端拉歌单后自动补时长（本地缓存，8 首一批）',
+    /function vhFillDurations\(/.test(ADM_520) && /cls_song_dur_v1/.test(ADM_520)
+    && /api\('\/music'/.test(ADM_520));
+
   /* ---- v3.5.19：歌单选项字段可选 / 实时赞数与时长 / 新增选项规则 / 前 N 与按时长抽取 ---- */
   const ADM_519 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const VOTES_519 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
@@ -10056,8 +10081,8 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /if\(!VOTE\.loaded && !VOTE\.loading\)\{ voteLoad\(\); return; \}/.test(idx));
   t('#10 卡片写明提出人与提出日期',
     idx.includes("'提出人：<b>'") && idx.includes("' 提出</span>'") && /vote-proposer/.test(idx));
-  t('#10 后端存 proposer 并回传 createdDate',
-    /proposer/.test(vot) && /createdDate: r\.created_at/.test(vot));
+  t('#10 后端存 proposer 并回传 createdDate（v3.5.20 起走 dateOnly 格式化）',
+    /proposer/.test(vot) && /createdDate: dateOnly\(r\.created_at\)/.test(vot));
   t('#10 老库自动补 proposer 列（幂等）',
     /alter table class_votes add column if not exists proposer/.test(http2));
   t('#10 后台投票面板也能填提出人',

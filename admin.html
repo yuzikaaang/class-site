@@ -999,7 +999,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.19';
+var SITE_VERSION = '3.5.20';
 var VER_DATE = '2026-10-17';
 
 /* ---- 运行时状态 ---- */
@@ -5003,12 +5003,71 @@ function vhFetchSongs(){
   }
   return vhFetchSongsRaw().then(function(list){
     if(Array.isArray(list) && list.length) writeCache(list);
-    return list;
+    return vhFillDurations(list);
   }).catch(function(err){
     var cached = readCache();
-    if(cached){ console.warn('[vh] 实时歌单获取失败，使用缓存：', err && err.message); return cached; }
+    if(cached){
+      console.warn('[vh] 实时歌单获取失败，使用缓存：', err && err.message);
+      return vhFillDurations(cached);
+    }
     throw err;
   });
+}
+
+/* v3.5.20：VoiceHub 的 durationSeconds 全是 null（实例没填时长），
+   所以按「歌名 + 歌手」到 QQ 音乐搜一次，补出秒数。
+   · 结果缓存在 localStorage（同名同歌手只查一次）
+   · 每次最多补 60 首、8 首一批，失败就停（不阻塞歌单展示） */
+function vhDurationCache(){
+  try{ return JSON.parse(localStorage.getItem('cls_song_dur_v1') || '{}') || {}; }catch(e){ return {}; }
+}
+function vhFillDurations(list){
+  if(!Array.isArray(list) || !list.length) return Promise.resolve(list);
+  var cache = vhDurationCache();
+  var need = [];
+  list.forEach(function(s){
+    if(!s) return;
+    var d = Number(s.durationSeconds) || 0;
+    if(d > 0) return;                       /* 平台自己有，别覆盖 */
+    var title = String(s.title || '').trim();
+    if(!title) return;
+    var artist = String(s.artist || '').trim();
+    var key = title + '|' + artist;
+    if(cache[key] != null){
+      s.durationSeconds = cache[key];
+      return;
+    }
+    if(need.length >= 60) return;           /* 一次别补太多 */
+    need.push({ key: key, title: title, artist: artist, song: s });
+  });
+  if(!need.length) return Promise.resolve(list);
+
+  var chunks = [];
+  for(var i = 0; i < need.length; i += 8) chunks.push(need.slice(i, i + 8));
+  var idx = 0;
+  var step = function(){
+    if(idx >= chunks.length){
+      try{ localStorage.setItem('cls_song_dur_v1', JSON.stringify(cache)); }catch(e){}
+      return list;
+    }
+    var part = chunks[idx++];
+    return api('/music', {
+      method: 'POST',
+      body: { items: part.map(function(x){ return { title: x.title, artist: x.artist }; }) },
+    }).then(function(j){
+      (j && j.list || []).forEach(function(r, k){
+        var src = part[k];
+        if(!src) return;
+        var sec = r && Number(r.seconds);
+        if(sec > 0){
+          src.song.durationSeconds = sec;
+          cache[src.key] = sec;
+        }
+      });
+      return step();
+    }).catch(function(){ return list; });   /* 查不到就算了，别影响歌单 */
+  };
+  return step().then(function(){ return list; });
 }
 
 function vhFetchSongsRaw(){
@@ -11295,8 +11354,8 @@ function voEditorDialog(v){
       +     '<input id="voProposer" maxlength="20" placeholder="谁提的？留空=记为你自己" value="'
       +     attr((v && v.proposer) || '') + '"></div>'
       +   '<div class="field" style="width:170px"><label>提出日期</label>'
-      +     '<input value="' + attr((v && v.createdDate) || voTodayStr()) + '" disabled '
-      +     'title="自动取创建时间，不能改"></div>'
+      +     '<input type="date" id="voCreatedDate" value="' + attr((v && v.createdDate) || voTodayStr()) + '"'
+      +     ' title="默认取创建当天，可以改"></div>'
       + '</div>'
       + '<div class="field"><label>说明（选填）</label>'
       +   '<input id="voNote" maxlength="200" placeholder="投票说明，会显示在标题下方" value="' + attr((v && v.note) || '') + '"></div>'
@@ -11408,6 +11467,8 @@ function voEditorDialog(v){
       minChoices: String((document.getElementById('voMinChoices') || {}).value || '').trim() || null,
       retractLimit: String((document.getElementById('voRetractLimit') || {}).value || '').trim(),
       endMode: (document.getElementById('voEndMode') || {}).value || 'keep',
+      /* v3.5.20：提出日期可改 */
+      createdDate: (document.getElementById('voCreatedDate') || {}).value || '',
       /* v3.5.19：同学新增选项限制 + 歌单取歌策略 */
       optionRule: (function(){
         var r = {};

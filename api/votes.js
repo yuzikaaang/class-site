@@ -211,7 +211,9 @@ function parseVoteInput(b) {
   const kind = (b.kind === 'song') ? 'song' : 'normal';
   const options = normOptions(b.options);
   if (options.length < 2) return { error: '至少需要两个选项' };
-  const multi = kind === 'normal' && b.multi === true;
+  /* v3.5.20：歌单投票也允许多选（站主：「点歌的投票也可以设置多选，我现在更改完就被改回了单选」）
+     —— 以前这里硬编码 kind === 'normal'，后台勾了多选也会被吞掉。 */
+  const multi = b.multi === true;
   const allowAdd = b.allowAdd === true;
   const note = String(b.note || '').trim().slice(0, MAX_NOTE);
   /* v3.5.12 #10：谁提出来的。留空则由后端记为当前操作人（created_by 的显示名） */
@@ -233,11 +235,41 @@ function parseVoteInput(b) {
   const endMode = (b.endMode === 'pub' || b.end_mode === 'pub') ? 'pub' : 'keep';
   /* v3.5.19：新增选项限制 + 歌单取歌策略（前 N / 用途 / 时长上限） */
   const optionRule = normOptionRule(b.optionRule != null ? b.optionRule : b.option_rule);
+  /* v3.5.20：提出日期可改（站主：「后台可以修改才对」）—— 只认 YYYY-MM-DD */
+  const createdDate = (function(){
+    const s = String(b.createdDate || b.created_date || '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  })();
   const songPick = (kind === 'song')
     ? normSongPick(b.songPick != null ? b.songPick : b.song_pick)
     : null;
   return { data: { title, kind, options, multi, allowAdd, note, deadline, proposer,
-    maxChoices, minChoices, retractLimit, endMode, optionRule, songPick } };
+    maxChoices, minChoices, retractLimit, endMode, optionRule, songPick, createdDate } };
+}
+
+/** timestamptz → 北京时间 YYYY-MM-DD（Date / ISO / 已格式化字符串都能吃） */
+function dateOnly(x) {
+  if (!x) return null;
+  if (typeof x === 'string') {
+    const m = x.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  }
+  const d = (x instanceof Date) ? x : new Date(x);
+  if (isNaN(d.getTime())) {
+    const m2 = String(x).match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m2 ? m2[0] : null;
+  }
+  /* 统一按北京时间取日期：Worker 跑在 UTC，早上 8 点前创建会差一天 */
+  const p = (n) => String(n).padStart(2, '0');
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(d);
+    return parts;   /* en-CA 就是 YYYY-MM-DD */
+  } catch (e) {
+    const d2 = new Date(d.getTime() + 8 * 3600 * 1000);
+    return d2.getUTCFullYear() + '-' + p(d2.getUTCMonth() + 1) + '-' + p(d2.getUTCDate());
+  }
 }
 
 /** 行 → 前端结构。results 只有「已截止」才给。 */
@@ -267,7 +299,9 @@ function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed) {
     createdByUsername: r.creator_username || '',
     createdByDisplay: r.creator_display || '',
     /* 提出的日期：只给「YYYY-MM-DD」，前端要显示「2026-10-17 提出」这种短格式 */
-    createdDate: r.created_at ? String(r.created_at).slice(0, 10) : null,
+    /* v3.5.20：以前 String(Date).slice(0,10) 得到 "Sun Oct 18"，
+       前端再 new Date() 出来就是 2001 年 —— 站主看到的「2001 年」就是这个。 */
+    createdDate: dateOnly(r.created_at),
     /* v3.5.14 #9：票数配额与撤回 */
     /* v3.5.14：结束后形态 —— keep 继续显示投票栏（不可投）；pub 自动展示公示并隐藏投票 */
     endMode: r.end_mode === 'pub' ? 'pub' : 'keep',
@@ -568,7 +602,8 @@ async function createVote(req, res) {
             'open', ${me.id}, ${proposer},
             ${p.data.maxChoices}, ${p.data.minChoices}, ${p.data.retractLimit}, ${p.data.endMode},
             ${p.data.optionRule ? JSON.stringify(p.data.optionRule) : null}::jsonb,
-            ${p.data.songPick ? JSON.stringify(p.data.songPick) : null}::jsonb, now(), now())
+            ${p.data.songPick ? JSON.stringify(p.data.songPick) : null}::jsonb,
+            coalesce(${p.data.createdDate ? p.data.createdDate + ' 00:00:00+08' : null}::timestamptz, now()), now())
     returning id
   `;
   await audit(me.id, 'vote.create', 'class_votes', String(rows[0].id), p.data.title);
@@ -630,6 +665,7 @@ async function updateVote(req, res) {
            retract_limit = ${p.data.retractLimit}, end_mode = ${p.data.endMode},
            option_rule = ${p.data.optionRule ? JSON.stringify(p.data.optionRule) : null}::jsonb,
            song_pick = ${p.data.songPick ? JSON.stringify(p.data.songPick) : null}::jsonb,
+           created_at = coalesce(${p.data.createdDate ? p.data.createdDate + ' 00:00:00+08' : null}::timestamptz, created_at),
            deadline = ${p.data.deadline}::timestamptz, updated_at = now()
      where id = ${voteId}
   `;

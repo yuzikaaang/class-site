@@ -3460,7 +3460,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.19';
+var SITE_VERSION = '3.5.20';
 var VER_DATE = '2026-10-17';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13336,7 +13336,13 @@ function voteDateText(x){
   var d = (x instanceof Date) ? x : new Date(x);
   if(isNaN(d.getTime())){
     var m = String(x).match(/\d{4}-\d{2}-\d{2}/);
-    return m ? m[0] : String(x).slice(0, 10);
+    return m ? m[0] : '';
+  }
+  /* v3.5.20：像 "Sun Oct 18" 这种缺年份的串，new Date() 会补成 2001 年 ——
+     年份离谱就直接认作无效，回退去字符串里找 YYYY-MM-DD，别把 2001 显示给用户。 */
+  if(d.getFullYear() < 2000 || d.getFullYear() > 2100){
+    var m2 = String(x).match(/\d{4}-\d{2}-\d{2}/);
+    return m2 ? m2[0] : '';
   }
   function p(n){ return (n < 10 ? '0' : '') + n; }
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
