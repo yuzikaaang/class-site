@@ -1359,6 +1359,10 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* v2.9.11：主按钮渐变两端都按「白字 4.5:1」选色（#b03908→#c2410c，
    6.11/5.18）。原末端 #e07a3c 白字仅 2.99，连大字 3:1 都不够，
    而按钮在「我的资料」里还有 .78rem 小号用法（按正文 4.5 要求）。 */
+.sync-spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:clsSyncSpin .7s linear infinite}
+@keyframes clsSyncSpin{to{transform:rotate(360deg)}}
+.acct-btn.sync-busy{opacity:.8;cursor:progress}
+.acct-btn[disabled]{cursor:progress}
 .acct-btn{width:100%;padding:11px;border:none;border-radius:12px;background:linear-gradient(135deg,#b03908,#c2410c);color:#fff;font-size:.88rem;font-weight:800;font-family:inherit;cursor:pointer;transition:transform .15s,box-shadow .2s;box-shadow:0 3px 10px rgba(194,65,12,.22)}
 .acct-btn:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(194,65,12,.3)}
 .acct-btn:active{transform:translateY(0) scale(.985)}
@@ -4208,7 +4212,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.6.3';
+var SITE_VERSION = '3.6.4';
 var VER_DATE = '2026-10-19';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -7482,6 +7486,11 @@ function siteBadgeUrl(){
   var u = '';
   try{ u = (window.SITE_DATA && SITE_DATA.badgeUrl) || ''; }catch(e){}
   u = String(u || '').trim();
+  /* v3.6.4：后台配了图片直链就走服务器的 /api/badge 代理。
+     图床基本都不给 CORS 头，直接画进 canvas 会把画布标记为「污染」，
+     toBlob 立刻抛 SecurityError（导出直接失败）。代理是服务端取的，
+     加上 CORS 头再吐回来，等同于同源图片。 */
+  if(/^https?:\/\//i.test(u)) return apiUrl('/badge');
   if(!u) u = './badge.png';
   try{ return new URL(u, location.href).href; }catch(e){ return u; }
 }
@@ -9134,11 +9143,11 @@ function acctProfileHtml(){
       '<div><span class="t">云同步</span>' +
         '<span class="s">把本机的主题、设置、作业打勾等同步到云端，换设备也能看到</span>' +
         '<span class="s" id="syncStatusLine" style="opacity:.72;margin-top:2px">自动同步已开启</span></div>' +
-      '<button class="acct-btn" style="width:auto;padding:8px 14px;font-size:.78rem" onclick="syncUploadNow()">上传本机</button>' +
+      '<button class="acct-btn" style="width:auto;padding:8px 14px;font-size:.78rem" onclick="syncUploadNow(this)">上传本机</button>' +
     '</div>' +
     '<div class="acct-row">' +
-      '<button class="acct-btn ghost" onclick="syncDownloadNow()">拉取云端</button>' +
-      '<button class="acct-btn ghost" onclick="syncNow()">双向同步</button>' +
+      '<button class="acct-btn ghost" onclick="syncDownloadNow(this)">拉取云端</button>' +
+      '<button class="acct-btn ghost" onclick="syncNow(this)">双向同步</button>' +
       '<button class="acct-btn ghost" onclick="showChangePwd()">改密码</button>' +
     '</div>' +
 
@@ -10159,29 +10168,46 @@ function saveContentLocal(key, value){
 
    为什么包在 try 里：某些浏览器（隐私模式 / 禁用存储）访问 localStorage
    会直接抛异常，包装失败也不能让整个页面挂掉。 */
+/* ============================================================================
+ * 本地写入钩子（v3.6.4 重写：这是作业同步「怎么修都不生效」的真正原因）
+ * ----------------------------------------------------------------------------
+ * 站主原话：「这几次一直在强调的作业同步问题一直没实现，云端数据还在 16 号」
+ *
+ * 实测（2026-10-19 23:0x，在线上页面里直接查）：
+ *   localStorage.setItem 仍然是 `[native code]` —— 说明旧写法
+ *      var proto = window.localStorage; proto.setItem = fn;
+ *   **根本没挂上去**（Chrome 里给 Storage 实例赋同名属性会被忽略，不报错）。
+ *   于是每次打勾都不会被 markCloudDirty 登记，flushCloudSync 里 keys 永远为空，
+ *   一个字节都不会上传。之前所有「加强重试 / 落盘 pending」的修复都白做了 ——
+ *   因为源头压根没触发。
+ *
+ * 正确做法：改 Storage.prototype（对所有实例生效），再按 this 判断是不是 localStorage。
+ * 同时保留原来的语义：
+ *   · __cloudPulling 期间不登记（从云端回写的值不是本机改动）
+ *   · 只登记云键（isCloudKey 内部判断）
+ *   · 失败一律吞掉，绝不影响业务写入
+ * ========================================================================= */
 (function hookLocalStorage(){
   try{
-    var proto = window.localStorage;
-    if(!proto || proto.__clsHooked) return;
-    var rawSet = proto.setItem.bind(proto);
-    var rawRemove = proto.removeItem.bind(proto);
+    if(!window.Storage || !Storage.prototype) return;
+    var proto = Storage.prototype;
+    if(proto.__clsHooked) return;
+    var rawSet = proto.setItem;
+    var rawRemove = proto.removeItem;
 
     proto.setItem = function(k, v){
-      rawSet(k, v);
-      /* v3.5.42：非「云端回写」的写入才算本机改动，记下时间供拉取时比对 */
-      if(!window.__cloudPulling){ try{ markLocalWrite(String(k)); }catch(e){} }
-      /* v2.10.0：云端拉取回写时打 __cloudPulling 标 ——
-         「从云端拉下来的值」不是「本机改动」，不能被 markCloudDirty
-         登记成待推送（否则每轮拉取都会产生一次无意义回推，
-         更糟的是脏键保护会让后续轮次跳过这些键，新云端值再也拉不下来）。 */
-      if(window.__cloudPulling) return;
-      /* 写失败会抛异常，能走到这里说明写成功了 */
+      rawSet.call(this, k, v);
+      if(this !== window.localStorage) return;     /* sessionStorage 不管 */
+      if(window.__cloudPulling) return;            /* 云端回写不算本机改动 */
+      try{ markLocalWrite(String(k)); }catch(e){}
       try{ markCloudDirty(String(k)); }catch(e){}
     };
     /* 删除也算改动：云端要跟着删掉，否则换设备又冒出来 */
     proto.removeItem = function(k){
-      rawRemove(k);
+      rawRemove.call(this, k);
+      if(this !== window.localStorage) return;
       if(window.__cloudPulling) return;
+      try{ markLocalWrite(String(k)); }catch(e){}
       try{ markCloudDirty(String(k)); }catch(e){}
     };
     proto.__clsHooked = true;
@@ -10377,8 +10403,9 @@ actLogLoad();
 setTimeout(function(){ try{ if(ACT_LOG_Q.length) actLogFlush(); }catch(e){} }, 4000);
 
 /** 立即同步：先推本机 → 云端，再把云端最新拉回来，保证一致 */
-function syncNow(){
+function syncNow(btn){
   if(!isLoggedIn()){ if(typeof uiMsg === 'function') uiMsg('请先登录', '#af410f'); return; }
+  return syncBtnRun(btn, '同步中…', function(){
   if(typeof uiMsg === 'function') uiMsg('正在同步…');
   /* v2.10.0：原名「上传本机」实为推送-only，与「双向同步」的按钮名不符。
      现在推完立刻静默拉一次个人数据（云端优先），真·双向。 */
@@ -10392,6 +10419,8 @@ function syncNow(){
     }
   }).catch(function(e){
     if(typeof uiMsg === 'function') uiMsg('同步失败：' + e.message, '#c0392b');
+    throw e;
+  });
   });
 }
 
@@ -10518,12 +10547,43 @@ function syncScheduleNext(){
   __syncTimer = setTimeout(function(){ syncRound(); }, wait);
 }
 
+/* ============================================================================
+ * v3.6.4（站主 #2）：同步按钮的「看得见的反馈」
+ * ----------------------------------------------------------------------------
+ * 站主原话：「在我的账号页面的拉取云端，双向同步，上传本机这些按钮加一点动画，
+ *            用户压根不清楚点击按钮后是否有反应，有没有进行同步」
+ *
+ * 做法：点下去立刻进「转圈 + 文案」态并禁用；成功打勾、失败打叉，1.2 秒后复原。
+ * 用 Promise 包住原来的逻辑，不改变同步本身的行为。
+ * ========================================================================= */
+function syncBtnRun(btn, busyText, task){
+  if(!btn || btn.disabled) return Promise.resolve();
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.classList.add('sync-busy');
+  btn.innerHTML = '<span class="sync-spin"></span> ' + busyText;
+  return Promise.resolve()
+    .then(task)
+    .then(function(r){
+      btn.classList.remove('sync-busy');
+      btn.innerHTML = '✓ 完成';
+      setTimeout(function(){ btn.disabled = false; btn.innerHTML = orig; }, 1200);
+      return r;
+    })
+    .catch(function(e){
+      btn.classList.remove('sync-busy');
+      btn.innerHTML = '✗ 失败';
+      setTimeout(function(){ btn.disabled = false; btn.innerHTML = orig; }, 1800);
+      throw e;
+    });
+}
+
 /** 手动：只上传本机 → 云端 */
-function syncUploadNow(){
+function syncUploadNow(btn){
   if(!isLoggedIn()){ if(typeof uiMsg === 'function') uiMsg('请先登录后再上传', '#af410f'); return; }
-  if(typeof uiMsg === 'function') uiMsg('正在上传本机改动…');
+  return syncBtnRun(btn, '上传中…', function(){
   markAllContentDirty();
-  flushContentSync().then(function(r){
+  return flushContentSync().then(function(r){
     SYNC_STATE.lastAt = new Date();
     syncStatusPaint();
     if(typeof uiMsg === 'function'){
@@ -10531,11 +10591,13 @@ function syncUploadNow(){
     }
   }).catch(function(e){
     if(typeof uiMsg === 'function') uiMsg('上传失败：' + e.message, '#c0392b');
+    throw e;
+  });
   });
 }
-
 /** 手动：只从云端拉取 */
-function syncDownloadNow(){
+function syncDownloadNow(btn){
+  return syncBtnRun(btn, '拉取中…', function(){
   if(typeof uiMsg === 'function') uiMsg('正在拉取云端最新…');
   /* v2.10.0：原来只拉共享内容，个人数据（作业勾选等）不拉 —
      「拉取云端」按钮名不副实，跨设备旧数据问题也在这。
@@ -10558,6 +10620,8 @@ function syncDownloadNow(){
     });
   }).catch(function(e){
     if(typeof uiMsg === 'function') uiMsg('拉取失败：' + (e.message || e), '#c0392b');
+    throw e;
+  });
   });
 }
 
