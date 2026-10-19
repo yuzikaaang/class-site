@@ -149,6 +149,27 @@ create table if not exists data_backups (
 create index if not exists data_backups_ver_idx     on data_backups (created_at desc);
 create index if not exists data_backups_version_idx on data_backups (version);
 
+-- ============================================================
+-- v3.6.4 删除回收站（站主 #3）
+--   站主原话：「数据可以直接删除而不是隐藏，这样会出现更多的问题，
+--            在后端的操作记录里新增撤回的功能，现在删除数据倒计时 30 分钟，
+--            30 分钟以内在后台操作日志里点击撤回即可重新显示，否则真正删除数据」
+--   · kind = field：删字段时把「字段定义 + 该列所有值」整包存进来
+--   · expires_at 到期后由下一次删除操作顺手清掉（惰性清理，不跑定时任务）
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.6.4
+-- ============================================================
+create table if not exists deleted_items (
+  id          bigserial   primary key,
+  kind        text        not null default 'field',
+  label       text        default '',
+  payload     jsonb       not null,
+  bytes       int         not null default 0,
+  deleted_by  bigint,
+  deleted_at  timestamptz not null default now(),
+  expires_at  timestamptz not null default now()
+);
+create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc);
+
 /* ---------------- 用户数据表（云同步核心） ---------------- */
 -- 按 (用户, 键) 存 JSONB，天然适配前端 localStorage 的任意结构
 create table if not exists user_data (
