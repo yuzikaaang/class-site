@@ -3299,7 +3299,27 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
       <button class="theme-btn" id="themeToggle" onclick="toggleTheme(event)" aria-label="切换主题">🌙</button>
       <h1 id="brandTitle">🏫 25级05班班级服务站</h1>
       <p id="brandSub">一站式获取班级服务 · 资源 · 工具</p>
-      <div class="logo" onclick="badgeClick()"><img src="./badge.png" alt="班徽" onerror="this.src='https://s41.ax1x.com/2026/06/07/pmmhF6H.png'"></div>
+      <!-- v3.7.1：班徽不再直接请求 ./badge.png（Pages 上经常 404 且要等十几秒），
+           先用 1×1 占位，紧接着的脚本立刻换成「本地缓存 → 服务器代理 → 图床」。
+           这样首屏不会被一张图拖住，也不会白等一个 404。 -->
+      <div class="logo" onclick="badgeClick()"><img id="siteLogoImg" alt="班徽"
+        src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></div>
+      <script>
+      (function(){
+        try{
+          var el = document.getElementById('siteLogoImg');
+          if(!el) return;
+          var c = '';
+          try{ c = localStorage.getItem('__cls_badge_src') || ''; }catch(e){}
+          if(c.indexOf('data:image/') === 0){ el.src = c; return; }
+          el.onerror = function(){
+            this.onerror = null;
+            this.src = 'https://s41.ax1x.com/2026/06/07/pmmhF6H.png';
+          };
+          el.src = 'https://api.classsite.dpdns.org/api/badge';
+        }catch(e){}
+      })();
+      </script>
     </header>
 
     <!-- 首页视图：公告 / 每日日报 / 每日一言 / 倒计时 -->
@@ -4235,7 +4255,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.7.0';
+var SITE_VERSION = '3.7.1';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
