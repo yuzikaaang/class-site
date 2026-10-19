@@ -40,7 +40,7 @@ import { cors } from './_lib/http.js';
    于是回查永远对不上提交号、每次都红了 120 秒后判失败：job 红，线上其实是新的。
    所以加一个**由代码本身带出去**的版本号：只要线上换了代码，它就会变。
    纪律：每轮发布与前台 SITE_VERSION 同步（测试里有断言锁死两者相等）。 */
-const API_VER = '3.7.3';
+const API_VER = '3.7.4';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
 async function adaptRequest(request, env) {
@@ -101,7 +101,16 @@ function makeResCollector() {
     },
     end(body) {
       if (body !== undefined && body !== null) {
-        state.body = typeof body === 'string' ? body : String(body);
+        /* v3.7.3：二进制直接透传。
+           ⚠️ 以前一律 String(body) —— /api/badge 返回的 PNG 被当成 UTF-8 文本后，
+              每个 >127 的字节都变成替换字符（89 50 4E 47 → EF BF BD …），
+              文件「看着有 200KB」却根本不是图片，浏览器解码失败、canvas 也画不上。
+              Response 构造器原生支持 ArrayBuffer / Uint8Array（Buffer 属于后者）。 */
+        if (body instanceof ArrayBuffer || body instanceof Uint8Array || ArrayBuffer.isView(body)) {
+          state.body = body;
+        } else {
+          state.body = typeof body === 'string' ? body : String(body);
+        }
       }
       return res;
     },
