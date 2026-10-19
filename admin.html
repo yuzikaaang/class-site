@@ -1461,8 +1461,8 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.42';
-var VER_DATE = '2026-10-18';
+var SITE_VERSION = '3.6.1';
+var VER_DATE = '2026-10-19';
 
 /* ---- 运行时状态 ---- */
 var STATE = {
@@ -2158,6 +2158,8 @@ var PAGES = [
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
   { id:'online',        label:'在线时长', icon:'clock',     group:'安全',  title:'在线时长（单次 / 累计）' },
+  /* v3.6.1（站主 #4）：云端数据备份 / 回档 */
+  { id:'backup',        label:'数据管理', icon:'database',  group:'安全',  title:'数据管理（备份 / 回档）' },
   { id:'logs',          label:'操作日志', icon:'file',      group:'安全',  title:'操作日志' },
   { id:'actionlogs',    label:'行为日志', icon:'activity',  group:'安全',  title:'用户操作日志（点击行为）' },
   { id:'secrets',       label:'令牌管理', icon:'key',       group:'系统',  title:'系统令牌' },
@@ -2240,6 +2242,7 @@ function go(page){
     dj:            renderDj,
     scores:        renderScores,
     votes:         renderVotes,
+    backup:        renderBackup,
     releases:      renderReleases,
     popups:        renderPopups,
     cards:         renderCards,
@@ -8210,6 +8213,66 @@ function renderFieldPanel(){
   });
 }
 
+/* ============================================================================
+ * v3.6.1：字段体检 / 恢复预置字段
+ * ----------------------------------------------------------------------------
+ * 站主原话：「字段管理之前的那些比如入团时间、发展团员编号那些你前几次更新
+ *           的时候直接给我删了，我现在后台没有数据，看看能不能恢复。」
+ *
+ * 先体检、再恢复，两步走：
+ *   · 体检告诉你：字段表还剩几行、墓碑里躺了谁、17 个预置字段哪些定义没了、
+ *     哪些列已经不存在（列没了 = 数据也没了，只能重新录入）；
+ *   · 恢复会清空墓碑 + 补回定义（列还在的，值立刻回来）。
+ * ========================================================================= */
+function repairFieldsDialog(){
+  api('/admin?action=repair-fields', { method:'POST', body:{} }).then(function(j){
+    var cols = j.columns || [];
+    var noMeta = cols.filter(function(x){ return !x.hasMeta; }).map(function(x){ return x.label; });
+    var noCol = cols.filter(function(x){ return !x.hasColumn; }).map(function(x){ return x.label; });
+    var tomb = j.tombstoned || [];
+    var html = '<div class="alert info" style="margin-bottom:12px">'
+      + '当前字段表 <b>' + (j.metaCount || 0) + '</b> 行；'
+      + '「已删除记录」里有 <b>' + tomb.length + '</b> 个字段'
+      + (tomb.length ? '（' + esc(tomb.slice(0, 12).join('、')) + (tomb.length > 12 ? '…' : '') + '）' : '')
+      + '。<br>这些记录会让每次升级都再删一遍对应字段 —— 恢复时会一并清空。</div>'
+      + (noMeta.length
+          ? '<div class="alert warn" style="margin-bottom:10px">缺少字段定义：' + esc(noMeta.join('、')) + '</div>'
+          : '<div class="alert ok" style="margin-bottom:10px">17 个预置字段的定义都在。</div>')
+      + (noCol.length
+          ? '<div class="alert danger" style="margin-bottom:10px">以下字段的**数据库列已不存在**：'
+            + esc(noCol.join('、'))
+            + '<br><span style="font-size:.78rem">这几项的历史数据无法通过本操作找回（列被删除时值就没了）。'
+            + '恢复会重建空列，之后可以重新录入或从旧表格导入。</span></div>'
+          : '<div class="alert ok">所有预置字段的数据库列都还在 —— 恢复后数据会立刻回来。</div>')
+      + '<p class="hint">恢复只补「定义」和「默认校验规则」，不会覆盖你改过的可见性、标签、本人可编辑开关。</p>';
+    openModal({
+      title: '字段体检 / 恢复', sub: '先把损失范围看清楚，再决定要不要恢复',
+      body: html,
+      foot: '<button class="btn btn-secondary" id="ffRpCancel">取消</button>'
+          + '<button class="btn" id="ffRpGo">恢复预置字段</button>',
+      onMount: function(box){
+        box.querySelector('#ffRpCancel').onclick = closeModal;
+        box.querySelector('#ffRpGo').onclick = function(){
+          var go = box.querySelector('#ffRpGo');
+          go.disabled = true; go.textContent = '恢复中…';
+          api('/admin?action=repair-fields', { method:'POST', body:{ apply:true } })
+            .then(function(r){
+              closeModal();
+              var msg = '已恢复。有数据的字段 ' + ((r.recovered||[]).length) + ' 个';
+              if((r.stillEmpty||[]).length) msg += '；仍为空：' + (r.stillEmpty||[]).map(function(x){ return x.label; }).join('、');
+              toast(msg, 'ok');
+              renderFieldPanel();
+            })
+            .catch(function(e){
+              go.disabled = false; go.textContent = '恢复预置字段';
+              toast('恢复失败：' + (e.message || e), 'danger');
+            });
+        };
+      },
+    });
+  }).catch(function(e){ toast('体检失败：' + (e.message || e), 'danger'); });
+}
+
 function paintFieldPanel(list){
   var body = $('mbFieldBody');
   if(!body) return;
@@ -8275,6 +8338,9 @@ function paintFieldPanel(list){
     + '<span class="muted" style="font-size:.76rem">共 ' + list.length + ' 个字段'
     +   '（其中自定义 ' + list.filter(function(f){ return f.isCustom; }).length + ' 个）</span>'
     + '<span style="flex:1"></span>'
+    /* v3.6.1：字段被误删后的一键恢复 */
+    + '<button class="btn btn-sm btn-secondary" id="ffRepair" title="把被删掉的预置字段定义补回来（不会覆盖你改过的设置）">'
+    +   svg('refresh', 14) + ' 恢复预置字段</button>'
     + '<button class="btn btn-sm" id="ffAdd">' + svg('plus', 14) + '新增字段</button>'
     + '<button class="btn btn-sm btn-secondary" id="ffRefresh">' + svg('refresh', 14) + '刷新</button>'
     + '</div>'
@@ -8293,6 +8359,8 @@ function paintFieldPanel(list){
 
   var addBtn = $('ffAdd');
   if(addBtn) addBtn.onclick = addFieldDialog;
+  var rpBtn = $('ffRepair');
+  if(rpBtn) rpBtn.onclick = repairFieldsDialog;
   var rfBtn = $('ffRefresh');
   if(rfBtn) rfBtn.onclick = renderFieldPanel;
 
@@ -10432,7 +10500,7 @@ function paintBadgePrev(){
   var inp = document.getElementById('stBadge');
   if(!el || !inp) return;
   var u = String(inp.value || '').trim();
-  if(!u){ el.innerHTML = '<span class="muted" style="font-size:.76rem">当前使用站点图标 favicon.svg</span>'; return; }
+  if(!u){ el.innerHTML = '<span class="muted" style="font-size:.76rem">当前使用站点班徽 badge.png</span>'; return; }
   var abs = u;
   try{ abs = new URL(u, location.href).href; }catch(e){}
   el.innerHTML = '<img src="' + attr(abs) + '" alt="班徽预览" '
@@ -10935,7 +11003,7 @@ function adminBadgeUrl(){
     var c = JSON.parse(localStorage.getItem('__cls_badge') || '{}');
     if(c && c.url) return new URL(c.url, location.href).href;
   }catch(e){}
-  try{ return new URL('./favicon.svg', location.href).href; }catch(e){ return './favicon.svg'; }
+  try{ return new URL('./badge.png', location.href).href; }catch(e){ return './badge.png'; }
 }
 
 /** 后台启动时拉一次 site_config，把班徽地址缓存下来（导出时不用等） */
@@ -12658,6 +12726,209 @@ function relTypeOf(t){
   return REL_TYPES[t] || { label: t || '其他', cls: 'badge-gray' };
 }
 
+/* ============================================================================
+ * v3.6.1（站主 #4）：数据管理 —— 备份 / 回档
+ * ----------------------------------------------------------------------------
+ * 站主原话：「后台新增数据管理，以后每次更新都先自动备份所有数据
+ *            （通过检测在部署前先备份后部署）……默认存储最近 14 个版本更新，
+ *            方便有问题随时回档」
+ *
+ * 这个面板只做三件事：看有哪些备份、手动备份一次、从某一份回档。
+ * 自动备份发生在「部署前」（见仓库脚本 predeploy.mjs），不依赖这个页面。
+ * ========================================================================= */
+var BK_STATE = { list: [], count: 0, totalBytes: 0, keep: 14, busy: false };
+
+function renderBackup(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">数据管理</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '每次部署前会自动备份一次；这里也可以手动备份、随时回档</p></div>'
+    +   '<button class="btn btn-sm btn-secondary" id="bkRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +   '<button class="btn btn-sm" id="bkNow">' + svg('database',14) + ' 立即备份</button>'
+    + '</div>'
+    + '<section class="panel" style="margin-bottom:14px">'
+    +   '<div class="panel-head" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    +     '<h3 style="margin:0;font-size:.95rem">备份概览</h3><span style="flex:1"></span>'
+    +     '<span class="muted" style="font-size:.76rem" id="bkMeta">加载中…</span>'
+    +   '</div>'
+    +   '<div class="panel-body" id="bkOverview"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    + '</section>'
+    + '<section class="panel"><div id="bkBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('bkRefresh').onclick = loadBackups;
+  $('bkNow').onclick = function(){ doBackupNow(); };
+  loadBackups();
+}
+
+function fmtBytes(n){
+  n = Number(n) || 0;
+  if(n < 1024) return n + ' B';
+  if(n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+function loadBackups(){
+  var body = $('bkBody');
+  if(body) body.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/admin?action=backups').then(function(j){
+    BK_STATE.list = j.backups || [];
+    BK_STATE.count = j.count || 0;
+    BK_STATE.totalBytes = j.totalBytes || 0;
+    BK_STATE.keep = j.keepVersions || 14;
+    paintBackups();
+  }).catch(function(e){
+    if(body) body.innerHTML = '<div class="alert danger" style="margin:16px">读取失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function paintBackups(){
+  var meta = $('bkMeta');
+  if(meta){
+    meta.textContent = '共 ' + BK_STATE.count + ' 份 · 占用 ' + fmtBytes(BK_STATE.totalBytes)
+      + ' · 按版本保留最近 ' + BK_STATE.keep + ' 个';
+  }
+  var ov = $('bkOverview');
+  if(ov){
+    var latest = BK_STATE.list[0];
+    ov.innerHTML = '<div style="display:flex;gap:14px;flex-wrap:wrap">'
+      + '<div class="panel" style="flex:1;min-width:150px;margin:0;padding:12px 14px">'
+      +   '<div class="muted" style="font-size:.74rem">最近一次备份</div>'
+      +   '<div style="font-size:1rem;font-weight:700;margin:4px 0 2px">'
+      +     (latest ? esc(latest.version) : '还没有') + '</div>'
+      +   '<div class="muted" style="font-size:.72rem">'
+      +     (latest ? esc(fmt(latest.createdAt)) : '部署前会自动生成') + '</div></div>'
+      + '<div class="panel" style="flex:1;min-width:150px;margin:0;padding:12px 14px">'
+      +   '<div class="muted" style="font-size:.74rem">备份</div>'
+      +   '<div style="font-size:1rem;font-weight:700;margin:4px 0 2px">' + BK_STATE.count + ' 份</div>'
+      +   '<div class="muted" style="font-size:.72rem">' + fmtBytes(BK_STATE.totalBytes) + '</div></div>'
+      + '<div class="panel" style="flex:1;min-width:150px;margin:0;padding:12px 14px">'
+      +   '<div class="muted" style="font-size:.74rem">回档范围</div>'
+      +   '<div style="font-size:.86rem;font-weight:700;margin:4px 0 2px">内容 / 档案 / 字段 / 设置</div>'
+      +   '<div class="muted" style="font-size:.72rem">账号密码不覆盖</div></div>'
+      + '</div>';
+  }
+
+  var body = $('bkBody');
+  if(!body) return;
+  if(!BK_STATE.list.length){
+    body.innerHTML = '<div class="empty">' + svg('database', 38)
+      + '<p>还没有备份</p><p style="font-size:.78rem;margin-top:8px">点右上角「立即备份」，或下次部署时会自动生成</p></div>';
+    return;
+  }
+  body.innerHTML = '<div class="table-wrap"><table><thead><tr>'
+    + '<th>版本</th><th>类型</th><th class="nowrap">时间</th><th class="nowrap">大小</th><th></th>'
+    + '</tr></thead><tbody>'
+    + BK_STATE.list.map(function(b){
+        var kindTxt = b.kind === 'predeploy' ? '部署前' : (b.kind === 'auto' ? '自动' : '手动');
+        var kindCls = b.kind === 'predeploy' ? 'badge-blue' : (b.kind === 'manual' ? 'badge-green' : 'badge-gray');
+        return '<tr>'
+          + '<td><b>' + esc(b.version) + '</b>' + (b.note ? '<div class="muted" style="font-size:.72rem">' + esc(b.note) + '</div>' : '') + '</td>'
+          + '<td class="nowrap"><span class="badge ' + kindCls + '">' + kindTxt + '</span></td>'
+          + '<td class="nowrap muted" style="font-size:.78rem">' + esc(fmt(b.createdAt)) + '</td>'
+          + '<td class="nowrap mono" style="font-size:.76rem">' + fmtBytes(b.bytes) + '</td>'
+          + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
+          +   '<button data-bk-detail="' + b.id + '">明细</button>'
+          +   '<button data-bk-restore="' + b.id + '" data-bk-ver="' + attr(b.version) + '">回档</button>'
+          +   '<button class="danger" data-bk-del="' + b.id + '" data-bk-ver="' + attr(b.version) + '">删除</button>'
+          + '</div></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-bk-detail]'), function(btn){
+    btn.onclick = function(){ showBackupDetail(Number(btn.dataset.bkDetail)); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-bk-restore]'), function(btn){
+    btn.onclick = function(){ restoreBackupDialog(Number(btn.dataset.bkRestore), btn.dataset.bkVer); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-bk-del]'), function(btn){
+    btn.onclick = function(){
+      var id = Number(btn.dataset.bkDel);
+      if(!confirm('删除「' + btn.dataset.bkVer + '」这份备份？删除后不可恢复。')) return;
+      api('/admin?action=delete-backup', { method:'POST', body:{ id: id } })
+        .then(function(){ toast('已删除', 'ok'); loadBackups(); })
+        .catch(function(e){ toast(e.message, 'danger'); });
+    };
+  });
+}
+
+function doBackupNow(){
+  var btn = $('bkNow');
+  if(btn){ btn.disabled = true; btn.textContent = '备份中…'; }
+  api('/admin?action=backup', {
+    method:'POST',
+    body:{ version: SITE_VERSION, kind:'manual', note:'后台手动备份' },
+  }).then(function(j){
+    toast(j.message || '已备份', 'ok');
+    if(btn){ btn.disabled = false; btn.innerHTML = svg('database',14) + ' 立即备份'; }
+    loadBackups();
+  }).catch(function(e){
+    toast('备份失败：' + (e.message || e), 'danger');
+    if(btn){ btn.disabled = false; btn.innerHTML = svg('database',14) + ' 立即备份'; }
+  });
+}
+
+function showBackupDetail(id){
+  api('/admin?action=backup&id=' + id).then(function(j){
+    var b = j.backup || {};
+    var rows = Object.keys(b.counts || {}).map(function(k){
+      return '<tr><td>' + esc(k) + '</td><td class="mono">' + b.counts[k] + '</td></tr>';
+    }).join('');
+    openModal({
+      title: '备份明细', sub: b.version + ' · ' + fmt(b.createdAt),
+      body: '<div class="table-wrap"><table><thead><tr><th>表</th><th>行数</th></tr></thead><tbody>'
+        + rows + '</tbody></table></div>'
+        + '<p class="hint">回档只覆盖「内容 / 档案 / 字段定义 / 站点设置」四类；'
+        + '账号密码、登录日志不会被动。</p>',
+      foot: '<button class="btn btn-secondary" id="bkdClose">关闭</button>',
+      onMount: function(box){ box.querySelector('#bkdClose').onclick = closeModal; },
+    });
+  }).catch(function(e){ toast(e.message, 'danger'); });
+}
+
+function restoreBackupDialog(id, ver){
+  openModal({
+    title: '从备份回档', sub: '备份版本 ' + ver,
+    body: '<div class="alert warn" style="margin-bottom:12px">'
+      + '回档会用这份备份**覆盖**当前数据，且不能撤销。建议先点「立即备份」把现在的状态存一份。</div>'
+      + '<div class="field"><label>要恢复哪些</label>'
+      +   '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="bkPart" value="content" checked> '
+      +     '<span>作业 / 公告 / 弹窗 / 排期等内容</span></label>'
+      +   '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="bkPart" value="profiles" checked> '
+      +     '<span>班级档案（姓名、身份证、入团时间等）</span></label>'
+      +   '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="bkPart" value="field_meta" checked> '
+      +     '<span>字段管理里的字段定义</span></label>'
+      +   '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="bkPart" value="settings"> '
+      +     '<span>站点设置（站点名、注册开关等）</span></label>'
+      + '</div>'
+      + '<p class="hint">账号与密码不在回档范围内 —— 避免把大家的密码改回旧值导致登录不上。</p>',
+    foot: '<button class="btn btn-secondary" id="bkRCancel">取消</button>'
+        + '<button class="btn" id="bkRGo" style="background:#b3261e">确认回档</button>',
+    onMount: function(box){
+      box.querySelector('#bkRCancel').onclick = closeModal;
+      box.querySelector('#bkRGo').onclick = function(){
+        var parts = [];
+        Array.prototype.forEach.call(box.querySelectorAll('.bkPart'), function(cb){
+          if(cb.checked) parts.push(cb.value);
+        });
+        if(!parts.length){ toast('至少选一项', 'err'); return; }
+        var go = box.querySelector('#bkRGo');
+        go.disabled = true; go.textContent = '回档中…';
+        api('/admin?action=restore-backup', { method:'POST', body:{ id: id, parts: parts } })
+          .then(function(j){
+            closeModal();
+            toast(j.message || '已回档', 'ok');
+            loadBackups();
+          })
+          .catch(function(e){
+            go.disabled = false; go.textContent = '确认回档';
+            toast('回档失败：' + (e.message || e), 'danger');
+          });
+      };
+    },
+  });
+}
+
 function renderVotes(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel)">'
@@ -13983,6 +14254,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.6.1', date: '2026-10-19', type: 'feat', title: '数据备份与回档 · 字段误删可恢复 · 导出图带班徽 · 成绩分享可写备注',
+    items: [
+      '新增「安全 → 数据管理」：可手动备份、查看历史备份、一键回档（内容 / 档案 / 字段定义 / 站点设置四类）',
+      '每次部署前自动备份一次，默认保留最近 14 个版本的备份；备份存在云端数据库里，换设备也能回档',
+      '修复：字段管理里的入团时间、发展团员编号等被删掉后数据找不回来。现在「删除字段」不再删除数据库里的列，只是从列表里隐藏，重新加回来数据就复原',
+      '新增「字段体检 / 恢复预置字段」：一键把 17 个预置字段定义补回来，并清掉导致反复误删的「墓碑」记录',
+      '导出图片右上角统一显示班徽（就是首页标题旁那个绿色徽标，已存到站点本地，导出更稳）',
+      '成绩分享长图可以写备注了：导出前填一句「为什么分享」，会印在图片底部',
+      '版本号规则改为「主版本 . 小更新 . 修复」：主版本只有站主发话才动，后两位由维护方按改动性质递增'
+    ] },
   { version: '3.5.42', date: '2026-10-19', type: 'fix', title: '作业勾选真正不丢了 · 导出图片带班徽 · 可选导出哪一次',
     items: [
       '修复「打完勾立刻退出、重进发现勾没了」：待同步清单现在会存在本机，进站先补推再拉云端',
