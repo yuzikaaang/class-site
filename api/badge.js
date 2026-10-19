@@ -20,7 +20,11 @@ import { getSql, jsonCol, systemUserId } from './_lib/db.js';
 import { cors, handlePreflight, fail } from './_lib/http.js';
 
 const CONTENT_KEY = 'cls_site_contents';
-const MAX_BYTES = 4 * 1024 * 1024;   /* 4MB，够 2000px 的 PNG */
+const MAX_BYTES = 4 * 1024 * 1024;        /* 4MB：超过直接不用（保护内存） */
+/* v3.7.1：图床原图 6.3MB，下到手机上要十几秒、还费流量。
+   超过这个尺寸就用内嵌的 256×256 压缩版 —— 导出图里班徽只有 66px，
+   用不着 2000px 的原图。实测原来那张就是 6.3MB。 */
+const MAX_CONFIG_BYTES = 1.5 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 3000;       /* 图床慢就不等了，直接上内嵌图 */
 
 /* 内嵌班徽：站点 badge.png 的 256×256 压缩版（base64）。
@@ -1439,7 +1443,7 @@ export default async function handler(req, res) {
         const type = r.headers.get('content-type') || '';
         if (/^image\//i.test(type)) {
           const buf = await r.arrayBuffer();
-          if (buf.byteLength > 0 && buf.byteLength <= MAX_BYTES) {
+          if (buf.byteLength > 0 && buf.byteLength <= MAX_CONFIG_BYTES) {
             res.statusCode = 200;
             res.setHeader('Content-Type', type);
             res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -1452,7 +1456,7 @@ export default async function handler(req, res) {
       }
     }
   } catch (e) {
-    /* 图床挂了不报错，走下面的内嵌图 */
+    /* 图床挂了 / 太慢 / 图太大，都走下面的内嵌图 —— 绝不把导出卡住 */
     console.warn('[badge] 取配置的班徽失败，改用内嵌图：', String(e && e.message || e).slice(0, 120));
   }
 
