@@ -47,7 +47,7 @@ export { getSql };
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.35';
+const SCHEMA_VER = '3.5.40';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -269,6 +269,23 @@ export async function ensureSchema(sql) {
           await s`create index if not exists online_user_start_idx on online_sessions (user_id, start_at desc)`;
           await s`create index if not exists online_start_idx on online_sessions (start_at desc)`;
           await s`create index if not exists online_token_idx on online_sessions (session_token)`;
+          /* v3.5.40（站主 #3）：在线时长要能精确到「哪个页面」。
+             单独一张表，不动 online_sessions —— 总时长口径不受影响。
+             每次心跳续上「同一人 + 同一会话 + 同一页面」还在 180 秒内的那一段。 */
+          await s`create table if not exists online_pages (
+            id            bigserial   primary key,
+            user_id       bigint      not null,
+            session_token text        not null default '',
+            page          text        not null default '',
+            start_at      timestamptz not null default now(),
+            stop_at       timestamptz not null default now(),
+            last_ping_at  timestamptz not null default now(),
+            ping_count    int         not null default 1,
+            created_at    timestamptz not null default now()
+          )`;
+          await s`create index if not exists online_pages_user_idx on online_pages (user_id, start_at desc)`;
+          await s`create index if not exists online_pages_page_idx on online_pages (page, start_at desc)`;
+          await s`create index if not exists online_pages_tok_idx on online_pages (session_token, page, last_ping_at desc)`;
         } catch (e) {
           console.warn('[schema] online_sessions 建表失败：', e && e.message);
         }
@@ -345,6 +362,23 @@ export async function ensureSchema(sql) {
     await s`create index if not exists online_user_start_idx on online_sessions (user_id, start_at desc)`;
     await s`create index if not exists online_start_idx on online_sessions (start_at desc)`;
     await s`create index if not exists online_token_idx on online_sessions (session_token)`;
+    /* v3.5.40 页面维度在线时长（见升级路径里的说明） */
+    await s`
+      create table if not exists online_pages (
+        id            bigserial   primary key,
+        user_id       bigint      not null,
+        session_token text        not null default '',
+        page          text        not null default '',
+        start_at      timestamptz not null default now(),
+        stop_at       timestamptz not null default now(),
+        last_ping_at  timestamptz not null default now(),
+        ping_count    int         not null default 1,
+        created_at    timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists online_pages_user_idx on online_pages (user_id, start_at desc)`;
+    await s`create index if not exists online_pages_page_idx on online_pages (page, start_at desc)`;
+    await s`create index if not exists online_pages_tok_idx on online_pages (session_token, page, last_ping_at desc)`;
     /* 班级通讯录 / 个人资料（与 schema.sql 保持一致，见该文件的说明） */
     await s`
       create table if not exists profiles (
@@ -391,6 +425,9 @@ export async function ensureSchema(sql) {
         /* v3.5.5：字段校验规则（{type:'text'|'number'|'time'|'select', ...}），
            形状与默认值见 _lib/field-rules.js 的 normalizeRules。 */
         rules       jsonb       not null default '{}'::jsonb,
+        /* v3.5.40（站主 #1）：本人可编辑。true = 同学可以在「我的资料」里
+           自己改这一项；后台随时可关。存储的是「许可」，不是值。 */
+        self_edit   boolean     not null default false,
         constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))
       )
     `;
@@ -400,6 +437,9 @@ export async function ensureSchema(sql) {
        ⚠️ 不能靠「visibility 是否等于出厂值」来判断「动没动过」——
           站主可能把字段设成它本来就有的档（值没变），比对法分辨不出来。 */
     await s`alter table profile_field_meta add column if not exists vis_locked boolean not null default false`;
+    /* self_edit 补列（v3.5.40 站主 #1）：老库升级用。
+       true = 允许本人在「我的资料」/查询卡片里修改该字段。 */
+    await s`alter table profile_field_meta add column if not exists self_edit boolean not null default false`;
     /* 预置字段元数据。on conflict do nothing —— 后台改过之后重跑不会覆盖。 */
     await s`
       insert into profile_field_meta (field, label, visibility, sort_order, is_custom) values
