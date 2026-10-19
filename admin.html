@@ -538,14 +538,26 @@ tbody tr.sel{background:var(--tint-2)}
 .only-mobile{display:none}
 @media (max-width:900px){ .only-mobile{display:inline-flex !important} }
 html.force-landscape, html.force-landscape body{overflow:hidden}
-/* ⚠️ 站主反馈「旋转了 180°，倒过来了」：原来用 left:100vw + rotate(90deg)，
-   在手机上方向正好反了。改成 left:0 + top:100vh + rotate(-90deg)，差 180°。 */
+/* ⚠️ v3.5.40 站主反馈「横屏方向跟手机实际横屏相反」：
+   rotate(-90deg) 是逆时针，得往左歪头看；大家横手机都是顺时针（home 键到右手边），
+   所以看着正好反。改回顺时针 rotate(90deg) + left:100vw + top:0。
+   另外配合 JS 的 deviceIsLandscape()：设备真的横过来后立刻撤掉旋转，
+   不会出现「手机横了、页面还歪着」的双重旋转。 */
 html.force-landscape body{
-  position:fixed; top:100vh; left:0; width:100vh; height:100vw;
-  transform:rotate(-90deg); transform-origin:left top; overflow:auto;
-  -webkit-overflow-scrolling:touch;
+  position:fixed; top:0; left:100vw; width:100vh; height:100vw;
+  transform:rotate(90deg); -webkit-transform:rotate(90deg);
+  transform-origin:left top; -webkit-transform-origin:left top;
+  overflow:auto; -webkit-overflow-scrolling:touch;
+  /* ⚠️ v3.5.40：body 全局有 min-height:100vh/100dvh，会把这层 100vw 的高度
+     顶回屏幕高（844），旋转后整块内容伸出可视区，看着就是白屏 + 点不动。
+     必须显式压掉。 */
+  min-height:0 !important; max-height:100vw;
+  overscroll-behavior:contain;
+  backface-visibility:hidden; -webkit-backface-visibility:hidden;
 }
 html.force-landscape .side{width:210px}
+/* v3.5.40：iOS 里 fixed 子元素在 transform 祖先内坐标会错位，改成 absolute 对齐旋转容器 */
+html.force-landscape .side{position:absolute;top:0;left:0;bottom:auto;height:100vw}
 html.force-landscape .content{padding:14px 16px}
 html.force-landscape table{font-size:.78rem}
 #btnRotate[data-on="1"]{background:var(--tint);color:var(--accent-ink);border-color:var(--border-2)}
@@ -964,6 +976,7 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 <div id="toasts"></div>
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 
+<script src="share-card.js"></script>
 <script>
 /* ============================================================================
  * 25级05班班级服务站 · 管理后台
@@ -1009,7 +1022,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.39';
+var SITE_VERSION = '3.5.40';
 var VER_DATE = '2026-10-18';
 
 /* ---- 运行时状态 ---- */
@@ -7794,6 +7807,14 @@ function paintFieldPanel(list){
       +   '<div class="mono muted" style="font-size:.72rem">' + esc(f.field) + '</div></td>'
       + '<td class="nowrap">' + visBadge + '</td>'
       + '<td class="nowrap">' + quick + '</td>'
+      /* v3.5.40（站主 #1）：本人可编辑 —— 开着同学能自己改，关着只能后台改 */
+      + '<td class="nowrap">'
+      +   '<button class="btn btn-xs' + (f.selfEdit ? '' : ' btn-secondary') + '"'
+      +     ' data-fse="' + attr(f.field) + '" data-fsel="' + attr(f.label) + '"'
+      +     ' data-fson="' + (f.selfEdit ? '1' : '0') + '"'
+      +     ' title="' + attr(f.selfEdit ? '同学可以自己改这一项（点击关闭）' : '只有后台能改（点击开放给本人）') + '">'
+      +     (f.selfEdit ? '✓ 允许' : '不允许') + '</button>'
+      + '</td>'
       + '<td class="nowrap mono">' + (f.sortOrder != null ? f.sortOrder : '—') + '</td>'
       + '<td class="nowrap">' + filled + '</td>'
       + '<td class="nowrap">' + ruleCell + '</td>'
@@ -7826,6 +7847,7 @@ function paintFieldPanel(list){
     + '<div class="table-wrap" style="margin-top:12px"><table><thead><tr>'
     + '<th class="nowrap" title="按住把手上下拖动即可调整顺序">拖动</th>'
     + '<th>字段</th><th class="nowrap">可见性</th><th class="nowrap">快捷切换</th>'
+    + '<th class="nowrap" title="打开后，同学可以在「我的资料」里自己改这一项">本人可编辑</th>'
     + '<th class="nowrap">已填</th><th class="nowrap">校验规则</th><th class="nowrap">类型</th>'
     + '<th style="text-align:right">操作</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
@@ -7841,6 +7863,20 @@ function paintFieldPanel(list){
       api('/admin?action=set-visibility', { method:'POST', body:{ field:f, visibility:v } })
         .then(function(){ toast('已把「' + f + '」改为' + VIS_LABEL[v]); renderFieldPanel(); })
         .catch(function(e){ toast(e.message, 'danger'); });
+    };
+  });
+  /* v3.5.40（站主 #1）：本人可编辑开关 */
+  Array.prototype.forEach.call(body.querySelectorAll('[data-fse]'), function(b){
+    b.onclick = function(){
+      var f = b.dataset.fse, label = b.dataset.fsel;
+      var next = b.dataset.fson !== '1';
+      b.disabled = true;
+      api('/admin?action=set-self-edit', { method:'POST', body:{ field:f, selfEdit:next } })
+        .then(function(){
+          toast(next ? ('已允许本人编辑「' + label + '」') : ('已关闭「' + label + '」的本人编辑'), 'ok');
+          renderFieldPanel();
+        })
+        .catch(function(e){ b.disabled = false; toast(e.message, 'danger'); });
     };
   });
   Array.prototype.forEach.call(body.querySelectorAll('[data-fe]'), function(b){
@@ -9276,6 +9312,7 @@ function renderOnline(){
     +   '<button class="btn btn-sm btn-secondary" id="onRefresh">' + svg('refresh', 14) + '刷新</button>'
     + '</div>'
     + '<div id="onSummary" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px"></div>'
+    + '<section class="panel" id="onPages" style="display:none"></section>'
     + '<section class="panel"><div id="onBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
 
   Array.prototype.forEach.call($('onDays').querySelectorAll('[data-ond]'), function(b){
@@ -9287,6 +9324,55 @@ function renderOnline(){
   });
   $('onRefresh').onclick = function(){ S.detail = null; S.detailUser = null; renderOnline(); };
   loadOnline();
+}
+
+/* v3.5.40（站主 #3）：页面标识 → 人话。
+   admin:votes → 后台 · 投票；game:breakout → 游戏 · 打砖块；其余原样。 */
+function pageLabel(p){
+  var raw = String(p || '');
+  if(raw.indexOf('admin:') === 0){
+    var pid = raw.slice(6);
+    var hit = null;
+    try{ hit = (PAGES || []).filter(function(x){ return x.id === pid; })[0]; }catch(e){}
+    return '后台 · ' + (hit ? (hit.label || hit.title || pid) : pid);
+  }
+  if(raw.indexOf('game:') === 0){
+    var gid = raw.slice(5);
+    var gm = null;
+    try{ gm = (GAME_META || []).filter(function(x){ return x.id === gid; })[0]; }catch(e){}
+    return '游戏 · ' + (gm ? gm.label : gid);
+  }
+  if(!raw) return '未知';
+  return raw;
+}
+
+/* 全站「哪个页面最耗时间」——横向条形，按秒数降序 */
+function paintOnlinePages(){
+  var S = STATE.online;
+  var box = document.getElementById('onPages');
+  if(!box) return;
+  var list = (S.byPage || []).filter(function(x){ return x.secs > 0; });
+  if(!list.length){ box.style.display = 'none'; return; }
+  var max = list[0].secs || 1;
+  var top = list.slice(0, 12);
+  box.style.display = 'block';
+  box.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">'
+    +   '<b style="font-size:.9rem">时间花在哪些页面</b>'
+    +   '<span class="muted" style="font-size:.76rem">同一时间窗口，按页面累计停留时长排序</span>'
+    + '</div>'
+    + top.map(function(x){
+        var pct = Math.max(2, Math.round(x.secs / max * 100));
+        return '<div style="margin-bottom:7px">'
+          + '<div style="display:flex;justify-content:space-between;gap:10px;font-size:.8rem;margin-bottom:3px">'
+          +   '<span>' + esc(pageLabel(x.page)) + '</span>'
+          +   '<span class="muted" style="white-space:nowrap">' + esc(secText(x.secs))
+          +     ' · ' + x.users + ' 人</span>'
+          + '</div>'
+          + '<div style="height:6px;border-radius:99px;background:var(--bg-2,#f3ece6);overflow:hidden">'
+          +   '<div style="height:100%;width:' + pct + '%;border-radius:99px;background:linear-gradient(90deg,var(--btn-a,#c2410c),var(--btn-b,#f59e0b))"></div>'
+          + '</div></div>';
+      }).join('');
 }
 
 /* 秒 → 中文时长（0 秒显示成「—」，避免一整列 0 秒看着像故障） */
@@ -9305,6 +9391,8 @@ function loadOnline(){
     S.grandSessions = j.grandSessions || 0;
     S.activeUsers = j.activeUsers || 0;
     S.totalUsers = j.totalUsers || 0;
+    S.byPage = j.byPage || [];
+    paintOnlinePages();
 
     var sum = $('onSummary');
     if(sum){
@@ -9392,7 +9480,28 @@ function onDetailHtml(S){
   if(!d) return '<div class="loading"><div class="spinner"></div>加载中…</div>';
   var list = d.sessions || [];
   if(!list.length) return '<div class="muted" style="font-size:.82rem">这个人还没有在线时段记录</div>';
-  return '<div class="muted" style="font-size:.78rem;margin-bottom:8px">'
+  /* v3.5.40（站主 #3）：这个人各页面分别待了多久 */
+  var pageHtml = '';
+  if((d.pages || []).length){
+    var pmax = d.pages[0].secs || 1;
+    pageHtml = '<div style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px">'
+      + '<b style="font-size:.82rem">页面分布</b>'
+      + '<div style="margin-top:7px">'
+      + d.pages.map(function(x){
+          var pct = Math.max(2, Math.round(x.secs / pmax * 100));
+          return '<div style="margin-bottom:6px">'
+            + '<div style="display:flex;justify-content:space-between;font-size:.78rem;gap:10px">'
+            +   '<span>' + esc(pageLabel(x.page)) + '</span>'
+            +   '<span class="muted">' + esc(secText(x.secs)) + ' · ' + x.count + ' 段</span>'
+            + '</div>'
+            + '<div style="height:5px;border-radius:99px;background:var(--bg-2,#f3ece6);overflow:hidden">'
+            +   '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--btn-a,#c2410c),var(--btn-b,#f59e0b))"></div>'
+            + '</div></div>';
+        }).join('')
+      + '</div></div>';
+  }
+  return pageHtml
+    + '<div class="muted" style="font-size:.78rem;margin-bottom:8px">'
       + '总计 <b>' + esc(secText(d.totalSecs)) + '</b>，共 ' + d.sessionCount + ' 个时段'
       + '（每段 = 一段连续在线，心跳中断超过 3 分钟就断开）'
       + (d.total > list.length ? '，下面仅显示最近 ' + list.length + ' 段' : '')
@@ -10336,6 +10445,13 @@ function enterApp(){
   startAdminHeartbeat();
 }
 
+/* v3.5.40（站主 #3）：后台心跳带上当前面板，在线统计里就能看出
+   「在后台看投票 / 在后台看成绩」各花了多久。格式 admin:<panelId>。 */
+function adminPageName(){
+  var id = (typeof STATE !== 'undefined' && STATE && STATE.page) || 'overview';
+  return 'admin:' + id;
+}
+
 /* v3.5.35：后台也要打心跳 —— 站主开着后台改作业的时间同样算「在线」，
    否则「在线时长」面板会把站长漏掉。规则与主站一致：60 秒一拍，
    标签页隐藏时跳过；失败静默，绝不影响后台使用。 */
@@ -10345,7 +10461,7 @@ function startAdminHeartbeat(){
     if(document.hidden) return;
     if(!STATE.token) return;
     try{
-      fetch(apiUrl('/auth?action=ping'), {
+      fetch(apiUrl('/auth?action=ping&page=' + encodeURIComponent(adminPageName())), {
         method:'GET', cache:'no-store',
         headers:{ Authorization:'Bearer ' + STATE.token }
       }).catch(function(){});
@@ -10388,9 +10504,22 @@ var LAND_ON = false;
 var LAND_LS = 'cls_admin_land';
 var FROM_HOME_LS = 'cls_admin_from_home';
 
+function deviceIsLandscape(){
+  try{
+    var a = null;
+    if(screen.orientation && typeof screen.orientation.angle === 'number') a = screen.orientation.angle;
+    if(a === null && typeof window.orientation === 'number') a = window.orientation;
+    if(a === null) return false;
+    a = Math.abs(Number(a)) % 360;
+    return a === 90 || a === 270;
+  }catch(e){ return false; }
+}
+
 function syncLandscapeClass(){
-  var portrait = window.innerHeight > window.innerWidth;
-  var need = LAND_ON && portrait;
+  var vpPortrait = window.innerHeight > window.innerWidth;
+  var devLand = deviceIsLandscape();
+  /* v3.5.40：设备物理横了就不再加 CSS 旋转（iOS PWA 视口可能不更新） */
+  var need = LAND_ON && vpPortrait && !devLand;
   var html = document.documentElement;
   if(html.classList.contains('force-landscape') !== need){
     html.classList.toggle('force-landscape', need);
@@ -10400,12 +10529,14 @@ function syncLandscapeClass(){
 }
 
 function lockLandscape(){
-  try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); }catch(e){}
+  /* v3.5.40：**不再请求全屏**。全屏 + fixed 旋转在 iOS PWA 上切后台回来时
+     会留下「全屏已退出、布局还按全屏算」的残影（站主说的卡住）。
+     CSS 旋转已经能兜住竖屏场景，全屏只是锦上添花，不值得这个风险。
+     支持 orientation.lock 的浏览器（Android Chrome）仍然试一下，失败也无副作用。 */
   try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
 }
 function unlockLandscape(){
   try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
-  try{ if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); }catch(e){}
 }
 
 function toggleLandscape(){
@@ -10456,17 +10587,18 @@ function initLandscape(){
 }
 
 /** v3.5.30：从后台切回来 / 页面被恢复时重新对齐。
- *  只对齐「CSS 兜底旋转」，不重新请求全屏或锁方向 —— 那会打断用户当时的操作。
- *  如果用户此时已经手动把手机横过来（视口变宽），syncLandscapeClass 会自动撤掉旋转；
- *  手机又竖回去，也会自动补回来。 */
+ *  v3.5.40 重写：不再重复请求锁方向（iOS PWA 恢复时视口没更新，锁方向 + fixed 旋转
+ *  会把页面顶出屏幕，站主反馈的「卡住」就是这个）。
+ *  现在先摘旋转 → 两帧后按真实视口重排 → 再等一拍补一次。 */
 function resyncLandscape(){
   try{
-    syncLandscapeClass();
-    if(LAND_ON){
-      /* 用户要横屏但系统可能被切后台重置了方向 → 再试一次（失败也无副作用） */
-      try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
-      setTimeout(syncLandscapeClass, 320);
-    }
+    document.documentElement.classList.remove('force-landscape');
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        syncLandscapeClass();
+        setTimeout(syncLandscapeClass, 260);
+      });
+    });
   }catch(e){}
 }
 
@@ -10530,7 +10662,7 @@ function startAdminHeartbeat(){
     var token = '';
     try{ token = localStorage.getItem(LS_TOKEN) || ''; }catch(e){}
     if(!token || document.hidden) return;
-    fetch((API_BASE || '') + '/api/auth?action=ping', {
+    fetch((API_BASE || '') + '/api/auth?action=ping&page=' + encodeURIComponent(adminPageName()), {
       cache:'no-store', headers:{ Authorization:'Bearer ' + token }
     }).then(function(){}).catch(function(){});
   };
@@ -10902,6 +11034,9 @@ function renderDj(){
     +   '</div>'
     +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
     +     '<button class="btn btn-green" id="djCopyBtn">' + svg('file',14) + ' 一键复制公示</button>'
+    /* v3.5.40（站主 #6）：把公示画成长图，直接发群里 */
+    +     '<button class="btn" id="djImgBtn">' + svg('download',14) + ' 导出图片</button>'
+    +     '<button class="btn btn-secondary" id="djShareBtn">' + svg('upload',14) + ' 分享图片</button>'
     +     '<button class="btn btn-secondary" id="djExportBtn">' + svg('download',14) + ' 导出数据</button>'
     +     '<button class="btn btn-secondary" id="djImportBtn">' + svg('upload',14) + ' 导入数据</button>'
     +     '<button class="btn btn-ghost" id="djClearBtn" style="color:#b3261e">' + svg('trash',14) + ' 清空排期</button>'
@@ -10925,6 +11060,9 @@ function renderDj(){
   if(durLibBtn) durLibBtn.onclick = function(){ openDurLib(); };
   vhDurNotice();
   $('djCopyBtn').onclick = djCopy;
+  /* v3.5.40（站主 #6）：公示长图 —— 与「一键复制公示」同一份数据，样式仿成绩卡 */
+  if($('djImgBtn'))   $('djImgBtn').onclick = function(){ djShareImage('download'); };
+  if($('djShareBtn')) $('djShareBtn').onclick = function(){ djShareImage('share'); };
 
   /* v3.5.21：抽取数量与总时长上限二选一。
      填了总时长上限后，抽取数量由系统按歌曲时长自动决定。 */
@@ -11870,6 +12008,77 @@ function djCopy(){
     navigator.clipboard.writeText(text).then(done, function(){ djFallbackCopy(text); done(); });
   }else{ djFallbackCopy(text); done(); }
 }
+/* ============================================================================
+ * v3.5.40（站主 #6）：抽歌排期公示 → 长图
+ * ----------------------------------------------------------------------------
+ * 站主原话：「抽歌排期支持导出图片公示的内容，样式和功能仿照成绩分析的导出图片」
+ *
+ * 与「一键复制公示」共用同一批数据（最近一次抽签），不另算一遍：
+ *   头部 = 标题 / 抽取时间 / 本期首数 / 总时长
+ *   分段 = 抽签规则、本期歌单（每首一行，右侧点赞数与时长）、备注
+ * 画图交给 share-card.js（前后台共用），这里只负责把数据摆成 rows。
+ * ========================================================================= */
+function djShareImage(mode){
+  if(typeof ShareCard === 'undefined'){
+    toast('图片组件没加载出来，请刷新页面重试', 'err');
+    return;
+  }
+  var rounds = DJ_STATE.rounds || [];
+  if(!rounds.length){ toast('还没有排期，请先抽签', 'err'); return; }
+  var last = rounds[rounds.length - 1];
+  var p = last.params || {};
+  var showDur = p.showDur !== false;
+  var showTotal = p.showTotal !== false;
+
+  var songs = last.songs || [];
+  var totSec = 0;
+  songs.forEach(function(s){ totSec += Number(s.duration) || 0; });
+
+  var badges = ['本期 ' + songs.length + ' 首'];
+  if(showTotal && totSec) badges.push('总时长 ' + voFmtDur(totSec));
+
+  var rows = songs.map(function(s, i){
+    var left = (i + 1) + '. ' + (s.title || '?') + ' - ' + (s.artist || '未知')
+      + ' - ' + (s.requester || '匿名');
+    var right = '点赞 ' + (s.votes || 0);
+    if(showDur && s.duration) right += ' · ' + voFmtDur(s.duration);
+    return { l: left, r: right };
+  });
+
+  var sections = [];
+  var rule = djParamsLine(last, songs.length);
+  if(rule) sections.push({ heading: '抽签规则', lines: [rule] });
+  sections.push({ heading: '本期歌单', rows: rows });
+
+  var notes = [];
+  if(last.note) notes.push(String(last.note));
+  var ne = $('djCopyNote');
+  var note = ne ? String(ne.value || '').trim() : '';
+  if(note) notes.push(note);
+  if(notes.length) sections.push({ heading: '备注', lines: notes });
+
+  var card = {
+    title: '点歌抽签排期公示',
+    subtitle: '25级05班 · ' + (last.at || ''),
+    badges: badges,
+    sections: sections,
+    footer: '由 25级05班 班级服务站生成 · 累计已排期 ' + djScheduleCount() + ' 首',
+  };
+  var fname = '点歌排期-' + String(last.at || '').replace(/[^0-9]/g, '').slice(0, 12) + '.png';
+
+  if(mode === 'share'){
+    ShareCard.share(card, fname).then(function(r){
+      if(r && r.shared) toast('已唤起系统分享', 'ok');
+      else if(r && r.canceled) { /* 用户自己取消，不打扰 */ }
+      else toast('这个浏览器不支持直接分享，已保存到下载', 'ok');
+    }).catch(function(e){ toast('分享失败：' + (e.message || e), 'err'); });
+  } else {
+    ShareCard.download(card, fname)
+      .then(function(){ toast('图片已生成，去相册/下载里找一下', 'ok'); })
+      .catch(function(e){ toast('生成失败：' + (e.message || e), 'err'); });
+  }
+}
+
 function djFallbackCopy(text){
   var ta = document.createElement('textarea');
   ta.value = text;
@@ -12129,6 +12338,8 @@ function voPaint(){
       +     '<button class="btn btn-sm btn-ghost" data-vo-edit="' + v.id + '">' + svg('edit',13) + ' 编辑</button>'
       +     '<button class="btn btn-sm btn-ghost" data-vo-pub="' + v.id + '">📋 公示'
       +       '<span class="muted" style="font-size:.68rem;margin-left:4px" data-vo-pub-badge="' + v.id + '"></span></button>'
+      +     '<button class="btn btn-sm btn-ghost" data-vo-ballots="' + v.id + '">' + svg('users',13) + ' 投票明细'
+      +       '<span class="muted" style="font-size:.68rem;margin-left:4px">' + ((v.ballots || []).length) + '</span></button>'
       +     (v.status === 'open'
               ? '<button class="btn btn-sm btn-ghost" data-vo-close="' + v.id + '">' + svg('lock',13) + ' 截止并公布</button>'
               : '<button class="btn btn-sm btn-ghost" data-vo-reopen="' + v.id + '">' + svg('unlock',13) + ' 重新打开</button>')
@@ -12138,6 +12349,7 @@ function voPaint(){
       + (v.note ? '<p class="muted" style="font-size:.8rem;margin:8px 0 0">' + esc(v.note) + '</p>' : '')
       + resHtml
       + top5
+      + '<div id="voBal_' + v.id + '" style="display:none"></div>'
       + '</div>';
   }).join('');
 
@@ -12164,7 +12376,69 @@ function voPaint(){
   Array.prototype.forEach.call(box.querySelectorAll('[data-vo-pub]'), function(b){
     b.onclick = function(){ voPubDialog(Number(b.dataset.voPub)); };
   });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-ballots]'), function(b){
+    b.onclick = function(){ voToggleBallots(Number(b.dataset.voBallots)); };
+  });
   voPaintPubBadges();
+}
+
+/* ============================================================================
+ * v3.5.40（站主 #2）：投票明细 —— 每张票是谁投的、什么时候投的
+ * ----------------------------------------------------------------------------
+ * 数据来自后端 listVotes 的管理员分支（v.ballots），普通同学拿不到这个字段。
+ * 展示：姓名（@登录名）/ 选了哪几项 / 时间；撤回的票（choices 为空）单独标注。
+ * ========================================================================= */
+function voToggleBallots(id){
+  var v = voFind(Number(id));
+  var box = document.getElementById('voBal_' + id);
+  if(!v || !box) return;
+  if(box.style.display !== 'none'){ box.style.display = 'none'; return; }
+
+  var labelOf = {};
+  (v.options || []).forEach(function(o){ labelOf[String(o.id)] = o.label; });
+  var list = (v.ballots || []).slice();
+
+  /* 未撤回的算「有效票」；撤回的虽占一行，但不计入票数 */
+  var valid = list.filter(function(x){ return (x.choices || []).length > 0; });
+
+  var rows = list.map(function(x, i){
+    var picked = (x.choices || []).map(function(cid){
+      return labelOf[String(cid)] || ('#' + cid);
+    });
+    var t = x.at ? new Date(x.at) : null;
+    var timeTxt = '';
+    if(t && !isNaN(t.getTime())){
+      function p(n){ return (n < 10 ? '0' : '') + n; }
+      timeTxt = t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate())
+        + ' ' + p(t.getHours()) + ':' + p(t.getMinutes());
+    }
+    return '<tr>'
+      + '<td class="muted" style="width:34px">' + (i + 1) + '</td>'
+      + '<td style="white-space:nowrap"><b>' + esc(x.name) + '</b>'
+      +   (x.username ? '<span class="muted" style="font-size:.72rem;margin-left:4px">@' + esc(x.username) + '</span>' : '')
+      + '</td>'
+      + '<td>' + (picked.length
+          ? picked.map(function(s){ return '<span class="badge" style="margin:1px 3px 1px 0">' + esc(s) + '</span>'; }).join('')
+          : '<span class="muted">（已撤回）</span>') + '</td>'
+      + '<td class="muted" style="white-space:nowrap;font-size:.76rem">' + esc(timeTxt) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  box.style.display = 'block';
+  box.innerHTML = '<div style="margin-top:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+    + '<div style="padding:8px 12px;background:var(--bg-2,#faf6f2);display:flex;gap:12px;flex-wrap:wrap;font-size:.78rem">'
+    +   '<b>投票明细</b>'
+    +   '<span class="muted">有效票 ' + valid.length + ' 张'
+    +     (list.length !== valid.length ? '（另有 ' + (list.length - valid.length) + ' 人撤回）' : '') + '</span>'
+    + '</div>'
+    + (list.length
+        ? '<div style="max-height:360px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:.8rem">'
+          + '<thead><tr style="text-align:left"><th style="padding:6px 10px">#</th><th style="padding:6px 10px">投票人</th>'
+          + '<th style="padding:6px 10px">投给</th><th style="padding:6px 10px">时间</th></tr></thead>'
+          + '<tbody>' + rows.replace(/<td/g, '<td style="padding:6px 10px;border-top:1px solid var(--border)"') + '</tbody>'
+          + '</table></div>'
+        : '<p class="muted" style="padding:12px;margin:0;font-size:.82rem">还没有人投票。</p>')
+    + '</div>';
 }
 
 /* ---------- 公示模版管理 ---------- */
@@ -13169,6 +13443,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.5.40', date: '2026-10-19', type: 'feat', title: '字段本人可编辑 · 投票明细 · 页面级在线时长 · 定向弹窗 · 导出图片',
+    items: [
+      '字段管理：每个字段后面多了一个「本人可编辑」开关。打开后，同学可以在「我的资料」里点「改」直接修改这一项，改完立即生效；姓名/学号/身份/头衔永远只能由你改',
+      '投票管理：每场投票多了「投票明细」，能看到每一张票是谁投的、投给哪个选项、什么时候投的（撤回的票也会标出来）',
+      '在线时长：新增「时间花在哪些页面」，能看到成绩分析、打砖块、后台各面板分别待了多久；每个人的明细里也有他自己的页面分布',
+      '通用弹窗：新增「投放对象」——可以只弹给某个人、某几个人，或按身份（管理员/学生/老师）、按头衔（团支书/课代表…）投放',
+      '横屏修好了：不再出现「切出去再回来就卡住/白屏」；旋转方向改成与手动横屏一致（顺时针），手机真横过来后会自动撤掉页面旋转',
+      '抽歌排期：公示区新增「导出图片 / 分享图片」，把当次公示画成一张长图，可直接发班级群',
+      '作业：作业弹窗新增「导出图片 / 分享」，图片里含作业名称、时间范围、每科的每一项任务，以及配图的图片直链'
+    ] },
   { version: '3.5.39', date: '2026-10-18', type: 'feat', title: '前台也能切横屏了：侧边栏一键横过来看',
     items: [
       '侧边栏「音效」上面多了一个「📱 横屏查看」按钮，点一下整页横过来，再点一下竖回去',
@@ -15487,6 +15771,17 @@ function popWindowText(p){
   return a + ' ~ ' + b;
 }
 
+/* v3.5.40（站主 #4）：投放对象 → 一句话 */
+function popTargetText(t){
+  if(!t || !t.mode || t.mode === 'all') return '所有人';
+  if(t.mode === 'users')   return '指定 ' + ((t.users || []).length) + ' 人（' + ((t.users || []).slice(0,3).join('、') || '未填') + ((t.users || []).length > 3 ? '…' : '') + '）';
+  if(t.mode === 'roles')   return '身份：' + ((t.roles || []).map(function(r){
+    return r === 'admin' ? '管理员' : r === 'teacher' ? '老师' : '学生';
+  }).join('、') || '未选');
+  if(t.mode === 'titles')  return '头衔：' + ((t.titles || []).join('、') || '未填');
+  return '所有人';
+}
+
 function paintPopups(){
   var list = POP_STATE.list || [];
   if(!list.length){
@@ -15518,6 +15813,8 @@ function paintPopups(){
       +       (p.bubble === false ? ' · 不留悬浮球' : ' · 留悬浮球')
       +       (p.bannerText ? ' · 横幅' : '')
       +       (p.theme ? ' · 样式:' + esc(p.theme) : '')
+      +       (p.target && p.target.mode && p.target.mode !== 'all'
+              ? ' · 投放:' + esc(popTargetText(p.target)) : ' · 投放:所有人')
       +     '</div>'
       +     (p.body ? '<div style="margin-top:8px;font-size:.8rem;white-space:pre-wrap;opacity:.85">'
       +       esc(p.body.length > 120 ? p.body.slice(0,120) + '…' : p.body) + '</div>' : '')
@@ -15580,7 +15877,8 @@ function popEdit(idx){
   var p = editing
     ? JSON.parse(JSON.stringify(POP_STATE.list[idx]))
     : { id: 'pop-' + Date.now().toString(36), scope:'boot', source:'custom', title:'', body:'',
-        video:'', image:'', linkText:'', linkUrl:'', startAt:'', endAt:'', dismiss:'daily', bubble:true, bannerText:'', theme:'' };
+        video:'', image:'', linkText:'', linkUrl:'', startAt:'', endAt:'', dismiss:'daily', bubble:true, bannerText:'', theme:'',
+        target: { mode:'all', users:[], roles:[], titles:[] } };
 
   function opts(arr, cur){
     return arr.map(function(o){
@@ -15603,6 +15901,31 @@ function popEdit(idx){
     + '<select id="pfScope" class="gate-input">' + scopeOpts
     + '<option value="__custom__">自定义 cat:N（手填）</option></select>'
     + '<input id="pfScopeCustom" class="gate-input" style="margin-top:6px;display:none" value="' + attr(p.scope) + '" placeholder="如 cat:12"></div>'
+
+    /* v3.5.40（站主 #4）：这条弹窗给谁看 */
+    + '<div class="field"><label>投放对象</label>'
+    + '<select id="pfTargetMode" class="gate-input">'
+    +   '<option value="all"' + ((!p.target || p.target.mode === 'all') ? ' selected' : '') + '>所有人</option>'
+    +   '<option value="users"' + (p.target && p.target.mode === 'users' ? ' selected' : '') + '>指定账号（按用户名 / 姓名）</option>'
+    +   '<option value="roles"' + (p.target && p.target.mode === 'roles' ? ' selected' : '') + '>按身份（管理员 / 学生 / 老师）</option>'
+    +   '<option value="titles"' + (p.target && p.target.mode === 'titles' ? ' selected' : '') + '>按头衔（团支书 / 课代表…）</option>'
+    + '</select>'
+    + '<div id="pfTargetUsersWrap" style="display:' + (p.target && p.target.mode === 'users' ? '' : 'none') + ';margin-top:8px">'
+    +   '<input id="pfTargetUsers" class="gate-input" value="' + attr(((p.target && p.target.users) || []).join(', ')) + '"'
+    +     ' placeholder="多个用逗号分隔，如 yuzikang, 余子康">'
+    +   '<p class="hint">写登录名或真实姓名都认；只弹给列出来的人。</p></div>'
+    + '<div id="pfTargetRolesWrap" style="display:' + (p.target && p.target.mode === 'roles' ? '' : 'none') + ';margin-top:8px;display:' + (p.target && p.target.mode === 'roles' ? 'flex' : 'none') + ';gap:14px;flex-wrap:wrap">'
+    +   [['admin','管理员'],['user','学生'],['teacher','老师']].map(function(x){
+          var on = !p.target || p.target.mode !== 'roles' || (p.target.roles || []).indexOf(x[0]) >= 0;
+          return '<label style="display:flex;align-items:center;gap:6px;font-weight:400">'
+            + '<input type="checkbox" class="pfRole" value="' + x[0] + '"' + (on ? ' checked' : '') + '> ' + x[1] + '</label>';
+        }).join('')
+    + '</div>'
+    + '<div id="pfTargetTitlesWrap" style="display:' + (p.target && p.target.mode === 'titles' ? '' : 'none') + ';margin-top:8px">'
+    +   '<input id="pfTargetTitles" class="gate-input" value="' + attr(((p.target && p.target.titles) || []).join(', ')) + '"'
+    +     ' placeholder="多个用逗号分隔，如 团支书, 课代表">'
+    +   '<p class="hint">按「头衔任命」里设的头衔匹配；同学身上有其中任意一个就会收到。</p></div>'
+    + '<p class="hint">投放对象只决定「弹给谁看」。内容仍存在云端，别把真正的秘密写进弹窗。</p></div>'
 
     + '<div class="field"><label>内容来源</label>'
     + '<select id="pfSource" class="gate-input">' + opts(POP_SOURCES, p.source) + '</select>'
@@ -15678,6 +16001,15 @@ function popEdit(idx){
          IIFE 里的函数（真机上表现为「选了没反应」，且不报错，很难查）。 */
       var pick = $('pfLinkPick');
       if(pick) pick.onchange = pfLinkPickChange;
+      /* v3.5.40：投放对象切换时显示对应输入区 */
+      var tm = $('pfTargetMode');
+      if(tm) tm.onchange = function(){
+        var m = tm.value;
+        var uw = $('pfTargetUsersWrap'), rw = $('pfTargetRolesWrap'), tw = $('pfTargetTitlesWrap');
+        if(uw) uw.style.display = (m === 'users') ? '' : 'none';
+        if(rw) rw.style.display = (m === 'roles') ? 'flex' : 'none';
+        if(tw) tw.style.display = (m === 'titles') ? '' : 'none';
+      };
       $('pfCancel').onclick = closeModal;
       $('pfSave').onclick = function(){ popSave(idx, editing); };
     },
@@ -15707,6 +16039,23 @@ function popSave(idx, editing){
     bubble:    $('pfBubble').checked,
     bannerText: ($('pfBanner').value || '').trim(),
     theme:      $('pfTheme').value,
+    /* v3.5.40（站主 #4）：投放对象 */
+    target: (function(){
+      var m = $('pfTargetMode') ? $('pfTargetMode').value : 'all';
+      var split = function(v){
+        return String(v || '').split(/[,，、]/).map(function(x){ return x.trim(); }).filter(Boolean);
+      };
+      var roles = [];
+      Array.prototype.forEach.call(document.querySelectorAll('.pfRole'), function(cb){
+        if(cb.checked) roles.push(cb.value);
+      });
+      return {
+        mode: m,
+        users:  m === 'users'  ? split($('pfTargetUsers') ? $('pfTargetUsers').value : '') : [],
+        roles:  m === 'roles'  ? (roles.length ? roles : ['user']) : [],
+        titles: m === 'titles' ? split($('pfTargetTitles') ? $('pfTargetTitles').value : '') : [],
+      };
+    })(),
   };
 
   var list = POP_STATE.list.slice();
