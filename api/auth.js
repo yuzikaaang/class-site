@@ -499,10 +499,44 @@ async function ping(req, res) {
       return 'new';
     })());
 
+    /* ---------------- v3.5.40 页面维度在线时长（站主 #3） ----------------
+       站主原话：「在线时间的统计需精确到某段时间在哪个页面，
+                比如成绩分析页面、打砖块页面、后台页面」
+
+       写法和上面 online_sessions 完全同款，只是分段键多了 page：
+         同一人 + 同一会话 + 同一页面，心跳间隔 ≤ 180 秒 → 续上同一段。
+       页面切走就自然另起一段，于是「某页面停留多久」= 该页所有段的时长之和。
+       page 由前端心跳带上（?page=…），这里做长度与字符清洗，防止脏值把索引撑爆。 */
+    const pageRaw = String((req.query && req.query.page) || '').trim();
+    const page = pageRaw.slice(0, 40).replace(/[^\u4e00-\u9fa5A-Za-z0-9:_\-\. ]/g, '') || '未知';
+    jobs.push((async () => {
+      const cur = await sql`
+        update online_pages o
+           set stop_at = now(), last_ping_at = now(), ping_count = o.ping_count + 1
+          from (
+            select id from online_pages
+             where user_id = ${u.id}
+               and session_token = ${sessTok}
+               and page = ${page}
+               and last_ping_at > now() - interval '180 seconds'
+             order by last_ping_at desc
+             limit 1
+          ) t
+         where o.id = t.id
+        returning o.id
+      `;
+      if (cur.length) return 'continue';
+      await sql`
+        insert into online_pages (user_id, session_token, page, start_at, stop_at, last_ping_at, ping_count)
+        values (${u.id}, ${sessTok}, ${page}, now(), now(), now(), 1)
+      `;
+      return 'new';
+    })());
+
     const settled = await Promise.allSettled(jobs);
     settled.forEach((r, i) => {
       if (r.status === 'rejected') {
-        console.warn('[auth] ping 更新失败(' + (['users', 'sessions', 'online_sessions'][i] || i) + ')：',
+        console.warn('[auth] ping 更新失败(' + (['users', 'sessions', 'online_sessions', 'online_pages'][i] || i) + ')：',
           r.reason && r.reason.message);
       }
     });
