@@ -1145,13 +1145,17 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   t('认领后 me 带出 profileId', cl1.body.profile && cl1.body.profile.id === pid1,
     JSON.stringify(cl1.body.profile || {}).slice(0, 100));
 
-  /* ---- 提交联系方式 → 进待审 ---- */
+  /* ---- 提交联系方式 → 进「信息审核」（v3.7.0 起不再直接改档） ----
+     ⚠️ 行为变更：submit 只生成一条待审申请，profiles 一个字节都不动。
+        所以「提交后别人看不到」的同时，「本人看到的也还是旧值」——
+        这正是站主要的「后台确认之前按原来显示」。 */
   const sb = await call('/api/profile?action=submit', {
     method: 'POST', token: token2,
     body: { wechat: 'test_wx_id', qq: '123456789', phone: '13900139000' },
   });
   t('提交联系方式成功', sb.status === 200, JSON.stringify(sb.body));
   t('提交后状态为 pending', sb.body.status === 'pending', '实际 ' + sb.body.status);
+  t('提交后返回待审申请 id', !!sb.body.requestId, JSON.stringify(sb.body));
 
   /* 格式校验 */
   const sbBadQq = await call('/api/profile?action=submit', {
@@ -1163,43 +1167,53 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   });
   t('三项全空被拒绝 400', sbEmpty.status === 400, '实际 ' + sbEmpty.status);
 
-  /* ⚠️ 关键断言：待审核的联系方式，别人查不到 */
+  /* 关键：提交之后、审核之前，档案里还是旧值（这里是空） */
   const s5 = await call('/api/profile?action=search&q=250501', { token: token2 });
   const selfHit = (s5.body.results || [])[0] || {};
-  t('本人能看见自己待审的联系方式',
-    selfHit.wechat === 'test_wx_id', '实际 ' + selfHit.wechat);
-  t('本人在结果里被标记为可见', selfHit.contactVisible === true);
+  t('★v3.7.0 待审期间本人查到的还是原内容（空）',
+    !selfHit.wechat && !selfHit.qq && !selfHit.phone,
+    JSON.stringify({ wx: selfHit.wechat, qq: selfHit.qq, ph: selfHit.phone }));
+  t('★v3.7.0 待审期间档案状态不是 approved', selfHit.contactStatus !== 'approved',
+    '实际 ' + selfHit.contactStatus);
 
-  /* 换一个账号来看，应该看不到（用管理员账号当「别人」测——管理员在查询接口
-     里也是普通查询者视角，只有本人会拿到完整信息） */
   const s6 = await call('/api/profile?action=search&q=250501', { token: adminToken });
   const otherHit = (s6.body.results || [])[0] || {};
   t('待审核的联系方式不会暴露给其他人',
     !otherHit.wechat && !otherHit.qq && !otherHit.phone,
     JSON.stringify({ wx: otherHit.wechat, qq: otherHit.qq, ph: otherHit.phone }));
-  t('别人视角下 contactVisible=false', otherHit.contactVisible === false);
-  t('别人视角下给出脱敏预览', otherHit.phoneMasked === '139****9000',
-    '实际 ' + otherHit.phoneMasked);
 
-  /* ---- 后台看到待审队列 ---- */
-  const rq = await call('/api/admin?action=profile-requests', { token: adminToken });
-  t('待审核队列能读到刚提交的申请',
-    (rq.body.requests || []).some(x => x.id === pid1),
-    JSON.stringify(rq.body).slice(0, 150));
+  /* 本人在「我的资料」里能看到这条待审申请（含原值与新值） */
+  const mp = await call('/api/profile?action=mine-requests', { token: token2 });
+  const pend0 = (mp.body.pending || [])[0] || {};
+  t('★v3.7.0 mine-requests 带出待审申请', !!pend0.id, JSON.stringify(mp.body).slice(0, 200));
+  const wxItem = (pend0.items || []).find((x) => x.field === 'wechat') || {};
+  t('★v3.7.0 待审项带原值与新值',
+    wxItem.before === '' && wxItem.after === 'test_wx_id',
+    JSON.stringify(wxItem));
+
+  /* ---- 后台「信息审核」队列 ---- */
+  const rq = await call('/api/admin?action=change-requests&scope=pending', { token: adminToken });
+  const req1 = (rq.body.requests || [])[0] || {};
+  t('★v3.7.0 待审队列能读到申请', !!req1.id, JSON.stringify(rq.body).slice(0, 160));
+  t('★v3.7.0 队列里只有改过的字段（3 项联系方式中只改这些）',
+    (req1.items || []).length === 3, '实际 ' + (req1.items || []).length);
+  t('★v3.7.0 队列带修改人姓名与学号',
+    req1.name === '测试甲' && req1.studentId === '250501',
+    JSON.stringify({ n: req1.name, s: req1.studentId }));
 
   /* ---- 驳回 ---- */
-  const rj = await call('/api/admin?action=review-contact', {
+  const rj = await call('/api/admin?action=reject-change', {
     method: 'POST', token: adminToken,
-    body: { id: pid1, approve: false, reason: '号码看起来不对' },
+    body: { id: req1.id, reason: '号码看起来不对' },
   });
-  t('驳回联系方式成功', rj.status === 200, JSON.stringify(rj.body));
-  t('驳回后状态为 rejected', rj.body.status === 'rejected');
+  t('驳回申请成功', rj.status === 200, JSON.stringify(rj.body));
 
   const mineRej = await call('/api/profile?action=mine-requests', { token: token2 });
   t('本人能看到驳回原因',
     (mineRej.body.requests || [])[0] &&
     (mineRej.body.requests || [])[0].rejectReason === '号码看起来不对',
     JSON.stringify(mineRej.body).slice(0, 200));
+  t('驳回后没有待审记录了', (mineRej.body.pending || []).length === 0);
 
   const sRej = await call('/api/profile?action=search&q=250501', { token: adminToken });
   t('被驳回后其他人仍看不到',
@@ -1213,16 +1227,39 @@ console.log('\n【12】班级通讯录 / 个人资料（后端化 + 审核 + 查
   });
   t('重新提交后状态回到 pending', sb2.body.status === 'pending');
 
-  const ap = await call('/api/admin?action=review-contact', {
-    method: 'POST', token: adminToken, body: { id: pid1, approve: true },
+  const rq2 = await call('/api/admin?action=change-requests&scope=pending', { token: adminToken });
+  const req2 = ((rq2.body.requests || [])[0]) || {};
+  const ap = await call('/api/admin?action=approve-change', {
+    method: 'POST', token: adminToken, body: { id: req2.id },
   });
-  t('审核通过成功', ap.status === 200 && ap.body.status === 'approved', JSON.stringify(ap.body));
+  t('审核通过成功', ap.status === 200, JSON.stringify(ap.body));
 
   const s7 = await call('/api/profile?action=search&q=250501', { token: adminToken });
   const ok2 = (s7.body.results || [])[0] || {};
   t('审核通过后其他人能看到微信', ok2.wechat === 'fixed_wx', '实际 ' + ok2.wechat);
   t('审核通过后其他人能看到 QQ', ok2.qq === '987654321', '实际 ' + ok2.qq);
   t('审核通过后 contactVisible=true', ok2.contactVisible === true);
+
+  /* ---- 7 天内撤销 ---- */
+  const hist0 = await call('/api/admin?action=change-requests&scope=history', { token: adminToken });
+  const h0 = (hist0.body.requests || []).find((x) => x.status === 'approved') || {};
+  t('★v3.7.0 历史记录里有这次通过', h0.status === 'approved', JSON.stringify(h0).slice(0, 120));
+  t('★v3.7.0 通过后 7 天内可撤销', h0.canRevert === true, JSON.stringify({ c: h0.canRevert, d: h0.revertDaysLeft }));
+
+  const rv = await call('/api/admin?action=revert-change', {
+    method: 'POST', token: adminToken, body: { id: h0.id },
+  });
+  t('★v3.7.0 撤销成功', rv.status === 200, JSON.stringify(rv.body));
+
+  const s8r = await call('/api/profile?action=search&q=250501', { token: adminToken });
+  t('★v3.7.0 撤销后内容恢复为修改前（空）',
+    !(s8r.body.results || [])[0].wechat, JSON.stringify((s8r.body.results || [])[0]).slice(0, 120));
+
+  /* 再撤一次应该被拒（状态已不是 approved） */
+  const rv2 = await call('/api/admin?action=revert-change', {
+    method: 'POST', token: adminToken, body: { id: h0.id },
+  });
+  t('★v3.7.0 已撤销的记录不能再撤', rv2.status === 409, '实际 ' + rv2.status);
 
   /* ---- 管理员不能通过查询接口改身份信息（改只能走 admin 接口） ---- */
   /* 这里验证「同学无法改自己的姓名/学号」：profile 接口的 submit 只接受联系方式 */
@@ -3095,7 +3132,12 @@ console.log('\n【33】第二十八轮·云端字段端到端写入读取');
   t('写入回执含 dj_schedule', (w.body.updated || []).indexOf('dj_schedule') >= 0, JSON.stringify(w.body.updated));
   t('写入回执含 release_notes', (w.body.updated || []).indexOf('release_notes') >= 0);
 
-  const rd = await call('/api/content');
+  /* v3.7.0：后台专用键只发给管理员 —— 普通/匿名请求拿不到（省 150KB+） */
+  const rdAnon = await call('/api/content');
+  t('★v3.7.0 匿名读内容不含后台专用键',
+    !rdAnon.body.items.dj_schedule && !rdAnon.body.items.release_notes,
+    JSON.stringify(Object.keys(rdAnon.body.items || {})));
+  const rd = await call('/api/content', { token: adminToken });
   const items = rd.body.items || {};
   t('读回 dj_schedule', Array.isArray(items.dj_schedule) && items.dj_schedule.length === 1,
     JSON.stringify(items.dj_schedule).slice(0, 120));
@@ -3114,7 +3156,7 @@ console.log('\n【33】第二十八轮·云端字段端到端写入读取');
     body: { key: 'release_notes', value: [] },
   });
   t('单键写入（key/value 形式）成功', w2.status === 200 && w2.body.ok);
-  const rd2 = await call('/api/content');
+  const rd2 = await call('/api/content', { token: adminToken });
   const it2 = rd2.body.items || {};
   t('清空 release_notes 后 dj_schedule 仍在', Array.isArray(it2.dj_schedule) && it2.dj_schedule.length === 1,
     JSON.stringify(it2.dj_schedule).slice(0, 80));
@@ -3406,9 +3448,12 @@ console.log('\n【36】第二十九轮·本人可见性意愿（仅自己可见�
   const myPid = meNow.body.profile && meNow.body.profile.id;
   t('拿到自己的资料 id', typeof myPid === 'number', '实际 ' + myPid);
 
-  await call('/api/admin?action=review-contact', {
+  /* v3.7.0：审批改走 change-requests —— 先取该档案的待审申请再通过 */
+  const myReq = await call('/api/admin?action=change-requests&scope=pending', { token: adminToken });
+  const myReqOne = (myReq.body.requests || []).find((x) => x.profileId === myPid) || {};
+  await call('/api/admin?action=approve-change', {
     method: 'POST', token: adminToken,
-    body: { id: myPid, approve: true },
+    body: { id: myReqOne.id },
   });
 
   /* 别人按学号查不到 —— 但这条资料没学号，改用姓名查 */
@@ -7968,8 +8013,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.6.4（3.6.5 无 DDL 变更，不跟着动）',
-    /const SCHEMA_VER = '3\.6\.4'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.7.0（新增资料修改申请表）',
+    /const SCHEMA_VER = '3\.7\.0'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8272,7 +8317,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.27 云端时长库表 song_durations 三处同步（升级路径/全量清单/schema.sql）',
     (HTTP_527.match(/create table if not exists song_durations/g) || []).length >= 2
     && /create table if not exists song_durations/.test(SCH_527)
-    && /const SCHEMA_VER = '3\.6\.4'/.test(HTTP_527));
+    && /const SCHEMA_VER = '3\.7\.0'/.test(HTTP_527));
   t('v3.5.27 后端写库按来源优先级，人工填写不被自动结果覆盖',
     /case song_durations\.source/.test(MUS_527) && /source: 'manual'/.test(MUS_527)
     && /when 'manual' then 3/.test(MUS_527));
@@ -10784,7 +10829,7 @@ console.log('\n【85】在线时长统计（v3.5.35）');
   t('v3.5.35 online_sessions 三处同步（升级路径 / 全量清单 / schema.sql）',
     (http535.match(/create table if not exists online_sessions/g) || []).length >= 2
     && /create table if not exists online_sessions/.test(sch535)
-    && /const SCHEMA_VER = '3\.6\.4'/.test(http535));
+    && /const SCHEMA_VER = '3\.7\.0'/.test(http535));
   t('v3.5.35 三处索引齐（user_start / start / token）',
     ['online_user_start_idx', 'online_start_idx', 'online_token_idx'].every(function(ix){
       const n = (http535.match(new RegExp('create index if not exists ' + ix, 'g')) || []).length;
@@ -10993,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.6.5 index.html SITE_VERSION = 3.6.5', /var SITE_VERSION = '3\.6\.5'/.test(idx539));
-  t('v3.6.5 admin.html SITE_VERSION = 3.6.5', /var SITE_VERSION = '3\.6\.5'/.test(admh539));
-  t('v3.6.5 sw.js SITE_VER = 3.6.5 + CACHE v158',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.6.5'")
-    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v161'"));
-  t('v3.6.5 api/worker.mjs API_VER = 3.6.5',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.6.5';"));
+  t('v3.7.0 index.html SITE_VERSION = 3.7.0', /var SITE_VERSION = '3\.7\.0'/.test(idx539));
+  t('v3.7.0 admin.html SITE_VERSION = 3.7.0', /var SITE_VERSION = '3\.7\.0'/.test(admh539));
+  t('v3.7.0 sw.js SITE_VER = 3.7.0 + CACHE v158',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.7.0'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v162'"));
+  t('v3.7.0 api/worker.mjs API_VER = 3.7.0',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.7.0';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11096,10 +11141,10 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.6.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.6\.5'/.test(idx540) && /var SITE_VERSION = '3\.6\.5'/.test(adm540)
-    && /const API_VER = '3\.6\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.6\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.0 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.7\.0'/.test(idx540) && /var SITE_VERSION = '3\.7\.0'/.test(adm540)
+    && /const API_VER = '3\.7\.0'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.7\.0'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11139,7 +11184,7 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
     /id="stBadge"/.test(adm542) && /cfg\.badgeUrl/.test(adm542) && /function adminBadgeUrl/.test(adm542));
   t('v3.5.42 前台班徽地址：后台配置优先，否则站点图标',
     /function siteBadgeUrl/.test(idx542) && /SITE_DATA\.badgeUrl/.test(idx542));
-  t('v3.5.42 作业 / 抽歌导出都带上 badge（v3.6.5 起为候选列表）',
+  t('v3.5.42 作业 / 抽歌导出都带上 badge（v3.7.0 起为候选列表）',
     /badge: \(typeof siteBadgeList === 'function'\)/.test(idx542)
     && /badge: \(typeof adminBadgeList === 'function'\)/.test(adm542));
 
@@ -11152,10 +11197,10 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
   t('v3.5.42 导出的就是当前正在看的那一份', /var hw = window\.__HW_VIEWING \|\| getCurrentHomework/.test(idx542));
 
   /* ---- 版本 ---- */
-  t('v3.6.5 四处版本号一致',
-    /var SITE_VERSION = '3\.6\.5'/.test(idx542) && /var SITE_VERSION = '3\.6\.5'/.test(adm542)
-    && /const API_VER = '3\.6\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.6\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.0 四处版本号一致',
+    /var SITE_VERSION = '3\.7\.0'/.test(idx542) && /var SITE_VERSION = '3\.7\.0'/.test(adm542)
+    && /const API_VER = '3\.7\.0'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.7\.0'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11194,7 +11239,7 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   t('★v3.6.1 字段体检/恢复接口存在（17 个预置字段）',
     /async function repairFields/.test(admjs61) && /PRESET_FIELDS = \[/.test(admjs61)
     && (admjs61.match(/\['[a-z_]+',\s*'[^']+'/g) || []).length > 10);
-  t('★v3.6.5 删除字段：先存快照再真删（30 分钟内可撤回）',
+  t('★v3.7.0 删除字段：先存快照再真删（30 分钟内可撤回）',
     (function(){
       const i = admjs61.indexOf('async function deleteField(');
       if (i < 0) return false;
@@ -11205,7 +11250,7 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
     })());
   t('★v3.6.1 恢复会清空墓碑（防止升级反复删）',
     /data - 'deleted_fields'/.test(admjs61));
-  t('v3.6.5 后台字段管理已移除「恢复预置字段」按钮（按站主要求）',
+  t('v3.7.0 后台字段管理已移除「恢复预置字段」按钮（按站主要求）',
     !/id="ffRepair"/.test(adm61) && /function repairFieldsDialog/.test(adm61));
 
   /* ---- #1 班徽 ---- */
@@ -11225,11 +11270,11 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.6.5 当前版本 3.6.5、日期 2026-10-19',
-    /var SITE_VERSION = '3\.6\.5'/.test(idx61) && /VER_DATE = '2026-10-19'/.test(idx61));
+  t('v3.7.0 当前版本 3.7.0、日期 2026-10-20',
+    /var SITE_VERSION = '3\.7\.0'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
 }
 
-console.log('\n【90】v3.6.5 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
+console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
 {
   const idx64 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adm64 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -11239,63 +11284,149 @@ console.log('\n【90】v3.6.5 同步钩子真正生效 · 删除撤回 · 按钮
   const pre64 = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
 
   /* ---- #1 同步钩子 ---- */
-  t('★v3.6.5 写入钩子挂在 Storage.prototype（实例上赋值在 Chrome 里不生效）',
+  t('★v3.7.0 写入钩子挂在 Storage.prototype（实例上赋值在 Chrome 里不生效）',
     /var proto = Storage\.prototype/.test(idx64)
     && /proto\.setItem = function\(k, v\)/.test(idx64)
     && /rawSet\.call\(this, k, v\)/.test(idx64));
-  t('★v3.6.5 只对 localStorage 生效，sessionStorage 不受影响',
+  t('★v3.7.0 只对 localStorage 生效，sessionStorage 不受影响',
     /if\(this !== window\.localStorage\) return;/.test(idx64));
-  t('v3.6.5 云端回写不登记（__cloudPulling 仍在）',
+  t('v3.7.0 云端回写不登记（__cloudPulling 仍在）',
     /if\(window\.__cloudPulling\) return;/.test(idx64));
 
   /* ---- #2 按钮反馈 ---- */
-  t('★v3.6.5 同步按钮有转圈 / 完成 / 失败三态',
+  t('★v3.7.0 同步按钮有转圈 / 完成 / 失败三态',
     /function syncBtnRun/.test(idx64) && /sync-spin/.test(idx64)
     && /'✓ 完成'/.test(idx64) && /'✗ 失败'/.test(idx64));
-  t('v3.6.5 三个按钮都把 this 传进去', (function(){
+  t('v3.7.0 三个按钮都把 this 传进去', (function(){
     return /syncUploadNow\(this\)/.test(idx64) && /syncDownloadNow\(this\)/.test(idx64)
       && /syncNow\(this\)/.test(idx64);
   })());
 
   /* ---- #3 删除撤回 ---- */
-  t('★v3.6.5 回收站表三处 DDL 齐',
+  t('★v3.7.0 回收站表三处 DDL 齐',
     (http64.match(/create table if not exists deleted_items/g) || []).length >= 2
     && /create table if not exists deleted_items/.test(sch64));
-  t('★v3.6.5 删除前先存快照，再 drop column',
+  t('★v3.7.0 删除前先存快照，再 drop column',
     (function(){
       const i = admjs64.indexOf('async function deleteField(');
       const body = admjs64.slice(i, admjs64.indexOf('\nasync function ', i + 10));
       return body.indexOf('insert into deleted_items') < body.indexOf('drop column if exists');
     })());
-  t('★v3.6.5 撤回接口校验 30 分钟窗口',
+  t('★v3.7.0 撤回接口校验 30 分钟窗口',
     /async function undoDelete/.test(admjs64) && /已经超过 30 分钟/.test(admjs64));
-  t('★v3.6.5 操作日志里有「撤回」按钮 + 剩余分钟',
+  t('★v3.7.0 操作日志里有「撤回」按钮 + 剩余分钟',
     /data-undo=/.test(adm64) && /剩 ' \+ left \+ ' 分/.test(adm64));
-  t('v3.6.5 撤回会解除墓碑（否则升级又删）', /where v <> \$\{p\.field\}/.test(admjs64));
+  t('v3.7.0 撤回会解除墓碑（否则升级又删）', /where v <> \$\{p\.field\}/.test(admjs64));
 
   /* ---- #4 字段编辑报错 ---- */
-  t('★v3.6.5 set-self-edit 先补 self_edit 列再写（修 500）',
+  t('★v3.7.0 set-self-edit 先补 self_edit 列再写（修 500）',
     /async function setSelfEdit/.test(admjs64)
     && /add column if not exists self_edit boolean not null default false/.test(admjs64));
 
   /* ---- #5 公告门禁 ---- */
-  t('★v3.6.5 部署前必须已发公告（没发就拦）',
+  t('★v3.7.0 部署前必须已发公告（没发就拦）',
     /云端公告里没有/.test(pre64) && /云端公告已发布/.test(pre64));
 
   /* ---- #6 合并页面 ---- */
-  t('★v3.6.5 版本更新并入数据管理，侧栏不再单独一项',
+  t('★v3.7.0 版本更新并入数据管理，侧栏不再单独一项',
     !/id:'releases'/.test(adm64) && /function releasesBlockHtml/.test(adm64)
     && /mountReleasesBlock\(\)/.test(adm64));
 
   /* ---- #7 班徽代理 ---- */
-  t('★v3.6.5 班徽走服务器代理（跨域图床也能进 canvas）',
+  t('★v3.7.0 班徽走服务器代理（跨域图床也能进 canvas）',
     fs.existsSync(new URL('./api/badge.js', import.meta.url))
     && /case 'badge'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
     && /apiUrl\('\/badge'\)/.test(idx64));
-  t('v3.6.5 代理拒绝非图片 / 过大文件', (function(){
+  t('v3.7.0 代理拒绝非图片 / 过大文件', (function(){
     const b = fs.readFileSync(new URL('./api/badge.js', import.meta.url), 'utf8');
-    return /not 图片|不是图片/.test(b) && /4MB/.test(b);
+    return /MAX_BYTES/.test(b) && /DEFAULT_BADGE_B64/.test(b);
   })());
+}
+
+console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽本地缓存');
+{
+  const idx70 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm70 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const pro70 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
+  const admjs70 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const http70 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const sch70 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const bdg70 = fs.readFileSync(new URL('./api/badge.js', import.meta.url), 'utf8');
+  const cnt70 = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
+
+  /* ---- #1 审批 ---- */
+  t('★v3.7.0 申请表三处 DDL（升级路径 / 全量清单 / schema.sql）',
+    (http70.match(/create table if not exists profile_change_requests/g) || []).length >= 2
+    && /create table if not exists profile_change_requests/.test(sch70));
+  t('★v3.7.0 submit 只建申请，不写 profiles',
+    (function(){
+      const i = pro70.indexOf('async function submit(');
+      const body = pro70.slice(i, pro70.indexOf('\nasync function ', i + 10));
+      return /createChangeRequest/.test(body) && !/update profiles\s+set wechat/.test(body);
+    })());
+  t('★v3.7.0 selfUpdate 也改为建申请（不再直接 update）',
+    (function(){
+      const i = pro70.indexOf('async function selfUpdate(');
+      const body = pro70.slice(i, pro70.indexOf('\nasync function ', i + 10));
+      return /createChangeRequest/.test(body) && !/update profiles set/.test(body);
+    })());
+  t('★v3.7.0 只记录真正变化的字段（old === new 丢弃）',
+    /if \(String\(beforePlain == null \? '' : beforePlain\) === afterPlain\) continue;/.test(pro70));
+  t('★v3.7.0 申请里的值仍是密文（encField 后才入库）',
+    /before: await encField\(pkey/.test(pro70) && /after: await encField\(pkey/.test(pro70));
+  t('★v3.7.0 后台通过才写库（approve-change）',
+    /async function approveChange/.test(admjs70) && /case 'approve-change'/.test(admjs70));
+  t('★v3.7.0 驳回不动档案内容', (function(){
+    const i = admjs70.indexOf('async function rejectChange(');
+    const body = admjs70.slice(i, admjs70.indexOf('\nasync function ', i + 10));
+    return !/wechat|qq|phone|name =/.test(body.replace(/reject_reason/g, ''));
+  })());
+  t('★v3.7.0 撤销只认 7 天内的已通过记录',
+    /CHANGE_REVERT_DAYS = 7/.test(admjs70) && /已超过 ' \+ CHANGE_REVERT_DAYS/.test(admjs70));
+  t('★v3.7.0 撤销会还原 contact_status（联系方式专用）',
+    /contact_status = 'approved'/.test(admjs70) && /prevStatus/.test(admjs70));
+  t('v3.7.0 我的资料里能看到待审新值',
+    /MY_PROF_PENDING/.test(idx70) && /待审核：/.test(idx70));
+  t('★v3.7.0 后台面板改名为「信息审核」',
+    /label:'信息审核'/.test(adm70) && !/label:'联系方式审核'/.test(adm70));
+  t('★v3.7.0 审核卡片只画改过的字段（revFieldRow）',
+    /function revFieldRow/.test(adm70) && /原内容/.test(adm70));
+  t('★v3.7.0 历史记录 + 撤销按钮',
+    /function paintReviewHistory/.test(adm70) && /data-rv-undo/.test(adm70) && /已超 7 天/.test(adm70));
+
+  /* ---- #2 缓存优先 ---- */
+  t('★v3.7.0 首屏渲染前先套缓存（contentCacheBootstrap 紧跟 goHomeView 之前）',
+    (function(){
+      /* 顶层顺序：contentCacheBootstrap(false); 换行 goHomeView(); */
+      const a = idx70.indexOf('\ncontentCacheBootstrap(false);\ngoHomeView();');
+      return a > 0;
+    })());
+  t('★v3.7.0 contentBoot 也复用同一个 bootstrap（不会重复套）',
+    /function contentBoot\(\)\{\s*contentCacheBootstrap\(true\);/.test(idx70.replace(/\n/g, '\n')));
+  t('★v3.7.0 同步完成后自动重绘（无需用户操作）',
+    /syncCloudContent\(false\)\.then\(function\(r\)\{\s*if\(r\.ok && r\.count > 0\)/.test(idx70));
+  t('★v3.7.0 内容接口对非管理员剔除后台专用键',
+    /ADMIN_ONLY_KEYS/.test(cnt70) && /delete items\[k\]/.test(cnt70));
+
+  /* ---- #3 班徽 ---- */
+  t('★v3.7.0 班徽接口内嵌兜底图（永 200）',
+    /DEFAULT_BADGE_B64/.test(bdg70) && /embedded/.test(bdg70));
+  t('★v3.7.0 班徽接口 3 秒超时 + 一天缓存',
+    /FETCH_TIMEOUT_MS = 3000/.test(bdg70) && /max-age=86400/.test(bdg70));
+  t('★v3.7.0 前台登录时把班徽存本地缓存',
+    /function badgeCacheLoad/.test(idx70) && /badgeCacheLoad\(false\)/.test(idx70)
+    && /__cls_badge_src/.test(idx70));
+  t('★v3.7.0 导出时缓存是第一候选',
+    /var cached = badgeCachedSrc\(\);\s*\n\s*if\(cached\) list\.push\(cached\);/.test(idx70));
+  t('★v3.7.0 后台同样读本地缓存',
+    /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
+
+  /* ---- 版本 ---- */
+  t('v3.7.0 四处版本一致', /var SITE_VERSION = '3\.7\.0'/.test(idx70)
+    && /var SITE_VERSION = '3\.7\.0'/.test(adm70)
+    && /const API_VER = '3\.7\.0'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.7\.0'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.7\.0'/.test(adm70));
 }
 
 console.log('\n' + '='.repeat(52));
