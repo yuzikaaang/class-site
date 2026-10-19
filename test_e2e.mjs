@@ -11139,8 +11139,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
     /id="stBadge"/.test(adm542) && /cfg\.badgeUrl/.test(adm542) && /function adminBadgeUrl/.test(adm542));
   t('v3.5.42 前台班徽地址：后台配置优先，否则站点图标',
     /function siteBadgeUrl/.test(idx542) && /SITE_DATA\.badgeUrl/.test(idx542));
-  t('v3.5.42 作业 / 抽歌导出都带上 badge',
-    /badge: siteBadgeUrl\(\)/.test(idx542) && /badge: \(typeof adminBadgeUrl/.test(adm542));
+  t('v3.5.42 作业 / 抽歌导出都带上 badge（v3.6.5 起为候选列表）',
+    /badge: \(typeof siteBadgeList === 'function'\)/.test(idx542)
+    && /badge: \(typeof adminBadgeList === 'function'\)/.test(adm542));
 
   /* ---- 选哪一次 ---- */
   t('★v3.5.42 抽歌导出前可选批次（djPickRound）',
