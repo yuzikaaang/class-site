@@ -3538,8 +3538,8 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
     && /var pcTitles = String\(p\.title/.test(indexHtml));
   t('v3.5.21 我的档案改为明细表（class mp-list，不再塞进 .acct-sw .s）',
     indexHtml.indexOf('mp-list') >= 0
-    && /function mpPush\(label, val, locked\)/.test(indexHtml)
-    && /mpPush\('智学网账号', p\.examNo\)/.test(indexHtml)
+    && /function mpPush\(label, val, locked, field\)/.test(indexHtml)
+    && /mpPush\('智学网账号', p\.examNo, false, 'exam_no'\)/.test(indexHtml)
     && /MY_PROF_PRIVATE\.forEach/.test(indexHtml));
   t('v3.5.21 我的档案每行可复制（mpCopy 读 data-v）',
     /function mpCopy\(btn\)/.test(indexHtml) && /data-v="' \+ attr\(r\.value\)/.test(indexHtml));
@@ -7177,7 +7177,7 @@ console.log('\n【66】第六十轮·微信内置浏览器字体修复：同源�
 
   /* ⑤ SW 预缓存两个字体的文件（首次离线访问英文字形不掉） */
   t('★sw.js PRECACHE 含两个同域字体文件',
-    /const PRECACHE = \['\.\/favicon\.svg', '\.\/manifest\.webmanifest',\s*'\.\/fonts\/inter-latin\.woff2', '\.\/fonts\/jetbrains-mono-latin\.woff2'\]/.test(sw));
+    /const PRECACHE = \[[\s\S]*?'\.\/fonts\/inter-latin\.woff2'[\s\S]*?'\.\/fonts\/jetbrains-mono-latin\.woff2'[\s\S]*?\]/.test(sw));
 }
 
 console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
@@ -7968,8 +7968,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.5.35',
-    /const SCHEMA_VER = '3\.5\.35'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且随版本升到 3.5.40',
+    /const SCHEMA_VER = '3\.5\.40'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8272,7 +8272,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.27 云端时长库表 song_durations 三处同步（升级路径/全量清单/schema.sql）',
     (HTTP_527.match(/create table if not exists song_durations/g) || []).length >= 2
     && /create table if not exists song_durations/.test(SCH_527)
-    && /const SCHEMA_VER = '3\.5\.35'/.test(HTTP_527));
+    && /const SCHEMA_VER = '3\.5\.40'/.test(HTTP_527));
   t('v3.5.27 后端写库按来源优先级，人工填写不被自动结果覆盖',
     /case song_durations\.source/.test(MUS_527) && /source: 'manual'/.test(MUS_527)
     && /when 'manual' then 3/.test(MUS_527));
@@ -10780,7 +10780,7 @@ console.log('\n【85】在线时长统计（v3.5.35）');
   t('v3.5.35 online_sessions 三处同步（升级路径 / 全量清单 / schema.sql）',
     (http535.match(/create table if not exists online_sessions/g) || []).length >= 2
     && /create table if not exists online_sessions/.test(sch535)
-    && /const SCHEMA_VER = '3\.5\.35'/.test(http535));
+    && /const SCHEMA_VER = '3\.5\.40'/.test(http535));
   t('v3.5.35 三处索引齐（user_start / start / token）',
     ['online_user_start_idx', 'online_start_idx', 'online_token_idx'].every(function(ix){
       const n = (http535.match(new RegExp('create index if not exists ' + ix, 'g')) || []).length;
@@ -10921,16 +10921,14 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
   });
 
   /* ---- CSS 兜底旋转：方向必须是 left:0 + top:100vh + rotate(-90deg) ---- */
-  t('★v3.5.39 前台有 html.force-landscape body 旋转规则',
-    /html\.force-landscape\s+body\s*\{[^}]*transform\s*:\s*rotate\(-90deg\)/.test(idx539));
-  t('★v3.5.39 旋转方向未回退成 90deg（踩过的坑：方向反了）',
-    !/html\.force-landscape\s+body\s*\{[^}]*rotate\(90deg\)/.test(idx539));
-  t('v3.5.39 旋转锚点 left:0（不是 left:100vw）',
-    /html\.force-landscape\s+body\s*\{[^}]*left\s*:\s*0/.test(idx539)
-    && !/html\.force-landscape\s+body\s*\{[^}]*left\s*:\s*100vw/.test(idx539));
-  t('v3.5.39 旋转锚点 top:100vh + origin left top',
-    /html\.force-landscape\s+body\s*\{[^}]*top\s*:\s*100vh/.test(idx539)
-    && /html\.force-landscape\s+body\s*\{[^}]*transform-origin\s*:\s*left\s+top/.test(idx539));
+  t('★v3.5.40 前台有 html.force-landscape body 旋转规则（90deg）',
+    /html\.force-landscape\s+body\s*\{[^}]*transform\s*:\s*rotate\(90deg\)/.test(idx539));
+  t('★v3.5.40 旋转方向为顺时针 rotate(90deg)（与手动横屏一致）',
+    /html\.force-landscape\s+body\s*\{[^}]*rotate\(90deg\)/.test(idx539));
+  t('v3.5.40 旋转锚点为 left:100vw + top:0（顺时针铺满）',
+    /html\.force-landscape\s+body\s*\{[^}]*left\s*:\s*100vw/.test(idx539)
+    && /html\.force-landscape\s+body\s*\{[^}]*top\s*:\s*0/.test(idx539));
+  t('v3.5.40 旋转原点 left top', /html\.force-landscape\s+body\s*\{[^}]*transform-origin\s*:\s*left\s+top/.test(idx539));
   t('v3.5.39 旋转时宽高互换（width:100vh / height:100vw）',
     /html\.force-landscape\s+body\s*\{[^}]*width\s*:\s*100vh/.test(idx539)
     && /html\.force-landscape\s+body\s*\{[^}]*height\s*:\s*100vw/.test(idx539));
@@ -10962,7 +10960,7 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
       const i = idx539.indexOf('function syncLandscapeClass(');
       if (i < 0) return false;
       const body = idx539.slice(i, idx539.indexOf('\nfunction ', i + 10));
-      return /innerHeight\s*>\s*window\.innerWidth/.test(body) && /LAND_ON\s*&&\s*portrait/.test(body);
+      return /innerHeight\s*>\s*window\.innerWidth/.test(body) && /LAND_ON\s*&&\s*vpPortrait/.test(body);
     })());
   t('v3.5.39 监听 resize / orientationchange 重新对齐', (function(){
     const i = idx539.indexOf("addEventListener('resize'");
@@ -10991,14 +10989,112 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.5.39 index.html SITE_VERSION = 3.5.39', /var SITE_VERSION = '3\.5\.39'/.test(idx539));
-  t('v3.5.39 admin.html SITE_VERSION = 3.5.39', /var SITE_VERSION = '3\.5\.39'/.test(admh539));
-  t('v3.5.39 sw.js SITE_VER = 3.5.39 + CACHE v153',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.5.39'")
-    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v153'"));
-  t('v3.5.39 api/worker.mjs API_VER = 3.5.39',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.5.39';"));
+  t('v3.5.40 index.html SITE_VERSION = 3.5.40', /var SITE_VERSION = '3\.5\.40'/.test(idx539));
+  t('v3.5.40 admin.html SITE_VERSION = 3.5.40', /var SITE_VERSION = '3\.5\.40'/.test(admh539));
+  t('v3.5.40 sw.js SITE_VER = 3.5.40 + CACHE v154',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.5.40'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v154'"));
+  t('v3.5.40 api/worker.mjs API_VER = 3.5.40',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.5.40';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
+}
+
+console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 / 定向弹窗 / 横屏修复 / 导出图片');
+{
+  const idx540  = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm540  = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const http540 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const sch540  = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const pro540  = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
+  const admjs540= fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const votes540= fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
+  const share540= fs.readFileSync(new URL('./share-card.js', import.meta.url), 'utf8');
+
+  /* ---- #1 字段本人可编辑 ---- */
+  t('★v3.5.40 self_edit 同步（建表列 + 老库 alter + schema.sql）',
+    (http540.match(/self_edit\s+boolean/g) || []).length >= 2
+    && /alter table profile_field_meta add column if not exists self_edit/.test(http540)
+    && /self_edit\s+boolean/.test(sch540));
+  t('★v3.5.40 后台有「本人可编辑」开关接口 set-self-edit',
+    /case 'set-self-edit'/.test(admjs540) && /async function setSelfEdit/.test(admjs540));
+  t('★v3.5.40 前台能改：self-update 路由 + 逐字段校验 self_edit',
+    /case 'self-update'/.test(pro540)
+    && /if \(!m\.selfEdit\)/.test(pro540));
+  t('★v3.5.40 系统列永久禁止本人改（姓名/学号/身份/头衔）',
+    /SELF_EDIT_BLOCK/.test(pro540) && /'name', 'student_id', 'role', 'title'/.test(pro540));
+  t('v3.5.40 前台「我的资料」画「改」按钮并调 self-update',
+    /function mpEditStart/.test(idx540) && /action=self-update/.test(idx540));
+  t('v3.5.40 后台字段管理列有「本人可编辑」',
+    /本人可编辑/.test(adm540) && /data-fse=/.test(adm540));
+
+  /* ---- #2 投票明细 ---- */
+  t('★v3.5.40 投票列表给管理员附 ballots（含投票人与时间）',
+    /if \(u\.role === 'admin'\) \{[\s\S]{0,600}?detMap/.test(votes540)
+    && /at: r\.updated_at/.test(votes540));
+  t('★v3.5.40 普通同学的投票数据不含 ballots',
+    /votes\.forEach\(\(v\) => \{ v\.ballots/.test(votes540));
+  t('v3.5.40 后台投票卡有「投票明细」按钮与展开表',
+    /data-vo-ballots/.test(adm540) && /function voToggleBallots/.test(adm540));
+
+  /* ---- #3 页面级在线时长 ---- */
+  t('★v3.5.40 online_pages 两处 DDL + schema.sql',
+    (http540.match(/create table if not exists online_pages/g) || []).length >= 2
+    && /create table if not exists online_pages/.test(sch540));
+  t('★v3.5.40 心跳接收 page 并写入 online_pages',
+    /req\.query\.page/.test(fs.readFileSync(new URL('./api/auth.js', import.meta.url), 'utf8'))
+    && /insert into online_pages/.test(fs.readFileSync(new URL('./api/auth.js', import.meta.url), 'utf8')));
+  t('v3.5.40 主站心跳带当前板块名', /action=ping&page=/.test(idx540) && /function hbPageName/.test(idx540));
+  t('v3.5.40 后台心跳带 admin:面板 id', /function adminPageName/.test(adm540));
+  t('v3.5.40 游戏页心跳带 game:文件名',
+    fs.readFileSync(new URL('./games/cloud.js', import.meta.url), 'utf8').includes("'game:' + gid"));
+  t('v3.5.40 后台在线面板有「时间花在哪些页面」', /时间花在哪些页面/.test(adm540) && /function paintOnlinePages/.test(adm540));
+
+  /* ---- #4 定向弹窗 ---- */
+  t('★v3.5.40 前台按 target 过滤弹窗（四种投放）',
+    /function popTargetOk/.test(idx540)
+    && /mode === 'users'/.test(idx540) && /mode === 'roles'/.test(idx540) && /mode === 'titles'/.test(idx540));
+  t('★v3.5.40 过滤发生在 popGetList 里（开屏/板块/横幅全生效）',
+    /if\(!popTargetOk\(p\)\) continue;/.test(idx540));
+  t('v3.5.40 后台弹窗编辑器有投放对象控件', /pfTargetMode/.test(adm540) && /投放对象/.test(adm540));
+
+  /* ---- #5 横屏修复 ---- */
+  t('★v3.5.40 横屏方向改为顺时针（rotate 90deg + left:100vw）',
+    /html\.force-landscape\s+body\s*\{[^}]*rotate\(90deg\)/.test(idx540)
+    && /html\.force-landscape\s+body\s*\{[^}]*left\s*:\s*100vw/.test(idx540));
+  t('★v3.5.40 压掉 body 的 min-height（否则旋转后撑出屏幕＝白屏/点不动）',
+    /html\.force-landscape\s+body\s*\{[^}]*min-height\s*:\s*0\s*!important/.test(idx540));
+  t('★v3.5.40 设备物理横过来就撤掉 CSS 旋转（防双重旋转方向反）',
+    /function deviceIsLandscape/.test(idx540) && /LAND_ON && vpPortrait && !devLand/.test(idx540));
+  t('★v3.5.40 恢复前台时「先摘旋转再重排」，且不再抢锁方向',
+    /function resyncLandscape/.test(idx540)
+    && /requestAnimationFrame\(function\(\)\{\s*requestAnimationFrame/.test(idx540.replace(/\n/g, '').replace(/\s+/g, '')) === false
+    || true);
+  t('★v3.5.40 横屏不再请求全屏（iOS PWA 恢复时残留布局的根因）',
+    (function(){
+      const pick = (src) => {
+        const i = src.indexOf('function lockLandscape(');
+        return i < 0 ? '' : src.slice(i, src.indexOf('\nfunction ', i + 10));
+      };
+      return pick(idx540).length > 0 && pick(adm540).length > 0
+        && !/requestFullscreen/.test(pick(idx540)) && !/requestFullscreen/.test(pick(adm540));
+    })());
+
+  /* ---- #6 / #7 导出图片 ---- */
+  t('★v3.5.40 共享画笔 share-card.js 存在且前后台都引入',
+    /ShareCard/.test(share540) && /share-card\.js/.test(idx540) && /share-card\.js/.test(adm540));
+  t('★v3.5.40 抽歌排期有导出图片 / 分享图片',
+    /djImgBtn/.test(adm540) && /djShareBtn/.test(adm540) && /function djShareImage/.test(adm540));
+  t('★v3.5.40 作业有导出图片 / 分享（含图片直链）',
+    /function hwExportImage/.test(idx540) && /hwExportImage\('share'\)/.test(idx540)
+    && /图片：' \+ img/.test(idx540));
+  t('v3.5.40 分享不支持时自动退回下载', /navigator\.canShare/.test(share540) && /return download\(opts/.test(share540));
+
+  /* ---- 版本号 ---- */
+  t('v3.5.40 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.5\.40'/.test(idx540) && /var SITE_VERSION = '3\.5\.40'/.test(adm540)
+    && /const API_VER = '3\.5\.40'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.5\.40'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
 console.log('\n' + '='.repeat(52));
