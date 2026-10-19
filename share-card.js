@@ -183,6 +183,32 @@
      少一个角标总比整张图导不出来强。 */
   var badgeCache = {};
 
+  /** 取不到真班徽时的兜底：绿色圆角块 + 班级号 */
+  function fallbackBadge() {
+    try {
+      if (badgeCache.__fallback) return badgeCache.__fallback;
+      var s = 132;
+      var cv = document.createElement('canvas');
+      cv.width = cv.height = s;
+      var c = cv.getContext('2d');
+      var g = c.createLinearGradient(0, 0, s, s);
+      g.addColorStop(0, '#16a34a');
+      g.addColorStop(1, '#0b6b35');
+      c.fillStyle = g;
+      c.fillRect(0, 0, s, s);
+      c.fillStyle = 'rgba(255,255,255,.18)';
+      c.beginPath(); c.arc(s * 0.78, s * 0.24, s * 0.34, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#fff';
+      c.font = 'bold 58px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText('05', s / 2, s / 2 + 3);
+      var r = { ok: true, img: cv, fallback: true };
+      badgeCache.__fallback = r;
+      return r;
+    } catch (e) { return null; }
+  }
+
   function loadBadge(url) {
     if (!url) return Promise.resolve(null);
     if (Object.prototype.hasOwnProperty.call(badgeCache, url)) {
@@ -207,12 +233,14 @@
             fin({ ok: true, img: img2 });
           } catch (e) { fin(null); }
         };
-        img2.onerror = function () { fin(null); };
+        img2.onerror = function () { fin(fallbackBadge()); };
         img2.src = url;
       };
       img.src = url;
-      /* 兜底：3 秒还没结果就不等了，别让用户以为按钮坏了 */
-      setTimeout(function () { fin(null); }, 3000);
+      /* 兜底：3 秒还没结果就不等了，别让用户以为按钮坏了。
+         v3.6.3：图取不到时不再留空 —— 画一个同色系的简化徽标（班级号），
+         总比右上角光秃秃强；真图同步上来后会自动换回真图。 */
+      setTimeout(function () { fin(fallbackBadge()); }, 3000);
     });
   }
 
