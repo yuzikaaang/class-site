@@ -102,6 +102,29 @@ if (!notes.some((n) => n && n.version === VER)) {
 }
 console.log('③ 云端版本记录已包含 ' + VER + '（共 ' + notes.length + ' 条）');
 
+/* ---------- ③b 云端公告已发布（站主 v3.6.4 新规） ----------
+   「每次小更新或主版本更新时添加公告，新增限制，没有更新公告将无法推送更新部署。
+     公告格式 ⅴ主版本.小更新 更新！内容如下：」 */
+let announcements = [];
+try {
+  const r = await fetch(API + '/api/content', { headers: { Authorization: 'Bearer ' + token } });
+  const j = await r.json();
+  const raw = j.items && j.items.announcements;
+  announcements = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (!Array.isArray(announcements)) announcements = [];
+} catch (e) {
+  die('读取云端公告失败：' + (e.message || e));
+}
+const verRe = new RegExp('(^|[^0-9.])' + VER.replace(/\./g, '\\.') + '(?![0-9])');
+const hit = announcements.find((a) => a && verRe.test(String(a.text || '')));
+if (!hit) {
+  die('云端公告里没有 ' + VER + ' 这一条。'
+    + '\n   站主规矩：每次更新都要发公告，格式「v' + VER + ' 更新！」，没发就不许部署。'
+    + '\n   公告只写给同学看：分类清楚、简短，不要写后台/隐私内容。'
+    + '\n   最新公告：' + String((announcements[0] && announcements[0].text) || '空').slice(0, 60));
+}
+console.log('③b 云端公告已发布 ' + VER + '（' + String(hit.text).slice(0, 40) + '…）');
+
 /* ---------- ④ 部署前备份 ---------- */
 if (DRY) {
   console.log('④ 跳过备份（--dry-run）\n✅ 检查通过（未备份、未部署）');
