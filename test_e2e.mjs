@@ -7968,7 +7968,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.6.4',
+  t('★SCHEMA_VER 常量存在且随版本升到 3.6.4（3.6.5 无 DDL 变更，不跟着动）',
     /const SCHEMA_VER = '3\.6\.4'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
@@ -10993,13 +10993,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.6.4 index.html SITE_VERSION = 3.6.4', /var SITE_VERSION = '3\.6\.4'/.test(idx539));
-  t('v3.6.4 admin.html SITE_VERSION = 3.6.4', /var SITE_VERSION = '3\.6\.4'/.test(admh539));
-  t('v3.6.4 sw.js SITE_VER = 3.6.4 + CACHE v158',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.6.4'")
-    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v160'"));
-  t('v3.6.4 api/worker.mjs API_VER = 3.6.4',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.6.4';"));
+  t('v3.6.5 index.html SITE_VERSION = 3.6.5', /var SITE_VERSION = '3\.6\.5'/.test(idx539));
+  t('v3.6.5 admin.html SITE_VERSION = 3.6.5', /var SITE_VERSION = '3\.6\.5'/.test(admh539));
+  t('v3.6.5 sw.js SITE_VER = 3.6.5 + CACHE v158',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.6.5'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v161'"));
+  t('v3.6.5 api/worker.mjs API_VER = 3.6.5',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.6.5';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11096,10 +11096,10 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.6.4 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.6\.4'/.test(idx540) && /var SITE_VERSION = '3\.6\.4'/.test(adm540)
-    && /const API_VER = '3\.6\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.6\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.6.5 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.6\.5'/.test(idx540) && /var SITE_VERSION = '3\.6\.5'/.test(adm540)
+    && /const API_VER = '3\.6\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.6\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11122,7 +11122,7 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
     && /lt > ct \+ 500/.test(idx542) && /protectedKeys\.push\(k\)/.test(idx542));
   t('★v3.5.42 本地写入记时间戳（__cls_lts，云端回写不记）',
     /var LTS_LS = '__cls_lts'/.test(idx542) && /function markLocalWrite/.test(idx542)
-    && /if\(window\.__cloudPulling\) return;.*\n.*try\{ markLocalWrite/.test(idx542));
+    && /__clsInWrite/.test(idx542) && /markLocalWrite\(String\(k\)\)/.test(idx542));
   t('★v3.5.42 推送正忙时不再「干等」：补 800ms 重试 + 结束后再排一次',
     /__syncInFlight\)\{[\s\S]{0,400}?setTimeout\(function\(\)\{[\s\S]{0,120}?flushCloudSync\(\);/.test(idx542));
   t('v3.5.42 待推送 / 时间戳两个键不在同步白名单里（不会被推上云）',
@@ -11151,10 +11151,10 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
   t('v3.5.42 导出的就是当前正在看的那一份', /var hw = window\.__HW_VIEWING \|\| getCurrentHomework/.test(idx542));
 
   /* ---- 版本 ---- */
-  t('v3.6.4 四处版本号一致',
-    /var SITE_VERSION = '3\.6\.4'/.test(idx542) && /var SITE_VERSION = '3\.6\.4'/.test(adm542)
-    && /const API_VER = '3\.6\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.6\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.6.5 四处版本号一致',
+    /var SITE_VERSION = '3\.6\.5'/.test(idx542) && /var SITE_VERSION = '3\.6\.5'/.test(adm542)
+    && /const API_VER = '3\.6\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.6\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11193,7 +11193,7 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   t('★v3.6.1 字段体检/恢复接口存在（17 个预置字段）',
     /async function repairFields/.test(admjs61) && /PRESET_FIELDS = \[/.test(admjs61)
     && (admjs61.match(/\['[a-z_]+',\s*'[^']+'/g) || []).length > 10);
-  t('★v3.6.4 删除字段：先存快照再真删（30 分钟内可撤回）',
+  t('★v3.6.5 删除字段：先存快照再真删（30 分钟内可撤回）',
     (function(){
       const i = admjs61.indexOf('async function deleteField(');
       if (i < 0) return false;
@@ -11204,7 +11204,7 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
     })());
   t('★v3.6.1 恢复会清空墓碑（防止升级反复删）',
     /data - 'deleted_fields'/.test(admjs61));
-  t('v3.6.4 后台字段管理已移除「恢复预置字段」按钮（按站主要求）',
+  t('v3.6.5 后台字段管理已移除「恢复预置字段」按钮（按站主要求）',
     !/id="ffRepair"/.test(adm61) && /function repairFieldsDialog/.test(adm61));
 
   /* ---- #1 班徽 ---- */
@@ -11224,11 +11224,11 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.6.4 当前版本 3.6.4、日期 2026-10-19',
-    /var SITE_VERSION = '3\.6\.4'/.test(idx61) && /VER_DATE = '2026-10-19'/.test(idx61));
+  t('v3.6.5 当前版本 3.6.5、日期 2026-10-19',
+    /var SITE_VERSION = '3\.6\.5'/.test(idx61) && /VER_DATE = '2026-10-19'/.test(idx61));
 }
 
-console.log('\n【90】v3.6.4 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
+console.log('\n【90】v3.6.5 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
 {
   const idx64 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adm64 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
@@ -11238,60 +11238,60 @@ console.log('\n【90】v3.6.4 同步钩子真正生效 · 删除撤回 · 按钮
   const pre64 = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
 
   /* ---- #1 同步钩子 ---- */
-  t('★v3.6.4 写入钩子挂在 Storage.prototype（实例上赋值在 Chrome 里不生效）',
+  t('★v3.6.5 写入钩子挂在 Storage.prototype（实例上赋值在 Chrome 里不生效）',
     /var proto = Storage\.prototype/.test(idx64)
     && /proto\.setItem = function\(k, v\)/.test(idx64)
     && /rawSet\.call\(this, k, v\)/.test(idx64));
-  t('★v3.6.4 只对 localStorage 生效，sessionStorage 不受影响',
+  t('★v3.6.5 只对 localStorage 生效，sessionStorage 不受影响',
     /if\(this !== window\.localStorage\) return;/.test(idx64));
-  t('v3.6.4 云端回写不登记（__cloudPulling 仍在）',
+  t('v3.6.5 云端回写不登记（__cloudPulling 仍在）',
     /if\(window\.__cloudPulling\) return;/.test(idx64));
 
   /* ---- #2 按钮反馈 ---- */
-  t('★v3.6.4 同步按钮有转圈 / 完成 / 失败三态',
+  t('★v3.6.5 同步按钮有转圈 / 完成 / 失败三态',
     /function syncBtnRun/.test(idx64) && /sync-spin/.test(idx64)
     && /'✓ 完成'/.test(idx64) && /'✗ 失败'/.test(idx64));
-  t('v3.6.4 三个按钮都把 this 传进去', (function(){
+  t('v3.6.5 三个按钮都把 this 传进去', (function(){
     return /syncUploadNow\(this\)/.test(idx64) && /syncDownloadNow\(this\)/.test(idx64)
       && /syncNow\(this\)/.test(idx64);
   })());
 
   /* ---- #3 删除撤回 ---- */
-  t('★v3.6.4 回收站表三处 DDL 齐',
+  t('★v3.6.5 回收站表三处 DDL 齐',
     (http64.match(/create table if not exists deleted_items/g) || []).length >= 2
     && /create table if not exists deleted_items/.test(sch64));
-  t('★v3.6.4 删除前先存快照，再 drop column',
+  t('★v3.6.5 删除前先存快照，再 drop column',
     (function(){
       const i = admjs64.indexOf('async function deleteField(');
       const body = admjs64.slice(i, admjs64.indexOf('\nasync function ', i + 10));
       return body.indexOf('insert into deleted_items') < body.indexOf('drop column if exists');
     })());
-  t('★v3.6.4 撤回接口校验 30 分钟窗口',
+  t('★v3.6.5 撤回接口校验 30 分钟窗口',
     /async function undoDelete/.test(admjs64) && /已经超过 30 分钟/.test(admjs64));
-  t('★v3.6.4 操作日志里有「撤回」按钮 + 剩余分钟',
+  t('★v3.6.5 操作日志里有「撤回」按钮 + 剩余分钟',
     /data-undo=/.test(adm64) && /剩 ' \+ left \+ ' 分/.test(adm64));
-  t('v3.6.4 撤回会解除墓碑（否则升级又删）', /where v <> \$\{p\.field\}/.test(admjs64));
+  t('v3.6.5 撤回会解除墓碑（否则升级又删）', /where v <> \$\{p\.field\}/.test(admjs64));
 
   /* ---- #4 字段编辑报错 ---- */
-  t('★v3.6.4 set-self-edit 先补 self_edit 列再写（修 500）',
+  t('★v3.6.5 set-self-edit 先补 self_edit 列再写（修 500）',
     /async function setSelfEdit/.test(admjs64)
     && /add column if not exists self_edit boolean not null default false/.test(admjs64));
 
   /* ---- #5 公告门禁 ---- */
-  t('★v3.6.4 部署前必须已发公告（没发就拦）',
+  t('★v3.6.5 部署前必须已发公告（没发就拦）',
     /云端公告里没有/.test(pre64) && /云端公告已发布/.test(pre64));
 
   /* ---- #6 合并页面 ---- */
-  t('★v3.6.4 版本更新并入数据管理，侧栏不再单独一项',
+  t('★v3.6.5 版本更新并入数据管理，侧栏不再单独一项',
     !/id:'releases'/.test(adm64) && /function releasesBlockHtml/.test(adm64)
     && /mountReleasesBlock\(\)/.test(adm64));
 
   /* ---- #7 班徽代理 ---- */
-  t('★v3.6.4 班徽走服务器代理（跨域图床也能进 canvas）',
+  t('★v3.6.5 班徽走服务器代理（跨域图床也能进 canvas）',
     fs.existsSync(new URL('./api/badge.js', import.meta.url))
     && /case 'badge'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
     && /apiUrl\('\/badge'\)/.test(idx64));
-  t('v3.6.4 代理拒绝非图片 / 过大文件', (function(){
+  t('v3.6.5 代理拒绝非图片 / 过大文件', (function(){
     const b = fs.readFileSync(new URL('./api/badge.js', import.meta.url), 'utf8');
     return /not 图片|不是图片/.test(b) && /4MB/.test(b);
   })());
