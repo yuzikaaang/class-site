@@ -643,6 +643,46 @@ async function myProfile(req, res, u) {
  * 与「联系方式 submit」的区别：那条走审核（pending），这条是站主明确授权的
  * 直接编辑，写进去就生效；但仍会记一条审计日志，事后可查。
  * ========================================================================= */
+/* ============================================================================
+ * v3.7.0（站主 #1）：资料修改审批 —— 统一的「提交申请」入口
+ * ----------------------------------------------------------------------------
+ * 站主原话：「所有允许学生自主修改的字段同之前微信QQ手机号的联系方式审核相同，
+ *            需要后台确认方可成功更改，在后台确认之前均按照原来显示」
+ *
+ * 关键点：**提交时不写 profiles**。
+ *   —— 这正是「确认之前按原来显示」的实现方式：库里还是旧值，前台读到的自然是旧值。
+ *      后台点「通过」时才把新值写进 profiles（见 admin.js 的 approveChange）。
+ *
+ * changes 里存的是密文（与 profiles 同密钥），明文不落库；后台展示时 decrypt。
+ * 只记录真正变化的字段（old === new 的直接丢弃），这样后台看到的永远是
+ * 「改了哪几项、原来是什么、现在是什么」，不会把没改的字段也堆上来。
+ * ========================================================================= */
+async function createChangeRequest(sql, pkey, profileId, userId, kind, items) {
+  const row = (await sql`select * from profiles where id = ${profileId} limit 1`)[0];
+  const changes = [];
+  for (const it of items) {
+    const beforePlain = row ? await decField(pkey, row[it.field]) : '';
+    const afterPlain = it.value == null ? '' : String(it.value);
+    if (String(beforePlain == null ? '' : beforePlain) === afterPlain) continue;
+    changes.push({
+      field: it.field,
+      label: it.label,
+      /* 空值也加密成空串（encField 对空值原样返回），保持一致 */
+      /* 统一用空串表示「原来没填」，不要留 null —— 前端/后台拿到的形状要一致 */
+      before: await encField(pkey, beforePlain ? String(beforePlain) : ''),
+      after: await encField(pkey, afterPlain || ''),
+    });
+  }
+  if (!changes.length) return { id: 0, count: 0, changes: [] };
+
+  const ins = await sql`
+    insert into profile_change_requests (profile_id, user_id, kind, changes)
+    values (${profileId}, ${userId || null}, ${kind}, ${JSON.stringify(changes)}::jsonb)
+    returning id
+  `;
+  return { id: Number(ins[0].id), count: changes.length, changes };
+}
+
 const SELF_EDIT_BLOCK = new Set([
   'name', 'student_id', 'role', 'title', 'contact_status',
   'user_id', 'id', 'updated_at', 'created_at',
@@ -687,30 +727,29 @@ async function selfUpdate(req, res, u) {
     items.push({ field: f, value: v, label: m.label });
   }
 
-  /* ---- 拼 UPDATE：列名来自 meta（历史白名单），值全部参数化 ---- */
-  const sets = [];
-  const params = [];
-  for (const it of items) {
-    /* ⚠️ 用 isSafeFieldFormat 而不是 checkFieldName：
-       后者有「禁止撞系统列名」的黑名单，会把 id_card / youth_league_no 这类
-       系统列自己挡掉，表现为「保存成功但值没写进去」。 */
-    const chk = isSafeFieldFormat(it.field);
-    if (!chk.ok) return fail(res, 400, '字段名不合法：' + it.field);
-    params.push(await encField(pkey, it.value || null));
-    sets.push(chk.field + ' = $' + params.length);
+  /* v3.7.0（站主 #1）：**不再直接写库**，改为生成一条待审申请。
+     通过之前 profiles 保持原值 —— 这就是「后台确认之前按原来显示」。 */
+  const chkAll = items.map((it) => ({ ...it, chk: isSafeFieldFormat(it.field) }));
+  const bad = chkAll.find((x) => !x.chk.ok);
+  if (bad) return fail(res, 400, '字段名不合法：' + bad.field);
+
+  const out = await createChangeRequest(sql, pkey, u.profileId, u.id, 'field', items);
+  if (!out.count) {
+    /* 一个字段都没变 —— 不生成空申请，也不报错 */
+    await audit(u.id, 'profile.self_update_noop', 'profile', String(u.profileId),
+      items.map((x) => x.field).join(', '));
+    return ok(res, { message: '内容和原来一样，不需要修改', pending: false, updated: [] });
   }
-  params.push(u.profileId);
-  await sql(
-    'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
-    params
-  );
 
   await audit(u.id, 'profile.self_update', 'profile', String(u.profileId),
-    items.map((x) => x.field).join(', '));
+    'request:' + out.id + ' ' + items.map((x) => x.field).join(', '));
 
   return ok(res, {
-    message: '已保存：' + items.map((x) => x.label).join('、'),
-    updated: items.map((x) => x.field),
+    message: '已提交，等待管理员核实后生效（通过前仍显示原内容）',
+    pending: true,
+    requestId: out.id,
+    fields: out.changes.map((c) => c.field),
+    updated: [],
   });
 }
 
@@ -724,9 +763,39 @@ async function mineRequests(req, res, u) {
       from profiles where id = ${u.profileId} limit 1
   `;
   if (!rows.length) return ok(res, { requests: [], claimed: false });
-  const r = await decRow(await profileKey(req), rows[0]);
+  const pkey = await profileKey(req);
+  const r = await decRow(pkey, rows[0]);
+
+  /* v3.7.0（站主 #1）：自己所有「待审核」的修改，逐字段带原值与新值。
+     前端「我的资料」据此在对应行后面标「待审核：新值」。 */
+  let pending = [];
+  try {
+    const q = await sql`
+      select id, kind, changes, created_at from profile_change_requests
+       where profile_id = ${u.profileId} and status = 'pending'
+       order by created_at desc limit 5
+    `;
+    pending = await Promise.all(q.map(async (row) => {
+      let arr = row.changes;
+      if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { arr = []; } }
+      const items = await Promise.all((Array.isArray(arr) ? arr : []).map(async (c) => ({
+        field: c.field,
+        label: c.label || c.field,
+        before: await decField(pkey, c.before),
+        after: await decField(pkey, c.after),
+      })));
+      return {
+        id: Number(row.id),
+        kind: row.kind || 'field',
+        createdAt: row.created_at,
+        items,
+      };
+    }));
+  } catch (e) { pending = []; }
+
   return ok(res, {
     claimed: true,
+    pending,
     requests: [{
       id: Number(r.id),
       name: r.name || '',
@@ -867,43 +936,47 @@ async function submit(req, res, u) {
     prefJson = JSON.stringify(cleanPref);
   }
 
-  /* 提交后一律回到 pending：改了内容就要重新核实，这是审核的意义所在。
-     reject_reason 一并清空（那是上一次驳回的理由）。
-     visibility_pref 只在本次带了新值时覆盖，避免「改联系方式顺手把开关重置」。
-
-     v3.5.0：联系方式落库前统一加密（站主要求档案"所有信息"加密）。
-     pkey 已在上方规则复核处取过（同一请求内密钥不变），直接复用。 */
-  const eWechat = await encField(pkey, wechat || null);
-  const eQq = await encField(pkey, qq || null);
-  const ePhone = await encField(pkey, phone || null);
-
+  /* ============================================================================
+   * v3.7.0（站主 #1）：联系方式也走「修改申请」，提交时不再写 profiles
+   * ----------------------------------------------------------------------------
+   * 变化点（相对旧实现的改进）：
+   *   旧：直接覆盖 wechat/qq/phone 并把 contact_status 打成 pending
+   *       → 前台连**旧值**都看不到了，等于「改一次全班都看不见」。
+   *   新：库里保持原值（前台照旧显示旧内容），新值进 profile_change_requests；
+   *       后台点「通过」才写库并置 contact_status='approved'。
+   *
+   * 可见性意愿（只让自己看）不是「内容」，仍然立即生效 —— 它是隐私开关，
+   * 让同学等审核才生效反而危险。
+   * ========================================================================= */
   if (prefJson != null) {
     await sql`
-      update profiles
-         set wechat = ${eWechat},
-             qq = ${eQq},
-             phone = ${ePhone},
-             contact_status = 'pending',
-             reject_reason = null,
-             visibility_pref = ${prefJson},
-             updated_at = now()
-       where id = ${u.profileId}
-    `;
-  } else {
-    await sql`
-      update profiles
-         set wechat = ${eWechat},
-             qq = ${eQq},
-             phone = ${ePhone},
-             contact_status = 'pending',
-             reject_reason = null,
-             updated_at = now()
+      update profiles set visibility_pref = ${prefJson}, updated_at = now()
        where id = ${u.profileId}
     `;
   }
 
+  const out = await createChangeRequest(sql, pkey, u.profileId, u.id, 'contact', [
+    { field: 'wechat', label: '微信', value: wechat },
+    { field: 'qq',     label: 'QQ',   value: qq },
+    { field: 'phone',  label: '手机号', value: phone },
+  ]);
+
+  if (!out.count) {
+    return ok(res, {
+      message: prefJson != null ? '可见性设置已更新' : '内容和原来一样，不需要修改',
+      status: 'unchanged',
+      pending: false,
+    });
+  }
+
+  await audit(u.id, 'profile.contact_submit', 'profile', String(u.profileId),
+    'request:' + out.id + ' ' + out.changes.map((c) => c.field).join(','));
+
   return ok(res, {
-    message: '已提交，等待管理员核实后展示',
+    message: '已提交，等待管理员核实后生效（通过前仍显示原内容）',
     status: 'pending',
+    pending: true,
+    requestId: out.id,
+    fields: out.changes.map((c) => c.field),
   });
 }
