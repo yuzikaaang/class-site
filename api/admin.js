@@ -1775,10 +1775,11 @@ async function listMembers(req, res) {
 async function loadFieldMeta() {
   try {
     const sql = getSql();
-    const rows = await sql`
-      select field, label, visibility, sort_order, is_custom, vis_locked, self_edit, rules
-        from profile_field_meta order by sort_order, field
-    `;
+    /* ⚠️ v3.6.1：原来写死列名（含 self_edit），只要老库还没补上那一列，
+       整条 select 就会报错 → catch 返回空数组 → 后台「字段管理」显示 0 个字段。
+       站主 2026-10-19 遇到的就是这个（字段其实都在，只是列表读不出来）。
+       改成 select * 再逐列取，缺哪列都不至于整张表读不出来。 */
+    const rows = await sql`select * from profile_field_meta order by sort_order, field`;
     return rows.map((r) => ({
       field: r.field,
       label: r.label || r.field,
@@ -1794,7 +1795,7 @@ async function loadFieldMeta() {
       adminSet: !!r.vis_locked || !!r.is_custom,
       /* v3.5.40（站主 #1）：本人可编辑。后台勾上后，同学能在「我的资料」里
          自己改这一项；关掉就只能由后台改。 */
-      selfEdit: !!r.self_edit,
+      selfEdit: !!(r.self_edit === true || r.self_edit === 1 || r.self_edit === 't'),
     }));
   } catch (e) {
     console.warn('[admin] 读字段元数据失败（返回空）：', e.message);
@@ -2494,6 +2495,10 @@ async function repairFields(req, res, me, b) {
     if (!chk.ok) continue;
     try { await sql(`alter table profiles add column if not exists ${chk.field} text`); } catch (e) {}
   }
+
+  /* ②b 字段表自身的 self_edit 列（v3.5.40 加的）。老库可能因升级中断而缺列 ——
+     缺了会让「字段管理」整张表读不出来（select 写死列名会报错）。 */
+  try { await sql`alter table profile_field_meta add column if not exists self_edit boolean not null default false`; } catch (e) {}
 
   /* ③ 重插字段定义（已有的不动，保留你改过的可见性/标签）。
      一条多值 INSERT 搞定，别逐条来 —— Cloudflare Workers 单次 50 个子请求，
