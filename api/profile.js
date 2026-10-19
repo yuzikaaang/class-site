@@ -82,7 +82,8 @@ function stricter(a, b) {
  */
 async function loadMeta(sql) {
   try {
-    const rows = await sql`select field, visibility, label, sort_order, is_custom, vis_locked, self_edit, rules from profile_field_meta order by sort_order, field`;
+    /* v3.6.1：同 admin.js —— 不写死列名，老库缺 self_edit 时也不会整张读空 */
+    const rows = await sql`select * from profile_field_meta order by sort_order, field`;
     const map = {};
     for (const r of rows) {
       map[r.field] = {
@@ -91,7 +92,7 @@ async function loadMeta(sql) {
         sortOrder: Number(r.sort_order || 100),
         isCustom: !!r.is_custom,
         /* v3.5.40（站主 #1）：本人可编辑开关，由后台字段管理逐项开启 */
-        selfEdit: !!r.self_edit,
+        selfEdit: !!(r.self_edit === true || r.self_edit === 1 || r.self_edit === 't'),
         /* v3.5.5 校验规则（形状先收敛，防历史脏数据） */
         rules: normalizeRules(r.rules),
         /* 站主是否设过这个字段的可见性（2026-10-09 v2.4.1）。
