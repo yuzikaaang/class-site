@@ -9575,7 +9575,10 @@ console.log('\n【85】第七十三轮·v3.3.0 需关注学生加单科线（比
      —— 上一轮「编辑分享保存无效」就是正则全绿、实际行为错，教训在这儿。 */
   const vmMod = await import('node:vm');
   const rawIdx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
-  const big = rawIdx.match(/<script>([\s\S]*?)<\/script>/g)[0].slice(8, -9);
+  /* v3.5.40：index.html 现在有两个内联脚本（share-card 画笔 + 主脚本），
+     取**最长**的那个才是主脚本 —— 按下标取第一个会拿到画笔，ctx.SC 就没了。 */
+  const allScripts = rawIdx.match(/<script>([\s\S]*?)<\/script>/g) || [];
+  const big = allScripts.map((m) => m.slice(8, -9)).reduce((a, b) => (b.length > a.length ? b : a), '');
 
   const mkEl = (tag) => ({
     tagName: (tag || 'div').toUpperCase(), _attrs: {},
@@ -10989,13 +10992,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.5.40 index.html SITE_VERSION = 3.5.40', /var SITE_VERSION = '3\.5\.40'/.test(idx539));
-  t('v3.5.40 admin.html SITE_VERSION = 3.5.40', /var SITE_VERSION = '3\.5\.40'/.test(admh539));
-  t('v3.5.40 sw.js SITE_VER = 3.5.40 + CACHE v154',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.5.40'")
-    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v154'"));
-  t('v3.5.40 api/worker.mjs API_VER = 3.5.40',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.5.40';"));
+  t('v3.5.41 index.html SITE_VERSION = 3.5.41', /var SITE_VERSION = '3\.5\.41'/.test(idx539));
+  t('v3.5.41 admin.html SITE_VERSION = 3.5.41', /var SITE_VERSION = '3\.5\.41'/.test(admh539));
+  t('v3.5.41 sw.js SITE_VER = 3.5.41 + CACHE v155',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.5.41'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v155'"));
+  t('v3.5.41 api/worker.mjs API_VER = 3.5.41',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.5.41';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11080,8 +11083,9 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     })());
 
   /* ---- #6 / #7 导出图片 ---- */
-  t('★v3.5.40 共享画笔 share-card.js 存在且前后台都引入',
-    /ShareCard/.test(share540) && /share-card\.js/.test(idx540) && /share-card\.js/.test(adm540));
+  t('★v3.5.40 共享画笔：源文件存在，前后台都内联了 ShareCard（不依赖外部文件）',
+    /ShareCard/.test(share540)
+    && /global\.ShareCard\s*=/.test(idx540) && /global\.ShareCard\s*=/.test(adm540));
   t('★v3.5.40 抽歌排期有导出图片 / 分享图片',
     /djImgBtn/.test(adm540) && /djShareBtn/.test(adm540) && /function djShareImage/.test(adm540));
   t('★v3.5.40 作业有导出图片 / 分享（含图片直链）',
@@ -11090,10 +11094,10 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
   t('v3.5.40 分享不支持时自动退回下载', /navigator\.canShare/.test(share540) && /return download\(opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.5.40 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.5\.40'/.test(idx540) && /var SITE_VERSION = '3\.5\.40'/.test(adm540)
-    && /const API_VER = '3\.5\.40'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.5\.40'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.5.41 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.5\.41'/.test(idx540) && /var SITE_VERSION = '3\.5\.41'/.test(adm540)
+    && /const API_VER = '3\.5\.41'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.5\.41'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
