@@ -100,6 +100,32 @@ create index if not exists online_user_start_idx on online_sessions (user_id, st
 create index if not exists online_start_idx      on online_sessions (start_at desc);
 create index if not exists online_token_idx      on online_sessions (session_token);
 
+-- ============================================================
+-- v3.5.40 页面维度在线时长（站主 #3）
+--   站主原话：「在线时间的统计需精确到某段时间在哪个页面，
+--            比如成绩分析页面、打砖块页面、后台页面」
+--   与 online_sessions 分开存：
+--     · online_sessions 仍负责「这一次在线多久 / 一共在线多久」（总口径不变）
+--     · online_pages   负责「这段时间挂在哪个页面」
+--   分段规则完全一致：同一人 + 同一会话 + 同一页面，心跳间隔 ≤ 180 秒算同一段。
+--   页面标识由前端心跳带上（?page=成绩分析 / game:breakout / admin:votes …）。
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.5.40
+-- ============================================================
+create table if not exists online_pages (
+  id            bigserial   primary key,
+  user_id       bigint      not null,
+  session_token text        not null default '',
+  page          text        not null default '',
+  start_at      timestamptz not null default now(),
+  stop_at       timestamptz not null default now(),
+  last_ping_at  timestamptz not null default now(),
+  ping_count    int         not null default 1,
+  created_at    timestamptz not null default now()
+);
+create index if not exists online_pages_user_idx on online_pages (user_id, start_at desc);
+create index if not exists online_pages_page_idx on online_pages (page, start_at desc);
+create index if not exists online_pages_tok_idx  on online_pages (session_token, page, last_ping_at desc);
+
 /* ---------------- 用户数据表（云同步核心） ---------------- */
 -- 按 (用户, 键) 存 JSONB，天然适配前端 localStorage 的任意结构
 create table if not exists user_data (
@@ -265,6 +291,7 @@ create table if not exists profile_field_meta (
   sort_order  int         not null default 100,        -- 展示顺序（小的在前）
   is_custom   boolean     not null default false,      -- true = 后台新增的自定义字段
   vis_locked  boolean     not null default false,      -- true = 站主在后台设过可见性，以站主为准
+  self_edit   boolean     not null default false,      -- v3.5.40：true = 允许本人自己改这一项
   updated_at  timestamptz not null default now(),
   -- v3.5.5 字段校验规则：{type:'text'|'number'|'time'|'select', ...}
   -- 形状与默认值见 api/_lib/field-rules.js 的 normalizeRules；
