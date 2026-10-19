@@ -128,6 +128,8 @@ export default async function handler(req, res) {
         case 'bind-profiles':  return await bindProfiles(req, res, me, b);
         case 'encrypt-profiles': return await encryptProfiles(req, res, me, b);
         case 'set-visibility': return await setVisibility(req, res, me, b);
+        /* v3.5.40（站主 #1）：某个字段是否允许本人自己编辑 */
+        case 'set-self-edit':  return await setSelfEdit(req, res, me, b);
         case 'add-field':      return await addField(req, res, me, b);
         case 'delete-field':   return await deleteField(req, res, me, b);
         case 'update-field':   return await updateField(req, res, me, b);
@@ -1305,11 +1307,30 @@ async function onlineStats(req, res) {
              count(*)::int as n
         from online_sessions where user_id = ${id}
     `)[0];
+    /* v3.5.40（站主 #3）：这个人的时间都花在哪些页面。
+       与 online_sessions 是两条独立时间线，分开查、分开返回。 */
+    const pageRows = await sql`
+      select page,
+             coalesce(sum(extract(epoch from (stop_at - start_at))), 0)::int as secs,
+             count(*)::int as n,
+             max(stop_at) as last_at
+        from online_pages
+       where user_id = ${id}
+       group by page
+       order by secs desc
+       limit 30
+    `;
     return ok(res, {
       userId: id,
       total,
       totalSecs: sum.secs,
       sessionCount: sum.n,
+      pages: pageRows.map((r) => ({
+        page: r.page || '未知',
+        secs: Math.max(0, Number(r.secs) || 0),
+        count: Number(r.n) || 0,
+        lastAt: r.last_at || null,
+      })),
       sessions: rows.map((r) => ({
         id: Number(r.id),
         startAt: r.start_at,
@@ -1349,8 +1370,28 @@ async function onlineStats(req, res) {
      where start_at > now() - (${String(days)} || ' days')::interval
   `)[0];
 
+  /* v3.5.40（站主 #3）：全站「哪个页面最耗时间」—— 同一时间窗口，
+     按 page 聚合。后台可据此看成绩分析 / 游戏 / 后台各占多少。 */
+  const pageAgg = await sql`
+    select page,
+           coalesce(sum(extract(epoch from (stop_at - start_at))), 0)::int as secs,
+           count(*)::int as n,
+           count(distinct user_id)::int as users
+      from online_pages
+     where start_at > now() - (${String(days)} || ' days')::interval
+     group by page
+     order by secs desc
+     limit 40
+  `;
+
   return ok(res, {
     days,
+    byPage: pageAgg.map((r) => ({
+      page: r.page || '未知',
+      secs: Math.max(0, Number(r.secs) || 0),
+      count: Number(r.n) || 0,
+      users: Number(r.users) || 0,
+    })),
     totalUsers: (await sql`select count(*)::int as n from users`)[0].n,
     grandSecs: all.secs,
     grandSessions: all.n,
@@ -1726,7 +1767,7 @@ async function loadFieldMeta() {
   try {
     const sql = getSql();
     const rows = await sql`
-      select field, label, visibility, sort_order, is_custom, vis_locked, rules
+      select field, label, visibility, sort_order, is_custom, vis_locked, self_edit, rules
         from profile_field_meta order by sort_order, field
     `;
     return rows.map((r) => ({
@@ -1742,6 +1783,9 @@ async function loadFieldMeta() {
          设过 → 同学自己的「仅自己可见」不再生效（后台权力最大）。
          自定义字段天然算设过。 */
       adminSet: !!r.vis_locked || !!r.is_custom,
+      /* v3.5.40（站主 #1）：本人可编辑。后台勾上后，同学能在「我的资料」里
+         自己改这一项；关掉就只能由后台改。 */
+      selfEdit: !!r.self_edit,
     }));
   } catch (e) {
     console.warn('[admin] 读字段元数据失败（返回空）：', e.message);
@@ -1916,6 +1960,42 @@ async function setVisibility(req, res, me, b) {
     message: '已把「' + field + '」的可见范围改为 ' + vis
       + '（此字段已锁定：同学自己的「仅自己可见」不再生效）',
     field, visibility: vis, adminSet: true,
+  });
+}
+
+/* ============================================================================
+ * v3.5.40（站主 #1）：字段「本人可编辑」开关
+ * ----------------------------------------------------------------------------
+ * 站主原话：「字段管理的所有字段均可设置本人是否可编辑，后台开启后则该用户
+ *           可以在个人资料页面或个人资料查询卡片修改字段内容」
+ *
+ * 这里只负责「许可」这一位。真正的写入在 profile.js 的 self-update：
+ *   ① 字段必须在 profile_field_meta 里且 self_edit = true（逐字段校验，不整包放行）
+ *   ② 值要过该字段的 rules（长度 / 数字 / 时间精度 / 下拉选项）
+ *   ③ 加密字段照旧走 profile-crypt，明文绝不下库
+ * 匿名/未认领的账号没有 profiles 行，自然改不了自己 —— 与既有认领流程一致。
+ * ========================================================================= */
+async function setSelfEdit(req, res, me, b) {
+  const field = String(b.field || '').trim().slice(0, 40);
+  if (!field) return fail(res, 400, '缺少 field');
+  const on = !!b.selfEdit;
+
+  const sql = getSql();
+  const exists = await sql`select field, label from profile_field_meta where field = ${field} limit 1`;
+  if (!exists.length) return fail(res, 404, '没有这个字段：' + field);
+
+  await sql`
+    update profile_field_meta
+       set self_edit = ${on}, updated_at = now()
+     where field = ${field}
+  `;
+  await audit(me.id, 'field.self_edit', 'profile_field', field, on ? 'on' : 'off');
+  return ok(res, {
+    field,
+    selfEdit: on,
+    message: on
+      ? '已允许本人编辑「' + (exists[0].label || field) + '」'
+      : '已关闭「' + (exists[0].label || field) + '」的本人编辑',
   });
 }
 
