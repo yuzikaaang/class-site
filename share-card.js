@@ -209,9 +209,26 @@
     } catch (e) { return null; }
   }
 
-  function loadBadge(url) {
+  /* v3.6.5：支持传数组 —— 按顺序试（先本地 badge.png，失败再走服务器代理）。
+     大图（几 MB 的原始班徽）走代理要好几秒，先试本地小图能快很多。 */
+  function loadBadge(urlOrList) {
+    if (Array.isArray(urlOrList)) {
+      var list = urlOrList.filter(Boolean);
+      if (!list.length) return Promise.resolve(fallbackBadge());
+      var i = 0;
+      var tryNext = function () {
+        if (i >= list.length) return Promise.resolve(fallbackBadge());
+        var u = list[i++];
+        return loadBadge(u).then(function (r) {
+          if (r && r.img && !r.fallback) return r;
+          return tryNext();
+        });
+      };
+      return tryNext();
+    }
+    var url = urlOrList;
     if (!url) return Promise.resolve(null);
-    if (Object.prototype.hasOwnProperty.call(badgeCache, url)) {
+    if (Object.prototype.hasOwnProperty.call(badgeCache, url) && badgeCache[url] && badgeCache[url].img) {
       return Promise.resolve(badgeCache[url]);
     }
     return new Promise(function (resolve) {
@@ -219,7 +236,10 @@
       var done = false;
       function fin(v) { if (!done) { done = true; badgeCache[url] = v; resolve(v); } }
       img.crossOrigin = 'anonymous';
-      img.onload = function () { fin({ ok: true, img: img }); };
+      img.onload = function () {
+        badgeCache[url] = { ok: true, img: img };
+        fin({ ok: true, img: img });
+      };
       img.onerror = function () {
         /* 带 crossOrigin 失败时，再试一次不带（同源图片在某些内核上也会被拦） */
         var img2 = new Image();
@@ -240,7 +260,10 @@
       /* 兜底：3 秒还没结果就不等了，别让用户以为按钮坏了。
          v3.6.3：图取不到时不再留空 —— 画一个同色系的简化徽标（班级号），
          总比右上角光秃秃强；真图同步上来后会自动换回真图。 */
-      setTimeout(function () { fin(fallbackBadge()); }, 3000);
+      setTimeout(function () {
+        if (!done) fin(fallbackBadge());
+        /* 超时后图片仍可能加载完 —— 更新缓存，下次导出用真图 */
+      }, 8000);
     });
   }
 
