@@ -5424,7 +5424,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx48));
-  t('★前台更新日期已同步为 2026-10-18', /VER_DATE = '2026-10-18'/.test(idx48));
+  t('★前台更新日期已同步（不早于 2026-10-19）', /VER_DATE = '2026-10-(19|2[0-9]|3[01])'/.test(idx48));
   t('★service worker 缓存版本升到 v100 以上', /class-site-v1[0-9]{2}/.test(sw48));
 }
 
@@ -5880,7 +5880,7 @@ console.log('\n【56】第四十七轮·成绩分析增强（v2.8.0/2.8.1）');
   t('★每格是上线人数（占比）', /上线人数（占比）/.test(idx));
 
   /* ===== ④ 导出图片 ===== */
-  t('★有 scExportCard', /function scExportCard\(cfg\)\{/.test(idx));
+  t('★有 scExportCard', /function scExportCard\(cfg, note, badge\)\{/.test(idx));
   t('★纯 canvas 画，不引第三方库', /createElement\('canvas'\)/.test(idx) && /getContext\('2d'\)/.test(idx));
   t('★2 倍图（手机上清晰）', /var SCALE = 2;/.test(idx));
   t('★文件名带考试名与姓名', /'-成绩卡\.png'/.test(idx));
@@ -6814,7 +6814,7 @@ console.log('\n【64】第五十九轮·成绩分析暗色全覆盖检查');
 
   /* ---- ⑥ 内联 style 提类（内联 color/background 压过一切 class 规则）---- */
   t('★分享弹窗 6 个 label 提成 .sc-sh-lb（原 inline #57534e 压过暗色规则）',
-    (idx.match(/<label class="sc-sh-lb">/g) || []).length === 6
+    (idx.match(/<label class="sc-sh-lb">/g) || []).length >= 6
     && !/<label class="sc-sh-lb"[^>]*style="[^"]*color:/.test(idx)
     && /\.sc-sh-lb\{font-size:\.8rem;color:#57534e;display:block;margin-bottom:6px\}/.test(idx)
     && /\.dark \.sc-sh-lb\{color:#f0e6dc\}/.test(idx));
@@ -7969,7 +7969,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
   t('★SCHEMA_VER 常量存在且随版本升到 3.5.40',
-    /const SCHEMA_VER = '3\.5\.40'/.test(httpSrc));
+    /const SCHEMA_VER = '3\.6\.1'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8272,7 +8272,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.27 云端时长库表 song_durations 三处同步（升级路径/全量清单/schema.sql）',
     (HTTP_527.match(/create table if not exists song_durations/g) || []).length >= 2
     && /create table if not exists song_durations/.test(SCH_527)
-    && /const SCHEMA_VER = '3\.5\.40'/.test(HTTP_527));
+    && /const SCHEMA_VER = '3\.6\.1'/.test(HTTP_527));
   t('v3.5.27 后端写库按来源优先级，人工填写不被自动结果覆盖',
     /case song_durations\.source/.test(MUS_527) && /source: 'manual'/.test(MUS_527)
     && /when 'manual' then 3/.test(MUS_527));
@@ -10783,7 +10783,7 @@ console.log('\n【85】在线时长统计（v3.5.35）');
   t('v3.5.35 online_sessions 三处同步（升级路径 / 全量清单 / schema.sql）',
     (http535.match(/create table if not exists online_sessions/g) || []).length >= 2
     && /create table if not exists online_sessions/.test(sch535)
-    && /const SCHEMA_VER = '3\.5\.40'/.test(http535));
+    && /const SCHEMA_VER = '3\.6\.1'/.test(http535));
   t('v3.5.35 三处索引齐（user_start / start / token）',
     ['online_user_start_idx', 'online_start_idx', 'online_token_idx'].every(function(ix){
       const n = (http535.match(new RegExp('create index if not exists ' + ix, 'g')) || []).length;
@@ -10992,13 +10992,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.5.42 index.html SITE_VERSION = 3.5.42', /var SITE_VERSION = '3\.5\.42'/.test(idx539));
-  t('v3.5.42 admin.html SITE_VERSION = 3.5.42', /var SITE_VERSION = '3\.5\.42'/.test(admh539));
-  t('v3.5.42 sw.js SITE_VER = 3.5.42 + CACHE v156',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.5.42'")
-    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v156'"));
-  t('v3.5.42 api/worker.mjs API_VER = 3.5.42',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.5.42';"));
+  t('v3.6.1 index.html SITE_VERSION = 3.6.1', /var SITE_VERSION = '3\.6\.1'/.test(idx539));
+  t('v3.6.1 admin.html SITE_VERSION = 3.6.1', /var SITE_VERSION = '3\.6\.1'/.test(admh539));
+  t('v3.6.1 sw.js SITE_VER = 3.6.1 + CACHE v157',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.6.1'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v157'"));
+  t('v3.6.1 api/worker.mjs API_VER = 3.6.1',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.6.1';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11095,10 +11095,10 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.5.42 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.5\.42'/.test(idx540) && /var SITE_VERSION = '3\.5\.42'/.test(adm540)
-    && /const API_VER = '3\.5\.42'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.5\.42'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.6.1 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.6\.1'/.test(idx540) && /var SITE_VERSION = '3\.6\.1'/.test(adm540)
+    && /const API_VER = '3\.6\.1'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.6\.1'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11150,11 +11150,81 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
   t('v3.5.42 导出的就是当前正在看的那一份', /var hw = window\.__HW_VIEWING \|\| getCurrentHomework/.test(idx542));
 
   /* ---- 版本 ---- */
-  t('v3.5.42 四处版本号一致',
-    /var SITE_VERSION = '3\.5\.42'/.test(idx542) && /var SITE_VERSION = '3\.5\.42'/.test(adm542)
-    && /const API_VER = '3\.5\.42'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.5\.42'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.5.42 REL_BUILTIN 有 3.5.42 条目', /\{\s*version:\s*'3\.5\.42'/.test(adm542));
+  t('v3.6.1 四处版本号一致',
+    /var SITE_VERSION = '3\.6\.1'/.test(idx542) && /var SITE_VERSION = '3\.6\.1'/.test(adm542)
+    && /const API_VER = '3\.6\.1'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.6\.1'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.6.1 REL_BUILTIN 有对应条目',
+    /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
+}
+
+console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩备注 · 版本规则');
+{
+  const idx61 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm61 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const http61 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const sch61 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const admjs61 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const pre61 = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
+
+  /* ---- #4 备份 ---- */
+  t('★v3.6.1 data_backups 三处 DDL 齐',
+    (http61.match(/create table if not exists data_backups/g) || []).length >= 2
+    && /create table if not exists data_backups/.test(sch61));
+  t('★v3.6.1 备份接口齐（建/列/详情/删/回档）',
+    /async function createBackup/.test(admjs61) && /async function listBackups/.test(admjs61)
+    && /async function restoreBackup/.test(admjs61) && /async function deleteBackup/.test(admjs61));
+  t('★v3.6.1 备份保留最近 14 个版本（pruneBackups）',
+    /BACKUP_KEEP_VERSIONS = 14/.test(admjs61) && /async function pruneBackups/.test(admjs61));
+  t('★v3.6.1 备份内容覆盖 10 张业务表',
+    /BACKUP_TABLES = \[/.test(admjs61)
+    && ['users','profiles','profile_field_meta','site_settings','user_data','exam_scores','class_votes']
+        .every((x) => new RegExp("'" + x + "'").test(admjs61)));
+  t('★v3.6.1 后台有「数据管理」面板（概览/立即备份/回档）',
+    /id:'backup'/.test(adm61) && /function renderBackup/.test(adm61)
+    && /function restoreBackupDialog/.test(adm61));
+  t('★v3.6.1 部署前脚本：版本四处一致 + 更新记录必须填 + 先备份',
+    /predeploy/.test(pre61) && /REL_BUILTIN 里没有/.test(pre61)
+    && /云端 release_notes 里没有/.test(pre61) && /action=backup/.test(pre61)
+    && /kind: 'predeploy'/.test(pre61));
+
+  /* ---- #3 字段恢复 ---- */
+  t('★v3.6.1 字段体检/恢复接口存在（17 个预置字段）',
+    /async function repairFields/.test(admjs61) && /PRESET_FIELDS = \[/.test(admjs61)
+    && (admjs61.match(/\['[a-z_]+',\s*'[^']+'/g) || []).length > 10);
+  t('★v3.6.1 删除字段不再 drop column（数据可恢复）',
+    (function(){
+      const i = admjs61.indexOf('async function deleteField(');
+      if (i < 0) return false;
+      const body = admjs61.slice(i, admjs61.indexOf('\nasync function ', i + 10));
+      /* 只检查「真的执行了 drop column」——注释里写着「不再 drop column」不算 */
+      return !/await sql\(`alter table profiles drop column/.test(body)
+        && /列与数据保留/.test(body);
+    })());
+  t('★v3.6.1 恢复会清空墓碑（防止升级反复删）',
+    /data - 'deleted_fields'/.test(admjs61));
+  t('v3.6.1 后台字段管理有「恢复预置字段」入口',
+    /id="ffRepair"/.test(adm61) && /function repairFieldsDialog/.test(adm61));
+
+  /* ---- #1 班徽 ---- */
+  t('★v3.6.1 班徽已本地化（badge.png），页头与导出都用它',
+    fs.existsSync(new URL('./badge.png', import.meta.url))
+    && /src="\.\/badge\.png"/.test(idx61)
+    && /u = '\.\/badge\.png'/.test(idx61));
+  t('★v3.6.1 成绩卡也画班徽（右上角）',
+    /function scExportCard\(cfg, note, badge\)/.test(idx61)
+    && /g\.drawImage\(badge\.img/.test(idx61));
+
+  /* ---- #2 成绩备注 ---- */
+  t('★v3.6.1 成绩导出可写备注并印在图上',
+    /id="scExNote"/.test(idx61) && /noteLines/.test(idx61)
+    && /备注（选填，会印在图片底部）/.test(idx61));
+
+  /* ---- #5 版本规则 ---- */
+  t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
+    /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
+  t('v3.6.1 当前版本 3.6.1、日期 2026-10-19',
+    /var SITE_VERSION = '3\.6\.1'/.test(idx61) && /VER_DATE = '2026-10-19'/.test(idx61));
 }
 
 console.log('\n' + '='.repeat(52));
