@@ -3295,7 +3295,7 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
       <button class="theme-btn" id="themeToggle" onclick="toggleTheme(event)" aria-label="切换主题">🌙</button>
       <h1 id="brandTitle">🏫 25级05班班级服务站</h1>
       <p id="brandSub">一站式获取班级服务 · 资源 · 工具</p>
-      <div class="logo" onclick="badgeClick()"><img src="https://s41.ax1x.com/2026/06/07/pmmhF6H.png" alt="班徽" onerror="this.parentNode.style.display='none'"></div>
+      <div class="logo" onclick="badgeClick()"><img src="./badge.png" alt="班徽" onerror="this.src='https://s41.ax1x.com/2026/06/07/pmmhF6H.png'"></div>
     </header>
 
     <!-- 首页视图：公告 / 每日日报 / 每日一言 / 倒计时 -->
@@ -4170,16 +4170,18 @@ function stripEmojiInOptions(root){
    用途：站主要一眼判断「我改的东西到底推上线了没有」。
    显示在首页最底部与后台页脚；点一下还能回查线上后端构建号。
 
-   三段式  主版本 . 功能批次 . 修订
-     第 1 段 大版本：1 = 纯前端静态站；2 = 含后端 + 数据库（2026-10 起）
-     第 2 段 功能批次：同一个大版本里每新增一批功能 +1
-     第 3 段 修订：同一批功能里的修修补补 +1
+   三段式  主版本 . 小更新 . 修复            （v3.6.1 起）
+     第 1 段 大版本：1 = 纯前端；2 = 含后端 + 数据库；3 = 数据架构与权限体系
+       ⚠️ **这个数字只有站主说了才动**，AI 一律不许自己改。
+     第 2 段 小更新：每加一批功能 +1（AI 负责）
+     第 3 段 修复：同一批功能里的修修补补 +1（AI 负责）
+     例：3.6.0 = 3 大版本下第 6 批功能；3.6.1 = 这批功能里的第 1 个修复。
 
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.42';
-var VER_DATE = '2026-10-18';
+var SITE_VERSION = '3.6.1';
+var VER_DATE = '2026-10-19';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
   gitee:  'https://gitee.com/zikang0529/class-site',
@@ -7452,7 +7454,7 @@ function siteBadgeUrl(){
   var u = '';
   try{ u = (window.SITE_DATA && SITE_DATA.badgeUrl) || ''; }catch(e){}
   u = String(u || '').trim();
-  if(!u) u = './favicon.svg';
+  if(!u) u = './badge.png';
   try{ return new URL(u, location.href).href; }catch(e){ return u; }
 }
 
@@ -17740,6 +17742,11 @@ function scExportDialog(){
     +   '<div class="sc-pk-group-h">全班成绩单<span class="sc-dim">长图只画你一个人；要看整班请用「打印」</span></div>'
     +   '<p class="sc-figcap" style="margin:0 0 6px">导出长图的定位是「发给家人看我自己」，所以不画整班名次表。'
     +     '需要全班成绩单请点工具栏的<b>打印</b>，那里可以逐项勾选全班成绩单的内容。</p>'
+    /* v3.6.1（站主 #2）：备注 —— 分享时说明「为什么发这张图」 */
+    +   '<div style="margin-top:14px"><label class="sc-sh-lb">备注（选填，会印在图片底部）</label>'
+    +     '<textarea id="scExNote" rows="2" maxlength="120" placeholder="例如：这次比上次进步了 20 名，继续加油" '
+    +       'style="width:100%;padding:9px 11px;border-radius:10px;border:1px solid var(--line-2,#e7d9cc);font-size:.85rem;resize:vertical"></textarea>'
+    +     '<div class="muted" style="font-size:.72rem;margin-top:4px">最多 120 字，写清原因对方一看就明白</div></div>'
     +   '<div style="display:flex;gap:10px;margin-top:18px">'
     +     '<button class="btn btn-secondary" style="flex:1" onclick="scExportClose()">取消</button>'
     +     '<button class="btn" style="flex:1" id="scExGo">导出图片</button>'
@@ -17774,8 +17781,14 @@ function scExportDialog(){
     });
     next.head = true;
     SC_EXPORT = next;             /* 记住这次的选择，下次打开还是这样 */
+    var noteEl = document.getElementById('scExNote');
+    var note = noteEl ? String(noteEl.value || '').trim().slice(0, 120) : '';
     scExportClose();
-    scExportCard(next);
+    /* v3.6.1：先把班徽加载好再画（画不出来就跳过，不能让导出失败） */
+    var bp = (window.ShareCard && ShareCard.loadBadge)
+      ? ShareCard.loadBadge(siteBadgeUrl()) : Promise.resolve(null);
+    bp.then(function(bd){ scExportCard(next, note, bd); })
+      .catch(function(){ scExportCard(next, note, null); });
   };
 }
 function scExportClose(){
@@ -17784,8 +17797,9 @@ function scExportClose(){
 }
 
 /** 真正画图。cfg 见 SC_EXPORT（不传的键默认「要」，兼容老调用） */
-function scExportCard(cfg){
+function scExportCard(cfg, note, badge){
   cfg = cfg || {};
+  note = String(note || '').trim().slice(0, 120);
   var pick = function(k){ return cfg[k] === undefined ? true : !!cfg[k]; };
   var opt = {
     head: true,                     /* 永远有：图里得有主角 */
@@ -17812,7 +17826,11 @@ function scExportCard(cfg){
   var hasBar = !!(gradeN && meRow.schoolRank != null);
 
   var S = SC_EX_STEP, W = S.W, pad = S.pad;
-  var H = scExportHeight(opt, subs.length, cuts.length, series.length, hasBar);
+  /* v3.6.1：备注按每行 34 字估行数（宽 688px、14px 字号，中文 34 字很保守），
+     多留一点空白也比把字裁掉强。 */
+  var noteLines = note ? Math.ceil(note.length / 34) : 0;
+  var noteH = noteLines ? (noteLines * 22 + 20) : 0;
+  var H = scExportHeight(opt, subs.length, cuts.length, series.length, hasBar) + noteH;
   var SCALE = 2;
 
   var cv = document.createElement('canvas');
@@ -18062,6 +18080,37 @@ function scExportCard(cfg){
                                             : '还差 ' + fmtNum(c.score - myTotal) + ' 分'), W - pad, y);
       g.textAlign = 'left';
     });
+  }
+
+  /* v3.6.1：备注块（在页脚上方） */
+  if(noteLines){
+    var nTop = H - 26 - 12 - noteLines * 22;
+    g.fillStyle = '#fdf6ee';
+    g.fillRect(pad, nTop - 10, W - pad * 2, noteLines * 22 + 16);
+    g.fillStyle = '#8a5a3b'; f(12, true);
+    g.fillText('备注', pad + 12, nTop + 2);
+    g.fillStyle = '#57534e'; f(14);
+    for(var ni = 0; ni < noteLines; ni++){
+      g.fillText(note.slice(ni * 34, (ni + 1) * 34), pad + 52, nTop + 2 + ni * 22);
+    }
+  }
+
+  /* v3.6.1：班徽（右上角，取不到就跳过） */
+  if(badge && badge.img){
+    try{
+      var bs = 66, bx = W - pad - bs, by = 18, br = 16;
+      g.save();
+      g.beginPath();
+      g.moveTo(bx + br, by);
+      g.arcTo(bx + bs, by, bx + bs, by + bs, br);
+      g.arcTo(bx + bs, by + bs, bx, by + bs, br);
+      g.arcTo(bx, by + bs, bx, by, br);
+      g.arcTo(bx, by, bx + bs, by, br);
+      g.closePath();
+      g.clip();
+      g.drawImage(badge.img, bx, by, bs, bs);
+      g.restore();
+    }catch(e){}
   }
 
   /* 页脚水印 */
