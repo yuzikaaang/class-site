@@ -47,7 +47,7 @@ export { getSql };
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.40';
+const SCHEMA_VER = '3.6.1';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -286,6 +286,18 @@ export async function ensureSchema(sql) {
           await s`create index if not exists online_pages_user_idx on online_pages (user_id, start_at desc)`;
           await s`create index if not exists online_pages_page_idx on online_pages (page, start_at desc)`;
           await s`create index if not exists online_pages_tok_idx on online_pages (session_token, page, last_ping_at desc)`;
+          /* v3.6.1（站主 #4）：部署前自动备份所有云端数据，保留最近 14 个版本 */
+          await s`create table if not exists data_backups (
+            id          bigserial   primary key,
+            version     text        not null,
+            kind        text        not null default 'auto',
+            note        text        default '',
+            payload     jsonb       not null,
+            bytes       int         not null default 0,
+            created_at  timestamptz not null default now()
+          )`;
+          await s`create index if not exists data_backups_ver_idx on data_backups (created_at desc)`;
+          await s`create index if not exists data_backups_version_idx on data_backups (version)`;
         } catch (e) {
           console.warn('[schema] online_sessions 建表失败：', e && e.message);
         }
@@ -379,6 +391,20 @@ export async function ensureSchema(sql) {
     await s`create index if not exists online_pages_user_idx on online_pages (user_id, start_at desc)`;
     await s`create index if not exists online_pages_page_idx on online_pages (page, start_at desc)`;
     await s`create index if not exists online_pages_tok_idx on online_pages (session_token, page, last_ping_at desc)`;
+    /* v3.6.1 云端数据备份（见升级路径里的说明） */
+    await s`
+      create table if not exists data_backups (
+        id          bigserial   primary key,
+        version     text        not null,
+        kind        text        not null default 'auto',
+        note        text        default '',
+        payload     jsonb       not null,
+        bytes       int         not null default 0,
+        created_at  timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists data_backups_ver_idx on data_backups (created_at desc)`;
+    await s`create index if not exists data_backups_version_idx on data_backups (version)`;
     /* 班级通讯录 / 个人资料（与 schema.sql 保持一致，见该文件的说明） */
     await s`
       create table if not exists profiles (
