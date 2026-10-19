@@ -402,6 +402,34 @@ async function listVotes(req, res) {
   });
 
   const votes = rows.map((r) => shapeVote(r, u.id, u.role === 'admin', myMap[Number(r.id)], countMap[Number(r.id)], myUsed[Number(r.id)]));
+
+  /* v3.5.40（站主 #2）：后台要能看到「每一张票是谁投的、什么时候投的」。
+     ⚠️ 只在管理员请求时多查一次；普通同学拿到的结构一个字都不变，
+        避免把「谁投了谁」这种敏感信息下发到前台。
+     时间取 updated_at：首次投票就是投出时间，撤回重投则是最后一次改票时间。 */
+  if (u.role === 'admin') {
+    const detRows = await sql`
+      select b.vote_id, b.user_id, b.choices, b.updated_at,
+             u.username, u.display_name
+        from class_vote_ballots b
+        left join users u on u.id = b.user_id
+       where b.vote_id = any(${voteIds}::bigint[])
+       order by b.updated_at asc
+    `;
+    const detMap = {};
+    detRows.forEach((r) => {
+      const vid = Number(r.vote_id);
+      (detMap[vid] = detMap[vid] || []).push({
+        userId: Number(r.user_id),
+        username: r.username || '',
+        name: r.display_name || r.username || ('#' + r.user_id),
+        choices: jsonCol(r.choices) || [],
+        at: r.updated_at,
+      });
+    });
+    votes.forEach((v) => { v.ballots = detMap[v.id] || []; });
+  }
+
   return ok(res, { votes, isAdmin: u.role === 'admin', serverTime: Date.now() });
 }
 
