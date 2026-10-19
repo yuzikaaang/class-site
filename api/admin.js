@@ -141,6 +141,8 @@ export default async function handler(req, res) {
         case 'backup':         return await createBackup(req, res, me, b);
         case 'delete-backup':  return await deleteBackup(req, res, me, b);
         case 'restore-backup': return await restoreBackup(req, res, me, b);
+        /* v3.6.4（站主 #3）：30 分钟内撤回删除 */
+        case 'undo-delete':    return await undoDelete(req, res, me, b);
         case 'update-field':   return await updateField(req, res, me, b);
         /* v3.5.14 #7：字段拖拽排序 —— 一次批量写，避免 N 次子请求 */
         case 'reorder-fields': return await reorderFields(req, res, me, b);
@@ -1994,6 +1996,15 @@ async function setSelfEdit(req, res, me, b) {
   const exists = await sql`select field, label from profile_field_meta where field = ${field} limit 1`;
   if (!exists.length) return fail(res, 404, '没有这个字段：' + field);
 
+  /* ⚠️ v3.6.4：老库可能还没有 self_edit 列（升级中断 / 建表跑过但补列失败），
+     直接 update 会 500「服务器内部错误」—— 站主点「允许本机编辑」踩的就是这个。
+     先补列再写，幂等且便宜。 */
+  try {
+    await sql`alter table profile_field_meta add column if not exists self_edit boolean not null default false`;
+  } catch (e) {
+    console.warn('[admin] 补 self_edit 列失败：', e.message);
+  }
+
   await sql`
     update profile_field_meta
        set self_edit = ${on}, updated_at = now()
@@ -2394,6 +2405,102 @@ async function restoreBackup(req, res, me, b) {
 }
 
 /* ============================================================================
+ * v3.6.4（站主 #3）：撤回删除（30 分钟窗口）
+ * ----------------------------------------------------------------------------
+ * 站主原话：「数据可以直接删除而不是隐藏，这样会出现更多的问题，在后端的操作
+ *            记录里新增撤回的功能，现在删除数据倒计时 30 分钟，30 分钟以内在
+ *            后台操作日志里点击撤回即可重新显示，否则真正删除数据」
+ *
+ * 撤回做的事（按 deleteField 的反向操作来）：
+ *   ① 把列加回来（add column if not exists）
+ *   ② 用一条 UPDATE ... FROM (VALUES ...) 把当时导出的值批量写回
+ *      （不用逐行 update —— 61 行就是 61 次子请求，Workers 额度扛不住）
+ *   ③ 字段定义按快照恢复（保留原来的可见性 / 排序 / 校验规则）
+ *   ④ 把这个字段从「墓碑」里摘掉，否则下次升级又会按墓碑删一遍
+ * 过期或记录不存在 → 明确告诉用户「已超过 30 分钟」，不装作成功。
+ * ========================================================================= */
+async function undoDelete(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+
+  const sql = getSql();
+  const rows = await sql`select * from deleted_items where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '这条删除记录已经不存在了');
+  const it = rows[0];
+  const expires = new Date(it.expires_at).getTime();
+  if (Date.now() > expires) {
+    return fail(res, 410, '已经超过 30 分钟，这条数据已被真正删除，无法撤回');
+  }
+
+  let p = it.payload;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = {}; } }
+
+  if (it.kind === 'field') {
+    const chk = isSafeFieldFormat(p.field);
+    if (!chk.ok) return fail(res, 400, '字段名不合法，无法撤回');
+
+    try {
+      await sql(`alter table profiles add column if not exists ${chk.field} text`);
+    } catch (e) {
+      return fail(res, 500, '重建字段列失败：' + String(e.message || e).slice(0, 120));
+    }
+
+    const list = Array.isArray(p.rows) ? p.rows : [];
+    if (list.length) {
+      try {
+        const pairs = list.map((r, i) => `($${i * 2 + 1}::bigint, $${i * 2 + 2}::text)`).join(',');
+        const params = list.flatMap((r) => [r.id, r.v]);
+        await sql(
+          'update profiles as pr set ' + chk.field + ' = v.val '
+          + 'from (values ' + pairs + ') as v(id, val) where pr.id = v.id',
+          params
+        );
+      } catch (e) {
+        console.warn('[admin] 撤回字段值时部分失败：', e.message);
+      }
+    }
+
+    try {
+      await sql`
+        insert into profile_field_meta (field, label, visibility, sort_order, is_custom, vis_locked, rules)
+        values (${p.field}, ${p.label || p.field}, ${p.visibility || 'public'},
+                ${Number(p.sortOrder) || 100}, ${!!p.isCustom}, ${!!p.visLocked},
+                ${JSON.stringify(p.rules || {})}::jsonb)
+        on conflict (field) do update
+          set label = excluded.label, visibility = excluded.visibility,
+              sort_order = excluded.sort_order, rules = excluded.rules, updated_at = now()
+      `;
+    } catch (e) {}
+
+    /* 解除墓碑：否则下次升级又按墓碑删 */
+    try {
+      await sql`
+        update site_settings
+           set data = jsonb_set(
+                 data, '{deleted_fields}',
+                 coalesce((
+                   select jsonb_agg(v)
+                     from jsonb_array_elements_text(coalesce(data->'deleted_fields', '[]'::jsonb)) v
+                    where v <> ${p.field}
+                 ), '[]'::jsonb),
+                 true),
+               updated_at = now()
+         where id = 1
+      `;
+    } catch (e) {}
+  }
+
+  await sql`delete from deleted_items where id = ${id}`;
+  await audit(me.id, 'data.undo_delete', 'deleted_item', String(id), it.kind + ':' + (it.label || ''));
+
+  return ok(res, {
+    restored: it.kind,
+    label: it.label || '',
+    message: '已撤回，字段「' + (it.label || '') + '」和它的数据都回来了',
+  });
+}
+
+/* ============================================================================
  * v3.6.1：字段体检 + 一键恢复
  * ----------------------------------------------------------------------------
  * 站主原话：「字段管理之前的那些比如入团时间、发展团员编号那些你前几次更新的
@@ -2610,20 +2717,77 @@ async function deleteField(req, res, me, b) {
     `;
   } catch (e) { console.warn('[admin] 写字段墓碑失败：', e.message); }
 
+  /* ============================================================================
+   * v3.6.4（站主 #3）：改回「真删」，但删之前先把整列数据存进回收站
+   * ----------------------------------------------------------------------------
+   * 站主原话：「数据可以直接删除而不是隐藏，这样会出现更多的问题，
+   *            在后端的操作记录里新增撤回的功能，现在删除数据倒计时 30 分钟，
+   *            30 分钟以内在后台操作日志里点击撤回即可重新显示，否则真正删除数据」
+   *
+   * 顺序很重要：**先导快照，再删**。快照里存字段定义 + 该列所有非空值，
+   * 30 分钟内点「撤回」能原样恢复（连列带值）；过期后由下一次删除顺手清掉。
+   * ========================================================================= */
+  let deletedId = 0;
+  const chkCol = isSafeFieldFormat(field);
+  if (chkCol.ok) {
+    try {
+      /* 兜底建表：老库升级中断时可能没这张表，缺了会让删除直接失败 */
+      await sql`create table if not exists deleted_items (
+        id          bigserial   primary key,
+        kind        text        not null default 'field',
+        label       text        default '',
+        payload     jsonb       not null,
+        bytes       int         not null default 0,
+        deleted_by  bigint,
+        deleted_at  timestamptz not null default now(),
+        expires_at  timestamptz not null default now()
+      )`;
+      const rows = await sql(
+        'select id, ' + chkCol.field + ' as v from profiles where coalesce(' + chkCol.field + ", '') <> ''"
+      );
+      const payload = {
+        field, label: row.label || field, visibility: row.visibility,
+        sortOrder: Number(row.sort_order) || 100, isCustom: !!row.is_custom,
+        visLocked: !!row.vis_locked, rules: row.rules || {},
+        rows: rows.map((r) => ({ id: Number(r.id), v: r.v })),
+      };
+      const bytes = JSON.stringify(payload).length;
+      const expAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const ins = await sql`
+        insert into deleted_items (kind, label, payload, bytes, deleted_by, expires_at)
+        values ('field', ${row.label || field}, ${JSON.stringify(payload)}::jsonb, ${bytes}, ${me.id}, ${expAt})
+        returning id
+      `;
+      deletedId = Number(ins[0].id);
+    } catch (e) {
+      /* 快照失败就不删 —— 宁可这次删不掉，也不能删了之后没得撤 */
+      console.error('[admin] 字段快照失败，已中止删除：', field, e.message);
+      return fail(res, 500, '备份该字段数据失败，已中止删除（数据未动）：' + String(e.message || e).slice(0, 120));
+    }
+  }
+
   await sql`delete from profile_field_meta where field = ${field}`;
 
-  /* ⚠️ v3.6.1 重要变更：**不再 drop column**。
-     站主原话：「那些字段你前几次更新的时候直接给我删了，我现在后台没有数据，
-                看看能不能恢复。」
-     根因就是这里执行了 `alter table profiles drop column`——
-     PostgreSQL 的 drop column 不可撤销，值跟着列一起没了，谁也救不回来。
-     现在只把字段从「字段管理」里摘掉（前台不再展示、搜索不再返回），
-     底下的列和数据原样保留。以后误删只要把字段重新加回来，值立刻复原。
-     代价是表里会留一些没人看的列 —— 与「数据丢了找不回来」相比完全值得。 */
-  console.log('[admin] 字段已从管理列表移除（列与数据保留，可随时恢复）：', field);
+  if (chkCol.ok) {
+    try {
+      await sql(`alter table profiles drop column if exists ${chkCol.field}`);
+    } catch (e) {
+      console.warn('[admin] 删列失败（meta 已删，前台不再展示）：', field, e.message);
+    }
+  }
 
-  await audit(me.id, 'field.delete', 'profile_field', field, row.label || '');
-  return ok(res, { message: '已删除字段「' + (row.label || field) + '」', field });
+  /* 顺手清理过期回收站记录（惰性清理，不跑定时任务） */
+  try { await sql`delete from deleted_items where expires_at < now()`; } catch (e) {}
+
+  await audit(me.id, 'field.delete', 'profile_field', field,
+    'deletedId:' + deletedId + ' ' + (row.label || ''));
+  return ok(res, {
+    message: '已删除字段「' + (row.label || field) + '」'
+      + (deletedId ? '；30 分钟内在「操作日志」里可撤回' : ''),
+    field,
+    deletedId,
+    undoMinutes: 30,
+  });
 }
 
 /**
