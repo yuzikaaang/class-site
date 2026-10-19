@@ -102,6 +102,9 @@ export default async function handler(req, res) {
       if (action === 'settings')         return await getSettings(req, res);
       if (action === 'action-logs')      return await listActionLogs(req, res);
       if (action === 'action-stats')     return await actionStats(req, res);
+      /* v3.6.1（站主 #4）：数据备份 / 回档 */
+      if (action === 'backups')          return await listBackups(req, res);
+      if (action === 'backup')           return await getBackup(req, res);
       return fail(res, 404, '未知的 action：' + action);
     }
 
@@ -132,6 +135,12 @@ export default async function handler(req, res) {
         case 'set-self-edit':  return await setSelfEdit(req, res, me, b);
         case 'add-field':      return await addField(req, res, me, b);
         case 'delete-field':   return await deleteField(req, res, me, b);
+        /* v3.6.1：字段体检 / 一键恢复（墓碑误删、meta 被清空时用） */
+        case 'repair-fields':  return await repairFields(req, res, me, b);
+        /* v3.6.1（站主 #4）：备份 / 回档 */
+        case 'backup':         return await createBackup(req, res, me, b);
+        case 'delete-backup':  return await deleteBackup(req, res, me, b);
+        case 'restore-backup': return await restoreBackup(req, res, me, b);
         case 'update-field':   return await updateField(req, res, me, b);
         /* v3.5.14 #7：字段拖拽排序 —— 一次批量写，避免 N 次子请求 */
         case 'reorder-fields': return await reorderFields(req, res, me, b);
@@ -2118,6 +2127,438 @@ async function addField(req, res, me, b) {
   });
 }
 
+/* ============================================================================
+ * v3.6.1（站主 #4）：云端数据备份 / 回档
+ * ----------------------------------------------------------------------------
+ * 站主原话：「后台新增数据管理，以后每次更新都先自动备份所有数据
+ *            （通过检测在部署前先备份后部署），包括作业、公告、用户数据等等
+ *            全部云端内容，默认存储最近 14 个版本更新，方便有问题随时回档」
+ *
+ * 设计取舍：
+ *   · 备份**整包快照**存 data_backups.payload（jsonb），一版一行 ——
+ *     比按表拆开更好查、更好回滚，也不会因为表结构变化而还原不了。
+ *   · 只备份「业务数据」：账号 / 档案 / 字段定义 / 成绩 / 投票 / 歌曲时长 /
+ *     站点设置 / 个人云端数据。登录日志、在线心跳这类高频流水不进快照
+ *     （几百 MB 且没有回档价值）。
+ *   · 每版跑 10 条 select，加插入与清理大约 13 个子请求，Workers 50 的额度够用。
+ *   · 保留策略：按版本号留最近 14 个（同版本最多留 3 份）。
+ *
+ * 回档范围（第一版）：
+ *   content      —— 个人云端数据里的站点内容（作业 / 公告 / 弹窗 / 排期…）
+ *   profiles     —— 班级档案（按 id upsert）
+ *   field_meta   —— 字段管理定义
+ *   settings     —— 站点设置
+ * 账号密码**默认不覆盖**（回档把大家密码改回旧值会造成集体登不上）。
+ * ========================================================================= */
+const BACKUP_TABLES = [
+  'users', 'profiles', 'profile_field_meta', 'site_settings', 'user_data',
+  'exams', 'exam_scores', 'class_votes', 'class_vote_ballots', 'song_durations',
+];
+const BACKUP_MAX_BYTES = 8 * 1024 * 1024;
+const BACKUP_KEEP_VERSIONS = 14;
+
+async function buildBackupPayload(sql) {
+  const dump = {};
+  for (const t of BACKUP_TABLES) {
+    try {
+      const rows = await sql('select * from ' + t + ' limit 20000');
+      dump[t] = rows;
+    } catch (e) {
+      dump[t] = [];
+      dump.__errors = (dump.__errors || []).concat(t + ': ' + String(e.message || e).slice(0, 80));
+    }
+  }
+  return dump;
+}
+
+/** 按版本保留最近 N 个；同版本最多留 3 份 */
+async function pruneBackups(sql) {
+  try {
+    const vers = await sql`
+      select version, max(created_at) as t
+        from data_backups
+       group by version
+       order by t desc
+       limit ${BACKUP_KEEP_VERSIONS}
+    `;
+    const keep = vers.map((v) => v.version);
+    if (!keep.length) return 0;
+    const list = keep.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(',');
+    const del = await sql('delete from data_backups where version not in (' + list + ') returning id');
+    for (const v of keep) {
+      await sql`
+        delete from data_backups
+         where version = ${v}
+           and id not in (
+             select id from data_backups where version = ${v} order by created_at desc limit 3
+           )
+      `;
+    }
+    return del.length;
+  } catch (e) {
+    console.warn('[admin] 清理旧备份失败：', e.message);
+    return 0;
+  }
+}
+
+async function createBackup(req, res, me, b) {
+  const version = String((b && b.version) || '').trim().slice(0, 20) || 'unknown';
+  const kind = ['auto', 'predeploy', 'manual'].indexOf(String((b && b.kind) || '')) >= 0
+    ? String(b.kind) : 'manual';
+  const note = String((b && b.note) || '').slice(0, 200);
+
+  const sql = getSql();
+  const payload = await buildBackupPayload(sql);
+  let bytes = 0;
+  try { bytes = JSON.stringify(payload).length; } catch (e) { bytes = 0; }
+  if (bytes > BACKUP_MAX_BYTES) {
+    return fail(res, 413, '数据太大（' + Math.round(bytes / 1024) + 'KB），超过 8MB 上限；请先在后台清理无用成绩/日志再试');
+  }
+
+  const row = await sql`
+    insert into data_backups (version, kind, note, payload, bytes)
+    values (${version}, ${kind}, ${note}, ${JSON.stringify(payload)}::jsonb, ${bytes})
+    returning id, created_at
+  `;
+  const pruned = await pruneBackups(sql);
+  await audit(me.id, 'data.backup', 'data_backup', String(row[0].id), version + '/' + kind + '/' + bytes);
+
+  return ok(res, {
+    id: Number(row[0].id),
+    version, kind, bytes,
+    createdAt: row[0].created_at,
+    pruned,
+    summary: BACKUP_TABLES.map((t) => t + ':' + ((payload[t] || []).length)).join(' '),
+    message: '已备份（' + Math.round(bytes / 1024) + 'KB）' + (pruned ? '，清理了 ' + pruned + ' 个过期备份' : ''),
+  });
+}
+
+async function listBackups(req, res) {
+  const sql = getSql();
+  const rows = await sql`
+    select id, version, kind, note, bytes, created_at
+      from data_backups
+     order by created_at desc
+     limit 60
+  `;
+  const total = (await sql`select count(*)::int as n, coalesce(sum(bytes),0)::int as b from data_backups`)[0];
+  return ok(res, {
+    backups: rows.map((r) => ({
+      id: Number(r.id), version: r.version, kind: r.kind, note: r.note || '',
+      bytes: Number(r.bytes || 0), createdAt: r.created_at,
+    })),
+    count: Number(total.n || 0),
+    totalBytes: Number(total.b || 0),
+    keepVersions: BACKUP_KEEP_VERSIONS,
+  });
+}
+
+async function getBackup(req, res) {
+  const id = Number(req.query.id || 0);
+  const sql = getSql();
+  const rows = await sql`
+    select id, version, kind, note, bytes, created_at, payload
+      from data_backups where id = ${id} limit 1
+  `;
+  if (!rows.length) return fail(res, 404, '没有这个备份');
+  const r = rows[0];
+  let p = r.payload;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = {}; } }
+  const counts = {};
+  Object.keys(p || {}).forEach((k) => {
+    if (k.indexOf('__') === 0) return;
+    counts[k] = Array.isArray(p[k]) ? p[k].length : 0;
+  });
+  return ok(res, {
+    backup: {
+      id: Number(r.id), version: r.version, kind: r.kind, note: r.note || '',
+      bytes: Number(r.bytes || 0), createdAt: r.created_at, counts,
+    },
+  });
+}
+
+async function deleteBackup(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const sql = getSql();
+  await sql`delete from data_backups where id = ${id}`;
+  await audit(me.id, 'data.backup_delete', 'data_backup', String(id), '');
+  return ok(res, { message: '备份已删除（不可恢复）' });
+}
+
+/* 只允许恢复这几张表：账号密码与日志不在范围内，避免误伤 */
+async function restoreBackup(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  const parts = Array.isArray(b && b.parts) ? b.parts.map(String) : ['content', 'profiles', 'field_meta', 'settings'];
+  if (!id) return fail(res, 400, '缺少备份 id');
+
+  const sql = getSql();
+  const rows = await sql`select id, version, created_at, payload from data_backups where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '没有这个备份');
+  let p = rows[0].payload;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = {}; } }
+
+  const done = [];
+  const skipped = [];
+
+  /* ---- 1) 站点内容（作业/公告/弹窗/排期…） ---- */
+  if (parts.indexOf('content') >= 0) {
+    const ud = (p.user_data || []).filter((r) => r.data_key === 'cls_site_contents');
+    if (!ud.length) skipped.push('content（备份里没有内容文档）');
+    else {
+      const r0 = ud[0];
+      const v = typeof r0.data_value === 'string' ? r0.data_value : JSON.stringify(r0.data_value);
+      await sql`
+        insert into user_data (user_id, data_key, data_value, updated_at)
+        values (${r0.user_id}, 'cls_site_contents', ${v}, now())
+        on conflict (user_id, data_key)
+        do update set data_value = excluded.data_value, updated_at = now()
+      `;
+      done.push('content');
+    }
+  }
+
+  /* ---- 2) 档案（按 id upsert；加密字段原样回写，不需要解密） ---- */
+  if (parts.indexOf('profiles') >= 0) {
+    const list = p.profiles || [];
+    let n = 0;
+    for (const row of list) {
+      const keys = Object.keys(row).filter((k) => k !== 'id' && isSafeFieldFormat(k).ok);
+      if (!keys.length) continue;
+      const cols = keys.join(', ');
+      const ph = keys.map((_, i) => '$' + (i + 2)).join(', ');
+      const params = [row.id].concat(keys.map((k) => row[k]));
+      const upd = keys.map((k) => k + ' = excluded.' + k).join(', ');
+      try {
+        await sql(
+          'insert into profiles (id, ' + cols + ') values ($1, ' + ph + ') '
+          + 'on conflict (id) do update set ' + upd,
+          params
+        );
+        n++;
+      } catch (e) { /* 单行失败不影响其它行 */ }
+    }
+    if (n) done.push('profiles(' + n + ')');
+    else skipped.push('profiles（无可写行）');
+  }
+
+  /* ---- 3) 字段定义 ---- */
+  if (parts.indexOf('field_meta') >= 0) {
+    const list = p.profile_field_meta || [];
+    let n = 0;
+    for (const r of list) {
+      const chk = isSafeFieldFormat(r.field);
+      if (!chk.ok) continue;
+      try {
+        await sql`
+          insert into profile_field_meta (field, label, visibility, sort_order, is_custom, vis_locked, rules)
+          values (${r.field}, ${r.label || r.field}, ${r.visibility || 'public'},
+                  ${Number(r.sort_order) || 100}, ${!!r.is_custom}, ${!!r.vis_locked},
+                  ${JSON.stringify(r.rules || {})}::jsonb)
+          on conflict (field) do update
+            set label = excluded.label, visibility = excluded.visibility,
+                sort_order = excluded.sort_order, rules = excluded.rules, updated_at = now()
+        `;
+        n++;
+      } catch (e) {}
+    }
+    if (n) done.push('field_meta(' + n + ')');
+    else skipped.push('field_meta（无可写行）');
+  }
+
+  /* ---- 4) 站点设置 ---- */
+  if (parts.indexOf('settings') >= 0) {
+    const r = (p.site_settings || [])[0];
+    if (r) {
+      const v = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || {});
+      await sql`
+        insert into site_settings (id, data, updated_at)
+        values (1, ${v}::jsonb, now())
+        on conflict (id) do update set data = excluded.data, updated_at = now()
+      `;
+      done.push('settings');
+    } else skipped.push('settings（备份里没有）');
+  }
+
+  await audit(me.id, 'data.restore', 'data_backup', String(id),
+    'restored: ' + done.join(',') + '; skipped: ' + skipped.join(','));
+
+  return ok(res, {
+    restored: done,
+    skipped,
+    version: rows[0].version,
+    message: '已从「' + rows[0].version + '」备份恢复：' + (done.join('、') || '无')
+      + (skipped.length ? '；未恢复：' + skipped.join('、') : ''),
+  });
+}
+
+/* ============================================================================
+ * v3.6.1：字段体检 + 一键恢复
+ * ----------------------------------------------------------------------------
+ * 站主原话：「字段管理之前的那些比如入团时间、发展团员编号那些你前几次更新的
+ *           时候直接给我删了，我现在后台没有数据，看看能不能恢复。」
+ *
+ * 根因（这次查清楚了）：
+ *   ① v3.5.14 给「删除字段」加了墓碑：删过的字段名记进 site_settings.data.deleted_fields；
+ *   ② ensureSchema 每次版本升级都会跑一段「按墓碑删除 profile_field_meta」，
+ *      防止预置种子把删掉的字段又插回来；
+ *   ③ 于是只要墓碑里躺着一个字段，以后**每次升级**都会再删一次；
+ *      如果墓碑里躺了一批系统字段，某次升级就会把整张字段表清空。
+ *   而 deleteField 同时执行了 `alter table profiles drop column` ——
+ *   列一没，值就跟着没了（PostgreSQL 的 drop column 不可撤销）。
+ *
+ * 本接口做两件事：
+ *   · dryRun（默认）：报告「字段表有几行 / 墓碑里有谁 / 12 个预置列哪些还在、
+ *     各有多少条有值」——先看清损失范围，再决定动不动手；
+ *   · apply=true：清空墓碑 → 补建缺列 → 重插预置字段 → 恢复默认校验规则。
+ *     列还在的，值会立刻回来；列已经没了的，只能靠数据库时间点恢复或重新导入
+ *     （接口会在返回里明确列出「哪些列已经不存在」）。
+ * ========================================================================= */
+const PRESET_FIELDS = [
+  ['name',            '姓名',        'public', 10],
+  ['student_id',      '学号',        'public', 20],
+  ['politics',        '政治面貌',    'public', 30],
+  ['exam_no',         '智学网账号',  'public', 40],
+  ['role',            '身份',        'public', 50],
+  ['title',           '头衔',        'public', 60],
+  ['wechat',          '微信',        'public', 70],
+  ['qq',              'QQ',          'public', 80],
+  ['phone',           '手机号',      'public', 90],
+  ['id_card',         '身份证号',    'self',   100],
+  ['youth_league_no', '发展团员编号', 'self',  110],
+  ['school',          '学校',        'public', 120],
+  ['class_name',      '班级',        'public', 130],
+  ['ethnicity',       '民族',        'public', 140],
+  ['birth_date',      '出生日期',    'self',   150],
+  ['home_address',    '家庭住址',    'self',   160],
+  ['league_date',     '入团时间',    'self',   170],
+];
+const PRESET_RULES = {
+  name: '{"type":"text","maxLen":3}', school: '{"type":"text","maxLen":6}',
+  politics: '{"type":"select","options":["群众","共青团员"]}', phone: '{"type":"number","digits":11}',
+  id_card: '{"type":"text","maxLen":18}', youth_league_no: '{"type":"text","maxLen":40}',
+  league_date: '{"type":"time"}', class_name: '{"type":"text","maxLen":8}',
+  student_id: '{"type":"number","digits":6}',
+  birth_date: '{"type":"time"}', home_address: '{"type":"text","maxLen":30}',
+};
+
+async function repairFields(req, res, me, b) {
+  const sql = getSql();
+  const apply = b && (b.apply === true || b.apply === 'true');
+
+  /* ---- 体检 ---- */
+  const metaRows = await sql`select field, label from profile_field_meta order by sort_order, field`;
+  let tomb = [];
+  try {
+    const r = await sql`
+      select coalesce(data->'deleted_fields', '[]'::jsonb) as d
+        from site_settings where id = 1 limit 1
+    `;
+    const raw = r.length ? r[0].d : [];
+    tomb = Array.isArray(raw) ? raw.map(String) : (typeof raw === 'string' ? JSON.parse(raw) : []);
+  } catch (e) { tomb = []; }
+
+  /* 现有列：select * 取第一行的键名（不依赖 information_schema，测试桩也能跑） */
+  let colNames = [];
+  try {
+    const one = await sql`select * from profiles limit 1`;
+    colNames = one.length ? Object.keys(one[0]) : [];
+  } catch (e) { colNames = []; }
+
+  const status = PRESET_FIELDS.map(([f, label]) => ({
+    field: f, label,
+    hasColumn: colNames.indexOf(f) >= 0,
+    hasMeta: metaRows.some((m) => m.field === f),
+  }));
+
+  if (!apply) {
+    return ok(res, {
+      dryRun: true,
+      metaCount: metaRows.length,
+      tombstoned: tomb,
+      columns: status,
+      missingColumns: status.filter((x) => !x.hasColumn).map((x) => x.field),
+      message: '这是体检结果，未做任何修改。确认要恢复请再调一次并带 apply=true',
+    });
+  }
+
+  /* ---- 恢复 ---- */
+  /* ① 清空墓碑：否则下次升级又会按墓碑删一遍 */
+  try {
+    await sql`update site_settings set data = data - 'deleted_fields', updated_at = now() where id = 1`;
+  } catch (e) { console.warn('[admin] 清墓碑失败：', e.message); }
+
+  /* ② 补建缺列（列还在时 add column if not exists 是空操作，值原样保留） */
+  for (const [f] of PRESET_FIELDS) {
+    const chk = isSafeFieldFormat(f);
+    if (!chk.ok) continue;
+    try { await sql(`alter table profiles add column if not exists ${chk.field} text`); } catch (e) {}
+  }
+
+  /* ③ 重插字段定义（已有的不动，保留你改过的可见性/标签）。
+     一条多值 INSERT 搞定，别逐条来 —— Cloudflare Workers 单次 50 个子请求，
+     17 条字段逐条插会把预算吃掉一大半。字段名/标签都是本文件里的常量，无注入风险。 */
+  try {
+    const vals = PRESET_FIELDS.map(([f, label, vis, ord]) =>
+      `('${f}', '${label}', '${vis}', ${ord}, false)`).join(', ');
+    await sql(
+      'insert into profile_field_meta (field, label, visibility, sort_order, is_custom) values '
+      + vals + ' on conflict (field) do nothing'
+    );
+  } catch (e) {
+    console.warn('[admin] 批量重插字段失败，改为逐条：', e.message);
+    for (const [f, label, vis, ord] of PRESET_FIELDS) {
+      try {
+        await sql`
+          insert into profile_field_meta (field, label, visibility, sort_order, is_custom)
+          values (${f}, ${label}, ${vis}, ${ord}, false)
+          on conflict (field) do nothing
+        `;
+      } catch (e2) {}
+    }
+  }
+
+  /* ④ 恢复默认校验规则（只补空的，不覆盖你改过的） */
+  for (const f of Object.keys(PRESET_RULES)) {
+    try {
+      await sql`
+        update profile_field_meta set rules = ${PRESET_RULES[f]}::jsonb
+         where field = ${f} and rules = '{}'::jsonb
+      `;
+    } catch (e) {}
+  }
+
+  /* ⑤ 体检结果：每列还有多少条有值 —— 这就是「数据到底还在不在」的答案 */
+  let counts = {};
+  try {
+    const cols = PRESET_FIELDS.map(([f]) => f).filter((f) => isSafeFieldFormat(f).ok);
+    const expr = cols.map((c) => `sum(case when coalesce(${c},'') <> '' then 1 else 0 end) as ${c}`).join(', ');
+    const r = await sql('select ' + expr + ' from profiles');
+    counts = r[0] || {};
+  } catch (e) { counts = {}; }
+
+  const recovered = [];
+  const stillEmpty = [];
+  PRESET_FIELDS.forEach(([f, label]) => {
+    const n = Number(counts[f] || 0);
+    if (n > 0) recovered.push({ field: f, label, filled: n });
+    else stillEmpty.push({ field: f, label, hasColumn: colNames.indexOf(f) >= 0 });
+  });
+
+  await audit(me.id, 'field.repair', 'profile_field', null,
+    '恢复 ' + (metaRows.length === 0 ? '全部' : '缺失') + '预置字段；墓碑 ' + tomb.length + ' 项');
+
+  return ok(res, {
+    applied: true,
+    metaCountBefore: metaRows.length,
+    tombstonedBefore: tomb,
+    recovered,                 /* 有值的字段 —— 数据回来了 */
+    stillEmpty,                /* 仍然为空 —— 列还在但值没了 / 列被删了 */
+    message: '已重建字段定义并清空墓碑。有值的字段：' + recovered.length + ' 个；'
+      + (stillEmpty.length ? ('仍为空：' + stillEmpty.map((x) => x.label).join('、')) : '其余为空'),
+  });
+}
+
 /**
  * 删除自定义资料字段。
  * body: { field }
@@ -2166,15 +2607,15 @@ async function deleteField(req, res, me, b) {
 
   await sql`delete from profile_field_meta where field = ${field}`;
 
-  /* 列名已确认来自 meta 表（即当初经过白名单的），再校验一次以防历史脏数据 */
-  const chk = isSafeFieldFormat(field);
-  if (chk.ok) {
-    try {
-      await sql(`alter table profiles drop column if exists ${field}`);
-    } catch (e) {
-      console.warn('[admin] 删自定义字段的列失败（meta 已删，前台不再展示）：', field, e.message);
-    }
-  }
+  /* ⚠️ v3.6.1 重要变更：**不再 drop column**。
+     站主原话：「那些字段你前几次更新的时候直接给我删了，我现在后台没有数据，
+                看看能不能恢复。」
+     根因就是这里执行了 `alter table profiles drop column`——
+     PostgreSQL 的 drop column 不可撤销，值跟着列一起没了，谁也救不回来。
+     现在只把字段从「字段管理」里摘掉（前台不再展示、搜索不再返回），
+     底下的列和数据原样保留。以后误删只要把字段重新加回来，值立刻复原。
+     代价是表里会留一些没人看的列 —— 与「数据丢了找不回来」相比完全值得。 */
+  console.log('[admin] 字段已从管理列表移除（列与数据保留，可随时恢复）：', field);
 
   await audit(me.id, 'field.delete', 'profile_field', field, row.label || '');
   return ok(res, { message: '已删除字段「' + (row.label || field) + '」', field });
