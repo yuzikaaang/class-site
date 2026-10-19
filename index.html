@@ -3306,28 +3306,45 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
         src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></div>
       <script>
       (function(){
-        /* v3.7.2：取图顺序 本地缓存 → /api/badge（重试一次）→ 图床原图。
-           ⚠️ 图床那张原图 6.3MB，是最后的最后才用；正常情况下走代理只有 ~200KB。 */
+        /* v3.7.3：取图顺序 本地缓存 → fetch(/api/badge) → 图床原图。
+           ⚠️ 关键教训（v3.7.2 实测）：直接给 <img src> 指到跨域的 API，
+              在部分网络环境下会触发 onerror（本次沙箱里连续两次都失败），
+              于是退到图床那张 **6.3MB** 的原图 —— 反而更慢。
+              fetch() 走的是和「导出图片缓存」同一条路，实测稳定返回 200。
+              所以这里改用 fetch 取图 → 转 dataURL → 顺手存成本地缓存，
+              之后的访问连请求都不用发；导出图片也直接吃这份缓存。 */
         var API_B = 'https://api.classsite.dpdns.org/api/badge';
         var FALL  = 'https://s41.ax1x.com/2026/06/07/pmmhF6H.png';
+        function store(d){
+          try{
+            localStorage.setItem('__cls_badge_src', d);
+            localStorage.setItem('__cls_badge_ts', String(Date.now()));
+          }catch(e){}
+        }
         try{
           var el = document.getElementById('siteLogoImg');
           if(!el) return;
           var c = '';
           try{ c = localStorage.getItem('__cls_badge_src') || ''; }catch(e){}
           if(c.indexOf('data:image/') === 0){ el.src = c; return; }
-          var tried = 0;
-          el.onerror = function(){
-            if(tried >= 1){
-              this.onerror = null;
-              this.src = FALL;          /* 最后一次才用 6MB 的原图 */
-              return;
-            }
-            tried++;
-            var self = this;
-            setTimeout(function(){ self.src = API_B + '?r=' + Date.now(); }, 700);
-          };
-          el.src = API_B;
+          fetch(API_B).then(function(r){
+            if(!r.ok) throw new Error('HTTP ' + r.status);
+            return r.blob();
+          }).then(function(bl){
+            if(!bl || bl.size < 200) throw new Error('图片太小');
+            var fr = new FileReader();
+            fr.onload = function(){
+              var d = String(fr.result || '');
+              if(d.indexOf('data:image/') !== 0) throw new Error('不是图片');
+              store(d);
+              el.src = d;
+            };
+            fr.onerror = function(){ el.src = FALL; };
+            fr.readAsDataURL(bl);
+          }).catch(function(){
+            /* 最后一招才用 6MB 原图 —— 正常情况走不到这里 */
+            el.src = FALL;
+          });
         }catch(e){}
       })();
       </script>
@@ -4266,7 +4283,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.7.2';
+var SITE_VERSION = '3.7.3';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
