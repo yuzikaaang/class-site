@@ -79,7 +79,14 @@ function pull(key, cb){
   function beat(){
     var a = auth(); if(!a) return;
     try{
-      fetch('https://api.classsite.dpdns.org/api/auth?action=ping', {
+      /* v3.5.40（站主 #3）：带上页面标识 game:<文件名>，
+         后台「在线时长 → 按页面」就能单独看到「打砖块」这类游戏页。 */
+      var gid = '';
+      try{
+        gid = String(location.pathname || '').split('/').pop().replace(/\.html?$/i, '');
+      }catch(e){}
+      if(!gid) gid = 'unknown';
+      fetch('https://api.classsite.dpdns.org/api/auth?action=ping&page=' + encodeURIComponent('game:' + gid), {
         method:'GET', cache:'no-store', headers:{ Authorization:'Bearer ' + a.token }
       }).catch(function(){});
     }catch(e){}
