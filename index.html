@@ -3184,6 +3184,10 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
         <button onclick="closeHwCurrent()">关闭</button>
       </span>
     </div>
+    <div id="hwPickBar" style="padding:10px 18px 0;display:flex;gap:8px;align-items:center">
+      <span style="font-size:.78rem;color:var(--fg-3,#6e635a);flex-shrink:0">查看：</span>
+      <select id="hwPickSel" style="flex:1;min-width:0;padding:7px 10px;border-radius:10px;border:1px solid var(--line-2,#e7d9cc);font-size:.82rem;background:var(--bg-2,#fff)"></select>
+    </div>
     <div class="allboard-list" id="hwCurrentList" data-scroll-keep style="padding:14px 18px;max-height:70vh;overflow:auto"></div>
   </div>
 </div>
@@ -3321,7 +3325,7 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 </div>
 
 <script>
-/* v3.5.40：share-card.js 内联版（外部文件在 Pages CDN 上偶发 404，
+/* v3.5.42：share-card.js 内联版（外部文件在 Pages CDN 上偶发 404，
    导出图片是主功能，不能靠一个可能取不到的文件）。源文件仍在仓库里保留一份。 */
 /* ============================================================================
  * share-card.js —— 把一段结构化内容画成一张 PNG 长图（v3.5.40）
@@ -3350,7 +3354,8 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
  *       { heading: '本期歌单', rows: [ { l:'1. 晴天 - 周杰伦', r:'点赞 12' }, ... ] },
  *       { heading: '备注', lines: ['...'] }
  *     ],
- *     footer: '由 25级05班 班级服务站生成'
+ *     footer: '由 25级05班 班级服务站生成',
+ *     badge: './favicon.svg'      // 班徽，画在右上角（取不到就不画，不影响导出）
  *   }, '文件名.png');
  * ========================================================================= */
 (function (global) {
@@ -3370,6 +3375,8 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
     GAP_SECTION: 26,
     GAP_ROW: 6,
     FOOT: 46,
+    BADGE: 66,          /* 班徽边长（右上角） */
+    BADGE_GAP: 16,      /* 标题与班徽之间的留白 */
   };
 
   var COLORS = {
@@ -3428,6 +3435,7 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
       sections: sections,
       footer: o.footer || '',
       width: o.width && o.width > 320 ? o.width : STEP.W,
+      __badge: o.__badge || null,
     };
   }
 
@@ -3439,7 +3447,9 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
     var h = STEP.PAD;
 
     ctx.font = font(STEP.TITLE, 700);
-    var titleLines = wrap(ctx, o.title, innerW);
+    var hasBadge = !!o.__badge;
+    var titleW = hasBadge ? innerW - STEP.BADGE - STEP.BADGE_GAP : innerW;
+    var titleLines = wrap(ctx, o.title, titleW);
     h += titleLines.length * (STEP.TITLE + 8);
 
     if (o.subtitle) {
@@ -3495,6 +3505,46 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
     return { height: Math.round(h), blocks: parts, titleLines: titleLines };
   }
 
+  /* ---- 班徽（v3.5.42）----
+     站主要求：所有导出图片右上角都带班徽。
+     图片跨域时 canvas 会被污染（toBlob 直接抛 SecurityError），
+     所以统一先试 crossOrigin='anonymous'，失败就当没有徽标 ——
+     少一个角标总比整张图导不出来强。 */
+  var badgeCache = {};
+
+  function loadBadge(url) {
+    if (!url) return Promise.resolve(null);
+    if (Object.prototype.hasOwnProperty.call(badgeCache, url)) {
+      return Promise.resolve(badgeCache[url]);
+    }
+    return new Promise(function (resolve) {
+      var img = new Image();
+      var done = false;
+      function fin(v) { if (!done) { done = true; badgeCache[url] = v; resolve(v); } }
+      img.crossOrigin = 'anonymous';
+      img.onload = function () { fin({ ok: true, img: img }); };
+      img.onerror = function () {
+        /* 带 crossOrigin 失败时，再试一次不带（同源图片在某些内核上也会被拦） */
+        var img2 = new Image();
+        img2.onload = function () {
+          try {
+            /* 画一下空像素检测是否被污染 */
+            var t = document.createElement('canvas');
+            t.width = t.height = 1;
+            t.getContext('2d').drawImage(img2, 0, 0, 1, 1);
+            t.getContext('2d').getImageData(0, 0, 1, 1);
+            fin({ ok: true, img: img2 });
+          } catch (e) { fin(null); }
+        };
+        img2.onerror = function () { fin(null); };
+        img2.src = url;
+      };
+      img.src = url;
+      /* 兜底：3 秒还没结果就不等了，别让用户以为按钮坏了 */
+      setTimeout(function () { fin(null); }, 3000);
+    });
+  }
+
   function roundRect(ctx, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -3526,6 +3576,22 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
     var y = STEP.PAD;
 
     /* 标题 */
+    /* 班徽：右上角，圆角裁切 */
+    if (o.__badge && o.__badge.img) {
+      try {
+        ctx.save();
+        roundRect(ctx, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE, 16);
+        ctx.clip();
+        ctx.drawImage(o.__badge.img, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE);
+        ctx.restore();
+        /* 细边框，浅色徽标也能看出边界 */
+        ctx.strokeStyle = 'rgba(0,0,0,.06)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE, 16);
+        ctx.stroke();
+      } catch (e) { /* 画不上就跳过 */ }
+    }
+
     ctx.fillStyle = COLORS.ink;
     ctx.font = font(STEP.TITLE, 700);
     m.titleLines.forEach(function (ln) {
@@ -3624,6 +3690,19 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
     return cv;
   }
 
+  /** 先把班徽加载好再画。download/share 内部都用这个。 */
+  function renderAsync(opts) {
+    var o = opts || {};
+    return loadBadge(o.badge).then(function (bd) {
+      var withBadge = {};
+      for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) withBadge[k] = o[k];
+      withBadge.__badge = bd;
+      return render(withBadge);
+    }).catch(function () {
+      return render(o);
+    });
+  }
+
   function toBlob(cv) {
     return new Promise(function (resolve, reject) {
       try {
@@ -3634,7 +3713,10 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 
   /** 下载（桌面 / 安卓微信里都走这条） */
   function download(opts, filename) {
-    var cv = render(opts);
+    return renderAsync(opts).then(function (cv) { return downloadCanvas(cv, opts, filename); });
+  }
+
+  function downloadCanvas(cv, opts, filename) {
     var name = filename || ((opts && opts.title ? String(opts.title) : '卡片') + '.png');
     return toBlob(cv).then(function (blob) {
       var url = URL.createObjectURL(blob);
@@ -3652,7 +3734,10 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 
   /** 分享：优先系统分享（iOS / 安卓能直接发微信），不支持就退回下载 */
   function share(opts, filename) {
-    var cv = render(opts);
+    return renderAsync(opts).then(function (cv) { return shareCanvas(cv, opts, filename); });
+  }
+
+  function shareCanvas(cv, opts, filename) {
     var name = filename || ((opts && opts.title ? String(opts.title) : '卡片') + '.png');
     return toBlob(cv).then(function (blob) {
       try {
@@ -3667,11 +3752,15 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
             });
         }
       } catch (e) { /* 老浏览器没有 File 构造器，直接走下载 */ }
-      return download(opts, filename).then(function () { return { shared: false, downloaded: true }; });
+      return downloadCanvas(cv, opts, filename).then(function () { return { shared: false, downloaded: true }; });
     });
   }
 
-  global.ShareCard = { render: render, download: download, share: share, toBlob: toBlob };
+  global.ShareCard = {
+    render: render, renderAsync: renderAsync,
+    download: download, share: share, toBlob: toBlob,
+    loadBadge: loadBadge,
+  };
 })(window);
 
 </script>
@@ -4089,7 +4178,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.41';
+var SITE_VERSION = '3.5.42';
 var VER_DATE = '2026-10-18';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -7356,6 +7445,17 @@ function isCloudKey(k){
 
 function apiUrl(path){ return (API_BASE || '') + '/api' + path; }
 
+/** v3.5.42：导出图片用的班徽地址。
+ *  优先后台「站点信息 → 班徽」里填的直链，没填就用站点自己的图标（favicon.svg）。
+ *  相对路径会被解析成绝对地址 —— canvas 画相对路径的图片在部分内核上会失败。 */
+function siteBadgeUrl(){
+  var u = '';
+  try{ u = (window.SITE_DATA && SITE_DATA.badgeUrl) || ''; }catch(e){}
+  u = String(u || '').trim();
+  if(!u) u = './favicon.svg';
+  try{ return new URL(u, location.href).href; }catch(e){ return u; }
+}
+
 /* 统一的 API 调用：自动带 token、自动处理登录过期 */
 function api(path, opts){
   opts = opts || {};
@@ -7812,6 +7912,8 @@ function applyCloudContent(items, opts){
 /** 站点通用配置（站点名、门禁、公告栏问候语等） */
 function applySiteConfig(cfg){
   if(!cfg || typeof cfg !== 'object') return;
+  /* v3.5.42：班徽图片地址（导出图片右上角用）。空值 = 用站点图标兜底。 */
+  if(typeof cfg.badgeUrl === 'string') SITE_DATA.badgeUrl = cfg.badgeUrl.trim();
   ['gateQuestion','gateAnswer','welcomeTitle'].forEach(function(k){
     if(cfg[k] !== undefined && cfg[k] !== null) SITE_DATA[k] = cfg[k];
   });
@@ -9479,6 +9581,12 @@ function syncPull(ask){
         }catch(e){}
       });
     }finally{ window.__cloudPulling = false; }
+    /* 被保护的本机新值要补推上去，否则云端永远停在旧值 */
+    if(protectedKeys.length){
+      protectedKeys.forEach(function(k){ DIRTY_KEYS[k] = 1; DIRTY_COUNT++; });
+      addPendingKeys(protectedKeys);
+      try{ flushCloudSync(); }catch(e){}
+    }
     /* 让界面按新数据重绘 */
     if(typeof loadUI === 'function' && k0In(items, 'cls_ui_cfg')){
       loadUI(); applyUICfg();
@@ -9528,11 +9636,26 @@ function syncPullSilent2(){
     window.__cloudKeyCount = n;
     if(n === 0) return { pulled:0 };
     var cnt = 0;
+    var times = j.times || {};
+    var lts = loadLTS();
+    var nowMs = Date.now();
+    var protectedKeys = [];
     window.__cloudPulling = true;
     try{
       Object.keys(items).forEach(function(k){
         if(!isCloudKey(k)) return;
         if(DIRTY_KEYS[k]) return;          /* 本机有未推送改动 → 保护，不覆盖 */
+        /* v3.5.42：本机改得比云端新，就不拿旧值盖它。
+           —— 站主「勾完立刻退出、重进发现勾没了」的直接原因就是这一步缺失：
+              云端还是打开页面前的旧值，却无条件覆盖了本机刚写的新值。
+           本地时钟可能被用户改过，所以只信「不超过现在 1 分钟」的时间戳，
+           且要求领先云端 500ms 以上（避免同一秒内的抖动误判）。 */
+        var lt = Number(lts[k] || 0);
+        var ct = times[k] ? Date.parse(times[k]) : 0;
+        if(lt && lt <= nowMs + 60000 && ct && lt > ct + 500){
+          protectedKeys.push(k);
+          return;
+        }
         var raw;
         try{ raw = JSON.stringify(items[k]); }catch(e){ return; }
         var cur = null;
@@ -9594,6 +9717,66 @@ function k0In(o, k){ return Object.prototype.hasOwnProperty.call(o, k); }
    ============================================================ */
 var DIRTY_KEYS = {};          /* 待推送的键（用对象当 Set，兼容老浏览器） */
 var DIRTY_COUNT = 0;
+
+/* ============================================================================
+ * v3.5.42：待推送清单落盘 + 本地写入时间
+ * ----------------------------------------------------------------------------
+ * 站主原话：「我刚刚已经打好勾了，然后我打完勾之后，我就立马退出去了嘛，
+ *           然后又重进来刷新了页面，结果是刚刚打勾的，现在都没打勾了」
+ *
+ * 根因（三条叠加，缺一条都不会丢）：
+ *   ① DIRTY_KEYS 只在内存里 —— 页面一关，待推送清单跟着没了；
+ *   ② 勾完立刻退出时 fetch 被浏览器取消，云端还是旧值；
+ *   ③ 重进页面从云端拉，旧值把本机新勾覆盖掉。
+ *
+ * 修法：
+ *   · __cls_pending：把待推送的键名落 localStorage，成功推上去才删；
+ *     下次进站先补推，再拉云端。
+ *   · __cls_lts：每个键「最后一次本机写入」的时间戳。拉取时和云端
+ *     user_data.updated_at 比，本机更新就不覆盖（并补推）。
+ *     这两个键不带 cls_ 前缀，不在同步白名单里，永远不会被推到云端。
+ * ========================================================================= */
+var PENDING_LS = '__cls_pending';
+var LTS_LS = '__cls_lts';
+
+function loadPendingKeys(){
+  try{
+    var a = JSON.parse(localStorage.getItem(PENDING_LS) || '[]');
+    return Array.isArray(a) ? a.filter(function(k){ return typeof k === 'string'; }) : [];
+  }catch(e){ return []; }
+}
+function savePendingKeys(arr){
+  try{ localStorage.setItem(PENDING_LS, JSON.stringify(arr.slice(0, 800))); }catch(e){}
+}
+function addPendingKeys(keys){
+  if(!keys || !keys.length) return;
+  var a = loadPendingKeys();
+  keys.forEach(function(k){ if(a.indexOf(k) < 0) a.push(k); });
+  savePendingKeys(a);
+}
+function removePendingKeys(keys){
+  if(!keys || !keys.length) return;
+  var a = loadPendingKeys().filter(function(k){ return keys.indexOf(k) < 0; });
+  savePendingKeys(a);
+}
+
+function loadLTS(){
+  try{ return JSON.parse(localStorage.getItem(LTS_LS) || '{}') || {}; }catch(e){ return {}; }
+}
+/** 记一笔「这个键刚在本机被改过」。只在本地写入时调用（云端回写不调） */
+function markLocalWrite(k){
+  try{
+    if(!isCloudKey(k)) return;
+    var m = loadLTS();
+    m[k] = Date.now();
+    var ks = Object.keys(m);
+    if(ks.length > 600){
+      ks.sort(function(a, b){ return (m[a] || 0) - (m[b] || 0); });
+      ks.slice(0, ks.length - 600).forEach(function(x){ delete m[x]; });
+    }
+    localStorage.setItem(LTS_LS, JSON.stringify(m));
+  }catch(e){}
+}
 var SYNC_DEBOUNCE_MS = 1500;  /* 停手 1.5 秒后发 */
 var SYNC_MAX_WAIT_MS = 10000; /* 但最多攒 10 秒 */
 var __syncDebounceTimer = null;
@@ -9641,13 +9824,28 @@ function flushCloudSync(){
   if(!isLoggedIn()){ DIRTY_KEYS = {}; DIRTY_COUNT = 0; return Promise.resolve({ pushed:0 }); }
   var keys = Object.keys(DIRTY_KEYS);
   if(!keys.length) return Promise.resolve({ pushed:0 });
-  /* 同一次请求里不要重复发：慢网络下前一个还没回来就再发会乱序 */
-  if(__syncInFlight) return Promise.resolve({ pushed:0, skipped:true });
+  /* 同一次请求里不要重复发：慢网络下前一个还没回来就再发会乱序。
+     ⚠️ v3.5.42：这里以前直接返回，**而且上面的 clearTimeout 已经把定时器清了** ——
+        于是这批改动既不在这轮发，也没有下一轮定时器，要等用户再操作一次才动。
+        「勾完立刻退出」正是撞上这个空档。现在补一个短定时器重试。 */
+  if(__syncInFlight){
+    if(__syncDebounceTimer === null || __syncDebounceTimer === undefined){
+      __syncDebounceTimer = setTimeout(function(){
+        __syncDebounceTimer = null;
+        flushCloudSync();
+      }, 800);
+    }
+    return Promise.resolve({ pushed:0, skipped:true });
+  }
 
   /* 先把待发清单清空——如果请求后面失败了，这些键会被下一次修改重新登记，
      不会因为「一直失败」而卡住后续改动。 */
   DIRTY_KEYS = {};
   DIRTY_COUNT = 0;
+
+  /* v3.5.42：先把这批键名落到 localStorage。页面在这一刻被关掉，
+     下次进站也能靠它把这次改动补推上去（否则只活在内存里，一关就没）。 */
+  addPendingKeys(keys);
 
   var items = {};
   keys.forEach(function(k){
@@ -9660,15 +9858,28 @@ function flushCloudSync(){
   return api('/data', { method:'PUT', body:{ items: items } })
     .then(function(j){
       window.__cloudKeyCount = Object.keys(items).length;
+      /* 真上云了才把 pending 标记撤掉 */
+      removePendingKeys(keys);
       return { pushed: j.written || Object.keys(items).length };
     })
     .catch(function(e){
       /* 失败不打扰用户——自动同步是「锦上添花」，弹错误提示反而烦人。
-         但要把键重新登记，等下次改动时再试。 */
+         但要把键重新登记，等下次改动时再试；pending 标记也留着，
+         下次进站会再补推一次。 */
       keys.forEach(function(k){ DIRTY_KEYS[k] = 1; DIRTY_COUNT++; });
       return { pushed:0, error:String(e && e.message || e) };
     })
-    .then(function(r){ __syncInFlight = false; return r; });
+    .then(function(r){
+      __syncInFlight = false;
+      /* 请求期间又攒了新的改动 → 补一个定时器，别让它们干等 */
+      if(hasPendingCloudSync() && (__syncDebounceTimer === null || __syncDebounceTimer === undefined)){
+        __syncDebounceTimer = setTimeout(function(){
+          __syncDebounceTimer = null;
+          flushCloudSync();
+        }, 600);
+      }
+      return r;
+    });
 }
 
 /**
@@ -9711,6 +9922,19 @@ function backfillOrphanHwDone(){
       .then(function(){ return orphan.length; })
       .catch(function(){ return 0; });
   }).catch(function(){ return 0; });
+}
+
+/** v3.5.42：进站时把上次没推成功的键捡回来，立刻补推一次。
+ *  必须在「从云端拉取」之前跑，否则旧云端值会先把本机新勾覆盖掉。 */
+var __pendingRestored = false;
+function restorePendingSync(){
+  if(__pendingRestored) return;
+  __pendingRestored = true;
+  if(!isLoggedIn()) return;
+  var a = loadPendingKeys().filter(function(k){ return isCloudKey(k); });
+  if(!a.length) return;
+  a.forEach(function(k){ DIRTY_KEYS[k] = 1; DIRTY_COUNT++; });
+  flushCloudSync();
 }
 
 /* 有改动待上传吗？页面隐藏时用它判断要不要立即发 */
@@ -9914,6 +10138,8 @@ function saveContentLocal(key, value){
 
     proto.setItem = function(k, v){
       rawSet(k, v);
+      /* v3.5.42：非「云端回写」的写入才算本机改动，记下时间供拉取时比对 */
+      if(!window.__cloudPulling){ try{ markLocalWrite(String(k)); }catch(e){} }
       /* v2.10.0：云端拉取回写时打 __cloudPulling 标 ——
          「从云端拉下来的值」不是「本机改动」，不能被 markCloudDirty
          登记成待推送（否则每轮拉取都会产生一次无意义回推，
@@ -10190,6 +10416,9 @@ function syncRound(opts){
   }
   SYNC_STATE.running = true;
 
+  /* v3.5.42：先把「上次没推成功」的键补上（勾完立刻退出就是这种情况） */
+  try{ restorePendingSync(); }catch(e){}
+
   /* ① 先推：把本机待发的内容改动发出去（未登录会直接跳过） */
   var pushStep = hasPendingContentSync()
     ? flushContentSync().catch(function(){ return { ok:false }; })
@@ -10332,6 +10561,9 @@ function syncStatusPaint(){
 
 /** 启动自动同步 */
 function syncAutoInit(){
+  /* v3.5.42：进站先把上次没推成功的改动补推掉（不等 5 秒）。
+     站主「勾完立刻退出」的那一笔就靠这里捡回来，越早发越安全。 */
+  try{ restorePendingSync(); }catch(e){}
   /* 首次延迟 5 秒（让 contentBoot 的首拉先完成），之后按 60 秒节拍 */
   if(__syncTimer){ clearTimeout(__syncTimer); __syncTimer = null; }
   __syncTimer = setTimeout(function(){ syncRound(); }, 5000);
@@ -19495,12 +19727,32 @@ function shortName(n){
   return s.length > 8 ? s.slice(0, 7) + '…' : s;
 }
 
-function showCurrentHomework(){
+function showCurrentHomework(forceId){
   var mask = document.getElementById('hwCurrentMask');
   var title = document.getElementById('hwCurrentTitle');
   var list = document.getElementById('hwCurrentList');
   if(!mask || !list) return;
-  var hw = getCurrentHomework();
+  /* v3.5.42（站主 #2）：可以看/导出之前某一期作业，不再只能看「当前」那一份。
+     forceId 由下拉框给出；不传则仍按「今天落在哪一期 / 最近一期」自动选。 */
+  var all = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
+  var hw = null;
+  if(forceId){
+    for(var fi = 0; fi < all.length; fi++){
+      if(String(all[fi].id) === String(forceId)){ hw = all[fi]; break; }
+    }
+  }
+  if(!hw) hw = getCurrentHomework();
+  window.__HW_VIEWING = hw || null;
+
+  /* 下拉：最近的排在前面 */
+  var sel = document.getElementById('hwPickSel');
+  if(sel){
+    sel.innerHTML = all.slice().reverse().map(function(x){
+      return '<option value="' + attr(x.id) + '"' + (hw && String(x.id) === String(hw.id) ? ' selected' : '') + '>'
+        + esc(x.title) + '（' + esc(x.start || '') + ' ~ ' + esc(x.end || '') + '）</option>';
+    }).join('');
+    sel.onchange = function(){ showCurrentHomework(sel.value); };
+  }
   if(!hw){
     if(title) title.textContent = '当前作业';
     list.innerHTML = '<div style="padding:24px;text-align:center;color:#6e635a">暂未找到当前作业记录。<br>请通过「历史作业（日期）」日历查看所有已同步的作业。</div>';
@@ -19537,7 +19789,8 @@ function hwExportImage(mode){
     if(typeof uiMsg === 'function') uiMsg('图片组件没加载出来，请刷新页面重试', '#af410f');
     return;
   }
-  var hw = getCurrentHomework();
+  /* 导出「正在看的那一份」（下拉可选以前的），不是永远导出当天 */
+  var hw = window.__HW_VIEWING || getCurrentHomework();
   if(!hw){
     if(typeof uiMsg === 'function') uiMsg('没有可导出的作业', '#af410f');
     return;
@@ -19565,6 +19818,7 @@ function hwExportImage(mode){
     badges: ['共 ' + items.length + ' 科', totalTasks + ' 项任务'],
     sections: sections,
     footer: '由 25级05班 班级服务站生成 · ' + new Date().toLocaleDateString('zh-CN'),
+    badge: siteBadgeUrl(),
   };
   var fname = '作业-' + String(hw.start || '').replace(/[^0-9]/g, '') + '.png';
 
