@@ -23,6 +23,7 @@
 import { getSql } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireUser, requireUserReady, isCommittee,
+  isSafeFieldFormat, audit,
 } from './_lib/http.js';
 /* v3.5.0：档案字段在库里是密文（AES-256-GCM），凡是要往外吐明文的地方都得解密。
    数据流：DB(密文) → [decRow 解密] → shapeProfile(按可见性裁剪) → 前端(明文)。 */
@@ -81,7 +82,7 @@ function stricter(a, b) {
  */
 async function loadMeta(sql) {
   try {
-    const rows = await sql`select field, visibility, label, sort_order, is_custom, vis_locked, rules from profile_field_meta order by sort_order, field`;
+    const rows = await sql`select field, visibility, label, sort_order, is_custom, vis_locked, self_edit, rules from profile_field_meta order by sort_order, field`;
     const map = {};
     for (const r of rows) {
       map[r.field] = {
@@ -89,6 +90,8 @@ async function loadMeta(sql) {
         label: r.label || r.field,
         sortOrder: Number(r.sort_order || 100),
         isCustom: !!r.is_custom,
+        /* v3.5.40（站主 #1）：本人可编辑开关，由后台字段管理逐项开启 */
+        selfEdit: !!r.self_edit,
         /* v3.5.5 校验规则（形状先收敛，防历史脏数据） */
         rules: normalizeRules(r.rules),
         /* 站主是否设过这个字段的可见性（2026-10-09 v2.4.1）。
@@ -221,6 +224,8 @@ export default async function handler(req, res) {
       case 'mine-requests':  return await mineRequests(req, res, u);
       case 'claim':          return await claim(req, res, u);
       case 'submit':         return await submit(req, res, u);
+      /* v3.5.40（站主 #1）：本人修改被后台开放的字段 */
+      case 'self-update':    return await selfUpdate(req, res, u);
       default:
         return fail(res, 404, '未知的 action：' + action);
     }
@@ -612,7 +617,99 @@ async function myProfile(req, res, u) {
     fieldMeta: Object.keys(meta).map((f) => ({
       field: f, label: meta[f].label, visibility: meta[f].visibility,
       sortOrder: meta[f].sortOrder, isCustom: !!meta[f].isCustom,
+      /* v3.5.40：front 端据此决定「这一项能不能改」，以及用什么控件改 */
+      selfEdit: !!meta[f].selfEdit, rules: meta[f].rules || {},
     })),
+  });
+}
+
+/* ============================================================================
+ * v3.5.40（站主 #1）：本人修改「后台允许本人编辑」的字段
+ * ----------------------------------------------------------------------------
+ * 站主原话：「字段管理的所有字段均可设置本人是否可编辑，后台开启后则该用户
+ *           可以在个人资料页面或个人资料查询卡片修改字段内容」
+ *
+ * 安全边界（每一层都不能省）：
+ *   ① 必须已认领资料（有 u.profileId）—— 没档案的人没有可改的对象
+ *   ② 只认 profile_field_meta 里 self_edit = true 的字段，逐字段判；
+ *      不在 meta 里的键、没开开关的键 → 403，绝不「部分成功」
+ *   ③ 姓名/学号/角色/头衔/审核状态/可见性意愿这些**系统列**永久禁止本人改：
+ *      姓名学号要维护盲索引与 users.display_name 同步，角色头衔是权限，
+ *      审核状态是流程 —— 都不该由本人一句话改掉
+ *   ④ 值写库前过该字段的 rules（长度/数字/时间精度/下拉选项），与后台同一套裁判
+ *   ⑤ 加密字段照旧 encField，明文不落库；解不出来的占位符一律拒绝
+ *
+ * 与「联系方式 submit」的区别：那条走审核（pending），这条是站主明确授权的
+ * 直接编辑，写进去就生效；但仍会记一条审计日志，事后可查。
+ * ========================================================================= */
+const SELF_EDIT_BLOCK = new Set([
+  'name', 'student_id', 'role', 'title', 'contact_status',
+  'user_id', 'id', 'updated_at', 'created_at',
+  'visibility_pref', 'field_vis', 'reject_reason',
+  'name_bidx', 'student_id_bidx',
+]);
+
+async function selfUpdate(req, res, u) {
+  if (req.method !== 'POST') return fail(res, 405, '请用 POST');
+  if (!u.profileId) return fail(res, 400, '请先认领你的资料，再修改');
+
+  const b = await body(req);
+  const vals = (b && b.fields && typeof b.fields === 'object' && !Array.isArray(b.fields))
+    ? b.fields : {};
+  const keys = Object.keys(vals);
+  if (!keys.length) return fail(res, 400, '没有要修改的内容');
+  if (keys.length > 30) return fail(res, 400, '一次改太多了');
+
+  const sql = getSql();
+  const meta = await loadMeta(sql);
+  const pkey = await profileKey(req);
+
+  /* ---- 先把所有字段校验一遍，任何一项不合法就整单拒绝 ---- */
+  const items = [];
+  for (const f of keys) {
+    const m = meta[f];
+    if (!m) return fail(res, 400, '没有这个字段：' + f);
+    if (SELF_EDIT_BLOCK.has(f)) {
+      return fail(res, 403, '「' + m.label + '」只能由管理员修改');
+    }
+    if (!m.selfEdit) {
+      return fail(res, 403, '「' + m.label + '」未开放本人编辑，请联系管理员');
+    }
+    let v = vals[f];
+    v = (v === null || v === undefined) ? '' : String(v).trim();
+    if (v.length > 200) return fail(res, 400, '「' + m.label + '」太长了（上限 200 字）');
+    /* 允许清空（把填错的内容删掉），但有值时必须过规则 */
+    if (v) {
+      const r = validateByRules(m.rules, v, m.label);
+      if (!r.ok) return fail(res, 400, r.error);
+    }
+    items.push({ field: f, value: v, label: m.label });
+  }
+
+  /* ---- 拼 UPDATE：列名来自 meta（历史白名单），值全部参数化 ---- */
+  const sets = [];
+  const params = [];
+  for (const it of items) {
+    /* ⚠️ 用 isSafeFieldFormat 而不是 checkFieldName：
+       后者有「禁止撞系统列名」的黑名单，会把 id_card / youth_league_no 这类
+       系统列自己挡掉，表现为「保存成功但值没写进去」。 */
+    const chk = isSafeFieldFormat(it.field);
+    if (!chk.ok) return fail(res, 400, '字段名不合法：' + it.field);
+    params.push(await encField(pkey, it.value || null));
+    sets.push(chk.field + ' = $' + params.length);
+  }
+  params.push(u.profileId);
+  await sql(
+    'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
+    params
+  );
+
+  await audit(u.id, 'profile.self_update', 'profile', String(u.profileId),
+    items.map((x) => x.field).join(', '));
+
+  return ok(res, {
+    message: '已保存：' + items.map((x) => x.label).join('、'),
+    updated: items.map((x) => x.field),
   });
 }
 
