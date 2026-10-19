@@ -3306,17 +3306,28 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
         src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></div>
       <script>
       (function(){
+        /* v3.7.2：取图顺序 本地缓存 → /api/badge（重试一次）→ 图床原图。
+           ⚠️ 图床那张原图 6.3MB，是最后的最后才用；正常情况下走代理只有 ~200KB。 */
+        var API_B = 'https://api.classsite.dpdns.org/api/badge';
+        var FALL  = 'https://s41.ax1x.com/2026/06/07/pmmhF6H.png';
         try{
           var el = document.getElementById('siteLogoImg');
           if(!el) return;
           var c = '';
           try{ c = localStorage.getItem('__cls_badge_src') || ''; }catch(e){}
           if(c.indexOf('data:image/') === 0){ el.src = c; return; }
+          var tried = 0;
           el.onerror = function(){
-            this.onerror = null;
-            this.src = 'https://s41.ax1x.com/2026/06/07/pmmhF6H.png';
+            if(tried >= 1){
+              this.onerror = null;
+              this.src = FALL;          /* 最后一次才用 6MB 的原图 */
+              return;
+            }
+            tried++;
+            var self = this;
+            setTimeout(function(){ self.src = API_B + '?r=' + Date.now(); }, 700);
           };
-          el.src = 'https://api.classsite.dpdns.org/api/badge';
+          el.src = API_B;
         }catch(e){}
       })();
       </script>
@@ -4255,7 +4266,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.7.1';
+var SITE_VERSION = '3.7.2';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
