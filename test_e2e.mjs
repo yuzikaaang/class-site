@@ -10992,13 +10992,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.5.41 index.html SITE_VERSION = 3.5.41', /var SITE_VERSION = '3\.5\.41'/.test(idx539));
-  t('v3.5.41 admin.html SITE_VERSION = 3.5.41', /var SITE_VERSION = '3\.5\.41'/.test(admh539));
-  t('v3.5.41 sw.js SITE_VER = 3.5.41 + CACHE v155',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.5.41'")
-    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v155'"));
-  t('v3.5.41 api/worker.mjs API_VER = 3.5.41',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.5.41';"));
+  t('v3.5.42 index.html SITE_VERSION = 3.5.42', /var SITE_VERSION = '3\.5\.42'/.test(idx539));
+  t('v3.5.42 admin.html SITE_VERSION = 3.5.42', /var SITE_VERSION = '3\.5\.42'/.test(admh539));
+  t('v3.5.42 sw.js SITE_VER = 3.5.42 + CACHE v156',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.5.42'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v156'"));
+  t('v3.5.42 api/worker.mjs API_VER = 3.5.42',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.5.42';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11091,14 +11091,70 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
   t('★v3.5.40 作业有导出图片 / 分享（含图片直链）',
     /function hwExportImage/.test(idx540) && /hwExportImage\('share'\)/.test(idx540)
     && /图片：' \+ img/.test(idx540));
-  t('v3.5.40 分享不支持时自动退回下载', /navigator\.canShare/.test(share540) && /return download\(opts/.test(share540));
+  t('v3.5.40 分享不支持时自动退回下载',
+    /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.5.41 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.5\.41'/.test(idx540) && /var SITE_VERSION = '3\.5\.41'/.test(adm540)
-    && /const API_VER = '3\.5\.41'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.5\.41'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.5.42 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.5\.42'/.test(idx540) && /var SITE_VERSION = '3\.5\.42'/.test(adm540)
+    && /const API_VER = '3\.5\.42'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.5\.42'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
+}
+
+console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选导出哪一次');
+{
+  const idx542 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm542 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const shr542 = fs.readFileSync(new URL('./share-card.js', import.meta.url), 'utf8');
+
+  /* ---- 作业勾选：三条根因对应三处修复 ---- */
+  t('★v3.5.42 待推送清单落盘（__cls_pending），页面关了也还在',
+    /var PENDING_LS = '__cls_pending'/.test(idx542)
+    && /function addPendingKeys/.test(idx542) && /function loadPendingKeys/.test(idx542));
+  t('★v3.5.42 flush 发请求前先落盘、成功后才撤标记',
+    /addPendingKeys\(keys\);/.test(idx542) && /removePendingKeys\(keys\);/.test(idx542));
+  t('★v3.5.42 进站先补推再拉云端（syncRound + syncAutoInit 都调）',
+    (idx542.match(/restorePendingSync\(\)/g) || []).length >= 3);
+  t('★v3.5.42 拉云端时比时间戳：本机更新就不覆盖',
+    /var lt = Number\(lts\[k\] \|\| 0\)/.test(idx542)
+    && /lt > ct \+ 500/.test(idx542) && /protectedKeys\.push\(k\)/.test(idx542));
+  t('★v3.5.42 本地写入记时间戳（__cls_lts，云端回写不记）',
+    /var LTS_LS = '__cls_lts'/.test(idx542) && /function markLocalWrite/.test(idx542)
+    && /if\(!window\.__cloudPulling\)\{ try\{ markLocalWrite/.test(idx542));
+  t('★v3.5.42 推送正忙时不再「干等」：补 800ms 重试 + 结束后再排一次',
+    /__syncInFlight\)\{[\s\S]{0,400}?setTimeout\(function\(\)\{[\s\S]{0,120}?flushCloudSync\(\);/.test(idx542));
+  t('v3.5.42 待推送 / 时间戳两个键不在同步白名单里（不会被推上云）',
+    !/CLOUD_KEYS[\s\S]{0,900}'__cls_pending'/.test(idx542)
+    && !/CLOUD_KEYS[\s\S]{0,900}'__cls_lts'/.test(idx542));
+
+  /* ---- 班徽 ---- */
+  t('★v3.5.42 画笔支持班徽（右上角、圆角、加载失败自动跳过）',
+    /function loadBadge/.test(shr542) && /STEP\.BADGE/.test(shr542)
+    && /ctx\.drawImage\(o\.__badge\.img/.test(shr542));
+  t('★v3.5.42 导出走 renderAsync（先加载徽标再画）',
+    /function renderAsync/.test(shr542) && /return renderAsync\(opts\)/.test(shr542));
+  t('★v3.5.42 后台「站点信息」可配班徽地址，并缓存给导出用',
+    /id="stBadge"/.test(adm542) && /cfg\.badgeUrl/.test(adm542) && /function adminBadgeUrl/.test(adm542));
+  t('v3.5.42 前台班徽地址：后台配置优先，否则站点图标',
+    /function siteBadgeUrl/.test(idx542) && /SITE_DATA\.badgeUrl/.test(idx542));
+  t('v3.5.42 作业 / 抽歌导出都带上 badge',
+    /badge: siteBadgeUrl\(\)/.test(idx542) && /badge: \(typeof adminBadgeUrl/.test(adm542));
+
+  /* ---- 选哪一次 ---- */
+  t('★v3.5.42 抽歌导出前可选批次（djPickRound）',
+    /function djPickRound/.test(adm542) && /data-djpick/.test(adm542) && /function djMakeImage/.test(adm542));
+  t('★v3.5.42 作业可切换历史期次（下拉 + forceId）',
+    /id="hwPickSel"/.test(idx542) && /function showCurrentHomework\(forceId\)/.test(idx542)
+    && /window\.__HW_VIEWING/.test(idx542));
+  t('v3.5.42 导出的就是当前正在看的那一份', /var hw = window\.__HW_VIEWING \|\| getCurrentHomework/.test(idx542));
+
+  /* ---- 版本 ---- */
+  t('v3.5.42 四处版本号一致',
+    /var SITE_VERSION = '3\.5\.42'/.test(idx542) && /var SITE_VERSION = '3\.5\.42'/.test(adm542)
+    && /const API_VER = '3\.5\.42'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.5\.42'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.5.42 REL_BUILTIN 有 3.5.42 条目', /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
 
 console.log('\n' + '='.repeat(52));
