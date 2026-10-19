@@ -47,7 +47,7 @@ export { getSql };
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.6.4';
+const SCHEMA_VER = '3.7.0';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -298,20 +298,6 @@ export async function ensureSchema(sql) {
           )`;
           await s`create index if not exists data_backups_ver_idx on data_backups (created_at desc)`;
           await s`create index if not exists data_backups_version_idx on data_backups (version)`;
-    /* v3.6.4 删除回收站（见升级路径里的说明） */
-    await s`
-      create table if not exists deleted_items (
-        id          bigserial   primary key,
-        kind        text        not null default 'field',
-        label       text        default '',
-        payload     jsonb       not null,
-        bytes       int         not null default 0,
-        deleted_by  bigint,
-        deleted_at  timestamptz not null default now(),
-        expires_at  timestamptz not null default now()
-      )
-    `;
-    await s`create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc)`;
           /* v3.6.4（站主 #3）：删除回收站 —— 真删，但 30 分钟内可从操作日志撤回 */
           await s`create table if not exists deleted_items (
             id          bigserial   primary key,
@@ -324,6 +310,24 @@ export async function ensureSchema(sql) {
             expires_at  timestamptz not null default now()
           )`;
           await s`create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc)`;
+          /* v3.7.0 字段修改审批（同全量清单） */
+          await s`create table if not exists profile_change_requests (
+            id         bigserial   primary key,
+            profile_id bigint      not null,
+            user_id    bigint,
+            kind       text        not null default 'field',
+            changes    jsonb       not null,
+            status     text        not null default 'pending',
+            note       text        default '',
+            decided_by bigint,
+            decided_at timestamptz,
+            applied_at timestamptz,
+            revoked_at timestamptz,
+            meta       jsonb       not null default '{}'::jsonb,
+            created_at timestamptz not null default now()
+          )`;
+          await s`create index if not exists pcr_status_idx on profile_change_requests (status, created_at desc)`;
+          await s`create index if not exists pcr_profile_idx on profile_change_requests (profile_id, created_at desc)`;
         } catch (e) {
           console.warn('[schema] online_sessions 建表失败：', e && e.message);
         }
@@ -431,6 +435,40 @@ export async function ensureSchema(sql) {
     `;
     await s`create index if not exists data_backups_ver_idx on data_backups (created_at desc)`;
     await s`create index if not exists data_backups_version_idx on data_backups (version)`;
+    /* v3.6.4 删除回收站（30 分钟内可撤回） */
+    await s`
+      create table if not exists deleted_items (
+        id          bigserial   primary key,
+        kind        text        not null default 'field',
+        label       text        default '',
+        payload     jsonb       not null,
+        bytes       int         not null default 0,
+        deleted_by  bigint,
+        deleted_at  timestamptz not null default now(),
+        expires_at  timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc)`;
+    /* v3.7.0 资料修改审批（提交不写 profiles，后台通过才写） */
+    await s`
+      create table if not exists profile_change_requests (
+        id         bigserial   primary key,
+        profile_id bigint      not null,
+        user_id    bigint,
+        kind       text        not null default 'field',
+        changes    jsonb       not null,
+        status     text        not null default 'pending',
+        note       text        default '',
+        decided_by bigint,
+        decided_at timestamptz,
+        applied_at timestamptz,
+        revoked_at timestamptz,
+        meta       jsonb       not null default '{}'::jsonb,
+        created_at timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists pcr_status_idx on profile_change_requests (status, created_at desc)`;
+    await s`create index if not exists pcr_profile_idx on profile_change_requests (profile_id, created_at desc)`;
     /* 班级通讯录 / 个人资料（与 schema.sql 保持一致，见该文件的说明） */
     await s`
       create table if not exists profiles (
