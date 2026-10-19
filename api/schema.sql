@@ -126,6 +126,29 @@ create index if not exists online_pages_user_idx on online_pages (user_id, start
 create index if not exists online_pages_page_idx on online_pages (page, start_at desc);
 create index if not exists online_pages_tok_idx  on online_pages (session_token, page, last_ping_at desc);
 
+-- ============================================================
+-- v3.6.1 云端数据备份（站主 #4）
+--   站主原话：「后台新增数据管理，以后每次更新都先自动备份所有数据
+--            （通过检测在部署前先备份后部署）到云端数据库，包括作业、公告、
+--            用户数据等等全部云端内容，默认存储最近 14 个版本更新，
+--            方便有问题随时回档」
+--   · payload：整包快照（content / users / profiles / votes / settings …）
+--   · kind：auto 自动 / predeploy 部署前 / manual 手动
+--   · 保留策略见 api/admin.js 的 pruneBackups()：按 version 保留最近 14 个
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.6.1
+-- ============================================================
+create table if not exists data_backups (
+  id          bigserial   primary key,
+  version     text        not null,
+  kind        text        not null default 'auto',
+  note        text        default '',
+  payload     jsonb       not null,
+  bytes       int         not null default 0,
+  created_at  timestamptz not null default now()
+);
+create index if not exists data_backups_ver_idx     on data_backups (created_at desc);
+create index if not exists data_backups_version_idx on data_backups (version);
+
 /* ---------------- 用户数据表（云同步核心） ---------------- */
 -- 按 (用户, 键) 存 JSONB，天然适配前端 localStorage 的任意结构
 create table if not exists user_data (
