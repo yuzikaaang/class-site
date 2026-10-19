@@ -977,7 +977,7 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 
 <script>
-/* v3.5.40：share-card.js 内联版（外部文件在 Pages CDN 上偶发 404，
+/* v3.5.42：share-card.js 内联版（外部文件在 Pages CDN 上偶发 404，
    导出图片是主功能，不能靠一个可能取不到的文件）。源文件仍在仓库里保留一份。 */
 /* ============================================================================
  * share-card.js —— 把一段结构化内容画成一张 PNG 长图（v3.5.40）
@@ -1006,7 +1006,8 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
  *       { heading: '本期歌单', rows: [ { l:'1. 晴天 - 周杰伦', r:'点赞 12' }, ... ] },
  *       { heading: '备注', lines: ['...'] }
  *     ],
- *     footer: '由 25级05班 班级服务站生成'
+ *     footer: '由 25级05班 班级服务站生成',
+ *     badge: './favicon.svg'      // 班徽，画在右上角（取不到就不画，不影响导出）
  *   }, '文件名.png');
  * ========================================================================= */
 (function (global) {
@@ -1026,6 +1027,8 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
     GAP_SECTION: 26,
     GAP_ROW: 6,
     FOOT: 46,
+    BADGE: 66,          /* 班徽边长（右上角） */
+    BADGE_GAP: 16,      /* 标题与班徽之间的留白 */
   };
 
   var COLORS = {
@@ -1084,6 +1087,7 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
       sections: sections,
       footer: o.footer || '',
       width: o.width && o.width > 320 ? o.width : STEP.W,
+      __badge: o.__badge || null,
     };
   }
 
@@ -1095,7 +1099,9 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
     var h = STEP.PAD;
 
     ctx.font = font(STEP.TITLE, 700);
-    var titleLines = wrap(ctx, o.title, innerW);
+    var hasBadge = !!o.__badge;
+    var titleW = hasBadge ? innerW - STEP.BADGE - STEP.BADGE_GAP : innerW;
+    var titleLines = wrap(ctx, o.title, titleW);
     h += titleLines.length * (STEP.TITLE + 8);
 
     if (o.subtitle) {
@@ -1151,6 +1157,46 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
     return { height: Math.round(h), blocks: parts, titleLines: titleLines };
   }
 
+  /* ---- 班徽（v3.5.42）----
+     站主要求：所有导出图片右上角都带班徽。
+     图片跨域时 canvas 会被污染（toBlob 直接抛 SecurityError），
+     所以统一先试 crossOrigin='anonymous'，失败就当没有徽标 ——
+     少一个角标总比整张图导不出来强。 */
+  var badgeCache = {};
+
+  function loadBadge(url) {
+    if (!url) return Promise.resolve(null);
+    if (Object.prototype.hasOwnProperty.call(badgeCache, url)) {
+      return Promise.resolve(badgeCache[url]);
+    }
+    return new Promise(function (resolve) {
+      var img = new Image();
+      var done = false;
+      function fin(v) { if (!done) { done = true; badgeCache[url] = v; resolve(v); } }
+      img.crossOrigin = 'anonymous';
+      img.onload = function () { fin({ ok: true, img: img }); };
+      img.onerror = function () {
+        /* 带 crossOrigin 失败时，再试一次不带（同源图片在某些内核上也会被拦） */
+        var img2 = new Image();
+        img2.onload = function () {
+          try {
+            /* 画一下空像素检测是否被污染 */
+            var t = document.createElement('canvas');
+            t.width = t.height = 1;
+            t.getContext('2d').drawImage(img2, 0, 0, 1, 1);
+            t.getContext('2d').getImageData(0, 0, 1, 1);
+            fin({ ok: true, img: img2 });
+          } catch (e) { fin(null); }
+        };
+        img2.onerror = function () { fin(null); };
+        img2.src = url;
+      };
+      img.src = url;
+      /* 兜底：3 秒还没结果就不等了，别让用户以为按钮坏了 */
+      setTimeout(function () { fin(null); }, 3000);
+    });
+  }
+
   function roundRect(ctx, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -1182,6 +1228,22 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
     var y = STEP.PAD;
 
     /* 标题 */
+    /* 班徽：右上角，圆角裁切 */
+    if (o.__badge && o.__badge.img) {
+      try {
+        ctx.save();
+        roundRect(ctx, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE, 16);
+        ctx.clip();
+        ctx.drawImage(o.__badge.img, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE);
+        ctx.restore();
+        /* 细边框，浅色徽标也能看出边界 */
+        ctx.strokeStyle = 'rgba(0,0,0,.06)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE, 16);
+        ctx.stroke();
+      } catch (e) { /* 画不上就跳过 */ }
+    }
+
     ctx.fillStyle = COLORS.ink;
     ctx.font = font(STEP.TITLE, 700);
     m.titleLines.forEach(function (ln) {
@@ -1280,6 +1342,19 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
     return cv;
   }
 
+  /** 先把班徽加载好再画。download/share 内部都用这个。 */
+  function renderAsync(opts) {
+    var o = opts || {};
+    return loadBadge(o.badge).then(function (bd) {
+      var withBadge = {};
+      for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) withBadge[k] = o[k];
+      withBadge.__badge = bd;
+      return render(withBadge);
+    }).catch(function () {
+      return render(o);
+    });
+  }
+
   function toBlob(cv) {
     return new Promise(function (resolve, reject) {
       try {
@@ -1290,7 +1365,10 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 
   /** 下载（桌面 / 安卓微信里都走这条） */
   function download(opts, filename) {
-    var cv = render(opts);
+    return renderAsync(opts).then(function (cv) { return downloadCanvas(cv, opts, filename); });
+  }
+
+  function downloadCanvas(cv, opts, filename) {
     var name = filename || ((opts && opts.title ? String(opts.title) : '卡片') + '.png');
     return toBlob(cv).then(function (blob) {
       var url = URL.createObjectURL(blob);
@@ -1308,7 +1386,10 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 
   /** 分享：优先系统分享（iOS / 安卓能直接发微信），不支持就退回下载 */
   function share(opts, filename) {
-    var cv = render(opts);
+    return renderAsync(opts).then(function (cv) { return shareCanvas(cv, opts, filename); });
+  }
+
+  function shareCanvas(cv, opts, filename) {
     var name = filename || ((opts && opts.title ? String(opts.title) : '卡片') + '.png');
     return toBlob(cv).then(function (blob) {
       try {
@@ -1323,11 +1404,15 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
             });
         }
       } catch (e) { /* 老浏览器没有 File 构造器，直接走下载 */ }
-      return download(opts, filename).then(function () { return { shared: false, downloaded: true }; });
+      return downloadCanvas(cv, opts, filename).then(function () { return { shared: false, downloaded: true }; });
     });
   }
 
-  global.ShareCard = { render: render, download: download, share: share, toBlob: toBlob };
+  global.ShareCard = {
+    render: render, renderAsync: renderAsync,
+    download: download, share: share, toBlob: toBlob,
+    loadBadge: loadBadge,
+  };
 })(window);
 
 </script>
@@ -1376,7 +1461,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.5.41';
+var SITE_VERSION = '3.5.42';
 var VER_DATE = '2026-10-18';
 
 /* ---- 运行时状态 ---- */
@@ -10341,6 +10426,21 @@ function deleteSecretDialog(item){
 /* ============================================================================
  * ⑱ 面板：系统设置
  * ========================================================================= */
+/** v3.5.42：班徽预览（填了地址就显示小图，填错给个提示） */
+function paintBadgePrev(){
+  var el = document.getElementById('stBadgePrev');
+  var inp = document.getElementById('stBadge');
+  if(!el || !inp) return;
+  var u = String(inp.value || '').trim();
+  if(!u){ el.innerHTML = '<span class="muted" style="font-size:.76rem">当前使用站点图标 favicon.svg</span>'; return; }
+  var abs = u;
+  try{ abs = new URL(u, location.href).href; }catch(e){}
+  el.innerHTML = '<img src="' + attr(abs) + '" alt="班徽预览" '
+    + 'style="width:64px;height:64px;border-radius:14px;object-fit:cover;border:1px solid var(--border)" '
+    + 'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'">'
+    + '<span class="muted" style="display:none;font-size:.76rem;color:#b3261e">图片加载失败，检查地址是否正确</span>';
+}
+
 function renderSettings(){
   $('view').innerHTML =
     '<div class="grid-2">'
@@ -10353,6 +10453,12 @@ function renderSettings(){
     +     '<input id="stName" placeholder="如 25级05班班级服务站" maxlength="40"></div>'
     +     '<div class="field"><label for="stSlogan">副标题 / 标语</label>'
     +     '<input id="stSlogan" placeholder="选填，如 一站式获取班级服务 · 资源 · 工具" maxlength="60"></div>'
+    /* v3.5.42（站主 #2）：班徽 —— 导出图片右上角用 */
+    +     '<div class="field"><label for="stBadge">班徽图片地址</label>'
+    +     '<input id="stBadge" placeholder="留空则用站点图标 favicon.svg；可填图片直链或 ./badge.png">'
+    +     '<p class="hint">用于所有「导出图片」（作业 / 抽歌排期）的右上角。'
+    +     '建议用正方形 PNG（不小于 128×128），放在站点目录里最稳（外链可能因跨域画不上，会自动跳过）。</p>'
+    +     '<div id="stBadgePrev" style="margin-top:8px"></div></div>'
     +     '<button class="btn" id="stSave">' + svg('check', 14) + '保存设置</button>'
     +     '<div class="msg" id="stMsg"></div>'
     +   '</div>'
@@ -10433,6 +10539,10 @@ function renderSettings(){
       var cfg = (j && j.items && j.items.site_config) || {};
       if(nameEl && !nameEl.value) nameEl.value = String(cfg.siteName || '');
       if(subEl && !subEl.value) subEl.value = String(cfg.siteSubtitle || '');
+      var bdEl = $('stBadge');
+      if(bdEl && !bdEl.value) bdEl.value = String(cfg.badgeUrl || '');
+      paintBadgePrev();
+      if(bdEl) bdEl.oninput = paintBadgePrev;
     }).catch(function(){});
     $('stSave').onclick = function(){
       var msg = $('stMsg');
@@ -10448,6 +10558,14 @@ function renderSettings(){
            若 delete 掉，主站 SITE_DATA 会残留旧值，清空就永远不生效了。 */
         cfg.siteName = name;
         cfg.siteSubtitle = sub;
+        /* v3.5.42：班徽地址（保存空串 = 回落到站点图标，不是删键） */
+        cfg.badgeUrl = String(($('stBadge') && $('stBadge').value) || '').trim();
+        /* 顺手缓存一份，导出图片时不用再多查一次 */
+        try{
+          localStorage.setItem('__cls_badge', JSON.stringify({
+            url: cfg.badgeUrl, ts: Date.now()
+          }));
+        }catch(e){}
         return api('/content', { method: 'PUT', body: { items: { site_config: cfg } } });
       }).then(function(){
         msg.className = 'msg show ok';
@@ -10797,6 +10915,8 @@ function enterApp(){
   $('meRole').textContent = 'ADMIN';
   go('overview');
   startAdminHeartbeat();
+  /* v3.5.42：把班徽地址缓存下来，导出图片时直接用 */
+  try{ cacheSiteBadge(); }catch(e){}
 }
 
 /* v3.5.40（站主 #3）：后台心跳带上当前面板，在线统计里就能看出
@@ -10809,6 +10929,27 @@ function adminPageName(){
 /* v3.5.35：后台也要打心跳 —— 站主开着后台改作业的时间同样算「在线」，
    否则「在线时长」面板会把站长漏掉。规则与主站一致：60 秒一拍，
    标签页隐藏时跳过；失败静默，绝不影响后台使用。 */
+/** v3.5.42：导出图片用的班徽地址。优先用「站点信息」里配的，其次站点图标。 */
+function adminBadgeUrl(){
+  try{
+    var c = JSON.parse(localStorage.getItem('__cls_badge') || '{}');
+    if(c && c.url) return new URL(c.url, location.href).href;
+  }catch(e){}
+  try{ return new URL('./favicon.svg', location.href).href; }catch(e){ return './favicon.svg'; }
+}
+
+/** 后台启动时拉一次 site_config，把班徽地址缓存下来（导出时不用等） */
+function cacheSiteBadge(){
+  try{
+    api('/content?keys=site_config').then(function(j){
+      var cfg = (j && j.items && j.items.site_config) || {};
+      localStorage.setItem('__cls_badge', JSON.stringify({
+        url: String(cfg.badgeUrl || ''), ts: Date.now()
+      }));
+    }).catch(function(){});
+  }catch(e){}
+}
+
 function startAdminHeartbeat(){
   if(window.__adminHbTimer) return;   /* 防重复启动（PWA 往返 / 重新登录） */
   var beat = function(){
@@ -12372,6 +12513,45 @@ function djCopy(){
  *   分段 = 抽签规则、本期歌单（每首一行，右侧点赞数与时长）、备注
  * 画图交给 share-card.js（前后台共用），这里只负责把数据摆成 rows。
  * ========================================================================= */
+/* v3.5.42（站主 #2）：导出前先选「哪一次」——
+   站主原话：「抽歌导出的话，我可以选择是导出哪一次数据」。 */
+function djPickRound(cb){
+  var rounds = (DJ_STATE.rounds || []).slice();
+  if(!rounds.length){ cb(null); return; }
+  if(rounds.length === 1){ cb(rounds[0]); return; }
+  var rev = rounds.slice().reverse();       /* 新的在前 */
+  var html = '<div class="muted" style="font-size:.8rem;margin-bottom:10px">'
+    + '共 ' + rev.length + ' 次抽签记录，点一条即可导出那一次的公示图片。</div>'
+    + '<div style="max-height:50vh;overflow:auto">'
+    + rev.slice(0, 60).map(function(r, i){
+        var n = (r.songs || []).length;
+        var rule = djParamsLine(r, n);
+        return '<button class="btn btn-secondary" style="width:100%;text-align:left;margin-bottom:6px;display:block" data-djpick="' + i + '">'
+          + '<b>' + esc(r.at || '未知时间') + '</b>'
+          + '<span class="muted" style="margin-left:8px">' + n + ' 首</span>'
+          + (i === 0 ? ' <span class="badge" style="margin-left:6px">最近一次</span>' : '')
+          + (rule ? '<div class="muted" style="font-size:.72rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(rule) + '</div>' : '')
+          + '</button>';
+      }).join('')
+    + '</div>';
+  openModal({
+    title: '导出哪一次排期', sub: '选中的那一次会画成一张长图',
+    body: html,
+    foot: '<button class="btn btn-secondary" id="djPickCancel">取消</button>',
+    onMount: function(box){
+      Array.prototype.forEach.call(box.querySelectorAll('[data-djpick]'), function(b){
+        b.onclick = function(){
+          var r = rev[Number(b.dataset.djpick)];
+          closeModal();
+          cb(r);
+        };
+      });
+      var c = box.querySelector('#djPickCancel');
+      if(c) c.onclick = closeModal;
+    },
+  });
+}
+
 function djShareImage(mode){
   if(typeof ShareCard === 'undefined'){
     toast('图片组件没加载出来，请刷新页面重试', 'err');
@@ -12379,7 +12559,12 @@ function djShareImage(mode){
   }
   var rounds = DJ_STATE.rounds || [];
   if(!rounds.length){ toast('还没有排期，请先抽签', 'err'); return; }
-  var last = rounds[rounds.length - 1];
+  djPickRound(function(picked){
+    if(picked) djMakeImage(picked, mode);
+  });
+}
+
+function djMakeImage(last, mode){
   var p = last.params || {};
   var showDur = p.showDur !== false;
   var showTotal = p.showTotal !== false;
@@ -12417,6 +12602,7 @@ function djShareImage(mode){
     badges: badges,
     sections: sections,
     footer: '由 25级05班 班级服务站生成 · 累计已排期 ' + djScheduleCount() + ' 首',
+    badge: (typeof adminBadgeUrl === 'function') ? adminBadgeUrl() : '',
   };
   var fname = '点歌排期-' + String(last.at || '').replace(/[^0-9]/g, '').slice(0, 12) + '.png';
 
@@ -13797,6 +13983,15 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.5.42', date: '2026-10-19', type: 'fix', title: '作业勾选真正不丢了 · 导出图片带班徽 · 可选导出哪一次',
+    items: [
+      '修复「打完勾立刻退出、重进发现勾没了」：待同步清单现在会存在本机，进站先补推再拉云端',
+      '再补一道保险：拉云端时比较时间戳，本机改得比云端新就不覆盖（以前旧值会无条件盖掉刚打的勾）',
+      '还修了一个空档：推送正忙时新攒的改动以前会一直等着，现在会自动排队补发',
+      '导出图片右上角统一显示班徽；后台「站点信息」新增「班徽图片地址」，留空则用站点图标',
+      '抽歌排期导出图片前可以先选「导出哪一次」，不再只能导最近一次',
+      '作业弹窗新增「查看」下拉，可以翻之前的作业；导出/分享的就是当前正在看的那一份'
+    ] },
   { version: '3.5.41', date: '2026-10-19', type: 'fix', title: '导出图片脚本改为内联（修线上偶发取不到）',
     items: [
       '修复：3.5.40 的导出图片依赖一个外部脚本，GitHub Pages 新文件同步慢时会出现 404，按钮点了没反应',
