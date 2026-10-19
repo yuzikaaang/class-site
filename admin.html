@@ -977,8 +977,7 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 
 <script>
-/* v3.6.3：share-card.js 内联版（外部文件在 Pages CDN 上偶发 404，
-   导出图片是主功能，不能靠一个可能取不到的文件）。源文件仍在仓库里保留一份。 */
+/* v3.6.5：share-card.js 内联版（页面与导出共用，避免外部文件 404） */
 /* ============================================================================
  * share-card.js —— 把一段结构化内容画成一张 PNG 长图（v3.5.40）
  * ----------------------------------------------------------------------------
@@ -1190,9 +1189,26 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
     } catch (e) { return null; }
   }
 
-  function loadBadge(url) {
+  /* v3.6.5：支持传数组 —— 按顺序试（先本地 badge.png，失败再走服务器代理）。
+     大图（几 MB 的原始班徽）走代理要好几秒，先试本地小图能快很多。 */
+  function loadBadge(urlOrList) {
+    if (Array.isArray(urlOrList)) {
+      var list = urlOrList.filter(Boolean);
+      if (!list.length) return Promise.resolve(fallbackBadge());
+      var i = 0;
+      var tryNext = function () {
+        if (i >= list.length) return Promise.resolve(fallbackBadge());
+        var u = list[i++];
+        return loadBadge(u).then(function (r) {
+          if (r && r.img && !r.fallback) return r;
+          return tryNext();
+        });
+      };
+      return tryNext();
+    }
+    var url = urlOrList;
     if (!url) return Promise.resolve(null);
-    if (Object.prototype.hasOwnProperty.call(badgeCache, url)) {
+    if (Object.prototype.hasOwnProperty.call(badgeCache, url) && badgeCache[url] && badgeCache[url].img) {
       return Promise.resolve(badgeCache[url]);
     }
     return new Promise(function (resolve) {
@@ -1200,7 +1216,10 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
       var done = false;
       function fin(v) { if (!done) { done = true; badgeCache[url] = v; resolve(v); } }
       img.crossOrigin = 'anonymous';
-      img.onload = function () { fin({ ok: true, img: img }); };
+      img.onload = function () {
+        badgeCache[url] = { ok: true, img: img };
+        fin({ ok: true, img: img });
+      };
       img.onerror = function () {
         /* 带 crossOrigin 失败时，再试一次不带（同源图片在某些内核上也会被拦） */
         var img2 = new Image();
@@ -1221,7 +1240,10 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
       /* 兜底：3 秒还没结果就不等了，别让用户以为按钮坏了。
          v3.6.3：图取不到时不再留空 —— 画一个同色系的简化徽标（班级号），
          总比右上角光秃秃强；真图同步上来后会自动换回真图。 */
-      setTimeout(function () { fin(fallbackBadge()); }, 3000);
+      setTimeout(function () {
+        if (!done) fin(fallbackBadge());
+        /* 超时后图片仍可能加载完 —— 更新缓存，下次导出用真图 */
+      }, 8000);
     });
   }
 
@@ -11058,6 +11080,17 @@ function adminPageName(){
    否则「在线时长」面板会把站长漏掉。规则与主站一致：60 秒一拍，
    标签页隐藏时跳过；失败静默，绝不影响后台使用。 */
 /** v3.5.42：导出图片用的班徽地址。优先用「站点信息」里配的，其次站点图标。 */
+/** v3.6.5：后台的班徽候选（本地小图优先，失败再走代理） */
+function adminBadgeList(){
+  var list = [];
+  try{ list.push(new URL('./badge.png', location.href).href); }catch(e){}
+  try{
+    var c = JSON.parse(localStorage.getItem('__cls_badge') || '{}');
+    if(c && /^https?:\/\//i.test(String(c.url || ''))) list.push(apiUrl('/badge'));
+  }catch(e){}
+  return list;
+}
+
 function adminBadgeUrl(){
   /* v3.6.4：与前台一致 —— 配了直链就走服务器代理，避免跨域把画布搞脏 */
   try{
@@ -12731,7 +12764,7 @@ function djMakeImage(last, mode){
     badges: badges,
     sections: sections,
     footer: '由 25级05班 班级服务站生成 · 累计已排期 ' + djScheduleCount() + ' 首',
-    badge: (typeof adminBadgeUrl === 'function') ? adminBadgeUrl() : '',
+    badge: (typeof adminBadgeList === 'function') ? adminBadgeList() : adminBadgeUrl(),
   };
   var fname = '点歌排期-' + String(last.at || '').replace(/[^0-9]/g, '').slice(0, 12) + '.png';
 
