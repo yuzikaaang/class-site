@@ -1489,7 +1489,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.6.3';
+var SITE_VERSION = '3.6.4';
 var VER_DATE = '2026-10-19';
 
 /* ---- 运行时状态 ---- */
@@ -2179,7 +2179,7 @@ var PAGES = [
   { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
   { id:'scores',        label:'成绩分析', icon:'activity',  group:'内容',  title:'成绩分析（考试 / 导入 / 改分 / 发布）' },
   { id:'votes',         label:'投票管理', icon:'check',     group:'内容',  title:'投票管理（发起投票 / 截止时间 / 结果）' },
-  { id:'releases',      label:'版本更新', icon:'clock',     group:'内容',  title:'版本更新记录' },
+
   { id:'popups',        label:'通用弹窗', icon:'bell',      group:'内容',  title:'通用弹窗（开屏弹 / 板块弹）' },
   { id:'cards',         label:'首页卡片', icon:'layers',    group:'内容',  title:'首页卡片（每日一言 / 学习卡片）' },
   { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
@@ -8366,9 +8366,6 @@ function paintFieldPanel(list){
     + '<span class="muted" style="font-size:.76rem">共 ' + list.length + ' 个字段'
     +   '（其中自定义 ' + list.filter(function(f){ return f.isCustom; }).length + ' 个）</span>'
     + '<span style="flex:1"></span>'
-    /* v3.6.1：字段被误删后的一键恢复 */
-    + '<button class="btn btn-sm btn-secondary" id="ffRepair" title="把被删掉的预置字段定义补回来（不会覆盖你改过的设置）">'
-    +   svg('refresh', 14) + ' 恢复预置字段</button>'
     + '<button class="btn btn-sm" id="ffAdd">' + svg('plus', 14) + '新增字段</button>'
     + '<button class="btn btn-sm btn-secondary" id="ffRefresh">' + svg('refresh', 14) + '刷新</button>'
     + '</div>'
@@ -8387,8 +8384,6 @@ function paintFieldPanel(list){
 
   var addBtn = $('ffAdd');
   if(addBtn) addBtn.onclick = addFieldDialog;
-  var rpBtn = $('ffRepair');
-  if(rpBtn) rpBtn.onclick = repairFieldsDialog;
   var rfBtn = $('ffRefresh');
   if(rfBtn) rfBtn.onclick = renderFieldPanel;
 
@@ -10084,7 +10079,13 @@ var ACTION_LABEL = {
   'user.clear_sessions':'强制下线',
   'user.change_password':'用户自己改密码',
   'data.update':        '修改云端数据',
-  'data.delete':        '删除云端数据'
+  'data.delete':        '删除云端数据',
+  'data.undo_delete':   '撤回删除',
+  'data.backup':        '数据备份',
+  'data.backup_delete': '删除备份',
+  'data.restore':       '从备份回档',
+  'field.repair':       '字段体检恢复',
+  'field.self_edit':    '字段本人可编辑'
 };
 
 function loadAudit(){
@@ -10098,19 +10099,50 @@ function loadAudit(){
     }
     body.innerHTML =
       '<div class="table-wrap"><table><thead><tr>'
-      + '<th class="nowrap">时间</th><th>操作人</th><th>动作</th><th>对象</th><th>备注</th>'
+      + '<th class="nowrap">时间</th><th>操作人</th><th>动作</th><th>对象</th><th>备注</th><th></th>'
       + '</tr></thead><tbody>'
       + logs.map(function(l){
+          /* v3.6.4（站主 #3）：删除后 30 分钟内，这行右侧出现「撤回」。
+             deletedId 写在 detail 里（格式 deletedId:123），没有就是普通日志。 */
+          var mm = /deletedId:(\d+)/.exec(String(l.detail || ''));
+          var undoBtn = '';
+          if(mm && l.action === 'field.delete'){
+            var mins = Math.floor((Date.now() - new Date(l.created_at).getTime()) / 60000);
+            var left = 30 - mins;
+            undoBtn = left > 0
+              ? '<button class="btn btn-xs" data-undo="' + mm[1] + '" data-label="' + attr(l.target_id || '') + '">撤回<span class="muted" style="font-size:.68rem;margin-left:3px">剩 ' + left + ' 分</span></button>'
+              : '<span class="muted" style="font-size:.72rem">已过期</span>';
+          }
           return '<tr>'
             + '<td class="nowrap"><span class="mono" style="font-size:.76rem">' + esc(fmt(l.created_at)) + '</span></td>'
             + '<td class="nowrap">' + (l.actor ? '<b>' + esc(l.actor) + '</b>' : '<span class="muted">系统</span>') + '</td>'
             + '<td class="nowrap"><span class="badge badge-orange">' + esc(ACTION_LABEL[l.action] || l.action) + '</span></td>'
             + '<td class="nowrap muted mono" style="font-size:.76rem">' + esc(l.target_id || '—') + '</td>'
             + '<td class="muted" style="font-size:.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(l.detail || '—') + '</td>'
+            + '<td class="nowrap">' + undoBtn + '</td>'
             + '</tr>';
         }).join('')
       + '</tbody></table></div>'
       + '<p class="muted" style="padding:12px 14px 0;font-size:.76rem">显示最近 ' + logs.length + ' 条记录</p>';
+
+    /* v3.6.4：撤回按钮 */
+    Array.prototype.forEach.call(body.querySelectorAll('[data-undo]'), function(btn){
+      btn.onclick = function(){
+        var id = btn.dataset.undo;
+        btn.disabled = true;
+        btn.textContent = '撤回中…';
+        api('/admin?action=undo-delete', { method:'POST', body:{ id: Number(id) } })
+          .then(function(r){
+            toast(r.message || '已撤回', 'ok');
+            loadAudit();
+          })
+          .catch(function(e){
+            btn.disabled = false;
+            btn.textContent = '撤回';
+            toast(e.message || '撤回失败', 'danger');
+          });
+      };
+    });
   }).catch(function(e){
     var body = $('acBody');
     if(body) body.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
@@ -11027,9 +11059,10 @@ function adminPageName(){
    标签页隐藏时跳过；失败静默，绝不影响后台使用。 */
 /** v3.5.42：导出图片用的班徽地址。优先用「站点信息」里配的，其次站点图标。 */
 function adminBadgeUrl(){
+  /* v3.6.4：与前台一致 —— 配了直链就走服务器代理，避免跨域把画布搞脏 */
   try{
     var c = JSON.parse(localStorage.getItem('__cls_badge') || '{}');
-    if(c && c.url) return new URL(c.url, location.href).href;
+    if(c && /^https?:\/\//i.test(String(c.url || ''))) return apiUrl('/badge');
   }catch(e){}
   try{ return new URL('./badge.png', location.href).href; }catch(e){ return './badge.png'; }
 }
@@ -12782,11 +12815,14 @@ function renderBackup(){
     +   '</div>'
     +   '<div class="panel-body" id="bkOverview"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
     + '</section>'
-    + '<section class="panel"><div id="bkBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+    + '<section class="panel"><div id="bkBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>'
+    /* v3.6.4：版本记录并入同一页 */
+    + releasesBlockHtml();
 
   $('bkRefresh').onclick = loadBackups;
   $('bkNow').onclick = function(){ doBackupNow(); };
   loadBackups();
+  mountReleasesBlock();
 }
 
 function fmtBytes(n){
@@ -14229,28 +14265,32 @@ function voMountSongPick(host){
   }
 }
 
-function renderReleases(){
-  $('view').innerHTML =
-    '<div class="toolbar" style="background:var(--panel)">'
+/* v3.6.4（站主 #6）：版本记录不再单独占一页，作为「数据管理」的下半部分。
+   拆成 html + mount 两半，两个入口都能用同一套逻辑。 */
+function releasesBlockHtml(){
+  return '<div class="toolbar" style="background:var(--panel);margin-top:18px">'
     +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">版本更新记录</b>'
-    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">只在后台可见，前台不展示</p></div>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '部署前必须在这里有一条对应版本的记录，否则不允许部署</p></div>'
     +   '<button class="btn btn-sm btn-secondary" id="relRefresh">' + svg('refresh',14) + ' 刷新</button>'
     +   '<button class="btn btn-sm btn-secondary" id="relSync">' + svg('download',14) + ' 补齐缺失版本</button>'
     +   '<button class="btn btn-sm" id="relAdd">' + svg('plus',14) + ' 新增版本</button>'
     + '</div>'
-    + '<div class="alert info" style="margin-bottom:16px">'
-    +   '这些记录<b>直接存在云端</b>：打开面板读的就是云端最新数据，新增 / 编辑 / 删除都会立即写回云端，'
-    +   '换设备、换浏览器都一致。<b>新增版本</b>会自动带上当前站点版本号与今天的日期，条目一行写一条。'
-    +   '<br><b>补齐缺失版本</b>会把内置的版本清单和云端对比，只补云端没有的那几个号，'
-    +   '已有的记录一个字都不动（防止把你自己写的说明冲掉）。'
-    + '</div>'
     + '<div class="alert warn" style="margin-bottom:16px;display:none" id="relMissBox"></div>'
     + '<section class="panel"><div id="relBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+}
 
-  $('relRefresh').onclick = loadReleases;
-  $('relAdd').onclick = function(){ relEdit(null); };
-  $('relSync').onclick = relSyncMissing;
+function mountReleasesBlock(){
+  if($('relRefresh')) $('relRefresh').onclick = loadReleases;
+  if($('relAdd')) $('relAdd').onclick = function(){ relEdit(null); };
+  if($('relSync')) $('relSync').onclick = relSyncMissing;
   loadReleases();
+}
+
+function renderReleases(){
+  /* 入口已并入「数据管理」，这里保留给旧链接 / 深链兜底 */
+  $('view').innerHTML = releasesBlockHtml();
+  mountReleasesBlock();
 }
 
 function loadReleases(){
@@ -14282,6 +14322,17 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.6.4', date: '2026-10-19', type: 'fix', title: '作业同步终于修好（钩子没挂上）· 删除可撤回 · 同步按钮有反馈',
+    items: [
+      '作业勾选一直传不上云，真正原因找到了：拦截本地写入的那段补丁在 Chrome 里根本没生效，打勾从未被登记为「待同步」',
+      '改成拦截 Storage.prototype 后，打勾会立刻排队上传；云端数据不再停在 10-16',
+      '「上传本机 / 拉取云端 / 双向同步」三个按钮加上转圈动画，成功打勾、失败打叉，不再点了没反应',
+      '删除字段恢复成「真删」（不再留隐藏列），但删之前会把整列数据存进回收站：30 分钟内在「操作日志」点「撤回」即可连数据一起恢复',
+      '修复：点字段的「允许本机编辑」会报「服务器内部错误」（老库缺 self_edit 列）',
+      '班徽改由服务器代理取图（后台填的直链也能画进导出图，不受跨域限制）',
+      '新增部署门禁：云端公告里没有当次版本，就不允许部署',
+      '「版本更新」并入「数据管理」同一页，侧栏不再单独占一项；移除临时的「恢复预置字段」按钮'
+    ] },
   { version: '3.6.3', date: '2026-10-19', type: 'fix', title: '导出图的班徽不再「空着」',
     items: [
       '班徽图片刚上传时线上可能还没同步过来，导出图上右上角会空一块',
