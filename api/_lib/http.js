@@ -47,7 +47,7 @@ export { getSql };
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.6.1';
+const SCHEMA_VER = '3.6.4';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -298,6 +298,32 @@ export async function ensureSchema(sql) {
           )`;
           await s`create index if not exists data_backups_ver_idx on data_backups (created_at desc)`;
           await s`create index if not exists data_backups_version_idx on data_backups (version)`;
+    /* v3.6.4 删除回收站（见升级路径里的说明） */
+    await s`
+      create table if not exists deleted_items (
+        id          bigserial   primary key,
+        kind        text        not null default 'field',
+        label       text        default '',
+        payload     jsonb       not null,
+        bytes       int         not null default 0,
+        deleted_by  bigint,
+        deleted_at  timestamptz not null default now(),
+        expires_at  timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc)`;
+          /* v3.6.4（站主 #3）：删除回收站 —— 真删，但 30 分钟内可从操作日志撤回 */
+          await s`create table if not exists deleted_items (
+            id          bigserial   primary key,
+            kind        text        not null default 'field',
+            label       text        default '',
+            payload     jsonb       not null,
+            bytes       int         not null default 0,
+            deleted_by  bigint,
+            deleted_at  timestamptz not null default now(),
+            expires_at  timestamptz not null default now()
+          )`;
+          await s`create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc)`;
         } catch (e) {
           console.warn('[schema] online_sessions 建表失败：', e && e.message);
         }
