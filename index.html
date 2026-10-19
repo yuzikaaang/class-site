@@ -4212,7 +4212,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.6.4';
+var SITE_VERSION = '3.6.5';
 var VER_DATE = '2026-10-19';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -10195,20 +10195,40 @@ function saveContentLocal(key, value){
     var rawSet = proto.setItem;
     var rawRemove = proto.removeItem;
 
+    /* ⚠️ 递归保护（v3.6.4 第二次修正）：
+       markLocalWrite 自己会写 localStorage（__cls_lts），那次写入又会进这个钩子……
+       于是形成 setItem → markLocalWrite → setItem → … 无限递归，栈溢出后被 catch
+       静默吞掉 —— 表现就是「钩子挂上了、但一个键都没登记」。
+       实测：打勾后 DIRTY_KEYS 仍然是空的，云端一直没有新数据。
+       现在用一个标志把「钩子内部产生的写入」挡掉。 */
     proto.setItem = function(k, v){
       rawSet.call(this, k, v);
       if(this !== window.localStorage) return;     /* sessionStorage 不管 */
       if(window.__cloudPulling) return;            /* 云端回写不算本机改动 */
-      try{ markLocalWrite(String(k)); }catch(e){}
-      try{ markCloudDirty(String(k)); }catch(e){}
+      if(window.__clsInWrite) return;              /* 钩子内部写入，别递归 */
+      window.__clsInWrite = true;
+      try{
+        markLocalWrite(String(k));
+        markCloudDirty(String(k));
+      }catch(e){
+      }finally{
+        window.__clsInWrite = false;
+      }
     };
     /* 删除也算改动：云端要跟着删掉，否则换设备又冒出来 */
     proto.removeItem = function(k){
       rawRemove.call(this, k);
       if(this !== window.localStorage) return;
       if(window.__cloudPulling) return;
-      try{ markLocalWrite(String(k)); }catch(e){}
-      try{ markCloudDirty(String(k)); }catch(e){}
+      if(window.__clsInWrite) return;
+      window.__clsInWrite = true;
+      try{
+        markLocalWrite(String(k));
+        markCloudDirty(String(k));
+      }catch(e){
+      }finally{
+        window.__clsInWrite = false;
+      }
     };
     proto.__clsHooked = true;
   }catch(e){ /* 挂不上就算了，手动同步仍然可用 */ }
