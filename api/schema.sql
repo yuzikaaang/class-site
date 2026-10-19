@@ -170,6 +170,34 @@ create table if not exists deleted_items (
 );
 create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc);
 
+-- ============================================================
+-- v3.7.0 资料修改审批（站主 #1）
+--   站主原话：「所有允许学生自主修改的字段同之前微信QQ手机号的联系方式审核相同，
+--            需要后台确认方可成功更改，在后台确认之前均按照原来显示」
+--   · changes = [{field, label, before, after}]，before/after 都是密文（与 profiles 同密钥）
+--   · 提交时**不动 profiles** → 前台自然还是旧值；后台通过后才写库
+--   · status: pending | approved | rejected | reverted
+--   · 通过后 7 天内可 revert（后台「信息审核 → 历史记录」里点撤销）
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.7.0
+-- ============================================================
+create table if not exists profile_change_requests (
+  id         bigserial   primary key,
+  profile_id bigint      not null,
+  user_id    bigint,
+  kind       text        not null default 'field',
+  changes    jsonb       not null,
+  status     text        not null default 'pending',
+  note       text        default '',
+  decided_by bigint,
+  decided_at timestamptz,
+  applied_at timestamptz,
+  revoked_at timestamptz,
+  meta       jsonb       not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists pcr_status_idx  on profile_change_requests (status, created_at desc);
+create index if not exists pcr_profile_idx on profile_change_requests (profile_id, created_at desc);
+
 /* ---------------- 用户数据表（云同步核心） ---------------- */
 -- 按 (用户, 键) 存 JSONB，天然适配前端 localStorage 的任意结构
 create table if not exists user_data (
