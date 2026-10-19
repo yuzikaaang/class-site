@@ -177,19 +177,42 @@ body::after{box-shadow:none}
 .side-btn:hover{background:#ede3d9}
 .side-btn.active{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;box-shadow:var(--sh-accent)}
 .sidebar-mask{display:none}
-/* ===== 横屏切换（v3.5.39，与 admin.html 同款） =====
-   手机竖着拿、但用户点了「横屏查看」→ 把整个 body 转 -90° 塞进横屏尺寸里。
-   方向在 2026-10 踩过坑：原来用 left:100vw + rotate(90deg) 方向正好反了，
-   现在固定 left:0 + top:100vh + rotate(-90deg) + origin:left top。
-   一旦系统真的把屏幕转成横屏（w>h），JS 会撤掉这个类，页面自然铺满。 */
+/* ===== 横屏切换（v3.5.39，v3.5.40 修方向与「重进卡住」） =====
+   手机竖着拿、但用户点了「横屏查看」→ 把整个 body 转 90° 塞进横屏尺寸里。
+
+   ⚠️ 方向（v3.5.40 站主反馈「与手机实际横屏方向相反」）：
+      rotate(-90deg) 是**逆时针**，内容顶部朝左，得歪着脖子往左看；
+      而大家横手机都是顺时针（home 键到右手边），所以看着正好反了。
+      改为 rotate(90deg) + left:100vw + top:0，顺时针转，跟手动横屏一致。
+
+   ⚠️ 卡住（v3.5.40 站主反馈「不关闭应用重进就卡住」）：
+      PWA 从后台切回来时，iOS 的视觉视口还没更新，body 已经是 fixed + 旋转，
+      算出来的尺寸对不上，页面内容被顶到屏幕外 → 白屏 / 点不动。
+      修法：恢复时**先摘掉旋转**，等两帧让它重新布局，再按需加回去。 */
 html.force-landscape, html.force-landscape body{overflow:hidden}
 html.force-landscape body{
-  position:fixed; top:100vh; left:0; width:100vh; height:100vw;
-  transform:rotate(-90deg); transform-origin:left top; overflow:auto;
-  -webkit-overflow-scrolling:touch;
+  position:fixed; top:0; left:100vw;
+  width:100vh; height:100vw;
+  transform:rotate(90deg); -webkit-transform:rotate(90deg);
+  transform-origin:left top; -webkit-transform-origin:left top;
+  overflow:auto; -webkit-overflow-scrolling:touch;
+  /* ⚠️ v3.5.40：body 全局有 min-height:100vh/100dvh，会把这层 100vw 的高度
+     顶回屏幕高（844），旋转后整块内容伸出可视区，看着就是白屏 + 点不动。
+     必须显式压掉。 */
+  min-height:0 !important; max-height:100vw;
+  overscroll-behavior:contain;
+  backface-visibility:hidden; -webkit-backface-visibility:hidden;
 }
 /* 横屏后视口宽高互换：侧边栏改按高度算，收窄一点让内容区多留位置 */
 html.force-landscape .sidebar{width:min(290px,42vw)}
+/* ⚠️ v3.5.40：iOS 上 fixed 子元素在 transform 祖先里坐标会算错 ——
+   侧边栏、遮罩、悬浮球都点不到（站主说的「卡住」）。
+   改成相对旋转容器 absolute 定位，坐标就跟旋转后的画面对上了。 */
+html.force-landscape .sidebar,
+html.force-landscape .sidebar-mask,
+html.force-landscape .fab{position:absolute}
+html.force-landscape .sidebar{height:100vw;top:0;left:0}
+html.force-landscape .fab{top:14px;left:14px}
 html.force-landscape .content{padding:0 14px 14px}
 html.force-landscape header{padding:26px 22px}
 #landBtn[data-on="1"]{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;box-shadow:var(--sh-accent)}
@@ -3154,7 +3177,13 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 
 <div class="allboard-mask" id="hwCurrentMask">
   <div class="allboard-box" style="max-width:560px">
-    <div class="allboard-head"><span id="hwCurrentTitle">当前作业</span><button onclick="closeHwCurrent()">关闭</button></div>
+    <div class="allboard-head"><span id="hwCurrentTitle">当前作业</span>
+      <span style="display:flex;gap:6px;flex-shrink:0">
+        <button onclick="hwExportImage('download')" title="把这份作业画成一张长图">导出图片</button>
+        <button onclick="hwExportImage('share')" title="生成图片并调起系统分享">分享</button>
+        <button onclick="closeHwCurrent()">关闭</button>
+      </span>
+    </div>
     <div class="allboard-list" id="hwCurrentList" data-scroll-keep style="padding:14px 18px;max-height:70vh;overflow:auto"></div>
   </div>
 </div>
@@ -3291,6 +3320,7 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
   </main>
 </div>
 
+<script src="share-card.js"></script>
 <script>
 /* =====================================================
    全站音效（Web Audio 合成，无音频文件；侧边栏可关）
@@ -3346,9 +3376,28 @@ var LAND_ON = false;
 var LAND_LS = 'cls_land';
 var LAND_FROM_ADMIN_LS = 'cls_land_from_admin';
 
+/** 设备是不是已经物理横过来了。
+ *  v3.5.40：iOS PWA 里 window.innerWidth 有时**不跟着设备转**（尤其中途切后台再回来），
+ *  只看视口就会一直以为还在竖屏，于是 CSS 旋转一直挂着 ——
+ *  站主看到的就是「手机已经横了，页面却还歪着 / 方向正好相反」。
+ *  所以再加一路物理方向判断：设备真横了，就绝不加 CSS 旋转。 */
+function deviceIsLandscape(){
+  try{
+    var a = null;
+    if(screen.orientation && typeof screen.orientation.angle === 'number') a = screen.orientation.angle;
+    if(a === null && typeof window.orientation === 'number') a = window.orientation;
+    if(a === null) return false;
+    a = Math.abs(Number(a)) % 360;
+    return a === 90 || a === 270;
+  }catch(e){ return false; }
+}
+
 function syncLandscapeClass(){
-  var portrait = window.innerHeight > window.innerWidth;
-  var need = LAND_ON && portrait;
+  var vpPortrait = window.innerHeight > window.innerWidth;
+  var devLand = deviceIsLandscape();
+  /* 只有「用户要横屏 + 视口还是竖的 + 设备也没横」才用 CSS 兜底旋转。
+     设备一旦物理横过来（哪怕视口没更新），立刻撤掉，避免转两次导致方向相反。 */
+  var need = LAND_ON && vpPortrait && !devLand;
   var html = document.documentElement;
   if(html.classList.contains('force-landscape') !== need){
     html.classList.toggle('force-landscape', need);
@@ -3361,12 +3410,14 @@ function syncLandscapeClass(){
 }
 
 function lockLandscape(){
-  try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); }catch(e){}
+  /* v3.5.40：**不再请求全屏**。全屏 + fixed 旋转在 iOS PWA 上切后台回来时
+     会留下「全屏已退出、布局还按全屏算」的残影（站主说的卡住）。
+     CSS 旋转已经能兜住竖屏场景，全屏只是锦上添花，不值得这个风险。
+     支持 orientation.lock 的浏览器（Android Chrome）仍然试一下，失败也无副作用。 */
   try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
 }
 function unlockLandscape(){
   try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
-  try{ if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); }catch(e){}
 }
 
 /** 把横屏意图写盘（'1' / '0'）。点按钮、恢复流程都走这里，只有一处写盘。 */
@@ -3414,15 +3465,23 @@ function initLandscape(){
   setTimeout(syncLandscapeClass, 400);
 }
 
-/** 从后台切回来 / 页面被恢复时重新对齐：只对齐 CSS 兜底旋转，
- *  不重新请求全屏 —— 那会打断用户当时的操作。 */
+/** 从后台切回来 / 页面被恢复时重新对齐（v3.5.40 重写）。
+ *  老版本这里会再调一次 orientation.lock，iOS 上恢复时视觉视口还没更新，
+ *  锁方向 + 定尺寸的 body 一起上，直接把页面顶出屏幕（站主说的「卡住」）。
+ *  现在：先摘旋转 → 两帧后重新布局 → 再按需加回来。全程不碰 lock。 */
 function resyncLandscape(){
   try{
-    syncLandscapeClass();
-    if(LAND_ON){
-      try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
-      setTimeout(syncLandscapeClass, 320);
-    }
+    var html = document.documentElement;
+    /* ① 先摘掉旋转，让浏览器按**当前真实视口**重排一次 */
+    html.classList.remove('force-landscape');
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        /* ② 视口已更新，再决定要不要转 */
+        syncLandscapeClass();
+        /* ③ 再等一拍，iOS 地址栏收缩/展开会二次改视口 */
+        setTimeout(syncLandscapeClass, 260);
+      });
+    });
   }catch(e){}
 }
 /* 全局轻点击音效（交互元素自动响应） */
@@ -3676,7 +3735,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.5.39';
+var SITE_VERSION = '3.5.40';
 var VER_DATE = '2026-10-18';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -4013,6 +4072,21 @@ var FAIL_CONFIRM_DELAY_MS = 15 * 1000;
 /* 「重试」按钮的倒计时秒数（站主要求：点了要有反应，不能让人干等着猜） */
 var RETRY_SECONDS = 60;
 
+/* v3.5.40（站主 #3）：心跳带上「现在在哪个页面」，后台才能统计页面级在线时长。
+   首页 → 「首页」，板块 → 板块中文名（成绩分析 / 班级事务 …）。 */
+function hbPageName(){
+  try{
+    if(typeof __activeCat !== 'undefined' && __activeCat != null){
+      var cats = (window.SITE_DATA && SITE_DATA.categories) || [];
+      for(var i = 0; i < cats.length; i++){
+        if(cats[i].id === __activeCat) return cats[i].name || ('板块' + __activeCat);
+      }
+      return '板块' + __activeCat;
+    }
+  }catch(e){}
+  return '首页';
+}
+
 function startHeartbeat(){
   if(!(typeof AUTH !== 'undefined' && AUTH && AUTH.token)) return;
   if(window.__hbTimer) { clearInterval(window.__hbTimer); window.__hbTimer = 0; }
@@ -4030,7 +4104,7 @@ function startHeartbeat(){
        老代码写的是 base + '/auth?action=ping'，而 API_BASE 只到域名根
        （https://api.classsite.dpdns.org），真实路径是 /api/auth —— 少一段，
        心跳自上线起就没打通过，只是失败被静默吞掉没人发现。 */
-    fetch(apiUrl('/auth?action=ping'), {
+    fetch(apiUrl('/auth?action=ping&page=' + encodeURIComponent(hbPageName())), {
       method:'GET', cache:'no-store',
       headers:{ Authorization:'Bearer ' + AUTH.token },
       signal: ctrl ? ctrl.signal : undefined
@@ -8628,6 +8702,8 @@ var MY_PROF_ERR = '';
       还没建列）；接口形状先立好，下轮后台加列后前端零改动即可显示。 */
 var MY_PROF_PRIVATE = [];      /* [{field,label,value,sortOrder}] 仅本人可见字段 */
 var MY_PROF_PREF = {};         /* {wechat:false,...} 本人的可见性意愿 */
+/* v3.5.40（站主 #1）：字段元数据（含 selfEdit），决定「这一项能不能自己改」 */
+var MY_PROF_META = {};
 
 /* 属性值转义：esc() 只处理 &<>，放进 value="…" 里遇到引号会把属性截断 */
 function attr(s){
@@ -8658,6 +8734,8 @@ function myProfLoad(){
       else { MY_PROF = null; MY_PROF_STATE = 'none'; }
       MY_PROF_PRIVATE = (j && j.privateFields) || [];
       MY_PROF_PREF = (j && j.visibilityPref) || {};
+      MY_PROF_META = {};
+      ((j && j.fieldMeta) || []).forEach(function(m){ if(m && m.field) MY_PROF_META[m.field] = m; });
       PC_MY_PROFILE_ID = MY_PROF ? MY_PROF.id : null;
       if(ACCT_TAB === 'myprofile') renderAccount();
     })
@@ -8715,24 +8793,27 @@ function myProfileHtml(){
      现在统一成一张明细表：班级信息 + 额外字段 + 仅本人可见，一行一项，
      值用正文色，右侧带复制按钮（与前台查询的卡片一致）。 */
   var mpRows = [];
-  function mpPush(label, val, locked){
+  function mpPush(label, val, locked, field){
     if(val == null) return;
     var s = String(val);
     if(!s.trim()) return;
-    mpRows.push({ label: label, value: s, locked: !!locked });
+    /* v3.5.40：后台开了「本人可编辑」的字段，行尾多一个「改」 */
+    var meta = field ? MY_PROF_META[field] : null;
+    var editable = !!(meta && meta.selfEdit && !MP_SELF_BLOCK[field]);
+    mpRows.push({ label: label, value: s, locked: !!locked, field: field || '', editable: editable, rules: (meta && meta.rules) || {} });
   }
-  mpPush('学号', p.studentId);
-  mpPush('智学网账号', p.examNo);
-  mpPush('政治面貌', p.politics);
+  mpPush('学号', p.studentId, false, 'student_id');
+  mpPush('智学网账号', p.examNo, false, 'exam_no');
+  mpPush('政治面貌', p.politics, false, 'politics');
   var myTitles = String(p.title || '').split(/[,，、]/)
     .map(function(s){ return s.trim(); }).filter(Boolean);
-  if(myTitles.length) mpPush('头衔', myTitles.join('、'));
-  mpPush('身份', p.role);
+  if(myTitles.length) mpPush('头衔', myTitles.join('、'), false, 'title');
+  mpPush('身份', p.role, false, 'role');
   if(Array.isArray(p.fields)){
-    p.fields.forEach(function(f){ if(f && f.value) mpPush(f.label || f.field, f.value); });
+    p.fields.forEach(function(f){ if(f && f.value) mpPush(f.label || f.field, f.value, false, f.field); });
   }
   if(MY_PROF_PRIVATE.length){
-    MY_PROF_PRIVATE.forEach(function(f){ if(f && f.value) mpPush(f.label || f.field, f.value, true); });
+    MY_PROF_PRIVATE.forEach(function(f){ if(f && f.value) mpPush(f.label || f.field, f.value, true, f.field); });
   }
 
   var mpList = mpRows.length
@@ -8742,6 +8823,12 @@ function myProfileHtml(){
           + '<span class="mp-lv">' + esc(r.value) + '</span>'
           + '<button class="mp-copy" type="button" onclick="mpCopy(this)"'
           +   ' data-v="' + attr(r.value) + '" data-l="' + attr(r.label) + '">复制</button>'
+          + (r.editable
+              ? '<button class="mp-copy" type="button" style="margin-left:6px"'
+                + ' onclick="mpEditStart(this)"'
+                + ' data-f="' + attr(r.field) + '" data-l="' + attr(r.label) + '"'
+                + ' data-v="' + attr(r.value) + '">改</button>'
+              : '')
           + '</div>';
       }).join('') + '</div>'
     : '<p class="mp-empty">还没有可展示的资料字段。有误请联系站主。</p>';
@@ -8758,7 +8845,7 @@ function myProfileHtml(){
     /* 只读区：管理员维护的字段 + 本人可见字段，全部可复制 */
     '<div class="acct-sw" style="margin-top:0">' +
       '<div style="width:100%"><span class="t">🔒 我的班级资料</span>' +
-        '<span class="s">这部分由管理员统一维护，自己改不了；发现错误请找站主。<br>' +
+        '<span class="s">带「改」的项你可以自己修改，改完立即生效；其余由管理员维护，发现错误请找站主。<br>' +
           '带 🔒 的项只有你自己看得到，其他同学（包括管理员）在前台都查不到。</span>' +
         mpList +
         '</div>' +
@@ -8784,6 +8871,77 @@ function myProfileHtml(){
         : '') +
       '不想被查到就清空三项再保存。</p>' +
     '<p style="margin:12px 0 0"><button class="acct-btn ghost" onclick="acctTab(\'profile\')">返回</button></p>';
+}
+
+/* ============================================================================
+ * v3.5.40（站主 #1）：我的资料 · 本人编辑
+ * ----------------------------------------------------------------------------
+ * 站主原话：「字段管理的所有字段均可设置本人是否可编辑，后台开启后则该用户
+ *           可以在个人资料页面或个人资料查询卡片修改字段内容」
+ *
+ * 前端只做两件事：
+ *   ① 后端返回的 fieldMeta 里 selfEdit = true 且不是系统列的字段，行尾画「改」
+ *   ② 点「改」→ 就地变输入框 → 保存走 /api/profile?action=self-update
+ * 真正的权限裁判在服务端（它会逐字段再判一次），前端隐藏按钮只是体验层。
+ * ========================================================================= */
+/* 这些字段即使后端误开也不给改（与服务端 SELF_EDIT_BLOCK 对齐） */
+var MP_SELF_BLOCK = {
+  name:1, student_id:1, role:1, title:1, contact_status:1,
+  user_id:1, id:1, visibility_pref:1, field_vis:1, reject_reason:1
+};
+
+/** 点「改」：把这一行就地切成输入框 */
+function mpEditStart(btn){
+  if(!btn) return;
+  var row = btn.parentNode;
+  var field = btn.dataset.f, label = btn.dataset.l, val = btn.dataset.v || '';
+  if(!row || !field) return;
+  row.innerHTML =
+      '<span class="mp-lk">✏️ ' + esc(label) + '</span>'
+    + '<input class="mp-lv" id="mpEditBox" value="' + attr(val) + '" autocomplete="off"'
+    +   ' style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--line-2,#e7d9cc);border-radius:8px;font-size:.86rem">'
+    + '<button class="mp-copy" type="button" id="mpEditOk">保存</button>'
+    + '<button class="mp-copy" type="button" id="mpEditNo" style="margin-left:6px">取消</button>';
+  var inp = document.getElementById('mpEditBox');
+  if(inp){ try{ inp.focus(); inp.select(); }catch(e){} }
+  document.getElementById('mpEditOk').onclick = function(){ mpEditSave(field, label, val); };
+  document.getElementById('mpEditNo').onclick = function(){ myProfLoad(); };
+}
+
+/** 保存单个字段 */
+function mpEditSave(field, label, oldVal){
+  var inp = document.getElementById('mpEditBox');
+  var v = inp ? inp.value : '';
+  var ok = document.getElementById('mpEditOk');
+  if(ok){ ok.disabled = true; ok.textContent = '保存中…'; }
+  var payload = {}; payload[field] = v;
+  api('/profile?action=self-update', { method:'POST', body:{ fields: payload } })
+    .then(function(j){
+      var msg = (j && j.message) || '已保存';
+      toastMini('✅ ' + msg);
+      myProfLoad();
+    })
+    .catch(function(e){
+      if(ok){ ok.disabled = false; ok.textContent = '保存'; }
+      toastMini('⚠️ ' + ((e && e.message) || '保存失败'), true);
+    });
+}
+
+/** 我的资料里的小提示（站内没有全局 toast，这里做一个轻量浮条） */
+function toastMini(text, isErr){
+  try{
+    var old = document.getElementById('mpToast');
+    if(old) old.remove();
+    var d = document.createElement('div');
+    d.id = 'mpToast';
+    d.textContent = text;
+    d.style.cssText = 'position:fixed;left:50%;bottom:32px;transform:translateX(-50%);'
+      + 'z-index:9999;max-width:86vw;padding:10px 16px;border-radius:999px;font-size:.82rem;'
+      + 'color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.18);'
+      + 'background:' + (isErr ? '#b3261e' : '#2f7d4f') + ';';
+    document.body.appendChild(d);
+    setTimeout(function(){ try{ d.remove(); }catch(e){} }, isErr ? 3600 : 2000);
+  }catch(e){}
 }
 
 /** 复制「我的资料」里某一项（v3.5.21）。
@@ -12034,6 +12192,12 @@ function renderContactResults(id, out, j){
       edit.className = 'pc-edit';
       edit.innerHTML =
         '<div class="pc-edit-title">✏️ 这是你自己的资料，可填写或修改联系方式</div>' +
+        /* v3.5.40（站主 #1）：后台开了「本人可编辑」的其它字段，去「我的资料」里改 */
+        '<div style="margin:-2px 0 10px;font-size:.78rem;color:var(--fg-3,#6e635a)">'
+          + '带「改」的其它字段（如身份证号、入团时间）在「我的资料」里改，'
+          + '<button type="button" onclick="openMyProfile()" '
+          +   'style="background:none;border:none;padding:0;font:inherit;font-weight:700;color:var(--accent,#c2410c);cursor:pointer;text-decoration:underline">'
+          + '去我的资料</button></div>' +
         '<div class="pc-edit-grid">' +
           '<input class="pc-inp" id="pc-wx-'+id+'" type="text" placeholder="微信号" value="'+esc(p.wechat || '')+'">' +
           '<input class="pc-inp" id="pc-qq-'+id+'" type="text" placeholder="QQ 号" value="'+esc(p.qq || '')+'">' +
@@ -12950,6 +13114,8 @@ function popGetList(){
     var p = list[i];
     if(!p || typeof p !== 'object') continue;
     if(!p.id) continue;                       /* 没有 id 无法记录「已关」，跳过 */
+    /* v3.5.40：不是给我的，直接跳过 */
+    if(!popTargetOk(p)) continue;
     out.push({
       id:        String(p.id),
       scope:     String(p.scope || 'boot'),
@@ -12965,10 +13131,53 @@ function popGetList(){
       dismiss:   (p.dismiss === 'once' || p.dismiss === 'always') ? p.dismiss : 'daily',
       bubble:    (p.bubble === false) ? false : true,
       bannerText: p.bannerText || '',
-      theme:     p.theme || ''
+      theme:     p.theme || '',
+      /* v3.5.40（站主 #4）：投放对象。
+         { mode:'all'|'users'|'roles'|'titles', users:[], roles:[], titles:[] }
+         老数据没有这个字段 → 一律当「所有人」，行为不变。 */
+      target: (function(t){
+        if(!t || typeof t !== 'object') return { mode:'all', users:[], roles:[], titles:[] };
+        var mode = ['all','users','roles','titles'].indexOf(String(t.mode)) >= 0 ? String(t.mode) : 'all';
+        var arr = function(v){ return Array.isArray(v) ? v.map(function(x){ return String(x).trim(); }).filter(Boolean) : []; };
+        return { mode: mode, users: arr(t.users), roles: arr(t.roles), titles: arr(t.titles) };
+      })(p.target)
     });
   }
   return out;
+}
+
+/* ============================================================================
+ * v3.5.40（站主 #4）：弹窗「指定给谁看」
+ * ----------------------------------------------------------------------------
+ * 站主原话：「可以设置指定弹窗，就是弹窗给某个人或某一群人」
+ * 四种投放：所有人 / 指定账号（用户名或姓名）/ 按身份（管理员、学生、老师）/
+ *          按头衔（团支书、课代表…，可多选）
+ * 判定放在 popGetList 返回前 —— 所有消费方（开屏弹、板块弹、横幅）自动生效。
+ * ⚠️ 这只是「给谁看」的过滤，不是权限：内容本身仍是公开的云端数据，
+ *    懂技术的人翻接口能看到。真正的秘密别放进弹窗正文。
+ * ========================================================================= */
+function popTargetOk(p){
+  var t = p && p.target;
+  if(!t || !t.mode || t.mode === 'all') return true;
+  var me = (typeof AUTH !== 'undefined' && AUTH && AUTH.user) ? AUTH.user : null;
+  if(!me) return false;                      /* 没登录 → 只给「所有人」的弹窗 */
+  if(t.mode === 'users'){
+    var un = String(me.username || '').toLowerCase();
+    var dn = String(me.displayName || me.display_name || me.name || '').trim().toLowerCase();
+    return (t.users || []).some(function(x){
+      var k = String(x || '').trim().toLowerCase();
+      return !!k && (k === un || k === dn);
+    });
+  }
+  if(t.mode === 'roles'){
+    var role = String(me.role || 'user');
+    return (t.roles || []).indexOf(role) >= 0;
+  }
+  if(t.mode === 'titles'){
+    var my = String(me.title || '').split(/[,，、]/).map(function(x){ return x.trim(); }).filter(Boolean);
+    return (t.titles || []).some(function(x){ return my.indexOf(x) >= 0; });
+  }
+  return true;
 }
 
 /** 板块顶部横幅 HTML：遍历该板块配的、带 bannerText 的弹窗条目（复用 .celebrate-banner 样式） */
@@ -18952,6 +19161,75 @@ function showCurrentHomework(){
   mask.classList.add('show');
 }
 function closeHwCurrent(){ var m=document.getElementById('hwCurrentMask'); if(m) m.classList.remove('show'); }
+
+/* ============================================================================
+ * v3.5.40（站主 #7）：作业导出图片 / 分享
+ * ----------------------------------------------------------------------------
+ * 站主原话：「作业支持导出图片（包含名称，对应作业，时间范围，
+ *           作业对应的图片直链等等）也支持分享的功能」
+ *
+ * 内容怎么摆：
+ *   标题   = 作业名称（如「国庆假期作业（10.1–10.7）」）
+ *   副标题 = 时间范围 start ~ end
+ *   徽章   = 共几科 / 几项任务
+ *   分段   = 每个科目一段，一行一项作业；配了图的，下面单独一行写「图片：<直链>」
+ *          （不把图片嵌进 canvas —— 跨域图片会污染画布，导不出来；
+ *            直链本身就是站主要求的内容，拿到链接自己也能打开）
+ *   页脚   = 站点名 + 生成时间
+ * 分享走 navigator.share；不支持就自动退回下载，绝不出现「点了没反应」。
+ * ========================================================================= */
+function hwExportImage(mode){
+  if(typeof ShareCard === 'undefined'){
+    if(typeof uiMsg === 'function') uiMsg('图片组件没加载出来，请刷新页面重试', '#af410f');
+    return;
+  }
+  var hw = getCurrentHomework();
+  if(!hw){
+    if(typeof uiMsg === 'function') uiMsg('没有可导出的作业', '#af410f');
+    return;
+  }
+
+  var items = hw.items || [];
+  var totalTasks = 0;
+  var sections = items.map(function(it){
+    var rows = [], lines = [];
+    (it.tasks || []).forEach(function(t){
+      var text = (t && typeof t === 'object') ? (t.text || '') : String(t == null ? '' : t);
+      var img = (t && typeof t === 'object') ? (t.img || '') : '';
+      var audio = (t && typeof t === 'object') ? (t.audio || '') : '';
+      if(text) { rows.push({ l: text, r: '' }); totalTasks++; }
+      else if(img || audio) { totalTasks++; }
+      if(img) lines.push('图片：' + img);
+      if(audio) lines.push('音频：' + audio);
+    });
+    return { heading: it.subject || '其他', rows: rows, lines: lines };
+  }).filter(function(s){ return s.rows.length || s.lines.length; });
+
+  var card = {
+    title: hw.title || '作业',
+    subtitle: (hw.start || '') + ' ~ ' + (hw.end || ''),
+    badges: ['共 ' + items.length + ' 科', totalTasks + ' 项任务'],
+    sections: sections,
+    footer: '由 25级05班 班级服务站生成 · ' + new Date().toLocaleDateString('zh-CN'),
+  };
+  var fname = '作业-' + String(hw.start || '').replace(/[^0-9]/g, '') + '.png';
+
+  if(mode === 'share'){
+    ShareCard.share(card, fname).then(function(r){
+      if(r && r.shared) return;
+      if(r && r.canceled) return;
+      if(typeof uiMsg === 'function') uiMsg('这个浏览器不支持直接分享，图片已保存到下载', '#2f7d4f');
+    }).catch(function(e){
+      if(typeof uiMsg === 'function') uiMsg('分享失败：' + (e.message || e), '#b3261e');
+    });
+  } else {
+    ShareCard.download(card, fname).then(function(){
+      if(typeof uiMsg === 'function') uiMsg('图片已生成，去相册/下载里找一下', '#2f7d4f');
+    }).catch(function(e){
+      if(typeof uiMsg === 'function') uiMsg('生成失败：' + (e.message || e), '#b3261e');
+    });
+  }
+}
 
 var _hwCalMonth = null;
 function showHomeworkCalendar(){
