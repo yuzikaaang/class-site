@@ -25,7 +25,8 @@
  *       { heading: '本期歌单', rows: [ { l:'1. 晴天 - 周杰伦', r:'点赞 12' }, ... ] },
  *       { heading: '备注', lines: ['...'] }
  *     ],
- *     footer: '由 25级05班 班级服务站生成'
+ *     footer: '由 25级05班 班级服务站生成',
+ *     badge: './favicon.svg'      // 班徽，画在右上角（取不到就不画，不影响导出）
  *   }, '文件名.png');
  * ========================================================================= */
 (function (global) {
@@ -45,6 +46,8 @@
     GAP_SECTION: 26,
     GAP_ROW: 6,
     FOOT: 46,
+    BADGE: 66,          /* 班徽边长（右上角） */
+    BADGE_GAP: 16,      /* 标题与班徽之间的留白 */
   };
 
   var COLORS = {
@@ -103,6 +106,7 @@
       sections: sections,
       footer: o.footer || '',
       width: o.width && o.width > 320 ? o.width : STEP.W,
+      __badge: o.__badge || null,
     };
   }
 
@@ -114,7 +118,9 @@
     var h = STEP.PAD;
 
     ctx.font = font(STEP.TITLE, 700);
-    var titleLines = wrap(ctx, o.title, innerW);
+    var hasBadge = !!o.__badge;
+    var titleW = hasBadge ? innerW - STEP.BADGE - STEP.BADGE_GAP : innerW;
+    var titleLines = wrap(ctx, o.title, titleW);
     h += titleLines.length * (STEP.TITLE + 8);
 
     if (o.subtitle) {
@@ -170,6 +176,46 @@
     return { height: Math.round(h), blocks: parts, titleLines: titleLines };
   }
 
+  /* ---- 班徽（v3.5.42）----
+     站主要求：所有导出图片右上角都带班徽。
+     图片跨域时 canvas 会被污染（toBlob 直接抛 SecurityError），
+     所以统一先试 crossOrigin='anonymous'，失败就当没有徽标 ——
+     少一个角标总比整张图导不出来强。 */
+  var badgeCache = {};
+
+  function loadBadge(url) {
+    if (!url) return Promise.resolve(null);
+    if (Object.prototype.hasOwnProperty.call(badgeCache, url)) {
+      return Promise.resolve(badgeCache[url]);
+    }
+    return new Promise(function (resolve) {
+      var img = new Image();
+      var done = false;
+      function fin(v) { if (!done) { done = true; badgeCache[url] = v; resolve(v); } }
+      img.crossOrigin = 'anonymous';
+      img.onload = function () { fin({ ok: true, img: img }); };
+      img.onerror = function () {
+        /* 带 crossOrigin 失败时，再试一次不带（同源图片在某些内核上也会被拦） */
+        var img2 = new Image();
+        img2.onload = function () {
+          try {
+            /* 画一下空像素检测是否被污染 */
+            var t = document.createElement('canvas');
+            t.width = t.height = 1;
+            t.getContext('2d').drawImage(img2, 0, 0, 1, 1);
+            t.getContext('2d').getImageData(0, 0, 1, 1);
+            fin({ ok: true, img: img2 });
+          } catch (e) { fin(null); }
+        };
+        img2.onerror = function () { fin(null); };
+        img2.src = url;
+      };
+      img.src = url;
+      /* 兜底：3 秒还没结果就不等了，别让用户以为按钮坏了 */
+      setTimeout(function () { fin(null); }, 3000);
+    });
+  }
+
   function roundRect(ctx, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -201,6 +247,22 @@
     var y = STEP.PAD;
 
     /* 标题 */
+    /* 班徽：右上角，圆角裁切 */
+    if (o.__badge && o.__badge.img) {
+      try {
+        ctx.save();
+        roundRect(ctx, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE, 16);
+        ctx.clip();
+        ctx.drawImage(o.__badge.img, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE);
+        ctx.restore();
+        /* 细边框，浅色徽标也能看出边界 */
+        ctx.strokeStyle = 'rgba(0,0,0,.06)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE, 16);
+        ctx.stroke();
+      } catch (e) { /* 画不上就跳过 */ }
+    }
+
     ctx.fillStyle = COLORS.ink;
     ctx.font = font(STEP.TITLE, 700);
     m.titleLines.forEach(function (ln) {
@@ -299,6 +361,19 @@
     return cv;
   }
 
+  /** 先把班徽加载好再画。download/share 内部都用这个。 */
+  function renderAsync(opts) {
+    var o = opts || {};
+    return loadBadge(o.badge).then(function (bd) {
+      var withBadge = {};
+      for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) withBadge[k] = o[k];
+      withBadge.__badge = bd;
+      return render(withBadge);
+    }).catch(function () {
+      return render(o);
+    });
+  }
+
   function toBlob(cv) {
     return new Promise(function (resolve, reject) {
       try {
@@ -309,7 +384,10 @@
 
   /** 下载（桌面 / 安卓微信里都走这条） */
   function download(opts, filename) {
-    var cv = render(opts);
+    return renderAsync(opts).then(function (cv) { return downloadCanvas(cv, opts, filename); });
+  }
+
+  function downloadCanvas(cv, opts, filename) {
     var name = filename || ((opts && opts.title ? String(opts.title) : '卡片') + '.png');
     return toBlob(cv).then(function (blob) {
       var url = URL.createObjectURL(blob);
@@ -327,7 +405,10 @@
 
   /** 分享：优先系统分享（iOS / 安卓能直接发微信），不支持就退回下载 */
   function share(opts, filename) {
-    var cv = render(opts);
+    return renderAsync(opts).then(function (cv) { return shareCanvas(cv, opts, filename); });
+  }
+
+  function shareCanvas(cv, opts, filename) {
     var name = filename || ((opts && opts.title ? String(opts.title) : '卡片') + '.png');
     return toBlob(cv).then(function (blob) {
       try {
@@ -342,9 +423,13 @@
             });
         }
       } catch (e) { /* 老浏览器没有 File 构造器，直接走下载 */ }
-      return download(opts, filename).then(function () { return { shared: false, downloaded: true }; });
+      return downloadCanvas(cv, opts, filename).then(function () { return { shared: false, downloaded: true }; });
     });
   }
 
-  global.ShareCard = { render: render, download: download, share: share, toBlob: toBlob };
+  global.ShareCard = {
+    render: render, renderAsync: renderAsync,
+    download: download, share: share, toBlob: toBlob,
+    loadBadge: loadBadge,
+  };
 })(window);
