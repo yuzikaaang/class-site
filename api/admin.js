@@ -104,6 +104,8 @@ export default async function handler(req, res) {
       if (action === 'action-stats')     return await actionStats(req, res);
       /* v3.6.1（站主 #4）：数据备份 / 回档 */
       if (action === 'backups')          return await listBackups(req, res);
+      /* v3.7.0（站主 #1）：信息审核（修改申请） */
+      if (action === 'change-requests')  return await listChangeRequests(req, res);
       if (action === 'backup')           return await getBackup(req, res);
       return fail(res, 404, '未知的 action：' + action);
     }
@@ -143,6 +145,10 @@ export default async function handler(req, res) {
         case 'restore-backup': return await restoreBackup(req, res, me, b);
         /* v3.6.4（站主 #3）：30 分钟内撤回删除 */
         case 'undo-delete':    return await undoDelete(req, res, me, b);
+        /* v3.7.0（站主 #1）：信息审核通过 / 驳回 / 7 天内撤销 */
+        case 'approve-change': return await approveChange(req, res, me, b);
+        case 'reject-change':  return await rejectChange(req, res, me, b);
+        case 'revert-change':  return await revertChange(req, res, me, b);
         case 'update-field':   return await updateField(req, res, me, b);
         /* v3.5.14 #7：字段拖拽排序 —— 一次批量写，避免 N 次子请求 */
         case 'reorder-fields': return await reorderFields(req, res, me, b);
@@ -2982,6 +2988,246 @@ async function profileDetail(req, res) {
 }
 
 /** 待审核列表（只返回 pending，后台「待审核」页用） */
+/* ============================================================================
+ * v3.7.0（站主 #1）：资料修改审批
+ * ----------------------------------------------------------------------------
+ * 站主原话：「所有允许学生自主修改的字段同之前微信QQ手机号的联系方式审核相同，
+ *            需要后台确认方可成功更改，在后台确认之前均按照原来显示，而且后台的
+ *            信息审核只包含修改人姓名和修改内容（原内容和现内容）其他没有改的地方
+ *            无需显示，名称从联系方式审核改为信息审核，而且可以看到历史审核记录
+ *            并后台可以撤销之前的确认（7 天之内）」
+ *
+ * 数据流：
+ *   同学提交 → profile_change_requests(status=pending)，**profiles 不动**
+ *            → 前台继续显示旧值（这就是「确认之前按原来显示」）
+ *   后台通过 → 把 after 写进 profiles，status=approved，记下改动前的 contact_status
+ *   后台驳回 → status=rejected + 原因（本人可见）
+ *   7 天内撤销 → 把 before 写回 profiles，status=reverted
+ *
+ * 只显示「改了哪几项」：changes 里在提交时就已经把 old === new 的字段剔掉了，
+ * 所以后台不会看到一堆没动的字段。
+ * ========================================================================= */
+
+const CHANGE_REVERT_DAYS = 7;
+
+/** 把请求行 → 前端结构（解密 before/after，补上姓名学号） */
+async function shapeChangeRows(sql, rows, pkey) {
+  if (!rows.length) return [];
+  /* 只取本次涉及的档案行。id 已 Number 过，拼进 SQL 无注入风险；
+     不用 any(...) 是因为测试用的 SQLite 桥接不认这个语法。 */
+  const ids = [...new Set(rows.map((r) => Number(r.profile_id)))].filter((n) => n > 0);
+  let profs = [];
+  if (ids.length) {
+    try {
+      profs = await sql(
+        'select p.id, p.name, p.student_id, u.username '
+        + 'from profiles p left join users u on u.id = p.user_id '
+        + 'where p.id in (' + ids.join(',') + ')'
+      );
+    } catch (e) { profs = []; }
+  }
+  const pmap = {};
+  for (const p of profs) pmap[Number(p.id)] = p;
+
+  const out = [];
+  for (const r of rows) {
+    let arr = r.changes;
+    if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { arr = []; } }
+    const items = await Promise.all((Array.isArray(arr) ? arr : []).map(async (c) => ({
+      field: c.field,
+      label: c.label || c.field,
+      before: await decField(pkey, c.before),
+      after: await decField(pkey, c.after),
+    })));
+    const p = pmap[Number(r.profile_id)] || {};
+    out.push({
+      id: Number(r.id),
+      profileId: Number(r.profile_id),
+      /* 站主要求：信息审核只看「修改人姓名」+「修改内容」 */
+      name: (await decField(pkey, p.name)) || '',
+      studentId: (await decField(pkey, p.student_id)) || '',
+      username: p.username || '',
+      kind: r.kind || 'field',
+      status: r.status || 'pending',
+      note: r.note || '',
+      items,
+      createdAt: r.created_at,
+      decidedAt: r.decided_at || null,
+      revokedAt: r.revoked_at || null,
+      canRevert: r.status === 'approved'
+        && r.decided_at
+        && (Date.now() - new Date(r.decided_at).getTime()) < CHANGE_REVERT_DAYS * 86400000,
+      revertDaysLeft: r.status === 'approved' && r.decided_at
+        ? Math.max(0, Math.ceil(CHANGE_REVERT_DAYS - (Date.now() - new Date(r.decided_at).getTime()) / 86400000))
+        : 0,
+    });
+  }
+  return out;
+}
+
+/** GET ?action=change-requests&scope=pending|history */
+async function listChangeRequests(req, res) {
+  const sql = getSql();
+  const scope = String(req.query.scope || 'pending');
+  const pkey = await profileKey(req);
+
+  let rows = [];
+  if (scope === 'history') {
+    rows = await sql`
+      select * from profile_change_requests
+       where status <> 'pending'
+       order by coalesce(decided_at, created_at) desc
+       limit 100
+    `;
+  } else {
+    rows = await sql`
+      select * from profile_change_requests
+       where status = 'pending'
+       order by created_at asc
+       limit 200
+    `;
+  }
+
+  let counts = { pending: 0, approved: 0, rejected: 0, reverted: 0 };
+  try {
+    const c = await sql`
+      select status, count(*)::int as n from profile_change_requests group by status
+    `;
+    c.forEach((r) => { if (r.status in counts) counts[r.status] = Number(r.n) || 0; });
+  } catch (e) {}
+
+  return ok(res, { scope, requests: await shapeChangeRows(sql, rows, pkey), counts });
+}
+
+/** POST ?action=approve-change { id } */
+async function approveChange(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const sql = getSql();
+  const rows = await sql`select * from profile_change_requests where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '这条申请已经不存在了');
+  const r = rows[0];
+  if (r.status !== 'pending') return fail(res, 409, '这条申请已经处理过了（' + r.status + '）');
+
+  let arr = r.changes;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { arr = []; } }
+
+  const sets = [];
+  const params = [];
+  for (const c of (Array.isArray(arr) ? arr : [])) {
+    const chk = isSafeFieldFormat(c.field);
+    if (!chk.ok) continue;
+    params.push(c.after);            /* 已是密文，原样写回 */
+    sets.push(chk.field + ' = $' + params.length);
+  }
+  if (!sets.length) return fail(res, 400, '这条申请里没有可写入的字段');
+
+  /* 联系方式审核通过 → 置 approved，之后前台才展示 */
+  const isContact = r.kind === 'contact';
+  let prevStatus = '';
+  if (isContact) {
+    const cur = await sql`select contact_status from profiles where id = ${r.profile_id} limit 1`;
+    prevStatus = (cur[0] && cur[0].contact_status) || 'none';
+    sets.push("contact_status = 'approved'");
+    sets.push('reject_reason = null');
+  }
+
+  /* ⚠️ 这里 deliberately 不改 updated_at 之外的任何系统列：
+     姓名/学号的盲索引不在 self-edit 允许范围内，所以不需要重算。 */
+  params.push(r.profile_id);
+  await sql(
+    'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
+    params
+  );
+
+  await sql`
+    update profile_change_requests
+       set status = 'approved', decided_by = ${me.id}, decided_at = now(),
+           applied_at = now(), note = '', meta = ${JSON.stringify({ prevStatus })}::jsonb
+     where id = ${id}
+  `;
+  await audit(me.id, 'profile.change_approve', 'profile', String(r.profile_id), 'request:' + id);
+
+  return ok(res, { message: '已通过，修改立即生效', requestId: id });
+}
+
+/** POST ?action=reject-change { id, reason } */
+async function rejectChange(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const reason = cText(b.reason, 200) || '管理员驳回';
+  const sql = getSql();
+  const rows = await sql`select profile_id, status from profile_change_requests where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '这条申请已经不存在了');
+  if (rows[0].status !== 'pending') return fail(res, 409, '这条申请已经处理过了');
+
+  /* 驳回只影响申请本身，库里的值一个字节都不动 */
+  if (rows[0].profile_id) {
+    try {
+      await sql`update profiles set reject_reason = ${reason} where id = ${rows[0].profile_id}`;
+    } catch (e) {}
+  }
+  await sql`
+    update profile_change_requests
+       set status = 'rejected', decided_by = ${me.id}, decided_at = now(), note = ${reason}
+     where id = ${id}
+  `;
+  await audit(me.id, 'profile.change_reject', 'profile', String(rows[0].profile_id), 'request:' + id);
+  return ok(res, { message: '已驳回，原内容保持不变', requestId: id });
+}
+
+/** POST ?action=revert-change { id } —— 7 天内撤销已通过的审批 */
+async function revertChange(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const sql = getSql();
+  const rows = await sql`select * from profile_change_requests where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '这条记录已经不存在了');
+  const r = rows[0];
+  if (r.status !== 'approved') return fail(res, 409, '只有「已通过」的记录可以撤销');
+  const decided = r.decided_at ? new Date(r.decided_at).getTime() : 0;
+  if (!decided || Date.now() - decided > CHANGE_REVERT_DAYS * 86400000) {
+    return fail(res, 410, '已超过 ' + CHANGE_REVERT_DAYS + ' 天，不能再撤销');
+  }
+
+  let arr = r.changes;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { arr = []; } }
+
+  const sets = [];
+  const params = [];
+  for (const c of (Array.isArray(arr) ? arr : [])) {
+    const chk = isSafeFieldFormat(c.field);
+    if (!chk.ok) continue;
+    params.push(c.before);           /* 写回原值（密文） */
+    sets.push(chk.field + ' = $' + params.length);
+  }
+  if (!sets.length) return fail(res, 400, '这条记录里没有可还原的字段');
+
+  if (r.kind === 'contact') {
+    let meta = r.meta;
+    if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch (e) { meta = {}; } }
+    const prev = (meta && meta.prevStatus) || 'approved';
+    /* 原来是什么状态就还原成什么状态；参数化避免拼接 */
+    params.push(prev);
+    sets.push('contact_status = $' + params.length);
+  }
+
+  params.push(r.profile_id);
+  await sql(
+    'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
+    params
+  );
+
+  await sql`
+    update profile_change_requests
+       set status = 'reverted', revoked_at = now()
+     where id = ${id}
+  `;
+  await audit(me.id, 'profile.change_revert', 'profile', String(r.profile_id), 'request:' + id);
+
+  return ok(res, { message: '已撤销，内容恢复到修改前', requestId: id });
+}
+
 async function profileRequests(req, res) {
   const sql = getSql();
   const raw = await sql`
