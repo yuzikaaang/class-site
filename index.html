@@ -306,6 +306,11 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .btn-secondary:hover{background:#ede3d9}
 .btn-green{background:#0a7d42}
 .btn-green:hover{background:#09703c}
+/* v3.8.3（站主）：「成绩分享」里三个按钮太大，手机上得左右滑才看得全。
+   根因是 .btn-sm 一直没定义过 —— 用的还是 .btn 的 10px 24px 内边距 + 130px 最小宽，
+   三个叠一行必然超宽。这里补上真正的小号按钮：不设最小宽、内边距收紧、字再小一档。 */
+.btn-sm{min-width:0;padding:5px 12px;border-radius:9px;font-size:.74rem;font-weight:700;line-height:1.5;white-space:nowrap;box-shadow:none}
+.btn-sm:hover{transform:none;filter:brightness(.97)}
 .wechat-hint{font-size:.75rem;color:#af410f;background:#fff7ed;border-radius:999px;padding:4px 12px}
 .gate-box{background:#f6f1ec;border-radius:16px;padding:14px;margin-top:12px;text-align:left}
 .gate-q{color:#af410f;font-weight:700;font-size:.95rem;margin:0 0 10px !important}
@@ -1385,7 +1390,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .dark .acct-msg.ok{color:#4ade80}
 .dark .acct-msg.warn{color:#ffb27a}
 .acct-hint{font-size:.7rem;color:#57493d;line-height:1.6;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(120,53,15,.13)}
-.dark .acct-hint{color:#c9b8aa}
+.dark .acct-hint{color:#d8cbc0}
 /* 2026-10-16 v2.10.0：初始密码提示条（建议制改密）。
    登录时不再强制改密，但个人中心常驻一条琥珀色提示，用户随时能去改。
    配色沿用站点琥珀体系（#af410f 系），暗色提亮到 #ffb27a 保 WCAG。 */
@@ -1470,7 +1475,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .dark .offline-bar.off-ok{background:#0a6b39}
 @media (prefers-reduced-motion:reduce){.off-spin{animation:none}}
 /* 「仅自己可见」勾选项（2026-10-08）：紧贴对应输入框，做成轻量小字行 */
-.acct-priv{display:flex;align-items:center;gap:6px;font-size:.72rem;color:#8a7a6d;
+.acct-priv{display:flex;align-items:center;gap:6px;font-size:.72rem;color:#6b5a4b;
   margin:-6px 0 10px;padding-left:2px;cursor:pointer;user-select:none}
 .acct-priv input{width:auto;margin:0;flex:0 0 auto;cursor:pointer;accent-color:#c2410c}
 .acct-user{display:flex;align-items:center;gap:12px;padding:13px;background:rgba(120,53,15,.045);border-radius:14px;margin-bottom:15px}
@@ -1480,17 +1485,23 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .acct-urole.user{background:#7c6f63}
 /* 头衔标签（班长/课代表等），与「管理员/成员」角色徽章区分开用蓝色 */
 .acct-urole.title-tag{background:#0369a1;margin-right:4px}
-.acct-usub{font-size:.7rem;color:#8a7a6d;margin-top:3px}
+.acct-usub{font-size:.7rem;color:#6b5a4b;margin-top:3px}
 /* v3.5.21：我的资料明细表 —— 之前把字段值塞进 .acct-sw .s（灰色说明文字），
    浅色下 #a99a8d、暗色下几乎糊成一团，站主反馈「字色看不清」。
    现在值走正文色 var(--fg)，标签走 var(--fg-2)，每行右侧带复制。 */
 /* ===== 我的资料（v3.8.0 起改成「一行一个输入框」，和微信/QQ 那块同款） ===== */
 .mp-grid{display:flex;flex-direction:column;gap:11px;margin:10px 0 2px}
 .mp-field{display:flex;flex-direction:column;gap:5px}
-.mp-lb{display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;color:var(--fg-2)}
-.mp-pendtag{font-size:.64rem;font-weight:700;color:#a05a1f;background:#fff5e6;border:1px solid #f0d6b3;border-radius:99px;padding:1px 7px}
-.mp-privtag{font-size:.64rem;font-weight:700;color:var(--fg-3);background:var(--bg-3);border:1px solid var(--tint-2);border-radius:99px;padding:1px 7px}
+.mp-lb{display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;color:#4a3f36}
+/* v3.8.3（站主）：「在我的资料里面，那还是有些字看不清楚」。
+   弹窗是玻璃底（半透明白叠在页面背景上，实测叠出 rgb(194,193,193) 左右的中灰），
+   var(--fg-3)=#6e635a、旧说明文字 #a99a8d 压上去只有 2.9～4.2，确实糊。
+   这里全部按 WCAG 4.5+ 重新取色，只作用在「我的资料」这几个类上，不动全局。 */
+.mp-pendtag{font-size:.64rem;font-weight:700;color:#8f4409;background:#ffefdc;border:1px solid #ecc9a6;border-radius:99px;padding:1px 7px}
+.mp-privtag{font-size:.64rem;font-weight:700;color:#5b4c40;background:#f0e2d4;border:1px solid #dcc6b2;border-radius:99px;padding:1px 7px}
+.dark .mp-lb{color:#efe6de}
 .dark .mp-pendtag{color:#fbbf24;background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.3)}
+.dark .mp-privtag{color:#e8ddd3;background:#332d29;border-color:#4a423c}
 .mp-iw{display:flex;align-items:center;gap:8px;min-width:0}
 /* 关键：min-width:0 + flex:1 —— 长号码（身份证、考籍号）不会再被挤成一行一个字 */
 .mp-in{flex:1 1 auto;min-width:0;width:100%;height:40px;box-sizing:border-box;
@@ -1498,8 +1509,8 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   padding:0 12px;font-size:.88rem;font-family:inherit;line-height:40px;
   text-overflow:ellipsis;transition:border-color .15s,background .15s}
 .mp-in:focus{outline:none;border-color:var(--btn-b);background:var(--bg-2)}
-.mp-in.mp-ro{background:var(--bg-3);color:var(--fg-3);cursor:default;border-style:dashed}
-.dark .mp-in.mp-ro{background:#262220;color:#b9ada2;border-color:#3f3833}
+.mp-in.mp-ro{background:#f4e9de;color:#4f4339;cursor:default;border-style:dashed;border-color:#dcc7b4}
+.dark .mp-in.mp-ro{background:#262220;color:#ded4cb;border-color:#4a423c}
 .mp-in.mp-changed{border-color:var(--btn-a);background:#fff8f1}
 .dark .mp-in.mp-changed{background:rgba(251,146,60,.10)}
 .mp-cp{flex:none;height:40px;padding:0 13px;border-radius:10px;border:1px solid var(--tint-2);
@@ -1507,19 +1518,26 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   cursor:pointer;transition:background .15s,color .15s}
 .mp-cp:hover{background:var(--tint);color:var(--accent-ink)}
 .mp-cp:active{transform:scale(.97)}
-.mp-pend{margin-top:1px;font-size:.72rem;color:var(--accent-ink);line-height:1.5}
-.mp-edittip{margin-top:8px;font-size:.72rem;color:var(--fg-3);line-height:1.6}
-.mp-empty{margin:8px 0 0;font-size:.78rem;color:var(--fg-2)}
+.mp-pend{margin-top:1px;font-size:.72rem;color:#9a3f06;line-height:1.5}
+.mp-edittip{margin-top:8px;font-size:.72rem;color:#57493d;line-height:1.6}
+.dark .mp-pend{color:#fbbf24}
+.dark .mp-edittip{color:#d5cbc2}
+.mp-empty{margin:8px 0 0;font-size:.78rem;color:#57493d}
+.dark .mp-empty{color:#d5cbc2}
+/* 复制按钮：原来 color:var(--fg-2) 压在浅底上偏淡，同样加深一档 */
+.mp-cp{color:#4a3f36}
+.mp-cp:hover{color:var(--accent-ink)}
+.dark .mp-cp{color:#efe6de}
 .dark .acct-user{background:rgba(255,255,255,.05)}
 .dark .acct-uname{color:#f0e6dc}
 .acct-row{display:flex;gap:9px;margin-top:11px}
 .acct-row .acct-btn{margin:0}
 .acct-sw{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0}
 .acct-sw .t{font-size:.82rem;font-weight:700;color:#3f342c}
-.acct-sw .s{font-size:.69rem;color:#a99a8d;margin-top:3px;line-height:1.5;display:block;font-weight:400}
+.acct-sw .s{font-size:.69rem;color:#6b5a4b;margin-top:3px;line-height:1.5;display:block;font-weight:400}
 .dark .acct-sw .t{color:#f0e6dc}
 /* v3.5.21：暗色下说明文字原来仍是暖灰 #a99a8d，落在近黑底上对比不足 */
-.dark .acct-sw .s{color:#c8bbae}
+.dark .acct-sw .s{color:#d8cbc0}
 .dark .acct-usub{color:#b8aa9d}
 .dark .mp-lrow{background:#2e2926;border-color:#3f3833}
 
@@ -2387,10 +2405,22 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .sc-sh-url{display:flex;gap:8px;margin-top:9px}
 .sc-sh-url input{flex:1;min-width:0;padding:9px 11px;border:1.5px solid #e2d5c8;border-radius:10px;
   font-size:.8rem;font-family:ui-monospace,Menlo,monospace;color:#57534e;background:#fff}
-.sc-sh-list{display:flex;flex-direction:column;gap:7px}
-.sc-sh-item{display:flex;align-items:center;gap:9px;font-size:.8rem;padding:7px 10px;
-  border:1px solid #f0e7de;border-radius:10px;background:#fff}
-.sc-sh-item b{flex:1;color:#57534e}
+/* v3.8.3（站主）：「三个按钮太大了，手机端我放不下，还要左右滑才能看完整」
+   原来是一条横排：[状态][标题][看过N次][预览][编辑][撤销] —— 手机上必然溢出。
+   改成两行：上行是状态 + 标题（超长省略）+ 次数，下行是按钮组右对齐；
+   窄屏下按钮等分铺满，不再出现横向滚动。 */
+.sc-sh-list{display:flex;flex-direction:column;gap:8px}
+.sc-sh-item{display:flex;flex-direction:column;gap:7px;font-size:.8rem;padding:9px 11px;
+  border:1px solid #f0e7de;border-radius:11px;background:#fff;min-width:0}
+.sc-sh-top{display:flex;align-items:center;gap:8px;min-width:0}
+.sc-sh-top b{flex:1 1 auto;min-width:0;color:#57534e;font-weight:700;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-sh-btns{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.sc-sh-btns .btn{flex:0 0 auto}
+@media screen and (max-width:560px){
+  .sc-sh-btns{flex-wrap:nowrap}
+  .sc-sh-btns .btn{flex:1 1 0;min-width:0;padding:6px 4px;font-size:.72rem}
+}
 .sc-sh-state{font-size:.68rem;font-weight:800;color:#7a6a5c;background:#f5efe8;border-radius:999px;padding:2px 8px}
 .sc-sh-state.on{color:#fff;background:#0b7a43}
 /* ===== 站主侧块（v2.8.2） ===== */
@@ -4297,19 +4327,28 @@ function stripEmojiInOptions(root){
    三段式  主版本 . 小更新 . 修复            （v3.6.1 起）
      第 1 段 大版本：1 = 纯前端；2 = 含后端 + 数据库；3 = 数据架构与权限体系
        ⚠️ **这个数字只有站主说了才动**，AI 一律不许自己改。
-     第 2 段 小更新：每加一批功能 +1（AI 负责）
-     第 3 段 修复：同一批功能里的修修补补 +1（AI 负责）
-     例：3.6.0 = 3 大版本下第 6 批功能；3.6.1 = 这批功能里的第 1 个修复。
+     第 2 段 小更新：**一天只加一次**（当天第一批需求 +1；同一天后面的都进第 3 段）
+     第 3 段 修复：同一天内的第 2、3… 次更新依次 +1（AI 负责）
+     例：3.8.2 = 3 大版本下第 8 批功能里的第 2 次更新；
+         3.8.3 = 同一天的下午又改了一批，版本仍是 3.8，只把末位加一。
 
-   📢 公告规则（站主 2026-10-20 明确）：
-     只有**前两位**变了才发公告（如 3.6 → 3.7，标题写「v3.7 更新！内容如下：」）；
-     只改最后一位（修修补补）**不发**公告，避免天天给同学推「修了个小问题」。
-     部署门禁 scripts/predeploy.mjs 按这条规则校验：前两位变了没发公告就不许部署。
+   📢 版本节奏与公告规则（站主 2026-10-20 第二次明确，取代 3.7.5 的旧规则）：
+     ① 一天只算一个版本（第二段）。同一天上午、下午各提一批需求，
+        第二段**只加一次**，后面的改动都放到第三段：
+        上午 3.8.2 → 下午 3.8.3 → 晚上 3.8.4。
+     ② 公告标题只写前两段：「v3.8 更新！内容如下：」，一个版本批次**共用一条公告**。
+     ③ 公告内容可以一直改、一直往里加。3.8.1 改了什么、3.8.2 又改了什么，
+        全都追加进同一条 v3.8 公告里，不单开新公告（否则一天好几条，太多）。
+     ④ 只有第二段变了（3.8 → 3.9，也就是新的一天/新的一批）才新起一条公告。
+     ⑤ 公告是给同学看的：不写后台、管理端、数据库、缓存、部署这类内部事项；
+        语言要官方、简洁，按【分类】分好。
+     部署门禁 scripts/predeploy.mjs 把这些全部做成了硬检查：
+     云端版本记录没这一条、公告没追加本次内容、公告里出现内部词，任一不过都不许部署。
 
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.8.2';
+var SITE_VERSION = '3.8.3';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -9756,7 +9795,7 @@ function myProfileHtml(){
           + '</div>'
           + (pend
               ? '<div class="mp-pend">提交的新值：' + esc(String(pend.after || '（清空）'))
-                + '　<span class="muted">管理员确认后生效</span></div>'
+                + '　<span class="muted">站主确认后生效</span></div>'
               : '')
           + '</div>';
       }).join('') + '</div>'
@@ -19062,13 +19101,19 @@ function scShareList(){
           /* v3.8.0：有备注就把它当标题（自己认得出是哪条），范围退成次要信息 */
           var title = x.note ? x.note : scopeTxt;
           return '<div class="sc-sh-item">'
-            + '<span class="sc-sh-state' + (x.alive ? ' on' : '') + '">' + state + '</span>'
-            + '<b>' + esc(title) + '</b>'
-            + (x.note ? '<span class="sc-dim">' + esc(scopeTxt) + '</span>' : '')
-            + '<span class="sc-dim">看过 ' + x.views + ' 次' + (x.maxViews ? ' / ' + x.maxViews : '') + '</span>'
-            + (x.alive ? '<button class="btn btn-sm btn-secondary" data-view="' + x.id + '" data-token="' + esc(x.token || '') + '">预览</button>' : '')
-            + (x.alive ? '<button class="btn btn-sm btn-secondary" data-edit="' + x.id + '">编辑</button>' : '')
-            + (x.alive ? '<button class="btn btn-sm btn-secondary" data-rev="' + x.id + '">撤销</button>' : '')
+            + '<div class="sc-sh-top">'
+            +   '<span class="sc-sh-state' + (x.alive ? ' on' : '') + '">' + state + '</span>'
+            +   '<b title="' + esc(title) + '">' + esc(title) + '</b>'
+            +   (x.note ? '<span class="sc-dim">' + esc(scopeTxt) + '</span>' : '')
+            +   '<span class="sc-dim">看过 ' + x.views + ' 次' + (x.maxViews ? ' / ' + x.maxViews : '') + '</span>'
+            + '</div>'
+            + (x.alive
+                ? '<div class="sc-sh-btns">'
+                  + '<button class="btn btn-sm btn-secondary" data-view="' + x.id + '" data-token="' + esc(x.token || '') + '">预览</button>'
+                  + '<button class="btn btn-sm btn-secondary" data-edit="' + x.id + '">编辑</button>'
+                  + '<button class="btn btn-sm btn-secondary" data-rev="' + x.id + '">撤销</button>'
+                  + '</div>'
+                : '')
             + '</div>';
         }).join('') + '</div>';
     /* v3.5.12 #9：预览 —— 就是真的打开那条分享链接，站内全屏弹窗打开，
