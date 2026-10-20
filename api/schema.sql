@@ -599,6 +599,7 @@ create table if not exists share_links (
   max_views  int,                                         -- 最多被打开几次
   views      int         not null default 0,
   revoked    boolean     not null default false,           -- 撤销开关
+  note       text        default '',                       -- v3.8.0 备注（自己认链接用）
   created_at timestamptz not null default now()
 );
 create index if not exists share_links_owner_idx on share_links (owner_id, created_at desc);
