@@ -4454,7 +4454,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.8.5';
+var SITE_VERSION = '3.8.6';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13081,6 +13081,15 @@ function cardGuestAllowed(ref){
 }
 
 /* 拦截提示：明确告诉对方「为什么点不动、怎么才能看」 */
+/* 从分享链接（?t=）或播放页（?play=）进来的访客：不弹开屏公告、不推销登录。
+   之前只判断了 t=，结果扫码播放时会被「登录一下」整块盖住，视频根本没法看。 */
+function isShareEntry(){
+  try{
+    var sp = new URLSearchParams(location.search);
+    return !!(sp.get('t') || sp.get('play'));
+  }catch(e){ return false; }
+}
+
 function guestDeny(){
   if(document.getElementById('guestMask')) return;
   var d = document.createElement('div');
@@ -13926,8 +13935,9 @@ function pcLoadMyProfile(){
 function maybeShowLoginGuide(){
   try{
     if(isLoggedIn()) return;
-    /* v3.8.4：从分享链接（?t=）进来的访客是来看某个板块的，别一进门就推销登录 */
-    if(new URLSearchParams(location.search).get('t')) return;
+    /* v3.8.4：从分享链接（?t=）进来的访客是来看某个板块的，别一进门就推销登录
+       v3.8.6：?play= 播放页同理，否则扫码后被登录弹窗整个盖住 */
+    if(isShareEntry()) return;
     if(localStorage.getItem('cls_login_guide_v1') === '1') return;
     if(!apiReady()) return;
   }catch(e){ return; }
@@ -15103,7 +15113,7 @@ function popBubbleSync(){
 function popAutoPop(){
   /* v3.8.4（站主）：「用户打开直接跳转到对应位置」—— 分享链接进来先看到内容，
      不要先糊两个开屏弹窗把板块盖住。公告在首页仍然能看到。 */
-  try{ if(new URLSearchParams(location.search).get('t')) return; }catch(e){}
+  if(typeof isShareEntry === 'function' && isShareEntry()) return;
   var list = popGetList().filter(function(p){ return p.scope === 'boot'; });
   var idx = 0;
   (function next(){
