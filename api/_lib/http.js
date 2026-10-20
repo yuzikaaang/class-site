@@ -83,8 +83,11 @@ export async function ensureSchema(sql) {
               一点「一键加密存量」就 500（column "name_bidx" does not exist）。
               教训写在函数顶部注释里：「改 DDL 清单必须同步升 SCHEMA_VER」，
            这次两条都犯了，所以这里连 DDL 带版本号一起补。 */
-        try { await s`alter table profiles add column if not exists name_bidx text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists student_id_bidx text`; } catch (e) {}
+        try { await s`
+          alter table profiles
+            add column if not exists name_bidx       text,
+            add column if not exists student_id_bidx text
+        `; } catch (e) {}
         try { await s`create index if not exists profiles_name_bidx_idx on profiles (name_bidx)`; } catch (e) {}
         try { await s`create index if not exists profiles_sid_bidx_idx  on profiles (student_id_bidx)`; } catch (e) {}
         try { await s`alter table profiles drop constraint if exists profiles_student_id_key`; } catch (e) {}
@@ -189,12 +192,13 @@ export async function ensureSchema(sql) {
            列一直没建，listVotes 一 select v.proposer 就
            column "proposer" does not exist → 500。
            和 v3.5.2 盲索引、v3.5.4 可见档是同一类错误，第三次了。 */
-        try { await s`alter table class_votes add column if not exists proposer text not null default ''`; } catch (e) {}
+
         /* 🔴 v3.5.14 #9：投票票数配额与撤回次数。
            纪律（已踩三次坑）：升级路径 + 全新库清单 + schema.sql 三处必须同时改，
            并升 SCHEMA_VER —— 少一处就是线上 500。
            升级路径合并成 2 条 ALTER，避免撞 Workers 免费版 50 子请求上限。 */
         try { await s`alter table class_votes
+          add column if not exists proposer    text not null default '',
           add column if not exists max_choices smallint,
           add column if not exists min_choices smallint,
           add column if not exists retract_limit smallint not null default 1,
@@ -207,15 +211,23 @@ export async function ensureSchema(sql) {
            这些列只在「全新库全量清单」里补过，老库走到本分支就 return 了，一直没建。
            现在按纪律补进升级路径（每条都 if not exists，重复跑无害）。 */
         /* 实测线上还缺 role（老库更早的建表就没有这一列）：一起补 */
-        try { await s`alter table profiles add column if not exists role text not null default '学生'`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists politics text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists contact_status text not null default 'none'`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists title text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists exam_no text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists visibility_pref text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists field_vis text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists id_card text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists youth_league_no text`; } catch (e) {}
+        /* ⚠️ 子请求纪律：Workers 免费版每次调用最多 50 个子请求，Neon 每条 SQL
+           算一次。以前这里是 9 条单列 ALTER（9 次往返），加上前面累积的迁移
+           语句一共 53 条 —— v3.8.4 实测一旦超过 50，整条升级链在中途断掉、
+           版本章盖不上，于是每个请求都重跑一遍，接口开始 500。
+           现在合并成一条多列 ALTER（1 次往返），升级链稳定在 40 条左右。 */
+        try { await s`
+          alter table profiles
+            add column if not exists role            text not null default '学生',
+            add column if not exists politics        text,
+            add column if not exists contact_status  text not null default 'none',
+            add column if not exists title           text,
+            add column if not exists exam_no         text,
+            add column if not exists visibility_pref text,
+            add column if not exists field_vis       text,
+            add column if not exists id_card         text,
+            add column if not exists youth_league_no text
+        `; } catch (e) {}
         /* 🔴 v3.5.27：歌曲时长云端库（站主「一定要获取到歌曲时长并同步云端，省的每次都要加载」）。
            以前时长只存 localStorage → 换设备/清缓存全丢，每次开页面都要重新联网搜一遍。
            现在查到的写库，人工填的 source='manual' 优先级最高。
@@ -361,7 +373,6 @@ export async function ensureSchema(sql) {
             created_at   timestamptz not null default now(),
             last_view_at timestamptz
           )`;
-          await s`create index if not exists board_links_owner_idx on board_links (created_by, created_at desc)`;
           await s`create table if not exists board_link_views (
             id         bigserial   primary key,
             link_id    bigint      not null,
@@ -371,7 +382,6 @@ export async function ensureSchema(sql) {
             ua         text,
             created_at timestamptz not null default now()
           )`;
-          await s`create index if not exists blv_link_idx on board_link_views (link_id, created_at desc)`;
           await s`create table if not exists board_meta (
             id         int         primary key default 1,
             data       jsonb       not null default '{}'::jsonb,
