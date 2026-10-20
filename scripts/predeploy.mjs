@@ -102,9 +102,17 @@ if (!notes.some((n) => n && n.version === VER)) {
 }
 console.log('③ 云端版本记录已包含 ' + VER + '（共 ' + notes.length + ' 条）');
 
-/* ---------- ③b 云端公告已发布（站主 v3.6.4 新规） ----------
-   「每次小更新或主版本更新时添加公告，新增限制，没有更新公告将无法推送更新部署。
-     公告格式 ⅴ主版本.小更新 更新！内容如下：」 */
+/* ---------- ③b 云端公告已发布（站主 v3.6.4 立规，v3.7.5 细化） ----------
+   「每次小更新或主版本更新时添加公告，没有更新公告就无法推送更新部署。
+     公告格式 ⅴ主版本.小更新 更新！内容如下：」
+   ⚠️ v3.7.5 站主补充：「公告的发布只有前两个数字改了才发，最后一个数字改了是不发的」
+
+   也就是：
+     3.6 → 3.7（小更新）要发公告，标题写「v3.7 更新！」
+     3.7.0 → 3.7.1（修修补补）**不发**公告
+   所以这里只取前两段去匹配，并且刻意排除「v3.7.1」这类三段号
+   （断言后面不能紧跟数字或点），避免拿补丁号的旧公告顶替。 */
+const VER2 = VER.split('.').slice(0, 2).join('.');   /* 3.7.4 → 3.7 */
 let announcements = [];
 try {
   const r = await fetch(API + '/api/content', { headers: { Authorization: 'Bearer ' + token } });
@@ -115,15 +123,16 @@ try {
 } catch (e) {
   die('读取云端公告失败：' + (e.message || e));
 }
-const verRe = new RegExp('(^|[^0-9.])' + VER.replace(/\./g, '\\.') + '(?![0-9])');
-const hit = announcements.find((a) => a && verRe.test(String(a.text || '')));
+const ver2Re = new RegExp('v' + VER2.replace(/\./g, '\\.') + '(?![0-9.])');
+const hit = announcements.find((a) => a && ver2Re.test(String(a.text || '')));
 if (!hit) {
-  die('云端公告里没有 ' + VER + ' 这一条。'
-    + '\n   站主规矩：每次更新都要发公告，格式「v' + VER + ' 更新！」，没发就不许部署。'
-    + '\n   公告只写给同学看：分类清楚、简短，不要写后台/隐私内容。'
+  die('云端公告里没有「v' + VER2 + '」这一条。'
+    + '\n   站主规矩：主版本 / 小更新（前两位）变化时必须发公告，格式「v' + VER2 + ' 更新！内容如下：」，'
+    + '没发就不许部署；只改最后一位（修修补补）不用发。'
+    + '\n   公告只写给同学看：按类别分好、简短，不要写后台 / 隐私内容。'
     + '\n   最新公告：' + String((announcements[0] && announcements[0].text) || '空').slice(0, 60));
 }
-console.log('③b 云端公告已发布 ' + VER + '（' + String(hit.text).slice(0, 40) + '…）');
+console.log('③b 云端公告已发布 v' + VER2 + '（' + String(hit.text).slice(0, 40).replace(/\n/g, ' ') + '…）');
 
 /* ---------- ④ 部署前备份 ---------- */
 if (DRY) {
