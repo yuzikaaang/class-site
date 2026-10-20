@@ -778,14 +778,19 @@ async function shareCreate(req, res) {
 
   const token = shareToken();
 
+  /* v3.8.0（站主）：「有时候建了很多个分享链接，就不知道这个链接指向哪里」
+     —— 建的时候可以写一句备注，列表里直接显示，一眼认出来。 */
+  const note = String(b.note == null ? '' : b.note).trim().slice(0, 40);
+
   const ins = await sql`
-    insert into share_links (token, scope, owner_id, target_names, exam_ids, sections, expires_at, max_views)
+    insert into share_links (token, scope, owner_id, target_names, exam_ids, sections, expires_at, max_views, note)
     values (${token}, ${scope}, ${u.id},
             ${names.length ? JSON.stringify(names) : null}::jsonb,
             ${examIds.length ? examIds : null},
             ${JSON.stringify(sections)}::jsonb,
             ${days > 0 ? new Date(Date.now() + days * 86400000) : null},
-            ${maxViews})
+            ${maxViews},
+            ${note})
     returning id`;
 
   await audit(u.id, 'score-share-create', 'share_link', Number(ins[0].id), scope + '/' + days + 'd');
@@ -796,6 +801,7 @@ async function shareCreate(req, res) {
     url: '/share.html?t=' + token,
     scope,
     sections,
+    note,
     days,
     expiresAt: days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null,
   });
@@ -873,6 +879,10 @@ async function shareUpdate(req, res) {
     expiresAt = days > 0 ? new Date(Date.now() + days * 86400000) : null;
   }
 
+  /* v3.8.0：备注。只有显式传了 note 才改，避免「编辑范围」把备注清空 */
+  const hasNote = (b.note !== undefined);
+  const note = hasNote ? String(b.note == null ? '' : b.note).trim().slice(0, 40) : (old.note || '');
+
   await sql`
     update share_links
        set scope = ${scope},
@@ -880,7 +890,8 @@ async function shareUpdate(req, res) {
            exam_ids = ${examIds.length ? examIds : null},
            sections = ${JSON.stringify(sections)}::jsonb,
            max_views = ${maxViews},
-           expires_at = ${keepExpiry ? old.expires_at : expiresAt}
+           expires_at = ${keepExpiry ? old.expires_at : expiresAt},
+           note = ${note}
      where id = ${id}`;
 
   await audit(u.id, 'score-share-update', 'share_link', id, scope);
@@ -952,6 +963,7 @@ function shareShape(r) {
     scope: r.scope,
     sections,
     ownerName: r.owner_name || '',
+    note: r.note || '',
     names: jsonCol(r.target_names) || [],
     examIds: Array.isArray(r.exam_ids) ? r.exam_ids.map(Number) : [],
     createdAt: r.created_at ? String(r.created_at) : null,
@@ -1066,8 +1078,13 @@ async function shareGet(req, res) {
     }));
   }
 
+  /* v3.8.0：备注是建链接的人自己看的（可能是「给爸妈看的」这类话），
+     不能跟着公开链接发给拿到链接的人 —— 这里剔掉。 */
+  const pubShare = shareShape(s0);
+  delete pubShare.note;
+
   ok(res, {
-    share: shareShape(s0),
+    share: pubShare,
     exams: examList,
     rows: out,
     stats: needStats ? stats : null,
