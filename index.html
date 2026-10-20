@@ -4309,7 +4309,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.8.0';
+var SITE_VERSION = '3.8.1';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -8146,6 +8146,12 @@ if(typeof MutationObserver === 'function'){
         if(t && t.nodeType === 1 && t.matches && t.matches(MK_SEL)){ mkScanAll(80); return; }
       }
     }).observe(document.body, { attributes:true, attributeFilter:['class','style'], subtree:true });
+
+    /* ⚠️ html 上的 .dark 不在 body 的子树里 —— 只盯 body 会漏掉「切昼夜」。
+       漏了会怎样：切到暗色后，之前按亮底写进内联的深色字（内联优先级高于 CSS）
+       就留在原地，变成深字压深底，整段看不见。 */
+    new MutationObserver(function(){ mkScanAll(120); })
+      .observe(document.documentElement, { attributes:true, attributeFilter:['class'] });
   }catch(e){}
 }
 window.addEventListener('resize', function(){ mkScanAll(200); }, {passive:true});
