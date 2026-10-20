@@ -482,7 +482,7 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .allboard-mask{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.6);z-index:9997;padding:20px;overscroll-behavior:contain}
 /* v3.5.31：同上，显式居中（盒子自身还有 margin:auto 兜底，内容超高时仍可滚动到顶） */
 .allboard-mask.show{display:flex;align-items:center;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch}
-.allboard-box{background:#fffdfb;border-radius:20px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);display:flex;flex-direction:column;margin:auto}
+.allboard-box{color:#2b2521;background:#fffdfb;border-radius:20px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);display:flex;flex-direction:column;margin:auto}
 .allboard-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#9a3412,#af410f);color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
 .allboard-head button{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:999px;padding:4px 12px;font-size:.75rem;cursor:pointer}
 .allboard-list{overflow-y:auto;list-style:none;margin:0;padding:0;max-height:60vh}
@@ -1020,7 +1020,10 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 /* 班级签弹窗 + 彩带彩蛋 */
 .sign-mask{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9990;padding:20px}
 .sign-mask.show{display:flex}
-.sign-box{background:linear-gradient(160deg,#262220,#2e2926);border:1px solid rgba(255,255,255,.12);border-radius:18px;max-width:340px;width:100%;padding:22px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+/* v3.7.6：这块底色是写死的深色渐变，标题等元素原本会继承「页面字色」——
+   亮色主题下就是深字压深底，看不清。这里先把继承色定死（JS 还会按实际底色再校准）。 */
+.sign-box{background:linear-gradient(160deg,#262220,#2e2926);border:1px solid rgba(255,255,255,.12);border-radius:18px;max-width:340px;width:100%;padding:22px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5);color:#f3ebe3}
+.sign-box h3{color:#fff}
 .sign-box h3{margin:0 0 6px;font-size:1.125rem}
 .sign-tag{display:inline-block;font-size:0.75rem;padding:3px 10px;border-radius:999px;margin-bottom:12px}
 .sign-tag.good{background:rgba(70,224,200,.18);color:#7fb8ab}
@@ -1042,7 +1045,7 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .dark .link-note{color:#fdba74}
 .confetti-box p{font-size:0.9375rem;line-height:1.7;margin:0 0 16px}
 #confettiCanvas{position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9992}
-.qr-box{background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.qr-box{color:#2b2521;background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .qr-head{display:flex;justify-content:center;align-items:center;margin-bottom:12px}
 .qr-head h3{color:#2f7355;font-size:1rem}
 .dark .qr-head h3{color:#7fb8ab}
@@ -4288,7 +4291,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.7.5';
+var SITE_VERSION = '3.7.6';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -7334,6 +7337,8 @@ function applyBg(){
     ? 'rgba(20,18,16,' + (0.32 + a * 0.55).toFixed(3) + ')'
     : 'rgba(255,251,247,' + (0.30 + a * 0.55).toFixed(3) + ')';
   d.style.setProperty('--bg-veil', veil);
+  /* v3.7.6：换背景/换蒙层后，弹窗里的字要按新底色重算一遍 */
+  try{ if(typeof mkScanAll === 'function') mkScanAll(120); }catch(e){}
 }
 
 /* ---------- 背景可读性守护 ----------
@@ -7951,6 +7956,182 @@ if(typeof MutationObserver === 'function'){
     }).observe(document.body, { childList:true, subtree:true });
   }catch(e){}
 }
+
+/* ============================================================================
+ * v3.7.6（站主）：弹窗里的字色也要跟着背景走
+ * ----------------------------------------------------------------------------
+ * 站主原话：「所有的弹窗，比如个人信息、班级签等等凡是用到弹窗的地方，字色要求跟
+ *            页面是一样的，要实时地动态根据背景颜色去调整。因为我现在页面基本上
+ *            都看得清，但有一些字体颜色在弹窗里还是会看不到。」
+ *
+ * 为什么会看不见：页面里的字色靠主题变量 + .ink-auto 算过一遍，而弹窗是自己一块
+ * 独立的底色（有的写死深色渐变，如 .sign-box；有的是玻璃半透明压在自定义背景上）。
+ * 弹窗里没显式写 color 的元素会**继承页面字色** —— 深色底 + 深色字，就糊成一片。
+ *
+ * 做法（只改「确实看不清」的，不动设计）：
+ *   ① 对弹窗里每个「直接含文字」的元素，按 WCAG 算「字色 vs 实际底色」的对比度；
+ *      实际底色 = 从该元素往上逐层合成（含半透明层、渐变首色、自定义背景图的平均色）。
+ *   ② 对比度 ≥ 4.0 就原样保留（品牌色、强调色都不动）；< 4.0 才换成近黑/纯白里更亮的那支。
+ *   ③ 实时重算：弹窗打开/关闭、切换昼夜、换背景、转屏，都会重跑一次。
+ *      因为是「按当前实际颜色算」，改完自己也会再被校准（不会越改越乱）。
+ * ========================================================================= */
+var MK_SEL = '[id$="Mask"], [id$="mask"], .allboard-mask, .sign-mask, .confetti-mask, .qr-mask, .welcome-mask, .video-mask';
+var MK_MIN = 4.0;          /* 正文最低对比度；4.5 是 AA，这里留点余地，避免把次要文字全刷白/刷黑 */
+var MK_BG_AVG = null;      /* 自定义背景图的平均色，用于图片底色的估算 */
+
+/** 解析颜色并保留 alpha（clsParseColor 会丢掉透明度） */
+function mkParseA(c){
+  var s = String(c || '').trim().toLowerCase();
+  var m = /^rgba?\(([^)]+)\)$/.exec(s);
+  if(m){
+    var p = m[1].split(',').map(function(x){ return parseFloat(x); });
+    if(p.length >= 3 && p.every(function(x){ return isFinite(x); })){
+      return { rgb: [p[0], p[1], p[2]], a: (p.length > 3 ? Math.max(0, Math.min(1, p[3])) : 1) };
+    }
+    return null;
+  }
+  var rgb = clsParseColor(s);
+  return rgb ? { rgb: rgb, a: 1 } : null;
+}
+/** 半透明前景叠到底色上 */
+function mkMix(fg, bg, a){
+  a = (a == null ? 1 : Math.max(0, Math.min(1, a)));
+  return [
+    Math.round(fg[0] * a + bg[0] * (1 - a)),
+    Math.round(fg[1] * a + bg[1] * (1 - a)),
+    Math.round(fg[2] * a + bg[2] * (1 - a)),
+  ];
+}
+/** 元素实际底色：自下而上把每一层背景合成出来 */
+function mkEffectiveBg(el){
+  var layers = [];
+  var node = el;
+  while(node && node.nodeType === 1 && node !== document.documentElement){
+    var cs;
+    try{ cs = getComputedStyle(node); }catch(e){ break; }
+    var bi = cs.backgroundImage || '';
+    if(bi && bi !== 'none'){
+      if(/url\(/i.test(bi)){
+        /* 自定义背景图：用启动时算好的平均色（没算出来就跳过，靠下面的层兜底） */
+        if(MK_BG_AVG) layers.push({ rgb: MK_BG_AVG, a: 1 });
+      }else{
+        var mm = /rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}/.exec(bi);
+        if(mm){ var g = mkParseA(mm[0]); if(g) layers.push({ rgb: g.rgb, a: 0.92 }); }
+      }
+    }
+    var b = mkParseA(cs.backgroundColor);
+    if(b && b.a > 0.02) layers.push(b);
+    node = node.parentElement;
+  }
+  var base = mkParseA(getComputedStyle(document.documentElement).backgroundColor);
+  var bg = base ? base.rgb : [255, 251, 247];
+  for(var i = layers.length - 1; i >= 0; i--){
+    bg = mkMix(layers[i].rgb, bg, layers[i].a);
+  }
+  return bg;
+}
+/** 这个元素自己是不是「装文字的那一层」（避免给容器统一染色、把子元素的品牌色盖掉） */
+function mkHasText(el){
+  for(var i = 0; i < el.childNodes.length; i++){
+    var n = el.childNodes[i];
+    if(n.nodeType === 3 && String(n.textContent || '').trim()) return true;
+  }
+  return false;
+}
+/** 核心：扫一个弹窗，把看不清的字改到能看清 */
+function mkFix(root){
+  if(!root || !root.querySelectorAll) return 0;
+  var els = root.querySelectorAll('*');
+  var fixed = 0;
+  for(var i = 0; i < els.length; i++){
+    var el = els[i];
+    if(el.nodeType !== 1) continue;
+    var isField = /^(INPUT|TEXTAREA|SELECT|BUTTON|OPTION)$/.test(el.tagName);
+    if(!mkHasText(el) && !isField) continue;
+    var cs;
+    try{ cs = getComputedStyle(el); }catch(e){ continue; }
+    if(cs.visibility === 'hidden' || cs.display === 'none') continue;
+    if(cs.opacity === '0') continue;
+
+    var fg = mkParseA(cs.color);
+    if(!fg) continue;
+    var bg = mkEffectiveBg(el);
+    var fgOn = mkMix(fg.rgb, bg, fg.a);
+    if(clsContrast(fgOn, bg) >= MK_MIN) continue;      /* 已经看得清 → 一个字都不动 */
+
+    var cDark  = clsContrast(CLS_INK_RGB_DARK, bg);
+    var cLight = clsContrast(CLS_INK_RGB_LIGHT, bg);
+    el.style.color = (cDark >= cLight) ? CLS_INK_DARK : CLS_INK_LIGHT;
+    fixed++;
+  }
+  return fixed;
+}
+/** 当前可见的弹窗根节点 */
+function mkVisibleRoots(){
+  var out = [];
+  var list = document.querySelectorAll(MK_SEL);
+  for(var i = 0; i < list.length; i++){
+    var el = list[i];
+    var cs;
+    try{ cs = getComputedStyle(el); }catch(e){ continue; }
+    if(cs.display === 'none' || cs.visibility === 'hidden') continue;
+    if(parseFloat(cs.opacity || '1') < 0.05) continue;
+    /* 侧边栏遮罩没有文字，跳过省点力气 */
+    if(el.classList.contains('sidebar-mask')) continue;
+    out.push(el);
+  }
+  return out;
+}
+var __mkTimer = null;
+function mkScanAll(delay){
+  if(__mkTimer) clearTimeout(__mkTimer);
+  __mkTimer = setTimeout(function(){
+    __mkTimer = null;
+    var n = 0;
+    try{
+      var roots = mkVisibleRoots();
+      for(var i = 0; i < roots.length; i++) n += mkFix(roots[i]);
+    }catch(e){}
+    return n;
+  }, delay == null ? 60 : delay);
+}
+
+/* 自定义背景图 → 平均色（只在本地是 dataURL 时取样，跨域图会污染 canvas 就不碰） */
+function mkSampleBg(){
+  try{
+    var src = (typeof getBgImg === 'function') ? getBgImg() : '';
+    if(!src || src.indexOf('data:') !== 0) return;
+    var img = new Image();
+    img.onload = function(){
+      try{
+        var cv = document.createElement('canvas');
+        cv.width = cv.height = 24;
+        var g = cv.getContext('2d');
+        g.drawImage(img, 0, 0, 24, 24);
+        var d = g.getImageData(0, 0, 24, 24).data;
+        var r = 0, gr = 0, b = 0, n = 0;
+        for(var i = 0; i < d.length; i += 4){ r += d[i]; gr += d[i+1]; b += d[i+2]; n++; }
+        if(n) MK_BG_AVG = [Math.round(r/n), Math.round(gr/n), Math.round(b/n)];
+        mkScanAll(0);
+      }catch(e){}
+    };
+    img.src = src;
+  }catch(e){}
+}
+
+/* 触发时机：开/关弹窗（class 变化）、切主题、换背景、转屏 */
+if(typeof MutationObserver === 'function'){
+  try{
+    new MutationObserver(function(list){
+      for(var i = 0; i < list.length; i++){
+        var t = list[i].target;
+        if(t && t.nodeType === 1 && t.matches && t.matches(MK_SEL)){ mkScanAll(80); return; }
+      }
+    }).observe(document.body, { attributes:true, attributeFilter:['class','style'], subtree:true });
+  }catch(e){}
+}
+window.addEventListener('resize', function(){ mkScanAll(200); }, {passive:true});
+window.addEventListener('orientationchange', function(){ mkScanAll(320); }, {passive:true});
 
 /* ---------- 登录态持久化 ---------- */
 function loadAuth(){
@@ -20351,6 +20532,9 @@ setInterval(updateCountdown, 1000);
    而不是 HTML 里写死的旧快照。云端内容由 contentBoot 在后台补拉，回来后再重绘。 */
 contentCacheBootstrap(false);
 goHomeView();
+/* v3.7.6：启动后算一次自定义背景的平均色，并给当前可见的弹窗校准字色 */
+try{ if(typeof mkSampleBg === 'function') setTimeout(mkSampleBg, 500); }catch(e){}
+try{ if(typeof mkScanAll === 'function') mkScanAll(900); }catch(e){}
 /* 返回记忆：从外链/小游戏返回时，恢复到跳转前的视图（隐藏空间/分类/首页）。
  * 必须在 goHomeView() 之后执行，否则会被其覆盖回首页 */
 (function(){
@@ -20385,6 +20569,8 @@ function toggleTheme(ev){
     try{ localStorage.setItem('cls_theme_hold', sunTodayKey()); }catch(e){}
   }
   radialTheme(_c.x, _c.y, next);
+  /* v3.7.6：手动切昼夜后，等过渡动画过半再校准弹窗字色 */
+  try{ if(typeof mkScanAll === 'function') mkScanAll(380); }catch(e){}
   /* 连续切换白天/黑夜 → 彩带彩蛋 */
   _themeRhythm++;
   if(_themeRhythmTimer) clearTimeout(_themeRhythmTimer);
@@ -20573,6 +20759,8 @@ function applyAutoTheme(force){
     var b = document.getElementById('themeToggle');
     if(b) b.innerHTML = wantDark ? iconSvg('sun',17) : iconSvg('moon',17);
     if(typeof applyBg === 'function') applyBg();   /* 【自定义设置】蒙层随主题切换 */
+    /* v3.7.6：昼夜切换后重算弹窗字色 */
+    try{ if(typeof mkScanAll === 'function') mkScanAll(160); }catch(e){}
   }
 }
 /* 系统主题变化监听：mode='system' 时立刻跟随 */
