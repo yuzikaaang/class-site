@@ -101,9 +101,9 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '3.7.6'
+const SITE_VER = '3.8.0'
 
-const CACHE = 'class-site-v168'
+const CACHE = 'class-site-v169'
 /* 预缓存清单：**只放小文件**。
    ⚠️ 不要把 index.html（600KB）放进来 —— install 会因为它变慢一大截，
    弱网下甚至装不完（真机实测 SW 卡在 installing 25 秒都没装好，
@@ -165,17 +165,47 @@ self.addEventListener('fetch', (event) => {
     if (u.searchParams.has('_') || u.searchParams.has('_r')) return
   } catch (e) { /* URL 解析失败就按原逻辑走 */ }
 
-  // 导航请求：网络优先，失败回退缓存首页
+  /* 导航请求（打开页面）：v3.8.0 起改成「最多等 900ms 的网络优先」
+   * ------------------------------------------------------------
+   * 站主原话：「从后台到前台的时候，一直在这个页面，但它还是要重新加载一次，
+   *            而且暂时没有用到缓存」
+   *
+   * 根因：原来是纯网络优先 —— 每次进站都要把整页 HTML 重新下一遍（现在 400KB+），
+   *       网慢的时候就是白等好几秒，缓存明明有却完全用不上。
+   *
+   * 现在：
+   *   · 有缓存 → 网络 900ms 内回来就用最新（保持「打开就是新版」），
+   *     回不来就先把缓存那页给浏览器，网络结果在后台落盘，下次即最新。
+   *   · 没缓存 → 老实等网络。
+   * 版本更新仍由 swRegister 的「检查更新」负责，不会因为这条策略卡住不升。
+   */
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
+    event.respondWith((async () => {
+      let cache = null
+      let cached = null
+      try {
+        cache = await caches.open(CACHE)
+        cached = (await cache.match(request)) || (await cache.match('./index.html'))
+      } catch (e) { cached = null }
+
+      const netP = fetch(request)
         .then((res) => {
-          const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put(request, copy))
+          if (res && res.ok && cache) cache.put(request, res.clone()).catch(() => {})
           return res
         })
-        .catch(() => caches.match('./index.html'))
-    )
+        .catch(() => null)
+
+      if (!cached) {
+        const r = await netP
+        return r || Response.error()
+      }
+      /* 有缓存：最多等 900ms 拿最新，超时先给缓存（页面秒开） */
+      const winner = await Promise.race([
+        netP,
+        new Promise((resolve) => setTimeout(() => resolve(null), 900)),
+      ])
+      return winner || cached
+    })())
     return
   }
 
