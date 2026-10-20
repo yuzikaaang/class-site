@@ -5273,8 +5273,8 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★后台两块已合并为「首页卡片」板块',
     /id:'cards',/.test(adm47) && /function renderCards\(\)/.test(adm47));
   /* v2.7.1 起内容组 10 项（合并后的 9 项 + 成绩分析）；v3.5.6 再加「投票管理」= 11 */
-  t('★内容组导航项为 10 项（9 项 + 成绩分析 + 投票管理 − 已并入的版本更新）',
-    (adm47.match(/group:'内容'/g) || []).length === 10,
+  t('★内容组导航项为 11 项（9 项 + 成绩分析 + 投票管理 + 板块管理 − 已并入的版本更新）',
+    (adm47.match(/group:'内容'/g) || []).length === 11,
     '实际 ' + (adm47.match(/group:'内容'/g) || []).length + ' 项');
   t('★合并后的面板路由已注册（cards → renderCards）',
     /cards:\s*renderCards,/.test(adm47));
@@ -8014,7 +8014,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
   t('★SCHEMA_VER 常量存在且随版本升到 3.7.0（新增资料修改申请表）',
-    /const SCHEMA_VER = '3\.8\.0'/.test(httpSrc));
+    /const SCHEMA_VER = '3\.8\.4'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8317,7 +8317,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.27 云端时长库表 song_durations 三处同步（升级路径/全量清单/schema.sql）',
     (HTTP_527.match(/create table if not exists song_durations/g) || []).length >= 2
     && /create table if not exists song_durations/.test(SCH_527)
-    && /const SCHEMA_VER = '3\.8\.0'/.test(HTTP_527));
+    && /const SCHEMA_VER = '3\.8\.4'/.test(HTTP_527));
   t('v3.5.27 后端写库按来源优先级，人工填写不被自动结果覆盖',
     /case song_durations\.source/.test(MUS_527) && /source: 'manual'/.test(MUS_527)
     && /when 'manual' then 3/.test(MUS_527));
@@ -10829,7 +10829,7 @@ console.log('\n【85】在线时长统计（v3.5.35）');
   t('v3.5.35 online_sessions 三处同步（升级路径 / 全量清单 / schema.sql）',
     (http535.match(/create table if not exists online_sessions/g) || []).length >= 2
     && /create table if not exists online_sessions/.test(sch535)
-    && /const SCHEMA_VER = '3\.8\.0'/.test(http535));
+    && /const SCHEMA_VER = '3\.8\.4'/.test(http535));
   t('v3.5.35 三处索引齐（user_start / start / token）',
     ['online_user_start_idx', 'online_start_idx', 'online_token_idx'].every(function(ix){
       const n = (http535.match(new RegExp('create index if not exists ' + ix, 'g')) || []).length;
@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.8.3 index.html SITE_VERSION = 3.8.3', /var SITE_VERSION = '3\.8\.3'/.test(idx539));
-  t('v3.8.3 admin.html SITE_VERSION = 3.8.3', /var SITE_VERSION = '3\.8\.3'/.test(admh539));
-  t('v3.8.3 sw.js SITE_VER = 3.8.3 + CACHE v171',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.8.3'")
+  t('v3.8.4 index.html SITE_VERSION = 3.8.4', /var SITE_VERSION = '3\.8\.4'/.test(idx539));
+  t('v3.8.4 admin.html SITE_VERSION = 3.8.4', /var SITE_VERSION = '3\.8\.4'/.test(admh539));
+  t('v3.8.4 sw.js SITE_VER = 3.8.4 + CACHE v171',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.8.4'")
     && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v171'"));
-  t('v3.8.3 api/worker.mjs API_VER = 3.8.3',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.8.3';"));
+  t('v3.8.4 api/worker.mjs API_VER = 3.8.4',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.8.4';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11141,10 +11141,10 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.8.3 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.8\.3'/.test(idx540) && /var SITE_VERSION = '3\.8\.3'/.test(adm540)
-    && /const API_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.8.4 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.8\.4'/.test(idx540) && /var SITE_VERSION = '3\.8\.4'/.test(adm540)
+    && /const API_VER = '3\.8\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.8\.3'/.test(idx542) && /var SITE_VERSION = '3\.8\.3'/.test(adm542)
-    && /const API_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.8\.4'/.test(idx542) && /var SITE_VERSION = '3\.8\.4'/.test(adm542)
+    && /const API_VER = '3\.8\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11270,8 +11270,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.3 当前版本 3.7.2、日期 2026-10-20',
-    /var SITE_VERSION = '3\.8\.3'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
+  t('v3.8.4 当前版本 3.7.2、日期 2026-10-20',
+    /var SITE_VERSION = '3\.8\.4'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11428,11 +11428,11 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.8.3 四处版本一致', /var SITE_VERSION = '3\.8\.3'/.test(idx70)
-    && /var SITE_VERSION = '3\.8\.3'/.test(adm70)
-    && /const API_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.3'/.test(adm70));
+  t('v3.8.4 四处版本一致', /var SITE_VERSION = '3\.8\.4'/.test(idx70)
+    && /var SITE_VERSION = '3\.8\.4'/.test(adm70)
+    && /const API_VER = '3\.8\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.4'/.test(adm70));
 }
 
 console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
@@ -11458,7 +11458,7 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
   t('v3.7.6 首页 / 后台版本已是 3.7.6',
-    /var SITE_VERSION = '3\.8\.3'/.test(idx76));
+    /var SITE_VERSION = '3\.8\.4'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11576,6 +11576,86 @@ console.log('\n【新】v3.8.3 我的资料字色 / 分享按钮排版 / 版本�
     /--fix-announce/.test(pre83) && /function appendToAnnouncement/.test(pre83));
   t('★v3.8.3 自动追加幂等（同样内容不会写两遍）',
     /cur\.split\(\/\[；;\]\/\)\.some/.test(pre83));
+}
+
+console.log('\n【新】v3.8.4 板块管理 / 板块分享链接');
+{
+  const idx84 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm84 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const brd84 = fs.readFileSync(new URL('./api/boards.js', import.meta.url), 'utf8');
+  const http84 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const sch84 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const wk84 = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+
+  /* ---- 数据层 ---- */
+  t('★v3.8.4 三张表三处同步：board_links / board_link_views / board_meta',
+    (http84.match(/create table if not exists board_links/g) || []).length >= 2
+    && (http84.match(/create table if not exists board_link_views/g) || []).length >= 2
+    && (http84.match(/create table if not exists board_meta/g) || []).length >= 2
+    && /create table if not exists board_links/.test(sch84)
+    && /create table if not exists board_link_views/.test(sch84)
+    && /create table if not exists board_meta/.test(sch84));
+  t('★v3.8.4 SCHEMA_VER 已升到 3.8.4', /const SCHEMA_VER = '3\.8\.4'/.test(http84));
+
+  /* ---- 接口 ---- */
+  t('★v3.8.4 /api/boards 路由已注册', /case 'boards':/.test(wk84) && /import boardsHandler/.test(wk84));
+  t('★v3.8.4 成绩分析不开放板块分享（NO_SHARE_BOARDS 含 3）',
+    /NO_SHARE_BOARDS = \[3\]/.test(brd84) && /成绩分析.*不在这里分享/.test(brd84));
+  t('★v3.8.4 游客解析用 currentUser（不用 requireUser，否则游客 401）',
+    /const u = await currentUser\(req\)\.catch\(\(\) => null\)/.test(brd84)
+    && !/requireUser\(req, res, \{ optional/.test(brd84));
+  t('★v3.8.4 解析时校验撤销 / 过期 / 次数', /这条链接已被撤销/.test(brd84)
+    && /链接已过期/.test(brd84) && /查看次数已用完/.test(brd84));
+  t('★v3.8.4 预览不消耗次数（仅管理员 + preview=1）',
+    /isPreview/.test(brd84) && /u\.role === 'admin'/.test(brd84));
+  t('★v3.8.4 免登录链接要求板块/卡片本身允许游客（取交集）',
+    /guestAllowed/.test(brd84) && /设了「仅登录可见」/.test(brd84));
+  t('★v3.8.4 建链 / 列表 / 编辑 / 撤销 / 明细五个动作齐',
+    ['share-create','share-list','share-update','share-revoke','share-stats']
+      .every(function(a){ return brd84.indexOf("'" + a + "'") >= 0; }));
+  t('★v3.8.4 访问记录落库（登录用户记名，游客留 IP/UA）',
+    /insert into board_link_views/.test(brd84) && /user-agent/.test(brd84));
+
+  /* ---- 前台 ---- */
+  t('★v3.8.4 启动解析 ?t= / ?b= 深链', /function boardShareBoot/.test(idx84)
+    && /resolveBoardShare\(q\.t/.test(idx84) && /openCat\(bid\)/.test(idx84));
+  t('★v3.8.4 游客只放行分享板块（openCat 最前面拦截）',
+    /if\(typeof GUEST !== 'undefined' && GUEST && Number\(id\) !== Number\(GUEST\.boardId\)\)/.test(idx84));
+  t('★v3.8.4 拦截文案与站主要求一致',
+    idx84.indexOf('当前分享链接仅支持查看该分享内容，其他内容请登录后再查看') >= 0);
+  t('★v3.8.4 未分享的板块/卡片置灰（side-locked / card-locked）',
+    /side-locked/.test(idx84) && /card-locked/.test(idx84) && /function applyGuestUI/.test(idx84));
+  t('★v3.8.4 卡片带 data-card，深链可定位', /data-card="'\+attr\(l\.id\)\+'"/.test(idx84)
+    && /function locateBoardCard/.test(idx84));
+  t('★v3.8.4 游客顶部条有一键返回主页 + 登录',
+    /guestBar/.test(idx84) && /onclick="goHomeView\(\)"/.test(idx84) && /function guestLogin/.test(idx84));
+  t('★v3.8.4 登录后自动回到分享位置（含强制改密后）',
+    /function afterLoginResume/.test(idx84) && /afterLoginResume\(\)/.test(idx84));
+  t('★v3.8.4 板块简介进页面顶部', /boardIntroHtml\(c\.id\)\+popBannerHtml/.test(idx84));
+  t('★v3.8.4 后台排序生效且不覆盖用户自定义顺序',
+    /applyBoardSort\(SITE_DATA\.categories\.filter/.test(idx84) && /UI\.order\.cat/.test(idx84));
+  t('★v3.8.4 首页登录后上报板块目录（后台才能列出来）',
+    /function reportBoardCatalog/.test(idx84) && /boards\?action=catalog/.test(idx84));
+
+  /* ---- 后台 ---- */
+  t('★v3.8.4 后台侧栏有「板块管理」', /id:'boards'/.test(adm84) && /boards:\s*renderBoards,/.test(adm84));
+  t('★v3.8.4 板块行能改名称 / 简介 / 排序 / 隐藏 / 游客可见',
+    /data-bf="name"/.test(adm84) && /data-bf="intro"/.test(adm84)
+    && /data-bact="up"/.test(adm84) && /data-bf="hidden"/.test(adm84) && /data-bf="guestOk"/.test(adm84));
+  t('★v3.8.4 显示板块位置（首页第 N 项 / 侧栏第 N 项）',
+    /首页第 ' \+ \(i \+ 1\) \+ ' 项 · 侧栏第/.test(adm84));
+  t('★v3.8.4 卡片级也能设游客可见 / 单独分享',
+    /data-cf="guestOk"/.test(adm84) && /data-cact="share"/.test(adm84));
+  t('★v3.8.4 分享表单含免登录 / 有效期 / 次数 / 备注',
+    /bsGuest/.test(adm84) && /bsDays/.test(adm84) && /bsMax/.test(adm84) && /bsNote/.test(adm84));
+  t('★v3.8.4 二维码离线生成（内联 qrcode 库 + canvas）',
+    /var qrcode=function\(\)/.test(adm84) && /function bdQrCanvas/.test(adm84));
+  t('★v3.8.4 分享图含板块名 / 简介 / 二维码 / 班徽',
+    /function bdSharePic/.test(adm84) && /adminBadgeUrl/.test(adm84) && /bdQrCanvas\(url, 420\)/.test(adm84));
+  t('★v3.8.4 分享列表有预览 / 编辑 / 二维码 / 分享图 / 明细 / 撤销',
+    ['view','edit','qr','pic','stat','rev'].every(function(a){
+      return adm84.indexOf('data-sact="' + a + '"') >= 0;
+    }));
 }
 
 console.log('\n' + '='.repeat(52));
