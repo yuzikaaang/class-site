@@ -47,7 +47,7 @@ export { getSql };
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.7.0';
+const SCHEMA_VER = '3.8.0';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -331,6 +331,11 @@ export async function ensureSchema(sql) {
         } catch (e) {
           console.warn('[schema] online_sessions 建表失败：', e && e.message);
         }
+        /* v3.8.0（站主）：分享链接备注列。
+           ⚠️ 必须写在**升级路径**里 —— 老库走的是这一段，全量清单对它不生效。
+              上一次 target_names / sections 就吃过这个亏（见下方注释）。 */
+        try { await s`alter table share_links add column if not exists note text default ''`; } catch (e) {}
+
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
@@ -704,12 +709,15 @@ export async function ensureSchema(sql) {
         max_views  int,
         views      int         not null default 0,
         revoked    boolean     not null default false,
+        note       text        default '',
         created_at timestamptz not null default now()
       )
     `;
     await s`create index if not exists share_links_owner_idx on share_links (owner_id, created_at desc)`;
     /* 自选分享的名单（v2.8.3 分享链接） */
     await s`alter table share_links add column if not exists target_names jsonb`;
+    /* v3.8.0（站主）：分享链接的备注 —— 建了很多条之后能一眼认出哪条是哪条 */
+    await s`alter table share_links add column if not exists note text default ''`;
     /* 分享内容开关（v2.9.7：分析也可以自定义分享内容）——
        老库的 share_links 已经建好了，光改 create table 是加不上列的，
        必须显式 alter，否则线上写 sections 直接报错。 */
