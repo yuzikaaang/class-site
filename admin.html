@@ -1560,7 +1560,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.8.4';
+var SITE_VERSION = '3.8.5';
 var VER_DATE = '2026-10-20';
 
 /* ---- 运行时状态 ---- */
@@ -13397,7 +13397,10 @@ function bdShareSave(share){
     if(btn){ btn.disabled = false; btn.textContent = share ? '保存修改' : '生成链接'; }
     toast(share ? '已保存' : '链接已生成', 'ok');
     if(!share){
-      var url = location.origin + j.url;
+      /* ⚠️ 站点可能部署在子路径（GitHub Pages 的 /class-site/），
+         后端返回的是 /index.html?b=…，直接拼 origin 会丢掉子目录 → 404。
+         和成绩分享同一套写法：去掉前导斜杠后按当前页面地址解析。 */
+      var url = new URL(String(j.url || '').replace(/^\/+/, ''), location.href).href;
       bdShowResult(url, j, boardId, card);
     }
     loadBoards(true);
@@ -13667,8 +13670,9 @@ function paintBoardShares(){
     var x = null;
     for(var i = 0; i < BM.shares.length; i++){ if(BM.shares[i].id === id){ x = BM.shares[i]; break; } }
     if(!x) return;
-    var url = location.origin + '/index.html?b=' + x.boardId
-      + (x.card ? '&c=' + encodeURIComponent(x.card) : '') + '&t=' + x.token;
+    var url = new URL('index.html?b=' + x.boardId
+      + (x.card ? '&c=' + encodeURIComponent(x.card) : '') + '&t=' + x.token,
+      location.href).href;
 
     if(act === 'view'){ window.open(url + '&preview=1', '_blank', 'noopener'); return; }
     if(act === 'qr'){ bdShowQr(url, x.name); return; }
@@ -15232,6 +15236,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.8.5', date: '2026-10-20', type: 'feat', title: '作业导出图带直链 · 修分享链接 404', items: [
+      '作业导出图片：作业里的图片直链直接把图draw进长图（先 fetch 成 blob 再画，避开跨域污染 canvas；取不到就退回一行文字，绝不毁整张图）',
+      '音频 / 视频直链变成二维码，扫码打开站内播放页，直接播放，不用下载、不用跳第三方',
+      '正文里直接写出来的直链也会识别：图片画出来，音视频转二维码，其它链接保持原样',
+      '修：后台生成板块分享链接时用了 location.origin 拼地址，站点在 /class-site/ 子路径下会丢掉这一段，打开就是 GitHub 404',
+      '现在按当前页面地址解析（和成绩分享同一套写法），预览 / 微信打开都能到正确的页面'
+    ], pub: [
+      { cat: '作业', text: '导出的作业图片里，图片直链会直接显示，音频和视频会变成二维码，扫码就能播放' },
+      { cat: '班级', text: '板块分享链接现在可以正常打开了' }
+    ] },
   { version: '3.8.4', date: '2026-10-20', type: 'feat', title: '板块管理 · 板块分享链接', items: [
       '新增「板块管理」：改名、写简介、调顺序、隐藏、单独控制游客可见；改完立刻全站生效，不用发版',
       '后台会列出每个板块的位置（首页第 N 项 / 侧栏第 N 项）和它下面的卡片；以后新增板块，首页登录打开一次就自动出现在列表里',
