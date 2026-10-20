@@ -672,3 +672,50 @@ create table if not exists song_durations (
 create index if not exists song_dur_title_idx on song_durations (title);
 -- v3.5.28：导入清单按「歌名全等 + 歌手部分匹配」比对，补歌手索引
 create index if not exists song_dur_artist_idx on song_durations (artist);
+
+-- ============================================================
+-- v3.8.4 板块分享链接（站主）
+--   「新增分享链接的功能（类似成绩分析的分享链接）……生成包含该板块所有内容的
+--     分享链接，内容也是链接数据库实时刷新，相当于一个快捷方式，用户打开直接
+--     跳转到对应位置，还可以一键返回主页。」
+--
+--   · board_links：一条分享。token 就是凭证，游客凭它进「指定板块」；
+--     card_ref 为空 = 整个板块，'2' = 只分享 2 号卡片
+--   · guest_ok：这条链接是否允许未登录访问（还要板块本身允许游客，取交集）
+--   · board_link_views：谁在什么时候打开过（登录用户记名，游客只记次数）
+--   · board_meta：单行 jsonb，存板块/卡片改名、简介、排序、隐藏、游客可见
+-- ensureSchema 两路径均已同步；SCHEMA_VER = 3.8.4
+-- ============================================================
+create table if not exists board_links (
+  id           bigserial   primary key,
+  token        text        not null unique,
+  board_id     int         not null,
+  card_ref     text        not null default '',
+  guest_ok     boolean     not null default false,
+  expires_at   timestamptz,
+  max_views    int,
+  views        int         not null default 0,
+  revoked      boolean     not null default false,
+  note         text        not null default '',
+  created_by   bigint,
+  created_at   timestamptz not null default now(),
+  last_view_at timestamptz
+);
+create index if not exists board_links_owner_idx on board_links (created_by, created_at desc);
+
+create table if not exists board_link_views (
+  id         bigserial   primary key,
+  link_id    bigint      not null,
+  user_id    bigint,
+  name       text        not null default '',
+  ip         text,
+  ua         text,
+  created_at timestamptz not null default now()
+);
+create index if not exists blv_link_idx on board_link_views (link_id, created_at desc);
+
+create table if not exists board_meta (
+  id         int         primary key default 1,
+  data       jsonb       not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
