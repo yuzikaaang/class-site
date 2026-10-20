@@ -28,6 +28,7 @@ import gamesHandler from './games.js';
 import studyHandler from './study.js';
 import scoresHandler from './scores.js';
 import votesHandler from './votes.js';
+import boardsHandler from './boards.js';
 import voicehubHandler from './voicehub.js';
 import musicHandler from './music.js';
 import { cors } from './_lib/http.js';
@@ -40,7 +41,7 @@ import { cors } from './_lib/http.js';
    于是回查永远对不上提交号、每次都红了 120 秒后判失败：job 红，线上其实是新的。
    所以加一个**由代码本身带出去**的版本号：只要线上换了代码，它就会变。
    纪律：每轮发布与前台 SITE_VERSION 同步（测试里有断言锁死两者相等）。 */
-const API_VER = '3.8.3';
+const API_VER = '3.8.4';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
 async function adaptRequest(request, env) {
@@ -173,6 +174,11 @@ export default {
         case 'votes':
           /* v3.5.6（投票管理）：班级投票。表见 ensureSchema。 */
           await votesHandler(req, res);
+          break;
+        case 'boards':
+          /* v3.8.4（站主）：板块分享链接 —— 链接只指向板块，内容现查数据库。
+             游客凭 token 可解析，其它动作（建/改/撤销）仅管理员。 */
+          await boardsHandler(req, res);
           break;
         case 'music':
     /* v3.5.20：按歌名+歌手补全歌曲时长（VoiceHub 的 durationSeconds 全空） */
