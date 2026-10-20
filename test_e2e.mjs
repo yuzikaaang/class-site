@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.7.5 index.html SITE_VERSION = 3.7.5', /var SITE_VERSION = '3\.7\.5'/.test(idx539));
-  t('v3.7.5 admin.html SITE_VERSION = 3.7.5', /var SITE_VERSION = '3\.7\.5'/.test(admh539));
-  t('v3.7.5 sw.js SITE_VER = 3.7.5 + CACHE v167',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.7.5'")
-    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v167'"));
-  t('v3.7.5 api/worker.mjs API_VER = 3.7.5',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.7.5';"));
+  t('v3.7.6 index.html SITE_VERSION = 3.7.6', /var SITE_VERSION = '3\.7\.6'/.test(idx539));
+  t('v3.7.6 admin.html SITE_VERSION = 3.7.6', /var SITE_VERSION = '3\.7\.6'/.test(admh539));
+  t('v3.7.6 sw.js SITE_VER = 3.7.6 + CACHE v168',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.7.6'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v168'"));
+  t('v3.7.6 api/worker.mjs API_VER = 3.7.6',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.7.6';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11141,10 +11141,10 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.7.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.7\.5'/.test(idx540) && /var SITE_VERSION = '3\.7\.5'/.test(adm540)
-    && /const API_VER = '3\.7\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.7\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.6 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.7\.6'/.test(idx540) && /var SITE_VERSION = '3\.7\.6'/.test(adm540)
+    && /const API_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.7\.5'/.test(idx542) && /var SITE_VERSION = '3\.7\.5'/.test(adm542)
-    && /const API_VER = '3\.7\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.7\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.7\.6'/.test(idx542) && /var SITE_VERSION = '3\.7\.6'/.test(adm542)
+    && /const API_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11270,8 +11270,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.7.5 当前版本 3.7.2、日期 2026-10-20',
-    /var SITE_VERSION = '3\.7\.5'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
+  t('v3.7.6 当前版本 3.7.2、日期 2026-10-20',
+    /var SITE_VERSION = '3\.7\.6'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11428,11 +11428,37 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.7.5 四处版本一致', /var SITE_VERSION = '3\.7\.5'/.test(idx70)
-    && /var SITE_VERSION = '3\.7\.5'/.test(adm70)
-    && /const API_VER = '3\.7\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.7\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.7\.5'/.test(adm70));
+  t('v3.7.6 四处版本一致', /var SITE_VERSION = '3\.7\.6'/.test(idx70)
+    && /var SITE_VERSION = '3\.7\.6'/.test(adm70)
+    && /const API_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.7\.6'/.test(adm70));
+}
+
+console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
+{
+  const idx76 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+
+  t('★v3.7.6 有弹窗字色自适应模块（含对比度计算与底色合成）',
+    /function mkFix\(root\)/.test(idx76) && /function mkEffectiveBg\(el\)/.test(idx76)
+    && /function mkParseA\(c\)/.test(idx76) && /MK_MIN = 4\.0/.test(idx76));
+  t('★v3.7.6 只改看不清的（阈值判断后才动，清晰的品牌色不动）',
+    /if\(clsContrast\(fgOn, bg\) >= MK_MIN\) continue;/.test(idx76));
+  t('★v3.7.6 底色按层合成（半透明 + 渐变首色 + 背景图平均色）',
+    /layers\.push\(b\)/.test(idx76) && /MK_BG_AVG/.test(idx76)
+    && /backgroundImage/.test(idx76));
+  t('★v3.7.6 覆盖所有遮罩类弹窗（id 结尾 Mask / 各类 mask class）',
+    /var MK_SEL = '\[id\$="Mask"\]/.test(idx76) && /sign-mask/.test(idx76)
+    && /allboard-mask/.test(idx76) && /confetti-mask/.test(idx76));
+  t('★v3.7.6 打开/关闭弹窗时自动重算（观察 mask 的 class 变化）',
+    /attributeFilter:\['class','style'\]/.test(idx76) && /t\.matches\(MK_SEL\)/.test(idx76));
+  t('★v3.7.6 切昼夜 / 换背景 / 转屏都会重算',
+    (idx76.match(/mkScanAll\(/g) || []).length >= 4
+    && /addEventListener\('orientationchange'/.test(idx76));
+  t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
+    /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
+  t('v3.7.6 首页 / 后台版本已是 3.7.6',
+    /var SITE_VERSION = '3\.7\.6'/.test(idx76));
 }
 
 console.log('\n' + '='.repeat(52));
