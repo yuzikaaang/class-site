@@ -25,7 +25,7 @@
 
 import { getSql } from './_lib/db.js';
 import {
-  cors, handlePreflight, ok, fail, body, requireUser, audit, currentUser,
+  cors, handlePreflight, ok, fail, body, requireUser, audit, currentUser, ensureSchema,
 } from './_lib/http.js';
 
 /* 不开放分享的板块（成绩分析）—— 它有自己的按次/按范围分享，别做两套 */
@@ -134,6 +134,10 @@ export default async function handler(req, res) {
 
   const action = String(req.query.action || '').toLowerCase();
   try {
+    /* ⚠️ 必须先自愈表结构：本接口的 meta / resolve 是**游客也会调**的，
+       不经过 requireUser（那条路才会 ensureSchema）。
+       少了这一句，新库/刚升级的库第一次访问会因为没有 board_meta 直接 500。 */
+    await ensureSchema();
     if (req.method === 'GET') {
       if (action === 'resolve') return await resolveLink(req, res);
       if (action === 'meta') return await getMeta(req, res);
