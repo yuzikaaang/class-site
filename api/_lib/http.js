@@ -47,7 +47,7 @@ export { getSql };
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.8.0';
+const SCHEMA_VER = '3.8.4';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -335,6 +335,51 @@ export async function ensureSchema(sql) {
            ⚠️ 必须写在**升级路径**里 —— 老库走的是这一段，全量清单对它不生效。
               上一次 target_names / sections 就吃过这个亏（见下方注释）。 */
         try { await s`alter table share_links add column if not exists note text default ''`; } catch (e) {}
+
+        /* ===== v3.8.4（站主）：板块分享链接 =====
+           「新增分享链接的功能（类似成绩分析的分享链接）……生成包含该板块所有内容
+             的分享链接，内容也是链接数据库实时刷新，相当于一个快捷方式，用户打开
+             直接跳转到对应位置，还可以一键返回主页」。
+           三张表：
+             board_links       一条分享链接（token 即凭证，游客可凭它进单个板块）
+             board_link_views  谁在什么时候打开过（登录用户记名，游客只记次数）
+             board_meta        单行 jsonb：板块/卡片改名、简介、排序、隐藏、游客可见
+           放在升级路径里，老库也能补上（create if not exists 幂等）。 */
+        try {
+          await s`create table if not exists board_links (
+            id           bigserial   primary key,
+            token        text        not null unique,
+            board_id     int         not null,
+            card_ref     text        not null default '',
+            guest_ok     boolean     not null default false,
+            expires_at   timestamptz,
+            max_views    int,
+            views        int         not null default 0,
+            revoked      boolean     not null default false,
+            note         text        not null default '',
+            created_by   bigint,
+            created_at   timestamptz not null default now(),
+            last_view_at timestamptz
+          )`;
+          await s`create index if not exists board_links_owner_idx on board_links (created_by, created_at desc)`;
+          await s`create table if not exists board_link_views (
+            id         bigserial   primary key,
+            link_id    bigint      not null,
+            user_id    bigint,
+            name       text        not null default '',
+            ip         text,
+            ua         text,
+            created_at timestamptz not null default now()
+          )`;
+          await s`create index if not exists blv_link_idx on board_link_views (link_id, created_at desc)`;
+          await s`create table if not exists board_meta (
+            id         int         primary key default 1,
+            data       jsonb       not null default '{}'::jsonb,
+            updated_at timestamptz not null default now()
+          )`;
+        } catch (e) {
+          console.warn('[schema] board_* 建表失败：', e && e.message);
+        }
 
         await s`
           insert into site_settings (id, data, updated_at)
@@ -840,6 +885,47 @@ export async function ensureSchema(sql) {
     await s`create index if not exists song_dur_title_idx on song_durations (title)`;
     /* v3.5.28：导入清单匹配会按歌手做模糊比对，补个歌手索引（与升级路径同步） */
     await s`create index if not exists song_dur_artist_idx on song_durations (artist)`;
+
+    /* ===== v3.8.4 板块分享链接（与上方升级路径同步，三处纪律）=====
+       站主原话见升级路径那段注释。这四段必须和那边一模一样。 */
+    await s`
+      create table if not exists board_links (
+        id           bigserial   primary key,
+        token        text        not null unique,
+        board_id     int         not null,
+        card_ref     text        not null default '',
+        guest_ok     boolean     not null default false,
+        expires_at   timestamptz,
+        max_views    int,
+        views        int         not null default 0,
+        revoked      boolean     not null default false,
+        note         text        not null default '',
+        created_by   bigint,
+        created_at   timestamptz not null default now(),
+        last_view_at timestamptz
+      )
+    `;
+    await s`create index if not exists board_links_owner_idx on board_links (created_by, created_at desc)`;
+    await s`
+      create table if not exists board_link_views (
+        id         bigserial   primary key,
+        link_id    bigint      not null,
+        user_id    bigint,
+        name       text        not null default '',
+        ip         text,
+        ua         text,
+        created_at timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists blv_link_idx on board_link_views (link_id, created_at desc)`;
+    await s`
+      create table if not exists board_meta (
+        id         int         primary key default 1,
+        data       jsonb       not null default '{}'::jsonb,
+        updated_at timestamptz not null default now()
+      )
+    `;
+
 
     /* 全量跑完 → 盖章。下一条请求起走「版本一致直接返回」的捷径。
        用 || 合并而不是整行覆盖：site_settings 里还存着 register_open /
