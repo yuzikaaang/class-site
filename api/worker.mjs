@@ -40,7 +40,7 @@ import { cors } from './_lib/http.js';
    于是回查永远对不上提交号、每次都红了 120 秒后判失败：job 红，线上其实是新的。
    所以加一个**由代码本身带出去**的版本号：只要线上换了代码，它就会变。
    纪律：每轮发布与前台 SITE_VERSION 同步（测试里有断言锁死两者相等）。 */
-const API_VER = '3.8.1';
+const API_VER = '3.8.2';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
 async function adaptRequest(request, env) {
