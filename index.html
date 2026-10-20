@@ -1484,13 +1484,31 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* v3.5.21：我的资料明细表 —— 之前把字段值塞进 .acct-sw .s（灰色说明文字），
    浅色下 #a99a8d、暗色下几乎糊成一团，站主反馈「字色看不清」。
    现在值走正文色 var(--fg)，标签走 var(--fg-2)，每行右侧带复制。 */
-.mp-list{display:flex;flex-direction:column;gap:6px;margin:10px 0 2px}
-.mp-lrow{display:flex;align-items:center;gap:8px;background:var(--tint);border:1px solid var(--tint-2);border-radius:10px;padding:8px 10px}
-.mp-lk{flex:none;min-width:64px;font-size:.76rem;font-weight:700;color:var(--fg-2)}
-.mp-lv{flex:1;min-width:0;font-size:.86rem;font-weight:600;color:var(--fg);word-break:break-all;line-height:1.45}
-.mp-copy{flex:none;border:none;background:var(--btn-a);color:#fff;border-radius:8px;padding:6px 11px;font-size:.72rem;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s}
-.mp-copy:hover{background:var(--btn-b)}
-.mp-copy:active{transform:scale(.97)}
+/* ===== 我的资料（v3.8.0 起改成「一行一个输入框」，和微信/QQ 那块同款） ===== */
+.mp-grid{display:flex;flex-direction:column;gap:11px;margin:10px 0 2px}
+.mp-field{display:flex;flex-direction:column;gap:5px}
+.mp-lb{display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;color:var(--fg-2)}
+.mp-pendtag{font-size:.64rem;font-weight:700;color:#a05a1f;background:#fff5e6;border:1px solid #f0d6b3;border-radius:99px;padding:1px 7px}
+.mp-privtag{font-size:.64rem;font-weight:700;color:var(--fg-3);background:var(--bg-3);border:1px solid var(--tint-2);border-radius:99px;padding:1px 7px}
+.dark .mp-pendtag{color:#fbbf24;background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.3)}
+.mp-iw{display:flex;align-items:center;gap:8px;min-width:0}
+/* 关键：min-width:0 + flex:1 —— 长号码（身份证、考籍号）不会再被挤成一行一个字 */
+.mp-in{flex:1 1 auto;min-width:0;width:100%;height:40px;box-sizing:border-box;
+  border:1px solid var(--tint-2);border-radius:10px;background:var(--bg-1);color:var(--fg);
+  padding:0 12px;font-size:.88rem;font-family:inherit;line-height:40px;
+  text-overflow:ellipsis;transition:border-color .15s,background .15s}
+.mp-in:focus{outline:none;border-color:var(--btn-b);background:var(--bg-2)}
+.mp-in.mp-ro{background:var(--bg-3);color:var(--fg-3);cursor:default;border-style:dashed}
+.dark .mp-in.mp-ro{background:#262220;color:#b9ada2;border-color:#3f3833}
+.mp-in.mp-changed{border-color:var(--btn-a);background:#fff8f1}
+.dark .mp-in.mp-changed{background:rgba(251,146,60,.10)}
+.mp-cp{flex:none;height:40px;padding:0 13px;border-radius:10px;border:1px solid var(--tint-2);
+  background:var(--bg-2);color:var(--fg-2);font-size:.74rem;font-weight:700;font-family:inherit;
+  cursor:pointer;transition:background .15s,color .15s}
+.mp-cp:hover{background:var(--tint);color:var(--accent-ink)}
+.mp-cp:active{transform:scale(.97)}
+.mp-pend{margin-top:1px;font-size:.72rem;color:var(--accent-ink);line-height:1.5}
+.mp-edittip{margin-top:8px;font-size:.72rem;color:var(--fg-3);line-height:1.6}
 .mp-empty{margin:8px 0 0;font-size:.78rem;color:var(--fg-2)}
 .dark .acct-user{background:rgba(255,255,255,.05)}
 .dark .acct-uname{color:#f0e6dc}
@@ -4291,7 +4309,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.7.6';
+var SITE_VERSION = '3.8.0';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -9012,6 +9030,7 @@ function renderAccount(){
     if(ACCT_TAB === 'myprofile'){
       if(title) title.innerHTML = iconSvg('contact',15) + ' 我的资料';
       box.innerHTML = myProfileHtml();
+      try{ mpAfterRender(); }catch(e){}
       if(MY_PROF_STATE === 'idle') myProfLoad();
       return;
     }
@@ -9585,7 +9604,7 @@ function myProfLoad(){
   if(!isLoggedIn()) return;
   MY_PROF_STATE = 'loading';
   var box = document.getElementById('acctBody');
-  if(box) box.innerHTML = myProfileHtml();
+  if(box){ box.innerHTML = myProfileHtml(); try{ mpAfterRender(); }catch(e){} }
   api('/profile?action=me')
     .then(function(j){
       if(j && j.ok && j.profile){ MY_PROF = j.profile; MY_PROF_STATE = 'ok'; }
@@ -9694,26 +9713,52 @@ function myProfileHtml(){
     MY_PROF_PRIVATE.forEach(function(f){ if(f && f.value) mpPush(f.label || f.field, f.value, true, f.field); });
   }
 
+  /* ============================================================================
+   * v3.8.0（站主）：我的资料改成「微信 / QQ 那种一行一个输入框」
+   * ----------------------------------------------------------------------------
+   * 站主原话：「你前面不是有复制和改两个按钮嘛，但我点击改之后由于手机屏幕小，
+   *            信息显示不全；改完之后考籍号突然就竖着显示了，显示兼容性有很大问题。
+   *            建议做得跟下面微信号 QQ 号那样，只不过旁边再新加一个复制的按钮。
+   *            可以编辑的格子直接显示、也能编辑，不可以编辑的就变灰，前面加个锁。」
+   *
+   * 所以：
+   *   · 每个字段一行：标签（可编辑 ✏️ / 只读 🔒）+ 输入框 + 复制
+   *   · 只读字段 readonly + 灰底 + 锁，不参与提交
+   *   · 可编辑字段直接改，改完底部「保存修改」一次性提交（进信息审核）
+   *   · 输入框宽度按行自适应（flex + min-width:0），长号码不会再被挤成竖排
+   * ========================================================================= */
+  var hasEditable = false;
   var mpList = mpRows.length
-    ? '<div class="mp-list">' + mpRows.map(function(r){
-        return '<div class="mp-lrow">'
-          + '<span class="mp-lk">' + (r.locked ? '🔒 ' : '') + esc(r.label) + '</span>'
-          + '<span class="mp-lv">' + esc(r.value) + '</span>'
-          /* v3.7.0：有待审修改时标一行小字，说明「你提交的新值」；审核通过后会自动变成新值 */
-          + (r.pending
-              ? '<span class="mp-copy" style="margin-left:6px;background:#fff5e6;color:#a05a1f;border-color:#f0d6b3;cursor:default">'
-                + '待审核：' + esc(String(r.pending.after || '（清空）')) + '</span>'
-              : '')
-          + '<button class="mp-copy" type="button" onclick="mpCopy(this)"'
-          +   ' data-v="' + attr(r.value) + '" data-l="' + attr(r.label) + '">复制</button>'
-          + (r.editable
-              ? '<button class="mp-copy" type="button" style="margin-left:6px"'
-                + ' onclick="mpEditStart(this)"'
-                + ' data-f="' + attr(r.field) + '" data-l="' + attr(r.label) + '"'
-                + ' data-v="' + attr(r.value) + '">改</button>'
+    ? '<div class="mp-grid">' + mpRows.map(function(r){
+        if(r.editable) hasEditable = true;
+        var pend = r.pending;
+        return '<div class="mp-field">'
+          + '<label class="mp-lb">'
+          +   (r.editable ? '✏️ ' : '🔒 ')
+          +   esc(r.label)
+          +   (r.locked ? '<span class="mp-privtag">仅自己可见</span>' : '')
+          +   (pend ? '<span class="mp-pendtag">待审核</span>' : '')
+          + '</label>'
+          + '<div class="mp-iw">'
+          +   '<input class="mp-in' + (r.editable ? '' : ' mp-ro') + '"'
+          +     ' data-mpf="' + attr(r.field) + '" data-mpl="' + attr(r.label) + '"'
+          +     ' data-mpo="' + attr(r.value) + '"'
+          +     ' value="' + attr(r.value) + '" autocomplete="off" spellcheck="false"'
+          +     (r.editable ? '' : ' readonly tabindex="-1"') + '>'
+          +   '<button class="mp-cp" type="button" data-mc="' + attr(r.value) + '"'
+          +     ' data-ml="' + attr(r.label) + '">复制</button>'
+          + '</div>'
+          + (pend
+              ? '<div class="mp-pend">提交的新值：' + esc(String(pend.after || '（清空）'))
+                + '　<span class="muted">管理员确认后生效</span></div>'
               : '')
           + '</div>';
       }).join('') + '</div>'
+      + (hasEditable
+          ? '<button class="acct-btn" id="mpEditSave" disabled'
+            + ' style="margin-top:10px;opacity:.55">保存修改（需管理员确认）</button>'
+            + '<div class="mp-edittip">带 ✏️ 的项改完点上面的按钮提交，确认前仍显示原内容；带 🔒 的只能由管理员修改。</div>'
+          : '')
     : '<p class="mp-empty">还没有可展示的资料字段。有误请联系站主。</p>';
 
   return '<div class="acct-user" style="margin-bottom:12px">' +
@@ -9727,9 +9772,10 @@ function myProfileHtml(){
 
     /* 只读区：管理员维护的字段 + 本人可见字段，全部可复制 */
     '<div class="acct-sw" style="margin-top:0">' +
-      '<div style="width:100%"><span class="t">🔒 我的班级资料</span>' +
-        '<span class="s">带「改」的项你可以自己改，提交后由管理员确认，<b>确认前仍显示原内容</b>；其余由管理员维护，发现错误请找站主。<br>' +
-          '带 🔒 的项只有你自己看得到，其他同学（包括管理员）在前台都查不到。</span>' +
+      '<div style="width:100%"><span class="t">我的班级资料</span>' +
+        '<span class="s">带 <b>✏️</b> 的可以自己改，改完点下面「保存修改」，<b>管理员确认前仍显示原内容</b>；' +
+          '带 <b>🔒</b> 的只能由管理员维护，发现错误请找站主。<br>' +
+          '标了「仅自己可见」的项只有你能看到，其他同学（包括管理员）在前台都查不到。</span>' +
         mpList +
         '</div>' +
     '</div>' +
@@ -9773,41 +9819,90 @@ var MP_SELF_BLOCK = {
   user_id:1, id:1, visibility_pref:1, field_vis:1, reject_reason:1
 };
 
-/** 点「改」：把这一行就地切成输入框 */
-function mpEditStart(btn){
-  if(!btn) return;
-  var row = btn.parentNode;
-  var field = btn.dataset.f, label = btn.dataset.l, val = btn.dataset.v || '';
-  if(!row || !field) return;
-  row.innerHTML =
-      '<span class="mp-lk">✏️ ' + esc(label) + '</span>'
-    + '<input class="mp-lv" id="mpEditBox" value="' + attr(val) + '" autocomplete="off"'
-    +   ' style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--line-2,#e7d9cc);border-radius:8px;font-size:.86rem">'
-    + '<button class="mp-copy" type="button" id="mpEditOk">保存</button>'
-    + '<button class="mp-copy" type="button" id="mpEditNo" style="margin-left:6px">取消</button>';
-  var inp = document.getElementById('mpEditBox');
-  if(inp){ try{ inp.focus(); inp.select(); }catch(e){} }
-  document.getElementById('mpEditOk').onclick = function(){ mpEditSave(field, label, val); };
-  document.getElementById('mpEditNo').onclick = function(){ myProfLoad(); };
+/** v3.8.0：我的资料渲染完后绑定交互（复制 / 改动检测 / 提交） */
+function mpAfterRender(){
+  var box = document.getElementById('acctBody');
+  if(!box) return;
+
+  /* 复制按钮：一行一个，复制的是输入框当前值（只读字段也一样能复制） */
+  Array.prototype.forEach.call(box.querySelectorAll('[data-mc]'), function(b){
+    b.onclick = function(){
+      var v = b.getAttribute('data-mc') || '';
+      var label = b.getAttribute('data-ml') || '';
+      if(!v){ toastMini('这一项还是空的，没有可复制的内容', true); return; }
+      var done = function(){ b.textContent = '已复制'; setTimeout(function(){ b.textContent = '复制'; }, 1200); };
+      try{
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(v).then(done).catch(function(){ mpLegacyCopy(v, done); });
+        } else { mpLegacyCopy(v, done); }
+      }catch(e){ mpLegacyCopy(v, done); }
+    };
+  });
+
+  /* 可编辑字段：改了才点亮「保存修改」；按 Esc 还原 */
+  var save = document.getElementById('mpEditSave');
+  var inputs = box.querySelectorAll('.mp-in[data-mpf]:not(.mp-ro)');
+  function refresh(){
+    var dirty = 0;
+    Array.prototype.forEach.call(inputs, function(i){
+      var changed = String(i.value) !== String(i.getAttribute('data-mpo') || '');
+      i.classList.toggle('mp-changed', changed);
+      if(changed) dirty++;
+    });
+    if(save){
+      save.disabled = dirty === 0;
+      save.style.opacity = dirty ? '1' : '.55';
+      save.textContent = dirty
+        ? ('保存修改（' + dirty + ' 项，需管理员确认）')
+        : '保存修改（需管理员确认）';
+    }
+  }
+  Array.prototype.forEach.call(inputs, function(i){
+    i.addEventListener('input', refresh);
+    i.addEventListener('keydown', function(e){
+      if(e.key === 'Escape'){ i.value = i.getAttribute('data-mpo') || ''; refresh(); i.blur(); }
+    });
+  });
+  if(save){
+    save.onclick = function(){
+      var fields = {};
+      Array.prototype.forEach.call(inputs, function(i){
+        var f = i.getAttribute('data-mpf');
+        var v = String(i.value);
+        if(v !== String(i.getAttribute('data-mpo') || '')) fields[f] = v;
+      });
+      var keys = Object.keys(fields);
+      if(!keys.length){ toastMini('还没有改动', true); return; }
+      save.disabled = true; save.textContent = '提交中…';
+      api('/profile?action=self-update', { method:'POST', body:{ fields: fields } })
+        .then(function(j){
+          toastMini('✅ ' + ((j && j.message) || '已提交'));
+          myProfLoad();
+        })
+        .catch(function(e){
+          save.disabled = false;
+          toastMini('⚠️ ' + ((e && e.message) || '提交失败'), true);
+          refresh();
+        });
+    };
+  }
+  refresh();
 }
 
-/** 保存单个字段 */
-function mpEditSave(field, label, oldVal){
-  var inp = document.getElementById('mpEditBox');
-  var v = inp ? inp.value : '';
-  var ok = document.getElementById('mpEditOk');
-  if(ok){ ok.disabled = true; ok.textContent = '保存中…'; }
-  var payload = {}; payload[field] = v;
-  api('/profile?action=self-update', { method:'POST', body:{ fields: payload } })
-    .then(function(j){
-      var msg = (j && j.message) || '已保存';
-      toastMini('✅ ' + msg);
-      myProfLoad();
-    })
-    .catch(function(e){
-      if(ok){ ok.disabled = false; ok.textContent = '保存'; }
-      toastMini('⚠️ ' + ((e && e.message) || '保存失败'), true);
-    });
+/** 复制兜底（老浏览器 / 非安全上下文） */
+function mpLegacyCopy(text, done){
+  try{
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try{ ok = document.execCommand('copy'); }catch(e){}
+    ta.remove();
+    if(ok && typeof done === 'function') done();
+    else toastMini('复制失败，请长按输入框手动复制', true);
+  }catch(e){ toastMini('复制失败，请长按输入框手动复制', true); }
 }
 
 /** 我的资料里的小提示（站内没有全局 toast，这里做一个轻量浮条） */
@@ -18708,6 +18803,13 @@ function scShareDialog(edit){
     +     '<b>谁拿到链接谁就能看，转发出去我控制不了</b> —— 所以默认只给 7 天，随时可以撤销。</div>'
     +   '<div class="field" style="margin-bottom:12px"><label class="sc-sh-lb">分享范围</label>'
     +     scopeSel + '</div>'
+    /* v3.8.0（站主）：备注 —— 建了很多条之后，靠它认出「这条是给谁的」 */
+    +   '<div class="field" style="margin-bottom:12px"><label class="sc-sh-lb">备注（方便自己认）</label>'
+    +     '<input id="shNote" class="sc-sel" maxlength="40" autocomplete="off"'
+    +       ' placeholder="例如：10 月月考 · 给爸妈看的"'
+    +       ' value="' + attr((edit && edit.note) || '') + '">'
+    +     '<div class="sc-dim" style="margin-top:4px;font-size:.74rem">只有你自己看得到，会显示在「我建过的分享」列表里</div>'
+    +   '</div>'
     +   '<div id="shNamesWrap" style="display:none;margin-bottom:12px">'
     +     '<label class="sc-sh-lb">挑同学（点一下选中）</label>'
     +     '<div id="shNames" class="sc-sh-names">'
@@ -18883,11 +18985,13 @@ function scShareCreate(editId){
   var maxV = scShEl('shMax').value;
   var daysVal = scShEl('shDays').value;
   var isEdit = !!editId;
+  var noteEl = scShEl('shNote');
   var req = {
     scope: scope,
     examIds: ids,
     names: names,
     sections: sections,
+    note: noteEl ? String(noteEl.value || '').trim().slice(0, 40) : '',
     days: (daysVal === 'keep' ? 'keep' : Number(daysVal)),
     maxViews: maxV ? Number(maxV) : null,
   };
@@ -18945,13 +19049,16 @@ function scShareList(){
     if(!box || !j || !j.ok) return;
     var list = j.shares || [];
     if(!list.length){ box.innerHTML = ''; return; }
-    box.innerHTML = '<div class="sc-card-h">我建过的分享</div>'
+    box.innerHTML = '<div class="sc-card-h">我建过的分享<span class="sc-dim" style="font-weight:400;margin-left:6px">共 ' + list.length + ' 条</span></div>'
       + '<div class="sc-sh-list">' + list.slice(0, 8).map(function(x){
           var state = x.revoked ? '已撤销' : x.expired ? '已过期' : x.usedUp ? '次数用完' : '有效';
           var scopeTxt = x.scope === 'self' ? '我' : x.scope === 'picked' ? '自选 ' + (x.names || []).length + ' 人' : '全班';
+          /* v3.8.0：有备注就把它当标题（自己认得出是哪条），范围退成次要信息 */
+          var title = x.note ? x.note : scopeTxt;
           return '<div class="sc-sh-item">'
             + '<span class="sc-sh-state' + (x.alive ? ' on' : '') + '">' + state + '</span>'
-            + '<b>' + esc(scopeTxt) + '</b>'
+            + '<b>' + esc(title) + '</b>'
+            + (x.note ? '<span class="sc-dim">' + esc(scopeTxt) + '</span>' : '')
             + '<span class="sc-dim">看过 ' + x.views + ' 次' + (x.maxViews ? ' / ' + x.maxViews : '') + '</span>'
             + (x.alive ? '<button class="btn btn-sm btn-secondary" data-view="' + x.id + '" data-token="' + esc(x.token || '') + '">预览</button>' : '')
             + (x.alive ? '<button class="btn btn-sm btn-secondary" data-edit="' + x.id + '">编辑</button>' : '')
