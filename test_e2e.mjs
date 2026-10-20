@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.8.0 index.html SITE_VERSION = 3.8.0', /var SITE_VERSION = '3\.8\.0'/.test(idx539));
-  t('v3.8.0 admin.html SITE_VERSION = 3.8.0', /var SITE_VERSION = '3\.8\.0'/.test(admh539));
-  t('v3.8.0 sw.js SITE_VER = 3.8.0 + CACHE v169',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.8.0'")
-    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v169'"));
-  t('v3.8.0 api/worker.mjs API_VER = 3.8.0',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.8.0';"));
+  t('v3.8.1 index.html SITE_VERSION = 3.8.1', /var SITE_VERSION = '3\.8\.1'/.test(idx539));
+  t('v3.8.1 admin.html SITE_VERSION = 3.8.1', /var SITE_VERSION = '3\.8\.1'/.test(admh539));
+  t('v3.8.1 sw.js SITE_VER = 3.8.1 + CACHE v170',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.8.1'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v170'"));
+  t('v3.8.1 api/worker.mjs API_VER = 3.8.1',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.8.1';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11141,10 +11141,10 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.8.0 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.8\.0'/.test(idx540) && /var SITE_VERSION = '3\.8\.0'/.test(adm540)
-    && /const API_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.8.1 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.8\.1'/.test(idx540) && /var SITE_VERSION = '3\.8\.1'/.test(adm540)
+    && /const API_VER = '3\.8\.1'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.1'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.8\.0'/.test(idx542) && /var SITE_VERSION = '3\.8\.0'/.test(adm542)
-    && /const API_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.8\.1'/.test(idx542) && /var SITE_VERSION = '3\.8\.1'/.test(adm542)
+    && /const API_VER = '3\.8\.1'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.1'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11270,8 +11270,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.0 当前版本 3.7.2、日期 2026-10-20',
-    /var SITE_VERSION = '3\.8\.0'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
+  t('v3.8.1 当前版本 3.7.2、日期 2026-10-20',
+    /var SITE_VERSION = '3\.8\.1'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11428,11 +11428,11 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.8.0 四处版本一致', /var SITE_VERSION = '3\.8\.0'/.test(idx70)
-    && /var SITE_VERSION = '3\.8\.0'/.test(adm70)
-    && /const API_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.0'/.test(adm70));
+  t('v3.8.1 四处版本一致', /var SITE_VERSION = '3\.8\.1'/.test(idx70)
+    && /var SITE_VERSION = '3\.8\.1'/.test(adm70)
+    && /const API_VER = '3\.8\.1'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.1'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.1'/.test(adm70));
 }
 
 console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
@@ -11458,7 +11458,7 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
   t('v3.7.6 首页 / 后台版本已是 3.7.6',
-    /var SITE_VERSION = '3\.8\.0'/.test(idx76));
+    /var SITE_VERSION = '3\.8\.1'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11509,6 +11509,8 @@ console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等
   /* ---- 导航缓存 ---- */
   t('★v3.8.0 导航改成「最多等 900ms」：慢网先用缓存',
     /Promise\.race/.test(sw80) && /900/.test(sw80) && /return winner \|\| cached/.test(sw80));
+  t('★v3.8.1 切昼夜会重算弹窗字色（盯 html 的 class）',
+    /observe\(document\.documentElement, \{ attributes:true, attributeFilter:\['class'\] \}\)/.test(idx80));
   t('★v3.8.0 导航缓存命中时会顺带把网络结果写回',
     /cache\.put\(request, res\.clone\(\)\)/.test(sw80));
 }
