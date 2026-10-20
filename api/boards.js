@@ -157,8 +157,7 @@ export default async function handler(req, res) {
     return fail(res, 405, '不支持的方法');
   } catch (e) {
     console.error('[boards]', action, e && e.stack ? e.stack : e);
-    /* 临时诊断：把原因带出来（定位完立刻改回统一文案） */
-    return fail(res, 500, '服务器内部错误', { detail: ('B/' + action + ': ' + String((e && e.message) || e)).slice(0, 260) });
+    return fail(res, 500, '服务器内部错误');
   }
 }
 
@@ -372,7 +371,7 @@ async function shareList(req, res) {
 
   const sql = getSql();
   const rows = await sql`
-    select l.*, u.name as owner_name
+    select l.*, coalesce(u.display_name, u.username, '') as owner_name
       from board_links l left join users u on u.id = l.created_by
      order by l.created_at desc
      limit 200`;
@@ -444,7 +443,10 @@ async function shareUpdate(req, res) {
                    max_views = ${maxViews || null}, card_ref = ${cardRef}
              where id = ${id}`;
   await audit(u.id, 'board.share_update', 'board_link', id, guestOk ? 'guest' : 'login');
-  return ok(res, { id, note, guestOk, card: cardRef, maxViews, expiresAt });
+  return ok(res, {
+    id, note, guestOk, card: cardRef, maxViews, expiresAt,
+    days: days === null ? null : days,
+  });
 }
 
 async function shareRevoke(req, res) {
