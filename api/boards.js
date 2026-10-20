@@ -157,7 +157,8 @@ export default async function handler(req, res) {
     return fail(res, 405, '不支持的方法');
   } catch (e) {
     console.error('[boards]', action, e && e.stack ? e.stack : e);
-    return fail(res, 500, '服务器内部错误');
+    /* 临时诊断：把原因带出来（定位完立刻改回统一文案） */
+    return fail(res, 500, '服务器内部错误', { detail: ('B/' + action + ': ' + String((e && e.message) || e)).slice(0, 260) });
   }
 }
 
