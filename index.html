@@ -1505,16 +1505,20 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .mp-iw{display:flex;align-items:center;gap:8px;min-width:0}
 /* 关键：min-width:0 + flex:1 —— 长号码（身份证、考籍号）不会再被挤成一行一个字 */
 .mp-in{flex:1 1 auto;min-width:0;width:100%;height:40px;box-sizing:border-box;
-  border:1px solid var(--tint-2);border-radius:10px;background:var(--bg-1);color:var(--fg);
+  /* v3.8.3：原来边框用 --tint-2（#fee2d5）、底色用 --bg-1（#fffbf7），
+     压在玻璃底上几乎看不出来，整片像一段普通文字，分不清哪里能填。
+     改成实一点的白底 + 浅棕描边。 */
+  border:1px solid #dcc7b4;border-radius:10px;background:#fffdfa;color:#292524;
   padding:0 12px;font-size:.88rem;font-family:inherit;line-height:40px;
   text-overflow:ellipsis;transition:border-color .15s,background .15s}
+.dark .mp-in{border-color:#4a423c;background:#201d1b;color:#f5f5f4}
 .mp-in:focus{outline:none;border-color:var(--btn-b);background:var(--bg-2)}
 .mp-in.mp-ro{background:#f4e9de;color:#4f4339;cursor:default;border-style:dashed;border-color:#dcc7b4}
 .dark .mp-in.mp-ro{background:#262220;color:#ded4cb;border-color:#4a423c}
 .mp-in.mp-changed{border-color:var(--btn-a);background:#fff8f1}
 .dark .mp-in.mp-changed{background:rgba(251,146,60,.10)}
-.mp-cp{flex:none;height:40px;padding:0 13px;border-radius:10px;border:1px solid var(--tint-2);
-  background:var(--bg-2);color:var(--fg-2);font-size:.74rem;font-weight:700;font-family:inherit;
+.mp-cp{flex:none;height:40px;padding:0 13px;border-radius:10px;border:1px solid #dcc7b4;
+  background:#fffdfa;color:#4a3f36;font-size:.74rem;font-weight:700;font-family:inherit;
   cursor:pointer;transition:background .15s,color .15s}
 .mp-cp:hover{background:var(--tint);color:var(--accent-ink)}
 .mp-cp:active{transform:scale(.97)}
@@ -1527,7 +1531,8 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* 复制按钮：原来 color:var(--fg-2) 压在浅底上偏淡，同样加深一档 */
 .mp-cp{color:#4a3f36}
 .mp-cp:hover{color:var(--accent-ink)}
-.dark .mp-cp{color:#efe6de}
+/* v3.8.3：上面把底色改成了白色，暗色模式必须同步，否则是「白底浅字」更看不见 */
+.dark .mp-cp{background:#2a2522;border-color:#4a423c;color:#efe6de}
 .dark .acct-user{background:rgba(255,255,255,.05)}
 .dark .acct-uname{color:#f0e6dc}
 .acct-row{display:flex;gap:9px;margin-top:11px}
@@ -2417,6 +2422,9 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sc-sh-btns{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}
 .sc-sh-btns .btn{flex:0 0 auto}
+/* 按钮给个浅底，别看着像一行普通文字（纯 tint 底在米白上几乎看不见） */
+.sc-sh-btns .btn-secondary{background:#f7ece1;border:1px solid #e9d9c9;color:#8a3f10}
+.dark .sc-sh-btns .btn-secondary{background:#332b26;border-color:#4a3f38;color:#fb923c}
 @media screen and (max-width:560px){
   .sc-sh-btns{flex-wrap:nowrap}
   .sc-sh-btns .btn{flex:1 1 0;min-width:0;padding:6px 4px;font-size:.72rem}
