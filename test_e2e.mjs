@@ -3589,7 +3589,7 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('v3.5.21 我的档案每行可复制（v3.8.0 起 data-mc + mpAfterRender 绑定）',
     /function mpAfterRender/.test(indexHtml) && /data-mc="' \+ attr\(r\.value\)/.test(indexHtml));
   t('v3.5.21 暗色下说明文字提亮（.dark .acct-sw .s）',
-    /\.dark \.acct-sw \.s\{color:#c8bbae\}/.test(indexHtml));
+    /\.dark \.acct-sw \.s\{color:#d8cbc0\}/.test(indexHtml));
   t('v3.5.21 后台可在线改身份证号 / 发展团员编号（以前只能导入）',
     /ruleInputHtml\('id_card'/.test(adminHtml)
     && /ruleInputHtml\('youth_league_no'/.test(adminHtml)
@@ -6722,7 +6722,7 @@ console.log('\n【63】第五十八轮·登录弹窗字色达标检查');
   t('★登录面板次要文字暗色覆盖 #c9b8aa（tab/label/hint/cap-tip/ghost 五处）',
     /\.dark \.acct-tab\{color:#c9b8aa\}/.test(idx)
     && /\.dark \.acct-field label\{color:#c9b8aa\}/.test(idx)
-    && /\.dark \.acct-hint\{color:#c9b8aa\}/.test(idx)
+    && /\.dark \.acct-hint\{color:#d8cbc0\}/.test(idx)
     && /\.dark \.cap-tip\{color:#c9b8aa\}/.test(idx)
     && /\.dark \.acct-btn\.ghost\{color:#c9b8aa\}/.test(idx));
 
@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.8.2 index.html SITE_VERSION = 3.8.2', /var SITE_VERSION = '3\.8\.2'/.test(idx539));
-  t('v3.8.2 admin.html SITE_VERSION = 3.8.2', /var SITE_VERSION = '3\.8\.2'/.test(admh539));
-  t('v3.8.2 sw.js SITE_VER = 3.8.2 + CACHE v171',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.8.2'")
+  t('v3.8.3 index.html SITE_VERSION = 3.8.3', /var SITE_VERSION = '3\.8\.3'/.test(idx539));
+  t('v3.8.3 admin.html SITE_VERSION = 3.8.3', /var SITE_VERSION = '3\.8\.3'/.test(admh539));
+  t('v3.8.3 sw.js SITE_VER = 3.8.3 + CACHE v171',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.8.3'")
     && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v171'"));
-  t('v3.8.2 api/worker.mjs API_VER = 3.8.2',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.8.2';"));
+  t('v3.8.3 api/worker.mjs API_VER = 3.8.3',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.8.3';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11141,10 +11141,10 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.8.2 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.8\.2'/.test(idx540) && /var SITE_VERSION = '3\.8\.2'/.test(adm540)
-    && /const API_VER = '3\.8\.2'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.2'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.8.3 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.8\.3'/.test(idx540) && /var SITE_VERSION = '3\.8\.3'/.test(adm540)
+    && /const API_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.8\.2'/.test(idx542) && /var SITE_VERSION = '3\.8\.2'/.test(adm542)
-    && /const API_VER = '3\.8\.2'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.2'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.8\.3'/.test(idx542) && /var SITE_VERSION = '3\.8\.3'/.test(adm542)
+    && /const API_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11270,8 +11270,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.2 当前版本 3.7.2、日期 2026-10-20',
-    /var SITE_VERSION = '3\.8\.2'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
+  t('v3.8.3 当前版本 3.7.2、日期 2026-10-20',
+    /var SITE_VERSION = '3\.8\.3'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11324,12 +11324,12 @@ console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮
     && /add column if not exists self_edit boolean not null default false/.test(admjs64));
 
   /* ---- #5 公告门禁 ---- */
-  t('★v3.7.5 公告门禁只认前两位版本号（补丁号不发公告）',
-    /const VER2 = VER\.split\('\.'\)\.slice\(0, 2\)\.join\('\.'\)/.test(pre64)
+  t('★v3.8.3 公告门禁只认前两位版本号（3.8.1/3.8.2 共用 v3.8 一条公告）',
+    /const VER2 = seg\.slice\(0, 2\)\.join\('\.'\)/.test(pre64)
     && /const ver2Re = new RegExp\('v' \+ VER2/.test(pre64)
-    && /只改最后一位（修修补补）不用发/.test(pre64));
-  t('★v3.7.0 部署前必须已发公告（没发就拦）',
-    /云端公告里没有/.test(pre64) && /云端公告已发布/.test(pre64));
+    && /一个版本批次共用一条公告/.test(pre64));
+  t('★v3.8.3 部署前必须已发公告（没发就拦）',
+    /云端公告里没有/.test(pre64) && /云端公告存在 v/.test(pre64));
 
   /* ---- #6 合并页面 ---- */
   t('★v3.7.0 版本更新并入数据管理，侧栏不再单独一项',
@@ -11428,11 +11428,11 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.8.2 四处版本一致', /var SITE_VERSION = '3\.8\.2'/.test(idx70)
-    && /var SITE_VERSION = '3\.8\.2'/.test(adm70)
-    && /const API_VER = '3\.8\.2'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.2'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.2'/.test(adm70));
+  t('v3.8.3 四处版本一致', /var SITE_VERSION = '3\.8\.3'/.test(idx70)
+    && /var SITE_VERSION = '3\.8\.3'/.test(adm70)
+    && /const API_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.3'/.test(adm70));
 }
 
 console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
@@ -11458,7 +11458,7 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
   t('v3.7.6 首页 / 后台版本已是 3.7.6',
-    /var SITE_VERSION = '3\.8\.2'/.test(idx76));
+    /var SITE_VERSION = '3\.8\.3'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11516,6 +11516,66 @@ console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等
     /observe\(document\.documentElement, \{ attributes:true, attributeFilter:\['class'\] \}\)/.test(idx80));
   t('★v3.8.0 导航缓存命中时会顺带把网络结果写回',
     /cache\.put\(request, res\.clone\(\)\)/.test(sw80));
+}
+
+console.log('\n【新】v3.8.3 我的资料字色 / 分享按钮排版 / 版本与公告门禁');
+{
+  const idx83 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm83 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const pre83 = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
+
+  /* ---- 我的资料：字看不清 ---- */
+  t('★v3.8.3 字段标签加深到 #4a3f36（原 var(--fg-2) 压在玻璃底上偏淡）',
+    /\.mp-lb\{[^}]*color:#4a3f36\}/.test(idx83));
+  t('★v3.8.3 只读输入框文字加深（亮 #4f4339 / 暗 #ded4cb）',
+    /\.mp-in\.mp-ro\{[^}]*color:#4f4339/.test(idx83)
+    && /\.dark \.mp-in\.mp-ro\{[^}]*color:#ded4cb/.test(idx83));
+  t('★v3.8.3 「仅自己可见」标签加深（#5b4c40 / 暗 #e8ddd3）',
+    /\.mp-privtag\{[^}]*color:#5b4c40/.test(idx83)
+    && /\.dark \.mp-privtag\{[^}]*color:#e8ddd3/.test(idx83));
+  t('★v3.8.3 顶部说明文字不再是 #a99a8d（改 #6b5a4b）',
+    /\.acct-sw \.s\{[^}]*color:#6b5a4b;/.test(idx83) && !/\.acct-sw \.s\{[^}]*#a99a8d/.test(idx83));
+  t('★v3.8.3 底部说明 / 复制按钮同步加深',
+    /\.mp-edittip\{[^}]*color:#57493d/.test(idx83) && /\.mp-cp\{color:#4a3f36\}/.test(idx83));
+
+  /* ---- 成绩分享：手机端按钮排版 ---- */
+  t('★v3.8.3 .btn-sm 真正定义了（不再沿用 .btn 的 130px 最小宽）',
+    /\.btn-sm\{min-width:0/.test(idx83) && /\.btn-sm\{[^}]*padding:5px 12px/.test(idx83));
+  t('★v3.8.3 分享列表改成两行（状态行 + 按钮行）',
+    /\.sc-sh-item\{[^}]*flex-direction:column/.test(idx83)
+    && /\.sc-sh-top\{/.test(idx83) && /\.sc-sh-btns\{/.test(idx83));
+  t('★v3.8.3 分享列表 HTML 用两行结构（状态/标题/次数 与按钮分离）',
+    /'<div class="sc-sh-top">'/.test(idx83) && /'<div class="sc-sh-btns">'/.test(idx83));
+  t('★v3.8.3 窄屏按钮等分铺满、不再横向滚动',
+    /max-width:560px\)\{\s*\.sc-sh-btns\{flex-wrap:nowrap\}/.test(idx83)
+    && /\.sc-sh-btns \.btn\{flex:1 1 0/.test(idx83));
+  t('★v3.8.3 分享标题超长省略（不再把「全班」挤成竖排）',
+    /\.sc-sh-top b\{[^}]*text-overflow:ellipsis/.test(idx83));
+
+  /* ---- 版本节奏：一天一个版本 ---- */
+  t('★v3.8.3 版本注释写明「一天只算一个版本」',
+    /一天只算一个版本/.test(idx83) && /上午 3\.8\.2 → 下午 3\.8\.3/.test(idx83));
+  t('★v3.8.3 REL_BUILTIN 的 3.8.3 条目带 pub 公告口径',
+    /\{\s*version:\s*'3\.8\.3'[\s\S]{0,3000}?pub:\s*\[/.test(adm83));
+
+  /* ---- 门禁：版本说明 + 公告 ---- */
+  t('★v3.8.3 门禁要求源码 REL_BUILTIN 写 pub', /缺少 pub 字段/.test(pre83));
+  t('★v3.8.3 门禁要求云端 release_notes 有该版本且带 pub',
+    /云端 release_notes 里没有/.test(pre83) && /云端 release_notes 的 ' \+ VER \+ ' 条目缺少 pub/.test(pre83));
+  t('★v3.8.3 门禁校验本次内容已并入同一版本公告',
+    /missingPub/.test(pre83) && /本次更新还没写进 v/.test(pre83));
+  t('★v3.8.3 门禁拦截内部事项（后台 / 缓存 / 数据库 …）',
+    /BAN_INTERNAL/.test(pre83) && /'后台'/.test(pre83) && /'缓存'/.test(pre83) && /'数据库'/.test(pre83));
+  t('★v3.8.3 门禁拦截技术缩写与口语化',
+    /BAN_TECH/.test(pre83) && /BAN_CASUAL/.test(pre83) && /搞定/.test(pre83));
+  t('★v3.8.3 门禁要求公告按分类分好（至少两个【分类】）',
+    /cats\.length < 2/.test(pre83) && /CAT_OK/.test(pre83));
+  t('★v3.8.3 门禁限制公告长度（站主要求简洁）',
+    /CN > 1200/.test(pre83));
+  t('★v3.8.3 --fix-announce 可按分类自动并入公告',
+    /--fix-announce/.test(pre83) && /function appendToAnnouncement/.test(pre83));
+  t('★v3.8.3 自动追加幂等（同样内容不会写两遍）',
+    /cur\.split\(\/\[；;\]\/\)\.some/.test(pre83));
 }
 
 console.log('\n' + '='.repeat(52));
