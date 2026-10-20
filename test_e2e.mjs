@@ -3581,13 +3581,13 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
     /pcAddRow\('学号', p\.studentId\)/.test(indexHtml)
     && /pcAddRow\('智学网账号', p\.examNo\)/.test(indexHtml)
     && /var pcTitles = String\(p\.title/.test(indexHtml));
-  t('v3.5.21 我的档案改为明细表（class mp-list，不再塞进 .acct-sw .s）',
-    indexHtml.indexOf('mp-list') >= 0
+  t('v3.5.21 我的档案改为明细表（v3.8.0 起换成 mp-grid 一行一输入框）',
+    indexHtml.indexOf('mp-grid') >= 0
     && /function mpPush\(label, val, locked, field\)/.test(indexHtml)
     && /mpPush\('智学网账号', p\.examNo, false, 'exam_no'\)/.test(indexHtml)
     && /MY_PROF_PRIVATE\.forEach/.test(indexHtml));
-  t('v3.5.21 我的档案每行可复制（mpCopy 读 data-v）',
-    /function mpCopy\(btn\)/.test(indexHtml) && /data-v="' \+ attr\(r\.value\)/.test(indexHtml));
+  t('v3.5.21 我的档案每行可复制（v3.8.0 起 data-mc + mpAfterRender 绑定）',
+    /function mpAfterRender/.test(indexHtml) && /data-mc="' \+ attr\(r\.value\)/.test(indexHtml));
   t('v3.5.21 暗色下说明文字提亮（.dark .acct-sw .s）',
     /\.dark \.acct-sw \.s\{color:#c8bbae\}/.test(indexHtml));
   t('v3.5.21 后台可在线改身份证号 / 发展团员编号（以前只能导入）',
@@ -6330,8 +6330,8 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     && /sections\s+jsonb/.test(sch));
   t('★share-create 收 sections，且至少留一项',
     /const rawSec = \(b\.sections/.test(sc) && /至少选一项分享内容/.test(sc));
-  t('★share-create 把 sections 存进去并回给前端',
-    /insert into share_links \(token, scope, owner_id, target_names, exam_ids, sections, expires_at, max_views\)/.test(sc));
+  t('★share-create 把 sections 存进去并回给前端（v3.8.0 起带 note 备注）',
+    /insert into share_links \(token, scope, owner_id, target_names, exam_ids, sections, expires_at, max_views, note\)/.test(sc));
   t('★老链接没写过 sections → 按「都有」处理（不返回空白）',
     /老链接没写过 sections → 按「都有」处理/.test(sc) && /const s3 = \(v\) => v !== false;/.test(sc)
     && /board: s3\(sec\.board\)/.test(sc));
@@ -8014,7 +8014,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
   t('★SCHEMA_VER 常量存在且随版本升到 3.7.0（新增资料修改申请表）',
-    /const SCHEMA_VER = '3\.7\.0'/.test(httpSrc));
+    /const SCHEMA_VER = '3\.8\.0'/.test(httpSrc));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8317,7 +8317,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.27 云端时长库表 song_durations 三处同步（升级路径/全量清单/schema.sql）',
     (HTTP_527.match(/create table if not exists song_durations/g) || []).length >= 2
     && /create table if not exists song_durations/.test(SCH_527)
-    && /const SCHEMA_VER = '3\.7\.0'/.test(HTTP_527));
+    && /const SCHEMA_VER = '3\.8\.0'/.test(HTTP_527));
   t('v3.5.27 后端写库按来源优先级，人工填写不被自动结果覆盖',
     /case song_durations\.source/.test(MUS_527) && /source: 'manual'/.test(MUS_527)
     && /when 'manual' then 3/.test(MUS_527));
@@ -10829,7 +10829,7 @@ console.log('\n【85】在线时长统计（v3.5.35）');
   t('v3.5.35 online_sessions 三处同步（升级路径 / 全量清单 / schema.sql）',
     (http535.match(/create table if not exists online_sessions/g) || []).length >= 2
     && /create table if not exists online_sessions/.test(sch535)
-    && /const SCHEMA_VER = '3\.7\.0'/.test(http535));
+    && /const SCHEMA_VER = '3\.8\.0'/.test(http535));
   t('v3.5.35 三处索引齐（user_start / start / token）',
     ['online_user_start_idx', 'online_start_idx', 'online_token_idx'].every(function(ix){
       const n = (http535.match(new RegExp('create index if not exists ' + ix, 'g')) || []).length;
@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.7.6 index.html SITE_VERSION = 3.7.6', /var SITE_VERSION = '3\.7\.6'/.test(idx539));
-  t('v3.7.6 admin.html SITE_VERSION = 3.7.6', /var SITE_VERSION = '3\.7\.6'/.test(admh539));
-  t('v3.7.6 sw.js SITE_VER = 3.7.6 + CACHE v168',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.7.6'")
-    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v168'"));
-  t('v3.7.6 api/worker.mjs API_VER = 3.7.6',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.7.6';"));
+  t('v3.8.0 index.html SITE_VERSION = 3.8.0', /var SITE_VERSION = '3\.8\.0'/.test(idx539));
+  t('v3.8.0 admin.html SITE_VERSION = 3.8.0', /var SITE_VERSION = '3\.8\.0'/.test(admh539));
+  t('v3.8.0 sw.js SITE_VER = 3.8.0 + CACHE v169',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.8.0'")
+    && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v169'"));
+  t('v3.8.0 api/worker.mjs API_VER = 3.8.0',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.8.0';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11071,8 +11071,8 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     && /if \(!m\.selfEdit\)/.test(pro540));
   t('★v3.5.40 系统列永久禁止本人改（姓名/学号/身份/头衔）',
     /SELF_EDIT_BLOCK/.test(pro540) && /'name', 'student_id', 'role', 'title'/.test(pro540));
-  t('v3.5.40 前台「我的资料」画「改」按钮并调 self-update',
-    /function mpEditStart/.test(idx540) && /action=self-update/.test(idx540));
+  t('v3.5.40 前台「我的资料」能改并调 self-update（v3.8.0 改成行内输入框）',
+    /function mpAfterRender/.test(idx540) && /action=self-update/.test(idx540));
   t('v3.5.40 后台字段管理列有「本人可编辑」',
     /本人可编辑/.test(adm540) && /data-fse=/.test(adm540));
 
@@ -11141,10 +11141,10 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
   /* ---- 版本号 ---- */
-  t('v3.7.6 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.7\.6'/.test(idx540) && /var SITE_VERSION = '3\.7\.6'/.test(adm540)
-    && /const API_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.8.0 index/admin/worker/sw 版本一致',
+    /var SITE_VERSION = '3\.8\.0'/.test(idx540) && /var SITE_VERSION = '3\.8\.0'/.test(adm540)
+    && /const API_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.7\.6'/.test(idx542) && /var SITE_VERSION = '3\.7\.6'/.test(adm542)
-    && /const API_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.8\.0'/.test(idx542) && /var SITE_VERSION = '3\.8\.0'/.test(adm542)
+    && /const API_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11270,8 +11270,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.7.6 当前版本 3.7.2、日期 2026-10-20',
-    /var SITE_VERSION = '3\.7\.6'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
+  t('v3.8.0 当前版本 3.7.2、日期 2026-10-20',
+    /var SITE_VERSION = '3\.8\.0'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11390,7 +11390,7 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
   t('★v3.7.0 撤销会还原 contact_status（联系方式专用）',
     /contact_status = 'approved'/.test(admjs70) && /prevStatus/.test(admjs70));
   t('v3.7.0 我的资料里能看到待审新值',
-    /MY_PROF_PENDING/.test(idx70) && /待审核：/.test(idx70));
+    /MY_PROF_PENDING/.test(idx70) && /mp-pend/.test(idx70) && /待审核/.test(idx70));
   t('★v3.7.0 后台面板改名为「信息审核」',
     /label:'信息审核'/.test(adm70) && !/label:'联系方式审核'/.test(adm70));
   t('★v3.7.0 审核卡片只画改过的字段（revFieldRow）',
@@ -11428,11 +11428,11 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.7.6 四处版本一致', /var SITE_VERSION = '3\.7\.6'/.test(idx70)
-    && /var SITE_VERSION = '3\.7\.6'/.test(adm70)
-    && /const API_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.7\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.7\.6'/.test(adm70));
+  t('v3.8.0 四处版本一致', /var SITE_VERSION = '3\.8\.0'/.test(idx70)
+    && /var SITE_VERSION = '3\.8\.0'/.test(adm70)
+    && /const API_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.0'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.0'/.test(adm70));
 }
 
 console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
@@ -11458,7 +11458,59 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
   t('v3.7.6 首页 / 后台版本已是 3.7.6',
-    /var SITE_VERSION = '3\.7\.6'/.test(idx76));
+    /var SITE_VERSION = '3\.8\.0'/.test(idx76));
+}
+
+console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
+{
+  const idx80 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const http80 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
+  const sch80 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
+  const sc80 = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
+  const sw80 = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+
+  /* ---- 分享备注 ---- */
+  t('★v3.8.0 share_links.note 三处都有（建表 / 升级 alter / schema.sql）',
+    /note\s+text\s+default ''/.test(http80)
+    && /alter table share_links add column if not exists note text/.test(http80)
+    && /note\s+text\s+default ''/.test(sch80));
+  t('★v3.8.0 升级路径里也补了 note（老库才生效的那一段）',
+    (function(){
+      /* 升级路径在 has_ual 分支内，且必须在 return 之前 */
+      const i = http80.indexOf('if (row && row.has_ual)');
+      const j = http80.indexOf('add column if not exists note text default', i);
+      const k = http80.indexOf('insert into site_settings', i);
+      return i > 0 && j > i && k > j;
+    })());
+  t('★v3.8.0 创建分享能写备注（最多 40 字）',
+    /const note = String\(b\.note == null \? '' : b\.note\)\.trim\(\)\.slice\(0, 40\)/.test(sc80));
+  t('★v3.8.0 编辑分享只在本轮传了 note 时才改（不会顺手清空）',
+    /const hasNote = \(b\.note !== undefined\)/.test(sc80));
+  t('★v3.8.0 公开分享页不返回备注（不泄露「给谁看的」）',
+    /delete pubShare\.note/.test(sc80));
+  t('★v3.8.0 前端分享弹窗有备注输入，列表拿备注当标题',
+    /id="shNote"/.test(idx80) && /var title = x\.note \? x\.note : scopeTxt/.test(idx80));
+
+  /* ---- 我的资料改版 ---- */
+  t('★v3.8.0 我的资料改成一行一输入框（不再有「复制 + 改」两个按钮那套）',
+    /var mpList = mpRows\.length/.test(idx80) && /\.mp-grid\{/.test(idx80)
+    && /class="mp-in'/.test(idx80));
+  t('★v3.8.0 可编辑直接改、不可编辑灰掉带锁',
+    /\.mp-in\.mp-ro\{/.test(idx80) && /r\.editable \? '✏️ ' : '🔒 '/.test(idx80));
+  t('★v3.8.0 每行右侧有复制按钮（data-mc）',
+    /data-mc="' \+ attr\(r\.value\)/.test(idx80) && /function mpAfterRender/.test(idx80));
+  t('★v3.8.0 长号码不再竖排（min-width:0 + 单行省略）',
+    /\.mp-in\{[^}]*min-width:0/.test(idx80) && /text-overflow:ellipsis/.test(idx80));
+  t('★v3.8.0 底部「保存修改（N 项，需管理员确认）」批量提交',
+    /mpEditSave/.test(idx80) && /保存修改（' \+ dirty \+ ' 项，需管理员确认）/.test(idx80));
+  t('v3.8.0 旧的就地「改」按钮逻辑已移除',
+    !/function mpEditStart/.test(idx80) && !/mpEditOk/.test(idx80));
+
+  /* ---- 导航缓存 ---- */
+  t('★v3.8.0 导航改成「最多等 900ms」：慢网先用缓存',
+    /Promise\.race/.test(sw80) && /900/.test(sw80) && /return winner \|\| cached/.test(sw80));
+  t('★v3.8.0 导航缓存命中时会顺带把网络结果写回',
+    /cache\.put\(request, res\.clone\(\)\)/.test(sw80));
 }
 
 console.log('\n' + '='.repeat(52));
