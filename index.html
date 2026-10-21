@@ -1535,8 +1535,14 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* 课表弹窗（v3.9.0 改版）
    老版本是「15 行 × 8 列」的大表，手机上糊满整屏；现在一行一节，时间/节次/科目三段，
    行高 26px，弹窗最高 68vh，内部滚动。页签在顶上，切「今天 / 周一到周日」。 */
-.tt-box{max-width:520px;width:94vw;max-height:70vh;display:flex;flex-direction:column;overflow:hidden}
-.tt-tabs{display:flex;gap:4px;padding:8px 10px;overflow-x:auto;flex:none;
+/* 站点弹窗默认是玻璃底（.allboard-box 那条规则带 !important），课表是密集表格，
+   透过去会跟背后的公告糊在一起。这里用同等优先级 + !important 压成实底。 */
+.allboard-mask .allboard-box.tt-box{max-width:520px;width:94vw;max-height:70vh;
+  display:flex;flex-direction:column;overflow:hidden;
+  background:#fffdfa!important;color:#2b211a;
+  -webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.dark .allboard-mask .allboard-box.tt-box{background:#262220!important;color:#f5ede6}
+.tt-tabs{display:flex;gap:4px;padding:6px 10px;overflow-x:auto;flex:none;
   border-bottom:1px solid #f2e9e0;scrollbar-width:none}
 .tt-tabs::-webkit-scrollbar{display:none}
 .tt-tab{flex:none;border:1px solid #efe3d7;background:#fff;border-radius:9px;
@@ -1550,12 +1556,12 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .tt-tab.on,.tt-tab.tt-exam.on,.tt-tab.tt-off.on{background:#c2410c;border-color:#c2410c;color:#fff}
 .tt-tab.on i,.tt-tab.tt-exam.on i,.tt-tab.tt-off.on i{color:rgba(255,255,255,.78)}
 .tt-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:2px 0 8px}
-.tt-dayhead{display:flex;align-items:baseline;gap:8px;padding:8px 14px 6px;
+.tt-dayhead{display:flex;align-items:baseline;gap:8px;padding:5px 14px 4px;
   font-size:.72rem;color:#8a7a6d;position:sticky;top:0;background:rgba(255,253,250,.96);
   -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);z-index:2}
 .tt-dayhead b{font-size:.82rem;color:#3f342c}
-.tt-r{display:flex;align-items:center;gap:8px;padding:4px 14px;min-height:26px;
-  font-size:.76rem;border-bottom:1px solid #f7f0e9}
+.tt-r{display:flex;align-items:center;gap:8px;padding:2px 14px;min-height:23px;
+  line-height:19px;font-size:.74rem;border-bottom:1px solid #f7f0e9}
 .tt-r .t{flex:none;width:58px;font-size:.62rem;color:#a3937f;font-variant-numeric:tabular-nums;
   white-space:nowrap}
 .tt-r .n{flex:0 0 74px;font-size:.68rem;color:#7a6a5b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -4589,7 +4595,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.9.0';
+var SITE_VERSION = '3.9.1';
 var VER_DATE = '2026-10-21';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
