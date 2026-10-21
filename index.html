@@ -1517,8 +1517,9 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .island-les.now .n{color:rgba(255,255,255,.8)}
 .island-les.done{opacity:.45}
 .island-free{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
-  padding:9px;border-radius:12px;background:rgba(255,255,255,.08);
-  font-size:.82rem;font-weight:800;color:rgba(255,255,255,.82)}
+  padding:9px;border-radius:12px;background:rgba(255,255,255,.14);
+  border:1px dashed rgba(255,255,255,.18);
+  font-size:.84rem;font-weight:800;color:#fff}
 .island-tap{flex:none;display:flex;align-items:center;padding:0 4px;font-size:.62rem;
   color:rgba(255,255,255,.55);font-weight:700;cursor:pointer}
 .island-foot{display:flex;justify-content:space-between;align-items:center;
@@ -4554,7 +4555,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.8.7';
+var SITE_VERSION = '3.8.8';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13030,6 +13031,8 @@ function islandRender(){
   }
   if(comps.indexOf('term') >= 0){
     var term = String(ISLAND.term || '').replace(/^\d{4}\s*年\s*/, '');
+    /* 手机上一格只有 80 多像素，只留最后一段（「2026 年秋季 · 高二上」→「高二上」） */
+    if(term.indexOf('·') >= 0) term = term.split('·').pop().trim();
     row += '<div class="island-chip"><span class="k">学期</span>'
          + '<span class="v" title="' + attr(ISLAND.term || '') + '">' + esc(term || '—') + '</span></div>';
   }
@@ -13178,7 +13181,7 @@ function openTimetable(){
       return '<td class="' + classes.join(' ') + '">' + (name ? esc(name) : '<span class="tt-free">—</span>') + '</td>';
     }).join('');
     return '<tr class="' + (cls ? '' : 'tt-quiet') + '">'
-      + '<td class="tt-p"><b>' + esc(p.group || '') + ' ' + esc(p.name) + '</b>'
+      + '<td class="tt-p"><b>' + esc((p.group && p.group !== p.name) ? (p.group + ' · ' + p.name) : p.name) + '</b>'
       +   '<span>' + esc((p.start || '') + '–' + (p.end || '')) + '</span></td>'
       + cells + '</tr>';
   }).join('');
