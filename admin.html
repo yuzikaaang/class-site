@@ -931,6 +931,10 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 .ai-brow .d{font-size:.74rem;font-weight:700;color:var(--fg-2)}
 .ai-brow input{width:100%;box-sizing:border-box;padding:6px 9px;border:1px solid var(--border);
   border-radius:8px;background:var(--bg-1);color:var(--fg);font-size:.78rem;font-family:inherit}
+/* v3.9.4：横幅改多行文本框（站主要求「方便我换行去写」）—— 可拉伸、自适应高度 */
+.ai-brow textarea{width:100%;box-sizing:border-box;padding:6px 9px;border:1px solid var(--border);
+  border-radius:8px;background:var(--bg-1);color:var(--fg);font-size:.78rem;font-family:inherit;
+  line-height:1.5;resize:vertical;min-height:34px;max-height:200px;overflow:auto}
 .ai-dform{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
 .ai-dform input[type=date]{flex:0 0 132px;min-width:0}
 .ai-dform input#adText{flex:1 1 200px;min-width:0}
@@ -1593,7 +1597,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.9.3';
+var SITE_VERSION = '3.9.4';
 var VER_DATE = '2026-10-21';
 
 /* ---- 运行时状态 ---- */
@@ -13308,13 +13312,23 @@ function bindCompEvents(){
 /* ---------- 横幅 ---------- */
 function paintBanner(){
   var host = $('aiBanner');
+  /* v3.9.4：<input> 改 <textarea>，支持换行；内容用 esc() 转义后放进标签内 */
   host.innerHTML = AI_DAYS.map(function(d){
     return '<div class="ai-brow">'
       + '<span class="d">' + d[1] + '</span>'
-      + '<input data-bk="' + d[0] + '" maxlength="60" value="' + attr(AI.banner[d[0]] || '') + '"'
-      +   ' placeholder="今日事项，如 升 数数语英化 物物体劳 听自语语">'
+      + '<textarea data-bk="' + d[0] + '" rows="2" maxlength="60"'
+      +   ' placeholder="今日事项，如 升 数数语英化 物物体劳 听自语语">' + esc(AI.banner[d[0]] || '') + '</textarea>'
       + '</div>';
   }).join('');
+  /* 多行自适应高度：输入时按内容伸缩，写长句也不用拖滚动条 */
+  Array.prototype.forEach.call(host.querySelectorAll('textarea[data-bk]'), function(ta){
+    var grow = function(){
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+    };
+    ta.addEventListener('input', grow);
+    grow();
+  });
   host.oninput = function(e){
     var k = e.target.getAttribute && e.target.getAttribute('data-bk');
     if(!k) return;
@@ -15669,6 +15683,15 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.4', date: '2026-10-21', type: 'fix', title: '首屏不再等接口 · 横幅支持换行', items: [
+      '进页面要等 10 秒才出内容：根因是首屏原来只有「等 /api/boards 接口回来才渲染」一条路，接口慢（Cloudflare Worker + 数据库冷启）时公告/日报/板块卡片全是空的',
+      '现在启动时先用页面自带数据 + 本地缓存同步画一屏，接口回来再原地刷新，弱网下也是秒开',
+      '统计脚本改为异步加载，不再拖住页面加载完成事件',
+      '班级岛横幅支持换行：后台文本框改成可拉伸的多行输入，前端按换行原样展示，写长一点也不会被截断'
+    ], pub: [
+      { cat: '界面', text: '首页打开即显示内容，不再长时间停留加载页' },
+      { cat: '班级', text: '「今日事项」横幅支持换行，内容长时自动换行显示' }
+    ] },
   { version: '3.9.3', date: '2026-10-21', type: 'feat', title: '班级岛收敛成「今日事项」横幅', items: [
       '班级岛第二行不再是一排课程格子，改成一行横幅：今日事项 升 数数语英化 物物体劳 听自语语自',
       '横幅按星期配：周一到周日各一句，周六周日默认也有课；后台直接改文字，不用按节次录课',
