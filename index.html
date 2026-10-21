@@ -1532,6 +1532,17 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   .island-chip.t .v{font-size:.94rem}
 }
 
+/* 仅赋分排名：只有 5 列，别跟着主表撑到 620px 横着滚 */
+.sc-tbl.sc-gd-tbl{min-width:0;table-layout:auto}
+.sc-gd-tbl th,.sc-gd-tbl td{padding:6px 3px;font-size:.72rem;white-space:nowrap}
+.sc-gd-tbl th:nth-child(1),.sc-gd-tbl td:nth-child(1){position:static;width:auto;min-width:0;
+  max-width:none;padding-left:8px;text-align:left}
+.sc-gd-tbl th{font-size:.68rem}
+.sc-gd-tbl td.sc-gd-name{font-weight:700;color:#3f342c}
+.dark .sc-gd-tbl td.sc-gd-name{color:#f0e6dc}
+.sc-gd-tbl .sc-gd-rk{font-weight:800;color:#b45309;white-space:nowrap}
+.dark .sc-gd-tbl .sc-gd-rk{color:#fdba74}
+
 /* 课表弹窗（v3.9.0 改版）
    老版本是「15 行 × 8 列」的大表，手机上糊满整屏；现在一行一节，时间/节次/科目三段，
    行高 26px，弹窗最高 68vh，内部滚动。页签在顶上，切「今天 / 周一到周日」。 */
@@ -4595,7 +4606,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.9.1';
+var SITE_VERSION = '3.9.2';
 var VER_DATE = '2026-10-21';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -16866,9 +16877,9 @@ var SC = {
   basis: 'graded',/* graded 总分赋分 | raw 总分原始 */
   sortKey: 'rank',
   sortAsc: true,
-  /* v3.9.0：仅赋分排名按「两科合计增值」排，分数高的（涨得多的）在上面 */
+  /* v3.9.0：仅赋分排名按「两科合计增值」排，涨得多的在上面（降序） */
   gSortKey: 'dSum',
-  gSortAsc: true,
+  gSortAsc: false,
   allRows: null,  /* 懒加载的历次全班成绩 { examId: {exam, rows} }，用于上线率趋势 */
   config: null,   /* 后台配置（对外展示档位等），进页面时取一次 */
   quadKey: null,  /* 四象限当前看哪一科 */
@@ -17403,8 +17414,8 @@ function scGradedBlock(){
 
   var head = '<tr>'
     + th('name', '姓名')
-    + th('cD', esc(d.C.name) + ' 赋分增值')
-    + th('bD', esc(d.B.name) + ' 赋分增值')
+    + th('cD', esc(d.C.name) + '增值')
+    + th('bD', esc(d.B.name) + '增值')
     + th('dSum', '两科合计')
     + th('rank', '排名')
     + '</tr>';
@@ -17437,7 +17448,8 @@ function scGArrow(k){
 
 function scGSort(k){
   if(SC.gSortKey === k) SC.gSortAsc = !SC.gSortAsc;
-  else { SC.gSortKey = k; SC.gSortAsc = (k === 'name' || k === 'cD' || k === 'bD' || k === 'dSum'); }
+  /* 只有姓名按升序（拼音序），数值列一律先给「从高到低」 */
+  else { SC.gSortKey = k; SC.gSortAsc = (k === 'name'); }
   scRenderBoard();
 }
 
