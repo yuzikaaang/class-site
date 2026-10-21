@@ -152,6 +152,7 @@ export default async function handler(req, res) {
       if (action === 'share-update') return await shareUpdate(req, res);
       if (action === 'share-revoke') return await shareRevoke(req, res);
       if (action === 'share-stats') return await shareStats(req, res);
+      if (action === 'ensure-link') return await ensureLink(req, res);
       return fail(res, 400, '未知的 action');
     }
     return fail(res, 405, '不支持的方法');
@@ -360,6 +361,59 @@ async function shareCreate(req, res) {
     name: boardName(meta, boardId),
     intro: boardIntro(meta, boardId),
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
+  });
+}
+
+/* ---------- 管理员：给某个板块/卡片「复用或新建」一条免登录链接 ----------
+   用途：作业导出的长图底部要印二维码，扫码直接进「作业查看」。
+   每次导出都新建一条会把分享列表刷成垃圾，所以先找可用的旧链接：
+   未撤销、没过期、次数没用完、且是免登录 —— 有就复用，没有才建。 */
+async function ensureLink(req, res) {
+  const u = await requireUser(req, res);
+  if (!u) return;
+  if (u.role !== 'admin') return fail(res, 403, '需要管理员权限');
+
+  const b = await body(req);
+  const boardId = Number(b.boardId || 0);
+  const cardRef = String(b.card || '').trim().slice(0, 40);
+  if (!boardId) return fail(res, 400, '缺少板块 id');
+
+  const sql = getSql();
+  const meta = await readMeta(sql);
+  if (!guestAllowed(meta, boardId, cardRef)) {
+    return fail(res, 400, '这个板块（或卡片）设了「仅登录可见」，不能生成免登录链接');
+  }
+
+  const rows = await sql`
+    select * from board_links
+     where board_id = ${boardId} and card_ref = ${cardRef}
+       and guest_ok = true and not revoked
+     order by id desc limit 5`;
+  for (const L of rows) {
+    const alive = (!L.expires_at || new Date(L.expires_at).getTime() > Date.now())
+      && (!L.max_views || Number(L.views) < Number(L.max_views));
+    if (alive) {
+      return ok(res, {
+        id: Number(L.id),
+        token: L.token,
+        url: '/index.html?b=' + boardId
+          + (cardRef ? '&c=' + encodeURIComponent(cardRef) : '') + '&t=' + L.token,
+        reused: true,
+      });
+    }
+  }
+
+  const token = token32();
+  const ins = await sql`
+    insert into board_links (token, board_id, card_ref, guest_ok, note, created_by)
+    values (${token}, ${boardId}, ${cardRef}, true, ${'作业导出二维码'}, ${u.id})
+    returning id`;
+  return ok(res, {
+    id: Number(ins[0].id),
+    token,
+    url: '/index.html?b=' + boardId
+      + (cardRef ? '&c=' + encodeURIComponent(cardRef) : '') + '&t=' + token,
+    reused: false,
   });
 }
 
