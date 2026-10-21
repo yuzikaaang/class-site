@@ -3636,9 +3636,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 3.9.2', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(indexHtml),
+  t('★前台版本号为 3.9.3', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.9.2', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adminHtml),
+  t('★后台版本号为 3.9.3', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -4262,9 +4262,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  t('★前台版本号为 3.9.2', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(indexHtml38),
+  t('★前台版本号为 3.9.3', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.9.2', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adminHtml38),
+  t('★后台版本号为 3.9.3', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.9.2 index.html SITE_VERSION = 3.9.2', /var SITE_VERSION = '3\.9\.2'/.test(idx539));
-  t('v3.9.2 admin.html SITE_VERSION = 3.9.2', /var SITE_VERSION = '3\.9\.2'/.test(admh539));
-  t('v3.9.2 sw.js SITE_VER = 3.9.2 + CACHE v172',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.2'")
+  t('v3.9.3 index.html SITE_VERSION = 3.9.3', /var SITE_VERSION = '3\.9\.3'/.test(idx539));
+  t('v3.9.3 admin.html SITE_VERSION = 3.9.3', /var SITE_VERSION = '3\.9\.3'/.test(admh539));
+  t('v3.9.3 sw.js SITE_VER = 3.9.3 + CACHE v172',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.3'")
     && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v172'"));
-  t('v3.9.2 api/worker.mjs API_VER = 3.9.2',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.2';"));
+  t('v3.9.3 api/worker.mjs API_VER = 3.9.3',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.3';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11142,9 +11142,9 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
 
   /* ---- 版本号 ---- */
   t('v3.8.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.9\.2'/.test(idx540) && /var SITE_VERSION = '3\.9\.2'/.test(adm540)
-    && /const API_VER = '3\.9\.2'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.2'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.3'/.test(idx540) && /var SITE_VERSION = '3\.9\.3'/.test(adm540)
+    && /const API_VER = '3\.9\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.9\.2'/.test(idx542) && /var SITE_VERSION = '3\.9\.2'/.test(adm542)
-    && /const API_VER = '3\.9\.2'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.2'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.3'/.test(idx542) && /var SITE_VERSION = '3\.9\.3'/.test(adm542)
+    && /const API_VER = '3\.9\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11271,7 +11271,7 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
   t('v3.8.5 当前版本 3.7.2、日期 2026-10-20',
-    /var SITE_VERSION = '3\.9\.2'/.test(idx61) && /VER_DATE = '2026-10-21'/.test(idx61));
+    /var SITE_VERSION = '3\.9\.3'/.test(idx61) && /VER_DATE = '2026-10-21'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11428,10 +11428,10 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.9.2 四处版本一致', /var SITE_VERSION = '3\.9\.2'/.test(idx70)
-    && /var SITE_VERSION = '3\.9\.2'/.test(adm70)
-    && /const API_VER = '3\.9\.2'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.2'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.9.3 四处版本一致', /var SITE_VERSION = '3\.9\.3'/.test(idx70)
+    && /var SITE_VERSION = '3\.9\.3'/.test(adm70)
+    && /const API_VER = '3\.9\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.9'/.test(adm70));
 }
 
@@ -11458,7 +11458,7 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
   t('v3.7.6 首页 / 后台版本已是 3.7.6',
-    /var SITE_VERSION = '3\.9\.2'/.test(idx76));
+    /var SITE_VERSION = '3\.9\.3'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11718,8 +11718,9 @@ console.log('\n【新】v3.8.7 仅赋分排名 / 作业导出 / 二维码班徽 
     && /o\.dSum = \(o\.cD != null && o\.bD != null\)/.test(idx87));
   t('★v3.9.0 排名按「两科合计增值」降序、同分并列',
     /arr\.forEach\(function\(o, i\)\{\s*if\(prev === null \|\| o\.dSum !== prev\)/.test(idx87));
-  t('★v3.9.0 表头只剩四列 + 名次（增值 / 合计 / 排名）',
-    /'增值'\)/.test(idx87) && /'两科合计'\)/.test(idx87) && /th\('rank', '排名'\)/.test(idx87));
+  t('★v3.9.3 表头：化学 / 生物 / 两科合计 / 排名',
+    /th\('cD', esc\(d\.C\.name\)\)/.test(idx87) && /th\('dSum', '两科合计'\)/.test(idx87)
+    && /th\('rank', '排名'\)/.test(idx87));
   t('★v3.8.7 接在全班成绩单下面', /\+ scGradedBlock\(\)/.test(idx87));
 
   /* ---- 作业导出 ---- */
@@ -11741,81 +11742,60 @@ console.log('\n【新】v3.8.7 仅赋分排名 / 作业导出 / 二维码班徽 
 
   /* ---- 班级岛 ---- */
   t('★v3.8.7 /api/island 已注册（GET 公开 / POST 管理员）', /case 'island':/.test(wk87));
-  t('★v3.8.7 默认作息是站主给的那一套（早读 7:30、40 分钟一节）',
-    /start: '07:30', end: '07:55'/.test(isl87) && /start: '08:00', end: '08:40'/.test(isl87)
-    && /start: '21:30', end: '22:00'/.test(isl87));
+  t('★v3.9.3 默认今日事项按纸质课表压成缩写',
+    /mon: '升 数数语英化 物物体劳 听自语语自'/.test(isl87));
   t('★v3.8.7 岛在首页公告上面',
     idx87.indexOf('id="classIsland"') < idx87.indexOf('id="board"'));
-  t('★v3.9.0 当日课程 + 当前节高亮 + 没课显示放假',
-    /function islandLessons/.test(idx87) && /island-les' \+ state/.test(idx87)
-    && /今天' \+ esc\(info\.label/.test(idx87));
-  t('★v3.9.0 课表弹窗改成页签式（今天 / 周一到周日）',
-    /function openTimetable/.test(idx87) && /tt-tabs/.test(idx87) && /tt-r/.test(idx87)
-    && /data-d="today"/.test(idx87));
+  t('★v3.9.3 第二行是「今日事项」横幅', /function islandBanner/.test(idx87)
+    && /class="island-banner"/.test(idx87) && /今日事项/.test(idx87));
+  t('★v3.9.3 课表弹窗已下线（不再有 openTimetable）', !/function openTimetable/.test(idx87));
   t('★v3.8.7 天气走 Open-Meteo（免 key、可跨域）', /api\.open-meteo\.com/.test(idx87));
   t('★v3.8.7 周数按开学日期算', /Math\.floor\(diff \/ 7\) \+ 1/.test(idx87));
   t('★v3.8.7 后台可拖动排序组件', /draggable="true"/.test(adm87) && /dragstart/.test(adm87)
     && /AI_DRAG/.test(adm87));
-  t('★v3.9.0 后台课表按天编辑（ai-trow + data-k）', /function paintDays/.test(adm87)
-    && /class="ai-trow"/.test(adm87) && /data-k="/.test(adm87));
-  t('★v3.9.0 后台作息可新建 / 复制 / 改名 / 删除',
-    /aiPlanNew/.test(adm87) && /aiPlanCopy/.test(adm87)
-    && /aiPlanRename/.test(adm87) && /aiPlanDel/.test(adm87));
+  t('★v3.9.3 后台改为七天横幅输入（不再按节次录课）',
+    /function paintBanner/.test(adm87) && /data-bk="/.test(adm87));
 }
 
-console.log('\n【新】v3.9.0 赋分增值 / 多套作息 / 考试与放假覆盖 / 课表弹窗改版');
+console.log('\n【新】v3.9.3 赋分增值→赋分 / 班级岛横幅 / 假期倒计时');
 {
-  const idx90 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
-  const adm90 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  const isl90 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
+  const idx93 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm93 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const isl93 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
 
-  /* ---- 赋分增值 ---- */
-  t('★v3.9.0 增值 = 赋分 − 原始，0 分灰显',
-    /function dc\(v\)/.test(idx90) && /if\(v === 0\) return '<td><span class="sc-dim">0/.test(idx90));
-  t('★v3.9.0 前三名带奖牌', /🥇/.test(idx90) && /🥈/.test(idx90) && /🥉/.test(idx90));
-  t('★v3.9.0 默认按合计增值排', /gSortKey: 'dSum'/.test(idx90));
+  /* ---- 赋分：增值 → 赋分 ---- */
+  t('★v3.9.3 单元格读作「+24 → 84」（增值 → 赋分）',
+    /function dc\(v, assigned\)/.test(idx93) && /sc-gd-ar">→<\/i>/.test(idx93)
+    && /dc\(o\.cD, o\.cGrd\)/.test(idx93) && /dc\(o\.dSum, o\.gSum\)/.test(idx93));
+  t('★v3.9.3 差值保留赋分值（cGrd / bGrd / gSum）',
+    /cGrd: cGrd, bGrd: bGrd,/.test(idx93) && /o\.gSum = \(o\.cGrd != null && o\.bGrd != null\)/.test(idx93));
+  t('★v3.9.3 增值与赋分用两种颜色', /\.sc-gd-as\{color:#3f342c;font-weight:800\}/.test(idx93));
+  t('★v3.9.3 默认按合计增值降序', /gSortKey: 'dSum',\s*gSortAsc: false/.test(idx93));
 
-  /* ---- 多套作息 ---- */
-  t('★v3.9.0 三套默认作息：周一至周五 / 周六 / 周日',
-    /name: '周一至周五'/.test(isl90) && /name: '周六'/.test(isl90) && /name: '周日（仅晚自习）'/.test(isl90));
-  t('★v3.9.0 周一至周五每天绑 p1、周六 p2、周日 p3',
-    /mon: 'p1', tue: 'p1', wed: 'p1', thu: 'p1', fri: 'p1', sat: 'p2', sun: 'p3'/.test(isl90));
-  t('★v3.9.0 作息数据合法化（最多 6 套 / 40 节）',
-    /MAX_PLANS = 6/.test(isl90) && /MAX_PERIODS = 40/.test(isl90) && /function normPlans/.test(isl90));
-
-  /* ---- 按日期覆盖 ---- */
-  t('★v3.9.0 覆盖支持 from/to 区间（一条能放好几天假）',
-    /if\(list\[i\]\.from <= key && key <= list\[i\]\.to\)/.test(idx90));
-  t('★v3.9.0 覆盖三种类型：放假 / 考试 / 换作息',
-    /ov\.type === 'off'/.test(idx90) && /ov\.type === 'exam'/.test(idx90)
-    && /ov\.type === 'plan'/.test(idx90));
-  t('★v3.9.0 考试日显示科目 + 起止时间（岛上与弹窗都有）',
-    /class="island-les exam"/.test(idx90) && /class="tt-r exam"/.test(idx90));
-  t('★v3.9.0 接口校验覆盖条数与考试场次',
-    /MAX_OVERRIDES = 60/.test(isl90) && /MAX_EXAM_ITEMS = 12/.test(isl90));
-
-  /* ---- 课表弹窗改版 ---- */
-  t('★v3.9.0 弹窗最高 70vh、内部滚动（不再糊满整屏）',
-    /\.tt-box\{[^}]*max-height:70vh/.test(idx90) && /\.tt-body\{[^}]*overflow-y:auto/.test(idx90));
-  t('★v3.9.0 一行一节：时间 / 节次 / 科目三段', /\.tt-r \.t\{/.test(idx90)
-    && /\.tt-r \.n\{/.test(idx90) && /\.tt-r \.s\{/.test(idx90));
-  t('★v3.9.0 页签标出考试日与放假，今天那格加框',
-    /tt-tab\.tt-exam/.test(idx90) && /tt-tab\.tt-off/.test(idx90) && /tt-tab\.tt-is-today/.test(idx90));
-
-  /* ---- 课表数据 ---- */
-  t('★v3.9.0 默认课表按纸质课表录入',
-    /mon: \['升国旗'/.test(isl90) && /wed: \['语文', '语文', '数学', '物理'/.test(isl90));
-  t('★v3.9.0 周六周日各自的作息与课程',
-    /sat: \['自习', '自习', '自习', '自习', '读报'/.test(isl90)
-    && /sun: \['读报', '自习', '物理', '物理', '自主自习'\]/.test(isl90));
+  /* ---- 班级岛：横幅 ---- */
+  t('★v3.9.3 数据模型收敛成 banner / days / holidays',
+    /banner: DEFAULT_BANNER/.test(isl93) && /function normDays/.test(isl93)
+    && /function normHolidays/.test(isl93) && !/plans/.test(isl93));
+  t('★v3.9.3 周一到周日各有一句默认今日事项',
+    /mon: '升 数数语英化 物物体劳 听自语语自'/.test(isl93)
+    && /sun: '读自 物理 物自'/.test(isl93));
+  t('★v3.9.3 周六周日默认也有课（不是空）', /sat: '自自 自自 读自自'/.test(isl93));
+  t('★v3.9.3 老课表能自动压成缩写（v1/v2 数据迁移）',
+    /function shorthand/.test(isl93) && /const ABBR = \{/.test(isl93));
+  t('★v3.9.3 按日期覆盖优先于星期默认值',
+    /var text = \(day && day\.text\) \|\| \(ISLAND\.banner \|\| \{\}\)\[dow\]/.test(idx93));
+  t('★v3.9.3 假期区间显示「已放假 N 天 · 距开学还有 M 天」',
+    /已放假 ' \+ t\.passed \+ ' 天/.test(idx93) && /距开学还有 ' \+ t\.left \+ ' 天/.test(idx93));
+  t('★v3.9.3 某天标不上课时显示放假而不是课表',
+    /if\(day && day\.off\)/.test(idx93) && /kind: 'off'/.test(idx93));
 
   /* ---- 后台 ---- */
-  t('★v3.9.0 后台可建特殊日程（放假 / 考试 / 换作息）',
-    /id="ovFrom"/.test(adm90) && /id="ovType"/.test(adm90) && /function aiAddOverride/.test(adm90));
-  t('★v3.9.0 考试科目一行一场（08:00-09:30 语文）',
-    /08:00-09:30 语文/.test(adm90));
-  t('★v3.9.0 每天可单独选作息（含不上课）',
-    /<option value="">不上课<\/option>/.test(adm90));
+  t('★v3.9.3 后台七天横幅输入框', /data-bk="/.test(adm93) && /function paintBanner/.test(adm93));
+  t('★v3.9.3 后台可按日期临时改（日期 + 文案 + 不上课）',
+    /id="adDate"/.test(adm93) && /id="adText"/.test(adm93) && /id="adOff"/.test(adm93));
+  t('★v3.9.3 后台可设假期起止与名称',
+    /id="ahLabel"/.test(adm93) && /id="ahFrom"/.test(adm93) && /id="ahTo"/.test(adm93));
+  t('★v3.9.3 后台不再有作息套数 / 周课表格子', !/aiPlanSel/.test(adm93) && !/ai-trow/.test(adm93));
 }
 
 console.log('\n' + '='.repeat(52));
