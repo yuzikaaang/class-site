@@ -913,7 +913,7 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
   .bd-name{max-width:none}
   .bd-pos{width:100%;order:9}
 }
-/* ===== 班级岛后台（v3.8.7） ===== */
+/* ===== 班级岛后台（v3.9.0 多套作息 / 特殊日程） ===== */
 .ai-sec{margin-bottom:18px}
 .ai-check{display:flex;align-items:center;gap:6px;font-size:.82rem;margin-bottom:6px}
 .ai-comp{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;
@@ -924,29 +924,55 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 .ai-comp .grip{color:var(--fg-3);font-size:.9rem;letter-spacing:-2px}
 .ai-comp button{border:none;background:var(--bg-2);border-radius:7px;padding:3px 7px;
   font-size:.72rem;cursor:pointer;color:var(--fg-2)}
-.ai-tt{width:100%;border-collapse:separate;border-spacing:0;font-size:.74rem;min-width:700px}
-.ai-tt th,.ai-tt td{padding:4px 3px;text-align:center;border-bottom:1px solid var(--border)}
-.ai-tt thead th{background:var(--bg-2);font-weight:800;position:sticky;top:0;z-index:2}
-.ai-tt .p{text-align:left;padding-left:8px;min-width:118px;background:var(--bg-2)}
-.ai-tt .p b{display:block;font-size:.72rem}
-.ai-tt .p span{font-size:.6rem;color:var(--fg-3)}
-.ai-tt input{width:100%;box-sizing:border-box;text-align:center;padding:5px 2px;
-  border:1px solid var(--border);border-radius:6px;background:var(--bg-1);color:var(--fg);
-  font-size:.76rem;font-family:inherit}
-.ai-tt tr.quiet{opacity:.42}
-.ai-prow{display:grid;grid-template-columns:1.1fr 1.1fr .8fr .8fr auto auto;gap:6px;
-  align-items:center;margin-bottom:6px}
-.ai-prow input[type=text],.ai-prow input:not([type]){width:100%;box-sizing:border-box;
-  padding:5px 7px;border:1px solid var(--border);border-radius:7px;background:var(--bg-1);
-  color:var(--fg);font-size:.76rem;font-family:inherit}
-.ai-prow label{font-size:.72rem;display:flex;align-items:center;gap:4px;white-space:nowrap}
-.ai-prow button{border:none;background:var(--bg-2);border-radius:7px;padding:4px 8px;
-  font-size:.72rem;cursor:pointer;color:var(--fg-2)}
-@media screen and (max-width:700px){
-  .ai-prow{grid-template-columns:1fr 1fr;gap:5px}
-  .ai-prow label{justify-content:flex-start}
-}
 
+/* 作息：一行一节，7 列（名称 / 开始 / 结束 / 排 / ↑ / ↓ / ✕） */
+.ai-planbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.ai-planbar select{flex:1 1 150px;min-width:0}
+.ai-prow{display:grid;grid-template-columns:minmax(0,1fr) 52px 52px 34px 22px 22px 22px;
+  gap:5px;align-items:center;margin-bottom:4px}
+.ai-prow input[type=text],.ai-prow input:not([type]){width:100%;box-sizing:border-box;
+  padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg-1);
+  color:var(--fg);font-size:.74rem;font-family:inherit}
+.ai-prow label{font-size:.68rem;display:flex;align-items:center;gap:3px;white-space:nowrap;color:var(--fg-2)}
+.ai-prow button{border:none;background:var(--bg-2);border-radius:6px;padding:3px 0;
+  font-size:.7rem;cursor:pointer;color:var(--fg-2)}
+
+/* 周课表：日期胶囊 + 一天一节 */
+.ai-days{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.ai-daytab{flex:0 0 auto;border:1px solid var(--border);background:var(--panel);border-radius:9px;
+  padding:4px 9px;font-size:.74rem;font-weight:700;color:var(--fg-2);cursor:pointer;
+  font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2}
+.ai-daytab i{font-style:normal;font-size:.58rem;color:var(--fg-3);font-weight:600;max-width:76px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-daytab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.ai-daytab.on i{color:rgba(255,255,255,.8)}
+.ai-dayplan{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--fg-2);margin-bottom:6px}
+.ai-dayplan select{flex:1 1 auto;min-width:0}
+.ai-trow{display:grid;grid-template-columns:92px minmax(0,1fr) 110px;gap:6px;
+  align-items:center;padding:3px 0;border-bottom:1px solid var(--border)}
+.ai-trow .t{font-size:.68rem;color:var(--fg-3);font-variant-numeric:tabular-nums}
+.ai-trow .n{font-size:.72rem;color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-trow input{width:100%;box-sizing:border-box;padding:4px 7px;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg-1);color:var(--fg);font-size:.74rem;font-family:inherit}
+
+/* 特殊日程 */
+.ai-ovitem{display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:5px;
+  border:1px solid var(--border);border-radius:9px;background:var(--bg-2);font-size:.78rem;flex-wrap:wrap}
+.ai-ovitem b{font-variant-numeric:tabular-nums}
+.ai-ovitem .muted{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-ovitem button{border:none;background:transparent;color:var(--fg-3);cursor:pointer;font-size:.8rem}
+.ai-ovtag{font-size:.64rem;font-weight:800;border-radius:999px;padding:1px 8px;flex:none}
+.ai-ovtag.off{background:rgba(140,140,140,.18);color:var(--fg-2)}
+.ai-ovtag.exam{background:rgba(185,28,28,.14);color:#b91c1c}
+.ai-ovtag.plan{background:rgba(3,105,161,.14);color:#0369a1}
+.ai-ovrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ai-ovrow input[type=date]{flex:1 1 120px;min-width:0}
+.ai-ovrow select{flex:1 1 100px;min-width:0}
+.ai-ovrow input#ovLabel{flex:1 1 200px;min-width:0}
+@media screen and (max-width:520px){
+  .ai-prow{grid-template-columns:minmax(0,1fr) 46px 46px 30px 20px 20px 20px;gap:4px}
+  .ai-trow{grid-template-columns:80px minmax(0,1fr) 84px}
+}
 </style>
 </head>
 <body>
@@ -1594,8 +1620,8 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.8.9';
-var VER_DATE = '2026-10-20';
+var SITE_VERSION = '3.9.0';
+var VER_DATE = '2026-10-21';
 
 /* ---- 运行时状态 ---- */
 var STATE = {
@@ -13099,19 +13125,25 @@ function relTypeOf(t){
 var BK_STATE = { list: [], count: 0, totalBytes: 0, keep: 14, busy: false };
 
 /* ============================================================================
- * v3.8.7（站主）：班级岛后台
+ * v3.9.0（站主）：班级岛后台
  * ----------------------------------------------------------------------------
  * 站主原话：
- *   「我可以在后台的首页卡片通过拖动的功能实现显示哪些组件，现在可以使用的组件
- *     包括时间、天气、周数、学期名称；课程表放第二行，这个是必须要的……
- *     我在后台可以选择课程，大概就是一个文本框……后台可以设置星期六/星期天要不要
- *     上课；前台点开之后有个弹窗，可以看到时间表和课程表。」
+ *   「以后星期三、星期四考试……我就是显示考试科目和具体考试时间。包括有时候可能是
+ *     提前放假，比如说星期四放假，那我星期五、星期六都没有课，而不是说仅周六、周天。
+ *     而且时间表我可能后面有多套，你这样一点都不好设置时间。」
+ *   「我可以在后台的首页卡片通过拖动的功能实现显示哪些组件。」
  *
- * 三块：组件（拖动排序 / 移除 / 加回）、课程表（可视化格子）、作息（逐节改时间）。
- * 保存一次写整份 JSON 到 /api/island，前台下次刷新就变。
+ * 五块：
+ *   ① 基本      开关 / 学期名 / 开学日
+ *   ② 组件      拖到哪就显示到哪，✕ 摘掉、＋ 加回
+ *   ③ 作息表    可以有好几套（周一至周五、周六、周日、考试日…），每套自己一套节次
+ *   ④ 周课表    周一到周日各绑一套作息；选一天，按那套作息逐节填课
+ *   ⑤ 特殊日程  按日期区间覆盖：放假 / 考试 / 临时换作息
  * ========================================================================= */
 var AI = null;
 var AI_DRAG = null;
+var AI_PLAN = '';
+var AI_DAY = 'mon';
 
 var AI_COMPS = [
   { k: 'time', n: '时间', d: '当前时分，每 30 秒自己走' },
@@ -13120,49 +13152,59 @@ var AI_COMPS = [
   { k: 'term', n: '学期名称', d: '例如 高二上' }
 ];
 
+var AI_DAYS = [
+  ['mon', '周一'], ['tue', '周二'], ['wed', '周三'], ['thu', '周四'],
+  ['fri', '周五'], ['sat', '周六'], ['sun', '周日']
+];
+
 function renderIsland(){
   $('view').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
   api('/island').then(function(j){
     AI = (j && j.data) || {};
+    AI.plans = AI.plans || [];
+    AI.week = AI.week || {};
+    AI.timetable = AI.timetable || {};
+    AI.overrides = AI.overrides || [];
+    AI_PLAN = (AI.plans[0] && AI.plans[0].id) || '';
     paintIsland();
   }).catch(function(e){
     $('view').innerHTML = '<div class="alert danger" style="margin:16px">加载失败：' + esc(e.message) + '</div>';
   });
 }
 
+function aiPlanById(id){
+  for(var i = 0; i < AI.plans.length; i++){ if(AI.plans[i].id === id) return AI.plans[i]; }
+  return null;
+}
+function aiCurPlan(){ return aiPlanById(AI_PLAN) || AI.plans[0] || { id: '', name: '作息', periods: [] }; }
 function paintIsland(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel)">'
     +   '<div style="flex:1;min-width:0">'
     +     '<b style="font-size:.92rem">班级岛</b>'
     +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
-    +       '首页公告上面那条：时间 / 天气 / 周数 / 学期 + 当日课程表；'
-    +       '<b>改完点保存，同学刷新一下就能看到</b></p>'
+    +       '首页公告上面那条。改完点<b>保存</b>，同学刷新一下就变</p>'
     +   '</div>'
     +   '<button class="btn btn-sm" id="aiSave">保存</button>'
     +   '<button class="btn btn-sm btn-secondary" id="aiReload">重新读取</button>'
     + '</div>'
 
     + '<section class="panel ai-sec">'
-    +   '<div class="panel-head"><div><h3>基本设置</h3></div></div>'
+    +   '<div class="panel-head"><div><h3>基本</h3></div></div>'
     +   '<div class="panel-body">'
     +     '<label class="ai-check"><input type="checkbox" id="aiOn"' + (AI.on !== false ? ' checked' : '') + '> 在首页显示班级岛</label>'
-    +     '<div class="bd-grid2" style="margin-top:12px">'
+    +     '<div class="bd-grid2" style="margin-top:10px">'
     +       '<div class="field"><label>学期名称</label>'
-    +         '<input class="gate-input" id="aiTerm" maxlength="30" value="' + attr(AI.term || '') + '" placeholder="高二上"></div>'
+    +         '<input class="gate-input" id="aiTerm" maxlength="30" value="' + attr(AI.term || '') + '" placeholder="2026 年秋季 · 高二上"></div>'
     +       '<div class="field"><label>开学那一周的周一（算周数用）</label>'
     +         '<input class="gate-input" id="aiStart" type="date" value="' + attr(AI.startDate || '') + '"></div>'
-    +     '</div>'
-    +     '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:4px">'
-    +       '<label class="ai-check"><input type="checkbox" id="aiSat"' + (AI.weekend && AI.weekend.sat ? ' checked' : '') + '> 周六上课</label>'
-    +       '<label class="ai-check"><input type="checkbox" id="aiSun"' + (AI.weekend && AI.weekend.sun ? ' checked' : '') + '> 周日上课</label>'
     +     '</div>'
     +   '</div>'
     + '</section>'
 
     + '<section class="panel ai-sec">'
     +   '<div class="panel-head"><div><h3>显示哪些组件</h3>'
-    +     '<p class="sub">按住卡片拖动可以排序；不想要的点 ✕，下面还能加回来</p></div></div>'
+    +     '<p class="sub">拖动卡片排序；✕ 摘掉、下面 ＋ 加回来。课程表固定在第二行，不在这里</p></div></div>'
     +   '<div class="panel-body">'
     +     '<div id="aiComps"></div>'
     +     '<div id="aiRest" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>'
@@ -13170,32 +13212,128 @@ function paintIsland(){
     + '</section>'
 
     + '<section class="panel ai-sec">'
-    +   '<div class="panel-head"><div><h3>课程表</h3>'
-    +     '<p class="sub">一行一节课，一格一门课；空格子会显示「—」。周六周日不上课时留空就行</p></div></div>'
-    +   '<div class="panel-body" style="overflow:auto"><table class="ai-tt" id="aiTt"></table></div>'
+    +   '<div class="panel-head"><div><h3>作息表（可以有好几套）</h3>'
+    +     '<p class="sub">勾了「排课」的才占一节；午休、大课间、晚饭这种不勾，只在时间上占位</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div class="ai-planbar">'
+    +       '<select class="gate-input" id="aiPlanSel"></select>'
+    +       '<button class="btn btn-sm btn-secondary" id="aiPlanNew">新建</button>'
+    +       '<button class="btn btn-sm btn-secondary" id="aiPlanCopy">复制</button>'
+    +       '<button class="btn btn-sm btn-secondary" id="aiPlanRename">改名</button>'
+    +       '<button class="btn btn-sm btn-danger" id="aiPlanDel">删除</button>'
+    +     '</div>'
+    +     '<div id="aiPeriods" style="margin-top:10px"></div>'
+    +     '<button class="btn btn-sm btn-secondary" id="aiAddP" style="margin-top:8px">＋ 新增一节</button>'
+    +     '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
+    +       '时间用 24 小时制，例如 08:00 / 08:40。改完不用点保存也能切来切去（切走前已经记下来了）</p>'
+    +   '</div>'
     + '</section>'
 
     + '<section class="panel ai-sec">'
-    +   '<div class="panel-head"><div><h3>作息时间</h3>'
-    +     '<p class="sub">前台课表弹窗里显示的时间；勾「排课」的才会出现在课表里</p></div>'
-    +     '<button class="btn btn-sm btn-secondary" id="aiAddP">新增一节</button></div>'
-    +   '<div class="panel-body"><div id="aiPeriods"></div>'
-    +     '<p class="muted" style="font-size:.74rem;margin:10px 0 0">'
-    +       '课间、吃饭、自主自习这些勾掉「排课」，只在时间表里出现，不占课程格子。</p>'
+    +   '<div class="panel-head"><div><h3>周课表</h3>'
+    +     '<p class="sub">先选哪天，再选这天用哪套作息；下面按那套作息逐节填课</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div class="ai-days" id="aiDays"></div>'
+    +     '<div class="ai-dayplan"><span>这天的作息</span><select class="gate-input" id="aiDayPlan"></select></div>'
+    +     '<div id="aiDayTt" style="margin-top:8px"></div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>特殊日程（考试 / 放假 / 换作息）</h3>'
+    +     '<p class="sub">按日期区间覆盖。放假直接写「10-23 到 10-25」，周五到周日一起放掉</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div id="aiOvList"></div>'
+    +     '<div class="ai-ovform">'
+    +       '<div class="ai-ovrow">'
+    +         '<input class="gate-input" type="date" id="ovFrom">'
+    +         '<span class="muted">到</span>'
+    +         '<input class="gate-input" type="date" id="ovTo">'
+    +         '<select class="gate-input" id="ovType">'
+    +           '<option value="off">放假</option>'
+    +           '<option value="exam">考试</option>'
+    +           '<option value="plan">换作息</option>'
+    +         '</select>'
+    +       '</div>'
+    +       '<div class="ai-ovrow" style="margin-top:6px">'
+    +         '<input class="gate-input" id="ovLabel" maxlength="20" placeholder="名称，如 期中考试 / 提前放假">'
+    +         '<select class="gate-input" id="ovPlan" style="display:none"></select>'
+    +       '</div>'
+    +       '<textarea class="gate-input" id="ovItems" rows="3" placeholder="考试科目：一行一场，例如&#10;08:00-09:30 语文&#10;10:00-11:30 数学" style="margin-top:6px;display:none;width:100%;font-family:inherit"></textarea>'
+    +       '<button class="btn btn-sm" id="ovAdd" style="margin-top:6px">添加</button>'
+    +     '</div>'
     +   '</div>'
     + '</section>';
 
   $('aiSave').onclick = islandSave;
   $('aiReload').onclick = renderIsland;
   $('aiAddP').onclick = function(){
-    AI.periods = (AI.periods || []).concat([{ key: '', name: '第 ' + ((AI.periods || []).length + 1) + ' 节', group: '', start: '', end: '', cls: true }]);
-    paintPeriods(); paintTt();
+    var p = aiCurPlan();
+    p.periods.push({ key: 'p' + Date.now(), name: '第 ' + (p.periods.length + 1) + ' 节', group: '', start: '', end: '', cls: true });
+    paintPeriods();
   };
+  $('aiPlanSel').onchange = function(){
+    AI_PLAN = this.value;
+    paintPeriods();
+  };
+  $('aiPlanNew').onclick = function(){
+    if(AI.plans.length >= 6){ toast('最多 6 套作息', 'warn'); return; }
+    var id = 'p' + Date.now().toString(36);
+    AI.plans.push({ id: id, name: '新作息 ' + (AI.plans.length + 1), periods: [
+      { key: 'a1', name: '第 1 节', group: '上午', start: '08:00', end: '08:40', cls: true },
+      { key: 'a2', name: '第 2 节', group: '上午', start: '08:50', end: '09:30', cls: true }
+    ] });
+    AI_PLAN = id;
+    paintPeriods();
+    toast('已新建，记得给这套作息起个名字', 'ok', 2200);
+  };
+  $('aiPlanCopy').onclick = function(){
+    if(AI.plans.length >= 6){ toast('最多 6 套作息', 'warn'); return; }
+    var src = aiCurPlan();
+    var id = 'p' + Date.now().toString(36);
+    AI.plans.push({
+      id: id, name: src.name + ' 副本',
+      periods: JSON.parse(JSON.stringify(src.periods)),
+    });
+    AI_PLAN = id;
+    paintPeriods();
+  };
+  $('aiPlanRename').onclick = function(){
+    var p = aiCurPlan();
+    var n = prompt('给这套作息起个名字', p.name);
+    if(n == null) return;
+    p.name = String(n).trim().slice(0, 20) || p.name;
+    paintPeriods();
+  };
+  $('aiPlanDel').onclick = function(){
+    if(AI.plans.length <= 1){ toast('至少留一套作息', 'warn'); return; }
+    var p = aiCurPlan();
+    confirmBox({ text: '删除作息「' + p.name + '」？', warn: '绑在这套作息上的日子会变成「不上课」。' })
+      .then(function(ok){
+        if(!ok) return;
+        AI.plans = AI.plans.filter(function(x){ return x.id !== p.id; });
+        AI_DAYS.forEach(function(d){ if(AI.week[d[0]] === p.id) AI.week[d[0]] = ''; });
+        AI_PLAN = AI.plans[0].id;
+        paintPeriods(); paintDays();
+      });
+  };
+  $('aiDayPlan').onchange = function(){
+    AI.week[AI_DAY] = this.value;
+    paintDays();
+  };
+  $('ovType').onchange = function(){
+    $('ovItems').style.display = this.value === 'exam' ? '' : 'none';
+    $('ovPlan').style.display = this.value === 'plan' ? '' : 'none';
+  };
+  $('ovAdd').onclick = aiAddOverride;
+
   paintComps();
-  paintTt();
   paintPeriods();
+  paintDays();
+  paintOvs();
 }
 
+/* ---------- 组件 ---------- */
 function aiCompName(k){
   for(var i = 0; i < AI_COMPS.length; i++){ if(AI_COMPS[i].k === k) return AI_COMPS[i].n; }
   return k;
@@ -13239,18 +13377,9 @@ function bindCompEvents(){
     var arr = (AI.components || []).slice();
     var i = arr.indexOf(k);
     if(i < 0) return;
-    if(t.hasAttribute('data-del')){
-      arr.splice(i, 1);
-      AI.components = arr; paintComps(); return;
-    }
-    if(t.hasAttribute('data-up') && i > 0){
-      arr.splice(i - 1, 0, arr.splice(i, 1)[0]);
-      AI.components = arr; paintComps(); return;
-    }
-    if(t.hasAttribute('data-down') && i < arr.length - 1){
-      arr.splice(i + 1, 0, arr.splice(i, 1)[0]);
-      AI.components = arr; paintComps(); return;
-    }
+    if(t.hasAttribute('data-del')){ arr.splice(i, 1); AI.components = arr; paintComps(); return; }
+    if(t.hasAttribute('data-up') && i > 0){ arr.splice(i - 1, 0, arr.splice(i, 1)[0]); AI.components = arr; paintComps(); return; }
+    if(t.hasAttribute('data-down') && i < arr.length - 1){ arr.splice(i + 1, 0, arr.splice(i, 1)[0]); AI.components = arr; paintComps(); return; }
   };
 
   $('aiRest').onclick = function(e){
@@ -13269,7 +13398,7 @@ function bindCompEvents(){
     el.classList.add('dragging');
     try{ e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'x'); }catch(err){}
   });
-  box.addEventListener('dragend', function(e){
+  box.addEventListener('dragend', function(){
     Array.prototype.forEach.call(box.children, function(x){ x.classList.remove('dragging', 'drag-over'); });
   });
   box.addEventListener('dragover', function(e){
@@ -13294,96 +13423,220 @@ function bindCompEvents(){
   });
 }
 
-function aiDays(){
-  return [['mon', '周一'], ['tue', '周二'], ['wed', '周三'], ['thu', '周四'],
-          ['fri', '周五'], ['sat', '周六'], ['sun', '周日']];
-}
-
-function paintTt(){
-  var periods = (AI.periods || []).filter(function(p){ return p.cls; });
-  var tt = AI.timetable || {};
-  var days = aiDays();
-  var head = '<thead><tr><th class="p">节次</th>'
-    + days.map(function(d){ return '<th>' + d[1] + '</th>'; }).join('') + '</tr></thead>';
-  var body = periods.map(function(p, i){
-    return '<tr><td class="p"><b>' + esc((p.group && p.group !== p.name) ? (p.group + ' · ' + p.name) : p.name) + '</b>'
-      + '<span>' + esc((p.start || '--:--') + '–' + (p.end || '--:--')) + '</span></td>'
-      + days.map(function(d){
-          var v = (tt[d[0]] || [])[i] || '';
-          return '<td><input data-d="' + d[0] + '" data-i="' + i + '" maxlength="6" value="' + attr(v) + '"></td>';
-        }).join('')
-      + '</tr>';
-  }).join('');
-  $('aiTt').innerHTML = head + '<tbody>' + body + '</tbody>';
-}
-
+/* ---------- 作息 ---------- */
 function paintPeriods(){
-  var ps = AI.periods || [];
-  $('aiPeriods').innerHTML = ps.map(function(p, i){
-    return '<div class="ai-prow" data-pi="' + i + '">'
-      + '<input data-pf="group" value="' + attr(p.group || '') + '" placeholder="时段（上午）">'
-      + '<input data-pf="name" value="' + attr(p.name || '') + '" placeholder="第 1 节">'
-      + '<input data-pf="start" value="' + attr(p.start || '') + '" placeholder="08:00">'
-      + '<input data-pf="end" value="' + attr(p.end || '') + '" placeholder="08:40">'
-      + '<label><input type="checkbox" data-pf="cls"' + (p.cls ? ' checked' : '') + '> 排课</label>'
-      + '<button type="button" data-pdel="' + i + '">删</button>'
-      + '</div>';
+  var sel = $('aiPlanSel');
+  if(!sel) return;
+  sel.innerHTML = AI.plans.map(function(p){
+    return '<option value="' + attr(p.id) + '"' + (p.id === AI_PLAN ? ' selected' : '') + '>'
+      + esc(p.name) + '（' + p.periods.filter(function(x){ return x.cls; }).length + ' 节）</option>';
   }).join('');
 
-  $('aiPeriods').onclick = function(e){
+  var p = aiCurPlan();
+  var host = $('aiPeriods');
+  host.innerHTML = p.periods.map(function(x, i){
+    return '<div class="ai-prow" data-pi="' + i + '">'
+      + '<input data-pf="name" value="' + attr(x.name || '') + '" placeholder="第 1 节">'
+      + '<input data-pf="start" value="' + attr(x.start || '') + '" placeholder="08:00">'
+      + '<input data-pf="end" value="' + attr(x.end || '') + '" placeholder="08:40">'
+      + '<label title="勾上才占一节"><input type="checkbox" data-pf="cls"' + (x.cls ? ' checked' : '') + '> 排</label>'
+      + '<button type="button" data-pup="1">↑</button>'
+      + '<button type="button" data-pdn="1">↓</button>'
+      + '<button type="button" data-pdel="1">✕</button>'
+      + '</div>';
+  }).join('') || '<p class="muted" style="font-size:.8rem">这套作息还没有节次</p>';
+
+  host.oninput = function(e){
     var t = e.target;
-    var del = t.getAttribute && t.getAttribute('data-pdel');
-    if(del == null) return;
-    AI.periods.splice(Number(del), 1);
-    paintPeriods(); paintTt();
+    var row = t.closest ? t.closest('.ai-prow') : null;
+    if(!row) return;
+    var pi = Number(row.getAttribute('data-pi'));
+    var f = t.getAttribute('data-pf');
+    if(!f || !p.periods[pi]) return;
+    p.periods[pi][f] = (t.type === 'checkbox') ? t.checked : String(t.value || '');
+  };
+  host.onchange = function(e){
+    if(e.target && e.target.type === 'checkbox'){
+      var row = e.target.closest('.ai-prow');
+      var pi = Number(row.getAttribute('data-pi'));
+      if(p.periods[pi]) p.periods[pi].cls = e.target.checked;
+    }
+  };
+  host.onclick = function(e){
+    var t = e.target;
+    var row = t.closest ? t.closest('.ai-prow') : null;
+    if(!row) return;
+    var pi = Number(row.getAttribute('data-pi'));
+    if(t.hasAttribute('data-pdel')){
+      p.periods.splice(pi, 1); paintPeriods(); return;
+    }
+    if(t.hasAttribute('data-pup') && pi > 0){
+      p.periods.splice(pi - 1, 0, p.periods.splice(pi, 1)[0]); paintPeriods(); return;
+    }
+    if(t.hasAttribute('data-pdn') && pi < p.periods.length - 1){
+      p.periods.splice(pi + 1, 0, p.periods.splice(pi, 1)[0]); paintPeriods(); return;
+    }
   };
 }
 
-function readPeriods(){
-  var out = [];
-  Array.prototype.forEach.call(document.querySelectorAll('#aiPeriods .ai-prow'), function(row, i){
-    function v(f){ var el = row.querySelector('[data-pf="' + f + '"]'); return el ? String(el.value || '').trim() : ''; }
-    var cb = row.querySelector('[data-pf="cls"]');
-    out.push({
-      key: 'p' + i,
-      group: v('group').slice(0, 8),
-      name: v('name').slice(0, 16) || ('第 ' + (i + 1) + ' 节'),
-      start: v('start').slice(0, 5),
-      end: v('end').slice(0, 5),
-      cls: !!(cb && cb.checked),
+/* ---------- 周课表 ---------- */
+function paintDays(){
+  var box = $('aiDays');
+  if(!box) return;
+  box.innerHTML = AI_DAYS.map(function(d){
+    var pid = AI.week[d[0]] || '';
+    var nm = pid ? (aiPlanById(pid) || {}).name : '不上课';
+    return '<button type="button" class="ai-daytab' + (AI_DAY === d[0] ? ' on' : '') + '" data-day="' + d[0] + '">'
+      + d[1] + '<i>' + esc(nm || '不上课') + '</i></button>';
+  }).join('');
+
+  box.onclick = function(e){
+    var b = e.target.closest ? e.target.closest('[data-day]') : null;
+    if(!b) return;
+    AI_DAY = b.getAttribute('data-day');
+    paintDays();
+  };
+
+  var sel = $('aiDayPlan');
+  var pid = AI.week[AI_DAY] || '';
+  sel.innerHTML = '<option value="">不上课</option>' + AI.plans.map(function(p){
+    return '<option value="' + attr(p.id) + '"' + (p.id === pid ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+  }).join('');
+
+  var plan = pid ? aiPlanById(pid) : null;
+  var host = $('aiDayTt');
+  var arr = (AI.timetable[AI_DAY] || []);
+  if(!plan){
+    host.innerHTML = '<p class="muted" style="font-size:.8rem">这天设成了「不上课」，岛上会显示放假。</p>';
+    return;
+  }
+  var idx = 0;
+  var rows = plan.periods.map(function(p, pi){
+    if(!p.cls) return '';
+    var k = idx++;
+    var v = arr[k] || '';
+    return '<div class="ai-trow">'
+      + '<span class="t">' + esc((p.start || '--:--') + '–' + (p.end || '--:--')) + '</span>'
+      + '<span class="n">' + esc(p.group && p.group !== p.name ? p.group + ' · ' + p.name : p.name) + '</span>'
+      + '<input data-k="' + k + '" maxlength="8" value="' + attr(v) + '" placeholder="课">'
+      + '</div>';
+  }).join('');
+  host.innerHTML = rows || '<p class="muted" style="font-size:.8rem">这套作息里没有勾「排课」的节次。</p>';
+
+  host.oninput = function(e){
+    var t = e.target;
+    if(!t.getAttribute || t.getAttribute('data-k') == null) return;
+    var k = Number(t.getAttribute('data-k'));
+    if(!AI.timetable[AI_DAY]) AI.timetable[AI_DAY] = [];
+    AI.timetable[AI_DAY][k] = String(t.value || '').slice(0, 8);
+  };
+}
+
+/* ---------- 特殊日程 ---------- */
+function paintOvs(){
+  var host = $('aiOvList');
+  if(!host) return;
+  var list = AI.overrides || [];
+  if(!list.length){
+    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">还没有特殊日程。下面加一条试试。</p>';
+  }else{
+    host.innerHTML = list.map(function(o, i){
+      var type = o.type === 'off' ? '放假' : o.type === 'exam' ? '考试' : '换作息';
+      var cls = o.type === 'off' ? 'off' : o.type === 'exam' ? 'exam' : 'plan';
+      var extra = o.type === 'exam'
+        ? (' · ' + (o.items || []).map(function(x){ return x.subject; }).join('、'))
+        : (o.type === 'plan' ? (' · ' + ((aiPlanById(o.planId) || {}).name || '作息')) : '');
+      var rng = o.from === o.to ? o.from.slice(5) : (o.from.slice(5) + ' – ' + o.to.slice(5));
+      return '<div class="ai-ovitem">'
+        + '<span class="ai-ovtag ' + cls + '">' + type + '</span>'
+        + '<b>' + esc(rng) + '</b>'
+        + '<span class="muted">' + esc(o.label || '') + esc(extra) + '</span>'
+        + '<button type="button" data-ovdel="' + i + '">✕</button>'
+        + '</div>';
+    }).join('');
+  }
+  host.onclick = function(e){
+    var d = e.target.getAttribute && e.target.getAttribute('data-ovdel');
+    if(d == null) return;
+    AI.overrides.splice(Number(d), 1);
+    paintOvs();
+  };
+
+  var sel = $('ovPlan');
+  if(sel){
+    sel.innerHTML = AI.plans.map(function(p){
+      return '<option value="' + attr(p.id) + '">' + esc(p.name) + '</option>';
+    }).join('');
+  }
+}
+
+function aiAddOverride(){
+  var from = $('ovFrom').value || '';
+  var to = $('ovTo').value || from;
+  var type = $('ovType').value;
+  var label = String($('ovLabel').value || '').trim().slice(0, 20);
+  if(!from){ toast('先选个起始日期', 'warn'); return; }
+  if(to < from){ toast('结束日期不能早于起始日期', 'warn'); return; }
+
+  var ov = {
+    id: 'o' + Date.now().toString(36),
+    from: from, to: to, type: type, label: label, planId: '', items: [],
+  };
+  if(type === 'exam'){
+    var txt = String($('ovItems').value || '').split('\n');
+    txt.forEach(function(line){
+      var m = /^\s*(\d{1,2}:\d{2})\s*[-–~到]\s*(\d{1,2}:\d{2})\s+(.+?)\s*$/.exec(line);
+      if(m) ov.items.push({ start: m[1], end: m[2], subject: m[3].slice(0, 16), note: '' });
+      else if(line.trim()) ov.items.push({ start: '', end: '', subject: line.trim().slice(0, 16), note: '' });
     });
-  });
-  return out;
+    if(!ov.items.length){ toast('至少写一场考试，例如「08:00-09:30 语文」', 'warn', 3000); return; }
+    if(!label) ov.label = '考试';
+  }
+  if(type === 'plan'){
+    ov.planId = $('ovPlan').value;
+    if(!ov.planId){ toast('选一套要用哪套作息', 'warn'); return; }
+  }
+  if(type === 'off' && !label) ov.label = '放假';
+
+  AI.overrides.push(ov);
+  AI.overrides.sort(function(a, b){ return a.from < b.from ? -1 : a.from > b.from ? 1 : 0; });
+  $('ovFrom').value = ''; $('ovTo').value = ''; $('ovLabel').value = ''; $('ovItems').value = '';
+  paintOvs();
+  toast('已添加，别忘了点上面的「保存」', 'ok', 2600);
 }
 
-function readTimetable(){
-  var tt = { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] };
-  Array.prototype.forEach.call(document.querySelectorAll('#aiTt input[data-d]'), function(inp){
-    var d = inp.getAttribute('data-d');
-    var i = Number(inp.getAttribute('data-i'));
-    if(!tt[d]) tt[d] = [];
-    tt[d][i] = String(inp.value || '').trim().slice(0, 6);
-  });
-  Array.prototype.forEach.call(Object.keys(tt), function(k){
-    while(tt[k].length && !tt[k][tt[k].length - 1]) tt[k].pop();
-  });
-  return tt;
-}
-
+/* ---------- 保存 ---------- */
 function islandSave(){
   var btn = $('aiSave');
   if(btn){ btn.disabled = true; btn.textContent = '保存中…'; }
+
+  /* 作息表里正在编辑的那套可能还没触发 input，这里按 DOM 再对一遍 */
+  var p = aiCurPlan();
+  Array.prototype.forEach.call(document.querySelectorAll('#aiPeriods .ai-prow'), function(row){
+    var pi = Number(row.getAttribute('data-pi'));
+    if(!p.periods[pi]) return;
+    ['name', 'start', 'end'].forEach(function(f){
+      var el = row.querySelector('[data-pf="' + f + '"]');
+      if(el) p.periods[pi][f] = String(el.value || '').trim().slice(0, 16);
+    });
+    var cb = row.querySelector('[data-pf="cls"]');
+    if(cb) p.periods[pi].cls = !!cb.checked;
+  });
+
   var data = {
     on: $('aiOn').checked,
     term: String($('aiTerm').value || '').trim(),
     startDate: String($('aiStart').value || '').trim(),
-    weekend: { sat: $('aiSat').checked, sun: $('aiSun').checked },
     components: (AI.components || []).slice(),
-    periods: readPeriods(),
-    timetable: readTimetable(),
+    plans: AI.plans,
+    week: AI.week,
+    timetable: AI.timetable,
+    overrides: AI.overrides,
   };
+
   api('/island', { method: 'POST', body: { data: data } }).then(function(j){
     AI = j.data;
+    AI_PLAN = (AI.plans[0] && AI.plans[0].id) || AI_PLAN;
     if(btn){ btn.disabled = false; btn.textContent = '保存'; }
     toast('已保存，同学刷新就能看到', 'ok');
     paintIsland();
@@ -15636,6 +15889,20 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.0', date: '2026-10-21', type: 'feat', title: '作息可多套 · 考试与放假覆盖 · 班级岛改版', items: [
+      '仅赋分排名改成「只比增值」：化学增值、生物增值、两科合计增值 + 按合计增值的名次（前三名带奖牌），不再重复显示分数，要看分数去上面的全班成绩单',
+      '作息表支持多套：周一至周五、周六、周日各一套，节次时间互不影响；后台可新建 / 复制 / 改名 / 删除，最多 6 套',
+      '周课表按天绑作息：周一到周日各选一套，周六周日的作息不一样也不用挤在同一张表里',
+      '特殊日程按日期区间覆盖：放假（10-23 到 10-25 一条就放掉三天）、考试（填科目和起止时间，当天岛上只显示考试安排）、临时换作息',
+      '前台班级岛：当天是考试就显示科目与时间，放假就显示假期名称与区间，不再硬按「周六周日」判断',
+      '课表弹窗重做：改成「今天 / 周一…周日」页签 + 一行一节（时间 · 节次 · 科目），高度从原来的整屏压到 70% 以内、内部滚动；今天那一节橙色高亮',
+      '课表弹窗里考试日显示考试科目与时间，放假显示放假区间，不再显示空课表',
+      '班级岛默认数据按站主 2026-10-21 提供的《高二五班 2026 秋季课表》录入，后台点格子即可改'
+    ], pub: [
+      { cat: '成绩', text: '「仅赋分排名」改为只看两科赋分增值，按合计增值排名' },
+      { cat: '班级', text: '首页班级小岛直接显示当天课程与时间；考试、放假期间显示相应安排' },
+      { cat: '界面', text: '课程表一页看完，不用左右滑动找日期' }
+    ] },
   { version: '3.8.9', date: '2026-10-21', type: 'fix', title: '课表弹窗一屏放得下', items: [
       '课表弹窗原来给表格设了 640px 最小宽，手机上只能看到周一周二，得横滑才知道后面还有五天',
       '现在改成自适应列宽：作息列 78px，周一到周日均分，390px 宽的手机一屏能看全；课名过长自动省略',
