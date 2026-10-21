@@ -1489,9 +1489,9 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* v3.5.21：我的资料明细表 —— 之前把字段值塞进 .acct-sw .s（灰色说明文字），
    浅色下 #a99a8d、暗色下几乎糊成一团，站主反馈「字色看不清」。
    现在值走正文色 var(--fg)，标签走 var(--fg-2)，每行右侧带复制。 */
-/* ===== 班级岛（v3.8.7，站主）=====
-   仿 ClassIsland 的顶部小岛：第一行时间/天气/周数/学期，第二行当日课程。
-   手机与电脑同一套结构，靠 flex 自适应；课程多时第二行横向滚动，不换行撑高。 */
+/* ===== 班级岛（v3.9.3，站主）=====
+   第一行 时间 / 天气 / 周数 / 学期，第二行是一条「今日事项」横幅。
+   横幅内容在后台按星期写，也能按具体日期临时改；放假区间自动换成倒计时。 */
 .island{margin:0 0 18px;border-radius:22px;padding:12px 14px;
   background:linear-gradient(145deg,rgba(30,26,23,.95),rgba(62,48,38,.92));
   border:1px solid rgba(255,255,255,.10);color:#fff;
@@ -1499,29 +1499,26 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .island::after{content:'';position:absolute;right:-40px;top:-60px;width:180px;height:180px;
   border-radius:50%;background:radial-gradient(circle,rgba(251,146,60,.28),transparent 70%);pointer-events:none}
 .island-row{display:flex;gap:8px;align-items:stretch;position:relative;z-index:1}
-.island-row + .island-row{margin-top:10px}
+.island-row + .island-row{margin-top:9px}
 .island-chip{flex:1 1 0;min-width:0;background:rgba(255,255,255,.10);border-radius:14px;
   padding:7px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px}
 .island-chip .k{font-size:.58rem;letter-spacing:.1em;color:rgba(255,255,255,.5);font-weight:700}
 .island-chip .v{font-size:.9rem;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .island-chip.t .v{font-variant-numeric:tabular-nums;font-size:1.02rem;letter-spacing:.02em}
-.island-lessons{flex:1 1 auto;display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;
-  padding:1px 0 2px;scrollbar-width:none}
-.island-lessons::-webkit-scrollbar{display:none}
-.island-les{flex:none;min-width:54px;text-align:center;padding:6px 8px;border-radius:12px;
-  background:rgba(255,255,255,.08);border:1px solid transparent}
-.island-les .n{font-size:.54rem;color:rgba(255,255,255,.5);font-weight:700;line-height:1.2}
-.island-les .s{font-size:.8rem;font-weight:800;margin-top:2px;line-height:1.2}
-.island-les.now{background:linear-gradient(135deg,#fb923c,#ea580c);border-color:rgba(255,255,255,.35);
-  box-shadow:0 6px 14px rgba(234,88,12,.45)}
-.island-les.now .n{color:rgba(255,255,255,.8)}
-.island-les.done{opacity:.45}
-.island-free{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
-  padding:9px;border-radius:12px;background:rgba(255,255,255,.14);
-  border:1px dashed rgba(255,255,255,.18);
-  font-size:.84rem;font-weight:800;color:#fff}
-.island-tap{flex:none;display:flex;align-items:center;padding:0 4px;font-size:.62rem;
-  color:rgba(255,255,255,.55);font-weight:700;cursor:pointer}
+
+/* 横幅 */
+.island-banner{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:8px;
+  padding:9px 11px;border-radius:14px;background:rgba(255,255,255,.09);
+  border:1px solid rgba(255,255,255,.10)}
+.island-banner .tag{flex:none;font-size:.6rem;font-weight:800;letter-spacing:.06em;
+  color:#ffd7bb;background:rgba(251,146,60,.20);border:1px solid rgba(251,146,60,.30);
+  border-radius:999px;padding:2px 8px}
+.island-banner .txt{flex:1 1 auto;min-width:0;font-size:.82rem;font-weight:700;color:#fff;
+  line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  word-break:break-word}
+.island-banner .txt b{font-weight:800}
+.island-banner.hol{background:rgba(255,255,255,.14);border-style:dashed}
+.island-banner.hol .tag{color:#fff;background:rgba(255,255,255,.20);border-color:rgba(255,255,255,.28)}
 .island-foot{display:flex;justify-content:space-between;align-items:center;
   margin-top:7px;font-size:.58rem;color:rgba(255,255,255,.42);position:relative;z-index:1}
 .island-foot b{color:rgba(255,255,255,.66);font-weight:700}
@@ -1530,6 +1527,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   .island-chip{padding:6px 8px;border-radius:12px}
   .island-chip .v{font-size:.82rem}
   .island-chip.t .v{font-size:.94rem}
+  .island-banner .txt{font-size:.78rem}
 }
 
 /* 仅赋分排名：只有 5 列，别跟着主表撑到 620px 横着滚 */
@@ -1541,69 +1539,11 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .sc-gd-tbl td.sc-gd-name{font-weight:700;color:#3f342c}
 .dark .sc-gd-tbl td.sc-gd-name{color:#f0e6dc}
 .sc-gd-tbl .sc-gd-rk{font-weight:800;color:#b45309;white-space:nowrap}
+.sc-gd-tbl .sc-gd-ar{font-style:normal;color:#b9ada2;margin:0 3px;font-size:.9em}
+.sc-gd-tbl .sc-gd-as{color:#3f342c;font-weight:800}
+.dark .sc-gd-tbl .sc-gd-as{color:#f0e6dc}
+.dark .sc-gd-tbl .sc-gd-ar{color:#7a6a5b}
 .dark .sc-gd-tbl .sc-gd-rk{color:#fdba74}
-
-/* 课表弹窗（v3.9.0 改版）
-   老版本是「15 行 × 8 列」的大表，手机上糊满整屏；现在一行一节，时间/节次/科目三段，
-   行高 26px，弹窗最高 68vh，内部滚动。页签在顶上，切「今天 / 周一到周日」。 */
-/* 站点弹窗默认是玻璃底（.allboard-box 那条规则带 !important），课表是密集表格，
-   透过去会跟背后的公告糊在一起。这里用同等优先级 + !important 压成实底。 */
-.allboard-mask .allboard-box.tt-box{max-width:520px;width:94vw;max-height:70vh;
-  display:flex;flex-direction:column;overflow:hidden;
-  background:#fffdfa!important;color:#2b211a;
-  -webkit-backdrop-filter:none!important;backdrop-filter:none!important}
-.dark .allboard-mask .allboard-box.tt-box{background:#262220!important;color:#f5ede6}
-.tt-tabs{display:flex;gap:4px;padding:6px 10px;overflow-x:auto;flex:none;
-  border-bottom:1px solid #f2e9e0;scrollbar-width:none}
-.tt-tabs::-webkit-scrollbar{display:none}
-.tt-tab{flex:none;border:1px solid #efe3d7;background:#fff;border-radius:9px;
-  padding:4px 8px;font-size:.68rem;font-weight:700;color:#6b5a4b;font-family:inherit;
-  line-height:1.25;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px}
-.tt-tab i{font-style:normal;font-size:.56rem;color:#a3937f;font-weight:600}
-.tt-tab.tt-exam{border-color:#f0c9a5;background:#fff7ed;color:#b45309}
-.tt-tab.tt-off{color:#a3937f;background:#faf6f1}
-.tt-tab.tt-is-today{box-shadow:inset 0 0 0 1.5px rgba(194,65,12,.35)}
-/* 选中态放在状态色后面：否则「放假 / 考试」的浅底会把选中盖掉，看着像没点中 */
-.tt-tab.on,.tt-tab.tt-exam.on,.tt-tab.tt-off.on{background:#c2410c;border-color:#c2410c;color:#fff}
-.tt-tab.on i,.tt-tab.tt-exam.on i,.tt-tab.tt-off.on i{color:rgba(255,255,255,.78)}
-.tt-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:2px 0 8px}
-.tt-dayhead{display:flex;align-items:baseline;gap:8px;padding:5px 14px 4px;
-  font-size:.72rem;color:#8a7a6d;position:sticky;top:0;background:rgba(255,253,250,.96);
-  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);z-index:2}
-.tt-dayhead b{font-size:.82rem;color:#3f342c}
-.tt-r{display:flex;align-items:center;gap:8px;padding:2px 14px;min-height:23px;
-  line-height:19px;font-size:.74rem;border-bottom:1px solid #f7f0e9}
-.tt-r .t{flex:none;width:58px;font-size:.62rem;color:#a3937f;font-variant-numeric:tabular-nums;
-  white-space:nowrap}
-.tt-r .n{flex:0 0 74px;font-size:.68rem;color:#7a6a5b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tt-r .s{flex:1 1 auto;min-width:0;font-weight:700;color:#2b211a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tt-r.now{background:#fff3e6}
-.tt-r.now .s{color:#b45309}
-.tt-r.done{opacity:.45}
-.tt-r.exam .n{color:#b91c1c;font-weight:800;font-size:.78rem;flex:0 0 92px}
-.tt-r.exam .s{color:#a3937f;font-weight:500;font-size:.7rem}
-.tt-empty{padding:22px 14px;text-align:center;color:#a3937f;font-size:.78rem}
-.tt-off-big{margin:10px 14px;padding:22px 14px;border-radius:14px;background:#fdf7f0;
-  border:1px dashed #ecd9c5;text-align:center;display:flex;flex-direction:column;gap:6px}
-.tt-off-big b{font-size:1rem;color:#8a4b16}
-.tt-off-big span{font-size:.74rem;color:#a3937f}
-.dark .tt-tabs{border-bottom-color:#3a332e}
-.dark .tt-tab{background:#2a2522;border-color:#413934;color:#d8cbc0}
-.dark .tt-tab.on{background:#c2410c;border-color:#c2410c;color:#fff}
-.dark .tt-tab i{color:#a89a8c}
-.dark .tt-dayhead{background:rgba(38,34,32,.96);color:#bfb0a3}
-.dark .tt-dayhead b{color:#f0e6dc}
-.dark .tt-r{border-bottom-color:#332c27}
-.dark .tt-r .t{color:#a89a8c}
-.dark .tt-r .n{color:#c3b3a5}
-.dark .tt-r .s{color:#f5ede6}
-.dark .tt-r.now{background:#3d2c1c}
-.dark .tt-r.now .s{color:#fdba74}
-.dark .tt-off-big{background:#2e2723;border-color:#4a3f36}
-.dark .tt-off-big b{color:#fbbf24}
-.island-les.exam{background:linear-gradient(135deg,rgba(220,38,38,.55),rgba(154,52,18,.55));
-  border-color:rgba(255,255,255,.22)}
-.island-les.exam .s{font-size:.76rem}
 
 /* ===== 板块分享（v3.8.4，站主）=====
    1) 板块简介：后台可改，进板块时显示在卡片上方
@@ -4606,7 +4546,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.9.2';
+var SITE_VERSION = '3.9.3';
 var VER_DATE = '2026-10-21';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -12994,25 +12934,23 @@ function openSidebar(){ var s=document.getElementById('sidebar'); var m=document
 function closeSidebar(){ var s=document.getElementById('sidebar'); var m=document.getElementById('sideMask'); if(s) s.classList.remove('open'); if(m) m.classList.remove('show'); }
 
 /* ============================================================================
- * v3.9.0（站主）：班级岛 —— 首页公告上面那条
+ * v3.9.3（站主）：班级岛 —— 首页公告上面那一条
  * ----------------------------------------------------------------------------
  * 站主原话：
- *   「以后星期三、星期四考试，那我这种大考就不会显示这种课程，我就是显示考试科目
- *     和具体考试时间。然后包括有时候可能是提前放假，比如说星期四放假，那我星期五、
- *     星期六都没有课，而不是说仅周六、周天。而且时间表我可能后面有多套……
- *     这个作息太长了，挡住了很多东西，最起码要短一半。」
+ *   「班级岛不要那么多功能了，第二行的课程表改为课表信息显示，类似一个横幅，
+ *     我在后台可以编辑横幅内容……一般情况下这个横幅上的就显示今日事项：
+ *     升 数数语英化 物物体劳 听自语语 就这样显示就可以了。」
+ *   「我星期五就可以提前修改好星期六和星期天的横幅显示内容。」
+ *   「放假时间段呢，我们不这样写……显示已放假多少天、距开学还有多少天。」
  *
- * 三件事对应三处改动：
- *   ① 多套作息：week 里每天绑一个 planId，周六周日各一套，考试日也能临时换一套
- *   ② 按日期覆盖：overrides 里写 from/to + 类型（放假 / 考试 / 换作息），
- *      一条「10-23 到 10-25 放假」就能把周五周六周日一起放掉，不用逐天点
- *   ③ 弹窗改版：原来一张 15 行 × 8 列的大表糊满全屏，现在改成
- *      「今天 / 周一…周日」页签 + 一行一节（时间 · 节次 · 科目），高度砍一半
+ * 所以第二行不再是一排课程格子，就是一行横幅：
+ *   今日事项：升 数数语英化 物物体劳 听自语语自
+ * 放假时换成：寒假 · 已放假 12 天 · 距开学还有 5 天
+ * 点它不弹窗 —— 要看整周的课，去公告里的课表图或者问课代表。
  * ========================================================================= */
 var ISLAND = null;
 var ISLAND_TICK = null;
 var ISLAND_WX = null;
-var ISLAND_TT_DAY = 'today';
 
 var ISLAND_WX_TXT = {
   0: '晴', 1: '多云', 2: '多云', 3: '阴', 45: '有雾', 48: '有雾',
@@ -13046,60 +12984,6 @@ function islandMin(hhmm){
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
 
-function islandPlan(id){
-  var ps = (ISLAND && ISLAND.plans) || [];
-  for(var i = 0; i < ps.length; i++){ if(ps[i].id === id) return ps[i]; }
-  return ps[0] || { id: '', name: '作息', periods: [] };
-}
-
-/* 某一天到底怎么过：放假 / 考试 / 正常上课 */
-function islandDayInfo(date){
-  if(!ISLAND) return { type: 'none', plan: islandPlan(''), lessons: [], label: '' };
-  var key = islandDateKey(date);
-  var ov = null;
-  var list = ISLAND.overrides || [];
-  for(var i = 0; i < list.length; i++){
-    if(list[i].from <= key && key <= list[i].to){ ov = list[i]; break; }
-  }
-
-  var dow = islandDayKey(date);
-  var planId = (ISLAND.week || {})[dow] || '';
-
-  if(ov && ov.type === 'off'){
-    return { type: 'off', plan: null, lessons: [], label: ov.label || '放假', from: ov.from, to: ov.to, ov: ov };
-  }
-  if(ov && ov.type === 'exam'){
-    return { type: 'exam', plan: null, lessons: [], label: ov.label || '考试', papers: ov.items || [], ov: ov };
-  }
-  if(ov && ov.type === 'plan' && ov.planId) planId = ov.planId;
-
-  if(!planId) return { type: 'off', plan: null, lessons: [], label: '不上课' };
-
-  var plan = islandPlan(planId);
-  var clsIdx = 0;
-  var arr = (ISLAND.timetable && ISLAND.timetable[dow]) || [];
-  var lessons = [];
-  (plan.periods || []).forEach(function(p, pi){
-    if(!p.cls) return;
-    lessons.push({ p: p, pi: pi, name: String(arr[clsIdx] || '').trim() });
-    clsIdx++;
-  });
-  return { type: 'class', plan: plan, lessons: lessons, label: plan.name };
-}
-
-/* 当前是第几节（只看今天，且今天要上课） */
-function islandNowPos(info){
-  if(!info || info.type !== 'class') return -1;
-  var now = new Date();
-  var cur = now.getHours() * 60 + now.getMinutes();
-  var ls = info.lessons;
-  for(var i = 0; i < ls.length; i++){
-    var a = islandMin(ls[i].p.start), b = islandMin(ls[i].p.end);
-    if(a != null && b != null && cur >= a && cur < b) return i;
-  }
-  return -1;
-}
-
 function islandWeekNo(date){
   if(!ISLAND || !ISLAND.startDate) return '';
   var st = new Date(ISLAND.startDate + 'T00:00:00');
@@ -13109,6 +12993,41 @@ function islandWeekNo(date){
   var diff = Math.floor((d - st) / 86400000);
   if(diff < 0) return '未开学';
   return '第 ' + (Math.floor(diff / 7) + 1) + ' 周';
+}
+
+function islandDaysBetween(a, b){
+  var A = new Date(a + 'T00:00:00'), B = new Date(b + 'T00:00:00');
+  if(isNaN(A.getTime()) || isNaN(B.getTime())) return null;
+  return Math.round((B - A) / 86400000);
+}
+
+/* 今天该显示什么：假期倒计时 / 这天不上课 / 具体文案 */
+function islandToday(){
+  var d = new Date();
+  var key = islandDateKey(d);
+  var dow = islandDayKey(d);
+  if(!ISLAND) return { kind: 'none' };
+
+  var hs = ISLAND.holidays || [];
+  for(var i = 0; i < hs.length; i++){
+    if(hs[i].from <= key && key <= hs[i].to){
+      var passed = islandDaysBetween(hs[i].from, key);
+      var left = islandDaysBetween(key, hs[i].to);
+      return {
+        kind: 'holiday',
+        label: hs[i].label || '假期',
+        passed: (passed == null ? 0 : passed) + 1,
+        left: (left == null ? 0 : left) + 1,
+      };
+    }
+  }
+
+  var day = (ISLAND.days || {})[key];
+  if(day && day.off){
+    return { kind: 'off', label: day.label || '今天不上课', text: day.text || '' };
+  }
+  var text = (day && day.text) || (ISLAND.banner || {})[dow] || '';
+  return { kind: 'text', text: text };
 }
 
 function islandRender(){
@@ -13144,85 +13063,51 @@ function islandRender(){
   if(!row) row = '<div class="island-chip"><span class="k">今日</span><span class="v" id="islTime">—</span></div>';
 
   host.innerHTML = '<div class="island-row">' + row + '</div>'
-    + '<div class="island-row" id="islLessons"></div>'
-    + '<div class="island-foot"><span>点开看整周与作息</span>'
+    + '<div class="island-row" id="islBannerRow"></div>'
+    + '<div class="island-foot"><span id="islFootL">今日事项</span>'
     +   '<b id="islFoot"></b></div>';
 
-  var lr = document.getElementById('islLessons');
-  if(lr){ lr.style.cursor = 'pointer'; lr.onclick = openTimetable; }
-  var ft = document.getElementById('islFoot');
-  if(ft){ ft.onclick = openTimetable; ft.style.cursor = 'pointer'; }
-
-  islandLessons();
+  islandBanner();
   islandTick();
   islandWeather();
 }
 
-/* 第二行：今天上什么（放假 / 考试 / 课程） */
-function islandLessons(){
-  var host = document.getElementById('islLessons');
+/* 第二行：一行横幅 */
+function islandBanner(){
+  var host = document.getElementById('islBannerRow');
   if(!host || !ISLAND) return;
-
-  var info = islandDayInfo(new Date());
+  var t = islandToday();
+  var footL = document.getElementById('islFootL');
   var foot = document.getElementById('islFoot');
 
-  if(info.type === 'off'){
-    host.innerHTML = '<div class="island-free">🏖️ 今天' + esc(info.label || '放假') + ' ing</div>';
-    if(foot){
-      var rng = (info.ov && info.ov.to && info.ov.to !== info.ov.from)
-        ? (' · ' + islandShort(info.ov.from) + '–' + islandShort(info.ov.to)) : '';
-      foot.textContent = (info.label || '放假') + rng + ' · ' + islandWeekNo();
-    }
-    return;
-  }
-
-  if(info.type === 'exam'){
-    var ps = info.papers || [];
-    host.innerHTML = '<div class="island-lessons">'
-      + (ps.length
-          ? ps.map(function(x){
-              return '<div class="island-les exam">'
-                + '<div class="n">' + esc((x.start || '') + (x.end ? '–' + x.end : '')) + '</div>'
-                + '<div class="s">' + esc(x.subject || '') + '</div>'
-                + '</div>';
-            }).join('')
-          : '<div class="island-les exam"><div class="n">今天</div><div class="s">' + esc(info.label) + '</div></div>')
-      + '</div><div class="island-tap">考试安排 ›</div>';
-    host.onclick = openTimetable;
-    if(foot) foot.textContent = '📝 ' + info.label + ' · ' + ps.length + ' 场 · ' + islandWeekNo();
-    return;
-  }
-
-  var ls = info.lessons || [];
-  var has = ls.filter(function(x){ return x.name; }).length;
-  if(!has){
-    host.innerHTML = '<div class="island-free">📭 今天没有排课</div>';
-    if(foot) foot.textContent = (info.label || '') + ' · ' + islandWeekNo();
-    return;
-  }
-
-  var now = islandNowPos(info);
-  var html = ls.map(function(x, i){
-    var state = (i === now) ? ' now' : (now >= 0 && i < now ? ' done' : '');
-    return '<div class="island-les' + state + '">'
-      + '<div class="n">' + esc(x.p.group || x.p.name) + '</div>'
-      + '<div class="s">' + esc(x.name || '—') + '</div>'
+  if(t.kind === 'holiday'){
+    host.innerHTML = '<div class="island-banner hol">'
+      + '<span class="tag">放假中</span>'
+      + '<span class="txt"><b>' + esc(t.label) + '</b>　已放假 ' + t.passed + ' 天'
+      +   ' · 距开学还有 ' + t.left + ' 天</span>'
       + '</div>';
-  }).join('');
-  host.innerHTML = '<div class="island-lessons">' + html + '</div>'
-    + '<div class="island-tap">整周 ›</div>';
-  host.onclick = openTimetable;
-
-  if(foot){
-    var curP = now >= 0 ? ls[now].p : null;
-    foot.textContent = (curP ? curP.name + ' · ' + curP.start + '–' + curP.end : '课间休息')
-      + ' · ' + islandWeekNo();
+    if(footL) footL.textContent = '假期';
+    if(foot) foot.textContent = islandWeekNo();
+    return;
   }
-}
 
-function islandShort(key){
-  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ''));
-  return m ? (Number(m[2]) + '/' + Number(m[3])) : String(key || '');
+  if(t.kind === 'off'){
+    host.innerHTML = '<div class="island-banner hol">'
+      + '<span class="tag">今天</span>'
+      + '<span class="txt"><b>' + esc(t.label) + '</b>' + (t.text ? '　' + esc(t.text) : '') + '</span>'
+      + '</div>';
+    if(footL) footL.textContent = '放假';
+    if(foot) foot.textContent = islandWeekNo();
+    return;
+  }
+
+  var txt = t.text || '今天没有安排';
+  host.innerHTML = '<div class="island-banner">'
+    + '<span class="tag">今日事项</span>'
+    + '<span class="txt">' + esc(txt) + '</span>'
+    + '</div>';
+  if(footL) footL.textContent = ISLAND_DOW_CN[islandDayKey(new Date())] + ' ' + (new Date().getMonth() + 1) + '/' + new Date().getDate();
+  if(foot) foot.textContent = islandWeekNo();
 }
 
 function islandTick(){
@@ -13232,9 +13117,6 @@ function islandTick(){
     var d = new Date();
     el.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   }
-  if(document.getElementById('islLessons')) islandLessons();
-  var tb = document.getElementById('ttBody');
-  if(tb){ ttPaint(); }
 }
 
 function islandWeather(){
@@ -13268,121 +13150,6 @@ function islandWeather(){
       var e3 = document.getElementById('islWx');
       if(e3) e3.textContent = '—';
     });
-}
-
-/* ---------- 弹窗：今天 / 本周七天 ---------- */
-function ttWeekMonday(){
-  var d = new Date();
-  d.setHours(0, 0, 0, 0);
-  var back = (d.getDay() + 6) % 7;     /* 周一为 0 */
-  d.setDate(d.getDate() - back);
-  return d;
-}
-
-function openTimetable(){
-  if(!ISLAND) return;
-  var old = document.getElementById('ttMask');
-  if(old && old.parentNode) old.parentNode.removeChild(old);
-  ISLAND_TT_DAY = 'today';
-
-  var mon = ttWeekMonday();
-  var tabs = '<button type="button" class="tt-tab on" data-d="today">今天</button>';
-  for(var i = 0; i < 7; i++){
-    var d = new Date(mon); d.setDate(mon.getDate() + i);
-    var info = islandDayInfo(d);
-    var mark = (info.type === 'exam') ? ' tt-exam' : (info.type === 'off' ? ' tt-off' : '');
-    var isToday = islandDateKey(d) === islandDateKey(new Date());
-    tabs += '<button type="button" class="tt-tab' + mark + (isToday ? ' tt-is-today' : '') + '" data-d="' + i + '">'
-      + ISLAND_DOW_CN[islandDayKey(d)] + '<i>' + (d.getMonth() + 1) + '/' + d.getDate() + '</i></button>';
-  }
-
-  var wrap = document.createElement('div');
-  wrap.id = 'ttMask';
-  wrap.className = 'allboard-mask show';
-  wrap.innerHTML = '<div class="allboard-box tt-box">'
-    + '<div class="allboard-head"><span>' + esc(ISLAND.term || '课程表') + '</span>'
-    +   '<button type="button" onclick="closeTimetable()">关闭</button></div>'
-    + '<div class="tt-tabs" id="ttTabs">' + tabs + '</div>'
-    + '<div class="tt-body" id="ttBody"></div>'
-    + '</div>';
-  document.body.appendChild(wrap);
-  wrap.addEventListener('click', function(e){ if(e.target === wrap) closeTimetable(); });
-  document.getElementById('ttTabs').addEventListener('click', function(e){
-    var b = e.target.closest ? e.target.closest('.tt-tab') : null;
-    if(!b) return;
-    ISLAND_TT_DAY = b.getAttribute('data-d');
-    Array.prototype.forEach.call(document.querySelectorAll('#ttTabs .tt-tab'), function(x){
-      x.classList.toggle('on', x === b);
-    });
-    ttPaint();
-  });
-  ttPaint();
-}
-
-function ttTargetDate(){
-  if(ISLAND_TT_DAY === 'today') return new Date();
-  var mon = ttWeekMonday();
-  var d = new Date(mon);
-  d.setDate(mon.getDate() + Number(ISLAND_TT_DAY || 0));
-  return d;
-}
-
-function ttPaint(){
-  var host = document.getElementById('ttBody');
-  if(!host) return;
-  var date = ttTargetDate();
-  var info = islandDayInfo(date);
-  var md = (date.getMonth() + 1) + '月' + date.getDate() + '日';
-  var dowCn = ISLAND_DOW_CN[islandDayKey(date)];
-  var isToday = islandDateKey(date) === islandDateKey(new Date());
-
-  var head = '<div class="tt-dayhead"><b>' + md + ' ' + dowCn + '</b>'
-    + '<span>' + esc(isLandTitle(info, isToday)) + '</span></div>';
-
-  if(info.type === 'off'){
-    var rng = (info.ov && info.ov.to && info.ov.to !== info.ov.from)
-      ? ('　' + islandShort(info.ov.from) + ' – ' + islandShort(info.ov.to)) : '';
-    host.innerHTML = head
-      + '<div class="tt-off-big"><b>🏖️ ' + esc(info.label || '放假') + '</b>'
-      + '<span>' + esc(rng.trim()) + '</span></div>';
-    return;
-  }
-
-  if(info.type === 'exam'){
-    var ps = info.papers || [];
-    var rows = ps.map(function(x){
-      var t = (x.start || '') + (x.end ? '–' + x.end : '');
-      return '<div class="tt-r exam">'
-        + '<span class="t">' + esc(t) + '</span>'
-        + '<span class="n">' + esc(x.subject || '') + '</span>'
-        + '<span class="s">' + esc(x.note || '') + '</span>'
-        + '</div>';
-    }).join('');
-    host.innerHTML = head + (rows || '<div class="tt-empty">还没填考试科目</div>');
-    return;
-  }
-
-  var now = isToday ? islandNowPos(info) : -1;
-  var rows2 = (info.lessons || []).map(function(x, i){
-    var st = (i === now) ? ' now' : (now >= 0 && i < now ? ' done' : '');
-    return '<div class="tt-r' + st + '">'
-      + '<span class="t">' + esc(x.p.start || '') + '</span>'
-      + '<span class="n">' + esc(x.p.group && x.p.group !== x.p.name ? x.p.group + ' · ' + x.p.name : x.p.name) + '</span>'
-      + '<span class="s">' + esc(x.name || '—') + '</span>'
-      + '</div>';
-  }).join('');
-  host.innerHTML = head + (rows2 || '<div class="tt-empty">这天没有排课</div>');
-}
-
-function isLandTitle(info, isToday){
-  if(info.type === 'exam') return info.label + (isToday ? ' · 今天' : '');
-  if(info.type === 'off') return info.label + (isToday ? ' · 今天' : '');
-  return (info.plan ? info.plan.name : '') + ' · ' + islandWeekNo(isToday ? new Date() : ttTargetDate());
-}
-
-function closeTimetable(){
-  var m = document.getElementById('ttMask');
-  if(m && m.parentNode) m.parentNode.removeChild(m);
 }
 
 /* ============================================================
@@ -17360,11 +17127,13 @@ function scGradedData(){
       id: r.id, name: r.name, isMe: !!(meRow && r.id === meRow.id),
       cD: (cRaw != null && cGrd != null) ? (cGrd - cRaw) : null,
       bD: (bRaw != null && bGrd != null) ? (bGrd - bRaw) : null,
+      cGrd: cGrd, bGrd: bGrd,
     };
   });
 
   rows.forEach(function(o){
     o.dSum = (o.cD != null && o.bD != null) ? (o.cD + o.bD) : null;
+    o.gSum = (o.cGrd != null && o.bGrd != null) ? (o.cGrd + o.bGrd) : null;
   });
 
   /* 排名只看「两科合计差值」；同分并列（1,2,2,4） */
@@ -17400,11 +17169,13 @@ function scGradedBlock(){
   function th(k, label){
     return '<th class="sc-th-sort" onclick="scGSort(\'' + k + '\')">' + label + scGArrow(k) + '</th>';
   }
-  function dc(v){
+  /* 站主：「+24（增值）→84（赋分）」，页面上用不同颜色区分 */
+  function dc(v, assigned){
     if(v == null) return '<td><span class="sc-dim">—</span></td>';
-    if(v === 0) return '<td><span class="sc-dim">0</span></td>';
-    return '<td class="' + (v > 0 ? 'sc-gd-up' : 'sc-gd-down') + '">'
-      + (v > 0 ? '+' : '') + v + '</td>';
+    var d = (v === 0) ? '<span class="sc-dim">0</span>'
+      : '<span class="' + (v > 0 ? 'sc-gd-up' : 'sc-gd-down') + '">' + (v > 0 ? '+' : '') + v + '</span>';
+    if(assigned == null) return '<td>' + d + '</td>';
+    return '<td>' + d + '<i class="sc-gd-ar">→</i><b class="sc-gd-as">' + assigned + '</b></td>';
   }
   function rankCell(o){
     if(o.rank == null) return '<td><span class="sc-dim">—</span></td>';
@@ -17414,8 +17185,8 @@ function scGradedBlock(){
 
   var head = '<tr>'
     + th('name', '姓名')
-    + th('cD', esc(d.C.name) + '增值')
-    + th('bD', esc(d.B.name) + '增值')
+    + th('cD', esc(d.C.name))
+    + th('bD', esc(d.B.name))
     + th('dSum', '两科合计')
     + th('rank', '排名')
     + '</tr>';
@@ -17423,18 +17194,18 @@ function scGradedBlock(){
   var body = arr.map(function(o){
     return '<tr class="' + (o.isMe ? 'sc-me-row' : '') + '">'
       + '<td class="sc-gd-name">' + esc(o.name) + (o.isMe ? '<span class="sc-you">我</span>' : '') + '</td>'
-      + dc(o.cD) + dc(o.bD) + dc(o.dSum)
+      + dc(o.cD, o.cGrd) + dc(o.bD, o.bGrd) + dc(o.dSum, o.gSum)
       + rankCell(o)
       + '</tr>';
   }).join('');
 
   return '<div class="sc-card-h" style="margin-top:22px">仅赋分排名'
-      + '<span class="sc-h-note">只看' + esc(d.C.name) + ' + ' + esc(d.B.name) + ' 的赋分增值</span>'
+      + '<span class="sc-h-note">' + esc(d.C.name) + ' + ' + esc(d.B.name) + '：增值 → 赋分</span>'
       + '</div>'
     + '<div class="sc-hint">'
-      +   '<b>增值 = 赋分 − 原始分</b>，也就是这两科赋分之后各自多拿了多少分；'
+      +   '每格读作 <span class="sc-gd-up">+24</span> → <b class="sc-gd-as">84</b>：'
+      +   '左边是赋分比原始分多拿的分（增值），右边是赋分后的分数。'
       +   '<b>排名</b>按「两科合计增值」从高到低，同分并列。'
-      +   '想看具体分数点上面的「全班成绩单」。'
       + '</div>'
     + '<div class="sc-tblwrap" data-scroll-keep><table class="sc-tbl sc-gd-tbl">'
     +   '<thead>' + head + '</thead><tbody>' + body + '</tbody>'
