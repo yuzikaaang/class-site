@@ -1513,9 +1513,9 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .island-banner .tag{flex:none;font-size:.6rem;font-weight:800;letter-spacing:.06em;
   color:#ffd7bb;background:rgba(251,146,60,.20);border:1px solid rgba(251,146,60,.30);
   border-radius:999px;padding:2px 8px}
+/* v3.9.4：横幅支持后台换行 —— pre-line 保留 \n，不再截断行数 */
 .island-banner .txt{flex:1 1 auto;min-width:0;font-size:.82rem;font-weight:700;color:#fff;
-  line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  word-break:break-word}
+  line-height:1.5;white-space:pre-line;word-break:break-word}
 .island-banner .txt b{font-weight:800}
 .island-banner.hol{background:rgba(255,255,255,.14);border-style:dashed}
 .island-banner.hol .tag{color:#fff;background:rgba(255,255,255,.20);border-color:rgba(255,255,255,.28)}
@@ -4546,7 +4546,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.9.3';
+var SITE_VERSION = '3.9.4';
 var VER_DATE = '2026-10-21';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -21784,6 +21784,17 @@ setInterval(updateCountdown, 1000);
    而不是 HTML 里写死的旧快照。云端内容由 contentBoot 在后台补拉，回来后再重绘。 */
 contentCacheBootstrap(false);
 goHomeView();
+/* v3.9.4（站主）：「每次进页面都要等 10 秒钟才能完全加载出来」
+   ------------------------------------------------------------
+   根因：首屏内容原来**只有一条渲染路径** —— boardShareBoot() → boardMetaLoad()
+   等 /api/boards?action=meta 回来才 render()。那是个 Cloudflare Worker + Neon
+   查询，实测 1.3~3.9 秒，同学手机慢网 + 数据库冷启时轻松 10 秒；
+   这期间公告 / 日报 / 一言 / 板块卡片全是空的，就是站主看到的「骨架屏」。
+
+   修法：先用 HTML 里自带的 SITE_DATA（叠加刚套上的云端缓存）**同步画一屏**，
+   用户瞬间看到内容；接口回来后该刷新刷新（boardMetaLoad 与 syncCloudContent
+   里本来就有 render / rerenderAll），数据一个不少。 */
+try{ render(); }catch(e){ console.warn('[boot] 首屏渲染失败，等接口回来再画', e); }
 /* v3.7.6：启动后算一次自定义背景的平均色，并给当前可见的弹窗校准字色 */
 try{ if(typeof mkSampleBg === 'function') setTimeout(mkSampleBg, 500); }catch(e){}
 try{ if(typeof mkScanAll === 'function') mkScanAll(900); }catch(e){}
@@ -22315,7 +22326,26 @@ if ('serviceWorker' in navigator) {
 }
 </script>
   <!-- 51LA 网站统计：匿名访问统计（PV/UV/来源/设备），详见站内公告。hashMode 适配本站单页 PWA 翻页 -->
-  <script charset="UTF-8" id="LA_COLLECT" src="https://sdk.51.la/js-sdk-pro.min.js"></script>
-  <script>LA.init({id:"3R2vmhdz45oTG6V1",ck:"3R2vmhdz45oTG6V1",autoTrack:true,hashMode:true})</script>
+  <!-- v3.9.4：SDK 改 async + 加载完再 init —— 同步脚本会拖住 DOMContentLoaded，
+       51.la 慢/被拦时整页 load 事件要等它，弱网下白白多等好几秒 -->
+  <script charset="UTF-8" id="LA_COLLECT" src="https://sdk.51.la/js-sdk-pro.min.js" async></script>
+  <script>
+    (function(){
+      function initLA(){
+        try{
+          if(typeof LA !== 'undefined' && LA && LA.init){
+            LA.init({id:"3R2vmhdz45oTG6V1",ck:"3R2vmhdz45oTG6V1",autoTrack:true,hashMode:true});
+          }
+        }catch(e){}
+      }
+      var s = document.getElementById('LA_COLLECT');
+      if(s && s.addEventListener){
+        s.addEventListener('load', initLA);
+        s.addEventListener('error', initLA);   /* 加载失败也别让统计把页面拖着 */
+      }else{
+        setTimeout(initLA, 0);
+      }
+    })();
+  </script>
 </body>
 </html>
