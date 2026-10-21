@@ -5273,8 +5273,8 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★后台两块已合并为「首页卡片」板块',
     /id:'cards',/.test(adm47) && /function renderCards\(\)/.test(adm47));
   /* v2.7.1 起内容组 10 项（合并后的 9 项 + 成绩分析）；v3.5.6 再加「投票管理」= 11 */
-  t('★内容组导航项为 11 项（9 项 + 成绩分析 + 投票管理 + 板块管理 − 已并入的版本更新）',
-    (adm47.match(/group:'内容'/g) || []).length === 11,
+  t('★内容组导航项为 12 项（9 项 + 成绩分析 + 投票管理 + 板块管理 + 班级岛 − 已并入的版本更新）',
+    (adm47.match(/group:'内容'/g) || []).length === 12,
     '实际 ' + (adm47.match(/group:'内容'/g) || []).length + ' 项');
   t('★合并后的面板路由已注册（cards → renderCards）',
     /cards:\s*renderCards,/.test(adm47));
@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.8.6 index.html SITE_VERSION = 3.8.6', /var SITE_VERSION = '3\.8\.6'/.test(idx539));
-  t('v3.8.6 admin.html SITE_VERSION = 3.8.6', /var SITE_VERSION = '3\.8\.6'/.test(admh539));
-  t('v3.8.6 sw.js SITE_VER = 3.8.6 + CACHE v171',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.8.6'")
+  t('v3.8.7 index.html SITE_VERSION = 3.8.7', /var SITE_VERSION = '3\.8\.7'/.test(idx539));
+  t('v3.8.7 admin.html SITE_VERSION = 3.8.7', /var SITE_VERSION = '3\.8\.7'/.test(admh539));
+  t('v3.8.7 sw.js SITE_VER = 3.8.7 + CACHE v171',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.8.7'")
     && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v171'"));
-  t('v3.8.6 api/worker.mjs API_VER = 3.8.6',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.8.6';"));
+  t('v3.8.7 api/worker.mjs API_VER = 3.8.7',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.8.7';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11142,9 +11142,9 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
 
   /* ---- 版本号 ---- */
   t('v3.8.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.8\.6'/.test(idx540) && /var SITE_VERSION = '3\.8\.6'/.test(adm540)
-    && /const API_VER = '3\.8\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.8\.7'/.test(idx540) && /var SITE_VERSION = '3\.8\.7'/.test(adm540)
+    && /const API_VER = '3\.8\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.8\.6'/.test(idx542) && /var SITE_VERSION = '3\.8\.6'/.test(adm542)
-    && /const API_VER = '3\.8\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.8\.7'/.test(idx542) && /var SITE_VERSION = '3\.8\.7'/.test(adm542)
+    && /const API_VER = '3\.8\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11271,7 +11271,7 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
   t('v3.8.5 当前版本 3.7.2、日期 2026-10-20',
-    /var SITE_VERSION = '3\.8\.6'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
+    /var SITE_VERSION = '3\.8\.7'/.test(idx61) && /VER_DATE = '2026-10-20'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11428,11 +11428,11 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.8.6 四处版本一致', /var SITE_VERSION = '3\.8\.6'/.test(idx70)
-    && /var SITE_VERSION = '3\.8\.6'/.test(adm70)
-    && /const API_VER = '3\.8\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.8\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.6'/.test(adm70));
+  t('v3.8.7 四处版本一致', /var SITE_VERSION = '3\.8\.7'/.test(idx70)
+    && /var SITE_VERSION = '3\.8\.7'/.test(adm70)
+    && /const API_VER = '3\.8\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.8\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.7'/.test(adm70));
 }
 
 console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
@@ -11458,7 +11458,7 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
   t('v3.7.6 首页 / 后台版本已是 3.7.6',
-    /var SITE_VERSION = '3\.8\.6'/.test(idx76));
+    /var SITE_VERSION = '3\.8\.7'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11699,6 +11699,65 @@ console.log('\n【新】v3.8.5 作业导出直链 / 分享链接 404 修复');
     /new URL\('index\.html\?b=' \+ x\.boardId/.test(adm85));
   t('★v3.8.5 REL_BUILTIN 的 3.8.5 条目带 pub',
     /\{\s*version:\s*'3\.8\.5'[\s\S]{0,2600}?pub:\s*\[/.test(adm85));
+}
+
+console.log('\n【新】v3.8.7 仅赋分排名 / 作业导出 / 二维码班徽 / 班级岛');
+{
+  const idx87 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm87 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const isl87 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
+  const wk87  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  const brd87 = fs.readFileSync(new URL('./api/boards.js', import.meta.url), 'utf8');
+
+  /* ---- 仅赋分排名 ---- */
+  t('★v3.8.7 仅赋分排名只取化学 + 生物',
+    idx87.indexOf("var want = ['chemistry', 'biology']") >= 0);
+  t('★v3.8.7 六个排名都算（两科原始/赋分 + 两个合计）',
+    /cRaw: rankOf\('cRaw'\), cGrd: rankOf\('cGrd'\)/.test(idx87)
+    && /bRaw: rankOf\('bRaw'\), bGrd: rankOf\('bGrd'\)/.test(idx87)
+    && /rSum: rankOf\('rSum'\), gSum: rankOf\('gSum'\)/.test(idx87));
+  t('★v3.8.7 名次变化 = 原始合计排名 − 赋分合计排名',
+    /o\.delta = \(o\.rRSum != null && o\.rGSum != null\) \? \(o\.rRSum - o\.rGSum\)/.test(idx87));
+  t('★v3.8.7 两行表头分组（化学 / 生物 / 两科合计）',
+    /colspan="2">' \+ esc\(d\.C\.name\)/.test(idx87) && /两科合计（原始 \/ 赋分）/.test(idx87));
+  t('★v3.8.7 接在全班成绩单下面', /\+ scGradedBlock\(\)/.test(idx87));
+
+  /* ---- 作业导出 ---- */
+  t('★v3.8.7 作业图字号放大 + A4 比例',
+    /large: true,/.test(idx87) && /Math\.round\(760 \* 1\.414\)/.test(idx87)
+    && /o\.large \? 16\.5 : 14/.test(idx87) && /o\.large \? 36 : STEP\.ROW/.test(idx87));
+  t('★v3.8.7 内容少时补白到 A4，多了自然延长',
+    /var H = Math\.max\(m\.height, o\.minHeight \|\| 0\)/.test(idx87));
+  t('★v3.8.7 底部二维码直接指向作业卡片',
+    /qr: qrCanvas \|\| null/.test(idx87) && /扫码打开「作业查看」/.test(idx87));
+  t('★v3.8.7 ensure-link 复用已建链接（不刷垃圾数据）',
+    /if \(action === 'ensure-link'\)/.test(brd87) && /reused: true/.test(brd87)
+    && /order by id desc limit 5/.test(brd87));
+
+  /* ---- 二维码班徽 ---- */
+  t('★v3.8.7 二维码导出图带班徽（放在二维码下方，不挡定位角）',
+    /function bdQrPoster/.test(adm87) && /bdQrPoster\(url, name/.test(adm87)
+    && /drawImage\(im, bx, by, badgeSize, badgeSize\)/.test(adm87));
+
+  /* ---- 班级岛 ---- */
+  t('★v3.8.7 /api/island 已注册（GET 公开 / POST 管理员）', /case 'island':/.test(wk87));
+  t('★v3.8.7 默认作息是站主给的那一套（早读 7:30、40 分钟一节）',
+    /start: '07:30', end: '07:55'/.test(isl87) && /start: '08:00', end: '08:40'/.test(isl87)
+    && /start: '21:30', end: '22:00'/.test(isl87));
+  t('★v3.8.7 岛在首页公告上面',
+    idx87.indexOf('id="classIsland"') < idx87.indexOf('id="board"'));
+  t('★v3.8.7 当日课程 + 当前节高亮 + 放假 ing',
+    /function islandLessons/.test(idx87) && /island-les' \+ state/.test(idx87)
+    && /今天放假 ing/.test(idx87));
+  t('★v3.8.7 点课程表看整周 + 作息时间', /function openTimetable/.test(idx87)
+    && /tt-tbl/.test(idx87) && /tt-now/.test(idx87));
+  t('★v3.8.7 天气走 Open-Meteo（免 key、可跨域）', /api\.open-meteo\.com/.test(idx87));
+  t('★v3.8.7 周数按开学日期算', /Math\.floor\(diff \/ 7\) \+ 1/.test(idx87));
+  t('★v3.8.7 后台可拖动排序组件', /draggable="true"/.test(adm87) && /dragstart/.test(adm87)
+    && /AI_DRAG/.test(adm87));
+  t('★v3.8.7 后台课表是格子录入', /data-d="' \+ d\[0\] \+ '" data-i=/.test(adm87));
+  t('★v3.8.7 后台作息可逐节改、可增删、可设周六日',
+    /data-pf="start"/.test(adm87) && /aiAddP/.test(adm87) && /aiSat/.test(adm87) && /aiSun/.test(adm87));
 }
 
 console.log('\n' + '='.repeat(52));
