@@ -1594,7 +1594,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.8.7';
+var SITE_VERSION = '3.8.8';
 var VER_DATE = '2026-10-20';
 
 /* ---- 运行时状态 ---- */
@@ -13306,7 +13306,7 @@ function paintTt(){
   var head = '<thead><tr><th class="p">节次</th>'
     + days.map(function(d){ return '<th>' + d[1] + '</th>'; }).join('') + '</tr></thead>';
   var body = periods.map(function(p, i){
-    return '<tr><td class="p"><b>' + esc((p.group ? p.group + ' · ' : '') + p.name) + '</b>'
+    return '<tr><td class="p"><b>' + esc((p.group && p.group !== p.name) ? (p.group + ' · ' + p.name) : p.name) + '</b>'
       + '<span>' + esc((p.start || '--:--') + '–' + (p.end || '--:--')) + '</span></td>'
       + days.map(function(d){
           var v = (tt[d[0]] || [])[i] || '';
@@ -15636,6 +15636,13 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.8.8', date: '2026-10-21', type: 'fix', title: '班级岛小修：学期名不再被截断', items: [
+      '手机上第一行四个格子挤，学期名「2026 年秋季 · 高二上」被截成「秋季 · …」；现在只取最后一段，显示「高二上」',
+      '「今天放假 ing」那一条底色太暗，看着像禁用按钮；改成亮一点的虚线块',
+      '课表弹窗和后台课表里，早读那行原来重复显示成「早读 早读」，现在同一名称只显示一次'
+    ], pub: [
+      { cat: '班级', text: '首页新增班级小岛：显示时间和当天课程，点开能看整周课表' }
+    ] },
   { version: '3.8.7', date: '2026-10-21', type: 'feat', title: '仅赋分排名 · 作业导出带二维码 · 班级岛', items: [
       '成绩分析：「全班成绩单」下面新增「仅赋分排名」，固定看化学 + 生物。两行表头分组（化学 / 生物 / 两科合计），每格大字是分数、右下角小字是该科班内排名；「变化」= 原始合计排名 − 赋分合计排名，红色 +n 是赋分后前进（占便宜），绿色 −n 是倒退（吃亏）',
       '作业导出：字号放大一档（正文 14→16.5，行高 30→36），宽高比优先一张 A4（内容少补白、多了自然延长）',
