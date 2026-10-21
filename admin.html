@@ -913,6 +913,40 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
   .bd-name{max-width:none}
   .bd-pos{width:100%;order:9}
 }
+/* ===== 班级岛后台（v3.8.7） ===== */
+.ai-sec{margin-bottom:18px}
+.ai-check{display:flex;align-items:center;gap:6px;font-size:.82rem;margin-bottom:6px}
+.ai-comp{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;
+  border:1px solid var(--border);border-radius:10px;background:var(--panel);cursor:grab}
+.ai-comp.dragging{opacity:.45}
+.ai-comp.drag-over{border-color:var(--accent);background:var(--bg-2)}
+.ai-comp .nm{flex:1;font-weight:700;font-size:.82rem}
+.ai-comp .grip{color:var(--fg-3);font-size:.9rem;letter-spacing:-2px}
+.ai-comp button{border:none;background:var(--bg-2);border-radius:7px;padding:3px 7px;
+  font-size:.72rem;cursor:pointer;color:var(--fg-2)}
+.ai-tt{width:100%;border-collapse:separate;border-spacing:0;font-size:.74rem;min-width:700px}
+.ai-tt th,.ai-tt td{padding:4px 3px;text-align:center;border-bottom:1px solid var(--border)}
+.ai-tt thead th{background:var(--bg-2);font-weight:800;position:sticky;top:0;z-index:2}
+.ai-tt .p{text-align:left;padding-left:8px;min-width:118px;background:var(--bg-2)}
+.ai-tt .p b{display:block;font-size:.72rem}
+.ai-tt .p span{font-size:.6rem;color:var(--fg-3)}
+.ai-tt input{width:100%;box-sizing:border-box;text-align:center;padding:5px 2px;
+  border:1px solid var(--border);border-radius:6px;background:var(--bg-1);color:var(--fg);
+  font-size:.76rem;font-family:inherit}
+.ai-tt tr.quiet{opacity:.42}
+.ai-prow{display:grid;grid-template-columns:1.1fr 1.1fr .8fr .8fr auto auto;gap:6px;
+  align-items:center;margin-bottom:6px}
+.ai-prow input[type=text],.ai-prow input:not([type]){width:100%;box-sizing:border-box;
+  padding:5px 7px;border:1px solid var(--border);border-radius:7px;background:var(--bg-1);
+  color:var(--fg);font-size:.76rem;font-family:inherit}
+.ai-prow label{font-size:.72rem;display:flex;align-items:center;gap:4px;white-space:nowrap}
+.ai-prow button{border:none;background:var(--bg-2);border-radius:7px;padding:4px 8px;
+  font-size:.72rem;cursor:pointer;color:var(--fg-2)}
+@media screen and (max-width:700px){
+  .ai-prow{grid-template-columns:1fr 1fr;gap:5px}
+  .ai-prow label{justify-content:flex-start}
+}
+
 </style>
 </head>
 <body>
@@ -1560,7 +1594,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.8.6';
+var SITE_VERSION = '3.8.7';
 var VER_DATE = '2026-10-20';
 
 /* ---- 运行时状态 ---- */
@@ -2247,6 +2281,8 @@ var PAGES = [
   { id:'classcontent',  label:'班级内容', icon:'layers',    group:'内容',  title:'班级内容（公告 / 作业 / 活动）' },
   /* v3.8.4（站主）：板块改名 / 简介 / 排序 / 隐藏 + 板块分享链接 */
   { id:'boards',        label:'板块管理', icon:'layers',    group:'内容',  title:'板块管理（名称 / 简介 / 排序 / 分享链接）' },
+  /* v3.8.7（站主）：首页班级岛 + 课程表 */
+  { id:'island',        label:'班级岛',   icon:'clock',     group:'内容',  title:'班级岛（时间 / 天气 / 课程表 / 作息）' },
   { id:'homeworks',     label:'作业管理', icon:'file',      group:'内容',  title:'作业管理' },
   { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
   { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
@@ -2339,6 +2375,7 @@ function go(page){
     viewlogs:      renderViewLogs,
     classcontent:  renderClassContent,
     boards:        renderBoards,
+    island:        renderIsland,
     homeworks:     renderHomeworks,
     song:          renderSong,
     dj:            renderDj,
@@ -13062,6 +13099,301 @@ function relTypeOf(t){
 var BK_STATE = { list: [], count: 0, totalBytes: 0, keep: 14, busy: false };
 
 /* ============================================================================
+ * v3.8.7（站主）：班级岛后台
+ * ----------------------------------------------------------------------------
+ * 站主原话：
+ *   「我可以在后台的首页卡片通过拖动的功能实现显示哪些组件，现在可以使用的组件
+ *     包括时间、天气、周数、学期名称；课程表放第二行，这个是必须要的……
+ *     我在后台可以选择课程，大概就是一个文本框……后台可以设置星期六/星期天要不要
+ *     上课；前台点开之后有个弹窗，可以看到时间表和课程表。」
+ *
+ * 三块：组件（拖动排序 / 移除 / 加回）、课程表（可视化格子）、作息（逐节改时间）。
+ * 保存一次写整份 JSON 到 /api/island，前台下次刷新就变。
+ * ========================================================================= */
+var AI = null;
+var AI_DRAG = null;
+
+var AI_COMPS = [
+  { k: 'time', n: '时间', d: '当前时分，每 30 秒自己走' },
+  { k: 'weather', n: '天气', d: '修水县实时温度与天气' },
+  { k: 'week', n: '周数', d: '按开学日期算第几周' },
+  { k: 'term', n: '学期名称', d: '例如 高二上' }
+];
+
+function renderIsland(){
+  $('view').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/island').then(function(j){
+    AI = (j && j.data) || {};
+    paintIsland();
+  }).catch(function(e){
+    $('view').innerHTML = '<div class="alert danger" style="margin:16px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function paintIsland(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0">'
+    +     '<b style="font-size:.92rem">班级岛</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '首页公告上面那条：时间 / 天气 / 周数 / 学期 + 当日课程表；'
+    +       '<b>改完点保存，同学刷新一下就能看到</b></p>'
+    +   '</div>'
+    +   '<button class="btn btn-sm" id="aiSave">保存</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="aiReload">重新读取</button>'
+    + '</div>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>基本设置</h3></div></div>'
+    +   '<div class="panel-body">'
+    +     '<label class="ai-check"><input type="checkbox" id="aiOn"' + (AI.on !== false ? ' checked' : '') + '> 在首页显示班级岛</label>'
+    +     '<div class="bd-grid2" style="margin-top:12px">'
+    +       '<div class="field"><label>学期名称</label>'
+    +         '<input class="gate-input" id="aiTerm" maxlength="30" value="' + attr(AI.term || '') + '" placeholder="高二上"></div>'
+    +       '<div class="field"><label>开学那一周的周一（算周数用）</label>'
+    +         '<input class="gate-input" id="aiStart" type="date" value="' + attr(AI.startDate || '') + '"></div>'
+    +     '</div>'
+    +     '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:4px">'
+    +       '<label class="ai-check"><input type="checkbox" id="aiSat"' + (AI.weekend && AI.weekend.sat ? ' checked' : '') + '> 周六上课</label>'
+    +       '<label class="ai-check"><input type="checkbox" id="aiSun"' + (AI.weekend && AI.weekend.sun ? ' checked' : '') + '> 周日上课</label>'
+    +     '</div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>显示哪些组件</h3>'
+    +     '<p class="sub">按住卡片拖动可以排序；不想要的点 ✕，下面还能加回来</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div id="aiComps"></div>'
+    +     '<div id="aiRest" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>课程表</h3>'
+    +     '<p class="sub">一行一节课，一格一门课；空格子会显示「—」。周六周日不上课时留空就行</p></div></div>'
+    +   '<div class="panel-body" style="overflow:auto"><table class="ai-tt" id="aiTt"></table></div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>作息时间</h3>'
+    +     '<p class="sub">前台课表弹窗里显示的时间；勾「排课」的才会出现在课表里</p></div>'
+    +     '<button class="btn btn-sm btn-secondary" id="aiAddP">新增一节</button></div>'
+    +   '<div class="panel-body"><div id="aiPeriods"></div>'
+    +     '<p class="muted" style="font-size:.74rem;margin:10px 0 0">'
+    +       '课间、吃饭、自主自习这些勾掉「排课」，只在时间表里出现，不占课程格子。</p>'
+    +   '</div>'
+    + '</section>';
+
+  $('aiSave').onclick = islandSave;
+  $('aiReload').onclick = renderIsland;
+  $('aiAddP').onclick = function(){
+    AI.periods = (AI.periods || []).concat([{ key: '', name: '第 ' + ((AI.periods || []).length + 1) + ' 节', group: '', start: '', end: '', cls: true }]);
+    paintPeriods(); paintTt();
+  };
+  paintComps();
+  paintTt();
+  paintPeriods();
+}
+
+function aiCompName(k){
+  for(var i = 0; i < AI_COMPS.length; i++){ if(AI_COMPS[i].k === k) return AI_COMPS[i].n; }
+  return k;
+}
+
+function paintComps(){
+  var used = (AI.components || []).slice();
+  var box = $('aiComps');
+  box.innerHTML = used.map(function(k, i){
+    var info = null;
+    for(var j = 0; j < AI_COMPS.length; j++){ if(AI_COMPS[j].k === k) info = AI_COMPS[j]; }
+    return '<div class="ai-comp" draggable="true" data-c="' + k + '" data-i="' + i + '">'
+      + '<span class="grip">⋮⋮</span>'
+      + '<span class="nm">' + esc((info && info.n) || k) + '</span>'
+      + '<span class="muted" style="font-size:.7rem">' + esc((info && info.d) || '') + '</span>'
+      + '<button type="button" data-up="1">↑</button>'
+      + '<button type="button" data-down="1">↓</button>'
+      + '<button type="button" data-del="1">✕</button>'
+      + '</div>';
+  }).join('') || '<p class="muted" style="font-size:.8rem">还没有启用任何组件</p>';
+
+  var rest = AI_COMPS.filter(function(c){ return used.indexOf(c.k) < 0; });
+  $('aiRest').innerHTML = rest.length
+    ? rest.map(function(c){
+        return '<button class="btn btn-sm btn-secondary" type="button" data-add="' + c.k + '">＋ ' + esc(c.n) + '</button>';
+      }).join('')
+    : '<span class="muted" style="font-size:.76rem">四个组件都用上了</span>';
+
+  bindCompEvents();
+}
+
+function bindCompEvents(){
+  var box = $('aiComps');
+  if(!box) return;
+
+  box.onclick = function(e){
+    var t = e.target;
+    var cardEl = t.closest ? t.closest('.ai-comp') : null;
+    if(!cardEl) return;
+    var k = cardEl.getAttribute('data-c');
+    var arr = (AI.components || []).slice();
+    var i = arr.indexOf(k);
+    if(i < 0) return;
+    if(t.hasAttribute('data-del')){
+      arr.splice(i, 1);
+      AI.components = arr; paintComps(); return;
+    }
+    if(t.hasAttribute('data-up') && i > 0){
+      arr.splice(i - 1, 0, arr.splice(i, 1)[0]);
+      AI.components = arr; paintComps(); return;
+    }
+    if(t.hasAttribute('data-down') && i < arr.length - 1){
+      arr.splice(i + 1, 0, arr.splice(i, 1)[0]);
+      AI.components = arr; paintComps(); return;
+    }
+  };
+
+  $('aiRest').onclick = function(e){
+    var k = e.target.getAttribute && e.target.getAttribute('data-add');
+    if(!k) return;
+    var arr = (AI.components || []).slice();
+    if(arr.indexOf(k) < 0) arr.push(k);
+    AI.components = arr;
+    paintComps();
+  };
+
+  box.addEventListener('dragstart', function(e){
+    var el = e.target.closest ? e.target.closest('.ai-comp') : null;
+    if(!el) return;
+    AI_DRAG = Array.prototype.indexOf.call(box.children, el);
+    el.classList.add('dragging');
+    try{ e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'x'); }catch(err){}
+  });
+  box.addEventListener('dragend', function(e){
+    Array.prototype.forEach.call(box.children, function(x){ x.classList.remove('dragging', 'drag-over'); });
+  });
+  box.addEventListener('dragover', function(e){
+    e.preventDefault();
+    var el = e.target.closest ? e.target.closest('.ai-comp') : null;
+    if(!el) return;
+    Array.prototype.forEach.call(box.children, function(x){ x.classList.remove('drag-over'); });
+    el.classList.add('drag-over');
+  });
+  box.addEventListener('drop', function(e){
+    e.preventDefault();
+    var el = e.target.closest ? e.target.closest('.ai-comp') : null;
+    if(!el || AI_DRAG == null) return;
+    var to = Array.prototype.indexOf.call(box.children, el);
+    if(to < 0) return;
+    var arr = (AI.components || []).slice();
+    var moved = arr.splice(AI_DRAG, 1)[0];
+    arr.splice(to, 0, moved);
+    AI.components = arr;
+    AI_DRAG = null;
+    paintComps();
+  });
+}
+
+function aiDays(){
+  return [['mon', '周一'], ['tue', '周二'], ['wed', '周三'], ['thu', '周四'],
+          ['fri', '周五'], ['sat', '周六'], ['sun', '周日']];
+}
+
+function paintTt(){
+  var periods = (AI.periods || []).filter(function(p){ return p.cls; });
+  var tt = AI.timetable || {};
+  var days = aiDays();
+  var head = '<thead><tr><th class="p">节次</th>'
+    + days.map(function(d){ return '<th>' + d[1] + '</th>'; }).join('') + '</tr></thead>';
+  var body = periods.map(function(p, i){
+    return '<tr><td class="p"><b>' + esc((p.group ? p.group + ' · ' : '') + p.name) + '</b>'
+      + '<span>' + esc((p.start || '--:--') + '–' + (p.end || '--:--')) + '</span></td>'
+      + days.map(function(d){
+          var v = (tt[d[0]] || [])[i] || '';
+          return '<td><input data-d="' + d[0] + '" data-i="' + i + '" maxlength="6" value="' + attr(v) + '"></td>';
+        }).join('')
+      + '</tr>';
+  }).join('');
+  $('aiTt').innerHTML = head + '<tbody>' + body + '</tbody>';
+}
+
+function paintPeriods(){
+  var ps = AI.periods || [];
+  $('aiPeriods').innerHTML = ps.map(function(p, i){
+    return '<div class="ai-prow" data-pi="' + i + '">'
+      + '<input data-pf="group" value="' + attr(p.group || '') + '" placeholder="时段（上午）">'
+      + '<input data-pf="name" value="' + attr(p.name || '') + '" placeholder="第 1 节">'
+      + '<input data-pf="start" value="' + attr(p.start || '') + '" placeholder="08:00">'
+      + '<input data-pf="end" value="' + attr(p.end || '') + '" placeholder="08:40">'
+      + '<label><input type="checkbox" data-pf="cls"' + (p.cls ? ' checked' : '') + '> 排课</label>'
+      + '<button type="button" data-pdel="' + i + '">删</button>'
+      + '</div>';
+  }).join('');
+
+  $('aiPeriods').onclick = function(e){
+    var t = e.target;
+    var del = t.getAttribute && t.getAttribute('data-pdel');
+    if(del == null) return;
+    AI.periods.splice(Number(del), 1);
+    paintPeriods(); paintTt();
+  };
+}
+
+function readPeriods(){
+  var out = [];
+  Array.prototype.forEach.call(document.querySelectorAll('#aiPeriods .ai-prow'), function(row, i){
+    function v(f){ var el = row.querySelector('[data-pf="' + f + '"]'); return el ? String(el.value || '').trim() : ''; }
+    var cb = row.querySelector('[data-pf="cls"]');
+    out.push({
+      key: 'p' + i,
+      group: v('group').slice(0, 8),
+      name: v('name').slice(0, 16) || ('第 ' + (i + 1) + ' 节'),
+      start: v('start').slice(0, 5),
+      end: v('end').slice(0, 5),
+      cls: !!(cb && cb.checked),
+    });
+  });
+  return out;
+}
+
+function readTimetable(){
+  var tt = { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] };
+  Array.prototype.forEach.call(document.querySelectorAll('#aiTt input[data-d]'), function(inp){
+    var d = inp.getAttribute('data-d');
+    var i = Number(inp.getAttribute('data-i'));
+    if(!tt[d]) tt[d] = [];
+    tt[d][i] = String(inp.value || '').trim().slice(0, 6);
+  });
+  Array.prototype.forEach.call(Object.keys(tt), function(k){
+    while(tt[k].length && !tt[k][tt[k].length - 1]) tt[k].pop();
+  });
+  return tt;
+}
+
+function islandSave(){
+  var btn = $('aiSave');
+  if(btn){ btn.disabled = true; btn.textContent = '保存中…'; }
+  var data = {
+    on: $('aiOn').checked,
+    term: String($('aiTerm').value || '').trim(),
+    startDate: String($('aiStart').value || '').trim(),
+    weekend: { sat: $('aiSat').checked, sun: $('aiSun').checked },
+    components: (AI.components || []).slice(),
+    periods: readPeriods(),
+    timetable: readTimetable(),
+  };
+  api('/island', { method: 'POST', body: { data: data } }).then(function(j){
+    AI = j.data;
+    if(btn){ btn.disabled = false; btn.textContent = '保存'; }
+    toast('已保存，同学刷新就能看到', 'ok');
+    paintIsland();
+  }).catch(function(e){
+    if(btn){ btn.disabled = false; btn.textContent = '保存'; }
+    toast('保存失败：' + e.message, 'err', 3200);
+  });
+}
+
+/* ============================================================================
  * v3.8.4（站主）：板块管理 + 板块分享链接
  * ----------------------------------------------------------------------------
  * 站主原话：
@@ -13462,23 +13794,91 @@ function bdQrCanvas(text, px){
   return cv;
 }
 
+/* v3.8.7（站主）：「导出二维码图片的时候也全部都要加上班徽」。
+   ⚠️ 班徽不能压在二维码上 —— 二维码三个角是定位图案，盖住就扫不出来。
+   所以做成「二维码 + 下方一条班徽署名」，白底、纯色，识别率不受影响。 */
+function bdQrPoster(url, name, cb){
+  var qs = 560, pad = 36, foot = 132;
+  var W = qs + pad * 2, H = qs + pad * 2 + foot;
+  var out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  var ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  try { ctx.drawImage(bdQrCanvas(url, qs), pad, pad, qs, qs); } catch (e) {}
+
+  ctx.strokeStyle = '#e6ded6';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, pad + qs + 26);
+  ctx.lineTo(W - pad, pad + qs + 26);
+  ctx.stroke();
+
+  var badgeSize = 68;
+  var bx = pad, by = pad + qs + 44;
+  function finish(){
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#2b211a';
+    ctx.font = '700 26px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('25级05班 班级服务站', bx + badgeSize + 18, by + 8);
+    ctx.fillStyle = '#8a6a55';
+    ctx.font = '400 20px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+    var t = String(name || '扫码打开');
+    if (t.length > 22) t = t.slice(0, 21) + '…';
+    ctx.fillText(t, bx + badgeSize + 18, by + 42);
+    cb(out);
+  }
+
+  try {
+    var src = (typeof adminBadgeUrl === 'function') ? adminBadgeUrl() : '';
+    if (!src) return finish();
+    var im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = function(){
+      try {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(bx + badgeSize / 2, by + badgeSize / 2, badgeSize / 2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(im, bx, by, badgeSize, badgeSize);
+        ctx.restore();
+      } catch (e) {}
+      finish();
+    };
+    im.onerror = function(){ finish(); };
+    im.src = src;
+    setTimeout(function(){ if (!out.__done) { out.__done = 1; finish(); } }, 3000);
+  } catch (e) { finish(); }
+}
+
 function bdShowQr(url, name){
+  /* 先给个纯二维码占位，班徽加载完再替换成「二维码 + 署名」整图 */
   var cv = bdQrCanvas(url, 560);
   var data = cv.toDataURL('image/png');
   openModal({
     title: '扫码打开',
     sub: name || '',
     body: '<div style="text-align:center">'
-      + '<img src="' + data + '" alt="二维码" style="width:min(72vw,320px);height:auto;border-radius:12px;border:1px solid var(--border)">'
+      + '<img id="bdQrImg" src="' + data + '" alt="二维码" style="width:min(78vw,340px);height:auto;border-radius:12px;border:1px solid var(--border)">'
       + '<p class="muted" style="font-size:.76rem;margin:10px 0 0;word-break:break-all">' + esc(url) + '</p>'
       + '</div>',
     foot: '<button class="btn" id="bdQrDown">保存二维码</button>',
     onMount: function(){
-      $('bdQrDown').onclick = function(){
-        var a = document.createElement('a');
-        a.href = data; a.download = '板块分享二维码.png';
-        document.body.appendChild(a); a.click(); a.remove();
-      };
+      function bindSave(d){
+        $('bdQrDown').onclick = function(){
+          var a = document.createElement('a');
+          a.href = d; a.download = '板块分享二维码.png';
+          document.body.appendChild(a); a.click(); a.remove();
+        };
+      }
+      bindSave(data);
+      bdQrPoster(url, name, function(poster){
+        var d = poster.toDataURL('image/png');
+        var img = document.getElementById('bdQrImg');
+        if(img) img.src = d;
+        bindSave(d);
+      });
     }
   });
 }
@@ -15236,6 +15636,19 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.8.7', date: '2026-10-21', type: 'feat', title: '仅赋分排名 · 作业导出带二维码 · 班级岛', items: [
+      '成绩分析：「全班成绩单」下面新增「仅赋分排名」，固定看化学 + 生物。两行表头分组（化学 / 生物 / 两科合计），每格大字是分数、右下角小字是该科班内排名；「变化」= 原始合计排名 − 赋分合计排名，红色 +n 是赋分后前进（占便宜），绿色 −n 是倒退（吃亏）',
+      '作业导出：字号放大一档（正文 14→16.5，行高 30→36），宽高比优先一张 A4（内容少补白、多了自然延长）',
+      '作业导出底部印「作业查看」的分享二维码，扫码直达这张卡片；游客态其它入口置灰、可一键登录，登录后自动解锁并回到原位置',
+      '作业里的图片直链直接画进长图（先 fetch 成 blob 再画，避开跨域污染；失败退回文字），音频/视频转二维码，扫码站内播放',
+      '所有二维码导出图（含后台「保存二维码」那张）都带班徽署名，班徽放在二维码下方，不遮挡定位角',
+      '首页新增「班级岛」：位于公告上方，第一行时间 / 天气 / 周数 / 学期，第二行当日课程，当前节高亮；点开看整周课表 + 作息时间；没课显示「放假 ing」',
+      '后台新增「班级岛」页签：组件可拖动排序 / 移除 / 加回，课表按格子录入，作息逐节可改（含大课间、晚饭这些不排课的时段），周六周日是否上课单独开关'
+    ], pub: [
+      { cat: '成绩', text: '成绩分析新增「仅赋分排名」：化学和生物两科，看原始分、赋分和名次变化' },
+      { cat: '作业', text: '作业导出的图片字更大了，底部有二维码，扫码直接进作业查看' },
+      { cat: '班级', text: '首页新增班级小岛：显示时间和当天课程，点开能看整周课表' }
+    ] },
   { version: '3.8.6', date: '2026-10-20', type: 'fix', title: '扫码播放页不再被登录提示挡住', items: [
       '扫码打开 ?play= 播放页时，原来还会弹「登录一下，数据跟着你走」和开屏公告，把播放器整个盖住',
       '现在把「分享链接（?t=）」和「播放页（?play=）」统一当成深链入口：不弹开屏、不推销登录，直接给内容'
