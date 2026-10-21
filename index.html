@@ -1534,14 +1534,16 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 
 /* 课表弹窗 */
 .tt-wrap{max-height:62vh;overflow:auto;-webkit-overflow-scrolling:touch}
-.tt-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:.74rem;min-width:640px}
-.tt-tbl th,.tt-tbl td{padding:6px 4px;text-align:center;border-bottom:1px solid #f2e9e0}
+/* 手机上要让「作息 + 周一到周日」一屏放得下，所以不设最小宽、列宽均分 */
+.tt-tbl{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:.68rem}
+.tt-tbl th,.tt-tbl td{padding:5px 2px;text-align:center;border-bottom:1px solid #f2e9e0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tt-tbl thead th{position:sticky;top:0;background:#fdf8f3;font-weight:800;color:#57534e;z-index:2}
-.tt-tbl .tt-p{position:sticky;left:0;background:#fff;text-align:left;padding-left:8px;z-index:1;
-  min-width:96px;border-right:1px solid #f2e9e0}
+.tt-tbl .tt-p{position:sticky;left:0;background:#fff;text-align:left;padding-left:6px;z-index:1;
+  width:78px;min-width:78px;border-right:1px solid #f2e9e0}
 .tt-tbl thead .tt-p{background:#fdf8f3;z-index:3}
-.tt-tbl .tt-p b{display:block;font-size:.72rem;color:#3f342c}
-.tt-tbl .tt-p span{font-size:.6rem;color:#8a7a6d;font-variant-numeric:tabular-nums}
+.tt-tbl .tt-p b{display:block;font-size:.64rem;color:#3f342c;white-space:normal;line-height:1.25}
+.tt-tbl .tt-p span{font-size:.52rem;color:#8a7a6d;font-variant-numeric:tabular-nums}
 .tt-tbl .tt-today{background:#fff6ec}
 .tt-tbl .tt-now{background:#ffedd5;font-weight:800;color:#b45309}
 .tt-tbl .tt-free{color:#b9ada2}
@@ -4555,7 +4557,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.8.8';
+var SITE_VERSION = '3.8.9';
 var VER_DATE = '2026-10-20';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
