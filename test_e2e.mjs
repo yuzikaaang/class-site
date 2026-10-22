@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.9.5 index.html SITE_VERSION = 3.9.5', /var SITE_VERSION = '3\.9\.5'/.test(idx539));
-  t('v3.9.5 admin.html SITE_VERSION = 3.9.5', /var SITE_VERSION = '3\.9\.5'/.test(admh539));
-  t('v3.9.5 sw.js SITE_VER = 3.9.5 + CACHE v172',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.5'")
+  t('v3.9.6 index.html SITE_VERSION = 3.9.6', /var SITE_VERSION = '3\.9\.6'/.test(idx539));
+  t('v3.9.6 admin.html SITE_VERSION = 3.9.6', /var SITE_VERSION = '3\.9\.6'/.test(admh539));
+  t('v3.9.6 sw.js SITE_VER = 3.9.6 + CACHE v172',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.6'")
     && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v172'"));
-  t('v3.9.5 api/worker.mjs API_VER = 3.9.5',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.5';"));
+  t('v3.9.6 api/worker.mjs API_VER = 3.9.6',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.6';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11142,9 +11142,9 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
 
   /* ---- 版本号 ---- */
   t('v3.8.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.9\.5'/.test(idx540) && /var SITE_VERSION = '3\.9\.5'/.test(adm540)
-    && /const API_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.6'/.test(idx540) && /var SITE_VERSION = '3\.9\.6'/.test(adm540)
+    && /const API_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.9\.5'/.test(idx542) && /var SITE_VERSION = '3\.9\.5'/.test(adm542)
-    && /const API_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.6'/.test(idx542) && /var SITE_VERSION = '3\.9\.6'/.test(adm542)
+    && /const API_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11270,8 +11270,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.5 当前版本 3.9.5、日期 2026-10-22',
-    /var SITE_VERSION = '3\.9\.5'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
+  t('v3.8.5 当前版本 3.9.6、日期 2026-10-22',
+    /var SITE_VERSION = '3\.9\.6'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11428,10 +11428,10 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.9.5 四处版本一致', /var SITE_VERSION = '3\.9\.5'/.test(idx70)
-    && /var SITE_VERSION = '3\.9\.5'/.test(adm70)
-    && /const API_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.9.6 四处版本一致', /var SITE_VERSION = '3\.9\.6'/.test(idx70)
+    && /var SITE_VERSION = '3\.9\.6'/.test(adm70)
+    && /const API_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.9'/.test(adm70));
 }
 
@@ -11457,8 +11457,8 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
     && /addEventListener\('orientationchange'/.test(idx76));
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
-  t('v3.7.6 首页 / 后台版本已是 3.9.5',
-    /var SITE_VERSION = '3\.9\.5'/.test(idx76));
+  t('v3.7.6 首页 / 后台版本已是 3.9.6',
+    /var SITE_VERSION = '3\.9\.6'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11747,7 +11747,7 @@ console.log('\n【新】v3.8.7 仅赋分排名 / 作业导出 / 二维码班徽 
   t('★v3.8.7 岛在首页公告上面',
     idx87.indexOf('id="classIsland"') < idx87.indexOf('id="board"'));
   t('★v3.9.3 第二行是「今日事项」横幅', /function islandBanner/.test(idx87)
-    && /class="island-banner"/.test(idx87) && /今日事项/.test(idx87));
+    && /island-banner/.test(idx87) && /今日事项/.test(idx87));
   t('★v3.9.3 课表弹窗已下线（不再有 openTimetable）', !/function openTimetable/.test(idx87));
   t('★v3.8.7 天气走 Open-Meteo（免 key、可跨域）', /api\.open-meteo\.com/.test(idx87));
   t('★v3.8.7 周数按开学日期算', /Math\.floor\(diff \/ 7\) \+ 1/.test(idx87));
@@ -11806,10 +11806,10 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
   const wk94  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
 
   /* ---- 版本号四处一致 ---- */
-  t('★v3.9.4+ index.html SITE_VERSION = 3.9.5', /var SITE_VERSION = '3\.9\.5'/.test(idx94));
-  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.5', /var SITE_VERSION = '3\.9\.5'/.test(adm94));
-  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.5'"));
-  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.5';"));
+  t('★v3.9.4+ index.html SITE_VERSION = 3.9.6', /var SITE_VERSION = '3\.9\.6'/.test(idx94));
+  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.6', /var SITE_VERSION = '3\.9\.6'/.test(adm94));
+  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.6'"));
+  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.6';"));
   t('★v3.9.4 REL_BUILTIN 有 3.9.4 条目且带 pub',
     /\{\s*version:\s*'3\.9\.4'[\s\S]{0,2000}?pub:\s*\[/.test(adm94));
 
@@ -11826,8 +11826,9 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
   t('★v3.9.4 前台横幅按换行展示（pre-line、不再截断行数）',
     /\.island-banner \.txt\{[^}]*white-space:pre-line;/.test(idx94)
     && !/-webkit-line-clamp/.test(idx94.slice(idx94.indexOf('.island-banner .txt{'), idx94.indexOf('.island-banner .txt{') + 220)));
-  t('★v3.9.4 后台横幅改成多行文本框（textarea + 自适应高度）',
-    /<textarea data-bk="/.test(adm94) && /ta\.style\.height = Math\.min\(ta\.scrollHeight, 200\)/.test(adm94));
+  t('★v3.9.4+ 后台「按日期临时改」是多行文本框（横幅本身收回单行）',
+    /<textarea class="gate-input ai-dtext" id="adText"/.test(adm94)
+    && /<input data-bk="/.test(adm94));
   t('★v3.9.4 后台 textarea 有样式（可拉伸、行高 1.5）',
     /\.ai-brow textarea\{[^}]*resize:vertical;/.test(adm94));
   t('★v3.9.4 保存仍按 DOM 对账（textarea 的 value 照样读得到）',
@@ -11840,11 +11841,12 @@ console.log('\n【新】v3.9.5 班级岛跟随主题配色 / 全部居中');
   const adm95 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ---- 浅色：奶油底 + 深字 ---- */
-  t('★v3.9.5 班级岛浅色底改为奶油渐变（不再是深棕黑板）',
-    /\.island\{[^}]*background:linear-gradient\(145deg,#fffdfa,#fff2e6\)/.test(idx95)
+  t('★v3.9.6 班级岛改用玻璃底（--glass-bg + 模糊，昼夜自适应）',
+    /\.island\{[^}]*background:var\(--glass-bg\)/.test(idx95)
+    && /\.island\{[^}]*backdrop-filter:blur\(18px\)/.test(idx95)
     && !/\.island\{[^}]*rgba\(30,26,23/.test(idx95));
-  t('★v3.9.5 班级岛有深色主题覆写（深底 + 浅字）',
-    /\.dark \.island\{[^}]*background:linear-gradient\(145deg,#2c2522,#211d1a\)/.test(idx95));
+  t('★v3.9.6 班级岛有深色主题覆写（阴影 / 描边）',
+    /\.dark \.island\{[^}]*box-shadow/.test(idx95));
 
   /* ---- 字色跟随 --fg 系列 ---- */
   t('★v3.9.5 信息块字色跟随主题变量（--fg / --fg-3）',
@@ -11871,6 +11873,80 @@ console.log('\n【新】v3.9.5 班级岛跟随主题配色 / 全部居中');
   t('★v3.9.5 REL_BUILTIN 有 3.9.5 条目且带 pub',
     /\{\s*version:\s*'3\.9\.5'[\s\S]{0,1200}?pub:\s*\[/.test(adm95));
   t('★v3.9.5 更新日期为 2026-10-22', /var VER_DATE = '2026-10-22'/.test(idx95));
+}
+
+console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横屏侧栏');
+{
+  const idx96 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm96 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const isl96 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
+
+  /* ---- 1) 横幅单行 / 临时改多行 / 一键填入 ---- */
+  t('★v3.9.6 星期横幅收回单行输入（默认课表）',
+    /<input data-bk="/.test(adm96) && !/<textarea data-bk="/.test(adm96));
+  t('★v3.9.6 「按日期临时改」是多行文本框（200 字）',
+    /<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="200"/.test(adm96));
+  t('★v3.9.6 有「填入当天课表」按钮并实现 aiFillDay',
+    /id="adFill"[^>]*>填入当天课表</.test(adm96) && /function aiFillDay\(\)/.test(adm96)
+    && /\[\x27sun\x27, \x27mon\x27/.test(adm96));
+  t('★v3.9.6 已设置的日期可点开再次修改（aiEditDay / 更新这一天）',
+    /function aiEditDay\(k\)/.test(adm96) && /更新这一天/.test(adm96)
+    && /data-dayedit=/.test(adm96));
+  t('★v3.9.6 假期可再次修改时间范围（aiEditHol）',
+    /function aiEditHol\(id\)/.test(adm96) && /更新这一段/.test(adm96)
+    && /data-holedit=/.test(adm96));
+  t('★v3.9.6 假期可复用（复制到表单再改日期）',
+    /function aiAddHoliday/.test(adm96) && /data-hcopy=/.test(adm96) && /复用/.test(adm96));
+  t('★v3.9.6 后端日期覆盖放宽到 200 字（MAX_DAY_TEXT）',
+    /const MAX_DAY_TEXT = 200/.test(isl96) && /text: str\(v\.text, MAX_DAY_TEXT\)/.test(isl96));
+
+  /* ---- 2) 气泡玻璃 + 暗色适配 ---- */
+  t('★v3.9.6 玻璃底 + 模糊 + 内高光（气泡感）',
+    /\.island\{[^}]*background:var\(--glass-bg\)/.test(idx96)
+    && /\.island\{[^}]*backdrop-filter:blur\(18px\)/.test(idx96)
+    && /\.island\{[^}]*inset/.test(idx96));
+  t('★v3.9.6 信息块也是半透明气泡（昼夜两套）',
+    /\.island-chip\{[^}]*background:rgba\(255,255,255,\.55\)/.test(idx96)
+    && /\.dark \.island-chip\{[^}]*background:rgba\(255,255,255,\.09\)/.test(idx96));
+  t('★v3.9.6 横幅气泡与标签配色分昼夜',
+    /\.island-banner\{[^}]*background:rgba\(255,255,255,\.72\)/.test(idx96)
+    && /\.dark \.island-banner\{[^}]*background:rgba\(255,255,255,\.08\)/.test(idx96));
+
+  /* ---- 3) 照片弹层 ---- */
+  t('★v3.9.6 点横幅弹照片（can-photo + islPhotoOpen）',
+    /function islPhotoOpen/.test(idx96) && /can-photo/.test(idx96)
+    && /islBindPhoto\(host\)/.test(idx96));
+  t('★v3.9.6 弹层在本页显示（fixed 遮罩 + img），可缩放可关闭',
+    /class="isl-photo-mask" id="islPhotoMask"/.test(idx96)
+    && /function islPhotoClose/.test(idx96)
+    && /ISL_PZ\.s = Math\.min\(5, Math\.max\(1, base \* d \/ pinch\)\)/.test(idx96)
+    && /addEventListener\('wheel'/.test(idx96) && /dblclick/.test(idx96));
+  t('★v3.9.6 照片地址存 island.photo（后端 500 字）',
+    /photo: str\(o\.photo, MAX_PHOTO\)/.test(isl96) && /const MAX_PHOTO = 500/.test(isl96));
+  t('★v3.9.6 后台可填照片直链 / 相对路径并随保存提交',
+    /id="aiPhoto"/.test(adm96) && /photo: String\(\(\$\('aiPhoto'\)/.test(adm96));
+
+  /* ---- 4) 窄屏字号 ---- */
+  t('★v3.9.6 信息块字号分三档（420 / 370）',
+    /@media screen and \(max-width:420px\)\{[\s\S]{0,400}?\.island-chip \.v\{font-size:\.78rem\}/.test(idx96)
+    && /@media screen and \(max-width:370px\)\{[\s\S]{0,400}?\.island-chip \.v\{font-size:\.72rem\}/.test(idx96));
+  t('★v3.9.6 窄屏收窄内边距，最长文案也不挤爆',
+    /\.island-chip\{padding:8px 6px/.test(idx96) && /gap:6px\.island-chip\{padding:6px 4px/.test(idx96.replace(/\s+/g, '')) === false
+    || /\.island-chip\{padding:6px 4px;border-radius:12px\}/.test(idx96));
+
+  /* ---- 5) 横屏侧栏 ---- */
+  t('★v3.9.6 主站横屏 FAB 跟随滚动补偿（landscapePin）',
+    /function landscapePin\(\)/.test(idx96) && /fab\.style\.top = \(st \+ 14\)/.test(idx96)
+    && /landscapePin\(\);/.test(idx96));
+  t('★v3.9.6 后台横屏顶栏改 absolute + 滚动补偿',
+    /html\.force-landscape \.head\{position:absolute/.test(adm96)
+    && /function landscapePin\(\)/.test(adm96) && /head\.style\.top = st/.test(adm96));
+  t('★v3.9.6 横屏主区补顶栏高度（内容不被压住）',
+    /html\.force-landscape \.main\{padding-top:var\(--head-h\)\}/.test(adm96));
+
+  /* ---- 发布记录 ---- */
+  t('★v3.9.6 REL_BUILTIN 有 3.9.6 条目且带 pub',
+    /\{\s*version:\s*'3\.9\.6'[\s\S]{0,2400}?pub:\s*\[/.test(adm96));
 }
 
 console.log('\n' + '='.repeat(52));
