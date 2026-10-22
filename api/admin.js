@@ -2268,9 +2268,12 @@ async function createBackup(req, res, me, b) {
         message: '这个版本已有自动备份，已升级为部署前备份（不重复新建）',
       });
     }
+    /* 跳过时也跑一次清理：把历史遗留的同版本多余快照收掉（只留最新 1 份） */
+    const pruned0 = await pruneBackups(sql).catch(() => 0);
     return ok(res, {
-      id: Number(dup[0].id), version, kind: dup[0].kind, skipped: true,
-      message: '这个版本已经备份过了（' + dup[0].kind + '），不重复备份',
+      id: Number(dup[0].id), version, kind: dup[0].kind, skipped: true, pruned: pruned0,
+      message: '这个版本已经备份过了（' + dup[0].kind + '），不重复备份'
+        + (pruned0 ? '，顺手清理了 ' + pruned0 + ' 份历史重复' : ''),
     });
   }
 
