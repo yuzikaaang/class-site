@@ -123,12 +123,13 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 <div class="score">步数：<b id="mv">0</b> · 配对：<b id="pairs">0</b>/8</div>
 <div class="grid" id="grid"></div>
 <div class="hint">翻开两张相同的即可消除，全部配对就赢</div>
+<script src="cloud.js"></script>
 <script>
 const EMO=['🍎','🍌','🍇','🍓','🍑','🍒','🥝','🍉'];
 const grid=document.getElementById('grid');
 let deck,first,lock,moves,pairs;
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
-function build(){deck=shuffle(EMO.concat(EMO));grid.innerHTML='';first=null;lock=false;moves=0;pairs=0;
+function build(){window.__mmStart=Date.now();   /* v3.5.35 游玩计时 */deck=shuffle(EMO.concat(EMO));grid.innerHTML='';first=null;lock=false;moves=0;pairs=0;
   document.getElementById('mv').textContent=0;document.getElementById('pairs').textContent=0;
   deck.forEach(e=>{const c=document.createElement('div');c.className='card';c.dataset.v=e;
     c.innerHTML='<div class="face back">？</div><div class="face" style="transform:rotateY(180deg)">'+e+'</div>';
@@ -137,7 +138,11 @@ function flip(c){if(lock||c.classList.contains('flip')||c===first)return;c.class
   if(!first){first=c;return;}
   moves++;document.getElementById('mv').textContent=moves;
   if(first.dataset.v===c.dataset.v){pairs++;document.getElementById('pairs').textContent=pairs;first=null;
-    if(pairs===8)setTimeout(()=>alert('全部配对完成！用了 '+moves+' 步 🎉'),200);}
+    if(pairs===8){
+      /* v3.5.35 云同步：步数（越少越好）+ 游玩时长 */
+      try{ if(window.CLS_CLOUD) CLS_CLOUD.addPlay('memory', Date.now()-(window.__mmStart||Date.now()), {lowScore:moves}); }catch(e){}
+      setTimeout(()=>alert('全部配对完成！用了 '+moves+' 步 🎉'),200);}
+  }
   else{lock=true;setTimeout(()=>{first.classList.remove('flip');c.classList.remove('flip');first=null;lock=false;},650);}}
 build();
 </script>

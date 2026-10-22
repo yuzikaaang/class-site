@@ -15,6 +15,7 @@ import dataHandler from './data.js';
 import adminHandler from './admin.js';
 import profileHandler from './profile.js';
 import contentHandler from './content.js';
+import badgeHandler from './badge.js';
 import gamesHandler from './games.js';
 import { cors } from './_lib/http.js';
 
@@ -57,6 +58,8 @@ export const handler = async (req, resp, context) => {
       case 'admin': return await adminHandler(r, res);
       case 'profile': return await profileHandler(r, res);
       case 'content': return await contentHandler(r, res);
+      /* v3.6.4：班徽代理（跨域图床 → 同源可画） */
+      case 'badge': return await badgeHandler(r, res);
       case 'games': return await gamesHandler(r, res);
       default:
         /* 这里也要回 CORS 头：否则跨域下浏览器会把 404 响应整个拦掉，

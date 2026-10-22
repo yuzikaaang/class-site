@@ -8,7 +8,7 @@ const API = 'https://api.classsite.dpdns.org';
 const login = await fetch(API + '/api/auth?action=login', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ username: 'aibot', password: 'ai202505' }),
+  body: JSON.stringify({ username: process.env.AI_USER || 'aibot', password: process.env.AI_PASS || '' }),
 }).then((r) => r.json());
 
 const token = login.token;

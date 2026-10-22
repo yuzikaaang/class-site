@@ -101,9 +101,9 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '3.5.34'
+const SITE_VER = '3.9.9'
 
-const CACHE = 'class-site-v148'
+const CACHE = 'class-site-v172'
 /* 预缓存清单：**只放小文件**。
    ⚠️ 不要把 index.html（600KB）放进来 —— install 会因为它变慢一大截，
    弱网下甚至装不完（真机实测 SW 卡在 installing 25 秒都没装好，
@@ -114,11 +114,25 @@ const CACHE = 'class-site-v148'
    同源自托管替代 Google Fonts 外链（微信内置浏览器拦截外部字体域），
    预缓存保证首次离线访问英文字形也不掉。 */
 const PRECACHE = ['./favicon.svg', './manifest.webmanifest',
-  './fonts/inter-latin.woff2', './fonts/jetbrains-mono-latin.woff2']
+  './fonts/inter-latin.woff2', './fonts/jetbrains-mono-latin.woff2',
+  /* v3.5.40：作业/排期导出图片用的共享画笔，离线也要能生成 */
+  './share-card.js', './badge.png']
 
 self.addEventListener('install', (event) => {
+  /* ⚠️ v3.8.2 关键修复：不能用 cache.addAll(PRECACHE)。
+     addAll 是「全成功才算数」—— 清单里只要有一个文件 404（本项目就长期
+     被 ./badge.png、./share-card.js 拖累，GitHub Pages 新文件同步极慢），
+     整个 install 就 reject，Service Worker **永远装不上**。
+     表现就是：缓存明明写了策略却从来没用上、断网打不开、每次进站都重新下整页。
+     现在逐个 add 并各自 catch：缺哪个就跳过，其余照常缓存。 */
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then((cache) => Promise.all(
+        PRECACHE.map((u) => cache.add(u).catch(() => {
+          /* 单个文件取不到不算错（比如临时 404 的图），下个版本再补 */
+        }))
+      ))
+      .then(() => self.skipWaiting())
   )
 })
 
@@ -163,17 +177,47 @@ self.addEventListener('fetch', (event) => {
     if (u.searchParams.has('_') || u.searchParams.has('_r')) return
   } catch (e) { /* URL 解析失败就按原逻辑走 */ }
 
-  // 导航请求：网络优先，失败回退缓存首页
+  /* 导航请求（打开页面）：v3.8.0 起改成「最多等 900ms 的网络优先」
+   * ------------------------------------------------------------
+   * 站主原话：「从后台到前台的时候，一直在这个页面，但它还是要重新加载一次，
+   *            而且暂时没有用到缓存」
+   *
+   * 根因：原来是纯网络优先 —— 每次进站都要把整页 HTML 重新下一遍（现在 400KB+），
+   *       网慢的时候就是白等好几秒，缓存明明有却完全用不上。
+   *
+   * 现在：
+   *   · 有缓存 → 网络 900ms 内回来就用最新（保持「打开就是新版」），
+   *     回不来就先把缓存那页给浏览器，网络结果在后台落盘，下次即最新。
+   *   · 没缓存 → 老实等网络。
+   * 版本更新仍由 swRegister 的「检查更新」负责，不会因为这条策略卡住不升。
+   */
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
+    event.respondWith((async () => {
+      let cache = null
+      let cached = null
+      try {
+        cache = await caches.open(CACHE)
+        cached = (await cache.match(request)) || (await cache.match('./index.html'))
+      } catch (e) { cached = null }
+
+      const netP = fetch(request)
         .then((res) => {
-          const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put(request, copy))
+          if (res && res.ok && cache) cache.put(request, res.clone()).catch(() => {})
           return res
         })
-        .catch(() => caches.match('./index.html'))
-    )
+        .catch(() => null)
+
+      if (!cached) {
+        const r = await netP
+        return r || Response.error()
+      }
+      /* 有缓存：最多等 900ms 拿最新，超时先给缓存（页面秒开） */
+      const winner = await Promise.race([
+        netP,
+        new Promise((resolve) => setTimeout(() => resolve(null), 900)),
+      ])
+      return winner || cached
+    })())
     return
   }
 

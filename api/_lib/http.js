@@ -47,7 +47,7 @@ export { getSql };
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.5.28';
+const SCHEMA_VER = '3.8.4';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -83,8 +83,11 @@ export async function ensureSchema(sql) {
               一点「一键加密存量」就 500（column "name_bidx" does not exist）。
               教训写在函数顶部注释里：「改 DDL 清单必须同步升 SCHEMA_VER」，
            这次两条都犯了，所以这里连 DDL 带版本号一起补。 */
-        try { await s`alter table profiles add column if not exists name_bidx text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists student_id_bidx text`; } catch (e) {}
+        try { await s`
+          alter table profiles
+            add column if not exists name_bidx       text,
+            add column if not exists student_id_bidx text
+        `; } catch (e) {}
         try { await s`create index if not exists profiles_name_bidx_idx on profiles (name_bidx)`; } catch (e) {}
         try { await s`create index if not exists profiles_sid_bidx_idx  on profiles (student_id_bidx)`; } catch (e) {}
         try { await s`alter table profiles drop constraint if exists profiles_student_id_key`; } catch (e) {}
@@ -189,12 +192,13 @@ export async function ensureSchema(sql) {
            列一直没建，listVotes 一 select v.proposer 就
            column "proposer" does not exist → 500。
            和 v3.5.2 盲索引、v3.5.4 可见档是同一类错误，第三次了。 */
-        try { await s`alter table class_votes add column if not exists proposer text not null default ''`; } catch (e) {}
+
         /* 🔴 v3.5.14 #9：投票票数配额与撤回次数。
            纪律（已踩三次坑）：升级路径 + 全新库清单 + schema.sql 三处必须同时改，
            并升 SCHEMA_VER —— 少一处就是线上 500。
            升级路径合并成 2 条 ALTER，避免撞 Workers 免费版 50 子请求上限。 */
         try { await s`alter table class_votes
+          add column if not exists proposer    text not null default '',
           add column if not exists max_choices smallint,
           add column if not exists min_choices smallint,
           add column if not exists retract_limit smallint not null default 1,
@@ -207,15 +211,23 @@ export async function ensureSchema(sql) {
            这些列只在「全新库全量清单」里补过，老库走到本分支就 return 了，一直没建。
            现在按纪律补进升级路径（每条都 if not exists，重复跑无害）。 */
         /* 实测线上还缺 role（老库更早的建表就没有这一列）：一起补 */
-        try { await s`alter table profiles add column if not exists role text not null default '学生'`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists politics text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists contact_status text not null default 'none'`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists title text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists exam_no text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists visibility_pref text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists field_vis text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists id_card text`; } catch (e) {}
-        try { await s`alter table profiles add column if not exists youth_league_no text`; } catch (e) {}
+        /* ⚠️ 子请求纪律：Workers 免费版每次调用最多 50 个子请求，Neon 每条 SQL
+           算一次。以前这里是 9 条单列 ALTER（9 次往返），加上前面累积的迁移
+           语句一共 53 条 —— v3.8.4 实测一旦超过 50，整条升级链在中途断掉、
+           版本章盖不上，于是每个请求都重跑一遍，接口开始 500。
+           现在合并成一条多列 ALTER（1 次往返），升级链稳定在 40 条左右。 */
+        try { await s`
+          alter table profiles
+            add column if not exists role            text not null default '学生',
+            add column if not exists politics        text,
+            add column if not exists contact_status  text not null default 'none',
+            add column if not exists title           text,
+            add column if not exists exam_no         text,
+            add column if not exists visibility_pref text,
+            add column if not exists field_vis       text,
+            add column if not exists id_card         text,
+            add column if not exists youth_league_no text
+        `; } catch (e) {}
         /* 🔴 v3.5.27：歌曲时长云端库（站主「一定要获取到歌曲时长并同步云端，省的每次都要加载」）。
            以前时长只存 localStorage → 换设备/清缓存全丢，每次开页面都要重新联网搜一遍。
            现在查到的写库，人工填的 source='manual' 优先级最高。
@@ -237,6 +249,148 @@ export async function ensureSchema(sql) {
            让 match-list 的全表扫描在几千条时也不至于慢。
            纪律：三处同步（升级路径 / 全量清单 / schema.sql），SCHEMA_VER 已升到 3.5.28。 */
         try { await s`create index if not exists song_dur_artist_idx on song_durations (artist)`; } catch (e) {}
+        /* 🔴 v3.5.35：在线时长统计（站主需求）
+           ------------------------------------------------------------
+           站主方案原话：「因为不是每过一段时间我们会刷新吗？那刷新它就会向上面
+           请求嘛，然后你就看一下这请求，第一次请求到最后一次请求之间的时间，
+           就是它这次上线时间。然后怎么样才能算作两次呢？就是如果两次请求时间
+           它超过了 3 分钟，那就算两次请求，就算另算这个在线时间。
+           然后历史总的话就把它们加起来。这个在后台我需要能看到历史的数据。」
+
+           落地方案：在心跳（/api/auth?action=ping，前端每 60 秒一次）里判定：
+             · 距上次心跳 ≤ 180 秒 → 同一次在线，把本次时段 stop_at 往后推
+             · 超过 180 秒（或第一次）→ 另起一个时段（插入新行）
+           每条 sessions 一行 = 一次「连续在线」；时长 = stop_at - start_at。
+           last_ping_at 是判定用的锚点，与 sessions.last_seen_at 分开存，
+           因为后者有 30 秒节流，粒度不够做 3 分钟判定。
+
+           用 (user_id, session_token) 定位而不是 sessions.id，是为了：
+             ① 老会话被清理、重新登录后 token 变了也能正确分段；
+             ② 不需要额外查一次 sessions 表（省一个 Neon 往返）。 */
+        try {
+          await s`create table if not exists online_sessions (
+            id            bigserial   primary key,
+            user_id       bigint      not null,
+            session_token text        not null default '',
+            start_at      timestamptz not null default now(),
+            stop_at       timestamptz not null default now(),
+            last_ping_at  timestamptz not null default now(),
+            ping_count    int         not null default 1,
+            created_at    timestamptz not null default now()
+          )`;
+          await s`create index if not exists online_user_start_idx on online_sessions (user_id, start_at desc)`;
+          await s`create index if not exists online_start_idx on online_sessions (start_at desc)`;
+          await s`create index if not exists online_token_idx on online_sessions (session_token)`;
+          /* v3.5.40（站主 #3）：在线时长要能精确到「哪个页面」。
+             单独一张表，不动 online_sessions —— 总时长口径不受影响。
+             每次心跳续上「同一人 + 同一会话 + 同一页面」还在 180 秒内的那一段。 */
+          await s`create table if not exists online_pages (
+            id            bigserial   primary key,
+            user_id       bigint      not null,
+            session_token text        not null default '',
+            page          text        not null default '',
+            start_at      timestamptz not null default now(),
+            stop_at       timestamptz not null default now(),
+            last_ping_at  timestamptz not null default now(),
+            ping_count    int         not null default 1,
+            created_at    timestamptz not null default now()
+          )`;
+          await s`create index if not exists online_pages_user_idx on online_pages (user_id, start_at desc)`;
+          await s`create index if not exists online_pages_page_idx on online_pages (page, start_at desc)`;
+          await s`create index if not exists online_pages_tok_idx on online_pages (session_token, page, last_ping_at desc)`;
+          /* v3.6.1（站主 #4）：部署前自动备份所有云端数据，保留最近 14 个版本 */
+          await s`create table if not exists data_backups (
+            id          bigserial   primary key,
+            version     text        not null,
+            kind        text        not null default 'auto',
+            note        text        default '',
+            payload     jsonb       not null,
+            bytes       int         not null default 0,
+            created_at  timestamptz not null default now()
+          )`;
+          await s`create index if not exists data_backups_ver_idx on data_backups (created_at desc)`;
+          await s`create index if not exists data_backups_version_idx on data_backups (version)`;
+          /* v3.6.4（站主 #3）：删除回收站 —— 真删，但 30 分钟内可从操作日志撤回 */
+          await s`create table if not exists deleted_items (
+            id          bigserial   primary key,
+            kind        text        not null default 'field',
+            label       text        default '',
+            payload     jsonb       not null,
+            bytes       int         not null default 0,
+            deleted_by  bigint,
+            deleted_at  timestamptz not null default now(),
+            expires_at  timestamptz not null default now()
+          )`;
+          await s`create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc)`;
+          /* v3.7.0 字段修改审批（同全量清单） */
+          await s`create table if not exists profile_change_requests (
+            id         bigserial   primary key,
+            profile_id bigint      not null,
+            user_id    bigint,
+            kind       text        not null default 'field',
+            changes    jsonb       not null,
+            status     text        not null default 'pending',
+            note       text        default '',
+            decided_by bigint,
+            decided_at timestamptz,
+            applied_at timestamptz,
+            revoked_at timestamptz,
+            meta       jsonb       not null default '{}'::jsonb,
+            created_at timestamptz not null default now()
+          )`;
+          await s`create index if not exists pcr_status_idx on profile_change_requests (status, created_at desc)`;
+          await s`create index if not exists pcr_profile_idx on profile_change_requests (profile_id, created_at desc)`;
+        } catch (e) {
+          console.warn('[schema] online_sessions 建表失败：', e && e.message);
+        }
+        /* v3.8.0（站主）：分享链接备注列。
+           ⚠️ 必须写在**升级路径**里 —— 老库走的是这一段，全量清单对它不生效。
+              上一次 target_names / sections 就吃过这个亏（见下方注释）。 */
+        try { await s`alter table share_links add column if not exists note text default ''`; } catch (e) {}
+
+        /* ===== v3.8.4（站主）：板块分享链接 =====
+           「新增分享链接的功能（类似成绩分析的分享链接）……生成包含该板块所有内容
+             的分享链接，内容也是链接数据库实时刷新，相当于一个快捷方式，用户打开
+             直接跳转到对应位置，还可以一键返回主页」。
+           三张表：
+             board_links       一条分享链接（token 即凭证，游客可凭它进单个板块）
+             board_link_views  谁在什么时候打开过（登录用户记名，游客只记次数）
+             board_meta        单行 jsonb：板块/卡片改名、简介、排序、隐藏、游客可见
+           放在升级路径里，老库也能补上（create if not exists 幂等）。 */
+        try {
+          await s`create table if not exists board_links (
+            id           bigserial   primary key,
+            token        text        not null unique,
+            board_id     int         not null,
+            card_ref     text        not null default '',
+            guest_ok     boolean     not null default false,
+            expires_at   timestamptz,
+            max_views    int,
+            views        int         not null default 0,
+            revoked      boolean     not null default false,
+            note         text        not null default '',
+            created_by   bigint,
+            created_at   timestamptz not null default now(),
+            last_view_at timestamptz
+          )`;
+          await s`create table if not exists board_link_views (
+            id         bigserial   primary key,
+            link_id    bigint      not null,
+            user_id    bigint,
+            name       text        not null default '',
+            ip         text,
+            ua         text,
+            created_at timestamptz not null default now()
+          )`;
+          await s`create table if not exists board_meta (
+            id         int         primary key default 1,
+            data       jsonb       not null default '{}'::jsonb,
+            updated_at timestamptz not null default now()
+          )`;
+        } catch (e) {
+          console.warn('[schema] board_* 建表失败：', e && e.message);
+        }
+
         await s`
           insert into site_settings (id, data, updated_at)
           values (1, ${JSON.stringify({ schema_ver: SCHEMA_VER })}::jsonb, now())
@@ -294,6 +448,87 @@ export async function ensureSchema(sql) {
       create index if not exists login_log_time_idx
         on login_log (created_at desc)
     `;
+    /* v3.5.35 在线时长统计（见升级路径里的详细说明） */
+    await s`
+      create table if not exists online_sessions (
+        id            bigserial   primary key,
+        user_id       bigint      not null,
+        session_token text        not null default '',
+        start_at      timestamptz not null default now(),
+        stop_at       timestamptz not null default now(),
+        last_ping_at  timestamptz not null default now(),
+        ping_count    int         not null default 1,
+        created_at    timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists online_user_start_idx on online_sessions (user_id, start_at desc)`;
+    await s`create index if not exists online_start_idx on online_sessions (start_at desc)`;
+    await s`create index if not exists online_token_idx on online_sessions (session_token)`;
+    /* v3.5.40 页面维度在线时长（见升级路径里的说明） */
+    await s`
+      create table if not exists online_pages (
+        id            bigserial   primary key,
+        user_id       bigint      not null,
+        session_token text        not null default '',
+        page          text        not null default '',
+        start_at      timestamptz not null default now(),
+        stop_at       timestamptz not null default now(),
+        last_ping_at  timestamptz not null default now(),
+        ping_count    int         not null default 1,
+        created_at    timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists online_pages_user_idx on online_pages (user_id, start_at desc)`;
+    await s`create index if not exists online_pages_page_idx on online_pages (page, start_at desc)`;
+    await s`create index if not exists online_pages_tok_idx on online_pages (session_token, page, last_ping_at desc)`;
+    /* v3.6.1 云端数据备份（见升级路径里的说明） */
+    await s`
+      create table if not exists data_backups (
+        id          bigserial   primary key,
+        version     text        not null,
+        kind        text        not null default 'auto',
+        note        text        default '',
+        payload     jsonb       not null,
+        bytes       int         not null default 0,
+        created_at  timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists data_backups_ver_idx on data_backups (created_at desc)`;
+    await s`create index if not exists data_backups_version_idx on data_backups (version)`;
+    /* v3.6.4 删除回收站（30 分钟内可撤回） */
+    await s`
+      create table if not exists deleted_items (
+        id          bigserial   primary key,
+        kind        text        not null default 'field',
+        label       text        default '',
+        payload     jsonb       not null,
+        bytes       int         not null default 0,
+        deleted_by  bigint,
+        deleted_at  timestamptz not null default now(),
+        expires_at  timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc)`;
+    /* v3.7.0 资料修改审批（提交不写 profiles，后台通过才写） */
+    await s`
+      create table if not exists profile_change_requests (
+        id         bigserial   primary key,
+        profile_id bigint      not null,
+        user_id    bigint,
+        kind       text        not null default 'field',
+        changes    jsonb       not null,
+        status     text        not null default 'pending',
+        note       text        default '',
+        decided_by bigint,
+        decided_at timestamptz,
+        applied_at timestamptz,
+        revoked_at timestamptz,
+        meta       jsonb       not null default '{}'::jsonb,
+        created_at timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists pcr_status_idx on profile_change_requests (status, created_at desc)`;
+    await s`create index if not exists pcr_profile_idx on profile_change_requests (profile_id, created_at desc)`;
     /* 班级通讯录 / 个人资料（与 schema.sql 保持一致，见该文件的说明） */
     await s`
       create table if not exists profiles (
@@ -340,6 +575,9 @@ export async function ensureSchema(sql) {
         /* v3.5.5：字段校验规则（{type:'text'|'number'|'time'|'select', ...}），
            形状与默认值见 _lib/field-rules.js 的 normalizeRules。 */
         rules       jsonb       not null default '{}'::jsonb,
+        /* v3.5.40（站主 #1）：本人可编辑。true = 同学可以在「我的资料」里
+           自己改这一项；后台随时可关。存储的是「许可」，不是值。 */
+        self_edit   boolean     not null default false,
         constraint pfm_vis_chk check (visibility in ('public','committee','self','admin'))
       )
     `;
@@ -349,6 +587,9 @@ export async function ensureSchema(sql) {
        ⚠️ 不能靠「visibility 是否等于出厂值」来判断「动没动过」——
           站主可能把字段设成它本来就有的档（值没变），比对法分辨不出来。 */
     await s`alter table profile_field_meta add column if not exists vis_locked boolean not null default false`;
+    /* self_edit 补列（v3.5.40 站主 #1）：老库升级用。
+       true = 允许本人在「我的资料」/查询卡片里修改该字段。 */
+    await s`alter table profile_field_meta add column if not exists self_edit boolean not null default false`;
     /* 预置字段元数据。on conflict do nothing —— 后台改过之后重跑不会覆盖。 */
     await s`
       insert into profile_field_meta (field, label, visibility, sort_order, is_custom) values
@@ -523,12 +764,15 @@ export async function ensureSchema(sql) {
         max_views  int,
         views      int         not null default 0,
         revoked    boolean     not null default false,
+        note       text        default '',
         created_at timestamptz not null default now()
       )
     `;
     await s`create index if not exists share_links_owner_idx on share_links (owner_id, created_at desc)`;
     /* 自选分享的名单（v2.8.3 分享链接） */
     await s`alter table share_links add column if not exists target_names jsonb`;
+    /* v3.8.0（站主）：分享链接的备注 —— 建了很多条之后能一眼认出哪条是哪条 */
+    await s`alter table share_links add column if not exists note text default ''`;
     /* 分享内容开关（v2.9.7：分析也可以自定义分享内容）——
        老库的 share_links 已经建好了，光改 create table 是加不上列的，
        必须显式 alter，否则线上写 sections 直接报错。 */
@@ -651,6 +895,47 @@ export async function ensureSchema(sql) {
     await s`create index if not exists song_dur_title_idx on song_durations (title)`;
     /* v3.5.28：导入清单匹配会按歌手做模糊比对，补个歌手索引（与升级路径同步） */
     await s`create index if not exists song_dur_artist_idx on song_durations (artist)`;
+
+    /* ===== v3.8.4 板块分享链接（与上方升级路径同步，三处纪律）=====
+       站主原话见升级路径那段注释。这四段必须和那边一模一样。 */
+    await s`
+      create table if not exists board_links (
+        id           bigserial   primary key,
+        token        text        not null unique,
+        board_id     int         not null,
+        card_ref     text        not null default '',
+        guest_ok     boolean     not null default false,
+        expires_at   timestamptz,
+        max_views    int,
+        views        int         not null default 0,
+        revoked      boolean     not null default false,
+        note         text        not null default '',
+        created_by   bigint,
+        created_at   timestamptz not null default now(),
+        last_view_at timestamptz
+      )
+    `;
+    await s`create index if not exists board_links_owner_idx on board_links (created_by, created_at desc)`;
+    await s`
+      create table if not exists board_link_views (
+        id         bigserial   primary key,
+        link_id    bigint      not null,
+        user_id    bigint,
+        name       text        not null default '',
+        ip         text,
+        ua         text,
+        created_at timestamptz not null default now()
+      )
+    `;
+    await s`create index if not exists blv_link_idx on board_link_views (link_id, created_at desc)`;
+    await s`
+      create table if not exists board_meta (
+        id         int         primary key default 1,
+        data       jsonb       not null default '{}'::jsonb,
+        updated_at timestamptz not null default now()
+      )
+    `;
+
 
     /* 全量跑完 → 盖章。下一条请求起走「版本一致直接返回」的捷径。
        用 || 合并而不是整行覆盖：site_settings 里还存着 register_open /

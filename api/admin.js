@@ -4,6 +4,7 @@
    GET    /api/admin?action=users                     用户列表（含数据条数）
    GET    /api/admin?action=user&id=1                 单个用户详情 + 其云端数据
    GET    /api/admin?action=stats                     简单统计
+   GET    /api/admin?action=online&days=30            在线时长（按人聚合；带 id 则查该人时段明细）
    GET    /api/admin?action=audit                     操作日志
    POST   /api/admin?action=reset-password            重置某用户密码
    POST   /api/admin?action=set-status                启用/禁用
@@ -87,6 +88,7 @@ export default async function handler(req, res) {
       if (action === 'stats')      return await stats(req, res);
       if (action === 'audit')      return await listAudit(req, res);
       if (action === 'login-logs') return await loginLogs(req, res);
+      if (action === 'online')     return await onlineStats(req, res);
       if (action === 'export')     return await exportUsers(req, res);
       if (action === 'profiles')         return await listProfiles(req, res);
       if (action === 'profile')          return await profileDetail(req, res);
@@ -100,6 +102,11 @@ export default async function handler(req, res) {
       if (action === 'settings')         return await getSettings(req, res);
       if (action === 'action-logs')      return await listActionLogs(req, res);
       if (action === 'action-stats')     return await actionStats(req, res);
+      /* v3.6.1（站主 #4）：数据备份 / 回档 */
+      if (action === 'backups')          return await listBackups(req, res);
+      /* v3.7.0（站主 #1）：信息审核（修改申请） */
+      if (action === 'change-requests')  return await listChangeRequests(req, res);
+      if (action === 'backup')           return await getBackup(req, res);
       return fail(res, 404, '未知的 action：' + action);
     }
 
@@ -126,8 +133,22 @@ export default async function handler(req, res) {
         case 'bind-profiles':  return await bindProfiles(req, res, me, b);
         case 'encrypt-profiles': return await encryptProfiles(req, res, me, b);
         case 'set-visibility': return await setVisibility(req, res, me, b);
+        /* v3.5.40（站主 #1）：某个字段是否允许本人自己编辑 */
+        case 'set-self-edit':  return await setSelfEdit(req, res, me, b);
         case 'add-field':      return await addField(req, res, me, b);
         case 'delete-field':   return await deleteField(req, res, me, b);
+        /* v3.6.1：字段体检 / 一键恢复（墓碑误删、meta 被清空时用） */
+        case 'repair-fields':  return await repairFields(req, res, me, b);
+        /* v3.6.1（站主 #4）：备份 / 回档 */
+        case 'backup':         return await createBackup(req, res, me, b);
+        case 'delete-backup':  return await deleteBackup(req, res, me, b);
+        case 'restore-backup': return await restoreBackup(req, res, me, b);
+        /* v3.6.4（站主 #3）：30 分钟内撤回删除 */
+        case 'undo-delete':    return await undoDelete(req, res, me, b);
+        /* v3.7.0（站主 #1）：信息审核通过 / 驳回 / 7 天内撤销 */
+        case 'approve-change': return await approveChange(req, res, me, b);
+        case 'reject-change':  return await rejectChange(req, res, me, b);
+        case 'revert-change':  return await revertChange(req, res, me, b);
         case 'update-field':   return await updateField(req, res, me, b);
         /* v3.5.14 #7：字段拖拽排序 —— 一次批量写，避免 N 次子请求 */
         case 'reorder-fields': return await reorderFields(req, res, me, b);
@@ -669,6 +690,16 @@ const GAME_META = [
   { id: 'tetris', hiKey: 'tetris_hi', label: '俄罗斯方块', icon: '🧱' },
   { id: 'bird',   hiKey: 'bird_hi',   label: '像素飞鸟',   icon: '🐦' },
   { id: 'doodle', hiKey: 'doodle_hi', label: '涂鸦跳跃',   icon: '🦘' },
+  /* v3.5.35：其余 9 款全部接入云同步，这里补齐元数据 */
+  { id: 'breakout',   hiKey: 'breakout_hi', label: '打砖块',   icon: '🧱' },
+  { id: 'whack',      hiKey: 'whack_hi',    label: '打地鼠',   icon: '🔨' },
+  { id: 'match3',     hiKey: 'match3_hi',   label: '消消乐',   icon: '🍬' },
+  { id: 'plane',      hiKey: 'plane_hi',    label: '飞机大战', icon: '✈️' },
+  { id: 'minesweeper',hiKey: 'mine_best',   label: '扫雷（最快用时）', icon: '💣' },
+  { id: 'memory',     hiKey: 'memory_moves',label: '记忆翻牌（最少步数）', icon: '🃏' },
+  { id: 'gomoku',     hiKey: '',            label: '五子棋',   icon: '⚫' },
+  { id: 'tictactoe',  hiKey: '',            label: '井字棋',   icon: '❌' },
+  { id: 'chess',      hiKey: '',            label: '中国象棋', icon: '♟️' },
 ];
 
 async function gameStats(req, res) {
@@ -738,6 +769,22 @@ async function gameStats(req, res) {
           lastMs: Number(v.lastMs) || 0,
           lastAt: v.lastAt || null,
           bestScore: (v.bestScore == null ? null : Number(v.bestScore)),
+          /* v3.5.35：低分更好型成绩（扫雷最快用时 / 翻牌最少步数） */
+          bestLow: (v.bestLow == null ? null : Number(v.bestLow)),
+        };
+      }
+      continue;
+    }
+
+    /* v3.5.35：胜负平台账（五子棋 / 井字棋等棋类），cls_game_rec_<game> = {w,l,d} */
+    if (k.startsWith('cls_game_rec_')) {
+      const g = k.slice('cls_game_rec_'.length);
+      if (v && typeof v === 'object') {
+        u.rec = u.rec || {};
+        u.rec[g] = {
+          w: Number(v.w) || 0,
+          l: Number(v.l) || 0,
+          d: Number(v.d) || 0,
         };
       }
       continue;
@@ -748,7 +795,7 @@ async function gameStats(req, res) {
       /* cls_game_week_<game> 是「本周榜」用的周计数，不是最高分记录；
          它和 cls_game_<game>_hi 长的很像，早期版本会被错当成 hi 收进来，
          导致 u.hi 里混进 week_snake 之类的垃圾键。这里直接跳过。 */
-      if (localKey.startsWith('week_')) continue;
+      if (localKey.startsWith('week_') || localKey.startsWith('rec_')) continue;
       const num = Number(v);
       if (Number.isFinite(num)) u.hi[localKey] = num;
       else u.hi[localKey] = v;
@@ -1244,6 +1291,141 @@ async function loginLogs(req, res) {
   });
 }
 
+/* ---------------- 读：在线时长（v3.5.35） ----------------
+   GET ?action=online&days=30&id=&limit=&offset=
+
+   · 不传 id → 按人聚合：每人累计时长、时段数、最近一次在线、最长单次
+   · 传 id   → 该人的时段明细（从新到旧）
+
+   时长口径：每条 online_sessions = 一次「连续在线」（心跳间隔 ≤180 秒不断开），
+   时长 = stop_at - start_at。单次只打过一个点的情况（start_at = stop_at = 0 秒）
+   不计入「单次最长」，但计入时段数——那代表「来过一次就走了」。
+
+   days 只作用于「按人聚合」的窗口；明细不分窗口，靠 limit/offset 翻。 */
+async function onlineStats(req, res) {
+  const sql = getSql();
+  const id = Number(req.query.id || 0);
+  const limit = Math.min(Number(req.query.limit || 100), 500);
+  const offset = Math.max(Number(req.query.offset || 0), 0);
+  const days = Math.min(Math.max(Number(req.query.days || 30), 1), 3650);
+
+  if (id) {
+    const rows = await sql`
+      select o.id, o.session_token, o.start_at, o.stop_at, o.last_ping_at, o.ping_count,
+             extract(epoch from (o.stop_at - o.start_at))::int as secs
+        from online_sessions o
+       where o.user_id = ${id}
+       order by o.start_at desc
+       limit ${limit} offset ${offset}
+    `;
+    const total = (await sql`select count(*)::int as n from online_sessions where user_id = ${id}`)[0].n;
+    const sum = (await sql`
+      select coalesce(sum(extract(epoch from (stop_at - start_at))), 0)::int as secs,
+             count(*)::int as n
+        from online_sessions where user_id = ${id}
+    `)[0];
+    /* v3.5.40（站主 #3）：这个人的时间都花在哪些页面。
+       与 online_sessions 是两条独立时间线，分开查、分开返回。 */
+    const pageRows = await sql`
+      select page,
+             coalesce(sum(extract(epoch from (stop_at - start_at))), 0)::int as secs,
+             count(*)::int as n,
+             max(stop_at) as last_at
+        from online_pages
+       where user_id = ${id}
+       group by page
+       order by secs desc
+       limit 30
+    `;
+    return ok(res, {
+      userId: id,
+      total,
+      totalSecs: sum.secs,
+      sessionCount: sum.n,
+      pages: pageRows.map((r) => ({
+        page: r.page || '未知',
+        secs: Math.max(0, Number(r.secs) || 0),
+        count: Number(r.n) || 0,
+        lastAt: r.last_at || null,
+      })),
+      sessions: rows.map((r) => ({
+        id: Number(r.id),
+        startAt: r.start_at,
+        stopAt: r.stop_at,
+        lastPingAt: r.last_ping_at,
+        pingCount: Number(r.ping_count),
+        secs: Math.max(0, Number(r.secs) || 0),
+        device: String(r.session_token || '').slice(0, 8),
+      })),
+    });
+  }
+
+  /* 按人聚合。用户表可能很小，这里直接 join 全量再过滤，比两次往返省一次子请求。
+     注：`max` 用 `filter (where ...)` 取「有长度的单次」，纯单点时段（0 秒）跳过。 */
+  const rows = await sql`
+    select u.id, u.username, u.display_name, u.role,
+           coalesce(sum(extract(epoch from (o.stop_at - o.start_at))), 0)::int as total_secs,
+           count(o.id)::int as session_count,
+           coalesce(max(extract(epoch from (o.stop_at - o.start_at)))
+                    filter (where o.stop_at > o.start_at), 0)::int as longest_secs,
+           max(o.stop_at) as last_at
+      from users u
+      left join online_sessions o
+             on o.user_id = u.id
+            and o.start_at > now() - (${String(days)} || ' days')::interval
+     group by u.id, u.username, u.display_name, u.role
+     order by total_secs desc, u.id
+     limit ${limit} offset ${offset}
+  `;
+
+  /* 全站合计：与上面同一个窗口，方便后台显示「总共在线 X 小时」 */
+  const all = (await sql`
+    select coalesce(sum(extract(epoch from (stop_at - start_at))), 0)::int as secs,
+           count(*)::int as n,
+           count(distinct user_id)::int as users
+      from online_sessions
+     where start_at > now() - (${String(days)} || ' days')::interval
+  `)[0];
+
+  /* v3.5.40（站主 #3）：全站「哪个页面最耗时间」—— 同一时间窗口，
+     按 page 聚合。后台可据此看成绩分析 / 游戏 / 后台各占多少。 */
+  const pageAgg = await sql`
+    select page,
+           coalesce(sum(extract(epoch from (stop_at - start_at))), 0)::int as secs,
+           count(*)::int as n,
+           count(distinct user_id)::int as users
+      from online_pages
+     where start_at > now() - (${String(days)} || ' days')::interval
+     group by page
+     order by secs desc
+     limit 40
+  `;
+
+  return ok(res, {
+    days,
+    byPage: pageAgg.map((r) => ({
+      page: r.page || '未知',
+      secs: Math.max(0, Number(r.secs) || 0),
+      count: Number(r.n) || 0,
+      users: Number(r.users) || 0,
+    })),
+    totalUsers: (await sql`select count(*)::int as n from users`)[0].n,
+    grandSecs: all.secs,
+    grandSessions: all.n,
+    activeUsers: all.users,
+    users: rows.map((r) => ({
+      id: Number(r.id),
+      username: r.username,
+      displayName: r.display_name,
+      role: r.role,
+      totalSecs: Math.max(0, Number(r.total_secs) || 0),
+      sessionCount: Number(r.session_count) || 0,
+      longestSecs: Math.max(0, Number(r.longest_secs) || 0),
+      lastAt: r.last_at || null,
+    })),
+  });
+}
+
 /* ---------------- 读：导出（按筛选返回全量，前端生成 xlsx） ----------------
    带上与列表页相同的筛选条件，做到「所见即所得」的导出。
    不返回密码哈希——只导出非敏感字段。 */
@@ -1601,10 +1783,11 @@ async function listMembers(req, res) {
 async function loadFieldMeta() {
   try {
     const sql = getSql();
-    const rows = await sql`
-      select field, label, visibility, sort_order, is_custom, vis_locked, rules
-        from profile_field_meta order by sort_order, field
-    `;
+    /* ⚠️ v3.6.1：原来写死列名（含 self_edit），只要老库还没补上那一列，
+       整条 select 就会报错 → catch 返回空数组 → 后台「字段管理」显示 0 个字段。
+       站主 2026-10-19 遇到的就是这个（字段其实都在，只是列表读不出来）。
+       改成 select * 再逐列取，缺哪列都不至于整张表读不出来。 */
+    const rows = await sql`select * from profile_field_meta order by sort_order, field`;
     return rows.map((r) => ({
       field: r.field,
       label: r.label || r.field,
@@ -1618,6 +1801,9 @@ async function loadFieldMeta() {
          设过 → 同学自己的「仅自己可见」不再生效（后台权力最大）。
          自定义字段天然算设过。 */
       adminSet: !!r.vis_locked || !!r.is_custom,
+      /* v3.5.40（站主 #1）：本人可编辑。后台勾上后，同学能在「我的资料」里
+         自己改这一项；关掉就只能由后台改。 */
+      selfEdit: !!(r.self_edit === true || r.self_edit === 1 || r.self_edit === 't'),
     }));
   } catch (e) {
     console.warn('[admin] 读字段元数据失败（返回空）：', e.message);
@@ -1795,6 +1981,51 @@ async function setVisibility(req, res, me, b) {
   });
 }
 
+/* ============================================================================
+ * v3.5.40（站主 #1）：字段「本人可编辑」开关
+ * ----------------------------------------------------------------------------
+ * 站主原话：「字段管理的所有字段均可设置本人是否可编辑，后台开启后则该用户
+ *           可以在个人资料页面或个人资料查询卡片修改字段内容」
+ *
+ * 这里只负责「许可」这一位。真正的写入在 profile.js 的 self-update：
+ *   ① 字段必须在 profile_field_meta 里且 self_edit = true（逐字段校验，不整包放行）
+ *   ② 值要过该字段的 rules（长度 / 数字 / 时间精度 / 下拉选项）
+ *   ③ 加密字段照旧走 profile-crypt，明文绝不下库
+ * 匿名/未认领的账号没有 profiles 行，自然改不了自己 —— 与既有认领流程一致。
+ * ========================================================================= */
+async function setSelfEdit(req, res, me, b) {
+  const field = String(b.field || '').trim().slice(0, 40);
+  if (!field) return fail(res, 400, '缺少 field');
+  const on = !!b.selfEdit;
+
+  const sql = getSql();
+  const exists = await sql`select field, label from profile_field_meta where field = ${field} limit 1`;
+  if (!exists.length) return fail(res, 404, '没有这个字段：' + field);
+
+  /* ⚠️ v3.6.4：老库可能还没有 self_edit 列（升级中断 / 建表跑过但补列失败），
+     直接 update 会 500「服务器内部错误」—— 站主点「允许本机编辑」踩的就是这个。
+     先补列再写，幂等且便宜。 */
+  try {
+    await sql`alter table profile_field_meta add column if not exists self_edit boolean not null default false`;
+  } catch (e) {
+    console.warn('[admin] 补 self_edit 列失败：', e.message);
+  }
+
+  await sql`
+    update profile_field_meta
+       set self_edit = ${on}, updated_at = now()
+     where field = ${field}
+  `;
+  await audit(me.id, 'field.self_edit', 'profile_field', field, on ? 'on' : 'off');
+  return ok(res, {
+    field,
+    selfEdit: on,
+    message: on
+      ? '已允许本人编辑「' + (exists[0].label || field) + '」'
+      : '已关闭「' + (exists[0].label || field) + '」的本人编辑',
+  });
+}
+
 /* ============================================================
    自定义资料字段的增 / 删 / 改（2026-10-09 v2.4.0 新增）
    ------------------------------------------------------------
@@ -1914,6 +2145,589 @@ async function addField(req, res, me, b) {
   });
 }
 
+/* ============================================================================
+ * v3.6.1（站主 #4）：云端数据备份 / 回档
+ * ----------------------------------------------------------------------------
+ * 站主原话：「后台新增数据管理，以后每次更新都先自动备份所有数据
+ *            （通过检测在部署前先备份后部署），包括作业、公告、用户数据等等
+ *            全部云端内容，默认存储最近 14 个版本更新，方便有问题随时回档」
+ *
+ * 设计取舍：
+ *   · 备份**整包快照**存 data_backups.payload（jsonb），一版一行 ——
+ *     比按表拆开更好查、更好回滚，也不会因为表结构变化而还原不了。
+ *   · 只备份「业务数据」：账号 / 档案 / 字段定义 / 成绩 / 投票 / 歌曲时长 /
+ *     站点设置 / 个人云端数据。登录日志、在线心跳这类高频流水不进快照
+ *     （几百 MB 且没有回档价值）。
+ *   · 每版跑 10 条 select，加插入与清理大约 13 个子请求，Workers 50 的额度够用。
+ *   · 保留策略：按版本号留最近 14 个（同版本最多留 3 份）。
+ *
+ * 回档范围（第一版）：
+ *   content      —— 个人云端数据里的站点内容（作业 / 公告 / 弹窗 / 排期…）
+ *   profiles     —— 班级档案（按 id upsert）
+ *   field_meta   —— 字段管理定义
+ *   settings     —— 站点设置
+ * 账号密码**默认不覆盖**（回档把大家密码改回旧值会造成集体登不上）。
+ * ========================================================================= */
+const BACKUP_TABLES = [
+  'users', 'profiles', 'profile_field_meta', 'site_settings', 'user_data',
+  'exams', 'exam_scores', 'class_votes', 'class_vote_ballots', 'song_durations',
+];
+const BACKUP_MAX_BYTES = 8 * 1024 * 1024;
+const BACKUP_KEEP_VERSIONS = 14;
+
+async function buildBackupPayload(sql) {
+  const dump = {};
+  for (const t of BACKUP_TABLES) {
+    try {
+      const rows = await sql('select * from ' + t + ' limit 20000');
+      dump[t] = rows;
+    } catch (e) {
+      dump[t] = [];
+      dump.__errors = (dump.__errors || []).concat(t + ': ' + String(e.message || e).slice(0, 80));
+    }
+  }
+  return dump;
+}
+
+/** 按版本保留最近 N 个；v3.9.9：同版本只留 1 份（站主：别备份重了） */
+async function pruneBackups(sql) {
+  try {
+    const vers = await sql`
+      select version, max(created_at) as t
+        from data_backups
+       group by version
+       order by t desc
+       limit ${BACKUP_KEEP_VERSIONS}
+    `;
+    const keep = vers.map((v) => v.version);
+    if (!keep.length) return 0;
+    const list = keep.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(',');
+    const del = await sql('delete from data_backups where version not in (' + list + ') returning id');
+    for (const v of keep) {
+      await sql`
+        delete from data_backups
+         where version = ${v}
+           and id not in (
+             select id from data_backups where version = ${v} order by created_at desc limit 1
+           )
+      `;
+    }
+    return del.length;
+  } catch (e) {
+    console.warn('[admin] 清理旧备份失败：', e.message);
+    return 0;
+  }
+}
+
+/* v3.9.8（站主）：定时自动备份 —— 给 Worker 的 cron 用（没有登录态，也不写审计人）
+   站主原话：「我说过了要在部署前有几个门禁的，可是你数据管理的备份没有做，
+              这个你可以放到 cloudflare 部署内容或 githubaction，确保每次更新能自动备份一次数据」。 */
+export async function runAutoBackup(version = 'auto') {
+  const sql = getSql();
+  /* v3.9.9：同一版本只备一次（改完立刻部署时，cron 撞上部署前备份也不会重复写） */
+  const dup = await sql`select id from data_backups where version = ${String(version).slice(0, 20)} limit 1`;
+  if (dup.length) return { ok: true, skipped: true, id: Number(dup[0].id) };
+  const payload = await buildBackupPayload(sql);
+  const bytes = JSON.stringify(payload).length;
+  if (bytes > BACKUP_MAX_BYTES) return { ok: false, error: 'too-large', bytes };
+  const row = await sql`
+    insert into data_backups (version, kind, note, payload, bytes)
+    values (${String(version).slice(0, 20)}, 'auto', ${'定时自动备份'}, ${JSON.stringify(payload)}::jsonb, ${bytes})
+    returning id, created_at
+  `;
+  const pruned = await pruneBackups(sql);
+  return { ok: true, id: Number(row[0].id), bytes, pruned };
+}
+
+async function createBackup(req, res, me, b) {
+  const version = String((b && b.version) || '').trim().slice(0, 20) || 'unknown';
+  const kind = ['auto', 'predeploy', 'manual'].indexOf(String((b && b.kind) || '')) >= 0
+    ? String(b.kind) : 'manual';
+  const note = String((b && b.note) || '').slice(0, 200);
+
+  const sql = getSql();
+
+  /* v3.9.9（站主）：「别备份重了，比如 3.9.8 后台就备份了 3 次」
+     —— 部署前门禁、GitHub Action、定时任务三条路都会调到这里。
+     同一版本只留一份：已有 backup 就跳过；若是 auto 被 predeploy 撞上，
+     把那一份升级成 predeploy（部署前的那份才是有意义的）。 */
+  const dup = await sql`select id, kind from data_backups where version = ${version} order by created_at desc limit 1`;
+  if (dup.length) {
+    if (kind === 'predeploy' && dup[0].kind !== 'predeploy') {
+      const payload0 = await buildBackupPayload(sql);
+      const bytes0 = JSON.stringify(payload0).length;
+      if (bytes0 > BACKUP_MAX_BYTES) return fail(res, 413, '数据太大，超过 8MB 上限');
+      await sql`
+        update data_backups
+           set kind = 'predeploy', payload = ${JSON.stringify(payload0)}::jsonb, bytes = ${bytes0},
+               note = ${note || '部署前自动备份'}, created_at = now()
+         where id = ${dup[0].id}
+      `;
+      return ok(res, {
+        id: Number(dup[0].id), version, kind: 'predeploy', bytes: bytes0, upgraded: true,
+        message: '这个版本已有自动备份，已升级为部署前备份（不重复新建）',
+      });
+    }
+    /* 跳过时也跑一次清理：把历史遗留的同版本多余快照收掉（只留最新 1 份） */
+    const pruned0 = await pruneBackups(sql).catch(() => 0);
+    return ok(res, {
+      id: Number(dup[0].id), version, kind: dup[0].kind, skipped: true, pruned: pruned0,
+      message: '这个版本已经备份过了（' + dup[0].kind + '），不重复备份'
+        + (pruned0 ? '，顺手清理了 ' + pruned0 + ' 份历史重复' : ''),
+    });
+  }
+
+  const payload = await buildBackupPayload(sql);
+  let bytes = 0;
+  try { bytes = JSON.stringify(payload).length; } catch (e) { bytes = 0; }
+  if (bytes > BACKUP_MAX_BYTES) {
+    return fail(res, 413, '数据太大（' + Math.round(bytes / 1024) + 'KB），超过 8MB 上限；请先在后台清理无用成绩/日志再试');
+  }
+
+  const row = await sql`
+    insert into data_backups (version, kind, note, payload, bytes)
+    values (${version}, ${kind}, ${note}, ${JSON.stringify(payload)}::jsonb, ${bytes})
+    returning id, created_at
+  `;
+  const pruned = await pruneBackups(sql);
+  await audit(me.id, 'data.backup', 'data_backup', String(row[0].id), version + '/' + kind + '/' + bytes);
+
+  return ok(res, {
+    id: Number(row[0].id),
+    version, kind, bytes,
+    createdAt: row[0].created_at,
+    pruned,
+    summary: BACKUP_TABLES.map((t) => t + ':' + ((payload[t] || []).length)).join(' '),
+    message: '已备份（' + Math.round(bytes / 1024) + 'KB）' + (pruned ? '，清理了 ' + pruned + ' 个过期备份' : ''),
+  });
+}
+
+async function listBackups(req, res) {
+  const sql = getSql();
+  const rows = await sql`
+    select id, version, kind, note, bytes, created_at
+      from data_backups
+     order by created_at desc
+     limit 60
+  `;
+  const total = (await sql`select count(*)::int as n, coalesce(sum(bytes),0)::int as b from data_backups`)[0];
+  return ok(res, {
+    backups: rows.map((r) => ({
+      id: Number(r.id), version: r.version, kind: r.kind, note: r.note || '',
+      bytes: Number(r.bytes || 0), createdAt: r.created_at,
+    })),
+    count: Number(total.n || 0),
+    totalBytes: Number(total.b || 0),
+    keepVersions: BACKUP_KEEP_VERSIONS,
+  });
+}
+
+async function getBackup(req, res) {
+  const id = Number(req.query.id || 0);
+  const sql = getSql();
+  const rows = await sql`
+    select id, version, kind, note, bytes, created_at, payload
+      from data_backups where id = ${id} limit 1
+  `;
+  if (!rows.length) return fail(res, 404, '没有这个备份');
+  const r = rows[0];
+  let p = r.payload;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = {}; } }
+  const counts = {};
+  Object.keys(p || {}).forEach((k) => {
+    if (k.indexOf('__') === 0) return;
+    counts[k] = Array.isArray(p[k]) ? p[k].length : 0;
+  });
+  return ok(res, {
+    backup: {
+      id: Number(r.id), version: r.version, kind: r.kind, note: r.note || '',
+      bytes: Number(r.bytes || 0), createdAt: r.created_at, counts,
+    },
+  });
+}
+
+async function deleteBackup(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const sql = getSql();
+  await sql`delete from data_backups where id = ${id}`;
+  await audit(me.id, 'data.backup_delete', 'data_backup', String(id), '');
+  return ok(res, { message: '备份已删除（不可恢复）' });
+}
+
+/* 只允许恢复这几张表：账号密码与日志不在范围内，避免误伤 */
+async function restoreBackup(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  const parts = Array.isArray(b && b.parts) ? b.parts.map(String) : ['content', 'profiles', 'field_meta', 'settings'];
+  if (!id) return fail(res, 400, '缺少备份 id');
+
+  const sql = getSql();
+  const rows = await sql`select id, version, created_at, payload from data_backups where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '没有这个备份');
+  let p = rows[0].payload;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = {}; } }
+
+  const done = [];
+  const skipped = [];
+
+  /* ---- 1) 站点内容（作业/公告/弹窗/排期…） ---- */
+  if (parts.indexOf('content') >= 0) {
+    const ud = (p.user_data || []).filter((r) => r.data_key === 'cls_site_contents');
+    if (!ud.length) skipped.push('content（备份里没有内容文档）');
+    else {
+      const r0 = ud[0];
+      const v = typeof r0.data_value === 'string' ? r0.data_value : JSON.stringify(r0.data_value);
+      await sql`
+        insert into user_data (user_id, data_key, data_value, updated_at)
+        values (${r0.user_id}, 'cls_site_contents', ${v}, now())
+        on conflict (user_id, data_key)
+        do update set data_value = excluded.data_value, updated_at = now()
+      `;
+      done.push('content');
+    }
+  }
+
+  /* ---- 2) 档案（按 id upsert；加密字段原样回写，不需要解密） ---- */
+  if (parts.indexOf('profiles') >= 0) {
+    const list = p.profiles || [];
+    let n = 0;
+    for (const row of list) {
+      const keys = Object.keys(row).filter((k) => k !== 'id' && isSafeFieldFormat(k).ok);
+      if (!keys.length) continue;
+      const cols = keys.join(', ');
+      const ph = keys.map((_, i) => '$' + (i + 2)).join(', ');
+      const params = [row.id].concat(keys.map((k) => row[k]));
+      const upd = keys.map((k) => k + ' = excluded.' + k).join(', ');
+      try {
+        await sql(
+          'insert into profiles (id, ' + cols + ') values ($1, ' + ph + ') '
+          + 'on conflict (id) do update set ' + upd,
+          params
+        );
+        n++;
+      } catch (e) { /* 单行失败不影响其它行 */ }
+    }
+    if (n) done.push('profiles(' + n + ')');
+    else skipped.push('profiles（无可写行）');
+  }
+
+  /* ---- 3) 字段定义 ---- */
+  if (parts.indexOf('field_meta') >= 0) {
+    const list = p.profile_field_meta || [];
+    let n = 0;
+    for (const r of list) {
+      const chk = isSafeFieldFormat(r.field);
+      if (!chk.ok) continue;
+      try {
+        await sql`
+          insert into profile_field_meta (field, label, visibility, sort_order, is_custom, vis_locked, rules)
+          values (${r.field}, ${r.label || r.field}, ${r.visibility || 'public'},
+                  ${Number(r.sort_order) || 100}, ${!!r.is_custom}, ${!!r.vis_locked},
+                  ${JSON.stringify(r.rules || {})}::jsonb)
+          on conflict (field) do update
+            set label = excluded.label, visibility = excluded.visibility,
+                sort_order = excluded.sort_order, rules = excluded.rules, updated_at = now()
+        `;
+        n++;
+      } catch (e) {}
+    }
+    if (n) done.push('field_meta(' + n + ')');
+    else skipped.push('field_meta（无可写行）');
+  }
+
+  /* ---- 4) 站点设置 ---- */
+  if (parts.indexOf('settings') >= 0) {
+    const r = (p.site_settings || [])[0];
+    if (r) {
+      const v = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || {});
+      await sql`
+        insert into site_settings (id, data, updated_at)
+        values (1, ${v}::jsonb, now())
+        on conflict (id) do update set data = excluded.data, updated_at = now()
+      `;
+      done.push('settings');
+    } else skipped.push('settings（备份里没有）');
+  }
+
+  await audit(me.id, 'data.restore', 'data_backup', String(id),
+    'restored: ' + done.join(',') + '; skipped: ' + skipped.join(','));
+
+  return ok(res, {
+    restored: done,
+    skipped,
+    version: rows[0].version,
+    message: '已从「' + rows[0].version + '」备份恢复：' + (done.join('、') || '无')
+      + (skipped.length ? '；未恢复：' + skipped.join('、') : ''),
+  });
+}
+
+/* ============================================================================
+ * v3.6.4（站主 #3）：撤回删除（30 分钟窗口）
+ * ----------------------------------------------------------------------------
+ * 站主原话：「数据可以直接删除而不是隐藏，这样会出现更多的问题，在后端的操作
+ *            记录里新增撤回的功能，现在删除数据倒计时 30 分钟，30 分钟以内在
+ *            后台操作日志里点击撤回即可重新显示，否则真正删除数据」
+ *
+ * 撤回做的事（按 deleteField 的反向操作来）：
+ *   ① 把列加回来（add column if not exists）
+ *   ② 用一条 UPDATE ... FROM (VALUES ...) 把当时导出的值批量写回
+ *      （不用逐行 update —— 61 行就是 61 次子请求，Workers 额度扛不住）
+ *   ③ 字段定义按快照恢复（保留原来的可见性 / 排序 / 校验规则）
+ *   ④ 把这个字段从「墓碑」里摘掉，否则下次升级又会按墓碑删一遍
+ * 过期或记录不存在 → 明确告诉用户「已超过 30 分钟」，不装作成功。
+ * ========================================================================= */
+async function undoDelete(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+
+  const sql = getSql();
+  const rows = await sql`select * from deleted_items where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '这条删除记录已经不存在了');
+  const it = rows[0];
+  const expires = new Date(it.expires_at).getTime();
+  if (Date.now() > expires) {
+    return fail(res, 410, '已经超过 30 分钟，这条数据已被真正删除，无法撤回');
+  }
+
+  let p = it.payload;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = {}; } }
+
+  if (it.kind === 'field') {
+    const chk = isSafeFieldFormat(p.field);
+    if (!chk.ok) return fail(res, 400, '字段名不合法，无法撤回');
+
+    try {
+      await sql(`alter table profiles add column if not exists ${chk.field} text`);
+    } catch (e) {
+      return fail(res, 500, '重建字段列失败：' + String(e.message || e).slice(0, 120));
+    }
+
+    const list = Array.isArray(p.rows) ? p.rows : [];
+    if (list.length) {
+      try {
+        const pairs = list.map((r, i) => `($${i * 2 + 1}::bigint, $${i * 2 + 2}::text)`).join(',');
+        const params = list.flatMap((r) => [r.id, r.v]);
+        await sql(
+          'update profiles as pr set ' + chk.field + ' = v.val '
+          + 'from (values ' + pairs + ') as v(id, val) where pr.id = v.id',
+          params
+        );
+      } catch (e) {
+        console.warn('[admin] 撤回字段值时部分失败：', e.message);
+      }
+    }
+
+    try {
+      await sql`
+        insert into profile_field_meta (field, label, visibility, sort_order, is_custom, vis_locked, rules)
+        values (${p.field}, ${p.label || p.field}, ${p.visibility || 'public'},
+                ${Number(p.sortOrder) || 100}, ${!!p.isCustom}, ${!!p.visLocked},
+                ${JSON.stringify(p.rules || {})}::jsonb)
+        on conflict (field) do update
+          set label = excluded.label, visibility = excluded.visibility,
+              sort_order = excluded.sort_order, rules = excluded.rules, updated_at = now()
+      `;
+    } catch (e) {}
+
+    /* 解除墓碑：否则下次升级又按墓碑删 */
+    try {
+      await sql`
+        update site_settings
+           set data = jsonb_set(
+                 data, '{deleted_fields}',
+                 coalesce((
+                   select jsonb_agg(v)
+                     from jsonb_array_elements_text(coalesce(data->'deleted_fields', '[]'::jsonb)) v
+                    where v <> ${p.field}
+                 ), '[]'::jsonb),
+                 true),
+               updated_at = now()
+         where id = 1
+      `;
+    } catch (e) {}
+  }
+
+  await sql`delete from deleted_items where id = ${id}`;
+  await audit(me.id, 'data.undo_delete', 'deleted_item', String(id), it.kind + ':' + (it.label || ''));
+
+  return ok(res, {
+    restored: it.kind,
+    label: it.label || '',
+    message: '已撤回，字段「' + (it.label || '') + '」和它的数据都回来了',
+  });
+}
+
+/* ============================================================================
+ * v3.6.1：字段体检 + 一键恢复
+ * ----------------------------------------------------------------------------
+ * 站主原话：「字段管理之前的那些比如入团时间、发展团员编号那些你前几次更新的
+ *           时候直接给我删了，我现在后台没有数据，看看能不能恢复。」
+ *
+ * 根因（这次查清楚了）：
+ *   ① v3.5.14 给「删除字段」加了墓碑：删过的字段名记进 site_settings.data.deleted_fields；
+ *   ② ensureSchema 每次版本升级都会跑一段「按墓碑删除 profile_field_meta」，
+ *      防止预置种子把删掉的字段又插回来；
+ *   ③ 于是只要墓碑里躺着一个字段，以后**每次升级**都会再删一次；
+ *      如果墓碑里躺了一批系统字段，某次升级就会把整张字段表清空。
+ *   而 deleteField 同时执行了 `alter table profiles drop column` ——
+ *   列一没，值就跟着没了（PostgreSQL 的 drop column 不可撤销）。
+ *
+ * 本接口做两件事：
+ *   · dryRun（默认）：报告「字段表有几行 / 墓碑里有谁 / 12 个预置列哪些还在、
+ *     各有多少条有值」——先看清损失范围，再决定动不动手；
+ *   · apply=true：清空墓碑 → 补建缺列 → 重插预置字段 → 恢复默认校验规则。
+ *     列还在的，值会立刻回来；列已经没了的，只能靠数据库时间点恢复或重新导入
+ *     （接口会在返回里明确列出「哪些列已经不存在」）。
+ * ========================================================================= */
+const PRESET_FIELDS = [
+  ['name',            '姓名',        'public', 10],
+  ['student_id',      '学号',        'public', 20],
+  ['politics',        '政治面貌',    'public', 30],
+  ['exam_no',         '智学网账号',  'public', 40],
+  ['role',            '身份',        'public', 50],
+  ['title',           '头衔',        'public', 60],
+  ['wechat',          '微信',        'public', 70],
+  ['qq',              'QQ',          'public', 80],
+  ['phone',           '手机号',      'public', 90],
+  ['id_card',         '身份证号',    'self',   100],
+  ['youth_league_no', '发展团员编号', 'self',  110],
+  ['school',          '学校',        'public', 120],
+  ['class_name',      '班级',        'public', 130],
+  ['ethnicity',       '民族',        'public', 140],
+  ['birth_date',      '出生日期',    'self',   150],
+  ['home_address',    '家庭住址',    'self',   160],
+  ['league_date',     '入团时间',    'self',   170],
+];
+const PRESET_RULES = {
+  name: '{"type":"text","maxLen":3}', school: '{"type":"text","maxLen":6}',
+  politics: '{"type":"select","options":["群众","共青团员"]}', phone: '{"type":"number","digits":11}',
+  id_card: '{"type":"text","maxLen":18}', youth_league_no: '{"type":"text","maxLen":40}',
+  league_date: '{"type":"time"}', class_name: '{"type":"text","maxLen":8}',
+  student_id: '{"type":"number","digits":6}',
+  birth_date: '{"type":"time"}', home_address: '{"type":"text","maxLen":30}',
+};
+
+async function repairFields(req, res, me, b) {
+  const sql = getSql();
+  const apply = b && (b.apply === true || b.apply === 'true');
+
+  /* ---- 体检 ---- */
+  const metaRows = await sql`select field, label from profile_field_meta order by sort_order, field`;
+  let tomb = [];
+  try {
+    const r = await sql`
+      select coalesce(data->'deleted_fields', '[]'::jsonb) as d
+        from site_settings where id = 1 limit 1
+    `;
+    const raw = r.length ? r[0].d : [];
+    tomb = Array.isArray(raw) ? raw.map(String) : (typeof raw === 'string' ? JSON.parse(raw) : []);
+  } catch (e) { tomb = []; }
+
+  /* 现有列：select * 取第一行的键名（不依赖 information_schema，测试桩也能跑） */
+  let colNames = [];
+  try {
+    const one = await sql`select * from profiles limit 1`;
+    colNames = one.length ? Object.keys(one[0]) : [];
+  } catch (e) { colNames = []; }
+
+  const status = PRESET_FIELDS.map(([f, label]) => ({
+    field: f, label,
+    hasColumn: colNames.indexOf(f) >= 0,
+    hasMeta: metaRows.some((m) => m.field === f),
+  }));
+
+  if (!apply) {
+    return ok(res, {
+      dryRun: true,
+      metaCount: metaRows.length,
+      tombstoned: tomb,
+      columns: status,
+      missingColumns: status.filter((x) => !x.hasColumn).map((x) => x.field),
+      message: '这是体检结果，未做任何修改。确认要恢复请再调一次并带 apply=true',
+    });
+  }
+
+  /* ---- 恢复 ---- */
+  /* ① 清空墓碑：否则下次升级又会按墓碑删一遍 */
+  try {
+    await sql`update site_settings set data = data - 'deleted_fields', updated_at = now() where id = 1`;
+  } catch (e) { console.warn('[admin] 清墓碑失败：', e.message); }
+
+  /* ② 补建缺列（列还在时 add column if not exists 是空操作，值原样保留） */
+  for (const [f] of PRESET_FIELDS) {
+    const chk = isSafeFieldFormat(f);
+    if (!chk.ok) continue;
+    try { await sql(`alter table profiles add column if not exists ${chk.field} text`); } catch (e) {}
+  }
+
+  /* ②b 字段表自身的 self_edit 列（v3.5.40 加的）。老库可能因升级中断而缺列 ——
+     缺了会让「字段管理」整张表读不出来（select 写死列名会报错）。 */
+  try { await sql`alter table profile_field_meta add column if not exists self_edit boolean not null default false`; } catch (e) {}
+
+  /* ③ 重插字段定义（已有的不动，保留你改过的可见性/标签）。
+     一条多值 INSERT 搞定，别逐条来 —— Cloudflare Workers 单次 50 个子请求，
+     17 条字段逐条插会把预算吃掉一大半。字段名/标签都是本文件里的常量，无注入风险。 */
+  try {
+    const vals = PRESET_FIELDS.map(([f, label, vis, ord]) =>
+      `('${f}', '${label}', '${vis}', ${ord}, false)`).join(', ');
+    await sql(
+      'insert into profile_field_meta (field, label, visibility, sort_order, is_custom) values '
+      + vals + ' on conflict (field) do nothing'
+    );
+  } catch (e) {
+    console.warn('[admin] 批量重插字段失败，改为逐条：', e.message);
+    for (const [f, label, vis, ord] of PRESET_FIELDS) {
+      try {
+        await sql`
+          insert into profile_field_meta (field, label, visibility, sort_order, is_custom)
+          values (${f}, ${label}, ${vis}, ${ord}, false)
+          on conflict (field) do nothing
+        `;
+      } catch (e2) {}
+    }
+  }
+
+  /* ④ 恢复默认校验规则（只补空的，不覆盖你改过的） */
+  for (const f of Object.keys(PRESET_RULES)) {
+    try {
+      await sql`
+        update profile_field_meta set rules = ${PRESET_RULES[f]}::jsonb
+         where field = ${f} and rules = '{}'::jsonb
+      `;
+    } catch (e) {}
+  }
+
+  /* ⑤ 体检结果：每列还有多少条有值 —— 这就是「数据到底还在不在」的答案 */
+  let counts = {};
+  try {
+    const cols = PRESET_FIELDS.map(([f]) => f).filter((f) => isSafeFieldFormat(f).ok);
+    const expr = cols.map((c) => `sum(case when coalesce(${c},'') <> '' then 1 else 0 end) as ${c}`).join(', ');
+    const r = await sql('select ' + expr + ' from profiles');
+    counts = r[0] || {};
+  } catch (e) { counts = {}; }
+
+  const recovered = [];
+  const stillEmpty = [];
+  PRESET_FIELDS.forEach(([f, label]) => {
+    const n = Number(counts[f] || 0);
+    if (n > 0) recovered.push({ field: f, label, filled: n });
+    else stillEmpty.push({ field: f, label, hasColumn: colNames.indexOf(f) >= 0 });
+  });
+
+  await audit(me.id, 'field.repair', 'profile_field', null,
+    '恢复 ' + (metaRows.length === 0 ? '全部' : '缺失') + '预置字段；墓碑 ' + tomb.length + ' 项');
+
+  return ok(res, {
+    applied: true,
+    metaCountBefore: metaRows.length,
+    tombstonedBefore: tomb,
+    recovered,                 /* 有值的字段 —— 数据回来了 */
+    stillEmpty,                /* 仍然为空 —— 列还在但值没了 / 列被删了 */
+    message: '已重建字段定义并清空墓碑。有值的字段：' + recovered.length + ' 个；'
+      + (stillEmpty.length ? ('仍为空：' + stillEmpty.map((x) => x.label).join('、')) : '其余为空'),
+  });
+}
+
 /**
  * 删除自定义资料字段。
  * body: { field }
@@ -1960,20 +2774,77 @@ async function deleteField(req, res, me, b) {
     `;
   } catch (e) { console.warn('[admin] 写字段墓碑失败：', e.message); }
 
-  await sql`delete from profile_field_meta where field = ${field}`;
-
-  /* 列名已确认来自 meta 表（即当初经过白名单的），再校验一次以防历史脏数据 */
-  const chk = isSafeFieldFormat(field);
-  if (chk.ok) {
+  /* ============================================================================
+   * v3.6.4（站主 #3）：改回「真删」，但删之前先把整列数据存进回收站
+   * ----------------------------------------------------------------------------
+   * 站主原话：「数据可以直接删除而不是隐藏，这样会出现更多的问题，
+   *            在后端的操作记录里新增撤回的功能，现在删除数据倒计时 30 分钟，
+   *            30 分钟以内在后台操作日志里点击撤回即可重新显示，否则真正删除数据」
+   *
+   * 顺序很重要：**先导快照，再删**。快照里存字段定义 + 该列所有非空值，
+   * 30 分钟内点「撤回」能原样恢复（连列带值）；过期后由下一次删除顺手清掉。
+   * ========================================================================= */
+  let deletedId = 0;
+  const chkCol = isSafeFieldFormat(field);
+  if (chkCol.ok) {
     try {
-      await sql(`alter table profiles drop column if exists ${field}`);
+      /* 兜底建表：老库升级中断时可能没这张表，缺了会让删除直接失败 */
+      await sql`create table if not exists deleted_items (
+        id          bigserial   primary key,
+        kind        text        not null default 'field',
+        label       text        default '',
+        payload     jsonb       not null,
+        bytes       int         not null default 0,
+        deleted_by  bigint,
+        deleted_at  timestamptz not null default now(),
+        expires_at  timestamptz not null default now()
+      )`;
+      const rows = await sql(
+        'select id, ' + chkCol.field + ' as v from profiles where coalesce(' + chkCol.field + ", '') <> ''"
+      );
+      const payload = {
+        field, label: row.label || field, visibility: row.visibility,
+        sortOrder: Number(row.sort_order) || 100, isCustom: !!row.is_custom,
+        visLocked: !!row.vis_locked, rules: row.rules || {},
+        rows: rows.map((r) => ({ id: Number(r.id), v: r.v })),
+      };
+      const bytes = JSON.stringify(payload).length;
+      const expAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const ins = await sql`
+        insert into deleted_items (kind, label, payload, bytes, deleted_by, expires_at)
+        values ('field', ${row.label || field}, ${JSON.stringify(payload)}::jsonb, ${bytes}, ${me.id}, ${expAt})
+        returning id
+      `;
+      deletedId = Number(ins[0].id);
     } catch (e) {
-      console.warn('[admin] 删自定义字段的列失败（meta 已删，前台不再展示）：', field, e.message);
+      /* 快照失败就不删 —— 宁可这次删不掉，也不能删了之后没得撤 */
+      console.error('[admin] 字段快照失败，已中止删除：', field, e.message);
+      return fail(res, 500, '备份该字段数据失败，已中止删除（数据未动）：' + String(e.message || e).slice(0, 120));
     }
   }
 
-  await audit(me.id, 'field.delete', 'profile_field', field, row.label || '');
-  return ok(res, { message: '已删除字段「' + (row.label || field) + '」', field });
+  await sql`delete from profile_field_meta where field = ${field}`;
+
+  if (chkCol.ok) {
+    try {
+      await sql(`alter table profiles drop column if exists ${chkCol.field}`);
+    } catch (e) {
+      console.warn('[admin] 删列失败（meta 已删，前台不再展示）：', field, e.message);
+    }
+  }
+
+  /* 顺手清理过期回收站记录（惰性清理，不跑定时任务） */
+  try { await sql`delete from deleted_items where expires_at < now()`; } catch (e) {}
+
+  await audit(me.id, 'field.delete', 'profile_field', field,
+    'deletedId:' + deletedId + ' ' + (row.label || ''));
+  return ok(res, {
+    message: '已删除字段「' + (row.label || field) + '」'
+      + (deletedId ? '；30 分钟内在「操作日志」里可撤回' : ''),
+    field,
+    deletedId,
+    undoMinutes: 30,
+  });
 }
 
 /**
@@ -2168,6 +3039,246 @@ async function profileDetail(req, res) {
 }
 
 /** 待审核列表（只返回 pending，后台「待审核」页用） */
+/* ============================================================================
+ * v3.7.0（站主 #1）：资料修改审批
+ * ----------------------------------------------------------------------------
+ * 站主原话：「所有允许学生自主修改的字段同之前微信QQ手机号的联系方式审核相同，
+ *            需要后台确认方可成功更改，在后台确认之前均按照原来显示，而且后台的
+ *            信息审核只包含修改人姓名和修改内容（原内容和现内容）其他没有改的地方
+ *            无需显示，名称从联系方式审核改为信息审核，而且可以看到历史审核记录
+ *            并后台可以撤销之前的确认（7 天之内）」
+ *
+ * 数据流：
+ *   同学提交 → profile_change_requests(status=pending)，**profiles 不动**
+ *            → 前台继续显示旧值（这就是「确认之前按原来显示」）
+ *   后台通过 → 把 after 写进 profiles，status=approved，记下改动前的 contact_status
+ *   后台驳回 → status=rejected + 原因（本人可见）
+ *   7 天内撤销 → 把 before 写回 profiles，status=reverted
+ *
+ * 只显示「改了哪几项」：changes 里在提交时就已经把 old === new 的字段剔掉了，
+ * 所以后台不会看到一堆没动的字段。
+ * ========================================================================= */
+
+const CHANGE_REVERT_DAYS = 7;
+
+/** 把请求行 → 前端结构（解密 before/after，补上姓名学号） */
+async function shapeChangeRows(sql, rows, pkey) {
+  if (!rows.length) return [];
+  /* 只取本次涉及的档案行。id 已 Number 过，拼进 SQL 无注入风险；
+     不用 any(...) 是因为测试用的 SQLite 桥接不认这个语法。 */
+  const ids = [...new Set(rows.map((r) => Number(r.profile_id)))].filter((n) => n > 0);
+  let profs = [];
+  if (ids.length) {
+    try {
+      profs = await sql(
+        'select p.id, p.name, p.student_id, u.username '
+        + 'from profiles p left join users u on u.id = p.user_id '
+        + 'where p.id in (' + ids.join(',') + ')'
+      );
+    } catch (e) { profs = []; }
+  }
+  const pmap = {};
+  for (const p of profs) pmap[Number(p.id)] = p;
+
+  const out = [];
+  for (const r of rows) {
+    let arr = r.changes;
+    if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { arr = []; } }
+    const items = await Promise.all((Array.isArray(arr) ? arr : []).map(async (c) => ({
+      field: c.field,
+      label: c.label || c.field,
+      before: await decField(pkey, c.before),
+      after: await decField(pkey, c.after),
+    })));
+    const p = pmap[Number(r.profile_id)] || {};
+    out.push({
+      id: Number(r.id),
+      profileId: Number(r.profile_id),
+      /* 站主要求：信息审核只看「修改人姓名」+「修改内容」 */
+      name: (await decField(pkey, p.name)) || '',
+      studentId: (await decField(pkey, p.student_id)) || '',
+      username: p.username || '',
+      kind: r.kind || 'field',
+      status: r.status || 'pending',
+      note: r.note || '',
+      items,
+      createdAt: r.created_at,
+      decidedAt: r.decided_at || null,
+      revokedAt: r.revoked_at || null,
+      canRevert: r.status === 'approved'
+        && r.decided_at
+        && (Date.now() - new Date(r.decided_at).getTime()) < CHANGE_REVERT_DAYS * 86400000,
+      revertDaysLeft: r.status === 'approved' && r.decided_at
+        ? Math.max(0, Math.ceil(CHANGE_REVERT_DAYS - (Date.now() - new Date(r.decided_at).getTime()) / 86400000))
+        : 0,
+    });
+  }
+  return out;
+}
+
+/** GET ?action=change-requests&scope=pending|history */
+async function listChangeRequests(req, res) {
+  const sql = getSql();
+  const scope = String(req.query.scope || 'pending');
+  const pkey = await profileKey(req);
+
+  let rows = [];
+  if (scope === 'history') {
+    rows = await sql`
+      select * from profile_change_requests
+       where status <> 'pending'
+       order by coalesce(decided_at, created_at) desc
+       limit 100
+    `;
+  } else {
+    rows = await sql`
+      select * from profile_change_requests
+       where status = 'pending'
+       order by created_at asc
+       limit 200
+    `;
+  }
+
+  let counts = { pending: 0, approved: 0, rejected: 0, reverted: 0 };
+  try {
+    const c = await sql`
+      select status, count(*)::int as n from profile_change_requests group by status
+    `;
+    c.forEach((r) => { if (r.status in counts) counts[r.status] = Number(r.n) || 0; });
+  } catch (e) {}
+
+  return ok(res, { scope, requests: await shapeChangeRows(sql, rows, pkey), counts });
+}
+
+/** POST ?action=approve-change { id } */
+async function approveChange(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const sql = getSql();
+  const rows = await sql`select * from profile_change_requests where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '这条申请已经不存在了');
+  const r = rows[0];
+  if (r.status !== 'pending') return fail(res, 409, '这条申请已经处理过了（' + r.status + '）');
+
+  let arr = r.changes;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { arr = []; } }
+
+  const sets = [];
+  const params = [];
+  for (const c of (Array.isArray(arr) ? arr : [])) {
+    const chk = isSafeFieldFormat(c.field);
+    if (!chk.ok) continue;
+    params.push(c.after);            /* 已是密文，原样写回 */
+    sets.push(chk.field + ' = $' + params.length);
+  }
+  if (!sets.length) return fail(res, 400, '这条申请里没有可写入的字段');
+
+  /* 联系方式审核通过 → 置 approved，之后前台才展示 */
+  const isContact = r.kind === 'contact';
+  let prevStatus = '';
+  if (isContact) {
+    const cur = await sql`select contact_status from profiles where id = ${r.profile_id} limit 1`;
+    prevStatus = (cur[0] && cur[0].contact_status) || 'none';
+    sets.push("contact_status = 'approved'");
+    sets.push('reject_reason = null');
+  }
+
+  /* ⚠️ 这里 deliberately 不改 updated_at 之外的任何系统列：
+     姓名/学号的盲索引不在 self-edit 允许范围内，所以不需要重算。 */
+  params.push(r.profile_id);
+  await sql(
+    'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
+    params
+  );
+
+  await sql`
+    update profile_change_requests
+       set status = 'approved', decided_by = ${me.id}, decided_at = now(),
+           applied_at = now(), note = '', meta = ${JSON.stringify({ prevStatus })}::jsonb
+     where id = ${id}
+  `;
+  await audit(me.id, 'profile.change_approve', 'profile', String(r.profile_id), 'request:' + id);
+
+  return ok(res, { message: '已通过，修改立即生效', requestId: id });
+}
+
+/** POST ?action=reject-change { id, reason } */
+async function rejectChange(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const reason = cText(b.reason, 200) || '管理员驳回';
+  const sql = getSql();
+  const rows = await sql`select profile_id, status from profile_change_requests where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '这条申请已经不存在了');
+  if (rows[0].status !== 'pending') return fail(res, 409, '这条申请已经处理过了');
+
+  /* 驳回只影响申请本身，库里的值一个字节都不动 */
+  if (rows[0].profile_id) {
+    try {
+      await sql`update profiles set reject_reason = ${reason} where id = ${rows[0].profile_id}`;
+    } catch (e) {}
+  }
+  await sql`
+    update profile_change_requests
+       set status = 'rejected', decided_by = ${me.id}, decided_at = now(), note = ${reason}
+     where id = ${id}
+  `;
+  await audit(me.id, 'profile.change_reject', 'profile', String(rows[0].profile_id), 'request:' + id);
+  return ok(res, { message: '已驳回，原内容保持不变', requestId: id });
+}
+
+/** POST ?action=revert-change { id } —— 7 天内撤销已通过的审批 */
+async function revertChange(req, res, me, b) {
+  const id = Number((b && b.id) || 0);
+  if (!id) return fail(res, 400, '缺少 id');
+  const sql = getSql();
+  const rows = await sql`select * from profile_change_requests where id = ${id} limit 1`;
+  if (!rows.length) return fail(res, 404, '这条记录已经不存在了');
+  const r = rows[0];
+  if (r.status !== 'approved') return fail(res, 409, '只有「已通过」的记录可以撤销');
+  const decided = r.decided_at ? new Date(r.decided_at).getTime() : 0;
+  if (!decided || Date.now() - decided > CHANGE_REVERT_DAYS * 86400000) {
+    return fail(res, 410, '已超过 ' + CHANGE_REVERT_DAYS + ' 天，不能再撤销');
+  }
+
+  let arr = r.changes;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { arr = []; } }
+
+  const sets = [];
+  const params = [];
+  for (const c of (Array.isArray(arr) ? arr : [])) {
+    const chk = isSafeFieldFormat(c.field);
+    if (!chk.ok) continue;
+    params.push(c.before);           /* 写回原值（密文） */
+    sets.push(chk.field + ' = $' + params.length);
+  }
+  if (!sets.length) return fail(res, 400, '这条记录里没有可还原的字段');
+
+  if (r.kind === 'contact') {
+    let meta = r.meta;
+    if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch (e) { meta = {}; } }
+    const prev = (meta && meta.prevStatus) || 'approved';
+    /* 原来是什么状态就还原成什么状态；参数化避免拼接 */
+    params.push(prev);
+    sets.push('contact_status = $' + params.length);
+  }
+
+  params.push(r.profile_id);
+  await sql(
+    'update profiles set ' + sets.join(', ') + ', updated_at = now() where id = $' + params.length,
+    params
+  );
+
+  await sql`
+    update profile_change_requests
+       set status = 'reverted', revoked_at = now()
+     where id = ${id}
+  `;
+  await audit(me.id, 'profile.change_revert', 'profile', String(r.profile_id), 'request:' + id);
+
+  return ok(res, { message: '已撤销，内容恢复到修改前', requestId: id });
+}
+
 async function profileRequests(req, res) {
   const sql = getSql();
   const raw = await sql`

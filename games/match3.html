@@ -142,6 +142,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
   </div>
 </div>
 <div class="tip">点击或滑动交换 · 连击越多分越高</div>
+<script src="cloud.js"></script>
 <script>
 /* ===================== 音效 ===================== */
 var AC=null;
@@ -194,6 +195,7 @@ function _star(x,cx,cy,R){x.beginPath();for(var i=0;i<10;i++){var a=-Math.PI/2+i
 
 /* ===================== 状态 ===================== */
 var board=[], sc=0, hi=0, sel=null, busy=false, playing=false, frozen=false;
+if(window.CLS_CLOUD) CLS_CLOUD.pullHi('match3_hi',function(v){ if(v>hi){hi=v;document.getElementById('hi').textContent=hi;} });   /* v3.5.35 云同步 */
 var combo=0, T=0, lastTs=0;
 hi=+(localStorage.getItem('match3_hi')||0);document.getElementById('hi').textContent=hi;
 
@@ -477,8 +479,11 @@ document.getElementById('reBtn').addEventListener('click',function(){reset();});
 
 /* ===================== 开局 / 重置 ===================== */
 function hideOv(){document.getElementById('startOv').classList.add('hidden');document.getElementById('overOv').classList.add('hidden');}
-function pause(){playing=false;document.getElementById('overOv').classList.remove('hidden');document.getElementById('ovInfo').textContent='当前得分 '+sc+(sc>=hi&&sc>0?'　🏆 新纪录！':'　最高 '+hi);}
+function pause(){playing=false;document.getElementById('overOv').classList.remove('hidden');document.getElementById('ovInfo').textContent='当前得分 '+sc+(sc>=hi&&sc>0?'　🏆 新纪录！':'　最高 '+hi);
+  /* v3.5.35 云同步：这局玩到暂停/结束，把时长与分数记上（sc>0 才算真玩过） */
+  try{ if(window.CLS_CLOUD && sc>0) CLS_CLOUD.addPlay('match3', Date.now()-(window.__m3Start||Date.now()), {score:sc}); }catch(e){}}
 function reset(){
+  window.__m3Start=Date.now();   /* v3.5.35 游玩计时起点 */
   mkGrid();
   var guard=0;
   while((findAllMatches().length>0||!hasPossibleMove())&&guard<300){mkGrid();guard++;}

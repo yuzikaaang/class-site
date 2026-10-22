@@ -19,7 +19,7 @@
 import { getSql, jsonCol, systemUserId } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireUser,
-  audit,
+  audit, currentUser,
 } from './_lib/http.js';
 
 /* 云端内容键 ↔ 前端 CONTENT_MAP 的对应关系见 index.html:4649-4658。
@@ -57,6 +57,11 @@ const HW_EDITABLE_KEYS = ['holiday_homeworks', 'homework_notice'];
 
 /* 单条内容体积上限（字符数）。公告/作业都是纯文本，200KB 绰绰有余；
    设这个上限是防止有人往云端塞大文件把库撑爆。 */
+/* v3.7.0：这几个键只有后台用（版本记录 150KB+、抽歌排期、排除清单），
+   普通同学拉 /api/content 时直接剔掉 —— 既省流量也省解析时间，
+   首屏快好几拍。管理员带着 token 请求时照旧全量返回。 */
+const ADMIN_ONLY_KEYS = ['release_notes', 'dj_schedule', 'dj_excluded'];
+
 const MAX_CHARS = 200 * 1024;
 /* 单个数组内容的条目上限 */
 const MAX_ITEMS = 2000;
@@ -133,14 +138,25 @@ async function readContent(req, res) {
     }
   });
 
-  /* since 之后的增量：这里直接把全量返回。
-     内容总量很小（几 KB），做增量反而容易因为客户端时间不准而漏内容。
-     保留 since 参数是为了兼容前端的调用方式，不改变行为。 */
+  /* v3.7.0：非管理员请求不带后台专用键（见 ADMIN_ONLY_KEYS 注释）。
+     判断身份失败时按「普通同学」处理 —— 宁可少给，不能多漏。 */
+  let isAdmin = false;
+  try {
+    if (req.headers && (req.headers.authorization || req.headers.Authorization)) {
+      const u = await currentUser(req);
+      isAdmin = !!(u && u.role === 'admin');
+    }
+  } catch (e) { isAdmin = false; }
+  if (!isAdmin) {
+    ADMIN_ONLY_KEYS.forEach((k) => { delete items[k]; });
+  }
+
   return ok(res, {
     items,
     serverTime: latest || Date.now(),
     since: since || null,
     count: Object.keys(items).length,
+    slim: !isAdmin,
   });
 }
 

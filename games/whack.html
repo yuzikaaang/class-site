@@ -123,19 +123,23 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 <div class="score">得分：<b id="sc">0</b> · 剩余：<b id="time">30</b>s · 最高：<b id="hi">0</b></div>
 <div class="grid" id="grid"></div>
 <div class="hint">地鼠冒头就点它，30 秒挑战手速</div>
+<script src="cloud.js"></script>
 <script>
 const grid=document.getElementById('grid');
 let sc=0,time=30,hi=+(localStorage.getItem('whack_hi')||0),running=false,spawnT,moleT,countT;
 document.getElementById('hi').textContent=hi;
+if(window.CLS_CLOUD) CLS_CLOUD.pullHi('whack_hi',function(v){ if(v>hi){hi=v;document.getElementById('hi').textContent=hi;} });   /* v3.5.35 云同步 */
 for(let i=0;i<9;i++){const h=document.createElement('div');h.className='hole';h.innerHTML='<div class="mole">🐹</div>';
   h.onclick=()=>{if(h.classList.contains('up')){sc++;document.getElementById('sc').textContent=sc;h.classList.remove('up');}};grid.appendChild(h);}
 const holes=[...grid.children];
-function start(){sc=0;time=30;running=true;document.getElementById('sc').textContent=0;document.getElementById('time').textContent=30;
+function start(){sc=0;time=30;running=true;window.__wkStart=Date.now();   /* v3.5.35 游玩计时 */document.getElementById('sc').textContent=0;document.getElementById('time').textContent=30;
   spawnT=setInterval(()=>{holes.forEach(h=>h.classList.remove('up'));const up=holes[(Math.random()*9)|0];up.classList.add('up');
     setTimeout(()=>up.classList.remove('up'),650);},750);
   countT=setInterval(()=>{time--;document.getElementById('time').textContent=time;if(time<=0)end();},1000);}
 function end(){running=false;clearInterval(spawnT);clearInterval(countT);holes.forEach(h=>h.classList.remove('up'));
   if(sc>hi){hi=sc;localStorage.setItem('whack_hi',hi);document.getElementById('hi').textContent=hi;}
+  /* v3.5.35 云同步：游玩时长 + 分数 + 最高分 */
+  try{ if(window.CLS_CLOUD){ CLS_CLOUD.addPlay('whack', Date.now()-(window.__wkStart||Date.now()), {score:sc}); if(sc>0) CLS_CLOUD.pushHi('whack_hi', hi); } }catch(e){}
   setTimeout(()=>alert('时间到！本局 '+sc+' 分，最高 '+hi+' 分。点任意处再来一局'),120);}
 document.body.addEventListener('click',e=>{if(!running&&!e.target.closest('a'))start();});
 start();

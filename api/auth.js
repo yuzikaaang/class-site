@@ -406,6 +406,11 @@ async function me(req, res) {
 const PING_THROTTLE_MS = 30 * 1000;
 /* 与后台判定口径保持一致，前端也用它做本地急判 */
 const ONLINE_WINDOW_SEC = 90;
+/* v3.5.35 在线时段分段阈值（秒）。
+   站主原话：「如果两次请求时间它超过了 3 分钟，那就算两次请求」。
+   注意这是**心跳间隔**的阈值，不是「在线判定窗口」——后者是 90 秒，
+   两者用途不同，别混。 */
+const ONLINE_GAP_SEC = 180;
 
 async function ping(req, res) {
   const u = await requireUser(req, res);
@@ -453,10 +458,86 @@ async function ping(req, res) {
            and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')
       `);
     }
+
+    /* ---------------- v3.5.35 在线时段累加 ----------------
+       站主原话：
+       「检测单次在线时长以及历史累计的在线时长……第一次请求到最后一次请求之间
+         的时间，就是它这次上线时间……如果两次请求时间它超过了 3 分钟，那就
+         算两次请求，就算另算这个在线时间，然后历史总的话就把它们加起来」
+
+       一条 UPDATE 就能同时完成「续上」和「另起一段」，不额外花子请求：
+         · 子查询找出本会话「还在 180 秒窗口内」的最新一条时段（t）
+         · UPDATE ... FROM t：命中就续（stop_at / last_ping_at 前推、次数 +1）
+         · 没命中则 RETURNING 返回 0 行 → 再插一条新时段
+
+       为什么用 session_token 而不是 user_id 分段：同一账号两台设备各自的心跳
+       是两条独立的时间线，混在一起会把「A 挂着不管 + B 在正常用」算成一段。
+
+       为什么要单独存 last_ping_at：sessions.last_seen_at 有 30 秒节流，
+       粒度撑不起 3 分钟判定；这里必须是「每次心跳都写」的精确锚点。 */
+    const sessTok = u.sessionToken || '';
+    jobs.push((async () => {
+      const cur = await sql`
+        update online_sessions o
+           set stop_at = now(), last_ping_at = now(), ping_count = o.ping_count + 1
+          from (
+            select id from online_sessions
+             where user_id = ${u.id}
+               and session_token = ${sessTok}
+               and last_ping_at > now() - interval '180 seconds'
+             order by last_ping_at desc
+             limit 1
+          ) t
+         where o.id = t.id
+        returning o.id
+      `;
+      if (cur.length) return 'continue';
+      await sql`
+        insert into online_sessions (user_id, session_token, start_at, stop_at, last_ping_at, ping_count)
+        values (${u.id}, ${sessTok}, now(), now(), now(), 1)
+      `;
+      return 'new';
+    })());
+
+    /* ---------------- v3.5.40 页面维度在线时长（站主 #3） ----------------
+       站主原话：「在线时间的统计需精确到某段时间在哪个页面，
+                比如成绩分析页面、打砖块页面、后台页面」
+
+       写法和上面 online_sessions 完全同款，只是分段键多了 page：
+         同一人 + 同一会话 + 同一页面，心跳间隔 ≤ 180 秒 → 续上同一段。
+       页面切走就自然另起一段，于是「某页面停留多久」= 该页所有段的时长之和。
+       page 由前端心跳带上（?page=…），这里做长度与字符清洗，防止脏值把索引撑爆。 */
+    const pageRaw = String((req.query && req.query.page) || '').trim();
+    const page = pageRaw.slice(0, 40).replace(/[^\u4e00-\u9fa5A-Za-z0-9:_\-\. ]/g, '') || '未知';
+    jobs.push((async () => {
+      const cur = await sql`
+        update online_pages o
+           set stop_at = now(), last_ping_at = now(), ping_count = o.ping_count + 1
+          from (
+            select id from online_pages
+             where user_id = ${u.id}
+               and session_token = ${sessTok}
+               and page = ${page}
+               and last_ping_at > now() - interval '180 seconds'
+             order by last_ping_at desc
+             limit 1
+          ) t
+         where o.id = t.id
+        returning o.id
+      `;
+      if (cur.length) return 'continue';
+      await sql`
+        insert into online_pages (user_id, session_token, page, start_at, stop_at, last_ping_at, ping_count)
+        values (${u.id}, ${sessTok}, ${page}, now(), now(), now(), 1)
+      `;
+      return 'new';
+    })());
+
     const settled = await Promise.allSettled(jobs);
     settled.forEach((r, i) => {
       if (r.status === 'rejected') {
-        console.warn('[auth] ping 更新失败(' + (i ? 'sessions' : 'users') + ')：', r.reason && r.reason.message);
+        console.warn('[auth] ping 更新失败(' + (['users', 'sessions', 'online_sessions', 'online_pages'][i] || i) + ')：',
+          r.reason && r.reason.message);
       }
     });
   } catch (e) {

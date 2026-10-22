@@ -75,6 +75,129 @@ create table if not exists sessions (
 create index if not exists sessions_user_idx    on sessions (user_id);
 create index if not exists sessions_expires_idx on sessions (expires_at);
 
+/* ---------------- 在线时段表（v3.5.35） ----------------
+   站主原话：
+   「检测单次在线时长以及历史累计的在线时长……第一次请求到最后一次请求之间的
+     时间，就是它这次上线时间……如果两次请求时间超过了 3 分钟，那就算两次请求」
+
+   落地算法（判定写在 api/auth.js 的 ping() 里）：
+     · 距同会话上一条的 last_ping_at ≤ 180 秒 → 同一次在线，把 stop_at 往后推
+     · 超过 180 秒（或第一次）→ 另起一个时段（插入新行）
+   每条 sessions 一行 = 一次「连续在线」；时长 = stop_at - start_at。
+   last_ping_at 是判定用的锚点，与 sessions.last_seen_at 分开存，
+   因为后者有 30 秒节流，粒度不够做 3 分钟判定。 */
+create table if not exists online_sessions (
+  id            bigserial   primary key,
+  user_id       bigint      not null,
+  session_token text        not null default '',     -- sha256(token)，不存明文
+  start_at      timestamptz not null default now(),  -- 本段第一次心跳
+  stop_at       timestamptz not null default now(),  -- 本段最后一次心跳（随时间前推）
+  last_ping_at  timestamptz not null default now(),  -- 分段判定锚点
+  ping_count    int         not null default 1,      -- 本段累计心跳次数
+  created_at    timestamptz not null default now()
+);
+create index if not exists online_user_start_idx on online_sessions (user_id, start_at desc);
+create index if not exists online_start_idx      on online_sessions (start_at desc);
+create index if not exists online_token_idx      on online_sessions (session_token);
+
+-- ============================================================
+-- v3.5.40 页面维度在线时长（站主 #3）
+--   站主原话：「在线时间的统计需精确到某段时间在哪个页面，
+--            比如成绩分析页面、打砖块页面、后台页面」
+--   与 online_sessions 分开存：
+--     · online_sessions 仍负责「这一次在线多久 / 一共在线多久」（总口径不变）
+--     · online_pages   负责「这段时间挂在哪个页面」
+--   分段规则完全一致：同一人 + 同一会话 + 同一页面，心跳间隔 ≤ 180 秒算同一段。
+--   页面标识由前端心跳带上（?page=成绩分析 / game:breakout / admin:votes …）。
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.5.40
+-- ============================================================
+create table if not exists online_pages (
+  id            bigserial   primary key,
+  user_id       bigint      not null,
+  session_token text        not null default '',
+  page          text        not null default '',
+  start_at      timestamptz not null default now(),
+  stop_at       timestamptz not null default now(),
+  last_ping_at  timestamptz not null default now(),
+  ping_count    int         not null default 1,
+  created_at    timestamptz not null default now()
+);
+create index if not exists online_pages_user_idx on online_pages (user_id, start_at desc);
+create index if not exists online_pages_page_idx on online_pages (page, start_at desc);
+create index if not exists online_pages_tok_idx  on online_pages (session_token, page, last_ping_at desc);
+
+-- ============================================================
+-- v3.6.1 云端数据备份（站主 #4）
+--   站主原话：「后台新增数据管理，以后每次更新都先自动备份所有数据
+--            （通过检测在部署前先备份后部署）到云端数据库，包括作业、公告、
+--            用户数据等等全部云端内容，默认存储最近 14 个版本更新，
+--            方便有问题随时回档」
+--   · payload：整包快照（content / users / profiles / votes / settings …）
+--   · kind：auto 自动 / predeploy 部署前 / manual 手动
+--   · 保留策略见 api/admin.js 的 pruneBackups()：按 version 保留最近 14 个
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.6.1
+-- ============================================================
+create table if not exists data_backups (
+  id          bigserial   primary key,
+  version     text        not null,
+  kind        text        not null default 'auto',
+  note        text        default '',
+  payload     jsonb       not null,
+  bytes       int         not null default 0,
+  created_at  timestamptz not null default now()
+);
+create index if not exists data_backups_ver_idx     on data_backups (created_at desc);
+create index if not exists data_backups_version_idx on data_backups (version);
+
+-- ============================================================
+-- v3.6.4 删除回收站（站主 #3）
+--   站主原话：「数据可以直接删除而不是隐藏，这样会出现更多的问题，
+--            在后端的操作记录里新增撤回的功能，现在删除数据倒计时 30 分钟，
+--            30 分钟以内在后台操作日志里点击撤回即可重新显示，否则真正删除数据」
+--   · kind = field：删字段时把「字段定义 + 该列所有值」整包存进来
+--   · expires_at 到期后由下一次删除操作顺手清掉（惰性清理，不跑定时任务）
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.6.4
+-- ============================================================
+create table if not exists deleted_items (
+  id          bigserial   primary key,
+  kind        text        not null default 'field',
+  label       text        default '',
+  payload     jsonb       not null,
+  bytes       int         not null default 0,
+  deleted_by  bigint,
+  deleted_at  timestamptz not null default now(),
+  expires_at  timestamptz not null default now()
+);
+create index if not exists deleted_items_exp_idx on deleted_items (expires_at desc);
+
+-- ============================================================
+-- v3.7.0 资料修改审批（站主 #1）
+--   站主原话：「所有允许学生自主修改的字段同之前微信QQ手机号的联系方式审核相同，
+--            需要后台确认方可成功更改，在后台确认之前均按照原来显示」
+--   · changes = [{field, label, before, after}]，before/after 都是密文（与 profiles 同密钥）
+--   · 提交时**不动 profiles** → 前台自然还是旧值；后台通过后才写库
+--   · status: pending | approved | rejected | reverted
+--   · 通过后 7 天内可 revert（后台「信息审核 → 历史记录」里点撤销）
+-- ensureSchema（http.js）两路径均已同步；SCHEMA_VER = 3.7.0
+-- ============================================================
+create table if not exists profile_change_requests (
+  id         bigserial   primary key,
+  profile_id bigint      not null,
+  user_id    bigint,
+  kind       text        not null default 'field',
+  changes    jsonb       not null,
+  status     text        not null default 'pending',
+  note       text        default '',
+  decided_by bigint,
+  decided_at timestamptz,
+  applied_at timestamptz,
+  revoked_at timestamptz,
+  meta       jsonb       not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists pcr_status_idx  on profile_change_requests (status, created_at desc);
+create index if not exists pcr_profile_idx on profile_change_requests (profile_id, created_at desc);
+
 /* ---------------- 用户数据表（云同步核心） ---------------- */
 -- 按 (用户, 键) 存 JSONB，天然适配前端 localStorage 的任意结构
 create table if not exists user_data (
@@ -240,6 +363,7 @@ create table if not exists profile_field_meta (
   sort_order  int         not null default 100,        -- 展示顺序（小的在前）
   is_custom   boolean     not null default false,      -- true = 后台新增的自定义字段
   vis_locked  boolean     not null default false,      -- true = 站主在后台设过可见性，以站主为准
+  self_edit   boolean     not null default false,      -- v3.5.40：true = 允许本人自己改这一项
   updated_at  timestamptz not null default now(),
   -- v3.5.5 字段校验规则：{type:'text'|'number'|'time'|'select', ...}
   -- 形状与默认值见 api/_lib/field-rules.js 的 normalizeRules；
@@ -475,6 +599,7 @@ create table if not exists share_links (
   max_views  int,                                         -- 最多被打开几次
   views      int         not null default 0,
   revoked    boolean     not null default false,           -- 撤销开关
+  note       text        default '',                       -- v3.8.0 备注（自己认链接用）
   created_at timestamptz not null default now()
 );
 create index if not exists share_links_owner_idx on share_links (owner_id, created_at desc);
@@ -547,3 +672,50 @@ create table if not exists song_durations (
 create index if not exists song_dur_title_idx on song_durations (title);
 -- v3.5.28：导入清单按「歌名全等 + 歌手部分匹配」比对，补歌手索引
 create index if not exists song_dur_artist_idx on song_durations (artist);
+
+-- ============================================================
+-- v3.8.4 板块分享链接（站主）
+--   「新增分享链接的功能（类似成绩分析的分享链接）……生成包含该板块所有内容的
+--     分享链接，内容也是链接数据库实时刷新，相当于一个快捷方式，用户打开直接
+--     跳转到对应位置，还可以一键返回主页。」
+--
+--   · board_links：一条分享。token 就是凭证，游客凭它进「指定板块」；
+--     card_ref 为空 = 整个板块，'2' = 只分享 2 号卡片
+--   · guest_ok：这条链接是否允许未登录访问（还要板块本身允许游客，取交集）
+--   · board_link_views：谁在什么时候打开过（登录用户记名，游客只记次数）
+--   · board_meta：单行 jsonb，存板块/卡片改名、简介、排序、隐藏、游客可见
+-- ensureSchema 两路径均已同步；SCHEMA_VER = 3.8.4
+-- ============================================================
+create table if not exists board_links (
+  id           bigserial   primary key,
+  token        text        not null unique,
+  board_id     int         not null,
+  card_ref     text        not null default '',
+  guest_ok     boolean     not null default false,
+  expires_at   timestamptz,
+  max_views    int,
+  views        int         not null default 0,
+  revoked      boolean     not null default false,
+  note         text        not null default '',
+  created_by   bigint,
+  created_at   timestamptz not null default now(),
+  last_view_at timestamptz
+);
+create index if not exists board_links_owner_idx on board_links (created_by, created_at desc);
+
+create table if not exists board_link_views (
+  id         bigserial   primary key,
+  link_id    bigint      not null,
+  user_id    bigint,
+  name       text        not null default '',
+  ip         text,
+  ua         text,
+  created_at timestamptz not null default now()
+);
+create index if not exists blv_link_idx on board_link_views (link_id, created_at desc);
+
+create table if not exists board_meta (
+  id         int         primary key default 1,
+  data       jsonb       not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);

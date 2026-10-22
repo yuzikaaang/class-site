@@ -141,6 +141,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
   </div>
 </div>
 <div class="tip">击落敌机得分 · 漏掉或相撞掉命 · 敌机会越来越快</div>
+<script src="cloud.js"></script>
 <script>
 /* ===== 音效（保留原版） ===== */
 var AC=null;
@@ -231,9 +232,11 @@ var sprRocks=[makeRock(0),makeRock(1),makeRock(2)];
 /* ===== 状态 ===== */
 var px,py,pw,ph,sc,life,hi,playing,bullets,enemies,spots,rocks,booms,raf,fireT;
 hi=+(localStorage.getItem('plane_hi')||0);document.getElementById('hi').textContent=hi;
+if(window.CLS_CLOUD) CLS_CLOUD.pullHi('plane_hi',function(v){ if(v>hi){hi=v;document.getElementById('hi').textContent=hi;} });   /* v3.5.35 云同步 */
 pw=44,ph=52;
 
 function reset(){
+  window.__plStart=Date.now();   /* v3.5.35 游玩计时 */
   px=W/2-pw/2;py=H-110;sc=0;life=3;bullets=[];enemies=[];tickFrame=0;booms=[];
   spots=[];for(var i=0;i<36;i++)spots.push({x:Math.random()*W,y:Math.random()*H,s:Math.random()*1.6+0.4});
   rocks=[];for(var j=0;j<7;j++)rocks.push({x:Math.random()*(W-64),y:Math.random()*H,w:34+Math.random()*30,v:(Math.random()*3)|0,sp:0.25+Math.random()*0.5});
@@ -246,6 +249,8 @@ function end(){
   if(sc>hi){hi=sc;try{localStorage.setItem('plane_hi',hi);}catch(e){} document.getElementById('hi').textContent=hi;}
   document.getElementById('ovInfo').innerHTML='得分 '+sc+(sc>=hi&&sc>0?'　🏆 新纪录！':'　最高 '+hi);
   document.getElementById('overOv').classList.remove('hidden');
+  /* v3.5.35 云同步：游玩时长 + 分数 + 最高分 */
+  try{ if(window.CLS_CLOUD){ CLS_CLOUD.addPlay('plane', Date.now()-(window.__plStart||Date.now()), {score:sc}); if(sc>0) CLS_CLOUD.pushHi('plane_hi', hi); } }catch(e){}
 }
 function addBoom(x,y,big,small){booms.push({x:x,y:y,t0:Date.now(),seed:(Math.random()*1e9)|0,big:big,small:small});}
 function tick(){

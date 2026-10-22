@@ -20,7 +20,8 @@ import path from 'node:path';
 const SITE = process.env.SITE_DIR || '/tmp/class-site';
 const API_BASE = process.env.API_BASE || 'https://api.classsite.dpdns.org';
 const AI_USER = process.env.AI_USER || 'aibot';
-const AI_PASS = process.env.AI_PASS || 'ai202505';
+const AI_PASS = process.env.AI_PASS || '';
+/* 🔐 v3.9.10：口令不再写进仓库，运行前先 export AI_PASS=*** */
 
 /* ---------- 1. 从 index.html 里抽 SITE_DATA ---------- */
 

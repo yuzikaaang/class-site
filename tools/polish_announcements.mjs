@@ -21,7 +21,8 @@ import fs from 'node:fs';
 
 const API_BASE = process.env.API_BASE || 'https://api.classsite.dpdns.org';
 const AI_USER = process.env.AI_USER || 'aibot';
-const AI_PASS = process.env.AI_PASS || 'ai202505';
+const AI_PASS = process.env.AI_PASS || '';
+/* 🔐 v3.9.10：口令不再写进仓库 */
 const DRY = process.argv.includes('--dry');
 
 /* date + 原文前缀 → 新文案。前缀取到足以唯一即可。 */

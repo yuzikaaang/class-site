@@ -141,6 +141,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
   </div>
 </div>
 <div class="tip">浅色砖 1 下打掉 · 深色砖要 2 下 · 每过一关球更快</div>
+<script src="cloud.js"></script>
 <script>
 var AC=null;
 function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} if(AC&&AC.state==='suspended')AC.resume(); return AC; }
@@ -154,6 +155,7 @@ var ROWS=6,COLS=8;
 var PAD_W=86,PAD_H=14,BALL=9;
 var px,py,bx,by,bvx,bvy,life,sc,hi,level,hLv,playing,bricks;
 hi=+(localStorage.getItem('breakout_hi')||0);
+if(window.CLS_CLOUD) CLS_CLOUD.pullHi('breakout_hi',function(v){ if(v>hi){hi=v;} });   /* v3.5.35 云同步 */
 hLv=+(localStorage.getItem('breakout_lv')||1);document.getElementById('hLv').textContent=hLv;
 var BRICK_W=(W-2*10- (COLS-1)*6)/COLS, BRICK_H=24;
 var PALETTE=['#ff6b8b','#ff9f6b','#ffcf7a','#7cffb2','#46e0c8','#7c83ff'];
@@ -191,6 +193,7 @@ function buildLevel(lv){
   return rows;
 }
 function startLevel(n){
+  window.__boStart = Date.now();   /* v3.5.35 游玩计时起点 */
   level=n;
   document.getElementById('lv').textContent=level;
   if(level>hLv){hLv=level;try{localStorage.setItem('breakout_lv',hLv);}catch(e){} document.getElementById('hLv').textContent=hLv;}
@@ -216,6 +219,13 @@ function end(win){
   document.getElementById('ovInfo').innerHTML='得分 '+sc+(sc>=hi&&sc>0?'　🏆 新纪录！':'　最高 '+hi)+'<br>最高关卡 '+hLv;
   document.getElementById('reBtn').textContent=win?'下一关 →':'再来一局';
   document.getElementById('overOv').classList.remove('hidden');
+  /* v3.5.35 云同步：游玩时长 + 分数 + 最高分 */
+  try{
+    if(window.CLS_CLOUD){
+      CLS_CLOUD.addPlay('breakout', Date.now()-(window.__boStart||Date.now()), {score:sc});
+      if(sc>0 && sc>=hi) CLS_CLOUD.pushHi('breakout_hi', hi);
+    }
+  }catch(e){}
 }
 function tick(){
   if(!playing){draw();return;}
