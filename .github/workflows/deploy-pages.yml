@@ -72,6 +72,7 @@ jobs:
           SOURCE_FILES=(
             index.html
             app.js
+            basic.html
             share-card.js
             admin.html
             share.html
@@ -80,7 +81,9 @@ jobs:
             favicon.svg
             icon-192.png
             icon-512.png
+            badge.png
             qrcode.jpg
+            fonts
             games
             homework
             vendor
