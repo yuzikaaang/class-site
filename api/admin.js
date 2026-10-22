@@ -2219,6 +2219,23 @@ async function pruneBackups(sql) {
   }
 }
 
+/* v3.9.8（站主）：定时自动备份 —— 给 Worker 的 cron 用（没有登录态，也不写审计人）
+   站主原话：「我说过了要在部署前有几个门禁的，可是你数据管理的备份没有做，
+              这个你可以放到 cloudflare 部署内容或 githubaction，确保每次更新能自动备份一次数据」。 */
+export async function runAutoBackup(version = 'auto') {
+  const sql = getSql();
+  const payload = await buildBackupPayload(sql);
+  const bytes = JSON.stringify(payload).length;
+  if (bytes > BACKUP_MAX_BYTES) return { ok: false, error: 'too-large', bytes };
+  const row = await sql`
+    insert into data_backups (version, kind, note, payload, bytes)
+    values (${String(version).slice(0, 20)}, 'auto', ${'定时自动备份'}, ${JSON.stringify(payload)}::jsonb, ${bytes})
+    returning id, created_at
+  `;
+  const pruned = await pruneBackups(sql);
+  return { ok: true, id: Number(row[0].id), bytes, pruned };
+}
+
 async function createBackup(req, res, me, b) {
   const version = String((b && b.version) || '').trim().slice(0, 20) || 'unknown';
   const kind = ['auto', 'predeploy', 'manual'].indexOf(String((b && b.kind) || '')) >= 0
