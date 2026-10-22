@@ -12,6 +12,15 @@ import initSqlJs from 'sql.js';
 import crypto from 'crypto';
 import fs from 'node:fs';
 
+/* v3.9.8：主脚本拆到 app.js 后，凡「读首页源码」的断言一律读两份拼接 ——
+   既能看到 HTML 骨架，也能看到函数实现，不用逐条改写断言。 */
+function readIdx(){
+  const a = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  let b = '';
+  try { b = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8'); } catch (e) {}
+  return a + '\n/* ---- app.js ---- */\n' + b;
+}
+
 /* ---------- 1. 桥接环境变量 ---------- */
 /* v3.5.0：档案字段加密（AES-256-GCM）默认**开启**，因为线上站主一旦配了
    ADMIN_SECRETS_KEY 就会走这条路，测试必须覆盖真实形态。
@@ -2126,7 +2135,7 @@ console.log('\n【19】最后上线（心跳）· 版本号一致性（2026-10-0
 {
   /* ---- 版本号护栏：主站与后台必须同步递增 ----
      站主靠版本号判断「改动推上线没有」，两边不一致就会误判。 */
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf-8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf-8');
   const grab = (s, k) => {
     const m = s.match(new RegExp('var\\s+' + k + "\\s*=\\s*'([^']+)'"));
@@ -2154,7 +2163,7 @@ console.log('\n【19】最后上线（心跳）· 版本号一致性（2026-10-0
   const rrNo = await call('/api/profile?action=roster');
   t('未登录读 roster 被拒 401', rrNo.status === 401, '实际 ' + rrNo.status);
 
-  const idx2 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf-8');
+  const idx2 = readIdx();
   t('主站有 syncRoster()', idx2.indexOf('function syncRoster(') >= 0);
   t('主站会调用 syncRoster()', idx2.split('syncRoster()').length >= 4,
     '出现次数 ' + (idx2.split('syncRoster(').length - 1));
@@ -2328,7 +2337,7 @@ console.log('\n【21.5】后台作业编辑器支持视频 + 附件行光标定�
     ad.indexOf('(t.text || \'\').trim() || t.img || t.audio || t.video') >= 0);
 
   /* 附件行按钮的光标定位：错了会让人多按好几次方向键 */
-  const idx2 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf-8');
+  const idx2 = readIdx();
   const a = idx2.indexOf('function caInsertAttRow');
   const aEnd = idx2.indexOf('function caInsertLine', a);
   const body = idx2.slice(a, aEnd > 0 ? aEnd : a + 600);
@@ -2348,7 +2357,7 @@ console.log('\n【22】附件方案护栏：只填直链、不做上传（2026-1
      会让人以为「能传」，点了却失败 —— 比彻底没有更糟。
      所以下面全部是「必须不存在」的否定断言。 */
 
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf-8');
+  const idx = readIdx();
   const wr = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf-8');
   const ct = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf-8');
 
@@ -2759,7 +2768,7 @@ console.log('\n【28】第二十七轮·通用弹窗引擎（popups 云端通道
     'announcements=' + JSON.stringify(rd2.body.items.announcements) + ' popups=' + (rd2.body.items.popups || []).length);
 
   /* ---- ⑤ 前端 CONTENT_MAP 与后端白名单必须一致 ---- */
-  const idxHtml = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idxHtml = readIdx();
   t('前端 CONTENT_MAP 含 popups', /popups:\s*'popups'/.test(idxHtml));
   const contentJs = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
   t('后端白名单含 popups', /'popups'/.test(contentJs));
@@ -2789,7 +2798,7 @@ console.log('\n【28】第二十七轮·通用弹窗引擎（popups 云端通道
 
 console.log('\n【29】第二十七轮·自动云同步（1 分钟双向）');
 {
-  const idxHtml = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idxHtml = readIdx();
 
   /* ---- 结构：状态对象与函数齐全 ---- */
   t('定义 SYNC_STATE', /var SYNC_STATE\s*=\s*\{/.test(idxHtml));
@@ -2981,7 +2990,7 @@ console.log('\n【31】第二十七轮·游戏排行榜（⑪）');
   t('limit 超上限被压回 100', limitCap.body.limit === 100, String(limitCap.body.limit));
 
   /* ---- 前端接入检查 ---- */
-  const page = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const page = readIdx();
   t('前端定义 openGameBoard', page.indexOf('function openGameBoard(') >= 0);
   t('前端定义 boardLoad', page.indexOf('function boardLoad(') >= 0);
   t('前端定义 boardPaint', page.indexOf('function boardPaint(') >= 0);
@@ -3001,7 +3010,7 @@ console.log('\n【31】第二十七轮·游戏排行榜（⑪）');
 
 console.log('\n【32】第二十八轮·抽歌功能迁移后台（前台删除 + 云端存储）');
 {
-  const page = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const page = readIdx();
   const adm  = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const cont = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
 
@@ -3554,7 +3563,7 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
 
   /* --- G. 文案：智学网账号 --- */
   const adminHtml = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  const indexHtml = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const indexHtml = readIdx();
   t('★后台已改为「智学网账号」', adminHtml.indexOf('智学网账号') >= 0);
   t('★后台 Excel 导入仍保留旧键「准考证号」（老模板照样能导）',
     adminHtml.indexOf("'智学网账号','智学网号','智学网准考证号','准考证号'") >= 0,
@@ -4260,7 +4269,7 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   t('字段可见性变更有审计', acts.includes('field.visibility'));
 
   /* ---- I. 版本号 ---- */
-  const indexHtml38 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const indexHtml38 = readIdx();
   const adminHtml38 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   t('★前台版本号为 3.9.3', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
@@ -4341,7 +4350,7 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
     /* update-field 出现两次，delete-field 一次；上面的正则做了宽松匹配 */
   );
 
-  const indexHtmlSrc = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const indexHtmlSrc = readIdx();
   t('★前台搜索结果渲染额外字段', /p\.fields/.test(indexHtmlSrc) && /pc-extra/.test(indexHtmlSrc));
   t('前台有 pc-extra 样式', /\.pc-extra\{/.test(indexHtmlSrc));
   t('前台不在客户端做可见性判断（后端已滤过）',
@@ -4635,7 +4644,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
   t('★后台编辑弹窗标出「本人已设为私密」', /本人已设为私密/.test(adminHtml39));
   t('★后台标出「已被你覆盖」的情况', /已被你覆盖/.test(adminHtml39));
   t('后台文案说明「后台权力最大」', /后台权力最大/.test(adminHtml39));
-  const indexHtml39 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const indexHtml39 = readIdx();
   t('★前台告知同学「以站主设置为准」', /以站主设置为准|则以站主设置为准/.test(indexHtml39));
 
   /* 清理 */
@@ -4646,7 +4655,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
 
 console.log('\n【40】第三十一轮·取消备用链接（v2.5.0）');
 {
-  const idx40 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx40 = readIdx();
   /* 备用链接（WorkBuddy 托管）已取消：SITE_DATA.siteLinks 只应有主链接。
      用两个信号交叉验证：① 不该再出现 workbuddy.link 域名；② siteLinks 里只有一项。 */
   t('★index.html 不再出现 workbuddy.link 备用域名', idx40.indexOf('workbuddy.link') < 0);
@@ -4672,7 +4681,7 @@ console.log('\n【40】第三十一轮·取消备用链接（v2.5.0）');
 
 console.log('\n【41】第三十一轮·登录验证码（v2.5.0 滑块 → v2.6.3 改输入式图形码）');
 {
-  const idx41 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx41 = readIdx();
   t('★有验证码引擎 capInit', idx41.indexOf('function capInit(') >= 0);
   t('★有交互绑定 capBind', idx41.indexOf('function capBind(') >= 0);
   t('★有校验入口 capPassed', idx41.indexOf('function capPassed(') >= 0);
@@ -4830,7 +4839,7 @@ console.log('\n【42】第三十一轮·双向心跳 + 会话级在线（v2.5.0�
     !!me43 && me43.online === false, JSON.stringify(me43));
 
   /* ---- 前端：双向心跳 + 离线横幅 ---- */
-  const idx42 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx42 = readIdx();
   t('★前端有心跳在线状态变量 ONLINE', /var ONLINE\s*=/.test(idx42));
   t('★心跳检查回程 online 字段', /j\.online/.test(idx42));
   /* v2.6.1：计数变量由 ONLINE_FAILS 改名 NET_FAILS（含义收窄为「心跳连续失败」） */
@@ -4857,7 +4866,7 @@ console.log('\n【42】第三十一轮·双向心跳 + 会话级在线（v2.5.0�
 
 console.log('\n【43】第三十一轮·连不上服务端的离线提示（v2.5.0）');
 {
-  const idx43 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx43 = readIdx();
   /* api() 必须包装网络层错误 —— 否则前端只会拿到裸的 TypeError: Failed to fetch */
   t('★api() 有网络错误包装（.catch 里有 offline 标记）', /netErr\.offline\s*=\s*true/.test(idx43));
   t('★网络错误被换成可读中文文案', idx43.indexOf('连接不到服务端，请检查网络') >= 0);
@@ -4884,7 +4893,7 @@ console.log('\n【43】第三十一轮·连不上服务端的离线提示（v2.5
 
 console.log('\n【44】第三十二轮·全站去 emoji 统一图标（v2.5.0）');
 {
-  const idx44 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx44 = readIdx();
   /* 旧的运行时引擎（MutationObserver 全量重扫）必须彻底删除 —— 它是倒计时每秒闪的直接原因。
      ⚠️ 2026-10-16 v2.9.10 起字色逻辑引入了一个新的 MutationObserver（ink-auto 兜底），
      所以这里不能简单断言「无 MutationObserver」，改为断言「唯一的 observer 就是字色兜底」。 */
@@ -4931,7 +4940,7 @@ console.log('\n【44】第三十二轮·全站去 emoji 统一图标（v2.5.0）
 
 console.log('\n【45】第三十三轮·主题自动切换三选一（v2.5.3）');
 {
-  const idx45 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx45 = readIdx();
   const data45 = fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf8');
 
   /* ---- 三种模式与存储键 ---- */
@@ -5019,7 +5028,7 @@ console.log('\n【45】第三十三轮·主题自动切换三选一（v2.5.3）'
 
 console.log('\n【46】第三十四轮·公告时间纪律 + 每日一言随机 + 学习卡片（v2.6.0）');
 {
-  const idx46 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx46 = readIdx();
   const adm46 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const stu46 = fs.readFileSync(new URL('./api/study.js', import.meta.url), 'utf8');
   const wrk46 = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
@@ -5093,7 +5102,7 @@ console.log('\n【46】第三十四轮·公告时间纪律 + 每日一言随机 
   t('★有会话内不重复（避开上次下标）',
     /function pickRandom\(items\)/.test(idx46) && /i === _quoteLastIdx/.test(idx46));
   t('★每日一言联网走 hitokoto',
-    /v1\.hitokoto\.cn/.test(idx46) && /function fetchRemoteQuote\(\)/.test(idx46));
+    /v1\.hitokoto\.cn/.test(idx46) && /function fetchRemoteQuote\(/.test(idx46));
   t('★联网失败静默（本地兜底不受影响）',
     /\.catch\(function\(\)\{ clearTimeout\(timer\); _quoteFetching = false; \}\)/.test(idx46));
   t('★联网结果带超时保护（AbortController）',
@@ -5191,7 +5200,7 @@ console.log('\n【46】第三十四轮·公告时间纪律 + 每日一言随机 
 
 console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重试倒计时（v2.6.1）');
 {
-  const idx47 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx47 = readIdx();
   const adm47 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sw47  = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
 
@@ -5289,7 +5298,7 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
 
 console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强制刷新（v2.6.4）');
 {
-  const idx48 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx48 = readIdx();
   const sw48  = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
 
   /* ===== ① sw.js：让页面能主动催新 SW 接管 =====
@@ -5475,7 +5484,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
 
 console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转（v2.6.6）');
 {
-  const idx49 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx49 = readIdx();
   const adm49 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ===== ① iPad 弹窗不居中 =====
@@ -5544,7 +5553,7 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
 
 console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动隐藏（v2.6.7）');
 {
-  const idx50 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx50 = readIdx();
 
   /* ===== ① 三态判定函数 =====
      站主 2026-10-14 的规则：
@@ -5614,7 +5623,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
 {
-  const idx51 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx51 = readIdx();
   const adm51 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ===== ① 板块改名（站主 2026-10-14：「把名字改为成绩分析」） ===== */
@@ -5785,7 +5794,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
 
   /* ===== ① 入口与容器 ===== */
   t('★成绩分析改为内嵌：不再有全屏遮罩容器', /id="scoreAnalMask"/.test(idx) === false);
@@ -5853,7 +5862,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sc  = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
   const http= fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
@@ -5902,7 +5911,7 @@ console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间�
 
 console.log('\n【56】第四十七轮·成绩分析增强（v2.8.0/2.8.1）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const sc  = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
 
   /* ===== ① 各科趋势网格 ===== */
@@ -5956,7 +5965,7 @@ console.log('\n【56】第四十七轮·成绩分析增强（v2.8.0/2.8.1）');
 
 console.log('\n【57】第四十八轮·站主侧五件套 + 三档开关（v2.8.2）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sc  = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
 
@@ -6028,7 +6037,7 @@ console.log('\n【57】第四十八轮·站主侧五件套 + 三档开关（v2.8
 
 console.log('\n【58】第四十九轮·分享链接 + 每日备份（v2.9.0）');
 {
-  const idx  = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx  = readIdx();
   const adm  = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sc   = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
   const wk   = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
@@ -6145,7 +6154,7 @@ console.log('\n【58】第四十九轮·分享链接 + 每日备份（v2.9.0）'
 
 console.log('\n【59】第五十二轮·姓名对照：同一个人两个名字（v2.9.5）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sc  = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
 
@@ -6287,7 +6296,7 @@ console.log('\n【59】第五十二轮·姓名对照：同一个人两个名字�
 
 console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容自定义 / 进退步三口径（v2.9.7）');
 {
-  const idx   = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx   = readIdx();
   const share = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
   const sc    = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
   const sch   = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
@@ -6404,7 +6413,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
 
 console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去重 + 导出长图（v2.9.8）');
 {
-  const idx   = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx   = readIdx();
   const share = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
   const sc    = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
 
@@ -6548,7 +6557,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
    任何一处漏接，线上就是「协议支持了但页面还在走老路」。 */
 console.log('\n【61】第五十六轮·客户端派生接线检查（index.html + admin.html）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ---- ① 前台：KDF 助手四件套齐全 ---- */
@@ -6601,7 +6610,7 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
    实时三通道在位、官方化文案锁定、防误解话术清零。 */
 console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检查');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const shr = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
 
@@ -6706,7 +6715,7 @@ console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检�
    玻璃拟态叠底场景按最差底色选色、welcome 主题链路不再被 inline 压。 */
 console.log('\n【63】第五十八轮·登录弹窗字色达标检查');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ---- ① 登录面板次要文字：亮色 #57493d（玻璃叠底 rgb(194,193,193) 上 4.82、
@@ -6780,7 +6789,7 @@ console.log('\n【63】第五十八轮·登录弹窗字色达标检查');
    验收方式：Playwright 扫描器 18 场景（前台 10 + 成绩分析 8）亮/暗全达标。 */
 console.log('\n【64】第五十九轮·成绩分析暗色全覆盖检查');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
 
   /* 工具：按函数名截取函数体（SVG class 接线必须落在各自函数里，全局计数会误判） */
   function fnBody(name) {
@@ -7190,7 +7199,7 @@ console.log('\n【65】第六十轮·注册审核 + 站点设置 + 用户操作�
 
 console.log('\n【66】第六十轮·微信内置浏览器字体修复：同源自托管（v2.10.0）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const sw = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
 
   /* ① 外部字体域清零（微信 X5 内核拦截 fonts.* 的 CSS 与字体文件）。
@@ -7227,7 +7236,7 @@ console.log('\n【66】第六十轮·微信内置浏览器字体修复：同源�
 
 console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
 
   /* 工具：按函数名截取函数体（嵌套 function 是缩进的，不会误截） */
   function fnBody(name) {
@@ -7814,7 +7823,7 @@ console.log('\n【69】第六十一轮·云端个人数据管理（#178：分类
   {
     const djsrc = fs.readFileSync(new URL('./api/data.js', import.meta.url), 'utf8');
     const allowSeg = djsrc.slice(djsrc.indexOf('const ALLOW_KEYS'), djsrc.indexOf('function isAllowedKey'));
-    const idxSrc = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+    const idxSrc = readIdx();
     const ckSeg = idxSrc.slice(idxSrc.indexOf('var CLOUD_KEYS'), idxSrc.indexOf('var CLOUD_KEY_PREFIX'));
     t('★v3.5.34 自定义设置不在云白名单（后端 ALLOW_KEYS 无 cls_ui_cfg / cls_ui_bgimg）',
       !/^\s*'cls_ui_cfg'/.test(allowSeg.replace(/\/\*[\s\S]*?\*\//g, ''))
@@ -7980,7 +7989,7 @@ console.log('\n【69】第六十一轮·云端个人数据管理（#178：分类
     && (dataSrc.match(/^\s*\{\s*cat:\s*'kv'/gm) || []).length === 0);
 
   /* ---- ⑩ 前端静态护栏（个人端 + 后台） ---- */
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   t('★个人端：数据管理弹窗有「我的云端数据」入口', /onclick="openCloudData\(\)"/.test(idx));
   t('★个人端：分类视图弹窗与密码验证弹窗都在位',
@@ -8055,7 +8064,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   const ADMJS_SRC355 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
   const profSrc355 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
   const schemaSrc355 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
-  const idxSrc355 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idxSrc355 = readIdx();
   const admHtml355 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   t('★field-rules.js 三导出齐全（normalize/validate/describe）',
     /export function normalizeRules\(/.test(frSrc)
@@ -8156,7 +8165,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- v3.5.20：提出日期 / 歌单多选 / 线上补时长 ---- */
   const VOTES_520 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
   const ADM_520 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  const IDX_520 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const IDX_520 = readIdx();
   const WRK_520 = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
   t('#17 歌单投票也能多选（不再被后端改回单选）',
     /const multi = b\.multi === true;/.test(VOTES_520) && !/kind === 'normal' && b\.multi/.test(VOTES_520));
@@ -8182,7 +8191,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   const ADM_519 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const VOTES_519 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
   const HTTP_519 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
-  const IDX_519 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const IDX_519 = readIdx();
   t('#16 创建表单可勾选选项字段（点歌人/时间/赞数/时长）',
     /id="voFldReq"/.test(ADM_519) && /id="voFldTime"/.test(ADM_519)
     && /id="voFldVotes"/.test(ADM_519) && /id="voFldDur"/.test(ADM_519));
@@ -8251,7 +8260,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     /role: canSee\('role'/.test(PROF_522) && /title: canSee\('title'/.test(PROF_522));
 
   /* ---- v3.5.23：歌单投票展示 / 加选项 / 时长上限一致性 / 公示变量 ---- */
-  const IDX_523 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const IDX_523 = readIdx();
   const ADM_523 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const VOTJS_523 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
   t('v3.5.23 老格式选项（含赞数/时长尾巴）也能折叠 —— 按日期段拆分',
@@ -8268,7 +8277,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.23 投票管理元信息分「状态行 / 规则行」', /规则行/.test(ADM_523));
 
   /* ---- v3.5.24：投票按赞数排序 / 勾选即选项 / 详情字段可配 ---- */
-  const IDX_524 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const IDX_524 = readIdx();
   const ADM_524 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   t('v3.5.24 前台投票选项按赞数从高到低排（同票稳定）',
     /var rankList = v\.options\.map/.test(IDX_524) && /cntMap\[b\.o\.id\]/.test(IDX_524)
@@ -8286,7 +8295,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
       || /歌名、歌手、<b>歌曲时长<\/b>永远直接显示/.test(ADM_524)));
 
   /* ---- v3.5.25：歌单投票免文本框 / 时长必显示 ---- */
-  const IDX_525 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const IDX_525 = readIdx();
   const ADM_525 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   t('v3.5.25 歌单投票模式隐藏选项文本框（普通投票保留）',
     /id="voOptsWrap"/.test(ADM_525) && /optsWrap\.style\.display = isSong \? 'none' : ''/.test(ADM_525));
@@ -8505,7 +8514,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   }
 
   /* ---- v3.5.29：站点名称 / 副标题后台可编辑（site_config.siteName/siteSubtitle → applyBranding） ---- */
-  const IDX_529 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const IDX_529 = readIdx();
   const ADM_529 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   t('v3.5.29 主站 applyBranding 把站点名/副标题换到 <title>/页头/页脚',
     /function applyBranding\(\)/.test(IDX_529)
@@ -8534,7 +8543,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && /typeof cfg\[k\] === 'string'/.test(IDX_529));
 
   /* ---- v3.5.30：① 云端版本记录补齐 ② 从主页进后台默认竖屏 + PWA 往返保状态 ③ 轻量模式 ---- */
-  const IDX_530 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const IDX_530 = readIdx();
   const ADM_530 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ① 版本记录：内置 3.5.21~3.5.30，按钮只补缺失版本 */
@@ -8642,7 +8651,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- v3.5.18：子请求上限 / 字段级冲突 / 确定按钮 / 投票选项折叠 ---- */
   const ADM_518 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const ADMJS_518 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
-  const IDX_518 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const IDX_518 = readIdx();
   t('#15 前端分批 8 条（避开 Workers 50 子请求上限）', /var CHUNK = 8;/.test(ADM_518));
   t('#15 后端单批上限 12 条', /list\.length > 12/.test(ADMJS_518) && /单批最多 12 条/.test(ADMJS_518));
   t('#15 查已有记录改 select *（省一次子请求）',
@@ -8668,7 +8677,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- v3.5.17：歌单投票选项 = 歌名 - 歌手 - 点歌人 - 点歌时间 ---- */
   const VOTES_SRC_517 = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
   const ADM_517 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  const IDX_517 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const IDX_517 = readIdx();
   t('#14 歌单选项四段拼接（title/artist/requester/createdAt）',
     /function voSongLabel\(s\)/.test(ADM_517)
     && /String\(s\.title \|\| ''\)\.trim\(\) \|\| '\(无歌名\)'/.test(ADM_517)
@@ -8986,7 +8995,7 @@ console.log('\n【74】第六十三轮·Pages 回查判据改内容哈希（修�
 
 console.log('\n【75】第六十三轮·「我的云端数据」入口暴露（原来点不到）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   t('★个人中心有云端数据入口（调用 openCloudDataFromAccount）',
     /openCloudDataFromAccount\(\)/.test(idx) && /☁️ 我的云端数据/.test(idx));
   t('★「自定义设置」也有入口（调用 openCloudDataFromSettings）',
@@ -9007,7 +9016,7 @@ console.log('\n【75】第六十三轮·「我的云端数据」入口暴露（�
 
 console.log('\n【76】第六十三轮·行为日志：点外链也要有记录（且必须发得出去）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   /* 背景：站主反馈「跳了点歌平台，后台查不到去了哪里」。两个根因—— */
   /* ① 离开页面前的最后一次发送走普通 fetch，会被浏览器取消 → 改用 keepalive */
   t('★新增 keepalive 发送通道', /function actLogFlushKeepalive\(\)\{/.test(idx));
@@ -9138,7 +9147,7 @@ console.log('\n【77】第六十三轮·各科排名 + 总分两种口径排名�
 console.log('\n【78】第六十四轮·四象限手机点选 / 六科画像数值对比 / 原始口径不显赋分头衔且不比三线');
 
 (function(){
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
 
   /* ① 四象限：点象限 / 圆点 → 列名单（手机可用，不用悬停） */
   t('★四象限有点选处理函数 scQuadTap', /function scQuadTap\(i\)\{/.test(idx));
@@ -9274,7 +9283,7 @@ console.log('\n【79】第六十五轮·导入未识别姓名弹窗修正 + 发�
 console.log('\n【80】第六十七轮·分享页含历史趋势/年级排名 + 卡与单并存 + 已建分享可改（token 不变）');
 {
   const shareSrc80 = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
-  const idx80 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx80 = readIdx();
   const sc80 = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
 
   t('分享页有历史总分趋势 + 年级排名变化',
@@ -9335,7 +9344,7 @@ console.log('\n【80】第六十七轮·分享页含历史趋势/年级排名 + 
 console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步 + 分享页口径修复 + 版本记录');
 {
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const sw = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
   const shr = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
   const wr = fs.readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8');
@@ -9368,7 +9377,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
   /* v3.5.7 护栏：投票结果排序 + admin 无一元加号 NaN 坑 + 时区本地化 */
   {
-    const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+    const idx = readIdx();
     const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
     const votesjs = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
     t('★投票后端 results 按票数降序（shapeVote sort）',
@@ -9385,7 +9394,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
 
 console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象限名单与图对齐 / 点圆点只看一个人');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sw = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
 
@@ -9478,7 +9487,7 @@ console.log('\n【82】第七十轮·v3.1.1 编辑分享保存真生效 + 四象
 
 console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名对照「选账号 / 直接改名（含按次）」');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sc = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
 
@@ -9566,7 +9575,7 @@ console.log('\n【83】第七十一轮·v3.2.0 各科趋势可看名次 + 姓名
 
 console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假红灯（缓存穿透 + 代码版本回查）');
 {
-  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx = readIdx();
   const adm = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sw = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
   const wrk = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
@@ -9619,11 +9628,10 @@ console.log('\n【85】第七十三轮·v3.3.0 需关注学生加单科线（比
      直接调 scWatchList / scTailRank / scHeatmap，断言看到的是**算出来的数**。
      —— 上一轮「编辑分享保存无效」就是正则全绿、实际行为错，教训在这儿。 */
   const vmMod = await import('node:vm');
-  const rawIdx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
-  /* v3.5.40：index.html 现在有两个内联脚本（share-card 画笔 + 主脚本），
-     取**最长**的那个才是主脚本 —— 按下标取第一个会拿到画笔，ctx.SC 就没了。 */
-  const allScripts = rawIdx.match(/<script>([\s\S]*?)<\/script>/g) || [];
-  const big = allScripts.map((m) => m.slice(8, -9)).reduce((a, b) => (b.length > a.length ? b : a), '');
+  /* v3.9.8：主脚本已拆到 app.js —— 直接读它（HTML 里剩下的都是小内联脚本）。
+     版本号现在声明在 index.html，沙箱里补上两行，跟真实加载顺序一致。 */
+  const big = "var SITE_VERSION='3.9.8';var VER_DATE='2026-10-22';\n"
+    + fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
 
   const mkEl = (tag) => ({
     tagName: (tag || 'div').toUpperCase(), _attrs: {},
@@ -9814,7 +9822,7 @@ console.log('\n【85】第七十三轮·v3.3.0 需关注学生加单科线（比
 console.log('\n【87】第七十五轮·v3.4.1 字段可见性新增「仅管理员」档');
 {
   const rd = (f) => fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8');
-  const idx = rd('index.html'), adm = rd('admin.html');
+  const idx = readIdx(), adm = rd('admin.html');
   const prof = rd('api/profile.js'), admjs = rd('api/admin.js');
   t('★profile.js：VIS_RANK 含 admin 档', /VIS_RANK = \{ public: 0, committee: 1, self: 2, admin: 3 \}/.test(prof));
   t('★profile.js：canSee 对 admin 档要求 ctx.admin（本人/班委都不放行）',
@@ -10035,7 +10043,7 @@ console.log('\n【89】第七十七轮·v3.5.1 存量资料一键加密 + 成绩
 {
   const rd = (f) => fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8');
   const admjs = rd('api/admin.js'), prof = rd('api/profile.js');
-  const idx = rd('index.html'), adm = rd('admin.html');
+  const idx = readIdx(), adm = rd('admin.html');
   const schemaSrc = rd('api/schema.sql');
 
   /* --- ① 存量加密接口 --- */
@@ -10296,7 +10304,7 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   const wrkSrc = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
   const httpSrc2 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
   const sqlSrc = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
-  const idxV = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idxV = readIdx();
   const admV = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const contSrc = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
 
@@ -10335,7 +10343,7 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('★后台首页卡片有来源开关（联网 API / 本地库）',
     /function qsPick/.test(admV) && /id="qsNet"/.test(admV) && /id="qsLocal"/.test(admV));
   t('★前端统一判定 quoteNetAllowed（后台配置优先于本机偏好）',
-    /function quoteNetAllowed/.test(idxV) && /if\(!quoteNetAllowed\(\)\) return;/.test(idxV));
+    /function quoteNetAllowed/.test(idxV) && /if\(!quoteNetAllowed\(\)\)\{/.test(idxV));
   t('★自定义设置里不再给同学切换来源（只读展示）',
     !/onclick="setQuoteNet/.test(idxV) && /由管理员在后台「首页卡片 → 每日一言」统一设置/.test(idxV));
   /* ===== v3.5.11 本地库：批量增删 + 排期轮换 ===== */
@@ -10609,7 +10617,7 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
 /* ==================== 第 n 轮（v3.5.12）站主 10 项需求回归 ==================== */
 {
   const fs = await import('node:fs');
-  const idx   = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx   = readIdx();
   const adm   = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const shr   = fs.readFileSync(new URL('./share.html', import.meta.url), 'utf8');
   const vot   = fs.readFileSync(new URL('./api/votes.js', import.meta.url), 'utf8');
@@ -10957,7 +10965,7 @@ console.log('\n【85】在线时长统计（v3.5.35）');
 
 console.log('\n【86】前台横屏切换（v3.5.39）');
 {
-  const idx539 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx539 = readIdx();
   const admh539 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ---- 前台必须存在与后台同款的一套能力 ---- */
@@ -11038,19 +11046,19 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.9.7 index.html SITE_VERSION = 3.9.7', /var SITE_VERSION = '3\.9\.7'/.test(idx539));
-  t('v3.9.7 admin.html SITE_VERSION = 3.9.7', /var SITE_VERSION = '3\.9\.7'/.test(admh539));
-  t('v3.9.7 sw.js SITE_VER = 3.9.7 + CACHE v172',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.7'")
+  t('v3.9.8 index.html SITE_VERSION = 3.9.8', /var SITE_VERSION = '3\.9\.8'/.test(idx539));
+  t('v3.9.8 admin.html SITE_VERSION = 3.9.8', /var SITE_VERSION = '3\.9\.8'/.test(admh539));
+  t('v3.9.8 sw.js SITE_VER = 3.9.8 + CACHE v172',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.8'")
     && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v172'"));
-  t('v3.9.7 api/worker.mjs API_VER = 3.9.7',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.7';"));
+  t('v3.9.8 api/worker.mjs API_VER = 3.9.8',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.8';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
 console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 / 定向弹窗 / 横屏修复 / 导出图片');
 {
-  const idx540  = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx540  = readIdx();
   const adm540  = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const http540 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
   const sch540  = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
@@ -11142,15 +11150,15 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
 
   /* ---- 版本号 ---- */
   t('v3.8.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.9\.7'/.test(idx540) && /var SITE_VERSION = '3\.9\.7'/.test(adm540)
-    && /const API_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.8'/.test(idx540) && /var SITE_VERSION = '3\.9\.8'/.test(adm540)
+    && /const API_VER = '3\.9\.8'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.8'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
 console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选导出哪一次');
 {
-  const idx542 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx542 = readIdx();
   const adm542 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const shr542 = fs.readFileSync(new URL('./share-card.js', import.meta.url), 'utf8');
 
@@ -11198,16 +11206,16 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.9\.7'/.test(idx542) && /var SITE_VERSION = '3\.9\.7'/.test(adm542)
-    && /const API_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.8'/.test(idx542) && /var SITE_VERSION = '3\.9\.8'/.test(adm542)
+    && /const API_VER = '3\.9\.8'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.8'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
 
 console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩备注 · 版本规则');
 {
-  const idx61 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx61 = readIdx();
   const adm61 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const http61 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
   const sch61 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
@@ -11270,13 +11278,13 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.5 当前版本 3.9.7、日期 2026-10-22',
-    /var SITE_VERSION = '3\.9\.7'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
+  t('v3.8.5 当前版本 3.9.8、日期 2026-10-22',
+    /var SITE_VERSION = '3\.9\.8'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
 {
-  const idx64 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx64 = readIdx();
   const adm64 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const admjs64 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
   const http64 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
@@ -11349,7 +11357,7 @@ console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮
 
 console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽本地缓存');
 {
-  const idx70 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx70 = readIdx();
   const adm70 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const pro70 = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
   const admjs70 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
@@ -11428,16 +11436,16 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.9.7 四处版本一致', /var SITE_VERSION = '3\.9\.7'/.test(idx70)
-    && /var SITE_VERSION = '3\.9\.7'/.test(adm70)
-    && /const API_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.9.8 四处版本一致', /var SITE_VERSION = '3\.9\.8'/.test(idx70)
+    && /var SITE_VERSION = '3\.9\.8'/.test(adm70)
+    && /const API_VER = '3\.9\.8'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.8'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.9'/.test(adm70));
 }
 
 console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
 {
-  const idx76 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx76 = readIdx();
 
   t('★v3.7.6 有弹窗字色自适应模块（含对比度计算与底色合成）',
     /function mkFix\(root\)/.test(idx76) && /function mkEffectiveBg\(el\)/.test(idx76)
@@ -11457,13 +11465,13 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
     && /addEventListener\('orientationchange'/.test(idx76));
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
-  t('v3.7.6 首页 / 后台版本已是 3.9.7',
-    /var SITE_VERSION = '3\.9\.7'/.test(idx76));
+  t('v3.7.6 首页 / 后台版本已是 3.9.8',
+    /var SITE_VERSION = '3\.9\.8'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
 {
-  const idx80 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx80 = readIdx();
   const http80 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
   const sch80 = fs.readFileSync(new URL('./api/schema.sql', import.meta.url), 'utf8');
   const sc80 = fs.readFileSync(new URL('./api/scores.js', import.meta.url), 'utf8');
@@ -11520,7 +11528,7 @@ console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等
 
 console.log('\n【新】v3.8.3 我的资料字色 / 分享按钮排版 / 版本与公告门禁');
 {
-  const idx83 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx83 = readIdx();
   const adm83 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const pre83 = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
 
@@ -11580,7 +11588,7 @@ console.log('\n【新】v3.8.3 我的资料字色 / 分享按钮排版 / 版本�
 
 console.log('\n【新】v3.8.4 板块管理 / 板块分享链接');
 {
-  const idx84 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx84 = readIdx();
   const adm84 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const brd84 = fs.readFileSync(new URL('./api/boards.js', import.meta.url), 'utf8');
   const http84 = fs.readFileSync(new URL('./api/_lib/http.js', import.meta.url), 'utf8');
@@ -11660,7 +11668,7 @@ console.log('\n【新】v3.8.4 板块管理 / 板块分享链接');
 
 console.log('\n【新】v3.8.5 作业导出直链 / 分享链接 404 修复');
 {
-  const idx85 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx85 = readIdx();
   const adm85 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   t('★v3.8.5 分享卡片支持 media（图片 / 二维码块）',
@@ -11703,7 +11711,7 @@ console.log('\n【新】v3.8.5 作业导出直链 / 分享链接 404 修复');
 
 console.log('\n【新】v3.8.7 仅赋分排名 / 作业导出 / 二维码班徽 / 班级岛');
 {
-  const idx87 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx87 = readIdx();
   const adm87 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const isl87 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
   const wk87  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
@@ -11759,7 +11767,7 @@ console.log('\n【新】v3.8.7 仅赋分排名 / 作业导出 / 二维码班徽 
 
 console.log('\n【新】v3.9.3 赋分增值→赋分 / 班级岛横幅 / 假期倒计时');
 {
-  const idx93 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx93 = readIdx();
   const adm93 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const isl93 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
 
@@ -11800,16 +11808,16 @@ console.log('\n【新】v3.9.3 赋分增值→赋分 / 班级岛横幅 / 假期�
 
 console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步');
 {
-  const idx94 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx94 = readIdx();
   const adm94 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const sw94  = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
   const wk94  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
 
   /* ---- 版本号四处一致 ---- */
-  t('★v3.9.4+ index.html SITE_VERSION = 3.9.7', /var SITE_VERSION = '3\.9\.7'/.test(idx94));
-  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.7', /var SITE_VERSION = '3\.9\.7'/.test(adm94));
-  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.7'"));
-  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.7';"));
+  t('★v3.9.4+ index.html SITE_VERSION = 3.9.8', /var SITE_VERSION = '3\.9\.8'/.test(idx94));
+  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.8', /var SITE_VERSION = '3\.9\.8'/.test(adm94));
+  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.8'"));
+  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.8';"));
   t('★v3.9.4 REL_BUILTIN 有 3.9.4 条目且带 pub',
     /\{\s*version:\s*'3\.9\.4'[\s\S]{0,2000}?pub:\s*\[/.test(adm94));
 
@@ -11837,7 +11845,7 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
 
 console.log('\n【新】v3.9.5 班级岛跟随主题配色 / 全部居中');
 {
-  const idx95 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx95 = readIdx();
   const adm95 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ---- 浅色：奶油底 + 深字 ---- */
@@ -11873,7 +11881,7 @@ console.log('\n【新】v3.9.5 班级岛跟随主题配色 / 全部居中');
 
 console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横屏侧栏');
 {
-  const idx96 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx96 = readIdx();
   const adm96 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const isl96 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
 
@@ -11942,7 +11950,7 @@ console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横�
 
 console.log('\n【新】v3.9.7 深色玻璃 / 实时保存 / 加粗居中');
 {
-  const idx97 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const idx97 = readIdx();
   const adm97 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
   const isl97 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
 
@@ -11964,9 +11972,10 @@ console.log('\n【新】v3.9.7 深色玻璃 / 实时保存 / 加粗居中');
   /* ---- 2) 加粗 / 居中 ---- */
   t('★v3.9.7 数据模型带 bold / center（默认居中）',
     /bold: !!v\.bold/.test(isl97) && /center: v\.center !== false/.test(isl97));
-  t('★v3.9.7 前台按设置渲染（txt bold / left）',
-    /t\.bold \? ' bold' : ''/.test(idx97) && /t\.center === false \? ' left' : ''/.test(idx97)
-    && /\.island-banner \.txt\.bold\{font-weight:800\}/.test(idx97));
+  t('★v3.9.7+ 前台按设置渲染（txt bold / soft / left 三态）',
+    /t\.bold === true \? ' bold' : \(t\.bold === false \? ' soft' : ''\)/.test(idx97)
+    && /t\.center === false \? ' left' : ''/.test(idx97)
+    && /\.island-banner \.txt\.bold\{font-weight:900\}/.test(idx97));
   t('★v3.9.7 不居中时整条左对齐（标签也靠左）',
     /left-align\{align-items:flex-start/.test(idx97)
     && /left-align \.tag\{align-self:flex-start\}/.test(idx97));
@@ -11992,6 +12001,78 @@ console.log('\n【新】v3.9.7 深色玻璃 / 实时保存 / 加粗居中');
   /* ---- 4) 发布记录 ---- */
   t('★v3.9.7 REL_BUILTIN 有 3.9.7 条目且带 pub',
     /\{\s*version:\s*'3\.9\.7'[\s\S]{0,2400}?pub:\s*\[/.test(adm97));
+}
+
+console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / 自动备份');
+{
+  const idx98 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const app98 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const adm98 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const isl98 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
+  const wk98  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  const adjs98 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+
+  /* ---- 1) 首屏拆分 ---- */
+  t('★v3.9.8 主脚本外链 + defer（HTML 只剩骨架）',
+    /<script src="\.\/app\.js\?v=\d+" defer><\/script>/.test(idx98)
+    && fs.statSync(new URL('./app.js', import.meta.url)).size > 600000);
+  t('★v3.9.8 HTML 体积降到原来的 1/4 以下（骨架 + 样式）',
+    idx98.length < 400000);
+  t('★v3.9.8 版本号留在 HTML（门禁能直接读到）',
+    /var SITE_VERSION = '3\.9\.8'/.test(idx98) && !/var SITE_VERSION/.test(app98));
+  t('★v3.9.8 首屏骨架卡（公告 + 板块）',
+    (idx98.match(/skel-card/g) || []).length >= 6 && /\.skel-card\{[^}]*animation/.test(idx98.replace(/@keyframes[^}]*\{[^}]*\}/g, '')) || (idx98.match(/skel-card/g) || []).length >= 6);
+
+  /* ---- 2) 逐小时天气 ---- */
+  t('★v3.9.8 点天气开弹层（islWxOpen + 遮罩）',
+    /id="islWxMask"/.test(idx98) && /function islWxOpen/.test(app98)
+    && /id="islWxChip" onclick="islWxOpen\(\)"/.test(app98));
+  t('★v3.9.8 逐小时数据（hourly=temperature_2m,weather_code,precipitation_probability）',
+    /hourly=temperature_2m,weather_code,precipitation_probability/.test(app98)
+    && /forecast_days=1/.test(app98));
+  t('★v3.9.8 当前小时高亮 + 缓存 10 分钟',
+    /isl-wx-row\.now/.test(idx98) && /10 \* 60000/.test(app98));
+
+  /* ---- 3) 每日一言分类 / 点击换一句 ---- */
+  t('★v3.9.8 前端按后台勾选的分类拼 c= 参数',
+    /function quoteCats\(\)/.test(app98) && /var qs = cats\.map/.test(app98)
+    && /hitokoto\.cn\/\?' \+ qs/.test(app98));
+  t('★v3.9.8 每日一言卡片可点换一句',
+    /function fetchRemoteQuote\(force\)/.test(app98) && /fetchRemoteQuote\(true\)/.test(app98)
+    && /quote-refresh/.test(app98));
+  t('★v3.9.8 后台有分类勾选并写进 quote_source.cats',
+    /id="qsCats"/.test(adm98) && /function paintQuoteCats/.test(adm98)
+    && /cats: STATE\.quoteCats/.test(adm98));
+
+  /* ---- 4) 按字排版 + 默认加粗 ---- */
+  t('★v3.9.8 前端解析 **加粗** / ~~横线~~ / 行首 #',
+    /function islFmt/.test(app98)
+    && /\(\[\^\*\]\+\)/.test(app98) && /<b>\$1<\/b>/.test(app98)
+    && /\(\[\^~\]\+\)/.test(app98) && /<s>\$1<\/s>/.test(app98)
+    && /\^#\\s\?/.test(app98));
+  t('★v3.9.8 课程信息默认加粗（.txt 800 / 勾选 900 / 取消 500）',
+    /\.island-banner \.txt\{[^}]*font-weight:800/.test(idx98)
+    && /\.island-banner \.txt\.bold\{font-weight:900\}/.test(idx98)
+    && /\.island-banner \.txt\.soft\{font-weight:500\}/.test(idx98));
+  t('★v3.9.8 后台加粗默认勾上',
+    /id="adBold" checked/.test(adm98));
+  t('★v3.9.8 后台排版按钮 + 同款预览',
+    /data-fmt="b"/.test(adm98) && /data-fmt="s"/.test(adm98) && /data-fmt="h"/.test(adm98)
+    && /function aiFmt\(kind\)/.test(adm98) && /id="adPrev"/.test(adm98));
+
+  /* ---- 5) 自动备份 ---- */
+  t('★v3.9.8 Worker 定时任务会写全量快照（runAutoBackup）',
+    /runAutoBackup/.test(wk98) && /async scheduled\(event, env, ctx\)/.test(wk98)
+    && /data backup/.test(wk98) && /export async function runAutoBackup/.test(adjs98));
+  t('★v3.9.8 每次 push 触发一次备份工作流',
+    fs.existsSync(new URL('./.github/workflows/backup-data.yml', import.meta.url))
+    && /action=backup/.test(fs.readFileSync(new URL('./.github/workflows/backup-data.yml', import.meta.url), 'utf8')));
+  t('★v3.9.8 Pages 发布清单包含 app.js',
+    /\n\s+app\.js\n/.test(fs.readFileSync(new URL('./.github/workflows/deploy-pages.yml', import.meta.url), 'utf8')));
+
+  /* ---- 6) 发布记录 ---- */
+  t('★v3.9.8 REL_BUILTIN 有 3.9.8 条目且带 pub',
+    /\{\s*version:\s*'3\.9\.8'[\s\S]{0,2600}?pub:\s*\[/.test(adm98));
 }
 
 console.log('\n' + '='.repeat(52));
