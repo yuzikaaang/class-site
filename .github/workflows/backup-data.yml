@@ -47,8 +47,14 @@ jobs:
           VERSION: ${{ steps.ver.outputs.value }}
         run: |
           set -euo pipefail
-          USER_NAME="${CLS_USER:-aibot}"
-          USER_PASS="${CLS_PASS:-ai202505}"
+          # 🔐 v3.9.10：口令只存在于 GitHub Secrets，仓库里不留任何默认值。
+          # 没配就跳过（不算失败）——备份还有「部署前门禁」与「定时任务」两条路。
+          if [ -z "${CLS_USER:-}" ] || [ -z "${CLS_PASS:-}" ]; then
+            echo "::notice::未配置 CLS_AI_USER / CLS_AI_PASS，跳过本次备份（不影响发布）"
+            exit 0
+          fi
+          USER_NAME="$CLS_USER"
+          USER_PASS="$CLS_PASS"
 
           TOKEN=$(curl -sS -X POST "$API/api/auth?action=login" \
             -H 'Content-Type: application/json' \
