@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.9.6 index.html SITE_VERSION = 3.9.6', /var SITE_VERSION = '3\.9\.6'/.test(idx539));
-  t('v3.9.6 admin.html SITE_VERSION = 3.9.6', /var SITE_VERSION = '3\.9\.6'/.test(admh539));
-  t('v3.9.6 sw.js SITE_VER = 3.9.6 + CACHE v172',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.6'")
+  t('v3.9.7 index.html SITE_VERSION = 3.9.7', /var SITE_VERSION = '3\.9\.7'/.test(idx539));
+  t('v3.9.7 admin.html SITE_VERSION = 3.9.7', /var SITE_VERSION = '3\.9\.7'/.test(admh539));
+  t('v3.9.7 sw.js SITE_VER = 3.9.7 + CACHE v172',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.7'")
     && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v172'"));
-  t('v3.9.6 api/worker.mjs API_VER = 3.9.6',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.6';"));
+  t('v3.9.7 api/worker.mjs API_VER = 3.9.7',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.7';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11142,9 +11142,9 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
 
   /* ---- 版本号 ---- */
   t('v3.8.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.9\.6'/.test(idx540) && /var SITE_VERSION = '3\.9\.6'/.test(adm540)
-    && /const API_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.7'/.test(idx540) && /var SITE_VERSION = '3\.9\.7'/.test(adm540)
+    && /const API_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.9\.6'/.test(idx542) && /var SITE_VERSION = '3\.9\.6'/.test(adm542)
-    && /const API_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.7'/.test(idx542) && /var SITE_VERSION = '3\.9\.7'/.test(adm542)
+    && /const API_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11270,8 +11270,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.5 当前版本 3.9.6、日期 2026-10-22',
-    /var SITE_VERSION = '3\.9\.6'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
+  t('v3.8.5 当前版本 3.9.7、日期 2026-10-22',
+    /var SITE_VERSION = '3\.9\.7'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11428,10 +11428,10 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.9.6 四处版本一致', /var SITE_VERSION = '3\.9\.6'/.test(idx70)
-    && /var SITE_VERSION = '3\.9\.6'/.test(adm70)
-    && /const API_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.9.7 四处版本一致', /var SITE_VERSION = '3\.9\.7'/.test(idx70)
+    && /var SITE_VERSION = '3\.9\.7'/.test(adm70)
+    && /const API_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.9'/.test(adm70));
 }
 
@@ -11457,8 +11457,8 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
     && /addEventListener\('orientationchange'/.test(idx76));
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
-  t('v3.7.6 首页 / 后台版本已是 3.9.6',
-    /var SITE_VERSION = '3\.9\.6'/.test(idx76));
+  t('v3.7.6 首页 / 后台版本已是 3.9.7',
+    /var SITE_VERSION = '3\.9\.7'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11806,10 +11806,10 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
   const wk94  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
 
   /* ---- 版本号四处一致 ---- */
-  t('★v3.9.4+ index.html SITE_VERSION = 3.9.6', /var SITE_VERSION = '3\.9\.6'/.test(idx94));
-  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.6', /var SITE_VERSION = '3\.9\.6'/.test(adm94));
-  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.6'"));
-  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.6';"));
+  t('★v3.9.4+ index.html SITE_VERSION = 3.9.7', /var SITE_VERSION = '3\.9\.7'/.test(idx94));
+  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.7', /var SITE_VERSION = '3\.9\.7'/.test(adm94));
+  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.7'"));
+  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.7';"));
   t('★v3.9.4 REL_BUILTIN 有 3.9.4 条目且带 pub',
     /\{\s*version:\s*'3\.9\.4'[\s\S]{0,2000}?pub:\s*\[/.test(adm94));
 
@@ -11841,23 +11841,19 @@ console.log('\n【新】v3.9.5 班级岛跟随主题配色 / 全部居中');
   const adm95 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
 
   /* ---- 浅色：奶油底 + 深字 ---- */
-  t('★v3.9.6 班级岛改用玻璃底（--glass-bg + 模糊，昼夜自适应）',
-    /\.island\{[^}]*background:var\(--glass-bg\)/.test(idx95)
-    && /\.island\{[^}]*backdrop-filter:blur\(18px\)/.test(idx95)
-    && !/\.island\{[^}]*rgba\(30,26,23/.test(idx95));
-  t('★v3.9.6 班级岛有深色主题覆写（阴影 / 描边）',
-    /\.dark \.island\{[^}]*box-shadow/.test(idx95));
+  t('★v3.9.7 深色玻璃在夜间模式也有单独一套（描边 / 阴影）',
+    /\.dark \.island\{[^}]*rgba\(34,29,26,\.96\)/.test(idx95)
+    && /\.dark \.island\{[^}]*box-shadow/.test(idx95));
 
   /* ---- 字色跟随 --fg 系列 ---- */
-  t('★v3.9.5 信息块字色跟随主题变量（--fg / --fg-3）',
-    /\.island-chip \.k\{[^}]*color:var\(--fg-3\)/.test(idx95)
-    && /\.island-chip \.v\{[^}]*color:var\(--fg\)/.test(idx95));
-  t('★v3.9.5 横幅文字与页脚字色跟随主题变量',
-    /\.island-banner \.txt\{[^}]*color:var\(--fg\)/.test(idx95)
-    && /\.island-foot\{[^}]*color:var\(--fg-3\)/.test(idx95));
-  t('★v3.9.5 不再有写死的白字（island 内）',
-    !/\.island-chip \.v\{[^}]*color:#fff/.test(idx95)
-    && !/\.island-banner \.txt\{[^}]*color:#fff/.test(idx95));
+  t('★v3.9.7 信息块回到深色玻璃（半透明白卡 + 白字）',
+    /\.island-chip\{[^}]*background:rgba\(255,255,255,\.10\)/.test(idx95)
+    && /\.island-chip \.v\{[^}]*color:#fff/.test(idx95));
+  t('★v3.9.7 横幅与页脚文字在白底上仍是白色',
+    /\.island-banner \.txt\{[^}]*color:#fff/.test(idx95)
+    && /\.island-foot\{[^}]*color:rgba\(255,255,255,\.42\)/.test(idx95));
+  t('★v3.9.7 岛底色是深棕渐变（不再是浅色奶油/玻璃白）',
+    /\.island\{[^}]*background:linear-gradient\(145deg,rgba\(30,26,23,\.95\)/.test(idx95));
 
   /* ---- 全部居中 ---- */
   t('★v3.9.5 信息块内容居中（align-items + text-align）',
@@ -11901,16 +11897,10 @@ console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横�
     /const MAX_DAY_TEXT = 200/.test(isl96) && /text: str\(v\.text, MAX_DAY_TEXT\)/.test(isl96));
 
   /* ---- 2) 气泡玻璃 + 暗色适配 ---- */
-  t('★v3.9.6 玻璃底 + 模糊 + 内高光（气泡感）',
-    /\.island\{[^}]*background:var\(--glass-bg\)/.test(idx96)
-    && /\.island\{[^}]*backdrop-filter:blur\(18px\)/.test(idx96)
-    && /\.island\{[^}]*inset/.test(idx96));
-  t('★v3.9.6 信息块也是半透明气泡（昼夜两套）',
-    /\.island-chip\{[^}]*background:rgba\(255,255,255,\.55\)/.test(idx96)
-    && /\.dark \.island-chip\{[^}]*background:rgba\(255,255,255,\.09\)/.test(idx96));
-  t('★v3.9.6 横幅气泡与标签配色分昼夜',
-    /\.island-banner\{[^}]*background:rgba\(255,255,255,\.72\)/.test(idx96)
-    && /\.dark \.island-banner\{[^}]*background:rgba\(255,255,255,\.08\)/.test(idx96));
+  t('★v3.9.7 深色玻璃岛参数与 v3.8.7 一致（渐变 / 描边 / 光晕）',
+    /\.island\{[^}]*background:linear-gradient\(145deg,rgba\(30,26,23,\.95\),rgba\(62,48,38,\.92\)\)/.test(idx96)
+    && /\.island\{[^}]*border:1px solid rgba\(255,255,255,\.10\)/.test(idx96)
+    && /\.island::after\{[^}]*rgba\(251,146,60,\.28\)/.test(idx96));
 
   /* ---- 3) 照片弹层 ---- */
   t('★v3.9.6 点横幅弹照片（can-photo + islPhotoOpen）',
@@ -11923,8 +11913,9 @@ console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横�
     && /addEventListener\('wheel'/.test(idx96) && /dblclick/.test(idx96));
   t('★v3.9.6 照片地址存 island.photo（后端 500 字）',
     /photo: str\(o\.photo, MAX_PHOTO\)/.test(isl96) && /const MAX_PHOTO = 500/.test(isl96));
-  t('★v3.9.6 后台可填照片直链 / 相对路径并随保存提交',
-    /id="aiPhoto"/.test(adm96) && /photo: String\(\(\$\('aiPhoto'\)/.test(adm96));
+  t('★v3.9.6+ 后台可填照片直链 / 相对路径并随保存提交',
+    /id="aiPhoto"/.test(adm96) && /AI\.photo = String\(\(ph && ph\.value\)/.test(adm96)
+    && /photo: AI\.photo/.test(adm96));
 
   /* ---- 4) 窄屏字号 ---- */
   t('★v3.9.6 信息块字号分三档（420 / 370）',
@@ -11947,6 +11938,60 @@ console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横�
   /* ---- 发布记录 ---- */
   t('★v3.9.6 REL_BUILTIN 有 3.9.6 条目且带 pub',
     /\{\s*version:\s*'3\.9\.6'[\s\S]{0,2400}?pub:\s*\[/.test(adm96));
+}
+
+console.log('\n【新】v3.9.7 深色玻璃 / 实时保存 / 加粗居中');
+{
+  const idx97 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm97 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const isl97 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
+
+  /* ---- 1) 实时保存 ---- */
+  t('★v3.9.7 后台不再有保存按钮，只有状态',
+    !/id="aiSave"/.test(adm97) && /id="aiStage"/.test(adm97)
+    && /改动实时保存/.test(adm97));
+  t('★v3.9.7 改动 650ms 后自动提交（aiTouch → aiFlush）',
+    /function aiTouch\(\)/.test(adm97) && /setTimeout\(aiFlush, 650\)/.test(adm97)
+    && /function aiFlush\(\)/.test(adm97));
+  t('★v3.9.7 保存状态三态（保存中 / 已自动保存 / 失败点此重试）',
+    /保存中…/.test(adm97) && /已自动保存 /.test(adm97) && /保存失败，点此重试/.test(adm97));
+  t('★v3.9.7 各处改动都触发自动保存（横幅/日期/假期/照片/组件）',
+    (adm97.match(/aiTouch\(\)/g) || []).length >= 8
+    && /ph\.oninput = function\(\)\{[\s\S]{0,160}?aiTouch\(\)/.test(adm97));
+  t('★v3.9.7 离开页面前补发未保存改动（keepalive）',
+    /function aiFlushBeacon/.test(adm97) && /keepalive: true/.test(adm97));
+
+  /* ---- 2) 加粗 / 居中 ---- */
+  t('★v3.9.7 数据模型带 bold / center（默认居中）',
+    /bold: !!v\.bold/.test(isl97) && /center: v\.center !== false/.test(isl97));
+  t('★v3.9.7 前台按设置渲染（txt bold / left）',
+    /t\.bold \? ' bold' : ''/.test(idx97) && /t\.center === false \? ' left' : ''/.test(idx97)
+    && /\.island-banner \.txt\.bold\{font-weight:800\}/.test(idx97));
+  t('★v3.9.7 不居中时整条左对齐（标签也靠左）',
+    /left-align\{align-items:flex-start/.test(idx97)
+    && /left-align \.tag\{align-self:flex-start\}/.test(idx97));
+  t('★v3.9.7 后台有加粗 / 居中开关，且默认居中',
+    /id="adBold"/.test(adm97) && /id="adCenter" checked/.test(adm97));
+  t('★v3.9.7 后台文本框实时预览加粗与对齐',
+    /function aiDayPreview/.test(adm97)
+    && /t\.style\.fontWeight = bold \? '800' : '400'/.test(adm97)
+    && /t\.style\.textAlign = center \? 'center' : 'left'/.test(adm97));
+  t('★v3.9.7 日期条目上标「粗」「左」',
+    /ai-ovflag">粗</.test(adm97) && /ai-ovflag">左</.test(adm97));
+
+  /* ---- 3) 照片入口 ---- */
+  t('★v3.9.7 照片面板排在第二块（基本之后）',
+    adm97.indexOf('<h3>今日事项照片</h3>') > adm97.indexOf('<h3>基本</h3>')
+    && adm97.indexOf('<h3>今日事项照片</h3>') < adm97.indexOf('<h3>显示哪些组件</h3>'));
+  t('★v3.9.7 照片带缩略图预览（无效地址不显示）',
+    /id="aiPhotoPrev"/.test(adm97) && /function aiPhotoPreview/.test(adm97)
+    && /im\.onerror = function\(\)\{ im\.style\.display = 'none'/.test(adm97));
+  t('★v3.9.7 未配照片时管理员点击有去处提示',
+    /还没设置今日事项照片：后台 → 班级岛 → 今日事项照片/.test(idx97));
+
+  /* ---- 4) 发布记录 ---- */
+  t('★v3.9.7 REL_BUILTIN 有 3.9.7 条目且带 pub',
+    /\{\s*version:\s*'3\.9\.7'[\s\S]{0,2400}?pub:\s*\[/.test(adm97));
 }
 
 console.log('\n' + '='.repeat(52));
