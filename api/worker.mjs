@@ -20,7 +20,7 @@
 
 import authHandler from './auth.js';
 import dataHandler from './data.js';
-import adminHandler from './admin.js';
+import adminHandler, { runAutoBackup } from './admin.js';
 import profileHandler from './profile.js';
 import contentHandler from './content.js';
 import badgeHandler from './badge.js';
@@ -42,7 +42,7 @@ import { cors } from './_lib/http.js';
    于是回查永远对不上提交号、每次都红了 120 秒后判失败：job 红，线上其实是新的。
    所以加一个**由代码本身带出去**的版本号：只要线上换了代码，它就会变。
    纪律：每轮发布与前台 SITE_VERSION 同步（测试里有断言锁死两者相等）。 */
-const API_VER = '3.9.7';
+const API_VER = '3.9.8';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
 async function adaptRequest(request, env) {
@@ -240,12 +240,22 @@ export default {
      ------------------------------------------------------------ */
   async scheduled(event, env, ctx) {
     globalThis.__ENV__ = env || {};
+    /* ① 成绩缓存日备份（原有） */
     try {
       const m = await import('./scores.js');
       const r = await m.runDailyBackup();
       console.log('[cron] daily backup:', JSON.stringify(r));
     } catch (e) {
       console.error('[cron] daily backup failed:', e && e.stack ? e.stack : e);
+    }
+    /* ② v3.9.8：全量数据快照（data_backups）—— 站主要求「每次更新能自动备份一次」，
+       以前 cron 只备成绩，业务数据一直没进快照。 */
+    try {
+      const day = new Date().toISOString().slice(0, 10);
+      const r2 = await runAutoBackup('auto-' + day);
+      console.log('[cron] data backup:', JSON.stringify(r2));
+    } catch (e) {
+      console.error('[cron] data backup failed:', e && e.stack ? e.stack : e);
     }
   },
 };
