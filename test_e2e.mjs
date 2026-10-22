@@ -11038,13 +11038,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.9.4 index.html SITE_VERSION = 3.9.4', /var SITE_VERSION = '3\.9\.4'/.test(idx539));
-  t('v3.9.4 admin.html SITE_VERSION = 3.9.4', /var SITE_VERSION = '3\.9\.4'/.test(admh539));
-  t('v3.9.4 sw.js SITE_VER = 3.9.4 + CACHE v172',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.4'")
+  t('v3.9.5 index.html SITE_VERSION = 3.9.5', /var SITE_VERSION = '3\.9\.5'/.test(idx539));
+  t('v3.9.5 admin.html SITE_VERSION = 3.9.5', /var SITE_VERSION = '3\.9\.5'/.test(admh539));
+  t('v3.9.5 sw.js SITE_VER = 3.9.5 + CACHE v172',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.5'")
     && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const CACHE = 'class-site-v172'"));
-  t('v3.9.4 api/worker.mjs API_VER = 3.9.4',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.4';"));
+  t('v3.9.5 api/worker.mjs API_VER = 3.9.5',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.5';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11142,9 +11142,9 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
 
   /* ---- 版本号 ---- */
   t('v3.8.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.9\.4'/.test(idx540) && /var SITE_VERSION = '3\.9\.4'/.test(adm540)
-    && /const API_VER = '3\.9\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.5'/.test(idx540) && /var SITE_VERSION = '3\.9\.5'/.test(adm540)
+    && /const API_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11198,9 +11198,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.9\.4'/.test(idx542) && /var SITE_VERSION = '3\.9\.4'/.test(adm542)
-    && /const API_VER = '3\.9\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.5'/.test(idx542) && /var SITE_VERSION = '3\.9\.5'/.test(adm542)
+    && /const API_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11270,8 +11270,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.5 当前版本 3.9.4、日期 2026-10-21',
-    /var SITE_VERSION = '3\.9\.4'/.test(idx61) && /VER_DATE = '2026-10-21'/.test(idx61));
+  t('v3.8.5 当前版本 3.9.5、日期 2026-10-22',
+    /var SITE_VERSION = '3\.9\.5'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11428,10 +11428,10 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.9.4 四处版本一致', /var SITE_VERSION = '3\.9\.4'/.test(idx70)
-    && /var SITE_VERSION = '3\.9\.4'/.test(adm70)
-    && /const API_VER = '3\.9\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.9.5 四处版本一致', /var SITE_VERSION = '3\.9\.5'/.test(idx70)
+    && /var SITE_VERSION = '3\.9\.5'/.test(adm70)
+    && /const API_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.9'/.test(adm70));
 }
 
@@ -11457,8 +11457,8 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
     && /addEventListener\('orientationchange'/.test(idx76));
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
-  t('v3.7.6 首页 / 后台版本已是 3.9.4',
-    /var SITE_VERSION = '3\.9\.4'/.test(idx76));
+  t('v3.7.6 首页 / 后台版本已是 3.9.5',
+    /var SITE_VERSION = '3\.9\.5'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11806,10 +11806,10 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
   const wk94  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
 
   /* ---- 版本号四处一致 ---- */
-  t('★v3.9.4 index.html SITE_VERSION = 3.9.4', /var SITE_VERSION = '3\.9\.4'/.test(idx94));
-  t('★v3.9.4 admin.html SITE_VERSION = 3.9.4', /var SITE_VERSION = '3\.9\.4'/.test(adm94));
-  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.4'"));
-  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.4';"));
+  t('★v3.9.4+ index.html SITE_VERSION = 3.9.5', /var SITE_VERSION = '3\.9\.5'/.test(idx94));
+  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.5', /var SITE_VERSION = '3\.9\.5'/.test(adm94));
+  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.5'"));
+  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.5';"));
   t('★v3.9.4 REL_BUILTIN 有 3.9.4 条目且带 pub',
     /\{\s*version:\s*'3\.9\.4'[\s\S]{0,2000}?pub:\s*\[/.test(adm94));
 
@@ -11832,6 +11832,45 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
     /\.ai-brow textarea\{[^}]*resize:vertical;/.test(adm94));
   t('★v3.9.4 保存仍按 DOM 对账（textarea 的 value 照样读得到）',
     /querySelectorAll\('#aiBanner \[data-bk\]'\)/.test(adm94));
+}
+
+console.log('\n【新】v3.9.5 班级岛跟随主题配色 / 全部居中');
+{
+  const idx95 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm95 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+
+  /* ---- 浅色：奶油底 + 深字 ---- */
+  t('★v3.9.5 班级岛浅色底改为奶油渐变（不再是深棕黑板）',
+    /\.island\{[^}]*background:linear-gradient\(145deg,#fffdfa,#fff2e6\)/.test(idx95)
+    && !/\.island\{[^}]*rgba\(30,26,23/.test(idx95));
+  t('★v3.9.5 班级岛有深色主题覆写（深底 + 浅字）',
+    /\.dark \.island\{[^}]*background:linear-gradient\(145deg,#2c2522,#211d1a\)/.test(idx95));
+
+  /* ---- 字色跟随 --fg 系列 ---- */
+  t('★v3.9.5 信息块字色跟随主题变量（--fg / --fg-3）',
+    /\.island-chip \.k\{[^}]*color:var\(--fg-3\)/.test(idx95)
+    && /\.island-chip \.v\{[^}]*color:var\(--fg\)/.test(idx95));
+  t('★v3.9.5 横幅文字与页脚字色跟随主题变量',
+    /\.island-banner \.txt\{[^}]*color:var\(--fg\)/.test(idx95)
+    && /\.island-foot\{[^}]*color:var\(--fg-3\)/.test(idx95));
+  t('★v3.9.5 不再有写死的白字（island 内）',
+    !/\.island-chip \.v\{[^}]*color:#fff/.test(idx95)
+    && !/\.island-banner \.txt\{[^}]*color:#fff/.test(idx95));
+
+  /* ---- 全部居中 ---- */
+  t('★v3.9.5 信息块内容居中（align-items + text-align）',
+    /\.island-chip\{[^}]*align-items:center[^}]*text-align:center/.test(idx95));
+  t('★v3.9.5 横幅整体居中（justify-content:center）',
+    /\.island-banner\{[^}]*justify-content:center[^}]*text-align:center/.test(idx95));
+  t('★v3.9.5 横幅文字多行时逐行居中',
+    /\.island-banner \.txt\{[^}]*text-align:center/.test(idx95));
+  t('★v3.9.5 页脚日期与周数居中', /\.island-foot\{[^}]*justify-content:center/.test(idx95));
+  t('★v3.9.5 岛整体文字居中', /\.island\{[^}]*text-align:center/.test(idx95));
+
+  /* ---- 发布记录 ---- */
+  t('★v3.9.5 REL_BUILTIN 有 3.9.5 条目且带 pub',
+    /\{\s*version:\s*'3\.9\.5'[\s\S]{0,1200}?pub:\s*\[/.test(adm95));
+  t('★v3.9.5 更新日期为 2026-10-22', /var VER_DATE = '2026-10-22'/.test(idx95));
 }
 
 console.log('\n' + '='.repeat(52));
