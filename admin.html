@@ -558,6 +558,11 @@ html.force-landscape body{
 html.force-landscape .side{width:210px}
 /* v3.5.40：iOS 里 fixed 子元素在 transform 祖先内坐标会错位，改成 absolute 对齐旋转容器 */
 html.force-landscape .side{position:absolute;top:0;left:0;bottom:auto;height:100vw}
+/* v3.9.6（站主）：横屏下滚到中间，顶栏（汉堡按钮）跟着内容跑掉，点不到侧边栏。
+   sticky 在 transform 祖先里部分浏览器不生效 —— 改 absolute，交给 JS 按
+   scrollTop 补偿钉在视口顶部；主区补上顶栏高度，内容不会被压住。 */
+html.force-landscape .head{position:absolute;top:0;left:0;right:0}
+html.force-landscape .main{padding-top:var(--head-h)}
 html.force-landscape .content{padding:14px 16px}
 html.force-landscape table{font-size:.78rem}
 #btnRotate[data-on="1"]{background:var(--tint);color:var(--accent-ink);border-color:var(--border-2)}
@@ -936,6 +941,15 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
   border-radius:8px;background:var(--bg-1);color:var(--fg);font-size:.78rem;font-family:inherit;
   line-height:1.5;resize:vertical;min-height:34px;max-height:200px;overflow:auto}
 .ai-dform{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+/* v3.9.6：按日期临时改支持多行 + 条目可点击编辑 / 复用 */
+.ai-dtext{width:100%;box-sizing:border-box;margin-top:8px;min-height:72px;resize:vertical;
+  line-height:1.55;font-family:inherit;white-space:pre-wrap}
+.ai-ovclick{cursor:pointer;border:1px solid transparent;border-radius:10px;transition:background .15s,border-color .15s}
+.ai-ovclick:hover{background:var(--tint)}
+.ai-ovclick.on{background:var(--tint);border-color:var(--border-2, #ffd8b8)}
+.ai-mini{flex:none;font-size:.68rem;line-height:1;padding:4px 8px;border-radius:8px;
+  border:1px solid var(--border);background:var(--bg-1);color:var(--fg-2);cursor:pointer}
+.ai-mini:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
 .ai-dform input[type=date]{flex:0 0 132px;min-width:0}
 .ai-dform input#adText{flex:1 1 200px;min-width:0}
 .ai-dform input#ahLabel{flex:1 1 120px;min-width:0}
@@ -1597,7 +1611,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.9.5';
+var SITE_VERSION = '3.9.6';
 var VER_DATE = '2026-10-22';
 
 /* ---- 运行时状态 ---- */
@@ -11452,7 +11466,26 @@ function syncLandscapeClass(){
   }
   var btn = document.getElementById('btnRotate');
   if(btn) btn.setAttribute('data-on', LAND_ON ? '1' : '0');
+  landscapePin();
 }
+
+/* v3.9.6（站主）：横屏时 body 自己滚动，absolute 的顶栏会随内容滚走 ——
+   滚到中间就点不到汉堡按钮（打开侧边栏）。滚动时按 scrollTop 补偿把它钉住。 */
+function landscapePin(){
+  var head = document.querySelector('.head');
+  if(!head) return;
+  var html = document.documentElement;
+  if(!html.classList.contains('force-landscape')){
+    if(head.style.top) head.style.top = '';
+    return;
+  }
+  var st = (document.body && document.body.scrollTop) || 0;
+  head.style.top = st + 'px';
+}
+try{
+  document.addEventListener('scroll', landscapePin, { passive: true, capture: true });
+  window.addEventListener('resize', landscapePin, { passive: true });
+}catch(e){}
 
 function lockLandscape(){
   /* v3.5.40：**不再请求全屏**。全屏 + fixed 旋转在 iOS PWA 上切后台回来时
@@ -13187,15 +13220,28 @@ function paintIsland(){
 
     + '<section class="panel ai-sec">'
     +   '<div class="panel-head"><div><h3>按日期临时改（提前改某一天）</h3>'
-    +     '<p class="sub">只影响那一天：考试、调课、临时放假都写这里；星期五就能把周六周日先写好</p></div></div>'
+    +     '<p class="sub">只影响那一天：考试、调课、临时放假都写这里；<b>支持换行</b>，<b>点已有条目可再次修改</b>。'
+    +       '写考试日程时先点「填入当天课表」，再改其中一两个字即可</p></div></div>'
     +   '<div class="panel-body">'
     +     '<div id="aiDayList"></div>'
     +     '<div class="ai-dform">'
     +       '<input class="gate-input" type="date" id="adDate">'
-    +       '<input class="gate-input" id="adText" maxlength="60" placeholder="今日事项，如 数学 08:00-09:30">'
+    +       '<button class="btn btn-sm btn-secondary" id="adFill" type="button">填入当天课表</button>'
     +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adOff"> 这天不上课</label>'
     +       '<button class="btn btn-sm" id="adAdd">添加</button>'
     +     '</div>'
+    +     '<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="200"'
+    +       ' placeholder="这一天的安排（可多行），如：\n数学 08:00-09:30\n语文 10:00-11:30"></textarea>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>今日事项照片</h3>'
+    +     '<p class="sub">同学点首页「今日事项」那一行会弹出这张图，可放大缩小；留空则点击不弹图</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<input class="gate-input" id="aiPhoto" maxlength="500" placeholder="https://… 或仓库里的相对路径，如 ./photo.jpg">'
+    +     '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
+    +       '直链（图床 / 云盘外链）最稳；用仓库里的图就写 <b>./文件名.jpg</b>（和 index.html 放同一层）</p>'
     +   '</div>'
     + '</section>'
 
@@ -13216,7 +13262,14 @@ function paintIsland(){
   $('aiSave').onclick = islandSave;
   $('aiReload').onclick = renderIsland;
   $('adAdd').onclick = aiAddDay;
+  $('adFill').onclick = aiFillDay;
   $('ahAdd').onclick = aiAddHoliday;
+  $('adText').onkeydown = function(e){
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); aiAddDay(); }
+  };
+
+  var ph = $('aiPhoto');
+  if(ph) ph.value = AI.photo || '';
 
   paintComps();
   paintBanner();
@@ -13309,26 +13362,18 @@ function bindCompEvents(){
   });
 }
 
-/* ---------- 横幅 ---------- */
+/* ---------- 横幅（默认课表：一行就够） ---------- */
 function paintBanner(){
   var host = $('aiBanner');
-  /* v3.9.4：<input> 改 <textarea>，支持换行；内容用 esc() 转义后放进标签内 */
+  /* v3.9.6（站主）：星期横幅 = 默认课表，收回单行输入；
+     要多行请用「按日期临时改」那一块（考试时段 / 备注）。 */
   host.innerHTML = AI_DAYS.map(function(d){
     return '<div class="ai-brow">'
       + '<span class="d">' + d[1] + '</span>'
-      + '<textarea data-bk="' + d[0] + '" rows="2" maxlength="60"'
-      +   ' placeholder="今日事项，如 升 数数语英化 物物体劳 听自语语">' + esc(AI.banner[d[0]] || '') + '</textarea>'
+      + '<input data-bk="' + d[0] + '" maxlength="60" value="' + attr(AI.banner[d[0]] || '') + '"'
+      +   ' placeholder="默认课表，如 升 数数语英化 物物体劳 听自语语">'
       + '</div>';
   }).join('');
-  /* 多行自适应高度：输入时按内容伸缩，写长句也不用拖滚动条 */
-  Array.prototype.forEach.call(host.querySelectorAll('textarea[data-bk]'), function(ta){
-    var grow = function(){
-      ta.style.height = 'auto';
-      ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
-    };
-    ta.addEventListener('input', grow);
-    grow();
-  });
   host.oninput = function(e){
     var k = e.target.getAttribute && e.target.getAttribute('data-bk');
     if(!k) return;
@@ -13336,44 +13381,96 @@ function paintBanner(){
   };
 }
 
-/* ---------- 按日期覆盖 ---------- */
+/* ---------- 按日期覆盖（可再次编辑 / 复用） ---------- */
+var AI_DAY_EDIT = null;   /* 正在编辑的日期；null = 新增 */
 function paintDayList(){
   var keys = Object.keys(AI.days || {}).sort();
   var host = $('aiDayList');
   if(!keys.length){
-    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">还没有单独设置的日期。</p>';
+    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">还没有单独设置的日期。点上面「填入课表」可以基于当天默认课表改一两个字。</p>';
     return;
   }
   host.innerHTML = keys.map(function(k){
     var v = AI.days[k] || {};
-    return '<div class="ai-ovitem">'
+    var one = String(v.label || v.text || '').replace(/\n/g, ' / ');
+    return '<div class="ai-ovitem ai-ovclick' + (AI_DAY_EDIT === k ? ' on' : '') + '" data-dayedit="' + attr(k) + '">'
       + '<span class="ai-ovtag ' + (v.off ? 'off' : 'plan') + '">' + (v.off ? '不上课' : '改文案') + '</span>'
       + '<b>' + esc(k.slice(5)) + '</b>'
-      + '<span class="muted">' + esc(v.label || v.text || '') + '</span>'
-      + '<button type="button" data-daydel="' + attr(k) + '">✕</button>'
+      + '<span class="muted">' + esc(one) + '</span>'
+      + '<button type="button" data-daydel="' + attr(k) + '" title="删除">✕</button>'
       + '</div>';
   }).join('');
   host.onclick = function(e){
-    var k = e.target.getAttribute && e.target.getAttribute('data-daydel');
-    if(!k) return;
-    delete AI.days[k];
-    paintDayList();
+    var del = e.target.getAttribute && e.target.getAttribute('data-daydel');
+    if(del){
+      delete AI.days[del];
+      if(AI_DAY_EDIT === del) aiCancelDay();
+      paintDayList();
+      return;
+    }
+    var ed = e.target.closest && e.target.closest('[data-dayedit]');
+    if(ed) aiEditDay(ed.getAttribute('data-dayedit'));
   };
+}
+
+function aiEditDay(k){
+  var v = (AI.days || {})[k];
+  if(!v) return;
+  AI_DAY_EDIT = k;
+  $('adDate').value = k;
+  $('adText').value = v.text || '';
+  $('adOff').checked = !!v.off;
+  var b = $('adAdd');
+  if(b) b.textContent = '更新这一天';
+  paintDayList();
+  $('adText').focus();
+  toast('已载入 ' + k.slice(5) + '，改完点「更新这一天」', 'ok', 2400);
+}
+function aiCancelDay(){
+  AI_DAY_EDIT = null;
+  $('adDate').value = ''; $('adText').value = ''; $('adOff').checked = false;
+  var b = $('adAdd');
+  if(b) b.textContent = '添加';
+}
+
+/* 一键填入「当天课表」：默认取所选日期的星期横幅；
+   那天已经有临时安排就先填那份，方便只改其中一两个字。 */
+function aiFillDay(){
+  var d = $('adDate').value || '';
+  if(!d){
+    var t = new Date();
+    d = t.getFullYear() + '-' + ('0' + (t.getMonth() + 1)).slice(-2) + '-' + ('0' + t.getDate()).slice(-2);
+    $('adDate').value = d;
+  }
+  var ex = (AI.days || {})[d];
+  var txt = ex && ex.text ? ex.text : '';
+  if(!txt){
+    var dt = new Date(d + 'T00:00:00');
+    if(isNaN(dt.getTime())){ toast('日期不对', 'warn'); return; }
+    var key = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][dt.getDay()];
+    txt = (AI.banner || {})[key] || '';
+  }
+  if(!txt){ toast('这一天还没有默认课表，先在上面写一句', 'warn', 2800); return; }
+  $('adText').value = txt;
+  $('adText').focus();
+  toast('已填入，改其中一两个字再点' + (AI_DAY_EDIT ? '「更新这一天」' : '「添加」'), 'ok', 2600);
 }
 
 function aiAddDay(){
   var d = $('adDate').value || '';
-  var text = String($('adText').value || '').trim().slice(0, 60);
+  var text = String($('adText').value || '').trim().slice(0, 200);
   var off = !!$('adOff').checked;
   if(!d){ toast('先选日期', 'warn'); return; }
   if(!text && !off){ toast('写点今日事项，或者勾「这天不上课」', 'warn', 2800); return; }
   AI.days[d] = { text: text, off: off, label: off ? (text || '今天不上课') : '' };
-  $('adDate').value = ''; $('adText').value = ''; $('adOff').checked = false;
+  AI_DAY_EDIT = null;
+  aiCancelDay();
   paintDayList();
-  toast('已添加，别忘了保存', 'ok', 2400);
+  toast('已保存到这一天，别忘了点右上角「保存」', 'ok', 2600);
 }
 
-/* ---------- 假期 ---------- */
+/* ---------- 假期（可再次修改时间范围 / 复用） ---------- */
+var AI_HOL_EDIT = null;   /* 正在编辑的假期 id */
 function paintHols(){
   var host = $('aiHolList');
   var list = (AI.holidays || []).slice().sort(function(a, b){ return a.from < b.from ? -1 : 1; });
@@ -13382,19 +13479,58 @@ function paintHols(){
     return;
   }
   host.innerHTML = list.map(function(h){
-    return '<div class="ai-ovitem">'
+    return '<div class="ai-ovitem ai-ovclick' + (AI_HOL_EDIT === h.id ? ' on' : '') + '" data-holedit="' + attr(h.id) + '">'
       + '<span class="ai-ovtag off">' + esc(h.label || '假期') + '</span>'
       + '<b>' + esc(h.from.slice(5)) + ' – ' + esc(h.to.slice(5)) + '</b>'
       + '<span class="muted"></span>'
-      + '<button type="button" data-hdel="' + attr(h.id) + '">✕</button>'
+      + '<button type="button" class="ai-mini" data-hcopy="' + attr(h.id) + '" title="复用：复制到下面表单，改日期再加一条">复用</button>'
+      + '<button type="button" data-hdel="' + attr(h.id) + '" title="删除">✕</button>'
       + '</div>';
   }).join('');
   host.onclick = function(e){
-    var id = e.target.getAttribute && e.target.getAttribute('data-hdel');
-    if(!id) return;
-    AI.holidays = AI.holidays.filter(function(x){ return x.id !== id; });
-    paintHols();
+    var del = e.target.getAttribute && e.target.getAttribute('data-hdel');
+    if(del){
+      AI.holidays = AI.holidays.filter(function(x){ return x.id !== del; });
+      if(AI_HOL_EDIT === del) aiCancelHol();
+      paintHols();
+      return;
+    }
+    var cp = e.target.getAttribute && e.target.getAttribute('data-hcopy');
+    if(cp){
+      var h0 = (AI.holidays || []).filter(function(x){ return x.id === cp; })[0];
+      if(!h0) return;
+      AI_HOL_EDIT = null;
+      $('ahLabel').value = h0.label || '';
+      $('ahFrom').value = h0.from;
+      $('ahTo').value = h0.to;
+      var b0 = $('ahAdd');
+      if(b0) b0.textContent = '添加';
+      paintHols();
+      toast('已复制到表单，改好日期再点「添加」', 'ok', 2600);
+      return;
+    }
+    var ed = e.target.closest && e.target.closest('[data-holedit]');
+    if(ed) aiEditHol(ed.getAttribute('data-holedit'));
   };
+}
+
+function aiEditHol(id){
+  var h = (AI.holidays || []).filter(function(x){ return x.id === id; })[0];
+  if(!h) return;
+  AI_HOL_EDIT = id;
+  $('ahLabel').value = h.label || '';
+  $('ahFrom').value = h.from;
+  $('ahTo').value = h.to;
+  var b = $('ahAdd');
+  if(b) b.textContent = '更新这一段';
+  paintHols();
+  toast('已载入「' + (h.label || '假期') + '」，改完点「更新这一段」', 'ok', 2400);
+}
+function aiCancelHol(){
+  AI_HOL_EDIT = null;
+  $('ahLabel').value = ''; $('ahFrom').value = ''; $('ahTo').value = '';
+  var b = $('ahAdd');
+  if(b) b.textContent = '添加';
 }
 
 function aiAddHoliday(){
@@ -13403,10 +13539,18 @@ function aiAddHoliday(){
   var to = $('ahTo').value || from;
   if(!from){ toast('先选开始日期', 'warn'); return; }
   if(to < from){ toast('结束日期不能早于开始日期', 'warn'); return; }
-  AI.holidays.push({ id: 'h' + Date.now().toString(36), from: from, to: to, label: label || '假期' });
-  $('ahLabel').value = ''; $('ahFrom').value = ''; $('ahTo').value = '';
+  if(AI_HOL_EDIT){
+    var cur = (AI.holidays || []).filter(function(x){ return x.id === AI_HOL_EDIT; })[0];
+    if(cur){
+      cur.from = from; cur.to = to; cur.label = label || '假期';
+    }
+    toast('已更新，别忘了点右上角「保存」', 'ok', 2600);
+  }else{
+    AI.holidays.push({ id: 'h' + Date.now().toString(36), from: from, to: to, label: label || '假期' });
+    toast('已添加，别忘了点右上角「保存」', 'ok', 2600);
+  }
+  aiCancelHol();
   paintHols();
-  toast('已添加，别忘了保存', 'ok', 2400);
 }
 
 /* ---------- 保存 ---------- */
@@ -13427,6 +13571,7 @@ function islandSave(){
     banner: AI.banner,
     days: AI.days,
     holidays: AI.holidays,
+    photo: String(($('aiPhoto') || {}).value || '').trim().slice(0, 500),
   };
 
   api('/island', { method: 'POST', body: { data: data } }).then(function(j){
@@ -15683,6 +15828,17 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.6', date: '2026-10-22', type: 'feat', title: '班级岛改气泡玻璃 · 点横幅看照片 · 横屏侧栏修复', items: [
+      '班级岛换回气泡玻璃质感：半透明白/黑底 + 模糊 + 内高光，昼夜两套自动适配，四个信息块做成半透明小气泡',
+      '四个信息块字号按屏幕宽度分三档收小，窄屏（≤360）下「22° 多云」这类最长文案也能完整显示',
+      '星期横幅收回单行（它就是默认课表）；「按日期临时改」保留多行输入，并新增「填入当天课表」按钮：一键带出当天课表，改一两个字即可',
+      '已设置的临时安排、假期都能点开再次修改；假期多一个「复用」，复制到表单改日期即可再加一段',
+      '今日事项照片：后台填直链或仓库相对路径，同学点首页「今日事项」那一行本页弹图，支持双指/滚轮/双击缩放、拖动、✕ 或 Esc 关闭',
+      '横屏界面滚到中间点不到侧边栏：主站悬浮按钮与后台顶栏改为跟随滚动补偿，任何时候都钉在屏幕左上角'
+    ], pub: [
+      { cat: '班级', text: '班级小岛改为气泡玻璃样式，小屏手机也能完整显示；点「今日事项」可查看当天照片' },
+      { cat: '界面', text: '横屏查看时侧边栏按钮固定在屏幕左上角，随时可以打开' }
+    ] },
   { version: '3.9.5', date: '2026-10-22', type: 'fix', title: '班级岛跟随主题配色 · 内容居中', items: [
       '班级岛原来写死深棕底 + 白字，白天模式下像一块黑板贴在奶油色页面里',
       '现在浅色用奶油渐变底 + 深字、深色用深棕底 + 浅字，标题 / 数值 / 横幅 / 页脚的字色统一跟着昼夜主题走',
