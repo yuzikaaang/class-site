@@ -123,8 +123,19 @@ async function readContent(req, res) {
     const val = jsonCol(r.data_value);
     if (val === null || val === undefined) return;
 
-    /* 时间戳：用于增量判断。数据库给的是 SQL 字符串，交给 JS 解析。 */
-    const t = Date.parse(String(r.updated_at).replace(' ', 'T') + 'Z') || 0;
+    /* 时间戳：用于增量判断。
+       ⚠️ v3.9.10 修：数据库可能给 `2026-10-22 15:31:50.123+00` 这种**已带时区**的串，
+       原来无条件拼 'Z' 会得到 `...T15:31:50.123+00Z` → Date.parse = NaN → latest 恒为 0，
+       于是「增量」永远判定为有更新（等于没做）。这里按形态分别处理。 */
+    const tsRaw = String(r.updated_at == null ? '' : r.updated_at).trim();
+    let t = 0;
+    if (tsRaw) {
+      if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(tsRaw)) {
+        t = Date.parse(tsRaw) || 0;                       /* 自带时区，直接用 */
+      } else {
+        t = Date.parse(tsRaw.replace(' ', 'T') + 'Z') || 0; /* 纯本地时间，按 UTC 补 Z */
+      }
+    }
     if (t > latest) latest = t;
 
     if (r.data_key === ANNOUNCE_KEY) {
