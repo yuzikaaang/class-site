@@ -71,6 +71,8 @@ jobs:
 
           SOURCE_FILES=(
             index.html
+            app.js
+            share-card.js
             admin.html
             share.html
             sw.js
