@@ -961,6 +961,20 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 .ai-add:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
 .ai-ovflag{flex:none;font-size:.62rem;font-weight:800;color:var(--accent-ink);
   background:var(--tint);border-radius:5px;padding:1px 5px}
+.ai-cat{font-size:.74rem;padding:5px 11px;border-radius:999px;border:1px solid var(--border);
+  background:var(--bg-1);color:var(--fg-2);cursor:pointer;line-height:1.4}
+.ai-cat.on{border-color:var(--accent-ink);background:var(--tint);color:var(--accent-ink);font-weight:700}
+.ai-fmtbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.ai-fmt{font-size:.72rem;padding:4px 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg-1);color:var(--fg-2);cursor:pointer}
+.ai-fmt:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
+.ai-dprev{margin-top:4px;padding:12px 14px;border-radius:12px;min-height:44px;
+  background:linear-gradient(145deg,rgba(30,26,23,.95),rgba(62,48,38,.92));color:#fff;
+  box-shadow:0 6px 18px rgba(70,35,10,.18)}
+.ai-dprev-txt{font-size:.82rem;line-height:1.55;white-space:pre-line;word-break:break-word}
+.ai-dprev-txt b{font-weight:900}
+.ai-dprev-txt s{opacity:.55}
+.ai-dprev-txt .ln-em{display:block;font-weight:900;text-align:center}
 .ai-photo-row img{display:block;margin-top:10px;max-width:180px;max-height:180px;
   border-radius:10px;border:1px solid var(--border);object-fit:cover}
 .ai-dform input[type=date]{flex:0 0 132px;min-width:0}
@@ -1624,7 +1638,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.9.7';
+var SITE_VERSION = '3.9.8';
 var VER_DATE = '2026-10-22';
 
 /* ---- 运行时状态 ---- */
@@ -6926,6 +6940,14 @@ function renderCards(){
     +       '<b>本地库</b>：只用下面这个列表里的句子，不发任何外部请求 —— 哪天显示哪句在下面的「轮换设置」里定。'
     +     '</p>'
     +     '<div id="qsMsg" style="font-size:.78rem;margin-top:8px"></div>'
+    +     '<div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border)">'
+    +       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +         '<b style="font-size:.86rem">内容分类</b>'
+    +         '<span class="muted" style="font-size:.74rem">取消勾选 = 不显示这类；改完立即生效</span>'
+    +       '</div>'
+    +       '<div id="qsCats" style="display:flex;gap:6px;flex-wrap:wrap"></div>'
+    +       '<div id="qsCatMsg" style="font-size:.74rem;margin-top:8px"></div>'
+    +     '</div>'
     +   '</div>'
     +   '<div class="alert info" style="margin-bottom:14px">'
     +     '列表改动保存后，让同学刷新一下页面就能看到最新内容。'
@@ -6969,13 +6991,65 @@ function renderCards(){
 
 /* v3.5.9 每日一言来源（内容键 quote_source）：站主要在「首页卡片」里直接改，
    不再让每个同学自己在「自定义设置」里点。 */
+var QUOTE_CATS = [
+  ['a', '动画'], ['b', '漫画'], ['c', '游戏'], ['d', '文学'],
+  ['e', '原创'], ['f', '网络'], ['g', '其他'], ['h', '影视'],
+  ['i', '诗词'], ['j', '网易云'], ['k', '哲学'], ['l', '抖机灵'],
+];
 function loadQuoteSource(){
   api('/content').then(function(j){
     var raw = (j && j.items) ? j.items.quote_source : null;
     /* 没配过就默认联网（与 v3.5.6 起的行为一致） */
     STATE.quoteSource = (raw && raw.net === 0) ? 0 : 1;
+    STATE.quoteCats = (raw && Array.isArray(raw.cats) && raw.cats.length)
+      ? raw.cats.slice() : ['a', 'b', 'd', 'i'];
     paintQuoteSource();
-  }).catch(function(){ STATE.quoteSource = 1; paintQuoteSource(); });
+    paintQuoteCats();
+  }).catch(function(){
+    STATE.quoteSource = 1;
+    STATE.quoteCats = ['a', 'b', 'd', 'i'];
+    paintQuoteSource(); paintQuoteCats();
+  });
+}
+/* v3.9.8（站主）：只显示勾选的分类，取消勾选就不拉那类 */
+function paintQuoteCats(){
+  var box = $('qsCats');
+  if(!box) return;
+  var cur = STATE.quoteCats || ['a', 'b', 'd', 'i'];
+  box.innerHTML = QUOTE_CATS.map(function(c){
+    var on = cur.indexOf(c[0]) >= 0;
+    return '<button type="button" class="ai-cat' + (on ? ' on' : '') + '" data-cat="' + c[0] + '">'
+      + (on ? '✓ ' : '') + c[1] + '</button>';
+  }).join('');
+  box.onclick = function(e){
+    var b = e.target.closest && e.target.closest('[data-cat]');
+    if(!b) return;
+    var k = b.getAttribute('data-cat');
+    var arr = (STATE.quoteCats || []).slice();
+    var i = arr.indexOf(k);
+    if(i >= 0){
+      if(arr.length <= 1){ toast('至少留一类，不然就没内容可显示了', 'warn'); return; }
+      arr.splice(i, 1);
+    }else{
+      arr.push(k);
+    }
+    STATE.quoteCats = arr;
+    paintQuoteCats();
+    saveQuoteCats();
+  };
+}
+function saveQuoteCats(){
+  var msg = $('qsCatMsg');
+  if(msg) msg.innerHTML = '<span class="muted">保存中…</span>';
+  api('/content', { method: 'PUT', body: { items: { quote_source: {
+    net: (STATE.quoteSource === 0) ? 0 : 1,
+    cats: STATE.quoteCats || ['a', 'b', 'd', 'i'],
+  } } } }).then(function(j){
+    if(j && j.ok === false) throw new Error(j.error || '保存失败');
+    if(msg) msg.innerHTML = '<span style="color:#2f9e44">✅ 已保存，同学刷新页面后只显示勾选的分类</span>';
+  }).catch(function(e){
+    if(msg) msg.innerHTML = '<span style="color:#b3261e">保存失败：' + esc(e.message || e) + '</span>';
+  });
 }
 
 function paintQuoteSource(){
@@ -7009,7 +7083,9 @@ function qsPick(m){
   if(STATE.quoteSource === next){ paintQuoteSource(); return; }
   var msg = $('qsMsg');
   if(msg){ msg.innerHTML = '<span class="muted">保存中…</span>'; }
-  api('/content', { method: 'PUT', body: { items: { quote_source: { net: next } } } })
+  api('/content', { method: 'PUT', body: { items: { quote_source: {
+    net: next, cats: STATE.quoteCats || ['a', 'b', 'd', 'i'],
+  } } } })
     .then(function(j){
       if(j && j.ok === false) throw new Error(j.error || '保存失败');
       STATE.quoteSource = next;
@@ -13255,13 +13331,20 @@ function paintIsland(){
     +       '<input class="gate-input" type="date" id="adDate">'
     +       '<button class="btn btn-sm btn-secondary" id="adFill" type="button">填入当天课表</button>'
     +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adOff"> 不上课</label>'
-    +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adBold"> 加粗</label>'
+    +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adBold" checked> 加粗</label>'
     +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adCenter" checked> 居中</label>'
     +       '<button class="btn btn-sm" id="adAdd">添加</button>'
     +     '</div>'
+    +     '<div class="ai-fmtbar">'
+    +       '<button type="button" class="ai-fmt" data-fmt="b">B 加粗选中</button>'
+    +       '<button type="button" class="ai-fmt" data-fmt="s">S 加横线</button>'
+    +       '<button type="button" class="ai-fmt" data-fmt="h"># 整行强调</button>'
+    +       '<span class="muted" style="font-size:.72rem">选中几个字再点；行首 # = 这行加粗并居中</span>'
+    +     '</div>'
     +     '<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="200"'
     +       ' placeholder="这一天的安排（可多行），如：\n数学 08:00-09:30\n语文 10:00-11:30"></textarea>'
-    +     '<p class="muted" style="font-size:.72rem;margin:6px 0 0">上面这块的样子就是同学看到的样子（加粗、居中都实时预览）</p>'
+    +     '<p class="muted" style="font-size:.72rem;margin:8px 0 4px">预览（就是首页看到的效果）：</p>'
+    +     '<div class="ai-dprev"><div class="ai-dprev-txt" id="adPrev"></div></div>'
     +   '</div>'
     + '</section>'
 
@@ -13289,6 +13372,9 @@ function paintIsland(){
   $('adBold').onchange = aiDayPreview;
   $('adCenter').onchange = aiDayPreview;
   $('adText').oninput = aiDayPreview;
+  document.querySelectorAll('.ai-fmt').forEach(function(b){
+    b.onclick = function(){ aiFmt(b.getAttribute('data-fmt')); };
+  });
 
   /* 基本项：改完立刻存 */
   $('aiOn').onchange = aiTouch;
@@ -13503,7 +13589,17 @@ function paintDayList(){
   };
 }
 
-/* 后台文本框实时套用「加粗 / 居中」，看到的就是前端效果 */
+/* 后台文本框实时套用「加粗 / 居中」，下方再给一份和首页一样的预览 */
+function aiPrevFmt(text){
+  return String(text == null ? '' : text).split('\n').map(function(line){
+    var head = false, t = line;
+    if(/^#\s?/.test(t)){ head = true; t = t.replace(/^#\s?/, ''); }
+    var h = esc(t);
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+    return head ? '<span class="ln-em">' + h + '</span>' : h;
+  }).join('\n');
+}
 function aiDayPreview(){
   var t = $('adText');
   if(!t) return;
@@ -13511,6 +13607,42 @@ function aiDayPreview(){
   var center = $('adCenter') && $('adCenter').checked;
   t.style.fontWeight = bold ? '800' : '400';
   t.style.textAlign = center ? 'center' : 'left';
+  var pv = $('adPrev');
+  if(pv){
+    pv.innerHTML = aiPrevFmt(t.value) || '<span style="opacity:.45">（这里是预览）</span>';
+    pv.style.fontWeight = bold ? '800' : '500';
+    pv.style.textAlign = center ? 'center' : 'left';
+  }
+}
+/* v3.9.8：选中文字后点按钮加标记（**加粗** / ~~横线~~ / 行首 #） */
+function aiFmt(kind){
+  var t = $('adText');
+  if(!t) return;
+  var v = t.value, a = t.selectionStart, b = t.selectionEnd;
+  if(kind === 'h'){
+    var ls = v.lastIndexOf('\n', a - 1) + 1;
+    if(v.slice(ls, ls + 1) !== '#'){
+      t.value = v.slice(0, ls) + '# ' + v.slice(ls);
+      a += 2; b += 2;
+    }
+  }else{
+    var mark = (kind === 'b') ? '**' : '~~';
+    var sel = v.slice(a, b);
+    if(!sel){
+      t.value = v.slice(0, a) + mark + '文字' + mark + v.slice(b);
+      a = a + mark.length; b = a + 2;
+    }else if(sel.indexOf(mark) === 0 && sel.lastIndexOf(mark) === sel.length - mark.length){
+      var inner = sel.slice(mark.length, sel.length - mark.length);
+      t.value = v.slice(0, a) + inner + v.slice(b);
+      b = a + inner.length;
+    }else{
+      t.value = v.slice(0, a) + mark + sel + mark + v.slice(b);
+      a = a + mark.length; b = a + sel.length;
+    }
+  }
+  t.focus();
+  try{ t.setSelectionRange(a, b); }catch(e){}
+  aiDayPreview();
 }
 
 function aiEditDay(k){
@@ -13531,7 +13663,7 @@ function aiEditDay(k){
 function aiCancelDay(){
   AI_DAY_EDIT = null;
   $('adDate').value = ''; $('adText').value = ''; $('adOff').checked = false;
-  $('adBold').checked = false; $('adCenter').checked = true;
+  $('adBold').checked = true; $('adCenter').checked = true;
   var b = $('adAdd');
   if(b) b.textContent = '添加';
   aiDayPreview();
@@ -15918,6 +16050,20 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.8', date: '2026-10-22', type: 'perf', title: '首屏秒开 · 逐小时天气 · 一言分类 · 自动备份', items: [
+      '首页脚本拆成独立的 app.js（defer）：HTML 只剩骨架 + 样式（约 89KB，原来 413KB），先把头部和骨架画出来，脚本随后加载再填充内容',
+      '首屏加了骨架卡（公告三条 + 板块四张），加载期间不再是空白一片',
+      '班级岛「天气」可以点了：弹层里按小时列出当天温度、天气、降水概率，当前小时高亮，数据缓存 10 分钟',
+      '每日一言后台可以选择只显示哪几类（动画/漫画/游戏/文学/原创/网络/其他/影视/诗词/网易云/哲学/抖机灵），不勾的不拉',
+      '每日一言卡片可以点：点一下换一句新的（本地库模式下会提示不联网）',
+      '今日事项支持按字排版：选中文字点「加粗」「加横线」，行首加 # 表示整行加粗并居中；后台下方有和首页一致的预览',
+      '课程信息默认就是加粗态；临时改的那天也可以单独取消加粗',
+      '备份补齐：Worker 的定时任务现在会真的写全量快照（以前只备成绩），另外每次 push 触发一次 GitHub Action 备份'
+    ], pub: [
+      { cat: '速度', text: '首页打开更快：先显示页面骨架，内容随后自动填充' },
+      { cat: '班级', text: '点班级岛的天气可以看当天每小时天气；每日一言点一下换一句' },
+      { cat: '班级', text: '今日事项支持部分文字加粗、加删除线，考试安排更醒目' }
+    ] },
   { version: '3.9.7', date: '2026-10-22', type: 'feat', title: '班级岛回到深色玻璃 · 编辑实时保存 · 可设加粗居中', items: [
       '班级岛样式回到最初那版深色玻璃（深棕渐变 + 半透明白卡 + 白字 + 右上角橙色光晕），昼夜都保持这块深色玻璃',
       '班级岛编辑改为实时保存：开关、学期、照片、七天横幅、组件、日期、假期，改完 650ms 自动写入，不再有保存按钮；顶部只显示「保存中 / 已自动保存 14:09 / 失败点此重试」',
