@@ -3766,6 +3766,9 @@ function badgeCachedSrc(){
 
 /** 把 /api/badge 的图存成本地 dataURL。force=false 时 7 天内不重复下载。 */
 function badgeCacheLoad(force){
+  /* v3.9.10：轻量模式直接用仓库里的 badge.png（同源 CDN），
+     不走 /api/badge 代理（110KB、约 3.8s）。 */
+  if(liteOn()) return Promise.resolve('./badge.png');
   if(__badgeLoading) return __badgeLoading;
   var cached = badgeCachedSrc();
   var ts = 0;
@@ -4723,6 +4726,11 @@ function renderDailyQuote(){
 var _quoteFetching = false;
 function fetchRemoteQuote(force){
   if(_quoteFetching) return;
+  /* v3.9.10：轻量模式不拉网络语录（本地库够用），省一次跨域请求 */
+  if(liteOn()){
+    if(force && typeof uiMsg === 'function') uiMsg('轻量模式用本地语录，不联网', '#b45309');
+    return;
+  }
   if(!force && _quoteRemote) return;   /* 已经有一句了就不用再拉（除非同学主动点刷新） */
   if(!quoteNetAllowed()){
     if(force && typeof uiMsg === 'function') uiMsg('当前使用的是本地语录库，点「换一句」不联网', '#b45309');
@@ -7889,33 +7897,30 @@ function makeSnapSlider(host, opts){
     return steps[0] + t * (steps[n - 1] - steps[0]);
   }
 
-  host.addEventListener('pointerdown', function(e){
-    if(e.button != null && e.button !== 0) return;
-    dragging = true; vel = 0;
-    lastX = e.clientX; lastT = Date.now();
-    try{ host.setPointerCapture(e.pointerId); }catch(_){}
-    host.__pid = e.pointerId;
-    host.classList.add('snapping');   /* 拖动中禁用 thumb 过渡，保证跟手 */
-    host.classList.remove('snapping');
-    setVal(xToVal(e.clientX), false, true);
-    e.preventDefault();
-  });
-  host.addEventListener('pointermove', function(e){
-    if(!dragging || e.pointerId !== host.__pid) return;
+  /* v3.9.10（站主）：iOS 13 以下没有 PointerEvent —— 字号滑块必须同时支持
+     touch / mouse，否则「进度条拖不动」。这里把三种输入统一成 down/move/end。 */
+  var hasPointer = !!window.PointerEvent;
+  var activeId = null;
+  function down(clientX, id){
+    dragging = true; vel = 0; activeId = id;
+    lastX = clientX; lastT = Date.now();
+    host.classList.remove('snapping');   /* 拖动中禁用过渡，保证跟手 */
+    setVal(xToVal(clientX), false, true);
+  }
+  function move(clientX, id){
+    if(!dragging || id !== activeId) return;
     var now = Date.now(), dt = now - lastT;
     if(dt > 0){
-      var v = (e.clientX - lastX) / dt;              /* px/ms */
+      var v = (clientX - lastX) / dt;                /* px/ms */
       vel = vel * 0.7 + v * 0.3;                     /* 指数平滑 */
-      lastX = e.clientX; lastT = now;
+      lastX = clientX; lastT = now;
     }
-    setVal(xToVal(e.clientX), false, true);
-    e.preventDefault();
-  });
-  function up(e){
-    if(!dragging || (e.pointerId != null && e.pointerId !== host.__pid)) return;
-    dragging = false;
-    var raw = xToVal(e.clientX);
-    var proj = raw + vel * 80;                       /* 速度投影 */
+    setVal(xToVal(clientX), false, true);
+  }
+  function end(clientX, id){
+    if(!dragging || id !== activeId) return;
+    dragging = false; activeId = null;
+    var raw = xToVal(clientX);
     var i = nearestIdx(raw);
     if(Math.abs(vel) >= 0.15){                       /* 快速滑动 → 沿方向走一档 */
       i += (vel > 0 ? 1 : -1);
@@ -7926,8 +7931,48 @@ function makeSnapSlider(host, opts){
     if(opts.onCommit) opts.onCommit(steps[i]);
     if(motionOn()){ try{ navigator.vibrate && navigator.vibrate(8); }catch(_){} }
   }
-  host.addEventListener('pointerup', up);
-  host.addEventListener('pointercancel', up);
+
+  if(hasPointer){
+    host.addEventListener('pointerdown', function(e){
+      if(e.button != null && e.button !== 0) return;
+      try{ host.setPointerCapture(e.pointerId); }catch(_){}
+      down(e.clientX, e.pointerId);
+      e.preventDefault();
+    });
+    host.addEventListener('pointermove', function(e){
+      if(e.pointerId !== activeId) return;
+      move(e.clientX, e.pointerId);
+      if(dragging) e.preventDefault();
+    });
+    host.addEventListener('pointerup', function(e){ end(e.clientX, e.pointerId); });
+    host.addEventListener('pointercancel', function(e){ end(e.clientX, e.pointerId); });
+  }else{
+    /* 老内核：touch + mouse 双通道 */
+    host.addEventListener('touchstart', function(e){
+      var t = e.changedTouches && e.changedTouches[0]; if(!t) return;
+      down(t.clientX, 't');
+      e.preventDefault();
+    }, false);
+    host.addEventListener('touchmove', function(e){
+      var t = e.changedTouches && e.changedTouches[0]; if(!t) return;
+      move(t.clientX, 't');
+      if(dragging) e.preventDefault();
+    }, false);
+    host.addEventListener('touchend', function(e){
+      var t = e.changedTouches && e.changedTouches[0]; if(t) end(t.clientX, 't'); else end(lastX, 't');
+    }, false);
+    host.addEventListener('touchcancel', function(e){
+      var t = e.changedTouches && e.changedTouches[0];
+      end(t ? t.clientX : lastX, 't');
+    }, false);
+    host.addEventListener('mousedown', function(e){
+      if(e.button !== 0) return;
+      down(e.clientX, 'm');
+      e.preventDefault();
+    }, false);
+    document.addEventListener('mousemove', function(e){ if(dragging) move(e.clientX, 'm'); }, false);
+    document.addEventListener('mouseup', function(e){ if(dragging) end(e.clientX, 'm'); }, false);
+  }
 
   host.__snapRender = function(){ pw = 0; render(cur, false); };
   render(cur, false);
@@ -9340,6 +9385,9 @@ function islandWeather(){
     el.textContent = ISLAND_WX.t + '° ' + ISLAND_WX.s;
     return;
   }
+  /* v3.9.10：轻量模式不主动联网（省流量、少一次 200ms+ 的请求），
+     有旧缓存就显示旧值，没有就留「—」。 */
+  if(liteOn()){ el.textContent = '—'; return; }
   /* Open-Meteo：免费、免 key、允许跨域；坐标按修水县取的 */
   fetch('https://api.open-meteo.com/v1/forecast?latitude=29.03&longitude=114.57'
       + '&current=temperature_2m,weather_code&timezone=Asia%2FShanghai')
