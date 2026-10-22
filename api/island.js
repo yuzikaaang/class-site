@@ -103,6 +103,9 @@ function normDays(raw) {
       text: str(v.text, MAX_DAY_TEXT),
       off: !!v.off,
       label: str(v.label, 16),
+      /* v3.9.7：当天那一条可以单独设加粗 / 是否居中（默认居中） */
+      bold: !!v.bold,
+      center: v.center !== false,
     };
   });
   return out;
