@@ -950,6 +950,19 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 .ai-mini{flex:none;font-size:.68rem;line-height:1;padding:4px 8px;border-radius:8px;
   border:1px solid var(--border);background:var(--bg-1);color:var(--fg-2);cursor:pointer}
 .ai-mini:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
+/* v3.9.7：实时保存状态 / 组件加回按钮 / 格式标记 / 照片预览 */
+.ai-save-state{flex:none;font-size:.72rem;font-weight:700;color:var(--fg-3);
+  padding:5px 10px;border-radius:999px;background:var(--bg-2);white-space:nowrap}
+.ai-save-state.saving{color:var(--accent-ink);background:var(--tint)}
+.ai-save-state.ok{color:#15803d;background:#eaf7ee}
+.ai-save-state.err{color:#b3261e;background:#fdecea;cursor:pointer}
+.ai-add{font-size:.72rem;padding:5px 10px;border-radius:999px;border:1px dashed var(--border);
+  background:transparent;color:var(--fg-2);cursor:pointer}
+.ai-add:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
+.ai-ovflag{flex:none;font-size:.62rem;font-weight:800;color:var(--accent-ink);
+  background:var(--tint);border-radius:5px;padding:1px 5px}
+.ai-photo-row img{display:block;margin-top:10px;max-width:180px;max-height:180px;
+  border-radius:10px;border:1px solid var(--border);object-fit:cover}
 .ai-dform input[type=date]{flex:0 0 132px;min-width:0}
 .ai-dform input#adText{flex:1 1 200px;min-width:0}
 .ai-dform input#ahLabel{flex:1 1 120px;min-width:0}
@@ -1611,7 +1624,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.9.6';
+var SITE_VERSION = '3.9.7';
 var VER_DATE = '2026-10-22';
 
 /* ---- 运行时状态 ---- */
@@ -13183,9 +13196,9 @@ function paintIsland(){
     +   '<div style="flex:1;min-width:0">'
     +     '<b style="font-size:.92rem">班级岛</b>'
     +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
-    +       '首页公告上面那条。第二行是「今日事项」横幅，<b>改完点保存</b>，同学刷新就变</p>'
+    +       '首页公告上面那条。<b>改动实时保存</b>，不用再点保存；同学刷新就能看到</p>'
     +   '</div>'
-    +   '<button class="btn btn-sm" id="aiSave">保存</button>'
+    +   '<span class="ai-save-state" id="aiStage">已同步</span>'
     +   '<button class="btn btn-sm btn-secondary" id="aiReload">重新读取</button>'
     + '</div>'
 
@@ -13198,6 +13211,20 @@ function paintIsland(){
     +         '<input class="gate-input" id="aiTerm" maxlength="30" value="' + attr(AI.term || '') + '" placeholder="2026 年秋季 · 高二上"></div>'
     +       '<div class="field"><label>开学那一周的周一（算周数用）</label>'
     +         '<input class="gate-input" id="aiStart" type="date" value="' + attr(AI.startDate || '') + '"></div>'
+    +     '</div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>今日事项照片</h3>'
+    +     '<p class="sub">同学点首页「今日事项」那一行会弹出这张图，可放大缩小；留空则点击不弹图</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<input class="gate-input" id="aiPhoto" maxlength="500" placeholder="粘贴图片直链，或写仓库相对路径 ./photo.jpg">'
+    +     '<div class="ai-photo-row">'
+    +       '<img id="aiPhotoPrev" alt="预览" style="display:none">'
+    +       '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
+    +         '直链（图床 / 云盘外链）最稳；用仓库里的图就写 <b>./文件名.jpg</b>（和 index.html 放同一层）。'
+    +         '填好会自动预览，有效才会显示缩略图</p>'
     +     '</div>'
     +   '</div>'
     + '</section>'
@@ -13220,28 +13247,21 @@ function paintIsland(){
 
     + '<section class="panel ai-sec">'
     +   '<div class="panel-head"><div><h3>按日期临时改（提前改某一天）</h3>'
-    +     '<p class="sub">只影响那一天：考试、调课、临时放假都写这里；<b>支持换行</b>，<b>点已有条目可再次修改</b>。'
-    +       '写考试日程时先点「填入当天课表」，再改其中一两个字即可</p></div></div>'
+    +     '<p class="sub">只影响那一天：考试、调课、临时放假都写这里。<b>支持换行</b>，'
+    +       '可单独设<b>加粗</b>（让考试更醒目）和是否<b>居中</b>；点已有条目可再次修改</p></div></div>'
     +   '<div class="panel-body">'
     +     '<div id="aiDayList"></div>'
     +     '<div class="ai-dform">'
     +       '<input class="gate-input" type="date" id="adDate">'
     +       '<button class="btn btn-sm btn-secondary" id="adFill" type="button">填入当天课表</button>'
-    +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adOff"> 这天不上课</label>'
+    +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adOff"> 不上课</label>'
+    +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adBold"> 加粗</label>'
+    +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adCenter" checked> 居中</label>'
     +       '<button class="btn btn-sm" id="adAdd">添加</button>'
     +     '</div>'
     +     '<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="200"'
     +       ' placeholder="这一天的安排（可多行），如：\n数学 08:00-09:30\n语文 10:00-11:30"></textarea>'
-    +   '</div>'
-    + '</section>'
-
-    + '<section class="panel ai-sec">'
-    +   '<div class="panel-head"><div><h3>今日事项照片</h3>'
-    +     '<p class="sub">同学点首页「今日事项」那一行会弹出这张图，可放大缩小；留空则点击不弹图</p></div></div>'
-    +   '<div class="panel-body">'
-    +     '<input class="gate-input" id="aiPhoto" maxlength="500" placeholder="https://… 或仓库里的相对路径，如 ./photo.jpg">'
-    +     '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
-    +       '直链（图床 / 云盘外链）最稳；用仓库里的图就写 <b>./文件名.jpg</b>（和 index.html 放同一层）</p>'
+    +     '<p class="muted" style="font-size:.72rem;margin:6px 0 0">上面这块的样子就是同学看到的样子（加粗、居中都实时预览）</p>'
     +   '</div>'
     + '</section>'
 
@@ -13259,7 +13279,6 @@ function paintIsland(){
     +   '</div>'
     + '</section>';
 
-  $('aiSave').onclick = islandSave;
   $('aiReload').onclick = renderIsland;
   $('adAdd').onclick = aiAddDay;
   $('adFill').onclick = aiFillDay;
@@ -13267,15 +13286,109 @@ function paintIsland(){
   $('adText').onkeydown = function(e){
     if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); aiAddDay(); }
   };
+  $('adBold').onchange = aiDayPreview;
+  $('adCenter').onchange = aiDayPreview;
+  $('adText').oninput = aiDayPreview;
 
+  /* 基本项：改完立刻存 */
+  $('aiOn').onchange = aiTouch;
+  $('aiTerm').oninput = aiTouch;
+  $('aiStart').onchange = aiTouch;
+
+  /* 照片：输入即存 + 实时预览（有效地址才显示缩略图） */
   var ph = $('aiPhoto');
-  if(ph) ph.value = AI.photo || '';
+  if(ph){
+    ph.value = AI.photo || '';
+    ph.oninput = function(){
+      AI.photo = String(ph.value || '').trim().slice(0, 500);
+      aiPhotoPreview();
+      aiTouch();
+    };
+    aiPhotoPreview();
+  }
 
   paintComps();
   paintBanner();
   paintDayList();
   paintHols();
+  aiDayPreview();
 }
+
+/* ============================================================================
+ * v3.9.7（站主）：实时保存
+ * ----------------------------------------------------------------------------
+ * 站主原话：「太繁琐了……我要更新内容，先要在下面更新这个表，然后点击添加之后
+ *            又在上面点保存，如果忘了一步，我重新看的时候就全部都没了。
+ *            那就实时更新，就跟我录那个数据一样，不要再加这么多保存让我搞了」。
+ *
+ * 做法：任何一处改动（开关 / 学期 / 照片 / 横幅 / 组件 / 日期 / 假期）都调用
+ *       aiTouch()，650ms 内没有新动作就自动 POST；顶部只显示状态，不再有保存按钮。
+ *       保存失败会变成「保存失败，点此重试」，点一下重发。
+ * ========================================================================= */
+var AI_T = null, AI_BUSY = false, AI_AGAIN = false;
+function aiStage(txt, cls){
+  var el = $('aiStage');
+  if(!el) return;
+  el.textContent = txt;
+  el.className = 'ai-save-state' + (cls ? ' ' + cls : '');
+  el.onclick = (cls === 'err') ? aiFlush : null;
+}
+function aiTouch(){
+  aiStage('保存中…', 'saving');
+  clearTimeout(AI_T);
+  AI_T = setTimeout(aiFlush, 650);
+}
+function aiCollect(){
+  var on = $('aiOn'), term = $('aiTerm'), st = $('aiStart'), ph = $('aiPhoto');
+  AI.on = !!(on && on.checked);
+  AI.term = String((term && term.value) || '').trim();
+  AI.startDate = String((st && st.value) || '').trim();
+  AI.photo = String((ph && ph.value) || '').trim().slice(0, 500);
+  Array.prototype.forEach.call(document.querySelectorAll('#aiBanner [data-bk]'), function(el){
+    AI.banner[el.getAttribute('data-bk')] = String(el.value || '').trim().slice(0, 60);
+  });
+  return {
+    on: AI.on,
+    term: AI.term,
+    startDate: AI.startDate,
+    components: (AI.components || []).slice(),
+    banner: AI.banner,
+    days: AI.days,
+    holidays: AI.holidays,
+    photo: AI.photo,
+  };
+}
+function aiFlush(){
+  clearTimeout(AI_T);
+  if(AI_BUSY){ AI_AGAIN = true; return; }
+  AI_BUSY = true;
+  AI_AGAIN = false;
+  var data = aiCollect();
+  api('/island', { method: 'POST', body: { data: data } }).then(function(j){
+    AI_BUSY = false;
+    if(j && j.data) AI = j.data;
+    var t = new Date();
+    aiStage('已自动保存 ' + ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2), 'ok');
+    if(AI_AGAIN) aiFlush();
+  }).catch(function(e){
+    AI_BUSY = false;
+    aiStage('保存失败，点此重试', 'err');
+    try{ console.warn('[island save]', e && e.message); }catch(err){}
+  });
+}
+/* 离开页面前把没来得及发的改动补发掉（keepalive 保证请求不被中断） */
+function aiFlushBeacon(){
+  if(!AI_T && !AI_BUSY) return;
+  try{
+    var body = JSON.stringify({ data: aiCollect() });
+    fetch(API_BASE + '/api/island', {
+      method: 'POST', keepalive: true,
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + STATE.token },
+      body: body,
+    }).catch(function(){});
+  }catch(e){}
+}
+try{ window.addEventListener('pagehide', aiFlushBeacon); }catch(e){}
 
 /* ---------- 组件 ---------- */
 function paintComps(){
@@ -13288,77 +13401,50 @@ function paintComps(){
       + '<span class="grip">⋮⋮</span>'
       + '<span class="nm">' + esc((info && info.n) || k) + '</span>'
       + '<span class="muted" style="font-size:.7rem">' + esc((info && info.d) || '') + '</span>'
-      + '<button type="button" data-up="1">↑</button>'
-      + '<button type="button" data-down="1">↓</button>'
-      + '<button type="button" data-del="1">✕</button>'
+
+      + '<button type="button" class="ai-x" data-off="' + k + '" title="摘掉">✕</button>'
       + '</div>';
-  }).join('') || '<p class="muted" style="font-size:.8rem">还没有启用任何组件</p>';
+  }).join('');
 
-  var rest = AI_COMPS.filter(function(c){ return used.indexOf(c.k) < 0; });
+  var rest = AI_COMPS.filter(function(x){ return used.indexOf(x.k) < 0; });
   $('aiRest').innerHTML = rest.length
-    ? rest.map(function(c){
-        return '<button class="btn btn-sm btn-secondary" type="button" data-add="' + c.k + '">＋ ' + esc(c.n) + '</button>';
+    ? rest.map(function(x){
+        return '<button type="button" class="ai-add" data-add="' + x.k + '">＋ ' + esc(x.n) + '</button>';
       }).join('')
-    : '<span class="muted" style="font-size:.76rem">四个组件都用上了</span>';
-
-  bindCompEvents();
-}
-
-function bindCompEvents(){
-  var box = $('aiComps');
-  if(!box) return;
+    : '<span class="muted" style="font-size:.74rem">四个组件都在用</span>';
 
   box.onclick = function(e){
-    var t = e.target;
-    var cardEl = t.closest ? t.closest('.ai-comp') : null;
-    if(!cardEl) return;
-    var k = cardEl.getAttribute('data-c');
-    var arr = (AI.components || []).slice();
-    var i = arr.indexOf(k);
-    if(i < 0) return;
-    if(t.hasAttribute('data-del')){ arr.splice(i, 1); AI.components = arr; paintComps(); return; }
-    if(t.hasAttribute('data-up') && i > 0){ arr.splice(i - 1, 0, arr.splice(i, 1)[0]); AI.components = arr; paintComps(); return; }
-    if(t.hasAttribute('data-down') && i < arr.length - 1){ arr.splice(i + 1, 0, arr.splice(i, 1)[0]); AI.components = arr; paintComps(); return; }
+    var k = e.target.getAttribute && e.target.getAttribute('data-off');
+    if(!k) return;
+    AI.components = (AI.components || []).filter(function(x){ return x !== k; });
+    paintComps(); aiTouch();
   };
-
   $('aiRest').onclick = function(e){
     var k = e.target.getAttribute && e.target.getAttribute('data-add');
     if(!k) return;
-    var arr = (AI.components || []).slice();
-    if(arr.indexOf(k) < 0) arr.push(k);
-    AI.components = arr;
-    paintComps();
+    AI.components = (AI.components || []).concat([k]);
+    paintComps(); aiTouch();
   };
 
-  box.addEventListener('dragstart', function(e){
-    var el = e.target.closest ? e.target.closest('.ai-comp') : null;
-    if(!el) return;
-    AI_DRAG = Array.prototype.indexOf.call(box.children, el);
-    el.classList.add('dragging');
-    try{ e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'x'); }catch(err){}
-  });
-  box.addEventListener('dragend', function(){
-    Array.prototype.forEach.call(box.children, function(x){ x.classList.remove('dragging', 'drag-over'); });
-  });
-  box.addEventListener('dragover', function(e){
-    e.preventDefault();
-    var el = e.target.closest ? e.target.closest('.ai-comp') : null;
-    if(!el) return;
-    Array.prototype.forEach.call(box.children, function(x){ x.classList.remove('drag-over'); });
-    el.classList.add('drag-over');
-  });
-  box.addEventListener('drop', function(e){
-    e.preventDefault();
-    var el = e.target.closest ? e.target.closest('.ai-comp') : null;
-    if(!el || AI_DRAG == null) return;
-    var to = Array.prototype.indexOf.call(box.children, el);
-    if(to < 0) return;
-    var arr = (AI.components || []).slice();
-    var moved = arr.splice(AI_DRAG, 1)[0];
-    arr.splice(to, 0, moved);
-    AI.components = arr;
-    AI_DRAG = null;
-    paintComps();
+  /* 拖拽排序 */
+  Array.prototype.forEach.call(box.querySelectorAll('.ai-comp'), function(el){
+    el.addEventListener('dragstart', function(e){
+      AI_DRAG = Number(el.getAttribute('data-i'));
+      try{ e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'x'); }catch(err){}
+    });
+    el.addEventListener('dragover', function(e){ e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', function(){ el.classList.remove('drag-over'); });
+    el.addEventListener('drop', function(e){
+      e.preventDefault(); el.classList.remove('drag-over');
+      var to = Number(el.getAttribute('data-i'));
+      if(AI_DRAG == null || AI_DRAG === to) return;
+      var arr = (AI.components || []).slice();
+      var moved = arr.splice(AI_DRAG, 1)[0];
+      arr.splice(to, 0, moved);
+      AI.components = arr;
+      AI_DRAG = null;
+      paintComps(); aiTouch();
+    });
   });
 }
 
@@ -13378,6 +13464,7 @@ function paintBanner(){
     var k = e.target.getAttribute && e.target.getAttribute('data-bk');
     if(!k) return;
     AI.banner[k] = String(e.target.value || '').slice(0, 60);
+    aiTouch();
   };
 }
 
@@ -13387,7 +13474,7 @@ function paintDayList(){
   var keys = Object.keys(AI.days || {}).sort();
   var host = $('aiDayList');
   if(!keys.length){
-    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">还没有单独设置的日期。点上面「填入课表」可以基于当天默认课表改一两个字。</p>';
+    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">还没有单独设置的日期。点上面「填入当天课表」可以基于当天默认课表改一两个字。</p>';
     return;
   }
   host.innerHTML = keys.map(function(k){
@@ -13396,6 +13483,8 @@ function paintDayList(){
     return '<div class="ai-ovitem ai-ovclick' + (AI_DAY_EDIT === k ? ' on' : '') + '" data-dayedit="' + attr(k) + '">'
       + '<span class="ai-ovtag ' + (v.off ? 'off' : 'plan') + '">' + (v.off ? '不上课' : '改文案') + '</span>'
       + '<b>' + esc(k.slice(5)) + '</b>'
+      + (v.bold ? '<span class="ai-ovflag">粗</span>' : '')
+      + (v.center === false ? '<span class="ai-ovflag">左</span>' : '')
       + '<span class="muted">' + esc(one) + '</span>'
       + '<button type="button" data-daydel="' + attr(k) + '" title="删除">✕</button>'
       + '</div>';
@@ -13406,11 +13495,22 @@ function paintDayList(){
       delete AI.days[del];
       if(AI_DAY_EDIT === del) aiCancelDay();
       paintDayList();
+      aiTouch();
       return;
     }
     var ed = e.target.closest && e.target.closest('[data-dayedit]');
     if(ed) aiEditDay(ed.getAttribute('data-dayedit'));
   };
+}
+
+/* 后台文本框实时套用「加粗 / 居中」，看到的就是前端效果 */
+function aiDayPreview(){
+  var t = $('adText');
+  if(!t) return;
+  var bold = $('adBold') && $('adBold').checked;
+  var center = $('adCenter') && $('adCenter').checked;
+  t.style.fontWeight = bold ? '800' : '400';
+  t.style.textAlign = center ? 'center' : 'left';
 }
 
 function aiEditDay(k){
@@ -13420,17 +13520,21 @@ function aiEditDay(k){
   $('adDate').value = k;
   $('adText').value = v.text || '';
   $('adOff').checked = !!v.off;
+  $('adBold').checked = !!v.bold;
+  $('adCenter').checked = v.center !== false;
   var b = $('adAdd');
   if(b) b.textContent = '更新这一天';
+  aiDayPreview();
   paintDayList();
   $('adText').focus();
-  toast('已载入 ' + k.slice(5) + '，改完点「更新这一天」', 'ok', 2400);
 }
 function aiCancelDay(){
   AI_DAY_EDIT = null;
   $('adDate').value = ''; $('adText').value = ''; $('adOff').checked = false;
+  $('adBold').checked = false; $('adCenter').checked = true;
   var b = $('adAdd');
   if(b) b.textContent = '添加';
+  aiDayPreview();
 }
 
 /* 一键填入「当天课表」：默认取所选日期的星期横幅；
@@ -13461,12 +13565,19 @@ function aiAddDay(){
   var text = String($('adText').value || '').trim().slice(0, 200);
   var off = !!$('adOff').checked;
   if(!d){ toast('先选日期', 'warn'); return; }
-  if(!text && !off){ toast('写点今日事项，或者勾「这天不上课」', 'warn', 2800); return; }
-  AI.days[d] = { text: text, off: off, label: off ? (text || '今天不上课') : '' };
+  if(!text && !off){ toast('写点今日事项，或者勾「不上课」', 'warn', 2800); return; }
+  AI.days[d] = {
+    text: text,
+    off: off,
+    label: off ? (text || '今天不上课') : '',
+    bold: !!$('adBold').checked,
+    center: !!$('adCenter').checked,
+  };
   AI_DAY_EDIT = null;
   aiCancelDay();
   paintDayList();
-  toast('已保存到这一天，别忘了点右上角「保存」', 'ok', 2600);
+  aiTouch();
+  toast('已写入这一天，自动保存中…', 'ok', 2200);
 }
 
 /* ---------- 假期（可再次修改时间范围 / 复用） ---------- */
@@ -13493,6 +13604,7 @@ function paintHols(){
       AI.holidays = AI.holidays.filter(function(x){ return x.id !== del; });
       if(AI_HOL_EDIT === del) aiCancelHol();
       paintHols();
+      aiTouch();
       return;
     }
     var cp = e.target.getAttribute && e.target.getAttribute('data-hcopy');
@@ -13524,7 +13636,6 @@ function aiEditHol(id){
   var b = $('ahAdd');
   if(b) b.textContent = '更新这一段';
   paintHols();
-  toast('已载入「' + (h.label || '假期') + '」，改完点「更新这一段」', 'ok', 2400);
 }
 function aiCancelHol(){
   AI_HOL_EDIT = null;
@@ -13541,48 +13652,27 @@ function aiAddHoliday(){
   if(to < from){ toast('结束日期不能早于开始日期', 'warn'); return; }
   if(AI_HOL_EDIT){
     var cur = (AI.holidays || []).filter(function(x){ return x.id === AI_HOL_EDIT; })[0];
-    if(cur){
-      cur.from = from; cur.to = to; cur.label = label || '假期';
-    }
-    toast('已更新，别忘了点右上角「保存」', 'ok', 2600);
+    if(cur){ cur.from = from; cur.to = to; cur.label = label || '假期'; }
+    toast('已更新，自动保存中…', 'ok', 2200);
   }else{
     AI.holidays.push({ id: 'h' + Date.now().toString(36), from: from, to: to, label: label || '假期' });
-    toast('已添加，别忘了点右上角「保存」', 'ok', 2600);
+    toast('已添加，自动保存中…', 'ok', 2200);
   }
   aiCancelHol();
   paintHols();
+  aiTouch();
 }
 
-/* ---------- 保存 ---------- */
-function islandSave(){
-  var btn = $('aiSave');
-  if(btn){ btn.disabled = true; btn.textContent = '保存中…'; }
-
-  /* 横幅里正在编辑的输入框，按 DOM 再对一遍 */
-  Array.prototype.forEach.call(document.querySelectorAll('#aiBanner [data-bk]'), function(el){
-    AI.banner[el.getAttribute('data-bk')] = String(el.value || '').trim().slice(0, 60);
-  });
-
-  var data = {
-    on: $('aiOn').checked,
-    term: String($('aiTerm').value || '').trim(),
-    startDate: String($('aiStart').value || '').trim(),
-    components: (AI.components || []).slice(),
-    banner: AI.banner,
-    days: AI.days,
-    holidays: AI.holidays,
-    photo: String(($('aiPhoto') || {}).value || '').trim().slice(0, 500),
-  };
-
-  api('/island', { method: 'POST', body: { data: data } }).then(function(j){
-    AI = j.data;
-    if(btn){ btn.disabled = false; btn.textContent = '保存'; }
-    toast('已保存，同学刷新就能看到', 'ok');
-    paintIsland();
-  }).catch(function(e){
-    if(btn){ btn.disabled = false; btn.textContent = '保存'; }
-    toast('保存失败：' + e.message, 'err', 3200);
-  });
+/* 照片缩略图预览：能加载才显示，加载失败就藏起来 */
+function aiPhotoPreview(){
+  var im = $('aiPhotoPrev');
+  var ph = $('aiPhoto');
+  if(!im || !ph) return;
+  var u = String(ph.value || '').trim();
+  if(!u){ im.style.display = 'none'; im.removeAttribute('src'); return; }
+  im.onload = function(){ im.style.display = ''; };
+  im.onerror = function(){ im.style.display = 'none'; };
+  im.src = u;
 }
 
 /* ============================================================================
@@ -15828,6 +15918,18 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.7', date: '2026-10-22', type: 'feat', title: '班级岛回到深色玻璃 · 编辑实时保存 · 可设加粗居中', items: [
+      '班级岛样式回到最初那版深色玻璃（深棕渐变 + 半透明白卡 + 白字 + 右上角橙色光晕），昼夜都保持这块深色玻璃',
+      '班级岛编辑改为实时保存：开关、学期、照片、七天横幅、组件、日期、假期，改完 650ms 自动写入，不再有保存按钮；顶部只显示「保存中 / 已自动保存 14:09 / 失败点此重试」',
+      '按日期临时改可单独设「加粗」与「是否居中」：当天有几节课要考试时，勾上加粗就能在首页更醒目；不勾居中就左对齐',
+      '后台文本框实时套用加粗/居中，看到的就是同学看到的样子；日期条目上会标「粗」「左」',
+      '今日事项照片挪到面板第二块并带缩略图预览：地址有效才显示图，填错不会有坏图',
+      '还没配照片时，管理员点首页今日事项会给出去处提示',
+      '离开页面前会把没来得及发出的改动补发，不会因为马上关掉而丢'
+    ], pub: [
+      { cat: '班级', text: '班级小岛回到深色玻璃样式；当天有考试时可加粗显示，更醒目' },
+      { cat: '班级', text: '小岛编辑改为实时保存，改完不用再点保存' }
+    ] },
   { version: '3.9.6', date: '2026-10-22', type: 'feat', title: '班级岛改气泡玻璃 · 点横幅看照片 · 横屏侧栏修复', items: [
       '班级岛换回气泡玻璃质感：半透明白/黑底 + 模糊 + 内高光，昼夜两套自动适配，四个信息块做成半透明小气泡',
       '四个信息块字号按屏幕宽度分三档收小，窄屏（≤360）下「22° 多云」这类最长文案也能完整显示',
