@@ -1492,36 +1492,52 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* ===== 班级岛（v3.9.3，站主）=====
    第一行 时间 / 天气 / 周数 / 学期，第二行是一条「今日事项」横幅。
    横幅内容在后台按星期写，也能按具体日期临时改；放假区间自动换成倒计时。 */
-.island{margin:0 0 18px;border-radius:22px;padding:12px 14px;
-  background:linear-gradient(145deg,rgba(30,26,23,.95),rgba(62,48,38,.92));
-  border:1px solid rgba(255,255,255,.10);color:#fff;
-  box-shadow:0 12px 30px rgba(70,35,10,.20);position:relative;overflow:hidden}
+/* v3.9.5（站主）：班级岛跟随站点主题配色 + 全部居中
+   ------------------------------------------------------------
+   原来写死深棕底 + 白字，白天模式下像一块「黑板」贴在奶油色页面里；
+   现在浅色用奶油渐变底 + 深字、深色用深棕底 + 浅字，字色全部走
+   --fg / --fg-2 / --fg-3（随昼夜自动对应），不再有看不清的地方。 */
+.island{margin:0 0 18px;border-radius:22px;padding:13px 14px;text-align:center;
+  background:linear-gradient(145deg,#fffdfa,#fff2e6);
+  border:1px solid rgba(120,53,15,.10);color:var(--fg);
+  box-shadow:0 1px 2px rgba(120,53,15,.05),0 10px 26px rgba(120,53,15,.08);
+  position:relative;overflow:hidden}
+.dark .island{background:linear-gradient(145deg,#2c2522,#211d1a);
+  border-color:rgba(194,65,12,.20);
+  box-shadow:0 12px 30px rgba(0,0,0,.35)}
 .island::after{content:'';position:absolute;right:-40px;top:-60px;width:180px;height:180px;
-  border-radius:50%;background:radial-gradient(circle,rgba(251,146,60,.28),transparent 70%);pointer-events:none}
-.island-row{display:flex;gap:8px;align-items:stretch;position:relative;z-index:1}
+  border-radius:50%;background:radial-gradient(circle,rgba(249,115,22,.10),transparent 70%);pointer-events:none}
+.dark .island::after{background:radial-gradient(circle,rgba(251,146,60,.20),transparent 70%)}
+.island-row{display:flex;gap:8px;align-items:stretch;justify-content:center;position:relative;z-index:1}
 .island-row + .island-row{margin-top:9px}
-.island-chip{flex:1 1 0;min-width:0;background:rgba(255,255,255,.10);border-radius:14px;
-  padding:7px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px}
-.island-chip .k{font-size:.58rem;letter-spacing:.1em;color:rgba(255,255,255,.5);font-weight:700}
-.island-chip .v{font-size:.9rem;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.island-chip{flex:1 1 0;min-width:0;background:var(--tint);border:1px solid rgba(120,53,15,.07);
+  border-radius:14px;padding:8px 10px;display:flex;flex-direction:column;
+  justify-content:center;align-items:center;gap:2px;text-align:center}
+.dark .island-chip{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.08)}
+.island-chip .k{font-size:.58rem;letter-spacing:.1em;color:var(--fg-3);font-weight:700}
+.island-chip .v{font-size:.9rem;font-weight:800;color:var(--fg);max-width:100%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .island-chip.t .v{font-variant-numeric:tabular-nums;font-size:1.02rem;letter-spacing:.02em}
 
-/* 横幅 */
-.island-banner{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:8px;
-  padding:9px 11px;border-radius:14px;background:rgba(255,255,255,.09);
-  border:1px solid rgba(255,255,255,.10)}
+/* 横幅：标签 + 文字整体居中，文字多行时逐行居中 */
+.island-banner{flex:1 1 auto;min-width:0;display:flex;justify-content:center;align-items:center;
+  gap:8px;padding:10px 12px;border-radius:14px;background:#fff;
+  border:1px solid rgba(120,53,15,.10);text-align:center}
+.dark .island-banner{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10)}
 .island-banner .tag{flex:none;font-size:.6rem;font-weight:800;letter-spacing:.06em;
-  color:#ffd7bb;background:rgba(251,146,60,.20);border:1px solid rgba(251,146,60,.30);
-  border-radius:999px;padding:2px 8px}
-/* v3.9.4：横幅支持后台换行 —— pre-line 保留 \n，不再截断行数 */
-.island-banner .txt{flex:1 1 auto;min-width:0;font-size:.82rem;font-weight:700;color:#fff;
-  line-height:1.5;white-space:pre-line;word-break:break-word}
+  color:var(--accent-ink);background:var(--tint);border:1px solid #ffd8b8;
+  border-radius:999px;padding:2px 9px}
+.dark .island-banner .tag{color:#ffd7bb;background:rgba(251,146,60,.20);border-color:rgba(251,146,60,.30)}
+.island-banner .txt{flex:0 1 auto;min-width:0;font-size:.82rem;font-weight:700;color:var(--fg);
+  line-height:1.55;white-space:pre-line;word-break:break-word;text-align:center}
 .island-banner .txt b{font-weight:800}
-.island-banner.hol{background:rgba(255,255,255,.14);border-style:dashed}
-.island-banner.hol .tag{color:#fff;background:rgba(255,255,255,.20);border-color:rgba(255,255,255,.28)}
-.island-foot{display:flex;justify-content:space-between;align-items:center;
-  margin-top:7px;font-size:.58rem;color:rgba(255,255,255,.42);position:relative;z-index:1}
-.island-foot b{color:rgba(255,255,255,.66);font-weight:700}
+.island-banner.hol{background:var(--tint);border-style:dashed;border-color:#f2cfae}
+.dark .island-banner.hol{background:rgba(251,146,60,.10);border-color:rgba(251,146,60,.28)}
+.island-banner.hol .tag{color:#9a3412;background:#fff;border-color:#ffd8b8}
+.dark .island-banner.hol .tag{color:#ffd7bb;background:rgba(251,146,60,.22);border-color:rgba(251,146,60,.34)}
+.island-foot{display:flex;justify-content:center;align-items:center;gap:14px;
+  margin-top:9px;font-size:.58rem;color:var(--fg-3);position:relative;z-index:1}
+.island-foot b{color:var(--fg-2);font-weight:700}
 @media screen and (max-width:420px){
   .island{padding:10px 11px;border-radius:18px}
   .island-chip{padding:6px 8px;border-radius:12px}
@@ -4546,8 +4562,8 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.9.4';
-var VER_DATE = '2026-10-21';
+var SITE_VERSION = '3.9.5';
+var VER_DATE = '2026-10-22';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
   gitee:  'https://gitee.com/zikang0529/class-site',
