@@ -1584,6 +1584,9 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   color:#fff;font-size:1.1rem;line-height:1;display:flex;align-items:center;justify-content:center;
   cursor:pointer;backdrop-filter:blur(8px)}
 .isl-photo-close:active{transform:scale(.94)}
+.isl-photo-err{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;
+  color:#fff;font-size:.92rem;font-weight:700;line-height:1.9;pointer-events:none}
+.isl-photo-err span{display:block;font-size:.74rem;font-weight:500;color:rgba(255,255,255,.62)}
 .isl-photo-tip{position:absolute;bottom:22px;left:0;right:0;text-align:center;color:rgba(255,255,255,.62);
   font-size:.7rem;letter-spacing:.02em;pointer-events:none}
 @media screen and (max-width:420px){.isl-photo-tip{font-size:.66rem;bottom:16px}}
@@ -3574,6 +3577,9 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     <div class="isl-photo-mask" id="islPhotoMask" onclick="islPhotoBackdrop(event)">
       <div class="isl-photo-stage" id="islPhotoStage">
         <img id="islPhotoImg" alt="今日事项照片" draggable="false">
+        <div class="isl-photo-err" id="islPhotoErr" style="display:none">
+          照片加载失败<br><span>请检查后台「今日事项照片」填的地址</span>
+        </div>
       </div>
       <button class="isl-photo-close" onclick="islPhotoClose()" aria-label="关闭">✕</button>
       <div class="isl-photo-tip">双指缩放 · 拖动查看 · 双击放大</div>
@@ -13126,6 +13132,17 @@ function islPhotoOpen(){
   var m = document.getElementById('islPhotoMask');
   var img = document.getElementById('islPhotoImg');
   if(!m || !img) return;
+  var err = document.getElementById('islPhotoErr');
+  if(err) err.style.display = 'none';
+  img.style.visibility = 'visible';
+  img.onerror = function(){
+    if(err) err.style.display = '';
+    img.style.visibility = 'hidden';
+  };
+  img.onload = function(){
+    if(err) err.style.display = 'none';
+    img.style.visibility = 'visible';
+  };
   img.src = ISLAND.photo;
   islPhotoReset();
   try{ islPhotoBind(); }catch(e){}   /* 首次打开时才挂手势，不占启动时间 */
