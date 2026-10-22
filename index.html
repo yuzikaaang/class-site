@@ -1492,42 +1492,51 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* ===== 班级岛（v3.9.3，站主）=====
    第一行 时间 / 天气 / 周数 / 学期，第二行是一条「今日事项」横幅。
    横幅内容在后台按星期写，也能按具体日期临时改；放假区间自动换成倒计时。 */
-/* v3.9.5（站主）：班级岛跟随站点主题配色 + 全部居中
+/* v3.9.6（站主）：班级岛改回「气泡玻璃」质感，浅色/深色都适配
    ------------------------------------------------------------
-   原来写死深棕底 + 白字，白天模式下像一块「黑板」贴在奶油色页面里；
-   现在浅色用奶油渐变底 + 深字、深色用深棕底 + 浅字，字色全部走
-   --fg / --fg-2 / --fg-3（随昼夜自动对应），不再有看不清的地方。 */
-.island{margin:0 0 18px;border-radius:22px;padding:13px 14px;text-align:center;
-  background:linear-gradient(145deg,#fffdfa,#fff2e6);
-  border:1px solid rgba(120,53,15,.10);color:var(--fg);
-  box-shadow:0 1px 2px rgba(120,53,15,.05),0 10px 26px rgba(120,53,15,.08);
-  position:relative;overflow:hidden}
-.dark .island{background:linear-gradient(145deg,#2c2522,#211d1a);
-  border-color:rgba(194,65,12,.20);
-  box-shadow:0 12px 30px rgba(0,0,0,.35)}
-.island::after{content:'';position:absolute;right:-40px;top:-60px;width:180px;height:180px;
-  border-radius:50%;background:radial-gradient(circle,rgba(249,115,22,.10),transparent 70%);pointer-events:none}
-.dark .island::after{background:radial-gradient(circle,rgba(251,146,60,.20),transparent 70%)}
+   站主原话：「样式复用之前的那种，我要有那种气泡感，现在这种样式不好看，
+             但是要适配暗色与明亮模式」。
+   底、卡片、描边全部走 --glass-* 变量（浅色半透白 / 深色半透黑 + 模糊），
+   四个信息块与横幅做成半透明小气泡，圆角更大、加一层内高光，看着是浮起来的。
+   字色仍走 --fg / --fg-3，昼夜自动对应。 */
+.island{margin:0 0 18px;border-radius:24px;padding:13px 14px;text-align:center;
+  background:var(--glass-bg);
+  -webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);
+  border:1px solid var(--glass-border);
+  box-shadow:var(--glass-shadow),0 1px 0 rgba(255,255,255,.55) inset;
+  color:var(--fg);position:relative;overflow:hidden}
+.dark .island{box-shadow:var(--glass-shadow),0 1px 0 rgba(255,255,255,.06) inset}
+.island::after{content:'';position:absolute;right:-46px;top:-70px;width:190px;height:190px;
+  border-radius:50%;background:radial-gradient(circle,rgba(249,115,22,.16),transparent 70%);pointer-events:none}
+.dark .island::after{background:radial-gradient(circle,rgba(251,146,60,.22),transparent 70%)}
 .island-row{display:flex;gap:8px;align-items:stretch;justify-content:center;position:relative;z-index:1}
 .island-row + .island-row{margin-top:9px}
-.island-chip{flex:1 1 0;min-width:0;background:var(--tint);border:1px solid rgba(120,53,15,.07);
-  border-radius:14px;padding:8px 10px;display:flex;flex-direction:column;
-  justify-content:center;align-items:center;gap:2px;text-align:center}
-.dark .island-chip{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.08)}
-.island-chip .k{font-size:.58rem;letter-spacing:.1em;color:var(--fg-3);font-weight:700}
-.island-chip .v{font-size:.9rem;font-weight:800;color:var(--fg);max-width:100%;
+.island-chip{flex:1 1 0;min-width:0;background:rgba(255,255,255,.55);
+  border:1px solid rgba(255,255,255,.75);border-radius:15px;padding:8px 6px;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;
+  text-align:center;box-shadow:0 1px 2px rgba(120,53,15,.06),0 3px 10px rgba(120,53,15,.05)}
+.dark .island-chip{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.12);
+  box-shadow:0 3px 10px rgba(0,0,0,.18)}
+.island-chip .k{font-size:.52rem;letter-spacing:.06em;color:var(--fg-3);font-weight:700}
+.island-chip .v{font-size:.82rem;font-weight:800;color:var(--fg);max-width:100%;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.island-chip.t .v{font-variant-numeric:tabular-nums;font-size:1.02rem;letter-spacing:.02em}
+.island-chip.t .v{font-variant-numeric:tabular-nums;font-size:.92rem;letter-spacing:0}
 
-/* 横幅：标签在上、文字在下，整条都在中轴线上（多行也居中） */
+/* 横幅：标签在上、文字在下，整条都在中轴线上；有照片时可点 */
 .island-banner{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;
-  justify-content:center;align-items:center;gap:5px;padding:10px 12px;border-radius:14px;
-  background:#fff;border:1px solid rgba(120,53,15,.10);text-align:center}
-.dark .island-banner{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10)}
+  justify-content:center;align-items:center;gap:5px;padding:10px 12px;border-radius:16px;
+  background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9);
+  box-shadow:0 2px 4px rgba(120,53,15,.05),0 6px 16px rgba(120,53,15,.05);
+  text-align:center;transition:transform .18s,box-shadow .18s}
+.dark .island-banner{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);
+  box-shadow:0 6px 16px rgba(0,0,0,.22)}
+.island-banner.can-photo{cursor:pointer}
+.island-banner.can-photo:active{transform:scale(.985)}
 .island-banner .tag{flex:none;font-size:.6rem;font-weight:800;letter-spacing:.06em;
   color:var(--accent-ink);background:var(--tint);border:1px solid #ffd8b8;
-  border-radius:999px;padding:2px 9px}
+  border-radius:999px;padding:2px 9px;display:inline-flex;align-items:center;gap:4px}
 .dark .island-banner .tag{color:#ffd7bb;background:rgba(251,146,60,.20);border-color:rgba(251,146,60,.30)}
+.island-banner .tag svg{width:10px;height:10px}
 .island-banner .txt{flex:0 1 auto;min-width:0;font-size:.82rem;font-weight:700;color:var(--fg);
   line-height:1.55;white-space:pre-line;word-break:break-word;text-align:center}
 .island-banner .txt b{font-weight:800}
@@ -1538,13 +1547,46 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .island-foot{display:flex;justify-content:center;align-items:center;gap:14px;
   margin-top:9px;font-size:.58rem;color:var(--fg-3);position:relative;z-index:1}
 .island-foot b{color:var(--fg-2);font-weight:700}
+/* v3.9.6：窄屏（≤400 / ≤360）四个信息块再缩一档 —— 站主反馈
+   「天气 22° 多云」字数一多就显示不全，这档保证最长文案也放得下。 */
 @media screen and (max-width:420px){
-  .island{padding:10px 11px;border-radius:18px}
-  .island-chip{padding:6px 8px;border-radius:12px}
-  .island-chip .v{font-size:.82rem}
-  .island-chip.t .v{font-size:.94rem}
+  .island{padding:11px 11px;border-radius:20px}
+  .island-chip{padding:7px 5px;border-radius:13px}
+  .island-chip .k{font-size:.5rem;letter-spacing:.03em}
+  .island-chip .v{font-size:.78rem}
+  .island-chip.t .v{font-size:.86rem}
   .island-banner .txt{font-size:.78rem}
 }
+@media screen and (max-width:370px){
+  .island{padding:10px 9px;gap:0}
+  .island-row{gap:6px}
+  .island-chip{padding:6px 4px;border-radius:12px}
+  .island-chip .k{font-size:.47rem;letter-spacing:0}
+  .island-chip .v{font-size:.72rem}
+  .island-chip.t .v{font-size:.8rem}
+  .island-banner{padding:9px 9px}
+  .island-banner .txt{font-size:.75rem}
+  .island-foot{gap:10px}
+}
+
+/* 今日事项照片：本页弹层，可缩放 / 拖动 / 关闭 */
+.isl-photo-mask{position:fixed;inset:0;z-index:1800;display:none;background:rgba(12,10,9,.92);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;overflow:hidden}
+.isl-photo-mask.show{display:flex}
+.isl-photo-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  touch-action:none;overflow:hidden}
+.isl-photo-stage img{max-width:94vw;max-height:86vh;border-radius:12px;
+  transform-origin:center center;will-change:transform;user-select:none;-webkit-user-drag:none;
+  box-shadow:0 18px 60px rgba(0,0,0,.55)}
+.isl-photo-close{position:absolute;top:16px;right:16px;z-index:2;width:40px;height:40px;
+  border-radius:50%;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.16);
+  color:#fff;font-size:1.1rem;line-height:1;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;backdrop-filter:blur(8px)}
+.isl-photo-close:active{transform:scale(.94)}
+.isl-photo-tip{position:absolute;bottom:22px;left:0;right:0;text-align:center;color:rgba(255,255,255,.62);
+  font-size:.7rem;letter-spacing:.02em;pointer-events:none}
+@media screen and (max-width:420px){.isl-photo-tip{font-size:.66rem;bottom:16px}}
 
 /* 仅赋分排名：只有 5 列，别跟着主表撑到 620px 横着滚 */
 .sc-tbl.sc-gd-tbl{min-width:0;table-layout:auto}
@@ -3528,6 +3570,15 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     <!-- 板块内容（从侧边栏打开） -->
     <div class="grid" id="grid"></div>
 
+    <!-- 今日事项照片弹层（v3.9.6）：本页显示，双指/滚轮缩放、拖动、双击放大、关闭 -->
+    <div class="isl-photo-mask" id="islPhotoMask" onclick="islPhotoBackdrop(event)">
+      <div class="isl-photo-stage" id="islPhotoStage">
+        <img id="islPhotoImg" alt="今日事项照片" draggable="false">
+      </div>
+      <button class="isl-photo-close" onclick="islPhotoClose()" aria-label="关闭">✕</button>
+      <div class="isl-photo-tip">双指缩放 · 拖动查看 · 双击放大</div>
+    </div>
+
     <footer>
       <p id="brandFoot">© 25级05班班级服务站</p>
       <p class="footer-sub">内容更新请联系管理员 · 全站可在微信内直接访问</p>
@@ -4217,7 +4268,39 @@ function syncLandscapeClass(){
     btn.setAttribute('data-on', LAND_ON ? '1' : '0');
     btn.textContent = LAND_ON ? '📱 横屏查看：开' : '📱 横屏查看：关';
   }
+  landscapePin();
 }
+
+/* ============================================================================
+ * v3.9.6（站主）：横屏下侧边栏按钮滚下去就点不到
+ * ----------------------------------------------------------------------------
+ * 站主原话：「在点击横屏后的界面，只有翻到每个页面的最顶端的时候点击侧边栏
+ *            才能显示，否则点击侧边栏按键之后无反应」。
+ *
+ * 根因：横屏是给 body 套 transform 旋转，按钮只能 absolute 定位（fixed 在
+ *       transform 祖先里坐标会错，iOS 上根本点不到）。但 body 自己是滚动容器，
+ *       absolute 的按钮会跟着内容一起滚走 —— 滚到中间时按钮其实已经在屏幕外，
+ *       点到的只是空气。
+ *
+ * 修法：监听 body 滚动，把按钮的 top 跟着 scrollTop 补偿回去（相当于「钉」在
+ *       视口左上角）。这里不能用 fixed，所以只能这样补偿。
+ *       ⚠️ 旋转后 y 轴指向屏幕右侧，滚动会让按钮沿 x 方向跑，补偿的是 top（本地 y）。
+ * ========================================================================= */
+function landscapePin(){
+  var fab = document.getElementById('fabBtn');
+  if(!fab) return;
+  var html = document.documentElement;
+  if(!html.classList.contains('force-landscape')){
+    if(fab.style.top) fab.style.top = '';
+    return;
+  }
+  var st = (document.body && document.body.scrollTop) || 0;
+  fab.style.top = (st + 14) + 'px';
+}
+try{
+  document.addEventListener('scroll', landscapePin, { passive: true, capture: true });
+  window.addEventListener('resize', landscapePin, { passive: true });
+}catch(e){}
 
 function lockLandscape(){
   /* v3.5.40：**不再请求全屏**。全屏 + fixed 旋转在 iOS PWA 上切后台回来时
@@ -4562,7 +4645,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.9.5';
+var SITE_VERSION = '3.9.6';
 var VER_DATE = '2026-10-22';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13017,6 +13100,116 @@ function islandDaysBetween(a, b){
   return Math.round((B - A) / 86400000);
 }
 
+/* ============================================================================
+ * v3.9.6（站主）：点「今日事项」那一行 → 本页弹出照片
+ * ----------------------------------------------------------------------------
+ * 站主原话：「用户点击今日事项那一行时显示一张照片，照片我会在后台的班级岛
+ *            位置放上直链或者仓库位置，用户点击后弹出照片，要求在本页面显示
+ *            而且可以放大缩小和关闭」。
+ *
+ * 实现要点：
+ *   · 图片地址存 island.photo，直链和相对路径都行（相对路径按 index.html 解析）
+ *   · 弹层 z-index 1800，压过所有普通弹窗；不跳新页面、不离开本站
+ *   · 缩放：双指（pointer 事件）/ 滚轮 / 双击切换 1× ↔ 2.4×
+ *   · 拖动：单指或鼠标拖；缩放回 1× 时自动归位
+ *   · 关闭：右上角 ✕ / 点空白处 / Esc
+ * ========================================================================= */
+var ISL_PZ = { s: 1, x: 0, y: 0 };
+function islPhotoApply(){
+  var img = document.getElementById('islPhotoImg');
+  if(!img) return;
+  img.style.transform = 'translate(' + ISL_PZ.x + 'px,' + ISL_PZ.y + 'px) scale(' + ISL_PZ.s + ')';
+}
+function islPhotoReset(){ ISL_PZ.s = 1; ISL_PZ.x = 0; ISL_PZ.y = 0; islPhotoApply(); }
+function islPhotoOpen(){
+  if(!ISLAND || !ISLAND.photo) return;
+  var m = document.getElementById('islPhotoMask');
+  var img = document.getElementById('islPhotoImg');
+  if(!m || !img) return;
+  img.src = ISLAND.photo;
+  islPhotoReset();
+  try{ islPhotoBind(); }catch(e){}   /* 首次打开时才挂手势，不占启动时间 */
+  m.classList.add('show');
+  document.body.style.overflow = 'hidden';
+  try{ if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop(); }catch(e){}
+}
+function islPhotoClose(){
+  var m = document.getElementById('islPhotoMask');
+  if(!m) return;
+  m.classList.remove('show');
+  document.body.style.overflow = '';
+}
+function islPhotoBackdrop(e){ if(e.target === e.currentTarget) islPhotoClose(); }
+function islBindPhoto(host){
+  if(!ISLAND || !ISLAND.photo) return;
+  var b = host && host.querySelector('.island-banner');
+  if(b) b.onclick = islPhotoOpen;
+}
+/* 手势绑定：只在第一次打开时挂一次 */
+function islPhotoBind(){
+  var stage = document.getElementById('islPhotoStage');
+  if(!stage || stage.__bound) return;
+  stage.__bound = true;
+  var pts = {}, pinch = 0, base = 1, drag = false, sx = 0, sy = 0, ox = 0, oy = 0;
+  function dist(){
+    var k = Object.keys(pts);
+    if(k.length < 2) return 0;
+    var a = pts[k[0]], b = pts[k[1]];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  stage.addEventListener('pointerdown', function(e){
+    pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+    try{ stage.setPointerCapture(e.pointerId); }catch(err){}
+    var n = Object.keys(pts).length;
+    if(n === 1){ drag = true; sx = e.clientX; sy = e.clientY; ox = ISL_PZ.x; oy = ISL_PZ.y; }
+    if(n === 2){ drag = false; pinch = dist(); base = ISL_PZ.s; }
+  });
+  stage.addEventListener('pointermove', function(e){
+    if(!pts[e.pointerId]) return;
+    pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var n = Object.keys(pts).length;
+    if(n >= 2 && pinch > 0){
+      var d = dist();
+      if(d > 0){
+        ISL_PZ.s = Math.min(5, Math.max(1, base * d / pinch));
+        islPhotoApply();
+      }
+      return;
+    }
+    if(drag){
+      ISL_PZ.x = ox + (e.clientX - sx);
+      ISL_PZ.y = oy + (e.clientY - sy);
+      islPhotoApply();
+    }
+  });
+  function end(e){
+    delete pts[e.pointerId];
+    var n = Object.keys(pts).length;
+    if(n === 0){
+      drag = false; pinch = 0;
+      if(ISL_PZ.s <= 1.02){ ISL_PZ.s = 1; ISL_PZ.x = 0; ISL_PZ.y = 0; islPhotoApply(); }
+    }else if(n === 1){
+      var k = Object.keys(pts)[0];
+      drag = true; sx = pts[k].x; sy = pts[k].y; ox = ISL_PZ.x; oy = ISL_PZ.y; pinch = 0;
+    }
+  }
+  stage.addEventListener('pointerup', end);
+  stage.addEventListener('pointercancel', end);
+  stage.addEventListener('wheel', function(e){
+    e.preventDefault();
+    ISL_PZ.s = Math.min(5, Math.max(1, ISL_PZ.s * (e.deltaY < 0 ? 1.12 : 0.89)));
+    if(ISL_PZ.s <= 1.02){ ISL_PZ.s = 1; ISL_PZ.x = 0; ISL_PZ.y = 0; }
+    islPhotoApply();
+  }, { passive: false });
+  stage.addEventListener('dblclick', function(){
+    if(ISL_PZ.s > 1.05){ ISL_PZ.s = 1; ISL_PZ.x = 0; ISL_PZ.y = 0; }
+    else { ISL_PZ.s = 2.4; }
+    islPhotoApply();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') islPhotoClose();
+  });
+}
 /* 今天该显示什么：假期倒计时 / 这天不上课 / 具体文案 */
 function islandToday(){
   var d = new Date();
@@ -13102,6 +13295,7 @@ function islandBanner(){
       + '<span class="txt"><b>' + esc(t.label) + '</b>　已放假 ' + t.passed + ' 天'
       +   ' · 距开学还有 ' + t.left + ' 天</span>'
       + '</div>';
+    islBindPhoto(host);
     if(footL) footL.textContent = '假期';
     if(foot) foot.textContent = islandWeekNo();
     return;
@@ -13112,16 +13306,22 @@ function islandBanner(){
       + '<span class="tag">今天</span>'
       + '<span class="txt"><b>' + esc(t.label) + '</b>' + (t.text ? '　' + esc(t.text) : '') + '</span>'
       + '</div>';
+    islBindPhoto(host);
     if(footL) footL.textContent = '放假';
     if(foot) foot.textContent = islandWeekNo();
     return;
   }
 
   var txt = t.text || '今天没有安排';
-  host.innerHTML = '<div class="island-banner">'
-    + '<span class="tag">今日事项</span>'
+  var cam = ISLAND.photo
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>'
+    : '';
+  host.innerHTML = '<div class="island-banner' + (ISLAND.photo ? ' can-photo' : '') + '"'
+    + (ISLAND.photo ? ' title="点击查看照片"' : '') + '>'
+    + '<span class="tag">今日事项' + cam + '</span>'
     + '<span class="txt">' + esc(txt) + '</span>'
     + '</div>';
+  islBindPhoto(host);
   if(footL) footL.textContent = ISLAND_DOW_CN[islandDayKey(new Date())] + ' ' + (new Date().getMonth() + 1) + '/' + new Date().getDate();
   if(foot) foot.textContent = islandWeekNo();
 }
