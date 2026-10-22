@@ -1492,63 +1492,57 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 /* ===== 班级岛（v3.9.3，站主）=====
    第一行 时间 / 天气 / 周数 / 学期，第二行是一条「今日事项」横幅。
    横幅内容在后台按星期写，也能按具体日期临时改；放假区间自动换成倒计时。 */
-/* v3.9.6（站主）：班级岛改回「气泡玻璃」质感，浅色/深色都适配
+/* v3.9.7（站主）：回到最初那版「深色玻璃岛」质感
    ------------------------------------------------------------
-   站主原话：「样式复用之前的那种，我要有那种气泡感，现在这种样式不好看，
-             但是要适配暗色与明亮模式」。
-   底、卡片、描边全部走 --glass-* 变量（浅色半透白 / 深色半透黑 + 模糊），
-   四个信息块与横幅做成半透明小气泡，圆角更大、加一层内高光，看着是浮起来的。
-   字色仍走 --fg / --fg-3，昼夜自动对应。 */
-.island{margin:0 0 18px;border-radius:24px;padding:13px 14px;text-align:center;
-  background:var(--glass-bg);
-  -webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);
-  border:1px solid var(--glass-border);
-  box-shadow:var(--glass-shadow),0 1px 0 rgba(255,255,255,.55) inset;
-  color:var(--fg);position:relative;overflow:hidden}
-.dark .island{box-shadow:var(--glass-shadow),0 1px 0 rgba(255,255,255,.06) inset}
-.island::after{content:'';position:absolute;right:-46px;top:-70px;width:190px;height:190px;
-  border-radius:50%;background:radial-gradient(circle,rgba(249,115,22,.16),transparent 70%);pointer-events:none}
-.dark .island::after{background:radial-gradient(circle,rgba(251,146,60,.22),transparent 70%)}
+   站主原话：「我要的那种质感没有回来，你自己看看以前那种那种样式我更喜欢，
+             我不喜欢这种」。
+   所以底色、卡片、文字全部按 v3.8.7 时的原样：深棕渐变 + 半透明白卡 + 白字 +
+   右上角橙色光晕；昼夜两种模式都保持这块深色玻璃（暗色下只是描边和阴影微调），
+   不再随主题变成浅底。居中和窄屏字号分档继续保留。 */
+.island{margin:0 0 18px;border-radius:22px;padding:13px 14px;text-align:center;
+  background:linear-gradient(145deg,rgba(30,26,23,.95),rgba(62,48,38,.92));
+  border:1px solid rgba(255,255,255,.10);color:#fff;
+  -webkit-backdrop-filter:blur(14px) saturate(1.35);backdrop-filter:blur(14px) saturate(1.35);
+  box-shadow:0 12px 30px rgba(70,35,10,.20);position:relative;overflow:hidden}
+.dark .island{background:linear-gradient(145deg,rgba(34,29,26,.96),rgba(56,43,34,.94));
+  border-color:rgba(255,255,255,.08);box-shadow:0 12px 30px rgba(0,0,0,.38)}
+.island::after{content:'';position:absolute;right:-40px;top:-60px;width:180px;height:180px;
+  border-radius:50%;background:radial-gradient(circle,rgba(251,146,60,.28),transparent 70%);pointer-events:none}
 .island-row{display:flex;gap:8px;align-items:stretch;justify-content:center;position:relative;z-index:1}
 .island-row + .island-row{margin-top:9px}
-.island-chip{flex:1 1 0;min-width:0;background:rgba(255,255,255,.55);
-  border:1px solid rgba(255,255,255,.75);border-radius:15px;padding:8px 6px;
-  display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;
-  text-align:center;box-shadow:0 1px 2px rgba(120,53,15,.06),0 3px 10px rgba(120,53,15,.05)}
-.dark .island-chip{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.12);
-  box-shadow:0 3px 10px rgba(0,0,0,.18)}
-.island-chip .k{font-size:.52rem;letter-spacing:.06em;color:var(--fg-3);font-weight:700}
-.island-chip .v{font-size:.82rem;font-weight:800;color:var(--fg);max-width:100%;
+.island-chip{flex:1 1 0;min-width:0;background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:8px 6px;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;text-align:center}
+.island-chip .k{font-size:.52rem;letter-spacing:.06em;color:rgba(255,255,255,.5);font-weight:700}
+.island-chip .v{font-size:.82rem;font-weight:800;color:#fff;max-width:100%;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .island-chip.t .v{font-variant-numeric:tabular-nums;font-size:.92rem;letter-spacing:0}
 
-/* 横幅：标签在上、文字在下，整条都在中轴线上；有照片时可点 */
+/* 横幅：标签在上、文字在下，整条在中轴线上 */
 .island-banner{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;
-  justify-content:center;align-items:center;gap:5px;padding:10px 12px;border-radius:16px;
-  background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9);
-  box-shadow:0 2px 4px rgba(120,53,15,.05),0 6px 16px rgba(120,53,15,.05);
-  text-align:center;transition:transform .18s,box-shadow .18s}
-.dark .island-banner{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);
-  box-shadow:0 6px 16px rgba(0,0,0,.22)}
+  justify-content:center;align-items:center;gap:5px;padding:10px 12px;border-radius:14px;
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.10);
+  text-align:center;transition:transform .18s}
 .island-banner.can-photo{cursor:pointer}
 .island-banner.can-photo:active{transform:scale(.985)}
 .island-banner .tag{flex:none;font-size:.6rem;font-weight:800;letter-spacing:.06em;
-  color:var(--accent-ink);background:var(--tint);border:1px solid #ffd8b8;
+  color:#ffd7bb;background:rgba(251,146,60,.20);border:1px solid rgba(251,146,60,.30);
   border-radius:999px;padding:2px 9px;display:inline-flex;align-items:center;gap:4px}
-.dark .island-banner .tag{color:#ffd7bb;background:rgba(251,146,60,.20);border-color:rgba(251,146,60,.30)}
 .island-banner .tag svg{width:10px;height:10px}
-.island-banner .txt{flex:0 1 auto;min-width:0;font-size:.82rem;font-weight:700;color:var(--fg);
+.island-banner .txt{flex:0 1 auto;min-width:0;font-size:.82rem;font-weight:700;color:#fff;
   line-height:1.55;white-space:pre-line;word-break:break-word;text-align:center}
 .island-banner .txt b{font-weight:800}
-.island-banner.hol{background:var(--tint);border-style:dashed;border-color:#f2cfae}
-.dark .island-banner.hol{background:rgba(251,146,60,.10);border-color:rgba(251,146,60,.28)}
-.island-banner.hol .tag{color:#9a3412;background:#fff;border-color:#ffd8b8}
-.dark .island-banner.hol .tag{color:#ffd7bb;background:rgba(251,146,60,.22);border-color:rgba(251,146,60,.34)}
+/* v3.9.7：按日期临时改可单独设「加粗 / 居中」，由行内样式覆盖 */
+.island-banner .txt.bold{font-weight:800}
+.island-banner .txt.left{text-align:left;width:100%}
+.island-banner.left-align{align-items:flex-start;text-align:left;padding-left:14px}
+.island-banner.left-align .tag{align-self:flex-start}
+.island-banner.hol{background:rgba(255,255,255,.14);border-style:dashed}
+.island-banner.hol .tag{color:#fff;background:rgba(255,255,255,.20);border-color:rgba(255,255,255,.28)}
 .island-foot{display:flex;justify-content:center;align-items:center;gap:14px;
-  margin-top:9px;font-size:.58rem;color:var(--fg-3);position:relative;z-index:1}
-.island-foot b{color:var(--fg-2);font-weight:700}
-/* v3.9.6：窄屏（≤400 / ≤360）四个信息块再缩一档 —— 站主反馈
-   「天气 22° 多云」字数一多就显示不全，这档保证最长文案也放得下。 */
+  margin-top:8px;font-size:.58rem;color:rgba(255,255,255,.42);position:relative;z-index:1}
+.island-foot b{color:rgba(255,255,255,.66);font-weight:700}
+/* 窄屏（≤420 / ≤370）四个信息块再缩一档 —— 保证「22° 多云」这类最长文案完整显示 */
 @media screen and (max-width:420px){
   .island{padding:11px 11px;border-radius:20px}
   .island-chip{padding:7px 5px;border-radius:13px}
@@ -1558,7 +1552,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   .island-banner .txt{font-size:.78rem}
 }
 @media screen and (max-width:370px){
-  .island{padding:10px 9px;gap:0}
+  .island{padding:10px 9px}
   .island-row{gap:6px}
   .island-chip{padding:6px 4px;border-radius:12px}
   .island-chip .k{font-size:.47rem;letter-spacing:0}
@@ -4651,7 +4645,7 @@ function stripEmojiInOptions(root){
    ⚠️ 纪律：每次改代码都要把 VERSION 往上加一格，并把 VER_DATE 改成当天。
       忘了加就会出现「线上内容和版本号对不上」，版本号也就失去意义了。
    ===================================================== */
-var SITE_VERSION = '3.9.6';
+var SITE_VERSION = '3.9.7';
 var VER_DATE = '2026-10-22';
 /* 源码仓库（「仓库」按钮二选一，2026-10-07） */
 var REPO_LINKS = {
@@ -13158,9 +13152,17 @@ function islPhotoClose(){
 }
 function islPhotoBackdrop(e){ if(e.target === e.currentTarget) islPhotoClose(); }
 function islBindPhoto(host){
-  if(!ISLAND || !ISLAND.photo) return;
   var b = host && host.querySelector('.island-banner');
-  if(b) b.onclick = islPhotoOpen;
+  if(!b) return;
+  if(ISLAND && ISLAND.photo){ b.onclick = islPhotoOpen; return; }
+  /* v3.9.7：还没配照片时，管理员点一下给个去处提示；同学点了不弹任何东西 */
+  b.onclick = function(){
+    try{
+      if(typeof isAdmin === 'function' && isAdmin()){
+        if(typeof uiMsg === 'function') uiMsg('还没设置今日事项照片：后台 → 班级岛 → 今日事项照片', '#b45309');
+      }
+    }catch(e){}
+  };
 }
 /* 手势绑定：只在第一次打开时挂一次 */
 function islPhotoBind(){
@@ -13253,7 +13255,13 @@ function islandToday(){
     return { kind: 'off', label: day.label || '今天不上课', text: day.text || '' };
   }
   var text = (day && day.text) || (ISLAND.banner || {})[dow] || '';
-  return { kind: 'text', text: text };
+  return {
+    kind: 'text',
+    text: text,
+    /* v3.9.7：只有「按日期临时改」的那一条才带格式；星期默认课表一律常规 + 居中 */
+    bold: !!(day && day.text && day.bold),
+    center: !(day && day.text && day.center === false),
+  };
 }
 
 function islandRender(){
@@ -13333,10 +13341,12 @@ function islandBanner(){
   var cam = ISLAND.photo
     ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>'
     : '';
-  host.innerHTML = '<div class="island-banner' + (ISLAND.photo ? ' can-photo' : '') + '"'
+  var cls = 'txt' + (t.bold ? ' bold' : '') + (t.center === false ? ' left' : '');
+  host.innerHTML = '<div class="island-banner' + (ISLAND.photo ? ' can-photo' : '')
+    + (t.center === false ? ' left-align' : '') + '"'
     + (ISLAND.photo ? ' title="点击查看照片"' : '') + '>'
     + '<span class="tag">今日事项' + cam + '</span>'
-    + '<span class="txt">' + esc(txt) + '</span>'
+    + '<span class="' + cls + '">' + esc(txt) + '</span>'
     + '</div>';
   islBindPhoto(host);
   if(footL) footL.textContent = ISLAND_DOW_CN[islandDayKey(new Date())] + ' ' + (new Date().getMonth() + 1) + '/' + new Date().getDate();
