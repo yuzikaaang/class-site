@@ -151,6 +151,20 @@ async function readContent(req, res) {
     ADMIN_ONLY_KEYS.forEach((k) => { delete items[k]; });
   }
 
+  /* v3.9.10（站主）：`since` 以前只回显、不筛选 —— 每 60 秒的轮询都要白拉
+     16.6KB（约 1MB/小时）。现在真做增量：内容没变就回空包。 */
+  const upToDate = since > 0 && latest > 0 && latest <= since + 1000;
+  if (upToDate) {
+    return ok(res, {
+      items: {},
+      serverTime: latest,
+      since,
+      count: 0,
+      notModified: true,
+      slim: !isAdmin,
+    });
+  }
+
   return ok(res, {
     items,
     serverTime: latest || Date.now(),
