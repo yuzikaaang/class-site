@@ -101,9 +101,9 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '3.9.9'
+const SITE_VER = '3.9.10'
 
-const CACHE = 'class-site-v172'
+const CACHE = 'class-site-v173'
 /* 预缓存清单：**只放小文件**。
    ⚠️ 不要把 index.html（600KB）放进来 —— install 会因为它变慢一大截，
    弱网下甚至装不完（真机实测 SW 卡在 installing 25 秒都没装好，
@@ -113,7 +113,7 @@ const CACHE = 'class-site-v172'
    v80（v2.10.0）：加入两个字体的 latin 子集 woff2（共约 78KB）——
    同源自托管替代 Google Fonts 外链（微信内置浏览器拦截外部字体域），
    预缓存保证首次离线访问英文字形也不掉。 */
-const PRECACHE = ['./favicon.svg', './manifest.webmanifest',
+const PRECACHE = ['./app.js', './favicon.svg', './manifest.webmanifest',
   './fonts/inter-latin.woff2', './fonts/jetbrains-mono-latin.woff2',
   /* v3.5.40：作业/排期导出图片用的共享画笔，离线也要能生成 */
   './share-card.js', './badge.png']
@@ -200,6 +200,12 @@ self.addEventListener('fetch', (event) => {
         cached = (await cache.match(request)) || (await cache.match('./index.html'))
       } catch (e) { cached = null }
 
+      /* v3.9.10（站主）：改成「缓存先给、后台再刷」
+         ------------------------------------------------------------
+         原来这里是「最多等 900ms 网络」，即使缓存命中也要干等 900ms，
+         弱网下这 900ms 常常变成十几秒（网络慢到超时）。
+         现在有缓存就直接返回，同时后台拉一份新的写回缓存；
+         版本变化由页面的版本检查负责提示刷新，不靠这里阻塞。 */
       const netP = fetch(request)
         .then((res) => {
           if (res && res.ok && cache) cache.put(request, res.clone()).catch(() => {})
@@ -207,28 +213,46 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => null)
 
-      if (!cached) {
-        const r = await netP
-        return r || Response.error()
+      if (cached) {
+        event.waitUntil(netP.catch(() => {}))
+        return cached
       }
-      /* 有缓存：最多等 900ms 拿最新，超时先给缓存（页面秒开） */
-      const winner = await Promise.race([
-        netP,
-        new Promise((resolve) => setTimeout(() => resolve(null), 900)),
-      ])
-      return winner || cached
+      const r = await netP
+      return r || Response.error()
     })())
     return
   }
 
-  // 静态资源：网络优先 + 缓存兜底
-  event.respondWith(
-    fetch(request)
+  // 静态资源：缓存优先 + 后台刷新（stale-while-revalidate）
+  // ------------------------------------------------------------
+  // v3.9.10（站主）：这里原来是「网络优先」，只有断网才读缓存 ——
+  // app.js 325KB(gzip) 于是每次进站都重下一遍，这才是「每次都很慢」的真根因。
+  // 现在：命中缓存立刻返回（忽略 ?v= 查询串），同时后台更新，下次即最新。
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE).catch(() => null)
+    if (!cache) return fetch(request)
+
+    // 只缓存同源 GET 的静态文件，别把 API/图片代理塞进来
+    const sameOrigin = new URL(request.url).origin === self.location.origin
+    const cacheable = sameOrigin && (request.destination === 'script' ||
+      request.destination === 'style' || request.destination === 'font' ||
+      request.destination === 'image' || request.destination === 'manifest' ||
+      /\.(js|css|woff2?|png|jpg|jpeg|svg|webmanifest)$/i.test(new URL(request.url).pathname))
+
+    if (!cacheable) return fetch(request)
+
+    const cached = await cache.match(request, { ignoreSearch: true }).catch(() => null)
+    const netP = fetch(request)
       .then((res) => {
-        const copy = res.clone()
-        caches.open(CACHE).then((c) => c.put(request, copy))
+        if (res && res.ok) cache.put(request, res.clone()).catch(() => {})
         return res
       })
-      .catch(() => caches.match(request))
-  )
+      .catch(() => null)
+
+    if (cached) {
+      event.waitUntil(netP.catch(() => {}))
+      return cached
+    }
+    return (await netP) || Response.error()
+  })())
 })

@@ -37,6 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
+import zlib from 'node:zlib';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API = process.env.CLS_API || 'https://api.classsite.dpdns.org';
@@ -262,6 +263,92 @@ if (CN > 1200) {
     + '\n   同一条公告会随着 3.8.1、3.8.2… 一直追加，请合并同类项、去掉重复表述。');
 }
 console.log('③d 公告措辞通过（' + cats.length + ' 个分类，' + CN + ' 字）');
+
+/* ---------- ③e 资源清单完整性（v3.9.10）----------
+   起因：badge.png 一直不在 deploy-pages.yml 的白名单里 → Pages 上 404 →
+   首页只好改走 /api/badge 代理（110KB、3.8s）。这类「引用了但没发布」
+   的问题肉眼很难发现，所以让门禁自己扫。 */
+const pagesYml = read('.github/workflows/deploy-pages.yml');
+const listMatch = pagesYml.match(/SOURCE_FILES=\(([\s\S]*?)\)/);
+const published = listMatch
+  ? listMatch[1].split('\n').map((x) => x.trim()).filter(Boolean)
+  : [];
+function isPublished(rel) {
+  const clean = rel.replace(/^\.\//, '').split('?')[0];
+  if (!clean || /^https?:|^\/\//.test(clean)) return true;
+  return published.some((p) => clean === p || clean.startsWith(p + '/'));
+}
+const refs = new Set();
+for (const f of ['index.html', 'app.js', 'share-card.js']) {
+  const t = read(f);
+  const re = /['"(](\.\/[A-Za-z0-9_\-./]+\.(?:js|css|png|jpg|jpeg|svg|webmanifest|woff2?))['")]/g;
+  let m;
+  while ((m = re.exec(t))) refs.add(m[1].replace(/^\.\//, ''));
+}
+const missing = [...refs].filter((r) => !isPublished(r));
+if (missing.length) {
+  die('这些文件被页面引用，但没在 .github/workflows/deploy-pages.yml 的发布清单里：\n   '
+    + missing.join('\n   ') + '\n   线上会 404（badge.png 就是这么丢的）。');
+}
+console.log('③e 资源清单完整（引用 ' + refs.size + ' 个文件，全部会发布）');
+
+/* ---------- ③f 体积预算（v3.9.10）----------
+   弱网下的「几十秒」主要来自首屏字节数。超预算不阻止发布，但要当面提醒 ——
+   数字摆出来，才不会一边喊慢一边继续加代码。 */
+const budget = [
+  ['index.html', 130 * 1024, '首屏 HTML（gzip）'],
+  ['app.js', 400 * 1024, '主脚本（gzip）'],
+  ['admin.html', 340 * 1024, '后台（gzip）'],
+];
+const gz = (p) => zlib.gzipSync(Buffer.from(read(p))).length;
+const over = [];
+for (const [f, limit, label] of budget) {
+  const size = gz(f);
+  const kb = (size / 1024).toFixed(0);
+  if (size > limit) over.push(`${f} ${kb}KB > 预算 ${(limit / 1024).toFixed(0)}KB`);
+  console.log('   · ' + label + '：' + kb + 'KB');
+}
+if (over.length) {
+  console.warn('⚠️ 体积超预算（不阻止发布，但请记账）：\n   ' + over.join('\n   '));
+}
+
+/* ---------- ③g 重复定义 & 明文口令（v3.9.10）----------
+   ① admin.html 曾有 startAdminHeartbeat 两份：后一份覆盖前一份，且没有
+      __adminHbTimer 守卫 → 每进一次后台多一个 60 秒定时器。
+   ② 公开仓库里曾躺着管理员明文口令。两件事都靠肉眼发现太晚。 */
+const dupFiles = ['app.js', 'admin.html', 'index.html'];
+const dupHit = [];
+for (const f of dupFiles) {
+  const t = read(f);
+  const names = [...t.matchAll(/^function\s+([A-Za-z_$][\w$]*)\s*\(/gm)].map((m) => m[1]);
+  const seen = new Set(), dup = new Set();
+  for (const n of names) (seen.has(n) ? dup : seen).add(n);
+  if (dup.size) dupHit.push(f + ' → ' + [...dup].join(', '));
+}
+if (dupHit.length) die('有重复的顶层函数定义（后者会静默覆盖前者）：\n   ' + dupHit.join('\n   '));
+console.log('③g 无重复顶层函数');
+
+const secretHits = [];
+const scanFiles = ['app.js', 'admin.html', 'index.html', 'sw.js',
+  '.github/workflows/backup-data.yml', '.github/workflows/deploy-pages.yml',
+  'api/worker.mjs', 'api/auth.js', 'scripts/predeploy.mjs'];
+for (const f of scanFiles) {
+  let t = '';
+  try { t = read(f); } catch (e) { continue; }
+  const lines = t.split('\n');
+  lines.forEach((line, i) => {
+    /* 只抓「密码/口令 = 字面值」，排除空串、变量、模板 */
+    const m = line.match(/(?:^|[^A-Za-z_])(password|passwd|pwd|PASS|PASSWORD)\s*[:=]\s*['"]([^'"]{4,})['"]/);
+    if (!m) return;
+    const val = m[2];
+    /* 排除：变量引用 / 中文文案 / 明显的占位符 */
+    if (/^\$/.test(val) || /[\u4e00-\u9fa5]/.test(val)) return;
+    if (/process\.env|placeholder|CHANGE_?ME|xxx/i.test(val)) return;
+    secretHits.push(f + ':' + (i + 1) + '  ' + m[1] + '=<疑似>');
+  });
+}
+if (secretHits.length) die('疑似明文口令（仓库是公开的，口令只能放 Secrets / 本机）：\n   ' + secretHits.join('\n   '));
+console.log('③h 无明文口令');
 
 /* ---------- ④ 部署前备份 ---------- */
 if (DRY) {

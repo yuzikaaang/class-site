@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>25级05班班级服务站 · 基础版</title>
+<!-- ============================================================================
+     v3.9.10：老设备「基础版」
+     ----------------------------------------------------------------------------
+     站主反馈 iPad 打开首页是一片白。首页要靠 app.js（近 1MB）渲染，老内核
+     一旦有它不认的 API 就整段停住，于是什么都出不来。
+     这一页刻意做成最保守的样子：
+       · 只有 ES5 语法，不引任何外部脚本 / 字体 / 图片
+       · 无 CSS 变量、无 flex gap、无 backdrop-filter、无动画
+       · 只用 XHR 拉两个公开接口（公告 + 今日事项），失败也有静态文案兜底
+     目标：任何还能上网的设备，打开都能看到字。
+     ========================================================================= -->
+<style>
+body{margin:0;padding:0;background:#fdf8f3;color:#292524;
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:16px;line-height:1.65;-webkit-text-size-adjust:100%}
+.wrap{max-width:640px;margin:0 auto;padding:14px 14px 40px}
+h1{font-size:18px;margin:0 0 4px}
+.sub{color:#8a7f76;font-size:13px;margin:0 0 14px}
+.box{background:#fff;border:1px solid #f0e3d6;border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.box h2{font-size:14px;margin:0 0 8px;color:#9a3412}
+.item{border-top:1px solid #f6eee6;padding:9px 0}
+.item:first-child{border-top:0;padding-top:0}
+.meta{color:#a89e95;font-size:12px}
+.txt{white-space:pre-wrap;word-break:break-word}
+.nav{display:block;margin-bottom:12px}
+.nav a{display:inline-block;padding:9px 14px;margin:0 8px 8px 0;border-radius:10px;
+  background:#f97316;color:#fff;text-decoration:none;font-size:14px}
+.nav a.sec{background:#fff;color:#9a3412;border:1px solid #f0d9c4}
+.banner{background:#3a2f28;color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.banner b{color:#ffd7bb;font-size:12px;letter-spacing:1px}
+.banner p{margin:6px 0 0;white-space:pre-wrap;font-weight:700}
+.tip{color:#a89e95;font-size:12px;margin-top:14px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>25级05班 · 班级服务站</h1>
+  <p class="sub">基础版（老设备专用）· 只显示公告与今日安排</p>
+
+  <div class="nav">
+    <a href="./index.html">完整版</a>
+    <a class="sec" href="./homework/">作业</a>
+  </div>
+
+  <div class="banner" id="islandBox" style="display:none">
+    <b>今日事项</b>
+    <p id="islandText">—</p>
+  </div>
+
+  <div class="box">
+    <h2>班级公告</h2>
+    <div id="annList"><div class="meta">正在加载…</div></div>
+  </div>
+
+  <p class="tip">这一页不加载任何特效脚本，所以旧设备也能打开。<br>想看完整功能，请在较新的浏览器里打开完整版。</p>
+</div>
+
+<script>
+/* 纯 ES5：XHR + 字符串拼接，不依赖任何 polyfill */
+(function(){
+  var API = 'https://api.classsite.dpdns.org';
+
+  function get(path, cb){
+    try{
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', API + path, true);
+      xhr.timeout = 12000;
+      xhr.onreadystatechange = function(){
+        if(xhr.readyState !== 4) return;
+        if(xhr.status >= 200 && xhr.status < 300){
+          try{ cb(JSON.parse(xhr.responseText)); }catch(e){ cb(null); }
+        }else{ cb(null); }
+      };
+      xhr.ontimeout = function(){ cb(null); };
+      xhr.onerror = function(){ cb(null); };
+      xhr.send(null);
+    }catch(e){ cb(null); }
+  }
+
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* ---- 今日事项 ---- */
+  get('/api/island', function(j){
+    var d = j && j.data;
+    if(!d || d.on === false) return;
+    var txt = '';
+    var today = new Date();
+    var pad = function(n){ return (n < 10 ? '0' : '') + n; };
+    var key = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate());
+    var day = d.days && d.days[key];
+    var dows = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    if(day && day.text) txt = day.text;
+    else if(d.banner && d.banner[dows[today.getDay()]]) txt = d.banner[dows[today.getDay()]];
+    if(!txt) return;
+    document.getElementById('islandText').innerHTML = esc(txt);
+    document.getElementById('islandBox').style.display = '';
+  });
+
+  /* ---- 公告 ---- */
+  get('/api/content', function(j){
+    var list = (j && j.items && j.items.announcements) || [];
+    var host = document.getElementById('annList');
+    if(!list.length){
+      host.innerHTML = '<div class="meta">暂时没读到公告，稍后再打开看看。</div>';
+      return;
+    }
+    var html = '';
+    for(var i = 0; i < list.length && i < 20; i++){
+      var a = list[i] || {};
+      html += '<div class="item">'
+        + '<div class="meta">' + esc(a.date || a.time || '') + '</div>'
+        + '<div class="txt">' + esc(a.text || a.title || '') + '</div>'
+        + '</div>';
+    }
+    host.innerHTML = html;
+  });
+})();
+</script>
+</body>
+</html>
