@@ -1556,20 +1556,25 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 @media screen and (max-width:420px){
   .island{padding:11px 11px;border-radius:20px}
   .island-chip{padding:7px 5px;border-radius:13px}
-  .island-chip .k{font-size:.5rem;letter-spacing:.03em}
-  .island-chip .v{font-size:.78rem}
-  .island-chip.t .v{font-size:.86rem}
-  .island-banner .txt{font-size:.78rem}
+  .island-chip .k{font-size:.62rem;letter-spacing:.02em}
+  .island-chip .v{font-size:.9rem}
+  .island-chip.t .v{font-size:.95rem}
+  .island-banner .txt{font-size:.8rem}
 }
+/* v3.9.10（站主）：≤370 的窄机不再靠缩字号硬塞 ——
+   四个信息块改 2×2 两行，字号反而回到看得清（标签 10px / 数值 15px）。
+   这是结构解法：上一版把标签压到 8px，字是塞下了但看不清。 */
 @media screen and (max-width:370px){
   .island{padding:10px 9px}
-  .island-row{gap:6px}
-  .island-chip{padding:6px 4px;border-radius:12px}
-  .island-chip .k{font-size:.47rem;letter-spacing:0}
-  .island-chip .v{font-size:.72rem}
-  .island-chip.t .v{font-size:.8rem}
+  .island-row{gap:6px;flex-wrap:wrap}
+  .island-row > .island-chip{flex:1 1 calc(50% - 3px);min-width:calc(50% - 3px)}
+  .island-row + .island-row .island-banner{flex:1 1 100%}
+  .island-chip{padding:8px 6px;border-radius:12px}
+  .island-chip .k{font-size:.62rem;letter-spacing:.02em}
+  .island-chip .v{font-size:.95rem}
+  .island-chip.t .v{font-size:1rem}
   .island-banner{padding:9px 9px}
-  .island-banner .txt{font-size:.75rem}
+  .island-banner .txt{font-size:.78rem}
   .island-foot{gap:10px}
 }
 
@@ -1596,7 +1601,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 @media screen and (max-width:420px){.isl-photo-tip{font-size:.66rem;bottom:16px}}
 
 /* v3.9.8：首屏骨架（脚本未就绪时先占位，避免页面空白一片） */
-.skel-card{background:#fff;border-radius:22px;padding:18px 20px;margin-bottom:14px;
+.skel-card{background:#fff;border-radius:22px;padding:18px 20px;margin-bottom:14px;min-height:104px;
   border:1px solid rgba(120,53,15,.06);box-shadow:0 1px 2px rgba(120,53,15,.05);
   display:flex;flex-direction:column;gap:9px;overflow:hidden;position:relative}
 .skel-card::after{content:'';position:absolute;inset:0;
@@ -1607,7 +1612,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .skel-line{height:12px;border-radius:6px;background:rgba(120,53,15,.09)}
 .skel-line.w50{width:50%}.skel-line.w60{width:60%}.skel-line.w70{width:70%}
 .skel-line.w76{width:76%}.skel-line.w85{width:85%}.skel-line.w90{width:90%}.skel-line.w92{width:92%}
-.skel-cat{align-items:center;text-align:center;padding:22px 16px;gap:10px}
+.skel-cat{align-items:center;text-align:center;padding:22px 16px;gap:10px;min-height:140px;justify-content:center}
 .skel-cat .skel-ico{width:42px;height:42px;border-radius:13px;background:rgba(249,115,22,.14)}
 .skel-cat .skel-line{width:64%}
 .dark .skel-card{background:#241f1c;border-color:rgba(255,255,255,.07)}
@@ -4265,8 +4270,152 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
+/* ============================================================================
+ * v3.9.10（站主）：老 iPad / 老 Safari 兜底
+ * ----------------------------------------------------------------------------
+ * 站主反馈：「iPad 页面刷新不出来，现在就是白的」「自定义设置字号无法调，
+ *            进度条拖不动」。根因两条：
+ *   ① iOS 13 以下没有 PointerEvent —— 字号滑块只绑了 pointerdown，所以拖不动；
+ *   ② 老内核遇到 app.js 里任何一个它不认的 API，整段脚本就停住 ——
+ *      首页内容全靠脚本渲染，于是只剩一片白。
+ *
+ * 这里做三件事（全部 ES5，不能再依赖任何新语法）：
+ *   A. 补上老 Safari 缺的基础 API（closest / NodeList.forEach / Object.assign …）
+ *   B. 补一个最小 fetch（XHR 实现），iOS 10.2 及更早没有 fetch
+ *   C. 启动看门狗：12 秒后如果骨架还在、卡片没出来，给一条人话提示 + 基础版入口，
+ *      绝不留白屏
+ * ========================================================================= */
+(function(){
+  /* ---------- A. 基础 API 补齐 ---------- */
+  if(!Element.prototype.matches){
+    Element.prototype.matches = Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector;
+  }
+  if(!Element.prototype.closest){
+    Element.prototype.closest = function(sel){
+      var el = this;
+      while(el && el.nodeType === 1){
+        if(el.matches && el.matches(sel)) return el;
+        el = el.parentElement || el.parentNode;
+      }
+      return null;
+    };
+  }
+  if(window.NodeList && !NodeList.prototype.forEach){
+    NodeList.prototype.forEach = Array.prototype.forEach;
+  }
+  if(window.HTMLCollection && !HTMLCollection.prototype.forEach){
+    HTMLCollection.prototype.forEach = Array.prototype.forEach;
+  }
+  if(!Object.assign){
+    Object.assign = function(t){
+      for(var i = 1; i < arguments.length; i++){
+        var o = arguments[i]; if(!o) continue;
+        for(var k in o){ if(Object.prototype.hasOwnProperty.call(o, k)) t[k] = o[k]; }
+      }
+      return t;
+    };
+  }
+  if(!Array.from){
+    Array.from = function(x){
+      var out = [];
+      if(!x) return out;
+      if(typeof x.length === 'number'){
+        for(var i = 0; i < x.length; i++) out.push(x[i]);
+      }
+      return out;
+    };
+  }
+  if(!String.prototype.includes){
+    String.prototype.includes = function(s, p){ return this.indexOf(s, p || 0) !== -1; };
+  }
+  if(!String.prototype.startsWith){
+    String.prototype.startsWith = function(s, p){ return this.substr(p || 0, s.length) === s; };
+  }
+  if(!String.prototype.endsWith){
+    String.prototype.endsWith = function(s, l){
+      var str = (l === undefined) ? this : this.substring(0, l);
+      return str.substr(str.length - s.length) === s;
+    };
+  }
+  if(!Number.isFinite){ Number.isFinite = function(v){ return typeof v === 'number' && isFinite(v); }; }
+  if(!Array.prototype.includes){
+    Array.prototype.includes = function(v){ return this.indexOf(v) !== -1; };
+  }
+
+  /* ---------- B. 最小 fetch（只有站点自己用到的 GET/POST + JSON） ---------- */
+  if(!window.fetch){
+    window.fetch = function(url, opt){
+      opt = opt || {};
+      return new Promise(function(resolve, reject){
+        var xhr = new XMLHttpRequest();
+        xhr.open(opt.method || 'GET', url, true);
+        var h = opt.headers || {};
+        for(var k in h){ if(Object.prototype.hasOwnProperty.call(h, k)) { try{ xhr.setRequestHeader(k, h[k]); }catch(e){} } }
+        xhr.onload = function(){
+          resolve({
+            ok: xhr.status >= 200 && xhr.status < 300,
+            status: xhr.status,
+            url: url,
+            text: function(){ return Promise.resolve(xhr.responseText); },
+            json: function(){
+              return new Promise(function(res, rej){
+                try{ res(JSON.parse(xhr.responseText)); }catch(e){ rej(e); }
+              });
+            }
+          });
+        };
+        xhr.onerror = function(){ reject(new Error('network')); };
+        xhr.ontimeout = function(){ reject(new Error('timeout')); };
+        try{ xhr.send(opt.body || null); }catch(e){ reject(e); }
+      });
+    };
+  }
+
+  /* ---------- C. 启动看门狗 ---------- */
+  var shown = false;
+  function fail(reason){
+    if(shown) return;
+    shown = true;
+    var board = document.getElementById('board');
+    var grid = document.getElementById('grid');
+    var stillSkel = board && board.querySelector('.skel-card');
+    var noCards = !grid || !grid.querySelector('.card');
+    if(!stillSkel && !noCards) return;   /* 已经渲染出来了，什么都不做 */
+
+    var box = document.createElement('div');
+    box.id = 'legacyFallback';
+    box.setAttribute('style',
+      'position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;padding:14px 16px;' +
+      'background:#fffdfa;border:1px solid #f0d9c4;border-radius:14px;' +
+      'box-shadow:0 10px 30px rgba(120,53,15,.18);color:#292524;font-size:14px;line-height:1.7');
+    box.innerHTML =
+      '<b>页面没能正常加载</b><br>' +
+      '<span style="color:#6e635a;font-size:13px">这台设备的浏览器版本较旧，或网络暂时不通。' +
+      '可以先用<b>基础版</b>看公告和作业，或重试一次。</span>' +
+      '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<a href="./basic.html" style="flex:1;text-align:center;padding:9px 0;border-radius:10px;' +
+          'background:#f97316;color:#fff;font-weight:700;text-decoration:none">打开基础版</a>' +
+        '<a href="javascript:location.reload()" style="flex:1;text-align:center;padding:9px 0;' +
+          'border-radius:10px;border:1px solid #e7d5c4;color:#7c2d12;text-decoration:none">重试</a>' +
+      '</div>' +
+      (reason ? '<div style="margin-top:8px;color:#a8a29e;font-size:11px;word-break:break-all">' +
+        String(reason).slice(0, 160) + '</div>' : '');
+    document.body.appendChild(box);
+  }
+
+  window.addEventListener('error', function(e){
+    /* 只关心脚本级错误；图片 404 之类不触发这里 */
+    if(e && (e.message || e.error)) fail(e.message || 'script error');
+  }, true);
+  window.addEventListener('load', function(){
+    setTimeout(function(){ fail('脚本未完成渲染（12s 超时）'); }, 12000);
+  });
+})();
+</script>
+
+<script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '3.9.9';
+var SITE_VERSION = '3.9.10';
 var VER_DATE = '2026-10-22';
 </script>
 <script src="./app.js?v=392" defer></script>
@@ -4290,26 +4439,45 @@ if ('serviceWorker' in navigator) {
   }
 }
 </script>
-  <!-- 51LA 网站统计：匿名访问统计（PV/UV/来源/设备），详见站内公告。hashMode 适配本站单页 PWA 翻页 -->
-  <!-- v3.9.4：SDK 改 async + 加载完再 init —— 同步脚本会拖住 DOMContentLoaded，
-       51.la 慢/被拦时整页 load 事件要等它，弱网下白白多等好几秒 -->
-  <script charset="UTF-8" id="LA_COLLECT" src="https://sdk.51.la/js-sdk-pro.min.js" async></script>
+  <!-- 51LA 网站统计：匿名访问统计（PV/UV/来源/设备），详见站内公告。hashMode 适配本站单页 PWA 翻页
+       v3.9.10（站主）：不再静态引入 —— 这两个脚本合计约 144KB，会和学生抢首屏带宽。
+       现在只在「页面已加载完 + 浏览器空闲」时才插入，且轻量模式 / 省流量模式下直接跳过。 -->
   <script>
     (function(){
-      function initLA(){
+      function lite(){
+        try{ return localStorage.getItem('cls_lite_mode') === '1'; }catch(e){ return false; }
+      }
+      function saveData(){
         try{
-          if(typeof LA !== 'undefined' && LA && LA.init){
-            LA.init({id:"3R2vmhdz45oTG6V1",ck:"3R2vmhdz45oTG6V1",autoTrack:true,hashMode:true});
-          }
-        }catch(e){}
+          var c = navigator.connection;
+          if(!c) return false;
+          if(c.saveData) return true;
+          return c.effectiveType === 'slow-2g' || c.effectiveType === '2g';
+        }catch(e){ return false; }
       }
-      var s = document.getElementById('LA_COLLECT');
-      if(s && s.addEventListener){
-        s.addEventListener('load', initLA);
-        s.addEventListener('error', initLA);   /* 加载失败也别让统计把页面拖着 */
-      }else{
-        setTimeout(initLA, 0);
+      function load(){
+        if(lite() || saveData()) return;          /* 轻量模式：一个字节都不拉 */
+        if(document.getElementById('LA_COLLECT')) return;
+        var s = document.createElement('script');
+        s.id = 'LA_COLLECT';
+        s.charset = 'UTF-8';
+        s.async = true;
+        s.src = 'https://sdk.51.la/js-sdk-pro.min.js';
+        s.onload = function(){
+          try{
+            if(typeof LA !== 'undefined' && LA && LA.init){
+              LA.init({id:"3R2vmhdz45oTG6V1",ck:"3R2vmhdz45oTG6V1",autoTrack:true,hashMode:true});
+            }
+          }catch(e){}
+        };
+        document.body.appendChild(s);
       }
+      function schedule(){
+        if(window.requestIdleCallback) requestIdleCallback(load, { timeout: 4000 });
+        else setTimeout(load, 2500);
+      }
+      if(document.readyState === 'complete') schedule();
+      else window.addEventListener('load', schedule);
     })();
   </script>
 </body>
