@@ -1519,10 +1519,10 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .island-chip.t .v{font-variant-numeric:tabular-nums;font-size:1.02rem;letter-spacing:.02em}
 
-/* 横幅：标签 + 文字整体居中，文字多行时逐行居中 */
-.island-banner{flex:1 1 auto;min-width:0;display:flex;justify-content:center;align-items:center;
-  gap:8px;padding:10px 12px;border-radius:14px;background:#fff;
-  border:1px solid rgba(120,53,15,.10);text-align:center}
+/* 横幅：标签在上、文字在下，整条都在中轴线上（多行也居中） */
+.island-banner{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;
+  justify-content:center;align-items:center;gap:5px;padding:10px 12px;border-radius:14px;
+  background:#fff;border:1px solid rgba(120,53,15,.10);text-align:center}
 .dark .island-banner{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10)}
 .island-banner .tag{flex:none;font-size:.6rem;font-weight:800;letter-spacing:.06em;
   color:var(--accent-ink);background:var(--tint);border:1px solid #ffd8b8;
