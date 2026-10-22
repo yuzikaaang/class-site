@@ -28,7 +28,9 @@ import {
 const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const MAX_HOLIDAYS = 30;
 const MAX_DAYS = 200;
-const MAX_TEXT = 60;
+const MAX_TEXT = 60;       /* 星期横幅：默认课表一行，60 字够 */
+const MAX_DAY_TEXT = 200;  /* v3.9.6：按日期临时改可以多行（考试时段 / 备注） */
+const MAX_PHOTO = 500;
 
 /* 站主 2026-10-21 发来的纸质课表，压成横幅缩写（早读 + 上午 5 节 + 下午 4 节 + 晚上） */
 const DEFAULT_BANNER = {
@@ -71,6 +73,7 @@ const DEFAULT_ISLAND = {
   banner: DEFAULT_BANNER,
   days: {},
   holidays: [],
+  photo: '',
 };
 
 function str(v, max) { return String(v == null ? '' : v).trim().slice(0, max); }
@@ -97,7 +100,7 @@ function normDays(raw) {
     if (!isDate(k)) return;
     const v = raw[k] || {};
     out[k] = {
-      text: str(v.text, MAX_TEXT),
+      text: str(v.text, MAX_DAY_TEXT),
       off: !!v.off,
       label: str(v.label, 16),
     };
@@ -133,6 +136,8 @@ function normalize(raw) {
     banner: normBanner(o.banner, legacyTt),
     days: normDays(o.days),
     holidays: normHolidays(o.holidays),
+    /* v3.9.6：点「今日事项」弹出的照片（直链或仓库相对路径，如 ./photo.jpg） */
+    photo: str(o.photo, MAX_PHOTO),
   };
 }
 
@@ -155,7 +160,8 @@ export default async function handler(req, res) {
       const data = normalize(b && b.data);
       await setSiteSetting(sql, 'island', data);
       await audit(u.id, 'island.save', 'site_setting', 0,
-        '横幅 7 天 / 覆盖 ' + Object.keys(data.days).length + ' 天 / 假期 ' + data.holidays.length + ' 段');
+        '横幅 7 天 / 覆盖 ' + Object.keys(data.days).length + ' 天 / 假期 ' + data.holidays.length + ' 段'
+        + (data.photo ? ' / 照片' : ''));
       return ok(res, { data });
     }
     return fail(res, 405, '不支持的方法');
