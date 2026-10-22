@@ -1638,7 +1638,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.9.9';
+var SITE_VERSION = '3.9.10';
 var VER_DATE = '2026-10-22';
 
 /* ---- 运行时状态 ---- */
@@ -11705,19 +11705,6 @@ function checkAdminVer(){
     });
 }
 /* 后台也算「在线」：站主自己在后台挂着也要体现在最后上线里 */
-function startAdminHeartbeat(){
-  var beat = function(){
-    var token = '';
-    try{ token = localStorage.getItem(LS_TOKEN) || ''; }catch(e){}
-    if(!token || document.hidden) return;
-    fetch((API_BASE || '') + '/api/auth?action=ping&page=' + encodeURIComponent(adminPageName()), {
-      cache:'no-store', headers:{ Authorization:'Bearer ' + token }
-    }).then(function(){}).catch(function(){});
-  };
-  beat();
-  setInterval(beat, 60000);
-}
-
 function boot(){
   initTheme();
   paintAdminVer();
@@ -16050,6 +16037,22 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.10', date: '2026-10-22', type: 'perf', title: '缓存优先秒开 · 老 iPad 修复 · 口令出库', items: [
+      '首屏真正走缓存：Service Worker 从「网络优先」改成「缓存先给、后台再刷」，app.js 也进了预缓存 —— 以前每次进站都要重新下 325KB',
+      '静态脚本改空闲加载：统计脚本延到页面加载完再拉，轻量模式下直接不加载（省约 144KB）',
+      '窄屏班级岛改 2×2 两行，字号回到看得清（原来标签被压到 8px）',
+      '老 iPad 修复：字号滑块同时支持触摸/鼠标（iOS 13 以下没有 PointerEvent，所以拖不动）',
+      '老内核兜底：补齐 closest / fetch 等基础 API，并加启动看门狗 —— 12 秒内没渲染出来会给提示和「基础版」入口，不再白屏',
+      '新增基础版页面：纯静态、不加载任何特效，只显示公告与今日事项，旧设备可直接打开',
+      '轻量模式进一步减负：不拉天气、不拉网络语录、不下载 110KB 的班徽代理图、不加载统计脚本',
+      '安全：管理员口令从仓库与工作流里彻底移除，改由 GitHub Secrets / 本机文件提供；备份工作流未配置时自动跳过',
+      '部署门禁新增四道：资源发布清单完整性、体积预算、重复函数定义、明文口令扫描',
+      '后台重复定义的心跳函数已删除（此前每进一次后台会多一个 60 秒定时器）'
+    ], pub: [
+      { cat: '速度', text: '再次打开页面基本秒出，内容会在空闲时自动更新到最新' },
+      { cat: '界面', text: '小屏手机上班级岛改为两行显示，字更大更清楚' },
+      { cat: '班级', text: '旧设备打不开时可以用「基础版」查看公告和今日安排' }
+    ] },
   { version: '3.9.9', date: '2026-10-22', type: 'fix', title: '备份去重：同一版本只留一份', items: [
       '站主反馈「别备份重了，比如 3.9.8 后台就备份了 3 次」—— 部署前门禁、GitHub Action、定时任务三条路都会触发备份',
       '现在同一版本只留一份：已有就跳过；如果自动备份先到、部署前备份后到，把那一份升级成 predeploy（保留部署前状态）',
