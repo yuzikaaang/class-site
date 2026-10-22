@@ -2189,7 +2189,7 @@ async function buildBackupPayload(sql) {
   return dump;
 }
 
-/** 按版本保留最近 N 个；同版本最多留 3 份 */
+/** 按版本保留最近 N 个；v3.9.9：同版本只留 1 份（站主：别备份重了） */
 async function pruneBackups(sql) {
   try {
     const vers = await sql`
@@ -2208,7 +2208,7 @@ async function pruneBackups(sql) {
         delete from data_backups
          where version = ${v}
            and id not in (
-             select id from data_backups where version = ${v} order by created_at desc limit 3
+             select id from data_backups where version = ${v} order by created_at desc limit 1
            )
       `;
     }
@@ -2224,6 +2224,9 @@ async function pruneBackups(sql) {
               这个你可以放到 cloudflare 部署内容或 githubaction，确保每次更新能自动备份一次数据」。 */
 export async function runAutoBackup(version = 'auto') {
   const sql = getSql();
+  /* v3.9.9：同一版本只备一次（改完立刻部署时，cron 撞上部署前备份也不会重复写） */
+  const dup = await sql`select id from data_backups where version = ${String(version).slice(0, 20)} limit 1`;
+  if (dup.length) return { ok: true, skipped: true, id: Number(dup[0].id) };
   const payload = await buildBackupPayload(sql);
   const bytes = JSON.stringify(payload).length;
   if (bytes > BACKUP_MAX_BYTES) return { ok: false, error: 'too-large', bytes };
@@ -2243,6 +2246,34 @@ async function createBackup(req, res, me, b) {
   const note = String((b && b.note) || '').slice(0, 200);
 
   const sql = getSql();
+
+  /* v3.9.9（站主）：「别备份重了，比如 3.9.8 后台就备份了 3 次」
+     —— 部署前门禁、GitHub Action、定时任务三条路都会调到这里。
+     同一版本只留一份：已有 backup 就跳过；若是 auto 被 predeploy 撞上，
+     把那一份升级成 predeploy（部署前的那份才是有意义的）。 */
+  const dup = await sql`select id, kind from data_backups where version = ${version} order by created_at desc limit 1`;
+  if (dup.length) {
+    if (kind === 'predeploy' && dup[0].kind !== 'predeploy') {
+      const payload0 = await buildBackupPayload(sql);
+      const bytes0 = JSON.stringify(payload0).length;
+      if (bytes0 > BACKUP_MAX_BYTES) return fail(res, 413, '数据太大，超过 8MB 上限');
+      await sql`
+        update data_backups
+           set kind = 'predeploy', payload = ${JSON.stringify(payload0)}::jsonb, bytes = ${bytes0},
+               note = ${note || '部署前自动备份'}, created_at = now()
+         where id = ${dup[0].id}
+      `;
+      return ok(res, {
+        id: Number(dup[0].id), version, kind: 'predeploy', bytes: bytes0, upgraded: true,
+        message: '这个版本已有自动备份，已升级为部署前备份（不重复新建）',
+      });
+    }
+    return ok(res, {
+      id: Number(dup[0].id), version, kind: dup[0].kind, skipped: true,
+      message: '这个版本已经备份过了（' + dup[0].kind + '），不重复备份',
+    });
+  }
+
   const payload = await buildBackupPayload(sql);
   let bytes = 0;
   try { bytes = JSON.stringify(payload).length; } catch (e) { bytes = 0; }
