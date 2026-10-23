@@ -88,6 +88,16 @@ idx = idx.replace(/<script src="\.\/app(?:\.min)?\.js(\?v=\d+)?" defer><\/script
   `<script src="./app.min.js${TAG}" defer></script>`);
 if (idx !== before) write('index.html', idx);
 
+/* ---------------- ④ admin.html 引用的 admin.js 也要带新版本号 ----------------
+   v3.9.19 发现：拆包那次写死了 ?v=3915，之后每次升版本都没再改，
+   结果是后台改了、浏览器还拿旧缓存（尤其配合 SW 的缓存优先）。
+   这里每次构建都同步一次，避免再漏。 */
+let adm3 = read('admin.html');
+const adm3Before = adm3;
+adm3 = adm3.replace(/<script src="\.\/admin\.js(\?v=\d+)?"><\/script>/,
+  `<script src="./admin.js${TAG}"></script>`);
+if (adm3 !== adm3Before) write('admin.html', adm3);
+
 /* ---------------- 报告 ---------------- */
 const admHtml = read('admin.html');
 const admJs = fs.existsSync(path.join(ROOT, 'admin.js')) ? read('admin.js') : '';
