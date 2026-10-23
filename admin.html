@@ -999,14 +999,17 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 .ai-charbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
 .ai-chlab{font-size:.72rem;font-weight:800;color:var(--accent-ink)}
 .ai-chtip{font-size:.7rem;opacity:.62;margin-left:auto}
-.ad-chars{margin-top:6px;padding:9px 12px;border-radius:12px;border:1px dashed var(--border);
-  background:var(--tint);line-height:2;white-space:pre-wrap;word-break:break-word;
-  max-height:150px;overflow:auto;user-select:none;-webkit-user-select:none;cursor:text}
-.ad-ch{display:inline-block;min-width:.45em;padding:0 1px;border-radius:4px;
-  text-align:center;transition:background .12s}
-.ad-ch:hover{background:rgba(251,146,60,.22)}
-.ad-ch.on{background:rgba(251,146,60,.45);box-shadow:inset 0 0 0 1px #fb923c}
-.ad-nl{opacity:.45;font-size:.7rem;padding:0 2px}
+/* v3.9.19：所见即所得输入区（里面只有字，没有 ** 和 {} 这些符号） */
+.ai-rt{margin-top:8px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);
+  background:var(--bg-1);color:var(--fg);font-size:.88rem;line-height:1.75;
+  min-height:66px;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+  outline:none;transition:border-color .15s,box-shadow .15s}
+.ai-rt:focus{border-color:var(--accent-ink);box-shadow:0 0 0 3px var(--tint)}
+.ai-rt:empty::before{content:attr(data-ph);opacity:.42;pointer-events:none}
+.ai-rt .ln-em{background:rgba(251,146,60,.16);border-left:3px solid #fb923c;
+  border-radius:6px;padding:2px 8px;font-weight:800;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone}
+.ai-fmt-b{font-weight:900}
 .ai-dprev-txt .ln-em{display:block;font-weight:900;text-align:center}
 .ai-photo-row img{display:block;margin-top:10px;max-width:180px;max-height:180px;
   border-radius:10px;border:1px solid var(--border);object-fit:cover}
@@ -1628,7 +1631,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '3.9.18';
+var SITE_VERSION = '3.9.19';
 var VER_DATE = '2026-10-23';
 </script>
 <script src="./admin.js?v=3915"></script>
