@@ -3768,7 +3768,7 @@ function badgeCachedSrc(){
 function badgeCacheLoad(force){
   /* v3.9.10：轻量模式直接用仓库里的 badge.png（同源 CDN），
      不走 /api/badge 代理（110KB、约 3.8s）。 */
-  if(liteOn()) return Promise.resolve('./badge.png');
+  if(liteOn()) return Promise.resolve('./icons/badge-256.png');
   if(__badgeLoading) return __badgeLoading;
   var cached = badgeCachedSrc();
   var ts = 0;
@@ -3779,7 +3779,9 @@ function badgeCacheLoad(force){
     var done = false;
     function fin(v){ if(!done){ done = true; __badgeLoading = null; resolve(v || ''); } }
     try{
-      var url = (typeof apiReady === 'function' && apiReady()) ? apiUrl('/badge') : './badge.png';
+      /* v3.9.12：班徽原图就是 256×256 但没有压缩（110KB），且要经 /api/badge 代理
+         （约 3.8s）。改用同源 icons/badge-256.png（128 色，28KB），首屏少 80KB。 */
+      var url = './icons/badge-256.png';
       fetch(url, { cache:'force-cache' }).then(function(r){
         if(!r.ok) throw new Error('HTTP ' + r.status);
         return r.blob();
@@ -3812,7 +3814,8 @@ function siteBadgeList(){
   /* ① 登录时下载好的本地缓存（dataURL，零请求、不会被跨域污染） */
   var cached = badgeCachedSrc();
   if(cached) list.push(cached);
-  /* ② 站点本地文件（有则更快，没有就 404 跳过） */
+  /* ② 站点本地文件：优先 28KB 的 256px 版（原图 110KB，画质一样） */
+  try{ list.push(new URL('./icons/badge-256.png', location.href).href); }catch(e){}
   try{ list.push(new URL('./badge.png', location.href).href); }catch(e){}
   var u = '';
   try{ u = (window.SITE_DATA && SITE_DATA.badgeUrl) || ''; }catch(e){}
