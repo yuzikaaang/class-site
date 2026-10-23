@@ -1544,16 +1544,25 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
   color:#ffd7bb;background:rgba(251,146,60,.20);border:1px solid rgba(251,146,60,.30);
   border-radius:999px;padding:2px 9px;display:inline-flex;align-items:center;gap:4px}
 .island-banner .tag svg{width:10px;height:10px}
-.island-banner .txt{flex:0 1 auto;min-width:0;font-size:.82rem;font-weight:800;color:#fff;
+/* v3.9.17：标签旁边挂「看今天 / 看明天」小按钮，不额外占高度 */
+.island-banner .tag-row{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center}
+.island-banner .isl-switch{flex:none;font-size:.62rem;font-weight:800;line-height:1.2;
+  color:#ffd7bb;background:rgba(255,255,255,.10);border:1px solid rgba(255,215,187,.34);
+  border-radius:999px;padding:2px 8px;cursor:pointer;font-family:inherit}
+.island-banner .isl-switch:active{transform:scale(.96)}
+.island-banner .txt{flex:0 1 auto;min-width:0;font-size:.82rem;font-weight:700;color:#fff;
   line-height:1.55;white-space:pre-line;word-break:break-word;text-align:center}
-.island-banner .txt b{font-weight:900}
+/* v3.9.17：行内加粗必须和默认拉开距离（原来 800 vs 900 几乎看不出来） */
+.island-banner .txt b{font-weight:900;letter-spacing:.01em}
 .island-banner .txt s{opacity:.55;text-decoration-thickness:1.5px}
 /* v3.9.7：按日期临时改可单独设「加粗 / 居中」；v3.9.8 默认就是加粗态 */
 .island-banner .txt.soft{font-weight:500}
-.island-banner .txt.bold{font-weight:900}
+.island-banner .txt.bold{font-weight:800}
 .island-banner .txt.left{text-align:left;width:100%}
-/* 行首 # 的行：整行加粗并居中 */
-.island-banner .txt .ln-em{display:block;font-weight:900;text-align:center}
+/* 行首 # 的行：整行强调（底色 + 左侧竖条 + 更重） */
+.island-banner .txt .ln-em{display:block;font-weight:900;text-align:center;
+  background:rgba(251,146,60,.18);border-left:3px solid #fb923c;border-radius:6px;
+  padding:3px 10px;margin:3px 0;letter-spacing:.01em}
 .island-banner.left-align{align-items:flex-start;text-align:left;padding-left:14px}
 .island-banner.left-align .tag{align-self:flex-start}
 .island-banner.hol{background:rgba(255,255,255,.14);border-style:dashed}
@@ -4479,10 +4488,10 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '3.9.16';
+var SITE_VERSION = '3.9.17';
 var VER_DATE = '2026-10-22';
 </script>
-<script src="./app.min.js?v=3916" defer></script>
+<script src="./app.min.js?v=3917" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
