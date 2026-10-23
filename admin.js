@@ -11723,6 +11723,14 @@ function paintIsland(){
     +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adOff"> 不上课</label>'
     +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adBold" checked> 加粗</label>'
     +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adCenter" checked> 居中</label>'
+    +       '<label class="ai-check" style="margin:0;gap:4px">字号'
+    +         '<select id="adSize" class="ai-size">'
+    +           '<option value="0">默认</option>'
+    +           '<option value="14">14</option><option value="16">16</option>'
+    +           '<option value="18">18</option><option value="20">20</option>'
+    +           '<option value="22">22</option><option value="24">24</option>'
+    +           '<option value="26">26</option><option value="28">28</option>'
+    +         '</select>px</label>'
     +       '<button class="btn btn-sm" id="adAdd">添加</button>'
     +     '</div>'
     +     '<div class="ai-fmtbar">'
@@ -11761,6 +11769,7 @@ function paintIsland(){
   };
   $('adBold').onchange = aiDayPreview;
   $('adCenter').onchange = aiDayPreview;
+  if($('adSize')) $('adSize').onchange = aiDayPreview;
   $('adText').oninput = aiDayPreview;
   document.querySelectorAll('.ai-fmt').forEach(function(b){
     b.onclick = function(){ aiFmt(b.getAttribute('data-fmt')); };
@@ -11961,6 +11970,7 @@ function paintDayList(){
       + '<b>' + esc(k.slice(5)) + '</b>'
       + (v.bold ? '<span class="ai-ovflag">粗</span>' : '')
       + (v.center === false ? '<span class="ai-ovflag">左</span>' : '')
+      + (v.size ? '<span class="ai-ovflag">' + v.size + 'px</span>' : '')
       + '<span class="muted">' + esc(one) + '</span>'
       + '<button type="button" data-daydel="' + attr(k) + '" title="删除">✕</button>'
       + '</div>';
@@ -11995,39 +12005,78 @@ function aiDayPreview(){
   if(!t) return;
   var bold = $('adBold') && $('adBold').checked;
   var center = $('adCenter') && $('adCenter').checked;
+  var size = Number(($('adSize') || {}).value || 0);
   t.style.fontWeight = bold ? '800' : '400';
   t.style.textAlign = center ? 'center' : 'left';
+  t.style.fontSize = size ? (size + 'px') : '';
   var pv = $('adPrev');
-  if(pv){
-    pv.innerHTML = aiPrevFmt(t.value) || '<span style="opacity:.45">（这里是预览）</span>';
-    pv.style.fontWeight = bold ? '800' : '500';
-    pv.style.textAlign = center ? 'center' : 'left';
-  }
+  if(!pv) return;
+  /* v3.9.17：预览不再自己写一套样式，而是复用前台的 .island-banner / .txt 类，
+     这样「粗多少、强调长什么样、字号多大」永远和首页一致，不会各写一套跑偏。 */
+  var cls = 'txt' + (bold ? ' bold' : ' soft') + (center ? '' : ' left');
+  var body = aiPrevFmt(t.value);
+  pv.innerHTML = '<div class="island-banner' + (center ? '' : ' left-align') + '">'
+    + '<span class="tag">今日事项</span>'
+    + '<span class="' + cls + '"' + (size ? ' style="font-size:' + size + 'px"' : '') + '>'
+    +   (body || '<span style="opacity:.45">这里是预览</span>')
+    + '</span></div>';
 }
-/* v3.9.8：选中文字后点按钮加标记（**加粗** / ~~横线~~ / 行首 #） */
+/* ============================================================================
+ * v3.9.17（站主）：「加粗选中没有用」「点一下应该取消，现在一直叠加」
+ * ----------------------------------------------------------------------------
+ * 根因两条：
+ *   ① 以前只判断「选区本身是不是正好被 ** 包住」；用户在 **数学** 里只选中
+ *      「数学」时判断失败，于是又包一层 → 越点越多层，看起来就是「叠加」。
+ *   ② 前台字重是 800、行内加粗 900，差 100 几乎看不出，所以觉得「没用」。
+ *
+ * 现在：先把选区扩张到「包住它的那一对标记」（看到标记就算关闭），再决定
+ * 加还是删，所以同一个位置连点就是开关；字重也在 CSS 里拉开了。
+ * ========================================================================= */
+function aiFindSpan(v, a, b, mark){
+  var m = mark.length;
+  /* 选区自己就带着标记：**数学** */
+  if(v.substr(a, m) === mark && v.substr(b - m, m) === mark && (b - a) >= 2 * m) return [a, b];
+  /* 选区紧贴标记内侧：数学 → **|数学|** */
+  if(v.substr(a - m, m) === mark && v.substr(b, m) === mark) return [a - m, b + m];
+  /* 选区在标记内部：向前找开启、向后找闭合 */
+  var open = v.lastIndexOf(mark, a - 1);
+  if(open >= 0){
+    var close = v.indexOf(mark, b);
+    if(close >= 0 && v.slice(open + m, close).indexOf(mark) < 0) return [open, close + m];
+  }
+  return null;
+}
+
 function aiFmt(kind){
   var t = $('adText');
   if(!t) return;
   var v = t.value, a = t.selectionStart, b = t.selectionEnd;
+
   if(kind === 'h'){
+    /* 行首 # 也是开关：有就删、没有就加 */
     var ls = v.lastIndexOf('\n', a - 1) + 1;
-    if(v.slice(ls, ls + 1) !== '#'){
+    if(v.slice(ls, ls + 2) === '# '){
+      t.value = v.slice(0, ls) + v.slice(ls + 2);
+      a = Math.max(ls, a - 2); b = Math.max(a, b - 2);
+    }else{
       t.value = v.slice(0, ls) + '# ' + v.slice(ls);
       a += 2; b += 2;
     }
   }else{
     var mark = (kind === 'b') ? '**' : '~~';
-    var sel = v.slice(a, b);
-    if(!sel){
+    var span = aiFindSpan(v, a, b, mark);
+    if(span){
+      /* 命中已有标记 → 去掉（连点即取消） */
+      var inner = v.slice(span[0] + mark.length, span[1] - mark.length);
+      t.value = v.slice(0, span[0]) + inner + v.slice(span[1]);
+      a = span[0]; b = span[0] + inner.length;
+    }else if(a === b){
+      /* 没有选区：插入占位并选中「文字」，方便直接改 */
       t.value = v.slice(0, a) + mark + '文字' + mark + v.slice(b);
       a = a + mark.length; b = a + 2;
-    }else if(sel.indexOf(mark) === 0 && sel.lastIndexOf(mark) === sel.length - mark.length){
-      var inner = sel.slice(mark.length, sel.length - mark.length);
-      t.value = v.slice(0, a) + inner + v.slice(b);
-      b = a + inner.length;
     }else{
-      t.value = v.slice(0, a) + mark + sel + mark + v.slice(b);
-      a = a + mark.length; b = a + sel.length;
+      t.value = v.slice(0, a) + mark + v.slice(a, b) + mark + v.slice(b);
+      b = b + mark.length; a = a + mark.length;
     }
   }
   t.focus();
@@ -12044,6 +12093,7 @@ function aiEditDay(k){
   $('adOff').checked = !!v.off;
   $('adBold').checked = !!v.bold;
   $('adCenter').checked = v.center !== false;
+  if($('adSize')) $('adSize').value = String(v.size || 0);
   var b = $('adAdd');
   if(b) b.textContent = '更新这一天';
   aiDayPreview();
@@ -12054,6 +12104,7 @@ function aiCancelDay(){
   AI_DAY_EDIT = null;
   $('adDate').value = ''; $('adText').value = ''; $('adOff').checked = false;
   $('adBold').checked = true; $('adCenter').checked = true;
+  if($('adSize')) $('adSize').value = '0';
   var b = $('adAdd');
   if(b) b.textContent = '添加';
   aiDayPreview();
@@ -12091,6 +12142,7 @@ function aiAddDay(){
   AI.days[d] = {
     text: text,
     off: off,
+    size: Number(($('adSize') || {}).value || 0),
     label: off ? (text || '今天不上课') : '',
     bold: !!$('adBold').checked,
     center: !!$('adCenter').checked,
@@ -14440,6 +14492,18 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.17', date: '2026-10-23', type: 'feat', title: '21 点后看明日事项 · 编辑器修好加粗与强调 · 可设字号', items: [
+      '21:00 之后班级岛默认显示「明日事项」：明天有临时安排就用它，没有就自动取明天星期几的课表',
+      '21:00 之后标签旁多一个「看今天 / 看明天」的小按钮，两个方向都能切，不额外占高度',
+      '把页面挂到 21 点会自动切换（不用刷新）',
+      '后台「按日期临时改」的加粗/横线按钮改成开关：同一处再点一次就取消（原来会一直叠加）',
+      '整行强调（行首 #）加了底色与左侧竖条，预览和首页都能一眼看出区别',
+      '新增字号设置（14–28px，默认跟随），只作用于那一天',
+      '后台预览改成直接复用首页的样式，粗细/强调/字号所见即所得'
+    ], pub: [
+      { cat: '班级', text: '晚上 9 点后班级岛自动显示「明日事项」，也能点一下切回今天' },
+      { cat: '班级', text: '今日事项可以单独调字号；行首加 # 的那一行会高亮显示' }
+    ] },
   { version: '3.9.16', date: '2026-10-23', type: 'fix', title: '横屏修好 · 更新不再看到旧版 · 首屏脚本瘦身', items: [
       '横屏重做：原来的「CSS 旋转」只是把 390 宽的页面转 90°，排版宽度没变，所以每一块都变成竖条、右半屏空白；现在改为全屏 + 系统方向锁，真的横过来，排版也按横屏重排',
       '锁不了方向的设备（如 iOS）不再假装横屏，直接提示「把手机横过来」，不会再出现半屏空白',
