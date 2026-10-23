@@ -29,7 +29,7 @@ const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const MAX_HOLIDAYS = 30;
 const MAX_DAYS = 200;
 const MAX_TEXT = 60;       /* 星期横幅：默认课表一行，60 字够 */
-const MAX_DAY_TEXT = 200;  /* v3.9.6：按日期临时改可以多行（考试时段 / 备注） */
+const MAX_DAY_TEXT = 600;  /* v3.9.6：多行；v3.9.18 起支持 {22b字} 单字标记，所以放到 600 */
 const MAX_PHOTO = 500;
 
 /* 站主 2026-10-21 发来的纸质课表，压成横幅缩写（早读 + 上午 5 节 + 下午 4 节 + 晚上） */
