@@ -1638,7 +1638,7 @@ var LS_UI    = 'cls_admin_ui';
    ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
       两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
       render_test.mjs 里有一条断言专门盯这件事。 */
-var SITE_VERSION = '3.9.13';
+var SITE_VERSION = '3.9.14';
 var VER_DATE = '2026-10-22';
 
 /* ---- 运行时状态 ---- */
@@ -16037,6 +16037,11 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.14', date: '2026-10-23', type: 'perf', title: '首屏不再「跳一下」', items: [
+      '班级岛改为先占位再显示：以前它等数据回来才出现，会把整页顶下去约 176px（布局跳动 0.25，属于「差」）'
+    ], pub: [
+      { cat: '速度', text: '打开首页时内容不再上下跳一下，看着更稳' }
+    ] },
   { version: '3.9.13', date: '2026-10-23', type: 'perf', title: '首屏班徽不再走服务器', items: [
       '首页顶部还有一处内联脚本冷启动就拉服务器代理的班徽（110KB、约 3 秒），改为直接读站内 28KB 版本'
     ], pub: [
