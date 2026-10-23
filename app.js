@@ -72,9 +72,19 @@ function deviceIsLandscape(){
 function syncLandscapeClass(){
   var vpPortrait = window.innerHeight > window.innerWidth;
   var devLand = deviceIsLandscape();
-  /* 只有「用户要横屏 + 视口还是竖的 + 设备也没横」才用 CSS 兜底旋转。
-     设备一旦物理横过来（哪怕视口没更新），立刻撤掉，避免转两次导致方向相反。 */
-  var need = LAND_ON && vpPortrait && !devLand;
+  /* ==========================================================================
+   * v3.9.16（站主）：「点横屏后只有半屏显示，另一半是白的」—— 废除假横屏
+   * --------------------------------------------------------------------------
+   * 老做法是给 body 套 rotate(90deg)，把 844 宽的盒子塞进 390 宽的屏幕。
+   * 但**排版用的还是 390 的视口宽度**：媒体查询不变，卡片仍是 390 宽，
+   * 旋转后每一块都变成一条竖带 —— 站主截图里那种「半屏内容 + 半屏空白」。
+   * 这不是坐标算错，是方案本身不可能对：CSS 旋转改不了布局宽度。
+   *
+   * 现在改成：真的锁屏幕方向（全屏 + orientation.lock，安卓 Chrome/Edge 支持）；
+   * 锁不了就提示「请把手机横过来」，绝不假装横屏。
+   * 附带好处：不用 transform 了，悬浮按钮回到 fixed，滚到哪都在。
+   * ========================================================================== */
+  var need = false;
   var html = document.documentElement;
   if(html.classList.contains('force-landscape') !== need){
     html.classList.toggle('force-landscape', need);
@@ -103,20 +113,32 @@ function syncLandscapeClass(){
  *       ⚠️ 旋转后 y 轴指向屏幕右侧，滚动会让按钮沿 x 方向跑，补偿的是 top（本地 y）。
  * ========================================================================= */
 function landscapePin(){
+  /* v3.9.16：不再有假旋转，按钮就是普通 fixed，不需要跟着滚动补偿。
+     这里只负责把历史版本留下的内联 top 清掉。 */
   var fab = document.getElementById('fabBtn');
-  if(!fab) return;
-  var html = document.documentElement;
-  if(!html.classList.contains('force-landscape')){
-    if(fab.style.top) fab.style.top = '';
-    return;
-  }
-  var st = (document.body && document.body.scrollTop) || 0;
-  fab.style.top = (st + 14) + 'px';
+  if(fab && fab.style.top) fab.style.top = '';
 }
 try{
   document.addEventListener('scroll', landscapePin, { passive: true, capture: true });
   window.addEventListener('resize', landscapePin, { passive: true });
 }catch(e){}
+
+/** 真正锁横屏：必须先进全屏（安卓上的硬性要求），再锁方向。
+ *  返回 Promise<boolean>：true = 真的转了；false = 这台设备做不到。 */
+function realLandscape(){
+  var el = document.documentElement;
+  var canFs = !!(el.requestFullscreen || el.webkitRequestFullscreen);
+  var canLock = !!(screen.orientation && screen.orientation.lock);
+  if(!canFs || !canLock) return Promise.resolve(false);
+  var fs;
+  try{
+    fs = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' })
+                              : el.webkitRequestFullscreen();
+  }catch(e){ return Promise.resolve(false); }
+  return Promise.resolve(fs).then(function(){
+    return screen.orientation.lock('landscape');
+  }).then(function(){ return true; }).catch(function(){ return false; });
+}
 
 function lockLandscape(){
   /* v3.5.40：**不再请求全屏**。全屏 + fixed 旋转在 iOS PWA 上切后台回来时
@@ -138,17 +160,33 @@ function toggleLandscape(){
   LAND_ON = !LAND_ON;
   saveLandIntent();
   if(LAND_ON){
-    lockLandscape();
-    /* 先按竖屏兜底转一次；380ms 后系统若已转屏会自动撤掉 CSS 旋转 */
-    syncLandscapeClass();
-    setTimeout(syncLandscapeClass, 380);
+    realLandscape().then(function(ok){
+      if(!ok){
+        /* 不能假装横屏：宁可提示，也不要把页面转成竖条 */
+        LAND_ON = false;
+        saveLandIntent();
+        if(typeof refreshLandBtn === 'function') refreshLandBtn();
+        if(typeof uiMsg === 'function') uiMsg('这台设备不支持强制横屏，把手机横过来就好', '#b45309');
+      }else{
+        syncLandscapeClass();
+      }
+    });
   }else{
     unlockLandscape();
+    try{ if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function(){}); }catch(e){}
     document.documentElement.classList.remove('force-landscape');
-    setTimeout(syncLandscapeClass, 380);
+    setTimeout(syncLandscapeClass, 300);
   }
   if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
   closeSidebar();
+}
+
+/* 按钮态刷新（取消横屏 / 失败回退时都要调） */
+function refreshLandBtn(){
+  var btn = document.getElementById('landBtn');
+  if(!btn) return;
+  btn.setAttribute('data-on', LAND_ON ? '1' : '0');
+  btn.textContent = LAND_ON ? '📱 横屏查看：开' : '📱 横屏查看：关';
 }
 
 /** 进页面时决定用竖屏还是横屏。

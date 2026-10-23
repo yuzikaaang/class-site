@@ -1,0 +1,17472 @@
+/* admin.js · 由 scripts/build.mjs 从 admin.html 抽出（未压缩） · v3.9.15 */
+
+/* ============================================================================
+ * 25级05班班级服务站 · 管理后台
+ * ----------------------------------------------------------------------------
+ * 单文件、零框架、零构建。直接双击 HTML 也能跑（请求后端需联网）。
+ *
+ * 模块划分：
+ *   ① CONFIG / 工具函数
+ *   ② API 层（统一鉴权、401 自动踢出）
+ *   ③ 图标库（内联 SVG，不引外部 CDN）
+ *   ④ 通用 UI：toast / modal / 确认框
+ *   ⑤ 面板 11 个：
+ *        概览   overview      用户   users         班级资料 profiles
+ *        审核   reviews       查看记录 viewlogs    公告   announcements
+ *        内容   content       登录记录 logins      操作日志 logs
+ *        设置   settings      账户   account
+ *   ⑥ Excel 导入导出（SheetJS 三源 CDN 回退）
+ *
+ * 隐私约定（2026-10-05 改造，别破坏它）：
+ *   · 班级通讯录（姓名/学号/政治面貌）只存在后端，前端不留任何明文密文
+ *   · 同学的微信 / QQ / 手机号提交后一律 pending，必须管理员在「联系方式审核」通过
+ *     才会出现在别人的查询结果里（后端 api/profile.js 的 shapeProfile 控制）
+ *   · 每次查询都写 profile_view_log，在「查看记录」里可溯
+ *   · 本文件的联系方式展示是**管理端明文视图**，非管理员拿不到这些接口
+ * ========================================================================= */
+(function(){
+'use strict';
+
+/* ============================================================================
+ * ① CONFIG 与工具
+ * ========================================================================= */
+
+/* 后端地址：与主站 index.html 保持一致。
+   留空则走同域（本地开发时起个服务即可）。 */
+var API_BASE = 'https://api.classsite.dpdns.org';
+
+var LS_TOKEN = 'cls_admin_token';
+var LS_USER  = 'cls_admin_user';
+var LS_THEME = 'cls_admin_theme';
+var LS_UI    = 'cls_admin_ui';
+
+/* 站点版本号（2026-10-07）
+   ⚠️ 必须与 index.html 里的 SITE_VERSION / VER_DATE 完全一致——
+      两边对不上就说明有一边忘了更新，站主会据此误判「有没有推上线」。
+      render_test.mjs 里有一条断言专门盯这件事。 */
+/* ---- 运行时状态 ---- */
+var STATE = {
+  token: '',
+  me: null,
+  page: 'overview',
+  /* 各面板的临时状态 */
+  /* v2.10.0 #172：成员与档案合并页（原 users / profiles 两页合一） */
+  members: { list: [], total: 0, counts: {}, page: 1, size: 50, q: '', role: '', status: '', scene: '', selected: {} },
+  quoteSource: 1,   /* v3.5.9 每日一言来源：1=联网 API，0=本地库 */
+  quoteSched: { mode:'random', start:'', every:3, fixed:{} },   /* v3.5.11 本地库排期 */
+  logs:  { list: [], total: 0, page: 1, size: 30 },
+  actionlogs: { list: [], total: 0, page: 1, size: 50, q: '', action: '', day: '', stats: null },
+  logins:{ list: [], total: 0, page: 1, size: 30, userId: 0 },
+  /* v3.5.35 在线时长：users 是按人聚合，sessions 是单人明细 */
+  online:{ users: [], days: 30, grandSecs: 0, grandSessions: 0, activeUsers: 0, totalUsers: 0,
+           detail: null, detailUser: null, page: 1, size: 50 },
+  profiles: { list: [], total: 0, counts: {}, page: 1, size: 30, q: '', status: '' },
+  reviews:  { list: [], history: [], total: 0, counts: {}, page: 1, size: 30 },
+  viewlogs: { list: [], total: 0, page: 1, size: 30, top: [], q: '' },
+  /* 班级内容：公告 + 内容合并成一个列表（2026-10-06） */
+  classcontent: { list: [], cat: '全部', sort: 'new', q: '' },
+  /* 2026-10-05 新增面板的状态 */
+  titles: { list: [], allowed: [], aiAccount: null, q: '', onlySet: false, page: 1, size: 30 },
+  homeworks: { list: [], notice: '', draft: null },
+  song: { list: [], cards: [] },
+  /* 2026-10-06 新增 */
+  quotes: { list: [] },
+  study: null,
+  dates:  { list: [] },
+  secrets: { list: [], encrypted: false, hasKey: false },
+  /* 2026-10-07 新增：游戏数据（最高分 / 游玩时长 / 券获取时间） */
+  games: { list: [], meta: [], summary: null, q: '', tab: 'play', week: '' },
+};
+window.__ADMIN_STATE = STATE;   /* 调试用 */
+
+/* ---- 小工具 ---- */
+function $(id){ return document.getElementById(id); }
+function esc(s){
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function attr(s){ return esc(s); }
+
+/**
+ * 把数据库返回的时间格式化成可读文本。
+ *
+ * ⚠️ 复制自主站的经验（2026-10-05 踩过的坑）：
+ * Neon HTTP 驱动返回 timestamptz 是**字符串**（形如 "2026-10-05 05:52:28"），
+ * 带空格的格式在 Safari / 微信 WebView 里 `new Date()` 会得到 Invalid Date。
+ * 所以要手动换 T 补 Z 按 UTC 解析，再转本地时区显示。
+ */
+function parseTime(v){
+  if(!v) return null;
+  if(v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  var s = String(v).trim();
+  if(!s) return null;
+  if(/^\d+$/.test(s)){ var n = Number(s); return new Date(n > 1e12 ? n : n*1000); }
+
+  /* 🔴 v3.5.12 真根因（站主反馈「行为日志没有时间戳」）：
+     线上 /admin?action=action-logs 返回的 createdAt 不是 "2026-10-17T15:01:09Z"，
+     而是 **JS Date 的 toString 形态** —— "Sat Oct 17 2026 15:01:09 GMT+0000
+     (Coordinated Universal Time)"（Neon 驱动把 timestamptz 直接当 Date 序列化）。
+     老代码只做 `replace(' ','T')`（替换第一个空格）→ 得到
+     "SatTOct 17 2026 ..."，Date.parse 必然 NaN → fmt() 返回 '—'，
+     整列时间就永远是个破折号。
+     修法：先认 ISO / 带时区偏移的数字格式；再退回 Date.parse 原生格式
+     （它本来就吃得下 toString 形态）；最后才是补 Z 兜底。 */
+  var iso = s.replace(' ', 'T');
+  if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)){
+    if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(iso)) iso += 'Z';
+    var t1 = Date.parse(iso);
+    if(!isNaN(t1)) return new Date(t1);
+  }
+  var t0 = Date.parse(s);
+  if(!isNaN(t0)) return new Date(t0);
+  var t2 = Date.parse(iso);
+  return isNaN(t2) ? null : new Date(t2);
+}
+function fmt(v, mode){
+  var d = parseTime(v);
+  if(!d) return '—';
+  var p = function(n){ return String(n).padStart(2,'0'); };
+  var Y = d.getFullYear(), M = p(d.getMonth()+1), D = p(d.getDate());
+  var h = p(d.getHours()), m = p(d.getMinutes()), sec = p(d.getSeconds());
+  if(mode === 'date') return Y + '-' + M + '-' + D;
+  if(mode === 'time') return h + ':' + m;
+  return Y + '-' + M + '-' + D + ' ' + h + ':' + m + ':' + sec;
+}
+
+/**
+ * 本地墙钟字符串原样格式化（**不碰时区**）。
+ *
+ * ⚠️ 2026-10-16 站主反馈修的坑：公告的发布时间、作业的起止日期是**站主手填 /
+ *    设备本地写下的墙钟字符串**（如 "2026-10-16 21:30"），前端是直接
+ *    `a.date.slice(5)` 原样显示的（见 index.html 公告栏）。
+ *    而 fmt() 会给没有时区标记的串补 Z 按 UTC 解析 —— 于是站主填 21:30，
+ *    后台小字显示成次日 05:30，正好多加 8 小时（前端不加，两边就对不上）。
+ *    含 "~" 的区间（作业起止）以前还会因为整串解析失败直接显示「—」。
+ *    所以内容类时间一律走这里：认得出就规范化，认不出就原样输出，绝不换算。
+ */
+function fmtWall(v, mode){
+  var s = String(v == null ? '' : v).trim();
+  if(!s) return '—';
+  if(s.indexOf('~') >= 0){
+    return s.split('~').map(function(x){ return fmtWall(x.trim(), mode); }).join(' ~ ');
+  }
+  var m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/);
+  if(!m) return s;
+  var p = function(n){ return String(n).padStart(2,'0'); };
+  var d0 = m[1] + '-' + p(m[2]) + '-' + p(m[3]);
+  if(mode === 'date' || m[4] === undefined) return d0;
+  return d0 + ' ' + p(m[4]) + ':' + p(m[5]);
+}
+
+/** 内容记录（公告 / 作业 / 其它内容）的时间展示。
+ *  只有 timeKind === 'db' 才是数据库时间戳（UTC，要转本地）；
+ *  其余都是站主手填的本地墙钟串，原样显示。 */
+function fmtRecTime(c){
+  if(!c || !c.time) return '—';
+  return c.timeKind === 'db' ? fmt(c.time) : fmtWall(c.time);
+}
+/** 相对时间："3 分钟前" */
+function ago(v){
+  var d = parseTime(v);
+  if(!d) return '—';
+  var ms = Date.now() - d.getTime();
+  if(ms < 0) return fmt(v);
+  var s = Math.floor(ms/1000);
+  if(s < 60) return '刚刚';
+  var m = Math.floor(s/60);
+  if(m < 60) return m + ' 分钟前';
+  var h = Math.floor(m/60);
+  if(h < 24) return h + ' 小时前';
+  var dd = Math.floor(h/24);
+  if(dd < 30) return dd + ' 天前';
+  return fmt(v, 'date');
+}
+function bytes(n){
+  n = Number(n) || 0;
+  if(n < 1024) return n + ' B';
+  if(n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(2) + ' MB';
+}
+/** 一次下载（导出用） */
+function download(blob, filename){
+  var a = document.createElement('a');
+  var url = URL.createObjectURL(blob);
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 200);
+}
+/** 防抖 */
+function debounce(fn, ms){
+  var t; return function(){ var a = arguments, c = this; clearTimeout(t); t = setTimeout(function(){ fn.apply(c, a); }, ms); };
+}
+
+/* ============================================================================
+ * ② API 层
+ * ========================================================================= */
+
+function apiUrl(path){
+  return (API_BASE || '') + '/api' + path;
+}
+
+/**
+ * 统一请求封装。
+ * - 自动带 Bearer token
+ * - 401 自动清登录态并回到登录门
+ * - 403 + mustChangePassword 自动弹强制改密
+ */
+function api(path, opts){
+  opts = opts || {};
+  var headers = { 'Content-Type':'application/json' };
+  if(STATE.token) headers['Authorization'] = 'Bearer ' + STATE.token;
+
+  var init = { method: opts.method || 'GET', headers: headers };
+  if(opts.body !== undefined) init.body = JSON.stringify(opts.body);
+
+  return fetch(apiUrl(path), init).then(function(r){
+    return r.json().catch(function(){
+      return { ok:false, error:'接口返回了非 JSON 内容（HTTP ' + r.status + '）' };
+    }).then(function(j){
+      if(r.status === 401){
+        doLogout(true);
+        throw new Error(j.error || '登录已过期，请重新登录');
+      }
+      /* 未改初始密码 → 后端拦截，这里把强制改密弹窗拉起来 */
+      if(r.status === 403 && j.mustChangePassword){
+        openForceChangePwd();
+        throw new Error(j.error || '请先修改初始密码');
+      }
+      if(!r.ok || j.ok === false){
+        var e = new Error(j.error || ('请求失败（HTTP ' + r.status + '）'));
+        e.status = r.status; e.data = j;
+        throw e;
+      }
+      return j;
+    });
+  });
+}
+
+/* ============================================================
+ * 【v2.9.10】全站共用自适应字色（与 index.html 逐行同构）
+ * ------------------------------------------------------------
+ * 站主原话：「全站字色共用一套逻辑……字体颜色需根据背景颜色实时改变，
+ * 都用对应的相反色，尤其是一些公告什么经常切换白天黑夜的时候
+ * 只有一部分看得清，主页面和后台页面都有这种情况」。
+ *
+ * 规则（以后新写的带背景文字块都按这个来）：
+ *   ① 凡是「文字压在背景上」的渲染，一律经过 clsReadableOn(背景色)
+ *      取相反色 —— 亮底用深字、暗底用白字，不写死；
+ *   ② 主题（白天/黑夜）切换后，clsAutoInk(document.body) 全局重算；
+ *   ③ 新增渲染点只要给容器加 class="ink-auto"（动态背景色用
+ *      data-ink-bg 声明代表色，如渐变的起始色），无需再操心字色。
+ * 与 index.html 保持同一套实现：同函数名、同择优逻辑、同色值，
+ * 改一处必须同步改另一处（render_test.mjs 有断言盯同构）。
+ *
+ * 【v2.9.11】判定升级：WCAG 相对亮度 + 对比度择优（不再用感知亮度猜）
+ * ------------------------------------------------------------
+ * 站主原话：「还有登录时的弹窗等等，都是字色不达标的后台也有这种情况」。
+ * v2.9.10 用 YIQ 感知亮度阈值 0.6 猜相反色，中间色会误判 ——
+ * 如 #f97316（亮橙）被判「暗底取白字」，实测白字对比度仅 2.80:1，
+ * 够不上 WCAG 正文 4.5:1，而深字 #241f1c 有 5.82:1。
+ * 现在白字、深字各算一遍 WCAG 对比度，谁大用谁，中间色不再靠猜。
+ * ============================================================ */
+var CLS_INK_DARK = '#241f1c';   /* 亮底上的字（暖调近黑，不用纯黑） */
+var CLS_INK_LIGHT = '#ffffff';  /* 暗底上的字 */
+var CLS_INK_RGB_DARK = clsParseColor(CLS_INK_DARK);   /* [36,31,28]，择优用 */
+var CLS_INK_RGB_LIGHT = clsParseColor(CLS_INK_LIGHT); /* [255,255,255]，择优用 */
+
+/* 解析颜色串 → [r,g,b]；支持 #rgb / #rrggbb / rgb() / rgba()。
+   透明或解析失败返回 null（调用方按「不处理」跳过）。 */
+function clsParseColor(c){
+  var s = String(c || '').trim().toLowerCase();
+  var m;
+  if((m = /^#([0-9a-f]{3})$/.exec(s))){
+    return [parseInt(m[1][0]+m[1][0],16), parseInt(m[1][1]+m[1][1],16), parseInt(m[1][2]+m[1][2],16)];
+  }
+  if((m = /^#([0-9a-f]{6})$/.exec(s))){
+    return [parseInt(m[1].slice(0,2),16), parseInt(m[1].slice(2,4),16), parseInt(m[1].slice(4,6),16)];
+  }
+  if((m = /^rgba?\(([^)]+)\)$/.exec(s))){
+    var p = m[1].split(',').map(function(x){ return parseFloat(x); });
+    if(p.length >= 3 && p.every(function(x){ return isFinite(x); })){
+      if(p.length > 3 && p[3] === 0) return null;   /* 全透明 */
+      return [p[0], p[1], p[2]];
+    }
+  }
+  return null;
+}
+/* WCAG 2.x 相对亮度 0–1（sRGB gamma 展开后加权）。
+   注意与「感知亮度」(0.299R+0.587G+0.114B)/255 的区别：那玩意儿
+   在中间色上会和真实对比度打架（#f97316 就是受害者），择优只认这个。 */
+function clsRelLum(rgb){
+  function ch(v){
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+  return 0.2126 * ch(rgb[0]) + 0.7152 * ch(rgb[1]) + 0.0722 * ch(rgb[2]);
+}
+/* WCAG 对比度 1–21 */
+function clsContrast(a, b){
+  var la = clsRelLum(a), lb = clsRelLum(b);
+  var hi = Math.max(la, lb), lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+/* 核心：给定背景色，返回可读的相反色。
+   v2.9.11 起不猜了直接算 —— 白字与深字各算一遍 WCAG 对比度，取大者。
+   实测：#f97316 白 2.80 / 深 5.82 → 深字；#0f766e 白 5.47 / 深 2.98 → 白字；
+   #e07a3c 白 2.99 / 深 5.45 → 深字；#c2410c 白 5.18 / 深 3.15 → 白字。
+   与 index.html 逐行同构。 */
+function clsReadableOn(bg){
+  var c = clsParseColor(bg);
+  if(!c) return '';
+  return clsContrast(CLS_INK_RGB_LIGHT, c) >= clsContrast(CLS_INK_RGB_DARK, c)
+    ? CLS_INK_LIGHT : CLS_INK_DARK;
+}
+/* 扫描 root 内所有 .ink-auto，按实际背景重设字色。
+   data-ink-bg 优先（渐变/图片背景没有单一 computed 色时用）；
+   否则读 computed backgroundColor（transparent 则跳过——
+   让继承色说话，不硬套）；
+   backgroundColor 读不到有效色时，从 background-image 渐变里抓
+   第一个色当代表色（渐变色取自 CSS 变量，换主题会实时变）。 */
+function clsAutoInk(root){
+  root = root || document.body;
+  if(!root || !root.querySelectorAll) return;
+  var els = root.querySelectorAll('.ink-auto');
+  for(var i = 0; i < els.length; i++){
+    var el = els[i];
+    var bg = el.getAttribute('data-ink-bg');
+    if(!bg){
+      try{
+        var cs = getComputedStyle(el);
+        bg = cs.backgroundColor;
+        if(!clsParseColor(bg)){
+          var m = /rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}/.exec(cs.backgroundImage || '');
+          if(m) bg = m[0];
+        }
+      }catch(e){ bg = ''; }
+    }
+    var ink = clsReadableOn(bg);
+    if(ink) el.style.color = ink;
+  }
+}
+
+/* v2.9.10：DOM 变化后自动补扫 .ink-auto —— 面板/表格动态渲染出来的
+   字色也实时正确，不用每个渲染函数后面手动跟一次（debounce 100ms，
+   只查 .ink-auto，且只观察 childList：写 style 不会反触发，无死循环风险）。
+   与 index.html 同款同构。 */
+if(typeof MutationObserver === 'function'){
+  var __inkTimer = null;
+  try{
+    new MutationObserver(function(){
+      if(__inkTimer) return;
+      __inkTimer = setTimeout(function(){
+        __inkTimer = null;
+        try{ clsAutoInk(document.body); }catch(e){}
+      }, 100);
+    }).observe(document.body, { childList:true, subtree:true });
+  }catch(e){}
+}
+
+/* ============================================================
+ * 【v2.9.9】客户端密码派生（与 index.html 同款同构）
+ * ------------------------------------------------------------
+ * 后台同样改走「浏览器本地 PBKDF2 → 服务端零派生」：
+ *   ① POST /auth?action=salt {username} → {algo, iterations, salt}
+ *   ② crypto.subtle 本地派生 → credential
+ *   ③ login 带 credential；change-password 带 {oldCredential, newHash}
+ * 任一步走不通自动回退明文路径，行为与 v2.9.9 之前一致。
+ * 由来详见 index.html 同名注释块（第五十六轮·根因修复）。
+ * ============================================================ */
+var CLS_KDF_ITER = 50000;
+
+function clsHasSubtle(){
+  return !!(window.crypto && window.crypto.subtle && window.crypto.subtle.deriveKey
+           && window.crypto.subtle.digest && window.TextEncoder);
+}
+function clsB64urlEncode(bytes){
+  var s = '', i;
+  for(i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function clsB64urlDecode(str){
+  var s = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+  while(s.length % 4) s += '=';
+  var bin = atob(s), out = new Uint8Array(bin.length);
+  for(var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function clsDerive(password, saltB64, iterations){
+  if(!clsHasSubtle()) return Promise.reject(new Error('NO_SUBTLE'));
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(String(password)), 'PBKDF2', false, ['deriveBits'])
+    .then(function(base){
+      return crypto.subtle.deriveBits(
+        { name:'PBKDF2', salt: clsB64urlDecode(saltB64), iterations: iterations, hash:'SHA-256' },
+        base, 256
+      );
+    })
+    .then(function(bits){ return clsB64urlEncode(new Uint8Array(bits)); });
+}
+function clsNewHash(password, iterations){
+  var salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  var saltB64 = clsB64urlEncode(salt);
+  return clsDerive(password, saltB64, iterations).then(function(dk){
+    return crypto.subtle.digest('SHA-256', clsB64urlDecode(dk)).then(function(d){
+      return 'pbkdf2c$' + iterations + '$' + saltB64 + '$' + clsB64urlEncode(new Uint8Array(d));
+    });
+  });
+}
+var CLS_SALT_CACHE = {};
+function clsSalt(username){
+  var key = String(username || '').toLowerCase();
+  if(CLS_SALT_CACHE[key]) return Promise.resolve(CLS_SALT_CACHE[key]);
+  return api('/auth?action=salt', { method:'POST', body:{ username: username } }).then(function(j){
+    var p = { algo: j.algo === 'pbkdf2' ? 'pbkdf2' : 'bcrypt', iterations: j.iterations || 0, salt: j.salt || '' };
+    CLS_SALT_CACHE[key] = p;
+    return p;
+  });
+}
+function clsSaltForget(username){ delete CLS_SALT_CACHE[String(username || '').toLowerCase()]; }
+var CLS_FALLBACK = { fallback: true };
+function clsKdfFallback(e){
+  if(e && (e.message === 'NO_SUBTLE' || e.status === 429 || e.status >= 500)) return true;
+  return false;
+}
+function clsLogin(u, p){
+  if(!u) return api('/auth?action=login', { method:'POST', body:{ username:u, password:p } });
+  return clsSalt(u).then(function(sp){
+    if(sp.algo !== 'pbkdf2' || !sp.salt || !sp.iterations) return CLS_FALLBACK;
+    return clsDerive(p, sp.salt, sp.iterations).then(function(cred){
+      return api('/auth?action=login', { method:'POST', body:{ username:u, credential:cred } });
+    });
+  }).catch(function(e){
+    if(clsKdfFallback(e)) return CLS_FALLBACK;
+    throw e;
+  }).then(function(r){
+    if(r === CLS_FALLBACK) return api('/auth?action=login', { method:'POST', body:{ username:u, password:p } });
+    return r;
+  });
+}
+function clsChangePwd(oldPwd, newPwd, username){
+  if(!username) return api('/auth?action=change-password',
+    { method:'POST', body:{ oldPassword: oldPwd, newPassword: newPwd } });
+  return clsSalt(username).then(function(sp){
+    if(sp.algo !== 'pbkdf2' || !sp.salt || !sp.iterations) return CLS_FALLBACK;
+    return clsDerive(oldPwd, sp.salt, sp.iterations).then(function(oldCred){
+      return clsNewHash(newPwd, CLS_KDF_ITER).then(function(newHash){
+        return api('/auth?action=change-password',
+          { method:'POST', body:{ oldCredential: oldCred, newHash: newHash } });
+      });
+    });
+  }).catch(function(e){
+    if(clsKdfFallback(e)) return CLS_FALLBACK;
+    throw e;
+  }).then(function(r){
+    if(username) clsSaltForget(username);
+    if(r === CLS_FALLBACK) return api('/auth?action=change-password',
+      { method:'POST', body:{ oldPassword: oldPwd, newPassword: newPwd } });
+    return r;
+  });
+}
+
+/* ============================================================================
+ * ③ 图标库（内联 SVG，不依赖外部 CDN）
+ * ========================================================================= */
+var ICON = {
+  dashboard:'<path d="M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  megaphone:'<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  layers:'<path d="m12 2 9 5-9 5-9-5 9-5z"/><path d="m3 17 9 5 9-5"/><path d="m3 12 9 5 9-5"/>',
+  activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  trash:'<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+  key:'<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 8.3-8.3"/><path d="m17 4 3 3"/><path d="m14 7 3 3"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  edit:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/>',
+  eye:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/>',
+  ban:'<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  ticket:'<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>',
+  calendar:'<path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>',
+  quote:'<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1a1 1 0 0 1 1 1v1a2 2 0 0 1-2 2h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1a1 1 0 0 1 1 1v1a2 2 0 0 1-2 2H4a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
+  grip:'<circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/>',
+  user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  globe:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v6h6"/>',
+  alert:'<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
+  chart:'<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
+  database:'<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  /* v3.5.12 行为日志分组折叠箭头 */
+  chevronRight:'<path d="m9 6 6 6-6 6"/>',
+  chevronDown:'<path d="m6 9 6 6 6-6"/>'
+};
+function svg(name, size){
+  var p = ICON[name] || ICON.file;
+  var s = size || 18;
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+       + 'stroke-linecap="round" stroke-linejoin="round" width="' + s + '" height="' + s + '">' + p + '</svg>';
+}
+
+/* -----------------------------------------------------
+   v2.5.0 去 emoji：后台与主站同一套做法 —— 页面加载后跑**一次**把写死的 emoji 换成 SVG。
+   只跑一次、**不监听 DOM 变化**，跑完即止，不会和任何定时刷新打架。
+   后台没有主站那套 85 个 emoji 的映射表，这里用一张精简表（覆盖后台实际用到的）。
+   ----------------------------------------------------- */
+var ADM_EMOJI_MAP = {
+  '⚠':'alert','✅':'check','❌':'x','💡':'sun','🔒':'lock','🔐':'lock','📌':'file','🎉':'activity',
+  '📝':'edit','🔔':'bell','🌙':'sun','☀':'sun','📋':'layers','📅':'calendar','📱':'file','🔗':'globe',
+  '🌐':'globe','💾':'download','🗑':'trash','🏫':'globe','🚫':'ban','✨':'activity','🎮':'activity',
+  '📥':'download','📤':'upload','🔍':'search','📡':'activity','💭':'quote','👤':'user','➕':'plus',
+  '🗂':'layers','🕹':'activity','🧩':'layers','🎯':'activity','🐍':'activity','🔨':'settings',
+  '🐦':'activity','🍬':'activity','💣':'alert','🦘':'activity','⚫':'ban','⭕':'ban','♟':'file',
+  '✈':'upload','🖥':'dashboard','🍎':'file','⚙':'settings','☰':'grip','🏠':'dashboard','📊':'chart',
+  '📦':'layers','🎁':'activity','🎵':'music','🎟':'ticket','🎼':'music','📜':'file','💬':'quote',
+  '👥':'users','🥇':'activity','🥈':'activity','🥉':'activity','✏':'edit','🗓':'calendar',
+  '👍':'activity','🔥':'activity','🖼':'file','🎧':'music','🎬':'file','📎':'file','⏳':'clock',
+  '⚡':'activity','🔤':'file','📖':'file','📐':'file','⚛':'file','🧪':'file','🧬':'file','☁':'globe',
+  '📢':'megaphone','📲':'file','👁':'eye','🔓':'lock','🧹':'trash','🔄':'refresh','📇':'user','🏆':'activity'
+};
+var ADM_EMOJI_CHARS = Object.keys(ADM_EMOJI_MAP).sort(function(a,b){ return b.length-a.length; });
+var ADM_EMOJI_RE = new RegExp('(' + ADM_EMOJI_CHARS.map(function(c){
+  return c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+}).join('|') + ')\\uFE0F?', 'g');
+function admEmojiSvg(text, size){
+  var t = String(text == null ? '' : text);
+  if(!t) return t;
+  ADM_EMOJI_RE.lastIndex = 0;
+  if(!ADM_EMOJI_RE.test(t)) return t;
+  ADM_EMOJI_RE.lastIndex = 0;
+  var out = '', last = 0, m;
+  while((m = ADM_EMOJI_RE.exec(t))){
+    if(m.index > last) out += t.slice(last, m.index);
+    var key = m[0].replace(/\uFE0F/g,'');
+    out += svg(ADM_EMOJI_MAP[key] || ADM_EMOJI_MAP[m[0]] || 'file', size || 15);
+    last = m.index + m[0].length;
+    if(m[0].length === 0) ADM_EMOJI_RE.lastIndex++;
+  }
+  if(last < t.length) out += t.slice(last);
+  return out;
+}
+/* 去掉纯文本里的 emoji（toast / option 这类放不了 SVG 的位置）。 */
+function admStripEmoji(text){
+  var t = String(text == null ? '' : text);
+  ADM_EMOJI_RE.lastIndex = 0;
+  return t.replace(ADM_EMOJI_RE, '').replace(/^\s+/, '');
+}
+var ADM_ICONIFY_SKIP = {SCRIPT:1, STYLE:1, TEXTAREA:1, OPTION:1, TITLE:1};
+function admIconify(root){
+  var base = root || document.body;
+  if(!base) return;
+  var walker = document.createTreeWalker(base, NodeFilter.SHOW_TEXT, {
+    acceptNode: function(node){
+      var p = node.parentNode;
+      if(!p || ADM_ICONIFY_SKIP[p.nodeName]) return NodeFilter.FILTER_REJECT;
+      if(p.closest && p.closest('[data-no-icon]')) return NodeFilter.FILTER_REJECT;
+      ADM_EMOJI_RE.lastIndex = 0;
+      return ADM_EMOJI_RE.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+  });
+  var targets = [], n;
+  while((n = walker.nextNode())) targets.push(n);
+  for(var i = 0; i < targets.length; i++){
+    var node = targets[i];
+    var span = document.createElement('span');
+    span.className = 'ico-inline';
+    span.innerHTML = admEmojiSvg(node.nodeValue, 15);
+    if(node.parentNode) node.parentNode.replaceChild(span, node);
+  }
+}
+/* option 放不了 SVG，统一去 emoji 保留文字 */
+function admStripOptions(root){
+  var base = root || document;
+  var opts = base.querySelectorAll ? base.querySelectorAll('option') : [];
+  for(var i = 0; i < opts.length; i++) opts[i].textContent = admStripEmoji(opts[i].textContent);
+}
+
+/* ============================================================================
+ * ④ 通用 UI
+ * ========================================================================= */
+function toast(msg, kind, ms){
+  var box = $('toasts');
+  if(!box) return;
+  var el = document.createElement('div');
+  el.className = 'toast ' + (kind || '');
+  /* v2.5.0：toast 是纯文本，放不了 SVG，统一去 emoji 只留文字 */
+  el.textContent = typeof admStripEmoji === 'function' ? admStripEmoji(msg || '') : msg;
+  box.appendChild(el);
+  setTimeout(function(){
+    el.style.transition = 'opacity .25s, transform .25s';
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(8px)';
+    setTimeout(function(){ el.remove(); }, 260);
+  }, ms || 2600);
+}
+
+/**
+ * 打开弹窗。
+ * @param {object} o { title, sub, body(html), foot(html), wide, onMount(box), locked(不可关闭) }
+ */
+function openModal(o){
+  o = o || {};
+  var m = $('modal'), box = $('modalBox');
+  var cls = 'modal-box' + (o.wide ? ' wide' : '');
+  box.className = cls;
+  box.innerHTML =
+    '<div class="modal-head">'
+    +   '<div><h3>' + esc(o.title || '') + '</h3>'
+    +   (o.sub ? '<p class="sub">' + esc(o.sub) + '</p>' : '')
+    +   '</div>'
+    +   (o.locked ? '' : '<button class="close-x" data-close>' + svg('x') + '</button>')
+    + '</div>'
+    + '<div class="modal-body" id="modalBody">' + (o.body || '') + '</div>'
+    + (o.foot ? '<div class="modal-foot">' + o.foot + '</div>' : '');
+
+  m.className = 'modal show' + (o.locked ? ' locked' : '');
+  /* 点遮罩关闭（locked 除外） */
+  m.onclick = function(e){ if(e.target === m && !o.locked) closeModal(); };
+  var x = box.querySelector('[data-close]');
+  if(x) x.onclick = closeModal;
+  if(typeof o.onMount === 'function') o.onMount(box);
+  return box;
+}
+function closeModal(){
+  var m = $('modal');
+  m.className = 'modal';
+  $('modalBox').innerHTML = '';
+}
+
+/**
+ * 确认框（Promise 化）
+ * @param {object} o
+ *   html  主文案（允许 HTML，调用方自己保证安全）
+ *   text  主文案（纯文本，会被转义）—— 与 html 二选一
+ *   detail 补充说明（纯文本，小字显示在主文案下面）
+ *   warn  危险提示（红框）
+ * @returns {Promise<boolean>}
+ */
+function confirmBox(o){
+  o = o || {};
+  return new Promise(function(resolve){
+    var done = function(v){ closeModal(); resolve(v); };
+    openModal({
+      title: o.title || '确认操作',
+      body: '<p style="margin:0;font-size:.9rem;line-height:1.7">' + (o.html || esc(o.text || '确定要继续吗？')) + '</p>'
+            + (o.detail ? '<p style="margin:10px 0 0;font-size:.82rem;line-height:1.7;color:var(--fg-3)">' + esc(o.detail) + '</p>' : '')
+            + (o.warn ? '<div class="alert danger" style="margin:16px 0 0">' + esc(o.warn) + '</div>' : ''),
+      foot: '<button class="btn btn-ghost" data-no>取消</button>'
+            + '<button class="btn ' + (o.danger ? 'btn-danger' : '') + '" data-yes>' + esc(o.okText || '确定') + '</button>',
+      onMount: function(box){
+        box.querySelector('[data-yes]').onclick = function(){ done(true); };
+        box.querySelector('[data-no]').onclick  = function(){ done(false); };
+      }
+    });
+  });
+}
+
+/** 输入框对话框（Promise 化，返回输入值或 null） */
+function promptBox(o){
+  o = o || {};
+  return new Promise(function(resolve){
+    var done = function(v){ closeModal(); resolve(v); };
+    openModal({
+      title: o.title || '输入',
+      sub: o.sub || '',
+      body:
+        '<div class="field"><label for="pmVal">' + esc(o.label || '内容') + '</label>'
+        + '<input id="pmVal" type="' + (o.type || 'text') + '" value="' + attr(o.value || '') + '" '
+        + 'placeholder="' + attr(o.placeholder || '') + '" '
+        + (o.maxlength ? 'maxlength="' + o.maxlength + '"' : '') + '>'
+        + (o.hint ? '<p class="hint">' + esc(o.hint) + '</p>' : '')
+        + '</div>'
+        + '<div class="msg" id="pmMsg"></div>',
+      foot: '<button class="btn btn-ghost" data-no>取消</button><button class="btn" data-yes>' + esc(o.okText || '确定') + '</button>',
+      onMount: function(box){
+        var input = box.querySelector('#pmVal');
+        var msg = box.querySelector('#pmMsg');
+        setTimeout(function(){ input.focus(); input.select(); }, 80);
+        var submit = function(){
+          var v = input.value.trim();
+          if(o.required && !v){
+            msg.className = 'msg err show'; msg.textContent = '不能为空';
+            return;
+          }
+          if(o.validate){
+            var err = o.validate(v);
+            if(err){ msg.className = 'msg err show'; msg.textContent = err; return; }
+          }
+          done(v);
+        };
+        box.querySelector('[data-yes]').onclick = submit;
+        box.querySelector('[data-no]').onclick  = function(){ done(null); };
+        input.onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); submit(); } };
+      }
+    });
+  });
+}
+
+/* ============================================================================
+ * ⑤ 导航配置
+ * ========================================================================= */
+var PAGES = [
+  { id:'overview',      label:'数据概览', icon:'dashboard', group:'概览',  title:'数据概览' },
+  { id:'members',       label:'成员与档案', icon:'users',   group:'用户',  title:'成员与档案（账号 + 班级档案）' },
+  { id:'titles',        label:'头衔任命', icon:'shield',    group:'用户',  title:'头衔任命' },
+  { id:'reviews',       label:'信息审核', icon:'check', group:'用户',  title:'信息审核（资料修改审批）' },
+  { id:'viewlogs',      label:'查看记录', icon:'eye',       group:'用户',  title:'资料查看记录' },
+  { id:'classcontent',  label:'班级内容', icon:'layers',    group:'内容',  title:'班级内容（公告 / 作业 / 活动）' },
+  /* v3.8.4（站主）：板块改名 / 简介 / 排序 / 隐藏 + 板块分享链接 */
+  { id:'boards',        label:'板块管理', icon:'layers',    group:'内容',  title:'板块管理（名称 / 简介 / 排序 / 分享链接）' },
+  /* v3.8.7（站主）：首页班级岛 + 课程表 */
+  { id:'island',        label:'班级岛',   icon:'clock',     group:'内容',  title:'班级岛（今日事项横幅）' },
+  { id:'homeworks',     label:'作业管理', icon:'file',      group:'内容',  title:'作业管理' },
+  { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
+  { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
+  { id:'scores',        label:'成绩分析', icon:'activity',  group:'内容',  title:'成绩分析（考试 / 导入 / 改分 / 发布）' },
+  { id:'votes',         label:'投票管理', icon:'check',     group:'内容',  title:'投票管理（发起投票 / 截止时间 / 结果）' },
+
+  { id:'popups',        label:'通用弹窗', icon:'bell',      group:'内容',  title:'通用弹窗（开屏弹 / 板块弹）' },
+  { id:'cards',         label:'首页卡片', icon:'layers',    group:'内容',  title:'首页卡片（每日一言 / 学习卡片）' },
+  { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
+  { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
+  { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
+  { id:'online',        label:'在线时长', icon:'clock',     group:'安全',  title:'在线时长（单次 / 累计）' },
+  /* v3.6.1（站主 #4）：云端数据备份 / 回档 */
+  { id:'backup',        label:'数据管理', icon:'database',  group:'安全',  title:'数据管理（备份 / 回档）' },
+  { id:'logs',          label:'操作日志', icon:'file',      group:'安全',  title:'操作日志' },
+  { id:'actionlogs',    label:'行为日志', icon:'activity',  group:'安全',  title:'用户操作日志（点击行为）' },
+  { id:'secrets',       label:'令牌管理', icon:'key',       group:'系统',  title:'系统令牌' },
+  { id:'settings',      label:'系统设置', icon:'settings',  group:'系统',  title:'系统设置' },
+  { id:'account',       label:'我的账户', icon:'lock',      group:'系统',  title:'我的账户' }
+];
+
+function renderNav(){
+  var groups = [];
+  PAGES.forEach(function(p){
+    var g = groups.find(function(x){ return x.name === p.group; });
+    if(!g){ g = { name:p.group, items:[] }; groups.push(g); }
+    g.items.push(p);
+  });
+  var html = groups.map(function(g){
+    return '<div class="nav-group"><h3>' + esc(g.name) + '</h3>'
+      + g.items.map(function(p){
+          return '<button class="nav-item' + (STATE.page === p.id ? ' on' : '') + '" data-page="' + p.id + '">'
+            + '<span class="ico">' + svg(p.icon, 17) + '</span>'
+            + '<span>' + esc(p.label) + '</span>'
+            + (STATE.page === p.id ? '<i class="dot"></i>' : '')
+            + '</button>';
+        }).join('')
+      + '</div>';
+  }).join('');
+  $('nav').innerHTML = html;
+  Array.prototype.forEach.call($('nav').querySelectorAll('[data-page]'), function(b){
+    b.onclick = function(){ go(b.dataset.page); closeSide(); };
+  });
+}
+
+/* ===== v3.5.13（站主 #4）：未保存内容拦截 =====
+   站主给的参照是 VoiceHub 的「您有未保存的排期修改，确定要离开吗？」。
+   后台最怕丢的是成绩录入面板的未保存行（SC_STATE.dirty），
+   其他面板多为即时保存，暂无脏状态。 */
+function unsavedCount(){
+  try{
+    var n = 0;
+    if(typeof SC_STATE !== 'undefined' && SC_STATE && SC_STATE.dirty){
+      for(var k in SC_STATE.dirty) if(SC_STATE.dirty[k]) n++;
+    }
+    return n;
+  }catch(e){ return 0; }
+}
+/* 离开当前页有未保存内容吗？有则弹确认，返回 true = 允许离开 */
+function confirmLeaveUnsaved(){
+  var n = unsavedCount();
+  if(!n) return true;
+  /* confirmBox 是 Promise 风格，但 go() 是同步流 —— 这里用同步 confirm 保住流程简单；
+     站主要求的就是「问一下」，不用做撤销。 */
+  return window.confirm('您有 ' + n + ' 行成绩修改还没保存，确定要离开吗？\n（离开后这些修改会丢失）');
+}
+/* 关页面/刷新也拦一道（浏览器原生对话框） */
+window.addEventListener('beforeunload', function(e){
+  if(unsavedCount() > 0){ e.preventDefault(); e.returnValue = ''; return ''; }
+});
+
+function go(page){
+  /* v3.5.13：切面板前先问 —— 同一成绩面板内重进也拦（避免自己冲掉自己） */
+  if(STATE.page && page !== STATE.page && !confirmLeaveUnsaved()) return;
+  STATE.page = page;
+  var p = PAGES.find(function(x){ return x.id === page; });
+  $('pageTitle').textContent = p ? p.title : '';
+  renderNav();
+  var view = $('view');
+  view.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  view.style.animation = 'none';
+  void view.offsetWidth;
+  view.style.animation = 'rise-in .45s cubic-bezier(.16,1,.3,1) both';
+
+  var fn = ({
+    overview:      renderOverview,
+    members:       renderMembers,
+    titles:        renderTitles,
+    reviews:       renderReviews,
+    viewlogs:      renderViewLogs,
+    classcontent:  renderClassContent,
+    boards:        renderBoards,
+    island:        renderIsland,
+    homeworks:     renderHomeworks,
+    song:          renderSong,
+    dj:            renderDj,
+    scores:        renderScores,
+    votes:         renderVotes,
+    backup:        renderBackup,
+    releases:      renderReleases,
+    popups:        renderPopups,
+    cards:         renderCards,
+    dates:         renderDates,
+    games:         renderGames,
+    logins:        renderLogins,
+    online:        renderOnline,
+    logs:          renderLogs,
+    actionlogs:    renderActionLogs,
+    secrets:       renderSecrets,
+    settings:      renderSettings,
+    account:       renderAccount
+  })[page];
+  if(fn) fn();
+}
+
+/* 移动端侧栏 */
+function openSide(){ $('side').classList.add('open'); $('scrim').classList.add('show'); }
+function closeSide(){ $('side').classList.remove('open'); $('scrim').classList.remove('show'); }
+
+/* ============================================================================
+ * ⑥ 面板：数据概览
+ * ========================================================================= */
+function renderOverview(){
+  api('/admin?action=stats').then(function(j){
+    var u = j.users || {}, d = j.data || {}, lg = j.login || {};
+    var pf = j.profiles || {};
+    var cards = [
+      { icon:'users',    tone:'',      label:'总用户数',   value: u.total || 0,
+        foot: '其中管理员 ' + (u.admins || 0) + ' 人' },
+      { icon:'activity', tone:'green',  label:'今日已登录', value: u.today_active || 0,
+        foot: '近 7 天活跃 ' + (u.active7 || 0) + ' 人' },
+      { icon:'key',      tone:'amber',  label:'待改初始密码', value: u.pending_pwd || 0,
+        foot: u.pending_pwd ? '这些同学还没首次改密' : '全部已改密' },
+      { icon:'clock',    tone:'blue',   label:'累计登录次数', value: lg.total || 0,
+        foot: '今日 ' + (lg.today || 0) + ' 次' },
+      { icon:'database', tone:'',       label:'云端数据条数', value: d.rows || 0,
+        foot: '占用 ' + bytes(d.bytes) },
+      { icon:'shield',   tone:'green',  label:'当前在线',   value: j.onlineUsers || 0,
+        foot: '在线会话 ' + (j.onlineSessions || 0) + ' 个 · 共 ' + (j.activeSessions || 0) + ' 个有效会话' },
+      { icon:'inbox',    tone:'blue',   label:'班级资料',   value: pf.total || 0,
+        foot: '已认领 ' + (pf.claimed || 0) + ' 条' },
+      { icon:'check',    tone: (pf.pending ? 'amber' : 'green'), label:'待审资料修改', value: pf.pending || 0,
+        foot: pf.pending ? '去「信息审核」处理' : '没有积压' },
+      { icon:'eye',      tone:'',       label:'资料查看次数', value: pf.viewsTotal || 0,
+        foot: '近 7 天 ' + (pf.views7 || 0) + ' 次' }
+    ];
+
+    var html =
+      '<div class="stat-grid">' + cards.map(function(c){
+        return '<div class="stat">'
+          + '<div class="top"><div class="si ink-auto ' + c.tone + '">' + svg(c.icon, 21) + '</div></div>'
+          + '<p class="label">' + esc(c.label) + '</p>'
+          + '<h3 class="value">' + esc(c.value) + '</h3>'
+          + '<p class="foot">' + esc(c.foot) + '</p>'
+          + '</div>';
+      }).join('') + '</div>'
+
+      + '<div class="grid-2">'
+      +   '<section class="panel">'
+      +     '<div class="panel-head"><div><h3>' + svg('activity') + '最近登录</h3>'
+      +       '<p class="sub">同学最近登录这台站点的记录</p></div>'
+      +       '<button class="btn btn-sm btn-secondary" data-goto="logins">查看全部</button></div>'
+      +     '<div class="feed" id="ovFeed"></div>'
+      +   '</section>'
+      +   '<section class="panel">'
+      +     '<div class="panel-head"><div><h3>' + svg('chart') + '功能使用热度</h3>'
+      +       '<p class="sub">同学云端同步最多的数据键</p></div></div>'
+      +     '<div class="panel-body" id="ovKeys"></div>'
+      +   '</section>'
+      + '</div>';
+
+    /* ⚠️ 迟到的响应不能抢页面：stats 是个慢接口，用户在等待期间很可能已经点去了别的面板。
+       这里必须先确认「概览页还开着」，否则会把人家正在看的资料管理页整页冲掉。
+       （2026-10-05 渲染测试实测踩到：切到资料管理后 stats 才回来，页面被换成了数据概览。） */
+    if(STATE.page !== 'overview') return;
+    $('view').innerHTML = html;
+
+    /* 最近登录流 */
+    var feed = $('ovFeed');
+    var rec = lg.recent || [];
+    if(!rec.length){
+      feed.innerHTML = '<div class="empty">' + svg('inbox', 38) + '<p>还没有登录记录</p></div>';
+    } else {
+      feed.innerHTML = rec.map(function(r){
+        var initial = String(r.username || '?').charAt(0).toUpperCase();
+        return '<div class="feed-item">'
+          + '<div class="fi">' + esc(initial) + '</div>'
+          + '<div class="fb"><b>' + esc(r.username || '(已删除)') + '</b>'
+          + '<p>' + (r.ip ? 'IP ' + esc(r.ip) : 'IP 未知') + '</p></div>'
+          + '<time>' + esc(ago(r.createdAt)) + '</time>'
+          + '</div>';
+      }).join('');
+    }
+
+    /* 键热度条 */
+    var keys = j.topKeys || [];
+    if(!keys.length){
+      $('ovKeys').innerHTML = '<div class="empty" style="padding:30px 12px">' + svg('inbox', 32) + '<p>暂无同步数据</p></div>';
+    } else {
+      var max = keys[0].count || 1;
+      $('ovKeys').innerHTML = keys.map(function(k){
+        var w = Math.max(Math.round(k.count / max * 100), 4);
+        return '<div style="margin-bottom:13px">'
+          + '<div style="display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:5px">'
+          + '<span class="mono" style="color:var(--fg-2)">' + esc(k.key) + '</span>'
+          + '<b style="color:var(--accent-ink)">' + esc(k.count) + '</b></div>'
+          + '<div class="progress-bar" style="margin:0"><i style="width:' + w + '%"></i></div>'
+          + '</div>';
+      }).join('');
+    }
+
+    var goto = $('view').querySelector('[data-goto]');
+    if(goto) goto.onclick = function(){ go(goto.dataset.goto); };
+  }).catch(function(e){
+    /* 只在概览页还开着的时候才报错。
+       否则用户已经切到别的面板，这个迟到的失败会把人家正在看的内容冲掉
+       （2026-10-05 实测踩到：stats 慢了一步，把资料管理页整页替换成错误提示）。 */
+    if(STATE.page !== 'overview') return;
+    $('view').innerHTML = '<div class="alert danger">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+/* ============================================================================
+ * ⑦ 面板：成员与档案（v2.10.0 第六十轮 #172，「用户管理」+「资料管理」合并）
+ * ---------------------------------------------------------------------------
+ * 背景：站主指出同一批人被「用户管理」「资料管理」分两处存储，改一处另一处
+ * 对不上（根因：users.display_name 与 profiles.name 双写）。
+ * 现在合并成一个页面、一个长表单：
+ *   · 列表一次拉齐（GET /admin?action=members），每行带 scene 场景标记
+ *   · 长表单不用折叠面板：上半「系统账号」下半「班级档案」，一次提交
+ *     （POST /admin?action=save-member 内部按场景编排）
+ *   · 姓名改为单数据源：profiles.name 是权威源，保存时后端同步
+ *     users.display_name（见 api/admin.js upsertProfileCore）
+ *
+ * 四种场景（scene）：
+ *   both         有账号 + 有档案（正常态）
+ *   user-only    有账号暂无档案（建号时补档案失败 / 历史数据）
+ *   profile-only 有档案无账号（通讯录先建、人还没领账号）
+ *
+ * 「头衔任命 / 联系方式审核 / 查看记录」保持独立页面，不并入本页。
+ * ========================================================================= */
+/* 「现在就在站上吗」（v2.5.0 起服务端会话级判定，口径与旧用户管理页一致） */
+function isOnlineNow(u){
+  if(!u) return false;
+  if(typeof u.online === 'boolean') return u.online;
+  var t = u.sessionLastSeen || u.lastSeenAt || u.lastLoginAt;
+  if(!t) return false;
+  var ms = Date.now() - new Date(t).getTime();
+  return ms >= 0 && ms < 2 * 60 * 1000;
+}
+
+var MEMBER_SCENE = {
+  both:         { text:'账号 · 档案', cls:'badge-blue'   },
+  'user-only':  { text:'缺档案',      cls:'badge-amber'  },
+  'profile-only': { text:'未认领',    cls:'badge-gray'   }
+};
+
+function renderMembers(){
+  var S = STATE.members;
+  var c = S.counts || {};
+
+  $('view').innerHTML =
+    '<div class="toolbar">'
+    +   '<div class="search">' + svg('search', 15)
+    +     '<input id="mbSearch" placeholder="搜索用户名 / 姓名 / 学号…" value="' + attr(S.q) + '" maxlength="40"></div>'
+    +   '<select id="mbRole">'
+    +     '<option value="">全部角色</option>'
+    +     '<option value="user"' + (S.role === 'user' ? ' selected' : '') + '>普通用户</option>'
+    +     '<option value="admin"' + (S.role === 'admin' ? ' selected' : '') + '>管理员</option>'
+    +   '</select>'
+    +   '<select id="mbStatus">'
+    +     '<option value="">全部状态</option>'
+    +     '<option value="active"' + (S.status === 'active' ? ' selected' : '') + '>正常</option>'
+    +     '<option value="pending"' + (S.status === 'pending' ? ' selected' : '') + '>待审核</option>'
+    +     '<option value="banned"' + (S.status === 'banned' ? ' selected' : '') + '>已禁用</option>'
+    +   '</select>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+
+    + '<div class="toolbar" style="background:var(--panel)">'
+    +   '<button class="btn btn-sm" id="mbAdd">' + svg('plus', 14) + '新增成员</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbImportUser">' + svg('upload', 14) + '账号导入</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbImportProfile">' + svg('upload', 14) + '资料导入</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbExport">' + svg('download', 14) + '导出</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbFields">' + svg('layers', 14) + '字段管理</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="mbEncrypt" title="把还没加密的资料就地加密，不用重新导入">' + svg('lock', 14) + '一键加密存量</button>'
+    +   '<span style="flex:1"></span>'
+    +   '<span data-bulk class="muted" style="font-size:.8rem"></span>'
+    + '</div>'
+
+    + '<div class="chips" id="mbChips" style="margin-bottom:14px">'
+    +   '<button class="chip' + (S.scene === '' ? ' on' : '') + '" data-sc="">全部 <b>' + (c.total || 0) + '</b></button>'
+    +   '<button class="chip' + (S.scene === 'user-only' ? ' on' : '') + '" data-sc="user-only">缺档案 <b>' + (c.userOnly || 0) + '</b></button>'
+    +   '<button class="chip' + (S.scene === 'profile-only' ? ' on' : '') + '" data-sc="profile-only">未认领 <b>' + (c.profileOnly || 0) + '</b></button>'
+    +   '<button class="chip' + (S.scene === 'pending-review' ? ' on' : '') + '" data-sc="pending-review">待审联系方式 <b>' + (c.pendingReview || 0) + '</b></button>'
+    + '</div>'
+
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '全班成员与他们的班级档案现在<b>合并在同一页</b>：一条记录同时管账号与档案，保存时两处自动同步。'
+    +   '「<b>未认领</b>」是只有通讯录、还没登录账号的同学；「<b>缺档案</b>」是建号时没配上档案的账号，点「编辑」即可补上。'
+    + '</div>'
+
+    /* 字段管理区（2026-10-09 v2.4.0）：默认折叠，点「字段管理」展开 */
+    + '<section class="panel" id="mbFieldPanel" style="display:none;margin-bottom:16px">'
+    +   '<div id="mbFieldBody"><div class="loading"><div class="spinner"></div>加载字段…</div></div>'
+    + '</section>'
+
+    + '<section class="panel"><div id="mbBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('mbSearch').oninput = debounce(function(e){ S.q = e.target.value.trim(); S.page = 1; loadMembers(); }, 320);
+  $('mbRole').onchange   = function(e){ S.role = e.target.value; S.page = 1; loadMembers(); };
+  $('mbStatus').onchange = function(e){ S.status = e.target.value; S.page = 1; loadMembers(); };
+  $('mbRefresh').onclick = function(){ loadMembers(); };
+  $('mbAdd').onclick     = function(){ memberDialog(null); };
+  $('mbImportUser').onclick   = importDialog;
+  $('mbImportProfile').onclick = profileImportDialog;
+  $('mbExport').onclick  = memberExport;
+  $('mbFields').onclick  = function(){
+    var panel = $('mbFieldPanel');
+    var open = panel.style.display !== 'none';
+    panel.style.display = open ? 'none' : 'block';
+    if(!open){ renderFieldPanel(); panel.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+  };
+  $('mbEncrypt').onclick = function(){ encryptAllProfiles(); };
+
+  Array.prototype.forEach.call($('mbChips').querySelectorAll('[data-sc]'), function(b){
+    b.onclick = function(){
+      S.scene = b.dataset.sc === 'pending-review' ? 'pending-review' : b.dataset.sc;
+      S.page = 1;
+      Array.prototype.forEach.call($('mbChips').querySelectorAll('.chip'), function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      loadMembers();
+    };
+  });
+
+  loadMembers();
+}
+
+function loadMembers(){
+  var S = STATE.members;
+  /* pending-review 是档案维度的筛选，后端不认这个 scene 值 —— 前端本地过滤 */
+  var sceneQ = S.scene === 'pending-review' ? '' : S.scene;
+  api('/admin?action=members&limit=' + S.size + '&offset=' + ((S.page - 1) * S.size)
+      + '&q=' + encodeURIComponent(S.q || '')
+      + '&role=' + encodeURIComponent(S.role || '')
+      + '&status=' + encodeURIComponent(S.status || '')
+      + '&scene=' + encodeURIComponent(sceneQ || ''))
+    .then(function(j){
+      S.list = j.members || [];
+      S.total = j.total || 0;
+      S.counts = j.counts || {};
+      if(Array.isArray(j.fieldMeta)) S.fieldMeta = j.fieldMeta;
+      /* 待审联系方式：后端按 profiles 口径给总数，这里本地筛出这一批 */
+      if(S.scene === 'pending-review'){
+        S.list = S.list.filter(function(m){ return m.contactStatus === 'pending'; });
+        S.total = S.list.length;
+      }
+      paintMembers();
+    })
+    .catch(function(e){
+      var b = $('mbBody');
+      if(b) b.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+    });
+}
+
+/** 行唯一键：有账号用 u+userId，无账号用 p+profileId（跨场景不撞车） */
+function mkey(m){
+  return (m.userId != null ? 'u' : 'p') + (m.userId != null ? m.userId : m.profileId);
+}
+
+/** 列表显示名：档案姓名是权威源，无档案退回账号显示名 */
+function memberName(m){
+  return m.name || m.displayName || m.username || '(未命名)';
+}
+
+function paintMembers(){
+  var S = STATE.members;
+  var body = $('mbBody');
+  if(!body) return;
+
+  /* 胶囊数字跟着最新统计刷新 */
+  var chipAll = $('mbChips') && $('mbChips').querySelector('[data-sc=""] b');
+  var chipUO  = $('mbChips') && $('mbChips').querySelector('[data-sc="user-only"] b');
+  var chipPO  = $('mbChips') && $('mbChips').querySelector('[data-sc="profile-only"] b');
+  var chipPR  = $('mbChips') && $('mbChips').querySelector('[data-sc="pending-review"] b');
+  if(chipAll) chipAll.textContent = S.counts.total || 0;
+  if(chipUO)  chipUO.textContent  = S.counts.userOnly || 0;
+  if(chipPO)  chipPO.textContent  = S.counts.profileOnly || 0;
+  if(chipPR)  chipPR.textContent  = S.counts.pendingReview || 0;
+
+  if(!S.list.length){
+    body.innerHTML = '<div class="empty">' + svg('users', 38)
+      + '<p>' + (S.q || S.role || S.status || S.scene ? '没有匹配的成员' : '还没有任何成员') + '</p>'
+      + (S.q || S.role || S.status || S.scene ? '' : '<p style="font-size:.78rem;margin-top:8px">点「新增成员」把第一位同学加进来</p>')
+      + '</div>';
+    return;
+  }
+
+  var extras = extraColsOf();
+  var allChecked = S.list.length > 0 && S.list.every(function(m){ return S.selected[mkey(m)]; });
+
+  var rows = S.list.map(function(m){
+    var key = mkey(m);
+    var sc = MEMBER_SCENE[m.scene] || MEMBER_SCENE.both;
+    var ini = String(memberName(m)).charAt(0);
+
+    /* 🔻 v3.5.12（站主 2026-10-17 #2「成员档案只展示联系方式，其他的通过详情查看」）
+       列表只留三样东西：头像+姓名、联系方式（微信/QQ/手机）、操作按钮。
+       学号、身份、头衔、政治面貌、自定字段、可见性、审核状态
+       全部收进「详情」弹窗，列表不再堆成一堵墙。
+       v3.5.13 站主补充：「不是把其他的都删了，账号状态、最后上线时间还是要的」
+       → 加回一列精简「状态」：账号在不在 + 最后上线，一眼能扫；其余仍走详情。 */
+    var sub = '<div class="muted"><i class="mono">@' + esc(m.username || (m.studentId ? '学号 ' + m.studentId : '未认领'))
+      + '</i></div>';
+
+    /* 账号状态异常时才在名字后面挂个小徽章，正常状态不占地方 */
+    var flag = '';
+    if(m.role === 'admin') flag += '<span class="badge badge-orange">管理员</span>';
+    if(m.status === 'pending') flag += '<span class="badge badge-amber">待审核</span>';
+    if(m.status === 'banned') flag += '<span class="badge badge-red">已禁用</span>';
+    if(m.mustChangePassword) flag += '<span class="badge badge-amber">待改密</span>';
+    if(!m.name && m.profileId == null) flag += '<span class="badge badge-gray">无档案</span>';
+
+    var ct = function(label, v){
+      return '<div class="ct"><i>' + label + '</i>'
+        + (v ? '<span title="' + attr(v) + '">' + esc(v) + '</span>'
+             : '<span class="none">—</span>')
+        + '</div>';
+    };
+    var contacts = '<div class="ct-grid">'
+      + ct('微信', m.wechat) + ct('QQ', m.qq) + ct('手机', m.phone)
+      + '</div>';
+
+    /* v3.5.13 状态列：账号状态一行字 + 最后上线相对时间 */
+    var acctTxt = m.userId == null ? '无账号'
+      : (m.status === 'banned' ? '已禁用' : m.status === 'pending' ? '待审核' : m.status === 'active' ? '正常' : (m.status || '正常'));
+    var acctCls = m.userId == null ? 'badge-gray'
+      : (m.status === 'banned' ? 'badge-red' : m.status === 'pending' ? 'badge-amber' : 'badge-green');
+    var seenV = m.sessionLastSeen || m.lastSeenAt || m.lastLoginAt;
+    var statusCell = '<div class="mb-status">'
+      + '<span class="badge ' + acctCls + '">' + esc(acctTxt) + '</span>'
+      + (isOnlineNow(m) ? '<span class="badge badge-green">在线</span>' : '')
+      + '<div class="muted" style="font-size:.72rem;margin-top:2px">'
+      +   (seenV ? ago(seenV) : '从未上线') + '</div></div>';
+
+    /* 行内操作：详情对所有行开放（v3.5.12 起）；账号类操作仅对有账号的行开放 */
+    var acts = '<button class="ok" data-mb="detail" data-key="' + attr(key) + '">详情</button>'
+      + '<button data-mb="edit" data-key="' + attr(key) + '">编辑</button>'
+      + (m.userId != null
+          ? '<button data-mb="pwd" data-key="' + attr(key) + '">重置密码</button>'
+            + (m.status === 'pending'
+                ? '<button class="ok" data-mb="approve" data-key="' + attr(key) + '">通过</button>'
+                  + '<button class="danger" data-mb="reject" data-key="' + attr(key) + '">驳回</button>'
+                : (m.status === 'banned'
+                    ? '<button class="ok" data-mb="unban" data-key="' + attr(key) + '">解禁</button>'
+                    : '<button class="danger" data-mb="ban" data-key="' + attr(key) + '">禁用</button>'))
+          : '')
+      + (m.profileId != null
+          ? '<button data-mb="views" data-key="' + attr(key) + '">查看记录</button>'
+          : '');
+
+    return '<tr' + (S.selected[key] ? ' class="sel"' : '') + '>'
+      + '<td><input type="checkbox" class="chk" data-pick="' + attr(key) + '"' + (S.selected[key] ? ' checked' : '') + '></td>'
+      + '<td><div class="cell-user"><div class="av ink-auto">' + esc(ini) + '</div>'
+      +   '<div><b>' + esc(memberName(m)) + '</b> ' + flag + sub + '</div></div></td>'
+      + '<td>' + contacts + '</td>'
+      + '<td>' + statusCell + '</td>'
+      + '<td class="nowrap" style="text-align:right"><div class="row-actions">' + acts
+      +   (m.userId != null
+            ? '<button class="danger" data-mb="del" data-key="' + attr(key) + '"'
+              + (STATE.me && m.userId === STATE.me.id ? ' disabled title="不能删除自己"' : '') + '>删除</button>'
+            : (m.profileId != null
+                ? '<button class="danger" data-mb="delprofile" data-key="' + attr(key) + '">删档案</button>'
+                : ''))
+      + '</div></td>'
+      + '</tr>';
+  }).join('');
+
+  var size = S.size;
+  var shownTo = Math.min(S.page * size, S.total);
+
+  body.innerHTML =
+    '<div class="table-wrap"><table><thead><tr>'
+    + '<th style="width:38px"><input type="checkbox" class="chk" data-pick-all' + (allChecked ? ' checked' : '') + '></th>'
+    + '<th>成员</th><th>联系方式</th><th>状态</th>'
+    + '<th style="text-align:right">操作</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '<div class="pager">'
+    +   '<span class="info">共 ' + S.total + ' 条，当前显示第 ' + ((S.page - 1) * size + 1) + '–' + shownTo + ' 条</span>'
+    +   '<span class="pages">'
+    +     '<button data-pg="prev"' + (S.page <= 1 ? ' disabled' : '') + '>上一页</button>'
+    +     '<button class="on">' + S.page + '</button>'
+    +     '<button data-pg="next"' + (shownTo >= S.total ? ' disabled' : '') + '>下一页</button>'
+    +   '</span>'
+    + '</div>';
+
+  /* --- 事件绑定 --- */
+  Array.prototype.forEach.call(body.querySelectorAll('[data-pick]'), function(cb){
+    cb.onchange = function(){ S.selected[cb.dataset.pick] = cb.checked; paintPick(); paintMembers(); };
+  });
+  var allCb = body.querySelector('[data-pick-all]');
+  if(allCb){
+    allCb.onchange = function(){
+      S.list.forEach(function(m){ S.selected[mkey(m)] = allCb.checked; });
+      paintMembers();
+    };
+  }
+  Array.prototype.forEach.call(body.querySelectorAll('[data-mb]'), function(b){
+    b.onclick = function(){ memberAction(b.dataset.mb, b.dataset.key); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-pg]'), function(b){
+    b.onclick = function(){
+      if(b.disabled) return;
+      S.page += (b.dataset.pg === 'next' ? 1 : -1);
+      loadMembers();
+    };
+  });
+
+  paintPick();
+}
+
+/** 按 key 找回行对象（key = 'u'+userId 或 'p'+profileId） */
+function memberByKey(key){
+  var S = STATE.members;
+  for(var i = 0; i < S.list.length; i++){
+    var m = S.list[i];
+    if(mkey(m) === key) return m;
+  }
+  return null;
+}
+
+/** 绘制批量操作提示条（只对有账号的行开放账号类批量操作） */
+function paintPick(){
+  var S = STATE.members;
+  var ids = Object.keys(S.selected).filter(function(k){ return S.selected[k]; });
+  var el = document.querySelector('[data-bulk]');
+  if(!el) return;
+  if(!ids.length){
+    el.className = 'muted';
+    el.innerHTML = '';
+    return;
+  }
+  /* 只有带账号的行能批量重置密码 / 禁用 / 删除 */
+  var withAccount = ids.filter(function(k){ var m = memberByKey(k); return m && m.userId != null; });
+  el.className = '';
+  el.innerHTML = '已选 <b style="color:var(--accent-ink)">' + ids.length + '</b> 人'
+    + (withAccount.length
+        ? ' <button class="btn btn-sm btn-ghost" data-bulk-pwd style="margin-left:6px">批量重置密码</button> '
+          + '<button class="btn btn-sm btn-ghost" data-bulk-ban style="margin-left:4px">批量禁用</button> '
+          + '<button class="btn btn-sm btn-ghost" data-bulk-del style="margin-left:4px;color:var(--danger)">批量删除</button> '
+        : ' <span class="muted" style="font-size:.76rem">（选中的都没有账号，仅能逐个编辑档案）</span> ')
+    + '<button class="btn btn-sm btn-ghost" data-bulk-clear style="margin-left:4px">取消选择</button>';
+
+  var q = function(sel){ return el.querySelector(sel); };
+  if(q('[data-bulk-pwd]')) q('[data-bulk-pwd]').onclick = function(){ bulkResetPwd(withAccount); };
+  if(q('[data-bulk-ban]')) q('[data-bulk-ban]').onclick = function(){ bulkBan(withAccount); };
+  if(q('[data-bulk-del]')) q('[data-bulk-del]').onclick = function(){ bulkDelMembers(withAccount); };
+  q('[data-bulk-clear]').onclick = function(){
+    STATE.members.selected = {}; paintMembers();
+  };
+}
+
+/** 批量删除成员：先剔自己，再逐个串行删；有档案的追加一问「是否连带删档案」 */
+function bulkDelMembers(ids){
+  var mineId = STATE.me ? STATE.me.id : 0;
+  var target = ids.filter(function(k){
+    var m = memberByKey(k);
+    return m && m.userId != null && Number(m.userId) !== Number(mineId);
+  });
+  if(!target.length){ toast('选中的只有你自己的账号或没有账号，不能删除', 'err', 3800); return; }
+  var skipped = ids.length - target.length;
+  var hasProfile = target.some(function(k){ var m = memberByKey(k); return m && m.profileId != null; });
+
+  confirmBox({
+    title: '批量删除成员',
+    html: '确定要删除选中的 <b>' + target.length + '</b> 个成员吗？',
+    detail: '他们的账号与云端数据会一并清除；班级档案默认保留（变为「未认领」）。'
+          + (skipped ? '\n已自动跳过你自己的账号。' : ''),
+    warn: '不可撤销。如果只是想暂时阻止登录，请改用「批量禁用」。',
+    danger: true,
+    okText: '确认删除',
+  }).then(function(ok){
+    if(!ok) return;
+    var step2 = function(alsoProfile){
+      var doneN = 0, failN = 0, firstErr = '';
+      var idx = 0;
+      var step = function(){
+        if(idx >= target.length) return finish();
+        var m = memberByKey(target[idx]);
+        return api('/admin?action=delete-user', { method:'POST', body:{ id:m.userId, alsoProfile:!!alsoProfile } })
+          .then(function(){ doneN++; })
+          .catch(function(e){ failN++; if(!firstErr) firstErr = e.message; })
+          .then(function(){ idx++; return step(); });
+      };
+      var finish = function(){
+        STATE.members.selected = {};
+        loadMembers();
+        var msg = '已删除 ' + doneN + ' 个成员';
+        if(failN) msg += '，失败 ' + failN + ' 个（' + firstErr + '）';
+        toast(msg, failN ? 'err' : 'ok', 4200);
+      };
+      step();
+    };
+    /* 有档案的追问一句：档案是通讯录，删不删要让站长明确选 */
+    if(hasProfile){
+      confirmBox({
+        title: '是否连带删除班级档案',
+        text: '这 ' + target.length + ' 人里有人挂着班级档案（含联系方式）。删除账号后档案默认保留为「未认领」，要一并删掉吗？',
+        detail: '选「保留档案」：人还能在通讯录里，只是没了登录账号。\n选「一并删除」：档案与联系方式彻底消失。',
+        danger: true,
+        okText: '一并删除', noText: '保留档案',
+      }).then(function(yes){ step2(!!yes); });
+    } else {
+      step2(false);
+    }
+  });
+}
+
+/* ---------------- 行内操作分发 ---------------- */
+function memberAction(act, key){
+  var m = memberByKey(key);
+  if(!m) return;
+  if(act === 'edit')       return memberDialog(m);
+  /* v3.5.12：详情对**所有**行开放（含未认领的档案行）；有账号时顺手带出账号信息 */
+  if(act === 'detail')     return memberDetailDialog(m);
+  if(act === 'pwd')        return resetPwdDialog(m.userId, m);
+  if(act === 'views')      return profileViewsDialog(m.profileId);
+  if(act === 'ban')        return memberSetStatus(m, 'banned');
+  if(act === 'unban')      return memberSetStatus(m, 'active');
+  if(act === 'del')        return deleteMemberDialog(m);
+  if(act === 'delprofile') return deleteProfileOfMember(m);
+  /* v2.10.0：注册审核 */
+  if(act === 'approve')    return reviewMember(m, 'approve');
+  if(act === 'reject')     return reviewMember(m, 'reject');
+}
+
+/** 禁用 / 解禁（账号类操作，仅对有账号的行开放） */
+function memberSetStatus(m, status){
+  if(!m || m.userId == null) return;
+  if(STATE.me && m.userId === STATE.me.id){ toast('不能禁用自己的账号', 'err'); return; }
+  var isBan = status === 'banned';
+  confirmBox({
+    title: isBan ? '禁用成员' : '解除禁用',
+    text: isBan
+      ? '确定禁用「' + memberName(m) + '」吗？对方会被立刻踢下线且无法再登录。'
+      : '确定恢复「' + memberName(m) + '」的登录吗？',
+    danger: isBan,
+    okText: isBan ? '禁用' : '解禁',
+  }).then(function(yes){
+    if(!yes) return;
+    api('/admin?action=set-status', { method:'POST', body:{ id:m.userId, status:status } })
+      .then(function(j){ toast(j.message || '已更新', 'ok', 3600); loadMembers(); })
+      .catch(function(e){ toast(e.message, 'err', 4200); });
+  });
+}
+
+/** v2.10.0：审核注册成员（通过 = 立即可登录；驳回 = 禁用并踢会话） */
+function reviewMember(m, decision){
+  if(!m || m.userId == null) return;
+  var approve = decision === 'approve';
+  confirmBox({
+    title: approve ? '通过注册审核' : '驳回注册申请',
+    text: approve
+      ? '确定通过「' + memberName(m) + '」的注册吗？通过后对方即可登录。'
+      : '确定驳回「' + memberName(m) + '」的注册吗？驳回后该账号将被禁用。',
+    danger: !approve,
+    okText: approve ? '通过审核' : '驳回',
+  }).then(function(ok){
+    if(!ok) return;
+    api('/admin?action=user-review', { method:'POST', body:{ id:m.userId, decision:decision } })
+      .then(function(j){
+        toast(j.message || '已审核', 'ok', 3600);
+        loadMembers();
+      })
+      .catch(function(e){ toast('审核失败：' + e.message, 'err', 4200); });
+  });
+}
+
+/** 删除成员（账号）。档案默认保留为「未认领」，可选择连带删除。 */
+function deleteMemberDialog(m){
+  if(!m || m.userId == null) return;
+  if(STATE.me && m.userId === STATE.me.id){ toast('不能删除自己的账号', 'err'); return; }
+  var label = memberName(m) + (m.username ? '（@' + m.username + '）' : '');
+
+  confirmBox({
+    title: '删除成员',
+    html: '确定要删除 <b>' + esc(label) + '</b> 吗？',
+    detail: '账号与云端数据（点歌记录、作业提交、会话）会一并清除。'
+          + (m.profileId != null ? '\n他的班级档案默认保留为「未认领」，可在下一步选择一并删除。' : ''),
+    warn: '不可撤销。如果只是想暂时阻止登录，请改用「禁用」。',
+    danger: true,
+    okText: '确认删除',
+  }).then(function(ok){
+    if(!ok) return;
+    var go = function(alsoProfile){
+      api('/admin?action=delete-user', { method:'POST', body:{ id:m.userId, alsoProfile:!!alsoProfile } })
+        .then(function(j){
+          toast(j.message || '已删除', 'ok', 3600);
+          delete STATE.members.selected[mkey(m)];
+          loadMembers();
+        })
+        .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+    };
+    if(m.profileId != null){
+      confirmBox({
+        title: '是否连带删除班级档案',
+        text: '「' + memberName(m) + '」挂着班级档案（含联系方式）。要一并删掉吗？',
+        detail: '选「保留档案」：人还在通讯录里，只是没了登录账号。\n选「一并删除」：档案与联系方式彻底消失。',
+        danger: true,
+        okText: '一并删除', noText: '保留档案',
+      }).then(function(yes){ go(!!yes); });
+    } else {
+      go(false);
+    }
+  });
+}
+
+/** 删除档案（无账号的通讯录条目，或只清档案不动账号） */
+function deleteProfileOfMember(m){
+  if(!m || m.profileId == null) return;
+  confirmBox({
+    title: '删除班级档案',
+    html: '确定要删除 <b>' + esc(memberName(m)) + '</b> 的档案吗？',
+    warn: '删除后该条通讯录及其联系方式会一并消失。此操作不可撤销。',
+    danger: true,
+    okText: '删除',
+  }).then(function(yes){
+    if(!yes) return;
+    api('/admin?action=delete-profile', { method:'POST', body:{ id:m.profileId } })
+      .then(function(j){ toast(j.message || '已删除', 'ok'); loadMembers(); })
+      .catch(function(e){ toast(e.message, 'err', 4000); });
+  });
+}
+
+/** 重置密码（账号类操作；m 用于显示名，缺省时按 id 显示） */
+function resetPwdDialog(id, m){
+  var name = m ? memberName(m) : ('#' + id);
+  promptBox({
+    title: '重置密码',
+    sub: '为「' + name + '」设置一个新的初始密码',
+    label: '新密码（6–64 位）',
+    type: 'text',
+    placeholder: '例如 Class2025',
+    hint: '重置后该用户必须用新密码重新登录，且下次登录需自行修改密码。管理后台不保存、也无法查看明文密码。',
+    okText: '确认重置',
+    validate: function(v){ return (v.length < 6 || v.length > 64) ? '密码长度需 6–64 位' : ''; }
+  }).then(function(v){
+    if(v === null) return;
+    api('/admin?action=reset-password', { method:'POST', body:{ id:id, newPassword:v } })
+      .then(function(j){ toast(j.message || '已重置', 'ok', 4000); loadMembers(); })
+      .catch(function(e){ toast(e.message, 'err', 4000); });
+  });
+}
+
+/* ---------------- 批量操作（仅对带账号的行） ---------------- */
+function bulkResetPwd(keys){
+  var targets = keys.map(function(k){ return memberByKey(k); })
+    .filter(function(m){ return m && m.userId != null; });
+  if(!targets.length){ toast('选中的成员都没有账号', 'err'); return; }
+  promptBox({
+    title: '批量重置密码',
+    sub: '已选择 ' + targets.length + ' 个账号',
+    label: '统一的新初始密码（6–64 位）',
+    placeholder: '例如 Class2025',
+    hint: '这 ' + targets.length + ' 个账号都会被设为该密码，并强制下次登录时改密。',
+    okText: '批量重置',
+    validate: function(v){ return (v.length < 6 || v.length > 64) ? '密码长度需 6–64 位' : ''; }
+  }).then(function(v){
+    if(v === null) return;
+    var ok = 0, bad = 0;
+    var seq = Promise.resolve();
+    targets.forEach(function(m){
+      seq = seq.then(function(){
+        return api('/admin?action=reset-password', { method:'POST', body:{ id:m.userId, newPassword:v } })
+          .then(function(){ ok++; }).catch(function(){ bad++; });
+      });
+    });
+    seq.then(function(){
+      toast('批量重置完成：成功 ' + ok + ' 个' + (bad ? '，失败 ' + bad + ' 个' : ''), bad ? 'warn' : 'ok', 4200);
+      STATE.members.selected = {};
+      loadMembers();
+    });
+  });
+}
+
+function bulkBan(keys){
+  var targets = keys.map(function(k){ return memberByKey(k); })
+    .filter(function(m){ return m && m.userId != null; });
+  if(!targets.length){ toast('选中的成员都没有账号', 'err'); return; }
+  var mineId = STATE.me ? STATE.me.id : 0;
+  targets = targets.filter(function(m){ return Number(m.userId) !== Number(mineId); });
+  if(!targets.length){ toast('选中的只有你自己的账号，不能禁用', 'err'); return; }
+  confirmBox({
+    title: '批量禁用',
+    text: '确定为所选的 ' + targets.length + ' 个账号全部禁用吗？他们会被立刻踢下线且无法再登录。',
+    danger: true, okText: '全部禁用'
+  }).then(function(yes){
+    if(!yes) return;
+    var ok = 0, bad = 0;
+    var seq = Promise.resolve();
+    targets.forEach(function(m){
+      seq = seq.then(function(){
+        return api('/admin?action=set-status', { method:'POST', body:{ id:m.userId, status:'banned' } })
+          .then(function(){ ok++; }).catch(function(){ bad++; });
+      });
+    });
+    seq.then(function(){
+      toast('批量禁用完成：成功 ' + ok + ' 个' + (bad ? '，失败 ' + bad + ' 个' : ''), bad ? 'warn' : 'ok', 4200);
+      STATE.members.selected = {};
+      loadMembers();
+    });
+  });
+}
+
+/**
+ * 合并导出：账号 + 档案一张表（v2.10.0 #172）。
+ * 走 members 接口当前筛选（搜索/角色/状态/场景），自定义字段动态追加列。
+ * 导的是「管理员视图」：含联系方式原文，文件请妥善保管。
+ */
+function memberExport(){
+  var S = STATE.members;
+  var sceneQ = S.scene === 'pending-review' ? '' : S.scene;
+  loadXLSX().then(function(XLSX){
+    if(!XLSX){ toast('表格组件加载失败（三个 CDN 都不可达），请检查网络后重试', 'err', 4200); return; }
+    var qs = '/admin?action=members&limit=500'
+           + '&q=' + encodeURIComponent(S.q || '')
+           + '&role=' + encodeURIComponent(S.role || '')
+           + '&status=' + encodeURIComponent(S.status || '')
+           + '&scene=' + encodeURIComponent(sceneQ || '');
+    api(qs).then(function(j){
+      var list = j.members || [];
+      if(!list.length){ toast('当前筛选条件下没有成员可导出', 'err'); return; }
+      var extras = extraColsOf();
+      /* v3.5.22：补「身份」「头衔」两列 —— 档案全字段可导出 */
+      var head = ['姓名', '学号', '身份', '头衔', '用户名', '角色', '状态', '政治面貌', '智学网账号']
+        .concat(extras.map(function(f){ return f.label; }))
+        .concat(['微信', 'QQ', '手机号', '审核状态', '场景', '最后上线']);
+      var data = [head].concat(list.map(function(m){
+        var base = [
+          memberName(m),
+          m.studentId || '',
+          m.identity || m.role || '',
+          (m.titles && m.titles.length) ? m.titles.join('、') : (m.title || ''),
+          m.username || '（未开通）',
+          m.role === 'admin' ? '管理员' : (m.userId != null ? '普通用户' : ''),
+          m.status === 'banned' ? '已禁用' : (m.status === 'pending' ? '待审核' : (m.userId != null ? '正常' : '')),
+          m.politics || '',
+          m.examNo || '',
+        ];
+        var ex = extras.map(function(f){ return (m.extra || {})[f.field] || ''; });
+        var tail = [
+          m.wechat || '', m.qq || '', m.phone || '',
+          (CONTACT_LABEL[m.contactStatus] || CONTACT_LABEL.none).text,
+          (MEMBER_SCENE[m.scene] || MEMBER_SCENE.both).text,
+          m.lastLoginAt ? fmt(m.lastLoginAt) : (m.lastSeenAt ? fmt(m.lastSeenAt) : ''),
+        ];
+        return base.concat(ex).concat(tail);
+      }));
+      var ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = head.map(function(h){ return { wch: Math.max(10, String(h).length * 2 + 4) }; });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '成员与档案');
+      XLSX.writeFile(wb, '成员与档案_' + fmt(new Date(), 'date').replace(/-/g, '') + '.xlsx');
+      toast('已导出 ' + list.length + ' 条记录', 'ok');
+    }).catch(function(e){ toast(e.message || '导出失败', 'err', 4000); });
+  });
+}
+
+/**
+ * v2.10.0 #172：成员长表单（新增 / 编辑通用）。
+ * 不用折叠面板——按站主要求「上半系统账号信息、下半班级档案」直接铺开，
+ * 一次提交（POST /admin?action=save-member），后端按场景编排。
+ *
+ * 四种场景在表单里的表现：
+ *   新增（都无）        账号段：用户名 + 初始密码必填；档案段全空待填
+ *   both                账号段：用户名只读 + 角色/状态可改；档案段带现值
+ *   user-only           账号段同 both；档案段空 + 提示「填任一字段即自动补建」
+ *   profile-only        账号段：未开通 + 「开通账号」勾选（展开用户名/密码）；
+ *                       档案段带现值
+ */
+function memberDialog(m){
+  var isNew = !m;
+  var hasUser = !isNew && m.userId != null;
+  var hasProfile = !isNew && m.profileId != null;
+  var POL = ['普通学生', '共青团员', '共青团员 · 团支书', '中共党员', '中共预备党员', '群众'];
+  var name0 = isNew ? '' : (m.name || m.displayName || '');
+  /* v3.5.22：身份（profiles.role）与账号角色（users.role）是两个东西。
+     账号角色管权限（普通用户 / 管理员），身份是档案里给人看的标签（学生 / 走读…）。 */
+  var identity0 = isNew ? '学生' : (m.identity || '学生');
+  var curTitles = (!isNew && m.titles && m.titles.length) ? m.titles : [];
+
+  /* v3.5.5：政治面貌选项跟随「字段管理」里的规则（预置：群众/共青团员）。
+     规则没配时退回老列表；当前值不在选项里时置顶展示（历史值不改库）。 */
+  function polOpts(cur){
+    var rule = ruleOf('politics');
+    var list = (rule.type === 'select' && rule.options && rule.options.length)
+      ? rule.options.slice() : POL.slice();
+    if(cur && list.indexOf(cur) < 0) list.unshift(cur);
+    return list.map(function(x){
+      return '<option value="' + attr(x) + '"' + (x === cur ? ' selected' : '') + '>' + esc(x) + '</option>';
+    }).join('');
+  }
+
+  /* ---- ① 系统账号段 ---- */
+  var accountSec =
+    '<div class="mb-form-sec">'
+    + '<h4>' + svg('lock', 15) + ' 系统账号</h4>'
+    + '<p class="hint" style="margin:-4px 0 12px">账号是登录凭证。用户名创建后不可修改，密码不在这里改（用行内「重置密码」）。</p>'
+
+    /* 用户名：已有账号只读；否则（新增 / 给未认领成员开号）可填 */
+    + (hasUser
+        ? '<div class="field"><label>用户名</label>'
+          + '<input value="' + attr(m.username) + '" disabled>'
+          + '<p class="hint">登录名不可修改。要换登录名只能删除账号重建（档案不受影响）。</p></div>'
+        : '<div class="field"><label for="mbUser">用户名 <span style="color:var(--danger)">*</span></label>'
+          + '<input id="mbUser" placeholder="3–20 位，中英文/数字/下划线" autocomplete="off">'
+          + '<p class="hint">' + (isNew ? '同学用它登录，告诉他初始密码。' : '给这位只有通讯录的同学开一个登录账号。') + '</p></div>'
+          + '<div class="field"><label for="mbPwd">初始密码 <span style="color:var(--danger)">*</span></label>'
+          + '<input id="mbPwd" placeholder="6–64 位" autocomplete="new-password">'
+          + '<p class="hint">首次登录后会建议他自己改密码。</p></div>')
+
+    /* 未认领场景：开不开号由站长选（不开就只存通讯录） */
+    + (!isNew && !hasUser
+        ? '<label class="chk" style="margin-bottom:12px"><input type="checkbox" id="mbOpen" checked>'
+          + ' 顺便开通登录账号（勾选后上面两项必填；不勾则只保存通讯录）</label>'
+        : '')
+
+    /* 姓名：单数据源，档案与账号显示名同一个框。
+       v3.5.5：maxlength 跟随规则（预置：最多 3 个中文字符）。 */
+    + '<div class="field"><label for="mbName">姓名</label>'
+    + '<input id="mbName" maxlength="' + (ruleOf('name').maxLen || 30) + '" value="' + attr(name0) + '" placeholder="如 余子康">'
+    + '<p class="hint">这一个框同时写进<b>班级档案</b>与<b>账号显示名</b>（单数据源，不会再出现两处对不上）。</p></div>'
+
+    /* 角色 / 状态：仅对（将有）账号有意义 */
+    + '<div class="mb-form-grid">'
+    +   '<div class="field"><label for="mbRole">角色</label>'
+    +     '<select id="mbRole">'
+    +       '<option value="user"' + (!isNew && m.role === 'admin' ? '' : ' selected') + '>普通用户</option>'
+    +       '<option value="admin"' + (!isNew && m.role === 'admin' ? ' selected' : '') + '>管理员</option>'
+    +     '</select></div>'
+    +   '<div class="field"><label for="mbStatus">状态</label>'
+    +     '<select id="mbStatus"'
+    +       (hasUser ? '' : ' disabled title="还没有账号，开通后生效"') + '>'
+    +       '<option value="active"' + (!isNew && m.status === 'active' ? ' selected' : '') + '>正常</option>'
+    +       '<option value="pending"' + (!isNew && m.status === 'pending' ? ' selected' : '') + '>待审核</option>'
+    +       '<option value="banned"' + (!isNew && m.status === 'banned' ? ' selected' : '') + '>已禁用</option>'
+    +     '</select></div>'
+    + '</div>'
+
+    /* 账号只读信息（编辑已有账号时） */
+    + (hasUser
+        ? '<dl class="kv" style="margin-top:4px">'
+          + '<dt>账号 ID</dt><dd class="mono">' + m.userId + '</dd>'
+          + '<dt>创建时间</dt><dd>' + esc(fmt(m.createdAt)) + '</dd>'
+          + '<dt>最后登录</dt><dd>' + (m.lastLoginAt ? esc(fmt(m.lastLoginAt) + '（' + ago(m.lastLoginAt) + '）') : '从未登录') + '</dd>'
+          + '<dt>最后上线</dt><dd>' + (isOnlineNow(m)
+              ? '<span class="badge badge-green">在线中</span>'
+              : esc(m.lastSeenAt ? fmt(m.lastSeenAt) + '（' + ago(m.lastSeenAt) + '）' : '未记录')) + '</dd>'
+          + '<dt>云端数据</dt><dd>' + (m.dataCount || 0) + ' 条</dd>'
+          + '<dt>首次改密</dt><dd>' + (m.mustChangePassword
+              ? '<span class="badge badge-amber">待改密</span>'
+              : '<span class="badge badge-green">已改密</span>') + '</dd>'
+          + '</dl>'
+        : '')
+    + '</div>';
+
+  /* ---- ② 班级档案段 ---- */
+  var vp0 = (!isNew && m.visibilityPref) || {};
+  var profileSec =
+    '<div class="mb-form-sec" style="margin-top:20px">'
+    + '<h4>' + svg('inbox', 15) + ' 班级档案</h4>'
+    + '<p class="hint" style="margin:-4px 0 12px">'
+    +   (hasProfile
+        ? '姓名 / 学号 / 政治面貌只有管理员能改；联系方式管理员填写视为已核实。'
+        : (hasUser
+            ? '这个账号还没有班级档案——下面填任一字段，保存时自动补建并绑定。'
+            : '通讯录信息。暂时不开账号也可以先只存档案。'))
+    + '</p>'
+
+    /* 档案 §1：学号 / 身份 / 政治面貌 */
+    + '<div class="mb-form-grid">'
+    +   '<div class="field"><label for="mbSid">学号</label>'
+    +     '<input id="mbSid" maxlength="' + (ruleOf('student_id').digits || 20) + '"'
+    +       ' inputmode="numeric" value="' + attr(isNew ? '' : m.studentId) + '" placeholder="如 250501">'
+    +     '<p class="hint">全部成员里唯一，重复会报错。</p></div>'
+    +   '<div class="field"><label for="mbIdentity">身份</label>'
+    +     '<div class="fld-cp">'
+    +       '<input id="mbIdentity" class="inp" maxlength="10" value="' + attr(identity0) + '" placeholder="学生">'
+    +       cpBtnHtml('role')
+    +     '</div>'
+    +     '<p class="hint">前台显示在姓名旁，如「学生 / 走读 / 住校」。</p></div>'
+    + '</div>'
+
+    + '<div class="mb-form-grid">'
+    +   '<div class="field"><label for="mbPol">政治面貌</label>'
+    +     '<select id="mbPol">' + polOpts(isNew ? '群众' : m.politics) + '</select></div>'
+    +   '<div class="field"><label>头衔（可多选）</label>'
+    +     '<div id="mbTitleBox" class="rule-multi" style="max-height:118px;overflow:auto">'
+    +       ((STATE.titles && STATE.titles.allowed && STATE.titles.allowed.length
+              ? STATE.titles.allowed : TITLE_FALLBACK).map(function(t){
+              return '<label class="chk"><input type="checkbox" class="mb-title" value="' + attr(t) + '"'
+                + ((curTitles.indexOf(t) >= 0) ? ' checked' : '') + '> ' + esc(t) + '</label>';
+            }).join(''))
+    +     '</div>'
+    +     '<p class="hint">和「头衔任命」是同一份数据，这里改完那边立刻同步。</p></div>'
+    + '</div>'
+
+    + '<div class="field"><label for="mbEx">智学网账号</label>'
+    + '<input id="mbEx" class="inp" maxlength="24" value="' + attr(isNew ? '' : m.examNo) + '" placeholder="如 11399395">'
+    + '<p class="hint">不属于隐私字段，同学查询时直接可见，不需要审核。</p></div>'
+
+    /* 🔴 v3.5.21：身份证号 / 发展团员编号以前**只能靠导入**。
+       extraColsOf() 为了防止「同一列传两遍」把它们排除了（v3.5.16），
+       但编辑弹窗里又没补固定输入框 —— 结果这两项在后台无处可填，
+       站主只能改 Excel 重新导入。这里补上，值走 data-xf → payload.extra，
+       服务端 loadEditableFields() 本来就含这两列，会正常写回。 */
+    + '<div class="mb-form-grid">'
+    +   '<div class="field"><label for="mbIdCard">身份证号</label>'
+    +     '<div class="fld-cp">'
+    +       ruleInputHtml('id_card', ruleOf('id_card'), (!isNew && (m.extra || {}).id_card) || '', 'mbIdCard', '18 位身份证号')
+    +       cpBtnHtml('id_card')
+    +     '</div>'
+    +     '<p class="hint">加密存储；前台是否可见由「字段管理」里的可见范围决定。</p></div>'
+    +   '<div class="field"><label for="mbYln">发展团员编号</label>'
+    +     '<div class="fld-cp">'
+    +       ruleInputHtml('youth_league_no', ruleOf('youth_league_no'), (!isNew && (m.extra || {}).youth_league_no) || '', 'mbYln', '团员编号')
+    +       cpBtnHtml('youth_league_no')
+    +     '</div>'
+    +     '<p class="hint">入团时间等自定义字段在下方「其他资料字段」里。</p></div>'
+    + '</div>'
+
+    + '<div class="field"><label>联系方式</label>'
+    +   '<div class="ct-grid" style="gap:10px">'
+    +     '<input id="mbWx" class="inp" maxlength="64" placeholder="微信号" value="' + attr(isNew ? '' : m.wechat) + '">'
+    +     '<input id="mbQq" class="inp" maxlength="64" placeholder="QQ 号" value="' + attr(isNew ? '' : m.qq) + '">'
+    +     '<input id="mbPh" class="inp" inputmode="numeric" maxlength="' + (ruleOf('phone').digits || 20) + '"'
+    +       ' placeholder="手机号（' + (ruleOf('phone').digits || '') + ' 位数字）" value="' + attr(isNew ? '' : m.phone) + '">'
+    +   '</div>'
+    +   '<p class="hint">管理员在这里填的视为已核实，直接按下面的状态对外展示。</p></div>'
+
+    + '<div class="field"><label for="mbCst">联系方式审核状态</label>'
+    + '<select id="mbCst">'
+    +   '<option value="none"' + (!isNew && m.contactStatus === 'none' ? ' selected' : '') + '>未填写 — 不对外展示</option>'
+    +   '<option value="approved"' + ((isNew && !(m && m.contactStatus)) || (!isNew && m.contactStatus === 'approved') ? ' selected' : '') + '>已通过 — 同学查询时可见</option>'
+    +   '<option value="pending"' + (!isNew && m.contactStatus === 'pending' ? ' selected' : '') + '>待审核 — 暂不展示</option>'
+    +   '<option value="rejected"' + (!isNew && m.contactStatus === 'rejected' ? ' selected' : '') + '>已驳回 — 不展示</option>'
+    + '</select></div>'
+
+    /* 联系方式可见性（仅编辑已有档案时出现） */
+    + (hasProfile
+        ? (function(){
+            var meta0 = STATE.members.fieldMeta || [];
+            var adminTouched = function(field){
+              var mm = meta0.find(function(x){ return x.field === field; });
+              return mm ? !!mm.adminSet : false;
+            };
+            function note(field){
+              if(vp0[field] !== false) return '';
+              return adminTouched(field)
+                ? '<span class="badge badge-purple" style="margin-left:6px" title="同学设过私密，但你在字段管理里改过该字段，以你为准">本人设过私密 · 已被你覆盖</span>'
+                : '<span class="badge badge-orange" style="margin-left:6px" title="同学把这项设成了仅自己可见">本人已设为私密</span>';
+            }
+            return '<div class="field"><label>联系方式可见性（这个人）</label>'
+            +   '<p class="hint" style="margin-bottom:8px">勾上 = 仅本人可见，同学查不到。'
+            +     '<b>后台权力最大</b>：你在「字段管理」里改过的字段，以你的设置为准。</p>'
+            +   '<label class="chk"><input type="checkbox" id="mbWxHide"' + (vp0.wechat === false ? ' checked' : '') + '> 微信号仅本人可见' + note('wechat') + '</label>'
+            +   '<label class="chk"><input type="checkbox" id="mbQqHide"' + (vp0.qq === false ? ' checked' : '') + '> QQ 号仅本人可见' + note('qq') + '</label>'
+            +   '<label class="chk"><input type="checkbox" id="mbPhHide"' + (vp0.phone === false ? ' checked' : '') + '> 手机号仅本人可见' + note('phone') + '</label>'
+            + '</div>';
+          })()
+        : '')
+
+    /* 其他资料字段（动态，2026-10-09 v2.4.0） */
+    + (function(){
+        var extras = extraColsOf();
+        if(!extras.length) return '';
+        var cur = (!isNew && m.extra) || {};
+        var fv  = (!isNew && m.fieldVis) || {};
+        return '<div class="field"><label>其他资料字段</label>'
+          + '<p class="hint" style="margin-bottom:8px">「字段管理」里登记的字段。可见范围默认跟随全班，也可只给这一个人单独调整。</p>'
+          +           extras.map(function(f){
+              var val = cur[f.field] || '';
+              var curFv = fv[f.field] || '';
+              var gv = (function(){
+                var mm = (STATE.members.fieldMeta || []).find(function(x){ return x.field === f.field; });
+                return mm ? mm.visibility : 'public';
+              })();
+              /* v3.5.5：按字段规则渲染控件 —— select 出下拉、time 出日期
+                 选择器、number 出数字键盘 + 限长、text 按 maxLen 限长。
+                 禁自由输入的下拉连输入框都不给。 */
+              return '<div class="extra-row">'
+                + '<label class="extra-lab" for="mbX_' + attr(f.field) + '">' + esc(f.label) + '</label>'
+                + ruleInputHtml(f.field, f.rules, val, 'mbX_' + attr(f.field), f.label)
+                + cpBtnHtml(f.field)
+                + '<select class="inp extra-vis" data-vf="' + attr(f.field) + '" title="只对这个人生效的可见范围">'
+                +   '<option value=""' + (curFv ? '' : ' selected') + '>跟随全班（' + esc(VIS_LABEL[gv] || gv) + '）</option>'
+                +   '<option value="public"' + (curFv === 'public' ? ' selected' : '') + '>公开</option>'
+                +   '<option value="committee"' + (curFv === 'committee' ? ' selected' : '') + '>班委可见</option>'
+                +   '<option value="self"' + (curFv === 'self' ? ' selected' : '') + '>仅本人</option>'
+                +   '<option value="admin"' + (curFv === 'admin' ? ' selected' : '') + '>仅后端可见</option>'
+                + '</select>'
+                + '</div>';
+            }).join('')
+          + '</div>';
+      })()
+    + '<div class="msg" id="mbMsg"></div>'
+    + '</div>';
+
+  openModal({
+    title: isNew ? '新增成员' : ('编辑成员：' + memberName(m)),
+    sub: isNew ? '一张表单同时建账号与档案' : '同一张表单管理账号与班级档案，保存时两处自动同步',
+    wide: true,
+    body: accountSec + profileSec,
+    foot: '<button class="btn btn-ghost" data-no>取消</button><button class="btn" data-yes>'
+      + (isNew ? '创建' : '保存') + '</button>',
+    onMount: function(box){
+      var msg = box.querySelector('#mbMsg');
+      /* v3.5.5：多选字段的复选框组 → 隐藏输入同步（值仍是逗号分隔文本） */
+      Array.prototype.forEach.call(extraColsOf(), function(f){
+        if(f.rules && f.rules.type === 'select' && f.rules.multi){
+          bindRuleMulti(box, 'mbX_' + f.field);
+        }
+      });
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var btn = this;
+        var openAcc = box.querySelector('#mbOpen');
+        var willCreateAccount = isNew || (openAcc && openAcc.checked);
+
+        /* 档案段是否有实质内容 */
+        var g = function(id){ var el = box.querySelector(id); return el ? el.value.trim() : ''; };
+        var nameV = g('#mbName');
+        /* v3.5.22：档案段现在「全字段可编辑」—— 身份、头衔也算实质内容 */
+        var titleVals = [];
+        Array.prototype.forEach.call(box.querySelectorAll('input.mb-title'), function(c){
+          if(c.checked) titleVals.push(c.value);
+        });
+        var hasProfileData = nameV || g('#mbSid') || g('#mbEx') || g('#mbWx') || g('#mbQq') || g('#mbPh')
+          || titleVals.length;
+
+        var payload = {
+          userId:    hasUser ? m.userId : 0,
+          profileId: hasProfile ? m.profileId : 0,
+          createAccount: willCreateAccount && !hasUser,
+          role:      box.querySelector('#mbRole').value,
+          status:    hasUser ? box.querySelector('#mbStatus').value : 'active',
+          /* 档案段 */
+          name: nameV,
+          studentId: g('#mbSid'),
+          politics:  box.querySelector('#mbPol').value,
+          examNo:    g('#mbEx'),
+          /* v3.5.22：身份与头衔都进档案段（以前只能去「头衔任命」单独改） */
+          identity:  g('#mbIdentity') || '学生',
+          title:     titleVals,
+          wechat:    g('#mbWx'),
+          qq:        g('#mbQq'),
+          phone:     g('#mbPh'),
+          contactStatus: box.querySelector('#mbCst').value,
+        };
+
+        /* 账号段校验（新建 / 开号时用户名+密码必填） */
+        if(payload.createAccount){
+          payload.username = g('#mbUser');
+          payload.password = box.querySelector('#mbPwd').value;
+          if(!payload.username){ msg.className = 'msg err show'; msg.textContent = '请填写用户名'; return; }
+          if(!payload.password){ msg.className = 'msg err show'; msg.textContent = '请填写初始密码'; return; }
+        }
+
+        /* 没有任何可保存内容时挡住（比如空表单直接点保存） */
+        if(!payload.userId && !payload.profileId && !payload.createAccount && !hasProfileData){
+          msg.className = 'msg err show';
+          msg.textContent = '请至少填写一项：账号信息或档案信息';
+          return;
+        }
+
+        /* 可见性：仅编辑已有档案时带（adminSet 语义见 upsertProfileCore） */
+        if(hasProfile){
+          var wxH = box.querySelector('#mbWxHide');
+          if(wxH){
+            payload.visibilityPref = {
+              wechat: !wxH.checked,
+              qq:     !box.querySelector('#mbQqHide').checked,
+              phone:  !box.querySelector('#mbPhHide').checked,
+            };
+          }
+          var fvVals = {};
+          Array.prototype.forEach.call(box.querySelectorAll('[data-vf]'), function(sel){
+            if(sel.value) fvVals[sel.dataset.vf] = sel.value;
+          });
+          payload.fieldVis = fvVals;
+        }
+        /* 额外字段值（新增时也允许带，默认都是「跟随全班」） */
+        var extraVals = {};
+        Array.prototype.forEach.call(box.querySelectorAll('[data-xf]'), function(inp){
+          extraVals[inp.dataset.xf] = inp.value.trim();
+        });
+        payload.extra = extraVals;
+
+        btn.disabled = true;
+        api('/admin?action=save-member', { method:'POST', body: payload }).then(function(j){
+          closeModal();
+          toast(j.message || '已保存', 'ok', 3800);
+          loadMembers();
+        }).catch(function(e){
+          msg.className = 'msg err show';
+          msg.textContent = e.message;
+          btn.disabled = false;
+        });
+      };
+      setTimeout(function(){
+        var first = box.querySelector(isNew ? '#mbUser' : '#mbName');
+        if(first) first.focus();
+      }, 80);
+    }
+  });
+}
+
+/* ---------------- 用户详情（含登录记录） ---------------- */
+/**
+ * v3.5.12 成员详情（站主 2026-10-17 #2）
+ * 「成员档案只展示联系方式，其他的通过详情查看」
+ *
+ * 列表瘦身成「姓名 + 联系方式」之后，其余信息全在这里：
+ *   顶部四格速览（场景 / 审核 / 上线 / 云端数据）
+ *   ① 班级档案：学号、身份、头衔、政治面貌、智学网账号 + 所有自定义字段
+ *   ② 联系方式：微信 / QQ / 手机 + 本人私密意愿 + 管理员单人可见性设置
+ *   ③ 账号信息：角色、状态、创建、最后上线/登录、在线会话
+ *   ④ 登录记录（有账号才拉）
+ * 未认领的档案行（profileId 有、userId 无）也能打开，只是账号区显示「无账号」。
+ */
+function memberDetailDialog(m){
+  if(!m) return;
+  var hasUser = m.userId != null;
+
+  function kvRow(dt, dd){
+    return '<dt>' + esc(dt) + '</dt><dd>' + dd + '</dd>';
+  }
+  function v(x){
+    return (x === 0 || x) && String(x).trim() !== ''
+      ? esc(x) : '<span class="muted">—</span>';
+  }
+
+  var sc = MEMBER_SCENE[m.scene] || MEMBER_SCENE.both;
+  var cst = CONTACT_LABEL[m.contactStatus] || CONTACT_LABEL.none;
+
+  var head = '<div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-bottom:18px">'
+    + statMini('场景', sc.text)
+    + statMini('审核', cst.text)
+    + statMini('最后上线', hasUser
+        ? (isOnlineNow(m) ? '在线中' : (m.sessionLastSeen || m.lastSeenAt
+            ? ago(m.sessionLastSeen || m.lastSeenAt) : (m.lastLoginAt ? ago(m.lastLoginAt) : '从未')))
+        : '—')
+    + statMini('云端数据', hasUser ? ((m.dataCount || 0) + ' 条') : '—')
+    + '</div>';
+
+  /* ① 班级档案 */
+  var meta = STATE.members.fieldMeta || [];
+  var FIXED = ['name', 'student_id', 'politics', 'exam_no', 'role', 'title', 'wechat', 'qq', 'phone'];
+  var extraFields = meta.filter(function(f){ return FIXED.indexOf(f.field) < 0; });
+
+  var extraRows = extraFields.map(function(f){
+    var x = (m.extra || {})[f.field];
+    return kvRow(f.label || f.field, v(x) + cpv(x, f.label || f.field));
+  }).join('');
+
+  var archive = m.profileId == null
+    ? '<div class="panel" style="margin-bottom:18px"><div class="panel-head"><h3>' + svg('file') + '班级档案</h3></div>'
+      + '<div class="panel-body"><p class="muted" style="margin:0;font-size:.85rem">'
+      + '这位同学<b>还没有班级档案</b>。点「编辑」可以在同一个表单里补上学号、身份、联系方式。</p></div></div>'
+    : '<div class="panel" style="margin-bottom:18px">'
+      + '<div class="panel-head"><div><h3>' + svg('file') + '班级档案</h3>'
+      +   '<p class="sub">' + esc(m.name || '(未命名)') + ' 的档案字段 · 每项可单独复制</p></div></div>'
+      + '<div class="panel-body"><dl class="kv">'
+      +   kvRow('姓名', v(m.name) + cpv(m.name, '姓名'))
+      +   kvRow('学号', v(m.studentId) + cpv(m.studentId, '学号'))
+      +   kvRow('身份', v(m.identity || m.role) + cpv(m.identity || m.role, '身份'))
+      +   kvRow('头衔', v((m.titles && m.titles.length) ? m.titles.join('、') : m.title)
+              + cpv((m.titles && m.titles.length) ? m.titles.join('、') : m.title, '头衔'))
+      +   kvRow('政治面貌', v(m.politics) + cpv(m.politics, '政治面貌'))
+      +   kvRow('智学网账号', v(m.examNo) + cpv(m.examNo, '智学网账号'))
+      +   extraRows
+      + '</dl></div></div>';
+
+  /* ② 联系方式 + 可见性 */
+  var vp = m.visibilityPref || {};
+  var hidden = [];
+  if(vp.wechat === false) hidden.push('微信');
+  if(vp.qq === false) hidden.push('QQ');
+  if(vp.phone === false) hidden.push('手机');
+
+  var fv = m.fieldVis || {};
+  var fvKeys = Object.keys(fv);
+  var fvLabelOf = function(k){
+    var mm = meta.find(function(x){ return x.field === k; });
+    return mm ? mm.label : k;
+  };
+
+  var visTxt;
+  if(fvKeys.length){
+    visTxt = '<span class="badge badge-purple">⚙ 管理员单独设置：'
+      + esc(fvKeys.map(fvLabelOf).join('/')) + '</span>';
+  } else if(hidden.length){
+    visTxt = '<span class="badge badge-orange">🔒 本人设私密：' + esc(hidden.join('/')) + '</span>';
+  } else {
+    visTxt = '<span class="badge badge-gray">全部公开</span>';
+  }
+
+  var contact = '<div class="panel" style="margin-bottom:18px">'
+    + '<div class="panel-head"><div><h3>' + svg('user') + '联系方式</h3>'
+    +   '<p class="sub">同学之间互相查到的是这三项</p></div></div>'
+    + '<div class="panel-body"><dl class="kv">'
+    +   kvRow('微信', v(m.wechat) + cpv(m.wechat, '微信'))
+    +   kvRow('QQ', v(m.qq) + cpv(m.qq, 'QQ'))
+    +   kvRow('手机', v(m.phone) + cpv(m.phone, '手机'))
+    +   kvRow('可见性', visTxt)
+    +   kvRow('审核状态', '<span class="badge ' + cst.cls + '">' + cst.text + '</span>'
+        + (m.rejectReason ? '<div class="muted" style="font-size:.74rem;margin-top:3px">驳回理由：' + esc(m.rejectReason) + '</div>' : ''))
+    + '</dl></div></div>';
+
+  /* ③ 账号信息 */
+  var account = !hasUser
+    ? '<div class="panel" style="margin-bottom:18px"><div class="panel-head"><h3>' + svg('shield') + '系统账号</h3></div>'
+      + '<div class="panel-body"><p class="muted" style="margin:0;font-size:.85rem">'
+      + '这条记录只有档案，<b>还没有绑定登录账号</b>（同学自己注册后会自动认领，或点「新增成员」直接建号）。</p></div></div>'
+    : '<div class="panel" style="margin-bottom:18px">'
+      + '<div class="panel-head"><h3>' + svg('shield') + '系统账号</h3></div>'
+      + '<div class="panel-body"><dl class="kv">'
+      +   kvRow('用户名', '<span class="mono">' + esc(m.username || '—') + '</span>')
+      +   kvRow('显示名', v(m.displayName))
+      +   kvRow('角色', m.role === 'admin'
+            ? '<span class="badge badge-orange">管理员</span>' : '普通用户')
+      +   kvRow('状态', m.status === 'banned'
+            ? '<span class="badge badge-red">已禁用</span>'
+            : (m.status === 'pending'
+                ? '<span class="badge badge-amber">待审核</span>'
+                : '<span class="badge badge-green">正常</span>')
+            + (m.mustChangePassword ? ' <span class="badge badge-amber">待改密</span>' : ''))
+      +   kvRow('注册时间', v(m.createdAt ? fmt(m.createdAt) : ''))
+      +   kvRow('最后上线', m.sessionLastSeen || m.lastSeenAt
+            ? esc(fmt(m.sessionLastSeen || m.lastSeenAt)) + ' <span class="muted">（' + esc(ago(m.sessionLastSeen || m.lastSeenAt)) + '）</span>'
+            : '<span class="muted">未记录</span>')
+      +   kvRow('最后登录', m.lastLoginAt
+            ? esc(fmt(m.lastLoginAt)) + ' <span class="muted">（' + esc(ago(m.lastLoginAt)) + '）</span>'
+            : '<span class="muted">从未登录</span>')
+      +   kvRow('在线会话', (m.onlineSessions || 0) + ' 个'
+            + (isOnlineNow(m) ? ' <span class="badge badge-green">在线</span>' : ''))
+      + '</dl></div></div>';
+
+  /* ④ 登录记录（有账号才拉） */
+  var loginBox = hasUser
+    ? '<div class="panel"><div class="panel-head"><div><h3>' + svg('clock') + '最近登录</h3>'
+      + '<p class="sub">最近 15 次</p></div>'
+      + '<button class="btn btn-sm btn-ghost" id="mdMore" style="margin-left:auto">完整用户详情</button></div>'
+      + '<div id="mdLogins"><div class="loading" style="padding:22px"><div class="spinner"></div></div></div></div>'
+    : '';
+
+  openModal({
+    title: '成员详情 · ' + (memberName(m) || ''),
+    sub: (hasUser ? '@' + m.username : '未认领') + (m.studentId ? ' · 学号 ' + m.studentId : ''),
+    wide: true,
+    body: head + archive + contact + account + loginBox,
+    foot: '<button class="btn btn-ghost" data-no>关闭</button>'
+      + '<button class="btn" data-edit>编辑这位成员</button>',
+    onMount: function(box){
+      var eb = box.querySelector('[data-edit]');
+      if(eb) eb.onclick = function(){ closeModal(); memberDialog(m); };
+
+      if(hasUser){
+        var more = box.querySelector('#mdMore');
+        if(more) more.onclick = function(){ closeModal(); userDetailDialog(m.userId); };
+
+        api('/admin?action=login-logs&id=' + m.userId + '&limit=15').then(function(lj){
+          var logs = lj.logs || [];
+          var el = box.querySelector('#mdLogins');
+          if(!el) return;
+          el.innerHTML = logs.length
+            ? '<div class="table-wrap"><table><thead><tr><th>时间</th><th>IP</th><th>设备</th></tr></thead><tbody>'
+              + logs.map(function(l){
+                  return '<tr><td class="nowrap">' + esc(fmt(l.createdAt)) + '</td>'
+                    + '<td class="nowrap mono">' + esc(l.ip || '—') + '</td>'
+                    + '<td class="muted" style="font-size:.75rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + attr(l.userAgent || '') + '">'
+                    + esc(shortUA(l.userAgent)) + '</td></tr>';
+                }).join('')
+              + '</tbody></table></div>'
+            : '<div class="empty" style="padding:24px"><p class="muted">暂无登录记录</p></div>';
+        }).catch(function(e){
+          var el = box.querySelector('#mdLogins');
+          if(el) el.innerHTML = '<p class="muted" style="padding:18px;margin:0">读取失败：' + esc(e.message) + '</p>';
+        });
+      }
+    },
+  });
+}
+
+function userDetailDialog(id){
+  openModal({
+    title: '用户详情',
+    wide: true,
+    body: '<div class="loading"><div class="spinner"></div>加载中…</div>',
+    onMount: function(box){
+      api('/admin?action=user&id=' + id).then(function(j){
+        var u = j.user || {};
+        var data = j.data || [];
+        var sess = j.sessions || [];
+
+        var head =
+          '<div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:20px">'
+          + statMini('账号', u.username)
+          + statMini('角色', u.role === 'admin' ? '管理员' : '普通用户')
+          + statMini('状态', u.status === 'banned' ? '已禁用' : '正常')
+          + statMini('云端数据', data.length + ' 条')
+          + '</div>';
+
+        var meta =
+          '<div class="panel" style="margin-bottom:18px"><div class="panel-head"><h3>' + svg('user') + '基本信息</h3></div>'
+          + '<div class="panel-body"><dl class="kv">'
+          + '<dt>显示名</dt><dd>' + esc(u.displayName || '—') + '</dd>'
+          + '<dt>创建时间</dt><dd>' + esc(fmt(u.createdAt)) + '</dd>'
+          + '<dt>最后上线</dt><dd>' + (u.lastSeenAt
+              ? esc(fmt(u.lastSeenAt) + '（' + ago(u.lastSeenAt) + '）') + (isOnlineNow(u) ? ' <span class="badge badge-green">在线</span>' : '')
+              : '<span class="muted">未记录</span>') + '</dd>'
+          + '<dt>最后登录</dt><dd>' + esc(u.lastLoginAt ? fmt(u.lastLoginAt) + '（' + ago(u.lastLoginAt) + '）' : '从未登录') + '</dd>'
+          + '<dt>在线会话</dt><dd>' + sess.length + ' 个' + (sess.length ? '（最近：' + esc(fmt(sess[0].createdAt)) + '）' : '') + '</dd>'
+          + '</dl></div></div>';
+
+        var loginBox = '<div class="panel" style="margin-bottom:18px">'
+          + '<div class="panel-head"><div><h3>' + svg('clock') + '登录记录</h3>'
+          + '<p class="sub">该用户的最近登录历史</p></div></div>'
+          + '<div id="udLogins"><div class="loading" style="padding:26px"><div class="spinner"></div></div></div></div>';
+
+        /* v2.10.1 需求⑬：管理员可「选择性删除」（每行一个删除按钮）
+           也可「批量删除」（面板右上角清空全部）。 */
+        var dataBox = '<div class="panel"><div class="panel-head"><h3>' + svg('database') + '云端数据</h3>'
+          + (data.length
+              ? '<button class="btn btn-sm btn-ghost" id="udDelAll" style="margin-left:auto;color:var(--danger)">清空全部</button>'
+              : '')
+          + '</div>'
+          + '<div class="panel-body">' + (data.length
+              ? '<div class="table-wrap"><table><thead><tr><th class="nowrap">分类</th><th>数据</th><th class="nowrap">更新时间</th><th style="text-align:right">操作</th></tr></thead><tbody>'
+                + data.map(function(d){
+                    /* #178：中文名 + 键名小字。label 与键名相同时（未归类键）
+                       只显示键名，不重复一遍。 */
+                    var showKey = (d.label && d.label !== d.key)
+                      ? esc(d.label) + ' <span class="mono muted" style="font-size:.72rem">' + esc(d.key) + '</span>'
+                      : '<span class="mono">' + esc(d.key) + '</span>';
+                    return '<tr><td class="nowrap">' + esc(d.catLabel || '—') + '</td>'
+                      + '<td>' + showKey + '</td>'
+                      + '<td class="nowrap muted">' + esc(fmt(d.updatedAt)) + '</td>'
+                      + '<td style="text-align:right"><div class="row-actions">'
+                      + '<button data-view-key="' + attr(d.key) + '">查看</button>'
+                      + '<button class="danger" data-del-key="' + attr(d.key) + '">删除</button>'
+                      + '</div></td></tr>';
+                  }).join('')
+                + '</tbody></table></div>'
+              : '<p class="muted" style="margin:0;font-size:.85rem">该用户还没有云端数据</p>')
+          + '</div></div>';
+
+        box.querySelector('.modal-body').innerHTML = head + meta + loginBox + dataBox;
+
+        /* 加载登录记录 */
+        api('/admin?action=login-logs&id=' + id + '&limit=20').then(function(lj){
+          var logs = lj.logs || [];
+          var el = box.querySelector('#udLogins');
+          if(!el) return;
+          el.innerHTML = logs.length
+            ? '<div class="table-wrap"><table><thead><tr><th>时间</th><th>IP</th><th>设备</th></tr></thead><tbody>'
+              + logs.map(function(l){
+                  return '<tr><td class="nowrap">' + esc(fmt(l.createdAt)) + '</td>'
+                    + '<td class="nowrap mono">' + esc(l.ip || '—') + '</td>'
+                    + '<td class="muted" style="font-size:.75rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + attr(l.userAgent || '') + '">'
+                    + esc(shortUA(l.userAgent)) + '</td></tr>';
+                }).join('')
+              + '</tbody></table></div>'
+              + (lj.total > 20 ? '<p class="muted" style="padding:11px 14px 0;font-size:.76rem">共 ' + lj.total + ' 条，仅显示最近 20 条</p>' : '')
+            : '<div class="empty" style="padding:30px"><p class="muted">暂无登录记录</p></div>';
+        }).catch(function(){
+          var el2 = box.querySelector('#udLogins');
+          if(el2) el2.innerHTML = '<div class="alert danger" style="margin:16px">登录记录加载失败（可能未建 login_log 表）</div>';
+        });
+
+        /* 数据键操作 */
+        Array.prototype.forEach.call(box.querySelectorAll('[data-view-key]'), function(b){
+          b.onclick = function(){
+            var k = b.dataset.viewKey;
+            var item = data.find(function(d){ return d.key === k; });
+            openModal({
+              title: '数据详情',
+              sub: k,
+              wide: true,
+              body: '<pre style="margin:0;padding:14px;background:var(--bg-2);border-radius:var(--radius-md);'
+                  + 'font-size:.76rem;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-all">'
+                  + esc(JSON.stringify(item ? item.value : null, null, 2)) + '</pre>',
+              foot: '<button class="btn btn-ghost" data-close3>关闭</button>',
+              onMount: function(b2){ b2.querySelector('[data-close3]').onclick = closeModal; }
+            });
+          };
+        });
+        Array.prototype.forEach.call(box.querySelectorAll('[data-del-key]'), function(b){
+          b.onclick = function(){
+            var k = b.dataset.delKey;
+            confirmBox({ title:'删除数据', text:'确定删除键「' + k + '」吗？此操作不可恢复。', danger:true, okText:'删除' })
+              .then(function(yes){
+                if(!yes) return;
+                api('/admin?action=delete-data', { method:'POST', body:{ userId:id, key:k } })
+                  .then(function(){ toast('已删除', 'ok'); userDetailDialog(id); })
+                  .catch(function(e){ toast(e.message, 'err'); });
+              });
+          };
+        });
+        /* 批量删除：清空该用户全部云端数据（需求⑬） */
+        var delAllBtn = box.querySelector('#udDelAll');
+        if(delAllBtn){
+          delAllBtn.onclick = function(){
+            confirmBox({
+              title: '清空全部云端数据',
+              text: '会删除这位同学在云端的全部 ' + data.length + ' 条数据（点歌记录、作业标记、界面设置等），不可恢复。\n\n只想删某几条的话，请用每行右侧的「删除」。',
+              danger: true, okText: '清空全部'
+            }).then(function(yes){
+              if(!yes) return;
+              api('/admin?action=delete-data', { method: 'POST', body: { userId: id, all: true } })
+                .then(function(j){
+                  toast('已清空 ' + (j.deleted || 0) + ' 条云端数据', 'ok');
+                  userDetailDialog(id);   /* 重新拉一次，列表与条数一起刷新 */
+                })
+                .catch(function(e){ toast(e.message, 'err'); });
+            });
+          };
+        }
+      }).catch(function(e){
+        box.querySelector('.modal-body').innerHTML = '<div class="alert danger">加载失败：' + esc(e.message) + '</div>';
+      });
+    }
+  });
+}
+
+function statMini(label, value){
+  return '<div class="stat" style="padding:14px;box-shadow:none">'
+    + '<p class="label" style="font-size:.72rem">' + esc(label) + '</p>'
+    + '<h3 class="value" style="font-size:1.15rem;margin-top:3px">' + esc(value) + '</h3></div>';
+}
+
+/** UA 精简显示："Chrome · Windows" 这种 */
+function shortUA(ua){
+  if(!ua) return '—';
+  var s = String(ua), out = [];
+  if(/MicroMessenger/i.test(s)) out.push('微信');
+  else if(/Edg\//.test(s)) out.push('Edge');
+  else if(/Chrome\//.test(s) && !/Chromium/.test(s)) out.push('Chrome');
+  else if(/Firefox\//.test(s)) out.push('Firefox');
+  else if(/Safari\//.test(s)) out.push('Safari');
+  if(/Windows NT/.test(s)) out.push('Windows');
+  else if(/Macintosh/.test(s)) out.push('macOS');
+  else if(/Android/.test(s)) out.push('Android');
+  else if(/iPhone|iPad/.test(s)) out.push('iOS');
+  else if(/Linux/.test(s)) out.push('Linux');
+  return out.length ? out.join(' · ') : s.slice(0, 40);
+}
+
+/* ============================================================================
+ * ⑧ Excel 导入（对标 VoiceHub：三源 CDN + 标题行检测 + 预览 + 分批进度）
+ * ========================================================================= */
+var _xlsxLoading = null;
+function loadXLSX(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(_xlsxLoading) return _xlsxLoading;
+
+  /* v3.5.3：本地内置优先。解析库（SheetJS 0.18.5）跟着仓库一起发布到
+     Pages（vendor/xlsx.full.min.js，881KB），同源永远可达；三个 CDN
+     只作兜底——国内访问 jsdelivr/unpkg/cdnjs 时常抽风，以前「直接选文件
+     就报 XLSX is not defined」一半原因就是库还在路上、根本没加载。
+     ⚠️ 以后升级 SheetJS：换 vendor/ 里的文件 + 下面 URL 的版本号一起改。 */
+  var urls = [
+    'vendor/xlsx.full.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+  ];
+
+  _xlsxLoading = new Promise(function(resolve){
+    var i = 0;
+    (function next(){
+      if(i >= urls.length){ resolve(null); return; }
+      var url = urls[i++];
+      var s = document.createElement('script');
+      s.src = url;
+      s.async = true;
+      /* onload 后没拿到 window.XLSX（本地文件缺失/被墙的 CDN 返回空壳）
+         不能就此 resolve(null——继续试下一个源，这条链才真的是兜底链。 */
+      s.onload = function(){ if(window.XLSX) resolve(window.XLSX); else next(); };
+      s.onerror = function(){ s.remove(); next(); };
+      document.head.appendChild(s);
+    })();
+  });
+  return _xlsxLoading;
+}
+
+/** 导入模板表头（与大表保持一致，方便老师/同学照抄） */
+var IMPORT_HEADERS = ['用户名', '密码', '姓名', '角色'];
+
+function importDialog(){
+  var parsed = [];        /* 解析出的待导入数据 */
+  var headerSkipped = false;
+
+  openModal({
+    title: 'Excel 批量导入用户',
+    wide: true,
+    sub: '支持 .xlsx / .xls，自动识别标题行',
+    body:
+      '<div class="alert info">'
+      + '<b>格式说明：</b>第 1 列 <b>用户名</b>，第 2 列 <b>密码</b>，第 3 列 <b>姓名</b>（选填），第 4 列 <b>角色</b>（选填，填 admin 才是管理员）。<br>'
+      + '第一行如果是「用户名 / 密码 / 姓名 / 角色」这类标题，会自动跳过；没有标题行也能识别。'
+      + '</div>'
+
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'
+      +   '<button class="btn btn-sm btn-secondary" id="imTpl">' + svg('download', 14) + '下载模板</button>'
+      +   '<label class="btn btn-sm" style="cursor:pointer">' + svg('upload', 14) + '选择 Excel 文件'
+      +     '<input type="file" id="imFile" accept=".xlsx,.xls" style="display:none"></label>'
+      + '</div>'
+
+      + '<div id="imBody"><p class="muted" style="font-size:.85rem;margin:0">还没有选择文件。</p></div>'
+      + '<div id="imProgWrap" style="display:none"><div class="progress-bar"><i id="imProg"></i></div>'
+      + '<p id="imProgTxt" style="font-size:.78rem;color:var(--fg-3);margin:0"></p></div>'
+      + '<div id="imErr" style="margin-top:14px"></div>'
+      + '<div class="msg" id="imMsg"></div>',
+    foot:
+      '<button class="btn btn-ghost" data-close4>取消</button>'
+      + '<button class="btn" id="imGo" disabled>开始导入</button>',
+    onMount: function(box){
+      box.querySelector('[data-close4]').onclick = closeModal;
+      var fileInput = box.querySelector('#imFile');
+      var body = box.querySelector('#imBody');
+      var goBtn = box.querySelector('#imGo');
+      var msg = box.querySelector('#imMsg');
+
+      /* 下载模板 */
+      box.querySelector('#imTpl').onclick = function(){
+        loadXLSX().then(function(XLSX){
+          if(!XLSX){ toast('模板库加载失败，请检查网络', 'err', 4200); return; }
+          var ws = XLSX.utils.json_to_sheet([
+            { 用户名:'zhangsan', 密码:'Class2025', 姓名:'张三', 角色:'user' }
+          ]);
+          ws['!cols'] = [{ wch:14 }, { wch:14 }, { wch:12 }, { wch:10 }];
+          var wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, '用户导入');
+          XLSX.writeFile(wb, '用户导入模板.xlsx');
+          toast('模板已下载', 'ok');
+        });
+      };
+
+      /* 选择文件 → 解析 */
+      fileInput.onchange = function(ev){
+        var f = ev.target.files && ev.target.files[0];
+        if(!f) return;
+        msg.className = 'msg';
+        body.innerHTML = '<div class="loading"><div class="spinner"></div>加载表格组件…</div>';
+
+        loadXLSX().then(function(XLSX){
+          if(!XLSX){
+            body.innerHTML = '<div class="alert danger">表格组件加载失败（三个 CDN 都不可达）。请检查网络后重试。</div>';
+            return;
+          }
+          var reader = new FileReader();
+          reader.onload = function(e){
+            try{
+              var wb = XLSX.read(new Uint8Array(e.target.result), { type:'array' });
+              var sheet = wb.Sheets[wb.SheetNames[0]];
+              var aoa = XLSX.utils.sheet_to_json(sheet, { header:1, defval:'' });
+
+              /* 智能检测标题行 */
+              var start = 0;
+              if(aoa.length && aoa[0] && aoa[0].length){
+                var kw = ['用户名','密码','姓名','角色','username','password','name','role','账号','用户'];
+                var hit = aoa[0].some(function(cell){
+                  if(cell === null || cell === undefined || cell === '') return false;
+                  var t = String(cell).toLowerCase();
+                  return kw.some(function(k){ return t.indexOf(k.toLowerCase()) >= 0; });
+                });
+                if(hit) start = 1;
+              }
+              headerSkipped = start === 1;
+
+              var out = [];
+              var skippedEmpty = 0;
+              for(var i = start; i < aoa.length; i++){
+                var row = aoa[i] || [];
+                var username = String(row[0] === null || row[0] === undefined ? '' : row[0]).trim();
+                /* 整行为空则跳过 */
+                if(!username && !String(row[1] || '').trim()){ skippedEmpty++; continue; }
+                out.push({
+                  username: username,
+                  password: String(row[1] === null || row[1] === undefined ? '' : row[1]),
+                  displayName: String(row[2] === null || row[2] === undefined ? '' : row[2]).trim(),
+                  role: String(row[3] || '').trim().toLowerCase() === 'admin' ? 'admin' : 'user'
+                });
+              }
+
+              parsed = out;
+              if(!out.length){
+                body.innerHTML = '<div class="alert warn">没有解析到有效数据。请确认第 1 列是用户名、第 2 列是密码。</div>';
+                goBtn.disabled = true;
+                return;
+              }
+
+              /* 预览前 8 行 */
+              var prev = out.slice(0, 8);
+              body.innerHTML =
+                '<div class="alert info" style="margin-bottom:12px">'
+                + '共解析出 <b>' + out.length + '</b> 条记录'
+                + (headerSkipped ? '，已自动跳过标题行' : '（未检测到标题行，从第一行开始）')
+                + (skippedEmpty ? '，忽略 ' + skippedEmpty + ' 个空行' : '')
+                + '</div>'
+                + '<div class="preview-table"><table><thead><tr>'
+                + '<th style="width:44px">#</th><th>用户名</th><th>密码</th><th>姓名</th><th>角色</th>'
+                + '</tr></thead><tbody>'
+                + prev.map(function(r, i){
+                    return '<tr><td class="muted">' + (i + 1) + '</td>'
+                      + '<td class="mono"><b>' + esc(r.username) + '</b></td>'
+                      + '<td class="mono muted">' + esc(r.password ? '•'.repeat(Math.min(r.password.length, 10)) : '（空）') + '</td>'
+                      + '<td>' + esc(r.displayName || '—') + '</td>'
+                      + '<td>' + (r.role === 'admin' ? '<span class="badge badge-orange">管理员</span>' : '<span class="badge badge-gray">普通</span>') + '</td>'
+                      + '</tr>';
+                  }).join('')
+                + '</tbody></table></div>'
+                + (out.length > 8
+                    ? '<p class="muted" style="font-size:.78rem;margin:9px 0 0">…… 还有 ' + (out.length - 8) + ' 条记录，导入时会一并处理</p>'
+                    : '');
+              goBtn.disabled = false;
+            }catch(err){
+              console.error(err);
+              body.innerHTML = '<div class="alert danger">解析失败：' + esc(err.message || '文件格式不正确') + '</div>';
+              goBtn.disabled = true;
+            }
+          };
+          reader.onerror = function(){ body.innerHTML = '<div class="alert danger">读取文件失败</div>'; };
+          reader.readAsArrayBuffer(f);
+        });
+      };
+
+      /* 开始导入：分批 50 条，逐批显示进度 */
+      goBtn.onclick = function(){
+        if(!parsed.length) return;
+        goBtn.disabled = true;
+        msg.className = 'msg';
+
+        var BATCH = 50;
+        var total = parsed.length;
+        var batches = [];
+        for(var i = 0; i < total; i += BATCH) batches.push(parsed.slice(i, i + BATCH));
+
+        var progWrap = box.querySelector('#imProgWrap');
+        var prog = box.querySelector('#imProg');
+        var progTxt = box.querySelector('#imProgTxt');
+        var errBox = box.querySelector('#imErr');
+        progWrap.style.display = 'block';
+        errBox.innerHTML = '';
+
+        var created = 0, failed = 0, allErrors = [], bi = 0;
+        body.innerHTML = '<div class="alert info">正在导入，请不要关闭本窗口…</div>';
+
+        (function nextBatch(){
+          if(bi >= batches.length){
+            /* 完成 */
+            prog.style.width = '100%';
+            progTxt.textContent = '导入完成：成功 ' + created + ' 个' + (failed ? '，失败 ' + failed + ' 个' : '');
+            goBtn.disabled = true;
+            goBtn.textContent = '已完成';
+            toast('导入完成：成功 ' + created + ' 个' + (failed ? '，失败 ' + failed + ' 个' : ''), failed ? 'warn' : 'ok', 4500);
+            if(allErrors.length){
+              errBox.innerHTML = '<p style="font-size:.8rem;font-weight:700;color:var(--danger);margin:0 0 7px">失败明细</p>'
+                + '<div class="err-list">' + allErrors.map(esc).join('\n') + '</div>';
+            }
+            loadMembers();
+            return;
+          }
+          var batch = batches[bi];
+          var offset = bi * BATCH;
+          progTxt.textContent = '正在处理第 ' + (bi + 1) + ' / ' + batches.length + ' 批（' + Math.min(offset + BATCH, total) + ' / ' + total + '）…';
+
+          api('/admin?action=batch-create', { method:'POST', body:{ users: batch } })
+            .then(function(j){
+              created += j.created || 0;
+              failed  += j.failed  || 0;
+              (j.errors || []).forEach(function(e){
+                /* 换算回 Excel 真实行号：批内下标 + 批偏移 + 标题行偏移 + 1（表格从 1 开始） */
+                var excelRow = offset + (e.index || 0) + (headerSkipped ? 1 : 0) + 1;
+                allErrors.push('第 ' + excelRow + ' 行' + (e.username ? '（' + e.username + '）' : '') + '：' + e.reason);
+              });
+            })
+            .catch(function(e){
+              failed += batch.length;
+              allErrors.push('第 ' + (bi + 1) + ' 批整体失败：' + e.message);
+            })
+            .then(function(){
+              bi++;
+              prog.style.width = Math.round(bi / batches.length * 100) + '%';
+              setTimeout(nextBatch, 60);
+            });
+        })();
+      };
+    }
+  });
+}
+
+/* ============================================================================
+ * ⑩ 云端内容的读写底座（公告 + 内容共用）
+ * ========================================================================= */
+/* 公告/内容在云端的存储方式：存在「系统账号」（优先 AI 助手，其次最早的管理员）
+   的 user_data 里，后端接口是 /api/content。
+
+   ⚠️ 2026-10-05 重要修正：
+   旧版这里走的是 /api/admin?action=set-data，把内容写进**当前登录管理员自己**的
+   user_data；而主站 index.html 读的是 /api/content —— 那个接口当时根本不存在（404），
+   前端 .catch 静默吞掉，于是公告一直显示硬编码内容。
+   也就是说「管理员改公告 → 同学能看到」从来没生效过。
+   现在改为统一走 /api/content，两端终于接上了。
+
+   ⚠️ 2026-10-06：原先的 loadSiteData / saveSiteData 双入口已删除——
+   公告与内容合并成「班级内容」面板后，读写统一走
+   loadClassContent() / saveClassContent()（见下方 ⑩-A）。 */
+
+/* 已下架的内容类型：旧的「通知」条目不再显示（公告才是正式通知渠道）。
+   注意只是不显示，云端数据没删——万一哪天要恢复还能捞回来。 */
+var CONTENT_RETIRED_KINDS = ['通知'];
+
+/* 内容面板的条目 ↔ 云端 items 字段名 的双向映射。
+   面板里每条是 {kind, title, body}，云端按 kind 归到不同字段。
+
+   ⚠️ 2026-10-06 修正：'活动' 原先是映到 activities 字段，但后端
+   api/content.js 的 ALLOW_CONTENT_KEYS 白名单里**没有** activities
+   （注释写明：主站 index.html 根本不消费它，加了会造成「后台存进去、
+   首页没反应」）。结果是管理员只要选了「活动」，保存就会被 400 拒掉。
+   现在统一落到 site_config —— 主站确实读这个键，测试能兜住。 */
+var CONTENT_FIELD = {
+  '作业':     'holiday_homeworks',
+  '课程表':   'site_config',
+  '值日安排': 'site_config',
+  '活动':     'site_config',
+  '其他':     'site_config'
+};
+
+/* items 里「属于内容区」的字段 —— 公告不在其中。
+   ⚠️ 2026-10-06 修 bug：以前 contentItemsToArray 遍历 items 的**全部**数组字段，
+   而 announcements 也是数组，于是公告会被摊平两次：
+   一次作为「公告」、一次被 fieldToKind() 兜底成「其他」。
+   表现为列表里每条公告都出现两遍，而且那个「其他」副本一编辑保存
+   就会被写进 site_config，等于凭空多出一条永远删不掉的幽灵记录。
+   现在只认下面这些真正属于「内容区」的字段。
+
+   ⚠️⚠️ 极其重要：daily_quote（每日一言）和 important_dates（重要日期）
+   都有**自己的专属面板**，千万不要放在这里。
+   本面板保存时是全量提交，一旦把 daily_quote 也铺成空数组写上去，
+   管理员在「班级内容」里改一条值日安排，就会顺手把 20 句每日一言
+   和所有考试日期全部清空 —— 隔壁面板背锅，还极难定位。 */
+var CONTENT_ARRAY_FIELDS = [
+  'holiday_homeworks',
+  'site_config',
+  'activities',      /* 后端已拒收，但历史数据里可能有，读出来让管理员能迁走 */
+];
+
+/* 本面板有「写权限」的字段子集 —— 上面那些里，activities 只读不写。 */
+var CONTENT_WRITABLE_FIELDS = ['holiday_homeworks', 'site_config'];
+
+/* 其它面板拥有的字段：本面板读都不读、写更不写。
+   列在这里是为了让「为什么不算进来」这件事有据可查。 */
+var CONTENT_OWNED_BY_OTHER_PANELS = ['daily_quote', 'important_dates', 'homework_notice'];
+void CONTENT_OWNED_BY_OTHER_PANELS;
+
+function contentItemsToArray(items){
+  var out = [];
+  CONTENT_ARRAY_FIELDS.forEach(function(f){
+    var v = (items || {})[f];
+    if(!Array.isArray(v)) return;
+    v.forEach(function(x){
+      if(!x || typeof x !== 'object') return;
+      /* 这条是从哪个云端字段来的 —— 保存时靠它归位，不再靠 kind 猜。
+         以前靠 kind→CONTENT_FIELD 反查，遇到 kind 认不出来（比如旧的
+         '通知'）就会掉进 site_config，把数据搬错地方。 */
+      out.push({
+        kind: x.kind || fieldToKind(f),
+        cat: x.category || '',
+        title: x.title || '',
+        body: x.body || '',
+        updatedAt: x.updatedAt || null,
+        _field: f,
+        _src: x                    /* 原始对象，保存时原样写回（形态保真） */
+      });
+    });
+  });
+  return out;
+}
+
+function fieldToKind(f){
+  var m = {
+    holiday_homeworks: '作业',
+    activities: '活动'
+  };
+  return m[f] || '其他';
+}
+
+/* ============================================================================
+ * ⑪ 面板：班级内容（公告 + 内容，2026-10-06 合并）
+ * ---------------------------------------------------------------------------
+ * ⚠️ 为什么合并：旧版这里是两个面板——
+ *      「公告管理」：存在 announcements 数组，有标题/正文/定向发布对象
+ *      「内容管理」：存在 items 的平铺字段里，有 kind 分类
+ *    但对使用者来说这俩长的几乎一样，都要填标题+正文，区别只在
+ *    「要不要指定发给谁」。结果就是管理员根本不知道该用哪个——
+ *    用户的反馈原话：「公告跟内容这两个有什么区别？我没有搞懂。」
+ *
+ *    现在合成一个列表，kind 里多一个「公告」类型，
+ *    announcements 数组在读取时被摊平成同样的记录条目，
+ *    保存时按 kind 分派回原来的存储位置。对外只有一个面板、一个按钮。
+ *
+ * ⚠️ 呈现方式（2026-10-06 改）：列表只放「类型 / 标题 / 时间 / 操作」，
+ *    正文一律收进「查看」按钮的只读弹窗。以前把正文塞进表格列，
+ *    移动端横向滚动、电脑端省略号截断，聊胜于无。
+ * ========================================================================= */
+function renderClassContent(){
+  var S = STATE.classcontent;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel);flex-wrap:wrap;gap:8px">'
+    +   '<button class="btn btn-sm" id="ccAdd">' + svg('plus', 14) + '新增内容</button>'
+    +   '<select id="ccCatFilter" class="gate-input" style="width:auto;padding:6px 8px;font-size:.8rem">'
+    +     [{ v:'全部', n:'全部' }, { v:'site', n:'📡 网站内部' }, { v:'activity', n:'🔔 重要更新' },
+          { v:'class', n:'🏫 班级事务' }, { v:'misc', n:'💭 站主杂谈' }, { v:'__hw__', n:'📝 作业' }].map(function(c){
+          return '<option value="' + attr(c.v) + '"' + (S.cat === c.v ? ' selected' : '') + '>' + esc(c.n) + '</option>';
+        }).join('')
+    +   '</select>'
+    +   '<input id="ccQ" class="gate-input" placeholder="搜标题 / 正文…" style="width:180px;padding:6px 10px;font-size:.8rem" value="' + attr(S.q) + '">'
+    +   '<button class="btn btn-sm btn-ghost" id="ccSort" title="切换时间排序">⇅ ' + (S.sort === 'new' ? '新→旧' : '旧→新') + '</button>'
+    +   '<span style="flex:1"></span>'
+    +   '<span class="muted" style="font-size:.8rem" id="ccCount">加载中…</span>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:14px">'
+    +   '<b>公告</b>按站内四板块分类（网站内部 / 重要更新 / 班级事务 / 站主杂谈），可以指定只发给某几位同学；'
+    +   '<b>作业不再在这里编辑</b>——课代表在前端作业界面改自己的科目，你在前端用管理员账号可改全部科目。<br>'
+    +   '列表里只显示标题和时间，<b>点「查看」看正文详情</b>。'
+    + '</div>'
+    + '<section class="panel" id="ccPanel"><div class="loading"><div class="spinner"></div>加载中…</div></section>';
+
+  $('ccAdd').onclick = function(){ classContentDialog(null); };
+  $('ccCatFilter').onchange = function(){ S.cat = this.value; paintClassContent(); };
+  $('ccSort').onclick = function(){ S.sort = (S.sort === 'new' ? 'old' : 'new'); this.textContent = '⇅ ' + (S.sort === 'new' ? '新→旧' : '旧→新'); paintClassContent(); };
+  var qTimer = null;
+  $('ccQ').oninput = function(){
+    clearTimeout(qTimer);
+    var v = this.value;
+    qTimer = setTimeout(function(){ S.q = v; paintClassContent(); }, 200);
+  };
+  loadClassContent();
+}
+
+/**
+ * 拉云端数据并摊平成统一记录数组。
+ * 每条记录带 _store 字段标明来源，保存时靠它决定往哪儿写回去。
+ */
+/** 公告首行（同上，列表/弹窗标题用） */
+function annFirstLine(text){
+  var line = String(text || '').split('\n')[0].trim();
+  if(!line) return '';
+  return line.length > 42 ? line.slice(0, 42) + '…' : line;
+}
+
+/* ============================================================================
+ * 公告置顶（2026-10-07 新增）
+ * ------------------------------------------------------------------------
+ * 站主要求：公告可以设置「显示置顶」或「永久置顶」。
+ * 数据层就两个字段（主站 index.html 的 isImportant() 早就认这两个）：
+ *     important: true                  → 永久置顶
+ *     important: true + importantUntil → 限时置顶，到点自动失效
+ *     important 缺失 / false           → 普通公告
+ * 这次要补的是**后台没有地方设置它们**——之前只能靠我手改数据。
+ *
+ * ⚠️ importantUntil 用 ISO 字符串存；表单用 datetime-local（本地时区，无时区后缀），
+ *    两边靠下面两个函数换算。别把 datetime-local 的值直接塞进 importantUntil，
+ *    那会被当成 UTC 解析，北京时间会差 8 小时。
+ * ========================================================================= */
+function annPinState(a){
+  a = a || {};
+  if(!a.important) return 'none';
+  if(a.importantUntil){
+    if(new Date(a.importantUntil).getTime() <= Date.now()) return 'expired';
+    return 'until';
+  }
+  return 'forever';
+}
+function annPinLabel(st){
+  return st === 'forever' ? '📌 永久置顶'
+       : st === 'until'   ? '⏳ 限时置顶'
+       : st === 'expired' ? '⌛ 置顶已过期'
+       : '';
+}
+/** ISO → datetime-local 输入框的值（本地时区） */
+function isoToLocalInput(iso){
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+       + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/** 新公告的发布时间，格式与线上数据一致（YYYY-MM-DD HH:MM，本地时间）。 */
+function annNowStr(){
+  var d = new Date();
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+       + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/**
+ * 校验后台手填的公告时间。
+ * 接受 YYYY-MM-DD HH:MM（也容许用 M/D/YYYY H:MM、YYYY/MM/DD HH:MM 这类宽松写法），
+ * 返回规范化后的 "YYYY-MM-DD HH:MM"；看不懂就返回 ''，由调用方回退到当前时间。
+ *
+ * ⚠️ 为什么不直接 new Date(str)：Safari 对 "2026-10-11 17:05" 这种带空格的
+ *    写法解析结果不稳定（部分版本返回 Invalid Date）。所以自己拆字段。
+ */
+function annParseDate(str){
+  var s = String(str || '').trim();
+  if(!s) return '';
+  var m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{1,2})$/);
+  if(!m) m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})[ T](\d{1,2}):(\d{1,2})$/), m && (m = [m[0], m[3], m[1], m[2], m[4], m[5]]);
+  if(!m) return '';
+  var Y = +m[1], Mo = +m[2], D = +m[3], H = +m[4], Mi = +m[5];
+  if(Mo < 1 || Mo > 12 || D < 1 || D > 31 || H > 23 || Mi > 59) return '';
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return Y + '-' + p(Mo) + '-' + p(D) + ' ' + p(H) + ':' + p(Mi);
+}
+
+function loadClassContent(){
+  var S = STATE.classcontent;
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    var out = [];
+
+    /* ① 公告：兼容两种形态——
+          线上真实形态 { date, text, category }（2026-10-06 实测 70 条全是这个形态），
+          旧后台设计形态 { id, title, body, targets, createdAt, updatedAt }。
+       正文统一读 text（旧形态兜底 body），标题给列表展示用：没有 title 就取正文首行，
+       时间读 date（旧形态兜底 createdAt/updatedAt）。 */
+    var ann = Array.isArray(items.announcements) ? items.announcements : [];
+    ann.forEach(function(a){
+      var text = a.text || a.body || '';
+      out.push({
+        _store: 'announcement',
+        _ref: a,                     /* 原始对象，保存时原样写回（形态保真） */
+        kind: '公告',
+        cat: a.category || '',       /* 站内板块分类（site/activity/class/misc），面板筛选用 */
+        title: a.title || annFirstLine(text),
+        body: text,
+        targets: a.targets || [],
+        /* timeKind：只有 createdAt / updatedAt 是数据库 UTC 时间戳（要转本地）；
+           a.date 是站主手填的本地墙钟串，原样显示 —— 2026-10-16 站主反馈的
+           「编辑完的小字比填的晚 8 小时」就出在这里。 */
+        time: a.createdAt || a.updatedAt || a.date || null,
+        timeKind: (a.createdAt || a.updatedAt) ? 'db' : 'wall'
+      });
+    });
+
+    /* ② 其它内容：平铺字段里带 kind 的对象数组。
+       作业的条目时间兜底用 start~end（线上作业没有 updatedAt）。 */
+    contentItemsToArray(items).forEach(function(c){
+      if(CONTENT_RETIRED_KINDS.indexOf(c.kind) !== -1) return;   /* 已下架的旧类型 */
+      var t = c.updatedAt || null;
+      if(!t && c.kind === '作业'){
+        var r0 = c._src || {};
+        if(r0.start || r0.end) t = (r0.start || '?') + ' ~ ' + (r0.end || '?');
+      }
+      out.push({
+        _store: 'content',
+        _ref: c._src,
+        _field: c._field,          /* 来自哪个云端字段，保存时归位用 */
+        kind: c.kind || '其他',
+        title: c.title || (c.kind === '作业' && c._src
+          ? ((c._src.start || '?') + ' ~ ' + (c._src.end || '?')) : ''),
+        body: c.body || '',
+        targets: [],
+        time: t,
+        /* updatedAt 是数据库 UTC 时间戳；作业的「起 ~ 止」是手填墙钟串（原样显示） */
+        timeKind: (!c.updatedAt && t) ? 'wall' : 'db'
+      });
+    });
+
+    /* ③ 主站形态的假期作业：holiday_homeworks 里是
+          { id, start, end, title, items:[{subject, tasks:[]}] }，
+          没有 body 字段。只看 body 会显示成「无正文」，
+          所以这里把科目写进 body，让「查看」弹窗（走 hwItemsOf）能正常渲染。 */
+    out.forEach(function(r){
+      if(r.kind !== '作业' || r.body) return;
+      var items0 = hwItemsOf(r._ref);
+      if(!items0.length) return;
+      r.body = items0.map(function(it){
+        var tasks = (it.tasks || []).map(function(t){
+          if(t && typeof t === 'object') return (t.text || '(附件)');
+          return String(t);
+        }).join('；');
+        return it.subject + '：' + tasks;
+      }).join('\n');
+    });
+
+    /* 按时间倒序，新的在前；没有时间的沉底 */
+    out.sort(function(a, b){
+      var ta = a.time ? Date.parse(a.time) : 0;
+      var tb = b.time ? Date.parse(b.time) : 0;
+      if(isNaN(ta)) ta = 0;
+      if(isNaN(tb)) tb = 0;
+      return tb - ta;
+    });
+
+    S.list = out;
+    paintClassContent();
+  }).catch(function(e){
+    var p = $('ccPanel');
+    if(p) p.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+    var c = $('ccCount');
+    if(c) c.textContent = '加载失败';
+  });
+}
+
+/* 类型 → 徽章配色。公告用红（最抓眼），作业蓝，活动绿，其余灰。 */
+function kindBadgeClass(kind){
+  var m = { '公告':'badge-red', '作业':'badge-blue', '活动':'badge-green', '课程表':'badge-orange', '值日安排':'badge-orange' };
+  return m[kind] || 'badge-gray';
+}
+
+function paintClassContent(){
+  var S = STATE.classcontent;
+  var panel = $('ccPanel');
+  if(!panel) return;
+  var cnt = $('ccCount');
+  if(cnt) cnt.textContent = '共 ' + S.list.length + ' 条';
+
+  if(!S.list.length){
+    panel.innerHTML = '<div class="empty">' + svg('layers', 38) + '<p>还没有任何内容</p>'
+      + '<p class="muted" style="font-size:.78rem">点左上角「新增内容」发布第一条</p></div>';
+    return;
+  }
+
+  /* ③ 过滤 + 排序 + 搜索（2026-10-06：站主要求按前端四板块 + 作业分开找，能搜能排）
+        分类下拉的值同时匹配公告的板块分类（cat）与「📝 作业」这类 kind。 */
+  var rows = S.list;
+  if(S.cat && S.cat !== '全部'){
+    var catKey = S.cat;
+    if(catKey === '__hw__'){
+      rows = rows.filter(function(c){ return c.kind === '作业'; });
+    } else {
+      rows = rows.filter(function(c){ return c.kind === '公告' && (c.cat || '') === catKey; });
+    }
+  }
+  if(S.q){
+    var q = S.q.trim().toLowerCase();
+    if(q){
+      rows = rows.filter(function(c){
+        return String(c.title || '').toLowerCase().indexOf(q) >= 0
+            || String(c.body || '').toLowerCase().indexOf(q) >= 0;
+      });
+    }
+  }
+  rows = rows.slice().sort(function(a, b){
+    var ta = Date.parse(String(a.time || '').replace(' ', 'T')) || 0;
+    var tb = Date.parse(String(b.time || '').replace(' ', 'T')) || 0;
+    return S.sort === 'new' ? (tb - ta) : (ta - tb);
+  });
+
+  if(!rows.length){
+    panel.innerHTML = '<div class="empty">' + svg('layers', 38) + '<p>当前筛选下没有内容</p>'
+      + '<p class="muted" style="font-size:.78rem">换个分类或清空搜索关键词试试</p></div>';
+    return;
+  }
+
+  panel.innerHTML = '<div class="rec-list">' + rows.map(function(c){
+    var i = S.list.indexOf(c);
+    var timeTxt = fmtRecTime(c);
+    var scope = (c.kind === '公告')
+      ? (c.targets && c.targets.length ? '定向 ' + c.targets.length + ' 人' : '全体同学')
+      : '';
+    /* 作业不再在后台编辑（2026-10-06）：课代表在前端改，管理员前端改全部 */
+    var editBtn = (c.kind === '作业')
+      ? ''
+      : '<button data-cc-edit="' + i + '">' + svg('edit', 14) + '编辑</button>';
+    var pinSt = (c.kind === '公告') ? annPinState(c._ref) : 'none';
+    return '<div class="rec">'
+      + '<div class="rec-main">'
+      +   '<div class="rec-top">'
+      +     '<span class="badge ' + kindBadgeClass(c.kind) + '">' + esc(c.kind) + '</span>'
+      +     (pinSt !== 'none' ? '<span class="badge badge-orange">' + esc(annPinLabel(pinSt)) + '</span>' : '')
+      +     '<b>' + esc(c.title || '(无标题)') + '</b>'
+      +   '</div>'
+      +   '<div class="rec-meta">'
+      +     '<span>' + svg('clock', 12) + esc(timeTxt) + '</span>'
+      +     (scope ? '<span>' + svg('users', 12) + esc(scope) + '</span>' : '')
+      +     (c.body ? '<span>' + svg('file', 12) + '正文 ' + c.body.length + ' 字</span>' : '<span class="muted">无正文</span>')
+      +   '</div>'
+      + '</div>'
+      + '<div class="rec-act">'
+      +   '<button class="view" data-cc-view="' + i + '">' + svg('eye', 14) + '查看</button>'
+      +   editBtn
+      +   '<button class="danger" data-cc-del="' + i + '">' + svg('trash', 14) + '删除</button>'
+      + '</div></div>';
+  }).join('') + '</div>';
+
+  bindAll(panel, '[data-cc-view]', 'ccView', function(i){ classContentViewDialog(S.list[i]); });
+  bindAll(panel, '[data-cc-edit]', 'ccEdit', function(i){ classContentDialog(i); });
+  bindAll(panel, '[data-cc-del]', 'ccDel', function(i){ classContentDelete(i); });
+}
+
+/* 小工具：批量绑定 data-xxx 属性上的点击事件（属性名去掉连字符） */
+function bindAll(root, sel, dataKey, fn){
+  Array.prototype.forEach.call(root.querySelectorAll(sel), function(b){
+    b.onclick = function(){ fn(Number(b.dataset[dataKey])); };
+  });
+}
+
+/** 只读详情弹窗 —— 列表里看不到的正文全在这儿。 */
+function classContentViewDialog(c){
+  if(!c) return;
+  var meta =
+    '<dl class="view-kv">'
+    + '<dt>类型</dt><dd><span class="badge ' + kindBadgeClass(c.kind) + '">' + esc(c.kind) + '</span></dd>'
+    + '<dt>标题</dt><dd>' + esc(c.title || '(无标题)') + '</dd>'
+    + '<dt>时间</dt><dd>' + esc(fmtRecTime(c)) + '</dd>'
+    + (c.kind === '公告'
+        ? '<dt>发布对象</dt><dd>' + ((c.targets && c.targets.length)
+            ? '定向 ' + c.targets.length + ' 人：' + esc(c.targets.join('、'))
+            : '全体同学') + '</dd>'
+        : '')
+    + (function(){
+        if(c.kind !== '公告') return '';
+        var st = annPinState(c._ref);
+        var tail = (st === 'until' || st === 'expired')
+          ? '　<span class="muted" style="font-size:.78rem">（到 ' + esc(fmt(c._ref.importantUntil)) + ' 结束）</span>' : '';
+        return '<dt>置顶</dt><dd>' + (st === 'none' ? '不置顶' : esc(annPinLabel(st)) + tail) + '</dd>';
+      })()
+    + '</dl>';
+
+  var body = c.body
+    ? '<div class="view-body">' + esc(c.body) + '</div>'
+    : '<div class="empty" style="padding:26px">' + svg('file', 30) + '<p>这条内容没有正文</p></div>';
+
+  openModal({
+    title: '查看内容',
+    sub: c.kind + ' · ' + (c.title || '(无标题)'),
+    wide: true,
+    body: meta + body,
+    foot: '<button class="btn btn-ghost" data-cv-close>关闭</button>'
+        + '<button class="btn" id="cvEdit">' + svg('edit', 14) + ' 去编辑</button>',
+    onMount: function(box){
+      box.querySelector('[data-cv-close]').onclick = closeModal;
+      box.querySelector('#cvEdit').onclick = function(){
+        var idx = STATE.classcontent.list.indexOf(c);
+        closeModal();
+        if(idx >= 0) classContentDialog(idx);
+      };
+    }
+  });
+}
+
+function classContentDelete(i){
+  var S = STATE.classcontent;
+  var c = S.list[i];
+  if(!c) return;
+  confirmBox({
+    title: '删除' + (c.kind === '公告' ? '公告' : '内容'),
+    text: '确定删除「' + (c.title || '(无标题)') + '」吗？',
+    detail: c.body ? (c.body.length > 90 ? c.body.slice(0, 90) + '…' : c.body) : '',
+    danger: true,
+    okText: '删除'
+  }).then(function(yes){
+    if(!yes) return;
+    var next = S.list.slice();
+    next.splice(i, 1);
+    saveClassContent(next).then(function(){
+      toast('已删除', 'ok');
+      loadClassContent();
+    }).catch(function(e){ toast(e.message, 'err'); });
+  });
+}
+
+/**
+ * 把统一记录数组写回云端。
+ * 按 _store 分派：公告 → announcements 数组；其它 → 按 _field 归位到内容字段。
+ * 两者在同一次 PUT 里提交，避免「删了公告但内容没更新」的半截状态。
+ *
+ * ⚠️ 形态保真（2026-10-06 重写）：写回的是每条记录的 **_ref 原始对象**——
+ *    编辑弹窗负责把用户改动直接写进 _ref（公告写 text/date/category，
+ *    作业写 items/start/end），这里绝不再重建对象。
+ *    旧版在这里按「title/body」重建，把线上公告的 text/date/category
+ *    和作业的 items 结构整个丢掉——保存一次等于清空主站数据。
+ *
+ * ⚠️ 必须**全量**提交。后端 /api/content 的 PUT 是「读旧文档 → 合并 → 写回」，
+ *    传什么就覆盖什么。少传一个字段它原样保留，但传了空数组就是「真的要清空」——
+ *    这两种语义必须能区分开，所以这里每个内容字段都显式写出来（哪怕是空数组）。
+ *    只写「有数据的字段」是不行的：那样删掉最后一条记录时，空数组传不出去，
+ *    云端那条记录就永远删不掉了。
+ *    ⚠️ 只铺 CONTENT_WRITABLE_FIELDS —— 绝不能碰 daily_quote /
+ *    important_dates，那是隔壁专属面板的地盘。
+ */
+function saveClassContent(list){
+  var ann = [];
+  var items = {};
+  CONTENT_WRITABLE_FIELDS.forEach(function(f){ items[f] = []; });
+
+  (list || []).forEach(function(c){
+    var ref = c._ref || {};
+    if(c._store === 'announcement'){
+      ann.push(ref);
+      return;
+    }
+    /* 归位：优先用记录自带的 _field（历史数据靠它不搬错地方），
+       没有就按 kind 现算。再兜一层 —— 算出来的字段必须在可写白名单内，
+       否则（比如历史上从 activities 读出来的）一律归到 site_config。 */
+    var f = c._field || CONTENT_FIELD[c.kind] || 'site_config';
+    if(CONTENT_WRITABLE_FIELDS.indexOf(f) === -1) f = 'site_config';
+    items[f].push(ref);
+  });
+
+  items.announcements = ann;
+
+  return api('/content', { method:'PUT', body:{ items: items } })
+    .then(function(j){
+      if(j && j.ok === false) throw new Error(j.error || '保存失败');
+      return j;
+    });
+}
+
+function classContentDialog(idx){
+  var editing = (idx !== null && idx !== undefined);
+  var c = editing ? STATE.classcontent.list[idx] : null;
+  /* 编辑时类型锁定（公告/作业/其它内容三种形态互不兼容，改类型=删了重建，
+     强行切换会让形态保真写回变成数据搬家事故）；新建默认发公告。 */
+  var kind = c ? c.kind : '公告';
+  var isAnnounce = kind === '公告';
+  var isHomework = kind === '作业';
+  /* 「作业」已从后台编辑移除（2026-10-06）：入口被拦在这里，给出去向说明 */
+  if (isHomework) {
+    openModal({
+      title: '作业已移到前端编辑',
+      body: '<div class="alert info">后台不再编辑作业。现在改作业有两条路：<br>'
+          + '<b>① 课代表</b>：登录班级站 → 打开作业查看 → 自己科目卡片上点「✏️ 编辑」（只能改本科目）；<br>'
+          + '<b>② 站主</b>：用管理员账号登录班级站 → 同样位置，全部科目都能改。<br>'
+          + '删错条目仍可在这里点该条作业的「删除」。</div>',
+      foot: '<button class="btn" data-cc-cancel>知道了</button>',
+      onMount: function(box){ box.querySelector('[data-cc-cancel]').onclick = closeModal; }
+    });
+    return;
+  }
+  /* 「作业」已从后台编辑移除（2026-10-06）：课代表在前端作业界面改本科目，
+     站主用管理员账号登录前端也能改全部科目。这里不再新建/编辑作业。 */
+  var KIND_OPTS = ['公告', '活动', '课程表', '值日安排', '其他'];
+  /* 主站公告分类（index.html ANN_CATS 的键） */
+  var ANN_CATS = [
+    { key: 'site',     name: '网站内部' },
+    { key: 'activity', name: '重要更新' },
+    { key: 'class',    name: '班级事务' },
+    { key: 'misc',     name: '站主杂谈' }
+  ];
+
+  /* ---------- 按类型生成表单 ---------- */
+  var bodyHtml = '';
+
+  if(isAnnounce){
+    /* 置顶三态：不置顶 / 永久置顶 / 限时置顶（到点自动取消） */
+    var _pr = c ? (c._ref || {}) : {};
+    var pinMode = annPinState(_pr);
+    if(pinMode === 'expired') pinMode = 'until';      /* 过期了也按「限时」显示，让人能改时间 */
+    var pinUntilVal = _pr.importantUntil ? isoToLocalInput(_pr.importantUntil) : '';
+
+    bodyHtml =
+      '<div class="field"><label for="ccBody">公告正文 <span style="color:var(--danger)">*</span>'
+      + '<span id="ccBodyCount" style="float:right;font-weight:400;color:#8a827b"></span></label>'
+      + '<textarea id="ccBody" rows="6" placeholder="官方、简洁。一句话说清改了什么，建议 20 字以内。">'
+      + esc(c ? (c.body || '') : '') + '</textarea>'
+      /* 站主 2026-10-14：公告要官方、简洁，字越少越好。
+         同学看公告只关心「有什么变化」，过程和不必要的语气都该省掉。 */
+      + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">面向全班，<b>字越少越好</b>：说清「改了什么」即可，不必解释过程，不用语气词、感叹号。</p>'
+      + '</div>'
+      + '<div class="field"><label for="ccCat">分类</label>'
+      + '<select id="ccCat">'
+      + ANN_CATS.map(function(k){
+          var cur = c ? ((c._ref && c._ref.category) || 'site') : 'site';
+          return '<option value="' + attr(k.key) + '"' + (cur === k.key ? ' selected' : '') + '>' + esc(k.name) + '</option>';
+        }).join('')
+      + '</select></div>'
+      + '<div class="field"><label for="ccPin">置顶</label>'
+      + '<select id="ccPin">'
+      +   [['none', '不置顶'],
+           ['forever', '📌 永久置顶（一直排在最上）'],
+           ['until', '⏳ 限时置顶（到指定时间自动取消）']].map(function(p){
+          return '<option value="' + attr(p[0]) + '"' + (pinMode === p[0] ? ' selected' : '') + '>' + esc(p[1]) + '</option>';
+        }).join('')
+      + '</select>'
+      + '<div id="ccPinUntilWrap" style="margin-top:8px' + (pinMode === 'until' ? '' : ';display:none') + '">'
+      +   '<label for="ccPinUntil">置顶到</label>'
+      +   '<input type="datetime-local" id="ccPinUntil" value="' + attr(pinUntilVal) + '">'
+      +   '<p class="muted" style="font-size:.76rem;margin:4px 0 0">按你手机 / 电脑上的本地时间算，到点自动降为普通公告</p>'
+      + '</div>'
+      + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">置顶公告在班级站公告栏排最上方，并带「置顶」标签</p>'
+      + '</div>'
+      + '<div class="field"><label for="ccDate">发布时间</label>'
+      + '<div style="display:flex;gap:8px;align-items:center">'
+      +   '<input id="ccDate" value="' + attr(c ? ((c._ref && c._ref.date) || '') : annNowStr()) + '" placeholder="YYYY-MM-DD HH:MM" style="flex:1;min-width:0">'
+      +   '<button type="button" class="btn btn-sm btn-secondary" id="ccDateNow" style="white-space:nowrap">填入当前时间</button>'
+      + '</div>'
+      + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">格式 <b>YYYY-MM-DD HH:MM</b>，按你设备上的本地时间。留空或格式不对会自动按当前时间填。</p></div>'
+      + '<div class="msg" id="ccMsg"></div>';
+  }else if(isHomework){
+    /* 作业：结构化编辑。每科 = 科目名 + 任务多行文本（一行一条）。
+       附件任务（图片/音频/视频）在文本里用「📎 [图片] 描述」占位行表示，
+       保存时按**描述匹配**还原成附件对象；删掉占位行 = 移除该附件。
+       （2026-10-07：原来按出现顺序配对，中间删行会全体错位，已改。） */
+    var src = c ? (c._ref || {}) : {};
+    var subs = (c ? hwItemsOf(src) : []);
+    bodyHtml =
+      '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+      + '<div class="field" style="flex:1;min-width:140px"><label for="ccHwStart">开始日期</label>'
+      +   '<input type="date" id="ccHwStart" value="' + attr(src.start || '') + '"></div>'
+      + '<div class="field" style="flex:1;min-width:140px"><label for="ccHwEnd">截止日期</label>'
+      +   '<input type="date" id="ccHwEnd" value="' + attr(src.end || '') + '"></div>'
+      + '</div>'
+      + '<div class="field"><label>科目与任务（任务一行一条）</label><div id="ccHwSubjects"></div>'
+      + '<button type="button" class="btn btn-sm btn-secondary" id="ccHwAddSubj" style="margin-top:8px">' + svg('plus', 14) + ' 添加科目</button></div>'
+      + '<div class="msg" id="ccMsg"></div>';
+  }else{
+    bodyHtml =
+      '<div class="field"><label for="ccTitle">标题 <span style="color:var(--danger)">*</span></label>'
+      + '<input id="ccTitle" value="' + attr(c ? c.title : '') + '" placeholder="例如：明天交物理作业"></div>'
+      + '<div class="field"><label for="ccBody">正文</label>'
+      + '<textarea id="ccBody" rows="7" placeholder="支持多行文本">' + esc(c ? (c.body || '') : '') + '</textarea></div>'
+      + '<div class="msg" id="ccMsg"></div>';
+  }
+
+  openModal({
+    title: editing ? ('编辑' + kind) : '新增内容',
+    wide: true,
+    sub: isAnnounce ? '公告保存后直接显示在班级站首页通知栏'
+       : isHomework ? '按「科目 → 任务」编辑，图片 / 音频附件会原样保留'
+       : '站内内容区块',
+    body:
+      '<div class="field"><label for="ccKind">类型</label>'
+      + '<select id="ccKind"' + (editing ? ' disabled' : '') + '>'
+      + KIND_OPTS.map(function(k){
+          return '<option value="' + attr(k) + '"' + (kind === k ? ' selected' : '') + '>' + esc(k) + '</option>';
+        }).join('')
+      + '</select>'
+      + (editing ? '<p class="muted" style="font-size:.76rem;margin:4px 0 0">类型不可改；想换类型就删掉这条重新发布</p>' : '')
+      + '</div>'
+      + bodyHtml,
+    foot: '<button class="btn btn-ghost" data-cc-cancel>取消</button>'
+        + '<button class="btn" id="ccGo">' + (editing ? '保存修改' : '发布') + '</button>',
+    onMount: function(box){
+      box.querySelector('[data-cc-cancel]').onclick = closeModal;
+      var msg = box.querySelector('#ccMsg');
+
+      /* 公告正文实时字数（站主 2026-10-14：公告要官方简洁，字越少越好）
+         超过 40 字变橙，提示「该收了」—— 但只是提示，不拦保存。 */
+      var bodyTa = box.querySelector('#ccBody');
+      var bodyCnt = box.querySelector('#ccBodyCount');
+      if(bodyTa && bodyCnt){
+        var syncBodyCnt = function(){
+          var n = bodyTa.value.trim().length;
+          bodyCnt.textContent = n ? (n + ' 字') : '';
+          bodyCnt.style.color = (n > 40) ? '#b45309' : '#8a827b';
+        };
+        bodyTa.addEventListener('input', syncBodyCnt);
+        syncBodyCnt();
+      }
+
+      /* ================= 公告：置顶方式切换 ================= */
+      var pinSel = box.querySelector('#ccPin');
+      if(pinSel){
+        var wrap = box.querySelector('#ccPinUntilWrap');
+        pinSel.onchange = function(){
+          if(wrap) wrap.style.display = (pinSel.value === 'until') ? '' : 'none';
+        };
+      }
+
+      /* ================= 公告：发布时间「填入当前时间」（2026-10-11 站主要求）=================
+         站主反馈「AI 发出来的时间总是错的」——根因是时间戳凭感觉手写。
+         这个按钮让站主一键取设备真实时间，不会再写出未来/过去的错时间。 */
+      var dateNowBtn = box.querySelector('#ccDateNow');
+      if(dateNowBtn){
+        dateNowBtn.onclick = function(){
+          var inp = box.querySelector('#ccDate');
+          if(inp){ inp.value = annNowStr(); inp.focus(); }
+        };
+      }
+
+      /* ================= 作业：科目编辑器 ================= */
+      var subjBox = box.querySelector('#ccHwSubjects');
+      if(subjBox){
+        var ATT_RE = /^\s*📎\s*\[([^\]]*)\]\s*/;   /* 📎 [图片] 描述 */
+        var attMark = function(t){
+          /* 三个字段都要认（2026-10-07 补 video）：只判 img/audio 的话，
+             视频附件会被标成「[附件]」，占位行还原时也就跟着丢了类别。 */
+          var what = t.img ? '图片' : (t.audio ? '音频' : (t.video ? '视频' : '附件'));
+          return '📎 [' + what + '] ' + (t.text || '');
+        };
+
+        function addSubjectBlk(subject, tasks){
+          var blk = document.createElement('div');
+          blk.className = 'hw-subj';
+          blk.style.cssText = 'border:1px solid var(--line,#ddd);border-radius:10px;padding:10px;margin-bottom:10px';
+          var lines = [], atts = [];
+          (tasks || []).forEach(function(t){
+            if(t && typeof t === 'object'){ lines.push(attMark(t)); atts.push(t); }
+            else lines.push(String(t));
+          });
+          blk.innerHTML =
+            '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'
+            + '<input class="hw-subj-name" value="' + attr(subject || '') + '" placeholder="科目名，如：语文" style="flex:1">'
+            + '<button type="button" class="btn btn-sm danger hw-subj-del">' + svg('trash', 13) + '</button>'
+            + '</div>'
+            + '<textarea class="hw-subj-tasks" rows="' + Math.max(3, lines.length + 1) + '" '
+            +   'placeholder="一行一条任务；📎 开头的是附件占位行，别改文字部分">'
+            + esc(lines.join('\n')) + '</textarea>'
+            + (atts.length ? '<p class="muted" style="font-size:.74rem;margin:6px 0 0">本科有 ' + atts.length + ' 个图片/音频/视频附件，以 📎 行表示；删掉该行 = 移除附件</p>' : '');
+          blk.__atts = atts;
+          blk.querySelector('.hw-subj-del').onclick = function(){ blk.remove(); };
+          subjBox.appendChild(blk);
+        }
+
+        subs.forEach(function(it){ addSubjectBlk(it.subject, it.tasks); });
+        if(!subs.length) addSubjectBlk('', []);
+        box.querySelector('#ccHwAddSubj').onclick = function(){ addSubjectBlk('', []); };
+      }
+
+      /* ================= 保存 ================= */
+      box.querySelector('#ccGo').onclick = function(){
+        var ref, rec;
+
+        if(isAnnounce){
+          var textV = box.querySelector('#ccBody').value.trim();
+          var cat = box.querySelector('#ccCat').value;
+          var pinV = box.querySelector('#ccPin') ? box.querySelector('#ccPin').value : 'none';
+          if(!textV){ msg.className = 'msg err show'; msg.textContent = '请填写公告正文'; return; }
+
+          /* 置顶三态 → important / importantUntil 两个字段。
+             限时置顶必须给到点时间，且必须是未来——否则等于「点了置顶却立刻失效」，
+             后台看着像成功、前台根本不置顶，这种静默不一致最坑。 */
+          var pinUntilIso = '';
+          if(pinV === 'until'){
+            var uv = box.querySelector('#ccPinUntil') ? box.querySelector('#ccPinUntil').value.trim() : '';
+            if(!uv){ msg.className = 'msg err show'; msg.textContent = '选了限时置顶，请填写置顶到什么时候'; return; }
+            var ud = new Date(uv);
+            if(isNaN(ud.getTime())){ msg.className = 'msg err show'; msg.textContent = '置顶时间看不懂，请重新选一个'; return; }
+            if(ud.getTime() <= Date.now()){ msg.className = 'msg err show'; msg.textContent = '置顶结束时间要晚于现在（否则一发布就失效）'; return; }
+            pinUntilIso = ud.toISOString();
+          }
+
+          /* 发布时间：优先用站主填的值（v2.6.0 解禁，之前是 disabled 只读）。
+             填了但格式看不懂 → 明确报错而不是悄悄丢掉，否则站主会以为改成功了。 */
+          var dateInp = box.querySelector('#ccDate');
+          var dateRaw = dateInp ? dateInp.value.trim() : '';
+          var dateV = annParseDate(dateRaw);
+          if(dateRaw && !dateV){
+            msg.className = 'msg err show';
+            msg.textContent = '发布时间格式看不懂，请用「YYYY-MM-DD HH:MM」，或点「填入当前时间」';
+            return;
+          }
+          if(!dateV) dateV = annNowStr();   /* 留空 = 用当前时间 */
+
+          if(editing){
+            ref = c._ref || {};
+            ref.text = textV; ref.category = cat;
+            /* 旧形态字段同步：老公告的正文在 body、标题在 title——只改 text 会留下
+               两份不一致的正文（读的时候 text 优先，body 成了脏数据）。
+               有就一起更新，写回后对象内自洽。 */
+            if('body' in ref) ref.body = textV;
+            if('title' in ref) ref.title = annFirstLine(textV);
+            ref.date = dateV;                          /* v2.6.0：以时间框为准 */
+          }else{
+            ref = { date: dateV, text: textV, category: cat };
+          }
+          /* 置顶字段写回：不置顶要把两个字段都清掉，否则「取消置顶」取消不掉 */
+          if(pinV === 'forever'){ ref.important = true; delete ref.importantUntil; }
+          else if(pinV === 'until'){ ref.important = true; ref.importantUntil = pinUntilIso; }
+          else { delete ref.important; delete ref.importantUntil; }
+          rec = {
+            _store: 'announcement', _ref: ref, kind: '公告',
+            title: ref.title || annFirstLine(ref.text),
+            body: ref.text, targets: ref.targets || [], time: ref.date,
+            pin: annPinState(ref)
+          };
+
+        }else if(isHomework){
+          var startV = box.querySelector('#ccHwStart').value.trim();
+          var endV   = box.querySelector('#ccHwEnd').value.trim();
+          var itemsArr = [];
+          Array.prototype.forEach.call(subjBox.querySelectorAll('.hw-subj'), function(blk){
+            var subject = blk.querySelector('.hw-subj-name').value.trim();
+            var atts = (blk.__atts || []).slice();
+            var tasks = blk.querySelector('.hw-subj-tasks').value.split('\n')
+              .map(function(l){ return l.trim(); }).filter(Boolean)
+              .map(function(ln){
+                if(ATT_RE.test(ln)){
+                  /* 附件占位行 → 还原为原附件对象。
+                     ⚠️ 这里原来用 atts.shift() 按**位置**配对，有个隐坑：
+                        用户在中间删掉/加了别的行，后面的附件就会全体错位，
+                        而且错得无声无息（链接换到了另一条任务上）。
+                        改成**按描述匹配**，对不上号才退化成纯文本。
+                        主站 caSave 用的是同一套匹配思路，两边保持一致。 */
+                  var desc = ln.replace(ATT_RE, '').split('|')[0].trim();
+                  var hit = -1;
+                  for(var k = 0; k < atts.length; k++){
+                    if(atts[k] && String(atts[k].text || '').trim() === desc){ hit = k; break; }
+                  }
+                  if(hit >= 0) return atts.splice(hit, 1)[0];
+                  return ln.replace(ATT_RE, '');
+                }
+                return ln;
+              });
+            if(subject || tasks.length) itemsArr.push({ subject: subject || '未分科', tasks: tasks });
+          });
+          if(!itemsArr.length){ msg.className = 'msg err show'; msg.textContent = '至少保留一个科目'; return; }
+          if(!startV && !endV){ msg.className = 'msg err show'; msg.textContent = '请至少填写开始或截止日期'; return; }
+
+          if(editing){
+            ref = c._ref || {};
+          }else{
+            ref = { id: 'hw-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Date.now().toString(36).slice(-4) };
+          }
+          ref.start = startV; ref.end = endV; ref.items = itemsArr;
+          rec = {
+            _store: 'content', _ref: ref, _field: 'holiday_homeworks', kind: '作业',
+            title: ref.title || ((startV || '?') + ' ~ ' + (endV || '?')),
+            body: hwSummary(ref),
+            targets: [],
+            time: (startV || '?') + ' ~ ' + (endV || '?')
+          };
+
+        }else{
+          var titleV = box.querySelector('#ccTitle').value.trim();
+          var bodyV  = box.querySelector('#ccBody').value;
+          if(!titleV){ msg.className = 'msg err show'; msg.textContent = '请填写标题'; return; }
+
+          if(editing){
+            ref = c._ref || {};
+          }else{
+            ref = {};
+          }
+          ref.kind = kind; ref.title = titleV; ref.body = bodyV;
+          ref.updatedAt = new Date().toISOString();
+          rec = {
+            _store: 'content', _ref: ref,
+            _field: (editing && c && c._field) ? c._field : CONTENT_FIELD[kind],
+            kind: kind, title: titleV, body: bodyV, targets: [], time: ref.updatedAt
+          };
+        }
+
+        var next = STATE.classcontent.list.slice();
+        if(editing) next[idx] = rec; else next.unshift(rec);
+
+        box.querySelector('#ccGo').disabled = true;
+        saveClassContent(next).then(function(){
+          toast(editing ? '已保存修改' : '已发布', 'ok');
+          closeModal();
+          loadClassContent();
+        }).catch(function(e){
+          msg.className = 'msg err show';
+          msg.textContent = e.message;
+          box.querySelector('#ccGo').disabled = false;
+        });
+      };
+    }
+  });
+}
+
+/* ============================================================================
+ * ⑪-B 面板：头衔任命（2026-10-05 新增）
+ * ---------------------------------------------------------------------------
+ * 班级职务由管理员在这里任命。头衔存 profiles.title（英文逗号分隔，可兼多职）。
+ *
+ * 授权作用：目前只有「课代表」（含各科课代表）参与实际授权——
+ *   可以编辑云端作业（见 api/content.js）。其余头衔先只做展示。
+ *
+ * ⚠️ 头衔是**授权凭据**，所以服务端只认 profiles.title 的值，
+ *    前端界面只是把它写进去，改不改得动由后端说了算。
+ * ========================================================================= */
+function renderTitles(){
+  var S = STATE.titles;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div class="search">' + svg('search')
+    +     '<input id="ttSearch" placeholder="搜索姓名或学号…" value="' + attr(S.q) + '" maxlength="40">'
+    +   '</div>'
+    +   '<span><label class="ck" style="font-size:.82rem;white-space:nowrap"><input type="checkbox" id="ttOnly"'
+    +     (S.onlySet ? ' checked' : '') + '>只看已任命</label></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="ttRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '给同学任命班级职务。头衔可以兼多职（比如既是团支书又是课代表）。<br>'
+    +   '<b>课代表有实际权限</b>：可以在主站作业界面修改<b>本科目</b>作业；其余头衔目前只用于展示。'
+    + '</div>'
+    + '<section class="panel"><div id="ttBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('ttSearch').oninput = debounce(function(e){
+    /* 换了搜索词就回第 1 页 —— 否则停在旧页码上，结果变少时会看到空白页 */
+    S.q = e.target.value.trim(); S.page = 1; loadTitles();
+  }, 320);
+  $('ttRefresh').onclick = function(){ S.page = 1; loadTitles(); };
+  var onlyBox = $('ttOnly');
+  if(onlyBox) onlyBox.onchange = function(){ S.onlySet = !!onlyBox.checked; S.page = 1; paintTitles(); };
+
+  /* ⚠️ 2026-10-10：进页面必须**强制回到第 1 页**（S.page = 1）。
+     原来这里只写 loadTitles()，而 STATE.titles 是**跨页面存活**的模块状态：
+     站主翻到 3/3 页 → 切到别的页 → 再回来，页码仍停在 3，
+     于是只看到最后 2 个人，还以为是「名单没显示全」。
+     （站主反馈「头衔那里还是没显示啊，比如冷思敏的名字」就是这个 ——
+       冷思敏在第 1 页，而他一直停在末页。） */
+  S.page = 1;
+  loadTitles();
+}
+
+function loadTitles(){
+  var S = STATE.titles;
+  api('/admin?action=titles').then(function(j){
+    S.list = j.profiles || [];
+    S.allowed = j.allowed || [];
+    S.aiAccount = j.aiAccount || null;
+    paintTitles();
+  }).catch(function(e){
+    var b = $('ttBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintTitles(){
+  var S = STATE.titles;
+  var body = $('ttBody');
+  if(!body) return;   /* 防迟到响应抢页面 */
+
+  var kw = (S.q || '').toLowerCase();
+  var list = S.list.filter(function(p){
+    if(S.onlySet && !(p.titles || []).length) return false;
+    if(!kw) return true;
+    return String(p.name || '').toLowerCase().indexOf(kw) >= 0
+        || String(p.studentId || '').toLowerCase().indexOf(kw) >= 0;
+  });
+
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('shield', 38) + '<p>'
+      + (!S.list.length ? '还没有成员，请先到「成员与档案」导入全班名单'
+         : (S.onlySet ? '当前全班还没有人被任命头衔（取消勾选「只看已任命」看全部同学）' : '没找到匹配的同学'))
+      + '</p></div>';
+    return;
+  }
+
+  /* ---- 分页（2026-10-09 修复） ----
+     原实现一次性渲染全部 list，全班 60+ 人时既看不到底、也没有翻页入口。
+     这里按 S.page / S.size 切片，并把筛选变化时的页码夹回合法范围。 */
+  var size  = S.size;
+  var total = list.length;
+  var pages = Math.max(1, Math.ceil(total / size));
+  if(S.page > pages) S.page = pages;
+  if(S.page < 1) S.page = 1;
+  var from  = (S.page - 1) * size;
+  var slice = list.slice(from, from + size);
+  var shownTo = Math.min(from + size, total);
+
+  body.innerHTML = '<div class="table-wrap"><table><thead><tr>'
+    + '<th>姓名</th><th>学号</th><th>当前头衔</th><th>绑定账号</th>'
+    + '<th style="text-align:right">操作</th>'
+    + '</tr></thead><tbody>'
+    + slice.map(function(p){
+        var tags = (p.titles || []);
+        var tagHtml = tags.length
+          ? tags.map(function(t){
+              var isHw = (t === '课代表' || /课代表$/.test(t));
+              return '<span class="badge' + (isHw ? ' badge-orange' : '') + '">' + esc(t) + '</span>';
+            }).join(' ')
+          : '<span class="muted">—</span>';
+        return '<tr>'
+          + '<td class="nowrap"><b>' + esc(p.name || '(未填)') + '</b></td>'
+          + '<td class="nowrap muted">' + esc(p.studentId || '—') + '</td>'
+          + '<td>' + tagHtml + '</td>'
+          + '<td class="nowrap muted" style="font-size:.78rem">'
+            + (p.username ? esc(p.username) : '<span style="opacity:.6">未认领</span>') + '</td>'
+          + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
+          +   '<button data-tt-edit="' + p.id + '">任命</button>'
+          + '</div></td></tr>';
+      }).join('')
+    + '</tbody></table></div>'
+    + '<div class="pager">'
+    +   '<span class="info">共 ' + total + ' 人'
+    +     (S.onlySet || kw ? '（已按条件筛选，全班共 ' + S.list.length + ' 人）' : '')
+    +     '，当前显示第 ' + (from + 1) + '–' + shownTo + ' 条'
+    /* ⚠️ 2026-10-10：末页时明确提示「还有前面几页」。
+        站主曾在末页找一个人找不到（那人在第 1 页），误以为名单没显示全。
+        光有页码按钮不够 —— 在末页时要主动说一句。 */
+    +     (pages > 1 && S.page >= pages
+              ? '<b style="color:var(--accent-ink)"> · 前面还有 ' + (pages - 1) + ' 页，点「首页」看全部</b>'
+              : '')
+    +   '</span>'
+    +   '<span class="pages">'
+    +     '<button data-ttp="first"' + (S.page <= 1 ? ' disabled' : '') + '>首页</button>'
+    +     '<button data-ttp="prev"'  + (S.page <= 1 ? ' disabled' : '') + '>上一页</button>'
+    +     '<button class="on">' + S.page + ' / ' + pages + '</button>'
+    +     '<button data-ttp="next"'  + (shownTo >= total ? ' disabled' : '') + '>下一页</button>'
+    +     '<button data-ttp="last"'  + (shownTo >= total ? ' disabled' : '') + '>末页</button>'
+    +   '</span>'
+    + '</div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-ttp]'), function(b){
+    b.onclick = function(){
+      var a = b.dataset.ttp;
+      if(a === 'first') S.page = 1;
+      else if(a === 'last') S.page = pages;
+      else if(a === 'prev') S.page = Math.max(1, S.page - 1);
+      else if(a === 'next') S.page = Math.min(pages, S.page + 1);
+      paintTitles();
+      /* 翻页后滚回列表顶部，免得停在半空 */
+      var p = $('ttBody');
+      if(p && p.scrollIntoView) p.scrollIntoView({ block:'start', behavior:'smooth' });
+    };
+  });
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-tt-edit]'), function(b){
+    b.onclick = function(){
+      var id = Number(b.dataset.ttEdit);
+      var p = S.list.find(function(x){ return Number(x.id) === id; });
+      titleDialog(p);
+    };
+  });
+}
+
+/** 任命弹窗：多选头衔 */
+function titleDialog(p){
+  if(!p) return;
+  var S = STATE.titles;
+  var cur = (p.titles || []).slice();
+
+  var boxes = (S.allowed || []).map(function(t){
+    var on = cur.indexOf(t) >= 0;
+    return '<label class="tt-item' + (on ? ' on' : '') + '">'
+      + '<input type="checkbox" value="' + attr(t) + '"' + (on ? ' checked' : '') + '>'
+      + '<span>' + esc(t) + '</span></label>';
+  }).join('');
+
+  openModal({
+    title: '任命头衔 · ' + (p.name || '该同学'),
+    body: '<div class="alert info" style="margin-bottom:14px;font-size:.8rem">'
+        +   '勾选要授予的职务，可多选。取消全部勾选＝撤销所有头衔。<br>'
+        +   '<b>课代表</b>（含各科课代表）可以修改云端作业。</div>'
+        + '<div class="tt-grid" id="ttGrid">' + boxes + '</div>',
+    foot: '<button class="btn btn-secondary" data-close>取消</button>'
+        + '<button class="btn" id="ttSave">保存</button>',
+  });
+
+  /* 点卡片即切换勾选状态，手机上更好点 */
+  Array.prototype.forEach.call(document.querySelectorAll('#ttGrid .tt-item'), function(el){
+    el.onclick = function(ev){
+      var cb = el.querySelector('input');
+      if(ev.target !== cb) cb.checked = !cb.checked;
+      setTimeout(function(){ el.classList.toggle('on', cb.checked); }, 0);
+    };
+  });
+
+  var saveBtn = $('ttSave');
+  if(saveBtn) saveBtn.onclick = function(){
+    var picked = [];
+    Array.prototype.forEach.call($('ttGrid').querySelectorAll('input:checked'), function(i){
+      picked.push(i.value);
+    });
+    api('/admin?action=set-title', { method:'POST', body:{ id: p.id, titles: picked } })
+      .then(function(j){
+        closeModal();
+        toast(j.message || '已保存', 'ok', 3200);
+        loadTitles();
+      })
+      .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
+  };
+  var cancelBtn = document.querySelector('#modalBox [data-close]');
+  if(cancelBtn) cancelBtn.onclick = closeModal;
+}
+
+/* ============================================================================
+ * ⑪-C 面板：作业管理（2026-10-05 新增）
+ * ---------------------------------------------------------------------------
+ * 需求「作业全部上云，后台可以查可以修改」。
+ *
+ * 云端字段：holiday_homeworks（假期作业）+ homework_notice（作业通知）
+ * 这两项也在内容管理里，本面板是更好用的专用编辑界面。
+ *
+ * ⚠️ 兜底原则：云端为空时主站会退回 index.html 里写死的作业，
+ *    不会出现「云端一空全班看不到作业」。所以这里删空是安全的。
+ * ========================================================================= */
+function renderHomeworks(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<button class="btn btn-sm" id="hwAdd">' + svg('plus', 14) + '新增作业</button>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="hwRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '<b>要新增某个日期的作业</b>：点左上角「＋ 新增作业」→ 填标题（如「国庆假期作业」）、'
+    +   '开始 / 结束日期 → 逐科添加任务 → 保存。到日子同学打开「作业」就能看到，日期过了自动归档。<br>'
+    +   '每条任务下面可以单独挂<b>图片 / 音频 / 视频链接</b>（填直链），挂在哪条就显示在哪个任务下面。<br>'
+    +   '附件文件由站主统一上传到仓库后给出链接，后台不提供直接上传。<br>'
+    +   '日常改本科目作业不用进后台——课代表在自己科目的作业卡上点 ✏️ 即可（只能改自己那科）。'
+    + '</div>'
+    + '<section class="panel">'
+    +   '<h3 style="margin:0 0 10px;font-size:.9rem">📌 作业通知</h3>'
+    +   '<textarea id="hwNotice" rows="3" placeholder="例如：本周作业已更新，请及时完成" style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--line);font-family:inherit;font-size:.85rem;resize:vertical"></textarea>'
+    +   '<div style="text-align:right;margin-top:10px"><button class="btn btn-sm" id="hwNoticeSave">保存通知</button></div>'
+    + '</section>'
+    + '<section class="panel" style="margin-top:16px"><div id="hwBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('hwAdd').onclick    = function(){ hwDialog(null); };
+  $('hwRefresh').onclick = function(){ loadHomeworks(); };
+  $('hwNoticeSave').onclick = function(){
+    var t = $('hwNotice').value;
+    api('/content', { method:'PUT', body:{ items:{ homework_notice:{ text: t } } } })
+      .then(function(){ toast('作业通知已保存', 'ok', 3000); })
+      .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
+  };
+
+  loadHomeworks();
+}
+
+function loadHomeworks(){
+  var S = STATE.homeworks;
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    S.list = Array.isArray(items.holiday_homeworks) ? items.holiday_homeworks : [];
+    var n = items.homework_notice;
+    S.notice = (n && typeof n === 'object') ? (n.text || '') : String(n || '');
+    paintHomeworks();
+  }).catch(function(e){
+    var b = $('hwBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintHomeworks(){
+  var S = STATE.homeworks;
+  var body = $('hwBody');
+  if(!body) return;
+  var noticeEl = $('hwNotice');
+  if(noticeEl && !noticeEl.value) noticeEl.value = S.notice || '';
+
+  if(!S.list.length){
+    body.innerHTML = '<div class="empty">' + svg('file', 38) + '<p>云端还没有作业</p>'
+      + '<p class="muted" style="font-size:.78rem">同学那边会继续看到站点内置的作业内容</p></div>';
+    return;
+  }
+
+  /* ⚠️ 呈现方式（2026-10-06 改）：
+     旧版表格只有「标题 / 科目 / 截止 / 更新时间」，**完全没有正文**。
+     用户看到的「作业显示不出来 / 显示不全」，根子就在这儿——
+     数据一直都在（主站三条渲染路径实测全通），是后台压根没把它画出来。
+     现在每行列出内容摘要，正文和科目明细进「查看」弹窗。 */
+  body.innerHTML = '<div class="rec-list">' + S.list.map(function(h, i){
+    var t = h.updatedAt ? ago(h.updatedAt) : '—';
+    var sum = hwSummary(h);
+    /* 主站结构的作业没有 due，用 start~end 区间；都靠不到才显示「未设置」。
+       以前这里无脑显示「截止 —」，管理员会以为数据丢了。 */
+    var when = h.due
+      ? '截止 ' + h.due
+      : (h.start || h.end ? (h.start || '?') + ' ~ ' + (h.end || '?') : '未设置时间');
+    return '<div class="rec">'
+      + '<div class="rec-main">'
+      +   '<div class="rec-top">'
+      +     (h.subject ? '<span class="badge badge-blue">' + esc(h.subject) + '</span>' : '')
+      +     '<b>' + esc(h.title || '(未命名)') + '</b>'
+      +   '</div>'
+      +   '<div class="rec-meta">'
+      +     '<span>' + svg('clock', 12) + esc(when) + '</span>'
+      +     '<span>' + svg('refresh', 12) + esc(t) + '</span>'
+      +     (sum ? '<span>' + svg('file', 12) + esc(sum) + '</span>' : '')
+      +   '</div>'
+      + '</div>'
+      + '<div class="rec-act">'
+      +   '<button class="view" data-hw-view="' + i + '">' + svg('eye', 14) + '查看</button>'
+      +   '<button data-hw-edit="' + i + '">' + svg('edit', 14) + '编辑</button>'
+      +   '<button class="danger" data-hw-del="' + i + '">' + svg('trash', 14) + '删除</button>'
+      + '</div></div>';
+  }).join('') + '</div>';
+
+  bindAll(body, '[data-hw-view]', 'hwView', function(i){ hwViewDialog(S.list[i]); });
+  bindAll(body, '[data-hw-edit]', 'hwEdit', function(i){ hwDialog(i); });
+  bindAll(body, '[data-hw-del]',  'hwDel',  function(i){ hwDelete(i); });
+}
+
+/**
+ * 一句话概括一条作业里到底写了什么。
+ * 支持两种形态：
+ *   ① 后台编辑用的扁平结构 { subject, title, content }
+ *   ② 主站 holidayHomeworks 的结构 { items:[{subject, tasks:[]}] }
+ * 第 ② 种是主站在用的，后台以前完全不认，所以显示得像空的。
+ */
+function hwItemsOf(h){
+  if(!h) return [];
+  if(Array.isArray(h.items) && h.items.length) return h.items;
+  /* 扁平结构打包成统一形状，下面的渲染器只认这一种 */
+  if(h.subject || h.content){
+    return [{ subject: h.subject || '未分科', tasks: h.content ? [h.content] : [] }];
+  }
+  return [];
+}
+
+function hwSummary(h){
+  var items = hwItemsOf(h);
+  if(!items.length) return '';
+  var subj = items.map(function(x){ return x.subject; }).filter(Boolean);
+  var n = items.reduce(function(a, x){ return a + ((x.tasks || []).length); }, 0);
+  return subj.length + ' 个科目 · ' + n + ' 条任务';
+}
+
+/** 作业只读详情弹窗：科目分组 + 每条任务全文，图片/音频也标出来。 */
+function hwViewDialog(h){
+  if(!h) return;
+  var items = hwItemsOf(h);
+
+  var meta =
+    '<dl class="view-kv">'
+    + '<dt>标题</dt><dd>' + esc(h.title || '(未命名)') + '</dd>'
+    + (h.subject ? '<dt>科目</dt><dd>' + esc(h.subject) + '</dd>' : '')
+    + '<dt>截止</dt><dd>' + esc(h.due || '未设置') + '</dd>'
+    + (h.start || h.end ? '<dt>区间</dt><dd>' + esc((h.start || '?') + ' ~ ' + (h.end || '?')) + '</dd>' : '')
+    + (h.updatedAt ? '<dt>更新</dt><dd>' + esc(fmt(h.updatedAt)) + '</dd>' : '')
+    + '</dl>';
+
+  var content = '';
+  if(items.length){
+    content = items.map(function(it){
+      var tasks = (it.tasks || []).map(function(t){
+        /* 任务可以是字符串，也可以是 {text, img, audio, audioLabel} */
+        if(t && typeof t === 'object'){
+          var line = esc(t.text || '(未填写文字)');
+          var extra = '';
+          if(t.img) extra += ' <span class="badge badge-gray">图片</span>';
+          if(t.audio) extra += ' <span class="badge badge-gray">' + esc(t.audioLabel || '音频') + '</span>';
+          return '<li>' + line + extra + '</li>';
+        }
+        return '<li>' + esc(String(t)) + '</li>';
+      }).join('');
+      if(!tasks) tasks = '<li class="muted">（这个科目还没写任务）</li>';
+      return '<div class="hwv-subj"><h4>' + esc(it.subject || '未分科') + '</h4><ul>' + tasks + '</ul></div>';
+    }).join('');
+  } else if(h.content){
+    content = '<div class="view-body">' + esc(h.content) + '</div>';
+  } else {
+    content = '<div class="empty" style="padding:26px">' + svg('file', 30)
+            + '<p>这条作业没有正文</p>'
+            + '<p class="muted" style="font-size:.78rem">点「去编辑」补上内容</p></div>';
+  }
+
+  openModal({
+    title: '查看作业',
+    sub: h.title || '(未命名)',
+    wide: true,
+    body: meta + (items.length ? '<div class="view-body">' + content + '</div>' : content),
+    foot: '<button class="btn btn-ghost" data-hv-close>关闭</button>'
+        + '<button class="btn" id="hvEdit">' + svg('edit', 14) + ' 去编辑</button>',
+    onMount: function(box){
+      box.querySelector('[data-hv-close]').onclick = closeModal;
+      box.querySelector('#hvEdit').onclick = function(){
+        var idx = STATE.homeworks.list.indexOf(h);
+        closeModal();
+        if(idx >= 0) hwDialog(idx);
+      };
+    }
+  });
+}
+
+/* ============================================================
+ * 作业编辑器（2026-10-07 重写）
+ * ------------------------------------------------------------
+ * 旧编辑器写的是扁平形态 { title, subject, due, content }，
+ * 而主站真正消费的是 { id, start, end, title, items:[{subject, tasks:[]}] }。
+ * 两套形态对不上 → 站主在后台「新增作业」填完，同学那边根本看不到，
+ * 看起来就像「新增了但没生效」。现在统一按主站形态编辑。
+ *
+ * 附件（图片 / 音频）挂在哪条任务上，同学就看到它跟哪条任务在一起
+ * ——也就是「这张图对应数学的第 2 个作业」这种要求。
+ * ============================================================ */
+function hwToDraft(h){
+  if(!h) return { id:'', title:'', start:'', end:'', subjects:[] };
+  if(Array.isArray(h.items) && h.items.length){
+    return {
+      id: h.id || '', title: h.title || '', start: h.start || '', end: h.end || '',
+      subjects: h.items.map(function(it){
+        return {
+          name: it.subject || '',
+          tasks: (it.tasks || []).map(function(t){
+            if(t && typeof t === 'object'){
+              return { text: t.text || '', img: t.img || '', audio: t.audio || '', video: t.video || '', audioLabel: t.audioLabel || '' };
+            }
+            return { text: String(t == null ? '' : t), img:'', audio:'', video:'', audioLabel:'' };
+          }),
+        };
+      }),
+    };
+  }
+  /* 老扁平数据：转成一个科目一条任务，保存后自动升级成主站形态 */
+  return {
+    id: h.id || '', title: h.title || '', start: h.start || '', end: h.end || '',
+    subjects: (h.subject || h.content)
+      ? [{ name: h.subject || '', tasks: [{ text: h.content || '', img:'', audio:'', video:'', audioLabel:'' }] }]
+      : [],
+  };
+}
+
+function hwDraftToItem(d, raw){
+  var item = Object.assign({}, raw || {});
+  item.id    = d.id || (raw && raw.id) || ('hw-' + Date.now().toString(36));
+  item.title = d.title.trim();
+  item.start = d.start;
+  item.end   = d.end;
+  item.items = d.subjects.map(function(s){
+    return {
+      subject: s.name.trim() || '未分科',
+      tasks: s.tasks.map(function(t){
+        var txt = (t.text || '').trim();
+        /* 没图没音频没视频就存字符串（和主站既有数据保持一致，纯文本任务占大多数） */
+        if(!t.img && !t.audio && !t.video) return txt;
+        var o = { text: txt };
+        if(t.img)   o.img = t.img.trim();
+        if(t.audio){ o.audio = t.audio.trim(); o.audioLabel = (t.audioLabel || '').trim() || '播放听力音频'; }
+        if(t.video) o.video = t.video.trim();
+        return o;
+      }).filter(function(t){
+        return (typeof t === 'string') ? t.length > 0 : !!(t.text || t.img || t.audio || t.video);
+      }),
+    };
+  }).filter(function(it){ return it.tasks.length; });
+  item.updatedAt = new Date().toISOString();
+  /* 老扁平字段清掉，免得主站读的时候两套字段打架 */
+  delete item.subject; delete item.content; delete item.due;
+  return item;
+}
+
+function hwTaskHtml(t, si, ti){
+  return '<div class="hwed-task">'
+    + '<input class="hwed-text" data-si="' + si + '" data-ti="' + ti + '" data-f="text"'
+    +   ' value="' + attr(t.text || '') + '" placeholder="任务内容，一行一条" maxlength="300">'
+    + '<button class="hwed-x" data-del-task="' + si + '.' + ti + '" title="删除这条任务">×</button>'
+    + '<input class="hwed-media" data-si="' + si + '" data-ti="' + ti + '" data-f="img"'
+    +   ' value="' + attr(t.img || '') + '" placeholder="🖼 图片链接（可选）：填直链，如 https://… / ./homework/xxx.jpg" maxlength="400">'
+    + '<input class="hwed-media" data-si="' + si + '" data-ti="' + ti + '" data-f="audio"'
+    +   ' value="' + attr(t.audio || '') + '" placeholder="🎧 音频链接（可选）：填直链，如 https://….mp3" maxlength="400">'
+    + '<input class="hwed-media" data-si="' + si + '" data-ti="' + ti + '" data-f="video"'
+    +   ' value="' + attr(t.video || '') + '" placeholder="🎬 视频链接（可选）：填直链，如 https://….mp4" maxlength="400">'
+    + '</div>';
+}
+
+function hwSubjHtml(s, si){
+  return '<div class="hwed-subj">'
+    + '<div class="hwed-subj-head">'
+    +   '<input class="hwed-name" data-si="' + si + '" value="' + attr(s.name || '') + '"'
+    +     ' placeholder="科目名，如 数学" maxlength="12">'
+    +   '<button class="btn btn-sm btn-secondary" data-del-subj="' + si + '">删除科目</button>'
+    + '</div>'
+    + '<div class="hwed-tasks">'
+    +   (s.tasks.length
+          ? s.tasks.map(function(t, ti){ return hwTaskHtml(t, si, ti); }).join('')
+          : '<div class="muted" style="font-size:.78rem;padding:2px 0 6px">这个科目还没有任务</div>')
+    + '</div>'
+    + '<button class="btn btn-sm btn-ghost" data-add-task="' + si + '">+ 添加一条任务</button>'
+    + '</div>';
+}
+
+function hwPaintEd(){
+  var S = STATE.homeworks;
+  var d = S.draft;
+  var box = $('hwEd');
+  if(!box || !d) return;
+
+  box.innerHTML =
+      '<div class="field"><label>作业标题</label>'
+    +   '<input id="hwedTitle" maxlength="60" placeholder="例如：国庆假期作业（10.1–10.7）" value="' + attr(d.title) + '"></div>'
+    + '<div class="field-row">'
+    +   '<div class="field"><label>开始日期</label><input id="hwedStart" type="date" value="' + attr(d.start) + '"></div>'
+    +   '<div class="field"><label>结束日期</label><input id="hwedEnd" type="date" value="' + attr(d.end) + '"></div>'
+    + '</div>'
+    + '<div class="alert info" style="font-size:.78rem;margin:0 0 12px">'
+    +   '任务一行一条。<b>图片 / 音频填直链</b>（外链，或仓库里的相对路径如 '
+    +   '<code>./homework/xxx.jpg</code>）——填在哪条任务上，同学就看到它跟哪条任务在一起，'
+    +   '比如「数学第 2 条任务」下面挂一张图。</div>'
+    + '<div id="hwedSubs">' + (d.subjects.length ? d.subjects.map(hwSubjHtml).join('') : '') + '</div>'
+    + '<button class="btn btn-sm btn-secondary" id="hwedAddSubj">+ 添加科目</button>';
+
+  var t = $('hwedTitle'); if(t) t.oninput = function(){ d.title = this.value; };
+  var s1 = $('hwedStart'); if(s1) s1.onchange = function(){ d.start = this.value; };
+  var e1 = $('hwedEnd');   if(e1) e1.onchange = function(){ d.end = this.value; };
+
+  Array.prototype.forEach.call(box.querySelectorAll('.hwed-name'), function(el){
+    el.oninput = function(){ var s = d.subjects[+el.dataset.si]; if(s) s.name = el.value; };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('input[data-f]'), function(el){
+    el.oninput = function(){
+      var s = d.subjects[+el.dataset.si]; if(!s) return;
+      var t2 = s.tasks[+el.dataset.ti];   if(!t2) return;
+      t2[el.dataset.f] = el.value;
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-del-subj]'), function(b){
+    b.onclick = function(){ d.subjects.splice(+b.dataset.delSubj, 1); hwPaintEd(); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-add-task]'), function(b){
+    b.onclick = function(){
+      var s = d.subjects[+b.dataset.addTask]; if(!s) return;
+      s.tasks.push({ text:'', img:'', audio:'', video:'', audioLabel:'' });
+      hwPaintEd();
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-del-task]'), function(b){
+    b.onclick = function(){
+      var p = String(b.dataset.delTask).split('.');
+      var s = d.subjects[+p[0]]; if(!s) return;
+      s.tasks.splice(+p[1], 1);
+      hwPaintEd();
+    };
+  });
+  var addS = $('hwedAddSubj');
+  if(addS) addS.onclick = function(){
+    d.subjects.push({ name:'', tasks:[{ text:'', img:'', audio:'', video:'', audioLabel:'' }] });
+    hwPaintEd();
+  };
+}
+
+function hwDialog(idx){
+  var S = STATE.homeworks;
+  var isNew = (idx === null || idx === undefined);
+  var raw = isNew ? null : (S.list[idx] || {});
+  S.draft = hwToDraft(raw);
+
+  openModal({
+    title: isNew ? '新增作业' : '编辑作业',
+    sub: isNew ? '按日期区间新增，同学到日子就能看到' : (raw.title || ''),
+    wide: true,
+    body: '<div id="hwEd"></div>',
+    foot: '<button class="btn btn-secondary" data-close>取消</button>'
+        + '<button class="btn" id="hwSave">保存</button>',
+  });
+  hwPaintEd();
+
+  var sv = $('hwSave');
+  if(sv) sv.onclick = function(){
+    var d = S.draft;
+    if(!d.title.trim()){ toast('请先填作业标题', 'err'); return; }
+    if(!d.start || !d.end){ toast('请填开始日期和结束日期', 'err'); return; }
+    if(d.start > d.end){ toast('开始日期不能晚于结束日期', 'err'); return; }
+    var ok2 = d.subjects.some(function(s){
+      return s.name.trim() && s.tasks.some(function(t){
+        /* ⚠️ 这里必须把 video 也算上：只判 text/img/audio 的话，
+           一条「只挂了视频」的任务会被判成空任务，
+           整份作业保存时报「至少要有一个科目名和一条任务」——
+           明明填了东西却说没有，用户根本猜不到是漏了这个字段。 */
+        return (t.text || '').trim() || t.img || t.audio || t.video;
+      });
+    });
+    if(!ok2){ toast('至少要有一个科目名和一条任务', 'err'); return; }
+
+    var item = hwDraftToItem(d, raw);
+    var next = S.list.slice();
+    if(isNew) next.push(item); else next[idx] = item;
+    api('/content', { method:'PUT', body:{ items:{ holiday_homeworks: next } } })
+      .then(function(){
+        closeModal();
+        toast(isNew ? '已新增作业，同学刷新即可看到' : '已保存', 'ok', 3200);
+        loadHomeworks();
+      })
+      .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
+  };
+  var cb = document.querySelector('#modalBox [data-close]');
+  if(cb) cb.onclick = closeModal;
+}
+
+function hwDelete(idx){
+  var S = STATE.homeworks;
+  var h = S.list[idx];
+  if(!h) return;
+  confirmBox({
+    title: '删除作业',
+    html: '确定要删除 <b>' + esc(h.title || '(未命名)') + '</b> 吗？',
+    detail: '同学那边将不再看到这条作业。',
+    danger: true,
+    okText: '确认删除',
+  }).then(function(ok){
+    if(!ok) return;
+    var next = S.list.slice();
+    next.splice(idx, 1);
+    api('/content', { method:'PUT', body:{ items:{ holiday_homeworks: next } } })
+      .then(function(){ toast('已删除', 'ok'); loadHomeworks(); })
+      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+  });
+}
+
+/* ============================================================================
+ * ⑪-D 面板：点歌管理（2026-10-06 改为直连 VoiceHub 实时数据）
+ * ---------------------------------------------------------------------------
+ * 需求变更：「后台的点歌面板应该改成直连 VoiceHub 实时数据」。
+ *
+ * 之前这里读的是云端 song_config 字段 —— 那是个**空头字段**：主站从来没写过它，
+ * 同学点歌时用的是主站内置逻辑 + VoiceHub 平台数据。所以后台永远显示
+ * 「云端还没有歌单配置」，看着像坏了，其实是数据源压根就选错了。
+ *
+ * 现在的数据源：VoiceHub 开放 API（与主站 index.html 同一个平台、同一把 key）
+ *   base            https://xsyzc2505.dpdns.org/api/open
+ *   鉴权            请求头 x-api-key
+ *   歌单            GET  /songs?page=1&limit=100    → { data:{ songs, pagination } }
+ *   发券            POST /card-codes                → { data:{ cardCodes } }
+ *   删券            DELETE /card-codes?id=XX
+ *
+ * ⚠️ 密钥不明文写：admin.html 也是公开页面（GitHub Pages 上人人可看源码）。
+ *    这里复用主站的 xor 混淆方案 —— 密文写死，运行时用 XOR_KEY 解出来。
+ *    注意这只防「随手翻源码看见」，**不是加密**，别拿它当真正的保密手段。
+ *
+ * ⚠️ CORS：VoiceHub 那边的白名单是硬编码在 fork 仓库
+ *    yuzikaaang/VoiceHub 的 server/middleware/api-0-open-cors.ts 里的，
+ *    已含 https://yuzikaaang.github.io。换域名部署前要先改那边，否则全部请求被拦。
+ * ========================================================================= */
+
+var VH_API      = 'https://xsyzc2505.dpdns.org/api/open';
+var VH_XOR_KEY  = 'cls2505-xor-key-2026';
+/* 以下两串是 xor 之后的密文（key = VH_XOR_KEY），解开才是真正的 vhub_xxx */
+var VH_DJ_KEY_ENC = 'FQQGUGoJAxsbC0oVCVBNTwRWAQYHChAEAAEGSRoNFxwJUhgaBA==';
+var VH_CP_KEY_ENC = 'FQQGUGoAUUtMWxccWgNAGwYHAwQBVBUBUwQHSExWRB8OBk4VBA==';
+
+/* ---- 是否在后台直连平台。想临时关掉（比如平台挂了）把这里置 false ---- */
+var VH_ENABLED = true;
+
+function vhXorDecrypt(cipher){
+  var bin = atob(cipher);
+  var enc = new TextEncoder();
+  var kb  = Array.prototype.slice.call(enc.encode(VH_XOR_KEY));
+  var bytes = [];
+  for(var i = 0; i < bin.length; i++) bytes.push(bin.charCodeAt(i) ^ kb[i % kb.length]);
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}
+function vhDjKey(){ try{ return vhXorDecrypt(VH_DJ_KEY_ENC); }catch(e){ return ''; } }
+function vhCpKey(){ try{ return vhXorDecrypt(VH_CP_KEY_ENC); }catch(e){ return ''; } }
+
+/** 点歌人字段兼容：平台可能返回字符串，也可能是 {name} 对象 */
+function vhReqName(s){
+  var r = (typeof s.requester === 'string') ? s.requester : ((s.requester && s.requester.name) || '');
+  return String(r == null ? '' : r).trim();
+}
+
+/** v3.5.19：解析平台时间。
+ *  ⚠️ 这个实例给的是 `2026/6/6 21:44:48`（斜杠 + 本地时间），不是 ISO；
+ *     直接 new Date() 在部分浏览器会 Invalid，点歌时间就显示不出来。 */
+function vhParseTime(x){
+  if(!x) return null;
+  if(x instanceof Date) return isNaN(x.getTime()) ? null : x;
+  var s = String(x).trim();
+  var m = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(m){
+    var d0 = new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+    return isNaN(d0.getTime()) ? null : d0;
+  }
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** 平台时间 → 本地 YYYY-MM-DD HH:mm */
+function vhFmtTime(iso){
+  if(!iso) return '';
+  var d = vhParseTime(iso);
+  if(!d) return String(iso).slice(0, 16).replace('T', ' ');
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+       + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/** 拉全量歌单（平台分页，第一页拿到总页数后再并发拉其余页）。
+ *  v3.5.19：加一层本地缓存 —— 站主要求「网络问题导致获取不了则展示缓存，
+ *  直至下次重新获取」。成功就刷新缓存，失败就回退缓存（没有缓存才报错）。 */
+function vhFetchSongs(){
+  var KEY = 'cls_vh_songs_cache_v1';
+  function readCache(){
+    try{
+      var raw = sessionStorage.getItem(KEY);
+      if(!raw) return null;
+      var o = JSON.parse(raw);
+      return (o && Array.isArray(o.list) && o.list.length) ? o.list : null;
+    }catch(e){ return null; }
+  }
+  function writeCache(list){
+    try{ sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), list: list })); }catch(e){}
+  }
+  return vhFetchSongsRaw().then(function(list){
+    if(Array.isArray(list) && list.length) writeCache(list);
+    return vhFillDurations(list);
+  }).catch(function(err){
+    var cached = readCache();
+    if(cached){
+      console.warn('[vh] 实时歌单获取失败，使用缓存：', err && err.message);
+      return vhFillDurations(cached);
+    }
+    throw err;
+  });
+}
+
+/* v3.5.20 → v3.5.27：VoiceHub 的 durationSeconds 全是 null（实例没填时长）。
+   ------------------------------------------------------------
+   站主 v3.5.27 原话：「一定要获取到歌曲时长并同步云端，省的每次都要加载，
+   渠道有网易云和 QQ 音乐，如果两个都没有找到由我人工填写，
+   否则无法发布投票或者随机排歌」。
+
+   因此分成三层：
+     ① 云端时长库（song_durations 表）：/api/music?action=lib 一次拉全量，
+        本地按 key 命中 —— **换设备、清缓存都还在**，不用每次开页面重新搜。
+     ② 库里没有的，批量问 /api/music（服务端查网易云 → QQ 音乐 → iTunes 兜底），
+        查到就自动写进云端库，下次直接命中。
+     ③ 还是查不到的（DUR_MISS），开后台时弹「时长补录」，站主手填秒数后写库
+        （source='manual'，优先级最高，不会被后面的自动结果覆盖）。
+
+   ⚠️ 歌单投票发布 / 抽歌排期前会校验时长，缺口存在就不放行（后端也拦一道）。
+   ------------------------------------------------------------ */
+var DUR_LIB_KEY = 'cls_song_dur_v1';          /* 老版本本地缓存，仍作第一层快查 */
+var DUR_LIB_AT = 'cls_song_dur_at_v1';
+var DUR_LIB_TTL = 10 * 60 * 1000;             /* 本地副本 10 分钟回源一次 */
+var DUR_MISS = {};                            /* key -> { title, artist } 待人工补录 */
+
+function vhDurationCache(){
+  try{ return JSON.parse(localStorage.getItem(DUR_LIB_KEY) || '{}') || {}; }catch(e){ return {}; }
+}
+function vhDurationKey(title, artist){
+  /* 与后端 libKey 一致：去括号、空格、连字符、大小写 —— 同一首歌换个写法也命中 */
+  function n(x){
+    return String(x == null ? '' : x)
+      .replace(/[（(][^）)]*[）)]/g, '')
+      .replace(/[\s·・\-—_]/g, '')
+      .toLowerCase();
+  }
+  return n(title) + '|' + n(artist);
+}
+function vhSaveDurCache(cache){
+  try{ localStorage.setItem(DUR_LIB_KEY, JSON.stringify(cache)); }catch(e){}
+}
+/** 秒 → m:ss（0 / 空返回空串）。v3.5.27：全站唯一一份（原来重复定义过两处） */
+function voFmtDur(sec){
+  var n = Math.round(Number(sec) || 0);
+  if(!n) return '';
+  var m = Math.floor(n / 60), s = n % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+/** ① 从云端拉全量时长库，合并进本地副本（一次请求，返回 Promise<Object>） */
+function vhDurLibPull(force){
+  var cache = vhDurationCache();
+  var at = 0;
+  try{ at = Number(localStorage.getItem(DUR_LIB_AT) || 0); }catch(e){}
+  if(!force && at && (Date.now() - at < DUR_LIB_TTL)) return Promise.resolve(cache);
+  return api('/music?action=lib').then(function(j){
+    var list = (j && j.list) || [];
+    list.forEach(function(r){
+      if(r && r.seconds > 0){
+        var k = r.key || vhDurationKey(r.title, r.artist);
+        cache[k] = Number(r.seconds);
+      }
+    });
+    vhSaveDurCache(cache);
+    try{ localStorage.setItem(DUR_LIB_AT, String(Date.now())); }catch(e){}
+    return cache;
+  }).catch(function(){ return cache; });      /* 拉不到就用本地副本，不阻塞 */
+}
+
+/** ② 缺的批量问服务端（8 首一批），命中的自动写云 */
+function vhDurAskCloud(need){
+  if(!need.length) return Promise.resolve();
+  var chunks = [];
+  for(var i = 0; i < need.length; i += 8) chunks.push(need.slice(i, i + 8));
+  var idx = 0;
+  var step = function(){
+    if(idx >= chunks.length) return Promise.resolve();
+    var part = chunks[idx++];
+    return api('/music', {
+      method: 'POST',
+      body: { action: 'batch', items: part.map(function(x){ return { title: x.title, artist: x.artist }; }) },
+    }).then(function(j){
+      (j && j.list || []).forEach(function(r){
+        var sec = Number(r && r.seconds);
+        if(sec > 0){
+          var k = vhDurationKey(r.title, r.artist);
+          var cache = vhDurationCache();
+          cache[k] = sec;
+          vhSaveDurCache(cache);
+          var x = part.filter(function(y){ return vhDurationKey(y.title, y.artist) === k; })[0];
+          if(x && x.song) x.song.durationSeconds = sec;
+          delete DUR_MISS[k];
+        }
+      });
+      return step();
+    }).catch(function(){ return step(); });
+  };
+  return step();
+}
+
+/** 主入口：给歌单补齐时长。返回 Promise<list>，查不到的记进 DUR_MISS */
+function vhFillDurations(list){
+  if(!Array.isArray(list) || !list.length) return Promise.resolve(list);
+  return vhDurLibPull().then(function(cache){
+    var need = [];
+    list.forEach(function(s){
+      if(!s) return;
+      var d = Number(s.durationSeconds) || 0;
+      if(d > 0) return;                       /* 平台自己有，别覆盖 */
+      var title = String(s.title || '').trim();
+      if(!title) return;
+      var artist = String(s.artist || '').trim();
+      var key = vhDurationKey(title, artist);
+      if(cache[key] > 0){
+        s.durationSeconds = cache[key];
+        return;
+      }
+      if(DUR_MISS[key]) return;
+      need.push({ key: key, title: title, artist: artist, song: s });
+    });
+    if(!need.length) return list;
+    /* 只对「本次真要用的歌」联网查：一次最多 40 首，避免开页面卡太久 */
+    var ask = need.slice(0, 40);
+    return vhDurAskCloud(ask).then(function(){
+      var cache2 = vhDurationCache();
+      need.forEach(function(x){
+        if(Number(x.song.durationSeconds) > 0) return;
+        if(cache2[x.key] > 0){ x.song.durationSeconds = cache2[x.key]; return; }
+        /* 查不到 → 挂起，等站主人工补录 */
+        DUR_MISS[x.key] = { title: x.title, artist: x.artist };
+      });
+      if(Object.keys(DUR_MISS).length) vhDurNotice();
+      return list;
+    });
+  }).catch(function(){ return list; });
+}
+
+/** ③ 缺时长的歌：站主手填后写云端 */
+function vhDurNotice(){
+  var keys = Object.keys(DUR_MISS);
+  if(!keys.length) return;
+  var box = document.getElementById('djDurNotice');
+  if(!box) return;
+  box.style.display = '';
+  box.innerHTML = '<div class="alert warn" style="margin:0 0 12px;line-height:1.8">'
+    + '<b>有 ' + keys.length + ' 首歌还没拿到时长</b>（网易云、QQ 音乐都没搜到）。'
+    + '<br>按站规：<b>时长为空不能发布投票、也不能随机排歌</b>，请点右边按钮人工填写。'
+    + '<button class="btn btn-sm" id="djDurFill" style="margin-left:8px">补录时长</button>'
+    + '</div>';
+  var btn = document.getElementById('djDurFill');
+  if(btn) btn.onclick = function(){ voDurManualDialog(keys); };
+}
+
+/** v3.5.28：时长库管理面板
+ *  站主原话：「时长库那个里面呢也可以搜歌，就是直接线上搜歌，我搜歌名，
+ *  然后匹配出对应的歌手和时间，然后我点击它就可以直接加到时长库。
+ *  也可以直接导入，就是我导入歌名和歌手，如果拉取的歌单里面也有同样的
+ *  歌名和歌手，只要相似就行 —— 歌名完全符合，歌手只要部分符合。
+ *  我打算预先准备一些，你也可以自己先准备好，比如周杰伦的、林俊杰的、方大同的。」
+ *
+ *  于是分成四块（用 tab 切）：
+ *    ① 已收录 —— 看库里有什么、删掉录错的
+ *    ② 线上搜 —— 输歌名 → 网易云 / QQ 音乐候选列表 → 点「加入」直接写库
+ *    ③ 导入清单 —— 一行「歌名 - 歌手」，批量查库；命中显示秒数，没命中可就地线上搜
+ *    ④ 预置歌单 —— 周杰伦/林俊杰/方大同热门曲，一键联网抓时长批量入库
+ */
+function openDurLib(){
+  var state = { tab: 'lib', lib: [], q: '', results: null, searching: false, imp: null };
+  openModal({
+    title: '🎵 歌曲时长库',
+    sub: '存云端，全班设备共用；线上搜到点一下就能入库，也能整批导入歌名+歌手',
+    wide: true,
+    body: '<div id="durLibBody"><div class="loading"><div class="spinner"></div>同步中…</div></div>',
+    foot: '<button class="btn btn-ghost" data-no>关闭</button>'
+        + '<button class="btn btn-secondary" data-fill>补录缺时长的歌</button>',
+    onMount: function(box){
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-fill]').onclick = function(){
+        var miss = Object.keys(DUR_MISS);
+        if(!miss.length){ toast('当前没有缺时长的歌', 'ok'); return; }
+        closeModal();
+        voDurManualDialog(miss);
+      };
+      var host = box.querySelector('#durLibBody');
+      host.__state = state;
+      host.__reload = function(){ return vhDurLibPull(true).then(function(){ return api('/music?action=lib'); })
+        .then(function(j){ state.lib = (j && j.list) || []; })
+        .catch(function(e){ state.lib = state.lib || []; toast('读取时长库失败：' + (e.message || e), 'err', 4000); }); };
+      host.__reload().then(function(){ paintDurLib(host); });
+    },
+  });
+}
+
+/* ---------- v3.5.28 时长库面板：四个 tab 共用的渲染 ---------- */
+var DUR_SRC_TXT = { manual: '人工', netease: '网易云', qq: 'QQ 音乐', itunes: 'iTunes', auto: '自动' };
+
+/** 面板外壳 + 按当前 tab 渲染内容（每次操作后整块重绘，简单可靠） */
+function paintDurLib(host){
+  if(!host) return;
+  var st = host.__state || { tab: 'lib', lib: [] };
+  var lib = st.lib || [];
+  var miss = Object.keys(DUR_MISS);
+
+  var tabs = [
+    ['lib', '已收录 ' + lib.length],
+    ['search', '线上搜'],
+    ['import', '导入清单'],
+    ['preset', '预置歌单'],
+  ];
+  var tabBar = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px">'
+    + tabs.map(function(t){
+        var on = st.tab === t[0];
+        return '<button class="btn btn-sm ' + (on ? '' : 'btn-ghost') + '" data-tab="' + t[0] + '"'
+          + (on ? ' style="pointer-events:none"' : '') + '>' + esc(t[1]) + '</button>';
+      }).join('')
+    + '</div>';
+
+  var body;
+  if(st.tab === 'lib') body = durLibViewLib(lib, miss);
+  else if(st.tab === 'search') body = durLibViewSearch(st);
+  else if(st.tab === 'import') body = durLibViewImport(st);
+  else body = durLibViewPreset(st);
+
+  host.innerHTML = tabBar + body;
+
+  /* tab 切换 */
+  Array.prototype.forEach.call(host.querySelectorAll('[data-tab]'), function(b){
+    b.onclick = function(){ st.tab = b.getAttribute('data-tab'); paintDurLib(host); };
+  });
+  if(st.tab === 'lib') wireDurLibRows(host, st);
+  else if(st.tab === 'search') wireDurLibSearch(host, st);
+  else if(st.tab === 'import') wireDurLibImport(host, st);
+  else wireDurLibPreset(host, st);
+}
+
+/* ---------- ① 已收录 ---------- */
+function durLibViewLib(list, miss){
+  var missHtml = miss.length
+    ? '<div class="alert warn" style="margin:0 0 10px;font-size:.82rem">还有 <b>' + miss.length + '</b> 首没拿到时长，'
+      + '点右下角「补录缺时长的歌」手填。</div>'
+    : '<div class="alert info" style="margin:0 0 10px;font-size:.82rem">当前没有缺时长的歌。</div>';
+  var rows = list.length
+    ? list.map(function(r){
+        return '<tr data-k="' + attr(r.key || '') + '">'
+          + '<td style="padding:6px 8px">' + esc(r.title || '') + (r.artist ? ' <i class="muted" style="font-style:normal">· ' + esc(r.artist) + '</i>' : '') + '</td>'
+          + '<td style="padding:6px 8px;white-space:nowrap;font-variant-numeric:tabular-nums">' + esc(voFmtDur(r.seconds)) + '</td>'
+          + '<td style="padding:6px 8px;white-space:nowrap;font-size:.78rem;color:var(--fg-3)">' + esc(DUR_SRC_TXT[r.source] || r.source || '') + '</td>'
+          + '<td style="padding:6px 8px;text-align:right">'
+          +   '<button class="btn btn-sm btn-ghost" data-del style="color:#b3261e">删除</button>'
+          + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="4" style="padding:14px;text-align:center" class="muted">库里还没有数据，去「线上搜」或「预置歌单」加一批</td></tr>';
+  return missHtml
+    + '<p class="muted" style="font-size:.78rem;margin:0 0 6px">共 ' + list.length + ' 首</p>'
+    + '<div style="max-height:44vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+    +   '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table>'
+    + '</div>';
+}
+
+function wireDurLibRows(host, st){
+  var list = st.lib || [];
+  Array.prototype.forEach.call(host.querySelectorAll('tr[data-k] button[data-del]'), function(btn){
+    btn.onclick = function(){
+      var tr = btn.closest('tr');
+      var k = tr.getAttribute('data-k');
+      var t = (list.filter(function(x){ return x.key === k; })[0] || {});
+      confirmBox({
+        title: '从时长库删除',
+        text: '删掉「' + (t.title || k) + '」的时长记录？下次用到时会重新联网查一遍。',
+        danger: true, okText: '删除',
+      }).then(function(yes){
+        if(!yes) return;
+        api('/music', { method: 'POST', body: { action: 'del', items: [{ title: t.title || '', artist: t.artist || '' }] } })
+          .then(function(j){
+            toast((j && j.message) || '已删除', 'ok');
+            var cache = vhDurationCache();
+            delete cache[k];
+            vhSaveDurCache(cache);
+            try{ localStorage.removeItem(DUR_LIB_AT); }catch(e){}
+            st.lib = list.filter(function(x){ return x.key !== k; });
+            paintDurLib(host);
+          })
+          .catch(function(e){ toast('删除失败：' + (e.message || e), 'err', 4000); });
+      });
+    };
+  });
+}
+
+/* ---------- ② 线上搜 ---------- */
+function durLibViewSearch(st){
+  var head = '<div class="field" style="margin-bottom:12px">'
+    + '<div style="display:flex;gap:8px">'
+    +   '<input id="durLibQ" placeholder="输入歌名（可带歌手，如「晴天」或「晴天 周杰伦」）"'
+    +     ' value="' + attr(st.q || '') + '" style="flex:1;padding:8px 12px;font-size:.86rem">'
+    +   '<button class="btn btn-sm" id="durLibGo" style="white-space:nowrap;height:auto">' + (st.searching ? '搜索中…' : '线上搜') + '</button>'
+    + '</div>'
+    + '<p class="hint" style="margin:6px 0 0">网易云 + QQ 音乐一起搜，都没有才用 iTunes 兜底。'
+    + '点「加入」直接把那一行的秒数写进云端库。</p></div>';
+
+  if(st.searching && !st.results) return head + '<div class="loading"><div class="spinner"></div>联网搜索中…</div>';
+  if(!st.results) return head + '<div class="alert info" style="font-size:.82rem">输个歌名点「线上搜」，下面会列出能查到的版本和时长。</div>';
+
+  var list = st.results;
+  if(!list.length) return head + '<div class="alert warn" style="font-size:.82rem">三个渠道都没搜到「' + esc(st.q) + '」，换个写法（去掉括号里的版本名）再试，或者直接手填。</div>';
+
+  var rows = list.map(function(c, i){
+    var badge = c.inLib
+      ? '<b style="color:#15803d;font-size:.78rem">已在库 ' + esc(voFmtDur(c.libSeconds)) + '</b>'
+      : '<button class="btn btn-sm" data-add="' + i + '">加入</button>';
+    return '<tr data-i="' + i + '">'
+      + '<td style="padding:6px 8px">' + esc(c.title)
+      +   (c.album ? '<i class="muted" style="font-style:normal;font-size:.74rem"> · ' + esc(c.album) + '</i>' : '') + '</td>'
+      + '<td style="padding:6px 8px;font-size:.8rem">' + esc(c.artist || '—') + '</td>'
+      + '<td style="padding:6px 8px;white-space:nowrap;font-variant-numeric:tabular-nums">' + esc(voFmtDur(c.seconds)) + '</td>'
+      + '<td style="padding:6px 8px;white-space:nowrap;font-size:.76rem;color:var(--fg-3)">' + esc(DUR_SRC_TXT[c.source] || c.source) + '</td>'
+      + '<td style="padding:6px 8px;text-align:right;white-space:nowrap">' + badge + '</td>'
+      + '</tr>';
+  }).join('');
+
+  return head
+    + '<p class="muted" style="font-size:.78rem;margin:0 0 6px">搜到 ' + list.length + ' 条（已收录的排最前，歌名完全一致的优先）</p>'
+    + '<div style="max-height:40vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+    +   '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table>'
+    + '</div>';
+}
+
+function wireDurLibSearch(host, st){
+  var qEl = host.querySelector('#durLibQ');
+  var goEl = host.querySelector('#durLibGo');
+  var doSearch = function(){
+    var q = String((qEl && qEl.value) || '').trim();
+    if(!q){ toast('先输入歌名', 'err'); return; }
+    st.q = q; st.searching = true; st.results = null;
+    paintDurLib(host);
+    api('/music?action=search&limit=20&q=' + encodeURIComponent(q))
+      .then(function(j){
+        st.results = (j && j.list) || [];
+        st.searching = false;
+        paintDurLib(host);
+      })
+      .catch(function(e){
+        st.searching = false; st.results = [];
+        paintDurLib(host);
+        toast('搜索失败：' + (e.message || e), 'err', 4000);
+      });
+  };
+  if(goEl) goEl.onclick = doSearch;
+  if(qEl) qEl.onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); doSearch(); } };
+
+  Array.prototype.forEach.call(host.querySelectorAll('[data-add]'), function(btn){
+    btn.onclick = function(){
+      var c = (st.results || [])[Number(btn.getAttribute('data-add'))];
+      if(!c) return;
+      btn.disabled = true; btn.textContent = '写入中…';
+      api('/music', { method: 'POST', body: { action: 'manual', items: [{ title: c.title, artist: c.artist, seconds: c.seconds }] } })
+        .then(function(j){
+          var k = vhDurationKey(c.title, c.artist);
+          var cache = vhDurationCache();
+          cache[k] = Number(c.seconds);
+          vhSaveDurCache(cache);
+          try{ localStorage.removeItem(DUR_LIB_AT); }catch(e){}
+          c.inLib = true; c.libSeconds = Number(c.seconds);
+          st.lib = [{ key: k, title: c.title, artist: c.artist, seconds: Number(c.seconds), source: 'manual' }].concat(st.lib || []);
+          toast('已加入：《' + c.title + '》' + voFmtDur(c.seconds), 'ok');
+          paintDurLib(host);
+        })
+        .catch(function(e){
+          btn.disabled = false; btn.textContent = '加入';
+          toast('加入失败：' + (e.message || e), 'err', 4000);
+        });
+    };
+  });
+}
+
+/* ---------- ③ 导入清单 ---------- */
+function durLibViewImport(st){
+  var box = '<div class="field" style="margin-bottom:10px">'
+    + '<label style="display:block;font-size:.8rem;font-weight:700;margin:0 0 6px">粘贴歌曲清单（一行一首）</label>'
+    + '<textarea id="durImpText" rows="7" placeholder="晴天 - 周杰伦&#10;三人游 - 方大同&#10;江南,林俊杰&#10;（歌名和歌手之间用 - 、, 或 ｜ 隔开都行；只写歌名也行）"'
+    +   ' style="width:100%;padding:8px 12px;font-size:.84rem;resize:vertical;font-family:inherit"></textarea>'
+    + '<p class="hint" style="margin:6px 0 0">匹配规则：<b>歌名完全一致</b>（忽略空格、括号里的版本名），'
+    + '<b>歌手部分符合即可</b> —— 比如歌单里是「周杰伦/费玉清」，你只写「周杰伦」也算命中。</p>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+    +   '<button class="btn btn-sm" id="durImpGo">导入并匹配时长库</button>'
+    +   '<button class="btn btn-sm btn-ghost" id="durImpFill">把没命中的都线上搜一遍</button>'
+    + '</div>';
+
+  if(!st.imp) return box + '<div class="alert info" style="font-size:.82rem">导入只会<b>查</b>时长库，不会改库；'
+    + '想把结果存下来点「加入」。</div>';
+
+  var list = st.imp;
+  var hit = list.filter(function(x){ return x.seconds > 0; }).length;
+  var rows = list.map(function(x, i){
+    var dur = x.seconds > 0
+      ? '<b style="color:#15803d">' + esc(voFmtDur(x.seconds)) + '</b>'
+        + (x.matchedArtist && x.matchedArtist !== x.artist ? '<i class="muted" style="font-style:normal;font-size:.72rem"> · ' + esc(x.matchedArtist) + '</i>' : '')
+      : '<b style="color:#b45309">未收录</b>';
+    var act = x.seconds > 0 ? '' : '<button class="btn btn-sm btn-ghost" data-imp-search="' + i + '" style="font-size:.74rem">线上搜</button>';
+    return '<tr data-i="' + i + '">'
+      + '<td style="padding:6px 8px">' + esc(x.title) + '</td>'
+      + '<td style="padding:6px 8px;font-size:.8rem;color:var(--fg-2)">' + esc(x.artist || '—') + '</td>'
+      + '<td style="padding:6px 8px;white-space:nowrap;font-variant-numeric:tabular-nums">' + dur + '</td>'
+      + '<td style="padding:6px 8px;text-align:right;white-space:nowrap">' + act + '</td></tr>';
+  }).join('');
+
+  return box
+    + '<div class="alert ' + (hit === list.length ? 'info' : 'warn') + '" style="font-size:.82rem;margin:0 0 10px">'
+    +   '共 ' + list.length + ' 首，命中 <b>' + hit + '</b> 首，缺 <b>' + (list.length - hit) + '</b> 首'
+    + '</div>'
+    + '<div style="max-height:36vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+    +   '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table>'
+    + '</div>';
+}
+
+/** 解析一行「歌名 - 歌手」；返回 {title, artist} 或 null */
+function durParseLine(line){
+  var s = String(line || '').trim();
+  if(!s) return null;
+  /* 分隔符优先级：Tab > ｜ > | > - – — > , ， 、（后面必须跟空格或直接结束，避免切坏歌名里的连字符） */
+  var m = s.match(/^(.*?)\t+(.*)$/);
+  if(!m) m = s.match(/^(.*?)\s*[｜|]\s*(.*)$/);
+  if(!m) m = s.match(/^(.*?)\s+[-–—]\s+(.*)$/);
+  if(!m) m = s.match(/^(.*?)[,，、]\s*(.*)$/);
+  if(m && m[1].trim()) return { title: m[1].trim(), artist: (m[2] || '').trim() };
+  return { title: s, artist: '' };
+}
+
+function wireDurLibImport(host, st){
+  var doMatch = function(){
+    var ta = host.querySelector('#durImpText');
+    var raw = String((ta && ta.value) || '');
+    var items = raw.split(/\r?\n/).map(durParseLine).filter(Boolean);
+    if(!items.length){ toast('先粘贴清单（一行一首）', 'err'); return; }
+    if(items.length > 200){ toast('一次最多 200 首，多的分批导', 'err', 4000); items = items.slice(0, 200); }
+    var go = host.querySelector('#durImpGo');
+    if(go){ go.disabled = true; go.textContent = '匹配中…'; }
+    api('/music', { method: 'POST', body: { action: 'match-list', items: items } })
+      .then(function(j){
+        st.imp = (j && j.list) || [];
+        st.impRaw = raw;
+        paintDurLib(host);
+        toast('匹配完成：命中 ' + ((j && j.hit) || 0) + ' / ' + st.imp.length, 'ok');
+      })
+      .catch(function(e){
+        if(go){ go.disabled = false; go.textContent = '导入并匹配时长库'; }
+        toast('匹配失败：' + (e.message || e), 'err', 4000);
+      });
+  };
+  var go = host.querySelector('#durImpGo');
+  if(go) go.onclick = doMatch;
+  var ta = host.querySelector('#durImpText');
+  if(ta && st.impRaw) ta.value = st.impRaw;
+
+  var fill = host.querySelector('#durImpFill');
+  if(fill) fill.onclick = function(){
+    var miss = (st.imp || []).filter(function(x){ return !(x.seconds > 0); });
+    if(!miss.length){ toast('都命中了，没有要搜的', 'ok'); return; }
+    closeModal();
+    durImpLiveSearch(miss);
+  };
+
+  Array.prototype.forEach.call(host.querySelectorAll('[data-imp-search]'), function(btn){
+    btn.onclick = function(){
+      var x = (st.imp || [])[Number(btn.getAttribute('data-imp-search'))];
+      if(!x) return;
+      closeModal();
+      durImpLiveSearch([x]);
+    };
+  });
+}
+
+/** 导入清单里没命中的 → 逐首联网搜（自动取「歌名归一后完全一致」的第一条，拿不到就记进待补录） */
+function durImpLiveSearch(items){
+  /* 简版进度：一个小弹窗列出每首的状态，逐条串行查（避免撞 Workers 子请求上限） */
+  var hostList = items.map(function(x){ return { title: x.title, artist: x.artist, seconds: null, state: '待查' }; });
+  openModal({
+    title: '线上补时长',
+    sub: '逐首查网易云 / QQ 音乐；查到自动写库，查不到的可以手填',
+    wide: true,
+    body: '<div id="durLiveBody"><div class="loading"><div class="spinner"></div>开始查询…</div></div>',
+    foot: '<button class="btn btn-ghost" data-close2>关闭</button>',
+    onMount: function(box){
+      box.querySelector('[data-close2]').onclick = closeModal;
+      var bodyEl = box.querySelector('#durLiveBody');
+      var idx = 0;
+      var paint = function(){
+        var rows = hostList.map(function(x){
+          var d = x.seconds > 0
+            ? '<b style="color:#15803d">' + esc(voFmtDur(x.seconds)) + '</b>'
+            : (x.state === '查不到' ? '<b style="color:#b45309">查不到</b>' : '<span class="muted">' + esc(x.state) + '</span>');
+          return '<tr><td style="padding:6px 8px">' + esc(x.title) + '</td>'
+            + '<td style="padding:6px 8px;font-size:.8rem;color:var(--fg-2)">' + esc(x.artist || '—') + '</td>'
+            + '<td style="padding:6px 8px;white-space:nowrap">' + d + '</td></tr>';
+        }).join('');
+        bodyEl.innerHTML = '<div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+          + '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table></div>';
+      };
+      var tick = function(){
+        if(idx >= hostList.length){
+          var miss = hostList.filter(function(x){ return !(x.seconds > 0); });
+          try{ localStorage.removeItem(DUR_LIB_AT); }catch(e){}
+          if(miss.length){
+            DUR_MISS_RESET();
+            miss.forEach(function(x){ DUR_MISS[vhDurationKey(x.title, x.artist)] = { title: x.title, artist: x.artist }; });
+            toast('查不到 ' + miss.length + ' 首，可在「补录缺时长的歌」里手填', 'warn', 5000);
+          } else {
+            toast('全部补齐了', 'ok');
+          }
+          return;
+        }
+        var x = hostList[idx];
+        x.state = '查询中…'; paint();
+        var kw = (x.title + ' ' + (x.artist || '')).trim();
+        api('/music?action=search&limit=10&q=' + encodeURIComponent(kw)).then(function(j){
+          var cands = ((j && j.list) || []).filter(function(c){ return vhDurationKey(c.title, '') === vhDurationKey(x.title, ''); });
+          if(!cands.length) cands = ((j && j.list) || []).filter(function(c){ return vhDurationKey(c.title, c.artist) === vhDurationKey(x.title, x.artist); });
+          var best = cands[0];
+          if(!best){ x.state = '查不到'; idx++; paint(); return tick(); }
+          return api('/music', { method: 'POST', body: { action: 'save-many', items: [{ title: x.title, artist: x.artist || best.artist, seconds: best.seconds, source: best.source }] } })
+            .then(function(){
+              x.seconds = best.seconds;
+              var cache = vhDurationCache();
+              cache[vhDurationKey(x.title, x.artist)] = best.seconds;
+              cache[vhDurationKey(x.title, best.artist)] = best.seconds;
+              vhSaveDurCache(cache);
+            })
+            .catch(function(){ x.state = '写入失败'; });
+        }).catch(function(){ x.state = '查询失败'; }).then(function(){
+          idx++; paint(); return tick();
+        });
+      };
+      paint();
+      tick();
+    },
+  });
+}
+/** 清空 DUR_MISS（避免把上一轮的待补项带进来） */
+function DUR_MISS_RESET(){ Object.keys(DUR_MISS).forEach(function(k){ delete DUR_MISS[k]; }); }
+
+/* ---------- ④ 预置歌单 ---------- */
+/** 预置歌单来源说明：站主说「你也可以自己先准备好周杰伦、林俊杰、方大同这些」。
+ *  ⚠️ 2026-10-18 实测校准：清单里不能有错 —— 「莫吉托」官方名是「Mojito」，
+ *  「孤独患者」是陈奕迅的、「心跳」「一首简单的歌」是王力宏的、「回到过去」是周杰伦的，
+ *  挂错歌手会被严格匹配拒绝（这是 v3.5.27 特意修的，防止拿翻唱顶原唱）。
+ *  已逐首用 /api/music?action=search 验证过存在才留在下面。 */
+var DUR_PRESETS = {
+  '周杰伦': ['晴天','七里香','稻香','青花瓷','告白气球','简单爱','夜曲','搁浅','蒲公英的约定','发如雪','龙卷风','菊花台','东风破','以父之名','双截棍','千里之外','听妈妈的话','Mojito','彩虹','回到过去'],
+  '林俊杰': ['江南','一千年以后','曹操','小酒窝','她说','修炼爱情','可惜没如果','不为谁而作的歌','醉赤壁','背对背拥抱','Always Online','学不会','我还想她','第几个100天','那些你很冒险的梦','爱笑的眼睛','冻结','简简单单','豆浆油条','木乃伊'],
+  '方大同': ['三人游','爱爱爱','特别的人','春风吹','南音','红豆','每天每天','小小虫','黑白','Singalongsong','妹妹','Love Song','麦恩莉','危险世界'],
+};
+
+function durLibViewPreset(st){
+  var names = Object.keys(DUR_PRESETS);
+  var rows = names.map(function(n){
+    var songs = DUR_PRESETS[n];
+    return '<tr data-n="' + attr(n) + '">'
+      + '<td style="padding:8px">' + esc(n) + '</td>'
+      + '<td style="padding:8px;font-size:.78rem;color:var(--fg-3)">' + songs.length + ' 首</td>'
+      + '<td style="padding:8px;text-align:right">'
+      +   '<button class="btn btn-sm" data-preset="' + attr(n) + '">联网抓时长并入库</button>'
+      + '</td></tr>';
+  }).join('');
+  var tot = names.reduce(function(a, n){ return a + DUR_PRESETS[n].length; }, 0);
+  return '<div class="alert info" style="font-size:.82rem;margin:0 0 10px">'
+      + '这些是常见热门曲，点一下会<b>逐首联网查时长</b>（网易云 → QQ 音乐 → iTunes），'
+      + '查到的写进云端库，查不到的会记进「待补录」。共 ' + tot + ' 首，每首约 1 秒。</div>'
+    + '<div style="border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden">'
+    +   '<table style="width:100%;font-size:.86rem"><tbody>' + rows + '</tbody></table>'
+    + '</div>'
+    + '<p class="hint" style="margin:10px 0 0">补完记得回来「已收录」看一眼条数变了没有。</p>';
+}
+
+function wireDurLibPreset(host, st){
+  Array.prototype.forEach.call(host.querySelectorAll('[data-preset]'), function(btn){
+    btn.onclick = function(){
+      var n = btn.getAttribute('data-preset');
+      var songs = DUR_PRESETS[n] || [];
+      if(!songs.length) return;
+      btn.disabled = true; btn.textContent = '开始…';
+      var items = songs.map(function(t){ return { title: t, artist: n }; });
+      closeModal();
+      durBatchSeed(items, n);
+    };
+  });
+}
+
+/** 批量抓时长入库：8 首一批（= 8 首 × 最多 3 个源的子请求，稳在 Workers 50 上限内） */
+function durBatchSeed(items, label){
+  var total = items.length, ok = 0, fail = [];
+  var idx = 0;
+  var list = items.map(function(x){ return { title: x.title, artist: x.artist, seconds: null, state: '待查' }; });
+  openModal({
+    title: '抓取《' + (label || '预置') + '》的时长',
+    sub: '共 ' + total + ' 首，查到的自动写进云端时长库',
+    wide: true,
+    body: '<div id="durSeedBody"></div>',
+    foot: '<button class="btn btn-ghost" data-c>关闭</button>',
+    onMount: function(box){
+      box.querySelector('[data-c]').onclick = closeModal;
+      var bodyEl = box.querySelector('#durSeedBody');
+      var paint = function(){
+        var hit = list.filter(function(x){ return x.seconds > 0; }).length;
+        var rows = list.map(function(x){
+          var d = x.seconds > 0 ? '<b style="color:#15803d">' + esc(voFmtDur(x.seconds)) + '</b>'
+                                : (x.state === '查不到' ? '<b style="color:#b45309">查不到</b>' : '<span class="muted">' + esc(x.state) + '</span>');
+          return '<tr><td style="padding:5px 8px">' + esc(x.title) + '</td>'
+            + '<td style="padding:5px 8px;font-size:.78rem;color:var(--fg-2)">' + esc(x.artist) + '</td>'
+            + '<td style="padding:5px 8px;white-space:nowrap">' + d + '</td></tr>';
+        }).join('');
+        bodyEl.innerHTML = '<div class="alert ' + (hit === total ? 'info' : 'warn') + '" style="font-size:.82rem;margin:0 0 10px">'
+          + '已拿到 <b>' + hit + '</b> / ' + total + ' 首' + (idx >= total ? '（完成）' : '（进行中…）') + '</div>'
+          + '<div style="max-height:50vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+          + '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table></div>';
+      };
+      var chunks = [];
+      for(var i = 0; i < list.length; i += 8) chunks.push(list.slice(i, i + 8));
+      var ci = 0;
+      var next = function(){
+        if(ci >= chunks.length){
+          try{ localStorage.removeItem(DUR_LIB_AT); }catch(e){}
+          var miss = list.filter(function(x){ return !(x.seconds > 0); });
+          if(miss.length) toast('有 ' + miss.length + ' 首没查到，可在「补录缺时长的歌」手填', 'warn', 5000);
+          else toast('全部入库了', 'ok');
+          paint();
+          return;
+        }
+        var part = chunks[ci++];
+        part.forEach(function(x){ x.state = '查询中…'; });
+        paint();
+        api('/music', { method: 'POST', body: { action: 'batch', items: part.map(function(x){ return { title: x.title, artist: x.artist }; }) } })
+          .then(function(j){
+            var rows = (j && j.list) || [];
+            part.forEach(function(x){
+              var r = rows.filter(function(y){ return vhDurationKey(y.title, y.artist) === vhDurationKey(x.title, x.artist); })[0];
+              var sec = r ? Number(r.seconds) : 0;
+              if(sec > 0){
+                x.seconds = sec;
+                var cache = vhDurationCache();
+                cache[vhDurationKey(x.title, x.artist)] = sec;
+                vhSaveDurCache(cache);
+              } else x.state = '查不到';
+            });
+          })
+          .catch(function(){ part.forEach(function(x){ x.state = '请求失败'; }); })
+          .then(function(){ paint(); next(); });
+      };
+      paint();
+      next();
+    },
+  });
+}
+
+/** 人工补录弹窗：一行一首，填「分:秒」或纯秒数
+ *  @param keys   要补的 key 列表（缺省 = 全部 DUR_MISS）
+ *  @param onDone 补录成功后的回调（用于「补齐后自动继续刚才那步」） */
+function voDurManualDialog(keys, onDone){
+  keys = keys || Object.keys(DUR_MISS);
+  if(!keys.length){ toast('没有待补录的歌', 'ok'); return; }
+  var rows = keys.map(function(k){
+    var m = DUR_MISS[k] || {};
+    return '<tr data-k="' + attr(k) + '">'
+      + '<td style="padding:6px 8px">' + esc(m.title || '') + (m.artist ? '<i class="muted" style="font-style:normal"> · ' + esc(m.artist) + '</i>' : '') + '</td>'
+      + '<td style="padding:6px 8px;width:120px">'
+      +   '<input class="dur-in" placeholder="3:45 或 225" style="width:100%;padding:5px 8px;font-size:.82rem">'
+      + '</td></tr>';
+  }).join('');
+  openModal({
+    title: '补录歌曲时长',
+    sub: '填「3:45」这种分秒，或直接填秒数 225；范围 20 秒 ~ 30 分钟',
+    wide: true,
+    body: '<div class="field" style="margin-bottom:0">'
+      +   '<p class="hint" style="margin:0 0 8px">人工填写的时长会写进<b>云端时长库</b>'
+      +   '（来源标为「人工」），优先级最高，以后自动搜索也不会覆盖它。</p>'
+      +   '<div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-md)">'
+      +     '<table style="width:100%;font-size:.84rem"><tbody>' + rows + '</tbody></table>'
+      +   '</div></div>',
+    foot: '<button class="btn btn-ghost" data-no>稍后再说</button>'
+        + '<button class="btn" data-yes>保存到云端</button>',
+    onMount: function(box){
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var items = [], bad = 0;
+        Array.prototype.forEach.call(box.querySelectorAll('tr[data-k]'), function(tr){
+          var inp = tr.querySelector('.dur-in');
+          var raw = String((inp && inp.value) || '').trim();
+          if(!raw) return;
+          var sec = 0;
+          var mm = raw.match(/^(\d{1,2})\s*[:：]\s*(\d{1,2})$/);
+          if(mm) sec = Number(mm[1]) * 60 + Number(mm[2]);
+          else if(/^\d+$/.test(raw)) sec = Number(raw);
+          if(!(sec >= 20 && sec <= 1800)){ bad++; tr.style.background = 'rgba(220,38,38,.08)'; return; }
+          var m = DUR_MISS[tr.getAttribute('data-k')] || {};
+          items.push({ title: m.title || '', artist: m.artist || '', seconds: sec });
+        });
+        if(!items.length){
+          toast(bad ? '填的时长不合法（需 20 秒 ~ 30 分钟）' : '至少填一首', 'err');
+          return;
+        }
+        var btn = box.querySelector('[data-yes]');
+        if(btn){ btn.disabled = true; btn.textContent = '保存中…'; }
+        api('/music', { method: 'POST', body: { action: 'manual', items: items } })
+          .then(function(j){
+            var cache = vhDurationCache();
+            items.forEach(function(x){ cache[vhDurationKey(x.title, x.artist)] = x.seconds; });
+            vhSaveDurCache(cache);
+            Object.keys(DUR_MISS).forEach(function(k){
+              var m = DUR_MISS[k];
+              if(items.some(function(x){ return vhDurationKey(x.title, x.artist) === k; })) delete DUR_MISS[k];
+            });
+            closeModal();
+            toast((j && j.message) || '已保存到云端', 'ok');
+            /* 已经打开的投票编辑器 / 歌单面板要跟着更新 */
+            if(typeof window.__voRebuildSongOptions === 'function') window.__voRebuildSongOptions();
+            if(typeof djRefreshDur === 'function') djRefreshDur();
+            vhDurNotice();
+            if(typeof onDone === 'function'){
+              try{ onDone(); }catch(e){}
+            }
+          })
+          .catch(function(e){
+            if(btn){ btn.disabled = false; btn.textContent = '保存到云端'; }
+            toast('保存失败：' + (e.message || e), 'err', 4000);
+          });
+      };
+    },
+  });
+}
+
+function vhFetchSongsRaw(){
+  var h = { 'x-api-key': vhDjKey() };
+  return fetch(VH_API + '/songs?page=1&limit=100', { headers: h })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var songs = (d && d.data && d.data.songs) || [];
+      var pages = (d && d.data && d.data.pagination && d.data.pagination.totalPages) || 1;
+      var tasks = [];
+      for(var i = 2; i <= pages; i++){
+        (function(pg){
+          tasks.push(fetch(VH_API + '/songs?page=' + pg + '&limit=100', { headers: h })
+            .then(function(r){ return r.json(); })
+            .then(function(x){ return (x && x.data && x.data.songs) || []; }));
+        })(i);
+      }
+      return Promise.all(tasks).then(function(rs){
+        var all = songs.slice();
+        rs.forEach(function(a){ all = all.concat(a); });
+        return all;
+      });
+    });
+}
+
+/** 拉券列表（只取第一页 100 张，够用；要更多可以再翻页） */
+function vhFetchCards(){
+  return fetch(VH_API + '/card-codes?page=1&limit=100', { headers: { 'x-api-key': vhCpKey() } })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ return (d && d.data && d.data.cardCodes) || []; });
+}
+
+/* ---- 面板骨架 ---- */
+function renderSong(){
+  $('view').innerHTML =
+    '<div class="alert info" style="margin-bottom:16px">'
+    +   '本页数据**实时来自点歌平台**（VoiceHub），不是云端缓存 —— 同学在首页点的歌、'
+    +   '领的券都会立刻出现在这里。此处的增删会真实作用到平台上，全班同步生效。'
+    + '</div>'
+    /* ===== v3.5.13（站主 #3）：VoiceHub 投稿上限 + 投稿统计 ===== */
+    + '<section class="panel" style="margin-bottom:16px">'
+    +   '<h3 style="margin:0 0 10px;font-size:.9rem">🛡 投稿上限守卫</h3>'
+    +   '<p class="muted" style="margin:0 0 10px;font-size:.78rem">'
+    +     '开启后，同学在班级网站点「点歌平台」入口时，先查 ta 的<b>未播投稿数</b>，'
+    +     '达到上限会弹提示（同名同学会误伤，默认关）。保存后约 1 分钟内全班生效。</p>'
+    +   '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+    +     '<label style="display:flex;align-items:center;gap:6px;font-size:.84rem">'
+    +       '<input type="checkbox" id="vhGuardOn"> 开启守卫</label>'
+    +     '<div class="field" style="margin:0;width:150px"><label>每人未播投稿上限</label>'
+    +       '<input id="vhGuardLimit" type="number" min="1" max="20" value="3"></div>'
+    +     '<button class="btn btn-sm" id="vhGuardSave">保存</button>'
+    +     '<span class="muted" id="vhGuardState" style="font-size:.76rem"></span>'
+    +   '</div>'
+    + '</section>'
+    + '<section class="panel" style="margin-bottom:16px">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'
+    +     '<h3 style="margin:0;font-size:.9rem">📊 投稿统计（未播为准）</h3>'
+    +     '<button class="btn btn-sm btn-ghost" id="vhStatReload">' + svg('refresh', 14) + ' 刷新</button>'
+    +   '</div>'
+    +   '<div id="vhStats"><div class="muted" style="font-size:.8rem">点「刷新」读取。</div></div>'
+    + '</section>'
+    + '<section class="panel" style="margin-bottom:16px">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'
+    +     '<h3 style="margin:0;font-size:.9rem">🎵 实时歌单</h3>'
+    +     '<div style="display:flex;gap:8px">'
+    +       '<button class="btn btn-sm btn-ghost" id="sgRefund">' + svg('ticket', 14) + ' 游戏券补发</button>'
+    +       '<button class="btn btn-sm btn-ghost" id="sgReload">' + svg('refresh', 14) + ' 刷新</button>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div id="sgSongs"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    + '</section>'
+    + '<section class="panel">'
+    +   '<h3 style="margin:0 0 10px;font-size:.9rem">🎟 点歌券管理</h3>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">'
+    +     '<div class="field" style="margin:0;min-width:90px"><label for="sgCount">生成数量</label>'
+    +       '<input id="sgCount" type="number" min="1" max="50" value="1"></div>'
+    +     '<div class="field" style="margin:0;flex:1;min-width:180px"><label for="sgNote">备注</label>'
+    +       '<input id="sgNote" maxlength="80" placeholder="如 手动添加"></div>'
+    +     '<button class="btn btn-sm" id="sgCreate">' + svg('plus', 14) + ' 生成券码</button>'
+    +   '</div>'
+    +   '<div id="sgCards"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    + '</section>';
+
+  var rb = $('sgReload');
+  if(rb) rb.onclick = function(){ loadSong(); };
+  /* v3.5.13 投稿上限守卫：读/存 site_config.vhGuard */
+  (function(){
+    api('/content?keys=site_config').then(function(j){
+      var g = (j && j.items && j.items.site_config && j.items.site_config.vhGuard) || {};
+      var onEl = $('vhGuardOn'), limEl = $('vhGuardLimit'), st = $('vhGuardState');
+      if(onEl) onEl.checked = !!g.on;
+      if(limEl) limEl.value = Math.max(1, Number(g.limit) || 3);
+      if(st) st.textContent = g.on ? ('当前：已开启（上限 ' + (Number(g.limit) || 3) + ' 首）') : '当前：未开启';
+    }).catch(function(){});
+    var sb = $('vhGuardSave');
+    if(sb) sb.onclick = function(){
+      var onEl = $('vhGuardOn'), limEl = $('vhGuardLimit');
+      api('/content?keys=site_config').then(function(j){
+        var cfg = (j && j.items && j.items.site_config) || {};
+        cfg.vhGuard = { on: !!(onEl && onEl.checked), limit: Math.max(1, Number(limEl && limEl.value) || 3) };
+        return api('/content', { method:'PUT', body:{ items:{ site_config: cfg } } });
+      }).then(function(){
+        toast('守卫设置已保存', 'ok');
+        var st = $('vhGuardState');
+        if(st) st.textContent = (onEl && onEl.checked)
+          ? ('当前：已开启（上限 ' + (Number(limEl && limEl.value) || 3) + ' 首）') : '当前：未开启';
+      }).catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+    };
+  })();
+  /* v3.5.13 投稿统计：走后端代理读 VoiceHub 公开歌单（上游无 CORS） */
+  (function(){
+    var btn = $('vhStatReload'), box = $('vhStats');
+    function loadStats(){
+      if(!box) return;
+      box.innerHTML = '<div class="loading"><div class="spinner"></div>读取中…</div>';
+      /* v3.5.15 热修：VH_API 是 `.../api/open`，以前用 replace(/\/api$/) 去掉尾巴，
+         结果 base 还带着 `/api/open`，被 /vh 代理的「只收 https 站点」校验挡下，
+         报「base 必须是 https:// 开头的完整站点地址」。改用 URL.origin 取站点根。 */
+      var base = '';
+      try{ base = new URL(VH_API).origin; }catch(e){ base = ''; }
+      if(!base){
+        box.innerHTML = '<div class="alert danger">点歌平台地址配置不对（VH_API = ' + esc(VH_API) + '），无法读取。</div>';
+        return;
+      }
+      api('/vh?action=songs&base=' + encodeURIComponent(base)).then(function(j){
+        var songs = (j && j.songs) || [];
+        var pending = songs.filter(function(it){ return !(it.played || (it.song && it.song.played)); });
+        var byUser = {};
+        songs.forEach(function(it){
+          var s = it.song || it;
+          var nm = String(s.requester || '').trim() || '匿名';
+          if(!byUser[nm]) byUser[nm] = { total: 0, pending: 0 };
+          byUser[nm].total++;
+          if(!(it.played || s.played)) byUser[nm].pending++;
+        });
+        var rows = Object.keys(byUser).map(function(nm){ return { nm: nm, t: byUser[nm].total, p: byUser[nm].pending }; });
+        rows.sort(function(a, b){ return b.p - a.p || b.t - a.t; });
+        box.innerHTML =
+          '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px">'
+          + '<div><b style="font-size:1.2rem">' + songs.length + '</b> <span class="muted" style="font-size:.78rem">总投稿</span></div>'
+          + '<div><b style="font-size:1.2rem">' + pending.length + '</b> <span class="muted" style="font-size:.78rem">未播</span></div>'
+          + '<div><b style="font-size:1.2rem">' + rows.length + '</b> <span class="muted" style="font-size:.78rem">投稿人数</span></div>'
+          + '</div>'
+          + '<div style="max-height:220px;overflow:auto">'
+          + '<table><thead><tr><th>投稿人</th><th>未播</th><th>累计</th></tr></thead><tbody>'
+          + rows.map(function(r){
+              return '<tr><td>' + esc(r.nm) + '</td>'
+                + '<td>' + (r.p ? '<b style="color:#c2410c">' + r.p + '</b>' : '0') + '</td>'
+                + '<td>' + r.t + '</td></tr>';
+            }).join('')
+          + '</tbody></table></div>'
+          + '<p class="muted" style="font-size:.74rem;margin:8px 0 0">数据来自 VoiceHub 公开歌单（5 分钟缓存）；「排期到某天 / 自动标已播」需要 VoiceHub 登录态，开放 API 暂不支持，见更新记录说明。</p>';
+      }).catch(function(e){
+        box.innerHTML = '<div class="alert danger">读取失败：' + esc(e.message || e) + '</div>';
+      });
+    }
+    if(btn) btn.onclick = loadStats;
+    loadStats();
+  })();
+  var rfb = $('sgRefund');
+  if(rfb) rfb.onclick = songRefundDialog;
+  var cb = $('sgCreate');
+  if(cb) cb.onclick = songCreateCards;
+
+  loadSong();
+}
+
+/* ---- 取数 ---- */
+function loadSong(){
+  var sb = $('sgSongs'), cb2 = $('sgCards');
+  if(!VH_ENABLED){
+    if(sb) sb.innerHTML = '<div class="empty">' + svg('ban', 34) + '<p>后台直连已关闭</p>'
+      + '<p class="muted" style="font-size:.78rem">把 admin.html 里的 VH_ENABLED 改回 true 即可恢复</p></div>';
+    if(cb2) cb2.innerHTML = '';
+    return;
+  }
+
+  vhFetchSongs().then(function(list){
+    STATE.song.list = list;
+    paintSongSongs();
+  }).catch(function(e){
+    STATE.song.list = [];
+    paintSongSongs(e);
+  });
+
+  vhFetchCards().then(function(list){
+    STATE.song.cards = list;
+    paintSongCards();
+  }).catch(function(e){
+    STATE.song.cards = [];
+    paintSongCards(e);
+  });
+}
+
+/* ---- 渲染：歌单 ---- */
+function paintSongSongs(err){
+  var body = $('sgSongs');
+  if(!body) return;
+
+  if(err){
+    body.innerHTML = '<div class="empty">' + svg('alert', 34)
+      + '<p>拉取歌单失败</p>'
+      + '<p class="muted" style="font-size:.78rem;word-break:break-all">' + esc(String((err && err.message) || err)) + '</p>'
+      + '<p class="muted" style="font-size:.78rem">常见原因：平台暂时不可用，或本站域名不在平台 CORS 白名单里。</p></div>';
+    return;
+  }
+
+  var list = STATE.song.list || [];
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('music', 38) + '<p>平台上还没有人点歌</p>'
+      + '<p class="muted" style="font-size:.78rem">同学在首页「点歌台」提交后会实时出现在这里</p></div>';
+    return;
+  }
+
+  /* 按点赞降序，同票按创建时间倒序 —— 让最热门的排前面 */
+  var sorted = list.slice().sort(function(a, b){
+    var va = Number(a.voteCount) || 0, vb = Number(b.voteCount) || 0;
+    if(vb !== va) return vb - va;
+    return String(b.createdAt || '') < String(a.createdAt || '') ? -1 : 1;
+  });
+
+  var totalVotes = sorted.reduce(function(n, s){ return n + (Number(s.voteCount) || 0); }, 0);
+  var played = sorted.filter(function(s){ return !!s.played; }).length;
+
+  body.innerHTML =
+    '<div class="muted" style="font-size:.78rem;margin-bottom:8px">'
+    +   '共 <b>' + sorted.length + '</b> 首 · 总点赞 <b>' + totalVotes + '</b> · 已播放 <b>' + played + '</b>'
+    + '</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    +   '<th class="nowrap" style="width:36px">#</th>'
+    +   '<th>歌曲</th><th class="nowrap" style="width:62px">时长</th><th class="nowrap" style="width:70px">👍 点赞</th>'
+    +   '<th>点歌人</th><th class="nowrap" style="width:130px">点歌时间</th>'
+    +   '<th class="nowrap" style="width:70px">状态</th>'
+    + '</tr></thead><tbody>'
+    + sorted.map(function(s, i){
+        var req = vhReqName(s) || '—';
+        return '<tr>'
+          + '<td class="muted nowrap">' + (i + 1) + '</td>'
+          + '<td><b>' + esc(s.title || '(无歌名)') + '</b>'
+          +   '<i class="muted" style="display:block;font-size:.75rem;font-style:normal">' + esc(s.artist || '未知歌手') + '</i></td>'
+          + '<td class="nowrap muted" style="font-size:.78rem">' + (voFmtDur(s.durationSeconds) || '—') + '</td>'
+          + '<td class="nowrap"><b style="color:#af410f">' + (Number(s.voteCount) || 0) + '</b></td>'
+          + '<td class="nowrap">' + esc(req) + '</td>'
+          + '<td class="nowrap muted" style="font-size:.76rem">' + esc(vhFmtTime(s.createdAt)) + '</td>'
+          + '<td class="nowrap">' + (s.played
+              ? '<span class="badge badge-gray">已播放</span>'
+              : '<span class="badge badge-blue">待播放</span>') + '</td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+/* ---- 渲染：券列表 ---- */
+function paintSongCards(err){
+  var body = $('sgCards');
+  if(!body) return;
+
+  if(err){
+    body.innerHTML = '<div class="empty">' + svg('alert', 30) + '<p>拉取券列表失败</p>'
+      + '<p class="muted" style="font-size:.78rem;word-break:break-all">' + esc(String((err && err.message) || err)) + '</p></div>';
+    return;
+  }
+
+  var list = STATE.song.cards || [];
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('key', 34) + '<p>平台上还没有点歌券</p></div>';
+    return;
+  }
+
+  var avail = list.filter(function(c){ return c.status === 'AVAILABLE'; }).length;
+  var used  = list.filter(function(c){ return c.status === 'REDEEMED'; }).length;
+
+  body.innerHTML =
+    '<div class="muted" style="font-size:.78rem;margin-bottom:8px">'
+    +   '共 <b>' + list.length + '</b> 张 · 可用 <b>' + avail + '</b> · 已核销 <b>' + used + '</b>'
+    + '</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    +   '<th class="nowrap" style="width:36px">#</th>'
+    +   '<th class="nowrap" style="width:120px">券码</th>'
+    +   '<th>备注</th><th class="nowrap" style="width:80px">状态</th>'
+    +   '<th style="text-align:right;width:80px">操作</th>'
+    + '</tr></thead><tbody>'
+    + list.map(function(c, i){
+        var st = c.status === 'AVAILABLE' ? '<span class="badge badge-green">可用</span>'
+               : (c.status === 'REDEEMED' ? '<span class="badge badge-gray">已核销</span>'
+               : '<span class="badge badge-gray">' + esc(c.status || '?') + '</span>');
+        return '<tr>'
+          + '<td class="muted nowrap">' + (i + 1) + '</td>'
+          + '<td class="nowrap"><b class="mono" style="font-size:.78rem">' + esc(c.code || '') + '</b></td>'
+          + '<td class="muted" style="font-size:.76rem;word-break:break-all">' + esc(c.note || '（无备注）') + '</td>'
+          + '<td class="nowrap">' + st + '</td>'
+          + '<td class="nowrap" style="text-align:right">'
+          +   '<button class="btn btn-sm btn-ghost" data-delcard="' + esc(c.id) + '" data-code="' + attr(c.code || '') + '">'
+          +   svg('trash', 13) + ' 删除</button></td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-delcard]'), function(b){
+    b.onclick = function(){ songDeleteCard(b.dataset.delcard, b.dataset.code); };
+  });
+}
+
+/* ---- 生成券码（真实调平台） ---- */
+function songCreateCards(){
+  var n = parseInt(($('sgCount') || {}).value || '1', 10);
+  if(!(n >= 1)) n = 1;
+  if(n > 50) n = 50;
+  var note = (($('sgNote') || {}).value || '').trim() || '手动添加';
+
+  var btn = $('sgCreate');
+  if(btn){ btn.disabled = true; btn.textContent = '生成中…'; }
+
+  fetch(VH_API + '/card-codes', {
+    method: 'POST',
+    headers: { 'x-api-key': vhCpKey(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ count: n, prefix: 'SONG', length: 8, note: note })
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var codes = (d && d.data && d.data.cardCodes) || [];
+      if(codes.length) toast('已生成 ' + codes.length + ' 张券：' + codes.map(function(c){ return c.code; }).join('、'), 'ok', 6000);
+      else toast('平台未返回券码：' + JSON.stringify(d).slice(0, 120), 'err', 6000);
+      if($('sgNote')) $('sgNote').value = '';
+      loadSong();
+    })
+    .catch(function(e){ toast('生成失败：' + ((e && e.message) || e), 'err', 5000); })
+    .then(function(){
+      if(btn){ btn.disabled = false; btn.innerHTML = svg('plus', 14) + ' 生成券码'; }
+    });
+}
+
+/* ---- 删除券（真实删平台，不可恢复） ---- */
+function songDeleteCard(id, code){
+  confirmBox({
+    title: '删除点歌券',
+    html: '确定删除券码 <b>' + esc(code) + '</b> 吗？',
+    detail: '这会真实删除点歌平台上的这张券，同学拿着它就无法再点歌，且不可恢复。',
+    warn: '如果只是想让本站暂时不认这张券，主站点歌台里有「禁用」选项，那个是可撤销的。',
+    danger: true,
+    okText: '删除'
+  }).then(function(yes){
+    if(!yes) return;
+    fetch(VH_API + '/card-codes?id=' + encodeURIComponent(id), {
+      method: 'DELETE',
+      headers: { 'x-api-key': vhCpKey() }
+    })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d && d.success) toast('已删除 ' + code, 'ok', 3000);
+        else toast('删除失败：' + JSON.stringify(d).slice(0, 120), 'err', 5000);
+        loadSong();
+      })
+      .catch(function(e){ toast('删除失败：' + ((e && e.message) || e), 'err', 5000); });
+  });
+}
+
+/* ---- 游戏点歌券补发（原主站功能搬进后台） ----
+ * 需求：「原先的点歌歌单、点歌券查询页面也放到后台」中的补发部分。
+ * 与主站一致：note 格式必须与游戏端 REWARD.note 完全相同，
+ * 否则游戏端的平台查重（platformFind）认不出这张补发券，同学可能重复领。 */
+var SONG_GAMES = { bird:'像素飞鸟', snake:'贪吃蛇', doodle:'涂鸦跳跃', tetris:'俄罗斯方块' };
+var SONG_NOTES = {
+  bird:  '像素飞鸟过20管奖励',
+  snake: '贪吃蛇吃豆50奖励',
+  doodle:'涂鸦跳跃10000高奖励',
+  tetris:'俄罗斯方块200分奖励'
+};
+
+function songRefundDialog(){
+  var gameOpts = Object.keys(SONG_GAMES).map(function(k){
+    return '<option value="' + attr(k) + '">' + esc(SONG_GAMES[k]) + '</option>';
+  }).join('');
+
+  openModal({
+    title: '游戏点歌券补发',
+    sub: '给达到游戏奖励条件但因故没领到券的同学补一张',
+    body:
+      '<div class="field"><label for="srName">同学姓名</label>'
+      + '<input id="srName" maxlength="30" placeholder="如 张三">'
+      + '<p class="hint">必须与班级名单里的名字完全一致，否则本站台账对不上。</p></div>'
+      + '<div class="field"><label for="srGame">游戏</label>'
+      + '<select id="srGame">' + gameOpts + '</select></div>'
+      + '<div class="field"><label for="srTime">达成时间</label>'
+      + '<input id="srTime" type="datetime-local"></div>'
+      + '<div class="alert info" style="margin:0">'
+      +   '提交后会真实在平台上生成一张券，券码直接显示给你。请手动把券码发给该同学。'
+      + '</div>'
+      + '<div class="msg" id="srMsg"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>登记并生成券</button>',
+    onMount: function(box){
+      var t = box.querySelector('#srTime');
+      if(t){
+        var d = new Date();
+        function p(n){ return (n < 10 ? '0' : '') + n; }
+        t.value = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+                + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+      }
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var msg  = box.querySelector('#srMsg');
+        var name = (box.querySelector('#srName').value || '').trim();
+        var game = box.querySelector('#srGame').value;
+        var tv   = (t && t.value) ? t.value.replace('T', ' ') : '';
+        if(!name){ msg.textContent = '请填写同学姓名'; msg.style.color = 'var(--danger,#af410f)'; return; }
+
+        if(!tv){
+          var d = new Date();
+          function p(n){ return (n < 10 ? '0' : '') + n; }
+          tv = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+             + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+        }
+        var note = name + ' · ' + tv + ' · ' + (SONG_NOTES[game] || game);
+
+        msg.style.color = 'var(--fg-3)';
+        msg.textContent = '正在平台上生成券码…';
+        fetch(VH_API + '/card-codes', {
+          method: 'POST',
+          headers: { 'x-api-key': vhCpKey(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count: 1, prefix: 'SONG', length: 8, note: note })
+        })
+          .then(function(r){ return r.json().catch(function(){ return {}; }); })
+          .then(function(d){
+            var codes = (d && d.data && d.data.cardCodes) || [];
+            if(codes.length){
+              toast('已为 ' + name + ' 生成券码：' + codes[0].code + '（请手动发给该同学）', 'ok', 9000);
+              closeModal();
+            }else{
+              msg.style.color = 'var(--danger,#af410f)';
+              msg.textContent = '平台生成未成功，请在「点歌管理」里手动生成一张券发给同学。';
+            }
+            loadSong();
+          })
+          .catch(function(e){
+            msg.style.color = 'var(--danger,#af410f)';
+            msg.textContent = '平台生成未成功（' + ((e && e.message) || e) + '），请手动生成。';
+          });
+      };
+    }
+  });
+}
+
+/* ============================================================================
+ * ⑪-E 面板：每日一言（2026-10-06 新增）
+ * ---------------------------------------------------------------------------
+ * 需求「每日一言要真做成功能」。
+ *
+ * 云端字段：daily_quote  数组，支持两种写法混用：
+ *   "今天也要加油"                        ← 纯字符串
+ *   { text:"...", from:"—— 某人的话" }     ← 带出处
+ *
+ * 主站按「当天日期取模」选一句（同一天早上和晚上看到的是同一句，
+ * 跨天才换），所以这里改完不需要通知同学刷新具体某句，第二天自然生效。
+ *
+ * ⚠️ 把数组清空 → 主站那边整块「每日一言」卡片直接不渲染（不留空壳）。
+ *    这是刻意设计：后台删干净，首页就干净。
+ * ========================================================================= */
+/* 🚀 v2.6.1 站主要求：原先「每日一言」和「学习卡片」在导航里是两个独立入口
+   （内容组本来就有 10 项，太碎），合并成一个板块「首页卡片」，
+   面板内分上下两块 —— 两者本质都是「首页那张小卡片」的配置，放一起更好找。
+
+   两块各自复用原来的加载/渲染逻辑，互不干扰：
+     · 每日一言 → loadQuotes() / paintQuotes() / dqDialog()，数据键 daily_quote
+     · 学习卡片 → loadStudy()  / paintStudy()  / saveStudy()，数据键 study_card */
+function renderCards(){
+  $('view').innerHTML =
+    /* ---------- 区块一：每日一言（含来源开关 v3.5.9） ---------- */
+    '<section class="panel" style="margin-bottom:18px">'
+    + '<div class="panel-head">'
+    +   '<div><h3>' + svg('quote') + '每日一言</h3>'
+    +     '<p class="sub">首页自动换一句，同学不用手动刷</p></div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +     '<button class="btn btn-sm" id="dqAdd">' + svg('plus', 14) + '新增一句</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="dqBatchAdd">' + svg('plus', 14) + '批量添加</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="dqBatchDel">批量删除</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="dqRefresh">' + svg('refresh', 14) + '刷新</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="panel-body">'
+    /* —— 来源开关（v3.5.9）：站主要求「改为展示 API 拉取内容」，这里一刀切全站 —— */
+    +   '<div style="margin-bottom:16px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg-2)">'
+    +     '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+    +       '<b style="font-size:.9rem">内容来源</b>'
+    +       '<span class="muted" style="font-size:.76rem">改完点「保存来源」，全站立即生效</span>'
+    +     '</div>'
+    +     '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +       '<button class="btn" id="qsNet" style="flex:1;min-width:130px"></button>'
+    +       '<button class="btn" id="qsLocal" style="flex:1;min-width:130px"></button>'
+    +     '</div>'
+    +     '<p class="muted" style="font-size:.76rem;margin:10px 0 0;line-height:1.7">'
+    +       '<b>联网 API</b>：从 hitokoto 公共文库拉取（动画 / 漫画 / 文学 / 诗词），每次刷新随机换一句，连不上自动回退本地库。<br>'
+    +       '<b>本地库</b>：只用下面这个列表里的句子，不发任何外部请求 —— 哪天显示哪句在下面的「轮换设置」里定。'
+    +     '</p>'
+    +     '<div id="qsMsg" style="font-size:.78rem;margin-top:8px"></div>'
+    +     '<div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border)">'
+    +       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +         '<b style="font-size:.86rem">内容分类</b>'
+    +         '<span class="muted" style="font-size:.74rem">取消勾选 = 不显示这类；改完立即生效</span>'
+    +       '</div>'
+    +       '<div id="qsCats" style="display:flex;gap:6px;flex-wrap:wrap"></div>'
+    +       '<div id="qsCatMsg" style="font-size:.74rem;margin-top:8px"></div>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="alert info" style="margin-bottom:14px">'
+    +     '列表改动保存后，让同学刷新一下页面就能看到最新内容。'
+    +   '</div>'
+    +   '<div id="dqBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    +   '<div id="dqSched" style="margin-top:18px"></div>'
+    + '</div>'
+    + '</section>'
+    /* ---------- 区块二：学习卡片 ---------- */
+    + '<section class="panel">'
+    + '<div class="panel-head">'
+    +   '<div><h3>' + svg('inbox') + '学习卡片</h3>'
+    +     '<p class="sub">知识点 / 每日一词 / 古诗文 / 每日一题</p></div>'
+    +   '<div style="display:flex;gap:8px">'
+    +     '<button class="btn btn-sm" id="stSave">' + svg('check', 14) + ' 保存</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="stRefresh">' + svg('refresh', 14) + ' 刷新</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="panel-body">'
+    +   '<div class="alert info" style="margin-bottom:14px">'
+    +     '首页「学习卡片」每次刷新随机出一条内容。这里配的是<b>全班默认</b>；'
+    +     '同学在首页「自定义设置 → 学习卡片」里改过、或手动关掉的，以他自己的为准。'
+    +   '</div>'
+    +   '<div id="stBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    + '</div>'
+    + '</section>';
+
+  $('dqAdd').onclick     = function(){ dqDialog(null); };
+  $('dqBatchAdd').onclick = dqBatchAdd;
+  $('dqBatchDel').onclick = dqBatchDelete;
+  $('dqRefresh').onclick = function(){ loadQuotes(); };
+  $('stSave').onclick    = saveStudy;
+  $('stRefresh').onclick = loadStudy;
+  $('qsNet').onclick     = function(){ qsPick(1); };
+  $('qsLocal').onclick   = function(){ qsPick(0); };
+  loadQuoteSource();
+  loadSchedule();
+  loadQuotes();
+  loadStudy();
+}
+
+/* v3.5.9 每日一言来源（内容键 quote_source）：站主要在「首页卡片」里直接改，
+   不再让每个同学自己在「自定义设置」里点。 */
+var QUOTE_CATS = [
+  ['a', '动画'], ['b', '漫画'], ['c', '游戏'], ['d', '文学'],
+  ['e', '原创'], ['f', '网络'], ['g', '其他'], ['h', '影视'],
+  ['i', '诗词'], ['j', '网易云'], ['k', '哲学'], ['l', '抖机灵'],
+];
+function loadQuoteSource(){
+  api('/content').then(function(j){
+    var raw = (j && j.items) ? j.items.quote_source : null;
+    /* 没配过就默认联网（与 v3.5.6 起的行为一致） */
+    STATE.quoteSource = (raw && raw.net === 0) ? 0 : 1;
+    STATE.quoteCats = (raw && Array.isArray(raw.cats) && raw.cats.length)
+      ? raw.cats.slice() : ['a', 'b', 'd', 'i'];
+    paintQuoteSource();
+    paintQuoteCats();
+  }).catch(function(){
+    STATE.quoteSource = 1;
+    STATE.quoteCats = ['a', 'b', 'd', 'i'];
+    paintQuoteSource(); paintQuoteCats();
+  });
+}
+/* v3.9.8（站主）：只显示勾选的分类，取消勾选就不拉那类 */
+function paintQuoteCats(){
+  var box = $('qsCats');
+  if(!box) return;
+  var cur = STATE.quoteCats || ['a', 'b', 'd', 'i'];
+  box.innerHTML = QUOTE_CATS.map(function(c){
+    var on = cur.indexOf(c[0]) >= 0;
+    return '<button type="button" class="ai-cat' + (on ? ' on' : '') + '" data-cat="' + c[0] + '">'
+      + (on ? '✓ ' : '') + c[1] + '</button>';
+  }).join('');
+  box.onclick = function(e){
+    var b = e.target.closest && e.target.closest('[data-cat]');
+    if(!b) return;
+    var k = b.getAttribute('data-cat');
+    var arr = (STATE.quoteCats || []).slice();
+    var i = arr.indexOf(k);
+    if(i >= 0){
+      if(arr.length <= 1){ toast('至少留一类，不然就没内容可显示了', 'warn'); return; }
+      arr.splice(i, 1);
+    }else{
+      arr.push(k);
+    }
+    STATE.quoteCats = arr;
+    paintQuoteCats();
+    saveQuoteCats();
+  };
+}
+function saveQuoteCats(){
+  var msg = $('qsCatMsg');
+  if(msg) msg.innerHTML = '<span class="muted">保存中…</span>';
+  api('/content', { method: 'PUT', body: { items: { quote_source: {
+    net: (STATE.quoteSource === 0) ? 0 : 1,
+    cats: STATE.quoteCats || ['a', 'b', 'd', 'i'],
+  } } } }).then(function(j){
+    if(j && j.ok === false) throw new Error(j.error || '保存失败');
+    if(msg) msg.innerHTML = '<span style="color:#2f9e44">✅ 已保存，同学刷新页面后只显示勾选的分类</span>';
+  }).catch(function(e){
+    if(msg) msg.innerHTML = '<span style="color:#b3261e">保存失败：' + esc(e.message || e) + '</span>';
+  });
+}
+
+function paintQuoteSource(){
+  var net = $('qsNet'), loc = $('qsLocal');
+  if(!net || !loc) return;
+  var cur = (STATE.quoteSource === 0) ? 0 : 1;
+  net.textContent = (cur === 1 ? '✓ ' : '') + '联网 API（推荐）';
+  loc.textContent = (cur === 0 ? '✓ ' : '') + '本地库';
+  net.className = 'btn' + (cur === 1 ? '' : ' btn-secondary');
+  loc.className = 'btn' + (cur === 0 ? '' : ' btn-secondary');
+  net.style.flex = loc.style.flex = '1';
+  net.style.minWidth = loc.style.minWidth = '130px';
+  /* v3.5.10 站主反馈「本地库可以新增，你把新增按钮删掉了」：
+     新增按钮一直在面板右上角（+ 新增一句），但太不显眼 —— 本地库时在这里明确指路。 */
+  var msg = $('qsMsg');
+  if(msg && !msg.innerHTML){
+    msg.innerHTML = (cur === 0)
+      ? '<span class="muted">当前用本地库：点右上角 <b>＋ 新增一句</b> 往库里加句子，列表里每条都能编辑和删除。</span>'
+      : '<span class="muted">当前联网取句。右上角 <b>＋ 新增一句</b> 维护的是本地库 —— 联网失败时自动用它兜底。</span>';
+  }
+  /* 本地库模式下把「新增一句」按钮换成主色高亮，一眼能看到 */
+  var add = $('dqAdd');
+  if(add){
+    add.className = 'btn btn-sm' + (cur === 0 ? '' : ' btn-secondary');
+    add.innerHTML = svg('plus', 14) + (cur === 0 ? '新增一句（本地库）' : '新增一句');
+  }
+}
+
+function qsPick(m){
+  var next = (m === 0) ? 0 : 1;
+  if(STATE.quoteSource === next){ paintQuoteSource(); return; }
+  var msg = $('qsMsg');
+  if(msg){ msg.innerHTML = '<span class="muted">保存中…</span>'; }
+  api('/content', { method: 'PUT', body: { items: { quote_source: {
+    net: next, cats: STATE.quoteCats || ['a', 'b', 'd', 'i'],
+  } } } })
+    .then(function(j){
+      if(j && j.ok === false) throw new Error(j.error || '保存失败');
+      STATE.quoteSource = next;
+      paintQuoteSource();
+      if(msg){ msg.innerHTML = '<span style="color:#2f9e44">✅ 已切换为「'
+        + (next === 1 ? '联网 API' : '本地库') + '」，同学刷新页面即生效。'
+        + (next === 0 ? '本地库的句子用右上角 <b>＋ 新增一句</b> 添加。' : '')
+        + '</span>'; }
+    })
+    .catch(function(e){
+      if(msg){ msg.innerHTML = '<span style="color:#b3261e">保存失败：' + esc(e.message || e) + '</span>'; }
+    });
+}
+
+function dqNormalize(list){
+  if(!Array.isArray(list)) return [];
+  return list.map(function(x){
+    if(typeof x === 'string') return { text: x, from: '' };
+    if(x && typeof x === 'object') return { text: String(x.text || ''), from: String(x.from || '') };
+    /* 数字 / 布尔 / null 一律丢掉。
+       不要写成 String(x) —— 数组里混进一个 0 或 true，首页就会出现
+       一句莫名其妙的「0」。宁可少显示，也不要显示垃圾。 */
+    return null;
+  }).filter(function(x){ return x && x.text.trim(); });
+}
+
+function loadQuotes(){
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    STATE.quotes.list = dqNormalize(items.daily_quote);
+    paintQuotes();
+  }).catch(function(e){
+    var b = $('dqBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintQuotes(){
+  var body = $('dqBody');
+  if(!body) return;
+  var list = STATE.quotes.list || [];
+
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('quote', 38) + '<p>云端还没有每日一言</p>'
+      + '<p class="muted" style="font-size:.78rem">首页的那张卡片现在不会显示；加一条就会自动出现</p></div>';
+    return;
+  }
+
+  /* v3.5.11：今天会轮到哪一句 —— 与主站**完全同一套**算法（含排期），
+     之前这里是自己另算的取模，排期一改就跟前台对不上，站主没法对照。 */
+  var todayStr = dqDayStr(new Date());
+  var todayIdx = dqTodayIdx(list, todayStr);
+  var sched = STATE.quoteSched || { mode:'random' };
+
+  body.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +   '<div class="muted" style="font-size:.78rem">共 <b>' + list.length + '</b> 句'
+    +     (todayIdx >= 0 ? '　今天显示第 <b>' + (todayIdx + 1) + '</b> 句' : (sched.mode === 'date' ? '　今天没指定句子' : ''))
+    +   '</div>'
+    +   '<div style="display:flex;align-items:center;gap:8px;font-size:.78rem">'
+    +     '<span class="muted">已选 <b id="dqSelN">0</b> 句</span>'
+    +     '<button class="btn btn-sm btn-ghost" id="dqSelAll">全选</button>'
+    +     '<button class="btn btn-sm btn-ghost" id="dqSelNone">清空</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    +   '<th class="nowrap" style="width:34px"><input type="checkbox" id="dqCkAll" title="全选"></th>'
+    +   '<th class="nowrap" style="width:44px">#</th>'
+    +   '<th>内容</th><th style="width:180px">出处</th>'
+    +   '<th style="text-align:right;width:130px">操作</th>'
+    + '</tr></thead><tbody>'
+    + list.map(function(q, i){
+        return '<tr' + (i === todayIdx ? ' style="background:rgba(175,65,15,.05)"' : '') + '>'
+          + '<td><input type="checkbox" data-dq-ck="' + i + '"></td>'
+          + '<td class="muted nowrap">' + (i + 1)
+          +   (i === todayIdx ? '<span class="badge badge-blue" style="margin-left:4px">今天</span>' : '')
+          + '</td>'
+          + '<td>' + esc(q.text) + '</td>'
+          + '<td class="muted" style="font-size:.78rem">' + (q.from ? esc(q.from) : '—') + '</td>'
+          + '<td style="text-align:right"><div class="row-actions">'
+          +   '<button data-dq-edit="' + i + '">编辑</button>'
+          +   '<button class="danger" data-dq-del="' + i + '">删除</button>'
+          + '</div></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dq-edit]'), function(b){
+    b.onclick = function(){ dqDialog(Number(b.dataset.dqEdit)); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dq-del]'), function(b){
+    b.onclick = function(){ dqDelete(Number(b.dataset.dqDel)); };
+  });
+
+  /* 勾选计数 */
+  function syncSel(){
+    var cks = body.querySelectorAll('[data-dq-ck]');
+    var n = 0;
+    Array.prototype.forEach.call(cks, function(c){ if(c.checked) n++; });
+    var el = $('dqSelN');
+    if(el) el.textContent = String(n);
+    var all = $('dqCkAll');
+    if(all) all.checked = (n > 0 && n === cks.length);
+  }
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){
+    c.onchange = syncSel;
+  });
+  var ckAll = $('dqCkAll');
+  if(ckAll){
+    ckAll.onchange = function(){
+      Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){ c.checked = ckAll.checked; });
+      syncSel();
+    };
+  }
+  var bAll = $('dqSelAll'), bNone = $('dqSelNone');
+  if(bAll) bAll.onclick = function(){
+    Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){ c.checked = true; });
+    if(ckAll) ckAll.checked = true;
+    syncSel();
+  };
+  if(bNone) bNone.onclick = function(){
+    Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){ c.checked = false; });
+    if(ckAll) ckAll.checked = false;
+    syncSel();
+  };
+  syncSel();
+  paintSchedule();
+}
+
+/* ============================================================================
+ * v3.5.11 本地库增强：批量添加 / 批量删除 / 轮换设置
+ * ----------------------------------------------------------------------------
+ * 站主要求（原话）：「可以批量删除或添加，也可以指定这两天是哪些句子，指定怎么轮换」
+ *
+ * 三个能力：
+ *   ① 批量添加 —— 一行一句整段粘贴，自动拆行、去重（与库里已有的比对）、跳过空行
+ *   ② 批量删除 —— 列表勾选后一次删掉，带确认
+ *   ③ 轮换设置 —— 四种模式 + 逐日指定（最多提前 90 天预览排期）
+ *
+ * 数据落在内容键 quote_schedule：
+ *   { mode:'random'|'order'|'rotate'|'date', start:'YYYY-MM-DD', every:N, fixed:{date:[idx]} }
+ * ⚠️ 与前端 index.html 的 quoteSchedule() / localQuoteIdx() 必须保持同一套算法，
+ *    改一边必须改另一边（e2e 有静态断言盯着「两处模式列表一致」）。
+ * ========================================================================= */
+
+/* 本地日期字符串（不能 toISOString，那是 UTC，晚上 8 点后日期会差一天） */
+function dqDayStr(d){
+  d = d || new Date();
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+/* 今天显示第几句（与前台 localQuoteIdx 同算法） */
+function dqTodayIdx(list, todayStr){
+  if(!list || !list.length) return -1;
+  var cfg = STATE.quoteSched || { mode:'random' };
+  var today = todayStr || dqDayStr(new Date());
+  var n = list.length;
+  var fixed = (cfg.fixed || {})[today];
+  if(fixed && fixed.length){
+    var valid = fixed.filter(function(i){ return i >= 0 && i < n; });
+    if(valid.length) return valid[0];
+  }
+  if(cfg.mode === 'date') return -1;
+  if(cfg.mode === 'order' || cfg.mode === 'rotate'){
+    var start = cfg.start || today;
+    var diff = dqDayDiff(start, today);
+    if(diff < 0) diff = ((diff % n) + n) % n;
+    if(cfg.mode === 'order') return diff % n;
+    var step = Math.floor(diff / (cfg.every || 1));
+    return ((step % n) + n) % n;
+  }
+  return -1;   /* random */
+}
+
+function dqDayDiff(fromStr, toStr){
+  var a = new Date(fromStr + 'T00:00:00'), b = new Date(toStr + 'T00:00:00');
+  if(isNaN(a.getTime()) || isNaN(b.getTime())) return 0;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+/* 读云端排期 */
+function loadSchedule(){
+  api('/content').then(function(j){
+    var raw = (j && j.items) ? j.items.quote_schedule : null;
+    STATE.quoteSched = dqNormSched(raw);
+    paintSchedule();
+  }).catch(function(){
+    STATE.quoteSched = dqNormSched(null);
+    paintSchedule();
+  });
+}
+
+/* 归一化：任何脏数据都退回安全默认，保证界面永远可编辑 */
+function dqNormSched(raw){
+  var out = { mode:'random', start:'', every:3, fixed:{} };
+  if(!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  var m = String(raw.mode || '');
+  if(m === 'order' || m === 'rotate' || m === 'date' || m === 'random') out.mode = m;
+  if(typeof raw.start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.start)) out.start = raw.start;
+  var e = Number(raw.every);
+  out.every = (e > 0) ? Math.min(60, Math.floor(e)) : 3;
+  if(raw.fixed && typeof raw.fixed === 'object' && !Array.isArray(raw.fixed)){
+    Object.keys(raw.fixed).forEach(function(k){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(k)) return;
+      if(!Array.isArray(raw.fixed[k])) return;
+      var arr = raw.fixed[k].map(Number).filter(function(x){ return isFinite(x) && x >= 0; });
+      if(arr.length) out.fixed[k] = arr;
+    });
+  }
+  return out;
+}
+
+/* 保存排期 */
+function dqSaveSched(next, okMsg){
+  var body = { mode: next.mode, start: next.start || '', every: next.every || 3, fixed: next.fixed || {} };
+  return api('/content', { method:'PUT', body:{ items:{ quote_schedule: body } } })
+    .then(function(j){
+      if(j && j.ok === false) throw new Error(j.error || '保存失败');
+      STATE.quoteSched = dqNormSched(body);
+      paintSchedule();
+      paintQuotes();          /* 重画列表（今天那句的标记会变） */
+      if(okMsg) toast(okMsg, 'ok', 3000);
+      return true;
+    })
+    .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); return false; });
+}
+
+/* ---------- 轮换设置面板 ---------- */
+function paintSchedule(){
+  var host = $('dqSched');
+  if(!host) return;
+  var cfg = STATE.quoteSched || dqNormSched(null);
+  var list = STATE.quotes.list || [];
+  var modes = [
+    ['random', '每次随机', '每次刷新随机抽一句（旧行为）'],
+    ['order',  '按列表顺序轮换', '从起始日期起每天下一句，走到末尾从头再来'],
+    ['rotate', '每 N 天换一句', '从起始日期起，每句停留 N 天再换'],
+    ['date',   '只按指定日期', '只显示你指定过的那几天，其它天不显示卡片'],
+  ];
+
+  var modeHtml = modes.map(function(m){
+    var on = cfg.mode === m[0];
+    /* v3.5.13（站主反馈「文字溢出」）：全局 .btn 是 height:42px + nowrap，
+       两行内容的模式按钮会被硬裁 —— 这里显式放开高度与换行。 */
+    return '<button class="btn ' + (on ? '' : 'btn-secondary') + '" data-dq-mode="' + m[0] + '" '
+      + 'style="text-align:left;display:block;width:100%;height:auto;white-space:normal;padding:10px 12px;margin-bottom:8px;line-height:1.45">'
+      + '<b style="font-size:.84rem">' + (on ? '✓ ' : '') + m[1] + '</b>'
+      + '<span style="display:block;font-size:.74rem;opacity:.8;margin-top:2px">' + m[2] + '</span></button>';
+  }).join('');
+
+  host.innerHTML =
+    '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg-2)">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+    +   '<b style="font-size:.9rem">轮换设置</b>'
+    +   '<span class="muted" style="font-size:.76rem">只影响本地库；联网模式下不生效</span>'
+    + '</div>'
+    /* 模式选择 */
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">' + modeHtml + '</div>'
+    /* 起点 + 间隔（order / rotate 才显示） */
+    + ((cfg.mode === 'order' || cfg.mode === 'rotate')
+        ? '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">'
+          + '<div class="field" style="margin:0;flex:1;min-width:160px"><label>起始日期</label>'
+          +   '<input type="date" id="dqStart" value="' + attr(cfg.start || dqDayStr()) + '"></div>'
+          + (cfg.mode === 'rotate'
+              ? '<div class="field" style="margin:0;width:140px"><label>每句停留（天）</label>'
+                + '<input type="number" id="dqEvery" min="1" max="60" value="' + cfg.every + '"></div>'
+              : '')
+          + '<button class="btn" id="dqSaveMode" style="height:40px">保存轮换</button>'
+          + '</div>'
+        : '<div style="margin-top:6px"><button class="btn" id="dqSaveMode">保存设置</button></div>')
+    /* 逐日指定 */
+    + '<div style="margin-top:18px;padding-top:14px;border-top:1px dashed #e7dbcd">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +     '<b style="font-size:.86rem">指定某天显示哪句</b>'
+    +     '<span class="muted" style="font-size:.74rem">指定日期优先级最高，任何模式下都照办</span>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">'
+    +     '<div class="field" style="margin:0;width:170px"><label>日期</label>'
+    +       '<input type="date" id="dqFxDate" value="' + attr(dqDayStr(new Date(Date.now() + 86400000))) + '"></div>'
+    +     '<div class="field" style="margin:0;flex:1;min-width:200px"><label>显示第几句（在「句子列表」里的序号）</label>'
+    +       '<input id="dqFxIdx" type="number" min="1" max="' + Math.max(1, list.length) + '" placeholder="例如 3"></div>'
+    +     '<button class="btn" id="dqFxAdd" style="height:40px">指定</button>'
+    +   '</div>'
+    +   dqFixedTable(cfg, list)
+    + '</div>'
+    /* 未来排期预览 */
+    + '<div style="margin-top:18px;padding-top:14px;border-top:1px dashed #e7dbcd">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +     '<b style="font-size:.86rem">接下来 14 天预览</b>'
+    +     '<span class="muted" style="font-size:.74rem">按当前设置算出来的效果</span>'
+    +   '</div>'
+    +   dqPreviewTable(cfg, list)
+    + '</div>'
+    + '</div>';
+
+  /* 模式按钮：点了立即换（不保存，等点「保存设置」） */
+  Array.prototype.forEach.call(host.querySelectorAll('[data-dq-mode]'), function(b){
+    b.onclick = function(){
+      var next = dqNormSched(STATE.quoteSched);
+      next.mode = b.dataset.dqMode;
+      if(!next.start) next.start = dqDayStr();
+      STATE.quoteSched = next;
+      paintSchedule();
+    };
+  });
+  var sv = $('dqSaveMode');
+  if(sv) sv.onclick = function(){
+    var next = dqNormSched(STATE.quoteSched);
+    next.mode = (STATE.quoteSched && STATE.quoteSched.mode) || 'random';
+    var st = $('dqStart'), ev = $('dqEvery');
+    if(st) next.start = st.value || dqDayStr();
+    if(ev) next.every = Math.max(1, Math.min(60, Number(ev.value) || 3));
+    dqSaveSched(next, '轮换设置已保存');
+  };
+  var fxAdd = $('dqFxAdd');
+  if(fxAdd) fxAdd.onclick = function(){
+    var dv = ($('dqFxDate') || {}).value || '';
+    var iv = Number(($('dqFxIdx') || {}).value);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dv)){ toast('请选择日期', 'err'); return; }
+    if(!iv || iv < 1 || iv > list.length){ toast('序号要在 1 ~ ' + list.length + ' 之间', 'err'); return; }
+    var next = dqNormSched(STATE.quoteSched);
+    next.fixed[dv] = [iv - 1];
+    dqSaveSched(next, dv + ' 已指定为第 ' + iv + ' 句');
+  };
+  Array.prototype.forEach.call(host.querySelectorAll('[data-dq-fxdel]'), function(b){
+    b.onclick = function(){
+      var next = dqNormSched(STATE.quoteSched);
+      delete next.fixed[b.dataset.dqFxdel];
+      dqSaveSched(next, '已取消指定');
+    };
+  });
+}
+
+/* 已达指定日期的表格 */
+function dqFixedTable(cfg, list){
+  var keys = Object.keys(cfg.fixed || {}).sort();
+  if(!keys.length){
+    return '<div class="muted" style="font-size:.78rem;padding:6px 0">还没有指定任何日期。'
+      + '比如想让 10 月 20 号显示第 3 句，就在上面填日期和序号后点「指定」。</div>';
+  }
+  var today = dqDayStr(new Date());
+  return '<div class="table-wrap"><table><thead><tr>'
+    + '<th style="width:120px">日期</th><th style="width:70px">句号</th><th>内容</th>'
+    + '<th style="text-align:right;width:80px">操作</th></tr></thead><tbody>'
+    + keys.map(function(k){
+        var ids = cfg.fixed[k] || [];
+        var txt = ids.map(function(i){
+          var q = list[i];
+          return q ? ('#' + (i + 1) + ' ' + esc(q.text)) : ('#' + (i + 1) + ' （已不存在）');
+        }).join('<br>') || '—';
+        var tag = (k === today) ? ' <span class="badge badge-blue">今天</span>' : '';
+        var past = (k < today) ? ' style="opacity:.5"' : '';
+        return '<tr' + past + '><td class="nowrap">' + esc(k) + tag + '</td>'
+          + '<td class="muted">' + ids.map(function(i){ return '#' + (i + 1); }).join(',') + '</td>'
+          + '<td style="font-size:.8rem">' + txt + '</td>'
+          + '<td style="text-align:right"><div class="row-actions">'
+          + '<button class="danger" data-dq-fxdel="' + esc(k) + '">取消</button>'
+          + '</div></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+/* 未来 14 天预览 */
+function dqPreviewTable(cfg, list){
+  if(!list.length) return '<div class="muted" style="font-size:.78rem">列表还是空的，先加几句再看预览。</div>';
+  var rows = '';
+  for(var i = 0; i < 14; i++){
+    var d = new Date();
+    d.setDate(d.getDate() + i);
+    var ds = dqDayStr(d);
+    var idx = dqTodayIdx(list, ds);
+    var isFixed = !!(cfg.fixed && cfg.fixed[ds]);
+    var txt;
+    if(idx < 0){
+      txt = (cfg.mode === 'date') ? '<span class="muted">（不显示）</span>' : '<span class="muted">随机一句</span>';
+    }else{
+      txt = '<b>#' + (idx + 1) + '</b>　' + esc((list[idx] || {}).text || '');
+    }
+    rows += '<tr' + (i === 0 ? ' style="background:rgba(175,65,15,.05)"' : '') + '>'
+      + '<td class="nowrap muted">' + ds + (i === 0 ? ' <span class="badge badge-blue">今天</span>' : '') + '</td>'
+      + '<td style="font-size:.8rem">' + txt + (isFixed ? ' <span class="badge">指定</span>' : '') + '</td></tr>';
+  }
+  return '<div class="table-wrap"><table><tbody>' + rows + '</tbody></table></div>';
+}
+
+/* ---------- 批量添加 ---------- */
+function dqBatchAdd(){
+  openModal({
+    title: '批量添加每日一言',
+    sub: '一行一句，整段粘贴即可；空行自动跳过，和现有重复的也会跳过',
+    wide: true,
+    body:
+      '<div class="field"><label for="dqbT">句子（一行一句）</label>'
+      + '<textarea id="dqbT" rows="12" style="font-family:inherit;line-height:1.7" '
+      + 'placeholder="慢慢来，比较快&#10;把每天的小事做好&#10;不着急，也不放弃"></textarea></div>'
+      + '<div class="field"><label for="dqbF">统一出处（可选，留空则不带出处）</label>'
+      + '<input id="dqbF" maxlength="60" placeholder="例如：—— 班主任"></div>'
+      + '<div id="dqbHint" class="muted" style="font-size:.78rem"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>添加</button>',
+    onMount: function(box){
+      var ta = box.querySelector('#dqbT');
+      var hint = box.querySelector('#dqbHint');
+      function parse(){
+        var raw = ta.value || '';
+        var lines = raw.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(function(x){ return x; });
+        var seen = {}, exist = {};
+        (STATE.quotes.list || []).forEach(function(q){ exist[String(q.text).trim()] = 1; });
+        var add = [], dup = 0;
+        lines.forEach(function(x){
+          if(exist[x] || seen[x]){ dup++; return; }
+          seen[x] = 1; add.push(x);
+        });
+        return { lines: lines, add: add, dup: dup };
+      }
+      function sync(){
+        var r = parse();
+        hint.innerHTML = r.lines.length
+          ? '识别到 <b>' + r.lines.length + '</b> 行，其中 <b>' + r.add.length + '</b> 句会新增'
+            + (r.dup ? '，<b>' + r.dup + '</b> 句重复已跳过' : '')
+          : '<span class="muted">还没输入内容</span>';
+      }
+      ta.oninput = sync;
+      sync();
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var r = parse();
+        if(!r.add.length){ toast(r.lines.length ? '没有可新增的句子（都重复了）' : '请先输入句子', 'err'); return; }
+        var from = (box.querySelector('#dqbF').value || '').trim();
+        var next = (STATE.quotes.list || []).slice();
+        r.add.forEach(function(t){
+          var item = { text: t };
+          if(from) item.from = from;
+          next.push(item);
+        });
+        api('/content', { method:'PUT', body:{ items:{ daily_quote: next } } })
+          .then(function(j){
+            if(j && j.ok === false) throw new Error(j.error || '保存失败');
+            closeModal();
+            toast('已新增 ' + r.add.length + ' 句' + (r.dup ? '（跳过 ' + r.dup + ' 句重复）' : ''), 'ok', 3500);
+            loadQuotes();
+          })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
+      };
+    }
+  });
+}
+
+/* ---------- 批量删除 ---------- */
+function dqBatchDelete(){
+  var body = $('dqBody');
+  var list = STATE.quotes.list || [];
+  if(!body || !list.length) return;
+  var picked = [];
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dq-ck]'), function(c){
+    if(c.checked) picked.push(Number(c.dataset.dqCk));
+  });
+  if(!picked.length){
+    toast('请先在列表里勾选要删除的句子（表头复选框可全选）', 'err', 3600);
+    return;
+  }
+  picked.sort(function(a, b){ return a - b; });
+  var preview = picked.slice(0, 5).map(function(i){
+    return '· ' + esc((list[i] || {}).text || '');
+  }).join('<br>');
+  confirmBox({
+    title: '批量删除 ' + picked.length + ' 句',
+    html: '确定删除以下 ' + picked.length + ' 句吗？<br><br>' + preview
+      + (picked.length > 5 ? '<br>…等共 ' + picked.length + ' 句' : ''),
+    detail: '删完不可恢复。如果这些句子被「指定日期」引用过，那些指定会自动失效。',
+    danger: true,
+    okText: '删除 ' + picked.length + ' 句'
+  }).then(function(ok){
+    if(!ok) return;
+    var kill = {};
+    picked.forEach(function(i){ kill[i] = 1; });
+    var next = [];
+    var remap = {};        /* 旧下标 → 新下标，用于修指定日期 */
+    list.forEach(function(q, i){
+      if(kill[i]) return;
+      remap[i] = next.length;
+      next.push(q);
+    });
+    /* 修 fixed：被删的下标去掉，其余重映射；整条空了就删掉这一天 */
+    var sched = dqNormSched(STATE.quoteSched);
+    var fixed = {};
+    Object.keys(sched.fixed).forEach(function(k){
+      var arr = sched.fixed[k].map(function(i){ return remap[i]; })
+        .filter(function(x){ return x !== undefined; });
+      if(arr.length) fixed[k] = arr;
+    });
+    sched.fixed = fixed;
+
+    Promise.all([
+      api('/content', { method:'PUT', body:{ items:{ daily_quote: next } } }),
+      api('/content', { method:'PUT', body:{ items:{ quote_schedule: {
+        mode: sched.mode, start: sched.start, every: sched.every, fixed: sched.fixed
+      } } } }),
+    ]).then(function(){
+      toast('已删除 ' + picked.length + ' 句', 'ok', 3000);
+      STATE.quoteSched = sched;
+      loadQuotes();
+    }).catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+  });
+}
+
+function dqDialog(idx){
+  var list = STATE.quotes.list || [];
+  var isNew = (idx === null || idx === undefined);
+  var q = isNew ? { text:'', from:'' } : (list[idx] || { text:'', from:'' });
+
+  openModal({
+    title: isNew ? '新增每日一言' : '编辑每日一言',
+    sub: '留空出处的就只显示句子本身',
+    body:
+      '<div class="field"><label for="dqT">内容</label>'
+      + '<textarea id="dqT" rows="3" maxlength="200" placeholder="例如：慢慢来，比较快">' + esc(q.text) + '</textarea></div>'
+      + '<div class="field"><label for="dqF">出处（可选）</label>'
+      + '<input id="dqF" maxlength="60" value="' + attr(q.from) + '" placeholder="例如：—— 班主任"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>' + (isNew ? '新增' : '保存') + '</button>',
+    onMount: function(box){
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var text = (box.querySelector('#dqT').value || '').trim();
+        var from = (box.querySelector('#dqF').value || '').trim();
+        if(!text){ toast('内容不能为空', 'err'); return; }
+
+        var next = list.slice();
+        var item = { text: text };
+        if(from) item.from = from;
+        if(isNew) next.push(item); else next[idx] = item;
+
+        api('/content', { method:'PUT', body:{ items:{ daily_quote: next } } })
+          .then(function(){
+            closeModal();
+            toast(isNew ? '已新增' : '已保存', 'ok', 3000);
+            loadQuotes();
+          })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
+      };
+    }
+  });
+}
+
+function dqDelete(idx){
+  var list = STATE.quotes.list || [];
+  var q = list[idx];
+  if(!q) return;
+  confirmBox({
+    title: '删除每日一言',
+    html: '确定删除这句吗？<br><br><b>' + esc(q.text) + '</b>',
+    detail: list.length === 1 ? '这是最后一句，删完首页那张卡片就不会再显示。' : '',
+    danger: true,
+    okText: '删除'
+  }).then(function(ok){
+    if(!ok) return;
+    var next = list.slice();
+    next.splice(idx, 1);
+    api('/content', { method:'PUT', body:{ items:{ daily_quote: next } } })
+      .then(function(){ toast('已删除', 'ok'); loadQuotes(); })
+      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+  });
+}
+
+/* ============================================================================
+ * ⑪-F2 面板：学习卡片（v2.6.0 新增）
+ * ---------------------------------------------------------------------------
+ * 站主要求：「不要做一个专门的板块，就跟每日一言一样，在选择好想随机
+ *           出现的学科知识点之后就可以联网更新」
+ *
+ * 云端字段：study_card
+ *   { on:true, types:{know,word,poem,quiz}, subjects:{physics,chemistry,biology} }
+ *
+ * 这里的配置是**全班默认值**：同学在首页「自定义设置」里改过就以个人的为准，
+ * 没改过就用这里配的。字段名必须与 index.html 的 STUDY_DEFAULT_CFG 一致，
+ * 少一个键前端会退回代码常量（不会崩，但站主会以为「设置了没生效」）。
+ *
+ * 内容本身（135 条知识点 + 30 道英语题）内置于 index.html，
+ * 不在这里维护 —— 后台只管「显示哪些类型」。
+ * ========================================================================= */
+var STUDY_TYPES = [
+  { k: 'know', name: '学科知识点', desc: '物理 / 化学 / 生物 必修一知识点与公式（内置，离线可用）' },
+  { k: 'quiz', name: '每日一题',   desc: '英语选词填空，每题一问，含答案与解析（内置）' },
+  { k: 'word', name: '每日一词',   desc: '联网获取英文单词的音标、中文释义与例句' },
+  { k: 'poem', name: '古诗文',     desc: '联网获取今日诗词，含朝代、作者与出处' },
+];
+var STUDY_SUBJECTS = [
+  { k: 'physics',   name: '物理', desc: '必修第一册 · 力与运动' },
+  { k: 'chemistry', name: '化学', desc: '必修第一册 · 物质变化 / 钠氯 / 铁 / 周期律' },
+  { k: 'biology',   name: '生物', desc: '必修1 · 分子与细胞' },
+];
+
+/* 注：本区块原先有独立的 renderStudy() 页面，v2.6.1 起并入上方 renderCards()
+   （「首页卡片」板块），这里只保留数据加载与勾选渲染逻辑。 */
+
+function loadStudy(){
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    var raw = items.study_card;
+    /* 归一化：历史/异常数据一律退回默认，保证界面永远有可勾的值 */
+    var cfg = { on: true,
+      types: { know: true, word: true, poem: true, quiz: true },
+      subjects: { physics: true, chemistry: true, biology: true } };
+    if(raw && typeof raw === 'object'){
+      if(raw.on === false) cfg.on = false;
+      ['know', 'word', 'poem', 'quiz'].forEach(function(k){
+        if(raw.types && raw.types[k] === false) cfg.types[k] = false;
+      });
+      ['physics', 'chemistry', 'biology'].forEach(function(k){
+        if(raw.subjects && raw.subjects[k] === false) cfg.subjects[k] = false;
+      });
+    }
+    STATE.study = cfg;
+    paintStudy();
+  }).catch(function(e){
+    var b = $('stBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintStudy(){
+  var body = $('stBody');
+  if(!body) return;
+  var c = STATE.study || {};
+  var typeRows = STUDY_TYPES.map(function(t){
+    var on = !c.types || c.types[t.k] !== false;
+    return '<label class="st-row">'
+      + '<input type="checkbox" data-st-type="' + t.k + '"' + (on ? ' checked' : '') + '>'
+      + '<span class="st-info"><b>' + esc(t.name) + '</b><i>' + esc(t.desc) + '</i></span>'
+      + '</label>';
+  }).join('');
+  var subjRows = STUDY_SUBJECTS.map(function(s){
+    var on = !c.subjects || c.subjects[s.k] !== false;
+    return '<label class="st-row">'
+      + '<input type="checkbox" data-st-subj="' + s.k + '"' + (on ? ' checked' : '') + '>'
+      + '<span class="st-info"><b>' + esc(s.name) + '</b><i>' + esc(s.desc) + '</i></span>'
+      + '</label>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="field" style="margin-bottom:18px">'
+    +   '<label class="st-row" style="border:1px solid var(--btn-b);border-radius:12px;padding:11px 14px">'
+    +     '<input type="checkbox" id="stOn"' + (c.on !== false ? ' checked' : '') + '>'
+    +     '<span class="st-info"><b>启用学习卡片</b><i>关掉后首页不再显示这张卡片（同学自己的开关优先）</i></span>'
+    +   '</label>'
+    + '</div>'
+    + '<h4 style="margin:0 0 8px;font-size:.9rem">内容类型</h4>'
+    + '<div class="st-list">' + typeRows + '</div>'
+    + '<h4 style="margin:20px 0 8px;font-size:.9rem">学科知识点范围</h4>'
+    + '<p class="muted" style="font-size:.78rem;margin:0 0 8px">'
+    +   '只在勾选「学科知识点」时生效。每科条目数：物理 24 · 化学 33 · 生物 48。'
+    + '</p>'
+    + '<div class="st-list">' + subjRows + '</div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-st-type]'), function(cb){
+    cb.onchange = function(){ c.types[cb.dataset.stType] = cb.checked; };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-st-subj]'), function(cb){
+    cb.onchange = function(){ c.subjects[cb.dataset.stSubj] = cb.checked; };
+  });
+  var onBox = body.querySelector('#stOn');
+  if(onBox) onBox.onchange = function(){ c.on = onBox.checked; };
+}
+
+function saveStudy(){
+  var c = STATE.study;
+  if(!c){ toast('还没加载完，稍等一下', 'err'); return; }
+  var typeBox = $('stBody').querySelector('#stOn');
+  if(typeBox) c.on = typeBox.checked;
+
+  /* 校验：至少留一个内容类型，否则首页整块空白，站主以为是 bug */
+  var anyType = Object.keys(c.types).some(function(k){ return c.types[k]; });
+  if(c.on && !anyType){ toast('至少要勾一个内容类型', 'err', 3600); return; }
+  var anySubj = Object.keys(c.subjects).some(function(k){ return c.subjects[k]; });
+  if(c.on && c.types.know && !anySubj){ toast('勾了「学科知识点」，至少要选一个学科', 'err', 3600); return; }
+
+  var btn = $('stSave');
+  btn.disabled = true;
+  /* 走 /content PUT：要带上完整 items（后端是整份替换），
+     所以先 GET 一次拿全量，只改 study_card 这一个键。 */
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    items.study_card = c;
+    return api('/content', { method: 'PUT', body: { items: items } });
+  }).then(function(j){
+    if(j && j.ok === false) throw new Error(j.error || '保存失败');
+    btn.disabled = false;
+    toast('已保存，同学刷新首页即可看到', 'ok');
+  }).catch(function(e){
+    btn.disabled = false;
+    toast('保存失败：' + e.message, 'err', 4200);
+  });
+}
+
+/* ============================================================================
+ * ⑪-F 面板：重要日期 / 考试范围（2026-10-06 新增）
+ * ---------------------------------------------------------------------------
+ * 需求「重要日期 / 考试范围也要能上云」。
+ *
+ * 云端字段：important_dates
+ *   [
+ *     { name:"寒假", date:"2027-01-30T00:00:00" },                       ← 单日
+ *     { name:"第一次段考", date:"2026-10-13T00:00:00",
+ *       endDate:"2026-10-14",                                            ← 跨天事项才填
+ *       scope:[ { sub:"语文", txt:"..." }, ... ] }                       ← 填了才显示「查看考试范围」
+ *   ]
+ *
+ * ⚠️ 字段名必须与主站 index.html 里的 IMPORTANT_DATES 完全一致 ——
+ *    主站是**整体替换**这个数组（applyCloudContent 里对 important_dates 的特判），
+ *    这里多写/少写一个字段都会被静默吞掉：比如漏了 endDate，段考就退化成单日；
+ *    漏了 scope，「查看考试范围」按钮直接消失。所以下面硬编码这几个键名。
+ * ========================================================================= */
+function renderDates(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<button class="btn btn-sm" id="dtAdd">' + svg('plus', 14) + '新增日期</button>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="dtRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '这里的每一条都会出现在首页「重要日期」倒计时里。'
+    +   '填了「考试范围」的事项，同学点开才有「查看考试范围」按钮。<br>'
+    +   '<b>注意：清空云端不影响首页</b> —— 主站会自动回退到页面内置的那份日期，不会出现空白。'
+    + '</div>'
+    + '<section class="panel"><div id="dtBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('dtAdd').onclick     = function(){ dtDialog(null); };
+  $('dtRefresh').onclick = function(){ loadDates(); };
+  loadDates();
+}
+
+function loadDates(){
+  api('/content').then(function(j){
+    var items = (j && j.items) || {};
+    STATE.dates.list = Array.isArray(items.important_dates) ? items.important_dates : [];
+    paintDates();
+  }).catch(function(e){
+    var b = $('dtBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function dtFmtDate(v){
+  if(!v) return '—';
+  var d = new Date(v);
+  if(isNaN(d.getTime())) return String(v).slice(0, 10);
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+function paintDates(){
+  var body = $('dtBody');
+  if(!body) return;
+  var list = STATE.dates.list || [];
+
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('calendar', 38) + '<p>云端还没有重要日期</p>'
+      + '<p class="muted" style="font-size:.78rem">首页此刻显示的是页面内置的那份（寒假 + 第一次段考）</p></div>';
+    return;
+  }
+
+  var sorted = list.slice().sort(function(a, b){
+    return String(a.date || '') < String(b.date || '') ? -1 : 1;
+  });
+
+  body.innerHTML =
+    '<div class="muted" style="font-size:.78rem;margin-bottom:8px">共 <b>' + sorted.length + '</b> 项</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    +   '<th>名称</th><th class="nowrap" style="width:200px">日期</th>'
+    +   '<th class="nowrap" style="width:90px">考试范围</th>'
+    +   '<th style="text-align:right;width:130px">操作</th>'
+    + '</tr></thead><tbody>'
+    + sorted.map(function(d){
+        var dateText = dtFmtDate(d.date);
+        if(d.endDate) dateText += ' — ' + dtFmtDate(d.endDate);
+        var sc = Array.isArray(d.scope) ? d.scope.filter(function(x){ return x && x.txt; }) : [];
+        return '<tr>'
+          + '<td><b>' + esc(d.name || '(未命名)') + '</b></td>'
+          + '<td class="muted nowrap" style="font-size:.78rem">' + esc(dateText) + '</td>'
+          + '<td class="nowrap">' + (sc.length
+              ? '<span class="badge badge-blue">' + sc.length + ' 科</span>'
+              : '<span class="muted">无</span>') + '</td>'
+          + '<td style="text-align:right"><div class="row-actions">'
+          +   '<button data-dt-edit="' + esc(d.name) + '">编辑</button>'
+          +   '<button class="danger" data-dt-del="' + esc(d.name) + '">删除</button>'
+          + '</div></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dt-edit]'), function(b){
+    b.onclick = function(){ dtDialog(b.dataset.dtEdit); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-dt-del]'), function(b){
+    b.onclick = function(){ dtDelete(b.dataset.dtDel); };
+  });
+}
+
+/**
+ * 新增/编辑重要日期。
+ * @param {string|null} key 传 null = 新增；传名称 = 编辑那一条
+ */
+function dtDialog(key){
+  var list = STATE.dates.list || [];
+  var isNew = (key === null || key === undefined);
+  var d = isNew ? { name:'', date:'', endDate:'', scope:[] }
+                : (list.find(function(x){ return x.name === key; }) || { name:'', date:'', endDate:'', scope:[] });
+  var scope = Array.isArray(d.scope) ? d.scope.slice() : [];
+
+  /* 把 ISO 时间裁成 datetime-local 需要的 "YYYY-MM-DDTHH:mm" */
+  function toLocalInput(v){
+    if(!v) return '';
+    var t = String(v);
+    return t.length > 16 ? t.slice(0, 16) : t;
+  }
+  function toDayInput(v){ return v ? String(v).slice(0, 10) : ''; }
+
+  function scopeRows(){
+    if(!scope.length) return '<div class="muted" style="font-size:.78rem;padding:6px 0">还没有科目，点下面的「添加科目」</div>';
+    return scope.map(function(s, i){
+      return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start">'
+        + '<input data-sc-sub="' + i + '" value="' + attr(s.sub || '') + '" maxlength="12" placeholder="科目" style="width:80px;flex-shrink:0">'
+        + '<textarea data-sc-txt="' + i + '" rows="2" maxlength="600" placeholder="考试范围" style="flex:1">' + esc(s.txt || '') + '</textarea>'
+        + '<button type="button" class="btn btn-sm btn-ghost" data-sc-del="' + i + '" style="flex-shrink:0">' + svg('x', 13) + '</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  openModal({
+    title: isNew ? '新增重要日期' : ('编辑 ' + (d.name || '')),
+    sub: '跨天事项才填「结束日期」；不考试的事项不用填科目',
+    wide: true,
+    body:
+      '<div class="field"><label for="dtN">名称</label>'
+      + '<input id="dtN" maxlength="30" value="' + attr(d.name || '') + '" placeholder="例如：第一次段考"></div>'
+
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+      +   '<div class="field" style="flex:1;min-width:200px"><label for="dtD">开始时间</label>'
+      +   '<input id="dtD" type="datetime-local" value="' + attr(toLocalInput(d.date)) + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:180px"><label for="dtE">结束日期（可选）</label>'
+      +   '<input id="dtE" type="date" value="' + attr(toDayInput(d.endDate)) + '">'
+      +   '<p class="hint">只有跨天的事项才填，比如段考 13—14 日。</p></div>'
+      + '</div>'
+
+      + '<div class="field"><label>考试范围（可选）</label>'
+      +   '<div id="dtScope">' + scopeRows() + '</div>'
+      +   '<div style="margin-top:8px"><button type="button" class="btn btn-sm btn-ghost" id="dtScopeAdd">'
+      +   svg('plus', 13) + ' 添加科目</button></div>'
+      +   '<p class="hint">填了之后，同学在首页点这条才会看到「查看考试范围」入口。</p></div>'
+
+      + '<div class="msg" id="dtMsg"></div>',
+
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>' + (isNew ? '新增' : '保存') + '</button>',
+
+    onMount: function(box){
+      var scopeBox = box.querySelector('#dtScope');
+
+      /* 每一次重画都从 scope 数组重新生成，所以先把文本区里的改动收回去 */
+      function harvest(){
+        Array.prototype.forEach.call(box.querySelectorAll('[data-sc-sub]'), function(inp){
+          var i = Number(inp.dataset.scSub);
+          if(scope[i]) scope[i].sub = inp.value;
+        });
+        Array.prototype.forEach.call(box.querySelectorAll('[data-sc-txt]'), function(inp){
+          var i = Number(inp.dataset.scTxt);
+          if(scope[i]) scope[i].txt = inp.value;
+        });
+      }
+      function redraw(){
+        harvest();
+        scopeBox.innerHTML = scopeRows();
+        bind();
+      }
+      function bind(){
+        Array.prototype.forEach.call(scopeBox.querySelectorAll('[data-sc-del]'), function(b){
+          b.onclick = function(){ harvest(); scope.splice(Number(b.dataset.scDel), 1); redraw(); };
+        });
+      }
+      bind();
+
+      box.querySelector('#dtScopeAdd').onclick = function(){
+        harvest();
+        scope.push({ sub: '', txt: '' });
+        redraw();
+      };
+      box.querySelector('[data-no]').onclick = closeModal;
+
+      box.querySelector('[data-yes]').onclick = function(){
+        harvest();
+        var msg = box.querySelector('#dtMsg');
+        var name = (box.querySelector('#dtN').value || '').trim();
+        var date = (box.querySelector('#dtD').value || '').trim();
+        var end  = (box.querySelector('#dtE').value || '').trim();
+
+        if(!name){ msg.textContent = '名称不能为空'; msg.style.color = 'var(--danger,#af410f)'; return; }
+        if(!date){ msg.textContent = '请选择开始时间'; msg.style.color = 'var(--danger,#af410f)'; return; }
+        if(end && end < date.slice(0, 10)){
+          msg.textContent = '结束日期不能早于开始日期'; msg.style.color = 'var(--danger,#af410f)'; return;
+        }
+        /* 同名会被主站 openExamScope() 按 name 查找，重名就取到错的那条，必须拦住 */
+        var dup = (STATE.dates.list || []).some(function(x){
+          return x.name === name && x.name !== key;
+        });
+        if(dup){ msg.textContent = '已经有一条叫「' + name + '」的了，换个名字'; msg.style.color = 'var(--danger,#af410f)'; return; }
+
+        var item = { name: name, date: date };
+        if(end) item.endDate = end;
+        var real = scope.filter(function(s){ return (s.txt || '').trim(); })
+                        .map(function(s){ return { sub: (s.sub || '').trim(), txt: s.txt.trim() }; });
+        if(real.length) item.scope = real;
+
+        var next = (STATE.dates.list || []).slice();
+        if(isNew) next.push(item);
+        else{
+          var at = next.findIndex(function(x){ return x.name === key; });
+          if(at >= 0) next[at] = item; else next.push(item);
+        }
+
+        api('/content', { method:'PUT', body:{ items:{ important_dates: next } } })
+          .then(function(){
+            closeModal();
+            toast(isNew ? '已新增' : '已保存', 'ok', 3000);
+            loadDates();
+          })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
+      };
+    }
+  });
+}
+
+function dtDelete(key){
+  var list = STATE.dates.list || [];
+  var d = list.find(function(x){ return x.name === key; });
+  if(!d) return;
+  confirmBox({
+    title: '删除重要日期',
+    html: '确定删除 <b>' + esc(d.name || '') + '</b> 吗？',
+    detail: '删除后首页倒计时里不再显示这一条。',
+    danger: true,
+    okText: '删除'
+  }).then(function(ok){
+    if(!ok) return;
+    var next = list.filter(function(x){ return x.name !== key; });
+    api('/content', { method:'PUT', body:{ items:{ important_dates: next } } })
+      .then(function(){ toast('已删除', 'ok'); loadDates(); })
+      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
+  });
+}
+
+/* ============================================================================
+ * ⑫ 面板：班级资料管理（通讯录）
+ * ---------------------------------------------------------------------------
+ * 后端 /admin?action=profiles 返回：
+ *   { total, counts:{total,pending,approved,claimed}, profiles:[{ id, name,
+ *     studentId, politics, examNo, role, wechat, qq, phone, contactStatus,
+ *     rejectReason, userId, boundUsername, createdAt, updatedAt }] }
+ *
+ * 注意：这里的联系方式是**管理端明文视图**，只有管理员能看到。
+ * 同学那边未审核通过时只会拿到打码号码（见 api/profile.js 的 shapeProfile）。
+ * ========================================================================= */
+var CONTACT_LABEL = {
+  none:     { text:'未填写',  cls:'badge-gray'  },
+  pending:  { text:'待审核',  cls:'badge-amber' },
+  approved: { text:'已通过',  cls:'badge-green' },
+  rejected: { text:'已驳回',  cls:'badge-red'   }
+};
+
+/* ============================================================================
+ * 字段管理（2026-10-09 v2.4.0）
+ * ----------------------------------------------------------------------------
+ * 站主原话：「以后如果可以的话，我能不能在后台直接加……比如新增用户资料的某个区域」。
+ *
+ * 三个能力：
+ *   ① 看：列出所有字段（中文名 / 英文键 / 可见性 / 排序 / 填报数 / 是否自定义）
+ *   ② 加：新增自定义字段（自动 ALTER TABLE 加真列）
+ *   ③ 改：改中文名、改排序、快捷切换可见性（公开 / 班委 / 仅本人）
+ *   ④ 删：只能删自定义字段（系统字段删了会带崩代码）
+ *
+ * ⚠️ 英文键名只能是小写字母开头 + 小写字母/数字/下划线，服务端有严格白名单
+ *    （因为列名要拼进 ALTER TABLE，无法参数化）。前端这里先挡一道，体验更好。
+ * ========================================================================= */
+/* v3.4.1 新增 admin 档；v3.5.37 更名「仅后端可见」；v3.5.38 语义收紧到站主要求：
+   · 只能在**后台**（成员与档案 → 详情）查到；
+   · 前台一律看不到 —— 包括管理员自己的「我的资料」，也一样看不到；
+   · 前台任何身份查询任何人（含管理员查别人）都拿不到，连键都不下发。
+   实现：前台两条链路（search / me）传给 canSee 的 ctx.admin 恒为 false；
+   后台详情是 select p.* 直读整行，不经过可见性判定。 */
+var VIS_LABEL = { public:'公开', committee:'班委可见', self:'仅本人', admin:'仅后端可见' };
+var VIS_DESC  = {
+  public:    '已登录的同学都能查到',
+  committee: '只有班委（班长/团支书/课代表等）能查到',
+  self:      '只有本人查自己时能看到',
+  admin:     '只能在后端（成员与档案 → 详情）查到；前台任何人都看不到，包括管理员自己的「我的资料」'
+};
+
+function loadFieldMeta(){
+  return api('/admin?action=field-meta').then(function(j){
+    STATE.members.fieldMeta = j.fields || [];
+    STATE.members.totalProfiles = j.totalProfiles || 0;
+    return STATE.members.fieldMeta;
+  });
+}
+
+/* ============================================================================
+ * 字段校验规则（v3.5.5）
+ * ----------------------------------------------------------------------------
+ * 站主要求：「所有字段支持管理员自定义配置校验规则」——
+ *   文本（最大/最小字符数）、数字（固定位数/数值范围/仅允许数字）、
+ *   时间（选择器录入/可限区间）、下拉单选多选（后台自定义选项）。
+ *
+ * ⚠️ 服务端（api/_lib/field-rules.js）是唯一裁判，这里只是让正确输入
+ *    更容易：批量导入 / 直接调 API 都能绕过 UI，规则在服务端复核。
+ * ⚠️ 与服务端 normalizeRules 同语义：空值恒放过、选项去重保序。
+ * ========================================================================= */
+
+/** 取某字段的校验规则（STATE 里已由服务端 normalize 过） */
+function ruleOf(field){
+  var meta = STATE.members.fieldMeta || STATE.profiles.fieldMeta || [];
+  for(var i=0;i<meta.length;i++) if(meta[i].field === field) return meta[i].rules || {};
+  return {};
+}
+
+/** 规则的一句话人话（字段列表 / 报错文案用，与服务端 describeRules 对齐） */
+function ruleDesc(rules){
+  var r = rules || {};
+  if(r.type === 'text'){
+    if(r.minLen && r.maxLen) return '文本 ' + r.minLen + '–' + r.maxLen + ' 字符';
+    if(r.maxLen) return '文本最多 ' + r.maxLen + ' 字符';
+    if(r.minLen) return '文本至少 ' + r.minLen + ' 字符';
+    return '文本';
+  }
+  if(r.type === 'number'){
+    if(r.digits) return '数字固定 ' + r.digits + ' 位';
+    if(r.min != null && r.max != null) return '数字 ' + r.min + '–' + r.max;
+    if(r.min != null) return '数字 ≥ ' + r.min;
+    if(r.max != null) return '数字 ≤ ' + r.max;
+    return '数字';
+  }
+  if(r.type === 'time'){
+    /* v3.5.15：精确到日 / 月 / 年（入团时间只到月份） */
+    var p = r.precision || 'day';
+    var base = p === 'year' ? '年份' : p === 'month' ? '年月' : '日期';
+    var fmt  = p === 'year' ? 'YYYY' : p === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
+    if(r.min && r.max) return base + ' ' + fmt + '，' + r.min + ' ~ ' + r.max;
+    if(r.min) return base + ' ' + fmt + '，不早于 ' + r.min;
+    if(r.max) return base + ' ' + fmt + '，不晚于 ' + r.max;
+    return base + '（' + fmt + '）';
+  }
+  if(r.type === 'select') return (r.multi ? '多选' : '单选') + '：' + (r.options || []).join(' / ');
+  return '';
+}
+
+/**
+ * 按规则渲染输入控件（资料编辑弹窗用）。
+ * @param field  字段键名（写进 data-xf，保存时按它收集值）
+ * @param rules  该字段的规则
+ * @param val    当前值
+ * @param id     元素 id
+ * @param ph     占位提示
+ * @param multiHost 多选的隐藏输入宿主 id 前缀（默认与 id 相同）
+ */
+function ruleInputHtml(field, rules, val, id, ph){
+  var r = rules || {};
+  var v = val == null ? '' : String(val);
+  if(r.type === 'select'){
+    var opts = r.options || [];
+    if(r.multi){
+      /* 多选：复选框组 + 隐藏输入（逗号分隔值），保存路径不改 */
+      var cur = v ? v.split(/[,，]/).map(function(s){ return s.trim(); }).filter(Boolean) : [];
+      var hid = id + '_hid';
+      var h = '<input type="hidden" id="' + attr(hid) + '" data-xf="' + attr(field) + '" value="' + attr(cur.join(',')) + '">';
+      h += '<div id="' + attr(id) + '" class="rule-multi">';
+      opts.forEach(function(o, i){
+        h += '<label class="chk"><input type="checkbox" value="' + attr(o) + '"'
+          + (cur.indexOf(o) >= 0 ? ' checked' : '') + '> ' + esc(o) + '</label>';
+      });
+      h += '</div>';
+      /* 勾选变化 → 同步隐藏输入（onMount 后由调用方绑定，这里用 onchange 内联最省事） */
+      return h;
+    }
+    var s = '<select id="' + attr(id) + '" class="inp" data-xf="' + attr(field) + '">'
+      + '<option value=""' + (v ? '' : ' selected') + '>（未填）</option>';
+    if(v && opts.indexOf(v) < 0){
+      s += '<option value="' + attr(v) + '" selected>' + esc(v) + '（历史值，规则外）</option>';
+    }
+    opts.forEach(function(o){
+      s += '<option value="' + attr(o) + '"' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>';
+    });
+    return s + '</select>';
+  }
+  if(r.type === 'time'){
+    /* v3.5.15：按精度给不同控件 —— 精确到月用 month（选年月），精确到年用四位数字。
+       历史值比精度更细时先截断，否则 type=month 会显示成空。 */
+    var p = r.precision || 'day';
+    if(p === 'year'){
+      return '<input id="' + attr(id) + '" class="inp" inputmode="numeric" maxlength="4" data-xf="' + attr(field) + '"'
+        + ' value="' + attr(v.slice(0, 4)) + '" placeholder="如 2024">';
+    }
+    if(p === 'month'){
+      return '<input id="' + attr(id) + '" class="inp" type="month" data-xf="' + attr(field) + '"'
+        + ' value="' + attr(v.slice(0, 7)) + '"' + (r.min ? ' min="' + attr(r.min) + '"' : '')
+        + (r.max ? ' max="' + attr(r.max) + '"' : '') + '>';
+    }
+    return '<input id="' + attr(id) + '" class="inp" type="date" data-xf="' + attr(field) + '"'
+      + ' value="' + attr(v) + '"' + (r.min ? ' min="' + attr(r.min) + '"' : '')
+      + (r.max ? ' max="' + attr(r.max) + '"' : '') + '>';
+  }
+  if(r.type === 'number'){
+    return '<input id="' + attr(id) + '" class="inp" inputmode="numeric" data-xf="' + attr(field) + '"'
+      + ' value="' + attr(v) + '" maxlength="' + (r.digits || 20) + '"'
+      + ' placeholder="' + attr(ph || (r.digits ? r.digits + ' 位数字' : '数字')) + '">';
+  }
+  /* text / 无规则：短文本，按 maxLen 限长（无规则时 200） */
+  return '<input id="' + attr(id) + '" class="inp" data-xf="' + attr(field) + '"'
+    + ' value="' + attr(v) + '" maxlength="' + (r.maxLen || 200) + '"'
+    + ' placeholder="' + attr(ph || '') + '">';
+}
+
+/** 多选复选框组 → 隐藏输入同步（ruleInputHtml 的多选分支渲染后调用） */
+function bindRuleMulti(box, id){
+  var host = box.querySelector('#' + id) || box.querySelector('[id="' + id + '"]');
+  var hid  = document.getElementById(id + '_hid');
+  if(!host || !hid) return;
+  Array.prototype.forEach.call(host.querySelectorAll('input[type=checkbox]'), function(cb){
+    cb.onchange = function(){
+      var picked = [];
+      Array.prototype.forEach.call(host.querySelectorAll('input[type=checkbox]'), function(c){
+        if(c.checked) picked.push(c.value);
+      });
+      hid.value = picked.join(',');
+    };
+  });
+}
+
+/* ---- 规则编辑器（新增 / 编辑字段弹窗里共用） ---- */
+var RULE_TYPE_LABEL = {
+  '':   '不校验（随便填）',
+  text: '文本 —— 限字符数',
+  number: '数字 —— 限位数 / 数值范围',
+  time: '日期 —— 选择器录入，可限区间',
+  select: '下拉选择 —— 自定义选项，禁止自由输入'
+};
+
+function ruleEditorHtml(rules){
+  var r = rules || {};
+  var t = r.type || '';
+  var h = '<div class="field"><label>校验规则</label>'
+    + '<select id="ffRuleType" class="inp">'
+    + Object.keys(RULE_TYPE_LABEL).map(function(k){
+        return '<option value="' + attr(k) + '"' + (k === t ? ' selected' : '') + '>'
+          + esc(RULE_TYPE_LABEL[k]) + '</option>';
+      }).join('')
+    + '</select>'
+    + '<div class="muted" style="font-size:.74rem;margin-top:6px">'
+    +   '留空 = 不限制。规则在服务端复核，批量导入同样生效；空值一律放过（没有必填概念）。'
+    + '</div></div>'
+    + '<div id="ffRuleBody"></div>';
+  return h;
+}
+
+/** 按当前选中的类型渲染规则参数区（类型下拉变化时调用） */
+function paintRuleBody(rules){
+  var box = $('ffRuleBody');
+  if(!box) return;
+  var t = ($('ffRuleType') || {}).value || '';
+  var r = rules || {};
+  var h = '';
+  if(t === 'text'){
+    h = '<div class="mb-form-grid">'
+      + '<div class="field"><label>最少字符</label><input id="ffRMinLen" class="inp" inputmode="numeric" maxlength="3" value="' + attr(r.minLen || '') + '" placeholder="不填 = 不限"></div>'
+      + '<div class="field"><label>最多字符</label><input id="ffRMaxLen" class="inp" inputmode="numeric" maxlength="3" value="' + attr(r.maxLen || '') + '" placeholder="不填 = 不限"></div>'
+      + '</div><p class="hint" style="margin-top:-4px">按字符数算，中文一个字算一个。</p>';
+  } else if(t === 'number'){
+    h = '<div class="field"><label>固定位数</label><input id="ffRDigits" class="inp" inputmode="numeric" maxlength="2" value="' + attr(r.digits || '') + '" placeholder="如手机号填 11；与范围二选一或都填"></div>'
+      + '<div class="mb-form-grid"><div class="field"><label>最小值</label><input id="ffRMin" class="inp" inputmode="numeric" value="' + attr(r.min == null ? '' : r.min) + '" placeholder="不限"></div>'
+      + '<div class="field"><label>最大值</label><input id="ffRMax" class="inp" inputmode="numeric" value="' + attr(r.max == null ? '' : r.max) + '" placeholder="不限"></div></div>'
+      + '<p class="hint" style="margin-top:-4px">只能填数字，字母符号一律拒绝。</p>';
+  } else if(t === 'time'){
+    /* v3.5.15：站主要求「入团时间精确到月份」—— 加「精确到」三档，
+       区间输入框跟着变（date / month / 四位年份）。 */
+    var prec = r.precision || 'day';
+    var boundInput = function(bid, val){
+      if(prec === 'year') return '<input id="' + bid + '" class="inp" inputmode="numeric" maxlength="4" value="' + attr(val || '') + '" placeholder="如 2020">';
+      if(prec === 'month') return '<input id="' + bid + '" class="inp" type="month" value="' + attr(val || '') + '">';
+      return '<input id="' + bid + '" class="inp" type="date" value="' + attr(val || '') + '">';
+    };
+    h = '<div class="field"><label>精确到</label>'
+      + '<select id="ffRPrec" class="inp">'
+      +   '<option value="day"' + (prec === 'day' ? ' selected' : '') + '>日 —— 2024-05-13</option>'
+      +   '<option value="month"' + (prec === 'month' ? ' selected' : '') + '>月 —— 2024-05（入团时间这类只到月份）</option>'
+      +   '<option value="year"' + (prec === 'year' ? ' selected' : '') + '>年 —— 2024</option>'
+      + '</select></div>'
+      + '<div class="mb-form-grid">'
+      + '<div class="field"><label>不早于</label>' + boundInput('ffRMin', r.min) + '</div>'
+      + '<div class="field"><label>不晚于</label>' + boundInput('ffRMax', r.max) + '</div>'
+      + '</div><p class="hint" style="margin-top:-4px">填「月」时，表格里写 2024-05、2024/5、2024年5月 都能导入。</p>';
+    /* 换精度后重建这一块（把已填的区间 / 精度带上，不丢） */
+    setTimeout(function(){
+      var sel = $('ffRPrec');
+      if(!sel) return;
+      sel.onchange = function(){
+        paintRuleBody({ type:'time', precision: sel.value,
+          min: ($('ffRMin') || {}).value || '', max: ($('ffRMax') || {}).value || '' });
+      };
+    }, 0);
+  } else if(t === 'select'){
+    var opts = (r.options || []).slice();
+    h = '<div class="field"><label><label class="chk" style="display:inline-flex"><input type="checkbox" id="ffRMulti"' + (r.multi ? ' checked' : '') + '> 多选</label></label>'
+      + '<div id="ffOpts">'
+      + opts.map(function(o, i){
+          return '<div class="opt-row" style="display:flex;gap:6px;margin-bottom:6px">'
+            + '<input class="inp ff-opt" value="' + attr(o) + '" maxlength="40" placeholder="选项文字">'
+            + '<button class="btn btn-sm btn-secondary ff-opt-del" type="button">删</button></div>';
+        }).join('')
+      + '</div>'
+      + '<button class="btn btn-sm btn-secondary" id="ffOptAdd" type="button">+ 添加选项</button>'
+      + '<p class="hint" style="margin-top:6px">同学只能从这些选项里选，禁止自由输入。</p></div>';
+  }
+  box.innerHTML = h;
+  var add = $('ffOptAdd');
+  if(add) add.onclick = function(){
+    var row = document.createElement('div');
+    row.className = 'opt-row';
+    row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px';
+    row.innerHTML = '<input class="inp ff-opt" maxlength="40" placeholder="选项文字">'
+      + '<button class="btn btn-sm btn-secondary ff-opt-del" type="button">删</button>';
+    $('ffOpts').appendChild(row);
+    row.querySelector('.ff-opt-del').onclick = function(){ row.parentNode.removeChild(row); };
+    row.querySelector('.ff-opt').focus();
+  };
+  Array.prototype.forEach.call(box.querySelectorAll('.ff-opt-del'), function(b){
+    b.onclick = function(){ b.parentNode.parentNode.removeChild(b.parentNode); };
+  });
+}
+
+/** 从规则编辑器收集规则对象（形状交给服务端 normalize 兜底） */
+function collectRules(){
+  var t = ($('ffRuleType') || {}).value || '';
+  if(!t) return {};
+  if(t === 'text'){
+    var o = { type:'text' };
+    var mn = Number(($('ffRMinLen') || {}).value || 0), mx = Number(($('ffRMaxLen') || {}).value || 0);
+    if(mn > 0) o.minLen = mn;
+    if(mx > 0) o.maxLen = mx;
+    return o;
+  }
+  if(t === 'number'){
+    var n = { type:'number' };
+    var d = Number(($('ffRDigits') || {}).value || 0);
+    var lo = ($('ffRMin') || {}).value, hi = ($('ffRMax') || {}).value;
+    if(d > 0) n.digits = d;
+    if(lo !== '' && lo != null && isFinite(Number(lo))) n.min = Number(lo);
+    if(hi !== '' && hi != null && isFinite(Number(hi))) n.max = Number(hi);
+    return n;
+  }
+  if(t === 'time'){
+    var tm = { type:'time' };
+    /* v3.5.15：precision 决定这是「日 / 月 / 年」哪一档 */
+    var pr = ($('ffRPrec') || {}).value || 'day';
+    if(pr !== 'day') tm.precision = pr;
+    var a = ($('ffRMin') || {}).value, b2 = ($('ffRMax') || {}).value;
+    if(a) tm.min = a;
+    if(b2) tm.max = b2;
+    return tm;
+  }
+  /* select：选项去空白、去重、保序（与服务端同规则） */
+  var seen = {}, list = [];
+  Array.prototype.forEach.call(document.querySelectorAll('.ff-opt'), function(inp){
+    var s = (inp.value || '').trim();
+    if(!s || seen[s]) return;
+    seen[s] = 1; list.push(s);
+  });
+  return { type:'select', options:list, multi:!!(($('ffRMulti') || {}).checked) };
+}
+
+/* ============================================================================
+ * 一键加密存量资料（v3.5.1）
+ * ---------------------------------------------------------------------------
+ * 站主要求：「之前的那些资料，在更改加密方式之前的，现在可以加密吗？
+ * 我不可能重新再导一次，因为量太多了。」
+ *
+ * 于是有了这个按钮：扫一遍数据库，把**还是明文**的字段就地加密，
+ * 已经是密文的自动跳过（幂等，中途断了再点一次就行，不会叠层）。
+ *
+ * ⚠️ 为什么前端要循环调用而不是一次搞定：
+ *    Cloudflare Workers 免费版单个请求最多 50 个子请求，一行资料的 UPDATE
+ *    算一次。全班 50 多人一次跑完会 500，所以每批 15 条、循环到 remaining=0。
+ * ⚠️ 按钮运行期间禁用，防止重复点导致两批并发写同一行。
+ * ========================================================================= */
+function encryptAllProfiles(){
+  openModal({
+    title: '一键加密存量资料',
+    sub: '把数据库中还是明文的资料就地加密（姓名、学号、身份证、微信等）',
+    body:
+      '<div class="alert info" style="margin:0 0 12px">'
+    + '  v3.5.0 起新保存的资料会自动加密，<b>以前导入的资料仍是明文</b>。'
+    + '  这个按钮会把它们<b>就地</b>转成密文 —— 不用重新导入、不会改动任何内容，'
+    + '  前台与后台的显示也完全不变。<br>'
+    + '  全班约 50 人会分几批处理，每批 15 条，<b>请保持页面打开</b>直到提示完成。'
+    + '</div>'
+    + '<div id="encStat" class="muted" style="font-size:.82rem;line-height:1.8">准备开始…</div>'
+    + '<div id="encBar" style="height:6px;border-radius:999px;background:#f0e7de;overflow:hidden;margin-top:10px">'
+    + '  <div id="encBarIn" style="height:100%;width:0;background:#b45309;transition:width .25s"></div>'
+    + '</div>',
+    foot:
+      '<button class="btn btn-secondary" id="encClose">关闭</button>'
+    + '<button class="btn" id="encGo">开始加密</button>',
+    onMount: function(){
+      var stat = $('encStat'), bar = $('encBarIn');
+      var go = $('encGo'), close = $('encClose');
+      close.onclick = closeModal;
+      go.onclick = function(){ go.disabled = true; go.textContent = '处理中…'; run(); };
+
+      function setText(t, pct){
+        if(stat) stat.innerHTML = t;
+        if(bar && pct != null) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      }
+
+      /* 每批 15 条，最多跑 12 批（= 180 条，够一个年级；防死循环） */
+      function run(){
+        var batch = 0, total = 0;
+        function step(){
+          if(batch >= 12){
+            setText('⚠️ 已处理 12 批仍未完成，请再点一次「开始加密」继续。', 100);
+            go.disabled = false; go.textContent = '再跑一批';
+            return;
+          }
+          api('/admin?action=encrypt-profiles', {
+            method: 'POST',
+            body: { limit: 15 },
+          }).then(function(j){
+            total += (j.encrypted || 0);
+            batch++;
+            var all = j.totalProfiles || 0;
+            var left = j.plainLeft || 0;
+            var pct = all ? ((all - left) / all * 100) : 100;
+            if(j.done || left === 0){
+              setText('✅ 全部完成：共加密 <b>' + total + '</b> 条资料'
+                + (j.skipped ? '（' + j.skipped + ' 条本就无需处理）' : '')
+                + '。<br>现在数据库里这些字段都是密文了，前台后台照常显示。', 100);
+              go.textContent = '已完成';
+              go.disabled = true;
+              loadMembers();
+              return;
+            }
+            setText('正在处理… 已加密 <b>' + total + '</b> 条，还剩约 <b>' + left + '</b> 条', pct);
+            setTimeout(step, 60);
+          }).catch(function(e){
+            setText('❌ 出错了：' + esc(e.message)
+              + '<br>已成功的批次不会丢，点「开始加密」会从没处理过的地方继续。', null);
+            go.disabled = false; go.textContent = '继续';
+          });
+        }
+        step();
+      }
+    },
+  });
+}
+
+function renderFieldPanel(){
+  var body = $('mbFieldBody');
+  if(!body) return;
+  body.innerHTML = '<div class="loading"><div class="spinner"></div>加载字段…</div>';
+
+  loadFieldMeta().then(function(list){
+    paintFieldPanel(list);
+  }).catch(function(e){
+    body.innerHTML = '<div class="alert danger" style="margin:14px">加载字段失败：' + esc(e.message) + '</div>';
+  });
+}
+
+/* ============================================================================
+ * v3.6.1：字段体检 / 恢复预置字段
+ * ----------------------------------------------------------------------------
+ * 站主原话：「字段管理之前的那些比如入团时间、发展团员编号那些你前几次更新
+ *           的时候直接给我删了，我现在后台没有数据，看看能不能恢复。」
+ *
+ * 先体检、再恢复，两步走：
+ *   · 体检告诉你：字段表还剩几行、墓碑里躺了谁、17 个预置字段哪些定义没了、
+ *     哪些列已经不存在（列没了 = 数据也没了，只能重新录入）；
+ *   · 恢复会清空墓碑 + 补回定义（列还在的，值立刻回来）。
+ * ========================================================================= */
+function repairFieldsDialog(){
+  api('/admin?action=repair-fields', { method:'POST', body:{} }).then(function(j){
+    var cols = j.columns || [];
+    var noMeta = cols.filter(function(x){ return !x.hasMeta; }).map(function(x){ return x.label; });
+    var noCol = cols.filter(function(x){ return !x.hasColumn; }).map(function(x){ return x.label; });
+    var tomb = j.tombstoned || [];
+    var html = '<div class="alert info" style="margin-bottom:12px">'
+      + '当前字段表 <b>' + (j.metaCount || 0) + '</b> 行；'
+      + '「已删除记录」里有 <b>' + tomb.length + '</b> 个字段'
+      + (tomb.length ? '（' + esc(tomb.slice(0, 12).join('、')) + (tomb.length > 12 ? '…' : '') + '）' : '')
+      + '。<br>这些记录会让每次升级都再删一遍对应字段 —— 恢复时会一并清空。</div>'
+      + (noMeta.length
+          ? '<div class="alert warn" style="margin-bottom:10px">缺少字段定义：' + esc(noMeta.join('、')) + '</div>'
+          : '<div class="alert ok" style="margin-bottom:10px">17 个预置字段的定义都在。</div>')
+      + (noCol.length
+          ? '<div class="alert danger" style="margin-bottom:10px">以下字段的**数据库列已不存在**：'
+            + esc(noCol.join('、'))
+            + '<br><span style="font-size:.78rem">这几项的历史数据无法通过本操作找回（列被删除时值就没了）。'
+            + '恢复会重建空列，之后可以重新录入或从旧表格导入。</span></div>'
+          : '<div class="alert ok">所有预置字段的数据库列都还在 —— 恢复后数据会立刻回来。</div>')
+      + '<p class="hint">恢复只补「定义」和「默认校验规则」，不会覆盖你改过的可见性、标签、本人可编辑开关。</p>';
+    openModal({
+      title: '字段体检 / 恢复', sub: '先把损失范围看清楚，再决定要不要恢复',
+      body: html,
+      foot: '<button class="btn btn-secondary" id="ffRpCancel">取消</button>'
+          + '<button class="btn" id="ffRpGo">恢复预置字段</button>',
+      onMount: function(box){
+        box.querySelector('#ffRpCancel').onclick = closeModal;
+        box.querySelector('#ffRpGo').onclick = function(){
+          var go = box.querySelector('#ffRpGo');
+          go.disabled = true; go.textContent = '恢复中…';
+          api('/admin?action=repair-fields', { method:'POST', body:{ apply:true } })
+            .then(function(r){
+              closeModal();
+              var msg = '已恢复。有数据的字段 ' + ((r.recovered||[]).length) + ' 个';
+              if((r.stillEmpty||[]).length) msg += '；仍为空：' + (r.stillEmpty||[]).map(function(x){ return x.label; }).join('、');
+              toast(msg, 'ok');
+              renderFieldPanel();
+            })
+            .catch(function(e){
+              go.disabled = false; go.textContent = '恢复预置字段';
+              toast('恢复失败：' + (e.message || e), 'danger');
+            });
+        };
+      },
+    });
+  }).catch(function(e){ toast('体检失败：' + (e.message || e), 'danger'); });
+}
+
+function paintFieldPanel(list){
+  var body = $('mbFieldBody');
+  if(!body) return;
+  var total = STATE.members.totalProfiles || 0;
+
+  var rows = list.map(function(f){
+    var visBadge = '<span class="badge ' + (f.visibility === 'public' ? 'badge-gray'
+                   : f.visibility === 'committee' ? 'badge-blue' : 'badge-orange') + '">'
+                   + esc(VIS_LABEL[f.visibility] || f.visibility) + '</span>';
+    var filled = f.filledCount == null ? '<span class="muted">—</span>'
+                   : '<span class="mono">' + f.filledCount + ' / ' + total + '</span>';
+
+    /* 快捷切换可见性：三个小按钮，当前档高亮 */
+    var quick = ['public', 'committee', 'self', 'admin'].map(function(v){
+      return '<button class="btn btn-xs' + (f.visibility === v ? '' : ' btn-secondary')
+        + '" data-fv="' + v + '" data-ff="' + attr(f.field) + '" title="' + attr(VIS_DESC[v]) + '">'
+        + esc(VIS_LABEL[v]) + '</button>';
+    }).join(' ');
+
+    var tag = f.isCustom
+      ? '<span class="badge badge-green">自定义</span>'
+      : '<span class="badge badge-gray">系统</span>';
+
+    /* v3.5.5 校验规则徽标：一句话人话 + 类型徽章 */
+    var rd = ruleDesc(f.rules);
+    var ruleCell = rd
+      ? '<span class="badge badge-blue" title="' + attr(rd) + '">' + esc(rd) + '</span>'
+      : '<span class="muted">未设置</span>';
+
+    return '<tr data-ff-row="' + attr(f.field) + '">'
+      /* v3.5.14 #7：拖这个把手调整顺序（原来要点「排序」手输数字） */
+      + '<td class="ff-drag"><span class="ff-grip" title="按住拖动调整顺序">⠿</span></td>'
+      + '<td><b>' + esc(f.label) + '</b>'
+      +   '<div class="mono muted" style="font-size:.72rem">' + esc(f.field) + '</div></td>'
+      + '<td class="nowrap">' + visBadge + '</td>'
+      + '<td class="nowrap">' + quick + '</td>'
+      /* v3.5.40（站主 #1）：本人可编辑 —— 开着同学能自己改，关着只能后台改 */
+      + '<td class="nowrap">'
+      +   '<button class="btn btn-xs' + (f.selfEdit ? '' : ' btn-secondary') + '"'
+      +     ' data-fse="' + attr(f.field) + '" data-fsel="' + attr(f.label) + '"'
+      +     ' data-fson="' + (f.selfEdit ? '1' : '0') + '"'
+      +     ' title="' + attr(f.selfEdit ? '同学可以自己改这一项（点击关闭）' : '只有后台能改（点击开放给本人）') + '">'
+      +     (f.selfEdit ? '✓ 允许' : '不允许') + '</button>'
+      + '</td>'
+      + '<td class="nowrap mono">' + (f.sortOrder != null ? f.sortOrder : '—') + '</td>'
+      + '<td class="nowrap">' + filled + '</td>'
+      + '<td class="nowrap">' + ruleCell + '</td>'
+      + '<td class="nowrap">' + tag + '</td>'
+      + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
+      +   '<button data-fe="rule" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '" data-fr="' + attr(JSON.stringify(f.rules || {})) + '">规则</button>'
+      +   '<button data-fe="rename" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '">改名</button>'
+      /* v3.5.14 #7：系统字段也允许删（姓名/学号由后端硬保护）。
+         非自定义字段删除时前端会要求手输字段名确认。 */
+      +   '<button class="danger" data-fe="del" data-ff="' + attr(f.field) + '" data-fl="' + attr(f.label) + '"'
+      +     (f.isCustom ? '' : ' data-force="1"') + '>删除</button>'
+      + '</div></td>'
+      + '</tr>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="panel-head" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px 0">'
+    + '<h3 style="margin:0;font-size:.95rem">字段管理</h3>'
+    + '<span class="muted" style="font-size:.76rem">共 ' + list.length + ' 个字段'
+    +   '（其中自定义 ' + list.filter(function(f){ return f.isCustom; }).length + ' 个）</span>'
+    + '<span style="flex:1"></span>'
+    + '<button class="btn btn-sm" id="ffAdd">' + svg('plus', 14) + '新增字段</button>'
+    + '<button class="btn btn-sm btn-secondary" id="ffRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin:14px 16px 0">'
+    +   '可见性是<b>全班默认</b>：改这里会影响所有同学。想只调某一个人，'
+    +   '去他的「编辑」弹窗里改（那里的设置只对该同学生效）。'
+    +   '本人也可以在个人中心把联系方式收窄为「仅自己可见」。'
+    + '</div>'
+    + '<div class="table-wrap" style="margin-top:12px"><table><thead><tr>'
+    + '<th class="nowrap" title="按住把手上下拖动即可调整顺序">拖动</th>'
+    + '<th>字段</th><th class="nowrap">可见性</th><th class="nowrap">快捷切换</th>'
+    + '<th class="nowrap" title="打开后，同学可以在「我的资料」里自己改这一项">本人可编辑</th>'
+    + '<th class="nowrap">已填</th><th class="nowrap">校验规则</th><th class="nowrap">类型</th>'
+    + '<th style="text-align:right">操作</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  var addBtn = $('ffAdd');
+  if(addBtn) addBtn.onclick = addFieldDialog;
+  var rfBtn = $('ffRefresh');
+  if(rfBtn) rfBtn.onclick = renderFieldPanel;
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-fv]'), function(b){
+    b.onclick = function(){
+      var f = b.dataset.ff, v = b.dataset.fv;
+      api('/admin?action=set-visibility', { method:'POST', body:{ field:f, visibility:v } })
+        .then(function(){ toast('已把「' + f + '」改为' + VIS_LABEL[v]); renderFieldPanel(); })
+        .catch(function(e){ toast(e.message, 'danger'); });
+    };
+  });
+  /* v3.5.40（站主 #1）：本人可编辑开关 */
+  Array.prototype.forEach.call(body.querySelectorAll('[data-fse]'), function(b){
+    b.onclick = function(){
+      var f = b.dataset.fse, label = b.dataset.fsel;
+      var next = b.dataset.fson !== '1';
+      b.disabled = true;
+      api('/admin?action=set-self-edit', { method:'POST', body:{ field:f, selfEdit:next } })
+        .then(function(){
+          toast(next ? ('已允许本人编辑「' + label + '」') : ('已关闭「' + label + '」的本人编辑'), 'ok');
+          renderFieldPanel();
+        })
+        .catch(function(e){ b.disabled = false; toast(e.message, 'danger'); });
+    };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-fe]'), function(b){
+    var f = b.dataset.ff;
+    if(b.dataset.fe === 'rule')   b.onclick = function(){ rulesFieldDialog(f, b.dataset.fl, JSON.parse(b.dataset.fr || '{}')); };
+    if(b.dataset.fe === 'rename') b.onclick = function(){ renameFieldDialog(f, b.dataset.fl); };
+    if(b.dataset.fe === 'del')    b.onclick = function(){ deleteFieldConfirm(f, b.dataset.fl, b.dataset.force === '1'); };
+  });
+
+  /* v3.5.14 #7：字段拖拽排序（后台这版不依赖主站的动效开关，精简实现） */
+  var tbody = body.querySelector('tbody');
+  if(tbody) attachFieldDrag(tbody);
+}
+
+/** 后台字段表拖拽：按住把手上下拖，松手批量保存一次 */
+function attachFieldDrag(tbody){
+  var st = null;
+  function rowsNow(){ return Array.prototype.slice.call(tbody.querySelectorAll('tr[data-ff-row]')); }
+  tbody.addEventListener('pointerdown', function(e){
+    var g = e.target.closest && e.target.closest('.ff-grip');
+    if(!g) return;
+    var row = g.closest('tr[data-ff-row]');
+    if(!row) return;
+    e.preventDefault();
+    st = { row: row, pid: e.pointerId };
+    row.classList.add('dragging');
+    try{ g.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  tbody.addEventListener('pointermove', function(e){
+    if(!st || e.pointerId !== st.pid) return;
+    if(e.cancelable) e.preventDefault();
+    var rows = rowsNow();
+    if(rows.length < 2) return;
+    var cur = rows.indexOf(st.row);
+    var target = cur;
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i].getBoundingClientRect();
+      if(e.clientY < r.top + r.height / 2){ target = i; break; }
+      target = i;
+    }
+    if(target === cur) return;
+    if(target > cur) tbody.insertBefore(st.row, rows[target].nextSibling);
+    else tbody.insertBefore(st.row, rows[target]);
+  });
+  function finish(e){
+    if(!st) return;
+    st.row.classList.remove('dragging');
+    st = null;
+    var order = rowsNow().map(function(r){ return r.getAttribute('data-ff-row'); });
+    api('/admin?action=reorder-fields', { method:'POST', body:{ fields: order } })
+      .then(function(j){ toast(j.message || '排序已保存', 'ok'); renderFieldPanel(); })
+      .catch(function(err){ toast(err.message || String(err), 'danger'); renderFieldPanel(); });
+  }
+  tbody.addEventListener('pointerup', finish);
+  tbody.addEventListener('pointercancel', finish);
+}
+
+/** ============================================================================
+ * v3.5.15：新增字段时「英文键名」按中文名自动生成（站主要求）
+ * ----------------------------------------------------------------------------
+ * 规则（我定的，够用且稳定）：
+ *   ① 先查整词表 —— 班级资料高频字段直接给地道英文（学籍号 → student_no）
+ *   ② 否则逐字转拼音（间 → jian），英文数字原样保留，空格/连字符转下划线
+ *   ③ 认不出的汉字退化成 u+码点（如 㛃 → u36c3），保证键名永远合法
+ *   ④ 结果强制小写字母开头、≤31 字符；真的空就 field_<时间戳后 4 位>
+ *   用户随时能在弹窗里改，改过之后就不再自动覆盖。
+ * ========================================================================= */
+var FIELD_PINYIN = (function(){
+  var raw = '时:shi 间:jian 日:ri 期:qi 年:nian 月:yue 学:xue 号:hao 籍:ji 入:ru 团:tuan '
+    + '家:jia 庭:ting 住:zhu 址:zhi 姓:xing 名:ming 长:zhang 电:dian 话:hua 手:shou 机:ji '
+    + '微:wei 信:xin 邮:you 箱:xiang 身:shen 份:fen 证:zheng 考:kao 试:shi 编:bian 班:ban '
+    + '级:ji 校:xiao 民:min 族:zu 政:zheng 治:zhi 面:mian 貌:mao 性:xing 别:bie 男:nan 女:nv '
+    + '出:chu 生:sheng 宿:su 舍:she 床:chuang 位:wei 寝:qin 室:shi 爱:ai 好:hao 特:te 社:she '
+    + '职:zhi 务:wu 备:bei 注:zhu 分:fen 组:zu 户:hu 贯:guan 监:jian 护:hu 人:ren 联:lian '
+    + '系:xi 方:fang 式:shi 地:di 码:ma 尺:chi 寸:cun 服:fu 体:ti 重:zhong 高:gao 健:jian '
+    + '康:kang 疾:ji 病:bing 过:guo 敏:min 药:yao 物:wu 父:fu 母:mu 亲:qin 哥:ge 姐:jie '
+    + '弟:di 妹:mei 爷:ye 奶:nai 姥:lao 姨:yi 叔:shu 舅:jiu 兴:xing 趣:qu 简:jian 历:li '
+    + '奖:jiang 惩:cheng 义:yi 工:gong 志:zhi 愿:yuan 者:zhe 卡:ka 银:yin 行:hang 支:zhi '
+    + '付:fu 宝:bao 口:kou 座:zuo 楼:lou 层:ceng 门:men 牌:pai 区:qu 县:xian 市:shi 省:sheng '
+    + '镇:zhen 村:cun 路:lu 街:jie 小:xiao 栋:dong 单:dan 元:yuan 称:cheng 全:quan 部:bu '
+    + '类:lei 型:xing 科:ke 目:mu 成:cheng 绩:ji 排:pai 序:xu 总:zong 平:ping 均:jun 最:zui '
+    + '低:di 等:deng 第:di 一:yi 二:er 三:san 四:si 五:wu 六:liu 七:qi 八:ba 九:jiu 十:shi '
+    + '百:bai 千:qian 万:wan 角:jiao 阶:jie 段:duan 次:ci 件:jian 照:zhao 片:pian 头:tou '
+    + '像:xiang 现:xian 居:ju 通:tong 讯:xun 属:shu 朋:peng 友:you 同:tong 老:lao 师:shi '
+    + '主:zhu 任:ren 干:gan 委:wei 员:yuan 课:ke 代:dai 表:biao 支:zhi 书:shu 记:ji 教:jiao '
+    + '活:huo 育:yu 文:wen 艺:yi 宣:xuan 传:chuan 心:xin 理:li 纪:ji 律:lv 定:ding 向:xiang '
+    + '选:xuan 修:xiu 必:bi 班:ban 主:zhu 题:ti 课:ke 亮:liang 点:dian 问:wen 题:ti 需:xu '
+    + '求:qiu 建:jian 议:yi 评:ping 语:yu 寄:ji 语:yu 梦:meng 想:xiang 目:mu 标:biao 座:zuo '
+    + '右:you 铭:ming 格:ge 言:yan 兴:xing 趣:qu 才:cai 艺:yi 运:yun 动:dong 球:qiu 篮:lan '
+    + '足:zu 乒:ping 乓:pang 羽:yu 毛:mao 跑:pao 步:bu 跳:tiao 远:yuan 泳:yong 唱:chang 歌:ge '
+    + '舞:wu 画:hua 琴:qin 棋:qi 书:shu 法:fa 摄:she 影:ying 演:yan 讲:jiang 辩:bian 论:lun '
+    + '科:ke 创:chuang 编:bian 程:cheng 机:ji 器:qi 人:ren 模:mo 型:xing 实:shi 验:yan 室:shi '
+    + '中:zhong 报:bao 说:shuo 明:ming 情:qing 况:kuang 条:tiao 内:nei 容:rong 息:xi 数:shu 据:ju '
+    + '字:zi 言:yan 度:du 水:shui 自:zi 己:ji 其:qi 他:ta 她:ta 与:yu 及:ji 和:he 为:wei 用:yong '
+    + '于:yu 个:ge 把:ba 关:guan 要:yao 可:ke 以:yi 不:bu 有:you 无:wu 多:duo 少:shao 大:da '
+    + '前:qian 后:hou 上:shang 下:xia 里:li 外:wai 东:dong 西:xi 南:nan 北:bei 单:dan 位:wei '
+    + '课:ke 外:wai 补:bu 习:xi 班:ban 排:pai 名:ming 次:ci 段:duan 班:ban 号:hao 座:zuo '
+    + '舍:she 长:zhang 室:shi 友:you 联:lian 系:xi 人:ren 电:dian 子:zi 信:xin 箱:xiang 密:mi 码:ma';
+  var o = {};
+  raw.split(/\s+/).forEach(function(p){
+    var i = p.indexOf(':');
+    if(i > 0) o[p.slice(0, i)] = p.slice(i + 1);
+  });
+  return o;
+})();
+
+/* 整词优先：这些词逐字拼音会变成 sushehao 之类，直接给地道英文 */
+var FIELD_WORDS = {
+  '学籍号': 'student_no', '学号': 'student_id', '考籍号': 'exam_reg_no',
+  '入团时间': 'league_date', '入团日期': 'league_date', '团员编号': 'league_no',
+  '发展团员编号': 'league_no', '家庭住址': 'home_address', '家庭地址': 'home_address',
+  '现居住址': 'current_address', '户籍地址': 'registered_address',
+  '家长姓名': 'parent_name', '家长电话': 'parent_phone', '家长手机': 'parent_phone',
+  '紧急联系人': 'emergency_contact', '紧急联系电话': 'emergency_phone',
+  '宿舍号': 'dorm_no', '宿舍楼': 'dorm_building', '床位号': 'bed_no',
+  '出生日期': 'birth_date', '生日': 'birthday', '身份证号': 'id_card',
+  '电子邮箱': 'email', '邮箱': 'email', '邮政编码': 'zip_code',
+  '校服尺寸': 'uniform_size', '身高': 'height', '体重': 'weight',
+  '兴趣爱好': 'hobbies', '特长': 'specialty', '社团': 'club', '职务': 'duty',
+  '备注': 'remark', '分组': 'group_name', '家长微信': 'parent_wechat',
+  '家长QQ': 'parent_qq', '监护人': 'guardian', '监护人电话': 'guardian_phone',
+  '班级职务': 'class_duty', '学生特长': 'student_specialty', '中考报名号': 'zhongkao_no',
+  '报名号': 'signup_no', '座位号': 'seat_no', '家长单位': 'parent_workplace',
+  '家庭情况': 'family_info', '特殊情况': 'special_note', '是否需要住宿': 'need_dorm',
+  '宿舍长': 'dorm_leader', '寝室长': 'dorm_leader', '班主任': 'head_teacher',
+  '任课老师': 'subject_teacher', '家长联系方式': 'parent_contact'
+};
+
+/** 中文名 → 英文键名（规则见上方注释） */
+function autoFieldKey(label){
+  var s = String(label == null ? '' : label).trim();
+  if(!s) return '';
+  /* 去掉括号里的补充说明：「身高（cm）」→「身高」 */
+  var bare = s.replace(/[（(][^）)]*[）)]/g, '').trim() || s;
+  if(FIELD_WORDS[bare]) return FIELD_WORDS[bare];
+  var out = '';
+  for(var i = 0; i < bare.length; i++){
+    var ch = bare.charAt(i);
+    if(/[A-Za-z0-9]/.test(ch)){ out += ch.toLowerCase(); continue; }
+    if(/[\s_\-·—、,，.。:：/]/.test(ch)){ out += '_'; continue; }
+    if(FIELD_PINYIN[ch]){ out += FIELD_PINYIN[ch]; continue; }
+    var code = ch.charCodeAt(0);
+    if(code > 127) out += 'u' + code.toString(16);   /* 生僻字保底，仍合法 */
+  }
+  out = out.replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(0, 28);
+  if(!out) out = 'field_' + String(Date.now()).slice(-4);
+  if(!/^[a-z]/.test(out)) out = 'f_' + out;
+  return out.slice(0, 31);
+}
+
+/** 新增自定义字段弹窗。
+ *  v3.4.0 站主报「弹窗不在中央、被遮挡」：原来手写的 .dialog-mask/.dialog
+ *  在全站样式里根本没有定义（只有这一处在用），结果是按普通文档流渲染，
+ *  掉在成员长表格的下面（页面底部）。改用通用 openModal() 体系，
+ *  fixed + flex 居中，与其它弹窗行为一致。
+ *  v3.5.5：加「校验规则」编辑器（站主：「新增字段都可以自由勾选配置以上规则」）。 */
+function addFieldDialog(){
+  var vis = 'self';
+  var body =
+    '<div class="alert info" style="margin:0 0 14px">'
+    +   '加完之后，每位同学都能在「编辑资料」里填这个字段，'
+    +   '前台也会按你设的可见性展示。'
+    + '</div>'
+    + '<div class="field"><label>中文名称 <span class="muted">（同学看到的名字）</span></label>'
+    +   '<input id="ffLabel" placeholder="例如：学籍号" maxlength="20" autocomplete="off"></div>'
+    + '<div class="field"><label>英文键名 <span class="muted">（内部用，只能小写字母 / 数字 / 下划线）</span></label>'
+    +   '<input id="ffKey" placeholder="填了中文名会自动生成，也可自己改" maxlength="31" autocomplete="off">'
+    +   '<div class="muted" style="font-size:.72rem;margin-top:4px" id="ffKeyHint">'
+    +     '英文键名创建后不能再改（它同时是数据库列名）。'
+    +   '</div></div>'
+    + '<div class="field"><label>可见范围</label>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap" id="ffVis">'
+    +     ['public','committee','self','admin'].map(function(v, i){
+            return '<button class="btn btn-sm ' + (i === 2 ? '' : 'btn-secondary')
+              + '" data-ffv="' + v + '">' + esc(VIS_LABEL[v]) + '</button>';
+          }).join('')
+    +   '</div>'
+    +   '<div class="muted" style="font-size:.74rem;margin-top:6px" id="ffVisHint">' + esc(VIS_DESC[vis]) + '</div>'
+    + '</div>'
+    + ruleEditorHtml({});
+  var foot =
+    '<button class="btn btn-secondary" id="ffCancel">取消</button>'
+    + '<button class="btn" id="ffOk">' + svg('plus', 14) + '创建字段</button>';
+
+  openModal({
+    title: '新增资料字段',
+    sub: '前台将按可见范围展示这个字段',
+    body: body,
+    foot: foot,
+    onMount: function(){
+      Array.prototype.forEach.call($('ffVis').querySelectorAll('[data-ffv]'), function(b){
+        b.onclick = function(){
+          vis = b.dataset.ffv;
+          Array.prototype.forEach.call($('ffVis').querySelectorAll('[data-ffv]'), function(x){
+            x.className = 'btn btn-sm ' + (x.dataset.ffv === vis ? '' : 'btn-secondary');
+          });
+          $('ffVisHint').textContent = VIS_DESC[vis];
+        };
+      });
+      paintRuleBody({});
+      $('ffRuleType').onchange = function(){ paintRuleBody({}); };
+
+      /* v3.5.15：中文名 → 英文键名自动生成。用户一旦自己改过键名，
+         就不再自动覆盖（清空则恢复自动）。 */
+      var labEl = $('ffLabel'), keyEl = $('ffKey'), keyHint = $('ffKeyHint');
+      var keyManual = false;
+      function paintKeyHint(k){
+        if(!keyHint) return;
+        keyHint.textContent = keyManual
+          ? '你已手动指定键名；清空可恢复自动生成。'
+          : (k ? '已按中文名自动生成：' + k + '（可以改）' : '填了中文名会自动生成；英文键名创建后不能再改。');
+      }
+      function syncKey(){
+        if(keyManual) return;
+        var k = autoFieldKey(labEl ? labEl.value : '');
+        if(keyEl) keyEl.value = k;
+        paintKeyHint(k);
+      }
+      if(labEl) labEl.addEventListener('input', syncKey);
+      if(keyEl) keyEl.addEventListener('input', function(){
+        keyManual = keyEl.value.trim() !== '';
+        paintKeyHint('');
+      });
+
+      $('ffCancel').onclick = closeModal;
+      $('ffOk').onclick = function(){
+        var label = ($('ffLabel').value || '').trim();
+        var key   = ($('ffKey').value || '').trim().toLowerCase();
+        /* 没填（或事件没触发）时按中文名兜底生成，避免卡在「请填写英文键名」 */
+        if(!key && label) key = autoFieldKey(label);
+        if(!label) return toast('请填写中文名称', 'danger');
+        if(!key)   return toast('请填写英文键名（如 school_id）', 'danger');
+        if(!/^[a-z][a-z0-9_]{0,30}$/.test(key)){
+          return toast('英文键名只能小写字母开头，由小写字母、数字、下划线组成', 'danger');
+        }
+        var rules = collectRules();
+        if(rules.type === 'select' && !rules.options.length){
+          return toast('下拉字段至少要有一个选项', 'danger');
+        }
+        api('/admin?action=add-field', { method:'POST', body:{ field:key, label:label, visibility:vis, rules:rules } })
+          .then(function(j){ closeModal(); toast(j.message || '已新增'); renderFieldPanel(); loadMembers(); })
+          .catch(function(e){ toast(e.message, 'danger'); });
+      };
+      setTimeout(function(){ var el = $('ffLabel'); if(el) el.focus(); }, 60);
+    },
+  });
+}
+
+/** v3.5.5：改某个字段的校验规则（系统字段也能改 —— 预置规则只是出厂值）。 */
+function rulesFieldDialog(field, label, curRules){
+  var body =
+    '<div class="alert info" style="margin:0 0 14px">'
+    +   '规则管的是「<b>填了的时候</b>」长什么样，空值一律放过（本系统没有必填字段）。'
+    +   '批量导入同样按规则复核，不合法的行会报出行号。'
+    + '</div>'
+    + '<div class="field"><label>字段</label><input class="inp" value="' + attr(label || field) + '（' + attr(field) + '）" disabled></div>'
+    + ruleEditorHtml(curRules || {});
+  openModal({
+    title: '校验规则：' + (label || field),
+    sub: '文本限字符数 / 数字限位数范围 / 日期选择器 / 下拉禁自由输入',
+    body: body,
+    foot: '<button class="btn btn-secondary" id="frCancel">取消</button>'
+      + '<button class="btn" id="frOk">保存规则</button>',
+    onMount: function(){
+      paintRuleBody(curRules || {});
+      $('ffRuleType').onchange = function(){ paintRuleBody(curRules || {}); };
+      $('frCancel').onclick = closeModal;
+      $('frOk').onclick = function(){
+        var rules = collectRules();
+        if(rules.type === 'select' && !rules.options.length){
+          return toast('下拉字段至少要有一个选项', 'danger');
+        }
+        api('/admin?action=update-field', { method:'POST', body:{ field:field, rules:rules } })
+          .then(function(j){
+            closeModal(); toast('已保存「' + (label || field) + '」的校验规则');
+            renderFieldPanel(); loadMembers();
+          })
+          .catch(function(e){ toast(e.message, 'danger'); });
+      };
+    },
+  });
+}
+
+/** 改字段中文名 */
+function renameFieldDialog(field, curLabel){
+  var v = prompt('把字段「' + field + '」的中文名称改为：', curLabel || '');
+  if(v == null) return;
+  v = String(v).trim();
+  if(!v) return toast('名称不能为空', 'danger');
+  api('/admin?action=update-field', { method:'POST', body:{ field:field, label:v } })
+    .then(function(){ toast('已改名'); renderFieldPanel(); loadMembers(); })
+    .catch(function(e){ toast(e.message, 'danger'); });
+}
+
+/** 改字段排序 */
+/** 删字段：危险操作，二次确认 + 说明后果 */
+function deleteFieldConfirm(field, label, isSystem){
+  /* v3.5.14 #7：自定义字段一次确认；系统预置字段要手输字段名才解锁 ——
+     删预置字段会把全班该列的数据一起删掉，误点代价太大。 */
+  var nm = label || field;
+  if(!isSystem){
+    confirmBox({
+      title: '删除字段「' + nm + '」',
+      html: '全班每位同学这个字段的值都会一起删掉，<b>无法恢复</b>。',
+      detail: '如果只是不想让大家看到，建议改成「仅本人」或「仅后端可见」，而不是删除。',
+      okText: '确认删除',
+      danger: true,
+    }).then(function(yes){
+      if(!yes) return;
+      api('/admin?action=delete-field', { method:'POST', body:{ field:field } })
+        .then(function(j){ toast(j.message || '已删除', 'ok'); renderFieldPanel(); loadMembers(); })
+        .catch(function(e){ toast(e.message, 'danger'); });
+    });
+    return;
+  }
+  openModal({
+    title: '删除系统预置字段',
+    sub: '「' + nm + '」（' + field + '）',
+    body: '<div class="alert danger" style="margin:0 0 12px">'
+      +   '这是站点预置字段，删除后：全班该字段的值全部消失且不可恢复；'
+      +   '如果有页面 / 导入模版还在引用它，可能出现报错。'
+      +   '<br>「姓名」「学号」是身份主键，系统不允许删除。'
+      + '</div>'
+      + '<div class="field"><label>确认请输入字段名 <b class="mono">' + esc(field) + '</b> 或中文名 <b class="mono">' + esc(label || '') + '</b></label>'
+      +   '<input id="ffDelConfirm" autocomplete="off" placeholder="' + attr(field + ' 或 ' + (label || '')) + '"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn btn-danger" data-yes disabled>确认删除</button>',
+    onMount: function(box){
+      var inp = box.querySelector('#ffDelConfirm');
+      var yes = box.querySelector('[data-yes]');
+      box.querySelector('[data-no]').onclick = closeModal;
+      /* 站主可能直接打中文名（出生日期）而不是列名（birth_date）——
+         两种都认，否则按钮永远灰着，看着就是「删不掉」。 */
+      inp.oninput = function(){
+        var v = inp.value.trim();
+        yes.disabled = !(v === field || v === (label || '') || v === nm);
+      };
+      yes.onclick = function(){
+        yes.disabled = true; yes.textContent = '删除中…';
+        api('/admin?action=delete-field', { method:'POST', body:{ field:field, force:true } })
+          .then(function(j){ closeModal(); toast(j.message || '已删除', 'ok'); renderFieldPanel(); loadMembers(); })
+          .catch(function(e){ yes.disabled = false; yes.textContent = '确认删除'; toast(e.message, 'danger'); });
+      };
+      inp.focus();
+    }
+  });
+}
+
+/**
+ * 算出某条资料上「可编辑额外字段」的展示单元（v2.4.0）。
+ * 额外字段 = 字段元数据里不在固定列中的那些（含自定义字段与 id_card 等）。
+ */
+/* ============================================================
+   v3.5.21 字段级复制（站主：「后台要可以快捷复制，和前台的查询一样」）
+   ------------------------------------------------------------
+   两种按钮：
+     · cpBtnHtml(field) —— 编辑弹窗里跟在输入框后面的「复制」，
+       点击时按 data-cp 找同弹窗内 [data-xf=field] 的当前值；
+     · cpv(val,label)   —— 详情弹窗里跟在某个值后面的「复制」，
+       值直接写进 data-cpv（不需要再回头查 DOM）。
+   复制走 navigator.clipboard，失败退回 textarea + execCommand。
+   ============================================================ */
+function cpBtnHtml(field){
+  return '<button type="button" class="btn btn-ghost cp-mini" data-cp="' + attr(field) + '"'
+    + ' title="复制这一项的值">复制</button>';
+}
+
+function cpv(val, label){
+  var s = (val == null ? '' : String(val)).trim();
+  if(!s) return '';
+  return ' <button type="button" class="btn btn-ghost cp-mini" data-cpv="' + attr(s) + '"'
+    + ' data-cpl="' + attr(label || '') + '">复制</button>';
+}
+
+function adminCopy(text, label){
+  var t = (text == null ? '' : String(text));
+  if(!t.trim()){ toast('这一项还是空的，没有可复制的内容', 'warn'); return; }
+  var done = function(){ toast((label ? label + ' ' : '') + '已复制', 'ok', 2400); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(done, function(){ djFallbackCopy(t); done(); });
+  }else{ djFallbackCopy(t); done(); }
+}
+
+/* 事件委托：两处按钮都在动态生成的弹窗里，逐个绑定容易漏；
+   挂一次 document 上的监听，后续任何弹窗都能用。 */
+document.addEventListener('click', function(e){
+  var t = e.target;
+  if(!t || !t.closest) return;
+  var b1 = t.closest('[data-cpv]');
+  if(b1){
+    adminCopy(b1.getAttribute('data-cpv'), b1.getAttribute('data-cpl') || '内容');
+    return;
+  }
+  var b2 = t.closest('[data-cp]');
+  if(b2){
+    var f = b2.getAttribute('data-cp');
+    var box = b2.closest('#modalBox') || document;
+    var inp = box.querySelector('[data-xf="' + f + '"]');
+    var wrap = b2.closest('.field, .extra-row');
+    var lab = wrap ? wrap.querySelector('label') : null;
+    adminCopy(inp ? inp.value : '', lab ? lab.textContent.trim() : '内容');
+  }
+});
+
+/* 头衔白名单兜底（与 api/admin.js 的 ALLOWED_TITLES 保持一致）。
+   正常情况下用接口返回的 STATE.titles.allowed，这里只在没加载到时顶上。 */
+var TITLE_FALLBACK = ['班长', '副班长', '团支书', '学习委员', '纪律委员',
+  '生活委员', '体育委员', '文艺委员', '电教委',
+  '语文课代表', '数学课代表', '英语课代表', '物理课代表',
+  '化学课代表', '生物课代表', '政治课代表', '历史课代表',
+  '地理课代表', '课代表'];
+
+function extraColsOf(){
+  var meta = STATE.members.fieldMeta || STATE.profiles.fieldMeta || [];
+  /* v3.5.16：id_card / youth_league_no 也有**固定列**的采集逻辑（顶层 o.idCard），
+     以前这里又当自定义字段收一遍，导致同一列被传两次，服务端拼出
+     `id_card = $n, id_card = $m` 直接报错。这里一律排除。 */
+  var FIXED = ['name','student_id','politics','exam_no','role','title','wechat','qq','phone',
+               'id_card','youth_league_no','contact_status','reject_reason'];
+  return meta.filter(function(f){ return FIXED.indexOf(f.field) < 0; });
+}
+
+/** 单条资料的查看记录（谁在什么时候看过这个人） */
+function profileViewsDialog(id){
+  openModal({
+    title: '资料查看记录',
+    sub: '谁在什么时候查到了这条资料',
+    wide: true,
+    body: '<div id="pvBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>',
+    foot: '<button class="btn btn-ghost" data-no>关闭</button>',
+    onMount: function(box){
+      box.querySelector('[data-no]').onclick = closeModal;
+      api('/admin?action=profile&id=' + id).then(function(j){
+        var p = j.profile || {}, vs = j.views || [];
+        var el = box.querySelector('#pvBody');
+        var head = '<div class="alert info" style="margin-bottom:16px">'
+          + '<b>' + esc(p.name || '(未填姓名)') + '</b>'
+          + ' <span class="mono muted">' + esc(p.studentId || '无学号') + '</span>'
+          + '　联系方式：'
+          + (p.wechat ? '微信 ' + esc(p.wechat) + '　' : '')
+          + (p.qq ? 'QQ ' + esc(p.qq) + '　' : '')
+          + (p.phone ? '手机 ' + esc(p.phone) : '')
+          + (p.wechat || p.qq || p.phone ? '' : '<span class="muted">暂未填写</span>')
+          + '</div>';
+
+        if(!vs.length){
+          el.innerHTML = head + '<div class="empty">' + svg('eye', 34) + '<p>还没有人查看过这条资料</p></div>';
+          return;
+        }
+        el.innerHTML = head
+          + '<div class="table-wrap"><table><thead><tr>'
+          + '<th>查看者</th><th class="nowrap">搜索关键词</th><th class="nowrap">IP</th><th class="nowrap">时间</th>'
+          + '</tr></thead><tbody>'
+          + vs.map(function(v){
+              return '<tr>'
+                + '<td><b>' + esc(v.viewer) + '</b></td>'
+                + '<td class="mono">' + esc(v.keyword || '—') + '</td>'
+                + '<td class="mono muted">' + esc(v.ip || '—') + '</td>'
+                + '<td class="nowrap">' + esc(fmt(v.createdAt)) + '<div class="muted" style="font-size:.72rem">' + esc(ago(v.createdAt)) + '</div></td>'
+                + '</tr>';
+            }).join('')
+          + '</tbody></table></div>'
+          + '<p class="hint" style="margin-top:10px">仅显示最近 20 条。</p>';
+      }).catch(function(e){
+        box.querySelector('#pvBody').innerHTML = '<div class="alert danger">加载失败：' + esc(e.message) + '</div>';
+      });
+    }
+  });
+}
+
+/**
+ * Excel 批量导入资料。
+ * 表头：姓名 / 学号 / 政治面貌 / 智学网账号 / 微信 / QQ / 手机号
+ * 按学号优先匹配（没有学号则按姓名），命中就更新、没命中就新增。
+ * 后端单批上限 60 条，所以这里分片串行提交。
+ */
+function profileImportDialog(){
+  var parsed = [];          /* 解析出的待导入数据 */
+  var headerNote = '';
+
+  openModal({
+    title: 'Excel 批量导入资料',
+    sub: '表头需包含：姓名 / 学号 / 政治面貌 / 智学网账号 / 微信 / QQ / 手机号（自定义字段按中文名自动识别）',
+    wide: true,
+    body:
+      '<div class="alert info" style="margin-bottom:16px">'
+      +   '按 <b>学号</b> 匹配已有资料（没有学号则按姓名），命中就更新、没命中就新增。'
+      +   '导入的数据会连带把联系方式记为「已通过」。单次请控制在 900 条以内。<br>'
+      +   '「字段管理」里加过的自定义字段，只要表头写上<b>它的中文名</b>（如「学籍号」）就会被一起导入。'
+      + '</div>'
+
+      /* 第一步：先给模板，再选文件 */
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'
+      +   '<button class="btn btn-sm btn-secondary" id="pfTpl">' + svg('download', 14) + '下载模板</button>'
+      +   '<label class="btn btn-sm" style="cursor:pointer">' + svg('upload', 14) + '选择 Excel 文件'
+      +     '<input type="file" id="pfFile" accept=".xlsx,.xls" style="display:none"></label>'
+      + '</div>'
+
+      /* 第二步：解析结果预览 */
+      + '<div id="pfPreview"><p class="muted" style="font-size:.85rem;margin:0">'
+      +   '建议先点「下载模板」，按模板表头填好再导回来。选好文件后这里会先预览，确认无误再导入。'
+      + '</p></div>'
+      + '<div class="msg" id="pfImpMsg"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes disabled>开始导入</button>',
+    onMount: function(box){
+      var file = box.querySelector('#pfFile');
+      var msg  = box.querySelector('#pfImpMsg');
+      var prev = box.querySelector('#pfPreview');
+      var yes  = box.querySelector('[data-yes]');
+      box.querySelector('[data-no]').onclick = closeModal;
+
+      var setMsg = function(kind, text){
+        msg.className = 'msg ' + kind + ' show';
+        msg.textContent = text;
+      };
+
+      /* --- 下载模板：表头 + 一行示例 + 一行说明 --- */
+      box.querySelector('#pfTpl').onclick = function(){
+        loadXLSX().then(function(XLSX){
+          if(!XLSX){ toast('模板库加载失败，请检查网络', 'err', 4200); return; }
+          var ws = XLSX.utils.json_to_sheet([
+            {
+              姓名: '张三', 学号: '250501', 政治面貌: '群众', 智学网账号: '11389409',
+              微信: '', QQ: '', 手机号: '',
+            },
+            {
+              姓名: '李四（示例·老师无学号）', 学号: '', 政治面貌: '共青团员', 智学网账号: '',
+              微信: 'lisi_wechat', QQ: '10001', 手机号: '13900000000',
+            },
+          ]);
+          ws['!cols'] = [
+            { wch: 22 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+            { wch: 16 }, { wch: 10 }, { wch: 14 },
+          ];
+          var wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, '资料导入');
+          XLSX.writeFile(wb, '班级资料导入模板.xlsx');
+          toast('模板已下载，填好后导回来即可', 'ok', 3600);
+        });
+      };
+
+      /* --- 选中文件 → 先解析并预览，不直接提交 --- */
+      file.onchange = function(){
+        var f = file.files[0];
+        yes.disabled = true;
+        parsed = [];
+        if(!f){
+          prev.innerHTML = '<p class="muted" style="font-size:.85rem;margin:0">还没有选择文件。</p>';
+          msg.className = 'msg';
+          return;
+        }
+
+        prev.innerHTML = '<div class="loading"><div class="spinner"></div>正在解析…</div>';
+        msg.className = 'msg';
+
+        var reader = new FileReader();
+        reader.onload = function(ev){
+          /* v3.5.3：先等解析库就位，再读文件内容。
+             以前这里直接用裸全局 XLSX.read(...) —— 用户没点过「下载模板」时
+             库从未开始加载，当场 ReferenceError，报「解析失败: XLSX is not defined」。
+             现在统一走 loadXLSX()（本地 vendor/ 优先，CDN 兜底）。
+             下面整段都包在 .then 里，逻辑一行没动，只是挪进了回调。 */
+          loadXLSX().then(function(XLSX){
+            if(!XLSX){
+              prev.innerHTML = '<div class="alert danger">表格解析库加载失败，请检查网络后重试</div>';
+              setMsg('err', '表格解析库加载失败，请检查网络后重试');
+              return;
+            }
+            var rows;
+            try{
+              var wb = XLSX.read(new Uint8Array(ev.target.result), { type:'array' });
+              var ws = wb.Sheets[wb.SheetNames[0]];
+              rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+            }catch(err){
+              prev.innerHTML = '<div class="alert danger">解析失败：' + esc(err.message) + '</div>';
+              setMsg('err', '解析失败：' + err.message);
+              return;
+            }
+          if(!rows.length){
+            prev.innerHTML = '<div class="alert danger">文件里没有读到数据行。</div>';
+            setMsg('err', '文件里没有读到数据行');
+            return;
+          }
+
+          /* 表头别名兼容：有人写「学号」，有人写「学籍号」 */
+          var pick = function(o, keys){
+            for(var i = 0; i < keys.length; i++){
+              var k = Object.keys(o).find(function(x){ return String(x).trim() === keys[i]; });
+              if(k && String(o[k]).trim() !== '') return String(o[k]).trim();
+            }
+            return '';
+          };
+
+          /* 动态字段（2026-10-09 v2.4.0）：按「字段管理」里的中文名匹配表头。
+             例如站主加了「学籍号」字段，Excel 里就有「学籍号」这一列。
+             同时兼容用英文键名当表头（导出文件用的是中文名，但手写表头也可能直接写键名）。 */
+          var extras = extraColsOf();
+
+          var bad = 0;
+          var list = rows.map(function(r){
+            var o = {
+              name:      pick(r, ['姓名','名字','学生姓名']),
+              studentId: pick(r, ['学号','学籍号']),
+              politics:  pick(r, ['政治面貌','面貌']),
+              examNo:    pick(r, ['智学网账号','智学网号','智学网准考证号','准考证号']),
+              wechat:    pick(r, ['微信','微信号']),
+              qq:        pick(r, ['QQ','QQ号']),
+              phone:     pick(r, ['手机号','手机','电话','手机号码']),
+              /* v3.5.3：站长的模板里一直有「身份证号 / 发展团员编号」两列，
+                 而这两列本来就是 profiles 的内置列（单条编辑一直支持），
+                 批量导入却始终不认 —— 数据被静默丢弃。这次补上。 */
+              idCard:        pick(r, ['身份证号','身份证','证件号']),
+              youthLeagueNo: pick(r, ['发展团员编号','团员编号','入团编号'])
+            };
+            /* 自定义字段：中文名优先，其次英文字段名 */
+            var ex = {};
+            extras.forEach(function(f){
+              var v = pick(r, [f.label, f.field]);
+              if(v) ex[f.field] = v;
+            });
+            if(Object.keys(ex).length) o.extra = ex;
+            return o;
+          }).filter(function(x){
+            /* 姓名和学号都空的算无效行，单独计数提示 */
+            if(!x.name && !x.studentId){ bad++; return false; }
+            return true;
+          });
+
+          if(!list.length){
+            prev.innerHTML = '<div class="alert danger">没有一行同时含「姓名」或「学号」，请检查表头是否为：'
+              + '姓名 / 学号 / 政治面貌 / 智学网账号 / 微信 / QQ / 手机号</div>';
+            setMsg('err', '没有一行含「姓名」或「学号」，请检查表头');
+            return;
+          }
+
+          parsed = list;
+          yes.disabled = false;
+          var hasExam  = list.filter(function(x){ return x.examNo; }).length;
+          var hasPhone = list.filter(function(x){ return x.wechat || x.qq || x.phone; }).length;
+          var hasId    = list.filter(function(x){ return x.idCard; }).length;
+          var hasYln   = list.filter(function(x){ return x.youthLeagueNo; }).length;
+          /* 本次真正读到的自定义字段（只列非空的，避免一堆空列） */
+          var hitExtras = extras.filter(function(f){
+            return list.some(function(x){ return (x.extra || {})[f.field]; });
+          });
+
+          /* 预览前 8 行，让管理员能一眼看出列有没有对错 */
+          var head = ['姓名','学号','政治面貌','智学网账号']
+            .concat(hitExtras.map(function(f){ return f.label; }))
+            .concat(['微信','QQ','手机号','身份证号','发展团员编号']);
+          var bodyRows = list.slice(0, 8).map(function(x){
+            var cells = [x.name, x.studentId, x.politics, x.examNo]
+              .concat(hitExtras.map(function(f){ return (x.extra || {})[f.field] || ''; }))
+              .concat([x.wechat, x.qq, x.phone, x.idCard, x.youthLeagueNo]);
+            return '<tr>' + cells.map(function(c, i){
+              var dash = c ? esc(c) : '<span class="muted">—</span>';
+              /* 学号/智学网账号/自定义字段用等宽字体，便于肉眼核对数字有没有错位 */
+              var mono = (i === 1 || i === 3 || (hitExtras.length && i > 3 && i < 4 + hitExtras.length));
+              return '<td' + (mono ? ' class="mono nowrap"' : '') + '>' + dash + '</td>';
+            }).join('') + '</tr>';
+          }).join('');
+
+          prev.innerHTML =
+            '<div class="alert ok" style="margin-bottom:12px">'
+            +   '读到 <b>' + list.length + '</b> 条有效数据'
+            +   (bad ? '，跳过 ' + bad + ' 条空行' : '')
+            +   '；其中含智学网账号 <b>' + hasExam + '</b> 条、含联系方式 <b>' + hasPhone + '</b> 条。'
+            +   (hasId  ? '含身份证号 <b>' + hasId + '</b> 条。' : '')
+            +   (hasYln ? '含发展团员编号 <b>' + hasYln + '</b> 条。' : '')
+            +   (hitExtras.length ? '识别到自定义字段：<b>' + hitExtras.map(function(f){ return esc(f.label); }).join('、') + '</b>。' : '')
+            + '</div>'
+            + '<p class="muted" style="font-size:.8rem;margin:0 0 8px">'
+            +   '预览前 ' + Math.min(8, list.length) + ' 行（确认列没串位再导入）：</p>'
+            + '<div class="table-wrap" style="max-height:280px;overflow:auto"><table><thead><tr>'
+            +   head.map(function(h){ return '<th class="nowrap">' + h + '</th>'; }).join('')
+            + '</tr></thead><tbody>' + bodyRows + '</tbody></table></div>'
+            + (list.length > 8
+                ? '<p class="hint" style="margin-top:8px">仅预览前 8 行，导入时会处理全部 ' + list.length + ' 条。</p>'
+                : '');
+
+          setMsg('info', '已选择：' + f.name + '（' + bytes(f.size) + '），确认预览无误后点「开始导入」。');
+          });
+        };
+        reader.onerror = function(){
+          prev.innerHTML = '<div class="alert danger">读取文件失败。</div>';
+          setMsg('err', '读取文件失败');
+        };
+        reader.readAsArrayBuffer(f);
+      };
+
+      /* --- 确认导入：分片串行提交，避免一次性压垮 Worker --- */
+      yes.onclick = function(){
+        if(!parsed.length) return;
+        var list = parsed;
+        var btn = yes;
+        btn.disabled = true;
+
+        /* v3.5.18：一批 60 条会撞 Cloudflare 的 50 子请求上限
+           （Too many subrequests by single Worker invocation），
+           改成 8 条一批串行提交 —— 慢一点但稳，62 人也就 8 轮。 */
+        var CHUNK = 8;
+        var chunks = [];
+        for(var i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
+
+        var created = 0, updated = 0, unchanged = 0, failed = 0, firstErr = '';
+        /* v3.5.15：逐行错误收集起来 —— 站主对着行号改 Excel 才高效，
+           以前只提示「首个错误」，后面的错误完全看不到。 */
+        var allErrs = [];
+        /* v3.5.18：字段级冲突（库里已有值 ≠ 导入值），等站主定夺 */
+        var allConf = [];
+        var idx = 0;
+
+        var step = function(){
+          if(idx >= chunks.length) return finish();
+          var n = idx + 1;
+          setMsg('info', '正在导入… 第 ' + n + '/' + chunks.length + ' 批（已处理 ' + (idx * CHUNK) + ' / ' + list.length + ' 条）');
+          return api('/admin?action=batch-profiles', { method:'POST', body: { rows: chunks[idx] } })
+            .then(function(j){
+              created += j.created || 0;
+              updated += j.updated || 0;
+              unchanged += j.unchanged || 0;
+              failed  += j.failed  || 0;
+              if(j.errors && j.errors.length){
+                j.errors.forEach(function(e){
+                  var n = idx * CHUNK + (Number(e.index) || 0) + 1;
+                  allErrs.push({ n: n, name: e.name || '', reason: e.reason || '' });
+                  if(!firstErr) firstErr = '数据第 ' + n + ' 行：' + (e.reason || '');
+                });
+              }
+              if(j.conflicts && j.conflicts.length){
+                j.conflicts.forEach(function(c){
+                  allConf.push({
+                    row: idx * CHUNK + (Number(c.index) || 0) + 1,
+                    id: c.id, name: c.name, field: c.field, label: c.label,
+                    oldValue: c.oldValue, newValue: c.newValue,
+                  });
+                });
+              }
+              idx++;
+              return step();
+            });
+        };
+
+        var finish = function(){
+          var parts = ['新增 ' + created + ' 条', '更新 ' + updated + ' 条'];
+          if(unchanged) parts.push('跳过 ' + unchanged + ' 条（与现有完全一致）');
+          if(failed) parts.push('失败 ' + failed + ' 条');
+          if(allConf.length) parts.push('待定夺 ' + allConf.length + ' 个字段');
+          setMsg((failed || allConf.length) ? 'warn' : 'ok',
+            '导入完成：' + parts.join('，') + (firstErr ? ('\n首个错误 ' + firstErr) : ''));
+
+          var html = '';
+
+          /* ① 失败行：数据行 / 姓名 / 原因 */
+          if(failed && allErrs.length){
+            html += '<div class="alert warn" style="margin-bottom:10px">'
+              +   '下面 <b>' + allErrs.length + '</b> 行没有导入（其余已入库，不会因为这几行失败而白导）。'
+              +   '按原因改完 Excel 再导一次即可，已导入的会走「更新」，不会重复。'
+              + '</div>'
+              + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table><thead><tr>'
+              +   '<th class="nowrap">数据行</th><th class="nowrap">姓名</th><th>原因</th>'
+              + '</tr></thead><tbody>'
+              + allErrs.slice(0, 50).map(function(e){
+                  return '<tr><td class="mono nowrap">' + e.n + '</td><td class="nowrap">'
+                    + (e.name ? esc(e.name) : '<span class="muted">—</span>')
+                    + '</td><td>' + esc(e.reason) + '</td></tr>';
+                }).join('')
+              + '</tbody></table></div>'
+              + (allErrs.length > 50 ? '<p class="hint" style="margin-top:8px">只列前 50 条，共 ' + allErrs.length + ' 条。</p>' : '');
+          }
+
+          /* ② 字段冲突：库里已有值 ≠ 导入值，先不写，交站主逐条定夺 */
+          if(allConf.length){
+            html += '<div class="alert warn" style="margin:14px 0 10px">'
+              +   '有 <b>' + allConf.length + '</b> 个字段与库里的值不一样，<b>这些字段暂时没有写入</b>。'
+              +   '勾「用导入值」的会被覆盖；没勾的保留现有（等于把导入的那一份丢掉）。'
+              + '</div>'
+              + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+              +   '<button type="button" class="btn btn-xs btn-secondary" data-cf-all>全选用导入</button>'
+              +   '<button type="button" class="btn btn-xs btn-secondary" data-cf-none>全不选</button>'
+              +   '<button type="button" class="btn btn-xs" data-cf-apply>应用选择</button>'
+              + '</div>'
+              + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table><thead><tr>'
+              +   '<th class="nowrap">数据行</th><th class="nowrap">姓名</th><th class="nowrap">字段</th>'
+              +   '<th>现有值</th><th>导入值</th><th class="nowrap">用导入</th>'
+              + '</tr></thead><tbody>'
+              + allConf.map(function(c, ci){
+                  var o = String(c.oldValue == null ? '' : c.oldValue);
+                  var nv = String(c.newValue == null ? '' : c.newValue);
+                  function cut(s){ return esc(s.length > 36 ? s.slice(0, 36) + '…' : s); }
+                  return '<tr><td class="mono nowrap">' + c.row + '</td>'
+                    + '<td class="nowrap">' + (c.name ? esc(c.name) : '<span class="muted">—</span>') + '</td>'
+                    + '<td class="nowrap">' + esc(c.label) + '</td>'
+                    + '<td title="' + attr(o) + '"><span class="mono" style="font-size:.76rem">' + cut(o) + '</span></td>'
+                    + '<td title="' + attr(nv) + '"><span class="mono" style="font-size:.76rem">' + cut(nv) + '</span></td>'
+                    + '<td class="nowrap"><input type="checkbox" data-cf="' + ci + '"></td></tr>';
+                }).join('')
+              + '</tbody></table></div>';
+          }
+
+          prev.innerHTML = html;
+
+          /* 冲突表交互 */
+          if(allConf.length){
+            var bAll = prev.querySelector('[data-cf-all]');
+            var bNone = prev.querySelector('[data-cf-none]');
+            var bApply = prev.querySelector('[data-cf-apply]');
+            if(bAll) bAll.onclick = function(){
+              Array.prototype.forEach.call(prev.querySelectorAll('[data-cf]'), function(el){ el.checked = true; });
+            };
+            if(bNone) bNone.onclick = function(){
+              Array.prototype.forEach.call(prev.querySelectorAll('[data-cf]'), function(el){ el.checked = false; });
+            };
+            if(bApply) bApply.onclick = function(){
+              var picks = [];
+              Array.prototype.forEach.call(prev.querySelectorAll('[data-cf]:checked'), function(el){
+                var c = allConf[Number(el.getAttribute('data-cf'))];
+                if(c && c.id && c.field) picks.push({ id: c.id, field: c.field, value: c.newValue == null ? '' : c.newValue });
+              });
+              if(!picks.length){ toast('没有勾选「用导入值」的字段', 'err'); return; }
+              bApply.disabled = true;
+              bApply.textContent = '应用中…';
+              var CH2 = 20, ci2 = 0, done = 0;
+              var nextPart = function(){
+                if(ci2 >= picks.length){
+                  bApply.textContent = '已应用 ' + done + ' 个字段';
+                  bAll.disabled = bNone.disabled = true;
+                  toast('已按你的选择覆盖 ' + done + ' 个字段', 'ok');
+                  loadMembers();
+                  return;
+                }
+                var part = picks.slice(ci2, ci2 + CH2);
+                return api('/admin?action=resolve-field-conflicts', { method:'POST', body:{ items: part } })
+                  .then(function(r){ done += (r.applied || 0); ci2 += CH2; return nextPart(); })
+                  .catch(function(e){
+                    bApply.disabled = false;
+                    bApply.textContent = '应用选择';
+                    toast('应用失败：' + e.message, 'err');
+                  });
+              };
+              nextPart();
+            };
+          }
+
+          /* 结果出来后「取消」变「确定」—— 让站主明确「这次导入到此为止」，
+             点它只是关窗，已入库的不会撤销。 */
+          var noBtn = box.querySelector('[data-no]');
+          if(noBtn) noBtn.textContent = '确定';
+
+          toast('导入完成：新增 ' + created + '，更新 ' + updated
+            + (unchanged ? '，跳过 ' + unchanged : ''), 'ok', 4200);
+          loadMembers();
+          btn.textContent = '再导一次';
+          btn.disabled = false;
+        };
+
+        step().catch(function(e){
+          setMsg('err',
+            '导入中断：' + e.message
+            + '\n（已成功的批次已入库，可以修完数据再导一次，重复的会走更新）');
+          btn.disabled = false;
+          loadMembers();
+        });
+      };
+    }
+  });
+}
+
+/* ============================================================================
+ * ⑬ 面板：信息审核（v3.7.0 由「联系方式审核」升级而来）
+ * ----------------------------------------------------------------------------
+ * 站主原话：「所有允许学生自主修改的字段同之前微信QQ手机号的联系方式审核相同，
+ *            需要后台确认方可成功更改，在后台确认之前均按照原来显示，而且后台的
+ *            信息审核只包含修改人姓名和修改内容（原内容和现内容）其他没有改的地方
+ *            无需显示，名称从联系方式审核改为信息审核，而且可以看到历史审核记录
+ *            并后台可以撤销之前的确认（7 天之内）」
+ *
+ * 三件事：
+ *   ① 待审核：每张卡片只有「谁」+「改了哪几项（原内容 → 现内容）」
+ *   ② 历史记录：通过 / 驳回 / 已撤销，7 天内可以点「撤销」
+ *   ③ 兼容旧数据：3.7.0 之前提交的联系方式还在老机制里（profiles.contact_status='pending'），
+ *      一并列出来，走老的 review-contact 接口；新提交不会再产生这类记录
+ * ========================================================================= */
+var REV_TAB = 'pending';
+
+function renderReviews(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0">'
+    +     '<b style="font-size:.92rem">信息审核</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '同学自己改的资料先到这里；<b>通过之前前台仍显示原内容</b>，通过后立即生效</p>'
+    +   '</div>'
+    +   '<button class="btn btn-sm btn-secondary" id="rvRefresh">' + svg('refresh', 14) + ' 刷新</button>'
+    + '</div>'
+    + '<div id="rvTabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"></div>'
+    + '<section class="panel"><div id="rvBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('rvRefresh').onclick = function(){ loadReviews(); };
+  paintRevTabs();
+  loadReviews();
+}
+
+function paintRevTabs(){
+  var box = $('rvTabs');
+  if(!box) return;
+  var S = STATE.reviews;
+  var c = S.counts || {};
+  var tab = function(id, label, n){
+    var on = REV_TAB === id;
+    return '<button class="btn btn-sm' + (on ? '' : ' btn-secondary') + '" data-rvt="' + id + '">'
+      + label + (n != null ? ' <b style="margin-left:2px">' + n + '</b>' : '') + '</button>';
+  };
+  box.innerHTML = tab('pending', '待审核', (c.pending || 0) + (c._legacy || 0))
+    + tab('history', '历史记录', null);
+  Array.prototype.forEach.call(box.querySelectorAll('[data-rvt]'), function(b){
+    b.onclick = function(){
+      REV_TAB = b.dataset.rvt;
+      paintRevTabs();
+      loadReviews();
+    };
+  });
+}
+
+function loadReviews(){
+  var body = $('rvBody');
+  if(body) body.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  var S = STATE.reviews;
+
+  if(REV_TAB === 'history'){
+    api('/admin?action=change-requests&scope=history').then(function(j){
+      S.history = j.requests || [];
+      S.counts = j.counts || {};
+      paintRevTabs();
+      paintReviewHistory();
+    }).catch(function(e){
+      if(body) body.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+    });
+    return;
+  }
+
+  /* 待审核：新机制 + 旧机制并行拉（旧的一般是空的） */
+  Promise.all([
+    api('/admin?action=change-requests&scope=pending').catch(function(){ return { requests: [], counts: {} }; }),
+    api('/admin?action=profile-requests').catch(function(){ return { requests: [] }; }),
+  ]).then(function(arr){
+    var nw = arr[0] || {};
+    var legacy = (arr[1] && arr[1].requests) || [];
+    S.list = (nw.requests || []).map(function(r){ r.legacy = false; return r; }).concat(
+      legacy.map(function(r){
+        return {
+          id: r.id, legacy: true, profileId: r.id, name: r.name, studentId: r.studentId,
+          username: r.boundUsername, createdAt: r.updatedAt, status: 'pending',
+          items: [
+            r.wechat ? { label: '微信', before: '', after: r.wechat } : null,
+            r.qq ? { label: 'QQ', before: '', after: r.qq } : null,
+            r.phone ? { label: '手机号', before: '', after: r.phone } : null,
+          ].filter(Boolean),
+        };
+      })
+    );
+    S.counts = nw.counts || {};
+    S.counts._legacy = legacy.length;
+    S.total = S.list.length;
+    paintRevTabs();
+    paintReviews();
+  }).catch(function(e){
+    if(body) body.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+/** 一行「原内容 → 现内容」；没改的字段根本不会出现在 items 里 */
+function revFieldRow(it){
+  var before = it.before === '' || it.before == null ? '<span class="muted">（空）</span>' : esc(it.before);
+  var after  = it.after  === '' || it.after  == null ? '<span class="muted">（清空）</span>' : '<b>' + esc(it.after) + '</b>';
+  return '<div><div class="k">' + esc(it.label) + '</div>'
+    + '<div class="v" style="font-family:inherit">' + before
+    + ' <span class="muted" style="margin:0 4px">→</span> ' + after + '</div></div>';
+}
+
+function revWho(r){
+  return '<b>' + esc(r.name || '(未填姓名)')
+    + (r.studentId ? ' <span class="sid">' + esc(r.studentId) + '</span>' : '')
+    + '</b><p class="meta">'
+    + (r.username ? ('账号：' + esc(r.username) + '　·　') : '')
+    + '提交于 ' + esc(fmt(r.createdAt) || '—')
+    + '</p>';
+}
+
+function paintReviews(){
+  var S = STATE.reviews;
+  var body = $('rvBody');
+  if(!body) return;
+
+  if(!S.list.length){
+    body.innerHTML = '<div class="empty">' + svg('check', 38)
+      + '<p>没有待审核的修改</p>'
+      + '<p style="font-size:.78rem;margin-top:8px">同学在「我的资料」里改资料、或在查询卡片里提交联系方式后，会出现在这里</p></div>';
+    return;
+  }
+
+  body.innerHTML =
+    '<div class="alert info" style="margin:16px 16px 0">'
+    +   '共 <b>' + S.list.length + '</b> 条待审核。只列出<b>实际改动过</b>的字段：左边是原内容，右边是同学提交的新内容。'
+    +   '点「通过」才写进档案；驳回时写的理由，本人能在「我的资料」里看到。'
+    + '</div>'
+    + '<div class="rev-list">'
+    + S.list.map(function(r){
+        return '<div class="rev">'
+          + '<div class="who">' + revWho(r)
+          +   (r.legacy ? ' <span class="badge badge-gray">旧版提交</span>' : '')
+          + '</div>'
+          + '<div class="act">'
+          +   '<button class="btn btn-sm btn-secondary" data-rv-no="' + r.id + '" data-legacy="' + (r.legacy ? '1' : '0') + '">驳回…</button>'
+          +   '<button class="btn btn-sm" data-rv-ok="' + r.id + '" data-legacy="' + (r.legacy ? '1' : '0') + '">'
+          +     svg('check', 14) + ' 通过</button>'
+          + '</div>'
+          + '<div class="fields">'
+          +   (r.items.length ? r.items.map(revFieldRow).join('')
+                : '<div class="muted" style="font-size:.8rem">没有可显示的字段</div>')
+          + '</div>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rv-ok]'), function(b){
+    b.onclick = function(){
+      b.disabled = true;
+      revDecide(Number(b.dataset.rvOk), true, '', b.dataset.legacy === '1');
+    };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rv-no]'), function(b){
+    b.onclick = function(){
+      var r = S.list.find(function(x){ return x.id === Number(b.dataset.rvNo) && (!!x.legacy === (b.dataset.legacy === '1')); });
+      var who = r ? (r.name || r.studentId || ('#' + r.id)) : ('#' + b.dataset.rvNo);
+      promptBox({
+        title: '驳回修改',
+        sub: '驳回了 ' + who,
+        label: '驳回原因（本人可见）',
+        value: '内容有误，请核对后重新提交',
+        maxlength: 200,
+        placeholder: '如：号码有误 / 与本人不符',
+        hint: '留空也可以，默认记为「管理员驳回」。档案内容不会改变。',
+        okText: '确认驳回'
+      }).then(function(reason){
+        if(reason === null) return;
+        revDecide(Number(b.dataset.rvNo), false, reason, b.dataset.legacy === '1');
+      });
+    };
+  });
+}
+
+/** 通过 / 驳回：legacy 走老接口，新机制走 change-requests */
+function revDecide(id, approve, reason, legacy){
+  if(legacy){
+    api('/admin?action=review-contact', { method:'POST', body:{ id: id, approve: approve, reason: reason || '' } })
+      .then(function(j){ toast(j.message || '已处理', approve ? 'ok' : ''); loadReviews(); })
+      .catch(function(e){ toast(e.message, 'danger'); loadReviews(); });
+    return;
+  }
+  var url = approve ? '/admin?action=approve-change' : '/admin?action=reject-change';
+  api(url, { method:'POST', body:{ id: id, reason: reason || '' } })
+    .then(function(j){ toast(j.message || '已处理', approve ? 'ok' : ''); loadReviews(); })
+    .catch(function(e){ toast(e.message, 'danger'); loadReviews(); });
+}
+
+function paintReviewHistory(){
+  var S = STATE.reviews;
+  var body = $('rvBody');
+  if(!body) return;
+  var list = S.history || [];
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('clock', 38)
+      + '<p>还没有审核历史</p>'
+      + '<p style="font-size:.78rem;margin-top:8px">通过或驳回之后，记录会留在这里，7 天内可以撤销</p></div>';
+    return;
+  }
+  var statBadge = function(r){
+    if(r.status === 'approved') return '<span class="badge badge-green">已通过</span>';
+    if(r.status === 'rejected') return '<span class="badge badge-red">已驳回</span>';
+    if(r.status === 'reverted') return '<span class="badge badge-gray">已撤销</span>';
+    return '<span class="badge">' + esc(r.status) + '</span>';
+  };
+  body.innerHTML = '<div class="table-wrap"><table><thead><tr>'
+    + '<th class="nowrap">处理时间</th><th>修改人</th><th>修改内容</th>'
+    + '<th class="nowrap">状态</th><th class="nowrap"></th>'
+    + '</tr></thead><tbody>'
+    + list.map(function(r){
+        var changes = (r.items || []).map(function(it){
+          return '<div style="font-size:.78rem;margin-bottom:2px">'
+            + '<span class="muted">' + esc(it.label) + '：</span>'
+            + (it.before ? esc(it.before) : '<span class="muted">（空）</span>')
+            + ' <span class="muted">→</span> ' + (it.after ? esc(it.after) : '<span class="muted">（清空）</span>')
+            + '</div>';
+        }).join('') || '<span class="muted">—</span>';
+        var act = '';
+        if(r.status === 'approved'){
+          act = r.canRevert
+            ? '<button class="btn btn-xs btn-secondary" data-rv-undo="' + r.id + '">撤销<span class="muted" style="font-size:.68rem;margin-left:3px">剩 ' + r.revertDaysLeft + ' 天</span></button>'
+            : '<span class="muted" style="font-size:.72rem">已超 7 天</span>';
+        }
+        return '<tr>'
+          + '<td class="nowrap muted mono" style="font-size:.76rem">'
+          +   esc(fmt(r.decidedAt || r.createdAt)) + '</td>'
+          + '<td class="nowrap"><b>' + esc(r.name || '—') + '</b>'
+          +   (r.studentId ? '<div class="muted mono" style="font-size:.72rem">' + esc(r.studentId) + '</div>' : '') + '</td>'
+          + '<td>' + changes + (r.note ? '<div class="muted" style="font-size:.72rem">理由：' + esc(r.note) + '</div>' : '') + '</td>'
+          + '<td class="nowrap">' + statBadge(r) + '</td>'
+          + '<td class="nowrap" style="text-align:right">' + act + '</td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>'
+    + '<p class="muted" style="padding:12px 14px 0;font-size:.76rem">'
+    +   '撤销会把内容改回修改之前的样子（7 天以内）；超过 7 天只能手动去档案里改。</p>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rv-undo]'), function(b){
+    b.onclick = function(){
+      var id = Number(b.dataset.rvUndo);
+      var r = (S.history || []).find(function(x){ return x.id === id; });
+      var who = r ? (r.name || ('#' + id)) : ('#' + id);
+      confirmBox({
+        title: '撤销这次审核',
+        html: '把 <b>' + esc(who) + '</b> 的资料改回修改之前的内容？',
+        detail: '会立即生效。撤销后这条记录会标记为「已撤销」，不会删除历史。',
+        okText: '撤销',
+      }).then(function(yes){
+        if(!yes) return;
+        b.disabled = true;
+        api('/admin?action=revert-change', { method:'POST', body:{ id: id } })
+          .then(function(j){ toast(j.message || '已撤销', 'ok'); loadReviews(); })
+          .catch(function(e){ b.disabled = false; toast(e.message, 'danger'); });
+      });
+    };
+  });
+}
+
+/* ============================================================================
+ * ⑭ 面板：资料查看记录
+ * ---------------------------------------------------------------------------
+ * 隐私透明化：谁在什么时候搜到了谁，都留痕。
+ * 后端 /admin?action=view-logs 支持 ?viewer= / ?target= 过滤，这里只做全量分页。
+ * ========================================================================= */
+function renderViewLogs(){
+  var S = STATE.viewlogs;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div class="search">' + svg('search')
+    +     '<input id="vlSearch" placeholder="按查看者或资料姓名筛选…" value="' + attr(S.q) + '" maxlength="30">'
+    +   '</div>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="vlRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="grid-2" style="margin-bottom:18px">'
+    +   '<section class="panel">'
+    +     '<div class="panel-head"><div><h3>' + svg('chart') + '近 7 天查询排行</h3>'
+    +       '<p class="sub">谁最常查同学的联系方式</p></div></div>'
+    +     '<div id="vlTop"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    +   '</section>'
+    +   '<section class="panel">'
+    +     '<div class="panel-head"><div><h3>' + svg('eye') + '为什么记这个</h3>'
+    +       '<p class="sub">给同学一个交代</p></div></div>'
+    +     '<div class="panel-body">'
+    +       '<p style="margin:0;font-size:.83rem;line-height:1.85;color:var(--fg-2)">'
+    +         '通讯录里是同学们的私人联系方式，所以每次查询都会记录：'
+    +         '<b>谁</b>、在<b>什么时候</b>、用什么<b>关键词</b>、查到了<b>谁</b>。'
+    +         '这份记录只有管理员能看，用来在出现纠纷或信息被滥用时追溯。'
+    +       '</p>'
+    +       '<p style="margin:14px 0 0;font-size:.83rem;line-height:1.85;color:var(--fg-2)">'
+    +         '如果某位同学的资料被反复查看，可以点开「成员与档案」里那一行的'
+    +         '<b>查看记录</b>按钮，单独看这条资料被谁查过。'
+    +       '</p>'
+    +     '</div>'
+    +   '</section>'
+    + '</div>'
+    + '<section class="panel"><div id="vlBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('vlSearch').oninput = debounce(function(e){
+    S.q = e.target.value.trim();
+    paintViewLogs();
+  }, 320);
+  $('vlRefresh').onclick = function(){ loadViewLogs(1); };
+  loadViewLogs(1);
+}
+
+function loadViewLogs(page){
+  var S = STATE.viewlogs;
+  S.page = page || 1;
+  api('/admin?action=view-logs&limit=' + S.size + '&offset=' + ((S.page - 1) * S.size)).then(function(j){
+    S.list  = j.logs || [];
+    S.total = j.total || 0;
+    S.top   = j.top  || [];
+    paintViewLogs();
+  }).catch(function(e){
+    var b = $('vlBody');
+    if(b) b.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function paintViewLogs(){
+  var S = STATE.viewlogs;
+
+  /* --- 排行 --- */
+  var topEl = $('vlTop');
+  if(topEl){
+    if(!S.top.length){
+      topEl.innerHTML = '<div class="empty">' + svg('chart', 32) + '<p>近 7 天还没有查询记录</p></div>';
+    }else{
+      var max = S.top[0].count || 1;
+      topEl.innerHTML = '<div class="rank">' + S.top.map(function(t, i){
+        var w = Math.max(4, Math.round((t.count / max) * 100));
+        return '<div class="rank-row">'
+          /* 第一名是渐变底（.rank-row:nth-child(1) .n），字色走全站共用 ink-auto */
+          + '<div class="n' + (i === 0 ? ' ink-auto' : '') + '">' + (i + 1) + '</div>'
+          + '<div class="nm">' + esc(t.username) + '</div>'
+          + '<div class="bar"><i style="width:' + w + '%"></i></div>'
+          + '<div class="c">' + t.count + ' 次</div>'
+          + '</div>';
+      }).join('') + '</div>';
+    }
+  }
+
+  /* --- 日志表 --- */
+  var body = $('vlBody');
+  if(!body) return;
+
+  if(!S.list.length){
+    body.innerHTML = '<div class="empty">' + svg('eye', 38)
+      + '<p>' + (S.q ? '没有匹配的记录' : '还没有任何查询记录') + '</p>'
+      + (S.q ? '' : '<p style="font-size:.78rem;margin-top:8px">同学在「资料查询」页搜过一次就会记一条</p>')
+      + '</div>';
+    return;
+  }
+
+  /* 关键词在前端过滤（后端 view-logs 只按 id 过滤，没有关键词参数） */
+  var q = (S.q || '').toLowerCase();
+  var list = q ? S.list.filter(function(l){
+    return String(l.viewer || '').toLowerCase().indexOf(q) >= 0
+        || String(l.targetName || '').toLowerCase().indexOf(q) >= 0;
+  }) : S.list;
+
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('search', 38) + '<p>当前页没有匹配「' + esc(S.q) + '」的记录</p></div>';
+    return;
+  }
+
+  var shownTo = Math.min(S.page * S.size, S.total);
+
+  body.innerHTML =
+    '<div class="table-wrap"><table><thead><tr>'
+    + '<th>查看者</th><th>查到了谁</th><th class="nowrap">搜索关键词</th>'
+    + '<th class="nowrap">IP</th><th class="nowrap">时间</th>'
+    + '</tr></thead><tbody>'
+    + list.map(function(l){
+        var ini = String(l.viewer || '?').charAt(0).toUpperCase();
+        return '<tr>'
+          + '<td><div class="cell-user"><div class="av ink-auto">' + esc(ini) + '</div>'
+          +   '<div><b>' + esc(l.viewer) + '</b>'
+          +   '<i class="mono">#' + (l.viewerId || '—') + '</i></div></div></td>'
+          + '<td><b>' + esc(l.targetName) + '</b>'
+          +   (l.targetStudentId ? '<div class="mono muted" style="font-size:.73rem">' + esc(l.targetStudentId) + '</div>' : '')
+          + '</td>'
+          + '<td class="mono">' + (l.keyword ? esc(l.keyword) : '<span class="muted">—</span>') + '</td>'
+          + '<td class="mono muted nowrap">' + esc(l.ip || '—') + '</td>'
+          + '<td class="nowrap">' + esc(fmt(l.createdAt))
+          +   '<div class="muted" style="font-size:.72rem">' + esc(ago(l.createdAt)) + '</div></td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>'
+    + '<div class="pager">'
+    +   '<span class="info">共 ' + S.total + ' 条记录，当前第 ' + ((S.page - 1) * S.size + 1) + '–' + shownTo + ' 条'
+    +     (q ? '（本页筛选出 ' + list.length + ' 条）' : '') + '</span>'
+    +   '<span class="pages">'
+    +     '<button data-vlp="prev"' + (S.page <= 1 ? ' disabled' : '') + '>上一页</button>'
+    +     '<button class="on">' + S.page + '</button>'
+    +     '<button data-vlp="next"' + (shownTo >= S.total ? ' disabled' : '') + '>下一页</button>'
+    +   '</span>'
+    + '</div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-vlp]'), function(b){
+    b.onclick = function(){
+      if(b.disabled) return;
+      loadViewLogs(S.page + (b.dataset.vlp === 'next' ? 1 : -1));
+    };
+  });
+}
+
+/* ============================================================================
+ * ⑭⁺ 面板：游戏数据（2026-10-07 新增）
+ * ------------------------------------------------------------------------
+ * 站主要求：后台能看到每个同学的
+ *   ① 各游戏最高分（cls_game_<键>）
+ *   ② 每个游戏的游玩时长（cls_game_play_<游戏>：局数 / 总时长 / 最近一局 / 最近时间）
+ *   ③ 点歌券获取时间（cls_game_coupon_ledger）
+ * 数据来自 /api/data 的个人同步表 user_data，由 /api/admin?action=games 聚合。
+ * ========================================================================= */
+function fmtDur(ms){
+  ms = Number(ms) || 0;
+  var s = Math.round(ms / 1000);
+  if(s < 60) return s + ' 秒';
+  var m = Math.floor(s / 60), ss = s % 60;
+  if(m < 60) return m + ' 分' + (ss ? ' ' + ss + ' 秒' : '');
+  var h = Math.floor(m / 60), mm = m % 60;
+  return h + ' 小时' + (mm ? ' ' + mm + ' 分' : '');
+}
+
+function renderGames(){
+  var S = STATE.games;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div class="search">' + svg('search')
+    +     '<input id="gmSearch" placeholder="搜索姓名或账号…" value="' + attr(S.q) + '" maxlength="40">'
+    +   '</div>'
+    +   '<span class="seg" id="gmTab">'
+    +     '<button data-gm-tab="play"' + (S.tab === 'play' ? ' class="on"' : '') + '>游玩数据</button>'
+    +     '<button data-gm-tab="coupon"' + (S.tab === 'coupon' ? ' class="on"' : '') + '>点歌券</button>'
+    +   '</span>'
+    +   '<button class="btn btn-sm btn-secondary" id="gmRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '数据由游戏页自动上报（需登录后才会上传）：<b>最高分</b>破纪录时上报、'
+    +   '<b>游玩时长</b>每局结束时累加、<b>点歌券</b>领取时写入台账（本周已有记录就不会再发券）。<br>'
+    +   '<b>注意</b>：只有登录状态下玩的游戏才会上云；未登录的只存在本机。'
+    + '</div>'
+    + '<section class="panel"><div id="gmBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('gmSearch').oninput = debounce(function(e){
+    S.q = e.target.value.trim(); paintGames();
+  }, 300);
+  $('gmRefresh').onclick = function(){ loadGames(); };
+  Array.prototype.forEach.call($('gmTab').querySelectorAll('[data-gm-tab]'), function(b){
+    b.onclick = function(){ S.tab = b.dataset.gmTab; renderGames(); };
+  });
+
+  loadGames();
+}
+
+function loadGames(){
+  var S = STATE.games;
+  api('/admin?action=games').then(function(j){
+    S.list = j.users || [];
+    S.meta = j.games || [];
+    S.summary = j.summary || null;
+    paintGames();
+  }).catch(function(e){
+    var b = $('gmBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintGames(){
+  var S = STATE.games;
+  var body = $('gmBody');
+  if(!body) return;   /* 防迟到响应抢页面 */
+
+  var kw = (S.q || '').toLowerCase();
+  var list = S.list.filter(function(u){
+    if(!kw) return true;
+    return String(u.name || '').toLowerCase().indexOf(kw) >= 0
+        || String(u.username || '').toLowerCase().indexOf(kw) >= 0;
+  });
+
+  if(!S.list.length){
+    body.innerHTML = '<div class="empty">' + svg('activity', 38)
+      + '<p>还没有任何游戏数据上云</p>'
+      + '<p class="muted" style="font-size:.82rem">同学登录后再去玩一局，这里就会有记录</p></div>';
+    return;
+  }
+
+  var sm = S.summary || {};
+  var head = '<div class="stat-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div class="mini-card"><span class="mc-label">上报人数</span><b>' + (sm.players || 0) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">累计游玩</span><b>' + (sm.totalPlays || 0) + ' 局</b></div>'
+    + '<div class="mini-card"><span class="mc-label">点歌券发放</span><b>' + (sm.coupons || 0) + ' 张</b></div>'
+    + '</div>';
+
+  if(S.tab === 'coupon'){ body.innerHTML = head + paintCoupons(list); return; }
+  body.innerHTML = head + paintPlay(list);
+}
+
+/* ---- 游玩数据 ---- */
+function paintPlay(list){
+  var S = STATE.games;
+  var cols = S.meta.map(function(g){
+    return '<th style="text-align:right">' + g.icon + ' ' + esc(g.label) + '</th>';
+  }).join('');
+
+  var rows = list.map(function(u){
+    var his = S.meta.map(function(g){
+      var v = u.hi[g.hiKey];
+      return '<td style="text-align:right">'
+        + (v == null || v === '' ? '<span class="muted">—</span>' : '<b>' + esc(v) + '</b>')
+        + '</td>';
+    }).join('');
+    var plays = S.meta.map(function(g){
+      var p = u.play[g.id];
+      if(!p) return '<span class="muted">—</span>';
+      return g.label + ' ' + (p.count || 0) + ' 局 / ' + fmtDur(p.totalMs);
+    }).filter(function(x){ return x.indexOf('muted') < 0; }).join('　·　');
+    var last = '';
+    S.meta.forEach(function(g){
+      var p = u.play[g.id];
+      if(p && p.lastAt && (!last || String(p.lastAt) > last)) last = String(p.lastAt);
+    });
+    return '<tr>'
+      + '<td><b>' + esc(u.name || '(未填)') + '</b></td>'
+      + '<td class="muted" style="font-size:.78rem">' + esc(u.username || '—') + '</td>'
+      + his
+      + '<td style="max-width:280px;font-size:.76rem" class="muted">' + (plays || '—') + '</td>'
+      + '<td class="muted" style="font-size:.76rem">' + (last ? esc(fmt(last)) : '—') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  return '<div class="table-wrap"><table><thead><tr>'
+    + '<th>姓名</th><th>账号</th>' + cols
+    + '<th>各游戏局数 / 时长</th><th>最近游玩</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+/* ---- 点歌券 ---- */
+function paintCoupons(list){
+  var S = STATE.games;
+  var all = [];
+  list.forEach(function(u){
+    (u.coupons || []).forEach(function(c){
+      all.push({ name: u.name, username: u.username, c: c });
+    });
+  });
+  all.sort(function(a, b){
+    return String(b.c.time || '').localeCompare(String(a.c.time || ''));
+  });
+
+  if(!all.length){
+    return '<div class="empty">' + svg('activity', 34)
+      + '<p>还没有人领过点歌券</p>'
+      + '<p class="muted" style="font-size:.82rem">券只有在游戏通关达标后发放，且必须先登录</p></div>';
+  }
+
+  var weeks = [];
+  all.forEach(function(x){ if(weeks.indexOf(x.c.week) < 0) weeks.push(x.c.week); });
+  weeks.sort().reverse();
+  if(!S.week || weeks.indexOf(S.week) < 0) S.week = weeks[0];
+  var shown = all.filter(function(x){ return x.c.week === S.week; });
+
+  var sel = '<label class="ck" style="font-size:.82rem">周次：'
+    + '<select id="gmWeek" style="margin-left:6px">'
+    + weeks.map(function(w){
+        return '<option value="' + attr(w) + '"' + (w === S.week ? ' selected' : '') + '>'
+          + esc(w) + '（' + all.filter(function(x){ return x.c.week === w; }).length + ' 张）</option>';
+      }).join('')
+    + '</select></label>';
+
+  var rows = shown.map(function(x){
+    var c = x.c;
+    return '<tr>'
+      + '<td><b>' + esc(x.name || '(未填)') + '</b></td>'
+      + '<td class="muted" style="font-size:.78rem">' + esc(x.username || '—') + '</td>'
+      + '<td>' + esc(c.gameLabel || c.game) + '</td>'
+      + '<td><code style="font-size:.8rem">' + (c.code ? esc(c.code) : '<span class="muted">（旧记录无券码）</span>') + '</code></td>'
+      + '<td class="muted">' + esc(c.time || '—') + '</td>'
+      + '<td class="muted" style="font-size:.76rem">' + esc(c.source || '—') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  var body = '<div style="margin-bottom:12px">' + sel + '</div>'
+    + '<div class="table-wrap"><table><thead><tr>'
+    + '<th>姓名</th><th>账号</th><th>游戏</th><th>券码</th><th>获取时间</th><th>来源</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  var sel2 = $('gmWeek');
+  if(sel2) sel2.onchange = function(){ S.week = sel2.value; paintGames(); };
+  return body;
+}
+
+/* ============================================================================
+ * ⑮ 面板：登录记录
+ * ========================================================================= */
+function renderLogins(){
+  var S = STATE.logins;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<span class="muted" style="font-size:.82rem">全部同学在这台站点的登录历史（时间 · IP · 设备）</span>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="lgRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<section class="panel"><div id="lgBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('lgRefresh').onclick = function(){ loadLogins(1); };
+  loadLogins(1);
+}
+
+function loadLogins(page){
+  var S = STATE.logins;
+  S.page = page;
+  api('/admin?action=login-logs&limit=' + S.size + '&offset=' + ((page - 1) * S.size)).then(function(j){
+    S.list = j.logs || [];
+    S.total = j.total || 0;
+
+    var body = $('lgBody');
+    if(!body) return;
+    if(!S.list.length){
+      body.innerHTML = '<div class="empty">' + svg('inbox', 38) + '<p>还没有任何登录记录</p>'
+        + '<p style="font-size:.78rem;margin-top:8px">该功能需要先在 Neon 执行 api/schema.sql 建 login_log 表</p></div>';
+      return;
+    }
+
+    var shownTo = Math.min(page * S.size, S.total);
+    body.innerHTML =
+      '<div class="table-wrap"><table><thead><tr>'
+      + '<th>用户</th><th class="nowrap">时间</th><th class="nowrap">IP</th><th>设备</th>'
+      + '</tr></thead><tbody>'
+      + S.list.map(function(l){
+          var initial = String(l.username || '?').charAt(0).toUpperCase();
+          return '<tr>'
+            + '<td><div class="cell-user"><div class="av ink-auto">' + esc(initial) + '</div>'
+            + '<div><b>' + esc(l.username || '(已删除)') + '</b><i class="mono">#' + l.userId + '</i></div></div></td>'
+            + '<td class="nowrap">' + esc(fmt(l.createdAt)) + '<div class="muted" style="font-size:.72rem">' + esc(ago(l.createdAt)) + '</div></td>'
+            + '<td class="nowrap mono">' + esc(l.ip || '—') + '</td>'
+            + '<td class="muted" style="font-size:.78rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + attr(l.userAgent || '') + '">'
+            + esc(shortUA(l.userAgent)) + '</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>'
+      + '<div class="pager">'
+      +   '<span class="info">共 ' + S.total + ' 条记录，当前第 ' + ((page - 1) * S.size + 1) + '–' + shownTo + ' 条</span>'
+      +   '<span class="pages">'
+      +     '<button data-lgp="prev"' + (page <= 1 ? ' disabled' : '') + '>上一页</button>'
+      +     '<button class="on">' + page + '</button>'
+      +     '<button data-lgp="next"' + (shownTo >= S.total ? ' disabled' : '') + '>下一页</button>'
+      +   '</span>'
+      + '</div>';
+
+    Array.prototype.forEach.call(body.querySelectorAll('[data-lgp]'), function(b){
+      b.onclick = function(){
+        if(b.disabled) return;
+        loadLogins(page + (b.dataset.lgp === 'next' ? 1 : -1));
+      };
+    });
+  }).catch(function(e){
+    var body = $('lgBody');
+    if(body) body.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+/* ============================================================================
+ * ⑯-2 面板：在线时长（v3.5.35）
+ *
+ * 站主原话：
+ *   「检测单次在线时长以及历史累计的在线时长……第一次请求到最后一次请求之间
+ *     的时间，就是它这次上线时间……如果两次请求时间它超过了 3 分钟，那就
+ *     算两次请求……历史总的话就把它们加起来。这个在后台我需要能看到历史的数据。」
+ *
+ * 数据来源：online_sessions 表，由心跳接口（/api/auth?action=ping）每 60 秒
+ * 一次的心跳逐段累加。判定规则写在 api/auth.js 的 ping() 里：
+ *   · 距上一条 last_ping_at ≤ 180 秒 → 续上同一段（stop_at 前推）
+ *   · 超过 180 秒 → 另起一段
+ *
+ * 本页两块：
+ *   ① 按人聚合排行（累计时长 / 时段数 / 最长单次 / 最近在线），可切时间窗口
+ *   ② 点某人展开他的时段明细（每段起止时刻 + 时长 + 心跳次数）
+ * ========================================================================= */
+function renderOnline(){
+  var S = STATE.online;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<span class="muted" style="font-size:.82rem">心跳每 60 秒一次；两次心跳超过 3 分钟就另算一次在线</span>'
+    +   '<span style="flex:1"></span>'
+    +   '<span class="seg" id="onDays">'
+    +     [1, 7, 30, 90].map(function(d){
+          return '<button data-ond="' + d + '" class="' + (S.days === d ? 'on' : '') + '">'
+            + (d === 1 ? '今天' : d + ' 天') + '</button>';
+        }).join('')
+    +   '</span>'
+    +   '<button class="btn btn-sm btn-secondary" id="onRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div id="onSummary" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px"></div>'
+    + '<section class="panel" id="onPages" style="display:none"></section>'
+    + '<section class="panel"><div id="onBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  Array.prototype.forEach.call($('onDays').querySelectorAll('[data-ond]'), function(b){
+    b.onclick = function(){
+      S.days = Number(b.dataset.ond);
+      S.detail = null; S.detailUser = null;
+      renderOnline();
+    };
+  });
+  $('onRefresh').onclick = function(){ S.detail = null; S.detailUser = null; renderOnline(); };
+  loadOnline();
+}
+
+/* v3.5.40（站主 #3）：页面标识 → 人话。
+   admin:votes → 后台 · 投票；game:breakout → 游戏 · 打砖块；其余原样。 */
+function pageLabel(p){
+  var raw = String(p || '');
+  if(raw.indexOf('admin:') === 0){
+    var pid = raw.slice(6);
+    var hit = null;
+    try{ hit = (PAGES || []).filter(function(x){ return x.id === pid; })[0]; }catch(e){}
+    return '后台 · ' + (hit ? (hit.label || hit.title || pid) : pid);
+  }
+  if(raw.indexOf('game:') === 0){
+    var gid = raw.slice(5);
+    var gm = null;
+    try{ gm = (GAME_META || []).filter(function(x){ return x.id === gid; })[0]; }catch(e){}
+    return '游戏 · ' + (gm ? gm.label : gid);
+  }
+  if(!raw) return '未知';
+  return raw;
+}
+
+/* 全站「哪个页面最耗时间」——横向条形，按秒数降序 */
+function paintOnlinePages(){
+  var S = STATE.online;
+  var box = document.getElementById('onPages');
+  if(!box) return;
+  var list = (S.byPage || []).filter(function(x){ return x.secs > 0; });
+  if(!list.length){ box.style.display = 'none'; return; }
+  var max = list[0].secs || 1;
+  var top = list.slice(0, 12);
+  box.style.display = 'block';
+  box.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">'
+    +   '<b style="font-size:.9rem">时间花在哪些页面</b>'
+    +   '<span class="muted" style="font-size:.76rem">同一时间窗口，按页面累计停留时长排序</span>'
+    + '</div>'
+    + top.map(function(x){
+        var pct = Math.max(2, Math.round(x.secs / max * 100));
+        return '<div style="margin-bottom:7px">'
+          + '<div style="display:flex;justify-content:space-between;gap:10px;font-size:.8rem;margin-bottom:3px">'
+          +   '<span>' + esc(pageLabel(x.page)) + '</span>'
+          +   '<span class="muted" style="white-space:nowrap">' + esc(secText(x.secs))
+          +     ' · ' + x.users + ' 人</span>'
+          + '</div>'
+          + '<div style="height:6px;border-radius:99px;background:var(--bg-2,#f3ece6);overflow:hidden">'
+          +   '<div style="height:100%;width:' + pct + '%;border-radius:99px;background:linear-gradient(90deg,var(--btn-a,#c2410c),var(--btn-b,#f59e0b))"></div>'
+          + '</div></div>';
+      }).join('');
+}
+
+/* 秒 → 中文时长（0 秒显示成「—」，避免一整列 0 秒看着像故障） */
+function secText(sec){
+  sec = Number(sec) || 0;
+  if(sec <= 0) return '—';
+  return fmtDur(sec * 1000);
+}
+
+function loadOnline(){
+  var S = STATE.online;
+  var body = $('onBody');
+  api('/admin?action=online&days=' + S.days + '&limit=500').then(function(j){
+    S.users = j.users || [];
+    S.grandSecs = j.grandSecs || 0;
+    S.grandSessions = j.grandSessions || 0;
+    S.activeUsers = j.activeUsers || 0;
+    S.totalUsers = j.totalUsers || 0;
+    S.byPage = j.byPage || [];
+    paintOnlinePages();
+
+    var sum = $('onSummary');
+    if(sum){
+      var cards = [
+        { k:'累计在线', v: secText(S.grandSecs), s: S.grandSessions + ' 个时段' },
+        { k:'有记录的人', v: S.activeUsers + ' / ' + S.totalUsers, s:'窗口内有心跳的同学' },
+        { k:'人均在线', v: secText(S.activeUsers ? Math.round(S.grandSecs / S.activeUsers) : 0), s:'按有记录的人算' }
+      ];
+      sum.innerHTML = cards.map(function(c){
+        return '<div class="panel" style="padding:14px 16px;margin:0">'
+          + '<div class="muted" style="font-size:.76rem">' + esc(c.k) + '</div>'
+          + '<div style="font-size:1.35rem;font-weight:700;margin:4px 0 2px">' + esc(c.v) + '</div>'
+          + '<div class="muted" style="font-size:.72rem">' + esc(c.s) + '</div></div>';
+      }).join('');
+    }
+
+    if(!body) return;
+    if(!S.users.length){
+      body.innerHTML = '<div class="empty">' + svg('inbox', 38) + '<p>还没有任何在线记录</p>'
+        + '<p style="font-size:.78rem;margin-top:8px">前端每 60 秒发一次心跳，第一个心跳到达后这里就会有数据</p></div>';
+      return;
+    }
+
+    body.innerHTML =
+      '<div class="table-wrap"><table><thead><tr>'
+      + '<th>用户</th><th class="nowrap">累计时长</th><th class="nowrap">在线次数</th>'
+      + '<th class="nowrap">最长单次</th><th class="nowrap">最近在线</th><th></th>'
+      + '</tr></thead><tbody>'
+      + S.users.map(function(u){
+          var initial = String(u.displayName || u.username || '?').charAt(0).toUpperCase();
+          var open = S.detailUser === u.id;
+          return '<tr' + (open ? ' style="background:rgba(255,255,255,.03)"' : '') + '>'
+            + '<td><div class="cell-user"><div class="av ink-auto">' + esc(initial) + '</div>'
+            + '<div><b>' + esc(u.displayName || u.username || '(未命名)') + '</b>'
+            + '<i class="mono">' + esc(u.username || '') + ' #' + u.id + '</i></div></div></td>'
+            + '<td class="nowrap"><b>' + esc(secText(u.totalSecs)) + '</b></td>'
+            + '<td class="nowrap">' + u.sessionCount + ' 次</td>'
+            + '<td class="nowrap">' + esc(secText(u.longestSecs)) + '</td>'
+            + '<td class="nowrap muted" style="font-size:.78rem">'
+            +   (u.lastAt ? esc(ago(u.lastAt)) + '<div style="font-size:.7rem">' + esc(fmt(u.lastAt)) + '</div>' : '—')
+            + '</td>'
+            + '<td class="nowrap"><button class="btn btn-sm btn-secondary" data-onu="' + u.id + '">'
+            +   (open ? '收起' : '明细') + '</button></td>'
+            + '</tr>'
+            + (open ? '<tr><td colspan="6" style="padding:0;background:rgba(0,0,0,.16)">'
+                    + '<div id="onDetail" style="padding:12px 14px">'
+                    +   (S.detail === null
+                        ? '<div class="loading"><div class="spinner"></div>加载明细…</div>'
+                        : onDetailHtml(S))
+                    + '</div></td></tr>' : '');
+        }).join('')
+      + '</tbody></table></div>';
+
+    Array.prototype.forEach.call(body.querySelectorAll('[data-onu]'), function(b){
+      b.onclick = function(){
+        var id = Number(b.dataset.onu);
+        if(S.detailUser === id){ S.detailUser = null; S.detail = null; loadOnline(); return; }
+        S.detailUser = id;
+        S.detail = null;
+        loadOnline();
+        loadOnlineDetail(id);
+      };
+    });
+  }).catch(function(e){
+    if(body) body.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function loadOnlineDetail(id){
+  var S = STATE.online;
+  api('/admin?action=online&id=' + id + '&limit=200').then(function(j){
+    if(S.detailUser !== id) return;   /* 用户已经切走了，别覆盖 */
+    S.detail = j;
+    var box = $('onDetail');
+    if(!box) return;
+    box.innerHTML = onDetailHtml(S);
+  }).catch(function(e){
+    var box = $('onDetail');
+    if(box) box.innerHTML = '<div class="alert danger">明细加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function onDetailHtml(S){
+  var d = S.detail;
+  if(!d) return '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  var list = d.sessions || [];
+  if(!list.length) return '<div class="muted" style="font-size:.82rem">这个人还没有在线时段记录</div>';
+  /* v3.5.40（站主 #3）：这个人各页面分别待了多久 */
+  var pageHtml = '';
+  if((d.pages || []).length){
+    var pmax = d.pages[0].secs || 1;
+    pageHtml = '<div style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px">'
+      + '<b style="font-size:.82rem">页面分布</b>'
+      + '<div style="margin-top:7px">'
+      + d.pages.map(function(x){
+          var pct = Math.max(2, Math.round(x.secs / pmax * 100));
+          return '<div style="margin-bottom:6px">'
+            + '<div style="display:flex;justify-content:space-between;font-size:.78rem;gap:10px">'
+            +   '<span>' + esc(pageLabel(x.page)) + '</span>'
+            +   '<span class="muted">' + esc(secText(x.secs)) + ' · ' + x.count + ' 段</span>'
+            + '</div>'
+            + '<div style="height:5px;border-radius:99px;background:var(--bg-2,#f3ece6);overflow:hidden">'
+            +   '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--btn-a,#c2410c),var(--btn-b,#f59e0b))"></div>'
+            + '</div></div>';
+        }).join('')
+      + '</div></div>';
+  }
+  return pageHtml
+    + '<div class="muted" style="font-size:.78rem;margin-bottom:8px">'
+      + '总计 <b>' + esc(secText(d.totalSecs)) + '</b>，共 ' + d.sessionCount + ' 个时段'
+      + '（每段 = 一段连续在线，心跳中断超过 3 分钟就断开）'
+      + (d.total > list.length ? '，下面仅显示最近 ' + list.length + ' 段' : '')
+      + '</div>'
+    + '<div class="table-wrap"><table style="font-size:.82rem"><thead><tr>'
+      + '<th class="nowrap">开始</th><th class="nowrap">结束</th><th class="nowrap">时长</th>'
+      + '<th class="nowrap">心跳次数</th><th>会话</th>'
+      + '</tr></thead><tbody>'
+      + list.map(function(s){
+          return '<tr>'
+            + '<td class="nowrap">' + esc(fmt(s.startAt)) + '</td>'
+            + '<td class="nowrap">' + esc(fmt(s.stopAt)) + '</td>'
+            + '<td class="nowrap"><b>' + esc(secText(s.secs)) + '</b></td>'
+            + '<td class="nowrap">' + s.pingCount + '</td>'
+            + '<td class="mono muted" style="font-size:.72rem">' + esc(s.device || '—') + '</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+}
+
+/* ============================================================================
+ * ⑰ 面板：操作日志
+ * ========================================================================= */
+function renderLogs(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<span class="muted" style="font-size:.82rem">管理员对系统做过的所有改动</span>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="lg2Refresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<section class="panel"><div id="acBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('lg2Refresh').onclick = function(){ loadAudit(); };
+  loadAudit();
+}
+
+/* 动作名 → 中文说明 */
+var ACTION_LABEL = {
+  'user.create':        '创建账号',
+  'user.batch_create':  '批量导入账号',
+  'user.reset_password':'重置密码',
+  'user.set_status':    '修改账号状态',
+  'user.set_role':      '修改角色',
+  'user.delete':        '删除账号',
+  'user.clear_sessions':'强制下线',
+  'user.change_password':'用户自己改密码',
+  'data.update':        '修改云端数据',
+  'data.delete':        '删除云端数据',
+  'data.undo_delete':   '撤回删除',
+  'data.backup':        '数据备份',
+  'data.backup_delete': '删除备份',
+  'data.restore':       '从备份回档',
+  'field.repair':       '字段体检恢复',
+  'field.self_edit':    '字段本人可编辑'
+};
+
+function loadAudit(){
+  api('/admin?action=audit&limit=120').then(function(j){
+    var logs = j.logs || [];
+    var body = $('acBody');
+    if(!body) return;
+    if(!logs.length){
+      body.innerHTML = '<div class="empty">' + svg('file', 38) + '<p>还没有操作记录</p></div>';
+      return;
+    }
+    body.innerHTML =
+      '<div class="table-wrap"><table><thead><tr>'
+      + '<th class="nowrap">时间</th><th>操作人</th><th>动作</th><th>对象</th><th>备注</th><th></th>'
+      + '</tr></thead><tbody>'
+      + logs.map(function(l){
+          /* v3.6.4（站主 #3）：删除后 30 分钟内，这行右侧出现「撤回」。
+             deletedId 写在 detail 里（格式 deletedId:123），没有就是普通日志。 */
+          var mm = /deletedId:(\d+)/.exec(String(l.detail || ''));
+          var undoBtn = '';
+          if(mm && l.action === 'field.delete'){
+            var mins = Math.floor((Date.now() - new Date(l.created_at).getTime()) / 60000);
+            var left = 30 - mins;
+            undoBtn = left > 0
+              ? '<button class="btn btn-xs" data-undo="' + mm[1] + '" data-label="' + attr(l.target_id || '') + '">撤回<span class="muted" style="font-size:.68rem;margin-left:3px">剩 ' + left + ' 分</span></button>'
+              : '<span class="muted" style="font-size:.72rem">已过期</span>';
+          }
+          return '<tr>'
+            + '<td class="nowrap"><span class="mono" style="font-size:.76rem">' + esc(fmt(l.created_at)) + '</span></td>'
+            + '<td class="nowrap">' + (l.actor ? '<b>' + esc(l.actor) + '</b>' : '<span class="muted">系统</span>') + '</td>'
+            + '<td class="nowrap"><span class="badge badge-orange">' + esc(ACTION_LABEL[l.action] || l.action) + '</span></td>'
+            + '<td class="nowrap muted mono" style="font-size:.76rem">' + esc(l.target_id || '—') + '</td>'
+            + '<td class="muted" style="font-size:.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(l.detail || '—') + '</td>'
+            + '<td class="nowrap">' + undoBtn + '</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>'
+      + '<p class="muted" style="padding:12px 14px 0;font-size:.76rem">显示最近 ' + logs.length + ' 条记录</p>';
+
+    /* v3.6.4：撤回按钮 */
+    Array.prototype.forEach.call(body.querySelectorAll('[data-undo]'), function(btn){
+      btn.onclick = function(){
+        var id = btn.dataset.undo;
+        btn.disabled = true;
+        btn.textContent = '撤回中…';
+        api('/admin?action=undo-delete', { method:'POST', body:{ id: Number(id) } })
+          .then(function(r){
+            toast(r.message || '已撤回', 'ok');
+            loadAudit();
+          })
+          .catch(function(e){
+            btn.disabled = false;
+            btn.textContent = '撤回';
+            toast(e.message || '撤回失败', 'danger');
+          });
+      };
+    });
+  }).catch(function(e){
+    var body = $('acBody');
+    if(body) body.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+/* ============================================================================
+ * ⑱ 面板：行为日志（v2.10.0 用户操作日志）
+ * ----------------------------------------------------------------------------
+ * 与上面「操作日志」（管理员审计）分工：
+ *   · 操作日志 = 管理员改了系统什么（audit_log）
+ *   · 行为日志 = 每个用户点了什么（user_action_log，全点击上报）
+ * 本面板 = 统计卡片 + 热门页面条形图 + 明细表（可按用户/类型/日期筛）。
+ * 英文路由/键名在这里统一翻译成中文展示（站主要求 ⑨）。
+ * ============================================================================ */
+
+/* 动作类型 → 中文（后端存的是英文短码） */
+var ACT_ACTION_CN = { click:'点击', jump:'页面跳转', switch:'切换标签', submit:'表单提交' };
+/* 页面名翻译表：前端一般直接发中文名，这里是英文兜底（历史数据/直调） */
+var ACT_PAGE_CN = {
+  home:'首页', index:'首页', score:'成绩分析', scores:'成绩分析',
+  compare:'成绩对比', homework:'作业查看', classworks:'作业查看',
+  tools:'其他工具', affairs:'班级事务', study:'学习资料', screen:'大屏服务',
+  account:'账号弹窗', profile:'我的资料', popup:'通知弹窗'
+};
+function actActionCn(a){ return ACT_ACTION_CN[a] || a || '—'; }
+function actPageCn(p){
+  if(!p) return '—';
+  var k = String(p).toLowerCase();
+  return ACT_PAGE_CN[k] || p;
+}
+
+function renderActionLogs(){
+  var S = STATE.actionlogs;
+  $('view').innerHTML =
+    /* ---- 统计面板 ---- */
+    '<div class="grid-2" id="alStats" style="margin-bottom:16px;grid-template-columns:minmax(0,5fr) minmax(0,7fr)">'
+    +   '<section class="panel"><div class="panel-body" style="display:flex;flex-direction:column;justify-content:center;gap:14px">'
+    +     '<div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:1.9rem;min-width:110px" id="alToday">—</b><span class="muted" style="font-size:.8rem">今日点击</span></div>'
+    +     '<div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:1.9rem;min-width:110px" id="alWeek">—</b><span class="muted" style="font-size:.8rem">近 7 天点击</span></div>'
+    +     '<div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:1.9rem;min-width:110px" id="alUsers">—</b><span class="muted" style="font-size:.8rem">7 日活跃用户</span></div>'
+    +   '</div></section>'
+    +   '<section class="panel"><div class="panel-head"><div><h3>热门页面（近 7 天）</h3></div></div>'
+    +     '<div class="panel-body" id="alTopPages"><div class="muted">加载中…</div></div></section>'
+    + '</div>'
+
+    /* ---- 筛选工具条 ---- */
+    + '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div class="search">' + svg('search', 15) + '<input id="alSearch" placeholder="搜索用户名或姓名…" value="' + attr(S.q) + '"></div>'
+    +   '<select id="alAction">'
+    +     '<option value="">全部类型</option>'
+    +     '<option value="click"' + (S.action === 'click' ? ' selected' : '') + '>点击</option>'
+    +     '<option value="jump"' + (S.action === 'jump' ? ' selected' : '') + '>页面跳转</option>'
+    +     '<option value="switch"' + (S.action === 'switch' ? ' selected' : '') + '>切换标签</option>'
+    +     '<option value="submit"' + (S.action === 'submit' ? ' selected' : '') + '>表单提交</option>'
+    +   '</select>'
+    +   '<input id="alDay" type="date" value="' + attr(S.day) + '" title="按某一天筛选（北京时间）">'
+    +   '<button class="btn btn-sm btn-secondary" id="alRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+
+    + '<section class="panel"><div id="alBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('alSearch').oninput = debounce(function(e){ S.q = e.target.value.trim(); S.page = 1; loadActionLogs(); }, 320);
+  $('alAction').onchange = function(e){ S.action = e.target.value; S.page = 1; loadActionLogs(); };
+  $('alDay').onchange = function(e){ S.day = e.target.value; S.page = 1; loadActionLogs(); };
+  $('alRefresh').onclick = function(){ loadActionStats(); loadActionLogs(); };
+
+  loadActionStats();
+  loadActionLogs();
+}
+
+/** 统计卡片 + 热门页面条形图 */
+function loadActionStats(){
+  api('/admin?action=action-stats').then(function(j){
+    var t = $('alToday'), w = $('alWeek'), u = $('alUsers');
+    if(t) t.textContent = j.today || 0;
+    if(w) w.textContent = j.week || 0;
+    if(u) u.textContent = j.activeUsers7d || 0;
+    var box = $('alTopPages');
+    if(!box) return;
+    var list = j.topPages || [];
+    if(!list.length){ box.innerHTML = '<div class="muted">近 7 天还没有数据</div>'; return; }
+    var max = list[0].n || 1;
+    box.innerHTML = list.map(function(r){
+      var pct = Math.max(4, Math.round(r.n / max * 100));
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+        + '<span style="flex:none;width:88px;font-size:.8rem;text-align:right">' + esc(actPageCn(r.page)) + '</span>'
+        + '<span style="flex:1;background:var(--tint,rgba(120,53,15,.08));border-radius:6px;height:16px;overflow:hidden">'
+        +   '<i style="display:block;height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--grad-a,#c2410c),var(--grad-b,#ea580c));border-radius:6px"></i>'
+        + '</span>'
+        + '<b style="flex:none;font-size:.8rem;min-width:36px">' + r.n + '</b>'
+        + '</div>';
+    }).join('');
+  }).catch(function(){
+    var box = $('alTopPages');
+    if(box) box.innerHTML = '<div class="muted">统计读取失败（表可能刚建出，无数据）</div>';
+  });
+}
+
+function loadActionLogs(){
+  var S = STATE.actionlogs;
+  api('/admin?action=action-logs&page=' + S.page + '&size=' + S.size
+      + '&q=' + encodeURIComponent(S.q || '')
+      + '&type=' + encodeURIComponent(S.action || '')
+      + '&day=' + encodeURIComponent(S.day || '')).then(function(j){
+    S.list = j.logs || [];
+    S.total = j.total || 0;
+    paintActionLogs();
+  }).catch(function(e){
+    var b = $('alBody');
+    if(b) b.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+/**
+ * v3.5.12 行为日志分组（站主 2026-10-17 要求）：
+ *   「如果前后都是同一个人那么就合并显示，点击可展开。同一个人但是中途
+ *    有其他人则分多次合并」
+ *
+ * 做法：后端已按 created_at desc 返回，这里顺序扫一遍，**相邻同 userId**
+ * 归为一组；一旦中间夹了别人就断开、后面同一个人再开新组。
+ * 组内顺序保持后端的倒序（最新在上）。
+ */
+function alGroup(list){
+  var groups = [];
+  var cur = null;
+  (list || []).forEach(function(l){
+    var uid = (l.userId != null ? l.userId : ('u:' + l.username));
+    /* v3.5.13（站主反馈「不能一面只显示一条」）：同一人连续操作超过
+       10 分钟就切断另起一组 —— 否则长时间挂机的人会把整页合并成一条。 */
+    var gapOk = false;
+    if(cur && cur.uid === uid && cur.items.length){
+      var prevT = parseTime(cur.items[0].createdAt);
+      var curT = parseTime(l.createdAt);
+      if(prevT && curT){
+        var gapMs = Math.abs(prevT.getTime() - curT.getTime());
+        gapOk = gapMs <= 10 * 60 * 1000;
+      }
+    }
+    if(cur && cur.uid === uid && gapOk){
+      cur.items.push(l);
+    } else {
+      cur = { uid: uid, items: [l] };
+      groups.push(cur);
+    }
+  });
+  return groups;
+}
+
+/** 组内时间区间文本：同一分钟只写一个时间，跨分钟写「起 ~ 止」 */
+function alRange(g){
+  var a = g.items[g.items.length - 1];   /* 最早 */
+  var b = g.items[0];                    /* 最新 */
+  var ta = fmt(a.createdAt), tb = fmt(b.createdAt);
+  if(g.items.length === 1) return ta;
+  if(ta === tb) return ta;
+  return ta + ' ~ ' + tb;
+}
+
+function paintActionLogs(){
+  var S = STATE.actionlogs;
+  var body = $('alBody');
+  if(!body) return;
+  if(!S.list.length){
+    body.innerHTML = '<div class="empty">' + svg('activity', 38) + '<p>没有匹配的记录</p>'
+      + '<p class="muted" style="font-size:.78rem">用户登录后的每一次点击都会记在这里（明细保留 90 天）</p></div>';
+    return;
+  }
+  var page = S.page, size = S.size;
+  var shownTo = Math.min(page * size, S.total);
+  var groups = alGroup(S.list);
+
+  /* 默认展开状态记在 STATE 里，翻页不丢 */
+  S.open = S.open || {};
+
+  var html = '';
+  groups.forEach(function(g, gi){
+    var head = g.items[0];
+    var key = 'g' + page + '_' + gi;
+    var n = g.items.length;
+    var opened = !!S.open[key];
+
+    /* ---- 组标题行（可点） ---- */
+    html += '<div class="al-g' + (opened ? ' open' : '') + '" data-alg="' + key + '">'
+      + '<div class="al-g-h">'
+      +   '<span class="al-g-caret">' + svg('chevronRight', 14) + '</span>'
+      +   '<span class="al-g-time">' + esc(alRange(g)) + '</span>'
+      +   '<span class="al-g-user"><b>' + esc(head.displayName || head.username) + '</b>'
+      +     '<span class="muted" style="font-size:.72rem"> @' + esc(head.username) + '</span></span>'
+      +   '<span class="al-g-cnt">' + (n > 1
+            ? ('<span class="badge badge-blue">' + n + ' 次操作</span>')
+            : ('<span class="badge badge-gray">1 次操作</span>'))
+      +   '</span>'
+      +   '<span class="al-g-brief muted">' + esc(alBrief(g)) + '</span>'
+      + '</div>';
+
+    /* ---- 组明细（展开后可见） ---- */
+    html += '<div class="al-g-body">';
+    g.items.forEach(function(l){
+      html += '<div class="al-row">'
+        + '<span class="al-row-t muted nowrap">' + esc(fmt(l.createdAt)) + '</span>'
+        + '<span class="nowrap"><span class="badge badge-blue">' + esc(actActionCn(l.action)) + '</span></span>'
+        + '<span class="nowrap muted">' + esc(actPageCn(l.page)) + '</span>'
+        + '<span class="al-row-tg" title="' + attr((l.target || '') + (l.detail ? ' — ' + l.detail : '')) + '">'
+        +   esc(l.target || '—')
+        +   (l.detail ? '<span class="muted" style="font-size:.72rem"> · ' + esc(l.detail) + '</span>' : '')
+        + '</span>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  body.innerHTML =
+    '<div class="al-wrap">' + html + '</div>'
+    + '<div class="pager">'
+    +   '<span class="info">共 ' + S.total + ' 条（' + groups.length + ' 组），当前显示第 '
+    +     ((page - 1) * size + 1) + '–' + shownTo + ' 条</span>'
+    +   '<span class="muted" style="font-size:.76rem">点整行可展开/收起 · 同一人连续操作已合并</span>'
+    +   '<span class="pages">'
+    +     '<button data-alp="prev"' + (page <= 1 ? ' disabled' : '') + '>上一页</button>'
+    +     '<button class="on">' + page + '</button>'
+    +     '<button data-alp="next"' + (shownTo >= S.total ? ' disabled' : '') + '>下一页</button>'
+    +   '</span>'
+    + '</div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-alg]'), function(el){
+    el.querySelector('.al-g-h').onclick = function(){
+      var k = el.dataset.alg;
+      S.open[k] = !S.open[k];
+      el.classList.toggle('open', S.open[k]);
+    };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-alp]'), function(b){
+    b.onclick = function(){
+      if(b.disabled) return;
+      S.page = page + (b.dataset.alp === 'next' ? 1 : -1);
+      loadActionLogs();
+    };
+  });
+}
+
+/** 组摘要：动作 + 页面 去重后的前两项，例如「点击 · 首页、成绩分析」 */
+function alBrief(g){
+  var acts = [], pages = [];
+  g.items.forEach(function(l){
+    var a = actActionCn(l.action), p = actPageCn(l.page);
+    if(acts.indexOf(a) < 0) acts.push(a);
+    if(p && pages.indexOf(p) < 0) pages.push(p);
+  });
+  var t = acts.slice(0, 2).join(' / ');
+  if(pages.length) t += ' · ' + pages.slice(0, 2).join('、') + (pages.length > 2 ? ' 等' : '');
+  return t;
+}
+
+/* ============================================================================
+ * ⑰ 面板：系统令牌（仅管理员可见）
+ * ---------------------------------------------------------------------------
+ * Cloudflare / Gitee / VoiceHub 等第三方令牌统一存这里。
+ * 后端挂在系统账号下，读写接口只让 role=admin 通过。
+ * ========================================================================= */
+function renderSecrets(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<span class="muted" style="font-size:.82rem">仅管理员可查看。这把密钥同时用于加密<b>令牌库</b>和<b>成员档案</b>（v3.5.0 起：姓名、学号、身份证、微信等全部密文存储），不开则两边都是明文。</span>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm" id="scAdd">' + svg('plus', 14) + '新增令牌</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="scRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert warn" id="scWarn" style="display:none;margin-bottom:14px"></div>'
+    + '<section class="panel"><div id="scBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('scAdd').onclick = function(){ secretDialog(null); };
+  $('scRefresh').onclick = loadSecrets;
+  loadSecrets();
+}
+
+function loadSecrets(){
+  api('/admin?action=secrets').then(function(j){
+    STATE.secrets = j.secrets || [];
+    STATE.secretsEncrypted = !!j.encrypted;
+    STATE.secretsHasKey = !!j.hasKey;
+    paintSecrets();
+    var warn = $('scWarn');
+    if(warn){
+      if(j.warning){
+        warn.style.display = 'block';
+        warn.textContent = j.warning;
+      }else if(!j.hasKey){
+        warn.style.display = 'block';
+        warn.textContent = '当前未配置 ADMIN_SECRETS_KEY：令牌与成员档案（姓名/学号/身份证/微信等）都在数据库里明文存储。如需加密，到 Cloudflare Workers 设置环境变量 ADMIN_SECRETS_KEY（值用 openssl rand -base64 32 生成）。配置后新保存的资料立刻变密文，存量资料在管理员下次保存时自动转换。';
+      }else{
+        warn.style.display = 'none';
+      }
+    }
+  }).catch(function(e){
+    var b = $('scBody');
+    if(b) b.innerHTML = '<div class="alert danger" style="margin:18px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function paintSecrets(){
+  var body = $('scBody');
+  if(!body) return;
+  var list = STATE.secrets || [];
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('key', 38)
+      + '<p>还没有保存任何令牌</p>'
+      + '<p style="font-size:.78rem;margin-top:8px">点右上角「新增令牌」把 Cloudflare / Gitee 等凭据存进来</p></div>';
+    return;
+  }
+
+  var rows = list.map(function(s){
+    var v = s.value || '';
+    var masked = v.length > 12 ? (v.slice(0, 6) + '…' + v.slice(-6)) : v;
+    return '<tr data-name="' + attr(s.name) + '">'
+      + '<td class="mono nowrap" style="font-weight:600">' + esc(s.name) + '</td>'
+      + '<td style="font-family:monospace;font-size:.78rem;max-width:320px;overflow:hidden;text-overflow:ellipsis" title="' + attr(v) + '">'
+      +   '<span class="sc-val">' + esc(masked) + '</span>'
+      + '</td>'
+      + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
+      +   '<button data-sc="show">显示</button>'
+      +   '<button data-sc="edit">编辑</button>'
+      +   '<button class="danger" data-sc="del">删除</button>'
+      + '</div></td>'
+      + '</tr>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="table-wrap"><table><thead><tr>'
+    + '<th class="nowrap">名称</th><th>令牌值</th><th style="text-align:right">操作</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '<p class="hint" style="padding:12px 14px 0;font-size:.75rem">' + (STATE.secretsEncrypted ? '已启用加密存储' : '当前明文存储') + '</p>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-sc]'), function(b){
+    var name = b.closest('[data-name]').dataset.name;
+    var item = list.find(function(x){ return x.name === name; }) || {};
+    if(b.dataset.sc === 'show'){
+      b.onclick = function(){
+        var cell = b.closest('tr').querySelector('.sc-val');
+        if(cell.textContent === item.value){
+          var v = item.value || '';
+          cell.textContent = v.length > 12 ? (v.slice(0, 6) + '…' + v.slice(-6)) : v;
+          b.textContent = '显示';
+        }else{
+          cell.textContent = item.value;
+          b.textContent = '隐藏';
+        }
+      };
+    }else if(b.dataset.sc === 'edit'){
+      b.onclick = function(){ secretDialog(item); };
+    }else if(b.dataset.sc === 'del'){
+      b.onclick = function(){ deleteSecretDialog(item); };
+    }
+  });
+}
+
+function secretDialog(item){
+  var isNew = !item;
+  openModal({
+    title: isNew ? '新增令牌' : ('编辑 ' + esc(item.name)),
+    sub: isNew ? '名称用大写下划线格式，如 CLOUDFLARE_API_TOKEN' : '留空表示不修改名称',
+    body:
+      '<div class="field"><label for="scName">令牌名称</label>'
+      + '<input id="scName" maxlength="64" value="' + attr(isNew ? '' : item.name) + '" placeholder="如 CLOUDFLARE_API_TOKEN">'
+      + '<p class="hint">只能是大写字母、数字、下划线，且以大写字母开头。</p></div>'
+      + '<div class="field"><label for="scValue">令牌值</label>'
+      + '<textarea id="scValue" rows="3" placeholder="粘贴令牌内容" style="font-family:monospace">' + attr(isNew ? '' : item.value) + '</textarea></div>'
+      + '<div class="msg" id="scMsg"></div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>' + (isNew ? '保存' : '更新') + '</button>',
+    onMount: function(box){
+      var msg = box.querySelector('#scMsg');
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = function(){
+        var name = (box.querySelector('#scName').value || '').trim();
+        var value = box.querySelector('#scValue').value;
+        if(!name){ msg.className = 'msg err show'; msg.textContent = '令牌名称不能为空'; return; }
+        if(!value){ msg.className = 'msg err show'; msg.textContent = '令牌值不能为空'; return; }
+        api('/admin?action=save-secret', { method:'POST', body:{ name: name, value: value } })
+          .then(function(j){
+            closeModal();
+            toast(j.message || '已保存', 'ok');
+            loadSecrets();
+          })
+          .catch(function(e){
+            msg.className = 'msg err show';
+            msg.textContent = e.message;
+          });
+      };
+    }
+  });
+}
+
+function deleteSecretDialog(item){
+  confirmBox({
+    title: '删除令牌',
+    html: '确定删除 <b class="mono">' + esc(item.name) + '</b> 吗？',
+    detail: '删除后后台就不再保存这条令牌，但已经写到 Cloudflare / GitHub Secrets 里的不受影响。',
+    danger: true,
+    okText: '删除'
+  }).then(function(ok){
+    if(!ok) return;
+    api('/admin?action=delete-secret', { method:'POST', body:{ name: item.name } })
+      .then(function(){ toast('已删除', 'ok'); loadSecrets(); })
+      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4000); });
+  });
+}
+
+/* ============================================================================
+ * ⑱ 面板：系统设置
+ * ========================================================================= */
+/** v3.5.42：班徽预览（填了地址就显示小图，填错给个提示） */
+function paintBadgePrev(){
+  var el = document.getElementById('stBadgePrev');
+  var inp = document.getElementById('stBadge');
+  if(!el || !inp) return;
+  var u = String(inp.value || '').trim();
+  if(!u){ el.innerHTML = '<span class="muted" style="font-size:.76rem">当前使用站点班徽 badge.png</span>'; return; }
+  var abs = u;
+  try{ abs = new URL(u, location.href).href; }catch(e){}
+  el.innerHTML = '<img src="' + attr(abs) + '" alt="班徽预览" '
+    + 'style="width:64px;height:64px;border-radius:14px;object-fit:cover;border:1px solid var(--border)" '
+    + 'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'">'
+    + '<span class="muted" style="display:none;font-size:.76rem;color:#b3261e">图片加载失败，检查地址是否正确</span>';
+}
+
+function renderSettings(){
+  $('view').innerHTML =
+    '<div class="grid-2">'
+
+    + '<section class="panel">'
+    +   '<div class="panel-head"><div><h3>' + svg('globe') + '站点信息</h3>'
+    +     '<p class="sub">显示在班级站上的基本信息（v3.5.29 起改这里立即生效，无需改代码）</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div class="field"><label for="stName">站点名称</label>'
+    +     '<input id="stName" placeholder="如 25级05班班级服务站" maxlength="40"></div>'
+    +     '<div class="field"><label for="stSlogan">副标题 / 标语</label>'
+    +     '<input id="stSlogan" placeholder="选填，如 一站式获取班级服务 · 资源 · 工具" maxlength="60"></div>'
+    /* v3.5.42（站主 #2）：班徽 —— 导出图片右上角用 */
+    +     '<div class="field"><label for="stBadge">班徽图片地址</label>'
+    +     '<input id="stBadge" placeholder="留空则用站点图标 favicon.svg；可填图片直链或 ./badge.png">'
+    +     '<p class="hint">用于所有「导出图片」（作业 / 抽歌排期）的右上角。'
+    +     '建议用正方形 PNG（不小于 128×128），放在站点目录里最稳（外链可能因跨域画不上，会自动跳过）。</p>'
+    +     '<div id="stBadgePrev" style="margin-top:8px"></div></div>'
+    +     '<button class="btn" id="stSave">' + svg('check', 14) + '保存设置</button>'
+    +     '<div class="msg" id="stMsg"></div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel">'
+    +   '<div class="panel-head"><div><h3>' + svg('shield') + '账号策略</h3>'
+    +     '<p class="sub">站点级开关，保存后立即生效（无需重新部署）</p></div></div>'
+    +   '<div class="panel-body">'
+
+    /* v2.10.0：注册总开关 + 注册审核，真开关真保存。
+       数据走 /admin?action=settings 与 set-settings（site_settings 表）。 */
+    +   '<div class="field">'
+    +     '<label style="display:flex;align-items:center;gap:10px;cursor:pointer">'
+    +       '<input type="checkbox" id="stRegOpen" style="width:auto;margin:0">'
+    +       '<span><b>开放自助注册</b><br>'
+    +       '<span class="muted" style="font-size:.76rem">关闭后：登录页不显示注册入口，注册接口直接拒绝。账号只能由你在「成员与档案」里创建</span></span>'
+    +     '</label>'
+    +   '</div>'
+    +   '<div class="field">'
+    +     '<label style="display:flex;align-items:center;gap:10px;cursor:pointer">'
+    +       '<input type="checkbox" id="stRegReview" style="width:auto;margin:0">'
+    +       '<span><b>注册需管理员审核</b><br>'
+    +       '<span class="muted" style="font-size:.76rem">开启后：新注册的账号状态为「待审核」，在「成员与档案」里通过后才能登录；未审核账号无法登录</span></span>'
+    +     '</label>'
+    +   '</div>'
+    +   '<button class="btn" id="stPolicySave">' + svg('check', 14) + '保存策略</button>'
+    +   '<div class="msg" id="stPolicyMsg"></div>'
+
+    +   '<dl class="kv" style="grid-template-columns:130px 1fr;margin-top:18px">'
+    +     '<dt>首次登录</dt><dd><span class="badge badge-green">建议改密</span>'
+    +       '<div class="muted" style="font-size:.76rem;margin-top:5px">v2.10.0 起：用初始密码登录后只是<b>建议</b>修改，可点「暂不修改」跳过，个人中心会常驻提醒</div></dd>'
+    +     '<dt>密码存储</dt><dd><span class="badge badge-gray">PBKDF2-SHA256</span>'
+    +       '<div class="muted" style="font-size:.76rem;margin-top:5px">只存哈希，管理员也无法查看明文密码</div></dd>'
+    +     '<dt>登录限流</dt><dd><span class="badge badge-blue">5 次错误锁 15 分钟</span></dd>'
+    +   '</dl>'
+    + '</div>'
+    + '</section>'
+
+    + '</div>'
+
+    + '<section class="panel" style="margin-top:18px">'
+    +   '<div class="panel-head"><div><h3>' + svg('database') + '后端连接</h3>'
+    +     '<p class="sub">前端与后端的对接状态</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<dl class="kv" style="grid-template-columns:130px 1fr">'
+    +     '<dt>后端地址</dt><dd class="mono" style="font-size:.78rem">' + esc(API_BASE || '(同域)') + '</dd>'
+    +     '<dt>数据库</dt><dd>Neon Postgres</dd>'
+    +     '<dt>运行环境</dt><dd>Cloudflare Workers</dd>'
+    +     '</dl>'
+    +     '<div style="margin-top:16px"><button class="btn btn-sm btn-secondary" id="stPing">' + svg('activity', 14) + '测试连接</button></div>'
+    +     '<div class="msg" id="stPingMsg"></div>'
+    +   '</div>'
+    + '</section>';
+
+  $('stPing').onclick = function(){
+    var msg = $('stPingMsg');
+    msg.className = 'msg show warn'; msg.textContent = '正在测试…';
+    api('/admin?action=stats').then(function(){
+      msg.className = 'msg ok show';
+      msg.textContent = '连接正常，后端与数据库均可用。';
+    }).catch(function(e){
+      msg.className = 'msg err show';
+      msg.textContent = '连接失败：' + e.message;
+    });
+  };
+
+  /* v3.5.29：站点名称 / 副标题真正可编辑（站主：「站点的名称及它的一个副名称
+     也可以在这后台编辑」）。读写都走 site_config（与点歌守卫 vhGuard 同一条管道）：
+     · 读  —— GET /content?keys=site_config，回填输入框
+     · 存  —— 整个 cfg 取回 → 改 siteName / siteSubtitle → PUT /content
+       （必须先取整个 cfg 再合并，不然会把 vhGuard 等其它配置冲掉）
+     留空 = 恢复前端 index.html 里的静态默认。主站收到 site_config 后由
+     applySiteConfig → applyBranding 即时换 <title>、页头大标题、副标题、页脚。 */
+  (function(){
+    var nameEl = $('stName'), subEl = $('stSlogan');
+    api('/content?keys=site_config').then(function(j){
+      var cfg = (j && j.items && j.items.site_config) || {};
+      if(nameEl && !nameEl.value) nameEl.value = String(cfg.siteName || '');
+      if(subEl && !subEl.value) subEl.value = String(cfg.siteSubtitle || '');
+      var bdEl = $('stBadge');
+      if(bdEl && !bdEl.value) bdEl.value = String(cfg.badgeUrl || '');
+      paintBadgePrev();
+      if(bdEl) bdEl.oninput = paintBadgePrev;
+    }).catch(function(){});
+    $('stSave').onclick = function(){
+      var msg = $('stMsg');
+      if(!msg) return;
+      msg.className = 'msg show warn';
+      msg.textContent = '保存中…';
+      api('/content?keys=site_config').then(function(j){
+        var cfg = (j && j.items && j.items.site_config) || {};
+        if(typeof cfg !== 'object' || Array.isArray(cfg)) cfg = {};
+        var name = String((nameEl && nameEl.value) || '').trim();
+        var sub = String((subEl && subEl.value) || '').trim();
+        /* ⚠️ 清空时写空字符串而不是 delete：前端 applySiteConfig 只覆盖「键存在」的字段，
+           若 delete 掉，主站 SITE_DATA 会残留旧值，清空就永远不生效了。 */
+        cfg.siteName = name;
+        cfg.siteSubtitle = sub;
+        /* v3.5.42：班徽地址（保存空串 = 回落到站点图标，不是删键） */
+        cfg.badgeUrl = String(($('stBadge') && $('stBadge').value) || '').trim();
+        /* 顺手缓存一份，导出图片时不用再多查一次 */
+        try{
+          localStorage.setItem('__cls_badge', JSON.stringify({
+            url: cfg.badgeUrl, ts: Date.now()
+          }));
+        }catch(e){}
+        return api('/content', { method: 'PUT', body: { items: { site_config: cfg } } });
+      }).then(function(){
+        msg.className = 'msg show ok';
+        msg.textContent = '已保存。同学下次打开/刷新班级站就会显示新的站点名称和副标题（浏览器标题栏、页头、页脚一起换）。';
+        toast('站点信息已保存', 'ok');
+      }).catch(function(e){
+        msg.className = 'msg show err';
+        msg.textContent = '保存失败：' + (e.message || e);
+      });
+    };
+  })();
+
+  /* v2.10.0：注册策略（总开关 + 审核）—— 读当前值，保存写 site_settings。
+     register_open 为 null = 从未设置过，此时展示环境变量兜底值（envDefault），
+     管理员一旦保存即以 DB 值为准。 */
+  api('/admin?action=settings').then(function(j){
+    var s = (j && j.settings) || {};
+    var ro = $('stRegOpen'), rr = $('stRegReview');
+    if(ro) ro.checked = s.register_open === null || s.register_open === undefined
+      ? !!(j && j.envDefault && j.envDefault.register_open) : !!s.register_open;
+    if(rr) rr.checked = (s.register_review === null || s.register_review === undefined) ? true : !!s.register_review;
+  }).catch(function(){ /* 读不到就保持默认勾选态，保存时以界面为准 */ });
+
+  $('stPolicySave').onclick = function(){
+    var msg = $('stPolicyMsg');
+    msg.className = 'msg show warn'; msg.textContent = '保存中…';
+    api('/admin?action=set-settings', { method:'POST', body: {
+      register_open: $('stRegOpen').checked,
+      register_review: $('stRegReview').checked,
+    }}).then(function(j){
+      msg.className = 'msg ok show'; msg.textContent = j.message || '已保存，立即生效';
+    }).catch(function(e){
+      msg.className = 'msg err show'; msg.textContent = '保存失败：' + e.message;
+    });
+  };
+}
+
+/* ============================================================================
+ * ⑲ 面板：我的账户
+ * ========================================================================= */
+function renderAccount(){
+  var me = STATE.me || {};
+  $('view').innerHTML =
+    '<div class="grid-2">'
+
+    + '<section class="panel">'
+    +   '<div class="panel-head"><div><h3>' + svg('user') + '账号信息</h3></div></div>'
+    +   '<div class="panel-body">'
+    +     '<dl class="kv">'
+    +     '<dt>用户名</dt><dd class="mono">' + esc(me.username || '—') + '</dd>'
+    +     '<dt>显示名</dt><dd>' + esc(me.displayName || '—') + '</dd>'
+    +     '<dt>角色</dt><dd><span class="badge badge-orange">管理员</span></dd>'
+    +     '</dl>'
+    +   '</div>'
+    + '</section>'
+
+    /* ---- AI 助手交接（需求 8）----
+       AI 助手是一个真实管理员账号，能编辑云端公告/作业。
+       换 AI 时在这里把身份转给新账号即可，不用改代码重新部署。 */
+    + '<section class="panel">'
+    +   '<div class="panel-head"><div><h3>' + svg('refresh') + 'AI 助手交接</h3>'
+    +     '<p class="sub">把 AI 助手身份转交给另一个账号</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div class="alert info" style="margin-bottom:14px;font-size:.8rem">'
+    +       'AI 助手账号可以编辑云端公告和作业。<br>'
+    +       '换 AI 时：先让新账号自行注册，再在这里填它的用户名点交接。<br>'
+    +       '旧账号会降回普通用户（<b>不会删号，数据都保留</b>），新账号需重新登录。'
+    +     '</div>'
+    +     '<div id="aiCur" class="muted" style="font-size:.82rem;margin-bottom:12px">正在读取当前 AI 账号…</div>'
+    +     '<div class="field"><label for="aiNew">接管账号的用户名</label>'
+    +     '<input id="aiNew" placeholder="例如 aibot" maxlength="20"></div>'
+    +     '<button class="btn btn-secondary" id="aiGo">' + svg('refresh', 14) + '交接 AI 助手身份</button>'
+    +     '<div class="msg" id="aiMsg"></div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel">'
+    +   '<div class="panel-head"><div><h3>' + svg('lock') + '修改密码</h3>'
+    +     '<p class="sub">修改后其他设备会自动退出登录</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div class="field"><label for="pwOld">当前密码</label>'
+    +     '<input id="pwOld" type="password" autocomplete="current-password"></div>'
+    +     '<div class="field"><label for="pwNew">新密码</label>'
+    +     '<input id="pwNew" type="password" autocomplete="new-password" placeholder="6–64 位">'
+    +     '<p class="hint">建议用字母 + 数字组合，别和用户名一样。</p></div>'
+    +     '<div class="field"><label for="pwNew2">再输一次新密码</label>'
+    +     '<input id="pwNew2" type="password" autocomplete="new-password"></div>'
+    +     '<button class="btn" id="pwGo">' + svg('check', 14) + '修改密码</button>'
+    +     '<div class="msg" id="pwMsg"></div>'
+    +   '</div>'
+    + '</section>'
+
+    + '</div>'
+
+    + '<section class="panel" style="margin-top:18px">'
+    +   '<div class="panel-head"><div><h3>' + svg('activity') + '我的登录记录</h3>'
+    +     '<p class="sub">检测账号是否被他人使用</p></div></div>'
+    +   '<div id="meLogins"><div class="loading" style="padding:26px"><div class="spinner"></div></div></div>'
+    + '</section>';
+
+  /* ---- AI 助手交接 ---- */
+  loadAiAccount();
+  $('aiGo').onclick = handoverAi;
+
+  $('pwGo').onclick = function(){
+    var msg = $('pwMsg');
+    var o = $('pwOld').value, n = $('pwNew').value, n2 = $('pwNew2').value;
+    if(!o || !n){ msg.className = 'msg err show'; msg.textContent = '请填写完整'; return; }
+    if(n !== n2){ msg.className = 'msg err show'; msg.textContent = '两次输入的新密码不一样'; return; }
+    if(n.length < 6 || n.length > 64){ msg.className = 'msg err show'; msg.textContent = '新密码长度需 6–64 位'; return; }
+
+    $('pwGo').disabled = true;
+    msg.className = 'msg show warn'; msg.textContent = '正在修改…';
+    /* v2.9.9：客户端派生路径，服务端零派生 */
+    clsChangePwd(o, n, STATE.me && STATE.me.username)
+      .then(function(j){
+        if(j.token) setToken(j.token);
+        msg.className = 'msg ok show';
+        msg.textContent = j.message || '密码已修改';
+        $('pwOld').value = ''; $('pwNew').value = ''; $('pwNew2').value = '';
+        $('pwGo').disabled = false;
+        toast('密码已修改', 'ok');
+      })
+      .catch(function(e){
+        msg.className = 'msg err show';
+        msg.textContent = e.message;
+        $('pwGo').disabled = false;
+      });
+  };
+
+  api('/admin?action=login-logs&id=' + me.id + '&limit=15').then(function(j){
+    var logs = j.logs || [];
+    var el = $('meLogins');
+    if(!el) return;
+    el.innerHTML = logs.length
+      ? '<div class="table-wrap"><table><thead><tr><th class="nowrap">时间</th><th class="nowrap">IP</th><th>设备</th></tr></thead><tbody>'
+        + logs.map(function(l){
+            return '<tr><td class="nowrap">' + esc(fmt(l.createdAt)) + '</td>'
+              + '<td class="nowrap mono">' + esc(l.ip || '—') + '</td>'
+              + '<td class="muted" style="font-size:.78rem">' + esc(shortUA(l.userAgent)) + '</td></tr>';
+          }).join('')
+        + '</tbody></table></div>'
+      : '<div class="empty" style="padding:30px"><p class="muted">暂无登录记录</p></div>';
+  }).catch(function(){
+    var el = $('meLogins');
+    if(el) el.innerHTML = '<div class="alert info" style="margin:16px">登录记录暂不可用（需先在数据库执行 api/schema.sql）</div>';
+  });
+}
+
+/* ---------------- AI 助手交接 ----------------
+   读当前 AI 账号是谁，显示在账户面板上 */
+function loadAiAccount(){
+  api('/admin?action=ai-account').then(function(j){
+    var el = $('aiCur');
+    if(!el) return;
+    var a = j.account;
+    el.innerHTML = a
+      ? '当前 AI 助手账号：<b class="mono">' + esc(a.username) + '</b>'
+        + '（显示名：' + esc(a.displayName) + '）'
+      : '<span style="color:var(--warn)">当前还没有 AI 助手账号</span>'
+        + '<br><span style="font-size:.78rem">提交交接后会自动把目标账号设为 AI 助手</span>';
+  }).catch(function(e){
+    var el = $('aiCur');
+    if(el) el.textContent = '读取失败：' + e.message;
+  });
+}
+
+/** 把 AI 助手身份交给另一个账号 */
+function handoverAi(){
+  var name = ($('aiNew').value || '').trim().toLowerCase();
+  var msg = $('aiMsg');
+  if(!name){
+    msg.className = 'msg err show';
+    msg.textContent = '请填写要接管的用户名';
+    return;
+  }
+  confirmBox({
+    title: '确认交接 AI 助手身份',
+    html: '要把 AI 助手身份交给 <b class="mono">' + esc(name) + '</b> 吗？',
+    detail: '该账号会被提升为管理员，并获得编辑云端公告/作业的权限。'
+          + '原来的 AI 账号会降回普通用户（账号和数据都保留）。',
+    warn: '交接后需要让新账号重新登录才会生效。',
+    okText: '确认交接',
+  }).then(function(ok){
+    if(!ok) return;
+    $('aiGo').disabled = true;
+    api('/admin?action=handover-ai', { method:'POST', body:{ username: name } })
+      .then(function(j){
+        $('aiGo').disabled = false;
+        msg.className = 'msg ok show';
+        msg.textContent = j.message || '已完成交接';
+        $('aiNew').value = '';
+        toast('AI 助手身份已交接', 'ok', 4200);
+        loadAiAccount();
+      })
+      .catch(function(e){
+        $('aiGo').disabled = false;
+        msg.className = 'msg err show';
+        msg.textContent = e.message;
+      });
+  });
+}
+
+/* ============================================================================
+ * ⑲ 登录门 / 会话
+ * ========================================================================= */
+/* 与主站 index.html 共用的登录态键。
+   第二十七轮（2026-10-07）修复「后台显示旧身份 / 在线不显示」：
+   以前后台用 cls_admin_token / cls_admin_user，主站用 cls_auth，
+   两套完全独立 —— 在主站登了 AI 账号，后台还显示上次的余子康；
+   两边心跳各发各的 token，后端只记到一边，在线状态也对不上。
+   现在后台登录/登出都同步写一份 cls_auth（主站同款形状 {token,user}），
+   启动时也优先读 cls_auth，实现「一套登录态、两站共享」。 */
+var LS_SHARED = 'cls_auth';
+
+function syncShared(){
+  try{
+    if(STATE.token && STATE.me){
+      localStorage.setItem(LS_SHARED, JSON.stringify({ token: STATE.token, user: STATE.me }));
+    }else{
+      localStorage.removeItem(LS_SHARED);
+    }
+  }catch(e){}
+}
+
+function setToken(t){
+  STATE.token = t || '';
+  try{
+    if(t) localStorage.setItem(LS_TOKEN, t);
+    else localStorage.removeItem(LS_TOKEN);
+    syncShared();
+  }catch(e){}
+  /* 登录后开始心跳：站主自己在后台挂着也要算「在线」（2026-10-07） */
+  if(t && typeof startAdminHeartbeat === 'function') startAdminHeartbeat();
+}
+function setUser(u){
+  STATE.me = u || null;
+  try{
+    if(u) localStorage.setItem(LS_USER, JSON.stringify(u));
+    else localStorage.removeItem(LS_USER);
+    syncShared();
+  }catch(e){}
+}
+
+function gateMsg(text, kind){
+  var el = $('gMsg');
+  el.className = 'msg show ' + (kind || 'err');
+  el.textContent = text;
+}
+
+function doLogin(){
+  var u = $('gU').value.trim();
+  var p = $('gP').value;
+  if(!u || !p){ gateMsg('请填写用户名和密码'); return; }
+
+  $('gGo').disabled = true;
+  $('gGo').textContent = '登录中…';
+  gateMsg('', '');
+
+  /* v2.9.9：浏览器本地派生 credential，服务端零派生 */
+  clsLogin(u, p)
+    .then(function(j){
+      if(!j.user || j.user.role !== 'admin'){
+        gateMsg('这个账号不是管理员，无法进入后台。');
+        $('gGo').disabled = false; $('gGo').textContent = '登录后台';
+        return;
+      }
+      setToken(j.token);
+      setUser(j.user);
+      $('gGo').disabled = false; $('gGo').textContent = '登录后台';
+      /* 首次登录（管理员自己也可能被重置过密码）→ 强制改密 */
+      if(j.mustChangePassword){ openForceChangePwd(); return; }
+      enterApp();
+    })
+    .catch(function(e){
+      gateMsg(e.message || '登录失败');
+      $('gGo').disabled = false; $('gGo').textContent = '登录后台';
+    });
+}
+
+/** 强制改密弹窗：不可关闭，改完才能用后台 */
+function openForceChangePwd(){
+  openModal({
+    locked: true,
+    title: '请先修改初始密码',
+    sub: '为了账号安全，首次登录必须设置自己的新密码',
+    body:
+      '<div class="alert warn">你的账号目前还是初始密码。请设置一个新密码，之后用新密码登录。</div>'
+      + '<div class="field"><label for="fcOld">当前密码（初始密码）</label>'
+      + '<input id="fcOld" type="password" autocomplete="current-password"></div>'
+      + '<div class="field"><label for="fcNew">新密码</label>'
+      + '<input id="fcNew" type="password" autocomplete="new-password" placeholder="6–64 位">'
+      + '<p class="hint">建议字母 + 数字组合。</p></div>'
+      + '<div class="field"><label for="fcNew2">再输一次新密码</label>'
+      + '<input id="fcNew2" type="password" autocomplete="new-password"></div>'
+      + '<div class="msg" id="fcMsg"></div>',
+    foot: '<button class="btn btn-block" id="fcGo">设置新密码并进入后台</button>',
+    onMount: function(box){
+      box.querySelector('#fcGo').onclick = function(){
+        var msg = box.querySelector('#fcMsg');
+        var o = box.querySelector('#fcOld').value;
+        var n = box.querySelector('#fcNew').value;
+        var n2 = box.querySelector('#fcNew2').value;
+        if(!o || !n){ msg.className = 'msg err show'; msg.textContent = '请填写完整'; return; }
+        if(n !== n2){ msg.className = 'msg err show'; msg.textContent = '两次输入的新密码不一样'; return; }
+        if(n.length < 6 || n.length > 64){ msg.className = 'msg err show'; msg.textContent = '新密码长度需 6–64 位'; return; }
+        if(n === o){ msg.className = 'msg err show'; msg.textContent = '新密码不能和初始密码一样'; return; }
+
+        box.querySelector('#fcGo').disabled = true;
+        msg.className = 'msg show warn'; msg.textContent = '正在设置…';
+        /* v2.9.9：客户端派生路径，服务端零派生 */
+        clsChangePwd(o, n, STATE.me && STATE.me.username)
+          .then(function(j){
+            if(j.token) setToken(j.token);
+            toast('密码已设置成功', 'ok');
+            closeModal();
+            enterApp();
+          })
+          .catch(function(e){
+            msg.className = 'msg err show';
+            msg.textContent = e.message;
+            box.querySelector('#fcGo').disabled = false;
+          });
+      };
+    }
+  });
+}
+
+function doLogout(silent){
+  var finish = function(){
+    setToken(''); setUser(null);
+    $('app').classList.remove('show');
+    $('gate').classList.remove('hide');
+    $('gP').value = '';
+    if(!silent) toast('已退出登录', 'ok');
+  };
+  if(!STATE.token){ finish(); return; }
+  api('/auth?action=logout', { method:'POST' }).catch(function(){}).then(finish);
+}
+
+function enterApp(){
+  $('gate').classList.add('hide');
+  $('app').classList.add('show');
+  var me = STATE.me || {};
+  $('meName').textContent = me.displayName || me.username || '管理员';
+  $('meAv').textContent = String(me.displayName || me.username || '管').charAt(0).toUpperCase();
+  $('meRole').textContent = 'ADMIN';
+  go('overview');
+  startAdminHeartbeat();
+  /* v3.5.42：把班徽地址缓存下来，导出图片时直接用 */
+  try{ cacheSiteBadge(); }catch(e){}
+  /* v3.7.0：顺便把班徽图本身也下到本地（7 天一次） */
+  try{ adminBadgeCacheLoad(false); }catch(e){}
+}
+
+/* v3.5.40（站主 #3）：后台心跳带上当前面板，在线统计里就能看出
+   「在后台看投票 / 在后台看成绩」各花了多久。格式 admin:<panelId>。 */
+function adminPageName(){
+  var id = (typeof STATE !== 'undefined' && STATE && STATE.page) || 'overview';
+  return 'admin:' + id;
+}
+
+/* v3.5.35：后台也要打心跳 —— 站主开着后台改作业的时间同样算「在线」，
+   否则「在线时长」面板会把站长漏掉。规则与主站一致：60 秒一拍，
+   标签页隐藏时跳过；失败静默，绝不影响后台使用。 */
+/** v3.5.42：导出图片用的班徽地址。优先用「站点信息」里配的，其次站点图标。 */
+/** v3.7.0（站主 #3）：登录时把班徽存本地，导出直接读缓存（后台同前台一套逻辑） */
+function adminBadgeCacheGet(){
+  try{
+    var v = localStorage.getItem('__cls_badge_src') || '';
+    return v.indexOf('data:image/') === 0 ? v : '';
+  }catch(e){ return ''; }
+}
+function adminBadgeCacheLoad(force){
+  var cached = adminBadgeCacheGet();
+  var ts = 0;
+  try{ ts = Number(localStorage.getItem('__cls_badge_ts')) || 0; }catch(e){}
+  if(!force && cached && ts && (Date.now() - ts) < 7 * 86400000) return;
+  try{
+    fetch(apiUrl('/badge'), { cache:'force-cache' }).then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.blob();
+    }).then(function(blob){
+      if(!blob || blob.size < 200) return;
+      var fr = new FileReader();
+      fr.onload = function(){
+        var d = String(fr.result || '');
+        if(d.indexOf('data:image/') !== 0) return;
+        try{
+          localStorage.setItem('__cls_badge_src', d);
+          localStorage.setItem('__cls_badge_ts', String(Date.now()));
+        }catch(e){}
+      };
+      fr.readAsDataURL(blob);
+    }).catch(function(){});
+  }catch(e){}
+}
+
+/** v3.6.5：后台的班徽候选（缓存优先，其次本地小图，最后走代理） */
+function adminBadgeList(){
+  var list = [];
+  var cached = adminBadgeCacheGet();
+  if(cached) list.push(cached);
+  try{ list.push(new URL('./badge.png', location.href).href); }catch(e){}
+  try{
+    var c = JSON.parse(localStorage.getItem('__cls_badge') || '{}');
+    if(c && /^https?:\/\//i.test(String(c.url || ''))) list.push(apiUrl('/badge'));
+  }catch(e){}
+  return list;
+}
+
+function adminBadgeUrl(){
+  /* v3.6.4：与前台一致 —— 配了直链就走服务器代理，避免跨域把画布搞脏 */
+  try{
+    var c = JSON.parse(localStorage.getItem('__cls_badge') || '{}');
+    if(c && /^https?:\/\//i.test(String(c.url || ''))) return apiUrl('/badge');
+  }catch(e){}
+  try{ return new URL('./badge.png', location.href).href; }catch(e){ return './badge.png'; }
+}
+
+/** 后台启动时拉一次 site_config，把班徽地址缓存下来（导出时不用等） */
+function cacheSiteBadge(){
+  try{
+    api('/content?keys=site_config').then(function(j){
+      var cfg = (j && j.items && j.items.site_config) || {};
+      localStorage.setItem('__cls_badge', JSON.stringify({
+        url: String(cfg.badgeUrl || ''), ts: Date.now()
+      }));
+    }).catch(function(){});
+  }catch(e){}
+}
+
+function startAdminHeartbeat(){
+  if(window.__adminHbTimer) return;   /* 防重复启动（PWA 往返 / 重新登录） */
+  var beat = function(){
+    if(document.hidden) return;
+    if(!STATE.token) return;
+    try{
+      fetch(apiUrl('/auth?action=ping&page=' + encodeURIComponent(adminPageName())), {
+        method:'GET', cache:'no-store',
+        headers:{ Authorization:'Bearer ' + STATE.token }
+      }).catch(function(){});
+    }catch(e){}
+  };
+  beat();
+  window.__adminHbTimer = setInterval(beat, 60000);
+}
+
+/* ============================================================================
+ * ⑳ 主题
+ * ========================================================================= */
+/* v3.5.14：横屏切换（修正「双重旋转」）
+   ------------------------------------------------------------
+   站主反馈：「只旋转了我的手机屏幕，页面没有一起旋转，还是只能竖着看」。
+   原因是：系统被 fullscreen + orientation.lock 转成横屏后（视口 844×390），
+   CSS 又把 body 转了 -90°，等于转回竖屏。
+
+   现在的规则：
+     · LAND_ON = 用户要不要横屏（只表示意图）
+     · syncLandscapeClass() 看**当前视口**：竖屏（h>w）才加 .force-landscape 旋转兜底；
+       一旦系统真的转成横屏（w>h），立刻撤掉 CSS 旋转，页面自然铺满宽屏。
+     · 锁方向成功与否都不影响结果，最多差一个「地址栏方向」。 */
+var LAND_ON = false;
+/* v3.5.30：横屏只认「用户显式点过按钮」。
+   ------------------------------------------------------------
+   站主原话：
+     「如果是从主页面进入的后台页面，默认采用竖屏，不用横过来。每次都横过来，
+       但实际上它还是竖屏，因为我你只是改了页面，但是手机没改。」
+     「在后台界面退出了一下 PWA 应用（切到后台做别的事），重新回来时要保持原来状态，
+       不要一回去又变成竖屏了。」
+   于是拆成两层状态：
+     · LAND_ON      —— 当前要不要横屏（唯一真源，只由按钮/恢复流程改）
+     · cls_admin_land —— 持久化 LAND_ON（'1' / '0'），跨 PWA 前后台切换、跨刷新都记住
+   进入后台时不看「上次怎么设的」而看「这次从哪进来的」：
+     从主站跳进来（sessionStorage 有 cls_admin_from_home）→ 一律竖屏，并清掉横屏记忆；
+     外部直接打开网址 / 独立 PWA 入口 → 沿用上次的横屏选择。
+   另外监听 visibilitychange：从后台切回来时重新对齐一次，避免系统把屏幕转回去后
+   CSS 还停在横屏状态（站主抱怨的「回来又变回竖屏」就是这种不同步）。 */
+var LAND_LS = 'cls_admin_land';
+var FROM_HOME_LS = 'cls_admin_from_home';
+
+function deviceIsLandscape(){
+  try{
+    var a = null;
+    if(screen.orientation && typeof screen.orientation.angle === 'number') a = screen.orientation.angle;
+    if(a === null && typeof window.orientation === 'number') a = window.orientation;
+    if(a === null) return false;
+    a = Math.abs(Number(a)) % 360;
+    return a === 90 || a === 270;
+  }catch(e){ return false; }
+}
+
+function syncLandscapeClass(){
+  var vpPortrait = window.innerHeight > window.innerWidth;
+  var devLand = deviceIsLandscape();
+  /* v3.5.40：设备物理横了就不再加 CSS 旋转（iOS PWA 视口可能不更新） */
+  var need = LAND_ON && vpPortrait && !devLand;
+  var html = document.documentElement;
+  if(html.classList.contains('force-landscape') !== need){
+    html.classList.toggle('force-landscape', need);
+  }
+  var btn = document.getElementById('btnRotate');
+  if(btn) btn.setAttribute('data-on', LAND_ON ? '1' : '0');
+  landscapePin();
+}
+
+/* v3.9.6（站主）：横屏时 body 自己滚动，absolute 的顶栏会随内容滚走 ——
+   滚到中间就点不到汉堡按钮（打开侧边栏）。滚动时按 scrollTop 补偿把它钉住。 */
+function landscapePin(){
+  var head = document.querySelector('.head');
+  if(!head) return;
+  var html = document.documentElement;
+  if(!html.classList.contains('force-landscape')){
+    if(head.style.top) head.style.top = '';
+    return;
+  }
+  var st = (document.body && document.body.scrollTop) || 0;
+  head.style.top = st + 'px';
+}
+try{
+  document.addEventListener('scroll', landscapePin, { passive: true, capture: true });
+  window.addEventListener('resize', landscapePin, { passive: true });
+}catch(e){}
+
+function lockLandscape(){
+  /* v3.5.40：**不再请求全屏**。全屏 + fixed 旋转在 iOS PWA 上切后台回来时
+     会留下「全屏已退出、布局还按全屏算」的残影（站主说的卡住）。
+     CSS 旋转已经能兜住竖屏场景，全屏只是锦上添花，不值得这个风险。
+     支持 orientation.lock 的浏览器（Android Chrome）仍然试一下，失败也无副作用。 */
+  try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}
+}
+function unlockLandscape(){
+  try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+}
+
+function toggleLandscape(){
+  LAND_ON = !LAND_ON;
+  saveLandIntent();
+  if(LAND_ON){
+    lockLandscape();
+    /* 先按竖屏兜底转一次；350ms 后系统若已转屏会自动撤掉 CSS 旋转 */
+    syncLandscapeClass();
+    setTimeout(syncLandscapeClass, 380);
+    toast('已切到横屏（若画面还是竖的，把手机横过来即可）', 'ok');
+  }else{
+    unlockLandscape();
+    document.documentElement.classList.remove('force-landscape');
+    setTimeout(syncLandscapeClass, 380);
+    toast('已切回竖屏', 'ok');
+  }
+}
+
+/** 记住当前横屏意图（'1' / '0'）。显式点按钮、恢复流程都走这里，保证只有一处写盘。 */
+function saveLandIntent(){
+  try{ localStorage.setItem(LAND_LS, LAND_ON ? '1' : '0'); }catch(e){}
+}
+
+/** v3.5.30：进入后台时决定用竖屏还是横屏。
+ *  规则（站主拍板）：
+ *    ① 从主站跳进来 → 一律竖屏，并顺手把横屏记忆清成 '0'
+ *       （否则下次从外部打开又会横过来，等于没改）
+ *    ② 外部直接打开 / 独立 PWA → 沿用上次选择
+ *  注意：这里**不主动调用 lockLandscape()**。站主抱怨「页面横了但手机没横」，
+ *  根因就是以前进来就抢着锁方向；现在只有点了按钮才尝试锁，
+ *  免得一进后台画面就是歪的。 */
+function initLandscape(){
+  var fromHome = false;
+  try{
+    fromHome = sessionStorage.getItem(FROM_HOME_LS) === '1';
+    if(fromHome) sessionStorage.removeItem(FROM_HOME_LS);
+  }catch(e){}
+  if(fromHome){
+    LAND_ON = false;
+    saveLandIntent();
+    document.documentElement.classList.remove('force-landscape');
+  }else{
+    try{ LAND_ON = (localStorage.getItem(LAND_LS) === '1'); }catch(e){ LAND_ON = false; }
+  }
+  syncLandscapeClass();
+  setTimeout(syncLandscapeClass, 400);
+}
+
+/** v3.5.30：从后台切回来 / 页面被恢复时重新对齐。
+ *  v3.5.40 重写：不再重复请求锁方向（iOS PWA 恢复时视口没更新，锁方向 + fixed 旋转
+ *  会把页面顶出屏幕，站主反馈的「卡住」就是这个）。
+ *  现在先摘旋转 → 两帧后按真实视口重排 → 再等一拍补一次。 */
+function resyncLandscape(){
+  try{
+    document.documentElement.classList.remove('force-landscape');
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        syncLandscapeClass();
+        setTimeout(syncLandscapeClass, 260);
+      });
+    });
+  }catch(e){}
+}
+
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : '');
+  try{ localStorage.setItem(LS_THEME, t); }catch(e){}
+  /* 字色全站共用逻辑（与 index.html 同款）：主题变了背景全变，
+     所有 .ink-auto 按新背景重算相反色；启动时 initTheme→applyTheme 也会扫到 */
+  try{ clsAutoInk(document.body); }catch(e){}
+}
+function initTheme(){
+  var t = '';
+  try{ t = localStorage.getItem(LS_THEME) || ''; }catch(e){}
+  if(!t){
+    /* 跟随系统 */
+    t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : '';
+  }
+  applyTheme(t);
+}
+
+/* ============================================================================
+ * ㉑ 启动
+ * ========================================================================= */
+/* ============================================================================
+ * 版本号显示 + 在线心跳（2026-10-07）
+ * -------------------------------------------------------------------------- */
+/* 版本号显示 + 在线心跳（2026-10-07）
+   ⚠️ 2026-10-10：版本号要同时写进**顶栏 #headVer** 和侧边栏 #adminVer。
+      手机上侧边栏默认收起，只有顶栏那个看得见 —— 站主靠它判断自己打开的是
+      不是缓存的旧页面（此前反复出现「改了却没生效」，其实是手机缓存）。 */
+function paintAdminVer(){
+  var txt = 'v' + SITE_VERSION + ' · ' + VER_DATE;
+  var a = $('adminVer'); if(a) a.textContent = txt;
+  var h = $('headVer');  if(h) h.textContent = 'v' + SITE_VERSION;
+}
+/* 点一下回查线上后端构建号：等于最新 commit 前 7 位说明已经是新代码 */
+function checkAdminVer(){
+  var el = $('adminVer') || $('headVer');
+  if(!el) return;
+  var txt = 'v' + SITE_VERSION + ' · 回查中…';
+  var a = $('adminVer'); if(a) a.textContent = txt;
+  var h = $('headVer');  if(h) h.textContent = 'v' + SITE_VERSION + ' ·…';
+  var t = new Date();
+  var hhmm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+  fetch((API_BASE || '') + '/api/content', { cache:'no-store' })
+    .then(function(r){
+      var sha = r.headers.get('x-build-sha') || '';
+      var full = 'v' + SITE_VERSION + ' · ' + VER_DATE + ' · 线上构建 ' + (sha || '未知') + ' ' + hhmm;
+      var a2 = $('adminVer'); if(a2) a2.textContent = full;
+      var h2 = $('headVer');  if(h2) h2.textContent = 'v' + SITE_VERSION + ' · ' + (sha || '未知');
+    })
+    .catch(function(){
+      var full = 'v' + SITE_VERSION + ' · ' + VER_DATE + ' · 回查失败';
+      var a3 = $('adminVer'); if(a3) a3.textContent = full;
+      var h3 = $('headVer');  if(h3) h3.textContent = 'v' + SITE_VERSION + ' · 回查失败';
+    });
+}
+/* 后台也算「在线」：站主自己在后台挂着也要体现在最后上线里 */
+function boot(){
+  initTheme();
+  paintAdminVer();
+
+  /* 顶栏按钮 */
+  var rot = $('btnRotate');
+  if(rot) rot.onclick = toggleLandscape;
+  /* v3.5.14 修：横屏不再「无脑 CSS 旋转」——
+     系统（屏幕）真的转成横屏时，页面再转 -90° 就等于又转回竖屏，看着还是竖的。
+     现在只记「用户想让后台横屏」的意图，按实时视口决定要不要 CSS 兜底旋转。
+     v3.5.30：意图改为「这次从哪进来」决定，见 initLandscape() 注释。 */
+  initLandscape();
+  window.addEventListener('resize', syncLandscapeClass);
+  window.addEventListener('orientationchange', function(){ setTimeout(syncLandscapeClass, 260); });
+  /* v3.5.30：PWA 切到后台再回来 —— 系统可能已经悄悄把方向改了，
+     这里重新对齐一次 CSS 横屏状态，保证「回来还是你离开时的样子」。 */
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') setTimeout(resyncLandscape, 120);
+  });
+  /* 页面从往返缓存（bfcache）恢复时同样对齐 */
+  window.addEventListener('pageshow', function(){ setTimeout(resyncLandscape, 120); });
+  $('btnTheme').onclick = function(){
+    var cur = document.documentElement.getAttribute('data-theme');
+    applyTheme(cur === 'dark' ? '' : 'dark');
+  };
+  $('btnRefresh').onclick = function(){ go(STATE.page); };
+  /* 返回主界面（需求 13）。直接跳转，登录态靠 localStorage 里的 token 带过去，
+     回到主站仍是登录状态，不用重新登。 */
+  $('btnBackHome').onclick = function(){ location.href = 'index.html'; };
+  $('btnLogout').onclick = function(){ doLogout(false); };
+  $('burger').onclick = function(){
+    var s = $('side');
+    if(s.classList.contains('open')) closeSide(); else openSide();
+  };
+  $('scrim').onclick = closeSide;
+
+  /* 登录门 */
+  $('gGo').onclick = doLogin;
+  $('gP').onkeydown = function(e){ if(e.key === 'Enter') doLogin(); };
+  $('gU').onkeydown = function(e){ if(e.key === 'Enter') $('gP').focus(); };
+
+  /* 恢复会话：优先读与主站共用的 cls_auth（2026-10-07 统一登录态）。
+     这样在主站登录了 AI 账号，打开后台直接就是 AI 账号，不会再显示旧身份。 */
+  var token = '';
+  var user = null;
+  try{
+    var shared = localStorage.getItem(LS_SHARED);
+    if(shared){
+      var sa = JSON.parse(shared);
+      if(sa && sa.token && sa.user){ token = sa.token; user = sa.user; }
+    }
+  }catch(e){}
+  /* 兜底：升级前残留的 cls_admin_*（旧会话） */
+  if(!token){
+    try{
+      token = localStorage.getItem(LS_TOKEN) || '';
+      var raw = localStorage.getItem(LS_USER);
+      if(raw) user = JSON.parse(raw);
+    }catch(e){}
+  }
+
+  if(!token || !user || user.role !== 'admin'){
+    return;   /* 停在登录门 */
+  }
+
+  STATE.token = token;
+  STATE.me = user;
+
+  /* 校验 token 是否还有效，并顺手确认 role */
+  api('/auth?action=me').then(function(j){
+    if(!j.user || j.user.role !== 'admin'){
+      doLogout(true);
+      gateMsg('这个账号不是管理员，无法进入后台。');
+      return;
+    }
+    STATE.me = j.user;
+    setUser(j.user);
+    if(j.mustChangePassword){ $('gate').classList.add('hide'); openForceChangePwd(); return; }
+    enterApp();
+  }).catch(function(){
+    doLogout(true);
+  });
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', boot);
+}else{
+  boot();
+}
+/* v2.5.0 去 emoji：启动后把后台界面里写死的 emoji 一次性换成 SVG 图标。
+   ⚠️ 只跑一次、不监听 DOM；option 放不了 SVG，单独去 emoji。 */
+setTimeout(function(){
+  try{ admIconify(document.body); }catch(e){}
+  try{ admStripOptions(document); }catch(e){}
+}, 0);
+
+/* ============================================================================
+ * ⑫ 面板：抽歌排期（第二十八轮，从主站 index.html 整体搬迁）
+ * ----------------------------------------------------------------------------
+ * 【为什么搬】
+ *   原先这套抽签逻辑住在前端 index.html 里，靠「点歌平台图标连点 5 次 +
+ *   答身份验证题（身份证后四位 / 户籍地村名）」隐藏进入。
+ *   站主要求：功能挪进后台，前台那套入口整个删掉。
+ *
+ * 【搬过来时砍掉了什么】
+ *   · 身份验证弹窗 —— 后台本身就要密码登录，再答一遍是重复劳动。
+ *   · 「点歌平台图标连点 5 次」的入口 —— 后台由侧栏点进来，不需要暗门。
+ *   · 平台密钥的两个 xor 密文常量 —— 后台已有一份（VH_DJ_KEY_ENC），复用即可。
+ *
+ * 【数据存哪：这次改了】
+ *   前台版本把排期存在浏览器 localStorage（cls_dj_schedule），
+ *   换台电脑 / 清缓存就全没了 —— 而这是个「在教室电脑抽签」的场景。
+ *   现在改为存云端（/api/content 的 dj_schedule / dj_excluded 两键），
+ *   全班管理员共享同一份，换设备不丢。
+ *
+ *   ⚠️ localStorage 仍然保留，但只做两件事：
+ *      ① 读取失败时的兜底（比如网络断了，至少还能看本机旧数据）
+ *      ② 首次进入时的「旧数据一键迁移」来源
+ *   写入一律走云端，不再写 localStorage。
+ *
+ * 【依赖】
+ *   · vhFetchSongs() / vhDjKey()  —— 后台「点歌管理」面板已有的拉歌单实现，直接复用，不重复实现
+ *   · api()                       —— 统一请求封装（自动带 token、处理 401）
+ *   · openModal / confirmBox / toast / svg / esc  —— 后台通用 UI
+ * ========================================================================= */
+
+/* 排期与排除清单的云端读写。改自前台 djLoadRounds/djSaveRounds —— 区别只在「存云端」。 */
+var DJ_LS_SCHEDULE = 'cls_dj_schedule';   /* 仅作旧数据迁移与本机兜底 */
+var DJ_LS_EXCLUDED = 'cls_dj_excluded';
+var DJ_LS_EXCLUDED_REQ = 'cls_dj_excluded_req';
+var DJ_LS_NOTE = 'cls_dj_copy_note';
+
+var DJ_STATE = {
+  songs: [],          /* 平台歌单（拉下来后缓存在这，切视图不重复拉） */
+  rounds: [],         /* 排期批次 */
+  excluded: { songs: [], reqs: [] },   /* 单曲排除 / 整人排除 */
+  view: 'song',       /* 歌单管理视图：song=按歌曲 req=按点歌人 */
+  pick: [],           /* 本次抽中的歌（用于「复制公示」校验） */
+  loaded: false,      /* 云端数据是否已拉过 */
+  dirtyLocal: false,  /* 本机是否有可迁移的旧数据 */
+  /* v3.5.6 点歌人加权：考试进步 / 班委身份两个加成，管理员在抽签面板调。
+     wmap = { 点歌人姓名: { prog:进步了没, comm:是不是班委 } }，抽签时按需拉一次 */
+  weight: { on: false, prog: 2, comm: 1 },
+  wmap: null,
+  /* v3.5.12 获选原因（站主 2026-10-17 #3）：
+     progTopN = 进步加权只覆盖「班内总分排名进步幅度前 N 名」（0 = 不限，所有进步的人都算）
+     commNames = 班委名单来源（后台头衔）；reasonShort = 公示里允许的最大字数（默认 5） */
+  reason: { progTopN: 0, reasonShort: 5 },
+};
+
+/* ---- 兼容读取：云端那份可能被写成数组，也可能写成 {schedule:[...]} ---- */
+function djNormRounds(v){
+  if(Array.isArray(v)) return v;
+  if(v && Array.isArray(v.schedule)) return v.schedule;
+  return [];
+}
+function djNormExcluded(v){
+  var o = { songs: [], reqs: [] };
+  if(Array.isArray(v)) { o.songs = v; return o; }        /* 极老格式：纯 id 数组 */
+  if(v && typeof v === 'object'){
+    if(Array.isArray(v.songs)) o.songs = v.songs;
+    if(Array.isArray(v.reqs)) o.reqs = v.reqs;
+  }
+  return o;
+}
+
+/* ---- 本机旧数据（只读，供迁移与兜底）---- */
+function djLocalRounds(){
+  try{ return djNormRounds(JSON.parse(localStorage.getItem(DJ_LS_SCHEDULE) || '[]')); }catch(e){ return []; }
+}
+function djLocalExcluded(){
+  var s = [], r = [];
+  try{ s = JSON.parse(localStorage.getItem(DJ_LS_EXCLUDED) || '[]') || []; }catch(e){}
+  try{ r = JSON.parse(localStorage.getItem(DJ_LS_EXCLUDED_REQ) || '[]') || []; }catch(e){}
+  return { songs: Array.isArray(s) ? s : [], reqs: Array.isArray(r) ? r : [] };
+}
+
+/* ---- 从云端拉一次（排期 + 排除清单一起）---- */
+function djLoadCloud(){
+  return api('/content').then(function(j){
+    var it = (j && j.items) || {};
+    DJ_STATE.rounds = djNormRounds(it.dj_schedule);
+    DJ_STATE.excluded = djNormExcluded(it.dj_excluded);
+    /* 云端两个都是空的、而本机有旧数据 → 提示可迁移 */
+    var loc = djLocalRounds(), locEx = djLocalExcluded();
+    DJ_STATE.dirtyLocal = (!DJ_STATE.rounds.length && !DJ_STATE.excluded.songs.length && !DJ_STATE.excluded.reqs.length)
+      && (loc.length > 0 || locEx.songs.length > 0 || locEx.reqs.length > 0);
+    DJ_STATE.loaded = true;
+    return j;
+  });
+}
+/* ---- 写云端。只传要改的键，后端是「读旧→合并→写回」语义 ---- */
+function djSaveSchedule(arr){
+  DJ_STATE.rounds = arr || [];
+  return api('/content', { method:'PUT', body:{ items:{ dj_schedule: DJ_STATE.rounds } } })
+    .then(function(){ toast('排期已保存到云端', 'ok'); })
+    .catch(function(e){ toast('保存失败：' + e.message, 'err', 4000); throw e; });
+}
+function djSaveExcluded(){
+  return api('/content', { method:'PUT', body:{ items:{ dj_excluded: DJ_STATE.excluded } } })
+    .catch(function(e){ toast('排除清单保存失败：' + e.message, 'err', 4000); throw e; });
+}
+
+/* ---- 取排除态（改成读内存，不再读 localStorage）---- */
+function djExcludedMap(){
+  var m = {};
+  (DJ_STATE.excluded.songs || []).forEach(function(id){ m[id] = 1; });
+  return m;
+}
+function djExcludedReqMap(){
+  var m = {};
+  (DJ_STATE.excluded.reqs || []).forEach(function(n){ m[n] = 1; });
+  return m;
+}
+function djSetExcluded(id, on){
+  var arr = (DJ_STATE.excluded.songs || []).filter(function(x){ return String(x) !== String(id); });
+  if(on) arr.push(id);
+  DJ_STATE.excluded.songs = arr;
+  return djSaveExcluded();
+}
+function djSetExcludedReq(name, on){
+  var arr = (DJ_STATE.excluded.reqs || []).filter(function(x){ return String(x) !== String(name); });
+  if(on) arr.push(name);
+  DJ_STATE.excluded.reqs = arr;
+  return djSaveExcluded();
+}
+function djClearExcluded(){
+  confirmBox({
+    text: '确定清空全部排除记录？',
+    detail: '包含「单曲排除」和「点歌人排除」两类，清空后这些歌会重新参与抽签。',
+    danger: true, okText: '清空',
+  }).then(function(yes){
+    if(!yes) return;
+    DJ_STATE.excluded = { songs: [], reqs: [] };
+    djSaveExcluded().then(function(){
+      toast('已清空排除记录', 'ok');
+      paintDjSongs();
+    });
+  });
+}
+
+/* ---- 点歌人姓名兼容（平台可能返回字符串或 {name} 对象）---- */
+function djReqName(s){
+  var r = (typeof s.requester === 'string') ? s.requester : ((s.requester && s.requester.name) || '');
+  return String(r == null ? '' : r).trim();
+}
+
+/* ---- 已播放 / 已排期：默认排除，不用手动一首首点 ----
+ * 「已排期」= 只要在排期记录里出现过就算，不要求该批次被勾成「已加到平台」。
+ * （前台 2026-08-30 修的坑：要求 addedToPlatform 会让「排除已排期」形同虚设） */
+function djAutoExclude(){
+  var schedIds = {}, playedIds = {};
+  (DJ_STATE.rounds || []).forEach(function(r){
+    (r.songs || []).forEach(function(s){
+      if(s && s.id != null) schedIds[s.id] = 1;
+    });
+  });
+  /* 平台自身也带 played 标记（同学在平台上标记过已播） */
+  (DJ_STATE.songs || []).forEach(function(s){ if(s && s.played) playedIds[s.id] = 1; });
+  return { schedIds: schedIds, playedIds: playedIds };
+}
+function djAutoExReason(s, info){
+  if(!s) return '';
+  if(info.playedIds[s.id]) return '已播放';
+  if(info.schedIds[s.id]) return '已排期';
+  return '';
+}
+
+/* ---- 时间格式化（平台返回 UTC ISO，直接切片会差 8 小时）---- */
+function djFmtTime(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate())
+       + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function djNowLocal(){
+  var d = new Date();
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate())
+       + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/* ============================ 面板骨架 ============================ */
+function renderDj(){
+  $('view').innerHTML =
+    '<div class="alert info" style="margin-bottom:16px">'
+    +   '本页数据保存在<b>云端</b>（全班管理员共用一份），换电脑 / 清缓存都不会丢。'
+    +   '歌单实时来自点歌平台，抽签结果会写进云端排期。'
+    + '</div>'
+    + '<div id="djMigrate"></div>'
+    /* v3.5.27：时长缺口提示（时长为空不能排歌） */
+    + '<div id="djDurNotice" style="display:none"></div>'
+    + '<section class="panel" style="margin-bottom:16px">'
+    +   '<div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px">'
+    +     '<h3 style="margin:0;font-size:.95rem">🎲 抽签</h3>'
+    +     '<div style="display:flex;gap:8px">'
+    +       '<button class="btn btn-sm btn-ghost" id="djSongsBtn">' + svg('music',14) + ' 歌单管理</button>'
+    +       '<button class="btn btn-sm btn-ghost" id="djHistoryBtn">' + svg('clock',14) + ' 历史记录</button>'
+    +     '</div>'
+    +   '</div>'
+    /* 时间范围 */
+    +   '<div class="field" style="margin-top:4px"><label>投稿时间范围</label>'
+    +     '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+    +       '<input type="datetime-local" id="djFrom" style="flex:1;min-width:150px">'
+    +       '<span class="muted">至</span>'
+    +       '<input type="datetime-local" id="djTo" style="flex:1;min-width:150px">'
+    +     '</div>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:6px;margin:8px 0 14px;flex-wrap:wrap">'
+    +     '<button class="btn btn-sm btn-secondary" data-dj-quick="0">全部</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-dj-quick="3">近 3 天</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-dj-quick="7">近 7 天</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-dj-quick="30">近 30 天</button>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px">'
+    +     '<div class="field" style="margin:0;width:120px"><label>抽取数量</label>'
+    +       '<input type="number" id="djCount" min="1" max="50" placeholder="留空 = 自动" value="5"></div>'
+    +     '<div class="field" style="margin:0;width:130px"><label>高赞必选</label>'
+    +       '<input type="number" id="djTopN" min="0" max="50" value="0" title="点赞最高的前 N 首必定中选，其余随机"></div>'
+    /* v3.5.19：按时长抽取（音乐课常用，比如一节课 40 分钟） */
+    +     '<div class="field" style="margin:0;width:150px"><label>总时长上限</label>'
+    +       '<input type="number" id="djMaxMin" min="1" max="300" placeholder="留空 = 不限" title="累加歌曲时长，超过就不再抽（缺时长的歌不参与判断）"></div>'
+    +   '</div>'
+    +   '<p class="hint" id="djCapHint" style="margin:-2px 0 10px">抽取数量 / 总时长上限二选一：填了总时长上限，系统按歌曲时长自动决定数量。</p>'
+    /* v3.5.27：时长库状态 —— 让站主一眼看到「哪些歌还没时长」入口 */
+    +   '<div id="djDurStat" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;'
+    +     'margin:-4px 0 12px;font-size:.8rem;color:var(--fg-3)">'
+    +     '<span>🎵 歌曲时长：先查<b>云端时长库</b>，没有再查网易云 / QQ 音乐；都没有就得你手填（不填不能排歌）</span>'
+    +     '<button class="btn btn-sm btn-ghost" id="djDurLibBtn" type="button">时长库 / 补录</button>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:.85rem">'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludePlayed" checked> 排除已播放</label>'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djExcludeSched" checked> 排除已排期</label>'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer" title="同一位同学点的歌，同一次抽签最多上一首"><input type="checkbox" id="djOnePer" checked> 每人限一首</label>'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer" title="考试进步的同学、班委，歌被随机抽中的概率更高"><input type="checkbox" id="djWeightOn"> 点歌人加权</label>'
+    +   '</div>'
+    +   '<div id="djWeightBox" style="display:none;margin-bottom:12px;padding:10px 12px;border:1px solid var(--line,#e5dcd2);border-radius:10px">'
+    +     '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +       '<div class="field" style="margin:0;width:150px"><label>考试进步加成</label>'
+    +         '<input type="number" id="djWProg" min="0" max="20" step="0.5" value="2" title="最近两场考试班内总分排名靠前＝进步，权重加这么多"></div>'
+    +       '<div class="field" style="margin:0;width:150px"><label>班委身份加成</label>'
+    +         '<input type="number" id="djWComm" min="0" max="20" step="0.5" value="1" title="有班级职务（班长/委员/课代表等）＝班委，权重加这么多"></div>'
+    +       '<div class="field" style="margin:0;width:190px"><label>进步加权范围</label>'
+    +         '<input type="number" id="djWProgTop" min="0" max="60" step="1" value="0" title="只给「班内总分排名进步幅度前 N 名」加权。0 = 所有进步的人都算"></div>'
+    +     '</div>'
+    +     '<p class="muted" style="font-size:.78rem;margin:8px 0 0;line-height:1.6">进步按最近两场有成绩的考试算（总分班内排名靠前，名次变化越大越靠前）；班委按后台头衔任命算。加成只作用于随机抽取，「高赞必选」不受影响。设为 0 即关闭该项。</p>'
+    +   '</div>'
+    +   '<button class="btn" id="djRunBtn" style="width:100%">🎲 开始抽签</button>'
+    +   '<div id="djResult" style="margin-top:12px"></div>'
+    + '</section>'
+    + '<section class="panel">'
+    +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">📋 公示</h3></div>'
+    /* v3.5.21：公示文案可选显示每首时长和总时长 */
+    +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 6px;font-size:.84rem">'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djShowDur" checked> 显示每首时长</label>'
+    +     '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="djShowTotal" checked> 显示歌曲总时长</label>'
+    +   '</div>'
+    +   '<div class="field"><label>公示备注（选填，会加在公示最后）</label>'
+    +     '<textarea id="djCopyNote" rows="2" placeholder="选填：例如「本次不随机抽人，是对段考前十的奖励」。抽签规则那行会自动生成，不用填"></textarea>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+    +     '<button class="btn btn-green" id="djCopyBtn">' + svg('file',14) + ' 一键复制公示</button>'
+    /* v3.5.40（站主 #6）：把公示画成长图，直接发群里 */
+    +     '<button class="btn" id="djImgBtn">' + svg('download',14) + ' 导出图片</button>'
+    +     '<button class="btn btn-secondary" id="djShareBtn">' + svg('upload',14) + ' 分享图片</button>'
+    +     '<button class="btn btn-secondary" id="djExportBtn">' + svg('download',14) + ' 导出数据</button>'
+    +     '<button class="btn btn-secondary" id="djImportBtn">' + svg('upload',14) + ' 导入数据</button>'
+    +     '<button class="btn btn-ghost" id="djClearBtn" style="color:#b3261e">' + svg('trash',14) + ' 清空排期</button>'
+    +     '<input type="file" id="djImportFile" accept=".json,application/json" style="display:none">'
+    +   '</div>'
+    + '</section>';
+
+  /* 备注：沿用本机存的那份（只是输入框的草稿，不算业务数据，不必上云） */
+  var ne = $('djCopyNote');
+  if(ne){ try{ ne.value = String(localStorage.getItem(DJ_LS_NOTE) || ''); }catch(e){} }
+  ne.oninput = function(){ try{ localStorage.setItem(DJ_LS_NOTE, ne.value); }catch(e){} };
+
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-dj-quick]'), function(b){
+    b.onclick = function(){ djQuick(parseInt(b.dataset.djQuick, 10) || 0); };
+  });
+  $('djSongsBtn').onclick = openDjSongs;
+  $('djHistoryBtn').onclick = openDjHistory;
+  $('djRunBtn').onclick = djRun;
+  /* v3.5.27：时长库入口 —— 先拉一次云端库，再把缺时长的歌列出来 */
+  var durLibBtn = $('djDurLibBtn');
+  if(durLibBtn) durLibBtn.onclick = function(){ openDurLib(); };
+  vhDurNotice();
+  $('djCopyBtn').onclick = djCopy;
+  /* v3.5.40（站主 #6）：公示长图 —— 与「一键复制公示」同一份数据，样式仿成绩卡 */
+  if($('djImgBtn'))   $('djImgBtn').onclick = function(){ djShareImage('download'); };
+  if($('djShareBtn')) $('djShareBtn').onclick = function(){ djShareImage('share'); };
+
+  /* v3.5.21：抽取数量与总时长上限二选一。
+     填了总时长上限后，抽取数量由系统按歌曲时长自动决定。 */
+  var djCapIn = $('djMaxMin'), djCountIn = $('djCount'), djCapHint = $('djCapHint');
+  function syncDjCap(){
+    if(!djCapIn || !djCountIn) return;
+    var cap = Number(djCapIn.value || 0);
+    if(cap > 0){
+      djCountIn.value = ''; djCountIn.disabled = true; djCountIn.title = '已设总时长上限，数量由系统自动决定';
+      if(djCapHint) djCapHint.textContent = '已启用总时长上限：系统会按歌曲时长自动决定抽取数量，「抽取数量」此时无效。';
+    }else{
+      djCountIn.disabled = false; djCountIn.title = '';
+      if(djCapHint) djCapHint.textContent = '抽取数量 / 总时长上限二选一：填了总时长上限，系统按歌曲时长自动决定数量。';
+    }
+  }
+  if(djCapIn){ djCapIn.oninput = syncDjCap; syncDjCap(); }
+  $('djExportBtn').onclick = djExportRounds;
+  $('djImportBtn').onclick = function(){ $('djImportFile').click(); };
+  $('djImportFile').onchange = function(){ djImportRounds(this); };
+  $('djClearBtn').onclick = djClear;
+
+  $('djTo').value = djNowLocal();
+
+  /* 点歌人加权：勾选才显示加成输入框 */
+  var wOn = $('djWeightOn'), wBox = $('djWeightBox');
+  if(wOn && wBox){
+    wOn.checked = !!DJ_STATE.weight.on;
+    var wp = $('djWProg'), wc = $('djWComm'), wt = $('djWProgTop');
+    if(wp) wp.value = String(DJ_STATE.weight.prog);
+    if(wc) wc.value = String(DJ_STATE.weight.comm);
+    if(wt) wt.value = String(Math.max(0, Number(DJ_STATE.reason.progTopN) || 0));
+    wBox.style.display = wOn.checked ? '' : 'none';
+    wOn.onchange = function(){
+      DJ_STATE.weight.on = !!wOn.checked;
+      wBox.style.display = wOn.checked ? '' : 'none';
+      if(wOn.checked) djLoadWeightMap().catch(function(){});
+    };
+    if(wp) wp.oninput = function(){ DJ_STATE.weight.prog = Math.max(0, Number(wp.value) || 0); };
+    if(wc) wc.oninput = function(){ DJ_STATE.weight.comm = Math.max(0, Number(wc.value) || 0); };
+    if(wt) wt.oninput = function(){ DJ_STATE.reason.progTopN = Math.max(0, Number(wt.value) || 0); };
+  }
+
+  /* 拉云端数据；成功后检查要不要提示迁移旧数据 */
+  djLoadCloud().then(function(){
+    if(DJ_STATE.dirtyLocal) djShowMigrateTip();
+  }).catch(function(e){
+    /* 云端拉不到 → 用本机旧数据兜底，至少界面不是空的 */
+    DJ_STATE.rounds = djLocalRounds();
+    DJ_STATE.excluded = djLocalExcluded();
+    DJ_STATE.loaded = true;
+    var box = $('djMigrate');
+    if(box) box.innerHTML = '<div class="alert danger" style="margin-bottom:16px">'
+      + '读取云端排期失败（' + esc(e.message) + '），当前显示的是<b>本机旧数据</b>。'
+      + '此时做出的修改无法保存，请检查网络后刷新重试。</div>';
+  });
+}
+
+/* 本机旧数据迁移提示（只在云端为空、本机有数据时出现一次） */
+function djShowMigrateTip(){
+  var box = $('djMigrate');
+  if(!box) return;
+  var n = djLocalRounds().length, ex = djLocalExcluded();
+  box.innerHTML = '<div class="alert info" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    + '<span style="flex:1;min-width:200px">检测到本机有旧抽歌数据'
+    +   '（排期 <b>' + n + '</b> 批，单曲排除 <b>' + ex.songs.length + '</b> 首，整人排除 <b>' + ex.reqs.length + '</b> 人），'
+    +   '云端还是空的。要不要把它上传到云端？</span>'
+    + '<button class="btn btn-sm" id="djMigGo">上传到云端</button>'
+    + '<button class="btn btn-sm btn-ghost" id="djMigNo">不用了</button></div>';
+  $('djMigGo').onclick = function(){
+    var rounds = djLocalRounds(), e = djLocalExcluded();
+    DJ_STATE.rounds = rounds;
+    DJ_STATE.excluded = e;
+    api('/content', { method:'PUT', body:{ items:{ dj_schedule: rounds, dj_excluded: e } } })
+      .then(function(){
+        toast('旧数据已上传到云端', 'ok');
+        box.innerHTML = '';
+        DJ_STATE.dirtyLocal = false;
+      })
+      .catch(function(err){ toast('上传失败：' + err.message, 'err', 4000); });
+  };
+  $('djMigNo').onclick = function(){ box.innerHTML = ''; };
+}
+
+/* 快捷时间范围：0=全部，其余=近 N 天 */
+function djQuick(days){
+  var f = $('djFrom'), t = $('djTo');
+  if(days <= 0){ if(f) f.value = ''; if(t) t.value = ''; return; }
+  var now = new Date(), from = new Date(now.getTime() - days * 86400000);
+  function fmt(d){
+    function p(n){ return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate())
+         + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  if(f) f.value = fmt(from);
+  if(t) t.value = fmt(now);
+}
+
+/* ============================ 抽签主流程 ============================
+ * 算法与前台完全一致（三个约束按顺序施加）：
+ *   ① 同一首歌不重复中选
+ *   ② 「每人限一首」时，同一位点歌人只占一个名额
+ *   ③ 高赞必选优先，撞上 ② 就顺延给后面的歌
+ * 变化只有一处：结果写云端而非 localStorage。
+ * ================================================================= */
+function djRun(){
+  /* v3.5.21：抽取数量 / 总时长上限二选一。填了总时长上限时，
+     把数量放宽到足够大，由 take() 里的时长上限来终止。 */
+  var capMin = parseInt(($('djMaxMin') || {}).value || '0', 10);
+  if(!(capMin >= 0)) capMin = 0;
+  var n = capMin > 0 ? 9999 : parseInt(($('djCount') || {}).value || '5', 10);
+  if(capMin <= 0 && !(n >= 1)) n = 5;
+  var wantN = n;
+  var excl = ($('djExcludePlayed') || {}).checked;
+  var exclSched = ($('djExcludeSched') || {}).checked;
+  var onePerEl = $('djOnePer');
+  var onePer = !onePerEl || onePerEl.checked;
+  var topN = parseInt(($('djTopN') || {}).value || '0', 10);
+  if(!(topN >= 0)) topN = 0;
+  var wantTop = topN;
+
+  /* v3.5.6 点歌人加权：读面板配置；开了就先拉加权数据（头衔 + 最近两场成绩）再抽 */
+  var wOnEl = $('djWeightOn');
+  DJ_STATE.weight.on = !!(wOnEl && wOnEl.checked);
+  if(DJ_STATE.weight.on){
+    DJ_STATE.weight.prog = Math.max(0, Number(($('djWProg') || {}).value) || 0);
+    DJ_STATE.weight.comm = Math.max(0, Number(($('djWComm') || {}).value) || 0);
+    DJ_STATE.reason.progTopN = Math.max(0, Number(($('djWProgTop') || {}).value) || 0);
+  }
+
+  var box = $('djResult');
+  if(box) box.innerHTML = '<div class="loading" style="padding:12px"><div class="spinner"></div>正在拉取歌单并抽签…</div>';
+
+  var f = $('djFrom'), t = $('djTo');
+  var tFrom = f && f.value ? new Date(f.value).getTime() : -Infinity;
+  var tTo = t && t.value ? new Date(t.value).getTime() : Infinity;
+
+  djFetchSongs()
+    .then(function(){ return DJ_STATE.weight.on ? djLoadWeightMap() : null; })
+    .then(function(){
+    var songs = DJ_STATE.songs;
+    var exIds = djExcludedMap(), exReq = djExcludedReqMap();
+    var auto = djAutoExclude();
+    var pool = songs.filter(function(s){
+      if(exIds[s.id]) return false;                  /* 手动排除单曲 */
+      var rq = djReqName(s);
+      if(rq && exReq[rq]) return false;              /* 手动排除该点歌人的全部歌 */
+      if(excl && auto.playedIds[s.id]) return false; /* 排除已播放 */
+      if(exclSched && auto.schedIds[s.id]) return false; /* 排除已排期 */
+      var ts = new Date(s.createdAt).getTime();
+      if(ts < tFrom || ts > tTo) return false;
+      return true;
+    });
+    /* 🔴 v3.5.27（站主）：「时长为空不能随机排歌」。
+       先把没时长的歌挑出来单独提示（而不是静默抽出一批时长未知的歌）。 */
+    var noDurSongs = pool.filter(function(s){ return !(Number(s.durationSeconds) >= 20); });
+    if(noDurSongs.length){
+      var map0 = {};
+      noDurSongs.forEach(function(s){
+        map0[vhDurationKey(String(s.title || ''), String(s.artist || ''))] = { title: s.title || '', artist: s.artist || '' };
+      });
+      Object.keys(map0).forEach(function(k){ if(!DUR_MISS[k]) DUR_MISS[k] = map0[k]; });
+      if(box){
+        box.innerHTML = '<div class="alert danger" style="line-height:1.9">'
+          + '<b>有 ' + noDurSongs.length + ' 首歌没有时长，按站规不能排歌</b><br>'
+          + '<span style="font-size:.82rem">' + noDurSongs.slice(0, 8).map(function(s){ return esc(s.title || '?'); }).join('、')
+          + (noDurSongs.length > 8 ? ' 等' : '') + '</span><br>'
+          + '<span style="font-size:.82rem;color:#57534e">时长会先去云端库找，再查网易云 / QQ 音乐；都查不到就得你手填。</span><br>'
+          + '<button class="btn btn-sm" id="djDurFillNow" style="margin-top:8px">立即补录 ' + noDurSongs.length + ' 首的时长</button>'
+          + '</div>';
+        var b0 = document.getElementById('djDurFillNow');
+        if(b0) b0.onclick = function(){ voDurManualDialog(Object.keys(map0)); };
+      }
+      return;
+    }
+    if(!pool.length){
+      if(box) box.innerHTML = '<div class="alert danger">没有可抽歌曲。试试放宽时间范围，或到「歌单管理」解除排除、取消「排除已播放 / 已排期」。</div>';
+      return;
+    }
+
+    /* 「每人限一首」时的容量上限 = 不同点歌人数 + 无点歌人信息的歌数 */
+    var personSet = {}, anonCnt = 0, pk;
+    pool.forEach(function(s){ var rq = djReqName(s); if(rq) personSet[rq] = 1; else anonCnt++; });
+    var personCnt = 0; for(pk in personSet) personCnt++;
+    var cap = onePer ? (personCnt + anonCnt) : pool.length;
+    if(n > cap) n = cap;
+    if(topN > n) topN = n;
+
+    var usedId = {}, usedReq = {}, picked = [], guarantee = [];
+    var usedSec = 0;   /* v3.5.19：已抽中歌曲的总时长（秒） */
+    function take(s){
+      if(!s || usedId[s.id]) return false;
+      var rq = djReqName(s);
+      if(onePer && rq && usedReq[rq]) return false;
+      var d = Number(s.durationSeconds) || 0;
+      /* v3.5.27（站主）：「时长为空不能随机排歌」——
+         以前「没时长就不拦」，结果抽出一批时长未知的歌，总时长统计全是错。
+         现在没时长的歌直接不进池子（在下面 pool 过滤时已经剔除，这里再兜一次）。 */
+      if(!(d >= 20)) return false;
+      if(capMin > 0 && usedSec + d > capMin * 60) return false;
+      usedSec += d;
+      usedId[s.id] = 1; if(rq) usedReq[rq] = 1; picked.push(s);
+      return true;
+    }
+    /* 1) 高赞必选：按点赞降序取；撞上「每人限一首」时自动顺延 */
+    var deferred = 0;
+    if(topN > 0){
+      var sorted = pool.slice().sort(function(a, b){ return (b.voteCount || 0) - (a.voteCount || 0); });
+      for(var i = 0; i < sorted.length && guarantee.length < topN; i++){
+        if(take(sorted[i])){ guarantee.push(sorted[i]); continue; }
+        var rqD = djReqName(sorted[i]);
+        if(onePer && rqD && usedReq[rqD]) deferred++;
+      }
+    }
+    /* 2) 其余随机：每中一首，同步剔除同一人的其他歌。
+       v3.5.6：开了点歌人加权时按权重抽（进步 / 班委加成），否则等概率 */
+    var bag = pool.filter(function(s){
+      if(usedId[s.id]) return false;
+      var rq = djReqName(s);
+      return !(onePer && rq && usedReq[rq]);
+    });
+    var boosted = 0;
+    while(picked.length < n && bag.length){
+      var idx = djWeightedIdx(bag);
+      var s = bag[idx];
+      bag.splice(idx, 1);
+      if(!take(s)) continue;
+      if(djWeightOf(djReqName(s)) > 1) boosted++;
+      if(onePer){
+        var rq2 = djReqName(s);
+        if(rq2){ for(var j = bag.length - 1; j >= 0; j--){ if(djReqName(bag[j]) === rq2) bag.splice(j, 1); } }
+      }
+    }
+
+    /* 存成一个批次（含时间 / 备注 / 已排期 / 已播放标记 + 本次参数） */
+    var rounds = (DJ_STATE.rounds || []).slice();
+    /* 高赞必选集合要在生成 songs 之前先算好 —— djReasonOf 靠它判断「高赞必选」 */
+    var gsetForReason = {};
+    guarantee.forEach(function(s){ gsetForReason[s.id] = 1; });
+    var rec = {
+      id: Date.now(),
+      at: new Date().toLocaleString('zh-CN', { hour12:false }),
+      note: '', addedToPlatform: false, played: false,
+      songs: picked.map(function(s){
+        /* v3.5.12 #3：每首歌带上「获选原因」——short 用于公示（≤5 字），
+           detail 用于后台结果面板与历史记录（写清楚进步了多少名 / 班干身份） */
+        var why = djReasonOf(s, gsetForReason);
+        return {
+          id: s.id, title: s.title, artist: s.artist, votes: s.voteCount || 0,
+          requester: djReqName(s),
+          duration: Number(s.durationSeconds) || 0,
+          reason: why.short, reasonDetail: why.detail,
+          /* 高赞必选的额外标记，公示按「获选原因」一列走，不单列 */
+          top: !!gsetForReason[s.id],
+        };
+      }),
+    };
+    /* 把参数存进批次：公示时用「这一批自己的参数」，
+       而不是复制时面板上的当前开关（否则抽完又改了开关，公示的规则就对不上歌单了） */
+    /* v3.5.21：公示时是否显示每首时长 / 歌曲总时长（用抽签那一刻的开关，避免复制时改设置导致对不上） */
+    var showDurEl = $('djShowDur'), showTotalEl = $('djShowTotal');
+    rec.params = {
+      top: guarantee.length, picked: picked.length, onePer: onePer,
+      exPlayed: !!excl, exSched: !!exclSched, pool: pool.length, persons: personCnt,
+      maxMinutes: capMin || null, totalSeconds: usedSec,          /* v3.5.19 时长约束 */
+      showDur: !!(showDurEl && showDurEl.checked),
+      showTotal: !!(showTotalEl && showTotalEl.checked),
+      /* v3.5.6 点歌人加权（null = 本次没开）；v3.5.12 加 progTopN 记录「前 N 名」范围 */
+      weight: DJ_STATE.weight.on
+        ? { on: true, prog: DJ_STATE.weight.prog, comm: DJ_STATE.weight.comm,
+            boosted: boosted, progTopN: Math.max(0, Number(DJ_STATE.reason.progTopN) || 0) }
+        : null,
+    };
+    rounds.push(rec);
+    DJ_STATE.pick = picked;
+
+    djSaveSchedule(rounds).then(function(){
+      var gset = {};
+      guarantee.forEach(function(s){ gset[s.id] = 1; });
+      /* v3.5.12 #3：结果面板要把「获选原因」写清楚（这是后台看的内部版） */
+      var rows = picked.map(function(s, i){
+        var rq = djReqName(s);
+        var why = djReasonOf(s, gset);
+        return '<div style="margin-top:4px">'
+          + (i + 1) + '. <b>' + esc(s.title || '?') + '</b> - ' + esc(s.artist || '未知歌手')
+          + (rq ? '（点歌：' + esc(rq) + ' · ' : '（')
+          + '点赞 ' + (s.voteCount || 0) + '）'
+          + (s.durationSeconds ? ' · 时长 ' + voFmtDur(s.durationSeconds) : '')
+          + '<div style="font-size:.78rem;color:#57534e;margin-left:1.2em">'
+          +   '获选原因：<b style="color:#0a7d42">' + esc(why.short) + '</b>'
+          +   (why.detail ? ' · <span style="color:#af410f">' + esc(why.detail) + '</span>' : '')
+          + '</div></div>';
+      }).join('');
+      var mode = (topN > 0 ? '高赞必选 ' + guarantee.length + ' 首 + ' : '') + '随机'
+        + (onePer ? ' · 每人限一首' : ' · 不限制每人首数')
+        + (excl ? ' · 排除已播放' : '') + (exclSched ? ' · 排除已排期' : '')
+        + (DJ_STATE.weight.on
+            ? ' · 点歌人加权（进步 +' + DJ_STATE.weight.prog + '／班委 +' + DJ_STATE.weight.comm
+              + (Math.max(0, Number(DJ_STATE.reason.progTopN) || 0) > 0
+                  ? '／仅进步前 ' + DJ_STATE.reason.progTopN + ' 名' : '')
+              + '，加权中选 ' + boosted + ' 首）'
+            : '')
+        + ' · 池中 ' + pool.length + ' 首' + (onePer ? ' / ' + personCnt + ' 位同学' : '');
+      var shortMsg = '';
+      if(picked.length < wantN){
+        shortMsg = onePer
+          ? '（受「每人限一首」限制：池中 ' + personCnt + ' 位点歌人 + ' + anonCnt + ' 首无点歌人信息，最多只能抽 ' + cap + ' 首）'
+          : (capMin > 0
+              ? '（已按总时长上限 ' + capMin + ' 分钟凑够 ' + picked.length + ' 首，再抽会超时）'
+              : '（池中仅 ' + pool.length + ' 首，已全部抽取）');
+      }
+      var topMsg = (wantTop > 0 && deferred > 0)
+        ? '⚠️ 高赞必选里有 ' + deferred + ' 首因「每人限一首」被顺延（同一位同学已有歌中选，名额让给后面的歌）'
+        : '';
+      if(box){
+        box.innerHTML = '<div class="alert info" style="line-height:1.9">'
+          + '<b style="color:#0a7d42">✅ 已抽中 ' + picked.length + ' 首' + shortMsg
+          + '，总时长 ' + voFmtDur(usedSec)
+          + '，已写入云端排期（累计 ' + djScheduleCount() + ' 首）</b><br>'
+          + '<span style="color:#af410f">' + mode + '</span><br>'
+          + (topMsg ? '<span style="color:#af410f;font-size:.82rem">' + topMsg + '</span><br>' : '')
+          + rows + '</div>';
+      }
+    }).catch(function(){
+      /* djSaveSchedule 内已弹错误提示；此处把结果框标红，避免看着像「抽成功了」 */
+      if(box) box.innerHTML = '<div class="alert danger">抽签结果<b>没能保存到云端</b>，请检查网络后重试。'
+        + '（本次抽中的歌未计入排期）</div>';
+    });
+  }).catch(function(err){
+    if(box) box.innerHTML = '<div class="alert danger">拉取歌单失败：' + esc(String((err && err.message) || err))
+      + '<br>请确认后台「点歌管理」能正常连上平台，再回来重试。</div>';
+  });
+}
+
+function djScheduleCount(){
+  var n = 0;
+  (DJ_STATE.rounds || []).forEach(function(r){ n += (r.songs || []).length; });
+  return n;
+}
+
+/* ============================ 拉歌单（复用点歌管理面板的实现） ============================ */
+function djFetchSongs(){
+  return vhFetchSongs().then(function(list){
+    DJ_STATE.songs = list || [];
+    return DJ_STATE.songs;
+  });
+}
+
+/* v3.5.27：人工补录时长成功后刷新面板。
+   已经拉过歌单的，把本地缓存里的秒数补回去；没拉过就等下次自动带上。 */
+function djRefreshDur(){
+  if(!DJ_STATE.songs || !DJ_STATE.songs.length) return;
+  var cache = vhDurationCache();
+  DJ_STATE.songs.forEach(function(s){
+    if(Number(s.durationSeconds) >= 20) return;
+    var sec = cache[vhDurationKey(String(s.title || ''), String(s.artist || ''))];
+    if(sec > 0) s.durationSeconds = Number(sec);
+  });
+  /* 抽屉/列表里显示时长的行要跟着重画 */
+  if(typeof window.__djRepaint === 'function') window.__djRepaint();
+  vhDurNotice();
+}
+window.djRefreshDur = djRefreshDur;
+
+/* ============================ 点歌人加权（v3.5.6）============================
+ * 站主要求：抽签排期能按「考试进退步 / 班委身份」给点歌人加权 ——
+ * 进步的同学、当班委的同学，歌被随机抽中的概率更高。
+ * 权重只作用在**随机那一部分**：「高赞必选」是管理员明确点名要的，不掺权重。
+ *
+ * 数据来源（都是后台已有接口，不新增后端）：
+ *   ① 班委身份 → /api/admin?action=titles：profiles[].titles 非空 = 有班级职务
+ *      （头衔白名单：班长/副班长/团支书/学习委员/纪律委员/生活委员/体育委员/
+ *       文艺委员/电教委/各科课代表）
+ *   ② 考试进退步 → /api/scores?action=list 取最近两场有成绩的考试，
+ *      分别拉 board，按「总分赋分」口径算班内总分排名；新的比旧的排名靠前 = 进步。
+ *      （排名算法与前台成绩分析一致：同分并列 1,2,2,4；赋分科取 assigned）
+ *
+ * 姓名匹配按点歌人姓名精确比对（去空白）。成绩表姓名与账号名不一致时
+ * （姓名对照表那种情况）对不上就不加权，不影响抽签本身。
+ * ========================================================================= */
+function djTotalOfRow(row, subs, basis){
+  var t = 0, any = false;
+  for(var i = 0; i < subs.length; i++){
+    var v = row.s && row.s[subs[i].key];
+    if(!v) continue;
+    var val = (basis === 'graded' && subs[i].graded && v.assigned != null) ? v.assigned : v.raw;
+    if(val == null) continue;
+    t += val; any = true;
+  }
+  return any ? t : null;
+}
+/* 同分并列排名（1,2,2,4）——与前台 scRankMap 同一算法 */
+function djRankByName(rows, subs, basis){
+  var arr = [];
+  rows.forEach(function(r){
+    var t = djTotalOfRow(r, subs, basis);
+    if(t != null) arr.push({ name: String(r.name || '').trim(), v: t });
+  });
+  arr.sort(function(a, b){ return b.v - a.v; });
+  var out = {}, rank = 0, prev = null;
+  arr.forEach(function(x, i){
+    if(prev === null || x.v !== prev){ rank = i + 1; prev = x.v; }
+    if(x.name && out[x.name] == null) out[x.name] = rank;
+  });
+  return out;
+}
+
+/**
+ * v3.5.12（#3）把加权映射算出来：{ 姓名: { prog, comm, delta, rankOld, rankNew } }
+ *   prog  : 是否「进步」（名次变小）
+ *   delta : 进步了多少名（正数=进步，负数=退步，0=持平）
+ *   comm  : 是否有班级职务
+ *   rankOld / rankNew : 上一场 / 这一场的班内总分排名
+ *   progRanked : 该人在「按进步幅度降序」里排第几（1 开始，只在进步的人里排）
+ * 有了 delta 才能实现站主要求的「在班级成员学校排名进步最多的前 10 名随机选出」。
+ */
+function djLoadWeightMap(){
+  if(DJ_STATE.wmap) return Promise.resolve(DJ_STATE.wmap);
+  var map = {};
+  return Promise.all([
+    api('/admin?action=titles').catch(function(){ return null; }),
+    api('/scores?action=list').catch(function(){ return null; }),
+  ]).then(function(res){
+    /* ① 班委 */
+    var tj = res[0];
+    ((tj && tj.profiles) || []).forEach(function(p){
+      var nm = String(p.name || '').trim();
+      if(!nm) return;
+      var comm = !!(p.titles && p.titles.length);
+      if(!map[nm]) map[nm] = { prog: false, comm: false, delta: 0, rankOld: null, rankNew: null, progRanked: 0 };
+      map[nm].comm = comm;
+    });
+    /* ② 进退步：最近两场有成绩的考试 */
+    var sj = res[1];
+    var exams = ((sj && sj.exams) || []).filter(function(e){
+      return e && e.id && (e.rowCount == null || e.rowCount > 0);
+    });
+    /* 后端按时间倒序给的，再排一次兜底（空日期沉底） */
+    exams.sort(function(a, b){
+      if(a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (b.id || 0) - (a.id || 0);
+    });
+    var last2 = exams.slice(0, 2);
+    if(last2.length === 2){
+      return Promise.all(last2.map(function(e){
+        return api('/scores?action=board&exam=' + e.id).catch(function(){ return null; });
+      })).then(function(bs){
+        var older = bs[1], newer = bs[0];   /* last2[0] 最新 */
+        if(older && newer && older.rows && newer.rows){
+          var rOld = djRankByName(older.rows, older.exam.subjects || [], 'graded');
+          var rNew = djRankByName(newer.rows, newer.exam.subjects || [], 'graded');
+          var gains = [];
+          Object.keys(rNew).forEach(function(nm){
+            if(rOld[nm] == null) return;               /* 上一场没这个人，无从谈进退步 */
+            var delta = rOld[nm] - rNew[nm];            /* 正数 = 名次前进 */
+            if(!map[nm]) map[nm] = { prog: false, comm: false, delta: 0, rankOld: null, rankNew: null, progRanked: 0 };
+            map[nm].delta = delta;
+            map[nm].rankOld = rOld[nm];
+            map[nm].rankNew = rNew[nm];
+            map[nm].prog = delta > 0;
+            if(delta > 0) gains.push({ name: nm, delta: delta });
+          });
+          /* 「进步最多的前 N 名」：按进步幅度降序排，同幅度并列同名次 */
+          gains.sort(function(a, b){ return b.delta - a.delta; });
+          var rk = 0, prevD = null;
+          gains.forEach(function(g, i){
+            if(prevD === null || g.delta !== prevD){ rk = i + 1; prevD = g.delta; }
+            map[g.name].progRanked = rk;
+          });
+          /* 记下这批进步的名单，公示时要按名次范围写原因 */
+          DJ_STATE.gainTop = rk;
+          DJ_STATE.gainCount = gains.length;
+          DJ_STATE.examOld = older.exam && (older.exam.name || older.exam.title);
+          DJ_STATE.examNew = newer.exam && (newer.exam.name || newer.exam.title);
+        }
+        DJ_STATE.wmap = map;
+        return map;
+      });
+    }
+    DJ_STATE.wmap = map;
+    return map;
+  });
+}
+/* 某个点歌人的权重倍数（1 = 不加成）
+ * v3.5.12：进步加成受「前 N 名」限制（reason.progTopN，0 = 不限） */
+function djProgEligible(name){
+  var info = DJ_STATE.wmap && DJ_STATE.wmap[name];
+  if(!info || !info.prog) return false;
+  var topN = Math.max(0, Number(DJ_STATE.reason.progTopN) || 0);
+  if(topN > 0 && !(info.progRanked >= 1 && info.progRanked <= topN)) return false;
+  return true;
+}
+function djWeightOf(name){
+  var w = DJ_STATE.weight;
+  if(!w.on) return 1;
+  var info = DJ_STATE.wmap && DJ_STATE.wmap[name];
+  if(!info) return 1;
+  var mul = 1;
+  if(djProgEligible(name) && w.prog > 0) mul += w.prog;
+  if(info.comm && w.comm > 0) mul += w.comm;
+  return mul;
+}
+
+/**
+ * v3.5.12（#3）获选原因
+ * 「抽歌要备注抽到的歌的原因（班干加权、进步加权，具体进步多少名），
+ *   但公示只需要写明 歌曲-歌手-点歌人-点赞量-获选原因（5 字以内概括，
+ *   没有就是随机抽取）」
+ *
+ * 返回 { short, detail }：
+ *   short  公示用，≤5 字（可调）。没有加成就是「随机抽取」。
+ *   detail 后台内部记录 / 结果面板用，写清楚到底为什么。
+ */
+function djReasonOf(s, gset){
+  var rq = djReqName(s);
+  var info = (DJ_STATE.wmap && DJ_STATE.wmap[rq]) || null;
+  var isTop = !!(gset && gset[s.id]);
+
+  /* 高赞必选：管理员点名要的，最优先说明 */
+  if(isTop){
+    return { short: '高赞必选', detail: '点赞 ' + (s.voteCount || 0) + '，进入高赞必选名额' };
+  }
+  if(!rq) return { short: '随机抽取', detail: '这首没有点歌人信息，纯随机' };
+
+  var parts = [];   /* 内部明细 */
+  var shorts = [];  /* 公示短语候选 */
+
+  if(DJ_STATE.weight.on && info){
+    if(djProgEligible(rq)){
+      var d = Number(info.delta) || 0;
+      var rk = info.progRanked;
+      var topN = Math.max(0, Number(DJ_STATE.reason.progTopN) || 0);
+      var scope = topN > 0
+        ? ('班内总分排名进步最多的前 ' + topN + ' 名中')
+        : '班内总分排名进步';
+      parts.push(scope + '（`' + info.rankOld + '` → `' + info.rankNew + '`，进步 ' + d + ' 名'
+        + (rk ? '，进步幅度第 ' + rk + ' 名' : '') + '）');
+      shorts.push('进步加权');
+    }
+    if(info.comm && DJ_STATE.weight.comm > 0){
+      parts.push('担任班级职务（班干加权 +' + DJ_STATE.weight.comm + '）');
+      shorts.push('班干加权');
+    }
+  }
+
+  if(!shorts.length){
+    return { short: '随机抽取', detail: (rq ? '点歌人 「' + rq + '」 没有满足任何加权条件，等概率随机中选' : '纯随机') };
+  }
+  /* 公示短语：能合并就合并（「进步加权」4 字 + 「班干加权」4 字超 5 字时取第一项） */
+  var maxLen = Math.max(2, Number(DJ_STATE.reason.reasonShort) || 5);
+  var short = shorts.join('+');
+  if(short.length > maxLen){
+    short = shorts.filter(function(x){ return x.length <= maxLen; })[0] || shorts[0].slice(0, maxLen);
+  }
+  return { short: short, detail: parts.join('；') };
+}
+/* 加权随机取一个下标：权重 = 1 + 加成；全部为 1 时行为与等概率一致 */
+function djWeightedIdx(bag){
+  var total = 0, i;
+  for(i = 0; i < bag.length; i++) total += djWeightOf(djReqName(bag[i]));
+  var r = Math.random() * total;
+  for(i = 0; i < bag.length; i++){
+    r -= djWeightOf(djReqName(bag[i]));
+    if(r <= 0) return i;
+  }
+  return bag.length - 1;
+}
+
+/* ============================ 歌单管理（按歌曲 / 按点歌人） ============================ */
+var _djReqGroups = [], _djReqOpen = {};
+
+function openDjSongs(){
+  openModal({
+    title: '🎼 歌单管理',
+    sub: '可以排除「某一首歌」，也可以排除「某一个人点的全部歌」',
+    wide: true,
+    body: '<p class="muted" style="font-size:.82rem;margin:0 0 10px;line-height:1.7">'
+        + '已播放 / 已排期的歌会<b>默认排除</b>（行尾标 🚫），不用手动点。'
+        + '想让它们重新参与，到抽签面板取消对应的「排除」开关即可。'
+        + '手动排除记录保存在云端。</p>'
+        + '<div class="seg" id="djSongsTab" style="margin-bottom:10px">'
+        +   '<button data-dj-view="song">🎵 按歌曲</button>'
+        +   '<button data-dj-view="req">👤 按点歌人</button>'
+        + '</div>'
+        + '<div class="search" style="width:100%;margin-bottom:8px">' + svg('search')
+        +   '<input id="djSongSearch" placeholder="搜索歌名 / 歌手 / 点歌人" maxlength="40">'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+        +   '<p id="djSongsStatus" class="muted" style="flex:1;min-width:0;margin:0;font-size:.82rem"></p>'
+        +   '<button class="btn btn-sm btn-ghost" id="djSongsClear">清空排除</button>'
+        + '</div>'
+        + '<div id="djSongsList" style="max-height:52vh;overflow:auto"><div class="loading"><div class="spinner"></div>加载中…</div></div>',
+    onMount: function(box){
+      box.querySelector('[data-dj-view="song"]').onclick = function(){ djSongsView('song'); };
+      box.querySelector('[data-dj-view="req"]').onclick  = function(){ djSongsView('req'); };
+      box.querySelector('#djSongSearch').oninput = debounce(function(e){
+        DJ_STATE.q = e.target.value.trim();
+        paintDjSongs();
+      }, 250);
+      box.querySelector('#djSongsClear').onclick = djClearExcluded;
+    },
+  });
+  paintDjSongs();
+  /* 歌单还没拉过就先拉一次 */
+  if(!DJ_STATE.songs.length){
+    djFetchSongs().then(function(){ paintDjSongs(); })
+      .catch(function(e){
+        var l = $('djSongsList');
+        if(l) l.innerHTML = '<div class="empty">' + svg('alert', 32) + '<p>拉取歌单失败：' + esc(e.message) + '</p></div>';
+      });
+  }
+  djLoadCloud().then(function(){ paintDjSongs(); }).catch(function(){});
+}
+
+function djSongsView(v){
+  DJ_STATE.view = (v === 'req') ? 'req' : 'song';
+  paintDjSongs();
+}
+function djSyncSongsTab(){
+  var box = $('djSongsTab');
+  if(!box) return;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-dj-view]'), function(b){
+    b.className = (b.dataset.djView === DJ_STATE.view) ? 'on' : '';
+  });
+}
+function djSongsFiltered(arr){
+  var kw = String(DJ_STATE.q || '').toLowerCase();
+  if(!kw) return arr;
+  return arr.filter(function(s){
+    return String(s.title || '').toLowerCase().indexOf(kw) >= 0
+        || String(s.artist || '').toLowerCase().indexOf(kw) >= 0
+        || djReqName(s).toLowerCase().indexOf(kw) >= 0;
+  });
+}
+function paintDjSongs(){
+  var list = $('djSongsList'), st = $('djSongsStatus');
+  if(!list) return;
+  djSyncSongsTab();
+  var songs = DJ_STATE.songs || [];
+  var ex = djExcludedMap(), exReq = djExcludedReqMap();
+  var exCount = 0, k; for(k in ex) exCount++;
+  var exReqCount = 0; for(k in exReq) exReqCount++;
+  var auto = djAutoExclude(), autoCnt = 0;
+  songs.forEach(function(s){ if(djAutoExReason(s, auto)) autoCnt++; });
+  if(st) st.textContent = '共 ' + songs.length + ' 首 · 手动排除 ' + exCount + ' 首 / ' + exReqCount
+    + ' 人 · 已播放或已排期 ' + autoCnt + ' 首（默认排除）';
+
+  if(!songs.length){ list.innerHTML = '<div class="empty">' + svg('music', 32) + '<p>平台上还没有人点歌</p></div>'; return; }
+  var arr = djSongsFiltered(songs);
+  if(!arr.length){ list.innerHTML = '<div class="empty"><p>没有匹配的歌曲</p></div>'; return; }
+
+  list.innerHTML = (DJ_STATE.view === 'req')
+    ? djRenderReqView(arr, ex, exReq, auto)
+    : arr.map(function(s, i){ return djSongRowHtml(s, i + 1, ex, exReq, auto); }).join('');
+
+  /* 事件绑定：用 data-* 属性循环绑，避免内联 onclick 拼字符串的转义风险 */
+  Array.prototype.forEach.call(list.querySelectorAll('[data-dj-ex-id]'), function(cb){
+    cb.onchange = function(){
+      djSetExcluded(cb.dataset.djExId, cb.checked).then(paintDjSongs);
+    };
+  });
+  Array.prototype.forEach.call(list.querySelectorAll('[data-dj-ex-req]'), function(cb){
+    cb.onchange = function(){
+      djSetExcludedReq(cb.dataset.djExReq, cb.checked).then(paintDjSongs);
+    };
+  });
+  Array.prototype.forEach.call(list.querySelectorAll('[data-dj-req-open]'), function(el){
+    el.onclick = function(){
+      var n = el.dataset.djReqOpen;
+      _djReqOpen[n] = !_djReqOpen[n];
+      paintDjSongs();
+    };
+  });
+}
+
+function djSongRowHtml(s, i, ex, exReq, auto){
+  var req = djReqName(s);
+  var byReq = req && !!exReq[req];
+  var autoR = djAutoExReason(s, auto);
+  var isEx = !!ex[s.id] || byReq || !!autoR;
+  var isAuto = !!autoR;
+  return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">'
+    + '<span class="muted" style="min-width:24px;font-size:.8rem">' + i + '</span>'
+    + '<span style="flex:1;min-width:0;font-size:.85rem">'
+    +   '<b style="' + (isEx ? 'text-decoration:line-through;color:var(--fg-3)' : '') + '">' + esc(s.title || '?') + '</b> '
+    +   '<span class="muted">' + esc(s.artist || '未知') + '</span>'
+    +   '<br><span class="muted" style="font-size:.76rem">👍 ' + (s.voteCount || 0)
+    +     ' · 点歌：' + esc(req || '?') + (s.played ? ' · 已播放' : '')
+    +     ' · ' + esc(String(s.createdAt || '').slice(0, 10)) + '</span>'
+    + '</span>'
+    + (byReq
+        ? '<span class="badge badge-gray" title="这位点歌人已被整人排除，请到「按点歌人」里解除">👤 已排除</span>'
+        : isAuto
+          ? '<span class="badge badge-gray" title="' + autoR + '的歌默认排除，不用手动勾选">🚫 ' + autoR + '</span>'
+          : '<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:.82rem;cursor:pointer">'
+            + '<input type="checkbox" data-dj-ex-id="' + attr(String(s.id)) + '"' + (ex[s.id] ? ' checked' : '') + '> 排除</label>')
+    + '</div>';
+}
+
+function djRenderReqView(arr, ex, exReq, auto){
+  var map = {}, order = [];
+  arr.forEach(function(s){
+    var r = djReqName(s) || '（未填写点歌人）';
+    if(!map[r]){ map[r] = []; order.push(r); }
+    map[r].push(s);
+  });
+  order.sort(function(a, b){ return map[b].length - map[a].length; });
+  _djReqGroups = order.map(function(r){ return { name: r, songs: map[r] }; });
+
+  return _djReqGroups.map(function(g){
+    var anon = (g.name === '（未填写点歌人）');
+    var isEx = !anon && !!exReq[g.name];
+    var cntEx = 0, cntAuto = 0;
+    g.songs.forEach(function(s){ if(ex[s.id]) cntEx++; if(djAutoExReason(s, auto)) cntAuto++; });
+    var open = !!_djReqOpen[g.name];
+    return '<div style="padding:10px 0;border-bottom:1px solid var(--line)">'
+      + '<div style="display:flex;align-items:center;gap:10px">'
+      +   '<span style="flex:1;min-width:0;cursor:pointer;font-size:.88rem" data-dj-req-open="' + attr(g.name) + '">'
+      +     (open ? '▾ ' : '▸ ') + '<b style="' + (isEx ? 'text-decoration:line-through;color:var(--fg-3)' : '') + '">' + esc(g.name) + '</b>'
+      +     '<span class="muted" style="font-size:.76rem"> · ' + g.songs.length + ' 首'
+      +       (cntAuto ? ' · 自动排除 ' + cntAuto : '') + (cntEx ? ' · 单曲排除 ' + cntEx : '') + '</span>'
+      +   '</span>'
+      +   (anon ? ''
+              : '<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:.82rem;cursor:pointer">'
+                + '<input type="checkbox" data-dj-ex-req="' + attr(g.name) + '"' + (isEx ? ' checked' : '') + '> 排除此人</label>')
+      + '</div>'
+      + (open ? '<div style="margin:8px 0 2px 16px;border-left:2px solid var(--line);padding-left:12px">'
+              + g.songs.map(function(s, j){ return djSongRowHtml(s, j + 1, ex, exReq, auto); }).join('')
+              + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+/* ============================ 历史记录 ============================ */
+function openDjHistory(){
+  openModal({
+    title: '📜 抽歌历史记录',
+    sub: '共 ' + (DJ_STATE.rounds || []).length + ' 批，累计 ' + djScheduleCount() + ' 首',
+    wide: true,
+    body: '<div id="djHistoryList" style="max-height:56vh;overflow:auto"></div>',
+  });
+  paintDjHistory();
+}
+function paintDjHistory(){
+  var list = $('djHistoryList');
+  if(!list) return;
+  var rounds = DJ_STATE.rounds || [];
+  if(!rounds.length){
+    list.innerHTML = '<div class="empty">' + svg('clock', 32) + '<p>还没有排期记录，先去抽一次签</p></div>';
+    return;
+  }
+  list.innerHTML = rounds.slice().reverse().map(function(r){
+    var songRows = (r.songs || []).map(function(s, j){
+      /* v3.5.12 #3：历史记录也带上获选原因（内部版，写清楚为什么） */
+      var why = s.reason || '随机抽取';
+      return (j + 1) + '. ' + esc(s.title || '?') + ' - ' + esc(s.artist || '未知')
+        + (s.requester ? '（点歌：' + esc(s.requester) + '）' : '') + '（点赞 ' + (s.votes || 0) + '）'
+        + (s.duration ? ' <span class="muted">· ' + voFmtDur(s.duration) + '</span>' : '')
+        + ' <span style="color:#0a7d42">· ' + esc(why) + '</span>'
+        + (s.reasonDetail ? '<div class="muted" style="font-size:.72rem;margin-left:1.1em">' + esc(s.reasonDetail) + '</div>' : '');
+    }).join('<br>');
+    var totSec = 0;
+    (r.songs || []).forEach(function(s){ totSec += Number(s.duration) || 0; });
+    return '<div class="panel" style="margin:0 0 12px;padding:12px 14px;font-size:.85rem">'
+      + '<div style="font-weight:700;color:#af410f;margin-bottom:8px">📅 ' + esc(r.at || '')
+      +   (totSec ? '<span class="muted" style="font-weight:400;font-size:.78rem"> · 总时长 ' + voFmtDur(totSec) + '</span>' : '')
+      + '</div>'
+      + '<div style="display:flex;gap:8px;margin-bottom:8px">'
+      +   '<input data-dj-note="' + attr(String(r.id)) + '" placeholder="备注：本次用于…" value="' + attr(r.note || '') + '" style="flex:1;min-width:0">'
+      +   '<button class="btn btn-sm" data-dj-note-save="' + attr(String(r.id)) + '">保存</button>'
+      + '</div>'
+      + '<div style="display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap;font-size:.83rem">'
+      +   '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-dj-flag="' + attr(String(r.id)) + '" data-dj-flag-name="addedToPlatform"' + (r.addedToPlatform ? ' checked' : '') + '> 已排期（已加到平台）</label>'
+      +   '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-dj-flag="' + attr(String(r.id)) + '" data-dj-flag-name="played"' + (r.played ? ' checked' : '') + '> 已播放</label>'
+      + '</div>'
+      + '<div class="muted" style="line-height:1.9">' + (songRows || '（本批没有歌）') + '</div>'
+      + '<div style="text-align:right;margin-top:8px">'
+      +   '<button class="btn btn-sm btn-ghost" data-dj-del="' + attr(String(r.id)) + '" style="color:#b3261e">' + svg('trash', 13) + ' 删除本批</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  var box = list;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-dj-note-save]'), function(b){
+    b.onclick = function(){ djSetRoundNote(b.dataset.djNoteSave, b); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-dj-flag]'), function(cb){
+    cb.onchange = function(){ djToggleRoundFlag(cb.dataset.djFlag, cb.dataset.djFlagName, cb.checked); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-dj-del]'), function(b){
+    b.onclick = function(){ djDeleteRound(b.dataset.djDel); };
+  });
+}
+function djSetRoundNote(id, btn){
+  var inp = document.querySelector('[data-dj-note="' + id + '"]');
+  if(!inp) return;
+  var rounds = (DJ_STATE.rounds || []).slice(), hit = null;
+  for(var i = 0; i < rounds.length; i++){ if(String(rounds[i].id) === String(id)){ hit = rounds[i]; break; } }
+  if(!hit) return;
+  hit.note = inp.value.trim();
+  djSaveSchedule(rounds).then(function(){
+    if(btn){ var old = btn.textContent; btn.textContent = '✅ 已保存'; setTimeout(function(){ btn.textContent = old; }, 1200); }
+  });
+}
+function djToggleRoundFlag(id, flag, val){
+  var rounds = (DJ_STATE.rounds || []).slice();
+  for(var i = 0; i < rounds.length; i++){
+    if(String(rounds[i].id) === String(id)){ rounds[i][flag] = !!val; break; }
+  }
+  djSaveSchedule(rounds);
+}
+function djDeleteRound(id){
+  confirmBox({ text: '确定删除这批记录吗？', detail: '只是一条排期批次记录，不影响平台上的歌单。', danger: true, okText: '删除' })
+    .then(function(yes){
+      if(!yes) return;
+      var rounds = (DJ_STATE.rounds || []).filter(function(r){ return String(r.id) !== String(id); });
+      djSaveSchedule(rounds).then(function(){ paintDjHistory(); });
+    });
+}
+
+/* ============================ 导出 / 导入 / 清空 ============================ */
+function djExportRounds(){
+  var json = JSON.stringify(DJ_STATE.rounds || [], null, 1);
+  download(new Blob([json], { type: 'application/json' }), 'dj-schedule-' + new Date().toISOString().slice(0, 10) + '.json');
+  toast('已导出排期数据', 'ok');
+}
+function djImportRounds(input){
+  var file = input.files && input.files[0];
+  if(!file) return;
+  var rd = new FileReader();
+  rd.onload = function(){
+    try{
+      var arr = JSON.parse(String(rd.result));
+      if(!Array.isArray(arr)) throw new Error('不是数组');
+      /* 旧格式兼容：早期导出的是「扁平歌曲数组」，这里包一层成批次 */
+      var isFlat = arr.length && arr[0] && (arr[0].title !== undefined) && (arr[0].songs === undefined);
+      var add = isFlat
+        ? [{ id: Date.now(), at: new Date().toLocaleString('zh-CN', { hour12:false }),
+             note: '（从旧格式导入）', addedToPlatform: false, played: false, songs: arr }]
+        : arr;
+      var merged = (DJ_STATE.rounds || []).concat(add);
+      djSaveSchedule(merged).then(function(){
+        toast('已导入 ' + add.length + ' 批记录', 'ok');
+        if($('djHistoryList')) paintDjHistory();
+        if($('djResult')) $('djResult').innerHTML = '';
+      });
+    }catch(e){
+      toast('导入失败：数据格式不正确', 'err', 4000);
+    }
+    input.value = '';
+  };
+  rd.readAsText(file);
+}
+function djClear(){
+  confirmBox({
+    text: '确定清空全部排期历史吗？',
+    detail: '会清空云端的 ' + (DJ_STATE.rounds || []).length + ' 批记录，不可恢复。建议先「导出数据」备份。',
+    danger: true, okText: '清空',
+  }).then(function(yes){
+    if(!yes) return;
+    DJ_STATE.pick = [];
+    djSaveSchedule([]).then(function(){
+      if($('djResult')) $('djResult').innerHTML = '';
+      if($('djHistoryList')) paintDjHistory();
+    });
+  });
+}
+
+/* ============================ 公示 ============================ */
+/* 「抽签规则」行：自动生成，尽量短。
+   数据优先用批次自带的 params（抽签那一刻的开关），老批次没有才按当前面板现算。 */
+function djParamsLine(r, pickedLen){
+  var p = (r && r.params) || null;
+  if(!p){
+    p = {
+      top: Math.max(0, parseInt(($('djTopN') || {}).value || '0', 10) || 0),
+      picked: pickedLen || 0,
+      onePer: !$('djOnePer') || $('djOnePer').checked,
+      exPlayed: !$('djExcludePlayed') || $('djExcludePlayed').checked,
+      exSched: !$('djExcludeSched') || $('djExcludeSched').checked,
+      pool: 0, persons: 0,
+    };
+  }
+  var picked = p.picked || pickedLen || 0;
+  var top = Math.max(0, p.top || 0); if(top > picked) top = picked;
+  var seg = [];
+  seg.push(top > 0 ? ('高赞必选 ' + top + ' + 随机 ' + (picked - top)) : ('随机 ' + picked));
+  seg.push(p.onePer ? '每人限一首' : '不限每人首数');
+  var ex = [];
+  if(p.exPlayed) ex.push('已播放');
+  if(p.exSched) ex.push('已排期');
+  if(ex.length) seg.push('排除' + ex.join('、'));
+  /* v3.5.6 点歌人加权（老批次没有这个字段，不显示） */
+  if(p.weight && p.weight.on){
+    seg.push('点歌人加权（进步 +' + (p.weight.prog || 0) + '／班委 +' + (p.weight.comm || 0) + '）');
+  }
+  if(p.pool) seg.push('池中 ' + p.pool + ' 首');
+  return seg.join(' · ');
+}
+function djCopy(){
+  var rounds = DJ_STATE.rounds || [];
+  if(!rounds.length){ toast('还没有排期，请先抽签', 'err'); return; }
+  var last = rounds[rounds.length - 1];
+  var lines = [];
+  lines.push('【25级05班 · 点歌抽签排期公示】');
+  lines.push('抽取时间：' + (last.at || ''));
+  var rule = djParamsLine(last, (last.songs || []).length);
+  if(rule) lines.push('抽签规则：' + rule);
+  lines.push('本期中选 ' + (last.songs || []).length + ' 首，累计排期 ' + djScheduleCount() + ' 首：');
+
+  /* v3.5.21：公示可选显示每首时长 / 总时长（用抽签时保存的开关，避免复制前乱改设置） */
+  var p = last.params || {};
+  var showDur = p.showDur !== false;   /* 老数据默认显示 */
+  var showTotal = p.showTotal !== false;
+  var totSec = 0;
+  (last.songs || []).forEach(function(s){ totSec += Number(s.duration) || 0; });
+
+  /* v3.5.12 #3 公示格式（站主钦定，一个字都不多写）：
+     歌曲 - 歌手 - 点歌人 - 点赞量 - 获选原因（≤5 字，没有就「随机抽取」）
+     抽签规则那行仍然保留（那是「怎么抽的」），但每首歌这一行不再啰嗦。 */
+  (last.songs || []).forEach(function(s, i){
+    var why = s.reason || '随机抽取';
+    var line = (i + 1) + '. ' + (s.title || '?')
+      + ' - ' + (s.artist || '未知')
+      + ' - ' + (s.requester || '匿名')
+      + ' - 点赞 ' + (s.votes || 0)
+      + ' - ' + why;
+    if(showDur && s.duration) line += ' - 时长 ' + voFmtDur(s.duration);
+    lines.push(line);
+  });
+  if(showTotal && totSec) lines.push('歌曲总时长：' + voFmtDur(totSec));
+
+  /* 备注统一放最后：批次备注（历史记录里填的）+ 公示备注（默认为空，手填才有） */
+  var notes = [];
+  if(last.note) notes.push(String(last.note));
+  var ne = $('djCopyNote');
+  var note = ne ? String(ne.value || '').trim() : '';
+  if(note) notes.push(note);
+  if(notes.length) lines.push('备注：' + notes.join(' '));
+
+  var text = lines.join('\n');
+  var done = function(){ toast('公示文本已复制，可粘贴到班级群', 'ok'); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, function(){ djFallbackCopy(text); done(); });
+  }else{ djFallbackCopy(text); done(); }
+}
+/* ============================================================================
+ * v3.5.40（站主 #6）：抽歌排期公示 → 长图
+ * ----------------------------------------------------------------------------
+ * 站主原话：「抽歌排期支持导出图片公示的内容，样式和功能仿照成绩分析的导出图片」
+ *
+ * 与「一键复制公示」共用同一批数据（最近一次抽签），不另算一遍：
+ *   头部 = 标题 / 抽取时间 / 本期首数 / 总时长
+ *   分段 = 抽签规则、本期歌单（每首一行，右侧点赞数与时长）、备注
+ * 画图交给 share-card.js（前后台共用），这里只负责把数据摆成 rows。
+ * ========================================================================= */
+/* v3.5.42（站主 #2）：导出前先选「哪一次」——
+   站主原话：「抽歌导出的话，我可以选择是导出哪一次数据」。 */
+function djPickRound(cb){
+  var rounds = (DJ_STATE.rounds || []).slice();
+  if(!rounds.length){ cb(null); return; }
+  if(rounds.length === 1){ cb(rounds[0]); return; }
+  var rev = rounds.slice().reverse();       /* 新的在前 */
+  var html = '<div class="muted" style="font-size:.8rem;margin-bottom:10px">'
+    + '共 ' + rev.length + ' 次抽签记录，点一条即可导出那一次的公示图片。</div>'
+    + '<div style="max-height:50vh;overflow:auto">'
+    + rev.slice(0, 60).map(function(r, i){
+        var n = (r.songs || []).length;
+        var rule = djParamsLine(r, n);
+        return '<button class="btn btn-secondary" style="width:100%;text-align:left;margin-bottom:6px;display:block" data-djpick="' + i + '">'
+          + '<b>' + esc(r.at || '未知时间') + '</b>'
+          + '<span class="muted" style="margin-left:8px">' + n + ' 首</span>'
+          + (i === 0 ? ' <span class="badge" style="margin-left:6px">最近一次</span>' : '')
+          + (rule ? '<div class="muted" style="font-size:.72rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(rule) + '</div>' : '')
+          + '</button>';
+      }).join('')
+    + '</div>';
+  openModal({
+    title: '导出哪一次排期', sub: '选中的那一次会画成一张长图',
+    body: html,
+    foot: '<button class="btn btn-secondary" id="djPickCancel">取消</button>',
+    onMount: function(box){
+      Array.prototype.forEach.call(box.querySelectorAll('[data-djpick]'), function(b){
+        b.onclick = function(){
+          var r = rev[Number(b.dataset.djpick)];
+          closeModal();
+          cb(r);
+        };
+      });
+      var c = box.querySelector('#djPickCancel');
+      if(c) c.onclick = closeModal;
+    },
+  });
+}
+
+function djShareImage(mode){
+  if(typeof ShareCard === 'undefined'){
+    toast('图片组件没加载出来，请刷新页面重试', 'err');
+    return;
+  }
+  var rounds = DJ_STATE.rounds || [];
+  if(!rounds.length){ toast('还没有排期，请先抽签', 'err'); return; }
+  djPickRound(function(picked){
+    if(picked) djMakeImage(picked, mode);
+  });
+}
+
+function djMakeImage(last, mode){
+  var p = last.params || {};
+  var showDur = p.showDur !== false;
+  var showTotal = p.showTotal !== false;
+
+  var songs = last.songs || [];
+  var totSec = 0;
+  songs.forEach(function(s){ totSec += Number(s.duration) || 0; });
+
+  var badges = ['本期 ' + songs.length + ' 首'];
+  if(showTotal && totSec) badges.push('总时长 ' + voFmtDur(totSec));
+
+  var rows = songs.map(function(s, i){
+    var left = (i + 1) + '. ' + (s.title || '?') + ' - ' + (s.artist || '未知')
+      + ' - ' + (s.requester || '匿名');
+    var right = '点赞 ' + (s.votes || 0);
+    if(showDur && s.duration) right += ' · ' + voFmtDur(s.duration);
+    return { l: left, r: right };
+  });
+
+  var sections = [];
+  var rule = djParamsLine(last, songs.length);
+  if(rule) sections.push({ heading: '抽签规则', lines: [rule] });
+  sections.push({ heading: '本期歌单', rows: rows });
+
+  var notes = [];
+  if(last.note) notes.push(String(last.note));
+  var ne = $('djCopyNote');
+  var note = ne ? String(ne.value || '').trim() : '';
+  if(note) notes.push(note);
+  if(notes.length) sections.push({ heading: '备注', lines: notes });
+
+  var card = {
+    title: '点歌抽签排期公示',
+    subtitle: '25级05班 · ' + (last.at || ''),
+    badges: badges,
+    sections: sections,
+    footer: '由 25级05班 班级服务站生成 · 累计已排期 ' + djScheduleCount() + ' 首',
+    badge: (typeof adminBadgeList === 'function') ? adminBadgeList() : adminBadgeUrl(),
+  };
+  var fname = '点歌排期-' + String(last.at || '').replace(/[^0-9]/g, '').slice(0, 12) + '.png';
+
+  if(mode === 'share'){
+    ShareCard.share(card, fname).then(function(r){
+      if(r && r.shared) toast('已唤起系统分享', 'ok');
+      else if(r && r.canceled) { /* 用户自己取消，不打扰 */ }
+      else toast('这个浏览器不支持直接分享，已保存到下载', 'ok');
+    }).catch(function(e){ toast('分享失败：' + (e.message || e), 'err'); });
+  } else {
+    ShareCard.download(card, fname)
+      .then(function(){ toast('图片已生成，去相册/下载里找一下', 'ok'); })
+      .catch(function(e){ toast('生成失败：' + (e.message || e), 'err'); });
+  }
+}
+
+function djFallbackCopy(text){
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
+}
+
+/* ============================================================================
+ * ⑬ 面板：版本更新记录（第二十八轮）
+ * ----------------------------------------------------------------------------
+ * 站主需求：「后台新增一个板块，用于记录每个版本更新、修复的问题，
+ *           有点像 GitHub 上的 release。」
+ *
+ * 【只有后台能看】前台不展示 —— 这是站主明确的要求（CONTENT_MAP 里
+ *   release_notes 的值是 null，主站不消费它）。
+ *
+ * 【为什么要放云端而不是后台本地】
+ *   版本记录是「站长资产」：换电脑、重装浏览器都不该丢。
+ *   同时它天然就是「这个站怎么长起来的」的历史档案，值得跟内容一起云备份。
+ *
+ * 【权限】
+ *   走 /api/content PUT，后端只放行 admin / AI 助手，天然受保护。
+ * ========================================================================= */
+
+var REL_STATE = { list: [], editing: null };
+
+/* 版本条目类型 → 展示标签 / 颜色（badge 样式复用后台已有的 badge-*） */
+var REL_TYPES = {
+  feature:  { label: '新功能', cls: 'badge-green' },
+  fix:      { label: '问题修复', cls: 'badge-blue' },
+  improve:  { label: '体验优化', cls: 'badge-gray' },
+  security: { label: '安全', cls: 'badge' },
+};
+function relTypeOf(t){
+  return REL_TYPES[t] || { label: t || '其他', cls: 'badge-gray' };
+}
+
+/* ============================================================================
+ * v3.6.1（站主 #4）：数据管理 —— 备份 / 回档
+ * ----------------------------------------------------------------------------
+ * 站主原话：「后台新增数据管理，以后每次更新都先自动备份所有数据
+ *            （通过检测在部署前先备份后部署）……默认存储最近 14 个版本更新，
+ *            方便有问题随时回档」
+ *
+ * 这个面板只做三件事：看有哪些备份、手动备份一次、从某一份回档。
+ * 自动备份发生在「部署前」（见仓库脚本 predeploy.mjs），不依赖这个页面。
+ * ========================================================================= */
+var BK_STATE = { list: [], count: 0, totalBytes: 0, keep: 14, busy: false };
+
+/* ============================================================================
+ * v3.9.3（站主）：班级岛后台
+ * ----------------------------------------------------------------------------
+ * 站主原话：
+ *   「班级岛不要那么多功能了，第二行的课程表改为课表信息显示，类似一个横幅，
+ *     我在后台可以编辑横幅内容……比如说星期一写哪个课表，星期二哪个课表，
+ *     然后星期六和星期天都默认都是有课的，如果当天没课的话，我会在后台提前修改。」
+ *   「寒暑假我就在后台设置开始时间和截止时间，在这时间内不显示课表，显示已放假
+ *     多少天、距开学还有多少天。」
+ *   「有些考试是不上课的，我就在后台编辑今日事项，比如数学，几点到几点。」
+ *
+ * 三块：① 周一到周日的默认横幅文案
+ *       ② 按具体日期临时改（周五就能把周六周日写掉）
+ *       ③ 假期区间（名称 + 起止），期间横幅自动变倒计时
+ * ========================================================================= */
+var AI = null;
+var AI_DRAG = null;
+
+var AI_COMPS = [
+  { k: 'time', n: '时间', d: '当前时分，每 30 秒自己走' },
+  { k: 'weather', n: '天气', d: '修水县实时温度与天气' },
+  { k: 'week', n: '周数', d: '按开学日期算第几周' },
+  { k: 'term', n: '学期名称', d: '例如 高二上' }
+];
+
+var AI_DAYS = [
+  ['mon', '周一'], ['tue', '周二'], ['wed', '周三'], ['thu', '周四'],
+  ['fri', '周五'], ['sat', '周六'], ['sun', '周日']
+];
+
+function renderIsland(){
+  $('view').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/island').then(function(j){
+    AI = (j && j.data) || {};
+    AI.banner = AI.banner || {};
+    AI.days = AI.days || {};
+    AI.holidays = AI.holidays || [];
+    paintIsland();
+  }).catch(function(e){
+    $('view').innerHTML = '<div class="alert danger" style="margin:16px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function paintIsland(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0">'
+    +     '<b style="font-size:.92rem">班级岛</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '首页公告上面那条。<b>改动实时保存</b>，不用再点保存；同学刷新就能看到</p>'
+    +   '</div>'
+    +   '<span class="ai-save-state" id="aiStage">已同步</span>'
+    +   '<button class="btn btn-sm btn-secondary" id="aiReload">重新读取</button>'
+    + '</div>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>基本</h3></div></div>'
+    +   '<div class="panel-body">'
+    +     '<label class="ai-check"><input type="checkbox" id="aiOn"' + (AI.on !== false ? ' checked' : '') + '> 在首页显示班级岛</label>'
+    +     '<div class="bd-grid2" style="margin-top:10px">'
+    +       '<div class="field"><label>学期名称</label>'
+    +         '<input class="gate-input" id="aiTerm" maxlength="30" value="' + attr(AI.term || '') + '" placeholder="2026 年秋季 · 高二上"></div>'
+    +       '<div class="field"><label>开学那一周的周一（算周数用）</label>'
+    +         '<input class="gate-input" id="aiStart" type="date" value="' + attr(AI.startDate || '') + '"></div>'
+    +     '</div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>今日事项照片</h3>'
+    +     '<p class="sub">同学点首页「今日事项」那一行会弹出这张图，可放大缩小；留空则点击不弹图</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<input class="gate-input" id="aiPhoto" maxlength="500" placeholder="粘贴图片直链，或写仓库相对路径 ./photo.jpg">'
+    +     '<div class="ai-photo-row">'
+    +       '<img id="aiPhotoPrev" alt="预览" style="display:none">'
+    +       '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
+    +         '直链（图床 / 云盘外链）最稳；用仓库里的图就写 <b>./文件名.jpg</b>（和 index.html 放同一层）。'
+    +         '填好会自动预览，有效才会显示缩略图</p>'
+    +     '</div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>显示哪些组件</h3>'
+    +     '<p class="sub">拖动卡片排序；✕ 摘掉、下面 ＋ 加回来。横幅固定在第二行</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div id="aiComps"></div>'
+    +     '<div id="aiRest" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>今日事项横幅（按星期）</h3>'
+    +     '<p class="sub">每天一句，写法随意：「升 数数语英化 物物体劳 听自语语」。'
+    +       '周六周日默认也有课，放掉就清空或留「今天放假」</p></div></div>'
+    +   '<div class="panel-body"><div id="aiBanner"></div></div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>按日期临时改（提前改某一天）</h3>'
+    +     '<p class="sub">只影响那一天：考试、调课、临时放假都写这里。<b>支持换行</b>，'
+    +       '可单独设<b>加粗</b>（让考试更醒目）和是否<b>居中</b>；点已有条目可再次修改</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div id="aiDayList"></div>'
+    +     '<div class="ai-dform">'
+    +       '<input class="gate-input" type="date" id="adDate">'
+    +       '<button class="btn btn-sm btn-secondary" id="adFill" type="button">填入当天课表</button>'
+    +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adOff"> 不上课</label>'
+    +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adBold" checked> 加粗</label>'
+    +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adCenter" checked> 居中</label>'
+    +       '<button class="btn btn-sm" id="adAdd">添加</button>'
+    +     '</div>'
+    +     '<div class="ai-fmtbar">'
+    +       '<button type="button" class="ai-fmt" data-fmt="b">B 加粗选中</button>'
+    +       '<button type="button" class="ai-fmt" data-fmt="s">S 加横线</button>'
+    +       '<button type="button" class="ai-fmt" data-fmt="h"># 整行强调</button>'
+    +       '<span class="muted" style="font-size:.72rem">选中几个字再点；行首 # = 这行加粗并居中</span>'
+    +     '</div>'
+    +     '<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="200"'
+    +       ' placeholder="这一天的安排（可多行），如：\n数学 08:00-09:30\n语文 10:00-11:30"></textarea>'
+    +     '<p class="muted" style="font-size:.72rem;margin:8px 0 4px">预览（就是首页看到的效果）：</p>'
+    +     '<div class="ai-dprev"><div class="ai-dprev-txt" id="adPrev"></div></div>'
+    +   '</div>'
+    + '</section>'
+
+    + '<section class="panel ai-sec">'
+    +   '<div class="panel-head"><div><h3>假期（寒假 / 暑假 / 小长假）</h3>'
+    +     '<p class="sub">这段时间内横幅显示「已放假 N 天 · 距开学还有 M 天」，不再显示课表</p></div></div>'
+    +   '<div class="panel-body">'
+    +     '<div id="aiHolList"></div>'
+    +     '<div class="ai-dform">'
+    +       '<input class="gate-input" id="ahLabel" maxlength="16" placeholder="名称，如 寒假">'
+    +       '<input class="gate-input" type="date" id="ahFrom">'
+    +       '<input class="gate-input" type="date" id="ahTo">'
+    +       '<button class="btn btn-sm" id="ahAdd">添加</button>'
+    +     '</div>'
+    +   '</div>'
+    + '</section>';
+
+  $('aiReload').onclick = renderIsland;
+  $('adAdd').onclick = aiAddDay;
+  $('adFill').onclick = aiFillDay;
+  $('ahAdd').onclick = aiAddHoliday;
+  $('adText').onkeydown = function(e){
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); aiAddDay(); }
+  };
+  $('adBold').onchange = aiDayPreview;
+  $('adCenter').onchange = aiDayPreview;
+  $('adText').oninput = aiDayPreview;
+  document.querySelectorAll('.ai-fmt').forEach(function(b){
+    b.onclick = function(){ aiFmt(b.getAttribute('data-fmt')); };
+  });
+
+  /* 基本项：改完立刻存 */
+  $('aiOn').onchange = aiTouch;
+  $('aiTerm').oninput = aiTouch;
+  $('aiStart').onchange = aiTouch;
+
+  /* 照片：输入即存 + 实时预览（有效地址才显示缩略图） */
+  var ph = $('aiPhoto');
+  if(ph){
+    ph.value = AI.photo || '';
+    ph.oninput = function(){
+      AI.photo = String(ph.value || '').trim().slice(0, 500);
+      aiPhotoPreview();
+      aiTouch();
+    };
+    aiPhotoPreview();
+  }
+
+  paintComps();
+  paintBanner();
+  paintDayList();
+  paintHols();
+  aiDayPreview();
+}
+
+/* ============================================================================
+ * v3.9.7（站主）：实时保存
+ * ----------------------------------------------------------------------------
+ * 站主原话：「太繁琐了……我要更新内容，先要在下面更新这个表，然后点击添加之后
+ *            又在上面点保存，如果忘了一步，我重新看的时候就全部都没了。
+ *            那就实时更新，就跟我录那个数据一样，不要再加这么多保存让我搞了」。
+ *
+ * 做法：任何一处改动（开关 / 学期 / 照片 / 横幅 / 组件 / 日期 / 假期）都调用
+ *       aiTouch()，650ms 内没有新动作就自动 POST；顶部只显示状态，不再有保存按钮。
+ *       保存失败会变成「保存失败，点此重试」，点一下重发。
+ * ========================================================================= */
+var AI_T = null, AI_BUSY = false, AI_AGAIN = false;
+function aiStage(txt, cls){
+  var el = $('aiStage');
+  if(!el) return;
+  el.textContent = txt;
+  el.className = 'ai-save-state' + (cls ? ' ' + cls : '');
+  el.onclick = (cls === 'err') ? aiFlush : null;
+}
+function aiTouch(){
+  aiStage('保存中…', 'saving');
+  clearTimeout(AI_T);
+  AI_T = setTimeout(aiFlush, 650);
+}
+function aiCollect(){
+  var on = $('aiOn'), term = $('aiTerm'), st = $('aiStart'), ph = $('aiPhoto');
+  AI.on = !!(on && on.checked);
+  AI.term = String((term && term.value) || '').trim();
+  AI.startDate = String((st && st.value) || '').trim();
+  AI.photo = String((ph && ph.value) || '').trim().slice(0, 500);
+  Array.prototype.forEach.call(document.querySelectorAll('#aiBanner [data-bk]'), function(el){
+    AI.banner[el.getAttribute('data-bk')] = String(el.value || '').trim().slice(0, 60);
+  });
+  return {
+    on: AI.on,
+    term: AI.term,
+    startDate: AI.startDate,
+    components: (AI.components || []).slice(),
+    banner: AI.banner,
+    days: AI.days,
+    holidays: AI.holidays,
+    photo: AI.photo,
+  };
+}
+function aiFlush(){
+  clearTimeout(AI_T);
+  if(AI_BUSY){ AI_AGAIN = true; return; }
+  AI_BUSY = true;
+  AI_AGAIN = false;
+  var data = aiCollect();
+  api('/island', { method: 'POST', body: { data: data } }).then(function(j){
+    AI_BUSY = false;
+    if(j && j.data) AI = j.data;
+    var t = new Date();
+    aiStage('已自动保存 ' + ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2), 'ok');
+    if(AI_AGAIN) aiFlush();
+  }).catch(function(e){
+    AI_BUSY = false;
+    aiStage('保存失败，点此重试', 'err');
+    try{ console.warn('[island save]', e && e.message); }catch(err){}
+  });
+}
+/* 离开页面前把没来得及发的改动补发掉（keepalive 保证请求不被中断） */
+function aiFlushBeacon(){
+  if(!AI_T && !AI_BUSY) return;
+  try{
+    var body = JSON.stringify({ data: aiCollect() });
+    fetch(API_BASE + '/api/island', {
+      method: 'POST', keepalive: true,
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + STATE.token },
+      body: body,
+    }).catch(function(){});
+  }catch(e){}
+}
+try{ window.addEventListener('pagehide', aiFlushBeacon); }catch(e){}
+
+/* ---------- 组件 ---------- */
+function paintComps(){
+  var used = (AI.components || []).slice();
+  var box = $('aiComps');
+  box.innerHTML = used.map(function(k, i){
+    var info = null;
+    for(var j = 0; j < AI_COMPS.length; j++){ if(AI_COMPS[j].k === k) info = AI_COMPS[j]; }
+    return '<div class="ai-comp" draggable="true" data-c="' + k + '" data-i="' + i + '">'
+      + '<span class="grip">⋮⋮</span>'
+      + '<span class="nm">' + esc((info && info.n) || k) + '</span>'
+      + '<span class="muted" style="font-size:.7rem">' + esc((info && info.d) || '') + '</span>'
+
+      + '<button type="button" class="ai-x" data-off="' + k + '" title="摘掉">✕</button>'
+      + '</div>';
+  }).join('');
+
+  var rest = AI_COMPS.filter(function(x){ return used.indexOf(x.k) < 0; });
+  $('aiRest').innerHTML = rest.length
+    ? rest.map(function(x){
+        return '<button type="button" class="ai-add" data-add="' + x.k + '">＋ ' + esc(x.n) + '</button>';
+      }).join('')
+    : '<span class="muted" style="font-size:.74rem">四个组件都在用</span>';
+
+  box.onclick = function(e){
+    var k = e.target.getAttribute && e.target.getAttribute('data-off');
+    if(!k) return;
+    AI.components = (AI.components || []).filter(function(x){ return x !== k; });
+    paintComps(); aiTouch();
+  };
+  $('aiRest').onclick = function(e){
+    var k = e.target.getAttribute && e.target.getAttribute('data-add');
+    if(!k) return;
+    AI.components = (AI.components || []).concat([k]);
+    paintComps(); aiTouch();
+  };
+
+  /* 拖拽排序 */
+  Array.prototype.forEach.call(box.querySelectorAll('.ai-comp'), function(el){
+    el.addEventListener('dragstart', function(e){
+      AI_DRAG = Number(el.getAttribute('data-i'));
+      try{ e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'x'); }catch(err){}
+    });
+    el.addEventListener('dragover', function(e){ e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', function(){ el.classList.remove('drag-over'); });
+    el.addEventListener('drop', function(e){
+      e.preventDefault(); el.classList.remove('drag-over');
+      var to = Number(el.getAttribute('data-i'));
+      if(AI_DRAG == null || AI_DRAG === to) return;
+      var arr = (AI.components || []).slice();
+      var moved = arr.splice(AI_DRAG, 1)[0];
+      arr.splice(to, 0, moved);
+      AI.components = arr;
+      AI_DRAG = null;
+      paintComps(); aiTouch();
+    });
+  });
+}
+
+/* ---------- 横幅（默认课表：一行就够） ---------- */
+function paintBanner(){
+  var host = $('aiBanner');
+  /* v3.9.6（站主）：星期横幅 = 默认课表，收回单行输入；
+     要多行请用「按日期临时改」那一块（考试时段 / 备注）。 */
+  host.innerHTML = AI_DAYS.map(function(d){
+    return '<div class="ai-brow">'
+      + '<span class="d">' + d[1] + '</span>'
+      + '<input data-bk="' + d[0] + '" maxlength="60" value="' + attr(AI.banner[d[0]] || '') + '"'
+      +   ' placeholder="默认课表，如 升 数数语英化 物物体劳 听自语语">'
+      + '</div>';
+  }).join('');
+  host.oninput = function(e){
+    var k = e.target.getAttribute && e.target.getAttribute('data-bk');
+    if(!k) return;
+    AI.banner[k] = String(e.target.value || '').slice(0, 60);
+    aiTouch();
+  };
+}
+
+/* ---------- 按日期覆盖（可再次编辑 / 复用） ---------- */
+var AI_DAY_EDIT = null;   /* 正在编辑的日期；null = 新增 */
+function paintDayList(){
+  var keys = Object.keys(AI.days || {}).sort();
+  var host = $('aiDayList');
+  if(!keys.length){
+    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">还没有单独设置的日期。点上面「填入当天课表」可以基于当天默认课表改一两个字。</p>';
+    return;
+  }
+  host.innerHTML = keys.map(function(k){
+    var v = AI.days[k] || {};
+    var one = String(v.label || v.text || '').replace(/\n/g, ' / ');
+    return '<div class="ai-ovitem ai-ovclick' + (AI_DAY_EDIT === k ? ' on' : '') + '" data-dayedit="' + attr(k) + '">'
+      + '<span class="ai-ovtag ' + (v.off ? 'off' : 'plan') + '">' + (v.off ? '不上课' : '改文案') + '</span>'
+      + '<b>' + esc(k.slice(5)) + '</b>'
+      + (v.bold ? '<span class="ai-ovflag">粗</span>' : '')
+      + (v.center === false ? '<span class="ai-ovflag">左</span>' : '')
+      + '<span class="muted">' + esc(one) + '</span>'
+      + '<button type="button" data-daydel="' + attr(k) + '" title="删除">✕</button>'
+      + '</div>';
+  }).join('');
+  host.onclick = function(e){
+    var del = e.target.getAttribute && e.target.getAttribute('data-daydel');
+    if(del){
+      delete AI.days[del];
+      if(AI_DAY_EDIT === del) aiCancelDay();
+      paintDayList();
+      aiTouch();
+      return;
+    }
+    var ed = e.target.closest && e.target.closest('[data-dayedit]');
+    if(ed) aiEditDay(ed.getAttribute('data-dayedit'));
+  };
+}
+
+/* 后台文本框实时套用「加粗 / 居中」，下方再给一份和首页一样的预览 */
+function aiPrevFmt(text){
+  return String(text == null ? '' : text).split('\n').map(function(line){
+    var head = false, t = line;
+    if(/^#\s?/.test(t)){ head = true; t = t.replace(/^#\s?/, ''); }
+    var h = esc(t);
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+    return head ? '<span class="ln-em">' + h + '</span>' : h;
+  }).join('\n');
+}
+function aiDayPreview(){
+  var t = $('adText');
+  if(!t) return;
+  var bold = $('adBold') && $('adBold').checked;
+  var center = $('adCenter') && $('adCenter').checked;
+  t.style.fontWeight = bold ? '800' : '400';
+  t.style.textAlign = center ? 'center' : 'left';
+  var pv = $('adPrev');
+  if(pv){
+    pv.innerHTML = aiPrevFmt(t.value) || '<span style="opacity:.45">（这里是预览）</span>';
+    pv.style.fontWeight = bold ? '800' : '500';
+    pv.style.textAlign = center ? 'center' : 'left';
+  }
+}
+/* v3.9.8：选中文字后点按钮加标记（**加粗** / ~~横线~~ / 行首 #） */
+function aiFmt(kind){
+  var t = $('adText');
+  if(!t) return;
+  var v = t.value, a = t.selectionStart, b = t.selectionEnd;
+  if(kind === 'h'){
+    var ls = v.lastIndexOf('\n', a - 1) + 1;
+    if(v.slice(ls, ls + 1) !== '#'){
+      t.value = v.slice(0, ls) + '# ' + v.slice(ls);
+      a += 2; b += 2;
+    }
+  }else{
+    var mark = (kind === 'b') ? '**' : '~~';
+    var sel = v.slice(a, b);
+    if(!sel){
+      t.value = v.slice(0, a) + mark + '文字' + mark + v.slice(b);
+      a = a + mark.length; b = a + 2;
+    }else if(sel.indexOf(mark) === 0 && sel.lastIndexOf(mark) === sel.length - mark.length){
+      var inner = sel.slice(mark.length, sel.length - mark.length);
+      t.value = v.slice(0, a) + inner + v.slice(b);
+      b = a + inner.length;
+    }else{
+      t.value = v.slice(0, a) + mark + sel + mark + v.slice(b);
+      a = a + mark.length; b = a + sel.length;
+    }
+  }
+  t.focus();
+  try{ t.setSelectionRange(a, b); }catch(e){}
+  aiDayPreview();
+}
+
+function aiEditDay(k){
+  var v = (AI.days || {})[k];
+  if(!v) return;
+  AI_DAY_EDIT = k;
+  $('adDate').value = k;
+  $('adText').value = v.text || '';
+  $('adOff').checked = !!v.off;
+  $('adBold').checked = !!v.bold;
+  $('adCenter').checked = v.center !== false;
+  var b = $('adAdd');
+  if(b) b.textContent = '更新这一天';
+  aiDayPreview();
+  paintDayList();
+  $('adText').focus();
+}
+function aiCancelDay(){
+  AI_DAY_EDIT = null;
+  $('adDate').value = ''; $('adText').value = ''; $('adOff').checked = false;
+  $('adBold').checked = true; $('adCenter').checked = true;
+  var b = $('adAdd');
+  if(b) b.textContent = '添加';
+  aiDayPreview();
+}
+
+/* 一键填入「当天课表」：默认取所选日期的星期横幅；
+   那天已经有临时安排就先填那份，方便只改其中一两个字。 */
+function aiFillDay(){
+  var d = $('adDate').value || '';
+  if(!d){
+    var t = new Date();
+    d = t.getFullYear() + '-' + ('0' + (t.getMonth() + 1)).slice(-2) + '-' + ('0' + t.getDate()).slice(-2);
+    $('adDate').value = d;
+  }
+  var ex = (AI.days || {})[d];
+  var txt = ex && ex.text ? ex.text : '';
+  if(!txt){
+    var dt = new Date(d + 'T00:00:00');
+    if(isNaN(dt.getTime())){ toast('日期不对', 'warn'); return; }
+    var key = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][dt.getDay()];
+    txt = (AI.banner || {})[key] || '';
+  }
+  if(!txt){ toast('这一天还没有默认课表，先在上面写一句', 'warn', 2800); return; }
+  $('adText').value = txt;
+  $('adText').focus();
+  toast('已填入，改其中一两个字再点' + (AI_DAY_EDIT ? '「更新这一天」' : '「添加」'), 'ok', 2600);
+}
+
+function aiAddDay(){
+  var d = $('adDate').value || '';
+  var text = String($('adText').value || '').trim().slice(0, 200);
+  var off = !!$('adOff').checked;
+  if(!d){ toast('先选日期', 'warn'); return; }
+  if(!text && !off){ toast('写点今日事项，或者勾「不上课」', 'warn', 2800); return; }
+  AI.days[d] = {
+    text: text,
+    off: off,
+    label: off ? (text || '今天不上课') : '',
+    bold: !!$('adBold').checked,
+    center: !!$('adCenter').checked,
+  };
+  AI_DAY_EDIT = null;
+  aiCancelDay();
+  paintDayList();
+  aiTouch();
+  toast('已写入这一天，自动保存中…', 'ok', 2200);
+}
+
+/* ---------- 假期（可再次修改时间范围 / 复用） ---------- */
+var AI_HOL_EDIT = null;   /* 正在编辑的假期 id */
+function paintHols(){
+  var host = $('aiHolList');
+  var list = (AI.holidays || []).slice().sort(function(a, b){ return a.from < b.from ? -1 : 1; });
+  if(!list.length){
+    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">还没有假期区间。</p>';
+    return;
+  }
+  host.innerHTML = list.map(function(h){
+    return '<div class="ai-ovitem ai-ovclick' + (AI_HOL_EDIT === h.id ? ' on' : '') + '" data-holedit="' + attr(h.id) + '">'
+      + '<span class="ai-ovtag off">' + esc(h.label || '假期') + '</span>'
+      + '<b>' + esc(h.from.slice(5)) + ' – ' + esc(h.to.slice(5)) + '</b>'
+      + '<span class="muted"></span>'
+      + '<button type="button" class="ai-mini" data-hcopy="' + attr(h.id) + '" title="复用：复制到下面表单，改日期再加一条">复用</button>'
+      + '<button type="button" data-hdel="' + attr(h.id) + '" title="删除">✕</button>'
+      + '</div>';
+  }).join('');
+  host.onclick = function(e){
+    var del = e.target.getAttribute && e.target.getAttribute('data-hdel');
+    if(del){
+      AI.holidays = AI.holidays.filter(function(x){ return x.id !== del; });
+      if(AI_HOL_EDIT === del) aiCancelHol();
+      paintHols();
+      aiTouch();
+      return;
+    }
+    var cp = e.target.getAttribute && e.target.getAttribute('data-hcopy');
+    if(cp){
+      var h0 = (AI.holidays || []).filter(function(x){ return x.id === cp; })[0];
+      if(!h0) return;
+      AI_HOL_EDIT = null;
+      $('ahLabel').value = h0.label || '';
+      $('ahFrom').value = h0.from;
+      $('ahTo').value = h0.to;
+      var b0 = $('ahAdd');
+      if(b0) b0.textContent = '添加';
+      paintHols();
+      toast('已复制到表单，改好日期再点「添加」', 'ok', 2600);
+      return;
+    }
+    var ed = e.target.closest && e.target.closest('[data-holedit]');
+    if(ed) aiEditHol(ed.getAttribute('data-holedit'));
+  };
+}
+
+function aiEditHol(id){
+  var h = (AI.holidays || []).filter(function(x){ return x.id === id; })[0];
+  if(!h) return;
+  AI_HOL_EDIT = id;
+  $('ahLabel').value = h.label || '';
+  $('ahFrom').value = h.from;
+  $('ahTo').value = h.to;
+  var b = $('ahAdd');
+  if(b) b.textContent = '更新这一段';
+  paintHols();
+}
+function aiCancelHol(){
+  AI_HOL_EDIT = null;
+  $('ahLabel').value = ''; $('ahFrom').value = ''; $('ahTo').value = '';
+  var b = $('ahAdd');
+  if(b) b.textContent = '添加';
+}
+
+function aiAddHoliday(){
+  var label = String($('ahLabel').value || '').trim().slice(0, 16);
+  var from = $('ahFrom').value || '';
+  var to = $('ahTo').value || from;
+  if(!from){ toast('先选开始日期', 'warn'); return; }
+  if(to < from){ toast('结束日期不能早于开始日期', 'warn'); return; }
+  if(AI_HOL_EDIT){
+    var cur = (AI.holidays || []).filter(function(x){ return x.id === AI_HOL_EDIT; })[0];
+    if(cur){ cur.from = from; cur.to = to; cur.label = label || '假期'; }
+    toast('已更新，自动保存中…', 'ok', 2200);
+  }else{
+    AI.holidays.push({ id: 'h' + Date.now().toString(36), from: from, to: to, label: label || '假期' });
+    toast('已添加，自动保存中…', 'ok', 2200);
+  }
+  aiCancelHol();
+  paintHols();
+  aiTouch();
+}
+
+/* 照片缩略图预览：能加载才显示，加载失败就藏起来 */
+function aiPhotoPreview(){
+  var im = $('aiPhotoPrev');
+  var ph = $('aiPhoto');
+  if(!im || !ph) return;
+  var u = String(ph.value || '').trim();
+  if(!u){ im.style.display = 'none'; im.removeAttribute('src'); return; }
+  im.onload = function(){ im.style.display = ''; };
+  im.onerror = function(){ im.style.display = 'none'; };
+  im.src = u;
+}
+
+/* ============================================================================
+ * v3.8.4（站主）：板块管理 + 板块分享链接
+ * ----------------------------------------------------------------------------
+ * 站主原话：
+ *   「首先确保目前现有的板块和以后新增的板块都可以在后台查询到具体的位置并修改
+ *     板块名称或简介；其次支持板块分享功能（成绩分析就不用了，灰色显示）。可以生成
+ *     包含该板块所有内容的分享链接，且内容也是链接数据库实时刷新的，就相当于一个
+ *     快捷方式……还可以一键返回主页。」
+ *   「后台生成分享链接时可以设置未登录用户点击后是否需要登录才能继续访问。」
+ *
+ * 为什么后台能列出板块：板块写在 index.html 的 SITE_DATA 里，后台是另一个页面。
+ * 首页每次启动（登录状态下）会把「当前真实结构」上报到 board_meta.catalog，
+ * 所以以后加板块不用改这里，只要有人登录打开过一次首页，列表就自动更新。
+ * ========================================================================= */
+var BM = {
+  meta: { cats: {}, cards: {}, catalog: { cats: [] }, noShare: [] },
+  shares: [],
+  open: {},
+  ready: false
+};
+
+function renderBoards(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0">'
+    +     '<b style="font-size:.92rem">板块管理</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '改名 / 写简介 / 调顺序 / 隐藏 / 游客可见 —— <b>改完立刻全站生效，不用发版</b>；'
+    +       '下面还能为整个板块或单张卡片生成分享链接</p>'
+    +   '</div>'
+    +   '<button class="btn btn-sm" id="bdNew">＋ 生成分享链接</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="bdRe">刷新</button>'
+    + '</div>'
+    + '<section class="panel" style="margin-bottom:16px">'
+    +   '<div class="bd-sec-h">板块与卡片</div>'
+    +   '<div id="bdList"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    + '</section>'
+    + '<section class="panel">'
+    +   '<div class="bd-sec-h">我建过的板块分享</div>'
+    +   '<div id="bdShareList"></div>'
+    + '</section>';
+
+  $('bdNew').onclick = function(){ bdShareForm(null); };
+  $('bdRe').onclick = function(){ BM.ready = false; loadBoards(true); };
+  loadBoards();
+}
+
+function loadBoards(force){
+  var host = $('bdList');
+  if(host && (!BM.ready || force)){
+    host.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  }
+  return Promise.all([
+    api('/boards?action=meta'),
+    api('/boards?action=share-list', { method:'POST', body:{} }).catch(function(){ return { shares: [] }; })
+  ]).then(function(a){
+    BM.meta = a[0] || BM.meta;
+    BM.shares = (a[1] && a[1].shares) || [];
+    BM.ready = true;
+    paintBoards();
+    paintBoardShares();
+  }).catch(function(e){
+    if(host) host.innerHTML = '<div class="alert danger" style="margin:16px">加载失败：' + esc(e.message) + '</div>';
+  });
+}
+
+/* 板块行：目录（有哪些板块/卡片）+ 云端设置（改过的名字/简介/排序/开关）合并 */
+function bdRows(){
+  var cat = (BM.meta.catalog && BM.meta.catalog.cats) || [];
+  var rows = cat.map(function(c){
+    var m = BM.meta.cats[String(c.id)] || {};
+    return {
+      id: Number(c.id),
+      defName: c.name || ('板块 ' + c.id),
+      name: m.name || c.name || ('板块 ' + c.id),
+      intro: m.intro || '',
+      sort: (m.sort === undefined || m.sort === null) ? null : Number(m.sort),
+      hidden: !!m.hidden,
+      guestOk: m.guestOk !== false,
+      cards: c.cards || [],
+      noShare: (BM.meta.noShare || []).indexOf(Number(c.id)) >= 0
+    };
+  });
+  rows.sort(function(a, b){
+    var sa = a.sort === null ? 1e9 : a.sort;
+    var sb = b.sort === null ? 1e9 : b.sort;
+    return sa - sb;
+  });
+  return rows;
+}
+
+function paintBoards(){
+  var host = $('bdList');
+  if(!host) return;
+  var rows = bdRows();
+  if(!rows.length){
+    host.innerHTML = '<div class="alert warn" style="margin:16px">还没有拿到板块清单。'
+      + '请先在手机或电脑上<b>登录并打开一次站点首页</b>，再回来点「刷新」。'
+      + '（首页会自动把当前的板块和卡片上报到这里。）</div>';
+    return;
+  }
+  host.innerHTML = rows.map(function(r, i){
+    var pos = '首页第 ' + (i + 1) + ' 项 · 侧栏第 ' + (i + 1) + ' 项'
+      + (r.hidden ? ' · <b style="color:var(--warn)">已隐藏</b>' : '');
+    var cardsHtml = (r.cards || []).map(function(c){
+      var m = BM.meta.cards[String(c.id)] || {};
+      var nm = m.title || c.title || ('卡片 ' + c.id);
+      return '<div class="bd-card-row" data-card="' + attr(c.id) + '">'
+        + '<input class="gate-input bd-c-title" data-cf="title" value="' + attr(nm) + '">'
+        + '<span class="bd-c-id">#' + esc(c.id) + '</span>'
+        + '<label class="bd-check"><input type="checkbox" data-cf="guestOk"'
+        +   (m.guestOk === false ? '' : ' checked') + '> 游客可见</label>'
+        + '<button class="btn btn-sm btn-secondary" data-cact="share">单独分享</button>'
+        + '</div>';
+    }).join('') || '<div class="bd-empty">这个板块下面没有卡片</div>';
+
+    return '<div class="bd-block" data-bd="' + r.id + '">'
+      + '<div class="bd-top">'
+      +   '<span class="bd-order">#' + (i + 1) + '</span>'
+      +   '<input class="gate-input bd-name" data-bf="name" value="' + attr(r.name) + '">'
+      +   '<span class="bd-pos">' + pos + '</span>'
+      +   '<button class="btn btn-sm btn-secondary" data-bact="up" title="上移">↑</button>'
+      +   '<button class="btn btn-sm btn-secondary" data-bact="down" title="下移">↓</button>'
+      +   '<label class="bd-check"><input type="checkbox" data-bf="hidden"' + (r.hidden ? ' checked' : '') + '> 隐藏</label>'
+      +   '<label class="bd-check"><input type="checkbox" data-bf="guestOk"' + (r.guestOk ? ' checked' : '') + '> 游客可见</label>'
+      +   (r.noShare
+            ? '<span class="bd-nos">成绩分析请用前台分享</span>'
+            : '<button class="btn btn-sm" data-bact="share">分享</button>')
+      +   '<button class="btn btn-sm btn-secondary" data-bact="cards">卡片 ' + (r.cards || []).length + ' 张</button>'
+      + '</div>'
+      + '<input class="gate-input bd-intro" data-bf="intro" maxlength="200"'
+      +   ' placeholder="板块简介（显示在板块页顶部，可留空）" value="' + attr(r.intro) + '">'
+      + '<div class="bd-cards"' + (BM.open[r.id] ? '' : ' hidden') + '>' + cardsHtml + '</div>'
+      + '</div>';
+  }).join('');
+
+  /* 事件：全部走委托，避免每行绑一堆闭包 */
+  host.onclick = function(e){
+    var block = e.target.closest ? e.target.closest('[data-bd]') : null;
+    if(!block) return;
+    var id = Number(block.getAttribute('data-bd'));
+    var act = e.target.getAttribute && e.target.getAttribute('data-bact');
+    if(act === 'up' || act === 'down'){ bdMove(id, act === 'up' ? -1 : 1); return; }
+    if(act === 'cards'){
+      BM.open[id] = !BM.open[id];
+      var box = block.querySelector('.bd-cards');
+      if(box) box.hidden = !BM.open[id];
+      return;
+    }
+    if(act === 'share'){ bdShareForm(null, id); return; }
+    var cact = e.target.getAttribute && e.target.getAttribute('data-cact');
+    if(cact === 'share'){
+      var cr = e.target.closest('[data-card]');
+      if(cr) bdShareForm(null, id, cr.getAttribute('data-card'));
+    }
+  };
+  host.onchange = function(e){
+    var t = e.target;
+    if(!t || !t.getAttribute) return;
+    var block = t.closest ? t.closest('[data-bd]') : null;
+    if(!block) return;
+    if(t.getAttribute('data-bf')){
+      var id = Number(block.getAttribute('data-bd'));
+      var f = t.getAttribute('data-bf');
+      var patch = {};
+      patch[f] = (t.type === 'checkbox') ? t.checked : t.value;
+      bdSaveCat(id, patch);
+    }
+  };
+  host.onblur = function(e){
+    var t = e.target;
+    if(!t || !t.getAttribute) return;
+    var block = t.closest ? t.closest('[data-bd]') : null;
+    if(!block) return;
+    var cardRow = t.closest ? t.closest('[data-card]') : null;
+    if(cardRow && t.getAttribute('data-cf')){
+      var cardId = cardRow.getAttribute('data-card');
+      var cf = t.getAttribute('data-cf');
+      var p = {}; p[cf] = (t.type === 'checkbox') ? t.checked : t.value;
+      bdSaveCard(cardId, p);
+      return;
+    }
+    if(t.getAttribute('data-bf')){
+      var id = Number(block.getAttribute('data-bd'));
+      var f = t.getAttribute('data-bf');
+      var patch = {}; patch[f] = t.value;
+      bdSaveCat(id, patch);
+    }
+  };
+  /* 卡片复选框也要即时保存（onchange 不冒泡到上面的分支时兜底） */
+  host.addEventListener('change', function(e){
+    var t = e.target;
+    if(!t || t.type !== 'checkbox' || !t.getAttribute('data-cf')) return;
+    var cardRow = t.closest ? t.closest('[data-card]') : null;
+    if(!cardRow) return;
+    var p = {}; p[t.getAttribute('data-cf')] = t.checked;
+    bdSaveCard(cardRow.getAttribute('data-card'), p);
+  }, true);
+}
+
+function bdSaveCat(id, patch){
+  var body = { cats: {} };
+  body.cats[String(id)] = patch;
+  return api('/boards?action=save-meta', { method:'POST', body: body }).then(function(j){
+    BM.meta.cats = j.cats || BM.meta.cats;
+    toast('已保存，全站立即生效', 'ok', 1400);
+  }).catch(function(e){ toast('保存失败：' + e.message, 'err', 2600); });
+}
+
+function bdSaveCard(cardId, patch){
+  var body = { cards: {} };
+  body.cards[String(cardId)] = patch;
+  return api('/boards?action=save-meta', { method:'POST', body: body }).then(function(j){
+    BM.meta.cards = j.cards || BM.meta.cards;
+    toast('已保存', 'ok', 1200);
+  }).catch(function(e){ toast('保存失败：' + e.message, 'err', 2600); });
+}
+
+/* 上下移动：交换后按 0,10,20… 重排一遍，避免历史 sort 值撞车 */
+function bdMove(id, dir){
+  var rows = bdRows();
+  var i = -1;
+  for(var k = 0; k < rows.length; k++){ if(rows[k].id === Number(id)){ i = k; break; } }
+  if(i < 0) return;
+  var j = i + dir;
+  if(j < 0 || j >= rows.length) return;
+  var arr = rows.slice();
+  var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+  var body = { cats: {} };
+  arr.forEach(function(r, idx){ body.cats[String(r.id)] = { sort: idx * 10 }; });
+  api('/boards?action=save-meta', { method:'POST', body: body }).then(function(){
+    loadBoards(true);
+  }).catch(function(e){ toast('排序失败：' + e.message, 'err'); });
+}
+
+/* ---------- 分享表单（新建 / 编辑共用） ---------- */
+function bdShareForm(share, boardId, cardRef){
+  var isEdit = !!share;
+  var rows = bdRows().filter(function(r){ return !r.noShare; });
+  if(!rows.length){
+    toast('还没有板块清单，先去首页登录打开一次', 'warn', 3000);
+    return;
+  }
+  var selId = isEdit ? Number(share.boardId) : Number(boardId || rows[0].id);
+  var selCard = isEdit ? String(share.card || '') : String(cardRef || '');
+
+  var opts = rows.map(function(r){
+    return '<option value="' + r.id + '"' + (r.id === selId ? ' selected' : '') + '>'
+      + esc(r.name) + '</option>';
+  }).join('');
+
+  openModal({
+    title: isEdit ? '编辑分享链接' : '生成板块分享链接',
+    sub: '链接只指向位置，内容每次打开都从数据库现取，改完内容不用重发链接',
+    wide: true,
+    body:
+      '<div class="bd-form">'
+      + '<div class="field"><label>板块</label><select class="gate-input" id="bsBoard">' + opts + '</select></div>'
+      + '<div class="field"><label>范围</label><select class="gate-input" id="bsCard"></select></div>'
+      + '<label class="bd-check bd-check-lg"><input type="checkbox" id="bsGuest">'
+      +   ' 未登录也能打开（游客只能看这一个板块，其它入口点了会提示登录）</label>'
+      + '<div class="bd-grid2">'
+      +   '<div class="field"><label>有效期</label><select class="gate-input" id="bsDays">'
+      +     '<option value="0">永久</option><option value="7">7 天</option>'
+      +     '<option value="30">30 天</option><option value="90">90 天</option>'
+      +     '<option value="custom">自定义…</option></select></div>'
+      +   '<div class="field"><label>最多查看次数（留空 = 不限）</label>'
+      +     '<input class="gate-input" id="bsMax" type="number" min="0" placeholder="不限"></div>'
+      + '</div>'
+      + '<div class="field" id="bsDaysWrap" hidden><label>自定义天数</label>'
+      +   '<input class="gate-input" id="bsDaysNum" type="number" min="1" max="3650" value="180"></div>'
+      + '<div class="field"><label>备注（自己认得出就行，最多 40 字）</label>'
+      +   '<input class="gate-input" id="bsNote" maxlength="40" placeholder="例：班级事务 · 给家长"></div>'
+      + '<div id="bsOut"></div>'
+      + '</div>',
+    foot: '<button class="btn btn-secondary" id="bsCancel">取消</button>'
+        + '<button class="btn" id="bsGo">' + (isEdit ? '保存修改' : '生成链接') + '</button>',
+    onMount: function(box){
+      var boardSel = $('bsBoard'), cardSel = $('bsCard');
+      function fillCards(){
+        var r = null;
+        for(var i = 0; i < rows.length; i++){ if(rows[i].id === Number(boardSel.value)){ r = rows[i]; break; } }
+        var cards = (r && r.cards) || [];
+        cardSel.innerHTML = '<option value="">整个板块</option>' + cards.map(function(c){
+          var m = BM.meta.cards[String(c.id)] || {};
+          var nm = m.title || c.title || ('卡片 ' + c.id);
+          return '<option value="' + attr(c.id) + '">' + esc(nm) + '</option>';
+        }).join('');
+        cardSel.value = selCard || '';
+      }
+      boardSel.onchange = fillCards;
+      fillCards();
+      /* 编辑已有链接时不允许改板块：token 指向哪儿是固定的，换板块等于换一条链接 */
+      if(isEdit) boardSel.disabled = true;
+
+      if(isEdit){
+        $('bsGuest').checked = !!share.guestOk;
+        $('bsNote').value = share.note || '';
+        $('bsMax').value = share.maxViews || '';
+        if(share.days === 7 || share.days === 30 || share.days === 90){
+          $('bsDays').value = String(share.days);
+        }else if(share.days > 0){
+          $('bsDays').value = 'custom';
+          $('bsDaysWrap').hidden = false;
+          $('bsDaysNum').value = share.days;
+        }
+      }
+      $('bsDays').onchange = function(){
+        $('bsDaysWrap').hidden = this.value !== 'custom';
+      };
+      $('bsCancel').onclick = closeModal;
+      $('bsGo').onclick = function(){ bdShareSave(isEdit ? share : null); };
+    }
+  });
+}
+
+function bdShareSave(share){
+  var boardId = Number($('bsBoard').value);
+  var card = $('bsCard').value || '';
+  var guestOk = $('bsGuest').checked;
+  var dv = $('bsDays').value;
+  var days = dv === 'custom' ? Math.max(1, Number($('bsDaysNum').value || 1)) : Number(dv || 0);
+  var maxViews = Number($('bsMax').value || 0);
+  var note = String($('bsNote').value || '').trim();
+  var btn = $('bsGo');
+  if(btn){ btn.disabled = true; btn.textContent = '处理中…'; }
+
+  var body = { boardId: boardId, card: card, guestOk: guestOk, days: days, maxViews: maxViews, note: note };
+  var p = share
+    ? api('/boards?action=share-update', { method:'POST', body: Object.assign({ id: share.id }, body) })
+    : api('/boards?action=share-create', { method:'POST', body: body });
+
+  p.then(function(j){
+    if(btn){ btn.disabled = false; btn.textContent = share ? '保存修改' : '生成链接'; }
+    toast(share ? '已保存' : '链接已生成', 'ok');
+    if(!share){
+      /* ⚠️ 站点可能部署在子路径（GitHub Pages 的 /class-site/），
+         后端返回的是 /index.html?b=…，直接拼 origin 会丢掉子目录 → 404。
+         和成绩分享同一套写法：去掉前导斜杠后按当前页面地址解析。 */
+      var url = new URL(String(j.url || '').replace(/^\/+/, ''), location.href).href;
+      bdShowResult(url, j, boardId, card);
+    }
+    loadBoards(true);
+  }).catch(function(e){
+    if(btn){ btn.disabled = false; btn.textContent = share ? '保存修改' : '生成链接'; }
+    toast(e.message || '操作失败', 'err', 3600);
+  });
+}
+
+/* 生成成功后的结果区：链接 + 复制 + 预览 + 二维码 + 分享图 */
+function bdShowResult(url, j, boardId, card){
+  var out = $('bsOut');
+  if(!out) return;
+  out.innerHTML =
+    '<div class="bd-result">'
+    + '<div class="bd-ok">✅ 链接已生成，发给同学即可</div>'
+    + '<div class="bd-url"><input class="gate-input" id="bsUrl" readonly value="' + attr(url) + '">'
+    +   '<button class="btn btn-sm" id="bsCopy">复制</button></div>'
+    + '<div class="bd-result-act">'
+    +   '<button class="btn btn-sm btn-secondary" id="bsPreview">预览</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="bsQr">二维码</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="bsPic">分享图</button>'
+    + '</div>'
+    + '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
+    +   (j.guestOk ? '未登录也能打开；游客只能看这一个板块。' : '需要登录才能打开；登录后自动跳到这个板块。')
+    + '</p></div>';
+
+  $('bsCopy').onclick = function(){
+    var inp = $('bsUrl'); inp.select();
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(url).then(function(){ toast('已复制', 'ok', 1200); });
+      }else{ document.execCommand('copy'); toast('已复制', 'ok', 1200); }
+    }catch(e){ document.execCommand('copy'); toast('已复制', 'ok', 1200); }
+  };
+  $('bsPreview').onclick = function(){ window.open(url + '&preview=1', '_blank', 'noopener'); };
+  $('bsQr').onclick = function(){ bdShowQr(url, j.name || ''); };
+  $('bsPic').onclick = function(){ bdSharePic(url, j.name || '', j.intro || '', j.note || ''); };
+}
+
+/* ---------- 二维码 ---------- */
+function bdQrCanvas(text, px){
+  var q = qrcode(0, 'M');
+  q.addData(text);
+  q.make();
+  var n = q.getModuleCount();
+  var cell = Math.max(2, Math.floor(px / n));
+  var size = cell * n;
+  var cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  var ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = '#141210';
+  for(var r = 0; r < n; r++){
+    for(var c = 0; c < n; c++){
+      if(q.isDark(r, c)) ctx.fillRect(c * cell, r * cell, cell, cell);
+    }
+  }
+  return cv;
+}
+
+/* v3.8.7（站主）：「导出二维码图片的时候也全部都要加上班徽」。
+   ⚠️ 班徽不能压在二维码上 —— 二维码三个角是定位图案，盖住就扫不出来。
+   所以做成「二维码 + 下方一条班徽署名」，白底、纯色，识别率不受影响。 */
+function bdQrPoster(url, name, cb){
+  var qs = 560, pad = 36, foot = 132;
+  var W = qs + pad * 2, H = qs + pad * 2 + foot;
+  var out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  var ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  try { ctx.drawImage(bdQrCanvas(url, qs), pad, pad, qs, qs); } catch (e) {}
+
+  ctx.strokeStyle = '#e6ded6';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, pad + qs + 26);
+  ctx.lineTo(W - pad, pad + qs + 26);
+  ctx.stroke();
+
+  var badgeSize = 68;
+  var bx = pad, by = pad + qs + 44;
+  function finish(){
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#2b211a';
+    ctx.font = '700 26px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('25级05班 班级服务站', bx + badgeSize + 18, by + 8);
+    ctx.fillStyle = '#8a6a55';
+    ctx.font = '400 20px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+    var t = String(name || '扫码打开');
+    if (t.length > 22) t = t.slice(0, 21) + '…';
+    ctx.fillText(t, bx + badgeSize + 18, by + 42);
+    cb(out);
+  }
+
+  try {
+    var src = (typeof adminBadgeUrl === 'function') ? adminBadgeUrl() : '';
+    if (!src) return finish();
+    var im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = function(){
+      try {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(bx + badgeSize / 2, by + badgeSize / 2, badgeSize / 2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(im, bx, by, badgeSize, badgeSize);
+        ctx.restore();
+      } catch (e) {}
+      finish();
+    };
+    im.onerror = function(){ finish(); };
+    im.src = src;
+    setTimeout(function(){ if (!out.__done) { out.__done = 1; finish(); } }, 3000);
+  } catch (e) { finish(); }
+}
+
+function bdShowQr(url, name){
+  /* 先给个纯二维码占位，班徽加载完再替换成「二维码 + 署名」整图 */
+  var cv = bdQrCanvas(url, 560);
+  var data = cv.toDataURL('image/png');
+  openModal({
+    title: '扫码打开',
+    sub: name || '',
+    body: '<div style="text-align:center">'
+      + '<img id="bdQrImg" src="' + data + '" alt="二维码" style="width:min(78vw,340px);height:auto;border-radius:12px;border:1px solid var(--border)">'
+      + '<p class="muted" style="font-size:.76rem;margin:10px 0 0;word-break:break-all">' + esc(url) + '</p>'
+      + '</div>',
+    foot: '<button class="btn" id="bdQrDown">保存二维码</button>',
+    onMount: function(){
+      function bindSave(d){
+        $('bdQrDown').onclick = function(){
+          var a = document.createElement('a');
+          a.href = d; a.download = '板块分享二维码.png';
+          document.body.appendChild(a); a.click(); a.remove();
+        };
+      }
+      bindSave(data);
+      bdQrPoster(url, name, function(poster){
+        var d = poster.toDataURL('image/png');
+        var img = document.getElementById('bdQrImg');
+        if(img) img.src = d;
+        bindSave(d);
+      });
+    }
+  });
+}
+
+/* ---------- 分享图（含班徽 + 二维码） ---------- */
+function bdSharePic(url, name, intro, note){
+  var W = 720, H = 980;
+  var cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+
+  /* 背景：暖白渐变，和站点同一个调子 */
+  var g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, '#fffaf5');
+  g.addColorStop(1, '#f6e9dc');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#c2410c';
+  ctx.fillRect(0, 0, W, 10);
+
+  ctx.fillStyle = '#8a6a55';
+  ctx.font = '600 22px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText('25级05班班级服务站', 48, 78);
+
+  /* 板块名，自动缩放避免溢出 */
+  var title = name || '班级板块';
+  var size = 56;
+  ctx.fillStyle = '#2b211a';
+  do{
+    ctx.font = '800 ' + size + 'px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+    if(ctx.measureText(title).width <= W - 96) break;
+    size -= 4;
+  }while(size > 26);
+  ctx.fillText(title, 48, 178);
+
+  /* 简介：按宽度折行，最多 5 行 */
+  ctx.fillStyle = '#57493d';
+  ctx.font = '400 24px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+  var lines = bdWrap(ctx, intro || '点开链接即可查看这个板块的全部内容', W - 96);
+  lines = lines.slice(0, 5);
+  for(var i = 0; i < lines.length; i++){
+    ctx.fillText(lines[i], 48, 228 + i * 38);
+  }
+
+  /* 二维码卡片 */
+  var qrCv = bdQrCanvas(url, 420);
+  var qrSize = 360;
+  var qx = (W - qrSize) / 2;
+  var qy = 430;
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = 'rgba(120,60,20,.16)';
+  ctx.shadowBlur = 26; ctx.shadowOffsetY = 10;
+  bdRound(ctx, qx - 26, qy - 26, qrSize + 52, qrSize + 52, 22);
+  ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.drawImage(qrCv, qx, qy, qrSize, qrSize);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#8a6a55';
+  ctx.font = '600 22px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText('扫码直接打开', W / 2, qy + qrSize + 76);
+
+  if(note){
+    ctx.fillStyle = '#2b211a';
+    ctx.font = '700 24px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.fillText('「' + note + '」', W / 2, qy + qrSize + 118);
+  }
+
+  ctx.fillStyle = '#a08a78';
+  ctx.font = '400 19px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText('内容实时更新 · 链接长期有效', W / 2, H - 54);
+  ctx.textAlign = 'left';
+
+  /* 右上角班徽（拿不到就跳过，不影响出图） */
+  try{
+    var src = (typeof adminBadgeUrl === 'function') ? adminBadgeUrl() : '';
+    if(src){
+      var im = new Image();
+      im.crossOrigin = 'anonymous';
+      im.onload = function(){
+        try{
+          var s = 96, pad = 42;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(W - pad - s / 2, 46 + s / 2, s / 2, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(im, W - pad - s, 46, s, s);
+          ctx.restore();
+        }catch(e){}
+        bdSavePic(cv, title);
+      };
+      im.onerror = function(){ bdSavePic(cv, title); };
+      im.src = src;
+      return;
+    }
+  }catch(e){}
+  bdSavePic(cv, title);
+}
+
+function bdWrap(ctx, text, maxW){
+  var out = [], line = '';
+  var chars = String(text || '').split('');
+  for(var i = 0; i < chars.length; i++){
+    var ch = chars[i];
+    if(ch === '\n'){ out.push(line); line = ''; continue; }
+    if(ctx.measureText(line + ch).width > maxW){ out.push(line); line = ch; }
+    else line += ch;
+  }
+  out.push(line);
+  return out;
+}
+
+function bdRound(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function bdSavePic(cv, name){
+  cv.toBlob(function(blob){
+    if(!blob){ toast('生成图片失败', 'err'); return; }
+    var file = null;
+    try{ file = new File([blob], '分享-' + (name || '板块') + '.png', { type:'image/png' }); }catch(e){}
+    if(file && navigator.canShare && navigator.canShare({ files:[file] }) && navigator.share){
+      navigator.share({ files:[file], title:'板块分享' }).catch(function(){});
+      return;
+    }
+    var u = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = u; a.download = '分享-' + (name || '板块') + '.png';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ a.remove(); URL.revokeObjectURL(u); }, 1200);
+    toast('分享图已保存', 'ok', 1600);
+  }, 'image/png');
+}
+
+/* ---------- 分享列表 ---------- */
+var BD_STATUS = {
+  alive:   { t: '有效',    c: 'ok' },
+  revoked: { t: '已撤销',  c: 'off' },
+  expired: { t: '已过期',  c: 'off' },
+  usedUp:  { t: '次数用完', c: 'off' }
+};
+
+function paintBoardShares(){
+  var host = $('bdShareList');
+  if(!host) return;
+  if(!BM.shares.length){
+    host.innerHTML = '<div class="bd-empty" style="padding:18px">还没有板块分享链接。点右上角「生成分享链接」试试。</div>';
+    return;
+  }
+  host.innerHTML = BM.shares.map(function(x){
+    var st = BD_STATUS[x.status] || BD_STATUS.alive;
+    var title = x.note || x.name || ('板块 ' + x.boardId);
+    var target = x.name + (x.card ? ' · ' + (x.cardTitle || ('卡片 ' + x.card)) : ' · 整个板块');
+    var last = x.lastViewAt ? String(x.lastViewAt).replace('T', ' ').slice(0, 16) : '还没人打开';
+    return '<div class="bd-share" data-id="' + x.id + '">'
+      + '<div class="bd-share-main">'
+      +   '<b>' + esc(title) + '</b>'
+      +   '<span class="bd-tag ' + st.c + '">' + st.t + '</span>'
+      +   '<span class="bd-tag ' + (x.guestOk ? 'guest' : 'login') + '">'
+      +     (x.guestOk ? '免登录' : '需登录') + '</span>'
+      + '</div>'
+      + '<div class="bd-share-meta">' + esc(target)
+      +   ' · 看过 ' + x.views + (x.maxViews ? ' / ' + x.maxViews : '') + ' 次'
+      +   ' · 最近：' + esc(last) + '</div>'
+      + '<div class="bd-share-act">'
+      +   '<button class="btn btn-sm btn-secondary" data-sact="view">预览</button>'
+      +   '<button class="btn btn-sm btn-secondary" data-sact="edit">编辑</button>'
+      +   '<button class="btn btn-sm btn-secondary" data-sact="qr">二维码</button>'
+      +   '<button class="btn btn-sm btn-secondary" data-sact="pic">分享图</button>'
+      +   '<button class="btn btn-sm btn-secondary" data-sact="stat">访问明细</button>'
+      +   (x.status === 'alive'
+            ? '<button class="btn btn-sm btn-danger" data-sact="rev">撤销</button>'
+            : '')
+      + '</div></div>';
+  }).join('');
+
+  host.onclick = function(e){
+    var act = e.target.getAttribute && e.target.getAttribute('data-sact');
+    if(!act) return;
+    var row = e.target.closest('[data-id]');
+    if(!row) return;
+    var id = Number(row.getAttribute('data-id'));
+    var x = null;
+    for(var i = 0; i < BM.shares.length; i++){ if(BM.shares[i].id === id){ x = BM.shares[i]; break; } }
+    if(!x) return;
+    var url = new URL('index.html?b=' + x.boardId
+      + (x.card ? '&c=' + encodeURIComponent(x.card) : '') + '&t=' + x.token,
+      location.href).href;
+
+    if(act === 'view'){ window.open(url + '&preview=1', '_blank', 'noopener'); return; }
+    if(act === 'qr'){ bdShowQr(url, x.name); return; }
+    if(act === 'pic'){ bdSharePic(url, x.name, x.intro || '', x.note || ''); return; }
+    if(act === 'edit'){ bdShareForm(x); return; }
+    if(act === 'stat'){ bdShowStats(x); return; }
+    if(act === 'rev'){
+      confirmBox({ text: '撤销后这个链接立刻失效，确定吗？', warn: '同学再打开会看到「链接已被撤销」。' })
+        .then(function(ok){
+          if(!ok) return;
+          api('/boards?action=share-revoke', { method:'POST', body:{ id: id } })
+            .then(function(){ toast('已撤销', 'ok'); loadBoards(true); })
+            .catch(function(e){ toast(e.message, 'err'); });
+        });
+    }
+  };
+}
+
+function bdShowStats(x){
+  api('/boards?action=share-stats', { method:'POST', body:{ id: x.id } }).then(function(j){
+    var list = (j && j.views) || [];
+    var body = list.length
+      ? '<div class="bd-stats">' + list.map(function(v){
+          return '<div class="bd-stat-row">'
+            + '<b>' + esc(v.name || (v.userId ? '同学' : '未登录访客')) + '</b>'
+            + '<span class="muted">' + esc(String(v.at || '').replace('T', ' ').slice(0, 16)) + '</span>'
+            + '<span class="bd-stat-ip">' + esc(v.ip || '') + '</span>'
+            + '</div>';
+        }).join('') + '</div>'
+      : '<div class="bd-empty" style="padding:16px">还没有访问记录</div>';
+    openModal({
+      title: '访问明细',
+      sub: (x.note || x.name) + ' · 共 ' + x.views + ' 次',
+      body: body + '<p class="muted" style="font-size:.74rem;margin-top:10px">'
+        + '登录用户记名；未登录访客只记录时间和 IP（用于排查异常访问）。</p>',
+      wide: true
+    });
+  }).catch(function(e){ toast(e.message, 'err'); });
+}
+
+function renderBackup(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">数据管理</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '每次部署前会自动备份一次；这里也可以手动备份、随时回档</p></div>'
+    +   '<button class="btn btn-sm btn-secondary" id="bkRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +   '<button class="btn btn-sm" id="bkNow">' + svg('database',14) + ' 立即备份</button>'
+    + '</div>'
+    + '<section class="panel" style="margin-bottom:14px">'
+    +   '<div class="panel-head" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    +     '<h3 style="margin:0;font-size:.95rem">备份概览</h3><span style="flex:1"></span>'
+    +     '<span class="muted" style="font-size:.76rem" id="bkMeta">加载中…</span>'
+    +   '</div>'
+    +   '<div class="panel-body" id="bkOverview"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    + '</section>'
+    + '<section class="panel"><div id="bkBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>'
+    /* v3.6.4：版本记录并入同一页 */
+    + releasesBlockHtml();
+
+  $('bkRefresh').onclick = loadBackups;
+  $('bkNow').onclick = function(){ doBackupNow(); };
+  loadBackups();
+  mountReleasesBlock();
+}
+
+function fmtBytes(n){
+  n = Number(n) || 0;
+  if(n < 1024) return n + ' B';
+  if(n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+function loadBackups(){
+  var body = $('bkBody');
+  if(body) body.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/admin?action=backups').then(function(j){
+    BK_STATE.list = j.backups || [];
+    BK_STATE.count = j.count || 0;
+    BK_STATE.totalBytes = j.totalBytes || 0;
+    BK_STATE.keep = j.keepVersions || 14;
+    paintBackups();
+  }).catch(function(e){
+    if(body) body.innerHTML = '<div class="alert danger" style="margin:16px">读取失败：' + esc(e.message) + '</div>';
+  });
+}
+
+function paintBackups(){
+  var meta = $('bkMeta');
+  if(meta){
+    meta.textContent = '共 ' + BK_STATE.count + ' 份 · 占用 ' + fmtBytes(BK_STATE.totalBytes)
+      + ' · 按版本保留最近 ' + BK_STATE.keep + ' 个';
+  }
+  var ov = $('bkOverview');
+  if(ov){
+    var latest = BK_STATE.list[0];
+    ov.innerHTML = '<div style="display:flex;gap:14px;flex-wrap:wrap">'
+      + '<div class="panel" style="flex:1;min-width:150px;margin:0;padding:12px 14px">'
+      +   '<div class="muted" style="font-size:.74rem">最近一次备份</div>'
+      +   '<div style="font-size:1rem;font-weight:700;margin:4px 0 2px">'
+      +     (latest ? esc(latest.version) : '还没有') + '</div>'
+      +   '<div class="muted" style="font-size:.72rem">'
+      +     (latest ? esc(fmt(latest.createdAt)) : '部署前会自动生成') + '</div></div>'
+      + '<div class="panel" style="flex:1;min-width:150px;margin:0;padding:12px 14px">'
+      +   '<div class="muted" style="font-size:.74rem">备份</div>'
+      +   '<div style="font-size:1rem;font-weight:700;margin:4px 0 2px">' + BK_STATE.count + ' 份</div>'
+      +   '<div class="muted" style="font-size:.72rem">' + fmtBytes(BK_STATE.totalBytes) + '</div></div>'
+      + '<div class="panel" style="flex:1;min-width:150px;margin:0;padding:12px 14px">'
+      +   '<div class="muted" style="font-size:.74rem">回档范围</div>'
+      +   '<div style="font-size:.86rem;font-weight:700;margin:4px 0 2px">内容 / 档案 / 字段 / 设置</div>'
+      +   '<div class="muted" style="font-size:.72rem">账号密码不覆盖</div></div>'
+      + '</div>';
+  }
+
+  var body = $('bkBody');
+  if(!body) return;
+  if(!BK_STATE.list.length){
+    body.innerHTML = '<div class="empty">' + svg('database', 38)
+      + '<p>还没有备份</p><p style="font-size:.78rem;margin-top:8px">点右上角「立即备份」，或下次部署时会自动生成</p></div>';
+    return;
+  }
+  body.innerHTML = '<div class="table-wrap"><table><thead><tr>'
+    + '<th>版本</th><th>类型</th><th class="nowrap">时间</th><th class="nowrap">大小</th><th></th>'
+    + '</tr></thead><tbody>'
+    + BK_STATE.list.map(function(b){
+        var kindTxt = b.kind === 'predeploy' ? '部署前' : (b.kind === 'auto' ? '自动' : '手动');
+        var kindCls = b.kind === 'predeploy' ? 'badge-blue' : (b.kind === 'manual' ? 'badge-green' : 'badge-gray');
+        return '<tr>'
+          + '<td><b>' + esc(b.version) + '</b>' + (b.note ? '<div class="muted" style="font-size:.72rem">' + esc(b.note) + '</div>' : '') + '</td>'
+          + '<td class="nowrap"><span class="badge ' + kindCls + '">' + kindTxt + '</span></td>'
+          + '<td class="nowrap muted" style="font-size:.78rem">' + esc(fmt(b.createdAt)) + '</td>'
+          + '<td class="nowrap mono" style="font-size:.76rem">' + fmtBytes(b.bytes) + '</td>'
+          + '<td class="nowrap" style="text-align:right"><div class="row-actions">'
+          +   '<button data-bk-detail="' + b.id + '">明细</button>'
+          +   '<button data-bk-restore="' + b.id + '" data-bk-ver="' + attr(b.version) + '">回档</button>'
+          +   '<button class="danger" data-bk-del="' + b.id + '" data-bk-ver="' + attr(b.version) + '">删除</button>'
+          + '</div></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-bk-detail]'), function(btn){
+    btn.onclick = function(){ showBackupDetail(Number(btn.dataset.bkDetail)); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-bk-restore]'), function(btn){
+    btn.onclick = function(){ restoreBackupDialog(Number(btn.dataset.bkRestore), btn.dataset.bkVer); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-bk-del]'), function(btn){
+    btn.onclick = function(){
+      var id = Number(btn.dataset.bkDel);
+      if(!confirm('删除「' + btn.dataset.bkVer + '」这份备份？删除后不可恢复。')) return;
+      api('/admin?action=delete-backup', { method:'POST', body:{ id: id } })
+        .then(function(){ toast('已删除', 'ok'); loadBackups(); })
+        .catch(function(e){ toast(e.message, 'danger'); });
+    };
+  });
+}
+
+function doBackupNow(){
+  var btn = $('bkNow');
+  if(btn){ btn.disabled = true; btn.textContent = '备份中…'; }
+  api('/admin?action=backup', {
+    method:'POST',
+    body:{ version: SITE_VERSION, kind:'manual', note:'后台手动备份' },
+  }).then(function(j){
+    toast(j.message || '已备份', 'ok');
+    if(btn){ btn.disabled = false; btn.innerHTML = svg('database',14) + ' 立即备份'; }
+    loadBackups();
+  }).catch(function(e){
+    toast('备份失败：' + (e.message || e), 'danger');
+    if(btn){ btn.disabled = false; btn.innerHTML = svg('database',14) + ' 立即备份'; }
+  });
+}
+
+function showBackupDetail(id){
+  api('/admin?action=backup&id=' + id).then(function(j){
+    var b = j.backup || {};
+    var rows = Object.keys(b.counts || {}).map(function(k){
+      return '<tr><td>' + esc(k) + '</td><td class="mono">' + b.counts[k] + '</td></tr>';
+    }).join('');
+    openModal({
+      title: '备份明细', sub: b.version + ' · ' + fmt(b.createdAt),
+      body: '<div class="table-wrap"><table><thead><tr><th>表</th><th>行数</th></tr></thead><tbody>'
+        + rows + '</tbody></table></div>'
+        + '<p class="hint">回档只覆盖「内容 / 档案 / 字段定义 / 站点设置」四类；'
+        + '账号密码、登录日志不会被动。</p>',
+      foot: '<button class="btn btn-secondary" id="bkdClose">关闭</button>',
+      onMount: function(box){ box.querySelector('#bkdClose').onclick = closeModal; },
+    });
+  }).catch(function(e){ toast(e.message, 'danger'); });
+}
+
+function restoreBackupDialog(id, ver){
+  openModal({
+    title: '从备份回档', sub: '备份版本 ' + ver,
+    body: '<div class="alert warn" style="margin-bottom:12px">'
+      + '回档会用这份备份**覆盖**当前数据，且不能撤销。建议先点「立即备份」把现在的状态存一份。</div>'
+      + '<div class="field"><label>要恢复哪些</label>'
+      +   '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="bkPart" value="content" checked> '
+      +     '<span>作业 / 公告 / 弹窗 / 排期等内容</span></label>'
+      +   '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="bkPart" value="profiles" checked> '
+      +     '<span>班级档案（姓名、身份证、入团时间等）</span></label>'
+      +   '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="bkPart" value="field_meta" checked> '
+      +     '<span>字段管理里的字段定义</span></label>'
+      +   '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="bkPart" value="settings"> '
+      +     '<span>站点设置（站点名、注册开关等）</span></label>'
+      + '</div>'
+      + '<p class="hint">账号与密码不在回档范围内 —— 避免把大家的密码改回旧值导致登录不上。</p>',
+    foot: '<button class="btn btn-secondary" id="bkRCancel">取消</button>'
+        + '<button class="btn" id="bkRGo" style="background:#b3261e">确认回档</button>',
+    onMount: function(box){
+      box.querySelector('#bkRCancel').onclick = closeModal;
+      box.querySelector('#bkRGo').onclick = function(){
+        var parts = [];
+        Array.prototype.forEach.call(box.querySelectorAll('.bkPart'), function(cb){
+          if(cb.checked) parts.push(cb.value);
+        });
+        if(!parts.length){ toast('至少选一项', 'err'); return; }
+        var go = box.querySelector('#bkRGo');
+        go.disabled = true; go.textContent = '回档中…';
+        api('/admin?action=restore-backup', { method:'POST', body:{ id: id, parts: parts } })
+          .then(function(j){
+            closeModal();
+            toast(j.message || '已回档', 'ok');
+            loadBackups();
+          })
+          .catch(function(e){
+            go.disabled = false; go.textContent = '确认回档';
+            toast('回档失败：' + (e.message || e), 'danger');
+          });
+      };
+    },
+  });
+}
+
+function renderVotes(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">投票管理</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">同学在「班级事务 → 投票」里参与，一人一票，截止后公布结果</p></div>'
+    +   '<button class="btn btn-sm btn-secondary" id="voPubTpl">' + svg('edit',14) + ' 公示模版</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="voRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +   '<button class="btn btn-sm" id="voNew">' + svg('plus',14) + ' 新建投票</button>'
+    + '</div>'
+    + '<div id="voList"><div class="loading"><div class="spinner"></div>加载中…</div></div>';
+
+  $('voRefresh').onclick = function(){ voLoad(); };
+  $('voNew').onclick = function(){ voEditorDialog(null); };
+  $('voPubTpl').onclick = function(){ voTemplatesDialog(); };
+  voPubLoad();
+  voLoad();
+}
+
+/* v3.5.15 热修：`VO` 的声明在之前某次清理里被误删了，但下面的
+   voPubLoad / voPaint / voPubDialog 全都在用 —— 后台一进投票页就
+   「读取失败：VO is not defined」。这里补回来。 */
+var VO = { list: [], busy: false, pub: null };
+
+/* ===== v3.5.13 投票公示（站主 #2）=====
+   内容键 vote_pub = { templates:[{id,name,template}], byVote:{ [voteId]:{tplId,on} } }。
+   前台在投票卡下方按模版渲染公示（变量替换见 index.html votePubRender）。 */
+/* v3.5.23：变量补到前十名 + 歌曲总时长（模板里想写第几名都能插） */
+var VO_PUB_VARS = ['标题','提出人','提出日期','截止时间','参与人数','总票数',
+  '第一名','第二名','第三名','第四名','第五名','第六名','第七名','第八名','第九名','第十名',
+  '歌曲总时长','结果表'];
+var VO_PUB_DEFAULT_TPL = {
+  id: 'default', name: '默认公示模版',
+  template: '📋 {{标题}} 投票结果公示\n'
+    + '提出人：{{提出人}}（{{提出日期}} 提出）\n'
+    + '共 {{参与人数}} 人参与投票。\n'
+    + '{{结果表}}\n'
+    + '第一名：{{第一名}}\n'
+    + '感谢大家的参与！',
+};
+function voPubLoad(){
+  return api('/content?keys=vote_pub').then(function(j){
+    var v = j && j.items && j.items.vote_pub;
+    VO.pub = (v && typeof v === 'object' && !Array.isArray(v)) ? v : { templates: [JSON.parse(JSON.stringify(VO_PUB_DEFAULT_TPL))], byVote: {} };
+    if(!Array.isArray(VO.pub.templates)) VO.pub.templates = [JSON.parse(JSON.stringify(VO_PUB_DEFAULT_TPL))];
+    if(!VO.pub.byVote || typeof VO.pub.byVote !== 'object') VO.pub.byVote = {};
+    voPaintPubBadges();
+  }).catch(function(){ VO.pub = { templates: [JSON.parse(JSON.stringify(VO_PUB_DEFAULT_TPL))], byVote: {} }; });
+}
+function voPubSave(){
+  return api('/content', { method:'PUT', body:{ items:{ vote_pub: VO.pub } } });
+}
+/* 每票公示开关变化后，只刷新卡片上的小徽章（不重拉列表） */
+function voPubBadges(){
+  if(!VO.pub) return {};
+  return VO.pub.byVote || {};
+}
+function voPaintPubBadges(){
+  /* voPaint 已把列表画好；这里只更新每张卡的公示徽章文本 */
+  var box = $('voList');
+  if(!box) return;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-pub-badge]'), function(el){
+    var cfg = (VO.pub && VO.pub.byVote || {})[el.getAttribute('data-vo-pub-badge')];
+    el.textContent = (cfg && cfg.on) ? '✓ 公示已开启' : '公示未开启';
+  });
+}
+
+function voLoad(){
+  var box = $('voList');
+  if(box) box.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/votes?action=list').then(function(j){
+    VO.list = (j && j.votes) || [];
+    voPaint();
+  }).catch(function(e){
+    if(box) box.innerHTML = '<div class="alert danger">读取失败：' + esc(e.message || e) + '</div>';
+  });
+}
+
+/* 截止时间统一按本地时区展示（此前直接切 UTC 字符串，比北京时间少 8 小时） */
+/* v3.5.12 今天的日期（本地时区，YYYY-MM-DD）——投票「提出日期」用 */
+function voTodayStr(){
+  var d = new Date();
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function voTimeText(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+/* datetime-local 输入框值（本地时区，T 分隔） */
+function voLocalInput(iso){  var d = new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0, 16);
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function voStatusText(v){
+  if(v.status === 'closed') return { text: '已截止', cls: 'muted' };
+  if(!v.deadline) return { text: '进行中 · 不限截止', cls: 'ok' };
+  var ms = Date.parse(v.deadline) - Date.now();
+  if(ms <= 0) return { text: '已过截止时间', cls: 'muted' };
+  var d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000);
+  return { text: '进行中 · 还剩 ' + (d > 0 ? d + ' 天' : h + ' 小时'), cls: 'ok' };
+}
+
+function voPaint(){
+  var box = $('voList');
+  if(!box) return;
+  if(!VO.list.length){
+    box.innerHTML = '<div class="panel"><p class="muted" style="margin:0;font-size:.86rem">还没有投票。点右上角「新建投票」发起一个。</p></div>';
+    return;
+  }
+  box.innerHTML = VO.list.map(function(v){
+    var st = voStatusText(v);
+    var total = 0, maxN = 0;
+    (v.results || []).forEach(function(r){ total += r.n; if(r.n > maxN) maxN = r.n; });
+    var resHtml = '';
+    if(v.results){
+      resHtml = '<div style="margin-top:10px">' + v.results.slice().sort(function(a, b){ return b.n - a.n; }).map(function(r){
+        var pct = maxN > 0 ? Math.round(r.n / maxN * 100) : 0;
+        return '<div style="position:relative;padding:7px 10px;border-radius:8px;background:var(--bg-2,#faf6f2);margin-bottom:6px;overflow:hidden">'
+          + '<div style="position:absolute;left:0;top:0;bottom:0;width:' + pct + '%;background:#ffe4cf"></div>'
+          + '<div style="position:relative;display:flex;justify-content:space-between;gap:10px;font-size:.82rem">'
+          +   '<span>' + esc(r.label) + (r.by === 'student' ? ' <span class="muted" style="font-size:.7rem">同学提</span>' : '') + '</span>'
+          +   '<span class="muted" style="white-space:nowrap">' + r.n + ' 票</span>'
+          + '</div></div>';
+      }).join('') + '</div>';
+    }else{
+      resHtml = '<p class="muted" style="margin:10px 0 0;font-size:.8rem">'
+        + '进行中，票数在截止后公布（防止看到结果再投）。选项 ' + (v.options || []).length + ' 个。</p>';
+    }
+    var top5 = '';
+    if(v.kind === 'song' && v.results){
+      /* v3.5.19：前 N 可配、用途（日常/音乐课）、统计总时长
+         v3.5.23：总时长上限与取前 N 二选一贯彻到底 ——
+           cap 模式下标题写「按时长上限」，取歌按累加时长截断（同 voWriteTop5），
+           「取前 N 名」输入框禁用，不再出现「前 5 名」这种矛盾文案。 */
+      var sp = v.songPick || {};
+      var cap = sp.maxMinutes || 0;
+      var topN = cap > 0 ? 0 : (sp.topN || 5);
+      var purpose = sp.purpose === 'music' ? 'music' : 'daily';
+      var metaOf = function(o){
+        var op = (v.options || []).filter(function(x){ return String(x.id) === String(o.id); })[0];
+        return (op && op.songMeta) || null;
+      };
+      /* 按票数降序，取到「前 N 名」或「总时长不超上限」为止 */
+      var capSec = cap > 0 ? cap * 60 : Infinity;
+      var usedSec = 0;
+      var top = [];
+      var all = v.results.slice().sort(function(a, b){ return b.n - a.n; });
+      for(var ti = 0; ti < all.length; ti++){
+        if(topN > 0 && top.length >= topN) break;
+        var mm0 = metaOf(all[ti]);
+        var d0 = (mm0 && mm0.duration) ? Number(mm0.duration) : 0;
+        /* cap 模式：缺时长的歌不参与判断；超了就跳过这首、看下一首（尽量装满上限） */
+        if(cap > 0 && d0 && usedSec + d0 > capSec) continue;
+        top.push(all[ti]);
+        usedSec += d0;
+      }
+      var totalSec = usedSec;
+      var durTxt = totalSec ? voFmtDur(totalSec) : '';
+      var capTxt = cap
+        ? (' · 上限 ' + cap + ' 分钟' + (totalSec && totalSec > capSec ? '（<b style="color:#c2410c">已超 ' + voFmtDur(totalSec - capSec) + '</b>）' : ''))
+        : '';
+      var titleTxt = cap > 0
+        ? ('按时长上限 ' + cap + ' 分钟' + (purpose === 'music' ? '（音乐课）' : ''))
+        : (purpose === 'music' ? ('前 ' + topN + ' 名（音乐课）') : ('前 ' + topN + ' 名（对应周一至周五）'));
+      top5 = '<div style="margin-top:10px;padding:10px;border-radius:8px;background:var(--bg-2,#faf6f2)">'
+        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+        +   '<b style="font-size:.82rem">' + esc(titleTxt) + '</b>'
+        +   '<span class="muted" style="font-size:.74rem">'
+        +     (durTxt ? '总时长 ' + durTxt : '总时长未知') + capTxt
+        +   '</span>'
+        +   '<span style="flex:1"></span>'
+        +   (cap > 0 ? '' : '<label class="muted" style="font-size:.74rem">取前'
+        +     '<input id="voTopN_' + v.id + '" type="number" min="1" max="50" value="' + topN + '" '
+        +       'style="width:56px;padding:2px 6px;margin:0 4px;font-size:.78rem"> 名</label>')
+        + '</div>'
+        + '<ol style="margin:6px 0 0;padding-left:20px;font-size:.82rem;line-height:1.8">'
+        + top.map(function(o, i){
+            var mm = metaOf(o);
+            var d = (mm && mm.duration) ? voFmtDur(mm.duration) : '';
+            var day = cap > 0 ? ('第 ' + (i + 1) + ' 首')
+              : (purpose === 'music' ? ('第 ' + (i + 1) + ' 首') : ('周' + '一二三四五'[i]));
+            return '<li>' + esc(o.label) + ' <span class="muted">（' + o.n + ' 票 · ' + day + (d ? ' · ' + d : '') + '）</span></li>';
+          }).join('')
+        + '</ol>'
+        + '<button class="btn btn-sm btn-secondary" style="margin-top:8px" data-vo-top5="' + v.id + '">'
+        +   svg('music',13) + ' 写入抽歌排期</button></div>';
+    }
+    return '<div class="panel" style="margin-bottom:12px">'
+      + '<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">'
+      +   '<div style="flex:1;min-width:160px">'
+      +     '<b style="font-size:.9rem">' + esc(v.title) + '</b>'
+      +     (v.kind === 'song' ? '<span class="badge" style="margin-left:6px">歌单</span>' : '')
+      /* v3.5.12 #10：提出人 + 提出日期
+         v3.5.23：元信息拆成「状态行 / 规则行」两组，不再糊成一条 */
+      +     '<div class="muted" style="font-size:.76rem;margin-top:3px">'
+      +       esc(v.proposer || v.createdByName || '未记录')
+      +       (v.createdDate ? ' · ' + esc(v.createdDate) + ' 提出' : '')
+      +       ' · ' + st.text
+      +       (v.deadline ? ' · 截止 ' + esc(voTimeText(v.deadline)) : ' · 不限截止')
+      +       (v.results ? ' · ' + (v.voters || total) + ' 人参与' : '')
+      +     '</div>'
+      +     '<div class="muted" style="font-size:.72rem;margin-top:2px">'
+      +       [
+              v.multi ? ('多选' + (v.maxChoices ? '（最多 ' + v.maxChoices + ' 项' + (v.minChoices ? ' / 至少 ' + v.minChoices + ' 项' : '') + '）' : ''))
+                      : ('单选' + (v.minChoices ? '（至少 ' + v.minChoices + ' 项）' : '')),
+              v.retractLimit > 0 ? '可撤回 ' + v.retractLimit + ' 次' : '不可撤回',
+              v.endMode === 'pub' ? '结束后显示公示' : '结束后保留投票',
+              v.allowAdd ? '同学可加选项' : '',
+            ].filter(Boolean).map(esc).join(' · ')
+      +     '</div>'
+      +   '</div>'
+      +   '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      +     '<button class="btn btn-sm btn-ghost" data-vo-edit="' + v.id + '">' + svg('edit',13) + ' 编辑</button>'
+      +     '<button class="btn btn-sm btn-ghost" data-vo-pub="' + v.id + '">📋 公示'
+      +       '<span class="muted" style="font-size:.68rem;margin-left:4px" data-vo-pub-badge="' + v.id + '"></span></button>'
+      +     '<button class="btn btn-sm btn-ghost" data-vo-ballots="' + v.id + '">' + svg('users',13) + ' 投票明细'
+      +       '<span class="muted" style="font-size:.68rem;margin-left:4px">' + ((v.ballots || []).length) + '</span></button>'
+      +     (v.status === 'open'
+              ? '<button class="btn btn-sm btn-ghost" data-vo-close="' + v.id + '">' + svg('lock',13) + ' 截止并公布</button>'
+              : '<button class="btn btn-sm btn-ghost" data-vo-reopen="' + v.id + '">' + svg('unlock',13) + ' 重新打开</button>')
+      +     '<button class="btn btn-sm btn-ghost" style="color:#b3261e" data-vo-del="' + v.id + '">' + svg('trash',13) + ' 删除</button>'
+      +   '</div>'
+      + '</div>'
+      + (v.note ? '<p class="muted" style="font-size:.8rem;margin:8px 0 0">' + esc(v.note) + '</p>' : '')
+      + resHtml
+      + top5
+      + '<div id="voBal_' + v.id + '" style="display:none"></div>'
+      + '</div>';
+  }).join('');
+
+  /* 绑定 */
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-edit]'), function(b){
+    b.onclick = function(){
+      var one = voFind(Number(b.dataset.voEdit));
+      window.__voEditingId = one ? one.id : -1;
+      voEditorDialog(one);
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-close]'), function(b){
+    b.onclick = function(){ voSetStatus(Number(b.dataset.voClose), 'closed'); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-reopen]'), function(b){
+    b.onclick = function(){ voSetStatus(Number(b.dataset.voReopen), 'open'); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-del]'), function(b){
+    b.onclick = function(){ voDelete(Number(b.dataset.voDel)); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-top5]'), function(b){
+    b.onclick = function(){ voWriteTop5(Number(b.dataset.voTop5)); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-pub]'), function(b){
+    b.onclick = function(){ voPubDialog(Number(b.dataset.voPub)); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-vo-ballots]'), function(b){
+    b.onclick = function(){ voToggleBallots(Number(b.dataset.voBallots)); };
+  });
+  voPaintPubBadges();
+}
+
+/* ============================================================================
+ * v3.5.40（站主 #2）：投票明细 —— 每张票是谁投的、什么时候投的
+ * ----------------------------------------------------------------------------
+ * 数据来自后端 listVotes 的管理员分支（v.ballots），普通同学拿不到这个字段。
+ * 展示：姓名（@登录名）/ 选了哪几项 / 时间；撤回的票（choices 为空）单独标注。
+ * ========================================================================= */
+function voToggleBallots(id){
+  var v = voFind(Number(id));
+  var box = document.getElementById('voBal_' + id);
+  if(!v || !box) return;
+  if(box.style.display !== 'none'){ box.style.display = 'none'; return; }
+
+  var labelOf = {};
+  (v.options || []).forEach(function(o){ labelOf[String(o.id)] = o.label; });
+  var list = (v.ballots || []).slice();
+
+  /* 未撤回的算「有效票」；撤回的虽占一行，但不计入票数 */
+  var valid = list.filter(function(x){ return (x.choices || []).length > 0; });
+
+  var rows = list.map(function(x, i){
+    var picked = (x.choices || []).map(function(cid){
+      return labelOf[String(cid)] || ('#' + cid);
+    });
+    var t = x.at ? new Date(x.at) : null;
+    var timeTxt = '';
+    if(t && !isNaN(t.getTime())){
+      function p(n){ return (n < 10 ? '0' : '') + n; }
+      timeTxt = t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate())
+        + ' ' + p(t.getHours()) + ':' + p(t.getMinutes());
+    }
+    return '<tr>'
+      + '<td class="muted" style="width:34px">' + (i + 1) + '</td>'
+      + '<td style="white-space:nowrap"><b>' + esc(x.name) + '</b>'
+      +   (x.username ? '<span class="muted" style="font-size:.72rem;margin-left:4px">@' + esc(x.username) + '</span>' : '')
+      + '</td>'
+      + '<td>' + (picked.length
+          ? picked.map(function(s){ return '<span class="badge" style="margin:1px 3px 1px 0">' + esc(s) + '</span>'; }).join('')
+          : '<span class="muted">（已撤回）</span>') + '</td>'
+      + '<td class="muted" style="white-space:nowrap;font-size:.76rem">' + esc(timeTxt) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  box.style.display = 'block';
+  box.innerHTML = '<div style="margin-top:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+    + '<div style="padding:8px 12px;background:var(--bg-2,#faf6f2);display:flex;gap:12px;flex-wrap:wrap;font-size:.78rem">'
+    +   '<b>投票明细</b>'
+    +   '<span class="muted">有效票 ' + valid.length + ' 张'
+    +     (list.length !== valid.length ? '（另有 ' + (list.length - valid.length) + ' 人撤回）' : '') + '</span>'
+    + '</div>'
+    + (list.length
+        ? '<div style="max-height:360px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:.8rem">'
+          + '<thead><tr style="text-align:left"><th style="padding:6px 10px">#</th><th style="padding:6px 10px">投票人</th>'
+          + '<th style="padding:6px 10px">投给</th><th style="padding:6px 10px">时间</th></tr></thead>'
+          + '<tbody>' + rows.replace(/<td/g, '<td style="padding:6px 10px;border-top:1px solid var(--border)"') + '</tbody>'
+          + '</table></div>'
+        : '<p class="muted" style="padding:12px;margin:0;font-size:.82rem">还没有人投票。</p>')
+    + '</div>';
+}
+
+/* ---------- 公示模版管理 ---------- */
+function voTemplatesDialog(){
+  var tpls = (VO.pub && VO.pub.templates) || [];
+  var listHtml = tpls.map(function(t){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">'
+      + '<div style="flex:1;min-width:0"><b style="font-size:.86rem">' + esc(t.name) + '</b>'
+      + '<div class="muted" style="font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+      + esc((t.template || '').split('\n')[0]) + '</div></div>'
+      + '<button class="btn btn-sm btn-secondary" data-tpl-edit="' + t.id + '">编辑</button>'
+      + (t.id === 'default' ? '' : '<button class="btn btn-sm btn-ghost" style="color:#b3261e" data-tpl-del="' + t.id + '">删除</button>')
+      + '</div>';
+  }).join('') || '<p class="muted">还没有模版，点「新增模版」创建。</p>';
+  openModal({
+    title: '公示模版管理', sub: '公示时按模版渲染；{{变量}} 会被替换成真实数据',
+    body: listHtml
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">'
+      +   '<button class="btn btn-sm" id="voTplNew">新增模版</button>'
+      +   '<button class="btn btn-sm btn-secondary" id="voTplImport">导入模版（粘贴 JSON）</button>'
+      + '</div>'
+      + '<div class="muted" style="font-size:.74rem;margin-top:10px;line-height:1.8">'
+      + '可用变量：' + VO_PUB_VARS.map(function(v){ return '<code>{{' + v + '}}</code>'; }).join(' ')
+      + '<br>也可以让别的 AI 生成完整模版，再点「导入模版」粘贴进来（支持一条 JSON 或数组）。</div>',
+    onMount: function(box){
+      box.querySelector('#voTplNew').onclick = function(){ voTplEditor(null); };
+      box.querySelector('#voTplImport').onclick = function(){ voTplImport(); };
+      Array.prototype.forEach.call(box.querySelectorAll('[data-tpl-edit]'), function(b){
+        b.onclick = function(){
+          var t = tpls.filter(function(x){ return x.id === b.dataset.tplEdit; })[0];
+          voTplEditor(t);
+        };
+      });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-tpl-del]'), function(b){
+        b.onclick = function(){
+          VO.pub.templates = VO.pub.templates.filter(function(x){ return x.id !== b.dataset.tplDel; });
+          voPubSave().then(function(){ toast('已删除', 'ok'); }).catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+          voTemplatesDialog();   /* 重画 */
+        };
+      });
+    },
+  });
+}
+
+function voTplEditor(tpl){
+  var isNew = !tpl;
+  tpl = tpl || { id: 't' + Date.now(), name: '', template: '' };
+  var varBtns = VO_PUB_VARS.map(function(v){
+    return '<button class="btn btn-sm btn-secondary" data-tplvar="' + v + '" style="margin:0 6px 6px 0">{{' + v + '}}</button>';
+  }).join('');
+  openModal({
+    title: isNew ? '新增公示模版' : '编辑公示模版',
+    body:
+      '<div class="field"><label>模版名称</label><input id="voTplName" maxlength="30" value="' + attr(tpl.name) + '"></div>'
+      + '<div class="field"><label>模版内容（{{变量}} 会被替换）</label>'
+      +   '<div style="margin-bottom:6px"><span class="muted" style="font-size:.74rem">点变量插入到光标处：</span></div>'
+      +   '<div>' + varBtns + '</div>'
+      +   '<textarea id="voTplBody" rows="10" style="width:100%;font-family:var(--mono,monospace);font-size:.8rem;line-height:1.7">'
+      +     esc(tpl.template) + '</textarea></div>'
+      + '<div class="muted" style="font-size:.74rem">「结果表」会渲染成带排名和票数的表格；其余变量替换成纯文本。</div>',
+    foot: '<button class="btn btn-ghost" data-close2>取消</button>'
+      + '<button class="btn" id="voTplSave">保存</button>',
+    onMount: function(box){
+      box.querySelector('[data-close2]').onclick = closeModal;
+      var ta = box.querySelector('#voTplBody');
+      Array.prototype.forEach.call(box.querySelectorAll('[data-tplvar]'), function(b){
+        b.onclick = function(){
+          var v = '{{' + b.dataset.tplvar + '}}';
+          var s = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+          ta.value = ta.value.slice(0, s) + v + ta.value.slice(ta.selectionEnd == null ? s : ta.selectionEnd);
+          ta.focus();
+          try{ ta.setSelectionRange(s + v.length, s + v.length); }catch(e){}
+        };
+      });
+      box.querySelector('#voTplSave').onclick = function(){
+        var name = box.querySelector('#voTplName').value.trim();
+        var body = ta.value;
+        if(!name){ toast('先填模版名称', 'err'); return; }
+        if(!body.trim()){ toast('模版内容不能为空', 'err'); return; }
+        var hit = VO.pub.templates.filter(function(x){ return x.id === tpl.id; })[0];
+        if(hit){ hit.name = name; hit.template = body; }
+        else VO.pub.templates.push({ id: tpl.id, name: name, template: body });
+        voPubSave().then(function(){ toast('模版已保存', 'ok'); closeModal(); voTemplatesDialog(); })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+      };
+    },
+  });
+}
+
+/* 让别的 AI 生成模版后粘贴导入。支持：
+   ① JSON 数组 [{ "name": "...", "template": "..." }, ...]
+   ② 单条对象 { name, template }
+   ③ 纯文本（整段当一条模版，名称取第一行） */
+function voTplImport(){
+  openModal({
+    title: '导入公示模版',
+    sub: '支持 JSON 或纯文本；让别的 AI 生成后整段粘贴进来',
+    body:
+      '<div class="field"><label>粘贴到这里</label>'
+      + '<textarea id="voTplImportTa" rows="10" style="width:100%;font-family:var(--mono,monospace);font-size:.8rem" '
+      + 'placeholder=\'[{ "name": "歌单公示", "template": "..." }]\n或直接粘贴纯文本模版\'></textarea></div>'
+      + '<div class="muted" style="font-size:.74rem">JSON 导入可一次多条；纯文本导入会把第一行当模版名。</div>',
+    foot: '<button class="btn btn-ghost" data-close2>取消</button><button class="btn" id="voTplImportGo">导入</button>',
+    onMount: function(box){
+      box.querySelector('[data-close2]').onclick = closeModal;
+      box.querySelector('#voTplImportGo').onclick = function(){
+        var raw = box.querySelector('#voTplImportTa').value.trim();
+        if(!raw){ toast('先粘贴内容', 'err'); return; }
+        var added = 0;
+        try{
+          var j = JSON.parse(raw);
+          var arr = Array.isArray(j) ? j : [j];
+          arr.forEach(function(o){
+            if(o && typeof o === 'object' && o.template && String(o.template).trim()){
+              VO.pub.templates.push({ id: 't' + Date.now() + '_' + (++added),
+                name: String(o.name || '导入模版 ' + added).slice(0, 30), template: String(o.template) });
+            }
+          });
+        }catch(e){
+          /* 不是 JSON → 纯文本 */
+          var lines = raw.split('\n');
+          VO.pub.templates.push({ id: 't' + Date.now(), name: (lines[0] || '导入模版').slice(0, 30), template: raw });
+          added = 1;
+        }
+        if(!added){ toast('没解析出模版（JSON 里要有 name 和 template 字段）', 'err'); return; }
+        voPubSave().then(function(){ toast('已导入 ' + added + ' 条', 'ok'); closeModal(); voTemplatesDialog(); })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+      };
+    },
+  });
+}
+
+/* ---------- 单票公示配置 ---------- */
+function voPubDialog(voteId){
+  var v = voFind(voteId);
+  if(!v) return;
+  if(!VO.pub) { toast('公示配置还在读取，稍等一下再点', 'err'); return; }
+  var tpls = VO.pub.templates;
+  var cfg = VO.pub.byVote[voteId] || {};
+  var opts = tpls.map(function(t){
+    return '<option value="' + t.id + '"' + (cfg.tplId === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>';
+  }).join('');
+  openModal({
+    title: '投票公示 · ' + v.title,
+    sub: '开启后，同学在投票卡上直接看到按模版渲染的公示',
+    body:
+      (v.results ? '' : '<div class="alert warn" style="margin-bottom:10px">投票还没截止，现在开启公示也行——截止出结果后前台才会显示内容。</div>')
+      + '<div class="field"><label>使用模版</label><select id="voPubTpl" style="width:100%">' + opts + '</select></div>'
+      + '<label style="display:flex;align-items:center;gap:8px;margin:10px 0 6px">'
+      +   '<input type="checkbox" id="voPubOn"' + (cfg.on ? ' checked' : '') + '>'
+      +   '<span>开启公示（前台投票卡下方显示）</span></label>'
+      /* v3.5.14 站主要求：公示可以选展示多久，到点自动取消展示 */
+      + '<div class="field"><label>展示到什么时候</label>'
+      +   '<select id="voPubDur" style="width:100%">'
+      +     '<option value="">永久展示（手动关闭才停）</option>'
+      +     '<option value="1">1 天后自动取消</option>'
+      +     '<option value="3">3 天后自动取消</option>'
+      +     '<option value="7">7 天后自动取消</option>'
+      +     '<option value="30">30 天后自动取消</option>'
+      +     '<option value="custom">自定义结束时间…</option>'
+      +   '</select>'
+      +   '<div id="voPubUntilWrap" style="display:none;margin-top:8px">'
+      +     '<input type="datetime-local" id="voPubUntil" style="width:100%">'
+      +   '</div>'
+      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0" id="voPubUntilHint"></p>'
+      + '</div>'
+      + '<div class="field"><label>预览</label><div id="voPubPrev" style="border:1px dashed var(--border);border-radius:10px;padding:10px;font-size:.82rem;line-height:1.9;max-height:260px;overflow:auto"></div></div>',
+    foot: '<button class="btn btn-ghost" data-close2>取消</button><button class="btn" id="voPubSave">保存</button>',
+    onMount: function(box){
+      box.querySelector('[data-close2]').onclick = closeModal;
+      var sel = box.querySelector('#voPubTpl'), on = box.querySelector('#voPubOn'), prev = box.querySelector('#voPubPrev');
+      var dur = box.querySelector('#voPubDur'), uw = box.querySelector('#voPubUntilWrap');
+      var ut = box.querySelector('#voPubUntil'), uh = box.querySelector('#voPubUntilHint');
+      /* 已有结束时间 → 回填到「自定义」 */
+      if(cfg.until){
+        dur.value = 'custom';
+        uw.style.display = '';
+        ut.value = voLocalInput(cfg.until);
+      }
+      function syncUntil(){
+        uw.style.display = (dur.value === 'custom') ? '' : 'none';
+        var txt = '';
+        if(dur.value === 'custom'){
+          var t0 = ut.value ? new Date(ut.value) : null;
+          txt = (t0 && !isNaN(t0.getTime())) ? '展示到 ' + voTimeText(t0.toISOString()) + '，到点后前台自动隐藏，无需手动关闭。' : '请选择结束时间。';
+        }else if(dur.value){
+          txt = '从现在起 ' + dur.value + ' 天后自动取消展示。';
+        }else{
+          txt = '一直展示，直到你手动关闭。';
+        }
+        uh.textContent = txt;
+      }
+      dur.onchange = syncUntil; ut.onchange = syncUntil; syncUntil();
+      function paint(){
+        var t = tpls.filter(function(x){ return x.id === sel.value; })[0];
+        prev.innerHTML = t ? voPubPreview(t, v) : '';
+      }
+      sel.onchange = paint; on.onchange = paint; paint();
+      box.querySelector('#voPubSave').onclick = function(){
+        var until = null;
+        if(dur.value === 'custom'){
+          if(!ut.value){ toast('请先选结束时间', 'err'); return; }
+          var d = new Date(ut.value);
+          if(isNaN(d.getTime())){ toast('结束时间格式不对', 'err'); return; }
+          until = d.toISOString();
+        }else if(dur.value){
+          until = new Date(Date.now() + Number(dur.value) * 86400000).toISOString();
+        }
+        VO.pub.byVote[voteId] = { tplId: sel.value, on: on.checked, until: until };
+        voPubSave().then(function(){ toast(on.checked ? '公示已开启' : '公示已关闭', 'ok'); closeModal(); })
+          .catch(function(e){ toast('保存失败：' + e.message, 'err'); });
+      };
+    },
+  });
+}
+
+/* 后台预览渲染（与前台 votePubRender 同一套替换规则） */
+function voPubPreview(tpl, v){
+  var rs = (v.results || []).slice().sort(function(a, b){ return (b.n || 0) - (a.n || 0); });
+  var totalVotes = rs.reduce(function(s, r){ return s + (r.n || 0); }, 0);
+  var map = {
+    '标题': esc(v.title || ''),
+    '提出人': esc(v.proposer || v.createdByName || '未记录'),
+    '提出日期': esc(v.createdDate || ''),
+    '截止时间': esc(v.deadline ? voTimeText(v.deadline) : '不限'),
+    '参与人数': String(v.voters || totalVotes),
+    '总票数': String(totalVotes),
+    '第一名': esc(rs[0] ? rs[0].label : '—'),
+    '第二名': esc(rs[1] ? rs[1].label : '—'),
+    '第三名': esc(rs[2] ? rs[2].label : '—'),
+    '结果表': rs.length
+      ? '<table style="border-collapse:collapse;margin:6px 0;width:100%">'
+        + '<thead><tr>' + ['排名','选项','提出人','票数'].map(function(h){ return '<th style="border:1px solid var(--border);padding:4px 8px;background:var(--bg-2,#faf6f2);font-size:.78rem;text-align:left">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + rs.map(function(r, i){
+            return '<tr><td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">' + (i + 1) + '</td>'
+              + '<td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">' + esc(r.label) + '</td>'
+              + '<td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">'
+              +   esc(r.byName || (r.by === 'student' ? '同学' : '管理员')) + '</td>'
+              + '<td style="border:1px solid var(--border);padding:4px 8px;font-size:.78rem">' + (r.n || 0) + ' 票</td></tr>';
+          }).join('') + '</tbody></table>'
+      : '<span class="muted">（截止后这里显示结果表）</span>',
+  };
+  return String(tpl.template || '')
+    .replace(/\{\{\s*([^}]+?)\s*\}\}/g, function(m, k){ return map[k] !== undefined ? map[k] : m; })
+    .split('\n').join('<br>');
+}
+
+function voFind(id){
+  for(var i = 0; i < VO.list.length; i++) if(VO.list[i].id === id) return VO.list[i];
+  return null;
+}
+
+function voSetStatus(id, st){
+  api('/votes?action=set-status', { method: 'POST', body: { voteId: id, status: st } })
+    .then(function(j){ toast(j.message || '已更新', 'ok'); voLoad(); })
+    .catch(function(e){ toast(e.message || String(e), 'err', 4000); });
+}
+
+function voDelete(id){
+  var v = voFind(id);
+  confirmBox({
+    title: '删除投票',
+    text: '确定删除「' + ((v && v.title) || id) + '」？所有投票记录会一并删除，不可恢复。',
+    danger: true,
+    okText: '删除'
+  }).then(function(yes){
+    if(!yes) return;
+    api('/votes?action=delete', { method: 'POST', body: { voteId: id } })
+      .then(function(j){ toast(j.message || '已删除', 'ok'); voLoad(); })
+      .catch(function(e){ toast(e.message || String(e), 'err', 4000); });
+  });
+}
+
+/* 歌单投票：把「前 N」写进抽歌排期（v3.5.19：N 可改、用途可选、带时长） */
+function voWriteTop5(id){
+  var v = voFind(id);
+  if(!v || !v.results){ toast('还没有结果', 'err'); return; }
+  var sp = v.songPick || {};
+  var nEl = document.getElementById('voTopN_' + id);
+  var capMin0 = Number(sp.maxMinutes) || 0;
+  /* v3.5.23：cap 模式下不再有「取前 N」输入（sp.topN = 0），数量由时长上限决定 */
+  var wantN = capMin0 > 0 ? Infinity
+    : Math.max(1, Number((nEl && nEl.value) || sp.topN || 5));
+  var purpose = sp.purpose === 'music' ? 'music' : 'daily';
+  var capMin = capMin0;
+
+  var sorted = v.results.slice().sort(function(a, b){ return b.n - a.n; });
+  var optMeta = function(o){
+    var op = (v.options || []).filter(function(x){ return String(x.id) === String(o.id); })[0];
+    return (op && op.songMeta) || null;
+  };
+  /* 🔴 v3.5.27（站主）：「时长为空不能随机排歌」—— 写排期也是排歌。
+     先把这条投票里所有缺时长的选项列出来拦下，让站主补齐再写。 */
+  var missOp = [];
+  (v.options || []).forEach(function(op){
+    var d = op.songMeta && Number(op.songMeta.duration);
+    if(!(d >= 20)) missOp.push(op);
+  });
+  if(missOp.length){
+    var map = {};
+    missOp.forEach(function(op){
+      var parts = String(op.label || '').split(' - ');
+      var t = (op.songMeta && op.songMeta.title) || parts[0] || '';
+      var a = (op.songMeta && op.songMeta.artist) || parts[1] || '';
+      map[vhDurationKey(t, a)] = { title: t, artist: a };
+    });
+    Object.keys(map).forEach(function(k){ if(!DUR_MISS[k]) DUR_MISS[k] = map[k]; });
+    toast('这条投票里有 ' + missOp.length + ' 首还没时长，补齐后才能写排期', 'err', 4000);
+    voDurManualDialog(Object.keys(map), function(){
+      /* 补录完成后自动重跑一次 —— 站主不用再点一遍 */
+      voWriteTop5(id);
+    });
+    return;
+  }
+  var picked = [], usedSec = 0;
+  for(var i = 0; i < sorted.length && picked.length < wantN; i++){
+    var o = sorted[i];
+    var om = optMeta(o);
+    var d = (om && om.duration) ? Number(om.duration) : 0;
+    /* 到这步时长一定齐了；总时长上限只做跳过判断 */
+    if(capMin > 0 && usedSec + d > capMin * 60) continue;
+    picked.push(o);
+    usedSec += d;
+  }
+  var top = picked;
+  if(!top.length){ toast('这条投票没有选项', 'err'); return; }
+  var DAYS = ['周一', '周二', '周三', '周四', '周五'];
+  var totalTxt = usedSec ? voFmtDur(usedSec) : '';
+  var labels = top.map(function(o, i){
+    var om2 = optMeta(o);
+    var d = (om2 && om2.duration) ? voFmtDur(om2.duration) : '';
+    var slot = purpose === 'music' ? ('第 ' + (i + 1) + ' 首') : (DAYS[i] || ('第 ' + (i + 1) + ' 首'));
+    return slot + ' ' + o.label + (d ? '（' + d + '）' : '');
+  }).join('；');
+  var rec = {
+    id: Date.now(),
+    at: new Date().toLocaleString('zh-CN', { hour12: false }),
+    /* v3.5.23：cap 模式下备注写「按时长上限」，不再写「前 N」 */
+    note: (capMin0 > 0
+        ? (purpose === 'music' ? '音乐课投票按时长上限 ' + capMin0 + ' 分钟' : '投票按时长上限 ' + capMin0 + ' 分钟')
+        : (purpose === 'music' ? '音乐课投票前 ' + top.length : '投票前 ' + top.length))
+      + '：「' + v.title + '」'
+      + (totalTxt ? '（共 ' + top.length + ' 首 · 总时长 ' + totalTxt + '）' : '') + '：' + labels,
+    purpose: purpose,
+    totalSeconds: usedSec,
+    addedToPlatform: false,
+    played: false,
+    songs: top.map(function(o, i){
+      return {
+        id: o.songId != null ? o.songId : ('vote-' + o.id),
+        title: o.label,
+        artist: '投票第 ' + (i + 1) + ' 名',
+        votes: o.n,
+        requester: (optMeta(o) && optMeta(o).requester) || '',
+        duration: (optMeta(o) && optMeta(o).duration) || 0,
+      };
+    }),
+    params: { fromVote: id, voteTitle: v.title, days: DAYS.slice(0, top.length), purpose: purpose, maxMinutes: capMin || null },
+  };
+  api('/content').then(function(j){
+    var cur = (j && j.items && j.items.dj_schedule) || [];
+    var rounds = Array.isArray(cur) ? cur.slice() : (cur && Array.isArray(cur.schedule) ? cur.schedule.slice() : []);
+    rounds.push(rec);
+    return api('/content', { method: 'PUT', body: { items: { dj_schedule: rounds } } });
+  }).then(function(){
+    toast('已写入抽歌排期（' + top.length + ' 首）', 'ok');
+  }).catch(function(e){
+    toast('写入失败：' + (e.message || e), 'err', 4000);
+  });
+}
+
+/* 新建 / 编辑投票的弹窗 */
+function voEditorDialog(v){
+  var isNew = !v;
+  var opts = (v && v.options) ? v.options.map(function(o){ return o.label; }).join('\n') : '';
+  openModal({
+    title: isNew ? '新建投票' : '编辑投票',
+    sub: isNew ? '选项一行一个；至少两个' : '已投的票会按选项文字对应保留',
+    wide: true,
+    body:
+      '<div id="voEditor" data-kind="' + ((v && v.kind === 'song') ? 'song' : 'normal') + '">'
+      + '<div class="field"><label>投票标题</label>'
+      +   '<input id="voTitle" maxlength="60" placeholder="例如：这次班级活动的主题" value="' + attr((v && v.title) || '') + '"></div>'
+      + '<div class="field"><label>类型</label>'
+      +   '<select id="voKind">'
+      +     '<option value="normal"' + (v && v.kind === 'song' ? '' : ' selected') + '>普通投票</option>'
+      +     '<option value="song"' + (v && v.kind === 'song' ? ' selected' : '') + '>歌单投票（从点歌平台选歌）</option>'
+      +   '</select></div>'
+      /* v3.5.25：选项文本框只给「普通投票」用；歌单投票以勾选为唯一数据源。
+         v3.5.26：改由 CSS 按 data-kind 控制显隐（纯 CSS，不依赖 onMount 时机）。
+         文本框仍留在 DOM 里当隐藏数据载体，保存时照旧从它读，提交逻辑不变。 */
+      + '<div class="field vo-opts-wrap" id="voOptsWrap"><label>选项（一行一个）</label>'
+      +   '<textarea id="voOpts" rows="6" placeholder="选项一&#10;选项二">' + esc(opts) + '</textarea>'
+      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">每行一个选项。歌单投票请切上面的类型，改用下面的勾选。</p>'
+      +   '</div>'
+      /* v3.5.19：歌单投票「选项里包含哪些字段」+ 取前 N / 用途 / 时长上限 */
+      + '<div id="voSongOpts" style="display:none;margin-bottom:12px">'
+      +   '<div class="field"><label>选项「详情」里包含哪些</label>'
+      +     '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.84rem">'
+      +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldReq" checked> 点歌人</label>'
+      +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldTime" checked> 点歌时间</label>'
+      +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto"><input type="checkbox" id="voFldVotes"> 实时赞数</label>'
+      +       '<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex:0 0 auto" title="时长永远显示，无法关闭">'
+      +         '<input type="checkbox" id="voFldDur" checked disabled> 歌曲时长（必显示）</label>'
+      +     '</div>'
+      +     '<p class="hint" style="margin:6px 0 0">'
+      +       '歌名、歌手、<b>歌曲时长</b>永远直接显示（时长跟在歌手后面，用另一种字色）；'
+      +       '其余勾了的项收进「详情」，同学点一下才展开。不勾 = 该项不展示（也不写进选项）。</p>'
+      +   '</div>'
+      +   '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">'
+      +     '<div class="field" style="width:140px"><label>取前几名</label>'
+      +       '<input id="voPickN" type="number" min="1" max="50" inputmode="numeric" placeholder="不限" value="'
+      +       attr(v && v.songPick && v.songPick.topN ? String(v.songPick.topN) : '') + '"></div>'
+      +     '<div class="field" style="width:190px"><label>用途</label>'
+      +       '<select id="voPickPurpose" style="width:100%">'
+      +         '<option value="daily"' + (v && v.songPick && v.songPick.purpose === 'music' ? '' : ' selected') + '>日常（周一至周五）</option>'
+      +         '<option value="music"' + (v && v.songPick && v.songPick.purpose === 'music' ? ' selected' : '') + '>音乐课</option>'
+      +       '</select></div>'
+      +     '<div class="field" style="width:190px"><label>总时长上限</label>'
+      +       '<input id="voPickCap" type="number" min="1" max="300" inputmode="numeric" placeholder="留空 = 不限（分钟）" value="'
+      +       attr(v && v.songPick && v.songPick.maxMinutes ? String(v.songPick.maxMinutes) : '') + '"></div>'
+      +   '</div>'
+      +   '<p class="hint" id="voPickHint" style="margin:6px 0 0">取前几名 / 总时长上限二选一：填了总时长上限，抽取数量由系统自动按歌曲时长凑，不需要再填「取前几名」。</p>'
+      + '</div>'
+      + '<div id="voSongPick" style="display:none;margin-bottom:12px"></div>'
+      + '<div class="field"><label>截止时间（留空 = 不限截止）</label>'
+      +   '<input type="datetime-local" id="voDeadline" value="' + attr((v && v.deadline) ? voLocalInput(v.deadline) : '') + '"></div>'
+      /* v3.5.12 #10：提出人 + 提出日期（日期 = 创建时间，自动带出，不用手填） */
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      +   '<div class="field" style="flex:1;min-width:180px"><label>提出人</label>'
+      +     '<input id="voProposer" maxlength="20" placeholder="谁提的？留空=记为你自己" value="'
+      +     attr((v && v.proposer) || '') + '"></div>'
+      +   '<div class="field" style="width:170px"><label>提出日期</label>'
+      +     '<input type="date" id="voCreatedDate" value="' + attr((v && v.createdDate) || voTodayStr()) + '"'
+      +     ' title="默认取创建当天，可以改"></div>'
+      + '</div>'
+      + '<div class="field"><label>说明（选填）</label>'
+      +   '<input id="voNote" maxlength="200" placeholder="投票说明，会显示在标题下方" value="' + attr((v && v.note) || '') + '"></div>'
+      + '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.86rem;margin-bottom:8px">'
+      +   '<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voMulti"' + (v && v.multi ? ' checked' : '') + '> 允许多选</label>'
+      +   '<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voAllowAdd"' + (v && v.allowAdd ? ' checked' : '') + '> 允许同学自己加选项</label>'
+      + '</div>'
+      /* v3.5.14 #9：票数配额 + 撤回次数 */
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">'
+      +   '<div class="field" style="flex:1;min-width:130px"><label>最多选几项</label>'
+      +     '<input id="voMaxChoices" type="number" min="1" max="30" inputmode="numeric" placeholder="留空 = 不限" value="'
+      +     attr(v && v.maxChoices != null ? String(v.maxChoices) : '') + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:130px"><label>至少选几项</label>'
+      +     '<input id="voMinChoices" type="number" min="1" max="30" inputmode="numeric" placeholder="留空 = 不限" value="'
+      +     attr(v && v.minChoices != null ? String(v.minChoices) : '') + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:130px"><label>可撤回次数</label>'
+      +     '<input id="voRetractLimit" type="number" min="0" max="5" inputmode="numeric" placeholder="默认 1；0 = 不允许" value="'
+      +     attr(v && v.retractLimit != null ? String(v.retractLimit) : '1') + '"></div>'
+      + '</div>'
+      + '<p class="muted" style="font-size:.76rem;margin:-2px 0 10px">'
+      +   '点👍只是选中，「确定投票」才上传。多选时「最多选」限制一次能点几项，「至少选」是必须选够几项；两个留空都代表不限。'
+      + '</p>'
+      /* v3.5.19：同学新增选项的限制（字数 + 格式） */
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">'
+      +   '<div class="field" style="width:150px"><label>新增选项最多</label>'
+      +     '<input id="voOptMax" type="number" min="1" max="80" inputmode="numeric" placeholder="留空 = 不限" value="'
+      +     attr(v && v.optionRule && v.optionRule.maxLen ? String(v.optionRule.maxLen) : '') + '"></div>'
+      +   '<div class="field" style="width:170px"><label>新增选项格式</label>'
+      +     '<select id="voOptFmt" style="width:100%">'
+      +       '<option value=""' + (v && v.optionRule && v.optionRule.format ? '' : ' selected') + '>不限</option>'
+      +       '<option value="number"' + (v && v.optionRule && v.optionRule.format === 'number' ? ' selected' : '') + '>仅数字</option>'
+      +       '<option value="en"' + (v && v.optionRule && v.optionRule.format === 'en' ? ' selected' : '') + '>仅英文</option>'
+      +       '<option value="date"' + (v && v.optionRule && v.optionRule.format === 'date' ? ' selected' : '') + '>仅日期</option>'
+      +     '</select></div>'
+      +   '<div class="field" style="width:170px" id="voOptPrecWrap"><label>日期精确到</label>'
+      +     '<select id="voOptPrec" style="width:100%">'
+      +       ['minute:分','hour:时','day:日','month:月','year:年'].map(function(p){
+                var kv = p.split(':');
+                return '<option value="' + kv[0] + '"' + ((v && v.optionRule && v.optionRule.precision || 'minute') === kv[0] ? ' selected' : '') + '>' + kv[1] + '</option>';
+              }).join('')
+      +     '</select></div>'
+      + '</div>'
+      + '<p class="muted" style="font-size:.74rem;margin:-2px 0 10px">只对「允许同学自己加选项」时同学填的内容生效；后台自己填不受限制。</p>'
+      /* v3.5.14：结束后形态 */
+      + '<div class="field"><label>投票结束后</label>'
+      +   '<select id="voEndMode" style="width:100%">'
+      +     '<option value="keep"' + (v && v.endMode === 'pub' ? '' : ' selected') + '>继续显示投票栏（只读，不能投）</option>'
+      +     '<option value="pub"' + (v && v.endMode === 'pub' ? ' selected' : '') + '>展示结果公示并隐藏投票</option>'
+      +   '</select>'
+      +   '<p class="muted" style="font-size:.76rem;margin:6px 0 0">选「展示公示」要在「公示」里配好模版并开启，否则仍按只读投票栏显示。</p>'
+      + '</div>'
+      + '</div>',
+    foot: '<button class="btn btn-ghost" data-no>取消</button>'
+        + '<button class="btn" data-yes>' + (isNew ? '创建' : '保存') + '</button>',
+    onMount: function(box){
+      box.querySelector('[data-no]').onclick = closeModal;
+      box.querySelector('[data-yes]').onclick = submit;
+
+      /* 类型切到「歌单投票」时才显示挑歌区 */
+      var kindSel = box.querySelector('#voKind');
+      var pick = box.querySelector('#voSongPick');
+      var songOpts = box.querySelector('#voSongOpts');
+      var precWrap = box.querySelector('#voOptPrecWrap');
+      var fmtSel = box.querySelector('#voOptFmt');
+      var syncKind = function(){
+        var isSong = kindSel.value === 'song';
+        pick.style.display = isSong ? '' : 'none';
+        /* v3.5.26：选项文本框的显隐交给 CSS（#voEditor[data-kind="song"] .vo-opts-wrap），
+           这里只负责同步 data-kind。以前只靠 style.display，一旦 onMount 没跑到就露出来。 */
+        var ed = box.querySelector('#voEditor');
+        if(ed) ed.setAttribute('data-kind', isSong ? 'song' : 'normal');
+        var optsWrap = box.querySelector('#voOptsWrap');
+        if(optsWrap) optsWrap.style.display = isSong ? 'none' : '';
+        if(songOpts) songOpts.style.display = isSong ? '' : 'none';
+        if(precWrap) precWrap.style.display = (fmtSel && fmtSel.value === 'date') ? '' : 'none';
+        /* v3.5.23：歌单投票没有「同学自己加选项」—— 从点歌平台挑的歌才是有效选项，
+           同学手打出来的字符串没有 songMeta，前台会退化成整条裸奔。直接禁掉。 */
+        var addCb = box.querySelector('#voAllowAdd');
+        if(addCb){
+          if(isSong){
+            addCb.checked = false;
+            addCb.disabled = true;
+            addCb.parentElement.title = '歌单投票只能从点歌平台挑歌，同学不能自己加选项';
+            addCb.parentElement.style.opacity = '.5';
+          }else{
+            addCb.disabled = false;
+            addCb.parentElement.title = '';
+            addCb.parentElement.style.opacity = '';
+          }
+        }
+        if(isSong && !pick.getAttribute('data-ready')){
+          pick.setAttribute('data-ready', '1');
+          voMountSongPick(pick);
+          /* v3.5.27：进歌单模式先把云端时长库拉下来，挑歌时就能看到时长；
+             「已选却没时长」的项会立刻在提示条里列出来。 */
+          vhDurLibPull().then(function(){
+            if(typeof box.__voRebuild === 'function') box.__voRebuild();
+          });
+        }
+      };
+      if(fmtSel) fmtSel.onchange = syncKind;
+      kindSel.onchange = syncKind;
+      syncKind();
+
+      /* v3.5.21：歌单投票的「取前几名」与「总时长上限」二选一。
+         填了总时长上限后，抽取数量由系统按歌曲时长自动凑，不需要再填数量。 */
+      var voCapIn = box.querySelector('#voPickCap');
+      var voNIn = box.querySelector('#voPickN');
+      var voHint = box.querySelector('#voPickHint');
+      function syncPickCap(){
+        if(!voCapIn || !voNIn) return;
+        var cap = Number(voCapIn.value || 0);
+        if(cap > 0){
+          voNIn.value = ''; voNIn.disabled = true; voNIn.title = '已设总时长上限，数量由系统自动决定';
+          if(voHint) voHint.textContent = '已启用总时长上限：系统会按歌曲时长自动决定抽取数量，「取前几名」此时无效。';
+        }else{
+          voNIn.disabled = false; voNIn.title = '';
+          if(voHint) voHint.textContent = '取前几名 / 总时长上限二选一：填了总时长上限，抽取数量由系统自动按歌曲时长凑，不需要再填「取前几名」。';
+        }
+      }
+      if(voCapIn){ voCapIn.oninput = syncPickCap; syncPickCap(); }
+
+      /* v3.5.25：改「详情里包含哪些」时，已勾选歌曲的选项要按新字段重算 ——
+         否则先勾歌、后勾「歌曲时长」，时长就永远写不进选项里。 */
+      ['voFldReq', 'voFldTime', 'voFldVotes', 'voFldDur'].forEach(function(id){
+        var el = box.querySelector('#' + id);
+        if(!el) return;
+        el.onchange = function(){
+          var fn = box.__voRebuild;
+          if(typeof fn === 'function') fn();
+        };
+      });
+    }
+  });
+
+  /* 校验 → 收集 → 提交。返回 false 时不关弹窗（保留用户输入） */
+  function submit(){
+    var title = String((document.getElementById('voTitle') || {}).value || '').trim();
+    if(!title){ toast('标题不能为空', 'err'); return; }
+    var lines = String((document.getElementById('voOpts') || {}).value || '')
+      .split(/\n+/).map(function(x){ return x.trim(); }).filter(Boolean);
+    /* 去重保序 */
+    var seen = {}, options = [];
+    lines.forEach(function(l){
+      if(seen[l]) return;
+      seen[l] = 1;
+      /* v3.5.19：从歌单挑进来的选项带上结构化信息（前端折叠展示 + 时长统计用） */
+      var meta = (typeof VO_PICK_META !== 'undefined') ? VO_PICK_META[l] : null;
+      options.push(meta ? { label: l, songMeta: meta } : { label: l });
+    });
+    if(options.length < 2){ toast('至少填两个选项', 'err'); return; }
+    /* 🔴 v3.5.27（站主）：「一定要获取到歌曲时长……否则无法发布投票」。
+       歌单投票每个选项都得有时长 —— 缺口直接拦下，并弹出补录窗口。
+       后端 parseVoteInput 也有一道同样的校验，双保险。 */
+    var kindNow = (document.getElementById('voKind') || {}).value || 'normal';
+    if(kindNow === 'song'){
+      var miss = options.filter(function(o){
+        var d = o.songMeta && Number(o.songMeta.duration);
+        return !(d >= 20 && d <= 1800);
+      });
+      if(miss.length){
+        var map = {};
+        miss.forEach(function(o){
+          var parts = String(o.label || '').split(' - ');
+          var t = (o.songMeta && o.songMeta.title) || parts[0] || '';
+          var a = (o.songMeta && o.songMeta.artist) || parts[1] || '';
+          map[vhDurationKey(t, a)] = { title: t, artist: a };
+        });
+        Object.keys(map).forEach(function(k){ if(!DUR_MISS[k]) DUR_MISS[k] = map[k]; });
+        toast('有 ' + miss.length + ' 首歌还没时长，补齐后才能发布', 'err', 4000);
+        voDurManualDialog(Object.keys(map));
+        return;
+      }
+    }
+    var dl = String((document.getElementById('voDeadline') || {}).value || '').trim();
+    var payload = {
+      title: title,
+      kind: (document.getElementById('voKind') || {}).value || 'normal',
+      options: options,
+      multi: !!(document.getElementById('voMulti') || {}).checked,
+      /* v3.5.23：歌单投票强制不允许同学加选项（双保险，后端也会拦） */
+      allowAdd: ((document.getElementById('voKind') || {}).value !== 'song')
+        && !!(document.getElementById('voAllowAdd') || {}).checked,
+      note: String((document.getElementById('voNote') || {}).value || ''),
+      /* v3.5.12 #10：提出人（留空后端记成操作人自己） */
+      proposer: String((document.getElementById('voProposer') || {}).value || '').trim(),
+      deadline: dl ? new Date(dl).toISOString() : null,
+      /* v3.5.14 #9：票数配额与撤回次数（留空 = 不限） */
+      maxChoices: String((document.getElementById('voMaxChoices') || {}).value || '').trim() || null,
+      minChoices: String((document.getElementById('voMinChoices') || {}).value || '').trim() || null,
+      retractLimit: String((document.getElementById('voRetractLimit') || {}).value || '').trim(),
+      endMode: (document.getElementById('voEndMode') || {}).value || 'keep',
+      /* v3.5.20：提出日期可改 */
+      createdDate: (document.getElementById('voCreatedDate') || {}).value || '',
+      /* v3.5.19：同学新增选项限制 + 歌单取歌策略 */
+      optionRule: (function(){
+        var r = {};
+        var ml = Number((document.getElementById('voOptMax') || {}).value || 0);
+        if(ml > 0) r.maxLen = ml;
+        var f = (document.getElementById('voOptFmt') || {}).value || '';
+        if(f) r.format = f;
+        if(f === 'date') r.precision = (document.getElementById('voOptPrec') || {}).value || 'minute';
+        return (r.maxLen || r.format) ? r : null;
+      })(),
+      songPick: (function(){
+        if((document.getElementById('voKind') || {}).value !== 'song') return null;
+        var n = Number((document.getElementById('voPickN') || {}).value || 0);
+        var cap = Number((document.getElementById('voPickCap') || {}).value || 0);
+        /* v3.5.21：「取前几名」与「总时长上限」二选一。
+           填了总时长上限时，topN 传 0（后端 normSongPick 不会输出 topN），
+           系统只按 maxMinutes 控制抽取范围。 */
+        return {
+          topN: cap > 0 ? 0 : (n > 0 ? n : 5),
+          purpose: (document.getElementById('voPickPurpose') || {}).value || 'daily',
+          maxMinutes: cap > 0 ? cap : null,
+        };
+      })(),
+    };
+    if(!isNew) payload.voteId = v.id;
+    var btn = document.querySelector('#modalBox [data-yes]');
+    if(btn){ btn.disabled = true; btn.textContent = isNew ? '创建中…' : '保存中…'; }
+    api('/votes?action=' + (isNew ? 'create' : 'update'), { method: 'POST', body: payload })
+      .then(function(j){ closeModal(); toast(j.message || '已保存', 'ok'); voLoad(); })
+      .catch(function(e){
+        if(btn){ btn.disabled = false; btn.textContent = isNew ? '创建' : '保存'; }
+        toast(e.message || String(e), 'err', 4000);
+      });
+  }
+}
+
+/** v3.5.19：从歌单挑进选项时记录结构化信息（label → songMeta）。
+ *  为什么不用 label 反解：歌名里可能本身就含 " - "，靠字符串拆必错。 */
+var VO_PICK_META = {};
+
+function voSongFieldPrefs(){
+  function ck(id, dflt){ var el = document.getElementById(id); return el ? el.checked : dflt; }
+  return {
+    requester: ck('voFldReq', true),
+    time: ck('voFldTime', true),
+    votes: ck('voFldVotes', false),
+    /* v3.5.25：歌曲时长是必展示项 —— 不管勾没勾都要写进选项，否则前台没得显示 */
+    duration: true,
+  };
+}
+
+/** 按当前勾选拼 label + meta —— 站主：「只有我勾选了才会填入表单选项」 */
+function voSongParts(s){
+  var p = voSongFieldPrefs();
+  var title = String(s.title || '').trim() || '(无歌名)';
+  var artist = String(s.artist || '').trim();
+  var req = vhReqName(s) || '匿名';
+  /* ⚠️ 平台给的是 requestedAt（2026/6/6 21:44:48），不是 createdAt ——
+     以前取 createdAt 全是空，点歌时间一直显示不出来。 */
+  var atRaw = s.requestedAt || s.createdAt || '';
+  var at = vhFmtTime(atRaw);
+  var votes = (s.voteCount != null) ? Number(s.voteCount) : null;
+  var dur = (s.durationSeconds != null) ? Number(s.durationSeconds) : null;
+
+  var parts = [title, artist];
+  var show = [];
+  if(p.requester){ parts.push(req); show.push('requester'); }
+  if(p.time && at){ parts.push(at); show.push('time'); }
+  if(p.votes && votes != null){ parts.push(votes + ' 赞'); show.push('votes'); }
+  if(p.duration && dur){ parts.push(voFmtDur(dur)); show.push('duration'); }
+
+  return {
+    label: parts.filter(Boolean).join(' - ').slice(0, 80),
+    meta: {
+      title: title, artist: artist,
+      requester: req,
+      requestedAt: at,
+      voteCount: votes,
+      duration: dur,
+      show: show,
+    },
+  };
+}
+
+/* 兼容旧调用 */
+function voSongLabel(s){ return voSongParts(s).label; }
+
+/* 从点歌平台挑歌，勾中的追加到「选项」文本框 */
+function voMountSongPick(host){
+  host.innerHTML = '<div class="panel" style="padding:12px 14px">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+    +   '<b style="font-size:.86rem">从点歌平台挑歌</b>'
+    +   '<input id="voPickQ" placeholder="搜歌名或歌手" style="flex:1;min-width:140px;max-width:260px;padding:6px 10px;font-size:.82rem">'
+    +   '<button class="btn btn-sm btn-secondary" id="voPickLoad" type="button">刷新歌单</button>'
+    + '</div>'
+    + '<p class="muted" style="font-size:.74rem;margin:0 0 8px">'
+    +   '加进去的选项格式：<b>歌名 - 歌手 - 点歌人 - 点歌时间</b>（缺哪项就跳过）'
+    + '</p>'
+    /* v3.5.21：批量选择按钮（站主：「这里可以一键批量选择」） */
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px">'
+    +   '<button class="btn btn-sm btn-ghost" id="voPickAll" type="button">全选</button>'
+    +   '<button class="btn btn-sm btn-ghost" id="voPickNone" type="button">全不选</button>'
+    +   '<button class="btn btn-sm btn-ghost" id="voPickInv" type="button">反选</button>'
+    + '</div>'
+    + '<div id="voPickBody" class="muted" style="font-size:.8rem">点「刷新歌单」加载平台上的歌</div>'
+    + '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
+    +   '勾选即加入选项，取消勾选即移出 —— 不用再点「加进选项」。'
+    +   '<b>选项</b>文本框与勾选列表实时同步，也可以手改。</p>'
+    /* v3.5.27：时长缺口提示条（时长为空不能发布 / 不能排歌） */
+    + '<div id="voDurBar" style="display:none;margin:8px 0 0"></div>'
+    + '</div>';
+  var body = host.querySelector('#voPickBody');
+  var q = host.querySelector('#voPickQ');
+  var cache = [];
+  host.querySelector('#voPickLoad').onclick = function(){
+    body.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+    /* 复用抽签那套取歌逻辑（分页拉全量），不新增接口 */
+    vhFetchSongs().then(function(list){
+      cache = list || [];
+      paint();
+      /* 打开编辑器时若选项里已有这几首，把勾打上（编辑旧投票不丢状态） */
+      syncChecksFromOptions();
+    }).catch(function(e){
+      body.innerHTML = '<span style="color:var(--danger)">加载失败：' + esc(e.message || e) + '</span>';
+    });
+  };
+  q.oninput = paint;
+  /* v3.5.21：全选 / 全不选 / 反选（只影响当前筛选结果） */
+  function voSetChecks(mode){
+    var inps = body.querySelectorAll('input[data-song]');
+    Array.prototype.forEach.call(inps, function(el){
+      var want = (mode === 'inv' ? !el.checked : !!mode);
+      if(want !== el.checked){ el.checked = want; applyOne(el); }
+    });
+  }
+  host.querySelector('#voPickAll').onclick = function(){ voSetChecks(true); };
+  host.querySelector('#voPickNone').onclick = function(){ voSetChecks(false); };
+  host.querySelector('#voPickInv').onclick = function(){ voSetChecks('inv'); };
+
+  /* v3.5.24：勾选即加入选项（站主：「勾选的就是选项，那我就不用再复制了」）
+     · 勾上 → 把 label 追加到「选项」文本框，并记下 songMeta
+     · 取消 → 从文本框里删掉这一行（手改过的行如果对不上就不动，避免误删）
+     · 文本框是唯一数据源，提交时仍按行解析，所以手改照样生效 */
+  function optionsLines(){
+    var ta = document.getElementById('voOpts');
+    return String((ta && ta.value) || '').split(/\n/).map(function(x){ return x.trim(); }).filter(Boolean);
+  }
+  function setOptionsLines(lines){
+    var ta = document.getElementById('voOpts');
+    if(ta) ta.value = lines.join('\n');
+  }
+  /* v3.5.25：按「当前勾选 + 当前勾选的字段」重算整份选项 ——
+     这样改「详情里包含哪些」勾选后，已选歌曲的 label/songMeta 会跟着重算，
+     不会因为先勾歌、后勾「歌曲时长」而漏掉时长。 */
+  function rebuildFromChecks(){
+    var inps = body.querySelectorAll('input[data-song]');
+    var lines = [], metas = {};
+    Array.prototype.forEach.call(inps, function(el){
+      if(!el.checked) return;
+      var song = null;
+      try{ song = JSON.parse(el.getAttribute('data-song-json') || 'null'); }catch(e){}
+      var label;
+      if(song){
+        var sp = voSongParts(song);   /* 用最新字段勾选重算 */
+        label = sp.label;
+        metas[label] = sp.meta;
+      }else{
+        label = el.getAttribute('data-song');   /* 没有原始数据就沿用旧 label */
+        var mj = el.getAttribute('data-meta');
+        if(mj){ try{ metas[label] = JSON.parse(mj); }catch(e){} }
+      }
+      if(lines.indexOf(label) < 0) lines.push(label);
+    });
+    /* 勾选区之外（比如编辑旧投票、手改过）的行要保留 —— 只重建勾选区的部分 */
+    var inCheck = {};
+    Array.prototype.forEach.call(inps, function(el){ inCheck[el.getAttribute('data-song')] = 1; });
+    optionsLines().forEach(function(l){ if(!inCheck[l] && lines.indexOf(l) < 0) lines.push(l); });
+    /* 同步 songMeta 表 */
+    Object.keys(metas).forEach(function(k){ VO_PICK_META[k] = metas[k]; });
+    setOptionsLines(lines);
+    paintDurBar();
+  }
+
+  /* v3.5.27（站主）：「一定要获取到歌曲时长……否则无法发布投票或者随机排歌」。
+     这里实时盘点「已勾的歌里哪些还没有时长」，缺口不为 0 就挂红条 + 补录按钮。
+     时长的获取顺序：平台自带 → 云端时长库 → 网易云/QQ 音乐联网 → 人工填写。 */
+  function durMissing(){
+    var out = [];
+    optionsLines().forEach(function(l){
+      var m = VO_PICK_META[l];
+      var d = m && Number(m.duration);
+      if(d >= 20 && d <= 1800) return;
+      /* 歌名歌手从 songMeta 取；没有就退回拆 label 的前两段 */
+      var parts = String(l).split(' - ');
+      out.push({ label: l, title: (m && m.title) || parts[0] || '', artist: (m && m.artist) || parts[1] || '' });
+    });
+    return out;
+  }
+  function paintDurBar(){
+    var bar = document.getElementById('voDurBar');
+    if(!bar) return;
+    var miss = durMissing();
+    if(!miss.length){
+      var any = optionsLines().length;
+      bar.style.display = any ? '' : 'none';
+      bar.innerHTML = any
+        ? '<div class="alert info" style="margin:0;font-size:.8rem">✅ 已选 ' + any + ' 首歌，时长全部齐了，可以发布。</div>'
+        : '';
+      return;
+    }
+    bar.style.display = '';
+    miss.forEach(function(x){
+      var k = vhDurationKey(x.title, x.artist);
+      if(!DUR_MISS[k]) DUR_MISS[k] = { title: x.title, artist: x.artist };
+    });
+    bar.innerHTML = '<div class="alert warn" style="margin:0;font-size:.8rem;line-height:1.8">'
+      + '<b style="color:#b45309">⚠️ ' + miss.length + ' 首歌还没拿到时长</b>，'
+      + '<b>补齐后才能发布</b>（网易云 / QQ 音乐都没搜到，需要你手填）。'
+      + '<br><span class="muted">' + miss.slice(0, 6).map(function(x){ return esc(x.title || x.label); }).join('、')
+      + (miss.length > 6 ? ' 等' : '') + '</span>'
+      + '<button class="btn btn-sm" id="voDurFillBtn" type="button" style="margin-left:8px">补录时长</button>'
+      + '</div>';
+    var b = document.getElementById('voDurFillBtn');
+    if(b) b.onclick = function(){
+      /* 只补这一批，别把整个 DUR_MISS 都倒出来 */
+      var only = {};
+      miss.forEach(function(x){
+        var k = vhDurationKey(x.title, x.artist);
+        only[k] = { title: x.title, artist: x.artist };
+      });
+      voDurManualDialogFor(only);
+    };
+  }
+  /* 只针对给定集合的补录（不污染全局 DUR_MISS 的显示） */
+  function voDurManualDialogFor(map){
+    var keep = DUR_MISS;
+    var sub = {};
+    Object.keys(map).forEach(function(k){ if(!keep[k]) sub[k] = map[k]; });
+    var restore = {};
+    Object.keys(sub).forEach(function(k){ restore[k] = keep[k]; keep[k] = sub[k]; });
+    voDurManualDialog(Object.keys(map));
+    /* 弹窗已经拿到 keys 快照，恢复全局映射（未填的仍留在 DUR_MISS 里） */
+    Object.keys(sub).forEach(function(k){ delete keep[k]; });
+    Object.keys(restore).forEach(function(k){ if(restore[k]) keep[k] = restore[k]; });
+  }
+  function applyOne(el){
+    rebuildFromChecks();
+    if(el.checked){
+      var mj = el.getAttribute('data-meta');
+      var lab = el.getAttribute('data-song');
+      if(mj && lab && !VO_PICK_META[lab]){ try{ VO_PICK_META[lab] = JSON.parse(mj); }catch(e){} }
+    }
+  }
+  body.addEventListener('change', function(ev){
+    var el = ev.target;
+    if(el && el.matches && el.matches('input[data-song]')) applyOne(el);
+  });
+  /* 用选项里现有的行反推勾选状态（编辑旧投票 / 手动粘贴过选项时） */
+  function syncChecksFromOptions(){
+    var lines = optionsLines();
+    var hit = {};
+    lines.forEach(function(l){ hit[l] = 1; });
+    Array.prototype.forEach.call(body.querySelectorAll('input[data-song]'), function(el){
+      el.checked = !!hit[el.getAttribute('data-song')];
+    });
+    /* 编辑旧投票时，把选项里存的 songMeta 也恢复过来（否则重算会丢掉已有字段） */
+    var vo = VO.list.filter(function(x){ return x.id === (window.__voEditingId || -1); })[0];
+    if(vo && vo.options){
+      vo.options.forEach(function(o){
+        if(o.songMeta && o.label) VO_PICK_META[o.label] = o.songMeta;
+      });
+    }
+  }
+  /* 暴露给 onMount 里的字段勾选处理器 */
+  var modalBox = host.closest('.modal') || document;
+  modalBox.__voRebuild = rebuildFromChecks;
+  window.__voRebuildSongOptions = rebuildFromChecks;
+  function paint(){
+    var kw = String(q.value || '').trim().toLowerCase();
+    var rows = cache.filter(function(s){
+      if(!kw) return true;
+      return (String(s.title || '') + ' ' + String(s.artist || '')).toLowerCase().indexOf(kw) >= 0;
+    }).slice(0, 60);
+    if(!rows.length){ body.innerHTML = '<span>没有匹配的歌</span>'; return; }
+    /* v3.5.24：勾选状态跟着「选项」文本框走 —— 重新渲染（搜索/刷新）也不丢勾。
+       列表右侧那串小字只是给你挑歌时参考，前台不会原样展示：
+       前台只显示「歌名 - 歌手」，其余（点歌人 / 点歌时间 / 赞数 / 时长）点「详情」才展开。 */
+    var curLines = optionsLines();
+    var lineHit = {};
+    curLines.forEach(function(l){ lineHit[l] = 1; });
+    body.innerHTML = '<div style="max-height:240px;overflow:auto;display:grid;gap:2px">'
+      + rows.map(function(s){
+          var name = String(s.title || '').trim();
+          var sp = voSongParts(s);
+          var label = sp.label;
+          var req = vhReqName(s) || '匿名';
+          var when = vhFmtTime(s.requestedAt || s.createdAt);
+          var durTxt = voFmtDur(s.durationSeconds);
+          return '<label style="display:flex;align-items:center;gap:8px;padding:3px 2px;cursor:pointer">'
+            + '<input type="checkbox" data-song="' + attr(label) + '" data-meta="' + attr(JSON.stringify(sp.meta)) + '"'
+            +   ' data-song-json="' + attr(JSON.stringify({
+                  title: s.title || '', artist: s.artist || '',
+                  requester: s.requester || '', requestedAt: s.requestedAt || s.createdAt || '',
+                  voteCount: (s.voteCount != null ? s.voteCount : null),
+                  durationSeconds: (s.durationSeconds != null ? s.durationSeconds : null),
+                })) + '"'
+            +   (lineHit[label] ? ' checked' : '') + '>'
+            + '<span style="font-size:.82rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+            +   esc(name) + (s.artist ? '<i class="muted" style="font-style:normal"> · ' + esc(s.artist) + '</i>' : '')
+            + '</span>'
+            + '<span class="muted" style="font-size:.72rem;margin-left:auto;white-space:nowrap">'
+            +   esc(req) + (when ? ' · ' + esc(when) : '')
+            +   (s.voteCount != null ? ' · ' + Number(s.voteCount) + ' 赞' : '')
+            /* v3.5.27：没时长的标红 —— 这首歌勾进去也发不了投票，得先补录 */
+            +   (durTxt ? ' · ' + durTxt : ' · <b style="color:#b45309">缺时长</b>')
+            + '</span>'
+            + '</label>';
+        }).join('')
+      + '</div>';
+  }
+}
+
+/* v3.6.4（站主 #6）：版本记录不再单独占一页，作为「数据管理」的下半部分。
+   拆成 html + mount 两半，两个入口都能用同一套逻辑。 */
+function releasesBlockHtml(){
+  return '<div class="toolbar" style="background:var(--panel);margin-top:18px">'
+    +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">版本更新记录</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '部署前必须在这里有一条对应版本的记录，否则不允许部署</p></div>'
+    +   '<button class="btn btn-sm btn-secondary" id="relRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="relSync">' + svg('download',14) + ' 补齐缺失版本</button>'
+    +   '<button class="btn btn-sm" id="relAdd">' + svg('plus',14) + ' 新增版本</button>'
+    + '</div>'
+    + '<div class="alert warn" style="margin-bottom:16px;display:none" id="relMissBox"></div>'
+    + '<section class="panel"><div id="relBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+}
+
+function mountReleasesBlock(){
+  if($('relRefresh')) $('relRefresh').onclick = loadReleases;
+  if($('relAdd')) $('relAdd').onclick = function(){ relEdit(null); };
+  if($('relSync')) $('relSync').onclick = relSyncMissing;
+  loadReleases();
+}
+
+function renderReleases(){
+  /* 入口已并入「数据管理」，这里保留给旧链接 / 深链兜底 */
+  $('view').innerHTML = releasesBlockHtml();
+  mountReleasesBlock();
+}
+
+function loadReleases(){
+  api('/content').then(function(j){
+    var v = (j && j.items && j.items.release_notes) || [];
+    REL_STATE.list = Array.isArray(v) ? v : [];
+    relSort();
+    paintReleases();
+  }).catch(function(e){
+    var b = $('relBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+/* ============================================================================
+ * v3.5.30：内置版本清单 + 「补齐缺失版本」
+ * ----------------------------------------------------------------------------
+ * 站主原话：「云端版本数据又有几次没更新了。」
+ *
+ * 根因不是存不住，而是**每次改完代码没人去后台补一条**。云端数据本身没问题
+ * （PUT 写完就在），漏的是「写」这个动作。
+ *
+ * 这份清单是代码里随版本走的，版本号天然与 SITE_VERSION 同步；
+ * 点「补齐缺失版本」时：
+ *   ① 读云端已有记录，收集已有版本号集合
+ *   ② 遍历这份清单，只挑**云端没有的**版本号追加
+ *   ③ 已有的绝不覆盖 —— 站主自己补充过的细节不会被机器文案冲掉
+ * 这样以后就算忘了手动加，进来点一下就能把缺的补齐。
+ * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
+ * ========================================================================= */
+var REL_BUILTIN = [
+  { version: '3.9.16', date: '2026-10-23', type: 'fix', title: '横屏修好 · 更新不再看到旧版 · 首屏脚本瘦身', items: [
+      '横屏重做：原来的「CSS 旋转」只是把 390 宽的页面转 90°，排版宽度没变，所以每一块都变成竖条、右半屏空白；现在改为全屏 + 系统方向锁，真的横过来，排版也按横屏重排',
+      '锁不了方向的设备（如 iOS）不再假装横屏，直接提示「把手机横过来」，不会再出现半屏空白',
+      '悬浮菜单不再跟着页面滚走：去掉 transform 旋转后按钮回到固定定位，任何滚动位置都能点开侧边栏',
+      '「更新后还是旧版」：缓存桶原来写死 v173，新版本仍读旧 HTML；现在缓存桶跟着版本号走，升级后首次打开必然是新版',
+      '首屏脚本压缩：app.js 328KB → app.min.js 192KB（gzip），源文件保留可读版',
+      '后台拆包：admin.html 从 300KB 降到 31KB（gzip），脚本独立为 admin.js 可单独缓存',
+      '新增 scripts/build.mjs：一条命令产出上述发布文件'
+    ], pub: [
+      { cat: '界面', text: '横屏查看修好了：整屏显示、排版会重新排，不再只显示半屏' },
+      { cat: '界面', text: '侧边栏按钮在任何位置都能点开，不用先翻到最顶上' },
+      { cat: '速度', text: '更新后打开就是新版本，不会再显示上一次的旧页面；首页加载也快了一半' }
+    ] },
+  { version: '3.9.15', date: '2026-10-23', type: 'feat', title: '手机端降密度 · 冒烟测试', items: [
+      '手机端头部收成一行（班徽 + 标题/副标题 + 主题按钮）：高度约 176px → 62px',
+      '手机端班级岛把四个信息块折成一行「时间 · 天气 · 周数 · 学期」，点「详情」才展开；高度约 177px → 107px，位置仍在公告上方',
+      '公告栏标题/计数/按钮允许换行，不再把「公告」两个字挤成竖排',
+      '给左上角悬浮菜单留出位置，不再压住班徽',
+      '接口域名提前握手（preconnect），首屏少一次 TLS 往返',
+      '统计脚本同一会话只加载一次，刷新不再重下 70–144KB',
+      '新增 test_ui.mjs：真跑浏览器验证首屏密度、展开收起、老内核滑块、轻量模式、断脚本兜底、基础版，共 19 项'
+    ], pub: [
+      { cat: '界面', text: '手机上标题更紧凑，班级岛默认只显示一行，点「详情」可展开' },
+      { cat: '界面', text: '公告栏标题不再被挤成竖排，公告区更清爽' }
+    ] },
+  { version: '3.9.14', date: '2026-10-23', type: 'perf', title: '首屏不再「跳一下」', items: [
+      '班级岛改为先占位再显示：以前它等数据回来才出现，会把整页顶下去约 176px（布局跳动 0.25，属于「差」）'
+    ], pub: [
+      { cat: '速度', text: '打开首页时内容不再上下跳一下，看着更稳' }
+    ] },
+  { version: '3.9.13', date: '2026-10-23', type: 'perf', title: '首屏班徽不再走服务器', items: [
+      '首页顶部还有一处内联脚本冷启动就拉服务器代理的班徽（110KB、约 3 秒），改为直接读站内 28KB 版本'
+    ], pub: [
+      { cat: '速度', text: '首页右上角班徽不再拖慢打开速度' }
+    ] },
+  { version: '3.9.12', date: '2026-10-23', type: 'perf', title: '班徽压到 28KB', items: [
+      '班徽原图是 256×256 但没压缩（110KB），且要经服务器代理（约 3.8 秒）；改为同源 128 色版本 28KB，画质不变',
+      '轻量模式也直接用这张小图，不再走网络代理'
+    ], pub: [
+      { cat: '速度', text: '首页班徽加载更快，打开时少等一会儿' }
+    ] },
+  { version: '3.9.11', date: '2026-10-23', type: 'perf', title: '图标本地化 · 同步真增量', items: [
+      '首页板块图标原先用图床原图（单张最大 238KB，五张合计约 412KB），改为站内 96px 版本，合计约 30KB',
+      '图标加懒加载与固定尺寸，既省流量也减少布局跳动',
+      '内容增量同步真正生效：内容没变时只回 125 字节（原来是每次都回 16.6KB），并修掉时间戳解析失败导致「增量恒失效」的问题'
+    ], pub: [
+      { cat: '速度', text: '首页图标改为站内小图，打开更快、更省流量' },
+      { cat: '速度', text: '页面自动同步最新内容时更省流量，不再反复下载同一份数据' }
+    ] },
+  { version: '3.9.10', date: '2026-10-22', type: 'perf', title: '缓存优先秒开 · 老 iPad 修复 · 口令出库', items: [
+      '首屏真正走缓存：Service Worker 从「网络优先」改成「缓存先给、后台再刷」，app.js 也进了预缓存 —— 以前每次进站都要重新下 325KB',
+      '静态脚本改空闲加载：统计脚本延到页面加载完再拉，轻量模式下直接不加载（省约 144KB）',
+      '窄屏班级岛改 2×2 两行，字号回到看得清（原来标签被压到 8px）',
+      '老 iPad 修复：字号滑块同时支持触摸/鼠标（iOS 13 以下没有 PointerEvent，所以拖不动）',
+      '老内核兜底：补齐 closest / fetch 等基础 API，并加启动看门狗 —— 12 秒内没渲染出来会给提示和「基础版」入口，不再白屏',
+      '新增基础版页面：纯静态、不加载任何特效，只显示公告与今日事项，旧设备可直接打开',
+      '轻量模式进一步减负：不拉天气、不拉网络语录、不下载 110KB 的班徽代理图、不加载统计脚本',
+      '安全：管理员口令从仓库与工作流里彻底移除，改由 GitHub Secrets / 本机文件提供；备份工作流未配置时自动跳过',
+      '部署门禁新增四道：资源发布清单完整性、体积预算、重复函数定义、明文口令扫描',
+      '后台重复定义的心跳函数已删除（此前每进一次后台会多一个 60 秒定时器）'
+    ], pub: [
+      { cat: '速度', text: '再次打开页面基本秒出，内容会在空闲时自动更新到最新' },
+      { cat: '界面', text: '小屏手机上班级岛改为两行显示，字更大更清楚' },
+      { cat: '班级', text: '旧设备打不开时可以用「基础版」查看公告和今日安排' }
+    ] },
+  { version: '3.9.9', date: '2026-10-22', type: 'fix', title: '备份去重：同一版本只留一份', items: [
+      '站主反馈「别备份重了，比如 3.9.8 后台就备份了 3 次」—— 部署前门禁、GitHub Action、定时任务三条路都会触发备份',
+      '现在同一版本只留一份：已有就跳过；如果自动备份先到、部署前备份后到，把那一份升级成 predeploy（保留部署前状态）',
+      '清理策略同步收紧：同版本最多 1 份（原来 3 份），历史重复会在下次备份时自动收掉',
+      '已手动清掉 3.9.8 多出来的 2 份，现在每个版本只有 1 条'
+    ], pub: [
+      { cat: '安全', text: '云端数据每天自动保存一份，版本更新时不再重复保存，占用更小' }
+    ] },
+  { version: '3.9.8', date: '2026-10-22', type: 'perf', title: '首屏秒开 · 逐小时天气 · 一言分类 · 自动备份', items: [
+      '首页脚本拆成独立的 app.js（defer）：HTML 只剩骨架 + 样式（约 89KB，原来 413KB），先把头部和骨架画出来，脚本随后加载再填充内容',
+      '首屏加了骨架卡（公告三条 + 板块四张），加载期间不再是空白一片',
+      '班级岛「天气」可以点了：弹层里按小时列出当天温度、天气、降水概率，当前小时高亮，数据缓存 10 分钟',
+      '每日一言后台可以选择只显示哪几类（动画/漫画/游戏/文学/原创/网络/其他/影视/诗词/网易云/哲学/抖机灵），不勾的不拉',
+      '每日一言卡片可以点：点一下换一句新的（本地库模式下会提示不联网）',
+      '今日事项支持按字排版：选中文字点「加粗」「加横线」，行首加 # 表示整行加粗并居中；后台下方有和首页一致的预览',
+      '课程信息默认就是加粗态；临时改的那天也可以单独取消加粗',
+      '备份补齐：Worker 的定时任务现在会真的写全量快照（以前只备成绩），另外每次 push 触发一次 GitHub Action 备份'
+    ], pub: [
+      { cat: '速度', text: '首页打开更快：先显示页面骨架，内容随后自动填充' },
+      { cat: '班级', text: '点班级岛的天气可以看当天每小时天气；每日一言点一下换一句' },
+      { cat: '班级', text: '今日事项支持部分文字加粗、加删除线，考试安排更醒目' }
+    ] },
+  { version: '3.9.7', date: '2026-10-22', type: 'feat', title: '班级岛回到深色玻璃 · 编辑实时保存 · 可设加粗居中', items: [
+      '班级岛样式回到最初那版深色玻璃（深棕渐变 + 半透明白卡 + 白字 + 右上角橙色光晕），昼夜都保持这块深色玻璃',
+      '班级岛编辑改为实时保存：开关、学期、照片、七天横幅、组件、日期、假期，改完 650ms 自动写入，不再有保存按钮；顶部只显示「保存中 / 已自动保存 14:09 / 失败点此重试」',
+      '按日期临时改可单独设「加粗」与「是否居中」：当天有几节课要考试时，勾上加粗就能在首页更醒目；不勾居中就左对齐',
+      '后台文本框实时套用加粗/居中，看到的就是同学看到的样子；日期条目上会标「粗」「左」',
+      '今日事项照片挪到面板第二块并带缩略图预览：地址有效才显示图，填错不会有坏图',
+      '还没配照片时，管理员点首页今日事项会给出去处提示',
+      '离开页面前会把没来得及发出的改动补发，不会因为马上关掉而丢'
+    ], pub: [
+      { cat: '班级', text: '班级小岛回到深色玻璃样式；当天有考试时可加粗显示，更醒目' },
+      { cat: '班级', text: '小岛编辑改为实时保存，改完不用再点保存' }
+    ] },
+  { version: '3.9.6', date: '2026-10-22', type: 'feat', title: '班级岛改气泡玻璃 · 点横幅看照片 · 横屏侧栏修复', items: [
+      '班级岛换回气泡玻璃质感：半透明白/黑底 + 模糊 + 内高光，昼夜两套自动适配，四个信息块做成半透明小气泡',
+      '四个信息块字号按屏幕宽度分三档收小，窄屏（≤360）下「22° 多云」这类最长文案也能完整显示',
+      '星期横幅收回单行（它就是默认课表）；「按日期临时改」保留多行输入，并新增「填入当天课表」按钮：一键带出当天课表，改一两个字即可',
+      '已设置的临时安排、假期都能点开再次修改；假期多一个「复用」，复制到表单改日期即可再加一段',
+      '今日事项照片：后台填直链或仓库相对路径，同学点首页「今日事项」那一行本页弹图，支持双指/滚轮/双击缩放、拖动、✕ 或 Esc 关闭',
+      '横屏界面滚到中间点不到侧边栏：主站悬浮按钮与后台顶栏改为跟随滚动补偿，任何时候都钉在屏幕左上角'
+    ], pub: [
+      { cat: '班级', text: '班级小岛改为气泡玻璃样式，小屏手机也能完整显示；点「今日事项」可查看当天照片' },
+      { cat: '界面', text: '横屏查看时侧边栏按钮固定在屏幕左上角，随时可以打开' }
+    ] },
+  { version: '3.9.5', date: '2026-10-22', type: 'fix', title: '班级岛跟随主题配色 · 内容居中', items: [
+      '班级岛原来写死深棕底 + 白字，白天模式下像一块黑板贴在奶油色页面里',
+      '现在浅色用奶油渐变底 + 深字、深色用深棕底 + 浅字，标题 / 数值 / 横幅 / 页脚的字色统一跟着昼夜主题走',
+      '班级岛内所有内容居中：四个信息块、今日事项横幅（标签 + 文字）、底部日期与周数',
+      '横幅文字多行时逐行居中，换行展示不受影响'
+    ], pub: [
+      { cat: '界面', text: '首页班级小岛改为跟随昼夜主题的配色，内容统一居中' }
+    ] },
+  { version: '3.9.4', date: '2026-10-21', type: 'fix', title: '首屏不再等接口 · 横幅支持换行', items: [
+      '进页面要等 10 秒才出内容：根因是首屏原来只有「等 /api/boards 接口回来才渲染」一条路，接口慢（Cloudflare Worker + 数据库冷启）时公告/日报/板块卡片全是空的',
+      '现在启动时先用页面自带数据 + 本地缓存同步画一屏，接口回来再原地刷新，弱网下也是秒开',
+      '统计脚本改为异步加载，不再拖住页面加载完成事件',
+      '班级岛横幅支持换行：后台文本框改成可拉伸的多行输入，前端按换行原样展示，写长一点也不会被截断'
+    ], pub: [
+      { cat: '界面', text: '首页打开即显示内容，不再长时间停留加载页' },
+      { cat: '班级', text: '「今日事项」横幅支持换行，内容长时自动换行显示' }
+    ] },
+  { version: '3.9.3', date: '2026-10-21', type: 'feat', title: '班级岛收敛成「今日事项」横幅', items: [
+      '班级岛第二行不再是一排课程格子，改成一行横幅：今日事项 升 数数语英化 物物体劳 听自语语自',
+      '横幅按星期配：周一到周日各一句，周六周日默认也有课；后台直接改文字，不用按节次录课',
+      '支持提前改某一天：星期五就能把周六周日的横幅先写好；考试当天直接写「数学 08:00-09:30」，勾上「不上课」就按放假显示',
+      '假期区间：后台填寒假 / 暑假 / 小长假的起止，期间横幅自动变成「已放假 N 天 · 距开学还有 M 天」，不再显示课表',
+      '课表弹窗整个下线（不再需要点开看整周），班级岛高度从四行压到两行',
+      '仅赋分排名：每格改成「+24 → 84」，左边是增值、右边是赋分，两种颜色区分；排名仍按两科合计增值',
+      '老版本存的完整课表会自动压成缩写，不用重新录'
+    ], pub: [
+      { cat: '成绩', text: '「仅赋分排名」改为只看两科赋分增值，按合计增值排名' },
+      { cat: '班级', text: '首页班级小岛改为「今日事项」横幅：直接显示当天上什么课；放假期间显示已放假天数与开学倒计时' },
+      { cat: '界面', text: '课程表一页看完，不用左右滑动找日期' }
+    ] },
+  { version: '3.9.2', date: '2026-10-21', type: 'fix', title: '仅赋分排名：默认涨得多的在前、五列一屏放下', items: [
+      '「仅赋分排名」默认排序反了：原来按合计增值升序，涨得最多的排在最后一行',
+      '现在默认按两科合计增值从高到低，与「排名」列一致；点表头才切成升序',
+      '表格原来跟着全班成绩单撑到 620px 宽，手机上「合计」「排名」要横滑才看得见；现在五列一屏放得下',
+      '表头精简为「化学增值 / 生物增值 / 两科合计 / 排名」，前三名带奖牌'
+    ], pub: [
+      { cat: '成绩', text: '「仅赋分排名」改为只看两科赋分增值，按合计增值排名' }
+    ] },
+  { version: '3.9.1', date: '2026-10-21', type: 'fix', title: '课表弹窗改实底 · 行高再压一档', items: [
+      '课表弹窗原来是全站统一的玻璃底，表格行压在半透明背景上，和背后的公告糊在一起',
+      '现在这一处改成实底（亮色近白、暗色深灰），并关掉背景模糊，文字边缘干净',
+      '行高从 26px 压到 23px、上下内边距减半，15 节课的完整一天从接近满屏降到约 6 成屏高'
+    ], pub: [
+      { cat: '界面', text: '课程表一页看完，不用左右滑动找日期' }
+    ] },
+  { version: '3.9.0', date: '2026-10-21', type: 'feat', title: '作息可多套 · 考试与放假覆盖 · 班级岛改版', items: [
+      '仅赋分排名改成「只比增值」：化学增值、生物增值、两科合计增值 + 按合计增值的名次（前三名带奖牌），不再重复显示分数，要看分数去上面的全班成绩单',
+      '作息表支持多套：周一至周五、周六、周日各一套，节次时间互不影响；后台可新建 / 复制 / 改名 / 删除，最多 6 套',
+      '周课表按天绑作息：周一到周日各选一套，周六周日的作息不一样也不用挤在同一张表里',
+      '特殊日程按日期区间覆盖：放假（10-23 到 10-25 一条就放掉三天）、考试（填科目和起止时间，当天岛上只显示考试安排）、临时换作息',
+      '前台班级岛：当天是考试就显示科目与时间，放假就显示假期名称与区间，不再硬按「周六周日」判断',
+      '课表弹窗重做：改成「今天 / 周一…周日」页签 + 一行一节（时间 · 节次 · 科目），高度从原来的整屏压到 70% 以内、内部滚动；今天那一节橙色高亮',
+      '课表弹窗里考试日显示考试科目与时间，放假显示放假区间，不再显示空课表',
+      '班级岛默认数据按站主 2026-10-21 提供的《高二五班 2026 秋季课表》录入，后台点格子即可改'
+    ], pub: [
+      { cat: '成绩', text: '「仅赋分排名」改为只看两科赋分增值，按合计增值排名' },
+      { cat: '班级', text: '首页班级小岛直接显示当天课程与时间；考试、放假期间显示相应安排' },
+      { cat: '界面', text: '课程表一页看完，不用左右滑动找日期' }
+    ] },
+  { version: '3.8.9', date: '2026-10-21', type: 'fix', title: '课表弹窗一屏放得下', items: [
+      '课表弹窗原来给表格设了 640px 最小宽，手机上只能看到周一周二，得横滑才知道后面还有五天',
+      '现在改成自适应列宽：作息列 78px，周一到周日均分，390px 宽的手机一屏能看全；课名过长自动省略',
+      '作息列的字也调小了一档，早读、上午第几节、几点到几点都在两行内'
+    ], pub: [
+      { cat: '班级', text: '首页新增班级小岛：显示时间和当天课程，点开能看整周课表' }
+    ] },
+  { version: '3.8.8', date: '2026-10-21', type: 'fix', title: '班级岛小修：学期名不再被截断', items: [
+      '手机上第一行四个格子挤，学期名「2026 年秋季 · 高二上」被截成「秋季 · …」；现在只取最后一段，显示「高二上」',
+      '「今天放假 ing」那一条底色太暗，看着像禁用按钮；改成亮一点的虚线块',
+      '课表弹窗和后台课表里，早读那行原来重复显示成「早读 早读」，现在同一名称只显示一次'
+    ], pub: [
+      { cat: '班级', text: '首页新增班级小岛：显示时间和当天课程，点开能看整周课表' }
+    ] },
+  { version: '3.8.7', date: '2026-10-21', type: 'feat', title: '仅赋分排名 · 作业导出带二维码 · 班级岛', items: [
+      '成绩分析：「全班成绩单」下面新增「仅赋分排名」，固定看化学 + 生物。两行表头分组（化学 / 生物 / 两科合计），每格大字是分数、右下角小字是该科班内排名；「变化」= 原始合计排名 − 赋分合计排名，红色 +n 是赋分后前进（占便宜），绿色 −n 是倒退（吃亏）',
+      '作业导出：字号放大一档（正文 14→16.5，行高 30→36），宽高比优先一张 A4（内容少补白、多了自然延长）',
+      '作业导出底部印「作业查看」的分享二维码，扫码直达这张卡片；游客态其它入口置灰、可一键登录，登录后自动解锁并回到原位置',
+      '作业里的图片直链直接画进长图（先 fetch 成 blob 再画，避开跨域污染；失败退回文字），音频/视频转二维码，扫码站内播放',
+      '所有二维码导出图（含后台「保存二维码」那张）都带班徽署名，班徽放在二维码下方，不遮挡定位角',
+      '首页新增「班级岛」：位于公告上方，第一行时间 / 天气 / 周数 / 学期，第二行当日课程，当前节高亮；点开看整周课表 + 作息时间；没课显示「放假 ing」',
+      '后台新增「班级岛」页签：组件可拖动排序 / 移除 / 加回，课表按格子录入，作息逐节可改（含大课间、晚饭这些不排课的时段），周六周日是否上课单独开关'
+    ], pub: [
+      { cat: '成绩', text: '成绩分析新增「仅赋分排名」：化学和生物两科，看原始分、赋分和名次变化' },
+      { cat: '作业', text: '作业导出的图片字更大了，底部有二维码，扫码直接进作业查看' },
+      { cat: '班级', text: '首页新增班级小岛：显示时间和当天课程，点开能看整周课表' }
+    ] },
+  { version: '3.8.6', date: '2026-10-20', type: 'fix', title: '扫码播放页不再被登录提示挡住', items: [
+      '扫码打开 ?play= 播放页时，原来还会弹「登录一下，数据跟着你走」和开屏公告，把播放器整个盖住',
+      '现在把「分享链接（?t=）」和「播放页（?play=）」统一当成深链入口：不弹开屏、不推销登录，直接给内容'
+    ], pub: [
+      { cat: '作业', text: '导出的作业图片里，图片直链会直接显示，音频和视频会变成二维码，扫码就能播放' }
+    ] },
+  { version: '3.8.5', date: '2026-10-20', type: 'feat', title: '作业导出图带直链 · 修分享链接 404', items: [
+      '作业导出图片：作业里的图片直链直接把图draw进长图（先 fetch 成 blob 再画，避开跨域污染 canvas；取不到就退回一行文字，绝不毁整张图）',
+      '音频 / 视频直链变成二维码，扫码打开站内播放页，直接播放，不用下载、不用跳第三方',
+      '正文里直接写出来的直链也会识别：图片画出来，音视频转二维码，其它链接保持原样',
+      '修：后台生成板块分享链接时用了 location.origin 拼地址，站点在 /class-site/ 子路径下会丢掉这一段，打开就是 GitHub 404',
+      '现在按当前页面地址解析（和成绩分享同一套写法），预览 / 微信打开都能到正确的页面'
+    ], pub: [
+      { cat: '作业', text: '导出的作业图片里，图片直链会直接显示，音频和视频会变成二维码，扫码就能播放' },
+      { cat: '班级', text: '板块分享链接现在可以正常打开了' }
+    ] },
+  { version: '3.8.4', date: '2026-10-20', type: 'feat', title: '板块管理 · 板块分享链接', items: [
+      '新增「板块管理」：改名、写简介、调顺序、隐藏、单独控制游客可见；改完立刻全站生效，不用发版',
+      '后台会列出每个板块的位置（首页第 N 项 / 侧栏第 N 项）和它下面的卡片；以后新增板块，首页登录打开一次就自动出现在列表里',
+      '板块分享：可为整个板块或单张卡片生成链接。链接只带 token，不带任何内容快照 —— 每次打开都从数据库现取，改完内容不用重发链接',
+      '生成时可设：是否允许未登录访问、有效期（永久/7/30/90/自定义）、最大查看次数、备注',
+      '游客态：只放行这一条链接指向的板块；其它板块与卡片置灰，点击弹提示「当前分享链接仅支持查看该分享内容，其他内容请登录后再查看」',
+      '登录用户点链接直接进；被拦下来的同学登录后自动回到原位置（首次强制改密也走完再回跳）',
+      '二维码离线生成（内联 qrcode-generator，不依赖外部接口）；分享图含班徽、板块名、简介、二维码',
+      '访问统计：次数、最近打开时间；登录用户记名，未登录访客记 IP 便于排查异常',
+      '「成绩分析」在板块管理里置灰，提示用前台成绩分享那边，不做两套'
+    ], pub: [
+      { cat: '班级', text: '新增板块分享链接：打开即可直达指定板块，内容始终是最新的' },
+      { cat: '界面', text: '板块名称和简介可以随时修改；分享页里其它板块会置灰并提示登录' }
+    ] },
+  { version: '3.8.3', date: '2026-10-20', type: 'fix', title: '我的资料字色加深 · 分享按钮手机端重排', items: [
+      '「我的资料」看不清的根因：弹窗是玻璃底，半透明白叠在页面背景上实际是中灰（实测约 rgb(194,193,193)），原来的说明文字 #a99a8d、只读框 #6e635a 压上去只有 2.9～4.2',
+      '按 WCAG 4.5+ 重新取色：说明文字、字段标签、只读输入框、仅自己可见标签、复制按钮全部加深，暗色模式同步调整',
+      '顺手把「管理员确认后生效」改成「站主确认后生效」，同学看得懂',
+      '「分享成绩」按钮溢出的根因：.btn-sm 这个类从来没定义过，用的还是 .btn 的 10px 24px 内边距 + 130px 最小宽，三个按钮排一行必然超出屏幕',
+      '补上真正的小号按钮样式，并把每条分享改成两行：上行状态 + 备注标题（超长省略）+ 看过次数，下行按钮组；560px 以下按钮等分铺满，不再需要左右滑动'
+    ], pub: [
+      { cat: '资料', text: '说明文字和只读项的显示已加深，亮色、暗色下都看得清' },
+      { cat: '成绩', text: '「分享成绩」的按钮在手机上重新排版，不用左右滑动就能看全' }    ] },
+  { version: '3.8.2', date: '2026-10-20', type: 'fix', title: '离线缓存终于真的装上了', items: [
+      '找到「缓存一直用不上」的根因：Service Worker 安装时要求预缓存清单**全部成功**，而清单里有长期 404 的 badge.png，于是整个安装失败 —— SW 根本没装上，缓存策略自然全都没生效',
+      '改成逐个文件缓存、缺哪个跳过，SW 现在能正常安装并接管页面',
+      '实测：把 HTML 网络直接掐断，页面仍能在 0.2 秒内从缓存打开',
+      '配合 3.8.0 的 900ms 导航策略：慢网下不再每次白等整页下载'
+    ] },
+  { version: '3.8.1', date: '2026-10-20', type: 'fix', title: '切昼夜后弹窗里的字也跟着变', items: [
+      '修一个边界：手动切到暗色时，弹窗里之前按亮底写进去的深色字会留在原地（内联优先级高于样式表），整段看不见',
+      '现在同时盯着 <html> 的 class 变化，切昼夜后立刻重算一遍弹窗字色'
+    ] },
+  { version: '3.8.0', date: '2026-10-20', type: 'feat', title: '分享链接可写备注 · 我的资料改版 · 回前台不再白等', items: [
+      '成绩分享：生成链接时可以写一句备注（最多 40 字），「我建过的分享」里直接把它当标题显示，建了很多条也认得出哪条是哪条',
+      '备注只有你自己看得到，不会跟着公开链接发给别人（后端读取时已剔除）',
+      '「我的资料」改版：一行一个输入框，和微信号/QQ 那块同款。可编辑的带 ✏️ 直接改，不可编辑的变灰带 🔒，右侧一键复制',
+      '改完点「保存修改（N 项，需管理员确认）」一次性提交，仍然走信息审核；长号码（身份证/考籍号）不会再被挤成竖排',
+      '快：页面导航改成「最多等 900ms 的网络优先」—— 网慢时直接用本地缓存先打开，网络结果在后台更新，下次即最新',
+      '也就是说从后台切回前台、再打开站点，不用每次都白等整页 HTML 重新下载'
+    ] },
+  { version: '3.7.6', date: '2026-10-20', type: 'fix', title: '弹窗里的字色也会跟着背景自动调整', items: [
+      '问题：页面上的字看得清，但弹窗里有些字看不见 —— 弹窗有自己的底色，没写颜色的文字会继承页面字色，深底 + 深字就糊成一片',
+      '现在每次打开弹窗都会按「实际底色」（含半透明层、渐变、自定义背景图的平均色）算一次对比度',
+      '只有真的看不清（低于 4.0）才改成近黑或纯白；原本清晰的品牌色、强调色一个字不动',
+      '实时跟随：开关弹窗、切昼夜、换背景、转屏都会重算',
+      '顺手修了「今日班级签」标题在亮色主题下深字压深底的问题（那块底色是固定深色渐变）'
+    ] },
+  { version: '3.7.5', date: '2026-10-20', type: 'fix', title: '公告规则细化：只有前两位版本号变了才发', items: [
+      '按站主说明调整：3.7.0 → 3.7.1 这类只改最后一位的修复，不再给同学发公告',
+      '前两位变化（如 3.6 → 3.7）仍然必须发公告，格式「v3.7 更新！内容如下：」，没发就不许部署',
+      '顺手把 3.7.1 ~ 3.7.4 那几条补丁级公告合并成一条「v3.7 更新！」，按类别写好、简短',
+      '部署门禁 scripts/predeploy.mjs 已按这条新规则校验（只匹配前两段，不会拿补丁号的旧公告顶替）'
+    ] },
+  { version: '3.7.4', date: '2026-10-20', type: 'fix', title: '班徽图片真正能用了（修二进制被当文本）', items: [
+      '找到班徽一直「看着下载了却显示不出来」的根因：后端把图片二进制当文本传送，PNG 文件头被改成替换字符，浏览器根本解不开',
+      '后端改为二进制透传，现在 /api/badge 返回的是一张真正的 PNG（约 200KB）',
+      '首页班徽、导出图片右上角的班徽都恢复正常'
+    ] },
+  { version: '3.7.3', date: '2026-10-20', type: 'fix', title: '首页班徽改走 fetch（不再掉到 6MB 原图）', items: [
+      'v3.7.2 实测发现问题：直接给图片标签指到跨域接口，部分网络下会加载失败，于是掉到图床那张 6.3MB 的原图，反而更慢',
+      '改成用 fetch 取图（和导出图片缓存同一条路，稳定），拿到就存成本地缓存',
+      '效果：首页班徽现在只有约 200KB，之后连请求都不用发；导出图片也用同一份缓存'
+    ] },
+  { version: '3.7.2', date: '2026-10-20', type: 'fix', title: '首页班徽不再退到 6MB 原图', items: [
+      '上次实测发现：代理偶发失败时会退回图床原图（6.3MB），手机上一张图拖慢首屏',
+      '改成失败先重试一次代理，实在不行才用它；正常情况只有约 200KB',
+      '本地缓存优先级仍最高：登录时存过班徽的设备，首页直接读缓存，零请求'
+    ] },
+  { version: '3.7.1', date: '2026-10-20', type: 'fix', title: '班徽不再拖慢首屏', items: [
+      '页头班徽不再直接请求站点图片（GitHub Pages 上经常 404，还要白等十几秒）',
+      '改成「本地缓存 → 服务器代理 → 图床」三级取图，首屏不再被一张图拖住',
+      '服务器代理新增尺寸上限：图床原图 6.3MB，超过 1.5MB 就改用内嵌的压缩版（导出图里班徽只有 66px，看不出来）',
+      '登录时下载的班徽缓存因此只有 110KB —— 换设备登录一次也就一下下'
+    ] },
+  { version: '3.7.0', date: '2026-10-20', type: 'feat', title: '资料修改改为审批制 · 首屏先用缓存 · 班徽本地缓存', items: [
+      '「联系方式审核」改名为「信息审核」：现在不只管微信/QQ/手机号，所有「允许本人编辑」的字段都走同一套审批',
+      '提交修改后不会立刻生效：后台点「通过」才写进档案；通过之前前台仍显示原来的内容',
+      '审核卡片只显示修改人姓名和实际改动的字段（原内容 → 现内容），没改的字段不再堆上来',
+      '信息审核新增「历史记录」：通过 / 驳回 / 已撤销都在，通过后 7 天内可以一键撤销',
+      '前台「我的资料」里，待审核的字段会标出「待审核：你提交的新值」，一眼能看到进度',
+      '首屏改用缓存优先：进站直接用上次同步的内容渲染，云端在后台补拉，同步完自动刷新，全程不打扰',
+      '云端内容接口不再给普通同学返回版本记录等后台专用数据（单次少了约 150KB）',
+      '班徽改成登录时下载一次存本地，导出图片直接读缓存，不再受图床跨域和 404 影响',
+      '班徽接口带内嵌兜底：图床挂了也能返回一张真图，不会画占位块'
+    ] },
+  { version: '3.6.5', date: '2026-10-19', type: 'fix', title: '作业同步：补上钩子的递归死循环',
+    items: [
+      '3.6.4 把钩子挂上了，但打勾后仍不上传 —— 实测发现钩子内部写时间戳会再次触发钩子，无限递归后被吞掉',
+      '加上递归保护后，本地实测：打勾 → 待推送队列有它 → PUT 请求发出（内容正确）',
+      '这一版是同步链路的最后一块，云端时间应该会随每次打勾刷新'
+    ] },
+  { version: '3.6.4', date: '2026-10-19', type: 'fix', title: '作业同步终于修好（钩子没挂上）· 删除可撤回 · 同步按钮有反馈',
+    items: [
+      '作业勾选一直传不上云，真正原因找到了：拦截本地写入的那段补丁在 Chrome 里根本没生效，打勾从未被登记为「待同步」',
+      '改成拦截 Storage.prototype 后，打勾会立刻排队上传；云端数据不再停在 10-16',
+      '「上传本机 / 拉取云端 / 双向同步」三个按钮加上转圈动画，成功打勾、失败打叉，不再点了没反应',
+      '删除字段恢复成「真删」（不再留隐藏列），但删之前会把整列数据存进回收站：30 分钟内在「操作日志」点「撤回」即可连数据一起恢复',
+      '修复：点字段的「允许本机编辑」会报「服务器内部错误」（老库缺 self_edit 列）',
+      '班徽改由服务器代理取图（后台填的直链也能画进导出图，不受跨域限制）',
+      '新增部署门禁：云端公告里没有当次版本，就不允许部署',
+      '「版本更新」并入「数据管理」同一页，侧栏不再单独占一项；移除临时的「恢复预置字段」按钮'
+    ] },
+  { version: '3.6.3', date: '2026-10-19', type: 'fix', title: '导出图的班徽不再「空着」',
+    items: [
+      '班徽图片刚上传时线上可能还没同步过来，导出图上右上角会空一块',
+      '现在取不到真图会自动画一个同色系的班级徽标兜底，等真图同步后自动换回'
+    ] },
+  { version: '3.6.2', date: '2026-10-19', type: 'fix', title: '字段列表读不出来的问题',
+    items: [
+      '修复：后台「字段管理」明明有字段却显示 0 个 —— 查询写死了列名，老库缺其中一列就整张表读空',
+      '同类问题也影响前台查询（档案里开放为公开的字段不显示），一并修好',
+      '「恢复预置字段」会顺带把字段表缺的列补上，避免升级中断留下的半成品状态'
+    ] },
+  { version: '3.6.1', date: '2026-10-19', type: 'feat', title: '数据备份与回档 · 字段误删可恢复 · 导出图带班徽 · 成绩分享可写备注',
+    items: [
+      '新增「安全 → 数据管理」：可手动备份、查看历史备份、一键回档（内容 / 档案 / 字段定义 / 站点设置四类）',
+      '每次部署前自动备份一次，默认保留最近 14 个版本的备份；备份存在云端数据库里，换设备也能回档',
+      '修复：字段管理里的入团时间、发展团员编号等被删掉后数据找不回来。现在「删除字段」不再删除数据库里的列，只是从列表里隐藏，重新加回来数据就复原',
+      '新增「字段体检 / 恢复预置字段」：一键把 17 个预置字段定义补回来，并清掉导致反复误删的「墓碑」记录',
+      '导出图片右上角统一显示班徽（就是首页标题旁那个绿色徽标，已存到站点本地，导出更稳）',
+      '成绩分享长图可以写备注了：导出前填一句「为什么分享」，会印在图片底部',
+      '版本号规则改为「主版本 . 小更新 . 修复」：主版本只有站主发话才动，后两位由维护方按改动性质递增'
+    ] },
+  { version: '3.5.42', date: '2026-10-19', type: 'fix', title: '作业勾选真正不丢了 · 导出图片带班徽 · 可选导出哪一次',
+    items: [
+      '修复「打完勾立刻退出、重进发现勾没了」：待同步清单现在会存在本机，进站先补推再拉云端',
+      '再补一道保险：拉云端时比较时间戳，本机改得比云端新就不覆盖（以前旧值会无条件盖掉刚打的勾）',
+      '还修了一个空档：推送正忙时新攒的改动以前会一直等着，现在会自动排队补发',
+      '导出图片右上角统一显示班徽；后台「站点信息」新增「班徽图片地址」，留空则用站点图标',
+      '抽歌排期导出图片前可以先选「导出哪一次」，不再只能导最近一次',
+      '作业弹窗新增「查看」下拉，可以翻之前的作业；导出/分享的就是当前正在看的那一份'
+    ] },
+  { version: '3.5.41', date: '2026-10-19', type: 'fix', title: '导出图片脚本改为内联（修线上偶发取不到）',
+    items: [
+      '修复：3.5.40 的导出图片依赖一个外部脚本，GitHub Pages 新文件同步慢时会出现 404，按钮点了没反应',
+      '现在画图代码直接内联进页面，不再依赖外部文件；功能与版式完全不变',
+      '顺带修好测试里「主脚本」的选取逻辑（页面多了一段脚本后要取最长的那段）'
+    ] },
+  { version: '3.5.40', date: '2026-10-19', type: 'feat', title: '字段本人可编辑 · 投票明细 · 页面级在线时长 · 定向弹窗 · 导出图片',
+    items: [
+      '字段管理：每个字段后面多了一个「本人可编辑」开关。打开后，同学可以在「我的资料」里点「改」直接修改这一项，改完立即生效；姓名/学号/身份/头衔永远只能由你改',
+      '投票管理：每场投票多了「投票明细」，能看到每一张票是谁投的、投给哪个选项、什么时候投的（撤回的票也会标出来）',
+      '在线时长：新增「时间花在哪些页面」，能看到成绩分析、打砖块、后台各面板分别待了多久；每个人的明细里也有他自己的页面分布',
+      '通用弹窗：新增「投放对象」——可以只弹给某个人、某几个人，或按身份（管理员/学生/老师）、按头衔（团支书/课代表…）投放',
+      '横屏修好了：不再出现「切出去再回来就卡住/白屏」；旋转方向改成与手动横屏一致（顺时针），手机真横过来后会自动撤掉页面旋转',
+      '抽歌排期：公示区新增「导出图片 / 分享图片」，把当次公示画成一张长图，可直接发班级群',
+      '作业：作业弹窗新增「导出图片 / 分享」，图片里含作业名称、时间范围、每科的每一项任务，以及配图的图片直链'
+    ] },
+  { version: '3.5.39', date: '2026-10-18', type: 'feat', title: '前台也能切横屏了：侧边栏一键横过来看',
+    items: [
+      '侧边栏「音效」上面多了一个「📱 横屏查看」按钮，点一下整页横过来，再点一下竖回去',
+      '和后台是同一套逻辑：系统真把屏幕转横了会自动撤掉 CSS 旋转，不会转两次又变回竖的',
+      '横屏状态会记住：切到别的 App 再回来、刷新页面、PWA 从后台恢复，都保持上次的选择',
+      '只在点了按钮时才尝试锁方向，进页面不会自己抢着横过来（避免「页面横了但手机没横」）',
+      '表格、课表、作业这类横向内容多的板块，横屏看舒服很多'
+    ] },
+  { version: '3.5.38', date: '2026-10-18', type: 'fix', title: '「仅后端可见」收紧了：前台上所有人都看不到',
+    items: [
+      '修正上一版的口径：之前管理员自己能前台的「我的资料」里看到这类字段，现在看不到了',
+      '现在的规则：只能在后端（成员与档案 → 详情）查；前台任何人都看不到，包括管理员本人',
+      '普通同学查自己、查别人、管理员查别人 —— 全都拿不到，连键都不会下发',
+      '以前设成「仅后端可见」的字段不用重设，自动生效'
+    ] },
+  { version: '3.5.37', date: '2026-10-18', type: 'feat', title: '「仅管理员」更名「仅后端可见」，语义更明确',
+    items: [
+      '改名叫「仅后端可见」了，谁能看到一目了然：你（后台档案详情 + 自己前台的「我的资料」）',
+      '其他所有人前台都查不到 —— 包括这个字段的主人本人（普通同学），连键都不会下发',
+      '你在前台查询别的同学时依然没有特权，和大家的查询规则一视同仁',
+      '存储值没变（还是 admin），原来设过的字段不用重新设置'
+    ] },
+  { version: '3.5.36', date: '2026-10-18', type: 'fix', title: '游戏全量云同步 · 在线统计覆盖游戏页与后台',
+    items: [
+      '修复：上一版漏发了主页面文件，导致换设备也停在 3.5.34 —— 现在已正常到 3.5.36',
+      '其余 9 款游戏（打砖块 / 打地鼠 / 消消乐 / 飞机大战 / 扫雷 / 记忆翻牌 / 五子棋 / 井字棋 / 象棋）全部接入云端：最高分（或最快用时、胜负场）与游玩时长都会统计',
+      '在线时长现在覆盖所有页面：玩游戏的每分钟、后台挂着的每分钟都算在线',
+      '后台「游戏数据」面板支持 13 款游戏的次数 / 时长 / 成绩展示'
+    ] },
+  { version: '3.5.35', date: '2026-10-18', type: 'feat', title: '在线时长统计：单次 / 累计一目了然',
+    items: [
+      '新增「在线时长」面板（后台 → 安全）：每人累计在线、在线次数、最长单次、最近在线，可切 今天 / 7 / 30 / 90 天',
+      '点「明细」可看每一段连续在线的起止时刻与时长',
+      '判定规则：心跳每 60 秒一次，两次心跳间隔超过 3 分钟就另算一次在线（你提的方案，原样落地）',
+      '同一账号在两台设备登录各算各的，不混在一起',
+      '统计随心跳自动累积，不需要任何人手动打卡'
+    ] },
+  { version: '3.5.34', date: '2026-10-18', type: 'fix', title: '自定义设置只存本机 · 轻量补媒体特效 · 作业勾选同步加固',
+    items: [
+      '自定义设置（字号 / 背景 / 排序 / 动效 / 轻量 / 背景图）不再上传云端，只保存在本机浏览器 —— 每台设备屏幕和习惯不同，各配各的',
+      '换设备想搬设置，用「导出配置 / 导入配置」手动搬',
+      '轻量模式进一步关掉听力播放器的唱片旋转与波形跳动（播放、倍速、拖动进度都正常）',
+      '轻量模式下作业里的视频不再预加载，点播放才开始加载',
+      '作业勾选后立即上传云端，不再等 1.5 秒防抖 —— 打完勾马上锁屏也不会丢',
+      '新增孤儿勾选回补：本机有、云端没有的勾选会自动补推上去，跨设备终于能对上',
+    ] },
+  { version: '3.5.33', date: '2026-10-18', type: 'fix', title: '轻量模式选择按设备永久记住',
+    items: [
+      '轻量 / 完整的选择改为独立存储（cls_lite_mode），不再混在会随版本升级、云端同步、恢复默认一起被重写的 UI 配置里',
+      '从此升级新版本、恢复默认设置、别的设备同步配置，都不会把本机选的轻量模式冲回完整',
+    ] },
+  { version: '3.5.31', date: '2026-10-18', type: 'fix', title: '轻量模式改纯手动 · 弹窗居中',
+    items: [
+      '轻量模式不再自动检测设备：站主明确「由我手动更改」，设置里只有「完整 / 轻量」两档，选完立刻生效并记住',
+      '修复登录引导等弹窗贴在左上角的问题：遮罩层显式居中，iPad / iPhone / 桌面都居中显示',
+      '兼容老版 iPad Safari：inset 简写改成四边定位写法，弹窗遮罩现在能铺满全屏（之前只缩在左上角一块）',
+    ] },
+  { version: '3.5.30', date: '2026-10-18', title: '兼容性修复 · 轻量模式 · 后台横屏记忆 · 站点名称可编辑', type: 'fix', highlight: true, items: [
+    '新增「轻量模式」：iPad / iPhone 上自动关闭玻璃模糊、背景光斑、卡片流光与入场动画（站主反馈 iPad Air 打开卡死、勉强操作后白屏）',
+    '性能自动判定：iOS 设备 / 内存 ≤4GB / CPU ≤4 核自动走轻量；另加首屏 3 秒长任务自测，超 120ms 自动降级',
+    '自定义设置 → 动效 里新增「性能 / 轻量模式」三档（自动 / 轻量 / 完整），可随时手动切换并记住选择',
+    '从主站进入后台默认竖屏，不再自动横过来；切到后台再回来保持原状态（含 PWA 往返）',
+    '后台「站点信息」里的站点名称与副标题真正可编辑：保存后浏览器标题栏、页头大标题、页脚一起更新',
+    '版本面板新增「补齐缺失版本」：自动对比内置清单，只补云端缺的版本号，不覆盖已有内容',
+  ] },
+  { version: '3.5.29', date: '2026-10-18', title: '站点名称 / 副标题后台可编辑', type: 'feature', items: [
+    '后台「系统设置 → 站点信息」从「仅作展示」改为真读真存，写入 site_config.siteName / siteSubtitle',
+    '保存时先取回整份 site_config 再合并，不会冲掉点歌守卫等其它配置',
+    '主站新增 applyBranding()：站点名同步替换 <title>、页头大标题、页脚版权行；副标题替换页头标语',
+    '清空保存 = 恢复默认（写空字符串而非删键，避免主站残留旧站名清不掉）',
+  ] },
+  { version: '3.5.28', date: '2026-10-18', title: '时长库支持线上搜歌 + 导入清单批量匹配', type: 'feature', items: [
+    '时长库面板改为四个分区：已收录 / 线上搜 / 导入清单 / 预置歌单',
+    '线上搜歌：输入歌名同时查网易云与 QQ 音乐（都没有才用 iTunes 兜底），点「加入」直接写进云端库',
+    '搜索结果按歌名贴合度排序 —— 修掉「搜《晴天》第一条是翻唱」的问题，原唱排最前',
+    '导入清单：一行一首「歌名 - 歌手」，歌名完全一致 + 歌手部分符合即命中（合唱多歌手 vs 只写一个也算）',
+    '预置周杰伦 / 林俊杰 / 方大同热门曲，一键逐批抓时长入库；云端库已预先填充 96 首',
+    'song_durations 补歌手索引（SCHEMA_VER 升到 3.5.28）',
+  ] },
+  { version: '3.5.27', date: '2026-10-18', title: '歌曲时长云端同步 · 缺时长禁止发布与排歌', type: 'feature', highlight: true, items: [
+    '新增云端时长库 song_durations：查到的秒数写进数据库，一次查询永久命中，换设备也不丢',
+    '时长来源优先级 manual > netease/qq > itunes，人工填写永不被自动结果覆盖',
+    '网易云 / QQ 音乐改为严格匹配（歌名必须一致），修掉「查不到时拿搜索结果第一条顶替」的错时长问题',
+    '查不到时返回空并弹「时长补录」，由站主手填（支持 3:45 或 225 两种写法）',
+    '缺时长的歌单投票无法发布、缺时长的歌无法被随机排歌 / 写排期（前后端双保险）',
+    '时长库管理面板：查看已收录、来源标注、删除误录、补录入口',
+  ] },
+  { version: '3.5.26', date: '2026-10-18', title: '歌单投票不再显示「选项（一行一个）」文本框', type: 'fix', items: [
+    '编辑器根节点渲染时即带 data-kind，由 CSS 强制隐藏文本框，不再依赖 onMount 执行时机',
+    '文本框仍作为隐藏数据载体，提交时照常读取，不影响既有投票',
+  ] },
+  { version: '3.5.25', date: '2026-10-18', title: '歌单投票彻底免文本框 · 时长必显示', type: 'improve', items: [
+    '勾选歌曲即成为选项；改动选项字段勾选会自动重算，不用再手动复制',
+    '歌曲时长改为必展示项，直接显示在歌手后面（青绿等宽字色，暗色主题已适配）',
+  ] },
+  { version: '3.5.24', date: '2026-10-18', title: '前台投票按赞数实时排序 · 后台勾选即选项', type: 'improve', items: [
+    '前台投票选项按赞成票从高到低实时排序，同票保持稳定顺序，不打断当前滚动位置',
+    '后台挑歌：勾选即加入选项，与选项列表双向同步',
+    '编辑器明确「歌名歌手直显，点歌人/日期/赞数/时长进详情」',
+  ] },
+  { version: '3.5.23', date: '2026-10-18', title: '投票管理整理 · 公示变量扩展 · 按时长取名', type: 'improve', items: [
+    '老格式歌单投票选项也能折叠（按日期段自动拆分）',
+    '歌单投票禁止同学自行添加选项',
+    '总时长上限模式下按实际时长取名次，不再出现「取前 5 名」这类与时间制冲突的表述',
+    '公示模版变量扩展到第 4~10 名',
+    '投票管理元信息分组（时间 / 取值方式 / 展示项分开）',
+  ] },
+  { version: '3.5.22', date: '2026-10-18', title: '后台人员档案全字段在线编辑 · 身份头衔与账号角色分离', type: 'feature', items: [
+    '身份 / 头衔进入成员表单，与账号角色（管理员 / 同学）互相独立',
+    'title、role 移出特殊字段白名单，可按普通字段配置可见性与编辑权限',
+    '前台查询显示的身份 / 头衔同样受字段可见性管辖',
+    '导出名单补上身份、头衔两列',
+  ] },
+  { version: '3.5.21', date: '2026-10-18', title: '档案字色与字段可复制 · 前台查询显头衔 · 点歌投票批量选择', type: 'feature', items: [
+    '我的档案字色加深、字段内容可一键复制',
+    '前台查询结果直接显示头衔与智学网账号',
+    '后台可在线编辑身份证、团员编号等敏感字段（不再只能靠导入）',
+    '点歌投票支持批量勾选，并可二选一：限定抽取数量或限定总时长',
+    '公示与抽歌排期均显示单曲时长与总时长',
+  ] },
+];
+
+/** 补齐云端缺失的版本记录：只追加云端没有的版本号，已有一律不动 */
+function relSyncMissing(){
+  var box = $('relMissBox');
+  var btn = $('relSync');
+  if(btn){ btn.disabled = true; btn.textContent = '对比中…'; }
+  api('/content').then(function(j){
+    var cur = (j && j.items && j.items.release_notes) || [];
+    cur = Array.isArray(cur) ? cur : [];
+    var have = {};
+    cur.forEach(function(r){ have[String(r && r.version || '').trim()] = 1; });
+    var add = REL_BUILTIN.filter(function(r){ return !have[String(r.version)]; });
+    if(!add.length){
+      if(btn){ btn.disabled = false; btn.innerHTML = svg('download',14) + ' 补齐缺失版本'; }
+      if(box){ box.style.display = 'block'; box.textContent = '云端版本记录是最新的，没有缺号。'; }
+      toast('没有需要补的版本', 'ok');
+      return;
+    }
+    var names = add.map(function(r){ return 'v' + r.version; }).join('、');
+    if(btn){ btn.disabled = false; btn.innerHTML = svg('download',14) + ' 补齐缺失版本'; }
+    confirmBox({
+      title: '补齐 ' + add.length + ' 个版本的记录',
+      text: '云端缺少：' + names,
+      detail: '只会追加这几条，已有的 ' + cur.length + ' 条记录保持不变。补完可以逐条再编辑。',
+      okText: '补齐',
+    }).then(function(yes){
+      if(!yes) return;
+      var merged = cur.concat(add.map(function(r){ return JSON.parse(JSON.stringify(r)); }));
+      api('/content', { method: 'PUT', body: { items: { release_notes: merged } } })
+        .then(function(){
+          REL_STATE.list = merged;
+          relSort();
+          paintReleases();
+          toast('已补齐 ' + add.length + ' 个版本的记录', 'ok');
+          if(box){ box.style.display = 'block'; box.textContent = '已补齐：' + names; }
+        })
+        .catch(function(e){ toast('补齐失败：' + (e.message || e), 'err', 4000); });
+    });
+  }).catch(function(e){
+    if(btn){ btn.disabled = false; btn.innerHTML = svg('download',14) + ' 补齐缺失版本'; }
+    toast('读取云端版本记录失败：' + (e.message || e), 'err', 4000);
+  });
+}
+
+/* 按日期倒序（同一天按版本号倒序）——最新的在最上面 */
+function relSort(){
+  REL_STATE.list.sort(function(a, b){
+    var d = String(b.date || '').localeCompare(String(a.date || ''));
+    if(d) return d;
+    return relVerNum(b.version) - relVerNum(a.version);
+  });
+}
+function relVerNum(v){
+  var m = String(v || '').match(/(\d+)\.(\d+)\.(\d+)/);
+  if(!m) return 0;
+  return (+m[1]) * 1000000 + (+m[2]) * 1000 + (+m[3]);
+}
+/* 版本号显示：数据里允许带 v 前缀（历史遗留），统一成 vX.Y.Z —— 别出现「vv2.6.4」 */
+function relVerLabel(v){
+  var s = String(v || '?').trim();
+  return /^v/i.test(s) ? s : ('v' + s);
+}
+
+function paintReleases(){
+  var body = $('relBody');
+  if(!body) return;
+  var list = REL_STATE.list || [];
+  if(!list.length){
+    body.innerHTML = '<div class="empty">' + svg('clock', 38)
+      + '<p>还没有版本记录</p>'
+      + '<p class="muted" style="font-size:.82rem">点右上角「新增版本」开始记录，'
+      + '或点「填入最近几轮」一键导入这几天的主要改动</p></div>';
+    return;
+  }
+  body.innerHTML = list.map(function(r, i){
+    var ty = relTypeOf(r.type);
+    var items = (r.items || []).map(function(t){
+      return '<li style="margin:5px 0;line-height:1.7">' + esc(t) + '</li>';
+    }).join('');
+    return '<div class="panel" style="margin:0 0 14px;padding:14px 16px' + (r.highlight ? ';border-left:3px solid #af410f' : '') + '">'
+      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+      +   '<b style="font-size:1rem">' + esc(relVerLabel(r.version)) + '</b>'
+      +   '<span class="badge ' + ty.cls + '">' + esc(ty.label) + '</span>'
+      +   (r.highlight ? '<span class="badge badge-green">重点</span>' : '')
+      +   '<span class="muted" style="font-size:.82rem">' + esc(r.date || '') + '</span>'
+      +   '<span style="flex:1"></span>'
+      +   '<button class="btn btn-sm btn-ghost" data-rel-up="' + i + '" title="上移">↑</button>'
+      +   '<button class="btn btn-sm btn-ghost" data-rel-down="' + i + '" title="下移">↓</button>'
+      +   '<button class="btn btn-sm btn-ghost" data-rel-edit="' + i + '">' + svg('edit',13) + ' 编辑</button>'
+      +   '<button class="btn btn-sm btn-ghost" data-rel-del="' + i + '" style="color:#b3261e">' + svg('trash',13) + ' 删除</button>'
+      + '</div>'
+      + (r.title ? '<div style="font-weight:700;margin-bottom:6px">' + esc(r.title) + '</div>' : '')
+      + (items ? '<ul style="margin:0;padding-left:20px;font-size:.86rem">' + items + '</ul>'
+               : '<p class="muted" style="margin:0;font-size:.84rem">（没有条目）</p>')
+      + '</div>';
+  }).join('');
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rel-edit]'), function(b){
+    b.onclick = function(){ relEdit(parseInt(b.dataset.relEdit, 10)); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rel-del]'), function(b){
+    b.onclick = function(){ relDelete(parseInt(b.dataset.relDel, 10)); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rel-up]'), function(b){
+    b.onclick = function(){ relMove(parseInt(b.dataset.relUp, 10), -1); };
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rel-down]'), function(b){
+    b.onclick = function(){ relMove(parseInt(b.dataset.relDown, 10), 1); };
+  });
+}
+
+/* 上移 / 下移：交换后把顺序整体写回（排序是按日期，所以交换日期意义不大——
+   这里直接交换数组位置并「锁序」：给两条同样的日期，靠数组顺序决定先后）。
+   为避免与 relSort 打架，交换后同步把 date 也维持原样即可，
+   因为 relSort 只在加载时跑一次，之后列表顺序由我们掌控。 */
+function relMove(i, dir){
+  var j = i + dir;
+  var list = REL_STATE.list;
+  if(j < 0 || j >= list.length) return;
+  var t = list[i]; list[i] = list[j]; list[j] = t;
+  paintReleases();
+  toast('顺序已调整，记得点「编辑」保存任一条以同步到云端', 'ok', 3500);
+}
+
+function relEdit(idx){
+  var isNew = (idx === null || idx === undefined);
+  var r = isNew
+    ? { version: String(typeof SITE_VERSION !== 'undefined' ? SITE_VERSION : ''), date: relToday(), title: '', type: 'feature', items: [], highlight: false }
+    : REL_STATE.list[idx];
+  if(!r) return;
+
+  openModal({
+    title: isNew ? '新增版本记录' : ('编辑 ' + esc(relVerLabel(r.version))),
+    sub: isNew ? '版本号与日期已按当前站点预填，可直接改' : '',
+    wide: true,
+    body:
+      '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      + '<div class="field" style="margin:0;width:150px"><label for="relVer">版本号</label>'
+      +   '<input id="relVer" value="' + attr(r.version || '') + '" placeholder="如 2.3.6" maxlength="20"></div>'
+      + '<div class="field" style="margin:0;width:170px"><label for="relDate">日期</label>'
+      +   '<input id="relDate" type="date" value="' + attr(r.date || '') + '"></div>'
+      + '<div class="field" style="margin:0;width:150px"><label for="relType">类型</label>'
+      +   '<select id="relType">'
+      +     Object.keys(REL_TYPES).map(function(k){
+              return '<option value="' + k + '"' + (r.type === k ? ' selected' : '') + '>' + esc(REL_TYPES[k].label) + '</option>';
+            }).join('')
+      +   '</select></div>'
+      + '</div>'
+      + '<div class="field"><label for="relTitle">标题（一句话概括这个版本）</label>'
+      +   '<input id="relTitle" value="' + attr(r.title || '') + '" placeholder="如 游戏排行榜" maxlength="60"></div>'
+      + '<div class="field"><label for="relItems">更新条目（一行一条）</label>'
+      +   '<textarea id="relItems" rows="8" placeholder="新增四款游戏的跨用户排行榜&#10;支持历史总榜 / 本周榜切换">'
+      +   esc((r.items || []).join('\n')) + '</textarea></div>'
+      + '<label style="display:flex;align-items:center;gap:6px;font-size:.86rem;cursor:pointer">'
+      +   '<input type="checkbox" id="relHi"' + (r.highlight ? ' checked' : '') + '> 标为重点版本（列表左侧加一条橙线）</label>',
+    foot: '<button class="btn btn-ghost" data-rel-cancel>取消</button>'
+        + '<button class="btn" data-rel-save>保存</button>',
+    onMount: function(box){
+      box.querySelector('[data-rel-cancel]').onclick = closeModal;
+      box.querySelector('[data-rel-save]').onclick = function(){ relSave(idx); };
+    },
+  });
+}
+
+function relSave(idx){
+  var ver = String(($('relVer') || {}).value || '').trim();
+  if(!ver){ toast('版本号不能为空', 'err'); return; }
+  var date = String(($('relDate') || {}).value || '').trim() || relToday();
+  var title = String(($('relTitle') || {}).value || '').trim();
+  var type = String(($('relType') || {}).value || 'feature');
+  var raw = String(($('relItems') || {}).value || '');
+  var items = raw.split('\n').map(function(x){ return x.trim(); }).filter(Boolean);
+  var hi = !!($('relHi') || {}).checked;
+
+  var rec = { version: ver, date: date, title: title, type: type, items: items, highlight: hi };
+  var isNew = (idx === null || idx === undefined);
+  var list = (REL_STATE.list || []).slice();
+
+  if(isNew){
+    /* 同版本号已存在 → 让站主决定是覆盖还是取消，避免手一抖出现两条同版本 */
+    var dup = -1;
+    for(var i = 0; i < list.length; i++){ if(String(list[i].version) === ver){ dup = i; break; } }
+    if(dup >= 0){
+      confirmBox({ text: relVerLabel(ver) + ' 已经存在了', detail: '要继续的话会覆盖那条记录。', okText: '覆盖' })
+        .then(function(yes){ if(yes){ list[dup] = rec; relWrite(list, '已覆盖 ' + relVerLabel(ver)); } });
+      return;
+    }
+    list.push(rec);
+  }else{
+    list[idx] = rec;
+  }
+  relWrite(list, isNew ? (ver + ' 已新增') : (ver + ' 已保存'));
+}
+
+function relWrite(list, okMsg){
+  api('/content', { method:'PUT', body:{ items:{ release_notes: list } } })
+    .then(function(){
+      REL_STATE.list = list;
+      relSort();
+      paintReleases();
+      toast(okMsg, 'ok');
+    })
+    .catch(function(e){ toast('保存失败：' + e.message, 'err', 4000); });
+}
+
+function relDelete(idx){
+  var r = REL_STATE.list[idx];
+  if(!r) return;
+  confirmBox({ text: '确定删除 ' + relVerLabel(r.version) + ' 的记录吗？', detail: '删除后不可恢复。', danger: true, okText: '删除' })
+    .then(function(yes){
+      if(!yes) return;
+      var list = (REL_STATE.list || []).slice();
+      list.splice(idx, 1);
+      relWrite(list, '已删除 v' + (r.version || '?'));
+    });
+}
+
+/* 一键填入最近几轮：只在「当前没有任何记录」时提供，避免把已有内容冲掉 */
+/* 今天（本地时区的 YYYY-MM-DD） */
+function relToday(){
+  var d = new Date();
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+}
+
+/* ============================================================================
+ * ⑬ 面板：通用弹窗（第二十八轮补做）
+ * ----------------------------------------------------------------------------
+ * 【背景】
+ *   第二十七轮在前端 index.html 做了「通用弹窗引擎」（popGetList / showPop /
+ *   popAutoPop 等），数据来源是 SITE_DATA.popups。但当时只做了前端引擎与
+ *   云端字段（/api/content 的 popups 键），**后台没有可视化编辑入口**，
+ *   站长想加一个弹窗只能去改 index.html 源码。
+ *   本面板补上后台编辑入口，数据写入云端 popups 键，前端自动生效。
+ *
+ * 【字段（必须与 index.html 的 popGetList 完全对齐，多一个少一个都不行）】
+ *   id        —— 唯一标识。改 id 会让「已关闭过」的同学重新收到弹窗
+ *   scope     —— 'boot' 进站弹 / 'cat:N' 进板块 N 弹
+ *   source    —— 'custom' 自带内容 / 'announcements' 取最新公告 / 'homework_notice' 取作业通知
+ *   title     —— source='custom' 时的标题
+ *   body      —— 正文，\n 换行
+ *   video     —— B站分享链接或 mp4 直链
+ *   image     —— 图片直链
+ *   linkText / linkUrl —— 底部按钮（留空不显示）
+ *   startAt / endAt     —— 时间窗（窗内才弹）
+ *   dismiss   —— daily 当天不再弹 / once 只弹一次 / always 每次都弹
+ *   bubble    —— 关掉后右下角留悬浮球
+ * ========================================================================= */
+
+var POP_STATE = { list: [], editing: null };
+
+/* 板块列表（与 index.html 的 SITE_DATA.categories 保持一致）
+   做成内置是为了不依赖前端文件；将来加板块可在此追加，
+   或者用「自定义」输入 cat:N 兜底。 */
+var POP_CATS = [
+  { id: 'boot',  name: '进站时（开屏弹）' },
+  { id: 'cat:1', name: '板块 · 常用服务' },
+  { id: 'cat:2', name: '板块 · 大屏服务' },
+  { id: 'cat:5', name: '板块 · 学习资料' },
+  { id: 'cat:3', name: '板块 · 成绩分析' },
+  { id: 'cat:7', name: '板块 · 班级事务' },
+  { id: 'cat:8', name: '板块 · 其他工具' },
+  { id: 'cat:9', name: '板块 · 安装为应用' },
+];
+/* 弹窗按钮可跳转的「站内页面」（v2.6.6 站主要求）
+   为什么用白名单而不是让站主随便写函数名：linkUrl 会被前端直接执行，
+   开放任意函数名等于把「能调什么」的决定权交给了配置内容。
+   白名单里的都是确认安全、且对同学有意义的页面入口。
+   想加新的：在这里追加一行，并在 index.html 的 POP_JUMP_FN 里同步加。 */
+var POP_JUMP_FNS = [
+  { id: 'fn:showCurrentHomework',  name: '站内页 · 当前作业' },
+  { id: 'fn:showHomeworkCalendar', name: '站内页 · 历史作业（按日期）' },
+  { id: 'fn:openClassworks',       name: '站内页 · Classworks 作业入口' },
+  { id: 'fn:openSettings',         name: '站内页 · 自定义设置' },
+  { id: 'fn:openMyProfile',        name: '站内页 · 我的资料' },
+  { id: 'fn:openClassSign',        name: '站内页 · 班级签到' },
+  { id: 'fn:openAllImp',           name: '站内页 · 重要日期（全部）' },
+  { id: 'fn:openAllHol',           name: '站内页 · 法定节假日' },
+  { id: 'fn:openGameBoard',        name: '站内页 · 游戏排行榜' },
+  { id: 'fn:openData',             name: '站内页 · 数据管理' },
+  { id: 'fn:openRepoDialog',       name: '站内页 · 仓库入口' },
+];
+
+/** 这个 linkUrl 是不是「需要手填」的自定义值？（不在已知列表里就是） */
+function pfLinkIsCustom(cur){
+  cur = String(cur || '').trim();
+  if(!cur) return false;
+  var known = {};
+  POP_CATS.forEach(function(c){ if(c.id !== 'boot') known[c.id] = 1; });
+  POP_JUMP_FNS.forEach(function(f){ known[f.id] = 1; });
+  return !known[cur];
+}
+
+/** 生成「按钮跳转到」下拉的选项；current 是当前 linkUrl，用来回显选中 */
+function pfLinkOptions(current){
+  var cur = String(current || '').trim();
+  var html = '<option value=""' + (cur ? '' : ' selected') + '>不跳转（只有一个关闭按钮）</option>';
+  html += '<optgroup label="站内板块">';
+  POP_CATS.forEach(function(c){
+    if(c.id === 'boot') return;      /* boot 是「弹在哪」，不是「跳到哪」 */
+    html += '<option value="' + attr(c.id) + '"' + (cur === c.id ? ' selected' : '') + '>'
+          + esc(c.name.replace('板块 · ', '')) + '</option>';
+  });
+  html += '</optgroup><optgroup label="站内页面">';
+  POP_JUMP_FNS.forEach(function(f){
+    html += '<option value="' + attr(f.id) + '"' + (cur === f.id ? ' selected' : '') + '>'
+          + esc(f.name.replace('站内页 · ', '')) + '</option>';
+  });
+  html += '</optgroup><option value="__custom"' + (pfLinkIsCustom(cur) ? ' selected' : '')
+        + '>自定义链接…（外部网址 / 手写 cat: / fn:）</option>';
+  return html;
+}
+
+/** 下拉联动：选具体目标写进输入框；选「自定义」才露出输入框 */
+function pfLinkPickChange(){
+  var sel = $('pfLinkPick'), inp = $('pfLinkUrl'), wrap = $('pfLinkUrlWrap'), txt = $('pfLinkText');
+  if(!sel || !inp) return;
+  var v = sel.value;
+  if(v === '__custom'){
+    if(wrap) wrap.style.display = '';
+    inp.focus();
+    return;
+  }
+  inp.value = v || '';
+  if(wrap) wrap.style.display = 'none';
+  /* 没写按钮文案时给个像样的默认，免得按钮显示成空白 */
+  if(v && txt && !txt.value.trim()) txt.value = v.indexOf('fn:') === 0 ? '前往查看' : '去看看';
+}
+
+var POP_SOURCES = [
+  { id: 'custom',          name: '自定义内容（自己写标题/正文）' },
+  { id: 'announcements',   name: '最新班级公告（自动取置顶或最新一条）' },
+  { id: 'homework_notice', name: '作业通知（自动取当前作业通知）' },
+];
+var POP_DISMISS = [
+  { id: 'daily',  name: '每天弹一次（次日恢复，默认）' },
+  { id: 'once',   name: '只弹一次（此后永不自动弹）' },
+  { id: 'always', name: '每次都弹' },
+];
+var POP_THEMES = [
+  { id: '',        name: '默认白卡' },
+  { id: 'welcome', name: '迎新橙卡（橙底白字，用于首次访问欢迎）' },
+];
+
+/* ---- 读取 / 写入云端 ---- */
+function popNorm(v){
+  if(!Array.isArray(v)) return [];
+  var out = [];
+  v.forEach(function(p){
+    if(!p || typeof p !== 'object' || !p.id) return;
+    out.push({
+      id:        String(p.id),
+      scope:     String(p.scope || 'boot'),
+      source:    String(p.source || 'custom'),
+      title:     p.title || '',
+      body:      p.body || '',
+      video:     p.video || '',
+      image:     p.image || '',
+      linkText:  p.linkText || '',
+      linkUrl:   p.linkUrl || '',
+      startAt:   p.startAt || '',
+      endAt:     p.endAt || '',
+      dismiss:   (p.dismiss === 'once' || p.dismiss === 'always') ? p.dismiss : 'daily',
+      bubble:    (p.bubble === false) ? false : true,
+      bannerText: p.bannerText || '',
+      theme:      p.theme || '',
+    });
+  });
+  return out;
+}
+function popLoad(){
+  return api('/content').then(function(j){
+    var it = (j && j.items) || {};
+    POP_STATE.list = popNorm(it.popups);
+    return j;
+  });
+}
+function popWrite(list, okMsg){
+  POP_STATE.list = list || [];
+  return api('/content', { method:'PUT', body:{ items:{ popups: POP_STATE.list } } })
+    .then(function(){ if(okMsg) toast(okMsg, 'ok'); return true; })
+    .catch(function(e){ toast('保存失败：' + e.message, 'err', 4000); throw e; });
+}
+
+/* ============================================================================
+ * ⑭ 面板：成绩分析（第四十三轮 · v2.7.1 起）
+ * ----------------------------------------------------------------------------
+ * 站主要求（2026-10-14 原话）：
+ *   · 后台要能「改一切」—— 从"导入工具"变成"编辑工具"：
+ *     新建空考试、改考试信息、像 Excel 一样改分数（点格改 / 失焦自动保存）、
+ *     增删学生行、**发布之后仍然可以改**。
+ *   · 分数线由站主手填（学校是按年级划线的，我们班拿不到那个基数），
+ *     学校没公布就留空；三条线不继承上次。
+ *   · 只录大型考试（全校 / 校际联考、月考），一年不超过 10 次。
+ *
+ * 【为什么导入是「整体替换本次」】
+ *   站主导入的是一张完整成绩单，「本次 = 表里这些行」最符合直觉。
+ *   好处：不存在重名冲突（同名同学各占一行），也不会导入两次把人搞重复。
+ *
+ * 【为什么改分走「增量保存」】
+ *   改一格就全量重传既慢又容易覆盖别处的改动；这里只提交改动过的行
+ *   （带行 id），失焦后防抖 1.5 秒自动提交，页面顶部显示保存状态。
+ * ========================================================================= */
+
+var SC_STATE = {
+  exams: [],       /* 考试列表 */
+  meta: null,      /* 默认科目 / 分数线 / 类型（只取一次） */
+  cur: null,       /* 当前打开的考试 */
+  rows: [],        /* 当前考试的成绩行 */
+  dirty: {},       /* 待保存的行：{ 行id: true }（新增行用 'new:序号'） */
+  timer: null,     /* 自动保存防抖计时器 */
+  saving: false,
+};
+
+/* ---------------- 入口 ---------------- */
+/* 考试日期的显示文案：跨天显示成 2026-05-14 ~ 05-15 */
+function scDateTxt(e){
+  if(!e) return '';
+  var a = e.date || '', b = e.endDate || '';
+  if(!b || b === a) return a;
+  return a.slice(0, 4) === b.slice(0, 4) ? (a + ' ~ ' + b.slice(5)) : (a + ' ~ ' + b);
+}
+
+/* ============================================================
+   对外展示（三档开关）
+   —— 「标签类」内容（退步榜 / 需关注 / 四象限 / 诊断卡）落到学生手里
+      可能是公开处刑，所以默认一律「完全隐藏」，要放开由站主自己决定。
+   ============================================================ */
+var SC_CFG = null;
+
+var SC_DISPLAY_ITEMS = [
+  { key: 'diagnosis', name: '诊断卡', hint: '「本次最值得做的事」——班均、最薄弱一科、过线人数' },
+  { key: 'watchList', name: '需关注学生', hint: '低于班均 10 分的学生 + 自动识别的拖后腿科目' },
+  { key: 'tailRank',  name: '进退步榜', hint: '和上一次考试比名次，进步/退步最多的几个' },
+  { key: 'quadrant',  name: '四象限 + 热力图', hint: '分层教学散点图、学生 × 科目热力图' },
+];
+
+function scCfgOpt(cur, val, label){
+  return '<option value="' + val + '"' + (cur === val ? ' selected' : '') + '>' + label + '</option>';
+}
+
+function scEditDisplay(){
+  api('/scores?action=config').then(function(j){
+    SC_CFG = j.config || {};
+    var c = SC_CFG;
+    var body =
+        '<div class="field"><label>整个「成绩分析」对学生开放吗</label>'
+      +   '<select id="cfAccess">'
+      +     scCfgOpt(c.access, 'off', '关闭 —— 学生打开只看到「暂未对外开放」')
+      +     scCfgOpt(c.access, 'published', '开放 —— 学生能看到已发布的考试')
+      +   '</select>'
+      +   '<p class="muted" style="font-size:.78rem;margin:6px 0 0">刚上手时建议先关着，等录完成绩、核对无误再开。</p></div>'
+
+      + '<div class="field"><label>默认排名口径</label>'
+      +   '<select id="cfBasis">'
+      +     scCfgOpt(c.rankBasis, 'graded', '总分（赋分）—— 化学 / 生物用赋分后的分')
+      +     scCfgOpt(c.rankBasis, 'raw', '总分（原始）')
+      +   '</select>'
+      +   '<p class="muted" style="font-size:.78rem;margin:6px 0 0">学生仍然可以在页面上自己切换。</p></div>'
+
+      + '<div class="field"><label>趋势默认看几次</label>'
+      +   '<select id="cfTrend">'
+      +     scCfgOpt(c.trendDefault, 'all', '全部（推荐 —— 你们一年才 6~8 次大考）')
+      +     scCfgOpt(c.trendDefault, '5', '近 5 次')
+      +     scCfgOpt(c.trendDefault, '3', '近 3 次')
+      +   '</select></div>'
+
+      + '<div class="field"><label>下面这些内容的「可见范围」</label>'
+      +   '<p class="muted" style="font-size:.78rem;margin:6px 0 8px">'
+      +     '这几块都是<b>给你看的分析</b>，落到学生手里容易变成公开处刑，所以默认全部隐藏。'
+      +     '你自己任何时候都能看到。</p>'
+      +   SC_DISPLAY_ITEMS.map(function(it){
+          return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)">'
+            + '<div style="flex:1;min-width:170px"><b style="font-size:.86rem">' + esc(it.name) + '</b>'
+            +   '<p class="muted" style="font-size:.76rem;margin:3px 0 0">' + esc(it.hint) + '</p></div>'
+            + '<select id="cf_' + it.key + '" style="min-width:170px">'
+            +   scCfgOpt(c[it.key], 'hide', '完全隐藏（只有我能看）')
+            +   scCfgOpt(c[it.key], 'self', '只给本人看自己那条')
+            +   scCfgOpt(c[it.key], 'all', '全班可见')
+            + '</select></div>';
+        }).join('')
+      + '</div>';
+
+    var box = openModal({
+      title: '对外展示',
+      sub: '控制哪些内容学生能看到。改动立刻生效，学生刷新即可。',
+      wide: true,
+      body: body,
+      actions: [
+        { label: '取消', cls: 'btn-secondary', onClick: closeModal },
+        { label: '保存', cls: 'btn', id: 'cfSave' },
+      ],
+      onMount: function(bx){
+        bx.querySelector('#cfSave').onclick = function(){
+          var patch = {
+            access: bx.querySelector('#cfAccess').value,
+            rankBasis: bx.querySelector('#cfBasis').value,
+            trendDefault: bx.querySelector('#cfTrend').value,
+          };
+          SC_DISPLAY_ITEMS.forEach(function(it){
+            patch[it.key] = bx.querySelector('#cf_' + it.key).value;
+          });
+          api('/scores?action=config-save', { method: 'POST', body: { config: patch } })
+            .then(function(){ closeModal(); toast('已保存，学生刷新就能看到新设置'); })
+            .catch(function(e){ toast('保存失败：' + (e.message || e), 'err'); });
+        };
+      },
+    });
+  }).catch(function(e){ toast('读不到配置：' + (e.message || e), 'err'); });
+}
+
+/* ============================================================
+   备份（KV）· R37
+   ------------------------------------------------------------
+   为什么要做：现在所有成绩、公告、作业都只有云端一份，
+   数据库出一次问题就全没了。备份**必须跨服务商**（数据在 Neon、
+   备份在 Cloudflare），也必须**不进公开仓库**（仓库是 public 的）。
+   ============================================================ */
+function scBackupDialog(){
+  var body =
+      '<div class="field"><label>现在做一次备份</label>'
+    +   '<p class="muted" style="font-size:.8rem;margin:4px 0 10px">'
+    +     '备份内容：成绩（考试 + 成绩 + 分享链接 + 配置）+ 内容数据（公告 / 作业 / 弹窗等）。'
+    +     '<b>不含任何密码</b>。</p>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +     '<button class="btn btn-sm" id="bkRun">立即备份到云端</button>'
+    +     '<button class="btn btn-sm btn-secondary" id="bkDl">下载一份到本地</button>'
+    +   '</div>'
+    +   '<div id="bkMsg" style="margin-top:10px"></div></div>'
+    + '<div class="field"><label>云端快照</label><div id="bkList" class="muted" style="font-size:.82rem">读取中…</div></div>'
+    + '<div class="field"><label>从快照还原（危险）</label>'
+    +   '<p class="muted" style="font-size:.8rem;margin:4px 0 8px">'
+    +     '还原会<b>覆盖</b>现有的考试与成绩。还原之前系统会自动先存一份「还原前的样子」，出错还能退回来。'
+    +     'users 表（账号）<b>不会</b>被改动。</p>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+    +     '<input id="bkKey" placeholder="要还原的快照标识（点上面对话框里的「还原」自动填）" style="flex:1;min-width:220px">'
+    +     '<input id="bkConfirm" placeholder="输入 RESTORE 确认" style="width:170px">'
+    +     '<button class="btn btn-sm btn-danger" id="bkRestore">还原</button>'
+    +   '</div></div>';
+
+  openModal({
+    title: '备份与还原',
+    sub: '建议每周点一次「立即备份」。开了定时任务后它会自己跑，这里主要用来手动兜底和演练还原。',
+    wide: true,
+    body: body,
+    actions: [{ label: '关闭', cls: 'btn-secondary', onClick: closeModal }],
+    onMount: function(bx){
+      var msg = bx.querySelector('#bkMsg');
+      var say = function(t, ok){
+        msg.innerHTML = '<div class="muted" style="font-size:.82rem;color:' + (ok ? 'var(--ok)' : 'var(--danger)') + '">' + esc(t) + '</div>';
+      };
+
+      bx.querySelector('#bkRun').onclick = function(){
+        say('正在打包…');
+        api('/scores?action=backup-run', { method:'POST' }).then(function(j){
+          if(j.stored){
+            say('已备份到云端：' + j.key + '（考试 ' + j.counts.exams + ' 次 / 成绩 ' + j.counts.examScores + ' 条）', true);
+            scBackupList(bx);
+          } else {
+            say((j.hint || '还没配置备份存储') + ' —— 已经帮你把快照准备好，点「下载一份到本地」就能存下来。');
+          }
+        }).catch(function(e){ say('备份失败：' + (e.message || e)); });
+      };
+
+      bx.querySelector('#bkDl').onclick = function(){
+        say('正在生成文件…');
+        fetch(API_BASE + '/api/scores?action=backup-export', {
+          headers: { Authorization: 'Bearer ' + STATE.token },
+        }).then(function(r){
+          if(!r.ok) throw new Error('HTTP ' + r.status);
+          return r.blob();
+        }).then(function(blob){
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'class-site-backup-' + new Date().toISOString().slice(0,10) + '.json';
+          document.body.appendChild(a); a.click();
+          setTimeout(function(){ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }, 1500);
+          say('已开始下载（请自己保存好，这份文件包含全班成绩，别外传）', true);
+        }).catch(function(e){ say('下载失败：' + (e.message || e)); });
+      };
+
+      bx.querySelector('#bkRestore').onclick = function(){
+        var key = (bx.querySelector('#bkKey').value || '').trim();
+        var cf = (bx.querySelector('#bkConfirm').value || '').trim();
+        if(!key){ say('先填要还原的快照标识'); return; }
+        if(cf !== 'RESTORE'){ say('请在确认框里原样输入 RESTORE'); return; }
+        if(!confirm('确定要还原吗？现在的考试与成绩会被覆盖。')) return;
+        say('正在还原…');
+        api('/scores?action=backup-restore', { method:'POST', body: { key: key, confirm: 'RESTORE' } })
+          .then(function(j){
+            say('还原完成：考试 ' + j.restored.exams + ' 次 / 成绩 ' + j.restored.examScores + ' 条'
+              + (j.beforeRestoreKey ? '（还原前那份存为 ' + j.beforeRestoreKey + '）' : ''), true);
+            scLoad();
+          }).catch(function(e){ say('还原失败：' + (e.message || e)); });
+      };
+
+      scBackupList(bx);
+    },
+  });
+}
+
+function scBackupList(bx){
+  var box = bx.querySelector('#bkList');
+  api('/scores?action=backup-list').then(function(j){
+    var items = j.items || [];
+    if(!items.length){ box.innerHTML = '云端还没有快照 —— 点上面的「立即备份到云端」建一份。'; return; }
+    box.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">'
+      + items.map(function(x){
+          return '<div style="display:flex;align-items:center;gap:9px;padding:6px 10px;border:1px solid var(--line);border-radius:9px">'
+            + '<span style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:.76rem">' + esc(x.key.replace('backup/','')) + '</span>'
+            + '<button class="btn btn-sm btn-secondary" data-bkdl="' + esc(x.key) + '">下载</button>'
+            + '<button class="btn btn-sm btn-secondary" data-bkrs="' + esc(x.key) + '">还原</button>'
+            + '</div>';
+        }).join('') + '</div>'
+      + '<p class="muted" style="font-size:.76rem;margin:8px 0 0">云端最多保留 ' + j.keep + ' 份，超出的会自动删最旧的。</p>';
+
+    Array.prototype.forEach.call(box.querySelectorAll('[data-bkdl]'), function(b){
+      b.onclick = function(){
+        var k = b.getAttribute('data-bkdl');
+        fetch(API_BASE + '/api/scores?action=backup-get&key=' + encodeURIComponent(k), {
+          headers: { Authorization: 'Bearer ' + STATE.token },
+        }).then(function(r){ return r.blob(); }).then(function(blob){
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url; a.download = k.replace('backup/', '');
+          document.body.appendChild(a); a.click();
+          setTimeout(function(){ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); }, 1500);
+        });
+      };
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-bkrs]'), function(b){
+      b.onclick = function(){ bx.querySelector('#bkKey').value = b.getAttribute('data-bkrs'); bx.querySelector('#bkConfirm').focus(); };
+    });
+  }).catch(function(e){
+    box.innerHTML = '<span style="color:var(--danger)">' + esc(e.message || '读不到快照列表') + '</span>'
+      + '<br><span class="muted" style="font-size:.78rem">（多半是还没在 Cloudflare 建 KV 命名空间 —— 见仓库文档「备份」一节）</span>';
+  });
+}
+
+function renderScores(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +  '<div style="flex:1;min-width:0"><b style="font-size:.92rem">成绩分析</b>'
+    +    '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +      '只录大型考试（全校 / 校际联考、月考）。导入或手填 → 核对 → 发布，同学才看得到。'
+    +    '</p></div>'
+    +  '<button class="btn btn-sm btn-secondary" id="scRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +  '<button class="btn btn-sm btn-secondary" id="scDisplay">对外展示</button>'
+    +  '<button class="btn btn-sm btn-secondary" id="scNames">姓名对照</button>'
+    +  '<button class="btn btn-sm btn-secondary" id="scBackup">备份</button>'
+    +  '<button class="btn btn-sm" id="scNew">' + svg('plus',14) + ' 新建考试</button>'
+    + '</div>'
+    + '<section class="panel"><div id="scBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('scRefresh').onclick = scLoad;
+  $('scNew').onclick = function(){ scEditExam(null); };
+  $('scDisplay').onclick = scEditDisplay;
+  $('scNames').onclick = scNameDialog;
+  $('scBackup').onclick = scBackupDialog;
+  scLoad();
+}
+
+/* ============================================================
+ * 姓名对照（v2.9.5）
+ * ------------------------------------------------------------
+ * 站主原话：「雷其桐就是雷博雅」。同一个人，成绩表里写的名字和站点账号
+ * 不一样，系统就认不出来 —— 他登录后看不到自己。
+ * 这里列出「成绩表里出现过、却没绑上账号」的姓名：选一下他是班里的谁，
+ * 对照关系就存到云端（score_config 的 nameMap），以后导入自动生效。
+ * 说明：**不动账号本身**。登录名是凭据（改名要连带改登录），
+ *       而且成绩表的名字将来还可能再变 —— 记一张表最省事也最安全。
+ * ============================================================ */
+var SC_NAME = { users: [], map: {}, unbound: [], bound: 0 };
+
+function scNameDialog(){
+  openModal({
+    title: '姓名对照',
+    sub: '成绩表里的名字 → 班里的账号（同一个人两种叫法）',
+    wide: true,
+    body: '<div id="scNameBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>',
+    foot: '<button class="btn btn-ghost" data-nm-close>关闭</button>'
+        + '<button class="btn btn-secondary" data-nm-reload>' + svg('refresh',14) + ' 重新检查</button>',
+    onMount: function(box){
+      box.querySelector('[data-nm-close]').onclick = closeModal;
+      box.querySelector('[data-nm-reload]').onclick = scNameLoad;
+      scNameLoad();
+    },
+  });
+}
+
+function scNameLoad(){
+  var el = $('scNameBody');
+  if(el) el.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/scores?action=unbound').then(function(j){
+    SC_NAME.users = j.users || [];
+    SC_NAME.map = j.nameMap || {};
+    SC_NAME.unbound = j.unbound || [];
+    SC_NAME.bound = j.boundCount || 0;
+    scNamePaint();
+  }).catch(function(e){
+    if(el) el.innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+  });
+}
+
+function scNamePaint(){
+  var el = $('scNameBody');
+  if(!el) return;
+  var mapKeys = Object.keys(SC_NAME.map || {});
+  var rows = SC_NAME.unbound || [];
+  /* 候选账号写成「姓名（账号）」—— 同名不同账号时也能分清 */
+  var opts = SC_NAME.users.map(function(u){
+    var label = u.name + (u.username && u.username !== u.name ? '（' + u.username + '）' : '');
+    return '<option value="' + attr(u.name) + '">' + esc(label) + '</option>';
+  }).join('');
+  var nameOpts = SC_NAME.users.map(function(u){
+    return '<option value="' + attr(u.name) + '">';
+  }).join('');
+
+  var html = '<datalist id="nmNames">' + nameOpts + '</datalist>'
+    + '<div class="alert info" style="margin-bottom:14px">'
+    + '成绩表里的姓名和站点账号对不上的会列在下面，按情况选一种：<br>'
+    + '<b>① 是同一个人、只是叫法不同</b>（比如改名了）→ 右边<b>选一个账号</b>点「关联」，'
+    + '记一条对照关系，以后导入自动认。<br>'
+    + '<b>② 名字压根打错了</b> → 在「改成正确姓名」里填对再点「改名」，'
+    + '直接把成绩行里的名字改掉（<b>不建对照关系</b>）；名字出现在多次考试的，还能「按考试分别改」。<br>'
+    + '两种做法都<b>不会改动账号本身</b>。'
+    + '</div>';
+
+  if(rows.length){
+    html += '<div style="font-weight:700;margin-bottom:8px">还没对上的姓名（' + rows.length + ' 个）</div>'
+      + '<div style="max-width:100%;overflow:auto"><table style="width:100%">'
+      + '<thead><tr><th>成绩表里的姓名</th><th>出现</th>'
+      +   '<th>① 关联到账号</th><th>② 改成正确姓名</th></tr></thead><tbody>'
+      + rows.map(function(x){
+          var exs = x.exams || [];
+          var exRows = exs.map(function(e){
+            return '<tr data-nm-exof="' + attr(x.name) + '" style="display:none">'
+              + '<td colspan="4" style="padding:4px 8px 4px 24px;background:#faf7f3">'
+              +   '<span class="muted" style="font-size:.78rem">' + esc(e.name) + '　' + esc(e.date || '')
+              +     '　' + e.rows + ' 行</span>'
+              +   ' <input data-nm-exinput="' + attr(x.name + '|' + e.id) + '" list="nmNames" '
+              +     'placeholder="正确姓名" style="width:120px;margin:0 6px;padding:3px 6px">'
+              +   ' <button class="btn btn-sm" data-nm-exgo="' + attr(x.name + '|' + e.id) + '">只改这次</button>'
+              + '</td></tr>';
+          }).join('');
+          return '<tr>'
+            + '<td><b>' + esc(x.name) + '</b>'
+            +   (x.alias ? '<span class="badge badge-gray" style="margin-left:6px">已配 ' + esc(x.alias) + '</span>' : '')
+            +   (exs.length > 1 ? '<div><a href="javascript:;" data-nm-toggle="' + attr(x.name) + '" '
+                  + 'style="font-size:.74rem;color:#c2410c">按考试分别改 ▾</a></div>' : '')
+            + '</td>'
+            + '<td class="muted">' + x.count + ' 次考试</td>'
+            + '<td><select data-nm-pick="' + attr(x.name) + '" style="max-width:180px">'
+            +   '<option value="">— 选择账号 —</option>' + opts + '</select>'
+            +   ' <button class="btn btn-sm" data-nm-bind="' + attr(x.name) + '">关联</button></td>'
+            + '<td><input data-nm-rename="' + attr(x.name) + '" list="nmNames" '
+            +   'placeholder="正确姓名" style="width:120px;padding:3px 6px">'
+            +   ' <button class="btn btn-sm btn-secondary" data-nm-rn-go="' + attr(x.name) + '">改名</button></td>'
+            + '</tr>' + exRows;
+        }).join('')
+      + '</tbody></table></div>';
+  } else {
+    html += '<div class="alert ok" style="margin-bottom:14px">'
+      + '成绩表里的姓名全都对得上账号了（已对上 ' + SC_NAME.bound + ' 个），没有需要处理的。</div>';
+  }
+
+  if(mapKeys.length){
+    html += '<div style="font-weight:700;margin:16px 0 8px">已配好的对照（' + mapKeys.length + ' 条）</div>'
+      + '<div style="max-width:100%;overflow:auto"><table style="width:100%">'
+      + '<thead><tr><th>成绩表里的姓名</th><th>认作</th><th></th></tr></thead><tbody>'
+      + mapKeys.map(function(k){
+          return '<tr><td>' + esc(k) + '</td><td><b>' + esc(SC_NAME.map[k]) + '</b></td>'
+            + '<td><button class="btn btn-sm btn-ghost" data-nm-unbind="' + attr(k) + '" style="color:#b3261e">取消关联</button></td></tr>';
+        }).join('')
+      + '</tbody></table></div>'
+      + '<p class="muted" style="font-size:.8rem;margin:8px 0 0">取消关联后，这些成绩行会解绑账号（成绩数据不动，只是他个人页看不到自己的那部分）。'
+      + '如果其实是名字打错了，用上面的「② 改名」更合适 —— 改完就一劳永逸。</p>';
+  }
+
+  el.innerHTML = html;
+
+  var each = Array.prototype.forEach;
+  var pickOf = function(name, attrName){
+    var box = null;
+    each.call(el.querySelectorAll('[' + attrName + ']'), function(x){
+      if(x.getAttribute(attrName) === name) box = x;
+    });
+    return box;
+  };
+
+  each.call(el.querySelectorAll('[data-nm-bind]'), function(b){
+    b.onclick = function(){
+      var name = b.getAttribute('data-nm-bind');
+      var sel = pickOf(name, 'data-nm-pick');
+      var target = sel ? sel.value : '';
+      if(!target){ toast('先给他选一个账号', 'err'); return; }
+      scNameBind(name, target);
+    };
+  });
+  each.call(el.querySelectorAll('[data-nm-unbind]'), function(b){
+    b.onclick = function(){ scNameBind(b.getAttribute('data-nm-unbind'), ''); };
+  });
+
+  /* ② 直接改名：全部（这个名字出现在所有考试里） */
+  each.call(el.querySelectorAll('[data-nm-rn-go]'), function(b){
+    b.onclick = function(){
+      var name = b.getAttribute('data-nm-rn-go');
+      var inp = pickOf(name, 'data-nm-rename');
+      var to = inp ? String(inp.value || '').trim() : '';
+      if(!to){ toast('先填要改成的正确姓名', 'err'); return; }
+      if(to === name){ toast('改前和改后是同一个名字', 'err'); return; }
+      scNameRename(name, to, 0);
+    };
+  });
+
+  /* 「按考试分别改」展开/收起 */
+  each.call(el.querySelectorAll('[data-nm-toggle]'), function(a){
+    a.onclick = function(){
+      var name = a.getAttribute('data-nm-toggle');
+      var open = a.getAttribute('data-open') === '1';
+      a.setAttribute('data-open', open ? '0' : '1');
+      a.textContent = open ? '按考试分别改 ▾' : '收起 ▴';
+      each.call(el.querySelectorAll('[data-nm-exof]'), function(tr){
+        if(tr.getAttribute('data-nm-exof') === name) tr.style.display = open ? 'none' : 'table-row';
+      });
+    };
+  });
+  /* ② 直接改名：只改某一次 */
+  each.call(el.querySelectorAll('[data-nm-exgo]'), function(b){
+    b.onclick = function(){
+      var key = b.getAttribute('data-nm-exgo');
+      var k = key.split('|');
+      var inp = pickOf(key, 'data-nm-exinput');
+      var to = inp ? String(inp.value || '').trim() : '';
+      if(!to){ toast('先填要改成的正确姓名', 'err'); return; }
+      if(to === k[0]){ toast('改前和改后是同一个名字', 'err'); return; }
+      scNameRename(k[0], to, Number(k[1] || 0));
+    };
+  });
+}
+
+/* 直接改成绩行里的姓名（不写别名对照）。examId=0 → 这个名字出现的所有考试都改 */
+function scNameRename(from, to, examId){
+  api('/scores?action=name-rename', { method:'POST', body:{ from: from, to: to, exam: examId || 0 } })
+    .then(function(j){
+      if(!j || !j.ok){ toast('改名失败：' + ((j && j.error) || '未知错误'), 'err', 4200); return; }
+      var msg = '已把「' + from + '」改成「' + to + '」，共 ' + (j.renamed || 0) + ' 行';
+      if(!j.bound) msg += '（新姓名没对上账号，可能又打错了）';
+      var bad = (j.conflicts || []).length;
+      if(bad) msg += '；有 ' + bad + ' 次考试里本来就有「' + to + '」，为免重复没动，请到改分表核对';
+      toast(msg, bad || !j.bound ? 'err' : 'ok', 5600);
+      scNameLoad();
+    })
+    .catch(function(e){ toast('改名失败：' + (e.message || e), 'err', 4200); });
+}
+
+function scNameBind(name, target){
+  var btn = null;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-nm-bind]'), function(b){
+    if(b.getAttribute('data-nm-bind') === name) btn = b;
+  });
+  if(btn){ btn.disabled = true; btn.textContent = '处理中…'; }
+  api('/scores?action=name-bind', { method:'POST', body:{ name: name, target: target } })
+    .then(function(j){
+      toast(target
+        ? ('已把「' + name + '」关联到「' + target + '」，影响 ' + (j.changed || 0) + ' 行成绩')
+        : ('已取消「' + name + '」的关联（影响 ' + (j.changed || 0) + ' 行）'), 'ok', 4200);
+      scNameLoad();
+    })
+    .catch(function(e){
+      if(btn){ btn.disabled = false; btn.textContent = '关联'; }
+      toast('保存失败：' + (e.message || e), 'err', 4200);
+    });
+}
+
+function scLoad(){
+  $('scBody').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  var jobs = [ api('/scores?action=list') ];
+  if(!SC_STATE.meta) jobs.push(api('/scores?action=meta'));
+
+  Promise.all(jobs).then(function(r){
+    SC_STATE.exams = (r[0] && r[0].exams) || [];
+    if(r[1]) SC_STATE.meta = r[1];
+    scPaintExams();
+  }).catch(function(e){
+    $('scBody').innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+  });
+}
+
+/* ---------------- 考试列表 ---------------- */
+function scPaintExams(){
+  var list = SC_STATE.exams;
+  if(!list.length){
+    $('scBody').innerHTML = '<div class="empty">'
+      + '<div style="font-size:2rem;margin-bottom:10px">📊</div>'
+      + '还没有任何考试。<br>点右上角「新建考试」建一次（填名称、时间、分数线），'
+      + '再「导入成绩」或直接手填。'
+      + '</div>';
+    return;
+  }
+
+  $('scBody').innerHTML = list.map(scExamCard).join('');
+  $('scBody').onclick = function(ev){
+    var b = ev.target.closest ? ev.target.closest('[data-sc-act]') : null;
+    if(!b) return;
+    var id = Number(b.getAttribute('data-sc-id'));
+    var act = b.getAttribute('data-sc-act');
+    if(act === 'edit')        scEditExam(id);
+    else if(act === 'import') scImport(id);
+    else if(act === 'rows')   scEditRows(id);
+    else if(act === 'export') scExportDialog(id);
+    else if(act === 'pub')    scPublish(id, true);
+    else if(act === 'unpub')  scPublish(id, false);
+    else if(act === 'del')    scDeleteExam(id);
+  };
+}
+
+function scExamCard(e){
+  var pub = e.status === 'published';
+  var cuts = (e.cutlines || []).filter(function(c){ return c.score != null; });
+  var n = e.rowCount || 0;
+  var visN = (e.visibleTo && e.visibleTo.length) ? e.visibleTo.length : 0;
+
+  return '<section class="panel" style="margin-bottom:12px;padding:14px 16px">'
+    + '<div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">'
+    +   '<div style="flex:1;min-width:200px">'
+    +     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+    +       '<b style="font-size:.95rem">' + esc(e.name) + '</b>'
+    +       (pub ? '<span class="badge badge-green">已发布' + (visN ? ' · 指定 ' + visN + ' 人' : ' · 全体') + '</span>'
+              : '<span class="badge badge-gray">草稿（同学看不到）</span>')
+    +       (n ? '' : '<span class="badge badge-gray">还没有成绩</span>')
+    +     '</div>'
+    +     '<p class="muted" style="margin:5px 0 0;font-size:.8rem">'
+    +       esc(scDateTxt(e)) + (e.type ? ' · ' + esc(e.type) : '') + ' · ' + n + ' 人'
+    +       (cuts.length ? '<br>分数线：' + cuts.map(function(c){
+              return esc(c.label) + ' ' + c.score;
+            }).join(' ／ ') : '<br>分数线：本次未填')
+    +     '</p>'
+    +     (e.note ? '<p class="muted" style="margin:4px 0 0;font-size:.78rem">备注：' + esc(e.note) + '</p>' : '')
+    +   '</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +     '<button class="btn btn-sm btn-secondary" data-sc-act="edit" data-sc-id="' + e.id + '">考试信息</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-sc-act="import" data-sc-id="' + e.id + '">导入成绩</button>'
+    +     '<button class="btn btn-sm" data-sc-act="rows" data-sc-id="' + e.id + '">改分 / 查看</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-sc-act="export" data-sc-id="' + e.id + '">导出</button>'
+    +     (pub
+        ? '<button class="btn btn-sm btn-secondary" data-sc-act="unpub" data-sc-id="' + e.id + '">撤回</button>'
+        : '<button class="btn btn-sm btn-green" data-sc-act="pub" data-sc-id="' + e.id + '">发布</button>')
+    +     '<button class="btn btn-sm btn-danger" data-sc-act="del" data-sc-id="' + e.id + '">删除</button>'
+    +   '</div>'
+    + '</div></section>';
+}
+
+/* ---------------- 发布 / 删除 ---------------- */
+/* 发布（2026-10-17 站主要求）：先选「全体 / 指定同学」，再发。 */
+function scPublish(id, publish){
+  if(!publish){
+    if(!confirm('撤回后，同学立刻看不到这次考试（数据仍在，随时能再发布）。\n\n确认撤回？')) return;
+    return scDoPublish(id, false, null);
+  }
+  scPublishDialog(id);
+}
+
+function scDoPublish(id, publish, visibleTo){
+  api('/scores?action=exam-publish', { method:'POST', body: { id: id, publish: !!publish, visibleTo: visibleTo || undefined } })
+    .then(function(){ toast(publish ? '已发布' : '已撤回', 'ok'); scLoad(); })
+    .catch(function(e){ toast('操作失败：' + e.message, 'err', 4200); });
+}
+
+function scPublishDialog(id){
+  var e = scFindExam(id);
+  api('/scores?action=unbound').then(function(j){
+    var users = (j && j.users) || [];
+    if(!users.length){ toast('还没有可选的用户，先在「成员与档案」里建好账号', 'err', 4200); return; }
+    var list = users.map(function(x){
+      return '<label style="display:inline-block;min-width:104px;margin:3px 8px 3px 0;font-size:.82rem">'
+        + '<input type="checkbox" class="sc-pub-ck" value="' + Number(x.id) + '"> '
+        + esc(x.name || x.username || '') + '</label>';
+    }).join('');
+    openModal({
+      title: '发布成绩 · 选择谁可见',
+      sub: '「' + (e ? e.name : id) + '」发布给：全体同学，或只给指定同学。',
+      wide: true,
+      body: '<div class="sc-pub-mode">'
+        +   '<label style="display:block;font-size:.86rem;color:#57534e"><input type="radio" name="scPubMode" value="all" checked> 全体同学（本班登录都能看）</label>'
+        +   '<label style="display:block;margin-top:8px;font-size:.86rem;color:#57534e"><input type="radio" name="scPubMode" value="some"> 只给指定同学</label>'
+        + '</div>'
+        + '<div id="scPubList" style="display:none;margin-top:10px;max-height:320px;overflow:auto;border:1px solid #efe6da;border-radius:8px;padding:8px 10px">' + list + '</div>'
+        + '<div class="alert info" style="margin-top:10px">指定发布时，名单外的人登录看不到这次考试（管理员不受限）。</div>',
+      foot: '<button class="btn btn-secondary" id="scPubCancel">取消</button>'
+          + '<button class="btn" id="scPubGo">发布</button>',
+      onMount: function(box){
+        var listBox = box.querySelector('#scPubList');
+        box.querySelector('#scPubCancel').onclick = closeModal;
+        Array.prototype.forEach.call(box.querySelectorAll('input[name="scPubMode"]'), function(r){
+          r.onchange = function(){ listBox.style.display = (r.value === 'some' && r.checked) ? 'block' : 'none'; };
+        });
+        box.querySelector('#scPubGo').onclick = function(){
+          var mode = (box.querySelector('input[name="scPubMode"]:checked') || {}).value || 'all';
+          var ids = [];
+          if(mode === 'some'){
+            Array.prototype.forEach.call(box.querySelectorAll('.sc-pub-ck'), function(c){ if(c.checked) ids.push(Number(c.value)); });
+            if(!ids.length){ toast('请至少勾一位同学，或改选「全体」', 'err'); return; }
+          }
+          closeModal();
+          scDoPublish(id, true, mode === 'some' ? ids : null);
+        };
+      },
+    });
+  }).catch(function(err){ toast('读取用户名单失败：' + err.message, 'err', 4500); });
+}
+
+function scDeleteExam(id){
+  var e = scFindExam(id);
+  var n = e ? (e.rowCount || 0) : 0;
+  if(!confirm('删除「' + (e ? e.name : id) + '」？\n\n这会连它下面 ' + n + ' 条成绩一起删掉，无法恢复。')) return;
+  api('/scores?action=exam-delete', { method:'POST', body: { id: id } })
+    .then(function(){ toast('已删除', 'ok'); scLoad(); })
+    .catch(function(e2){ toast('删除失败：' + e2.message, 'err', 4000); });
+}
+
+/* ---------------- 成绩导出（Excel / PDF · 2026-10-17 站主要求） ----------------
+   内容：考试名称/日期/分数线 + 各科分数 + 总分 + 班排 + 年级排名 + 联考排名。
+   班排当场按赋分口径总分排序算（系统不存班排）。 */
+function scExportPrep(j){
+  var e = j.exam || {}, rows = (j.rows || []).slice(), subs = e.subjects || [];
+  var pick = function(r, sub){
+    var v = r.s && r.s[sub.key];
+    if(!v) return null;
+    var x = (sub.graded && v.assigned != null) ? v.assigned : v.raw;
+    return x == null ? null : Number(x);
+  };
+  rows.forEach(function(r){
+    var t = 0, any = false;
+    subs.forEach(function(sub){ var v = pick(r, sub); if(v != null){ t += v; any = true; } });
+    r._total = any ? t : null;
+  });
+  var sorted = rows.filter(function(r){ return r._total != null; }).sort(function(a, b){ return b._total - a._total; });
+  var rk = 0, prev = null;
+  sorted.forEach(function(r, i){ if(prev === null || r._total !== prev){ rk = i + 1; prev = r._total; } r._rank = rk; });
+  return { e: e, rows: rows, subs: subs, pick: pick, cuts: (e.cutlines || []).filter(function(c){ return c.score != null; }) };
+}
+function scExportMeta(e, cuts){
+  var l = [];
+  var d = (e.date || '') + (e.endDate && e.endDate !== e.date ? ' ~ ' + e.endDate : '');
+  l.push((e.type || '考试') + '　' + d);
+  if(cuts.length) l.push('分数线：' + cuts.map(function(c){ return c.label + ' ' + c.score; }).join('　'));
+  return l;
+}
+function scExportDialog(id){
+  var e = scFindExam(id);
+  openModal({
+    title: '导出成绩 · ' + (e ? e.name : id),
+    sub: '含考试名称 / 日期、分数线、各科分数、总分、班排、年级排名、联考排名。',
+    body: '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+      + '<button class="btn" id="exXlsx">导出 Excel（.xlsx）</button>'
+      + '<button class="btn btn-secondary" id="exPdf">导出 PDF（打印后另存为 PDF）</button></div>'
+      + '<p class="muted" style="margin-top:10px;font-size:.8rem">PDF：会打开打印窗口，在「目标打印机」里选「另存为 PDF」即可。</p>',
+    foot: '<button class="btn btn-secondary" onclick="closeModal()">关闭</button>',
+    onMount: function(box){
+      box.querySelector('#exXlsx').onclick = function(){ closeModal(); scExportXlsx(id); };
+      box.querySelector('#exPdf').onclick = function(){ closeModal(); scExportPdf(id); };
+    },
+  });
+}
+function scExportXlsx(id){
+  api('/scores?action=board&exam=' + id).then(function(j){
+    loadXLSX().then(function(XLSX){
+      if(!XLSX){ toast('表格组件加载失败（CDN 不可达），请稍后重试', 'err', 4000); return; }
+      var P = scExportPrep(j), e = P.e, subs = P.subs;
+      var aoa = [[e.name + '　成绩表']];
+      scExportMeta(e, P.cuts).forEach(function(x){ aoa.push([x]); });
+      aoa.push([]);
+      var head = ['班排', '姓名', '学号'].concat(subs.map(function(s){ return s.name + (s.graded ? '（赋分）' : ''); }))
+        .concat(['总分（赋分）', '年级排名', '联考排名']);
+      aoa.push(head);
+      P.rows.slice().sort(function(a, b){ return (a._rank || 9999) - (b._rank || 9999); }).forEach(function(r){
+        var line = [r._rank == null ? '' : r._rank, r.name || '', r.no || ''];
+        subs.forEach(function(s){ var v = P.pick(r, s); line.push(v == null ? '' : v); });
+        line.push(r._total == null ? '' : Math.round(r._total * 10) / 10,
+                  r.schoolRank == null ? '' : r.schoolRank,
+                  r.leagueRank == null ? '' : r.leagueRank);
+        aoa.push(line);
+      });
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: head.length - 1 } }];
+      ws['!cols'] = head.map(function(_, i){ return { wch: i < 3 ? 10 : 9 }; });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '成绩表');
+      XLSX.writeFile(wb, String(e.name || '成绩') + '_成绩.xlsx');
+      toast('已导出 Excel', 'ok', 3000);
+    });
+  }).catch(function(err){ toast('导出失败：' + err.message, 'err', 4200); });
+}
+function scExportPdf(id){
+  api('/scores?action=board&exam=' + id).then(function(j){
+    var P = scExportPrep(j), e = P.e, subs = P.subs;
+    var head = ['班排', '姓名', '学号'].concat(subs.map(function(s){ return esc(s.name) + (s.graded ? '<br><span style="font-size:9px;color:#888">赋分</span>' : ''); }))
+      .concat(['总分', '年级排名', '联考排名']);
+    var trs = P.rows.slice().sort(function(a, b){ return (a._rank || 9999) - (b._rank || 9999); }).map(function(r){
+      return '<tr><td>' + (r._rank == null ? '' : r._rank) + '</td><td>' + esc(r.name || '') + '</td><td>' + esc(r.no || '') + '</td>'
+        + subs.map(function(s){ var v = P.pick(r, s); return '<td>' + (v == null ? '—' : v) + '</td>'; }).join('')
+        + '<td><b>' + (r._total == null ? '—' : (Math.round(r._total * 10) / 10)) + '</b></td>'
+        + '<td>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</td>'
+        + '<td>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</td></tr>';
+    }).join('');
+    var meta = scExportMeta(e, P.cuts).map(function(x){ return '<div>' + esc(x) + '</div>'; }).join('');
+    var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(e.name || '成绩') + ' 成绩表</title>'
+      + '<style>body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#222;padding:16px}'
+      + 'h1{font-size:18px;margin:0 0 6px}.meta{font-size:12px;color:#555;margin-bottom:10px;line-height:1.7}'
+      + 'table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #bbb;padding:4px 5px;text-align:center}'
+      + 'th{background:#f0f0f0}@media print{@page{size:A4 landscape;margin:10mm}}</style></head><body>'
+      + '<h1>' + esc(e.name || '成绩') + '　成绩表</h1><div class="meta">' + meta + '</div>'
+      + '<table><thead><tr>' + head.map(function(h){ return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + trs + '</tbody></table>'
+      + '<div style="font-size:11px;color:#777;margin-top:10px">共 ' + P.rows.length + ' 人　·　总分按赋分口径累加　·　化学/生物为赋分</div>'
+      + '</body></html>';
+    var w = window.open('', '_blank');
+    if(!w){ toast('浏览器拦截了新窗口，请允许弹窗后重试', 'err', 4200); return; }
+    w.document.write(html); w.document.close();
+    w.focus();
+    setTimeout(function(){ try { w.print(); } catch(e){} }, 350);
+  }).catch(function(err){ toast('导出失败：' + err.message, 'err', 4200); });
+}
+
+function scFindExam(id){
+  for(var i = 0; i < SC_STATE.exams.length; i++) if(SC_STATE.exams[i].id === id) return SC_STATE.exams[i];
+  return null;
+}
+
+/* ============================================================================
+ * 新建 / 编辑考试
+ * ========================================================================= */
+function scEditExam(id){
+  var e = id ? scFindExam(id) : null;
+  var meta = SC_STATE.meta || {};
+  var subs = (e && e.subjects && e.subjects.length ? e.subjects : (meta.defaultSubjects || []))
+    .map(function(s){ return { key:s.key, name:s.name, full:s.full, graded:!!s.graded, on:true }; });
+  /* 兜底：后端 meta 没回来时也要能用 */
+  if(!subs.length) subs = [
+    { key:'chinese', name:'语文', full:150, graded:false, on:true },
+    { key:'math', name:'数学', full:150, graded:false, on:true },
+    { key:'english', name:'英语', full:150, graded:false, on:true },
+    { key:'physics', name:'物理', full:100, graded:false, on:true },
+    { key:'chemistry', name:'化学', full:100, graded:true, on:true },
+    { key:'biology', name:'生物', full:100, graded:true, on:true },
+  ];
+  var cuts = (e && e.cutlines && e.cutlines.length ? e.cutlines : (meta.defaultCutlines || []))
+    .map(function(c){ return { key:c.key, label:c.label, score:c.score, color:c.color }; });
+  if(!cuts.length) cuts = [
+    { key:'special', label:'特控线', score:null, color:'#b45309' },
+    { key:'undergrad', label:'本科线', score:null, color:'#c0392b' },
+    { key:'line600', label:'600 分线', score:600, color:'#7c3aed' },
+  ];
+  var types = meta.examTypes || ['全校联考','校际联考','月考','期中','期末','其他'];
+  var d = new Date();
+  var today = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+
+  openModal({
+    title: e ? '编辑考试信息' : '新建考试',
+    sub: '名称和时间必填，其余可以先空着，之后随时改',
+    wide: true,
+    body:
+        '<div class="field"><label>考试名称 <span style="color:var(--danger)">*</span></label>'
+      +   '<input id="scName" maxlength="60" placeholder="例：高二上·第一次段考" value="' + esc(e ? e.name : '') + '"></div>'
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      +   '<div class="field" style="flex:1;min-width:140px"><label>考试开始 <span style="color:var(--danger)">*</span></label>'
+      +     '<input id="scDate" type="date" value="' + esc(e ? e.date : today) + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:140px"><label>结束日期（不跨天就留空）</label>'
+      +     '<input id="scEndDate" type="date" value="' + esc(e && e.endDate ? e.endDate : '') + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:140px"><label>考试类型</label>'
+      +     '<select id="scType">' + types.map(function(t){
+              return '<option value="' + esc(t) + '"' + (e && e.type === t ? ' selected' : '') + '>' + esc(t) + '</option>';
+            }).join('') + '</select></div>'
+      + '</div>'
+      + '<div class="field"><label>科目与满分（勾掉本次没考的科目；化学 / 生物按你们的规则默认赋分）</label>'
+      +   '<div id="scSubjBox" style="margin-top:6px">'
+      +     subs.map(scSubjRow).join('')
+      +   '</div></div>'
+      + '<div class="field"><label>分数线（学校没公布就留空，留空=不画也不统计）</label>'
+      +   '<div id="scCutBox" style="margin-top:6px">' + cuts.map(scCutRow).join('') + '</div>'
+      +   '<button type="button" class="btn btn-sm btn-secondary" id="scCutAdd" style="margin-top:6px">'
+      +     svg('plus',13) + ' 再加一条线</button></div>'
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      +   '<div class="field" style="flex:1;min-width:150px"><label>年级人数（可空）</label>'
+      +     '<input id="scGradeN" type="number" min="1" placeholder="例：760" value="'
+      +       (e && e.gradeRef && e.gradeRef.students != null ? e.gradeRef.students : '') + '"></div>'
+      +   '<div class="field" style="flex:1;min-width:150px"><label>年级均分（可空）</label>'
+      +     '<input id="scGradeAvg" type="number" step="0.1" placeholder="例：480" value="'
+      +       (e && e.gradeRef && e.gradeRef.avgTotal != null ? e.gradeRef.avgTotal : '') + '"></div>'
+      + '</div>'
+      + '<div class="field"><label>备注（可空）</label>'
+      +   '<input id="scNote" maxlength="200" placeholder="例：本次生物未考" value="' + esc(e ? e.note : '') + '"></div>'
+      + '<div class="alert info" style="margin-top:4px">填了年级人数就能算「你在年级前百分之几」；'
+      +   '填了年级均分还能看「本班 vs 年级」的变化。都没有就留空，不影响别的功能。</div>',
+    foot: '<button class="btn btn-secondary" id="scCancel">取消</button>'
+        + '<button class="btn" id="scSave">' + (e ? '保存修改' : '创建考试') + '</button>',
+    onMount: function(box){
+      box.querySelector('#scCancel').onclick = closeModal;
+      box.querySelector('#scCutAdd').onclick = function(){
+        var arr = cuts.concat([{ key:'line' + Date.now(), label:'', score:null, color:'#6b7280' }]);
+        cuts = arr;
+        box.querySelector('#scCutBox').innerHTML = cuts.map(scCutRow).join('');
+      };
+      box.querySelector('#scSave').onclick = function(){
+        var payload = scCollectExam(box);
+        if(!payload) return;
+        var btn = box.querySelector('#scSave');
+        btn.disabled = true;
+        api('/scores?action=exam-save', { method:'POST', body: Object.assign({ id: e ? e.id : 0 }, payload) })
+          .then(function(j){
+            toast(e ? '已保存' : '考试已创建', 'ok');
+            closeModal();
+            if(!e && j && j.exam){
+              /* 新建后直接问要不要导入 */
+              SC_STATE.meta = null;
+              scLoad();
+              setTimeout(function(){
+                if(confirm('考试已创建。现在导入这次考试的成绩表吗？')) scImport(j.exam.id);
+              }, 260);
+            } else {
+              scLoad();
+            }
+          })
+          .catch(function(err){ btn.disabled = false; toast('保存失败：' + err.message, 'err', 4200); });
+      };
+      /* 分数线删除用事件委托（行是动态生成的） */
+      box.querySelector('#scCutBox').onclick = function(ev){
+        var b = ev.target.closest ? ev.target.closest('[data-cut-del]') : null;
+        if(!b) return;
+        var i = Number(b.getAttribute('data-cut-del'));
+        cuts.splice(i, 1);
+        box.querySelector('#scCutBox').innerHTML = cuts.map(scCutRow).join('');
+      };
+    },
+  });
+}
+
+function scSubjRow(s){
+  return '<div class="sc-subj" data-key="' + esc(s.key) + '" data-name="' + esc(s.name) + '" '
+    + 'style="display:flex;gap:10px;align-items:center;margin-bottom:8px">'
+    + '<label style="display:flex;align-items:center;gap:6px;min-width:86px;font-weight:700">'
+    +   '<input type="checkbox" data-f="on"' + (s.on !== false ? ' checked' : '') + '>' + esc(s.name) + '</label>'
+    + '<input class="inp" style="width:90px" type="number" min="1" max="1000" data-f="full" value="' + (s.full || 100) + '">'
+    + '<span class="muted" style="font-size:.78rem">满分</span>'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:.82rem">'
+    +   '<input type="checkbox" data-f="graded"' + (s.graded ? ' checked' : '') + '>赋分</label>'
+    + '</div>';
+}
+
+function scCutRow(c, i){
+  return '<div class="sc-cut" data-i="' + i + '" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'
+    + '<input class="inp" style="width:120px" data-f="label" maxlength="20" placeholder="线名（如 特控线）" value="' + esc(c.label || '') + '">'
+    + '<input class="inp" style="width:100px" type="number" data-f="score" placeholder="分数（可空）" value="' + (c.score == null ? '' : c.score) + '">'
+    + '<input class="inp" style="width:52px;padding:6px" type="color" data-f="color" value="' + esc(c.color || '#b45309') + '">'
+    + '<button type="button" class="btn btn-sm btn-secondary" data-cut-del="' + i + '">删</button>'
+    + '</div>';
+}
+
+/* 收集表单 → 提交体；校验不过返回 null 并提示 */
+function scCollectExam(box){
+  var name = (box.querySelector('#scName').value || '').trim();
+  if(!name){ toast('请填考试名称', 'err'); return null; }
+  var date = (box.querySelector('#scDate').value || '').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ toast('请选考试开始日期', 'err'); return null; }
+  /* 跨天考试：结束日期可空；填了就不能早于开始日 */
+  var endDate = (box.querySelector('#scEndDate').value || '').trim();
+  if(endDate){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(endDate)){ toast('结束日期格式不对', 'err'); return null; }
+    if(endDate < date){ toast('结束日期不能早于开始日期', 'err'); return null; }
+    if(endDate === date) endDate = '';
+  }
+
+  var subjects = [];
+  Array.prototype.forEach.call(box.querySelectorAll('.sc-subj'), function(el){
+    if(!el.querySelector('[data-f="on"]').checked) return;
+    var full = Number(el.querySelector('[data-f="full"]').value);
+    subjects.push({
+      key: el.getAttribute('data-key'),
+      name: el.getAttribute('data-name'),
+      full: Number.isFinite(full) && full > 0 ? full : 100,
+      graded: el.querySelector('[data-f="graded"]').checked,
+    });
+  });
+  if(!subjects.length){ toast('至少要保留一科', 'err'); return null; }
+
+  var cutlines = [];
+  Array.prototype.forEach.call(box.querySelectorAll('.sc-cut'), function(el){
+    var label = (el.querySelector('[data-f="label"]').value || '').trim();
+    if(!label) return;
+    var sv = el.querySelector('[data-f="score"]').value;
+    cutlines.push({
+      key: 'c' + cutlines.length,
+      label: label,
+      score: sv === '' ? null : Number(sv),
+      color: el.querySelector('[data-f="color"]').value || '#b45309',
+    });
+  });
+
+  var gn = box.querySelector('#scGradeN').value;
+  var ga = box.querySelector('#scGradeAvg').value;
+  var gradeRef = null;
+  if(gn !== '' || ga !== ''){
+    gradeRef = {
+      students: gn === '' ? null : Number(gn),
+      avgTotal: ga === '' ? null : Number(ga),
+      avgSubject: {},
+    };
+  }
+
+  return {
+    name: name,
+    exam_date: date,
+    exam_end_date: endDate || '',
+    exam_type: box.querySelector('#scType').value || '',
+    subjects: subjects,
+    cutlines: cutlines,
+    grade_ref: gradeRef,
+    note: (box.querySelector('#scNote').value || '').trim(),
+  };
+}
+
+/* ============================================================================
+ * 导入成绩（浏览器解析 Excel → 预览校验 → 提交 JSON）
+ * ----------------------------------------------------------------------------
+ * 为什么不直接上传文件：后端 Worker 的入口为了让 body 可重复读，
+ * 用的是 text() 预读，**收不了 multipart**。所以文件在前端解析成 JSON 再发，
+ * 后端只认 JSON —— 这条路同时也让"预览校验"成为可能。
+ * ========================================================================= */
+/**
+ * 生成这次考试的导入模版（.xlsx）。
+ * ----------------------------------------------------------------------------
+ * 列结构 = 站主手头那张模版的形状：第 1 行大类（合并单元格）、第 2 行子字段、
+ * 第 3 行起填数据。科目由**本次考试的配置**生成 —— 选了赋分科目的自动多两列
+ * （赋分 + 该科排名），所以「对应的模版」永远和考试设置对得上。
+ * 生成后解析器认的就是它（见 scParseTwoRow），不用来回试格式。
+ */
+function scTemplateXlsx(e){
+  loadXLSX().then(function(XLSX){
+    if(!XLSX){ toast('表格组件加载失败（三个 CDN 都不可达），请检查网络后重试', 'err', 4200); return; }
+    var subs = e.subjects || [];
+    var r0 = ['基本信息', ''];
+    var r1 = ['考号/学号', '姓名'];
+    var merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+    var c = 2;
+
+    /* 总分组：赋分前 / 赋分后两组，每组各带年级排名 + 联考排名。
+       （2026-10-17 站主要求：总分分赋分前与赋分后，两种都要有年级/联考排名；
+         班级排名由系统按分数当场算，模版里不填。）
+       总分本身也不用填 —— 系统按各科分数算得出来。 */
+    var group = function(name, cols){
+      r0.push(name);
+      for(var gi = 1; gi < cols.length; gi++) r0.push('');
+      cols.forEach(function(x){ r1.push(x); });
+      merges.push({ s: { r: 0, c: c }, e: { r: 0, c: c + cols.length - 1 } });
+      c += cols.length;
+    };
+    group('总分（赋分前）', ['年级排名', '联考排名']);
+    group('总分（赋分后）', ['年级排名', '联考排名']);
+
+    /* 各科：每个分数都要对应一个年级排名。
+       赋分科目（化学 / 生物）四列：原始分 + 原始分年级排名 + 赋分 + 赋分年级排名；
+       其余两列：分数 + 年级排名。 */
+    subs.forEach(function(s){
+      group(s.name, s.graded
+        ? ['原始分', '年级排名', '赋分', '年级排名']
+        : ['分数', '年级排名']);
+    });
+
+    /* 分数线参考列：只作填写时的参照，系统不读（要设分数线请到考试设置里填） */
+    ['600线', '特控线', '本科线'].forEach(function(nm){ r0.push(nm); r1.push(''); });
+
+    var ws = XLSX.utils.aoa_to_sheet([r0, r1]);
+    ws['!merges'] = merges;
+    ws['!cols'] = r0.map(function(_, i){ return { wch: i < 2 ? 12 : 10 }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, String(e.name || '成绩表').slice(0, 25) || '成绩表');
+    XLSX.writeFile(wb, String(e.name || '成绩导入模版') + '_模版.xlsx');
+    toast('模版已下载，填好后用「选择文件」导回来即可', 'ok', 4200);
+  });
+}
+
+function scImport(examId){
+  var e = scFindExam(examId);
+  if(!e) return;
+  var subs = e.subjects || [];
+
+  openModal({
+    title: '导入成绩 —— ' + e.name,
+    sub: '按模版填：考号·学号 / 姓名 / 各科分数（化学·生物带赋分）/ 总分的年级排名与联考排名。班排不用填，系统当场算。',
+    wide: true,
+    body:
+        '<div class="alert info" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">'
+      +   '<span><b>建议用模版填。</b>模版的列头会按本次考试的科目自动对齐，'
+      +     '没填的格留空即可（系统记成「不知」，不计入统计）。</span>'
+      +   '<button type="button" class="btn btn-sm btn-secondary" id="scTpl" style="white-space:nowrap">'
+      +     svg('download', 13) + ' 下载模版</button>'
+      + '</div>'
+      + '<div class="alert warn">导入是<b>整体替换本次</b>：导入后这次考试的成绩就等于表里这些行。'
+      +   '同名同学会各占一行并提示你；导入后每格都还能手改。</div>'
+      + '<div class="field"><label>① 选择文件（.xlsx / .xls / .csv）</label>'
+      +   '<input type="file" id="scFile" accept=".xlsx,.xls,.csv"></div>'
+      + '<div class="field"><label>或者：② 从 Excel 直接复制，粘到这里（制表符分隔）</label>'
+      +   '<textarea id="scPaste" rows="4" placeholder="从 Excel 选中区域复制，Ctrl+V 粘进这里（含模版的两行表头也行）"></textarea></div>'
+      + '<div id="scPrev"></div>',
+    foot: '<button class="btn btn-secondary" id="scImpCancel">取消</button>'
+        + '<button class="btn" id="scImpGo" disabled>导入</button>',
+    onMount: function(box){
+      var parsed = null;   /* { header:[], rows:[], map:{} } */
+      var btn = box.querySelector('#scImpGo');
+
+      box.querySelector('#scImpCancel').onclick = closeModal;
+      box.querySelector('#scTpl').onclick = function(){ scTemplateXlsx(e); };
+      box.querySelector('#scFile').onchange = function(ev){
+        var f = ev.target.files && ev.target.files[0];
+        if(!f) return;
+        box.querySelector('#scPrev').innerHTML = '<div class="loading"><div class="spinner"></div>解析中…</div>';
+        loadXLSX().then(function(XLSX){
+          if(!XLSX){ box.querySelector('#scPrev').innerHTML = '<div class="empty">表格解析库加载失败，请检查网络</div>'; return; }
+          var rd = new FileReader();
+          rd.onload = function(){
+            try{
+              var wb = XLSX.read(new Uint8Array(rd.result), { type:'array' });
+              var ws = wb.Sheets[wb.SheetNames[0]];
+              var aoa = XLSX.utils.sheet_to_json(ws, { header:1, blankrows:false, defval:'' });
+              parsed = scParseAOA(aoa, subs);
+              scPaintPreview(box, parsed, subs, btn);
+            }catch(err){
+              box.querySelector('#scPrev').innerHTML = '<div class="empty">解析失败：' + esc(err.message) + '</div>';
+            }
+          };
+          rd.readAsArrayBuffer(f);
+        });
+      };
+
+      box.querySelector('#scPaste').oninput = function(ev){
+        var txt = ev.target.value || '';
+        if(!txt.trim()){ parsed = null; btn.disabled = true; box.querySelector('#scPrev').innerHTML = ''; return; }
+        var aoa = txt.replace(/\r/g,'').split('\n').filter(function(l){ return l.trim(); })
+                     .map(function(l){ return l.split('\t'); });
+        parsed = scParseAOA(aoa, subs);
+        scPaintPreview(box, parsed, subs, btn);
+      };
+
+      btn.onclick = function(){
+        if(!parsed) return;
+        btn.disabled = true;
+        api('/scores?action=scores-import', { method:'POST', body: { exam: examId, rows: parsed.rows } })
+          .then(function(j){
+            var msg = '导入成功：' + j.imported + ' 行';
+            if(j.skippedCount) msg += '，跳过 ' + j.skippedCount + ' 行';
+            toast(msg, 'ok', 4200);
+            closeModal();
+            scLoad();
+            /* 未识别姓名 = 多半打错了（站主 2026-10-17：名单里的人都在用户里）：
+               直接弹窗让站主改，不用一个个去找。跳过的行（空姓名/同名重复）单独提示一下。 */
+            if(j.skippedCount){
+              setTimeout(function(){
+                alert('有 ' + j.skippedCount + ' 行被跳过：\n  ' + (j.skipped || []).join('\n  '));
+              }, 1200);
+            }
+            if(j.unmatchedCount){
+              setTimeout(function(){ scFixNamesDialog(examId, j.unmatched || []); }, 700);
+            }
+          })
+          .catch(function(err){ btn.disabled = false; toast('导入失败：' + err.message, 'err', 4600); });
+      };
+    },
+  });
+}
+
+/**
+ * 导入后「未识别姓名」修正弹窗（2026-10-17 站主要求）。
+ * 前提：考试名单里的人都在站点用户里，所以导入后对不上账号，一定是名字打错了。
+ * 这里把每个对不上的姓名列出来，右边填/选正确姓名，确认后一次性改名并自动绑定，
+ * 不用站主自己一个个去翻。候选姓名来自后台用户（/scores?action=unbound 的 users）。
+ */
+function scFixNamesDialog(examId, names){
+  names = (names || []).filter(Boolean);
+  if(!names.length){ toast('导入完成，全部姓名都已对上账号', 'ok', 3500); return; }
+  api('/scores?action=unbound').then(function(j){
+    var users = (j && j.users) || [];
+    var opts = users.map(function(x){ return String(x.name || '').trim(); }).filter(Boolean);
+    var dl = '<datalist id="scFixDl">' + opts.map(function(n){ return '<option value="' + attr(n) + '">'; }).join('') + '</datalist>';
+    var rows = names.map(function(nm){
+      return '<div style="display:flex;gap:8px;align-items:center;margin:7px 0">'
+        + '<span style="min-width:120px;font-size:.85rem;font-weight:700;color:#c0392b">' + esc(nm) + '</span>'
+        + '<span style="color:#8a7968">→</span>'
+        + '<input class="sc-fix-to" data-from="' + attr(nm) + '" list="scFixDl" autocomplete="off" '
+        + 'placeholder="输入或下拉选择正确姓名" '
+        + 'style="flex:1;min-width:140px;padding:7px 9px;border:1px solid #e2d5c8;border-radius:7px;font-family:inherit;font-size:.85rem">'
+        + '</div>';
+    }).join('');
+    openModal({
+      title: '导入完成 · 有 ' + names.length + ' 个姓名没对上账号',
+      sub: '这些姓名在用户里找不到。按站规名单都在用户里，多半是打错字 —— 右边填上正确姓名，确认后一次性改名并自动绑好账号。',
+      wide: true,
+      body: '<div class="alert warn" style="margin-bottom:10px">只填要改的那几个即可，留空的保持原样。</div>'
+        + dl + rows,
+      foot: '<button class="btn btn-secondary" id="scFixSkip">以后再说</button>'
+          + '<button class="btn" id="scFixGo">确认修正</button>',
+      onMount: function(box){
+        box.querySelector('#scFixSkip').onclick = closeModal;
+        box.querySelector('#scFixGo').onclick = function(){
+          var inputs = box.querySelectorAll('.sc-fix-to');
+          var fixes = [];
+          Array.prototype.forEach.call(inputs, function(inp){
+            var from = inp.getAttribute('data-from');
+            var to = (inp.value || '').trim();
+            if(to && to !== from) fixes.push({ from: from, to: to });
+          });
+          if(!fixes.length){ toast('还没有填要改成的姓名', 'err'); return; }
+          var go = box.querySelector('#scFixGo'); go.disabled = true;
+          api('/scores?action=fix-names', { method:'POST', body: { exam: examId, fixes: fixes } })
+            .then(function(r){
+              closeModal();
+              scLoad();
+              var rest = (r && r.stillUnmatched) || [];
+              if(rest.length){
+                toast('已修正 ' + (r.renamed || 0) + ' 行，还有 ' + rest.length + ' 个没对上', 'ok', 4200);
+                setTimeout(function(){ scFixNamesDialog(examId, rest); }, 250);
+              }else{
+                toast('已修正 ' + (r.renamed || 0) + ' 行，全部对上账号了', 'ok', 4200);
+              }
+            })
+            .catch(function(e){ go.disabled = false; toast('修正失败：' + e.message, 'err', 4600); });
+        };
+      },
+    });
+  }).catch(function(e){ toast('读取用户名单失败：' + e.message, 'err', 4500); });
+}
+
+/* AOA（二维数组）→ { header, rows, map }；第一行当表头 */
+function scParseAOA(aoa, subs){
+  if(!aoa || !aoa.length) return { header: [], rows: [], map: null };
+  /* ① 两行表头（站主的模版）→ 走按列解析 */
+  if(scIsTwoRowHeader(aoa[0] || [], aoa[1] || [])) return scParseTwoRow(aoa, subs);
+  /* ② 单行表头（直接粘贴 / 自制的简单表）→ 老路径，表头自动识别 */
+  var header = (aoa[0] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
+  var body = aoa.slice(1).filter(function(r){
+    return r && r.some(function(c){ return String(c == null ? '' : c).trim() !== ''; });
+  });
+  return { header: header, rows: scMapRows(header, body, subs, null), map: scGuessMap(header, subs), body: body };
+}
+
+/* ============================================================================
+ * 模版导入（2026-10-16 第六十二轮）
+ * ----------------------------------------------------------------------------
+ * 站主的成绩模版是**两行表头**：
+ *   第 1 行 = 大类（基本信息 / 总分 / 语文 / 数学 / 英语 / 物理 / 化学 / 生物 / 600线 / 特控线 / 本科线）
+ *   第 2 行 = 子字段（考号·学号 / 姓名 / 总分 / 年级排名 / 联考排名 / 分数 / 原始分 / 赋分 …），
+ *   第 3 行起才是学生数据。
+ *
+ * ⚠️ 为什么老解析认不出这张表：它把第 1 行当表头，而第 1 行的「基本信息」「总分」
+ *   「语文」是**合并单元格** —— 合并区只有左上角有值，其余格读出来是**空**，
+ *   于是姓名列和各科列全成了空表头，自动识别全线失败。
+ *
+ * 所以这条路**按列位置解析**（模版是固定的，不猜）：
+ *   · 大类行先做「合并填充」（空 = 沿用左边最近的非空标签）
+ *   · 科目列靠大类名与考试配置里的科目名对上，子字段决定它是分数 / 赋分 / 排名
+ *   · 空单元格、-、—、/、缺考、免考 一律当「不知」（后端存 null，不参与统计）
+ *   · 各科的「年级排名」列系统不存（库里只有各科分数 + 总分的年级/联考排名），
+ *     解析时识别出来并在预览里如实告诉你，不悄悄丢
+ * ========================================================================= */
+
+/** 合并单元格的大类行向右填充：合并区只有左上角有值，其余读出来是空。 */
+function scFillMerged(row){
+  var out = [], last = '';
+  for(var i = 0; i < (row || []).length; i++){
+    var v = String(row[i] == null ? '' : row[i]).trim();
+    if(v) last = v;
+    out.push(v || last);
+  }
+  return out;
+}
+
+/** 两行表头判定：第 2 行有「姓名」而第 1 行没有 —— 站主模版就是这个形状。 */
+function scIsTwoRowHeader(r0, r1){
+  var has = function(row, re){
+    return (row || []).some(function(c){ return re.test(String(c == null ? '' : c).trim()); });
+  };
+  return has(r1, /^(姓名|名字|学生姓名|学生)$/) && !has(r0, /姓名|名字/);
+}
+
+/** 科目组里某个子字段属于哪一类。 */
+function scSubKind(label, subjName){
+  var s = String(label || '').replace(/[\s()（）\[\]【】]/g, '');
+  if(!s) return 'score';
+  if(/赋分|等级分|分级/.test(s)) return 'assigned';
+  if(/联考排名|联考名次|市排名/.test(s)) return 'subLeague';
+  if(/年级排名|年级名次|校排名|校名次|排名|名次/.test(s)) return 'subRank';
+  if(/分数|成绩|原始分/.test(s) || s === subjName) return 'score';
+  return 'other';
+}
+
+function scParseTwoRow(aoa, subs){
+  var catRow = scFillMerged(aoa[0] || []);
+  var subRow = (aoa[1] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
+  var body = aoa.slice(2).filter(function(r){
+    return r && r.some(function(c){ return String(c == null ? '' : c).trim() !== ''; });
+  });
+
+  var nameCol = -1, noCol = -1, srCol = -1, lrCol = -1;
+  /* 总分两种口径（2026-10-17 站主要求）：赋分后 = school_rank / league_rank 两列（老口径，保持兼容）；
+     赋分前 = 存进 scores 的 _t（跟着行数据走）。 */
+  var totalRaw = { rank: -1, league: -1 };
+  var subjCols = {};
+  var cutlines = [];   /* 分数线参考列：只识别回报，不写库 */
+  var ignored  = [];   /* 识别到但不导入的列：预览里如实说明 */
+
+  var maxLen = Math.max(catRow.length, subRow.length);
+  for(var i = 0; i < maxLen; i++){
+    var cat = String(catRow[i] || '').trim();
+    var sub = String(subRow[i] || '').trim();
+    var label = (cat && cat !== sub ? cat + '·' : '') + (sub || '（空）');
+
+    /* ① 姓名 / 学号 */
+    if(/^(姓名|名字|学生姓名|学生)$/.test(sub)){ if(nameCol < 0) nameCol = i; continue; }
+    if(/学号|考号|准考证/.test(sub) || /学号|考号/.test(cat)){ if(noCol < 0) noCol = i; continue; }
+
+    /* ② 分数线（600线 / 特控线 / 本科线）—— 表头参考信息，不属于学生数据 */
+    if(/线$|分数线/.test(cat) && !/排名/.test(sub)){ cutlines.push({ i: i, label: cat }); continue; }
+
+    /* ③ 科目列：大类名与考试配置里的科目名对得上 */
+    var su = null;
+    (subs || []).forEach(function(s){
+      if(su) return;
+      var n = String(s.name || '').trim();
+      if(!n) return;
+      if(cat === n || (cat && (cat.indexOf(n) >= 0 || n.indexOf(cat) >= 0))) su = s;
+    });
+    if(su){
+      var g = subjCols[su.key] || (subjCols[su.key] = { raw: -1, assigned: -1, rank: -1, asgRank: -1 });
+      var k = scSubKind(sub, su.name);
+      /* 排名列归属靠**子字段顺序**判定：紧跟在「原始分/分数」后面的那个年级排名 = 该分数的排名；
+         紧跟在「赋分」后面的 = 赋分的排名。所以每组里两个「年级排名」不会串。 */
+      if(k === 'assigned'){ if(g.assigned < 0){ g.assigned = i; g.__last = 'assigned'; } else ignored.push({ label: label, why: '赋分列重复，只取第一列' }); }
+      else if(k === 'score'){ if(g.raw < 0){ g.raw = i; g.__last = 'raw'; } else ignored.push({ label: label, why: '分数列重复，只取第一列' }); }
+      else if(k === 'subRank' || k === 'subLeague'){
+        var slot = (g.__last === 'assigned') ? 'asgRank' : 'rank';
+        if(k === 'subLeague') slot = slot + 'League';   /* 各科联考排名（暂不存，如实登记） */
+        if(slot === 'rank' || slot === 'asgRank'){
+          if(g[slot] < 0) g[slot] = i;
+          else ignored.push({ label: label, why: '该科排名重复，只取第一列' });
+        }else{
+          ignored.push({ label: label, why: '各科联考排名暂不存储（只存总分的联考排名）' });
+        }
+      }
+      else ignored.push({ label: label, why: '未识别，已跳过' });
+      continue;
+    }
+
+    /* ④ 总分组：总分本身不存（系统按各科实时算），只取总分的年级 / 联考排名。
+       看不出赋分前/后时，按「赋分后」处理 —— 与老模版（只有一组总分排名）保持一致。 */
+    if(/总分|总成绩/.test(cat) && /排名|名次/.test(sub)){
+      var isRaw = /赋分前|原始|不加赋分|裸分/.test(cat);
+      var slot2 = isRaw ? totalRaw : null;
+      var isLeague = /联考排名|联考名次|市排名/.test(sub);
+      if(isLeague){
+        if(isRaw){ if(totalRaw.league < 0) totalRaw.league = i; else ignored.push({ label: label, why: '赋分前联考排名重复，只取第一列' }); }
+        else { if(lrCol < 0) lrCol = i; else ignored.push({ label: label, why: '联考排名重复，只取第一列' }); }
+      }else{
+        if(isRaw){ if(totalRaw.rank < 0) totalRaw.rank = i; else ignored.push({ label: label, why: '赋分前年级排名重复，只取第一列' }); }
+        else { if(srCol < 0) srCol = i; else ignored.push({ label: label, why: '年级排名重复，只取第一列' }); }
+      }
+      continue;
+    }
+    if(/总分|总成绩/.test(sub)) continue;
+
+    ignored.push({ label: label, why: '未识别，已跳过' });
+  }
+
+  var map = { name: nameCol, no: noCol, schoolRank: srCol, leagueRank: lrCol, subj: subjCols, totalRaw: totalRaw };
+  var header = subRow.map(function(x, i){ return x ? x : (catRow[i] || ''); });
+  return {
+    header: header,
+    rows: scMapRows(header, body, subs, map),
+    map: map,
+    body: body,
+    twoRow: true,
+    cutlines: cutlines,
+    ignored: ignored
+  };
+}
+
+/** 单行的总分（各科累加：赋分科目取赋分，其余取原始分）。预览里算班排用。 */
+function scRowTotal(r, subs){
+  var t = 0, any = false;
+  (subs || []).forEach(function(s){
+    var v = r.s ? r.s[s.key] : null;
+    if(!v) return;
+    var n = (v.assigned != null) ? v.assigned : v.raw;
+    if(n == null) return;
+    t += n; any = true;
+  });
+  return any ? t : null;
+}
+
+/** 单行的「赋分前总分」：各科一律取原始分（估分/裸分口径）。 */
+function scRowTotalRaw(r, subs){
+  var t = 0, any = false;
+  (subs || []).forEach(function(s){
+    var v = r.s ? r.s[s.key] : null;
+    if(!v || v.raw == null) return;
+    t += v.raw; any = true;
+  });
+  return any ? t : null;
+}
+
+/** 按总分当场算班排（1 = 最高）。模版里没有班排列，就是这么来的。 */
+function scClassRanks(rows, subs){
+  var scored = rows.map(function(r, i){ return { i: i, t: scRowTotal(r, subs) }; })
+                   .filter(function(x){ return x.t != null; });
+  scored.sort(function(a, b){ return b.t - a.t; });
+  var out = {};
+  scored.forEach(function(x, idx){ out[x.i] = idx + 1; });
+  return out;
+}
+
+/* 表头自动识别 */
+function scGuessMap(header, subs){
+  var H = header.map(function(s){ return String(s || '').replace(/[\s()（）\[\]【】]/g, ''); });
+  var pick = function(list){
+    for(var i = 0; i < H.length; i++) for(var j = 0; j < list.length; j++) if(H[i] === list[j]) return i;
+    for(var i2 = 0; i2 < H.length; i2++) for(var j2 = 0; j2 < list.length; j2++) if(H[i2].indexOf(list[j2]) >= 0) return i2;
+    return -1;
+  };
+  var map = {
+    name: pick(['姓名','名字','学生姓名','学生']),
+    no: pick(['学号','考号','准考证']),   /* 用「准考证」前缀匹配，能命中各种带「考号」的写法 */
+    schoolRank: pick(['校排名','校名次','学校排名','年级排名','年级名次']),
+    leagueRank: pick(['联考排名','联考名次','市排名']),
+    subj: {},
+  };
+  (subs || []).forEach(function(s){
+    var raw = -1, asg = -1;
+    for(var i = 0; i < H.length; i++){
+      if(H[i].indexOf(s.name) < 0) continue;
+      if(/赋分|分级|等级/.test(H[i])){ if(asg < 0) asg = i; }
+      else if(raw < 0) raw = i;
+    }
+    map.subj[s.key] = { raw: raw, assigned: asg };
+  });
+  return map;
+}
+
+/* 按映射把 AOA 转成后端要的行 */
+function scMapRows(header, body, subs, map){
+  if(!map) map = scGuessMap(header, subs);
+  var num = function(v){
+    var s = String(v == null ? '' : v).trim();
+    if(s === '' || s === '-' || s === '—' || s === '/' || /缺考|免考/.test(s)) return null;
+    var n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+  var out = [];
+  body.forEach(function(r){
+    var name = map.name >= 0 ? String(r[map.name] == null ? '' : r[map.name]).trim() : '';
+    if(!name) return;
+    var s = {};
+    (subs || []).forEach(function(su){
+      var m = map.subj[su.key] || { raw:-1, assigned:-1, rank:-1, asgRank:-1 };
+      var raw = m.raw >= 0 ? num(r[m.raw]) : null;
+      var asg = m.assigned >= 0 ? num(r[m.assigned]) : null;
+      if(raw == null && asg == null) return;
+      var o = (su.graded && asg != null) ? { raw: raw, assigned: asg } : { raw: raw == null ? asg : raw };
+      /* 每个分数配一个年级排名（站主要求）。空 = 不知，不写。 */
+      var rk = (m.rank != null && m.rank >= 0) ? num(r[m.rank]) : null;
+      var ak = (m.asgRank != null && m.asgRank >= 0) ? num(r[m.asgRank]) : null;
+      if(rk != null) o.rank = rk;
+      if(ak != null && o.assigned != null) o.asgRank = ak;
+      s[su.key] = o;
+    });
+    /* 总分（赋分前）的两个排名：存进 _t，跟着这行数据走 */
+    var tr = map.totalRaw || {};
+    var tRank = (tr.rank >= 0) ? num(r[tr.rank]) : null;
+    var tLeague = (tr.league >= 0) ? num(r[tr.league]) : null;
+    if(tRank != null || tLeague != null) s._t = { rank: tRank, league: tLeague };
+    out.push({
+      name: name,
+      no: map.no >= 0 ? String(r[map.no] == null ? '' : r[map.no]).trim() : '',
+      s: s,
+      schoolRank: map.schoolRank >= 0 ? num(r[map.schoolRank]) : null,
+      leagueRank: map.leagueRank >= 0 ? num(r[map.leagueRank]) : null,
+    });
+  });
+  return out;
+}
+
+function scPaintPreview(box, parsed, subs, btn){
+  var host = box.querySelector('#scPrev');
+  if(!parsed || !parsed.rows.length){
+    host.innerHTML = '<div class="empty">没解析出有效数据 —— 检查一下第一行是不是表头、有没有「姓名」列</div>';
+    if(btn) btn.disabled = true;
+    return;
+  }
+  var m = parsed.map || {};
+  var hit = function(i){ return i >= 0 ? esc(parsed.header[i] || ('第' + (i+1) + '列')) : '<span style="color:var(--danger)">未找到</span>'; };
+
+  /* 班排当场算：模版里没有班排列，名次由各科分数累加后现排 */
+  var ranks = scClassRanks(parsed.rows, subs);
+  var totalOf = function(r){ return scRowTotal(r, subs); };
+
+  /* 识别到但不导入的列 / 分数线列：如实列出来，别让人以为导进去了。
+     按原因归组——同一原因（如「各科年级排名」）只写一遍，否则 8 列刷 8 行。 */
+  var notes = '';
+  if((parsed.ignored && parsed.ignored.length) || (parsed.cutlines && parsed.cutlines.length)){
+    var li = [];
+    if(parsed.cutlines && parsed.cutlines.length){
+      li.push('分数线列（' + parsed.cutlines.map(function(c){ return esc(c.label); }).join('、')
+        + '）只是表头参考信息，不会写进系统 —— 要设分数线请在考试设置里填');
+    }
+    if(parsed.ignored && parsed.ignored.length){
+      var byWhy = {};
+      parsed.ignored.forEach(function(g){ (byWhy[g.why] = byWhy[g.why] || []).push(g.label); });
+      li.push('这些列不导入：' + Object.keys(byWhy).map(function(w){
+        var names = byWhy[w];
+        return names.slice(0, 5).map(esc).join('、')
+          + (names.length > 5 ? ' 等 ' + names.length + ' 列' : '')
+          + '<span class="muted">（' + esc(w) + '）</span>';
+      }).join('；'));
+    }
+    notes = '<div class="alert warn" style="margin-top:8px">' + li.join('<br>') + '</div>';
+  }
+
+  host.innerHTML =
+      '<div class="alert ok" style="margin-top:8px"><b>解析到 ' + parsed.rows.length + ' 行。</b>'
+    +   (parsed.twoRow ? '（<b>两行表头模版</b>，按列位置解析）' : '')
+    +   '列对应关系：姓名→' + hit(m.name) + '　学号→' + hit(m.no) + '<br>'
+    +   '总分（赋分后）年级排名→' + hit(m.schoolRank) + '　联考→' + hit(m.leagueRank)
+    +   '　总分（赋分前）年级排名→' + hit((m.totalRaw || {}).rank) + '　联考→' + hit((m.totalRaw || {}).league) + '<br>'
+    +   (subs || []).map(function(s){
+          var mm = (m.subj || {})[s.key] || {};
+          return esc(s.name) + '→' + hit(mm.raw) + '（排名 ' + hit(mm.rank) + '）'
+            + (mm.assigned >= 0 ? '（赋分 ' + hit(mm.assigned) + '，排名 ' + hit(mm.asgRank) + '）' : '');
+        }).join('　')
+    +   '<br><span class="muted" style="font-size:.78rem">空单元格 / - / / / 缺考 都会记成「不知」，不计入统计；排名列空着就是「不知」，不会补 0。</span>'
+    + '</div>'
+    + '<div class="table-wrap" style="max-height:300px;overflow:auto"><table style="font-size:.8rem">'
+    +   '<thead><tr><th>班排</th><th>姓名</th>'
+    +   (subs || []).map(function(s){ return '<th>' + esc(s.name) + '</th>'; }).join('')
+    +   '<th>总分</th><th>年级排名</th><th>联考</th><th>赋分前总分</th><th>其年级</th><th>其联考</th></tr></thead><tbody>'
+    +   parsed.rows.slice(0, 30).map(function(r, i){
+          var tt = totalOf(r);
+          var tRaw = scRowTotalRaw(r, subs);
+          var t = r.s._t || {};
+          var cell = function(v){
+            if(!v) return '<td class="muted">—</td>';
+            var line1 = (v.raw == null ? '—' : v.raw)
+              + (v.assigned != null ? ' <span class="muted">/' + v.assigned + '</span>' : '');
+            var rk = [];
+            if(v.rank != null) rk.push('排名 ' + v.rank);
+            if(v.asgRank != null) rk.push('赋分排名 ' + v.asgRank);
+            return '<td>' + line1
+              + (rk.length ? '<div class="muted" style="font-size:.7rem;white-space:nowrap">' + rk.join(' · ') + '</div>' : '')
+              + '</td>';
+          };
+          return '<tr><td class="muted">' + (ranks[i] || '—') + '</td>'
+            + '<td style="font-weight:700">' + esc(r.name) + '</td>'
+            + (subs || []).map(function(s){ return cell(r.s[s.key]); }).join('')
+            + '<td>' + (tt == null ? '—' : tt) + '</td>'
+            + '<td>' + (r.schoolRank == null ? '—' : r.schoolRank) + '</td>'
+            + '<td>' + (r.leagueRank == null ? '—' : r.leagueRank) + '</td>'
+            + '<td>' + (tRaw == null ? '—' : tRaw) + '</td>'
+            + '<td>' + (t.rank == null ? '—' : t.rank) + '</td>'
+            + '<td>' + (t.league == null ? '—' : t.league) + '</td></tr>';
+        }).join('')
+    + '</tbody></table></div>'
+    + '<p class="muted" style="font-size:.78rem;margin-top:6px">'
+    +   '班排与总分是<b>当场按各科分数算的</b>（模版里没有这几列，也不需要填）：'
+    +   '总分 = 各科按赋分口径累加；赋分前总分 = 各科一律取原始分。'
+    +   (parsed.rows.length > 30 ? '只预览前 30 行，导入时会处理全部。' : '')
+    + '</p>'
+    + notes;
+
+  if(btn) btn.disabled = false;
+}
+
+/* ============================================================================
+ * 成绩编辑表（像 Excel 一样改分）
+ * ----------------------------------------------------------------------------
+ * 站主要求「导入之后我也可以改」「失焦自动保存」。
+ * 做法：每个可编辑格是 <input>，改动后标脏 + 防抖 1.5 秒自动提交；
+ *      只提交脏行（带行 id），新增行没有 id 也能提交（后端会插入）。
+ * ========================================================================= */
+function scEditRows(examId){
+  SC_STATE.cur = examId;
+  SC_STATE.dirty = {};
+  renderScoreRows(examId);
+}
+
+function renderScoreRows(examId){
+  var e = scFindExam(examId);
+  if(!e) return;
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +  '<button class="btn btn-sm btn-secondary" id="scBack">' + svg('arrow-left',14) + ' 返回列表</button>'
+    +  '<div style="flex:1;min-width:0;margin-left:8px"><b style="font-size:.92rem">' + esc(e.name) + '</b>'
+    +    '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +      '点格子直接改，离开格子会自动保存。加分/减分都可以，改完不用再点别的。'
+    +    '</p></div>'
+    +  '<span id="scSaveState" class="badge badge-gray">未改动</span>'
+    +  '<button class="btn btn-sm btn-secondary" id="scAddRow">' + svg('plus',14) + ' 加一行</button>'
+    +  '<button class="btn btn-sm btn-secondary" id="scReload">刷新</button>'
+    + '</div>'
+    + '<section class="panel"><div id="scRows"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('scBack').onclick = function(){ renderScores(); };
+  $('scReload').onclick = function(){ loadScoreRows(examId); };
+  $('scAddRow').onclick = function(){ scAddRow(examId); };
+  loadScoreRows(examId);
+}
+
+function loadScoreRows(examId){
+  SC_STATE.dirty = {};
+  $('scRows').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  api('/scores?action=board&exam=' + examId).then(function(j){
+    SC_STATE.curExam = j.exam;
+    SC_STATE.rows = j.rows || [];
+    scPaintRows();
+  }).catch(function(err){
+    $('scRows').innerHTML = '<div class="empty">加载失败：' + esc(err.message) + '</div>';
+  });
+}
+
+/* ---------------- 改分表的表格标记（表头 / 各科格 / 总分格） ----------------
+   抽出来的原因：表头与单元格原来在「渲染」「加一行」「空表骨架」三处各写一遍，
+   2026-10-17 加各科排名与总分赋分前/后两组排名时，三处必须同步改，否则
+   加出来的行会缺列、一改分就把新字段冲掉。现在只有这一份。 */
+function scInpTd(rid, sub, f, val, w, small){
+  return '<input class="inp" style="width:' + w + 'px;padding:' + (small ? '3px 5px;font-size:.74rem' : '5px 6px') + '" type="number"'
+    + ' data-row="' + rid + '"' + (sub ? ' data-sub="' + sub + '"' : '') + ' data-f="' + f + '"'
+    + ' value="' + (val == null ? '' : val) + '">';
+}
+function scGridHeadHtml(subs){
+  return '<tr><th style="min-width:88px">姓名</th><th style="min-width:76px">学号</th>'
+    + subs.map(function(s){
+        return '<th style="min-width:104px">' + esc(s.name)
+          + '<br><span class="muted" style="font-weight:400;font-size:.7rem">'
+          + (s.graded ? '原始·排名 / 赋分·排名' : '分数 · 年级排名') + '</span></th>';
+      }).join('')
+    + '<th style="min-width:112px">总分（赋分前）<br><span class="muted" style="font-weight:400;font-size:.7rem">年级 · 联考</span></th>'
+    + '<th style="min-width:112px">总分（赋分后）<br><span class="muted" style="font-weight:400;font-size:.7rem">年级 · 联考</span></th>'
+    + '<th style="min-width:52px">操作</th></tr>';
+}
+/** 一个科目格：分数（赋分科目再加赋分）+ 各自对应的年级排名。空 = 不知。 */
+function scSubCellHtml(rid, su, v){
+  v = v || {};
+  if(su.graded){
+    return '<td style="white-space:nowrap">'
+      + scInpTd(rid, su.key, 'raw', v.raw, 52) + '<span class="muted" style="margin:0 2px">/</span>' + scInpTd(rid, su.key, 'assigned', v.assigned, 52)
+      + '<div style="margin-top:3px">' + scInpTd(rid, su.key, 'rank', v.rank, 50, 1)
+      + '<span class="muted" style="margin:0 2px">/</span>' + scInpTd(rid, su.key, 'asgRank', v.asgRank, 50, 1) + '</div>'
+      + '</td>';
+  }
+  return '<td style="white-space:nowrap">' + scInpTd(rid, su.key, 'raw', v.raw, 64)
+    + '<div style="margin-top:3px">' + scInpTd(rid, su.key, 'rank', v.rank, 58, 1) + '</div>'
+    + '</td>';
+}
+/** 总分布：左=赋分前（存 s._t），右=赋分后（仍是 school_rank / league_rank 两列）。 */
+function scTotalCellsHtml(rid, r){
+  var t = (r.s && r.s._t) || {};
+  return '<td style="white-space:nowrap">' + scInpTd(rid, null, 'tRankRaw', t.rank, 50)
+      + '<span class="muted" style="margin:0 2px">·</span>' + scInpTd(rid, null, 'tLeagueRaw', t.league, 50) + '</td>'
+    + '<td style="white-space:nowrap">' + scInpTd(rid, null, 'schoolRank', r.schoolRank, 50)
+      + '<span class="muted" style="margin:0 2px">·</span>' + scInpTd(rid, null, 'leagueRank', r.leagueRank, 50) + '</td>';
+}
+
+function scPaintRows(){
+  var ex = SC_STATE.curExam || {};
+  var subs = ex.subjects || [];
+  var rows = SC_STATE.rows || [];
+
+  if(!rows.length){
+    $('scRows').innerHTML = '<div class="empty">这次考试还没有成绩。<br>'
+      + '点上面「加一行」手填，或者回列表用「导入成绩」传一张表。</div>';
+    return;
+  }
+
+  var head = scGridHeadHtml(subs);
+
+  var body = rows.map(function(r, idx){
+    return '<tr data-idx="' + idx + '">'
+      + '<td><input class="inp" style="width:82px;padding:5px 6px" data-row="' + r.id + '" data-f="name" value="' + esc(r.name) + '"></td>'
+      + '<td><input class="inp" style="width:70px;padding:5px 6px" data-row="' + r.id + '" data-f="no" value="' + esc(r.no || '') + '"></td>'
+      + subs.map(function(s){ return scSubCellHtml(r.id, s, r.s[s.key]); }).join('')
+      + scTotalCellsHtml(r.id, r)
+      + '<td><button class="btn btn-sm btn-danger" data-del-row="' + r.id + '">删</button></td>'
+      + '</tr>';
+  }).join('');
+
+  $('scRows').innerHTML = '<div class="table-wrap"><table style="font-size:.82rem">'
+    + '<thead>' + head + '</thead><tbody id="scTbody">' + body + '</tbody></table></div>';
+
+  /* 改动即排队 + 防抖保存；删除按钮单独绑 */
+  var host = $('scRows');
+  host.oninput = function(ev){
+    var t = ev.target;
+    if(!t || !t.getAttribute || !t.getAttribute('data-row')) return;
+    scMarkDirty(t.getAttribute('data-row'));
+  };
+  host.onchange = function(ev){
+    var t = ev.target;
+    if(t && t.getAttribute && t.getAttribute('data-row')) scMarkDirty(t.getAttribute('data-row'));
+  };
+  host.onclick = function(ev){
+    var b = ev.target.closest ? ev.target.closest('[data-del-row]') : null;
+    if(!b) return;
+    var rid = Number(b.getAttribute('data-del-row'));
+    if(!confirm('删掉这一行？（保存后生效，无法恢复）')) return;
+    scDeleteRow(rid);
+  };
+}
+
+function scMarkDirty(rowId){
+  SC_STATE.dirty[rowId] = true;
+  scSetSaveState('待保存');
+  if(SC_STATE.timer) clearTimeout(SC_STATE.timer);
+  SC_STATE.timer = setTimeout(scFlush, 1500);
+}
+
+function scSetSaveState(txt, kind){
+  var el = $('scSaveState');
+  if(!el) return;
+  el.textContent = txt;
+  el.className = 'badge ' + (kind === 'ok' ? 'badge-green' : kind === 'err' ? 'badge-red' : 'badge-gray');
+}
+
+/* 把当前表格里"脏行"的内容收集起来提交 */
+function scFlush(){
+  if(SC_STATE.saving) return;
+  var ids = Object.keys(SC_STATE.dirty);
+  if(!ids.length) return;
+
+  var subs = (SC_STATE.curExam && SC_STATE.curExam.subjects) || [];
+  var rows = [];
+  ids.forEach(function(rowId){
+    var row = scReadRow(rowId, subs);
+    if(row) rows.push(row);
+  });
+  if(!rows.length){ SC_STATE.dirty = {}; return; }
+
+  SC_STATE.saving = true;
+  scSetSaveState('保存中…');
+  api('/scores?action=scores-save', { method:'POST', body: { exam: SC_STATE.cur, rows: rows } })
+    .then(function(){
+      SC_STATE.saving = false;
+      SC_STATE.dirty = {};
+      scSetSaveState('已保存', 'ok');
+    })
+    .catch(function(err){
+      SC_STATE.saving = false;
+      scSetSaveState('保存失败', 'err');
+      toast('保存失败：' + err.message, 'err', 4200);
+    });
+}
+
+/* 从 DOM 里读一行的当前值 */
+function scReadRow(rowId, subs){
+  var sel = '[data-row="' + rowId + '"]';
+  var nameEl = document.querySelector(sel + '[data-f="name"]');
+  if(!nameEl) return null;             /* 行已被删掉 */
+  var noEl   = document.querySelector(sel + '[data-f="no"]');
+  /* 按 data-f 取值。⚠️ 这里必须把「各科排名 + 总分两组排名」一起读回来：
+     整行是从 DOM 重建的，漏读哪个字段，保存时就会被整行覆盖掉（= 数据丢失）。
+     2026-10-17 加各科排名与总分赋分前/后时，就是靠这条注释提醒别漏的。 */
+  var pickInp = function(sub, f){
+    var el = document.querySelector(sel + (sub ? '[data-sub="' + sub + '"]' : '') + '[data-f="' + f + '"]');
+    return el ? scNumOrNull(el.value) : null;
+  };
+  var s = {};
+  subs.forEach(function(su){
+    var raw = pickInp(su.key, 'raw');
+    var asg = pickInp(su.key, 'assigned');
+    if(raw == null && asg == null) return;
+    var o = su.graded ? { raw: raw, assigned: asg } : { raw: raw };
+    var rk = pickInp(su.key, 'rank');
+    var ak = pickInp(su.key, 'asgRank');
+    if(rk != null) o.rank = rk;
+    if(ak != null && asg != null) o.asgRank = ak;
+    s[su.key] = o;
+  });
+  /* 总分（赋分前）的两个排名存进 _t；两个都空就不带（= 不知） */
+  var tRank = pickInp(null, 'tRankRaw');
+  var tLeague = pickInp(null, 'tLeagueRaw');
+  if(tRank != null || tLeague != null) s._t = { rank: tRank, league: tLeague };
+  return {
+    id: Number(rowId),
+    name: (nameEl.value || '').trim(),
+    no: noEl ? (noEl.value || '').trim() : '',
+    s: s,
+    schoolRank: pickInp(null, 'schoolRank'),
+    leagueRank: pickInp(null, 'leagueRank'),
+  };
+}
+
+function scNumOrNull(v){
+  var s = String(v == null ? '' : v).trim();
+  if(s === '') return null;
+  var n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/* 新增空行（转学生、或者补录一个漏掉的人） */
+function scAddRow(examId){
+  var ex = SC_STATE.curExam || scFindExam(examId) || {};
+  var subs = ex.subjects || [];
+  if(!subs.length){ toast('这次考试还没配置科目', 'err'); return; }
+  var tmpId = 'new' + Date.now();
+  var tbody = $('scTbody');
+  if(!tbody){ /* 空表时先铺个骨架 */
+    $('scRows').innerHTML = '<div class="table-wrap"><table style="font-size:.82rem"><thead>'
+      + scGridHeadHtml(subs) + '</thead><tbody id="scTbody"></tbody></table></div>';
+    var host0 = $('scRows');
+    host0.oninput = function(ev){ var t = ev.target; if(t && t.getAttribute && t.getAttribute('data-row')) scMarkDirty(t.getAttribute('data-row')); };
+    host0.onclick = function(ev){
+      var b = ev.target.closest ? ev.target.closest('[data-del-row]') : null;
+      if(!b) return;
+      scDeleteRow(Number(b.getAttribute('data-del-row')));
+    };
+    tbody = $('scTbody');
+  }
+  var tr = document.createElement('tr');
+  tr.innerHTML = '<td><input class="inp" style="width:82px;padding:5px 6px" data-row="' + tmpId + '" data-f="name" placeholder="姓名"></td>'
+    + '<td><input class="inp" style="width:70px;padding:5px 6px" data-row="' + tmpId + '" data-f="no"></td>'
+    + subs.map(function(s){ return scSubCellHtml(tmpId, s, null); }).join('')
+    + scTotalCellsHtml(tmpId, {})
+    + '<td><button class="btn btn-sm btn-danger" data-del-row="' + tmpId + '">删</button></td>';
+  tbody.appendChild(tr);
+  var first = tr.querySelector('input');
+  if(first) first.focus();
+}
+
+function scDeleteRow(rowId){
+  /* 立刻从界面上移除，避免误看；保存时会一并提交 */
+  var el = document.querySelector('[data-row="' + rowId + '"][data-f="name"]');
+  if(el){
+    var tr = el.closest ? el.closest('tr') : null;
+    if(tr) tr.remove();
+  }
+  var idNum = Number(rowId);
+  if(Number.isFinite(idNum) && idNum > 0){
+    api('/scores?action=row-delete', { method:'POST', body: { id: idNum, exam: SC_STATE.cur } })
+      .then(function(){ toast('已删除', 'ok'); })
+      .catch(function(err){ toast('删除失败：' + err.message, 'err', 4000); });
+  } else {
+    delete SC_STATE.dirty[rowId];   /* 还没入库的新行，直接丢弃 */
+  }
+}
+
+function renderPopups(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">通用弹窗</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '开屏弹 / 板块弹，支持公告与作业通知自动取数</p></div>'
+    +   '<button class="btn btn-sm btn-secondary" id="popRefresh">' + svg('refresh',14) + ' 刷新</button>'
+    +   '<button class="btn btn-sm" id="popAdd">' + svg('plus',14) + ' 新增弹窗</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '这里的每一条都会成为站内弹窗。数据存在云端，配了就生效，不配则前台永不弹（与以前行为一致）。'
+    +   '关闭策略建议用默认的「每天弹一次」。'
+    + '</div>'
+    + '<section class="panel"><div id="popBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
+
+  $('popRefresh').onclick = loadPopups;
+  $('popAdd').onclick = function(){ popEdit(null); };
+  loadPopups();
+}
+
+function loadPopups(){
+  $('popBody').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  popLoad().then(function(){ paintPopups(); })
+    .catch(function(e){ $('popBody').innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>'; });
+}
+
+function popScopeName(scope){
+  for(var i = 0; i < POP_CATS.length; i++) if(POP_CATS[i].id === scope) return POP_CATS[i].name;
+  var m = /^cat:(\d+)$/.exec(scope);
+  if(m) return '板块 · #' + m[1];
+  return scope || '—';
+}
+function popSourceName(src){
+  for(var i = 0; i < POP_SOURCES.length; i++) if(POP_SOURCES[i].id === src) return POP_SOURCES[i].name;
+  return src || '—';
+}
+function popDismissName(d){
+  for(var i = 0; i < POP_DISMISS.length; i++) if(POP_DISMISS[i].id === d) return POP_DISMISS[i].name;
+  return d || '—';
+}
+function popWindowText(p){
+  if(!p.startAt && !p.endAt) return '常驻';
+  var a = p.startAt ? p.startAt.replace('T', ' ') : '不限';
+  var b = p.endAt ? p.endAt.replace('T', ' ') : '不限';
+  return a + ' ~ ' + b;
+}
+
+/* v3.5.40（站主 #4）：投放对象 → 一句话 */
+function popTargetText(t){
+  if(!t || !t.mode || t.mode === 'all') return '所有人';
+  if(t.mode === 'users')   return '指定 ' + ((t.users || []).length) + ' 人（' + ((t.users || []).slice(0,3).join('、') || '未填') + ((t.users || []).length > 3 ? '…' : '') + '）';
+  if(t.mode === 'roles')   return '身份：' + ((t.roles || []).map(function(r){
+    return r === 'admin' ? '管理员' : r === 'teacher' ? '老师' : '学生';
+  }).join('、') || '未选');
+  if(t.mode === 'titles')  return '头衔：' + ((t.titles || []).join('、') || '未填');
+  return '所有人';
+}
+
+function paintPopups(){
+  var list = POP_STATE.list || [];
+  if(!list.length){
+    $('popBody').innerHTML = '<div class="empty">'
+      + '<div style="font-size:2rem;margin-bottom:10px">💬</div>'
+      + '还没有任何弹窗。<br>点右上角「新增弹窗」加一条，比如开屏弹一条班级公告。'
+      + '</div>';
+    return;
+  }
+  $('popBody').innerHTML = list.map(function(p, i){
+    var badge = p.scope === 'boot' ? 'badge-green' : 'badge';
+    var media = [];
+    if(p.video) media.push('视频');
+    if(p.image) media.push('图片');
+    if(p.linkUrl) media.push('按钮');
+    return '<div class="panel pop-card" style="margin-bottom:12px">'
+      + '<div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">'
+      +   '<div style="flex:1;min-width:200px">'
+      +     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">'
+      +       '<span class="badge ' + badge + '">' + esc(popScopeName(p.scope)) + '</span>'
+      +       '<b style="font-size:.9rem">' + esc(p.title || '(无标题)') + '</b>'
+      +       '<code class="mono muted" style="font-size:.72rem">' + esc(p.id) + '</code>'
+      +     '</div>'
+      +     '<div class="muted" style="font-size:.78rem;line-height:1.7">'
+      +       '来源：' + esc(popSourceName(p.source))
+      +       ' · 关闭：' + esc(popDismissName(p.dismiss))
+      +       ' · 时间窗：' + esc(popWindowText(p))
+      +       (media.length ? ' · 含 ' + media.join('/') : '')
+      +       (p.bubble === false ? ' · 不留悬浮球' : ' · 留悬浮球')
+      +       (p.bannerText ? ' · 横幅' : '')
+      +       (p.theme ? ' · 样式:' + esc(p.theme) : '')
+      +       (p.target && p.target.mode && p.target.mode !== 'all'
+              ? ' · 投放:' + esc(popTargetText(p.target)) : ' · 投放:所有人')
+      +     '</div>'
+      +     (p.body ? '<div style="margin-top:8px;font-size:.8rem;white-space:pre-wrap;opacity:.85">'
+      +       esc(p.body.length > 120 ? p.body.slice(0,120) + '…' : p.body) + '</div>' : '')
+      +   '</div>'
+      +   '<div style="display:flex;gap:6px;flex-shrink:0">'
+      +     '<button class="btn btn-sm btn-ghost" data-pop-up="' + i + '" title="上移">↑</button>'
+      +     '<button class="btn btn-sm btn-ghost" data-pop-down="' + i + '" title="下移">↓</button>'
+      +     '<button class="btn btn-sm btn-secondary" data-pop-edit="' + i + '">编辑</button>'
+      +     '<button class="btn btn-sm btn-secondary" data-pop-preview="' + i + '">预览</button>'
+      +     '<button class="btn btn-sm btn-ghost" data-pop-del="' + i + '" style="color:var(--danger)">删除</button>'
+      +   '</div>'
+      + '</div></div>';
+  }).join('');
+
+  /* 事件用循环绑定（不用 inline onclick，避免 IIFE 内函数外露） */
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-edit]'), function(b){
+    b.onclick = function(){ popEdit(+b.dataset.popEdit); };
+  });
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-preview]'), function(b){
+    b.onclick = function(){ popPreview(+b.dataset.popPreview); };
+  });
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-del]'), function(b){
+    b.onclick = function(){ popDelete(+b.dataset.popDel); };
+  });
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-up]'), function(b){
+    b.onclick = function(){ popMove(+b.dataset.popUp, -1); };
+  });
+  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-down]'), function(b){
+    b.onclick = function(){ popMove(+b.dataset.popDown, 1); };
+  });
+}
+
+function popMove(i, dir){
+  var list = POP_STATE.list.slice();
+  var j = i + dir;
+  if(j < 0 || j >= list.length) return;
+  var t = list[i]; list[i] = list[j]; list[j] = t;
+  popWrite(list, '顺序已更新').then(paintPopups).catch(function(){});
+}
+
+function popDelete(i){
+  var p = POP_STATE.list[i];
+  if(!p) return;
+  confirmBox({
+    text: '删除这条弹窗？',
+    detail: '「' + (p.title || p.id) + '」删除后前台不再弹。已关闭过它的同学不受影响。',
+    danger: true,
+    okText: '删除',
+  }).then(function(ok){
+    if(!ok) return;
+    var list = POP_STATE.list.slice();
+    list.splice(i, 1);
+    popWrite(list, '已删除').then(paintPopups).catch(function(){});
+  });
+}
+
+/* 新增 / 编辑：字段较多，用一个较宽的弹窗表单 */
+function popEdit(idx){
+  var editing = (typeof idx === 'number' && idx >= 0);
+  var p = editing
+    ? JSON.parse(JSON.stringify(POP_STATE.list[idx]))
+    : { id: 'pop-' + Date.now().toString(36), scope:'boot', source:'custom', title:'', body:'',
+        video:'', image:'', linkText:'', linkUrl:'', startAt:'', endAt:'', dismiss:'daily', bubble:true, bannerText:'', theme:'',
+        target: { mode:'all', users:[], roles:[], titles:[] } };
+
+  function opts(arr, cur){
+    return arr.map(function(o){
+      return '<option value="' + attr(o.id) + '"' + (o.id === cur ? ' selected' : '') + '>' + esc(o.name) + '</option>';
+    }).join('');
+  }
+  var scopeOpts = POP_CATS.map(function(c){
+    return '<option value="' + attr(c.id) + '"' + (c.id === p.scope ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+  }).join('');
+  /* 若 scope 是自定义的 cat:N 且不在内置列表里，补一个选项，避免被吞掉 */
+  var known = POP_CATS.some(function(c){ return c.id === p.scope; });
+  if(!known) scopeOpts += '<option value="' + attr(p.scope) + '" selected>自定义 · ' + esc(p.scope) + '</option>';
+
+  var html =
+    '<div class="field"><label>弹窗 ID</label>'
+    + '<input id="pfId" class="gate-input" value="' + attr(p.id) + '" placeholder="唯一标识，如 boot-hw">'
+    + '<p class="hint">改 ID 会让之前关过它的同学重新收到弹窗；新建建议保持不变。</p></div>'
+
+    + '<div class="field"><label>出现时机</label>'
+    + '<select id="pfScope" class="gate-input">' + scopeOpts
+    + '<option value="__custom__">自定义 cat:N（手填）</option></select>'
+    + '<input id="pfScopeCustom" class="gate-input" style="margin-top:6px;display:none" value="' + attr(p.scope) + '" placeholder="如 cat:12"></div>'
+
+    /* v3.5.40（站主 #4）：这条弹窗给谁看 */
+    + '<div class="field"><label>投放对象</label>'
+    + '<select id="pfTargetMode" class="gate-input">'
+    +   '<option value="all"' + ((!p.target || p.target.mode === 'all') ? ' selected' : '') + '>所有人</option>'
+    +   '<option value="users"' + (p.target && p.target.mode === 'users' ? ' selected' : '') + '>指定账号（按用户名 / 姓名）</option>'
+    +   '<option value="roles"' + (p.target && p.target.mode === 'roles' ? ' selected' : '') + '>按身份（管理员 / 学生 / 老师）</option>'
+    +   '<option value="titles"' + (p.target && p.target.mode === 'titles' ? ' selected' : '') + '>按头衔（团支书 / 课代表…）</option>'
+    + '</select>'
+    + '<div id="pfTargetUsersWrap" style="display:' + (p.target && p.target.mode === 'users' ? '' : 'none') + ';margin-top:8px">'
+    +   '<input id="pfTargetUsers" class="gate-input" value="' + attr(((p.target && p.target.users) || []).join(', ')) + '"'
+    +     ' placeholder="多个用逗号分隔，如 yuzikang, 余子康">'
+    +   '<p class="hint">写登录名或真实姓名都认；只弹给列出来的人。</p></div>'
+    + '<div id="pfTargetRolesWrap" style="display:' + (p.target && p.target.mode === 'roles' ? '' : 'none') + ';margin-top:8px;display:' + (p.target && p.target.mode === 'roles' ? 'flex' : 'none') + ';gap:14px;flex-wrap:wrap">'
+    +   [['admin','管理员'],['user','学生'],['teacher','老师']].map(function(x){
+          var on = !p.target || p.target.mode !== 'roles' || (p.target.roles || []).indexOf(x[0]) >= 0;
+          return '<label style="display:flex;align-items:center;gap:6px;font-weight:400">'
+            + '<input type="checkbox" class="pfRole" value="' + x[0] + '"' + (on ? ' checked' : '') + '> ' + x[1] + '</label>';
+        }).join('')
+    + '</div>'
+    + '<div id="pfTargetTitlesWrap" style="display:' + (p.target && p.target.mode === 'titles' ? '' : 'none') + ';margin-top:8px">'
+    +   '<input id="pfTargetTitles" class="gate-input" value="' + attr(((p.target && p.target.titles) || []).join(', ')) + '"'
+    +     ' placeholder="多个用逗号分隔，如 团支书, 课代表">'
+    +   '<p class="hint">按「头衔任命」里设的头衔匹配；同学身上有其中任意一个就会收到。</p></div>'
+    + '<p class="hint">投放对象只决定「弹给谁看」。内容仍存在云端，别把真正的秘密写进弹窗。</p></div>'
+
+    + '<div class="field"><label>内容来源</label>'
+    + '<select id="pfSource" class="gate-input">' + opts(POP_SOURCES, p.source) + '</select>'
+    + '<p class="hint">选「最新公告 / 作业通知」时，下面标题正文可留空，会自动取站内数据。</p></div>'
+
+    + '<div class="field"><label>标题</label>'
+    + '<input id="pfTitle" class="gate-input" value="' + attr(p.title) + '" placeholder="留空则用默认标题"></div>'
+
+    + '<div class="field"><label>正文</label>'
+    + '<textarea id="pfBody" class="gate-input" rows="4" placeholder="支持换行（直接回车即可）">' + esc(p.body) + '</textarea></div>'
+
+    + '<div class="field"><label>视频链接（可选）</label>'
+    + '<input id="pfVideo" class="gate-input" value="' + attr(p.video) + '" placeholder="B站分享链接 或 mp4 直链"></div>'
+
+    + '<div class="field"><label>图片链接（可选）</label>'
+    + '<input id="pfImage" class="gate-input" value="' + attr(p.image) + '" placeholder="图片直链"></div>'
+
+    + '<div class="field" style="display:flex;gap:10px;flex-wrap:wrap">'
+    +   '<div style="flex:1;min-width:160px"><label>按钮文字（可选）</label>'
+    +     '<input id="pfLinkText" class="gate-input" value="' + attr(p.linkText) + '" placeholder="如 查看详情"></div>'
+    +   '<div style="flex:2;min-width:200px"><label>按钮跳转到</label>'
+    +     '<select id="pfLinkPick" class="gate-input">'
+    +       pfLinkOptions(p.linkUrl)
+    +     '</select></div>'
+    + '</div>'
+
+    + '<div class="field" id="pfLinkUrlWrap" style="display:' + (pfLinkIsCustom(p.linkUrl) ? '' : 'none') + '">'
+    +   '<label>跳转地址</label>'
+    +   '<input id="pfLinkUrl" class="gate-input" value="' + attr(p.linkUrl) + '" placeholder="https://... 或 cat:5 / fn:showCurrentHomework">'
+    +   '<p class="hint">三种写法：<b>https://…</b> 外部链接；<b>cat:编号</b> 打开站内板块；'
+    +   '<b>fn:函数名</b> 打开站内页面（如 fn:showCurrentHomework 当前作业）。'
+    +   '留空则弹窗只有一个「我知道了」关闭按钮。</p>'
+    + '</div>'
+
+    + '<div class="field" style="display:flex;gap:10px;flex-wrap:wrap">'
+    +   '<div style="flex:1;min-width:160px"><label>开始时间（可选）</label>'
+    +     '<input id="pfStart" class="gate-input" value="' + attr(p.startAt) + '" placeholder="2026-10-13T08:00:00"></div>'
+    +   '<div style="flex:1;min-width:160px"><label>结束时间（可选）</label>'
+    +     '<input id="pfEnd" class="gate-input" value="' + attr(p.endAt) + '" placeholder="2026-10-20T18:00:00"></div>'
+    + '</div>'
+
+    + '<div class="field"><label>关闭后行为</label>'
+    + '<select id="pfDismiss" class="gate-input">' + opts(POP_DISMISS, p.dismiss) + '</select></div>'
+
+    + '<div class="field"><label>关闭后留悬浮球</label>'
+    + '<label style="display:flex;align-items:center;gap:8px;font-weight:400">'
+    +   '<input type="checkbox" id="pfBubble"' + (p.bubble !== false ? ' checked' : '') + '>'
+    +   '勾选后，同学关掉弹窗仍能在右下角点开重看</label></div>'
+
+    + '<div class="field"><label>横幅文字（仅「进板块」弹窗生效）</label>'
+    + '<input id="pfBanner" class="gate-input" value="' + attr(p.bannerText) + '" placeholder="进板块时板块顶部显示的横幅，留空则不显示"></div>'
+
+    + '<div class="field"><label>卡片样式</label>'
+    + '<select id="pfTheme" class="gate-input">' + POP_THEMES.map(function(t){ return '<option value="' + attr(t.id) + '"' + (t.id === p.theme ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select></div>';
+
+  openModal({
+    title: editing ? '编辑弹窗' : '新增弹窗',
+    sub: editing ? ('正在编辑 ' + p.id) : '填好后保存即写入云端',
+    body: html,
+    wide: true,
+    foot: '<button class="btn btn-secondary" id="pfCancel">取消</button>'
+        + '<button class="btn" id="pfSave">保存</button>',
+    onMount: function(){
+      var sc = $('pfScope'), scc = $('pfScopeCustom');
+      /* 已选「自定义」时把输入框亮出来 */
+      if(sc.value === '__custom__') scc.style.display = '';
+      sc.onchange = function(){
+        scc.style.display = (sc.value === '__custom__') ? '' : 'none';
+      };
+      /* 「按钮跳转到」下拉的联动。
+         ⚠️ 这里必须用 JS 赋值绑定，**不能写成内联的 onchange 属性**：
+         本文件的主脚本是 IIFE 包裹的，内联属性在全局作用域执行，根本找不到
+         IIFE 里的函数（真机上表现为「选了没反应」，且不报错，很难查）。 */
+      var pick = $('pfLinkPick');
+      if(pick) pick.onchange = pfLinkPickChange;
+      /* v3.5.40：投放对象切换时显示对应输入区 */
+      var tm = $('pfTargetMode');
+      if(tm) tm.onchange = function(){
+        var m = tm.value;
+        var uw = $('pfTargetUsersWrap'), rw = $('pfTargetRolesWrap'), tw = $('pfTargetTitlesWrap');
+        if(uw) uw.style.display = (m === 'users') ? '' : 'none';
+        if(rw) rw.style.display = (m === 'roles') ? 'flex' : 'none';
+        if(tw) tw.style.display = (m === 'titles') ? '' : 'none';
+      };
+      $('pfCancel').onclick = closeModal;
+      $('pfSave').onclick = function(){ popSave(idx, editing); };
+    },
+  });
+}
+
+function popSave(idx, editing){
+  var scopeSel = $('pfScope').value;
+  var scope = (scopeSel === '__custom__') ? ($('pfScopeCustom').value || '').trim() : scopeSel;
+  var id = ($('pfId').value || '').trim();
+  if(!id){ toast('弹窗 ID 不能为空', 'err'); return; }
+  if(!scope){ toast('请选择或填写出现时机', 'err'); return; }
+
+  var item = {
+    id:        id,
+    scope:     scope,
+    source:    $('pfSource').value,
+    title:     ($('pfTitle').value || '').trim(),
+    body:      $('pfBody').value || '',
+    video:     ($('pfVideo').value || '').trim(),
+    image:     ($('pfImage').value || '').trim(),
+    linkText:  ($('pfLinkText').value || '').trim(),
+    linkUrl:   ($('pfLinkUrl').value || '').trim(),
+    startAt:   ($('pfStart').value || '').trim(),
+    endAt:     ($('pfEnd').value || '').trim(),
+    dismiss:   $('pfDismiss').value,
+    bubble:    $('pfBubble').checked,
+    bannerText: ($('pfBanner').value || '').trim(),
+    theme:      $('pfTheme').value,
+    /* v3.5.40（站主 #4）：投放对象 */
+    target: (function(){
+      var m = $('pfTargetMode') ? $('pfTargetMode').value : 'all';
+      var split = function(v){
+        return String(v || '').split(/[,，、]/).map(function(x){ return x.trim(); }).filter(Boolean);
+      };
+      var roles = [];
+      Array.prototype.forEach.call(document.querySelectorAll('.pfRole'), function(cb){
+        if(cb.checked) roles.push(cb.value);
+      });
+      return {
+        mode: m,
+        users:  m === 'users'  ? split($('pfTargetUsers') ? $('pfTargetUsers').value : '') : [],
+        roles:  m === 'roles'  ? (roles.length ? roles : ['user']) : [],
+        titles: m === 'titles' ? split($('pfTargetTitles') ? $('pfTargetTitles').value : '') : [],
+      };
+    })(),
+  };
+
+  var list = POP_STATE.list.slice();
+
+  /* 同 ID 冲突检查（新建撞已有，或编辑时改成别人的 ID） */
+  var clash = -1;
+  list.forEach(function(r, i){ if(r.id === id && (!editing || i !== idx)) clash = i; });
+  var doWrite = function(target){
+    if(target >= 0){ list[target] = item; }        /* 覆盖指定那条（冲突确认后） */
+    else if(editing){ list[idx] = item; }          /* 原地编辑 */
+    else { list.push(item); }                      /* 新增 */
+    popWrite(list, editing ? '已保存' : '已新增').then(function(){
+      closeModal();
+      paintPopups();
+    }).catch(function(){});
+  };
+  if(clash >= 0){
+    confirmBox({
+      text: 'ID 「' + id + '」已被另一条弹窗占用',
+      detail: '继续保存会把它覆盖掉（不会新增一条）。要覆盖吗？',
+      warn: true,
+      okText: '覆盖',
+    }).then(function(ok){ if(ok) doWrite(clash); });
+    return;
+  }
+  doWrite(editing ? idx : -1);
+}
+
+/* 预览：用后台自己的弹窗容器还原前台样子（简化版，只展示能看见的部分） */
+function popPreview(i){
+  var p = POP_STATE.list[i];
+  if(!p) return;
+  var srcNote = '';
+  if(p.source !== 'custom'){
+    srcNote = '<div class="alert warn" style="margin:0 0 12px">'
+      + '这条的内容取自「' + esc(popSourceName(p.source)) + '」，实际显示内容以站内当时的数据为准，'
+      + '下面只是占位示意。</div>';
+    if(p.source === 'announcements') srcNote += '<p style="opacity:.8">（此处会显示最新公告正文）</p>';
+    if(p.source === 'homework_notice') srcNote += '<p style="opacity:.8">（此处会显示当前作业通知正文）</p>';
+  } else {
+    srcNote = '<p style="white-space:pre-wrap;margin:0 0 12px">' + (p.body ? esc(p.body) : '<span class="muted">（无正文）</span>') + '</p>';
+  }
+  var media = '';
+  if(p.video) media += '<p class="muted" style="font-size:.8rem">🎬 视频：<code class="mono">' + esc(p.video) + '</code></p>';
+  if(p.image) media += '<img src="' + attr(p.image) + '" style="max-width:100%;border-radius:8px;margin:8px 0" alt="预览图">';
+  if(p.bannerText) media += '<p class="muted" style="font-size:.8rem">📌 横幅：' + esc(p.bannerText) + '</p>';
+  var btn = p.linkUrl
+    ? '<div style="margin-top:12px"><span class="btn btn-sm">' + esc(p.linkText || '查看详情') + '</span></div>'
+    : '';
+
+  openModal({
+    title: p.title || '(无标题)',
+    sub: popScopeName(p.scope) + ' · ' + popDismissName(p.dismiss) + ' · ' + popWindowText(p)
+        + (p.theme ? ' · 样式:' + esc(p.theme) : '')
+        + (p.bannerText ? ' · 横幅' : ''),
+    body: srcNote + media + btn,
+    foot: '<button class="btn btn-secondary" id="pvClose">关闭预览</button>'
+        + '<button class="btn" id="pvEdit">去编辑</button>',
+    onMount: function(){
+      $('pvClose').onclick = closeModal;
+      $('pvEdit').onclick = function(){ closeModal(); popEdit(i); };
+    },
+  });
+}
+
+})();
