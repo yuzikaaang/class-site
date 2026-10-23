@@ -56,7 +56,8 @@ function die(msg) {
 
 /* ---------- ① 版本号四处一致 ---------- */
 const idx = read('index.html');
-const adm = read('admin.html');
+/* v3.9.16：后台脚本已拆到 admin.js，读发布记录要两份拼起来 */
+const adm = read('admin.html') + (fs.existsSync(path.join(ROOT, 'admin.js')) ? read('admin.js') : '');
 const sw = read('sw.js');
 const wk = read('api/worker.mjs');
 
@@ -297,8 +298,9 @@ console.log('③e 资源清单完整（引用 ' + refs.size + ' 个文件，全�
    数字摆出来，才不会一边喊慢一边继续加代码。 */
 const budget = [
   ['index.html', 130 * 1024, '首屏 HTML（gzip）'],
-  ['app.js', 400 * 1024, '主脚本（gzip）'],
-  ['admin.html', 340 * 1024, '后台（gzip）'],
+  ['app.min.js', 240 * 1024, '主脚本（gzip，实际发布）'],
+  ['admin.html', 60 * 1024, '后台 HTML（gzip，拆包后）'],
+  ['admin.js', 240 * 1024, '后台脚本（gzip，拆包后）'],
 ];
 const gz = (p) => zlib.gzipSync(Buffer.from(read(p))).length;
 const over = [];
@@ -316,7 +318,7 @@ if (over.length) {
    ① admin.html 曾有 startAdminHeartbeat 两份：后一份覆盖前一份，且没有
       __adminHbTimer 守卫 → 每进一次后台多一个 60 秒定时器。
    ② 公开仓库里曾躺着管理员明文口令。两件事都靠肉眼发现太晚。 */
-const dupFiles = ['app.js', 'admin.html', 'index.html'];
+const dupFiles = ['app.js', 'admin.js', 'admin.html', 'index.html'];
 const dupHit = [];
 for (const f of dupFiles) {
   const t = read(f);
