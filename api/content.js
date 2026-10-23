@@ -105,8 +105,12 @@ async function readContent(req, res) {
      「写入成功（cloudKeys 里能看到键）、读取为空」的诡异现象，排查了很久。
      根因是 @neondatabase/serverless 的模板标签对这种散装占位展开不正确。 */
   const wantKeys = [CONTENT_KEY, ANNOUNCE_KEY];
+  /* v3.9.10：让数据库直接给出毫秒时间戳 —— 不再由 JS 猜 updated_at 的格式。
+     之前 Date.parse 在「带时区 / 不带时区 / 带毫秒」三种形态间必有一种失败，
+     失败后 latest 恒为 0，增量判断永远不成立（等于没做增量）。 */
   const rows = await sql`
-    select data_key, data_value, updated_at
+    select data_key, data_value, updated_at,
+           (extract(epoch from updated_at) * 1000)::bigint as updated_ms
       from user_data
      where user_id = ${uid}
        and data_key = any(${wantKeys}::text[])
@@ -123,19 +127,8 @@ async function readContent(req, res) {
     const val = jsonCol(r.data_value);
     if (val === null || val === undefined) return;
 
-    /* 时间戳：用于增量判断。
-       ⚠️ v3.9.10 修：数据库可能给 `2026-10-22 15:31:50.123+00` 这种**已带时区**的串，
-       原来无条件拼 'Z' 会得到 `...T15:31:50.123+00Z` → Date.parse = NaN → latest 恒为 0，
-       于是「增量」永远判定为有更新（等于没做）。这里按形态分别处理。 */
-    const tsRaw = String(r.updated_at == null ? '' : r.updated_at).trim();
-    let t = 0;
-    if (tsRaw) {
-      if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(tsRaw)) {
-        t = Date.parse(tsRaw) || 0;                       /* 自带时区，直接用 */
-      } else {
-        t = Date.parse(tsRaw.replace(' ', 'T') + 'Z') || 0; /* 纯本地时间，按 UTC 补 Z */
-      }
-    }
+    /* 时间戳：直接用数据库算好的毫秒（updated_ms），JS 不再解析字符串 */
+    const t = Number(r.updated_ms) || 0;
     if (t > latest) latest = t;
 
     if (r.data_key === ANNOUNCE_KEY) {
