@@ -994,6 +994,19 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 /* 字号下拉：跟其他小控件一个尺寸 */
 .ai-size{font-size:.74rem;padding:3px 6px;border-radius:7px;border:1px solid var(--border);
   background:var(--bg-1);color:var(--fg);font-family:inherit}
+/* v3.9.18 逐字编辑：文字拆成一格格可点的字 */
+.ai-chhint{font-size:.72rem;margin:8px 0 0;line-height:1.5}
+.ai-charbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.ai-chlab{font-size:.72rem;font-weight:800;color:var(--accent-ink)}
+.ai-chtip{font-size:.7rem;opacity:.62;margin-left:auto}
+.ad-chars{margin-top:6px;padding:9px 12px;border-radius:12px;border:1px dashed var(--border);
+  background:var(--tint);line-height:2;white-space:pre-wrap;word-break:break-word;
+  max-height:150px;overflow:auto;user-select:none;-webkit-user-select:none;cursor:text}
+.ad-ch{display:inline-block;min-width:.45em;padding:0 1px;border-radius:4px;
+  text-align:center;transition:background .12s}
+.ad-ch:hover{background:rgba(251,146,60,.22)}
+.ad-ch.on{background:rgba(251,146,60,.45);box-shadow:inset 0 0 0 1px #fb923c}
+.ad-nl{opacity:.45;font-size:.7rem;padding:0 2px}
 .ai-dprev-txt .ln-em{display:block;font-weight:900;text-align:center}
 .ai-photo-row img{display:block;margin-top:10px;max-width:180px;max-height:180px;
   border-radius:10px;border:1px solid var(--border);object-fit:cover}
@@ -1615,7 +1628,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '3.9.17';
+var SITE_VERSION = '3.9.18';
 var VER_DATE = '2026-10-22';
 </script>
 <script src="./admin.js?v=3915"></script>
