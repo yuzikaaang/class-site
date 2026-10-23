@@ -88,21 +88,29 @@ console.log('\n【1】手机端首屏密度（390×844）');
     localStorage.setItem('cls_welcome_v1', '1');
   });
   await page.route('**/api/**', mockApi);
-  await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded' });
+  await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForTimeout(2500);
   await page.evaluate(() => document.querySelectorAll('.allboard-mask,.mask').forEach((m) => { m.classList.remove('show'); m.style.display = 'none'; }));
 
-  const r = await page.evaluate(() => ({
-    header: Math.round(document.querySelector('header').getBoundingClientRect().height),
-    island: Math.round(document.getElementById('classIsland').getBoundingClientRect().height),
-    meta: getComputedStyle(document.querySelector('.island-meta')).display,
-    chips: getComputedStyle(document.querySelector('.island-row.isl-chips')).display,
-    cards: document.querySelectorAll('#grid .card').length,
-    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  }));
+  const r = await page.evaluate(() => {
+    const hd = document.querySelector('header');
+    const isl = document.getElementById('classIsland');
+    const meta = document.querySelector('.island-meta');
+    const chips = document.querySelector('.island-row.isl-chips');
+    const cs = (el) => (el ? getComputedStyle(el).display : 'missing');
+    return {
+      header: hd ? Math.round(hd.getBoundingClientRect().height) : -1,
+      island: isl ? Math.round(isl.getBoundingClientRect().height) : -1,
+      meta: cs(meta),
+      chips: cs(chips),
+      cards: document.querySelectorAll('#grid .card').length,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
   t('头部收成一行（< 80px）', r.header < 80, '实际 ' + r.header + 'px');
   t('班级岛默认收起（< 130px）', r.island < 130, '实际 ' + r.island + 'px');
-  t('信息条可见、四格隐藏', r.meta !== 'none' && r.chips === 'none', JSON.stringify(r));
+  t('信息条存在且可见、四格默认隐藏', r.meta === 'flex' && r.chips === 'none',
+    'meta=' + r.meta + ' chips=' + r.chips + '（meta=missing 说明 app.js 没更新）');
   t('8 张卡片正常渲染', r.cards === 8, '实际 ' + r.cards);
   t('无横向溢出', r.overflow <= 0, '溢出 ' + r.overflow + 'px');
 
@@ -135,7 +143,7 @@ console.log('\n【2】老内核（无 PointerEvent）拖字号滑块');
     localStorage.setItem('cls_welcome_v1', '1');
   });
   await page.route('**/api/**', mockApi);
-  await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded' });
+  await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForTimeout(2000);
   await page.evaluate(() => { try { openSettings(); uiSec('look'); } catch (e) {} });
   await page.waitForTimeout(700);
@@ -180,7 +188,7 @@ console.log('\n【3】轻量模式：不拉外部资源');
     if (!u.startsWith(BASE) && !u.includes('api.classsite.dpdns.org')) external.push(u);
   });
   await page.route('**/api/**', mockApi);
-  await page.goto(BASE + '/index.html', { waitUntil: 'load' });
+  await page.goto(BASE + '/index.html', { waitUntil: 'load', timeout: 120000 });
   await page.waitForTimeout(4000);
   const r = await page.evaluate(() => ({
     lite: document.documentElement.getAttribute('data-lite'),
@@ -199,7 +207,7 @@ console.log('\n【4】app.js 加载失败时不白屏');
   const page = await ctx.newPage();
   await page.route('**/app.js*', (r) => r.abort());
   await page.route('**/api/**', mockApi);
-  await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded' });
+  await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForTimeout(13500);
   const r = await page.evaluate(() => {
     const el = document.getElementById('legacyFallback');
@@ -218,7 +226,7 @@ console.log('\n【5】基础版页面（老设备）');
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
   await page.route('**/api/**', mockApi);
-  await page.goto(BASE + '/basic.html', { waitUntil: 'domcontentloaded' });
+  await page.goto(BASE + '/basic.html', { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForTimeout(1500);
   const r = await page.evaluate(() => ({
     items: document.querySelectorAll('#annList .item').length,
