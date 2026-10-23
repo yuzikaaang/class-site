@@ -84,6 +84,7 @@ jobs:
             badge.png
             qrcode.jpg
             fonts
+            icons
             games
             homework
             vendor

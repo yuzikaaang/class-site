@@ -1560,14 +1560,14 @@ var SITE_DATA = {
   links: [
     {
       id: 1,
-      categoryId: 1, title: "点歌平台", subtitle: "VoiceHub", icon: "https://s41.ax1x.com/2026/08/21/pmxXJkq.png",
+      categoryId: 1, title: "点歌平台", subtitle: "VoiceHub", icon: "./icons/pmxXJkq.png",
       desc: "线上点歌平台：点击下方按钮进入，点播你想听的歌曲。\n本平台由 VoiceHub 提供技术支持\n初始账号：学号（如 250501），默认密码：生日（如 20250901）\n💡 服务器配置有限，没有立即跳转请耐心等待几秒",
       mainLabel: "前往入口", mainUrl: "https://xsyzc2505.dpdns.org/", mainWechatOk: false,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
       id: 2,
-      categoryId: 1, title: "作业查看", subtitle: "Classworks", icon: "https://s41.ax1x.com/2026/08/21/pmxX87n.png",
+      categoryId: 1, title: "作业查看", subtitle: "Classworks", icon: "./icons/pmxX87n.png",
       desc: "周作业及假期作业均可在线查看。\n使用教程：点击页面中的「已注册」，即可自动登录。\n若未显示当周作业，请跳转到布置作业的当天重新查看。",
       cardTip: "⚠️ 因校园网限制，班级电脑端的 Classworks 连不上服务器、无法同步到云端供大家查看，故站内作业为站主手动同步。如需尝试直接访问原站，可点「🌐 前往 Classworks」。",
       customActions: [
@@ -1578,21 +1578,21 @@ var SITE_DATA = {
     },
     {
       id: 3,
-      categoryId: 2, title: "班级课表", subtitle: "ClassIsland", icon: "https://s41.ax1x.com/2026/08/21/pmxjpEn.png",
+      categoryId: 2, title: "班级课表", subtitle: "ClassIsland", icon: "./icons/pmxjpEn.png",
       desc: "开源智能大屏课表系统，\n实时展示当日课程、上下课倒计时与提醒，\n支持多周轮换课表与临时调课功能。",
       mainLabel: "前往官方页面", mainUrl: "https://www.classisland.tech/", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
       id: 4,
-      categoryId: 2, title: "屏幕批注", subtitle: "ICC-CE", icon: "https://s41.ax1x.com/2026/08/22/pmz6J6U.png", active: false,
+      categoryId: 2, title: "屏幕批注", subtitle: "ICC-CE", icon: "./icons/pmz6J6U.png", active: false,
       desc: "智能课堂绘图增强工具，\n专为教师打造高效交互式绘图解决方案，\n支持智能笔迹处理、PPT 实时标注、多点触控手势与高度自定义设置。",
       mainLabel: "前往官方页面", mainUrl: "https://cjk-is-so-cute.netlify.app/", mainWechatOk: false,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
       id: 5,
-      categoryId: 2, title: "听歌平台", subtitle: "EchoMusic", icon: "https://s41.ax1x.com/2026/08/25/pnpe3ff.png",
+      categoryId: 2, title: "听歌平台", subtitle: "EchoMusic", icon: "./icons/pnpe3ff.png",
       desc: "音乐课等课上播放歌曲的桌面播放器，\n支持歌单分享、歌词同步、主题换肤与多平台音乐导入，\n可在教室电脑安装使用，课上一起听歌更自在。",
       mainLabel: "查看项目", mainUrl: "https://github.com/hoowhoami/EchoMusic", mainWechatOk: false,
       extraLabel: "", extraUrl: "", extraWechatOk: true
@@ -2877,7 +2877,7 @@ function render(){
       inner = links.map(function(l){
         var fallback = esc(l.iconText || (l.title||'').charAt(0) || '链');
         var iconHtml = l.icon
-          ? '<img src="'+esc(l.icon)+'" alt="'+esc(l.title)+'" onerror="this.outerHTML=\'<div class=&quot;fallback ink-auto&quot;>'+fallback+'</div>\'">'
+          ? '<img src="'+esc(l.icon)+'" alt="'+esc(l.title)+'" loading="lazy" decoding="async" width="44" height="44" onerror="this.outerHTML=\'<div class=&quot;fallback ink-auto&quot;>'+fallback+'</div>\'">'
           : '<div class="fallback ink-auto">'+fallback+'</div>';
         var needBrowser = isWeChat() && !l.mainWechatOk && httpUrl(l.mainUrl);
         /* 门禁总开关关闭时直接视为「已通过」，不再渲染问答框（GATE_ENABLED=false） */
@@ -3768,7 +3768,7 @@ function badgeCachedSrc(){
 function badgeCacheLoad(force){
   /* v3.9.10：轻量模式直接用仓库里的 badge.png（同源 CDN），
      不走 /api/badge 代理（110KB、约 3.8s）。 */
-  if(liteOn()) return Promise.resolve('./badge.png');
+  if(liteOn()) return Promise.resolve('./icons/badge-256.png');
   if(__badgeLoading) return __badgeLoading;
   var cached = badgeCachedSrc();
   var ts = 0;
@@ -3779,7 +3779,9 @@ function badgeCacheLoad(force){
     var done = false;
     function fin(v){ if(!done){ done = true; __badgeLoading = null; resolve(v || ''); } }
     try{
-      var url = (typeof apiReady === 'function' && apiReady()) ? apiUrl('/badge') : './badge.png';
+      /* v3.9.12：班徽原图就是 256×256 但没有压缩（110KB），且要经 /api/badge 代理
+         （约 3.8s）。改用同源 icons/badge-256.png（128 色，28KB），首屏少 80KB。 */
+      var url = './icons/badge-256.png';
       fetch(url, { cache:'force-cache' }).then(function(r){
         if(!r.ok) throw new Error('HTTP ' + r.status);
         return r.blob();
@@ -3812,7 +3814,8 @@ function siteBadgeList(){
   /* ① 登录时下载好的本地缓存（dataURL，零请求、不会被跨域污染） */
   var cached = badgeCachedSrc();
   if(cached) list.push(cached);
-  /* ② 站点本地文件（有则更快，没有就 404 跳过） */
+  /* ② 站点本地文件：优先 28KB 的 256px 版（原图 110KB，画质一样） */
+  try{ list.push(new URL('./icons/badge-256.png', location.href).href); }catch(e){}
   try{ list.push(new URL('./badge.png', location.href).href); }catch(e){}
   var u = '';
   try{ u = (window.SITE_DATA && SITE_DATA.badgeUrl) || ''; }catch(e){}
@@ -9249,6 +9252,9 @@ function islandToday(){
 function islandRender(){
   var host = document.getElementById('classIsland');
   if(!host) return;
+  /* v3.9.14：去掉首帧占位类（占位是为了不让页面跳，见 index.html .isl-boot） */
+  host.classList.remove('isl-boot');
+  host.removeAttribute('aria-hidden');
   if(!ISLAND || !ISLAND.on){
     host.style.display = 'none';
     host.innerHTML = '';

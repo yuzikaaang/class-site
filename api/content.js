@@ -87,6 +87,20 @@ export default async function handler(req, res) {
    公开接口：内容（公告、作业）本来就是给全班看的，登录与否都能读。
    这里不做登录校验，是为了让「还没登录的同学」也能看到公告——
    否则开屏引导登录的那个弹窗就没法展示内容了。 */
+/** 把数据库给的时间串解析成毫秒；兼容带/不带时区、带/不带毫秒、±HH / ±HHMM / ±HH:MM */
+function parseDbTime(v) {
+  if (v instanceof Date) return v.getTime() || 0;
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return 0;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?/);
+  if (!m) return Date.parse(s) || 0;
+  const ms = m[7] ? Number((m[7] + '000').slice(0, 3)) : 0;
+  let t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0), ms);
+  const off = s.match(/([+-])(\d{2}):?(\d{2})?$/);
+  if (off) t -= (off[1] === '-' ? -1 : 1) * (Number(off[2]) * 60 + Number(off[3] || 0)) * 60000;
+  return t;
+}
+
 async function readContent(req, res) {
   const sql = getSql();
   const since = Number(req.query.since) || 0;
@@ -123,8 +137,10 @@ async function readContent(req, res) {
     const val = jsonCol(r.data_value);
     if (val === null || val === undefined) return;
 
-    /* 时间戳：用于增量判断。数据库给的是 SQL 字符串，交给 JS 解析。 */
-    const t = Date.parse(String(r.updated_at).replace(' ', 'T') + 'Z') || 0;
+    /* 时间戳：v3.9.10 用容错解析（见 parseDbTime）。
+       原来写 `Date.parse(str.replace(' ','T') + 'Z')`，遇到 `2026-10-22 15:31:50.123+00`
+       这种已带偏移的串会拼成 `...123+00Z` → NaN → latest 恒 0 → 增量恒失效。 */
+    const t = parseDbTime(r.updated_at);
     if (t > latest) latest = t;
 
     if (r.data_key === ANNOUNCE_KEY) {
