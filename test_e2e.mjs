@@ -11899,8 +11899,8 @@ console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横�
   /* ---- 1) 横幅单行 / 临时改多行 / 一键填入 ---- */
   t('★v3.9.6 星期横幅收回单行输入（默认课表）',
     /<input data-bk="/.test(adm96) && !/<textarea data-bk="/.test(adm96));
-  t('★v3.9.6 「按日期临时改」是多行文本框（200 字）',
-    /<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="200"/.test(adm96));
+  t('★v3.9.6 「按日期临时改」是多行文本框（v3.9.18 起 600 字，留给单字标记）',
+    /<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="600"/.test(adm96));
   t('★v3.9.6 有「填入当天课表」按钮并实现 aiFillDay',
     /id="adFill"[^>]*>填入当天课表</.test(adm96) && /function aiFillDay\(\)/.test(adm96)
     && /\[\x27sun\x27, \x27mon\x27/.test(adm96));
@@ -11912,8 +11912,19 @@ console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横�
     && /data-holedit=/.test(adm96));
   t('★v3.9.6 假期可复用（复制到表单再改日期）',
     /function aiAddHoliday/.test(adm96) && /data-hcopy=/.test(adm96) && /复用/.test(adm96));
-  t('★v3.9.6 后端日期覆盖放宽到 200 字（MAX_DAY_TEXT）',
-    /const MAX_DAY_TEXT = 200/.test(isl96) && /text: str\(v\.text, MAX_DAY_TEXT\)/.test(isl96));
+  t('★v3.9.6 后端日期覆盖放宽（MAX_DAY_TEXT，v3.9.18 = 600）',
+    /const MAX_DAY_TEXT = 600/.test(isl96) && /text: str\(v\.text, MAX_DAY_TEXT\)/.test(isl96));
+
+  /* ---- v3.9.18 逐字编辑 ---- */
+  t('★v3.9.18 后台有逐字面板与「逐个字」的格式函数',
+    /id="adChars"/.test(adm96) && /function aiRichChars\(/.test(adm96)
+    && /function aiCharApply\(/.test(adm96) && /data-ch="b"/.test(adm96)
+    && /id="adChSize"/.test(adm96));
+  t('★v3.9.18 前台与后台解析同一套单字标记 {22b字}',
+    idx96.indexOf('([bs]{0,2})([^{}]+)') >= 0
+    && /function islInline\(/.test(idx96));
+  t('★v3.9.18 单字标记只对有属性的花括号生效（正文 {abc} 原样）',
+    /if\(!sz && !fl\) return all;/.test(idx96));
 
   /* ---- 2) 气泡玻璃 + 暗色适配 ---- */
   t('★v3.9.7 深色玻璃岛参数与 v3.8.7 一致（渐变 / 描边 / 光晕）',
