@@ -76,6 +76,13 @@ const DEFAULT_ISLAND = {
   photo: '',
 };
 
+/** 字号：只接受 12–32 的整数，其它一律当「默认」 */
+function clampSize(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 12 || n > 32) return 0;
+  return Math.round(n);
+}
+
 function str(v, max) { return String(v == null ? '' : v).trim().slice(0, max); }
 function isDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')); }
 
@@ -103,9 +110,11 @@ function normDays(raw) {
       text: str(v.text, MAX_DAY_TEXT),
       off: !!v.off,
       label: str(v.label, 16),
-      /* v3.9.7：当天那一条可以单独设加粗 / 是否居中（默认居中） */
+      /* v3.9.7：当天那一条可以单独设加粗 / 是否居中（默认居中）
+         v3.9.17：再加「字号」（px，0 = 跟随默认） */
       bold: !!v.bold,
       center: v.center !== false,
+      size: clampSize(v.size),
     };
   });
   return out;
