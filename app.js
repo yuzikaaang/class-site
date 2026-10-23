@@ -9382,11 +9382,26 @@ function islandRender(){
  *   行首 #     → 这一行整体加粗并居中
  * 先转义再套标记，不会因为内容里带尖括号出问题。
  * ========================================================================= */
+/* v3.9.18：{字号b/s文字} —— 单字级别的字号 / 加粗 / 横线
+   例：{28b考} 表示「考」28px 且加粗；{s化} 表示「化」加一条横线。
+   只有带属性才当标记，正文里单纯写 {abc} 会原样显示。 */
+function islInline(sz, fl, txt){
+  if(!sz && !fl) return txt;
+  var st = '';
+  if(sz) st += 'font-size:' + sz + 'px;';
+  if(fl.indexOf('b') >= 0) st += 'font-weight:900;';
+  if(fl.indexOf('s') >= 0) st += 'text-decoration:line-through;';
+  return st ? '<span style="' + st + '">' + txt + '</span>' : txt;
+}
 function islFmtLine(line, forceHead){
   var head = !!forceHead;
   var t = String(line == null ? '' : line);
   if(/^#\s?/.test(t)){ head = true; t = t.replace(/^#\s?/, ''); }
   var html = esc(t);
+  html = html.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, txt){
+    if(!sz && !fl) return all;
+    return islInline(sz, fl, txt);
+  });
   html = html.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
   html = html.replace(/~~([^~]+)~~/g, '<s>$1</s>');
   return head ? '<span class="ln-em">' + html + '</span>' : html;
