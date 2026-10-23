@@ -9649,7 +9649,7 @@ console.log('\n【85】第七十三轮·v3.3.0 需关注学生加单科线（比
   const vmMod = await import('node:vm');
   /* v3.9.8：主脚本已拆到 app.js —— 直接读它（HTML 里剩下的都是小内联脚本）。
      版本号现在声明在 index.html，沙箱里补上两行，跟真实加载顺序一致。 */
-  const big = "var SITE_VERSION='3.9.16';var VER_DATE='2026-10-22';\n"
+  const big = "var SITE_VERSION='3.9.17';var VER_DATE='2026-10-22';\n"
     + fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
 
   const mkEl = (tag) => ({
@@ -11056,13 +11056,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.9.16 index.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.16'/.test(idx539));
-  t('v3.9.16 admin.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.16'/.test(admh539));
-  t('v3.9.16 sw.js SITE_VER = 3.9.16（缓存桶随版本）',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.16'")
+  t('v3.9.17 index.html SITE_VERSION = 3.9.17', /var SITE_VERSION = '3\.9\.17'/.test(idx539));
+  t('v3.9.17 admin.html SITE_VERSION = 3.9.17', /var SITE_VERSION = '3\.9\.17'/.test(admh539));
+  t('v3.9.17 sw.js SITE_VER = 3.9.17（缓存桶随版本）',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.17'")
     && /const CACHE = 'class-site-' \+ SITE_VER/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.9.16 api/worker.mjs API_VER = 3.9.16',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.16';"));
+  t('v3.9.17 api/worker.mjs API_VER = 3.9.17',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.17';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11160,9 +11160,9 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
 
   /* ---- 版本号 ---- */
   t('v3.8.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx540) && /var SITE_VERSION = '3\.9\.16'/.test(adm540)
-    && /const API_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.17'/.test(idx540) && /var SITE_VERSION = '3\.9\.17'/.test(adm540)
+    && /const API_VER = '3\.9\.17'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.17'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11216,9 +11216,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx542) && /var SITE_VERSION = '3\.9\.16'/.test(adm542)
-    && /const API_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    /var SITE_VERSION = '3\.9\.17'/.test(idx542) && /var SITE_VERSION = '3\.9\.17'/.test(adm542)
+    && /const API_VER = '3\.9\.17'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.17'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11288,8 +11288,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.5 当前版本 3.9.16、日期 2026-10-22',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
+  t('v3.8.5 当前版本 3.9.17、日期 2026-10-22',
+    /var SITE_VERSION = '3\.9\.17'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11446,10 +11446,10 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.9.16 四处版本一致', /var SITE_VERSION = '3\.9\.16'/.test(idx70)
-    && /var SITE_VERSION = '3\.9\.16'/.test(adm70)
-    && /const API_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.9.17 四处版本一致', /var SITE_VERSION = '3\.9\.17'/.test(idx70)
+    && /var SITE_VERSION = '3\.9\.17'/.test(adm70)
+    && /const API_VER = '3\.9\.17'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /const SITE_VER = '3\.9\.17'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.9'/.test(adm70));
 }
 
@@ -11476,7 +11476,7 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
   t('v3.7.6 首页 / 后台版本已是 3.9.16',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx76));
+    /var SITE_VERSION = '3\.9\.17'/.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11825,10 +11825,10 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
   const wk94  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
 
   /* ---- 版本号四处一致 ---- */
-  t('★v3.9.4+ index.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.16'/.test(idx94));
-  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.16'/.test(adm94));
-  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.16'"));
-  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.16';"));
+  t('★v3.9.4+ index.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.17'/.test(idx94));
+  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.17'/.test(adm94));
+  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.17'"));
+  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.17';"));
   t('★v3.9.4 REL_BUILTIN 有 3.9.4 条目且带 pub',
     /\{\s*version:\s*'3\.9\.4'[\s\S]{0,2000}?pub:\s*\[/.test(adm94));
 
@@ -11986,7 +11986,7 @@ console.log('\n【新】v3.9.7 深色玻璃 / 实时保存 / 加粗居中');
   t('★v3.9.7+ 前台按设置渲染（txt bold / soft / left 三态）',
     /t\.bold === true \? ' bold' : \(t\.bold === false \? ' soft' : ''\)/.test(idx97)
     && /t\.center === false \? ' left' : ''/.test(idx97)
-    && /\.island-banner \.txt\.bold\{font-weight:900\}/.test(idx97));
+    && /\.island-banner \.txt\.bold\{font-weight:800\}/.test(idx97));
   t('★v3.9.7 不居中时整条左对齐（标签也靠左）',
     /left-align\{align-items:flex-start/.test(idx97)
     && /left-align \.tag\{align-self:flex-start\}/.test(idx97));
@@ -12030,7 +12030,7 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
   t('★v3.9.8 HTML 体积降到原来的 1/4 以下（骨架 + 样式）',
     idx98.length < 400000);
   t('★v3.9.8 版本号留在 HTML（门禁能直接读到）',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx98) && !/var SITE_VERSION/.test(app98));
+    /var SITE_VERSION = '3\.9\.17'/.test(idx98) && !/var SITE_VERSION/.test(app98));
   t('★v3.9.8 首屏骨架卡（公告 + 板块）',
     (idx98.match(/skel-card/g) || []).length >= 6 && /\.skel-card\{[^}]*animation/.test(idx98.replace(/@keyframes[^}]*\{[^}]*\}/g, '')) || (idx98.match(/skel-card/g) || []).length >= 6);
 
@@ -12061,9 +12061,10 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
     && /\(\[\^\*\]\+\)/.test(app98) && /<b>\$1<\/b>/.test(app98)
     && /\(\[\^~\]\+\)/.test(app98) && /<s>\$1<\/s>/.test(app98)
     && /\^#\\s\?/.test(app98));
-  t('★v3.9.8 课程信息默认加粗（.txt 800 / 勾选 900 / 取消 500）',
-    /\.island-banner \.txt\{[^}]*font-weight:800/.test(idx98)
-    && /\.island-banner \.txt\.bold\{font-weight:900\}/.test(idx98)
+  t('★v3.9.17 字重分层：默认 700 / 整块加粗 800 / 行内加粗 900 / 取消 500',
+    /\.island-banner \.txt\{[^}]*font-weight:700/.test(idx98)
+    && /\.island-banner \.txt\.bold\{font-weight:800\}/.test(idx98)
+    && /\.island-banner \.txt b\{font-weight:900/.test(idx98)
     && /\.island-banner \.txt\.soft\{font-weight:500\}/.test(idx98));
   t('★v3.9.8 后台加粗默认勾上',
     /id="adBold" checked/.test(adm98));
@@ -12103,7 +12104,7 @@ console.log('\n【新】v3.9.16 备份去重（同一版本只留一份）');
     /order by created_at desc limit 1\s*\n?\s*\)/.test(adjs99)
     && !/order by created_at desc limit 3/.test(adjs99));
   t('★v3.9.16 REL_BUILTIN 有 3.9.16 条目且带 pub',
-    /\{\s*version:\s*'3\.9\.16'[\s\S]{0,1600}?pub:\s*\[/.test(adm99));
+    /\{\s*version:\s*'3\.9\.17'[\s\S]{0,1600}?pub:\s*\[/.test(adm99));
 }
 
 
@@ -12158,6 +12159,41 @@ console.log('\n【新】v3.9.10 缓存优先 / 老 iPad / 门禁加固');
     && /host\.classList\.remove\('isl-boot'\)/.test(app10));
   t('★v3.9.16 后台只剩一个心跳函数',
     (adm10.match(/function startAdminHeartbeat/g) || []).length === 1);
+}
+
+
+console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
+{
+  const idx17 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const app17 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const adm17 = readAdm();
+  const isl17 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
+
+  t('★v3.9.17 21 点后默认看明天（islIsNight + 可手动覆盖）',
+    /function islIsNight\(\)\{ return new Date\(\)\.getHours\(\) >= 21; \}/.test(app17)
+    && /var ISL_VIEW = null;/.test(app17) && /function islShowTomorrow\(\)/.test(app17));
+  t('★v3.9.17 明天有临时安排优先，没有再用星期课表',
+    /function islandToday\(offset\)/.test(app17) && /if\(offset\) d\.setDate\(d\.getDate\(\) \+ offset\)/.test(app17)
+    && /\(day && day\.text\) \|\| \(ISLAND\.banner \|\| \{\}\)\[dow\]/.test(app17));
+  t('★v3.9.17 标签会变成「明日事项」', /\(tomorrow \? '明日事项' : '今日事项'\)/.test(app17));
+  t('★v3.9.17 21 点后出现「看今天 / 看明天」按钮', /class="isl-switch"/.test(app17)
+    && /看今天|看明天/.test(app17) && /islSwitchView/.test(app17));
+  t('★v3.9.17 挂到 21 点自动重画（不用刷新）', /if\(h === 21 \|\| h === 0\) islandBanner\(\);/.test(app17));
+  t('★v3.9.17 字号（12–32）存进当天配置并渲染',
+    /function clampSize/.test(isl17) && /size: clampSize\(v\.size\)/.test(isl17)
+    && /font-size:' \+ t\.size \+ 'px/.test(app17));
+  t('★v3.9.17 排版按钮是开关（能找到包住选区的标记就取消）',
+    /function aiFindSpan/.test(adm17) && /var span = aiFindSpan\(v, a, b, mark\)/.test(adm17)
+    && /连点即取消/.test(adm17));
+  t('★v3.9.17 整行强调有可见样式（底色 + 左竖条）',
+    /\.island-banner \.txt \.ln-em\{[^}]*background:rgba\(251,146,60,\.18\)/.test(idx17));
+  t('★v3.9.17 行内加粗与默认字重拉开（700 / 900）',
+    /\.island-banner \.txt\{[^}]*font-weight:700/.test(idx17)
+    && /\.island-banner \.txt b\{font-weight:900/.test(idx17));
+  t('★v3.9.17 后台有字号下拉且随保存提交',
+    /id="adSize"/.test(adm17) && /size: Number\(\(\$\('adSize'\)/.test(adm17));
+  t('★v3.9.17 后台预览复用前台类（不再各写一套）',
+    /pv\.innerHTML = '<div class="island-banner'/.test(adm17));
 }
 
 console.log('\n' + '='.repeat(52));
