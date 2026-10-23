@@ -3580,7 +3580,9 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
               fetch() 走的是和「导出图片缓存」同一条路，实测稳定返回 200。
               所以这里改用 fetch 取图 → 转 dataURL → 顺手存成本地缓存，
               之后的访问连请求都不用发；导出图片也直接吃这份缓存。 */
-        var API_B = 'https://api.classsite.dpdns.org/api/badge';
+        /* v3.9.13：原先这里冷启动就拉服务器代理的班徽（110KB，约 3 秒），
+           现在站内已有 28KB 的 256px 版本，直接用它 —— 同源、可被离线缓存。 */
+        var API_B = './icons/badge-256.png';
         var FALL  = 'https://s41.ax1x.com/2026/06/07/pmmhF6H.png';
         function store(d){
           try{
@@ -4415,7 +4417,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '3.9.12';
+var SITE_VERSION = '3.9.13';
 var VER_DATE = '2026-10-22';
 </script>
 <script src="./app.js?v=392" defer></script>
