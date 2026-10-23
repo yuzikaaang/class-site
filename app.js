@@ -9252,6 +9252,9 @@ function islandToday(){
 function islandRender(){
   var host = document.getElementById('classIsland');
   if(!host) return;
+  /* v3.9.14：去掉首帧占位类（占位是为了不让页面跳，见 index.html .isl-boot） */
+  host.classList.remove('isl-boot');
+  host.removeAttribute('aria-hidden');
   if(!ISLAND || !ISLAND.on){
     host.style.display = 'none';
     host.innerHTML = '';
