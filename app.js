@@ -9284,7 +9284,19 @@ function islandRender(){
   }
   if(!row) row = '<div class="island-chip"><span class="k">今日</span><span class="v" id="islTime">—</span></div>';
 
-  host.innerHTML = '<div class="island-row">' + row + '</div>'
+  /* v3.9.15（站主）：手机端太占地方 —— 四个信息块在窄屏折成「一行信息条」，
+     点一下才展开成原来的四格。位置不动（仍在公告上面），但高度从 ~172px 降到 ~90px。 */
+  var meta = [];
+  if(comps.indexOf('time') >= 0) meta.push('<span id="islTimeM">--:--</span>');
+  if(comps.indexOf('weather') >= 0) meta.push('<span id="islWxM" onclick="event.stopPropagation();islWxOpen()">—</span>');
+  if(comps.indexOf('week') >= 0) meta.push(esc(islandWeekNo() || '—'));
+  if(comps.indexOf('term') >= 0) meta.push(esc(term || '—'));
+
+  host.innerHTML = '<div class="island-meta" id="islMeta" onclick="islandToggleMeta()">'
+    +   meta.join('<i>·</i>')
+    +   '<b class="isl-cue" id="islCue">详情</b>'
+    + '</div>'
+    + '<div class="island-row isl-chips">' + row + '</div>'
     + '<div class="island-row" id="islBannerRow"></div>'
     + '<div class="island-foot"><span id="islFootL">今日事项</span>'
     +   '<b id="islFoot"></b></div>';
@@ -9368,32 +9380,44 @@ function islandBanner(){
   if(foot) foot.textContent = islandWeekNo();
 }
 
+/* 同时写「四格」与「一行信息条」两处，id 加 M 后缀的是一行条 */
+function islSet(id, txt){
+  var a = document.getElementById(id);
+  if(a) a.textContent = txt;
+  var b = document.getElementById(id + 'M');
+  if(b) b.textContent = txt;
+}
+/* 手机端点一下信息条：展开 / 收起四个信息块 */
+function islandToggleMeta(){
+  var host = document.getElementById('classIsland');
+  if(!host) return;
+  var on = host.classList.toggle('expanded');
+  var cue = document.getElementById('islCue');
+  if(cue) cue.textContent = on ? '收起' : '详情';
+}
+
 function islandTick(){
   if(!ISLAND || !ISLAND.on) return;
-  var el = document.getElementById('islTime');
-  if(el){
-    var d = new Date();
-    el.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-  }
+  var d = new Date();
+  islSet('islTime', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'));
 }
 
 function islandWeather(){
-  var el = document.getElementById('islWx');
-  if(!el) return;
+  if(!document.getElementById('islWx')) return;
   if(ISLAND_WX){
-    el.textContent = ISLAND_WX.t + '° ' + ISLAND_WX.s;
+    islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
     return;
   }
   var cache = null;
   try{ cache = JSON.parse(localStorage.getItem('__cls_wx') || 'null'); }catch(e){}
   if(cache && cache.v && (Date.now() - cache.t) < 30 * 60000){
     ISLAND_WX = cache.v;
-    el.textContent = ISLAND_WX.t + '° ' + ISLAND_WX.s;
+    islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
     return;
   }
   /* v3.9.10：轻量模式不主动联网（省流量、少一次 200ms+ 的请求），
      有旧缓存就显示旧值，没有就留「—」。 */
-  if(liteOn()){ el.textContent = '—'; return; }
+  if(liteOn()){ islSet('islWx', '—'); return; }
   /* Open-Meteo：免费、免 key、允许跨域；坐标按修水县取的 */
   fetch('https://api.open-meteo.com/v1/forecast?latitude=29.03&longitude=114.57'
       + '&current=temperature_2m,weather_code&timezone=Asia%2FShanghai')
@@ -9404,8 +9428,7 @@ function islandWeather(){
       var v = { t: Math.round(c.temperature_2m), s: ISLAND_WX_TXT[c.weather_code] || '天气' };
       ISLAND_WX = v;
       try{ localStorage.setItem('__cls_wx', JSON.stringify({ t: Date.now(), v: v })); }catch(e){}
-      var e2 = document.getElementById('islWx');
-      if(e2) e2.textContent = v.t + '° ' + v.s;
+      islSet('islWx', v.t + '° ' + v.s);
     })
     .catch(function(){
       var e3 = document.getElementById('islWx');
