@@ -11739,8 +11739,26 @@ function paintIsland(){
     +       '<button type="button" class="ai-fmt" data-fmt="h"># 整行强调</button>'
     +       '<span class="muted" style="font-size:.72rem">选中几个字再点；行首 # = 这行加粗并居中</span>'
     +     '</div>'
-    +     '<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="200"'
+    +     '<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="600"'
     +       ' placeholder="这一天的安排（可多行），如：\n数学 08:00-09:30\n语文 10:00-11:30"></textarea>'
+    +     '<p class="muted ai-chhint">想单独改某个字：先点它（可按住拖一串），再点 B / S / 字号。'
+    +       '上面框里显示的是写法（**粗**、{22字}），不用自己敲</p>'
+    +     '<div class="ai-charbar">'
+    +       '<span class="ai-chlab">逐字设置</span>'
+    +       '<button type="button" class="ai-fmt" data-ch="b" title="只改选中的字">B</button>'
+    +       '<button type="button" class="ai-fmt" data-ch="s" title="只改选中的字">S</button>'
+    +       '<select id="adChSize" class="ai-size" title="只改选中的字">'
+    +         '<option value="0">字号·默认</option>'
+    +         '<option value="14">14px</option><option value="16">16px</option>'
+    +         '<option value="18">18px</option><option value="20">20px</option>'
+    +         '<option value="22">22px</option><option value="24">24px</option>'
+    +         '<option value="26">26px</option><option value="28">28px</option>'
+    +         '<option value="32">32px</option>'
+    +       '</select>'
+    +       '<button type="button" class="ai-fmt" data-ch="clear">清格式</button>'
+    +       '<span class="muted ai-chtip" id="adChTip"></span>'
+    +     '</div>'
+    +     '<div class="ad-chars" id="adChars"></div>'
     +     '<p class="muted" style="font-size:.72rem;margin:8px 0 4px">预览（就是首页看到的效果）：</p>'
     +     '<div class="ai-dprev"><div class="ai-dprev-txt" id="adPrev"></div></div>'
     +   '</div>'
@@ -11767,13 +11785,26 @@ function paintIsland(){
   $('adText').onkeydown = function(e){
     if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); aiAddDay(); }
   };
-  $('adBold').onchange = aiDayPreview;
+  $('adBold').onchange = function(){ aiDayPreview(); aiCharPaint(); };
   $('adCenter').onchange = aiDayPreview;
-  if($('adSize')) $('adSize').onchange = aiDayPreview;
-  $('adText').oninput = aiDayPreview;
+  if($('adSize')) $('adSize').onchange = function(){ aiDayPreview(); aiCharPaint(); };
+  $('adText').oninput = function(){ AI_CSEL = null; aiDayPreview(); aiCharPaint(); };
   document.querySelectorAll('.ai-fmt').forEach(function(b){
+    if(b.hasAttribute('data-ch')) return;   /* 逐字按钮走下面那套 */
     b.onclick = function(){ aiFmt(b.getAttribute('data-fmt')); };
   });
+  document.querySelectorAll('[data-ch]').forEach(function(b){
+    b.onclick = function(){ aiCharApply(b.getAttribute('data-ch')); };
+  });
+  if($('adChSize')){
+    $('adChSize').onchange = function(){
+      var v = Number(this.value || 0);
+      aiCharApply('size', v);
+      this.value = '0';
+    };
+  }
+  aiCharBind();
+  aiCharPaint();
 
   /* 基本项：改完立刻存 */
   $('aiOn').onchange = aiTouch;
@@ -11990,16 +12021,248 @@ function paintDayList(){
 }
 
 /* 后台文本框实时套用「加粗 / 居中」，下方再给一份和首页一样的预览 */
+function aiInline(sz, fl, txt){
+  if(!sz && !fl) return txt;
+  var st = '';
+  if(sz) st += 'font-size:' + sz + 'px;';
+  if(fl.indexOf('b') >= 0) st += 'font-weight:900;';
+  if(fl.indexOf('s') >= 0) st += 'text-decoration:line-through;';
+  return st ? '<span style="' + st + '">' + txt + '</span>' : txt;
+}
 function aiPrevFmt(text){
   return String(text == null ? '' : text).split('\n').map(function(line){
     var head = false, t = line;
     if(/^#\s?/.test(t)){ head = true; t = t.replace(/^#\s?/, ''); }
     var h = esc(t);
+    h = h.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, txt){
+      if(!sz && !fl) return all;
+      return aiInline(sz, fl, txt);
+    });
     h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
     h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
     return head ? '<span class="ln-em">' + h + '</span>' : h;
   }).join('\n');
 }
+/* ============================================================================
+ * v3.9.18（站主）：真正的「逐字」编辑
+ * ----------------------------------------------------------------------------
+ * 站主原话：「我要求是可以做到单个字的编辑，不是一行或怎么样，我做单个字号
+ *            单个字体，是否要加粗横线什么的，我单个字的编辑」。
+ *
+ * 做法：把这一天的话拆成一个个可点的字块，点哪个字就只改那个字。
+ *       按住拖动可以一次选一串；再点一次同一个按钮就取消。
+ *       存回文本时用 {22b文字} 这种标记，前台 islFmt 认同一套语法，
+ *       所以「后台看到什么，首页就是什么」。
+ * ========================================================================= */
+var AI_CSEL = null;      /* 选中的字区间 [起, 止]，下标是「第几个字」不是文本偏移 */
+var AI_CANCHOR = 0, AI_CDOWN = false;
+
+function aiRichChars(v){
+  v = String(v == null ? '' : v);
+  var out = [], b = false, s = false, i = 0, n = v.length, lineStart = true;
+  function add(ch, sz, fl, p){
+    out.push({ c: ch, size: sz || 0, b: !!b || fl.indexOf('b') >= 0,
+               s: !!s || fl.indexOf('s') >= 0, p: p });
+    if(ch !== '\n') lineStart = false;
+  }
+  while(i < n){
+    /* 行首 # 是「整行强调」标记，不算正文，单独记一个哨兵，免得字符下标错位 */
+    if(lineStart && v.substr(i, 2) === '# '){ out.push({ c: '', head: true, p: i }); i += 2; continue; }
+    if(v.substr(i, 2) === '**'){ b = !b; i += 2; continue; }
+    if(v.substr(i, 2) === '~~'){ s = !s; i += 2; continue; }
+    if(v.charAt(i) === '{'){
+      var m = /^\{(\d{0,2})([bs]{0,2})/.exec(v.slice(i, i + 10));
+      if(m && (m[1] || m[2])){
+        var st = i + m[0].length, close = v.indexOf('}', st);
+        if(close > st && v.slice(st, close).indexOf('{') < 0 && v.slice(st, close).indexOf('\n') < 0){
+          var body = v.slice(st, close);
+          for(var k = 0; k < body.length; k++) add(body.charAt(k), Number(m[1]) || 0, m[2], st + k);
+          i = close + 1;
+          continue;
+        }
+      }
+    }
+    if(v.charAt(i) === '\n'){ out.push({ c: '\n', size: 0, b: false, s: false, p: i }); i++; lineStart = true; continue; }
+    add(v.charAt(i), 0, '', i);
+    i++;
+  }
+  return out;
+}
+
+function aiRichFlag(c){ return (c.b ? 'b' : '') + (c.s ? 's' : ''); }
+
+function aiRichBuild(chars){
+  var out = '', i = 0;
+  while(i < chars.length){
+    var c0 = chars[i];
+    if(c0.head){ out += '# '; i++; continue; }
+    if(c0.c === '\n'){ out += '\n'; i++; continue; }
+    var sz = c0.size || 0, f = aiRichFlag(c0);
+    if(!sz && !f){ out += c0.c; i++; continue; }
+    var j = i + 1;
+    while(j < chars.length && chars[j].c !== '\n' && (chars[j].size || 0) === sz
+          && aiRichFlag(chars[j]) === f) j++;
+    var body = chars.slice(i, j).map(function(x){ return x.c; }).join('');
+    if(body.indexOf('{') >= 0 || body.indexOf('}') >= 0){ out += body; }
+    else if(!sz && f === 'b' && body.indexOf('*') < 0){ out += '**' + body + '**'; }
+    else if(!sz && f === 's' && body.indexOf('~') < 0){ out += '~~' + body + '~~'; }
+    else { out += '{' + (sz || '') + f + body + '}'; }
+    i = j;
+  }
+  return out;
+}
+
+function aiCharTip(){
+  var el = $('adChTip');
+  if(!el) return;
+  if(!AI_CSEL){ el.textContent = '点一下要改的字（可按住拖一串）'; return; }
+  var chars = aiRichChars($('adText').value);
+  var sel = chars.slice(AI_CSEL[0], AI_CSEL[1] + 1).filter(function(c){ return !c.head && c.c !== '\n'; });
+  if(!sel.length){ el.textContent = '这里没有可改的字'; return; }
+  var b = sel.filter(function(c){ return c.b; }).length;
+  var s = sel.filter(function(c){ return c.s; }).length;
+  var sz = sel[0].size || 0;
+  var same = sel.every(function(c){ return (c.size || 0) === sz; });
+  el.textContent = '已选 ' + sel.length + ' 字'
+    + (b ? ' · 粗' : '') + (s ? ' · 横线' : '')
+    + (same && sz ? ' · ' + sz + 'px' : '');
+}
+
+function aiCharPaint(){
+  var box = $('adChars'), t = $('adText');
+  if(!box || !t) return;
+  var chars = aiRichChars(t.value);
+  if(AI_CSEL){
+    if(AI_CSEL[0] >= chars.length) AI_CSEL = null;
+    else AI_CSEL = [AI_CSEL[0], Math.min(AI_CSEL[1], chars.length - 1)];
+  }
+  var baseSz = Number(($('adSize') || {}).value || 0);
+  var baseB = $('adBold') && $('adBold').checked;
+  box.style.fontSize = baseSz ? baseSz + 'px' : '';
+  box.style.fontWeight = baseB ? '800' : '400';
+  if(!chars.length){
+    box.innerHTML = '<span class="muted" style="font-size:.72rem">在上面输入框写内容，这里就能逐字改</span>';
+    box.removeAttribute('data-sig');
+    aiCharTip();
+    return;
+  }
+  /* 拖动选字时只改 class，不重建 DOM —— 重建会把鼠标底下的节点换掉，
+     拖动就断了（v3.9.18 实测踩到过） */
+  var sig = '';
+  for(var i = 0; i < chars.length; i++){
+    sig += chars[i].head ? 'h' : (chars[i].c === '\n' ? 'n' : chars[i].c);
+  }
+  if(box.getAttribute('data-sig') !== sig){
+    var html = '';
+    for(var k = 0; k < chars.length; k++){
+      var ck = chars[k];
+      if(ck.head){ html += '<span class="ad-nl">#</span>'; continue; }
+      if(ck.c === '\n'){ html += '<span class="ad-nl">⏎</span>'; continue; }
+      var sk = '';
+      if(ck.size) sk += 'font-size:' + ck.size + 'px;';
+      if(ck.b) sk += 'font-weight:900;';
+      if(ck.s) sk += 'text-decoration:line-through;';
+      var onk = AI_CSEL && k >= AI_CSEL[0] && k <= AI_CSEL[1];
+      html += '<span class="ad-ch' + (onk ? ' on' : '') + '" data-ci="' + k + '"'
+        + (sk ? ' style="' + sk + '"' : '') + '>' + esc(ck.c) + '</span>';
+    }
+    box.innerHTML = html;
+    box.setAttribute('data-sig', sig);
+    aiCharTip();
+    return;
+  }
+  var kids = box.children;
+  for(var i2 = 0; i2 < chars.length; i2++){
+    var c = chars[i2], el = kids[i2];
+    if(!el) continue;
+    if(c.head || c.c === '\n') continue;
+    var on = AI_CSEL && i2 >= AI_CSEL[0] && i2 <= AI_CSEL[1];
+    var cls = 'ad-ch' + (on ? ' on' : '');
+    if(el.className !== cls) el.className = cls;
+    var st = '';
+    if(c.size) st += 'font-size:' + c.size + 'px;';
+    if(c.b) st += 'font-weight:900;';
+    if(c.s) st += 'text-decoration:line-through;';
+    if((el.getAttribute('style') || '') !== st){
+      if(st) el.setAttribute('style', st); else el.removeAttribute('style');
+    }
+  }
+  aiCharTip();
+}
+
+function aiCharApply(kind, val){
+  var t = $('adText');
+  if(!t || !AI_CSEL){ toast('先点一下要改的字（可按住拖一串）', 'warn', 2400); return; }
+  var chars = aiRichChars(t.value);
+  var a = Math.max(0, AI_CSEL[0]), b = Math.min(chars.length - 1, AI_CSEL[1]);
+  /* 空格和换行不给格式：{24 } 这种标记既没意义，还会在正文里留下怪东西 */
+  var sel = chars.slice(a, b + 1).filter(function(c){ return !c.head && c.c !== '\n' && !/^\s$/.test(c.c); });
+  if(!sel.length){ toast('空格和换行不用设格式，点文字', 'warn', 1800); return; }
+  if(kind === 'b' || kind === 's'){
+    var allOn = sel.every(function(c){ return !!c[kind]; });
+    sel.forEach(function(c){ c[kind] = !allOn; });
+  }else if(kind === 'size'){
+    sel.forEach(function(c){ c.size = val || 0; });
+  }else if(kind === 'clear'){
+    sel.forEach(function(c){ c.size = 0; c.b = false; c.s = false; });
+  }
+  t.value = aiRichBuild(chars);
+  AI_CSEL = [a, b];
+  aiDayPreview();
+  aiCharPaint();
+}
+
+function aiCharBind(){
+  var box = $('adChars');
+  if(!box) return;
+  box.onmousedown = function(e){
+    var el = e.target.closest && e.target.closest('[data-ci]');
+    if(!el) return;
+    e.preventDefault();
+    var i = Number(el.getAttribute('data-ci'));
+    if(e.shiftKey && AI_CSEL){
+      AI_CSEL = [Math.min(AI_CSEL[0], i), Math.max(AI_CSEL[1], i)];
+    }else{
+      AI_CSEL = [i, i];
+      AI_CANCHOR = i;
+    }
+    AI_CDOWN = true;
+    aiCharPaint();
+  };
+  box.onmouseover = function(e){
+    if(!AI_CDOWN) return;
+    var el = e.target.closest && e.target.closest('[data-ci]');
+    if(!el) return;
+    var i = Number(el.getAttribute('data-ci'));
+    AI_CSEL = [Math.min(AI_CANCHOR, i), Math.max(AI_CANCHOR, i)];
+    aiCharPaint();
+  };
+  if(!aiCharBind._doc){
+    aiCharBind._doc = true;
+    document.addEventListener('mouseup', function(){ AI_CDOWN = false; });
+    document.addEventListener('touchend', function(){ AI_CDOWN = false; });
+  }
+  /* 手机上按住一个字横向拖，也能选一串（触屏不触发 mouseover） */
+  box.addEventListener('touchstart', function(e){
+    var el = e.target.closest && e.target.closest('[data-ci]');
+    if(!el) return;
+    var i = Number(el.getAttribute('data-ci'));
+    AI_CSEL = [i, i]; AI_CANCHOR = i; AI_CDOWN = true;
+    aiCharPaint();
+  }, { passive: true });
+  box.addEventListener('touchmove', function(e){
+    if(!AI_CDOWN) return;
+    var p = e.touches && e.touches[0];
+    if(!p) return;
+    var el = document.elementFromPoint(p.clientX, p.clientY);
+    el = el && el.closest && el.closest('[data-ci]');
+    if(!el) return;
+    var i = Number(el.getAttribute('data-ci'));
+    AI_CSEL = [Math.min(AI_CANCHOR, i), Math.max(AI_CANCHOR, i)];
+    aiCharPaint();
+  }, { passive: true });
+}
+
 function aiDayPreview(){
   var t = $('adText');
   if(!t) return;
@@ -12051,7 +12314,11 @@ function aiFmt(kind){
   var t = $('adText');
   if(!t) return;
   var v = t.value, a = t.selectionStart, b = t.selectionEnd;
-
+  /* 只在逐字面板里点过字、输入框又没有选区时，用面板的选中位置 */
+  if(a === b && AI_CSEL){
+    var c0 = aiRichChars(v)[AI_CSEL[0]];
+    if(c0) a = b = c0.p;
+  }
   if(kind === 'h'){
     /* 行首 # 也是开关：有就删、没有就加 */
     var ls = v.lastIndexOf('\n', a - 1) + 1;
@@ -12079,9 +12346,11 @@ function aiFmt(kind){
       b = b + mark.length; a = a + mark.length;
     }
   }
+  AI_CSEL = null;
   t.focus();
   try{ t.setSelectionRange(a, b); }catch(e){}
   aiDayPreview();
+  aiCharPaint();
 }
 
 function aiEditDay(k){
@@ -12096,7 +12365,9 @@ function aiEditDay(k){
   if($('adSize')) $('adSize').value = String(v.size || 0);
   var b = $('adAdd');
   if(b) b.textContent = '更新这一天';
+  AI_CSEL = null;
   aiDayPreview();
+  aiCharPaint();
   paintDayList();
   $('adText').focus();
 }
@@ -12107,7 +12378,9 @@ function aiCancelDay(){
   if($('adSize')) $('adSize').value = '0';
   var b = $('adAdd');
   if(b) b.textContent = '添加';
+  AI_CSEL = null;
   aiDayPreview();
+  aiCharPaint();
 }
 
 /* 一键填入「当天课表」：默认取所选日期的星期横幅；
@@ -14492,6 +14765,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.18', date: '2026-10-23', type: 'feat', title: '今日事项可以逐个字调字号 / 加粗 / 横线', items: [
+      '「按日期临时改」下面多了一块「逐字设置」：文字被拆成一格格，点哪个字就只改那个字',
+      '每个字能单独设字号（14–32px）、加粗、横线；同一个按钮再点一次就取消',
+      '按住拖动可一次选一串；手机上按住一个字横向拖也行',
+      '「清格式」只清选中的字，不影响其它字',
+      '前台认同一套写法（{22b字}），后台预览和首页效果完全一致',
+      '单日文字上限从 200 字放宽到 600 字，给标记留出余量'
+    ], pub: [
+      { cat: '班级', text: '今日事项可以逐个字调大小、加粗、加横线了' }
+    ] },
   { version: '3.9.17', date: '2026-10-23', type: 'feat', title: '21 点后看明日事项 · 编辑器修好加粗与强调 · 可设字号', items: [
       '21:00 之后班级岛默认显示「明日事项」：明天有临时安排就用它，没有就自动取明天星期几的课表',
       '21:00 之后标签旁多一个「看今天 / 看明天」的小按钮，两个方向都能切，不额外占高度',
