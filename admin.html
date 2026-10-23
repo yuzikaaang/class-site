@@ -974,6 +974,26 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 .ai-dprev-txt{font-size:.82rem;line-height:1.55;white-space:pre-line;word-break:break-word}
 .ai-dprev-txt b{font-weight:900}
 .ai-dprev-txt s{opacity:.55}
+/* v3.9.17：预览直接复用前台的 .island-banner 类，这里补一份后台内的样式
+   （admin.html 本身没有这些类，不补就只是白字一堆，看不出效果） */
+.ai-dprev .island-banner{display:flex;flex-direction:column;align-items:center;gap:5px;
+  text-align:center;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.10);
+  border-radius:14px;padding:10px 12px}
+.ai-dprev .tag{font-size:.6rem;font-weight:800;letter-spacing:.06em;color:#ffd7bb;
+  background:rgba(251,146,60,.20);border:1px solid rgba(251,146,60,.30);
+  border-radius:999px;padding:2px 9px}
+.ai-dprev .txt{font-size:.82rem;font-weight:700;line-height:1.55;white-space:pre-line;
+  word-break:break-word;color:#fff}
+.ai-dprev .txt.bold{font-weight:800}
+.ai-dprev .txt.soft{font-weight:500}
+.ai-dprev .txt b{font-weight:900;letter-spacing:.01em}
+.ai-dprev .txt.left{text-align:left;width:100%}
+.ai-dprev .island-banner.left-align{align-items:flex-start;text-align:left}
+.ai-dprev .ln-em{display:block;font-weight:900;text-align:center;background:rgba(251,146,60,.18);
+  border-left:3px solid #fb923c;border-radius:6px;padding:3px 10px;margin:3px 0}
+/* 字号下拉：跟其他小控件一个尺寸 */
+.ai-size{font-size:.74rem;padding:3px 6px;border-radius:7px;border:1px solid var(--border);
+  background:var(--bg-1);color:var(--fg);font-family:inherit}
 .ai-dprev-txt .ln-em{display:block;font-weight:900;text-align:center}
 .ai-photo-row img{display:block;margin-top:10px;max-width:180px;max-height:180px;
   border-radius:10px;border:1px solid var(--border);object-fit:cover}
@@ -1595,7 +1615,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '3.9.16';
+var SITE_VERSION = '3.9.17';
 var VER_DATE = '2026-10-22';
 </script>
 <script src="./admin.js?v=3915"></script>
