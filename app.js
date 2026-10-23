@@ -9069,10 +9069,11 @@ function islWxLoad(){
     return;
   }
   body.innerHTML = '<div class="isl-wx-load">正在获取逐小时天气…</div>';
+  /* v3.9.19：改成「从现在起 24 小时」——原来只取今天 0–24 点，晚上 11 点打开
+     只剩 1 个小时可看。取 2 天数据再按当前小时截 24 条。 */
   fetch('https://api.open-meteo.com/v1/forecast?latitude=29.03&longitude=114.57'
       + '&hourly=temperature_2m,weather_code,precipitation_probability'
-      + '&daily=temperature_2m_max,temperature_2m_min'
-      + '&forecast_days=1&timezone=Asia%2FShanghai')
+      + '&forecast_days=2&timezone=Asia%2FShanghai')
     .then(function(r){ return r.json(); })
     .then(function(j){
       var h = (j && j.hourly) || {};
@@ -9080,8 +9081,6 @@ function islWxLoad(){
       var v = {
         time: h.time, temp: h.temperature_2m || [],
         code: h.weather_code || [], rain: h.precipitation_probability || [],
-        max: (j.daily && j.daily.temperature_2m_max && j.daily.temperature_2m_max[0]) || null,
-        min: (j.daily && j.daily.temperature_2m_min && j.daily.temperature_2m_min[0]) || null,
       };
       try{ localStorage.setItem('__cls_wx_h', JSON.stringify({ t: Date.now(), v: v })); }catch(e){}
       islWxPaint(v);
@@ -9093,33 +9092,56 @@ function islWxLoad(){
 function islWxPaint(v){
   var body = document.getElementById('islWxBody');
   if(!body || !v) return;
+  var pad = function(n){ return ('0' + n).slice(-2); };
   var now = new Date();
-  var curH = now.getHours();
-  var temps = v.temp.filter(function(x){ return x != null; });
-  var lo = Math.min.apply(null, temps), hi = Math.max.apply(null, temps);
+  var key = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+    + 'T' + pad(now.getHours());
+  /* v3.9.19：从现在这一小时起往后数 24 条，跨天就跨天 */
+  var start = 0;
+  for(var i = 0; i < v.time.length; i++){
+    if(String(v.time[i]).slice(0, 13) >= key){ start = i; break; }
+  }
+  var time = v.time.slice(start, start + 24);
+  var temp = (v.temp || []).slice(start, start + 24);
+  var code = (v.code || []).slice(start, start + 24);
+  var rain = (v.rain || []).slice(start, start + 24);
+  if(!time.length) time = v.time.slice(0, 24);
+
+  var nums = temp.filter(function(x){ return x != null; });
+  var lo = nums.length ? Math.min.apply(null, nums) : 0;
+  var hi = nums.length ? Math.max.apply(null, nums) : 1;
   var span = Math.max(1, hi - lo);
+
   var sub = document.getElementById('islWxSub');
-  if(sub) sub.textContent = (v.max != null && v.min != null)
-    ? ('最高 ' + Math.round(v.max) + '° · 最低 ' + Math.round(v.min) + '°') : '';
-  var rows = v.time.map(function(t, i){
+  if(sub) sub.textContent = nums.length
+    ? ('未来 24 小时 ' + Math.round(lo) + '° ~ ' + Math.round(hi) + '°') : '';
+
+  var rows = '';
+  var lastDay = '';
+  time.forEach(function(t, i){
+    var day = String(t).slice(0, 10);
+    if(day !== lastDay && i > 0){
+      var d = new Date(day + 'T00:00:00');
+      rows += '<div class="isl-wx-day">' + (isNaN(d.getTime()) ? '' :
+        (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日 · 周' + '日一二三四五六'.charAt(d.getDay())) + '</div>';
+    }
+    lastDay = day;
     var hh = parseInt(String(t).slice(11, 13), 10);
-    var tp = v.temp[i];
-    var rn = v.rain[i];
+    var tp = temp[i], rn = rain[i];
     var w = (tp == null) ? 0 : Math.round(((tp - lo) / span) * 88 + 12);
-    return '<div class="isl-wx-row' + (hh === curH ? ' now' : '') + '">'
-      + '<span class="t">' + ('0' + hh).slice(-2) + ':00</span>'
-      + '<span class="ic">' + islWxIcon(v.code[i]) + '</span>'
+    var isNow = (i === 0);
+    rows += '<div class="isl-wx-row' + (isNow ? ' now' : '') + '">'
+      + '<span class="t">' + (isNow ? '现在' : ('0' + hh).slice(-2) + ':00') + '</span>'
+      + '<span class="ic">' + islWxIcon(code[i]) + '</span>'
       + '<span class="bar" style="width:' + w + '%"></span>'
       + '<span class="tp">' + (tp == null ? '—' : Math.round(tp) + '°') + '</span>'
       + '<span class="rn">' + (rn == null || rn <= 0 ? '' : rn + '%') + '</span>'
       + '</div>';
-  }).join('');
-  body.innerHTML = rows || '<div class="isl-wx-load">今天没有逐小时数据</div>';
-  /* 自动滚到当前小时 */
-  try{
-    var nowRow = body.querySelector('.isl-wx-row.now');
-    if(nowRow) body.scrollTop = Math.max(0, nowRow.offsetTop - 90);
-  }catch(e){}
+  });
+  body.innerHTML = rows || '<div class="isl-wx-load">暂时没有逐小时数据</div>';
+  try{ body.scrollTop = 0; }catch(e){}
+  var title = document.getElementById('islWxTitle');
+  if(title) title.textContent = '修水 · 接下来 24 小时';
 }
 
 /* ============================================================================
