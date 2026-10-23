@@ -9252,8 +9252,24 @@ function islPhotoBind(){
   });
 }
 /* 今天该显示什么：假期倒计时 / 这天不上课 / 具体文案 */
-function islandToday(){
+/* v3.9.17（站主）：21 点后默认看「明天」。
+   ISL_VIEW：null = 自动（21 点后明天）｜'today'｜'tomorrow'（用户手动切的） */
+var ISL_VIEW = null;
+function islIsNight(){ return new Date().getHours() >= 21; }
+function islShowTomorrow(){
+  if(ISL_VIEW === 'today') return false;
+  if(ISL_VIEW === 'tomorrow') return true;
+  return islIsNight();
+}
+function islSwitchView(){
+  ISL_VIEW = islShowTomorrow() ? 'today' : 'tomorrow';
+  try{ sessionStorage.setItem('__cls_isl_view', ISL_VIEW); }catch(e){}
+  islandBanner();
+}
+
+function islandToday(offset){
   var d = new Date();
+  if(offset) d.setDate(d.getDate() + offset);
   var key = islandDateKey(d);
   var dow = islandDayKey(d);
   if(!ISLAND) return { kind: 'none' };
@@ -9268,13 +9284,14 @@ function islandToday(){
         label: hs[i].label || '假期',
         passed: (passed == null ? 0 : passed) + 1,
         left: (left == null ? 0 : left) + 1,
+        key: key, date: d,
       };
     }
   }
 
   var day = (ISLAND.days || {})[key];
   if(day && day.off){
-    return { kind: 'off', label: day.label || '今天不上课', text: day.text || '' };
+    return { kind: 'off', label: day.label || '不上课', text: day.text || '', key: key, date: d };
   }
   var text = (day && day.text) || (ISLAND.banner || {})[dow] || '';
   return {
@@ -9284,11 +9301,19 @@ function islandToday(){
     /* 没设过的那天（用星期默认课表）走「默认加粗」，day.bold 未设时也按加粗 */
     bold: (day && day.text) ? !!day.bold : undefined,
     center: !(day && day.text && day.center === false),
+    size: (day && day.text && day.size) ? Number(day.size) : 0,
+    key: key, date: d,
   };
 }
 
 function islandRender(){
   var host = document.getElementById('classIsland');
+  if(ISL_VIEW === null){
+    try{
+      var v = sessionStorage.getItem('__cls_isl_view');
+      if(v === 'today' || v === 'tomorrow') ISL_VIEW = v;
+    }catch(e){}
+  }
   if(!host) return;
   /* v3.9.14：去掉首帧占位类（占位是为了不让页面跳，见 index.html .isl-boot） */
   host.classList.remove('isl-boot');
@@ -9374,13 +9399,22 @@ function islFmt(text){
 function islandBanner(){
   var host = document.getElementById('islBannerRow');
   if(!host || !ISLAND) return;
-  var t = islandToday();
+  var tomorrow = islShowTomorrow();
+  var t = islandToday(tomorrow ? 1 : 0);
   var footL = document.getElementById('islFootL');
   var foot = document.getElementById('islFoot');
+  /* 21 点后才出现「看今天 / 看明天」的切换按钮：不加高度，跟标签同一行 */
+  var sw = islIsNight()
+    ? '<button type="button" class="isl-switch" onclick="event.stopPropagation();islSwitchView()">'
+      + (tomorrow ? '看今天' : '看明天') + '</button>'
+    : '';
+  var tagRow = function(tag){
+    return '<span class="tag-row"><span class="tag">' + tag + '</span>' + sw + '</span>';
+  };
 
   if(t.kind === 'holiday'){
     host.innerHTML = '<div class="island-banner hol">'
-      + '<span class="tag">放假中</span>'
+      + tagRow('放假中')
       + '<span class="txt"><b>' + esc(t.label) + '</b>　已放假 ' + t.passed + ' 天'
       +   ' · 距开学还有 ' + t.left + ' 天</span>'
       + '</div>';
@@ -9392,7 +9426,7 @@ function islandBanner(){
 
   if(t.kind === 'off'){
     host.innerHTML = '<div class="island-banner hol">'
-      + '<span class="tag">今天</span>'
+      + tagRow(tomorrow ? '明天' : '今天')
       + '<span class="txt"><b>' + esc(t.label) + '</b>' + (t.text ? '　' + esc(t.text) : '') + '</span>'
       + '</div>';
     islBindPhoto(host);
@@ -9410,11 +9444,13 @@ function islandBanner(){
   host.innerHTML = '<div class="island-banner' + (ISLAND.photo ? ' can-photo' : '')
     + (t.center === false ? ' left-align' : '') + '"'
     + (ISLAND.photo ? ' title="点击查看照片"' : '') + '>'
-    + '<span class="tag">今日事项' + cam + '</span>'
-    + '<span class="' + cls + '">' + islFmt(txt) + '</span>'
+    + tagRow((tomorrow ? '明日事项' : '今日事项') + cam)
+    + '<span class="' + cls + '"' + (t.size ? ' style="font-size:' + t.size + 'px"' : '') + '>'
+    +   islFmt(txt) + '</span>'
     + '</div>';
   islBindPhoto(host);
-  if(footL) footL.textContent = ISLAND_DOW_CN[islandDayKey(new Date())] + ' ' + (new Date().getMonth() + 1) + '/' + new Date().getDate();
+  var vd = t.date || new Date();
+  if(footL) footL.textContent = ISLAND_DOW_CN[islandDayKey(vd)] + ' ' + (vd.getMonth() + 1) + '/' + vd.getDate();
   if(foot) foot.textContent = islandWeekNo();
 }
 
@@ -9434,10 +9470,17 @@ function islandToggleMeta(){
   if(cue) cue.textContent = on ? '收起' : '详情';
 }
 
+var ISL_TICK_H = null;
 function islandTick(){
   if(!ISLAND || !ISLAND.on) return;
   var d = new Date();
   islSet('islTime', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'));
+  /* 跨过 21:00（或跨天）时重画横幅：不用刷新页面也能切到「明日事项」 */
+  var h = d.getHours();
+  if(ISL_TICK_H !== null && ISL_TICK_H !== h){
+    if(h === 21 || h === 0) islandBanner();
+  }
+  ISL_TICK_H = h;
 }
 
 function islandWeather(){
