@@ -76,10 +76,11 @@ const DEFAULT_ISLAND = {
   photo: '',
 };
 
-/** 字号：只接受 12–32 的整数，其它一律当「默认」 */
+/** 字号：只接受 4–32 的整数，其它一律当「默认」
+    （v3.9.19：站主要求最小能到 4px，之前卡在 12 会被静默丢掉） */
 function clampSize(v) {
   const n = Number(v);
-  if (!Number.isFinite(n) || n < 12 || n > 32) return 0;
+  if (!Number.isFinite(n) || n < 4 || n > 32) return 0;
   return Math.round(n);
 }
 
