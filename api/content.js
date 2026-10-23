@@ -87,6 +87,20 @@ export default async function handler(req, res) {
    公开接口：内容（公告、作业）本来就是给全班看的，登录与否都能读。
    这里不做登录校验，是为了让「还没登录的同学」也能看到公告——
    否则开屏引导登录的那个弹窗就没法展示内容了。 */
+/** 把数据库给的时间串解析成毫秒；兼容带/不带时区、带/不带毫秒、±HH / ±HHMM / ±HH:MM */
+function parseDbTime(v) {
+  if (v instanceof Date) return v.getTime() || 0;
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return 0;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?/);
+  if (!m) return Date.parse(s) || 0;
+  const ms = m[7] ? Number((m[7] + '000').slice(0, 3)) : 0;
+  let t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0), ms);
+  const off = s.match(/([+-])(\d{2}):?(\d{2})?$/);
+  if (off) t -= (off[1] === '-' ? -1 : 1) * (Number(off[2]) * 60 + Number(off[3] || 0)) * 60000;
+  return t;
+}
+
 async function readContent(req, res) {
   const sql = getSql();
   const since = Number(req.query.since) || 0;
@@ -105,12 +119,8 @@ async function readContent(req, res) {
      「写入成功（cloudKeys 里能看到键）、读取为空」的诡异现象，排查了很久。
      根因是 @neondatabase/serverless 的模板标签对这种散装占位展开不正确。 */
   const wantKeys = [CONTENT_KEY, ANNOUNCE_KEY];
-  /* v3.9.10：让数据库直接给出毫秒时间戳 —— 不再由 JS 猜 updated_at 的格式。
-     之前 Date.parse 在「带时区 / 不带时区 / 带毫秒」三种形态间必有一种失败，
-     失败后 latest 恒为 0，增量判断永远不成立（等于没做增量）。 */
   const rows = await sql`
-    select data_key, data_value, updated_at,
-           (extract(epoch from updated_at) * 1000)::bigint as updated_ms
+    select data_key, data_value, updated_at
       from user_data
      where user_id = ${uid}
        and data_key = any(${wantKeys}::text[])
@@ -127,8 +137,10 @@ async function readContent(req, res) {
     const val = jsonCol(r.data_value);
     if (val === null || val === undefined) return;
 
-    /* 时间戳：直接用数据库算好的毫秒（updated_ms），JS 不再解析字符串 */
-    const t = Number(r.updated_ms) || 0;
+    /* 时间戳：v3.9.10 用容错解析（见 parseDbTime）。
+       原来写 `Date.parse(str.replace(' ','T') + 'Z')`，遇到 `2026-10-22 15:31:50.123+00`
+       这种已带偏移的串会拼成 `...123+00Z` → NaN → latest 恒 0 → 增量恒失效。 */
+    const t = parseDbTime(r.updated_at);
     if (t > latest) latest = t;
 
     if (r.data_key === ANNOUNCE_KEY) {
