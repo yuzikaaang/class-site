@@ -205,6 +205,7 @@ console.log('\n【4】app.js 加载失败时不白屏');
 {
   const ctx = await browser.newContext({ viewport: { width: 768, height: 1024 } });
   const page = await ctx.newPage();
+  await page.route('**/app.min.js*', (r) => r.abort());
   await page.route('**/app.js*', (r) => r.abort());
   await page.route('**/api/**', mockApi);
   await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded', timeout: 120000 });
