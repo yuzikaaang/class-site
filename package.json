@@ -14,7 +14,8 @@
   "scripts": {
     "test": "node test_e2e.mjs",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test:ui": "node test_ui.mjs"
   },
   "devDependencies": {
     "sql.js": "^1.10.3",
