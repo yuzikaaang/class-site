@@ -11733,32 +11733,28 @@ function paintIsland(){
     +         '</select>px</label>'
     +       '<button class="btn btn-sm" id="adAdd">添加</button>'
     +     '</div>'
-    +     '<div class="ai-fmtbar">'
-    +       '<button type="button" class="ai-fmt" data-fmt="b">B 加粗选中</button>'
-    +       '<button type="button" class="ai-fmt" data-fmt="s">S 加横线</button>'
-    +       '<button type="button" class="ai-fmt" data-fmt="h"># 整行强调</button>'
-    +       '<span class="muted" style="font-size:.72rem">选中几个字再点；行首 # = 这行加粗并居中</span>'
-    +     '</div>'
-    +     '<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="600"'
-    +       ' placeholder="这一天的安排（可多行），如：\n数学 08:00-09:30\n语文 10:00-11:30"></textarea>'
-    +     '<p class="muted ai-chhint">想单独改某个字：先点它（可按住拖一串），再点 B / S / 字号。'
-    +       '上面框里显示的是写法（**粗**、{22字}），不用自己敲</p>'
+    +     '<p class="muted ai-chhint">直接在这块里写，看到的就是首页的样子。'
+    +       '选中文字后点 B / S / 字号；再点一次就取消。想在句子里插字，光标点进去直接打。</p>'
+    +     '<div class="ai-rt" id="adRich" contenteditable="true" role="textbox" aria-multiline="true"'
+    +       ' data-ph="这一天的安排（可多行），如：数学 08:00-09:30"></div>'
+    +     '<textarea id="adText" style="display:none" aria-hidden="true" tabindex="-1"></textarea>'
     +     '<div class="ai-charbar">'
-    +       '<span class="ai-chlab">逐字设置</span>'
-    +       '<button type="button" class="ai-fmt" data-ch="b" title="只改选中的字">B</button>'
-    +       '<button type="button" class="ai-fmt" data-ch="s" title="只改选中的字">S</button>'
-    +       '<select id="adChSize" class="ai-size" title="只改选中的字">'
+    +       '<button type="button" class="ai-fmt ai-fmt-b" data-rt="b" title="加粗选中的字">B</button>'
+    +       '<button type="button" class="ai-fmt" data-rt="s" title="给选中的字加横线">S</button>'
+    +       '<select id="adChSize" class="ai-size" title="选中的字多大">'
     +         '<option value="0">字号·默认</option>'
-    +         '<option value="14">14px</option><option value="16">16px</option>'
-    +         '<option value="18">18px</option><option value="20">20px</option>'
-    +         '<option value="22">22px</option><option value="24">24px</option>'
-    +         '<option value="26">26px</option><option value="28">28px</option>'
-    +         '<option value="32">32px</option>'
+    +         '<option value="4">4px</option><option value="6">6px</option>'
+    +         '<option value="8">8px</option><option value="10">10px</option>'
+    +         '<option value="12">12px</option><option value="14">14px</option>'
+    +         '<option value="16">16px</option><option value="18">18px</option>'
+    +         '<option value="20">20px</option><option value="22">22px</option>'
+    +         '<option value="24">24px</option><option value="26">26px</option>'
+    +         '<option value="28">28px</option><option value="32">32px</option>'
     +       '</select>'
-    +       '<button type="button" class="ai-fmt" data-ch="clear">清格式</button>'
-    +       '<span class="muted ai-chtip" id="adChTip"></span>'
+    +       '<button type="button" class="ai-fmt" data-rt="h" title="整行加底色">整行强调</button>'
+    +       '<button type="button" class="ai-fmt" data-rt="clear" title="去掉选中的格式">清格式</button>'
+    +       '<span class="muted ai-chtip" id="adChTip">选中文字后点左边的按钮</span>'
     +     '</div>'
-    +     '<div class="ad-chars" id="adChars"></div>'
     +     '<p class="muted" style="font-size:.72rem;margin:8px 0 4px">预览（就是首页看到的效果）：</p>'
     +     '<div class="ai-dprev"><div class="ai-dprev-txt" id="adPrev"></div></div>'
     +   '</div>'
@@ -11782,29 +11778,25 @@ function paintIsland(){
   $('adAdd').onclick = aiAddDay;
   $('adFill').onclick = aiFillDay;
   $('ahAdd').onclick = aiAddHoliday;
-  $('adText').onkeydown = function(e){
-    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); aiAddDay(); }
-  };
-  $('adBold').onchange = function(){ aiDayPreview(); aiCharPaint(); };
+  if($('adRich')){
+    $('adRich').addEventListener('keydown', function(e){
+      if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); aiAddDay(); }
+    });
+  }
+  $('adBold').onchange = aiDayPreview;
   $('adCenter').onchange = aiDayPreview;
-  if($('adSize')) $('adSize').onchange = function(){ aiDayPreview(); aiCharPaint(); };
-  $('adText').oninput = function(){ AI_CSEL = null; aiDayPreview(); aiCharPaint(); };
-  document.querySelectorAll('.ai-fmt').forEach(function(b){
-    if(b.hasAttribute('data-ch')) return;   /* 逐字按钮走下面那套 */
-    b.onclick = function(){ aiFmt(b.getAttribute('data-fmt')); };
-  });
-  document.querySelectorAll('[data-ch]').forEach(function(b){
-    b.onclick = function(){ aiCharApply(b.getAttribute('data-ch')); };
+  if($('adSize')) $('adSize').onchange = aiDayPreview;
+  document.querySelectorAll('[data-rt]').forEach(function(b){
+    b.onclick = function(){ aiRtFmt(b.getAttribute('data-rt')); };
   });
   if($('adChSize')){
     $('adChSize').onchange = function(){
-      var v = Number(this.value || 0);
-      aiCharApply('size', v);
+      aiRtFmt('size', this.value);
       this.value = '0';
+      aiRtTip();
     };
   }
-  aiCharBind();
-  aiCharPaint();
+  aiRtInit();
 
   /* 基本项：改完立刻存 */
   $('aiOn').onchange = aiTouch;
@@ -11995,7 +11987,7 @@ function paintDayList(){
   }
   host.innerHTML = keys.map(function(k){
     var v = AI.days[k] || {};
-    var one = String(v.label || v.text || '').replace(/\n/g, ' / ');
+    var one = aiStrip(v.label || v.text || '').replace(/\n/g, ' / ');
     return '<div class="ai-ovitem ai-ovclick' + (AI_DAY_EDIT === k ? ' on' : '') + '" data-dayedit="' + attr(k) + '">'
       + '<span class="ai-ovtag ' + (v.off ? 'off' : 'plan') + '">' + (v.off ? '不上课' : '改文案') + '</span>'
       + '<b>' + esc(k.slice(5)) + '</b>'
@@ -12044,223 +12036,343 @@ function aiPrevFmt(text){
   }).join('\n');
 }
 /* ============================================================================
- * v3.9.18（站主）：真正的「逐字」编辑
+ * v3.9.19（站主）：编辑框里不再出现符号
  * ----------------------------------------------------------------------------
- * 站主原话：「我要求是可以做到单个字的编辑，不是一行或怎么样，我做单个字号
- *            单个字体，是否要加粗横线什么的，我单个字的编辑」。
+ * 站主原话：「不要把那些符号，比如说中括号啊、星号那些展示出来，不然我看着
+ *            很别扭，我都不知道哪些能不能删……我这段编辑好，但又想在这句话
+ *            里面新加一些字的话，就会觉得很奇怪。能不能根据我输入框选出来的
+ *            范围进行修改，或者其它方法，就是我不想看到这些符号」。
  *
- * 做法：把这一天的话拆成一个个可点的字块，点哪个字就只改那个字。
- *       按住拖动可以一次选一串；再点一次同一个按钮就取消。
- *       存回文本时用 {22b文字} 这种标记，前台 islFmt 认同一套语法，
- *       所以「后台看到什么，首页就是什么」。
+ * 做法：输入框换成所见即所得的富文本区（contenteditable）——
+ *   · 屏幕上只有真正的字：粗体就是粗的、大字就是大的、横线就是划掉的
+ *   · 选中一段 → 点 B / S / 字号，直接改这段（跟 Word 一样），不用记任何符号
+ *   · 想在句子中间插字，光标点进去直接打，前后的格式不会乱
+ *   · 存进数据库时再翻译成 **粗** / ~~横线~~ / {22b字}，所以前台、旧数据、
+ *     以及别处读 text 的地方完全不受影响
  * ========================================================================= */
-var AI_CSEL = null;      /* 选中的字区间 [起, 止]，下标是「第几个字」不是文本偏移 */
-var AI_CANCHOR = 0, AI_CDOWN = false;
 
-function aiRichChars(v){
-  v = String(v == null ? '' : v);
-  var out = [], b = false, s = false, i = 0, n = v.length, lineStart = true;
-  function add(ch, sz, fl, p){
-    out.push({ c: ch, size: sz || 0, b: !!b || fl.indexOf('b') >= 0,
-               s: !!s || fl.indexOf('s') >= 0, p: p });
-    if(ch !== '\n') lineStart = false;
+/* 标记文本 → 纯文字：列表、摘要这些地方不该露出 ** 和 {} */
+function aiStrip(text){
+  return String(text == null ? '' : text)
+    .split('\n')
+    .map(function(l){ return l.replace(/^#\s?/, ''); })
+    .join('\n')
+    .replace(/\{\d{0,2}[bs]{0,2}([^{}]+)\}/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1');
+}
+
+/* 标记文本 → 富文本 HTML（编辑器和预览共用同一套解析，永远一致） */
+function aiToHtml(text){
+  return String(text == null ? '' : text).split('\n').map(function(line){
+    var head = false;
+    if(/^#\s?/.test(line)){ head = true; line = line.replace(/^#\s?/, ''); }
+    var h = esc(line);
+    h = h.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, txt){
+      if(!sz && !fl) return all;
+      return aiInline(sz, fl, txt);
+    });
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+    if(!h) return head ? '<span class="ln-em"><br></span>' : '';
+    return head ? '<span class="ln-em">' + h + '</span>' : h;
+  }).join('<br>');
+}
+
+/* 富文本 DOM → 标记文本：只看标签结构，不猜样式 */
+function aiFromHtml(root){
+  if(!root) return '';
+  var out = '';
+  var nl = function(){ out += '\n'; };
+
+  function wrap(t, ctx){
+    if(!t) return '';
+    var f = (ctx.b ? 'b' : '') + (ctx.s ? 's' : '');
+    if(!ctx.size && !f) return t;
+    if(!ctx.size && f === 'b' && t.indexOf('*') < 0) return '**' + t + '**';
+    if(!ctx.size && f === 's' && t.indexOf('~') < 0) return '~~' + t + '~~';
+    return '{' + (ctx.size || '') + f + t + '}';
   }
-  while(i < n){
-    /* 行首 # 是「整行强调」标记，不算正文，单独记一个哨兵，免得字符下标错位 */
-    if(lineStart && v.substr(i, 2) === '# '){ out.push({ c: '', head: true, p: i }); i += 2; continue; }
-    if(v.substr(i, 2) === '**'){ b = !b; i += 2; continue; }
-    if(v.substr(i, 2) === '~~'){ s = !s; i += 2; continue; }
-    if(v.charAt(i) === '{'){
-      var m = /^\{(\d{0,2})([bs]{0,2})/.exec(v.slice(i, i + 10));
-      if(m && (m[1] || m[2])){
-        var st = i + m[0].length, close = v.indexOf('}', st);
-        if(close > st && v.slice(st, close).indexOf('{') < 0 && v.slice(st, close).indexOf('\n') < 0){
-          var body = v.slice(st, close);
-          for(var k = 0; k < body.length; k++) add(body.charAt(k), Number(m[1]) || 0, m[2], st + k);
-          i = close + 1;
-          continue;
-        }
-      }
+
+  function styleCtx(node, ctx){
+    var c = { size: ctx.size, b: ctx.b, s: ctx.s };
+    var nm = node.nodeName;
+    if(nm === 'B' || nm === 'STRONG') c.b = true;
+    if(nm === 'S' || nm === 'STRIKE' || nm === 'DEL') c.s = true;
+    var st = node.style;
+    if(st){
+      if(st.fontSize){ var n = parseInt(st.fontSize, 10); if(n) c.size = n; }
+      if(st.fontWeight && parseInt(st.fontWeight, 10) >= 600) c.b = true;
+      if((st.textDecoration || st.textDecorationLine || '').indexOf('line-through') >= 0) c.s = true;
     }
-    if(v.charAt(i) === '\n'){ out.push({ c: '\n', size: 0, b: false, s: false, p: i }); i++; lineStart = true; continue; }
-    add(v.charAt(i), 0, '', i);
-    i++;
+    return c;
   }
-  return out;
+
+  function walk(node, ctx){
+    for(var n = node.firstChild; n; n = n.nextSibling){
+      if(n.nodeType === 3){
+        out += wrap(n.nodeValue.replace(/\u00a0/g, ' '), ctx);
+        continue;
+      }
+      if(n.nodeType !== 1) continue;
+      var nm = n.nodeName;
+      if(nm === 'BR'){ nl(); continue; }
+      if(nm === 'DIV' || nm === 'P'){ nl(); walk(n, ctx); nl(); continue; }
+      if(nm === 'SPAN' && String(n.className || '').indexOf('ln-em') >= 0){
+        nl();
+        out += '# ';
+        walk(n, styleCtx(n, ctx));
+        continue;
+      }
+      walk(n, styleCtx(n, ctx));
+    }
+  }
+
+  walk(root, { size: 0, b: false, s: false });
+  return out.replace(/^\n+/, '').replace(/\n+$/, '');
 }
 
-function aiRichFlag(c){ return (c.b ? 'b' : '') + (c.s ? 's' : ''); }
-
-function aiRichBuild(chars){
-  var out = '', i = 0;
-  while(i < chars.length){
-    var c0 = chars[i];
-    if(c0.head){ out += '# '; i++; continue; }
-    if(c0.c === '\n'){ out += '\n'; i++; continue; }
-    var sz = c0.size || 0, f = aiRichFlag(c0);
-    if(!sz && !f){ out += c0.c; i++; continue; }
-    var j = i + 1;
-    while(j < chars.length && chars[j].c !== '\n' && (chars[j].size || 0) === sz
-          && aiRichFlag(chars[j]) === f) j++;
-    var body = chars.slice(i, j).map(function(x){ return x.c; }).join('');
-    if(body.indexOf('{') >= 0 || body.indexOf('}') >= 0){ out += body; }
-    else if(!sz && f === 'b' && body.indexOf('*') < 0){ out += '**' + body + '**'; }
-    else if(!sz && f === 's' && body.indexOf('~') < 0){ out += '~~' + body + '~~'; }
-    else { out += '{' + (sz || '') + f + body + '}'; }
-    i = j;
-  }
-  return out;
+/* 编辑器 ↔ 隐藏的标记文本框，两边随时同步 */
+function aiRtSync(){
+  var box = $('adRich'), t = $('adText');
+  if(!box || !t) return;
+  t.value = aiFromHtml(box);
+  aiDayPreview();
+  aiRtTip();
 }
 
-function aiCharTip(){
+function aiRtLoad(text){
+  var box = $('adRich'), t = $('adText');
+  if(!box || !t) return;
+  t.value = String(text == null ? '' : text);
+  box.innerHTML = aiToHtml(t.value);
+  aiDayPreview();
+  aiRtTip();
+}
+
+var AI_RT_RANGE = null;   /* 点工具栏会让输入框失焦，先记住最后一段选择 */
+
+function aiRtSel(){
+  var box = $('adRich');
+  if(!box) return null;
+  var sel = window.getSelection();
+  if(!sel || !sel.rangeCount) return null;
+  var r = sel.getRangeAt(0);
+  if(!box.contains(r.commonAncestorContainer)) return null;
+  return { sel: sel, range: r };
+}
+
+function aiRtRestore(){
+  if(!AI_RT_RANGE) return false;
+  try{
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(AI_RT_RANGE);
+    return true;
+  }catch(e){ return false; }
+}
+
+function aiRtCount(range){
+  var t = range.toString().replace(/[\n\r]/g, '');
+  return t.length;
+}
+
+function aiRtTip(){
   var el = $('adChTip');
   if(!el) return;
-  if(!AI_CSEL){ el.textContent = '点一下要改的字（可按住拖一串）'; return; }
-  var chars = aiRichChars($('adText').value);
-  var sel = chars.slice(AI_CSEL[0], AI_CSEL[1] + 1).filter(function(c){ return !c.head && c.c !== '\n'; });
-  if(!sel.length){ el.textContent = '这里没有可改的字'; return; }
-  var b = sel.filter(function(c){ return c.b; }).length;
-  var s = sel.filter(function(c){ return c.s; }).length;
-  var sz = sel[0].size || 0;
-  var same = sel.every(function(c){ return (c.size || 0) === sz; });
-  el.textContent = '已选 ' + sel.length + ' 字'
-    + (b ? ' · 粗' : '') + (s ? ' · 横线' : '')
-    + (same && sz ? ' · ' + sz + 'px' : '');
-}
-
-function aiCharPaint(){
-  var box = $('adChars'), t = $('adText');
-  if(!box || !t) return;
-  var chars = aiRichChars(t.value);
-  if(AI_CSEL){
-    if(AI_CSEL[0] >= chars.length) AI_CSEL = null;
-    else AI_CSEL = [AI_CSEL[0], Math.min(AI_CSEL[1], chars.length - 1)];
-  }
-  var baseSz = Number(($('adSize') || {}).value || 0);
-  var baseB = $('adBold') && $('adBold').checked;
-  box.style.fontSize = baseSz ? baseSz + 'px' : '';
-  box.style.fontWeight = baseB ? '800' : '400';
-  if(!chars.length){
-    box.innerHTML = '<span class="muted" style="font-size:.72rem">在上面输入框写内容，这里就能逐字改</span>';
-    box.removeAttribute('data-sig');
-    aiCharTip();
+  var s = aiRtSel();
+  if(!s || s.range.collapsed){
+    el.textContent = '选中文字后点左边的按钮';
     return;
   }
-  /* 拖动选字时只改 class，不重建 DOM —— 重建会把鼠标底下的节点换掉，
-     拖动就断了（v3.9.18 实测踩到过） */
-  var sig = '';
-  for(var i = 0; i < chars.length; i++){
-    sig += chars[i].head ? 'h' : (chars[i].c === '\n' ? 'n' : chars[i].c);
-  }
-  if(box.getAttribute('data-sig') !== sig){
-    var html = '';
-    for(var k = 0; k < chars.length; k++){
-      var ck = chars[k];
-      if(ck.head){ html += '<span class="ad-nl">#</span>'; continue; }
-      if(ck.c === '\n'){ html += '<span class="ad-nl">⏎</span>'; continue; }
-      var sk = '';
-      if(ck.size) sk += 'font-size:' + ck.size + 'px;';
-      if(ck.b) sk += 'font-weight:900;';
-      if(ck.s) sk += 'text-decoration:line-through;';
-      var onk = AI_CSEL && k >= AI_CSEL[0] && k <= AI_CSEL[1];
-      html += '<span class="ad-ch' + (onk ? ' on' : '') + '" data-ci="' + k + '"'
-        + (sk ? ' style="' + sk + '"' : '') + '>' + esc(ck.c) + '</span>';
-    }
-    box.innerHTML = html;
-    box.setAttribute('data-sig', sig);
-    aiCharTip();
-    return;
-  }
-  var kids = box.children;
-  for(var i2 = 0; i2 < chars.length; i2++){
-    var c = chars[i2], el = kids[i2];
-    if(!el) continue;
-    if(c.head || c.c === '\n') continue;
-    var on = AI_CSEL && i2 >= AI_CSEL[0] && i2 <= AI_CSEL[1];
-    var cls = 'ad-ch' + (on ? ' on' : '');
-    if(el.className !== cls) el.className = cls;
-    var st = '';
-    if(c.size) st += 'font-size:' + c.size + 'px;';
-    if(c.b) st += 'font-weight:900;';
-    if(c.s) st += 'text-decoration:line-through;';
-    if((el.getAttribute('style') || '') !== st){
-      if(st) el.setAttribute('style', st); else el.removeAttribute('style');
-    }
-  }
-  aiCharTip();
+  var n = aiRtCount(s.range);
+  el.textContent = '已选 ' + n + ' 个字';
 }
 
-function aiCharApply(kind, val){
-  var t = $('adText');
-  if(!t || !AI_CSEL){ toast('先点一下要改的字（可按住拖一串）', 'warn', 2400); return; }
-  var chars = aiRichChars(t.value);
-  var a = Math.max(0, AI_CSEL[0]), b = Math.min(chars.length - 1, AI_CSEL[1]);
-  /* 空格和换行不给格式：{24 } 这种标记既没意义，还会在正文里留下怪东西 */
-  var sel = chars.slice(a, b + 1).filter(function(c){ return !c.head && c.c !== '\n' && !/^\s$/.test(c.c); });
-  if(!sel.length){ toast('空格和换行不用设格式，点文字', 'warn', 1800); return; }
-  if(kind === 'b' || kind === 's'){
-    var allOn = sel.every(function(c){ return !!c[kind]; });
-    sel.forEach(function(c){ c[kind] = !allOn; });
-  }else if(kind === 'size'){
-    sel.forEach(function(c){ c.size = val || 0; });
-  }else if(kind === 'clear'){
-    sel.forEach(function(c){ c.size = 0; c.b = false; c.s = false; });
+function aiRtOk(){
+  var box = $('adRich');
+  var s = aiRtSel();
+  if((!s || s.range.collapsed) && AI_RT_RANGE){ aiRtRestore(); s = aiRtSel(); }
+  if(!s || s.range.collapsed){
+    toast('先选中要改的文字，再点按钮', 'warn', 2200);
+    if(box) box.focus();
+    return null;
   }
-  t.value = aiRichBuild(chars);
-  AI_CSEL = [a, b];
-  aiDayPreview();
-  aiCharPaint();
+  return s;
 }
 
-function aiCharBind(){
-  var box = $('adChars');
+/* 把选中的内容包进一个新的行内元素 */
+function aiRtWrap(tag, style){
+  var s = aiRtOk();
+  if(!s) return;
+  var node = document.createElement(tag);
+  if(style) node.setAttribute('style', style);
+  try{
+    node.appendChild(s.range.extractContents());
+    s.range.insertNode(node);
+    var r2 = document.createRange();
+    r2.selectNodeContents(node);
+    s.sel.removeAllRanges();
+    s.sel.addRange(r2);
+  }catch(e){}
+  aiRtSync();
+}
+
+/* 去掉选区内同类的包裹（再点一次即取消） */
+function aiRtUnwrapAll(test){
+  var box = $('adRich');
+  var s = aiRtSel();
+  if(!box || !s) return false;
+  var list = [];
+  var all = box.querySelectorAll('*');
+  for(var i = 0; i < all.length; i++){
+    var el = all[i];
+    if(!test(el)) continue;
+    try{ if(s.range.intersectsNode(el)) list.push(el); }catch(e){}
+  }
+  if(!list.length) return false;
+  /* 从里往外拆，避免拆外层时把内层节点带走 */
+  for(var k = list.length - 1; k >= 0; k--){
+    var n = list[k], p = n.parentNode;
+    if(!p) continue;
+    while(n.firstChild) p.insertBefore(n.firstChild, n);
+    p.removeChild(n);
+  }
+  return true;
+}
+
+function aiRtHas(test){
+  var box = $('adRich');
+  var s = aiRtSel();
+  if(!box || !s) return false;
+  var all = box.querySelectorAll('*');
+  for(var i = 0; i < all.length; i++){
+    var el = all[i];
+    if(!test(el)) continue;
+    try{ if(s.range.intersectsNode(el)) return true; }catch(e){}
+  }
+  return false;
+}
+
+/* 工具栏总入口：b 粗体 / s 横线 / size 字号 / clear 清格式 / h 整行强调 */
+function aiRtFmt(kind, val){
+  var box = $('adRich');
   if(!box) return;
-  box.onmousedown = function(e){
-    var el = e.target.closest && e.target.closest('[data-ci]');
-    if(!el) return;
-    e.preventDefault();
-    var i = Number(el.getAttribute('data-ci'));
-    if(e.shiftKey && AI_CSEL){
-      AI_CSEL = [Math.min(AI_CSEL[0], i), Math.max(AI_CSEL[1], i)];
+  if(kind === 'h'){ aiRtHead(); return; }
+  var s = aiRtOk();
+  if(!s) return;
+
+  if(kind === 'b'){
+    if(aiRtHas(function(el){ return el.nodeName === 'B' || el.nodeName === 'STRONG'; })){
+      aiRtUnwrapAll(function(el){ return el.nodeName === 'B' || el.nodeName === 'STRONG'; });
     }else{
-      AI_CSEL = [i, i];
-      AI_CANCHOR = i;
+      aiRtWrap('b');
     }
-    AI_CDOWN = true;
-    aiCharPaint();
-  };
-  box.onmouseover = function(e){
-    if(!AI_CDOWN) return;
-    var el = e.target.closest && e.target.closest('[data-ci]');
-    if(!el) return;
-    var i = Number(el.getAttribute('data-ci'));
-    AI_CSEL = [Math.min(AI_CANCHOR, i), Math.max(AI_CANCHOR, i)];
-    aiCharPaint();
-  };
-  if(!aiCharBind._doc){
-    aiCharBind._doc = true;
-    document.addEventListener('mouseup', function(){ AI_CDOWN = false; });
-    document.addEventListener('touchend', function(){ AI_CDOWN = false; });
+  }else if(kind === 's'){
+    if(aiRtHas(function(el){ return /^(S|STRIKE|DEL)$/.test(el.nodeName); })){
+      aiRtUnwrapAll(function(el){ return /^(S|STRIKE|DEL)$/.test(el.nodeName); });
+    }else{
+      aiRtWrap('s');
+    }
+  }else if(kind === 'size'){
+    var px = Number(val) || 0;
+    if(!px){
+      /* 恢复默认：把选区内所有字号去掉，再清掉空壳 */
+      var all = box.querySelectorAll('span');
+      for(var i = 0; i < all.length; i++){
+        var el = all[i];
+        try{ if(s.range.intersectsNode(el)) el.style.fontSize = ''; }catch(e){}
+      }
+      aiRtUnwrapAll(function(el){
+        return el.nodeName === 'SPAN' && !String(el.className || '').length
+          && !el.getAttribute('style') && !el.firstChild;
+      });
+    }else{
+      aiRtWrap('span', 'font-size:' + px + 'px');
+    }
+  }else if(kind === 'clear'){
+    aiRtUnwrapAll(function(el){
+      if(/^(B|STRONG|S|STRIKE|DEL)$/.test(el.nodeName)) return true;
+      /* 整行强调是「这一行」的属性，不跟着单字格式一起清掉 */
+      return el.nodeName === 'SPAN' && String(el.className || '').indexOf('ln-em') < 0;
+    });
+    /* 说明：ln-em（整行强调）故意留着，它属于这一行，不算单字格式 */
   }
-  /* 手机上按住一个字横向拖，也能选一串（触屏不触发 mouseover） */
-  box.addEventListener('touchstart', function(e){
-    var el = e.target.closest && e.target.closest('[data-ci]');
-    if(!el) return;
-    var i = Number(el.getAttribute('data-ci'));
-    AI_CSEL = [i, i]; AI_CANCHOR = i; AI_CDOWN = true;
-    aiCharPaint();
-  }, { passive: true });
-  box.addEventListener('touchmove', function(e){
-    if(!AI_CDOWN) return;
-    var p = e.touches && e.touches[0];
-    if(!p) return;
-    var el = document.elementFromPoint(p.clientX, p.clientY);
-    el = el && el.closest && el.closest('[data-ci]');
-    if(!el) return;
-    var i = Number(el.getAttribute('data-ci'));
-    AI_CSEL = [Math.min(AI_CANCHOR, i), Math.max(AI_CANCHOR, i)];
-    aiCharPaint();
-  }, { passive: true });
+  aiRtSync();
+}
+
+/* 整行强调：光标所在那一行套底色，再点一次取消 */
+function aiRtHead(){
+  var box = $('adRich');
+  if(!box) return;
+  var s = aiRtSel();
+  if(!s) return;
+  /* 文本节点的父节点就是顶层节点；元素则往上找到 box 的直接子节点 */
+  var top = s.range.startContainer;
+  while(top && top.parentNode !== box) top = top.parentNode;
+  if(!top || top.parentNode !== box){ toast('先把光标放到要强调的那一行', 'warn', 2000); return; }
+
+  if(top.nodeName === 'SPAN' && String(top.className || '').indexOf('ln-em') >= 0){
+    var p = top.parentNode;
+    while(top.firstChild) p.insertBefore(top.firstChild, top);
+    p.removeChild(top);
+    aiRtSync();
+    return;
+  }
+
+  var kids = Array.prototype.slice.call(box.childNodes);
+  var i = kids.indexOf(top);
+  if(i < 0) return;
+  var a = i, b = i;
+  while(a > 0 && kids[a - 1].nodeName !== 'BR') a--;
+  while(b < kids.length - 1 && kids[b + 1].nodeName !== 'BR') b++;
+  var span = document.createElement('span');
+  span.className = 'ln-em';
+  box.insertBefore(span, kids[a]);
+  for(var k = a; k <= b; k++) span.appendChild(kids[k]);
+  if(!span.textContent.trim()) span.appendChild(document.createElement('br'));
+  aiRtSync();
+}
+
+/* 编辑器初始化：回车插 <br>、粘贴只留纯文字、输入法不打断 */
+function aiRtInit(){
+  var box = $('adRich');
+  if(!box) return;
+  box.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' && !e.isComposing){
+      e.preventDefault();
+      document.execCommand('insertLineBreak');
+      aiRtSync();
+    }
+  });
+  box.addEventListener('paste', function(e){
+    e.preventDefault();
+    var txt = '';
+    try{ txt = (e.clipboardData || window.clipboardData).getData('text') || ''; }catch(err){}
+    txt = txt.replace(/\r\n?/g, '\n');
+    if(txt) document.execCommand('insertText', false, txt);
+    aiRtSync();
+  });
+  box.addEventListener('input', function(e){
+    if(e.isComposing) return;
+    aiRtSync();
+  });
+  box.addEventListener('compositionend', function(){ aiRtSync(); });
+  box.addEventListener('keyup', aiRtTip);
+  box.addEventListener('mouseup', function(){ setTimeout(aiRtTip, 0); });
+  box.addEventListener('touchend', function(){ setTimeout(aiRtTip, 0); });
+  document.addEventListener('selectionchange', function(){
+    var s = aiRtSel();
+    if(s && !s.range.collapsed) AI_RT_RANGE = s.range.cloneRange();
+    if(document.activeElement === box) aiRtTip();
+  });
+  /* 点工具栏按钮时别把输入框的焦点抢走，否则选区没了 */
+  var bar = document.querySelector('.ai-charbar');
+  if(bar){
+    bar.addEventListener('mousedown', function(e){
+      if(e.target && e.target.nodeName === 'BUTTON') e.preventDefault();
+    });
+  }
 }
 
 function aiDayPreview(){
@@ -12284,103 +12396,29 @@ function aiDayPreview(){
     +   (body || '<span style="opacity:.45">这里是预览</span>')
     + '</span></div>';
 }
-/* ============================================================================
- * v3.9.17（站主）：「加粗选中没有用」「点一下应该取消，现在一直叠加」
- * ----------------------------------------------------------------------------
- * 根因两条：
- *   ① 以前只判断「选区本身是不是正好被 ** 包住」；用户在 **数学** 里只选中
- *      「数学」时判断失败，于是又包一层 → 越点越多层，看起来就是「叠加」。
- *   ② 前台字重是 800、行内加粗 900，差 100 几乎看不出，所以觉得「没用」。
- *
- * 现在：先把选区扩张到「包住它的那一对标记」（看到标记就算关闭），再决定
- * 加还是删，所以同一个位置连点就是开关；字重也在 CSS 里拉开了。
- * ========================================================================= */
-function aiFindSpan(v, a, b, mark){
-  var m = mark.length;
-  /* 选区自己就带着标记：**数学** */
-  if(v.substr(a, m) === mark && v.substr(b - m, m) === mark && (b - a) >= 2 * m) return [a, b];
-  /* 选区紧贴标记内侧：数学 → **|数学|** */
-  if(v.substr(a - m, m) === mark && v.substr(b, m) === mark) return [a - m, b + m];
-  /* 选区在标记内部：向前找开启、向后找闭合 */
-  var open = v.lastIndexOf(mark, a - 1);
-  if(open >= 0){
-    var close = v.indexOf(mark, b);
-    if(close >= 0 && v.slice(open + m, close).indexOf(mark) < 0) return [open, close + m];
-  }
-  return null;
-}
-
-function aiFmt(kind){
-  var t = $('adText');
-  if(!t) return;
-  var v = t.value, a = t.selectionStart, b = t.selectionEnd;
-  /* 只在逐字面板里点过字、输入框又没有选区时，用面板的选中位置 */
-  if(a === b && AI_CSEL){
-    var c0 = aiRichChars(v)[AI_CSEL[0]];
-    if(c0) a = b = c0.p;
-  }
-  if(kind === 'h'){
-    /* 行首 # 也是开关：有就删、没有就加 */
-    var ls = v.lastIndexOf('\n', a - 1) + 1;
-    if(v.slice(ls, ls + 2) === '# '){
-      t.value = v.slice(0, ls) + v.slice(ls + 2);
-      a = Math.max(ls, a - 2); b = Math.max(a, b - 2);
-    }else{
-      t.value = v.slice(0, ls) + '# ' + v.slice(ls);
-      a += 2; b += 2;
-    }
-  }else{
-    var mark = (kind === 'b') ? '**' : '~~';
-    var span = aiFindSpan(v, a, b, mark);
-    if(span){
-      /* 命中已有标记 → 去掉（连点即取消） */
-      var inner = v.slice(span[0] + mark.length, span[1] - mark.length);
-      t.value = v.slice(0, span[0]) + inner + v.slice(span[1]);
-      a = span[0]; b = span[0] + inner.length;
-    }else if(a === b){
-      /* 没有选区：插入占位并选中「文字」，方便直接改 */
-      t.value = v.slice(0, a) + mark + '文字' + mark + v.slice(b);
-      a = a + mark.length; b = a + 2;
-    }else{
-      t.value = v.slice(0, a) + mark + v.slice(a, b) + mark + v.slice(b);
-      b = b + mark.length; a = a + mark.length;
-    }
-  }
-  AI_CSEL = null;
-  t.focus();
-  try{ t.setSelectionRange(a, b); }catch(e){}
-  aiDayPreview();
-  aiCharPaint();
-}
-
 function aiEditDay(k){
   var v = (AI.days || {})[k];
   if(!v) return;
   AI_DAY_EDIT = k;
   $('adDate').value = k;
-  $('adText').value = v.text || '';
   $('adOff').checked = !!v.off;
   $('adBold').checked = !!v.bold;
   $('adCenter').checked = v.center !== false;
   if($('adSize')) $('adSize').value = String(v.size || 0);
   var b = $('adAdd');
   if(b) b.textContent = '更新这一天';
-  AI_CSEL = null;
-  aiDayPreview();
-  aiCharPaint();
+  aiRtLoad(v.text || '');
   paintDayList();
-  $('adText').focus();
+  if($('adRich')) $('adRich').focus();
 }
 function aiCancelDay(){
   AI_DAY_EDIT = null;
-  $('adDate').value = ''; $('adText').value = ''; $('adOff').checked = false;
+  $('adDate').value = ''; $('adOff').checked = false;
   $('adBold').checked = true; $('adCenter').checked = true;
   if($('adSize')) $('adSize').value = '0';
   var b = $('adAdd');
   if(b) b.textContent = '添加';
-  AI_CSEL = null;
-  aiDayPreview();
-  aiCharPaint();
+  aiRtLoad('');
 }
 
 /* 一键填入「当天课表」：默认取所选日期的星期横幅；
@@ -12401,8 +12439,8 @@ function aiFillDay(){
     txt = (AI.banner || {})[key] || '';
   }
   if(!txt){ toast('这一天还没有默认课表，先在上面写一句', 'warn', 2800); return; }
-  $('adText').value = txt;
-  $('adText').focus();
+  aiRtLoad(txt);
+  if($('adRich')) $('adRich').focus();
   toast('已填入，改其中一两个字再点' + (AI_DAY_EDIT ? '「更新这一天」' : '「添加」'), 'ok', 2600);
 }
 
@@ -14765,6 +14803,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.19', date: '2026-10-23', type: 'feat', title: '编辑不再看到符号 · 天气看未来 24 小时 · 字号能到 4px', items: [
+      '后台「按日期临时改」的输入区换成所见即所得：屏幕上只有字，粗体就是粗的、大字就是大的、横线就是划掉的',
+      '选中一段文字点 B / S / 字号就直接改这一段；同一个按钮再点一次就取消',
+      '想在句子里加字，光标点进去直接打，前后格式不会乱',
+      '日期列表里的摘要也只显示纯文字，不再露出 ** 和 {} 那些符号',
+      '单字字号扩展到 4–32px（原来最小 14px）',
+      '天气详情改成「从现在起 24 小时」，跨天会标出日期，标题写明是修水的天气'
+    ], pub: [
+      { cat: '班级', text: '今日事项的编辑不再显示符号；天气详情改成从现在起 24 小时' }
+    ] },
   { version: '3.9.18', date: '2026-10-23', type: 'feat', title: '今日事项可以逐个字调字号 / 加粗 / 横线', items: [
       '「按日期临时改」下面多了一块「逐字设置」：文字被拆成一格格，点哪个字就只改那个字',
       '每个字能单独设字号（14–32px）、加粗、横线；同一个按钮再点一次就取消',
