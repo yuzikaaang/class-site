@@ -2652,13 +2652,13 @@ function renderClassContent(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel);flex-wrap:wrap;gap:8px">'
     +   '<button class="btn btn-sm" id="ccAdd">' + svg('plus', 14) + '新增内容</button>'
-    +   '<select id="ccCatFilter" class="gate-input" style="width:auto;padding:6px 8px;font-size:.8rem">'
+    +   '<select id="ccCatFilter" class="gate-input inp-sm" style="width:auto;min-width:140px">'
     +     [{ v:'全部', n:'全部' }, { v:'site', n:'📡 网站内部' }, { v:'activity', n:'🔔 重要更新' },
           { v:'class', n:'🏫 班级事务' }, { v:'misc', n:'💭 站主杂谈' }, { v:'__hw__', n:'📝 作业' }].map(function(c){
           return '<option value="' + attr(c.v) + '"' + (S.cat === c.v ? ' selected' : '') + '>' + esc(c.n) + '</option>';
         }).join('')
     +   '</select>'
-    +   '<input id="ccQ" class="gate-input" placeholder="搜标题 / 正文…" style="width:180px;padding:6px 10px;font-size:.8rem" value="' + attr(S.q) + '">'
+    +   '<input id="ccQ" class="gate-input inp-sm" placeholder="搜标题 / 正文…" style="width:180px" value="' + attr(S.q) + '">'
     +   '<button class="btn btn-sm btn-ghost" id="ccSort" title="切换时间排序">⇅ ' + (S.sort === 'new' ? '新→旧' : '旧→新') + '</button>'
     +   '<span style="flex:1"></span>'
     +   '<span class="muted" style="font-size:.8rem" id="ccCount">加载中…</span>'
@@ -3632,7 +3632,7 @@ function renderHomeworks(){
     + '</div>'
     + '<section class="panel">'
     +   '<h3 style="margin:0 0 10px;font-size:.9rem">📌 作业通知</h3>'
-    +   '<textarea id="hwNotice" rows="3" placeholder="例如：本周作业已更新，请及时完成" style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--line);font-family:inherit;font-size:.85rem;resize:vertical"></textarea>'
+    +   '<textarea id="hwNotice" class="inp" rows="3" placeholder="例如：本周作业已更新，请及时完成"></textarea>'
     +   '<div style="text-align:right;margin-top:10px"><button class="btn btn-sm" id="hwNoticeSave">保存通知</button></div>'
     + '</section>'
     + '<section class="panel" style="margin-top:16px"><div id="hwBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
@@ -14803,6 +14803,17 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.20', date: '2026-10-24', type: 'style', title: '输入框全部统一：同一个高度、圆角、边框和聚焦光晕', items: [
+      '后台原来只有登录页的输入框有样式，绝大部分是浏览器默认外观；现在统一成 42px 高、12px 圆角、同一描边',
+      '聚焦时统一变成橙色边框 + 一圈淡光晕，悬停也会轻微加深，一眼能看出哪里可以填',
+      '下拉框去掉系统外观，换成同一个箭头；暗色下自动换成浅色箭头',
+      '工具栏里的小输入框收到 34px 高，和旁边的按钮平齐',
+      '前台把登录、我的资料、搜索、公告筛选、作业选择几套样式合并成一套（44px 高）',
+      '公告搜索里的搜索框、板块筛选、时间筛选、日期范围现在一样高',
+      '输入框里的提示文字、禁用状态、只读状态也统一了'
+    ], pub: [
+      { cat: '界面', text: '全站输入框统一样式，点进去时会亮起橙色边框' }
+    ] },
   { version: '3.9.19', date: '2026-10-23', type: 'feat', title: '编辑不再看到符号 · 天气看未来 24 小时 · 字号能到 4px', items: [
       '后台「按日期临时改」的输入区换成所见即所得：屏幕上只有字，粗体就是粗的、大字就是大的、横线就是划掉的',
       '选中一段文字点 B / S / 字号就直接改这一段；同一个按钮再点一次就取消',
