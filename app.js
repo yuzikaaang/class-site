@@ -6251,7 +6251,7 @@ function showChangePwd(){
   var box = document.getElementById('acctPwdBox');
   if(!box) return;
   box.innerHTML = '<div class="acct-prompt">' +
-    '<input id="pwdOld" type="password" placeholder="原密码" autocomplete="current-password">' +
+    '<input id="pwdOld" class="inp" type="password" placeholder="原密码" autocomplete="current-password">' +
     '<input id="pwdNew" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">' +
     '<div class="acct-row" style="margin-top:0">' +
       '<button class="acct-btn" onclick="doChangePwd()">确认修改</button>' +
@@ -7488,7 +7488,7 @@ function loadAdminUsers(q){
     var total = j.total || 0;
     b.innerHTML =
       '<div class="admin-search">' +
-        '<input id="adminQ" placeholder="搜索用户名或显示名…" value="' + esc(q || '') + '">' +
+        '<input id="adminQ" class="inp inp-sm" placeholder="搜索用户名或显示名…" value="' + esc(q || '') + '">' +
         '<button onclick="loadAdminUsers(document.getElementById(\'adminQ\').value)">搜索</button>' +
       '</div>' +
       '<div class="admin-stats">' +
@@ -8765,8 +8765,7 @@ function renderUiImport(){
       '<input type="file" id="uiImpFile" accept=".json,application/json" onchange="uiImpRead(this)" ' +
         'style="width:100%;font-size:.78rem;color:var(--fg-3);margin-bottom:10px">' +
       '<p class="ui-hint">也可以直接把文件内容粘贴到下面：</p>' +
-      '<textarea id="uiImpText" rows="4" style="width:100%;font-size:.74rem;border:1px solid var(--tint-2);' +
-        'border-radius:10px;padding:8px;font-family:inherit;background:#fff;color:var(--fg)" placeholder="粘贴配置 JSON…"></textarea>' +
+      '<textarea id="uiImpText" class="inp" rows="4" placeholder="粘贴配置 JSON…"></textarea>' +
       '<button class="btn" style="width:100%;margin-top:10px" onclick="uiImpFromText()">下一步</button>';
   }else if(UI_IMP_STEP === 1){
     box.innerHTML =
