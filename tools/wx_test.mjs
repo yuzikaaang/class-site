@@ -5,7 +5,7 @@ const browser = await chromium.launch({
   executablePath: '/root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome',
   args: ['--no-sandbox'],
 });
-const page = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+const page = await (await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' })).newPage();
 
 let pass = 0, fail = 0;
 const t = (n, c, d) => {
