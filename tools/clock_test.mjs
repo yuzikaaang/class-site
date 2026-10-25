@@ -435,7 +435,13 @@ t('点数字能展开时长设置', await page.evaluate(() => document.getElemen
   await p6.waitForTimeout(700);
 
   const snds = await p6.evaluate(() => [...document.querySelectorAll('#sndRow button')].map((b) => b.getAttribute('data-snd')));
-  t('音效有「叮咚」「清脆」等 6 个选项', snds.length === 6 && snds.includes('ding') && snds.includes('chime'), JSON.stringify(snds));
+  t('音效有「叮咚」「清脆」等 7 个选项', snds.length === 7 && snds.includes('ding') && snds.includes('chime'), JSON.stringify(snds));
+  await p6.evaluate(() => document.querySelector('[data-snd="blue"]').click());
+  await p6.waitForTimeout(200);
+  t('点「蓝牙」能选中并存进配置（无报错即真实音频解码播放成功）', await p6.evaluate(() => {
+    const c = JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}');
+    return c.sound === 'blue' && document.querySelector('[data-snd="blue"]').className === 'on';
+  }));
 
   const noises = await p6.evaluate(() => [...document.querySelectorAll('#noiseRow button')].map((b) => b.getAttribute('data-noise')));
   t('白噪音有雨 / 风 / 海浪 3 个', noises.length === 3 && noises.includes('rain') && noises.includes('wind') && noises.includes('wave'), JSON.stringify(noises));
@@ -448,10 +454,23 @@ t('点数字能展开时长设置', await page.evaluate(() => document.getElemen
 
   await p6.evaluate(() => { document.getElementById('bar').className = 'show'; });
   await p6.waitForTimeout(100);
-  t('有收起工具栏的小箭头', await p6.evaluate(() => !!document.getElementById('barHide')));
-  await p6.evaluate(() => document.getElementById('barHide').click());
+  t('有常驻的工具栏开关按钮', await p6.evaluate(() => !!document.getElementById('barBtn')));
+  await p6.evaluate(() => document.getElementById('barBtn').click());
   await p6.waitForTimeout(150);
-  t('点箭头立即收起工具栏', await p6.evaluate(() => document.getElementById('bar').className.indexOf('show') < 0));
+  t('点开关立即收起工具栏', await p6.evaluate(() => document.getElementById('bar').className.indexOf('show') < 0));
+  t('收起后箭头变成「展开」方向', await p6.evaluate(() => document.getElementById('barBtn').className.indexOf('open') < 0));
+  await p6.evaluate(() => document.getElementById('barBtn').click());
+  await p6.waitForTimeout(150);
+  t('再点开关能重新展开工具栏', await p6.evaluate(() => document.getElementById('bar').className.indexOf('show') >= 0));
+  t('展开后箭头翻回「收起」方向', await p6.evaluate(() => document.getElementById('barBtn').className.indexOf('open') >= 0));
+  t('点空白处也能展开工具栏', await p6.evaluate(() => {
+    document.getElementById('bar').className = '';
+    document.getElementById('barBtn').className = '';
+    document.getElementById('stage').dispatchEvent(new MouseEvent('click', {bubbles:true}));
+    return document.getElementById('bar').className.indexOf('show') >= 0;
+  }));
+  const sndKeys = await p6.evaluate(() => [...document.querySelectorAll('#sndRow button')].map((b) => b.getAttribute('data-snd')));
+  t('音效含蓝牙（时间到推荐）等 7 项', sndKeys.length === 7 && sndKeys.includes('blue') && sndKeys.includes('ding') && sndKeys.includes('bell'), JSON.stringify(sndKeys));
 
   t('音效 / 白噪音 / 收起无 JS 报错', errs6.length === 0, errs6.join(' | '));
   await ctx6.close();
