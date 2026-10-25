@@ -1686,15 +1686,17 @@ var SITE_DATA = {
          仿照 yingming006.cn/time 做的，功能对齐（数字 / 翻页 / 秒表 / 计时器）。 */
       id: 30,
       categoryId: 8, title: "全屏时钟", icon: "", iconText: "⏰",
-      desc: "桌面时间显示与倒计时：数字 / 翻页两种时钟样式，另有秒表和倒计时。\n支持全屏、换字体、换背景，适合教室投屏、自习计时、桌面常驻。",
+      desc: "桌面时间显示与倒计时：数字 / 翻页两种时钟样式，翻页可以关掉秒；另有秒表、倒计时和自习番茄钟。\n支持全屏（自动横屏）、换字体、调数字大小、换背景，适合教室投屏、自习计时、桌面常驻。",
       mainLabel: "打开全屏时钟", mainUrl: "./clock.html", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
+      /* v3.9.24（站主）：「把番茄钟这些功能挪过来」——番茄钟已并进全屏时钟的自习模式，
+         这里不再跳外站，直接打开本地页面并进自习。 */
       id: 11,
       categoryId: 8, title: "番茄时钟", icon: "", iconText: "🍅",
-      desc: "番茄工作法计时器：专注 25 分钟 + 短暂休息，\n帮你提升学习效率，保持专注。",
-      mainLabel: "前往使用", mainUrl: "https://focustide.app/", mainWechatOk: true,
+      desc: "番茄工作法计时器：专注 25 分钟 → 休息 5 分钟自动循环，每 4 个番茄给一次长休息，\n并记下今天完成几个。已并入站内「全屏时钟 → 自习」，不用再跳外站。",
+      mainLabel: "开始自习", mainUrl: "./clock.html?m=pomo", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
