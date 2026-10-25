@@ -76,6 +76,8 @@ var STATE = {
   secrets: { list: [], encrypted: false, hasKey: false },
   /* 2026-10-07 新增：游戏数据（最高分 / 游玩时长 / 券获取时间） */
   games: { list: [], meta: [], summary: null, q: '', tab: 'play', week: '' },
+  /* v3.9.25：全屏时钟使用记录（谁在什么时候用了多久） */
+  clocklog: { day: '', q: '', users: [], summary: null, open: {} },
 };
 window.__ADMIN_STATE = STATE;   /* 调试用 */
 
@@ -742,6 +744,8 @@ var PAGES = [
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
   { id:'online',        label:'在线时长', icon:'clock',     group:'安全',  title:'在线时长（单次 / 累计）' },
+  /* v3.9.25（站主）：全屏时钟的自习 / 计时记录 */
+  { id:'clocklog',      label:'时钟记录', icon:'clock',     group:'安全',  title:'时钟记录（谁在什么时候用了多久）' },
   /* v3.6.1（站主 #4）：云端数据备份 / 回档 */
   { id:'backup',        label:'数据管理', icon:'database',  group:'安全',  title:'数据管理（备份 / 回档）' },
   { id:'logs',          label:'操作日志', icon:'file',      group:'安全',  title:'操作日志' },
@@ -836,6 +840,7 @@ function go(page){
     games:         renderGames,
     logins:        renderLogins,
     online:        renderOnline,
+    clocklog:      renderClockLog,
     logs:          renderLogs,
     actionlogs:    renderActionLogs,
     secrets:       renderSecrets,
@@ -2652,13 +2657,13 @@ function renderClassContent(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel);flex-wrap:wrap;gap:8px">'
     +   '<button class="btn btn-sm" id="ccAdd">' + svg('plus', 14) + '新增内容</button>'
-    +   '<select id="ccCatFilter" class="gate-input" style="width:auto;padding:6px 8px;font-size:.8rem">'
+    +   '<select id="ccCatFilter" class="gate-input inp-sm" style="width:auto;min-width:140px">'
     +     [{ v:'全部', n:'全部' }, { v:'site', n:'📡 网站内部' }, { v:'activity', n:'🔔 重要更新' },
           { v:'class', n:'🏫 班级事务' }, { v:'misc', n:'💭 站主杂谈' }, { v:'__hw__', n:'📝 作业' }].map(function(c){
           return '<option value="' + attr(c.v) + '"' + (S.cat === c.v ? ' selected' : '') + '>' + esc(c.n) + '</option>';
         }).join('')
     +   '</select>'
-    +   '<input id="ccQ" class="gate-input" placeholder="搜标题 / 正文…" style="width:180px;padding:6px 10px;font-size:.8rem" value="' + attr(S.q) + '">'
+    +   '<input id="ccQ" class="gate-input inp-sm" placeholder="搜标题 / 正文…" style="width:180px" value="' + attr(S.q) + '">'
     +   '<button class="btn btn-sm btn-ghost" id="ccSort" title="切换时间排序">⇅ ' + (S.sort === 'new' ? '新→旧' : '旧→新') + '</button>'
     +   '<span style="flex:1"></span>'
     +   '<span class="muted" style="font-size:.8rem" id="ccCount">加载中…</span>'
@@ -3632,7 +3637,7 @@ function renderHomeworks(){
     + '</div>'
     + '<section class="panel">'
     +   '<h3 style="margin:0 0 10px;font-size:.9rem">📌 作业通知</h3>'
-    +   '<textarea id="hwNotice" rows="3" placeholder="例如：本周作业已更新，请及时完成" style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--line);font-family:inherit;font-size:.85rem;resize:vertical"></textarea>'
+    +   '<textarea id="hwNotice" class="inp" rows="3" placeholder="例如：本周作业已更新，请及时完成"></textarea>'
     +   '<div style="text-align:right;margin-top:10px"><button class="btn btn-sm" id="hwNoticeSave">保存通知</button></div>'
     + '</section>'
     + '<section class="panel" style="margin-top:16px"><div id="hwBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
@@ -8333,6 +8338,152 @@ function fmtDur(ms){
   return h + ' 小时' + (mm ? ' ' + mm + ' 分' : '');
 }
 
+/* ============================================================================
+ * v3.9.25（站主）：时钟记录
+ * ----------------------------------------------------------------------------
+ * 站主：「我在后台也可以看到具体是谁干嘛」。
+ * 数据是 clock.html 自己写进 user_data 的（cls_clock_log_<日期>），
+ * 接口 GET /api/admin?action=clock-logs 只读汇总，不写库。
+ * ========================================================================== */
+function clockToday(){
+  var d = new Date(), p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function clockDur(sec){
+  sec = Math.round(Number(sec) || 0);
+  if(sec <= 0) return '—';
+  if(sec < 60) return sec + ' 秒';
+  var m = Math.round(sec / 60);
+  if(m < 60) return m + ' 分钟';
+  return Math.floor(m / 60) + ' 时 ' + (m % 60) + ' 分';
+}
+function clockHM(ms){
+  var d = new Date(Number(ms));
+  if(isNaN(d.getTime())) return '—';
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function renderClockLog(){
+  var S = STATE.clocklog;
+  if(!S.day) S.day = clockToday();
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div class="search">' + svg('search')
+    +     '<input id="clSearch" placeholder="搜索姓名或账号…" value="' + attr(S.q) + '" maxlength="40">'
+    +   '</div>'
+    +   '<input type="date" id="clDay" class="inp inp-sm" style="width:152px;flex:0 0 auto" value="' + attr(S.day) + '">'
+    +   '<button class="btn btn-sm btn-secondary" id="clToday">今天</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="clRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '同学在「全屏时钟」页里每切换一次模式就记一段：数字时钟 / 翻页时钟 / 秒表 / 倒计时，'
+    +   '自习则分成<b>专注</b>与<b>休息</b>两段。'
+    +   '<br><b>只有登录的人才会出现在这里</b> —— 未登录的记录只存在他自己的设备上。'
+    + '</div>'
+    + '<section class="panel"><div id="clBody">'
+    +   '<div class="loading"><div class="spinner"></div>加载中…</div>'
+    + '</div></section>';
+
+  $('clSearch').oninput = debounce(function(e){
+    STATE.clocklog.q = e.target.value.trim();
+    loadClockLog();
+  }, 400);
+  $('clDay').onchange = function(){
+    STATE.clocklog.day = this.value || clockToday();
+    STATE.clocklog.open = {};
+    loadClockLog();
+  };
+  $('clToday').onclick = function(){
+    STATE.clocklog.day = clockToday();
+    $('clDay').value = STATE.clocklog.day;
+    STATE.clocklog.open = {};
+    loadClockLog();
+  };
+  $('clRefresh').onclick = function(){ loadClockLog(); };
+
+  loadClockLog();
+}
+
+function loadClockLog(){
+  var S = STATE.clocklog;
+  if(!S.day) S.day = clockToday();
+  api('/admin?action=clock-logs&day=' + encodeURIComponent(S.day)
+    + '&q=' + encodeURIComponent(S.q || '')).then(function(j){
+    S.users = j.users || [];
+    S.summary = j.summary || null;
+    S.day = j.day || S.day;
+    paintClockLog();
+  }).catch(function(e){
+    var b = $('clBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34)
+      + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintClockLog(){
+  var S = STATE.clocklog;
+  var body = $('clBody');
+  if(!body) return;
+
+  var sm = S.summary || {};
+  var head = '<div class="stat-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div class="mini-card"><span class="mc-label">使用人数</span><b>' + (sm.users || 0) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">合计自习</span><b>' + clockDur(sm.focus) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">合计休息</span><b>' + clockDur(sm.rest) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">番茄总数</span><b>' + (sm.tomato || 0) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">其它工具</span><b>' + clockDur(sm.other) + '</b></div>'
+    + '</div>';
+
+  if(!S.users.length){
+    body.innerHTML = head + '<div class="empty">' + svg('clock', 38)
+      + '<p>' + esc(S.day) + ' 还没有人用过全屏时钟</p>'
+      + '<p class="muted" style="font-size:.82rem">换一天看看，或者等同学登录后去用一会儿</p></div>';
+    return;
+  }
+
+  var rows = S.users.map(function(u, i){
+    var open = !!S.open[u.userId];
+    var modes = (u.byMode || []).map(function(m){ return m.name + ' ' + clockDur(m.secs); }).join(' · ');
+    var segs = (u.segs || []).map(function(g){
+      return '<span class="cl-seg"><b>' + clockHM(g.start) + '–' + clockHM(g.end) + '</b>'
+        + ' ' + esc(g.name) + ' <i>' + clockDur(g.secs) + '</i></span>';
+    }).join('');
+    return '<tr>'
+      + '<td><b>' + esc(u.displayName || u.username || '(未填)') + '</b>'
+        + '<div class="muted" style="font-size:.74rem">' + esc(u.username || '') + '</div></td>'
+      + '<td style="text-align:right">' + (u.focus ? '<b>' + clockDur(u.focus) + '</b>' : '<span class="muted">—</span>') + '</td>'
+      + '<td style="text-align:right">' + (u.rest ? clockDur(u.rest) : '<span class="muted">—</span>') + '</td>'
+      + '<td style="text-align:right">' + (u.tomato ? '<b>' + u.tomato + '</b> 个' : '<span class="muted">—</span>') + '</td>'
+      + '<td style="text-align:right">' + (u.other ? clockDur(u.other) : '<span class="muted">—</span>') + '</td>'
+      + '<td class="muted" style="font-size:.78rem;white-space:nowrap">'
+        + (u.firstAt ? clockHM(u.firstAt) + ' – ' + clockHM(u.lastAt) : '—') + '</td>'
+      + '<td><button class="btn btn-sm btn-secondary" data-cl-open="' + u.userId + '">'
+        + (open ? '收起' : '明细') + '</button></td>'
+      + '</tr>'
+      + '<tr class="cl-detail" data-cl-row="' + u.userId + '"'
+        + (open ? '' : ' style="display:none"') + '><td colspan="7">'
+        + (modes ? '<div class="muted" style="font-size:.78rem;margin-bottom:8px">' + esc(modes) + '</div>' : '')
+        + '<div class="cl-segs">' + (segs || '<span class="muted">没有明细</span>') + '</div>'
+      + '</td></tr>';
+  }).join('');
+
+  body.innerHTML = head
+    + '<div class="table-wrap"><table><thead><tr>'
+    + '<th>成员</th><th style="text-align:right">自习</th><th style="text-align:right">休息</th>'
+    + '<th style="text-align:right">番茄</th><th style="text-align:right">其它工具</th>'
+    + '<th>时段</th><th></th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-cl-open]'), function(b){
+    b.onclick = function(){
+      var id = b.getAttribute('data-cl-open');
+      S.open[id] = !S.open[id];
+      paintClockLog();
+    };
+  });
+}
+
 function renderGames(){
   var S = STATE.games;
   $('view').innerHTML =
@@ -11723,16 +11874,38 @@ function paintIsland(){
     +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adOff"> 不上课</label>'
     +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adBold" checked> 加粗</label>'
     +       '<label class="ai-check" style="margin:0"><input type="checkbox" id="adCenter" checked> 居中</label>'
+    +       '<label class="ai-check" style="margin:0;gap:4px">字号'
+    +         '<select id="adSize" class="ai-size">'
+    +           '<option value="0">默认</option>'
+    +           '<option value="14">14</option><option value="16">16</option>'
+    +           '<option value="18">18</option><option value="20">20</option>'
+    +           '<option value="22">22</option><option value="24">24</option>'
+    +           '<option value="26">26</option><option value="28">28</option>'
+    +         '</select>px</label>'
     +       '<button class="btn btn-sm" id="adAdd">添加</button>'
     +     '</div>'
-    +     '<div class="ai-fmtbar">'
-    +       '<button type="button" class="ai-fmt" data-fmt="b">B 加粗选中</button>'
-    +       '<button type="button" class="ai-fmt" data-fmt="s">S 加横线</button>'
-    +       '<button type="button" class="ai-fmt" data-fmt="h"># 整行强调</button>'
-    +       '<span class="muted" style="font-size:.72rem">选中几个字再点；行首 # = 这行加粗并居中</span>'
+    +     '<p class="muted ai-chhint">直接在这块里写，看到的就是首页的样子。'
+    +       '选中文字后点 B / S / 字号；再点一次就取消。想在句子里插字，光标点进去直接打。</p>'
+    +     '<div class="ai-rt" id="adRich" contenteditable="true" role="textbox" aria-multiline="true"'
+    +       ' data-ph="这一天的安排（可多行），如：数学 08:00-09:30"></div>'
+    +     '<textarea id="adText" style="display:none" aria-hidden="true" tabindex="-1"></textarea>'
+    +     '<div class="ai-charbar">'
+    +       '<button type="button" class="ai-fmt ai-fmt-b" data-rt="b" title="加粗选中的字">B</button>'
+    +       '<button type="button" class="ai-fmt" data-rt="s" title="给选中的字加横线">S</button>'
+    +       '<select id="adChSize" class="ai-size" title="选中的字多大">'
+    +         '<option value="0">字号·默认</option>'
+    +         '<option value="4">4px</option><option value="6">6px</option>'
+    +         '<option value="8">8px</option><option value="10">10px</option>'
+    +         '<option value="12">12px</option><option value="14">14px</option>'
+    +         '<option value="16">16px</option><option value="18">18px</option>'
+    +         '<option value="20">20px</option><option value="22">22px</option>'
+    +         '<option value="24">24px</option><option value="26">26px</option>'
+    +         '<option value="28">28px</option><option value="32">32px</option>'
+    +       '</select>'
+    +       '<button type="button" class="ai-fmt" data-rt="h" title="整行加底色">整行强调</button>'
+    +       '<button type="button" class="ai-fmt" data-rt="clear" title="去掉选中的格式">清格式</button>'
+    +       '<span class="muted ai-chtip" id="adChTip">选中文字后点左边的按钮</span>'
     +     '</div>'
-    +     '<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="200"'
-    +       ' placeholder="这一天的安排（可多行），如：\n数学 08:00-09:30\n语文 10:00-11:30"></textarea>'
     +     '<p class="muted" style="font-size:.72rem;margin:8px 0 4px">预览（就是首页看到的效果）：</p>'
     +     '<div class="ai-dprev"><div class="ai-dprev-txt" id="adPrev"></div></div>'
     +   '</div>'
@@ -11756,15 +11929,25 @@ function paintIsland(){
   $('adAdd').onclick = aiAddDay;
   $('adFill').onclick = aiFillDay;
   $('ahAdd').onclick = aiAddHoliday;
-  $('adText').onkeydown = function(e){
-    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); aiAddDay(); }
-  };
+  if($('adRich')){
+    $('adRich').addEventListener('keydown', function(e){
+      if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); aiAddDay(); }
+    });
+  }
   $('adBold').onchange = aiDayPreview;
   $('adCenter').onchange = aiDayPreview;
-  $('adText').oninput = aiDayPreview;
-  document.querySelectorAll('.ai-fmt').forEach(function(b){
-    b.onclick = function(){ aiFmt(b.getAttribute('data-fmt')); };
+  if($('adSize')) $('adSize').onchange = aiDayPreview;
+  document.querySelectorAll('[data-rt]').forEach(function(b){
+    b.onclick = function(){ aiRtFmt(b.getAttribute('data-rt')); };
   });
+  if($('adChSize')){
+    $('adChSize').onchange = function(){
+      aiRtFmt('size', this.value);
+      this.value = '0';
+      aiRtTip();
+    };
+  }
+  aiRtInit();
 
   /* 基本项：改完立刻存 */
   $('aiOn').onchange = aiTouch;
@@ -11955,12 +12138,13 @@ function paintDayList(){
   }
   host.innerHTML = keys.map(function(k){
     var v = AI.days[k] || {};
-    var one = String(v.label || v.text || '').replace(/\n/g, ' / ');
+    var one = aiStrip(v.label || v.text || '').replace(/\n/g, ' / ');
     return '<div class="ai-ovitem ai-ovclick' + (AI_DAY_EDIT === k ? ' on' : '') + '" data-dayedit="' + attr(k) + '">'
       + '<span class="ai-ovtag ' + (v.off ? 'off' : 'plan') + '">' + (v.off ? '不上课' : '改文案') + '</span>'
       + '<b>' + esc(k.slice(5)) + '</b>'
       + (v.bold ? '<span class="ai-ovflag">粗</span>' : '')
       + (v.center === false ? '<span class="ai-ovflag">左</span>' : '')
+      + (v.size ? '<span class="ai-ovflag">' + v.size + 'px</span>' : '')
       + '<span class="muted">' + esc(one) + '</span>'
       + '<button type="button" data-daydel="' + attr(k) + '" title="删除">✕</button>'
       + '</div>';
@@ -11980,83 +12164,412 @@ function paintDayList(){
 }
 
 /* 后台文本框实时套用「加粗 / 居中」，下方再给一份和首页一样的预览 */
+function aiInline(sz, fl, txt){
+  if(!sz && !fl) return txt;
+  var st = '';
+  if(sz) st += 'font-size:' + sz + 'px;';
+  if(fl.indexOf('b') >= 0) st += 'font-weight:900;';
+  if(fl.indexOf('s') >= 0) st += 'text-decoration:line-through;';
+  return st ? '<span style="' + st + '">' + txt + '</span>' : txt;
+}
 function aiPrevFmt(text){
   return String(text == null ? '' : text).split('\n').map(function(line){
     var head = false, t = line;
     if(/^#\s?/.test(t)){ head = true; t = t.replace(/^#\s?/, ''); }
     var h = esc(t);
+    h = h.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, txt){
+      if(!sz && !fl) return all;
+      return aiInline(sz, fl, txt);
+    });
     h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
     h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
     return head ? '<span class="ln-em">' + h + '</span>' : h;
   }).join('\n');
 }
+/* ============================================================================
+ * v3.9.19（站主）：编辑框里不再出现符号
+ * ----------------------------------------------------------------------------
+ * 站主原话：「不要把那些符号，比如说中括号啊、星号那些展示出来，不然我看着
+ *            很别扭，我都不知道哪些能不能删……我这段编辑好，但又想在这句话
+ *            里面新加一些字的话，就会觉得很奇怪。能不能根据我输入框选出来的
+ *            范围进行修改，或者其它方法，就是我不想看到这些符号」。
+ *
+ * 做法：输入框换成所见即所得的富文本区（contenteditable）——
+ *   · 屏幕上只有真正的字：粗体就是粗的、大字就是大的、横线就是划掉的
+ *   · 选中一段 → 点 B / S / 字号，直接改这段（跟 Word 一样），不用记任何符号
+ *   · 想在句子中间插字，光标点进去直接打，前后的格式不会乱
+ *   · 存进数据库时再翻译成 **粗** / ~~横线~~ / {22b字}，所以前台、旧数据、
+ *     以及别处读 text 的地方完全不受影响
+ * ========================================================================= */
+
+/* 标记文本 → 纯文字：列表、摘要这些地方不该露出 ** 和 {} */
+function aiStrip(text){
+  return String(text == null ? '' : text)
+    .split('\n')
+    .map(function(l){ return l.replace(/^#\s?/, ''); })
+    .join('\n')
+    .replace(/\{\d{0,2}[bs]{0,2}([^{}]+)\}/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1');
+}
+
+/* 标记文本 → 富文本 HTML（编辑器和预览共用同一套解析，永远一致） */
+function aiToHtml(text){
+  return String(text == null ? '' : text).split('\n').map(function(line){
+    var head = false;
+    if(/^#\s?/.test(line)){ head = true; line = line.replace(/^#\s?/, ''); }
+    var h = esc(line);
+    h = h.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, txt){
+      if(!sz && !fl) return all;
+      return aiInline(sz, fl, txt);
+    });
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+    if(!h) return head ? '<span class="ln-em"><br></span>' : '';
+    return head ? '<span class="ln-em">' + h + '</span>' : h;
+  }).join('<br>');
+}
+
+/* 富文本 DOM → 标记文本：只看标签结构，不猜样式 */
+function aiFromHtml(root){
+  if(!root) return '';
+  var out = '';
+  var nl = function(){ out += '\n'; };
+
+  function wrap(t, ctx){
+    if(!t) return '';
+    var f = (ctx.b ? 'b' : '') + (ctx.s ? 's' : '');
+    if(!ctx.size && !f) return t;
+    if(!ctx.size && f === 'b' && t.indexOf('*') < 0) return '**' + t + '**';
+    if(!ctx.size && f === 's' && t.indexOf('~') < 0) return '~~' + t + '~~';
+    return '{' + (ctx.size || '') + f + t + '}';
+  }
+
+  function styleCtx(node, ctx){
+    var c = { size: ctx.size, b: ctx.b, s: ctx.s };
+    var nm = node.nodeName;
+    if(nm === 'B' || nm === 'STRONG') c.b = true;
+    if(nm === 'S' || nm === 'STRIKE' || nm === 'DEL') c.s = true;
+    var st = node.style;
+    if(st){
+      if(st.fontSize){ var n = parseInt(st.fontSize, 10); if(n) c.size = n; }
+      if(st.fontWeight && parseInt(st.fontWeight, 10) >= 600) c.b = true;
+      if((st.textDecoration || st.textDecorationLine || '').indexOf('line-through') >= 0) c.s = true;
+    }
+    return c;
+  }
+
+  function walk(node, ctx){
+    for(var n = node.firstChild; n; n = n.nextSibling){
+      if(n.nodeType === 3){
+        out += wrap(n.nodeValue.replace(/\u00a0/g, ' '), ctx);
+        continue;
+      }
+      if(n.nodeType !== 1) continue;
+      var nm = n.nodeName;
+      if(nm === 'BR'){ nl(); continue; }
+      if(nm === 'DIV' || nm === 'P'){ nl(); walk(n, ctx); nl(); continue; }
+      if(nm === 'SPAN' && String(n.className || '').indexOf('ln-em') >= 0){
+        nl();
+        out += '# ';
+        walk(n, styleCtx(n, ctx));
+        continue;
+      }
+      walk(n, styleCtx(n, ctx));
+    }
+  }
+
+  walk(root, { size: 0, b: false, s: false });
+  return out.replace(/^\n+/, '').replace(/\n+$/, '');
+}
+
+/* 编辑器 ↔ 隐藏的标记文本框，两边随时同步 */
+function aiRtSync(){
+  var box = $('adRich'), t = $('adText');
+  if(!box || !t) return;
+  t.value = aiFromHtml(box);
+  aiDayPreview();
+  aiRtTip();
+}
+
+function aiRtLoad(text){
+  var box = $('adRich'), t = $('adText');
+  if(!box || !t) return;
+  t.value = String(text == null ? '' : text);
+  box.innerHTML = aiToHtml(t.value);
+  aiDayPreview();
+  aiRtTip();
+}
+
+var AI_RT_RANGE = null;   /* 点工具栏会让输入框失焦，先记住最后一段选择 */
+
+function aiRtSel(){
+  var box = $('adRich');
+  if(!box) return null;
+  var sel = window.getSelection();
+  if(!sel || !sel.rangeCount) return null;
+  var r = sel.getRangeAt(0);
+  if(!box.contains(r.commonAncestorContainer)) return null;
+  return { sel: sel, range: r };
+}
+
+function aiRtRestore(){
+  if(!AI_RT_RANGE) return false;
+  try{
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(AI_RT_RANGE);
+    return true;
+  }catch(e){ return false; }
+}
+
+function aiRtCount(range){
+  var t = range.toString().replace(/[\n\r]/g, '');
+  return t.length;
+}
+
+function aiRtTip(){
+  var el = $('adChTip');
+  if(!el) return;
+  var s = aiRtSel();
+  if(!s || s.range.collapsed){
+    el.textContent = '选中文字后点左边的按钮';
+    return;
+  }
+  var n = aiRtCount(s.range);
+  el.textContent = '已选 ' + n + ' 个字';
+}
+
+function aiRtOk(){
+  var box = $('adRich');
+  var s = aiRtSel();
+  if((!s || s.range.collapsed) && AI_RT_RANGE){ aiRtRestore(); s = aiRtSel(); }
+  if(!s || s.range.collapsed){
+    toast('先选中要改的文字，再点按钮', 'warn', 2200);
+    if(box) box.focus();
+    return null;
+  }
+  return s;
+}
+
+/* 把选中的内容包进一个新的行内元素 */
+function aiRtWrap(tag, style){
+  var s = aiRtOk();
+  if(!s) return;
+  var node = document.createElement(tag);
+  if(style) node.setAttribute('style', style);
+  try{
+    node.appendChild(s.range.extractContents());
+    s.range.insertNode(node);
+    var r2 = document.createRange();
+    r2.selectNodeContents(node);
+    s.sel.removeAllRanges();
+    s.sel.addRange(r2);
+  }catch(e){}
+  aiRtSync();
+}
+
+/* 去掉选区内同类的包裹（再点一次即取消） */
+function aiRtUnwrapAll(test){
+  var box = $('adRich');
+  var s = aiRtSel();
+  if(!box || !s) return false;
+  var list = [];
+  var all = box.querySelectorAll('*');
+  for(var i = 0; i < all.length; i++){
+    var el = all[i];
+    if(!test(el)) continue;
+    try{ if(s.range.intersectsNode(el)) list.push(el); }catch(e){}
+  }
+  if(!list.length) return false;
+  /* 从里往外拆，避免拆外层时把内层节点带走 */
+  for(var k = list.length - 1; k >= 0; k--){
+    var n = list[k], p = n.parentNode;
+    if(!p) continue;
+    while(n.firstChild) p.insertBefore(n.firstChild, n);
+    p.removeChild(n);
+  }
+  return true;
+}
+
+function aiRtHas(test){
+  var box = $('adRich');
+  var s = aiRtSel();
+  if(!box || !s) return false;
+  var all = box.querySelectorAll('*');
+  for(var i = 0; i < all.length; i++){
+    var el = all[i];
+    if(!test(el)) continue;
+    try{ if(s.range.intersectsNode(el)) return true; }catch(e){}
+  }
+  return false;
+}
+
+/* 工具栏总入口：b 粗体 / s 横线 / size 字号 / clear 清格式 / h 整行强调 */
+function aiRtFmt(kind, val){
+  var box = $('adRich');
+  if(!box) return;
+  if(kind === 'h'){ aiRtHead(); return; }
+  var s = aiRtOk();
+  if(!s) return;
+
+  if(kind === 'b'){
+    if(aiRtHas(function(el){ return el.nodeName === 'B' || el.nodeName === 'STRONG'; })){
+      aiRtUnwrapAll(function(el){ return el.nodeName === 'B' || el.nodeName === 'STRONG'; });
+    }else{
+      aiRtWrap('b');
+    }
+  }else if(kind === 's'){
+    if(aiRtHas(function(el){ return /^(S|STRIKE|DEL)$/.test(el.nodeName); })){
+      aiRtUnwrapAll(function(el){ return /^(S|STRIKE|DEL)$/.test(el.nodeName); });
+    }else{
+      aiRtWrap('s');
+    }
+  }else if(kind === 'size'){
+    var px = Number(val) || 0;
+    if(!px){
+      /* 恢复默认：把选区内所有字号去掉，再清掉空壳 */
+      var all = box.querySelectorAll('span');
+      for(var i = 0; i < all.length; i++){
+        var el = all[i];
+        try{ if(s.range.intersectsNode(el)) el.style.fontSize = ''; }catch(e){}
+      }
+      aiRtUnwrapAll(function(el){
+        return el.nodeName === 'SPAN' && !String(el.className || '').length
+          && !el.getAttribute('style') && !el.firstChild;
+      });
+    }else{
+      aiRtWrap('span', 'font-size:' + px + 'px');
+    }
+  }else if(kind === 'clear'){
+    aiRtUnwrapAll(function(el){
+      if(/^(B|STRONG|S|STRIKE|DEL)$/.test(el.nodeName)) return true;
+      /* 整行强调是「这一行」的属性，不跟着单字格式一起清掉 */
+      return el.nodeName === 'SPAN' && String(el.className || '').indexOf('ln-em') < 0;
+    });
+    /* 说明：ln-em（整行强调）故意留着，它属于这一行，不算单字格式 */
+  }
+  aiRtSync();
+}
+
+/* 整行强调：光标所在那一行套底色，再点一次取消 */
+function aiRtHead(){
+  var box = $('adRich');
+  if(!box) return;
+  var s = aiRtSel();
+  if(!s) return;
+  /* 文本节点的父节点就是顶层节点；元素则往上找到 box 的直接子节点 */
+  var top = s.range.startContainer;
+  while(top && top.parentNode !== box) top = top.parentNode;
+  if(!top || top.parentNode !== box){ toast('先把光标放到要强调的那一行', 'warn', 2000); return; }
+
+  if(top.nodeName === 'SPAN' && String(top.className || '').indexOf('ln-em') >= 0){
+    var p = top.parentNode;
+    while(top.firstChild) p.insertBefore(top.firstChild, top);
+    p.removeChild(top);
+    aiRtSync();
+    return;
+  }
+
+  var kids = Array.prototype.slice.call(box.childNodes);
+  var i = kids.indexOf(top);
+  if(i < 0) return;
+  var a = i, b = i;
+  while(a > 0 && kids[a - 1].nodeName !== 'BR') a--;
+  while(b < kids.length - 1 && kids[b + 1].nodeName !== 'BR') b++;
+  var span = document.createElement('span');
+  span.className = 'ln-em';
+  box.insertBefore(span, kids[a]);
+  for(var k = a; k <= b; k++) span.appendChild(kids[k]);
+  if(!span.textContent.trim()) span.appendChild(document.createElement('br'));
+  aiRtSync();
+}
+
+/* 编辑器初始化：回车插 <br>、粘贴只留纯文字、输入法不打断 */
+function aiRtInit(){
+  var box = $('adRich');
+  if(!box) return;
+  box.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' && !e.isComposing){
+      e.preventDefault();
+      document.execCommand('insertLineBreak');
+      aiRtSync();
+    }
+  });
+  box.addEventListener('paste', function(e){
+    e.preventDefault();
+    var txt = '';
+    try{ txt = (e.clipboardData || window.clipboardData).getData('text') || ''; }catch(err){}
+    txt = txt.replace(/\r\n?/g, '\n');
+    if(txt) document.execCommand('insertText', false, txt);
+    aiRtSync();
+  });
+  box.addEventListener('input', function(e){
+    if(e.isComposing) return;
+    aiRtSync();
+  });
+  box.addEventListener('compositionend', function(){ aiRtSync(); });
+  box.addEventListener('keyup', aiRtTip);
+  box.addEventListener('mouseup', function(){ setTimeout(aiRtTip, 0); });
+  box.addEventListener('touchend', function(){ setTimeout(aiRtTip, 0); });
+  document.addEventListener('selectionchange', function(){
+    var s = aiRtSel();
+    if(s && !s.range.collapsed) AI_RT_RANGE = s.range.cloneRange();
+    if(document.activeElement === box) aiRtTip();
+  });
+  /* 点工具栏按钮时别把输入框的焦点抢走，否则选区没了 */
+  var bar = document.querySelector('.ai-charbar');
+  if(bar){
+    bar.addEventListener('mousedown', function(e){
+      if(e.target && e.target.nodeName === 'BUTTON') e.preventDefault();
+    });
+  }
+}
+
 function aiDayPreview(){
   var t = $('adText');
   if(!t) return;
   var bold = $('adBold') && $('adBold').checked;
   var center = $('adCenter') && $('adCenter').checked;
+  var size = Number(($('adSize') || {}).value || 0);
   t.style.fontWeight = bold ? '800' : '400';
   t.style.textAlign = center ? 'center' : 'left';
+  t.style.fontSize = size ? (size + 'px') : '';
   var pv = $('adPrev');
-  if(pv){
-    pv.innerHTML = aiPrevFmt(t.value) || '<span style="opacity:.45">（这里是预览）</span>';
-    pv.style.fontWeight = bold ? '800' : '500';
-    pv.style.textAlign = center ? 'center' : 'left';
-  }
+  if(!pv) return;
+  /* v3.9.17：预览不再自己写一套样式，而是复用前台的 .island-banner / .txt 类，
+     这样「粗多少、强调长什么样、字号多大」永远和首页一致，不会各写一套跑偏。 */
+  var cls = 'txt' + (bold ? ' bold' : ' soft') + (center ? '' : ' left');
+  var body = aiPrevFmt(t.value);
+  pv.innerHTML = '<div class="island-banner' + (center ? '' : ' left-align') + '">'
+    + '<span class="tag">今日事项</span>'
+    + '<span class="' + cls + '"' + (size ? ' style="font-size:' + size + 'px"' : '') + '>'
+    +   (body || '<span style="opacity:.45">这里是预览</span>')
+    + '</span></div>';
 }
-/* v3.9.8：选中文字后点按钮加标记（**加粗** / ~~横线~~ / 行首 #） */
-function aiFmt(kind){
-  var t = $('adText');
-  if(!t) return;
-  var v = t.value, a = t.selectionStart, b = t.selectionEnd;
-  if(kind === 'h'){
-    var ls = v.lastIndexOf('\n', a - 1) + 1;
-    if(v.slice(ls, ls + 1) !== '#'){
-      t.value = v.slice(0, ls) + '# ' + v.slice(ls);
-      a += 2; b += 2;
-    }
-  }else{
-    var mark = (kind === 'b') ? '**' : '~~';
-    var sel = v.slice(a, b);
-    if(!sel){
-      t.value = v.slice(0, a) + mark + '文字' + mark + v.slice(b);
-      a = a + mark.length; b = a + 2;
-    }else if(sel.indexOf(mark) === 0 && sel.lastIndexOf(mark) === sel.length - mark.length){
-      var inner = sel.slice(mark.length, sel.length - mark.length);
-      t.value = v.slice(0, a) + inner + v.slice(b);
-      b = a + inner.length;
-    }else{
-      t.value = v.slice(0, a) + mark + sel + mark + v.slice(b);
-      a = a + mark.length; b = a + sel.length;
-    }
-  }
-  t.focus();
-  try{ t.setSelectionRange(a, b); }catch(e){}
-  aiDayPreview();
-}
-
 function aiEditDay(k){
   var v = (AI.days || {})[k];
   if(!v) return;
   AI_DAY_EDIT = k;
   $('adDate').value = k;
-  $('adText').value = v.text || '';
   $('adOff').checked = !!v.off;
   $('adBold').checked = !!v.bold;
   $('adCenter').checked = v.center !== false;
+  if($('adSize')) $('adSize').value = String(v.size || 0);
   var b = $('adAdd');
   if(b) b.textContent = '更新这一天';
-  aiDayPreview();
+  aiRtLoad(v.text || '');
   paintDayList();
-  $('adText').focus();
+  if($('adRich')) $('adRich').focus();
 }
 function aiCancelDay(){
   AI_DAY_EDIT = null;
-  $('adDate').value = ''; $('adText').value = ''; $('adOff').checked = false;
+  $('adDate').value = ''; $('adOff').checked = false;
   $('adBold').checked = true; $('adCenter').checked = true;
+  if($('adSize')) $('adSize').value = '0';
   var b = $('adAdd');
   if(b) b.textContent = '添加';
-  aiDayPreview();
+  aiRtLoad('');
 }
 
 /* 一键填入「当天课表」：默认取所选日期的星期横幅；
@@ -12077,8 +12590,8 @@ function aiFillDay(){
     txt = (AI.banner || {})[key] || '';
   }
   if(!txt){ toast('这一天还没有默认课表，先在上面写一句', 'warn', 2800); return; }
-  $('adText').value = txt;
-  $('adText').focus();
+  aiRtLoad(txt);
+  if($('adRich')) $('adRich').focus();
   toast('已填入，改其中一两个字再点' + (AI_DAY_EDIT ? '「更新这一天」' : '「添加」'), 'ok', 2600);
 }
 
@@ -12091,6 +12604,7 @@ function aiAddDay(){
   AI.days[d] = {
     text: text,
     off: off,
+    size: Number(($('adSize') || {}).value || 0),
     label: off ? (text || '今天不上课') : '',
     bold: !!$('adBold').checked,
     center: !!$('adCenter').checked,
@@ -14440,6 +14954,126 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.10.0', date: '2026-10-25', type: 'feat', title: '全屏时钟大更新 · 成绩分析动画与折叠', items: [
+      '全屏时钟新增提示音：关闭 / 叮 / 木鱼 / 铃声 / 嘀嗒五种，点选即试听，可在「更多」里随时换',
+      '倒计时、秒表、自习都能自定义名称，云端记录按「名称 · 类型」归类，后台可按事项查看',
+      '自习除了自定义名称，还能点「语数英物化生」六科快捷选科目，记录按科目分开统计',
+      '时钟记录的日期可以自由选择（日历点选），不用再一天天翻',
+      '时钟记录新增「总结」：周报 / 月报 / 学期报 / 自定义区间，可导出文字或图片',
+      '总结报告含总时长、各分区时长、各科目总时长（自定义归到「其他」）、用得最久的一天，可实时预览并编辑标题、备注',
+      '倒计时到点、自习阶段切换时，整屏弹出「时间到」提醒约 3 秒，文字可自定义',
+      '修复成绩对比里「第二次考试」淡柱没有显示对应成绩、用了主柱成绩的问题',
+      '成绩分析各小板块可折叠展开；图表动画改为「滚动到才播放、滚走重置、回来重播」，文字数字只在第一次跳动'
+    ], pub: [
+      { cat: '班级', text: '全屏时钟更新：新增多种提示音，倒计时、秒表、自习都能自定义名称，自习还能点选六科快捷记录' },
+      { cat: '班级', text: '时钟记录支持自由选择日期，并新增「总结」：可导出周报、月报、学期报的文字或图片' },
+      { cat: '班级', text: '倒计时到点、自习阶段切换时会整屏弹出「时间到」提醒' },
+      { cat: '成绩', text: '成绩分析修复两次考试对比时柱子显示错误，各板块可折叠，图表动画改为滚动到才播放' }
+    ] },
+  { version: '3.9.26', date: '2026-10-25', type: 'style', title: '成绩分析的图表现在会「长出来」', items: [
+      '总分分布的柱子从底下一根根长上来，柱顶的人数跟着浮现，均分 / 中位数 / 分数线在柱子长好后滑出',
+      '个人画像的雷达图从圆心张开，班均虚线和得分点随后出现',
+      '分数段横条、各科得分率条从 0 撑到实际长度',
+      '表格与列表一行行落下来，概览里的均分、人数等数字从 0 滚到真实值',
+      '轻量模式、自定义设置里的「精简动效」、系统「减少动态效果」三种情况一律不做动画，直接显示结果'
+    ], pub: [
+      { cat: '班级', text: '成绩分析的图表加了入场动画：柱子长起来、雷达张开、数字滚动' }
+    ] },
+  { version: '3.9.25', date: '2026-10-25', type: 'feat', title: '翻页动画重做 · 时钟使用记录（本地 + 云端 + 后台）', items: [
+      '翻页时钟的数字现在跟着卡片一起翻：上半片翻下去的同时，新的下半片从后面翻上来，不再「翻完才跳一下」',
+      '时钟页右上角多了「记录」，点开是右侧抽屉：今天几点到几点用了什么、用了多久一目了然',
+      '自习会单独统计：今天一共自习多久、休息多久、用掉几个番茄',
+      '登录后记录自动同步到云端，换设备也能看到；没登录就只记在这台设备上',
+      '后台新增「安全 → 时钟记录」：按日期看谁在什么时候用了多久，点「明细」展开每一段',
+      '「其他工具」里的番茄时钟卡片删掉了 —— 功能已经在全屏时钟的自习里'
+    ], pub: [
+      { cat: '班级', text: '全屏时钟新增「记录」：能看今天几点到几点用了多久，登录后自动上云' },
+      { cat: '班级', text: '翻页时钟的数字现在会跟着卡片一起翻，不再翻完才跳' }
+    ] },
+  { version: '3.9.24', date: '2026-10-25', type: 'feat', title: '翻页时钟可关秒 · 新增自习番茄钟', items: [
+      '翻页时钟多了一个「秒」开关：关掉后只剩「时 : 分」两张卡，卡片自动放大，更像桌面翻页钟',
+      '新增「自习」模式：专注 25 分钟 → 休息 5 分钟自动循环，每 4 个番茄给一次 15 分钟长休息',
+      '自习阶段结束会闪两下并振动提醒，然后自动进下一段继续走，不用一直守着',
+      '记下今天完成了几个番茄，跨天自动清零；点数字可以改专注 / 休息时长',
+      '「番茄时钟」卡片不用再跳外站了，直接打开站内自习模式',
+      '横屏（手机转过来）时数字会自动收小，按钮不会被底部工具栏压住'
+    ], pub: [
+      { cat: '班级', text: '全屏时钟新增「自习」番茄钟，翻页时钟也能关掉秒了' }
+    ] },
+  { version: '3.9.23', date: '2026-10-25', type: 'fix', title: '卡片松一点 · 翻页时钟重做 · 全屏自动横屏', items: [
+      '板块卡片放大一档（88px 高、图标 48px、圆角 20px），卡片之间留出 14px，不再挤在一起',
+      '翻页时钟重做：数字不再压到卡片边缘，上下两半对得齐，中间冒号单独垂直居中',
+      '点「全屏」会顺带把屏幕转成横屏（设备支持方向锁时）；不支持的会提示把手机横过来',
+      '去掉了没什么用的音效开关（倒计时结束仍然会闪红提示）',
+      '计时器默认只显示大大的倒计时数字，点一下数字才出现「时 / 分 / 秒」设置',
+      '时钟数字大小可调，四档：小 / 中 / 大 / 超大'
+    ], pub: [
+      { cat: '界面', text: '板块卡片放大了一点、间距松开了，没那么挤' },
+      { cat: '班级', text: '全屏时钟改造：翻页数字不再压边、全屏自动横屏、数字大小可调，倒计时默认只看数字' }
+    ] },
+  { version: '3.9.22', date: '2026-10-25', type: 'feat', title: '卡片改小窗口 · 新增全屏时钟', items: [
+      '所有板块的卡片默认收成小窗口：只显示图标和标题，一屏能看到更多入口',
+      '点一下卡片展开描述和按钮，再点一下收起；视频类卡片保持整卡点击播放',
+      '「自定义设置 → 动效 → 卡片显示」可以切回「全部展开」，选择会记在这台设备上',
+      '其他工具新增「全屏时钟」：数字时钟 / 翻页时钟 / 秒表 / 倒计时四种模式',
+      '时钟支持全屏、切换字体、切换背景色、12/24 小时、防息屏，空格开始暂停，数字双击进全屏',
+      '时钟页「更多」里写明了是仿照 yingming006.cn/time 制作的'
+    ], pub: [
+      { cat: '界面', text: '板块卡片默认收成小窗口，点一下展开详情；想全展开可在自定义设置里改' },
+      { cat: '班级', text: '其他工具新增「全屏时钟」，有翻页时钟、秒表和倒计时，可全屏投屏' }
+    ] },
+  { version: '3.9.21', date: '2026-10-25', type: 'fix', title: '天气偶尔不显示温度的毛病修好了', items: [
+      '逐小时天气：温度数据不完整时不再只给你一列「—」，会说明「温度暂时没取到」并给一个「重新获取」按钮',
+      '修掉一个真 bug：时间列表回退时温度没跟着回退，于是出现「有时间、没温度」',
+      '拿到的数据不完整就不再存缓存，避免一次坏数据卡住十分钟',
+      '首页那个天气格子：接口偶尔抽风时保留上一次的温度，不再立刻变成横线；一分钟后再自动试一次',
+      '网络不稳时直接显示上次的数据并注明，点一下就能重新获取'
+    ], pub: [
+      { cat: '班级', text: '天气偶尔不显示温度的问题修好了，取不到时可以直接点「重新获取」' }
+    ] },
+  { version: '3.9.20', date: '2026-10-24', type: 'style', title: '输入框全部统一：同一个高度、圆角、边框和聚焦光晕', items: [
+      '后台原来只有登录页的输入框有样式，绝大部分是浏览器默认外观；现在统一成 42px 高、12px 圆角、同一描边',
+      '聚焦时统一变成橙色边框 + 一圈淡光晕，悬停也会轻微加深，一眼能看出哪里可以填',
+      '下拉框去掉系统外观，换成同一个箭头；暗色下自动换成浅色箭头',
+      '工具栏里的小输入框收到 34px 高，和旁边的按钮平齐',
+      '前台把登录、我的资料、搜索、公告筛选、作业选择几套样式合并成一套（44px 高）',
+      '公告搜索里的搜索框、板块筛选、时间筛选、日期范围现在一样高',
+      '输入框里的提示文字、禁用状态、只读状态也统一了'
+    ], pub: [
+      { cat: '界面', text: '全站输入框统一样式，点进去时会亮起橙色边框' }
+    ] },
+  { version: '3.9.19', date: '2026-10-23', type: 'feat', title: '编辑不再看到符号 · 天气看未来 24 小时 · 字号能到 4px', items: [
+      '后台「按日期临时改」的输入区换成所见即所得：屏幕上只有字，粗体就是粗的、大字就是大的、横线就是划掉的',
+      '选中一段文字点 B / S / 字号就直接改这一段；同一个按钮再点一次就取消',
+      '想在句子里加字，光标点进去直接打，前后格式不会乱',
+      '日期列表里的摘要也只显示纯文字，不再露出 ** 和 {} 那些符号',
+      '单字字号扩展到 4–32px（原来最小 14px）',
+      '天气详情改成「从现在起 24 小时」，跨天会标出日期，标题写明是修水的天气'
+    ], pub: [
+      { cat: '班级', text: '今日事项的编辑不再显示符号；天气详情改成从现在起 24 小时' }
+    ] },
+  { version: '3.9.18', date: '2026-10-23', type: 'feat', title: '今日事项可以逐个字调字号 / 加粗 / 横线', items: [
+      '「按日期临时改」下面多了一块「逐字设置」：文字被拆成一格格，点哪个字就只改那个字',
+      '每个字能单独设字号（14–32px）、加粗、横线；同一个按钮再点一次就取消',
+      '按住拖动可一次选一串；手机上按住一个字横向拖也行',
+      '「清格式」只清选中的字，不影响其它字',
+      '前台认同一套写法（{22b字}），后台预览和首页效果完全一致',
+      '单日文字上限从 200 字放宽到 600 字，给标记留出余量'
+    ], pub: [
+      { cat: '班级', text: '今日事项可以逐个字调大小、加粗、加横线了' }
+    ] },
+  { version: '3.9.17', date: '2026-10-23', type: 'feat', title: '21 点后看明日事项 · 编辑器修好加粗与强调 · 可设字号', items: [
+      '21:00 之后班级岛默认显示「明日事项」：明天有临时安排就用它，没有就自动取明天星期几的课表',
+      '21:00 之后标签旁多一个「看今天 / 看明天」的小按钮，两个方向都能切，不额外占高度',
+      '把页面挂到 21 点会自动切换（不用刷新）',
+      '后台「按日期临时改」的加粗/横线按钮改成开关：同一处再点一次就取消（原来会一直叠加）',
+      '整行强调（行首 #）加了底色与左侧竖条，预览和首页都能一眼看出区别',
+      '新增字号设置（14–28px，默认跟随），只作用于那一天',
+      '后台预览改成直接复用首页的样式，粗细/强调/字号所见即所得'
+    ], pub: [
+      { cat: '班级', text: '晚上 9 点后班级岛自动显示「明日事项」，也能点一下切回今天' },
+      { cat: '班级', text: '今日事项可以单独调字号；行首加 # 的那一行会高亮显示' }
+    ] },
   { version: '3.9.16', date: '2026-10-23', type: 'fix', title: '横屏修好 · 更新不再看到旧版 · 首屏脚本瘦身', items: [
       '横屏重做：原来的「CSS 旋转」只是把 390 宽的页面转 90°，排版宽度没变，所以每一块都变成竖条、右半屏空白；现在改为全屏 + 系统方向锁，真的横过来，排版也按横屏重排',
       '锁不了方向的设备（如 iOS）不再假装横屏，直接提示「把手机横过来」，不会再出现半屏空白',

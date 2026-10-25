@@ -102,6 +102,7 @@ export default async function handler(req, res) {
       if (action === 'settings')         return await getSettings(req, res);
       if (action === 'action-logs')      return await listActionLogs(req, res);
       if (action === 'action-stats')     return await actionStats(req, res);
+      if (action === 'clock-logs')       return await clockLogs(req, res);
       /* v3.6.1（站主 #4）：数据备份 / 回档 */
       if (action === 'backups')          return await listBackups(req, res);
       /* v3.7.0（站主 #1）：信息审核（修改申请） */
@@ -4413,6 +4414,93 @@ async function bindProfiles(req, res, me, b) {
    ============================================================ */
 
 /** 明细列表：按用户名 / 动作类型 / 日期（上海时区）筛选 */
+/* ============================================================
+   v3.9.25（站主）：全屏时钟使用记录
+   ------------------------------------------------------------
+   GET /api/admin?action=clock-logs&day=YYYY-MM-DD&q=关键词
+   数据不在别的表里 —— 是 clock.html 用 /api/data 写在自己名下的
+   user_data（cls_clock_log_<日期>），这里只读、只汇总。
+
+   结构：
+     { v:2, pomo:3, segs:[{ m:'pomo:focus', s:毫秒, e:毫秒, d:秒 }, ...] }
+   旧版本可能只写了数组 [ ...segs ]，一并兼容。
+   ============================================================ */
+const CLOCK_MODE_NAME = {
+  clock: '数字时钟', flip: '翻页时钟', stop: '秒表', timer: '倒计时',
+  'pomo:focus': '专注', 'pomo:rest': '休息', 'pomo:long': '长休息',
+};
+
+async function clockLogs(req, res) {
+  const sql = getSql();
+  const q = String(req.query.q || '').trim().toLowerCase();
+  /* 日期不传就按上海时区的今天 —— 跟前台「今天」对得上 */
+  let day = String(req.query.day || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    day = (await sql`select (now() at time zone 'Asia/Shanghai')::date::text as d`)[0].d;
+  }
+  const key = 'cls_clock_log_' + day;
+
+  let rows = [];
+  try {
+    rows = await sql`
+      select u.id as user_id, u.username, u.display_name, d.data_value, d.updated_at
+        from user_data d
+        join users u on u.id = d.user_id
+       where d.data_key = ${key}
+         and (${q} = '' or lower(u.username) like '%' || ${q} || '%'
+                         or lower(coalesce(u.display_name, '')) like '%' || ${q} || '%')
+       order by d.updated_at desc
+       limit 300
+    `;
+  } catch (e) {
+    rows = [];
+  }
+
+  const users = rows.map((r) => {
+    const v = r.data_value;
+    const segs = Array.isArray(v) ? v : (v && Array.isArray(v.segs) ? v.segs : []);
+    const clean = [];
+    let focus = 0, rest = 0, other = 0;
+    const byMode = {};
+    segs.forEach((x) => {
+      if (!x) return;
+      const m = String(x.m || '');
+      const d = Math.max(0, Math.min(12 * 3600, Number(x.d) || 0));
+      /* 3 秒以下当手滑；阈值跟前端 logSegOk 保持一致，免得两边数字对不上 */
+      if (!m || d < 3) return;
+      const s = Number(x.s) || 0, e = Number(x.e) || (s + d * 1000);
+      clean.push({ mode: m, name: CLOCK_MODE_NAME[m] || m, start: s, end: e, secs: d });
+      byMode[m] = (byMode[m] || 0) + d;
+      if (m === 'pomo:focus') focus += d;
+      else if (m === 'pomo:rest' || m === 'pomo:long') rest += d;
+      else other += d;
+    });
+    clean.sort((a, b) => a.start - b.start);
+    const total = focus + rest + other;
+    return {
+      userId: Number(r.user_id),
+      username: r.username,
+      displayName: r.display_name || '',
+      tomato: Number((Array.isArray(v) ? 0 : (v && v.pomo)) || 0),
+      focus, rest, other, total,
+      firstAt: clean.length ? clean[0].start : null,
+      lastAt: clean.length ? clean[clean.length - 1].end : null,
+      byMode: Object.keys(byMode).map((m) => ({
+        mode: m, name: CLOCK_MODE_NAME[m] || m, secs: byMode[m],
+      })).sort((a, b) => b.secs - a.secs),
+      segs: clean.slice(-80),
+      updatedAt: r.updated_at || null,
+    };
+  }).sort((a, b) => b.total - a.total);
+
+  const sum = { users: users.length, focus: 0, rest: 0, other: 0, tomato: 0 };
+  users.forEach((u) => {
+    sum.focus += u.focus; sum.rest += u.rest; sum.other += u.other; sum.tomato += u.tomato;
+  });
+
+  return ok(res, { day, users, summary: sum, modes: CLOCK_MODE_NAME });
+}
+
 async function listActionLogs(req, res) {
   const sql = getSql();
   const page = Math.max(Number(req.query.page || 1), 1);

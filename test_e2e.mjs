@@ -10,6 +10,19 @@
 
 import initSqlJs from 'sql.js';
 import crypto from 'crypto';
+
+/* v3.9.21：版本断言不再写死 —— 从 index.html 现读，升版本只改一处。
+   以前每发一版都要手动改 8 处 3.9.x，漏一处就红一片。 */
+import fs0 from 'node:fs';
+const CUR_VER = (fs0.readFileSync(new URL('./index.html', import.meta.url), 'utf8')
+  .match(/var SITE_VERSION = '([\d.]+)'/) || [])[1] || '';
+const CUR_VER_RE = CUR_VER.replace(/\./g, '\\.');
+const CUR_DATE = (fs0.readFileSync(new URL('./index.html', import.meta.url), 'utf8')
+  .match(/var VER_DATE = '([\d-]+)'/) || [])[1] || '';
+const RE_SITE = new RegExp("var SITE_VERSION = '" + CUR_VER_RE + "'");
+const RE_SITE_VER = new RegExp("const SITE_VER = '" + CUR_VER_RE + "'");
+const RE_API_VER = new RegExp("const API_VER = '" + CUR_VER_RE + "'");
+const RE_DATE = new RegExp("VER_DATE = '" + CUR_DATE + "'");
 import fs from 'node:fs';
 
 /* v3.9.8：主脚本拆到 app.js 后，凡「读首页源码」的断言一律读两份拼接 ——
@@ -21,6 +34,14 @@ function readAdm(){
   let b = '';
   try { b = fs.readFileSync(new URL('./admin.js', import.meta.url), 'utf8'); } catch (e) {}
   return a + '\n/* ---- admin.js ---- */\n' + b;
+}
+
+/* v3.9.25：全屏时钟是独立页面，单独读 */
+function readClock(){
+  try { return fs.readFileSync(new URL('./clock.html', import.meta.url), 'utf8'); } catch (e) { return ''; }
+}
+function readApi(name){
+  try { return fs.readFileSync(new URL('./api/' + name, import.meta.url), 'utf8'); } catch (e) { return ''; }
 }
 
 function readIdx(){
@@ -9649,7 +9670,7 @@ console.log('\n【85】第七十三轮·v3.3.0 需关注学生加单科线（比
   const vmMod = await import('node:vm');
   /* v3.9.8：主脚本已拆到 app.js —— 直接读它（HTML 里剩下的都是小内联脚本）。
      版本号现在声明在 index.html，沙箱里补上两行，跟真实加载顺序一致。 */
-  const big = "var SITE_VERSION='3.9.16';var VER_DATE='2026-10-22';\n"
+  const big = "var SITE_VERSION='3.9.17';var VER_DATE='2026-10-22';\n"
     + fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
 
   const mkEl = (tag) => ({
@@ -11056,13 +11077,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.9.16 index.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.16'/.test(idx539));
-  t('v3.9.16 admin.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.16'/.test(admh539));
-  t('v3.9.16 sw.js SITE_VER = 3.9.16（缓存桶随版本）',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.16'")
+  t('v3.9.17 index.html SITE_VERSION = 当前版本', RE_SITE.test(idx539));
+  t('v3.9.17 admin.html SITE_VERSION = 当前版本', RE_SITE.test(admh539));
+  t('v3.9.17 sw.js SITE_VER = 3.9.17（缓存桶随版本）',
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '" + CUR_VER + "'")
     && /const CACHE = 'class-site-' \+ SITE_VER/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.9.16 api/worker.mjs API_VER = 3.9.16',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.16';"));
+  t('v3.9.17 api/worker.mjs API_VER = 当前版本',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '" + CUR_VER + "';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11160,9 +11181,9 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
 
   /* ---- 版本号 ---- */
   t('v3.8.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx540) && /var SITE_VERSION = '3\.9\.16'/.test(adm540)
-    && /const API_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    RE_SITE.test(idx540) && RE_SITE.test(adm540)
+    && RE_API_VER.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && RE_SITE_VER.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11216,9 +11237,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx542) && /var SITE_VERSION = '3\.9\.16'/.test(adm542)
-    && /const API_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    RE_SITE.test(idx542) && RE_SITE.test(adm542)
+    && RE_API_VER.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && RE_SITE_VER.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11288,8 +11309,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.5 当前版本 3.9.16、日期 2026-10-22',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx61) && /VER_DATE = '2026-10-22'/.test(idx61));
+  t('v3.8.5 当前版本 当前版本、当前日期',
+    RE_SITE.test(idx61) && RE_DATE.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11446,10 +11467,10 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.9.16 四处版本一致', /var SITE_VERSION = '3\.9\.16'/.test(idx70)
-    && /var SITE_VERSION = '3\.9\.16'/.test(adm70)
-    && /const API_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.16'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.9.17 四处版本一致', RE_SITE.test(idx70)
+    && RE_SITE.test(adm70)
+    && RE_API_VER.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && RE_SITE_VER.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.9'/.test(adm70));
 }
 
@@ -11475,8 +11496,8 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
     && /addEventListener\('orientationchange'/.test(idx76));
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
-  t('v3.7.6 首页 / 后台版本已是 3.9.16',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx76));
+  t('v3.7.6 首页 / 后台版本已是当前版本',
+    RE_SITE.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11825,10 +11846,10 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
   const wk94  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
 
   /* ---- 版本号四处一致 ---- */
-  t('★v3.9.4+ index.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.16'/.test(idx94));
-  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.16', /var SITE_VERSION = '3\.9\.16'/.test(adm94));
-  t('★v3.9.4 sw.js SITE_VER = 3.9.4', sw94.includes("const SITE_VER = '3.9.16'"));
-  t('★v3.9.4 api/worker.mjs API_VER = 3.9.4', wk94.includes("const API_VER = '3.9.16';"));
+  t('★v3.9.4+ index.html SITE_VERSION = 当前版本', RE_SITE.test(idx94));
+  t('★v3.9.4+ admin.html SITE_VERSION = 当前版本', RE_SITE.test(adm94));
+  t('★v3.9.4 sw.js SITE_VER = 3.9.20', sw94.includes("const SITE_VER = '" + CUR_VER + "'"));
+  t('★v3.9.4 api/worker.mjs API_VER = 当前版本', wk94.includes("const API_VER = '" + CUR_VER + "';"));
   t('★v3.9.4 REL_BUILTIN 有 3.9.4 条目且带 pub',
     /\{\s*version:\s*'3\.9\.4'[\s\S]{0,2000}?pub:\s*\[/.test(adm94));
 
@@ -11845,8 +11866,8 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
   t('★v3.9.4 前台横幅按换行展示（pre-line、不再截断行数）',
     /\.island-banner \.txt\{[^}]*white-space:pre-line;/.test(idx94)
     && !/-webkit-line-clamp/.test(idx94.slice(idx94.indexOf('.island-banner .txt{'), idx94.indexOf('.island-banner .txt{') + 220)));
-  t('★v3.9.4+ 后台「按日期临时改」是多行文本框（横幅本身收回单行）',
-    /<textarea class="gate-input ai-dtext" id="adText"/.test(adm94)
+  t('★v3.9.4+ 后台「按日期临时改」是多行输入区（v3.9.20 起是可编辑富文本）',
+    /id="adRich" contenteditable="true"/.test(adm94)
     && /<input data-bk="/.test(adm94));
   t('★v3.9.4 后台 textarea 有样式（可拉伸、行高 1.5）',
     /\.ai-brow textarea\{[^}]*resize:vertical;/.test(adm94));
@@ -11887,7 +11908,7 @@ console.log('\n【新】v3.9.5 班级岛跟随主题配色 / 全部居中');
   /* ---- 发布记录 ---- */
   t('★v3.9.5 REL_BUILTIN 有 3.9.5 条目且带 pub',
     /\{\s*version:\s*'3\.9\.5'[\s\S]{0,1200}?pub:\s*\[/.test(adm95));
-  t('★v3.9.5 更新日期为 2026-10-22', /var VER_DATE = '2026-10-22'/.test(idx95));
+  t('★v3.9.5 更新日期与代码一致', RE_DATE.test(idx95));
 }
 
 console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横屏侧栏');
@@ -11899,8 +11920,8 @@ console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横�
   /* ---- 1) 横幅单行 / 临时改多行 / 一键填入 ---- */
   t('★v3.9.6 星期横幅收回单行输入（默认课表）',
     /<input data-bk="/.test(adm96) && !/<textarea data-bk="/.test(adm96));
-  t('★v3.9.6 「按日期临时改」是多行文本框（200 字）',
-    /<textarea class="gate-input ai-dtext" id="adText" rows="3" maxlength="200"/.test(adm96));
+  t('★v3.9.6 「按日期临时改」是多行输入区（v3.9.20 起换成富文本，仍支持多行）',
+    /id="adRich" contenteditable="true"/.test(adm96) && /<br>/.test(adm96));
   t('★v3.9.6 有「填入当天课表」按钮并实现 aiFillDay',
     /id="adFill"[^>]*>填入当天课表</.test(adm96) && /function aiFillDay\(\)/.test(adm96)
     && /\[\x27sun\x27, \x27mon\x27/.test(adm96));
@@ -11912,8 +11933,21 @@ console.log('\n【新】v3.9.6 气泡玻璃 / 照片弹层 / 窄屏字号 / 横�
     && /data-holedit=/.test(adm96));
   t('★v3.9.6 假期可复用（复制到表单再改日期）',
     /function aiAddHoliday/.test(adm96) && /data-hcopy=/.test(adm96) && /复用/.test(adm96));
-  t('★v3.9.6 后端日期覆盖放宽到 200 字（MAX_DAY_TEXT）',
-    /const MAX_DAY_TEXT = 200/.test(isl96) && /text: str\(v\.text, MAX_DAY_TEXT\)/.test(isl96));
+  t('★v3.9.6 后端日期覆盖放宽（MAX_DAY_TEXT，v3.9.18 = 600）',
+    /const MAX_DAY_TEXT = 600/.test(isl96) && /text: str\(v\.text, MAX_DAY_TEXT\)/.test(isl96));
+
+  /* ---- v3.9.18 逐字编辑 ---- */
+  t('★v3.9.20 编辑区是所见即所得（看不到 ** 和 {}）',
+    /id="adRich" contenteditable="true"/.test(adm96) && /function aiToHtml\(/.test(adm96)
+    && /function aiFromHtml\(/.test(adm96) && /data-rt="b"/.test(adm96)
+    && !/id="adChars"/.test(adm96));
+  t('★v3.9.20 字号可到 4px（前后端一起放宽）',
+    /<option value="4">4px<\/option>/.test(adm96) && /n < 4 \|\| n > 32/.test(isl96));
+  t('★v3.9.18 前台与后台解析同一套单字标记 {22b字}',
+    idx96.indexOf('([bs]{0,2})([^{}]+)') >= 0
+    && /function islInline\(/.test(idx96));
+  t('★v3.9.18 单字标记只对有属性的花括号生效（正文 {abc} 原样）',
+    /if\(!sz && !fl\) return all;/.test(idx96));
 
   /* ---- 2) 气泡玻璃 + 暗色适配 ---- */
   t('★v3.9.7 深色玻璃岛参数与 v3.8.7 一致（渐变 / 描边 / 光晕）',
@@ -11986,7 +12020,7 @@ console.log('\n【新】v3.9.7 深色玻璃 / 实时保存 / 加粗居中');
   t('★v3.9.7+ 前台按设置渲染（txt bold / soft / left 三态）',
     /t\.bold === true \? ' bold' : \(t\.bold === false \? ' soft' : ''\)/.test(idx97)
     && /t\.center === false \? ' left' : ''/.test(idx97)
-    && /\.island-banner \.txt\.bold\{font-weight:900\}/.test(idx97));
+    && /\.island-banner \.txt\.bold\{font-weight:800\}/.test(idx97));
   t('★v3.9.7 不居中时整条左对齐（标签也靠左）',
     /left-align\{align-items:flex-start/.test(idx97)
     && /left-align \.tag\{align-self:flex-start\}/.test(idx97));
@@ -12030,7 +12064,7 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
   t('★v3.9.8 HTML 体积降到原来的 1/4 以下（骨架 + 样式）',
     idx98.length < 400000);
   t('★v3.9.8 版本号留在 HTML（门禁能直接读到）',
-    /var SITE_VERSION = '3\.9\.16'/.test(idx98) && !/var SITE_VERSION/.test(app98));
+    RE_SITE.test(idx98) && !/var SITE_VERSION/.test(app98));
   t('★v3.9.8 首屏骨架卡（公告 + 板块）',
     (idx98.match(/skel-card/g) || []).length >= 6 && /\.skel-card\{[^}]*animation/.test(idx98.replace(/@keyframes[^}]*\{[^}]*\}/g, '')) || (idx98.match(/skel-card/g) || []).length >= 6);
 
@@ -12040,7 +12074,7 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
     && /id="islWxChip" onclick="islWxOpen\(\)"/.test(app98));
   t('★v3.9.8 逐小时数据（hourly=temperature_2m,weather_code,precipitation_probability）',
     /hourly=temperature_2m,weather_code,precipitation_probability/.test(app98)
-    && /forecast_days=1/.test(app98));
+    && /forecast_days=2/.test(app98));
   t('★v3.9.8 当前小时高亮 + 缓存 10 分钟',
     /isl-wx-row\.now/.test(idx98) && /10 \* 60000/.test(app98));
 
@@ -12061,15 +12095,16 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
     && /\(\[\^\*\]\+\)/.test(app98) && /<b>\$1<\/b>/.test(app98)
     && /\(\[\^~\]\+\)/.test(app98) && /<s>\$1<\/s>/.test(app98)
     && /\^#\\s\?/.test(app98));
-  t('★v3.9.8 课程信息默认加粗（.txt 800 / 勾选 900 / 取消 500）',
-    /\.island-banner \.txt\{[^}]*font-weight:800/.test(idx98)
-    && /\.island-banner \.txt\.bold\{font-weight:900\}/.test(idx98)
+  t('★v3.9.17 字重分层：默认 700 / 整块加粗 800 / 行内加粗 900 / 取消 500',
+    /\.island-banner \.txt\{[^}]*font-weight:700/.test(idx98)
+    && /\.island-banner \.txt\.bold\{font-weight:800\}/.test(idx98)
+    && /\.island-banner \.txt b\{font-weight:900/.test(idx98)
     && /\.island-banner \.txt\.soft\{font-weight:500\}/.test(idx98));
   t('★v3.9.8 后台加粗默认勾上',
     /id="adBold" checked/.test(adm98));
   t('★v3.9.8 后台排版按钮 + 同款预览',
-    /data-fmt="b"/.test(adm98) && /data-fmt="s"/.test(adm98) && /data-fmt="h"/.test(adm98)
-    && /function aiFmt\(kind\)/.test(adm98) && /id="adPrev"/.test(adm98));
+    /data-rt="b"/.test(adm98) && /data-rt="s"/.test(adm98) && /data-rt="h"/.test(adm98)
+    && /function aiRtFmt\(kind, val\)/.test(adm98) && /id="adPrev"/.test(adm98));
 
   /* ---- 5) 自动备份 ---- */
   t('★v3.9.8 Worker 定时任务会写全量快照（runAutoBackup）',
@@ -12103,7 +12138,7 @@ console.log('\n【新】v3.9.16 备份去重（同一版本只留一份）');
     /order by created_at desc limit 1\s*\n?\s*\)/.test(adjs99)
     && !/order by created_at desc limit 3/.test(adjs99));
   t('★v3.9.16 REL_BUILTIN 有 3.9.16 条目且带 pub',
-    /\{\s*version:\s*'3\.9\.16'[\s\S]{0,1600}?pub:\s*\[/.test(adm99));
+    /\{\s*version:\s*'3\.9\.17'[\s\S]{0,1600}?pub:\s*\[/.test(adm99));
 }
 
 
@@ -12138,7 +12173,7 @@ console.log('\n【新】v3.9.10 缓存优先 / 老 iPad / 门禁加固');
     basic10.length > 1000 && !/=>/.test(basic10) && !/\bconst \w+ =/.test(basic10));
 
   t('★v3.9.16 轻量模式跳过天气 / 语录 / 班徽代理',
-    /if\(liteOn\(\)\)\{ islSet\('islWx', '—'\)/.test(app10)
+    /if\(liteOn\(\)\)\{\s*if\(hasCache\)/.test(app10)
     && /轻量模式用本地语录/.test(app10)
     && /if\(liteOn\(\)\) return Promise\.resolve\('\.\/icons\/badge-256\.png'\)/.test(app10));
   t('★v3.9.16 统计脚本空闲加载且轻量模式跳过',
@@ -12158,6 +12193,176 @@ console.log('\n【新】v3.9.10 缓存优先 / 老 iPad / 门禁加固');
     && /host\.classList\.remove\('isl-boot'\)/.test(app10));
   t('★v3.9.16 后台只剩一个心跳函数',
     (adm10.match(/function startAdminHeartbeat/g) || []).length === 1);
+}
+
+
+console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
+{
+  const idx17 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const app17 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const adm17 = readAdm();
+  const isl17 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
+
+  t('★v3.9.17 21 点后默认看明天（islIsNight + 可手动覆盖）',
+    /function islIsNight\(\)\{ return new Date\(\)\.getHours\(\) >= 21; \}/.test(app17)
+    && /var ISL_VIEW = null;/.test(app17) && /function islShowTomorrow\(\)/.test(app17));
+  t('★v3.9.17 明天有临时安排优先，没有再用星期课表',
+    /function islandToday\(offset\)/.test(app17) && /if\(offset\) d\.setDate\(d\.getDate\(\) \+ offset\)/.test(app17)
+    && /\(day && day\.text\) \|\| \(ISLAND\.banner \|\| \{\}\)\[dow\]/.test(app17));
+  t('★v3.9.17 标签会变成「明日事项」', /\(tomorrow \? '明日事项' : '今日事项'\)/.test(app17));
+  t('★v3.9.17 21 点后出现「看今天 / 看明天」按钮', /class="isl-switch"/.test(app17)
+    && /看今天|看明天/.test(app17) && /islSwitchView/.test(app17));
+  t('★v3.9.17 挂到 21 点自动重画（不用刷新）', /if\(h === 21 \|\| h === 0\) islandBanner\(\);/.test(app17));
+  t('★v3.9.17 字号（12–32）存进当天配置并渲染',
+    /function clampSize/.test(isl17) && /size: clampSize\(v\.size\)/.test(isl17)
+    && /font-size:' \+ t\.size \+ 'px/.test(app17));
+  t('★v3.9.17 排版按钮是开关（再点一次取消）',
+    /function aiRtFmt\(kind, val\)/.test(adm17) && /aiRtUnwrapAll/.test(adm17)
+    && /再点一次/.test(adm17));
+  t('★v3.9.17 整行强调有可见样式（底色 + 左竖条）',
+    /\.island-banner \.txt \.ln-em\{[^}]*background:rgba\(251,146,60,\.18\)/.test(idx17));
+  t('★v3.9.17 行内加粗与默认字重拉开（700 / 900）',
+    /\.island-banner \.txt\{[^}]*font-weight:700/.test(idx17)
+    && /\.island-banner \.txt b\{font-weight:900/.test(idx17));
+  t('★v3.9.17 后台有字号下拉且随保存提交',
+    /id="adSize"/.test(adm17) && /size: Number\(\(\$\('adSize'\)/.test(adm17));
+  t('★v3.9.17 后台预览复用前台类（不再各写一套）',
+    /pv\.innerHTML = '<div class="island-banner'/.test(adm17));
+}
+
+/* ============================================================
+ * v3.9.25：翻页动画两片接力 + 时钟使用记录（本地 / 云端 / 后台）
+ * ========================================================== */
+{
+  const clk = readClock();
+  const dataSrc = readApi('data.js');
+  const adminApi = readApi('admin.js');
+
+  t('★v3.9.25 clock.html 存在且带五种模式',
+    /data-m="pomo"/.test(clk) && /data-m="flip"/.test(clk) && /data-m="stop"/.test(clk));
+
+  /* 翻页动画 */
+  t('★v3.9.25 翻页是两片接力（A 翻下去 + B 翻上来）',
+    /\.flip \.flap\.a\{/.test(clk) && /\.flip \.flap\.b\{/.test(clk)
+    && /@keyframes flipA\{/.test(clk) && /@keyframes flipB\{/.test(clk));
+  t('★v3.9.25 B 片延迟半程开始（0.3s + 0.3s 接力）',
+    /animation:flipB \.3s[^;]*\.3s forwards/.test(clk)
+    && /animation:flipA \.3s[^;]*forwards/.test(clk));
+  t('★v3.9.25 文字在动画开始前就位（不是翻完才改）',
+    /bot\.textContent = old;/.test(clk) && /top\.textContent = val;/.test(clk));
+  t('★v3.9.25 收尾用令牌防两轮叠加', /box\.__tok/.test(clk) && /flipClean\(box\)/.test(clk));
+
+  /* 使用记录 */
+  t('★v3.9.25 时钟页右上角有「记录」按钮与右侧抽屉',
+    /id="logBtn"/.test(clk) && /id="logPanel"/.test(clk) && /translateX\(103%\)/.test(clk));
+  t('★v3.9.25 记录按天存在 cls_clock_log_<日期>',
+    /var LOG_PREFIX = 'cls_clock_log_'/.test(clk) && /dkey\(ts\)/.test(clk));
+  t('★v3.9.25 切模式就切一段（logStart / logStop）',
+    /function logStart\(mode\)/.test(clk) && /function logStop\(\)/.test(clk)
+    && /logStart\(logModeOf\(\)\)/.test(clk));
+  t('★v3.9.25 自习按专注 / 休息分开记', /logPomoPhase/.test(clk)
+    && /'pomo:' \+ PM\.phase/.test(clk));
+  t('★v3.9.25 抽屉里有自习 / 休息 / 番茄三张卡',
+    /自习<\/i>/.test(clk) && /<i>休息<\/i>/.test(clk) && /<i>番茄<\/i>/.test(clk)
+    && /lg-card wide/.test(clk));
+  t('★v3.9.25 切到后台停止计时', /if\(document\.hidden\) logStop\(\);/.test(clk)
+    && /pagehide/.test(clk));
+  t('★v3.9.25 登录后推到 /api/data', /flushLog/.test(clk) && /CLK_API \+ '\/api\/data'/.test(clk));
+
+  /* 后端 */
+  t('★v3.9.25 云端白名单放行 cls_clock_*',
+    /'cls_clock_\*'/.test(dataSrc));
+  t('★v3.9.25 后台有时钟记录接口', /action === 'clock-logs'/.test(adminApi)
+    && /async function clockLogs/.test(adminApi) && /cls_clock_log_/.test(adminApi));
+
+  /* 后台面板 */
+  const adm90 = readAdm();
+  t('★v3.9.25 后台有「时钟记录」页面',
+    /id:'clocklog'/.test(adm90) && /function renderClockLog\(\)/.test(adm90)
+    && /function paintClockLog\(\)/.test(adm90));
+  t('★v3.9.25 后台能展开每人每段', /data-cl-open/.test(adm90) && /cl-seg/.test(adm90));
+
+  /* 番茄卡片已删 */
+  const idx90 = readIdx();
+  t('★v3.9.25 番茄时钟卡片已删除（不再跳外站）',
+    !/focustide\.app/.test(idx90));
+}
+
+/* ============================================================
+ * v3.10.0：成绩图表动画（滚到才播 / 出视口复位）+ 卡片折叠 + 对比淡柱修复
+ * ========================================================== */
+{
+  const idx91 = readIdx();
+
+  t('★v3.10.0 动画总开关（轻量 / 精简动效 / 系统偏好都拦）',
+    /function scAnimOn\(\)/.test(idx91)
+    && /if\(liteOn\(\)\) return false;/.test(idx91)
+    && /UI\.motion === 0/.test(idx91)
+    && /prefers-reduced-motion/.test(idx91));
+
+  t('★v3.10.0 柱子逐帧长高（改 y/height，不用 CSS transform）',
+    /function scPlayBars\(svg\)/.test(idx91)
+    && /setAttribute\('height', h\.toFixed\(2\)\)/.test(idx91)
+    && /setAttribute\('y', \(it\.y \+ it\.h - h\)\.toFixed\(2\)\)/.test(idx91));
+
+  t('★v3.10.0 柱子逐根错峰 26ms + 缓出',
+    /d: i \* 26/.test(idx91) && /function scEase\(p\)\{ return 1 - Math\.pow\(1 - p, 3\); \}/.test(idx91));
+
+  t('★v3.10.0 关键：开播前才归零（视口外保持真实高度）',
+    /开播前才归零 —— 视口外保持真实高度/.test(idx91)
+    && /it\.el\.setAttribute\('y', st\.baseY\)/.test(idx91));
+
+  t('★v3.10.0 横条从 0 撑开',
+    /function scPlayGrow\(card\)/.test(idx91) && /o\.el\.style\.width = '0%'/.test(idx91));
+
+  t('★v3.10.0 概览数字只跳一次（文字不反复动）',
+    /function scPlayNums\(card\)/.test(idx91) && /if\(card\.__numsDone\) return;/.test(idx91));
+
+  t('★v3.10.0 用 IntersectionObserver 按卡片进出视口播 / 复位',
+    /new IntersectionObserver\(/.test(idx91)
+    && /function scPlayCard\(card\)/.test(idx91)
+    && /function scResetCard\(card\)/.test(idx91)
+    && /else if\(card\.classList\.contains\('sc-in''\)\)/.test(idx91.replace(/\\/g, '')) === false
+    && /scResetCard\(card\);/.test(idx91));
+
+  t('★v3.10.0 已经在视口里的卡片不等回调，立刻播',
+    /var r = c\.getBoundingClientRect\(\);/.test(idx91)
+    && /if\(r\.bottom > 0 && r\.top < \(window\.innerHeight \|\| 800\)\) scPlayCard\(c\);/.test(idx91));
+
+  t('★v3.10.0 没有 IntersectionObserver 时兜底全播',
+    /if\(!window\.IntersectionObserver\)\{/.test(idx91));
+
+  t('★v3.10.0 表格 / 列表行只给前 16 行做错峰',
+    /var limit = Math\.min\(rows\.length, 16\)/.test(idx91));
+
+  t('★v3.10.0 动画样式挂在「卡片进了视口」上',
+    /#scPaneBox\.sc-anim \.sc-card\.sc-in \.sc-rise\{animation:scRise/.test(idx91)
+    && /#scPaneBox\.sc-anim \.sc-card\.sc-in svg \.sc-mine-poly\{transform-origin:320px 154px/.test(idx91)
+    && /#scPaneBox\.sc-anim \.sc-card\.sc-in svg \.sc-cut-line\{animation:scSoftIn/.test(idx91));
+
+  t('★v3.10.0 系统「减少动态效果」时 CSS 也停掉',
+    /@media \(prefers-reduced-motion: reduce\)\{[\s\S]{0,500}\.sc-card\.sc-in \.sc-rise/.test(idx91));
+
+  /* 折叠 */
+  t('★v3.10.0 每张卡右上角有折叠按钮，内容收进 .sc-fold-body',
+    /function scFoldInit\(root\)/.test(idx91)
+    && /function scFoldBody\(card\)/.test(idx91)
+    && /sc-fold-btn/.test(idx91));
+
+  t('★v3.10.0 折叠用事件委托（重渲染后照样能点）',
+    /function scBindFold\(root\)/.test(idx91)
+    && /root\.addEventListener\('click'/.test(idx91));
+
+  t('★v3.10.0 折叠状态按 data-scblk 记住',
+    /if\(key\) SC_FOLD\[key\] = card\.classList\.contains\('sc-folded'\)/.test(idx91));
+
+  /* 对比淡柱修复 */
+  t('★v3.10.0 修复：两场对比的淡柱取的是上一场的成绩',
+    /function prevRowOf\(row\)/.test(idx91)
+    && /var v = pr\.s && pr\.s\[s\.key\];/.test(idx91));
+
+  t('★v3.10.0 淡柱认人：先 uid 再姓名',
+    /if\(row\.uid\)\{[\s\S]{0,200}String\(x\.uid\) === String\(row\.uid\)/.test(idx91));
 }
 
 console.log('\n' + '='.repeat(52));

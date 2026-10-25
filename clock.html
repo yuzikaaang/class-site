@@ -1,0 +1,2349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#f4f4f4">
+<title>全屏时钟 · 时间 / 倒计时 / 秒表</title>
+<style>
+/* ============================================================================
+ * 全屏时钟（v3.9.22）
+ * 仿照 yingming006.cn/time 做的站内版：数字 / 翻页 / 秒表 / 计时器四种模式，
+ * 字体、背景、12-24 小时、全屏、防息屏、空格开始暂停都对齐。
+ * 纯 ES5 + 无第三方依赖，老 iPad 也能跑。
+ * ========================================================================= */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;padding:0;overflow:hidden}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+  background:#f4f4f4;color:#141414;
+  transition:background .28s ease,color .28s ease;
+  user-select:none;-webkit-user-select:none;
+  cursor:default;
+}
+body.bg-dark{background:#0d0d0f;color:#f5f5f5}
+body.bg-black{background:#000;color:#fff}
+body.bg-cream{background:#f6f1e7;color:#3a2f24}
+body.bg-navy{background:#0e1a2b;color:#e8eefc}
+body.bg-green{background:#0f241d;color:#e6f6ee}
+body.bg-gray{background:#2b2b2e;color:#f2f2f2}
+
+#stage{position:fixed;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;flex-direction:column}
+.view{display:none;width:100%;text-align:center}
+.view.on{display:block}
+
+/* ---------- 字号档位（4 档，全部由 --fs 推导） ---------- */
+/* v3.9.24：加一道 vh 上限——横屏（尤其手机横过来只有 390 高）时
+   原来按 vw 算出来的数字会把按钮顶到工具栏底下。 */
+body.sz-1{--fs:min(15vw,28vh,190px)}
+body.sz-2{--fs:min(19vw,31vh,240px)}
+body.sz-3{--fs:min(24vw,37vh,300px)}
+body.sz-4{--fs:min(30vw,48vh,380px)}
+
+/* ---------- 数字时钟 ---------- */
+#bigTime{
+  font-size:var(--fs);line-height:1;letter-spacing:-.02em;font-weight:700;
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+#bigSub{margin-top:2.4vh;font-size:2.4vw;opacity:.55;letter-spacing:.06em;white-space:nowrap}
+@media (max-aspect-ratio: 1/1){
+  #bigSub{font-size:3.2vw}
+}
+
+/* ---------- 翻页时钟 ----------
+   v3.9.23 重做：原来卡片宽高靠 24vw/32vw 两个写死的数，数字用 20vw，
+   两位数一挤就顶到边框（手机上「13」直接压边）。现在全部由 --fs 推导：
+   卡片宽 = .92fs、高 = 1.2fs、数字 = .66fs，两位数宽度约 .73fs，稳留在卡片里。
+   中间冒号单独一个元素、垂直居中，不再跟着数字基线跑。 */
+/* 翻页卡片按「屏宽」算，不跟数字时钟的字号档走：三张 + 间距要正好铺满一行 */
+#flipView{--fw:min(24vw,54vh,300px)}
+#flipView .flip-row{display:flex;align-items:center;justify-content:center;gap:calc(var(--fw) * .05)}
+.flip{
+  position:relative;
+  width:var(--fw);
+  height:calc(var(--fw) * 1.12);
+  border-radius:calc(var(--fw) * .09);
+  background:#e9e5e0;
+  box-shadow:0 10px 26px rgba(60,40,25,.10),inset 0 1px 0 rgba(255,255,255,.75);
+  perspective:900px;
+  font-variant-numeric:tabular-nums;
+}
+body.bg-dark .flip,body.bg-black .flip,body.bg-navy .flip,
+body.bg-green .flip,body.bg-gray .flip{
+  background:#2a2724;box-shadow:0 10px 26px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06);
+}
+.flip .half{position:absolute;left:0;width:100%;height:50%;overflow:hidden;background:inherit;
+  border-radius:calc(var(--fw) * .09)}
+.flip .half.top{top:0;border-bottom-left-radius:0;border-bottom-right-radius:0;
+  box-shadow:inset 0 -1px 0 rgba(0,0,0,.22)}
+.flip .half.bottom{bottom:0;border-top-left-radius:0;border-top-right-radius:0;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+body.bg-dark .flip .half.bottom,body.bg-black .flip .half.bottom,body.bg-navy .flip .half.bottom,
+body.bg-green .flip .half.bottom,body.bg-gray .flip .half.bottom{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.flip .txt{
+  position:absolute;left:0;width:100%;text-align:center;
+  height:calc(var(--fw) * 1.12);line-height:calc(var(--fw) * 1.12);
+  font-size:calc(var(--fw) * .66);font-weight:700;letter-spacing:-.05em;
+}
+.flip .half.top .txt{top:0}
+.flip .half.bottom .txt{top:calc(var(--fw) * -.56)}
+
+/* ---------- 翻页动画：两片接力（v3.9.25 重做） ----------
+   站主：「数字要跟着卡片一起翻，不能等卡片翻完再加一，那样特别怪异」。
+   以前只有上面一片在翻、翻完才把下半改成新数字 —— 视觉上就是「翻走了再跳一下」。
+   现在按真翻页钟的做法接力：
+     · 上半静态 = 新值，被 A 片（旧值上半）盖住
+     · A 片 0° → -90°，前半段（旧数字被翻下去）
+     · 下半静态 = 旧值，等 B 片（新值下半）落下来盖住
+     · B 片 90° → 0°，后半段（新数字从后面翻上来）
+   翻完只清两片，文本早在动画开始前就位，不存在「翻完才跳数」。 */
+.flip .flap{
+  position:absolute;left:0;width:100%;height:50%;overflow:hidden;
+  background:inherit;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  will-change:transform;
+}
+.flip .flap .txt{position:absolute;left:0}
+.flip .flap.a{
+  top:0;z-index:4;transform-origin:bottom center;
+  border-radius:calc(var(--fw) * .09) calc(var(--fw) * .09) 0 0;
+  box-shadow:inset 0 -1px 0 rgba(0,0,0,.22);
+  animation:flipA .3s cubic-bezier(.45,.05,.55,.95) forwards;
+}
+.flip .flap.a .txt{top:0}
+.flip .flap.b{
+  bottom:0;z-index:5;transform-origin:top center;transform:rotateX(90deg);
+  border-radius:0 0 calc(var(--fw) * .09) calc(var(--fw) * .09);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28);
+  animation:flipB .3s cubic-bezier(.45,.05,.55,.95) .3s forwards;
+}
+.flip .flap.b .txt{top:calc(var(--fw) * -.56)}
+body.bg-dark .flip .flap.b,body.bg-black .flip .flap.b,body.bg-navy .flip .flap.b,
+body.bg-green .flip .flap.b,body.bg-gray .flip .flap.b{box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+/* 明暗变化：上半片越翻越暗，下半片从阴影里亮起来 —— 「有重量」全靠这个 */
+.flip .flap.a::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;
+  pointer-events:none;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.26));
+  animation:flapShade .3s linear forwards}
+.flip .flap.b::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;
+  pointer-events:none;background:linear-gradient(rgba(0,0,0,.26),rgba(0,0,0,0));
+  animation:flapLight .3s linear .3s forwards}
+@keyframes flipA{from{transform:rotateX(0)}to{transform:rotateX(-90deg)}}
+@keyframes flipB{from{transform:rotateX(90deg)}to{transform:rotateX(0)}}
+@keyframes flapShade{from{opacity:0}to{opacity:1}}
+@keyframes flapLight{from{opacity:.85}to{opacity:0}}
+.flip-sep{
+  font-size:calc(var(--fw) * .3);line-height:1;font-weight:700;opacity:.30;
+  margin:0 calc(var(--fw) * .03);transform:translateY(-.04em);
+}
+
+/* ---------- 翻页：可关掉秒 ----------
+   v3.9.24（站主）：「翻页的这个时钟可以选择是否要有秒」。
+   关掉秒后只剩「时 : 分」两张卡，卡片跟着放大，更像桌面翻页钟。 */
+#flipView.nosec .flip-row > :nth-child(4),
+#flipView.nosec .flip-row > :nth-child(5){display:none}
+#flipView.nosec{--fw:min(38vw,58vh,430px)}
+
+/* ---------- 自习（番茄钟） ---------- */
+#pomoPhase{
+  font-size:2.2vw;line-height:1;font-weight:700;letter-spacing:.28em;opacity:.55;
+  margin-bottom:2.2vh;text-indent:.28em;transition:color .3s,opacity .3s;
+}
+body.sz-3 #pomoPhase,body.sz-4 #pomoPhase{font-size:2vw}
+#pomoPhase.rest{color:#3c9f6a;opacity:.85}
+#pomoPhase.done{color:#e08a4c;opacity:.9}
+#pomoTime{transition:opacity .25s}
+#pomoTime.paused{opacity:.42}
+#pomoSet{display:flex;align-items:center;justify-content:center;gap:calc(var(--fs) * .04);
+  margin-top:2.6vh;font-size:1.6vw;opacity:.75}
+#pomoSet.hide{display:none}
+#pomoSet input{
+  width:calc(var(--fs) * .2);max-width:110px;height:9vh;max-height:60px;min-height:40px;
+  border:1px solid rgba(0,0,0,.14);border-radius:14px;background:rgba(255,255,255,.62);
+  color:inherit;font:inherit;font-size:calc(var(--fs) * .13);text-align:center;outline:none;
+  -webkit-appearance:none;appearance:none;box-shadow:0 2px 10px rgba(60,40,25,.05);
+}
+body.bg-dark #pomoSet input,body.bg-black #pomoSet input,body.bg-navy #pomoSet input,
+body.bg-green #pomoSet input,body.bg-gray #pomoSet input{
+  background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.20)}
+#pomoSet input:focus{border-color:#e08a4c;box-shadow:0 0 0 3px rgba(224,138,76,.16)}
+#pomoHint{margin-top:1.8vh;font-size:1.35vw;opacity:.42;letter-spacing:.03em}
+#pomoHint b{font-weight:700;opacity:.9}
+@media (max-aspect-ratio: 1/1){
+  #pomoPhase{font-size:4.8vw;margin-bottom:2.8vh;letter-spacing:.22em}
+  #pomoHint{font-size:2.7vw}
+  #pomoSet{font-size:3vw;margin-top:3vh}
+}
+
+/* ---------- 秒表 / 计时器 ---------- */
+#stopTime,#timerTime,#pomoTime{
+  font-size:calc(var(--fs) * .82);line-height:1;font-weight:700;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+#stopTime .ms,#timerTime .ms{font-size:.5em;opacity:.55}
+#pomoTime{cursor:pointer;font-size:calc(var(--fs) * .92)}
+#timerTime.warn,#pomoTime.warn{color:#e23b3b}
+body.bg-dark #timerTime.warn,body.bg-black #timerTime.warn,body.bg-navy #timerTime.warn,
+body.bg-green #timerTime.warn,body.bg-gray #timerTime.warn,
+body.bg-dark #pomoTime.warn,body.bg-black #pomoTime.warn,body.bg-navy #pomoTime.warn,
+body.bg-green #pomoTime.warn,body.bg-gray #pomoTime.warn{color:#ff6b6b}
+/* 阶段切换时闪两下（没有声音，靠这个和振动提醒） */
+#pomoTime.flash{animation:pomoFlash 1.1s ease-in-out 2}
+@keyframes pomoFlash{0%,100%{opacity:1}45%{opacity:.12}}
+
+/* ---------- 全屏「时间到」提醒（v3.10.0） ----------
+   倒计时到点、自习阶段切换时整屏弹出约 3 秒，点一下可提前关闭；
+   文字可在「更多」里自定义，留空默认「时间到！」。 */
+#fullAlert{
+  position:fixed;left:0;right:0;top:0;bottom:0;z-index:120;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  background:rgba(8,8,10,.84);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  opacity:0;pointer-events:none;
+  transition:opacity .3s ease;
+}
+#fullAlert.on{opacity:1;pointer-events:auto}
+#fullAlertTxt{
+  font-size:min(12vw,20vh,140px);line-height:1.15;font-weight:800;color:#fff;
+  letter-spacing:.08em;text-indent:.08em;padding:0 5vw;max-width:92vw;
+  text-shadow:0 6px 40px rgba(0,0,0,.4);
+}
+#fullAlert.on #fullAlertTxt{animation:fullAlertPop .5s cubic-bezier(.18,.89,.32,1.18)}
+@keyframes fullAlertPop{from{transform:scale(.82);opacity:0}to{transform:scale(1);opacity:1}}
+/* 计时器默认只看数字，点数字才出现设置框（站主：默认只显示倒计时） */
+#timerSet{display:flex;align-items:center;justify-content:center;margin-top:3vh;
+  transition:opacity .2s}
+#timerSet.hide{display:none}
+#timerSet input{
+  width:calc(var(--fs) * .26);max-width:130px;height:9vh;max-height:66px;min-height:42px;
+  border:1px solid rgba(0,0,0,.14);border-radius:14px;background:rgba(255,255,255,.62);
+  color:inherit;font:inherit;font-size:calc(var(--fs) * .16);text-align:center;outline:none;
+  -webkit-appearance:none;appearance:none;
+  box-shadow:0 2px 10px rgba(60,40,25,.05);
+}
+body.bg-dark #timerSet input,body.bg-black #timerSet input,body.bg-navy #timerSet input,
+body.bg-green #timerSet input,body.bg-gray #timerSet input{
+  background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.20);
+  box-shadow:0 2px 10px rgba(0,0,0,.3)}
+#timerSet .colon{font-size:calc(var(--fs) * .18);opacity:.35;margin:0 calc(var(--fs) * .06)}
+#timerSet input:focus{border-color:#e08a4c;box-shadow:0 0 0 3px rgba(224,138,76,.16)}
+#timerHint{margin-top:1.6vh;font-size:1.4vw;opacity:.4;letter-spacing:.04em}
+@media (max-aspect-ratio: 1/1){ #timerHint{font-size:2.6vw} }
+
+/* ---------- 按钮组 ---------- */
+.actions{display:flex;align-items:center;justify-content:center;margin-top:3.4vh;flex-wrap:wrap}
+.actions button{
+  min-width:12vw;height:6.4vh;min-height:42px;padding:0 3vw;margin:.6vh .7vw;
+  border:1px solid rgba(0,0,0,.16);border-radius:12px;background:rgba(255,255,255,.65);
+  color:inherit;font:inherit;font-size:1.6vw;font-weight:600;cursor:pointer;
+  transition:transform .12s,background .18s;
+}
+body.bg-dark #actions button,body.bg-black #actions button,body.bg-navy #actions button,
+body.bg-green #actions button,body.bg-gray .actions button{
+  background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22)}
+.actions button:active{transform:scale(.96)}
+.actions button.primary{background:#141414;color:#fff;border-color:transparent}
+body.bg-dark .actions button.primary,body.bg-black .actions button.primary,
+body.bg-navy .actions button.primary,body.bg-green .actions button.primary,
+body.bg-gray .actions button.primary{background:#f5f5f5;color:#111}
+.actions .kbd{font-size:.68em;opacity:.5;margin-left:.5em;font-weight:400}
+
+/* ---------- 工具栏 ---------- */
+#bar{
+  position:fixed;left:50%;bottom:3vh;transform:translateX(-50%) translateY(6px);
+  display:flex;align-items:center;flex-wrap:wrap;justify-content:center;
+  padding:.7vh .6vw;border-radius:16px;z-index:40;
+  background:rgba(255,255,255,.78);border:1px solid rgba(0,0,0,.1);
+  box-shadow:0 10px 30px rgba(0,0,0,.10);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  opacity:0;visibility:hidden;transition:opacity .22s,transform .22s;
+  max-width:96vw;
+}
+body.bg-dark #bar,body.bg-black #bar,body.bg-navy #bar,body.bg-green #bar,body.bg-gray #bar{
+  background:rgba(28,28,32,.82);border-color:rgba(255,255,255,.14)}
+#bar.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+#bar button{
+  height:38px;padding:0 14px;margin:3px;border:1px solid transparent;border-radius:10px;
+  background:transparent;color:inherit;font:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+}
+#bar button:hover{background:rgba(0,0,0,.06)}
+body.bg-dark #bar button:hover,body.bg-black #bar button:hover,body.bg-navy #bar button:hover,
+body.bg-green #bar button:hover,body.bg-gray #bar button:hover{background:rgba(255,255,255,.1)}
+#bar button.cur{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.08)}
+body.bg-dark #bar button.cur,body.bg-black #bar button.cur,body.bg-navy #bar button.cur,
+body.bg-green #bar button.cur,body.bg-gray #bar button.cur{background:rgba(255,255,255,.14);border-color:transparent}
+
+/* 模式菜单 */
+#modeMenu{
+  position:fixed;left:50%;bottom:calc(3vh + 54px);transform:translateX(-50%);
+  background:rgba(255,255,255,.96);border:1px solid rgba(0,0,0,.1);border-radius:14px;
+  padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.14);z-index:41;display:none;
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+}
+body.bg-dark #modeMenu,body.bg-black #modeMenu,body.bg-navy #modeMenu,
+body.bg-green #modeMenu,body.bg-gray #modeMenu{background:rgba(30,30,34,.96);border-color:rgba(255,255,255,.14)}
+#modeMenu.show{display:block}
+#modeMenu button{display:block;width:100%;height:38px;padding:0 22px;border:none;border-radius:9px;
+  background:transparent;color:inherit;font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:center}
+#modeMenu button.cur{background:rgba(0,0,0,.08)}
+body.bg-dark #modeMenu button.cur,body.bg-black #modeMenu button.cur,body.bg-navy #modeMenu button.cur,
+body.bg-green #modeMenu button.cur,body.bg-gray #modeMenu button.cur{background:rgba(255,255,255,.14)}
+
+#back{
+  position:fixed;left:16px;top:16px;z-index:35;padding:9px 14px;border-radius:12px;
+  font-size:13px;font-weight:600;text-decoration:none;color:inherit;
+  background:rgba(255,255,255,.7);border:1px solid rgba(0,0,0,.1);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:opacity .2s;
+}
+body.bg-dark #back,body.bg-black #back,body.bg-navy #back,body.bg-green #back,body.bg-gray #back{
+  background:rgba(30,30,34,.7);border-color:rgba(255,255,255,.14)}
+#back:hover{opacity:.75}
+
+/* 提示气泡 */
+#hint{
+  position:fixed;left:50%;top:4vh;transform:translateX(-50%);
+  padding:8px 16px;border-radius:999px;font-size:12px;
+  background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.08);color:#333;
+  transition:opacity .4s;z-index:30;
+}
+body.bg-dark #hint,body.bg-black #hint,body.bg-navy #hint,body.bg-green #hint,body.bg-gray #hint{
+  background:rgba(30,30,34,.9);border-color:rgba(255,255,255,.14);color:#ddd}
+#hint.hide{opacity:0}
+
+/* 关于面板 */
+#about{
+  position:fixed;left:0;right:0;top:0;bottom:0;z-index:60;display:none;
+  background:rgba(0,0,0,.45);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
+}
+#about.show{display:flex;align-items:center;justify-content:center;padding:24px}
+#about .box{
+  width:100%;max-width:440px;max-height:86vh;overflow:auto;-webkit-overflow-scrolling:touch;
+  background:#fff;color:#222;border-radius:18px;padding:22px 20px;
+  box-shadow:0 20px 50px rgba(0,0,0,.3);
+}
+/* v3.10.0：设置区（音效 / 自定义名称） */
+.ab-sec{margin-top:16px;padding-top:14px;border-top:1px solid rgba(0,0,0,.08)}
+.ab-sec h4{margin:0 0 9px;font-size:12.5px;font-weight:800;opacity:.62;letter-spacing:.02em}
+.snd-row{display:flex;gap:7px;flex-wrap:wrap}
+.snd-row button{
+  height:34px;padding:0 13px;border-radius:10px;border:1px solid rgba(0,0,0,.12);
+  background:#fff;color:inherit;font-family:inherit;font-size:13px;cursor:pointer;
+  transition:background .15s,border-color .15s,color .15s;
+}
+.snd-row button:active{transform:scale(.97)}
+.snd-row button.on{background:#e08a4c;border-color:#e08a4c;color:#fff}
+.name-grid{display:grid;gap:8px}
+.name-grid label{display:flex;align-items:center;gap:8px;font-size:13px}
+.name-grid label span{flex:0 0 66px;opacity:.6}
+.name-grid input{
+  flex:1;min-width:0;height:34px;border-radius:9px;border:1px solid rgba(0,0,0,.12);
+  padding:0 10px;font-family:inherit;font-size:13px;color:inherit;background:#fff;outline:none;
+}
+.name-grid input:focus{border-color:#e08a4c;box-shadow:0 0 0 3px rgba(224,138,76,.15)}
+/* 当前模式的自定义名称（各模式上方一行小字） */
+#modeName{
+  font-size:2vw;letter-spacing:.16em;font-weight:700;opacity:.42;margin-bottom:1.6vh;
+  text-indent:.16em;min-height:0;
+}
+#modeName:empty{display:none}
+/* 自习的科目快捷行 */
+.subj-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:2.4vh}
+.subj-row button{
+  height:32px;min-width:44px;padding:0 10px;border-radius:9px;border:1px solid rgba(0,0,0,.12);
+  background:transparent;color:inherit;font-family:inherit;font-size:13px;cursor:pointer;
+  opacity:.7;transition:all .15s;
+}
+.subj-row button.on{background:rgba(224,138,76,.16);border-color:#e08a4c;color:#c2410c;opacity:1;font-weight:700}
+body.bg-dark .subj-row button,body.bg-black .subj-row button,body.bg-navy .subj-row button,
+body.bg-green .subj-row button,body.bg-gray .subj-row button{border-color:rgba(255,255,255,.18)}
+body.bg-dark .subj-row button.on,body.bg-black .subj-row button.on,body.bg-navy .subj-row button.on,
+body.bg-green .subj-row button.on,body.bg-gray .subj-row button.on{color:#fdba74;border-color:#fb923c}
+@media (max-aspect-ratio: 1/1){ #modeName{font-size:3.2vw;margin-bottom:1.8vh} }
+#about h3{margin:0 0 10px;font-size:17px}
+#about p{margin:0 0 10px;font-size:13px;line-height:1.75;color:#555}
+#about a{color:#b45309;text-decoration:none;font-weight:600}
+#about .close{width:100%;height:44px;margin-top:8px;border:none;border-radius:12px;
+  background:#141414;color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+
+/* 字体族切换 */
+body.f-auto{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif}
+body.f-hei{font-family:"PingFang SC","Microsoft YaHei","Heiti SC","SimHei",sans-serif}
+body.f-mono{font-family:"SF Mono",Menlo,Consolas,"Courier New",ui-monospace,monospace}
+body.f-round{font-family:"PingFang SC","Yuanti SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-weight:800;letter-spacing:.01em}
+body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
+
+/* 竖屏时字号基准收一点（vw 相对宽度小，不收会顶到边） */
+@media (max-aspect-ratio: 1/1){
+  body.sz-1{--fs:min(16vw,150px)}
+  body.sz-2{--fs:min(20vw,190px)}
+  body.sz-3{--fs:min(25vw,230px)}
+  body.sz-4{--fs:min(31vw,280px)}
+}
+/* 横屏：底部有工具栏，内容整体上移一点，别被压住 */
+@media (min-aspect-ratio: 1/1){
+  #stage{padding-bottom:13vh}
+  #pomoPhase{margin-bottom:1.6vh}
+  #pomoSet{margin-top:1.8vh}
+  #pomoHint{margin-top:1.2vh}
+}
+@media (max-width:420px){
+  #bar button{height:34px;padding:0 10px;font-size:12px}
+  .actions button{min-width:26vw;font-size:3.4vw}
+  #timerSet input{width:22vw;font-size:5vw;height:44px}
+}
+
+/* ---------- v3.10.0：记录抽屉里的「总结 / 报告」 ---------- */
+.lg-tabs{display:flex;gap:6px;padding:0 16px 10px}
+.lg-tabs button{
+  flex:1;height:32px;border-radius:10px;border:1px solid transparent;background:rgba(0,0,0,.05);
+  color:inherit;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;opacity:.7;
+}
+body.bg-dark .lg-tabs button,body.bg-black .lg-tabs button,body.bg-navy .lg-tabs button,
+body.bg-green .lg-tabs button,body.bg-gray .lg-tabs button{background:rgba(255,255,255,.08)}
+.lg-tabs button.on{background:#fff;border-color:rgba(0,0,0,.08);opacity:1;
+  box-shadow:0 1px 3px rgba(60,40,25,.08)}
+body.bg-dark .lg-tabs button.on,body.bg-black .lg-tabs button.on,body.bg-navy .lg-tabs button.on,
+body.bg-green .lg-tabs button.on,body.bg-gray .lg-tabs button.on{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.14)}
+.sum-body{flex:1;overflow:auto;padding:0 16px 12px;-webkit-overflow-scrolling:touch}
+.sum-pick{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.sum-pick button{
+  height:30px;padding:0 11px;border-radius:9px;border:1px solid rgba(0,0,0,.1);background:transparent;
+  color:inherit;font-family:inherit;font-size:12.5px;cursor:pointer;opacity:.72;
+}
+body.bg-dark .sum-pick button,body.bg-black .sum-pick button,body.bg-navy .sum-pick button,
+body.bg-green .sum-pick button,body.bg-gray .sum-pick button{border-color:rgba(255,255,255,.16)}
+.sum-pick button.on{background:rgba(224,138,76,.16);border-color:#e08a4c;color:#c2410c;opacity:1;font-weight:700}
+body.bg-dark .sum-pick button.on,body.bg-black .sum-pick button.on,body.bg-navy .sum-pick button.on,
+body.bg-green .sum-pick button.on,body.bg-gray .sum-pick button.on{color:#fdba74;border-color:#fb923c}
+.sum-custom{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:12px;opacity:.8}
+.sum-custom input{height:30px;border-radius:8px;border:1px solid rgba(0,0,0,.12);background:transparent;
+  color:inherit;font-family:inherit;font-size:12.5px;padding:0 6px;min-width:0;flex:1}
+body.bg-dark .sum-custom input,body.bg-black .sum-custom input,body.bg-navy .sum-custom input,
+body.bg-green .sum-custom input,body.bg-gray .sum-custom input{border-color:rgba(255,255,255,.16)}
+/* 预览卡：就是导出图的样子 */
+.sum-paper{
+  background:#fdfbf7;color:#2a2118;border-radius:14px;padding:16px 16px 14px;
+  border:1px solid rgba(120,53,15,.1);font-size:13px;line-height:1.65;
+}
+.sum-paper .sp-head{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+.sum-paper .sp-head img{width:40px;height:40px;border-radius:10px;object-fit:cover;flex:0 0 auto;
+  background:#f2e9df}
+.sum-paper .sp-title{
+  flex:1;min-width:0;border:none;background:transparent;font-family:inherit;
+  font-size:17px;font-weight:800;color:#1f1a15;padding:2px 4px;border-radius:6px;outline:none;
+}
+.sum-paper .sp-title:focus{background:rgba(224,138,76,.1)}
+.sum-paper .sp-range{font-size:11.5px;color:#8a7a6a;margin:6px 0 12px}
+.sum-paper .sp-nums{display:flex;gap:8px;margin-bottom:12px}
+.sum-paper .sp-num{flex:1;background:#fff;border:1px solid #f0e7de;border-radius:10px;padding:8px 10px}
+.sum-paper .sp-num i{display:block;font-style:normal;font-size:10.5px;color:#9a8a7a;margin-bottom:3px}
+.sum-paper .sp-num b{font-size:16px;color:#b45309;font-weight:800}
+.sum-paper h5{margin:12px 0 6px;font-size:11.5px;color:#9a8a7a;font-weight:800;letter-spacing:.04em}
+.sum-paper .sp-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:12.5px}
+.sum-paper .sp-row span:last-child{color:#6b5443;font-variant-numeric:tabular-nums}
+.sum-paper .sp-note{
+  width:100%;min-height:56px;margin-top:10px;padding:8px 10px;border-radius:9px;
+  border:1px solid #ece2d8;background:#fff;color:#2a2118;font-family:inherit;font-size:12.5px;
+  line-height:1.6;resize:vertical;outline:none;
+}
+.sum-paper .sp-note:focus{border-color:#e08a4c;box-shadow:0 0 0 3px rgba(224,138,76,.14)}
+.sum-paper .sp-foot{margin-top:10px;font-size:10.5px;color:#a89a8c;display:flex;justify-content:space-between}
+.sum-actions{display:flex;gap:8px;margin-top:12px}
+.sum-actions button{
+  flex:1;height:38px;border-radius:11px;border:1px solid rgba(0,0,0,.1);background:#fff;
+  color:#c2410c;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;
+}
+.sum-actions button.primary{background:#c2410c;border-color:#c2410c;color:#fff}
+.sum-actions button:active{transform:scale(.98)}
+.sum-empty{padding:24px 4px;font-size:12.5px;opacity:.55;line-height:1.9;text-align:center}
+
+/* ---------- v3.9.25：右上角「记录」与右侧抽屉 ---------- */
+#logBtn{
+  position:fixed;right:16px;top:16px;z-index:36;height:38px;padding:0 14px;border-radius:12px;
+  display:flex;align-items:center;gap:6px;font-family:inherit;font-size:13px;font-weight:600;
+  color:inherit;cursor:pointer;border:1px solid rgba(0,0,0,.1);background:rgba(255,255,255,.72);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  transition:opacity .2s,background .2s;
+}
+#logBtn:hover{opacity:.78}
+body.bg-dark #logBtn,body.bg-black #logBtn,body.bg-navy #logBtn,
+body.bg-green #logBtn,body.bg-gray #logBtn{
+  background:rgba(30,30,34,.72);border-color:rgba(255,255,255,.14);
+}
+#logPanel{
+  position:fixed;top:0;right:0;bottom:0;width:min(94vw,368px);z-index:70;
+  display:flex;flex-direction:column;
+  background:rgba(255,255,255,.985);color:#1b1b1b;
+  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+  border-left:1px solid rgba(0,0,0,.07);
+  box-shadow:-18px 0 48px rgba(40,28,18,.14);
+  transform:translateX(103%);transition:transform .34s cubic-bezier(.16,1,.3,1);
+  -webkit-overflow-scrolling:touch;
+}
+#logPanel.show{transform:none}
+body.bg-dark #logPanel,body.bg-black #logPanel,body.bg-navy #logPanel,
+body.bg-green #logPanel,body.bg-gray #logPanel{
+  background:rgba(22,22,25,.985);color:#ececec;border-left-color:rgba(255,255,255,.08);
+  box-shadow:-18px 0 48px rgba(0,0,0,.5);
+}
+.lg-head{display:flex;align-items:center;gap:8px;padding:15px 16px 11px}
+.lg-head b{font-size:15px;letter-spacing:.02em;flex:1 1 auto;white-space:nowrap}
+.lg-daywrap{flex:0 0 auto;display:flex;align-items:center;gap:1px}
+.lg-daywrap span{font-size:12.5px;opacity:.72;min-width:56px;text-align:center}
+.lg-nav{width:26px;height:26px;border-radius:8px;border:1px solid rgba(0,0,0,.09);
+  background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0}
+body.bg-dark .lg-nav,body.bg-black .lg-nav,body.bg-navy .lg-nav,
+body.bg-green .lg-nav,body.bg-gray .lg-nav{border-color:rgba(255,255,255,.14)}
+.lg-nav:disabled{opacity:.25;cursor:default}
+.lg-cal{position:relative;width:26px;height:26px;border-radius:8px;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  border:1px solid rgba(0,0,0,.09);opacity:.7}
+body.bg-dark .lg-cal,body.bg-black .lg-cal,body.bg-navy .lg-cal,
+body.bg-green .lg-cal,body.bg-gray .lg-cal{border-color:rgba(255,255,255,.14)}
+.lg-cal:hover{opacity:1}
+.lg-cal input{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;border:none;
+  -webkit-appearance:none;appearance:none;cursor:pointer}
+.lg-close{width:30px;height:30px;border-radius:9px;border:none;background:rgba(0,0,0,.06);
+  color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:0}
+body.bg-dark .lg-close,body.bg-black .lg-close,body.bg-navy .lg-close,
+body.bg-green .lg-close,body.bg-gray .lg-close{background:rgba(255,255,255,.1)}
+.lg-sum{padding:0 18px 4px}
+/* 自习那张卡横跨两列 —— 「1 小时 15 分」这种长度，三张平分放不下会折行 */
+.lg-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.lg-card{padding:10px 12px;border-radius:12px;background:rgba(224,138,76,.1);
+  border:1px solid rgba(224,138,76,.18);min-width:0}
+.lg-card.wide{grid-column:1 / -1}
+body.bg-dark .lg-card,body.bg-black .lg-card,body.bg-navy .lg-card,
+body.bg-green .lg-card,body.bg-gray .lg-card{background:rgba(251,146,60,.13);border-color:rgba(251,146,60,.22)}
+.lg-card i{display:block;font-style:normal;font-size:11px;opacity:.6;margin-bottom:4px}
+.lg-card b{font-size:17px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;
+  display:block;overflow:hidden;text-overflow:ellipsis}
+.lg-card.wide b{font-size:21px}
+.lg-card b em{font-style:normal;font-size:11.5px;font-weight:600;opacity:.65;margin-left:2px}
+.lg-modes{font-size:12px;opacity:.62;line-height:1.75;margin-bottom:10px}
+.lg-list{flex:1;overflow:auto;padding:4px 18px 12px}
+.lg-row{display:flex;align-items:baseline;gap:10px;padding:9px 0;
+  border-bottom:1px dashed rgba(0,0,0,.07);font-size:13px}
+body.bg-dark .lg-row,body.bg-black .lg-row,body.bg-navy .lg-row,
+body.bg-green .lg-row,body.bg-gray .lg-row{border-bottom-color:rgba(255,255,255,.08)}
+.lg-row:last-child{border-bottom:none}
+.lg-t{font-variant-numeric:tabular-nums;opacity:.66;font-size:12px;flex:0 0 auto}
+.lg-m{flex:1;min-width:0}
+.lg-m .tag{display:inline-block;padding:1px 7px;border-radius:6px;font-size:11px;margin-right:6px;
+  background:rgba(0,0,0,.06)}
+body.bg-dark .lg-m .tag,body.bg-black .lg-m .tag,body.bg-navy .lg-m .tag,
+body.bg-green .lg-m .tag,body.bg-gray .lg-m .tag{background:rgba(255,255,255,.09)}
+.lg-m .tag.focus{background:rgba(224,138,76,.18)}
+.lg-m .tag.rest{background:rgba(60,159,106,.18)}
+.lg-d{flex:0 0 auto;font-size:12px;opacity:.55;font-variant-numeric:tabular-nums}
+.lg-empty{padding:26px 4px;font-size:12.5px;opacity:.5;line-height:1.9}
+.lg-foot{padding:12px 18px calc(14px + env(safe-area-inset-bottom));font-size:11.5px;opacity:.55;
+  border-top:1px solid rgba(0,0,0,.06);display:flex;align-items:center;gap:6px}
+body.bg-dark .lg-foot,body.bg-black .lg-foot,body.bg-navy .lg-foot,
+body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.08)}
+.lg-foot a{color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+@media (max-width:420px){
+  #logBtn{height:34px;padding:0 11px;font-size:12px}
+  .lg-card b{font-size:16px}
+}
+</style>
+</head>
+<body class="bg-light f-auto">
+
+<div id="stage">
+  <div id="modeName"></div>
+
+  <!-- 数字时钟 -->
+  <div class="view on" id="clockView">
+    <div id="bigTime">00:00:00</div>
+    <div id="bigSub"></div>
+  </div>
+
+  <!-- 翻页时钟 -->
+  <div class="view" id="flipView">
+    <div class="flip-row">
+      <div class="flip" id="flipH"><div class="half top"><div class="txt">00</div></div><div class="half bottom"><div class="txt">00</div></div></div>
+      <div class="flip-sep">:</div>
+      <div class="flip" id="flipM"><div class="half top"><div class="txt">00</div></div><div class="half bottom"><div class="txt">00</div></div></div>
+      <div class="flip-sep">:</div>
+      <div class="flip" id="flipS"><div class="half top"><div class="txt">00</div></div><div class="half bottom"><div class="txt">00</div></div></div>
+    </div>
+  </div>
+
+  <!-- 秒表 -->
+  <div class="view" id="stopView">
+    <div id="stopTime">00:00<span class="ms">.00</span></div>
+    <div class="actions">
+      <button id="stopBtn" class="primary">开始<span class="kbd">Space</span></button>
+      <button id="lapBtn">计次</button>
+      <button id="stopReset">重置</button>
+    </div>
+    <div id="laps" style="margin-top:2vh;font-size:1.5vw;opacity:.6;max-height:24vh;overflow:auto"></div>
+  </div>
+
+  <!-- 计时器 -->
+  <div class="view" id="timerView">
+    <div id="timerTime">00:05:00</div>
+    <div id="timerSet" class="hide">
+      <input id="th" type="number" min="0" max="99" value="0" inputmode="numeric">
+      <span class="colon">:</span>
+      <input id="tm" type="number" min="0" max="59" value="5" inputmode="numeric">
+      <span class="colon">:</span>
+      <input id="ts" type="number" min="0" max="59" value="0" inputmode="numeric">
+    </div>
+    <div class="actions">
+      <button id="timerBtn" class="primary">开始<span class="kbd">Space</span></button>
+      <button id="timerReset">重置</button>
+      <button id="timerPreset">常用</button>
+    </div>
+    <div id="timerHint">点上面的数字可以设置时长</div>
+  </div>
+
+  <!-- 自习（番茄钟） -->
+  <div class="view" id="pomoView">
+    <div id="pomoPhase">专 注</div>
+    <div id="pomoTime">25:00</div>
+    <div id="pomoSet" class="hide">
+      <input id="pf" type="number" min="1" max="99" value="25" inputmode="numeric">
+      <span>分钟专注</span>
+      <input id="pb" type="number" min="1" max="60" value="5" inputmode="numeric">
+      <span>分钟休息</span>
+    </div>
+    <div class="actions">
+      <button id="pomoBtn" class="primary">开始<span class="kbd">Space</span></button>
+      <button id="pomoSkip">跳过</button>
+      <button id="pomoReset">重置</button>
+    </div>
+    <div id="pomoHint">今天已完成 <b id="pomoCount">0</b> 个番茄 · 点上面的数字改时长</div>
+    <div class="subj-row" id="subjRow">
+      <button data-subj="语文">语文</button><button data-subj="数学">数学</button>
+      <button data-subj="英语">英语</button><button data-subj="物理">物理</button>
+      <button data-subj="化学">化学</button><button data-subj="生物">生物</button>
+    </div>
+  </div>
+</div>
+
+<a id="back" href="./index.html" title="返回班级服务站">← 返回</a>
+<button id="logBtn" title="看看今天用了多久">记录</button>
+
+<aside id="logPanel" aria-hidden="true">
+  <div class="lg-head">
+    <b>使用记录</b>
+    <div class="lg-daywrap">
+      <button class="lg-nav" id="logPrev" title="前一天">‹</button>
+      <span id="logDay">今天</span>
+      <button class="lg-nav" id="logNext" title="后一天">›</button>
+      <label class="lg-cal" title="选日期">
+        <input type="date" id="logPick">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/>
+          <path d="M8 2v4M16 2v4M3 10h18"/></svg>
+      </label>
+    </div>
+    <button class="lg-close" id="logClose" title="关闭">×</button>
+  </div>
+  <div class="lg-tabs" id="logTabs">
+    <button data-lg="list" class="on">记录</button>
+    <button data-lg="sum">总结</button>
+  </div>
+
+  <div id="lgListView" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <div class="lg-sum" id="logSum"></div>
+    <div class="lg-list" id="logList"></div>
+    <div class="lg-foot" id="logFoot"></div>
+  </div>
+
+  <div id="lgSumView" class="sum-body" hidden>
+    <div class="sum-pick" id="sumPick">
+      <button data-range="week">本周</button>
+      <button data-range="month">本月</button>
+      <button data-range="term">本学期</button>
+      <button data-range="custom">自定义</button>
+    </div>
+    <div class="sum-custom" id="sumCustom" hidden>
+      <input type="date" id="sumFrom"><span>~</span><input type="date" id="sumTo">
+    </div>
+    <div id="sumPreview"></div>
+    <div class="sum-actions">
+      <button class="primary" id="sumPng">导出图片</button>
+      <button id="sumTxt">导出文字</button>
+    </div>
+    <div class="lg-foot" id="sumFoot" style="border:none;padding-left:0;padding-right:0"></div>
+  </div>
+</aside>
+<div id="hint">单击屏幕可显示工具栏 · 双击数字进入全屏</div>
+
+<!-- 全屏「时间到」提醒 -->
+<div id="fullAlert" aria-hidden="true"><div id="fullAlertTxt">时间到！</div></div>
+
+<div id="bar">
+  <button id="modeBtn">数字</button>
+  <button id="fontBtn">字体 · 自动</button>
+  <button id="sizeBtn">字号 · 中</button>
+  <button id="bgBtn">背景</button>
+  <button id="h12Btn">24 小时</button>
+  <button id="secBtn" style="display:none">秒 · 显示</button>
+  <button id="fsBtn">全屏</button>
+  <button id="aboutBtn">更多</button>
+</div>
+
+<div id="modeMenu">
+  <button data-m="clock" class="cur">数字</button>
+  <button data-m="flip">翻页</button>
+  <button data-m="stop">秒表</button>
+  <button data-m="timer">计时器</button>
+  <button data-m="pomo">自习</button>
+</div>
+
+<div id="about">
+  <div class="box">
+    <h3>关于全屏时钟</h3>
+    <p>这是一个给班级同学用的在线时钟：数字 / 翻页两种时钟样式，外加秒表、倒计时和自习番茄钟，适合桌面常驻、教室投屏、自习计时。</p>
+    <p>翻页时钟可以关掉秒，只留时分；自习模式会按「专注 → 休息」自动循环，并记下今天完成了几个番茄。</p>
+
+    <div class="ab-sec">
+      <h4>提示音（点一下就能试听）</h4>
+      <div class="snd-row" id="sndRow">
+        <button data-snd="off">关闭</button>
+        <button data-snd="ding">叮</button>
+        <button data-snd="wood">木鱼</button>
+        <button data-snd="bell">铃声</button>
+        <button data-snd="tick">嘀嗒</button>
+      </div>
+    </div>
+
+    <div class="ab-sec">
+      <h4>自定义名称（留空就用默认叫法）</h4>
+      <div class="name-grid">
+        <label><span>数字时钟</span><input data-nm="clock" maxlength="12" placeholder="数字时钟"></label>
+        <label><span>翻页时钟</span><input data-nm="flip" maxlength="12" placeholder="翻页时钟"></label>
+        <label><span>秒表</span><input data-nm="stop" maxlength="12" placeholder="秒表"></label>
+        <label><span>倒计时</span><input data-nm="timer" maxlength="12" placeholder="倒计时"></label>
+        <label><span>自习</span><input data-nm="pomo" maxlength="12" placeholder="自习"></label>
+      </div>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">
+        自习还能直接在界面上点「语数英物化生」选科目，记录会按「名称 · 类型」分开统计。
+      </p>
+    </div>
+    <div class="ab-sec">
+      <h4>时间到提醒文字（留空默认「时间到！」）</h4>
+      <div class="name-grid">
+        <label><span>提醒文字</span><input id="toastInp" maxlength="20" placeholder="时间到！"></label>
+      </div>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">倒计时到点、自习阶段切换时全屏弹出约 3 秒，点一下可提前关闭。</p>
+    </div>
+    <p><b>本页面仿照 <a href="https://yingming006.cn/time/?m=timer" target="_blank" rel="noopener">yingming006.cn/time</a> 制作</b>，功能与操作方式对齐原站，代码为本站自己实现。</p>
+    <p style="font-size:12px;opacity:.7">快捷键：空格 开始 / 暂停 · F 全屏 · Esc 退出全屏 · 1~5 切换模式</p>
+    <button class="close" id="aboutClose">知道了</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+ * 全屏时钟逻辑（ES5，无依赖）
+ * ========================================================================= */
+(function(){
+'use strict';
+
+var CFG_KEY = 'cls_clock_cfg';
+var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5, ts:0,
+  flipSec:true, pf:25, pb:5, pomoDone:0, pomoDate:'',
+  /* v3.10.0：提示音 / 自定义名称 / 自习科目 / 时间到提醒文字 */
+  sound:'ding', names:{}, subj:'', toast:'' };
+try{
+  var saved = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
+  if(saved && typeof saved === 'object'){
+    for(var k in CFG){ if(saved[k] !== undefined) CFG[k] = saved[k]; }
+  }
+}catch(e){}
+function saveCfg(){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); }catch(e){} }
+
+var $ = function(id){ return document.getElementById(id); };
+var pad = function(n, w){ var s = '' + n; while(s.length < (w || 2)) s = '0' + s; return s; };
+
+/* ---------------- 农历（只用来显示「九月十六」） ----------------
+   原来手抄了一张 1900–2100 的压缩表，实测算出来差 10 天（今天应是九月十六，算成初六）。
+   改成用系统自带的农历日历（Intl chinese），Chromium / Safari / 微信内核都准；
+   老设备没有这个日历就干脆不显示，不瞎猜。 */
+function cnDay(n){
+  if(n === 10) return '初十';
+  if(n === 20) return '二十';
+  if(n === 30) return '三十';
+  var a = Math.floor(n / 10), b = n % 10;
+  var pre = ['初', '十', '廿', '三'][a] || '';
+  var suf = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'][b] || '';
+  return pre + suf;
+}
+function lunarText(d){
+  try{
+    var fmt = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long', day: 'numeric' });
+    var raw = fmt.format(d);
+    return raw.replace(/(\d+)/, function(_, n){ return cnDay(parseInt(n, 10)); }).replace(/日$/, '');
+  }catch(e){ return ''; }
+}
+
+/* ---------------- 自定义名称（v3.10.0） ---------------- */
+var MODE_DEF = { clock:'数字时钟', flip:'翻页时钟', stop:'秒表', timer:'倒计时', pomo:'自习' };
+function modeLabel(m){
+  var v = CFG.names && CFG.names[m];
+  return (v && String(v).trim()) || MODE_DEF[m] || '';
+}
+/* 页面上那一行小字：显示用户自己起的名字（没起就不显示） */
+function applyName(){
+  var el = $('modeName');
+  if(!el) return;
+  var m = CFG.mode || 'clock';
+  var t = (CFG.names && String(CFG.names[m] || '').trim()) || '';
+  if(m === 'pomo' && CFG.subj) t = CFG.subj + (t ? ' · ' + t : '');
+  el.textContent = t;
+  var row = $('subjRow');
+  if(row){
+    var bs = row.getElementsByTagName('button');
+    for(var i = 0; i < bs.length; i++){
+      bs[i].className = (bs[i].getAttribute('data-subj') === CFG.subj) ? 'on' : '';
+    }
+  }
+}
+/* 这一段记录该叫什么：科目 + 名称（都没填就空着，前台退回类型名） */
+function segNameOf(){
+  var m = CFG.mode;
+  var nm = (CFG.names && String(CFG.names[m] || '').trim()) || '';
+  if(m === 'pomo'){
+    var parts = [];
+    if(CFG.subj) parts.push(CFG.subj);
+    if(nm) parts.push(nm);
+    return parts.join('·');
+  }
+  return nm;
+}
+
+/* ---------------- 模式切换 ---------------- */
+var MODE_NAME = { clock:'数字', flip:'翻页', stop:'秒表', timer:'计时器', pomo:'自习' };
+var VIEWS = { clock:'clockView', flip:'flipView', stop:'stopView', timer:'timerView', pomo:'pomoView' };
+
+function applyMode(m){
+  CFG.mode = m; saveCfg();
+  for(var k in VIEWS){ if(VIEWS.hasOwnProperty(k)) $(VIEWS[k]).className = 'view' + (k === m ? ' on' : ''); }
+  $('modeBtn').textContent = MODE_NAME[m];
+  var items = $('modeMenu').getElementsByTagName('button');
+  for(var i = 0; i < items.length; i++){
+    items[i].className = (items[i].getAttribute('data-m') === m) ? 'cur' : '';
+  }
+  $('modeMenu').className = '';
+  if(m === 'clock' || m === 'flip') tickClock();
+  if(m === 'timer') refreshTimerInputs();
+  if(m === 'pomo') refreshPomo();
+  applyName();
+  logStart(logModeOf());
+  /* 「秒 · 显示」只在翻页模式下有意义，别的时候不占工具栏位置 */
+  var sb = $('secBtn');
+  if(sb) sb.style.display = (m === 'flip') ? '' : 'none';
+  /* 上面那轮 className 会把 nosec 抹掉，切回翻页时要补上 */
+  if(m === 'flip' && CFG.flipSec === false) applyFlipSec();
+}
+
+/* ---------------- 数字 / 翻页时钟 ---------------- */
+var WEEK = ['日','一','二','三','四','五','六'];
+var lastFlip = { h:'', m:'', s:'' };
+
+function two(n){ return n < 10 ? '0' + n : '' + n; }
+
+function tickClock(){
+  var d = new Date();
+  var h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+  var hh = h;
+  if(CFG.h12){ hh = h % 12; if(hh === 0) hh = 12; }
+
+  if(CFG.mode === 'clock'){
+    $('bigTime').textContent = two(hh) + ':' + two(m) + ':' + two(s);
+    var lu = lunarText(d);
+    $('bigSub').textContent = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'
+      + (lu ? '  ' + lu : '') + '  星期' + WEEK[d.getDay()];
+  }else if(CFG.mode === 'flip'){
+    flipTo('flipH', two(hh), lastFlip.h); lastFlip.h = two(hh);
+    flipTo('flipM', two(m), lastFlip.m); lastFlip.m = two(m);
+    /* 关掉秒就干脆不画：少一次翻页动画，老设备也轻松一点 */
+    if(CFG.flipSec !== false){
+      flipTo('flipS', two(s), lastFlip.s); lastFlip.s = two(s);
+    }
+  }
+}
+
+/* 翻一片：A 片翻旧值上半下去，B 片把新值下半翻上来。
+   0.3s + 0.3s，两端文字在动画开始前就位，所以不会「翻完才跳数」。 */
+/* 测试时可以把它调大，慢动作看两片是不是接力上了 */
+var FLIP_MS = window.__flipMs || 640;
+
+function flipTxt(val){
+  var d = document.createElement('div');
+  d.className = 'txt';
+  d.textContent = val;
+  return d;
+}
+function flipClean(box){
+  var old = box.getElementsByClassName('flap');
+  while(old.length){ box.removeChild(old[0]); }
+}
+function flipTo(id, val, old){
+  var box = $(id);
+  if(!box) return;
+  var top = box.querySelector('.half.top .txt');
+  var bot = box.querySelector('.half.bottom .txt');
+  if(!top || !bot) return;
+
+  if(old === val){
+    if(!top.textContent){ top.textContent = val; bot.textContent = val; }
+    return;
+  }
+  /* 刚打开那一帧：直接落值，不从 00 翻一遍（三张卡同时转会显得乱） */
+  if(old === ''){
+    top.textContent = val;
+    bot.textContent = val;
+    return;
+  }
+
+  flipClean(box);            /* 上一轮没落地就先清掉，别两轮叠一起 */
+  top.textContent = val;     /* 上半：新值（此刻还被旧值上半片盖着） */
+  bot.textContent = old;     /* 下半：旧值（等新值下半片落下来盖住） */
+
+  var a = document.createElement('div');
+  a.className = 'flap a';
+  a.appendChild(flipTxt(old));
+  var b = document.createElement('div');
+  b.className = 'flap b';
+  b.appendChild(flipTxt(val));
+  box.appendChild(a);
+  box.appendChild(b);
+
+  /* 每个卡片一个令牌：万一 0.64 秒内又翻了一次，旧的收尾任务作废 */
+  var tok = (box.__tok || 0) + 1;
+  box.__tok = tok;
+  setTimeout(function(){
+    if(box.__tok !== tok) return;
+    bot.textContent = val;
+    flipClean(box);
+  }, FLIP_MS);
+}
+
+/* ---------------- 秒表 ---------------- */
+var SW = { run:false, t0:0, acc:0, laps:[] };
+function swText(ms){
+  var cs = Math.floor(ms / 10) % 100;
+  var sec = Math.floor(ms / 1000) % 60;
+  var min = Math.floor(ms / 60000);
+  return two(min) + ':' + two(sec) + '<span class="ms">.' + two(cs) + '</span>';
+}
+function swPaint(){
+  $('stopTime').innerHTML = swText(SW.acc + (SW.run ? (nowMs() - SW.t0) : 0));
+}
+function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+function swToggle(){
+  if(SW.run){
+    SW.acc += nowMs() - SW.t0; SW.run = false; $('stopBtn').innerHTML = '继续<span class="kbd">Space</span>';
+  }else{
+    SW.t0 = nowMs(); SW.run = true; $('stopBtn').innerHTML = '暂停<span class="kbd">Space</span>'; beep(0);
+  }
+  swPaint();
+}
+
+/* ---------------- 计时器 ---------------- */
+var TM = { run:false, end:0, left:300000, total:300000 };
+function timerMs(){
+  var h = Math.max(0, Math.min(99, parseInt($('th').value, 10) || 0));
+  var m = Math.max(0, Math.min(59, parseInt($('tm').value, 10) || 0));
+  var s = Math.max(0, Math.min(59, parseInt($('ts').value, 10) || 0));
+  return ((h * 60 + m) * 60 + s) * 1000;
+}
+function tmText(ms){
+  if(ms < 0) ms = 0;
+  var total = Math.ceil(ms / 1000);
+  var h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
+  return two(h) + ':' + two(m) + ':' + two(s);
+}
+function tmPaint(){
+  var left = TM.run ? (TM.end - nowMs()) : TM.left;
+  var el = $('timerTime');
+  el.textContent = tmText(left);
+  el.className = (left <= 10000 && left > 0) ? 'warn' : '';
+  if(TM.run && left <= 0) tmDone();
+}
+function refreshTimerInputs(){
+  $('th').value = CFG.th; $('tm').value = CFG.tm; $('ts').value = CFG.ts;
+  TM.left = timerMs(); TM.total = TM.left;
+  tmPaint();
+}
+function tmToggle(){
+  if(TM.run){
+    TM.left = Math.max(0, TM.end - nowMs()); TM.run = false;
+    $('timerBtn').innerHTML = '继续<span class="kbd">Space</span>';
+  }else{
+    if(TM.left <= 0) TM.left = timerMs() || 300000;
+    TM.total = TM.left;
+    TM.end = nowMs() + TM.left; TM.run = true;
+    $('timerBtn').innerHTML = '暂停<span class="kbd">Space</span>';
+    beep(0);
+  }
+  tmPaint();
+}
+function tmDone(){
+  TM.run = false; TM.left = 0;
+  $('timerBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  tmPaint();
+  var n = 0;
+  var iv = setInterval(function(){
+    beep(); n++;
+    if(n >= 3) clearInterval(iv);
+  }, 700);
+  if(navigator.vibrate){ try{ navigator.vibrate([300, 150, 300, 150, 300]); }catch(e){} }
+  fullAlert();              /* 全屏「时间到」提醒 */
+}
+
+/* ---------------- 自习（番茄钟） ----------------
+   v3.9.24（站主）：「可以把番茄钟这些功能挪过来，这就是自习的一个时钟倒计时」。
+   专注 → 休息 → 专注…，每 4 个番茄给一次长休息；阶段结束自动进下一段并继续走，
+   所以打开就能一直自习。今天做完几个记在本地，跨天自己清零。 */
+var PM = { run:false, end:0, left:0, phase:'focus', paused:false };
+
+function todayKey(){
+  var d = new Date();
+  return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate());
+}
+function pomoDoneToday(){
+  if(CFG.pomoDate !== todayKey()){ CFG.pomoDate = todayKey(); CFG.pomoDone = 0; saveCfg(); }
+  return CFG.pomoDone || 0;
+}
+function phaseMin(phase){
+  var f = Math.max(1, Math.min(99, parseInt(CFG.pf, 10) || 25));
+  var b = Math.max(1, Math.min(60, parseInt(CFG.pb, 10) || 5));
+  if(phase === 'focus') return f;
+  if(phase === 'long') return Math.max(10, b * 3);
+  return b;
+}
+function phaseMs(phase){ return phaseMin(phase) * 60000; }
+
+function pmText(ms){
+  if(ms < 0) ms = 0;
+  var total = Math.ceil(ms / 1000);
+  var h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
+  return h ? (h + ':' + two(m) + ':' + two(s)) : (two(m) + ':' + two(s));
+}
+function pmBtnLabel(txt){
+  var b = $('pomoBtn');
+  if(b) b.innerHTML = txt + '<span class="kbd">Space</span>';
+}
+function pmPaintPhase(){
+  var el = $('pomoPhase');
+  if(!el) return;
+  el.textContent = (PM.phase === 'focus') ? '专注' : (PM.phase === 'long' ? '长休息' : '休息');
+  el.className = (PM.phase === 'focus') ? '' : (PM.phase === 'long' ? 'done' : 'rest');
+}
+function pmPaintCount(){
+  var el = $('pomoCount');
+  if(el) el.textContent = pomoDoneToday();
+}
+function pmPaint(){
+  var el = $('pomoTime');
+  if(!el) return;
+  var left = PM.run ? (PM.end - nowMs()) : PM.left;
+  el.textContent = pmText(left);
+  /* 只有「按过开始又暂停」才变灰；刚进来还没开始，数字要实的 */
+  el.className = (PM.paused ? 'paused' : '') + (left <= 10000 && left > 0 ? ' warn' : '');
+  if(PM.run && left <= 0) pmDone();
+}
+function pmFlash(){
+  var el = $('pomoTime');
+  if(!el) return;
+  el.className = el.className.replace(/\s*flash/g, '') + ' flash';
+  setTimeout(function(){ el.className = el.className.replace(/\s*flash/g, ''); }, 2400);
+}
+function refreshPomo(){
+  $('pf').value = phaseMin('focus');
+  $('pb').value = phaseMin('rest');
+  if(!PM.run && !PM.left) PM.left = phaseMs(PM.phase);
+  pmPaint(); pmPaintPhase(); pmPaintCount();
+}
+function pomoToggle(){
+  if(PM.run){
+    PM.left = Math.max(0, PM.end - nowMs());
+    PM.run = false;
+    PM.paused = true;
+    pmBtnLabel('继续');
+  }else{
+    if(PM.left <= 0) PM.left = phaseMs(PM.phase);
+    PM.end = nowMs() + PM.left;
+    PM.run = true;
+    PM.paused = false;
+    pmBtnLabel('暂停');
+  }
+  pmPaint();
+  logPomoPhase();
+}
+/* 进入下一个阶段：专注做完才记一个番茄，每 4 个换长休息 */
+function pmNext(skip){
+  if(PM.phase === 'focus'){
+    if(!skip){
+      CFG.pomoDone = pomoDoneToday() + 1;
+      CFG.pomoDate = todayKey();
+      saveCfg();
+      logPomo(CFG.pomoDone);
+    }
+    PM.phase = (!skip && CFG.pomoDone % 4 === 0) ? 'long' : 'rest';
+  }else{
+    PM.phase = 'focus';
+  }
+  PM.left = phaseMs(PM.phase);
+  PM.run = false;
+  pmPaintPhase();
+  pmPaintCount();
+  logPomoPhase();          /* 阶段结束：上一段收账 */
+}
+function pmJump(auto){
+  PM.end = nowMs() + PM.left;
+  PM.run = true;
+  PM.paused = false;
+  pmBtnLabel('暂停');
+  pmPaint();
+  logPomoPhase();
+}
+function pmDone(){
+  PM.run = false;
+  PM.left = 0;
+  pmPaint();
+  if(navigator.vibrate){ try{ navigator.vibrate([260, 140, 260, 140, 260]); }catch(e){} }
+  beep();                 /* 阶段结束的提示音（在声音设置里选） */
+  pmNext(false);          /* 切到下一阶段 */
+  pmJump(true);           /* 接着开始，不用再按一次 */
+  pmFlash();              /* 放在最后：前面几次 pmPaint 会重置 className */
+  fullAlert();            /* 全屏「时间到」提醒（每段切换都弹） */
+}
+/* 点数字改时长 */
+function togglePomoSet(e){
+  if(e) e.stopPropagation();
+  var box = $('pomoSet');
+  if(!box) return;
+  box.className = (box.className.indexOf('hide') >= 0) ? '' : 'hide';
+}
+
+/* ---------------- 使用记录（本地 + 云端） ----------------
+   v3.9.25（站主）：
+   「前端我可以看到什么时候从几点自习到几点，就是用了多久，每次用时候干嘛」
+   「我觉得放在页面最右边可以看到历史记录，这样最好看一点」
+   「这个也要同步上云」「后台也可以看到具体是谁干嘛」
+
+   做法：页面每切换一次模式就切一段，段落结束写进
+   localStorage 的 cls_clock_log_<日期>（同一个键同时同步到 /api/data）。
+   结构 { v:2, pomo:番茄数, segs:[{m:模式, s:起, e:止, d:秒}] }。 */
+var LOG_PREFIX = 'cls_clock_log_';
+var CLK_API = 'https://api.classsite.dpdns.org';
+
+var LOG = {
+  day: '',            /* 正在记录的日期（本地时间的 YYYY-MM-DD） */
+  data: { v: 2, pomo: 0, segs: [] },
+  cur: null,          /* 正在计时的那一段 { m, s } */
+  view: '',           /* 抽屉里正在看哪一天 */
+  timer: null,        /* 推送防抖 */
+  queue: {},
+  cloud: ''           /* '' | 'local' | 'ok' | 'fail' */
+};
+
+function pad2(n){ return (n < 10 ? '0' : '') + n; }
+/* 拼 HTML 时用：记录里的名称是用户自己起的，必须转义 */
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function dkey(ts){
+  var d = new Date(ts || Date.now());
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+function hm(ts){ var d = new Date(ts); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+function durText(sec){
+  sec = Math.max(0, Math.round(sec));
+  if(sec < 60) return sec + ' 秒';
+  var m = Math.round(sec / 60);
+  if(m < 60) return m + ' 分钟';
+  var h = Math.floor(m / 60), mm = m % 60;
+  return h + ' 小时' + (mm ? ' ' + mm + ' 分' : '');
+}
+function logSegOk(x){
+  return x && x.m && Number(x.s) > 0 && Number(x.d) >= 3;
+}
+function logLoad(day){
+  var raw = null;
+  try{ raw = JSON.parse(localStorage.getItem(LOG_PREFIX + day) || 'null'); }catch(e){}
+  if(Array.isArray(raw)) return { v: 2, pomo: 0, segs: raw.filter(logSegOk) };
+  if(raw && Array.isArray(raw.segs)) return { v: 2, pomo: Number(raw.pomo) || 0, segs: raw.segs.filter(logSegOk) };
+  return { v: 2, pomo: 0, segs: [] };
+}
+function logEnsure(){
+  var k = dkey();
+  if(k !== LOG.day){ LOG.day = k; LOG.data = logLoad(k); }
+  return LOG.data;
+}
+function logSaveLocal(day, data){
+  try{ localStorage.setItem(LOG_PREFIX + day, JSON.stringify(data)); }catch(e){}
+}
+
+/* ---- 云端 ---- */
+function clkToken(){
+  try{
+    var a = JSON.parse(localStorage.getItem('cls_auth') || 'null');
+    return (a && a.token) || '';
+  }catch(e){ return ''; }
+}
+function logCloudSet(st){
+  if(LOG.cloud === st) return;
+  LOG.cloud = st;
+  logFootPaint();
+}
+function logPush(day, data, now){
+  var t = clkToken();
+  if(!t){ logCloudSet('local'); return; }
+  LOG.queue[LOG_PREFIX + day] = data;
+  if(now){ flushLog(); return; }
+  if(LOG.timer) clearTimeout(LOG.timer);
+  LOG.timer = setTimeout(flushLog, 2500);
+}
+function flushLog(){
+  if(LOG.timer){ clearTimeout(LOG.timer); LOG.timer = null; }
+  var t = clkToken();
+  var items = LOG.queue;
+  LOG.queue = {};
+  if(!t || !Object.keys(items).length) return;
+  fetch(CLK_API + '/api/data', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
+    body: JSON.stringify({ items: items }),
+    keepalive: true
+  }).then(function(r){ return r.json().catch(function(){ return {}; }); })
+    .then(function(j){ logCloudSet(j && j.ok === false ? 'fail' : 'ok'); })
+    .catch(function(){ logCloudSet('fail'); });
+}
+/* 打开抽屉时把云端那份拉下来合并（换设备也能看到） */
+function logPull(day, done){
+  var t = clkToken();
+  if(!t){ logCloudSet('local'); done && done(); return; }
+  fetch(CLK_API + '/api/data?key=' + encodeURIComponent(LOG_PREFIX + day), {
+    headers: { 'Authorization': 'Bearer ' + t }
+  }).then(function(r){ return r.json(); }).then(function(j){
+    var v = j && j.value;
+    if(!v) { logCloudSet('ok'); done && done(); return; }
+    var cloud = Array.isArray(v) ? { v: 2, pomo: 0, segs: v } : { v: 2, pomo: Number(v.pomo) || 0, segs: v.segs || [] };
+    var local = logLoad(day);
+    var seen = {}, out = [];
+    local.segs.concat(cloud.segs.filter(logSegOk)).forEach(function(x){
+      if(!logSegOk(x)) return;
+      var k = x.m + '@' + x.s;
+      if(seen[k]) return;
+      seen[k] = 1; out.push(x);
+    });
+    out.sort(function(a, b){ return a.s - b.s; });
+    var merged = { v: 2, pomo: Math.max(local.pomo || 0, cloud.pomo || 0), segs: out };
+    logSaveLocal(day, merged);
+    if(day === LOG.day) LOG.data = merged;
+    logCloudSet('ok');
+    done && done();
+  }).catch(function(){ logCloudSet('fail'); done && done(); });
+}
+
+/* 一次性把云端所有天的记录合并进本地（生成报告前用，避免逐天请求） */
+function logPullAll(done){
+  var t = clkToken();
+  if(!t){ logCloudSet('local'); done && done(); return; }
+  fetch(CLK_API + '/api/data', { headers: { 'Authorization': 'Bearer ' + t } })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      var items = (j && j.items) || {};
+      Object.keys(items).forEach(function(k){
+        if(k.indexOf(LOG_PREFIX) !== 0) return;
+        var day = k.slice(LOG_PREFIX.length);
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+        var v = items[k];
+        var cloud = Array.isArray(v) ? { pomo: 0, segs: v } : { pomo: Number(v.pomo) || 0, segs: v.segs || [] };
+        var local = logLoad(day);
+        var seen = {}, out = [];
+        local.segs.concat(cloud.segs).forEach(function(x){
+          if(!logSegOk(x)) return;
+          var key = x.m + '@' + x.s;
+          if(seen[key]) return;
+          seen[key] = 1; out.push(x);
+        });
+        out.sort(function(a, b){ return a.s - b.s; });
+        logSaveLocal(day, { v: 2, pomo: Math.max(local.pomo || 0, cloud.pomo || 0), segs: out });
+      });
+      if(LOG.day) LOG.data = logLoad(LOG.day);
+      logCloudSet('ok');
+      done && done();
+    })
+    .catch(function(){ logCloudSet('fail'); done && done(); });
+}
+
+/* ---- 记账 ---- */
+function logWrite(day, data){ logSaveLocal(day, data); logPush(day, data); }
+
+/** 现在该记哪个模式：自习按阶段细分，其它就是模式名 */
+function logModeOf(){
+  if(CFG.mode === 'pomo') return 'pomo:' + PM.phase;
+  return CFG.mode;
+}
+/** 自习开始 / 暂停 / 换阶段时同步记账 */
+function logPomoPhase(){
+  if(CFG.mode !== 'pomo') return;
+  if(PM.run) logStart('pomo:' + PM.phase);
+  else logStop();
+}
+
+function logStart(mode){
+  logEnsure();
+  var nm = segNameOf();
+  /* 名称变了也要切一段：换了科目 / 改了名字，算另一件事 */
+  if(LOG.cur && LOG.cur.m === mode && (LOG.cur.n || '') === nm) return;
+  logStop();
+  LOG.cur = { m: mode, s: Date.now(), n: nm };
+}
+function logStop(){
+  if(!LOG.cur) return;
+  var c = LOG.cur;
+  LOG.cur = null;
+  var now = Date.now();
+  var d = Math.round((now - c.s) / 1000);
+  if(d < 3) return;                       /* 随手点一下不算 */
+  var day = dkey(c.s);                    /* 归到「开始那一刻」所在的日期 */
+  var data = (day === LOG.day) ? LOG.data : logLoad(day);
+  var seg = { m: c.m, s: c.s, e: now, d: d };
+  if(c.n) seg.n = c.n;
+  data.segs.push(seg);
+  if(data.segs.length > 600) data.segs = data.segs.slice(-600);
+  if(day === LOG.day) LOG.data = data;
+  logWrite(day, data);
+}
+function logPomo(n){
+  n = Number(n) || 0;
+  if(n <= 0) return;          /* 0 个就别写，免得后台多出一堆空记录 */
+  var data = logEnsure();
+  if(data.pomo === n) return;
+  data.pomo = n;
+  logWrite(LOG.day, data);
+}
+
+/* ---------------- 总结 / 报告（v3.10.0） ----------------
+   站主：「记录的前台内部新增总结功能，可以总结时间段的时长，还可以快捷选择
+   周报 / 月报 / 学期报，这些文件均可以以文字或图片的形式导出，包含总时长、
+   对应每个分区时长、每个科目的总时长；用户自定义的归到「其他」；显示哪天用得最久；
+   生成前可以实时预览并修改，底部留几行让用户写想法；样式至少包含班徽、标题、
+   导出日期、导出时间段」 */
+var SUM = { range: 'week', from: '', to: '', segs: [], stats: null, title: '', note: '' };
+
+function sumTermStart(){
+  var d = new Date(), m = d.getMonth() + 1, y = d.getFullYear();
+  if(m >= 9) return y + '-09-01';
+  if(m <= 1) return (y - 1) + '-09-01';
+  return y + '-02-01';
+}
+function sumRange(){
+  var today = dkey();
+  var d = new Date();
+  if(SUM.range === 'custom'){
+    var f = SUM.from || today, t = SUM.to || today;
+    return (f <= t) ? { from: f, to: t } : { from: t, to: f };
+  }
+  if(SUM.range === 'month'){
+    var p = function(n){ return (n < 10 ? '0' : '') + n; };
+    return { from: d.getFullYear() + '-' + p(d.getMonth() + 1) + '-01', to: today };
+  }
+  if(SUM.range === 'term') return { from: sumTermStart(), to: today };
+  /* 本周：从周一起算 */
+  var w = new Date(d.getTime());
+  var dow = (w.getDay() + 6) % 7;
+  w.setDate(w.getDate() - dow);
+  return { from: dkey(w.getTime()), to: today };
+}
+/* 把区间里每天的数据拼起来（同时把每天的小番茄数加起来） */
+function logRange(from, to){
+  var out = { segs: [], pomo: 0 };
+  var d = new Date(from + 'T00:00:00');
+  var end = new Date(to + 'T00:00:00');
+  var n = 0;
+  while(d <= end && n++ < 400){
+    var k = dkey(d.getTime());
+    var data = logLoad(k);
+    (data.segs || []).forEach(function(x){
+      if(!logSegOk(x)) return;
+      out.segs.push({ m: x.m, s: x.s, e: x.e, d: x.d, n: x.n || '' });
+    });
+    out.pomo += Number(data.pomo) || 0;
+    d.setDate(d.getDate() + 1);
+  }
+  /* 正在跑的那一段也要算进去，否则刚用了几分钟就看「还没有记录」 */
+  if(LOG.cur){
+    var cd = dkey(LOG.cur.s);
+    if(cd >= from && cd <= to){
+      var dur = Math.round((Date.now() - LOG.cur.s) / 1000);
+      if(dur >= 3) out.segs.push({ m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: dur, n: LOG.cur.n || '' });
+    }
+  }
+  return out;
+}
+
+var SUBJ_LIST = ['语文', '数学', '英语', '物理', '化学', '生物'];
+function sumStats(segs, pomo){
+  var focus = 0, rest = 0, other = 0, total = 0;
+  var byName = {}, bySubj = {}, byDay = {};
+  segs.forEach(function(x){
+    var d = Number(x.d) || 0;
+    total += d;
+    if(x.m === 'pomo:focus') focus += d;
+    else if(x.m === 'pomo:rest' || x.m === 'pomo:long') rest += d;
+    else other += d;
+    var t = segName(x.m);
+    var key = x.n ? (x.n + '·' + t) : t;
+    byName[key] = (byName[key] || 0) + d;
+    if(x.m === 'pomo:focus'){
+      var s0 = (x.n || '').split('·')[0];
+      var sb = (SUBJ_LIST.indexOf(s0) >= 0) ? s0 : '其他';
+      bySubj[sb] = (bySubj[sb] || 0) + d;
+    }
+    var day = dkey(x.s);
+    byDay[day] = (byDay[day] || 0) + d;
+  });
+  var bestDay = null;
+  Object.keys(byDay).forEach(function(k){
+    if(!bestDay || byDay[k] > bestDay.sec) bestDay = { day: k, sec: byDay[k] };
+  });
+  return {
+    total: total, focus: focus, rest: rest, other: other, pomo: pomo || 0,
+    byName: byName, bySubj: bySubj, byDay: byDay, bestDay: bestDay,
+    n: segs.length
+  };
+}
+function sumDayText(k){
+  var p = String(k).split('-');
+  return Number(p[1]) + ' 月 ' + Number(p[2]) + ' 日';
+}
+
+/* ---- 预览 ---- */
+function sumRender(){
+  var box = $('sumPreview');
+  if(!box) return;
+  var r = sumRange();
+  SUM.from = r.from; SUM.to = r.to;
+  var got = logRange(r.from, r.to);
+  SUM.segs = got.segs;
+  var st = SUM.stats = sumStats(got.segs, got.pomo);
+
+  if(!st.n){
+    box.innerHTML = '<div class="sum-empty">这段时间还没有记录。<br>'
+      + '换一个区间看看，或者先去用一会儿时钟（自习、倒计时、秒表都会记）。</div>';
+    return;
+  }
+  if(!SUM.title){
+    var m0 = Number(String(r.from).slice(5, 7));
+    SUM.title = (SUM.range === 'week' ? '本周学习报告'
+      : SUM.range === 'month' ? m0 + ' 月学习报告'
+      : SUM.range === 'term' ? '本学期学习报告' : '学习报告');
+  }
+
+  var rows = function(obj, limit){
+    var keys = Object.keys(obj).sort(function(a, b){ return obj[b] - obj[a]; });
+    if(limit) keys = keys.slice(0, limit);
+    if(!keys.length) return '<div class="sp-row"><span>还没有数据</span><span>—</span></div>';
+    return keys.map(function(k){
+      return '<div class="sp-row"><span>' + esc(k) + '</span><span>' + durText(obj[k]) + '</span></div>';
+    }).join('');
+  };
+
+  box.innerHTML = '<div class="sum-paper" id="sumPaper">'
+    + '<div class="sp-head">'
+    +   '<img src="./badge.png" alt="" onerror="this.style.display=\'none\'">'
+    +   '<input class="sp-title" id="sumTitle" maxlength="24" value="' + esc(SUM.title) + '">'
+    + '</div>'
+    + '<div class="sp-range">' + sumDayText(r.from) + ' ~ ' + sumDayText(r.to)
+    +   ' · 导出 ' + new Date().getFullYear() + '-' + pad2(new Date().getMonth() + 1) + '-' + pad2(new Date().getDate())
+    +   ' ' + pad2(new Date().getHours()) + ':' + pad2(new Date().getMinutes()) + '</div>'
+    + '<div class="sp-nums">'
+    +   '<div class="sp-num"><i>总时长</i><b>' + durText(st.total) + '</b></div>'
+    +   '<div class="sp-num"><i>自习</i><b>' + durText(st.focus) + '</b></div>'
+    +   '<div class="sp-num"><i>番茄</i><b>' + st.pomo + ' 个</b></div>'
+    + '</div>'
+    + '<h5>按事项</h5>' + rows(st.byName)
+    + (Object.keys(st.bySubj).length ? '<h5>按科目</h5>' + rows(st.bySubj) : '')
+    + '<h5>用得最久的一天</h5>'
+    + '<div class="sp-row"><span>' + (st.bestDay ? sumDayText(st.bestDay.day) : '—') + '</span><span>'
+    +   (st.bestDay ? durText(st.bestDay.sec) : '—') + '</span></div>'
+    + '<h5>想说的话（可留空）</h5>'
+    + '<textarea class="sp-note" id="sumNote" maxlength="200" placeholder="写点给自己的话，会一起印在报告上…">'
+    +   esc(SUM.note) + '</textarea>'
+    + '<div class="sp-foot"><span>班级服务站 · 全屏时钟</span><span>共 ' + st.n + ' 段记录</span></div>'
+    + '</div>';
+
+  var ti = $('sumTitle'), no = $('sumNote');
+  if(ti) ti.oninput = function(){ SUM.title = ti.value.slice(0, 24); };
+  if(no) no.oninput = function(){ SUM.note = no.value.slice(0, 200); };
+}
+
+/* ---- 导出文字 ---- */
+function sumText(){
+  var st = SUM.stats;
+  if(!st || !st.n) return '';
+  var L = [];
+  L.push(SUM.title || '学习报告');
+  L.push(sumDayText(SUM.from) + ' ~ ' + sumDayText(SUM.to));
+  L.push('');
+  L.push('总时长：' + durText(st.total));
+  L.push('自习：' + durText(st.focus) + '　休息：' + durText(st.rest) + '　番茄：' + st.pomo + ' 个');
+  L.push('');
+  L.push('【按事项】');
+  Object.keys(st.byName).sort(function(a, b){ return st.byName[b] - st.byName[a]; })
+    .forEach(function(k){ L.push('  ' + k + '：' + durText(st.byName[k])); });
+  if(Object.keys(st.bySubj).length){
+    L.push('');
+    L.push('【按科目】');
+    SUBJ_LIST.concat(['其他']).forEach(function(k){
+      if(st.bySubj[k]) L.push('  ' + k + '：' + durText(st.bySubj[k]));
+    });
+  }
+  L.push('');
+  L.push('用得最久的一天：' + (st.bestDay ? sumDayText(st.bestDay.day) + '（' + durText(st.bestDay.sec) + '）' : '—'));
+  if(SUM.note){
+    L.push('');
+    L.push('【想说的话】');
+    L.push(SUM.note);
+  }
+  L.push('');
+  L.push('—— 班级服务站 · 全屏时钟　导出于 ' + dkey() + ' ' + pad2(new Date().getHours()) + ':' + pad2(new Date().getMinutes()));
+  return L.join('\n');
+}
+
+/* ---- 导出图片 ---- */
+function sumPng(){
+  var st = SUM.stats;
+  if(!st || !st.n){ toast('这段时间没有记录，先攒点数据吧'); return; }
+  var W = 760, P = 40;
+  var lines = [];   /* 每行 {h} 累加高度 */
+  var body = [];
+  var push = function(h){ body.push(h); };
+
+  var nameKeys = Object.keys(st.byName).sort(function(a, b){ return st.byName[b] - st.byName[a]; }).slice(0, 12);
+  var subjKeys = SUBJ_LIST.concat(['其他']).filter(function(k){ return st.bySubj[k]; });
+  var noteLines = SUM.note ? wrapText(SUM.note, 30) : [];
+
+  var H = P + 56 + 24 + 12 + 72 + 26 + nameKeys.length * 24 + 26
+    + (subjKeys.length ? 26 + subjKeys.length * 24 : 0)
+    + 26 + 26 + (SUM.note ? (26 + noteLines.length * 22) : 0) + 44 + P;
+
+  var cv = document.createElement('canvas');
+  var scale = 2;
+  cv.width = W * scale; cv.height = H * scale;
+  var ctx = cv.getContext('2d');
+  ctx.scale(scale, scale);
+  ctx.fillStyle = '#fdfbf7';
+  ctx.fillRect(0, 0, W, H);
+  /* 顶部一条品牌色 */
+  ctx.fillStyle = '#c2410c';
+  ctx.fillRect(0, 0, W, 5);
+
+  var x = P, y = P + 6;
+  /* 班徽 */
+  ctx.fillStyle = '#f2e9df';
+  roundRect(ctx, x, y, 46, 46, 12); ctx.fill();
+  var img = new Image();
+  var drawRest = function(){
+    var tx = x + 58;
+    ctx.fillStyle = '#1f1a15';
+    ctx.font = '800 22px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText(SUM.title || '学习报告', tx, y + 4);
+    ctx.fillStyle = '#8a7a6a';
+    ctx.font = '400 12px "PingFang SC","Microsoft YaHei",sans-serif';
+    var now = new Date();
+    ctx.fillText(sumDayText(SUM.from) + ' ~ ' + sumDayText(SUM.to) + ' · 导出 '
+      + dkey() + ' ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes()), tx, y + 32);
+    y += 56 + 18;
+
+    ctx.strokeStyle = '#ece2d8';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke();
+    y += 18;
+
+    /* 三个数字 */
+    var nums = [
+      { k: '总时长', v: durText(st.total) },
+      { k: '自习', v: durText(st.focus) },
+      { k: '番茄', v: st.pomo + ' 个' }
+    ];
+    var cw = (W - P * 2 - 20) / 3;
+    nums.forEach(function(o, i){
+      var bx = P + i * (cw + 10);
+      ctx.fillStyle = '#fff';
+      roundRect(ctx, bx, y, cw, 62, 12); ctx.fill();
+      ctx.strokeStyle = '#f0e7de'; roundRect(ctx, bx, y, cw, 62, 12); ctx.stroke();
+      ctx.fillStyle = '#9a8a7a';
+      ctx.font = '400 11px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText(o.k, bx + 12, y + 12);
+      ctx.fillStyle = '#b45309';
+      ctx.font = '800 19px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText(o.v, bx + 12, y + 30);
+    });
+    y += 62 + 26;
+
+    /* 列表 */
+    var section = function(title, pairs){
+      ctx.fillStyle = '#9a8a7a';
+      ctx.font = '800 11.5px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText(title, P, y);
+      y += 24;
+      ctx.font = '400 13px "PingFang SC","Microsoft YaHei",sans-serif';
+      pairs.forEach(function(p){
+        ctx.fillStyle = '#2a2118';
+        ctx.fillText(p[0], P + 2, y);
+        ctx.fillStyle = '#6b5443';
+        var w = ctx.measureText(p[1]).width;
+        ctx.fillText(p[1], W - P - 2 - w, y);
+        y += 24;
+      });
+      y += 2;
+    };
+    section('按事项', nameKeys.map(function(k){ return [k, durText(st.byName[k])]; }));
+    if(subjKeys.length) section('按科目', subjKeys.map(function(k){ return [k, durText(st.bySubj[k])]; }));
+    section('用得最久的一天', [[st.bestDay ? sumDayText(st.bestDay.day) : '—',
+      st.bestDay ? durText(st.bestDay.sec) : '—']]);
+
+    if(noteLines.length){
+      ctx.fillStyle = '#9a8a7a';
+      ctx.font = '800 11.5px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('想说的话', P, y);
+      y += 24;
+      ctx.fillStyle = '#3a3128';
+      ctx.font = '400 13px "PingFang SC","Microsoft YaHei",sans-serif';
+      noteLines.forEach(function(t){ ctx.fillText(t, P + 2, y); y += 22; });
+      y += 2;
+    }
+
+    /* 页脚 */
+    y = H - P - 10;
+    ctx.strokeStyle = '#ece2d8';
+    ctx.beginPath(); ctx.moveTo(P, y - 8); ctx.lineTo(W - P, y - 8); ctx.stroke();
+    ctx.fillStyle = '#a89a8c';
+    ctx.font = '400 11px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('班级服务站 · 全屏时钟', P, y + 2);
+    var w2 = ctx.measureText('共 ' + st.n + ' 段记录').width;
+    ctx.fillText('共 ' + st.n + ' 段记录', W - P - w2, y + 2);
+
+    cv.toBlob(function(blob){
+      if(!blob) return;
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = (SUM.title || '学习报告') + '_' + SUM.from + '_' + SUM.to + '.png';
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 1200);
+    }, 'image/png');
+  };
+  img.onload = function(){ ctx.drawImage(img, x, y, 46, 46); drawRest(); };
+  img.onerror = function(){ drawRest(); };
+  img.src = './badge.png?' + Date.now();
+}
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function wrapText(t, per){
+  var out = [], line = '';
+  String(t).split('\n').forEach(function(seg){
+    line = '';
+    for(var i = 0; i < seg.length; i++){
+      line += seg.charAt(i);
+      if(line.length >= per){ out.push(line); line = ''; }
+    }
+    if(line) out.push(line);
+  });
+  return out;
+}
+
+/* ---- 总结页交互 ---- */
+function sumBind(){
+  var tabs = $('logTabs');
+  if(tabs){
+    Array.prototype.forEach.call(tabs.getElementsByTagName('button'), function(b){
+      b.onclick = function(e){
+        if(e && e.stopPropagation) e.stopPropagation();
+        var v = b.getAttribute('data-lg');
+        Array.prototype.forEach.call(tabs.getElementsByTagName('button'), function(x){
+          x.className = (x === b) ? 'on' : '';
+        });
+        $('lgListView').hidden = (v !== 'list');
+        $('lgSumView').hidden = (v !== 'sum');
+        if(v === 'sum'){ sumRefresh(); }
+      };
+    });
+  }
+  var pick = $('sumPick');
+  if(pick){
+    Array.prototype.forEach.call(pick.getElementsByTagName('button'), function(b){
+      b.onclick = function(e){
+        if(e && e.stopPropagation) e.stopPropagation();
+        SUM.range = b.getAttribute('data-range');
+        SUM.title = '';
+        Array.prototype.forEach.call(pick.getElementsByTagName('button'), function(x){
+          x.className = (x.getAttribute('data-range') === SUM.range) ? 'on' : '';
+        });
+        $('sumCustom').hidden = (SUM.range !== 'custom');
+        if(SUM.range === 'custom'){
+          if(!SUM.from) SUM.from = dkey();
+          if(!SUM.to) SUM.to = dkey();
+          $('sumFrom').value = SUM.from;
+          $('sumTo').value = SUM.to;
+        }
+        sumRefresh();
+      };
+    });
+  }
+  if($('sumFrom')) $('sumFrom').onchange = function(){ SUM.from = this.value; sumRefresh(); };
+  if($('sumTo')) $('sumTo').onchange = function(){ SUM.to = this.value; sumRefresh(); };
+  if($('sumPng')) $('sumPng').onclick = function(e){ if(e) e.stopPropagation(); sumPng(); };
+  if($('sumTxt')) $('sumTxt').onclick = function(e){
+    if(e) e.stopPropagation();
+    var t = sumText();
+    if(!t){ toast('这段时间没有记录'); return; }
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(t).then(function(){ toast('文字已复制'); },
+          function(){ toast('复制失败，可以长按选择'); });
+      }else throw new Error('no clipboard');
+    }catch(e2){
+      /* 老内核：弹出来让用户自己复制 */
+      var ta = document.createElement('textarea');
+      ta.value = t; ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(ta); ta.select();
+      try{ document.execCommand('copy'); toast('文字已复制'); }
+      catch(e3){ toast('复制失败，请手动选择'); }
+      ta.remove();
+    }
+  };
+}
+function sumRefresh(){
+  /* 先用本机的数据出图（不等网络），云端那份回来了再刷一次 */
+  try{ sumRender(); }catch(e){}
+  setSumFoot('正在汇总云端…');
+  try{
+    logPullAll(function(){
+      try{ sumRender(); }catch(e){}
+      var st = SUM.stats;
+      setSumFoot((st && st.n)
+        ? '共 ' + st.n + ' 段 · 改标题和留言会立刻反映到导出的图片里'
+        : '这段时间还没有记录 · 记录会自动按名称归类');
+    });
+  }catch(e){
+    var st2 = SUM.stats;
+    setSumFoot((st2 && st2.n) ? '共 ' + st2.n + ' 段' : '这段时间还没有记录');
+  }
+}
+function setSumFoot(t){
+  var el = $('sumFoot');
+  if(el) el.textContent = t;
+}
+
+/* ---- 抽屉 ---- */
+function logMerged(day){
+  var data = (day === LOG.day) ? LOG.data : logLoad(day);
+  var segs = data.segs.slice();
+  /* 正在跑的那一段也先算进去，点开就能看到实时累计 */
+  if(day === LOG.day && LOG.cur){
+    segs.push({ m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: Math.round((Date.now() - LOG.cur.s) / 1000) });
+  }
+  var out = [];
+  segs.filter(logSegOk).sort(function(a, b){ return a.s - b.s; }).forEach(function(x){
+    var last = out[out.length - 1];
+    if(last && last.m === x.m && x.s - last.e < 120000){
+      last.e = x.e;
+      last.d = Math.round((last.e - last.s) / 1000);
+    }else{
+      out.push({ m: x.m, s: x.s, e: x.e, d: x.d });
+    }
+  });
+  return { pomo: data.pomo || 0, segs: out };
+}
+function modeName(m){
+  return MODE_NAME[String(m).indexOf('pomo:') === 0 ? 'pomo' : m] || '时钟';
+}
+function segName(m){
+  var map = { 'pomo:focus': '专注', 'pomo:rest': '休息', 'pomo:long': '长休息' };
+  if(map[m]) return map[m];
+  return { clock: '数字时钟', flip: '翻页时钟', stop: '秒表', timer: '倒计时', pomo: '自习' }[m] || m;
+}
+function segTag(m){
+  if(m === 'pomo:focus') return 'focus';
+  if(m === 'pomo:rest' || m === 'pomo:long') return 'rest';
+  return '';
+}
+function logDayLabel(day){
+  var today = dkey();
+  if(day === today) return '今天';
+  var y = new Date(); y.setDate(y.getDate() - 1);
+  if(day === dkey(y.getTime())) return '昨天';
+  var p = day.split('-');
+  return Number(p[1]) + ' 月 ' + Number(p[2]) + ' 日';
+}
+function logRender(){
+  var day = LOG.view || dkey();
+  var m = logMerged(day);
+  var focus = 0, rest = 0, other = 0, otherMap = {};
+  m.segs.forEach(function(x){
+    if(x.m === 'pomo:focus') focus += x.d;
+    else if(x.m === 'pomo:rest' || x.m === 'pomo:long') rest += x.d;
+    else { other += x.d; otherMap[x.m] = (otherMap[x.m] || 0) + x.d; }
+  });
+  $('logDay').textContent = logDayLabel(day);
+  $('logNext').disabled = (day >= dkey());
+  $('logPrev').disabled = false;
+  if($('logPick') && $('logPick').value !== day) $('logPick').value = day;
+
+  var cards = '<div class="lg-cards">'
+    + '<div class="lg-card wide"><i>今天自习</i><b>' + (focus ? durText(focus) : '还没有') + '</b></div>'
+    + '<div class="lg-card"><i>休息</i><b>' + (rest ? durText(rest) : '—') + '</b></div>'
+    + '<div class="lg-card"><i>番茄</i><b>' + m.pomo + '<em>个</em></b></div>'
+    + '</div>';
+  /* v3.10.0：按「名称 · 类型」归类 —— 自己起的名字排前面 */
+  var byName = {};
+  m.segs.forEach(function(x){
+    var t = segName(x.m);
+    var k = x.n ? (x.n + '·' + t) : t;
+    byName[k] = (byName[k] || 0) + x.d;
+  });
+  var keys = Object.keys(byName).sort(function(a, b){ return byName[b] - byName[a]; });
+  var modes = '';
+  if(keys.length){
+    modes = '<div class="lg-modes">' + keys.map(function(k){
+      return esc(k) + ' ' + durText(byName[k]);
+    }).join(' · ') + '</div>';
+  }
+  $('logSum').innerHTML = cards + modes;
+
+  if(!m.segs.length){
+    $('logList').innerHTML = '<div class="lg-empty">这天还没有记录。<br>'
+      + '页面开着并且切过模式（数字 / 翻页 / 秒表 / 倒计时 / 自习）就会自动记一段，'
+      + '不用手动开始。</div>';
+  }else{
+    var rows = m.segs.slice(-60).reverse().map(function(x){
+      var t = x.m === 'pomo:focus' || x.m === 'pomo:rest' || x.m === 'pomo:long' ? segTag(x.m) : '';
+      return '<div class="lg-row"><span class="lg-t">' + hm(x.s) + ' – ' + hm(x.e) + '</span>'
+        + '<span class="lg-m"><span class="tag ' + t + '">' + segName(x.m) + '</span></span>'
+        + '<span class="lg-d">' + durText(x.d) + '</span></div>';
+    }).join('');
+    $('logList').innerHTML = rows;
+  }
+  logFootPaint();
+}
+function logFootPaint(){
+  var el = $('logFoot');
+  if(!el) return;
+  var txt = '';
+  if(LOG.cloud === 'local') txt = '未登录 · 只记在这台设备上<a id="logLogin">去登录</a>';
+  else if(LOG.cloud === 'ok') txt = '已同步到云端 · 换设备也能看到';
+  else if(LOG.cloud === 'fail') txt = '同步失败，联网后会自动补传';
+  else txt = '正在检查云端…';
+  el.innerHTML = txt;
+  var a = $('logLogin');
+  if(a) a.onclick = function(){ location.href = './index.html'; };
+}
+function logOpen(){
+  LOG.view = dkey();
+  $('logPanel').className = 'show';
+  $('logPanel').setAttribute('aria-hidden', 'false');
+  logRender();
+  logPull(dkey(), function(){ if($('logPanel').className === 'show') logRender(); });
+  if(LOG.viewTimer) clearInterval(LOG.viewTimer);
+  LOG.viewTimer = setInterval(function(){
+    if($('logPanel').className === 'show' && (LOG.view || dkey()) === dkey()) logRender();
+  }, 20000);
+}
+function logClose(){
+  $('logPanel').className = '';
+  $('logPanel').setAttribute('aria-hidden', 'true');
+  if(LOG.viewTimer){ clearInterval(LOG.viewTimer); LOG.viewTimer = null; }
+}
+function logShift(n){
+  var d = new Date((LOG.view || dkey()) + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  var k = dkey(d.getTime());
+  if(k > dkey()) return;
+  LOG.view = k;
+  logRender();
+  logPull(k, function(){ if($('logPanel').className === 'show') logRender(); });
+}
+
+/* ---------------- 声音 ----------------
+   v3.10.0（站主）：「新增时钟音效，用户可以自行选择是否开启，多设几种，
+   选择的时候可以先试听」。全部用 WebAudio 现合成，不加载任何音频文件。 */
+var AC = null;
+var SND = {
+  /* f 起始频率 / f2 收尾频率 / dur 时长 / gain 音量 / harm 泛音倍数 */
+  ding: { type: 'sine',     f: 880,  f2: 1320, dur: 0.30, gain: 0.16 },
+  wood: { type: 'triangle', f: 520,  f2: 300,  dur: 0.13, gain: 0.22 },
+  bell: { type: 'sine',     f: 1046, f2: 1046, dur: 0.85, gain: 0.13, harm: 2.76, harmGain: 0.05 },
+  tick: { type: 'square',   f: 1500, f2: 1500, dur: 0.05, gain: 0.07 }
+};
+function sndName(){ return CFG.sound || 'off'; }
+function beep(name){
+  var key = name || sndName();
+  if(!key || key === 'off') return;
+  var cfg = SND[key];
+  if(!cfg) return;
+  try{
+    var C = window.AudioContext || window.webkitAudioContext;
+    if(!C) return;
+    if(!AC) AC = new C();
+    if(AC.state === 'suspended' && AC.resume) AC.resume();
+    var t = AC.currentTime;
+    var o = AC.createOscillator(), g = AC.createGain();
+    o.type = cfg.type;
+    o.frequency.setValueAtTime(cfg.f, t);
+    if(cfg.f2 && cfg.f2 !== cfg.f) o.frequency.exponentialRampToValueAtTime(cfg.f2, t + cfg.dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(cfg.gain, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + cfg.dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(t); o.stop(t + cfg.dur + 0.02);
+    /* 铃声再叠一个泛音，听起来更「铃」 */
+    if(cfg.harm){
+      var o2 = AC.createOscillator(), g2 = AC.createGain();
+      o2.type = 'sine';
+      o2.frequency.setValueAtTime(cfg.f * cfg.harm, t);
+      g2.gain.setValueAtTime(0.0001, t);
+      g2.gain.exponentialRampToValueAtTime(cfg.harmGain || 0.05, t + 0.02);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + cfg.dur * 0.7);
+      o2.connect(g2); g2.connect(AC.destination);
+      o2.start(t); o2.stop(t + cfg.dur);
+    }
+  }catch(e){}
+}
+
+/* ---------------- 全屏「时间到」提醒（v3.10.0） ----------------
+   倒计时到点、自习阶段切换时整屏弹出，默认文字「时间到！」，可在「更多」里改；
+   约 3 秒自动收起，点一下可提前关闭。 */
+function toastText(){
+  var t = CFG.toast && String(CFG.toast).trim();
+  return t || '时间到！';
+}
+var FA_TIMER = null;
+function fullAlert(text){
+  var box = $('fullAlert'), el = $('fullAlertTxt');
+  if(!box || !el) return;
+  el.textContent = (text || toastText()).slice(0, 20);
+  box.className = '';
+  void box.offsetWidth;                       /* 重新触发弹入动画 */
+  box.className = 'on';
+  if(FA_TIMER) clearTimeout(FA_TIMER);
+  FA_TIMER = setTimeout(function(){ box.className = ''; }, 3000);
+}
+$('fullAlert').onclick = function(){
+  this.className = '';
+  if(FA_TIMER){ clearTimeout(FA_TIMER); FA_TIMER = null; }
+};
+
+/* ---------------- 主循环 ---------------- */
+/* 时钟一秒一跳，不需要每帧算（老 iPad 每帧算农历会卡）；
+   秒表和计时器才用 rAF 保证毫秒级。 */
+var lastSec = -1;
+function clockTick(){
+  var s = new Date().getSeconds();
+  if(s === lastSec) return;
+  lastSec = s;
+  tickClock();
+}
+function loop(){
+  if(CFG.mode === 'stop' && SW.run) swPaint();
+  else if(CFG.mode === 'timer' && TM.run) tmPaint();
+  else if(CFG.mode === 'pomo' && PM.run) pmPaint();
+  requestAnimationFrame ? requestAnimationFrame(loop) : setTimeout(loop, 100);
+}
+
+/* ---------------- 工具栏 / 菜单 ---------------- */
+var barTimer = null;
+function showBar(){
+  $('bar').className = 'show';
+  if(barTimer) clearTimeout(barTimer);
+  barTimer = setTimeout(function(){ $('bar').className = ''; $('modeMenu').className = ''; }, 6000);
+}
+function toggleBar(){ $('bar').className ? ($('bar').className = '') : showBar(); }
+
+var FONTS = [['auto','自动'],['hei','黑体'],['mono','等宽'],['round','圆体'],['serif','宋体']];
+
+/* v3.9.23：数字大小 4 档（站主要求「字体可以调，大概有多大」） */
+var SIZES = [['sz-1','小'],['sz-2','中'],['sz-3','大'],['sz-4','超大']];
+function applySize(z){
+  CFG.size = z; saveCfg();
+  var cls = document.body.className.split(' ').filter(function(c){ return c && c.indexOf('sz-') !== 0; });
+  cls.push('sz-' + z);
+  document.body.className = cls.join(' ');
+  for(var i = 0; i < SIZES.length; i++){
+    if(SIZES[i][0] === 'sz-' + z) $('sizeBtn').textContent = '字号 · ' + SIZES[i][1];
+  }
+}
+function cycleSize(){
+  var cur = parseInt(CFG.size || 2, 10);
+  applySize((cur % 4) + 1);
+}
+function applyFont(f){
+  CFG.font = f; saveCfg();
+  document.body.className = document.body.className.replace(/\bf-\w+/g, '').replace(/\s+/g, ' ');
+  document.body.className += ' f-' + f;
+  for(var i = 0; i < FONTS.length; i++){ if(FONTS[i][0] === f) $('fontBtn').textContent = '字体 · ' + FONTS[i][1]; }
+}
+function cycleFont(){
+  var i = 0;
+  for(var k = 0; k < FONTS.length; k++){ if(FONTS[k][0] === CFG.font) i = k; }
+  applyFont(FONTS[(i + 1) % FONTS.length][0]);
+}
+
+var BGS = ['light','dark','black','cream','navy','green','gray'];
+var BG_NAME = { light:'浅灰', dark:'深灰', black:'纯黑', cream:'米色', navy:'深蓝', green:'墨绿', gray:'炭灰' };
+function applyBg(b){
+  CFG.bg = b; saveCfg();
+  document.body.className = document.body.className.replace(/\bbg-\w+/g, '').replace(/\s+/g, ' ');
+  document.body.className += ' bg-' + b;
+  $('bgBtn').textContent = '背景 · ' + (BG_NAME[b] || b);
+  var meta = document.querySelector('meta[name=theme-color]');
+  if(meta) meta.setAttribute('content', b === 'cream' ? '#f6f1e7' : (b === 'light' ? '#f4f4f4' : '#0d0d0f'));
+}
+function cycleBg(){
+  var i = 0;
+  for(var k = 0; k < BGS.length; k++){ if(BGS[k] === CFG.bg) i = k; }
+  applyBg(BGS[(i + 1) % BGS.length]);
+}
+
+function applyH12(){
+  $('h12Btn').textContent = CFG.h12 ? '12 小时' : '24 小时';
+  lastFlip = { h:'', m:'', s:'' };
+  tickClock();
+}
+
+/* ---------------- 全屏 ---------------- */
+function isFs(){
+  return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+}
+/* v3.9.23：全屏后自动转横屏（站主：「全屏之后会自动展现为横屏」）。
+   只有「全屏 + 屏幕方向锁」都支持时才会转；iOS Safari 两样都不给，
+   就退回到「提示把手机横过来」，不假装成功。 */
+function lockLandscape(){
+  try{
+    if(screen && screen.orientation && screen.orientation.lock){
+      var p = screen.orientation.lock('landscape');
+      if(p && p.catch) p.catch(function(){});
+    }
+  }catch(e){}
+}
+function unlockLandscape(){
+  try{ if(screen && screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+}
+function toggleFs(){
+  var el = document.documentElement;
+  var canFs = !!(el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen);
+  if(!canFs){ toast('这台设备的浏览器不支持网页全屏，可以用菜单里的「全屏」'); return; }
+  try{
+    if(!isFs()){
+      if(el.requestFullscreen) el.requestFullscreen();
+      else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if(el.mozRequestFullScreen) el.mozRequestFullScreen();
+      else el.msRequestFullscreen();
+      /* 方向锁必须等全屏生效之后再调，否则直接 reject */
+      setTimeout(function(){
+        lockLandscape();
+        var locked = screen && screen.orientation && screen.orientation.type &&
+          screen.orientation.type.indexOf('landscape') >= 0;
+        if(!locked && window.innerHeight > window.innerWidth){
+          toast('这台设备不支持自动横屏，把手机横过来即可');
+        }
+      }, 420);
+    }else{
+      unlockLandscape();
+      if(document.exitFullscreen) document.exitFullscreen();
+      else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if(document.mozCancelFullScreen) document.mozCancelFullScreen();
+    }
+  }catch(e){}
+  setTimeout(function(){ $('fsBtn').textContent = isFs() ? '退出全屏' : '全屏'; }, 300);
+}
+
+/* 点数字 → 展开/收起时长设置（默认只显示倒计时数字） */
+function toggleTimerSet(e){
+  if(e){ e.stopPropagation(); }
+  var box = $('timerSet');
+  if(!box) return;
+  var hidden = box.className.indexOf('hide') >= 0;
+  box.className = hidden ? '' : 'hide';
+  $('timerHint').textContent = hidden ? '改完点「开始」就开始倒计时' : '点上面的数字可以设置时长';
+}
+
+function toast(txt){
+  var h = $('hint');
+  h.textContent = txt; h.className = '';
+  setTimeout(function(){ h.className = 'hide'; }, 2600);
+}
+
+/* ---------------- 防息屏 ---------------- */
+var wakeLock = null;
+function keepAwake(){
+  if(!navigator.wakeLock || !navigator.wakeLock.request) return;
+  try{
+    navigator.wakeLock.request('screen').then(function(l){ wakeLock = l; }).catch(function(){});
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', function(){
+  if(!document.hidden) keepAwake();
+  /* 切到后台就不算在用，回来再接着记 —— 不然整晚挂着会记成一夜 */
+  if(document.hidden) logStop();
+  else logStart(logModeOf());
+});
+window.addEventListener('pagehide', function(){
+  logStop();
+  flushLog();
+});
+
+/* ---------------- 事件绑定 ---------------- */
+$('modeBtn').onclick = function(e){
+  e.stopPropagation();
+  showBar();
+  var m = $('modeMenu');
+  m.className = (m.className === 'show') ? '' : 'show';
+};
+Array.prototype.forEach.call($('modeMenu').getElementsByTagName('button'), function(b){
+  b.onclick = function(e){
+    e.stopPropagation();
+    applyMode(b.getAttribute('data-m'));
+  };
+});
+$('fontBtn').onclick = cycleFont;
+$('bgBtn').onclick = cycleBg;
+$('h12Btn').onclick = function(){ CFG.h12 = !CFG.h12; saveCfg(); applyH12(); };
+$('sizeBtn').onclick = cycleSize;
+$('fsBtn').onclick = toggleFs;
+$('aboutBtn').onclick = function(e){ e.stopPropagation(); $('about').className = 'show'; };
+$('aboutClose').onclick = function(){ $('about').className = ''; };
+$('about').onclick = function(e){ if(e.target === this) this.className = ''; };
+
+$('stopBtn').onclick = function(){ swToggle(); };
+$('lapBtn').onclick = function(){
+  var ms = SW.acc + (SW.run ? (nowMs() - SW.t0) : 0);
+  if(ms <= 0) return;
+  SW.laps.push(ms);
+  var html = '';
+  for(var i = SW.laps.length - 1; i >= 0; i--){
+    html += '<div>第 ' + (i + 1) + ' 次　' + swText(SW.laps[i]) + '</div>';
+  }
+  $('laps').innerHTML = html;
+};
+$('stopReset').onclick = function(){
+  SW.run = false; SW.acc = 0; SW.laps = [];
+  $('stopBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  $('laps').innerHTML = '';
+  swPaint();
+};
+
+$('timerTime').onclick = toggleTimerSet;
+$('timerBtn').onclick = function(){ tmToggle(); };
+$('timerReset').onclick = function(){
+  TM.run = false; TM.left = timerMs(); TM.total = TM.left;
+  $('timerBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  tmPaint();
+};
+var PRESETS = [[5,'5 分钟'],[10,'10 分钟'],[15,'15 分钟'],[25,'25 分钟'],[45,'45 分钟']];
+var presetIdx = 0;
+$('timerPreset').onclick = function(){
+  var p = PRESETS[presetIdx % PRESETS.length];
+  presetIdx++;
+  $('th').value = 0; $('tm').value = p[0]; $('ts').value = 0;
+  CFG.th = 0; CFG.tm = p[0]; CFG.ts = 0; saveCfg();
+  TM.run = false; TM.left = timerMs(); TM.total = TM.left;
+  $('timerBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  tmPaint();
+};
+/* v3.10.0：设置区（提示音 / 自定义名称 / 自习科目） */
+function paintSnd(){
+  var row = $('sndRow');
+  if(!row) return;
+  var bs = row.getElementsByTagName('button');
+  for(var i = 0; i < bs.length; i++){
+    bs[i].className = (bs[i].getAttribute('data-snd') === sndName()) ? 'on' : '';
+  }
+}
+function bindSettings(){
+  var row = $('sndRow');
+  if(row){
+    Array.prototype.forEach.call(row.getElementsByTagName('button'), function(b){
+      b.onclick = function(e){
+        if(e && e.stopPropagation) e.stopPropagation();
+        CFG.sound = b.getAttribute('data-snd');
+        saveCfg(); paintSnd();
+        if(CFG.sound !== 'off') beep();      /* 选的同时就试听 */
+      };
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-nm]'), function(inp){
+    var k = inp.getAttribute('data-nm');
+    inp.value = (CFG.names && CFG.names[k]) || '';
+    inp.oninput = function(){
+      CFG.names = CFG.names || {};
+      CFG.names[k] = inp.value.slice(0, 12);
+      saveCfg();
+      applyName();
+      logStart(logModeOf());     /* 名字变了，从现在起算新的一段 */
+    };
+  });
+  var sr = $('subjRow');
+  if(sr){
+    Array.prototype.forEach.call(sr.getElementsByTagName('button'), function(b){
+      b.onclick = function(e){
+        if(e && e.stopPropagation) e.stopPropagation();
+        var v = b.getAttribute('data-subj');
+        CFG.subj = (CFG.subj === v) ? '' : v;   /* 再点一次取消 */
+        saveCfg(); applyName();
+        logStart(logModeOf());
+      };
+    });
+  }
+  var ti = $('toastInp');
+  if(ti){
+    ti.value = CFG.toast || '';
+    ti.oninput = function(){
+      CFG.toast = ti.value.slice(0, 20);
+      saveCfg();
+    };
+  }
+}
+
+/* 记录抽屉 */
+$('logBtn').onclick = function(e){ if(e) e.stopPropagation(); logOpen(); };
+$('logClose').onclick = function(e){ if(e) e.stopPropagation(); logClose(); };
+$('logPrev').onclick = function(e){ if(e) e.stopPropagation(); logShift(-1); };
+$('logPick').onchange = function(e){
+  if(e && e.stopPropagation) e.stopPropagation();
+  var v = this.value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) return;
+  LOG.view = v;
+  logRender();
+  logPull(v, function(){ if($('logPanel').className === 'show') logRender(); });
+};
+$('logPick').onclick = function(e){ if(e) e.stopPropagation(); };
+$('logNext').onclick = function(e){ if(e) e.stopPropagation(); logShift(1); };
+
+$('pomoTime').onclick = togglePomoSet;
+$('pomoBtn').onclick = function(){ pomoToggle(); };
+$('pomoSkip').onclick = function(){
+  var wasRun = PM.run;
+  PM.run = false; PM.paused = false;
+  pmNext(true);           /* 跳过不记番茄 */
+  if(wasRun){
+    pmJump(true);         /* 原来是跑着的，接着跑下一段 */
+  }else{
+    pmBtnLabel('开始');
+    pmPaint();
+  }
+};
+$('pomoReset').onclick = function(){
+  PM.run = false; PM.paused = false; PM.phase = 'focus'; PM.left = phaseMs('focus'); PM.end = 0;
+  $('pomoBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  pmPaintPhase(); pmPaint();
+  logPomoPhase();
+};
+['pf','pb'].forEach(function(id){
+  $(id).onchange = function(){
+    CFG.pf = Math.max(1, Math.min(99, parseInt($('pf').value, 10) || 25));
+    CFG.pb = Math.max(1, Math.min(60, parseInt($('pb').value, 10) || 5));
+    saveCfg();
+    $('pf').value = CFG.pf; $('pb').value = CFG.pb;
+    if(!PM.run){ PM.left = phaseMs(PM.phase); pmPaint(); }
+  };
+});
+
+/* 翻页的秒：开 / 关 */
+function applyFlipSec(){
+  var on = CFG.flipSec !== false;
+  $('flipView').className = 'view' + (CFG.mode === 'flip' ? ' on' : '') + (on ? '' : ' nosec');
+  $('secBtn').textContent = on ? '秒 · 显示' : '秒 · 隐藏';
+  lastFlip = { h:'', m:'', s:'' };
+  if(CFG.mode === 'flip') tickClock();
+}
+$('secBtn').onclick = function(){
+  CFG.flipSec = (CFG.flipSec === false);
+  saveCfg();
+  applyFlipSec();
+};
+
+['th','tm','ts'].forEach(function(id){
+  $(id).onchange = function(){
+    CFG.th = parseInt($('th').value, 10) || 0;
+    CFG.tm = parseInt($('tm').value, 10) || 0;
+    CFG.ts = parseInt($('ts').value, 10) || 0;
+    saveCfg();
+    if(!TM.run){ TM.left = timerMs(); TM.total = TM.left; tmPaint(); }
+  };
+});
+
+/* 点屏幕：显示工具栏（点在按钮上不触发） */
+document.getElementById('stage').onclick = function(e){
+  if(e.target && /INPUT|BUTTON/.test(e.target.nodeName)) return;
+  showBar();
+};
+/* 双击数字进全屏 */
+$('stage').ondblclick = function(e){
+  if(e.target && /INPUT|BUTTON/.test(e.target.nodeName)) return;
+  toggleFs();
+};
+
+/* 键盘 */
+document.onkeydown = function(e){
+  var tag = (e.target && e.target.nodeName) || '';
+  if(tag === 'INPUT') return;
+  var k = e.key;
+  if(k === ' '){ e.preventDefault();
+    if(CFG.mode === 'stop') swToggle();
+    else if(CFG.mode === 'timer') tmToggle();
+    else if(CFG.mode === 'pomo') pomoToggle();
+  }
+  else if(k === 'f' || k === 'F'){ toggleFs(); }
+  else if(k === '1') applyMode('clock');
+  else if(k === '2') applyMode('flip');
+  else if(k === '3') applyMode('stop');
+  else if(k === '4') applyMode('timer');
+  else if(k === '5') applyMode('pomo');
+  else if(k === 'Escape'){ $('about').className = ''; }
+};
+
+/* ---------------- 启动 ---------------- */
+applyFont(CFG.font || 'auto');
+applySize(CFG.size || 2);
+applyBg(CFG.bg || 'light');
+applyH12();
+/* 支持 ./clock.html?m=pomo 直接进某个模式（首页「番茄时钟」卡片就指到这里） */
+function modeFromUrl(){
+  var m = (location.search.match(/[?&]m=([a-z]+)/) || [])[1];
+  return (m && MODE_NAME[m]) ? m : '';
+}
+applyMode(modeFromUrl() || CFG.mode || 'clock');
+applyFlipSec();
+if(CFG.mode === 'timer') refreshTimerInputs();
+bindSettings();
+sumBind();
+paintSnd();
+logEnsure();
+logPomo(pomoDoneToday());   /* 把今天的番茄数补进记录，后台能直接看到 */
+applyName();
+logStart(logModeOf());
+keepAwake();
+clockTick();
+setInterval(clockTick, 250);
+loop();
+setTimeout(function(){ $('hint').className = 'hide'; }, 5000);
+setTimeout(showBar, 600);
+
+})();
+</script>
+</body>
+</html>

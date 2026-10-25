@@ -1682,12 +1682,16 @@ var SITE_DATA = {
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
-      id: 11,
-      categoryId: 8, title: "番茄时钟", icon: "", iconText: "🍅",
-      desc: "番茄工作法计时器：专注 25 分钟 + 短暂休息，\n帮你提升学习效率，保持专注。",
-      mainLabel: "前往使用", mainUrl: "https://focustide.app/", mainWechatOk: true,
+      /* v3.9.22（站主）：其他工具里加一个全屏时钟，放在番茄时钟前面。
+         仿照 yingming006.cn/time 做的，功能对齐（数字 / 翻页 / 秒表 / 计时器）。 */
+      id: 30,
+      categoryId: 8, title: "全屏时钟", icon: "", iconText: "⏰",
+      desc: "桌面时间显示与倒计时：数字 / 翻页两种时钟样式，翻页可以关掉秒；另有秒表、倒计时和自习番茄钟。\n支持全屏（自动横屏）、换字体、调数字大小、换背景；右上角「记录」能看到今天几点到几点用了什么。",
+      mainLabel: "打开全屏时钟", mainUrl: "./clock.html", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
+    /* v3.9.25（站主）：「其他工具这个番茄钟就可以不要了，我有（全屏时钟）就够了」
+       —— 番茄钟已经并进全屏时钟的自习模式，这里把整张卡片删掉。 */
     {
       id: 12,
       categoryId: 8, title: "私人云盘", icon: "", iconText: "云盘", active: false,
@@ -2920,7 +2924,9 @@ function render(){
         var needBrowser = isWeChat() && !l.mainWechatOk && httpUrl(l.mainUrl);
         /* 门禁总开关关闭时直接视为「已通过」，不再渲染问答框（GATE_ENABLED=false） */
         var passed = gatePassed(l) || !gateOn();
-        var contentHtml = '<div class="card-content"><h3>'+esc(l.title)+'</h3>'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
+        /* v3.9.22：标题留在折叠态，其余内容都塞进 .card-detail，点开才显示 */
+        var contentHtml = '<div class="card-content"><h3><span class="f-t">'+esc(l.title)+'</span><span class="f-i">⌄</span></h3>'
+          + '<div class="card-detail">'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
         if(l.paused){
           contentHtml += '<div class="paused-box">'+(l.pausedMsg ? emojiEscHtml(l.pausedMsg) : (iconSvg('ban',15)+' 因网络问题，暂时关闭，恢复开放时间另行通知'))+'</div>';
         }else if(l.gate && !passed){
@@ -2964,7 +2970,6 @@ function render(){
             '</div>';
         }
         contentHtml += (l.cardTip ? '<p class="card-hw-tip" style="font-size:.78rem;color:#af410f;margin-top:6px;line-height:1.6">'+esc(l.cardTip)+'</p>' : '');
-        contentHtml += '</div>';
         var actionsHtml;
         if(l.paused){
           actionsHtml = ''; /* 暂停开放：不渲染任何入口按钮与门禁 */
@@ -3011,13 +3016,16 @@ function render(){
             (needBrowser ? '<span class="wechat-hint">微信内请按引导用浏览器打开</span>' : '');
         }
         /* 视频类卡片整卡可点：点卡片任意位置直接弹视频，无需二级按钮 */
-        var cardCls = 'card' + (l.paused?' card-paused':'') + (l.video?' card-clickable':'');
+        /* 视频卡片整卡点击就播放，没有「展开」这一步，所以不参与折叠 */
+        var cardCls = 'card' + (l.paused?' card-paused':'') + (l.video?' card-clickable':'') + (l.video?'':' card-fold');
         var cardClick = l.video ? ' onclick="openVideo(\''+jsq(l.video)+'\',\''+jsq(l.title)+'\')"' : '';
         return '<div class="'+cardCls+'" data-card="'+attr(l.id)+'"'+cardClick+'>'+
           '<div class="card-icon">'+iconHtml+'</div>'+
-          contentHtml+
-          '<div class="card-actions">'+actionsHtml+'</div>'+
-        '</div>';
+          contentHtml +
+            '<div class="card-actions">'+actionsHtml+'</div>'+
+          '</div>'+   /* card-detail */
+          '</div>'+   /* card-content */
+        '</div>';    /* card */
       });
       /* 【卡片堆叠 v35】同一分类下 ≥2 张卡片时包一层堆叠容器；仅 1 张时不包（堆叠无意义）。
          用户可在「自定义设置 → 动效」里关掉堆叠，回到传统平铺。 */
@@ -3271,6 +3279,10 @@ function uiDefault(){
     v: UI_V,
     fs: 1,              /* 字号缩放 0.85 ~ 1.35 */
     motion: 1,          /* 1 = 完整动效，0 = 精简 */
+    cardMode: 'compact',/* 【卡片折叠 v3.9.22】compact = 默认小窗口、点开看详情；open = 一直展开
+                          站主原话：「所有板块的卡片默认都是小窗口显示，因为一个卡片占用太大，
+                          点击之后显示详情，用户可以在自定义设置里选择默认展开」 */
+
     stack: 0,           /* 【卡片堆叠 v35】1 = 多卡片分类层叠展示，0 = 传统平铺
                            默认关闭：堆叠效果仍在试验中，观感不理想，暂不作为默认（站主拍板） */
     netWatch: 0,        /* 【网络状态提示】1 = 连不上时弹横幅并倒计时重试，0 = 不打扰
@@ -3600,6 +3612,32 @@ function syncThemeToBg(){
 }
 
 /* 总入口：一次性把配置全部应用（初始化时、导入后、恢复默认后调用） */
+/* v3.9.22：卡片「小窗口 / 展开」两种模式。
+   只切 <html> 上的一个类，具体样式全在 CSS 里，重绘不需要额外逻辑。 */
+function applyCardMode(){
+  var compact = UI.cardMode !== 'open';
+  var el = document.documentElement;
+  if(compact) el.classList.add('cards-compact');
+  else el.classList.remove('cards-compact');
+}
+function setCardMode(mode){
+  UI.cardMode = (mode === 'open') ? 'open' : 'compact';
+  saveUI();
+  applyCardMode();
+  try{ render(); }catch(e){}
+  try{ renderUI(); }catch(e){}
+}
+/* 点卡片展开 / 收起：按钮、输入框、链接、门禁框里点都不触发 */
+document.addEventListener('click', function(e){
+  if(UI.cardMode === 'open') return;
+  var t = e.target;
+  if(!t || !t.closest) return;
+  if(t.closest('button,a,input,textarea,select,label,.gate-box,.paused-box,.qrcode-box')) return;
+  var card = t.closest('.card');
+  if(!card || !card.classList.contains('card-fold')) return;
+  card.classList.toggle('open');
+}, false);
+
 function applyUICfg(){
   applyFont();
   /* v3.5.30：轻量模式要**先于**背景/顺序应用 —— 它决定 --glass-bg 等变量
@@ -3607,6 +3645,7 @@ function applyUICfg(){
   applyLite();
   applyBg();
   applyHomeOrder();
+  applyCardMode();
   STACK_OPEN = {};    /* 【卡片堆叠 v35】配置变更（导入/恢复默认）后清展开记忆，回到默认堆叠态 */
   /* data-motion 由 applyLite() 统一设置（轻量模式强制 off） */
   var sb = document.getElementById('uiSetBtn');
@@ -6251,7 +6290,7 @@ function showChangePwd(){
   var box = document.getElementById('acctPwdBox');
   if(!box) return;
   box.innerHTML = '<div class="acct-prompt">' +
-    '<input id="pwdOld" type="password" placeholder="原密码" autocomplete="current-password">' +
+    '<input id="pwdOld" class="inp" type="password" placeholder="原密码" autocomplete="current-password">' +
     '<input id="pwdNew" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">' +
     '<div class="acct-row" style="margin-top:0">' +
       '<button class="acct-btn" onclick="doChangePwd()">确认修改</button>' +
@@ -7488,7 +7527,7 @@ function loadAdminUsers(q){
     var total = j.total || 0;
     b.innerHTML =
       '<div class="admin-search">' +
-        '<input id="adminQ" placeholder="搜索用户名或显示名…" value="' + esc(q || '') + '">' +
+        '<input id="adminQ" class="inp inp-sm" placeholder="搜索用户名或显示名…" value="' + esc(q || '') + '">' +
         '<button onclick="loadAdminUsers(document.getElementById(\'adminQ\').value)">搜索</button>' +
       '</div>' +
       '<div class="admin-stats">' +
@@ -8352,6 +8391,21 @@ function renderSettings(){
     html += '<div id="uiSortBox"></div>';
   }
   else if(UI_SEC === 'motion'){
+    /* v3.9.22：卡片默认小窗口，这里给个开关（站主要求「用户可以在自定义设置里选择」） */
+    var _cm = (UI.cardMode === 'open') ? 'open' : 'compact';
+    var _cmBtns = [['compact','小窗口','只显示图标和标题，点一下展开'],['open','全部展开','卡片直接显示完整内容']]
+      .map(function(m){
+        var active = (m[0] === _cm);
+        return '<button class="btn ' + (active ? '' : 'btn-secondary') + '" ' +
+          'style="flex:1;font-size:.76rem;padding:10px 4px" ' +
+          'onclick="setCardMode(\'' + m[0] + '\')">' + m[1] + '</button>';
+      }).join('');
+    html += secHtml('cardmode','卡片显示','layers',
+      '<div class="ui-modes">' + _cmBtns + '</div>' +
+      '<p class="ui-hint" style="margin-top:10px">当前：<b>' + (_cm === 'open' ? '全部展开' : '小窗口')
+        + '</b>　<span style="opacity:.75">· 只影响这台设备</span></p>' +
+      '<p class="ui-hint">选「小窗口」时，卡片只留图标和标题，<b>点一下</b>展开描述和按钮，再点收起；'
+      + '这样一屏能看到更多入口。<br>想一眼看全所有内容，就选「全部展开」。</p>', false);
     html += secHtml('mo','动效','sliders-horizontal',
       '<div class="sw-row"><span class="t">完整动效<span class="s">拖拽、涟漪、圆形主题切换等</span></span>' +
         swHtml(UI.motion !== 0, 'toggleMotion(event)') + '</div>' +
@@ -8765,8 +8819,7 @@ function renderUiImport(){
       '<input type="file" id="uiImpFile" accept=".json,application/json" onchange="uiImpRead(this)" ' +
         'style="width:100%;font-size:.78rem;color:var(--fg-3);margin-bottom:10px">' +
       '<p class="ui-hint">也可以直接把文件内容粘贴到下面：</p>' +
-      '<textarea id="uiImpText" rows="4" style="width:100%;font-size:.74rem;border:1px solid var(--tint-2);' +
-        'border-radius:10px;padding:8px;font-family:inherit;background:#fff;color:var(--fg)" placeholder="粘贴配置 JSON…"></textarea>' +
+      '<textarea id="uiImpText" class="inp" rows="4" placeholder="粘贴配置 JSON…"></textarea>' +
       '<button class="btn" style="width:100%;margin-top:10px" onclick="uiImpFromText()">下一步</button>';
   }else if(UI_IMP_STEP === 1){
     box.innerHTML =
@@ -9059,67 +9112,140 @@ function islWxClose(){
   document.body.style.overflow = '';
 }
 function islWxBackdrop(e){ if(e.target === e.currentTarget) islWxClose(); }
+function islWxForce(){
+  /* 站主反馈「有时候不显示温度」：碰到残缺数据或被写坏的缓存时，
+     手动清掉再取一次，不用关掉弹层重开。 */
+  try{ localStorage.removeItem('__cls_wx_h2'); localStorage.removeItem('__cls_wx_h'); }catch(e){}
+  islWxLoad();
+}
+
+/* 一份逐小时数据算不算完整：时间够 24 条，且至少一半小时有温度。
+   以前拿到什么就存什么，一旦接口只给了时间没给温度，10 分钟内每次打开
+   都是一列「—」，看起来就是「天气预报不显示温度」。 */
+function islWxOk(v){
+  if(!v || !v.time || !v.time.length) return false;
+  if(v.time.length < 24) return false;
+  var t = v.temp || [];
+  var n = 0;
+  for(var i = 0; i < t.length; i++){ if(t[i] != null) n++; }
+  return n >= 12;
+}
+
 function islWxLoad(){
   var body = document.getElementById('islWxBody');
   if(!body) return;
   var cache = null;
-  try{ cache = JSON.parse(localStorage.getItem('__cls_wx_h') || 'null'); }catch(e){}
-  if(cache && cache.t && (Date.now() - cache.t) < 10 * 60000){
+  try{ cache = JSON.parse(localStorage.getItem('__cls_wx_h2') || 'null'); }catch(e){}
+  if(cache && cache.t && (Date.now() - cache.t) < 10 * 60000 && islWxOk(cache.v)){
     islWxPaint(cache.v);
     return;
   }
   body.innerHTML = '<div class="isl-wx-load">正在获取逐小时天气…</div>';
+  /* v3.9.19：改成「从现在起 24 小时」——原来只取今天 0–24 点，晚上 11 点打开
+     只剩 1 个小时可看。取 2 天数据再按当前小时截 24 条。 */
   fetch('https://api.open-meteo.com/v1/forecast?latitude=29.03&longitude=114.57'
       + '&hourly=temperature_2m,weather_code,precipitation_probability'
-      + '&daily=temperature_2m_max,temperature_2m_min'
-      + '&forecast_days=1&timezone=Asia%2FShanghai')
+      + '&forecast_days=2&timezone=Asia%2FShanghai')
     .then(function(r){ return r.json(); })
     .then(function(j){
       var h = (j && j.hourly) || {};
       if(!h.time || !h.time.length) throw new Error('no data');
       var v = {
-        time: h.time, temp: h.temperature_2m || [],
-        code: h.weather_code || [], rain: h.precipitation_probability || [],
-        max: (j.daily && j.daily.temperature_2m_max && j.daily.temperature_2m_max[0]) || null,
-        min: (j.daily && j.daily.temperature_2m_min && j.daily.temperature_2m_min[0]) || null,
+        time: h.time,
+        temp: Array.isArray(h.temperature_2m) ? h.temperature_2m : [],
+        code: Array.isArray(h.weather_code) ? h.weather_code : [],
+        rain: Array.isArray(h.precipitation_probability) ? h.precipitation_probability : [],
       };
-      try{ localStorage.setItem('__cls_wx_h', JSON.stringify({ t: Date.now(), v: v })); }catch(e){}
+      /* 温度缺一半以上就不写缓存（下次打开重新取，避免 10 分钟内一直是「—」），
+         但时间还在，仍然把列表画出来 —— 有几点、什么天气，总比一整页错误有用。 */
+      if(islWxOk(v)){
+        try{ localStorage.setItem('__cls_wx_h2', JSON.stringify({ t: Date.now(), v: v })); }catch(e){}
+      }
       islWxPaint(v);
     })
     .catch(function(){
-      body.innerHTML = '<div class="isl-wx-load">天气没取到，可能是网络或接口暂时不可用<br>稍后再点一次试试</div>';
+      /* 取不到完整数据时，宁可给旧数据（并说明），也不要一屏「—」 */
+      var old = null;
+      try{ old = JSON.parse(localStorage.getItem('__cls_wx_h2') || 'null'); }catch(e){}
+      if(old && islWxOk(old.v)){
+        islWxPaint(old.v);
+        var sub = document.getElementById('islWxSub');
+        if(sub) sub.innerHTML = '网络不稳，显示的是上次的数据 · '
+          + '<a href="javascript:;" onclick="islWxForce()">重新获取</a>';
+        return;
+      }
+      body.innerHTML = '<div class="isl-wx-load">天气没取到，可能是网络或接口暂时不可用'
+        + '<br><button type="button" class="isl-wx-retry" onclick="islWxForce()">重新获取</button></div>';
     });
 }
 function islWxPaint(v){
   var body = document.getElementById('islWxBody');
-  if(!body || !v) return;
+  if(!body || !v || !v.time || !v.time.length) return;
+  var pad = function(n){ return ('0' + n).slice(-2); };
   var now = new Date();
-  var curH = now.getHours();
-  var temps = v.temp.filter(function(x){ return x != null; });
-  var lo = Math.min.apply(null, temps), hi = Math.max.apply(null, temps);
+  var key = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+    + 'T' + pad(now.getHours());
+  /* v3.9.19：从现在这一小时起往后数 24 条，跨天就跨天 */
+  var start = 0;
+  for(var i = 0; i < v.time.length; i++){
+    if(String(v.time[i]).slice(0, 13) >= key){ start = i; break; }
+  }
+  /* v3.9.21：四组数据必须一起切。以前 time 兜底回退到前 24 条、温度却没回退，
+     一旦走到这个分支，时间有、温度全空 —— 就是站主说的「不显示温度」。 */
+  var time = v.time.slice(start, start + 24);
+  var temp = (v.temp || []).slice(start, start + 24);
+  var code = (v.code || []).slice(start, start + 24);
+  var rain = (v.rain || []).slice(start, start + 24);
+  if(!time.length){
+    start = 0;
+    time = v.time.slice(0, 24);
+    temp = (v.temp || []).slice(0, 24);
+    code = (v.code || []).slice(0, 24);
+    rain = (v.rain || []).slice(0, 24);
+  }
+
+  var nums = temp.filter(function(x){ return x != null && x !== '' && !isNaN(x); });
+  var lo = nums.length ? Math.min.apply(null, nums) : 0;
+  var hi = nums.length ? Math.max.apply(null, nums) : 0;
   var span = Math.max(1, hi - lo);
+
   var sub = document.getElementById('islWxSub');
-  if(sub) sub.textContent = (v.max != null && v.min != null)
-    ? ('最高 ' + Math.round(v.max) + '° · 最低 ' + Math.round(v.min) + '°') : '';
-  var rows = v.time.map(function(t, i){
+  if(sub){
+    if(nums.length){
+      sub.innerHTML = '未来 24 小时 ' + Math.round(lo) + '° ~ ' + Math.round(hi) + '°';
+    }else{
+      /* 温度整段缺失：说清楚 + 给个重试，别让人对着一列「—」发呆 */
+      sub.innerHTML = '温度暂时没取到 · <a href="javascript:;" onclick="islWxForce()">重新获取</a>';
+    }
+  }
+
+  var rows = '';
+  var lastDay = '';
+  time.forEach(function(t, i){
+    var day = String(t).slice(0, 10);
+    if(day !== lastDay && i > 0){
+      var d = new Date(day + 'T00:00:00');
+      rows += '<div class="isl-wx-day">' + (isNaN(d.getTime()) ? '' :
+        (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日 · 周' + '日一二三四五六'.charAt(d.getDay())) + '</div>';
+    }
+    lastDay = day;
     var hh = parseInt(String(t).slice(11, 13), 10);
-    var tp = v.temp[i];
-    var rn = v.rain[i];
-    var w = (tp == null) ? 0 : Math.round(((tp - lo) / span) * 88 + 12);
-    return '<div class="isl-wx-row' + (hh === curH ? ' now' : '') + '">'
-      + '<span class="t">' + ('0' + hh).slice(-2) + ':00</span>'
-      + '<span class="ic">' + islWxIcon(v.code[i]) + '</span>'
-      + '<span class="bar" style="width:' + w + '%"></span>'
-      + '<span class="tp">' + (tp == null ? '—' : Math.round(tp) + '°') + '</span>'
+    var tp = temp[i], rn = rain[i];
+    var has = (tp != null && tp !== '' && !isNaN(tp));
+    var w = has ? Math.round(((tp - lo) / span) * 88 + 12) : 0;
+    var isNow = (i === 0);
+    rows += '<div class="isl-wx-row' + (isNow ? ' now' : '') + (has ? '' : ' no-t') + '">'
+      + '<span class="t">' + (isNow ? '现在' : ('0' + hh).slice(-2) + ':00') + '</span>'
+      + '<span class="ic">' + islWxIcon(code[i]) + '</span>'
+      + (has ? '<span class="bar" style="width:' + w + '%"></span>' : '<span class="bar" style="display:none"></span>')
+      + '<span class="tp">' + (has ? Math.round(tp) + '°' : '—') + '</span>'
       + '<span class="rn">' + (rn == null || rn <= 0 ? '' : rn + '%') + '</span>'
       + '</div>';
-  }).join('');
-  body.innerHTML = rows || '<div class="isl-wx-load">今天没有逐小时数据</div>';
-  /* 自动滚到当前小时 */
-  try{
-    var nowRow = body.querySelector('.isl-wx-row.now');
-    if(nowRow) body.scrollTop = Math.max(0, nowRow.offsetTop - 90);
-  }catch(e){}
+  });
+  body.innerHTML = rows;
+  try{ body.scrollTop = 0; }catch(e){}
+  var title = document.getElementById('islWxTitle');
+  if(title) title.textContent = '修水 · 接下来 24 小时';
 }
 
 /* ============================================================================
@@ -9252,8 +9378,24 @@ function islPhotoBind(){
   });
 }
 /* 今天该显示什么：假期倒计时 / 这天不上课 / 具体文案 */
-function islandToday(){
+/* v3.9.17（站主）：21 点后默认看「明天」。
+   ISL_VIEW：null = 自动（21 点后明天）｜'today'｜'tomorrow'（用户手动切的） */
+var ISL_VIEW = null;
+function islIsNight(){ return new Date().getHours() >= 21; }
+function islShowTomorrow(){
+  if(ISL_VIEW === 'today') return false;
+  if(ISL_VIEW === 'tomorrow') return true;
+  return islIsNight();
+}
+function islSwitchView(){
+  ISL_VIEW = islShowTomorrow() ? 'today' : 'tomorrow';
+  try{ sessionStorage.setItem('__cls_isl_view', ISL_VIEW); }catch(e){}
+  islandBanner();
+}
+
+function islandToday(offset){
   var d = new Date();
+  if(offset) d.setDate(d.getDate() + offset);
   var key = islandDateKey(d);
   var dow = islandDayKey(d);
   if(!ISLAND) return { kind: 'none' };
@@ -9268,13 +9410,14 @@ function islandToday(){
         label: hs[i].label || '假期',
         passed: (passed == null ? 0 : passed) + 1,
         left: (left == null ? 0 : left) + 1,
+        key: key, date: d,
       };
     }
   }
 
   var day = (ISLAND.days || {})[key];
   if(day && day.off){
-    return { kind: 'off', label: day.label || '今天不上课', text: day.text || '' };
+    return { kind: 'off', label: day.label || '不上课', text: day.text || '', key: key, date: d };
   }
   var text = (day && day.text) || (ISLAND.banner || {})[dow] || '';
   return {
@@ -9284,11 +9427,19 @@ function islandToday(){
     /* 没设过的那天（用星期默认课表）走「默认加粗」，day.bold 未设时也按加粗 */
     bold: (day && day.text) ? !!day.bold : undefined,
     center: !(day && day.text && day.center === false),
+    size: (day && day.text && day.size) ? Number(day.size) : 0,
+    key: key, date: d,
   };
 }
 
 function islandRender(){
   var host = document.getElementById('classIsland');
+  if(ISL_VIEW === null){
+    try{
+      var v = sessionStorage.getItem('__cls_isl_view');
+      if(v === 'today' || v === 'tomorrow') ISL_VIEW = v;
+    }catch(e){}
+  }
   if(!host) return;
   /* v3.9.14：去掉首帧占位类（占位是为了不让页面跳，见 index.html .isl-boot） */
   host.classList.remove('isl-boot');
@@ -9357,11 +9508,26 @@ function islandRender(){
  *   行首 #     → 这一行整体加粗并居中
  * 先转义再套标记，不会因为内容里带尖括号出问题。
  * ========================================================================= */
+/* v3.9.18：{字号b/s文字} —— 单字级别的字号 / 加粗 / 横线
+   例：{28b考} 表示「考」28px 且加粗；{s化} 表示「化」加一条横线。
+   只有带属性才当标记，正文里单纯写 {abc} 会原样显示。 */
+function islInline(sz, fl, txt){
+  if(!sz && !fl) return txt;
+  var st = '';
+  if(sz) st += 'font-size:' + sz + 'px;';
+  if(fl.indexOf('b') >= 0) st += 'font-weight:900;';
+  if(fl.indexOf('s') >= 0) st += 'text-decoration:line-through;';
+  return st ? '<span style="' + st + '">' + txt + '</span>' : txt;
+}
 function islFmtLine(line, forceHead){
   var head = !!forceHead;
   var t = String(line == null ? '' : line);
   if(/^#\s?/.test(t)){ head = true; t = t.replace(/^#\s?/, ''); }
   var html = esc(t);
+  html = html.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, txt){
+    if(!sz && !fl) return all;
+    return islInline(sz, fl, txt);
+  });
   html = html.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
   html = html.replace(/~~([^~]+)~~/g, '<s>$1</s>');
   return head ? '<span class="ln-em">' + html + '</span>' : html;
@@ -9374,13 +9540,22 @@ function islFmt(text){
 function islandBanner(){
   var host = document.getElementById('islBannerRow');
   if(!host || !ISLAND) return;
-  var t = islandToday();
+  var tomorrow = islShowTomorrow();
+  var t = islandToday(tomorrow ? 1 : 0);
   var footL = document.getElementById('islFootL');
   var foot = document.getElementById('islFoot');
+  /* 21 点后才出现「看今天 / 看明天」的切换按钮：不加高度，跟标签同一行 */
+  var sw = islIsNight()
+    ? '<button type="button" class="isl-switch" onclick="event.stopPropagation();islSwitchView()">'
+      + (tomorrow ? '看今天' : '看明天') + '</button>'
+    : '';
+  var tagRow = function(tag){
+    return '<span class="tag-row"><span class="tag">' + tag + '</span>' + sw + '</span>';
+  };
 
   if(t.kind === 'holiday'){
     host.innerHTML = '<div class="island-banner hol">'
-      + '<span class="tag">放假中</span>'
+      + tagRow('放假中')
       + '<span class="txt"><b>' + esc(t.label) + '</b>　已放假 ' + t.passed + ' 天'
       +   ' · 距开学还有 ' + t.left + ' 天</span>'
       + '</div>';
@@ -9392,7 +9567,7 @@ function islandBanner(){
 
   if(t.kind === 'off'){
     host.innerHTML = '<div class="island-banner hol">'
-      + '<span class="tag">今天</span>'
+      + tagRow(tomorrow ? '明天' : '今天')
       + '<span class="txt"><b>' + esc(t.label) + '</b>' + (t.text ? '　' + esc(t.text) : '') + '</span>'
       + '</div>';
     islBindPhoto(host);
@@ -9410,11 +9585,13 @@ function islandBanner(){
   host.innerHTML = '<div class="island-banner' + (ISLAND.photo ? ' can-photo' : '')
     + (t.center === false ? ' left-align' : '') + '"'
     + (ISLAND.photo ? ' title="点击查看照片"' : '') + '>'
-    + '<span class="tag">今日事项' + cam + '</span>'
-    + '<span class="' + cls + '">' + islFmt(txt) + '</span>'
+    + tagRow((tomorrow ? '明日事项' : '今日事项') + cam)
+    + '<span class="' + cls + '"' + (t.size ? ' style="font-size:' + t.size + 'px"' : '') + '>'
+    +   islFmt(txt) + '</span>'
     + '</div>';
   islBindPhoto(host);
-  if(footL) footL.textContent = ISLAND_DOW_CN[islandDayKey(new Date())] + ' ' + (new Date().getMonth() + 1) + '/' + new Date().getDate();
+  var vd = t.date || new Date();
+  if(footL) footL.textContent = ISLAND_DOW_CN[islandDayKey(vd)] + ' ' + (vd.getMonth() + 1) + '/' + vd.getDate();
   if(foot) foot.textContent = islandWeekNo();
 }
 
@@ -9434,11 +9611,21 @@ function islandToggleMeta(){
   if(cue) cue.textContent = on ? '收起' : '详情';
 }
 
+var ISL_TICK_H = null;
 function islandTick(){
   if(!ISLAND || !ISLAND.on) return;
   var d = new Date();
   islSet('islTime', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'));
+  /* 跨过 21:00（或跨天）时重画横幅：不用刷新页面也能切到「明日事项」 */
+  var h = d.getHours();
+  if(ISL_TICK_H !== null && ISL_TICK_H !== h){
+    if(h === 21 || h === 0) islandBanner();
+  }
+  ISL_TICK_H = h;
 }
+
+/* v3.9.21：失败后最多自动重试一次（用函数对象当开关，避免再开一个全局变量） */
+function islWxRetry(){}
 
 function islandWeather(){
   if(!document.getElementById('islWx')) return;
@@ -9448,14 +9635,24 @@ function islandWeather(){
   }
   var cache = null;
   try{ cache = JSON.parse(localStorage.getItem('__cls_wx') || 'null'); }catch(e){}
-  if(cache && cache.v && (Date.now() - cache.t) < 30 * 60000){
+  var hasCache = !!(cache && cache.v && cache.v.t != null);
+  var fresh = hasCache && (Date.now() - cache.t) < 30 * 60000;
+  if(fresh){
     ISLAND_WX = cache.v;
     islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
     return;
   }
-  /* v3.9.10：轻量模式不主动联网（省流量、少一次 200ms+ 的请求），
-     有旧缓存就显示旧值，没有就留「—」。 */
-  if(liteOn()){ islSet('islWx', '—'); return; }
+  /* v3.9.10：轻量模式不主动联网（省流量、少一次 200ms+ 的请求）；
+     v3.9.21：不再一律显示「—」，旧缓存有多旧都先用上（温度总比横线有用）。 */
+  if(liteOn()){
+    if(hasCache){
+      ISLAND_WX = cache.v;
+      islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
+    }else{
+      islSet('islWx', '—');
+    }
+    return;
+  }
   /* Open-Meteo：免费、免 key、允许跨域；坐标按修水县取的 */
   fetch('https://api.open-meteo.com/v1/forecast?latitude=29.03&longitude=114.57'
       + '&current=temperature_2m,weather_code&timezone=Asia%2FShanghai')
@@ -9469,8 +9666,21 @@ function islandWeather(){
       islSet('islWx', v.t + '° ' + v.s);
     })
     .catch(function(){
-      var e3 = document.getElementById('islWx');
-      if(e3) e3.textContent = '—';
+      /* v3.9.21：请求偶尔失败不要立刻把温度抹成「—」——
+         有上次的值就先顶着，并在一分钟后再试一次（只重试一次）。 */
+      var old2 = null;
+      try{ old2 = JSON.parse(localStorage.getItem('__cls_wx') || 'null'); }catch(e){}
+      if(old2 && old2.v && old2.v.t != null){
+        ISLAND_WX = old2.v;
+        islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
+      }else{
+        var e3 = document.getElementById('islWx');
+        if(e3) e3.textContent = '—';
+      }
+      if(!islWxRetry._done){
+        islWxRetry._done = true;
+        setTimeout(function(){ ISLAND_WX = null; islandWeather(); }, 60000);
+      }
     });
 }
 
@@ -13036,7 +13246,314 @@ function scEmbedHtml(){
     + '<div class="sc-pane" id="scPaneBox"></div>'
     + '</div>';
 }
-function scPane(html){ document.getElementById('scPaneBox').innerHTML = html; }
+/* ============================================================================
+ * v3.9.26（站主）：成绩分析的图表都要「长出来」的入场动画
+ * ----------------------------------------------------------------------------
+ * 站主要的是抖音上那类数据可视化：柱子从底部长起来、雷达从中心张开、
+ * 横条从 0 撑开、表格一行行落下来、概览数字滚动计数。
+ *
+ * 三种情况一律不动画，直接渲染终值（老设备上动画反而卡）：
+ *   ① 轻量模式 liteOn()   ② 自定义设置里选了「精简动效」   ③ 系统开了「减少动态效果」
+ * ========================================================================== */
+var SC_ANIM_MS = 620;
+var SC_IO = null;          /* 视口观察器：滚到哪张卡才播哪张 */
+var SC_FOLD = {};          /* 折叠状态：data-scblk -> true */
+
+function scAnimOn(){
+  try{
+    if(liteOn()) return false;
+    if(UI && UI.motion === 0) return false;
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+  }catch(e){}
+  return true;
+}
+function scRAF(fn){
+  if(window.requestAnimationFrame) return window.requestAnimationFrame(fn);
+  return setTimeout(function(){ fn(Date.now()); }, 16);
+}
+function scEase(p){ return 1 - Math.pow(1 - p, 3); }
+
+/* ============================================================================
+ * v3.10.0（站主）：
+ *   「图表内部的动画等屏幕转到那个页面才开始显示，不要打开板块就全部同时播；
+ *     上滑翻走了再回去，图表要重新播一遍；文字（成绩、排名那些）第一次跳一下就行」
+ *
+ * 所以：柱状图 / 横条 / 雷达 / 行 → 交给 IntersectionObserver，进视口播、出视口复位，
+ *       下次滚回来再播一遍；
+ *       概览数字（文字）→ 只播一次（元素上打 __done 记号）。
+ * 视频里的数据永远是真实值 —— 只在「即将播放」的那一刻才归零，不会出现
+ * 视口外的柱子一直是 0（那样万一观察器没触发就变成错数据）。
+ * ========================================================================== */
+
+/* ---- 柱状图：逐帧改 y / height（不用 CSS transform，老 Safari 的
+        transform-box 不靠谱，会以 (0,0) 为中心缩放） ---- */
+function scBarState(svg){
+  if(svg.__bars) return svg.__bars;
+  var bars = svg.querySelectorAll('.sc-bar');
+  var axis = svg.querySelector('.sc-axis');
+  var baseY = axis ? parseFloat(axis.getAttribute('y1')) : NaN;
+  var items = [];
+  if(bars.length && isFinite(baseY)){
+    for(var i = 0; i < bars.length; i++){
+      var b = bars[i];
+      var y = parseFloat(b.getAttribute('y'));
+      var h = parseFloat(b.getAttribute('height'));
+      if(!isFinite(y) || !isFinite(h) || h <= 0) continue;
+      items.push({ el: b, y: y, h: h, d: i * 26 });
+    }
+  }
+  svg.__bars = { items: items, baseY: baseY, playing: false };
+  return svg.__bars;
+}
+function scPlayBars(svg){
+  if(!svg) return;
+  var st = scBarState(svg);
+  if(!st.items.length || st.playing) return;
+  st.playing = true;
+  /* 开播前才归零 —— 视口外保持真实高度 */
+  for(var i = 0; i < st.items.length; i++){
+    st.items[i].el.setAttribute('y', st.baseY);
+    st.items[i].el.setAttribute('height', 0);
+  }
+  var items = st.items, total = SC_ANIM_MS + (items.length - 1) * 26, t0 = 0;
+  var step = function(ts){
+    if(!t0) t0 = ts;
+    var el = ts - t0;
+    for(var k = 0; k < items.length; k++){
+      var it = items[k];
+      if(!it.el.parentNode) continue;
+      var p = scEase(Math.max(0, Math.min(1, (el - it.d) / SC_ANIM_MS)));
+      var h = it.h * p;
+      it.el.setAttribute('height', h.toFixed(2));
+      it.el.setAttribute('y', (it.y + it.h - h).toFixed(2));
+    }
+    if(el < total) scRAF(step);
+    else{
+      st.playing = false;
+      items.forEach(function(it){
+        it.el.setAttribute('height', it.h.toFixed(2));
+        it.el.setAttribute('y', it.y.toFixed(2));
+      });
+    }
+  };
+  scRAF(step);
+}
+
+/* ---- 横向占比条：开播前才归零，两帧后还原触发 transition ---- */
+function scGrowList(card){
+  if(card.__grows) return card.__grows;
+  var els = card.querySelectorAll('.sc-seg-bar, .sc-sub-bar > i');
+  var list = [];
+  for(var i = 0; i < els.length; i++){
+    var w = els[i].style.width;
+    if(!w || parseFloat(w) <= 0) continue;
+    list.push({ el: els[i], w: w });
+  }
+  card.__grows = list;
+  return list;
+}
+function scPlayGrow(card){
+  var list = scGrowList(card);
+  if(!list.length) return;
+  list.forEach(function(o){ if(o.el.parentNode) o.el.style.width = '0%'; });
+  scRAF(function(){
+    scRAF(function(){
+      list.forEach(function(o){ if(o.el.parentNode) o.el.style.width = o.w; });
+    });
+  });
+}
+
+/* ---- 概览数字：只跳一次（文字类不用反复动） ---- */
+function scCountUp(el, dur){
+  var txt = el.__txt != null ? el.__txt : el.textContent;
+  el.__txt = txt;
+  var m = /-?\d+(?:\.\d+)?/.exec(txt);
+  if(!m) return;
+  var target = parseFloat(m[0]);
+  if(!isFinite(target) || Math.abs(target) > 99999) return;
+  var dec = (m[0].split('.')[1] || '').length;
+  var head = txt.slice(0, m.index), tail = txt.slice(m.index + m[0].length);
+  var t0 = 0;
+  var step = function(ts){
+    if(!t0) t0 = ts;
+    var p = scEase(Math.min(1, (ts - t0) / dur));
+    el.textContent = head + (target * p).toFixed(dec) + tail;
+    if(p < 1) scRAF(step);
+    else el.textContent = txt;
+  };
+  el.textContent = head + (0).toFixed(dec) + tail;
+  scRAF(step);
+}
+function scPlayNums(card){
+  if(card.__numsDone) return;
+  card.__numsDone = true;
+  var els = card.querySelectorAll('.sc-stat b');
+  for(var i = 0; i < els.length; i++){
+    (function(el, i){
+      setTimeout(function(){ if(el.parentNode) scCountUp(el, 700); }, i * 40);
+    })(els[i], i);
+  }
+}
+
+/* ---- 卡片级：进视口播、出视口复位 ---- */
+function scPlayCard(card){
+  if(!card) return;
+  card.classList.add('sc-in');
+  var svg = card.querySelector('svg.sc-svg');
+  if(svg) scPlayBars(svg);
+  scPlayGrow(card);
+  scPlayNums(card);          /* 内部自带「只播一次」 */
+}
+function scResetCard(card){
+  if(!card) return;
+  card.classList.remove('sc-in');
+  var svg = card.querySelector('svg.sc-svg');
+  if(svg && svg.__bars && svg.__bars.items.length){
+    var st = svg.__bars;
+    st.items.forEach(function(it){
+      it.el.setAttribute('y', st.baseY);
+      it.el.setAttribute('height', 0);
+    });
+  }
+  var list = scGrowList(card);
+  list.forEach(function(o){ if(o.el.parentNode) o.el.style.width = '0%'; });
+}
+
+/* ---- 折叠：每个 .sc-card 右上角一个小箭头 ----
+   用事件委托绑在容器上（不给每个按钮单独挂 onclick）：
+   面板每次重渲染都是新 DOM，逐个绑一旦漏掉就又「点了没反应」。 */
+function scCardOf(el, root){
+  var n = 0;
+  while(el && el !== root && n++ < 10){
+    if(el.classList && el.classList.contains('sc-card')) return el;
+    el = el.parentNode;
+  }
+  return null;
+}
+function scBindFold(root){
+  if(root.__foldBound) return;
+  root.__foldBound = true;
+  root.addEventListener('click', function(e){
+    var t = e.target, n = 0;
+    while(t && t !== root && n++ < 6){
+      if(t.classList && t.classList.contains('sc-fold-btn')) break;
+      t = t.parentNode;
+    }
+    if(!t || t === root || !(t.classList && t.classList.contains('sc-fold-btn'))) return;
+    var card = scCardOf(t, root);
+    if(!card) return;
+    card.classList.toggle('sc-folded');
+    var body = scFoldBody(card);
+    if(body) body.hidden = card.classList.contains('sc-folded');
+    var key = card.getAttribute('data-scblk');
+    if(key) SC_FOLD[key] = card.classList.contains('sc-folded');
+    if(!card.classList.contains('sc-folded') && card.classList.contains('sc-anim-card')){
+      /* 展开时补一次动画，不然展开后图表是「已经长完」的样子 */
+      scPlayCard(card);
+    }
+  }, false);
+}
+/* 折叠用一个包裹层 —— 之前试过「直接给子元素设 display:none」和
+   「CSS 的 > :not(.sc-card-h)」，在 <svg> 上都不生效（svg 自带 display，
+   而且 svg.matches('… > :not(…)') 在 Chrome 上返回 false）。
+   包一层普通 div 最稳：收起来就是 body.hidden = true。 */
+function scFoldBody(card){
+  if(!card) return null;
+  if(card.__foldBody) return card.__foldBody;
+  var head = card.querySelector('.sc-card-h');
+  if(!head) return null;
+  var body = document.createElement('div');
+  body.className = 'sc-fold-body';
+  var nodes = [];
+  for(var i = 0; i < card.children.length; i++){
+    if(card.children[i] !== head) nodes.push(card.children[i]);
+  }
+  for(var k = 0; k < nodes.length; k++) body.appendChild(nodes[k]);
+  card.appendChild(body);
+  card.__foldBody = body;
+  return body;
+}
+
+function scFoldInit(root){
+  scBindFold(root);
+  var cards = root.querySelectorAll('.sc-card');
+  for(var i = 0; i < cards.length; i++){
+    var c = cards[i];
+    var head = c.querySelector('.sc-card-h');
+    if(!head || c.querySelector('.sc-fold-btn')) continue;
+    c.classList.add('sc-anim-card');
+    var body = scFoldBody(c);
+    var key = c.getAttribute('data-scblk');
+    if(key && SC_FOLD[key]) c.classList.add('sc-folded');
+    if(body) body.hidden = c.classList.contains('sc-folded');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sc-fold-btn';
+    btn.setAttribute('aria-label', '收起或展开');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" '
+      + 'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+    head.appendChild(btn);
+  }
+}
+
+function scAnim(root){
+  if(!root) return;
+  if(SC_IO){ SC_IO.disconnect(); SC_IO = null; }
+  scFoldInit(root);                       /* 折叠是功能，轻量模式下也要有 */
+
+  if(!scAnimOn()){
+    root.classList.remove('sc-anim');
+    return;
+  }
+  root.classList.add('sc-anim');
+
+  var cards = [];
+  var raw = root.querySelectorAll('.sc-card');
+  for(var i = 0; i < raw.length; i++) cards.push(raw[i]);
+  if(!cards.length && root.nodeType === 1) cards.push(root);
+
+  if(!window.IntersectionObserver){
+    /* 老内核没有观察器：直接全部播一遍，至少不丢动画 */
+    cards.forEach(scPlayCard);
+    return;
+  }
+  SC_IO = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      var card = en.target;
+      if(en.isIntersecting){
+        if(!card.classList.contains('sc-in')){
+          void card.offsetWidth;      /* 强制一次重排，CSS 动画才会重头播 */
+          scPlayCard(card);
+        }
+      }else if(card.classList.contains('sc-in')){
+        scResetCard(card);
+      }
+    });
+  }, { threshold: 0.08, rootMargin: '0px 0px -6% 0px' });
+
+  cards.forEach(function(c){
+    SC_IO.observe(c);
+    /* 已经在视口里的立刻播，不等观察器那一下回调（首屏更利索，也避免某些
+       内核首帧不回调导致柱子一直是 0） */
+    var r = c.getBoundingClientRect();
+    if(r.bottom > 0 && r.top < (window.innerHeight || 800)) scPlayCard(c);
+  });
+  /* 行错峰（只挑前 16 行，全班 60 行全动会卡） */
+  var rows = root.querySelectorAll('.sc-tbl tbody tr, .sc-cut-row, .sc-sub, .sc-hm-row');
+  var limit = Math.min(rows.length, 16);
+  for(var k = 0; k < limit; k++){
+    rows[k].classList.add('sc-rise');
+    rows[k].style.animationDelay = (k * 26) + 'ms';
+  }
+}
+window.__scAnim = scAnim;   /* 测试用：直接喂一段 DOM 看动画有没有跑 */
+
+function scPane(html){
+  var box = document.getElementById('scPaneBox');
+  box.innerHTML = html;
+  /* typeof 兜一下：有些单元测试只把部分函数提出来跑，不该因为缺 scAnim 就炸 */
+  if(typeof scAnim === 'function') scAnim(box);
+}
 function scLoading(txt){
   scPane('<div class="sc-empty"><div class="spinner"></div><p>' + (txt || '加载中…') + '</p></div>');
 }
@@ -14187,11 +14704,26 @@ function scPkTotalCard(A, B){
   /* v3.5.13（#8 站主「两次考试都要画上去」）：选了第二场且数据在手时，
      每人画两根柱 —— 淡柱=上一场，实柱=这一场。 */
   var pack = (SC.pkExam2 != null) ? ((SC.allRows || {})[SC.pkExam2] || null) : null;
-  function prevTot(row){
+  /* 🔴 v3.10.0 修：淡柱（上一场）以前直接读 row.s —— 那是**这一场**的成绩，
+     于是淡柱和主柱一样高，看起来「淡柱用的还是主柱的分」。
+     正确做法是先在上一场成绩里认人（先 uid 再姓名），再用那一行的分。 */
+  function prevRowOf(row){
     if(!pack || !row) return null;
+    var rows = pack.rows || [], hit = null;
+    if(row.uid){
+      rows.forEach(function(x){ if(!hit && x.uid && String(x.uid) === String(row.uid)) hit = x; });
+    }
+    if(!hit && row.name){
+      rows.forEach(function(x){ if(!hit && x.name === row.name) hit = x; });
+    }
+    return hit;
+  }
+  function prevTot(row){
+    var pr = prevRowOf(row);
+    if(!pr) return null;
     var t = 0, any = false;
     ((pack.exam && pack.exam.subjects) || []).forEach(function(s){
-      var v = row.s && row.s[s.key];
+      var v = pr.s && pr.s[s.key];
       if(!v) return;
       var val = (SC.basis === 'graded' && s.graded && v.assigned != null) ? v.assigned : v.raw;
       if(val == null) return;

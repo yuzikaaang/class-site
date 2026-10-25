@@ -352,6 +352,47 @@ for (const f of scanFiles) {
 if (secretHits.length) die('疑似明文口令（仓库是公开的，口令只能放 Secrets / 本机）：\n   ' + secretHits.join('\n   '));
 console.log('③h 无明文口令');
 
+/* ---------- ③i README 必须与本次版本同步 ----------
+   站主（2026-10-25）：「以后 readme 也是有部署门禁，部署前确保 readme 已同步更新，
+   确保删掉错误的，添加新增的」。
+   三条硬规则：
+     · 顶部「当前版本 vX.Y.Z」必须等于代码版本（改代码不改 README → 拦）
+     · 更新日志的第一条必须是当前版本（只在中间塞一行不算）
+     · 功能一览必须提到关键能力（新功能忘了写进 README → 拦）
+   外加一份「错误的表述」黑名单，防止老描述被复制回去。 */
+const rd = read('README.md');
+const rdVer = (rd.match(/\*\*当前版本\s*v?([\d.]+)\*\*/) || [])[1];
+if (!rdVer) {
+  die('README.md 顶部没有「当前版本 **vX.Y.Z**」这一行。'
+    + '\n   加在开头介绍下面，格式照抄：> **当前版本 v' + VER + '**（YYYY-MM-DD）· …');
+}
+if (rdVer !== VER) {
+  die('README 写的是 v' + rdVer + '，代码是 v' + VER + '。'
+    + '\n   这次改了功能却没同步 README —— 请把「当前版本」、更新日志、功能一览一起改。');
+}
+const logAt = rd.indexOf('## 更新日志');
+if (logAt < 0) die('README.md 里找不到「## 更新日志」这一节。');
+const firstLog = (rd.slice(logAt).match(/^### (v[\d.]+)/m) || [])[1] || '';
+if (firstLog !== 'v' + VER) {
+  die('README 更新日志的第一条是 ' + (firstLog || '空') + '，不是 v' + VER + '。'
+    + '\n   新版本要写在更新日志最上面（旧的往下排），不能只塞在中间。');
+}
+const needWords = ['班级岛', '逐字', '成绩分析', '作业管理', '备份', '分享链接'];
+const missWords = needWords.filter((w) => rd.indexOf(w) < 0);
+if (missWords.length) {
+  die('README 的「功能一览 / 后台能力」里缺这些关键词：' + missWords.join('、')
+    + '\n   功能加了就写进去；确实是删掉的功能，同步删掉这条检查。');
+}
+const staleWords = [
+  ['无需后端与数据库', '站点现在有 Cloudflare Worker + Neon，这句是错的'],
+  ['v2.6.4 新增', '版本标注过时，改成「v2.6.4 起」或去掉'],
+];
+const hitStale = staleWords.filter(([k]) => rd.indexOf(k) >= 0);
+if (hitStale.length) {
+  die('README 里有过时表述：' + hitStale.map(([k, why]) => '「' + k + '」' + why).join('；'));
+}
+console.log('③i README 已同步到 ' + VER + '（当前版本 / 更新日志首条 / 功能关键词 / 无过时表述）');
+
 /* ---------- ④ 部署前备份 ---------- */
 if (DRY) {
   console.log('④ 跳过备份（--dry-run）\n✅ 检查通过（未备份、未部署）');

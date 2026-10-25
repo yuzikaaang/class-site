@@ -70,6 +70,11 @@ const ALLOW_KEYS = [
      cls_game_<本地键>（如 cls_game_snake_hi）、cls_game_play_<游戏>、
      cls_game_coupon_ledger（券台账云端副本，发放前以它判重） */
   'cls_game_*',
+  /* v3.9.25（站主）：全屏时钟的使用记录。
+     cls_clock_log_<YYYY-MM-DD>  当天的时间线（每段用了几分钟、用的哪个模式）
+     cls_clock_pomo_<YYYY-MM-DD> 当天的番茄数（离线补写用，正常随 log 一起）
+     后台「时钟记录」面板按这两类键汇总，别的键一概不碰。 */
+  'cls_clock_*',
 ];
 
 /** 单条数据体积上限（字符数），防止有人塞大文件进来 */

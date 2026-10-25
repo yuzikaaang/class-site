@@ -29,7 +29,7 @@ const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const MAX_HOLIDAYS = 30;
 const MAX_DAYS = 200;
 const MAX_TEXT = 60;       /* 星期横幅：默认课表一行，60 字够 */
-const MAX_DAY_TEXT = 200;  /* v3.9.6：按日期临时改可以多行（考试时段 / 备注） */
+const MAX_DAY_TEXT = 600;  /* v3.9.6：多行；v3.9.18 起支持 {22b字} 单字标记，所以放到 600 */
 const MAX_PHOTO = 500;
 
 /* 站主 2026-10-21 发来的纸质课表，压成横幅缩写（早读 + 上午 5 节 + 下午 4 节 + 晚上） */
@@ -76,6 +76,14 @@ const DEFAULT_ISLAND = {
   photo: '',
 };
 
+/** 字号：只接受 4–32 的整数，其它一律当「默认」
+    （v3.9.19：站主要求最小能到 4px，之前卡在 12 会被静默丢掉） */
+function clampSize(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 4 || n > 32) return 0;
+  return Math.round(n);
+}
+
 function str(v, max) { return String(v == null ? '' : v).trim().slice(0, max); }
 function isDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')); }
 
@@ -103,9 +111,11 @@ function normDays(raw) {
       text: str(v.text, MAX_DAY_TEXT),
       off: !!v.off,
       label: str(v.label, 16),
-      /* v3.9.7：当天那一条可以单独设加粗 / 是否居中（默认居中） */
+      /* v3.9.7：当天那一条可以单独设加粗 / 是否居中（默认居中）
+         v3.9.17：再加「字号」（px，0 = 跟随默认） */
       bold: !!v.bold,
       center: v.center !== false,
+      size: clampSize(v.size),
     };
   });
   return out;
