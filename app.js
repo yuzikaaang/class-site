@@ -9183,7 +9183,7 @@ function islWxPaint(v){
     rows += '<div class="isl-wx-row' + (isNow ? ' now' : '') + (has ? '' : ' no-t') + '">'
       + '<span class="t">' + (isNow ? '现在' : ('0' + hh).slice(-2) + ':00') + '</span>'
       + '<span class="ic">' + islWxIcon(code[i]) + '</span>'
-      + '<span class="bar" style="width:' + w + '%"></span>'
+      + (has ? '<span class="bar" style="width:' + w + '%"></span>' : '<span class="bar" style="display:none"></span>')
       + '<span class="tp">' + (has ? Math.round(tp) + '°' : '—') + '</span>'
       + '<span class="rn">' + (rn == null || rn <= 0 ? '' : rn + '%') + '</span>'
       + '</div>';
