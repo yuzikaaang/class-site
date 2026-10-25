@@ -9058,12 +9058,31 @@ function islWxClose(){
   document.body.style.overflow = '';
 }
 function islWxBackdrop(e){ if(e.target === e.currentTarget) islWxClose(); }
+function islWxForce(){
+  /* 站主反馈「有时候不显示温度」：碰到残缺数据或被写坏的缓存时，
+     手动清掉再取一次，不用关掉弹层重开。 */
+  try{ localStorage.removeItem('__cls_wx_h2'); localStorage.removeItem('__cls_wx_h'); }catch(e){}
+  islWxLoad();
+}
+
+/* 一份逐小时数据算不算完整：时间够 24 条，且至少一半小时有温度。
+   以前拿到什么就存什么，一旦接口只给了时间没给温度，10 分钟内每次打开
+   都是一列「—」，看起来就是「天气预报不显示温度」。 */
+function islWxOk(v){
+  if(!v || !v.time || !v.time.length) return false;
+  if(v.time.length < 24) return false;
+  var t = v.temp || [];
+  var n = 0;
+  for(var i = 0; i < t.length; i++){ if(t[i] != null) n++; }
+  return n >= 12;
+}
+
 function islWxLoad(){
   var body = document.getElementById('islWxBody');
   if(!body) return;
   var cache = null;
-  try{ cache = JSON.parse(localStorage.getItem('__cls_wx_h') || 'null'); }catch(e){}
-  if(cache && cache.t && (Date.now() - cache.t) < 10 * 60000){
+  try{ cache = JSON.parse(localStorage.getItem('__cls_wx_h2') || 'null'); }catch(e){}
+  if(cache && cache.t && (Date.now() - cache.t) < 10 * 60000 && islWxOk(cache.v)){
     islWxPaint(cache.v);
     return;
   }
@@ -9078,19 +9097,36 @@ function islWxLoad(){
       var h = (j && j.hourly) || {};
       if(!h.time || !h.time.length) throw new Error('no data');
       var v = {
-        time: h.time, temp: h.temperature_2m || [],
-        code: h.weather_code || [], rain: h.precipitation_probability || [],
+        time: h.time,
+        temp: Array.isArray(h.temperature_2m) ? h.temperature_2m : [],
+        code: Array.isArray(h.weather_code) ? h.weather_code : [],
+        rain: Array.isArray(h.precipitation_probability) ? h.precipitation_probability : [],
       };
-      try{ localStorage.setItem('__cls_wx_h', JSON.stringify({ t: Date.now(), v: v })); }catch(e){}
+      /* 温度缺一半以上就不写缓存（下次打开重新取，避免 10 分钟内一直是「—」），
+         但时间还在，仍然把列表画出来 —— 有几点、什么天气，总比一整页错误有用。 */
+      if(islWxOk(v)){
+        try{ localStorage.setItem('__cls_wx_h2', JSON.stringify({ t: Date.now(), v: v })); }catch(e){}
+      }
       islWxPaint(v);
     })
     .catch(function(){
-      body.innerHTML = '<div class="isl-wx-load">天气没取到，可能是网络或接口暂时不可用<br>稍后再点一次试试</div>';
+      /* 取不到完整数据时，宁可给旧数据（并说明），也不要一屏「—」 */
+      var old = null;
+      try{ old = JSON.parse(localStorage.getItem('__cls_wx_h2') || 'null'); }catch(e){}
+      if(old && islWxOk(old.v)){
+        islWxPaint(old.v);
+        var sub = document.getElementById('islWxSub');
+        if(sub) sub.innerHTML = '网络不稳，显示的是上次的数据 · '
+          + '<a href="javascript:;" onclick="islWxForce()">重新获取</a>';
+        return;
+      }
+      body.innerHTML = '<div class="isl-wx-load">天气没取到，可能是网络或接口暂时不可用'
+        + '<br><button type="button" class="isl-wx-retry" onclick="islWxForce()">重新获取</button></div>';
     });
 }
 function islWxPaint(v){
   var body = document.getElementById('islWxBody');
-  if(!body || !v) return;
+  if(!body || !v || !v.time || !v.time.length) return;
   var pad = function(n){ return ('0' + n).slice(-2); };
   var now = new Date();
   var key = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
@@ -9100,20 +9136,34 @@ function islWxPaint(v){
   for(var i = 0; i < v.time.length; i++){
     if(String(v.time[i]).slice(0, 13) >= key){ start = i; break; }
   }
+  /* v3.9.21：四组数据必须一起切。以前 time 兜底回退到前 24 条、温度却没回退，
+     一旦走到这个分支，时间有、温度全空 —— 就是站主说的「不显示温度」。 */
   var time = v.time.slice(start, start + 24);
   var temp = (v.temp || []).slice(start, start + 24);
   var code = (v.code || []).slice(start, start + 24);
   var rain = (v.rain || []).slice(start, start + 24);
-  if(!time.length) time = v.time.slice(0, 24);
+  if(!time.length){
+    start = 0;
+    time = v.time.slice(0, 24);
+    temp = (v.temp || []).slice(0, 24);
+    code = (v.code || []).slice(0, 24);
+    rain = (v.rain || []).slice(0, 24);
+  }
 
-  var nums = temp.filter(function(x){ return x != null; });
+  var nums = temp.filter(function(x){ return x != null && x !== '' && !isNaN(x); });
   var lo = nums.length ? Math.min.apply(null, nums) : 0;
-  var hi = nums.length ? Math.max.apply(null, nums) : 1;
+  var hi = nums.length ? Math.max.apply(null, nums) : 0;
   var span = Math.max(1, hi - lo);
 
   var sub = document.getElementById('islWxSub');
-  if(sub) sub.textContent = nums.length
-    ? ('未来 24 小时 ' + Math.round(lo) + '° ~ ' + Math.round(hi) + '°') : '';
+  if(sub){
+    if(nums.length){
+      sub.innerHTML = '未来 24 小时 ' + Math.round(lo) + '° ~ ' + Math.round(hi) + '°';
+    }else{
+      /* 温度整段缺失：说清楚 + 给个重试，别让人对着一列「—」发呆 */
+      sub.innerHTML = '温度暂时没取到 · <a href="javascript:;" onclick="islWxForce()">重新获取</a>';
+    }
+  }
 
   var rows = '';
   var lastDay = '';
@@ -9127,17 +9177,18 @@ function islWxPaint(v){
     lastDay = day;
     var hh = parseInt(String(t).slice(11, 13), 10);
     var tp = temp[i], rn = rain[i];
-    var w = (tp == null) ? 0 : Math.round(((tp - lo) / span) * 88 + 12);
+    var has = (tp != null && tp !== '' && !isNaN(tp));
+    var w = has ? Math.round(((tp - lo) / span) * 88 + 12) : 0;
     var isNow = (i === 0);
-    rows += '<div class="isl-wx-row' + (isNow ? ' now' : '') + '">'
+    rows += '<div class="isl-wx-row' + (isNow ? ' now' : '') + (has ? '' : ' no-t') + '">'
       + '<span class="t">' + (isNow ? '现在' : ('0' + hh).slice(-2) + ':00') + '</span>'
       + '<span class="ic">' + islWxIcon(code[i]) + '</span>'
       + '<span class="bar" style="width:' + w + '%"></span>'
-      + '<span class="tp">' + (tp == null ? '—' : Math.round(tp) + '°') + '</span>'
+      + '<span class="tp">' + (has ? Math.round(tp) + '°' : '—') + '</span>'
       + '<span class="rn">' + (rn == null || rn <= 0 ? '' : rn + '%') + '</span>'
       + '</div>';
   });
-  body.innerHTML = rows || '<div class="isl-wx-load">暂时没有逐小时数据</div>';
+  body.innerHTML = rows;
   try{ body.scrollTop = 0; }catch(e){}
   var title = document.getElementById('islWxTitle');
   if(title) title.textContent = '修水 · 接下来 24 小时';
@@ -9519,6 +9570,9 @@ function islandTick(){
   ISL_TICK_H = h;
 }
 
+/* v3.9.21：失败后最多自动重试一次（用函数对象当开关，避免再开一个全局变量） */
+function islWxRetry(){}
+
 function islandWeather(){
   if(!document.getElementById('islWx')) return;
   if(ISLAND_WX){
@@ -9527,14 +9581,24 @@ function islandWeather(){
   }
   var cache = null;
   try{ cache = JSON.parse(localStorage.getItem('__cls_wx') || 'null'); }catch(e){}
-  if(cache && cache.v && (Date.now() - cache.t) < 30 * 60000){
+  var hasCache = !!(cache && cache.v && cache.v.t != null);
+  var fresh = hasCache && (Date.now() - cache.t) < 30 * 60000;
+  if(fresh){
     ISLAND_WX = cache.v;
     islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
     return;
   }
-  /* v3.9.10：轻量模式不主动联网（省流量、少一次 200ms+ 的请求），
-     有旧缓存就显示旧值，没有就留「—」。 */
-  if(liteOn()){ islSet('islWx', '—'); return; }
+  /* v3.9.10：轻量模式不主动联网（省流量、少一次 200ms+ 的请求）；
+     v3.9.21：不再一律显示「—」，旧缓存有多旧都先用上（温度总比横线有用）。 */
+  if(liteOn()){
+    if(hasCache){
+      ISLAND_WX = cache.v;
+      islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
+    }else{
+      islSet('islWx', '—');
+    }
+    return;
+  }
   /* Open-Meteo：免费、免 key、允许跨域；坐标按修水县取的 */
   fetch('https://api.open-meteo.com/v1/forecast?latitude=29.03&longitude=114.57'
       + '&current=temperature_2m,weather_code&timezone=Asia%2FShanghai')
@@ -9548,8 +9612,21 @@ function islandWeather(){
       islSet('islWx', v.t + '° ' + v.s);
     })
     .catch(function(){
-      var e3 = document.getElementById('islWx');
-      if(e3) e3.textContent = '—';
+      /* v3.9.21：请求偶尔失败不要立刻把温度抹成「—」——
+         有上次的值就先顶着，并在一分钟后再试一次（只重试一次）。 */
+      var old2 = null;
+      try{ old2 = JSON.parse(localStorage.getItem('__cls_wx') || 'null'); }catch(e){}
+      if(old2 && old2.v && old2.v.t != null){
+        ISLAND_WX = old2.v;
+        islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
+      }else{
+        var e3 = document.getElementById('islWx');
+        if(e3) e3.textContent = '—';
+      }
+      if(!islWxRetry._done){
+        islWxRetry._done = true;
+        setTimeout(function(){ ISLAND_WX = null; islandWeather(); }, 60000);
+      }
     });
 }
 
