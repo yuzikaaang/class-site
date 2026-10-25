@@ -1686,19 +1686,12 @@ var SITE_DATA = {
          仿照 yingming006.cn/time 做的，功能对齐（数字 / 翻页 / 秒表 / 计时器）。 */
       id: 30,
       categoryId: 8, title: "全屏时钟", icon: "", iconText: "⏰",
-      desc: "桌面时间显示与倒计时：数字 / 翻页两种时钟样式，翻页可以关掉秒；另有秒表、倒计时和自习番茄钟。\n支持全屏（自动横屏）、换字体、调数字大小、换背景，适合教室投屏、自习计时、桌面常驻。",
+      desc: "桌面时间显示与倒计时：数字 / 翻页两种时钟样式，翻页可以关掉秒；另有秒表、倒计时和自习番茄钟。\n支持全屏（自动横屏）、换字体、调数字大小、换背景；右上角「记录」能看到今天几点到几点用了什么。",
       mainLabel: "打开全屏时钟", mainUrl: "./clock.html", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
-    {
-      /* v3.9.24（站主）：「把番茄钟这些功能挪过来」——番茄钟已并进全屏时钟的自习模式，
-         这里不再跳外站，直接打开本地页面并进自习。 */
-      id: 11,
-      categoryId: 8, title: "番茄时钟", icon: "", iconText: "🍅",
-      desc: "番茄工作法计时器：专注 25 分钟 → 休息 5 分钟自动循环，每 4 个番茄给一次长休息，\n并记下今天完成几个。已并入站内「全屏时钟 → 自习」，不用再跳外站。",
-      mainLabel: "开始自习", mainUrl: "./clock.html?m=pomo", mainWechatOk: true,
-      extraLabel: "", extraUrl: "", extraWechatOk: true
-    },
+    /* v3.9.25（站主）：「其他工具这个番茄钟就可以不要了，我有（全屏时钟）就够了」
+       —— 番茄钟已经并进全屏时钟的自习模式，这里把整张卡片删掉。 */
     {
       id: 12,
       categoryId: 8, title: "私人云盘", icon: "", iconText: "云盘", active: false,
