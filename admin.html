@@ -1027,6 +1027,14 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 .ai-ovtag.off{background:rgba(140,140,140,.18);color:var(--fg-2)}
 .ai-ovtag.exam{background:rgba(185,28,28,.14);color:#b91c1c}
 .ai-ovtag.plan{background:rgba(3,105,161,.14);color:#0369a1}
+/* v3.9.25：时钟记录的明细标签 */
+.cl-segs{display:flex;flex-wrap:wrap;gap:8px}
+.cl-seg{display:inline-block;padding:5px 9px;border-radius:8px;background:var(--tint);
+  font-size:.76rem;line-height:1.45;white-space:nowrap}
+.cl-seg b{font-weight:700;margin-right:2px}
+.cl-seg i{font-style:normal;opacity:.6;margin-left:2px}
+tr.cl-detail td{background:var(--bg-2);padding-top:12px;padding-bottom:14px}
+
 /* ============================================================================
  * v3.9.20 统一输入控件（站主：输入框样式不统一，尤其是后台）
  * ----------------------------------------------------------------------------
@@ -1742,9 +1750,9 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '3.9.24';
+var SITE_VERSION = '3.9.25';
 var VER_DATE = '2026-10-25';
 </script>
-<script src="./admin.js?v=3924"></script>
+<script src="./admin.js?v=3925"></script>
 </body>
 </html>
