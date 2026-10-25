@@ -76,6 +76,8 @@ var STATE = {
   secrets: { list: [], encrypted: false, hasKey: false },
   /* 2026-10-07 新增：游戏数据（最高分 / 游玩时长 / 券获取时间） */
   games: { list: [], meta: [], summary: null, q: '', tab: 'play', week: '' },
+  /* v3.9.25：全屏时钟使用记录（谁在什么时候用了多久） */
+  clocklog: { day: '', q: '', users: [], summary: null, open: {} },
 };
 window.__ADMIN_STATE = STATE;   /* 调试用 */
 
@@ -742,6 +744,8 @@ var PAGES = [
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
   { id:'online',        label:'在线时长', icon:'clock',     group:'安全',  title:'在线时长（单次 / 累计）' },
+  /* v3.9.25（站主）：全屏时钟的自习 / 计时记录 */
+  { id:'clocklog',      label:'时钟记录', icon:'clock',     group:'安全',  title:'时钟记录（谁在什么时候用了多久）' },
   /* v3.6.1（站主 #4）：云端数据备份 / 回档 */
   { id:'backup',        label:'数据管理', icon:'database',  group:'安全',  title:'数据管理（备份 / 回档）' },
   { id:'logs',          label:'操作日志', icon:'file',      group:'安全',  title:'操作日志' },
@@ -836,6 +840,7 @@ function go(page){
     games:         renderGames,
     logins:        renderLogins,
     online:        renderOnline,
+    clocklog:      renderClockLog,
     logs:          renderLogs,
     actionlogs:    renderActionLogs,
     secrets:       renderSecrets,
@@ -8333,6 +8338,152 @@ function fmtDur(ms){
   return h + ' 小时' + (mm ? ' ' + mm + ' 分' : '');
 }
 
+/* ============================================================================
+ * v3.9.25（站主）：时钟记录
+ * ----------------------------------------------------------------------------
+ * 站主：「我在后台也可以看到具体是谁干嘛」。
+ * 数据是 clock.html 自己写进 user_data 的（cls_clock_log_<日期>），
+ * 接口 GET /api/admin?action=clock-logs 只读汇总，不写库。
+ * ========================================================================== */
+function clockToday(){
+  var d = new Date(), p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function clockDur(sec){
+  sec = Math.round(Number(sec) || 0);
+  if(sec <= 0) return '—';
+  if(sec < 60) return sec + ' 秒';
+  var m = Math.round(sec / 60);
+  if(m < 60) return m + ' 分钟';
+  return Math.floor(m / 60) + ' 时 ' + (m % 60) + ' 分';
+}
+function clockHM(ms){
+  var d = new Date(Number(ms));
+  if(isNaN(d.getTime())) return '—';
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function renderClockLog(){
+  var S = STATE.clocklog;
+  if(!S.day) S.day = clockToday();
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<div class="search">' + svg('search')
+    +     '<input id="clSearch" placeholder="搜索姓名或账号…" value="' + attr(S.q) + '" maxlength="40">'
+    +   '</div>'
+    +   '<input type="date" id="clDay" class="inp inp-sm" style="width:152px;flex:0 0 auto" value="' + attr(S.day) + '">'
+    +   '<button class="btn btn-sm btn-secondary" id="clToday">今天</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="clRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '同学在「全屏时钟」页里每切换一次模式就记一段：数字时钟 / 翻页时钟 / 秒表 / 倒计时，'
+    +   '自习则分成<b>专注</b>与<b>休息</b>两段。'
+    +   '<br><b>只有登录的人才会出现在这里</b> —— 未登录的记录只存在他自己的设备上。'
+    + '</div>'
+    + '<section class="panel"><div id="clBody">'
+    +   '<div class="loading"><div class="spinner"></div>加载中…</div>'
+    + '</div></section>';
+
+  $('clSearch').oninput = debounce(function(e){
+    STATE.clocklog.q = e.target.value.trim();
+    loadClockLog();
+  }, 400);
+  $('clDay').onchange = function(){
+    STATE.clocklog.day = this.value || clockToday();
+    STATE.clocklog.open = {};
+    loadClockLog();
+  };
+  $('clToday').onclick = function(){
+    STATE.clocklog.day = clockToday();
+    $('clDay').value = STATE.clocklog.day;
+    STATE.clocklog.open = {};
+    loadClockLog();
+  };
+  $('clRefresh').onclick = function(){ loadClockLog(); };
+
+  loadClockLog();
+}
+
+function loadClockLog(){
+  var S = STATE.clocklog;
+  if(!S.day) S.day = clockToday();
+  api('/admin?action=clock-logs&day=' + encodeURIComponent(S.day)
+    + '&q=' + encodeURIComponent(S.q || '')).then(function(j){
+    S.users = j.users || [];
+    S.summary = j.summary || null;
+    S.day = j.day || S.day;
+    paintClockLog();
+  }).catch(function(e){
+    var b = $('clBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34)
+      + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintClockLog(){
+  var S = STATE.clocklog;
+  var body = $('clBody');
+  if(!body) return;
+
+  var sm = S.summary || {};
+  var head = '<div class="stat-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div class="mini-card"><span class="mc-label">使用人数</span><b>' + (sm.users || 0) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">合计自习</span><b>' + clockDur(sm.focus) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">合计休息</span><b>' + clockDur(sm.rest) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">番茄总数</span><b>' + (sm.tomato || 0) + '</b></div>'
+    + '<div class="mini-card"><span class="mc-label">其它工具</span><b>' + clockDur(sm.other) + '</b></div>'
+    + '</div>';
+
+  if(!S.users.length){
+    body.innerHTML = head + '<div class="empty">' + svg('clock', 38)
+      + '<p>' + esc(S.day) + ' 还没有人用过全屏时钟</p>'
+      + '<p class="muted" style="font-size:.82rem">换一天看看，或者等同学登录后去用一会儿</p></div>';
+    return;
+  }
+
+  var rows = S.users.map(function(u, i){
+    var open = !!S.open[u.userId];
+    var modes = (u.byMode || []).map(function(m){ return m.name + ' ' + clockDur(m.secs); }).join(' · ');
+    var segs = (u.segs || []).map(function(g){
+      return '<span class="cl-seg"><b>' + clockHM(g.start) + '–' + clockHM(g.end) + '</b>'
+        + ' ' + esc(g.name) + ' <i>' + clockDur(g.secs) + '</i></span>';
+    }).join('');
+    return '<tr>'
+      + '<td><b>' + esc(u.displayName || u.username || '(未填)') + '</b>'
+        + '<div class="muted" style="font-size:.74rem">' + esc(u.username || '') + '</div></td>'
+      + '<td style="text-align:right">' + (u.focus ? '<b>' + clockDur(u.focus) + '</b>' : '<span class="muted">—</span>') + '</td>'
+      + '<td style="text-align:right">' + (u.rest ? clockDur(u.rest) : '<span class="muted">—</span>') + '</td>'
+      + '<td style="text-align:right">' + (u.tomato ? '<b>' + u.tomato + '</b> 个' : '<span class="muted">—</span>') + '</td>'
+      + '<td style="text-align:right">' + (u.other ? clockDur(u.other) : '<span class="muted">—</span>') + '</td>'
+      + '<td class="muted" style="font-size:.78rem;white-space:nowrap">'
+        + (u.firstAt ? clockHM(u.firstAt) + ' – ' + clockHM(u.lastAt) : '—') + '</td>'
+      + '<td><button class="btn btn-sm btn-secondary" data-cl-open="' + u.userId + '">'
+        + (open ? '收起' : '明细') + '</button></td>'
+      + '</tr>'
+      + '<tr class="cl-detail" data-cl-row="' + u.userId + '"'
+        + (open ? '' : ' style="display:none"') + '><td colspan="7">'
+        + (modes ? '<div class="muted" style="font-size:.78rem;margin-bottom:8px">' + esc(modes) + '</div>' : '')
+        + '<div class="cl-segs">' + (segs || '<span class="muted">没有明细</span>') + '</div>'
+      + '</td></tr>';
+  }).join('');
+
+  body.innerHTML = head
+    + '<div class="table-wrap"><table><thead><tr>'
+    + '<th>成员</th><th style="text-align:right">自习</th><th style="text-align:right">休息</th>'
+    + '<th style="text-align:right">番茄</th><th style="text-align:right">其它工具</th>'
+    + '<th>时段</th><th></th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-cl-open]'), function(b){
+    b.onclick = function(){
+      var id = b.getAttribute('data-cl-open');
+      S.open[id] = !S.open[id];
+      paintClockLog();
+    };
+  });
+}
+
 function renderGames(){
   var S = STATE.games;
   $('view').innerHTML =
@@ -14803,6 +14954,17 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.9.25', date: '2026-10-25', type: 'feat', title: '翻页动画重做 · 时钟使用记录（本地 + 云端 + 后台）', items: [
+      '翻页时钟的数字现在跟着卡片一起翻：上半片翻下去的同时，新的下半片从后面翻上来，不再「翻完才跳一下」',
+      '时钟页右上角多了「记录」，点开是右侧抽屉：今天几点到几点用了什么、用了多久一目了然',
+      '自习会单独统计：今天一共自习多久、休息多久、用掉几个番茄',
+      '登录后记录自动同步到云端，换设备也能看到；没登录就只记在这台设备上',
+      '后台新增「安全 → 时钟记录」：按日期看谁在什么时候用了多久，点「明细」展开每一段',
+      '「其他工具」里的番茄时钟卡片删掉了 —— 功能已经在全屏时钟的自习里'
+    ], pub: [
+      { cat: '班级', text: '全屏时钟新增「记录」：能看今天几点到几点用了多久，登录后自动上云' },
+      { cat: '班级', text: '翻页时钟的数字现在会跟着卡片一起翻，不再翻完才跳' }
+    ] },
   { version: '3.9.24', date: '2026-10-25', type: 'feat', title: '翻页时钟可关秒 · 新增自习番茄钟', items: [
       '翻页时钟多了一个「秒」开关：关掉后只剩「时 : 分」两张卡，卡片自动放大，更像桌面翻页钟',
       '新增「自习」模式：专注 25 分钟 → 休息 5 分钟自动循环，每 4 个番茄给一次 15 分钟长休息',
