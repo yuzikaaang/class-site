@@ -10,6 +10,19 @@
 
 import initSqlJs from 'sql.js';
 import crypto from 'crypto';
+
+/* v3.9.21：版本断言不再写死 —— 从 index.html 现读，升版本只改一处。
+   以前每发一版都要手动改 8 处 3.9.x，漏一处就红一片。 */
+import fs0 from 'node:fs';
+const CUR_VER = (fs0.readFileSync(new URL('./index.html', import.meta.url), 'utf8')
+  .match(/var SITE_VERSION = '([\d.]+)'/) || [])[1] || '';
+const CUR_VER_RE = CUR_VER.replace(/\./g, '\\.');
+const CUR_DATE = (fs0.readFileSync(new URL('./index.html', import.meta.url), 'utf8')
+  .match(/var VER_DATE = '([\d-]+)'/) || [])[1] || '';
+const RE_SITE = new RegExp("var SITE_VERSION = '" + CUR_VER_RE + "'");
+const RE_SITE_VER = new RegExp("const SITE_VER = '" + CUR_VER_RE + "'");
+const RE_API_VER = new RegExp("const API_VER = '" + CUR_VER_RE + "'");
+const RE_DATE = new RegExp("VER_DATE = '" + CUR_DATE + "'");
 import fs from 'node:fs';
 
 /* v3.9.8：主脚本拆到 app.js 后，凡「读首页源码」的断言一律读两份拼接 ——
@@ -11056,13 +11069,13 @@ console.log('\n【86】前台横屏切换（v3.5.39）');
     /LAND_LS\s*=\s*'cls_admin_land'/.test(admh539));
 
   /* ---- 版本号三处同步 ---- */
-  t('v3.9.17 index.html SITE_VERSION = 3.9.20', /var SITE_VERSION = '3\.9\.20'/.test(idx539));
-  t('v3.9.17 admin.html SITE_VERSION = 3.9.20', /var SITE_VERSION = '3\.9\.20'/.test(admh539));
+  t('v3.9.17 index.html SITE_VERSION = 当前版本', RE_SITE.test(idx539));
+  t('v3.9.17 admin.html SITE_VERSION = 当前版本', RE_SITE.test(admh539));
   t('v3.9.17 sw.js SITE_VER = 3.9.17（缓存桶随版本）',
-    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '3.9.20'")
+    fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '" + CUR_VER + "'")
     && /const CACHE = 'class-site-' \+ SITE_VER/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
-  t('v3.9.17 api/worker.mjs API_VER = 3.9.20',
-    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '3.9.20';"));
+  t('v3.9.17 api/worker.mjs API_VER = 当前版本',
+    fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '" + CUR_VER + "';"));
   t('v3.5.39 REL_BUILTIN 有 3.5.39 条目', /\{\s*version:\s*'3\.5\.39'/.test(admh539));
 }
 
@@ -11160,9 +11173,9 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
 
   /* ---- 版本号 ---- */
   t('v3.8.5 index/admin/worker/sw 版本一致',
-    /var SITE_VERSION = '3\.9\.20'/.test(idx540) && /var SITE_VERSION = '3\.9\.20'/.test(adm540)
-    && /const API_VER = '3\.9\.20'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.20'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    RE_SITE.test(idx540) && RE_SITE.test(adm540)
+    && RE_API_VER.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && RE_SITE_VER.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.5.40 REL_BUILTIN 有 3.5.40 条目', /\{\s*version:\s*'3\.5\.40'/.test(adm540));
 }
 
@@ -11216,9 +11229,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
-    /var SITE_VERSION = '3\.9\.20'/.test(idx542) && /var SITE_VERSION = '3\.9\.20'/.test(adm542)
-    && /const API_VER = '3\.9\.20'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.20'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    RE_SITE.test(idx542) && RE_SITE.test(adm542)
+    && RE_API_VER.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && RE_SITE_VER.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.6.1 REL_BUILTIN 有对应条目',
     /\{\s*version:\s*'3\.6\.1'/.test(adm542) && /\{\s*version:\s*'3\.5\.42'/.test(adm542));
 }
@@ -11288,8 +11301,8 @@ console.log('\n【89】v3.6.1 数据备份 · 字段恢复 · 班徽 · 成绩�
   /* ---- #5 版本规则 ---- */
   t('★v3.6.1 版本规则写明「主版本只有站主说了才动」',
     /主版本.*只有站主说了才动|这个数字只有站主说了才动/.test(idx61));
-  t('v3.8.5 当前版本 3.9.20、日期 2026-10-24',
-    /var SITE_VERSION = '3\.9\.20'/.test(idx61) && /VER_DATE = '2026-10-24'/.test(idx61));
+  t('v3.8.5 当前版本 当前版本、当前日期',
+    RE_SITE.test(idx61) && RE_DATE.test(idx61));
 }
 
 console.log('\n【90】v3.7.0 同步钩子真正生效 · 删除撤回 · 按钮反馈 · 公告门禁');
@@ -11446,10 +11459,10 @@ console.log('\n【91】v3.7.0 资料修改审批 · 首屏缓存优先 · 班徽
     /function adminBadgeCacheLoad/.test(adm70) && /adminBadgeCacheGet\(\)/.test(adm70));
 
   /* ---- 版本 ---- */
-  t('v3.9.17 四处版本一致', /var SITE_VERSION = '3\.9\.20'/.test(idx70)
-    && /var SITE_VERSION = '3\.9\.20'/.test(adm70)
-    && /const API_VER = '3\.9\.20'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /const SITE_VER = '3\.9\.20'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('v3.9.17 四处版本一致', RE_SITE.test(idx70)
+    && RE_SITE.test(adm70)
+    && RE_API_VER.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && RE_SITE_VER.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
   t('v3.7.0 REL_BUILTIN 有 3.7.0 条目', /\{\s*version:\s*'3\.8\.9'/.test(adm70));
 }
 
@@ -11475,8 +11488,8 @@ console.log('\n【92】v3.7.6 弹窗字色跟随实际背景');
     && /addEventListener\('orientationchange'/.test(idx76));
   t('★v3.7.6 固定深色底弹窗有 CSS 兜底（首帧就不糊字）',
     /\.sign-box\{[^}]*color:#f3ebe3/.test(idx76) && /\.sign-box h3\{color:#fff\}/.test(idx76));
-  t('v3.7.6 首页 / 后台版本已是 3.9.20',
-    /var SITE_VERSION = '3\.9\.20'/.test(idx76));
+  t('v3.7.6 首页 / 后台版本已是当前版本',
+    RE_SITE.test(idx76));
 }
 
 console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等');
@@ -11825,10 +11838,10 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
   const wk94  = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
 
   /* ---- 版本号四处一致 ---- */
-  t('★v3.9.4+ index.html SITE_VERSION = 3.9.20', /var SITE_VERSION = '3\.9\.20'/.test(idx94));
-  t('★v3.9.4+ admin.html SITE_VERSION = 3.9.20', /var SITE_VERSION = '3\.9\.20'/.test(adm94));
-  t('★v3.9.4 sw.js SITE_VER = 3.9.20', sw94.includes("const SITE_VER = '3.9.20'"));
-  t('★v3.9.4 api/worker.mjs API_VER = 3.9.20', wk94.includes("const API_VER = '3.9.20';"));
+  t('★v3.9.4+ index.html SITE_VERSION = 当前版本', RE_SITE.test(idx94));
+  t('★v3.9.4+ admin.html SITE_VERSION = 当前版本', RE_SITE.test(adm94));
+  t('★v3.9.4 sw.js SITE_VER = 3.9.20', sw94.includes("const SITE_VER = '" + CUR_VER + "'"));
+  t('★v3.9.4 api/worker.mjs API_VER = 当前版本', wk94.includes("const API_VER = '" + CUR_VER + "';"));
   t('★v3.9.4 REL_BUILTIN 有 3.9.4 条目且带 pub',
     /\{\s*version:\s*'3\.9\.4'[\s\S]{0,2000}?pub:\s*\[/.test(adm94));
 
@@ -12043,7 +12056,7 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
   t('★v3.9.8 HTML 体积降到原来的 1/4 以下（骨架 + 样式）',
     idx98.length < 400000);
   t('★v3.9.8 版本号留在 HTML（门禁能直接读到）',
-    /var SITE_VERSION = '3\.9\.20'/.test(idx98) && !/var SITE_VERSION/.test(app98));
+    RE_SITE.test(idx98) && !/var SITE_VERSION/.test(app98));
   t('★v3.9.8 首屏骨架卡（公告 + 板块）',
     (idx98.match(/skel-card/g) || []).length >= 6 && /\.skel-card\{[^}]*animation/.test(idx98.replace(/@keyframes[^}]*\{[^}]*\}/g, '')) || (idx98.match(/skel-card/g) || []).length >= 6);
 
@@ -12152,7 +12165,7 @@ console.log('\n【新】v3.9.10 缓存优先 / 老 iPad / 门禁加固');
     basic10.length > 1000 && !/=>/.test(basic10) && !/\bconst \w+ =/.test(basic10));
 
   t('★v3.9.16 轻量模式跳过天气 / 语录 / 班徽代理',
-    /if\(liteOn\(\)\)\{ islSet\('islWx', '—'\)/.test(app10)
+    /if\(liteOn\(\)\)\{\s*if\(hasCache\)/.test(app10)
     && /轻量模式用本地语录/.test(app10)
     && /if\(liteOn\(\)\) return Promise\.resolve\('\.\/icons\/badge-256\.png'\)/.test(app10));
   t('★v3.9.16 统计脚本空闲加载且轻量模式跳过',
