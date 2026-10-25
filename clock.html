@@ -32,61 +32,104 @@ body.bg-gray{background:#2b2b2e;color:#f2f2f2}
 .view{display:none;width:100%;text-align:center}
 .view.on{display:block}
 
+/* ---------- 字号档位（4 档，全部由 --fs 推导） ---------- */
+body.sz-1{--fs:min(15vw,190px)}
+body.sz-2{--fs:min(19vw,240px)}
+body.sz-3{--fs:min(24vw,300px)}
+body.sz-4{--fs:min(30vw,380px)}
+
 /* ---------- 数字时钟 ---------- */
 #bigTime{
-  font-size:22vw;line-height:1;letter-spacing:-.02em;font-weight:700;
+  font-size:var(--fs);line-height:1;letter-spacing:-.02em;font-weight:700;
   font-variant-numeric:tabular-nums;white-space:nowrap;
 }
-#bigSub{margin-top:2.2vh;font-size:2.4vw;opacity:.55;letter-spacing:.06em;white-space:nowrap}
+#bigSub{margin-top:2.4vh;font-size:2.4vw;opacity:.55;letter-spacing:.06em;white-space:nowrap}
+@media (max-aspect-ratio: 1/1){
+  #bigSub{font-size:3.2vw}
+}
 
-/* ---------- 翻页时钟 ---------- */
-#flipView .flip-row{display:flex;align-items:center;justify-content:center}
+/* ---------- 翻页时钟 ----------
+   v3.9.23 重做：原来卡片宽高靠 24vw/32vw 两个写死的数，数字用 20vw，
+   两位数一挤就顶到边框（手机上「13」直接压边）。现在全部由 --fs 推导：
+   卡片宽 = .92fs、高 = 1.2fs、数字 = .66fs，两位数宽度约 .73fs，稳留在卡片里。
+   中间冒号单独一个元素、垂直居中，不再跟着数字基线跑。 */
+/* 翻页卡片按「屏宽」算，不跟数字时钟的字号档走：三张 + 间距要正好铺满一行 */
+#flipView{--fw:min(24vw,300px)}
+#flipView .flip-row{display:flex;align-items:center;justify-content:center;gap:calc(var(--fw) * .05)}
 .flip{
-  position:relative;width:24vw;height:32vw;margin:0 1.4vw;border-radius:1.6vw;
-  background:rgba(0,0,0,.06);perspective:1200px;
+  position:relative;
+  width:var(--fw);
+  height:calc(var(--fw) * 1.12);
+  border-radius:calc(var(--fw) * .09);
+  background:#e9e5e0;
+  box-shadow:0 10px 26px rgba(60,40,25,.10),inset 0 1px 0 rgba(255,255,255,.75);
+  perspective:900px;
+  font-variant-numeric:tabular-nums;
 }
-body.bg-dark .flip,body.bg-black .flip,body.bg-navy .flip,body.bg-green .flip,body.bg-gray .flip{background:rgba(255,255,255,.09)}
-.flip .half{position:absolute;left:0;width:100%;height:50%;overflow:hidden;background:inherit;border-radius:1.6vw}
+body.bg-dark .flip,body.bg-black .flip,body.bg-navy .flip,
+body.bg-green .flip,body.bg-gray .flip{
+  background:#2a2724;box-shadow:0 10px 26px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06);
+}
+.flip .half{position:absolute;left:0;width:100%;height:50%;overflow:hidden;background:inherit;
+  border-radius:calc(var(--fw) * .09)}
 .flip .half.top{top:0;border-bottom-left-radius:0;border-bottom-right-radius:0;
-  box-shadow:inset 0 -.15vw 0 rgba(0,0,0,.18)}
-.flip .half.bottom{bottom:0;border-top-left-radius:0;border-top-right-radius:0}
-.flip .half .txt{
-  position:absolute;left:0;width:100%;height:32vw;line-height:32vw;text-align:center;
-  font-size:20vw;font-weight:700;font-variant-numeric:tabular-nums;
+  box-shadow:inset 0 -1px 0 rgba(0,0,0,.22)}
+.flip .half.bottom{bottom:0;border-top-left-radius:0;border-top-right-radius:0;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+body.bg-dark .flip .half.bottom,body.bg-black .flip .half.bottom,body.bg-navy .flip .half.bottom,
+body.bg-green .flip .half.bottom,body.bg-gray .flip .half.bottom{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.flip .txt{
+  position:absolute;left:0;width:100%;text-align:center;
+  height:calc(var(--fw) * 1.12);line-height:calc(var(--fw) * 1.12);
+  font-size:calc(var(--fw) * .66);font-weight:700;letter-spacing:-.05em;
 }
-.flip .half.top .txt{top:0}
-.flip .half.bottom .txt{top:-16vw}
+.flip .half.top .txt,.flip .flap .txt{top:0}
+.flip .half.bottom .txt{top:calc(var(--fw) * -.56)}
 .flip .flap{
   position:absolute;left:0;top:0;width:100%;height:50%;overflow:hidden;
-  background:inherit;border-radius:1.6vw 1.6vw 0 0;transform-origin:bottom center;
-  backface-visibility:hidden;-webkit-backface-visibility:hidden;z-index:3;
+  background:inherit;border-radius:calc(var(--fw) * .09) calc(var(--fw) * .09) 0 0;
+  transform-origin:bottom center;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  z-index:3;box-shadow:inset 0 -1px 0 rgba(0,0,0,.22);
 }
-.flip .flap .txt{position:absolute;left:0;top:0;width:100%;height:32vw;line-height:32vw;
-  text-align:center;font-size:20vw;font-weight:700;font-variant-numeric:tabular-nums}
-.flip .flap-go{animation:flipDown .55s cubic-bezier(.45,.05,.55,.95) forwards}
+/* 翻页片翻到 90° 时给下半片压一层暗，模拟影子 */
+.flip .flap-go::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;
+  background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.10));opacity:.9}
+.flip .flap-go{animation:flipDown .5s cubic-bezier(.4,.02,.6,.98) forwards}
 @keyframes flipDown{from{transform:rotateX(0)}to{transform:rotateX(-90deg)}}
-.flip-sep{font-size:9vw;font-weight:700;opacity:.35;margin:0 .4vw}
+.flip-sep{
+  font-size:calc(var(--fw) * .3);line-height:1;font-weight:700;opacity:.30;
+  margin:0 calc(var(--fw) * .03);transform:translateY(-.04em);
+}
 
 /* ---------- 秒表 / 计时器 ---------- */
 #stopTime,#timerTime{
-  font-size:17vw;line-height:1;font-weight:700;letter-spacing:-.02em;
+  font-size:calc(var(--fs) * .82);line-height:1;font-weight:700;letter-spacing:-.02em;
   font-variant-numeric:tabular-nums;white-space:nowrap;
 }
 #stopTime .ms,#timerTime .ms{font-size:.5em;opacity:.55}
 #timerTime.warn{color:#e23b3b}
-body.bg-dark #timerTime.warn,body.bg-black #timerTime.warn,body.bg-navy #timerTime.warn,body.bg-green #timerTime.warn,body.bg-gray #timerTime.warn{color:#ff6b6b}
-#timerSet{display:flex;align-items:center;justify-content:center;margin-top:3vh}
+body.bg-dark #timerTime.warn,body.bg-black #timerTime.warn,body.bg-navy #timerTime.warn,
+body.bg-green #timerTime.warn,body.bg-gray #timerTime.warn{color:#ff6b6b}
+/* 计时器默认只看数字，点数字才出现设置框（站主：默认只显示倒计时） */
+#timerSet{display:flex;align-items:center;justify-content:center;margin-top:3vh;
+  transition:opacity .2s}
+#timerSet.hide{display:none}
 #timerSet input{
-  width:15vw;max-width:120px;height:9vh;max-height:64px;min-height:40px;
-  border:1px solid rgba(0,0,0,.16);border-radius:12px;background:rgba(255,255,255,.6);
-  color:inherit;font:inherit;font-size:2.6vw;text-align:center;outline:none;
+  width:calc(var(--fs) * .26);max-width:130px;height:9vh;max-height:66px;min-height:42px;
+  border:1px solid rgba(0,0,0,.14);border-radius:14px;background:rgba(255,255,255,.62);
+  color:inherit;font:inherit;font-size:calc(var(--fs) * .16);text-align:center;outline:none;
   -webkit-appearance:none;appearance:none;
+  box-shadow:0 2px 10px rgba(60,40,25,.05);
 }
 body.bg-dark #timerSet input,body.bg-black #timerSet input,body.bg-navy #timerSet input,
 body.bg-green #timerSet input,body.bg-gray #timerSet input{
-  background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.22)}
-#timerSet .colon{font-size:3vw;opacity:.4;margin:0 1vw}
-#timerSet input:focus{border-color:#e08a4c}
+  background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.20);
+  box-shadow:0 2px 10px rgba(0,0,0,.3)}
+#timerSet .colon{font-size:calc(var(--fs) * .18);opacity:.35;margin:0 calc(var(--fs) * .06)}
+#timerSet input:focus{border-color:#e08a4c;box-shadow:0 0 0 3px rgba(224,138,76,.16)}
+#timerHint{margin-top:1.6vh;font-size:1.4vw;opacity:.4;letter-spacing:.04em}
+@media (max-aspect-ratio: 1/1){ #timerHint{font-size:2.6vw} }
 
 /* ---------- 按钮组 ---------- */
 .actions{display:flex;align-items:center;justify-content:center;margin-top:3.4vh;flex-wrap:wrap}
@@ -192,18 +235,17 @@ body.f-mono{font-family:"SF Mono",Menlo,Consolas,"Courier New",ui-monospace,mono
 body.f-round{font-family:"PingFang SC","Yuanti SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-weight:800;letter-spacing:.01em}
 body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
 
+/* 竖屏时字号基准收一点（vw 相对宽度小，不收会顶到边） */
 @media (max-aspect-ratio: 1/1){
-  #bigTime{font-size:20vw}
-  #stopTime,#timerTime{font-size:15vw}
-  .flip{width:26vw;height:34vw}
-  .flip .half .txt,.flip .flap .txt{height:34vw;line-height:34vw;font-size:21vw}
-  .flip .half.bottom .txt{top:-17vw}
-  #bigSub{font-size:2.8vw}
+  body.sz-1{--fs:min(16vw,150px)}
+  body.sz-2{--fs:min(20vw,190px)}
+  body.sz-3{--fs:min(25vw,230px)}
+  body.sz-4{--fs:min(31vw,280px)}
 }
 @media (max-width:420px){
   #bar button{height:34px;padding:0 10px;font-size:12px}
   .actions button{min-width:26vw;font-size:3.4vw}
-  #timerSet input{font-size:4.4vw;width:18vw}
+  #timerSet input{width:22vw;font-size:5vw;height:44px}
 }
 </style>
 </head>
@@ -241,7 +283,7 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
   <!-- 计时器 -->
   <div class="view" id="timerView">
     <div id="timerTime">00:05:00</div>
-    <div id="timerSet">
+    <div id="timerSet" class="hide">
       <input id="th" type="number" min="0" max="99" value="0" inputmode="numeric">
       <span class="colon">:</span>
       <input id="tm" type="number" min="0" max="59" value="5" inputmode="numeric">
@@ -253,6 +295,7 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
       <button id="timerReset">重置</button>
       <button id="timerPreset">常用</button>
     </div>
+    <div id="timerHint">点上面的数字可以设置时长</div>
   </div>
 </div>
 
@@ -262,9 +305,9 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
 <div id="bar">
   <button id="modeBtn">数字</button>
   <button id="fontBtn">字体 · 自动</button>
+  <button id="sizeBtn">字号 · 中</button>
   <button id="bgBtn">背景</button>
   <button id="h12Btn">24 小时</button>
-  <button id="soundBtn">声音 · 开</button>
   <button id="fsBtn">全屏</button>
   <button id="aboutBtn">更多</button>
 </div>
@@ -294,7 +337,7 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
 'use strict';
 
 var CFG_KEY = 'cls_clock_cfg';
-var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, sound:true, th:0, tm:5, ts:0 };
+var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5, ts:0 };
 try{
   var saved = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
   if(saved && typeof saved === 'object'){
@@ -515,6 +558,22 @@ function showBar(){
 function toggleBar(){ $('bar').className ? ($('bar').className = '') : showBar(); }
 
 var FONTS = [['auto','自动'],['hei','黑体'],['mono','等宽'],['round','圆体'],['serif','宋体']];
+
+/* v3.9.23：数字大小 4 档（站主要求「字体可以调，大概有多大」） */
+var SIZES = [['sz-1','小'],['sz-2','中'],['sz-3','大'],['sz-4','超大']];
+function applySize(z){
+  CFG.size = z; saveCfg();
+  var cls = document.body.className.split(' ').filter(function(c){ return c && c.indexOf('sz-') !== 0; });
+  cls.push('sz-' + z);
+  document.body.className = cls.join(' ');
+  for(var i = 0; i < SIZES.length; i++){
+    if(SIZES[i][0] === 'sz-' + z) $('sizeBtn').textContent = '字号 · ' + SIZES[i][1];
+  }
+}
+function cycleSize(){
+  var cur = parseInt(CFG.size || 2, 10);
+  applySize((cur % 4) + 1);
+}
 function applyFont(f){
   CFG.font = f; saveCfg();
   document.body.className = document.body.className.replace(/\bf-\w+/g, '').replace(/\s+/g, ' ');
@@ -553,22 +612,57 @@ function applyH12(){
 function isFs(){
   return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
 }
+/* v3.9.23：全屏后自动转横屏（站主：「全屏之后会自动展现为横屏」）。
+   只有「全屏 + 屏幕方向锁」都支持时才会转；iOS Safari 两样都不给，
+   就退回到「提示把手机横过来」，不假装成功。 */
+function lockLandscape(){
+  try{
+    if(screen && screen.orientation && screen.orientation.lock){
+      var p = screen.orientation.lock('landscape');
+      if(p && p.catch) p.catch(function(){});
+    }
+  }catch(e){}
+}
+function unlockLandscape(){
+  try{ if(screen && screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+}
 function toggleFs(){
   var el = document.documentElement;
+  var canFs = !!(el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen);
+  if(!canFs){ toast('这台设备的浏览器不支持网页全屏，可以用菜单里的「全屏」'); return; }
   try{
     if(!isFs()){
       if(el.requestFullscreen) el.requestFullscreen();
       else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
       else if(el.mozRequestFullScreen) el.mozRequestFullScreen();
-      else if(el.msRequestFullscreen) el.msRequestFullscreen();
-      else toast('这台设备不支持网页全屏，可以用浏览器菜单里的「全屏」');
+      else el.msRequestFullscreen();
+      /* 方向锁必须等全屏生效之后再调，否则直接 reject */
+      setTimeout(function(){
+        lockLandscape();
+        var locked = screen && screen.orientation && screen.orientation.type &&
+          screen.orientation.type.indexOf('landscape') >= 0;
+        if(!locked && window.innerHeight > window.innerWidth){
+          toast('这台设备不支持自动横屏，把手机横过来即可');
+        }
+      }, 420);
     }else{
+      unlockLandscape();
       if(document.exitFullscreen) document.exitFullscreen();
       else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
       else if(document.mozCancelFullScreen) document.mozCancelFullScreen();
     }
   }catch(e){}
-  setTimeout(function(){ $('fsBtn').textContent = isFs() ? '退出全屏' : '全屏'; }, 260);
+  setTimeout(function(){ $('fsBtn').textContent = isFs() ? '退出全屏' : '全屏'; }, 300);
+}
+
+/* 点数字 → 展开/收起时长设置（默认只显示倒计时数字） */
+function toggleTimerSet(e){
+  if(e){ e.stopPropagation(); }
+  var box = $('timerSet');
+  if(!box) return;
+  var hidden = box.className.indexOf('hide') >= 0;
+  box.className = hidden ? '' : 'hide';
+  $('timerHint').textContent = hidden ? '改完点「开始」就开始倒计时' : '点上面的数字可以设置时长';
 }
 
 function toast(txt){
@@ -605,11 +699,7 @@ Array.prototype.forEach.call($('modeMenu').getElementsByTagName('button'), funct
 $('fontBtn').onclick = cycleFont;
 $('bgBtn').onclick = cycleBg;
 $('h12Btn').onclick = function(){ CFG.h12 = !CFG.h12; saveCfg(); applyH12(); };
-$('soundBtn').onclick = function(){
-  CFG.sound = !CFG.sound; saveCfg();
-  $('soundBtn').textContent = CFG.sound ? '声音 · 开' : '声音 · 关';
-  if(CFG.sound) beep(0);
-};
+$('sizeBtn').onclick = cycleSize;
 $('fsBtn').onclick = toggleFs;
 $('aboutBtn').onclick = function(e){ e.stopPropagation(); $('about').className = 'show'; };
 $('aboutClose').onclick = function(){ $('about').className = ''; };
@@ -633,6 +723,7 @@ $('stopReset').onclick = function(){
   swPaint();
 };
 
+$('timerTime').onclick = toggleTimerSet;
 $('timerBtn').onclick = function(){ tmToggle(); };
 $('timerReset').onclick = function(){
   TM.run = false; TM.left = timerMs(); TM.total = TM.left;
@@ -690,9 +781,9 @@ document.onkeydown = function(e){
 
 /* ---------------- 启动 ---------------- */
 applyFont(CFG.font || 'auto');
+applySize(CFG.size || 2);
 applyBg(CFG.bg || 'light');
 applyH12();
-$('soundBtn').textContent = CFG.sound ? '声音 · 开' : '声音 · 关';
 applyMode(CFG.mode || 'clock');
 if(CFG.mode === 'timer') refreshTimerInputs();
 keepAwake();
