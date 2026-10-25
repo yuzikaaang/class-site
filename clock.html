@@ -33,10 +33,12 @@ body.bg-gray{background:#2b2b2e;color:#f2f2f2}
 .view.on{display:block}
 
 /* ---------- 字号档位（4 档，全部由 --fs 推导） ---------- */
-body.sz-1{--fs:min(15vw,190px)}
-body.sz-2{--fs:min(19vw,240px)}
-body.sz-3{--fs:min(24vw,300px)}
-body.sz-4{--fs:min(30vw,380px)}
+/* v3.9.24：加一道 vh 上限——横屏（尤其手机横过来只有 390 高）时
+   原来按 vw 算出来的数字会把按钮顶到工具栏底下。 */
+body.sz-1{--fs:min(15vw,28vh,190px)}
+body.sz-2{--fs:min(19vw,31vh,240px)}
+body.sz-3{--fs:min(24vw,37vh,300px)}
+body.sz-4{--fs:min(30vw,48vh,380px)}
 
 /* ---------- 数字时钟 ---------- */
 #bigTime{
@@ -54,7 +56,7 @@ body.sz-4{--fs:min(30vw,380px)}
    卡片宽 = .92fs、高 = 1.2fs、数字 = .66fs，两位数宽度约 .73fs，稳留在卡片里。
    中间冒号单独一个元素、垂直居中，不再跟着数字基线跑。 */
 /* 翻页卡片按「屏宽」算，不跟数字时钟的字号档走：三张 + 间距要正好铺满一行 */
-#flipView{--fw:min(24vw,300px)}
+#flipView{--fw:min(24vw,54vh,300px)}
 #flipView .flip-row{display:flex;align-items:center;justify-content:center;gap:calc(var(--fw) * .05)}
 .flip{
   position:relative;
@@ -102,15 +104,59 @@ body.bg-green .flip .half.bottom,body.bg-gray .flip .half.bottom{
   margin:0 calc(var(--fw) * .03);transform:translateY(-.04em);
 }
 
+/* ---------- 翻页：可关掉秒 ----------
+   v3.9.24（站主）：「翻页的这个时钟可以选择是否要有秒」。
+   关掉秒后只剩「时 : 分」两张卡，卡片跟着放大，更像桌面翻页钟。 */
+#flipView.nosec .flip-row > :nth-child(4),
+#flipView.nosec .flip-row > :nth-child(5){display:none}
+#flipView.nosec{--fw:min(38vw,58vh,430px)}
+
+/* ---------- 自习（番茄钟） ---------- */
+#pomoPhase{
+  font-size:2.2vw;line-height:1;font-weight:700;letter-spacing:.28em;opacity:.55;
+  margin-bottom:2.2vh;text-indent:.28em;transition:color .3s,opacity .3s;
+}
+body.sz-3 #pomoPhase,body.sz-4 #pomoPhase{font-size:2vw}
+#pomoPhase.rest{color:#3c9f6a;opacity:.85}
+#pomoPhase.done{color:#e08a4c;opacity:.9}
+#pomoTime{transition:opacity .25s}
+#pomoTime.paused{opacity:.42}
+#pomoSet{display:flex;align-items:center;justify-content:center;gap:calc(var(--fs) * .04);
+  margin-top:2.6vh;font-size:1.6vw;opacity:.75}
+#pomoSet.hide{display:none}
+#pomoSet input{
+  width:calc(var(--fs) * .2);max-width:110px;height:9vh;max-height:60px;min-height:40px;
+  border:1px solid rgba(0,0,0,.14);border-radius:14px;background:rgba(255,255,255,.62);
+  color:inherit;font:inherit;font-size:calc(var(--fs) * .13);text-align:center;outline:none;
+  -webkit-appearance:none;appearance:none;box-shadow:0 2px 10px rgba(60,40,25,.05);
+}
+body.bg-dark #pomoSet input,body.bg-black #pomoSet input,body.bg-navy #pomoSet input,
+body.bg-green #pomoSet input,body.bg-gray #pomoSet input{
+  background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.20)}
+#pomoSet input:focus{border-color:#e08a4c;box-shadow:0 0 0 3px rgba(224,138,76,.16)}
+#pomoHint{margin-top:1.8vh;font-size:1.35vw;opacity:.42;letter-spacing:.03em}
+#pomoHint b{font-weight:700;opacity:.9}
+@media (max-aspect-ratio: 1/1){
+  #pomoPhase{font-size:4.8vw;margin-bottom:2.8vh;letter-spacing:.22em}
+  #pomoHint{font-size:2.7vw}
+  #pomoSet{font-size:3vw;margin-top:3vh}
+}
+
 /* ---------- 秒表 / 计时器 ---------- */
-#stopTime,#timerTime{
+#stopTime,#timerTime,#pomoTime{
   font-size:calc(var(--fs) * .82);line-height:1;font-weight:700;letter-spacing:-.02em;
   font-variant-numeric:tabular-nums;white-space:nowrap;
 }
 #stopTime .ms,#timerTime .ms{font-size:.5em;opacity:.55}
-#timerTime.warn{color:#e23b3b}
+#pomoTime{cursor:pointer;font-size:calc(var(--fs) * .92)}
+#timerTime.warn,#pomoTime.warn{color:#e23b3b}
 body.bg-dark #timerTime.warn,body.bg-black #timerTime.warn,body.bg-navy #timerTime.warn,
-body.bg-green #timerTime.warn,body.bg-gray #timerTime.warn{color:#ff6b6b}
+body.bg-green #timerTime.warn,body.bg-gray #timerTime.warn,
+body.bg-dark #pomoTime.warn,body.bg-black #pomoTime.warn,body.bg-navy #pomoTime.warn,
+body.bg-green #pomoTime.warn,body.bg-gray #pomoTime.warn{color:#ff6b6b}
+/* 阶段切换时闪两下（没有声音，靠这个和振动提醒） */
+#pomoTime.flash{animation:pomoFlash 1.1s ease-in-out 2}
+@keyframes pomoFlash{0%,100%{opacity:1}45%{opacity:.12}}
 /* 计时器默认只看数字，点数字才出现设置框（站主：默认只显示倒计时） */
 #timerSet{display:flex;align-items:center;justify-content:center;margin-top:3vh;
   transition:opacity .2s}
@@ -242,6 +288,13 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
   body.sz-3{--fs:min(25vw,230px)}
   body.sz-4{--fs:min(31vw,280px)}
 }
+/* 横屏：底部有工具栏，内容整体上移一点，别被压住 */
+@media (min-aspect-ratio: 1/1){
+  #stage{padding-bottom:13vh}
+  #pomoPhase{margin-bottom:1.6vh}
+  #pomoSet{margin-top:1.8vh}
+  #pomoHint{margin-top:1.2vh}
+}
 @media (max-width:420px){
   #bar button{height:34px;padding:0 10px;font-size:12px}
   .actions button{min-width:26vw;font-size:3.4vw}
@@ -297,6 +350,24 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
     </div>
     <div id="timerHint">点上面的数字可以设置时长</div>
   </div>
+
+  <!-- 自习（番茄钟） -->
+  <div class="view" id="pomoView">
+    <div id="pomoPhase">专 注</div>
+    <div id="pomoTime">25:00</div>
+    <div id="pomoSet" class="hide">
+      <input id="pf" type="number" min="1" max="99" value="25" inputmode="numeric">
+      <span>分钟专注</span>
+      <input id="pb" type="number" min="1" max="60" value="5" inputmode="numeric">
+      <span>分钟休息</span>
+    </div>
+    <div class="actions">
+      <button id="pomoBtn" class="primary">开始<span class="kbd">Space</span></button>
+      <button id="pomoSkip">跳过</button>
+      <button id="pomoReset">重置</button>
+    </div>
+    <div id="pomoHint">今天已完成 <b id="pomoCount">0</b> 个番茄 · 点上面的数字改时长</div>
+  </div>
 </div>
 
 <a id="back" href="./index.html" title="返回班级服务站">← 返回</a>
@@ -308,6 +379,7 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
   <button id="sizeBtn">字号 · 中</button>
   <button id="bgBtn">背景</button>
   <button id="h12Btn">24 小时</button>
+  <button id="secBtn" style="display:none">秒 · 显示</button>
   <button id="fsBtn">全屏</button>
   <button id="aboutBtn">更多</button>
 </div>
@@ -317,14 +389,16 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
   <button data-m="flip">翻页</button>
   <button data-m="stop">秒表</button>
   <button data-m="timer">计时器</button>
+  <button data-m="pomo">自习</button>
 </div>
 
 <div id="about">
   <div class="box">
     <h3>关于全屏时钟</h3>
-    <p>这是一个给班级同学用的在线时钟：数字 / 翻页两种时钟样式，外加秒表和倒计时，适合桌面常驻、教室投屏、自习计时。</p>
+    <p>这是一个给班级同学用的在线时钟：数字 / 翻页两种时钟样式，外加秒表、倒计时和自习番茄钟，适合桌面常驻、教室投屏、自习计时。</p>
+    <p>翻页时钟可以关掉秒，只留时分；自习模式会按「专注 → 休息」自动循环，并记下今天完成了几个番茄。</p>
     <p><b>本页面仿照 <a href="https://yingming006.cn/time/?m=timer" target="_blank" rel="noopener">yingming006.cn/time</a> 制作</b>，功能与操作方式对齐原站，代码为本站自己实现。</p>
-    <p style="font-size:12px;opacity:.7">快捷键：空格 开始 / 暂停 · F 全屏 · Esc 退出全屏 · 1~4 切换模式</p>
+    <p style="font-size:12px;opacity:.7">快捷键：空格 开始 / 暂停 · F 全屏 · Esc 退出全屏 · 1~5 切换模式</p>
     <button class="close" id="aboutClose">知道了</button>
   </div>
 </div>
@@ -337,7 +411,8 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
 'use strict';
 
 var CFG_KEY = 'cls_clock_cfg';
-var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5, ts:0 };
+var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5, ts:0,
+  flipSec:true, pf:25, pb:5, pomoDone:0, pomoDate:'' };
 try{
   var saved = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
   if(saved && typeof saved === 'object'){
@@ -371,8 +446,8 @@ function lunarText(d){
 }
 
 /* ---------------- 模式切换 ---------------- */
-var MODE_NAME = { clock:'数字', flip:'翻页', stop:'秒表', timer:'计时器' };
-var VIEWS = { clock:'clockView', flip:'flipView', stop:'stopView', timer:'timerView' };
+var MODE_NAME = { clock:'数字', flip:'翻页', stop:'秒表', timer:'计时器', pomo:'自习' };
+var VIEWS = { clock:'clockView', flip:'flipView', stop:'stopView', timer:'timerView', pomo:'pomoView' };
 
 function applyMode(m){
   CFG.mode = m; saveCfg();
@@ -385,6 +460,12 @@ function applyMode(m){
   $('modeMenu').className = '';
   if(m === 'clock' || m === 'flip') tickClock();
   if(m === 'timer') refreshTimerInputs();
+  if(m === 'pomo') refreshPomo();
+  /* 「秒 · 显示」只在翻页模式下有意义，别的时候不占工具栏位置 */
+  var sb = $('secBtn');
+  if(sb) sb.style.display = (m === 'flip') ? '' : 'none';
+  /* 上面那轮 className 会把 nosec 抹掉，切回翻页时要补上 */
+  if(m === 'flip' && CFG.flipSec === false) applyFlipSec();
 }
 
 /* ---------------- 数字 / 翻页时钟 ---------------- */
@@ -407,7 +488,10 @@ function tickClock(){
   }else if(CFG.mode === 'flip'){
     flipTo('flipH', two(hh), lastFlip.h); lastFlip.h = two(hh);
     flipTo('flipM', two(m), lastFlip.m); lastFlip.m = two(m);
-    flipTo('flipS', two(s), lastFlip.s); lastFlip.s = two(s);
+    /* 关掉秒就干脆不画：少一次翻页动画，老设备也轻松一点 */
+    if(CFG.flipSec !== false){
+      flipTo('flipS', two(s), lastFlip.s); lastFlip.s = two(s);
+    }
   }
 }
 
@@ -510,6 +594,126 @@ function tmDone(){
   if(navigator.vibrate){ try{ navigator.vibrate([300, 150, 300, 150, 300]); }catch(e){} }
 }
 
+/* ---------------- 自习（番茄钟） ----------------
+   v3.9.24（站主）：「可以把番茄钟这些功能挪过来，这就是自习的一个时钟倒计时」。
+   专注 → 休息 → 专注…，每 4 个番茄给一次长休息；阶段结束自动进下一段并继续走，
+   所以打开就能一直自习。今天做完几个记在本地，跨天自己清零。 */
+var PM = { run:false, end:0, left:0, phase:'focus', paused:false };
+
+function todayKey(){
+  var d = new Date();
+  return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate());
+}
+function pomoDoneToday(){
+  if(CFG.pomoDate !== todayKey()){ CFG.pomoDate = todayKey(); CFG.pomoDone = 0; saveCfg(); }
+  return CFG.pomoDone || 0;
+}
+function phaseMin(phase){
+  var f = Math.max(1, Math.min(99, parseInt(CFG.pf, 10) || 25));
+  var b = Math.max(1, Math.min(60, parseInt(CFG.pb, 10) || 5));
+  if(phase === 'focus') return f;
+  if(phase === 'long') return Math.max(10, b * 3);
+  return b;
+}
+function phaseMs(phase){ return phaseMin(phase) * 60000; }
+
+function pmText(ms){
+  if(ms < 0) ms = 0;
+  var total = Math.ceil(ms / 1000);
+  var h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
+  return h ? (h + ':' + two(m) + ':' + two(s)) : (two(m) + ':' + two(s));
+}
+function pmBtnLabel(txt){
+  var b = $('pomoBtn');
+  if(b) b.innerHTML = txt + '<span class="kbd">Space</span>';
+}
+function pmPaintPhase(){
+  var el = $('pomoPhase');
+  if(!el) return;
+  el.textContent = (PM.phase === 'focus') ? '专注' : (PM.phase === 'long' ? '长休息' : '休息');
+  el.className = (PM.phase === 'focus') ? '' : (PM.phase === 'long' ? 'done' : 'rest');
+}
+function pmPaintCount(){
+  var el = $('pomoCount');
+  if(el) el.textContent = pomoDoneToday();
+}
+function pmPaint(){
+  var el = $('pomoTime');
+  if(!el) return;
+  var left = PM.run ? (PM.end - nowMs()) : PM.left;
+  el.textContent = pmText(left);
+  /* 只有「按过开始又暂停」才变灰；刚进来还没开始，数字要实的 */
+  el.className = (PM.paused ? 'paused' : '') + (left <= 10000 && left > 0 ? ' warn' : '');
+  if(PM.run && left <= 0) pmDone();
+}
+function pmFlash(){
+  var el = $('pomoTime');
+  if(!el) return;
+  el.className = el.className.replace(/\s*flash/g, '') + ' flash';
+  setTimeout(function(){ el.className = el.className.replace(/\s*flash/g, ''); }, 2400);
+}
+function refreshPomo(){
+  $('pf').value = phaseMin('focus');
+  $('pb').value = phaseMin('rest');
+  if(!PM.run && !PM.left) PM.left = phaseMs(PM.phase);
+  pmPaint(); pmPaintPhase(); pmPaintCount();
+}
+function pomoToggle(){
+  if(PM.run){
+    PM.left = Math.max(0, PM.end - nowMs());
+    PM.run = false;
+    PM.paused = true;
+    pmBtnLabel('继续');
+  }else{
+    if(PM.left <= 0) PM.left = phaseMs(PM.phase);
+    PM.end = nowMs() + PM.left;
+    PM.run = true;
+    PM.paused = false;
+    pmBtnLabel('暂停');
+  }
+  pmPaint();
+}
+/* 进入下一个阶段：专注做完才记一个番茄，每 4 个换长休息 */
+function pmNext(skip){
+  if(PM.phase === 'focus'){
+    if(!skip){
+      CFG.pomoDone = pomoDoneToday() + 1;
+      CFG.pomoDate = todayKey();
+      saveCfg();
+    }
+    PM.phase = (!skip && CFG.pomoDone % 4 === 0) ? 'long' : 'rest';
+  }else{
+    PM.phase = 'focus';
+  }
+  PM.left = phaseMs(PM.phase);
+  PM.run = false;
+  pmPaintPhase();
+  pmPaintCount();
+}
+function pmJump(auto){
+  PM.end = nowMs() + PM.left;
+  PM.run = true;
+  PM.paused = false;
+  pmBtnLabel('暂停');
+  pmPaint();
+}
+function pmDone(){
+  PM.run = false;
+  PM.left = 0;
+  pmPaint();
+  if(navigator.vibrate){ try{ navigator.vibrate([260, 140, 260, 140, 260]); }catch(e){} }
+  pmNext(false);          /* 切到下一阶段 */
+  pmJump(true);           /* 接着开始，不用再按一次 */
+  pmFlash();              /* 放在最后：前面几次 pmPaint 会重置 className */
+}
+/* 点数字改时长 */
+function togglePomoSet(e){
+  if(e) e.stopPropagation();
+  var box = $('pomoSet');
+  if(!box) return;
+  box.className = (box.className.indexOf('hide') >= 0) ? '' : 'hide';
+}
+
 /* ---------------- 声音 ---------------- */
 var AC = null;
 function beep(kind){
@@ -545,6 +749,7 @@ function clockTick(){
 function loop(){
   if(CFG.mode === 'stop' && SW.run) swPaint();
   else if(CFG.mode === 'timer' && TM.run) tmPaint();
+  else if(CFG.mode === 'pomo' && PM.run) pmPaint();
   requestAnimationFrame ? requestAnimationFrame(loop) : setTimeout(loop, 100);
 }
 
@@ -741,6 +946,48 @@ $('timerPreset').onclick = function(){
   $('timerBtn').innerHTML = '开始<span class="kbd">Space</span>';
   tmPaint();
 };
+$('pomoTime').onclick = togglePomoSet;
+$('pomoBtn').onclick = function(){ pomoToggle(); };
+$('pomoSkip').onclick = function(){
+  var wasRun = PM.run;
+  PM.run = false; PM.paused = false;
+  pmNext(true);           /* 跳过不记番茄 */
+  if(wasRun){
+    pmJump(true);         /* 原来是跑着的，接着跑下一段 */
+  }else{
+    pmBtnLabel('开始');
+    pmPaint();
+  }
+};
+$('pomoReset').onclick = function(){
+  PM.run = false; PM.paused = false; PM.phase = 'focus'; PM.left = phaseMs('focus'); PM.end = 0;
+  $('pomoBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  pmPaintPhase(); pmPaint();
+};
+['pf','pb'].forEach(function(id){
+  $(id).onchange = function(){
+    CFG.pf = Math.max(1, Math.min(99, parseInt($('pf').value, 10) || 25));
+    CFG.pb = Math.max(1, Math.min(60, parseInt($('pb').value, 10) || 5));
+    saveCfg();
+    $('pf').value = CFG.pf; $('pb').value = CFG.pb;
+    if(!PM.run){ PM.left = phaseMs(PM.phase); pmPaint(); }
+  };
+});
+
+/* 翻页的秒：开 / 关 */
+function applyFlipSec(){
+  var on = CFG.flipSec !== false;
+  $('flipView').className = 'view' + (CFG.mode === 'flip' ? ' on' : '') + (on ? '' : ' nosec');
+  $('secBtn').textContent = on ? '秒 · 显示' : '秒 · 隐藏';
+  lastFlip = { h:'', m:'', s:'' };
+  if(CFG.mode === 'flip') tickClock();
+}
+$('secBtn').onclick = function(){
+  CFG.flipSec = (CFG.flipSec === false);
+  saveCfg();
+  applyFlipSec();
+};
+
 ['th','tm','ts'].forEach(function(id){
   $(id).onchange = function(){
     CFG.th = parseInt($('th').value, 10) || 0;
@@ -770,12 +1017,14 @@ document.onkeydown = function(e){
   if(k === ' '){ e.preventDefault();
     if(CFG.mode === 'stop') swToggle();
     else if(CFG.mode === 'timer') tmToggle();
+    else if(CFG.mode === 'pomo') pomoToggle();
   }
   else if(k === 'f' || k === 'F'){ toggleFs(); }
   else if(k === '1') applyMode('clock');
   else if(k === '2') applyMode('flip');
   else if(k === '3') applyMode('stop');
   else if(k === '4') applyMode('timer');
+  else if(k === '5') applyMode('pomo');
   else if(k === 'Escape'){ $('about').className = ''; }
 };
 
@@ -784,7 +1033,13 @@ applyFont(CFG.font || 'auto');
 applySize(CFG.size || 2);
 applyBg(CFG.bg || 'light');
 applyH12();
-applyMode(CFG.mode || 'clock');
+/* 支持 ./clock.html?m=pomo 直接进某个模式（首页「番茄时钟」卡片就指到这里） */
+function modeFromUrl(){
+  var m = (location.search.match(/[?&]m=([a-z]+)/) || [])[1];
+  return (m && MODE_NAME[m]) ? m : '';
+}
+applyMode(modeFromUrl() || CFG.mode || 'clock');
+applyFlipSec();
 if(CFG.mode === 'timer') refreshTimerInputs();
 keepAwake();
 clockTick();
