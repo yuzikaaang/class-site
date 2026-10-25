@@ -12263,7 +12263,8 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
   t('★v3.9.25 自习按专注 / 休息分开记', /logPomoPhase/.test(clk)
     && /'pomo:' \+ PM\.phase/.test(clk));
   t('★v3.9.25 抽屉里有自习 / 休息 / 番茄三张卡',
-    /<i>自习<\/i>/.test(clk) && /<i>休息<\/i>/.test(clk) && /<i>番茄<\/i>/.test(clk));
+    /自习<\/i>/.test(clk) && /<i>休息<\/i>/.test(clk) && /<i>番茄<\/i>/.test(clk)
+    && /lg-card wide/.test(clk));
   t('★v3.9.25 切到后台停止计时', /if\(document\.hidden\) logStop\(\);/.test(clk)
     && /pagehide/.test(clk));
   t('★v3.9.25 登录后推到 /api/data', /flushLog/.test(clk) && /CLK_API \+ '\/api\/data'/.test(clk));
