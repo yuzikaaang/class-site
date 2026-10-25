@@ -12288,6 +12288,56 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
     !/focustide\.app/.test(idx90));
 }
 
+/* ============================================================
+ * v3.9.26：成绩分析图表入场动画（轻量模式不动画）
+ * ========================================================== */
+{
+  const idx91 = readIdx();
+
+  t('★v3.9.26 图表动画有总开关（轻量 / 精简动效 / 系统偏好都拦）',
+    /function scAnimOn\(\)/.test(idx91)
+    && /if\(liteOn\(\)\) return false;/.test(idx91)
+    && /UI\.motion === 0/.test(idx91)
+    && /prefers-reduced-motion/.test(idx91));
+
+  t('★v3.9.26 直方图柱子逐帧长高（不是一次性设值）',
+    /function scAnimBars\(root\)/.test(idx91)
+    && /setAttribute\('height', h\.toFixed\(2\)\)/.test(idx91)
+    && /setAttribute\('y', \(it\.y \+ it\.h - h\)\.toFixed\(2\)\)/.test(idx91));
+
+  t('★v3.9.26 柱子逐根错峰（i * 26ms）+ 缓出',
+    /d: i \* 26/.test(idx91) && /function scEase\(p\)\{ return 1 - Math\.pow\(1 - p, 3\); \}/.test(idx91));
+
+  t('★v3.9.26 横条 / 各科得分率宽度从 0 撑开',
+    /function scAnimGrow\(root\)/.test(idx91)
+    && /el\.style\.width = '0%'/.test(idx91));
+
+  t('★v3.9.26 概览数字滚动计数（按原值的小数位收尾）',
+    /function scCountUp\(el, dur\)/.test(idx91)
+    && /var dec = /.test(idx91) && /\[1\] \|\| ''\)\.length/.test(idx91));
+
+  t('★v3.9.26 表格 / 列表行只给前 16 行做错峰（全班 60 行会卡）',
+    /var limit = Math\.min\(rows\.length, 16\)/.test(idx91));
+
+  t('★v3.9.26 900ms 内重复渲染不重播（点排序不闪）',
+    /Date\.now\(\) - SC_ANIM_AT < 900/.test(idx91));
+
+  t('★v3.9.26 动画类挂在容器上，轻量模式不加（不会永久透明）',
+    /root\.classList\.add\('sc-anim'\)/.test(idx91)
+    && /root\.classList\.remove\('sc-anim'\)/.test(idx91));
+
+  t('★v3.9.26 雷达从圆心张开 + 行落下来 + 分数线后浮现',
+    /#scPaneBox\.sc-anim svg \.sc-mine-poly\{transform-origin:320px 154px/.test(idx91)
+    && /#scPaneBox\.sc-anim \.sc-rise\{animation:scRise/.test(idx91)
+    && /#scPaneBox\.sc-anim svg \.sc-cut-line\{animation:scSoftIn/.test(idx91));
+
+  t('★v3.9.26 系统「减少动态效果」时 CSS 也停掉',
+    /@media \(prefers-reduced-motion: reduce\)\{[\s\S]{0,400}#scPaneBox\.sc-anim \.sc-rise/.test(idx91));
+
+  t('★v3.9.26 每个面板渲染完都会触发动画（scPane 里调用）',
+    /if\(typeof scAnim === 'function'\) scAnim\(box\);/.test(idx91));
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }
