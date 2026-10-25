@@ -1682,6 +1682,15 @@ var SITE_DATA = {
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
+      /* v3.9.22（站主）：其他工具里加一个全屏时钟，放在番茄时钟前面。
+         仿照 yingming006.cn/time 做的，功能对齐（数字 / 翻页 / 秒表 / 计时器）。 */
+      id: 30,
+      categoryId: 8, title: "全屏时钟", icon: "", iconText: "⏰",
+      desc: "桌面时间显示与倒计时：数字 / 翻页两种时钟样式，另有秒表和倒计时。\n支持全屏、换字体、换背景，适合教室投屏、自习计时、桌面常驻。",
+      mainLabel: "打开全屏时钟", mainUrl: "./clock.html", mainWechatOk: true,
+      extraLabel: "", extraUrl: "", extraWechatOk: true
+    },
+    {
       id: 11,
       categoryId: 8, title: "番茄时钟", icon: "", iconText: "🍅",
       desc: "番茄工作法计时器：专注 25 分钟 + 短暂休息，\n帮你提升学习效率，保持专注。",
@@ -2920,7 +2929,9 @@ function render(){
         var needBrowser = isWeChat() && !l.mainWechatOk && httpUrl(l.mainUrl);
         /* 门禁总开关关闭时直接视为「已通过」，不再渲染问答框（GATE_ENABLED=false） */
         var passed = gatePassed(l) || !gateOn();
-        var contentHtml = '<div class="card-content"><h3>'+esc(l.title)+'</h3>'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
+        /* v3.9.22：标题留在折叠态，其余内容都塞进 .card-detail，点开才显示 */
+        var contentHtml = '<div class="card-content"><h3><span class="f-t">'+esc(l.title)+'</span><span class="f-i">⌄</span></h3>'
+          + '<div class="card-detail">'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
         if(l.paused){
           contentHtml += '<div class="paused-box">'+(l.pausedMsg ? emojiEscHtml(l.pausedMsg) : (iconSvg('ban',15)+' 因网络问题，暂时关闭，恢复开放时间另行通知'))+'</div>';
         }else if(l.gate && !passed){
@@ -2964,7 +2975,6 @@ function render(){
             '</div>';
         }
         contentHtml += (l.cardTip ? '<p class="card-hw-tip" style="font-size:.78rem;color:#af410f;margin-top:6px;line-height:1.6">'+esc(l.cardTip)+'</p>' : '');
-        contentHtml += '</div>';
         var actionsHtml;
         if(l.paused){
           actionsHtml = ''; /* 暂停开放：不渲染任何入口按钮与门禁 */
@@ -3011,13 +3021,16 @@ function render(){
             (needBrowser ? '<span class="wechat-hint">微信内请按引导用浏览器打开</span>' : '');
         }
         /* 视频类卡片整卡可点：点卡片任意位置直接弹视频，无需二级按钮 */
-        var cardCls = 'card' + (l.paused?' card-paused':'') + (l.video?' card-clickable':'');
+        /* 视频卡片整卡点击就播放，没有「展开」这一步，所以不参与折叠 */
+        var cardCls = 'card' + (l.paused?' card-paused':'') + (l.video?' card-clickable':'') + (l.video?'':' card-fold');
         var cardClick = l.video ? ' onclick="openVideo(\''+jsq(l.video)+'\',\''+jsq(l.title)+'\')"' : '';
         return '<div class="'+cardCls+'" data-card="'+attr(l.id)+'"'+cardClick+'>'+
           '<div class="card-icon">'+iconHtml+'</div>'+
-          contentHtml+
-          '<div class="card-actions">'+actionsHtml+'</div>'+
-        '</div>';
+          contentHtml +
+            '<div class="card-actions">'+actionsHtml+'</div>'+
+          '</div>'+   /* card-detail */
+          '</div>'+   /* card-content */
+        '</div>';    /* card */
       });
       /* 【卡片堆叠 v35】同一分类下 ≥2 张卡片时包一层堆叠容器；仅 1 张时不包（堆叠无意义）。
          用户可在「自定义设置 → 动效」里关掉堆叠，回到传统平铺。 */
@@ -3271,6 +3284,10 @@ function uiDefault(){
     v: UI_V,
     fs: 1,              /* 字号缩放 0.85 ~ 1.35 */
     motion: 1,          /* 1 = 完整动效，0 = 精简 */
+    cardMode: 'compact',/* 【卡片折叠 v3.9.22】compact = 默认小窗口、点开看详情；open = 一直展开
+                          站主原话：「所有板块的卡片默认都是小窗口显示，因为一个卡片占用太大，
+                          点击之后显示详情，用户可以在自定义设置里选择默认展开」 */
+
     stack: 0,           /* 【卡片堆叠 v35】1 = 多卡片分类层叠展示，0 = 传统平铺
                            默认关闭：堆叠效果仍在试验中，观感不理想，暂不作为默认（站主拍板） */
     netWatch: 0,        /* 【网络状态提示】1 = 连不上时弹横幅并倒计时重试，0 = 不打扰
@@ -3600,6 +3617,32 @@ function syncThemeToBg(){
 }
 
 /* 总入口：一次性把配置全部应用（初始化时、导入后、恢复默认后调用） */
+/* v3.9.22：卡片「小窗口 / 展开」两种模式。
+   只切 <html> 上的一个类，具体样式全在 CSS 里，重绘不需要额外逻辑。 */
+function applyCardMode(){
+  var compact = UI.cardMode !== 'open';
+  var el = document.documentElement;
+  if(compact) el.classList.add('cards-compact');
+  else el.classList.remove('cards-compact');
+}
+function setCardMode(mode){
+  UI.cardMode = (mode === 'open') ? 'open' : 'compact';
+  saveUI();
+  applyCardMode();
+  try{ render(); }catch(e){}
+  try{ renderUI(); }catch(e){}
+}
+/* 点卡片展开 / 收起：按钮、输入框、链接、门禁框里点都不触发 */
+document.addEventListener('click', function(e){
+  if(UI.cardMode === 'open') return;
+  var t = e.target;
+  if(!t || !t.closest) return;
+  if(t.closest('button,a,input,textarea,select,label,.gate-box,.paused-box,.qrcode-box')) return;
+  var card = t.closest('.card');
+  if(!card || !card.classList.contains('card-fold')) return;
+  card.classList.toggle('open');
+}, false);
+
 function applyUICfg(){
   applyFont();
   /* v3.5.30：轻量模式要**先于**背景/顺序应用 —— 它决定 --glass-bg 等变量
@@ -3607,6 +3650,7 @@ function applyUICfg(){
   applyLite();
   applyBg();
   applyHomeOrder();
+  applyCardMode();
   STACK_OPEN = {};    /* 【卡片堆叠 v35】配置变更（导入/恢复默认）后清展开记忆，回到默认堆叠态 */
   /* data-motion 由 applyLite() 统一设置（轻量模式强制 off） */
   var sb = document.getElementById('uiSetBtn');
@@ -8352,6 +8396,21 @@ function renderSettings(){
     html += '<div id="uiSortBox"></div>';
   }
   else if(UI_SEC === 'motion'){
+    /* v3.9.22：卡片默认小窗口，这里给个开关（站主要求「用户可以在自定义设置里选择」） */
+    var _cm = (UI.cardMode === 'open') ? 'open' : 'compact';
+    var _cmBtns = [['compact','小窗口','只显示图标和标题，点一下展开'],['open','全部展开','卡片直接显示完整内容']]
+      .map(function(m){
+        var active = (m[0] === _cm);
+        return '<button class="btn ' + (active ? '' : 'btn-secondary') + '" ' +
+          'style="flex:1;font-size:.76rem;padding:10px 4px" ' +
+          'onclick="setCardMode(\'' + m[0] + '\')">' + m[1] + '</button>';
+      }).join('');
+    html += secHtml('cardmode','卡片显示','layers',
+      '<div class="ui-modes">' + _cmBtns + '</div>' +
+      '<p class="ui-hint" style="margin-top:10px">当前：<b>' + (_cm === 'open' ? '全部展开' : '小窗口')
+        + '</b>　<span style="opacity:.75">· 只影响这台设备</span></p>' +
+      '<p class="ui-hint">选「小窗口」时，卡片只留图标和标题，<b>点一下</b>展开描述和按钮，再点收起；'
+      + '这样一屏能看到更多入口。<br>想一眼看全所有内容，就选「全部展开」。</p>', false);
     html += secHtml('mo','动效','sliders-horizontal',
       '<div class="sw-row"><span class="t">完整动效<span class="s">拖拽、涟漪、圆形主题切换等</span></span>' +
         swHtml(UI.motion !== 0, 'toggleMotion(event)') + '</div>' +
