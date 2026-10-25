@@ -75,6 +75,7 @@ jobs:
             app.min.js
             admin.js
             basic.html
+            clock.html
             share-card.js
             admin.html
             share.html
