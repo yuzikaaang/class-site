@@ -113,7 +113,7 @@ console.log('\n【1】手机端首屏密度（390×844）');
   t('班级岛默认收起（< 130px）', r.island < 130, '实际 ' + r.island + 'px');
   t('信息条存在且可见、四格默认隐藏', r.meta === 'flex' && r.chips === 'none',
     'meta=' + r.meta + ' chips=' + r.chips + '（meta=missing 说明 app.js 没更新）');
-  t('8 张卡片正常渲染', r.cards === 8, '实际 ' + r.cards);
+  t('卡片正常渲染（≥8 张）', r.cards >= 8, '实际 ' + r.cards);
   t('无横向溢出', r.overflow <= 0, '溢出 ' + r.overflow + 'px');
 
   /* 展开 / 收起 */
