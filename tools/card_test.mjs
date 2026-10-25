@@ -42,7 +42,8 @@ const s1 = await page.evaluate(() => ({
   h: [...document.querySelectorAll('#tab-cat-8 .card')].map((c) => Math.round(c.getBoundingClientRect().height)),
 }));
 t('默认是紧凑模式', /cards-compact/.test(s1.cls), s1.cls);
-t('其他工具里有卡片', s1.n >= 3, String(s1.n));
+/* v3.9.25：番茄时钟卡片并进全屏时钟后删掉了，可见卡片从 3 张变 2 张 */
+t('其他工具里有卡片', s1.n >= 2, String(s1.n));
 t('卡片默认高度 ≤ 90px', s1.h.every((h) => h > 0 && h <= 90), JSON.stringify(s1.h));
 
 /* 2. 点一下展开 */
