@@ -1197,7 +1197,10 @@ var LOG = {
   view: '',           /* 抽屉里正在看哪一天 */
   timer: null,        /* 推送防抖 */
   queue: {},
-  cloud: ''           /* '' | 'local' | 'ok' | 'fail' */
+  cloud: '',          /* '' | 'sync' | 'local' | 'ok' | 'fail' */
+  pulledDays: {},     /* 这一天跟云端对过账没有（v3.10.4：推之前先合并，免得冲掉别的设备） */
+  retry: 0,           /* 推送失败连试次数 */
+  pulled: false       /* 进页面那次总拉取做完了没有 */
 };
 
 function pad2(n){ return (n < 10 ? '0' : '') + n; }
@@ -1239,7 +1242,20 @@ function logSaveLocal(day, data){
   try{ localStorage.setItem(LOG_PREFIX + day, JSON.stringify(data)); }catch(e){}
 }
 
-/* ---- 云端 ---- */
+/* ---- 云端 ----
+   v3.10.4：同步策略重做。站主反馈「手机上下午的自习记录，晚上 iPad 上没有，
+   iPad 从零开始，什么都没同步过去」。查下来是三个问题叠在一起：
+     ① /api/data 的 PUT 是「整条覆盖」，而新设备本地是空的 ——
+        它第一次落一段就把云端的当天记录冲掉了（数据是从这里丢的）；
+     ② 只有「打开抽屉」才拉云端，页面一直开着就永远不问；
+     ③ 推送失败（切后台被系统掐掉、断网）时队列已经清空，数据直接丢。
+   现在的做法：
+     · 进页面先总拉一次（有登录才拉），拉完才允许推 —— 新设备不会再把云端冲掉；
+     · 每天第一次推之前，先把这一天拉下来合并再推（两条设备各记各的也不互相覆盖）；
+     · 每 60 秒心跳推一次，带上「正在计时」的那一段快照，换设备能近乎实时看到；
+     · 时间到、点「返回」、切到后台都立刻推一次；
+     · 推送失败把数据放回队列，8 秒后重试（最多连试 5 次）；
+     · 没登录：只写 localStorage，不碰网络。 */
 function clkToken(){
   try{
     var a = JSON.parse(localStorage.getItem('cls_auth') || 'null');
@@ -1251,60 +1267,143 @@ function logCloudSet(st){
   LOG.cloud = st;
   logFootPaint();
 }
+/* 两份记录合并：同一段（模式 + 开始毫秒）只留时长长的那个 ——
+   心跳推的是「进行中」的快照，这一段真结束时会被完整的覆盖掉 */
+function logMerge(a, b){
+  var idx = {}, out = [];
+  function eat(list){
+    (list || []).forEach(function(x){
+      if(!logSegOk(x)) return;
+      var k = x.m + '@' + x.s;
+      if(idx[k] !== undefined){
+        if(Number(x.d) > Number(out[idx[k]].d)) out[idx[k]] = x;
+        return;
+      }
+      idx[k] = out.length;
+      out.push(x);
+    });
+  }
+  eat(a && a.segs);
+  eat(b && b.segs);
+  out.sort(function(x, y){ return x.s - y.s; });
+  return { v: 2, pomo: Math.max(Number(a && a.pomo) || 0, Number(b && b.pomo) || 0), segs: out };
+}
+/* 这一天 3 分钟内跟云端对过账没有（多设备同时用的时候，太久没对账就不能直接覆盖） */
+function logFresh(day){
+  var ts = LOG.pulledDays[day];
+  return !!ts && (Date.now() - ts) < 180000;
+}
 function logPush(day, data, now){
   var t = clkToken();
   if(!t){ logCloudSet('local'); return; }
   LOG.queue[LOG_PREFIX + day] = data;
+  if(!LOG.pulled && !LOG.pulledDays[day]) return;   /* 还没跟云端对过账：先攒着，别冲掉别的设备 */
   if(now){ flushLog(); return; }
   if(LOG.timer) clearTimeout(LOG.timer);
   LOG.timer = setTimeout(flushLog, 2500);
 }
-function flushLog(){
+function flushLog(done){
   if(LOG.timer){ clearTimeout(LOG.timer); LOG.timer = null; }
   var t = clkToken();
   var items = LOG.queue;
   LOG.queue = {};
-  if(!t || !Object.keys(items).length) return;
+  if(!t || !Object.keys(items).length){ done && done(false); return; }
   fetch(CLK_API + '/api/data', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
     body: JSON.stringify({ items: items }),
     keepalive: true
   }).then(function(r){ return r.json().catch(function(){ return {}; }); })
-    .then(function(j){ logCloudSet(j && j.ok === false ? 'fail' : 'ok'); })
-    .catch(function(){ logCloudSet('fail'); });
+    .then(function(j){
+      if(j && j.ok === false) throw new Error('rejected');
+      LOG.retry = 0;
+      logCloudSet('ok');
+      done && done(true);
+      /* 推的过程中又攒了新的，接着推 */
+      if(Object.keys(LOG.queue).length) flushLog();
+    })
+    .catch(function(){
+      /* 失败不能丢数据：放回队列，8 秒后再试 */
+      Object.keys(items).forEach(function(k){
+        if(!(k in LOG.queue)) LOG.queue[k] = items[k];
+      });
+      LOG.retry++;
+      logCloudSet('fail');
+      done && done(false);
+      if(!LOG.timer && LOG.retry <= 5){
+        LOG.timer = setTimeout(function(){ LOG.timer = null; flushLog(); }, 8000);
+      }
+    });
 }
-/* 打开抽屉时把云端那份拉下来合并（换设备也能看到） */
+/* 打开抽屉 / 写之前把云端那份拉下来合并（换设备也能看到） */
 function logPull(day, done){
   var t = clkToken();
   if(!t){ logCloudSet('local'); done && done(); return; }
+  LOG.pulledDays[day] = Date.now();      /* 先占位，避免同一秒里连发好几个请求 */
   fetch(CLK_API + '/api/data?key=' + encodeURIComponent(LOG_PREFIX + day), {
     headers: { 'Authorization': 'Bearer ' + t }
   }).then(function(r){ return r.json(); }).then(function(j){
     var v = j && j.value;
-    if(!v) { logCloudSet('ok'); done && done(); return; }
+    if(!v){ logCloudSet('ok'); done && done(); return; }
     var cloud = Array.isArray(v) ? { v: 2, pomo: 0, segs: v } : { v: 2, pomo: Number(v.pomo) || 0, segs: v.segs || [] };
-    var local = logLoad(day);
-    var seen = {}, out = [];
-    local.segs.concat(cloud.segs.filter(logSegOk)).forEach(function(x){
-      if(!logSegOk(x)) return;
-      var k = x.m + '@' + x.s;
-      if(seen[k]) return;
-      seen[k] = 1; out.push(x);
-    });
-    out.sort(function(a, b){ return a.s - b.s; });
-    var merged = { v: 2, pomo: Math.max(local.pomo || 0, cloud.pomo || 0), segs: out };
+    var merged = logMerge(logLoad(day), cloud);
     logSaveLocal(day, merged);
     if(day === LOG.day) LOG.data = merged;
     logCloudSet('ok');
     done && done();
-  }).catch(function(){ logCloudSet('fail'); done && done(); });
+  }).catch(function(){
+    delete LOG.pulledDays[day];          /* 没拉成，下次写之前再试 */
+    logCloudSet('fail');
+    done && done();
+  });
+}
+/* 正在计时的那一段，按「进行中」的快照推上去（心跳 / 时间到 / 返回时用） */
+function logLiveSnap(){
+  if(!LOG.cur) return null;
+  var d = Math.round((Date.now() - LOG.cur.s) / 1000);
+  if(d < 3) return null;
+  var seg = { m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: d };
+  if(LOG.cur.n) seg.n = LOG.cur.n;
+  return { day: dkey(LOG.cur.s), seg: seg };
+}
+function logHeartbeat(){
+  var t = clkToken();
+  if(!t || !LOG.cur) return;
+  var snap = logLiveSnap();
+  if(!snap) return;
+  var push = function(){
+    var data = (snap.day === LOG.day) ? LOG.data : logLoad(snap.day);
+    LOG.queue[LOG_PREFIX + snap.day] = logMerge(data, { pomo: 0, segs: [snap.seg] });
+    flushLog();
+  };
+  /* 三分钟内对过账就直接推；太久了先拉一次合并，免得把另一台设备记的冲掉 */
+  if(logFresh(snap.day)) push();
+  else logPull(snap.day, push);
+}
+/* 立刻同步一次：时间到 / 点返回 / 切后台 都走这里 */
+function logSyncNow(done){
+  if(!clkToken()){ logCloudSet('local'); done && done(); return; }
+  var snap = logLiveSnap();
+  var day = snap ? snap.day : LOG.day;
+  if(!day){ done && done(); return; }
+  var push = function(){
+    if(snap){
+      var data = (snap.day === LOG.day) ? LOG.data : logLoad(snap.day);
+      LOG.queue[LOG_PREFIX + snap.day] = logMerge(data, { pomo: 0, segs: [snap.seg] });
+    }else{
+      LOG.queue[LOG_PREFIX + LOG.day] = LOG.data;
+    }
+    flushLog(function(){ done && done(); });
+  };
+  if(logFresh(day)) push();
+  else logPull(day, push);
 }
 
-/* 一次性把云端所有天的记录合并进本地（生成报告前用，避免逐天请求） */
+/* 一次性把云端所有天的记录合并进本地（进页面 / 生成报告前用，避免逐天请求） */
 function logPullAll(done){
   var t = clkToken();
-  if(!t){ logCloudSet('local'); done && done(); return; }
+  if(!t){ LOG.pulled = true; logCloudSet('local'); done && done(); return; }
+  logCloudSet('sync');
   fetch(CLK_API + '/api/data', { headers: { 'Authorization': 'Bearer ' + t } })
     .then(function(r){ return r.json(); })
     .then(function(j){
@@ -1315,26 +1414,35 @@ function logPullAll(done){
         if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
         var v = items[k];
         var cloud = Array.isArray(v) ? { pomo: 0, segs: v } : { pomo: Number(v.pomo) || 0, segs: v.segs || [] };
-        var local = logLoad(day);
-        var seen = {}, out = [];
-        local.segs.concat(cloud.segs).forEach(function(x){
-          if(!logSegOk(x)) return;
-          var key = x.m + '@' + x.s;
-          if(seen[key]) return;
-          seen[key] = 1; out.push(x);
-        });
-        out.sort(function(a, b){ return a.s - b.s; });
-        logSaveLocal(day, { v: 2, pomo: Math.max(local.pomo || 0, cloud.pomo || 0), segs: out });
+        logSaveLocal(day, logMerge(logLoad(day), cloud));
+        LOG.pulledDays[day] = Date.now();
       });
       if(LOG.day) LOG.data = logLoad(LOG.day);
+      LOG.pulled = true;
       logCloudSet('ok');
+      flushLog();                        /* 登录前攒下的改动这时候补传 */
       done && done();
     })
-    .catch(function(){ logCloudSet('fail'); done && done(); });
+    .catch(function(){
+      LOG.pulled = true;                 /* 拉不到也别把推送堵死，退回原来的「本地优先」 */
+      logCloudSet('fail');
+      flushLog();
+      done && done();
+    });
 }
-
 /* ---- 记账 ---- */
-function logWrite(day, data){ logSaveLocal(day, data); logPush(day, data); }
+function logWrite(day, data){
+  logSaveLocal(day, data);
+  if(!clkToken()){ logCloudSet('local'); return; }
+  if(logFresh(day)){ logPush(day, data); return; }
+  /* v3.10.4：这一天还没跟云端对过账 —— 先拉下来合并再推。
+     以前新设备本地是空的，第一次落一段就把云端的当天记录整条覆盖掉了。 */
+  logPull(day, function(){
+    var merged = logLoad(day);
+    if(day === LOG.day) LOG.data = merged;
+    logPush(day, merged);
+  });
+}
 
 /** 现在该记哪个模式：自习按阶段细分，其它就是模式名 */
 function logModeOf(){
@@ -1901,6 +2009,7 @@ function logFootPaint(){
   if(LOG.cloud === 'local') txt = '未登录 · 只记在这台设备上<a id="logLogin">去登录</a>';
   else if(LOG.cloud === 'ok') txt = '已同步到云端 · 换设备也能看到';
   else if(LOG.cloud === 'fail') txt = '同步失败，联网后会自动补传';
+  else if(LOG.cloud === 'sync') txt = '正在跟云端核对…';
   else txt = '正在检查云端…';
   el.innerHTML = txt;
   var a = $('logLogin');
@@ -2070,6 +2179,8 @@ function fullAlert(text){
   box.className = 'on';
   if(FA_TIMER) clearTimeout(FA_TIMER);
   FA_TIMER = setTimeout(function(){ box.className = ''; }, 3000);
+  /* v3.10.4：时间到立刻把记录推一次，别等切模式 */
+  try{ logSyncNow(); }catch(e){}
 }
 $('fullAlert').onclick = function(){
   this.className = '';
@@ -2257,13 +2368,37 @@ function keepAwake(){
 document.addEventListener('visibilitychange', function(){
   if(!document.hidden) keepAwake();
   /* 切到后台就不算在用，回来再接着记 —— 不然整晚挂着会记成一夜 */
-  if(document.hidden) logStop();
-  else logStart(logModeOf());
+  if(document.hidden){
+    logStop();
+    logSyncNow();                      /* v3.10.4：切后台先把这一段推上去，别等回来 */
+  }else{
+    logStart(logModeOf());
+    /* 回来时顺手看一眼云端：另一台设备这段时间记的东西能马上并进来 */
+    logPull(dkey(), function(){
+      if($('logPanel') && $('logPanel').className === 'show') logRender();
+    });
+  }
 });
 window.addEventListener('pagehide', function(){
   logStop();
   flushLog();
 });
+
+/* v3.10.4：点「返回」先把今天的数据推上去再走（最多等 0.8 秒，网络慢也不卡人） */
+(function(){
+  var b = $('back');
+  if(!b) return;
+  b.addEventListener('click', function(e){
+    if(!clkToken()) return;                       /* 没登录：本来就只存本地 */
+    var href = b.getAttribute('href') || './index.html';
+    var jumped = false;
+    var go = function(){ if(jumped) return; jumped = true; location.href = href; };
+    e.preventDefault();
+    try{ logStop(); }catch(err){}
+    try{ logSyncNow(function(){ go(); }); }catch(err){ go(); return; }
+    setTimeout(go, 800);
+  });
+})();
 
 /* ---------------- 事件绑定 ---------------- */
 $('modeBtn').onclick = function(e){
@@ -2521,6 +2656,12 @@ keepAwake();
 clockTick();
 setInterval(clockTick, 250);
 loop();
+/* v3.10.4：进页面先跟云端总拉一次（登录了才拉），新设备/换设备都能看到历史 */
+logPullAll();
+/* 拉取卡住或离线时别把推送堵死：12 秒后照常推，退回原来的「本地优先」 */
+setTimeout(function(){ if(!LOG.pulled){ LOG.pulled = true; flushLog(); } }, 12000);
+/* 每 60 秒心跳一次：带上正在计时的那一段，换设备能近乎实时看到 */
+setInterval(logHeartbeat, 60000);
 setTimeout(function(){ $('hint').className = 'hide'; }, 5000);
 setTimeout(showBar, 600);
 

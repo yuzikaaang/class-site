@@ -165,6 +165,101 @@ t('切到后台会立刻收账', afterHide.n > before, before + ' → ' + afterH
 
 t('全程无 JS 报错', errs.length === 0, errs.slice(0, 3).join(' | '));
 
+/* ================= v3.10.4 云同步重做 =================
+   站主反馈：手机上记的，iPad 上什么都没有（新设备本地空 → 第一次推把云端冲掉了） */
+const pad = (n) => String(n).padStart(2, '0');
+const now = new Date();
+const D = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+const K = 'cls_clock_log_' + D;
+
+/* 7. 新设备：一进页面就自动把云端记录拉进本地 */
+const ctx7 = await browser.newContext({ viewport: { width: 1100, height: 800 } });
+const p7 = await ctx7.newPage();
+const errs7 = [];
+p7.on('pageerror', (e) => errs7.push(e.message));
+const puts7 = [];
+const order7 = [];
+await p7.route('**/api/data**', async (route) => {
+  const req = route.request();
+  const url = req.url();
+  if (req.method() === 'PUT') {
+    order7.push('PUT');
+    puts7.push(JSON.parse(req.postData() || '{}'));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  }
+  order7.push('GET');
+  return route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, items: { [K]: { v: 2, pomo: 3, segs: [
+      { m: 'pomo:focus', s: Date.now() - 3 * 3600e3, e: Date.now() - 2.5 * 3600e3, d: 1800, n: '语文·试卷' },
+    ] } } }),
+  });
+});
+await p7.addInitScript(() => {
+  localStorage.setItem('cls_auth', JSON.stringify({ token: 'tok7', user: { id: 9, username: 'x' } }));
+});
+await p7.goto(BASE + '/clock.html', { waitUntil: 'domcontentloaded' });
+await p7.waitForTimeout(2500);
+const got7 = await p7.evaluate((k) => {
+  const raw = localStorage.getItem(k);
+  return raw ? JSON.parse(raw) : null;
+}, K);
+t('新设备一进页面就把云端记录拉进本地（不用点抽屉）',
+  !!(got7 && got7.segs.some((x) => x.n === '语文·试卷')), JSON.stringify(got7 && got7.segs));
+t('番茄数也一起拉下来了', !!(got7 && got7.pomo === 3), String(got7 && got7.pomo));
+
+/* 8. 推送前先合并：写这一天的记录不会把云端那段冲掉 */
+await p7.evaluate(() => {
+  Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+});
+await p7.waitForTimeout(1500);
+const put8 = (puts7[puts7.length - 1] || {}).items || {};
+const segs8 = (put8[K] || {}).segs || [];
+t('切后台会立刻推一次', puts7.length > 0, 'put 次数 ' + puts7.length);
+t('推上去的内容包含云端原有的那段（没被覆盖）',
+  segs8.some((x) => x.n === '语文·试卷'), JSON.stringify(segs8.map((x) => x.n || x.m)));
+t('推送前先 GET 对过账', order7.indexOf('GET') >= 0 && order7.indexOf('GET') < order7.indexOf('PUT'), order7.join('→'));
+t('新设备无 JS 报错', errs7.length === 0, errs7.slice(0, 2).join(' | '));
+await ctx7.close();
+
+/* 9. 推送失败会重试，数据不丢 */
+const ctx9 = await browser.newContext({ viewport: { width: 1100, height: 800 } });
+const p9 = await ctx9.newPage();
+let put9 = 0;
+await p9.route('**/api/data**', async (route) => {
+  const req = route.request();
+  if (req.method() === 'PUT') {
+    put9++;
+    if (put9 === 1) return route.fulfill({ status: 500, contentType: 'application/json', body: '{"ok":false}' });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  }
+  return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"items":{}}' });
+});
+await p9.addInitScript(() => {
+  localStorage.setItem('cls_auth', JSON.stringify({ token: 'tok9', user: { id: 9, username: 'x' } }));
+});
+await p9.goto(BASE + '/clock.html', { waitUntil: 'domcontentloaded' });
+await p9.waitForTimeout(1200);
+await p9.evaluate(() => {
+  Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+});
+await p9.waitForTimeout(9500);
+t('推送失败后会自动重试（数据没丢）', put9 >= 2, 'put 次数 ' + put9);
+t('重试后底部显示已同步', /已同步/.test(await p9.evaluate(() => document.getElementById('logFoot').textContent)),
+  await p9.evaluate(() => document.getElementById('logFoot').textContent));
+
+/* 10. 点「返回」先上传再跳走 */
+await p9.route('**/index.html', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>stub</body></html>' }));
+const before10 = put9;
+await p9.evaluate(() => { document.getElementById('back').click(); });
+await p9.waitForTimeout(700);
+t('点「返回」会先把当天记录推一次', put9 > before10, before10 + ' → ' + put9);
+await p9.waitForTimeout(800);
+t('推完真的跳回首页了', /index\.html/.test(p9.url()), p9.url());
+await ctx9.close();
+
 await browser.close();
 console.log('\n结果：' + pass + ' 通过 / ' + fail + ' 失败');
 process.exit(fail ? 1 : 0);

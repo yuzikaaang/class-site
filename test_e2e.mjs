@@ -12265,8 +12265,9 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
   t('★v3.9.25 抽屉里有自习 / 休息 / 番茄三张卡',
     /自习<\/i>/.test(clk) && /<i>休息<\/i>/.test(clk) && /<i>番茄<\/i>/.test(clk)
     && /lg-card wide/.test(clk));
-  t('★v3.9.25 切到后台停止计时', /if\(document\.hidden\) logStop\(\);/.test(clk)
+  t('★v3.9.25 切到后台停止计时', /if\(document\.hidden\)\{?\s*logStop\(\);/.test(clk)
     && /pagehide/.test(clk));
+  t('★v3.10.4 切后台顺手推一次（logSyncNow）', /logStop\(\);\s*logSyncNow\(\);/.test(clk));
   t('★v3.9.25 登录后推到 /api/data', /flushLog/.test(clk) && /CLK_API \+ '\/api\/data'/.test(clk));
 
   /* 后端 */
