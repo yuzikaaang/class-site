@@ -13246,7 +13246,157 @@ function scEmbedHtml(){
     + '<div class="sc-pane" id="scPaneBox"></div>'
     + '</div>';
 }
-function scPane(html){ document.getElementById('scPaneBox').innerHTML = html; }
+/* ============================================================================
+ * v3.9.26（站主）：成绩分析的图表都要「长出来」的入场动画
+ * ----------------------------------------------------------------------------
+ * 站主要的是抖音上那类数据可视化：柱子从底部长起来、雷达从中心张开、
+ * 横条从 0 撑开、表格一行行落下来、概览数字滚动计数。
+ *
+ * 三种情况一律不动画，直接渲染终值（老设备上动画反而卡）：
+ *   ① 轻量模式 liteOn()   ② 自定义设置里选了「精简动效」   ③ 系统开了「减少动态效果」
+ * ========================================================================== */
+var SC_ANIM_MS = 620;
+var SC_ANIM_AT = 0;        /* 上一次播动画的时间，连续重渲染时别一直闪 */
+
+function scAnimOn(){
+  try{
+    if(liteOn()) return false;
+    if(UI && UI.motion === 0) return false;
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+  }catch(e){}
+  return true;
+}
+function scRAF(fn){
+  if(window.requestAnimationFrame) return window.requestAnimationFrame(fn);
+  return setTimeout(function(){ fn(Date.now()); }, 16);
+}
+function scEase(p){ return 1 - Math.pow(1 - p, 3); }
+
+/* ① 直方图柱子：从 x 轴长上来，逐根错峰 */
+function scAnimBars(root){
+  var svg = root.querySelector('svg.sc-svg');
+  if(!svg) return;
+  var bars = svg.querySelectorAll('.sc-bar');
+  if(!bars.length) return;
+  var axis = svg.querySelector('.sc-axis');
+  var baseY = axis ? parseFloat(axis.getAttribute('y1')) : NaN;
+  if(!isFinite(baseY)) return;
+
+  var items = [];
+  for(var i = 0; i < bars.length; i++){
+    var b = bars[i];
+    var y = parseFloat(b.getAttribute('y'));
+    var h = parseFloat(b.getAttribute('height'));
+    if(!isFinite(y) || !isFinite(h) || h <= 0) continue;
+    items.push({ el: b, y: y, h: h, d: i * 26 });
+    b.setAttribute('y', baseY);
+    b.setAttribute('height', 0);
+  }
+  if(!items.length) return;
+
+  var t0 = 0;
+  var total = SC_ANIM_MS + (items.length - 1) * 26;
+  var step = function(ts){
+    if(!t0) t0 = ts;
+    var el = ts - t0;
+    for(var k = 0; k < items.length; k++){
+      var it = items[k];
+      if(!it.el.parentNode) continue;
+      var p = scEase(Math.max(0, Math.min(1, (el - it.d) / SC_ANIM_MS)));
+      var h = it.h * p;
+      it.el.setAttribute('height', h.toFixed(2));
+      it.el.setAttribute('y', (it.y + it.h - h).toFixed(2));
+    }
+    if(el < total) scRAF(step);
+    else items.forEach(function(it){
+      it.el.setAttribute('height', it.h.toFixed(2));
+      it.el.setAttribute('y', it.y.toFixed(2));
+    });
+  };
+  scRAF(step);
+}
+
+/* ② 横向占比条（分数段 / 各科得分率）：宽度从 0 撑开 */
+function scAnimGrow(root){
+  var els = root.querySelectorAll('.sc-seg-bar, .sc-sub-bar > i');
+  var list = [];
+  for(var i = 0; i < els.length; i++){
+    var el = els[i];
+    var w = el.style.width;
+    if(!w || parseFloat(w) <= 0) continue;
+    list.push({ el: el, w: w });
+    el.style.width = '0%';
+  }
+  if(!list.length) return;
+  /* 两帧之后再设目标宽度，保证 0 → 目标 的 transition 真的触发 */
+  scRAF(function(){
+    scRAF(function(){
+      list.forEach(function(o){
+        if(o.el.parentNode) o.el.style.width = o.w;
+      });
+    });
+  });
+}
+
+/* ③ 概览数字：0 → 目标，滚动计数 */
+function scCountUp(el, dur){
+  var txt = el.textContent;
+  var m = /-?\d+(?:\.\d+)?/.exec(txt);
+  if(!m) return;
+  var target = parseFloat(m[0]);
+  if(!isFinite(target) || Math.abs(target) > 99999) return;
+  var dec = (m[0].split('.')[1] || '').length;
+  var head = txt.slice(0, m.index), tail = txt.slice(m.index + m[0].length);
+  var t0 = 0;
+  var step = function(ts){
+    if(!t0) t0 = ts;
+    var p = scEase(Math.min(1, (ts - t0) / dur));
+    el.textContent = head + (target * p).toFixed(dec) + tail;
+    if(p < 1) scRAF(step);
+    else el.textContent = txt;
+  };
+  el.textContent = head + (0).toFixed(dec) + tail;
+  scRAF(step);
+}
+function scAnimNums(root){
+  var els = root.querySelectorAll('.sc-stat b');
+  for(var i = 0; i < els.length; i++){
+    (function(el, i){ setTimeout(function(){ if(el.parentNode) scCountUp(el, 700); }, i * 40); })(els[i], i);
+  }
+}
+
+/* ④ 列表行 / 表格行：一行行落下来（只挑前 16 行，全班 60 行全动会卡） */
+function scAnimRows(root){
+  var rows = root.querySelectorAll('.sc-tbl tbody tr, .sc-cut-row, .sc-sub, .sc-hm-row');
+  var limit = Math.min(rows.length, 16);
+  for(var i = 0; i < limit; i++){
+    rows[i].classList.add('sc-rise');
+    rows[i].style.animationDelay = (i * 26) + 'ms';
+  }
+}
+
+function scAnim(root){
+  if(!root) return;
+  /* 连续点排序 / 切口径时会一秒内重渲染好几次，这种情况只给第一次播 */
+  if(!scAnimOn() || Date.now() - SC_ANIM_AT < 900){
+    root.classList.remove('sc-anim');
+    return;
+  }
+  SC_ANIM_AT = Date.now();
+  root.classList.add('sc-anim');
+  scAnimBars(root);
+  scAnimGrow(root);
+  scAnimNums(root);
+  scAnimRows(root);
+}
+window.__scAnim = scAnim;   /* 测试用：直接喂一段 DOM 看动画有没有跑 */
+
+function scPane(html){
+  var box = document.getElementById('scPaneBox');
+  box.innerHTML = html;
+  /* typeof 兜一下：有些单元测试只把部分函数提出来跑，不该因为缺 scAnim 就炸 */
+  if(typeof scAnim === 'function') scAnim(box);
+}
 function scLoading(txt){
   scPane('<div class="sc-empty"><div class="spinner"></div><p>' + (txt || '加载中…') + '</p></div>');
 }
