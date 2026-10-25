@@ -24,9 +24,9 @@ const V = (sel) => page.evaluate((s) => {
   return el ? el.textContent.trim() : null;
 }, sel);
 
-/* 1. 四种模式都在 */
+/* 1. 五种模式都在 */
 const modes = await page.evaluate(() => [...document.querySelectorAll('#modeMenu button')].map((b) => b.textContent.trim()));
-t('四种模式齐全', ['数字', '翻页', '秒表', '计时器'].every((m) => modes.includes(m)), JSON.stringify(modes));
+t('五种模式齐全', ['数字', '翻页', '秒表', '计时器', '自习'].every((m) => modes.includes(m)), JSON.stringify(modes));
 
 /* 2. 数字时钟：时间格式 + 日期 + 农历 */
 await page.evaluate(() => document.querySelector('[data-m="clock"]').click());
@@ -148,6 +148,155 @@ await page.evaluate(() => document.getElementById('timerTime').click());
 await page.waitForTimeout(300);
 const ts1 = await page.evaluate(() => document.getElementById('timerSet').className);
 t('点数字可以调出时长设置', ts1.indexOf('hide') < 0, ts1);
+
+/* ---- v3.9.24：翻页可关秒 + 自习（番茄钟） ---- */
+
+/* 9c. 翻页的秒开关 */
+await page.evaluate(() => { document.querySelector('[data-m="flip"]').click(); });
+await page.waitForTimeout(500);
+const sec0 = await page.evaluate(() => ({
+  btn: document.getElementById('secBtn').textContent,
+  vis: getComputedStyle(document.getElementById('secBtn')).display,
+  cards: [...document.querySelectorAll('#flipView .flip')].filter((e) => getComputedStyle(e).display !== 'none').length,
+  w: Math.round(document.querySelector('#flipView .flip').getBoundingClientRect().width),
+}));
+t('翻页模式下有「秒」开关，默认三张卡', sec0.vis !== 'none' && sec0.cards === 3 && /秒 · 显示/.test(sec0.btn), JSON.stringify(sec0));
+await page.evaluate(() => document.getElementById('secBtn').click());
+await page.waitForTimeout(600);
+const sec1 = await page.evaluate(() => ({
+  btn: document.getElementById('secBtn').textContent,
+  cls: document.getElementById('flipView').className,
+  cards: [...document.querySelectorAll('#flipView .flip')].filter((e) => getComputedStyle(e).display !== 'none').length,
+  w: Math.round(document.querySelector('#flipView .flip').getBoundingClientRect().width),
+  only: [...document.querySelectorAll('#flipView .flip-sep')].filter((e) => getComputedStyle(e).display !== 'none').length,
+}));
+t('关掉秒后只剩「时 : 分」两张卡', sec1.cards === 2 && sec1.only === 1 && /秒 · 隐藏/.test(sec1.btn), JSON.stringify(sec1));
+t('关掉秒后卡片会放大', sec1.w > sec0.w, sec0.w + ' → ' + sec1.w);
+t('切到别的模式时「秒」按钮收起', await page.evaluate(() => {
+  document.querySelector('[data-m="clock"]').click();
+  return getComputedStyle(document.getElementById('secBtn')).display === 'none';
+}));
+t('切回翻页仍保持「不要秒」', await page.evaluate(() => {
+  document.querySelector('[data-m="flip"]').click();
+  return document.getElementById('flipView').className.indexOf('nosec') >= 0;
+}));
+
+/* 9d. 自习模式初态 */
+await page.evaluate(() => { document.querySelector('[data-m="pomo"]').click(); });
+await page.waitForTimeout(400);
+const pm0 = await page.evaluate(() => ({
+  phase: document.getElementById('pomoPhase').textContent,
+  time: document.getElementById('pomoTime').textContent,
+  set: document.getElementById('pomoSet').className,
+  btn: document.getElementById('pomoBtn').textContent,
+  dim: getComputedStyle(document.getElementById('pomoTime')).opacity,
+}));
+t('自习默认「专注 25:00」且设置收起', pm0.phase === '专注' && pm0.time === '25:00' && pm0.set.indexOf('hide') >= 0, JSON.stringify(pm0));
+t('还没开始时数字不灰', Number(pm0.dim) > 0.9, pm0.dim);
+await page.evaluate(() => document.getElementById('pomoTime').click());
+await page.waitForTimeout(250);
+t('点数字能展开时长设置', await page.evaluate(() => document.getElementById('pomoSet').className.indexOf('hide') < 0));
+
+/* 9d-2. 网址参数直达自习（首页「番茄时钟」卡片用的就是它） */
+{
+  const ctxU = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pU = await ctxU.newPage();
+  await pU.goto(BASE + '/clock.html?m=pomo', { waitUntil: 'domcontentloaded' });
+  await pU.waitForTimeout(800);
+  const u = await pU.evaluate(() => ({
+    mode: document.getElementById('modeBtn').textContent,
+    phase: document.getElementById('pomoPhase').textContent,
+  }));
+  t('clock.html?m=pomo 直接进自习', u.mode === '自习' && u.phase === '专注', JSON.stringify(u));
+  await ctxU.close();
+}
+
+/* 9d-3. 跳过：跑着就接着跑下一段，没跑就停着等按开始 */
+{
+  const ctxK = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pK = await ctxK.newPage();
+  await pK.goto(BASE + '/clock.html?m=pomo', { waitUntil: 'domcontentloaded' });
+  await pK.waitForTimeout(700);
+  await pK.evaluate(() => document.getElementById('pomoSkip').click());
+  await pK.waitForTimeout(250);
+  const idle = await pK.evaluate(() => ({
+    btn: document.getElementById('pomoBtn').textContent,
+    phase: document.getElementById('pomoPhase').textContent,
+  }));
+  t('没开始时跳过：停在休息，等按开始', idle.phase === '休息' && /开始/.test(idle.btn), JSON.stringify(idle));
+  await pK.evaluate(() => document.getElementById('pomoBtn').click());
+  await pK.waitForTimeout(300);
+  await pK.evaluate(() => document.getElementById('pomoSkip').click());
+  await pK.waitForTimeout(300);
+  const running = await pK.evaluate(() => ({
+    btn: document.getElementById('pomoBtn').textContent,
+    phase: document.getElementById('pomoPhase').textContent,
+  }));
+  t('跑着时跳过：接着跑下一段', running.phase === '专注' && /暂停/.test(running.btn), JSON.stringify(running));
+  await ctxK.close();
+}
+
+/* 9e. 用假时钟跑完整番茄循环（1 分钟专注 / 1 分钟休息） */
+{
+  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const p2 = await ctx2.newPage();
+  const errs2 = [];
+  p2.on('pageerror', (e) => errs2.push(e.message));
+  await p2.clock.install({ time: new Date('2026-10-25T15:00:00') });
+  await p2.goto(BASE + '/clock.html', { waitUntil: 'domcontentloaded' });
+  await p2.clock.runFor(400);
+  await p2.evaluate(() => { document.querySelector('[data-m="pomo"]').click(); });
+  await p2.clock.runFor(200);
+  await p2.evaluate(() => {
+    const pf = document.getElementById('pf'), pb = document.getElementById('pb');
+    pf.value = 1; pf.dispatchEvent(new Event('change', { bubbles: true }));
+    pb.value = 1; pb.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await p2.clock.runFor(200);
+  const before = await p2.evaluate(() => document.getElementById('pomoTime').textContent);
+  await p2.evaluate(() => document.getElementById('pomoBtn').click());
+  await p2.clock.runFor(3000);
+  const running = await p2.evaluate(() => ({
+    t: document.getElementById('pomoTime').textContent,
+    btn: document.getElementById('pomoBtn').textContent,
+  }));
+  t('自习开始后倒计时在走', running.t !== before && /01:00|00:5\d/.test(running.t) && /暂停/.test(running.btn), JSON.stringify([before, running]));
+
+  await p2.clock.runFor(61000);
+  const afterFocus = await p2.evaluate(() => ({
+    phase: document.getElementById('pomoPhase').textContent,
+    cnt: document.getElementById('pomoCount').textContent,
+    cls: document.getElementById('pomoPhase').className,
+  }));
+  t('专注结束自动进休息并记一个番茄', afterFocus.phase === '休息' && afterFocus.cnt === '1' && afterFocus.cls === 'rest', JSON.stringify(afterFocus));
+  t('进休息后自动继续走', await p2.evaluate(() => document.getElementById('pomoBtn').textContent.indexOf('暂停') >= 0));
+
+  await p2.clock.runFor(61000);
+  t('休息结束自动回到专注', await p2.evaluate(() => document.getElementById('pomoPhase').textContent) === '专注');
+
+  /* 跳到第 4 个番茄，看长休息 */
+  for (let i = 0; i < 3; i++) {
+    await p2.clock.runFor(61000);   // 专注
+    await p2.clock.runFor(61000);   // 休息
+  }
+  const longRest = await p2.evaluate(() => ({
+    phase: document.getElementById('pomoPhase').textContent,
+    cnt: document.getElementById('pomoCount').textContent,
+    t: document.getElementById('pomoTime').textContent,
+  }));
+  t('每 4 个番茄给一次长休息', longRest.phase === '长休息' && longRest.cnt === '4', JSON.stringify(longRest));
+
+  /* 隔天打开：今天的计数要归零 */
+  await p2.clock.setSystemTime(new Date('2026-10-26T09:00:00'));
+  await p2.reload({ waitUntil: 'domcontentloaded' });
+  await p2.clock.runFor(400);
+  await p2.evaluate(() => { document.querySelector('[data-m="pomo"]').click(); });
+  await p2.clock.runFor(300);
+  const nextDay = await p2.evaluate(() => document.getElementById('pomoCount').textContent);
+  t('换一天番茄计数自动归零', nextDay === '0', nextDay);
+  t('自习模式无 JS 报错', errs2.length === 0, errs2.join(' | '));
+  await ctx2.close();
+}
 
 /* 10. 无 JS 报错 */
 t('无 JS 报错', errs.length === 0, errs.join(' | '));
