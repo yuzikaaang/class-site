@@ -4466,7 +4466,8 @@ async function clockLogs(req, res) {
       if (!x) return;
       const m = String(x.m || '');
       const d = Math.max(0, Math.min(12 * 3600, Number(x.d) || 0));
-      if (!m || d < 5) return;
+      /* 3 秒以下当手滑；阈值跟前端 logSegOk 保持一致，免得两边数字对不上 */
+      if (!m || d < 3) return;
       const s = Number(x.s) || 0, e = Number(x.e) || (s + d * 1000);
       clean.push({ mode: m, name: CLOCK_MODE_NAME[m] || m, start: s, end: e, secs: d });
       byMode[m] = (byMode[m] || 0) + d;
