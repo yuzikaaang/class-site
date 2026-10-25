@@ -347,9 +347,10 @@ body.bg-green #logBtn,body.bg-gray #logBtn{
   background:rgba(30,30,34,.72);border-color:rgba(255,255,255,.14);
 }
 #logPanel{
-  position:fixed;top:0;right:0;bottom:0;width:min(92vw,372px);z-index:70;
+  position:fixed;top:0;right:0;bottom:0;width:min(94vw,368px);z-index:70;
   display:flex;flex-direction:column;
-  background:rgba(255,255,255,.96);color:#1b1b1b;
+  background:rgba(255,255,255,.985);color:#1b1b1b;
+  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
   border-left:1px solid rgba(0,0,0,.07);
   box-shadow:-18px 0 48px rgba(40,28,18,.14);
   transform:translateX(103%);transition:transform .34s cubic-bezier(.16,1,.3,1);
@@ -358,13 +359,13 @@ body.bg-green #logBtn,body.bg-gray #logBtn{
 #logPanel.show{transform:none}
 body.bg-dark #logPanel,body.bg-black #logPanel,body.bg-navy #logPanel,
 body.bg-green #logPanel,body.bg-gray #logPanel{
-  background:rgba(22,22,25,.97);color:#ececec;border-left-color:rgba(255,255,255,.08);
+  background:rgba(22,22,25,.985);color:#ececec;border-left-color:rgba(255,255,255,.08);
   box-shadow:-18px 0 48px rgba(0,0,0,.5);
 }
-.lg-head{display:flex;align-items:center;gap:10px;padding:16px 18px 12px;flex-wrap:wrap}
-.lg-head b{font-size:15px;letter-spacing:.02em}
-.lg-daywrap{margin-left:auto;display:flex;align-items:center;gap:2px}
-.lg-daywrap span{font-size:12.5px;opacity:.72;min-width:74px;text-align:center}
+.lg-head{display:flex;align-items:center;gap:8px;padding:15px 16px 11px}
+.lg-head b{font-size:15px;letter-spacing:.02em;flex:1 1 auto;white-space:nowrap}
+.lg-daywrap{flex:0 0 auto;display:flex;align-items:center;gap:1px}
+.lg-daywrap span{font-size:12.5px;opacity:.72;min-width:56px;text-align:center}
 .lg-nav{width:26px;height:26px;border-radius:8px;border:1px solid rgba(0,0,0,.09);
   background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0}
 body.bg-dark .lg-nav,body.bg-black .lg-nav,body.bg-navy .lg-nav,
@@ -375,13 +376,17 @@ body.bg-green .lg-nav,body.bg-gray .lg-nav{border-color:rgba(255,255,255,.14)}
 body.bg-dark .lg-close,body.bg-black .lg-close,body.bg-navy .lg-close,
 body.bg-green .lg-close,body.bg-gray .lg-close{background:rgba(255,255,255,.1)}
 .lg-sum{padding:0 18px 4px}
-.lg-cards{display:flex;gap:8px;margin-bottom:12px}
-.lg-card{flex:1;padding:10px 12px;border-radius:12px;background:rgba(224,138,76,.1);
-  border:1px solid rgba(224,138,76,.18)}
+/* 自习那张卡横跨两列 —— 「1 小时 15 分」这种长度，三张平分放不下会折行 */
+.lg-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.lg-card{padding:10px 12px;border-radius:12px;background:rgba(224,138,76,.1);
+  border:1px solid rgba(224,138,76,.18);min-width:0}
+.lg-card.wide{grid-column:1 / -1}
 body.bg-dark .lg-card,body.bg-black .lg-card,body.bg-navy .lg-card,
 body.bg-green .lg-card,body.bg-gray .lg-card{background:rgba(251,146,60,.13);border-color:rgba(251,146,60,.22)}
 .lg-card i{display:block;font-style:normal;font-size:11px;opacity:.6;margin-bottom:4px}
-.lg-card b{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.lg-card b{font-size:17px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;
+  display:block;overflow:hidden;text-overflow:ellipsis}
+.lg-card.wide b{font-size:21px}
 .lg-card b em{font-style:normal;font-size:11.5px;font-weight:600;opacity:.65;margin-left:2px}
 .lg-modes{font-size:12px;opacity:.62;line-height:1.75;margin-bottom:10px}
 .lg-list{flex:1;overflow:auto;padding:4px 18px 12px}
@@ -1089,8 +1094,8 @@ function logRender(){
   $('logPrev').disabled = false;
 
   var cards = '<div class="lg-cards">'
-    + '<div class="lg-card"><i>自习</i><b>' + durText(focus) + '</b></div>'
-    + '<div class="lg-card"><i>休息</i><b>' + durText(rest) + '</b></div>'
+    + '<div class="lg-card wide"><i>今天自习</i><b>' + (focus ? durText(focus) : '还没有') + '</b></div>'
+    + '<div class="lg-card"><i>休息</i><b>' + (rest ? durText(rest) : '—') + '</b></div>'
     + '<div class="lg-card"><i>番茄</i><b>' + m.pomo + '<em>个</em></b></div>'
     + '</div>';
   var modes = '';
