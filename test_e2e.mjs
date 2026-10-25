@@ -36,6 +36,14 @@ function readAdm(){
   return a + '\n/* ---- admin.js ---- */\n' + b;
 }
 
+/* v3.9.25：全屏时钟是独立页面，单独读 */
+function readClock(){
+  try { return fs.readFileSync(new URL('./clock.html', import.meta.url), 'utf8'); } catch (e) { return ''; }
+}
+function readApi(name){
+  try { return fs.readFileSync(new URL('./api/' + name, import.meta.url), 'utf8'); } catch (e) { return ''; }
+}
+
 function readIdx(){
   const a = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   let b = '';
@@ -12220,6 +12228,63 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
     /id="adSize"/.test(adm17) && /size: Number\(\(\$\('adSize'\)/.test(adm17));
   t('★v3.9.17 后台预览复用前台类（不再各写一套）',
     /pv\.innerHTML = '<div class="island-banner'/.test(adm17));
+}
+
+/* ============================================================
+ * v3.9.25：翻页动画两片接力 + 时钟使用记录（本地 / 云端 / 后台）
+ * ========================================================== */
+{
+  const clk = readClock();
+  const dataSrc = readApi('data.js');
+  const adminApi = readApi('admin.js');
+
+  t('★v3.9.25 clock.html 存在且带五种模式',
+    /data-m="pomo"/.test(clk) && /data-m="flip"/.test(clk) && /data-m="stop"/.test(clk));
+
+  /* 翻页动画 */
+  t('★v3.9.25 翻页是两片接力（A 翻下去 + B 翻上来）',
+    /\.flip \.flap\.a\{/.test(clk) && /\.flip \.flap\.b\{/.test(clk)
+    && /@keyframes flipA\{/.test(clk) && /@keyframes flipB\{/.test(clk));
+  t('★v3.9.25 B 片延迟半程开始（0.3s + 0.3s 接力）',
+    /animation:flipB \.3s[^;]*\.3s forwards/.test(clk)
+    && /animation:flipA \.3s[^;]*forwards/.test(clk));
+  t('★v3.9.25 文字在动画开始前就位（不是翻完才改）',
+    /bot\.textContent = old;/.test(clk) && /top\.textContent = val;/.test(clk));
+  t('★v3.9.25 收尾用令牌防两轮叠加', /box\.__tok/.test(clk) && /flipClean\(box\)/.test(clk));
+
+  /* 使用记录 */
+  t('★v3.9.25 时钟页右上角有「记录」按钮与右侧抽屉',
+    /id="logBtn"/.test(clk) && /id="logPanel"/.test(clk) && /translateX\(103%\)/.test(clk));
+  t('★v3.9.25 记录按天存在 cls_clock_log_<日期>',
+    /var LOG_PREFIX = 'cls_clock_log_'/.test(clk) && /dkey\(ts\)/.test(clk));
+  t('★v3.9.25 切模式就切一段（logStart / logStop）',
+    /function logStart\(mode\)/.test(clk) && /function logStop\(\)/.test(clk)
+    && /logStart\(logModeOf\(\)\)/.test(clk));
+  t('★v3.9.25 自习按专注 / 休息分开记', /logPomoPhase/.test(clk)
+    && /'pomo:' \+ PM\.phase/.test(clk));
+  t('★v3.9.25 抽屉里有自习 / 休息 / 番茄三张卡',
+    /<i>自习<\/i>/.test(clk) && /<i>休息<\/i>/.test(clk) && /<i>番茄<\/i>/.test(clk));
+  t('★v3.9.25 切到后台停止计时', /if\(document\.hidden\) logStop\(\);/.test(clk)
+    && /pagehide/.test(clk));
+  t('★v3.9.25 登录后推到 /api/data', /flushLog/.test(clk) && /CLK_API \+ '\/api\/data'/.test(clk));
+
+  /* 后端 */
+  t('★v3.9.25 云端白名单放行 cls_clock_*',
+    /'cls_clock_\*'/.test(dataSrc));
+  t('★v3.9.25 后台有时钟记录接口', /action === 'clock-logs'/.test(adminApi)
+    && /async function clockLogs/.test(adminApi) && /cls_clock_log_/.test(adminApi));
+
+  /* 后台面板 */
+  const adm90 = readAdm();
+  t('★v3.9.25 后台有「时钟记录」页面',
+    /id:'clocklog'/.test(adm90) && /function renderClockLog\(\)/.test(adm90)
+    && /function paintClockLog\(\)/.test(adm90));
+  t('★v3.9.25 后台能展开每人每段', /data-cl-open/.test(adm90) && /cl-seg/.test(adm90));
+
+  /* 番茄卡片已删 */
+  const idx90 = readIdx();
+  t('★v3.9.25 番茄时钟卡片已删除（不再跳外站）',
+    !/focustide\.app/.test(idx90));
 }
 
 console.log('\n' + '='.repeat(52));
