@@ -358,6 +358,17 @@ body.bg-dark .subj-row button,body.bg-black .subj-row button,body.bg-navy .subj-
 body.bg-green .subj-row button,body.bg-gray .subj-row button{border-color:rgba(255,255,255,.18)}
 body.bg-dark .subj-row button.on,body.bg-black .subj-row button.on,body.bg-navy .subj-row button.on,
 body.bg-green .subj-row button.on,body.bg-gray .subj-row button.on{color:#fdba74;border-color:#fb923c}
+/* 自习「这次做什么」输入框 */
+.doing-inp{
+  display:block;width:min(72vw,340px);margin:1.8vh auto 0;height:38px;padding:0 12px;
+  border:1px solid rgba(0,0,0,.14);border-radius:10px;background:rgba(255,255,255,.62);
+  color:inherit;font-family:inherit;font-size:14px;text-align:center;outline:none;
+  -webkit-appearance:none;appearance:none;
+}
+body.bg-dark .doing-inp,body.bg-black .doing-inp,body.bg-navy .doing-inp,
+body.bg-green .doing-inp,body.bg-gray .doing-inp{
+  background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.20)}
+.doing-inp:focus{border-color:#e08a4c;box-shadow:0 0 0 3px rgba(224,138,76,.16)}
 @media (max-aspect-ratio: 1/1){ #modeName{font-size:3.2vw;margin-bottom:1.8vh} }
 #about h3{margin:0 0 10px;font-size:17px}
 #about p{margin:0 0 10px;font-size:13px;line-height:1.75;color:#555}
@@ -619,7 +630,9 @@ body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.
       <button data-subj="语文">语文</button><button data-subj="数学">数学</button>
       <button data-subj="英语">英语</button><button data-subj="物理">物理</button>
       <button data-subj="化学">化学</button><button data-subj="生物">生物</button>
+      <button data-subj="其他">其他</button>
     </div>
+    <input class="doing-inp" id="doingInp" maxlength="12" placeholder="这次做什么（如：试卷、练习）">
   </div>
 </div>
 
@@ -719,10 +732,9 @@ body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.
         <label><span>翻页时钟</span><input data-nm="flip" maxlength="12" placeholder="翻页时钟"></label>
         <label><span>秒表</span><input data-nm="stop" maxlength="12" placeholder="秒表"></label>
         <label><span>倒计时</span><input data-nm="timer" maxlength="12" placeholder="倒计时"></label>
-        <label><span>自习</span><input data-nm="pomo" maxlength="12" placeholder="自习"></label>
       </div>
       <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">
-        自习还能直接在界面上点「语数英物化生」选科目，记录会按「名称 · 类型」分开统计。
+        自习的名字在自习界面里设：先点「语数英物化生 / 其他」选科目，再填这次做什么（如「试卷」「练习」），记录会按「科目 · 事项」分开统计。
       </p>
     </div>
     <div class="ab-sec">
@@ -748,8 +760,8 @@ body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.
 var CFG_KEY = 'cls_clock_cfg';
 var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5, ts:0,
   flipSec:true, pf:25, pb:5, pomoDone:0, pomoDate:'',
-  /* v3.10.0：提示音 / 自定义名称 / 自习科目 / 时间到提醒文字 */
-  sound:'ding', names:{}, subj:'', toast:'' };
+  /* v3.10.0：提示音 / 自定义名称 / 自习科目+事项 / 时间到提醒文字 */
+  sound:'ding', names:{}, subj:'', doing:'', toast:'' };
 try{
   var saved = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
   if(saved && typeof saved === 'object'){
@@ -793,9 +805,9 @@ function applyName(){
   var el = $('modeName');
   if(!el) return;
   var m = CFG.mode || 'clock';
-  var t = (CFG.names && String(CFG.names[m] || '').trim()) || '';
-  if(m === 'pomo' && CFG.subj) t = CFG.subj + (t ? ' · ' + t : '');
-  el.textContent = t;
+  el.textContent = (m === 'pomo')
+    ? segNameOf()
+    : ((CFG.names && String(CFG.names[m] || '').trim()) || '');
   var row = $('subjRow');
   if(row){
     var bs = row.getElementsByTagName('button');
@@ -803,18 +815,22 @@ function applyName(){
       bs[i].className = (bs[i].getAttribute('data-subj') === CFG.subj) ? 'on' : '';
     }
   }
+  var di = $('doingInp');
+  if(di && document.activeElement !== di) di.value = CFG.doing || '';
 }
-/* 这一段记录该叫什么：科目 + 名称（都没填就空着，前台退回类型名） */
+/* 这一段记录该叫什么：自习是「科目 · 这次做什么」（如 语文·试卷，
+   选「其他」就只记做的事，如 家务）；其它模式仍用「更多」里起的名字。
+   都没填就空着，前台退回类型名 */
 function segNameOf(){
   var m = CFG.mode;
-  var nm = (CFG.names && String(CFG.names[m] || '').trim()) || '';
   if(m === 'pomo'){
-    var parts = [];
-    if(CFG.subj) parts.push(CFG.subj);
-    if(nm) parts.push(nm);
-    return parts.join('·');
+    var s = String(CFG.subj || '').trim();
+    var d = String(CFG.doing || '').trim();
+    if(s === '其他') return d || '其他';
+    if(s && d) return s + '·' + d;
+    return s || d || '';
   }
-  return nm;
+  return (CFG.names && String(CFG.names[m] || '').trim()) || '';
 }
 
 /* ---------------- 模式切换 ---------------- */
@@ -2207,6 +2223,15 @@ function bindSettings(){
         logStart(logModeOf());
       };
     });
+  }
+  var di = $('doingInp');
+  if(di){
+    di.value = CFG.doing || '';
+    di.oninput = function(){
+      CFG.doing = di.value.slice(0, 12);
+      saveCfg(); applyName();
+      logStart(logModeOf());       /* 换了做的事，从现在起算新的一段 */
+    };
   }
   var ti = $('toastInp');
   if(ti){

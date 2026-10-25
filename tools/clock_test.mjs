@@ -380,6 +380,51 @@ t('点数字能展开时长设置', await page.evaluate(() => document.getElemen
   await ctx4.close();
 }
 
+/* 9h. v3.10.0：自习「科目 + 这次做什么」 */
+{
+  const ctx5 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const p5 = await ctx5.newPage();
+  const errs5 = [];
+  p5.on('pageerror', (e) => errs5.push(e.message));
+  await p5.goto(BASE + '/clock.html?m=pomo', { waitUntil: 'domcontentloaded' });
+  await p5.waitForTimeout(700);
+
+  const subjN = await p5.evaluate(() => document.querySelectorAll('#subjRow button').length);
+  t('科目按钮共 7 个（含「其他」）', subjN === 7, 'subjN=' + subjN);
+  t('有「这次做什么」输入框', await p5.evaluate(() => !!document.getElementById('doingInp')));
+
+  await p5.evaluate(() => document.querySelector('[data-subj="语文"]').click());
+  await p5.waitForTimeout(150);
+  const n1 = await p5.evaluate(() => document.getElementById('modeName').textContent);
+  t('选语文后显示「语文」', n1 === '语文', n1);
+
+  await p5.evaluate(() => {
+    const i = document.getElementById('doingInp');
+    i.value = '试卷';
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await p5.waitForTimeout(150);
+  const n2 = await p5.evaluate(() => document.getElementById('modeName').textContent);
+  t('填「试卷」后显示「语文·试卷」', n2 === '语文·试卷', n2);
+
+  await p5.evaluate(() => document.querySelector('[data-subj="其他"]').click());
+  await p5.waitForTimeout(150);
+  const n3 = await p5.evaluate(() => document.getElementById('modeName').textContent);
+  t('选「其他」后只显示做的事', n3 === '试卷', n3);
+
+  await p5.evaluate(() => {
+    const i = document.getElementById('doingInp');
+    i.value = '家务';
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await p5.waitForTimeout(150);
+  const n4 = await p5.evaluate(() => document.getElementById('modeName').textContent);
+  t('其他 + 家务 显示「家务」', n4 === '家务', n4);
+
+  t('自习科目/事项功能无 JS 报错', errs5.length === 0, errs5.join(' | '));
+  await ctx5.close();
+}
+
 /* 10. 无 JS 报错 */
 t('无 JS 报错', errs.length === 0, errs.join(' | '));
 
