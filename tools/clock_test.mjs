@@ -425,6 +425,38 @@ t('点数字能展开时长设置', await page.evaluate(() => document.getElemen
   await ctx5.close();
 }
 
+/* 9i. v3.10.0：音效升级 / 白噪音 / 工具栏手动收起 */
+{
+  const ctx6 = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+  const p6 = await ctx6.newPage();
+  const errs6 = [];
+  p6.on('pageerror', (e) => errs6.push(e.message));
+  await p6.goto(BASE + '/clock.html', { waitUntil: 'domcontentloaded' });
+  await p6.waitForTimeout(700);
+
+  const snds = await p6.evaluate(() => [...document.querySelectorAll('#sndRow button')].map((b) => b.getAttribute('data-snd')));
+  t('音效有「叮咚」「清脆」等 6 个选项', snds.length === 6 && snds.includes('ding') && snds.includes('chime'), JSON.stringify(snds));
+
+  const noises = await p6.evaluate(() => [...document.querySelectorAll('#noiseRow button')].map((b) => b.getAttribute('data-noise')));
+  t('白噪音有雨 / 风 / 海浪 3 个', noises.length === 3 && noises.includes('rain') && noises.includes('wind') && noises.includes('wave'), JSON.stringify(noises));
+  await p6.evaluate(() => document.querySelector('[data-noise="rain"]').click());
+  await p6.waitForTimeout(150);
+  t('点「雨声」能打开并记进配置', await p6.evaluate(() => { const c = JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}'); return !!(c.noise && c.noise.rain); }));
+  await p6.evaluate(() => document.querySelector('[data-noise="rain"]').click());
+  await p6.waitForTimeout(150);
+  t('再点一下能关掉', await p6.evaluate(() => { const c = JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}'); return !(c.noise && c.noise.rain); }));
+
+  await p6.evaluate(() => { document.getElementById('bar').className = 'show'; });
+  await p6.waitForTimeout(100);
+  t('有收起工具栏的小箭头', await p6.evaluate(() => !!document.getElementById('barHide')));
+  await p6.evaluate(() => document.getElementById('barHide').click());
+  await p6.waitForTimeout(150);
+  t('点箭头立即收起工具栏', await p6.evaluate(() => document.getElementById('bar').className.indexOf('show') < 0));
+
+  t('音效 / 白噪音 / 收起无 JS 报错', errs6.length === 0, errs6.join(' | '));
+  await ctx6.close();
+}
+
 /* 10. 无 JS 报错 */
 t('无 JS 报错', errs.length === 0, errs.join(' | '));
 

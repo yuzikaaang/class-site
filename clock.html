@@ -272,6 +272,11 @@ body.bg-green #bar button:hover,body.bg-gray #bar button:hover{background:rgba(2
 #bar button.cur{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.08)}
 body.bg-dark #bar button.cur,body.bg-black #bar button.cur,body.bg-navy #bar button.cur,
 body.bg-green #bar button.cur,body.bg-gray #bar button.cur{background:rgba(255,255,255,.14);border-color:transparent}
+/* 手动收起工具栏的小箭头 */
+#barHide{width:38px;padding:0;font-size:15px;opacity:.55}
+#barHide:hover{opacity:1;background:rgba(0,0,0,.06)}
+body.bg-dark #barHide:hover,body.bg-black #barHide:hover,body.bg-navy #barHide:hover,
+body.bg-green #barHide:hover,body.bg-gray #barHide:hover{background:rgba(255,255,255,.1)}
 
 /* 模式菜单 */
 #modeMenu{
@@ -698,6 +703,7 @@ body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.
   <button id="secBtn" style="display:none">秒 · 显示</button>
   <button id="fsBtn">全屏</button>
   <button id="aboutBtn">更多</button>
+  <button id="barHide" title="收起工具栏" aria-label="收起工具栏">▾</button>
 </div>
 
 <div id="modeMenu">
@@ -718,11 +724,22 @@ body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.
       <h4>提示音（点一下就能试听）</h4>
       <div class="snd-row" id="sndRow">
         <button data-snd="off">关闭</button>
-        <button data-snd="ding">叮</button>
+        <button data-snd="ding">叮咚</button>
+        <button data-snd="chime">清脆</button>
         <button data-snd="wood">木鱼</button>
         <button data-snd="bell">铃声</button>
         <button data-snd="tick">嘀嗒</button>
       </div>
+    </div>
+
+    <div class="ab-sec">
+      <h4>白噪音（可多选混合，专注 / 助眠）</h4>
+      <div class="snd-row" id="noiseRow">
+        <button data-noise="rain">雨声</button>
+        <button data-noise="wind">风声</button>
+        <button data-noise="wave">海浪</button>
+      </div>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">点一下开 / 关，可同时开几种混合；关掉这个面板后声音继续，再点「更多」回来就能关。</p>
     </div>
 
     <div class="ab-sec">
@@ -760,8 +777,8 @@ body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.
 var CFG_KEY = 'cls_clock_cfg';
 var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5, ts:0,
   flipSec:true, pf:25, pb:5, pomoDone:0, pomoDate:'',
-  /* v3.10.0：提示音 / 自定义名称 / 自习科目+事项 / 时间到提醒文字 */
-  sound:'ding', names:{}, subj:'', doing:'', toast:'' };
+  /* v3.10.0：提示音 / 自定义名称 / 自习科目+事项 / 时间到提醒文字 / 白噪音 */
+  sound:'ding', names:{}, subj:'', doing:'', toast:'', noise:{} };
 try{
   var saved = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
   if(saved && typeof saved === 'object'){
@@ -1899,11 +1916,16 @@ function logShift(n){
    选择的时候可以先试听」。全部用 WebAudio 现合成，不加载任何音频文件。 */
 var AC = null;
 var SND = {
-  /* f 起始频率 / f2 收尾频率 / dur 时长 / gain 音量 / harm 泛音倍数 */
-  ding: { type: 'sine',     f: 880,  f2: 1320, dur: 0.30, gain: 0.16 },
-  wood: { type: 'triangle', f: 520,  f2: 300,  dur: 0.13, gain: 0.22 },
-  bell: { type: 'sine',     f: 1046, f2: 1046, dur: 0.85, gain: 0.13, harm: 2.76, harmGain: 0.05 },
-  tick: { type: 'square',   f: 1500, f2: 1500, dur: 0.05, gain: 0.07 }
+  /* 每个音效可含多个音符（notes）依次发声：f 频率 / d 延迟秒 / dur 时长 / gain 音量 / type 波形 / f2 收尾频率。
+     harm 是钟声泛音倍数、harmGain 泛音音量 —— 让「叮咚 / 铃声」更像真实门铃。 */
+  ding:  { notes: [ { f:1318.5, d:0,    dur:0.50, gain:0.16 },
+                    { f:987.8,  d:0.13, dur:0.75, gain:0.13 } ], harm:2.76, harmGain:0.045 },
+  chime: { notes: [ { f:523.3, d:0,    dur:0.40, gain:0.13 },
+                    { f:659.3, d:0.11, dur:0.40, gain:0.13 },
+                    { f:783.9, d:0.22, dur:0.55, gain:0.13 } ], harm:2.0, harmGain:0.03 },
+  wood:  { notes: [ { f:520, d:0, dur:0.14, gain:0.24, type:'triangle', f2:320 } ] },
+  bell:  { notes: [ { f:1046.5, d:0, dur:1.30, gain:0.14 } ], harm:2.76, harmGain:0.06 },
+  tick:  { notes: [ { f:1500, d:0, dur:0.05, gain:0.07, type:'square' } ] }
 };
 function sndName(){ return CFG.sound || 'off'; }
 function beep(name){
@@ -1916,28 +1938,119 @@ function beep(name){
     if(!C) return;
     if(!AC) AC = new C();
     if(AC.state === 'suspended' && AC.resume) AC.resume();
-    var t = AC.currentTime;
-    var o = AC.createOscillator(), g = AC.createGain();
-    o.type = cfg.type;
-    o.frequency.setValueAtTime(cfg.f, t);
-    if(cfg.f2 && cfg.f2 !== cfg.f) o.frequency.exponentialRampToValueAtTime(cfg.f2, t + cfg.dur);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(cfg.gain, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + cfg.dur);
-    o.connect(g); g.connect(AC.destination);
-    o.start(t); o.stop(t + cfg.dur + 0.02);
-    /* 铃声再叠一个泛音，听起来更「铃」 */
-    if(cfg.harm){
-      var o2 = AC.createOscillator(), g2 = AC.createGain();
-      o2.type = 'sine';
-      o2.frequency.setValueAtTime(cfg.f * cfg.harm, t);
-      g2.gain.setValueAtTime(0.0001, t);
-      g2.gain.exponentialRampToValueAtTime(cfg.harmGain || 0.05, t + 0.02);
-      g2.gain.exponentialRampToValueAtTime(0.0001, t + cfg.dur * 0.7);
-      o2.connect(g2); g2.connect(AC.destination);
-      o2.start(t); o2.stop(t + cfg.dur);
-    }
+    var t0 = AC.currentTime;
+    var notes = cfg.notes || [cfg];
+    notes.forEach(function(n){
+      var t = t0 + (n.d || 0);
+      var o = AC.createOscillator(), g = AC.createGain();
+      o.type = n.type || 'sine';
+      o.frequency.setValueAtTime(n.f, t);
+      if(n.f2 && n.f2 !== n.f) o.frequency.exponentialRampToValueAtTime(n.f2, t + n.dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(n.gain, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + n.dur);
+      o.connect(g); g.connect(AC.destination);
+      o.start(t); o.stop(t + n.dur + 0.02);
+      /* 叠一个泛音，钟声 / 铃声更有质感 */
+      if(cfg.harm){
+        var o2 = AC.createOscillator(), g2 = AC.createGain();
+        o2.type = 'sine';
+        o2.frequency.setValueAtTime(n.f * cfg.harm, t);
+        g2.gain.setValueAtTime(0.0001, t);
+        g2.gain.exponentialRampToValueAtTime(cfg.harmGain || 0.05, t + 0.02);
+        g2.gain.exponentialRampToValueAtTime(0.0001, t + n.dur * 0.7);
+        o2.connect(g2); g2.connect(AC.destination);
+        o2.start(t); o2.stop(t + n.dur);
+      }
+    });
   }catch(e){}
+}
+
+/* ---------------- 白噪音（v3.10.0） ----------------
+   雨声 / 风声 / 海浪，用 WebAudio 合成循环噪声，可单个开、也可多个混合；
+   开关状态记在 CFG.noise 里，跨会话记住。 */
+var NOISE_NODES = {};
+function noiseSrc(kind){
+  var C = window.AudioContext || window.webkitAudioContext;
+  if(!C) return null;
+  if(!AC) AC = new C();
+  if(AC.state === 'suspended' && AC.resume) AC.resume();
+  var len = AC.sampleRate * 2;                       /* 2 秒循环 */
+  var buf = AC.createBuffer(1, len, AC.sampleRate);
+  var d = buf.getChannelData(0);
+  if(kind === 'wind'){
+    /* 粉红噪声（低频为主，风声更闷更自然） */
+    var b0 = 0, b1 = 0, b2 = 0;
+    for(var i = 0; i < len; i++){
+      var w = Math.random() * 2 - 1;
+      b0 = 0.997 * b0 + 0.029591 * w;
+      b1 = 0.985 * b1 + 0.032534 * w;
+      b2 = 0.950 * b2 + 0.048056 * w;
+      d[i] = (b0 + b1 + b2 + w * 0.05) * 3.5;
+    }
+  }else{
+    for(var j = 0; j < len; j++) d[j] = Math.random() * 2 - 1;   /* 白噪声 */
+  }
+  var src = AC.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  var filt = AC.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.value = (kind === 'rain') ? 1200 : (kind === 'wind') ? 400 : 600;
+  var g = AC.createGain();
+  g.gain.value = 0.0001;
+  src.connect(filt); filt.connect(g); g.connect(AC.destination);
+  src.start();
+  return { src: src, g: g, filt: filt, lfo: null };
+}
+function noiseTarget(kind){ return (kind === 'rain') ? 0.22 : (kind === 'wind') ? 0.20 : 0.16; }
+function noiseStopLfo(n){
+  if(n.lfo){ try{ n.lfo.stop(); n.lfo.disconnect(); }catch(e){} n.lfo = null; }
+}
+function noiseStartLfo(n, kind){
+  noiseStopLfo(n);
+  n.lfo = AC.createOscillator();
+  var lg = AC.createGain();
+  if(kind === 'wind'){ n.lfo.frequency.value = 0.13; lg.gain.value = 200; n.lfo.connect(lg); lg.connect(n.filt.frequency); }
+  else{ n.lfo.frequency.value = 0.07; lg.gain.value = 0.06; n.lfo.connect(lg); lg.connect(n.g.gain); }
+  n.lfo.start();
+}
+function noiseSet(kind, on){
+  CFG.noise = CFG.noise || {};
+  CFG.noise[kind] = on;
+  saveCfg();
+  if(on){
+    if(!NOISE_NODES[kind]) NOISE_NODES[kind] = noiseSrc(kind);
+    var n = NOISE_NODES[kind];
+    if(!n) return;
+    var t = AC.currentTime;
+    n.g.gain.cancelScheduledValues(t);
+    n.g.gain.setValueAtTime(Math.max(0.0001, n.g.gain.value), t);
+    n.g.gain.linearRampToValueAtTime(noiseTarget(kind), t + 1.0);   /* 淡入 */
+    if(kind === 'wind' || kind === 'wave') noiseStartLfo(n, kind);
+  }else{
+    var n2 = NOISE_NODES[kind];
+    if(!n2) return;
+    var t2 = AC.currentTime;
+    n2.g.gain.cancelScheduledValues(t2);
+    n2.g.gain.setValueAtTime(Math.max(0.0001, n2.g.gain.value), t2);
+    n2.g.gain.linearRampToValueAtTime(0.0001, t2 + 0.5);            /* 淡出 */
+    noiseStopLfo(n2);
+    setTimeout(function(){
+      if(!CFG.noise || !CFG.noise[kind]){
+        try{ n2.src.stop(); }catch(e){}
+        delete NOISE_NODES[kind];
+      }
+    }, 700);
+  }
+}
+function paintNoise(){
+  var row = $('noiseRow');
+  if(!row) return;
+  CFG.noise = CFG.noise || {};
+  var bs = row.getElementsByTagName('button');
+  for(var i = 0; i < bs.length; i++){
+    bs[i].className = (CFG.noise[bs[i].getAttribute('data-noise')]) ? 'on' : '';
+  }
 }
 
 /* ---------------- 全屏「时间到」提醒（v3.10.0） ----------------
@@ -1988,6 +2101,12 @@ function showBar(){
   barTimer = setTimeout(function(){ $('bar').className = ''; $('modeMenu').className = ''; }, 6000);
 }
 function toggleBar(){ $('bar').className ? ($('bar').className = '') : showBar(); }
+function hideBar(){
+  $('bar').className = '';
+  $('modeMenu').className = '';
+  if(barTimer){ clearTimeout(barTimer); barTimer = null; }
+}
+$('barHide').onclick = function(e){ if(e && e.stopPropagation) e.stopPropagation(); hideBar(); };
 
 var FONTS = [['auto','自动'],['hei','黑体'],['mono','等宽'],['round','圆体'],['serif','宋体']];
 
@@ -2233,6 +2352,18 @@ function bindSettings(){
       logStart(logModeOf());       /* 换了做的事，从现在起算新的一段 */
     };
   }
+  var nr = $('noiseRow');
+  if(nr){
+    Array.prototype.forEach.call(nr.getElementsByTagName('button'), function(b){
+      b.onclick = function(e){
+        if(e && e.stopPropagation) e.stopPropagation();
+        var k = b.getAttribute('data-noise');
+        CFG.noise = CFG.noise || {};
+        noiseSet(k, !CFG.noise[k]);
+        paintNoise();
+      };
+    });
+  }
   var ti = $('toastInp');
   if(ti){
     ti.value = CFG.toast || '';
@@ -2357,6 +2488,7 @@ if(CFG.mode === 'timer') refreshTimerInputs();
 bindSettings();
 sumBind();
 paintSnd();
+paintNoise();
 logEnsure();
 logPomo(pomoDoneToday());   /* 把今天的番茄数补进记录，后台能直接看到 */
 applyName();
