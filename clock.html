@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#f4f4f4">
+<title>全屏时钟 · 时间 / 倒计时 / 秒表</title>
+<style>
+/* ============================================================================
+ * 全屏时钟（v3.9.22）
+ * 仿照 yingming006.cn/time 做的站内版：数字 / 翻页 / 秒表 / 计时器四种模式，
+ * 字体、背景、12-24 小时、全屏、防息屏、空格开始暂停都对齐。
+ * 纯 ES5 + 无第三方依赖，老 iPad 也能跑。
+ * ========================================================================= */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;padding:0;overflow:hidden}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+  background:#f4f4f4;color:#141414;
+  transition:background .28s ease,color .28s ease;
+  user-select:none;-webkit-user-select:none;
+  cursor:default;
+}
+body.bg-dark{background:#0d0d0f;color:#f5f5f5}
+body.bg-black{background:#000;color:#fff}
+body.bg-cream{background:#f6f1e7;color:#3a2f24}
+body.bg-navy{background:#0e1a2b;color:#e8eefc}
+body.bg-green{background:#0f241d;color:#e6f6ee}
+body.bg-gray{background:#2b2b2e;color:#f2f2f2}
+
+#stage{position:fixed;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;flex-direction:column}
+.view{display:none;width:100%;text-align:center}
+.view.on{display:block}
+
+/* ---------- 数字时钟 ---------- */
+#bigTime{
+  font-size:22vw;line-height:1;letter-spacing:-.02em;font-weight:700;
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+#bigSub{margin-top:2.2vh;font-size:2.4vw;opacity:.55;letter-spacing:.06em;white-space:nowrap}
+
+/* ---------- 翻页时钟 ---------- */
+#flipView .flip-row{display:flex;align-items:center;justify-content:center}
+.flip{
+  position:relative;width:24vw;height:32vw;margin:0 1.4vw;border-radius:1.6vw;
+  background:rgba(0,0,0,.06);perspective:1200px;
+}
+body.bg-dark .flip,body.bg-black .flip,body.bg-navy .flip,body.bg-green .flip,body.bg-gray .flip{background:rgba(255,255,255,.09)}
+.flip .half{position:absolute;left:0;width:100%;height:50%;overflow:hidden;background:inherit;border-radius:1.6vw}
+.flip .half.top{top:0;border-bottom-left-radius:0;border-bottom-right-radius:0;
+  box-shadow:inset 0 -.15vw 0 rgba(0,0,0,.18)}
+.flip .half.bottom{bottom:0;border-top-left-radius:0;border-top-right-radius:0}
+.flip .half .txt{
+  position:absolute;left:0;width:100%;height:32vw;line-height:32vw;text-align:center;
+  font-size:20vw;font-weight:700;font-variant-numeric:tabular-nums;
+}
+.flip .half.top .txt{top:0}
+.flip .half.bottom .txt{top:-16vw}
+.flip .flap{
+  position:absolute;left:0;top:0;width:100%;height:50%;overflow:hidden;
+  background:inherit;border-radius:1.6vw 1.6vw 0 0;transform-origin:bottom center;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;z-index:3;
+}
+.flip .flap .txt{position:absolute;left:0;top:0;width:100%;height:32vw;line-height:32vw;
+  text-align:center;font-size:20vw;font-weight:700;font-variant-numeric:tabular-nums}
+.flip .flap-go{animation:flipDown .55s cubic-bezier(.45,.05,.55,.95) forwards}
+@keyframes flipDown{from{transform:rotateX(0)}to{transform:rotateX(-90deg)}}
+.flip-sep{font-size:9vw;font-weight:700;opacity:.35;margin:0 .4vw}
+
+/* ---------- 秒表 / 计时器 ---------- */
+#stopTime,#timerTime{
+  font-size:17vw;line-height:1;font-weight:700;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+#stopTime .ms,#timerTime .ms{font-size:.5em;opacity:.55}
+#timerTime.warn{color:#e23b3b}
+body.bg-dark #timerTime.warn,body.bg-black #timerTime.warn,body.bg-navy #timerTime.warn,body.bg-green #timerTime.warn,body.bg-gray #timerTime.warn{color:#ff6b6b}
+#timerSet{display:flex;align-items:center;justify-content:center;margin-top:3vh}
+#timerSet input{
+  width:15vw;max-width:120px;height:9vh;max-height:64px;min-height:40px;
+  border:1px solid rgba(0,0,0,.16);border-radius:12px;background:rgba(255,255,255,.6);
+  color:inherit;font:inherit;font-size:2.6vw;text-align:center;outline:none;
+  -webkit-appearance:none;appearance:none;
+}
+body.bg-dark #timerSet input,body.bg-black #timerSet input,body.bg-navy #timerSet input,
+body.bg-green #timerSet input,body.bg-gray #timerSet input{
+  background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.22)}
+#timerSet .colon{font-size:3vw;opacity:.4;margin:0 1vw}
+#timerSet input:focus{border-color:#e08a4c}
+
+/* ---------- 按钮组 ---------- */
+.actions{display:flex;align-items:center;justify-content:center;margin-top:3.4vh;flex-wrap:wrap}
+.actions button{
+  min-width:12vw;height:6.4vh;min-height:42px;padding:0 3vw;margin:.6vh .7vw;
+  border:1px solid rgba(0,0,0,.16);border-radius:12px;background:rgba(255,255,255,.65);
+  color:inherit;font:inherit;font-size:1.6vw;font-weight:600;cursor:pointer;
+  transition:transform .12s,background .18s;
+}
+body.bg-dark #actions button,body.bg-black #actions button,body.bg-navy #actions button,
+body.bg-green #actions button,body.bg-gray .actions button{
+  background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22)}
+.actions button:active{transform:scale(.96)}
+.actions button.primary{background:#141414;color:#fff;border-color:transparent}
+body.bg-dark .actions button.primary,body.bg-black .actions button.primary,
+body.bg-navy .actions button.primary,body.bg-green .actions button.primary,
+body.bg-gray .actions button.primary{background:#f5f5f5;color:#111}
+.actions .kbd{font-size:.68em;opacity:.5;margin-left:.5em;font-weight:400}
+
+/* ---------- 工具栏 ---------- */
+#bar{
+  position:fixed;left:50%;bottom:3vh;transform:translateX(-50%) translateY(6px);
+  display:flex;align-items:center;flex-wrap:wrap;justify-content:center;
+  padding:.7vh .6vw;border-radius:16px;z-index:40;
+  background:rgba(255,255,255,.78);border:1px solid rgba(0,0,0,.1);
+  box-shadow:0 10px 30px rgba(0,0,0,.10);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  opacity:0;visibility:hidden;transition:opacity .22s,transform .22s;
+  max-width:96vw;
+}
+body.bg-dark #bar,body.bg-black #bar,body.bg-navy #bar,body.bg-green #bar,body.bg-gray #bar{
+  background:rgba(28,28,32,.82);border-color:rgba(255,255,255,.14)}
+#bar.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+#bar button{
+  height:38px;padding:0 14px;margin:3px;border:1px solid transparent;border-radius:10px;
+  background:transparent;color:inherit;font:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+}
+#bar button:hover{background:rgba(0,0,0,.06)}
+body.bg-dark #bar button:hover,body.bg-black #bar button:hover,body.bg-navy #bar button:hover,
+body.bg-green #bar button:hover,body.bg-gray #bar button:hover{background:rgba(255,255,255,.1)}
+#bar button.cur{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.08)}
+body.bg-dark #bar button.cur,body.bg-black #bar button.cur,body.bg-navy #bar button.cur,
+body.bg-green #bar button.cur,body.bg-gray #bar button.cur{background:rgba(255,255,255,.14);border-color:transparent}
+
+/* 模式菜单 */
+#modeMenu{
+  position:fixed;left:50%;bottom:calc(3vh + 54px);transform:translateX(-50%);
+  background:rgba(255,255,255,.96);border:1px solid rgba(0,0,0,.1);border-radius:14px;
+  padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.14);z-index:41;display:none;
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+}
+body.bg-dark #modeMenu,body.bg-black #modeMenu,body.bg-navy #modeMenu,
+body.bg-green #modeMenu,body.bg-gray #modeMenu{background:rgba(30,30,34,.96);border-color:rgba(255,255,255,.14)}
+#modeMenu.show{display:block}
+#modeMenu button{display:block;width:100%;height:38px;padding:0 22px;border:none;border-radius:9px;
+  background:transparent;color:inherit;font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:center}
+#modeMenu button.cur{background:rgba(0,0,0,.08)}
+body.bg-dark #modeMenu button.cur,body.bg-black #modeMenu button.cur,body.bg-navy #modeMenu button.cur,
+body.bg-green #modeMenu button.cur,body.bg-gray #modeMenu button.cur{background:rgba(255,255,255,.14)}
+
+#back{
+  position:fixed;left:16px;top:16px;z-index:35;padding:9px 14px;border-radius:12px;
+  font-size:13px;font-weight:600;text-decoration:none;color:inherit;
+  background:rgba(255,255,255,.7);border:1px solid rgba(0,0,0,.1);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:opacity .2s;
+}
+body.bg-dark #back,body.bg-black #back,body.bg-navy #back,body.bg-green #back,body.bg-gray #back{
+  background:rgba(30,30,34,.7);border-color:rgba(255,255,255,.14)}
+#back:hover{opacity:.75}
+
+/* 提示气泡 */
+#hint{
+  position:fixed;left:50%;top:4vh;transform:translateX(-50%);
+  padding:8px 16px;border-radius:999px;font-size:12px;
+  background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.08);color:#333;
+  transition:opacity .4s;z-index:30;
+}
+body.bg-dark #hint,body.bg-black #hint,body.bg-navy #hint,body.bg-green #hint,body.bg-gray #hint{
+  background:rgba(30,30,34,.9);border-color:rgba(255,255,255,.14);color:#ddd}
+#hint.hide{opacity:0}
+
+/* 关于面板 */
+#about{
+  position:fixed;left:0;right:0;top:0;bottom:0;z-index:60;display:none;
+  background:rgba(0,0,0,.45);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
+}
+#about.show{display:flex;align-items:center;justify-content:center;padding:24px}
+#about .box{
+  width:100%;max-width:420px;background:#fff;color:#222;border-radius:18px;padding:24px 22px;
+  box-shadow:0 20px 50px rgba(0,0,0,.3);
+}
+#about h3{margin:0 0 10px;font-size:17px}
+#about p{margin:0 0 10px;font-size:13px;line-height:1.75;color:#555}
+#about a{color:#b45309;text-decoration:none;font-weight:600}
+#about .close{width:100%;height:44px;margin-top:8px;border:none;border-radius:12px;
+  background:#141414;color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+
+/* 字体族切换 */
+body.f-auto{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif}
+body.f-hei{font-family:"PingFang SC","Microsoft YaHei","Heiti SC","SimHei",sans-serif}
+body.f-mono{font-family:"SF Mono",Menlo,Consolas,"Courier New",ui-monospace,monospace}
+body.f-round{font-family:"PingFang SC","Yuanti SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-weight:800;letter-spacing:.01em}
+body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
+
+@media (max-aspect-ratio: 1/1){
+  #bigTime{font-size:20vw}
+  #stopTime,#timerTime{font-size:15vw}
+  .flip{width:26vw;height:34vw}
+  .flip .half .txt,.flip .flap .txt{height:34vw;line-height:34vw;font-size:21vw}
+  .flip .half.bottom .txt{top:-17vw}
+  #bigSub{font-size:2.8vw}
+}
+@media (max-width:420px){
+  #bar button{height:34px;padding:0 10px;font-size:12px}
+  .actions button{min-width:26vw;font-size:3.4vw}
+  #timerSet input{font-size:4.4vw;width:18vw}
+}
+</style>
+</head>
+<body class="bg-light f-auto">
+
+<div id="stage">
+  <!-- 数字时钟 -->
+  <div class="view on" id="clockView">
+    <div id="bigTime">00:00:00</div>
+    <div id="bigSub"></div>
+  </div>
+
+  <!-- 翻页时钟 -->
+  <div class="view" id="flipView">
+    <div class="flip-row">
+      <div class="flip" id="flipH"><div class="half top"><div class="txt">00</div></div><div class="half bottom"><div class="txt">00</div></div></div>
+      <div class="flip-sep">:</div>
+      <div class="flip" id="flipM"><div class="half top"><div class="txt">00</div></div><div class="half bottom"><div class="txt">00</div></div></div>
+      <div class="flip-sep">:</div>
+      <div class="flip" id="flipS"><div class="half top"><div class="txt">00</div></div><div class="half bottom"><div class="txt">00</div></div></div>
+    </div>
+  </div>
+
+  <!-- 秒表 -->
+  <div class="view" id="stopView">
+    <div id="stopTime">00:00<span class="ms">.00</span></div>
+    <div class="actions">
+      <button id="stopBtn" class="primary">开始<span class="kbd">Space</span></button>
+      <button id="lapBtn">计次</button>
+      <button id="stopReset">重置</button>
+    </div>
+    <div id="laps" style="margin-top:2vh;font-size:1.5vw;opacity:.6;max-height:24vh;overflow:auto"></div>
+  </div>
+
+  <!-- 计时器 -->
+  <div class="view" id="timerView">
+    <div id="timerTime">00:05:00</div>
+    <div id="timerSet">
+      <input id="th" type="number" min="0" max="99" value="0" inputmode="numeric">
+      <span class="colon">:</span>
+      <input id="tm" type="number" min="0" max="59" value="5" inputmode="numeric">
+      <span class="colon">:</span>
+      <input id="ts" type="number" min="0" max="59" value="0" inputmode="numeric">
+    </div>
+    <div class="actions">
+      <button id="timerBtn" class="primary">开始<span class="kbd">Space</span></button>
+      <button id="timerReset">重置</button>
+      <button id="timerPreset">常用</button>
+    </div>
+  </div>
+</div>
+
+<a id="back" href="./index.html" title="返回班级服务站">← 返回</a>
+<div id="hint">单击屏幕可显示工具栏 · 双击数字进入全屏</div>
+
+<div id="bar">
+  <button id="modeBtn">数字</button>
+  <button id="fontBtn">字体 · 自动</button>
+  <button id="bgBtn">背景</button>
+  <button id="h12Btn">24 小时</button>
+  <button id="soundBtn">声音 · 开</button>
+  <button id="fsBtn">全屏</button>
+  <button id="aboutBtn">更多</button>
+</div>
+
+<div id="modeMenu">
+  <button data-m="clock" class="cur">数字</button>
+  <button data-m="flip">翻页</button>
+  <button data-m="stop">秒表</button>
+  <button data-m="timer">计时器</button>
+</div>
+
+<div id="about">
+  <div class="box">
+    <h3>关于全屏时钟</h3>
+    <p>这是一个给班级同学用的在线时钟：数字 / 翻页两种时钟样式，外加秒表和倒计时，适合桌面常驻、教室投屏、自习计时。</p>
+    <p><b>本页面仿照 <a href="https://yingming006.cn/time/?m=timer" target="_blank" rel="noopener">yingming006.cn/time</a> 制作</b>，功能与操作方式对齐原站，代码为本站自己实现。</p>
+    <p style="font-size:12px;opacity:.7">快捷键：空格 开始 / 暂停 · F 全屏 · Esc 退出全屏 · 1~4 切换模式</p>
+    <button class="close" id="aboutClose">知道了</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+ * 全屏时钟逻辑（ES5，无依赖）
+ * ========================================================================= */
+(function(){
+'use strict';
+
+var CFG_KEY = 'cls_clock_cfg';
+var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, sound:true, th:0, tm:5, ts:0 };
+try{
+  var saved = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
+  if(saved && typeof saved === 'object'){
+    for(var k in CFG){ if(saved[k] !== undefined) CFG[k] = saved[k]; }
+  }
+}catch(e){}
+function saveCfg(){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); }catch(e){} }
+
+var $ = function(id){ return document.getElementById(id); };
+var pad = function(n, w){ var s = '' + n; while(s.length < (w || 2)) s = '0' + s; return s; };
+
+/* ---------------- 农历（只用来显示「九月十六」） ----------------
+   原来手抄了一张 1900–2100 的压缩表，实测算出来差 10 天（今天应是九月十六，算成初六）。
+   改成用系统自带的农历日历（Intl chinese），Chromium / Safari / 微信内核都准；
+   老设备没有这个日历就干脆不显示，不瞎猜。 */
+function cnDay(n){
+  if(n === 10) return '初十';
+  if(n === 20) return '二十';
+  if(n === 30) return '三十';
+  var a = Math.floor(n / 10), b = n % 10;
+  var pre = ['初', '十', '廿', '三'][a] || '';
+  var suf = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'][b] || '';
+  return pre + suf;
+}
+function lunarText(d){
+  try{
+    var fmt = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long', day: 'numeric' });
+    var raw = fmt.format(d);
+    return raw.replace(/(\d+)/, function(_, n){ return cnDay(parseInt(n, 10)); }).replace(/日$/, '');
+  }catch(e){ return ''; }
+}
+
+/* ---------------- 模式切换 ---------------- */
+var MODE_NAME = { clock:'数字', flip:'翻页', stop:'秒表', timer:'计时器' };
+var VIEWS = { clock:'clockView', flip:'flipView', stop:'stopView', timer:'timerView' };
+
+function applyMode(m){
+  CFG.mode = m; saveCfg();
+  for(var k in VIEWS){ if(VIEWS.hasOwnProperty(k)) $(VIEWS[k]).className = 'view' + (k === m ? ' on' : ''); }
+  $('modeBtn').textContent = MODE_NAME[m];
+  var items = $('modeMenu').getElementsByTagName('button');
+  for(var i = 0; i < items.length; i++){
+    items[i].className = (items[i].getAttribute('data-m') === m) ? 'cur' : '';
+  }
+  $('modeMenu').className = '';
+  if(m === 'clock' || m === 'flip') tickClock();
+  if(m === 'timer') refreshTimerInputs();
+}
+
+/* ---------------- 数字 / 翻页时钟 ---------------- */
+var WEEK = ['日','一','二','三','四','五','六'];
+var lastFlip = { h:'', m:'', s:'' };
+
+function two(n){ return n < 10 ? '0' + n : '' + n; }
+
+function tickClock(){
+  var d = new Date();
+  var h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+  var hh = h;
+  if(CFG.h12){ hh = h % 12; if(hh === 0) hh = 12; }
+
+  if(CFG.mode === 'clock'){
+    $('bigTime').textContent = two(hh) + ':' + two(m) + ':' + two(s);
+    var lu = lunarText(d);
+    $('bigSub').textContent = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'
+      + (lu ? '  ' + lu : '') + '  星期' + WEEK[d.getDay()];
+  }else if(CFG.mode === 'flip'){
+    flipTo('flipH', two(hh), lastFlip.h); lastFlip.h = two(hh);
+    flipTo('flipM', two(m), lastFlip.m); lastFlip.m = two(m);
+    flipTo('flipS', two(s), lastFlip.s); lastFlip.s = two(s);
+  }
+}
+
+function flipTo(id, val, old){
+  var box = $(id);
+  if(!box) return;
+  var top = box.getElementsByClassName('top')[0].getElementsByClassName('txt')[0];
+  var bot = box.getElementsByClassName('bottom')[0].getElementsByClassName('txt')[0];
+  if(old === val){ if(!top.textContent) { top.textContent = val; bot.textContent = val; } return; }
+  /* 上半显示新值（被翻页片盖住），下半显示旧值；翻页片从 0° 转到 -90° 后落定 */
+  top.textContent = val;
+  bot.textContent = old || val;
+  var flap = box.getElementsByClassName('flap')[0];
+  if(flap && flap.parentNode) flap.parentNode.removeChild(flap);
+  flap = document.createElement('div');
+  flap.className = 'flap';
+  var t = document.createElement('div');
+  t.className = 'txt';
+  t.textContent = old || val;
+  flap.appendChild(t);
+  box.appendChild(flap);
+  /* 强制重排后再加动画类，老浏览器也能触发 */
+  void flap.offsetWidth;
+  flap.className = 'flap flap-go';
+  setTimeout(function(){
+    bot.textContent = val;
+    if(flap && flap.parentNode) flap.parentNode.removeChild(flap);
+  }, 560);
+}
+
+/* ---------------- 秒表 ---------------- */
+var SW = { run:false, t0:0, acc:0, laps:[] };
+function swText(ms){
+  var cs = Math.floor(ms / 10) % 100;
+  var sec = Math.floor(ms / 1000) % 60;
+  var min = Math.floor(ms / 60000);
+  return two(min) + ':' + two(sec) + '<span class="ms">.' + two(cs) + '</span>';
+}
+function swPaint(){
+  $('stopTime').innerHTML = swText(SW.acc + (SW.run ? (nowMs() - SW.t0) : 0));
+}
+function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+function swToggle(){
+  if(SW.run){
+    SW.acc += nowMs() - SW.t0; SW.run = false; $('stopBtn').innerHTML = '继续<span class="kbd">Space</span>';
+  }else{
+    SW.t0 = nowMs(); SW.run = true; $('stopBtn').innerHTML = '暂停<span class="kbd">Space</span>'; beep(0);
+  }
+  swPaint();
+}
+
+/* ---------------- 计时器 ---------------- */
+var TM = { run:false, end:0, left:300000, total:300000 };
+function timerMs(){
+  var h = Math.max(0, Math.min(99, parseInt($('th').value, 10) || 0));
+  var m = Math.max(0, Math.min(59, parseInt($('tm').value, 10) || 0));
+  var s = Math.max(0, Math.min(59, parseInt($('ts').value, 10) || 0));
+  return ((h * 60 + m) * 60 + s) * 1000;
+}
+function tmText(ms){
+  if(ms < 0) ms = 0;
+  var total = Math.ceil(ms / 1000);
+  var h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
+  return two(h) + ':' + two(m) + ':' + two(s);
+}
+function tmPaint(){
+  var left = TM.run ? (TM.end - nowMs()) : TM.left;
+  var el = $('timerTime');
+  el.textContent = tmText(left);
+  el.className = (left <= 10000 && left > 0) ? 'warn' : '';
+  if(TM.run && left <= 0) tmDone();
+}
+function refreshTimerInputs(){
+  $('th').value = CFG.th; $('tm').value = CFG.tm; $('ts').value = CFG.ts;
+  TM.left = timerMs(); TM.total = TM.left;
+  tmPaint();
+}
+function tmToggle(){
+  if(TM.run){
+    TM.left = Math.max(0, TM.end - nowMs()); TM.run = false;
+    $('timerBtn').innerHTML = '继续<span class="kbd">Space</span>';
+  }else{
+    if(TM.left <= 0) TM.left = timerMs() || 300000;
+    TM.total = TM.left;
+    TM.end = nowMs() + TM.left; TM.run = true;
+    $('timerBtn').innerHTML = '暂停<span class="kbd">Space</span>';
+    beep(0);
+  }
+  tmPaint();
+}
+function tmDone(){
+  TM.run = false; TM.left = 0;
+  $('timerBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  tmPaint();
+  var n = 0;
+  var iv = setInterval(function(){
+    beep(1); n++;
+    if(n >= 3) clearInterval(iv);
+  }, 700);
+  if(navigator.vibrate){ try{ navigator.vibrate([300, 150, 300, 150, 300]); }catch(e){} }
+}
+
+/* ---------------- 声音 ---------------- */
+var AC = null;
+function beep(kind){
+  if(!CFG.sound) return;
+  try{
+    if(!AC){
+      var C = window.AudioContext || window.webkitAudioContext;
+      if(!C) return;
+      AC = new C();
+    }
+    var o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine';
+    o.frequency.value = kind ? 880 : 660;
+    g.gain.value = 0.0001;
+    o.connect(g); g.connect(AC.destination);
+    var t = AC.currentTime;
+    g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.start(t); o.stop(t + 0.18);
+  }catch(e){}
+}
+
+/* ---------------- 主循环 ---------------- */
+/* 时钟一秒一跳，不需要每帧算（老 iPad 每帧算农历会卡）；
+   秒表和计时器才用 rAF 保证毫秒级。 */
+var lastSec = -1;
+function clockTick(){
+  var s = new Date().getSeconds();
+  if(s === lastSec) return;
+  lastSec = s;
+  tickClock();
+}
+function loop(){
+  if(CFG.mode === 'stop' && SW.run) swPaint();
+  else if(CFG.mode === 'timer' && TM.run) tmPaint();
+  requestAnimationFrame ? requestAnimationFrame(loop) : setTimeout(loop, 100);
+}
+
+/* ---------------- 工具栏 / 菜单 ---------------- */
+var barTimer = null;
+function showBar(){
+  $('bar').className = 'show';
+  if(barTimer) clearTimeout(barTimer);
+  barTimer = setTimeout(function(){ $('bar').className = ''; $('modeMenu').className = ''; }, 6000);
+}
+function toggleBar(){ $('bar').className ? ($('bar').className = '') : showBar(); }
+
+var FONTS = [['auto','自动'],['hei','黑体'],['mono','等宽'],['round','圆体'],['serif','宋体']];
+function applyFont(f){
+  CFG.font = f; saveCfg();
+  document.body.className = document.body.className.replace(/\bf-\w+/g, '').replace(/\s+/g, ' ');
+  document.body.className += ' f-' + f;
+  for(var i = 0; i < FONTS.length; i++){ if(FONTS[i][0] === f) $('fontBtn').textContent = '字体 · ' + FONTS[i][1]; }
+}
+function cycleFont(){
+  var i = 0;
+  for(var k = 0; k < FONTS.length; k++){ if(FONTS[k][0] === CFG.font) i = k; }
+  applyFont(FONTS[(i + 1) % FONTS.length][0]);
+}
+
+var BGS = ['light','dark','black','cream','navy','green','gray'];
+var BG_NAME = { light:'浅灰', dark:'深灰', black:'纯黑', cream:'米色', navy:'深蓝', green:'墨绿', gray:'炭灰' };
+function applyBg(b){
+  CFG.bg = b; saveCfg();
+  document.body.className = document.body.className.replace(/\bbg-\w+/g, '').replace(/\s+/g, ' ');
+  document.body.className += ' bg-' + b;
+  $('bgBtn').textContent = '背景 · ' + (BG_NAME[b] || b);
+  var meta = document.querySelector('meta[name=theme-color]');
+  if(meta) meta.setAttribute('content', b === 'cream' ? '#f6f1e7' : (b === 'light' ? '#f4f4f4' : '#0d0d0f'));
+}
+function cycleBg(){
+  var i = 0;
+  for(var k = 0; k < BGS.length; k++){ if(BGS[k] === CFG.bg) i = k; }
+  applyBg(BGS[(i + 1) % BGS.length]);
+}
+
+function applyH12(){
+  $('h12Btn').textContent = CFG.h12 ? '12 小时' : '24 小时';
+  lastFlip = { h:'', m:'', s:'' };
+  tickClock();
+}
+
+/* ---------------- 全屏 ---------------- */
+function isFs(){
+  return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+}
+function toggleFs(){
+  var el = document.documentElement;
+  try{
+    if(!isFs()){
+      if(el.requestFullscreen) el.requestFullscreen();
+      else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if(el.mozRequestFullScreen) el.mozRequestFullScreen();
+      else if(el.msRequestFullscreen) el.msRequestFullscreen();
+      else toast('这台设备不支持网页全屏，可以用浏览器菜单里的「全屏」');
+    }else{
+      if(document.exitFullscreen) document.exitFullscreen();
+      else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if(document.mozCancelFullScreen) document.mozCancelFullScreen();
+    }
+  }catch(e){}
+  setTimeout(function(){ $('fsBtn').textContent = isFs() ? '退出全屏' : '全屏'; }, 260);
+}
+
+function toast(txt){
+  var h = $('hint');
+  h.textContent = txt; h.className = '';
+  setTimeout(function(){ h.className = 'hide'; }, 2600);
+}
+
+/* ---------------- 防息屏 ---------------- */
+var wakeLock = null;
+function keepAwake(){
+  if(!navigator.wakeLock || !navigator.wakeLock.request) return;
+  try{
+    navigator.wakeLock.request('screen').then(function(l){ wakeLock = l; }).catch(function(){});
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', function(){
+  if(!document.hidden) keepAwake();
+});
+
+/* ---------------- 事件绑定 ---------------- */
+$('modeBtn').onclick = function(e){
+  e.stopPropagation();
+  showBar();
+  var m = $('modeMenu');
+  m.className = (m.className === 'show') ? '' : 'show';
+};
+Array.prototype.forEach.call($('modeMenu').getElementsByTagName('button'), function(b){
+  b.onclick = function(e){
+    e.stopPropagation();
+    applyMode(b.getAttribute('data-m'));
+  };
+});
+$('fontBtn').onclick = cycleFont;
+$('bgBtn').onclick = cycleBg;
+$('h12Btn').onclick = function(){ CFG.h12 = !CFG.h12; saveCfg(); applyH12(); };
+$('soundBtn').onclick = function(){
+  CFG.sound = !CFG.sound; saveCfg();
+  $('soundBtn').textContent = CFG.sound ? '声音 · 开' : '声音 · 关';
+  if(CFG.sound) beep(0);
+};
+$('fsBtn').onclick = toggleFs;
+$('aboutBtn').onclick = function(e){ e.stopPropagation(); $('about').className = 'show'; };
+$('aboutClose').onclick = function(){ $('about').className = ''; };
+$('about').onclick = function(e){ if(e.target === this) this.className = ''; };
+
+$('stopBtn').onclick = function(){ swToggle(); };
+$('lapBtn').onclick = function(){
+  var ms = SW.acc + (SW.run ? (nowMs() - SW.t0) : 0);
+  if(ms <= 0) return;
+  SW.laps.push(ms);
+  var html = '';
+  for(var i = SW.laps.length - 1; i >= 0; i--){
+    html += '<div>第 ' + (i + 1) + ' 次　' + swText(SW.laps[i]) + '</div>';
+  }
+  $('laps').innerHTML = html;
+};
+$('stopReset').onclick = function(){
+  SW.run = false; SW.acc = 0; SW.laps = [];
+  $('stopBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  $('laps').innerHTML = '';
+  swPaint();
+};
+
+$('timerBtn').onclick = function(){ tmToggle(); };
+$('timerReset').onclick = function(){
+  TM.run = false; TM.left = timerMs(); TM.total = TM.left;
+  $('timerBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  tmPaint();
+};
+var PRESETS = [[5,'5 分钟'],[10,'10 分钟'],[15,'15 分钟'],[25,'25 分钟'],[45,'45 分钟']];
+var presetIdx = 0;
+$('timerPreset').onclick = function(){
+  var p = PRESETS[presetIdx % PRESETS.length];
+  presetIdx++;
+  $('th').value = 0; $('tm').value = p[0]; $('ts').value = 0;
+  CFG.th = 0; CFG.tm = p[0]; CFG.ts = 0; saveCfg();
+  TM.run = false; TM.left = timerMs(); TM.total = TM.left;
+  $('timerBtn').innerHTML = '开始<span class="kbd">Space</span>';
+  tmPaint();
+};
+['th','tm','ts'].forEach(function(id){
+  $(id).onchange = function(){
+    CFG.th = parseInt($('th').value, 10) || 0;
+    CFG.tm = parseInt($('tm').value, 10) || 0;
+    CFG.ts = parseInt($('ts').value, 10) || 0;
+    saveCfg();
+    if(!TM.run){ TM.left = timerMs(); TM.total = TM.left; tmPaint(); }
+  };
+});
+
+/* 点屏幕：显示工具栏（点在按钮上不触发） */
+document.getElementById('stage').onclick = function(e){
+  if(e.target && /INPUT|BUTTON/.test(e.target.nodeName)) return;
+  showBar();
+};
+/* 双击数字进全屏 */
+$('stage').ondblclick = function(e){
+  if(e.target && /INPUT|BUTTON/.test(e.target.nodeName)) return;
+  toggleFs();
+};
+
+/* 键盘 */
+document.onkeydown = function(e){
+  var tag = (e.target && e.target.nodeName) || '';
+  if(tag === 'INPUT') return;
+  var k = e.key;
+  if(k === ' '){ e.preventDefault();
+    if(CFG.mode === 'stop') swToggle();
+    else if(CFG.mode === 'timer') tmToggle();
+  }
+  else if(k === 'f' || k === 'F'){ toggleFs(); }
+  else if(k === '1') applyMode('clock');
+  else if(k === '2') applyMode('flip');
+  else if(k === '3') applyMode('stop');
+  else if(k === '4') applyMode('timer');
+  else if(k === 'Escape'){ $('about').className = ''; }
+};
+
+/* ---------------- 启动 ---------------- */
+applyFont(CFG.font || 'auto');
+applyBg(CFG.bg || 'light');
+applyH12();
+$('soundBtn').textContent = CFG.sound ? '声音 · 开' : '声音 · 关';
+applyMode(CFG.mode || 'clock');
+if(CFG.mode === 'timer') refreshTimerInputs();
+keepAwake();
+clockTick();
+setInterval(clockTick, 250);
+loop();
+setTimeout(function(){ $('hint').className = 'hide'; }, 5000);
+setTimeout(showBar, 600);
+
+})();
+</script>
+</body>
+</html>
