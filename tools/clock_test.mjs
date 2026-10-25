@@ -122,6 +122,33 @@ const about = await page.evaluate(() => document.getElementById('about').classNa
 t('「更多」里写明仿照的网站', /仿照/.test(about) && /yingming006\.cn/.test(about), about.slice(0, 80));
 await page.evaluate(() => document.getElementById('aboutClose').click());
 
+/* 9b. v3.9.23：字号四档、翻页不溢出、计时器默认只看数字 */
+await page.evaluate(() => { document.querySelector('[data-m="clock"]').click(); });
+await page.waitForTimeout(400);
+const sz0 = await page.evaluate(() => ({ cls: document.body.className, fs: getComputedStyle(document.getElementById('bigTime')).fontSize }));
+await page.evaluate(() => document.getElementById('sizeBtn').click());
+await page.waitForTimeout(300);
+const sz1 = await page.evaluate(() => ({ cls: document.body.className, fs: getComputedStyle(document.getElementById('bigTime')).fontSize }));
+t('字号可以切档', /sz-\d/.test(sz1.cls) && sz1.fs !== sz0.fs, JSON.stringify([sz0, sz1]));
+
+await page.evaluate(() => { document.querySelector('[data-m="flip"]').click(); });
+await page.waitForTimeout(600);
+const fp = await page.evaluate(() => {
+  const f = document.querySelector('.flip');
+  const txt = f.querySelector('.half.top .txt');
+  return { w: Math.round(f.getBoundingClientRect().width), tw: Math.round(txt.scrollWidth), font: getComputedStyle(txt).fontSize };
+});
+t('翻页数字不超出卡片', fp.tw <= fp.w + 1, JSON.stringify(fp));
+
+await page.evaluate(() => { document.querySelector('[data-m="timer"]').click(); });
+await page.waitForTimeout(400);
+const ts0 = await page.evaluate(() => document.getElementById('timerSet').className);
+t('计时器默认只显示数字', ts0.indexOf('hide') >= 0, ts0);
+await page.evaluate(() => document.getElementById('timerTime').click());
+await page.waitForTimeout(300);
+const ts1 = await page.evaluate(() => document.getElementById('timerSet').className);
+t('点数字可以调出时长设置', ts1.indexOf('hide') < 0, ts1);
+
 /* 10. 无 JS 报错 */
 t('无 JS 报错', errs.length === 0, errs.join(' | '));
 
