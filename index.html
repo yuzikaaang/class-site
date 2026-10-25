@@ -1714,6 +1714,13 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .isl-wx-day{margin:10px 0 4px;font-size:.68rem;font-weight:800;letter-spacing:.04em;
   color:var(--fg-3);display:flex;align-items:center;gap:8px}
 .isl-wx-day::after{content:'';flex:1;height:1px;background:var(--border)}
+/* v3.9.21：某个小时缺温度、整段缺温度、请求失败时的三个兜底样式 */
+.isl-wx-row.no-t .tp{opacity:.4}
+.isl-wx-sub a{color:#ffe0c7;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.isl-wx-retry{margin-top:10px;height:34px;padding:0 16px;border-radius:10px;cursor:pointer;
+  border:1px solid rgba(251,146,60,.45);background:rgba(251,146,60,.16);color:#ffd7bb;
+  font-family:inherit;font-size:.78rem;font-weight:700}
+.isl-wx-retry:hover{background:rgba(251,146,60,.26)}
 .isl-wx-row.now{background:var(--tint);font-weight:700}
 .isl-wx-row .t{color:var(--fg-3);font-variant-numeric:tabular-nums}
 .isl-wx-row .ic{font-size:1rem;text-align:center}
@@ -4545,10 +4552,10 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '3.9.20';
+var SITE_VERSION = '3.9.21';
 var VER_DATE = '2026-10-24';
 </script>
-<script src="./app.min.js?v=3920" defer></script>
+<script src="./app.min.js?v=3921" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
