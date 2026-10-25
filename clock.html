@@ -86,19 +86,51 @@ body.bg-green .flip .half.bottom,body.bg-gray .flip .half.bottom{
   height:calc(var(--fw) * 1.12);line-height:calc(var(--fw) * 1.12);
   font-size:calc(var(--fw) * .66);font-weight:700;letter-spacing:-.05em;
 }
-.flip .half.top .txt,.flip .flap .txt{top:0}
+.flip .half.top .txt{top:0}
 .flip .half.bottom .txt{top:calc(var(--fw) * -.56)}
+
+/* ---------- 翻页动画：两片接力（v3.9.25 重做） ----------
+   站主：「数字要跟着卡片一起翻，不能等卡片翻完再加一，那样特别怪异」。
+   以前只有上面一片在翻、翻完才把下半改成新数字 —— 视觉上就是「翻走了再跳一下」。
+   现在按真翻页钟的做法接力：
+     · 上半静态 = 新值，被 A 片（旧值上半）盖住
+     · A 片 0° → -90°，前半段（旧数字被翻下去）
+     · 下半静态 = 旧值，等 B 片（新值下半）落下来盖住
+     · B 片 90° → 0°，后半段（新数字从后面翻上来）
+   翻完只清两片，文本早在动画开始前就位，不存在「翻完才跳数」。 */
 .flip .flap{
-  position:absolute;left:0;top:0;width:100%;height:50%;overflow:hidden;
-  background:inherit;border-radius:calc(var(--fw) * .09) calc(var(--fw) * .09) 0 0;
-  transform-origin:bottom center;backface-visibility:hidden;-webkit-backface-visibility:hidden;
-  z-index:3;box-shadow:inset 0 -1px 0 rgba(0,0,0,.22);
+  position:absolute;left:0;width:100%;height:50%;overflow:hidden;
+  background:inherit;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  will-change:transform;
 }
-/* 翻页片翻到 90° 时给下半片压一层暗，模拟影子 */
-.flip .flap-go::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;
-  background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.10));opacity:.9}
-.flip .flap-go{animation:flipDown .5s cubic-bezier(.4,.02,.6,.98) forwards}
-@keyframes flipDown{from{transform:rotateX(0)}to{transform:rotateX(-90deg)}}
+.flip .flap .txt{position:absolute;left:0}
+.flip .flap.a{
+  top:0;z-index:4;transform-origin:bottom center;
+  border-radius:calc(var(--fw) * .09) calc(var(--fw) * .09) 0 0;
+  box-shadow:inset 0 -1px 0 rgba(0,0,0,.22);
+  animation:flipA .3s cubic-bezier(.45,.05,.55,.95) forwards;
+}
+.flip .flap.a .txt{top:0}
+.flip .flap.b{
+  bottom:0;z-index:5;transform-origin:top center;transform:rotateX(90deg);
+  border-radius:0 0 calc(var(--fw) * .09) calc(var(--fw) * .09);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28);
+  animation:flipB .3s cubic-bezier(.45,.05,.55,.95) .3s forwards;
+}
+.flip .flap.b .txt{top:calc(var(--fw) * -.56)}
+body.bg-dark .flip .flap.b,body.bg-black .flip .flap.b,body.bg-navy .flip .flap.b,
+body.bg-green .flip .flap.b,body.bg-gray .flip .flap.b{box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+/* 明暗变化：上半片越翻越暗，下半片从阴影里亮起来 —— 「有重量」全靠这个 */
+.flip .flap.a::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;
+  pointer-events:none;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.26));
+  animation:flapShade .3s linear forwards}
+.flip .flap.b::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;
+  pointer-events:none;background:linear-gradient(rgba(0,0,0,.26),rgba(0,0,0,0));
+  animation:flapLight .3s linear .3s forwards}
+@keyframes flipA{from{transform:rotateX(0)}to{transform:rotateX(-90deg)}}
+@keyframes flipB{from{transform:rotateX(90deg)}to{transform:rotateX(0)}}
+@keyframes flapShade{from{opacity:0}to{opacity:1}}
+@keyframes flapLight{from{opacity:.85}to{opacity:0}}
 .flip-sep{
   font-size:calc(var(--fw) * .3);line-height:1;font-weight:700;opacity:.30;
   margin:0 calc(var(--fw) * .03);transform:translateY(-.04em);
@@ -300,6 +332,83 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
   .actions button{min-width:26vw;font-size:3.4vw}
   #timerSet input{width:22vw;font-size:5vw;height:44px}
 }
+
+/* ---------- v3.9.25：右上角「记录」与右侧抽屉 ---------- */
+#logBtn{
+  position:fixed;right:16px;top:16px;z-index:36;height:38px;padding:0 14px;border-radius:12px;
+  display:flex;align-items:center;gap:6px;font-family:inherit;font-size:13px;font-weight:600;
+  color:inherit;cursor:pointer;border:1px solid rgba(0,0,0,.1);background:rgba(255,255,255,.72);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  transition:opacity .2s,background .2s;
+}
+#logBtn:hover{opacity:.78}
+body.bg-dark #logBtn,body.bg-black #logBtn,body.bg-navy #logBtn,
+body.bg-green #logBtn,body.bg-gray #logBtn{
+  background:rgba(30,30,34,.72);border-color:rgba(255,255,255,.14);
+}
+#logPanel{
+  position:fixed;top:0;right:0;bottom:0;width:min(92vw,372px);z-index:70;
+  display:flex;flex-direction:column;
+  background:rgba(255,255,255,.96);color:#1b1b1b;
+  border-left:1px solid rgba(0,0,0,.07);
+  box-shadow:-18px 0 48px rgba(40,28,18,.14);
+  transform:translateX(103%);transition:transform .34s cubic-bezier(.16,1,.3,1);
+  -webkit-overflow-scrolling:touch;
+}
+#logPanel.show{transform:none}
+body.bg-dark #logPanel,body.bg-black #logPanel,body.bg-navy #logPanel,
+body.bg-green #logPanel,body.bg-gray #logPanel{
+  background:rgba(22,22,25,.97);color:#ececec;border-left-color:rgba(255,255,255,.08);
+  box-shadow:-18px 0 48px rgba(0,0,0,.5);
+}
+.lg-head{display:flex;align-items:center;gap:10px;padding:16px 18px 12px;flex-wrap:wrap}
+.lg-head b{font-size:15px;letter-spacing:.02em}
+.lg-daywrap{margin-left:auto;display:flex;align-items:center;gap:2px}
+.lg-daywrap span{font-size:12.5px;opacity:.72;min-width:74px;text-align:center}
+.lg-nav{width:26px;height:26px;border-radius:8px;border:1px solid rgba(0,0,0,.09);
+  background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0}
+body.bg-dark .lg-nav,body.bg-black .lg-nav,body.bg-navy .lg-nav,
+body.bg-green .lg-nav,body.bg-gray .lg-nav{border-color:rgba(255,255,255,.14)}
+.lg-nav:disabled{opacity:.25;cursor:default}
+.lg-close{width:30px;height:30px;border-radius:9px;border:none;background:rgba(0,0,0,.06);
+  color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:0}
+body.bg-dark .lg-close,body.bg-black .lg-close,body.bg-navy .lg-close,
+body.bg-green .lg-close,body.bg-gray .lg-close{background:rgba(255,255,255,.1)}
+.lg-sum{padding:0 18px 4px}
+.lg-cards{display:flex;gap:8px;margin-bottom:12px}
+.lg-card{flex:1;padding:10px 12px;border-radius:12px;background:rgba(224,138,76,.1);
+  border:1px solid rgba(224,138,76,.18)}
+body.bg-dark .lg-card,body.bg-black .lg-card,body.bg-navy .lg-card,
+body.bg-green .lg-card,body.bg-gray .lg-card{background:rgba(251,146,60,.13);border-color:rgba(251,146,60,.22)}
+.lg-card i{display:block;font-style:normal;font-size:11px;opacity:.6;margin-bottom:4px}
+.lg-card b{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.lg-card b em{font-style:normal;font-size:11.5px;font-weight:600;opacity:.65;margin-left:2px}
+.lg-modes{font-size:12px;opacity:.62;line-height:1.75;margin-bottom:10px}
+.lg-list{flex:1;overflow:auto;padding:4px 18px 12px}
+.lg-row{display:flex;align-items:baseline;gap:10px;padding:9px 0;
+  border-bottom:1px dashed rgba(0,0,0,.07);font-size:13px}
+body.bg-dark .lg-row,body.bg-black .lg-row,body.bg-navy .lg-row,
+body.bg-green .lg-row,body.bg-gray .lg-row{border-bottom-color:rgba(255,255,255,.08)}
+.lg-row:last-child{border-bottom:none}
+.lg-t{font-variant-numeric:tabular-nums;opacity:.66;font-size:12px;flex:0 0 auto}
+.lg-m{flex:1;min-width:0}
+.lg-m .tag{display:inline-block;padding:1px 7px;border-radius:6px;font-size:11px;margin-right:6px;
+  background:rgba(0,0,0,.06)}
+body.bg-dark .lg-m .tag,body.bg-black .lg-m .tag,body.bg-navy .lg-m .tag,
+body.bg-green .lg-m .tag,body.bg-gray .lg-m .tag{background:rgba(255,255,255,.09)}
+.lg-m .tag.focus{background:rgba(224,138,76,.18)}
+.lg-m .tag.rest{background:rgba(60,159,106,.18)}
+.lg-d{flex:0 0 auto;font-size:12px;opacity:.55;font-variant-numeric:tabular-nums}
+.lg-empty{padding:26px 4px;font-size:12.5px;opacity:.5;line-height:1.9}
+.lg-foot{padding:12px 18px calc(14px + env(safe-area-inset-bottom));font-size:11.5px;opacity:.55;
+  border-top:1px solid rgba(0,0,0,.06);display:flex;align-items:center;gap:6px}
+body.bg-dark .lg-foot,body.bg-black .lg-foot,body.bg-navy .lg-foot,
+body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.08)}
+.lg-foot a{color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+@media (max-width:420px){
+  #logBtn{height:34px;padding:0 11px;font-size:12px}
+  .lg-card b{font-size:16px}
+}
 </style>
 </head>
 <body class="bg-light f-auto">
@@ -371,6 +480,22 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
 </div>
 
 <a id="back" href="./index.html" title="返回班级服务站">← 返回</a>
+<button id="logBtn" title="看看今天用了多久">记录</button>
+
+<aside id="logPanel" aria-hidden="true">
+  <div class="lg-head">
+    <b>使用记录</b>
+    <div class="lg-daywrap">
+      <button class="lg-nav" id="logPrev" title="前一天">‹</button>
+      <span id="logDay">今天</span>
+      <button class="lg-nav" id="logNext" title="后一天">›</button>
+    </div>
+    <button class="lg-close" id="logClose" title="关闭">×</button>
+  </div>
+  <div class="lg-sum" id="logSum"></div>
+  <div class="lg-list" id="logList"></div>
+  <div class="lg-foot" id="logFoot"></div>
+</aside>
 <div id="hint">单击屏幕可显示工具栏 · 双击数字进入全屏</div>
 
 <div id="bar">
@@ -461,6 +586,7 @@ function applyMode(m){
   if(m === 'clock' || m === 'flip') tickClock();
   if(m === 'timer') refreshTimerInputs();
   if(m === 'pomo') refreshPomo();
+  logStart(logModeOf());
   /* 「秒 · 显示」只在翻页模式下有意义，别的时候不占工具栏位置 */
   var sb = $('secBtn');
   if(sb) sb.style.display = (m === 'flip') ? '' : 'none';
@@ -495,31 +621,60 @@ function tickClock(){
   }
 }
 
+/* 翻一片：A 片翻旧值上半下去，B 片把新值下半翻上来。
+   0.3s + 0.3s，两端文字在动画开始前就位，所以不会「翻完才跳数」。 */
+/* 测试时可以把它调大，慢动作看两片是不是接力上了 */
+var FLIP_MS = window.__flipMs || 640;
+
+function flipTxt(val){
+  var d = document.createElement('div');
+  d.className = 'txt';
+  d.textContent = val;
+  return d;
+}
+function flipClean(box){
+  var old = box.getElementsByClassName('flap');
+  while(old.length){ box.removeChild(old[0]); }
+}
 function flipTo(id, val, old){
   var box = $(id);
   if(!box) return;
-  var top = box.getElementsByClassName('top')[0].getElementsByClassName('txt')[0];
-  var bot = box.getElementsByClassName('bottom')[0].getElementsByClassName('txt')[0];
-  if(old === val){ if(!top.textContent) { top.textContent = val; bot.textContent = val; } return; }
-  /* 上半显示新值（被翻页片盖住），下半显示旧值；翻页片从 0° 转到 -90° 后落定 */
-  top.textContent = val;
-  bot.textContent = old || val;
-  var flap = box.getElementsByClassName('flap')[0];
-  if(flap && flap.parentNode) flap.parentNode.removeChild(flap);
-  flap = document.createElement('div');
-  flap.className = 'flap';
-  var t = document.createElement('div');
-  t.className = 'txt';
-  t.textContent = old || val;
-  flap.appendChild(t);
-  box.appendChild(flap);
-  /* 强制重排后再加动画类，老浏览器也能触发 */
-  void flap.offsetWidth;
-  flap.className = 'flap flap-go';
-  setTimeout(function(){
+  var top = box.querySelector('.half.top .txt');
+  var bot = box.querySelector('.half.bottom .txt');
+  if(!top || !bot) return;
+
+  if(old === val){
+    if(!top.textContent){ top.textContent = val; bot.textContent = val; }
+    return;
+  }
+  /* 刚打开那一帧：直接落值，不从 00 翻一遍（三张卡同时转会显得乱） */
+  if(old === ''){
+    top.textContent = val;
     bot.textContent = val;
-    if(flap && flap.parentNode) flap.parentNode.removeChild(flap);
-  }, 560);
+    return;
+  }
+
+  flipClean(box);            /* 上一轮没落地就先清掉，别两轮叠一起 */
+  top.textContent = val;     /* 上半：新值（此刻还被旧值上半片盖着） */
+  bot.textContent = old;     /* 下半：旧值（等新值下半片落下来盖住） */
+
+  var a = document.createElement('div');
+  a.className = 'flap a';
+  a.appendChild(flipTxt(old));
+  var b = document.createElement('div');
+  b.className = 'flap b';
+  b.appendChild(flipTxt(val));
+  box.appendChild(a);
+  box.appendChild(b);
+
+  /* 每个卡片一个令牌：万一 0.64 秒内又翻了一次，旧的收尾任务作废 */
+  var tok = (box.__tok || 0) + 1;
+  box.__tok = tok;
+  setTimeout(function(){
+    if(box.__tok !== tok) return;
+    bot.textContent = val;
+    flipClean(box);
+  }, FLIP_MS);
 }
 
 /* ---------------- 秒表 ---------------- */
@@ -672,6 +827,7 @@ function pomoToggle(){
     pmBtnLabel('暂停');
   }
   pmPaint();
+  logPomoPhase();
 }
 /* 进入下一个阶段：专注做完才记一个番茄，每 4 个换长休息 */
 function pmNext(skip){
@@ -680,6 +836,7 @@ function pmNext(skip){
       CFG.pomoDone = pomoDoneToday() + 1;
       CFG.pomoDate = todayKey();
       saveCfg();
+      logPomo(CFG.pomoDone);
     }
     PM.phase = (!skip && CFG.pomoDone % 4 === 0) ? 'long' : 'rest';
   }else{
@@ -689,6 +846,7 @@ function pmNext(skip){
   PM.run = false;
   pmPaintPhase();
   pmPaintCount();
+  logPomoPhase();          /* 阶段结束：上一段收账 */
 }
 function pmJump(auto){
   PM.end = nowMs() + PM.left;
@@ -696,6 +854,7 @@ function pmJump(auto){
   PM.paused = false;
   pmBtnLabel('暂停');
   pmPaint();
+  logPomoPhase();
 }
 function pmDone(){
   PM.run = false;
@@ -712,6 +871,288 @@ function togglePomoSet(e){
   var box = $('pomoSet');
   if(!box) return;
   box.className = (box.className.indexOf('hide') >= 0) ? '' : 'hide';
+}
+
+/* ---------------- 使用记录（本地 + 云端） ----------------
+   v3.9.25（站主）：
+   「前端我可以看到什么时候从几点自习到几点，就是用了多久，每次用时候干嘛」
+   「我觉得放在页面最右边可以看到历史记录，这样最好看一点」
+   「这个也要同步上云」「后台也可以看到具体是谁干嘛」
+
+   做法：页面每切换一次模式就切一段，段落结束写进
+   localStorage 的 cls_clock_log_<日期>（同一个键同时同步到 /api/data）。
+   结构 { v:2, pomo:番茄数, segs:[{m:模式, s:起, e:止, d:秒}] }。 */
+var LOG_PREFIX = 'cls_clock_log_';
+var CLK_API = 'https://api.classsite.dpdns.org';
+
+var LOG = {
+  day: '',            /* 正在记录的日期（本地时间的 YYYY-MM-DD） */
+  data: { v: 2, pomo: 0, segs: [] },
+  cur: null,          /* 正在计时的那一段 { m, s } */
+  view: '',           /* 抽屉里正在看哪一天 */
+  timer: null,        /* 推送防抖 */
+  queue: {},
+  cloud: ''           /* '' | 'local' | 'ok' | 'fail' */
+};
+
+function pad2(n){ return (n < 10 ? '0' : '') + n; }
+function dkey(ts){
+  var d = new Date(ts || Date.now());
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+function hm(ts){ var d = new Date(ts); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+function durText(sec){
+  sec = Math.max(0, Math.round(sec));
+  if(sec < 60) return sec + ' 秒';
+  var m = Math.round(sec / 60);
+  if(m < 60) return m + ' 分钟';
+  var h = Math.floor(m / 60), mm = m % 60;
+  return h + ' 小时' + (mm ? ' ' + mm + ' 分' : '');
+}
+function logSegOk(x){
+  return x && x.m && Number(x.s) > 0 && Number(x.d) >= 3;
+}
+function logLoad(day){
+  var raw = null;
+  try{ raw = JSON.parse(localStorage.getItem(LOG_PREFIX + day) || 'null'); }catch(e){}
+  if(Array.isArray(raw)) return { v: 2, pomo: 0, segs: raw.filter(logSegOk) };
+  if(raw && Array.isArray(raw.segs)) return { v: 2, pomo: Number(raw.pomo) || 0, segs: raw.segs.filter(logSegOk) };
+  return { v: 2, pomo: 0, segs: [] };
+}
+function logEnsure(){
+  var k = dkey();
+  if(k !== LOG.day){ LOG.day = k; LOG.data = logLoad(k); }
+  return LOG.data;
+}
+function logSaveLocal(day, data){
+  try{ localStorage.setItem(LOG_PREFIX + day, JSON.stringify(data)); }catch(e){}
+}
+
+/* ---- 云端 ---- */
+function clkToken(){
+  try{
+    var a = JSON.parse(localStorage.getItem('cls_auth') || 'null');
+    return (a && a.token) || '';
+  }catch(e){ return ''; }
+}
+function logCloudSet(st){
+  if(LOG.cloud === st) return;
+  LOG.cloud = st;
+  logFootPaint();
+}
+function logPush(day, data, now){
+  var t = clkToken();
+  if(!t){ logCloudSet('local'); return; }
+  LOG.queue[LOG_PREFIX + day] = data;
+  if(now){ flushLog(); return; }
+  if(LOG.timer) clearTimeout(LOG.timer);
+  LOG.timer = setTimeout(flushLog, 2500);
+}
+function flushLog(){
+  if(LOG.timer){ clearTimeout(LOG.timer); LOG.timer = null; }
+  var t = clkToken();
+  var items = LOG.queue;
+  LOG.queue = {};
+  if(!t || !Object.keys(items).length) return;
+  fetch(CLK_API + '/api/data', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
+    body: JSON.stringify({ items: items }),
+    keepalive: true
+  }).then(function(r){ return r.json().catch(function(){ return {}; }); })
+    .then(function(j){ logCloudSet(j && j.ok === false ? 'fail' : 'ok'); })
+    .catch(function(){ logCloudSet('fail'); });
+}
+/* 打开抽屉时把云端那份拉下来合并（换设备也能看到） */
+function logPull(day, done){
+  var t = clkToken();
+  if(!t){ logCloudSet('local'); done && done(); return; }
+  fetch(CLK_API + '/api/data?key=' + encodeURIComponent(LOG_PREFIX + day), {
+    headers: { 'Authorization': 'Bearer ' + t }
+  }).then(function(r){ return r.json(); }).then(function(j){
+    var v = j && j.value;
+    if(!v) { logCloudSet('ok'); done && done(); return; }
+    var cloud = Array.isArray(v) ? { v: 2, pomo: 0, segs: v } : { v: 2, pomo: Number(v.pomo) || 0, segs: v.segs || [] };
+    var local = logLoad(day);
+    var seen = {}, out = [];
+    local.segs.concat(cloud.segs.filter(logSegOk)).forEach(function(x){
+      if(!logSegOk(x)) return;
+      var k = x.m + '@' + x.s;
+      if(seen[k]) return;
+      seen[k] = 1; out.push(x);
+    });
+    out.sort(function(a, b){ return a.s - b.s; });
+    var merged = { v: 2, pomo: Math.max(local.pomo || 0, cloud.pomo || 0), segs: out };
+    logSaveLocal(day, merged);
+    if(day === LOG.day) LOG.data = merged;
+    logCloudSet('ok');
+    done && done();
+  }).catch(function(){ logCloudSet('fail'); done && done(); });
+}
+
+/* ---- 记账 ---- */
+function logWrite(day, data){ logSaveLocal(day, data); logPush(day, data); }
+
+/** 现在该记哪个模式：自习按阶段细分，其它就是模式名 */
+function logModeOf(){
+  if(CFG.mode === 'pomo') return 'pomo:' + PM.phase;
+  return CFG.mode;
+}
+/** 自习开始 / 暂停 / 换阶段时同步记账 */
+function logPomoPhase(){
+  if(CFG.mode !== 'pomo') return;
+  if(PM.run) logStart('pomo:' + PM.phase);
+  else logStop();
+}
+
+function logStart(mode){
+  logEnsure();
+  if(LOG.cur && LOG.cur.m === mode) return;
+  logStop();
+  LOG.cur = { m: mode, s: Date.now() };
+}
+function logStop(){
+  if(!LOG.cur) return;
+  var c = LOG.cur;
+  LOG.cur = null;
+  var now = Date.now();
+  var d = Math.round((now - c.s) / 1000);
+  if(d < 3) return;                       /* 随手点一下不算 */
+  var day = dkey(c.s);                    /* 归到「开始那一刻」所在的日期 */
+  var data = (day === LOG.day) ? LOG.data : logLoad(day);
+  data.segs.push({ m: c.m, s: c.s, e: now, d: d });
+  if(data.segs.length > 600) data.segs = data.segs.slice(-600);
+  if(day === LOG.day) LOG.data = data;
+  logWrite(day, data);
+}
+function logPomo(n){
+  n = Number(n) || 0;
+  if(n <= 0) return;          /* 0 个就别写，免得后台多出一堆空记录 */
+  var data = logEnsure();
+  if(data.pomo === n) return;
+  data.pomo = n;
+  logWrite(LOG.day, data);
+}
+
+/* ---- 抽屉 ---- */
+function logMerged(day){
+  var data = (day === LOG.day) ? LOG.data : logLoad(day);
+  var segs = data.segs.slice();
+  /* 正在跑的那一段也先算进去，点开就能看到实时累计 */
+  if(day === LOG.day && LOG.cur){
+    segs.push({ m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: Math.round((Date.now() - LOG.cur.s) / 1000) });
+  }
+  var out = [];
+  segs.filter(logSegOk).sort(function(a, b){ return a.s - b.s; }).forEach(function(x){
+    var last = out[out.length - 1];
+    if(last && last.m === x.m && x.s - last.e < 120000){
+      last.e = x.e;
+      last.d = Math.round((last.e - last.s) / 1000);
+    }else{
+      out.push({ m: x.m, s: x.s, e: x.e, d: x.d });
+    }
+  });
+  return { pomo: data.pomo || 0, segs: out };
+}
+function modeName(m){
+  return MODE_NAME[String(m).indexOf('pomo:') === 0 ? 'pomo' : m] || '时钟';
+}
+function segName(m){
+  var map = { 'pomo:focus': '专注', 'pomo:rest': '休息', 'pomo:long': '长休息' };
+  if(map[m]) return map[m];
+  return { clock: '数字时钟', flip: '翻页时钟', stop: '秒表', timer: '倒计时', pomo: '自习' }[m] || m;
+}
+function segTag(m){
+  if(m === 'pomo:focus') return 'focus';
+  if(m === 'pomo:rest' || m === 'pomo:long') return 'rest';
+  return '';
+}
+function logDayLabel(day){
+  var today = dkey();
+  if(day === today) return '今天';
+  var y = new Date(); y.setDate(y.getDate() - 1);
+  if(day === dkey(y.getTime())) return '昨天';
+  var p = day.split('-');
+  return Number(p[1]) + ' 月 ' + Number(p[2]) + ' 日';
+}
+function logRender(){
+  var day = LOG.view || dkey();
+  var m = logMerged(day);
+  var focus = 0, rest = 0, other = 0, otherMap = {};
+  m.segs.forEach(function(x){
+    if(x.m === 'pomo:focus') focus += x.d;
+    else if(x.m === 'pomo:rest' || x.m === 'pomo:long') rest += x.d;
+    else { other += x.d; otherMap[x.m] = (otherMap[x.m] || 0) + x.d; }
+  });
+  $('logDay').textContent = logDayLabel(day);
+  $('logNext').disabled = (day >= dkey());
+  $('logPrev').disabled = false;
+
+  var cards = '<div class="lg-cards">'
+    + '<div class="lg-card"><i>自习</i><b>' + durText(focus) + '</b></div>'
+    + '<div class="lg-card"><i>休息</i><b>' + durText(rest) + '</b></div>'
+    + '<div class="lg-card"><i>番茄</i><b>' + m.pomo + '<em>个</em></b></div>'
+    + '</div>';
+  var modes = '';
+  var keys = Object.keys(otherMap);
+  if(keys.length){
+    modes = '<div class="lg-modes">' + keys.map(function(k){
+      return segName(k) + ' ' + durText(otherMap[k]);
+    }).join(' · ') + '</div>';
+  }
+  $('logSum').innerHTML = cards + modes;
+
+  if(!m.segs.length){
+    $('logList').innerHTML = '<div class="lg-empty">这天还没有记录。<br>'
+      + '页面开着并且切过模式（数字 / 翻页 / 秒表 / 倒计时 / 自习）就会自动记一段，'
+      + '不用手动开始。</div>';
+  }else{
+    var rows = m.segs.slice(-60).reverse().map(function(x){
+      var t = x.m === 'pomo:focus' || x.m === 'pomo:rest' || x.m === 'pomo:long' ? segTag(x.m) : '';
+      return '<div class="lg-row"><span class="lg-t">' + hm(x.s) + ' – ' + hm(x.e) + '</span>'
+        + '<span class="lg-m"><span class="tag ' + t + '">' + segName(x.m) + '</span></span>'
+        + '<span class="lg-d">' + durText(x.d) + '</span></div>';
+    }).join('');
+    $('logList').innerHTML = rows;
+  }
+  logFootPaint();
+}
+function logFootPaint(){
+  var el = $('logFoot');
+  if(!el) return;
+  var txt = '';
+  if(LOG.cloud === 'local') txt = '未登录 · 只记在这台设备上<a id="logLogin">去登录</a>';
+  else if(LOG.cloud === 'ok') txt = '已同步到云端 · 换设备也能看到';
+  else if(LOG.cloud === 'fail') txt = '同步失败，联网后会自动补传';
+  else txt = '正在检查云端…';
+  el.innerHTML = txt;
+  var a = $('logLogin');
+  if(a) a.onclick = function(){ location.href = './index.html'; };
+}
+function logOpen(){
+  LOG.view = dkey();
+  $('logPanel').className = 'show';
+  $('logPanel').setAttribute('aria-hidden', 'false');
+  logRender();
+  logPull(dkey(), function(){ if($('logPanel').className === 'show') logRender(); });
+  if(LOG.viewTimer) clearInterval(LOG.viewTimer);
+  LOG.viewTimer = setInterval(function(){
+    if($('logPanel').className === 'show' && (LOG.view || dkey()) === dkey()) logRender();
+  }, 20000);
+}
+function logClose(){
+  $('logPanel').className = '';
+  $('logPanel').setAttribute('aria-hidden', 'true');
+  if(LOG.viewTimer){ clearInterval(LOG.viewTimer); LOG.viewTimer = null; }
+}
+function logShift(n){
+  var d = new Date((LOG.view || dkey()) + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  var k = dkey(d.getTime());
+  if(k > dkey()) return;
+  LOG.view = k;
+  logRender();
+  logPull(k, function(){ if($('logPanel').className === 'show') logRender(); });
 }
 
 /* ---------------- 声音 ---------------- */
@@ -886,6 +1327,13 @@ function keepAwake(){
 }
 document.addEventListener('visibilitychange', function(){
   if(!document.hidden) keepAwake();
+  /* 切到后台就不算在用，回来再接着记 —— 不然整晚挂着会记成一夜 */
+  if(document.hidden) logStop();
+  else logStart(logModeOf());
+});
+window.addEventListener('pagehide', function(){
+  logStop();
+  flushLog();
 });
 
 /* ---------------- 事件绑定 ---------------- */
@@ -946,6 +1394,12 @@ $('timerPreset').onclick = function(){
   $('timerBtn').innerHTML = '开始<span class="kbd">Space</span>';
   tmPaint();
 };
+/* 记录抽屉 */
+$('logBtn').onclick = function(e){ if(e) e.stopPropagation(); logOpen(); };
+$('logClose').onclick = function(e){ if(e) e.stopPropagation(); logClose(); };
+$('logPrev').onclick = function(e){ if(e) e.stopPropagation(); logShift(-1); };
+$('logNext').onclick = function(e){ if(e) e.stopPropagation(); logShift(1); };
+
 $('pomoTime').onclick = togglePomoSet;
 $('pomoBtn').onclick = function(){ pomoToggle(); };
 $('pomoSkip').onclick = function(){
@@ -963,6 +1417,7 @@ $('pomoReset').onclick = function(){
   PM.run = false; PM.paused = false; PM.phase = 'focus'; PM.left = phaseMs('focus'); PM.end = 0;
   $('pomoBtn').innerHTML = '开始<span class="kbd">Space</span>';
   pmPaintPhase(); pmPaint();
+  logPomoPhase();
 };
 ['pf','pb'].forEach(function(id){
   $(id).onchange = function(){
@@ -1041,6 +1496,9 @@ function modeFromUrl(){
 applyMode(modeFromUrl() || CFG.mode || 'clock');
 applyFlipSec();
 if(CFG.mode === 'timer') refreshTimerInputs();
+logEnsure();
+logPomo(pomoDoneToday());   /* 把今天的番茄数补进记录，后台能直接看到 */
+logStart(logModeOf());
 keepAwake();
 clockTick();
 setInterval(clockTick, 250);
