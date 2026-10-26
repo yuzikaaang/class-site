@@ -1258,6 +1258,8 @@ var bareJust = 0;      /* 刚被「点背景」展开的时刻，用来避免点
 function setBare(on){
   UI.bare = !!on;
   try{ if(document.body.classList) document.body.classList[UI.bare ? 'add' : 'remove']('bare'); }catch(e){}
+  /* 收起界面的时候底部工具栏也一起收掉，屏幕上就真的只剩数字 */
+  if(UI.bare) hideBar();
   if(bareTimer){ clearTimeout(bareTimer); bareTimer = null; }
   if(!UI.bare && T.run && CFG.bareRun){
     bareTimer = setTimeout(function(){ if(T.run && !DS.open) setBare(true); }, 8000);
