@@ -322,7 +322,7 @@ body.bg-dark #back,body.bg-black #back,body.bg-navy #back,body.bg-green #back,bo
 
 /* 提示气泡 */
 #hint{
-  position:fixed;left:50%;top:4vh;transform:translateX(-50%);
+  position:fixed;left:50%;top:calc(60px + env(safe-area-inset-top));transform:translateX(-50%);
   padding:8px 16px;border-radius:999px;font-size:12px;
   background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.08);color:#333;
   transition:opacity .4s;z-index:30;
@@ -582,6 +582,22 @@ body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.
 }
 
 /* ---------- 计时模块（v3.11.0） ---------- */
+/* 顶部子模式（v3.12.0） */
+#subTabs{position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);
+  z-index:34;display:flex;gap:3px;padding:4px;border-radius:13px;
+  background:rgba(255,255,255,.72);border:1px solid rgba(0,0,0,.08);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  box-shadow:0 4px 16px rgba(0,0,0,.06)}
+#subTabs button{height:30px;padding:0 12px;border:none;border-radius:10px;background:transparent;
+  color:inherit;font:inherit;font-size:13px;font-weight:600;cursor:pointer;opacity:.5;white-space:nowrap;
+  transition:background .15s,color .15s,opacity .15s}
+#subTabs button.on{background:#141414;color:#fff;opacity:1}
+body.bg-dark #subTabs,body.bg-black #subTabs,body.bg-navy #subTabs,body.bg-green #subTabs,body.bg-gray #subTabs{
+  background:rgba(30,30,34,.75);border-color:rgba(255,255,255,.14)}
+body.bg-dark #subTabs button.on,body.bg-black #subTabs button.on,body.bg-navy #subTabs button.on,
+body.bg-green #subTabs button.on,body.bg-gray #subTabs button.on{background:#f5f5f5;color:#111}
+body.bare #subTabs{display:none}
+
 #tmHead{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:1.2vh;
   font-size:calc(var(--fs) * .11);opacity:.6;letter-spacing:.02em}
 #tmHead #tmPhase{padding:3px 12px;border-radius:999px;background:rgba(224,138,76,.16);color:#c9722f}
@@ -592,24 +608,6 @@ body.bg-dark #tmHead #tmPhase,body.bg-black #tmHead #tmPhase,body.bg-navy #tmHea
 #tmBar i{display:block;height:100%;width:0;border-radius:999px;background:#e08a4c;transition:width .28s linear}
 body.bg-dark #tmBar,body.bg-black #tmBar,body.bg-navy #tmBar{background:rgba(255,255,255,.12)}
 
-.preset-row{display:flex;gap:6px;justify-content:center;flex-wrap:nowrap;margin-top:1.6vh;padding:0 12px}
-#timerView .actions{gap:8px;flex-wrap:nowrap;padding:0 12px}
-#timerView .actions button{min-width:0;flex:1 1 0;margin:0;padding:0 6px;font-size:13px}
-#timerView .actions button.primary{flex:1.25 1 0}
-.preset-chip{
-  min-width:0;flex:1 1 0;height:34px;padding:0 4px;border-radius:11px;cursor:pointer;
-  border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.6);color:inherit;
-  font:inherit;font-size:12.5px;font-weight:600;line-height:1;
-  transition:transform .12s,background .15s,border-color .15s;
-  -webkit-tap-highlight-color:transparent;
-}
-.preset-chip:active{transform:scale(.96)}
-.preset-chip.cur{background:#e08a4c;border-color:#e08a4c;color:#fff}
-body.bg-dark .preset-chip,body.bg-black .preset-chip,body.bg-navy .preset-chip{
-  background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14)}
-body.bg-dark .preset-chip.cur,body.bg-black .preset-chip.cur,body.bg-navy .preset-chip.cur{
-  background:#e08a4c;border-color:#e08a4c;color:#fff}
-
 #markList{max-height:16vh;overflow:auto;margin-top:1.2vh;font-size:13px;opacity:.62;line-height:1.9}
 .mk-row{display:flex;gap:10px;justify-content:center}
 .mk-row b{font-variant-numeric:tabular-nums;font-weight:600;opacity:.85}
@@ -618,7 +616,6 @@ body.bg-dark .preset-chip.cur,body.bg-black .preset-chip.cur,body.bg-navy .prese
 #durSheet{
   position:fixed;left:0;right:0;top:0;bottom:0;z-index:90;display:flex;align-items:flex-end;
   background:rgba(0,0,0,.35);opacity:0;visibility:hidden;transition:opacity .22s,visibility .22s;
-  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
 }
 #durSheet.show{opacity:1;visibility:visible}
 .ds-box{
@@ -635,10 +632,10 @@ body.bg-dark .ds-box,body.bg-black .ds-box,body.bg-navy .ds-box{background:#1d1d
 body.bg-dark .ds-head button,body.bg-black .ds-head button,body.bg-navy .ds-head button{background:rgba(255,255,255,.1)}
 
 .wheel{position:relative;display:flex;align-items:center;justify-content:center;gap:4px;height:180px;margin:4px 0 2px}
-.w-col{width:86px;height:100%;overflow-y:auto;scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;
-  scrollbar-width:none;overscroll-behavior:contain;padding:68px 0}
+.w-col{width:86px;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;padding:68px 0;touch-action:pan-y}
 .w-col::-webkit-scrollbar{display:none}
-.w-item{height:44px;line-height:44px;text-align:center;scroll-snap-align:center;
+.w-item{height:44px;line-height:44px;text-align:center;
   font-size:24px;font-weight:500;font-variant-numeric:tabular-nums;opacity:.3;
   transition:opacity .16s,transform .16s;user-select:none;cursor:pointer}
 .w-item.on{opacity:1;font-weight:700;transform:scale(1.06)}
@@ -654,18 +651,6 @@ body.bg-dark .w-mask,body.bg-black .w-mask,body.bg-navy .w-mask{
   background:linear-gradient(to bottom,#1d1d22 0%,rgba(29,29,34,.9) 16%,rgba(29,29,34,0) 34%,
     rgba(29,29,34,0) 66%,rgba(29,29,34,.9) 84%,#1d1d22 100%)}
 
-.ds-quick{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0 10px}
-.ds-quick button{height:32px;padding:0 12px;border-radius:10px;border:1px solid rgba(0,0,0,.12);
-  background:transparent;color:inherit;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
-body.bg-dark .ds-quick button,body.bg-black .ds-quick button,body.bg-navy .ds-quick button{border-color:rgba(255,255,255,.16)}
-
-.ds-input{display:flex;gap:8px;margin-bottom:10px}
-.ds-input input{flex:1;min-width:0;height:38px;padding:0 12px;border-radius:10px;font:inherit;font-size:13px;
-  border:1px solid rgba(0,0,0,.14);background:transparent;color:inherit}
-body.bg-dark .ds-input input,body.bg-black .ds-input input,body.bg-navy .ds-input input{border-color:rgba(255,255,255,.18)}
-.ds-input button{height:38px;padding:0 16px;border-radius:10px;border:1px solid rgba(0,0,0,.14);
-  background:rgba(0,0,0,.04);color:inherit;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
-
 .ds-loop{display:flex;gap:14px;flex-wrap:wrap}
 .ds-loop label{display:flex;align-items:center;gap:6px;font-size:13px;opacity:.85}
 .ds-loop input{width:64px;height:34px;text-align:center;border-radius:9px;font:inherit;font-size:14px;
@@ -676,7 +661,7 @@ body.bg-dark .ds-loop input,body.bg-black .ds-loop input,body.bg-navy .ds-loop i
 .ds-actions{display:flex;gap:10px}
 .ds-actions button{flex:1;height:44px;border-radius:12px;border:1px solid rgba(0,0,0,.12);
   background:transparent;color:inherit;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
-.ds-actions button.primary{background:#e08a4c;border-color:#e08a4c;color:#fff;flex:0 0 96px}
+.ds-actions button.primary{background:#e08a4c;border-color:#e08a4c;color:#fff;flex:0 0 130px;margin:0 auto}
 
 /* v3.11.1：计时跑起来后只留数字（点一下才出现操作区） */
 body.bare #modeName,
@@ -692,12 +677,14 @@ body.bare #timerTime{cursor:pointer}
 
 /* 提醒设置行 */
 .al-row{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px}
-.al-row .sw{width:38px;height:22px;border-radius:999px;background:rgba(0,0,0,.15);position:relative;
-  flex:0 0 auto;cursor:pointer;transition:background .18s}
-.al-row .sw i{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;
-  transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
-.al-row .sw.on{background:#e08a4c}
-.al-row .sw.on i{transform:translateX(16px)}
+.al-row .sw{width:46px;height:26px;border-radius:999px;background:rgba(0,0,0,.12);color:rgba(0,0,0,.5);
+  border:none;font:inherit;font-size:12px;font-weight:700;letter-spacing:.02em;flex:0 0 auto;cursor:pointer;
+  transition:background .18s,color .18s}
+.al-row .sw.on{background:#3c9f6a;color:#fff}
+.al-row .num{width:34px;height:28px;border-radius:9px;border:1px solid rgba(0,0,0,.12);
+  background:rgba(0,0,0,.04);color:inherit;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
+  flex:0 0 auto}
+.al-row .num.on{background:#e08a4c;border-color:#e08a4c;color:#fff}
 .al-row .tx{flex:1;min-width:0}
 .al-row .tx input{width:44px;height:26px;text-align:center;border-radius:7px;font:inherit;font-size:12.5px;
   border:1px solid rgba(0,0,0,.14);background:transparent;color:inherit;margin:0 4px}
@@ -706,7 +693,7 @@ body.bare #timerTime{cursor:pointer}
 body.bg-dark .al-row .snd,body.bg-black .al-row .snd,body.bg-navy .al-row .snd{
   border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.08)}
 .al-row .snd.on{background:#e08a4c;border-color:#e08a4c;color:#fff}
-body.bg-dark .al-row .sw,body.bg-black .al-row .sw,body.bg-navy .al-row .sw{background:rgba(255,255,255,.2)}
+body.bg-dark .al-row .sw,body.bg-black .al-row .sw,body.bg-navy .al-row .sw{background:rgba(255,255,255,.14);color:rgba(255,255,255,.7)}
 body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-row .tx input{
   border-color:rgba(255,255,255,.18)}
 </style>
@@ -714,15 +701,17 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 <body class="bg-light f-auto">
 
 <div id="stage">
+  <!-- 顶部子模式：时钟页是 数字/翻页，计时页是 正计时/倒计时/番茄钟（v3.12.0） -->
+  <div id="subTabs"></div>
   <div id="modeName"></div>
 
-  <!-- 数字时钟 -->
+  <!-- 时钟：数字 -->
   <div class="view on" id="clockView">
     <div id="bigTime">00:00:00</div>
     <div id="bigSub"></div>
   </div>
 
-  <!-- 翻页时钟 -->
+  <!-- 时钟：翻页 -->
   <div class="view" id="flipView">
     <div class="flip-row">
       <div class="flip" id="flipH"><div class="half top"><div class="txt">00</div></div><div class="half bottom"><div class="txt">00</div></div></div>
@@ -733,22 +722,20 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
     </div>
   </div>
 
-  <!-- 计时（v3.11.0：倒计时 / 正计时 / 多轮循环 三合一，原来的秒表和自习并进来了） -->
+  <!-- 计时：正计时 / 倒计时 / 番茄钟 -->
   <div class="view" id="timerView">
-    <div id="tmHead"><span id="tmRound">单次 25:00</span><span id="tmPhase" class="hide">专注</span></div>
-    <div id="timerTime">25:00</div>
+    <div id="timerTime">00:00</div>
     <div id="tmBar"><i id="tmBarIn"></i></div>
-
-    <div class="preset-row" id="presetRow"></div>
+    <div id="tmHead"><span id="tmRound"></span><span id="tmPhase" class="hide">专注</span></div>
 
     <div class="actions">
       <button id="timerBtn" class="primary">开始<span class="kbd">Space</span></button>
-      <button id="markBtn" title="给这一刻写个名字，时间线按它分段">记一笔</button>
+      <button id="markBtn">记一笔</button>
       <button id="skipBtn">跳过</button>
       <button id="timerReset">重置</button>
     </div>
 
-    <div id="timerHint">点上面的数字改时长 · 时长为 0 直接开始就是正计时</div>
+    <div id="timerHint">点数字设时长 · 不设就直接开始是正计时</div>
     <div id="markList"></div>
 
     <div class="subj-row" id="subjRow">
@@ -809,7 +796,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
     <div class="lg-foot" id="sumFoot" style="border:none;padding-left:0;padding-right:0"></div>
   </div>
 </aside>
-<div id="hint">单击屏幕可显示工具栏 · 双击数字进入全屏</div>
+<div id="hint" class="hide"></div>
 
 <!-- 全屏「时间到」提醒 -->
 <div id="fullAlert" aria-hidden="true"><div id="fullAlertTxt">时间到！</div></div>
@@ -829,8 +816,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 <button id="barBtn" title="展开工具栏" aria-label="展开工具栏"><span class="ar">▾</span></button>
 
 <div id="modeMenu">
-  <button data-m="clock" class="cur">数字</button>
-  <button data-m="flip">翻页</button>
+  <button data-m="clock" class="cur">时钟</button>
   <button data-m="timer">计时</button>
 </div>
 
@@ -866,13 +852,12 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
     <div class="ab-sec">
       <h4>自定义名称（留空就用默认叫法）</h4>
       <div class="name-grid">
-        <label><span>数字时钟</span><input data-nm="clock" maxlength="12" placeholder="数字时钟"></label>
-        <label><span>翻页时钟</span><input data-nm="flip" maxlength="12" placeholder="翻页时钟"></label>
-        <label><span>秒表</span><input data-nm="stop" maxlength="12" placeholder="秒表"></label>
-        <label><span>倒计时</span><input data-nm="timer" maxlength="12" placeholder="倒计时"></label>
+        <label><span>数字</span><input data-nm="clock" maxlength="12" placeholder="数字时钟"></label>
+        <label><span>翻页</span><input data-nm="flip" maxlength="12" placeholder="翻页时钟"></label>
+        <label><span>计时</span><input data-nm="timer" maxlength="12" placeholder="计时"></label>
       </div>
       <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">
-        自习的名字在自习界面里设：先点「语数英物化生 / 其他」选科目，再填这次做什么（如「试卷」「练习」），记录会按「科目 · 事项」分开统计。
+        计时里的记录名字用「科目 · 这次做什么」：先在计时页点科目，再填这次做什么（如「试卷」「练习」），记录会按「科目 · 事项」分开统计。
       </p>
     </div>
     <div class="ab-sec">
@@ -881,6 +866,11 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
         <label><span>提醒文字</span><input id="toastInp" maxlength="20" placeholder="时间到！"></label>
       </div>
       <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">倒计时到点、轮次切换时全屏弹出约 3 秒，点一下可提前关闭。</p>
+    </div>
+
+    <div class="ab-sec">
+      <h4>计时</h4>
+      <div id="tmOpts"></div>
     </div>
 
     <div class="ab-sec">
@@ -894,11 +884,11 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
   </div>
 </div>
 
-<!-- 时长设置（轮盘 + 快捷档位 + 手动输入，v3.11.0） -->
+<!-- 时长设置（轮盘，v3.12.0：只剩轮盘，别的都去掉了） -->
 <div id="durSheet" aria-hidden="true">
   <div class="ds-box">
     <div class="ds-head">
-      <b id="dsTitle">设置专注时长</b>
+      <b id="dsTitle">设置时长</b>
       <button id="dsClose" aria-label="关闭">✕</button>
     </div>
 
@@ -912,21 +902,13 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
       <div class="w-line"></div>
     </div>
 
-    <div class="ds-quick" id="quickRow"></div>
-
-    <div class="ds-input">
-      <input id="durInp" inputmode="text" placeholder="也可以直接打字，如 25 / 1:30 / 90s">
-      <button id="durApply">填</button>
-    </div>
-
-    <div class="ds-loop">
+    <div class="ds-loop" id="dsLoop">
       <label><span>循环</span><input id="roundsInp" type="number" min="0" max="99" inputmode="numeric"><em>轮</em></label>
-      <label><span>每轮休息</span><input id="restInp" type="number" min="0" max="99" inputmode="numeric"><em>分钟</em></label>
+      <label><span>休息</span><input id="restInp" type="number" min="0" max="99" inputmode="numeric"><em>分钟</em></label>
     </div>
-    <p class="ds-note">循环填 0 = 只跑一次；时长为 0 时点开始就是正计时。</p>
+    <p class="ds-note" id="dsNote">循环填 0 = 只跑一次</p>
 
     <div class="ds-actions">
-      <button id="dsSave">把当前时长存进预设</button>
       <button id="dsOk" class="primary">好</button>
     </div>
   </div>
@@ -945,8 +927,8 @@ var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5
   /* v3.10.0：提示音 / 自定义名称 / 自习科目+事项 / 时间到提醒文字 / 白噪音 */
   sound:'blue', names:{}, subj:'', doing:'', toast:'', noise:{},
   /* v3.11.0：计时合并后 —— 专注时长 / 每轮休息 / 循环次数 / 6 个预设 / 提醒列表 */
-  focusSec:1500, restSec:5, rounds:0,
-  presets:[300, 600, 900, 1500, 2700, 3600], alertTimes:2,
+  focusSec:1500, restSec:5, rounds:1, downSec:0,
+  tk:'up', bareRun:0, alertTimes:2,
   alerts:[
     { at:'end',     snd:'blue',  on:true  },
     { at:'restEnd', snd:'chime', on:true  },
@@ -964,13 +946,17 @@ try{
   var old = SAVED || {};
   if(old.mode === 'stop' || old.mode === 'pomo') CFG.mode = 'timer';
   if(old.focusSec === undefined){
+    /* 老版本只有一个时长，现在拆成「倒计时」和「番茄专注」两份，都继承它 */
     var sec = (Number(old.th) || 0) * 3600 + (Number(old.tm) || 0) * 60 + (Number(old.ts) || 0);
-    /* 老计时器默认是 5 分钟，番茄钟默认 25 —— 用番茄那档更贴近「开始学习」 */
     if(old.pf && (!sec || sec === 300)) sec = Number(old.pf) * 60;
     CFG.focusSec = sec || 1500;
+    CFG.downSec = sec || 0;
   }
+  if(old.downSec === undefined && old.focusSec !== undefined) CFG.downSec = Number(old.focusSec) || 0;
+  if(old.tk === undefined) CFG.tk = 'up';
+  if(old.bareRun === undefined) CFG.bareRun = 0;
   if(old.restSec === undefined) CFG.restSec = Number(old.pb) || 5;
-  if(old.rounds === undefined) CFG.rounds = 0;
+  if(old.rounds === undefined) CFG.rounds = 1;
   if(old.alertTimes === undefined) CFG.alertTimes = 2;
   if(!Array.isArray(CFG.alerts) || !CFG.alerts.length){
     CFG.alerts = [
@@ -1046,21 +1032,55 @@ function segNameOf(){
 }
 
 /* ---------------- 模式切换 ---------------- */
-var MODE_NAME = { clock:'数字', flip:'翻页', timer:'计时' };
+var MODE_NAME = { clock:'时钟', flip:'时钟', timer:'计时' };
 var VIEWS = { clock:'clockView', flip:'flipView', timer:'timerView' };
-
+/* 顶部那排子模式：时钟页两个，计时页三个（站主要的顺序） */
+var SUB_TABS = {
+  clock: [['clock', '数字'], ['flip', '翻页']],
+  timer: [['up', '正计时'], ['down', '倒计时'], ['pomo', '番茄钟']]
+};
+function currentSub(){
+  if(CFG.mode === 'timer') return CFG.tk || 'up';
+  return CFG.mode;
+}
+function paintSubTabs(){
+  var box = $('subTabs');
+  if(!box) return;
+  var list = (CFG.mode === 'timer') ? SUB_TABS.timer : SUB_TABS.clock;
+  var cur = currentSub();
+  box.innerHTML = '';
+  list.forEach(function(p){
+    var b = document.createElement('button');
+    b.textContent = p[1];
+    b.className = (p[0] === cur) ? 'on' : '';
+    b.setAttribute('data-k', p[0]);
+    b.onclick = function(e){
+      if(e){ e.stopPropagation(); e.preventDefault(); }
+      if(CFG.mode === 'timer') tmSetKind(p[0]);
+      else applyMode(p[0]);
+      paintSubTabs();
+    };
+    box.appendChild(b);
+  });
+}
 function applyMode(m){
+  if(m === 'stop' || m === 'pomo') m = 'timer';
   CFG.mode = m; saveCfg();
   for(var k in VIEWS){ if(VIEWS.hasOwnProperty(k)) $(VIEWS[k]).className = 'view' + (k === m ? ' on' : ''); }
   $('modeBtn').textContent = MODE_NAME[m];
+  var top = (m === 'timer') ? 'timer' : 'clock';
   var items = $('modeMenu').getElementsByTagName('button');
   for(var i = 0; i < items.length; i++){
-    items[i].className = (items[i].getAttribute('data-m') === m) ? 'cur' : '';
+    items[i].className = (items[i].getAttribute('data-m') === top) ? 'cur' : '';
   }
   $('modeMenu').className = '';
   if(m === 'clock' || m === 'flip') tickClock();
-  if(m === 'timer') tmPaint();
+  if(m === 'timer'){
+    if(T.kind !== (CFG.tk || 'up')) tmSetKind(CFG.tk || 'up');
+    else tmPaint();
+  }
   if(m !== 'timer') setBare(false);
+  paintSubTabs();
   applyName();
   logStart(logModeOf());
   /* 「秒 · 显示」只在翻页模式下有意义，别的时候不占工具栏位置 */
@@ -1153,16 +1173,13 @@ function flipTo(id, val, old){
   }, FLIP_MS);
 }
 
-/* ---------------- 计时（v3.11.0） ----------------
-   站主：「倒计时和自习合并以及正计时，番茄钟不就是多个倒计时中间再加一点休息」。
-   于是只留一个「计时」模块：
-     · 设了时长 → 倒计时；时长为 0 点开始 → 正计时往上走（原来的秒表）
-     · 循环 0 = 单次；循环 N = 专注 N 轮，每两轮中间休息一次
-     · 休息的时候能改下一轮的时长，也能直接结束（站主原话）
-     · 「记录」= 打点：给这一刻写个名字并切一段，时间线就按打点分开
-     · 提醒：结束 / 休息结束 / 结束前 N 分钟，各用各的铃声 */
+/* ---------------- 计时（v3.12.0） ----------------
+   站主：「点击了计时之后，上面才会显示具体的功能：最左边正计时、中间倒计时、
+   右边番茄钟」「刚开始应该是零」。所以三种各管各的：
+     · 正计时：00:00 起往上走，只有它才有「记一笔」
+     · 倒计时：默认 00:00，点数字滚轮盘设时长；到点提醒后停在 00:00
+     · 番茄钟：专注 N 轮 + 每轮休息，自动 专注 → 休息 → 专注 */
 function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
-
 function todayKey(){
   var d = new Date();
   return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate());
@@ -1173,17 +1190,18 @@ function pomoDoneToday(){
 }
 
 var T = {
+  kind:'up',                 /* 'up' 正计时 | 'down' 倒计时 | 'pomo' 番茄钟 */
   run:false, up:false, paused:false,
-  left:0, total:0, end:0,          /* 倒计时 */
-  upAcc:0, upStart:0,              /* 正计时 */
+  left:0, total:0, end:0,    /* 倒计时 */
+  upAcc:0, upStart:0,        /* 正计时 */
   phase:'focus', round:1, rounds:0,
-  hits:{}, marks:[]
+  hits:{}, marks:[], markFrom:0
 };
 function focusMs(){ return Math.max(0, Math.min(99 * 3600, Number(CFG.focusSec) || 0)) * 1000; }
+function downMs(){ return Math.max(0, Math.min(99 * 3600, Number(CFG.downSec) || 0)) * 1000; }
 function restMs(){ return Math.max(0, Math.min(99, Number(CFG.restSec) || 0)) * 60000; }
 function tmRounds(){ return Math.max(0, Math.min(99, Number(CFG.rounds) || 0)); }
 
-/* 大数字：倒计时 mm:ss（超 1 小时带时），正计时 mm:ss.cs */
 function tmText(ms, up){
   if(ms < 0) ms = 0;
   if(up){
@@ -1203,39 +1221,54 @@ function tmLeftMs(){
   if(T.up) return tmElapsed();
   return T.run ? Math.max(0, T.end - nowMs()) : Math.max(0, T.left);
 }
-/* v3.11.1：计时进行中默认只有数字，点数字才把操作区唤出来 */
-var UI = { bare:false };
-var bareTimer = null;
-function setBare(on){
-  UI.bare = !!on;
-  try{
-    if(document.body.classList) document.body.classList[UI.bare ? 'add' : 'remove']('bare');
-  }catch(e){}
-  if(bareTimer){ clearTimeout(bareTimer); bareTimer = null; }
-  /* 展开着又一直不动，8 秒后自己收起来，免得挡着数字 */
-  if(!UI.bare && T.run){
-    bareTimer = setTimeout(function(){
-      if(T.run && !DS.open) setBare(true);
-    }, 8000);
-  }
-}
 function tmBtn(txt){
   var b = $('timerBtn');
   if(b) b.innerHTML = txt + '<span class="kbd">Space</span>';
 }
-function tmPaintHead(){
+
+/* 极简态：跑起来后只留数字（站主可以关掉，见「更多 → 计时时收起界面」） */
+var UI = { bare:false };
+var bareTimer = null;
+function setBare(on){
+  UI.bare = !!on;
+  try{ if(document.body.classList) document.body.classList[UI.bare ? 'add' : 'remove']('bare'); }catch(e){}
+  if(bareTimer){ clearTimeout(bareTimer); bareTimer = null; }
+  if(!UI.bare && T.run && CFG.bareRun){
+    bareTimer = setTimeout(function(){ if(T.run && !DS.open) setBare(true); }, 8000);
+  }
+}
+/* 跑起来的时候要不要自动收起，按站主的设置来 */
+function autoBare(){ if(CFG.bareRun === 1) setBare(true); }
+
+function tmHeadPaint(){
   var r = $('tmRound'), p = $('tmPhase');
   if(!r || !p) return;
-  var n = tmRounds();
-  if(T.up){
-    r.textContent = '正计时';
+  if(T.kind === 'up'){
+    r.textContent = T.run || T.upAcc ? '正计时' : '';
     p.className = 'hide';
-  }else{
-    var total = n > 0 ? n : 1;
-    r.textContent = (n > 0 ? ('第 ' + T.round + ' / ' + total + ' 轮') : ('单次 ' + tmText(focusMs(), false)));
-    var rest = (T.phase === 'rest');
-    p.textContent = rest ? '休息' : '专注';
-    p.className = rest ? 'rest' : '';
+    return;
+  }
+  if(T.kind === 'down'){
+    r.textContent = (T.run || T.left) ? '倒计时' : '';
+    p.className = 'hide';
+    return;
+  }
+  var n = tmRounds();
+  var total = n > 0 ? n : 1;
+  r.textContent = n > 0 ? ('第 ' + T.round + ' / ' + total + ' 轮') : '单次';
+  var rest = (T.phase === 'rest');
+  p.textContent = rest ? '休息' : '专注';
+  p.className = rest ? 'rest' : '';
+}
+function tmDetailPaint(){
+  var m = $('markBtn'), s = $('skipBtn'), bar = $('tmBar'), hint = $('timerHint');
+  if(m) m.style.display = (T.kind === 'up') ? '' : 'none';
+  if(s) s.style.display = (T.kind === 'pomo') ? '' : 'none';
+  if(bar) bar.style.display = (T.kind === 'up') ? 'none' : '';
+  if(hint){
+    hint.textContent = (T.kind === 'up')
+      ? '按开始就往上走 · 中途点「记一笔」把这段时间记下来'
+      : (T.kind === 'down' ? '点数字设时长 · 设好按开始' : '点数字改专注 / 休息时长 · 跳过进下一段');
   }
 }
 function tmPaint(){
@@ -1245,57 +1278,64 @@ function tmPaint(){
   el.innerHTML = tmText(left, T.up);
   el.className = (!T.up && T.run && left <= 10000 && left > 0) ? 'warn' : (T.paused ? 'paused' : '');
   var bar = $('tmBarIn');
-  if(bar){
+  if(bar && !T.up){
     var pct = 0;
-    if(!T.up && T.total > 0) pct = Math.max(0, Math.min(100, (T.total - left) / T.total * 100));
+    if(T.total > 0) pct = Math.max(0, Math.min(100, (T.total - left) / T.total * 100));
     bar.style.width = pct + '%';
-    $('tmBar').style.opacity = T.up ? '0' : '1';
   }
-  tmPaintHead();
-  /* 提醒点检查（只往前跨过阈值的那一瞬间响一次） */
+  tmHeadPaint();
+  tmDetailPaint();
   if(T.run && !T.up) tmCheckAlerts(left);
   if(T.run && !T.up && left <= 0) tmDone();
 }
-function tmShow(ph){
-  T.phase = ph;
-  var ms = (ph === 'rest') ? restMs() : focusMs();
-  T.total = ms; T.left = ms; T.end = 0; T.up = false;
+/* 按当前 kind 回到「还没开始」的样子 */
+function tmIdle(){
+  T.run = false; T.paused = false; T.up = false;
+  T.upAcc = 0; T.upStart = 0;
+  T.round = 1; T.rounds = tmRounds();
+  T.phase = 'focus';
   T.hits = {};
+  if(T.kind === 'up'){ T.total = 0; T.left = 0; T.end = 0; }
+  else if(T.kind === 'down'){ T.total = downMs(); T.left = downMs(); T.end = 0; }
+  else { T.total = focusMs() || 1500000; T.left = T.total; T.end = 0; }
+  tmBtn('开始');
   tmPaint();
+}
+function tmSetKind(k){
+  T.kind = k;
+  CFG.tk = k;
+  saveCfg();
+  T.marks = [];
+  paintMarks();
+  tmIdle();
+  setBare(false);
+  logStart(logModeOf());
 }
 function tmReset(){
-  T.run = false; T.up = false; T.paused = false;
-  T.round = 1; T.rounds = tmRounds();
-  T.upAcc = 0; T.upStart = 0;
-  tmShow('focus');
-  T.left = focusMs(); T.total = focusMs(); T.end = 0;
-  tmBtn('开始');
+  T.marks = [];
+  T.markFrom = 0;
   paintMarks();
-  tmPaint();
-  logStart(logModeOf());
+  tmIdle();
   setBare(false);
+  logStart(logModeOf());
 }
 function tmStart(){
-  T.rounds = tmRounds();
-  T.round = 1;
-  T.paused = false;
-  T.hits = {};
-  if(focusMs() === 0){
-    /* 没设时长 → 正计时 */
+  if(T.kind === 'up'){
     T.up = true; T.upAcc = 0; T.upStart = nowMs(); T.run = true;
+    T.markFrom = Date.now();
   }else{
-    T.up = false;
-    T.phase = 'focus';
-    T.total = focusMs();
-    T.left = T.total;
-    T.end = nowMs() + T.left;
-    T.run = true;
+    var ms = (T.kind === 'pomo') ? (focusMs() || 1500000) : downMs();
+    if(ms <= 0){ toast('先点一下数字设个时长'); openDur('focus'); return; }
+    T.up = false; T.rounds = tmRounds(); T.round = 1; T.phase = 'focus';
+    T.total = ms; T.left = ms; T.end = nowMs() + ms; T.run = true;
+    T.hits = {};
   }
+  T.paused = false;
   tmBtn('暂停');
   beep(0);
   logStart(logModeOf());
   tmPaint();
-  setBare(true);
+  autoBare();
 }
 function tmToggle(){
   if(T.run){
@@ -1308,179 +1348,127 @@ function tmToggle(){
   }else{
     if(T.up){ T.upStart = nowMs(); }
     else{
-      if(T.left <= 0){ T.left = T.total || focusMs() || 300000; }
+      if(T.left <= 0){ T.left = T.total || focusMs() || 1500000; }
       T.end = nowMs() + T.left;
     }
     T.run = true; T.paused = false;
     tmBtn('暂停');
     beep(0);
     logStart(logModeOf());
-    setBare(true);
+    autoBare();
   }
   tmPaint();
 }
-/* 一个阶段到点 */
 function tmDone(){
   var wasRest = (T.phase === 'rest');
   T.run = false;
   var key = alertSnd(wasRest ? 'restEnd' : 'end');
   if(key) ring(key, CFG.alertTimes);
   if(navigator.vibrate){ try{ navigator.vibrate([280, 140, 280, 140, 280]); }catch(e){} }
-  logStop();                       /* 这一阶段收账 */
+  logStop();
   fullAlert(wasRest ? '休息结束！' : toastText());
 
-  if(wasRest){
-    T.round = Math.min(99, T.round + 1);
-    tmShow('focus');
-    tmJump();                      /* 多轮：休息完自动接着专注 */
+  if(T.kind === 'down'){
+    /* 单次倒计时：停在 00:00，再按开始重来 */
+    T.left = 0; T.total = downMs(); T.end = 0; T.paused = false;
+    tmBtn('开始');
+    tmPaint();
+    setBare(false);
     return;
   }
-  /* 专注结束：记一个番茄 */
+  if(wasRest){
+    T.round = Math.min(99, T.round + 1);
+    T.phase = 'focus';
+    T.total = focusMs(); T.left = T.total;
+    T.hits = {};
+    tmJump();
+    return;
+  }
   CFG.pomoDone = pomoDoneToday() + 1;
   CFG.pomoDate = todayKey();
   saveCfg();
   logPomo(CFG.pomoDone);
   var n = tmRounds();
   if(n > 0 && T.round < n){
-    tmShow('rest');
-    tmJump();                      /* 还有下一轮 → 自动进休息 */
+    T.phase = 'rest';
+    T.total = restMs(); T.left = T.total;
+    T.hits = {};
+    tmJump();
   }else{
-    T.left = focusMs(); T.total = focusMs(); T.end = 0;
+    T.left = 0; T.total = focusMs(); T.end = 0;
     tmBtn('开始');
     tmPaint();
     setBare(false);
   }
 }
 function tmJump(){
-  if(T.up){ T.upStart = nowMs(); }
-  else{ T.end = nowMs() + T.left; }
+  if(T.up) T.upStart = nowMs();
+  else T.end = nowMs() + T.left;
   T.run = true; T.paused = false;
   tmBtn('暂停');
   tmPaint();
   logStart(logModeOf());
+  autoBare();
 }
 function tmSkip(){
+  if(T.kind !== 'pomo') return;
+  T.run = false;
+  logStop();
   if(T.phase === 'rest'){
-    T.run = false;
     T.round = Math.min(99, T.round + 1);
-    logStop();
-    tmShow('focus');
+    T.phase = 'focus';
+    T.total = focusMs(); T.left = T.total; T.hits = {};
     tmJump();
     return;
   }
-  /* 跳过专注：不算番茄，直接进休息 / 结束 */
-  T.run = false;
-  logStop();
   var n = tmRounds();
   if(n > 0 && T.round < n){
-    tmShow('rest');
+    T.phase = 'rest';
+    T.total = restMs(); T.left = T.total; T.hits = {};
     tmJump();
   }else{
-    T.left = focusMs(); T.total = focusMs(); T.end = 0;
-    tmBtn('开始');
-    tmPaint();
+    tmIdle();
   }
 }
-/* 打点：给这一刻写个名字，并把记录切一段 */
+/* 记一笔：只有正计时有意义 —— 把「上一次记一笔到现在」切出来并起个名 */
 function tmMark(){
+  var now = Date.now();
+  if(!T.markFrom) T.markFrom = now - Math.round(tmElapsed());
+  var from = T.markFrom;
+  var d = Math.max(0, Math.round((now - from) / 1000));
+  if(d < 1){ toast('再等一会儿再记'); return; }
   var note = String(CFG.doing || '').trim();
   var di = $('doingInp');
   if(di && String(di.value || '').trim()) note = String(di.value).trim();
-  if(!note && window.prompt){
-    try{ note = String(window.prompt('这一段在做什么？', '') || '').trim(); }catch(e){}
-  }
   note = note.slice(0, 12);
   if(note){ CFG.doing = note; saveCfg(); }
-  var used = T.up ? tmElapsed() : Math.max(0, T.total - tmLeftMs());
-  T.marks.unshift({ t: Date.now(), d: Math.round(used / 1000), n: note || segNameOf() || '记录' });
-  if(T.marks.length > 20) T.marks.length = 20;
+  T.marks.push({ from: from, to: now, d: d, n: note || segNameOf() || '这一段' });
+  if(T.marks.length > 30) T.marks.shift();
+  T.markFrom = now;
   paintMarks();
-  logStop(); logStart(logModeOf());     /* 切段：时间线上就按打点分开 */
+  logStop(); logStart(logModeOf());     /* 时间线也按「记一笔」切开 */
   beep(0);
 }
-/* 给自动化测试的最小探针：只读状态 + 一个把倒计时推到点的口子 */
-window.__clk = {
-  log: function(){ return LOG; },   /* 测试要看「现在在记哪一段」 */
-  state: function(){
-    return { run:T.run, up:T.up, phase:T.phase, round:T.round, left:Math.round(tmLeftMs()), marks:T.marks.length };
-  },
-  finish: function(){ if(T.run && !T.up) T.end = nowMs() - 1; }
-};
-
 function paintMarks(){
   var box = $('markList');
   if(!box) return;
   if(!T.marks.length){ box.innerHTML = ''; return; }
-  box.innerHTML = T.marks.slice(0, 6).map(function(x, i){
-    var d = new Date(x.t);
-    return '<div class="mk-row"><b>' + two(d.getHours()) + ':' + two(d.getMinutes()) + '</b>'
+  var t0 = T.marks[0].from;
+  box.innerHTML = T.marks.slice(-6).map(function(x, i){
+    var a = Math.round((x.from - t0) / 1000), b = Math.round((x.to - t0) / 1000);
+    return '<div class="mk-row"><b>' + tmText(a * 1000, false) + '–' + tmText(b * 1000, false) + '</b>'
       + '<span>' + esc(x.n) + '</span><b>' + tmText(x.d * 1000, false) + '</b></div>';
   }).join('');
 }
-/* ---------------- 6 个预设（v3.11.0） ----------------
-   站主：「可以设置 6 个预设功能…点击可以直接使用预设倒计时，预设的时长可以修改，
-   该项需要同步上云」。长按某一格 = 把当前时长存进这一格。 */
-var PRESET_DEFAULT = [300, 600, 900, 1500, 2700, 3600];
-function presets(){
-  if(!Array.isArray(CFG.presets) || CFG.presets.length !== 6) CFG.presets = PRESET_DEFAULT.slice();
-  return CFG.presets;
-}
-function fmtMin(sec){
-  sec = Math.round(sec);
-  if(sec < 60) return sec + ' 秒';
-  var m = Math.round(sec / 60);
-  return m + ' 分';
-}
-function paintPresets(){
-  var row = $('presetRow');
-  if(!row) return;
-  var list = presets();
-  row.innerHTML = '';
-  list.forEach(function(sec, i){
-    var b = document.createElement('button');
-    b.className = 'preset-chip' + (Math.round(focusMs() / 1000) === sec ? ' cur' : '');
-    b.textContent = fmtMin(sec);
-    b.setAttribute('data-i', i);
-    var lp = null;
-    var fire = function(){ lp = setTimeout(function(){ lp = null; savePreset(i); }, 700); };
-    var clear = function(){ if(lp){ clearTimeout(lp); lp = null; } };
-    b.addEventListener('pointerdown', fire);
-    b.addEventListener('pointerup', clear);
-    b.addEventListener('pointercancel', clear);
-    b.addEventListener('pointerleave', clear);
-    b.addEventListener('contextmenu', function(e){ e.preventDefault(); savePreset(i); });
-    b.addEventListener('click', function(){
-      if(b.__lpDone) { b.__lpDone = false; return; }
-      usePreset(i);
-    });
-    row.appendChild(b);
-  });
-}
-function usePreset(i){
-  var sec = presets()[i];
-  if(!sec) return;
-  CFG.focusSec = sec;
-  saveCfg();
-  paintPresets();
-  tmReset();
-  tmStart();
-  toast('开始 ' + fmtMin(sec));
-}
-function savePreset(i){
-  var sec = Math.round(focusMs() / 1000);
-  if(sec <= 0){ toast('先设一个时长再存'); return; }
-  presets()[i] = sec;
-  saveCfg();
-  paintPresets();
-  pushPresets();
-  toast('已存进第 ' + (i + 1) + ' 格：' + fmtMin(sec));
-}
-function pushPresets(){
-  if(!clkToken()) return;
-  LOG.queue['cls_clock_presets'] = { list: presets().slice() };
-  if(LOG.timer) clearTimeout(LOG.timer);
-  LOG.timer = setTimeout(flushLog, 800);
-}
+
+/* 给自动化测试的最小探针 */
+window.__clk = {
+  log: function(){ return LOG; },
+  state: function(){
+    return { kind:T.kind, run:T.run, up:T.up, phase:T.phase, round:T.round, left:Math.round(tmLeftMs()), marks:T.marks.length, bare:UI.bare };
+  },
+  finish: function(){ if(T.run && !T.up) T.end = nowMs() - 1; }
+};
 
 /* ---------------- 提醒（v3.11.0） ----------------
    站主：「比如在倒计时结束的时候、休息结束的时候、距倒计时结束 n 分钟的时候，
@@ -1521,43 +1509,59 @@ function tmCheckAlerts(leftMs){
   }
 }
 var SND_LABEL = { off:'关闭', ding:'叮咚', chime:'清脆', bell:'铃声', wood:'木鱼', tick:'嘀嗒', blue:'蓝牙' };
+function paintTmOpts(){
+  var box = $('tmOpts');
+  if(!box) return;
+  box.innerHTML = '';
+  var row = document.createElement('div');
+  row.className = 'al-row';
+  var sw = document.createElement('button');
+  sw.className = 'sw' + (CFG.bareRun === 1 ? ' on' : '');
+  sw.textContent = CFG.bareRun === 1 ? '开' : '关';
+  sw.onclick = function(){ CFG.bareRun = (CFG.bareRun === 1) ? 0 : 1; saveCfg(); paintTmOpts(); };
+  var tx = document.createElement('div');
+  tx.className = 'tx';
+  tx.textContent = '开始计时后收起界面（只留数字）';
+  row.appendChild(sw); row.appendChild(tx);
+  box.appendChild(row);
+}
 function paintAlerts(){
   var box = $('alertList');
   if(!box) return;
   var A = CFG.alerts = CFG.alerts || [];
   box.innerHTML = '';
 
-  /* v3.11.1：响几遍（等前一遍放完再放下一遍） */
+  /* 响几遍 */
   var times = Math.max(1, Math.min(9, Number(CFG.alertTimes) || 1));
   var trow = document.createElement('div');
   trow.className = 'al-row';
   var ttx = document.createElement('div');
   ttx.className = 'tx';
-  ttx.textContent = '响几遍（放完一遍再放下一遍）';
+  ttx.textContent = '响几遍';
   trow.appendChild(ttx);
   [1, 2, 3, 4, 5].forEach(function(n){
     var b = document.createElement('button');
-    b.className = 'snd' + (n === times ? ' on' : '');
-    b.style.minWidth = '28px';
+    b.className = 'num' + (n === times ? ' on' : '');
     b.textContent = n;
     b.onclick = function(){ CFG.alertTimes = n; saveCfg(); paintAlerts(); beep(alertSnd('end') || 'blue'); };
     trow.appendChild(b);
   });
   box.appendChild(trow);
+
   A.forEach(function(a, i){
     var row = document.createElement('div');
     row.className = 'al-row';
-    var sw = document.createElement('div');
+    var sw = document.createElement('button');
     sw.className = 'sw' + (a.on ? ' on' : '');
-    sw.innerHTML = '<i></i>';
-    sw.onclick = function(){ a.on = !a.on; saveCfg(); paintAlerts(); };
+    sw.textContent = a.on ? '开' : '关';
+    sw.onclick = function(){ a.on = !a.on; saveCfg(); paintAlerts(); if(a.on) beep(a.snd); };
 
     var tx = document.createElement('div');
     tx.className = 'tx';
-    if(a.at === 'end') tx.textContent = '专注结束的时候';
-    else if(a.at === 'restEnd') tx.textContent = '休息结束的时候';
+    if(a.at === 'end') tx.textContent = '专注结束';
+    else if(a.at === 'restEnd') tx.textContent = '休息结束';
     else{
-      tx.innerHTML = '距结束还有 <input type="number" min="1" max="60" value="' + (a.min || 5) + '"> 分钟';
+      tx.innerHTML = '结束前 <input type="number" min="1" max="60" value="' + (a.min || 5) + '"> 分钟';
       var inp = tx.getElementsByTagName('input')[0];
       inp.onchange = function(){
         a.min = Math.max(1, Math.min(60, parseInt(inp.value, 10) || 5));
@@ -1603,7 +1607,9 @@ function nextSnd(a, btn){
   beep(a.snd);
 }
 
-/* ---------------- 时长设置面板（轮盘 + 档位 + 手动输入） ---------------- */
+/* ---------------- 时长设置（只有一个轮盘） ----------------
+   v3.12.0：站主「快捷和手动输入都不要了，太丑，只会留下轮盘；iPad 上滑不动要修」。
+   滚动吸附改成「滚完停一下再对齐」——iOS 的 scroll-snap 套在这个面板里会卡住。 */
 var DS = { open:false, target:'focus', h:0, m:0, s:0 };
 var W_ITEM_H = 44;
 function fillCol(id, n){
@@ -1612,10 +1618,21 @@ function fillCol(id, n){
   var html = '';
   for(var i = 0; i <= n; i++) html += '<div class="w-item" data-v="' + i + '">' + two(i) + '</div>';
   box.innerHTML = html;
-  var raf = 0;
+  var raf = 0, snap = null;
   box.addEventListener('scroll', function(){
+    DS.fresh = false;
     if(raf) return;
     raf = requestAnimationFrame ? requestAnimationFrame(function(){ raf = 0; wheelPaint(); }) : setTimeout(function(){ raf = 0; wheelPaint(); }, 60);
+    /* 手指停下 160ms 再吸附到最近的一格 */
+    if(snap) clearTimeout(snap);
+    snap = setTimeout(function(){
+      var v = wheelIdx(box);
+      var want = v * W_ITEM_H;
+      if(Math.abs(box.scrollTop - want) > 1){
+        if(box.scrollTo) box.scrollTo({ top: want, behavior: 'smooth' }); else box.scrollTop = want;
+      }
+      wheelPaint();
+    }, 160);
   }, { passive:true });
   box.addEventListener('click', function(e){
     var it = e.target && e.target.closest ? e.target.closest('.w-item') : null;
@@ -1626,6 +1643,7 @@ function fillCol(id, n){
   });
 }
 function wheelIdx(box){
+  if(!box) return 0;
   var n = Math.round((box.scrollTop || 0) / W_ITEM_H);
   var max = box.children.length - 1;
   return Math.max(0, Math.min(max, n));
@@ -1655,64 +1673,58 @@ function wheelSec(){ return (DS.h * 3600 + DS.m * 60 + DS.s); }
 function openDur(target){
   DS.target = target || 'focus';
   DS.open = true;
-  $('dsTitle').textContent = (DS.target === 'rest')
-    ? '设置每轮休息时长'
-    : (T.phase === 'rest' ? '设置下一轮专注时长' : '设置专注时长');
-  $('roundsInp').value = tmRounds();
-  $('restInp').value = Math.round(restMs() / 60000);
-  $('durInp').value = '';
+  var pomo = (T.kind === 'pomo');
+  $('dsTitle').textContent = pomo
+    ? (T.phase === 'rest' ? '设置下一轮专注时长' : '设置专注时长')
+    : '设置时长';
+  $('dsLoop').style.display = pomo ? '' : 'none';
+  $('dsNote').style.display = pomo ? '' : 'none';
+  if(pomo){
+    $('roundsInp').value = tmRounds();
+    $('restInp').value = Math.round(restMs() / 60000);
+  }
   $('durSheet').className = 'show';
   $('durSheet').setAttribute('aria-hidden', 'false');
-  /* 面板先显示出来再滚 —— 还藏着的时候 scrollTop 会被浏览器忽略 */
-  var sec = Math.round(((DS.target === 'rest') ? restMs() : focusMs()) / 1000);
+  var sec = Math.round(((T.kind === 'down') ? downMs() : focusMs()) / 1000);
+  DS.fresh = true;
   wheelSet(sec);
-  setTimeout(function(){ wheelSet(sec); }, 60);
+  /* 面板刚弹出来那一下再对齐一次；但用户已经开滚了就别把人拉回来 */
+  setTimeout(function(){ if(DS.fresh) wheelSet(sec); }, 80);
 }
 function closeDur(){
   DS.open = false;
   $('durSheet').className = '';
   $('durSheet').setAttribute('aria-hidden', 'true');
-}
-/* 手动输入：25 = 25 分钟 · 90s = 90 秒 · 1:30 = 1 小时 30 分 · 1:30:15 = 时:分:秒 */
-function parseDur(str){
-  str = String(str || '').trim().toLowerCase().replace(/\s+/g, '');
-  if(!str) return 0;
-  if(/^\d+(\.\d+)?s$/.test(str)) return Math.round(parseFloat(str) );
-  if(str.indexOf(':') >= 0){
-    var p = str.split(':').map(function(x){ return parseInt(x, 10) || 0; });
-    if(p.length === 3) return p[0] * 3600 + p[1] * 60 + p[2];
-    if(p.length === 2) return p[0] * 3600 + p[1] * 60;
-  }
-  if(/^\d+(\.\d+)?$/.test(str)) return Math.round(parseFloat(str) * 60);
-  return 0;
-}
-function applyDur(){
-  var sec = parseDur($('durInp').value);
-  if(sec <= 0){ toast('没看懂这个时长，试试 25 / 90s / 1:30'); return; }
-  wheelSet(sec);
-  $('durInp').value = '';
+  if(T.run && CFG.bareRun === 1) setBare(true);
 }
 function saveDur(){
   var sec = wheelSec();
-  CFG.rounds = Math.max(0, Math.min(99, parseInt($('roundsInp').value, 10) || 0));
-  CFG.restSec = Math.max(0, Math.min(99, parseInt($('restInp').value, 10) || 0));
-  if(DS.target === 'rest'){
-    /* 正在休息时改休息时长：直接作用到这一刻，剩余时间一起改 */
-    CFG.restSec = Math.max(0, Math.min(99, Math.round(sec / 60)));
-    if(T.phase === 'rest' && !T.run){
-      T.total = sec * 1000; T.left = T.total;
-    }
-  }else{
-    CFG.focusSec = sec;
-    if(T.phase === 'focus' && !T.run && !T.up){
-      T.total = CFG.focusSec * 1000; T.left = T.total;
-    }
+  if(T.kind === 'down') CFG.downSec = sec;
+  else CFG.focusSec = sec;
+  if(T.kind === 'pomo'){
+    CFG.rounds = Math.max(0, Math.min(99, parseInt($('roundsInp').value, 10) || 0));
+    CFG.restSec = Math.max(0, Math.min(99, parseInt($('restInp').value, 10) || 0));
   }
   saveCfg();
   closeDur();
-  paintPresets();
-  tmPaint();
-  toast('专注 ' + fmtMin(focusMs() / 1000) + (CFG.rounds ? ' · ' + CFG.rounds + ' 轮 · 休息 ' + CFG.restSec + ' 分钟' : ' · 单次'));
+  if(!T.run){
+    /* 没在跑：直接把数字换成新时长 */
+    T.total = sec * 1000;
+    T.left = (T.kind === 'down' || T.kind === 'pomo') ? T.total : 0;
+    tmPaint();
+  }else{
+    tmPaint();
+  }
+  if(sec <= 0) toast('时长为 0：点开始就是正计时');
+  else toast('已设 ' + fmtDur(sec) + (T.kind === 'pomo' && CFG.rounds ? ' · ' + CFG.rounds + ' 轮' : ''));
+}
+function fmtDur(sec){
+  sec = Math.round(sec);
+  if(sec < 60) return sec + ' 秒';
+  var h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+  if(h && m) return h + ' 小时 ' + m + ' 分';
+  if(h) return h + ' 小时';
+  return m + ' 分钟';
 }
 
 /* ---------------- 使用记录（本地 + 云端） ----------------
@@ -1946,16 +1958,6 @@ function logPullAll(done){
     .then(function(j){
       var items = (j && j.items) || {};
       Object.keys(items).forEach(function(k){
-        /* v3.11.0：6 个预设也上云（换设备能直接用同一套） */
-        if(k === 'cls_clock_presets'){
-          var vp = items[k];
-          if(vp && Array.isArray(vp.list) && vp.list.length === 6){
-            CFG.presets = vp.list.map(function(x){ return Math.max(0, Math.min(99 * 3600, Number(x) || 0)); });
-            saveCfg();
-            try{ paintPresets(); }catch(e){}
-          }
-          return;
-        }
         if(k.indexOf(LOG_PREFIX) !== 0) return;
         var day = k.slice(LOG_PREFIX.length);
         if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
@@ -2969,59 +2971,25 @@ $('about').onclick = function(e){ if(e.target === this) this.className = ''; };
 $('timerTime').onclick = function(e){
   if(e) e.stopPropagation();
   if(T.run){ setBare(!UI.bare); return; }
+  if(T.kind === 'up'){ toast('正计时不用设时长，直接按开始'); return; }
   openDur('focus');
 };
 $('timerBtn').onclick = function(){ if(T.run || T.paused) tmToggle(); else tmStart(); };
 $('timerReset').onclick = function(){ tmReset(); };
 $('markBtn').onclick = function(){ tmMark(); };
 $('skipBtn').onclick = function(){ tmSkip(); };
+/* 极简态下点屏幕空白处也能把操作区叫回来（iPad 上点数字不一定灵） */
+$('timerView').addEventListener('click', function(e){
+  if(!UI.bare) return;
+  var t = e.target;
+  if(t && t.closest && t.closest('button,input,label')) return;
+  setBare(false);
+});
 
 /* 时长面板 */
 $('dsClose').onclick = closeDur;
 $('dsOk').onclick = saveDur;
-$('durApply').onclick = applyDur;
-$('durInp').onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); applyDur(); } };
 $('durSheet').onclick = function(e){ if(e.target === this) closeDur(); };
-$('dsSave').onclick = function(){
-  var old = $('dsPick');
-  if(old){ old.parentNode.removeChild(old); return; }
-  var box = document.createElement('div');
-  box.id = 'dsPick';
-  box.className = 'ds-quick';
-  box.style.marginTop = '4px';
-  var tip = document.createElement('span');
-  tip.style.cssText = 'font-size:12px;opacity:.6;align-self:center';
-  tip.textContent = '存进第几格？';
-  box.appendChild(tip);
-  for(var i = 0; i < 6; i++){
-    (function(idx){
-      var b = document.createElement('button');
-      b.textContent = (idx + 1) + '·' + fmtMin(presets()[idx]);
-      b.onclick = function(){
-        var sec = wheelSec();
-        if(sec <= 0){ toast('时长为 0，先滚一个出来'); return; }
-        presets()[idx] = sec;
-        saveCfg(); pushPresets(); paintPresets();
-        toast('已存进第 ' + (idx + 1) + ' 格：' + fmtMin(sec));
-        box.parentNode.removeChild(box);
-      };
-      box.appendChild(b);
-    })(i);
-  }
-  $('dsSave').parentNode.parentNode.insertBefore(box, $('dsSave').parentNode);
-};
-function paintQuick(){
-  var row = $('quickRow');
-  if(!row) return;
-  row.innerHTML = '';
-  [5, 10, 15, 25, 30, 45, 60].forEach(function(m){
-    var b = document.createElement('button');
-    b.textContent = m + ' 分';
-    b.onclick = function(){ wheelSet(m * 60); };
-    row.appendChild(b);
-  });
-}
-/* v3.10.0：设置区（提示音 / 自定义名称 / 自习科目） */
 function paintSnd(){
   var row = $('sndRow');
   if(!row) return;
@@ -3097,6 +3065,7 @@ function bindSettings(){
 }
 
 /* 翻页的秒：开 / 关 */
+/* 翻页的秒：开 / 关 */
 function applyFlipSec(){
   var on = CFG.flipSec !== false;
   $('flipView').className = 'view' + (CFG.mode === 'flip' ? ' on' : '') + (on ? '' : ' nosec');
@@ -3163,21 +3132,21 @@ applyH12();
 /* 支持 ./clock.html?m=pomo 直接进某个模式（首页「番茄时钟」卡片就指到这里） */
 function modeFromUrl(){
   var m = (location.search.match(/[?&]m=([a-z]+)/) || [])[1];
-  /* v3.11.0：老的 ?m=stop / ?m=pomo 链接（首页卡片、收藏夹）继续能用 */
-  if(m === 'pomo' || m === 'stop') m = 'timer';
+  /* 老链接继续能用：?m=stop → 正计时，?m=pomo → 番茄钟，一律进「计时」 */
+  if(m === 'stop'){ CFG.tk = 'up'; return 'timer'; }
+  if(m === 'pomo'){ CFG.tk = 'pomo'; return 'timer'; }
   return (m && MODE_NAME[m]) ? m : '';
 }
 applyMode(modeFromUrl() || CFG.mode || 'clock');
 applyFlipSec();
-if(CFG.mode === 'timer') tmReset();
+if(CFG.mode === 'timer'){ T.kind = CFG.tk || 'up'; tmReset(); }
 bindSettings();
 sumBind();
 paintSnd();
 paintNoise();
 fillCol('wH', 99); fillCol('wM', 59); fillCol('wS', 59);
-paintQuick();
-paintPresets();
 paintAlerts();
+paintTmOpts();
 logEnsure();
 logPomo(pomoDoneToday());   /* 把今天的番茄数补进记录，后台能直接看到 */
 applyName();

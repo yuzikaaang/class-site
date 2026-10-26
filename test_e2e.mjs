@@ -12238,9 +12238,10 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
   const dataSrc = readApi('data.js');
   const adminApi = readApi('admin.js');
 
-  t('★v3.11.0 clock.html 三种模式（数字 / 翻页 / 计时）',
-    /data-m="clock"/.test(clk) && /data-m="flip"/.test(clk) && /data-m="timer"/.test(clk)
-    && !/data-m="pomo"/.test(clk) && !/data-m="stop"/.test(clk));
+  t('★v3.12.0 clock.html 顶层两个模式（时钟 / 计时）+ 两排子标签',
+    /data-m="clock"/.test(clk) && /data-m="timer"/.test(clk)
+    && !/data-m="pomo"/.test(clk) && !/data-m="stop"/.test(clk)
+    && /SUB_TABS/.test(clk) && /正计时/.test(clk) && /番茄钟/.test(clk));
 
   /* 翻页动画 */
   t('★v3.9.25 翻页是两片接力（A 翻下去 + B 翻上来）',

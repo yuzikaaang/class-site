@@ -17,6 +17,25 @@ const page = await ctx.newPage();
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
 
+const goTop = (pg, m) => pg.evaluate((mm) => {
+  document.getElementById('modeBtn').click();
+  const b = document.querySelector('#modeMenu [data-m="' + mm + '"]');
+  if (b) b.click();
+  document.getElementById('modeMenu').className = '';
+}, m);
+const goSub = (pg, k) => pg.evaluate((kk) => {
+  let b = document.querySelector('#subTabs button[data-k="' + kk + '"]');
+  if (!b) {
+    document.getElementById('modeBtn').click();
+    const want = (kk === 'up' || kk === 'down' || kk === 'pomo') ? 'timer' : 'clock';
+    const tb = document.querySelector('#modeMenu [data-m="' + want + '"]');
+    if (tb) tb.click();
+    document.getElementById('modeMenu').className = '';
+    b = document.querySelector('#subTabs button[data-k="' + kk + '"]');
+  }
+  if (b) b.click();
+}, k);
+
 /* 云端交互全部拦下来，只看它发了什么 */
 const puts = [];
 await page.route('**/api/data**', async (route) => {
@@ -33,7 +52,7 @@ await page.route('**/api/data**', async (route) => {
 
 await page.goto(BASE + '/clock.html', { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(4000);
-await page.evaluate(() => { document.querySelector('[data-m="flip"]').click(); });
+await goSub(page, 'flip');
 await page.waitForTimeout(4200);
 
 /* 1. 本地记账 */
@@ -67,8 +86,11 @@ t('未登录时说明只在本机', /未登录/.test(panel.foot), panel.foot);
 /* 3. 自习按「专注 / 休息」两段记 */
 await page.evaluate(() => document.getElementById('logClose').click());
 /* v3.11.0：自习并进「计时」了 —— 设 2 轮，跳过专注直接进休息，两段都能落盘 */
+await goTop(page, 'timer');
+await page.waitForTimeout(200);
+await goSub(page, 'pomo');
+await page.waitForTimeout(200);
 await page.evaluate(() => {
-  document.querySelector('[data-m="timer"]').click();
   document.getElementById('timerTime').click();
   document.getElementById('roundsInp').value = '2';
   document.getElementById('restInp').value = '1';
@@ -80,7 +102,7 @@ await page.waitForTimeout(4500);
 await page.evaluate(() => document.getElementById('skipBtn').click());   /* 进休息 */
 await page.waitForTimeout(4200);
 /* 休息那段还在计时，切个模式让它落盘（不切的话只有结束才写） */
-await page.evaluate(() => { document.querySelector('[data-m="clock"]').click(); });
+await goSub(page, 'clock');
 await page.waitForTimeout(400);
 
 const segs = await page.evaluate(() => {
@@ -103,10 +125,10 @@ await page.evaluate(() => document.getElementById('logClose').click());
 await page.evaluate(() => {
   localStorage.setItem('cls_auth', JSON.stringify({ token: 'tok_test', user: { id: 4, username: 'aibot' } }));
 });
-await page.evaluate(() => { document.querySelector('[data-m="clock"]').click(); });
+await goSub(page, 'clock');
 await page.waitForTimeout(1200);
 /* 用计时模块造一段（跑够 3 秒再切走）—— 段落结束才会触发上传 */
-await page.evaluate(() => { document.querySelector('[data-m="timer"]').click(); });
+await goTop(page, 'timer');
 await page.waitForTimeout(200);
 /* 先停掉上一段遗留的计时再重新开，保证这一段是全新的、跑够 3 秒 */
 await page.evaluate(() => {
@@ -114,7 +136,7 @@ await page.evaluate(() => {
   document.getElementById('timerBtn').click();
 });
 await page.waitForTimeout(4500);
-await page.evaluate(() => { document.querySelector('[data-m="clock"]').click(); });
+await goSub(page, 'clock');
 await page.waitForTimeout(5000);   /* 先拉一次对账 + 2.5 秒推送防抖，留够时间 */
 t('登录后把当天记录 PUT 到 /api/data', puts.length > 0, 'put 次数 ' + puts.length);
 const putBody = puts[puts.length - 1] || {};

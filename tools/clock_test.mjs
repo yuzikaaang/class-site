@@ -19,6 +19,27 @@ page.on('pageerror', (e) => errs.push(e.message));
 await page.goto(BASE + '/clock.html', { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(900);
 
+/* v3.12.0：模式改成两级 —— 先切「时钟/计时」，再切上面的子标签 */
+const goTop = (pg, m) => pg.evaluate((mm) => {
+  document.getElementById('modeBtn').click();
+  const b = document.querySelector('#modeMenu [data-m="' + mm + '"]');
+  if (b) b.click();
+  document.getElementById('modeMenu').className = '';
+}, m);
+const goSub = (pg, k) => pg.evaluate((kk) => {
+  let b = document.querySelector('#subTabs button[data-k="' + kk + '"]');
+  if (!b) {
+    /* 顶层模式不对就先切过去 */
+    document.getElementById('modeBtn').click();
+    const want = (kk === 'up' || kk === 'down' || kk === 'pomo') ? 'timer' : 'clock';
+    const tb = document.querySelector('#modeMenu [data-m="' + want + '"]');
+    if (tb) tb.click();
+    document.getElementById('modeMenu').className = '';
+    b = document.querySelector('#subTabs button[data-k="' + kk + '"]');
+  }
+  if (b) b.click();
+}, k);
+
 const V = (sel) => page.evaluate((s) => {
   const el = document.querySelector(s);
   return el ? el.textContent.trim() : null;
@@ -26,10 +47,14 @@ const V = (sel) => page.evaluate((s) => {
 
 /* 1. v3.11.0：倒计时 / 自习 / 正计时合并，只留三种模式 */
 const modes = await page.evaluate(() => [...document.querySelectorAll('#modeMenu button')].map((b) => b.textContent.trim()));
-t('三种模式齐全（数字 / 翻页 / 计时）', ['数字', '翻页', '计时'].every((m) => modes.includes(m)) && modes.length === 3, JSON.stringify(modes));
+t('顶层两个模式：时钟 / 计时', modes.length === 2 && modes.includes('时钟') && modes.includes('计时'), JSON.stringify(modes));
+await goTop(page, 'clock');
+await page.waitForTimeout(300);
+const clockTabs = await page.evaluate(() => [...document.querySelectorAll('#subTabs button')].map((b) => b.textContent));
+t('时钟页上面是「数字 / 翻页」', clockTabs.length === 2 && clockTabs[0] === '数字' && clockTabs[1] === '翻页', JSON.stringify(clockTabs));
 
 /* 2. 数字时钟：时间格式 + 日期 + 农历 */
-await page.evaluate(() => document.querySelector('[data-m="clock"]').click());
+await goSub(page, 'clock');
 await page.waitForTimeout(1100);
 const big = await V('#bigTime');
 const sub = await V('#bigSub');
@@ -43,7 +68,7 @@ const lunar = await page.evaluate(() => {
 t('农历也显示出来了', /月/.test(lunar), sub + ' | ' + lunar);
 
 /* 3. 翻页时钟：三张卡片 + 数字 */
-await page.evaluate(() => document.querySelector('[data-m="flip"]').click());
+await goSub(page, 'flip');
 await page.waitForTimeout(1200);
 const flip = await page.evaluate(() => ({
   cards: document.querySelectorAll('#flipView .flip').length,
@@ -77,18 +102,22 @@ await page.evaluate(() => document.getElementById('timerReset').click());
 await page.waitForTimeout(200);
 t('正计时可以重置', (await V('#timerTime')).indexOf('00:00') === 0, await V('#timerTime'));
 
-/* 5. 倒计时：面板里输入 2s → 开始 → 归零 */
-await page.evaluate(() => document.querySelector('[data-m="timer"]').click());
-await page.waitForTimeout(300);
+/* 5. 倒计时：轮盘设 2 秒 → 开始 → 归零 */
+await goTop(page, 'timer');
+await goSub(page, 'down');
+await page.waitForTimeout(400);
 await page.evaluate(() => document.getElementById('timerTime').click());
 await page.waitForTimeout(250);
 const sheet0 = await page.evaluate(() => document.getElementById('durSheet').className);
 t('点大数字能打开时长面板', sheet0.indexOf('show') >= 0, sheet0);
 await page.evaluate(() => {
-  document.getElementById('durInp').value = '2s';
-  document.getElementById('durApply').click();
-  document.getElementById('dsOk').click();
+  /* 轮盘：秒列滚到 2 */
+  const s2 = document.getElementById('wS');
+  s2.scrollTop = 2 * 44;
+  s2.dispatchEvent(new Event('scroll'));
 });
+await page.waitForTimeout(300);
+await page.evaluate(() => document.getElementById('dsOk').click());
 await page.waitForTimeout(300);
 t('面板里输入 2s 后显示 00:02', (await V('#timerTime')) === '00:02', await V('#timerTime'));
 await page.evaluate(() => document.getElementById('timerBtn').click());
@@ -99,7 +128,7 @@ const end = await V('#timerTime');
 const endBtn = await V('#timerBtn');
 t('倒计时在走', mid === '00:01' || mid === '00:02', mid);
 /* 跑完之后回到设定时长、按钮变回「开始」—— 想再来一次直接按就行 */
-t('倒计时跑完停下并回到设定时长', end === '00:02' && /开始/.test(endBtn || ''), end + ' / ' + endBtn);
+t('倒计时跑完停在 00:00，按钮回到「开始」', end === '00:00' && /开始/.test(endBtn || ''), end + ' / ' + endBtn);
 
 /* 6. 字体 / 背景 / 12-24 小时 */
 await page.evaluate(() => document.getElementById('fontBtn').click());
@@ -135,7 +164,7 @@ t('「更多」里写明仿照的网站', /仿照/.test(about) && /yingming006\.
 await page.evaluate(() => document.getElementById('aboutClose').click());
 
 /* 9b. v3.9.23：字号四档、翻页不溢出、计时器默认只看数字 */
-await page.evaluate(() => { document.querySelector('[data-m="clock"]').click(); });
+await goSub(page, 'clock');
 await page.waitForTimeout(400);
 const sz0 = await page.evaluate(() => ({ cls: document.body.className, fs: getComputedStyle(document.getElementById('bigTime')).fontSize }));
 await page.evaluate(() => document.getElementById('sizeBtn').click());
@@ -143,7 +172,7 @@ await page.waitForTimeout(300);
 const sz1 = await page.evaluate(() => ({ cls: document.body.className, fs: getComputedStyle(document.getElementById('bigTime')).fontSize }));
 t('字号可以切档', /sz-\d/.test(sz1.cls) && sz1.fs !== sz0.fs, JSON.stringify([sz0, sz1]));
 
-await page.evaluate(() => { document.querySelector('[data-m="flip"]').click(); });
+await goSub(page, 'flip');
 await page.waitForTimeout(600);
 const fp = await page.evaluate(() => {
   const f = document.querySelector('.flip');
@@ -152,7 +181,7 @@ const fp = await page.evaluate(() => {
 });
 t('翻页数字不超出卡片', fp.tw <= fp.w + 1, JSON.stringify(fp));
 
-await page.evaluate(() => { document.querySelector('[data-m="timer"]').click(); });
+await goTop(page, 'timer');
 await page.waitForTimeout(400);
 const ts0 = await page.evaluate(() => document.getElementById('durSheet').className);
 t('时长面板默认收起', ts0.indexOf('show') < 0, ts0);
@@ -166,7 +195,7 @@ await page.waitForTimeout(200);
 /* ---- v3.9.24：翻页可关秒 + 自习（番茄钟） ---- */
 
 /* 9c. 翻页的秒开关 */
-await page.evaluate(() => { document.querySelector('[data-m="flip"]').click(); });
+await goSub(page, 'flip');
 await page.waitForTimeout(500);
 const sec0 = await page.evaluate(() => ({
   btn: document.getElementById('secBtn').textContent,
@@ -187,11 +216,11 @@ const sec1 = await page.evaluate(() => ({
 t('关掉秒后只剩「时 : 分」两张卡', sec1.cards === 2 && sec1.only === 1 && /秒 · 隐藏/.test(sec1.btn), JSON.stringify(sec1));
 t('关掉秒后卡片会放大', sec1.w > sec0.w, sec0.w + ' → ' + sec1.w);
 t('切到别的模式时「秒」按钮收起', await page.evaluate(() => {
-  document.querySelector('[data-m="clock"]').click();
+  document.querySelector('#subTabs button[data-k="clock"]').click();
   return getComputedStyle(document.getElementById('secBtn')).display === 'none';
 }));
 t('切回翻页仍保持「不要秒」', await page.evaluate(() => {
-  document.querySelector('[data-m="flip"]').click();
+  document.querySelector('#subTabs button[data-k="flip"]').click();
   return document.getElementById('flipView').className.indexOf('nosec') >= 0;
 }));
 
@@ -199,23 +228,44 @@ t('切回翻页仍保持「不要秒」', await page.evaluate(() => {
 /* 先把上一段改过的时长还原，免得测到的是 2 秒 */
 await page.evaluate(() => {
   const c = JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}');
-  c.mode = 'timer'; c.focusSec = 1500; c.rounds = 0; c.restSec = 5;
+  c.mode = 'timer'; c.focusSec = 1500; c.rounds = 1; c.restSec = 5;
+  c.tk = 'up'; c.downSec = 0; c.bareRun = 0;
   localStorage.setItem('cls_clock_cfg', JSON.stringify(c));
 });
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(900);
-await page.evaluate(() => { document.querySelector('[data-m="timer"]').click(); });
+await goTop(page, 'timer');
 await page.waitForTimeout(400);
 const pm0 = await page.evaluate(() => ({
-  head: document.getElementById('tmRound').textContent,
-  phase: document.getElementById('tmPhase').textContent,
+  tabs: [...document.querySelectorAll('#subTabs button')].map((b) => b.textContent),
   time: document.getElementById('timerTime').textContent,
   btn: document.getElementById('timerBtn').textContent,
-  chips: document.querySelectorAll('.preset-chip').length,
+  mark: getComputedStyle(document.getElementById('markBtn')).display,
 }));
-t('计时默认单次 25:00，头顶写轮次', /单次 25:00/.test(pm0.head) && pm0.time === '25:00', JSON.stringify(pm0));
+t('计时页上面是「正计时 / 倒计时 / 番茄钟」', pm0.tabs.join('/') === '正计时/倒计时/番茄钟', JSON.stringify(pm0.tabs));
+t('刚进来是正计时 00:00', pm0.time.indexOf('00:00') === 0, pm0.time);
+t('正计时才有「记一笔」', pm0.mark !== 'none', pm0.mark);
 t('还没开始时按钮是「开始」', /开始/.test(pm0.btn), pm0.btn);
-t('有 6 个预设格', pm0.chips === 6, 'chips=' + pm0.chips);
+
+await goSub(page, 'down');
+await page.waitForTimeout(300);
+const pDown = await page.evaluate(() => ({
+  time: document.getElementById('timerTime').textContent,
+  mark: getComputedStyle(document.getElementById('markBtn')).display,
+  skip: getComputedStyle(document.getElementById('skipBtn')).display,
+}));
+t('倒计时刚进来也是 00:00', pDown.time === '00:00', pDown.time);
+t('倒计时没有「记一笔」，也没有「跳过」', pDown.mark === 'none' && pDown.skip === 'none', JSON.stringify(pDown));
+
+await goSub(page, 'pomo');
+await page.waitForTimeout(300);
+const pPomo = await page.evaluate(() => ({
+  time: document.getElementById('timerTime').textContent,
+  head: document.getElementById('tmRound').textContent,
+  skip: getComputedStyle(document.getElementById('skipBtn')).display,
+  mark: getComputedStyle(document.getElementById('markBtn')).display,
+}));
+t('番茄钟默认 25:00，有「跳过」没「记一笔」', pPomo.time === '25:00' && pPomo.skip !== 'none' && pPomo.mark === 'none', JSON.stringify(pPomo));
 
 /* 9d-2. 老网址参数继续能用（?m=pomo 以前是首页「番茄时钟」卡片的地址） */
 {
@@ -236,7 +286,7 @@ t('有 6 个预设格', pm0.chips === 6, 'chips=' + pm0.chips);
   const ctxK = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const pK = await ctxK.newPage();
   await pK.addInitScript(() => {
-    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', focusSec: 120, restSec: 1, rounds: 2 }));
+    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', tk: 'pomo', focusSec: 120, restSec: 1, rounds: 2 }));
   });
   await pK.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
   await pK.waitForTimeout(700);
@@ -266,7 +316,7 @@ t('有 6 个预设格', pm0.chips === 6, 'chips=' + pm0.chips);
   const errs2 = [];
   p2.on('pageerror', (e) => errs2.push(e.message));
   await p2.addInitScript(() => {
-    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', focusSec: 60, restSec: 1, rounds: 2, sound: 'blue' }));
+    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', tk: 'pomo', focusSec: 60, restSec: 1, rounds: 2, sound: 'blue' }));
   });
   await p2.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
   await p2.waitForTimeout(800);
@@ -304,47 +354,65 @@ t('有 6 个预设格', pm0.chips === 6, 'chips=' + pm0.chips);
   await ctx2.close();
 }
 
-/* 9e-2. v3.11.1：计时跑起来后只留数字，点一下数字才出现操作区 */
+/* 9e-2. v3.12.0：默认不收起；站主在设置里打开「开始计时后收起界面」才收起 */
 {
   const ctxB = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const pB = await ctxB.newPage();
   const errsB = [];
   pB.on('pageerror', (e) => errsB.push(e.message));
   await pB.addInitScript(() => {
-    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', focusSec: 600, rounds: 0, restSec: 5 }));
+    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', tk: 'up', bareRun: 0 }));
   });
   await pB.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
   await pB.waitForTimeout(800);
-  const idle = await pB.evaluate(() => ({
-    bare: document.body.className.indexOf('bare') >= 0,
-    acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
-  }));
-  t('还没开始时操作区是展开的', idle.bare === false && idle.acts === 'flex', JSON.stringify(idle));
+
+  const cfg0 = await pB.evaluate(() => JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}').bareRun);
+  t('默认不收起界面（bareRun = 0）', cfg0 === 0, String(cfg0));
 
   await pB.evaluate(() => document.getElementById('timerBtn').click());
   await pB.waitForTimeout(500);
-  const running = await pB.evaluate(() => {
+  const run0 = await pB.evaluate(() => ({
+    bare: document.body.className.indexOf('bare') >= 0,
+    acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
+  }));
+  t('默认开始后按钮还在', !run0.bare && run0.acts === 'flex', JSON.stringify(run0));
+
+  /* 在「更多」里把开关打开 */
+  await pB.evaluate(() => document.getElementById('timerReset').click());
+  await pB.evaluate(() => document.getElementById('aboutBtn').click());
+  await pB.waitForTimeout(200);
+  await pB.evaluate(() => document.querySelector('#tmOpts .sw').click());
+  await pB.waitForTimeout(150);
+  const on = await pB.evaluate(() => ({
+    cfg: JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}').bareRun,
+    txt: document.querySelector('#tmOpts .sw').textContent,
+    cls: document.querySelector('#tmOpts .sw').className,
+  }));
+  t('开关点一下变「开」并存进配置', on.cfg === 1 && on.txt === '开' && on.cls.indexOf('on') >= 0, JSON.stringify(on));
+  await pB.evaluate(() => document.getElementById('aboutClose').click());
+
+  await pB.evaluate(() => document.getElementById('timerBtn').click());
+  await pB.waitForTimeout(500);
+  const run1 = await pB.evaluate(() => {
     const r = document.getElementById('timerTime').getBoundingClientRect();
     return {
       bare: document.body.className.indexOf('bare') >= 0,
       acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
       head: getComputedStyle(document.getElementById('tmHead')).display,
-      preset: getComputedStyle(document.getElementById('presetRow')).display,
       subj: getComputedStyle(document.getElementById('subjRow')).display,
       centerGap: Math.round(Math.abs((r.top + r.height / 2) - window.innerHeight / 2)),
     };
   });
-  t('跑起来后按钮 / 预设 / 科目全部隐藏', running.bare && running.acts === 'none' && running.preset === 'none' && running.subj === 'none', JSON.stringify(running));
-  t('跑起来后连轮次条也隐藏', running.head === 'none', running.head);
-  t('跑起来后数字在屏幕正中（±30px）', running.centerGap <= 30, 'gap=' + running.centerGap);
+  t('打开开关后：跑起来只剩数字', run1.bare && run1.acts === 'none' && run1.subj === 'none', JSON.stringify(run1));
+  t('跑起来后数字在屏幕正中（±30px）', run1.centerGap <= 30, 'gap=' + run1.centerGap);
 
   await pB.evaluate(() => document.getElementById('timerTime').click());
   await pB.waitForTimeout(400);
-  const open = await pB.evaluate(() => ({
+  const open1 = await pB.evaluate(() => ({
     bare: document.body.className.indexOf('bare') >= 0,
     acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
   }));
-  t('点一下数字把操作区唤出来', !open.bare && open.acts === 'flex', JSON.stringify(open));
+  t('点一下数字把操作区唤出来', !open1.bare && open1.acts === 'flex', JSON.stringify(open1));
   await pB.evaluate(() => document.getElementById('timerTime').click());
   await pB.waitForTimeout(300);
   t('再点一下又收起', await pB.evaluate(() => document.body.className.indexOf('bare') >= 0));
@@ -400,14 +468,17 @@ t('有 6 个预设格', pm0.chips === 6, 'chips=' + pm0.chips);
   await p3.waitForTimeout(150);
   await p3.evaluate(() => document.getElementById('aboutClose').click());
 
-  await p3.evaluate(() => { document.querySelector('[data-m="timer"]').click(); });
-  await p3.waitForTimeout(200);
+  await goTop(p3, 'timer');
+  await goSub(p3, 'down');
+  await p3.waitForTimeout(250);
   await p3.evaluate(() => {
     document.getElementById('timerTime').click();
-    document.getElementById('durInp').value = '1s';
-    document.getElementById('durApply').click();
-    document.getElementById('dsOk').click();
+    const s1 = document.getElementById('wS');
+    s1.scrollTop = 1 * 44;
+    s1.dispatchEvent(new Event('scroll'));
   });
+  await p3.waitForTimeout(300);
+  await p3.evaluate(() => document.getElementById('dsOk').click());
   await p3.waitForTimeout(150);
   await p3.evaluate(() => document.getElementById('timerBtn').click());
   await p3.waitForTimeout(1700);
@@ -422,13 +493,7 @@ t('有 6 个预设格', pm0.chips === 6, 'chips=' + pm0.chips);
   await p3.waitForTimeout(100);
   t('点击可提前关闭全屏提醒', await p3.evaluate(() => document.getElementById('fullAlert').className.indexOf('on') < 0));
 
-  await p3.evaluate(() => {
-    document.getElementById('timerTime').click();
-    document.getElementById('durInp').value = '1s';
-    document.getElementById('durApply').click();
-    document.getElementById('dsOk').click();
-    document.getElementById('timerBtn').click();
-  });
+  await p3.evaluate(() => document.getElementById('timerBtn').click());
   await p3.waitForTimeout(1700);
   const onBefore = await p3.evaluate(() => document.getElementById('fullAlert').className.indexOf('on') >= 0);
   await p3.waitForTimeout(3200);
@@ -445,7 +510,7 @@ t('有 6 个预设格', pm0.chips === 6, 'chips=' + pm0.chips);
   const p4 = await ctx4.newPage();
   await p4.clock.install({ time: new Date('2026-10-25T15:00:00') });
   await p4.addInitScript(() => {
-    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', focusSec: 60, restSec: 1, rounds: 3 }));
+    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', tk: 'pomo', focusSec: 60, restSec: 1, rounds: 3 }));
   });
   await p4.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
   await p4.clock.runFor(400);
