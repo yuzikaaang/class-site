@@ -110,12 +110,7 @@ await page.evaluate(() => document.getElementById('timerTime').click());
 await page.waitForTimeout(250);
 const sheet0 = await page.evaluate(() => document.getElementById('durSheet').className);
 t('点大数字能打开时长面板', sheet0.indexOf('show') >= 0, sheet0);
-await page.evaluate(() => {
-  /* 轮盘：秒列滚到 2 */
-  const s2 = document.getElementById('wS');
-  s2.scrollTop = 2 * 44;
-  s2.dispatchEvent(new Event('scroll'));
-});
+await page.evaluate(() => { window.__clk.wheel('wS', 2); });
 await page.waitForTimeout(300);
 await page.evaluate(() => document.getElementById('dsOk').click());
 await page.waitForTimeout(300);
@@ -381,12 +376,12 @@ t('番茄钟默认 25:00，有「跳过」没「记一笔」', pPomo.time === '2
   await pB.evaluate(() => document.getElementById('timerReset').click());
   await pB.evaluate(() => document.getElementById('aboutBtn').click());
   await pB.waitForTimeout(200);
-  await pB.evaluate(() => document.querySelector('#tmOpts .sw').click());
+  await pB.evaluate(() => document.querySelector('#tmOpts .seg button[data-v="1"]').click());
   await pB.waitForTimeout(150);
   const on = await pB.evaluate(() => ({
     cfg: JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}').bareRun,
-    txt: document.querySelector('#tmOpts .sw').textContent,
-    cls: document.querySelector('#tmOpts .sw').className,
+    txt: document.querySelector('#tmOpts .seg button.on').textContent,
+    cls: document.querySelector('#tmOpts .seg button.on').className,
   }));
   t('开关点一下变「开」并存进配置', on.cfg === 1 && on.txt === '开' && on.cls.indexOf('on') >= 0, JSON.stringify(on));
   await pB.evaluate(() => document.getElementById('aboutClose').click());
@@ -422,6 +417,46 @@ t('番茄钟默认 25:00，有「跳过」没「记一笔」', pPomo.time === '2
   t('暂停时自动展开操作区', await pB.evaluate(() => document.body.className.indexOf('bare') < 0));
   t('极简模式无 JS 报错', errsB.length === 0, errsB.join(' | '));
   await ctxB.close();
+}
+
+/* 9e-4. v3.12.1：轮盘用自己实现的拖动（不依赖系统滚动），拖两格就是 2 */
+{
+  const ctxW = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pW = await ctxW.newPage();
+  const errsW = [];
+  pW.on('pageerror', (e) => errsW.push(e.message));
+  await pW.addInitScript(() => {
+    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', tk: 'down', downSec: 0 }));
+  });
+  await pW.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
+  await pW.waitForTimeout(900);
+  await pW.evaluate(() => document.getElementById('timerTime').click());
+  await pW.waitForTimeout(300);
+
+  const box = await pW.evaluate(() => {
+    const r = document.getElementById('wM').getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  });
+  /* 往上拖 88px = 2 格 */
+  await pW.mouse.move(box.x, box.y);
+  await pW.mouse.down();
+  await pW.mouse.move(box.x, box.y - 40, { steps: 4 });
+  await pW.mouse.move(box.x, box.y - 88, { steps: 4 });
+  await pW.mouse.up();
+  await pW.waitForTimeout(400);
+
+  const drag = await pW.evaluate(() => {
+    const w = document.querySelector('#wM .w-item.on');
+    return { on: w ? w.textContent : '', transform: document.querySelector('#wM .w-list').style.transform };
+  });
+  t('拖动轮盘能滚动（拖两格到 02）', drag.on === '02', JSON.stringify(drag));
+
+  await pW.evaluate(() => document.getElementById('dsOk').click());
+  await pW.waitForTimeout(300);
+  const val = await pW.evaluate(() => JSON.parse(localStorage.getItem('cls_clock_cfg')).downSec);
+  t('拖出来的 2 分钟存进了配置', val === 120, String(val));
+  t('轮盘无 JS 报错', errsW.length === 0, errsW.join(' | '));
+  await ctxW.close();
 }
 
 /* 9e-3. v3.11.1：响铃遍数可配（默认 2，等放完再放下一遍） */
@@ -473,9 +508,7 @@ t('番茄钟默认 25:00，有「跳过」没「记一笔」', pPomo.time === '2
   await p3.waitForTimeout(250);
   await p3.evaluate(() => {
     document.getElementById('timerTime').click();
-    const s1 = document.getElementById('wS');
-    s1.scrollTop = 1 * 44;
-    s1.dispatchEvent(new Event('scroll'));
+    window.__clk.wheel('wS', 1);
   });
   await p3.waitForTimeout(300);
   await p3.evaluate(() => document.getElementById('dsOk').click());

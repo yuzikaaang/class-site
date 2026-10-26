@@ -632,8 +632,9 @@ body.bg-dark .ds-box,body.bg-black .ds-box,body.bg-navy .ds-box{background:#1d1d
 body.bg-dark .ds-head button,body.bg-black .ds-head button,body.bg-navy .ds-head button{background:rgba(255,255,255,.1)}
 
 .wheel{position:relative;display:flex;align-items:center;justify-content:center;gap:4px;height:180px;margin:4px 0 2px}
-.w-col{width:86px;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
-  scrollbar-width:none;padding:68px 0;touch-action:pan-y}
+.w-col{position:relative;width:86px;height:100%;overflow:hidden;touch-action:none;
+  user-select:none;-webkit-user-select:none}
+.w-list{padding:68px 0;will-change:transform}
 .w-col::-webkit-scrollbar{display:none}
 .w-item{height:44px;line-height:44px;text-align:center;
   font-size:24px;font-weight:500;font-variant-numeric:tabular-nums;opacity:.3;
@@ -676,11 +677,14 @@ body.bare #timerView .actions{display:none}
 body.bare #timerTime{cursor:pointer}
 
 /* 提醒设置行 */
-.al-row{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px}
-.al-row .sw{width:46px;height:26px;border-radius:999px;background:rgba(0,0,0,.12);color:rgba(0,0,0,.5);
-  border:none;font:inherit;font-size:12px;font-weight:700;letter-spacing:.02em;flex:0 0 auto;cursor:pointer;
-  transition:background .18s,color .18s}
-.al-row .sw.on{background:#3c9f6a;color:#fff}
+.al-row{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px;text-align:left}
+.al-row .seg{display:inline-flex;flex:0 0 auto;border-radius:10px;overflow:hidden;
+  border:1px solid rgba(0,0,0,.14);background:rgba(0,0,0,.04)}
+.al-row .seg button{width:38px;height:28px;padding:0;border:none;background:transparent;color:inherit;
+  font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;opacity:.45;transition:background .15s,color .15s}
+.al-row .seg button.on{opacity:1;color:#fff}
+.al-row .seg button.on.y{background:#3c9f6a}
+.al-row .seg button.on.n{background:#98a0a6}
 .al-row .num{width:34px;height:28px;border-radius:9px;border:1px solid rgba(0,0,0,.12);
   background:rgba(0,0,0,.04);color:inherit;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
   flex:0 0 auto}
@@ -693,7 +697,10 @@ body.bare #timerTime{cursor:pointer}
 body.bg-dark .al-row .snd,body.bg-black .al-row .snd,body.bg-navy .al-row .snd{
   border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.08)}
 .al-row .snd.on{background:#e08a4c;border-color:#e08a4c;color:#fff}
-body.bg-dark .al-row .sw,body.bg-black .al-row .sw,body.bg-navy .al-row .sw{background:rgba(255,255,255,.14);color:rgba(255,255,255,.7)}
+body.bg-dark .al-row .seg,body.bg-black .al-row .seg,body.bg-navy .al-row .seg{
+  border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.06)}
+body.bg-dark .al-row .seg button.on.n,body.bg-black .al-row .seg button.on.n,body.bg-navy .al-row .seg button.on.n{
+  background:#6b7378}
 body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-row .tx input{
   border-color:rgba(255,255,255,.18)}
 </style>
@@ -949,8 +956,8 @@ try{
     /* 老版本只有一个时长，现在拆成「倒计时」和「番茄专注」两份，都继承它 */
     var sec = (Number(old.th) || 0) * 3600 + (Number(old.tm) || 0) * 60 + (Number(old.ts) || 0);
     if(old.pf && (!sec || sec === 300)) sec = Number(old.pf) * 60;
-    CFG.focusSec = sec || 1500;
-    CFG.downSec = sec || 0;
+    if(old.focusSec === undefined) CFG.focusSec = sec || 1500;
+    if(old.downSec === undefined) CFG.downSec = sec || 0;
   }
   if(old.downSec === undefined && old.focusSec !== undefined) CFG.downSec = Number(old.focusSec) || 0;
   if(old.tk === undefined) CFG.tk = 'up';
@@ -1467,7 +1474,16 @@ window.__clk = {
   state: function(){
     return { kind:T.kind, run:T.run, up:T.up, phase:T.phase, round:T.round, left:Math.round(tmLeftMs()), marks:T.marks.length, bare:UI.bare };
   },
-  finish: function(){ if(T.run && !T.up) T.end = nowMs() - 1; }
+  finish: function(){ if(T.run && !T.up) T.end = nowMs() - 1; },
+  wheel: function(id, v){
+    var w = WHEELS[id];
+    if(!w) return;
+    DS.fresh = false;
+    w.idx = Math.max(0, Math.min(w.n, v | 0));
+    w.list.style.transition = 'none';
+    w.list.style.transform = 'translateY(' + (-w.idx * W_ITEM_H) + 'px)';
+    paintWheel();
+  }
 };
 
 /* ---------------- 提醒（v3.11.0） ----------------
@@ -1509,20 +1525,35 @@ function tmCheckAlerts(leftMs){
   }
 }
 var SND_LABEL = { off:'关闭', ding:'叮咚', chime:'清脆', bell:'铃声', wood:'木鱼', tick:'嘀嗒', blue:'蓝牙' };
+/* v3.12.1：开关做成「开 | 关」两个小按钮，选中的那块上色 —— 一眼能看出状态 */
+function segSwitch(on, cb){
+  var wrap = document.createElement('span');
+  wrap.className = 'seg';
+  [['开', true], ['关', false]].forEach(function(p){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = p[0];
+    b.setAttribute('data-v', p[1] ? '1' : '0');
+    b.className = (!!on === p[1]) ? ('on ' + (p[1] ? 'y' : 'n')) : '';
+    b.onclick = function(e){ if(e) e.stopPropagation(); cb(p[1]); };
+    wrap.appendChild(b);
+  });
+  return wrap;
+}
 function paintTmOpts(){
   var box = $('tmOpts');
   if(!box) return;
   box.innerHTML = '';
   var row = document.createElement('div');
   row.className = 'al-row';
-  var sw = document.createElement('button');
-  sw.className = 'sw' + (CFG.bareRun === 1 ? ' on' : '');
-  sw.textContent = CFG.bareRun === 1 ? '开' : '关';
-  sw.onclick = function(){ CFG.bareRun = (CFG.bareRun === 1) ? 0 : 1; saveCfg(); paintTmOpts(); };
+  row.appendChild(segSwitch(CFG.bareRun === 1, function(){
+    CFG.bareRun = (CFG.bareRun === 1) ? 0 : 1;
+    saveCfg(); paintTmOpts();
+  }));
   var tx = document.createElement('div');
   tx.className = 'tx';
   tx.textContent = '开始计时后收起界面（只留数字）';
-  row.appendChild(sw); row.appendChild(tx);
+  row.appendChild(tx);
   box.appendChild(row);
 }
 function paintAlerts(){
@@ -1551,17 +1582,18 @@ function paintAlerts(){
   A.forEach(function(a, i){
     var row = document.createElement('div');
     row.className = 'al-row';
-    var sw = document.createElement('button');
-    sw.className = 'sw' + (a.on ? ' on' : '');
-    sw.textContent = a.on ? '开' : '关';
-    sw.onclick = function(){ a.on = !a.on; saveCfg(); paintAlerts(); if(a.on) beep(a.snd); };
+    var sw = segSwitch(a.on, function(v){
+      a.on = v;
+      saveCfg(); paintAlerts();
+      if(a.on) beep(a.snd);
+    });
 
     var tx = document.createElement('div');
     tx.className = 'tx';
     if(a.at === 'end') tx.textContent = '专注结束';
     else if(a.at === 'restEnd') tx.textContent = '休息结束';
     else{
-      tx.innerHTML = '结束前 <input type="number" min="1" max="60" value="' + (a.min || 5) + '"> 分钟';
+      tx.innerHTML = '提前 <input type="number" min="1" max="60" value="' + (a.min || 5) + '"> 分';
       var inp = tx.getElementsByTagName('input')[0];
       inp.onchange = function(){
         a.min = Math.max(1, Math.min(60, parseInt(inp.value, 10) || 5));
@@ -1610,64 +1642,90 @@ function nextSnd(a, btn){
 /* ---------------- 时长设置（只有一个轮盘） ----------------
    v3.12.0：站主「快捷和手动输入都不要了，太丑，只会留下轮盘；iPad 上滑不动要修」。
    滚动吸附改成「滚完停一下再对齐」——iOS 的 scroll-snap 套在这个面板里会卡住。 */
-var DS = { open:false, target:'focus', h:0, m:0, s:0 };
+var DS = { open:false, target:'focus', h:0, m:0, s:0, fresh:false };
 var W_ITEM_H = 44;
+/* v3.12.1：轮盘改成自己处理拖动（pointer events），不再依赖 iOS 的原生滚动 ——
+   站主「iPad 在这个地方滑不动」，原生 overflow 滚动套在弹层里确实会失效。 */
+var WHEELS = {};
 function fillCol(id, n){
-  var box = $(id);
-  if(!box) return;
+  var col = $(id);
+  if(!col) return;
   var html = '';
   for(var i = 0; i <= n; i++) html += '<div class="w-item" data-v="' + i + '">' + two(i) + '</div>';
-  box.innerHTML = html;
-  var raf = 0, snap = null;
-  box.addEventListener('scroll', function(){
+  col.innerHTML = '<div class="w-list">' + html + '</div>';
+  var list = col.firstChild;
+  var w = { col: col, list: list, idx: 0, n: n, drag: false, sy: 0, si: 0, moved: 0 };
+  WHEELS[id] = w;
+
+  function apply(y, anim){
+    list.style.transition = anim ? 'transform .22s cubic-bezier(.2,.8,.3,1)' : 'none';
+    list.style.transform = 'translateY(' + y + 'px)';
+  }
+  function setIdx(i, anim){
+    w.idx = Math.max(0, Math.min(n, i));
+    apply(-w.idx * W_ITEM_H, anim);
+    paintWheel();
+  }
+  function endDrag(){
+    if(!w.drag) return;
+    w.drag = false;
+    var dy = (w.lastY || w.sy) - w.sy;
+    setIdx(Math.round((w.si * W_ITEM_H - dy) / W_ITEM_H), true);
+  }
+  col.addEventListener('pointerdown', function(e){
+    w.drag = true; w.moved = 0; w.sy = e.clientY; w.lastY = e.clientY; w.si = w.idx;
     DS.fresh = false;
-    if(raf) return;
-    raf = requestAnimationFrame ? requestAnimationFrame(function(){ raf = 0; wheelPaint(); }) : setTimeout(function(){ raf = 0; wheelPaint(); }, 60);
-    /* 手指停下 160ms 再吸附到最近的一格 */
-    if(snap) clearTimeout(snap);
-    snap = setTimeout(function(){
-      var v = wheelIdx(box);
-      var want = v * W_ITEM_H;
-      if(Math.abs(box.scrollTop - want) > 1){
-        if(box.scrollTo) box.scrollTo({ top: want, behavior: 'smooth' }); else box.scrollTop = want;
-      }
-      wheelPaint();
-    }, 160);
-  }, { passive:true });
-  box.addEventListener('click', function(e){
+    try{ col.setPointerCapture(e.pointerId); }catch(err){}
+    apply(-w.idx * W_ITEM_H, false);
+  });
+  col.addEventListener('pointermove', function(e){
+    if(!w.drag) return;
+    var dy = e.clientY - w.sy;
+    w.lastY = e.clientY;
+    w.moved = Math.max(w.moved, Math.abs(dy));
+    var y = -w.si * W_ITEM_H + dy;
+    var lo = -(n) * W_ITEM_H, hi = 0;
+    y = Math.max(lo, Math.min(hi, y));
+    apply(y, false);
+  });
+  col.addEventListener('pointerup', function(e){ w.lastY = e.clientY; endDrag(); });
+  col.addEventListener('pointercancel', endDrag);
+  col.addEventListener('pointerleave', function(){ if(w.drag) endDrag(); });
+  col.addEventListener('click', function(e){
+    if(w.moved > 6) return;          /* 刚拖过就别当点击 */
     var it = e.target && e.target.closest ? e.target.closest('.w-item') : null;
     if(!it) return;
-    var v = Number(it.getAttribute('data-v')) || 0;
-    if(box.scrollTo) box.scrollTo({ top: v * W_ITEM_H, behavior: 'smooth' });
-    else box.scrollTop = v * W_ITEM_H;
+    setIdx(Number(it.getAttribute('data-v')) || 0, true);
   });
+  apply(0, false);
 }
-function wheelIdx(box){
-  if(!box) return 0;
-  var n = Math.round((box.scrollTop || 0) / W_ITEM_H);
-  var max = box.children.length - 1;
-  return Math.max(0, Math.min(max, n));
+function wheelIdx(id){
+  var w = WHEELS[id];
+  return w ? w.idx : 0;
 }
-function wheelPaint(){
-  var h = wheelIdx($('wH')), m = wheelIdx($('wM')), s = wheelIdx($('wS'));
-  DS.h = h; DS.m = m; DS.s = s;
-  [[$('wH'), h], [$('wM'), m], [$('wS'), s]].forEach(function(pair){
-    var box = pair[0], cur = pair[1];
-    if(!box) return;
-    var items = box.children;
+function paintWheel(){
+  [['wH', 'h'], ['wM', 'm'], ['wS', 's']].forEach(function(p){
+    var w = WHEELS[p[0]];
+    if(!w) return;
+    var items = w.list.children;
     for(var i = 0; i < items.length; i++){
-      items[i].className = 'w-item' + (i === cur ? ' on' : '');
+      items[i].className = 'w-item' + (i === w.idx ? ' on' : '');
     }
+    DS[p[1]] = w.idx;
   });
 }
 function wheelSet(totalSec){
-  if(!$('wH')) return;
+  if(!WHEELS.wH) return;
   totalSec = Math.max(0, Math.min(99 * 3600 + 59 * 60 + 59, Math.round(totalSec)));
   var h = Math.floor(totalSec / 3600), m = Math.floor(totalSec / 60) % 60, s = totalSec % 60;
-  $('wH').scrollTop = h * W_ITEM_H;
-  $('wM').scrollTop = m * W_ITEM_H;
-  $('wS').scrollTop = s * W_ITEM_H;
-  wheelPaint();
+  [['wH', h], ['wM', m], ['wS', s]].forEach(function(p){
+    var w = WHEELS[p[0]];
+    if(!w) return;
+    w.idx = p[1];
+    w.list.style.transition = 'none';
+    w.list.style.transform = 'translateY(' + (-w.idx * W_ITEM_H) + 'px)';
+  });
+  paintWheel();
 }
 function wheelSec(){ return (DS.h * 3600 + DS.m * 60 + DS.s); }
 function openDur(target){
