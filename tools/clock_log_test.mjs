@@ -241,6 +241,45 @@ t('全程无 JS 报错', errs.length === 0, errs.slice(0, 3).join(' | '));
   await ctxY.close();
 }
 
+/* 6-3. v3.13.0：每段记录带上「哪台设备」，抽屉里能看出在哪儿用的 */
+{
+  const ctxD = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pD = await ctxD.newPage();
+  const errsD = [];
+  pD.on('pageerror', (e) => errsD.push(e.message));
+  await pD.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
+  await pD.waitForTimeout(900);
+
+  const dev = await pD.evaluate(() => document.body && (window.__clk.dev ? window.__clk.dev() : null));
+  t('页面能识别出设备名', !!dev && dev.length >= 2, String(dev));
+
+  /* 记一段，看段落里有没有 dv */
+  await pD.evaluate(() => { document.getElementById('doingInp').value = '数学'; });
+  await pD.evaluate(() => document.getElementById('timerBtn').click());
+  await pD.waitForTimeout(4200);
+  await pD.evaluate(() => { document.getElementById('modeBtn').click(); document.querySelector('#modeMenu [data-m="clock"]').click(); });
+  await pD.waitForTimeout(600);
+  const segDev = await pD.evaluate(() => {
+    const k = Object.keys(localStorage).find((x) => x.indexOf('cls_clock_log_') === 0);
+    const v = k ? JSON.parse(localStorage.getItem(k)) : null;
+    const last = v && v.segs[v.segs.length - 1];
+    return last ? { dv: last.dv, n: last.n } : null;
+  });
+  t('记下的那一段带上了设备名', !!(segDev && segDev.dv === dev), JSON.stringify(segDev));
+
+  /* 抽屉里：行上有设备徽标，汇总里有「设备：」那一行 */
+  await pD.evaluate(() => document.getElementById('logBtn').click());
+  await pD.waitForTimeout(600);
+  const view = await pD.evaluate(() => ({
+    chips: [...document.querySelectorAll('#logList .lg-dev')].map((x) => x.textContent),
+    sum: document.getElementById('logSum').textContent.replace(/\s+/g, ' ').trim(),
+  }));
+  t('记录列表每条都标了设备', view.chips.length > 0 && view.chips[0] === dev, JSON.stringify(view.chips));
+  t('汇总里有「设备：…」这一行', /设备：/.test(view.sum) && view.sum.indexOf(dev) >= 0, view.sum.slice(-60));
+  t('设备标记无 JS 报错', errsD.length === 0, errsD.join(' | '));
+  await ctxD.close();
+}
+
 /* ================= v3.10.4 云同步重做 =================
    站主反馈：手机上记的，iPad 上什么都没有（新设备本地空 → 第一次推把云端冲掉了） */
 const pad = (n) => String(n).padStart(2, '0');

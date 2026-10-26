@@ -12238,6 +12238,11 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
   const dataSrc = readApi('data.js');
   const adminApi = readApi('admin.js');
 
+  t('★v3.13.0 屏幕底部热区 + 每段记录带设备名',
+    /id="barHot"/.test(clk) && /var DEVICE = /.test(clk) && /dv: DEVICE/.test(clk)
+    && /barHot'\).className = 'on'/.test(clk));
+  t('★v3.13.0 开始计时默认只留数字（bareRun 默认 1）',
+    /bareRun:1/.test(clk) && /cfgV:2/.test(clk));
   t('★v3.12.0 clock.html 顶层两个模式（时钟 / 计时）+ 两排子标签',
     /data-m="clock"/.test(clk) && /data-m="timer"/.test(clk)
     && !/data-m="pomo"/.test(clk) && !/data-m="stop"/.test(clk)

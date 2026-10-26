@@ -349,74 +349,126 @@ t('番茄钟默认 25:00，有「跳过」没「记一笔」', pPomo.time === '2
   await ctx2.close();
 }
 
-/* 9e-2. v3.12.0：默认不收起；站主在设置里打开「开始计时后收起界面」才收起 */
+/* 9e-2. v3.13.0：开始计时就只留数字（默认），点背景唤出操作区；开关能关掉 */
 {
   const ctxB = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const pB = await ctxB.newPage();
   const errsB = [];
   pB.on('pageerror', (e) => errsB.push(e.message));
-  await pB.addInitScript(() => {
-    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', tk: 'up', bareRun: 0 }));
-  });
   await pB.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
   await pB.waitForTimeout(800);
 
-  const cfg0 = await pB.evaluate(() => JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}').bareRun);
-  t('默认不收起界面（bareRun = 0）', cfg0 === 0, String(cfg0));
+  const cfg0 = await pB.evaluate(() => JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}'));
+  t('全新配置默认就是「开始后只留数字」', cfg0.bareRun === 1 && cfg0.cfgV === 2, JSON.stringify({ bareRun: cfg0.bareRun, cfgV: cfg0.cfgV }));
 
-  await pB.evaluate(() => document.getElementById('timerBtn').click());
-  await pB.waitForTimeout(500);
-  const run0 = await pB.evaluate(() => ({
-    bare: document.body.className.indexOf('bare') >= 0,
-    acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
-  }));
-  t('默认开始后按钮还在', !run0.bare && run0.acts === 'flex', JSON.stringify(run0));
+  /* 三种计时都要收：正计时 / 倒计时 / 番茄钟 */
+  const kinds = [['up', null], ['down', 600], ['pomo', null]];
+  for (const [k, downSec] of kinds) {
+    await pB.evaluate((o) => {
+      const c = JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}');
+      c.mode = 'timer'; c.tk = o.k; c.bareRun = 1; c.cfgV = 2;
+      if (o.ds !== null) c.downSec = o.ds;
+      localStorage.setItem('cls_clock_cfg', JSON.stringify(c));
+    }, { k, ds: downSec });
+    await pB.reload({ waitUntil: 'domcontentloaded' });
+    await pB.waitForTimeout(700);
+    await pB.evaluate(() => document.getElementById('timerBtn').click());
+    await pB.waitForTimeout(500);
+    const r = await pB.evaluate(() => {
+      const t = document.getElementById('timerTime').getBoundingClientRect();
+      return {
+        bare: document.body.className.indexOf('bare') >= 0,
+        acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
+        subj: getComputedStyle(document.getElementById('subjRow')).display,
+        tabs: getComputedStyle(document.getElementById('subTabs')).display,
+        back: getComputedStyle(document.getElementById('back')).display,
+        rec: getComputedStyle(document.getElementById('logBtn')).display,
+        gap: Math.round(Math.abs((t.top + t.height / 2) - window.innerHeight / 2)),
+      };
+    });
+    const label = { up: '正计时', down: '倒计时', pomo: '番茄钟' }[k];
+    t(label + '跑起来只剩数字（按钮 / 科目也隐藏）', r.bare && r.acts === 'none' && r.subj === 'none' && r.tabs === 'none', JSON.stringify(r));
+    t(label + '跑起来数字仍在屏幕正中（±30px）', r.gap <= 30, 'gap=' + r.gap);
+    t(label + '跑起来「返回」「记录」还在', r.back !== 'none' && r.rec !== 'none', JSON.stringify({ back: r.back, rec: r.rec }));
+  }
 
-  /* 在「更多」里把开关打开 */
+  /* 点背景把操作区唤出来 */
   await pB.evaluate(() => document.getElementById('timerReset').click());
-  await pB.evaluate(() => document.getElementById('aboutBtn').click());
-  await pB.waitForTimeout(200);
-  await pB.evaluate(() => document.querySelector('#tmOpts .seg button[data-v="1"]').click());
-  await pB.waitForTimeout(150);
-  const on = await pB.evaluate(() => ({
-    cfg: JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}').bareRun,
-    txt: document.querySelector('#tmOpts .seg button.on').textContent,
-    cls: document.querySelector('#tmOpts .seg button.on').className,
-  }));
-  t('开关点一下变「开」并存进配置', on.cfg === 1 && on.txt === '开' && on.cls.indexOf('on') >= 0, JSON.stringify(on));
-  await pB.evaluate(() => document.getElementById('aboutClose').click());
-
   await pB.evaluate(() => document.getElementById('timerBtn').click());
   await pB.waitForTimeout(500);
-  const run1 = await pB.evaluate(() => {
-    const r = document.getElementById('timerTime').getBoundingClientRect();
-    return {
-      bare: document.body.className.indexOf('bare') >= 0,
-      acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
-      head: getComputedStyle(document.getElementById('tmHead')).display,
-      subj: getComputedStyle(document.getElementById('subjRow')).display,
-      centerGap: Math.round(Math.abs((r.top + r.height / 2) - window.innerHeight / 2)),
-    };
-  });
-  t('打开开关后：跑起来只剩数字', run1.bare && run1.acts === 'none' && run1.subj === 'none', JSON.stringify(run1));
-  t('跑起来后数字在屏幕正中（±30px）', run1.centerGap <= 30, 'gap=' + run1.centerGap);
-
-  await pB.evaluate(() => document.getElementById('timerTime').click());
-  await pB.waitForTimeout(400);
+  await pB.mouse.click(60, 430);
+  await pB.waitForTimeout(350);
   const open1 = await pB.evaluate(() => ({
     bare: document.body.className.indexOf('bare') >= 0,
     acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
   }));
-  t('点一下数字把操作区唤出来', !open1.bare && open1.acts === 'flex', JSON.stringify(open1));
-  await pB.evaluate(() => document.getElementById('timerTime').click());
+  t('点背景把操作区唤出来', !open1.bare && open1.acts === 'flex', JSON.stringify(open1));
+
+  /* 点空白处（不落在按钮上）→ 8 秒不动应该自己收回去 */
+  await pB.mouse.click(28, 170);
   await pB.waitForTimeout(300);
-  t('再点一下又收起', await pB.evaluate(() => document.body.className.indexOf('bare') >= 0));
+  t('展开后再点空白处仍然保持展开', await pB.evaluate(() => document.body.className.indexOf('bare') < 0));
+  t('8 秒不动会自动收起', await pB.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 8300));
+    return document.body.className.indexOf('bare') >= 0;
+  }));
 
   await pB.evaluate(() => document.getElementById('timerBtn').click());   /* 暂停 → 展开 */
   await pB.waitForTimeout(400);
   t('暂停时自动展开操作区', await pB.evaluate(() => document.body.className.indexOf('bare') < 0));
+
+  /* 在「更多」里把开关关掉 → 开始后按钮还在 */
+  await pB.evaluate(() => document.getElementById('timerReset').click());
+  await pB.evaluate(() => document.getElementById('aboutBtn').click());
+  await pB.waitForTimeout(200);
+  await pB.evaluate(() => document.querySelector('#tmOpts .seg button[data-v="0"]').click());
+  await pB.waitForTimeout(150);
+  const off = await pB.evaluate(() => ({
+    cfg: JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}').bareRun,
+    txt: document.querySelector('#tmOpts .seg button.on').textContent,
+  }));
+  t('开关能关掉并存进配置', off.cfg === 0 && off.txt === '关', JSON.stringify(off));
+  await pB.evaluate(() => document.getElementById('aboutClose').click());
+  await pB.evaluate(() => document.getElementById('timerBtn').click());
+  await pB.waitForTimeout(500);
+  const run2 = await pB.evaluate(() => ({
+    bare: document.body.className.indexOf('bare') >= 0,
+    acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
+  }));
+  t('关掉之后开始后按钮还留着', !run2.bare && run2.acts === 'flex', JSON.stringify(run2));
   t('极简模式无 JS 报错', errsB.length === 0, errsB.join(' | '));
   await ctxB.close();
+}
+
+/* 9e-3. v3.13.0：点屏幕最底下那条 / 点右下旋钮，都能开收工具栏 */
+{
+  const ctxH = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pH = await ctxH.newPage();
+  const errsH = [];
+  pH.on('pageerror', (e) => errsH.push(e.message));
+  await pH.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
+  await pH.waitForTimeout(7000);          /* 开场那 6 秒的工具栏先让它自己收掉 */
+
+  const hot = await pH.evaluate(() => !!document.getElementById('barHot'));
+  t('屏幕底部有一条热区', hot);
+
+  await pH.mouse.click(195, 820);
+  await pH.waitForTimeout(300);
+  t('点底部就展开工具栏', await pH.evaluate(() => document.getElementById('bar').className === 'show'),
+    await pH.evaluate(() => document.getElementById('bar').className));
+
+  await pH.mouse.click(195, 825);
+  await pH.waitForTimeout(300);
+  t('再点底部收起工具栏', await pH.evaluate(() => document.getElementById('bar').className !== 'show'));
+
+  await pH.evaluate(() => document.getElementById('barBtn').click());
+  await pH.waitForTimeout(300);
+  t('点右下旋钮也能展开', await pH.evaluate(() => document.getElementById('bar').className === 'show'));
+  await pH.evaluate(() => document.getElementById('barBtn').click());
+  await pH.waitForTimeout(300);
+  t('再点旋钮收起', await pH.evaluate(() => document.getElementById('bar').className !== 'show'));
+  t('底部热区无 JS 报错', errsH.length === 0, errsH.join(' | '));
+  await ctxH.close();
 }
 
 /* 9e-4. v3.12.1：轮盘用自己实现的拖动（不依赖系统滚动），拖两格就是 2 */

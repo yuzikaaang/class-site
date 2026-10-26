@@ -294,6 +294,14 @@ body.bg-dark #barBtn,body.bg-black #barBtn,body.bg-navy #barBtn,
 body.bg-green #barBtn,body.bg-gray #barBtn{
   background:rgba(30,30,36,.82);border-color:rgba(255,255,255,.14)}
 
+/* 底部热区（v3.13）：工具栏收起时，屏幕最底下一整条都能点开它。
+   z-index 压在工具栏和旋钮之下，这样栏里的按钮照样点得到 */
+#barHot{
+  position:fixed;left:0;right:0;bottom:0;height:78px;z-index:38;
+  background:transparent;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+
 /* 模式菜单 */
 #modeMenu{
   position:fixed;left:50%;bottom:calc(3vh + 54px);transform:translateX(-50%);
@@ -562,7 +570,12 @@ body.bg-dark .lg-row,body.bg-black .lg-row,body.bg-navy .lg-row,
 body.bg-green .lg-row,body.bg-gray .lg-row{border-bottom-color:rgba(255,255,255,.08)}
 .lg-row:last-child{border-bottom:none}
 .lg-t{font-variant-numeric:tabular-nums;opacity:.66;font-size:12px;flex:0 0 auto}
-.lg-m{flex:1;min-width:0}
+.lg-m{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:3px 6px}
+.lg-n{font-size:12.5px;opacity:.82}
+.lg-dev{font-size:10.5px;line-height:1.6;padding:0 6px;border-radius:5px;
+  background:rgba(0,0,0,.06);opacity:.62;white-space:nowrap}
+body.bg-dark .lg-dev,body.bg-black .lg-dev,body.bg-navy .lg-dev,
+body.bg-green .lg-dev,body.bg-gray .lg-dev{background:rgba(255,255,255,.12)}
 .lg-m .tag{display:inline-block;padding:1px 7px;border-radius:6px;font-size:11px;margin-right:6px;
   background:rgba(0,0,0,.06)}
 body.bg-dark .lg-m .tag,body.bg-black .lg-m .tag,body.bg-navy .lg-m .tag,
@@ -821,6 +834,8 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 
 <!-- 常驻悬浮开关：工具栏收起后也有地方点开（iPad 上点空白处有时不灵，v3.10.3） -->
 <button id="barBtn" title="展开工具栏" aria-label="展开工具栏"><span class="ar">▾</span></button>
+<!-- v3.13：工具栏收起时，屏幕最底下那条也能点开（站主要「直接点底部」） -->
+<div id="barHot" aria-hidden="true"></div>
 
 <div id="modeMenu">
   <button data-m="clock" class="cur">时钟</button>
@@ -935,7 +950,7 @@ var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5
   sound:'blue', names:{}, subj:'', doing:'', toast:'', noise:{},
   /* v3.11.0：计时合并后 —— 专注时长 / 每轮休息 / 循环次数 / 6 个预设 / 提醒列表 */
   focusSec:1500, restSec:5, rounds:1, downSec:0,
-  tk:'up', bareRun:0, alertTimes:2,
+  tk:'up', bareRun:1, alertTimes:2, cfgV:2,
   alerts:[
     { at:'end',     snd:'blue',  on:true  },
     { at:'restEnd', snd:'chime', on:true  },
@@ -961,7 +976,10 @@ try{
   }
   if(old.downSec === undefined && old.focusSec !== undefined) CFG.downSec = Number(old.focusSec) || 0;
   if(old.tk === undefined) CFG.tk = 'up';
-  if(old.bareRun === undefined) CFG.bareRun = 0;
+  /* v3.13：站主明确「开始计时就只留数字」，所以默认改成收起；
+     老配置不管之前存的是什么，升级上来先按新默认走一次（之后在「更多 → 计时」里改） */
+  if((Number(old.cfgV) || 0) < 2){ CFG.bareRun = 1; }
+  CFG.cfgV = 2;
   if(old.restSec === undefined) CFG.restSec = Number(old.pb) || 5;
   if(old.rounds === undefined) CFG.rounds = 1;
   if(old.alertTimes === undefined) CFG.alertTimes = 2;
@@ -1236,6 +1254,7 @@ function tmBtn(txt){
 /* 极简态：跑起来后只留数字（站主可以关掉，见「更多 → 计时时收起界面」） */
 var UI = { bare:false };
 var bareTimer = null;
+var bareJust = 0;      /* 刚被「点背景」展开的时刻，用来避免点数字又立刻收回去 */
 function setBare(on){
   UI.bare = !!on;
   try{ if(document.body.classList) document.body.classList[UI.bare ? 'add' : 'remove']('bare'); }catch(e){}
@@ -1471,6 +1490,7 @@ function paintMarks(){
 /* 给自动化测试的最小探针 */
 window.__clk = {
   log: function(){ return LOG; },
+  dev: function(){ return DEVICE; },
   state: function(){
     return { kind:T.kind, run:T.run, up:T.up, phase:T.phase, round:T.round, left:Math.round(tmLeftMs()), marks:T.marks.length, bare:UI.bare };
   },
@@ -1795,6 +1815,26 @@ function fmtDur(sec){
    localStorage 的 cls_clock_log_<日期>（同一个键同时同步到 /api/data）。
    结构 { v:2, pomo:番茄数, segs:[{m:模式, s:起, e:止, d:秒}] }。 */
 var LOG_PREFIX = 'cls_clock_log_';
+/* v3.13：站主「记录要能看出是哪台设备用的」——
+   把一个好认的设备名随每段记进 seg.dv，换设备也能看出在哪儿记的。
+   只存在本机（cls_clock_dev），不跟着账号走：同一账号在多台设备上各是各的名字。 */
+var DEVICE = (function(){
+  var ua = navigator.userAgent || '';
+  var name = '设备';
+  if(/iPad/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1)) name = 'iPad';
+  else if(/iPhone/.test(ua)) name = 'iPhone';
+  else if(/Android/.test(ua)) name = /Mobile/.test(ua) ? '安卓手机' : '安卓平板';
+  else if(/Windows/.test(ua)) name = 'Windows 电脑';
+  else if(/Macintosh|Mac OS X/.test(ua)) name = '苹果电脑';
+  else if(/Linux/.test(ua)) name = 'Linux 电脑';
+  var br = '';
+  if(/MicroMessenger/i.test(ua)) br = '微信';
+  else if(/EdgA?\//i.test(ua)) br = 'Edge';
+  else if(/Firefox|FxiOS/i.test(ua)) br = 'Firefox';
+  else if(/CriOS|Chrome|Chromium/i.test(ua)) br = 'Chrome';
+  else if(/Safari/.test(ua)) br = 'Safari';
+  return br ? (name + ' · ' + br) : name;
+})();
 var CLK_API = 'https://api.classsite.dpdns.org';
 
 var LOG = {
@@ -1969,7 +2009,7 @@ function logLiveSnap(){
   if(!LOG.cur) return null;
   var d = Math.round((Date.now() - LOG.cur.s) / 1000);
   if(d < 3) return null;
-  var seg = { m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: d };
+  var seg = { m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: d, dv: DEVICE };
   if(LOG.cur.n) seg.n = LOG.cur.n;
   return { day: dkey(LOG.cur.s), seg: seg };
 }
@@ -2075,7 +2115,7 @@ function logStop(){
   if(d < 3) return;                       /* 随手点一下不算 */
   var day = dkey(c.s);                    /* 归到「开始那一刻」所在的日期 */
   var data = (day === LOG.day) ? LOG.data : logLoad(day);
-  var seg = { m: c.m, s: c.s, e: now, d: d };
+  var seg = { m: c.m, s: c.s, e: now, d: d, dv: DEVICE };
   if(c.n) seg.n = c.n;
   data.segs.push(seg);
   if(data.segs.length > 600) data.segs = data.segs.slice(-600);
@@ -2144,7 +2184,7 @@ function logRange(from, to){
     var cd = dkey(LOG.cur.s);
     if(cd >= from && cd <= to){
       var dur = Math.round((Date.now() - LOG.cur.s) / 1000);
-      if(dur >= 3) out.segs.push({ m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: dur, n: LOG.cur.n || '' });
+      if(dur >= 3) out.segs.push({ m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: dur, n: LOG.cur.n || '', dv: DEVICE });
     }
   }
   return out;
@@ -2524,11 +2564,16 @@ function logMerged(day){
   var out = [];
   segs.filter(logSegOk).sort(function(a, b){ return a.s - b.s; }).forEach(function(x){
     var last = out[out.length - 1];
-    if(last && last.m === x.m && x.s - last.e < 120000){
+    /* v3.13：名字不同就是两件事，不能并成一行（顺手把名字和设备带过来） */
+    if(last && last.m === x.m && (last.n || '') === (x.n || '') && x.s - last.e < 120000){
       last.e = x.e;
       last.d = Math.round((last.e - last.s) / 1000);
+      if(!last.dv && x.dv) last.dv = x.dv;
     }else{
-      out.push({ m: x.m, s: x.s, e: x.e, d: x.d });
+      var it = { m: x.m, s: x.s, e: x.e, d: x.d };
+      if(x.n) it.n = x.n;
+      if(x.dv) it.dv = x.dv;
+      out.push(it);
     }
   });
   return { pomo: data.pomo || 0, segs: out };
@@ -2597,6 +2642,15 @@ function logRender(){
       return esc(k) + ' ' + durText(byName[k]);
     }).join(' · ') + '</div>';
   }
+  /* v3.13：这一天在各台设备上各用了多久 */
+  var byDev = {};
+  m.segs.forEach(function(x){ var d = x.dv || '未记录设备'; byDev[d] = (byDev[d] || 0) + x.d; });
+  var devKeys = Object.keys(byDev).sort(function(a, b){ return byDev[b] - byDev[a]; });
+  if(devKeys.length){
+    modes += '<div class="lg-modes lg-devs">设备：' + devKeys.map(function(k){
+      return esc(k) + ' ' + durText(byDev[k]);
+    }).join(' · ') + '</div>';
+  }
   $('logSum').innerHTML = cards + modes;
 
   if(!m.segs.length){
@@ -2607,7 +2661,9 @@ function logRender(){
     var rows = m.segs.slice(-60).reverse().map(function(x){
       var t = x.m === 'pomo:focus' || x.m === 'pomo:rest' || x.m === 'pomo:long' ? segTag(x.m) : '';
       return '<div class="lg-row"><span class="lg-t">' + hm(x.s) + ' – ' + hm(x.e) + '</span>'
-        + '<span class="lg-m"><span class="tag ' + t + '">' + segName(x.m) + '</span></span>'
+        + '<span class="lg-m"><span class="tag ' + t + '">' + segName(x.m) + '</span>'
+        + (x.n ? '<span class="lg-n">' + esc(x.n) + '</span>' : '')
+        + '<span class="lg-dev">' + esc(x.dv || '未记录设备') + '</span></span>'
         + '<span class="lg-d">' + durText(x.d) + '</span></div>';
     }).join('');
     $('logList').innerHTML = rows;
@@ -2833,6 +2889,7 @@ function barBtnSync(){
 }
 function showBar(){
   $('bar').className = 'show';
+  if($('barHot')) $('barHot').className = '';
   if(barTimer) clearTimeout(barTimer);
   barTimer = setTimeout(function(){ hideBar(); }, 6000);
   barBtnSync();
@@ -2841,6 +2898,7 @@ function toggleBar(){ ($('bar').className === 'show') ? hideBar() : showBar(); }
 function hideBar(){
   $('bar').className = '';
   $('modeMenu').className = '';
+  if($('barHot')) $('barHot').className = 'on';
   if(barTimer){ clearTimeout(barTimer); barTimer = null; }
   barBtnSync();
 }
@@ -2848,14 +2906,26 @@ $('barBtn').onclick = function(e){
   if(e && e.stopPropagation) e.stopPropagation();
   toggleBar();
 };
+/* 底部那条热区：点一下就开 / 收工具栏 */
+if($('barHot')){
+  $('barHot').onclick = function(e){
+    if(e && e.stopPropagation) e.stopPropagation();
+    toggleBar();
+  };
+}
 /* 点空白处展开工具栏（点在按钮 / 输入框 / 各面板上不触发） */
 document.addEventListener('click', function(e){
+  /* 极简计时态：点背景只把操作区叫回来，别顺带弹工具栏 */
+  if(UI.bare) return;
   if($('bar').className === 'show') return;
   var t = e.target;
   if(!t || !t.closest) return;
-  if(t.closest('button,input,textarea,select,a,label,#bar,#barBtn,#modeMenu,#about,#fullAlert')) return;
+  /* #barHot 自己有开 / 收逻辑，这里得让开，否则捕获阶段先 showBar、紧接着又被它收回去 */
+  if(t.closest('button,input,textarea,select,a,label,#bar,#barBtn,#barHot,#modeMenu,#about,#fullAlert')) return;
   showBar();
 }, true);
+
+if($('barHot')) $('barHot').className = 'on';
 
 var FONTS = [['auto','自动'],['hei','黑体'],['mono','等宽'],['round','圆体'],['serif','宋体']];
 
@@ -3028,7 +3098,12 @@ $('about').onclick = function(e){ if(e.target === this) this.className = ''; };
 
 $('timerTime').onclick = function(e){
   if(e) e.stopPropagation();
-  if(T.run){ setBare(!UI.bare); return; }
+  if(T.run){
+    /* 极简态由下面那条「点背景展开」统一处理，这里只管在展开态下点数字把它收起来 */
+    if(UI.bare || Date.now() - bareJust < 400) return;
+    setBare(true);
+    return;
+  }
   if(T.kind === 'up'){ toast('正计时不用设时长，直接按开始'); return; }
   openDur('focus');
 };
@@ -3036,13 +3111,15 @@ $('timerBtn').onclick = function(){ if(T.run || T.paused) tmToggle(); else tmSta
 $('timerReset').onclick = function(){ tmReset(); };
 $('markBtn').onclick = function(){ tmMark(); };
 $('skipBtn').onclick = function(){ tmSkip(); };
-/* 极简态下点屏幕空白处也能把操作区叫回来（iPad 上点数字不一定灵） */
-$('timerView').addEventListener('click', function(e){
+/* v3.13：极简态下点背景任意一处都能把操作区叫回来（iPad 上点数字不一定灵） */
+document.addEventListener('click', function(e){
   if(!UI.bare) return;
   var t = e.target;
-  if(t && t.closest && t.closest('button,input,label')) return;
+  if(!t || !t.closest) return;
+  if(t.closest('button,input,textarea,select,a,label,#bar,#barBtn,#barHot,#modeMenu,#about,#durSheet,#logPanel,#fullAlert')) return;
+  bareJust = Date.now();
   setBare(false);
-});
+}, true);
 
 /* 时长面板 */
 $('dsClose').onclick = closeDur;
