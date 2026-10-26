@@ -12238,8 +12238,9 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
   const dataSrc = readApi('data.js');
   const adminApi = readApi('admin.js');
 
-  t('★v3.9.25 clock.html 存在且带五种模式',
-    /data-m="pomo"/.test(clk) && /data-m="flip"/.test(clk) && /data-m="stop"/.test(clk));
+  t('★v3.11.0 clock.html 三种模式（数字 / 翻页 / 计时）',
+    /data-m="clock"/.test(clk) && /data-m="flip"/.test(clk) && /data-m="timer"/.test(clk)
+    && !/data-m="pomo"/.test(clk) && !/data-m="stop"/.test(clk));
 
   /* 翻页动画 */
   t('★v3.9.25 翻页是两片接力（A 翻下去 + B 翻上来）',
@@ -12260,8 +12261,8 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
   t('★v3.9.25 切模式就切一段（logStart / logStop）',
     /function logStart\(mode\)/.test(clk) && /function logStop\(\)/.test(clk)
     && /logStart\(logModeOf\(\)\)/.test(clk));
-  t('★v3.9.25 自习按专注 / 休息分开记', /logPomoPhase/.test(clk)
-    && /'pomo:' \+ PM\.phase/.test(clk));
+  t('★v3.9.25 自习按专注 / 休息分开记（v3.11.0 并进计时后仍按阶段记）',
+    /function logModeOf\(\)\{/.test(clk) && /pomo:rest/.test(clk) && /pomo:focus/.test(clk));
   t('★v3.9.25 抽屉里有自习 / 休息 / 番茄三张卡',
     /自习<\/i>/.test(clk) && /<i>休息<\/i>/.test(clk) && /<i>番茄<\/i>/.test(clk)
     && /lg-card wide/.test(clk));

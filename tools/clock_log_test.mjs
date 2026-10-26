@@ -43,8 +43,8 @@ const local = await page.evaluate(() => {
 });
 t('本地按天存了记录', /^cls_clock_log_\d{4}-\d{2}-\d{2}$/.test(local.key || ''), local.key);
 t('切模式会落一段', !!(local.val && local.val.segs && local.val.segs.length), JSON.stringify(local.val && local.val.segs));
-t('刚打开那段记的是「数字/倒计时」之类', local.val && local.val.segs[0]
-  && ['timer', 'clock', 'flip'].indexOf(local.val.segs[0].m) >= 0, local.val && local.val.segs[0] && local.val.segs[0].m);
+t('刚打开那段记的是「计时/数字/翻页」之类', local.val && local.val.segs[0]
+  && ['pomo:focus', 'timer', 'clock', 'flip'].indexOf(local.val.segs[0].m) >= 0, local.val && local.val.segs[0] && local.val.segs[0].m);
 t('每段带起止和秒数', local.val && local.val.segs.every((x) => x.s > 0 && x.e > x.s && x.d >= 3), JSON.stringify(local.val && local.val.segs));
 
 /* 2. 抽屉 */
@@ -66,15 +66,18 @@ t('未登录时说明只在本机', /未登录/.test(panel.foot), panel.foot);
 
 /* 3. 自习按「专注 / 休息」两段记 */
 await page.evaluate(() => document.getElementById('logClose').click());
+/* v3.11.0：自习并进「计时」了 —— 设 2 轮，跳过专注直接进休息，两段都能落盘 */
 await page.evaluate(() => {
-  document.querySelector('[data-m="pomo"]').click();
-  const pf = document.getElementById('pf');
-  pf.value = 1; pf.dispatchEvent(new Event('change', { bubbles: true }));
+  document.querySelector('[data-m="timer"]').click();
+  document.getElementById('timerTime').click();
+  document.getElementById('roundsInp').value = '2';
+  document.getElementById('restInp').value = '1';
+  document.getElementById('dsOk').click();
 });
 await page.waitForTimeout(300);
-await page.evaluate(() => document.getElementById('pomoBtn').click());
+await page.evaluate(() => document.getElementById('timerBtn').click());
 await page.waitForTimeout(4500);
-await page.evaluate(() => document.getElementById('pomoSkip').click());   /* 进休息 */
+await page.evaluate(() => document.getElementById('skipBtn').click());   /* 进休息 */
 await page.waitForTimeout(4200);
 /* 休息那段还在计时，切个模式让它落盘（不切的话只有结束才写） */
 await page.evaluate(() => { document.querySelector('[data-m="clock"]').click(); });
@@ -102,11 +105,17 @@ await page.evaluate(() => {
 });
 await page.evaluate(() => { document.querySelector('[data-m="clock"]').click(); });
 await page.waitForTimeout(1200);
-/* 用秒表造一段，跑够 3 秒再切走 —— 段落结束才会触发上传 */
-await page.evaluate(() => { document.querySelector('[data-m="stop"]').click(); });
-await page.waitForTimeout(4200);
+/* 用计时模块造一段（跑够 3 秒再切走）—— 段落结束才会触发上传 */
+await page.evaluate(() => { document.querySelector('[data-m="timer"]').click(); });
+await page.waitForTimeout(200);
+/* 先停掉上一段遗留的计时再重新开，保证这一段是全新的、跑够 3 秒 */
+await page.evaluate(() => {
+  document.getElementById('timerReset').click();
+  document.getElementById('timerBtn').click();
+});
+await page.waitForTimeout(4500);
 await page.evaluate(() => { document.querySelector('[data-m="clock"]').click(); });
-await page.waitForTimeout(3500);   /* 等 2.5 秒的推送防抖 */
+await page.waitForTimeout(5000);   /* 先拉一次对账 + 2.5 秒推送防抖，留够时间 */
 t('登录后把当天记录 PUT 到 /api/data', puts.length > 0, 'put 次数 ' + puts.length);
 const putBody = puts[puts.length - 1] || {};
 const putKey = Object.keys(putBody.items || {})[0] || '';
