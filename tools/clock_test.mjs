@@ -304,6 +304,83 @@ t('有 6 个预设格', pm0.chips === 6, 'chips=' + pm0.chips);
   await ctx2.close();
 }
 
+/* 9e-2. v3.11.1：计时跑起来后只留数字，点一下数字才出现操作区 */
+{
+  const ctxB = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pB = await ctxB.newPage();
+  const errsB = [];
+  pB.on('pageerror', (e) => errsB.push(e.message));
+  await pB.addInitScript(() => {
+    localStorage.setItem('cls_clock_cfg', JSON.stringify({ mode: 'timer', focusSec: 600, rounds: 0, restSec: 5 }));
+  });
+  await pB.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
+  await pB.waitForTimeout(800);
+  const idle = await pB.evaluate(() => ({
+    bare: document.body.className.indexOf('bare') >= 0,
+    acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
+  }));
+  t('还没开始时操作区是展开的', idle.bare === false && idle.acts === 'flex', JSON.stringify(idle));
+
+  await pB.evaluate(() => document.getElementById('timerBtn').click());
+  await pB.waitForTimeout(500);
+  const running = await pB.evaluate(() => {
+    const r = document.getElementById('timerTime').getBoundingClientRect();
+    return {
+      bare: document.body.className.indexOf('bare') >= 0,
+      acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
+      head: getComputedStyle(document.getElementById('tmHead')).display,
+      preset: getComputedStyle(document.getElementById('presetRow')).display,
+      subj: getComputedStyle(document.getElementById('subjRow')).display,
+      centerGap: Math.round(Math.abs((r.top + r.height / 2) - window.innerHeight / 2)),
+    };
+  });
+  t('跑起来后按钮 / 预设 / 科目全部隐藏', running.bare && running.acts === 'none' && running.preset === 'none' && running.subj === 'none', JSON.stringify(running));
+  t('跑起来后连轮次条也隐藏', running.head === 'none', running.head);
+  t('跑起来后数字在屏幕正中（±30px）', running.centerGap <= 30, 'gap=' + running.centerGap);
+
+  await pB.evaluate(() => document.getElementById('timerTime').click());
+  await pB.waitForTimeout(400);
+  const open = await pB.evaluate(() => ({
+    bare: document.body.className.indexOf('bare') >= 0,
+    acts: getComputedStyle(document.querySelector('#timerView .actions')).display,
+  }));
+  t('点一下数字把操作区唤出来', !open.bare && open.acts === 'flex', JSON.stringify(open));
+  await pB.evaluate(() => document.getElementById('timerTime').click());
+  await pB.waitForTimeout(300);
+  t('再点一下又收起', await pB.evaluate(() => document.body.className.indexOf('bare') >= 0));
+
+  await pB.evaluate(() => document.getElementById('timerBtn').click());   /* 暂停 → 展开 */
+  await pB.waitForTimeout(400);
+  t('暂停时自动展开操作区', await pB.evaluate(() => document.body.className.indexOf('bare') < 0));
+  t('极简模式无 JS 报错', errsB.length === 0, errsB.join(' | '));
+  await ctxB.close();
+}
+
+/* 9e-3. v3.11.1：响铃遍数可配（默认 2，等放完再放下一遍） */
+{
+  const ctxT = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pT = await ctxT.newPage();
+  await pT.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
+  await pT.waitForTimeout(800);
+  const times0 = await pT.evaluate(() => {
+    const c = JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}');
+    return { cfg: c.alertTimes, btns: [...document.querySelectorAll('#alertList .al-row button')].slice(0, 5).map((b) => b.textContent) };
+  });
+  t('提醒遍数默认 2 遍', times0.cfg === 2 || times0.cfg === undefined, JSON.stringify(times0.cfg));
+  await pT.evaluate(() => {
+    const row = document.querySelector('#alertList .al-row');
+    const btns = [...row.querySelectorAll('button')];
+    btns[3].click();      /* 选 4 遍 */
+  });
+  await pT.waitForTimeout(300);
+  const times1 = await pT.evaluate(() => ({
+    cfg: JSON.parse(localStorage.getItem('cls_clock_cfg') || '{}').alertTimes,
+    on: document.querySelector('#alertList .al-row button.on').textContent,
+  }));
+  t('点一下能改成 4 遍并存进配置', times1.cfg === 4 && times1.on === '4', JSON.stringify(times1));
+  await ctxT.close();
+}
+
 /* 9f. v3.10.0：全屏「时间到」提醒（倒计时 + 自定义文字 + 自动消失 + 点击关闭） */
 {
   const ctx3 = await browser.newContext({ viewport: { width: 1280, height: 820 } });

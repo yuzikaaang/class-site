@@ -174,6 +174,51 @@ t('切到后台会立刻收账', afterHide.n > before, before + ' → ' + afterH
 
 t('全程无 JS 报错', errs.length === 0, errs.slice(0, 3).join(' | '));
 
+/* 6-2. v3.11.1：看昨天的时候，卡片得写「昨日自习」，不能还写「今天」 */
+{
+  const ctxY = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pY = await ctxY.newPage();
+  await pY.addInitScript(() => {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    const p2 = (n) => String(n).padStart(2, '0');
+    const k = 'cls_clock_log_' + d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+    const base = d.getTime() - 3 * 3600e3;
+    localStorage.setItem(k, JSON.stringify({ v: 2, pomo: 2, segs: [
+      { m: 'pomo:focus', s: base, e: base + 1500e3, d: 1500, n: '数学·试卷' },
+      { m: 'pomo:rest', s: base + 1500e3, e: base + 1800e3, d: 300 },
+    ] }));
+  });
+  await pY.goto(BASE + '/clock.html?m=timer', { waitUntil: 'domcontentloaded' });
+  await pY.waitForTimeout(900);
+
+  await pY.evaluate(() => document.getElementById('logBtn').click());
+  await pY.waitForTimeout(400);
+  const today = await pY.evaluate(() => document.getElementById('logSum').textContent);
+  t('看今天时卡片写「今日自习」', /今日自习/.test(today), today.slice(0, 40));
+
+  await pY.evaluate(() => document.getElementById('logPrev').click());
+  await pY.waitForTimeout(600);
+  const yest = await pY.evaluate(() => ({
+    day: document.getElementById('logDay').textContent,
+    sum: document.getElementById('logSum').textContent.replace(/\s+/g, ' ').trim(),
+  }));
+  t('切到昨天，标题变「昨天」', yest.day === '昨天', yest.day);
+  t('昨天的卡片写「昨日自习」而不是「今天自习」', /昨日自习/.test(yest.sum) && !/今天自习|今日自习/.test(yest.sum), yest.sum.slice(0, 60));
+  t('休息 / 番茄也带上「昨日」', /昨日休息/.test(yest.sum) && /昨日番茄/.test(yest.sum), yest.sum.slice(0, 80));
+
+  /* 再往前翻两天 → 写具体日期 */
+  await pY.evaluate(() => document.getElementById('logPrev').click());
+  await pY.waitForTimeout(500);
+  await pY.evaluate(() => document.getElementById('logPrev').click());
+  await pY.waitForTimeout(500);
+  const older = await pY.evaluate(() => ({
+    day: document.getElementById('logDay').textContent,
+    sum: document.getElementById('logSum').textContent.replace(/\s+/g, ' ').trim(),
+  }));
+  t('更早的日期用「10 月 24 日 自习」这种写法', /月\s*\d+\s*日\s*自习/.test(older.sum), older.sum.slice(0, 60));
+  await ctxY.close();
+}
+
 /* ================= v3.10.4 云同步重做 =================
    站主反馈：手机上记的，iPad 上什么都没有（新设备本地空 → 第一次推把云端冲掉了） */
 const pad = (n) => String(n).padStart(2, '0');

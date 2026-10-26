@@ -678,6 +678,18 @@ body.bg-dark .ds-loop input,body.bg-black .ds-loop input,body.bg-navy .ds-loop i
   background:transparent;color:inherit;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
 .ds-actions button.primary{background:#e08a4c;border-color:#e08a4c;color:#fff;flex:0 0 96px}
 
+/* v3.11.1：计时跑起来后只留数字（点一下才出现操作区） */
+body.bare #modeName,
+body.bare #tmHead,
+body.bare #tmBar,
+body.bare #presetRow,
+body.bare #timerHint,
+body.bare #markList,
+body.bare #subjRow,
+body.bare #doingInp,
+body.bare #timerView .actions{display:none}
+body.bare #timerTime{cursor:pointer}
+
 /* 提醒设置行 */
 .al-row{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px}
 .al-row .sw{width:38px;height:22px;border-radius:999px;background:rgba(0,0,0,.15);position:relative;
@@ -693,6 +705,7 @@ body.bg-dark .ds-loop input,body.bg-black .ds-loop input,body.bg-navy .ds-loop i
   background:rgba(0,0,0,.04);color:inherit;font:inherit;font-size:12px;cursor:pointer;flex:0 0 auto}
 body.bg-dark .al-row .snd,body.bg-black .al-row .snd,body.bg-navy .al-row .snd{
   border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.08)}
+.al-row .snd.on{background:#e08a4c;border-color:#e08a4c;color:#fff}
 body.bg-dark .al-row .sw,body.bg-black .al-row .sw,body.bg-navy .al-row .sw{background:rgba(255,255,255,.2)}
 body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-row .tx input{
   border-color:rgba(255,255,255,.18)}
@@ -933,7 +946,7 @@ var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5
   sound:'blue', names:{}, subj:'', doing:'', toast:'', noise:{},
   /* v3.11.0：计时合并后 —— 专注时长 / 每轮休息 / 循环次数 / 6 个预设 / 提醒列表 */
   focusSec:1500, restSec:5, rounds:0,
-  presets:[300, 600, 900, 1500, 2700, 3600],
+  presets:[300, 600, 900, 1500, 2700, 3600], alertTimes:2,
   alerts:[
     { at:'end',     snd:'blue',  on:true  },
     { at:'restEnd', snd:'chime', on:true  },
@@ -958,6 +971,7 @@ try{
   }
   if(old.restSec === undefined) CFG.restSec = Number(old.pb) || 5;
   if(old.rounds === undefined) CFG.rounds = 0;
+  if(old.alertTimes === undefined) CFG.alertTimes = 2;
   if(!Array.isArray(CFG.alerts) || !CFG.alerts.length){
     CFG.alerts = [
       { at:'end', snd:CFG.sound || 'blue', on:true },
@@ -1046,6 +1060,7 @@ function applyMode(m){
   $('modeMenu').className = '';
   if(m === 'clock' || m === 'flip') tickClock();
   if(m === 'timer') tmPaint();
+  if(m !== 'timer') setBare(false);
   applyName();
   logStart(logModeOf());
   /* 「秒 · 显示」只在翻页模式下有意义，别的时候不占工具栏位置 */
@@ -1188,6 +1203,22 @@ function tmLeftMs(){
   if(T.up) return tmElapsed();
   return T.run ? Math.max(0, T.end - nowMs()) : Math.max(0, T.left);
 }
+/* v3.11.1：计时进行中默认只有数字，点数字才把操作区唤出来 */
+var UI = { bare:false };
+var bareTimer = null;
+function setBare(on){
+  UI.bare = !!on;
+  try{
+    if(document.body.classList) document.body.classList[UI.bare ? 'add' : 'remove']('bare');
+  }catch(e){}
+  if(bareTimer){ clearTimeout(bareTimer); bareTimer = null; }
+  /* 展开着又一直不动，8 秒后自己收起来，免得挡着数字 */
+  if(!UI.bare && T.run){
+    bareTimer = setTimeout(function(){
+      if(T.run && !DS.open) setBare(true);
+    }, 8000);
+  }
+}
 function tmBtn(txt){
   var b = $('timerBtn');
   if(b) b.innerHTML = txt + '<span class="kbd">Space</span>';
@@ -1242,6 +1273,7 @@ function tmReset(){
   paintMarks();
   tmPaint();
   logStart(logModeOf());
+  setBare(false);
 }
 function tmStart(){
   T.rounds = tmRounds();
@@ -1263,6 +1295,7 @@ function tmStart(){
   beep(0);
   logStart(logModeOf());
   tmPaint();
+  setBare(true);
 }
 function tmToggle(){
   if(T.run){
@@ -1271,6 +1304,7 @@ function tmToggle(){
     T.run = false; T.paused = true;
     tmBtn('继续');
     logStop();
+    setBare(false);
   }else{
     if(T.up){ T.upStart = nowMs(); }
     else{
@@ -1281,6 +1315,7 @@ function tmToggle(){
     tmBtn('暂停');
     beep(0);
     logStart(logModeOf());
+    setBare(true);
   }
   tmPaint();
 }
@@ -1289,7 +1324,7 @@ function tmDone(){
   var wasRest = (T.phase === 'rest');
   T.run = false;
   var key = alertSnd(wasRest ? 'restEnd' : 'end');
-  if(key) ring(key);
+  if(key) ring(key, CFG.alertTimes);
   if(navigator.vibrate){ try{ navigator.vibrate([280, 140, 280, 140, 280]); }catch(e){} }
   logStop();                       /* 这一阶段收账 */
   fullAlert(wasRest ? '休息结束！' : toastText());
@@ -1313,6 +1348,7 @@ function tmDone(){
     T.left = focusMs(); T.total = focusMs(); T.end = 0;
     tmBtn('开始');
     tmPaint();
+    setBare(false);
   }
 }
 function tmJump(){
@@ -1457,11 +1493,18 @@ function alertSnd(at){
   }
   return '';
 }
-function ring(key){
+/* v3.11.1：站主「等第一遍放完了再放第二遍，中间还能自定义几遍」 */
+function ring(key, times){
   if(!key) return;
-  var n = 0;
-  beep(key);
-  var iv = setInterval(function(){ n++; if(n >= 2){ clearInterval(iv); return; } beep(key); }, 750);
+  var left = Math.max(1, Math.min(9, Number(times) || 1));
+  (function once(){
+    left--;
+    if(left < 0) return;
+    beep(key, function(){
+      if(left <= 0) return;
+      setTimeout(once, 300);      /* 放完停 0.3 秒再下一遍 */
+    });
+  })();
 }
 function tmCheckAlerts(leftMs){
   var A = CFG.alerts || [];
@@ -1483,6 +1526,24 @@ function paintAlerts(){
   if(!box) return;
   var A = CFG.alerts = CFG.alerts || [];
   box.innerHTML = '';
+
+  /* v3.11.1：响几遍（等前一遍放完再放下一遍） */
+  var times = Math.max(1, Math.min(9, Number(CFG.alertTimes) || 1));
+  var trow = document.createElement('div');
+  trow.className = 'al-row';
+  var ttx = document.createElement('div');
+  ttx.className = 'tx';
+  ttx.textContent = '响几遍（放完一遍再放下一遍）';
+  trow.appendChild(ttx);
+  [1, 2, 3, 4, 5].forEach(function(n){
+    var b = document.createElement('button');
+    b.className = 'snd' + (n === times ? ' on' : '');
+    b.style.minWidth = '28px';
+    b.textContent = n;
+    b.onclick = function(){ CFG.alertTimes = n; saveCfg(); paintAlerts(); beep(alertSnd('end') || 'blue'); };
+    trow.appendChild(b);
+  });
+  box.appendChild(trow);
   A.forEach(function(a, i){
     var row = document.createElement('div');
     row.className = 'al-row';
@@ -2425,6 +2486,15 @@ function segTag(m){
   if(m === 'pomo:rest' || m === 'pomo:long') return 'rest';
   return '';
 }
+/* v3.11.1：卡片标题要跟着看的那天走 —— 看昨天就不能再写「今天自习」 */
+function dayWord(day){
+  var today = dkey();
+  if(day === today) return '今日';
+  var y = new Date(); y.setDate(y.getDate() - 1);
+  if(day === dkey(y.getTime())) return '昨日';
+  var p = day.split('-');
+  return Number(p[1]) + ' 月 ' + Number(p[2]) + ' 日';
+}
 function logDayLabel(day){
   var today = dkey();
   if(day === today) return '今天';
@@ -2447,10 +2517,11 @@ function logRender(){
   $('logPrev').disabled = false;
   if($('logPick') && $('logPick').value !== day) $('logPick').value = day;
 
+  var w = dayWord(day);
   var cards = '<div class="lg-cards">'
-    + '<div class="lg-card wide"><i>今天自习</i><b>' + (focus ? durText(focus) : '还没有') + '</b></div>'
-    + '<div class="lg-card"><i>休息</i><b>' + (rest ? durText(rest) : '—') + '</b></div>'
-    + '<div class="lg-card"><i>番茄</i><b>' + m.pomo + '<em>个</em></b></div>'
+    + '<div class="lg-card wide"><i>' + w + '自习</i><b>' + (focus ? durText(focus) : '还没有') + '</b></div>'
+    + '<div class="lg-card"><i>' + w + '休息</i><b>' + (rest ? durText(rest) : '—') + '</b></div>'
+    + '<div class="lg-card"><i>' + w + '番茄</i><b>' + m.pomo + '<em>个</em></b></div>'
     + '</div>';
   /* v3.10.0：按「名称 · 类型」归类 —— 自己起的名字排前面 */
   var byName = {};
@@ -2544,29 +2615,33 @@ var SND_DATA = {
 };
 var SND_BUFS = {};   /* 解码好的 AudioBuffer 缓存，第二次起即时播放 */
 function sndName(){ return CFG.sound || 'off'; }
-function playBuf(buf, vol){
+function playBuf(buf, vol, cb){
   var src = AC.createBufferSource();
   src.buffer = buf;
   var g = AC.createGain();
   g.gain.value = vol;
   src.connect(g); g.connect(AC.destination);
+  /* v3.11.1：播完再回调 —— 连响几遍的时候要等这一遍真正放完 */
+  if(cb){
+    src.onended = function(){ try{ cb(); }catch(e){} };
+  }
   src.start();
 }
-function beep(name){
+function beep(name, cb){
   var key = name || sndName();
-  if(!key || key === 'off' || !SND_DATA[key]) return;
+  if(!key || key === 'off' || !SND_DATA[key]){ if(cb) cb(); return; }
   try{
     var C = window.AudioContext || window.webkitAudioContext;
-    if(!C) return;
+    if(!C){ if(cb) cb(); return; }
     if(!AC) AC = new C();
     if(AC.state === 'suspended' && AC.resume) AC.resume();
     var buf = SND_BUFS[key];
-    if(buf){ playBuf(buf, 0.9); return; }
+    if(buf){ playBuf(buf, 0.9, cb); return; }
     /* 第一次要先解码，解完再播 */
     var bin = atob(SND_DATA[key]), arr = new Uint8Array(bin.length);
     for(var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    AC.decodeAudioData(arr.buffer, function(b){ SND_BUFS[key] = b; playBuf(b, 0.9); }, function(){});
-  }catch(e){}
+    AC.decodeAudioData(arr.buffer, function(b){ SND_BUFS[key] = b; playBuf(b, 0.9, cb); }, function(){ if(cb) cb(); });
+  }catch(e){ if(cb) cb(); }
 }
 /* iOS 的 AudioContext 必须由用户手势激活：第一次触摸 / 点击就准备好，
    免得倒计时到点时声音被系统压掉 */
@@ -2891,7 +2966,11 @@ $('aboutBtn').onclick = function(e){ e.stopPropagation(); $('about').className =
 $('aboutClose').onclick = function(){ $('about').className = ''; };
 $('about').onclick = function(e){ if(e.target === this) this.className = ''; };
 
-$('timerTime').onclick = function(e){ if(e) e.stopPropagation(); openDur('focus'); };
+$('timerTime').onclick = function(e){
+  if(e) e.stopPropagation();
+  if(T.run){ setBare(!UI.bare); return; }
+  openDur('focus');
+};
 $('timerBtn').onclick = function(){ if(T.run || T.paused) tmToggle(); else tmStart(); };
 $('timerReset').onclick = function(){ tmReset(); };
 $('markBtn').onclick = function(){ tmMark(); };
