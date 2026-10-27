@@ -1555,8 +1555,44 @@ function bulkBan(keys){
 /**
  * 合并导出：账号 + 档案一张表（v2.10.0 #172）。
  * 走 members 接口当前筛选（搜索/角色/状态/场景），自定义字段动态追加列。
- * 导的是「管理员视图」：含联系方式原文，文件请妥善保管。
+ * 导的是「管理员视图」：含联系方式原文与身份证号等私密字段，文件请妥善保管。
+ *
+ * 🔴 v3.15.2（站主）：「导出不完整，身份证号没有；以后新增的字段是不是也没有？」
+ *   根因：列是手写的 —— extraColsOf() 把 id_card / youth_league_no 当成「表单里的固定列」
+ *   排除掉，可表头里又没补上这两列，于是这两列永远导不出来；
+ *   以后每加一个字段，都得回来改一次这份名单，迟早再漏。
+ *   现在改成**完全按字段元数据出列**（profile_field_meta，按 sortOrder 排），
+ *   值从固定键或 extra 里取 —— 后台「字段管理」里加了新字段，导出自动多一列。
  */
+function memberExportCols(meta){
+  var skip = ['contact_status', 'reject_reason'];   /* 状态另有中文列，不重复 */
+  var cols = (meta || []).filter(function(f){ return f && f.field && skip.indexOf(f.field) < 0; });
+  /* 兜底：元数据异常时，至少保住姓名与学号两列 */
+  ['name', 'student_id'].forEach(function(k){
+    var has = cols.some(function(f){ return f.field === k; });
+    if(!has) cols.unshift({ field: k, label: k === 'name' ? '姓名' : '学号' });
+  });
+  return cols;
+}
+
+/* 一行的单元格：固定键走顶层字段，其余（含身份证号与以后新增的）走 extra */
+function memberCell(m, f){
+  var k = f.field;
+  if(k === 'name') return memberName(m);
+  if(k === 'student_id') return m.studentId || '';
+  if(k === 'politics') return m.politics || '';
+  if(k === 'exam_no') return m.examNo || '';
+  if(k === 'role') return m.identity || m.role || '';
+  if(k === 'title'){
+    return (m.titles && m.titles.length) ? m.titles.join('、') : (m.title || '');
+  }
+  if(k === 'wechat') return m.wechat || '';
+  if(k === 'qq') return m.qq || '';
+  if(k === 'phone') return m.phone || '';
+  var v = (m.extra || {})[k];
+  return (v == null) ? '' : v;
+}
+
 function memberExport(){
   var S = STATE.members;
   var sceneQ = S.scene === 'pending-review' ? '' : S.scene;
@@ -1570,38 +1606,31 @@ function memberExport(){
     api(qs).then(function(j){
       var list = j.members || [];
       if(!list.length){ toast('当前筛选条件下没有成员可导出', 'err'); return; }
-      var extras = extraColsOf();
-      /* v3.5.22：补「身份」「头衔」两列 —— 档案全字段可导出 */
-      var head = ['姓名', '学号', '身份', '头衔', '用户名', '角色', '状态', '政治面貌', '智学网账号']
-        .concat(extras.map(function(f){ return f.label; }))
-        .concat(['微信', 'QQ', '手机号', '审核状态', '场景', '最后上线']);
+
+      var cols = memberExportCols(j.fieldMeta || S.fieldMeta || []);
+      var head = cols.map(function(f){ return f.label || f.field; })
+        .concat(['用户名', '账号角色', '账号状态', '审核状态', '场景', '最后上线']);
       var data = [head].concat(list.map(function(m){
-        var base = [
-          memberName(m),
-          m.studentId || '',
-          m.identity || m.role || '',
-          (m.titles && m.titles.length) ? m.titles.join('、') : (m.title || ''),
+        var line = cols.map(function(f){ return memberCell(m, f); });
+        return line.concat([
           m.username || '（未开通）',
           m.role === 'admin' ? '管理员' : (m.userId != null ? '普通用户' : ''),
           m.status === 'banned' ? '已禁用' : (m.status === 'pending' ? '待审核' : (m.userId != null ? '正常' : '')),
-          m.politics || '',
-          m.examNo || '',
-        ];
-        var ex = extras.map(function(f){ return (m.extra || {})[f.field] || ''; });
-        var tail = [
-          m.wechat || '', m.qq || '', m.phone || '',
           (CONTACT_LABEL[m.contactStatus] || CONTACT_LABEL.none).text,
           (MEMBER_SCENE[m.scene] || MEMBER_SCENE.both).text,
           m.lastLoginAt ? fmt(m.lastLoginAt) : (m.lastSeenAt ? fmt(m.lastSeenAt) : ''),
-        ];
-        return base.concat(ex).concat(tail);
+        ]);
       }));
+
+      /* 留一份给自动化测试核对「列是否齐全」（也方便现场排查导出了什么） */
+      try{ window.__lastExport = { head: head, rows: data.slice(1), at: Date.now() }; }catch(e){}
+
       var ws = XLSX.utils.aoa_to_sheet(data);
       ws['!cols'] = head.map(function(h){ return { wch: Math.max(10, String(h).length * 2 + 4) }; });
       var wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '成员与档案');
       XLSX.writeFile(wb, '成员与档案_' + fmt(new Date(), 'date').replace(/-/g, '') + '.xlsx');
-      toast('已导出 ' + list.length + ' 条记录', 'ok');
+      toast('已导出 ' + list.length + ' 条记录 · ' + cols.length + ' 个档案字段', 'ok', 3200);
     }).catch(function(e){ toast(e.message || '导出失败', 'err', 4000); });
   });
 }
@@ -14957,6 +14986,14 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.15.2', date: '2026-10-27', type: 'fix', title: '成员资料导出补齐所有字段', items: [
+      '导出时身份证号、发展团员编号曾经导不出来：表头是手写的，这两列被当成「表单固定列」排除掉了',
+      '现在改成按字段元数据出列，导出会包含全部 13 个档案字段；以后新加的字段自动带上（考籍号已验证）',
+      '导出提示改成「N 条记录 · M 个档案字段」，能直接核对列数'
+    ], pub: [
+      { cat: '资料', text: '成员资料导出现在会把身份证号、发展团员编号、考籍号等字段一起导出，以后新增的字段也会自动带上' },
+      { cat: '修复', text: '修正导出表格漏列的问题，导出的列数与档案字段数一致' }
+    ] },
   { version: '3.15.1', date: '2026-10-27', type: 'fix', title: '后台「信息分享」页修好', items: [
       '后台「内容 → 信息分享」点进去会报错打不开，已修复',
       '同学端「查其他成员」的名单改成内部滚动，人多的班级不会拉成一条长墙'
