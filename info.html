@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fffdfb">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>班级信息查询</title>
+<style>
+:root{
+  --bg:#fffdfb; --panel:#fff; --line:#f0e7de; --line2:#e2d5c8;
+  --ink:#292524; --ink2:#57534e; --dim:#a8968a; --brand:#c2410c; --brand2:#b45309;
+  --ok:#0f8a4d; --bad:#c0392b; --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:linear-gradient(180deg,#fff8f2,#fffdfb 320px);
+  color:var(--ink);min-height:100vh;
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:calc(24px + env(safe-area-inset-bottom));
+}
+.wrap{max-width:560px;margin:0 auto;padding:14px 16px 40px}
+
+/* 顶栏 */
+.top{display:flex;align-items:center;gap:10px;margin-bottom:16px;min-height:34px}
+.top a.back{
+  display:inline-flex;align-items:center;gap:4px;text-decoration:none;color:var(--ink2);
+  font-size:.82rem;font-weight:700;background:#fff;border:1px solid var(--line2);
+  border-radius:999px;padding:6px 12px;flex:0 0 auto;
+}
+.top a.back:active{transform:scale(.97)}
+.top .t{flex:1;min-width:0;text-align:right;font-size:.78rem;color:var(--dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 登录卡 */
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:18px 16px}
+.login-h{font-size:1.12rem;font-weight:800;margin:2px 0 4px}
+.login-s{font-size:.8rem;color:var(--dim);margin:0 0 16px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:.76rem;color:var(--ink2);font-weight:700;margin-bottom:5px}
+.field input{
+  width:100%;padding:12px 13px;border:1.5px solid var(--line2);border-radius:11px;
+  background:#fff;color:var(--ink);font:inherit;font-size:.92rem;
+}
+.field input:focus{outline:none;border-color:var(--brand)}
+.btn{
+  width:100%;padding:13px;border:none;border-radius:12px;background:var(--brand);color:#fff;
+  font:inherit;font-size:.95rem;font-weight:800;cursor:pointer;
+}
+.btn:disabled{opacity:.55}
+.btn.ghost{background:#fff;color:var(--ink2);border:1px solid var(--line2)}
+.hint{
+  margin-top:14px;background:#fdf8f3;border:1px solid var(--line);border-radius:11px;
+  padding:11px 13px;font-size:.78rem;color:#6e635a;line-height:1.75;white-space:pre-line;
+}
+.hint b{color:var(--brand2)}
+.err{margin-top:12px;font-size:.82rem;color:var(--bad);font-weight:700;display:none}
+.err.show{display:block}
+.tip{margin-top:10px;font-size:.74rem;color:var(--dim);text-align:center}
+
+/* 分段切换 */
+.tabs{display:flex;gap:6px;padding:4px;border-radius:12px;background:#f6efe8;margin-bottom:14px}
+.tabs button{
+  flex:1;padding:9px 8px;border:none;border-radius:9px;background:transparent;color:#8a7968;
+  font:inherit;font-size:.84rem;font-weight:700;cursor:pointer;
+}
+.tabs button.on{background:#fff;color:var(--brand);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+
+/* 我的信息 */
+.me-h{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
+.me-h b{font-size:1.1rem}
+.me-h span{font-size:.76rem;color:var(--dim)}
+.rows{border-top:1px solid var(--line)}
+.row{display:flex;align-items:flex-start;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);font-size:.88rem}
+.row i{font-style:normal;color:var(--dim);flex:0 0 76px;font-size:.8rem}
+.row b{font-weight:600;color:var(--ink);word-break:break-all;flex:1;min-width:0}
+
+/* 其他成员 */
+.search{margin-bottom:12px}
+.search input{
+  width:100%;padding:11px 13px;border:1.5px solid var(--line2);border-radius:11px;
+  background:#fff;color:var(--ink);font:inherit;font-size:.88rem;
+}
+.names{display:flex;flex-wrap:wrap;gap:8px}
+.name-chip{
+  padding:8px 14px;border-radius:999px;border:1px solid var(--line2);background:#fff;
+  color:var(--ink2);font:inherit;font-size:.86rem;font-weight:600;cursor:pointer;
+}
+.name-chip.me{border-color:#f5c9a8;background:#fff3ea;color:var(--brand)}
+.name-chip:active{transform:scale(.97)}
+.empty{color:var(--dim);font-size:.84rem;padding:14px 2px}
+.loading{color:var(--dim);font-size:.86rem;padding:30px 0;text-align:center}
+.detail-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.detail-head b{font-size:1.02rem}
+.detail-head button{
+  margin-left:auto;padding:6px 12px;border-radius:999px;border:1px solid var(--line2);
+  background:#fff;color:var(--ink2);font:inherit;font-size:.78rem;font-weight:700;cursor:pointer;
+}
+.badge{display:inline-block;font-size:.66rem;font-weight:800;color:#fff;background:var(--brand);border-radius:999px;padding:1px 7px;vertical-align:middle;margin-left:6px}
+.foot{margin-top:18px;font-size:.72rem;color:var(--dim);text-align:center;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a class="back" href="./index.html">← 返回班级站</a>
+    <div class="t" id="topTitle"></div>
+  </div>
+
+  <div id="app"><div class="loading">正在打开…</div></div>
+</div>
+
+<script>
+(function(){
+  var API = 'https://api.classsite.dpdns.org';
+  var TOKEN = (function(){
+    var m = /[?&]t=([^&#]+)/.exec(location.search);
+    return m ? decodeURIComponent(m[1]) : '';
+  })();
+  var SHARE = null;          /* 分享配置（公开部分） */
+  var DATA = null;          /* 登录后拿到的数据 */
+  var SESSION = 'cls_info_tk_' + (TOKEN || 'x').slice(0, 8);
+  var tab = 'self';
+
+  var app = document.getElementById('app');
+  var topTitle = document.getElementById('topTitle');
+
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function q(sel){ return document.querySelector(sel); }
+
+  /* 请求：自动带上登录态 */
+  function api(path, opt){
+    opt = opt || {};
+    var headers = { 'Content-Type': 'application/json' };
+    try{
+      var tk = sessionStorage.getItem(SESSION);
+      if(tk) headers.Authorization = 'Bearer ' + tk;
+    }catch(e){}
+    return fetch(API + path, {
+      method: opt.method || 'GET',
+      headers: headers,
+      body: opt.body ? JSON.stringify(opt.body) : undefined
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){
+        if(!r.ok || (j && j.ok === false)){
+          var msg = (j && (j.message || j.error)) || ('请求失败（' + r.status + '）');
+          var err = new Error(msg);
+          err.status = r.status;
+          throw err;
+        }
+        return j;
+      });
+    });
+  }
+
+  function fatal(msg){
+    app.innerHTML = '<div class="card">'
+      + '<div class="login-h">打不开这个链接</div>'
+      + '<p class="login-s">' + esc(msg || '链接可能已被撤销或过期。') + '</p>'
+      + '<a class="btn ghost" style="display:block;text-align:center;text-decoration:none;line-height:1.4" href="./index.html">回班级站</a>'
+      + '</div>';
+    topTitle.textContent = '';
+  }
+
+  /* ---------------- 登录页 ---------------- */
+  function renderLogin(errMsg){
+    var hintUser = SHARE.hintUser || '用户名：你的姓名（例：张三）';
+    var hintPass = SHARE.hintPass || '密码：班级站登录密码；忘了找管理员重置';
+    app.innerHTML = '<div class="card">'
+      + '<div class="login-h">' + esc(SHARE.title || '班级信息查询') + '</div>'
+      + '<p class="login-s">用班级站账号登录后即可查看' + (SHARE.feats.others ? '本人和同学的信息' : '本人的信息') + '</p>'
+      + '<div class="field"><label>用户名</label><input id="u" autocomplete="username" placeholder="你的姓名"></div>'
+      + '<div class="field"><label>密码</label><input id="p" type="password" autocomplete="current-password" placeholder="班级站密码"></div>'
+      + '<button class="btn" id="go">登录</button>'
+      + '<div class="err" id="err">' + esc(errMsg || '') + '</div>'
+      + '<div class="hint"><b>怎么登录</b>\n' + esc(hintUser) + '\n' + esc(hintPass) + '</div>'
+      + '<div class="tip">登录信息只用于这一次查询，关掉页面就要重新登录</div>'
+      + '</div>';
+
+    var u = q('#u'), p = q('#p'), go = q('#go');
+    if(errMsg) q('#err').className = 'err show';
+    function submit(){
+      var name = String(u.value || '').trim();
+      var pass = String(p.value || '');
+      if(!name || !pass){ showErr('请把用户名和密码都填上'); return; }
+      go.disabled = true; go.textContent = '登录中…';
+      api('/api/auth?action=login', { method: 'POST', body: { username: name, password: pass } })
+        .then(function(j){
+          if(!j || !j.token) throw new Error('登录没有返回凭证，请稍后重试');
+          try{ sessionStorage.setItem(SESSION, j.token); }catch(e){}
+          return loadData();
+        })
+        .catch(function(e){
+          go.disabled = false; go.textContent = '登录';
+          showErr(e.message || '登录失败');
+        });
+    }
+    go.onclick = submit;
+    p.onkeydown = function(e){ if(e.key === 'Enter') submit(); };
+    u.onkeydown = function(e){ if(e.key === 'Enter') p.focus(); };
+  }
+  function showErr(msg){
+    var el = q('#err');
+    if(!el) return;
+    el.textContent = msg;
+    el.className = 'err show';
+  }
+
+  /* ---------------- 登录后 ---------------- */
+  function loadData(){
+    app.innerHTML = '<div class="loading">正在读取…</div>';
+    return api('/api/profile?action=ishare-data&t=' + encodeURIComponent(TOKEN))
+      .then(function(j){
+        DATA = j;
+        SHARE = j.share || SHARE;
+        tab = SHARE.feats.self ? 'self' : 'others';
+        renderApp();
+      })
+      .catch(function(e){
+        if(e.status === 401){
+          try{ sessionStorage.removeItem(SESSION); }catch(err){}
+          renderLogin('登录已失效，请重新登录');
+          return;
+        }
+        fatal(e.message);
+      });
+  }
+
+  function fieldLabel(key){
+    var fs = (SHARE && SHARE.fields) || [];
+    for(var i = 0; i < fs.length; i++) if(fs[i].key === key) return fs[i].label;
+    var map = { student_id:'学号', politics:'政治面貌', exam_no:'智学网账号', school:'学校',
+      class_name:'班级', ethnicity:'民族', birth_date:'出生日期', home_address:'家庭住址',
+      league_date:'入团时间', wechat:'微信', qq:'QQ', phone:'手机号' };
+    return map[key] || key;
+  }
+
+  function rowsHtml(obj, skipName){
+    var html = '<div class="rows">';
+    var any = false;
+    Object.keys(obj).forEach(function(k){
+      if(k === 'name') return;
+      if(obj[k] == null || obj[k] === '') return;
+      any = true;
+      html += '<div class="row"><i>' + esc(fieldLabel(k)) + '</i><b>' + esc(obj[k]) + '</b></div>';
+    });
+    html += '</div>';
+    if(!any) html = '<div class="empty">这个链接没有开放任何可展示的字段。</div>';
+    return html;
+  }
+
+  function renderApp(){
+    var head = '<div class="tabs">'
+      + (SHARE.feats.self ? '<button data-tab="self" class="' + (tab === 'self' ? 'on' : '') + '">我的信息</button>' : '')
+      + (SHARE.feats.others ? '<button data-tab="others" class="' + (tab === 'others' ? 'on' : '') + '">查其他成员</button>' : '')
+      + '</div>';
+
+    var body = '';
+    if(tab === 'self'){
+      var me = DATA.me;
+      if(!me){
+        body = '<div class="card"><div class="empty">'
+          + (DATA.claimed === false
+              ? '这个账号还没有认领班级档案。请先回班级站完成认领，再来这里查看。'
+              : '没有读到你的资料，请联系管理员。')
+          + '</div></div>';
+      }else{
+        body = '<div class="card">'
+          + '<div class="me-h"><b>' + esc(me.name || '我') + '</b><span>本人</span></div>'
+          + rowsHtml(me)
+          + '</div>';
+      }
+    }else{
+      var list = DATA.members || [];
+      body = '<div class="card">'
+        + '<div class="search"><input id="kw" placeholder="搜姓名（' + list.length + ' 位同学）"></div>'
+        + '<div class="names" id="names">' + list.map(function(m){
+            return '<button class="name-chip" data-name="' + esc(m.name) + '">' + esc(m.name) + '</button>';
+          }).join('') + '</div>'
+        + '<div id="detail"></div>'
+        + '</div>';
+    }
+
+    app.innerHTML = head + body;
+
+    Array.prototype.forEach.call(app.querySelectorAll('.tabs button'), function(b){
+      b.onclick = function(){ tab = b.getAttribute('data-tab'); renderApp(); };
+    });
+
+    if(tab === 'others'){
+      var kw = q('#kw');
+      if(kw){
+        kw.oninput = function(){
+          var v = String(kw.value || '').trim();
+          Array.prototype.forEach.call(app.querySelectorAll('.name-chip'), function(b){
+            var hit = !v || b.getAttribute('data-name').indexOf(v) >= 0;
+            b.style.display = hit ? '' : 'none';
+          });
+        };
+      }
+      Array.prototype.forEach.call(app.querySelectorAll('.name-chip'), function(b){
+        b.onclick = function(){ showMember(b.getAttribute('data-name')); };
+      });
+    }
+  }
+
+  function showMember(name){
+    var list = DATA.members || [];
+    var m = null;
+    for(var i = 0; i < list.length; i++) if(list[i].name === name){ m = list[i]; break; }
+    if(!m) return;
+    var box = q('#detail');
+    if(!box) return;
+    var isMe = !!(DATA.me && DATA.me.name === name);
+    box.innerHTML = '<div class="detail-head">'
+      + '<b>' + esc(m.name) + (isMe ? '<span class="badge">我</span>' : '') + '</b>'
+      + '<button id="dclose">收起</button></div>'
+      + rowsHtml(m);
+    q('#dclose').onclick = function(){ box.innerHTML = ''; };
+    try{ box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }catch(e){}
+  }
+
+  /* ---------------- 启动 ---------------- */
+  if(!TOKEN){
+    fatal('这条链接不完整，缺少标识。请让管理员重新发一次。');
+    return;
+  }
+  api('/api/profile?action=ishare-open&t=' + encodeURIComponent(TOKEN))
+    .then(function(j){
+      SHARE = j.share;
+      document.title = (SHARE.title || '班级信息查询');
+      topTitle.textContent = SHARE.title || '';
+      var hasTk = '';
+      try{ hasTk = sessionStorage.getItem(SESSION) || ''; }catch(e){}
+      if(hasTk){ loadData(); }
+      else{ renderLogin(''); }
+    })
+    .catch(function(e){ fatal(e.message); });
+})();
+</script>
+</body>
+</html>

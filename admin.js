@@ -737,6 +737,8 @@ var PAGES = [
   { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
   { id:'scores',        label:'成绩分析', icon:'activity',  group:'内容',  title:'成绩分析（考试 / 导入 / 改分 / 发布）' },
   { id:'votes',         label:'投票管理', icon:'check',     group:'内容',  title:'投票管理（发起投票 / 截止时间 / 结果）' },
+  /* v3.15.0（站主）：个人信息分享 —— 发链接给同学，登录后直接查资料 */
+  { id:'ishare',        label:'信息分享', icon:'users',     group:'内容',  title:'个人信息分享（登录后查询 · 链接 / 二维码 / 开放范围）' },
 
   { id:'popups',        label:'通用弹窗', icon:'bell',      group:'内容',  title:'通用弹窗（开屏弹 / 板块弹）' },
   { id:'cards',         label:'首页卡片', icon:'layers',    group:'内容',  title:'首页卡片（每日一言 / 学习卡片）' },
@@ -832,6 +834,7 @@ function go(page){
     dj:            renderDj,
     scores:        renderScores,
     votes:         renderVotes,
+    ishare:        renderIshare,
     backup:        renderBackup,
     releases:      renderReleases,
     popups:        renderPopups,
@@ -14954,6 +14957,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.15.0', date: '2026-10-27', type: 'feat', title: '个人信息分享：发链接，登录就能查资料', items: [
+      '新页面 info.html：后台建一条分享，把链接或二维码发给同学，打开就能登录查询',
+      '后台可单独设置开放「查自己的信息」/「查其他成员信息」；查其他成员还能逐字段勾选（学号、政治面貌、智学网账号、学校、班级、民族、出生日期、家庭住址、入团时间、微信、QQ、手机号）',
+      '这套配置与档案编辑的字段可见性互不同步；档案里设成「仅本人 / 仅管理员」的字段，分享里勾了也不会漏',
+      '必须先登录才能看；登录页下面直接写清用户名 / 密码怎么填，文案可在后台自定义',
+      '支持有效期、最多打开次数、备注；列表里可复制链接、生成二维码、打开预览、编辑、撤销，并统计打开次数'
+    ], pub: [
+      { cat: '班级', text: '新增「个人信息分享」：由老师发出链接，用班级站账号登录后即可直接查看自己的资料，无需进入首页查找' },
+      { cat: '安全', text: '可查询的内容逐项设定，链接必须登录后才能查看' }
+    ] },
   { version: '3.14.1', date: '2026-10-27', type: 'fix', title: '个人明细的排版收一收', items: [
       '各科那一行改成两段：上面「科目 · 分数 · 与班均差」，下面一行右对齐的小字放「班内 / 年级名次 · 赋分变化」',
       '行之间加细线分隔，六科长短不一时也对得整齐，不会再看着像「下一科」'
@@ -18208,3 +18221,283 @@ function popPreview(i){
 }
 
 })();
+
+/* ============================================================================
+ * v3.15.0（站主）个人信息分享
+ * ----------------------------------------------------------------------------
+ * 站主要求：「发给同学链接，登录之后直接看自己的信息，也能查其他成员」。
+ *    · 与成绩分享（share.html，免登录）分开：这条**必须先登录**；
+ *    · 开放哪些功能、哪些字段，单独一套配置，与档案编辑不同步；
+ *    · 生成后给链接 + 二维码（二维码复用 bdQrCanvas）。
+ * 数据存后端 user_data（key=cls_info_shares），这里只负责界面。
+ * ========================================================================= */
+var ISHARE = { list: [], fields: [], loaded: false };
+
+function ishareUrl(sh){
+  var base = location.href.replace(/admin\.html.*$/, '');
+  return base + 'info.html?t=' + encodeURIComponent(sh.token || '');
+}
+
+function renderIshare(){
+  $('view').innerHTML =
+    '<div class="toolbar" style="background:var(--panel)">'
+    +   '<button class="btn btn-sm" id="isAdd">' + svg('plus', 14) + '新建分享</button>'
+    +   '<span style="flex:1"></span>'
+    +   '<button class="btn btn-sm btn-secondary" id="isRefresh">' + svg('refresh', 14) + '刷新</button>'
+    + '</div>'
+    + '<div class="alert info" style="margin-bottom:16px">'
+    +   '给同学发一条链接，<b>用班级站账号登录</b>后就能直接查资料 —— 不用先进首页找板块。'
+    +   '<br>链接里能看到什么，全由下面对每条分享的「开放范围」决定；'
+    +   '<b>没勾的字段不会发到同学手机上</b>（连字段名都不给）。'
+    +   '<br>档案里设成「仅本人 / 仅管理员」的字段，这里勾了也不会漏出去（两套取交集）。'
+    + '</div>'
+    + '<section class="panel"><div class="panel-head"><h3>' + svg('users', 17) + '我建过的分享'
+    +   '<span class="sub" id="isCount"></span></h3></div>'
+    +   '<div class="panel-body" id="isBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
+    + '</section>';
+
+  $('isAdd').onclick = function(){ ishareForm(null); };
+  $('isRefresh').onclick = function(){ ISHARE.loaded = false; loadIshare(); };
+  if(ISHARE.loaded) paintIshare(); else loadIshare();
+}
+
+function loadIshare(){
+  api('/profile?action=ishare-list').then(function(j){
+    ISHARE.list = (j && j.shares) || [];
+    ISHARE.fields = (j && j.fields) || [];
+    ISHARE.loaded = true;
+    paintIshare();
+  }).catch(function(e){
+    var b = $('isBody');
+    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 30) + '<p>加载失败：' + esc(e.message) + '</p></div>';
+  });
+}
+
+function paintIshare(){
+  var body = $('isBody');
+  if(!body) return;
+  if($('isCount')) $('isCount').textContent = '共 ' + ISHARE.list.length + ' 条';
+  if(!ISHARE.list.length){
+    body.innerHTML = '<div class="empty">' + svg('users', 34)
+      + '<p>还没有分享链接。<br>点左上角「新建分享」，选好开放范围后会生成链接和二维码。</p></div>';
+    return;
+  }
+  body.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px">'
+    + ISHARE.list.map(function(sh){
+        var feats = sh.feats || {};
+        var fc = [];
+        if(feats.self) fc.push('查自己');
+        if(feats.others) fc.push('查其他成员');
+        if(!fc.length) fc.push('（没有开功能）');
+        var nField = Object.keys(sh.fieldMap || {}).filter(function(k){ return sh.fieldMap[k]; }).length;
+        var state = sh.alive ? '有效' : (sh.revoked ? '已撤销' : (sh.why || '已失效'));
+        return '<div class="is-item" style="border:1px solid var(--border);border-radius:12px;padding:12px 14px">'
+          + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+          +   '<span style="font-size:.72rem;font-weight:800;padding:2px 9px;border-radius:999px;'
+          +     (sh.alive ? 'background:#e9f7ef;color:#0f8a4d' : 'background:#fdeceb;color:#c0392b') + '">' + esc(state) + '</span>'
+          +   '<b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+          +     esc(sh.note || sh.title || '班级信息查询') + '</b>'
+          +   '<span style="font-size:.74rem;color:var(--fg-3)">看过 ' + Number(sh.views || 0) + ' 次'
+          +     (sh.maxViews ? ' / ' + sh.maxViews : '') + '</span>'
+          + '</div>'
+          + '<div style="font-size:.76rem;color:var(--fg-3);margin-top:6px">'
+          +   esc(fc.join(' · ')) + (feats.others ? ' · ' + nField + ' 个字段' : '')
+          +   (sh.expiresAt ? ' · ' + esc(String(sh.expiresAt).slice(0, 10)) + ' 到期' : ' · 长期有效')
+          + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+          +   '<button class="btn btn-sm btn-secondary" data-act="copy" data-id="' + esc(sh.id) + '">复制链接</button>'
+          +   '<button class="btn btn-sm btn-secondary" data-act="qr" data-id="' + esc(sh.id) + '">二维码</button>'
+          +   '<button class="btn btn-sm btn-secondary" data-act="open" data-id="' + esc(sh.id) + '">打开看看</button>'
+          +   (sh.alive ? '<button class="btn btn-sm btn-secondary" data-act="edit" data-id="' + esc(sh.id) + '">编辑</button>' : '')
+          +   (sh.alive ? '<button class="btn btn-sm btn-secondary" data-act="rev" data-id="' + esc(sh.id) + '">撤销</button>' : '')
+          + '</div>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-act]'), function(b){
+    var act = b.getAttribute('data-act');
+    var sh = null;
+    ISHARE.list.forEach(function(x){ if(x.id === b.getAttribute('data-id')) sh = x; });
+    if(!sh) return;
+    b.onclick = function(){
+      if(act === 'copy'){
+        var url = ishareUrl(sh);
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(url).then(function(){ toast('链接已复制', 'ok'); },
+            function(){ prompt('复制这个链接：', url); });
+        }else{
+          prompt('复制这个链接：', url);
+        }
+      }else if(act === 'qr'){
+        var box = openModal({
+          title: '二维码',
+          sub: sh.note || sh.title || '班级信息查询',
+          body: '<div style="text-align:center"><div id="isQrWrap" style="display:inline-block;padding:10px;background:#fff;border-radius:12px"></div>'
+              + '<p style="font-size:.76rem;color:var(--fg-3);margin:10px 0 0">扫码 → 登录 → 直接看资料</p></div>',
+          foot: '<button class="btn btn-secondary" id="isQrDown">保存图片</button>',
+        });
+        var cv = bdQrCanvas(ishareUrl(sh), 420);
+        cv.style.width = 'min(70vw,300px)';
+        cv.style.height = 'auto';
+        box.querySelector('#isQrWrap').appendChild(cv);
+        box.querySelector('#isQrDown').onclick = function(){
+          var a = document.createElement('a');
+          a.href = cv.toDataURL('image/png');
+          a.download = '信息查询二维码.png';
+          document.body.appendChild(a); a.click(); a.remove();
+        };
+      }else if(act === 'open'){
+        window.open(ishareUrl(sh), '_blank');
+      }else if(act === 'edit'){
+        ishareForm(sh);
+      }else if(act === 'rev'){
+        confirmBox({ text: '撤销后这条链接立刻失效，确定吗？' }).then(function(ok){
+          if(!ok) return;
+          api('/profile?action=ishare-revoke', { method: 'POST', body: { id: sh.id } })
+            .then(function(){ toast('已撤销', 'ok'); ISHARE.loaded = false; loadIshare(); })
+            .catch(function(e){ toast(e.message, 'err'); });
+        });
+      }
+    };
+  });
+}
+
+/* 新建 / 编辑表单 */
+function ishareForm(edit){
+  var isEdit = !!edit;
+  var feats = (edit && edit.feats) || { self: true, others: false };
+  var fm = (edit && edit.fieldMap) || {};
+  /* 新建时默认勾上前四个常用字段，省得每次都点 */
+  var defOn = { student_id: 1, politics: 1, exam_no: 1, phone: 1 };
+  var fields = ISHARE.fields.length ? ISHARE.fields : [];
+  var days = 0;
+  if(edit && edit.expiresAt){
+    var left = Math.round((Date.parse(edit.expiresAt) - Date.now()) / 86400000);
+    days = left > 0 ? left : 0;
+  }
+
+  var fieldBoxes = fields.map(function(f){
+    var on = isEdit ? !!fm[f.key] : !!defOn[f.key];
+    return '<label style="display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid var(--border);'
+      + 'border-radius:9px;font-size:.82rem;cursor:pointer">'
+      + '<input type="checkbox" data-f="' + esc(f.key) + '"' + (on ? ' checked' : '') + '> '
+      + esc(f.label) + '</label>';
+  }).join('');
+
+  var body = ''
+    + '<div class="field"><label>标题（同学在页面上看到的）</label>'
+    +   '<input id="isTitle" maxlength="30" value="' + esc(edit ? (edit.title || '') : '班级信息查询') + '"></div>'
+    + '<div class="field"><label>备注（只给自己看，方便认出这条是发给谁的）</label>'
+    +   '<input id="isNote" maxlength="40" value="' + esc(edit ? (edit.note || '') : '') + '" placeholder="如：发给全班、临时查询"></div>'
+    + '<div class="field"><label>开放哪些功能</label>'
+    +   '<label style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" id="isSelf"' + (feats.self ? ' checked' : '') + '> 查个人信息（看自己的资料）</label>'
+    +   '<label style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" id="isOthers"' + (feats.others ? ' checked' : '') + '> 查其他成员信息（可以搜同学、看下面的字段）</label>'
+    + '</div>'
+    + '<div class="field"><label>「查其他成员」时能看到的字段</label>'
+    +   '<div id="isFieldBox" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">'
+    +   fieldBoxes + '</div>'
+    +   '<p style="font-size:.74rem;color:var(--fg-3);margin:8px 0 0">姓名始终可见（不然搜不到人）；'
+    +   '档案里设成「仅本人 / 仅管理员」的字段勾了也不会显示。</p>'
+    + '</div>'
+    + '<div class="field" style="display:flex;gap:10px;flex-wrap:wrap">'
+    +   '<div style="flex:1;min-width:150px"><label>有效期</label>'
+    +     '<select id="isDays">'
+    +       '<option value="0"' + (days === 0 ? ' selected' : '') + '>长期有效</option>'
+    +       '<option value="7"' + (days === 7 ? ' selected' : '') + '>7 天</option>'
+    +       '<option value="30"' + (days === 30 ? ' selected' : '') + '>30 天</option>'
+    +       '<option value="90"' + (days === 90 ? ' selected' : '') + '>90 天</option>'
+    +       '<option value="custom"' + (days && [7,30,90].indexOf(days) < 0 ? ' selected' : '') + '>自定义</option>'
+    +     '</select></div>'
+    +   '<div style="flex:0 0 120px" id="isDaysWrap"><label>天数</label>'
+    +     '<input id="isDaysNum" type="number" min="1" max="3650" value="' + (days || 7) + '"></div>'
+    +   '<div style="flex:0 0 140px"><label>最多打开（可空）</label>'
+    +     '<input id="isMax" type="number" min="1" placeholder="不限" value="' + (edit && edit.maxViews ? edit.maxViews : '') + '"></div>'
+    + '</div>'
+    + '<div class="field"><label>登录页提示 · 用户名</label>'
+    +   '<input id="isHintU" maxlength="120" placeholder="用户名：你的姓名（例：张三）" value="' + esc(edit ? (edit.hintUser || '') : '') + '"></div>'
+    + '<div class="field"><label>登录页提示 · 密码</label>'
+    +   '<input id="isHintP" maxlength="120" placeholder="密码：班级站登录密码；忘了找管理员重置" value="' + esc(edit ? (edit.hintPass || '') : '') + '"></div>';
+
+  var box = openModal({
+    title: isEdit ? '编辑分享' : '新建个人信息分享',
+    sub: '同学点开链接 → 登录 → 直接看资料',
+    body: body,
+    foot: '<button class="btn btn-secondary" data-close>取消</button>'
+        + '<button class="btn" id="isSave">' + (isEdit ? '保存修改' : '生成链接') + '</button>',
+  });
+
+  function syncDays(){
+    var v = box.querySelector('#isDays').value;
+    box.querySelector('#isDaysWrap').style.display = (v === 'custom') ? '' : 'none';
+  }
+  box.querySelector('#isDays').onchange = syncDays;
+  syncDays();
+
+  box.querySelector('#isSave').onclick = function(){
+    var btn = box.querySelector('#isSave');
+    var selfOn = box.querySelector('#isSelf').checked;
+    var othersOn = box.querySelector('#isOthers').checked;
+    if(!selfOn && !othersOn){ toast('至少勾一个功能', 'err'); return; }
+    var fmOut = {};
+    Array.prototype.forEach.call(box.querySelectorAll('[data-f]'), function(cb){
+      fmOut[cb.getAttribute('data-f')] = !!cb.checked;
+    });
+    if(othersOn && !Object.keys(fmOut).some(function(k){ return fmOut[k]; })){
+      toast('「查其他成员」至少要勾一个字段', 'err'); return;
+    }
+    var dv = box.querySelector('#isDays').value;
+    var daysOut = dv === 'custom' ? Math.max(1, parseInt(box.querySelector('#isDaysNum').value, 10) || 7) : Number(dv);
+    var payload = {
+      title: box.querySelector('#isTitle').value,
+      note: box.querySelector('#isNote').value,
+      feats: { self: selfOn, others: othersOn },
+      fields: fmOut,
+      days: daysOut,
+      maxViews: box.querySelector('#isMax').value,
+      hintUser: box.querySelector('#isHintU').value,
+      hintPass: box.querySelector('#isHintP').value,
+    };
+    btn.disabled = true;
+    btn.textContent = '保存中…';
+    var req = isEdit
+      ? api('/profile?action=ishare-update', { method: 'POST', body: Object.assign({ id: edit.id }, payload) })
+      : api('/profile?action=ishare-create', { method: 'POST', body: payload });
+    req.then(function(j){
+      closeModal();
+      ISHARE.loaded = false;
+      loadIshare();
+      if(!isEdit && j && j.url){
+        var url = location.href.replace(/admin\.html.*$/, '') + j.url.replace(/^\//, '');
+        var mb = openModal({
+          title: '链接已生成',
+          sub: '发给同学，登录后就能用',
+          body: '<p style="font-size:.82rem;color:var(--fg-2);margin:0 0 8px">把这条链接发到群里，或生成二维码扫：</p>'
+              + '<input id="isUrl" readonly value="' + esc(url) + '" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:.78rem">',
+          foot: '<button class="btn btn-secondary" id="isCopy2">复制链接</button>'
+              + '<button class="btn btn-secondary" id="isQr2">二维码</button>'
+              + '<button class="btn" data-close>好</button>',
+        });
+        mb.querySelector('#isCopy2').onclick = function(){
+          var inp = mb.querySelector('#isUrl');
+          inp.select();
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(url).then(function(){ toast('已复制', 'ok'); }, function(){ document.execCommand && document.execCommand('copy'); });
+          }else if(document.execCommand){ document.execCommand('copy'); toast('已复制', 'ok'); }
+        };
+        mb.querySelector('#isQr2').onclick = function(){
+          var cv = bdQrCanvas(url, 420);
+          cv.style.width = 'min(70vw,300px)';
+          mb.querySelector('#isUrl').parentNode.appendChild(cv);
+          cv.style.display = 'block';
+        };
+      }else{
+        toast(isEdit ? '已保存' : '已生成', 'ok');
+      }
+    }).catch(function(e){
+      btn.disabled = false;
+      btn.textContent = isEdit ? '保存修改' : '生成链接';
+      toast(e.message, 'err');
+    });
+  };
+}

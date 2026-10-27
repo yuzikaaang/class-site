@@ -20,7 +20,7 @@
       只能由管理员在后台维护。
    ============================================================ */
 
-import { getSql } from './_lib/db.js';
+import { getSql, systemUserId, jsonCol } from './_lib/db.js';
 import {
   cors, handlePreflight, ok, fail, body, requireUser, requireUserReady, isCommittee,
   isSafeFieldFormat, audit,
@@ -200,6 +200,271 @@ function canSee(field, meta, pref, fvis, ctx) {
   return true;
 }
 
+/* ============================================================
+   个人信息分享（v3.15.0）
+   ------------------------------------------------------------
+   站主要求（2026-10-27）：「临时需要一个分享页面……发给同学链接，登录
+   之后直接看个人信息，也能查其他成员」。与成绩分享刻意分开：
+     · 这条链接**必须先登录**（用班级站账号），转发出去也进不去；
+     · 开放哪些功能、哪些字段，由站主在后台单独配一套，
+       与档案编辑那套字段可见性**互不同步**（两套取交集：档案里设成
+       「仅本人」的字段，分享里勾了也不会漏）。
+   存储复用 user_data（与 /api/content 同一张表），不新建表 ——
+   免 DDL，上线即可用。
+   ============================================================ */
+const ISHARE_KEY = 'cls_info_shares';
+
+/* 可分享的字段目录。key 与 profiles 表列名 / shapeProfile 输出一一对应。 */
+const ISHARE_FIELDS = [
+  { key: 'student_id',  label: '学号' },
+  { key: 'politics',    label: '政治面貌' },
+  { key: 'exam_no',     label: '智学网账号' },
+  { key: 'school',      label: '学校' },
+  { key: 'class_name',  label: '班级' },
+  { key: 'ethnicity',   label: '民族' },
+  { key: 'birth_date',  label: '出生日期' },
+  { key: 'home_address',label: '家庭住址' },
+  { key: 'league_date', label: '入团时间' },
+  { key: 'wechat',      label: '微信' },
+  { key: 'qq',          label: 'QQ' },
+  { key: 'phone',       label: '手机号' },
+];
+const ISHARE_FIELD_KEYS = new Set(ISHARE_FIELDS.map((f) => f.key));
+
+function ishareToken() {
+  const buf = new Uint8Array(18);
+  crypto.getRandomValues(buf);
+  return btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function ishareLoad(sql) {
+  const uid = await systemUserId(sql);
+  if (!uid) return [];
+  const rows = await sql`
+    select data_value from user_data
+     where user_id = ${uid} and data_key = ${ISHARE_KEY} limit 1`;
+  if (!rows.length) return [];
+  const v = jsonCol(rows[0].data_value);
+  return Array.isArray(v) ? v : [];
+}
+
+async function ishareSave(sql, list) {
+  const uid = await systemUserId(sql);
+  if (!uid) throw new Error('没有可用的系统账号，无法保存分享链接');
+  await sql`
+    insert into user_data (user_id, data_key, data_value, updated_at)
+    values (${uid}, ${ISHARE_KEY}, ${JSON.stringify(list)}::jsonb, now())
+    on conflict (user_id, data_key)
+    do update set data_value = excluded.data_value, updated_at = now()`;
+}
+
+function ishareState(s) {
+  if (!s) return { alive: false, why: '这条链接不存在，可能已经被删除' };
+  if (s.revoked) return { alive: false, why: '这条链接已被管理员撤销' };
+  if (s.expiresAt && Date.parse(s.expiresAt) < Date.now()) return { alive: false, why: '这条链接已过期' };
+  if (s.maxViews && Number(s.views || 0) >= Number(s.maxViews)) return { alive: false, why: '这条链接的查看次数已用完' };
+  return { alive: true };
+}
+
+/* 对外公开的部分：只说明「开放了哪些功能 / 哪些字段」，不含任何人的资料 */
+function isharePublic(s) {
+  const feats = s.feats || {};
+  const fields = (s.fields || {});
+  return {
+    title: String(s.title || '班级信息查询'),
+    note: String(s.note || ''),
+    hintUser: String(s.hintUser || ''),
+    hintPass: String(s.hintPass || ''),
+    feats: { self: !!feats.self, others: !!feats.others },
+    fields: ISHARE_FIELDS.filter((f) => !!fields[f.key]).map((f) => ({ key: f.key, label: f.label })),
+    views: Number(s.views || 0),
+  };
+}
+
+async function ishareOpen(req, res) {
+  const token = String(req.query.t || '').trim();
+  if (!token) return fail(res, 400, '缺少链接标识');
+  const sql = getSql();
+  const list = await ishareLoad(sql);
+  const s = list.find((x) => x && x.token === token);
+  const st = ishareState(s);
+  if (!st.alive) return fail(res, 410, st.why);
+
+  /* 打开就记一次（限次数用得上）；失败不影响正常打开 */
+  if (s.views === undefined) s.views = 0;
+  s.views += 1;
+  try { await ishareSave(sql, list); } catch (e) { console.warn('[ishare] 计数失败', e && e.message); }
+
+  return ok(res, { ok: true, share: isharePublic(s) });
+}
+
+/* 一行的对外形状：先过档案那套可见性，再按分享勾选的字段裁 */
+function ishareRowShape(row, meta, self) {
+  const p = shapeProfile(row, self, meta, self ? { self: true, committee: true } : { self: false, committee: false });
+  const map = {
+    student_id: p.studentId,
+    politics: p.politics,
+    exam_no: p.examNo,
+    wechat: p.wechat,
+    qq: p.qq,
+    phone: p.phone,
+  };
+  (p.fields || []).forEach((f) => { if (f && f.field) map[f.field] = f.value; });
+  const out = { name: p.name || '' };
+  Object.keys(map).forEach((k) => {
+    if (!ISHARE_FIELD_KEYS.has(k)) return;
+    const v = map[k];
+    if (v == null || v === '') return;
+    out[k] = String(v);
+  });
+  return out;
+}
+
+async function ishareData(req, res, u) {
+  const token = String(req.query.t || '').trim();
+  if (!token) return fail(res, 400, '缺少链接标识');
+  const sql = getSql();
+  const list = await ishareLoad(sql);
+  const s = list.find((x) => x && x.token === token);
+  const st = ishareState(s);
+  if (!st.alive) return fail(res, 410, st.why);
+
+  const feats = s.feats || {};
+  const allow = s.fields || {};
+  const meta = await loadMeta(sql);
+  const key = await profileKey(req);
+
+  /* ① 自己的：本人看自己，档案里「仅本人」的字段也照常给（和「我的资料」一致） */
+  let me = null;
+  if (feats.self && u.profileId) {
+    const rows = await sql`select * from profiles where id = ${u.profileId} limit 1`;
+    if (rows.length) me = ishareRowShape(await decRow(key, rows[0]), meta, true);
+  }
+
+  /* ② 其他成员：按分享勾选的字段裁；没勾的字段连键都不给 */
+  let members = [];
+  if (feats.others) {
+    const raw = await sql`
+      select * from profiles
+       where coalesce(name, '') <> ''
+       order by student_id nulls last, name
+       limit 300`;
+    for (const r of raw) {
+      const row = ishareRowShape(await decRow(key, r), meta, false);
+      const keep = { name: row.name };
+      ISHARE_FIELDS.forEach((f) => {
+        if (!allow[f.key]) return;
+        if (row[f.key] == null) return;
+        keep[f.key] = row[f.key];
+      });
+      members.push(keep);
+    }
+  }
+
+  return ok(res, {
+    ok: true,
+    share: isharePublic(s),
+    me,
+    claimed: !!u.profileId,
+    members,
+  });
+}
+
+/* 后台：建 / 列 / 改 / 撤 */
+async function ishareAdmin(req, res, u, action) {
+  const sql = getSql();
+  const list = await ishareLoad(sql);
+
+  if (action === 'ishare-list') {
+    return ok(res, {
+      ok: true,
+      fields: ISHARE_FIELDS,
+      shares: list.map((s) => {
+        const st = ishareState(s);
+        return Object.assign({}, isharePublic(s), {
+          id: s.id, token: s.token, url: '/info.html?t=' + s.token,
+          alive: st.alive, why: st.why || '',
+          revoked: !!s.revoked, expiresAt: s.expiresAt || null,
+          maxViews: s.maxViews || null, views: Number(s.views || 0),
+          feats: s.feats || {}, fieldMap: s.fields || {},
+          createdAt: s.createdAt || '',
+        });
+      }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
+    });
+  }
+
+  const b = await body(req);
+
+  if (action === 'ishare-revoke') {
+    const id = String(b.id || '');
+    const s = list.find((x) => x && x.id === id);
+    if (!s) return fail(res, 404, '这条分享不存在');
+    s.revoked = true;
+    await ishareSave(sql, list);
+    await audit(u.id, 'info-share-revoke', 'info_share', null, id);
+    return ok(res, { ok: true });
+  }
+
+  /* 建 / 改共用的字段清洗 */
+  const feats = {
+    self: b.feats ? !!b.feats.self : true,
+    others: b.feats ? !!b.feats.others : false,
+  };
+  if (!feats.self && !feats.others) return fail(res, 400, '至少开一个功能：查自己的信息或查其他成员');
+
+  const fields = {};
+  ISHARE_FIELDS.forEach((f) => {
+    fields[f.key] = !!(b.fields && b.fields[f.key]);
+  });
+  if (feats.others && !ISHARE_FIELDS.some((f) => fields[f.key])) {
+    return fail(res, 400, '「查其他成员」至少要勾一个可展示的字段');
+  }
+
+  let days = Number(b.days);
+  if (!Number.isFinite(days) || days < 0) days = 0;
+  if (days > 3650) days = 3650;
+  const maxViews = Number.isFinite(Number(b.maxViews)) && Number(b.maxViews) > 0
+    ? Math.min(100000, Math.round(Number(b.maxViews))) : null;
+
+  const patch = {
+    title: String(b.title || '').trim().slice(0, 30) || '班级信息查询',
+    hintUser: String(b.hintUser || '').trim().slice(0, 120),
+    hintPass: String(b.hintPass || '').trim().slice(0, 120),
+    note: String(b.note || '').trim().slice(0, 40),
+    feats,
+    fields,
+    maxViews,
+    expiresAt: days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null,
+  };
+
+  if (action === 'ishare-update') {
+    const s = list.find((x) => x && x.id === String(b.id || ''));
+    if (!s) return fail(res, 404, '这条分享不存在');
+    Object.assign(s, patch);
+    if (b.revoked === false) s.revoked = false;
+    await ishareSave(sql, list);
+    await audit(u.id, 'info-share-update', 'info_share', null, String(s.id));
+    return ok(res, { ok: true, id: s.id, token: s.token, url: '/info.html?t=' + s.token });
+  }
+
+  if (action === 'ishare-create') {
+    const token = ishareToken();
+    const s = Object.assign({
+      id: 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      token,
+      views: 0,
+      revoked: false,
+      createdAt: new Date().toISOString(),
+    }, patch);
+    list.push(s);
+    await ishareSave(sql, list);
+    await audit(u.id, 'info-share-create', 'info_share', null, token.slice(0, 6));
+    return ok(res, { ok: true, id: s.id, token, url: '/info.html?t=' + token });
+  }
+
+  return fail(res, 404, '未知的 action：' + action);
+}
+
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
   cors(req, res);
@@ -214,6 +479,24 @@ export default async function handler(req, res) {
         原因：requireUserReady 的白名单是 ['me','change-password','logout']，
         如果这里传固定的 'me'，那 search 也会被当成白名单动作放行 ——
         未改初始密码的人就能查全班资料了。这个坑已经踩过一次，别重蹈。 */
+  /* v3.15.0：个人信息分享。
+     · ishare-open 免登录（只吐「这条分享开放了什么」，不含任何人的资料）；
+     · ishare-data 要登录，但**不走「必须先改初始密码」那道门** ——
+       站主就是想让同学点开链接、登一下就能看，别再绕一圈；
+     · ishare-create/list/update/revoke 只有管理员能调。 */
+  if (action === 'ishare-open') return await ishareOpen(req, res);
+  if (action === 'ishare-data') {
+    const uu = await requireUser(req, res);
+    if (!uu) return;
+    return await ishareData(req, res, uu);
+  }
+  if (action.indexOf('ishare-') === 0) {
+    const uu = await requireUser(req, res);
+    if (!uu) return;
+    if (uu.role !== 'admin') return fail(res, 403, '只有管理员能管理分享链接');
+    return await ishareAdmin(req, res, uu, action);
+  }
+
   const u = await requireUserReady(req, res, action);
   if (!u) return;
 
