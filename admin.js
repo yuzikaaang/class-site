@@ -225,6 +225,29 @@ function api(path, opts){
   var init = { method: opts.method || 'GET', headers: headers };
   if(opts.body !== undefined) init.body = JSON.stringify(opts.body);
 
+  /* 【v3.15.3】请求超时闸门。
+   * 站主原话：「信息分享这个后台一直转圈，转了四五分钟还是没有显示」。
+   * 根因是那条老页面里的渲染函数直接抛错，视图永远停在加载态 —— 但另一类
+   * 同样是「转圈不动」的坑是：fetch 一直挂着不返回（弱网 / 运营商劫持 /
+   * 中间代理吞掉响应），Promise 既 then 也不 catch，界面就永远等下去。
+   * 现在默认 25 秒还没回来就直接 reject 并给出人话提示，让每个页面的
+   * .catch 都能正常收尾。opts.timeout 可单独指定。 */
+  var ms = Number(opts.timeout || 25000);
+  var ctrl = null, tid = null;
+  try{
+    if(typeof AbortController !== 'undefined'){
+      ctrl = new AbortController();
+      init.signal = ctrl.signal;
+    }
+  }catch(e){ ctrl = null; }
+
+  var clear = function(){ if(tid){ clearTimeout(tid); tid = null; } };
+  if(ctrl){
+    tid = setTimeout(function(){
+      try{ ctrl.abort(); }catch(e){}
+    }, ms);
+  }
+
   return fetch(apiUrl(path), init).then(function(r){
     return r.json().catch(function(){
       return { ok:false, error:'接口返回了非 JSON 内容（HTTP ' + r.status + '）' };
@@ -245,6 +268,21 @@ function api(path, opts){
       }
       return j;
     });
+  }).then(function(v){ clear(); return v; }, function(e){
+    clear();
+    /* 被上面那个定时器 abort 掉的 → 换成看得懂的提示 */
+    if(e && (e.name === 'AbortError' || e.code === 20)){
+      var te = new Error('请求超时：' + Math.round(ms / 1000) + ' 秒没有响应，请检查网络后重试');
+      te.timeout = true;
+      throw te;
+    }
+    if(e && e.name === 'TypeError' && /fetch|network|load failed/i.test(String(e.message || ''))){
+      /* fetch 层直接失败（断网 / DNS / TLS），一并说人话 */
+      var ne = new Error('连不上服务器，请检查网络后重试');
+      ne.network = true;
+      throw ne;
+    }
+    throw e;
   });
 }
 
@@ -816,6 +854,9 @@ function go(page){
   renderNav();
   var view = $('view');
   view.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  /* v3.15.3：留一份「这个圈」的句柄 —— 页面要是真的画出来了，这个节点会被换掉；
+     还挂在文档里就说明它一直没走，交给下面的看门狗收尸。 */
+  var loadingNode = view.firstChild;
   view.style.animation = 'none';
   void view.offsetWidth;
   view.style.animation = 'rise-in .45s cubic-bezier(.16,1,.3,1) both';
@@ -850,7 +891,94 @@ function go(page){
     settings:      renderSettings,
     account:       renderAccount
   })[page];
-  if(fn) fn();
+
+  /* v3.15.3（站主）：「信息分享这个后台一直转圈，转了四五分钟还是这样」
+   * ------------------------------------------------------------
+   * 旧写法是 `if(fn) fn();` —— 渲染函数不存在、或者里面第一行就抛错
+   * （v3.15.0 那次就是函数被写在 IIFE 外，取不到 $），异常一路冒到
+   * 控制台，而视图早就被设成了「加载中…」，于是那个圈就一直转下去。
+   * 现在：缺函数 / 抛错都当场换成一张「这块没加载出来」的卡片，
+   * 上面带「重试」和「强制刷新」，不用再去翻浏览器控制台。 */
+  if(!fn){
+    panelBroken(page, new Error('这个面板块没有对应的渲染程序（多半是页面缓存了旧版本）'));
+    return;
+  }
+  try{
+    fn();
+  }catch(err){
+    panelBroken(page, err);
+    return;
+  }
+
+  /* 看门狗：12 秒后原来那个圈还在原地，就认定卡死，主动兜底。
+     注意判据是「那一颗圈还在不在」，不是「视图里有没有 loading」——
+     有些面板会自己再画一层加载态去等接口，那种情况算正常工作，
+     不能误杀（接口本身另有 25 秒超时）。 */
+  setTimeout(function(){
+    if(STATE.page !== page) return;              /* 已经切到别的面板 */
+    if(!loadingNode || !loadingNode.parentNode) return;  /* 内容已经画出来了 */
+    panelBroken(page, new Error('等了 12 秒还停在加载状态'));
+  }, 12000);
+}
+
+/* 面板没加载出来时的兜底界面：说清楚 + 给两条出路 */
+function panelBroken(page, err){
+  var view = $('view');
+  if(!view) return;
+  var msg = (err && (err.message || err)) || '未知错误';
+  view.innerHTML =
+    '<section class="panel" style="max-width:640px;margin:28px auto">'
+    +  '<div class="panel-head"><h3>' + svg('alert', 17) + '这块没能加载出来</h3></div>'
+    +  '<div class="panel-body">'
+    +    '<p style="margin:0 0 10px">' + esc(msg) + '</p>'
+    +    '<p class="muted" style="font-size:.82rem;margin:0 0 16px">'
+    +      '如果这台设备之前打开过旧版本，多半是缓存了老页面 —— 点「强制刷新」清掉本地缓存重新取一次就好。'
+    +    '</p>'
+    +    '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +      '<button class="btn btn-sm" id="pbRetry">' + svg('refresh', 14) + '重试</button>'
+    +      '<button class="btn btn-sm btn-secondary" id="pbHard">' + svg('download', 14) + '强制刷新</button>'
+    +      '<span style="flex:1"></span>'
+    +      '<span class="muted" style="font-size:.78rem;align-self:center">v' + (typeof SITE_VERSION !== 'undefined' ? SITE_VERSION : '?') + '</span>'
+    +    '</div>'
+    +  '</div>'
+    + '</section>';
+  var r = $('pbRetry'), h = $('pbHard');
+  if(r) r.onclick = function(){ go(page); };
+  if(h) h.onclick = adminHardRefresh;
+}
+
+/* 后台版「强制刷新」：注销 SW + 清空所有缓存 + 带时间戳重进
+   （与首页 hardRefresh 同一套路，后台没有那个函数，这里自备一份） */
+function adminHardRefresh(){
+  var btn = $('pbHard');
+  if(btn){ btn.disabled = true; btn.textContent = '正在清理缓存…'; }
+  var goNow = function(){
+    var u;
+    try{
+      var x = new URL(location.href);
+      x.searchParams.delete('_r');
+      x.searchParams.set('_r', Date.now());
+      u = x.toString();
+    }catch(e){ u = location.origin + location.pathname + '?_r=' + Date.now(); }
+    try{ location.replace(u); }catch(e){ location.href = u; }
+  };
+  var killSw = function(){
+    if(navigator.serviceWorker && navigator.serviceWorker.getRegistrations){
+      return navigator.serviceWorker.getRegistrations().then(function(rs){
+        return Promise.all(rs.map(function(r){ return r.unregister().catch(function(){}); }));
+      }).catch(function(){});
+    }
+  };
+  var wipe = function(){
+    if(window.caches && caches.keys){
+      return caches.keys().then(function(ks){
+        return Promise.all(ks.map(function(k){ return caches.delete(k); }));
+      }).catch(function(){});
+    }
+  };
+  Promise.resolve().then(killSw).then(wipe).then(wipe)
+    .then(function(){ setTimeout(goNow, 300); })
+    .catch(function(){ setTimeout(goNow, 300); });
 }
 
 /* 移动端侧栏 */
@@ -14986,6 +15114,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.15.3', date: '2026-10-28', type: 'fix', title: '后台页面不再无限转圈', items: [
+      '「信息分享」进不去、一直转圈，揪出来是两类原因：① 手机还停在旧版页面，旧代码一进这块就报错，圈留着不走了；② 接口偶尔被网络吞掉，请求既不成功也不失败，界面只能干等',
+      '现在任何面板渲染出错都会换成一张说明卡，上面有「重试」和「强制刷新」，不会再让你对着圈子等四五分钟',
+      '所有后台请求加 25 秒超时，超时明确提示「请求超时，请检查网络后重试」；连不上服务器也直接说连不上',
+      '面板画不出来超过 12 秒自动兜底，切到别的面板不受影响',
+      '版本号升到 3.15.3，缓存桶一起换新，装上新版后旧页面不会再被翻出来'
+    ], pub: [
+      { cat: '修复', text: '信息分享等页面之前会一直转圈加载不出来，现在出错会直接说明原因，并给出「重试 / 强制刷新」' },
+      { cat: '修复', text: '网络不好时会提示「请求超时」，不再无休止地等待' }
+    ] },
   { version: '3.15.2', date: '2026-10-27', type: 'fix', title: '成员资料导出补齐所有字段', items: [
       '导出时身份证号、发展团员编号曾经导不出来：表头是手写的，这两列被当成「表单固定列」排除掉了',
       '现在改成按字段元数据出列，导出会包含全部 13 个档案字段；以后新加的字段自动带上（考籍号已验证）',

@@ -5331,6 +5331,23 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     && /memberExportCols\(j\.fieldMeta/.test(adm47)
     && !/var head = \['姓名', '学号', '身份', '头衔'/.test(adm47));
 
+  /* ===== v3.15.3（站主）：「信息分享后台一直转圈四五分钟」=====
+     旧写法 `if(fn) fn();` 一旦渲染函数抛错，视图永远停在加载态。
+     现在三件套：缺函数/抛错换说明卡、12 秒看门狗、接口 25 秒超时。 */
+  t('★v3.15.3 渲染函数缺失或抛错都换成说明卡（不留转不停的圈）',
+    /if\(!fn\)\{[\s\S]{0,120}panelBroken\(page,/.test(adm47)
+    && /try\{\s*fn\(\);\s*\}catch\(err\)\{\s*panelBroken\(page, err\);/.test(adm47)
+    && !/^\s*if\(fn\) fn\(\);\s*$/m.test(adm47));
+  t('★v3.15.3 说明卡带「重试」和「强制刷新」两条出路',
+    /id="pbRetry"/.test(adm47) && /id="pbHard"/.test(adm47)
+    && /function adminHardRefresh\(\)/.test(adm47)
+    && /caches\.delete/.test(adm47));
+  t('★v3.15.3 看门狗 12 秒：判据是「原来那颗圈还在不在」，不误杀页面自绘的加载态',
+    /\}, 12000\);/.test(adm47) && /!loadingNode \|\| !loadingNode\.parentNode/.test(adm47));
+  t('★v3.15.3 接口统一 25 秒超时 + 人话提示',
+    /opts\.timeout \|\| 25000/.test(adm47) && /AbortController/.test(adm47)
+    && /请求超时/.test(adm47) && /连不上服务器/.test(adm47));
+
   t('★合并后的面板路由已注册（cards → renderCards）',
     /cards:\s*renderCards,/.test(adm47));
 
