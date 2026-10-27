@@ -14275,7 +14275,7 @@ function scHistWhoHtml(id){
     if(pack.raw != null && pack.assigned != null && Math.abs(pack.raw - pack.assigned) > 0.001){
       tail.push('赋分 ' + fmtNum(pack.raw) + '→' + fmtNum(pack.assigned));
     }
-    return '<div class="sc-qwho-row sc-hwho-row"><i>' + esc(sub.name) + '</i>'
+    return '<div class="sc-qwho-row sc-hwho-row sc-hwho-sub"><i>' + esc(sub.name) + '</i>'
       + '<b>' + (v == null ? '<span class="sc-dim">未考</span>' : fmtNum(v)) + '</b>'
       + '<span>' + (v == null ? '' : esc(scQGap(v, avgs[sub.key]))) + '</span>'
       + '<em>' + esc(tail.join(' · ')) + '</em></div>';
