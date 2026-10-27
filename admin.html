@@ -297,6 +297,10 @@ input,select,textarea{font-family:inherit;font-size:inherit}
   backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
 }
 .head h2{margin:0;font-size:1.2rem;font-weight:800;letter-spacing:-.01em}
+/* v3.15.3（站主）：超长面板标题（如「个人信息分享（登录后查询 · 链接 / 二维码 / 开放范围）」）
+   在手机上会折成两行，顶栏高度是固定的，多出来的字就压到顶栏外、盖住旁边的图标。
+   统一改成单行省略号：宁可截断，也不许它撑破顶栏。完整标题见 title 提示。 */
+#pageTitle{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .head .head-actions{display:flex;align-items:center;gap:9px}
 #burger{display:none}
 .main{margin-left:var(--side-w);min-height:100vh;display:flex;flex-direction:column;position:relative;z-index:1}

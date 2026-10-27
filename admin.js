@@ -851,6 +851,8 @@ function go(page){
   STATE.page = page;
   var p = PAGES.find(function(x){ return x.id === page; });
   $('pageTitle').textContent = p ? p.title : '';
+  /* v3.15.3：标题单行省略，完整文案挂在 title 上，长按 / 悬停能看全 */
+  try{ $('pageTitle').title = p ? p.title : ''; }catch(e){}
   renderNav();
   var view = $('view');
   view.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
