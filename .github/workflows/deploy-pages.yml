@@ -79,6 +79,7 @@ jobs:
             share-card.js
             admin.html
             share.html
+            info.html
             sw.js
             manifest.webmanifest
             favicon.svg

@@ -280,7 +280,7 @@ function isPublished(rel) {
   return published.some((p) => clean === p || clean.startsWith(p + '/'));
 }
 const refs = new Set();
-for (const f of ['index.html', 'app.js', 'share-card.js']) {
+for (const f of ['index.html', 'app.js', 'share-card.js', 'admin.js']) {
   const t = read(f);
   const re = /['"(](\.\/[A-Za-z0-9_\-./]+\.(?:js|css|png|jpg|jpeg|svg|webmanifest|woff2?))['")]/g;
   let m;
