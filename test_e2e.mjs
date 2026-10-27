@@ -4352,7 +4352,8 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   t('后台保存时带上 extra', /payload\.extra\s*=/.test(adminHtmlSrc));
   t('后台保存时带上 fieldVis', /payload\.fieldVis\s*=/.test(adminHtmlSrc));
   t('★合并导出支持动态列（账号+档案一张表）',
-    /extras\.map\(function\(f\)\{ return \(m\.extra \|\| \{\}\)\[f\.field\]/.test(adminHtmlSrc)
+    /memberExportCols\(j\.fieldMeta/.test(adminHtmlSrc)
+    && /\(m\.extra \|\| \{\}\)\[k\]/.test(adminHtmlSrc)
     && /成员与档案_' \+ fmt\(new Date\(\), 'date'\)/.test(adminHtmlSrc));
   t('后台导入识别自定义字段表头', /pick\(r, \[f\.label, f\.field\]\)/.test(adminHtmlSrc));
   t('后台有 extra-row 样式', /\.extra-row\{/.test(adminHtmlSrc));
@@ -5325,6 +5326,11 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★内容组导航项为 13 项（12 项 + v3.15 信息分享）',
     (adm47.match(/group:'内容'/g) || []).length === 13,
     '实际 ' + (adm47.match(/group:'内容'/g) || []).length + ' 项');
+  t('★v3.15.2 成员导出按字段元数据出列（新增字段自动带上）',
+    /function memberExportCols\(meta\)/.test(adm47) && /function memberCell\(m, f\)/.test(adm47)
+    && /memberExportCols\(j\.fieldMeta/.test(adm47)
+    && !/var head = \['姓名', '学号', '身份', '头衔'/.test(adm47));
+
   t('★合并后的面板路由已注册（cards → renderCards）',
     /cards:\s*renderCards,/.test(adm47));
 
@@ -8302,7 +8308,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && /'role', 'title'/.test(readAdm()));
   t('v3.5.22 成员列表返回 identity 与 titles',
     /identity: r\.role \|\| '学生'/.test(ADMJS_522) && /titles: normTitles\(r\.title\)\.list/.test(ADMJS_522));
-  t('v3.5.22 导出表格带身份与头衔列', /'姓名', '学号', '身份', '头衔'/.test(ADM_522));
+  t('v3.5.22 导出表格带身份与头衔列（v3.15.2 起由字段元数据带出）',
+    /k === 'role'\).*return m\.identity/.test(ADM_522) && /k === 'title'\)\{/.test(ADM_522));
   t('v3.5.22 前台身份/头衔也受字段可见性管辖',
     /role: canSee\('role'/.test(PROF_522) && /title: canSee\('title'/.test(PROF_522));
 
