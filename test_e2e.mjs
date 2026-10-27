@@ -5858,7 +5858,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★空值（缺考）排到最后', /缺考\/空值永远垫底/.test(idx));
 
   /* ===== ④ 图表 ===== */
-  t('★直方图带均分 / 中位数 / 分数线', /function scChartHist\(st\)/.test(idx) && /stroke-dasharray="4 3"/.test(idx));
+  t('★直方图带均分 / 中位数 / 分数线', /function scChartHist\(st(, rk)?\)/.test(idx) && /stroke-dasharray="4 3"/.test(idx));
   t('★上线人数统计', /function scChartCutlines\(st\)/.test(idx));
   t('★分数段四色条', /function scChartSegments\(st\)/.test(idx));
   t('★雷达图按得分率画（不是原始分）', /function scRadar\(labels, mine, avg, tips\)/.test(idx) && /按得分率/.test(idx));
@@ -6060,7 +6060,7 @@ console.log('\n【57】第四十八轮·站主侧五件套 + 三档开关（v2.8
   /* ===== ⑦ 前端响应总开关 ===== */
   t('★access=off 时学生只看到「暂未对外开放」', /cfg\.access === 'off' && !scIsAdmin\(\)/.test(idx));
   t('★后台默认口径会被前端采用（用户没切过时）', /SC\.basis = cfg\.rankBasis; SC\.basisSet = true;/.test(idx));
-  t('★用户自己切过就不再被覆盖', /SC\.basisSet = true;\s*\n\s*scRenderAll\(\)/.test(idx));
+  t('★用户自己切过就不再被覆盖', /SC\.basisSet = true;[\s\S]{0,160}?scRenderAll\(\)/.test(idx));
 
   /* ===== ⑧ 后端白名单 ===== */
   t('★config 白名单含四个档位键 + access',
@@ -6723,6 +6723,13 @@ console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检�
   /* ---- ⑥ 官方化文案锁定（只看「怎么写」，不解释「别误解什么」） ---- */
   t('★六科画像图注官方句式', /各顶点标注学科分数/.test(idx));
   t('★总分分布图注官方句式', /柱顶为该段人数/.test(idx));
+  {
+    const sapp = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    t('★v3.14.0 总分分布柱子可点：点柱子出分段名单，点名字出各科分数',
+      /function scHistTap\(/.test(sapp) && /function scHistWhoHtml\(/.test(sapp)
+      && /id="scHistList"/.test(sapp) && /data-hb="/.test(sapp)
+      && /onclick="scHistTap\(/.test(sapp) && /\.sc-hrow\{/.test(idx) && /\.sc-hb\.on \.sc-bar/.test(idx));
+  }
   t('★四象限图注官方句式', /图中标注姓名与该科分数/.test(idx));
   t('★热力图图注官方句式', /每格为该生该科分数/.test(idx));
   t('★年级排名图注官方句式', /年级排名与班排名分别统计/.test(idx));

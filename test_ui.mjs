@@ -241,6 +241,129 @@ console.log('\n【5】基础版页面（老设备）');
   await ctx.close();
 }
 
+/* ---------------------------------------------------------------- 6) 成绩分析：点总分分布的柱子 */
+console.log('\n【6】总分分布：点柱子看分段名单 → 点名字看各科分数');
+{
+  const SUBJECTS = [
+    { key: 'chinese', name: '语文', full: 150, graded: false },
+    { key: 'math', name: '数学', full: 150, graded: false },
+    { key: 'english', name: '英语', full: 150, graded: false },
+    { key: 'physics', name: '物理', full: 100, graded: false },
+    { key: 'chemistry', name: '化学', full: 100, graded: true },
+    { key: 'biology', name: '生物', full: 100, graded: true },
+  ];
+  const exam = { id: 901, name: '冒烟测试月考', date: '2026-10-01', subjects: SUBJECTS, cutlines: [], gradeRef: { students: 500 } };
+  /* 8 个人，总分刻意跨几个 20 分格：620/610 挤一格，用来验「分段 + 排序」 */
+  const plan = [['张三', 641], ['李四', 630], ['王五', 621], ['赵六', 610], ['孙七', 588], ['周八', 561], ['吴九', 512], ['郑十', 470]];
+  const rows = plan.map(([name, total], i) => {
+    const r = { id: 900 + i, name, schoolRank: 300 + i, leagueRank: 1100 + i, s: {} };
+    let left = total;
+    SUBJECTS.forEach((sub, k) => {
+      const v = k === SUBJECTS.length - 1 ? left : Math.round(total * (sub.full / 750));
+      if (k < SUBJECTS.length - 1) left -= v;
+      r.s[sub.key] = { raw: v, assigned: sub.graded ? v + 5 : null, rank: 100 + i, asgRank: 90 + i };
+    });
+    return r;
+  });
+  const json = (o) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(o) });
+
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message.slice(0, 140)));
+  await page.addInitScript(() => {
+    localStorage.setItem('cls_login_guide_v1', '1');
+    localStorage.setItem('cls_welcome_v1', '1');
+    localStorage.setItem('cls_auth', JSON.stringify({ token: 'smoke-token', user: { id: 900, displayName: '张三', role: 'user' } }));
+  });
+  await page.route('**/api/**', async (route) => {
+    const u = new URL(route.request().url());
+    if (u.pathname.endsWith('/api/scores')) {
+      const a = u.searchParams.get('action');
+      if (a === 'list') return route.fulfill(json({ ok: true, exams: [exam], config: { access: 'on' } }));
+      if (a === 'board') return route.fulfill(json({ ok: true, exam, rows }));
+      if (a === 'me') return route.fulfill(json({ ok: true, items: [] }));
+      if (a === 'config') return route.fulfill(json({ ok: true, config: { access: 'on' } }));
+      return route.fulfill(json({ ok: true }));
+    }
+    return mockApi(route);
+  });
+  await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.waitForTimeout(2200);
+  /* 成绩分析挂在板块 3 里，切到那个板块才会挂载（手机上侧栏在抽屉里，直接调 openCat） */
+  await page.evaluate(() => { if (typeof openCat === 'function') openCat(3); });
+  await page.waitForTimeout(1800);
+
+  const chart = await page.evaluate(() => ({
+    bars: document.querySelectorAll('#scPaneBox .sc-hb').length,
+    clickable: document.querySelectorAll('#scPaneBox .sc-hb[onclick]').length,
+    emptyNoClick: [...document.querySelectorAll('#scPaneBox .sc-hb')].every((g) => {
+      const m = /：(\d+) 人/.exec(g.querySelector('title').textContent);
+      return !m || Number(m[1]) === 0 ? !g.hasAttribute('onclick') : g.hasAttribute('onclick');
+    }),
+  }));
+  t('总分分布画出可点的柱子', chart.bars > 0 && chart.clickable > 0, JSON.stringify(chart));
+  t('没人的空柱不可点（有人的才可点）', chart.emptyNoClick, JSON.stringify(chart));
+
+  /* 点「621–640」那根（张三 641 / 李四 630 / 王五 621 → 621 落在下一格，所以这格是 2 人） */
+  const pick = await page.evaluate(() => {
+    const gs = [...document.querySelectorAll('#scPaneBox .sc-hb')];
+    const hit = gs.find((g) => /^620–639 分：2 人/.test(g.querySelector('title').textContent));
+    if (!hit) return null;
+    hit.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return hit.getAttribute('data-hb');
+  });
+  await page.waitForTimeout(300);
+  const list = await page.evaluate(() => ({
+    head: document.querySelector('#scHistList .sc-qlist-h') ? document.querySelector('#scHistList .sc-qlist-h').textContent.replace(/\s+/g, ' ').trim() : '',
+    rows: [...document.querySelectorAll('#scHistList .sc-hrow')].map((r) => ({
+      name: r.querySelector('.n').textContent.replace('我', '').trim(),
+      total: Number(r.querySelector('.t').textContent),
+    })),
+    on: document.querySelectorAll('#scPaneBox .sc-hb.on').length,
+  }));
+  t('点柱子弹出这一分段的名单', pick != null && /620–639 分/.test(list.head) && list.rows.length === 2, pick + ' · ' + JSON.stringify(list));
+  t('名单按总分从高到低排', list.rows.length === 2 && list.rows[0].total > list.rows[1].total, JSON.stringify(list.rows));
+  t('点中的柱子高亮一根', list.on === 1, String(list.on));
+
+  /* 点第一个人 → 各科分数 */
+  await page.evaluate(() => document.querySelectorAll('#scHistList .sc-hrow')[0].click());
+  await page.waitForTimeout(300);
+  const who = await page.evaluate(() => {
+    const box = document.querySelector('#scHistList .sc-hwho');
+    return {
+      shown: !!box,
+      head: box ? box.querySelector('.sc-qwho-h').textContent.replace(/\s+/g, ' ').trim() : '',
+      rows: box ? [...box.querySelectorAll('.sc-hwho-row')].map((r) => r.textContent.replace(/\s+/g, ' ').trim()) : [],
+    };
+  });
+  t('点名字展开这个人的明细', who.shown, JSON.stringify(who.head));
+  t('明细里有总分', who.rows.some((x) => /^总分/.test(x)), JSON.stringify(who.rows.slice(0, 3)));
+  t('明细里有六科分数', ['语文', '数学', '英语', '物理', '化学', '生物'].every((n) => who.rows.some((x) => x.indexOf(n) === 0)), JSON.stringify(who.rows.slice(-3)));
+  t('赋分科目写出原始→赋分', who.rows.some((x) => /赋分 \d+(\.\d+)?→\d+/.test(x)), JSON.stringify(who.rows.slice(-2)));
+  t('明细里没有横向溢出', await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth <= 0),
+    String(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)));
+
+  /* 收起明细 → 名单还在；再点同一根柱子 → 名单收起 */
+  await page.evaluate(() => document.querySelector('#scHistList .sc-hwho .sc-qlist-x').click());
+  await page.waitForTimeout(250);
+  const afterWho = await page.evaluate(() => ({
+    who: !!document.querySelector('#scHistList .sc-hwho'),
+    rows: document.querySelectorAll('#scHistList .sc-hrow').length,
+  }));
+  t('收起个人明细后名单还在', !afterWho.who && afterWho.rows === 2, JSON.stringify(afterWho));
+
+  await page.evaluate((i) => document.querySelector('#scPaneBox .sc-hb[data-hb="' + i + '"]').dispatchEvent(new MouseEvent('click', { bubbles: true })), Number(pick));
+  await page.waitForTimeout(300);
+  const collapsed = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#scHistList .sc-hrow').length,
+    on: document.querySelectorAll('#scPaneBox .sc-hb.on').length,
+  }));
+  t('再点同一根柱子就收起', collapsed.rows === 0 && collapsed.on === 0, JSON.stringify(collapsed));
+  t('成绩分析无 JS 报错', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 await browser.close();
 
 console.log('\n' + '='.repeat(46));

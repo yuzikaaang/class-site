@@ -2657,6 +2657,39 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .sc-qchip{display:inline-flex;align-items:baseline;gap:5px;background:#f6f2ff;border:1px solid #e6dcf7;color:#4c3b74;border-radius:999px;padding:3px 10px;font-size:.78rem}
 .sc-qchip em{font-style:normal;font-size:.66rem;color:#8a7968}
 .sc-qchip.me{background:#fff3ea;border-color:#f5c9a8;color:#c2410c}
+/* 总分分布：点柱子看分段名单（v3.14.0） */
+.sc-hb{cursor:pointer}
+.sc-hb .sc-bar{transition:fill .15s}
+.sc-hb:hover .sc-bar{fill:#e8b183}
+.sc-hb.on .sc-bar{fill:#c2410c}
+.sc-hb.on .sc-bar-num{fill:#c2410c}
+.sc-hlist{display:flex;flex-direction:column;gap:1px;margin-top:4px;max-height:280px;overflow:auto;
+  -webkit-overflow-scrolling:touch}
+.sc-hrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:.82rem;
+  -webkit-tap-highlight-color:transparent}
+.sc-hrow:hover{background:#faf5f0}
+.sc-hrow.on{background:#fff3ea;box-shadow:inset 0 0 0 1px #f5c9a8}
+.sc-hrow .r{min-width:30px;text-align:right;color:#a8968a;font-size:.72rem;font-variant-numeric:tabular-nums}
+.sc-hrow .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-weight:600;color:#3f3a36;display:flex;align-items:center;gap:5px}
+.sc-hrow .t{font-weight:800;color:#b45309;font-variant-numeric:tabular-nums}
+.sc-hrow.me .n{color:#c2410c}
+.sc-hwho{margin-top:8px}
+.sc-hwho .sc-qwho-row{align-items:flex-start;flex-wrap:wrap}
+.sc-hwho .sc-qwho-row i{min-width:52px}
+.sc-hwho .sc-qwho-row em{margin-left:auto;text-align:right;font-size:.7rem;line-height:1.5;color:#a8968a}
+.dark .sc-hwho .sc-qwho-row em{color:#9a8b7c}
+/* 各科明细行：分数 / 与班均差 / 名次信息 —— 手机上允许换行，别撑出横向滚动 */
+.sc-hwho-row span{flex:1 1 auto;min-width:0}
+.dark .sc-hrow:hover{background:#332b26}
+.dark .sc-hrow.on{background:#3a2f26;box-shadow:inset 0 0 0 1px #5a4636}
+.dark .sc-hrow .n{color:#e7ddd3}
+.dark .sc-hrow .r{color:#9a8b7c}
+.dark .sc-hrow.me .n{color:#fb923c}
+.dark .sc-hb:hover .sc-bar{fill:#8a6440}
+.dark .sc-hb.on .sc-bar{fill:#fb923c}
+.dark .sc-hb.on .sc-bar-num{fill:#fb923c}
+
 /* 点某个圆点 → 这一个人的明细（v3.1.1） */
 .sc-qwho{margin-top:8px;border:1px solid #f0e2d2;border-radius:10px;padding:8px 10px;background:#fffdfb}
 .sc-qwho-h{display:flex;align-items:center;gap:8px;font-size:.84rem;color:#3f3a36}
@@ -4652,10 +4685,10 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '3.13.1';
+var SITE_VERSION = '3.14.0';
 var VER_DATE = '2026-10-25';
 </script>
-<script src="./app.min.js?v=3131" defer></script>
+<script src="./app.min.js?v=3140" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

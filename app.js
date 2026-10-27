@@ -13188,6 +13188,9 @@ var SC = {
   tailSortKey: 'd',   /* 进退步榜排序键（v3.3.0：合并成一张表，点表头排） */
   tailSortAsc: false, /* 默认按名次变化降序＝进步最多的在最上面 */
   hmSel: null,        /* 热力图上点中的格子（单元格下标，null=没点） */
+  histSel: null,      /* v3.14.0：总分分布点中了哪个分段（下标，null=没点） */
+  histWho: null,      /* v3.14.0：分段名单里点中的那个学生（成绩行 id） */
+  _hist: null,        /* v3.14.0：总分分布每个分段的人（供点选时出名单，不重新渲染） */
   _hm: null,          /* 热力图每格的数据（供点选时出明细，不重新渲染） */
   _quad: null,    /* 最近一次四象限渲染的点数据（供点选时算名单，不重新渲染） */
   /* v3.5.6 需关注筛选：all 全部 / total 总分不达标 / subj 仅单科 / drop 连续两次退步 */
@@ -13833,6 +13836,8 @@ function scRenderBar(){
 function scSetBasis(b){
   SC.basis = b;
   SC.basisSet = true;
+  /* 分段是按分数切的，换了口径（原始 / 赋分）就重新点 */
+  SC.histSel = null; SC.histWho = null;
   scRenderAll();
 }
 
@@ -13920,7 +13925,7 @@ function scRenderBoard(){
     + '<div class="sc-tblwrap" data-scroll-keep data-scblk="board_table"><table class="sc-tbl sc-fix2">'
     +   '<thead>' + head + '</thead><tbody>' + body + '</tbody>'
     + '</table></div>'
-    + scChartHist(st)
+    + scChartHist(st, rk)
     + scChartCutlines(st)
     + scChartSegments(st)
     + scGradedBlock()
@@ -14081,7 +14086,7 @@ function scSort(k){
 }
 
 /* ---------- 图表：总分分布直方图（含分数线） ---------- */
-function scChartHist(st){
+function scChartHist(st, rk){
   if(!st.n) return '';
   var full = scFullMark();
   var step = 20;
@@ -14099,6 +14104,31 @@ function scChartHist(st){
   first = Math.max(0, first - pad); last = Math.min(bins.length - 1, last + pad);
   var slice = bins.slice(first, last + 1);
 
+  /* v3.14.0（站主）：点柱子 → 这一分段有哪些人（按总分从高到低）；再点名字 → 他的各科分数。
+     数据在这里一次算好存进 SC._hist，点的时候只重画下面那一块，不整页重渲染。 */
+  var rankMap = (rk && rk.total) || {};
+  var hist = slice.map(function(c, i){
+    var lo = (first + i) * step;
+    var isLast = (i === slice.length - 1);
+    var list = [];
+    SC.rows.forEach(function(r){
+      var t = scTotal(r, SC.basis);
+      if(t == null) return;
+      if(t >= lo && (isLast || t < lo + step)){
+        list.push({ id: r.id, name: r.name, total: t, rank: rankMap[r.id] || null, me: scIsMe(r) });
+      }
+    });
+    /* 同分按班排先后，再按姓名 */
+    list.sort(function(a, b){
+      if(b.total !== a.total) return b.total - a.total;
+      var ra = (a.rank == null ? 9999 : a.rank), rb = (b.rank == null ? 9999 : b.rank);
+      if(ra !== rb) return ra - rb;
+      return a.name > b.name ? 1 : a.name < b.name ? -1 : 0;
+    });
+    return { lo: lo, hi: lo + step, list: list };
+  });
+  SC._hist = hist;
+
   var W = 640, H = 180, L = 34, B = 26, T = 14, R = 14;
   var maxC = Math.max.apply(null, slice.concat([1]));
   var bw = (W - L - R) / slice.length;
@@ -14108,13 +14138,21 @@ function scChartHist(st){
   /* 柱顶直接写「这一格多少人」——手机上看图不用去对纵轴 */
   var bars = slice.map(function(c, i){
     var h = H - B - yOf(c);
+    var b0 = hist[i] || { lo: 0, list: [] };
     var rect = '<rect x="' + (xOf(i) + 1).toFixed(1) + '" y="' + yOf(c).toFixed(1) + '" width="' + Math.max(1, bw - 2).toFixed(1)
       + '" height="' + Math.max(0, h).toFixed(1) + '" class="sc-bar" fill="#f0c9a3" rx="2"/>';
-    if(c <= 0) return rect;
+    /* 空柱没高度，点了也没意义 —— 只有有人的柱子才可点 */
+    if(c <= 0){
+      return '<g class="sc-hb" data-hb="' + i + '"><title>' + b0.lo + '–' + (b0.hi - 1) + ' 分：0 人</title>' + rect + '</g>';
+    }
     /* 柱子窄的时候字号跟着缩，宁可小也别糊成一团 */
     var fs = bw < 13 ? 7 : (bw < 18 ? 8.5 : 9.5);
-    return rect + '<text x="' + (xOf(i) + bw / 2).toFixed(1) + '" y="' + Math.max(8.5, yOf(c) - 3).toFixed(1)
+    var txt = '<text x="' + (xOf(i) + bw / 2).toFixed(1) + '" y="' + Math.max(8.5, yOf(c) - 3).toFixed(1)
       + '" font-size="' + fs + '" font-weight="700" class="sc-bar-num" fill="#8a6a4a" text-anchor="middle">' + c + '</text>';
+    /* 整根（含顶上数字）都挂在同一个 <g> 上，手指点哪都能命中 */
+    return '<g class="sc-hb" data-hb="' + i + '" onclick="scHistTap(' + i + ')" style="cursor:pointer">'
+      + '<title>' + b0.lo + '–' + (b0.hi - 1) + ' 分：' + c + ' 人（点开看名单）</title>'
+      + rect + txt + '</g>';
   }).join('');
 
   var axis = '';
@@ -14171,8 +14209,123 @@ function scChartHist(st){
     +   axis + bars + marks + myMark
     +   '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" class="sc-axis" stroke="#e2d5c8" stroke-width="1.2"/>'
     + '</svg></div>'
-    + '<div class="sc-figcap">每格 ' + step + ' 分；柱顶为该段人数，虚线为均分与中位数，实线为分数线，红点为你</div>'
+    + '<div id="scHistList" class="sc-qlist">' + scHistHtml() + '</div>'
+    + '<div class="sc-figcap">每格 ' + step + ' 分；柱顶为该段人数，虚线为均分与中位数，实线为分数线，红点为你。'
+    + '<b>点柱子看这一段有谁</b>（按总分从高到低），再点名字看他的各科分数。</div>'
     + '</div>';
+}
+
+/* ---------- 总分分布：点柱子看分段名单（v3.14.0） ---------- */
+/* 分段名单 + 选中那个人之后的明细；SC.histSel / histWho 一变就只重画这一块 */
+function scHistHtml(){
+  var hist = SC._hist;
+  if(!hist || SC.histSel == null) return '';
+  var b = hist[SC.histSel];
+  if(!b) return '';
+
+  var head = '<div class="sc-qlist-h"><b>' + b.lo + '–' + (b.hi - 1) + ' 分</b>　共 '
+    + b.list.length + ' 人<span class="sc-dim" style="font-size:.72rem">总分从高到低</span>'
+    + '<button class="sc-qlist-x" onclick="scHistTap(-1)">收起</button></div>';
+
+  if(!b.list.length){
+    return head + '<div class="sc-dim" style="padding:4px 2px">这一段没有人。</div>';
+  }
+
+  var rows = b.list.map(function(p){
+    var on = (String(SC.histWho) === String(p.id));
+    return '<div class="sc-hrow' + (on ? ' on' : '') + (p.me ? ' me' : '') + '" onclick="scHistWho(' + p.id + ')">'
+      + '<span class="r">' + (p.rank == null ? '—' : p.rank) + '</span>'
+      + '<span class="n">' + esc(p.name) + (p.me ? '<i class="sc-you">我</i>' : '') + '</span>'
+      + '<span class="t">' + fmtNum(p.total) + '</span>'
+      + '</div>';
+  }).join('');
+
+  var who = (SC.histWho == null) ? '' : scHistWhoHtml(SC.histWho);
+  return head
+    + '<div class="sc-hlist">' + rows + '</div>'
+    + who
+    + (SC.histWho == null ? '<div class="sc-dim" style="margin-top:6px;font-size:.72rem">点名字看这个人的各科分数</div>' : '');
+}
+
+/* 某一个人的各科明细：分数 / 与班均差 / 班内名次 / 年级名次 / 赋分变化 */
+function scHistWhoHtml(id){
+  var r = null;
+  SC.rows.forEach(function(x){ if(!r && String(x.id) === String(id)) r = x; });
+  if(!r) return '';
+
+  var subs = (SC.exam && SC.exam.subjects) || [];
+  var rk = scRankMap(SC.basis);
+  var avgs = scSubjAvg();
+  var st = scStats(SC.basis);
+  var total = scTotal(r, SC.basis);
+  var myRank = rk.total[r.id];
+  var gradeN = (SC.exam.gradeRef && SC.exam.gradeRef.students) ? SC.exam.gradeRef.students : null;
+  var me = scIsMe(r);
+
+  var lines = subs.map(function(sub){
+    var v = scSubScore(r, sub, SC.basis);
+    var pack = (r.s && r.s[sub.key]) || {};
+    var sr = rk.subj[sub.key] || {};
+    var cr = (sr.rank || {})[r.id];
+    var cnt = sr.count;
+    var gRank = (SC.basis === 'graded' && sub.graded && pack.asgRank != null) ? pack.asgRank : pack.rank;
+    var tail = [];
+    if(cr != null) tail.push('班内 ' + cr + (cnt ? '/' + cnt : ''));
+    if(gRank != null) tail.push('年级 ' + gRank);
+    if(pack.raw != null && pack.assigned != null && Math.abs(pack.raw - pack.assigned) > 0.001){
+      tail.push('赋分 ' + fmtNum(pack.raw) + '→' + fmtNum(pack.assigned));
+    }
+    return '<div class="sc-qwho-row sc-hwho-row"><i>' + esc(sub.name) + '</i>'
+      + '<b>' + (v == null ? '<span class="sc-dim">未考</span>' : fmtNum(v)) + '</b>'
+      + '<span>' + (v == null ? '' : esc(scQGap(v, avgs[sub.key]))) + '</span>'
+      + '<em>' + esc(tail.join(' · ')) + '</em></div>';
+  }).join('');
+
+  return '<div class="sc-qwho sc-hwho">'
+    + '<div class="sc-qwho-h"><b>' + esc(r.name) + '</b>'
+    +   (me ? '<em class="sc-qwho-me">我</em>' : '')
+    +   '<button class="sc-qlist-x" onclick="scHistWho(' + r.id + ')">收起</button></div>'
+    + '<div class="sc-qwho-body">'
+    +   '<div class="sc-qwho-row sc-hwho-row"><i>总分</i>'
+    +     '<b>' + (total == null ? '—' : fmtNum(total)) + '</b>'
+    +     '<span>' + (total == null ? '' : esc(scQGap(total, st.avg))) + '</span>'
+    +     '<em>' + (myRank != null ? '班内第 ' + myRank : '') + '</em></div>'
+    +   (r.schoolRank != null ? '<div class="sc-qwho-row sc-hwho-row"><i>年级排名</i><b>' + r.schoolRank + '</b><span></span><em>' + (gradeN ? '共 ' + gradeN + ' 人（物理方向）' : '物理方向') + '</em></div>' : '')
+    +   (r.leagueRank != null ? '<div class="sc-qwho-row sc-hwho-row"><i>联考排名</i><b>' + r.leagueRank + '</b><span></span><em></em></div>' : '')
+    +   lines
+    + '</div></div>';
+}
+
+/* 点柱子：同一个再点一次 = 收起 */
+function scHistTap(i){
+  i = Number(i);
+  if(!(i >= 0) || SC.histSel === i){
+    SC.histSel = null; SC.histWho = null;
+  }else{
+    SC.histSel = i; SC.histWho = null;
+  }
+  scHistPaint();
+}
+
+/* 点名单里的某个人：再点一次收起明细 */
+function scHistWho(id){
+  SC.histWho = (String(SC.histWho) === String(id)) ? null : id;
+  scHistPaint();
+}
+
+/* 只重画：柱子的高亮 + 下面那一块名单，不动整页（手机上好滚动、不跳回顶部） */
+function scHistPaint(){
+  var box = document.getElementById('scHistList');
+  if(box) box.innerHTML = scHistHtml();
+  var gs = document.querySelectorAll('.sc-hb');
+  for(var i = 0; i < gs.length; i++){
+    var idx = Number(gs[i].getAttribute('data-hb'));
+    var on = (SC.histSel != null && idx === SC.histSel);
+    gs[i].setAttribute('class', 'sc-hb' + (on ? ' on' : ''));
+  }
+  if(box && SC.histSel != null){
+    try{ box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }catch(e){}
+  }
 }
 
 /* ---------- 图表：分数线上线统计 ---------- */
