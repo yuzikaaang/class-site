@@ -100,6 +100,9 @@
 //       且后台取到异常后仍留着加载态。浏览器侧这次只做一件事：版本号照旧跟着
 //       前端走（CACHE = class-site-<版本>），升上来就把旧桶整个删掉，
 //       旧页面不会再从缓存里被翻出来。后台兜底逻辑在 admin.js 里。升版本清旧缓存。
+//       同时修一处缓存一致性坑：带 ?v= 的资源不再回退「忽略查询串」匹配 ——
+//       旧 SW + 新 HTML 时，会把缓存里的旧 admin.js 又递回去，页面看着是新的、
+//       脚本还是旧的，症状就是「点了没反应 / 一直转圈」。
 /* ⚠️ 这个常量必须和 index.html 里的 SITE_VERSION 保持一致。
    前端的「检查更新」就是读这里的值来判断线上有没有新版 ——
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
@@ -252,7 +255,16 @@ self.addEventListener('fetch', (event) => {
 
     if (!cacheable) return fetch(request)
 
-    const cached = await cache.match(request, { ignoreSearch: true }).catch(() => null)
+    /* v3.15.3（站主）：带 ?v= 的资源只认「完全一致的 URL」，不再回退到忽略查询串。
+     * 起因是「信息分享后台一直转圈」：设备上装的是旧 SW，缓存桶也是旧版，
+     * 新 HTML 引用了 admin.js?v=3153，但旧 SW 用 ignoreSearch 一匹配，
+     * 又把缓存里那份旧 admin.js 递了回去 —— 页面版本号是新的、脚本是旧的，
+     * 出现的正是「点了没反应 / 一直转圈」这种最难查的现象。
+     * 现在：?v= 是明确的版本标记，没命中就走网络；
+     * 只有不带 ?v= 的资源（图片 / 字体）才继续享受「忽略查询串」的容错。 */
+    const hasVer = (() => { try { return new URL(request.url).searchParams.has('v') } catch (e) { return false } })()
+    let cached = await cache.match(request).catch(() => null)
+    if (!cached && !hasVer) cached = await cache.match(request, { ignoreSearch: true }).catch(() => null)
     const netP = fetch(request)
       .then((res) => {
         if (res && res.ok) cache.put(request, res.clone()).catch(() => {})

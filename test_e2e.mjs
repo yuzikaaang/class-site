@@ -5347,6 +5347,8 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★v3.15.3 接口统一 25 秒超时 + 人话提示',
     /opts\.timeout \|\| 25000/.test(adm47) && /AbortController/.test(adm47)
     && /请求超时/.test(adm47) && /连不上服务器/.test(adm47));
+  t('★v3.15.3 带 ?v= 的资源不再回退「忽略查询串」（否则旧 SW 会把旧脚本递回来）',
+    /const hasVer = /.test(sw47) && /if \(!cached && !hasVer\) cached = await cache\.match\(request, \{ ignoreSearch: true \}\)/.test(sw47));
 
   t('★合并后的面板路由已注册（cards → renderCards）',
     /cards:\s*renderCards,/.test(adm47));
