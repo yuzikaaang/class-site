@@ -5322,8 +5322,8 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★后台两块已合并为「首页卡片」板块',
     /id:'cards',/.test(adm47) && /function renderCards\(\)/.test(adm47));
   /* v2.7.1 起内容组 10 项（合并后的 9 项 + 成绩分析）；v3.5.6 再加「投票管理」= 11 */
-  t('★内容组导航项为 12 项（9 项 + 成绩分析 + 投票管理 + 板块管理 + 班级岛 − 已并入的版本更新）',
-    (adm47.match(/group:'内容'/g) || []).length === 12,
+  t('★内容组导航项为 13 项（12 项 + v3.15 信息分享）',
+    (adm47.match(/group:'内容'/g) || []).length === 13,
     '实际 ' + (adm47.match(/group:'内容'/g) || []).length + ' 项');
   t('★合并后的面板路由已注册（cards → renderCards）',
     /cards:\s*renderCards,/.test(adm47));
