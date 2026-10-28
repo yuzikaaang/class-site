@@ -161,12 +161,37 @@ async function login(req, res) {
       from users where lower(username) = ${username} limit 1
   `;
 
+  /* 【v3.15.4】用姓名也能登录（站主 2026-10-28）
+   * 起因：站主在「信息分享」页登录不进去 —— 分享页提示写的是「用户名：你的姓名」，
+   * 全班 62 个账号的用户名确实就是中文姓名，唯独站主自己的账号是拼音 `yuzikang`，
+   * 按提示输「余子康」当然 401。同学记不住拼音，同样会栽在这。
+   * 现在：用户名查不到时，再按「显示名 = 输入值」找一次 —— 唯一匹配就当用户名用；
+   * 有多人同名则明确提示改用登录名，不要瞎猜一个塞进去。
+   * 顺带补一道限流口子：姓名路径命中后，也要按真实用户名查一次锁，否则
+   * 换个写法（拼音 ↔ 姓名）就能绕过 5 次锁 15 分钟。 */
+  let u = rows[0];
+  if (!u) {
+    const byName = await sql`
+      select id, username, display_name, role, status, password_hash, created_at,
+             coalesce(must_change_password, false) as must_change_password
+        from users where lower(coalesce(display_name, '')) = ${username} limit 2
+    `;
+    if (byName.length === 1) {
+      u = byName[0];
+      const lockByName = await lockRemain(sql, String(u.username || '').toLowerCase());
+      if (lockByName > 0) {
+        return fail(res, 429, '密码连续输错次数过多，请 ' + lockByName + ' 分钟后再试');
+      }
+    } else if (byName.length > 1) {
+      return fail(res, 409, '班里有多个同名的账号，请改用管理员给你的登录名（拼音那种，例如 yuzikang）');
+    }
+  }
+
   /* 用户不存在时也走一次密码比对，避免通过响应时间探测用户名是否存在。
      ⚠️ 这个陪跑串必须是**合法且能被真正计算的**哈希，否则会提前返回、
         防护等于没做。（历史上踩过两次坑：
           2026-09-30 —— 假 bcrypt 串是 66 位非法长度，bcryptjs 直接返回 false；
           2026-10-05 —— 换 PBKDF2 后，假串同步改为合法的 pbkdf2 格式。） */
-  const u = rows[0];
   const hash = u ? u.password_hash : DECOY_HASH;
   let good;
   if (credential) {
@@ -179,7 +204,9 @@ async function login(req, res) {
 
   if (!u || !good) {
     await bumpFail(sql, u ? u.id : null, username);
-    return fail(res, 401, '用户名或密码不对');
+    /* v3.15.4：文案补一句方向 —— 用户名多数是姓名，也有拼音的，别让人反复瞎试
+       （连错 5 次会锁 15 分钟，比猜错更麻烦） */
+    return fail(res, 401, '用户名或密码不对。用户名多数就是姓名，个别账号是拼音（忘了可以问管理员）');
   }
   if (u.status !== 'active') {
     /* v2.10.0：区分「待审核」与「已禁用」—— 提示语不同，

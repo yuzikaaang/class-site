@@ -15116,6 +15116,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.15.4', date: '2026-10-28', type: 'fix', title: '用姓名也能登录', items: [
+      '站主在「信息分享」页登录不进去：页面提示「用户名：你的姓名」，可他自己的账号是拼音 yuzikang，按提示输「余子康」当然对不上',
+      '登录接口加了一层兜底：用户名查不到时，再按「姓名」找一次，全班唯一就放行 —— 同学记不住拼音也能登',
+      '有多个同名账号时不再瞎猜，直接提示「请改用管理员给的登录名」',
+      '分享页提示与报错文案改准确：用户名多数是姓名、个别是拼音；401 时顺带提醒「连错 5 次会锁 15 分钟」',
+      '限流补了个口子：走姓名登录同样按真实账号计入锁定，换写法绕不过去'
+    ], pub: [
+      { cat: '修复', text: '信息分享页现在用姓名（或原来的拼音账号）都能登录，不用再猜用户名' },
+      { cat: '修复', text: '登录失败时会提示用户名可能不是姓名，并提醒连错会被临时锁定' }
+    ] },
   { version: '3.15.3', date: '2026-10-28', type: 'fix', title: '后台页面不再无限转圈', items: [
       '「信息分享」进不去、一直转圈，揪出来是两类原因：① 手机还停在旧版页面，旧代码一进这块就报错，圈留着不走了；② 接口偶尔被网络吞掉，请求既不成功也不失败，界面只能干等',
       '现在任何面板渲染出错都会换成一张说明卡，上面有「重试」和「强制刷新」，不会再让你对着圈子等四五分钟',
@@ -18491,6 +18501,7 @@ function paintIshare(){
           +   '<button class="btn btn-sm btn-secondary" data-act="open" data-id="' + esc(sh.id) + '">打开看看</button>'
           +   (sh.alive ? '<button class="btn btn-sm btn-secondary" data-act="edit" data-id="' + esc(sh.id) + '">编辑</button>' : '')
           +   (sh.alive ? '<button class="btn btn-sm btn-secondary" data-act="rev" data-id="' + esc(sh.id) + '">撤销</button>' : '')
+          +   '<button class="btn btn-sm btn-secondary" data-act="del" data-id="' + esc(sh.id) + '">删除</button>'
           + '</div>'
           + '</div>';
       }).join('')
@@ -18537,6 +18548,14 @@ function paintIshare(){
           if(!ok) return;
           api('/profile?action=ishare-revoke', { method: 'POST', body: { id: sh.id } })
             .then(function(){ toast('已撤销', 'ok'); ISHARE.loaded = false; loadIshare(); })
+            .catch(function(e){ toast(e.message, 'err'); });
+        });
+      }else if(act === 'del'){
+        /* v3.15.4：撤销只是停用、记录还在；建错的和自测用的可以直接清掉 */
+        confirmBox({ text: '删除后这条记录彻底消失（同学手里的链接也一起失效），确定吗？' }).then(function(ok){
+          if(!ok) return;
+          api('/profile?action=ishare-delete', { method: 'POST', body: { id: sh.id } })
+            .then(function(){ toast('已删除', 'ok'); ISHARE.loaded = false; loadIshare(); })
             .catch(function(e){ toast(e.message, 'err'); });
         });
       }

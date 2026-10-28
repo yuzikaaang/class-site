@@ -56,7 +56,8 @@ body{
   padding:11px 13px;font-size:.78rem;color:#6e635a;line-height:1.75;white-space:pre-line;
 }
 .hint b{color:var(--brand2)}
-.err{margin-top:12px;font-size:.82rem;color:var(--bad);font-weight:700;display:none}
+.err{margin-top:12px;font-size:.82rem;color:var(--bad);font-weight:700;display:none;
+  white-space:pre-line;line-height:1.55}
 .err.show{display:block}
 .tip{margin-top:10px;font-size:.74rem;color:var(--dim);text-align:center}
 
@@ -170,12 +171,14 @@ body{
 
   /* ---------------- 登录页 ---------------- */
   function renderLogin(errMsg){
-    var hintUser = SHARE.hintUser || '用户名：你的姓名（例：张三）';
+    /* v3.15.4（站主）：原来默认写「用户名：你的姓名」，可全班 62 个账号是中文姓名，
+       站主自己的却是拼音 yuzikang —— 按提示输姓名就登不进去。文案改成不误导的说法。 */
+    var hintUser = SHARE.hintUser || '用户名：注册时填的那个 —— 多数同学是姓名，个别是拼音（如 yuzikang）';
     var hintPass = SHARE.hintPass || '密码：班级站登录密码；忘了找管理员重置';
     app.innerHTML = '<div class="card">'
       + '<div class="login-h">' + esc(SHARE.title || '班级信息查询') + '</div>'
       + '<p class="login-s">用班级站账号登录后即可查看' + (SHARE.feats.others ? '本人和同学的信息' : '本人的信息') + '</p>'
-      + '<div class="field"><label>用户名</label><input id="u" autocomplete="username" placeholder="你的姓名"></div>'
+      + '<div class="field"><label>用户名</label><input id="u" autocomplete="username" placeholder="姓名，或管理员给的登录名"></div>'
       + '<div class="field"><label>密码</label><input id="p" type="password" autocomplete="current-password" placeholder="班级站密码"></div>'
       + '<button class="btn" id="go">登录</button>'
       + '<div class="err" id="err">' + esc(errMsg || '') + '</div>'
@@ -198,7 +201,11 @@ body{
         })
         .catch(function(e){
           go.disabled = false; go.textContent = '登录';
-          showErr(e.message || '登录失败');
+          var msg = e.message || '登录失败';
+          /* v3.15.4：401 时把「去哪找用户名」说清楚，别让人反复试到被锁 15 分钟 */
+          if(e.status === 401) msg += '。\n提示：多数账号用姓名就能登，个别是拼音；连错 5 次会锁 15 分钟。';
+          if(e.status === 429) msg += '\n等解锁后，先用「姓名」试一次，别连点。';
+          showErr(msg);
         });
     }
     go.onclick = submit;

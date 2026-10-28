@@ -405,6 +405,18 @@ async function ishareAdmin(req, res, u, action) {
     return ok(res, { ok: true });
   }
 
+  /* v3.15.4：彻底删掉一条（撤销只是停用，记录还留着占位置）。
+     站主建错的、自测用的分享，能直接清掉，列表不会被垃圾占住。 */
+  if (action === 'ishare-delete') {
+    const id = String(b.id || '');
+    const at = list.findIndex((x) => x && x.id === id);
+    if (at < 0) return fail(res, 404, '这条分享不存在');
+    list.splice(at, 1);
+    await ishareSave(sql, list);
+    await audit(u.id, 'info-share-delete', 'info_share', null, id);
+    return ok(res, { ok: true });
+  }
+
   /* 建 / 改共用的字段清洗 */
   const feats = {
     self: b.feats ? !!b.feats.self : true,

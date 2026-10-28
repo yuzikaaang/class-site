@@ -5347,6 +5347,27 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★v3.15.3 接口统一 25 秒超时 + 人话提示',
     /opts\.timeout \|\| 25000/.test(adm47) && /AbortController/.test(adm47)
     && /请求超时/.test(adm47) && /连不上服务器/.test(adm47));
+  const auth47 = readApi('auth.js');
+  const prof47 = readApi('profile.js');
+  const info47 = fs.readFileSync(new URL('./info.html', import.meta.url), 'utf8');
+
+  /* ===== v3.15.4（站主）：分享页登录不进去 =====
+     全班 62 个账号用户名就是姓名，站主自己却是拼音 yuzikang；
+     按「用户名：你的姓名」的提示输姓名必然 401。 */
+  t('★v3.15.4 登录：用户名查不到时按姓名兜底（唯一匹配才放行）',
+    /from users where lower\(coalesce\(display_name, ''\)\) = \$\{username\} limit 2/.test(auth47)
+    && /if \(byName\.length === 1\)/.test(auth47));
+  t('★v3.15.4 登录：同名多个不猜，直接让用登录名',
+    /return fail\(res, 409, '班里有多个同名的账号/.test(auth47));
+  t('★v3.15.4 登录：姓名路径也计入限流（换写法绕不过 5 次锁）',
+    /const lockByName = await lockRemain\(sql, String\(u\.username \|\| ''\)\.toLowerCase\(\)\)/.test(auth47));
+  t('★v3.15.4 分享页提示不再写死「你的姓名（例：张三）」',
+    !/用户名：你的姓名（例：张三）/.test(info47) && /多数同学是姓名，个别是拼音/.test(info47));
+  t('★v3.15.4 分享页 401/429 有补充提示且支持换行',
+    /e\.status === 401/.test(info47) && /连错 5 次会锁 15 分钟/.test(info47)
+    && /white-space:pre-line/.test(info47));
+  t('★v3.15.4 分享可以彻底删除（撤销只是停用）',
+    /action === 'ishare-delete'/.test(prof47) && /data-act="del"/.test(adm47));
   t('★v3.15.3 顶栏标题单行省略（长标题不再折行压住图标）',
     /#pageTitle\{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap\}/.test(adm47)
     && /\$\('pageTitle'\)\.title = p \? p\.title : ''/.test(adm47));
