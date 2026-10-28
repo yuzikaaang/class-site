@@ -15116,6 +15116,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.15.5', date: '2026-10-28', type: 'fix', title: '分享字段跟着「字段管理」走', items: [
+      '站主：「考籍号、身份证号后台压根没有选项可以勾」—— 分享的字段清单是写死的 12 项，字段管理里新增的字段从来没进过这份清单',
+      '现在目录改成动态拼：基础 12 项 + 字段管理里的全部自定义字段，按 sort_order 排在后面，名字用你在字段管理里起的那个',
+      '后台勾选框、分享页显示、后端取数三处统一走同一份目录，不会再出现「勾了拿不到」',
+      '每个字段后面标出档案可见性（如「档案：仅管理员」），勾了也不会显示的字段当场就能看见，不用试',
+      '以后在字段管理里加字段，分享这里自动多一项，不用改代码'
+    ], pub: [
+      { cat: '资料', text: '信息分享可以勾选的字段补齐了：考籍号、身份证号、发展团员编号等自定义字段现在都能放进去' },
+      { cat: '资料', text: '勾选时会标注哪些字段在档案里设了可见性限制，避免勾了却不显示' }
+    ] },
   { version: '3.15.4', date: '2026-10-28', type: 'fix', title: '用姓名也能登录', items: [
       '站主在「信息分享」页登录不进去：页面提示「用户名：你的姓名」，可他自己的账号是拼音 yuzikang，按提示输「余子康」当然对不上',
       '登录接口加了一层兜底：用户名查不到时，再按「姓名」找一次，全班唯一就放行 —— 同学记不住拼音也能登',
@@ -18577,12 +18587,19 @@ function ishareForm(edit){
     days = left > 0 ? left : 0;
   }
 
+  /* v3.15.5（站主）：「考籍号、身份证号这些后台压根没有选项可以勾」——
+     字段目录现在由后端按「字段管理」动态生成（ishareCatalog），
+     这里只负责画出来；顺带把档案可见性标上，免得勾了却不显示又来问一次。 */
+  var visWord = { admin: '档案：仅管理员', self: '档案：仅本人', committee: '档案：班委及以上' };
   var fieldBoxes = fields.map(function(f){
     var on = isEdit ? !!fm[f.key] : !!defOn[f.key];
+    var lock = visWord[f.vis] || '';
     return '<label style="display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid var(--border);'
-      + 'border-radius:9px;font-size:.82rem;cursor:pointer">'
+      + 'border-radius:9px;font-size:.82rem;cursor:pointer' + (lock ? ';opacity:.9' : '') + '">'
       + '<input type="checkbox" data-f="' + esc(f.key) + '"' + (on ? ' checked' : '') + '> '
-      + esc(f.label) + '</label>';
+      + esc(f.label)
+      + (lock ? '<span style="font-size:.68rem;color:#b45309;background:#fbeee0;border-radius:5px;padding:1px 5px;white-space:nowrap">' + esc(lock) + '</span>' : '')
+      + '</label>';
   }).join('');
 
   var body = ''
@@ -18597,7 +18614,8 @@ function ishareForm(edit){
     + '<div class="field"><label>「查其他成员」时能看到的字段</label>'
     +   '<div id="isFieldBox" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">'
     +   fieldBoxes + '</div>'
-    +   '<p style="font-size:.74rem;color:var(--fg-3);margin:8px 0 0">姓名始终可见（不然搜不到人）；'
+    +   '<p style="font-size:.74rem;color:var(--fg-3);margin:8px 0 0">这一份清单跟着「成员与档案 → 字段管理」走，'
+    +   '你在字段管理里新增的字段会自动出现在这里。<br>姓名始终可见（不然搜不到人）；'
     +   '档案里设成「仅本人 / 仅管理员」的字段勾了也不会显示。</p>'
     + '</div>'
     + '<div class="field" style="display:flex;gap:10px;flex-wrap:wrap">'

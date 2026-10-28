@@ -5366,6 +5366,22 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★v3.15.4 分享页 401/429 有补充提示且支持换行',
     /e\.status === 401/.test(info47) && /连错 5 次会锁 15 分钟/.test(info47)
     && /white-space:pre-line/.test(info47));
+  /* ===== v3.15.5（站主）：分享字段目录没跟上「字段管理」=====
+     「考籍号、身份证号后台压根没有选项可以勾」—— 原来 ISHARE_FIELDS 写死 12 项。 */
+  t('★v3.15.5 分享字段目录 = 基础清单 + 字段管理的自定义字段',
+    /function ishareCatalog\(meta\)/.test(prof47)
+    && /!have\.has\(k\) && !ISHARE_SKIP\.has\(k\)/.test(prof47)
+    && /custom: true/.test(prof47));
+  t('★v3.15.5 取数、公开配置、后台列表统一用动态目录（不再用写死的那份）',
+    /ishareRowShape\(await decRow\(key, rows\[0\]\), meta, true, allowKeys\)/.test(prof47)
+    && /const cat = ishareCatalog\(await loadMeta\(sql\)\)/.test(prof47)
+    && /fields: cat,/.test(prof47)
+    && /cat\.forEach\(\(f\) => \{\s*fields\[f\.key\]/.test(prof47));
+  t('★v3.15.5 目录带档案可见性，后台能标出「勾了也不显示」',
+    /vis: \(m\[f\.key\] && m\[f\.key\]\.visibility\) \|\| 'public'/.test(prof47)
+    && /档案：仅管理员/.test(adm47));
+  t('★v3.15.5 后台说明：清单跟着字段管理走',
+    /你在字段管理里新增的字段会自动出现在这里/.test(adm47));
   t('★v3.15.4 分享可以彻底删除（撤销只是停用）',
     /action === 'ishare-delete'/.test(prof47) && /data-act="del"/.test(adm47));
   t('★v3.15.3 顶栏标题单行省略（长标题不再折行压住图标）',

@@ -214,7 +214,11 @@ function canSee(field, meta, pref, fvis, ctx) {
    ============================================================ */
 const ISHARE_KEY = 'cls_info_shares';
 
-/* 可分享的字段目录。key 与 profiles 表列名 / shapeProfile 输出一一对应。 */
+/* 可分享的字段目录 —— 这里是**基础清单**，最终目录由 ishareCatalog(meta) 拼出来：
+   基础 12 项 +「成员与档案 → 字段管理」里新增的自定义字段。
+   ⚠️ v3.15.5（站主 2026-10-28）：「考籍号、身份证号这些后台压根没有勾选选项」——
+      根因就是这份清单是写死的，字段管理里新加的字段从来没进过分享目录。
+      以后在字段管理里加字段，分享这里自动多一项，不用再改代码。 */
 const ISHARE_FIELDS = [
   { key: 'student_id',  label: '学号' },
   { key: 'politics',    label: '政治面貌' },
@@ -230,6 +234,43 @@ const ISHARE_FIELDS = [
   { key: 'phone',       label: '手机号' },
 ];
 const ISHARE_FIELD_KEYS = new Set(ISHARE_FIELDS.map((f) => f.key));
+
+/* 不能出现在分享目录里的字段：
+   · name —— 姓名本来就是每条记录固定的抬头，不需要勾；
+   · role / title —— 身份与头衔走的是固定输出，不进 shapeProfile 的 fields 通道，
+     勾了也拿不到东西，摆出来只会误导；
+   · 其余是内部列（id / user_id / 时间戳 / 可见性配置），不是个人资料。 */
+const ISHARE_SKIP = new Set(['name', 'role', 'title', 'id', 'user_id', 'class_id',
+  'created_at', 'updated_at', 'contact_status', 'visibility_pref', 'field_vis', 'sort_order']);
+
+/**
+ * 真正的分享字段目录：基础清单 + 字段管理里的自定义字段。
+ * 自定义字段按 sort_order 排在后面，label 用站主在字段管理里起的名字。
+ */
+function ishareCatalog(meta) {
+  const m = meta || {};
+  /* 基础项也标上档案可见性：档案里设成「仅管理员」的，分享勾了也拿不到，
+     后台要能当场看出来，别让人以为勾了就会显示（这是下一个必然会被问到的问题）。 */
+  const list = ISHARE_FIELDS.map((f) => ({
+    key: f.key,
+    label: f.label,
+    vis: (m[f.key] && m[f.key].visibility) || 'public',
+  }));
+  const have = new Set(list.map((f) => f.key));
+  Object.keys(meta || {})
+    .filter((k) => !have.has(k) && !ISHARE_SKIP.has(k))
+    .map((k) => ({
+      key: k,
+      label: (meta[k] && meta[k].label) || k,
+      order: Number(meta[k] && meta[k].sortOrder) || 999,
+    }))
+    .sort((a, b) => a.order - b.order || String(a.key).localeCompare(String(b.key)))
+    .forEach((f) => {
+      list.push({ key: f.key, label: f.label, custom: true, vis: (m[f.key] && m[f.key].visibility) || 'public' });
+    });
+  return list;
+}
+function ishareKeySet(cat) { return new Set((cat || []).map((f) => f.key)); }
 
 function ishareToken() {
   const buf = new Uint8Array(18);
@@ -266,17 +307,19 @@ function ishareState(s) {
   return { alive: true };
 }
 
-/* 对外公开的部分：只说明「开放了哪些功能 / 哪些字段」，不含任何人的资料 */
-function isharePublic(s) {
+/* 对外公开的部分：只说明「开放了哪些功能 / 哪些字段」，不含任何人的资料。
+   v3.15.5：目录由外部传入（含字段管理里的自定义字段），不再用写死的那 12 项。 */
+function isharePublic(s, cat) {
   const feats = s.feats || {};
   const fields = (s.fields || {});
+  const list = cat || ISHARE_FIELDS;
   return {
     title: String(s.title || '班级信息查询'),
     note: String(s.note || ''),
     hintUser: String(s.hintUser || ''),
     hintPass: String(s.hintPass || ''),
     feats: { self: !!feats.self, others: !!feats.others },
-    fields: ISHARE_FIELDS.filter((f) => !!fields[f.key]).map((f) => ({ key: f.key, label: f.label })),
+    fields: list.filter((f) => !!fields[f.key]).map((f) => ({ key: f.key, label: f.label })),
     views: Number(s.views || 0),
   };
 }
@@ -285,6 +328,7 @@ async function ishareOpen(req, res) {
   const token = String(req.query.t || '').trim();
   if (!token) return fail(res, 400, '缺少链接标识');
   const sql = getSql();
+  const cat = ishareCatalog(await loadMeta(sql));
   const list = await ishareLoad(sql);
   const s = list.find((x) => x && x.token === token);
   const st = ishareState(s);
@@ -295,11 +339,11 @@ async function ishareOpen(req, res) {
   s.views += 1;
   try { await ishareSave(sql, list); } catch (e) { console.warn('[ishare] 计数失败', e && e.message); }
 
-  return ok(res, { ok: true, share: isharePublic(s) });
+  return ok(res, { ok: true, share: isharePublic(s, cat) });
 }
 
 /* 一行的对外形状：先过档案那套可见性，再按分享勾选的字段裁 */
-function ishareRowShape(row, meta, self) {
+function ishareRowShape(row, meta, self, allowed) {
   const p = shapeProfile(row, self, meta, self ? { self: true, committee: true } : { self: false, committee: false });
   const map = {
     student_id: p.studentId,
@@ -311,8 +355,9 @@ function ishareRowShape(row, meta, self) {
   };
   (p.fields || []).forEach((f) => { if (f && f.field) map[f.field] = f.value; });
   const out = { name: p.name || '' };
+  const allow = allowed || ISHARE_FIELD_KEYS;
   Object.keys(map).forEach((k) => {
-    if (!ISHARE_FIELD_KEYS.has(k)) return;
+    if (!allow.has(k)) return;
     const v = map[k];
     if (v == null || v === '') return;
     out[k] = String(v);
@@ -332,13 +377,15 @@ async function ishareData(req, res, u) {
   const feats = s.feats || {};
   const allow = s.fields || {};
   const meta = await loadMeta(sql);
+  const cat = ishareCatalog(meta);
+  const allowKeys = ishareKeySet(cat);
   const key = await profileKey(req);
 
   /* ① 自己的：本人看自己，档案里「仅本人」的字段也照常给（和「我的资料」一致） */
   let me = null;
   if (feats.self && u.profileId) {
     const rows = await sql`select * from profiles where id = ${u.profileId} limit 1`;
-    if (rows.length) me = ishareRowShape(await decRow(key, rows[0]), meta, true);
+    if (rows.length) me = ishareRowShape(await decRow(key, rows[0]), meta, true, allowKeys);
   }
 
   /* ② 其他成员：按分享勾选的字段裁；没勾的字段连键都不给 */
@@ -350,9 +397,9 @@ async function ishareData(req, res, u) {
        order by student_id nulls last, name
        limit 300`;
     for (const r of raw) {
-      const row = ishareRowShape(await decRow(key, r), meta, false);
+      const row = ishareRowShape(await decRow(key, r), meta, false, allowKeys);
       const keep = { name: row.name };
-      ISHARE_FIELDS.forEach((f) => {
+      cat.forEach((f) => {
         if (!allow[f.key]) return;
         if (row[f.key] == null) return;
         keep[f.key] = row[f.key];
@@ -363,7 +410,7 @@ async function ishareData(req, res, u) {
 
   return ok(res, {
     ok: true,
-    share: isharePublic(s),
+    share: isharePublic(s, cat),
     me,
     claimed: !!u.profileId,
     members,
@@ -374,14 +421,17 @@ async function ishareData(req, res, u) {
 async function ishareAdmin(req, res, u, action) {
   const sql = getSql();
   const list = await ishareLoad(sql);
+  /* v3.15.5：目录含「字段管理」里新增的自定义字段（考籍号 / 身份证号 …），
+     否则后台勾选框里永远只有写死的那 12 项。 */
+  const cat = ishareCatalog(await loadMeta(sql));
 
   if (action === 'ishare-list') {
     return ok(res, {
       ok: true,
-      fields: ISHARE_FIELDS,
+      fields: cat,
       shares: list.map((s) => {
         const st = ishareState(s);
-        return Object.assign({}, isharePublic(s), {
+        return Object.assign({}, isharePublic(s, cat), {
           id: s.id, token: s.token, url: '/info.html?t=' + s.token,
           alive: st.alive, why: st.why || '',
           revoked: !!s.revoked, expiresAt: s.expiresAt || null,
@@ -425,10 +475,10 @@ async function ishareAdmin(req, res, u, action) {
   if (!feats.self && !feats.others) return fail(res, 400, '至少开一个功能：查自己的信息或查其他成员');
 
   const fields = {};
-  ISHARE_FIELDS.forEach((f) => {
+  cat.forEach((f) => {
     fields[f.key] = !!(b.fields && b.fields[f.key]);
   });
-  if (feats.others && !ISHARE_FIELDS.some((f) => fields[f.key])) {
+  if (feats.others && !cat.some((f) => fields[f.key])) {
     return fail(res, 400, '「查其他成员」至少要勾一个可展示的字段');
   }
 
