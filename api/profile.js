@@ -320,6 +320,9 @@ function isharePublic(s, cat) {
     hintPass: String(s.hintPass || ''),
     feats: { self: !!feats.self, others: !!feats.others },
     fields: list.filter((f) => !!fields[f.key]).map((f) => ({ key: f.key, label: f.label })),
+    /* v3.15.6：key → 中文名 的完整字典。前端拿它兜底，任何字段都不会再显示成
+       exam_number / id_card 这种英文字符名。（只是字段名，不含任何人的数据） */
+    labels: list.reduce((m, f) => { m[f.key] = f.label; return m; }, {}),
     views: Number(s.views || 0),
   };
 }
@@ -378,14 +381,18 @@ async function ishareData(req, res, u) {
   const allow = s.fields || {};
   const meta = await loadMeta(sql);
   const cat = ishareCatalog(meta);
-  const allowKeys = ishareKeySet(cat);
+  /* v3.15.6（站主）：「自定义字段显示成英文字符名」——
+     原来这里传的是目录**全集** allowKeys，「我的信息」就把所有有值的字段都吐出来了，
+     包括没勾选的；而前端只认勾选清单里的中文名，多出来的只能退回显示 key。
+     现在本人也只给勾选过的字段，和「查其他成员」口径一致。 */
+  const shownKeys = new Set(cat.filter((f) => !!allow[f.key]).map((f) => f.key));
   const key = await profileKey(req);
 
   /* ① 自己的：本人看自己，档案里「仅本人」的字段也照常给（和「我的资料」一致） */
   let me = null;
   if (feats.self && u.profileId) {
     const rows = await sql`select * from profiles where id = ${u.profileId} limit 1`;
-    if (rows.length) me = ishareRowShape(await decRow(key, rows[0]), meta, true, allowKeys);
+    if (rows.length) me = ishareRowShape(await decRow(key, rows[0]), meta, true, shownKeys);
   }
 
   /* ② 其他成员：按分享勾选的字段裁；没勾的字段连键都不给 */
@@ -397,7 +404,7 @@ async function ishareData(req, res, u) {
        order by student_id nulls last, name
        limit 300`;
     for (const r of raw) {
-      const row = ishareRowShape(await decRow(key, r), meta, false, allowKeys);
+      const row = ishareRowShape(await decRow(key, r), meta, false, shownKeys);
       const keep = { name: row.name };
       cat.forEach((f) => {
         if (!allow[f.key]) return;

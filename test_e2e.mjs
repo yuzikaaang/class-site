@@ -5373,13 +5373,21 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     && /!have\.has\(k\) && !ISHARE_SKIP\.has\(k\)/.test(prof47)
     && /custom: true/.test(prof47));
   t('★v3.15.5 取数、公开配置、后台列表统一用动态目录（不再用写死的那份）',
-    /ishareRowShape\(await decRow\(key, rows\[0\]\), meta, true, allowKeys\)/.test(prof47)
+    /ishareRowShape\(await decRow\(key, rows\[0\]\), meta, true, shownKeys\)/.test(prof47)
     && /const cat = ishareCatalog\(await loadMeta\(sql\)\)/.test(prof47)
     && /fields: cat,/.test(prof47)
     && /cat\.forEach\(\(f\) => \{\s*fields\[f\.key\]/.test(prof47));
   t('★v3.15.5 目录带档案可见性，后台能标出「勾了也不显示」',
     /vis: \(m\[f\.key\] && m\[f\.key\]\.visibility\) \|\| 'public'/.test(prof47)
     && /档案：仅管理员/.test(adm47));
+  /* ===== v3.15.6（站主）：自定义字段显示成英文名 ===== */
+  t('★v3.15.6 「我的信息」只给勾选字段（原来给目录全集，多出来的只能显示英文）',
+    /const shownKeys = new Set\(cat\.filter\(\(f\) => !!allow\[f\.key\]\)\.map\(\(f\) => f\.key\)\)/.test(prof47)
+    && /ishareRowShape\(await decRow\(key, rows\[0\]\), meta, true, shownKeys\)/.test(prof47)
+    && !/ishareRowShape\(await decRow\(key, rows\[0\]\), meta, true, allowKeys\)/.test(prof47));
+  t('\u2605v3.15.6 \u540e\u7aef\u4e0b\u53d1\u300c\u5b57\u6bb5 \u2192 \u4e2d\u6587\u540d\u300d\u5b57\u5178', /labels: list\.reduce\(\(m, f\) => \{ m\[f\.key\] = f\.label/.test(prof47));
+  t('\u2605v3.15.6 \u5206\u4eab\u9875\u4e09\u5c42\u515c\u5e95\uff0c\u4e0d\u518d\u9000\u56de\u82f1\u6587 key', /var dict = \(SHARE && SHARE\.labels\) \|\| \{\}/.test(info47)
+    && /if\(dict\[key\]\) return dict\[key\]/.test(info47));
   t('★v3.15.5 后台说明：清单跟着字段管理走',
     /你在字段管理里新增的字段会自动出现在这里/.test(adm47));
   t('★v3.15.4 分享可以彻底删除（撤销只是停用）',

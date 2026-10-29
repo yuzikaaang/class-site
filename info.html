@@ -240,8 +240,14 @@ body{
   }
 
   function fieldLabel(key){
+    /* v3.15.6（站主）：「自定义字段显示成英文字符名」。
+       根因是这里只认「勾选清单」里的中文名，勾选之外的字段一路兜底到 key。
+       现在三层兜底：勾选清单 → 后端给的全量「key→中文名」字典 → 老的内置表，
+       全都不中才退回 key（正常不会走到这一步）。 */
     var fs = (SHARE && SHARE.fields) || [];
     for(var i = 0; i < fs.length; i++) if(fs[i].key === key) return fs[i].label;
+    var dict = (SHARE && SHARE.labels) || {};
+    if(dict[key]) return dict[key];
     var map = { student_id:'学号', politics:'政治面貌', exam_no:'智学网账号', school:'学校',
       class_name:'班级', ethnicity:'民族', birth_date:'出生日期', home_address:'家庭住址',
       league_date:'入团时间', wechat:'微信', qq:'QQ', phone:'手机号' };

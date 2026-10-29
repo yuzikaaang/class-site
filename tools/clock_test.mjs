@@ -62,7 +62,9 @@ t('数字时钟是 时:分:秒', /^\d{2}:\d{2}:\d{2}$/.test(big || ''), big);
 t('下面有日期与星期', /年.*月.*日/.test(sub || '') && /星期/.test(sub || ''), sub);
 const lunar = await page.evaluate(() => {
   const s = document.getElementById('bigSub').textContent;
-  const m = s.match(/(闰?[正二三四五六七八九十冬腊]月[初十廿三][一二三四五六七八九十]?)/);
+  /* 2026-10-29 农历「九月二十」：第三段的字符类原来漏了「二」，
+     导致二十 / 廿二 这类日子匹配不上（页面其实正常显示，只是断言没覆盖到）。 */
+  const m = s.match(/(闰?[正二三四五六七八九十冬腊]月[初十廿二三][一二三四五六七八九十]?)/);
   return m ? m[1] : '';
 });
 t('农历也显示出来了', /月/.test(lunar), sub + ' | ' + lunar);
