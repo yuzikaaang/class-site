@@ -75,7 +75,9 @@ body{
 .me-h span{font-size:.76rem;color:var(--dim)}
 .rows{border-top:1px solid var(--line)}
 .row{display:flex;align-items:flex-start;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);font-size:.88rem}
-.row i{font-style:normal;color:var(--dim);flex:0 0 76px;font-size:.8rem}
+/* v3.15.6：原来固定 76px，「发展团员编号」这种长标签放不下会折成两行、
+   和右边的值错位。改成最短 76px（短标签仍对齐）、长标签自动撑开一行。 */
+.row i{font-style:normal;color:var(--dim);flex:0 0 auto;min-width:76px;font-size:.8rem;white-space:nowrap}
 .row b{font-weight:600;color:var(--ink);word-break:break-all;flex:1;min-width:0}
 
 /* 其他成员 */
