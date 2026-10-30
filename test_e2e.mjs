@@ -5347,6 +5347,26 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★v3.15.3 接口统一 25 秒超时 + 人话提示',
     /opts\.timeout \|\| 25000/.test(adm47) && /AbortController/.test(adm47)
     && /请求超时/.test(adm47) && /连不上服务器/.test(adm47));
+  /* ===== v3.15.7（站主）：iPad 上「全部展开」每次更新又变回小窗口 ===== */
+  const app47 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  t('★v3.15.7 卡片显示方式走设备级记忆（不被云端/恢复默认/升级重置）',
+    /var CARDMODE_KEY = 'cls_card_mode'/.test(app47)
+    && /function cardModeOn\(\)\{/.test(app47)
+    && /if\(pref\) return pref === 'open';/.test(app47)
+    && /writeCardModePref\(UI\.cardMode\)/.test(app47)
+    && /if\(!readCardModePref\(\) && UI\.cardMode === 'open'\) writeCardModePref\('open'\)/.test(app47));
+  t('★v3.15.7 normalizeUI 补读 cardMode（原来漏了，每次都回落默认）',
+    /out\.cardMode = \(o\.cardMode === 'open'\) \? 'open' : 'compact'/.test(app47));
+  t('★v3.15.7 卡片堆叠也按设备记（手机上开堆叠不影响平板）',
+    /var STACK_KEY = 'cls_stack_mode'/.test(app47)
+    && /function stackOn\(\)\{/.test(app47)
+    && /inner = \(stackOn\(\) && inner\.length >= 2\)/.test(app47)
+    && /writeStackPref\(UI\.stack === 1\)/.test(app47));
+  t('★v3.15.7 渲染与设置项都按设备记忆显示（不再直接读 UI.cardMode）',
+    /var _cm = cardModeOn\(\) \? 'open' : 'compact'/.test(app47)
+    && /swHtml\(stackOn\(\), 'toggleStack\(event\)'\)/.test(app47)
+    && !/if\(UI\.cardMode === 'open'\) return;/.test(app47));
+
   const auth47 = readApi('auth.js');
   const prof47 = readApi('profile.js');
   const info47 = fs.readFileSync(new URL('./info.html', import.meta.url), 'utf8');

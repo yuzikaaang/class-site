@@ -3029,7 +3029,7 @@ function render(){
       });
       /* 【卡片堆叠 v35】同一分类下 ≥2 张卡片时包一层堆叠容器；仅 1 张时不包（堆叠无意义）。
          用户可在「自定义设置 → 动效」里关掉堆叠，回到传统平铺。 */
-      inner = (UI.stack !== 0 && inner.length >= 2) ? stackDeckHtml(inner, c.id) : inner.join('');
+      inner = (stackOn() && inner.length >= 2) ? stackDeckHtml(inner, c.id) : inner.join('');
     }
     return '<div class="tab-page" id="tab-cat-'+c.id+'">'+boardIntroHtml(c.id)+popBannerHtml(c.id)
       /* v3.5.6 投票专区：挂在「班级事务」板块顶部，原有卡片照旧排在下面
@@ -3339,6 +3339,11 @@ function normalizeUI(o){
   out.fs = (typeof o.fs === 'number' && o.fs >= 0.7 && o.fs <= 1.6) ? o.fs : 1;
   out.motion = (o.motion === 0) ? 0 : 1;
   out.stack  = (o.stack  === 1) ? 1 : 0;   /* 【卡片堆叠 v35】缺省关，仅显式 1 才开 */
+  /* 【v3.15.7 修复】cardMode 之前漏了读回 —— 每次 loadUI() 都被重置成 uiDefault 的
+     'compact'，站主在 iPad 上选「全部展开」，一刷新 / 一升级又折叠回去，
+     老 iPad 上折叠卡点不开就等于整页没法用（他反复提过两次）。这里先补上读回，
+     真正的记忆交给下面的设备级 key。 */
+  out.cardMode = (o.cardMode === 'open') ? 'open' : 'compact';
   /* 【v3.5.6 每日一言来源】缺省联网（1），仅显式 0 才关 */
   out.quoteNet = (o.quoteNet === 0) ? 0 : 1;
   /* 【v3.5.30 轻量模式】null/缺省 = 自动判断；1 = 强制轻量；0 = 强制完整。
@@ -3393,6 +3398,11 @@ function loadUI(){
     }else UI = uiDefault();
   }catch(e){ UI = uiDefault(); }
   if(migrated){ try{ saveUI(); }catch(e){} }
+  /* v3.15.7：这台设备第一次跑新版本时，把**当前生效**的卡片显示方式固化下来。
+     站主之前在 iPad 上选过「全部展开」，值其实一直在 cls_ui_cfg 里，只是没被读回；
+     这里把它落到设备 key 上，从此云端同步 / 恢复默认 / 升级都不会再翻回折叠。 */
+  if(!readCardModePref() && UI.cardMode === 'open') writeCardModePref('open');
+  if(!readStackPref()) writeStackPref(UI.stack === 1);
   return UI;
 }
 function saveUI(){
@@ -3611,17 +3621,69 @@ function syncThemeToBg(){
   return true;
 }
 
+/* ===== 卡片显示方式：设备级记忆（v3.15.7）=====
+ * 站主原话（第三次提）：「iPad 每个版本更新之后，那个卡片堆叠照样还是堆叠，
+ *   没有自动展开……我在设置里点成默认不折叠才可以，但后面又变了。」
+ *
+ * 原来的病根有两处：
+ *   ① normalizeUI 里压根没读 cardMode，每次加载都回落 uiDefault 的 'compact'；
+ *   ② 就算读了，cls_ui_cfg 也会被云端个人数据覆盖、被「恢复默认」清掉。
+ *
+ * 而这台 iPad 是 2017 年的，折叠卡片点不开 = 整页用不了，属于**设备属性**，
+ * 不该跨版本重置、也不该被别的设备覆盖。所以单独存一个 key：
+ * 写过就永远以它为准，只有用户自己点才改（和 cls_lite_mode 一个套路）。 */
+var CARDMODE_KEY = 'cls_card_mode';
+
+function readCardModePref(){
+  try{
+    var v = localStorage.getItem(CARDMODE_KEY);
+    if(v === 'open' || v === 'compact') return v;
+  }catch(e){}
+  return null;      /* 没选过 */
+}
+function writeCardModePref(v){
+  try{ localStorage.setItem(CARDMODE_KEY, v === 'open' ? 'open' : 'compact'); }catch(e){}
+}
+/* 设备级优先，没选过才看 UI 里的（导入配置那种显式带过来的场景） */
+function cardModeOn(){
+  var pref = readCardModePref();
+  if(pref) return pref === 'open';
+  return UI.cardMode === 'open';
+}
+
+/* 【卡片堆叠】同样按设备记忆。
+   站主那台老 iPad 开了堆叠就点不开卡片，所以这台机器必须永远记住「不堆叠」，
+   不能被手机上开着的配置、也不能被云端同步过来的旧值重新打开。 */
+var STACK_KEY = 'cls_stack_mode';
+
+function readStackPref(){
+  try{
+    var v = localStorage.getItem(STACK_KEY);
+    if(v === '1' || v === '0') return v;
+  }catch(e){}
+  return null;
+}
+function writeStackPref(on){
+  try{ localStorage.setItem(STACK_KEY, on ? '1' : '0'); }catch(e){}
+}
+function stackOn(){
+  var pref = readStackPref();
+  if(pref) return pref === '1';
+  return UI.stack === 1;
+}
+
 /* 总入口：一次性把配置全部应用（初始化时、导入后、恢复默认后调用） */
 /* v3.9.22：卡片「小窗口 / 展开」两种模式。
    只切 <html> 上的一个类，具体样式全在 CSS 里，重绘不需要额外逻辑。 */
 function applyCardMode(){
-  var compact = UI.cardMode !== 'open';
+  var compact = !cardModeOn();
   var el = document.documentElement;
   if(compact) el.classList.add('cards-compact');
   else el.classList.remove('cards-compact');
 }
 function setCardMode(mode){
   UI.cardMode = (mode === 'open') ? 'open' : 'compact';
+  writeCardModePref(UI.cardMode);     /* 设备级记住，跨版本 / 跨恢复默认都不动 */
   saveUI();
   applyCardMode();
   try{ render(); }catch(e){}
@@ -3629,7 +3691,7 @@ function setCardMode(mode){
 }
 /* 点卡片展开 / 收起：按钮、输入框、链接、门禁框里点都不触发 */
 document.addEventListener('click', function(e){
-  if(UI.cardMode === 'open') return;
+  if(cardModeOn()) return;
   var t = e.target;
   if(!t || !t.closest) return;
   if(t.closest('button,a,input,textarea,select,label,.gate-box,.paused-box,.qrcode-box')) return;
@@ -8392,7 +8454,7 @@ function renderSettings(){
   }
   else if(UI_SEC === 'motion'){
     /* v3.9.22：卡片默认小窗口，这里给个开关（站主要求「用户可以在自定义设置里选择」） */
-    var _cm = (UI.cardMode === 'open') ? 'open' : 'compact';
+    var _cm = cardModeOn() ? 'open' : 'compact';
     var _cmBtns = [['compact','小窗口','只显示图标和标题，点一下展开'],['open','全部展开','卡片直接显示完整内容']]
       .map(function(m){
         var active = (m[0] === _cm);
@@ -8410,7 +8472,7 @@ function renderSettings(){
       '<div class="sw-row"><span class="t">完整动效<span class="s">拖拽、涟漪、圆形主题切换等</span></span>' +
         swHtml(UI.motion !== 0, 'toggleMotion(event)') + '</div>' +
       '<div class="sw-row"><span class="t">卡片堆叠（测试中）<span class="s">同一板块的多个入口层叠展示，可点 ↑↓ 上下轮换。效果还在试验，可能随时调整</span></span>' +
-        swHtml(UI.stack !== 0, 'toggleStack(event)') + '</div>' +
+        swHtml(stackOn(), 'toggleStack(event)') + '</div>' +
       '<div class="sw-row"><span class="t">网络状态提示<span class="s">连不上服务器时，页面顶部弹一条提示并可点「重试」。<b>当前默认关闭</b> —— 关了不影响任何功能，也不影响后台的在线状态</span></span>' +
         swHtml(netWatchOn(), 'toggleNetWatch(event)') + '</div>' +
       '<p class="ui-hint">关闭后所有动效立即静止（跟随系统的「减少动态效果」设置也同理）。<br>「卡片堆叠」是试验功能，默认关闭，觉得不好用可随时关掉。</p>', true);
@@ -8676,7 +8738,8 @@ function toggleMotion(ev){
 
 /* 【卡片堆叠 v35】开关：切换「层叠展示」与「传统平铺」，立即重渲染生效 */
 function toggleStack(ev){
-  UI.stack = (UI.stack === 0) ? 1 : 0;
+  UI.stack = stackOn() ? 0 : 1;
+  writeStackPref(UI.stack === 1);     /* 这台设备记住，云端推什么都不改它 */
   saveUI();
   STACK_OPEN = {};                        /* 切换模式时清掉展开记忆，回到默认堆叠态 */
   var btn = ev && ev.target && ev.target.closest ? ev.target.closest('.sw') : null;
