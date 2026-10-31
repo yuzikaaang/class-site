@@ -3143,8 +3143,10 @@ function stackApply(){
     });
     if(maxH > 0) deck.style.setProperty('--deck-h', Math.ceil(maxH) + 'px');
 
-    /* ② 每层露出的边缘：堆得松一些，层次更清楚（跟随用户字号缩放） */
-    var EDGE = Math.round(46 * (UI.fs || 1));
+    /* ② 每层露出的边缘：堆得松一些，层次更清楚（跟随用户字号缩放）
+       v3.15.8：46 → 54。旧值在桌面上只露出一条细缝，看不出是「一沓」；
+       54px 刚好露出一整行纸边的厚度，又不至于把下面的卡片推得太远。 */
+    var EDGE = Math.round(54 * (UI.fs || 1));
     /* 统一高度（px）。所有 item 都一样高，所以位移基准用同一个值。 */
     var H = Math.ceil(maxH) || 0;
     items.forEach(function(it, i){
@@ -3154,11 +3156,14 @@ function stackApply(){
         it.style.transform = '';                    /* 顶牌不位移，靠它定整体位置 */
         it.removeAttribute('aria-hidden');
       }else{
-        /* 下层整体下移到「顶牌底边 - 露出量」处，露出它自己最上面的 EDGE 一条。
-           若用 i*EDGE 累加，位移太小会被顶牌整个盖住，看不出是一沓（实测问题）。 */
-        var y = Math.max(0, H - EDGE * i);
-        var sc = 1 - i * 0.018;                      /* 逐层极轻微缩小，做出纵深 */
-        var rot = (i % 2 ? 1 : -1) * (i * 0.4);      /* 左右交替微旋转，像一沓牌 */
+        /* v3.15.8：下层排在顶牌**下方**，而不是塞进顶牌内部。
+           旧写法 y = H - EDGE*i 会把下层顶边塞到顶牌里面（顶牌底部有 54px 被它压住）：
+           以前顶牌底部正好是空白，看不出来；但卡片一展开、按钮贴到底部，
+           按钮就被这条「纸边」盖掉一半（站主截图反馈）。
+           改成紧接顶牌底边往下排，每层露出自己的 EDGE 一条，谁也不挡谁。 */
+        var y = H + (i - 1) * EDGE;
+        var sc = 1 - i * 0.022;                      /* 逐层极轻微缩小，做出纵深（v3.15.8：0.018→0.022） */
+        var rot = (i % 2 ? 1 : -1) * (i * 0.5);      /* 左右交替微旋转，像一沓牌 */
         it.style.transform = 'translateY(' + y + 'px) scale(' + sc + ') rotate(' + rot + 'deg)';
         it.setAttribute('aria-hidden', 'true');
         /* 把卡片裁成只剩顶边一条，并另叠一层同色底板挡住内容
@@ -3698,6 +3703,10 @@ document.addEventListener('click', function(e){
   var card = t.closest('.card');
   if(!card || !card.classList.contains('card-fold')) return;
   card.classList.toggle('open');
+  /* v3.15.8：卡片在堆叠态里被展开/收起后，整栈的统一高度必须重算——
+     否则 --deck-h 还停在折叠条那 60px，卡片会被 height:100% + overflow:hidden
+     压成一条（站主截图反馈「点了以后只剩一条白边」就是这个）。 */
+  if(typeof stackApply === 'function') stackApply();
 }, false);
 
 function applyUICfg(){
