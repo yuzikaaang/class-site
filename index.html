@@ -3375,7 +3375,7 @@ html.cards-compact .card:not(.open) .card-content h3 .f-i{display:inline-block}
 .card-actions{
   grid-column:2; grid-row:2;
   flex-direction:row; flex-wrap:wrap;
-  align-items:center; justify-content:flex-end;
+  align-items:center; justify-content:flex-start;   /* 与正文左边缘对齐，形成一条左侧轴线 */
   gap:10px; width:auto; padding-top:2px;
 }
 .card-actions:empty{display:none}          /* 暂停 / 未解锁时空 div 不再撑出一行空隙 */
