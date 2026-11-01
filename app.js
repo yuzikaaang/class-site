@@ -13705,6 +13705,8 @@ function scPane(html){
   box.innerHTML = html;
   /* typeof 兜一下：有些单元测试只把部分函数提出来跑，不该因为缺 scAnim 就炸 */
   if(typeof scAnim === 'function') scAnim(box);
+  /* v3.16.1：切板块 / 换考试都会重绘，AI 结果要从内存里接回来 */
+  try{ if(typeof aiRenderAll === 'function') aiRenderAll(); }catch(e){}
 }
 function scLoading(txt){
   scPane('<div class="sc-empty"><div class="spinner"></div><p>' + (txt || '加载中…') + '</p></div>');
@@ -14714,6 +14716,747 @@ function scRenderMe(){
   scPane(html);
 }
 
+/* ============================================================================
+ * v3.16.1 · 成绩 AI 分析（真模型 · 用户自带 Key）
+ * ----------------------------------------------------------------------------
+ * 站主要求（2026-11-01）：「能不能接入真实 API，用户可以填 API 信息，用自己的 AI」
+ *
+ * 几条已经定下来的事：
+ *   ① 浏览器直连厂商接口，不经我们的服务器。
+ *      实测 DeepSeek 的 CORS 是放行的（预检回显 Origin、401 也带 CORS 头），
+ *      所以 Key 压根不用经过 Worker —— 少一跳，也少一个会泄密的地方。
+ *      代价：用户设备必须能访问该地址（DeepSeek 国内直连没问题）。
+ *   ② Key 只存这台设备的 localStorage，不跟账号走、不上云。
+ *      换设备要重新填 —— 这是站主要的，「泄露出去比较危险」。
+ *   ③ 姓名一律代号化后再发出。同一个浏览器里随机打乱分配「同学N」，
+ *      模型只看得到代号和分数，看不到任何真实姓名；结果回来再换回原名。
+ *      打乱是必须的：如果按成绩顺序编号，模型能从「同学3 排第 3」反推。
+ *   ④ 没配 Key 的人完全不受影响 —— 本地规则引擎（scMeAnalysis）照旧跑，
+ *      下面这些代码一行都不会执行。
+ *
+ * 输出约定：要求模型写 Markdown，固定五个二级标题。前端按 ## 切段，
+ *   映射到原有的 sc-ai-concl / sc-ai-row / sc-ai-todo 结构上，视觉完全一致。
+ *   模型不听话（少标题、多废话）也不至于白屏：解析不到就整段当富文本塞进结论区。
+ * ========================================================================== */
+
+var AI_CFG_KEY = 'cls_ai_cfg_v1';
+var AI_CACHE_KEY = 'cls_ai_cache_v1';
+
+/* 预设：DeepSeek 和 OpenAI 都是 OpenAI 兼容协议，差别只在地址和模型名。
+   自定义那档留给通义 / Kimi / 智谱 / 硅基流动 / 本地 Ollama —— 只要它兼容。 */
+var AI_PRESET = {
+  deepseek: {
+    label: 'DeepSeek',
+    base: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    tip: '国内直连，不用梯子。注册送免费额度，之后也很便宜。'
+  },
+  openai: {
+    label: 'OpenAI',
+    base: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    tip: '需要能连海外的网络，按美元计费。'
+  },
+  custom: {
+    label: '自定义',
+    base: '',
+    model: '',
+    tip: '任何「OpenAI 兼容」的接口都能填：通义、Kimi、智谱、硅基流动、本地 Ollama。'
+  }
+};
+
+var AI_PROMPT_DEFAULT =
+  '你是一位带过十几届毕业班的高中老师，擅长看着成绩单说人话。\n'
++ '读者是学生本人，语气直接、具体，不要灌鸡汤，不要写「你很棒」「继续加油」这类空话。\n'
++ '只根据我给的数据下判断，数据里没有的东西一律不编。数字要引用具体值，不要含糊。\n'
++ '学生以「同学N」这类代号出现，你不知道他们是谁，也不需要猜。\n'
++ '输出用 Markdown，固定五个二级标题，顺序不要变：\n'
++ '## 结论\n## 亮点\n## 短板\n## 趋势\n## 下一步\n'
++ '「下一步」下面给 2~3 条编号建议，每条都要落到具体动作（做什么、做多少、怎么检验），'
++ '不要写「加强练习」这种正确的废话。\n'
++ '全篇控制在 500 字以内，不要开场白，不要结尾总结。';
+
+var AIC = { provider: 'deepseek', base: '', model: '', key: '', temp: 0.6, prompt: '' };
+
+/* ---------- Key 的本地存取 ----------
+   只做一层混淆，不当加密用 —— 密钥本身也在本机，真加密是自欺欺人。
+   目的是：不要在 devtools 里一眼看到 sk- 开头的明文，防的是「旁边的人瞥一眼」。 */
+var AI_XK = 'cls-ai-2026';
+function aiObf(s) {
+  if (!s) return '';
+  var out = '';
+  for (var i = 0; i < s.length; i++) {
+    out += String.fromCharCode(s.charCodeAt(i) ^ AI_XK.charCodeAt(i % AI_XK.length));
+  }
+  try { return btoa(unescape(encodeURIComponent(out))); } catch (e) { return ''; }
+}
+function aiDeobf(s) {
+  if (!s) return '';
+  try {
+    var raw = decodeURIComponent(escape(atob(s)));
+    var out = '';
+    for (var i = 0; i < raw.length; i++) {
+      out += String.fromCharCode(raw.charCodeAt(i) ^ AI_XK.charCodeAt(i % AI_XK.length));
+    }
+    return out;
+  } catch (e) { return ''; }
+}
+
+function aiCfgLoad() {
+  try {
+    var raw = localStorage.getItem(AI_CFG_KEY);
+    if (!raw) return;
+    var o = JSON.parse(raw);
+    if (!o || typeof o !== 'object') return;
+    AIC.provider = o.provider || 'deepseek';
+    AIC.base = o.base || '';
+    AIC.model = o.model || '';
+    AIC.key = aiDeobf(o.k || '');
+    AIC.temp = (typeof o.temp === 'number') ? o.temp : 0.6;
+    AIC.prompt = o.prompt || '';
+  } catch (e) {}
+}
+function aiCfgSave() {
+  try {
+    localStorage.setItem(AI_CFG_KEY, JSON.stringify({
+      provider: AIC.provider, base: AIC.base, model: AIC.model,
+      k: aiObf(AIC.key), temp: AIC.temp, prompt: AIC.prompt
+    }));
+  } catch (e) {}
+  aiRenderAll();
+}
+
+function aiBase() {
+  var b = String(AIC.base || '').trim();
+  if (!b && AI_PRESET[AIC.provider]) b = AI_PRESET[AIC.provider].base;
+  return b.replace(/\/+$/, '');
+}
+function aiModelName() {
+  return String(AIC.model || '').trim() || ((AI_PRESET[AIC.provider] || {}).model || '');
+}
+function aiPrompt() {
+  return String(AIC.prompt || '').trim() || AI_PROMPT_DEFAULT;
+}
+function aiReady() { return !!AIC.key && !!aiBase() && !!aiModelName(); }
+
+/* ---------- 姓名 → 代号 ----------
+   返回 { map: 真名→代号, back: 代号→真名 }。
+   每次调用重新洗牌：同一个人这次是「同学7」，下次可能是「同学2」。 */
+function aiMakeAlias(names) {
+  var uniq = [], seen = {};
+  (names || []).forEach(function (n) {
+    n = String(n || '').trim();
+    if (n && !seen[n]) { seen[n] = 1; uniq.push(n); }
+  });
+  for (var i = uniq.length - 1; i > 0; i--) {          /* Fisher-Yates */
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = uniq[i]; uniq[i] = uniq[j]; uniq[j] = t;
+  }
+  var map = {}, back = {};
+  uniq.forEach(function (n, i) {
+    var a = '同学' + (i + 1);
+    map[n] = a; back[a] = n;
+  });
+  return { map: map, back: back };
+}
+/* 把文本里的真名换掉（长的先换，避免「张三丰」被「张三」截胡） */
+function aiMask(text, map) {
+  var out = String(text || '');
+  Object.keys(map || {}).sort(function (a, b) { return b.length - a.length; })
+    .forEach(function (n) { out = out.split(n).join(map[n]); });
+  return out;
+}
+/* 换回来；模型偶尔会写成「同学 3」（中间带空格），正则放宽一点 */
+function aiUnmask(text, back) {
+  var out = String(text || '');
+  Object.keys(back || {}).forEach(function (a) {
+    var m = a.match(/^(.*?)(\d+)$/);
+    var re = m ? new RegExp(m[1] + '\\s*' + m[2], 'g') : new RegExp(a, 'g');
+    out = out.replace(re, back[a]);
+  });
+  return out;
+}
+
+/* ---------- 缓存：同一场考试 + 同一份数据 + 同一套提示词，只算一次 ----------
+   不加缓存的话，每次切到「我的画像」都会重新请求一次，一天下来能把免费额度烧穿。 */
+function aiHash(s) {
+  var h = 0, str = String(s);
+  for (var i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) | 0; }
+  return Math.abs(h).toString(36);
+}
+function aiCacheGet(key) {
+  try {
+    var o = JSON.parse(localStorage.getItem(AI_CACHE_KEY) || '{}');
+    return o && o[key] ? o[key] : null;
+  } catch (e) { return null; }
+}
+function aiCachePut(key, text) {
+  try {
+    var o = JSON.parse(localStorage.getItem(AI_CACHE_KEY) || '{}');
+    o[key] = { t: text, at: Date.now() };
+    var ks = Object.keys(o);
+    if (ks.length > 12) {                                  /* 只留最近 12 条 */
+      ks.sort(function (a, b) { return (o[a].at || 0) - (o[b].at || 0); });
+      for (var i = 0; i < ks.length - 12; i++) delete o[ks[i]];
+    }
+    localStorage.setItem(AI_CACHE_KEY, JSON.stringify(o));
+  } catch (e) {}
+}
+function aiCacheClear() {
+  try { localStorage.removeItem(AI_CACHE_KEY); } catch (e) {}
+}
+
+/* ---------- 请求 ---------- */
+function aiErrText(status, txt) {
+  if (status === 401) return 'Key 不对，或者这个 Key 已经失效了。';
+  if (status === 402) return '账户余额不足，先去充值。';
+  if (status === 403) return '这个 Key 没有调用该模型的权限。';
+  if (status === 404) return '接口地址不对（BaseURL 一般要填到 /v1 这一层），或者模型名不存在。';
+  if (status === 429) return '请求太频繁或额度用完了，等一会儿再试。';
+  if (status >= 500) return '模型服务那边出错了（' + status + '），过一会儿再试。';
+  return '请求失败（' + status + '）：' + String(txt || '').replace(/\s+/g, ' ').slice(0, 120);
+}
+
+/* messages → 流式请求。onDelta(增量, 全文) / onDone(全文) / onError(文案) */
+function aiRequest(messages, onDelta, onDone, onError) {
+  var url = aiBase() + '/chat/completions';
+  var ctl = null;
+  try { ctl = new AbortController(); } catch (e) {}
+  var done = false, full = '';
+  var timer = setTimeout(function () {
+    if (done) return;
+    done = true;
+    try { if (ctl) ctl.abort(); } catch (e) {}
+    onError('等了 90 秒还没响应，先停下了。可能是网络卡，也可能是模型排队。');
+  }, 90000);
+
+  var opt = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AIC.key },
+    body: JSON.stringify({
+      model: aiModelName(),
+      messages: messages,
+      temperature: (typeof AIC.temp === 'number') ? AIC.temp : 0.6,
+      max_tokens: 1200,
+      stream: true
+    })
+  };
+  if (ctl) opt.signal = ctl.signal;
+
+  fetch(url, opt).then(function (r) {
+    if (!r.ok) {
+      return r.text().then(function (t) {
+        if (done) return;
+        done = true; clearTimeout(timer);
+        onError(aiErrText(r.status, t));
+      });
+    }
+    if (!r.body || !r.body.getReader) {          /* 老浏览器 / 不支持流式 */
+      return r.text().then(function (t) {
+        if (done) return;
+        done = true; clearTimeout(timer);
+        try {
+          var j = JSON.parse(t);
+          var c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+          if (c) { onDone(c); } else { onError('返回内容看不懂：' + t.slice(0, 100)); }
+        } catch (e) { onError('返回内容解析失败。'); }
+      });
+    }
+    var reader = r.body.getReader(), dec = new TextDecoder('utf-8'), buf = '';
+    function pump() {
+      return reader.read().then(function (res) {
+        if (res.done) {
+          if (done) return;
+          done = true; clearTimeout(timer);
+          if (full) onDone(full); else onError('模型没有返回任何内容。');
+          return;
+        }
+        buf += dec.decode(res.value, { stream: true });
+        var lines = buf.split('\n');
+        buf = lines.pop();
+        lines.forEach(function (line) {
+          line = String(line).trim();
+          if (line.indexOf('data:') !== 0) return;
+          var d = line.slice(5).trim();
+          if (!d || d === '[DONE]') return;
+          try {
+            var j = JSON.parse(d);
+            var c = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+            if (c) { full += c; if (onDelta) onDelta(c, full); }
+          } catch (e) {}
+        });
+        return pump();
+      });
+    }
+    return pump();
+  }).catch(function (e) {
+    if (done) return;
+    done = true; clearTimeout(timer);
+    if (e && e.name === 'AbortError') return;
+    onError('连不上 ' + aiBase() + '。检查网络，或看看 BaseURL 是不是填错了。');
+  });
+}
+
+/* ---------- Markdown → 分段 ----------
+   只认我们要求的那五个 ## 标题，别的一概当正文。够用，而且不会误伤。 */
+function aiSections(md) {
+  var lines = String(md || '').replace(/\r/g, '').split('\n');
+  var out = [], cur = null;
+  lines.forEach(function (ln) {
+    var m = ln.match(/^\s*#{1,3}\s*(.+?)\s*$/);
+    if (m) {
+      cur = { h: m[1].replace(/[：:]\s*$/, ''), body: [] };
+      out.push(cur);
+    } else if (cur) {
+      cur.body.push(ln);
+    } else if (ln.trim()) {
+      cur = { h: '', body: [ln] };
+      out.push(cur);
+    }
+  });
+  return out.filter(function (s) { return s.body.join('').trim() || s.h; })
+    .map(function (s) { return { h: s.h, t: s.body.join('\n').trim() }; });
+}
+
+/* 极简行内 Markdown：**粗体** / `代码` / 段落与列表。
+   不引第三方库 —— 为了这么点东西多下 20KB 不划算，而且我们自己控制输出格式。 */
+function aiMdInline(s) {
+  var t = esc(String(s || ''));
+  t = t.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+  return t;
+}
+function aiMdBlock(text) {
+  var lines = String(text || '').split('\n');
+  var html = '', inUl = false, inOl = false, para = [];
+  function flushPara() {
+    if (para.length) {
+      html += '<p>' + para.map(aiMdInline).join('<br>') + '</p>';
+      para = [];
+    }
+  }
+  function closeList() {
+    if (inUl) { html += '</ul>'; inUl = false; }
+    if (inOl) { html += '</ol>'; inOl = false; }
+  }
+  lines.forEach(function (ln) {
+    var t = ln.trim();
+    if (!t) { flushPara(); closeList(); return; }
+    var mu = t.match(/^[-*·]\s+(.*)$/);
+    var mo = t.match(/^\d+[.)、]\s*(.*)$/);
+    if (mu) {
+      flushPara();
+      if (inOl) { html += '</ol>'; inOl = false; }
+      if (!inUl) { html += '<ul>'; inUl = true; }
+      html += '<li>' + aiMdInline(mu[1]) + '</li>';
+    } else if (mo) {
+      flushPara();
+      if (inUl) { html += '</ul>'; inUl = false; }
+      if (!inOl) { html += '<ol>'; inOl = true; }
+      html += '<li>' + aiMdInline(mo[1]) + '</li>';
+    } else {
+      closeList();
+      para.push(t);
+    }
+  });
+  flushPara(); closeList();
+  return html;
+}
+
+/* ---------- 运行时状态 ---------- */
+var AIQ = {
+  payload: {},     /* scene → 本地原始数据（含真名，只活在内存里） */
+  result: {},      /* scene → { text, model, at } */
+  busy: {},        /* scene → true 表示正在流式输出 */
+  els: {},         /* scene → 卡片里的 body 元素 */
+  localHtml: {}    /* scene → 本地规则版正文，切回来时用 */
+};
+
+/* ---------- 配置弹窗 ---------- */
+function aiDlgEl() {
+  var d = document.getElementById('aiDlg');
+  if (d) return d;
+  d = document.createElement('div');
+  d.id = 'aiDlg';
+  d.className = 'ai-dlg';
+  d.innerHTML = ''
+    + '<div class="ai-box">'
+    + '  <h3>AI 分析配置</h3>'
+    + '  <p class="ai-note">Key 只保存在<b>这台设备</b>的浏览器里，不上传服务器、不跟着账号走。'
+    +     '换设备或清了浏览器数据，要重新填一次。</p>'
+    + '  <div class="ai-field"><label>服务商</label>'
+    + '    <select id="aiProv">'
+    + '      <option value="deepseek">DeepSeek</option>'
+    + '      <option value="openai">OpenAI</option>'
+    + '      <option value="custom">自定义（OpenAI 兼容）</option>'
+    + '    </select></div>'
+    + '  <div class="ai-field"><label>接口地址</label>'
+    + '    <input id="aiBaseInp" spellcheck="false" placeholder="https://api.deepseek.com/v1"></div>'
+    + '  <div class="ai-field"><label>模型</label>'
+    + '    <input id="aiModelInp" spellcheck="false" placeholder="deepseek-chat"></div>'
+    + '  <div class="ai-field"><label>API Key</label>'
+    + '    <input id="aiKeyInp" type="password" spellcheck="false" placeholder="sk-..."></div>'
+    + '  <div class="ai-field"><label>温度</label>'
+    + '    <input id="aiTempInp" type="range" min="0" max="10" step="1">'
+    + '    <b id="aiTempVal">0.6</b></div>'
+    + '  <div class="ai-field ai-field-col"><label>系统提示词（角色设定，可自己改）</label>'
+    + '    <textarea id="aiPromptInp" rows="7" spellcheck="false"></textarea>'
+    + '    <button class="ai-link" id="aiPromptReset">恢复默认提示词</button></div>'
+    + '  <div class="ai-status" id="aiStatus"></div>'
+    + '  <div class="ai-acts">'
+    + '    <button id="aiTest" class="ai-btn">测试连接</button>'
+    + '    <button id="aiSave" class="ai-btn primary">保存</button>'
+    + '    <button id="aiClose" class="ai-btn">关闭</button>'
+    + '  </div>'
+    + '  <p class="ai-warn">点「保存」后，成绩会以「同学1/同学2…」的代号发给模型，'
+    +     '本页再把代号换回真名 —— 模型那边看不到任何真实姓名。但分数本身还是发出去了，这一点请知悉。</p>'
+    + '</div>';
+  document.body.appendChild(d);
+  d.addEventListener('click', function (e) { if (e.target === d) aiDlgClose(); });
+
+  d.querySelector('#aiProv').addEventListener('change', function () {
+    var p = this.value;
+    var pr = AI_PRESET[p] || {};
+    var bi = d.querySelector('#aiBaseInp'), mi = d.querySelector('#aiModelInp');
+    if (bi) bi.value = pr.base || '';
+    if (mi) mi.value = pr.model || '';
+    var tip = d.querySelector('#aiProvTip');
+    if (!tip) {
+      tip = document.createElement('p');
+      tip.id = 'aiProvTip';
+      tip.className = 'ai-note';
+      d.querySelector('#aiProv').parentNode.appendChild(tip);
+    }
+    tip.textContent = pr.tip || '';
+  });
+  d.querySelector('#aiTempInp').addEventListener('input', function () {
+    d.querySelector('#aiTempVal').textContent = (Number(this.value) / 10).toFixed(1);
+  });
+  d.querySelector('#aiPromptReset').addEventListener('click', function () {
+    d.querySelector('#aiPromptInp').value = AI_PROMPT_DEFAULT;
+  });
+  d.querySelector('#aiClose').addEventListener('click', aiDlgClose);
+  d.querySelector('#aiSave').addEventListener('click', function () {
+    var prev = AIC.key;
+    AIC.provider = d.querySelector('#aiProv').value;
+    AIC.base = d.querySelector('#aiBaseInp').value.trim();
+    AIC.model = d.querySelector('#aiModelInp').value.trim();
+    AIC.key = d.querySelector('#aiKeyInp').value.trim();
+    AIC.temp = Number(d.querySelector('#aiTempInp').value) / 10;
+    AIC.prompt = d.querySelector('#aiPromptInp').value.trim();
+    if (AIC.prompt === AI_PROMPT_DEFAULT) AIC.prompt = '';
+    if (prev !== AIC.key) aiCacheClear();       /* 换 Key 就清缓存，免得串号 */
+    aiCfgSave();
+    aiStatus('已保存。', 'ok');
+    setTimeout(aiDlgClose, 600);
+  });
+  d.querySelector('#aiTest').addEventListener('click', function () {
+    var btn = this;
+    var key = d.querySelector('#aiKeyInp').value.trim();
+    var base = d.querySelector('#aiBaseInp').value.trim() || ((AI_PRESET[d.querySelector('#aiProv').value] || {}).base || '');
+    var model = d.querySelector('#aiModelInp').value.trim() || ((AI_PRESET[d.querySelector('#aiProv').value] || {}).model || '');
+    if (!key) { aiStatus('先把 Key 填上。', 'err'); return; }
+    if (!base || !model) { aiStatus('接口地址和模型都要填。', 'err'); return; }
+    btn.disabled = true;
+    aiStatus('正在连 ' + base + ' …', 'wait');
+    var t0 = Date.now();
+    var ctl = null;
+    try { ctl = new AbortController(); } catch (e) {}
+    var opt = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      body: JSON.stringify({ model: model, messages: [{ role: 'user', content: '只回复两个字：可用' }], max_tokens: 16, stream: false })
+    };
+    if (ctl) opt.signal = ctl.signal;
+    fetch(base.replace(/\/+$/, '') + '/chat/completions', opt)
+      .then(function (r) {
+        return r.text().then(function (t) {
+          btn.disabled = false;
+          if (!r.ok) { aiStatus(aiErrText(r.status, t), 'err'); return; }
+          var j = null;
+          try { j = JSON.parse(t); } catch (e) {}
+          var c = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+          aiStatus('通了（' + ((Date.now() - t0) / 1000).toFixed(1) + ' 秒，模型回：' + String(c || '').slice(0, 20) + '）', 'ok');
+        });
+      })
+      .catch(function (e) {
+        btn.disabled = false;
+        aiStatus('连不上 ' + base + '。检查网络，或者地址填错了。', 'err');
+      });
+  });
+  return d;
+}
+function aiStatus(msg, kind) {
+  var el = document.getElementById('aiStatus');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.className = 'ai-status' + (kind ? ' ' + kind : '');
+}
+function aiDlgOpen() {
+  var d = aiDlgEl();
+  d.querySelector('#aiProv').value = AIC.provider || 'deepseek';
+  d.querySelector('#aiBaseInp').value = AIC.base || ((AI_PRESET[AIC.provider] || {}).base || '');
+  d.querySelector('#aiModelInp').value = AIC.model || ((AI_PRESET[AIC.provider] || {}).model || '');
+  d.querySelector('#aiKeyInp').value = AIC.key || '';
+  d.querySelector('#aiTempInp').value = String(Math.round((AIC.temp != null ? AIC.temp : 0.6) * 10));
+  d.querySelector('#aiTempVal').textContent = (AIC.temp != null ? AIC.temp : 0.6).toFixed(1);
+  d.querySelector('#aiPromptInp').value = AIC.prompt || AI_PROMPT_DEFAULT;
+  aiStatus('', '');
+  d.className = 'ai-dlg show';
+}
+function aiDlgClose() {
+  var d = document.getElementById('aiDlg');
+  if (d) d.className = 'ai-dlg';
+}
+
+/* ---------- 把数据写成中文说明（这一步之后就只剩代号了） ---------- */
+function aiFmtNum(v) {
+  if (v == null || isNaN(v)) return '—';
+  var n = Math.round(Number(v) * 10) / 10;
+  return (n % 1 === 0) ? String(n) : n.toFixed(1);
+}
+function aiFmtDiff(v) {
+  if (v == null || isNaN(v)) return '—';
+  var n = Math.round(Number(v) * 10) / 10;
+  return (n > 0 ? '+' : n < 0 ? '−' : '±') + aiFmtNum(Math.abs(n));
+}
+function aiPayloadText(p) {
+  if (!p) return '';
+  var L = [];
+  L.push('【本次考试】' + (p.examName || '未命名考试') + '（' + (p.basis || '总分') + '口径，全班 ' + (p.classSize || '?') + ' 人参考）');
+
+  if (p.scene === 'me') {
+    var m = p.me || {};
+    L.push('');
+    L.push('【我的成绩】');
+    L.push('总分 ' + aiFmtNum(m.total) + '，班排 ' + (m.rank != null ? m.rank : '—') + '/' + (p.classSize || '?')
+      + '，班均 ' + aiFmtNum(p.classAvg) + '（' + aiFmtDiff(m.total - p.classAvg) + '）');
+    if (m.subjects && m.subjects.length) {
+      L.push('各科（我的分数/满分，班均，与班均差）：');
+      m.subjects.forEach(function (s) {
+        L.push('· ' + s.n + ' ' + aiFmtNum(s.v) + '/' + s.full + '，班均 ' + aiFmtNum(s.avg)
+          + '（' + aiFmtDiff(s.v - s.avg) + '），得分率 ' + (s.full ? Math.round(s.v / s.full * 100) : '—') + '%');
+      });
+    }
+    if (p.history && p.history.length >= 2) {
+      L.push('');
+      L.push('【历次总分】（按时间先后）');
+      L.push(p.history.map(function (h) { return h.name + ' ' + aiFmtNum(h.total); }).join(' → '));
+    }
+    if (p.cutlines && p.cutlines.length) {
+      L.push('');
+      L.push('【分数线】' + p.cutlines.map(function (c) { return c.label + ' ' + aiFmtNum(c.score); }).join('，'));
+    }
+    L.push('');
+    L.push('请分析这次考试，给出结论、亮点、短板、趋势和下一步建议。');
+  } else if (p.scene === 'pk') {
+    var A = p.a || {}, B = p.b || {};
+    L.push('');
+    /* 这里写的是真名 —— 随后 aiMask 会把它换成「同学N」再发出去 */
+    L.push('【甲】' + (A.name || '甲') + '：总分 ' + aiFmtNum(A.total) + '，班排 ' + (A.rank != null ? A.rank : '—'));
+    L.push('【乙】' + (B.name || '乙') + '：总分 ' + aiFmtNum(B.total) + '，班排 ' + (B.rank != null ? B.rank : '—'));
+    if (A.subjects && A.subjects.length) {
+      L.push('');
+      L.push('【逐科对比】（甲 / 乙 / 差值）');
+      A.subjects.forEach(function (s, i) {
+        var sb = (B.subjects || [])[i] || {};
+        var d = (s.v != null && sb.v != null) ? (s.v - sb.v) : null;
+        L.push('· ' + s.n + ' ' + aiFmtNum(s.v) + ' / ' + aiFmtNum(sb.v) + '（' + aiFmtDiff(d) + '），满分 ' + s.full
+          + '，班均 ' + aiFmtNum(s.avg));
+      });
+    }
+    L.push('');
+    L.push('请把两个人放在一起比：差距在哪几科、各自强项弱项、下一步各自该怎么做。');
+  }
+  return L.join('\n');
+}
+
+/* ---------- 组装 messages ---------- */
+function aiMessages(p) {
+  var alias = aiMakeAlias(p.scene === 'me'
+    ? [(p.me || {}).name]
+    : [(p.a || {}).name, (p.b || {}).name]);
+  var body = aiPayloadText(p);
+  body = aiMask(body, alias.map);
+  var sys = aiPrompt() + '\n（补充：本次数据里的人名已全部替换成「同学N」代号，这是隐私处理，你不需要知道真名。）';
+  return {
+    messages: [{ role: 'system', content: sys }, { role: 'user', content: body }],
+    back: alias.back,
+    body: body
+  };
+}
+
+/* ---------- 渲染 ---------- */
+function aiSetBadge(scene, text) {
+  var c = document.querySelector('[data-ai="' + scene + '"] [data-ai-badge]');
+  if (c) c.textContent = text;
+}
+function aiRenderScene(scene, host) {
+  if (!host) return;
+  var res = AIQ.result[scene];
+  if (res && res.text) {
+    aiSetBadge(scene, 'AI · ' + (res.model || ''));
+    host.innerHTML = aiResultHtml(res.text, res.model, scene);
+    return;
+  }
+  if (AIQ.busy[scene]) { aiSetBadge(scene, '生成中…'); return; }   /* 正在流式输出，别覆盖 */
+  aiSetBadge(scene, '本地规则 · 未联网');
+  host.innerHTML = (AIQ.localHtml[scene] || '') + aiBarHtml(scene);
+}
+
+function aiResultHtml(md, model, scene) {
+  var secs = aiSections(md);
+  var concl = '', rows = '', todo = '';
+  if (!secs.length) {
+    concl = '<div class="sc-ai-concl">' + aiMdBlock(md) + '</div>';
+  } else {
+    secs.forEach(function (s) {
+      var h = String(s.h || '');
+      var isTodo = /下一步|建议|怎么做/.test(h);
+      if (!concl && !rows && !isTodo) {
+        concl = '<div class="sc-ai-concl">' + aiMdBlock(s.t) + '</div>';
+      } else if (isTodo) {
+        todo += '<div class="sc-ai-todo"><b>' + (h || '下一步') + '</b>' + aiMdBlock(s.t) + '</div>';
+      } else {
+        rows += '<div class="sc-ai-row"><span class="sc-ai-k">' + esc(h || '·') + '</span>'
+          + '<span class="sc-ai-v">' + aiMdBlock(s.t) + '</span></div>';
+      }
+    });
+  }
+  return concl + rows + todo
+    + '<div class="sc-ai-foot">'
+    + '<span class="sc-ai-by">由 ' + esc(model || 'AI') + ' 生成 · 成绩已代号化</span>'
+    + '<button class="ai-mini" data-ai-act="again" data-ai-scene="' + scene + '">重新分析</button>'
+    + '<button class="ai-mini" data-ai-act="local" data-ai-scene="' + scene + '">看规则版</button>'
+    + '</div>';
+}
+
+/* 提示条：永远挂在本地规则正文的下面，说明「这份不是真模型」+ 给入口 */
+function aiBarHtml(scene) {
+  var ready = aiReady();
+  var name = (AI_PRESET[AIC.provider] || {}).label || 'AI';
+  return '<div class="ai-idle">'
+    + '<div class="ai-idle-t">上面这份是<b>本地规则</b>算的 · 不联网、不花钱</div>'
+    + '<div class="ai-idle-s">接上真模型，能写出更具体的话：结合错因、时间分配、这一科到底该补哪块，'
+    + '而不是只有「补弱科」这种正确但没用的话。</div>'
+    + '<div class="ai-idle-a">'
+    + (ready
+        ? '<button class="ai-go" data-ai-act="run" data-ai-scene="' + scene + '">用 ' + esc(name) + ' 重新分析</button>'
+        : '<button class="ai-go" data-ai-act="cfg" data-ai-scene="' + scene + '">先填 API Key</button>')
+    + '  <button class="ai-mini" data-ai-act="cfg" data-ai-scene="' + scene + '">设置</button>'
+    + '</div>'
+    + (ready ? '' : '<div class="ai-idle-h">用自己的 Key，只有你点的时候才会请求，按量计费（DeepSeek 一次约几分钱）。</div>')
+    + '</div>';
+}
+
+/* 流式过程中：只更新正文，不重建整个卡片，减少闪烁 */
+function aiStreamPaint(scene, host, text, model) {
+  if (!host) return;
+  var secs = aiSections(text);
+  var concl = '', rows = '', todo = '';
+  secs.forEach(function (s, i) {
+    var h = String(s.h || '');
+    var isTodo = /下一步|建议|怎么做/.test(h);
+    if (i === 0) {
+      concl = '<div class="sc-ai-concl">' + aiMdBlock(s.t) + '</div>';
+    } else if (isTodo) {
+      todo += '<div class="sc-ai-todo"><b>' + (h || '下一步') + '</b>' + aiMdBlock(s.t) + '</div>';
+    } else {
+      rows += '<div class="sc-ai-row"><span class="sc-ai-k">' + esc(h || '·') + '</span>'
+        + '<span class="sc-ai-v">' + aiMdBlock(s.t) + '</span></div>';
+    }
+  });
+  host.innerHTML = concl + rows + todo
+    + '<div class="sc-ai-typing"><span></span><span></span><span></span>正在生成…</div>';
+}
+
+/* ---------- 触发 ---------- */
+function aiRun(scene, host) {
+  var p = AIQ.payload[scene];
+  if (!p) { return; }
+  if (!aiReady()) { aiDlgOpen(); return; }
+  if (AIQ.busy[scene]) return;
+
+  var built = aiMessages(p);
+  var ck = 'v1|' + scene + '|' + (p.examName || '') + '|' + aiModelName() + '|' + aiHash(aiPrompt())
+    + '|' + aiHash(built.body);
+
+  var cached = aiCacheGet(ck);
+  if (cached && cached.t) {
+    AIQ.result[scene] = { text: cached.t, model: aiModelName(), at: cached.at };
+    aiRenderScene(scene, host);
+    return;
+  }
+
+  AIQ.busy[scene] = true;
+  aiSetBadge(scene, '生成中…');
+  host.innerHTML = '<div class="sc-ai-typing"><span></span><span></span><span></span>正在生成…</div>';
+
+  var last = 0;
+  aiRequest(built.messages, function (delta, full) {
+    var now = Date.now();
+    if (now - last < 80) return;            /* 80ms 节流，别每个 token 都重排 */
+    last = now;
+    aiStreamPaint(scene, host, aiUnmask(full, built.back), aiModelName());
+  }, function (full) {
+    AIQ.busy[scene] = false;
+    var text = aiUnmask(full, built.back);
+    AIQ.result[scene] = { text: text, model: aiModelName(), at: Date.now() };
+    aiCachePut(ck, text);
+    aiRenderScene(scene, host);
+  }, function (err) {
+    AIQ.busy[scene] = false;
+    aiSetBadge(scene, '本地规则 · 未联网');
+    host.innerHTML = (AIQ.localHtml[scene] || '') + '<div class="ai-idle">'
+      + '<div class="ai-idle-t err">没成：' + esc(err) + '</div>'
+      + '<div class="ai-idle-a">'
+      + '<button class="ai-go" data-ai-act="run" data-ai-scene="' + scene + '">再试一次</button>'
+      + '  <button class="ai-mini" data-ai-act="cfg" data-ai-scene="' + scene + '">检查设置</button>'
+      + '</div></div>';
+  });
+}
+
+/* 卡片重建（切板块、换考试）后，把 AI 结果接回去 */
+function aiRenderAll() {
+  ['me', 'pk'].forEach(function (scene) {
+    var card = document.querySelector('[data-ai="' + scene + '"]');
+    if (!card) return;
+    var host = card.querySelector('[data-ai-body]');
+    if (!host) return;
+    AIQ.els[scene] = host;
+    aiRenderScene(scene, host);
+  });
+}
+
+/* 事件委托：卡片里的按钮统一在这处理 */
+document.addEventListener('click', function (e) {
+  var t = e.target;
+  if (!t || !t.closest) return;
+  var btn = t.closest('[data-ai-act]');
+  if (!btn) return;
+  var act = btn.getAttribute('data-ai-act');
+  var scene = btn.getAttribute('data-ai-scene') || 'me';
+  e.preventDefault();
+  e.stopPropagation();
+  if (act === 'cfg') { aiDlgOpen(); return; }
+  if (act === 'run' || act === 'again') {
+    var card = btn.closest('[data-ai]') || document.querySelector('[data-ai="' + scene + '"]');
+    var host = card ? card.querySelector('[data-ai-body]') : null;
+    if (act === 'again') AIQ.result[scene] = null;      /* 「重新分析」不吃缓存 */
+    aiRun(scene, host);
+    return;
+  }
+  if (act === 'local') {
+    AIQ.result[scene] = null;
+    var c2 = btn.closest('[data-ai]') || document.querySelector('[data-ai="' + scene + '"]');
+    var h2 = c2 ? c2.querySelector('[data-ai-body]') : null;
+    if (h2) aiRenderScene(scene, h2);
+    return;
+  }
+}, false);
+
+try { aiCfgLoad(); } catch (e) {}
+
 /* ----------------------------------------------------------------------------
  * 我的画像 · AI 分析（v3.5.6）
  * 站主要求：「我的画像 AI 分析」。
@@ -14846,9 +15589,7 @@ function scMeAnalysis(meRow, rk, st, myTotal, myRank, subs){
     return v ? '<div class="sc-ai-row"><span class="sc-ai-k">' + k + '</span><span class="sc-ai-v">' + v + '</span></div>' : '';
   };
 
-  return '<div class="sc-card sc-ai-card" data-scblk="me_ai">'
-    + '<div class="sc-card-h">AI 分析<span class="sc-h-note">本地规则生成 · 不联网 · 不上传成绩</span></div>'
-    + '<div class="sc-ai-concl">' + concl + '</div>'
+  var bodyHtml = '<div class="sc-ai-concl">' + concl + '</div>'
     + rowHtml('亮点', goodText)
     + rowHtml('短板', weakText)
     + rowHtml('均衡', balanceText)
@@ -14857,8 +15598,37 @@ function scMeAnalysis(meRow, rk, st, myTotal, myRank, subs){
     + '<div class="sc-ai-todo"><b>下一步可以这样做</b><ol>'
     +   todos.map(function(t){ return '<li>' + t + '</li>'; }).join('')
     + '</ol></div>'
-    + '<div class="sc-figcap">这份分析由浏览器按当前考试数据实时算出（定位 / 单科强弱 / 均衡度 / 历次趋势 / 上线距离五类规则），'
-    + '每次换考试、切换赋分口径都会重算，不会把成绩发到任何服务器。</div>'
+    + '<div class="sc-figcap">这份是<b>本地规则</b>算的（定位 / 单科强弱 / 均衡度 / 历次趋势 / 上线距离五类规则），'
+    + '每次换考试、切赋分口径都会重算 —— 不联网、不花钱、不把成绩发出去。</div>';
+
+  /* v3.16.1：换了考试就把上一场的结果丢掉 —— 否则切过去还显示着上一场的分析，
+     数字全对不上，比不显示更糟。 */
+  var _eid = (SC.exam && SC.exam.id) || '';
+  if (AIQ.examId !== _eid) { AIQ.result = {}; AIQ.examId = _eid; }
+
+  /* 把这一场的原始数据留在内存里，等用户点「用 AI 重新分析」时取用。
+     注意这里有真实姓名，但它只活在当前页面，发出去之前会全部换成「同学N」。 */
+  AIQ.payload.me = {
+    scene: 'me',
+    examName: (SC.exam && SC.exam.name) || '',
+    basis: SC.basis === 'graded' ? '赋分' : '原始分',
+    classSize: st.n,
+    classAvg: st.avg,
+    me: {
+      name: (meRow && meRow.name) || '',
+      total: myTotal,
+      rank: myRank,
+      subjects: valid.map(function(x){ return { n: x.name, v: x.v, full: x.full, avg: x.avg }; })
+    },
+    history: scMeSeries().map(function(h){ return { name: h.name, total: h.v }; }),
+    cutlines: ((SC.exam && SC.exam.cutlines) || []).filter(function(c){ return c.score != null; })
+      .map(function(c){ return { label: c.label, score: c.score }; })
+  };
+  AIQ.localHtml.me = bodyHtml;
+
+  return '<div class="sc-card sc-ai-card" data-scblk="me_ai" data-ai="me">'
+    + '<div class="sc-card-h">AI 分析<span class="sc-h-note" data-ai-badge>本地规则 · 未联网</span></div>'
+    + '<div data-ai-body>' + bodyHtml + aiBarHtml('me') + '</div>'
     + '</div>';
 }
 
@@ -15664,9 +16434,7 @@ function scPkAiCard(A, B){
   var note = hasPrev
     ? '这份对比由浏览器按两场考试数据实时算出（总分差 / 逐科拆解 / 强弱项 / 变化速度四类规则），仅供参考。'
     : '这份对比由浏览器按本场数据实时算出（总分差 / 逐科拆解 / 强弱项三类规则）。想看两场进退与趋势，选一场「对比另一场」。';
-  return '<div class="sc-card sc-ai-card" data-scblk="pk_ai" style="margin-top:12px">'
-    + '<div class="sc-card-h">AI 对比分析<span class="sc-h-note">本地规则生成 · 不联网 · 不上传成绩</span></div>'
-    + '<div class="sc-ai-concl">' + d.concl + '</div>'
+  var bodyHtml = '<div class="sc-ai-concl">' + d.concl + '</div>'
     + d.rowHtml('差距在哪', d.contrib)
     + d.rowHtml('A 方强弱', d.sideA)
     + d.rowHtml('B 方强弱', d.sideB)
@@ -15675,7 +16443,31 @@ function scPkAiCard(A, B){
     + '<div class="sc-ai-todo"><b>下一步可以这样做</b><ol>'
     +   d.todo.map(function(t){ return '<li>' + t + '</li>'; }).join('')
     + '</ol></div>'
-    + '<div class="sc-figcap">' + note + '</div>'
+    + '<div class="sc-figcap">' + note + '</div>';
+
+  /* v3.16.1：留给真模型的原始数据（发出去前姓名会换成代号） */
+  try{
+    var _subs = SC.exam.subjects || [];
+    var _avg = scPkSubjAvg();
+    var _sa = [], _sb = [];
+    _subs.forEach(function(s){
+      _sa.push({ n: s.name || s.key, v: scSubScore(A, s, SC.basis), full: s.full || 0, avg: _avg[s.key] });
+      _sb.push({ n: s.name || s.key, v: scSubScore(B, s, SC.basis), full: s.full || 0, avg: _avg[s.key] });
+    });
+    AIQ.payload.pk = {
+      scene: 'pk',
+      examName: (SC.exam && SC.exam.name) || '',
+      basis: SC.basis === 'graded' ? '赋分' : '原始分',
+      classSize: (SC.rows || []).length,
+      a: { name: A.name || 'A 方', total: tA, rank: ctx.curRk[A.id], subjects: _sa },
+      b: { name: B.name || 'B 方', total: tB, rank: ctx.curRk[B.id], subjects: _sb }
+    };
+    AIQ.localHtml.pk = bodyHtml;
+  }catch(e){}
+
+  return '<div class="sc-card sc-ai-card" data-scblk="pk_ai" data-ai="pk" style="margin-top:12px">'
+    + '<div class="sc-card-h">AI 对比分析<span class="sc-h-note" data-ai-badge>本地规则 · 未联网</span></div>'
+    + '<div data-ai-body>' + bodyHtml + aiBarHtml('pk') + '</div>'
     + '</div>';
 }
 
