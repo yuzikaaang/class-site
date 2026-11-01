@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#f4f4f4">
 <title>全屏时钟 · 时间 / 倒计时 / 秒表</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 /* ============================================================================
  * 全屏时钟（v3.9.22）
@@ -912,7 +914,12 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
         <button data-noise="wind">风声</button>
         <button data-noise="wave">海浪</button>
       </div>
-      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">点一下开 / 关，可同时开几种混合；关掉这个面板后声音继续，再点「更多」回来就能关。</p>
+      <label class="vol-row" id="noiseVolRow">
+        <span>音量</span>
+        <input type="range" id="noiseVolInp" min="0" max="100" step="5" value="70">
+        <b id="noiseVolVal">70%</b>
+      </label>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">点一下开 / 关，可同时开几种混合；关掉这个面板后声音继续，再点「更多」回来就能关。音量拉到底就是静音，开着听歌也不打架。</p>
     </div>
 
     <div class="ab-sec">
@@ -997,6 +1004,9 @@ var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5
   /* v3.11.0：计时合并后 —— 专注时长 / 每轮休息 / 循环次数 / 6 个预设 / 提醒列表 */
   focusSec:1500, restSec:5, rounds:1, downSec:0,
   tk:'up', bareRun:1, alertTimes:2, cfgV:2,
+  /* v3.16.3：站主要求 —— 正计时默认只看「时:分:秒」，百分秒可自己开；
+     白噪音音量可调（之前写死 0.9 / 0.7 / 0.8，跟听歌打架） */
+  msShow:0, noiseVol:0.7,
   alerts:[
     { at:'end',     snd:'blue',  on:true  },
     { at:'restEnd', snd:'chime', on:true  },
@@ -1284,10 +1294,19 @@ function tmRounds(){ return Math.max(0, Math.min(99, Number(CFG.rounds) || 0)); 
 function tmText(ms, up){
   if(ms < 0) ms = 0;
   if(up){
-    var cs = Math.floor(ms / 10) % 100;
     var sec = Math.floor(ms / 1000) % 60;
-    var min = Math.floor(ms / 60000);
-    return two(min) + ':' + two(sec) + '<span class="ms">.' + two(cs) + '</span>';
+    var min = Math.floor(ms / 60000) % 60;
+    var hour = Math.floor(ms / 3600000);
+    if(CFG.msShow === 1){
+      /* 百分秒模式：过一小时后同样补出小时位，否则会变成「62:05」这种读不顺的数 */
+      var hh = Math.floor(ms / 3600000);
+      var mm = Math.floor(ms / 60000) % 60;
+      var head = hh ? (hh + ':' + two(mm)) : two(Math.floor(ms / 60000));
+      return head + ':' + two(sec)
+        + '<span class="ms">.' + two(Math.floor(ms / 10) % 100) + '</span>';
+    }
+    /* v3.16.3：默认只到秒；过一小时后补出小时位，读起来才是「1:05:09」 */
+    return hour ? (hour + ':' + two(min) + ':' + two(sec)) : (two(min) + ':' + two(sec));
   }
   var total = Math.ceil(ms / 1000);
   var h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
@@ -1547,6 +1566,8 @@ function paintMarks(){
 window.__clk = {
   log: function(){ return LOG; },
   dev: function(){ return DEVICE; },
+  /* v3.16.3：毫秒开关 / 超一小时补小时位，都是纯格式化逻辑，单独给个口子好验 */
+  text: function(ms, up){ return tmText(Number(ms) || 0, !!up); },
   state: function(){
     return { kind:T.kind, run:T.run, up:T.up, phase:T.phase, round:T.round, left:Math.round(tmLeftMs()), marks:T.marks.length, bare:UI.bare };
   },
@@ -1631,6 +1652,20 @@ function paintTmOpts(){
   tx.textContent = '开始计时后收起界面（只留数字）';
   row.appendChild(tx);
   box.appendChild(row);
+
+  /* v3.16.3：正计时显示到哪一位 —— 默认「时:分:秒」，需要看百分秒的再打开 */
+  var row2 = document.createElement('div');
+  row2.className = 'al-row';
+  row2.appendChild(segSwitch(CFG.msShow === 1, function(v){
+    CFG.msShow = v ? 1 : 0;
+    saveCfg(); paintTmOpts();
+    if(T.up) tmPaint();          /* 正计时跑着的时候立刻换显示 */
+  }));
+  var tx2 = document.createElement('div');
+  tx2.className = 'tx';
+  tx2.textContent = '正计时显示百分秒（默认只到秒）';
+  row2.appendChild(tx2);
+  box.appendChild(row2);
 }
 function paintAlerts(){
   var box = $('alertList');
@@ -2928,7 +2963,28 @@ var NOISE_DATA = {
 };
 var NOISE_BUFS = {};   /* 解码好的 AudioBuffer 缓存 */
 var NOISE_NODES = {};  /* 正在播放的节点 */
-function noiseTarget(kind){ return (kind === 'rain') ? 0.9 : (kind === 'wind') ? 0.7 : 0.8; }
+function noiseVol(){
+  var v = (typeof CFG.noiseVol === 'number') ? CFG.noiseVol : 0.7;
+  return Math.max(0, Math.min(1, v));
+}
+function noiseTarget(kind){
+  var base = (kind === 'rain') ? 0.9 : (kind === 'wind') ? 0.7 : 0.8;
+  return base * noiseVol();
+}
+/* 拖动音量滑杆时，正在响的那几路要立刻跟着变（不然得关掉再开才生效） */
+function noiseApplyVol(){
+  if(!AC) return;
+  Object.keys(NOISE_NODES).forEach(function(k){
+    var n = NOISE_NODES[k];
+    if(!n || !n.g) return;
+    var t = AC.currentTime, v = Math.max(0.0001, noiseTarget(k));
+    try{
+      n.g.gain.cancelScheduledValues(t);
+      n.g.gain.setValueAtTime(Math.max(0.0001, n.g.gain.value), t);
+      n.g.gain.linearRampToValueAtTime(v, t + 0.15);
+    }catch(e){}
+  });
+}
 function noiseDecode(kind, cb){
   if(NOISE_BUFS[kind]){ cb(NOISE_BUFS[kind]); return; }
   var b64 = NOISE_DATA[kind];
@@ -2979,6 +3035,13 @@ function paintNoise(){
   for(var i = 0; i < bs.length; i++){
     bs[i].className = (CFG.noise[bs[i].getAttribute('data-noise')]) ? 'on' : '';
   }
+  var inp = $('noiseVolInp'), val = $('noiseVolVal'), wrap = $('noiseVolRow');
+  if(inp){
+    var pct = Math.round(noiseVol() * 100);
+    inp.value = pct;
+    if(val) val.textContent = pct + '%';
+  }
+  if(wrap) wrap.className = 'vol-row' + (noiseVol() === 0 ? ' is-off' : '');
 }
 
 /* ---------------- 全屏「时间到」提醒（v3.10.0） ----------------
@@ -3374,6 +3437,16 @@ function bindSettings(){
         paintNoise();
       };
     });
+  }
+  var nv = $('noiseVolInp');
+  if(nv){
+    nv.oninput = function(e){
+      if(e && e.stopPropagation) e.stopPropagation();
+      CFG.noiseVol = Number(nv.value) / 100;
+      saveCfg();
+      noiseApplyVol();
+      paintNoise();
+    };
   }
   var ti = $('toastInp');
   if(ti){

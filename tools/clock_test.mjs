@@ -96,7 +96,8 @@ await page.waitForTimeout(300);
 const up2 = await V('#timerTime');
 await page.waitForTimeout(400);
 const up3 = await V('#timerTime');
-t('时长为 0 点开始就是正计时', /^\d{2}:\d{2}\.\d{2}$/.test(up1) && up1 !== '00:00.00', up1);
+/* v3.16.3：正计时默认只到秒（百分秒要自己开），所以这里放宽格式 */
+t('时长为 0 点开始就是正计时', /^(\d+:)?\d{2}:\d{2}(\.\d{2})?$/.test(up1) && !/^00:00/.test(up1), up1);
 t('正计时时头顶写「正计时」', upHead === '正计时', upHead);
 /* 暂停那一刻会比最后一次重绘晚一帧（~10ms），所以比的是「暂停后再读一次是否还在变」 */
 t('正计时暂停后停住', up2 === up3, up2 + ' / ' + up3);

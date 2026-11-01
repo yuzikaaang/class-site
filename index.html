@@ -30,6 +30,7 @@
 <link rel="dns-prefetch" href="https://api.classsite.dpdns.org">
 
 <link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <link rel="apple-touch-icon" href="./icon-512.png">
 <meta name="theme-color" content="#141210">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2958,6 +2959,50 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .sc-ai-body li{font-size:.82rem;line-height:1.8;color:#4a4440;margin-bottom:4px}
 .sc-ai-body code{background:#f3ecff;border-radius:4px;padding:1px 4px;font-size:.78rem}
 
+/* —— v3.16.3：卡内「总览 / 单科」视角 + 科目 chips + 目标 + 追问 —— */
+.ai-tabs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.ai-tab{
+  height:29px;padding:0 13px;border:1px solid #ded4ea;border-radius:999px;cursor:pointer;
+  background:#fff;color:#6b6480;font:inherit;font-size:.75rem;font-weight:700;
+  transition:background .15s ease,color .15s ease,border-color .15s ease;
+}
+.ai-tab.on{background:#6d28d9;border-color:#6d28d9;color:#fff}
+.ai-goal{
+  margin-left:auto;font-size:.7rem;color:#6d28d9;background:#f4edff;border-radius:999px;
+  padding:4px 10px;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ai-chips{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 12px}
+.ai-chip{
+  height:27px;padding:0 11px;border:1px solid #e4dcf3;border-radius:8px;cursor:pointer;
+  background:#fbf9ff;color:#5f5673;font:inherit;font-size:.74rem;font-weight:600;
+  transition:background .15s ease,border-color .15s ease,color .15s ease;
+}
+.ai-chip:hover{border-color:#c4b5fd;color:#5b21b6}
+.ai-chip.on{background:#efe7ff;border-color:#a78bfa;color:#5b21b6}
+
+.ai-chat{margin-top:14px;padding-top:12px;border-top:1px dashed #ece3f5}
+.ai-chat-h{font-size:.74rem;font-weight:700;color:#7c5aa8;margin-bottom:8px}
+.ai-chat-list{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto}
+.ai-chat-list:empty{display:none}
+.ai-bub{max-width:88%;padding:9px 12px;border-radius:12px;font-size:.8rem;line-height:1.75}
+.ai-bub.u{align-self:flex-end;background:#6d28d9;color:#fff;border-bottom-right-radius:4px}
+.ai-bub.a{align-self:flex-start;background:#f7f3ff;color:#3f3a35;border-bottom-left-radius:4px}
+.ai-bub.a p{margin:0 0 6px}
+.ai-bub.a p:last-child{margin:0}
+.ai-bub.a ul,.ai-bub.a ol{margin:2px 0 6px;padding-left:18px}
+.ai-chat-in{display:flex;gap:8px;margin-top:10px}
+.ai-chat-in input{
+  flex:1;min-width:0;height:36px;border:1px solid #ded4ea;border-radius:10px;padding:0 12px;
+  font:inherit;font-size:.78rem;color:#2d2438;background:#fff;outline:none;
+}
+.ai-chat-in input:focus{border-color:#a78bfa;box-shadow:0 0 0 3px rgba(167,139,250,.16)}
+.ai-chat-in .ai-go{height:36px;flex:0 0 auto}
+.ai-chat-tip{font-size:.68rem;color:#9a93a8;margin-top:6px;line-height:1.6}
+.ai-dots{display:inline-flex;gap:4px;align-items:center}
+.ai-dots i{width:5px;height:5px;border-radius:50%;background:#a78bfa;animation:aiDot 1.1s infinite ease-in-out}
+.ai-dots i:nth-child(2){animation-delay:.16s}
+.ai-dots i:nth-child(3){animation-delay:.32s}
+
 /* —— 流式输出的等待点 —— */
 .sc-ai-typing{display:flex;align-items:center;gap:5px;padding:14px 4px;
   font-size:.78rem;color:#8b8398}
@@ -3042,6 +3087,16 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .dark .ai-btn{background:#2b2438;border-color:#443a5e;color:#d6cfe0}
 .dark .ai-btn:hover{background:#352c47}
 .dark .ai-btn.primary{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.dark .ai-tab{background:#2b2438;border-color:#443a5e;color:#b2a8c6}
+.dark .ai-tab.on{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.dark .ai-goal{background:#332a48;color:#c4b5fd}
+.dark .ai-chip{background:#2b2438;border-color:#3d3350;color:#b2a8c6}
+.dark .ai-chip.on{background:#3a2f52;border-color:#7c3aed;color:#ddd2ff}
+.dark .ai-chat{border-top-color:#3d3350}
+.dark .ai-chat-h{color:#a78bfa}
+.dark .ai-bub.a{background:#2b2438;color:#d6cfe0}
+.dark .ai-chat-in input{background:#1f1a29;border-color:#3d3350;color:#ede7f8}
+.dark .ai-chat-tip{color:#8b8398}
 
 @media (max-width:640px){
   .ai-box{max-width:100%;max-height:92vh;border-radius:16px;padding:18px 16px}
@@ -5216,10 +5271,10 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '3.16.2';
+var SITE_VERSION = '3.16.3';
 var VER_DATE = '2026-10-30';
 </script>
-<script src="./app.min.js?v=3162" defer></script>
+<script src="./app.min.js?v=3163" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

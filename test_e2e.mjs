@@ -7462,6 +7462,8 @@ console.log('\n【67】第六十轮·成绩对比 PK 页（v2.10.0）');
     ];
     const api = new Function('SC', 'AUTH', 'document', src + `
       function scRenderPane(){ scRenderPk(); }   /* 桩：PK 只有一个 pane，直接重绘 */
+      /* v3.16.3：AI 卡现在要挂一个提示条，真值表里不需要它的内容，给个空桩 */
+      function aiBarHtml(){ return ''; }
       return { scRenderPk, scPkSwap, scPkPick, scPkDefaults, scPkRow, scTotal, scPkSubjAvg, scPkExam2 };
     `)(SC, AUTH, docStub);
 
@@ -10556,8 +10558,10 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('★我的画像 AI 分析卡已挂进渲染链',
     /html \+= scMeAnalysis\(meRow, rk, st, myTotal, myRank, subs\)/.test(idxV)
     && /function scMeAnalysis/.test(idxV));
-  t('★AI 分析声明不联网不上传成绩',
-    /不联网/.test(idxV) && /不会把成绩发到任何服务器/.test(idxV));
+  /* v3.16.3：文案改成「本地规则 · 不联网」+ 配置弹窗里的「不上传服务器」，
+     原文案「不会把成绩发到任何服务器」在接真模型那版就换掉了（发分数这件事必须在弹窗里说清） */
+  t('★AI 分析声明不联网 / 不明文上传',
+    /本地规则/.test(idxV) && /不联网/.test(idxV) && /不上传服务器/.test(idxV));
   t('★「连续两次退步」的上一场数据走懒加载（不当场阻塞）',
     /function scLoadPrevPack/.test(idxV) && /scLoadPrevPack\(ex\.id\)/.test(idxV));
   t('★新增样式都有暗色覆盖（sc-chip / sc-ai）',
@@ -10819,10 +10823,12 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     /function scPkBothTotalCard\(/.test(idx) && /scPkBothTotalCard\(A, B\)/.test(idx));
   t('#8 卡同时给原始分和赋分两口径',
     /mode === 'graded'/.test(idx) && /赋分后的总分/.test(idx));
+  /* v3.16.3：标题里的「A 方 / B 方」改成真实姓名 + 「的强弱」，
+     「下一步」也只写给 A 方（站主：我不是 B 方，别给我 B 方的建议） */
   t('#8 AI 对比分析五段齐全（v3.5.13 改名 scPkAiData，单场也要有）',
     /function scPkAiData\(/.test(idx) && /function scPkAiCard\(/.test(idx)
-    && /差距在哪/.test(idx) && /A 方强弱/.test(idx) && /B 方强弱/.test(idx) && /两场变化/.test(idx)
-    && /下一步可以这样做/.test(idx));
+    && /差距在哪/.test(idx) && /的强弱/.test(idx) && /两场变化/.test(idx)
+    && /下一步该怎么做/.test(idx) && /只写给/.test(idx) === false);
   t('#8 AI 分析带“本地规则生成 · 不联网”说明',
     /本地规则生成/.test(idx));
 

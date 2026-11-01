@@ -14081,7 +14081,186 @@ function scRenderBoard(){
     + scChartSegments(st)
     + scGradedBlock()
     + scTeacherBlocks()
+    + scBoardAiCard()
   );
+}
+
+/* ============================================================================
+ * v3.16.3 · 全班成绩单的 AI 诊断（站主：「全班成绩单下面最好也可以加一个 AI 分析，
+ *   尤其是需关注学生、最值得做的事」）
+ * ----------------------------------------------------------------------------
+ * 这一块和「我的画像」的 AI 卡不是一回事，视角变了：
+ *   · 读者是班主任 / 管理员，关心的是「这个班整体怎么样、谁要谈、先做什么」
+ *   · 数据给的是班级统计（均分、分位、各科得分率、上线人数、需关注名单），
+ *     不是某个人的分数 —— 所以没有「我的」这种说法
+ *   · 名单里的人名在发出去之前一样的会被换成「同学N」
+ * 没配 Key 也能看：下面是本地规则算的一版，够用来做一轮粗筛。
+ * ========================================================================== */
+function scBoardStats(){
+  var st = scStats(SC.basis);
+  var subs = (SC.exam && SC.exam.subjects) || [];
+  var rows = SC.rows || [];
+
+  /* 各科：均分 / 最高 / 最低 / 及格人数 */
+  var per = [];
+  subs.forEach(function(s){
+    var vals = [];
+    rows.forEach(function(r){
+      var v = scSubScore(r, s, SC.basis);
+      if(v != null) vals.push(Number(v));
+    });
+    if(!vals.length) return;
+    vals.sort(function(a, b){ return a - b; });
+    var sum = vals.reduce(function(a, b){ return a + b; }, 0);
+    var passLine = s.full ? s.full * 0.6 : 60;
+    per.push({
+      key: s.key, n: s.name || s.key, full: s.full || 0,
+      avg: sum / vals.length, max: vals[vals.length - 1], min: vals[0],
+      pass: vals.filter(function(v){ return v >= passLine; }).length,
+      rate: s.full ? (sum / vals.length) / s.full : null
+    });
+  });
+
+  /* 分数段：按分位切五段（前 10% / 10–30% / 30–60% / 60–85% / 后 15%） */
+  var bands = [];
+  if(st.n){
+    var pr = function(q){ return st.list[Math.min(st.list.length - 1, Math.max(0, Math.floor(st.list.length * q)))]; };
+    var q1 = pr(0.10), q2 = pr(0.30), q3 = pr(0.60), q4 = pr(0.85);
+    bands = [
+      { label: '前 10%（≥' + fmtNum(q1) + '）', n: 0 },
+      { label: '10%–30%（≥' + fmtNum(q2) + '）', n: 0 },
+      { label: '30%–60%（≥' + fmtNum(q3) + '）', n: 0 },
+      { label: '60%–85%（≥' + fmtNum(q4) + '）', n: 0 },
+      { label: '后 15%（<' + fmtNum(q4) + '）', n: 0 }
+    ];
+    st.list.forEach(function(v){
+      if(v >= q1) bands[0].n++;
+      else if(v >= q2) bands[1].n++;
+      else if(v >= q3) bands[2].n++;
+      else if(v >= q4) bands[3].n++;
+      else bands[4].n++;
+    });
+  }
+
+  /* 上线人数 */
+  var cutCount = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; }).map(function(c){
+    return { label: c.label, score: c.score, n: st.list.filter(function(v){ return v >= c.score; }).length };
+  });
+
+  /* 需关注：总分明显落后 + 单科严重拖后腿，两个来源合成一张名单 */
+  var care = [];
+  var avgs = scSubjAvg();
+  rows.forEach(function(r){
+    var t = scTotal(r, SC.basis);
+    if(t == null) return;
+    var why = [];
+    var dt = t - st.avg;
+    if(st.avg && dt < -st.avg * 0.12) why.push('总分 ' + fmtNum(t) + '，比班均低 ' + fmtNum(-dt) + ' 分');
+    var worst = null;
+    subs.forEach(function(s){
+      var v = scSubScore(r, s, SC.basis);
+      var a = avgs[s.key];
+      if(v == null || a == null) return;
+      var dd = v - a;
+      if(dd < 0 && (!worst || dd < worst.d)) worst = { name: s.name || s.key, v: v, d: dd, a: a };
+    });
+    if(worst && worst.a > 0 && worst.d < -worst.a * 0.2){
+      why.push(worst.name + ' ' + fmtNum(worst.v) + '，比班均低 ' + fmtNum(-worst.d) + ' 分');
+    }
+    if(why.length) care.push({ name: r.name || '同学', why: why.join('；'), score: t });
+  });
+  care.sort(function(a, b){ return a.score - b.score; });
+
+  return {
+    st: st, per: per, bands: bands, cuts: cutCount,
+    care: care.slice(0, 8), careAll: care.length
+  };
+}
+
+function scBoardAiCard(){
+  var d;
+  try { d = scBoardStats(); } catch(e) { return ''; }
+  if(!d || !d.st.n) return '';
+
+  var st = d.st;
+  var weakest = null, strongest = null;
+  d.per.forEach(function(s){
+    if(s.rate == null) return;
+    if(!weakest || s.rate < weakest.rate) weakest = s;
+    if(!strongest || s.rate > strongest.rate) strongest = s;
+  });
+  var top3 = d.care.slice(0, 3);
+
+  var concl = '这次参考 <b>' + st.n + '</b> 人，班均 <b>' + fmtNum(st.avg) + '</b>、中位 <b>' + fmtNum(st.median)
+    + '</b>，最高 ' + fmtNum(st.max) + '、最低 ' + fmtNum(st.min)
+    + '，最高与最低相差 <b>' + fmtNum(st.max - st.min) + '</b> 分。'
+    + (d.careAll ? '按「总分明显落后 / 单科严重拖后腿」两条，有 <b>' + d.careAll + '</b> 人需要盯一下。' : '这次没有明显需要单独盯的人。');
+
+  var rowHtml = function(k, v){
+    return v ? '<div class="sc-ai-row"><span class="sc-ai-k">' + k + '</span><span class="sc-ai-v">' + v + '</span></div>' : '';
+  };
+
+  var subjTxt = '';
+  if(weakest && strongest){
+    subjTxt = '集体最弱的是 <b>' + esc(weakest.n) + '</b>（班均得分率 ' + Math.round(weakest.rate * 100)
+      + '%，最高 ' + fmtNum(weakest.max) + '、最低 ' + fmtNum(weakest.min) + '）；最强的是 <b>' + esc(strongest.n)
+      + '</b>（' + Math.round(strongest.rate * 100) + '%）。两科相差 '
+      + Math.round((strongest.rate - weakest.rate) * 100) + ' 个百分点。';
+  }
+
+  var careTxt = top3.length
+    ? top3.map(function(c){ return '<b>' + esc(c.name) + '</b>：' + esc(c.why); }).join('<br>')
+    : '';
+
+  var cutTxt = d.cuts.length
+    ? d.cuts.map(function(c){
+        return esc(c.label) + ' ' + fmtNum(c.score) + '：<b>' + c.n + '</b> 人（' + Math.round(c.n / st.n * 100) + '%）';
+      }).join('　')
+    : '';
+
+  var todo = [];
+  if(weakest){
+    todo.push('先处理最弱的 <b>' + esc(weakest.n) + '</b>：班均得分率只有 ' + Math.round(weakest.rate * 100)
+      + '%，说明丢分是<b>集体性</b>的，不是个别学生的问题 —— 值得占用一次整节课过一遍共性错题，只看这一科。');
+  }
+  if(top3.length){
+    todo.push('找 <b>' + esc(top3[0].name) + '</b> 谈一次：' + esc(top3[0].why) + '。谈话时先让他自己说哪一块听不懂，别急着给方法。');
+  }
+  todo.push('把这次「最高与最低相差 ' + fmtNum(st.max - st.min) + ' 分」摆到班会上讲一次 —— 差距大不等于没救，但不说清楚，中后段会先放弃。');
+
+  var bodyHtml = '<div class="sc-ai-concl">' + concl + '</div>'
+    + rowHtml('学科', subjTxt)
+    + rowHtml('上线', cutTxt)
+    + rowHtml('需关注', careTxt)
+    + '<div class="sc-ai-todo"><b>最值得做的三件事</b><ol>'
+    + todo.slice(0, 3).map(function(t){ return '<li>' + t + '</li>'; }).join('')
+    + '</ol></div>'
+    + '<div class="sc-figcap">这一版是浏览器按本场数据算的（分布 / 学科得分率 / 需关注 / 上线人数四类规则）。'
+    + '接上模型后，它会读同一份数据，写得更细 —— 包括每个需关注学生的抓手和这一周具体做什么。</div>';
+
+  /* 留给真模型的原始数据（人名会在发出前换成代号） */
+  try {
+    AIQ.payload.board = {
+      scene: 'board',
+      examName: (SC.exam && SC.exam.name) || '',
+      basis: SC.basis === 'graded' ? '赋分' : '原始分',
+      classSize: st.n,
+      full: scFullMark(),
+      stats: { avg: st.avg, median: st.median, max: st.max, min: st.min, sd: aiSd(st.list) },
+      bands: d.bands,
+      subs: d.per.map(function(s){ return { n: s.n, avg: s.avg, full: s.full, max: s.max, min: s.min, pass: s.pass }; }),
+      cutlines: d.cuts,
+      care: d.care,
+      goal: AIC.goal || ''
+    };
+    AIQ.localHtml.board = bodyHtml;
+  } catch(e) {}
+
+  return '<div class="sc-card sc-ai-card" data-scblk="board_ai" data-ai="board" style="margin-top:12px">'
+    + '<div class="sc-card-h">AI 班级诊断<span class="sc-h-note" data-ai-badge>本地规则 · 未联网</span>'
+    + '<span class="sc-h-note" style="margin-left:8px">班主任视角</span></div>'
+    + '<div data-ai-body>' + bodyHtml + aiBarHtml('board') + '</div>'
+    + '</div>';
 }
 
 /* ============================================================================
@@ -14765,18 +14944,58 @@ var AI_PRESET = {
   }
 };
 
+/* 默认提示词（v3.16.3 重写过一次）。
+   写的时候参照了网上几份「AI 成绩分析」的实现，共同的问题都在这几条上：
+     · 只说「数学偏弱」不说弱多少 → 强制引用具体数字
+     · 凭分数编原因（「你最近没认真」「你心态不好」）→ 明确禁止，改成「可验证的假设」
+     · 建议全是「加强练习」「多做题」→ 要求写清做什么、做多少、怎么检验
+     · 一次给七八条 → 要求按性价比排序，最多 3 条
+   所以提示词里把「不许做什么」写得比「要做什么」更细，模型才不会滑回套话。 */
 var AI_PROMPT_DEFAULT =
-  '你是一位带过十几届毕业班的高中老师，擅长看着成绩单说人话。\n'
-+ '读者是学生本人，语气直接、具体，不要灌鸡汤，不要写「你很棒」「继续加油」这类空话。\n'
-+ '只根据我给的数据下判断，数据里没有的东西一律不编。数字要引用具体值，不要含糊。\n'
-+ '学生以「同学N」这类代号出现，你不知道他们是谁，也不需要猜。\n'
-+ '输出用 Markdown，固定五个二级标题，顺序不要变：\n'
-+ '## 结论\n## 亮点\n## 短板\n## 趋势\n## 下一步\n'
-+ '「下一步」下面给 2~3 条编号建议，每条都要落到具体动作（做什么、做多少、怎么检验），'
-+ '不要写「加强练习」这种正确的废话。\n'
-+ '全篇控制在 500 字以内，不要开场白，不要结尾总结。';
+  '你是一位带了十几届毕业班的高中老师，同时懂一点数据分析。学生拿着成绩单来问你，你说话直接、具体，像一个了解他的班主任，不客套、不灌鸡汤。\n'
++ '\n【硬性规则】\n'
++ '1. 只根据我给的数据下判断。数据里没有的（作息、心态、家庭、老师水平、刷题量），一律不编。\n'
++ '2. 不要写「你很棒」「继续加油」「相信自己」这类没有信息量的话；不要用感叹号堆情绪。\n'
++ '3. 每一个判断都要落到具体数字：分数、与班均的差、名次、得分率、分差、百分位。说「数学偏弱」时必须跟一句「比班均低 12 分、得分率 62%」。\n'
++ '4. 归因要谨慎。你只能给「可能的原因」，并且要说明怎么验证（例如「可能是立体几何丢分，翻一下这科卷子的最后两题就能确认」）。不要说成事实。\n'
++ '5. 建议按性价比排序，最多 3 条（详细档最多 5 条）。每条写清三件事：做什么、做多少（几天/几道题/多少分钟）、怎么检验做到了。\n'
++ '6. 读者只有一个：数据里标明的「我」。不要给别人的建议，不要写成给老师看的班级报告（除非数据里明确说是班级视角）。\n'
++ '7. 全篇用 Markdown 写，只用二级标题分节，标题名照下面给的写，顺序不要变。不要开场白，不要结尾总结，不要加粗大段文字。\n';
 
-var AIC = { provider: 'deepseek', base: '', model: '', key: '', temp: 0.6, prompt: '' };
+/* 详细程度：站主要能自己选。
+   brief 只留结论 + 最该做的一件事；std 是默认；deep 要逐科拆到「哪一块丢分」。 */
+var AI_DEPTH = {
+  brief: {
+    label: '简洁',
+    words: '300 字以内',
+    maxTok: 700,
+    heads: '## 结论\n## 最该做的一件事',
+    tip: '只看结论和一条建议，30 秒读完。'
+  },
+  std: {
+    label: '标准',
+    words: '600～900 字',
+    maxTok: 1500,
+    heads: '## 结论\n## 亮点\n## 短板\n## 趋势\n## 下一步',
+    tip: '结论、亮点、短板、趋势、三条建议。'
+  },
+  deep: {
+    label: '详细',
+    words: '1200～1800 字',
+    maxTok: 2800,
+    heads: '## 结论\n## 本次发挥\n## 逐科点评\n## 与班级和年级的位置\n## 目标和上线\n## 多次考试的趋势\n## 隐患\n## 下一步',
+    tip: '逐科拆到丢分结构，适合考完认真复盘。'
+  }
+};
+function aiDepth(){ return AI_DEPTH[AIC.depth] ? AIC.depth : 'std'; }
+function aiDepthSpec(){ return AI_DEPTH[aiDepth()]; }
+function aiDepthText(){
+  var d = aiDepthSpec();
+  return '【详细程度】本次按「' + d.label + '」档：' + d.words + '，用下面这几个二级标题，顺序不要变：\n'
+    + d.heads + '\n';
+}
+
+var AIC = { provider: 'deepseek', base: '', model: '', key: '', temp: 0.6, prompt: '', depth: 'std', goal: '' };
 
 /* ---------- Key 的本地存取 ----------
    只做一层混淆，不当加密用 —— 密钥本身也在本机，真加密是自欺欺人。
@@ -14814,13 +15033,16 @@ function aiCfgLoad() {
     AIC.key = aiDeobf(o.k || '');
     AIC.temp = (typeof o.temp === 'number') ? o.temp : 0.6;
     AIC.prompt = o.prompt || '';
+    AIC.depth = (o.depth === 'brief' || o.depth === 'deep') ? o.depth : 'std';
+    AIC.goal = o.goal || '';
   } catch (e) {}
 }
 function aiCfgSave() {
   try {
     localStorage.setItem(AI_CFG_KEY, JSON.stringify({
       provider: AIC.provider, base: AIC.base, model: AIC.model,
-      k: aiObf(AIC.key), temp: AIC.temp, prompt: AIC.prompt
+      k: aiObf(AIC.key), temp: AIC.temp, prompt: AIC.prompt,
+      depth: AIC.depth, goal: AIC.goal
     }));
   } catch (e) {}
   aiRenderAll();
@@ -14918,7 +15140,7 @@ function aiErrText(status, txt) {
 }
 
 /* messages → 流式请求。onDelta(增量, 全文) / onDone(全文) / onError(文案) */
-function aiRequest(messages, onDelta, onDone, onError) {
+function aiRequest(messages, onDelta, onDone, onError, opts) {
   var url = aiBase() + '/chat/completions';
   var ctl = null;
   try { ctl = new AbortController(); } catch (e) {}
@@ -14927,8 +15149,8 @@ function aiRequest(messages, onDelta, onDone, onError) {
     if (done) return;
     done = true;
     try { if (ctl) ctl.abort(); } catch (e) {}
-    onError('等了 90 秒还没响应，先停下了。可能是网络卡，也可能是模型排队。');
-  }, 90000);
+    onError('等了 150 秒还没响应，先停下了。可能是网络卡，也可能是模型排队（详细档输出长，会比较慢）。');
+  }, 150000);
 
   var opt = {
     method: 'POST',
@@ -14937,7 +15159,7 @@ function aiRequest(messages, onDelta, onDone, onError) {
       model: aiModelName(),
       messages: messages,
       temperature: (typeof AIC.temp === 'number') ? AIC.temp : 0.6,
-      max_tokens: 1200,
+      max_tokens: (opts && opts.maxTok) || aiDepthSpec().maxTok,
       stream: true
     })
   };
@@ -14997,6 +15219,11 @@ function aiRequest(messages, onDelta, onDone, onError) {
   });
 }
 
+/* 哪些小标题算「行动清单」—— 交给 .sc-ai-todo 那块渲染，视觉上更醒目。
+   v3.16.3：模型现在会写「下次怎么练」「最值得做的三件事」这类标题，正则放宽一点。 */
+function aiIsTodoHead(h){
+  return /下一步|建议|怎么做|怎么练|该做|值得做|行动|练习计划|计划/.test(String(h || ''));
+}
 /* ---------- Markdown → 分段 ----------
    只认我们要求的那五个 ## 标题，别的一概当正文。够用，而且不会误伤。 */
 function aiSections(md) {
@@ -15069,7 +15296,11 @@ var AIQ = {
   result: {},      /* scene → { text, model, at } */
   busy: {},        /* scene → true 表示正在流式输出 */
   els: {},         /* scene → 卡片里的 body 元素 */
-  localHtml: {}    /* scene → 本地规则版正文，切回来时用 */
+  localHtml: {},   /* scene → 本地规则版正文，切回来时用 */
+  tab: 'sum',      /* v3.16.3：v'me' 卡里的两个视角 —— sum 总览 / subj 单科 */
+  subjKey: null,   /* 当前选中的单科 key */
+  chat: {},        /* scene → [{role, content}] 追问记录（只存内存，刷新即清） */
+  chatBusy: {}     /* scene → true 表示追问正在流式 */
 };
 
 /* ---------- 配置弹窗 ---------- */
@@ -15099,6 +15330,17 @@ function aiDlgEl() {
     + '  <div class="ai-field"><label>温度</label>'
     + '    <input id="aiTempInp" type="range" min="0" max="10" step="1">'
     + '    <b id="aiTempVal">0.6</b></div>'
+    + '  <div class="ai-field"><label>详细程度</label>'
+    + '    <select id="aiDepthSel">'
+    + '      <option value="brief">简洁 · 只看结论</option>'
+    + '      <option value="std">标准 · 结论到建议</option>'
+    + '      <option value="deep">详细 · 逐科拆解</option>'
+    + '    </select></div>'
+    + '  <p class="ai-note" id="aiDepthTip" style="margin:-4px 0 10px"></p>'
+    + '  <div class="ai-field ai-field-col"><label>我的目标（选填，每次分析都会带上）</label>'
+    + '    <textarea id="aiGoalInp" rows="2" maxlength="200" spellcheck="false" '
+    + '      placeholder="例如：下次月考进班级前 10；物理稳定在 85 以上"></textarea>'
+    + '    <span class="ai-note" style="margin:0">目标只存在这台设备里；AI 会围绕它给建议，而不是泛泛而谈。</span></div>'
     + '  <div class="ai-field ai-field-col"><label>系统提示词（角色设定，可自己改）</label>'
     + '    <textarea id="aiPromptInp" rows="7" spellcheck="false"></textarea>'
     + '    <button class="ai-link" id="aiPromptReset">恢复默认提示词</button></div>'
@@ -15132,6 +15374,10 @@ function aiDlgEl() {
   d.querySelector('#aiTempInp').addEventListener('input', function () {
     d.querySelector('#aiTempVal').textContent = (Number(this.value) / 10).toFixed(1);
   });
+  d.querySelector('#aiDepthSel').addEventListener('change', function () {
+    var sp = AI_DEPTH[this.value] || AI_DEPTH.std;
+    d.querySelector('#aiDepthTip').textContent = sp.tip + '（约 ' + sp.words + '）';
+  });
   d.querySelector('#aiPromptReset').addEventListener('click', function () {
     d.querySelector('#aiPromptInp').value = AI_PROMPT_DEFAULT;
   });
@@ -15143,6 +15389,8 @@ function aiDlgEl() {
     AIC.model = d.querySelector('#aiModelInp').value.trim();
     AIC.key = d.querySelector('#aiKeyInp').value.trim();
     AIC.temp = Number(d.querySelector('#aiTempInp').value) / 10;
+    AIC.depth = d.querySelector('#aiDepthSel').value || 'std';
+    AIC.goal = (d.querySelector('#aiGoalInp').value || '').trim().slice(0, 200);
     AIC.prompt = d.querySelector('#aiPromptInp').value.trim();
     if (AIC.prompt === AI_PROMPT_DEFAULT) AIC.prompt = '';
     if (prev !== AIC.key) aiCacheClear();       /* 换 Key 就清缓存，免得串号 */
@@ -15201,6 +15449,9 @@ function aiDlgOpen() {
   d.querySelector('#aiTempInp').value = String(Math.round((AIC.temp != null ? AIC.temp : 0.6) * 10));
   d.querySelector('#aiTempVal').textContent = (AIC.temp != null ? AIC.temp : 0.6).toFixed(1);
   d.querySelector('#aiPromptInp').value = AIC.prompt || AI_PROMPT_DEFAULT;
+  d.querySelector('#aiDepthSel').value = aiDepth();
+  d.querySelector('#aiDepthTip').textContent = aiDepthSpec().tip + '（约 ' + aiDepthSpec().words + '）';
+  d.querySelector('#aiGoalInp').value = AIC.goal || '';
   aiStatus('', '');
   d.className = 'ai-dlg show';
 }
@@ -15220,75 +15471,330 @@ function aiFmtDiff(v) {
   var n = Math.round(Number(v) * 10) / 10;
   return (n > 0 ? '+' : n < 0 ? '−' : '±') + aiFmtNum(Math.abs(n));
 }
+function aiPct(v, base){
+  if (v == null || !base) return '—';
+  return Math.round(v / base * 100) + '%';
+}
+function aiPos(rank, n){
+  if (rank == null || !n) return '';
+  var p = Math.round(rank / n * 100);
+  return '（前 ' + p + '%）';
+}
+function aiSd(list){
+  if (!list || list.length < 2) return null;
+  var m = list.reduce(function (a, b) { return a + b; }, 0) / list.length;
+  var s = 0;
+  list.forEach(function (v) { s += (v - m) * (v - m); });
+  return Math.sqrt(s / list.length);
+}
+
+/* ---------- 把数据写成中文说明（这一步之后就只剩代号了） ----------
+   v3.16.3 重写：站主要「分析得更具体」，光给总分和五科分数不够 ——
+   模型只能看到这些，当然只能写「补弱科」。
+   现在喂给它的东西多了：班级中位/最高、单科班排、年级排名、历次单科序列、
+   每条分数线的距离、用户自己设的目标，以及「这一场到底参考多少人」。
+   数据越具体，它能说的话就越具体；反过来说，这里没有的它也不许编。 */
 function aiPayloadText(p) {
   if (!p) return '';
   var L = [];
-  L.push('【本次考试】' + (p.examName || '未命名考试') + '（' + (p.basis || '总分') + '口径，全班 ' + (p.classSize || '?') + ' 人参考）');
+
+  if (p.scene === 'me' || p.scene === 'subj') {
+    L.push('【考试】' + (p.examName || '未命名考试') + ' · 总分按' + (p.basis || '赋分') + '计 · 参考 ' + (p.classSize || '?') + ' 人');
+  } else if (p.scene === 'pk') {
+    L.push('【考试】' + (p.examName || '未命名考试') + ' · 总分按' + (p.basis || '赋分') + '计 · 参考 ' + (p.classSize || '?') + ' 人');
+  } else if (p.scene === 'board') {
+    L.push('【考试】' + (p.examName || '未命名考试') + ' · 总分按' + (p.basis || '赋分') + '计 · 参考 ' + (p.classSize || '?') + ' 人');
+  }
 
   if (p.scene === 'me') {
     var m = p.me || {};
     L.push('');
-    L.push('【我的成绩】');
-    L.push('总分 ' + aiFmtNum(m.total) + '，班排 ' + (m.rank != null ? m.rank : '—') + '/' + (p.classSize || '?')
-      + '，班均 ' + aiFmtNum(p.classAvg) + '（' + aiFmtDiff(m.total - p.classAvg) + '）');
+    L.push('【读者】这次分析的对象是「我」本人，下面所有数字都是我的。不要给别人建议。');
+    L.push('');
+    L.push('【总分】' + aiFmtNum(m.total) + ' / ' + (p.full || 750) + '，得分率 ' + aiPct(m.total, p.full || 750)
+      + '；班排 ' + (m.rank != null ? m.rank : '—') + ' / ' + (p.classSize || '?') + aiPos(m.rank, p.classSize));
+    L.push('【班级对照】班均 ' + aiFmtNum(p.classAvg) + '（我 ' + aiFmtDiff(m.total - p.classAvg) + '）、中位 '
+      + aiFmtNum(p.classMedian) + '、最高 ' + aiFmtNum(p.classMax)
+      + (p.classSd != null ? '、标准差 ' + aiFmtNum(p.classSd) : ''));
+
     if (m.subjects && m.subjects.length) {
-      L.push('各科（我的分数/满分，班均，与班均差）：');
+      L.push('');
+      L.push('【各科】（分数/满分，得分率，班均与差，班排，年级排名）');
       m.subjects.forEach(function (s) {
-        L.push('· ' + s.n + ' ' + aiFmtNum(s.v) + '/' + s.full + '，班均 ' + aiFmtNum(s.avg)
-          + '（' + aiFmtDiff(s.v - s.avg) + '），得分率 ' + (s.full ? Math.round(s.v / s.full * 100) : '—') + '%');
+        L.push('· ' + s.n + '：' + aiFmtNum(s.v) + '/' + s.full + '，得分率 ' + aiPct(s.v, s.full)
+          + '，班均 ' + aiFmtNum(s.avg) + '（' + aiFmtDiff(s.v - s.avg) + '）'
+          + '，班排 ' + (s.rank != null ? s.rank + '/' + (p.classSize || '?') : '—')
+          + (s.gradeRank != null ? '，年级第 ' + s.gradeRank : ''));
       });
+    }
+
+    if (p.history && p.history.length >= 2) {
+      L.push('');
+      L.push('【历次总分】（按时间先后，最多 6 次）');
+      L.push(p.history.map(function (h) {
+        return h.name + '：' + aiFmtNum(h.total) + (h.rank != null ? '（班排 ' + h.rank + '）' : '');
+      }).join(' → '));
+    }
+
+    if (p.subjHistory) {
+      var anyH = false;
+      Object.keys(p.subjHistory).forEach(function (k) {
+        var arr = p.subjHistory[k] || [];
+        if (arr.length < 2) return;
+        if (!anyH) { L.push(''); L.push('【单科历次】（用来判断是哪一科在动）'); anyH = true; }
+        L.push('· ' + k + '：' + arr.map(function (h) { return aiFmtNum(h.v); }).join(' → ')
+          + '（' + arr.length + ' 次）');
+      });
+    }
+
+    if (p.schoolRank != null && p.gradeN) {
+      L.push('');
+      L.push('【年级位置】校排 ' + p.schoolRank + ' / ' + p.gradeN + '（物理方向）' + aiPos(p.schoolRank, p.gradeN));
+    }
+
+    if (p.cutlines && p.cutlines.length) {
+      L.push('');
+      L.push('【分数线与本场距离】' + p.cutlines.map(function (c) {
+        var d = m.total - c.score;
+        return c.label + ' ' + aiFmtNum(c.score) + '（我' + (d >= 0 ? '超 ' + aiFmtNum(d) : '差 ' + aiFmtNum(-d)) + '）';
+      }).join('，'));
+    }
+
+    if (p.goal) {
+      L.push('');
+      L.push('【我的目标】' + p.goal);
+      L.push('（建议要围绕这个目标算账：按现在的位置，要达线总分还差多少、摊到哪几科最现实。）');
+    }
+
+    L.push('');
+    L.push('【请写】结合上面全部数据做分析。要指出这次发挥是超常还是失常（有班均和中位可比）、哪几科在拖总分、哪一科提分最划算、和目标的差距怎么补。');
+  } else if (p.scene === 'subj') {
+    var sj = p.subj || {};
+    L.push('');
+    L.push('【读者】这次只分析「我」的「' + (sj.n || '') + '」这一科，读者是我本人。');
+    L.push('【这一科】满分 ' + (sj.full || '?') + '，我考了 ' + aiFmtNum(sj.v) + '（得分率 ' + aiPct(sj.v, sj.full) + '）');
+    L.push('【班内位置】班排 ' + (sj.rank != null ? sj.rank : '—') + ' / ' + (sj.count || p.classSize || '?')
+      + '，班均 ' + aiFmtNum(sj.avg) + '（我 ' + aiFmtDiff(sj.v - sj.avg) + '）'
+      + '，班内最高 ' + aiFmtNum(sj.max) + '、最低 ' + aiFmtNum(sj.min)
+      + (sj.gradeRank != null ? '，年级第 ' + sj.gradeRank : ''));
+    if (sj.rank != null && sj.count) {
+      L.push('【超过多少人】这科比班里 ' + (sj.count - sj.rank) + ' 人高、比 ' + (sj.rank - 1) + ' 人低。');
     }
     if (p.history && p.history.length >= 2) {
       L.push('');
-      L.push('【历次总分】（按时间先后）');
-      L.push(p.history.map(function (h) { return h.name + ' ' + aiFmtNum(h.total); }).join(' → '));
+      L.push('【这一科的历次成绩】（按时间先后）');
+      L.push(p.history.map(function (h) {
+        return h.name + '：' + aiFmtNum(h.v) + (h.rank != null ? '（第 ' + h.rank + '）' : '');
+      }).join(' → '));
+      var vs = p.history.map(function (h) { return h.v; });
+      var sd = aiSd(vs);
+      if (sd != null) L.push('【波动】标准差 ±' + aiFmtNum(sd) + '（' + (sd >= 12 ? '波动大，稳定性本身就是分数' : '比较稳定') + '）');
     }
-    if (p.cutlines && p.cutlines.length) {
+    if (p.totalCtx) {
       L.push('');
-      L.push('【分数线】' + p.cutlines.map(function (c) { return c.label + ' ' + aiFmtNum(c.score); }).join('，'));
+      L.push('【和其他科的关系】' + p.totalCtx);
+    }
+    if (p.goal) {
+      L.push('');
+      L.push('【我的目标】' + p.goal);
     }
     L.push('');
-    L.push('请分析这次考试，给出结论、亮点、短板、趋势和下一步建议。');
+    L.push('【请写】只谈这一科，别谈其他科的总分策略。要说清：这次这一科的分数放在班里是什么水平、和上次比是涨是跌、丢分更可能集中在哪里（说明这是推测、怎么核对）、下次这一科具体怎么练。');
   } else if (p.scene === 'pk') {
     var A = p.a || {}, B = p.b || {};
     L.push('');
-    /* 这里写的是真名 —— 随后 aiMask 会把它换成「同学N」再发出去 */
-    L.push('【甲】' + (A.name || '甲') + '：总分 ' + aiFmtNum(A.total) + '，班排 ' + (A.rank != null ? A.rank : '—'));
-    L.push('【乙】' + (B.name || '乙') + '：总分 ' + aiFmtNum(B.total) + '，班排 ' + (B.rank != null ? B.rank : '—'));
+    L.push('【读者】我是【甲】，也就是 ' + (A.name || '甲') + '。乙只是对照组：可以拿他做参照，但结尾的建议只能写给我，不要给乙提建议。');
+    L.push('【甲（我）】' + (A.name || '甲') + '，总分 ' + aiFmtNum(A.total) + '，班排 ' + (A.rank != null ? A.rank : '—') + ' / ' + (p.classSize || '?'));
+    L.push('【乙（对照）】' + (B.name || '乙') + '，总分 ' + aiFmtNum(B.total) + '，班排 ' + (B.rank != null ? B.rank : '—') + ' / ' + (p.classSize || '?'));
+    L.push('【总分差】' + aiFmtDiff(A.total - B.total) + '（正数＝我领先）');
     if (A.subjects && A.subjects.length) {
       L.push('');
-      L.push('【逐科对比】（甲 / 乙 / 差值）');
+      L.push('【逐科对比】（甲 / 乙 / 差，差为正＝我高）');
       A.subjects.forEach(function (s, i) {
         var sb = (B.subjects || [])[i] || {};
         var d = (s.v != null && sb.v != null) ? (s.v - sb.v) : null;
-        L.push('· ' + s.n + ' ' + aiFmtNum(s.v) + ' / ' + aiFmtNum(sb.v) + '（' + aiFmtDiff(d) + '），满分 ' + s.full
-          + '，班均 ' + aiFmtNum(s.avg));
+        L.push('· ' + s.n + '：' + aiFmtNum(s.v) + ' / ' + aiFmtNum(sb.v) + '（' + aiFmtDiff(d) + '）'
+          + '，满分 ' + s.full + '，班均 ' + aiFmtNum(s.avg)
+          + '，我' + aiFmtDiff(s.v - s.avg) + '、他' + aiFmtDiff(sb.v - s.avg));
       });
     }
+    if (p.historyA && p.historyA.length >= 2) {
+      L.push('');
+      L.push('【我的历次总分】' + p.historyA.map(function (h) { return h.name + ' ' + aiFmtNum(h.total); }).join(' → '));
+    }
+    if (p.goal) {
+      L.push('');
+      L.push('【我的目标】' + p.goal);
+    }
     L.push('');
-    L.push('请把两个人放在一起比：差距在哪几科、各自强项弱项、下一步各自该怎么做。');
+    L.push('【请写】重点是「我」：差距集中在哪几科、这几科里哪一科补起来最划算（用分差和满分算给、不要只排序）、我自己的强项怎么守住。乙只作为参照出现，不要在最后给他任何建议或加油。');
+  } else if (p.scene === 'board') {
+    var st2 = p.stats || {};
+    L.push('');
+    L.push('【读者】你是班主任，看的是整个班。学生以「同学N」代号出现，你不知道他们是谁，也不要去猜。');
+    L.push('【总分概况】班均 ' + aiFmtNum(st2.avg) + '，中位 ' + aiFmtNum(st2.median)
+      + '，最高 ' + aiFmtNum(st2.max) + '，最低 ' + aiFmtNum(st2.min)
+      + (st2.sd != null ? '，标准差 ' + aiFmtNum(st2.sd) : '') + '，满分 ' + (p.full || 750));
+    if (p.bands && p.bands.length) {
+      L.push('【分数段】' + p.bands.map(function (b) { return b.label + ' ' + b.n + ' 人'; }).join('，'));
+    }
+    if (p.subs && p.subs.length) {
+      L.push('');
+      L.push('【各科】均分 / 满分 / 得分率 / 最高 / 最低 / 及格人数');
+      p.subs.forEach(function (s) {
+        L.push('· ' + s.n + '：' + aiFmtNum(s.avg) + '/' + s.full + '，' + aiPct(s.avg, s.full)
+          + '，最高 ' + aiFmtNum(s.max) + '，最低 ' + aiFmtNum(s.min)
+          + '，及格 ' + s.pass + '/' + (p.classSize || '?'));
+      });
+    }
+    if (p.cutlines && p.cutlines.length) {
+      L.push('');
+      L.push('【上线】' + p.cutlines.map(function (c) {
+        return c.label + ' ' + aiFmtNum(c.score) + '：' + c.n + ' 人（' + Math.round(c.n / (p.classSize || 1) * 100) + '%）';
+      }).join('，'));
+    }
+    if (p.care && p.care.length) {
+      L.push('');
+      L.push('【需要关注的学生】（按风险从高到低，最多 8 条）');
+      p.care.forEach(function (c) { L.push('· ' + c.name + '：' + c.why); });
+    }
+    if (p.trend) {
+      L.push('');
+      L.push('【班级走势】' + p.trend);
+    }
+    L.push('');
+    L.push('【请写】给班主任看的班级诊断：整体水平与分布、哪些学科是集体短板、哪几个学生最该找谈话（写明理由和抓手）、接下来两周最值得做的两三件事。注意分寸：不要给学生贴标签、不要预言他们的前途。');
   }
   return L.join('\n');
 }
 
 /* ---------- 组装 messages ---------- */
-function aiMessages(p) {
-  var alias = aiMakeAlias(p.scene === 'me'
-    ? [(p.me || {}).name]
-    : [(p.a || {}).name, (p.b || {}).name]);
-  var body = aiPayloadText(p);
-  body = aiMask(body, alias.map);
-  var sys = aiPrompt() + '\n（补充：本次数据里的人名已全部替换成「同学N」代号，这是隐私处理，你不需要知道真名。）';
-  return {
-    messages: [{ role: 'system', content: sys }, { role: 'user', content: body }],
-    back: alias.back,
-    body: body
-  };
+function aiSceneNames(p) {
+  if (!p) return [];
+  if (p.scene === 'me' || p.scene === 'subj') return [(p.me || {}).name || p.meName || ''];
+  if (p.scene === 'pk') return [(p.a || {}).name, (p.b || {}).name];
+  if (p.scene === 'board') return (p.care || []).map(function (c) { return c.name; });
+  return [];
+}
+/* extra：多轮对话的历史（{role, content}[]），追问时带上；首次分析不传 */
+function aiMessages(p, extra) {
+  var alias = aiMakeAlias(aiSceneNames(p));
+  var body = aiMask(aiPayloadText(p), alias.map);
+  var sys = aiPrompt() + '\n\n' + aiDepthText()
+    + '（补充：本次数据里的人名已全部替换成「同学N」代号，这是隐私处理，你不需要知道真名，也不要追问。）';
+  var msgs = [{ role: 'system', content: sys }, { role: 'user', content: body }];
+  (extra || []).forEach(function (m) {
+    if (!m || !m.content) return;
+    msgs.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: aiMask(m.content, alias.map) });
+  });
+  return { messages: msgs, back: alias.back, body: body };
+}
+
+/* ---------- 卡片里的「总览 / 单科」两个视角 + 追问框（v3.16.3） ----------
+   站主要求：
+     「单科的分析，不一定一定要分析总的嘛」「用户可以跟它进行一个简单的对话」
+   所以卡片上头加了两个视角，单科再选科目；底下是一条对话输入框。
+   追问的记录只放在内存里（AIQ.chat），刷新就清 —— 成绩相关的东西不留痕更省心。 */
+function aiSubjList() {
+  return ((SC.exam && SC.exam.subjects) || []).map(function (s) {
+    return { key: s.key, name: s.name || s.key };
+  });
+}
+function aiMeTabsHtml() {
+  var chips = aiSubjList().map(function (s) {
+    var on = (AIQ.tab === 'subj' && AIQ.subjKey === s.key);
+    return '<button class="ai-chip' + (on ? ' on' : '') + '" data-ai-act="subj" data-subj="'
+      + esc(s.key) + '">' + esc(s.name) + '</button>';
+  }).join('');
+  return '<div class="ai-tabs">'
+    + '<button class="ai-tab' + (AIQ.tab === 'sum' ? ' on' : '') + '" data-ai-act="tab" data-tab="sum">总览</button>'
+    + '<button class="ai-tab' + (AIQ.tab === 'subj' ? ' on' : '') + '" data-ai-act="tab" data-tab="subj">单科</button>'
+    + (AIC.goal ? '<span class="ai-goal" title="' + esc(AIC.goal) + '">目标 · ' + esc(AIC.goal) + '</span>' : '')
+    + '</div>'
+    + (AIQ.tab === 'subj' && chips ? '<div class="ai-chips">' + chips + '</div>' : '');
+}
+function aiBubbleHtml(m) {
+  if (m.role === 'user') return '<div class="ai-bub u">' + esc(m.content) + '</div>';
+  if (m.pending) return '<div class="ai-bub a"><span class="ai-dots"><i></i><i></i><i></i></span></div>';
+  return '<div class="ai-bub a">' + aiMdBlock(m.content) + '</div>';
+}
+function aiChatHtml() {
+  var scene = aiNowScene();
+  var list = AIQ.chat[scene] || [];
+  return '<div class="ai-chat">'
+    + '<div class="ai-chat-h">还想问点什么？</div>'
+    + '<div class="ai-chat-list" data-ai-chatlist>' + list.map(aiBubbleHtml).join('') + '</div>'
+    + '<div class="ai-chat-in">'
+    + '<input type="text" data-ai-chatin maxlength="300" spellcheck="false" '
+    + 'placeholder="例如：数学到底从哪补起？ / 物理这次为什么掉了？">'
+    + '<button class="ai-go" data-ai-act="chat">发送</button>'
+    + '</div>'
+    + '<div class="ai-chat-tip">追问会带着这一场的数据一起发给你配置的模型，实时生成。' + (aiReady() ? '' : '（还没填 API Key）') + '</div>'
+    + '</div>';
+}
+function aiChatPaint() {
+  var card = document.querySelector('[data-ai="me"]');
+  if (!card) return;
+  var list = card.querySelector('[data-ai-chatlist]');
+  if (!list) return;
+  var scene = aiNowScene();
+  list.innerHTML = (AIQ.chat[scene] || []).map(aiBubbleHtml).join('');
+  list.scrollTop = list.scrollHeight;
+}
+function aiChatSend() {
+  var scene = aiNowScene();
+  if (AIQ.chatBusy[scene]) return;
+  if (!aiReady()) { aiDlgOpen(); return; }
+  var p = AIQ.payload[scene];
+  if (!p) return;
+  var card = document.querySelector('[data-ai="me"]');
+  var inp = card ? card.querySelector('[data-ai-chatin]') : null;
+  var text = inp ? String(inp.value || '').trim() : '';
+  if (!text) return;
+  inp.value = '';
+
+  var hist = AIQ.chat[scene] = AIQ.chat[scene] || [];
+  hist.push({ role: 'user', content: text });
+  var ph = { role: 'assistant', content: '', pending: true };
+  hist.push(ph);
+  /* 只带最近 8 条（约 4 轮），越聊越长会把前面全挤爆 */
+  while (hist.length > 9) hist.shift();
+  AIQ.chatBusy[scene] = true;
+  aiChatPaint();
+
+  var built = aiMessages(p, hist.filter(function (m) { return !m.pending; }));
+  var last = 0;
+  aiRequest(built.messages, function (delta, full) {
+    var now = Date.now();
+    if (now - last < 120) return;              /* 对话比正文更频繁地重排，节流放宽一点 */
+    last = now;
+    ph.content = aiUnmask(full, built.back);
+    aiChatPaint();
+  }, function (full) {
+    ph.pending = false;
+    ph.content = aiUnmask(full, built.back) || '（没生成内容）';
+    AIQ.chatBusy[scene] = false;
+    aiChatPaint();
+  }, function (err) {
+    ph.pending = false;
+    ph.content = '没成：' + err;
+    AIQ.chatBusy[scene] = false;
+    aiChatPaint();
+  }, { maxTok: 900 });
 }
 
 /* ---------- 渲染 ---------- */
+function aiNowScene() {
+  return (AIQ.tab === 'subj' && AIQ.subjKey) ? ('subj_' + AIQ.subjKey) : 'me';
+}
+/* 单科视角用的是 subj_<key> 这个 scene，但卡片只有一张（data-ai="me"），
+   所以找不到自己的卡时退回到主卡上写角标。 */
 function aiSetBadge(scene, text) {
   var c = document.querySelector('[data-ai="' + scene + '"] [data-ai-badge]');
+  if (!c) {
+    var card = document.querySelector('[data-ai="me"]');
+    c = card ? card.querySelector('[data-ai-badge]') : null;
+  }
   if (c) c.textContent = text;
 }
 function aiRenderScene(scene, host) {
@@ -15312,7 +15818,7 @@ function aiResultHtml(md, model, scene) {
   } else {
     secs.forEach(function (s) {
       var h = String(s.h || '');
-      var isTodo = /下一步|建议|怎么做/.test(h);
+      var isTodo = aiIsTodoHead(h);
       if (!concl && !rows && !isTodo) {
         concl = '<div class="sc-ai-concl">' + aiMdBlock(s.t) + '</div>';
       } else if (isTodo) {
@@ -15357,7 +15863,7 @@ function aiStreamPaint(scene, host, text, model) {
   var concl = '', rows = '', todo = '';
   secs.forEach(function (s, i) {
     var h = String(s.h || '');
-    var isTodo = /下一步|建议|怎么做/.test(h);
+    var isTodo = aiIsTodoHead(h);
     if (i === 0) {
       concl = '<div class="sc-ai-concl">' + aiMdBlock(s.t) + '</div>';
     } else if (isTodo) {
@@ -15379,8 +15885,8 @@ function aiRun(scene, host) {
   if (AIQ.busy[scene]) return;
 
   var built = aiMessages(p);
-  var ck = 'v1|' + scene + '|' + (p.examName || '') + '|' + aiModelName() + '|' + aiHash(aiPrompt())
-    + '|' + aiHash(built.body);
+  var ck = 'v2|' + scene + '|' + (p.examName || '') + '|' + aiModelName() + '|' + aiHash(aiPrompt())
+    + '|' + aiDepth() + '|' + aiHash(AIC.goal || '') + '|' + aiHash(built.body);
 
   var cached = aiCacheGet(ck);
   if (cached && cached.t) {
@@ -15417,16 +15923,37 @@ function aiRun(scene, host) {
   });
 }
 
-/* 卡片重建（切板块、换考试）后，把 AI 结果接回去 */
+/* 卡片重建（切板块、换考试）后，把 AI 结果接回去。
+   v3.16.3：me 卡里有「总览 / 单科」两个视角，重绘时要按当前视角来。 */
 function aiRenderAll() {
-  ['me', 'pk'].forEach(function (scene) {
-    var card = document.querySelector('[data-ai="' + scene + '"]');
-    if (!card) return;
+  var cards = document.querySelectorAll('[data-ai]');
+  Array.prototype.forEach.call(cards, function (card) {
+    var name = card.getAttribute('data-ai');
     var host = card.querySelector('[data-ai-body]');
     if (!host) return;
-    AIQ.els[scene] = host;
-    aiRenderScene(scene, host);
+    if (name === 'me') {
+      var tabs = card.querySelector('[data-ai-tabs]');
+      if (tabs) tabs.innerHTML = aiMeTabsHtml();
+      var wrap = card.querySelector('[data-ai-chatwrap]');
+      if (wrap) wrap.innerHTML = aiChatHtml();
+      AIQ.els[aiNowScene()] = host;
+      aiRenderScene(aiNowScene(), host);
+      return;
+    }
+    AIQ.els[name] = host;
+    aiRenderScene(name, host);
   });
+}
+/* 切「总览 / 单科」时用：只重绘这一张卡，不动别处 */
+function aiPaintMe() {
+  var card = document.querySelector('[data-ai="me"]');
+  if (!card) return;
+  var tabs = card.querySelector('[data-ai-tabs]');
+  if (tabs) tabs.innerHTML = aiMeTabsHtml();
+  var wrap = card.querySelector('[data-ai-chatwrap]');
+  if (wrap) wrap.innerHTML = aiChatHtml();
+  var host = card.querySelector('[data-ai-body]');
+  if (host) aiRenderScene(aiNowScene(), host);
 }
 
 /* 事件委托：卡片里的按钮统一在这处理 */
@@ -15440,6 +15967,28 @@ document.addEventListener('click', function (e) {
   e.preventDefault();
   e.stopPropagation();
   if (act === 'cfg') { aiDlgOpen(); return; }
+  if (act === 'tab') {
+    var tb = btn.getAttribute('data-tab');
+    if (tb === 'subj') {
+      AIQ.tab = 'subj';
+      if (!AIQ.subjKey) {
+        var first = aiSubjList()[0];
+        AIQ.subjKey = first ? first.key : null;
+      }
+      if (!AIQ.subjKey) { AIQ.tab = 'sum'; }      /* 一科都没有就别切过去 */
+    } else {
+      AIQ.tab = 'sum';
+    }
+    aiPaintMe();
+    return;
+  }
+  if (act === 'subj') {
+    AIQ.tab = 'subj';
+    AIQ.subjKey = btn.getAttribute('data-subj');
+    aiPaintMe();
+    return;
+  }
+  if (act === 'chat') { aiChatSend(); return; }
   if (act === 'run' || act === 'again') {
     var card = btn.closest('[data-ai]') || document.querySelector('[data-ai="' + scene + '"]');
     var host = card ? card.querySelector('[data-ai-body]') : null;
@@ -15483,6 +16032,16 @@ document.addEventListener('click', function (e) {
     if (h2) aiRenderScene(scene, h2);
     return;
   }
+}, false);
+
+/* 追问框回车即发（中文输入法选词时的回车不能误触，所以看 isComposing） */
+document.addEventListener('keydown', function (e) {
+  var t = e.target;
+  if (!t || !t.getAttribute || !t.getAttribute('data-ai-chatin')) return;
+  if (e.key !== 'Enter') return;
+  if (e.isComposing) return;
+  e.preventDefault();
+  aiChatSend();
 }, false);
 
 try { aiCfgLoad(); } catch (e) {}
@@ -15638,28 +16197,149 @@ function scMeAnalysis(meRow, rk, st, myTotal, myRank, subs){
 
   /* 把这一场的原始数据留在内存里，等用户点「用 AI 重新分析」时取用。
      注意这里有真实姓名，但它只活在当前页面，发出去之前会全部换成「同学N」。 */
+  var _full = scFullMark();
+  var _rkm = rk.subj || {};
+  var _gradeN = null;
+  (SC.me || []).forEach(function(it){ if(it.gradeRef && it.gradeRef.students) _gradeN = it.gradeRef.students; });
+  var _mySubs = valid.map(function(x){
+    var sr = (_rkm[x.key] && _rkm[x.key].rank) ? _rkm[x.key].rank[meRow.id] : null;
+    var gr = (meRow.s && meRow.s[x.key] && meRow.s[x.key].rank != null) ? meRow.s[x.key].rank : null;
+    return { key: x.key, n: x.name, v: x.v, full: x.full, avg: x.avg, rank: sr, gradeRank: gr };
+  });
+
   AIQ.payload.me = {
     scene: 'me',
     examName: (SC.exam && SC.exam.name) || '',
     basis: SC.basis === 'graded' ? '赋分' : '原始分',
     classSize: st.n,
     classAvg: st.avg,
+    classMedian: st.median,
+    classMax: st.max,
+    classSd: aiSd(st.list),
+    full: _full,
     me: {
       name: (meRow && meRow.name) || '',
       total: myTotal,
       rank: myRank,
-      subjects: valid.map(function(x){ return { n: x.name, v: x.v, full: x.full, avg: x.avg }; })
+      subjects: _mySubs
     },
     history: scMeSeries().map(function(h){ return { name: h.name, total: h.v }; }),
+    subjHistory: (function(){
+      var o = {};
+      _mySubs.forEach(function(s){
+        var arr = aiSubjHistory(s.key);
+        if(arr.length >= 2) o[s.name] = arr;
+      });
+      return o;
+    })(),
+    schoolRank: (meRow && meRow.schoolRank != null) ? meRow.schoolRank : null,
+    gradeN: _gradeN,
     cutlines: ((SC.exam && SC.exam.cutlines) || []).filter(function(c){ return c.score != null; })
       .map(function(c){ return { label: c.label, score: c.score }; })
   };
+
+  /* 每一科都先备好一份 payload + 本地规则版，切到「单科」时不用再算 */
+  aiSubjList().forEach(function(sj){
+    aiBuildSubjScene(sj.key, meRow, st, myTotal, myRank);
+  });
+
   AIQ.localHtml.me = bodyHtml;
 
   return '<div class="sc-card sc-ai-card" data-scblk="me_ai" data-ai="me">'
     + '<div class="sc-card-h">AI 分析<span class="sc-h-note" data-ai-badge>本地规则 · 未联网</span></div>'
+    + '<div data-ai-tabs>' + aiMeTabsHtml() + '</div>'
     + '<div data-ai-body>' + bodyHtml + aiBarHtml('me') + '</div>'
+    + '<div data-ai-chatwrap>' + aiChatHtml() + '</div>'
     + '</div>';
+}
+
+/* 历次单科成绩（复用 SC.me，口径跟「各科进退步」表一致） */
+function aiSubjHistory(key){
+  var sub = ((SC.exam && SC.exam.subjects) || []).filter(function(s){ return s.key === key; })[0] || {};
+  var items = (SC.me || []).slice().sort(function(a, b){
+    return String(a.date || '').localeCompare(String(b.date || ''));
+  });
+  var arr = [];
+  items.forEach(function(it){
+    var v = it.s && it.s[key];
+    if(!v) return;
+    var val = (SC.basis === 'graded' && sub.graded && v.assigned != null) ? v.assigned : v.raw;
+    if(val == null) return;
+    arr.push({ name: shortName(it.name || ''), v: Number(val), rank: v.rank == null ? null : Number(v.rank) });
+  });
+  return arr.slice(-6);
+}
+
+/* 单科场景：payload 与本地规则版一起造好。
+   本地版不讲虚的，只把「这一科在班里什么位置、最近在涨还是跌、和班均差多少」摆出来 ——
+   没接模型的时候也算个能看的东西。 */
+function aiBuildSubjScene(key, meRow, st, myTotal, myRank){
+  var subs = (SC.exam && SC.exam.subjects) || [];
+  var s = null;
+  for(var i = 0; i < subs.length; i++) if(subs[i].key === key) s = subs[i];
+  if(!s || !meRow) return;
+  var v = scSubScore(meRow, s, SC.basis);
+  if(v == null) return;
+  var avgMap = scSubjAvg();
+  var avg = avgMap[key];
+  var rkm = scRankMap(SC.basis).subj[key] || { rank: {}, count: 0 };
+  var list = [];
+  SC.rows.forEach(function(r){
+    var x = scSubScore(r, s, SC.basis);
+    if(x != null) list.push(Number(x));
+  });
+  list.sort(function(a, b){ return a - b; });
+  var mx = list.length ? list[list.length - 1] : null;
+  var mn = list.length ? list[0] : null;
+  var hist = aiSubjHistory(key);
+  var histScores = hist.map(function(h){ return h.v; });
+  var sd = aiSd(histScores);
+
+  AIQ.payload['subj_' + key] = {
+    scene: 'subj',
+    examName: (SC.exam && SC.exam.name) || '',
+    basis: SC.basis === 'graded' ? '赋分' : '原始分',
+    classSize: st.n,
+    meName: (meRow && meRow.name) || '',
+    me: { name: (meRow && meRow.name) || '', total: myTotal, rank: myRank },
+    subj: {
+      key: key, n: s.name || key, full: s.full || 0, v: v, avg: avg,
+      rank: rkm.rank[meRow.id] || null, count: rkm.count || list.length,
+      max: mx, min: mn,
+      gradeRank: (meRow.s && meRow.s[key] && meRow.s[key].rank != null) ? meRow.s[key].rank : null
+    },
+    history: hist,
+    totalCtx: '这次总分 ' + fmtNum(myTotal) + '，班排 ' + myRank + '/' + st.n
+      + '；这一科' + (avg != null ? ('与班均相差 ' + fmtDiff(v - avg) + ' 分') : ''),
+    goal: AIC.goal || ''
+  };
+
+  var rate = s.full ? Math.round(v / s.full * 100) : null;
+  var lastD = histScores.length >= 2 ? histScores[histScores.length - 1] - histScores[histScores.length - 2] : null;
+  var rowsHtml = '<div class="sc-ai-concl">'
+    + '这次 <b>' + esc(s.name || key) + '</b> 考了 <b>' + fmtNum(v) + '</b> 分'
+    + (s.full ? '（满分 ' + s.full + '，得分率 ' + rate + '%）' : '')
+    + (avg != null ? '，班均 <b>' + fmtNum(avg) + '</b>，你 <b>' + fmtDiff(v - avg) + '</b>' : '')
+    + '；班内第 <b>' + (rkm.rank[meRow.id] || '—') + '</b> / ' + (rkm.count || st.n) + '。'
+    + '</div>'
+    + '<div class="sc-ai-row"><span class="sc-ai-k">班内位置</span><span class="sc-ai-v">'
+    + (mx != null ? ('最高 ' + fmtNum(mx) + '、最低 ' + fmtNum(mn) + '，你在中间偏'
+        + (v >= (avg || 0) ? '上' : '下') + '。') : '这次没有可比的分数。')
+    + '</span></div>'
+    + '<div class="sc-ai-row"><span class="sc-ai-k">历次</span><span class="sc-ai-v">'
+    + (histScores.length >= 2
+        ? (hist.map(function(h){ return fmtNum(h.v); }).join(' → ')
+           + '（最近一次' + fmtDiff(lastD) + '）' + (sd != null ? '，波动 ±' + fmtNum(sd) : ''))
+        : '只有这一次的数据，看不出一科的趋势。')
+    + '</span></div>'
+    + '<div class="sc-ai-todo"><b>这一科先做一件事</b><ol><li>'
+    + (avg != null && v < avg
+        ? ('先把和班均的 <b>' + fmtNum(avg - v) + '</b> 分差补上：翻最近两次这科的卷子，把错题按「不会 / 算错 / 看错」分三堆，只有第一堆需要重新学。')
+        : ('这科已经不低于班均了，下一步是稳住而不是加码：用限时套卷练「会的题不丢分」。'))
+    + '</li></ol></div>'
+    + '<div class="sc-figcap">按这一科的本次成绩与历次记录实时算；想看模型逐题拆丢分，点下面的按钮。</div>';
+
+  AIQ.localHtml['subj_' + key] = rowsHtml;
 }
 
 /* ----------------------------------------------------------------------------
@@ -16404,23 +17084,34 @@ function scPkAiData(A, B, ctx){
       return bits.length ? bits.join('，') : '两场基本持平';
     }
 
-    /* ④ 建议：分「领先方怎么守」「落后方怎么追」，都落到具体科目 */
+    /* ④ 建议：只给「我」（A 方）。
+       站主原话：「我是 A 方，那你最后给的建议你就只要给 A 方建议好了，就不用给 B 方的建议，
+       因为我又不是 B 方」——以前两方各给一条，等于一半篇幅跟我没关系，删掉。 */
     var todo = [];
+    var mine = per.map(function(x){ return { name: x.name, d: x.d, full: x.full }; });   /* d = A − B */
+    var behind = mine.filter(function(x){ return x.d < 0; }).sort(function(p, q){ return p.d - q.d; });
+    var edge = mine.filter(function(x){ return x.d > 0; }).sort(function(p, q){ return q.d - p.d; });
+
     if(gap === 0){
-      todo.push('两人这次打成平手，下一步比的是<b>谁先把短板补上去</b>。'
-        + '对照上面的强弱项，各自把落后班均最多的那科当成本月唯一重点。');
+      todo.push('这次打平，比的是谁先把短板补上去。对照上面的强弱项，把你自己落后班均最多的那一科当成本月唯一重点，别再摊开。');
+    }else if(behind.length){
+      var b0 = behind[0];
+      todo.push('你最该补的是 <b>' + esc(b0.name) + '</b>：这一科你比他低 <b>' + fmtNum(Math.abs(b0.d))
+        + '</b> 分' + (b0.full ? '（满分 ' + b0.full + '，相当于 ' + Math.round(Math.abs(b0.d) / b0.full * 100) + '% 的分差）' : '')
+        + '。把这一科拉到他的水平，总分差就从 ' + fmtNum(gap) + ' 缩到 '
+        + fmtNum(Math.max(0, gap - Math.abs(b0.d))) + ' 分' + (Math.abs(b0.d) >= gap ? '，直接反超' : '') + '。');
     }else{
-      todo.push('<b>' + esc(lead.nmL) + '</b> 的追赶点很明确：<b>' + esc(bigWin.name) + '</b> 一科就差了 '
-        + fmtNum(bigWin.d) + ' 分，只要把这一科拉到对方水平，总分差距立刻抹平'
-        + (bigWin.d >= gap ? '（甚至反超）' : '') + '。别同时补三科。');
-      todo.push('<b>' + esc(lead.nmW) + '</b> 的优势主要靠 <b>' + esc(bigWin.name) + '</b>，'
-        + '这一科要继续稳住；同时注意别在其他科目被对方反超 —— 把最弱那一科守到班均以上就够。');
+      todo.push('你在每一科都不输他，问题不在单科而在稳定性：把领先最少的 <b>' + esc(edge.length ? edge[edge.length - 1].name : '那几科')
+        + '</b> 守住，比继续拉大优势更划算。');
     }
-    if(ctx.anA && ctx.anA.td != null && ctx.anB && ctx.anB.td != null && ctx.anA.td !== ctx.anB.td){
-      var faster = ctx.anA.td > ctx.anB.td ? ctx.anA.name : ctx.anB.name;
-      todo.push('从这两场的<b>变化速度</b>看，<b>' + esc(faster) + '</b> 涨得更快 —— '
-        + '如果这个势头保持下去，' + (gap > 0 ? '下一次考试两人的差距会进一步' + (faster === lead.nmW ? '拉大' : '缩小') : '差距会重新出现')
-        + '。');
+    if(edge.length && edge[0].d >= 8){
+      todo.push('你的基本盘是 <b>' + esc(edge[0].name) + '</b>（领先 ' + fmtNum(edge[0].d)
+        + ' 分）。这一科不用再追加时间，保持现在的训练量就行 —— 时间挪给上面那一科。');
+    }
+    if(ctx.anA && ctx.anB && ctx.anA.td != null && ctx.anB.td != null && ctx.anA.td !== 0){
+      todo.push('从这两场的变化看，你自己这次<b>' + (ctx.anA.td > 0 ? '涨了 ' + fmtNum(ctx.anA.td) : '掉了 ' + fmtNum(Math.abs(ctx.anA.td)))
+        + '</b> 分，对方' + (ctx.anB.td > 0 ? '涨 ' + fmtNum(ctx.anB.td) : ctx.anB.td < 0 ? '掉 ' + fmtNum(Math.abs(ctx.anB.td)) : '没动')
+        + '。按这个速度，' + (gap > 0 ? (ctx.anA.td > ctx.anB.td ? '差距会继续拉大，别松。' : '差距会被追上，注意。') : '下次就能分出高下。'));
     }
     todo = todo.slice(0, 3);
 
@@ -16466,16 +17157,17 @@ function scPkAiCard(A, B){
     : '这份对比由浏览器按本场数据实时算出（总分差 / 逐科拆解 / 强弱项三类规则）。想看两场进退与趋势，选一场「对比另一场」。';
   var bodyHtml = '<div class="sc-ai-concl">' + d.concl + '</div>'
     + d.rowHtml('差距在哪', d.contrib)
-    + d.rowHtml('A 方强弱', d.sideA)
-    + d.rowHtml('B 方强弱', d.sideB)
+    + d.rowHtml((A.name || 'A 方') + ' 的强弱', d.sideA)
+    + d.rowHtml((B.name || 'B 方') + ' 的强弱', d.sideB)
     + (hasPrev ? d.rowHtml('两场变化', d.trend) : '')
     + d.tableHtml
-    + '<div class="sc-ai-todo"><b>下一步可以这样做</b><ol>'
+    + '<div class="sc-ai-todo"><b>我（' + esc(A.name || 'A 方') + '）下一步该怎么做</b><ol>'
     +   d.todo.map(function(t){ return '<li>' + t + '</li>'; }).join('')
     + '</ol></div>'
     + '<div class="sc-figcap">' + note + '</div>';
 
-  /* v3.16.1：留给真模型的原始数据（发出去前姓名会换成代号） */
+  /* v3.16.1：留给真模型的原始数据（发出去前姓名会换成代号）
+     v3.16.3：补上「我的历次」和「我的目标」，并且明确告诉模型：只给 A 方建议 */
   try{
     var _subs = SC.exam.subjects || [];
     var _avg = scPkSubjAvg();
@@ -16490,7 +17182,9 @@ function scPkAiCard(A, B){
       basis: SC.basis === 'graded' ? '赋分' : '原始分',
       classSize: (SC.rows || []).length,
       a: { name: A.name || 'A 方', total: tA, rank: ctx.curRk[A.id], subjects: _sa },
-      b: { name: B.name || 'B 方', total: tB, rank: ctx.curRk[B.id], subjects: _sb }
+      b: { name: B.name || 'B 方', total: tB, rank: ctx.curRk[B.id], subjects: _sb },
+      historyA: scMeSeries().map(function(h){ return { name: h.name, total: h.v }; }),
+      goal: AIC.goal || ''
     };
     AIQ.localHtml.pk = bodyHtml;
   }catch(e){}
