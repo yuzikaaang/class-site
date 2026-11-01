@@ -15326,6 +15326,7 @@ function aiResultHtml(md, model, scene) {
   return concl + rows + todo
     + '<div class="sc-ai-foot">'
     + '<span class="sc-ai-by">由 ' + esc(model || 'AI') + ' 生成 · 成绩已代号化</span>'
+    + '<button class="ai-mini" data-ai-act="copy" data-ai-scene="' + scene + '">复制</button>'
     + '<button class="ai-mini" data-ai-act="again" data-ai-scene="' + scene + '">重新分析</button>'
     + '<button class="ai-mini" data-ai-act="local" data-ai-scene="' + scene + '">看规则版</button>'
     + '</div>';
@@ -15444,6 +15445,35 @@ document.addEventListener('click', function (e) {
     var host = card ? card.querySelector('[data-ai-body]') : null;
     if (act === 'again') AIQ.result[scene] = null;      /* 「重新分析」不吃缓存 */
     aiRun(scene, host);
+    return;
+  }
+  if (act === 'copy') {
+    var r = AIQ.result[scene];
+    var plain = String((r && r.text) || '')
+      .replace(/^#{1,3}\s*/gm, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .trim();
+    if (!plain) return;
+    var done = function (ok) {
+      btn.textContent = ok ? '已复制' : '复制失败';
+      setTimeout(function () { btn.textContent = '复制'; }, 1600);
+    };
+    /* https 下用剪贴板 API；不支持就退回「选中 + execCommand」那套老办法 */
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(plain).then(function () { done(true); }, function () { done(false); });
+    } else {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = plain;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok2 = document.execCommand('copy');
+        document.body.removeChild(ta);
+        done(ok2);
+      } catch (e) { done(false); }
+    }
     return;
   }
   if (act === 'local') {
@@ -15598,8 +15628,8 @@ function scMeAnalysis(meRow, rk, st, myTotal, myRank, subs){
     + '<div class="sc-ai-todo"><b>下一步可以这样做</b><ol>'
     +   todos.map(function(t){ return '<li>' + t + '</li>'; }).join('')
     + '</ol></div>'
-    + '<div class="sc-figcap">这份是<b>本地规则</b>算的（定位 / 单科强弱 / 均衡度 / 历次趋势 / 上线距离五类规则），'
-    + '每次换考试、切赋分口径都会重算 —— 不联网、不花钱、不把成绩发出去。</div>';
+    + '<div class="sc-figcap">按当前考试数据实时算（定位 / 单科强弱 / 均衡度 / 历次趋势 / 上线距离五类规则），'
+    + '换考试、切赋分口径都会重算。</div>';
 
   /* v3.16.1：换了考试就把上一场的结果丢掉 —— 否则切过去还显示着上一场的分析，
      数字全对不上，比不显示更糟。 */
