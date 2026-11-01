@@ -2925,7 +2925,7 @@ function render(){
         /* 门禁总开关关闭时直接视为「已通过」，不再渲染问答框（GATE_ENABLED=false） */
         var passed = gatePassed(l) || !gateOn();
         /* v3.9.22：标题留在折叠态，其余内容都塞进 .card-detail，点开才显示 */
-        var contentHtml = '<div class="card-content"><h3><span class="f-t">'+esc(l.title)+'</span><span class="f-i">⌄</span></h3>'
+        var contentHtml = '<div class="card-content"><h3><span class="f-t">'+esc(l.title)+'</span><span class="f-i">'+iconSvg('chevron-down',15)+'</span></h3>'
           + '<div class="card-detail">'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
         if(l.paused){
           contentHtml += '<div class="paused-box">'+(l.pausedMsg ? emojiEscHtml(l.pausedMsg) : (iconSvg('ban',15)+' 因网络问题，暂时关闭，恢复开放时间另行通知'))+'</div>';
@@ -3702,12 +3702,64 @@ document.addEventListener('click', function(e){
   if(t.closest('button,a,input,textarea,select,label,.gate-box,.paused-box,.qrcode-box')) return;
   var card = t.closest('.card');
   if(!card || !card.classList.contains('card-fold')) return;
-  card.classList.toggle('open');
-  /* v3.15.8：卡片在堆叠态里被展开/收起后，整栈的统一高度必须重算——
-     否则 --deck-h 还停在折叠条那 60px，卡片会被 height:100% + overflow:hidden
-     压成一条（站主截图反馈「点了以后只剩一条白边」就是这个）。 */
-  if(typeof stackApply === 'function') stackApply();
+  toggleCardDetail(card);
 }, false);
+
+/* ============================================================================
+ * v3.15.9 · 卡片展开动效
+ * ----------------------------------------------------------------------------
+ * 站主 2026-11-01：「卡片的展开应该是一个动画过程，箭头也不是突然变向，
+ *   现在全站都太生硬了。」
+ *
+ * 改法：内容区不再 display:none ↔ block 硬切，改成真实高度补间。
+ *   · 展开：先量自然高度 → 从当前高度补到目标 → 结束后交回 auto（内容变化自适应）
+ *   · 收起：先把 auto 固化成 px → 下一帧补到 0
+ *   · 堆叠态要同步 --deck-h，否则卡片被 height:100% + overflow:hidden 裁掉
+ *   · 关动效 / prefers-reduced-motion 下直接切 class，不做补间
+ * ========================================================================== */
+function toggleCardDetail(card){
+  if(!card) return;
+  var detail = card.querySelector('.card-detail');
+  var willOpen = !card.classList.contains('open');
+  var motion = (typeof motionOn === 'function') ? motionOn() : true;
+  if(!detail || !motion){
+    card.classList.toggle('open');
+    if(detail) detail.style.height = '';
+    if(typeof stackApply === 'function') stackApply();
+    return;
+  }
+  var from = detail.getBoundingClientRect().height;
+  var settle = function(keepAuto){
+    detail.removeEventListener('transitionend', onEnd);
+    if(keepAuto && card.classList.contains('open')) detail.style.height = 'auto';
+    if(typeof stackApply === 'function') stackApply();
+  };
+  var onEnd = function(ev){
+    if(ev && ev.propertyName && ev.propertyName !== 'height') return;
+    settle(willOpen);
+  };
+
+  if(willOpen){
+    card.classList.add('open');
+    detail.style.height = 'auto';           /* 先交给内容，量一次真实高度 */
+    var target = detail.scrollHeight;
+    if(typeof stackApply === 'function') stackApply();  /* 堆叠态整栈同步长高 */
+    detail.style.height = from + 'px';
+    void detail.offsetHeight;               /* 强制回流，让起点生效 */
+    detail.style.height = target + 'px';
+    detail.addEventListener('transitionend', onEnd);
+  }else{
+    detail.style.height = from + 'px';
+    card.classList.remove('open');
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){ detail.style.height = '0px'; });
+    });
+    detail.addEventListener('transitionend', onEnd);
+  }
+  /* transitionend 在某些情况下不触发（高度没变化 / 被浏览器合并），兜底再收一次尾 */
+  clearTimeout(detail.__settleT);
+  detail.__settleT = setTimeout(function(){ settle(willOpen); }, 620);
+}
 
 function applyUICfg(){
   applyFont();
@@ -13519,7 +13571,7 @@ function scBindFold(root){
     if(!card) return;
     card.classList.toggle('sc-folded');
     var body = scFoldBody(card);
-    if(body) body.hidden = card.classList.contains('sc-folded');
+    if(body) scFoldAnim(body, card.classList.contains('sc-folded'));
     var key = card.getAttribute('data-scblk');
     if(key) SC_FOLD[key] = card.classList.contains('sc-folded');
     if(!card.classList.contains('sc-folded') && card.classList.contains('sc-anim-card')){
@@ -13549,6 +13601,31 @@ function scFoldBody(card){
   return body;
 }
 
+/* v3.15.9：成绩卡片原来也是 body.hidden 一刀切（内容瞬间消失、下面的卡片猛地上移）。
+   改成真实高度补间 —— hidden 状态在 CSS 里是 height:0 + opacity:0，仍然「收起来」，
+   但中间会有一段过渡。 */
+function scFoldAnim(body, folded){
+  if(!body) return;
+  var motion = (typeof motionOn === 'function') ? motionOn() : true;
+  if(!motion){ body.hidden = folded; body.style.height = ''; return; }
+  var from = body.hidden ? 0 : body.getBoundingClientRect().height;
+  if(folded){
+    body.hidden = false;                    /* 先确保能量到当前高度 */
+    body.style.height = from + 'px';
+    void body.offsetHeight;
+    body.hidden = true;                     /* CSS 里 [hidden] = height:0，才有可补间的目标 */
+    body.style.height = '';
+  }else{
+    body.hidden = false;
+    body.style.height = 'auto';
+    var to = body.scrollHeight;
+    body.style.height = from + 'px';
+    void body.offsetHeight;
+    body.style.height = to + 'px';
+    clearTimeout(body.__foldT);
+    body.__foldT = setTimeout(function(){ if(!body.hidden) body.style.height = ''; }, 480);
+  }
+}
 function scFoldInit(root){
   scBindFold(root);
   var cards = root.querySelectorAll('.sc-card');
