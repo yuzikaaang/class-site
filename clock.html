@@ -363,6 +363,35 @@ body.bg-dark #hint,body.bg-black #hint,body.bg-navy #hint,body.bg-green #hint,bo
 .snd-row button.on{background:#e08a4c;border-color:#e08a4c;color:#fff}
 .snd-tip{font-size:10px;font-weight:400;opacity:.55;margin-left:4px}
 .snd-row button.on .snd-tip{opacity:.85}
+/* 翻页音效的音量条（v3.16.0）：和上面那排按钮同一套色，别再引入新颜色 */
+.vol-row{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px}
+.vol-row > span{flex:0 0 66px;opacity:.6}
+.vol-row > b{flex:0 0 42px;text-align:right;font-weight:700;font-size:12.5px;opacity:.72;
+  font-variant-numeric:tabular-nums}
+.vol-row input[type=range]{
+  -webkit-appearance:none;appearance:none;flex:1;min-width:0;height:22px;background:transparent;
+  cursor:pointer;outline:none;
+}
+.vol-row input[type=range]::-webkit-slider-runnable-track{
+  height:6px;border-radius:999px;background:rgba(0,0,0,.14);
+}
+.vol-row input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:18px;height:18px;margin-top:-6px;
+  border-radius:50%;background:#e08a4c;border:2px solid #fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.22);transition:transform .15s ease;
+}
+.vol-row input[type=range]:active::-webkit-slider-thumb{transform:scale(1.12)}
+.vol-row input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:rgba(0,0,0,.12)}
+.vol-row input[type=range]::-moz-range-thumb{
+  width:15px;height:15px;border-radius:50%;background:#e08a4c;border:2px solid #fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.22);
+}
+.vol-row input[type=range]:focus-visible::-webkit-slider-thumb{
+  box-shadow:0 0 0 4px rgba(224,138,76,.28);
+}
+/* 关掉音效后，音量条变灰 —— 免得让人以为拖了没用 */
+.vol-row.is-off{opacity:.42;pointer-events:none}
+
 .name-grid{display:grid;gap:8px}
 .name-grid label{display:flex;align-items:center;gap:8px;font-size:13px}
 .name-grid label span{flex:0 0 66px;opacity:.6}
@@ -862,6 +891,21 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
     </div>
 
     <div class="ab-sec">
+      <h4>翻页音效（只在翻页时钟里响）</h4>
+      <div class="snd-row" id="flipSndRow">
+        <button data-fsnd="off">关闭</button>
+        <button data-fsnd="paper">纸页<small class="snd-tip">推荐</small></button>
+        <button data-fsnd="click">咔哒<small class="snd-tip">更干脆</small></button>
+      </div>
+      <label class="vol-row" id="flipVolRow">
+        <span>音量</span>
+        <input type="range" id="flipVolInp" min="0" max="100" step="5" value="55">
+        <b id="flipVolVal">55%</b>
+      </label>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">每次翻页响一下；同一秒里时、分、秒三片一起翻时只响一声，不会叠成一片噪音。选音色的时候会立刻试听。</p>
+    </div>
+
+    <div class="ab-sec">
       <h4>白噪音（可多选混合，专注 / 助眠）</h4>
       <div class="snd-row" id="noiseRow">
         <button data-noise="rain">雨声</button>
@@ -946,6 +990,8 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 var CFG_KEY = 'cls_clock_cfg';
 var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5, ts:0,
   flipSec:true, pf:25, pb:5, pomoDone:0, pomoDate:'',
+  /* v3.16.0：翻页音效 —— 关 / 纸页 / 咔哒，音量 0~1 */
+  flipSnd:'paper', flipVol:0.55,
   /* v3.10.0：提示音 / 自定义名称 / 自习科目+事项 / 时间到提醒文字 / 白噪音 */
   sound:'blue', names:{}, subj:'', doing:'', toast:'', noise:{},
   /* v3.11.0：计时合并后 —— 专注时长 / 每轮休息 / 循环次数 / 6 个预设 / 提醒列表 */
@@ -1133,12 +1179,20 @@ function tickClock(){
     $('bigSub').textContent = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'
       + (lu ? '  ' + lu : '') + '  星期' + WEEK[d.getDay()];
   }else if(CFG.mode === 'flip'){
+    /* 第一次进来时 lastFlip 全是空串，那一帧只是「把数字落上去」，
+       并没有翻页动作 —— 所以要先确认上一帧已经有值（had），再比差异。 */
+    var had = lastFlip.h !== '' || lastFlip.m !== '';
+    var moved = had && (lastFlip.h !== two(hh) || lastFlip.m !== two(m)
+                        || (CFG.flipSec !== false && lastFlip.s !== two(s)));
     flipTo('flipH', two(hh), lastFlip.h); lastFlip.h = two(hh);
     flipTo('flipM', two(m), lastFlip.m); lastFlip.m = two(m);
     /* 关掉秒就干脆不画：少一次翻页动画，老设备也轻松一点 */
     if(CFG.flipSec !== false){
       flipTo('flipS', two(s), lastFlip.s); lastFlip.s = two(s);
     }
+    /* v3.16.0：真翻了才响。刚进这个模式那一帧 lastFlip 还是空字符串，
+       只是把数字落上去、并没有翻页动作，所以不该出声（moved 帮我们分辨）。 */
+    if(moved) flipSound();
   }
 }
 
@@ -2745,6 +2799,97 @@ function playBuf(buf, vol, cb){
   }
   src.start();
 }
+/* ---------------- 翻页音效（v3.16.0） ----------------
+ * 站主：「大屏时钟翻页的时候，加个类似翻页的声音，音效也能选择是否开启。」
+ *
+ * 声音来源：
+ *   paper —— Mixkit「翻页 / 纸张」免费音效（Mixkit Free License，可商用免署名，
+ *            项目里的白噪音也是这家），截取其中一次完整的翻页，去掉前后静音，
+ *            95Hz 高通滤掉空调低鸣，首尾各做淡入淡出避免爆音，32kbps 单声道 →
+ *            1.5KB，base64 内嵌，不依赖网络。
+ *   click —— 现场合成：带通噪声（1.6~5.2kHz）做「咔」的瞬态 + 260Hz 一点下沉 +
+ *            6kHz 以上一点「空气」，17ms 衰减完，像翻页牌的塑料片扣下来。
+ *
+ * 播放时机：动画里上半片 0~300ms 翻下去、下半片 300~600ms 落回来，
+ *   真实的翻页牌是在下半片落到一半时「啪」的，所以这里延后 300ms 出声。
+ *   同一秒里时 / 分 / 秒三片一起翻，只响一声 —— 三声叠加会糊成一片噪音。
+ * ---------------------------------------------------------------- */
+var FLIP_SND = {
+  paper: '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',
+  click: '//NAxAAQ4VrU5UMQAAa8Ghw4t9AAAAAMDFu7ueURET/Oc538hPnP/6nOc/+QhznOd6nIQgAQEHZPB8Hwfu8o7lwfB9/gh6wfB8/5c///iAEFu11t+AoFtlrkbjclEAml5YNzyZ6CjyT/80LEFxpiAypfmEACAXpUqy7Lqbn2fJFRX/+Gb/+SaBV5h/B5TMHI2FWQ/dCYbTamk6xZOIHXbX9qtRE9zp33K1cccrUJSFxSjF6/gZagrpPFp7EIyFni2xZY9r/6WqVxB8AVfO2GiRX/80DECRWxctJP0RgCLgZCCwYDZFkpJUs1ZL/////G+qixozMcJrGpQ2Y40PL/1LrMyr/0BBUMlWHjoiDqlBRBYOx0RVgq754FQVdy0cHZDxE/xERxKGhEOHhp/eFeILTNFzAS19JY/f/zQsQNFfImeADQEpBM3u/5biK+sKiaSJVDMzdwWaLH1tWmVFJKyWQpNoWUKpChIm3XbLkWlg0KmyxFOxSivJ+dLGooXLPWWNFX0iaIm0KyKqaRNU09lrXG1OxZpoBBFIQD2xIAwBDmj//zQMQRFuoeRADQknmhlT7f//9SgIEYCmhVJa3FESccVhNYVESJNDk7VZWKul2S2a5ohJVrxKUlUJYLGlvsHkRohONetIi5CS1dN4qxcWSLK0lQkRohMyoAIOACSDG5djjYxwMM53ja//NCxBARaeYxpthEnEMdGjTlgSj51ePf89fzuEvPl1xcQnL/oybI5vDG5dDLb/uZpQEBPOgrBUBe9SuU+3o9Nf/XZQABRGDOybgp2J93ThuRUccjFAaapNmx+765H2faas/3bPYvolcl//NAxCYMuDIqVg5SBPV6qfFE1/pf5dWVQxytVrSlmRAieGYli40ZWk+atzftFgFX6/fWAwGE1LjXWBmqCgFWAny1rAKdHujHiU71FsrRLPrc+PcIrfDXLPUenvVI4lxF9CZhQm6gHyb/80LEThHwxgAAyYZowh6ELayaAiEobJUQsSdxcMuAQsKirBUUaaesWNR4oLf/FhVlbOLM/ULCoqsVFBY18VFBbFhX+LCrPxZMQU1FMy4xMDEgKGJldGEgMymqqqqqqqqqqqqqqqqqqqr/80DEYhBAOW1seJIgqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqg=='
+};
+var FLIP_BUFS = {};      /* 解码缓存 */
+var FLIP_AT = 0;         /* 上次出声的时间戳，用来防连环触发 */
+
+function flipSndKey(){ return CFG.flipSnd || 'off'; }
+function flipVolume(){
+  var v = Number(CFG.flipVol);
+  if(isNaN(v)) v = 0.55;
+  return Math.max(0, Math.min(1, v));
+}
+function flipVoice(buf){
+  try{
+    var src = AC.createBufferSource();
+    src.buffer = buf;
+    /* 每秒一次如果波形完全一样，耳朵很快会听出「复读机」；
+       给音高和音量各加一点随机，像真的翻页牌那样每次略不同 */
+    src.playbackRate.value = 0.95 + Math.random() * 0.10;
+    var g = AC.createGain();
+    g.gain.value = Math.max(0.0001, flipVolume() * 0.85) * (0.9 + Math.random() * 0.2);
+    src.connect(g); g.connect(AC.destination);
+    src.start(0);
+  }catch(e){}
+}
+/* 试听 / 正式播放共用：key 为空就用当前设置 */
+function playFlip(key){
+  key = key || flipSndKey();
+  if(key === 'off' || !FLIP_SND[key]) return;
+  if(flipVolume() <= 0) return;
+  try{
+    var C = window.AudioContext || window.webkitAudioContext;
+    if(!C) return;
+    if(!AC) AC = new C();
+    if(AC.state === 'suspended' && AC.resume) AC.resume();
+    if(FLIP_BUFS[key]){ flipVoice(FLIP_BUFS[key]); return; }
+    var bin = atob(FLIP_SND[key]), arr = new Uint8Array(bin.length);
+    for(var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    AC.decodeAudioData(arr.buffer, function(b){
+      FLIP_BUFS[key] = b;
+      flipVoice(b);
+    }, function(){});
+  }catch(e){}
+}
+/* 进翻页模式时先把音频解码好，免得「第一次翻页」那一下要等解码、声音迟到 */
+function flipPreload(){
+  var key = flipSndKey();
+  if(key === 'off' || FLIP_BUFS[key] || !FLIP_SND[key] || !AC) return;
+  try{
+    var bin = atob(FLIP_SND[key]), arr = new Uint8Array(bin.length);
+    for(var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    AC.decodeAudioData(arr.buffer, function(b){ FLIP_BUFS[key] = b; }, function(){});
+  }catch(e){}
+}
+
+/* 给自动化测试留个口子（和 window.__flipMs 同一种做法，不影响运行） */
+window.__flipDbg = {
+  snd: FLIP_SND, bufs: FLIP_BUFS, cfg: CFG,
+  key: function(){ return flipSndKey(); },
+  vol: function(){ return flipVolume(); },
+  play: function(k){ return playFlip(k); }
+};
+
+/* 由 tickClock 调用：延后 300ms 出声，并对齐到「下半片落下」那一刻 */
+function flipSound(){
+  if(flipSndKey() === 'off' || flipVolume() <= 0) return;
+  var now = Date.now();
+  if(now - FLIP_AT < 250) return;     /* 切模式 / 补帧时可能连调，别连响 */
+  FLIP_AT = now;
+  setTimeout(function(){
+    if(flipSndKey() === 'off') return;   /* 这 300ms 里被关掉了 */
+    playFlip();
+  }, 300);
+}
+
 function beep(name, cb){
   var key = name || sndName();
   if(!key || key === 'off' || !SND_DATA[key]){ if(cb) cb(); return; }
@@ -3135,7 +3280,46 @@ function paintSnd(){
     bs[i].className = (bs[i].getAttribute('data-snd') === sndName()) ? 'on' : '';
   }
 }
+function paintFlipSnd(){
+  var row = $('flipSndRow');
+  if(row){
+    var bs = row.getElementsByTagName('button');
+    for(var i = 0; i < bs.length; i++){
+      bs[i].className = (bs[i].getAttribute('data-fsnd') === flipSndKey()) ? 'on' : '';
+    }
+  }
+  var inp = $('flipVolInp'), val = $('flipVolVal'), wrap = $('flipVolRow');
+  if(inp){
+    var pct = Math.round(flipVolume() * 100);
+    inp.value = pct;
+    if(val) val.textContent = pct + '%';
+  }
+  if(wrap) wrap.className = 'vol-row' + (flipSndKey() === 'off' ? ' is-off' : '');
+}
 function bindSettings(){
+  var frow = $('flipSndRow');
+  if(frow){
+    Array.prototype.forEach.call(frow.getElementsByTagName('button'), function(b){
+      b.onclick = function(e){
+        if(e && e.stopPropagation) e.stopPropagation();
+        CFG.flipSnd = b.getAttribute('data-fsnd');
+        saveCfg(); paintFlipSnd();
+        if(CFG.flipSnd !== 'off') playFlip();     /* 选的同时试听一下 */
+        /* 试听要用翻页模式才听得明白，但别硬切用户正在用的模式 —— 只提示 */
+      };
+    });
+  }
+  var fv = $('flipVolInp');
+  if(fv){
+    fv.oninput = function(e){
+      if(e && e.stopPropagation) e.stopPropagation();
+      CFG.flipVol = Number(fv.value) / 100;
+      saveCfg();
+      var val = $('flipVolVal');
+      if(val) val.textContent = Math.round(flipVolume() * 100) + '%';
+    };
+    fv.onchange = function(){ playFlip(); };   /* 拖完松手试听一次 */
+  }
   var row = $('sndRow');
   if(row){
     Array.prototype.forEach.call(row.getElementsByTagName('button'), function(b){
@@ -3208,7 +3392,7 @@ function applyFlipSec(){
   $('flipView').className = 'view' + (CFG.mode === 'flip' ? ' on' : '') + (on ? '' : ' nosec');
   $('secBtn').textContent = on ? '秒 · 显示' : '秒 · 隐藏';
   lastFlip = { h:'', m:'', s:'' };
-  if(CFG.mode === 'flip') tickClock();
+  if(CFG.mode === 'flip'){ flipPreload(); tickClock(); }
 }
 $('secBtn').onclick = function(){
   CFG.flipSec = (CFG.flipSec === false);
@@ -3280,6 +3464,7 @@ if(CFG.mode === 'timer'){ T.kind = CFG.tk || 'up'; tmReset(); }
 bindSettings();
 sumBind();
 paintSnd();
+paintFlipSnd();
 paintNoise();
 fillCol('wH', 99); fillCol('wM', 59); fillCol('wS', 59);
 paintAlerts();
