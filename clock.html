@@ -987,6 +987,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
   </div>
 </div>
 
+<script src="./auth-bus.js"></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -1994,7 +1995,10 @@ function logSaveLocal(day, data){
      · 时间到、点「返回」、切到后台都立刻推一次；
      · 推送失败把数据放回队列，8 秒后重试（最多连试 5 次）；
      · 没登录：只写 localStorage，不碰网络。 */
+/* v3.18.0：登录态统一走 auth-bus.js（同源共享，主站登过这里就有）。
+   拿不到总线时退回直接读 localStorage —— 老缓存里没有 auth-bus 也不会崩。 */
 function clkToken(){
+  if(typeof ClsAuth !== 'undefined') return ClsAuth.token || '';
   try{
     var a = JSON.parse(localStorage.getItem('cls_auth') || 'null');
     return (a && a.token) || '';

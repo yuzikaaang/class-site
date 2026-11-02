@@ -104,16 +104,34 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
 }
 .prg th,.prg td{position:static!important;box-shadow:none!important}
 .prg{min-width:420px}
+/* v3.18.0：已登录提示条 —— 复用浏览器里已有的登录态，不再让人重复登录 */
+.mebar{
+  display:none;align-items:center;gap:10px;flex-wrap:wrap;
+  background:#fff7ed;border:1px solid #fdba74;border-radius:10px;
+  padding:9px 13px;margin-bottom:14px;font-size:.78rem;color:#7c2d12;line-height:1.6;
+}
+.mebar.show{display:flex}
+.mebar b{color:#9a3412}
+.mebar a{
+  margin-left:auto;color:#c2410c;font-weight:600;text-decoration:none;
+  border:1px solid #fdba74;border-radius:8px;padding:3px 10px;background:#fff;
+}
 </style>
 </head>
 <body>
 <div class="wrap" id="app">
   <div class="empty"><div class="spin"></div><p>正在打开分享…</p></div>
 </div>
+<script src="./auth-bus.js"></script>
 <script>
 (function(){
   'use strict';
   var API = 'https://api.classsite.dpdns.org';
+  /* v3.18.0：同源共享登录态 —— 主站登过，这里就不用再登一次。
+     只读 token，不发往任何地方（分享页本身仍然免登录可看）。 */
+  var ME = (window.ClsAuth && ClsAuth.isLoggedIn())
+    ? { name: ClsAuth.userName(), isAdmin: ClsAuth.isAdmin() }
+    : null;
   var app = document.getElementById('app');
 
   function esc(s){
@@ -186,7 +204,20 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       + esc(untilText(sh.expiresAt))
       + '<br><b>仅在本班内查看，请勿截图外传。</b></div></div>';
 
-    app.innerHTML = wm
+    /* v3.18.0：已登录就把「看自己的」摆在最上面；分享者本人打开时提示这是自己的 */
+    var meBar = '';
+    if (ME) {
+      var mine = sh.ownerName && ME.name && sh.ownerName === ME.name;
+      meBar = '<div class="mebar show">'
+        + '<span>' + (mine
+            ? '这是你自己分享出去的链接，内容就是你自己的成绩。'
+            : '你已经登录（<b>' + esc(ME.name) + '</b>），不用再登一次。')
+        + '</span>'
+        + '<a href="./index.html#/scores">看我的成绩</a>'
+        + '</div>';
+    }
+
+    app.innerHTML = meBar + wm
       + '<div class="head"><h1>成绩单</h1><span class="sub">共 ' + exams.length + ' 次考试</span></div>'
       + '<div class="selbar"><select id="exSel"></select>'
       +   '<div class="seg">'

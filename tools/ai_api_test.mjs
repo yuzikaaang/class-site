@@ -74,8 +74,12 @@ t('缺考返回 null', aiScoreOf({ math: { raw: 0 } }, subR, 'raw') === 0 && aiS
 t('接口说明写在注释里（what/fmt/exam/no）',
   /what=me/.test(SRC) && /fmt=md\|json/.test(SRC) && /exam=<id>/.test(SRC) && /no=<学号>/.test(SRC));
 const WORKER = fs.readFileSync(new URL('../api/worker.mjs', import.meta.url), 'utf8');
-t('后端版本号已升到 3.17', /const API_VER = '3\.17\.0'/.test(WORKER),
-  (WORKER.match(/const API_VER = '([^']+)'/) || [])[1]);
+/* 版本号不再写死具体数字 —— 只要跟 index.html 的 SITE_VERSION 一致就行，
+   否则每升一次版本都要改这里（v3.18.0 起）。 */
+const SITE_VER = (fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')
+  .match(/var SITE_VERSION = '([\d.]+)'/) || [])[1];
+t('后端版本号与前台一致', new RegExp("const API_VER = '" + SITE_VER.replace(/\./g, '\\.') + "'").test(WORKER),
+  'api=' + (WORKER.match(/const API_VER = '([^']+)'/) || [])[1] + ' site=' + SITE_VER);
 
 console.log('\n' + pass + ' / ' + (pass + fail));
 process.exit(fail ? 1 : 0);

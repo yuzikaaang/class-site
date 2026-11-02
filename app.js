@@ -1941,13 +1941,167 @@ function httpUrl(u){ return /^https?:\/\//i.test((u||'').trim()); }
 
 var targetUrl = '';
 
-/* ---- 哈希路由：#/guide?url=xxx ---- */
+/* ============================================================================
+ * v3.18.0 —— 统一深链路由
+ * ----------------------------------------------------------------------------
+ * 站主原话：「我自己创建了一个新链接，用户打开之后可以直接跳转到那个页面，
+ *   就不用从首页开始进去；但这样就需要重新登录，太麻烦 —— 全部都复用登录态。」
+ *
+ * 以前哈希只服务一个用途（#/guide?url=），别的页面一律从首页点进去。
+ * 现在任何位置都能变成一条链接，且**打开者已登录就沿用他的登录态**：
+ *
+ *   #/board/3              板块 3
+ *   #/board/3/card/a1      板块 3，并定位到卡片 a1
+ *   #/scores               成绩分析（默认全班成绩单）
+ *   #/scores/exam/16       直接看第 16 场
+ *   #/scores/me            我的画像
+ *   #/scores/pk            成绩对比
+ *   #/votes                投票专区
+ *   #/vote/12              投票专区，定位第 12 条
+ *   #/game/tetris          小游戏（整页跳转）
+ *   #/clock  #/music  #/homework
+ *   #/guide?url=…          老格式，继续可用
+ *
+ * 设计约束：
+ *   ① 解析失败一律回首页，绝不把用户卡在白屏；
+ *   ② 切换板块用 replaceState —— 不把每个点击都塞进历史，点后退是「真的后退」；
+ *   ③ 老 ?b=3&c=a1 这种查询串深链继续认（boardShareBoot 里处理）。
+ * ========================================================================= */
+
+var ROUTE_QUIET = false;   /* setRoute 自己改地址时不要回环进 applyRoute */
+
+/* 进站那一刻的地址，可能是 #/board/7 这种深链。
+   ⚠️ 必须在**启动流程动它之前**记下来：启动末尾的 goHomeView() 会顺手把
+   地址栏清干净（它本来是给「点返回主页」用的），等轮到 applyHash() 时已经晚了。 */
+var BOOT_HASH = (typeof location !== 'undefined') ? (location.hash || '') : '';
+var ROUTE_BOOTED = false;
+/* 给自动化测试的最小探针：进过几次路由、进站地址是什么 */
+try{ window.__route = { ran: 0, boot: BOOT_HASH, last: '' }; }catch(e){}
+
+function parseRoute(raw){
+  var h = String(raw == null ? location.hash : raw).replace(/^#/, '');
+  if(!h || h === '/') return { v: 'home' };
+
+  var qs = '';
+  var qi = h.indexOf('?');
+  if(qi >= 0){ qs = h.slice(qi + 1); h = h.slice(0, qi); }
+
+  var p = h.split('/').filter(function (x) { return x !== ''; });
+  if(!p.length) return { v: 'home' };
+
+  var out = { v: p[0], qs: qs, parts: p };
+
+  if(p[0] === 'board'){
+    out.id = parseInt(p[1], 10);
+    if(!out.id) return { v: 'home' };
+    if(p[2] === 'card' && p[3]) out.card = p.slice(3).join('/');
+    return out;
+  }
+  if(p[0] === 'scores'){
+    if(p[1] === 'exam' && p[2]) out.exam = parseInt(p[2], 10);
+    if(p[1] === 'me') out.tab = 'me';
+    if(p[1] === 'pk') out.tab = 'pk';
+    return out;
+  }
+  if(p[0] === 'vote'){ out.id = parseInt(p[1], 10); return out; }
+  if(p[0] === 'votes'){ return out; }
+  /* 两个高频入口给个短名字，比记板块 id 友好（卡片 id 见 SITE_DATA.links） */
+  if(p[0] === 'music'){ out.v = 'card'; out.cat = 1; out.card = '1'; return out; }
+  if(p[0] === 'homework'){ out.v = 'card'; out.cat = 1; out.card = '2'; return out; }
+  if(p[0] === 'game'){ out.name = String(p[1] || '').replace(/[^a-z0-9_-]/gi, ''); return out; }
+  return out;
+}
+
+/* 把当前视图写回地址栏（不触发 hashchange） */
+function setRoute(path){
+  path = String(path || '').replace(/^#?\/?/, '');
+  var hash = path ? ('#/' + path) : '';
+  if(location.hash === hash) return;
+  ROUTE_QUIET = true;
+  try{
+    history.replaceState(null, '', location.pathname + location.search + hash);
+  }catch(e){
+    location.hash = hash;   /* 老浏览器兜底：会触发一次 hashchange，靠 ROUTE_QUIET 吃掉 */
+  }
+  setTimeout(function(){ ROUTE_QUIET = false; }, 0);
+}
+
+/* 当前视图 → 路由字符串（给「复制链接」按钮用） */
+function routeOfView(){
+  if(window.__activeCat == null) return '';
+  var id = window.__activeCat;
+  if(id === 3){
+    var t = (typeof SC !== 'undefined' && SC && SC.tab) ? SC.tab : 'board';
+    if(t === 'me') return 'scores/me';
+    if(t === 'pk') return 'scores/pk';
+    return 'scores';
+  }
+  if(id === 7) return 'votes';
+  return 'board/' + id;
+}
+
+/* 复制「当前这条投票」的链接（#/vote/<id>），不是整个板块 */
+function copyVoteLink(){
+  var id = (typeof VOTE !== 'undefined' && VOTE && VOTE.curId) ? VOTE.curId : 0;
+  var base = location.href.split('#')[0];
+  var url = base + (id ? ('#/vote/' + id) : '#/votes');
+  aiCopyText(url).then(function(){
+    toastMini('链接已复制，同学打开就落到这一条');
+  }).catch(function(){
+    toastMini('复制失败，长按地址栏手动复制', true);
+  });
+}
+
+/* 复制「当前视图」的直达链接。
+   v3.18.0：链接里不带任何 token，打开者用**自己的**登录态 —— 该看什么由服务端
+   按他的身份判，不会因为点了别人的链接就看到别人的成绩。 */
+function copyHereLink(){
+  var url = shareHere();
+  aiCopyText(url).then(function(){
+    toastMini('链接已复制，粘贴发给同学就行');
+  }).catch(function(){
+    /* 微信内置浏览器常禁 clipboard，退回手动选中 */
+    var d = document.createElement('div');
+    d.className = 'allboard-mask show';
+    d.innerHTML = '<div class="allboard-box" style="max-width:360px">'
+      + '<div class="allboard-head"><span>长按选中复制</span></div>'
+      + '<div style="padding:14px">'
+      +   '<input readonly value="' + esc(url) + '" style="width:100%;padding:9px;border:1px solid #e2d5c8;border-radius:8px;font-size:12px" onclick="this.select()">'
+      +   '<button class="btn" style="width:100%;margin-top:12px" onclick="this.parentNode.parentNode.parentNode.remove()">关闭</button>'
+      + '</div></div>';
+    document.body.appendChild(d);
+    var inp = d.querySelector('input');
+    try{ inp.focus(); inp.select(); }catch(e){}
+  });
+}
+
+/* 带当前登录态与当前视图的完整链接 —— 分享给同学时直接落到同一位置 */
+function shareHere(){
+  var r = routeOfView();
+  /* ⚠️ 不能用 location.origin 拼 —— 站点挂在 GitHub Pages 的 /class-site/ 子目录下，
+     只留 origin 会把前缀吃掉（2026-10-24 就因为这类写法让分享链接全 404）。
+     直接取当前地址去掉 hash 最稳。 */
+  var base = location.href.split('#')[0];
+  return base + (r ? '#/' + r : '');
+}
+
 function applyHash(){
-  var h = location.hash || '';
-  var m = h.match(/^#\/guide\?url=(.*)$/);
-  if(m){
+  try{ if(window.__route){ window.__route.ran++; window.__route.last = location.hash; window.__route.v = ''; } }catch(e){}
+  /* ⚠️ 这里**不判** ROUTE_QUIET。
+     v3.18.0 踩过的坑：setRoute/resetHome 会临时置 QUIET，靠 setTimeout(0) 复位，
+     而启动流程是同一个同步块 —— 末尾那次 applyHash() 正好落在 QUIET 还没复位的窗口里，
+     于是深链被静默丢弃（表现：地址 #/board/7 打开后停在首页，hash 还被清空）。
+     现在只让 hashchange 那条路判 QUIET（见文件末尾的监听器）。 */
+  /* 第一次解析优先用「进站时的地址」，之后才用当前地址（用户点链接/后退） */
+  var src = (!ROUTE_BOOTED && BOOT_HASH) ? BOOT_HASH : undefined;
+  ROUTE_BOOTED = true;
+  var r = parseRoute(src);
+
+  /* ① 老格式：外链跳转引导 */
+  if(r.v === 'guide'){
+    var m = /(?:^|&)url=([^&]*)/.exec(r.qs || '');
     var u = '';
-    try{ u = decodeURIComponent(m[1]); }catch(e){ u = m[1]; }
+    try{ u = decodeURIComponent((m && m[1]) || ''); }catch(e){ u = (m && m[1]) || ''; }
     if(!httpUrl(u)){ resetHome(); return; }
     targetUrl = u;
     if(isWeChat()){
@@ -1963,17 +2117,95 @@ function applyHash(){
       document.getElementById('jumpManual').href = u;
       setTimeout(function(){ window.location.replace(u); }, 900);
     }
-  }else{
-    hideOverlays();
+    return;
   }
+
+  hideOverlays();
+
+  /* ② 游戏 / 时钟 / 点歌：独立页，整页跳 */
+  if(r.v === 'game' && r.name){ location.href = './games/' + r.name + '.html'; return; }
+  if(r.v === 'clock'){ location.href = './clock.html'; return; }
+
+  /* ③ 站内板块类 */
+  if(r.v === 'home'){ resetHome(); return; }
+
+  if(r.v === 'board'){
+    goBoardRoute(r.id, r.card);
+    return;
+  }
+
+  /* 短名字入口：#/music、#/homework —— 落到「常用服务」里对应的那张卡 */
+  if(r.v === 'card'){
+    goBoardRoute(r.cat, r.card);
+    return;
+  }
+
+  if(r.v === 'scores'){
+    goScoreRoute(r.exam, r.tab);
+    return;
+  }
+
+  if(r.v === 'votes' || r.v === 'vote'){
+    goVotesRoute(r.id);
+    return;
+  }
+
+  /* 认不出来的，回首页（不把用户留在空白页） */
+  resetHome();
 }
+
+function goBoardRoute(id, card){
+  if(!id) { resetHome(); return; }
+  openCat(id);
+  if(card) setTimeout(function(){ locateBoardCard(card); }, 420);
+}
+
+/* 成绩页是异步加载的：先等 SC.loaded，再切考试 / 切标签 */
+function goScoreRoute(examId, tab){
+  openCat(3);
+  /* ⚠️ 未登录时**不要**绕过闸门直接 scLoad —— 那会把整张成绩单画出来，
+     等于把「需要登录才能看」变成了摆设（v3.18.0 自测踩到）。
+     openCat 里的 scEnsureMounted 已经会给出登录引导，这里直接收工。 */
+  if(!isLoggedIn()) return;
+  var tries = 0;
+  (function wait(){
+    tries++;
+    if(typeof SC === 'undefined' || !SC){ if(tries < 50) return setTimeout(wait, 200); return; }
+    if(!SC.loaded && !SC.loading){ try{ scEnsureMounted(); }catch(e){} }
+    if(!SC.loaded){ if(tries < 80) return setTimeout(wait, 200); return; }
+    if(examId && SC.exam && SC.exam.id !== examId){
+      var has = (SC.exams || []).some(function (e) { return e.id === examId; });
+      if(has) scPickExam(examId);
+    }
+    if(tab) setTimeout(function(){ try{ scSetTab(tab); }catch(e){} }, 260);
+  })();
+}
+
+function goVotesRoute(id){
+  openCat(7);
+  if(!id || typeof VOTE === 'undefined' || !VOTE) return;
+  /* 投票是左右滑动的，没有「滚动到某条」这回事 —— 直接设当前索引再重绘 */
+  VOTE.curId = id;
+  if(VOTE.loaded && !VOTE.loading){ try{ voteRenderAll(); }catch(e){} }
+}
+
 function show(id){ hideOverlays(); document.getElementById(id).classList.add('show'); }
 function hideOverlays(){
   document.getElementById('guideOverlay').classList.remove('show');
   document.getElementById('jumpOverlay').classList.remove('show');
 }
-function resetHome(){ location.hash = ''; hideOverlays(); window.scrollTo(0,0); }
-window.addEventListener('hashchange', applyHash);
+function resetHome(){
+  ROUTE_QUIET = true;
+  try{ history.replaceState(null, '', location.pathname + location.search); }
+  catch(e){ location.hash = ''; }
+  setTimeout(function(){ ROUTE_QUIET = false; }, 0);
+  hideOverlays();
+  window.scrollTo(0,0);
+}
+window.addEventListener('hashchange', function(){
+  if(ROUTE_QUIET) return;   /* 自己改的地址，不回环 */
+  applyHash();
+});
 
 /* ---- 链接打开（微信智能分流） ---- */
 /* 跳转前记住当前视图，返回班级站时自动恢复（sessionStorage） */
@@ -4054,9 +4286,10 @@ function api(path, opts){
       .then(function(j){
         /* 登录态失效：清掉本地并提示 */
         if(r.status === 401 && AUTH.token){
-          AUTH = { token:'', user:null };
-          try{ localStorage.removeItem(AUTH_KEY); }catch(e){}
-          refreshAcctBtn();
+          setAuth('', null);
+          /* v3.18.0：过期不再「静默变游客」—— 记住当前所在位置，
+             用户点登录后原地回来，而不是被扔回首页重走一遍。 */
+          if(typeof onAuthExpired === 'function') onAuthExpired();
         }
         if(!r.ok || j.ok === false){
           var err = new Error(j.error || ('请求失败（HTTP ' + r.status + '）'));
@@ -4521,17 +4754,43 @@ window.addEventListener('resize', function(){ mkScanAll(200); }, {passive:true})
 window.addEventListener('orientationchange', function(){ mkScanAll(320); }, {passive:true});
 
 /* ---------- 登录态持久化 ---------- */
+/* v3.18.0：登录态统一交给 auth-bus.js 管。
+   这里是**唯一**的适配层 —— 全站旧代码继续用 AUTH.token / AUTH.user 读，
+   但写入必须经过 setAuth()，这样所有页面（分享页、时钟页、以后的单页）
+   看到的是同一份 localStorage，不会再出现「主页登录了、分享页还让你登」。 */
 function loadAuth(){
+  if(typeof ClsAuth !== 'undefined'){
+    var a = ClsAuth.reload();
+    AUTH = { token:a.token || '', user:a.user || null };
+    /* 另一个标签页登录/退出时，这里跟着变 —— 心跳和界面都靠它 */
+    if(!loadAuth.__bound){
+      loadAuth.__bound = 1;
+      ClsAuth.onChange(function(token, user){
+        AUTH = { token:token || '', user:user || null };
+        try{ refreshAcctBtn(); }catch(e){}
+        try{ startHeartbeat(); }catch(e){}
+      });
+    }
+    return;
+  }
   try{
     var raw = localStorage.getItem(AUTH_KEY);
     if(raw){ var o = JSON.parse(raw); AUTH = { token:o.token||'', user:o.user||null }; }
   }catch(e){ AUTH = { token:'', user:null }; }
 }
 function saveAuth(){
+  if(typeof ClsAuth !== 'undefined'){ ClsAuth.save(AUTH); return; }
   try{
     if(AUTH.token) localStorage.setItem(AUTH_KEY, JSON.stringify(AUTH));
     else localStorage.removeItem(AUTH_KEY);
   }catch(e){}
+}
+/* 写登录态的唯一入口：顺手把界面刷了，避免各调用点漏掉 */
+function setAuth(token, user){
+  AUTH = { token: token || '', user: user || null };
+  saveAuth();
+  try{ refreshAcctBtn(); }catch(e){}
+  return AUTH;
 }
 function isLoggedIn(){ return !!AUTH.token; }
 function isAdmin(){ return !!(AUTH.user && AUTH.user.role === 'admin'); }
@@ -5758,9 +6017,7 @@ function doRegister(){
         acctMsg(j.message || '注册成功，等待管理员审核通过后即可登录', 'ok');
         return;
       }
-      AUTH = { token:j.token, user:j.user };
-      saveAuth();
-      refreshAcctBtn();
+      setAuth(j.token, j.user);
       acctMsg(j.message || '注册成功', 'ok');
       startHeartbeat();
       syncRoster();   /* 登录后名单改从云端拉（2026-10-07） */
@@ -5783,9 +6040,7 @@ function doLogin(){
      老浏览器 / salt 接口异常时自动回退明文路径 */
   clsLogin(u, p)
     .then(function(j){
-      AUTH = { token:j.token, user:j.user };
-      saveAuth();
-      refreshAcctBtn();
+      setAuth(j.token, j.user);
       acctBusy(false);
       startHeartbeat();
       syncRoster();   /* 登录后名单改从云端拉（2026-10-07） */
@@ -5843,7 +6098,7 @@ function doForceChangePwd(){
   clsChangePwd(oldPwd, p1, AUTH.user && AUTH.user.username)
     .then(function(j){
       /* 接口会踢掉全部旧会话并签发新 token —— 必须更新本地存储，否则后续请求全 401 */
-      if(j.token) AUTH = { token:j.token, user: (AUTH.user || {}) };
+      if(j.token) setAuth(j.token, AUTH.user || {});
       FORCE_OLD_PWD = '';
       /* v3.8.4：改完初始密码 → 如果是被分享链接拦下来的，直接跳到目标板块 */
       try{ if(typeof afterLoginResume === 'function') setTimeout(afterLoginResume, 260); }catch(e){}
@@ -5877,9 +6132,7 @@ function doLogout(){
     .then(function(){})
     .catch(function(){})   /* 登出失败也照样清本地 */
     .then(function(){
-      AUTH = { token:'', user:null };
-      saveAuth();
-      refreshAcctBtn();
+      setAuth('', null);
       ACCT_TAB = 'login';
       /* 清掉资料页缓存：退出后不该再知道「哪条是我自己」 */
       if(typeof PC_MY_PROFILE_ID !== 'undefined') PC_MY_PROFILE_ID = null;
@@ -9122,9 +9375,17 @@ function openCat(id){
     requestAnimationFrame(function(){ stackApply(); });
   }
   closeSidebar();
+  /* v3.18.0：视图变了就把地址栏跟上 —— 这样「复制当前地址」就是一条能直达的链接。
+     成绩 / 投票两个内嵌板块由它们自己的标签切换负责更细的路径，这里只兜底。 */
+  try{
+    if(id === 3) setRoute('scores');
+    else if(id === 7) setRoute('votes');
+    else setRoute('board/' + id);
+  }catch(e){}
 }
 function goHomeView(){
   __activeCat = null;
+  try{ setRoute(''); }catch(e){}
   studyBubbleHide();
   var home = document.getElementById('homeView');
   var grid = document.getElementById('grid');
@@ -10084,12 +10345,59 @@ function guestDeny(){
 }
 
 /* ---------- 登录后回到分享位置 ---------- */
+/* v3.18.0：登录成功后的统一回跳。
+   优先级：① 总线里记的「刚才想去哪」→ ② 老分享上下文 → ③ 什么都不做。
+   有了 ①，任何页面（深链、分享、401 过期）都能回到原处，不用再点一遍。 */
 function afterLoginResume(){
+  var next = '';
+  try{ next = ClsAuth.takeNext(); }catch(e){}
+
+  if(next){
+    var base = location.pathname + location.search;
+    var cur = base + location.hash;
+    if(next !== cur){
+      /* 同页不同 hash：换 hash 就够，不整页刷新 */
+      if(next.indexOf(base + '#') === 0){
+        location.hash = next.slice(base.length);
+        return;
+      }
+      /* 站内另一个静态页（分享页 / 时钟页）：整页过去 */
+      location.replace(next);
+      return;
+    }
+  }
+
   if(!SHARE_CTX) return;
   var ctx = SHARE_CTX;
   clearGuest();
   openCat(ctx.boardId);
   if(ctx.card) setTimeout(function(){ locateBoardCard(ctx.card); }, 420);
+}
+
+/* ---------- 登录闸门 ---------- */
+/* 任何「需要登录才能看」的地方都走这里：没登录就记下当前位置再弹登录，
+   登录成功后 afterLoginResume 自动把人送回去。
+   返回值：true = 已登录可以继续；false = 已经接管（弹窗了）。 */
+function needLogin(next){
+  if(isLoggedIn()) return true;
+  try{ ClsAuth.setNext(next || ClsAuth.here()); }catch(e){}
+  openAccount();
+  setTimeout(function(){ try{ acctTab('login'); }catch(e){} }, 60);
+  return false;
+}
+
+/* 登录态在路上过期（401）：一分钟内只提示一次，避免并发请求弹一串 */
+var AUTH_EXPIRED_AT = 0;
+function onAuthExpired(){
+  var now = Date.now();
+  if(now - AUTH_EXPIRED_AT < 60000) return;
+  AUTH_EXPIRED_AT = now;
+  try{ ClsAuth.setNext(ClsAuth.here()); }catch(e){}
+  try{ if(typeof uiMsg === 'function') uiMsg('登录已过期，重新登录后还停在当前页面'); }catch(e){}
+  if(typeof openAccount === 'function'){
+    openAccount();
+    setTimeout(function(){ try{ acctTab('login'); }catch(e){} }, 80);
+  }
 }
 
 /* ---------- 定位到具体卡片 ---------- */
@@ -12677,7 +12985,7 @@ function voteEnsureMounted(){
     voteBody('<div class="vote-empty">'
       + '<div class="vote-empty-ico">🗳️</div>'
       + '<p>投票需要登录后才能参与。</p>'
-      + '<button class="btn" onclick="openAccount(\'login\')">去登录</button>'
+      + '<button class="btn" onclick="needLogin(ClsAuth.here(\'#/votes\'))">去登录</button>'
       + '</div>');
     return;
   }
@@ -12750,6 +13058,7 @@ function voteRenderAll(){
 
   voteBarHtml(
     '<div class="vote-head">'
+    + '<button class="vote-link" type="button" onclick="copyVoteLink()" title="复制这一条投票的直达链接">复制链接</button>'
     + '<h3>🗳️ 投票</h3>'
     + '<p class="vote-sub">' + (openList.length
         ? '进行中 <b>' + openList.length + '</b> 个' + (doneList.length ? ' · 已结束 ' + doneList.length + ' 个' : '')
@@ -13350,7 +13659,7 @@ function scEnsureMounted(){
       '<div class="sc-empty">'
       + '<div class="sc-empty-ico">🔐</div>'
       + '<p>成绩分析需要登录后才能查看。</p>'
-      + '<button class="btn" onclick="openAccount(\'login\')">去登录</button>'
+      + '<button class="btn" onclick="needLogin(ClsAuth.here(\'#/scores\'))">去登录</button>'
       + '</div>';
     return;
   }
@@ -13974,6 +14283,7 @@ function scRenderBar(){
     +   '<button onclick="scExportDialog()" title="勾选要导出的内容，生成一张图片（可直接发微信）">导出图片</button>'
     +   '<button onclick="scPrint()" title="按 A4 版式打印当前页面">打印</button>'
     +   '<button onclick="scShareDialog()" title="生成一个免登录的只读链接">分享</button>'
+    +   '<button onclick="copyHereLink()" title="复制当前这一页的直达链接，同学打开就落在这里">链接</button>'
     + '</div>'
     + '</div>'
     + '<div class="sc-meta">'
@@ -14000,7 +14310,11 @@ function scRenderTabs(){
     /* v2.10.0 成绩对比 PK：任选两人 + 同一场考试（数据用当前考试的 SC.rows） */
     + '<button class="' + (SC.tab === 'pk' ? 'on' : '') + '" onclick="scSetTab(\'pk\')">成绩对比</button>';
 }
-function scSetTab(t){ SC.tab = t; scRenderTabs(); scRenderPane(); }
+function scSetTab(t){
+  SC.tab = t; scRenderTabs(); scRenderPane();
+  /* v3.18.0：三种视角各有一条链接，#/scores/me 直接落到我的画像 */
+  try{ setRoute(t === 'me' ? 'scores/me' : (t === 'pk' ? 'scores/pk' : 'scores')); }catch(e){}
+}
 
 function scRenderPane(){
   if(SC.tab === 'me') scRenderMe();
@@ -20876,7 +21190,10 @@ applyUICfg();   /* 【自定义设置】初始化：应用字号/背景/动效/�
       这是「不再闪烁」的关键。option 里放不了 SVG，单独去 emoji 保留文字。 */
 try{ iconifyStatic(document.body); }catch(e){}
 try{ stripEmojiInOptions(document); }catch(e){}
-applyHash();
+/* ⚠️ v3.18.0：这里**不能**先 applyHash()。
+   启动末尾有一句 goHomeView()（见下面），它会把视图切回首页并清掉地址栏 ——
+   顺序反了的话，#/board/7 这种深链刚被解析就被自己人抹掉（实测 hash 直接变空）。
+   现在统一放到 render() 之后执行，那时 tab-cat-* 容器才真正存在。 */
 updateCountdown();
 setInterval(updateCountdown, 1000);
 /* v3.7.0（站主 #2）：先套缓存，再画首屏 —— 保证第一眼看到的是上次的云端内容，
@@ -20894,6 +21211,8 @@ goHomeView();
    用户瞬间看到内容；接口回来后该刷新刷新（boardMetaLoad 与 syncCloudContent
    里本来就有 render / rerenderAll），数据一个不少。 */
 try{ render(); }catch(e){ console.warn('[boot] 首屏渲染失败，等接口回来再画', e); }
+/* v3.18.0：深链解析放在首屏渲染之后 —— 容器齐了才敢 openCat */
+try{ applyHash(); }catch(e){ console.warn('[boot] 深链解析失败', e); }
 /* v3.7.6：启动后算一次自定义背景的平均色，并给当前可见的弹窗校准字色 */
 try{ if(typeof mkSampleBg === 'function') setTimeout(mkSampleBg, 500); }catch(e){}
 try{ if(typeof mkScanAll === 'function') mkScanAll(900); }catch(e){}

@@ -86,6 +86,9 @@ let idx = read('index.html');
 const before = idx;
 idx = idx.replace(/<script src="\.\/app(?:\.min)?\.js(\?v=\d+)?" defer><\/script>/,
   `<script src="./app.min.js${TAG}" defer></script>`);
+/* v3.18.0：登录态总线也要跟着版本号走，否则 SW 缓存优先会一直递旧的那份 */
+idx = idx.replace(/<script src="\.\/auth-bus\.js(\?v=\d+)?" defer><\/script>/,
+  `<script src="./auth-bus.js${TAG}" defer></script>`);
 if (idx !== before) write('index.html', idx);
 
 /* ---------------- ④ admin.html 引用的 admin.js 也要带新版本号 ----------------
