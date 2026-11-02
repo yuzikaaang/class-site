@@ -114,6 +114,8 @@ t('勾选后带上密钥', packKey.key === 'sk-secret-abc', packKey.key);
 t('设置包带详细程度与目标', packNoKey.cfg.depth === 'deep' && packNoKey.cfg.goal === '进前 10', JSON.stringify(packNoKey.cfg));
 t('设置包有提示词字段（空 = 用站点默认）', typeof packNoKey.cfg.prompt === 'string');
 t('设置包有可识别的 kind', packNoKey.kind === 'ai-config' && packNoKey.app === 'class-site');
+t('默认包里不带班级查询密钥', !packNoKey.api || !packNoKey.api.key, JSON.stringify(packNoKey.api || null));
+t('勾选后班级查询密钥也带上', !!(packKey.api && packKey.api.key === 'ak_demo_1234567890'), JSON.stringify(packKey.api || null));
 
 /* ---------- 4. 诊断导出（本地规则版也能导） ---------- */
 const md = await page.evaluate(() => aiSceneMd('me', true));
@@ -159,6 +161,7 @@ if (chooser) {
       temp: 0.3, depth: 'brief', goal: '先稳住物理', prompt: '你是我的学习教练。'
     },
     key: 'sk-from-file',
+    api: { base: 'https://api.classsite.dpdns.org', key: 'ak_from_file' },
   };
   await chooser.setFiles({ name: 'cfg.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(pack)) });
   await page.waitForTimeout(700);
@@ -173,6 +176,8 @@ if (chooser) {
   t('导入后目标生效', after.goal === '先稳住物理');
   t('导入后密钥生效', after.key === 'sk-from-file');
   t('导入后写进了本机存储', !!after.stored.k && after.stored.depth === 'brief', JSON.stringify(after.stored).slice(0, 120));
+  const savedApi = await page.evaluate(() => localStorage.getItem('cls_ai_apikey_v1'));
+  t('导入后班级查询密钥也落盘（说明书能用）', savedApi === 'ak_from_file', String(savedApi));
 }
 
 /* ---------- 8. 错误文件不会把设置搞坏 ---------- */

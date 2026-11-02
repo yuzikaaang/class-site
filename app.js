@@ -16032,6 +16032,15 @@ function aiCfgPack(includeKey) {
     }
   };
   if (includeKey && AIC.key) pack.key = AIC.key;
+  /* 班级的「本地 AI 查询密钥」也一起带走（只有站主拿得到），
+     换设备后「给本地 AI 的说明书」才不会是一张空头支票。
+     它跟个人 API Key 同一个勾选框控制 —— 都算密钥。 */
+  if (includeKey && SC.config && SC.config.aiKey) {
+    pack.api = {
+      base: (typeof API_BASE !== 'undefined' ? API_BASE : ''),
+      key: SC.config.aiKey
+    };
+  }
   return pack;
 }
 
@@ -16040,6 +16049,9 @@ function aiCfgPack(includeKey) {
 function aiGuideMd() {
   var apiBase = (typeof API_BASE !== 'undefined' && API_BASE ? API_BASE : '') + '/api/scores?action=ai';
   var akey = (SC.config && SC.config.aiKey) || '';
+  if (!akey) {
+    try { akey = localStorage.getItem('cls_ai_apikey_v1') || ''; } catch (e) {}
+  }
   var no = '';
   try {
     (SC.rows || []).forEach(function (r) { if (r.mine && !no) no = String(r.no || '').trim(); });
@@ -16233,6 +16245,9 @@ function aiImportPick() {
           AIC.goal = String(c.goal || '').slice(0, 200);
           AIC.prompt = String(c.prompt || '');
           if (o.key) AIC.key = String(o.key);
+          if (o.api && o.api.key) {
+            try { localStorage.setItem('cls_ai_apikey_v1', String(o.api.key)); } catch (e) {}
+          }
           aiCfgSave();
           aiRenderAll();
           aiExportDlgClose();
