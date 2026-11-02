@@ -280,9 +280,12 @@ function isPublished(rel) {
   return published.some((p) => clean === p || clean.startsWith(p + '/'));
 }
 const refs = new Set();
-for (const f of ['index.html', 'app.js', 'share-card.js', 'admin.js']) {
+for (const f of ['index.html', 'app.js', 'share-card.js', 'admin.js', 'clock.html', 'share.html']) {
+  if (!fs.existsSync(path.join(ROOT, f))) continue;
   const t = read(f);
-  const re = /['"(](\.\/[A-Za-z0-9_\-./]+\.(?:js|css|png|jpg|jpeg|svg|webmanifest|woff2?))['")]/g;
+  /* v3.18.0：允许带 ?v= 查询串（之前只认「引号紧跟文件名」，
+     于是 <script src="./auth-bus.js?v=3180"> 这种完全扫不到 —— 线上直接 404）。 */
+  const re = /['"(](\.\/[A-Za-z0-9_\-./]+\.(?:js|css|png|jpg|jpeg|svg|webmanifest|woff2?))(?:\?[^'"\s)]*)?['")]/g;
   let m;
   while ((m = re.exec(t))) refs.add(m[1].replace(/^\.\//, ''));
 }
