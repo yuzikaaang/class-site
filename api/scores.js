@@ -88,6 +88,8 @@ async function handleGet(req, res, action) {
     case 'unbound': return await unboundNames(req, res);
     /* 分享链接取数：**免登录**（链接本身就是凭证） */
     case 'share-get': return await shareGet(req, res);
+    /* v3.17.0：给本地 AI 的只读查询（免登录，凭 aiKey） */
+    case 'ai':    return await aiQuery(req, res);
     case 'backup-list':   return await backupList(req, res);
     case 'backup-get':    return await backupGet(req, res);
     case 'backup-export': return await backupExport(req, res);
@@ -258,9 +260,9 @@ async function getConfig(req, res) {
   const cfg = await loadConfig(sql);
   const isAdmin = u.role === 'admin';
   /* 姓名对照是「谁的两种叫法」，属于隐私，只给站主。
-     （其余都是展示开关，没有机密内容，整份返回即可。） */
+     AI 查询密钥同理：拿到它就能按学号查分，不能发给学生。 */
   const safe = Object.assign({}, cfg);
-  if (!isAdmin) delete safe.nameMap;
+  if (!isAdmin) { delete safe.nameMap; delete safe.aiKey; }
   ok(res, { config: safe, isAdmin });
 }
 
@@ -295,6 +297,8 @@ async function handlePost(req, res, action) {
     case 'share-update':   return await shareUpdate(req, res);
     case 'share-revoke':   return await shareRevoke(req, res);
     case 'share-list':     return await shareList(req, res);
+    /* v3.17.0：生成 / 重置 AI 查询密钥（管理员） */
+    case 'ai-key':         return await aiKeyGen(req, res);
     case 'backup-run':     return await backupRun(req, res);
     case 'backup-restore': return await backupRestore(req, res);
     default:             return fail(res, 400, '未知的写入动作：' + (action || '(空)'));
@@ -975,6 +979,396 @@ function shareShape(r) {
     usedUp: used,
     alive: !r.revoked && !expired && !used,
   };
+}
+
+/* ============================================================
+   v3.17.0：给「本地 AI」的只读查询接口
+   ------------------------------------------------------------
+   站主原话：「有些同学自己部署了本地 AI，没有云端 API Key，
+   那就只能线上调 API 查数据，再交给本地模型分析。别把全班成绩
+   压成一大段文本塞进提示词，太乱太长，让它按学号自己来查。」
+
+   设计取舍：
+     · 按学号查**单人**，不提供「拉全班明细」的出口；班级只给聚合值
+     · 返回里**没有任何姓名**，连代号都没有 —— 调用方只会看到自己输的学号
+     · 凭站主生成的 aiKey 访问，随时可关（aiApi=off）、可重置
+     · 同一个地址既能被 AI 的联网工具 fetch，也能直接在浏览器里打开看
+     · fmt=md 生成为 Markdown，比 JSON 省一半 token，模型也更好读
+
+   用法：
+     GET /api/scores?action=ai&k=<密钥>
+        &what=me       个人（默认，要带 no=学号）
+        &what=class    班级概况（只有聚合值）
+        &what=exams    已发布的考试列表
+        &exam=<id>     指定考试，不填取最近一场
+        &no=<学号>      个人查询时必填
+        &fmt=md|json   默认 json
+   ============================================================ */
+
+/** 学号归一：去空格、去前导 0。「07」「7」「 7 」当同一个人。 */
+function aiNormNo(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, '').replace(/^0+/, '');
+}
+
+/** 按口径取单科分（与前端 scSubScore 同一套规则） */
+function aiScoreOf(scores, sub, basis) {
+  const v = scores && scores[sub.key || sub.name];
+  if (!v) return null;
+  const useGraded = (basis === 'graded' && sub.graded && v.assigned != null);
+  const n = Number(useGraded ? v.assigned : v.raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+const aiR1 = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.round(Number(v) * 10) / 10);
+
+/** 把结果写回：md 走纯文本，json 走 ok() */
+function aiSend(res, fmt, data, mdFn) {
+  if (fmt === 'md') {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.end(mdFn(data));
+    return;
+  }
+  return ok(res, data);
+}
+
+async function aiQuery(req, res) {
+  const sql = getSql();
+  const cfg = await loadConfig(sql);
+
+  if (String(cfg.aiApi || 'off') !== 'on') {
+    return fail(res, 403, 'AI 查询接口未开启 —— 站主可以在「成绩分析 → 对外展示」里打开');
+  }
+  const want = String(cfg.aiKey || '').trim();
+  if (!want) return fail(res, 403, '还没有生成查询密钥');
+  if (String(req.query.k || req.query.key || '').trim() !== want) {
+    return fail(res, 401, '密钥不对，或者已经被站主重置了');
+  }
+
+  const what = String(req.query.what || 'me').toLowerCase();
+  const fmt = String(req.query.fmt || '').toLowerCase() === 'md' ? 'md' : 'json';
+  const basis = String(req.query.basis || cfg.rankBasis || 'graded') === 'raw' ? 'raw' : 'graded';
+
+  /* ---------- ① 有哪些考试 ---------- */
+  if (what === 'exams') {
+    const rows = await sql`
+      select id, name, exam_date, exam_end_date, exam_type, subjects, cutlines, grade_ref
+        from exams
+       where status = 'published'
+       order by exam_date desc nulls last, id desc`;
+    const list = rows.map((r) => {
+      const e = normalizeExam(r);
+      return {
+        id: e.id, name: e.name, date: e.date, endDate: e.endDate, type: e.type,
+        subjects: (e.subjects || []).length,
+      };
+    });
+    return aiSend(res, fmt, { exams: list, count: list.length }, (d) => {
+      const L = ['# 已发布的考试（' + d.count + ' 场）', ''];
+      if (!d.count) L.push('（还没有已发布的考试）');
+      d.exams.forEach((e) => {
+        L.push('- `' + e.id + '` · ' + e.name + ' · ' + e.date + (e.endDate ? ' ~ ' + e.endDate : '')
+          + ' · ' + e.type + ' · ' + e.subjects + ' 科');
+      });
+      L.push('', '查某一场：把 `exam=` 换成上面的 id；不填就是最近一场。');
+      return L.join('\n');
+    });
+  }
+
+  /* ---------- ② 选定考试 ---------- */
+  let exam = null;
+  const examId = Number(req.query.exam || req.query.id || 0);
+  if (examId) {
+    const r = await sql`
+      select id, name, exam_date, exam_end_date, exam_type, subjects, cutlines, grade_ref, status
+        from exams where id = ${examId}`;
+    if (!r.length) return fail(res, 404, '没有这次考试（id=' + examId + '）');
+    if (String(r[0].status || '') !== 'published') return fail(res, 403, '这次考试还没有发布');
+    exam = normalizeExam(r[0]);
+  } else {
+    const r = await sql`
+      select id, name, exam_date, exam_end_date, exam_type, subjects, cutlines, grade_ref
+        from exams
+       where status = 'published'
+       order by exam_date desc nulls last, id desc
+       limit 1`;
+    if (!r.length) return fail(res, 404, '还没有发布过任何考试');
+    exam = normalizeExam(r[0]);
+  }
+
+  /* ---------- ③ 全班原始分（只在本函数内存里用） ---------- */
+  const rows = await sql`
+    select id, student_name, student_no, scores, school_rank
+      from exam_scores
+     where exam_id = ${exam.id}
+     order by id`;
+
+  const subs = exam.subjects || [];
+  const fullSum = subs.reduce((a, s) => a + (Number(s.full) || 0), 0);
+
+  const people = rows.map((r) => {
+    const sc = jsonCol(r.scores) || {};
+    let t = 0, any = false;
+    subs.forEach((sub) => {
+      const v = aiScoreOf(sc, sub, basis);
+      if (v != null) { t += v; any = true; }
+    });
+    return {
+      no: String(r.student_no == null ? '' : r.student_no).trim(),
+      total: any ? aiR1(t) : null,
+      sc,
+      schoolRank: r.school_rank == null ? null : Number(r.school_rank),
+    };
+  }).filter((p) => p.total != null);
+
+  const n = people.length;
+  const totals = people.map((p) => p.total).slice().sort((a, b) => b - a);
+  const sum = totals.reduce((a, b) => a + b, 0);
+  const avg = n ? sum / n : 0;
+  const median = n ? (n % 2 ? totals[(n - 1) / 2] : (totals[n / 2 - 1] + totals[n / 2]) / 2) : 0;
+  const max = n ? totals[0] : 0;
+  const min = n ? totals[n - 1] : 0;
+  const sd = n > 1
+    ? Math.sqrt(totals.reduce((a, v) => a + (v - avg) * (v - avg), 0) / n)
+    : 0;
+  /* 并列名次：比它高的有几个人 + 1 */
+  const rankOf = (v) => 1 + totals.filter((x) => x > v).length;
+
+  /* 各科统计（班均 / 最高 / 最低 / 及格率） */
+  const subStat = subs.map((sub) => {
+    const vals = [];
+    people.forEach((p) => {
+      const v = aiScoreOf(p.sc, sub, basis);
+      if (v != null) vals.push(v);
+    });
+    const s2 = vals.reduce((a, b) => a + b, 0);
+    const full = Number(sub.full) || 0;
+    return {
+      key: sub.key || sub.name,
+      name: sub.name || sub.key,
+      full,
+      avg: vals.length ? aiR1(s2 / vals.length) : null,
+      max: vals.length ? Math.max.apply(null, vals) : null,
+      min: vals.length ? Math.min.apply(null, vals) : null,
+      passRate: (vals.length && full) ? aiR1(vals.filter((v) => v >= full * 0.6).length / vals.length) : null,
+      n: vals.length,
+    };
+  });
+
+  const cutlines = (exam.cutlines || []).filter((c) => c && c.score != null).map((c) => ({
+    label: String(c.label || '线'),
+    score: Number(c.score),
+    count: people.filter((p) => p.total >= Number(c.score)).length,
+  }));
+
+  /* 分数段：等高 5 段（够模型判断「这次整体什么样」） */
+  const bands = [];
+  if (n) {
+    const q = [0.10, 0.30, 0.60, 0.85].map((x) => totals[Math.min(n - 1, Math.max(0, Math.floor(n * x)))]);
+    const labels = ['前 10%', '10%–30%', '30%–60%', '60%–85%', '后 15%'];
+    labels.forEach((lb) => bands.push({ label: lb, n: 0 }));
+    people.forEach((p) => {
+      if (p.total >= q[0]) bands[0].n++;
+      else if (p.total >= q[1]) bands[1].n++;
+      else if (p.total >= q[2]) bands[2].n++;
+      else if (p.total >= q[3]) bands[3].n++;
+      else bands[4].n++;
+    });
+    bands.forEach((b, i) => { b.min = aiR1([q[0], q[1], q[2], q[3], min][i]); });
+  }
+
+  const classInfo = {
+    n, avg: aiR1(avg), median: aiR1(median), max: aiR1(max), min: aiR1(min),
+    sd: aiR1(sd), range: aiR1(max - min), full: fullSum || 750,
+    bands, subjects: subStat, cutlines,
+  };
+  const examInfo = {
+    id: exam.id, name: exam.name, date: exam.date, endDate: exam.endDate,
+    type: exam.type, basis: basis === 'graded' ? '赋分' : '原始分',
+  };
+
+  /* ---------- ④ 班级概况 ---------- */
+  if (what === 'class' || what === 'board') {
+    return aiSend(res, fmt, { exam: examInfo, class: classInfo }, (d) => {
+      const c = d.class;
+      const L = [];
+      L.push('# 班级成绩概况（匿名）');
+      L.push('');
+      L.push('考试：' + d.exam.name + '（' + d.exam.date + '）· 总分按' + d.exam.basis + '计');
+      L.push('');
+      L.push('## 总分');
+      L.push(c.n + ' 人参考，均分 ' + c.avg + ' / ' + c.full + '，中位 ' + c.median
+        + '，最高 ' + c.max + '，最低 ' + c.min + '，标准差 ' + c.sd + '，极差 ' + c.range + '。');
+      L.push('');
+      L.push('## 分布');
+      c.bands.forEach((b) => L.push('- ' + b.label + '（≥' + b.min + '）：' + b.n + ' 人'));
+      L.push('');
+      L.push('## 各科');
+      L.push('| 科目 | 满分 | 班均 | 得分率 | 最高 | 最低 | 及格率 |');
+      L.push('|---|---|---|---|---|---|---|');
+      c.subjects.forEach((s) => {
+        L.push('| ' + s.name + ' | ' + s.full + ' | ' + s.avg + ' | '
+          + (s.avg && s.full ? Math.round(s.avg / s.full * 100) + '%' : '—') + ' | '
+          + s.max + ' | ' + s.min + ' | '
+          + (s.passRate != null ? Math.round(s.passRate * 100) + '%' : '—') + ' |');
+      });
+      if (c.cutlines.length) {
+        L.push('');
+        L.push('## 分数线');
+        c.cutlines.forEach((x) => L.push('- ' + x.label + ' ' + x.score + '：' + x.count + ' 人上线'));
+      }
+      L.push('');
+      L.push('（说明：这里没有任何学生姓名或学号。要看某个人的数据，用 `what=me&no=学号`。）');
+      return L.join('\n');
+    });
+  }
+
+  /* ---------- ⑤ 个人（按学号） ---------- */
+  const no = String(req.query.no || req.query.sid || '').trim();
+  if (!no) return fail(res, 400, '缺少学号：加 &no=你的学号');
+  if (!n) return fail(res, 404, '这次考试还没有成绩数据');
+
+  const key = aiNormNo(no);
+  const hit = people.filter((p) => aiNormNo(p.no) === key);
+  if (!hit.length) {
+    return fail(res, 404, '学号「' + no + '」在这次考试里没有成绩。可能学号填错了，或者这次没参加。');
+  }
+  const p = hit[0];
+
+  const mine = {
+    no: p.no || no,
+    total: p.total,
+    full: fullSum || 750,
+    rate: fullSum ? aiR1(p.total / fullSum * 100) : null,
+    rank: rankOf(p.total),
+    classSize: n,
+    percentile: n ? aiR1(rankOf(p.total) / n * 100) : null,
+    schoolRank: p.schoolRank,
+    subjects: subs.map((sub) => {
+      const v = aiScoreOf(p.sc, sub, basis);
+      const st = subStat.filter((x) => x.key === (sub.key || sub.name))[0] || {};
+      const vals = people.map((q) => aiScoreOf(q.sc, sub, basis)).filter((x) => x != null);
+      const full = Number(sub.full) || 0;
+      return {
+        key: sub.key || sub.name,
+        name: sub.name || sub.key,
+        full,
+        score: v,
+        rate: (v != null && full) ? aiR1(v / full * 100) : null,
+        avg: st.avg == null ? null : st.avg,
+        diff: (v != null && st.avg != null) ? aiR1(v - st.avg) : null,
+        rank: v == null ? null : 1 + vals.filter((x) => x > v).length,
+        classMax: vals.length ? Math.max.apply(null, vals) : null,
+        classMin: vals.length ? Math.min.apply(null, vals) : null,
+      };
+    }),
+  };
+
+  /* 历次：同一个学号在所有已发布考试里的总分与班排 */
+  const hist = [];
+  try {
+    const all = await sql`
+      select e.id as exam_id, e.name, e.exam_date, e.subjects, s.scores, s.student_no
+        from exam_scores s
+        join exams e on e.id = s.exam_id
+       where e.status = 'published'
+       order by e.exam_date asc, e.id asc`;
+    /* 按考试分组，算这一场全班总分分布，再取「我」的名次 */
+    const byExam = new Map();
+    all.forEach((r) => {
+      const id = Number(r.exam_id);
+      if (!byExam.has(id)) byExam.set(id, { name: r.name, date: fmtDate(r.exam_date), subj: jsonCol(r.subjects) || [], rows: [] });
+      byExam.get(id).rows.push(r);
+    });
+    const seq = Array.from(byExam.values());
+    /* 最近 8 场就够看趋势 */
+    seq.slice(Math.max(0, seq.length - 8)).forEach((ex) => {
+      const arr = [];
+      let mineT = null;
+      ex.rows.forEach((r) => {
+        const sc = jsonCol(r.scores) || {};
+        let t = 0, any = false;
+        ex.subj.forEach((sub) => {
+          const v = aiScoreOf(sc, sub, basis);
+          if (v != null) { t += v; any = true; }
+        });
+        if (!any) return;
+        t = aiR1(t);
+        arr.push(t);
+        if (aiNormNo(r.student_no) === key) mineT = t;
+      });
+      if (mineT == null) return;
+      const higher = arr.filter((x) => x > mineT).length;
+      hist.push({
+        examId: ex.id, name: ex.name, date: ex.date,
+        total: mineT, rank: higher + 1, classSize: arr.length,
+      });
+    });
+  } catch { /* 趋势拉不到不影响主查询 */ }
+
+  return aiSend(res, fmt, {
+    exam: examInfo, me: mine, class: classInfo, history: hist,
+  }, (d) => {
+    const m = d.me;
+    const L = [];
+    L.push('# 个人成绩（匿名查询）');
+    L.push('');
+    L.push('考试：' + d.exam.name + '（' + d.exam.date + '）· 总分按' + d.exam.basis + '计 · 参考 ' + m.classSize + ' 人');
+    L.push('查询学号：' + m.no);
+    L.push('');
+    L.push('## 总分');
+    L.push(m.total + ' / ' + m.full + (m.rate != null ? '（得分率 ' + m.rate + '%）' : '')
+      + '，班级第 ' + m.rank + ' / ' + m.classSize
+      + (m.percentile != null ? '（前 ' + m.percentile + '%）' : '')
+      + (m.schoolRank != null ? '，年级第 ' + m.schoolRank : ''));
+    L.push('班级对照：均分 ' + d.class.avg + '（我 ' + (m.total - d.class.avg >= 0 ? '+' : '')
+      + aiR1(m.total - d.class.avg) + '）、中位 ' + d.class.median + '、最高 ' + d.class.max
+      + '、最低 ' + d.class.min + '、标准差 ' + d.class.sd);
+    L.push('');
+    L.push('## 各科');
+    L.push('| 科目 | 我的分 | 满分 | 得分率 | 班均 | 与班均 | 班排 | 班内最高 | 班内最低 |');
+    L.push('|---|---|---|---|---|---|---|---|---|');
+    m.subjects.forEach((s) => {
+      L.push('| ' + s.name + ' | ' + (s.score == null ? '—' : s.score) + ' | ' + s.full + ' | '
+        + (s.rate == null ? '—' : s.rate + '%') + ' | ' + (s.avg == null ? '—' : s.avg) + ' | '
+        + (s.diff == null ? '—' : (s.diff >= 0 ? '+' : '') + s.diff) + ' | '
+        + (s.rank == null ? '—' : s.rank) + ' | ' + (s.classMax == null ? '—' : s.classMax) + ' | '
+        + (s.classMin == null ? '—' : s.classMin) + ' |');
+    });
+    if (d.history && d.history.length >= 2) {
+      L.push('');
+      L.push('## 历次总分（按时间先后）');
+      L.push(d.history.map((h) => h.date.slice(5) + ' ' + h.name + ' ' + h.total
+        + '（第 ' + h.rank + '/' + h.classSize + '）').join('\n→ '));
+    }
+    if (d.class.cutlines && d.class.cutlines.length) {
+      L.push('');
+      L.push('## 分数线');
+      d.class.cutlines.forEach((c) => {
+        L.push('- ' + c.label + ' ' + c.score + '：我' + (m.total >= c.score ? '已上线（+' + aiR1(m.total - c.score) + '）' : '还差 ' + aiR1(c.score - m.total) + ' 分'));
+      });
+    }
+    L.push('');
+    L.push('（这份数据里没有任何其他同学的姓名，本班只有聚合统计。请基于以上数字分析，不要编造数据里没有的信息。）');
+    return L.join('\n');
+  });
+}
+
+/** 生成 / 重置 AI 查询密钥（管理员） */
+async function aiKeyGen(req, res) {
+  const u = await requireAdmin(req, res);
+  if (!u) return;
+  const sql = getSql();
+  const cfg = await loadConfig(sql);
+  const key = 'ak_' + shareToken().replace(/-/g, 'x').slice(0, 28);
+  const next = { ...cfg, aiKey: key, aiApi: 'on' };
+  await sql`
+    insert into score_config (id, data, updated_at)
+    values (1, ${JSON.stringify(next)}::jsonb, now())
+    on conflict (id) do update set data = ${JSON.stringify(next)}::jsonb, updated_at = now()`;
+  await audit(u.id, 'score-ai-key', 'score_config', 1, '');
+  ok(res, { aiKey: key, aiApi: 'on' });
 }
 
 /** 免登录取数：链接本身就是凭证 */
@@ -1910,6 +2304,12 @@ const DEFAULT_CONFIG = {
   rankBasis: 'graded',
   /* 成绩分析总开关：'published' 学生可见已发布 | 'off' 整个功能对学生关闭 */
   access: 'published',
+  /* v3.17.0：给「本地 AI」用的只读查询接口。
+     'off' 关闭 | 'on' 开放。开放后凭 aiKey + 学号可查**单人**成绩与班级聚合，
+     接口不返回任何真实姓名（只有用户自己输进去的学号）。
+     为什么不直接把全班数据塞进提示词：站主原话「太乱太长」，按需查更省 token。 */
+  aiApi: 'off',
+  aiKey: '',
   /* 姓名对照：成绩表里的姓名 → 站点账号里的姓名（同一个人的两种叫法）
      例：{ '雷博雅': '雷其桐' }（同一个人，成绩表写的是新名字、账号还是旧的）。
      导入、绑账号、找「我」都会先过一遍这张表，所以改一次名字不用动成绩数据。 */
@@ -1940,6 +2340,12 @@ function sanitizeConfig(patch) {
   pick('shareByStudent', ['none', 'self', 'all']);
   pick('rankBasis', ['graded', 'raw']);
   pick('access', ['published', 'off']);
+  pick('aiApi', ['off', 'on']);
+  /* aiKey 只能由管理员经 configSave 写（这个函数本身就要求 admin）；
+     空串 = 清空（等于停用接口）。限长，防止被塞进一整段文本。 */
+  if (patch.aiKey !== undefined) {
+    out.aiKey = String(patch.aiKey || '').trim().slice(0, 80);
+  }
   if (patch.shareDays !== undefined) {
     const n = Number(patch.shareDays);
     if (Number.isFinite(n) && n >= 1 && n <= 3650) out.shareDays = Math.round(n);

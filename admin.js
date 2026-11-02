@@ -15116,6 +15116,21 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '3.17.0', date: '2026-11-02', type: 'feat', title: '成绩 AI 可以导出，也能让本地 AI 按学号查', items: [
+      '站主：「诊断能导出，设置（包括密钥）也能导到另一台设备；自己部署了本地 AI 的同学没有云端接口，就让它线上查数据再本地分析」',
+      '【导出诊断】AI 卡底部新增「导出」：单份 / 全部（Markdown）。内容 = 元信息（考试、时间、模型、详细程度、目标）+ 正文 + 当时喂进去的那份数据，换台设备或换个模型都能复盘',
+      '【设置迁移】设置弹窗底部新增「导出设置 / 导入设置」：一个 JSON 带走服务商、地址、模型、温度、详细程度、目标、提示词。密钥默认不写进文件，勾了才带，并在面板里明说「这文件等于账号密码」',
+      '【下载兜底】浏览器不让下载时（微信内置浏览器常见），自动把内容复制到剪贴板并提示，不会点了没反应',
+      '【给本地 AI 的说明书】一键生成 Markdown：接口地址、我的学号、访问密钥、要做什么、完整提示词、当前档位的标题骨架。发给 Ollama / LM Studio 这类本地模型，它就能自己查成绩再分析',
+      '【后台：给本地 AI 的查询接口】成绩设置里新增区块：开关 + 一键生成/重置密钥 + 可直接点开的示例链接。接口按学号查单人，班级只给聚合值',
+      '【匿名】接口返回里没有任何同学姓名，连「同学N」代号都没有，只有调用方自己填的学号；班级部分是均分、中位、分位、各科得分率、上线人数',
+      '【安全】非管理员读成绩配置时不下发查询密钥；密钥重置后旧的立即失效；接口关闭时一律 403',
+      '【安全】导出设置默认不含密钥；说明书里的密钥只有站主能生成，学生端拿到的是空位，需要站主单独给他'
+    ], pub: [
+      { cat: '成绩', text: 'AI 分析结果可以导出了：卡片底部点「导出」，能存成文件，单份或这次考试的全部都行；换设备也能把 AI 设置一起搬过去（默认不带走密钥）' },
+      { cat: '成绩', text: '自己装了本地 AI 的同学：设置里有「给本地 AI 的说明书」，发给本地模型就能让它按学号查成绩、自己分析' },
+      { cat: '安全', text: '导出的设置默认不含密钥；给本地 AI 的查询返回里没有任何同学姓名，班上只给均分、中位数这类汇总' }
+    ] },
   { version: '3.16.3', date: '2026-11-01', type: 'feat', title: '成绩 AI 大改：单科、追问、目标、班级诊断', items: [
       '站主：「AI 分析还是不太够，我要能设详细程度、要单科的分析、要能跟它对话、要能把目标告诉它；全班成绩单下面也来一个」',
       '【详细程度】配置弹窗新增三档：简洁（300 字，只看结论）/ 标准（600–900 字）/ 详细（1200–1800 字，逐科拆到丢分结构）。选哪档，模型的输出结构和字数都跟着变',
@@ -16449,6 +16464,22 @@ function scEditDisplay(){
       +     scCfgOpt(c.trendDefault, '3', '近 3 次')
       +   '</select></div>'
 
+      /* v3.17.0：给本地 AI 的只读查询接口 */
+      + '<div class="field" style="border:1px solid var(--line);border-radius:10px;padding:12px">'
+      +   '<label style="margin-top:0">给本地 AI 的查询接口</label>'
+      +   '<select id="cfAiApi">'
+      +     scCfgOpt(c.aiApi, 'off', '关闭 —— 不对外提供查询')
+      +     scCfgOpt(c.aiApi, 'on', '开启 —— 凭密钥可查')
+      +   '</select>'
+      +   '<p class="muted" style="font-size:.78rem;margin:8px 0 10px;line-height:1.6">'
+      +     '给<b>自己部署了本地 AI</b>（Ollama / LM Studio 之类，没有云端 Key）的同学用：'
+      +     '让模型按<b>学号</b>来查，而不是把全班成绩压成一大段塞进提示词。'
+      +     '接口<b>不返回任何姓名</b>，班级只给均分、中位、分位这些聚合值；'
+      +     '拿到密钥的人能查任意一个学号的分数，所以别公开贴到群里，泄露了就点重置。</p>'
+      +   '<div id="aiKeyBox" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>'
+      +   '<div id="aiApiDemo" style="margin-top:10px;font-size:.76rem;line-height:1.7"></div>'
+      + '</div>'
+
       + '<div class="field"><label>下面这些内容的「可见范围」</label>'
       +   '<p class="muted" style="font-size:.78rem;margin:6px 0 8px">'
       +     '这几块都是<b>给你看的分析</b>，落到学生手里容易变成公开处刑，所以默认全部隐藏。'
@@ -16475,11 +16506,72 @@ function scEditDisplay(){
         { label: '保存', cls: 'btn', id: 'cfSave' },
       ],
       onMount: function(bx){
+        /* v3.17.0：AI 查询密钥的生成 / 复制 / 重置 */
+        function copyText(t){
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            return navigator.clipboard.writeText(t);
+          }
+          return new Promise(function(res, rej){
+            try{
+              var ta = document.createElement('textarea');
+              ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+              document.body.appendChild(ta); ta.select();
+              var okk = document.execCommand('copy');
+              document.body.removeChild(ta);
+              okk ? res() : rej(new Error('copy failed'));
+            }catch(e){ rej(e); }
+          });
+        }
+        var kb = bx.querySelector('#aiKeyBox');
+        var demo = bx.querySelector('#aiApiDemo');
+        function paintKey(){
+          var k = SC_CFG.aiKey || '';
+          kb.innerHTML = k
+            ? '<code style="font-size:.8rem;padding:5px 8px;background:var(--bg-2);border-radius:6px;word-break:break-all">'
+                + esc(k) + '</code>'
+              + '<button class="btn btn-sm" id="aiKeyCopy">复制密钥</button>'
+              + '<button class="btn btn-sm" id="aiKeyNew">重置</button>'
+            : '<span class="muted" style="font-size:.82rem">还没有密钥</span>'
+              + '<button class="btn btn-sm" id="aiKeyNew">生成密钥</button>';
+          var box = kb.querySelector('#aiKeyCopy');
+          if(box) box.onclick = function(){
+            copyText(k).then(function(){ toast('密钥已复制'); })
+              .catch(function(){ toast('复制失败，手动选中吧', 'err'); });
+          };
+          var nw = kb.querySelector('#aiKeyNew');
+          if(nw) nw.onclick = function(){
+            if(k && !confirm('重置之后旧密钥立刻失效，已经配好的人要重新填。继续？')) return;
+            api('/scores?action=ai-key', { method: 'POST', body: {} }).then(function(j){
+              SC_CFG.aiKey = j.aiKey; SC_CFG.aiApi = 'on';
+              bx.querySelector('#cfAiApi').value = 'on';
+              paintKey(); paintDemo();
+              toast('新密钥已生成');
+            }).catch(function(e){ toast('生成失败：' + (e.message || e), 'err'); });
+          };
+          paintDemo();
+        }
+        function paintDemo(){
+          var k = SC_CFG.aiKey || '你的密钥';
+          var on = bx.querySelector('#cfAiApi').value === 'on';
+          var base = (API_BASE || '') + '/api/scores?action=ai';
+          demo.innerHTML = on
+            ? '<div class="muted">自己先试一下（浏览器直接打开就是给人看的 Markdown）：</div>'
+              + '<div style="word-break:break-all"><a href="' + esc(base + '&k=' + encodeURIComponent(k) + '&what=me&no=你的学号&fmt=md') + '" target="_blank" rel="noopener">'
+              + esc(base + '&k=' + encodeURIComponent(k) + '&what=me&no=你的学号&fmt=md') + '</a></div>'
+              + '<div class="muted" style="margin-top:6px">'
+              +   '<code>what=me</code> 单人 · <code>what=class</code> 班级概况 · <code>what=exams</code> 考试列表 · '
+              +   '<code>fmt=json</code> 给程序读</div>'
+            : '<div class="muted">接口现在是关着的，打开上面的开关并生成密钥后才能用。</div>';
+        }
+        bx.querySelector('#cfAiApi').onchange = paintDemo;
+        paintKey();
+
         bx.querySelector('#cfSave').onclick = function(){
           var patch = {
             access: bx.querySelector('#cfAccess').value,
             rankBasis: bx.querySelector('#cfBasis').value,
             trendDefault: bx.querySelector('#cfTrend').value,
+            aiApi: bx.querySelector('#cfAiApi').value,
           };
           SC_DISPLAY_ITEMS.forEach(function(it){
             patch[it.key] = bx.querySelector('#cf_' + it.key).value;

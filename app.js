@@ -15350,6 +15350,11 @@ function aiDlgEl() {
     + '    <button id="aiSave" class="ai-btn primary">保存</button>'
     + '    <button id="aiClose" class="ai-btn">关闭</button>'
     + '  </div>'
+    + '  <div class="ai-acts ai-acts-sub">'
+    + '    <button id="aiCfgExport" class="ai-btn">导出设置</button>'
+    + '    <button id="aiCfgImport" class="ai-btn">导入设置</button>'
+    + '    <button id="aiCfgGuide" class="ai-btn">给本地 AI 的说明书</button>'
+    + '  </div>'
     + '  <p class="ai-warn">点「保存」后，成绩会以「同学1/同学2…」的代号发给模型，'
     +     '本页再把代号换回真名 —— 模型那边看不到任何真实姓名。但分数本身还是发出去了，这一点请知悉。</p>'
     + '</div>';
@@ -15382,6 +15387,14 @@ function aiDlgEl() {
     d.querySelector('#aiPromptInp').value = AI_PROMPT_DEFAULT;
   });
   d.querySelector('#aiClose').addEventListener('click', aiDlgClose);
+  /* v3.17.0：导出 / 导入 / 说明书 */
+  d.querySelector('#aiCfgExport').addEventListener('click', function () { aiDlgClose(); aiExportDlg('me'); });
+  d.querySelector('#aiCfgImport').addEventListener('click', function () { aiImportPick(); });
+  d.querySelector('#aiCfgGuide').addEventListener('click', function () {
+    var md = aiGuideMd();
+    if (aiDownload('成绩AI_说明书.md', md, 'text/markdown')) toastMini('说明书已导出');
+    else aiCopyText(md).then(function(){ toastMini('浏览器不让下载，已复制到剪贴板'); });
+  });
   d.querySelector('#aiSave').addEventListener('click', function () {
     var prev = AIC.key;
     AIC.provider = d.querySelector('#aiProv').value;
@@ -15833,9 +15846,406 @@ function aiResultHtml(md, model, scene) {
     + '<div class="sc-ai-foot">'
     + '<span class="sc-ai-by">由 ' + esc(model || 'AI') + ' 生成 · 成绩已代号化</span>'
     + '<button class="ai-mini" data-ai-act="copy" data-ai-scene="' + scene + '">复制</button>'
+    + '<button class="ai-mini" data-ai-act="export" data-ai-scene="' + scene + '">导出</button>'
     + '<button class="ai-mini" data-ai-act="again" data-ai-scene="' + scene + '">重新分析</button>'
     + '<button class="ai-mini" data-ai-act="local" data-ai-scene="' + scene + '">看规则版</button>'
     + '</div>';
+}
+
+/* ============================================================================
+ * v3.17.0：导出 / 导入
+ * ----------------------------------------------------------------------------
+ * 站主要求：「能把这次诊断导出，也能把设置（包括 Key）导到另一台设备；
+ * 顺便把提示词、选项都列出来；自己部署了本地 AI 的人，用接口按学号查就行。」
+ *
+ * 三条路各管一段：
+ *   · aiSceneMd  —— 一份诊断的快照（元信息 + 正文 + 当时喂进去的数据）
+ *   · aiCfgPack  —— 可迁移的设置包，Key 默认不进去，要勾
+ *   · aiGuideMd  —— 给本地模型的说明书：接口怎么调、学号多少、提示词什么
+ * ========================================================================== */
+
+function aiStamp(d) {
+  var x = d || new Date();
+  var p = function (n) { return (n < 10 ? '0' : '') + n; };
+  return x.getFullYear() + '-' + p(x.getMonth() + 1) + '-' + p(x.getDate())
+    + ' ' + p(x.getHours()) + ':' + p(x.getMinutes());
+}
+function aiFileStamp(d) {
+  return aiStamp(d).replace(/[-: ]/g, '').slice(0, 12);
+}
+function aiSafeName(s) {
+  return String(s || '').replace(/[\\/:*?"<>|\r\n\t]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 60);
+}
+
+/* 下载。微信里 <a download> 有时没反应，所以返回 false 让调用方退回复制。 */
+function aiDownload(name, text, mime) {
+  try {
+    var blob = new Blob([text], { type: (mime || 'text/plain') + ';charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      try { document.body.removeChild(a); } catch (e) {}
+      URL.revokeObjectURL(url);
+    }, 1500);
+    return true;
+  } catch (e) { return false; }
+}
+
+function aiCopyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise(function (res, rej) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok2 = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok2 ? res() : rej(new Error('copy'));
+    } catch (e) { rej(e); }
+  });
+}
+
+/* 本地规则版是 HTML，导出成文本时把块级标签换成换行 */
+function aiHtmlToText(html) {
+  return String(html || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6]|table|section|ul|ol)>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function aiSceneTitle(scene) {
+  if (scene === 'me') return '我的画像 · 总览';
+  if (scene === 'pk') return '成绩对比';
+  if (scene === 'board') return '班级诊断';
+  if (scene.indexOf('subj_') === 0) {
+    var key = scene.slice(5);
+    var list = (typeof aiSubjList === 'function') ? aiSubjList() : [];
+    for (var i = 0; i < list.length; i++) if (list[i].key === key) return '我的画像 · ' + list[i].name;
+    return '我的画像 · 单科';
+  }
+  return scene;
+}
+
+/* Markdown 表格单元格：竖线要转义，换行压成空格 */
+function aiMdCell(v) {
+  return String(v == null ? '' : v).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim();
+}
+
+/* 一份诊断 → Markdown */
+function aiSceneMd(scene, withData) {
+  var r = AIQ.result[scene];
+  var p = AIQ.payload[scene];
+  var L = [];
+  L.push('# ' + aiSceneTitle(scene) + ' · AI 诊断');
+  L.push('');
+  L.push('| 项 | 值 |');
+  L.push('|---|---|');
+  L.push('| 考试 | ' + aiMdCell((p && p.examName) || (SC.exam && SC.exam.name) || '—') + ' |');
+  L.push('| 导出时间 | ' + aiStamp() + ' |');
+  L.push('| 模型 | ' + (r ? (r.model || '—') : '本地规则（未联网）') + ' |');
+  L.push('| 详细程度 | ' + aiDepthSpec().label + ' · ' + aiDepthSpec().words + ' |');
+  if (AIC.goal) L.push('| 我的目标 | ' + aiMdCell(AIC.goal) + ' |');
+  L.push('');
+  L.push('---');
+  L.push('');
+  if (r && r.text) {
+    L.push(String(r.text).trim());
+  } else if (AIQ.localHtml[scene]) {
+    L.push('> 这份是站点内置规则算的，没有调用模型。');
+    L.push('');
+    L.push(aiHtmlToText(AIQ.localHtml[scene]));
+  } else {
+    L.push('（这个场景还没有内容）');
+  }
+  if (withData && p) {
+    L.push('');
+    L.push('---');
+    L.push('');
+    L.push('## 附：分析时喂给模型的数据');
+    L.push('');
+    L.push('```text');
+    try { L.push(aiMessages(p).body); } catch (e) { L.push('（数据重建失败）'); }
+    L.push('```');
+  }
+  return L.join('\n') + '\n';
+}
+
+/* 当前有内容的场景（顺序固定，导出时按这个来） */
+function aiSceneList() {
+  var out = [];
+  ['me', 'pk', 'board'].forEach(function (s) {
+    if (AIQ.result[s] || AIQ.localHtml[s]) out.push(s);
+  });
+  Object.keys(AIQ.payload || {}).forEach(function (s) {
+    if (s.indexOf('subj_') !== 0) return;
+    if ((AIQ.result[s] || AIQ.localHtml[s]) && out.indexOf(s) < 0) out.push(s);
+  });
+  return out;
+}
+
+function aiAllMd() {
+  var list = aiSceneList();
+  if (!list.length) return '';
+  var L = [];
+  L.push('# 成绩 AI 诊断合集 · ' + ((SC.exam && SC.exam.name) || ''));
+  L.push('');
+  L.push('导出时间 ' + aiStamp() + ' · 共 ' + list.length + ' 份');
+  L.push('');
+  list.forEach(function (s) {
+    L.push('\n\n---\n\n');
+    L.push(aiSceneMd(s, false));
+  });
+  return L.join('\n');
+}
+
+/* 设置包。Key 默认不带 —— 站主可以勾上（导出时明确提醒过一次）。 */
+function aiCfgPack(includeKey) {
+  var pack = {
+    app: 'class-site',
+    kind: 'ai-config',
+    version: (typeof SITE_VERSION !== 'undefined' ? SITE_VERSION : ''),
+    at: new Date().toISOString(),
+    cfg: {
+      provider: AIC.provider,
+      base: AIC.base,
+      model: AIC.model,
+      temp: AIC.temp,
+      depth: aiDepth(),
+      goal: AIC.goal || '',
+      prompt: AIC.prompt || ''
+    }
+  };
+  if (includeKey && AIC.key) pack.key = AIC.key;
+  return pack;
+}
+
+/* 给本地模型的说明书。
+   站主的场景：同学跑 Ollama / LM Studio，没有云端 Key，让模型自己按学号查。 */
+function aiGuideMd() {
+  var apiBase = (typeof API_BASE !== 'undefined' && API_BASE ? API_BASE : '') + '/api/scores?action=ai';
+  var akey = (SC.config && SC.config.aiKey) || '';
+  var no = '';
+  try {
+    (SC.rows || []).forEach(function (r) { if (r.mine && !no) no = String(r.no || '').trim(); });
+  } catch (e) {}
+
+  var L = [];
+  L.push('# 成绩分析助手 · 使用说明');
+  L.push('');
+  L.push('把整份文件发给你的 AI（本地模型也行），再告诉它「开始分析」。');
+  L.push('数据不在文件里，让它按下面的接口自己查 —— 接口返回的是**匿名**数据，没有同学姓名。');
+  L.push('');
+  L.push('## 一、接口');
+  L.push('');
+  L.push('```');
+  L.push('GET ' + apiBase);
+  L.push('```');
+  L.push('');
+  L.push('| 参数 | 必填 | 说明 |');
+  L.push('|---|---|---|');
+  L.push('| `k` | 是 | 访问密钥，见下面第三节 |');
+  L.push('| `no` | 查个人时必填 | 学号，如 `07` |');
+  L.push('| `what` | 否 | `me` 个人（默认）/ `class` 班级概况 / `exams` 考试列表 |');
+  L.push('| `exam` | 否 | 考试 id，不填取最近一场 |');
+  L.push('| `fmt` | 否 | `md` 返回 Markdown（推荐，省 token）/ `json` 给程序读 |');
+  L.push('');
+  L.push('示例：`' + apiBase + '&k=' + (akey || '密钥') + '&what=me&no=' + (no || '你的学号') + '&fmt=md`');
+  L.push('');
+  L.push('## 二、我的学号');
+  L.push('');
+  L.push('`' + (no || '（没查到，请自己填成绩表上的学号）') + '`');
+  L.push('');
+  L.push('## 三、访问密钥');
+  L.push('');
+  L.push('`' + (akey || '（站主还没开放这个接口，找他要一个密钥）') + '`');
+  L.push('');
+  L.push('## 四、你要做的事');
+  L.push('');
+  L.push('1. 先用 `what=me&no=' + (no || '学号') + '&fmt=md` 拉这个人的成绩；');
+  L.push('2. 如果还想看班级整体，再拉 `what=class&fmt=md`；');
+  L.push('3. 然后严格按第五节的提示词分析。**不要编造数据里没有的数字**；');
+  L.push('4. 如果接口调不通（网络受限），让用户把那个链接在浏览器里打开，把内容整段粘给你。');
+  L.push('');
+  L.push('## 五、提示词');
+  L.push('');
+  L.push('```text');
+  L.push(aiPrompt());
+  L.push('```');
+  L.push('');
+  L.push('## 六、详细程度');
+  L.push('');
+  L.push('当前选的是「' + aiDepthSpec().label + '」：' + aiDepthSpec().words + '。用这些二级标题，顺序不要变：');
+  L.push('');
+  L.push('```');
+  L.push(aiDepthSpec().heads);
+  L.push('```');
+  if (AIC.goal) {
+    L.push('');
+    L.push('## 七、我的目标');
+    L.push('');
+    L.push(AIC.goal);
+  }
+  return L.join('\n') + '\n';
+}
+
+/* 导出 / 导入面板 */
+var AI_EXPORT_ITEMS = [
+  { key: 'one',   t: '导出这份诊断',   s: 'Markdown，含元信息和当时喂进去的数据' },
+  { key: 'all',   t: '导出全部诊断',   s: '把这个考试下所有场景合成一份' },
+  { key: 'cfg',   t: '导出 AI 设置',   s: 'JSON，换设备导入就能用；默认不含密钥' },
+  { key: 'imp',   t: '导入 AI 设置',   s: '读一份之前导出的 JSON' },
+  { key: 'guide', t: '给本地 AI 的说明书', s: '接口地址 + 学号 + 提示词，直接发给本地模型' },
+  { key: 'copy',  t: '复制这份诊断',   s: '纯文本，粘到哪儿都行' }
+];
+
+function aiExportDlg(scene) {
+  var d = document.getElementById('aiExpDlg');
+  if (!d) {
+    d = document.createElement('div');
+    d.id = 'aiExpDlg';
+    d.className = 'ai-dlg';
+    d.innerHTML = '<div class="ai-box ai-xbox">'
+      + '<h3>导出 / 导入</h3>'
+      + '<p class="ai-note">导出的文件都在你自己手机或电脑上，不经服务器。'
+      + '<b>设置包里默认不含密钥</b>，要带走的话勾一下。</p>'
+      + '<div class="ai-xgrid" id="aiXGrid"></div>'
+      + '<label class="ai-xkey"><input type="checkbox" id="aiXKey"> 导出设置时把 API Key 一起写进去</label>'
+      + '<p class="ai-note" id="aiXTip" style="margin:2px 0 10px">'
+      + '勾上之后，这个 JSON 拿到的人就能用你的 Key 花钱。只在自己设备之间传。</p>'
+      + '<div class="ai-acts"><button class="ai-btn" id="aiXClose">关闭</button></div>'
+      + '</div>';
+    document.body.appendChild(d);
+    d.addEventListener('click', function (e) { if (e.target === d) aiExportDlgClose(); });
+    d.querySelector('#aiXClose').onclick = aiExportDlgClose;
+
+    d.querySelector('#aiXGrid').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-x]');
+      if (!b) return;
+      var k = b.getAttribute('data-x');
+      var sc = d.getAttribute('data-scene') || 'me';
+      var inc = !!d.querySelector('#aiXKey').checked;
+      var base = '成绩AI_' + aiSafeName((SC.exam && SC.exam.name) || '') + '_' + aiFileStamp();
+
+      if (k === 'one') {
+        var md1 = aiSceneMd(sc, true);
+        if (aiDownload(base + '_' + aiSafeName(aiSceneTitle(sc)) + '.md', md1, 'text/markdown')) toastMini('已导出');
+        else aiCopyText(md1).then(function () { toastMini('浏览器不让下载，已复制到剪贴板'); });
+        return;
+      }
+      if (k === 'all') {
+        var md2 = aiAllMd();
+        if (!md2) { toastMini('还没有任何诊断内容', 'err'); return; }
+        if (aiDownload(base + '_合集.md', md2, 'text/markdown')) toastMini('已导出');
+        else aiCopyText(md2).then(function () { toastMini('浏览器不让下载，已复制到剪贴板'); });
+        return;
+      }
+      if (k === 'cfg') {
+        var js = JSON.stringify(aiCfgPack(inc), null, 2);
+        if (aiDownload('成绩AI设置_' + aiFileStamp() + '.json', js, 'application/json')) {
+          toastMini(inc ? '已导出（含密钥，别外传）' : '已导出（不含密钥）');
+        } else {
+          aiCopyText(js).then(function () { toastMini('浏览器不让下载，已复制到剪贴板'); });
+        }
+        return;
+      }
+      if (k === 'guide') {
+        var gd = aiGuideMd();
+        if (aiDownload('成绩AI_说明书.md', gd, 'text/markdown')) toastMini('已导出');
+        else aiCopyText(gd).then(function () { toastMini('浏览器不让下载，已复制到剪贴板'); });
+        return;
+      }
+      if (k === 'copy') {
+        aiCopyText(aiSceneMd(sc, false)).then(function () { toastMini('已复制'); },
+          function () { toastMini('复制失败', 'err'); });
+        return;
+      }
+      if (k === 'imp') {
+        aiImportPick();
+        return;
+      }
+    });
+
+    d.querySelector('#aiXKey').addEventListener('change', function () {
+      d.querySelector('#aiXTip').innerHTML = this.checked
+        ? '<b style="color:#c2410c">会带上 Key。</b>这个文件等同于你的账号密码，只在自己设备之间传。'
+        : '勾上之后，这个 JSON 拿到的人就能用你的 Key 花钱。只在自己设备之间传。';
+    });
+  }
+
+  /* 每次打开重建列表：有些场景可能还没生成 */
+  var grid = d.querySelector('#aiXGrid');
+  grid.innerHTML = AI_EXPORT_ITEMS.map(function (it) {
+    var dis = (it.key === 'all' && !aiSceneList().length);
+    return '<button class="ai-xitem" data-x="' + it.key + '"' + (dis ? ' disabled' : '') + '>'
+      + '<b>' + it.t + '</b><span>' + it.s + '</span></button>';
+  }).join('');
+  d.setAttribute('data-scene', scene);
+  d.querySelector('#aiXKey').checked = false;
+  d.className = 'ai-dlg show';
+}
+function aiExportDlgClose() {
+  var d = document.getElementById('aiExpDlg');
+  if (d) d.className = 'ai-dlg';
+}
+
+/* 选文件 → 校验 → 写入 */
+function aiImportPick() {
+  var inp = document.getElementById('aiImpFile');
+  if (!inp) {
+    inp = document.createElement('input');
+    inp.type = 'file';
+    inp.id = 'aiImpFile';
+    inp.accept = '.json,application/json';
+    inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0];
+      if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        try {
+          var o = JSON.parse(String(rd.result || ''));
+          if (!o || o.kind !== 'ai-config' || !o.cfg) throw new Error('不是成绩 AI 的设置文件');
+          var c = o.cfg;
+          if (!confirm('导入会覆盖这台设备上的 AI 设置'
+            + (o.key ? '（包括 Key）' : '（不含 Key，Key 保持原样）') + '，继续？')) return;
+          AIC.provider = (c.provider === 'openai' || c.provider === 'custom') ? c.provider : 'deepseek';
+          AIC.base = String(c.base || '');
+          AIC.model = String(c.model || '');
+          AIC.temp = (typeof c.temp === 'number') ? c.temp : 0.6;
+          AIC.depth = (c.depth === 'brief' || c.depth === 'deep') ? c.depth : 'std';
+          AIC.goal = String(c.goal || '').slice(0, 200);
+          AIC.prompt = String(c.prompt || '');
+          if (o.key) AIC.key = String(o.key);
+          aiCfgSave();
+          aiRenderAll();
+          aiExportDlgClose();
+          toastMini('设置已导入' + (o.key ? '（含密钥）' : ''));
+        } catch (e) {
+          toastMini('导入失败：' + (e.message || e), 'err');
+        }
+      };
+      rd.readAsText(f);
+      inp.value = '';
+    });
+  }
+  inp.click();
 }
 
 /* 提示条：永远挂在本地规则正文的下面，说明「这份不是真模型」+ 给入口 */
@@ -15851,6 +16261,7 @@ function aiBarHtml(scene) {
         ? '<button class="ai-go" data-ai-act="run" data-ai-scene="' + scene + '">用 ' + esc(name) + ' 重新分析</button>'
         : '<button class="ai-go" data-ai-act="cfg" data-ai-scene="' + scene + '">先填 API Key</button>')
     + '  <button class="ai-mini" data-ai-act="cfg" data-ai-scene="' + scene + '">设置</button>'
+    + '  <button class="ai-mini" data-ai-act="export" data-ai-scene="' + scene + '">导出</button>'
     + '</div>'
     + (ready ? '' : '<div class="ai-idle-h">用自己的 Key，只有你点的时候才会请求，按量计费（DeepSeek 一次约几分钱）。</div>')
     + '</div>';
@@ -15967,6 +16378,7 @@ document.addEventListener('click', function (e) {
   e.preventDefault();
   e.stopPropagation();
   if (act === 'cfg') { aiDlgOpen(); return; }
+  if (act === 'export') { aiExportDlg(scene); return; }
   if (act === 'tab') {
     var tb = btn.getAttribute('data-tab');
     if (tb === 'subj') {

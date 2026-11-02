@@ -3065,6 +3065,29 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .ai-warn{font-size:.7rem;line-height:1.75;color:#8b8398;margin:12px 0 0;
   padding-top:10px;border-top:1px dashed #ebe3f5}
 
+/* —— 导出 / 导入（v3.17.0） —— */
+.ai-acts-sub{margin-top:8px}
+.ai-acts-sub .ai-btn{font-size:.72rem;font-weight:500;height:34px;color:#6b6280}
+.ai-xbox{max-width:470px}
+.ai-xgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 10px}
+.ai-xitem{display:flex;flex-direction:column;gap:3px;text-align:left;padding:10px 11px;
+  border:1px solid #e6ddf2;border-radius:11px;background:#faf8ff;cursor:pointer;font:inherit;
+  transition:border-color .15s ease,background .15s ease,transform .12s ease}
+.ai-xitem b{font-size:.78rem;color:#3d3350;font-weight:600}
+.ai-xitem span{font-size:.66rem;line-height:1.5;color:#857b99}
+.ai-xitem:hover{border-color:#c4b5fd;background:#f5f0ff}
+.ai-xitem:active{transform:scale(.985)}
+.ai-xitem:disabled{opacity:.45;cursor:default}
+.ai-xkey{display:flex;align-items:center;gap:7px;font-size:.72rem;color:#6b6280;margin:2px 0 6px;cursor:pointer}
+.ai-xkey input{accent-color:#7c3aed}
+@media (max-width:430px){.ai-xgrid{grid-template-columns:1fr}}
+.dark .ai-box{background:#221c2e}
+.dark .ai-box h3{color:#e6ddf5}
+.dark .ai-xitem{background:#2b2438;border-color:#443a5e}
+.dark .ai-xitem b{color:#ddd3f0}
+.dark .ai-xitem span{color:#9c92b3}
+.dark .ai-xitem:hover{border-color:#6d5a96;background:#322a44}
+
 /* —— 暗色 —— */
 .dark .ai-idle{background:linear-gradient(180deg,#2b2438,#282236);border-color:#443a5e}
 .dark .ai-idle-t{color:#c4b5fd}
@@ -5271,10 +5294,10 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '3.16.3';
+var SITE_VERSION = '3.17.0';
 var VER_DATE = '2026-10-30';
 </script>
-<script src="./app.min.js?v=3163" defer></script>
+<script src="./app.min.js?v=3170" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
