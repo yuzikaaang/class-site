@@ -226,7 +226,9 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       +   '</div></div>'
       + '<div class="meta" id="meta"></div>'
       + '<div id="body"></div>'
-      + '<div class="foot">班级站点 · 成绩分析<br>这是一个只读分享页，不用登录，也不会存你的任何信息。</div>';
+      + (ME
+          ? '<div class="foot">班级站点 · 成绩分析<br>你已经登录，这一页仍然只显示这位同学分享给你的范围；想看你自己的，点上面的「看我的成绩」。</div>'
+          : '<div class="foot">班级站点 · 成绩分析<br>这是一个只读分享页，不用登录，也不会存你的任何信息。</div>');
 
     var sel = document.getElementById('exSel');
     sel.innerHTML = exams.map(function(e, i){
