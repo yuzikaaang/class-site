@@ -1273,7 +1273,8 @@ async function aiQuery(req, res) {
   const hist = [];
   try {
     const all = await sql`
-      select e.id as exam_id, e.name, e.exam_date, e.subjects, s.scores, s.student_no
+      select e.id as exam_id, e.name, e.exam_date, e.subjects,
+             s.scores, s.student_no, s.student_name
         from exam_scores s
         join exams e on e.id = s.exam_id
        where e.status = 'published'

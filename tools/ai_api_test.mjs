@@ -39,6 +39,8 @@ const mineBlock = fn.slice(fn.indexOf('const mine = {'), fn.indexOf('/* 历次')
 t('个人返回对象里没有 name 字段', mineBlock.length > 100 && !/\bname:\s*p\.name|\bname:\s*String\(/.test(mineBlock),
   mineBlock.slice(0, 80));
 t('姓名字段有内部用途注释（历次兜底）', /不会出现在任何响应里/.test(fn));
+/* 回归：历次那条 SQL 必须把 student_name 选出来，否则兜底永远拿到空串（v3.17.0 踩过） */
+t('历次 SQL 选出了 student_name', /s\.student_no, s\.student_name/.test(fn));
 t('个人返回只回显调用方输入的学号', /no: p\.no \|\| no/.test(fn));
 
 /* ---------- 4. 纯函数 ---------- */
