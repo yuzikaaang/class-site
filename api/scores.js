@@ -1116,6 +1116,10 @@ async function aiQuery(req, res) {
     });
     return {
       no: String(r.student_no == null ? '' : r.student_no).trim(),
+      /* v3.17.0：姓名只留在服务端内存里，用来串「历次」——
+         早期考试的学号是 6 位、现在是 8 位，光靠学号会断档。
+         它不会出现在任何响应里（返回体只回显调用方自己填的学号）。 */
+      name: String(r.student_name || '').trim(),
       total: any ? aiR1(t) : null,
       sc,
       schoolRank: r.school_rank == null ? null : Number(r.school_rank),
@@ -1278,7 +1282,7 @@ async function aiQuery(req, res) {
     const byExam = new Map();
     all.forEach((r) => {
       const id = Number(r.exam_id);
-      if (!byExam.has(id)) byExam.set(id, { name: r.name, date: fmtDate(r.exam_date), subj: jsonCol(r.subjects) || [], rows: [] });
+      if (!byExam.has(id)) byExam.set(id, { id: id, name: r.name, date: fmtDate(r.exam_date), subj: jsonCol(r.subjects) || [], rows: [] });
       byExam.get(id).rows.push(r);
     });
     const seq = Array.from(byExam.values());
@@ -1296,7 +1300,9 @@ async function aiQuery(req, res) {
         if (!any) return;
         t = aiR1(t);
         arr.push(t);
-        if (aiNormNo(r.student_no) === key) mineT = t;
+        /* 学号优先；学号对不上时按姓名兜底（老考试学号位数不一样） */
+        if (aiNormNo(r.student_no) === key
+          || (p.name && String(r.student_name || '').trim() === p.name)) mineT = t;
       });
       if (mineT == null) return;
       const higher = arr.filter((x) => x > mineT).length;
@@ -1346,7 +1352,10 @@ async function aiQuery(req, res) {
       L.push('');
       L.push('## 分数线');
       d.class.cutlines.forEach((c) => {
-        L.push('- ' + c.label + ' ' + c.score + '：我' + (m.total >= c.score ? '已上线（+' + aiR1(m.total - c.score) + '）' : '还差 ' + aiR1(c.score - m.total) + ' 分'));
+        L.push('- ' + c.label + ' ' + c.score + '：'
+          + (m.total >= c.score
+            ? '已过线，高出 ' + aiR1(m.total - c.score) + ' 分'
+            : '还差 ' + aiR1(c.score - m.total) + ' 分'));
       });
     }
     L.push('');

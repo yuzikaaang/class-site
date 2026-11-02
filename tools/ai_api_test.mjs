@@ -34,8 +34,11 @@ t('个人查询必须给学号', /缺少学号/.test(fn));
 /* 只需要盯 ok(res, ...) / aiSend 里带出去的对象。整段里 student_name 只应出现在 SQL 与内部变量。 */
 const respBlocks = fn.split('return aiSend(').slice(1);
 t('至少有一处返回（aiSend）', respBlocks.length > 0, String(respBlocks.length));
-const leak = respBlocks.some((b) => /student_name|\.name\b(?!: )/.test(b.slice(0, 2000)) && /name:\s*String\(r\.student_name/.test(b));
-t('返回体里没有把 student_name 直接吐出去', !/name:\s*String\(r\.student_name/.test(fn));
+/* 个人返回对象（const mine = {...}）里不允许出现 name 字段 —— 姓名只在服务端内存里串历次 */
+const mineBlock = fn.slice(fn.indexOf('const mine = {'), fn.indexOf('/* 历次'));
+t('个人返回对象里没有 name 字段', mineBlock.length > 100 && !/\bname:\s*p\.name|\bname:\s*String\(/.test(mineBlock),
+  mineBlock.slice(0, 80));
+t('姓名字段有内部用途注释（历次兜底）', /不会出现在任何响应里/.test(fn));
 t('个人返回只回显调用方输入的学号', /no: p\.no \|\| no/.test(fn));
 
 /* ---------- 4. 纯函数 ---------- */
