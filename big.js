@@ -302,6 +302,8 @@
     if(h) h.style.setProperty('--bhw-fs', String(FS_STEPS[BIG.fs]));
     var v = $('bhwFsVal');
     if(v) v.textContent = Math.round(FS_STEPS[BIG.fs] * 100) + '%';
+    /* 字号一变，卡片高度跟着变 —— 立刻重排一次（站主第 2 条：每次调字号都要实时重排） */
+    if(BIG.hwOn) scheduleLayout();
   }
   BIG.fs = readFs();
   BIG.fsStep = function (d){
@@ -346,6 +348,14 @@
     }
   }, true);
 
+  /* 窗口尺寸变了（大屏切分辨率 / 浏览器缩放）卡片要重新分配 */
+  var _rzTimer = null;
+  window.addEventListener('resize', function (){
+    if(!BIG.hwOn) return;
+    if(_rzTimer) clearTimeout(_rzTimer);
+    _rzTimer = setTimeout(function (){ _rzTimer = null; BIG.relayout(); }, 160);
+  });
+
   function todayStr(){
     var d = new Date();
     function p(n){ return (n < 10 ? '0' : '') + n; }
@@ -385,7 +395,7 @@
       out += isVid
         ? '<video class="bhw-img" src="' + attr0(img) + '" controls preload="metadata" playsinline></video>'
         : '<img class="bhw-img" src="' + attr0(img) + '" alt="作业配图" loading="lazy"'
-          + ' onclick="BIG.zoomImg(this.src)" title="点一下看大图">';
+          + ' onload="BIG.relayout()" onclick="BIG.zoomImg(this.src)" title="点一下看大图">';
     }
     if(video){
       out += '<video class="bhw-img" src="' + attr0(video) + '" controls preload="metadata" playsinline></video>';
@@ -425,9 +435,11 @@
   function taskHtml(it, si, ti, t, admin){
     var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
     var text = o.text || '';
+    /* 编辑态用 textarea + 自适应高度：单行 input 装不下长句，字一多就被框子截断。 */
     var main = admin
-      ? '<input class="bhw-in" value="' + attr0(text) + '" placeholder="写一项作业…"'
-        + ' onchange="BIG.hwTask(' + si + ',' + ti + ',this.value)">'
+      ? '<textarea class="bhw-in bhw-area" rows="1" placeholder="写一项作业…"'
+        + ' oninput="BIG.autoGrow(this)"'
+        + ' onchange="BIG.hwTask(' + si + ',' + ti + ',this.value)">' + esc0(text) + '</textarea>'
       : '<span class="bhw-txt">' + esc0(text) + '</span>';
     return '<div class="bhw-task">'
       + '<span class="bhw-dot"></span>'
@@ -435,6 +447,17 @@
       + (admin ? '<button type="button" class="bhw-x" title="删除这一项"'
         + ' onclick="BIG.hwDelTask(' + si + ',' + ti + ')">' + ico('x', 13) + '</button>' : '')
       + '</div>';
+  }
+
+  /* 自适应高度：先归零再读 scrollHeight，字号一变重算一遍（见 applyFs / layoutCards） */
+  BIG.autoGrow = function (el){
+    if(!el) return;
+    el.style.height = 'auto';
+    el.style.height = (el.scrollHeight + 2) + 'px';
+  };
+  function growAll(){
+    var arr = document.querySelectorAll('#bhwColA .bhw-area,#bhwColB .bhw-area,#bhwOther .bhw-area');
+    for(var i = 0; i < arr.length; i++) BIG.autoGrow(arr[i]);
   }
 
   function subjCard(it, si, admin){
@@ -539,7 +562,8 @@
     if(hw.title) hw._t = hw.title;
     var items = hw.items || [];
 
-    /* 分栏：固定 6 科按语数英 / 物化生 落位，其余（政治、历史、其他…）进底部 */
+    /* v4.1.0：不再「左三右三」写死。6 科全排进 colA，再交给 layoutCards()
+       按真实高度往两栏里塞（怎么省空间怎么排）。其余科目（政治、历史…）进底部。 */
     var mapA = {}, mapB = {}, extras = [];
     items.forEach(function (it, si){
       var nm = String(it.subject || '').trim();
@@ -548,21 +572,14 @@
       else extras.push({ it: it, si: si });
     });
 
-    function fill(host, keys, map){
-      var html = '';
-      keys.forEach(function (k){
-        var hit = map[k];
-        if(hit) html += subjCard(hit.it, hit.si, admin);
-      });
-      if(!html){
-        html = '<div class="bhw-subj"><div class="bhw-empty">'
-          + (admin ? '这一栏还没有科目，可在下方「添加科目」里加。' : '这一栏暂时没有作业。')
-          + '</div></div>';
-      }
-      host.innerHTML = html;
-    }
-    fill(colA, SUBJ_A, mapA);
-    fill(colB, SUBJ_B, mapB);
+    var mainHtml = '';
+    SUBJ_A.concat(SUBJ_B).forEach(function (k){
+      var hit = mapA[k] || mapB[k];
+      if(hit) mainHtml += subjCard(hit.it, hit.si, admin);
+    });
+    colA.innerHTML = mainHtml || ('<div class="bhw-subj"><div class="bhw-empty">'
+      + (admin ? '还没有科目，可在下方「添加科目」里加。' : '暂时没有作业。') + '</div></div>');
+    colB.innerHTML = '';
 
     if(other){
       other.innerHTML = extras.length
@@ -580,7 +597,80 @@
     }
 
     renderSide();
+    scheduleLayout();
   };
+
+  /* —— 卡片排布（v4.1.0）——
+     站主要求：像 ClassWorks 那样「怎么省空间怎么排，不需要按顺序排」。
+     做法：把两栏的科目卡片收起来 → 量出各自真实高度 → 逐个塞进当前更矮的一栏。
+     触发点：渲染完、每次调字号、图片加载完、窗口尺寸变化。 */
+  var _layTimer = null;
+  function isCard(el){ return !!(el && el.classList && el.classList.contains('bhw-subj')); }
+  function sameSeq(a, b){
+    if(a.length !== b.length) return false;
+    for(var i = 0; i < a.length; i++) if(a[i] !== b[i]) return false;
+    return true;
+  }
+  BIG.layoutCards = function (){
+    var colA = $('bhwColA'), colB = $('bhwColB');
+    if(!colA || !colB) return;
+    /* 正在输入时别搬 DOM：会丢焦点、丢光标位置（站主踩过一次） */
+    var ae = document.activeElement;
+    if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)
+      && (colA.contains(ae) || colB.contains(ae))) return;
+
+    var cards = [].slice.call(colA.children).filter(isCard)
+      .concat([].slice.call(colB.children).filter(isCard));
+    if(cards.length < 2) return;
+
+    /* 先取消弹性伸展，量到「内容自然高度」——上一步为了填满屏幕可能把卡片拉高了，
+       直接量会把拉伸后的高度当成内容高度，越排越偏。 */
+    cards.forEach(function (el){ el.style.flex = '0 0 auto'; });
+    void colA.offsetHeight;
+    var gap = 10, ha = 0, hb = 0, planA = [], planB = [];
+    cards.forEach(function (el){
+      var h = el.getBoundingClientRect().height;
+      if(ha <= hb){ planA.push({ el: el, h: h }); ha += h + gap; }
+      else { planB.push({ el: el, h: h }); hb += h + gap; }
+    });
+
+    var curA = [].slice.call(colA.children).filter(isCard);
+    var curB = [].slice.call(colB.children).filter(isCard);
+    var wantA = planA.map(function (x){ return x.el; });
+    var wantB = planB.map(function (x){ return x.el; });
+    if(!(sameSeq(curA, wantA) && sameSeq(curB, wantB))){
+      /* appendChild 会把节点从原位置搬过来，按数组顺序追加即得目标次序 */
+      wantA.forEach(function (el){ colA.appendChild(el); });
+      wantB.forEach(function (el){ colB.appendChild(el); });
+    }
+    /* 排完这一栏还有富余，就让卡片平分剩余高度把栏填满；
+       内容已经超过栏高时保持自然高度（页面允许纵向滚动）。 */
+    stretch(colA, planA, gap);
+    stretch(colB, planB, gap);
+  };
+
+  function stretch(col, plan, gap){
+    if(!plan.length) return;
+    var used = -gap;
+    plan.forEach(function (x){ used += x.h + gap; });
+    var free = col.clientHeight - used;
+    plan.forEach(function (x){
+      /* 按内容多少分配富余：内容多的卡片长得多，只有一两项的卡片几乎不摊开 */
+      x.el.style.flexShrink = '0';
+      x.el.style.flexBasis = 'auto';
+      x.el.style.flexGrow = free > 12 ? String(Math.max(1, Math.round(x.h))) : '0';
+    });
+  }
+
+  function scheduleLayout(){
+    if(_layTimer) clearTimeout(_layTimer);
+    _layTimer = setTimeout(function (){
+      _layTimer = null;
+      growAll();
+      BIG.layoutCards();
+    }, 50);
+  }
+  BIG.relayout = scheduleLayout;
 
   function renderSide(){
     var c = $('bhwCourses');
@@ -886,16 +976,109 @@
     }catch(e){ BIG.pick.exams = []; if(done) done(); }
   }
 
+  /* v4.1.0：名次一律按**本班**算。
+     成绩表里可能是全年级的行（站主：「排名只看本班不看年级」），
+     所以先按班级名册收敛，再在班内排名。名册为空时（没登录 / 读不到）退回全班表。 */
+  function rosterSet(){
+    var arr = BIG.pick.roster || [];
+    if(!arr.length) return null;
+    var s = {};
+    arr.forEach(function (x){
+      var n = String((x && x.name) || '').trim();
+      if(n) s[n] = 1;
+    });
+    return s;
+  }
+
   function statOf(examId, done){
-    if(!examId){ BIG.pick.stat = null; if(done) done(); return; }
-    if(BIG.pick.stat && String(BIG.pick.stat.id) === String(examId)){ if(done) done(); return; }
+    if(!examId){ BIG.pick.stat = null; BIG.pick.prog = null; if(done) done(); return; }
+    if(BIG.pick.stat && String(BIG.pick.stat.id) === String(examId)){ afterStat(done); return; }
+    BIG.pick.prog = null;
+    var cache = BIG.pick.statCache || (BIG.pick.statCache = {});
+    var key = String(examId);
+    if(cache[key]){ BIG.pick.stat = cache[key]; afterStat(done); return; }
     try{
       if(typeof api !== 'function'){ if(done) done(); return; }
       api('/scores?action=board&exam=' + encodeURIComponent(examId)).then(function (j){
-        BIG.pick.stat = buildStat(j);
-        if(done) done();
-      }).catch(function (){ BIG.pick.stat = null; if(done) done(); });
+        cache[key] = buildStat(j);
+        BIG.pick.stat = cache[key];
+        afterStat(done);
+      }).catch(function (){ BIG.pick.stat = null; BIG.pick.prog = null; if(done) done(); });
     }catch(e){ if(done) done(); }
+  }
+
+  /* 「进步排名」要用上一次考试做基准：列表按日期倒序，当前这一场的下一项就是上一场。 */
+  function needProg(m){ return m === 'totalProgress' || m === 'subProgress'; }
+
+  function prevExamId(){
+    var arr = BIG.pick.exams || [], id = String((BIG.pick.f || {}).examId || '');
+    if(!id) return null;
+    for(var i = 0; i < arr.length; i++){
+      if(String(arr[i].id) === id) return arr[i + 1] ? String(arr[i + 1].id) : null;
+    }
+    return null;
+  }
+
+  function loadPrevStat(done){
+    /* 考试列表还没到就先去拿，否则「上一次是哪一场」无从判断 */
+    if(!BIG.pick.exams){ loadExams(function (){ loadPrevStat(done); }); return; }
+    var pid = prevExamId();
+    BIG.pick.progNoPrev = false;
+    if(!pid){ BIG.pick.prevStat = null; BIG.pick.progNoPrev = true; if(done) done(); return; }
+    var cache = BIG.pick.statCache || (BIG.pick.statCache = {});
+    if(cache[pid]){ BIG.pick.prevStat = cache[pid]; if(done) done(); return; }
+    try{
+      if(typeof api !== 'function'){ if(done) done(); return; }
+      api('/scores?action=board&exam=' + encodeURIComponent(pid)).then(function (j){
+        cache[pid] = buildStat(j);
+        BIG.pick.prevStat = cache[pid];
+        if(done) done();
+      }).catch(function (){ BIG.pick.prevStat = null; if(done) done(); });
+    }catch(e){ if(done) done(); }
+  }
+
+  function afterStat(done){
+    var f = BIG.pick.f || F_DEF;
+    if(!needProg(f.metric)){ BIG.pick.prog = null; if(done) done(); return; }
+    if(BIG.pick.prog){ if(done) done(); return; }
+    loadPrevStat(function (){ calcProg(); if(done) done(); });
+  }
+
+  /* 进步 = 上一次班级名次 − 这一次班级名次（正数 = 往前走了几名）。
+     再按进步幅度在班里排个名次（1 = 进步最多），供「进步排名」条件用。 */
+  function calcProg(){
+    var cur = BIG.pick.stat, prev = BIG.pick.prevStat;
+    if(!cur || !prev){ BIG.pick.prog = null; return; }
+    var keys = (cur.subjects || []).map(function (s){ return s.key; });
+    var rows = [];
+    (cur.rows || []).forEach(function (r){
+      var p = prev.byName[r.name];
+      if(!p) return;
+      var o = { name: r.name, total: null, sub: {}, subRank: {} };
+      if(p.totalRank != null && r.totalRank != null) o.total = p.totalRank - r.totalRank;
+      keys.forEach(function (k){
+        var a = (p.sub[k] || {}).rank, b = (r.sub[k] || {}).rank;
+        o.sub[k] = (a != null && b != null) ? (a - b) : null;
+      });
+      rows.push(o);
+    });
+    function rankBy(val, set){
+      var arr = rows.map(function (x){ return { x: x, v: val(x) }; })
+        .filter(function (o){ return o.v != null && isFinite(o.v); })
+        .sort(function (a, b){ return b.v - a.v; });
+      var last = null, rk = 0;
+      arr.forEach(function (o, i){
+        if(last === null || o.v !== last){ rk = i + 1; last = o.v; }
+        set(o.x, rk);
+      });
+    }
+    rankBy(function (x){ return x.total; }, function (x, k){ x.totalRank = k; });
+    keys.forEach(function (k){
+      rankBy(function (x){ return x.sub[k]; }, function (x, k2){ x.subRank[k] = k2; });
+    });
+    var byName = {};
+    rows.forEach(function (x){ if(!byName[x.name]) byName[x.name] = x; });
+    BIG.pick.prog = { rows: rows, byName: byName };
   }
 
   /* 把一次考试的成绩表算成「谁总分多少名、某科多少分多少名」 */
@@ -905,8 +1088,13 @@
     var subs = (exam.subjects || []).map(function (s){
       return { key: String(s.key || ''), name: String(s.name || s.key || '') };
     }).filter(function (s){ return s.key; });
+    /* 只留本班的学生：年级大表里的外班行一律丢掉，后面的排名自然就是班级名次 */
+    var inClass = rosterSet();
     var rows = (board.rows || []).map(function (r){
       return { name: String(r.name || '').trim(), s: r.s || {}, total: 0, totalRank: null, sub: {} };
+    }).filter(function (r){
+      if(!r.name) return false;
+      return inClass ? !!inClass[r.name] : true;
     });
     function scoreOf(v){
       if(v == null) return null;
@@ -968,6 +1156,11 @@
       var v = null;
       if(f.metric === 'totalRank') v = row.totalRank;
       else if(f.metric === 'totalScore') v = row.total;
+      else if(needProg(f.metric)){
+        var pr = BIG.pick.prog, prr = pr && pr.byName[st.name];
+        if(!prr) return false;
+        v = (f.metric === 'totalProgress') ? prr.totalRank : (prr.subRank || {})[f.subj];
+      }
       else {
         var cell = row.sub[f.subj] || {};
         v = (f.metric === 'subScore') ? cell.score : cell.rank;
@@ -999,6 +1192,9 @@
     BIG.pick.state = 'setup';
     BIG.pick.names = [];
     BIG.pick.stat = null;
+    BIG.pick.prog = null;
+    BIG.pick.prevStat = null;
+    BIG.pick.progNoPrev = false;
     m.classList.add('show');
     BIG.pickBody();
     loadRoster(function (){
@@ -1084,7 +1280,14 @@
   BIG.pickSet = function (k, v){
     var f = BIG.pick.f || (BIG.pick.f = loadF());
     f[k] = v;
-    if(k === 'examId'){ BIG.pick.stat = null; statOf(v, BIG.pickBody); }
+    if(k === 'examId'){
+      BIG.pick.stat = null; BIG.pick.prog = null; BIG.pick.prevStat = null;
+      statOf(v, BIG.pickBody);
+    }
+    /* 切到「进步排名」时，上一次考试的成绩得现拉 */
+    if(k === 'metric' && needProg(v) && !BIG.pick.prog){
+      loadPrevStat(function (){ calcProg(); BIG.pickBody(); });
+    }
     if(k !== 'metric' && k !== 'subj' && k !== 'min' && k !== 'max'){ /* 其它条件即时生效 */ }
     saveF();
     BIG.pickBody();
@@ -1134,9 +1337,11 @@
     if(f.sidMin !== '' || f.sidMax !== '') arr.push('学号 ' + (f.sidMin || '不限') + '–' + (f.sidMax || '不限'));
     if(f.metric){
       var stat = BIG.pick.stat;
-      var mName = f.metric === 'totalRank' ? '总分名次'
+      var mName = f.metric === 'totalRank' ? '总分名次（班级）'
         : f.metric === 'totalScore' ? '总分'
-        : (f.metric === 'subScore' ? '分数' : '单科名次');
+        : f.metric === 'totalProgress' ? '总分进步排名'
+        : f.metric === 'subProgress' ? '单科进步排名'
+        : (f.metric === 'subScore' ? '分数' : '单科名次（班级）');
       var subName = f.subj && stat ? (function (){
         for(var i = 0; i < stat.subjects.length; i++) if(stat.subjects[i].key === f.subj) return stat.subjects[i].name;
         return f.subj;
@@ -1176,8 +1381,9 @@
           + '>' + esc0(e.name || ('考试 ' + e.id)) + '</option>';
       });
       var metricOpts = [
-        ['', '不限'], ['totalRank', '总分名次'], ['totalScore', '总分'],
-        ['subScore', '单科分数'], ['subRank', '单科名次'],
+        ['', '不限'], ['totalRank', '总分名次（班级）'], ['totalScore', '总分'],
+        ['subScore', '单科分数'], ['subRank', '单科名次（班级）'],
+        ['totalProgress', '总分进步排名'], ['subProgress', '单科进步排名'],
       ].map(function (x){
         return '<option value="' + x[0] + '"' + (f.metric === x[0] ? ' selected' : '') + '>' + x[1] + '</option>';
       }).join('');
@@ -1188,7 +1394,11 @@
             + esc0(sb.name) + '</option>';
         }).join('');
       }
-      var needSubj = (f.metric === 'subScore' || f.metric === 'subRank');
+      var needSubj = (f.metric === 'subScore' || f.metric === 'subRank' || f.metric === 'subProgress');
+      /* 进步排名：上一次没考 / 这是最早一场，就没法算 */
+      var progTip = (needProg(f.metric) && p.progNoPrev)
+        ? '<div class="bpick-f-tip" style="color:#b45309">这是最早的一次考试，没有「上一次」可比，进步排名算不出来。</div>'
+        : '';
 
       var filterHtml = p.fOpen
         ? ('<div class="bpick-f">'
@@ -1228,7 +1438,9 @@
                       + '</div>'
                     : '')
                 : '')
-            + '<p class="bpick-f-tip">条件可以叠加：比如「学生 + 男 + 总分名次 1–10」。名单只记在这台电脑上。</p>'
+            + progTip
+            + '<p class="bpick-f-tip">名次都是<b>本班排名</b>（不看年级）。条件可以叠加：比如「学生 + 男 + 总分名次 1–10」。'
+            + '「进步排名」按班级名次相比上一次考试提升的幅度排，1 = 进步最多。名单只记在这台电脑上。</p>'
             + '</div>')
         : '';
 

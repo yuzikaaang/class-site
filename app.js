@@ -2473,14 +2473,17 @@ function openAudio(url, title){
   _audioSetSub(same ? '已续上上次进度，点「播放」继续' : '点下方按钮开始播放');
   _audioSyncProgress();
 }
-/* 关闭：暂停并收起弹窗，保留进度供悬浮球续播 */
+/* 关闭：暂停并收起弹窗。
+   v4.1.0：关闭后**不再留右下角悬浮球**（站主指定，仅对音频生效）。
+   以前关掉音频会在右下角留个球，大屏上很碍事；现在音频关掉就干净收起。
+   视频播放器的悬浮球不变。 */
 function closeAudio(){
   var el = _audioEnsure();
   try{ el.pause(); }catch(e){}
   var m = document.getElementById('audioMask');
   if(m){ m.classList.remove('show'); m.classList.remove('fs'); }
   var b = document.getElementById('audioFsBtn'); if(b) b.textContent = '全屏';
-  if(_audioUrl) audioBubbleShow();
+  audioBubbleHide();
 }
 function reopenAudio(){
   if(!_audioUrl) return;
