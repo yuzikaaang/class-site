@@ -46,8 +46,12 @@ export { getSql };
    ⚠️ 凡是改动下方 DDL 清单，必须同步把 SCHEMA_VER 往上加一格，
       否则老库不会重跑 —— 自愈能力就断了。
    ------------------------------------------------------------ */
-/** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。 */
-const SCHEMA_VER = '3.8.4';
+/** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。
+    3.8.4 → 3.19.0：class_votes 新增 public_read（投票是否对未登录可见）。
+    2026-11-03 踩坑复盘：改了 DDL 却忘了升这里，线上老库被闸门放行、
+    列一直没建，/api/votes?action=public 直接 500 —— 这是第四次同类错误，
+    纪律就是纪律：**改 DDL 清单的同一次提交里必须改这一行**。 */
+const SCHEMA_VER = '3.19.0';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
