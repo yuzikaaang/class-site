@@ -274,7 +274,77 @@
     try{ goHomeView(); }catch(e){}
   };
 
-  /* ---------------- 大屏作业页 ---------------- */
+  /* ---------------- 大屏作业页（v4.0.0 重做） ----------------
+     站主 2026-11-03 的 9 条，这一页占了大半：
+       ① 新建一期能命名，历史作业能重命名
+       ② 时钟精确到秒
+       ③ 字号可调（只对这一页生效）
+       ④ 底部工具条：A− / A+ / 锁定
+       ⑤ 左右两栏（语数英 / 物化生）+ 右栏小功能 + 底部其他，一屏看完
+       ⑦ 图片直接铺出来，音频点一下才播
+     实现上刻意保持「数据形状不变」：仍然是 holiday_homeworks 里的
+     items[].tasks[]，task 依旧可以是字符串或 {text,img,audio}。
+     只改渲染与交互，云端结构不动，老数据不会丢。 */
+
+  var FS_KEY = 'cls_bhw_fs';
+  var FS_STEPS = [0.85, 0.95, 1, 1.1, 1.2, 1.35, 1.5, 1.7];
+  var SUBJ_A = ['语文', '数学', '英语'];
+  var SUBJ_B = ['物理', '化学', '生物'];
+
+  function readFs(){
+    var n = 2;
+    try{ n = parseInt(localStorage.getItem(FS_KEY), 10); }catch(e){}
+    if(!(n >= 0 && n < FS_STEPS.length)) n = 2;
+    return n;
+  }
+  function applyFs(){
+    var h = $('bigHw');
+    if(h) h.style.setProperty('--bhw-fs', String(FS_STEPS[BIG.fs]));
+    var v = $('bhwFsVal');
+    if(v) v.textContent = Math.round(FS_STEPS[BIG.fs] * 100) + '%';
+  }
+  BIG.fs = readFs();
+  BIG.fsStep = function (d){
+    var n = BIG.fs + (d > 0 ? 1 : -1);
+    if(n < 0 || n >= FS_STEPS.length){ toast(n < 0 ? '已经是最小字号' : '已经是最大字号'); return; }
+    BIG.fs = n;
+    try{ localStorage.setItem(FS_KEY, String(n)); }catch(e){}
+    applyFs();
+  };
+
+  /* —— 锁定：锁上以后整页点击 / 滑动 / 滚动全部失效 ——
+     站主原话：「点击或滑动都没有任何反应，你必须先点解锁才行」。
+     做法：一层透明遮罩盖住整页（拦截点击），再在捕获阶段拦住滚轮 / 触摸 / 方向键。
+     锁定状态**不写 localStorage**：刷新页面即解锁，避免大屏自己锁死没人能开。 */
+  BIG.lockOn = false;
+  BIG.lockToggle = function (){
+    BIG.lockOn = !BIG.lockOn;
+    document.documentElement.classList.toggle('bhw-locked', BIG.lockOn);
+    var b = $('bhwLockBtn');
+    if(b){
+      b.textContent = BIG.lockOn ? '已锁定' : '锁定';
+      b.classList.toggle('bhw-lockon', BIG.lockOn);
+    }
+    toast(BIG.lockOn ? '已锁定：先点右下角「解锁」' : '已解锁');
+  };
+  BIG.lockBlock = function (e){
+    if(e && e.preventDefault) e.preventDefault();
+    if(e && e.stopPropagation) e.stopPropagation();
+    return false;
+  };
+  document.addEventListener('wheel', function (e){
+    if(BIG.lockOn && BIG.hwOn && e.cancelable) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchmove', function (e){
+    if(BIG.lockOn && BIG.hwOn && e.cancelable) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('keydown', function (e){
+    if(!BIG.lockOn || !BIG.hwOn) return;
+    var k = e.key;
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','PageUp','PageDown','Home','End',' '].indexOf(k) >= 0){
+      e.preventDefault();
+    }
+  }, true);
 
   function todayStr(){
     var d = new Date();
@@ -293,6 +363,101 @@
       if(typeof getCurrentHomework === 'function') return getCurrentHomework();
     }catch(e){}
     return list[list.length - 1] || null;
+  }
+
+  function subjStyle(s){
+    try{
+      if(typeof HW_SUBJECT_STYLE !== 'undefined' && HW_SUBJECT_STYLE[s]) return HW_SUBJECT_STYLE[s];
+    }catch(e){}
+    return { c: '#9a3412' };
+  }
+
+  /* 媒体渲染（站主第 7 条）：
+       图片 —— 直接铺在作业下面，一眼能看见；点一下只是放大，不是唯一入口。
+       视频 —— 原生播放器，同样直接显示。
+       音频 —— 仍然点一下才播（自动播放会被浏览器拦，也吵）。 */
+  function mediaHtml(o){
+    var img = o && o.img, video = o && o.video, audio = o && o.audio, label = o && o.audioLabel;
+    if(!img && !video && !audio) return '';
+    var out = '';
+    if(img){
+      var isVid = /\.(mp4|webm|mov|m4v|ogv|avi)(\?|#|$)/i.test(String(img));
+      out += isVid
+        ? '<video class="bhw-img" src="' + attr0(img) + '" controls preload="metadata" playsinline></video>'
+        : '<img class="bhw-img" src="' + attr0(img) + '" alt="作业配图" loading="lazy"'
+          + ' onclick="BIG.zoomImg(this.src)" title="点一下看大图">';
+    }
+    if(video){
+      out += '<video class="bhw-img" src="' + attr0(video) + '" controls preload="metadata" playsinline></video>';
+    }
+    if(audio){
+      out += '<button type="button" class="bhw-audio" onclick="event.stopPropagation();BIG.playAudio('
+        + "'" + attr0(encodeURIComponent(String(audio))) + "','"
+        + attr0(String(label || '播放音频').replace(/'/g, '')) + "')\">"
+        + ico('headphones', 14) + ' ' + esc0(label || '播放音频') + '</button>';
+    }
+    return '<div class="bhw-media">' + out + '</div>';
+  }
+
+  BIG.playAudio = function (enc, label){
+    var u = enc;
+    try{ u = decodeURIComponent(enc); }catch(e){}
+    try{
+      if(typeof openAudio === 'function'){ openAudio(u, label || '播放音频'); return; }
+    }catch(e){}
+    try{ window.open(u, '_blank'); }catch(e2){}
+  };
+
+  BIG.zoomImg = function (src){
+    var z = $('bhwZoom');
+    if(!z){
+      z = document.createElement('div');
+      z.id = 'bhwZoom';
+      z.className = 'bhw-zoom';
+      z.innerHTML = '<img alt="作业配图">';
+      z.onclick = function (){ z.classList.remove('show'); };
+      document.body.appendChild(z);
+    }
+    z.querySelector('img').src = src;
+    z.classList.add('show');
+  };
+
+  function taskHtml(it, si, ti, t, admin){
+    var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
+    var text = o.text || '';
+    var main = admin
+      ? '<input class="bhw-in" value="' + attr0(text) + '" placeholder="写一项作业…"'
+        + ' onchange="BIG.hwTask(' + si + ',' + ti + ',this.value)">'
+      : '<span class="bhw-txt">' + esc0(text) + '</span>';
+    return '<div class="bhw-task">'
+      + '<span class="bhw-dot"></span>'
+      + '<div style="flex:1;min-width:0">' + main + mediaHtml(o) + '</div>'
+      + (admin ? '<button type="button" class="bhw-x" title="删除这一项"'
+        + ' onclick="BIG.hwDelTask(' + si + ',' + ti + ')">' + ico('x', 13) + '</button>' : '')
+      + '</div>';
+  }
+
+  function subjCard(it, si, admin){
+    var name = String(it.subject || '');
+    var tasks = it.tasks || [];
+    var st = subjStyle(name);
+    var accent = st.c || '#9a3412';
+    var head = '<div class="bhw-subj-h">'
+      + (admin
+          ? '<input class="bhw-in" value="' + attr0(name) + '" placeholder="科目"'
+            + ' onchange="BIG.hwSubjName(' + si + ',this.value)"'
+            + ' style="flex:none;max-width:7em;font-weight:900;color:' + attr0(accent) + '">'
+          : '<b style="color:' + attr0(accent) + '">' + esc0(name) + '</b>')
+      + '<span class="bhw-cnt">' + tasks.length + ' 项</span>'
+      + (admin ? '<button type="button" class="bhw-x" title="删除这一科"'
+          + ' onclick="BIG.hwDelSubj(' + si + ')">' + ico('trash', 13) + '</button>' : '')
+      + '</div>';
+    var rows = tasks.map(function (t, ti){ return taskHtml(it, si, ti, t, admin); }).join('');
+    return '<div class="bhw-subj" style="border-left:4px solid ' + attr0(accent) + '">'
+      + head + rows
+      + (admin ? '<button type="button" class="bhw-add" onclick="BIG.hwAddTask(' + si + ')">'
+          + ico('plus', 12) + ' 添加一项</button>' : '')
+      + '</div>';
   }
 
   BIG.openHw = function (id){
@@ -316,11 +481,13 @@
     var bh = $('bigHome'); if(bh) bh.style.display = 'none';
     var h = $('bigHw'); if(h) h.style.display = 'block';
     try{ setRoute('hw'); }catch(e){}
+    applyFs();
     BIG.renderHw();
     startClock();
   };
 
   BIG.closeHw = function (){
+    if(BIG.lockOn) BIG.lockToggle();
     leaveHwUi();
     try{ goHomeView(); }catch(e){}
   };
@@ -331,73 +498,85 @@
     var hw = currentHw();
     var admin = adminOk();
     var list = hwList();
-    var title = $('bhwTitle'), range = $('bhwRange'), act = $('bhwActions'), body = $('bhwList');
-    if(!body) return;
+    var act = $('bhwActions');
+    var brand = $('bhwBrand');
+    if(brand){
+      var nm = '';
+      try{
+        var h1 = document.querySelector('.content>header h1');
+        if(h1) nm = String(h1.textContent || '').trim();
+      }catch(e){}
+      brand.textContent = nm || '班级服务站';
+    }
 
-    /* 期次下拉 + 新建（仅管理员） */
-    var sel = '<select class="bhw-sel" onchange="BIG.hwPick(this.value)" title="切换作业期次">'
-      + '<option value="">当前作业</option>'
-      + list.slice().reverse().map(function (x){
-          return '<option value="' + attr0(x.id) + '"' + (hw && String(x.id) === String(hw.id) ? ' selected' : '') + '>'
-            + esc0(x.title || '未命名') + '（' + esc0(x.start || '') + ' ~ ' + esc0(x.end || '') + '）</option>';
-        }).join('')
-      + '</select>';
+    /* 期次下拉 + 重命名 + 新建（管理员才有后两个） */
     if(act){
+      var sel = '<select class="bhw-sel" onchange="BIG.hwPick(this.value)" title="切换作业期次">'
+        + '<option value="">当前作业</option>'
+        + list.slice().reverse().map(function (x){
+            return '<option value="' + attr0(x.id) + '"'
+              + (hw && String(x.id) === String(hw.id) ? ' selected' : '') + '>'
+              + esc0(x.title || '未命名') + '</option>';
+          }).join('')
+        + '</select>';
       act.innerHTML = sel
-        + (admin ? '<button type="button" class="bhw-btn" onclick="BIG.hwNew()">' + ico('plus', 16) + ' 新建一期</button>' : '')
-        + '<button type="button" class="bhw-btn ghost" onclick="BIG.closeHw()">返回大屏</button>';
+        + (admin && hw ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwRename()">重命名</button>' : '')
+        + (admin ? '<button type="button" class="bhw-btn" onclick="BIG.hwNew()">' + ico('plus', 13) + ' 新建一期</button>' : '');
     }
 
-    if(title) title.textContent = hw ? (plain(hw.title) || '作业') : '作业';
-    if(range){
-      var r = hw ? ((hw.start || '') + ' ~ ' + (hw.end || '')) : '';
-      range.textContent = r + (hw && hw.isDemo ? ' · 示例数据' : '') + (admin ? '' : ' · 只读');
-    }
+    var colA = $('bhwColA'), colB = $('bhwColB'), other = $('bhwOther'), addHost = $('bhwAddSubj');
+    if(!colA || !colB) return;
 
     if(!hw){
-      body.innerHTML = '<div class="bhw-empty">还没有作业数据。' + (admin ? '点右上角「新建一期」开始添加。' : '等管理员发布后再来看。') + '</div>';
+      colA.innerHTML = colB.innerHTML = '';
+      if(other) other.innerHTML = '<div class="bhw-subj"><div class="bhw-empty">'
+        + (admin ? '还没有作业。点右上角「新建一期」开始。' : '管理员还没发布作业。') + '</div></div>';
+      if(addHost) addHost.innerHTML = '';
       renderSide();
       return;
     }
 
+    if(hw.title) hw._t = hw.title;
     var items = hw.items || [];
-    var subjectsHtml = '';
-    if(!items.length && admin){
-      subjectsHtml = '<div class="bhw-empty">这一期还没有科目，点下面按钮加一科。</div>';
-    }else{
-      subjectsHtml = items.map(function (it, si){
-        var tasks = (it.tasks || []).map(function (t, ti){
-          var text = (t && typeof t === 'object') ? (t.text || '') : String(t || '');
-          var extra = (t && typeof t === 'object' && (t.audio || t.img)) ? '<span class="bhw-tag">媒体</span>' : '';
-          if(!admin){
-            return '<div class="bhw-task"><span class="bhw-dot"></span><span class="bhw-txt">' + esc0(text) + extra + '</span></div>';
-          }
-          return '<div class="bhw-task">'
-            + '<span class="bhw-dot"></span>'
-            + '<input class="bhw-in" value="' + attr0(text) + '" placeholder="写一项作业…"'
-            +   ' onchange="BIG.hwTask(' + si + ',' + ti + ',this.value)">' + extra
-            + '<button type="button" class="bhw-x" title="删除这一项" onclick="BIG.hwDelTask(' + si + ',' + ti + ')">' + ico('x', 14) + '</button>'
-            + '</div>';
-        }).join('');
-        var head = admin
-          ? '<div class="bhw-subj-h">'
-            + '<input class="bhw-subj-in" value="' + attr0(it.subject || '') + '" placeholder="科目" onchange="BIG.hwSubjName(' + si + ',this.value)">'
-            + '<button type="button" class="bhw-x" title="删除这一科" onclick="BIG.hwDelSubj(' + si + ')">' + ico('trash', 15) + '</button>'
-            + '</div>'
-          : '<div class="bhw-subj-h"><b>' + esc0(it.subject || '') + '</b></div>';
-        return '<div class="bhw-subj">' + head + tasks
-          + (admin ? '<button type="button" class="bhw-add" onclick="BIG.hwAddTask(' + si + ')">' + ico('plus', 14) + ' 添加一项</button>' : '')
-          + '</div>';
-      }).join('');
+
+    /* 分栏：固定 6 科按语数英 / 物化生 落位，其余（政治、历史、其他…）进底部 */
+    var mapA = {}, mapB = {}, extras = [];
+    items.forEach(function (it, si){
+      var nm = String(it.subject || '').trim();
+      if(SUBJ_A.indexOf(nm) >= 0) mapA[nm] = { it: it, si: si };
+      else if(SUBJ_B.indexOf(nm) >= 0) mapB[nm] = { it: it, si: si };
+      else extras.push({ it: it, si: si });
+    });
+
+    function fill(host, keys, map){
+      var html = '';
+      keys.forEach(function (k){
+        var hit = map[k];
+        if(hit) html += subjCard(hit.it, hit.si, admin);
+      });
+      if(!html){
+        html = '<div class="bhw-subj"><div class="bhw-empty">'
+          + (admin ? '这一栏还没有科目，可在下方「添加科目」里加。' : '这一栏暂时没有作业。')
+          + '</div></div>';
+      }
+      host.innerHTML = html;
+    }
+    fill(colA, SUBJ_A, mapA);
+    fill(colB, SUBJ_B, mapB);
+
+    if(other){
+      other.innerHTML = extras.length
+        ? extras.map(function (x){ return subjCard(x.it, x.si, admin); }).join('')
+        : '';
     }
 
-    body.innerHTML = '<div class="bhw-subjects">' + subjectsHtml + '</div>';
-    if(admin){
-      body.innerHTML += '<div class="bhw-addsubj">'
-        + '<input class="bhw-in" id="bhwNewSubj" placeholder="新科目名（如 语文）" onkeydown="if(event.key===\'Enter\')BIG.hwAddSubj()">'
-        + '<button type="button" class="bhw-btn" onclick="BIG.hwAddSubj()">' + ico('plus', 15) + ' 添加科目</button>'
-        + '<span class="bhw-save" id="bhwSave"></span>'
-        + '</div>';
+    if(addHost){
+      addHost.innerHTML = admin
+        ? '<input class="bhw-in" id="bhwNewSubj" placeholder="新科目名（如 政治 / 其他）"'
+          + ' onkeydown="if(event.key===\'Enter\')BIG.hwAddSubj()">'
+          + '<button type="button" class="bhw-audio" onclick="BIG.hwAddSubj()">' + ico('plus', 14) + ' 添加科目</button>'
+          + '<span class="bhw-save" id="bhwSave"></span>'
+        : '';
     }
 
     renderSide();
@@ -420,7 +599,8 @@
       }catch(e){}
       if(txt){
         c.style.display = '';
-        c.innerHTML = '<span class="bhw-mini-k">' + esc0(sub) + '</span><b class="bhw-mini-v">' + esc0(txt) + '</b>';
+        c.innerHTML = '<span class="bhw-mini-k">' + esc0(sub) + '</span>'
+          + '<b class="bhw-mini-v">' + esc0(txt) + '</b>';
       }else{
         c.style.display = 'none';
       }
@@ -434,17 +614,19 @@
       }catch(e){}
       if(!qt) qt = String(data().dailyQuote || '');
       q.style.display = qt ? '' : 'none';
-      if(qt) q.innerHTML = '<span class="bhw-mini-k">今日一句</span><b class="bhw-mini-v">' + esc0(qt) + '</b>';
+      if(qt) q.innerHTML = '<span class="bhw-mini-k">今日一句</span>'
+        + '<b class="bhw-mini-v">' + esc0(qt) + '</b>';
     }
   }
 
+  /* 时钟：精确到秒（站主第 2 条） */
   function startClock(){
     function tick(){
       var t = $('bhwClockT'), s = $('bhwClockS'), b = $('bhwClock');
       if(!t) return;
       var d = new Date();
       function p(n){ return (n < 10 ? '0' : '') + n; }
-      t.textContent = p(d.getHours()) + ':' + p(d.getMinutes());
+      t.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
       var wk = '日一二三四五六'.charAt(d.getDay());
       var week = '';
       try{ if(typeof islandWeekNo === 'function') week = islandWeekNo(); }catch(e){}
@@ -507,6 +689,7 @@
     var hw = hwObj(); if(!hw || !hw.items[si]) return;
     hw.items[si].subject = String(v || '').trim();
     touch();
+    BIG.renderHw();
   };
   BIG.hwTask = function (si, ti, v){
     var hw = hwObj(); if(!hw || !hw.items[si]) return;
@@ -544,27 +727,92 @@
     var el = $('bhwNewSubj');
     var name = el ? String(el.value || '').trim() : '';
     if(!name){ toast('先写个科目名', true); if(el) el.focus(); return; }
+    var dup = (hw.items || []).some(function (x){ return String(x.subject || '').trim() === name; });
+    if(dup){ toast('已经有「' + name + '」这一科了', true); return; }
     hw.items.push({ subject: name, tasks: [''] });
     BIG.renderHw();
     touch();
   };
 
+  /* —— 新建 / 重命名（站主第 1 条）—— */
+  var FORM = { mode: 'new' };
   BIG.hwNew = function (){
     if(!adminOk()){ toast('只有管理员能新建作业', true); return; }
+    FORM.mode = 'new';
+    var t = $('bhwFormTitle'); if(t) t.textContent = '新建一期作业';
     var d = todayStr();
-    var id = 'hw' + Date.now();
-    var list = hwList();
-    list.push({ id: id, title: d.slice(5) + ' 作业', start: d, end: d, items: [{ subject: '语文', tasks: [''] }] });
-    BIG.hwId = id;
-    try{
-      if(typeof saveContentLocal === 'function') saveContentLocal('holiday_homeworks', list);
-    }catch(e){}
+    var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
+    if(n) n.value = '';
+    if(st) st.value = d;
+    if(en) en.value = d;
+    var m = $('bhwFormMask'); if(m) m.classList.add('show');
+    setTimeout(function(){ if(n) n.focus(); }, 60);
+  };
+  BIG.hwRename = function (){
+    if(!adminOk()) return;
+    var hw = currentHw(); if(!hw){ toast('还没有作业可以改名', true); return; }
+    FORM.mode = 'rename';
+    var t = $('bhwFormTitle'); if(t) t.textContent = '重命名这一期';
+    var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
+    if(n) n.value = plain(hw.title || '');
+    if(st) st.value = hw.start || '';
+    if(en) en.value = hw.end || '';
+    var m = $('bhwFormMask'); if(m) m.classList.add('show');
+    setTimeout(function(){ if(n){ n.focus(); n.select(); } }, 60);
+  };
+  BIG.formClose = function (){
+    var m = $('bhwFormMask'); if(m) m.classList.remove('show');
+  };
+  BIG.formSave = function (){
+    var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
+    var name = n ? String(n.value || '').trim() : '';
+    if(!name){ toast('给这一期起个名字', true); if(n) n.focus(); return; }
+    var s0 = st ? String(st.value || '') : '';
+    var e0 = en ? String(en.value || '') : '';
+    if(s0 && e0 && e0 < s0){ toast('结束日期不能早于开始日期', true); return; }
+    if(FORM.mode === 'new'){
+      var list = hwList();
+      var id = 'hw' + Date.now();
+      list.push({
+        id: id, title: name,
+        start: s0 || todayStr(), end: e0 || s0 || todayStr(),
+        items: [],
+      });
+      BIG.hwId = id;
+      toast('已新建，先加科目再写作业');
+    }else{
+      var hw = currentHw();
+      if(!hw){ toast('找不到这一期', true); return; }
+      hw.title = name;
+      if(s0) hw.start = s0;
+      if(e0) hw.end = e0;
+      toast('名称已更新');
+    }
+    BIG.formClose();
     BIG.renderHw();
     persist();
-    toast('已新建一期，直接在这里写就行');
   };
 
-  /* ---------------- 随机点名 ---------------- */
+  /* ---------------- 随机点名（v4.0.0 重做） ----------------
+     站主 2026-11-03（第 6 条）原话大意：
+       · 默认只抽学生（后台里那种「学生 / 老师 / 管理员」标签）
+       · 学号可以设一个范围
+       · 能按「本次总分第几名」「单科第几名 / 多少分」这些条件抽
+       · 能按性别抽
+       · 名单设置里点一下「请假」不要跳回最上面
+     实现：
+       · 名单改用 /profile?action=roster 的 students（带学号、身份、性别），
+         拿不到就退回老的姓名列表 —— 老设备/未登录也不至于空着。
+       · 成绩条件读 /scores?action=list + action=board，前端算班级排名
+         （总分 = 各科赋分优先，排名并列同名次）。
+       · 条件存在本机 localStorage，班级电脑下次打开还是上次那一套。
+     ⚠️ 滚动位置：以前点一下就把整块 innerHTML 重绘，滚动条自然回到顶部。
+        现在只改被点的那一个按钮 + 顶部计数，DOM 不动，位置就不会跳。 */
+
+  var EX_KEY = 'cls_big_pick_ex';      /* { 姓名: 'leave' | 'out' } */
+  var F_KEY  = 'cls_big_pick_f';       /* 抽取条件，只存本机 */
+
+  var F_DEF = { role: ['学生'], gender: '', sidMin: '', sidMax: '', examId: '', metric: '', subj: '', min: '', max: '' };
 
   function loadEx(){
     try{ return JSON.parse(localStorage.getItem(EX_KEY) || '{}') || {}; }catch(e){ return {}; }
@@ -572,40 +820,192 @@
   function saveEx(o){
     try{ localStorage.setItem(EX_KEY, JSON.stringify(o)); }catch(e){}
   }
-
-  function rosterNames(){
-    var names = [];
-    try{
-      if(typeof classList === 'function') names = classList() || [];
-    }catch(e){}
-    names = names.map(function (x){ return String(x || '').trim(); }).filter(Boolean);
-    /* 去重 + 去老师（名单本身只有同学，这里再挡一次） */
-    var seen = {}, out = [];
-    names.forEach(function (n){ if(!seen[n]){ seen[n] = 1; out.push(n); } });
+  function loadF(){
+    var f = null;
+    try{ f = JSON.parse(localStorage.getItem(F_KEY) || 'null'); }catch(e){}
+    if(!f || typeof f !== 'object') f = {};
+    var out = {};
+    for(var k in F_DEF) out[k] = (f[k] === undefined ? F_DEF[k] : f[k]);
+    if(!Array.isArray(out.role)) out.role = ['学生'];
     return out;
+  }
+  function saveF(){
+    try{ localStorage.setItem(F_KEY, JSON.stringify(BIG.pick.f)); }catch(e){}
+  }
+
+  /* 名单：优先云端（带学号/身份/性别），失败退回站内姓名列表 */
+  function loadRoster(done){
+    function fallback(){
+      var names = [];
+      try{ if(typeof classList === 'function') names = classList() || []; }catch(e){}
+      var seen = {}, out = [];
+      names.forEach(function (x){
+        var n = String(x || '').trim();
+        if(!n || seen[n]) return;
+        seen[n] = 1;
+        out.push({ name: n, studentId: '', role: '学生', gender: '' });
+      });
+      BIG.pick.roster = out;
+      if(done) done();
+    }
+    try{
+      if(typeof api === 'function'){
+        api('/profile?action=roster').then(function (j){
+          var arr = (j && j.students) || [];
+          if(!arr.length){ fallback(); return; }
+          var seen = {}, out = [];
+          arr.forEach(function (x){
+            var n = String((x && x.name) || '').trim();
+            if(!n || seen[n]) return;
+            seen[n] = 1;
+            out.push({
+              name: n,
+              studentId: String(x.studentId || ''),
+              role: String(x.role || '学生'),
+              gender: String(x.gender || ''),
+            });
+          });
+          BIG.pick.roster = out;
+          if(done) done();
+        }).catch(fallback);
+        return;
+      }
+    }catch(e){}
+    fallback();
+  }
+
+  /* 成绩：考试列表 + 某次考试的班级排名（总分 / 单科，分数 / 名次） */
+  function loadExams(done){
+    if(BIG.pick.exams) { if(done) done(); return; }
+    try{
+      if(typeof api !== 'function'){ BIG.pick.exams = []; if(done) done(); return; }
+      api('/scores?action=list').then(function (j){
+        BIG.pick.exams = (j && j.exams) || [];
+        if(done) done();
+      }).catch(function (){ BIG.pick.exams = []; if(done) done(); });
+    }catch(e){ BIG.pick.exams = []; if(done) done(); }
+  }
+
+  function statOf(examId, done){
+    if(!examId){ BIG.pick.stat = null; if(done) done(); return; }
+    if(BIG.pick.stat && String(BIG.pick.stat.id) === String(examId)){ if(done) done(); return; }
+    try{
+      if(typeof api !== 'function'){ if(done) done(); return; }
+      api('/scores?action=board&exam=' + encodeURIComponent(examId)).then(function (j){
+        BIG.pick.stat = buildStat(j);
+        if(done) done();
+      }).catch(function (){ BIG.pick.stat = null; if(done) done(); });
+    }catch(e){ if(done) done(); }
+  }
+
+  /* 把一次考试的成绩表算成「谁总分多少名、某科多少分多少名」 */
+  function buildStat(board){
+    if(!board || !board.rows) return null;
+    var exam = board.exam || {};
+    var subs = (exam.subjects || []).map(function (s){
+      return { key: String(s.key || ''), name: String(s.name || s.key || '') };
+    }).filter(function (s){ return s.key; });
+    var rows = (board.rows || []).map(function (r){
+      return { name: String(r.name || '').trim(), s: r.s || {}, total: 0, totalRank: null, sub: {} };
+    });
+    function scoreOf(v){
+      if(v == null) return null;
+      if(typeof v === 'object'){ var x = (v.assigned != null ? v.assigned : v.raw); return (x == null || x === '' || isNaN(Number(x))) ? null : Number(x); }
+      return isNaN(Number(v)) ? null : Number(v);
+    }
+    rows.forEach(function (r){
+      var t = 0, any = false;
+      subs.forEach(function (sb){
+        var v = scoreOf(r.s[sb.key]);
+        r.sub[sb.key] = { score: v, rank: null };
+        if(v != null){ t += v; any = true; }
+      });
+      r.total = any ? t : null;
+    });
+    function rank(list, val, set){
+      var arr = list.map(function (x){ return { x: x, v: val(x) }; })
+        .filter(function (o){ return o.v != null && isFinite(o.v); })
+        .sort(function (a, b){ return b.v - a.v; });
+      var last = null, rank = 0;
+      arr.forEach(function (o, i){
+        if(last === null || o.v !== last){ rank = i + 1; last = o.v; }
+        set(o.x, rank);
+      });
+    }
+    rank(rows, function (r){ return r.total; }, function (r, k){ r.totalRank = k; });
+    subs.forEach(function (sb){
+      rank(rows, function (r){ return (r.sub[sb.key] || {}).score; }, function (r, k){
+        if(r.sub[sb.key]) r.sub[sb.key].rank = k;
+      });
+    });
+    var byName = {};
+    rows.forEach(function (r){ if(r.name && !byName[r.name]) byName[r.name] = r; });
+    return { id: exam.id, name: exam.name || '', subjects: subs, rows: rows, byName: byName };
+  }
+
+  function inRange(v, min, max){
+    if(v == null || !isFinite(v)) return false;
+    if(min !== '' && min != null && Number(v) < Number(min)) return false;
+    if(max !== '' && max != null && Number(v) > Number(max)) return false;
+    return true;
+  }
+
+  /* 条件命中判定：身份 / 性别 / 学号范围 / 成绩条件，取交集 */
+  function hit(st, f, stat){
+    var roles = (f.role && f.role.length) ? f.role : ['学生'];
+    if(roles.indexOf(String(st.role || '学生')) < 0) return false;
+    if(f.gender && String(st.gender || '') !== f.gender) return false;
+    if(f.sidMin !== '' || f.sidMax !== ''){
+      var sid = Number(st.studentId);
+      if(!isFinite(sid) || !st.studentId) return false;
+      if(f.sidMin !== '' && sid < Number(f.sidMin)) return false;
+      if(f.sidMax !== '' && sid > Number(f.sidMax)) return false;
+    }
+    if(f.metric){
+      if(!stat) return false;
+      var row = stat.byName[st.name];
+      if(!row) return false;
+      var v = null;
+      if(f.metric === 'totalRank') v = row.totalRank;
+      else if(f.metric === 'totalScore') v = row.total;
+      else {
+        var cell = row.sub[f.subj] || {};
+        v = (f.metric === 'subScore') ? cell.score : cell.rank;
+      }
+      if(!inRange(v, f.min, f.max)) return false;
+    }
+    return true;
   }
 
   function pool(){
-    var ex = BIG.pick.ex || {};
-    return (BIG.pick.roster || []).filter(function (n){ return !ex[n]; });
+    var ex = BIG.pick.ex || {}, f = BIG.pick.f || F_DEF, stat = BIG.pick.stat;
+    return (BIG.pick.roster || []).filter(function (st){
+      if(ex[st.name]) return false;
+      return hit(st, f, stat);
+    });
   }
+  function names(arr){ return arr.map(function (x){ return x.name; }); }
 
-  function rnd(arr){
-    return arr[Math.floor(Math.random() * arr.length)];
-  }
+  function rnd(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
   global.bigPickOpen = function (){ BIG.pickOpen(); };
 
   BIG.pickOpen = function (){
     var m = $('bpickMask');
     if(!m) return;
-    BIG.pick.roster = rosterNames();
     BIG.pick.ex = loadEx();
+    BIG.pick.f = loadF();
     BIG.pick.n = Math.min(Math.max(1, BIG.pick.n || 1), 10);
     BIG.pick.state = 'setup';
     BIG.pick.names = [];
+    BIG.pick.stat = null;
     m.classList.add('show');
     BIG.pickBody();
+    loadRoster(function (){
+      BIG.pickBody();
+      if(BIG.pick.f.examId) statOf(BIG.pick.f.examId, BIG.pickBody);
+    });
+    loadExams(function (){ if(BIG.pick.fOpen || BIG.pick.state === 'setup') BIG.pickBody(); });
   };
 
   BIG.pickClose = function (){
@@ -625,8 +1025,8 @@
   };
 
   BIG.pickStart = function (){
-    var p = pool();
-    if(!p.length){ toast('名单里没人可抽（或都被排除了）', true); return; }
+    var p = names(pool());
+    if(!p.length){ toast('按现在的条件没人可抽，放宽一点试试', true); return; }
     BIG.pick.state = 'rolling';
     var n = Math.min(BIG.pick.n, p.length);
     BIG.pick.names = [];
@@ -645,7 +1045,6 @@
       if(Date.now() - t0 > 1400){
         clearInterval(BIG.pick.timer);
         BIG.pick.timer = null;
-        /* 最终结果：不重复 */
         var picked = [], guard = 0;
         while(picked.length < n && guard < 500){
           guard++;
@@ -665,9 +1064,8 @@
     BIG.pickStart();
   };
 
-  /* 单个重抽：只换这一个，其余不动，且不与其它结果重名 */
   BIG.pickReroll = function (i){
-    var p = pool();
+    var p = names(pool());
     if(!p.length) return;
     var others = BIG.pick.names.filter(function (_, k){ return k !== i; });
     var cand = p.filter(function (n){ return others.indexOf(n) < 0; });
@@ -676,19 +1074,83 @@
     BIG.pickBody();
   };
 
-  BIG.pickToggleEx = function (name, kind){
-    BIG.pick.ex = BIG.pick.ex || {};
-    if(BIG.pick.ex[name] === kind) delete BIG.pick.ex[name];
-    else BIG.pick.ex[name] = kind;
-    saveEx(BIG.pick.ex);
+  /* 条件面板开关 */
+  BIG.pickFilter = function (){
+    BIG.pick.fOpen = !BIG.pick.fOpen;
     BIG.pickBody();
   };
+
+  /* 条件改动：写回内存 + 本机，然后重画（条件区在顶部，重画不影响下面的名单滚动） */
+  BIG.pickSet = function (k, v){
+    var f = BIG.pick.f || (BIG.pick.f = loadF());
+    f[k] = v;
+    if(k === 'examId'){ BIG.pick.stat = null; statOf(v, BIG.pickBody); }
+    if(k !== 'metric' && k !== 'subj' && k !== 'min' && k !== 'max'){ /* 其它条件即时生效 */ }
+    saveF();
+    BIG.pickBody();
+  };
+  BIG.pickRole = function (role){
+    var f = BIG.pick.f || (BIG.pick.f = loadF());
+    var arr = (f.role || []).slice();
+    var i = arr.indexOf(role);
+    if(i >= 0){ if(arr.length > 1) arr.splice(i, 1); }
+    else arr.push(role);
+    f.role = arr;
+    saveF();
+    BIG.pickBody();
+  };
+
+  /* 名单里点一下：正常 → 请假 → 不参与 → 正常。
+     ⚠️ 只改这一个按钮的 class 与内部文字，**不重绘整块** —— 否则滚动位置会跳回顶部
+     （站主原话：「点请假之后它会自动跳转到最前面，我还要往下翻」）。 */
+  BIG.pickExOne = function (name, btn){
+    var ex = BIG.pick.ex || {};
+    if(!ex[name]) ex[name] = 'leave';
+    else if(ex[name] === 'leave') ex[name] = 'out';
+    else delete ex[name];
+    BIG.pick.ex = ex;
+    saveEx(ex);
+
+    var el = btn;
+    if(!el){
+      var all = document.querySelectorAll('.bpick-ex-item');
+      for(var i = 0; i < all.length; i++){
+        if(all[i].getAttribute('data-name') === name){ el = all[i]; break; }
+      }
+    }
+    if(el){
+      var k = ex[name] || '';
+      el.className = 'bpick-ex-item' + (k ? ' ' + k : '');
+      el.innerHTML = esc0(name) + (k === 'leave' ? '<i>请假</i>' : (k === 'out' ? '<i>不参与</i>' : ''));
+    }
+    var c = $('bpickHeadCount');
+    if(c) c.textContent = String(pool().length);
+  };
+
+  function condText(){
+    var f = BIG.pick.f || F_DEF, arr = [];
+    arr.push((f.role || ['学生']).join('/'));
+    if(f.gender) arr.push(f.gender);
+    if(f.sidMin !== '' || f.sidMax !== '') arr.push('学号 ' + (f.sidMin || '不限') + '–' + (f.sidMax || '不限'));
+    if(f.metric){
+      var stat = BIG.pick.stat;
+      var mName = f.metric === 'totalRank' ? '总分名次'
+        : f.metric === 'totalScore' ? '总分'
+        : (f.metric === 'subScore' ? '分数' : '单科名次');
+      var subName = f.subj && stat ? (function (){
+        for(var i = 0; i < stat.subjects.length; i++) if(stat.subjects[i].key === f.subj) return stat.subjects[i].name;
+        return f.subj;
+      })() : '';
+      arr.push((subName ? subName : '') + mName + ' ' + (f.min || '不限') + '–' + (f.max || '不限'));
+    }
+    return arr.join(' · ');
+  }
 
   BIG.pickBody = function (){
     var box = $('bpickBody');
     if(!box) return;
     var p = BIG.pick, all = p.roster || [], left = pool();
-    var head = '<div class="bpick-state">当前可抽取 <b>' + left.length + '</b> 人'
+    var head = '<div class="bpick-state">按条件可抽 <b id="bpickHeadCount">' + left.length + '</b> 人'
       + (all.length ? '（共 ' + all.length + ' 人）' : '') + '</div>';
 
     if(!all.length){
@@ -697,8 +1159,87 @@
     }
 
     if(p.state === 'setup'){
+      var f = p.f || F_DEF;
+      var stat = p.stat;
       var exCount = Object.keys(p.ex || {}).length;
-      box.innerHTML = head
+
+      var roles = ['学生', '老师', '管理员'];
+      var roleHtml = roles.map(function (r){
+        var on = (f.role || []).indexOf(r) >= 0;
+        return '<button type="button" class="bpick-chip' + (on ? ' on' : '') + '"'
+          + ' onclick="BIG.pickRole(\'' + attr0(r) + '\')">' + esc0(r) + '</button>';
+      }).join('');
+
+      var examOpts = '<option value="">不限成绩</option>';
+      (p.exams || []).forEach(function (e){
+        examOpts += '<option value="' + attr0(e.id) + '"' + (String(f.examId) === String(e.id) ? ' selected' : '')
+          + '>' + esc0(e.name || ('考试 ' + e.id)) + '</option>';
+      });
+      var metricOpts = [
+        ['', '不限'], ['totalRank', '总分名次'], ['totalScore', '总分'],
+        ['subScore', '单科分数'], ['subRank', '单科名次'],
+      ].map(function (x){
+        return '<option value="' + x[0] + '"' + (f.metric === x[0] ? ' selected' : '') + '>' + x[1] + '</option>';
+      }).join('');
+      var subjOpts = '';
+      if(stat && stat.subjects.length){
+        subjOpts = stat.subjects.map(function (sb){
+          return '<option value="' + attr0(sb.key) + '"' + (f.subj === sb.key ? ' selected' : '') + '>'
+            + esc0(sb.name) + '</option>';
+        }).join('');
+      }
+      var needSubj = (f.metric === 'subScore' || f.metric === 'subRank');
+
+      var filterHtml = p.fOpen
+        ? ('<div class="bpick-f">'
+            + '<div class="bpick-f-row"><span class="bpick-f-k">身份</span><div class="bpick-chips">' + roleHtml + '</div></div>'
+            + '<div class="bpick-f-row"><span class="bpick-f-k">性别</span><div class="bpick-chips">'
+            +   ['', '男', '女'].map(function (g){
+                  var lb = g || '不限';
+                  return '<button type="button" class="bpick-chip' + (f.gender === g ? ' on' : '') + '"'
+                    + ' onclick="BIG.pickSet(\'gender\',\'' + g + '\')">' + lb + '</button>';
+                }).join('')
+            + '</div></div>'
+            + '<div class="bpick-f-row"><span class="bpick-f-k">学号</span>'
+            +   '<input class="bpick-in" inputmode="numeric" placeholder="起" value="' + attr0(f.sidMin) + '"'
+            +     ' onchange="BIG.pickSet(\'sidMin\',this.value.trim())">'
+            +   '<span class="bpick-dash">–</span>'
+            +   '<input class="bpick-in" inputmode="numeric" placeholder="止" value="' + attr0(f.sidMax) + '"'
+            +     ' onchange="BIG.pickSet(\'sidMax\',this.value.trim())">'
+            + '</div>'
+            + '<div class="bpick-f-row"><span class="bpick-f-k">成绩</span>'
+            +   '<select class="bpick-sel" onchange="BIG.pickSet(\'examId\',this.value)">' + examOpts + '</select>'
+            + '</div>'
+            + (f.examId
+                ? '<div class="bpick-f-row"><span class="bpick-f-k"></span>'
+                  +   '<select class="bpick-sel" onchange="BIG.pickSet(\'metric\',this.value)">' + metricOpts + '</select>'
+                  +   (needSubj
+                      ? '<select class="bpick-sel" onchange="BIG.pickSet(\'subj\',this.value)">'
+                        + (subjOpts || '<option value="">先等成绩加载…</option>') + '</select>'
+                      : '')
+                  + '</div>'
+                + (f.metric
+                    ? '<div class="bpick-f-row"><span class="bpick-f-k"></span>'
+                      + '<input class="bpick-in" inputmode="decimal" placeholder="最小" value="' + attr0(f.min) + '"'
+                      +   ' onchange="BIG.pickSet(\'min\',this.value.trim())">'
+                      + '<span class="bpick-dash">–</span>'
+                      + '<input class="bpick-in" inputmode="decimal" placeholder="最大" value="' + attr0(f.max) + '"'
+                      +   ' onchange="BIG.pickSet(\'max\',this.value.trim())">'
+                      + '</div>'
+                    : '')
+                : '')
+            + '<p class="bpick-f-tip">条件可以叠加：比如「学生 + 男 + 总分名次 1–10」。名单只记在这台电脑上。</p>'
+            + '</div>')
+        : '';
+
+      var noOne = left.length ? '' : '<div class="bpick-empty" style="padding:12px 0 4px">按现在的条件没有人可抽。<br>'
+        + '检查一下性别 / 学号 / 成绩条件，或点上面的「修改」放宽。</div>';
+
+      box.innerHTML = head + noOne
+        + '<div class="bpick-cond">条件：' + esc0(condText())
+        +   '<button type="button" class="bpick-link" style="margin:0 0 0 8px" onclick="BIG.pickFilter()">'
+        +   (p.fOpen ? '收起' : '修改') + '</button></div>'
+        + filterHtml
         + '<div class="bpick-count"><button type="button" onclick="BIG.pickCount(-1)">−</button>'
         +   '<span><b>' + p.n + '</b> 人</span>'
         +   '<button type="button" onclick="BIG.pickCount(1)">+</button></div>'
@@ -729,16 +1270,25 @@
       + '</div>';
   };
 
+  /* 名单设置：整块只渲染一次；之后点击只改单个按钮（见 pickExOne） */
   function exPanel(){
     var p = BIG.pick;
-    var names = (p.roster || []).slice().sort(function (a, b){ return a.localeCompare(b, 'zh-Hans-CN'); });
+    var arr = (p.roster || []).slice().sort(function (a, b){
+      var x = String(a.studentId || ''), y = String(b.studentId || '');
+      if(x && y && x !== y) return x < y ? -1 : 1;
+      if(x && !y) return -1;
+      if(!x && y) return 1;
+      return a.name.localeCompare(b.name, 'zh-Hans-CN');
+    });
     return '<div class="bpick-ex">'
       + '<p class="bpick-ex-tip">点名字切换：不参与 / 请假。名单只记在这台电脑上。</p>'
       + '<div class="bpick-ex-list">'
-      + names.map(function (n){
-          var k = p.ex[n] || '';
+      + arr.map(function (st){
+          var k = p.ex[st.name] || '';
           return '<button type="button" class="bpick-ex-item' + (k ? ' ' + k : '') + '"'
-            + ' onclick="BIG.pickExOne(\'' + attr0(n) + '\')">' + esc0(n)
+            + ' data-name="' + attr0(st.name) + '"'
+            + ' onclick="BIG.pickExOne(\'' + attr0(st.name).replace(/'/g, "\\'") + '\',this)">'
+            + esc0(st.name)
             + (k === 'leave' ? '<i>请假</i>' : (k === 'out' ? '<i>不参与</i>' : '')) + '</button>';
         }).join('')
       + '</div></div>';
@@ -749,22 +1299,172 @@
     BIG.pickBody();
   };
 
-  /* 点一下：正常 → 请假 → 不参与 → 正常 */
-  BIG.pickExOne = function (name){
-    var ex = BIG.pick.ex || {};
-    if(!ex[name]) ex[name] = 'leave';
-    else if(ex[name] === 'leave') ex[name] = 'out';
-    else delete ex[name];
-    BIG.pick.ex = ex;
-    saveEx(ex);
+  BIG.pickToggleEx = function (name, kind){
+    BIG.pick.ex = BIG.pick.ex || {};
+    if(BIG.pick.ex[name] === kind) delete BIG.pick.ex[name];
+    else BIG.pick.ex[name] = kind;
+    saveEx(BIG.pick.ex);
     BIG.pickBody();
+  };
+
+  /* ---------------- 班级电脑提醒（v4.0.0 第 9 条） ----------------
+     站主原话：「我在手机端用我的账户给班级电脑发一条消息，班级电脑收到之后
+     实时出现一个弹窗，内容就是我发的消息，我可以自定义标题、内容，以及重要性，
+     重要性三档，不同等级弹窗颜色不一样。」
+     落地方式（复用站里已有的「通用弹窗」，不另建一套消息系统）：
+       · 后台「通用弹窗」新增一条，投放对象选班级电脑那个账号，重要性选普通/重要/紧急；
+       · 大屏这边每 20 秒拉一次 /api/content，看到**新出现**的弹窗就整屏弹出来；
+       · 只弹 24 小时内创建、在时间窗内、且投放对象命中本机的；
+       · 老数据没有 createdAt → 直接标记为「已看过」，不会开机把历史消息全弹一遍。 */
+  var ALERT_POLL = 20000;
+  BIG.alertSeen = {};
+  BIG.alertT = null;
+  BIG.alertQueue = [];
+
+  function meUser(){
+    try{ return (typeof AUTH !== 'undefined' && AUTH && AUTH.user) ? AUTH.user : null; }catch(e){ return null; }
+  }
+
+  function alertHit(p){
+    var t = p && p.target;
+    if(!t || !t.mode || t.mode === 'all') return true;
+    var me = meUser();
+    if(!me) return false;
+    var un = String(me.username || '').toLowerCase();
+    var dn = String(me.displayName || me.display_name || me.name || '').trim().toLowerCase();
+    if(t.mode === 'users'){
+      return (t.users || []).some(function (x){
+        var k = String(x || '').trim().toLowerCase();
+        return !!k && (k === un || k === dn);
+      });
+    }
+    if(t.mode === 'roles'){ return (t.roles || []).indexOf(String(me.role || 'user')) >= 0; }
+    if(t.mode === 'titles'){
+      var my = String(me.title || '').split(/[,，、]/).map(function (x){ return x.trim(); }).filter(Boolean);
+      return (t.titles || []).some(function (x){ return my.indexOf(x) >= 0; });
+    }
+    return true;
+  }
+
+  function inWindow(p){
+    var now = Date.now();
+    if(p.startAt){ var a = Date.parse(p.startAt); if(isFinite(a) && now < a) return false; }
+    if(p.endAt){ var b = Date.parse(p.endAt); if(isFinite(b) && now > b) return false; }
+    return true;
+  }
+
+  function beep(level){
+    try{
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return;
+      if(!BIG._ac) BIG._ac = new AC();
+      var ac = BIG._ac;
+      if(ac.state === 'suspended'){ ac.resume(); }
+      var seq = level === 'urgent'
+        ? [[880,0],[660,.16],[880,.32],[660,.48],[880,.64],[660,.80]]
+        : level === 'important'
+          ? [[740,0],[880,.18],[740,.36]]
+          : [[880,0]];
+      seq.forEach(function (x){
+        var o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sine';
+        o.frequency.value = x[0];
+        o.connect(g); g.connect(ac.destination);
+        var t = ac.currentTime + x[1];
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.2, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.19);
+        o.start(t); o.stop(t + 0.22);
+      });
+    }catch(e){}
+  }
+
+  function alertDom(){
+    var el = $('bigAlert');
+    if(el) return el;
+    el = document.createElement('div');
+    el.id = 'bigAlert';
+    el.className = 'big-alert';
+    el.innerHTML = '<div class="big-alert-box" id="bigAlertBox">'
+      + '<div class="big-alert-k" id="bigAlertK">提醒</div>'
+      + '<h2 id="bigAlertTitle"></h2>'
+      + '<p id="bigAlertBody"></p>'
+      + '<div class="big-alert-foot"><span id="bigAlertFrom"></span>'
+      +   '<button type="button" class="big-alert-btn" onclick="BIG.alertClose()">知道了</button></div>'
+      + '</div>';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  BIG.alertShow = function (p){
+    if(!p) return;
+    /* 已经在弹一条了，就排队，避免两条叠在一起 */
+    if($('bigAlert') && $('bigAlert').classList.contains('show')){ BIG.alertQueue.push(p); return; }
+    var el = alertDom();
+    var lv = (p.level === 'urgent' || p.level === 'important') ? p.level : '';
+    var box = $('bigAlertBox');
+    box.className = 'big-alert-box' + (lv ? ' level-' + lv : '');
+    $('bigAlertK').textContent = lv === 'urgent' ? '紧急通知' : lv === 'important' ? '重要提醒' : '班级提醒';
+    $('bigAlertTitle').textContent = plain(p.title || '班级消息');
+    $('bigAlertBody').textContent = String(p.body || '');
+    $('bigAlertFrom').textContent = p.createdAt
+      ? ('发送于 ' + new Date(p.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
+      : '';
+    el.classList.add('show');
+    beep(lv);
+  };
+
+  BIG.alertClose = function (){
+    var el = $('bigAlert');
+    if(el) el.classList.remove('show');
+    var next = BIG.alertQueue.shift();
+    if(next) setTimeout(function (){ BIG.alertShow(next); }, 260);
+  };
+
+  function pollAlerts(){
+    if(!BIG.on) return;
+    try{
+      if(typeof api !== 'function') return;
+      api('/content').then(function (j){
+        var it = (j && j.items) || {};
+        var raw = it.popups;
+        if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = []; } }
+        if(!Array.isArray(raw)) return;
+        raw.forEach(function (p){
+          if(!p || !p.id) return;
+          var id = String(p.id);
+          if(BIG.alertSeen[id]) return;
+          /* 只管「进站弹」这一类：板块弹（cat:N）不往大屏上怼 */
+          if(p.scope && p.scope !== 'boot' && p.scope !== 'big') return;
+          if(!inWindow(p)) return;
+          if(!alertHit(p)) return;
+          /* 没有创建时间的老弹窗：标记已读，不弹（否则第一次打开会把历史消息全放出来） */
+          if(!p.createdAt){ BIG.alertSeen[id] = 1; return; }
+          var age = Date.now() - Date.parse(p.createdAt);
+          if(!(age >= 0 && age < 86400000)){ BIG.alertSeen[id] = 1; return; }
+          BIG.alertSeen[id] = 1;
+          BIG.alertShow(p);
+        });
+      }).catch(function (){});
+    }catch(e){}
+  }
+
+  BIG.startAlerts = function (){
+    if(BIG.alertT) clearInterval(BIG.alertT);
+    pollAlerts();
+    BIG.alertT = setInterval(pollAlerts, ALERT_POLL);
+  };
+  BIG.stopAlerts = function (){
+    if(BIG.alertT){ clearInterval(BIG.alertT); BIG.alertT = null; }
   };
 
   /* ---------------- 启动 ---------------- */
 
   function boot(){
     applyClass();
+    applyFs();
     buildHome();
+    if(BIG.on) BIG.startAlerts();
     var pi = $('bhwPickIco');
     if(pi) pi.innerHTML = ico('dices', 20);
     if(!BIG.on) return;

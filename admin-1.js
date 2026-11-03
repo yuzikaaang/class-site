@@ -1866,6 +1866,18 @@ function memberDialog(m){
     +     '<p class="hint">前台显示在姓名旁，如「学生 / 走读 / 住校」。</p></div>'
     + '</div>'
 
+    /* v4.0.0（站主 9 条之六）：性别。大屏随机点名「可以按性别抽」的数据来源，
+       平时也是班级资料的一部分（可见性跟随字段管理，默认公开）。 */
+    + '<div class="mb-form-grid">'
+    +   '<div class="field"><label for="mbGender">性别</label>'
+    +     '<select id="mbGender">'
+    +       '<option value=""' + (!isNew && m.gender ? '' : ' selected') + '>未填</option>'
+    +       '<option value="男"' + (!isNew && m.gender === '男' ? ' selected' : '') + '>男</option>'
+    +       '<option value="女"' + (!isNew && m.gender === '女' ? ' selected' : '') + '>女</option>'
+    +     '</select>'
+    +     '<p class="hint">只在随机点名「按性别抽」时用到，可以不填。</p></div>'
+    + '</div>'
+
     + '<div class="mb-form-grid">'
     +   '<div class="field"><label for="mbPol">政治面貌</label>'
     +     '<select id="mbPol">' + polOpts(isNew ? '群众' : m.politics) + '</select></div>'
@@ -2022,6 +2034,7 @@ function memberDialog(m){
           /* 档案段 */
           name: nameV,
           studentId: g('#mbSid'),
+          gender:    g('#mbGender'),
           politics:  box.querySelector('#mbPol').value,
           examNo:    g('#mbEx'),
           /* v3.5.22：身份与头衔都进档案段（以前只能去「头衔任命」单独改） */

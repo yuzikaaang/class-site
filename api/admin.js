@@ -1559,6 +1559,8 @@ async function listProfiles(req, res) {
         studentId: (await d(r.student_id)) || '',
         politics: (await d(r.politics)) || '',
         examNo: (await d(r.exam_no)) || '',
+        /* v4.0.0：性别（明文列）。后台表单回显、Excel 导出都用它。 */
+        gender: r.gender || '',
         role: r.role || '学生',
         /* v3.5.22：档案里的「身份」（profiles.role）单独给一个键，
            避免与账号角色 role 混淆（前端编辑表单两个都要用） */
@@ -3358,8 +3360,15 @@ async function reviewContact(req, res, me, b) {
    顺带落地「姓名单数据源」：profiles.name 是权威源，
    保存时同步 users.display_name，消除合并前两处各存一份、对不上的问题。 */
 async function saveProfile(req, res, me, b) {
-  const r = await upsertProfileCore(getSql(), me, b, req);
+  const sql = getSql();
+  const r = await upsertProfileCore(sql, me, b, req);
   if (!r.ok) return fail(res, r.code, r.error);
+  /* v4.0.0：性别独立写（同 saveMember 的理由） */
+  if (r.id && b.gender !== undefined) {
+    const gRaw = String(b.gender == null ? '' : b.gender).trim();
+    const g = (gRaw === '男' || gRaw === '女') ? gRaw : null;
+    await sql`update profiles set gender = ${g}, updated_at = now() where id = ${r.id}`;
+  }
   return ok(res, { message: r.message, id: r.id });
 }
 
@@ -3462,6 +3471,16 @@ async function saveMember(req, res, me, b) {
     if (!r.ok) return fail(res, r.code, r.error);
     finalProfileId = r.id;
     notes.push(r.message);
+  }
+
+  /* v4.0.0（站主 9 条之六）：性别单独一条 UPDATE，**故意不塞进 upsertProfileCore
+     的参数数组** —— 那个函数的列序是手写的参数位（name/student_id/…/contact_status），
+     插一列就要重排全部占位符，历史上已经因为错位把密文写进错误的列三次了。
+     这里独立写，错不了；只认「男 / 女」，其它值一律置空。 */
+  if (finalProfileId && b.gender !== undefined) {
+    const gRaw = String(b.gender == null ? '' : b.gender).trim();
+    const g = (gRaw === '男' || gRaw === '女') ? gRaw : null;
+    await sql`update profiles set gender = ${g}, updated_at = now() where id = ${finalProfileId}`;
   }
 
   await audit(me.id, 'member.save', 'member',

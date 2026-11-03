@@ -133,6 +133,7 @@ create table profiles (
   name_hash text unique,
   student_id text unique,
   politics text,
+  gender text,
   exam_no text,
   role text not null default '学生',
   title text,
@@ -2209,7 +2210,7 @@ console.log('\n【19】最后上线（心跳）· 版本号一致性（2026-10-0
   t('主站与后台版本号一致（漏改会被抓）', !!v1 && v1 === v2, '主站 ' + v1 + ' / 后台 ' + v2);
   t('主站与后台版本日期一致', !!d1 && d1 === d2, '主站 ' + d1 + ' / 后台 ' + d2);
   t('版本号是三段数字', /^\d+\.\d+\.\d+$/.test(v1), v1);
-  t('大版本号为 3（含后端的大版本，2026-10-17 起为 3.1.0）', v1.split('.')[0] === '3', v1);
+  t('大版本号不低于 3（2026-10-17 起为 3.1.0，v4.0.0 起为 4）', Number(v1.split('.')[0]) >= 3, v1);
 }
 
 {
@@ -3706,9 +3707,9 @@ console.log('\n【37】第二十九轮·审计签名修复 + 文案 + 版本号�
   t('name_hash 已标注废弃', /\[废弃\]/.test(schemaSrc) && /name_hash[^\n]*废弃|废弃[^\n]*name_hash/.test(schemaSrc));
 
   /* --- H. 版本号（v2.4.0 起：自定义资料字段） --- */
-  t('★前台版本号为 3.9.3', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(indexHtml),
+  t('★前台版本号为 3.9.3', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(indexHtml),
     (indexHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.9.3', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adminHtml),
+  t('★后台版本号为 3.9.3', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(adminHtml),
     (adminHtml.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* --- 未认领分支必须回同一套键（否则前端要写两套判断） ---
@@ -4332,9 +4333,9 @@ console.log('\n【38】第三十轮·后台自定义资料字段（v2.4.0）');
   /* ---- I. 版本号 ---- */
   const indexHtml38 = readIdx();
   const adminHtml38 = readAdm();
-  t('★前台版本号为 3.9.3', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(indexHtml38),
+  t('★前台版本号为 3.9.3', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(indexHtml38),
     (indexHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
-  t('★后台版本号为 3.9.3', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adminHtml38),
+  t('★后台版本号为 3.9.3', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(adminHtml38),
     (adminHtml38.match(/SITE_VERSION = '([\d.]+)'/) || [])[1]);
 
   /* ---- J. 桩本身要能跑普通调用形式（否则上面那些断言是假绿） ---- */
@@ -5443,8 +5444,8 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
     /cards:\s*renderCards,/.test(adm47));
 
   /* ===== ④ 版本号 / 缓存 ===== */
-  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx47));
-  t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm47));
+  t('★前台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(idx47));
+  t('★后台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(adm47));
   /* 缓存号只增不减：v3.5.6 起是 v101。这里断言「≥v100 且是 v1xx 形态」，不再钉死具体数字 */
   t('★v3.9.16 缓存桶改为「class-site-版本」（升级即换桶，旧缓存自动作废）',
     /const CACHE = 'class-site-' \+ SITE_VER/.test(sw47));
@@ -5531,7 +5532,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /cache: 'no-store'/.test(idx48));
   const verRe = /SITE_VER\s*=\s*'([0-9]+(?:\.[0-9]+)*)'/;
   t('★版本提取正则能从 sw.js 取出版本号（SITE_VER 常量，不会误匹配 SITE_VERSION）',
-    !!verRe.exec(sw48) && /^3\.\d+\.\d+$/.test(verRe.exec(sw48)[1]), verRe.exec(sw48) ? verRe.exec(sw48)[1] : 'null');
+    !!verRe.exec(sw48) && /^\d+\.\d+\.\d+$/.test(verRe.exec(sw48)[1]), verRe.exec(sw48) ? verRe.exec(sw48)[1] : 'null');
   /* 版本号现在存在两处（index.html 的 SITE_VERSION 与 sw.js 的 SITE_VER），
      一旦漂移，所有用户都会看到「发现新版本」却怎么刷都没用。 */
   {
@@ -5631,7 +5632,7 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★所用图标 rotate-cw 确实在图标库中', /"rotate-cw":"/.test(idx48));
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
-  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx48));
+  t('★前台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(idx48));
   /* v3.19.0：日期跨月了，断言改成「2026-10-19 之后」，别再写死十月 */
   t('★前台更新日期已同步（不早于 2026-10-19）',
     /VER_DATE = '2026-(10-(19|2[0-9]|3[01])|1[12]-\d{2})'/.test(idx48));
@@ -5701,8 +5702,8 @@ console.log('\n【49】第四十一轮·iPad 弹窗居中修复 + 弹窗跳转�
     /pfLinkIsCustom\(p\.linkUrl\)/.test(adm49));
 
   /* ===== ④ 版本 ===== */
-  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx49));
-  t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm49));
+  t('★前台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(idx49));
+  t('★后台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(adm49));
   t('★页脚署名为「页面由 AI 辅助生成」', /页面由 AI 辅助生成/.test(idx49));
   t('★页脚不再出现 Work Buddy 字样', /Work Buddy/.test(idx49) === false);
 }
@@ -5774,7 +5775,7 @@ console.log('\n【50】第四十二轮·倒计时「进行中」+ 到期自动�
   t('★已结束态样式存在（imp-over）', /\.imp-over\{opacity:\.55/.test(idx50));
 
   /* ===== ⑤ 版本 ===== */
-  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx50));
+  t('★前台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(idx50));
 }
 
 console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占位（v2.7.0）');
@@ -5945,7 +5946,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
     && !/导入完成，有几点要留意/.test(adm));
 
   /* ===== ⑦ 版本 ===== */
-  t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
+  t('★后台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(adm));
 }
 
 console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
@@ -6013,7 +6014,7 @@ console.log('\n【54】第四十五轮·前台成绩分析页（v2.7.2）');
   t('★赛道文案：仅本班同学可见、请勿外传', /请勿截图外传/.test(idx));
 
   /* ===== ⑥ 版本 ===== */
-  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
+  t('★前台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(idx));
 }
 
 console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间排序 + 考试跨天（v2.7.4）');
@@ -6537,7 +6538,7 @@ console.log('\n【59】第五十四轮·分享 404 / 网络提示开关 / 内容
     /统计口径：年级名次（由后台导入）/.test(idx));
 
   /* ===== ⑥ 版本与更新记录 ===== */
-  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
+  t('★前台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(idx));
   
   /* ===== ⑦ 真实接口：sections 能存能读 ===== */  const ex0 = await call('/api/scores?action=list', { token: adminToken });
   const anyExam = (ex0.body.exams || [])[0];
@@ -6646,7 +6647,7 @@ console.log('\n【60】第五十五轮·分享统计按全班算 + 分享页去�
     /if\(cfg\.subrank && nSub\) y \+= S\.rankGap/.test(idx) && /if\(opt\.subrank && subs\.length\)\{/.test(idx));
 
   /* ===== ⑤ 版本与更新记录 ===== */
-  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
+  t('★前台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(idx));
   
   /* ===== ⑥ 真跑一遍：只分享 1 个人，班均与排名仍然是对的 ===== */  const reg2 = await call('/api/auth?action=register', {
     method: 'POST', body: { username: 'statsstu', password: 'StatsStu2026', displayName: '统计生甲' },
@@ -6749,10 +6750,10 @@ console.log('\n【61】第五十六轮·客户端派生接线检查（index.html
   t('★admin.js 不再导入 bcryptjs（诊断探针一起带走）', !/from 'bcryptjs'/.test(adminSrc));
 
   /* ---- ⑥ 版本三处同步 ---- */
-  t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx));
-  t('★后台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(adm));
+  t('★前台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(idx));
+  t('★后台版本号格式正确（主.次.修）', /SITE_VERSION = '\d+\.\d+\.\d+'/.test(adm));
   const swSrc = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
-  t('★v3.9.16 缓存桶与 SITE_VER 绑定', /SITE_VER = '3\.\d+\.\d+'/.test(swSrc) && /class-site-' \+ SITE_VER/.test(swSrc));
+  t('★v3.9.16 缓存桶与 SITE_VER 绑定', /SITE_VER = '\d+\.\d+\.\d+'/.test(swSrc) && /class-site-' \+ SITE_VER/.test(swSrc));
   }
 
 /* 【62】第五十七轮·全站字色共用逻辑 + 文案官方化（v2.9.10）
@@ -8890,7 +8891,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
 
   /* ---- ③ 版本与缓存同步 ---- */
   t('★v3.9.16 缓存桶名含版本（不再手工维护 vNN）',
-    /const CACHE = 'class-site-' \+ SITE_VER/.test(swSrc) && /SITE_VER = '3\.[0-9]+\.[0-9]+'/.test(swSrc));
+    /const CACHE = 'class-site-' \+ SITE_VER/.test(swSrc) && /SITE_VER = '\d+\.[0-9]+\.[0-9]+'/.test(swSrc));
 
   /* ---- ④ 后台内置更新记录补 2.10.1 热修条目（2.10.0 条目仍保留）---- */
   const ADMJS_SRC = readAdm();
@@ -9537,7 +9538,7 @@ console.log('\n【81】第六十八/六十九轮·成绩导出 + 各科进退步
     /* 断言「三处彼此一致 + 形如 3.x.y」，而不是钉死某个数字 —— 每轮升版都要改这里太脆 */
   t('版本号三处同步（index / admin / sw 彼此一致）',
     (function(){ var a=(idx.match(/SITE_VERSION = '([^']+)'/)||[])[1], b=(adm.match(/SITE_VERSION = '([^']+)'/)||[])[1], c=(sw.match(/SITE_VER = '([^']+)'/)||[])[1];
-      return !!a && a===b && a===c && /^3\.\d+\.\d+$/.test(a); })());
+      return !!a && a===b && a===c && /^\d+\.\d+\.\d+$/.test(a); })());
   t('KV 绑定已恢复（未注释）', /^\[\[kv_namespaces\]\]/m.test(wr) && /binding = "SITE_KV"/.test(wr));
 }
 
@@ -9783,7 +9784,7 @@ console.log('\n【84】第七十二轮·v3.2.1 修「部署失败」的两个假
 
   /* ⑤ 模拟 CI 里那行解析，确认能取到版本号 */
   const parsed = (wrk.match(/const API_VER = '([^']+)'/) || [])[1];
-  t('（模拟）CI 的 grep|sed 能取出版本号', /^3\.\d+\.\d+$/.test(String(parsed||'')), 'parsed=' + parsed);
+  t('（模拟）CI 的 grep|sed 能取出版本号', /^\d+\.\d+\.\d+$/.test(String(parsed||'')), 'parsed=' + parsed);
 }
 
 

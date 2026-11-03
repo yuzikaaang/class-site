@@ -283,6 +283,7 @@ create table if not exists profiles (
         加密后同一学号每次加密的 IV 不同，密文永远互不相等，unique 形同虚设；
         唯一性改由 student_id_bidx（盲索引）在应用层保证。 */
   student_id    text,                                  -- 学号（管理员维护，密文存储）
+  gender        text,                                  -- 性别：男 / 女（v4.0.0，随机点名按性别抽取用）
   politics      text,                                  -- 政治面貌：共青团员 / 群众 / 中共党员 等
   exam_no       text,                                  -- 智学网准考证号（管理员维护，同学查询时直接可见）
   role          text        not null default '学生',    -- 学生 | 老师 | 管理员  /* ---- 以下三项由同学自填，需管理员审核后展示 ---- */
@@ -393,6 +394,7 @@ insert into profile_field_meta (field, label, visibility, sort_order, is_custom)
   ('politics',        '政治面貌',      'public', 30,  false),
   ('exam_no',         '智学网账号',    'public', 40,  false),
   ('role',            '身份',         'public', 50,  false),
+  ('gender',          '性别',         'public', 25,  false),
   ('title',           '头衔',         'public', 60,  false),
   ('wechat',          '微信',         'public', 70,  false),
   ('qq',              'QQ',          'public', 80,  false),

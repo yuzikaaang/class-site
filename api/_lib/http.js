@@ -48,10 +48,11 @@ export { getSql };
    ------------------------------------------------------------ */
 /** 表结构版本：DDL 清单每变一次 +1（见上方闸门说明）。
     3.8.4 → 3.19.0：class_votes 新增 public_read（投票是否对未登录可见）。
+    3.19.0 → 4.0.0：profiles 新增 gender（随机点名按性别抽取）。
     2026-11-03 踩坑复盘：改了 DDL 却忘了升这里，线上老库被闸门放行、
     列一直没建，/api/votes?action=public 直接 500 —— 这是第四次同类错误，
     纪律就是纪律：**改 DDL 清单的同一次提交里必须改这一行**。 */
-const SCHEMA_VER = '3.19.0';
+const SCHEMA_VER = '4.0.0';
 let schemaReady = false;
 export async function ensureSchema(sql) {
   if (schemaReady) return;
@@ -129,7 +130,9 @@ export async function ensureSchema(sql) {
             ('ethnicity',    '民族',     'public', 140, false),
             ('birth_date',   '出生日期', 'self',   150, false),
             ('home_address', '家庭住址', 'self',   160, false),
-            ('league_date',  '入团时间', 'self',   170, false)
+            ('league_date',  '入团时间', 'self',   170, false),
+            /* v4.0.0：性别。放在学号后面（sort 25），前台资料卡与后台表单都按这个顺序排。 */
+            ('gender',       '性别',     'public',  25, false)
           on conflict (field) do nothing
         `; } catch (e) {}
         /* 🔴 v3.5.14：站主「出生日期/民族/班级/学校/家庭住址 怎么删都删不掉」。
@@ -233,7 +236,9 @@ export async function ensureSchema(sql) {
             add column if not exists visibility_pref text,
             add column if not exists field_vis       text,
             add column if not exists id_card         text,
-            add column if not exists youth_league_no text
+            add column if not exists youth_league_no text,
+            /* v4.0.0：性别（随机点名按性别抽取用）。只认「男 / 女」，空 = 未填。 */
+            add column if not exists gender          text
         `; } catch (e) {}
         /* 🔴 v3.5.27：歌曲时长云端库（站主「一定要获取到歌曲时长并同步云端，省的每次都要加载」）。
            以前时长只存 localStorage → 换设备/清缓存全丢，每次开页面都要重新联网搜一遍。
@@ -544,6 +549,7 @@ export async function ensureSchema(sql) {
         name_hash      text        unique,
         student_id     text,
         politics       text,
+        gender         text,
         exam_no        text,
         role           text        not null default '学生',
         wechat         text,

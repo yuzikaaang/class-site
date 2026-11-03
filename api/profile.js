@@ -868,7 +868,7 @@ async function roster(req, res) {
      （密文非空），但排序与展示必须用明文，所以整行解密后再排。 */
   const pkey = await profileKey(req);
   const raw = await sql`
-    select name, student_id
+    select name, student_id, role, gender
       from profiles
      where coalesce(name, '') <> ''
      order by student_id nulls last, name
@@ -876,7 +876,14 @@ async function roster(req, res) {
   const rows = [];
   for (const r of raw) {
     const d = await decRow(pkey, r);
-    rows.push({ name: d.name || '', studentId: d.student_id || '' });
+    rows.push({
+      name: d.name || '',
+      studentId: d.student_id || '',
+      /* v4.0.0（站主 9 条）：「默认只抽学生」「可以按性别抽」「按学号范围抽」——
+         大屏随机点名的筛选全靠这三个字段。role/gender 是明文列，不经加密。 */
+      role: d.role || '学生',
+      gender: d.gender || '',
+    });
   }
   if (pkey) {
     rows.sort((a, b) => {
@@ -890,7 +897,10 @@ async function roster(req, res) {
     count: rows.length,
     names: rows.map((r) => r.name),
     /* 学号只在前端做排序 / 去重备用，同样是班内公开信息 */
-    students: rows.map((r) => ({ name: r.name, studentId: r.studentId || '' })),
+    students: rows.map((r) => ({
+      name: r.name, studentId: r.studentId || '',
+      role: r.role || '学生', gender: r.gender || '',
+    })),
   });
 }
 

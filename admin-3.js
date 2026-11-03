@@ -2775,6 +2775,27 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.0.0', date: '2026-11-03', type: 'feat', title: '大屏作业页改版：两栏排布、字号可调、锁定防误触，点名能按条件抽', items: [
+      '站主：「这次主要是对大屏里面的作业查看进行一个更改……最重要的一点是我不需要滑动就可以看到所有的作业，而且字号我可以自己调」',
+      '【两栏排布】作业页重排：左边语数英，右边物化生，最右边是时钟与随机点名，底边放其他科目；一行写不下自动换行',
+      '【不带导航】作业页不再显示全站导航与页头，只保留「25级05班班级服务站」和左上角「返回大屏服务」',
+      '【一屏看完】默认字号下全部作业一屏装得下，不出现滚动条；字号调大放不下时才允许上下滚动',
+      '【字号可调】底部工具条 A− / A+ 共八档，只影响作业页，并记在这台电脑上',
+      '【锁定防误触】底部「锁定」按下后，整页点击、滑动、滚动都不会有反应，必须先点右下角「解锁」；刷新页面自动解锁',
+      '【时钟到秒】作业页时钟精确到秒',
+      '【期次命名】新建一期时可填名称与起止日期；历史作业可随时重命名',
+      '【作业配图】作业里配的图片直接铺出来，不用点开看；点一下可以放大；音频仍然点一下才播放',
+      '【按条件抽人】随机点名默认只抽学生，可按性别、学号范围、总分名次、单科名次或分数区间筛选，条件可叠加，记在本机',
+      '【名单不跳顶】名单设置里点「请假 / 不参与」不再跳回最上面，可以接着往下点',
+      '【班级电脑提醒】后台「通用弹窗」发一条、投放对象选班级电脑账号，电脑上 20 秒内整屏弹出；分普通 / 重要 / 紧急三档，边框颜色与提示音不同',
+      '【性别字段】成员档案新增「性别」，后台可填写，供点名按性别抽取'
+    ], pub: [
+      { cat: '界面', text: '大屏作业页改版：左边语数英、右边物化生，底边放其他科目；底部可调字号、可一键锁定防误触，默认一屏看完全部作业' },
+      { cat: '作业', text: '作业页时钟精确到秒；新建一期可命名、历史作业可重命名；作业配图直接显示，音频点一下播放' },
+      { cat: '班级', text: '随机点名可按身份、性别、学号范围、总分或单科名次筛选，默认只在学生里抽' },
+      { cat: '班级', text: '班级电脑会收到提醒，分普通、重要、紧急三档，颜色与提示音不同' },
+      { cat: '资料', text: '成员档案新增「性别」一栏，可在班级档案里填写' }
+    ] },
   { version: '3.19.0', date: '2026-11-03', type: 'feat', title: '大屏模式：一屏放全部功能，作业能直接在班级电脑上写', items: [
       '站主：「这个班级的网站我后续会在我们班上电脑大屏上运用……在设置新增一个大屏模式的选项，打开之后就是一个页面显示全部功能」',
       '【大屏模式】自定义设置 → 界面 → 大屏模式。开了以后：顶部导航变成横排（还是原来那些入口），首页铺成图标墙，按板块分组，图标更大、点起来更容易',
@@ -4032,6 +4053,15 @@ var POP_THEMES = [
   { id: 'welcome', name: '迎新橙卡（橙底白字，用于首次访问欢迎）' },
 ];
 
+/* v4.0.0（站主第 9 条）：重要性三档。
+   大屏（班级电脑）收到时按档位换颜色、换提示音 —— 普通一短声、重要三声、紧急连响。
+   这里只存级别；具体怎么响由大屏的 big.js 决定，后台不关心播放设备。 */
+var POP_LEVELS = [
+  { id: '',          name: '普通（灰棕，一声轻提示）' },
+  { id: 'important', name: '重要（橙色，三声提示）' },
+  { id: 'urgent',    name: '紧急（红色，连响并整屏弹出）' },
+];
+
 /* ---- 读取 / 写入云端 ---- */
 function popNorm(v){
   if(!Array.isArray(v)) return [];
@@ -4054,6 +4084,17 @@ function popNorm(v){
       bubble:    (p.bubble === false) ? false : true,
       bannerText: p.bannerText || '',
       theme:      p.theme || '',
+      /* v4.0.0：重要性 + 创建时间（大屏靠 createdAt 判断「要不要现在弹」，
+         避免一次把积压的历史消息全弹出来）。顺带补上 target —— 以前
+         popNorm 是白名单，target 存进去再读回来就被吃掉了，编辑一次就丢投放对象。 */
+      level:     (p.level === 'important' || p.level === 'urgent') ? p.level : '',
+      createdAt: p.createdAt || '',
+      target: (p.target && typeof p.target === 'object')
+        ? { mode: String(p.target.mode || 'all'),
+            users: Array.isArray(p.target.users) ? p.target.users : [],
+            roles: Array.isArray(p.target.roles) ? p.target.roles : [],
+            titles: Array.isArray(p.target.titles) ? p.target.titles : [] }
+        : { mode: 'all', users: [], roles: [], titles: [] },
     });
   });
   return out;
@@ -6004,6 +6045,8 @@ function paintPopups(){
       +       (p.bubble === false ? ' · 不留悬浮球' : ' · 留悬浮球')
       +       (p.bannerText ? ' · 横幅' : '')
       +       (p.theme ? ' · 样式:' + esc(p.theme) : '')
+       + (p.level === 'urgent' ? ' · <b style="color:#b91c1c">紧急</b>'
+          : p.level === 'important' ? ' · <b style="color:#c2410c">重要</b>' : '')
       +       (p.target && p.target.mode && p.target.mode !== 'all'
               ? ' · 投放:' + esc(popTargetText(p.target)) : ' · 投放:所有人')
       +     '</div>'
@@ -6169,6 +6212,12 @@ function popEdit(idx){
     + '<div class="field"><label>横幅文字（仅「进板块」弹窗生效）</label>'
     + '<input id="pfBanner" class="gate-input" value="' + attr(p.bannerText) + '" placeholder="进板块时板块顶部显示的横幅，留空则不显示"></div>'
 
+    + '<div class="field"><label>重要性（班级电脑弹窗的颜色与提示音）</label>'
+    + '<select id="pfLevel" class="gate-input">'
+    + POP_LEVELS.map(function(t){ return '<option value="' + attr(t.id) + '"' + (t.id === (p.level || '') ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('')
+    + '</select>'
+    + '<p class="hint">只有开了「大屏模式」的班级电脑会按这个级别换颜色、响不同提示音；手机端弹窗不受影响。</p></div>'
+
     + '<div class="field"><label>卡片样式</label>'
     + '<select id="pfTheme" class="gate-input">' + POP_THEMES.map(function(t){ return '<option value="' + attr(t.id) + '"' + (t.id === p.theme ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select></div>';
 
@@ -6230,6 +6279,13 @@ function popSave(idx, editing){
     bubble:    $('pfBubble').checked,
     bannerText: ($('pfBanner').value || '').trim(),
     theme:      $('pfTheme').value,
+    level:      $('pfLevel').value,
+    /* 新建时打上创建时间；编辑保留原来的，不能让「改个字」变成一次新推送 */
+    createdAt:  (function(){
+      var old = null;
+      if(typeof idx === 'number' && POP_STATE.list[idx]) old = POP_STATE.list[idx].createdAt;
+      return old || new Date().toISOString();
+    })(),
     /* v3.5.40（站主 #4）：投放对象 */
     target: (function(){
       var m = $('pfTargetMode') ? $('pfTargetMode').value : 'all';
