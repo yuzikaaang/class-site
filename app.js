@@ -2005,6 +2005,8 @@ function parseRoute(raw){
   }
   if(p[0] === 'vote'){ out.id = parseInt(p[1], 10); return out; }
   if(p[0] === 'votes'){ return out; }
+  /* v3.19.0：大屏作业页（#/hw 或 #/hw/<期次id>） */
+  if(p[0] === 'hw'){ out.hwid = p[1] ? decodeURIComponent(p.slice(1).join('/')) : ''; return out; }
   /* 两个高频入口给个短名字，比记板块 id 友好（卡片 id 见 SITE_DATA.links） */
   if(p[0] === 'music'){ out.v = 'card'; out.cat = 1; out.card = '1'; return out; }
   if(p[0] === 'homework'){ out.v = 'card'; out.cat = 1; out.card = '2'; return out; }
@@ -2028,6 +2030,8 @@ function setRoute(path){
 
 /* 当前视图 → 路由字符串（给「复制链接」按钮用） */
 function routeOfView(){
+  /* v3.19.0：大屏作业页优先 —— 它不落在任何板块上，__activeCat 是空的 */
+  if(window.BIG && BIG.hwOn) return 'hw' + (BIG.hwId ? '/' + encodeURIComponent(BIG.hwId) : '');
   if(window.__activeCat == null) return '';
   var id = window.__activeCat;
   if(id === 3){
@@ -2147,6 +2151,16 @@ function applyHash(){
 
   if(r.v === 'votes' || r.v === 'vote'){
     goVotesRoute(r.id);
+    return;
+  }
+
+  /* 大屏作业页：big.js 在 app.min.js 之后才执行，这里不能同步调用，
+     也不能 resetHome（那会把地址栏清掉）—— 让出一拍等它挂上来。 */
+  if(r.v === 'hw'){
+    setTimeout(function(){
+      if(window.BIG && typeof BIG.openHw === 'function') BIG.openHw(r.hwid || null);
+      else resetHome();
+    }, 0);
     return;
   }
 
@@ -8655,6 +8669,19 @@ function renderSettings(){
   var box = document.getElementById('uiSetBody'); if(!box) return;
   var html = '';
   if(UI_SEC === 'look'){
+    /* —— v3.19.0（站主）：大屏模式 ——
+       班级电脑 / 投影用。开了以后首页就是「一屏全功能」的图标墙，
+       顶部导航照旧；点站内功能进单功能页，点外链直接新窗口。
+       只记这台设备（站主要求「只存本机」），换电脑要重新开一次。 */
+    if(typeof BIG !== 'undefined' && BIG){
+      html += secHtml('bigscreen','大屏模式','monitor',
+        '<div class="sw-row"><span class="t">大屏模式<span class="s">班级电脑 / 投影：一屏显示全部功能，图标更大更好点</span></span>' +
+          swHtml(!!BIG.on, 'bigToggle(event)') + '</div>' +
+        '<p class="ui-hint">开之后：首页按板块分组铺成图标墙，顶部导航还在；'
+        + '点「成绩分析」这类站内功能会进入只有这一个功能的页面，左上角「返回大屏」可回来。<br>'
+        + '<b>只记在这台电脑上</b>，清缓存或换设备要重新打开。'
+        + (BIG.on ? '<br>当前：<b>已开启</b>' : '') + '</p>', true);
+    }
     /* —— 主题自动切换（v2.5.3 站主要求：三选一 + 跟随系统/日出日落）—— */
     var tmode = themeAutoMode();
     var modeBtns = [
@@ -12980,15 +13007,8 @@ function voteBarHtml(html){
 /* 切到板块 7 时调用（openCat 里），render() 重建后也要重挂 */
 function voteEnsureMounted(){
   if(!document.getElementById('voteEmbed')) return;
-  if(!isLoggedIn()){
-    voteBarHtml('');
-    voteBody('<div class="vote-empty">'
-      + '<div class="vote-empty-ico">🗳️</div>'
-      + '<p>投票需要登录后才能参与。</p>'
-      + '<button class="btn" onclick="needLogin(ClsAuth.here(\'#/votes\'))">去登录</button>'
-      + '</div>');
-    return;
-  }
+  /* v3.19.0（站主）：未登录不再是一张「请登录」的空板 ——
+     先加载公开投票，让人看得到有哪些项目、结果如何；要投票再登录。 */
   if(!VOTE.loaded && !VOTE.loading){ voteLoad(); return; }
   voteRenderAll();
 }
@@ -12997,7 +13017,7 @@ function voteLoad(){
   VOTE.loading = true;
   voteBarHtml('');
   voteBody('<div class="vote-empty"><div class="spinner"></div><p>正在读取投票…</p></div>');
-  api('/votes?action=list').then(function(j){
+  api(isLoggedIn() ? '/votes?action=list' : '/votes?action=public').then(function(j){
     VOTE.votes = (j && j.votes) || [];
     VOTE.loaded = true;
     VOTE.loading = false;
@@ -13063,6 +13083,7 @@ function voteRenderAll(){
     + '<p class="vote-sub">' + (openList.length
         ? '进行中 <b>' + openList.length + '</b> 个' + (doneList.length ? ' · 已结束 ' + doneList.length + ' 个' : '')
         : '当前没有进行中的投票' + (doneList.length ? ' · 已结束 ' + doneList.length + ' 个' : ''))
+    + (isLoggedIn() ? '' : '<br><span class="vote-dim">未登录只能查看，投票需登录</span>')
     + '</p>'
     + '</div>');
 
@@ -13230,6 +13251,8 @@ function voteOptLabelHtml(label, meta, moreText){
 function voteCardHtml(v){
   var multi = !!v.multi;
   var closed = !v.open;
+  /* v3.19.0：游客态（未登录）—— 能看到选项和票数，但不给投票按钮 */
+  var guest = !isLoggedIn();
   /* v3.5.14 站主要求：结束后可选「展示结果公示并隐藏投票」。
      配了公示才这么干；没配公示就退回只读投票栏，免得整张卡空白。 */
   if(closed && v.endMode === 'pub'){
@@ -13252,7 +13275,7 @@ function voteCardHtml(v){
   /* ⚠️ v3.5.14 重要修正：以前条件是 closed || v.results —— 管理员（后台预览时后端也发票数）
      永远走结果视图，所以站主自己在线上「点了几次都投不上」。现在只有**已截止**才只看结果；
      未截止一律展示点赞按钮，管理员额外在选项右侧看到票数。 */
-  if(closed){
+  if(closed || guest){
     /* 结果视图：条形 + 票数（按票数降序，同票保持原顺序；后端已排，这里兜底） */
     optsHtml = (v.results || v.options).slice().sort(function(a, b){ return (b.n || 0) - (a.n || 0); }).map(function(o){
       var n = o.n || 0;
@@ -13295,7 +13318,7 @@ function voteCardHtml(v){
   }
 
   var addHtml = '';
-  if(v.allowAdd && !closed){
+  if(v.allowAdd && !closed && !guest){
     addHtml = '<div class="vote-add">'
       + '<input id="voteAddInput' + v.id + '" type="text" maxlength="80" placeholder="想加的选项（最多 80 字）">'
       + '<button class="btn btn-sm btn-secondary" data-vote-add="' + v.id + '">添加</button>'
@@ -13304,7 +13327,13 @@ function voteCardHtml(v){
 
   /* v3.5.14 修正：选完要点「确定」才上传；已投状态下只显示撤回入口。 */
   var submitHtml = '';
-  if(!closed){
+  if(!closed && guest){
+    /* 未登录：只提示，不给投票入口 */
+    submitHtml = '<div class="vote-actions vote-guest-bar">'
+      + '<span class="vote-hint">未登录，只能看结果</span>'
+      + '<button class="btn btn-sm" onclick="needLogin(ClsAuth.here(\'#/votes\'))">登录后投票</button>'
+      + '</div>';
+  }else if(!closed){
     var hint = multi ? '可多选' : '单选';
     if(v.maxChoices) hint += ' · 最多 ' + v.maxChoices + ' 项';
     if(v.minChoices) hint += ' · 至少 ' + v.minChoices + ' 项';

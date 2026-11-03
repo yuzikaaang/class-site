@@ -3845,6 +3845,300 @@ html[data-motion="off"] .welcome-mask.show{
 }
 
 </style>
+
+<style id="bigModeCss">
+/* ============================================================================
+ * 大屏模式（v3.19.0）
+ * ----------------------------------------------------------------------------
+ * 站主：「打开之后他就是一个页面显示全部功能」。
+ * 做法：html.big-mode 一个类切三件事 ——
+ *   ① 顶栏从「左侧竖排」变成「横向导航条」（还是原来那些按钮，不复制一套）；
+ *   ② 首页换成图标墙 #bigHome；
+ *   ③ 点站内功能进「单功能页」，同板块其它卡片隐藏，并出现返回条。
+ * 全部用 !important 覆盖 app.js 写在行内的 display 切换，避免两套逻辑打架。
+ * ========================================================================= */
+html.big-mode{font-size:17px}
+html.big-mode .layout{display:block;max-width:1520px;padding:12px 20px 40px}
+html.big-mode .sidebar{
+  position:sticky;top:8px;z-index:900;width:auto;height:auto;max-height:none;
+  flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px;
+  padding:8px 10px;border-radius:16px;overflow:visible;margin-bottom:14px;
+}
+html.big-mode .sidebar .side-tip{display:none}
+html.big-mode #sideCats{display:flex;flex-wrap:wrap;gap:6px}
+html.big-mode .side-btn{margin:0!important;padding:9px 15px;font-size:.95rem;white-space:nowrap;width:auto!important}
+html.big-mode #landBtn,html.big-mode #sfxBtn{display:none}
+html.big-mode #uiSetBtn{margin-left:auto!important}
+html.big-mode .fab{display:none}
+html.big-mode .sidebar-mask{display:none!important}
+html.big-mode .content{max-width:none;padding:0}
+html.big-mode .content>header{padding:18px 22px;border-radius:18px;margin-bottom:14px}
+html.big-mode .content>header h1{font-size:1.45rem;line-height:1.3}
+html.big-mode .content>header p#brandSub{display:none}
+html.big-mode .content>header .logo{width:46px;height:46px;margin-top:8px}
+html.big-mode footer{margin-top:18px}
+
+/* —— 图标墙 —— */
+#bigHome{display:none}
+html.big-mode #bigHome{display:block}
+html.big-mode.big-cat #bigHome,html.big-mode.big-hw #bigHome{display:none!important}
+html.big-mode:not(.big-cat):not(.big-hw) #homeView{display:none!important}
+.big-group{margin:22px 0 4px}
+.big-group h2{
+  display:flex;align-items:center;gap:12px;margin:0 0 14px;
+  font-size:.92rem;font-weight:800;letter-spacing:.12em;color:var(--fg-3);
+}
+.big-group h2::after{content:'';flex:1;height:1px;background:rgba(120,53,15,.14)}
+.dark .big-group h2::after{background:rgba(255,255,255,.12)}
+.big-tiles{display:grid;grid-template-columns:repeat(auto-fill,200px);gap:14px;justify-content:start}
+.big-tile{
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:9px;
+  min-height:170px;padding:22px 12px 16px;text-align:center;cursor:pointer;
+  background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:20px;
+  box-shadow:0 1px 2px rgba(120,53,15,.05);color:var(--fg);
+  transition:transform .18s ease,box-shadow .18s ease,background .18s ease;
+}
+.big-tile:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(120,53,15,.13);background:#fff}
+.big-tile:active{transform:scale(.97)}
+.dark .big-tile{background:#2a2523;border-color:rgba(255,255,255,.08)}
+.dark .big-tile:hover{background:#332d29}
+.big-tile.off{opacity:.42;filter:grayscale(1);cursor:not-allowed}
+.big-tile .bt-ico{
+  width:64px;height:64px;border-radius:19px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--grad-a),var(--grad-b));overflow:hidden;flex:none;
+  box-shadow:0 6px 14px rgba(194,65,12,.18);
+}
+.big-tile .bt-ico img{width:40px;height:40px;object-fit:contain}
+.big-tile .bt-txt{font-size:1.25rem;font-weight:900;color:#fff;letter-spacing:.02em}
+.big-tile .bt-t{font-size:1.05rem;font-weight:800;line-height:1.35}
+.big-tile .bt-s{font-size:.75rem;color:var(--fg-3);line-height:1.4}
+.big-empty{color:var(--fg-3);text-align:center;padding:40px 0}
+
+/* —— 单功能页的顶部返回条 —— */
+.big-sub{display:none;align-items:center;gap:14px;margin:2px 0 12px}
+html.big-mode.big-cat .big-sub{display:flex}
+.big-sub button{
+  display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:12px;cursor:pointer;
+  border:1px solid rgba(120,53,15,.16);background:var(--bg-2);color:var(--fg);font-weight:700;font-size:.9rem;
+}
+.big-sub button:hover{background:var(--tint)}
+.big-sub span{font-size:1.05rem;font-weight:800;color:var(--fg-2)}
+html.big-mode.big-cat #grid.big-single .card:not(.big-only){display:none!important}
+html.big-mode.big-cat #grid.big-single .card.big-only{max-width:760px;margin:0 auto}
+html.big-mode .tab-page h2{font-size:1.3rem}
+
+/* —— 大屏作业页 —— */
+#bigHw{display:none;padding:2px 0 30px}
+html.big-mode.big-hw #bigHw{display:block}
+html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important}
+.bhw-head{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:16px}
+.bhw-head h2{font-size:1.75rem;margin:0;line-height:1.25;color:var(--fg)}
+.bhw-head p{margin:4px 0 0;color:var(--fg-3);font-size:.9rem}
+.bhw-head-act{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bhw-sel{
+  padding:9px 12px;border-radius:12px;border:1px solid rgba(120,53,15,.16);
+  background:var(--bg-2);color:var(--fg);font-size:.88rem;max-width:340px;
+}
+.bhw-btn{
+  display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:12px;cursor:pointer;
+  border:none;background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;font-weight:700;font-size:.88rem;
+}
+.bhw-btn.ghost{background:var(--bg-2);color:var(--fg);border:1px solid rgba(120,53,15,.16)}
+.bhw-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+@media(max-width:1180px){.bhw-grid{grid-template-columns:1fr}}
+/* 宽屏（教室电脑）：作业区自己滚，右栏时钟 / 点名始终停在原位 ——
+   站主要求「一个页面装得下」，作业再多也不该把时钟顶出屏幕。 */
+@media(min-width:1181px){
+  .bhw-grid{grid-template-columns:minmax(0,1fr) 380px}
+  .bhw-main{max-height:calc(100vh - 250px);overflow:auto;padding-right:8px}
+  .bhw-main::-webkit-scrollbar{width:8px}
+  .bhw-main::-webkit-scrollbar-thumb{background:rgba(120,53,15,.18);border-radius:8px}
+  .bhw-txt,.bhw-in{font-size:1.06rem}
+}
+@media(min-width:1600px){
+  html.big-mode{font-size:19px}
+  .bhw-head h2{font-size:1.9rem}
+  .bhw-subj-h b,.bhw-subj-in{font-size:1.34rem}
+  .bhw-clock-t{font-size:3.6rem}
+}
+.bhw-card{
+  background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:22px;
+  padding:20px 22px;box-shadow:0 2px 6px rgba(120,53,15,.05);
+}
+.dark .bhw-card,.dark .bhw-mini,.dark .bhw-clock{background:#2a2523;border-color:rgba(255,255,255,.08)}
+.bhw-subj{padding:6px 0 14px;border-bottom:1px dashed rgba(120,53,15,.14)}
+.bhw-subj:last-child{border-bottom:none;padding-bottom:0}
+.bhw-subj-h{display:flex;align-items:center;gap:8px;margin:10px 0 8px}
+.bhw-subj-h b{font-size:1.22rem;font-weight:900;color:var(--accent-ink)}
+.dark .bhw-subj-h b{color:#fdba74}
+.bhw-subj-in{
+  font-size:1.18rem;font-weight:900;color:var(--accent-ink);background:transparent;
+  border:1px solid transparent;border-radius:8px;padding:2px 6px;width:8em;
+}
+.bhw-subj-in:hover,.bhw-subj-in:focus{border-color:rgba(120,53,15,.2);background:#fff;outline:none}
+.dark .bhw-subj-in{color:#fdba74}
+.dark .bhw-subj-in:hover,.dark .bhw-subj-in:focus{background:#332d29}
+.bhw-task{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:10px;margin-bottom:6px}
+.bhw-task:hover{background:rgba(249,115,22,.06)}
+.bhw-dot{width:6px;height:6px;border-radius:50%;background:var(--grad-a);flex:none}
+.bhw-txt{font-size:1.02rem;line-height:1.6;color:var(--fg)}
+.bhw-in{
+  flex:1;min-width:0;font-size:1.02rem;line-height:1.6;color:var(--fg);background:transparent;
+  border:1px solid transparent;border-radius:8px;padding:2px 6px;font-family:inherit;
+}
+.bhw-in:hover{border-color:rgba(120,53,15,.14)}
+.bhw-in:focus{border-color:var(--grad-a);background:#fff;outline:none}
+.dark .bhw-in:focus{background:#332d29}
+.bhw-x{
+  border:none;background:transparent;color:var(--fg-3);cursor:pointer;padding:4px;border-radius:8px;
+  display:inline-flex;align-items:center;opacity:.5;
+}
+.bhw-x:hover{opacity:1;background:rgba(185,28,28,.1);color:#b91c1c}
+.bhw-add,.bhw-addsubj button{
+  border:none;background:transparent;color:var(--accent-ink);font-weight:700;font-size:.86rem;
+  cursor:pointer;padding:6px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:5px;
+}
+.bhw-add:hover{background:rgba(249,115,22,.1)}
+.bhw-tag{font-size:.66rem;padding:1px 6px;border-radius:6px;background:var(--tint-2);color:var(--accent-ink);margin-left:4px}
+.bhw-addsubj{display:flex;align-items:center;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid rgba(120,53,15,.10);flex-wrap:wrap}
+.bhw-addsubj .bhw-in{border:1px dashed rgba(120,53,15,.25);max-width:240px;padding:8px 12px;border-radius:10px}
+.bhw-save{font-size:.8rem;color:var(--fg-3);margin-left:auto}
+.bhw-empty{color:var(--fg-3);text-align:center;padding:46px 10px;font-size:1rem}
+.bhw-side{display:flex;flex-direction:column;gap:12px}
+.bhw-clock{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;cursor:pointer;text-align:left;
+  background:linear-gradient(135deg,#7c2d12,#9a3412);color:#fff;border:none;border-radius:22px;
+  padding:20px 22px;box-shadow:0 10px 26px rgba(124,45,18,.25);
+}
+.bhw-clock:hover{filter:brightness(1.06)}
+.bhw-clock-t{font-size:3.1rem;font-weight:900;line-height:1;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.bhw-clock-s{font-size:.85rem;opacity:.85;margin-top:6px}
+.bhw-mini{
+  background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:18px;padding:14px 16px;
+  display:flex;flex-direction:column;gap:6px;
+}
+.bhw-mini-k{font-size:.72rem;font-weight:800;letter-spacing:.12em;color:var(--fg-3)}
+.bhw-mini-v{font-size:.95rem;line-height:1.55;font-weight:700;color:var(--fg)}
+.bhw-pick{
+  display:flex;flex-direction:column;align-items:flex-start;gap:3px;cursor:pointer;text-align:left;
+  background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:18px;padding:16px 16px;
+  color:var(--fg);font-family:inherit;
+}
+.bhw-pick:hover{border-color:var(--grad-a);background:#fff}
+.dark .bhw-pick{background:#2a2523;border-color:rgba(255,255,255,.08)}
+.bhw-pick-ico{width:34px;height:34px;border-radius:11px;background:linear-gradient(135deg,var(--grad-a),var(--grad-b));display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+.bhw-pick-ico svg{stroke:#fff}
+.bhw-pick b{font-size:1.05rem}
+.bhw-pick span{font-size:.78rem;color:var(--fg-3)}
+
+/* —— 随机点名弹层 —— */
+.bpick-mask{
+  position:fixed;inset:0;z-index:1400;display:none;align-items:center;justify-content:center;
+  background:rgba(30,20,14,.55);backdrop-filter:blur(6px);padding:20px;
+}
+.bpick-mask.show{display:flex}
+.bpick-box{
+  width:min(720px,96vw);max-height:92vh;overflow:auto;background:var(--bg-1);border-radius:24px;
+  box-shadow:0 30px 70px rgba(0,0,0,.35);padding:22px 26px 26px;
+}
+.dark .bpick-box{background:#221f1d}
+.bpick-head{display:flex;align-items:center;margin-bottom:6px}
+.bpick-head b{font-size:1.3rem}
+.bpick-head button{margin-left:auto;border:none;background:transparent;cursor:pointer;color:var(--fg-3);padding:6px;border-radius:8px}
+.bpick-head button:hover{background:var(--tint)}
+.bpick-state{font-size:.85rem;color:var(--fg-3);margin-bottom:14px}
+.bpick-state b{font-size:1.1rem;color:var(--accent-ink)}
+.bpick-count{display:flex;align-items:center;justify-content:center;gap:26px;margin:10px 0 18px}
+.bpick-count button{
+  width:52px;height:52px;border-radius:50%;border:1px solid rgba(120,53,15,.18);background:var(--bg-2);
+  font-size:1.5rem;line-height:1;cursor:pointer;color:var(--fg);display:flex;align-items:center;justify-content:center;
+}
+.bpick-count button:hover{background:var(--tint);border-color:var(--grad-a)}
+.bpick-count span{font-size:1rem;color:var(--fg-2)}
+.bpick-count b{font-size:2.6rem;font-weight:900;color:var(--fg);display:inline-block;min-width:1.6em;text-align:center}
+.bpick-go{
+  width:100%;padding:16px;border:none;border-radius:16px;cursor:pointer;
+  background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;font-size:1.15rem;font-weight:800;
+  box-shadow:0 10px 24px rgba(29,78,216,.28);
+}
+.bpick-go:hover{filter:brightness(1.07)}
+.bpick-link{
+  display:block;margin:12px auto 0;border:none;background:transparent;color:var(--fg-3);
+  font-size:.85rem;cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+}
+.bpick-roll{display:flex;flex-direction:column;gap:10px;margin:8px 0}
+.bpick-roll-item{
+  padding:20px;border-radius:14px;text-align:center;font-size:1.9rem;font-weight:900;
+  border:2px solid rgba(37,99,235,.45);color:#2563eb;letter-spacing:.04em;
+}
+.bpick-res{display:flex;flex-direction:column;gap:10px;margin:8px 0}
+.bpick-res-row{
+  display:flex;align-items:center;gap:10px;padding:16px 20px;border-radius:14px;
+  border:2px solid rgba(37,99,235,.45);background:rgba(37,99,235,.04);
+}
+.bpick-res-row b{flex:1;text-align:center;font-size:1.9rem;color:#2563eb;letter-spacing:.04em}
+.bpick-res-row button{
+  border:none;background:rgba(37,99,235,.1);color:#2563eb;border-radius:10px;padding:8px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.bpick-res-row button:hover{background:rgba(37,99,235,.2)}
+.bpick-foot{display:flex;gap:10px;margin-top:14px}
+.bpick-foot .bpick-go{flex:1}
+.bpick-foot .bpick-link{flex:none;margin:0;padding:0 16px;border:1px solid rgba(120,53,15,.18);border-radius:16px;text-decoration:none}
+.bpick-ex{margin-top:16px;border-top:1px solid rgba(120,53,15,.12);padding-top:12px}
+.bpick-ex-tip{font-size:.78rem;color:var(--fg-3);margin:0 0 10px}
+.bpick-ex-list{display:flex;flex-wrap:wrap;gap:7px;max-height:260px;overflow:auto}
+.bpick-ex-item{
+  border:1px solid rgba(120,53,15,.16);background:var(--bg-2);color:var(--fg);
+  border-radius:9px;padding:7px 10px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;gap:5px;
+}
+.bpick-ex-item i{font-style:normal;font-size:.68rem;padding:1px 5px;border-radius:5px;background:var(--tint-2);color:var(--accent-ink)}
+.bpick-ex-item.leave{border-color:#f59e0b;background:rgba(245,158,11,.12)}
+.bpick-ex-item.out{border-color:#b91c1c;background:rgba(185,28,28,.1);opacity:.75}
+.bpick-empty{text-align:center;color:var(--fg-3);padding:26px 0;line-height:1.8}
+/* 手机 / 窄屏：大屏模式的顶栏要压成横向滚动的胶囊条。
+   ⚠️ 手机端 .sidebar 原本是「抽屉」：position:fixed + translateX(-100%)。
+      这里只改 position 不改 transform 的话，整条导航会被推到屏幕外 —— 实测踩到。 */
+/* 教室大屏（1080p / 2K）：格子更大，坐在后排也看得清 */
+@media(min-width:1600px){
+  html.big-mode .big-tiles{grid-template-columns:repeat(auto-fill,236px);gap:16px}
+  html.big-mode .big-tile .bt-ico img{width:52px;height:52px}
+  html.big-mode .big-tile{min-height:196px;padding:26px 14px 20px}
+  html.big-mode .big-tile .bt-ico{width:76px;height:76px;border-radius:22px}
+  html.big-mode .big-tile .bt-t{font-size:1.15rem}
+  html.big-mode .big-tile .bt-s{font-size:.82rem}
+  html.big-mode .big-group h2{font-size:1rem}
+}
+@media(max-width:900px){
+  html.big-mode .sidebar{transform:none!important;left:auto;top:auto;width:auto;border-radius:16px;
+    overflow-x:auto;flex-wrap:nowrap;padding:8px 8px;margin-bottom:12px}
+  html.big-mode .sidebar::-webkit-scrollbar{display:none}
+  html.big-mode #sideCats{flex-wrap:nowrap}
+  html.big-mode .side-btn{flex:none;font-size:.85rem;padding:8px 12px}
+  html.big-mode #uiSetBtn{margin-left:0!important}
+  html.big-mode .content>header{padding:14px 16px;border-radius:16px}
+  html.big-mode .content>header h1{font-size:1.05rem;line-height:1.4;word-break:break-word}
+  html.big-mode .content>header .logo{width:34px;height:34px;margin:0 0 4px}
+  html.big-mode .layout{padding:10px 10px 30px}
+}
+@media(max-width:760px){
+  html.big-mode .big-tiles{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px;justify-content:stretch}
+  html.big-mode .big-tile{min-height:132px;padding:14px 8px 12px}
+  html.big-mode .big-tile .bt-ico{width:46px;height:46px;border-radius:14px}
+  .bhw-head h2{font-size:1.35rem}
+  .bhw-clock-t{font-size:2.4rem}
+  .bpick-res-row b,.bpick-roll-item{font-size:1.4rem}
+}
+</style>
+<script>
+/* 大屏模式：类要在首帧前挂到 <html> 上，否则进站会先闪一下普通首页。
+   big.js 里还会再同步一次（那里负责画图标墙）。 */
+(function(){
+  try{
+    if(localStorage.getItem('cls_bigscreen') === '1') document.documentElement.classList.add('big-mode');
+  }catch(e){}
+})();
+</script>
 </head>
 <body>
 
@@ -4519,7 +4813,60 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <section class="countdown" id="countdown"></section>
     </section>
 
+    <!-- ===== 大屏首页（v3.19.0）：一屏显示全部功能，按板块分组 =====
+         只在 html.big-mode 下显示；图标与动作全部由 big.js 生成。 -->
+    <section class="big-home" id="bigHome" aria-label="全部功能">
+      <div id="bigGroups"></div>
+    </section>
+
+    <!-- ===== 大屏作业页（v3.19.0）：路由 #/hw ===== -->
+    <section class="big-hw" id="bigHw" aria-label="作业">
+      <div class="bhw-head">
+        <div>
+          <h2 id="bhwTitle">作业</h2>
+          <p id="bhwRange"></p>
+        </div>
+        <div class="bhw-head-act" id="bhwActions"></div>
+      </div>
+      <div class="bhw-grid">
+        <div class="bhw-main">
+          <div class="bhw-card" id="bhwList">
+            <div class="bhw-empty">正在读取作业…</div>
+          </div>
+        </div>
+        <aside class="bhw-side">
+          <button type="button" class="bhw-clock" id="bhwClock" onclick="BIG.openClock()" title="打开全屏时钟">
+            <span class="bhw-clock-t" id="bhwClockT">--:--</span>
+            <span class="bhw-clock-s" id="bhwClockS"></span>
+          </button>
+          <div class="bhw-mini" id="bhwCourses" style="display:none"></div>
+          <button type="button" class="bhw-pick" onclick="BIG.pickOpen()">
+            <span class="bhw-pick-ico" id="bhwPickIco"></span>
+            <b>随机点名</b>
+            <span>从班级名单里随机抽人，可单独重抽</span>
+          </button>
+          <div class="bhw-mini bhw-quote" id="bhwQuote" style="display:none"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 随机点名弹层 -->
+    <div class="bpick-mask" id="bpickMask" onclick="BIG.pickBackdrop(event)">
+      <div class="bpick-box">
+        <div class="bpick-head">
+          <b>随机点名</b>
+          <button type="button" onclick="BIG.pickClose()" aria-label="关闭">✕</button>
+        </div>
+        <div id="bpickBody"></div>
+      </div>
+    </div>
+
     <!-- 板块内容（从侧边栏打开） -->
+    <div class="big-sub" id="bigSub">
+      <button type="button" onclick="bigBack()" id="bigBackBtn">← 返回大屏</button>
+      <span id="bigSubTitle">功能</span>
+    </div>
+
     <div class="grid" id="grid">
       <div class="skel-card skel-cat"><span class="skel-ico"></span><span class="skel-line w50"></span><span class="skel-line w70"></span></div>
       <div class="skel-card skel-cat"><span class="skel-ico"></span><span class="skel-line w50"></span><span class="skel-line w70"></span></div>
@@ -5300,11 +5647,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '3.18.0';
-var VER_DATE = '2026-10-30';
+var SITE_VERSION = '3.19.0';
+var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=3180" defer></script>
-<script src="./app.min.js?v=3180" defer></script>
+<script src="./auth-bus.js?v=3190" defer></script>
+<script src="./app.min.js?v=3190" defer></script>
+<!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
+     它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
+<script src="./big.js?v=3190" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

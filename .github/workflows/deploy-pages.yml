@@ -76,7 +76,14 @@ jobs:
             # v3.18.0：全站登录态总线。⚠️ 新增根目录脚本必须加进这里，
             # 否则 Pages 上直接 404（本站踩过：代码推上去了，线上一直缺文件）。
             auth-bus.js
-            admin.js
+            # v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。
+            # 漏了它线上会 404，大屏模式直接白屏。
+            big.js
+            # v3.19.0：后台脚本按顶层横幅拆成三段（各 <130KB gzip），
+            # 三个都必须发布，缺一个后台就白屏。
+            admin-1.js
+            admin-2.js
+            admin-3.js
             basic.html
             clock.html
             share-card.js

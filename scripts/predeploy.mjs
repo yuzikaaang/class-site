@@ -57,7 +57,11 @@ function die(msg) {
 /* ---------- ① 版本号四处一致 ---------- */
 const idx = read('index.html');
 /* v3.9.16：后台脚本已拆到 admin.js，读发布记录要两份拼起来 */
-const adm = read('admin.html') + (fs.existsSync(path.join(ROOT, 'admin.js')) ? read('admin.js') : '');
+/* v3.19.0：后台脚本拆成 admin-1/2/3.js，更新记录（REL_BUILTIN）现在在 admin-3.js 里 ——
+   这里必须把三段都拼进来，否则门禁永远说「没有这一条」。 */
+const adm = read('admin.html') + ['admin-1.js', 'admin-2.js', 'admin-3.js']
+  .filter((f) => fs.existsSync(path.join(ROOT, f)))
+  .map((f) => read(f)).join('\n');
 const sw = read('sw.js');
 const wk = read('api/worker.mjs');
 
@@ -280,7 +284,9 @@ function isPublished(rel) {
   return published.some((p) => clean === p || clean.startsWith(p + '/'));
 }
 const refs = new Set();
-for (const f of ['index.html', 'app.js', 'share-card.js', 'admin.js', 'clock.html', 'share.html']) {
+/* v3.19.0：后台脚本拆成 admin-1/2/3.js 之后，引用它们的是 admin.html ——
+   扫描清单里必须有 admin.html，否则「引用了但没发布」这类问题又会被漏掉。 */
+for (const f of ['index.html', 'app.js', 'big.js', 'share-card.js', 'admin.html', 'clock.html', 'share.html']) {
   if (!fs.existsSync(path.join(ROOT, f))) continue;
   const t = read(f);
   /* v3.18.0：允许带 ?v= 查询串（之前只认「引号紧跟文件名」，
@@ -303,7 +309,9 @@ const budget = [
   ['index.html', 130 * 1024, '首屏 HTML（gzip）'],
   ['app.min.js', 240 * 1024, '主脚本（gzip，实际发布）'],
   ['admin.html', 60 * 1024, '后台 HTML（gzip，拆包后）'],
-  ['admin.js', 240 * 1024, '后台脚本（gzip，拆包后）'],
+  ['admin-1.js', 150 * 1024, '后台脚本第 1 段（gzip）'],
+  ['admin-2.js', 150 * 1024, '后台脚本第 2 段（gzip）'],
+  ['admin-3.js', 180 * 1024, '后台脚本第 3 段（gzip）'],
 ];
 const gz = (p) => zlib.gzipSync(Buffer.from(read(p))).length;
 const over = [];
@@ -321,10 +329,18 @@ if (over.length) {
    ① admin.html 曾有 startAdminHeartbeat 两份：后一份覆盖前一份，且没有
       __adminHbTimer 守卫 → 每进一次后台多一个 60 秒定时器。
    ② 公开仓库里曾躺着管理员明文口令。两件事都靠肉眼发现太晚。 */
-const dupFiles = ['app.js', 'admin.js', 'admin.html', 'index.html'];
+/* v3.19.0：后台拆成三段后，重复定义还可能在「不同段之间」——
+   所以三段合成一份虚拟文件再查，否则跨段覆盖查不出来。 */
+const dupGroups = [
+  ['app.js'],
+  ['admin-1.js', 'admin-2.js', 'admin-3.js'],
+  ['admin.html'],
+  ['index.html'],
+];
 const dupHit = [];
-for (const f of dupFiles) {
-  const t = read(f);
+for (const group of dupGroups) {
+  const t = group.map((f) => read(f)).join('\n');
+  const f = group.join('+');
   const names = [...t.matchAll(/^function\s+([A-Za-z_$][\w$]*)\s*\(/gm)].map((m) => m[1]);
   const seen = new Set(), dup = new Set();
   for (const n of names) (seen.has(n) ? dup : seen).add(n);

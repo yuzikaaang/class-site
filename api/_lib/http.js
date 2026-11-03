@@ -205,6 +205,9 @@ export async function ensureSchema(sql) {
           add column if not exists end_mode text not null default 'keep',
           add column if not exists option_rule jsonb,
           add column if not exists song_pick jsonb`; } catch (e) {}
+        /* v3.19.0：投票公开（未登录可看选项和结果）。默认 true = 公开，
+           管理员可在后台逐条关掉。 */
+        try { await s`alter table class_votes add column if not exists public_read boolean not null default true`; } catch (e) {}
         try { await s`alter table class_vote_ballots add column if not exists retract_used smallint not null default 0`; } catch (e) {}
         /* 🔴 v3.5.14：站主截图「头衔任命 加载失败：column p.title does not exist」。
            title / exam_no / visibility_pref / field_vis / id_card / youth_league_no
@@ -858,7 +861,8 @@ export async function ensureSchema(sql) {
       add column if not exists retract_limit smallint not null default 1,
       add column if not exists end_mode text not null default 'keep',
       add column if not exists option_rule jsonb,
-      add column if not exists song_pick jsonb`;
+      add column if not exists song_pick jsonb,
+      add column if not exists public_read boolean not null default true`;
     await s`
       create table if not exists class_vote_ballots (
         vote_id    bigint      not null,

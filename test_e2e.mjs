@@ -31,9 +31,13 @@ import fs from 'node:fs';
    凡是「读后台源码」的断言读两份拼接，避免拆包把断言全打红。 */
 function readAdm(){
   const a = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  /* v3.19.0：后台脚本拆成 admin-1/2/3.js 三段，按顺序全部拼进来，
+     否则「读后台源码」的断言会因为一半代码不在文件里而误报。 */
   let b = '';
-  try { b = fs.readFileSync(new URL('./admin.js', import.meta.url), 'utf8'); } catch (e) {}
-  return a + '\n/* ---- admin.js ---- */\n' + b;
+  for (const f of ['admin-1.js', 'admin-2.js', 'admin-3.js']) {
+    try { b += '\n/* ---- ' + f + ' ---- */\n' + fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8'); } catch (e) {}
+  }
+  return a + '\n/* ---- admin parts ---- */\n' + b;
 }
 
 /* v3.9.25：全屏时钟是独立页面，单独读 */
@@ -5611,7 +5615,9 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
 
   /* ===== ⑨ 版本号 / 缓存 ===== */
   t('★前台版本号格式正确（3.x.y）', /SITE_VERSION = '3\.[0-9]+\.[0-9]+'/.test(idx48));
-  t('★前台更新日期已同步（不早于 2026-10-19）', /VER_DATE = '2026-10-(19|2[0-9]|3[01])'/.test(idx48));
+  /* v3.19.0：日期跨月了，断言改成「2026-10-19 之后」，别再写死十月 */
+  t('★前台更新日期已同步（不早于 2026-10-19）',
+    /VER_DATE = '2026-(10-(19|2[0-9]|3[01])|1[12]-\d{2})'/.test(idx48));
   t('★v3.9.16 缓存桶由版本号派生', /const CACHE = 'class-site-' \+ SITE_VER/.test(sw48));
 }
 
@@ -8316,7 +8322,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && /Asia\/Shanghai/.test(VOTES_520));
   t('#17 提出日期可改（后台可选日期并提交）',
     /id="voCreatedDate"/.test(ADM_520) && /createdDate: \(document\.getElementById\('voCreatedDate'\)/.test(ADM_520)
-    && /songPick, createdDate \}/.test(VOTES_520));
+    && /songPick, createdDate(, publicRead)? \}/.test(VOTES_520));
   t('#17 前端日期显示加年份护栏（<2000 视为无效，避免 2001）',
     /d\.getFullYear\(\) < 2000 \|\| d\.getFullYear\(\) > 2100/.test(IDX_520));
   t('#17 新增 /api/music 时长补全代理并挂路由',
@@ -10600,8 +10606,11 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   const list1 = await call('/api/votes?action=list', { token: stuToken2 });
   const v1 = ((list1.body || {}).votes || []).find(x => String(x.id) === String(vid));
   t('★学生在列表里能看到这条投票', !!v1, JSON.stringify((list1.body || {}).votes || []).length + ' 条');
-  /* 未截止时必须显式给 null（不是 undefined）—— 前端靠 results 判断走条形图还是选项 */
-  t('★投票进行中不下发票数（results 恒为 null）', !!v1 && v1.results === null,
+  /* v3.19.0（站主）改口径：投票默认「公开」，未截止也下发各选项票数 ——
+     「未登录点开分享链接也能看到有哪些项目、结果如何」。
+     不公开的投票（后台逐条关掉）仍按老规矩：截止后才给结果。 */
+  t('★公开投票进行中也下发票数（v3.19.0 公开口径）',
+    !!v1 && Array.isArray(v1.results) && v1.results.length > 0 && v1.publicRead === true,
     JSON.stringify(v1 && v1.results).slice(0, 60));
   const optA = ((v1 || {}).options || [])[0] || {};
   const optB = ((v1 || {}).options || [])[1] || {};
@@ -10926,8 +10935,9 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
   t('#9 已投再点点赞 → 撤回确认弹窗', /function voteAskRetract\(/.test(idx) && /消耗 1 次撤回机会/.test(idx));
   t('#9 撤回后可直接重投（自动选上刚点的那项）', /已帮你选上刚才点的那项/.test(idx));
   t('#9 撤回按钮与次数提示', /data-vote-retract/.test(idx) && /撤回重投/.test(idx));
-  t('#9 未截止一律出点赞按钮（管理员也能投，不再被结果视图挡住）',
-    /if\(closed\)\{/.test(idx) && !/if\(closed \|\| v\.results\)\{/.test(idx));
+  /* v3.19.0：未截止且已登录 → 点赞按钮；未登录（guest）只看结果 */
+  t('#9 未截止一律出点赞按钮（登录用户；游客只看结果）',
+    /if\(closed \|\| guest\)\{/.test(idx) && !/if\(closed \|\| v\.results\)\{/.test(idx));
   t('#9 最多/最少票数后端校验', /maxChoices/.test(vot) && /minChoices/.test(vot) && /最多选/.test(vot));
   t('#9 后台三个配额输入', /id="voMaxChoices"/.test(adm) && /id="voMinChoices"/.test(adm) && /id="voRetractLimit"/.test(adm));
   t('#9b 多个投票左右滑动切换（scroll-snap 轮播）',

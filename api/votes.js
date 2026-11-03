@@ -44,6 +44,10 @@ export default async function handler(req, res) {
     const action = String(req.query.action || '').toLowerCase();
     if (req.method === 'GET') {
       if (action === '' || action === 'list') return await listVotes(req, res);
+      /* v3.19.0（站主）：未登录也能看 —— 只给「公开」的投票，且只给选项和票数，
+         不含投票人、不含「我投了谁」。这样分享出去的链接点开就有内容看，
+         想投票仍然必须登录（write 动作依旧 requireUser）。 */
+      if (action === 'public') return await publicVotes(req, res);
       return fail(res, 400, '不支持的 action：' + action);
     }
     if (req.method === 'POST') {
@@ -262,8 +266,13 @@ function parseVoteInput(b) {
   const songPick = (kind === 'song')
     ? normSongPick(b.songPick != null ? b.songPick : b.song_pick)
     : null;
+  /* v3.19.0：这条投票是否公开（未登录也能看选项和结果）。
+     不传 = 沿用原值（新建时按「公开」处理），显式传 false 才关掉。 */
+  const publicRead = (b.publicRead === undefined && b.public_read === undefined)
+    ? null
+    : (b.publicRead === true || b.public_read === true);
   return { data: { title, kind, options, multi, allowAdd, note, deadline, proposer,
-    maxChoices, minChoices, retractLimit, endMode, optionRule, songPick, createdDate } };
+    maxChoices, minChoices, retractLimit, endMode, optionRule, songPick, createdDate, publicRead } };
 }
 
 /** timestamptz → 北京时间 YYYY-MM-DD（Date / ISO / 已格式化字符串都能吃） */
@@ -292,7 +301,7 @@ function dateOnly(x) {
 }
 
 /** 行 → 前端结构。results 只有「已截止」才给。 */
-function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed) {
+function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed, forceResults) {
   const v = {
     id: Number(r.id),
     title: r.title,
@@ -333,9 +342,12 @@ function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed) {
     retractUsed: Number(myUsed || 0),
     canRetract: !!uid && (myChoices || []).length > 0 && Number(myUsed || 0) < (r.retract_limit == null ? 1 : Number(r.retract_limit)),
   };
+  v.publicRead = (r.public_read === undefined || r.public_read === null) ? true : !!r.public_read;
   const closed = !v.open;
-  /* 截止后：所有人看结果；截止前：只有管理员看（后台要能预览） */
-  if (closed || isAdmin) {
+  /* 截止后：所有人看结果；截止前：只有管理员看（后台要能预览）。
+     v3.19.0：公开的投票（public_read）也直接给结果 —— 站主要求
+     「未登录点开分享链接能看到有哪些项目和结果」。 */
+  if (closed || isAdmin || forceResults) {
     /* 结果按票数降序（同票保持原顺序） */
     v.results = (v.options || []).map((o) => ({
       id: o.id, label: o.label, by: o.by,
@@ -351,6 +363,53 @@ function shapeVote(r, uid, isAdmin, myChoices, counts, myUsed) {
   return v;
 }
 
+/* ---------------- 读：公开投票（未登录） ----------------
+   v3.19.0（站主）：
+     「投票分享……可以展示投票结果，但是具体他能不能投票得看他有没有登录，
+       就是他没登录的话是不能投票的，但是是可以看到有哪些项目什么的。」
+   所以这里只做一件事：把「公开」的投票连同选项和票数发出去。
+   不发的东西：投票人名单、谁投了谁、我的选择（没有「我」）、创建者账号。
+   写操作（vote / toggle / retract / add-option）依旧 requireUser，
+   未登录点投票按钮会被 401 拦下，前端也会先弹登录。 */
+async function publicVotes(req, res) {
+  const sql = getSql();
+  const rows = await sql`
+    select v.id, v.title, v.kind, v.options, v.multi, v.allow_add, v.note,
+           v.deadline, v.status, v.created_at, v.created_by, v.proposer,
+           v.max_choices, v.min_choices, v.retract_limit, v.end_mode,
+           v.option_rule, v.song_pick,
+           true as public_read,
+           null::text as creator_username,
+           null::text as creator_display
+      from class_votes v
+     where coalesce(v.public_read, true) = true
+     order by (v.status = 'open') desc, v.deadline asc nulls last, v.id desc
+     limit 50
+  `;
+  if (!rows.length) return ok(res, { votes: [], public: true, serverTime: Date.now() });
+
+  const voteIds = rows.map((r) => Number(r.id));
+  const ballotRows = await sql`
+    select vote_id, choices from class_vote_ballots
+     where vote_id = any(${voteIds}::bigint[])
+  `;
+  const countMap = {};
+  ballotRows.forEach((r) => {
+    const vid = Number(r.vote_id);
+    const ch = jsonCol(r.choices) || [];
+    if (!ch.length) return;
+    if (!countMap[vid]) countMap[vid] = { __voters: 0 };
+    countMap[vid].__voters++;
+    ch.forEach((cid) => {
+      const k = String(cid);
+      countMap[vid][k] = (countMap[vid][k] || 0) + 1;
+    });
+  });
+
+  const votes = rows.map((r) => shapeVote(r, null, false, null, countMap[Number(r.id)], 0, true));
+  return ok(res, { votes, public: true, serverTime: Date.now() });
+}
+
 /* ---------------- 读：投票列表 ----------------
    登录用户可看。排序：进行中的在前（截止时间近的更前），其余按创建时间倒序。 */
 async function listVotes(req, res) {
@@ -362,7 +421,7 @@ async function listVotes(req, res) {
     select v.id, v.title, v.kind, v.options, v.multi, v.allow_add, v.note,
            v.deadline, v.status, v.created_at, v.created_by, v.proposer,
            v.max_choices, v.min_choices, v.retract_limit, v.end_mode,
-           v.option_rule, v.song_pick,
+           v.option_rule, v.song_pick, coalesce(v.public_read, true) as public_read,
            u.username as creator_username,
            u.display_name as creator_display
       from class_votes v
@@ -401,7 +460,7 @@ async function listVotes(req, res) {
     });
   });
 
-  const votes = rows.map((r) => shapeVote(r, u.id, u.role === 'admin', myMap[Number(r.id)], countMap[Number(r.id)], myUsed[Number(r.id)]));
+  const votes = rows.map((r) => shapeVote(r, u.id, u.role === 'admin', myMap[Number(r.id)], countMap[Number(r.id)], myUsed[Number(r.id)], !!r.public_read));
 
   /* v3.5.40（站主 #2）：后台要能看到「每一张票是谁投的、什么时候投的」。
      ⚠️ 只在管理员请求时多查一次；普通同学拿到的结构一个字都不变，
@@ -643,13 +702,14 @@ async function createVote(req, res) {
   const rows = await sql`
     insert into class_votes (title, kind, options, multi, allow_add, note, deadline, status,
                              created_by, proposer, max_choices, min_choices, retract_limit, end_mode,
-                             option_rule, song_pick, created_at, updated_at)
+                             option_rule, song_pick, public_read, created_at, updated_at)
     values (${p.data.title}, ${p.data.kind}, ${JSON.stringify(p.data.options)}::jsonb,
             ${p.data.multi}, ${p.data.allowAdd}, ${p.data.note}, ${p.data.deadline}::timestamptz,
             'open', ${me.id}, ${proposer},
             ${p.data.maxChoices}, ${p.data.minChoices}, ${p.data.retractLimit}, ${p.data.endMode},
             ${p.data.optionRule ? JSON.stringify(p.data.optionRule) : null}::jsonb,
             ${p.data.songPick ? JSON.stringify(p.data.songPick) : null}::jsonb,
+            ${p.data.publicRead === null ? true : p.data.publicRead},
             coalesce(${p.data.createdDate ? p.data.createdDate + ' 00:00:00+08' : null}::timestamptz, now()), now())
     returning id
   `;
@@ -712,6 +772,7 @@ async function updateVote(req, res) {
            retract_limit = ${p.data.retractLimit}, end_mode = ${p.data.endMode},
            option_rule = ${p.data.optionRule ? JSON.stringify(p.data.optionRule) : null}::jsonb,
            song_pick = ${p.data.songPick ? JSON.stringify(p.data.songPick) : null}::jsonb,
+           public_read = coalesce(${p.data.publicRead}::boolean, public_read),
            created_at = coalesce(${p.data.createdDate ? p.data.createdDate + ' 00:00:00+08' : null}::timestamptz, created_at),
            deadline = ${p.data.deadline}::timestamptz, updated_at = now()
      where id = ${voteId}

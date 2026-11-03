@@ -80,7 +80,10 @@ async function mkPage(opts = {}) {
   }));
   t('#/board/7 直接落到投票板块', st.cat === 7 && st.tab7, JSON.stringify(st));
   t('地址栏被规范化成 #/votes', /#\/votes$/.test(st.hash), st.hash);
-  t('未登录时投票给出登录引导', /需要登录/.test(st.txt), st.txt.slice(0, 80));
+  /* v3.19.0（站主）：未登录不再只给一张「请登录」的空板 ——
+     先看到有哪些投票、各多少票，想投票再登录。 */
+  t('未登录时能看投票与结果，并提示登录后投票',
+    /登录后投票/.test(st.txt) && /票/.test(st.txt), st.txt.slice(0, 80));
   t('没有 JS 报错', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

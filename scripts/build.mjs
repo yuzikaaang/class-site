@@ -49,7 +49,10 @@ write('.build-meta.json', JSON.stringify({ version: VER, appMin: hash, at: new D
 
 /* ---------------- ② admin.html 内联大脚本 → admin.js ---------------- */
 let adm = read('admin.html');
-if (!/src="\.\/admin\.js/.test(adm)) {
+/* v3.19.0：后台脚本已拆成 admin-1/2/3.js 三个普通脚本，admin.html 里不再有大段内联。
+   这里只在「还没拆过」时才做一次性抽取，拆完就跳过。 */
+const ADM_SPLIT = /src="\.\/admin-1\.js/.test(adm);
+if (!ADM_SPLIT && !/src="\.\/admin\.js/.test(adm)) {
   /* 找最后一个 <script>…</script>（742KB 的那个主脚本） */
   const re = /<script>([\s\S]*?)<\/script>/g;
   let m;
@@ -89,6 +92,9 @@ idx = idx.replace(/<script src="\.\/app(?:\.min)?\.js(\?v=\d+)?" defer><\/script
 /* v3.18.0：登录态总线也要跟着版本号走，否则 SW 缓存优先会一直递旧的那份 */
 idx = idx.replace(/<script src="\.\/auth-bus\.js(\?v=\d+)?" defer><\/script>/,
   `<script src="./auth-bus.js${TAG}" defer></script>`);
+/* v3.19.0：大屏脚本也带版本号，否则 SW 缓存优先会一直递旧的那份 */
+idx = idx.replace(/<script src="\.\/big\.js(\?v=\d+)?" defer><\/script>/,
+  `<script src="./big.js${TAG}" defer></script>`);
 if (idx !== before) write('index.html', idx);
 
 /* ---------------- ④ admin.html 引用的 admin.js 也要带新版本号 ----------------
@@ -97,17 +103,23 @@ if (idx !== before) write('index.html', idx);
    这里每次构建都同步一次，避免再漏。 */
 let adm3 = read('admin.html');
 const adm3Before = adm3;
-adm3 = adm3.replace(/<script src="\.\/admin\.js(\?v=\d+)?"><\/script>/,
-  `<script src="./admin.js${TAG}"></script>`);
+/* v3.19.0：三段各自带版本号，否则 SW / 浏览器缓存会让后台停在旧版。
+   注意 \.js 后面必须跟引号或 ?，别把 admin-1.js 也当成 admin.js。 */
+adm3 = adm3.replace(/<script src="\.\/admin(-\d+)?\.js(\?v=\d+)?"><\/script>/g,
+  (m, part) => `<script src="./admin${part || ''}.js${TAG}"></script>`);
 if (adm3 !== adm3Before) write('admin.html', adm3);
 
 /* ---------------- 报告 ---------------- */
 const admHtml = read('admin.html');
-const admJs = fs.existsSync(path.join(ROOT, 'admin.js')) ? read('admin.js') : '';
+const admParts = [1, 2, 3].map((i) => 'admin-' + i + '.js').filter((f) => fs.existsSync(path.join(ROOT, f)));
 console.log('构建完成 v' + VER);
 console.log('  app.js      ' + kb(appSrc.length).padStart(7) + ' raw / ' + kb(gz(appSrc)).padStart(7) + ' gzip');
 console.log('  app.min.js  ' + kb(appMin.length).padStart(7) + ' raw / ' + kb(gz(appMin)).padStart(7) + ' gzip   ← 首屏用这个');
-if (admJs) {
-  console.log('  admin.html  ' + kb(admHtml.length).padStart(7) + ' raw / ' + kb(gz(admHtml)).padStart(7) + ' gzip');
-  console.log('  admin.js    ' + kb(admJs.length).padStart(7) + ' raw / ' + kb(gz(admJs)).padStart(7) + ' gzip');
+console.log('  admin.html  ' + kb(admHtml.length).padStart(7) + ' raw / ' + kb(gz(admHtml)).padStart(7) + ' gzip');
+let admTotalRaw = 0, admTotalGz = 0;
+for (const f of admParts) {
+  const t = read(f);
+  admTotalRaw += Buffer.byteLength(t); admTotalGz += gz(t);
+  console.log('  ' + f.padEnd(11) + kb(Buffer.byteLength(t)).padStart(6) + ' raw / ' + kb(gz(t)).padStart(6) + ' gzip');
 }
+if (admParts.length) console.log('  后台脚本合计 ' + kb(admTotalRaw) + ' raw / ' + kb(admTotalGz) + ' gzip（拆成 ' + admParts.length + ' 段）');
