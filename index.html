@@ -3931,6 +3931,11 @@ html.big-mode .tab-page h2{font-size:1.3rem}
 #bigHw{display:none;padding:2px 0 30px}
 html.big-mode.big-hw #bigHw{display:block}
 html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important}
+/* 作业页是「工具页」：页脚那三行版权/版本说明会把整页顶到 1229px，
+   屏幕上多出一条没必要的滚动条（实测 1080 视口 / 文档 1229）。这里收掉，
+   版本信息在大屏首页底部仍然看得到。 */
+html.big-mode.big-hw footer{display:none}
+html.big-mode.big-hw #bigHw{padding:2px 0 0}
 .bhw-head{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:16px}
 .bhw-head h2{font-size:1.75rem;margin:0;line-height:1.25;color:var(--fg)}
 .bhw-head p{margin:4px 0 0;color:var(--fg-3);font-size:.9rem}
@@ -4038,7 +4043,7 @@ html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important
 }
 .bpick-mask.show{display:flex}
 .bpick-box{
-  width:min(720px,96vw);max-height:92vh;overflow:auto;background:var(--bg-1);border-radius:24px;
+  width:min(760px,96vw);max-height:92vh;overflow:auto;background:var(--bg-1);border-radius:24px;
   box-shadow:0 30px 70px rgba(0,0,0,.35);padding:22px 26px 26px;
 }
 .dark .bpick-box{background:#221f1d}
@@ -4058,8 +4063,8 @@ html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important
 .bpick-count b{font-size:2.6rem;font-weight:900;color:var(--fg);display:inline-block;min-width:1.6em;text-align:center}
 .bpick-go{
   width:100%;padding:16px;border:none;border-radius:16px;cursor:pointer;
-  background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;font-size:1.15rem;font-weight:800;
-  box-shadow:0 10px 24px rgba(29,78,216,.28);
+  background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;font-size:1.15rem;font-weight:800;
+  box-shadow:0 10px 24px rgba(194,65,12,.26);
 }
 .bpick-go:hover{filter:brightness(1.07)}
 .bpick-link{
@@ -4068,20 +4073,20 @@ html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important
 }
 .bpick-roll{display:flex;flex-direction:column;gap:10px;margin:8px 0}
 .bpick-roll-item{
-  padding:20px;border-radius:14px;text-align:center;font-size:1.9rem;font-weight:900;
-  border:2px solid rgba(37,99,235,.45);color:#2563eb;letter-spacing:.04em;
+  padding:20px;border-radius:16px;text-align:center;font-size:2.05rem;font-weight:900;
+  border:2px solid var(--grad-a);background:var(--tint-2);color:var(--accent-ink);letter-spacing:.04em;
 }
 .bpick-res{display:flex;flex-direction:column;gap:10px;margin:8px 0}
 .bpick-res-row{
-  display:flex;align-items:center;gap:10px;padding:16px 20px;border-radius:14px;
-  border:2px solid rgba(37,99,235,.45);background:rgba(37,99,235,.04);
+  display:flex;align-items:center;gap:10px;padding:16px 20px;border-radius:16px;
+  border:2px solid var(--grad-a);background:var(--tint);
 }
-.bpick-res-row b{flex:1;text-align:center;font-size:1.9rem;color:#2563eb;letter-spacing:.04em}
+.bpick-res-row b{flex:1;text-align:center;font-size:2.05rem;color:var(--accent-ink);letter-spacing:.04em}
 .bpick-res-row button{
-  border:none;background:rgba(37,99,235,.1);color:#2563eb;border-radius:10px;padding:8px;
+  border:none;background:var(--tint-2);color:var(--accent-ink);border-radius:11px;padding:9px;
   cursor:pointer;display:flex;align-items:center;justify-content:center;
 }
-.bpick-res-row button:hover{background:rgba(37,99,235,.2)}
+.bpick-res-row button:hover{background:rgba(194,65,12,.16)}
 .bpick-foot{display:flex;gap:10px;margin-top:14px}
 .bpick-foot .bpick-go{flex:1}
 .bpick-foot .bpick-link{flex:none;margin:0;padding:0 16px;border:1px solid rgba(120,53,15,.18);border-radius:16px;text-decoration:none}
