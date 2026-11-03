@@ -639,11 +639,15 @@
     cards.forEach(function (el){ el.style.flex = '0 0 auto'; });
     void colA.offsetHeight;
     var gap = 10, ha = 0, hb = 0, planA = [], planB = [];
-    cards.forEach(function (el){
-      var h = el.getBoundingClientRect().height;
-      if(ha <= hb){ planA.push({ el: el, h: h }); ha += h + gap; }
-      else { planB.push({ el: el, h: h }); hb += h + gap; }
-    });
+    /* 高的先放、谁矮放谁（LPT 装箱）：比按科目顺序轮流塞更均衡，
+       同样 6 张卡两栏高度差能压到几像素，底部留白也就更少。 */
+    cards.map(function (el, i){
+      return { el: el, h: el.getBoundingClientRect().height, i: i };
+    }).sort(function (a, b){ return b.h - a.h || a.i - b.i; })
+      .forEach(function (x){
+        if(ha <= hb){ planA.push(x); ha += x.h + gap; }
+        else { planB.push(x); hb += x.h + gap; }
+      });
 
     var curA = [].slice.call(colA.children).filter(isCard);
     var curB = [].slice.call(colB.children).filter(isCard);
@@ -654,24 +658,9 @@
       wantA.forEach(function (el){ colA.appendChild(el); });
       wantB.forEach(function (el){ colB.appendChild(el); });
     }
-    /* 排完这一栏还有富余，就让卡片平分剩余高度把栏填满；
-       内容已经超过栏高时保持自然高度（页面允许纵向滚动）。 */
-    stretch(colA, planA, gap);
-    stretch(colB, planB, gap);
+    /* 卡片只包住自己的内容（站主 2026-11-04 定）：不再拉伸去填满屏幕，
+       富余的竖向空间就空在底部，宁可留白也不让只有一两项的科目撑出一大片。 */
   };
-
-  function stretch(col, plan, gap){
-    if(!plan.length) return;
-    var used = -gap;
-    plan.forEach(function (x){ used += x.h + gap; });
-    var free = col.clientHeight - used;
-    plan.forEach(function (x){
-      /* 按内容多少分配富余：内容多的卡片长得多，只有一两项的卡片几乎不摊开 */
-      x.el.style.flexShrink = '0';
-      x.el.style.flexBasis = 'auto';
-      x.el.style.flexGrow = free > 12 ? String(Math.max(1, Math.round(x.h))) : '0';
-    });
-  }
 
   function scheduleLayout(){
     if(_layTimer) clearTimeout(_layTimer);
