@@ -4204,9 +4204,11 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 /* —— 随机点名弹层 —— */
 /* v4.0.0：条件区（身份 / 性别 / 学号 / 成绩） */
 .bpick-cond{
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px;
   font-size:.82rem;color:var(--fg-2);margin:-4px 0 12px;padding:9px 12px;border-radius:10px;
   background:var(--tint-2);line-height:1.5;
 }
+.bpick-cond .bpick-link{margin:0!important;white-space:nowrap;text-decoration:none;font-weight:800}
 .bpick-f{
   border:1px solid rgba(120,53,15,.14);border-radius:14px;padding:12px 14px;margin-bottom:14px;
   background:var(--bg-2);
