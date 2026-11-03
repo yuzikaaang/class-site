@@ -623,6 +623,17 @@
       .concat([].slice.call(colB.children).filter(isCard));
     if(cards.length < 2) return;
 
+    /* 窄屏（手机 / 平板竖屏）本来就是单列，拆两栏只会让科目顺序看起来乱 —— 全部塞回一栏 */
+    if(window.innerWidth <= 1180){
+      if(colB.children.length){
+        cards.forEach(function (el){ colA.appendChild(el); });
+      }
+      cards.forEach(function (el){
+        el.style.flexGrow = '0'; el.style.flexShrink = '0'; el.style.flexBasis = 'auto';
+      });
+      return;
+    }
+
     /* 先取消弹性伸展，量到「内容自然高度」——上一步为了填满屏幕可能把卡片拉高了，
        直接量会把拉伸后的高度当成内容高度，越排越偏。 */
     cards.forEach(function (el){ el.style.flex = '0 0 auto'; });
