@@ -601,6 +601,23 @@ function t(name, cond, extra) {
   else { fail++; fails.push(name); console.log('  ✗ ' + name + (extra ? '  → ' + extra : '')); }
 }
 
+/** v3.19.0：SCHEMA_VER 断言改成「至少 X.Y.Z」，不再写死某一格。
+ *  教训：v3.19.0 加了 class_votes.public_read 把 SCHEMA_VER 升到 3.19.0，
+ *  结果 4 条按字符串写死 '3.8.4' 的断言全红 —— 而且字典序里 '3.19.0' < '3.8.4'，
+ *  「用字符串比大小」这种偷懒写法在两位数版本号上一定是错的。
+ *  表结构只会往前走，所以断言方向也应该是「不低于」而不是「等于」。 */
+function schVerOf(src) {
+  const m = String(src || '').match(/const SCHEMA_VER = '(\d+)\.(\d+)\.(\d+)'/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+function schAtLeast(src, min) {
+  const a = schVerOf(src);
+  const b = String(min).split('.').map(Number);
+  if (!a) return false;
+  for (let i = 0; i < 3; i++) { if (a[i] !== (b[i] || 0)) return a[i] > (b[i] || 0); }
+  return true;
+}
+
 const ORIGIN = 'https://yuzikaaang.github.io';
 function req(path, { method = 'GET', body, token, origin = ORIGIN, headers = {} } = {}) {
   const url = 'https://api.example.workers.dev' + path;
@@ -8170,8 +8187,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   /* ---- ① 版本闸门：1 次探针往返替代 46 条 DDL ----
      背景：Workers 免费版单请求子请求上限 50，Neon 每条 SQL 一次子请求，
      46 条 DDL + 登录 7 次查询 = 53 → 撞线，登录必然 500。 */
-  t('★SCHEMA_VER 常量存在且随版本升到 3.7.0（新增资料修改申请表）',
-    /const SCHEMA_VER = '3\.8\.4'/.test(httpSrc));
+  t('★SCHEMA_VER 常量存在且不低于 3.8.4（新增资料修改申请表）',
+    schAtLeast(httpSrc, '3.8.4'));
   t('★闸门探针：读 schema_ver + to_regclass 探 user_action_log 存在性',
     /data->>'schema_ver'/.test(httpSrc) && /to_regclass\('public\.user_action_log'\)/.test(httpSrc));
   t('★版本一致直接 return（不再跑全量 DDL）',
@@ -8475,7 +8492,7 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
   t('v3.5.27 云端时长库表 song_durations 三处同步（升级路径/全量清单/schema.sql）',
     (HTTP_527.match(/create table if not exists song_durations/g) || []).length >= 2
     && /create table if not exists song_durations/.test(SCH_527)
-    && /const SCHEMA_VER = '3\.8\.4'/.test(HTTP_527));
+    && schAtLeast(HTTP_527, '3.8.4'));
   t('v3.5.27 后端写库按来源优先级，人工填写不被自动结果覆盖',
     /case song_durations\.source/.test(MUS_527) && /source: 'manual'/.test(MUS_527)
     && /when 'manual' then 3/.test(MUS_527));
@@ -10994,7 +11011,7 @@ console.log('\n【85】在线时长统计（v3.5.35）');
   t('v3.5.35 online_sessions 三处同步（升级路径 / 全量清单 / schema.sql）',
     (http535.match(/create table if not exists online_sessions/g) || []).length >= 2
     && /create table if not exists online_sessions/.test(sch535)
-    && /const SCHEMA_VER = '3\.8\.4'/.test(http535));
+    && schAtLeast(http535, '3.8.4'));
   t('v3.5.35 三处索引齐（user_start / start / token）',
     ['online_user_start_idx', 'online_start_idx', 'online_token_idx'].every(function(ix){
       const n = (http535.match(new RegExp('create index if not exists ' + ix, 'g')) || []).length;
@@ -11752,7 +11769,7 @@ console.log('\n【新】v3.8.4 板块管理 / 板块分享链接');
     && /create table if not exists board_links/.test(sch84)
     && /create table if not exists board_link_views/.test(sch84)
     && /create table if not exists board_meta/.test(sch84));
-  t('★v3.8.4 SCHEMA_VER 已升到 3.8.4', /const SCHEMA_VER = '3\.8\.4'/.test(http84));
+  t('★v3.8.4 SCHEMA_VER 已升到 3.8.4 或更高', schAtLeast(http84, '3.8.4'));
 
   /* ---- 接口 ---- */
   t('★v3.8.4 /api/boards 路由已注册', /case 'boards':/.test(wk84) && /import boardsHandler/.test(wk84));

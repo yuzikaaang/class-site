@@ -4099,15 +4099,25 @@ html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important
 /* 手机 / 窄屏：大屏模式的顶栏要压成横向滚动的胶囊条。
    ⚠️ 手机端 .sidebar 原本是「抽屉」：position:fixed + translateX(-100%)。
       这里只改 position 不改 transform 的话，整条导航会被推到屏幕外 —— 实测踩到。 */
-/* 教室大屏（1080p / 2K）：格子更大，坐在后排也看得清 */
+/* 教室大屏（1080p / 2K）：站主要求「一个页面显示全部功能」——
+   2026-11-03 实测 1920×1080 下原方案文档高 1656px，要滚 1.5 屏，
+   于是这里整体压扁：格子 236→200、行高 196→132、组间距 22→8、
+   页头也收薄，5 个分组一屏装得下（约 1040px）。
+   字号仍留在 1rem 上下，后排看得清；格子改成居中对齐，项数少的组不会歪在左边。 */
 @media(min-width:1600px){
-  html.big-mode .big-tiles{grid-template-columns:repeat(auto-fill,236px);gap:16px}
-  html.big-mode .big-tile .bt-ico img{width:52px;height:52px}
-  html.big-mode .big-tile{min-height:196px;padding:26px 14px 20px}
-  html.big-mode .big-tile .bt-ico{width:76px;height:76px;border-radius:22px}
-  html.big-mode .big-tile .bt-t{font-size:1.15rem}
-  html.big-mode .big-tile .bt-s{font-size:.82rem}
-  html.big-mode .big-group h2{font-size:1rem}
+  html.big-mode .layout{padding:6px 18px 4px}
+  html.big-mode .content>header{padding:8px 18px;margin-bottom:7px;border-radius:15px}
+  html.big-mode .content>header h1{font-size:1.14rem}
+  html.big-mode .content>header .logo{width:32px;height:32px;margin-top:2px}
+  html.big-mode footer{margin-top:5px;font-size:.68rem;line-height:1.45}
+  html.big-mode .big-group{margin:2px 0 0}
+  html.big-mode .big-group h2{margin:0 0 5px;font-size:.82rem}
+  html.big-mode .big-tiles{grid-template-columns:repeat(auto-fill,240px);gap:14px;justify-content:start}
+  html.big-mode .big-tile{min-height:114px;padding:11px 8px 9px;gap:4px;border-radius:14px}
+  html.big-mode .big-tile .bt-ico{width:58px;height:58px;border-radius:17px}
+  html.big-mode .big-tile .bt-ico img{width:38px;height:38px}
+  html.big-mode .big-tile .bt-t{font-size:1.06rem}
+  html.big-mode .big-tile .bt-s{font-size:.76rem}
 }
 @media(max-width:900px){
   html.big-mode .sidebar{transform:none!important;left:auto;top:auto;width:auto;border-radius:16px;
