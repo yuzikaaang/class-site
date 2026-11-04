@@ -48,6 +48,7 @@ const ALLOW_CONTENT_KEYS = [
   'dj_excluded',        // 抽歌排除清单（第二十八轮）：{ songs:[id], reqs:[点歌人] }
   'release_notes',      // 版本更新记录（第二十八轮）：仅后台可见，前台不展示
   'vote_pub',           // v3.5.13 投票公示：{ templates:[{id,name,template}], byVote:{ [voteId]:{tplId,on} } }
+  'pick_history',       // v4.4.0 随机点名抽取记录：[{id,at,cond,n,names[],note}]
 ];
 
 /* 课代表能改的字段——只有作业相关。

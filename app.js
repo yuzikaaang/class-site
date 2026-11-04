@@ -1468,13 +1468,14 @@ var SITE_DATA = {
     { date: "2026-08-25 20:03", text: "🔧 修复分类页验证后整页空白的问题", category: "site" },
     { date: "2026-08-25 19:50", text: "🔧 修复资料类入口点击无反应的问题", category: "site" },
     { date: "2026-08-25 19:39", text: "🔧 修复密码输入无反应的问题", category: "site" },
-    { date: "2026-08-25 19:22", text: "📝 作业查看恢复 Classworks 直达入口", category: "site" },
+    { date: "2026-08-25 19:22", text: "📝 作业查看新增站内入口", category: "site" },
     { date: "2026-08-25 19:11", text: "📲 新增「安装为应用」教程", category: "activity" },
     { date: "2026-08-25 17:30", text: "📣 公告支持按分类筛选", category: "site" },
     { date: "2026-08-25 17:14", text: "🔗 主链接已切换为 GitHub Pages", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
     /* 2026-09-30 站主要求：这条不再永久置顶。置顶靠 important:true 且无 importantUntil 实现，
-       直接删掉会连历史记录一起丢，所以只取消置顶、保留条目，仍可在活动分组里翻到。 */
-    { date: "2026-08-25 16:46", text: "【班级通知】Classworks 暂无法连接服务器，作业以老师线下布置为准。", category: "activity" },
+       直接删掉会连历史记录一起丢，所以只取消置顶、保留条目，仍可在活动分组里翻到。
+       v4.4.0（站主第 5 条）：Classworks 已完全退场，正文字面也一并改掉，免得有人照着去找。 */
+    { date: "2026-08-25 16:46", text: "【班级通知】外部作业平台已停用，作业统一在站内「作业查看」里看。", category: "activity" },
     { date: "2026-08-25 16:46", text: "📌 公告分组调整，新增多项小功能", category: 'site' },
     { date: "2026-08-25 16:19", text: "🔧 修复日报排版与首次密码报错", category: 'site' },
     { date: "2026-08-25 16:13", text: "修复每日日报卡片空白问题；班级公告时间统一为「精确到分」。", category: 'site' },
@@ -1605,11 +1606,13 @@ var SITE_DATA = {
     },
     {
       id: 2,
-      categoryId: 1, title: "作业查看", subtitle: "Classworks", icon: "./icons/pmxX87n.png",
-      desc: "周作业及假期作业均可在线查看。\n使用教程：点击页面中的「已注册」，即可自动登录。\n若未显示当周作业，请跳转到布置作业的当天重新查看。",
-      cardTip: "⚠️ 因校园网限制，班级电脑端的 Classworks 连不上服务器、无法同步到云端供大家查看，故站内作业为站主手动同步。如需尝试直接访问原站，可点「🌐 前往 Classworks」。",
+      /* v4.4.0（站主第 5 条）：Classworks 那条外链彻底退场 ——
+         「后续看作业都是直接在这个网站里面看」。
+         所以：不再跳原站、不再挂 Classworks 的 logo（那个图标本来就是人家的），
+         标题下面不写 Classworks，图标位置直接放「作业」两个字。 */
+      categoryId: 1, title: "作业查看", subtitle: "", icon: "", iconText: "作业",
+      desc: "周作业及假期作业都在站内看。\n点「查看当前作业」看今天这一期，点「历史作业」按日期翻以前的。",
       customActions: [
-        { label: "🌐 前往 Classworks", onclick: "openClassworks()", style: "gray" },
         { label: "📝 查看当前作业", onclick: "showCurrentHomework()" },
         { label: "📅 历史作业（日期）", onclick: "showHomeworkCalendar()" }
       ]
@@ -4865,6 +4868,7 @@ var CONTENT_MAP = {
   release_notes:     null,           /* 版本更新记录（后台专用，前台不展示） */
   vote_pub:          'votePub',      /* v3.5.13 投票公示（模版 + 每票配置），前台渲染公示 */
   important_dates:   null,           /* 特殊：落到 IMPORTANT_DATES，见 applyCloudContent() */
+  pick_history:      'pickHistory',  /* v4.4.0 随机点名抽取记录（时间/条件/人数/名单/备注） */
   site_config:       null            /* 特殊：见 applySiteConfig() */
 };
 
@@ -7201,6 +7205,7 @@ function readLocalContentValue(key){
     if(key === 'homework_notice') return SITE_DATA.homeworkNotice;
     if(key === 'daily_quote') return SITE_DATA.dailyQuote;
     if(key === 'important_dates') return IMPORTANT_DATES;
+    if(key === 'pick_history') return SITE_DATA.pickHistory;
   }catch(e){}
   return undefined;
 }
@@ -13714,6 +13719,7 @@ var SC = {
   careSortAsc: true,
   pkA: null,      /* 成绩对比 PK：A 方成绩行 id（v2.10.0） */
   pkB: null,      /* 成绩对比 PK：B 方成绩行 id（v2.10.0） */
+  viewAs: null,   /* v4.4.0：个人画像「看谁」——null = 本人；管理员可切成别的同学 */
   pkExam2: null,  /* v3.4.0：跨考试对比的第二场考试 id（null = 只看本场） */
   basisSet: false,/* 用户是否自己切过口径（切过就不再被后台默认值覆盖） */
   trendSet: false,
@@ -14175,6 +14181,8 @@ function scPickExam(id){
     /* v3.4.0：第二场考试若与新的当前考试相同，也一并清掉 */
     if(SC.pkExam2 != null && SC.pkExam2 === ex.id) SC.pkExam2 = null;
     if(r[1] && r[1].items) SC.me = r[1].items;
+    /* v4.4.0：换了考试，成绩行的 id 全换了，画像「看谁」要跟着复位 */
+    SC.viewAs = null;
     SC.loading = false;
     scRenderAll();
     /* v3.5.6：需关注里的「连续两次退步」要看上一场，异步补一次，回来再重画这一块 */
@@ -15125,14 +15133,60 @@ function scChartSegments(st){
 }
 
 /* ---------- 我的画像 ---------- */
+/* v4.4.0（站主第 6 条）：个人画像能看别人。
+   站主原话：「管理员他自己并不是学生，但是我要求他也可以有这个人画像功能……
+              如果既是学生是管理员的话，那默认是看学生本人的，不过他也可以看其他人的」
+   规则：
+     · 默认看本人（学生兼管理员也是先看自己）
+     · 管理员本人不在成绩表里（纯管理号，比如班级电脑那个）→ 自动落到成绩表第一个人
+     · 只有管理员看得到「查看画像」下拉，普通同学看不到、也切不了 */
+function scViewRow(){
+  if(SC.viewAs){
+    for(var i = 0; i < SC.rows.length; i++){
+      if(String(SC.rows[i].id) === String(SC.viewAs)) return SC.rows[i];
+    }
+    SC.viewAs = null;   /* 记的那个人这场考试没有成绩，回到默认 */
+  }
+  var me = scMyRow();
+  if(me) return me;
+  if(scIsAdmin() && SC.rows.length) return SC.rows[0];
+  return null;
+}
+function scViewPick(id){
+  if(!scIsAdmin()) return;
+  SC.viewAs = id ? String(id) : null;
+  scRenderPane();
+}
+function scViewBar(){
+  if(!scIsAdmin() || !SC.rows.length) return '';
+  var me = scMyRow();
+  var cur = SC.viewAs ? String(SC.viewAs) : (me ? String(me.id) : String(SC.rows[0].id));
+  var opts = SC.rows.map(function(r){
+    return '<option value="' + esc(r.id) + '"' + (String(r.id) === cur ? ' selected' : '') + '>'
+      + esc(r.name) + (r.studentId ? '（' + esc(r.studentId) + '）' : '') + '</option>';
+  }).join('');
+  return '<div class="sc-viewbar">'
+    + '<span class="sc-viewbar-k">查看画像</span>'
+    + '<select class="sc-viewbar-sel" onchange="scViewPick(this.value)">' + opts + '</select>'
+    + (SC.viewAs ? '<span class="sc-viewbar-tip">正在看别人的画像</span>' : '')
+    + '</div>';
+}
+
 function scRenderMe(){
-  var meRow = scMyRow();
+  var bar = scViewBar();
+  var meRow = scViewRow();
   if(!meRow){
     /* v3.4.0 站主：历次上线率开放给管理员。管理员本人可能不在成绩表里
        （没有 meRow），此时个人画像的其余卡片都画不出来，
        就只给「历次上线率」这一张管理员卡。 */
+    if(scIsAdmin() && SC.rows.length){
+      /* v4.4.0：以前这里直接说「没有你的名字」就没了。现在把选择条也带上，
+         让纯管理号能自己挑一个学生看（班级电脑就是这种号）。 */
+      scPane(bar + '<div class="sc-hint">你是管理员，这次考试的成绩里没有你的名字。'
+        + '用上面的「查看画像」选一位同学就能看他的画像。</div>');
+      return;
+    }
     if(scIsAdmin()){
-      /* v3.5.14：站主已下线画像里的「历次上线率」，这里不再兜底展示 */
       scPane('<div class="sc-hint">你是管理员，但这次考试的成绩里没有你的名字 —— 个人画像需要本人成绩才有数据。'
         + '可以切到「全班成绩单」看全班情况。</div>');
       return;
@@ -15151,7 +15205,7 @@ function scRenderMe(){
   var myRank = rk.total[meRow.id];
   var full = scFullMark();
 
-  var html = '';
+  var html = bar;
 
   /* ① 概览卡 */
   html += '<div class="sc-card sc-overview">'

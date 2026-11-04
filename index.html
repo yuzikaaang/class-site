@@ -40,7 +40,13 @@
 /* 字体栈：Inter（拉丁/数字，CDN 加载）→ 中文系统字体（零加载成本）→ 兜底。
    ⚠️ 顺序不能颠倒：Inter 只含拉丁字形，放第一位时中文会自动落到后面的中文字体，
       这正是「英文用 Inter、中文用系统字体」的预期效果。 */
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;font-family:'Inter','PingFang SC','HarmonyOS Sans SC','Microsoft YaHei',system-ui,-apple-system,'Segoe UI',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* ⚠️ v4.4.0：字体栈必须挂在 html 上、**不能**挂在 * 上。
+   `*` 是「直接声明」——它比继承优先，会把每个元素都钉死成同一套字体，
+   于是 #bigHw 上设的 --bhw-font 只在 #bigHw 自己身上生效，所有子元素纹丝不动。
+   这正是「五种字体选了没反应、看起来一模一样」的根因（站主 2026-11-04 反馈）。
+   挂到 html 后，全部元素靠继承拿字体，#bigHw 换变量就能整页跟着换。 */
+html{font-family:'Inter','PingFang SC','HarmonyOS Sans SC','Microsoft YaHei',system-ui,-apple-system,'Segoe UI',sans-serif}
 :root{--fg:#292524;--fg-2:#57534e;--fg-3:#6e635a;--fg-muted:#6e635a}
 .dark{--fg:#f5f5f4;--fg-2:#d6d3d1;--fg-3:#a8a29e;--fg-muted:#a8a29e}
 /* ============================================================
@@ -2553,6 +2559,18 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .sc-empty p{margin:6px 0;font-size:.86rem;line-height:1.7}
 .sc-dim{color:#7a6a5c}
 .sc-hint{font-size:.78rem;color:#6e635a;background:#fdf8f3;border:1px solid #f0e7de;border-radius:10px;padding:9px 12px;line-height:1.7;margin-bottom:12px}
+/* v4.4.0：个人画像「查看画像」选择条 */
+.sc-viewbar{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  background:#fff;border:1px solid #f0e7de;border-radius:12px;padding:8px 12px;margin-bottom:12px;
+}
+.sc-viewbar-k{font-size:.76rem;font-weight:700;color:#6e635a;white-space:nowrap}
+.sc-viewbar-sel{
+  flex:1 1 180px;min-width:0;padding:7px 10px;border-radius:9px;font-size:.84rem;font-family:inherit;
+  border:1px solid #e7dcd0;background:#fffdfa;color:#3f342c;outline:none;
+}
+.sc-viewbar-sel:focus{border-color:#c2410c;box-shadow:0 0 0 3px rgba(194,65,12,.1)}
+.sc-viewbar-tip{font-size:.72rem;color:#b45309;white-space:nowrap}
 .sc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
 .sc-stat{background:#fff;border:1px solid #f0e7de;border-radius:12px;padding:9px 6px;text-align:center}
 .sc-stat b{display:block;font-size:1.05rem;color:#b45309;font-variant-numeric:tabular-nums}
@@ -4474,6 +4492,40 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .bpick-ex-item.leave{border-color:#f59e0b;background:rgba(245,158,11,.12)}
 .bpick-ex-item.out{border-color:#b91c1c;background:rgba(185,28,28,.1);opacity:.75}
 .bpick-empty{text-align:center;color:var(--fg-3);padding:26px 0;line-height:1.8}
+
+/* —— 抽取历史（v4.4.0 第 4 条） —— */
+.bpick-note{margin:2px 0 4px;padding:12px 14px;border-radius:14px;background:var(--bg-2);border:1px solid rgba(120,53,15,.14)}
+.bpick-note-k{font-size:.74rem;font-weight:700;color:var(--fg-3);margin-bottom:7px}
+.bpick-note-in{
+  width:100%;box-sizing:border-box;padding:9px 11px;border-radius:10px;
+  border:1px solid rgba(120,53,15,.18);background:var(--bg-1);color:var(--fg);
+  font-size:.85rem;font-family:inherit;outline:none;
+}
+.bpick-note-in:focus{border-color:var(--grad-a);box-shadow:0 0 0 3px rgba(194,65,12,.1)}
+.bpick-note-tip{font-size:.68rem;color:var(--fg-3);margin-top:6px}
+.bpick-hist{display:flex;flex-direction:column;gap:10px;margin:6px 0 4px;max-height:min(58vh,560px);overflow:auto;padding-right:2px}
+.bpick-hist-tip{font-size:.72rem;color:var(--fg-3);margin:2px 0 8px;line-height:1.5}
+.bpick-hist-item{
+  border:1px solid rgba(120,53,15,.14);border-radius:14px;padding:12px 14px;background:var(--bg-1);
+}
+.bpick-hist-top{display:flex;align-items:center;gap:9px;margin-bottom:5px}
+.bpick-hist-top b{font-size:.9rem;color:var(--fg)}
+.bpick-hist-n{
+  font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:999px;
+  background:var(--tint-2);color:var(--accent-ink);
+}
+.bpick-hist-x{
+  margin-left:auto;border:1px solid rgba(120,53,15,.18);background:transparent;color:var(--fg-3);
+  font-size:.7rem;padding:3px 9px;border-radius:8px;cursor:pointer;font-family:inherit;
+}
+.bpick-hist-x:hover{border-color:#b91c1c;color:#b91c1c}
+.bpick-hist-cond{font-size:.74rem;color:var(--fg-3);margin-bottom:8px;line-height:1.5}
+.bpick-hist-names{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+.bpick-hist-names span{
+  font-size:.82rem;font-weight:700;padding:3px 10px;border-radius:8px;
+  background:var(--tint);color:var(--accent-ink);
+}
+.bpick-hist-note{font-size:.78rem;padding:7px 10px}
 /* 手机 / 窄屏：大屏模式的顶栏要压成横向滚动的胶囊条。
    ⚠️ 手机端 .sidebar 原本是「抽屉」：position:fixed + translateX(-100%)。
       这里只改 position 不改 transform 的话，整条导航会被推到屏幕外 —— 实测踩到。 */
@@ -4916,10 +4968,9 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
       <p style="margin:0 0 8px">目前本班级电脑端的部分云盘软件及外部学习平台因<strong>校园网络限制 + 未备案网站审核</strong>原因无法正常联网，导致：</p>
       <ul style="margin:6px 0 12px 18px;padding:0">
         <li>课堂笔记、课件等学习资源无法实时同步至云端；</li>
-        <li>班级作业查看平台（Classworks）无法连接服务器；</li>
         <li>部分未备案网址在校园网环境下可能显示「无网络」。</li>
       </ul>
-      <p style="margin:0 0 12px">当前解决办法仍在探索中，请同学们以老师线下布置为准，给大家带来的不便敬请谅解。</p>
+      <p style="margin:0 0 12px">作业已统一放在站内「作业查看」里，不再依赖外部平台；其余资源仍以老师线下安排为准。</p>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap;gap:8px">
         <label style="font-size:.78rem;color:#6e635a;cursor:pointer;display:inline-flex;align-items:center;gap:6px">
           <input type="checkbox" id="studyNoticeNoShow"> 不再显示此提示
@@ -6112,14 +6163,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.3.3';
+var SITE_VERSION = '4.4.0';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=433" defer></script>
-<script src="./app.min.js?v=433" defer></script>
+<script src="./auth-bus.js?v=440" defer></script>
+<script src="./app.min.js?v=440" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=433" defer></script>
+<script src="./big.js?v=440" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

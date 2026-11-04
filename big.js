@@ -1029,6 +1029,10 @@
 
   BIG.openClock = function (){
     try{ rememberView(); }catch(e){}
+    /* v4.4.0（站主第 3 条）：记下「从哪儿点的时钟」，返回时原路回去。
+       作业看板点进来 → 返回作业看板；首页点进来 → 回首页。
+       原来的返回写死 ./index.html，从作业页进去再回来就掉到首页了。 */
+    try{ sessionStorage.setItem('cls_clock_from', BIG.hwOn ? 'hw' : 'home'); }catch(e){}
     location.href = './clock.html';
   };
 
@@ -1534,6 +1538,97 @@
   function saveEx(o){
     try{ localStorage.setItem(EX_KEY, JSON.stringify(o)); }catch(e){}
   }
+
+  /* ---------------- 抽取历史（v4.4.0 站主第 4 条） ----------------
+     站主要求：「可以看到历史记录，具体是时间点、条件、抽取人数以及具体的抽取人员。
+              然后我可以在下面写备注，就说这次是用来干嘛的，需要上传云端」
+     存储：本机 localStorage 是真源（断网也能写），同时整包推云端 pick_history。
+           云端走 /api/content，只有管理员 token 能写 —— 班级电脑上登的是管理员，够用。
+     合并：本机 ∪ 云端，按 id 去重、时间倒序。这样换设备也能看到别人抽过的记录。 */
+  var PH_KEY = 'cls_pick_hist';
+  var PH_MAX = 300;
+  function phLocal(){
+    var a = [];
+    try{ a = JSON.parse(localStorage.getItem(PH_KEY) || '[]'); }catch(e){ a = []; }
+    return Array.isArray(a) ? a : [];
+  }
+  function phMerge(){
+    var map = {}, out = [];
+    function add(x){
+      if(!x || !x.id || map[x.id]) return;
+      map[x.id] = 1;
+      out.push({
+        id: String(x.id),
+        at: Number(x.at) || 0,
+        cond: String(x.cond || ''),
+        n: Number(x.n) || (Array.isArray(x.names) ? x.names.length : 0),
+        names: Array.isArray(x.names) ? x.names.map(String) : [],
+        note: String(x.note || ''),
+      });
+    }
+    phLocal().forEach(add);
+    try{
+      var d = data();
+      if(d && Array.isArray(d.pickHistory)) d.pickHistory.forEach(add);
+    }catch(e){}
+    out.sort(function (a, b){ return b.at - a.at; });
+    return out.slice(0, PH_MAX);
+  }
+  function phSave(list, push){
+    try{ localStorage.setItem(PH_KEY, JSON.stringify(list)); }catch(e){}
+    if(push === false) return;
+    /* 没登录 / 不是管理员就只落本机，等下次有人登管理员再说（列表本身会一起带上） */
+    try{
+      if(typeof pushCloudContent === 'function' && adminOk()){
+        pushCloudContent({ pick_history: list }, true);
+      }
+    }catch(e){}
+  }
+  function phAdd(names){
+    var list = phMerge();
+    var rec = {
+      id: 'pk' + Date.now() + Math.floor(Math.random() * 1000),
+      at: Date.now(),
+      cond: condText(),
+      n: names.length,
+      names: names.slice(),
+      note: '',
+    };
+    list.unshift(rec);
+    list = list.slice(0, PH_MAX);
+    phSave(list);
+    BIG.pick.rec = rec;
+    return rec;
+  }
+  function phTime(ts){
+    var d = new Date(ts || 0);
+    function p(n){ return (n < 10 ? '0' : '') + n; }
+    return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  /* 备注：边打边存本机，松手 800ms 后再推云端，避免每敲一个字打一次接口 */
+  BIG.pickNote = function (val){
+    var p = BIG.pick, id = p.noteFor;
+    if(!id) return;
+    var list = phMerge(), hit = null;
+    for(var i = 0; i < list.length; i++) if(list[i].id === id){ hit = list[i]; break; }
+    if(!hit) return;
+    hit.note = String(val || '').slice(0, 120);
+    if(p.rec && p.rec.id === id) p.rec.note = hit.note;
+    phSave(list, false);
+    if(BIG._noteT) clearTimeout(BIG._noteT);
+    BIG._noteT = setTimeout(function (){ phSave(phMerge()); }, 800);
+  };
+  BIG.pickHist = function (){
+    BIG.pick.state = (BIG.pick.state === 'hist') ? 'setup' : 'hist';
+    BIG.pickBody();
+  };
+  BIG.pickHistDel = function (id){
+    if(!confirm('删掉这条抽取记录？删了就找不回来了。')) return;
+    var list = phMerge().filter(function (x){ return x.id !== id; });
+    phSave(list);
+    BIG.pickBody();
+  };
+
   function loadF(){
     var f = null;
     try{ f = JSON.parse(localStorage.getItem(F_KEY) || 'null'); }catch(e){}
@@ -1815,6 +1910,9 @@
     BIG.pick.n = Math.min(Math.max(1, BIG.pick.n || 1), 10);
     BIG.pick.state = 'setup';
     BIG.pick.names = [];
+    BIG.pick.rec = null;
+    BIG.pick.noteFor = '';
+    BIG.pick.exList = false;
     BIG.pick.stat = null;
     BIG.pick.prog = null;
     BIG.pick.prevStat = null;
@@ -1873,6 +1971,7 @@
         }
         BIG.pick.names = picked;
         BIG.pick.state = 'result';
+        try{ phAdd(picked); }catch(e){}
         BIG.pickBody();
         try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
       }
@@ -1891,6 +1990,18 @@
     var cand = p.filter(function (n){ return others.indexOf(n) < 0; });
     if(!cand.length) cand = p;
     BIG.pick.names[i] = rnd(cand);
+    /* 单个人重抽 = 这次抽取的结果变了，历史里那条要跟着改，不然记录和屏幕对不上 */
+    try{
+      var rec = BIG.pick.rec;
+      if(rec && rec.id){
+        var list = phMerge();
+        for(var k = 0; k < list.length; k++){
+          if(list[k].id === rec.id){ list[k].names = BIG.pick.names.slice(); list[k].n = BIG.pick.names.length; break; }
+        }
+        rec.names = BIG.pick.names.slice();
+        phSave(list, false);
+      }
+    }catch(e){}
     BIG.pickBody();
   };
 
@@ -1979,6 +2090,14 @@
     var box = $('bpickBody');
     if(!box) return;
     var p = BIG.pick, all = p.roster || [], left = pool();
+
+    /* 历史面板不需要名单，先处理 —— 否则未登录、名单空的时候连历史都看不了 */
+    if(p.state === 'hist'){
+      box.innerHTML = '<div class="bpick-state">抽取历史 · 由新到旧</div>' + histPanel()
+        + '<div class="bpick-foot"><button type="button" class="bpick-link" onclick="BIG.pickHist()">← 返回抽取</button></div>';
+      return;
+    }
+
     var head = '<div class="bpick-state">按条件可抽 <b id="bpickHeadCount">' + left.length + '</b> 人'
       + (all.length ? '（共 ' + all.length + ' 人）' : '') + '</div>';
 
@@ -1992,7 +2111,10 @@
       var stat = p.stat;
       var exCount = Object.keys(p.ex || {}).length;
 
-      var roles = ['学生', '老师', '管理员'];
+      /* v4.4.0（站主第 1 条）：身份多一档「班干部」。
+         身份值是后台「成员档案 → 身份」那个自由文本（maxlength 10），
+         填「班干部」就能在这里被单独抽出来，不需要改数据库。 */
+      var roles = ['学生', '班干部', '老师', '管理员'];
       var roleHtml = roles.map(function (r){
         var on = (f.role || []).indexOf(r) >= 0;
         return '<button type="button" class="bpick-chip' + (on ? ' on' : '') + '"'
@@ -2082,6 +2204,8 @@
         + '<button type="button" class="bpick-go" onclick="BIG.pickStart()">开始抽取</button>'
         + '<button type="button" class="bpick-link" onclick="BIG.pickExOpen()">名单设置'
         +   (exCount ? '（已排除 ' + exCount + ' 人）' : '') + '</button>'
+        + '<button type="button" class="bpick-link" onclick="BIG.pickHist()">抽取历史'
+        +   (histCount() ? '（' + histCount() + '）' : '') + '</button>'
         + (p.exList ? exPanel() : '');
       return;
     }
@@ -2100,11 +2224,56 @@
             + '<button type="button" title="只重抽这一个" onclick="BIG.pickReroll(' + i + ')">' + ico('rotate-cw', 16) + '</button></div>';
         }).join('')
       + '</div>'
+      + noteHtml()
       + '<div class="bpick-foot">'
       +   '<button type="button" class="bpick-go" onclick="BIG.pickAgain()">重新抽取</button>'
       +   '<button type="button" class="bpick-link" onclick="BIG.pickClose()">关闭</button>'
       + '</div>';
   };
+
+  /* 结果页底部的备注框（v4.4.0 第 4 条） */
+  function noteHtml(){
+    var rec = BIG.pick.rec;
+    if(!rec || !rec.id) return '';
+    BIG.pick.noteFor = rec.id;
+    return '<div class="bpick-note">'
+      + '<div class="bpick-note-k">这次是干嘛的（写一句，以后翻得到）</div>'
+      + '<input class="bpick-note-in" maxlength="120" placeholder="例如：语文课抽查背诵"'
+      +   ' value="' + attr0(rec.note || '') + '" oninput="BIG.pickNote(this.value)">'
+      + '<div class="bpick-note-tip">' + (adminOk() ? '会自动同步到云端，换台设备也看得到' : '暂时只记在这台电脑上（管理员登录后自动同步）') + '</div>'
+      + '</div>';
+  }
+  function histCount(){
+    try{ return phMerge().length; }catch(e){ return 0; }
+  }
+  function histPanel(){
+    var list = [];
+    try{ list = phMerge(); }catch(e){ list = []; }
+    if(!list.length){
+      return '<div class="bpick-empty">还没有抽取记录。<br>抽一次就会自动记下来，包括时间、条件、人数和抽到的人。</div>';
+    }
+    return '<div class="bpick-hist-tip">'
+      + (adminOk() ? '已登录管理员：记录会自动同步到云端，换台设备也看得到' : '现在只记在这台电脑上；管理员登录后会自动补传到云端')
+      + '</div>'
+      + '<div class="bpick-hist">' + list.map(function (r){
+      var rid = attr0(r.id);
+      return '<div class="bpick-hist-item">'
+        + '<div class="bpick-hist-top">'
+        +   '<b>' + esc0(phTime(r.at)) + '</b>'
+        +   '<span class="bpick-hist-n">' + r.n + ' 人</span>'
+        +   '<button type="button" class="bpick-hist-x" onclick="BIG.pickHistDel(\'' + rid + '\')">删</button>'
+        + '</div>'
+        + '<div class="bpick-hist-cond">条件：' + esc0(r.cond || '不限（全部可抽的人）') + '</div>'
+        + '<div class="bpick-hist-names">'
+        +   r.names.map(function (n){ return '<span>' + esc0(n) + '</span>'; }).join('')
+        + '</div>'
+        + '<input class="bpick-note-in bpick-hist-note" maxlength="120" placeholder="备注：这次用来干嘛"'
+        +   ' value="' + attr0(r.note || '') + '"'
+        +   ' onfocus="BIG.pick.noteFor=\'' + rid + '\'"'
+        +   ' oninput="BIG.pick.noteFor=\'' + rid + '\';BIG.pickNote(this.value)">'
+        + '</div>';
+    }).join('') + '</div>';
+  }
 
   /* 名单设置：整块只渲染一次；之后点击只改单个按钮（见 pickExOne） */
   function exPanel(){

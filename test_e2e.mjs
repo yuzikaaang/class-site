@@ -7389,9 +7389,12 @@ console.log('\n【66】第六十轮·微信内置浏览器字体修复：同源�
       buf.length + ' bytes');
   }
 
-  /* ④ 字体栈首位仍是 Inter（同域字体生效后英文数字用它） */
-  t('★全局字体栈首位仍是 Inter（中文仍落系统字体）',
-    /\*\{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;font-family:'Inter','PingFang SC'/.test(idx));
+  /* ④ 字体栈首位仍是 Inter（同域字体生效后英文数字用它）
+     v4.4.0：字体栈从 `*` 移到 `html` —— `*` 是直接声明、优先于继承，
+     会把每个元素钉死成同一套字体，大屏「换字体」就永远没反应。 */
+  t('★全局字体栈首位仍是 Inter，且挂在 html 而不是 *（否则换字体无效）',
+    /html\{font-family:'Inter','PingFang SC'/.test(idx)
+    && !/\*\{[^}]*font-family/.test(idx));
 
   /* ⑤ SW 预缓存两个字体的文件（首次离线访问英文字形不掉） */
   t('★sw.js PRECACHE 含两个同域字体文件',

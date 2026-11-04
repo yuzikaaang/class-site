@@ -3273,12 +3273,22 @@ window.addEventListener('pagehide', function(){
 });
 
 /* v3.10.4：点「返回」先把今天的数据推上去再走（最多等 0.8 秒，网络慢也不卡人） */
+/* v4.4.0（站主第 3 条）：返回哪儿由「从哪儿进来」决定 ——
+   作业看板点时钟 → 回作业看板（index.html?big=1#/hw），首页点 → 回首页。
+   原来写死 ./index.html，从大屏作业页进去再点返回就掉到首页图标墙了。 */
+function clockBackHref(){
+  var from = '';
+  try{ from = sessionStorage.getItem('cls_clock_from') || ''; }catch(e){}
+  if(from === 'hw') return './index.html?big=1#/hw';
+  return './index.html';
+}
 (function(){
   var b = $('back');
   if(!b) return;
+  b.setAttribute('href', clockBackHref());
   b.addEventListener('click', function(e){
     if(!clkToken()) return;                       /* 没登录：本来就只存本地 */
-    var href = b.getAttribute('href') || './index.html';
+    var href = clockBackHref();
     var jumped = false;
     var go = function(){ if(jumped) return; jumped = true; location.href = href; };
     e.preventDefault();
