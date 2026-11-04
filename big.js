@@ -542,9 +542,13 @@
               + esc0(x.title || '未命名') + '</option>';
           }).join('')
         + '</select>';
-      act.innerHTML = sel
+      act.innerHTML = '<span class="bhw-sync" id="bhwSync"></span>'
+        + sel
         + (admin && hw ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwRename()">重命名</button>' : '')
+        + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwExport()" title="把作业导出成文件带走">导出</button>' : '')
+        + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwImport()" title="从文件恢复作业并上传">导入</button>' : '')
         + (admin ? '<button type="button" class="bhw-btn" onclick="BIG.hwNew()">' + ico('plus', 13) + ' 新建一期</button>' : '');
+      syncBadge();
     }
 
     var colA = $('bhwColA'), colB = $('bhwColB'), other = $('bhwOther'), addHost = $('bhwAddSubj');
@@ -739,6 +743,7 @@
     try{ setRoute('hw' + (v ? '/' + encodeURIComponent(v) : '')); }catch(e){}
   };
 
+  BIG.markSaved = function (txt){ markSaved(txt); };
   function markSaved(txt){
     var s = $('bhwSave');
     if(!s) return;
@@ -756,8 +761,10 @@
       pushCloudContent({ holiday_homeworks: list }, true).then(function (r){
         if(r && r.ok) markSaved('已同步云端');
         else markSaved('同步失败：' + ((r && r.error) || '未知原因') + '（已存本机）');
+        syncBadge();
       }).catch(function (e){
         markSaved('同步失败：' + (e && e.message || e) + '（已存本机）');
+        syncBadge();
       });
     }catch(e){}
   }
@@ -881,6 +888,267 @@
     BIG.formClose();
     BIG.renderHw();
     persist();
+  };
+
+  /* ---------------- 导出 / 导入（v4.2.0） ----------------
+     站主原话：「我们班电脑可能没网……我在班级电脑上新增了一天的作业，
+     就可以导出所有数据，或者只导出今天这一期；拿到家里那台有网的电脑上
+     导入，它就可以自动上传到云端，作业就同步了。」
+
+     设计取舍：
+       · 只做 JSON。结构自描述（带 kind / ver / exportedAt），另一台设备能认出来，
+         用记事本也能看；纯 text 没法区分「这是哪一期的第几项」。
+       · 导入兼容三种写法：纯数组 / {homeworks:[…]} / {items:{holiday_homeworks:…}}，
+         手写或从后台复制过来的都能吃。
+       · 合并规则按 id：同 id 覆盖（说明是同一期在两台机器上都改过，以导入的为准），
+         新 id 追加。绝不因为 id 重复就整份丢掉。
+       · 导入完立刻推云端；推不上去就靠「待上传」队列，联网后自动补（见 app.js）。 */
+  var IO = { mode: 'export' };
+
+  function syncBadge(){
+    var el = $('bhwSync'); if(!el) return;
+    var pending = false, off = false;
+    try{ pending = (typeof hasPendingContentSync === 'function') && hasPendingContentSync(); }catch(e){}
+    try{ off = (navigator.onLine === false); }catch(e){}
+    if(off){ el.className = 'bhw-sync off'; el.innerHTML = '<i></i>离线 · 存本机'; }
+    else if(pending){ el.className = 'bhw-sync pend'; el.innerHTML = '<i></i>待上传'; }
+    else { el.className = 'bhw-sync'; el.innerHTML = '<i></i>已同步'; }
+  }
+  BIG.syncBadge = syncBadge;
+  try{
+    window.addEventListener('online', function (){ syncBadge(); });
+    window.addEventListener('offline', function (){ syncBadge(); });
+  }catch(e){}
+
+  function stampText(){
+    var d = new Date();
+    function p(n){ return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+      + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function stampFile(){
+    var d = new Date();
+    function p(n){ return (n < 10 ? '0' : '') + n; }
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
+  }
+
+  function ioOpen(mode){
+    IO.mode = mode;
+    var m = $('bhwIoMask'); if(!m) return;
+    m.classList.add('show');
+  }
+  BIG.ioClose = function (){
+    var m = $('bhwIoMask'); if(m) m.classList.remove('show');
+  };
+
+  BIG.hwExport = function (){
+    if(!adminOk()){ toast('只有管理员能导出', true); return; }
+    var list = hwList();
+    if(!list.length){ toast('还没有作业可以导出', true); return; }
+    var t = $('bhwIoTitle'); if(t) t.textContent = '导出作业';
+    var tip = $('bhwIoTip');
+    if(tip) tip.textContent = '勾选要带走的内容，导出成一个 JSON 文件。拿到有网的电脑上点「导入」，那边会自动上传云端。';
+    var ok = $('bhwIoOk'); if(ok){ ok.textContent = '导出所选'; ok.style.display = ''; }
+    var body = $('bhwIoBody');
+    if(body){
+      body.innerHTML = '<label class="bhw-io-all"><input type="checkbox" id="bhwIoAll" checked'
+        + ' onchange="BIG.ioAll(this.checked)"> 全选（' + list.length + ' 期）</label>'
+        + list.slice().reverse().map(function (x){
+            var n = (x.items || []).length;
+            var cnt = 0;
+            (x.items || []).forEach(function (it){ cnt += (it.tasks || []).length; });
+            var meta = n + ' 科 · ' + cnt + ' 项' + (x.end ? ' · 至 ' + x.end : '');
+            return '<label class="bhw-io-item">'
+              + '<input type="checkbox" class="bhw-io-ck" data-id="' + attr0(x.id) + '" checked'
+              + ' onchange="BIG.ioOne()">'
+              + '<span class="bhw-io-name">' + esc0(x.title || '未命名') + '</span>'
+              + '<span class="bhw-io-meta">' + esc0(meta) + '</span>'
+              + '</label>';
+          }).join('');
+    }
+    ioOpen('export');
+  };
+
+  BIG.ioAll = function (on){
+    var arr = document.querySelectorAll('#bhwIoBody .bhw-io-ck');
+    for(var i = 0; i < arr.length; i++) arr[i].checked = !!on;
+  };
+  BIG.ioOne = function (){
+    var arr = [].slice.call(document.querySelectorAll('#bhwIoBody .bhw-io-ck'));
+    var all = $('bhwIoAll');
+    if(!all) return;
+    var n = 0;
+    arr.forEach(function (c){ if(c.checked) n++; });
+    all.checked = (n === arr.length && n > 0);
+    all.indeterminate = (n > 0 && n < arr.length);
+  };
+
+  function saveBlob(name, text){
+    try{
+      var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function (){
+        try{ document.body.removeChild(a); }catch(e){}
+        try{ URL.revokeObjectURL(url); }catch(e){}
+      }, 1200);
+      return true;
+    }catch(e){
+      /* 老浏览器不支持 download：退回复制到剪贴板之外的方案 —— 直接弹一段可复制的文本 */
+      try{ toast('这台设备不支持直接下载文件，请改用「导入」里的粘贴框反向操作', true); }catch(e2){}
+      return false;
+    }
+  }
+
+  function doExport(){
+    var list = hwList();
+    var ids = {};
+    var arr = [].slice.call(document.querySelectorAll('#bhwIoBody .bhw-io-ck'));
+    arr.forEach(function (c){ if(c.checked) ids[String(c.getAttribute('data-id'))] = 1; });
+    var picked = list.filter(function (x){ return ids[String(x.id)]; });
+    if(!picked.length){ toast('至少选一期再导出', true); return; }
+    var payload = {
+      app: '25级05班班级服务站',
+      kind: 'holiday_homeworks',
+      ver: 1,
+      siteVersion: (typeof SITE_VERSION !== 'undefined' ? SITE_VERSION : ''),
+      exportedAt: stampText(),
+      homeworks: picked,
+    };
+    var all = (picked.length === list.length);
+    var tag = all ? '全部'
+      : (picked.length === 1 ? String(picked[0].title || '单期').replace(/[\\/:*?"<>|]/g, '') : ('部分' + picked.length + '期'));
+    var nm = '班级作业-' + tag + '-' + stampFile() + '.json';
+    if(saveBlob(nm, JSON.stringify(payload, null, 2))){
+      BIG.ioClose();
+      toast('已导出 ' + picked.length + ' 期（' + nm + '）');
+    }
+  }
+
+  BIG.hwImport = function (){
+    if(!adminOk()){ toast('只有管理员能导入', true); return; }
+    var t = $('bhwIoTitle'); if(t) t.textContent = '导入作业';
+    var tip = $('bhwIoTip');
+    if(tip) tip.textContent = '选之前导出的 JSON 文件，或把内容粘贴到下面。导入后会自动尝试上传云端；上传不上去也会先存本机，联网后自动补。';
+    var ok = $('bhwIoOk'); if(ok){ ok.textContent = '导入'; ok.style.display = ''; }
+    var body = $('bhwIoBody');
+    if(body){
+      body.innerHTML = ''
+        + '<div class="bhw-io-file">'
+        + '<button type="button" onclick="document.getElementById(\'bhwIoFile\').click()">选择 JSON 文件</button>'
+        + '<span id="bhwIoFileName">还没选文件</span>'
+        + '</div>'
+        + '<input type="file" id="bhwIoFile" accept=".json,application/json,text/plain"'
+        + ' style="display:none" onchange="BIG.ioFile(this)">'
+        + '<p class="bhw-io-tip" style="margin:0 0 6px">或者把文件内容粘贴到这里：</p>'
+        + '<textarea id="bhwIoText" placeholder="粘贴导出的 JSON 内容…"></textarea>';
+    }
+    ioOpen('import');
+  };
+
+  BIG.ioFile = function (inp){
+    var f = inp && inp.files && inp.files[0];
+    if(!f) return;
+    var lab = $('bhwIoFileName');
+    if(lab) lab.textContent = f.name + '（' + Math.max(1, Math.round(f.size / 1024)) + ' KB）';
+    var r = new FileReader();
+    r.onload = function (){
+      var ta = $('bhwIoText');
+      if(ta) ta.value = String(r.result || '');
+    };
+    r.onerror = function (){ toast('这个文件读不出来，换个文件试试', true); };
+    r.readAsText(f, 'utf-8');
+  };
+
+  /* 把各种可能的导入写法统一成「作业数组」 */
+  function parseImport(txt){
+    var obj = JSON.parse(txt);
+    var arr = null;
+    if(Array.isArray(obj)) arr = obj;
+    else if(obj && Array.isArray(obj.homeworks)) arr = obj.homeworks;
+    else if(obj && obj.items && obj.items.holiday_homeworks !== undefined){
+      var v = obj.items.holiday_homeworks;
+      arr = (typeof v === 'string') ? JSON.parse(v) : v;
+    }else if(obj && Array.isArray(obj.holidayHomeworks)) arr = obj.holidayHomeworks;
+    if(!Array.isArray(arr)) throw new Error('这不是作业数据（找不到作业列表）');
+    return arr;
+  }
+
+  /* 只保留认识的字段，别把乱七八糟的东西塞进云端 */
+  function cleanHw(h){
+    if(!h || typeof h !== 'object') return null;
+    var items = [];
+    (Array.isArray(h.items) ? h.items : []).forEach(function (it){
+      if(!it || typeof it !== 'object') return;
+      var tasks = [];
+      (Array.isArray(it.tasks) ? it.tasks : []).forEach(function (t){
+        if(t === null || t === undefined) return;
+        if(typeof t === 'object'){
+          var o = { text: String(t.text == null ? '' : t.text) };
+          if(t.img) o.img = String(t.img);
+          if(t.audio) o.audio = String(t.audio);
+          if(t.video) o.video = String(t.video);
+          if(t.audioLabel) o.audioLabel = String(t.audioLabel);
+          tasks.push(o);
+        }else{
+          tasks.push(String(t));
+        }
+      });
+      items.push({ subject: String(it.subject || '').trim(), tasks: tasks });
+    });
+    return {
+      id: String(h.id || ('hw' + Date.now() + Math.floor(Math.random() * 1000))),
+      title: String(h.title || '未命名'),
+      start: String(h.start || ''),
+      end: String(h.end || ''),
+      items: items,
+    };
+  }
+
+  function doImport(){
+    var ta = $('bhwIoText');
+    var txt = ta ? String(ta.value || '').trim() : '';
+    if(!txt){ toast('先选一个文件，或把内容粘贴进来', true); return; }
+    var arr;
+    try{
+      arr = parseImport(txt);
+    }catch(e){
+      toast('读不了这个内容：' + (e && e.message || e), true);
+      return;
+    }
+    var list = hwList();
+    var add = 0, upd = 0, bad = 0;
+    arr.forEach(function (raw){
+      var rec = cleanHw(raw);
+      if(!rec){ bad++; return; }
+      var hit = -1;
+      for(var i = 0; i < list.length; i++){
+        if(String(list[i].id) === String(rec.id)){ hit = i; break; }
+      }
+      if(hit >= 0){ list[hit] = rec; upd++; }
+      else { list.push(rec); add++; }
+    });
+    if(!add && !upd){ toast('文件里没有可用的作业', true); return; }
+
+    /* 导入完把视图切到「最近导入的那一期」，让人马上看到结果 */
+    if(arr.length){
+      var last = cleanHw(arr[arr.length - 1]);
+      if(last) BIG.hwId = last.id;
+    }
+    BIG.ioClose();
+    BIG.renderHw();
+    persist();
+    var msg = '已导入：新增 ' + add + ' 期' + (upd ? '，更新 ' + upd + ' 期' : '') + (bad ? '，跳过 ' + bad + ' 条' : '');
+    toast(msg);
+    setTimeout(function (){ syncBadge(); }, 1600);
+  }
+
+  BIG.ioOk = function (){
+    if(IO.mode === 'import') doImport();
+    else doExport();
   };
 
   /* ---------------- 随机点名（v4.0.0 重做） ----------------

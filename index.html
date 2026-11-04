@@ -4231,6 +4231,57 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;border-color:transparent;
 }
 
+/* —— 导出 / 导入（v4.2.0）——
+   用途：班级电脑常年断网，作业改动只能先存本机；把数据导出成文件带到
+   有网的设备再导入，就能补传到云端。所以这块 UI 要「一眼看懂、点得动」，
+   不做成后台那种密集表单。 */
+.bhw-io{width:min(640px,94vw);max-height:88vh;display:flex;flex-direction:column}
+.bhw-io-tip{font-size:.78rem;color:var(--fg-3);line-height:1.55;margin:0 0 12px}
+.bhw-io-body{overflow:auto;max-height:52vh;padding-right:4px}
+.bhw-io-item{
+  display:flex;align-items:center;gap:11px;padding:11px 13px;margin-bottom:8px;
+  border-radius:11px;border:1px solid rgba(120,53,15,.14);background:var(--bg-2);
+  cursor:pointer;
+}
+.bhw-io-item:hover{border-color:var(--grad-a)}
+.bhw-io-item input[type=checkbox]{
+  width:20px;height:20px;flex:none;accent-color:#c2410c;cursor:pointer;
+}
+.bhw-io-item .bhw-io-name{font-size:.95rem;font-weight:800;flex:1;min-width:0;padding-right:10px}
+.bhw-io-item .bhw-io-meta{font-size:.75rem;color:var(--fg-3);font-weight:600;white-space:nowrap}
+.bhw-io-all{
+  display:flex;align-items:center;gap:9px;margin:0 0 10px;font-size:.82rem;
+  font-weight:800;color:var(--accent-ink);cursor:pointer;
+}
+.bhw-io-all input{width:18px;height:18px;accent-color:#c2410c;cursor:pointer}
+.bhw-io textarea{
+  width:100%;box-sizing:border-box;min-height:150px;padding:10px 12px;border-radius:11px;
+  border:1px solid rgba(120,53,15,.18);background:var(--bg-2);color:var(--fg);
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;
+  resize:vertical;
+}
+.bhw-io-file{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;
+}
+.bhw-io-file button{
+  border-radius:11px;padding:10px 16px;font-size:.88rem;font-weight:800;cursor:pointer;
+  border:1px dashed rgba(120,53,15,.3);background:var(--tint-2);color:var(--accent-ink);
+  font-family:inherit;
+}
+.bhw-io-file button:hover{background:rgba(249,115,22,.14)}
+.bhw-io-file span{font-size:.76rem;color:var(--fg-3)}
+/* 顶部同步状态小徽标 */
+.bhw-sync{
+  display:inline-flex;align-items:center;gap:5px;font-size:.72rem;font-weight:700;
+  padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.18);color:#fff;
+  border:1px solid rgba(255,255,255,.28);white-space:nowrap;
+}
+.bhw-sync i{width:7px;height:7px;border-radius:50%;background:#86efac;flex:none}
+.bhw-sync.pend{background:rgba(255,237,213,.22);border-color:rgba(253,186,116,.6)}
+.bhw-sync.pend i{background:#fdba74}
+.bhw-sync.off{background:rgba(254,226,226,.2);border-color:rgba(252,165,165,.6)}
+.bhw-sync.off i{background:#fca5a5}
+
 /* —— 随机点名弹层 —— */
 /* v4.0.0：条件区（身份 / 性别 / 学号 / 成绩） */
 .bpick-cond{
@@ -5120,6 +5171,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       </div>
     </div>
 
+    <!-- 导出 / 导入作业（v4.2.0）：断网时把改动带走，到有网的设备再补传 -->
+    <div class="bhw-form-mask" id="bhwIoMask">
+      <div class="bhw-form bhw-io">
+        <h3 id="bhwIoTitle">导出作业</h3>
+        <p class="bhw-io-tip" id="bhwIoTip"></p>
+        <div class="bhw-io-body" id="bhwIoBody"></div>
+        <div class="bhw-form-foot">
+          <button type="button" onclick="BIG.ioClose()">取消</button>
+          <button type="button" class="primary" id="bhwIoOk" onclick="BIG.ioOk()">导出</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 随机点名弹层 -->
     <div class="bpick-mask" id="bpickMask" onclick="BIG.pickBackdrop(event)">
       <div class="bpick-box">
@@ -5917,14 +5981,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.1.2';
+var SITE_VERSION = '4.2.0';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=412" defer></script>
-<script src="./app.min.js?v=412" defer></script>
+<script src="./auth-bus.js?v=420" defer></script>
+<script src="./app.min.js?v=420" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=412" defer></script>
+<script src="./big.js?v=420" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

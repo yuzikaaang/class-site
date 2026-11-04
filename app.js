@@ -7255,7 +7255,13 @@ function doPushContent(items){
       /* 失败保留 DIRTY_CONTENT，等下次改动或页面隐藏时再试 */
       return { ok:false, pushed:0, error:String(e && e.message || e) };
     })
-    .then(function(r){ __contentInFlight = false; return r; });
+    .then(function(r){
+      __contentInFlight = false;
+      /* v4.2.0：不管成功失败都刷一下作业页的同步徽标（已同步 / 待上传）。
+         放在这里而不是各个调用点，是因为推送的入口有四五处，容易漏。 */
+      try{ if(window.BIG && BIG.syncBadge) BIG.syncBadge(); }catch(e){}
+      return r;
+    });
 }
 
 /** 真正推送所有待推的内容键 */
@@ -7296,6 +7302,50 @@ function hasPendingContentSync(){
   for(var k in DIRTY_CONTENT){ if(DIRTY_CONTENT[k]) return true; }
   return false;
 }
+
+/* ---------------- 断网改动自动补推（v4.2.0） ----------------
+   站主原话：「我们班电脑可能没网……新增了一天的作业……确保它可以正常使用」。
+   改动在断网时照样写本机（DIRTY_CONTENT 保留），但以前只有「下次再改一次」
+   才会重试 —— 老师改完就关页面，云端永远等不到。
+   现在三个触发点：
+     · 浏览器 online 事件（网线插回 / 连上 WiFi）
+     · 页面回到前台（切回大屏）
+     · 每 45 秒兜底巡检（教室电脑常开，频率压低，别空转）
+   只在「真的有待传内容 + 网络没断」时才发请求。 */
+(function(){
+  var t = null;
+  function retry(){
+    try{
+      if(typeof hasPendingContentSync !== 'function' || !hasPendingContentSync()) return;
+      if(typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      if(typeof flushContentSync === 'function'){
+        var pr = flushContentSync();
+        /* 推是异步的，成功之后再刷新一下徽标，别停在「待上传」 */
+        if(pr && pr.then) pr.then(function(r){
+          try{ if(window.BIG && BIG.syncBadge) BIG.syncBadge(); }catch(e){}
+          /* 补推成功后把「同步失败」的旧文案改掉，免得一直挂着红字 */
+          try{
+            if(r && r.ok && window.BIG && BIG.markSaved && document.getElementById('bhwSave')){
+              BIG.markSaved('已同步云端');
+            }
+          }catch(e){}
+        }, function(){});
+      }
+      try{ if(window.BIG && BIG.syncBadge) BIG.syncBadge(); }catch(e){}
+    }catch(e){}
+  }
+  function later(ms){
+    if(t) clearTimeout(t);
+    t = setTimeout(function(){ t = null; retry(); }, ms || 800);
+  }
+  try{
+    window.addEventListener('online', function(){ later(1000); });
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'visible') later(1200);
+    });
+    setInterval(retry, 45000);
+  }catch(e){}
+})();
 
 /* ---------------- 挂钩内容写入 ----------------
    页面里改公告/作业的地方会直接改 SITE_DATA 上的字段。
