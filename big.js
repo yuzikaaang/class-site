@@ -234,6 +234,7 @@
     document.documentElement.classList.remove('big-hw');
     BIG.hwOn = false;
     if(BIG._clockT){ clearInterval(BIG._clockT); BIG._clockT = null; }
+    stopHwTimers();
   }
 
   wrap('goHomeView', function (){
@@ -290,6 +291,83 @@
   var FS_STEPS = [0.85, 0.95, 1, 1.1, 1.2, 1.35, 1.5, 1.7];
   var SUBJ_A = ['语文', '数学', '英语'];
   var SUBJ_B = ['物理', '化学', '生物'];
+  /* v4.3.0 站主要求：新建一期默认带上六科，不用每次手动加 */
+  var PRESET_SUBJECTS = SUBJ_A.concat(SUBJ_B);
+
+  /* —— 换字体（v4.3.0）——
+     全程走系统已装字体，不引外部字体文件：班级电脑很可能断网，
+     远程字体加载不到反而更难看。每项给一个在 Win / Mac 上都尽量有的备选栈。 */
+  var FONT_KEY = 'cls_bhw_font';
+  var FONTS = [
+    { id: 'hei', name: '黑体（默认）', desc: '笔画实、远看清晰',
+      stack: "'Inter','PingFang SC','HarmonyOS Sans SC','Microsoft YaHei UI','Microsoft YaHei','Source Han Sans SC','Noto Sans CJK SC',system-ui,sans-serif" },
+    { id: 'song', name: '宋体', desc: '横细竖粗，正式',
+      stack: "'Songti SC','SimSun','Source Han Serif SC','Noto Serif CJK SC','STSong',serif" },
+    { id: 'kai', name: '楷体', desc: '像手写，柔和',
+      stack: "'Kaiti SC','KaiTi','STKaiti','楷体',serif" },
+    { id: 'round', name: '圆体', desc: '边角圆润，友好',
+      stack: "'YouYuan','Yuanti SC','Hiragino Sans GB','Microsoft YaHei UI','Microsoft YaHei',sans-serif" },
+    { id: 'deng', name: '等线', desc: '偏细，字面大',
+      stack: "'DengXian','等线','Microsoft YaHei UI','Microsoft YaHei',sans-serif" }
+  ];
+  function readFont(){
+    var v = '';
+    try{ v = String(localStorage.getItem(FONT_KEY) || ''); }catch(e){}
+    for(var i = 0; i < FONTS.length; i++) if(FONTS[i].id === v) return v;
+    return 'hei';
+  }
+  function fontOf(id){
+    for(var i = 0; i < FONTS.length; i++) if(FONTS[i].id === id) return FONTS[i];
+    return FONTS[0];
+  }
+  function applyFont(){
+    var h = $('bigHw');
+    if(h) h.style.setProperty('--bhw-font', fontOf(BIG.font).stack);
+  }
+  BIG.font = readFont();
+  BIG.fontSet = function (id){
+    BIG.font = fontOf(id).id;
+    try{ localStorage.setItem(FONT_KEY, BIG.font); }catch(e){}
+    applyFont();
+    if(BIG.hwOn) scheduleLayout();
+    BIG.fontClose();
+    toast('字体已换成「' + fontOf(BIG.font).name + '」');
+  };
+
+  /* —— 随机一言（v4.3.0）——
+     站主原话：「今日一句那个换一句点击没有反应，而且我可以设置每隔 5 分钟自动换」。
+     原来侧栏这块只是把首页 #dailyQuoteBar 的 textContent 抄过来，没有点击、也没有来源，
+     出处跟正文一个颜色，看着糊成一片。现在这里独立维护一份：
+       · 点卡片任意位置 = 换一句（先本地随机，再联网补一句更好的）
+       · 自动轮换间隔可设：1 / 3 / 5 / 10 / 30 分钟，或关掉
+       · 出处用小一号、淡色，和正文分开 */
+  var QI_KEY = 'cls_bhw_quote_min';
+  BIG.quoteMin = (function (){
+    var n = 5;
+    try{
+      var v = localStorage.getItem(QI_KEY);
+      if(v !== null) n = parseInt(v, 10);
+    }catch(e){}
+    return (n >= 0 && n <= 60) ? n : 5;
+  })();
+  BIG.quoteData = null;
+  BIG.quoteSetMin = function (n){
+    n = Math.max(0, Math.min(60, parseInt(n, 10) || 0));
+    BIG.quoteMin = n;
+    try{ localStorage.setItem(QI_KEY, String(n)); }catch(e){}
+    BIG.quoteAuto();
+    renderQuote();
+    BIG.quoteClose();
+    toast(n ? ('随机一言每 ' + n + ' 分钟自动换') : '已关闭自动更换');
+  };
+  BIG.quoteAuto = function (){
+    if(BIG._quoteT){ clearInterval(BIG._quoteT); BIG._quoteT = null; }
+    if(!BIG.quoteMin) return;
+    BIG._quoteT = setInterval(function (){
+      if(!BIG.hwOn) return;
+      BIG.quoteNext(true);
+    }, BIG.quoteMin * 60000);
+  };
 
   function readFs(){
     var n = 2;
@@ -364,15 +442,26 @@
 
   function hwList(){ return (data().holidayHomeworks || []); }
 
+  /* v4.3.0（站主第 4 条）：没手动选期次时，只认「今天落在起止日期之内」的那一期。
+     以前兜底取 list 最后一条 —— 那是「上一次作业」，学生放假回来第一天看到的是旧作业，
+     会以为今天还要写。现在没有就返回 null，页面显示「当前没有作业」。 */
   function currentHw(){
     var list = hwList();
     if(BIG.hwId){
       for(var i = 0; i < list.length; i++){ if(String(list[i].id) === String(BIG.hwId)) return list[i]; }
     }
-    try{
-      if(typeof getCurrentHomework === 'function') return getCurrentHomework();
-    }catch(e){}
-    return list[list.length - 1] || null;
+    var t = todayStr(), hit = null;
+    for(var j = 0; j < list.length; j++){
+      var x = list[j];
+      var s = String(x.start || '').slice(0, 10) || String(x.end || '').slice(0, 10);
+      var e = String(x.end || '').slice(0, 10) || s;
+      if(!s) continue;
+      if(s <= t && t <= e){
+        /* 万一有两期重叠，取日期更靠近今天的（结束日期更晚的那期） */
+        if(!hit || e > (String(hit.end || '').slice(0, 10))) hit = x;
+      }
+    }
+    return hit;
   }
 
   function subjStyle(s){
@@ -556,8 +645,13 @@
 
     if(!hw){
       colA.innerHTML = colB.innerHTML = '';
+      /* v4.3.0（站主第 4 条）：只按起止日期找「当前」。今天不在任何一期内就明说没有，
+         不再拿上一次的作业冒充今天 —— 想看旧的可从右上角下拉里翻。 */
       if(other) other.innerHTML = '<div class="bhw-subj"><div class="bhw-empty">'
-        + (admin ? '还没有作业。点右上角「新建一期」开始。' : '管理员还没发布作业。') + '</div></div>';
+        + '<b class="bhw-empty-t">当前没有作业</b>'
+        + (admin ? '<span>今天不在任何一期作业的日期里。可点右上角「新建一期」；要看以前的，从下拉里选。</span>'
+                 : '<span>今天不在任何一期作业的日期里，先歇会儿。</span>')
+        + '</div></div>';
       if(addHost) addHost.innerHTML = '';
       renderSide();
       return;
@@ -676,6 +770,9 @@
   }
   BIG.relayout = scheduleLayout;
 
+  /* ---------------- 侧栏（v4.3.0 重排） ----------------
+     顺序按站主要求：时钟 → 今日事项 → 倒计时（重要日期 / 最近节假日） → 随机点名 → 随机一言（最底）。
+     倒计时必须压在点名上面，一言单独放最下面，不再和别的挤在一块。 */
   function renderSide(){
     var c = $('bhwCourses');
     if(c){
@@ -699,19 +796,167 @@
         c.style.display = 'none';
       }
     }
-    var q = $('bhwQuote');
-    if(q){
-      var qt = '';
-      try{
-        var el = document.getElementById('dailyQuoteBar');
-        if(el && el.textContent.trim()) qt = el.textContent.trim();
-      }catch(e){}
-      if(!qt) qt = String(data().dailyQuote || '');
-      q.style.display = qt ? '' : 'none';
-      if(qt) q.innerHTML = '<span class="bhw-mini-k">今日一句</span>'
-        + '<b class="bhw-mini-v">' + esc0(qt) + '</b>';
-    }
+    renderCd();
+    renderQuote();
   }
+
+  /* ---------------- 倒计时（v4.3.0） ----------------
+     数据直接复用全站的 IMPORTANT_DATES / HOLIDAYS，不再单独配一份：
+     站主在后台改了重要日期，大屏这一块跟着变。
+     规则（站主原话）：「倒计时没有的话那就空着；节假日倒计时只显示最近的一个」。
+       重要日期：取「还没结束」里最早的一条，区间内显示「进行中」；
+       节假日：取今天之后最近的一个。
+     两个都没有 → 整块隐藏，不留空白盒子。 */
+  function cdDays(a, b){
+    return Math.max(0, Math.ceil((a.getTime() - b.getTime()) / 86400000));
+  }
+  function cdLeftText(target, now){
+    var sec = Math.floor((target.getTime() - now.getTime()) / 1000);
+    if(sec <= 0) return '已开始';
+    var d = Math.floor(sec / 86400);
+    var h = Math.floor((sec % 86400) / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    if(d > 0) return d + ' 天 ' + h + ' 时';
+    if(h > 0) return h + ' 小时 ' + m + ' 分';
+    return m + ' 分';
+  }
+  function cdPick(){
+    var now = new Date(), out = { imp: null, hol: null };
+    try{
+      var arr = (typeof IMPORTANT_DATES !== 'undefined' && Array.isArray(IMPORTANT_DATES)) ? IMPORTANT_DATES : [];
+      var best = null;
+      arr.forEach(function (d){
+        var st = new Date(d.date);
+        if(isNaN(st.getTime())) return;
+        var en = d.endDate ? new Date(String(d.endDate).slice(0, 10) + 'T23:59:59') : st;
+        if(now.getTime() > en.getTime()) return;      /* 已经过去的整条不显示 */
+        if(!best || st < best.st) best = { name: d.name || '', st: st, en: en,
+          during: !!(d.endDate && now.getTime() >= st.getTime()) };
+      });
+      out.imp = best;
+    }catch(e){}
+    try{
+      var hs = (typeof HOLIDAYS !== 'undefined' && Array.isArray(HOLIDAYS)) ? HOLIDAYS : [];
+      var t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      var bh = null;
+      hs.forEach(function (h){
+        var d = new Date(String(h.date).slice(0, 10) + 'T00:00:00');
+        if(isNaN(d.getTime()) || d < t0) return;
+        if(!bh || d < bh.d) bh = { name: h.name || '节假日', d: d, days: h.days };
+      });
+      out.hol = bh;
+    }catch(e){}
+    return out;
+  }
+  function renderCd(){
+    var box = $('bhwCd'); if(!box) return;
+    var now = new Date(), p = cdPick();
+    if(!p.imp && !p.hol){ box.style.display = 'none'; return; }
+    box.style.display = '';
+    var rows = '';
+    if(p.imp){
+      rows += '<div class="bhw-cd-row">'
+        + '<span class="bhw-cd-n">' + esc0(p.imp.name) + '</span>'
+        + '<span class="bhw-cd-v' + (p.imp.during ? ' during' : '') + '">'
+        + (p.imp.during ? '进行中' : cdLeftText(p.imp.st, now)) + '</span></div>';
+    }
+    if(p.hol){
+      var left = cdDays(p.hol.d, now);
+      rows += '<div class="bhw-cd-row">'
+        + '<span class="bhw-cd-n">' + esc0(p.hol.name) + '</span>'
+        + '<span class="bhw-cd-v">' + (left <= 0 ? '就是今天' : '还有 ' + left + ' 天')
+        + (p.hol.days ? ' · 放 ' + p.hol.days + ' 天' : '') + '</span></div>';
+    }
+    box.innerHTML = '<span class="bhw-mini-k">倒计时</span>' + rows;
+  }
+  BIG.renderCd = renderCd;
+
+  /* ---------------- 随机一言（v4.3.0） ---------------- */
+  function renderQuote(){
+    var box = $('bhwQuote'); if(!box) return;
+    var q = BIG.quoteData;
+    if(!q || !q.text){ box.style.display = 'none'; return; }
+    box.style.display = '';
+    box.innerHTML =
+      '<div class="bhw-q-head">'
+        + '<span class="bhw-mini-k">随机一言</span>'
+        + '<span class="bhw-q-act">'
+          + '<button type="button" class="bhw-q-btn" onclick="event.stopPropagation();BIG.quoteNext(true)">'
+            + '换一句 ↻</button>'
+          + '<button type="button" class="bhw-q-btn bhw-q-gear" title="自动更换时间"'
+            + ' onclick="event.stopPropagation();BIG.quoteCfg()">' + ico('settings', 13) + '</button>'
+        + '</span>'
+      + '</div>'
+      + '<div class="bhw-q-text">' + esc0(q.text) + '</div>'
+      + (q.from ? '<div class="bhw-q-from">—— ' + esc0(q.from) + '</div>' : '')
+      + '<div class="bhw-q-tip">点一下换一句'
+        + (BIG.quoteMin ? ' · 每 ' + BIG.quoteMin + ' 分钟自动换' : ' · 自动更换已关') + '</div>';
+  }
+  BIG.renderQuote = renderQuote;
+
+  function quoteLocalPick(){
+    var list = [];
+    try{ if(typeof quoteItems === 'function') list = quoteItems(); }catch(e){}
+    if(!list.length){
+      try{
+        var raw = data().dailyQuote;
+        if(typeof raw === 'string' && raw.trim()) list = [{ text: raw.trim(), from: '' }];
+        else if(Array.isArray(raw)) list = raw.map(function (x){
+          return (typeof x === 'string') ? { text: x, from: '' } : (x && x.text ? { text: x.text, from: x.from || '' } : null);
+        }).filter(Boolean);
+      }catch(e){}
+    }
+    if(!list.length) return null;
+    var i = Math.floor(Math.random() * list.length);
+    if(list.length > 1 && BIG.quoteData && list[i].text === BIG.quoteData.text){
+      i = (i + 1) % list.length;
+    }
+    return list[i];
+  }
+
+  /* 联网补一句（hitokoto）。失败就保留本地那句，绝不把卡片清空 ——
+     站主要求「断网也能正常用」，这里不能因为一次请求失败就白屏。 */
+  var _qFetching = false;
+  function quoteNet(){
+    try{
+      if(_qFetching) return;
+      if(typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      if(typeof quoteNetAllowed === 'function' && !quoteNetAllowed()) return;
+    }catch(e){}
+    var cats = ['a', 'b', 'd', 'i'];
+    try{ if(typeof quoteCats === 'function') cats = quoteCats(); }catch(e){}
+    var qs = cats.map(function (c){ return 'c=' + encodeURIComponent(c); }).join('&');
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var tm = setTimeout(function (){ if(ctrl) ctrl.abort(); }, 6000);
+    _qFetching = true;
+    fetch('https://v1.hitokoto.cn/?' + qs + '&encode=json', ctrl ? { signal: ctrl.signal } : undefined)
+      .then(function (r){ return r.ok ? r.json() : null; })
+      .then(function (j){
+        clearTimeout(tm); _qFetching = false;
+        if(!j || !j.hitokoto) return;
+        if(!BIG.hwOn) return;
+        var from = j.from || '';
+        if(j.from_who && j.from) from = j.from_who + '《' + j.from + '》';
+        else if(j.from_who) from = j.from_who;
+        BIG.quoteData = { text: String(j.hitokoto), from: String(from || ''), net: 1 };
+        renderQuote();
+      })
+      .catch(function (){ clearTimeout(tm); _qFetching = false; });
+  }
+
+  BIG.quoteNext = function (force){
+    var p = quoteLocalPick();
+    if(p) BIG.quoteData = { text: p.text, from: p.from || '' };
+    else if(!BIG.quoteData) BIG.quoteData = { text: '今天也要认真写作业。', from: '班级服务站' };
+    renderQuote();
+    if(force) quoteNet();
+  };
+
+  /* 卡片本体点击 = 换一句（原来这块是纯 div，点了完全没反应） */
+  BIG.quoteTap = function (e){
+    if(e && e.target && e.target.closest && e.target.closest('button')) return;
+    BIG.quoteNext(true);
+  };
 
   /* 时钟：精确到秒（站主第 2 条） */
   function startClock(){
@@ -730,6 +975,19 @@
     tick();
     if(BIG._clockT) clearInterval(BIG._clockT);
     BIG._clockT = setInterval(tick, 1000);
+
+    /* v4.3.0：进了作业页才起这两组定时器 —— 倒计时 30 秒刷一次（天/时粒度，不用每秒重排），
+       一言按用户设的分钟数自动换。离开作业页由 leaveHwUi 收掉。 */
+    renderCd();
+    if(BIG._cdT) clearInterval(BIG._cdT);
+    BIG._cdT = setInterval(function (){ if(BIG.hwOn) renderCd(); }, 30000);
+    if(!BIG.quoteData) BIG.quoteNext(false);
+    BIG.quoteAuto();
+  }
+
+  function stopHwTimers(){
+    if(BIG._cdT){ clearInterval(BIG._cdT); BIG._cdT = null; }
+    if(BIG._quoteT){ clearInterval(BIG._quoteT); BIG._quoteT = null; }
   }
 
   BIG.openClock = function (){
@@ -832,16 +1090,35 @@
   };
 
   /* —— 新建 / 重命名（站主第 1 条）—— */
-  var FORM = { mode: 'new' };
+  var FORM = { mode: 'new', subjects: PRESET_SUBJECTS.slice() };
+  function formSubjHtml(){
+    var host = $('bhwFormSubj');
+    if(!host) return;
+    if(FORM.mode !== 'new'){ host.innerHTML = ''; host.style.display = 'none'; return; }
+    host.style.display = '';
+    host.innerHTML = '<span class="bhw-form-subj-k">预设科目</span>'
+      + PRESET_SUBJECTS.map(function (s){
+          var on = FORM.subjects.indexOf(s) >= 0;
+          return '<button type="button" class="bhw-chip' + (on ? ' on' : '') + '"'
+            + ' onclick="BIG.formSubjToggle(\'' + s + '\')">' + esc0(s) + '</button>';
+        }).join('');
+  }
+  BIG.formSubjToggle = function (s){
+    var i = FORM.subjects.indexOf(s);
+    if(i >= 0) FORM.subjects.splice(i, 1); else FORM.subjects.push(s);
+    formSubjHtml();
+  };
   BIG.hwNew = function (){
     if(!adminOk()){ toast('只有管理员能新建作业', true); return; }
     FORM.mode = 'new';
+    FORM.subjects = PRESET_SUBJECTS.slice();
     var t = $('bhwFormTitle'); if(t) t.textContent = '新建一期作业';
     var d = todayStr();
     var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
     if(n) n.value = '';
     if(st) st.value = d;
     if(en) en.value = d;
+    formSubjHtml();
     var m = $('bhwFormMask'); if(m) m.classList.add('show');
     setTimeout(function(){ if(n) n.focus(); }, 60);
   };
@@ -854,11 +1131,50 @@
     if(n) n.value = plain(hw.title || '');
     if(st) st.value = hw.start || '';
     if(en) en.value = hw.end || '';
+    formSubjHtml();
     var m = $('bhwFormMask'); if(m) m.classList.add('show');
     setTimeout(function(){ if(n){ n.focus(); n.select(); } }, 60);
   };
   BIG.formClose = function (){
     var m = $('bhwFormMask'); if(m) m.classList.remove('show');
+  };
+
+  /* ---------------- 换字体弹窗（v4.3.0） ---------------- */
+  BIG.fontOpen = function (){
+    var body = $('bhwFontBody');
+    if(body){
+      body.innerHTML = FONTS.map(function (f){
+        return '<button type="button" class="bhw-font-item' + (f.id === BIG.font ? ' on' : '') + '"'
+          + ' style="font-family:' + f.stack + '" onclick="BIG.fontSet(\'' + f.id + '\')">'
+          + '<span class="bhw-font-name">' + esc0(f.name) + '</span>'
+          + '<span class="bhw-font-demo">作业预览 Aa 123</span>'
+          + '<span class="bhw-font-desc">' + esc0(f.desc) + '</span>'
+          + '</button>';
+      }).join('');
+    }
+    var m = $('bhwFontMask'); if(m) m.classList.add('show');
+  };
+  BIG.fontClose = function (){
+    var m = $('bhwFontMask'); if(m) m.classList.remove('show');
+  };
+
+  /* ---------------- 一言轮换间隔弹窗（v4.3.0） ---------------- */
+  BIG.quoteCfg = function (){
+    var body = $('bhwQuoteBody');
+    var opts = [
+      { n: 1, t: '每 1 分钟' }, { n: 3, t: '每 3 分钟' }, { n: 5, t: '每 5 分钟（默认）' },
+      { n: 10, t: '每 10 分钟' }, { n: 30, t: '每 30 分钟' }, { n: 0, t: '不自动换，只手动' }
+    ];
+    if(body){
+      body.innerHTML = opts.map(function (o){
+        return '<button type="button" class="bhw-opt' + (o.n === BIG.quoteMin ? ' on' : '') + '"'
+          + ' onclick="BIG.quoteSetMin(' + o.n + ')">' + o.t + '</button>';
+      }).join('');
+    }
+    var m = $('bhwQuoteMask'); if(m) m.classList.add('show');
+  };
+  BIG.quoteClose = function (){
+    var m = $('bhwQuoteMask'); if(m) m.classList.remove('show');
   };
   BIG.formSave = function (){
     var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
@@ -870,13 +1186,16 @@
     if(FORM.mode === 'new'){
       var list = hwList();
       var id = 'hw' + Date.now();
+      var picked = FORM.subjects && FORM.subjects.length ? FORM.subjects : PRESET_SUBJECTS.slice();
       list.push({
         id: id, title: name,
         start: s0 || todayStr(), end: e0 || s0 || todayStr(),
-        items: [],
+        /* v4.3.0（站主第 1 条）：新建时直接把六科预设带上，每科先放一个空项，
+           打开就能写，不用再一科一科「添加科目」。不需要的科目点卡片右上角垃圾桶删掉。 */
+        items: picked.map(function (s){ return { subject: s, tasks: [''] }; }),
       });
       BIG.hwId = id;
-      toast('已新建，先加科目再写作业');
+      toast('已新建，六科已预设好，直接写作业');
     }else{
       var hw = currentHw();
       if(!hw){ toast('找不到这一期', true); return; }
@@ -1943,6 +2262,7 @@
   function boot(){
     applyClass();
     applyFs();
+    applyFont();
     buildHome();
     if(BIG.on) BIG.startAlerts();
     var pi = $('bhwPickIco');

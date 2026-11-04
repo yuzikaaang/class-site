@@ -3939,9 +3939,11 @@ html.big-mode .tab-page h2{font-size:1.3rem}
 #bigHw{
   display:none;--bhw-fs:1;padding:0 0 58px;
   /* 大屏远看：中文优先用笔画更实、字面更大的字体。
-     PingFang（Mac）/ HarmonyOS（华为）/ Microsoft YaHei UI（Win10+，比旧 YaHei 清晰）。 */
-  font-family:'Inter','PingFang SC','HarmonyOS Sans SC','Microsoft YaHei UI','Microsoft YaHei',
+     PingFang（Mac）/ HarmonyOS（华为）/ Microsoft YaHei UI（Win10+，比旧 YaHei 清晰）。
+     v4.3.0：整栈收进 --bhw-font，底栏「字体」按钮直接换这个变量（见 big.js applyFont）。 */
+  --bhw-font:'Inter','PingFang SC','HarmonyOS Sans SC','Microsoft YaHei UI','Microsoft YaHei',
     'Source Han Sans SC','Noto Sans CJK SC',system-ui,sans-serif;
+  font-family:var(--bhw-font);
 }
 html.big-mode.big-hw #bigHw{display:block}
 html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important}
@@ -4067,7 +4069,8 @@ html.big-mode.big-hw .content{padding:0}
 /* —— 右栏小功能 —— */
 .bhw-side{display:flex;flex-direction:column;gap:10px;min-height:calc(100vh - 190px)}
 .bhw-side .bhw-clock{flex:0 0 auto}
-.bhw-side .bhw-quote{flex:1 1 auto;justify-content:center}
+/* v4.3.0：一言不再拉满整列（那样只剩一大片空白），卡片包住自己的内容 */
+.bhw-side .bhw-quote{flex:0 0 auto}
 .bhw-clock{
   display:flex;flex-direction:column;align-items:flex-start;gap:2px;cursor:pointer;text-align:left;
   background:linear-gradient(135deg,#7c2d12,#9a3412);color:#fff;border:none;border-radius:18px;
@@ -4104,6 +4107,91 @@ html.big-mode.big-hw .content{padding:0}
 .bhw-pick-ico svg{stroke:#fff}
 .bhw-pick b{font-size:calc(.9rem*var(--bhw-fs));display:block}
 .bhw-pick span{font-size:calc(.68rem*var(--bhw-fs));color:var(--fg-3)}
+
+/* —— 侧栏倒计时（v4.3.0）——
+   重要日期 / 最近节假日各一行，名称在左、剩余时间在右。没有可显示的整块隐藏。 */
+.bhw-cd{gap:6px}
+.bhw-cd-row{
+  display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  font-size:calc(.78rem*var(--bhw-fs));line-height:1.45;
+}
+.bhw-cd-n{
+  font-weight:800;color:var(--fg);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.bhw-cd-v{
+  flex:none;font-weight:800;color:#9a3412;font-variant-numeric:tabular-nums;
+  font-size:calc(.76rem*var(--bhw-fs));
+}
+.dark .bhw-cd-v{color:#f0a884}
+.bhw-cd-v.during{color:#15803d}
+
+/* —— 随机一言（v4.3.0）——
+   站主原话：「那一块全是每日一句，还不太好看，出处应该颜色更淡一点」。
+   正文用正常字重、出处小一号且明显淡；标题行右边放「换一句」和齿轮。 */
+.bhw-quote{
+  background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:14px;
+  padding:11px 13px 10px;display:flex;flex-direction:column;gap:6px;cursor:pointer;
+  transition:border-color .15s,transform .15s;
+}
+.bhw-quote:hover{border-color:var(--grad-a);transform:translateY(-1px)}
+.dark .bhw-quote{background:#2a2523;border-color:rgba(255,255,255,.08)}
+.bhw-q-head{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.bhw-q-act{display:flex;align-items:center;gap:4px}
+.bhw-q-btn{
+  border:1px solid rgba(120,53,15,.14);background:transparent;color:var(--fg-3);
+  border-radius:8px;padding:2px 7px;font-size:.7rem;font-weight:700;cursor:pointer;
+  font-family:inherit;line-height:1.5;
+}
+.bhw-q-btn:hover{color:#9a3412;border-color:var(--grad-a);background:var(--tint)}
+.bhw-q-gear{padding:2px 5px;display:flex;align-items:center}
+.bhw-q-gear svg{width:13px;height:13px}
+.bhw-q-text{
+  font-size:calc(.95rem*var(--bhw-fs));line-height:1.62;font-weight:600;color:var(--fg);
+  letter-spacing:.01em;
+}
+.bhw-q-from{
+  font-size:calc(.72rem*var(--bhw-fs));line-height:1.4;font-weight:400;
+  color:var(--fg-3);opacity:.75;text-align:right;
+}
+.bhw-q-tip{
+  font-size:.66rem;color:var(--fg-3);opacity:.55;border-top:1px dashed rgba(120,53,15,.12);
+  padding-top:5px;margin-top:1px;
+}
+
+/* —— 弹窗：换字体 / 一言间隔（v4.3.0）—— */
+.bhw-fontbox{max-width:420px}
+.bhw-font-list,.bhw-opt-list{display:flex;flex-direction:column;gap:8px;margin:12px 0 4px}
+.bhw-font-item{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;cursor:pointer;
+  border:1.5px solid rgba(120,53,15,.14);background:var(--bg-2);color:var(--fg);
+  border-radius:12px;padding:9px 13px;font-family:inherit;
+}
+.bhw-font-item:hover{border-color:var(--grad-a);background:var(--tint)}
+.bhw-font-item.on{border-color:var(--grad-a);background:var(--tint);box-shadow:0 0 0 2px rgba(154,52,18,.12)}
+.bhw-font-name{font-size:.86rem;font-weight:900}
+.bhw-font-demo{font-size:1.02rem;font-weight:600}
+.bhw-font-desc{font-size:.68rem;color:var(--fg-3)}
+.bhw-opt{
+  border:1.5px solid rgba(120,53,15,.14);background:var(--bg-2);color:var(--fg);
+  border-radius:11px;padding:10px 13px;text-align:left;font-size:.86rem;font-weight:700;
+  cursor:pointer;font-family:inherit;
+}
+.bhw-opt:hover{border-color:var(--grad-a);background:var(--tint)}
+.bhw-opt.on{border-color:var(--grad-a);background:var(--tint);color:#9a3412}
+
+/* —— 新建期：预设科目 chips —— */
+.bhw-form-subj{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px}
+.bhw-form-subj-k{font-size:.72rem;color:var(--fg-3);margin-right:2px}
+.bhw-chip{
+  border:1.5px solid rgba(120,53,15,.16);background:transparent;color:var(--fg-3);
+  border-radius:999px;padding:4px 12px;font-size:.8rem;font-weight:700;cursor:pointer;
+  font-family:inherit;line-height:1.4;
+}
+.bhw-chip.on{border-color:var(--grad-a);background:var(--tint);color:#9a3412}
+
+/* —— 空态：当前没有作业 —— */
+.bhw-empty-t{display:block;font-size:calc(1rem*var(--bhw-fs));font-weight:800;color:var(--fg);margin-bottom:6px}
+.bhw-empty span{font-size:calc(.82rem*var(--bhw-fs));line-height:1.6}
 
 /* 窄屏（手机 / 平板竖屏）：三列挤不下，改成单列竖排；底部工具条只留按钮 */
 @media(max-width:1180px){
@@ -5127,11 +5215,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
             <span class="bhw-clock-s" id="bhwClockS"></span>
           </button>
           <div class="bhw-mini" id="bhwCourses" style="display:none"></div>
+          <!-- v4.3.0：倒计时压在随机点名上面；没有可显示的就整块隐藏 -->
+          <div class="bhw-mini bhw-cd" id="bhwCd" style="display:none"></div>
           <button type="button" class="bhw-pick" onclick="BIG.pickOpen()">
             <span class="bhw-pick-ico" id="bhwPickIco"></span>
             <span><b>随机点名</b><span>按学号 / 成绩 / 性别抽</span></span>
           </button>
-          <div class="bhw-mini bhw-quote" id="bhwQuote" style="display:none"></div>
+          <!-- v4.3.0：随机一言放最底下，点一下就换 -->
+          <div class="bhw-quote" id="bhwQuote" style="display:none" onclick="BIG.quoteTap(event)"></div>
         </aside>
       </div>
 
@@ -5144,6 +5235,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           <button type="button" onclick="BIG.fsStep(-1)" title="缩小字号">A−</button>
           <span class="bhw-fsval" id="bhwFsVal">100%</span>
           <button type="button" onclick="BIG.fsStep(1)" title="放大字号">A+</button>
+          <button type="button" onclick="BIG.fontOpen()" title="换字体（只影响这一页）">字体</button>
           <button type="button" id="bhwLockBtn" onclick="BIG.lockToggle()">锁定</button>
         </div>
       </nav>
@@ -5164,6 +5256,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           <div><label for="bhwFormStart">开始日期</label><input id="bhwFormStart" type="date"></div>
           <div><label for="bhwFormEnd">结束日期</label><input id="bhwFormEnd" type="date"></div>
         </div>
+        <!-- v4.3.0：新建时默认六科全勾，点一下可以去掉这期不需要的 -->
+        <div class="bhw-form-subj" id="bhwFormSubj"></div>
         <div class="bhw-form-foot">
           <button type="button" onclick="BIG.formClose()">取消</button>
           <button type="button" class="primary" onclick="BIG.formSave()">保存</button>
@@ -5180,6 +5274,29 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         <div class="bhw-form-foot">
           <button type="button" onclick="BIG.ioClose()">取消</button>
           <button type="button" class="primary" id="bhwIoOk" onclick="BIG.ioOk()">导出</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 换字体 / 一言轮换间隔（v4.3.0） -->
+    <div class="bhw-form-mask" id="bhwFontMask">
+      <div class="bhw-form bhw-fontbox">
+        <h3>换字体</h3>
+        <p class="bhw-io-tip">只影响这一页，存在本机；换完下面的作业正文立刻变。</p>
+        <div class="bhw-font-list" id="bhwFontBody"></div>
+        <div class="bhw-form-foot">
+          <button type="button" onclick="BIG.fontClose()">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bhw-form-mask" id="bhwQuoteMask">
+      <div class="bhw-form bhw-fontbox">
+        <h3>随机一言 · 自动更换</h3>
+        <p class="bhw-io-tip">没网也能换（用站内语录库）；联网时会补一句新的。</p>
+        <div class="bhw-opt-list" id="bhwQuoteBody"></div>
+        <div class="bhw-form-foot">
+          <button type="button" onclick="BIG.quoteClose()">关闭</button>
         </div>
       </div>
     </div>
@@ -5981,14 +6098,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.2.0';
+var SITE_VERSION = '4.3.0';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=420" defer></script>
-<script src="./app.min.js?v=420" defer></script>
+<script src="./auth-bus.js?v=430" defer></script>
+<script src="./app.min.js?v=430" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=420" defer></script>
+<script src="./big.js?v=430" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
