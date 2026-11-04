@@ -15162,8 +15162,9 @@ function scViewBar(){
   var me = scMyRow();
   var cur = SC.viewAs ? String(SC.viewAs) : (me ? String(me.id) : String(SC.rows[0].id));
   var opts = SC.rows.map(function(r){
-    return '<option value="' + esc(r.id) + '"' + (String(r.id) === cur ? ' selected' : '') + '>'
-      + esc(r.name) + (r.studentId ? '（' + esc(r.studentId) + '）' : '') + '</option>';
+    /* ⚠️ esc() 里直接 .replace，只吃字符串；成绩行 id 是数字，不过 String() 这里必炸 */
+    return '<option value="' + esc(String(r.id)) + '"' + (String(r.id) === cur ? ' selected' : '') + '>'
+      + esc(r.name) + (r.studentId ? '（' + esc(String(r.studentId)) + '）' : '') + '</option>';
   }).join('');
   return '<div class="sc-viewbar">'
     + '<span class="sc-viewbar-k">查看画像</span>'
