@@ -3936,7 +3936,13 @@ html.big-mode .tab-page h2{font-size:1.3rem}
    · 一屏装下（默认字号），字号变大后才允许纵向滚动（站主 2026-11-03 拍板）
    · 所有字号都走 --bhw-fs，底部 A− / A+ 只改这一个变量
    ============================================================ */
-#bigHw{display:none;--bhw-fs:1;padding:0 0 60px}
+#bigHw{
+  display:none;--bhw-fs:1;padding:0 0 58px;
+  /* 大屏远看：中文优先用笔画更实、字面更大的字体。
+     PingFang（Mac）/ HarmonyOS（华为）/ Microsoft YaHei UI（Win10+，比旧 YaHei 清晰）。 */
+  font-family:'Inter','PingFang SC','HarmonyOS Sans SC','Microsoft YaHei UI','Microsoft YaHei',
+    'Source Han Sans SC','Noto Sans CJK SC',system-ui,sans-serif;
+}
 html.big-mode.big-hw #bigHw{display:block}
 html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important}
 /* 作业页是「专用页」：把全站导航、页头大标题、页脚全部收掉 */
@@ -3982,7 +3988,7 @@ html.big-mode.big-hw .content{padding:0}
    「怎么省空间怎么排，不按科目顺序」。所以卡片保持自身高度，不再 flex 撑满。 */
 .bhw-col{
   display:flex;flex-direction:column;gap:10px;min-width:0;
-  min-height:calc(100vh - 180px);align-content:flex-start;
+  min-height:calc(100vh - 190px);align-content:flex-start;
 }
 .bhw-col>.bhw-subj{flex:0 0 auto}
 .bhw-subj{
@@ -4001,14 +4007,20 @@ html.big-mode.big-hw .content{padding:0}
 .bhw-task{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;border-radius:9px}
 .bhw-task:hover{background:rgba(249,115,22,.05)}
 .bhw-dot{width:5px;height:5px;border-radius:50%;background:var(--grad-a);flex:none;margin-top:calc(.62em*var(--bhw-fs))}
+/* v4.1.2：大屏远看要「笔画实、行距紧」。
+   - 字重 600：原来 400 在 Windows 上细得发虚，后排看不清
+   - 不加 text-stroke：Windows 上 600 会就近取雅黑 Bold，本身已经够实，再描边会糊
+   - letter-spacing 负值 + line-height 1.45：中文字距本来就宽，再放大字号就一片稀，
+     收紧一点同样高度能多塞两三行 */
 .bhw-txt{
-  flex:1;min-width:0;font-size:calc(1rem*var(--bhw-fs));line-height:1.62;color:var(--fg);
+  flex:1;min-width:0;font-size:calc(1rem*var(--bhw-fs));line-height:1.45;color:var(--fg);
   white-space:pre-wrap;word-break:break-word;
+  font-weight:600;letter-spacing:-.01em;
 }
 .bhw-in{
-  flex:1;min-width:0;font-size:calc(1rem*var(--bhw-fs));line-height:1.62;color:var(--fg);
+  flex:1;min-width:0;font-size:calc(1rem*var(--bhw-fs));line-height:1.45;color:var(--fg);
   background:transparent;border:1px solid transparent;border-radius:7px;padding:1px 5px;
-  font-family:inherit;
+  font-family:inherit;font-weight:600;letter-spacing:-.01em;
 }
 .bhw-in:hover{border-color:rgba(120,53,15,.14)}
 .bhw-in:focus{border-color:var(--grad-a);background:#fff;outline:none}
@@ -4053,7 +4065,7 @@ html.big-mode.big-hw .content{padding:0}
 .bhw-empty{color:var(--fg-3);text-align:center;padding:30px 10px;font-size:calc(.9rem*var(--bhw-fs))}
 
 /* —— 右栏小功能 —— */
-.bhw-side{display:flex;flex-direction:column;gap:10px;min-height:calc(100vh - 180px)}
+.bhw-side{display:flex;flex-direction:column;gap:10px;min-height:calc(100vh - 190px)}
 .bhw-side .bhw-clock{flex:0 0 auto}
 .bhw-side .bhw-quote{flex:1 1 auto;justify-content:center}
 .bhw-clock{
@@ -4108,24 +4120,29 @@ html.big-mode.big-hw .content{padding:0}
 .bhw-foot{padding:10px 16px 0}
 .bhw-foot .bhw-subj{padding:8px 12px}
 
-/* —— 底部工具条（仿 ClassWorks）：字号 / 锁定 —— */
+/* —— 底部工具条（仿 ClassWorks）：字号 / 锁定 ——
+   v4.1.2：按钮组居中。原来贴右下角，鼠标/手在屏幕边上不好点（站主原话
+   「有时候在侧面我在班级电脑上太大了不好点」）。提示文字用绝对定位留在左下。 */
 .bhw-bar{
-  position:fixed;left:0;right:0;bottom:0;height:52px;z-index:1200;
-  display:flex;align-items:center;gap:10px;padding:0 18px;
+  position:fixed;left:0;right:0;bottom:0;height:58px;z-index:1200;
+  display:flex;align-items:center;justify-content:center;gap:10px;padding:0 18px;
   background:rgba(255,255,255,.94);backdrop-filter:blur(10px);
   border-top:1px solid rgba(120,53,15,.14);box-shadow:0 -6px 20px rgba(120,53,15,.06);
 }
 .dark .bhw-bar{background:rgba(32,28,26,.94);border-color:rgba(255,255,255,.10)}
-.bhw-bar-tip{font-size:.76rem;color:var(--fg-3)}
-.bhw-bar-r{margin-left:auto;display:flex;align-items:center;gap:6px}
+.bhw-bar-tip{
+  position:absolute;left:18px;top:50%;transform:translateY(-50%);
+  font-size:.76rem;color:var(--fg-3);pointer-events:none;
+}
+.bhw-bar-r{display:flex;align-items:center;gap:8px}
 .bhw-bar button{
   border:1px solid rgba(120,53,15,.16);background:var(--bg-2);color:var(--fg);
-  border-radius:11px;padding:7px 13px;font-size:.86rem;font-weight:800;cursor:pointer;
-  font-family:inherit;line-height:1;
+  border-radius:12px;padding:9px 17px;font-size:.92rem;font-weight:800;cursor:pointer;
+  font-family:inherit;line-height:1;min-width:48px;
 }
 .bhw-bar button:hover{background:var(--tint);border-color:var(--grad-a)}
 .bhw-bar button:active{transform:scale(.96)}
-.bhw-fsval{font-size:.8rem;color:var(--fg-3);min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+.bhw-fsval{font-size:.86rem;color:var(--fg-3);min-width:52px;text-align:center;font-variant-numeric:tabular-nums}
 .bhw-bar .bhw-lockon{background:linear-gradient(135deg,var(--grad-a),var(--grad-b));color:#fff;border-color:transparent}
 
 /* —— 锁定遮罩：锁上以后整页点击 / 滚动全部失效，只留右下角「解锁」 —— */
@@ -5900,14 +5917,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.1.1';
+var SITE_VERSION = '4.1.2';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=411" defer></script>
-<script src="./app.min.js?v=411" defer></script>
+<script src="./auth-bus.js?v=412" defer></script>
+<script src="./app.min.js?v=412" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=411" defer></script>
+<script src="./big.js?v=412" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
