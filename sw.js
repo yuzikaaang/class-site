@@ -108,7 +108,7 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '4.3.1'
+const SITE_VER = '4.3.2'
 
 /* v3.9.16（站主）：缓存桶跟着版本走。
    ------------------------------------------------------------
@@ -208,7 +208,22 @@ self.addEventListener('fetch', (event) => {
    *   · 没缓存 → 老实等网络。
    * 版本更新仍由 swRegister 的「检查更新」负责，不会因为这条策略卡住不升。
    */
+  /* v4.3.2（班级电脑专用）：带 ?big=1 的入口改走「网络优先」。
+     ------------------------------------------------------------
+     背景：教室一体机开了冰点还原，Profile 已整体搬到 D 盘（--user-data-dir），
+     版本不会再被回滚。但学校网络不稳，一旦某次打开时没网、SW 更新又失败，
+     抽屉里就会一直躺着旧版 —— 站主明确要求「打开就必须是最新版」。
+
+     所以在**大屏入口**这个特定场景下，把「新」放在「快」前面：
+       有缓存 → 最多等 2.5 秒网络
+                 拿到就用最新的（并写回缓存），拿不到才退回缓存
+       无缓存 → 老实等网络
+     其它入口（手机、微信、普通电脑）完全不受影响，仍是原来的
+     「缓存先给、后台再刷」。 */
   if (request.mode === 'navigate') {
+    let isBigEntry = false
+    try { isBigEntry = new URL(request.url).searchParams.has('big') } catch (e) {}
+
     event.respondWith((async () => {
       let cache = null
       let cached = null
@@ -229,6 +244,22 @@ self.addEventListener('fetch', (event) => {
           return res
         })
         .catch(() => null)
+
+      /* 大屏入口：网络优先，最多等 2.5 秒 */
+      if (isBigEntry) {
+        const r = await Promise.race([
+          netP,
+          new Promise((resolve) => setTimeout(() => resolve(null), 2500)),
+        ])
+        if (r && r.ok) return r
+        if (cached) {
+          /* 超时了也把网络请求跑完，顺手落盘，下次就是新的 */
+          event.waitUntil(netP.catch(() => {}))
+          return cached
+        }
+        const r2 = await netP
+        return r2 || Response.error()
+      }
 
       if (cached) {
         event.waitUntil(netP.catch(() => {}))

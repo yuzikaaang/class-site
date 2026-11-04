@@ -2296,6 +2296,71 @@
 
   /* ---------------- 启动 ---------------- */
 
+  /* v4.3.2（站主）：版本静默自检
+     ------------------------------------------------------------
+     背景：教室一体机带冰点还原，Edge 的 Profile 已整体搬到 D 盘，
+     正常情况版本不会再回退。但「正常」不够 —— 站主要的是「打开必定最新」，
+     而不是「打开大概是新的」。
+
+     所以打开 4 秒后偷偷读一次 sw.js（12KB，很轻），比对里面的 SITE_VER
+     和本页的 SITE_VERSION：
+       · 线上更新了 → 主动让新 SW 接管，然后带 ?_r= 时间戳强刷一次
+         （?_r= 在 SW 里是明确放行网络的，绕开所有缓存）
+       · 一样 → 什么都不做，用户全程无感
+
+     两道闸防死循环：
+       · sessionStorage 计数：同一次打开最多救 2 次
+       · localStorage 时间戳：10 分钟内不重复救（跨重启也算） */
+  function verGt(a, b){
+    var x = String(a || '').split('.'), y = String(b || '').split('.');
+    var n = Math.max(x.length, y.length);
+    for(var i = 0; i < n; i++){
+      var p = parseInt(x[i], 10) || 0, q = parseInt(y[i], 10) || 0;
+      if(p > q) return true;
+      if(p < q) return false;
+    }
+    return false;
+  }
+
+  function selfHeal(){
+    if(!BIG.on) return;
+    var T_KEY = 'cls_bhw_heal_t';
+    var N_KEY = 'cls_bhw_heal_n';
+    var lastT = 0, n = 0;
+    try{ lastT = parseInt(localStorage.getItem(T_KEY) || '0', 10) || 0; }catch(e){}
+    try{ n = parseInt(sessionStorage.getItem(N_KEY) || '0', 10) || 0; }catch(e){}
+    if(n >= 2) return;
+    if(Date.now() - lastT < 10 * 60 * 1000) return;
+
+    setTimeout(function(){
+      if(!BIG.on) return;
+      fetch('./sw.js?_sh=' + Date.now(), { cache: 'no-store' })
+        .then(function(r){ return (r && r.ok) ? r.text() : ''; })
+        .then(function(t){
+          var m = /SITE_VER\s*=\s*['"]([0-9][0-9.]*)['"]/.exec(t || '');
+          if(!m) return;
+          var cur = (typeof SITE_VERSION !== 'undefined') ? String(SITE_VERSION) : '';
+          if(!cur || !verGt(m[1], cur)) return;
+          try{ localStorage.setItem(T_KEY, String(Date.now())); }catch(e){}
+          try{ sessionStorage.setItem(N_KEY, String(n + 1)); }catch(e){}
+          /* 让等待中的新 SW 立刻接管（install 里已有 skipWaiting，这条是推处于 waiting 的） */
+          try{
+            if(navigator.serviceWorker && navigator.serviceWorker.controller){
+              navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+            }
+          }catch(e){}
+          /* 带 ?_r= 强刷：SW 对 _r 请求直接放行网络，不会被缓存拦住。
+             app.js 里刷完会把 _r 从地址栏抹掉，不会留在收藏/分享里。 */
+          try{
+            var u = new URL(location.href);
+            u.searchParams.set('_r', String(Date.now()));
+            location.replace(u.toString());
+          }catch(e){ location.reload(); }
+        })
+        .catch(function(){});
+    }, 4000);
+  }
+
   function boot(){
     applyClass();
     applyFs();
@@ -2315,6 +2380,8 @@
     }else if(!hash || hash === '#' || hash === '#/'){
       BIG.openHw();
     }
+    /* v4.3.2：大屏模式做一次静默版本自检（只在这个模式下才跑，不影响别人） */
+    selfHeal();
   }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function (){ setTimeout(boot, 0); });

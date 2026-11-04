@@ -11680,10 +11680,14 @@ console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等
   t('v3.8.0 旧的就地「改」按钮逻辑已移除',
     !/function mpEditStart/.test(idx80) && !/mpEditOk/.test(idx80));
 
-  /* ---- 导航缓存 ---- */
-  t('★v3.8.0+ 导航「缓存先给、后台再刷」（v3.9.16 去掉了 900ms 干等）',
+  /* ---- 导航缓存 ----
+     v4.3.2：大屏入口（?big=1，教室一体机专用）改成 2.5 秒网络优先，
+     所以 Promise.race 在这里是**有意为之**，只允许出现在 big 分支内；
+     普通入口必须维持 v3.9.16 的「缓存先给、后台再刷」，且绝不回到 900ms 干等。 */
+  t('★v4.3.2 导航：普通入口缓存先给、大屏入口网络优先（2.5 秒，不再有 900ms 干等）',
     /event\.waitUntil\(netP\.catch/.test(sw80) && /return cached/.test(sw80)
-    && !/Promise\.race/.test(sw80));
+    && /isBigEntry/.test(sw80) && /resolve\(null\), 2500\)/.test(sw80)
+    && !/resolve\(null\), 900\)/.test(sw80));
   t('★v3.8.2 SW 预缓存逐个 add（一个 404 不再拖垮整个安装）',
     /cache\.add\(u\)\.catch/.test(sw80)
     && !/\.then\(\(cache\) => cache\.addAll\(PRECACHE\)\)/.test(sw80));
