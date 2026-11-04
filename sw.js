@@ -108,7 +108,7 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '4.3.2'
+const SITE_VER = '4.3.3'
 
 /* v3.9.16（站主）：缓存桶跟着版本走。
    ------------------------------------------------------------
@@ -166,6 +166,20 @@ self.addEventListener('activate', (event) => {
       .then((cs) => cs.forEach((c) => c.postMessage({ type: 'SW_ACTIVATED', cache: CACHE })))
       .catch(() => {})
   )
+
+  /* v4.3.2：装好之后补一份 index.html 兜底。
+     为什么不放 PRECACHE：那会在 install 里同步下载 117KB，弱网下能把安装卡到二十几秒，
+     反而让「断网打不开」更严重。这里等 3 秒（首屏已经画完），确认缓存里没有才补，
+     有就一次请求都不发。 */
+  event.waitUntil((async () => {
+    try {
+      await new Promise((r) => setTimeout(r, 3000))
+      const cache = await caches.open(CACHE)
+      if (await cache.match('./index.html')) return
+      const res = await fetch('./index.html', { cache: 'no-store' })
+      if (res && res.ok) await cache.put('./index.html', res.clone())
+    } catch (e) { /* 没网就算了，下次导航成功时会补上 */ }
+  })())
 })
 
 /* v2.6.4：页面可主动要求新 SW **立刻接管**（点「立即更新 / 强制刷新」时用）。
@@ -240,7 +254,19 @@ self.addEventListener('fetch', (event) => {
          版本变化由页面的版本检查负责提示刷新，不靠这里阻塞。 */
       const netP = fetch(request)
         .then((res) => {
-          if (res && res.ok && cache) cache.put(request, res.clone()).catch(() => {})
+          if (res && res.ok && cache) {
+            cache.put(request, res.clone()).catch(() => {})
+            /* v4.3.2：任何一次导航成功，都顺手沉一份 ./index.html 作兜底。
+               起因（线上实测发现的真空档）：全新 Profile 第一次打开时 SW 还没接管，
+               这次导航不经过 fetch handler，缓存里**一个 HTML 都没有**；
+               如果这时正好断网再打开，cached 为空、网络也拿不到 → 整页白屏。
+               有了这份兜底，从「第二次打开起」就永远有页可用。 */
+            try {
+              if (!/index\.html$/.test(new URL(request.url).pathname)) {
+                cache.put('./index.html', res.clone()).catch(() => {})
+              }
+            } catch (e) { /* pathname 解析失败就跳过兜底 */ }
+          }
           return res
         })
         .catch(() => null)
