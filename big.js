@@ -644,18 +644,26 @@
     if(!colA || !colB) return;
 
     if(!hw){
-      colA.innerHTML = colB.innerHTML = '';
       /* v4.3.0（站主第 4 条）：只按起止日期找「当前」。今天不在任何一期内就明说没有，
-         不再拿上一次的作业冒充今天 —— 想看旧的可从右上角下拉里翻。 */
-      if(other) other.innerHTML = '<div class="bhw-subj"><div class="bhw-empty">'
+         不再拿上一次的作业冒充今天 —— 想看旧的可从右上角下拉里翻。
+         空态放主区域正中（原来挂在底部「其他科目」里，一屏看下去只有一条在屏幕最下沿）。 */
+      colA.innerHTML = '<div class="bhw-empty bhw-empty-page">'
         + '<b class="bhw-empty-t">当前没有作业</b>'
-        + (admin ? '<span>今天不在任何一期作业的日期里。可点右上角「新建一期」；要看以前的，从下拉里选。</span>'
-                 : '<span>今天不在任何一期作业的日期里，先歇会儿。</span>')
-        + '</div></div>';
+        + '<span>' + (admin
+            ? '今天不在任何一期作业的日期里。可点右上角「新建一期」；要看以前的，从下拉里选。'
+            : '今天不在任何一期作业的日期里，先歇会儿。')
+        + '</span></div>';
+      colB.innerHTML = '';
+      /* 空态横跨作业那两栏，居中在整块作业区，而不是缩在左三分之一 */
+      colA.style.gridColumn = '1 / span 2';
+      colB.style.display = 'none';
+      if(other) other.innerHTML = '';
       if(addHost) addHost.innerHTML = '';
       renderSide();
       return;
     }
+    colA.style.gridColumn = '';
+    colB.style.display = '';
 
     if(hw.title) hw._t = hw.title;
     var items = hw.items || [];
@@ -935,10 +943,14 @@
         clearTimeout(tm); _qFetching = false;
         if(!j || !j.hitokoto) return;
         if(!BIG.hwOn) return;
+        /* 站主场景是班级大屏：动画类（c=a）会混进日文台词、韩文歌词，
+           后排看着莫名其妙。非中文（假名 / 谚文 / 西里尔）直接丢掉，保留本地那句。 */
+        var txt = String(j.hitokoto);
+        if(/[\u3040-\u30ff\uac00-\ud7af\u0400-\u04ff]/.test(txt)) return;
         var from = j.from || '';
         if(j.from_who && j.from) from = j.from_who + '《' + j.from + '》';
         else if(j.from_who) from = j.from_who;
-        BIG.quoteData = { text: String(j.hitokoto), from: String(from || ''), net: 1 };
+        BIG.quoteData = { text: txt, from: String(from || ''), net: 1 };
         renderQuote();
       })
       .catch(function (){ clearTimeout(tm); _qFetching = false; });

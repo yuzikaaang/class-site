@@ -4183,15 +4183,23 @@ html.big-mode.big-hw .content{padding:0}
 .bhw-form-subj{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px}
 .bhw-form-subj-k{font-size:.72rem;color:var(--fg-3);margin-right:2px}
 .bhw-chip{
-  border:1.5px solid rgba(120,53,15,.16);background:transparent;color:var(--fg-3);
+  border:1.5px solid rgba(120,53,15,.18);background:transparent;color:var(--fg-3);
   border-radius:999px;padding:4px 12px;font-size:.8rem;font-weight:700;cursor:pointer;
   font-family:inherit;line-height:1.4;
 }
-.bhw-chip.on{border-color:var(--grad-a);background:var(--tint);color:#9a3412}
+.bhw-chip:hover{border-color:var(--grad-a)}
+.bhw-chip.on{
+  border-color:transparent;color:#fff;
+  background:linear-gradient(135deg,var(--grad-a),var(--grad-b));
+}
 
 /* —— 空态：当前没有作业 —— */
-.bhw-empty-t{display:block;font-size:calc(1rem*var(--bhw-fs));font-weight:800;color:var(--fg);margin-bottom:6px}
-.bhw-empty span{font-size:calc(.82rem*var(--bhw-fs));line-height:1.6}
+.bhw-empty-page{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:40px 16px;gap:2px;
+}
+.bhw-empty-t{display:block;font-size:calc(1.06rem*var(--bhw-fs));font-weight:800;color:var(--fg);margin-bottom:6px}
+.bhw-empty span{font-size:calc(.84rem*var(--bhw-fs));line-height:1.7;color:var(--fg-3);max-width:34em}
 
 /* 窄屏（手机 / 平板竖屏）：三列挤不下，改成单列竖排；底部工具条只留按钮 */
 @media(max-width:1180px){
