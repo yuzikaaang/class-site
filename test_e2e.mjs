@@ -2225,6 +2225,18 @@ console.log('\n【19】最后上线（心跳）· 版本号一致性（2026-10-0
   const rrNo = await call('/api/profile?action=roster');
   t('未登录读 roster 被拒 401', rrNo.status === 401, '实际 ' + rrNo.status);
 
+  /* v4.4.2（站主）：点名要能单独抽「班干部」「课代表」——
+     职务存在 profiles.title 里，roster 必须把它带出来，否则前端永远抽 0 人。 */
+  db.run("update profiles set title = '班长' where coalesce(name,'') <> ''");
+  const rrT = await call('/api/profile?action=roster', { token: adminToken });
+  db.run("update profiles set title = '' where coalesce(name,'') <> ''");
+  const stT = rrT.body.students || [];
+  t('★v4.4.2 roster 带头衔（title），前端才抽得到班干部 / 课代表',
+    rrT.status === 200 && stT.length > 0 && stT.every((x) => x.title === '班长'),
+    JSON.stringify(stT.slice(0, 2)));
+  t('★头衔仍不进联系方式那一类（不被隐私过滤误删）',
+    stT.some((x) => 'title' in x) && stT.every((x) => !('wechat' in x) && !('phone' in x)));
+
   const idx2 = readIdx();
   t('主站有 syncRoster()', idx2.indexOf('function syncRoster(') >= 0);
   t('主站会调用 syncRoster()', idx2.split('syncRoster()').length >= 4,
@@ -12515,6 +12527,60 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
 
   t('★v3.10.0 淡柱认人：先 uid 再姓名',
     /if\(row\.uid\)\{[\s\S]{0,200}String\(x\.uid\) === String\(row\.uid\)/.test(idx91));
+}
+
+console.log('\n【94】v4.4.2 点名身份拆细（班干部 / 课代表，认头衔）');
+{
+  const big = fs.readFileSync(new URL('./big.js', import.meta.url), 'utf8');
+  const adm1 = fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8');
+  const prof = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
+
+  t('★身份筛选 5 档：学生 / 班干部 / 课代表 / 老师 / 管理员',
+    /var roles = \['学生', '班干部', '课代表', '老师', '管理员'\];/.test(big));
+
+  const STAFF8 = ['班长', '副班长', '学习委员', '劳动委员', '团支书', '体育委员', '宣传委员', '纪律委员'];
+  t('★班干部关键字表含站主说的 8 个职务', STAFF8.every(r => big.indexOf("'" + r + "'") >= 0));
+  t('★也兼容库里已有的生活委员 / 文艺委员 / 电教委',
+    ['生活委员', '文艺委员', '电教委'].every(r => big.indexOf("'" + r + "'") >= 0));
+
+  /* 真跑一遍判定函数（不是看代码长得像）：把 roleHit 抽出来 eval。
+     入参是「身份 + 头衔」拼起来的串，顺序与 hit() 里一致。 */
+  let roleHit = null;
+  try {
+    const src = big.slice(big.indexOf('var ROLE_STAFF'), big.indexOf('/* 条件命中判定'));
+    roleHit = new Function(src + '\nreturn roleHit;')();
+  } catch (e) {}
+  t('★roleHit 能独立取出执行', typeof roleHit === 'function');
+
+  if (typeof roleHit === 'function') {
+    /* 头衔挂在后面（真实数据：身份=学生，头衔=班长） */
+    t('★行为：身份「学生」+ 头衔「班长」→ 勾「班干部」抽得到',
+      STAFF8.every(r => roleHit('班干部', '学生 ' + r) === true));
+    t('★行为：头衔是「语文课代表」→ 勾「课代表」抽得到，勾「班干部」抽不到',
+      roleHit('课代表', '学生 语文课代表') === true
+      && roleHit('班干部', '学生 语文课代表') === false);
+    t('★行为：以后加个「心理委员」也自动算班干部（不用改代码）',
+      roleHit('班干部', '学生 心理委员') === true);
+    t('★行为：手写在身份里的职务也认（老数据兼容）',
+      roleHit('班干部', '班长') === true && roleHit('课代表', '化学课代表') === true);
+    t('★行为：空身份 / 走读都算学生，勾「学生」不会漏人',
+      roleHit('学生', '') === true && roleHit('学生', '走读') === true
+      && roleHit('学生', '学生 班长') === true);
+    t('★行为：老师 / 管理员不算学生，勾「学生」抽不到他们',
+      roleHit('学生', '老师') === false && roleHit('学生', '管理员') === false
+      && roleHit('老师', '老师') === true && roleHit('管理员', '管理员') === true);
+  }
+
+  t('★行为：hit() 判定用的是「身份 + 头衔」拼串，不是只看身份',
+    /String\(st\.role \|\| '学生'\) \+ ' ' \+ String\(st\.title \|\| ''\)/.test(big));
+  t('★roster 接口下发头衔（title 列），前端才抽得到职务',
+    /select name, student_id, role, gender, title/.test(prof)
+    && /title: d\.title \|\| ''/.test(prof) && /title: r\.title \|\| ''/.test(prof)
+    && /title: String\(x\.title \|\| ''\)/.test(big));
+  t('★后台身份栏明确写着「职务去头衔里勾」，不鼓励把职务塞进身份',
+    /<b>班级职务不要写这里<\/b>/.test(adm1) && /头衔（可多选）/.test(adm1));
+  t('★筛选面板底部写清了班干部 / 课代表怎么认',
+    /「班干部」认这些职务/.test(big) && /「头衔任命」/.test(big));
 }
 
 console.log('\n' + '='.repeat(52));

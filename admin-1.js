@@ -1863,7 +1863,8 @@ function memberDialog(m){
     +       '<input id="mbIdentity" class="inp" maxlength="10" value="' + attr(identity0) + '" placeholder="学生">'
     +       cpBtnHtml('role')
     +     '</div>'
-    +     '<p class="hint">前台显示在姓名旁，如「学生 / 走读 / 住校」。</p></div>'
+    +     '<p class="hint">前台显示在姓名旁，如「学生 / 走读 / 住校」。'
+    +       '<b>班级职务不要写这里</b>，在下面「头衔（可多选）」里勾 —— 大屏点名勾「班干部」「课代表」认的是头衔。</p></div>'
     + '</div>'
 
     /* v4.0.0（站主 9 条之六）：性别。大屏随机点名「可以按性别抽」的数据来源，

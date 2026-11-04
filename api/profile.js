@@ -868,7 +868,7 @@ async function roster(req, res) {
      （密文非空），但排序与展示必须用明文，所以整行解密后再排。 */
   const pkey = await profileKey(req);
   const raw = await sql`
-    select name, student_id, role, gender
+    select name, student_id, role, gender, title
       from profiles
      where coalesce(name, '') <> ''
      order by student_id nulls last, name
@@ -883,6 +883,11 @@ async function roster(req, res) {
          大屏随机点名的筛选全靠这三个字段。role/gender 是明文列，不经加密。 */
       role: d.role || '学生',
       gender: d.gender || '',
+      /* v4.4.2（站主）：随机点名要能单独抽「班干部」「课代表」。
+         职务真正的落点是 profiles.title（后台「头衔任命」，白名单校验过的），
+         不是身份 —— 身份那边通常写的是「学生 / 走读 / 住校」。
+         头衔本身就是班内公开信息（姓名旁就会显示），随 roster 下发不扩大可见范围。 */
+      title: d.title || '',
     });
   }
   if (pkey) {
@@ -900,6 +905,7 @@ async function roster(req, res) {
     students: rows.map((r) => ({
       name: r.name, studentId: r.studentId || '',
       role: r.role || '学生', gender: r.gender || '',
+      title: r.title || '',
     })),
   });
 }

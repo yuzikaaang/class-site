@@ -1652,7 +1652,7 @@
         var n = String(x || '').trim();
         if(!n || seen[n]) return;
         seen[n] = 1;
-        out.push({ name: n, studentId: '', role: '学生', gender: '' });
+        out.push({ name: n, studentId: '', role: '学生', gender: '', title: '' });
       });
       BIG.pick.roster = out;
       if(done) done();
@@ -1672,6 +1672,8 @@
               studentId: String(x.studentId || ''),
               role: String(x.role || '学生'),
               gender: String(x.gender || ''),
+              /* v4.4.2：头衔（班长 / 团支书 / 语文课代表…），抽班干部、课代表靠它 */
+              title: String(x.title || ''),
             });
           });
           BIG.pick.roster = out;
@@ -1857,10 +1859,37 @@
     return true;
   }
 
+  /* v4.4.2（站主）：身份不再只有笼统的一个「班干部」。
+     站主：班干部就是班长、副班长、学习委员、劳动委员、团支书、体育委员、
+     宣传委员、纪律委员这 8 个；课代表按 6 科分，所以身份再拆两档。
+     ⚠️ 职务真正的落点是后台「头衔任命」（profiles.title，白名单校验过的），
+     身份那一栏平时写的还是「学生 / 走读 / 住校」。所以判定时把
+     **身份 + 头衔** 拼在一起看：头衔里有职务就命中，身份里手写了也认。
+     「学生」= 除老师 / 管理员以外的所有人（班干部、课代表本来还是学生）。 */
+  var ROLE_STAFF = ['班长', '副班长', '学习委员', '劳动委员', '生活委员',
+                    '团支书', '体育委员', '宣传委员', '文艺委员', '纪律委员', '电教委'];
+  function roleHit(group, raw){
+    var s = String(raw == null ? '' : raw).trim();
+    if(!s) s = '学生';
+    if(group === '学生') return s.indexOf('老师') < 0 && s.indexOf('管理员') < 0;
+    if(group === '班干部'){
+      if(s.indexOf('班干部') >= 0) return true;
+      for(var i = 0; i < ROLE_STAFF.length; i++) if(s.indexOf(ROLE_STAFF[i]) >= 0) return true;
+      /* 兜底：任何「××委员」都算班干部（以后加新职务不用改代码） */
+      return s.indexOf('委员') >= 0 || s.indexOf('班长') >= 0;
+    }
+    if(group === '课代表') return s.indexOf('课代表') >= 0;
+    return s.indexOf(group) >= 0;
+  }
+
   /* 条件命中判定：身份 / 性别 / 学号范围 / 成绩条件，取交集 */
   function hit(st, f, stat){
     var roles = (f.role && f.role.length) ? f.role : ['学生'];
-    if(roles.indexOf(String(st.role || '学生')) < 0) return false;
+    var stRole = String(st.role || '学生') + ' ' + String(st.title || ''), roleOk = false;
+    for(var ri = 0; ri < roles.length; ri++){
+      if(roleHit(roles[ri], stRole)){ roleOk = true; break; }
+    }
+    if(!roleOk) return false;
     if(f.gender && String(st.gender || '') !== f.gender) return false;
     if(f.sidMin !== '' || f.sidMax !== ''){
       var sid = Number(st.studentId);
@@ -2111,10 +2140,10 @@
       var stat = p.stat;
       var exCount = Object.keys(p.ex || {}).length;
 
-      /* v4.4.0（站主第 1 条）：身份多一档「班干部」。
-         身份值是后台「成员档案 → 身份」那个自由文本（maxlength 10），
-         填「班干部」就能在这里被单独抽出来，不需要改数据库。 */
-      var roles = ['学生', '班干部', '老师', '管理员'];
+      /* v4.4.0 起有「班干部」，v4.4.2 拆出「课代表」。
+         身份值仍是后台「成员档案 → 身份」那个自由文本（maxlength 10），
+         填「班长」「团支书」「语文课代表」都能被对应按钮认出来，不用改数据库。 */
+      var roles = ['学生', '班干部', '课代表', '老师', '管理员'];
       var roleHtml = roles.map(function (r){
         var on = (f.role || []).indexOf(r) >= 0;
         return '<button type="button" class="bpick-chip' + (on ? ' on' : '') + '"'
@@ -2187,6 +2216,8 @@
             + progTip
             + '<p class="bpick-f-tip">名次都是<b>本班排名</b>（不看年级）。条件可以叠加：比如「学生 + 男 + 总分名次 1–10」。'
             + '「进步排名」按班级名次相比上一次考试提升的幅度排，1 = 进步最多。名单只记在这台电脑上。</p>'
+            + '<p class="bpick-f-tip">「班干部」认这些职务：班长 / 副班长 / 学习委员 / 劳动委员 / 生活委员 / 团支书 / 体育委员 / 宣传委员 / 文艺委员 / 纪律委员（其它「××委员」也认）；'
+            + '「课代表」认带「课代表」的职务（如「语文课代表」）。这些写在后台<b>「头衔任命」</b>里就行，不用改身份。</p>'
             + '</div>')
         : '';
 
