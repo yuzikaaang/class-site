@@ -4240,11 +4240,15 @@ html.big-mode.big-hw .content{padding:0}
 .bhw-bar button:active{transform:scale(.96)}
 .bhw-fsval{font-size:.86rem;color:var(--fg-3);min-width:52px;text-align:center;font-variant-numeric:tabular-nums}
 .bhw-bar .bhw-lockon{background:linear-gradient(135deg,var(--grad-a),var(--grad-b));color:#fff;border-color:transparent}
+#bhwThemeBtn{display:inline-flex;align-items:center;justify-content:center;gap:5px}
+#bhwThemeBtn svg{width:15px;height:15px}
 
-/* —— 锁定遮罩：锁上以后整页点击 / 滚动全部失效，只留右下角「解锁」 —— */
+/* —— 锁定遮罩：锁上以后整页点击 / 滚动全部失效，只留右下角「解锁」 ——
+   v4.3.1（站主第 2 条）：遮罩不再加模糊 / 半透明底。
+   锁定只防误触，同学还得看作业；压一层 blur 后排根本看不清字。
+   现在遮罩完全透明，只保留顶部提示和右下角解锁按钮。 */
 .bhw-lock{
-  position:fixed;inset:0;z-index:1300;display:none;
-  background:rgba(28,20,14,.10);backdrop-filter:blur(1px);
+  position:fixed;inset:0;z-index:1300;display:none;background:transparent;
 }
 html.bhw-locked .bhw-lock{display:block}
 html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch-action:none}
@@ -5244,6 +5248,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           <span class="bhw-fsval" id="bhwFsVal">100%</span>
           <button type="button" onclick="BIG.fsStep(1)" title="放大字号">A+</button>
           <button type="button" onclick="BIG.fontOpen()" title="换字体（只影响这一页）">字体</button>
+          <!-- v4.3.1：主题切换不再跟着侧边栏一起藏起来，作业页自己留一个 -->
+          <button type="button" id="bhwThemeBtn" onclick="BIG.themeToggle(event)" title="切换明亮 / 暗色">明亮</button>
           <button type="button" id="bhwLockBtn" onclick="BIG.lockToggle()">锁定</button>
         </div>
       </nav>
@@ -6106,14 +6112,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.3.0';
+var SITE_VERSION = '4.3.1';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=430" defer></script>
-<script src="./app.min.js?v=430" defer></script>
+<script src="./auth-bus.js?v=431" defer></script>
+<script src="./app.min.js?v=431" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=430" defer></script>
+<script src="./big.js?v=431" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

@@ -396,6 +396,31 @@
      站主原话：「点击或滑动都没有任何反应，你必须先点解锁才行」。
      做法：一层透明遮罩盖住整页（拦截点击），再在捕获阶段拦住滚轮 / 触摸 / 方向键。
      锁定状态**不写 localStorage**：刷新页面即解锁，避免大屏自己锁死没人能开。 */
+  /* —— 主题切换（v4.3.1）——
+     站主：「作业面板里面我可以切换暗色和明亮模式，这个按钮不需要隐藏」。
+     作业页把侧边栏整个藏掉了（大屏专用页），全站的 #themeToggle 也跟着不见，
+     所以底栏单独放一个。真正的切换仍走 app.js 的 toggleTheme（带扩散动画 + 记忆本机），
+     这里只管调用，并把按钮文案同步成当前状态。 */
+  function syncThemeBtn(){
+    var b = $('bhwThemeBtn'); if(!b) return;
+    var dark = document.documentElement.classList.contains('dark');
+    /* 按钮显示「点下去会变成什么」：现在明亮就写「暗色」，并配月亮图标 —— 比显示当前状态更好懂 */
+    var ic = ico(dark ? 'sun' : 'moon', 15);
+    b.innerHTML = (ic ? ic + ' ' : '') + (dark ? '明亮' : '暗色');
+    b.title = dark ? '当前暗色，点一下切明亮' : '当前明亮，点一下切暗色';
+  }
+  BIG.syncThemeBtn = syncThemeBtn;
+  BIG.themeToggle = function (e){
+    try{ if(typeof toggleTheme === 'function') toggleTheme(e || window.event); }catch(err){}
+    setTimeout(syncThemeBtn, 60);
+    setTimeout(syncThemeBtn, 420);   /* 扩散动画结束后再对一次，防止动画中途被覆盖 */
+  };
+  /* 自动切换（日出日落 / 跟随系统）也会改 html.dark，按钮要跟着变 */
+  try{
+    new MutationObserver(syncThemeBtn).observe(document.documentElement,
+      { attributes: true, attributeFilter: ['class'] });
+  }catch(e){}
+
   BIG.lockOn = false;
   BIG.lockToggle = function (){
     BIG.lockOn = !BIG.lockOn;
@@ -2280,10 +2305,15 @@
     var pi = $('bhwPickIco');
     if(pi) pi.innerHTML = ico('dices', 20);
     if(!BIG.on) return;
-    /* 深链 #/hw（applyHash 里是异步转过来的，这里只需保证首页已画好） */
-    if(/^#\/hw/.test(location.hash || '')){
-      var m = /^#\/hw\/(.+)$/.exec(location.hash || '');
+    syncThemeBtn();
+    /* v4.3.1（站主第 1 条）：大屏模式打开网站直接进作业页，不用再点一次图标墙。
+       但别的深链（比如 #/board/3）不能抢 —— 只有 hash 为空或本来就是 #/hw 才自动进。 */
+    var hash = String(location.hash || '');
+    if(/^#\/hw/.test(hash)){
+      var m = /^#\/hw\/(.+)$/.exec(hash);
       BIG.openHw(m ? decodeURIComponent(m[1]) : null);
+    }else if(!hash || hash === '#' || hash === '#/'){
+      BIG.openHw();
     }
   }
 
