@@ -814,7 +814,7 @@ function confirmLeaveUnsaved(){
   if(!n) return true;
   /* confirmBox 是 Promise 风格，但 go() 是同步流 —— 这里用同步 confirm 保住流程简单；
      站主要求的就是「问一下」，不用做撤销。 */
-  return window.confirm('您有 ' + n + ' 行成绩修改还没保存，确定要离开吗？\n（离开后这些修改会丢失）');
+  return window.confirm('当前有 ' + n + ' 行成绩修改尚未保存，确定离开吗？\n（离开后这些修改会丢失）');
 }
 /* 关页面/刷新也拦一道（浏览器原生对话框） */
 window.addEventListener('beforeunload', function(e){
@@ -3053,7 +3053,7 @@ function paintClassContent(){
 
   if(!rows.length){
     panel.innerHTML = '<div class="empty">' + svg('layers', 38) + '<p>当前筛选下没有内容</p>'
-      + '<p class="muted" style="font-size:.78rem">换个分类或清空搜索关键词试试</p></div>';
+      + '<p class="muted" style="font-size:.78rem">请更换分类或清空搜索关键词</p></div>';
     return;
   }
 
@@ -4424,7 +4424,7 @@ function vhDurNotice(){
   box.style.display = '';
   box.innerHTML = '<div class="alert warn" style="margin:0 0 12px;line-height:1.8">'
     + '<b>有 ' + keys.length + ' 首歌还没拿到时长</b>（网易云、QQ 音乐都没搜到）。'
-    + '<br>按站规：<b>时长为空不能发布投票、也不能随机排歌</b>，请点右边按钮人工填写。'
+    + '<br>按站规：<b>时长为空不能发布投票、也不能随机排歌</b>，请点击右侧按钮手动填写。'
     + '<button class="btn btn-sm" id="djDurFill" style="margin-left:8px">补录时长</button>'
     + '</div>';
   var btn = document.getElementById('djDurFill');

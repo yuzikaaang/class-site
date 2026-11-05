@@ -2364,6 +2364,7 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .dark .sc-hint{background:#2e2926;border-color:#3d3631}
 .dark .sc-sh-tip{background:#3a2f28;border-color:#4d4038}
 .dark .sc-tblwrap{background:#262220;border-color:#3d3631}
+.dark .sc-tbl th{background:#3d3631;border-bottom-color:#4a423c;box-shadow:0 1px 0 #4a423c}
 .dark .sc-tbl th{background:#332d29;color:#f0e6dc;border-bottom-color:#3d3631}
 .dark .sc-tbl td{background:#262220;border-bottom-color:#332d29}
 .dark .sc-tbl th:nth-child(1){background:#332d29}
@@ -2580,17 +2581,22 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .sc-notebar{font-size:.74rem;color:#8a5a13;background:#fdf3e0;border:1px solid #f3e2c2;border-radius:10px;padding:6px 12px;margin-bottom:8px;line-height:1.5}
 .dark .sc-notebar{color:#e8c98a;background:#332b20;border-color:#4d4030}
 .sc-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem;min-width:620px}
-.sc-tbl th{position:sticky;top:0;z-index:3;background:#fdf8f3;padding:9px 6px;font-weight:700;color:#57534e;font-size:.76rem;white-space:nowrap;border-bottom:1.5px solid #f0e7de;cursor:pointer;user-select:none}
+/* v4.4.5（站主）：表头必须随表格滚动吸在顶部。
+   ① 同时写 -webkit-sticky：轻量模式多用在低配安卓 / 微信内置浏览器（X5 内核），
+      老内核只认带前缀的 sticky，只写 sticky 会被当成 static —— 表现就是「表头不跟着动」。
+   ② top:-1px + 自带下边框：滚动时下面的数据行不会从表头底边 1px 的缝里透出来。
+   ③ background 必须是实色，sticky 元素半透明会把内容透上来。 */
+.sc-tbl th{position:-webkit-sticky;position:sticky;top:-1px;z-index:3;background:#fdf8f3;padding:9px 6px;font-weight:700;color:#57534e;font-size:.76rem;white-space:nowrap;border-bottom:1.5px solid #f0e7de;cursor:pointer;user-select:none;box-shadow:0 1px 0 #f0e7de}
 .sc-tbl td{padding:8px 6px;text-align:center;border-bottom:1px solid #faf5f0;font-variant-numeric:tabular-nums;background:#fff}
 .sc-tbl tbody tr:last-child td{border-bottom:none}
 /* 前两列（班排 / 姓名）横向吸住 —— 手机上左右拖动时不会看错行。
    宽度写死，因为 sticky 的 left 偏移必须是个确定值。 */
-.sc-tbl th:nth-child(1),.sc-tbl td:nth-child(1){position:sticky;left:0;z-index:2;width:46px;min-width:46px;max-width:46px;padding-left:0;padding-right:0}
+.sc-tbl th:nth-child(1),.sc-tbl td:nth-child(1){position:-webkit-sticky;position:sticky;left:0;z-index:2;width:46px;min-width:46px;max-width:46px;padding-left:0;padding-right:0}
 /* v3.4.0：第二列吸列只在带 .sc-fix2 的表上生效（目前只有全班成绩单：
    班排+姓名 两列都吸）。其余卡片的表（各科进退步、进退步榜、需关注…）
    第二列是普通数据列，之前被这条全局规则误吸住 —— 站主报告
    「个人画像的各科进退步把第一次考试那一栏也固定了」，即此因。 */
-.sc-tbl.sc-fix2 th:nth-child(2),.sc-tbl.sc-fix2 td:nth-child(2){position:sticky;left:46px;z-index:2;box-shadow:1px 0 0 #f0e7de}
+.sc-tbl.sc-fix2 th:nth-child(2),.sc-tbl.sc-fix2 td:nth-child(2){position:-webkit-sticky;position:sticky;left:46px;z-index:2;box-shadow:1px 0 0 #f0e7de}
 .sc-tbl th:nth-child(1){z-index:4;background:#fdf8f3}
 .sc-tbl.sc-fix2 th:nth-child(2){z-index:4;background:#fdf8f3}
 .sc-tbl .sc-me-row td{background:#fff8f2}
@@ -4589,7 +4595,7 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 <div class="jump-overlay" id="jumpOverlay">
   <div class="jump-box">
     <div class="spinner"></div>
-    <h2 style="color:#292524;margin-bottom:8px;font-size:1.1875rem">正在为您跳转</h2>
+    <h2 style="color:#292524;margin-bottom:8px;font-size:1.1875rem">正在跳转</h2>
     <p style="color:#6e635a;font-size:.85rem;margin-bottom:4px">目标站点</p>
     <p id="jumpHost" style="color:#af410f;font-weight:700;word-break:break-all"></p>
     <a id="jumpManual" href="#" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:20px;background:#9a3412;color:#fff;padding:11px;border-radius:999px;text-decoration:none;font-size:.95rem;font-weight:600">未自动跳转时，请点击此处</a>
@@ -4669,7 +4675,7 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
         <div class="audio-wave" id="audioWave" aria-hidden="true">
           <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
         </div>
-        <div class="audio-sub" id="audioSub">点击下方按钮播放</div>
+        <div class="audio-sub" id="audioSub">点击按钮播放</div>
       </div>
 
       <div class="audio-ctrl">
@@ -5155,7 +5161,7 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 <div class="layout" id="mainPage">
   <!-- 侧边栏：桌面常驻，移动端抽屉 -->
   <aside class="sidebar" id="sidebar">
-    <div class="side-tip">站点功能位于侧边栏，点击下方板块打开</div>
+    <div class="side-tip">站点功能位于侧边栏，点击板块打开</div>
     <button class="side-btn" id="homeBtn" onclick="goHomeView()">🏠 首页</button>
     <div id="sideCats"></div>
     <button class="side-btn" id="landBtn" onclick="toggleLandscape()" data-on="0">横屏查看：关</button>
@@ -6163,14 +6169,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.4.4';
+var SITE_VERSION = '4.4.5';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=444" defer></script>
-<script src="./app.min.js?v=444" defer></script>
+<script src="./auth-bus.js?v=445" defer></script>
+<script src="./app.min.js?v=445" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=444" defer></script>
+<script src="./big.js?v=445" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

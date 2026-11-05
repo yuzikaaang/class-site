@@ -179,7 +179,7 @@ body{
     var hintPass = SHARE.hintPass || '密码：班级站登录密码；忘了找管理员重置';
     app.innerHTML = '<div class="card">'
       + '<div class="login-h">' + esc(SHARE.title || '班级信息查询') + '</div>'
-      + '<p class="login-s">用班级站账号登录后即可查看' + (SHARE.feats.others ? '本人和同学的信息' : '本人的信息') + '</p>'
+      + '<p class="login-s">用班级站账号登录后可查看' + (SHARE.feats.others ? '本人和同学的信息' : '本人的信息') + '</p>'
       + '<div class="field"><label>用户名</label><input id="u" autocomplete="username" placeholder="姓名，或管理员给的登录名"></div>'
       + '<div class="field"><label>密码</label><input id="p" type="password" autocomplete="current-password" placeholder="班级站密码"></div>'
       + '<button class="btn" id="go">登录</button>'
@@ -283,7 +283,7 @@ body{
         body = '<div class="card"><div class="empty">'
           + (DATA.claimed === false
               ? '这个账号还没有认领班级档案。请先回班级站完成认领，再来这里查看。'
-              : '没有读到你的资料，请联系管理员。')
+              : '未读取到本人资料，请联系管理员。')
           + '</div></div>';
       }else{
         body = '<div class="card">'

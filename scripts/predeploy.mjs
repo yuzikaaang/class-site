@@ -269,6 +269,26 @@ if (CN > 1200) {
 }
 console.log('③d 公告措辞通过（' + cats.length + ' 个分类，' + CN + ' 字）');
 
+/* ---------- ③d2 站内文案书面化（v4.4.5）----------
+   站主原话：「对应软件的简介，你没有进行官方化文字修改，比如作业、意见反馈等，
+             还有这个以后要进入你们部署前的一个文件就检查，没有出现这种语言才可以部署。」
+   所以把「文案检查」做成硬闸门：scripts/copycheck.mjs 不过，这里直接退出。
+   规则与豁免都在那个文件里，改文案时用 `node scripts/copycheck.mjs --list` 看全部命中。 */
+{
+  const { spawnSync } = await import('node:child_process');
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'copycheck.mjs')], { encoding: 'utf8' });
+  if (r.status !== 0) {
+    console.error(((r.stdout || '') + (r.stderr || '')).trim());
+    die('站内文案不够书面化（见上）。'
+      + '\n\n   站主要求：站内提示、软件简介、公告一律用书面表述 ——'
+      + '\n   · 不出现第二人称（你 / 您），改为「本人」「当前账号」或无主语句'
+      + '\n   · 不出现口语动词与语气词（点一下 / 试试 / 搞定 / 啦 / 哦 / 吧）'
+      + '\n   · 动作统一「点击」，状态统一「已 / 暂无 / 无法」'
+      + '\n\n   跑 node scripts/copycheck.mjs --list 可以看全部命中位置。');
+  }
+  console.log((r.stdout || '').trim());
+}
+
 /* ---------- ③e 资源清单完整性（v3.9.10）----------
    起因：badge.png 一直不在 deploy-pages.yml 的白名单里 → Pages 上 404 →
    首页只好改走 /api/badge 代理（110KB、3.8s）。这类「引用了但没发布」

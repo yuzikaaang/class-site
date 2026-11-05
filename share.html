@@ -163,7 +163,7 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
   var T = token();
   if(!T){
     app.innerHTML = '<div class="empty"><div class="ico">🔗</div>'
-      + '<p><b>链接不完整</b></p><p class="dim">这个地址里没有分享标识，请向分享给你的同学要完整链接。</p></div>';
+      + '<p><b>链接不完整</b></p><p class="dim">该地址缺少分享标识，请向分享人获取完整链接。</p></div>';
     return;
   }
 
@@ -174,14 +174,14 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
         var msg = (res.j && res.j.error) || '打不开这个分享';
         app.innerHTML = '<div class="empty"><div class="ico">🔒</div>'
           + '<p><b>' + esc(msg) + '</b></p>'
-          + '<p class="dim">如果这是老师或同学发给你的，可以让他重新生成一个链接。</p></div>';
+          + '<p class="dim">如链接由老师或同学发送，请对方重新生成。</p></div>';
         return;
       }
       render(res.j);
     })
     .catch(function(e){ console.error('share-get 失败：', e);
       app.innerHTML = '<div class="empty"><div class="ico">📡</div>'
-        + '<p><b>网络不给力，没能打开</b></p><p class="dim">检查一下网络，再刷新试试。</p></div>';
+        + '<p><b>网络不给力，没能打开</b></p><p class="dim">请检查网络后重试。</p></div>';
     });
 
   var DATA = null, EX = null, BASIS = 'graded';
@@ -227,8 +227,8 @@ th:nth-child(1),th:nth-child(2){z-index:4;background:#fdf8f3}
       + '<div class="meta" id="meta"></div>'
       + '<div id="body"></div>'
       + (ME
-          ? '<div class="foot">班级站点 · 成绩分析<br>你已经登录，这一页仍然只显示这位同学分享给你的范围；想看你自己的，点上面的「看我的成绩」。</div>'
-          : '<div class="foot">班级站点 · 成绩分析<br>这是一个只读分享页，不用登录，也不会存你的任何信息。</div>');
+          ? '<div class="foot">班级站点 · 成绩分析<br>当前已登录，本页仅显示分享范围内内容；查看本人成绩请点击上方「看我的成绩」。</div>'
+          : '<div class="foot">班级站点 · 成绩分析<br>本页为只读分享页，无需登录，不保存任何个人信息。</div>');
 
     var sel = document.getElementById('exSel');
     sel.innerHTML = exams.map(function(e, i){

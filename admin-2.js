@@ -573,7 +573,7 @@ function bindRuleMulti(box, id){
 
 /* ---- 规则编辑器（新增 / 编辑字段弹窗里共用） ---- */
 var RULE_TYPE_LABEL = {
-  '':   '不校验（随便填）',
+  '':   '不校验（可任意填写）',
   text: '文本 —— 限字符数',
   number: '数字 —— 限位数 / 数值范围',
   time: '日期 —— 选择器录入，可限区间',
@@ -3835,7 +3835,7 @@ function openForceChangePwd(){
     title: '请先修改初始密码',
     sub: '为了账号安全，首次登录必须设置自己的新密码',
     body:
-      '<div class="alert warn">你的账号目前还是初始密码。请设置一个新密码，之后用新密码登录。</div>'
+      '<div class="alert warn">当前账号仍为初始密码，请设置新密码，之后使用新密码登录。</div>'
       + '<div class="field"><label for="fcOld">当前密码（初始密码）</label>'
       + '<input id="fcOld" type="password" autocomplete="current-password"></div>'
       + '<div class="field"><label for="fcNew">新密码</label>'
@@ -4769,7 +4769,7 @@ function djRun(){
       return;
     }
     if(!pool.length){
-      if(box) box.innerHTML = '<div class="alert danger">没有可抽歌曲。试试放宽时间范围，或到「歌单管理」解除排除、取消「排除已播放 / 已排期」。</div>';
+      if(box) box.innerHTML = '<div class="alert danger">无可抽取歌曲。请放宽时间范围，或在「歌单管理」解除排除、取消「排除已播放 / 已排期」。</div>';
       return;
     }
 
@@ -5846,7 +5846,7 @@ function paintIsland(){
     +       '</select>'
     +       '<button type="button" class="ai-fmt" data-rt="h" title="整行加底色">整行强调</button>'
     +       '<button type="button" class="ai-fmt" data-rt="clear" title="去掉选中的格式">清格式</button>'
-    +       '<span class="muted ai-chtip" id="adChTip">选中文字后点左边的按钮</span>'
+    +       '<span class="muted ai-chtip" id="adChTip">选中文字后点击左侧按钮</span>'
     +     '</div>'
     +     '<p class="muted" style="font-size:.72rem;margin:8px 0 4px">预览（就是首页看到的效果）：</p>'
     +     '<div class="ai-dprev"><div class="ai-dprev-txt" id="adPrev"></div></div>'

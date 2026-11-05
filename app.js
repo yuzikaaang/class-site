@@ -1408,99 +1408,10 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
-    { date: "2026-10-17 20:30", text: "🔒 存量资料一键加密（v3.5.1）：加密上线前导入的资料不用再手动重导了 —— 后台「成员与档案」新增「🔒 一键加密存量」按钮，点击自动分批把老资料转成密文，带进度条、断了能接着跑、重复点也不会重复加密。另外修了两个问题：① 学科热力图打开的明细里，「班内排名」之前误用了年级排名（比如校排 350 显示成班排 350），现在班内名次按本班实际成绩重新算，年级排名单独一行摆着；② 「需关注学生」表格适配手机端，一人一张卡片，列名齐全，不再挤成一团。", category: "site" },
-    { date: "2026-10-17 18:20", text: "🔒 成员档案全量加密（v3.5.0）：姓名、学号、政治面貌、智学网账号、微信、QQ、手机号、身份证号、团员编号以及后台自定义的所有字段，现在全部以 AES-256-GCM 密文存进数据库 —— 直接打开数据库看到的是 <code>enc:v1:...</code> 这样的乱码，看不到任何真实信息。密钥就是你后台「秘钥管理」里那把 ADMIN_SECRETS_KEY（和令牌库同一把，不用另外配）。后台和前台照常显示明文，查询、认领、导入导出都不受影响。⚠️ 存量资料是「谁保存过、谁就转成密文」，没动过的仍是明文，慢慢会全部转完；⚠️ 密钥千万别删，删了就解不开了。", category: "site" },
-    { date: "2026-10-17 16:50", text: "🔐 字段管理新增「仅管理员」可见级别（v3.4.1）：某些敏感字段（如身份证号、家庭信息）现在可以设为只有你在后台能看到 —— 前台查询里连本人都看不到，连键都不会下发。新增字段、快捷切换、单人例外三处都能选这一档。", category: "site" },
-    { date: "2026-10-17 15:30", text: "⚔️ 成绩分析更新（v3.4.0）：①「成绩对比」可以再选一场考试放在一起比（最多 2 场），新增「跨考试进退步」表——两位同学的总分 / 班排 / 年级排名 / 各科分数逐项对比，进步退步一目了然，总分柱下也补了年级排名；② 个人画像「各科进退步」只固定科目列了，第一次考试那一列不再被误固定（进退步榜、需关注等表同样修好）；③ 年级排名各处都标注了是「物理方向」的年级排名，不是全校；④「历次上线率」开放给管理员查看；⑤ 页面顶部加了小横幅：成绩由人工手动录入，若有错误请联系管理员修改；⑥ 后台「新增字段」弹窗修复了不居中的问题。", category: "site" },
-    { date: "2026-10-17 13:41", text: "📊 成绩分析三处改动（v3.3.0）：①「需关注学生」不再只看总分，某一科拖后腿也会被单独点名（表格里直接写「化学 60 −30.2」，并标出是「仅单科」还是总分也不达标）；②「进退步榜」把进步和退步合成一张表，全部同学都在里面，点表头就能排序（名次、变化、分数都能排），班级 / 年级 / 单科三种筛选照旧；③「学生 × 科目热力图」手机端点任意一格就能看这个人的明细，再点一次收起。", category: "site" },
-    { date: "2026-10-17 12:05", text: "📉 「我的画像 → 各科趋势」现在能看<b>名次</b>了：右上角切「分数 / 名次」，名次视角下折线越靠上就是名次越前，每张卡直接写「第几 名 / 全年级人数」和「较上次 名次升/降多少」，本次分数也保留在下面。哪次没导入年级排名会写「暂无名次」。", category: "site" },
-    { date: "2026-10-17 11:29", text: "🔧 修好了分享的一个毛病：以前点「编辑」改分享范围，保存后其实没生效（页面读到的还是旧弹窗里的选项）。现在编辑保存会真正生效，链接不变；而且改范围时不会再把已经勾好的「成绩单 / 个人成绩卡」清掉。", category: "site" },
-    { date: "2026-10-17 10:48", text: "📈 「我的画像」新增「各科进退步」：最近几次考试，每科的分数和年级排名逐次列出，还标出分数增减、名次升降和稳定性（波动大小）。分享出去的成绩页也能看到这张表。", category: "site" },
-    { date: "2026-10-17 10:47", text: "🔗 成绩分享升级：分享页除了每次成绩的具体分值、各科小分和上线情况，现在还多了「历史总分趋势」和「年级排名变化」两张图；「成绩单」和「个人成绩卡」可以同时展示。已建过的分享也能直接改范围，链接不变，不用重新发。", category: "site" },
-    { date: "2026-10-17 10:45", text: "🔐 成绩发布更灵活：老师现在可以把某次成绩只发给指定同学，或发给全班。被指定的同学登录就能看到，其他同学不会看到那次考试。", category: "site" },
-    { date: "2026-10-17 10:30", text: "📊 「我的画像」升级：六科画像除了雷达图，还多了一张数值表 —— 每科都能看到「我的分数 / 占总分比例 / 班均 / 与班均差」，一眼看清自己强在哪、差多少。另外，切到「总分原始」口径时，化学、生物不再显示「赋分」标签，也不会再和特控 / 本科 / 600 线硬比（那三条线是按赋分总分划的）。", category: "site" },
-    { date: "2026-10-11 17:18", text: "📚 首页新增「学习卡片」：和「每日一言」一样每次刷新随机出一条 —— 物理 / 化学 / 生物 知识点公式，或英语选词填空（带答案解析），也能联网抓「每日一词」和「古诗文」。想只留某几类，去「自定义设置」里勾。", category: "site" },
-    { date: "2026-10-11 17:12", text: "🎲 「每日一言」改为完全随机切换，不再按日顺序轮播；同时接入网络名言库，联网时会自动换一句。", category: "site" },
-    { date: "2026-10-11 17:06", text: "🛠 后台公告支持手动改发布时间，旁边加了「填入当前时间」按钮，时间填错也能自己修正。", category: "site" },
-    { date: "2026-10-11 17:05", text: "🎨 自定义设置新增「主题自动切换」，可选：关闭自动 / 跟随系统 / 跟随日出日落。选「跟随日出日落」会按当地真实日出日落时间自动切换亮暗，离线时用本地计算兜底。", category: "site" },
-    { date: "2026-10-11 13:20", text: "🔧 修复：登录滑块验证码「拖到底也提示不匹配」的问题 —— 拼图块现在能正确嵌入缺口了。", category: "site" },
-    { date: "2026-10-11 12:00", text: "🎨 全站图标统一升级：所有 emoji 全部换成 Lucide 图标，倒计时不再闪动。", category: "site" },
-    { date: "2026-10-11 11:50", text: "🔒 登录新增滑块安全验证，进一步保护你的账号。", category: "site" },
-    { date: "2026-10-11 11:40", text: "📡 在线状态改为实时检测（每分钟双向心跳），管理后台能准确看到谁在线。", category: "site" },
-    { date: "2026-10-11 11:30", text: "💡 连不上服务器时，页面顶部会提示你切换网络或改用流量，此期间显示的是本地缓存。", category: "site" },
-    { date: "2026-09-30 15:56", text: "🎉 国庆假期作业已发布", category: "activity" },
-    { date: "2026-09-29 23:02", text: "📅 第一次段考时间已公布：10月13日—14日。\n各科考试范围可在「重要日期倒计时」→「查看全部」→「查看考试范围」中查看。", category: "activity" },
-    { date: "2026-09-27 09:32", text: "🎨 新增自定义设置：排序、字号、背景", category: "site" },
-    { date: "2026-09-26 17:50", text: "界面换回暖橙新装，更清爽啦。", category: "site" },
-    { date: "2026-09-26 16:43", text: "🔓 站内入口已免密码，直接进入即可。", category: "site" },
-    { date: "2026-09-26 15:38", text: "🎧 新增英语听力音频，可在「作业查看」里直接点击播放。", category: "site" },
-    { date: "2026-09-24 23:25", text: "🔣 全站图标统一为 Lucide 一套，含小游戏", category: "site" },
-    { date: "2026-09-24 22:52", text: "📇 升级为「个人资料查询」，新增政治面貌", category: "site" },
-    { date: "2026-09-24 13:40", text: "🌕 中秋假期作业已发布，六科全齐", category: "site" },
-    { date: "2026-09-07 12:57", text: "【班级通知】因网络问题，「学习资料」板块中的课堂笔记与教学课件暂时关闭，恢复开放时间另行通知，给大家带来的不便敬请谅解。", category: "site" },
-    { date: "2026-08-31 18:26", text: "📌 「报到」日期（8/31 18:00）已过，首页「重要日期倒计时」中的「报到」项已隐藏；当前面板仅显示「寒假」倒计时。", category: "site" },
-    { date: "2026-08-30 23:36", text: "📊 已接入匿名访问统计，不收集个人信息", category: "site" },
-    { date: "2026-08-30 18:50", text: "🎲 点歌抽签优化：自动排除已播/已排期", category: "site" },
-    { date: "2026-08-30 16:05", text: "🎲 点歌抽签新增「每人限一首」，更公平", category: "site" },
-    { date: "2026-08-29 18:10", text: "🔤 修复密码框打不出中文的问题", category: "site" },
-    { date: "2026-08-29 16:20", text: "📌 公告分类调整，数据导出改为加密", category: "site" },
-    { date: "2026-08-29 15:20", text: "🔗 备用链接已上线，主链打不开时用", important: true, importantUntil: "2026-08-29T18:00:00", category: "activity" },
-    { date: "2026-08-29 00:40", text: "🎟️ 点歌券防重复，每周每人一张", category: "site" },
-    { date: "2026-08-29 00:30", text: "⚠️ 原 Gitee Pages 备用入口已失效", category: "site" },
-    { date: "2026-08-28 23:15", text: "🖥️ 电脑端小游戏改为当前页打开", category: "site" },
-    { date: "2026-08-28 22:30", text: "🔐 站里藏着隐藏空间，自己找找看", category: "misc" },
-    { date: "2026-08-28 22:18", text: "🎟️ 点歌券规则升级，门槛下调", category: "site" },
-    { date: "2026-08-28 14:50", text: "👁️ 修复倒计时文字看不清的问题", category: "site" },
-    { date: "2026-08-28 10:00", text: "👁️ 优化全站文字对比度，更清晰", category: "site" },
-    { date: "2026-08-27 00:46", text: "💬 学习资料「访问提示」悬浮球调整：仅在学习资料板块内显示，离开板块后自动消失。", category: "site" },
-    { date: "2026-08-27 00:28", text: "✨ 全站视觉升级，动画更顺滑", category: "site" },
-    { date: "2026-08-27 00:21", text: "🌙 新增夜间自动暗色模式", category: "site" },
-    { date: "2026-08-27 00:13", text: "📌 公告支持按日期筛选与隐藏", category: "site" },
-    { date: "2026-08-26 23:27", text: "💾 新增「全部清理」，一键清空本机数据", category: "site" },
-    { date: "2026-08-26 10:52", text: "💾 新增「数据管理」，可导出导入", category: "site" },
-    { date: "2026-08-26 10:25", text: "🔄 返回时自动回到刚才的页面", category: "site" },
-    { date: "2026-08-26 10:12", text: "🎁 悄悄说一句：站内藏着彩蛋和隐藏空间，说不定哪天就被你碰上了～（线索就藏在日常交互里，自己去探索才有意思）", category: "misc" },
-    { date: "2026-08-26 09:55", text: "🔔 新增音效反馈，侧边栏可关闭", category: "site" },
-    { date: "2026-08-26 00:45", text: "🔒 密码增加防爆破，输错会短暂锁定", category: "activity" },
-    { date: "2026-08-25 22:58", text: "🎋 新增「今日班级签」，每天可抽一次", category: "activity" },
-    { date: "2026-08-25 21:55", text: "📝 新增「意见反馈」，可匿名填写", category: "class" },
-    { date: "2026-08-25 20:41", text: "📦 新增「仓库」按钮，可查看源码", category: "site" },
-    { date: "2026-08-25 20:03", text: "🔧 修复分类页验证后整页空白的问题", category: "site" },
-    { date: "2026-08-25 19:50", text: "🔧 修复资料类入口点击无反应的问题", category: "site" },
-    { date: "2026-08-25 19:39", text: "🔧 修复密码输入无反应的问题", category: "site" },
-    { date: "2026-08-25 19:22", text: "📝 作业查看新增站内入口", category: "site" },
-    { date: "2026-08-25 19:11", text: "📲 新增「安装为应用」教程", category: "activity" },
-    { date: "2026-08-25 17:30", text: "📣 公告支持按分类筛选", category: "site" },
-    { date: "2026-08-25 17:14", text: "🔗 主链接已切换为 GitHub Pages", important: true, importantUntil: "2026-08-25T19:14:00", category: "site" },
-    /* 2026-09-30 站主要求：这条不再永久置顶。置顶靠 important:true 且无 importantUntil 实现，
-       直接删掉会连历史记录一起丢，所以只取消置顶、保留条目，仍可在活动分组里翻到。
-       v4.4.0（站主第 5 条）：Classworks 已完全退场，正文字面也一并改掉，免得有人照着去找。 */
-    { date: "2026-08-25 16:46", text: "【班级通知】外部作业平台已停用，作业统一在站内「作业查看」里看。", category: "activity" },
-    { date: "2026-08-25 16:46", text: "📌 公告分组调整，新增多项小功能", category: 'site' },
-    { date: "2026-08-25 16:19", text: "🔧 修复日报排版与首次密码报错", category: 'site' },
-    { date: "2026-08-25 16:13", text: "修复每日日报卡片空白问题；班级公告时间统一为「精确到分」。", category: 'site' },
-    { date: "2026-08-25 15:30", text: "每日日报已切换为外部热点聚合站；修复重要日期弹窗倒计时不走秒；新增「导出备份」功能（站内密码验证后下载完整版 zip）。", category: 'site' },
-    { date: "2026-08-23 12:37", text: "修复倒计时时/分/秒不实时刷新的问题。", category: 'site' },
-    { date: "2026-08-23 12:33", text: "修复倒计时实时刷新；其他工具新增番茄时钟。", category: 'site' },
-    { date: "2026-08-23 12:24", text: "首页改版：应用入口移至侧边栏；法定节假日已备至 2028 年 6 月。", category: 'site' },
-    { date: "2026-08-23 12:09", text: "倒计时重做：精确到月天，点击面板可查看全部重要日期 / 全部法定节假日。", category: 'site' },
-    { date: "2026-08-23 12:00", text: "新增暗黑模式：点击页头左上角的月亮/太阳图标即可切换。", category: 'site' },
-    { date: "2026-08-23 11:39", text: "站点新增入口问答；私人云盘已接入访问密码验证。", category: 'site' },
-    { date: "2026-08-23 11:34", text: "点歌平台与听歌平台用途说明已修正；其他工具入口文案优化。", category: 'site' },
-    { date: "2026-08-23 11:31", text: "点歌平台说明已更新；其他工具新增「私人云盘」占位入口。", category: 'site' },
-    { date: "2026-08-23 11:25", text: "板块整理：新增「班级事务」「其他工具」，每日日报移至首页公告下方。", category: 'site' },
-    { date: "2026-08-23 11:16", text: "联系方式已更新为班级通讯录（含学号与职位），欢迎查询。", category: 'site' },
-    { date: "2026-08-23 11:04", text: "联系方式调整：出于隐私保护，站内不再提供电话、微信、QQ 等个人联系方式，需要请联系班主任。", category: 'site' },
-    { date: "2026-08-23 10:58", text: "学习资料问答与联系方式已升级为加密存储，数据更安全。", category: 'site' },
-    { date: "2026-08-23 10:53", text: "已新增联系人，可在「其他」-「联系方式」中查询。", category: 'site' },
-    { date: "2026-08-23 10:48", text: "新增「其他」板块：联系方式、情况反映、建言献策、排行榜、班级活动。", category: 'site' },
-    { date: "2026-08-23 10:42", text: "学习资料问答题目已更新，如有通过记录失效请重新答题。", category: 'site' },
-    { date: "2026-08-23 10:36", text: "修复课堂笔记、教学课件网盘链接，欢迎重新查看。", category: 'site' },
-    { date: "2026-08-23 10:29", text: "新增「学习资料」板块：课堂笔记、教学课件，答对班级小问题即可获取网盘链接与访问码。", category: 'site' },
-    { date: "2026-08-23 10:09", text: "每日日报入口已更新，班级应用新增 EchoMusic 听歌平台。", category: 'site' },
-    { date: "2026-08-23 00:22", text: "经过我这么久的调试这个网站终于有点雏形在了！(╥╯﹏╰╥)ง", category: 'misc' },
-    { date: "2026-08-22 00:00", text: "点歌平台入口已开放！微信内无法直接访问，点击「前往入口」后请按引导用浏览器打开。", category: 'site' },
-    { date: "2026-08-22 00:00", text: "班级服务站 2.0 上线：新增公告栏；站点可在微信内直接打开，部分国外站点会自动引导用浏览器访问。", category: 'site' },
+    /* v4.4.5：内置公告只做离线兜底（正常从云端读取）。
+       站主要求公告简洁、只写更新内容，历史长文已清空。 */
+    { date: "2026-11-05 12:00", text: "班级服务站已更新，详情见公告列表。", category: "site" },
+    { date: "2026-11-01 12:00", text: "成绩由人工录入，如有错误请联系管理员。", category: "score" }
   ],
   /* ── 开屏通知弹窗：大假作业发布提醒（在 start~end 期间打开网站自动弹出；可「不再显示」）── */
   homeworkNotice: {
@@ -1600,7 +1511,7 @@ var SITE_DATA = {
     {
       id: 1,
       categoryId: 1, title: "点歌平台", subtitle: "VoiceHub", icon: "./icons/pmxXJkq.png",
-      desc: "线上点歌平台：点击下方按钮进入，点播你想听的歌曲。\n本平台由 VoiceHub 提供技术支持\n初始账号：学号（如 250501），默认密码：生日（如 20250901）\n💡 服务器配置有限，没有立即跳转请耐心等待几秒",
+      desc: "线上点歌平台，提供歌曲点播服务。\n技术支持：VoiceHub\n初始账号为学号，初始密码为出生日期。\n服务器资源有限，跳转可能延迟，请稍候。",
       mainLabel: "前往入口", mainUrl: "https://xsyzc2505.dpdns.org/", mainWechatOk: false,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
@@ -1611,7 +1522,7 @@ var SITE_DATA = {
          所以：不再跳原站、不再挂 Classworks 的 logo（那个图标本来就是人家的），
          标题下面不写 Classworks，图标位置直接放「作业」两个字。 */
       categoryId: 1, title: "作业查看", subtitle: "", icon: "", iconText: "作业",
-      desc: "周作业及假期作业都在站内看。\n点「查看当前作业」看今天这一期，点「历史作业」按日期翻以前的。",
+      desc: "站内查看周作业与假期作业。\n「查看当前作业」显示当前日期所属期次，「历史作业」按日期检索往期。",
       customActions: [
         { label: "📝 查看当前作业", onclick: "showCurrentHomework()" },
         { label: "📅 历史作业（日期）", onclick: "showHomeworkCalendar()" }
@@ -1620,21 +1531,21 @@ var SITE_DATA = {
     {
       id: 3,
       categoryId: 2, title: "班级课表", subtitle: "ClassIsland", icon: "./icons/pmxjpEn.png",
-      desc: "开源智能大屏课表系统，\n实时展示当日课程、上下课倒计时与提醒，\n支持多周轮换课表与临时调课功能。",
+      desc: "开源智能大屏课表系统，\n实时显示当日课程、上下课倒计时与提醒，\n支持多周轮换课表与临时调课。",
       mainLabel: "前往官方页面", mainUrl: "https://www.classisland.tech/", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
       id: 4,
       categoryId: 2, title: "屏幕批注", subtitle: "ICC-CE", icon: "./icons/pmz6J6U.png", active: false,
-      desc: "智能课堂绘图增强工具，\n专为教师打造高效交互式绘图解决方案，\n支持智能笔迹处理、PPT 实时标注、多点触控手势与高度自定义设置。",
+      desc: "智能课堂绘图增强工具，\n面向教师的交互式绘图方案，\n支持智能笔迹处理、PPT 实时标注、多点触控手势与自定义设置。",
       mainLabel: "前往官方页面", mainUrl: "https://cjk-is-so-cute.netlify.app/", mainWechatOk: false,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
       id: 5,
       categoryId: 2, title: "听歌平台", subtitle: "EchoMusic", icon: "./icons/pnpe3ff.png",
-      desc: "音乐课等课上播放歌曲的桌面播放器，\n支持歌单分享、歌词同步、主题换肤与多平台音乐导入，\n可在教室电脑安装使用，课上一起听歌更自在。",
+      desc: "面向课堂播放的桌面音乐播放器，\n支持歌单分享、歌词同步、主题更换与多平台音乐导入，\n可安装于教室电脑使用。",
       mainLabel: "查看项目", mainUrl: "https://github.com/hoowhoami/EchoMusic", mainWechatOk: false,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
@@ -1642,7 +1553,7 @@ var SITE_DATA = {
       id: 6,
       categoryId: 5, title: "课堂笔记", icon: "", iconText: "笔记", paused: true,
       pausedMsg: "📌 以后查看课堂笔记 / 课件，请线下在班上大屏查看。",
-      desc: "经多方对比，课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载基本不限速。\n笔记为截图，可在线预览，加载卡顿建议下载查看。\n打不开可复制链接至浏览器打开（微信页面可能存在兼容问题）。",
+      desc: "课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载不受限速影响。\n笔记为截图，支持在线预览；加载缓慢时建议下载查看。\n如无法打开，可将链接复制至浏览器访问（微信内置页面可能存在兼容性问题）。",
       mainLabel: "", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
       gate: {
@@ -1658,7 +1569,7 @@ var SITE_DATA = {
       id: 7,
       categoryId: 5, title: "教学课件", icon: "", iconText: "课件", paused: true,
       pausedMsg: "📌 以后查看课堂笔记 / 课件，请线下在班上大屏查看。",
-      desc: "经多方对比，课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载基本不限速。\n打不开可复制链接至浏览器打开（微信页面可能存在兼容问题）。",
+      desc: "课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载不受限速影响。\n如无法打开，可将链接复制至浏览器访问（微信内置页面可能存在兼容性问题）。",
       mainLabel: "", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
       gate: {
@@ -1672,7 +1583,7 @@ var SITE_DATA = {
     },
     {
       id: 8, categoryId: 0, title: "每日日报", icon: "",
-      desc: "实时热点资讯聚合，\n点击下方按钮即可查看最新热点内容。",
+      desc: "实时热点资讯聚合，\n点击按钮查看当日内容。",
       mainLabel: "前往查看", mainUrl: "https://newsnow.czl.net/c/china", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
       iconText: "日报"
@@ -1680,7 +1591,7 @@ var SITE_DATA = {
     {
       id: 10,
       categoryId: 8, title: "个人资料查询", icon: "", iconText: "资料", contactQuery: true,
-      desc: "输入姓名，查询班上同学与班主任的资料。\n可查看学号、政治面貌（中共党员 / 共青团员 / 普通学生）等资料。\n资料采用加密存储，不用担心泄露。",
+      desc: "输入姓名查询本班同学与班主任资料，\n可查看学号、政治面貌（中共党员／共青团员／普通学生）等信息。\n资料加密存储。",
       mainLabel: "", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
@@ -1689,7 +1600,7 @@ var SITE_DATA = {
          仿照 yingming006.cn/time 做的，功能对齐（数字 / 翻页 / 秒表 / 计时器）。 */
       id: 30,
       categoryId: 8, title: "全屏时钟", icon: "", iconText: "⏰",
-      desc: "桌面时间显示与倒计时：数字 / 翻页两种时钟样式，翻页可以关掉秒；另有秒表、倒计时和自习番茄钟。\n支持全屏（自动横屏）、换字体、调数字大小、换背景；右上角「记录」能看到今天几点到几点用了什么。",
+      desc: "桌面时间显示与计时工具，\n提供数字、翻页两种时钟样式，翻页样式可隐藏秒数；\n另含秒表、倒计时与自习番茄钟。\n支持全屏（自动横屏）、字体切换、字号与背景调节；\n右上角「记录」可查看当日各时段使用情况。",
       mainLabel: "打开全屏时钟", mainUrl: "./clock.html", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
@@ -1698,7 +1609,7 @@ var SITE_DATA = {
     {
       id: 12,
       categoryId: 8, title: "私人云盘", icon: "", iconText: "云盘", active: false,
-      desc: "用于同步班级重要文件、应用与软件，方便随时取用。",
+      desc: "用于同步班级重要文件、应用与软件，支持随时取用。",
       mainLabel: "", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
       gate: {
@@ -1713,7 +1624,7 @@ var SITE_DATA = {
     {
       id: 17,
       categoryId: 7, title: "意见反馈", icon: "", iconText: "📮",
-      desc: "对班级事务有任何想法、建议，或想反映的问题，都可以在这里匿名提交。\n好的点子、槽点、建议都可以畅所欲言，我们会认真查看。",
+      desc: "班级事务的意见与建议提交入口，支持匿名提交，由管理员统一查阅。",
       mainLabel: "前往填写", mainUrl: "https://www.wjx.top/vm/tFMclw4.aspx#", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true,
       needLogin: true
@@ -1721,15 +1632,15 @@ var SITE_DATA = {
     {
       id: 15,
       categoryId: 7, title: "排行榜", icon: "", iconText: "排行", comingSoon: true, active: false,
-      desc: "班级排行榜功能开发中，敬请期待。",
+      desc: "班级排行榜功能开发中。",
       mainLabel: "开发中", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
     {
       id: 16,
       categoryId: 7, title: "班级活动", icon: "", iconText: "活动", comingSoon: true,
-      desc: "暂时还没有班级活动，敬请期待。",
-      mainLabel: "敬请期待", mainUrl: "", mainWechatOk: true,
+      desc: "暂无进行中的班级活动。",
+      mainLabel: "暂未开放", mainUrl: "", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     }
   ]
@@ -2387,7 +2298,7 @@ function _audioEnsure(){
     });
     el.addEventListener('error',  function(){
       var fb = document.getElementById('audioFallback');
-      if(fb){ fb.classList.add('show'); fb.innerHTML = '音频加载失败。可能是网络问题，或该链接不是可直接播放的音频直链。可 <a href="'+esc(_audioUrl)+'" target="_blank" rel="noopener">在新标签页打开试试</a>。'; }
+      if(fb){ fb.classList.add('show'); fb.innerHTML = '音频加载失败。可能是网络问题，或该链接不是可直接播放的音频直链。可 <a href="'+esc(_audioUrl)+'" target="_blank" rel="noopener">在新标签页打开</a>。'; }
     });
     el.addEventListener('progress', function(){ /* 缓冲进度预留，当前用填充条表示播放进度 */ });
   }
@@ -2473,7 +2384,7 @@ function openAudio(url, title){
   _audioSyncRateUI(); _audioSyncVolUI();
   var m = document.getElementById('audioMask'); if(m) m.classList.add('show');
   audioBubbleHide();
-  _audioSetSub(same ? '已续上上次进度，点「播放」继续' : '点下方按钮开始播放');
+  _audioSetSub(same ? '已恢复上次进度，点击「播放」继续' : '点击按钮开始播放');
   _audioSyncProgress();
 }
 /* 关闭：暂停并收起弹窗。
@@ -2555,7 +2466,7 @@ function audioToggle(){
 function audioSkip(sec){
   var el = _audioEnsure();
   if(!isFinite(el.duration)){
-    _audioSubHoldSet('音频还在加载，稍等一下再试');
+    _audioSubHoldSet('音频加载中，请稍后重试');
     return;
   }
   /* 播完之后按「后退」应当从结尾往回退，而不是停在结尾 */
@@ -2587,7 +2498,7 @@ function _audioHideFallback(){
 function audioNoSeekTip(){
   if(_audioNoSeekWarned) return;
   _audioNoSeekWarned = true;
-  _audioSubHoldSet('这个音频源不支持拖动进度条，可点下方链接用系统播放器收听');
+  _audioSubHoldSet('该音频源不支持拖动进度条，可点击下方链接使用系统播放器收听');
   var fb = document.getElementById('audioFallback');
   if(fb){
     fb.dataset.kind = 'noseek';
@@ -2881,8 +2792,16 @@ function reopenVideo(){
   if(!_videoUrl) return;
   openVideo(_videoUrl, _videoTitle);
 }
+/* v4.4.5（站主）：「视频关闭后的右下角悬浮球，只在大屏服务里显示」。
+   判定以当前板块为准（大屏服务 = 板块 2）；离开板块时由 openCat / goHomeView 收起，
+   回来再自动恢复，不在大屏服务页面里就不再出现，避免挡住首页与其它页面的内容。 */
 function videoBubbleShow(){
   var el = document.getElementById('videoBubble'); if(!el) return;
+  if(window.__activeCat !== 2 || !_videoUrl){
+    el.style.display = 'none';
+    if(typeof actSyncBubble === 'function') actSyncBubble();
+    return;
+  }
   el.style.display = 'flex';
   if(typeof actSyncBubble === 'function') actSyncBubble();
 }
@@ -3166,7 +3085,7 @@ function render(){
     }else if(c.id === 9){
       inner = installGuideHtml();
     }else if(links.length === 0){
-      inner = '<div class="placeholder"><span>➕</span>该板块内容正在筹备中，敬请期待</div>';
+      inner = '<div class="placeholder"><span>➕</span>该板块内容筹备中</div>';
     }else{
       inner = links.map(function(l){
         var fallback = esc(l.iconText || (l.title||'').charAt(0) || '链');
@@ -3245,7 +3164,7 @@ function render(){
             actionsHtml = '<span class="gate-tip">答对后获取访问码</span>';
           }
         }else if(l.comingSoon){
-          var _csMsg = l.comingSoonMsg || '功能开发中，敬请期待';
+          var _csMsg = l.comingSoonMsg || '功能开发中';
           actionsHtml = '<button class="btn btn-disabled" onclick="alert(\''+jsq(_csMsg)+'\')">'+esc(l.mainLabel||'待开发')+'</button>';
         }else if(l.contactQuery){
           actionsHtml = '<span class="gate-tip">输入姓名查询</span>';
@@ -5741,7 +5660,7 @@ function renderAccount(){
     : '<div class="acct-field"><label>用户名</label><input id="acctU" placeholder="输入用户名" autocomplete="username"></div>' +
       '<div class="acct-field"><label>密码</label><input id="acctP" type="password" placeholder="输入密码" autocomplete="current-password"></div>' +
       '<div class="acct-field"><label>安全验证</label>' + capHtml() + '</div>' +
-      '<p class="acct-hint" style="margin:2px 0 10px">💡 用户名就是你的<b>姓名</b>，初始密码是<b>出生日期 8 位数字</b>（如 2010 年 7 月 10 日生 → <code>20100710</code>）。</p>' +
+      '<p class="acct-hint" style="margin:2px 0 10px">💡 用户名为本人<b>姓名</b>，初始密码是<b>出生日期 8 位数字</b>（如 2010 年 7 月 10 日生 → <code>20100710</code>）。</p>' +
       '<button class="acct-btn" id="acctGo" onclick="doLogin()">登录</button>';
 
   box.innerHTML = tabs + form +
@@ -5793,7 +5712,7 @@ function acctForcePwdHtml(){
      文案从「请先设置才能使用」改成安全建议口吻；新增【暂不修改】，
      跳过不清服务端标志（后台「待改密」徽章仍有意义），只记本地，
      之后个人中心常驻提示条，随时能改。 */
-  return '<div class="acct-hint" style="margin-bottom:10px">你的账号目前用的是初始密码（出生日期），'
+  return '<div class="acct-hint" style="margin-bottom:10px">当前账号仍使用初始密码（出生日期），'
     + '强度不足，建议更换为仅本人知晓的密码。'
     + '可点击「暂不修改」跳过，之后可在「我的账号」中修改。</div>'
     + oldField
@@ -6317,7 +6236,7 @@ function myProfLoad(){
 
 function myProfileHtml(){
   if(MY_PROF_STATE === 'idle' || MY_PROF_STATE === 'loading'){
-    return '<p class="acct-hint">⏳ 正在读取你的资料…</p>';
+    return '<p class="acct-hint">⏳ 正在读取资料…</p>';
   }
   if(MY_PROF_STATE === 'error'){
     return '<p class="acct-hint">读取失败：' + esc(MY_PROF_ERR) + '</p>' +
@@ -6329,8 +6248,8 @@ function myProfileHtml(){
   /* 还没认领资料：先认领（学号 + 姓名双验，与后端 claim 一致） */
   if(!p){
     return '<p class="acct-hint">你还没认领班级资料。认领之后就能自己维护<b>微信 / QQ / 手机号</b>，' +
-        '同学查到的也是你填的内容。</p>' +
-      '<div class="acct-field"><label>姓名</label><input id="mpName" placeholder="你的姓名" autocomplete="off"></div>' +
+        '同学查到的也是此处填写的内容。</p>' +
+      '<div class="acct-field"><label>姓名</label><input id="mpName" placeholder="本人姓名" autocomplete="off"></div>' +
       '<div class="acct-field"><label>学号</label><input id="mpSid" placeholder="例如 250518" autocomplete="off"></div>' +
       '<button class="acct-btn" id="mpClaim" onclick="myProfClaim()">认领我的资料</button>' +
       '<div class="acct-msg" id="mpMsg"></div>' +
@@ -6462,13 +6381,13 @@ function myProfileHtml(){
     '</div>' +
 
     '<div class="acct-field"><label>💬 微信号' + mpPendTag('wechat') + '</label><input id="mpWechat" value="' + attr(p.wechat || '') + '" placeholder="选填，微信号" autocomplete="off"></div>' +
-    '<label class="acct-priv"><input type="checkbox" id="mpWechatHide"' + (wHidden ? ' checked' : '') + '> 仅自己可见（同学查不到你的微信号）</label>' +
+    '<label class="acct-priv"><input type="checkbox" id="mpWechatHide"' + (wHidden ? ' checked' : '') + '> 仅自己可见（同学无法查看本人的微信号）</label>' +
 
     '<div class="acct-field"><label>🐧 QQ 号' + mpPendTag('qq') + '</label><input id="mpQq" value="' + attr(p.qq || '') + '" placeholder="选填，5–12 位数字" autocomplete="off"></div>' +
-    '<label class="acct-priv"><input type="checkbox" id="mpQqHide"' + (qHidden ? ' checked' : '') + '> 仅自己可见（同学查不到你的 QQ 号）</label>' +
+    '<label class="acct-priv"><input type="checkbox" id="mpQqHide"' + (qHidden ? ' checked' : '') + '> 仅自己可见（同学无法查看本人的 QQ 号）</label>' +
 
     '<div class="acct-field"><label>📱 手机号' + mpPendTag('phone') + '</label><input id="mpPhone" value="' + attr(p.phone || '') + '" placeholder="选填，11 位手机号" autocomplete="off"></div>' +
-    '<label class="acct-priv"><input type="checkbox" id="mpPhoneHide"' + (phHidden ? ' checked' : '') + '> 仅自己可见（同学查不到你的手机号）</label>' +
+    '<label class="acct-priv"><input type="checkbox" id="mpPhoneHide"' + (phHidden ? ' checked' : '') + '> 仅自己可见（同学无法查看本人的手机号）</label>' +
 
     '<button class="acct-btn" id="mpSave" onclick="myProfSave()">保存我的联系方式</button>' +
     '<div class="acct-msg" id="mpMsg"></div>' +
@@ -6638,7 +6557,7 @@ function myProfSave(){
 
   if(!w && !q && !ph){
     /* 清空：允许，但要提示会撤回公开 */
-    if(!confirm('三项都空着，保存会把你的联系方式撤回（同学查不到）。确定吗？')) return;
+    if(!confirm('三项均为空，保存后将撤回本人的联系方式（同学无法查看）。确定吗？')) return;
   }
   if(ph && ph !== storedPh && !/^[0-9]{11}$/.test(ph)){ myProfSay('手机号应为 11 位数字'); return; }
   if(q && !/^[0-9]{5,12}$/.test(q)){ myProfSay('QQ 号应为 5–12 位数字'); return; }
@@ -6768,7 +6687,7 @@ function syncPull(ask){
       return { pulled:0 };
     }
     if(ask){
-      var doIt = confirm('云端有 ' + n + ' 项你的数据。\n\n' +
+      var doIt = confirm('云端有 ' + n + ' 项属于本人的数据。\n\n' +
         '点「确定」= 用云端数据覆盖本机（适合换了新设备）\n' +
         '选择「取消」将保留本机数据，之后可手动同步。');
       if(!doIt) return { pulled:0 };
@@ -9440,6 +9359,9 @@ function openCat(id){
   if(page) page.classList.add('active');
   if(id === 5){ showStudyNotice(); }
   else { studyBubbleHide(); }
+  /* v4.4.5：视频悬浮球只在大屏服务（板块 2）内出现；切到别的板块就收起 */
+  if(id === 2){ if(_videoUrl) setTimeout(videoBubbleShow, 0); }
+  else { videoBubbleHide(); }
   /* 通用弹窗引擎：该板块配了 scope:'cat:N' 就弹一条（含横幅） */
   if(typeof popOnCategory === 'function'){ setTimeout(function(){ popOnCategory(id); }, 600); }
   var btns = document.querySelectorAll('#sideCats .side-btn');
@@ -9472,6 +9394,7 @@ function goHomeView(){
   __activeCat = null;
   try{ setRoute(''); }catch(e){}
   studyBubbleHide();
+  videoBubbleHide();   /* v4.4.5：回首页时视频悬浮球一并收起 */
   var home = document.getElementById('homeView');
   var grid = document.getElementById('grid');
   if(home) home.style.display = 'block';
@@ -11443,7 +11366,7 @@ function renderAllBoard(){
             (isImportant(a)?'<span class="board-pin">'+(a.importantUntil?'限时置顶':'置顶')+'</span>':'')+'</div>'+
             '<p class="board-text">'+annHighlight(a,q)+'</p></li>';
         }).join('')+'</ul></li>'
-      : '<li style="padding:18px;color:#6e635a;text-align:center">未找到匹配公告，可试试相近词（如「彩蛋 / 隐藏」）</li>';
+      : '<li style="padding:18px;color:#6e635a;text-align:center">未找到匹配公告，可尝试相近关键词（如「彩蛋 / 隐藏」）</li>';
   }else{
     if(title) title.textContent='全部公告（'+scoped.length+' 条）';
     var grouped={};
@@ -11733,7 +11656,7 @@ function askDataEnc(mode,cb){
   var p=document.getElementById('dataEncPass'), p2=document.getElementById('dataEncPass2'), err=document.getElementById('dataEncErr');
   if(t) t.textContent=(mode==='export')?'🔐 设置导出密码':'🔓 输入数据密码';
   if(d) d.innerHTML=(mode==='export')
-    ? '导出内容含<b>姓名、班级签、点歌记录</b>等，将用你设置的密码加密。<br><b style="color:#af410f">请务必记住</b>——导入时要输入同一个密码，忘记将无法恢复。'
+    ? '导出内容含<b>姓名、班级签、点歌记录</b>等，将使用所设置的密码加密。<br><b style="color:#af410f">请务必记住</b>——导入时要输入同一个密码，忘记将无法恢复。'
     : '该数据已加密，请输入导出时设置的密码。';
   if(p2) p2.style.display=(mode==='export')?'':'none';
   if(err) err.style.display='none';
@@ -13628,7 +13551,7 @@ function voteAskRetract(vid, oid){
       delete VOTE.picked[vid];
       return voteReload().then(function(){
         if(oid){ VOTE.picked[vid] = [oid]; voteRenderAll(); }
-        voteMsg(vid, '✅ ' + (j.message || '已撤回') + (oid ? '，已帮你选上刚才点的那项，确认后上传' : ''));
+        voteMsg(vid, '✅ ' + (j.message || '已撤回') + (oid ? '，已自动选中刚点击的选项，确认后上传' : ''));
       });
     })
     .catch(function(e){
@@ -14142,7 +14065,7 @@ function scLoad(){
       scPane('<div class="sc-empty">'
         + '<div class="sc-empty-ico">📊</div>'
         + '<p><b>暂未对外开放</b></p>'
-        + '<p class="sc-dim">成绩分析正在准备中。等老师开放后，这里就能看到全班成绩单和你的个人分析。</p>'
+        + '<p class="sc-dim">成绩分析正在准备中。等老师开放后，这里可查看全班成绩单与个人分析。</p>'
         + '</div>');
       return;
     }
@@ -14151,7 +14074,7 @@ function scLoad(){
       scPane('<div class="sc-empty">'
         + '<div class="sc-empty-ico">📊</div>'
         + '<p><b>暂未对外开放</b></p>'
-        + '<p class="sc-dim">成绩分析正在准备中。等老师发布成绩后，这里就能看到全班成绩单和你的个人分析。</p>'
+        + '<p class="sc-dim">成绩分析正在准备中。等老师发布成绩后，这里可查看全班成绩单与个人分析。</p>'
         + '</div>');
       return;
     }
@@ -15183,18 +15106,18 @@ function scRenderMe(){
     if(scIsAdmin() && SC.rows.length){
       /* v4.4.0：以前这里直接说「没有你的名字」就没了。现在把选择条也带上，
          让纯管理号能自己挑一个学生看（班级电脑就是这种号）。 */
-      scPane(bar + '<div class="sc-hint">你是管理员，这次考试的成绩里没有你的名字。'
+      scPane(bar + '<div class="sc-hint">当前为管理员账号，本次考试成绩中无本人在列。'
         + '用上面的「查看画像」选一位同学就能看他的画像。</div>');
       return;
     }
     if(scIsAdmin()){
-      scPane('<div class="sc-hint">你是管理员，但这次考试的成绩里没有你的名字 —— 个人画像需要本人成绩才有数据。'
+      scPane('<div class="sc-hint">当前为管理员账号，本次考试成绩中无本人在列 —— 个人画像需要本人成绩方可显示。'
         + '可以切到「全班成绩单」看全班情况。</div>');
       return;
     }
     scPane('<div class="sc-empty">'
       + '<div class="sc-empty-ico">🙋</div>'
-      + '<p>这次考试的成绩里没有找到你的名字。</p>'
+      + '<p>本次考试成绩中未找到本人姓名。</p>'
       + '<p class="sc-dim">未找到本人成绩。如成绩已发布，请联系老师核对成绩表姓名。</p>'
       + '</div>');
     return;
@@ -16511,7 +16434,7 @@ function aiGuideMd() {
   var L = [];
   L.push('# 成绩分析助手 · 使用说明');
   L.push('');
-  L.push('把整份文件发给你的 AI（本地模型也行），再告诉它「开始分析」。');
+  L.push('将整份文件发送给所使用的 AI（本地模型亦可），再令其「开始分析」。');
   L.push('数据不在文件里，让它按下面的接口自己查 —— 接口返回的是**匿名**数据，没有同学姓名。');
   L.push('');
   L.push('## 一、接口');
@@ -16528,22 +16451,22 @@ function aiGuideMd() {
   L.push('| `exam` | 否 | 考试 id，不填取最近一场 |');
   L.push('| `fmt` | 否 | `md` 返回 Markdown（推荐，省 token）/ `json` 给程序读 |');
   L.push('');
-  L.push('示例：`' + apiBase + '&k=' + (akey || '密钥') + '&what=me&no=' + (no || '你的学号') + '&fmt=md`');
+  L.push('示例：`' + apiBase + '&k=' + (akey || '密钥') + '&what=me&no=' + (no || '学号') + '&fmt=md`');
   L.push('');
   L.push('## 二、我的学号');
   L.push('');
-  L.push('`' + (no || '（没查到，请自己填成绩表上的学号）') + '`');
+  L.push('`' + (no || '（未查询到，请填写成绩表上的学号）') + '`');
   L.push('');
   L.push('## 三、访问密钥');
   L.push('');
-  L.push('`' + (akey || '（站主还没开放这个接口，找他要一个密钥）') + '`');
+  L.push('`' + (akey || '（该接口尚未开放，请联系管理员获取密钥）') + '`');
   L.push('');
-  L.push('## 四、你要做的事');
+  L.push('## 四、使用方需执行的操作');
   L.push('');
   L.push('1. 先用 `what=me&no=' + (no || '学号') + '&fmt=md` 拉这个人的成绩；');
   L.push('2. 如果还想看班级整体，再拉 `what=class&fmt=md`；');
   L.push('3. 然后严格按第五节的提示词分析。**不要编造数据里没有的数字**；');
-  L.push('4. 如果接口调不通（网络受限），让用户把那个链接在浏览器里打开，把内容整段粘给你。');
+  L.push('4. 若接口无法访问（网络受限），可在浏览器中打开该链接，将内容整段粘贴。');
   L.push('');
   L.push('## 五、提示词');
   L.push('');
@@ -16590,7 +16513,7 @@ function aiExportDlg(scene) {
       + '<div class="ai-xgrid" id="aiXGrid"></div>'
       + '<label class="ai-xkey"><input type="checkbox" id="aiXKey"> 导出设置时把 API Key 一起写进去</label>'
       + '<p class="ai-note" id="aiXTip" style="margin:2px 0 10px">'
-      + '勾上之后，这个 JSON 拿到的人就能用你的 Key 花钱。只在自己设备之间传。</p>'
+      + '勾选后，获得该 JSON 的人可使用此 Key 产生费用。仅限在本人设备之间传输。</p>'
       + '<div class="ai-acts"><button class="ai-btn" id="aiXClose">关闭</button></div>'
       + '</div>';
     document.body.appendChild(d);
@@ -16646,8 +16569,8 @@ function aiExportDlg(scene) {
 
     d.querySelector('#aiXKey').addEventListener('change', function () {
       d.querySelector('#aiXTip').innerHTML = this.checked
-        ? '<b style="color:#c2410c">会带上 Key。</b>这个文件等同于你的账号密码，只在自己设备之间传。'
-        : '勾上之后，这个 JSON 拿到的人就能用你的 Key 花钱。只在自己设备之间传。';
+        ? '<b style="color:#c2410c">会带上 Key。</b>该文件等同于账号密码，仅限在本人设备之间传输。'
+        : '勾选后，获得该 JSON 的人可使用此 Key 产生费用。仅限在本人设备之间传输。';
     });
   }
 
@@ -16729,7 +16652,7 @@ function aiBarHtml(scene) {
     + '  <button class="ai-mini" data-ai-act="cfg" data-ai-scene="' + scene + '">设置</button>'
     + '  <button class="ai-mini" data-ai-act="export" data-ai-scene="' + scene + '">导出</button>'
     + '</div>'
-    + (ready ? '' : '<div class="ai-idle-h">用自己的 Key，只有你点的时候才会请求，按量计费（DeepSeek 一次约几分钱）。</div>')
+    + (ready ? '' : '<div class="ai-idle-h">使用本人 Key，仅在主动请求时产生调用，按量计费（DeepSeek 单次约几分钱）。</div>')
     + '</div>';
 }
 
@@ -16968,8 +16891,8 @@ function scMeAnalysis(meRow, rk, st, myTotal, myRank, subs){
   var goodText = strong.length
     ? '相对班均领先的是 ' + strong.map(function(x){
         return '<b>' + esc(x.name) + '</b>（' + fmtNum(x.v) + '，超班均 ' + fmtNum(x.d) + ' 分）';
-      }).join(' 和 ') + ' —— 这几科是你的基本盘，稳住即可，不用再压时间。'
-    : '这次没有明显超过班均的科目 —— 说明整体还在追赶阶段，别急着挑科大补，先把最拖后腿那科拉到班均附近最划算。';
+      }).join(' 和 ') + ' —— 以上科目为本人优势科目，保持现有投入即可，无需额外加时。'
+    : '本次无明显高于班均的科目 —— 整体仍处追赶阶段，建议优先将最低分科目提升至班均附近。';
 
   /* ---- ③ 短板：得分率最低的两科 ---- */
   var weak = byRate.slice(-Math.min(2, byRate.length)).reverse().filter(function(x){ return x.d != null && x.d < 0; });
@@ -17983,7 +17906,7 @@ function scPkAiData(A, B, ctx){
         + '</b> 守住，比继续拉大优势更划算。');
     }
     if(edge.length && edge[0].d >= 8){
-      todo.push('你的基本盘是 <b>' + esc(edge[0].name) + '</b>（领先 ' + fmtNum(edge[0].d)
+      todo.push('本人优势科目为 <b>' + esc(edge[0].name) + '</b>（领先 ' + fmtNum(edge[0].d)
         + ' 分）。这一科不用再追加时间，保持现在的训练量即可 —— 时间挪给上面那一科。');
     }
     if(ctx.anA && ctx.anB && ctx.anA.td != null && ctx.anB.td != null && ctx.anA.td !== 0){
@@ -21700,7 +21623,7 @@ function openClassSign(){
   tag.className = 'sign-tag ' + (sign.t==='good'?'good':sign.t==='bad'?'bad':'mid');
   tag.textContent = sign.t==='good' ? '吉签 ✨' : sign.t==='bad' ? '平签 ⚠️' : '凡签';
   document.getElementById('signText').textContent = sign.text;
-  document.getElementById('signSub').textContent = saved ? '今天已经抽过啦，明天 0 点刷新 🌙' : '一天一签，明天 0 点刷新';
+  document.getElementById('signSub').textContent = saved ? '今日已抽取，次日 0 点刷新 🌙' : '一天一签，明天 0 点刷新';
   document.getElementById('signMask').classList.add('show');
   if(!saved) SFX.success();
   renderSignBar();

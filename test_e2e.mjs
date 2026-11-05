@@ -5117,7 +5117,8 @@ console.log('\n【46】第三十四轮·公告时间纪律 + 每日一言随机 
        · 不允许出现「未来时间」的公告（那必然是手写错的）。 */
   const annSeg = idx46.slice(idx46.indexOf('announcements: ['), idx46.indexOf('\n  ],', idx46.indexOf('announcements: [')));
   const annDates = [...annSeg.matchAll(/date:\s*["']([^"']+)["']/g)].map(m => m[1]);
-  t('★公告数组非空（没被脚本改坏）', annDates.length > 50);
+  /* v4.4.5：内置公告只留离线兜底（云端 74 条才是主数据），这里只要求数组结构完好 */
+  t('★内置公告保留兜底条目（没被脚本改坏）', annDates.length >= 2);
   let outOfOrder = 0;
   for (let i = 1; i < annDates.length; i++) if (annDates[i] > annDates[i - 1]) outOfOrder++;
   t('★公告数组严格倒序（' + annDates.length + ' 条，逆序对 ' + outOfOrder + '）', outOfOrder === 0);
@@ -5824,7 +5825,7 @@ console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占�
 
   /* ===== ④ comingSoon 支持自定义提示文案 ===== */
   t('★comingSoon 分支支持 comingSoonMsg 自定义提示',
-    /comingSoonMsg \|\| '功能开发中，敬请期待'/.test(idx51));
+    /comingSoonMsg \|\| '功能开发中'/.test(idx51));
   t('★排行榜等旧卡片不受影响（无 msg 时回退默认文案）',
     /comingSoon: true, active: false/.test(idx51));
 }
@@ -5918,7 +5919,7 @@ console.log('\n【53】第四十三轮·后台成绩分析面板（v2.7.1）');
   t('★分数线允许留空（学校没公布就不画不统计）', /placeholder="分数（可空）"/.test(adm));
   t('★默认三条线，600 分线预填 600', /key:'line600', label:'600 分线', score:600/.test(adm));
   t('★化学 / 生物默认勾「赋分」', /key:'chemistry', name:'化学', full:100, graded:true/.test(adm));
-  t('★科目可勾掉（本次没考的科）', /勾掉本次没考的科目/.test(adm));
+  t('★科目可勾掉（本次没考的科）', /取消勾选本次未考科目/.test(adm));
   t('★分数线可增可删', /scCutAdd/.test(adm) && /data-cut-del/.test(adm));
   t('★年级参照可空（填了才算年级百分位）', /年级人数（可空）/.test(adm) && /年级均分（可空）/.test(adm));
 
@@ -6038,11 +6039,12 @@ console.log('\n【55】第四十六轮·成绩单表头吸附 + 考试按时间�
 
   /* ===== ① 表头 / 姓名列吸附（手机上横向拖动不会看错行） ===== */
   t('★表格容器可纵向滚动（sticky 生效的前提）', /\.sc-tblwrap\{max-height:min\(60vh,460px\);overflow:auto/.test(idx));
-  t('★表头 sticky 吸顶', /\.sc-tbl th\{position:sticky;top:0;z-index:3/.test(idx));
-  t('★班排列吸附左侧', /\.sc-tbl th:nth-child\(1\),\.sc-tbl td:nth-child\(1\)\{position:sticky;left:0/.test(idx));
+  /* v4.4.5：同时写 -webkit-sticky（微信内核老版本只认前缀写法），top 用 -1px 消透缝 */
+  t('★表头 sticky 吸顶（含 -webkit 前缀）', /\.sc-tbl th\{position:-webkit-sticky;position:sticky;top:-1px;z-index:3/.test(idx));
+  t('★班排列吸附左侧', /\.sc-tbl th:nth-child\(1\),\.sc-tbl td:nth-child\(1\)\{position:-webkit-sticky;position:sticky;left:0/.test(idx));
   /* v3.4.0：第二列吸列只在带 .sc-fix2 的表上生效（全班成绩单），
      其余卡片（各科进退步、进退步榜、需关注…）的第二列不再被误固定 */
-  t('★姓名列吸附在其右侧（left:46px，仅 .sc-fix2）', /\.sc-tbl\.sc-fix2 th:nth-child\(2\),\.sc-tbl\.sc-fix2 td:nth-child\(2\)\{position:sticky;left:46px/.test(idx));
+  t('★姓名列吸附在其右侧（left:46px，仅 .sc-fix2）', /\.sc-tbl\.sc-fix2 th:nth-child\(2\),\.sc-tbl\.sc-fix2 td:nth-child\(2\)\{position:-webkit-sticky;position:sticky;left:46px/.test(idx));
   t('★表头两列 z-index 更高（压住滚动内容）', /th:nth-child\(1\)\{z-index:4;background:#fdf8f3\}/.test(idx) && /\.sc-tbl\.sc-fix2 th:nth-child\(2\)\{z-index:4/.test(idx));
   t('★非 fix2 表第二列不再吸列（普通数据列）', (idx.match(/\.sc-tbl th:nth-child\(2\),\.sc-tbl td:nth-child\(2\)\{position:sticky/g) || []).length === 0);
   t('★吸附单元格有不透明背景（否则会透出后面的字）',
@@ -10966,7 +10968,7 @@ console.log('\n【91】第七十九轮·v3.5.6 投票管理（建投票 / 一人
     && /data-vote-submit/.test(idx) && /function voteSubmitDraft\(/.test(idx));
   t('#9 取消选择不消耗撤回次数（本地草稿）', /已取消选择（还没上传，不消耗撤回次数）/.test(idx));
   t('#9 已投再点点赞 → 撤回确认弹窗', /function voteAskRetract\(/.test(idx) && /消耗 1 次撤回机会/.test(idx));
-  t('#9 撤回后可直接重投（自动选上刚点的那项）', /已帮你选上刚才点的那项/.test(idx));
+  t('#9 撤回后可直接重投（自动选上刚点的那项）', /已自动选中刚点击的选项/.test(idx));
   t('#9 撤回按钮与次数提示', /data-vote-retract/.test(idx) && /撤回重投/.test(idx));
   /* v3.19.0：未截止且已登录 → 点赞按钮；未登录（guest）只看结果 */
   t('#9 未截止一律出点赞按钮（登录用户；游客只看结果）',
@@ -12581,6 +12583,46 @@ console.log('\n【94】v4.4.2 点名身份拆细（班干部 / 课代表，认�
     /<b>班级职务不要写这里<\/b>/.test(adm1) && /头衔（可多选）/.test(adm1));
   t('★筛选面板底部写清了班干部 / 课代表怎么认',
     /「班干部」包含班长/.test(big) && /「头衔任命」/.test(big));
+}
+
+console.log('\n【95】v4.4.5 软件简介书面化 / 表头吸顶 / 视频悬浮球限域');
+
+{
+  const app = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const pre = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
+  const chkPath = new URL('./scripts/copycheck.mjs', import.meta.url);
+  const chk = fs.existsSync(chkPath) ? fs.readFileSync(chkPath, 'utf8') : '';
+
+  /* ① 软件简介：卡片说明里不能出现第二人称与指令句 */
+  const descs = [...app.matchAll(/desc:\s*"([^"]{4,400})"/g)].map((m) => m[1]);
+  t('★软件简介可提取（≥10 条）', descs.length >= 10, '实际 ' + descs.length);
+  const badDesc = descs.filter((d) => /你的|您|点下方|点击下方按钮|敬请期待|不用担心/.test(d));
+  t('★软件简介里没有第二人称 / 指令句 / 宣传腔',
+    badDesc.length === 0, badDesc.slice(0, 2).map((d) => d.slice(0, 40)).join(' | '));
+
+  /* ② 文案门禁真的接进部署流程（不是只多了个文件） */
+  t('★部署门禁调用 copycheck（不过就不许部署）',
+    /scripts', 'copycheck\.mjs'/.test(pre) && /站内文案不够书面化/.test(pre));
+  t('★文案检查覆盖 12 个会显示文案的文件',
+    (chk.match(/FILES = \[/) || []).length === 1
+    && /'index\.html'/.test(chk) && /'app\.js'/.test(chk) && /'big\.js'/.test(chk)
+    && /'admin-3\.js'/.test(chk) && /'clock\.html'/.test(chk));
+  t('★文案检查能识别第二人称 / 口语动词 / 语气词',
+    /第二人称/.test(chk) && /口语动作/.test(chk) && /句末语气词/.test(chk));
+
+  /* ③ 表头吸顶：必须带 -webkit 前缀（微信内置浏览器老内核只认前缀写法） */
+  t('★成绩单表头 sticky 带 -webkit 前缀 + 消缝',
+    /\.sc-tbl th\{position:-webkit-sticky;position:sticky;top:-1px/.test(idx));
+  t('★暗色下表头有独立实色背景（吸顶时不透字）',
+    /\.dark \.sc-tbl th\{background:#3d3631/.test(idx));
+
+  /* ④ 视频悬浮球：只在大屏服务（板块 2）显示 */
+  t('★视频悬浮球按当前板块判定（仅板块 2 显示）',
+    /window\.__activeCat !== 2 \|\| !_videoUrl/.test(app));
+  t('★切换板块时收起 / 恢复视频悬浮球',
+    /if\(id === 2\)\{ if\(_videoUrl\) setTimeout\(videoBubbleShow, 0\); \}/.test(app)
+    && /videoBubbleHide\(\);   \/\* v4\.4\.5/.test(app));
 }
 
 console.log('\n' + '='.repeat(52));

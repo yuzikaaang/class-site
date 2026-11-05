@@ -148,7 +148,7 @@ function aiRtTip(){
   if(!el) return;
   var s = aiRtSel();
   if(!s || s.range.collapsed){
-    el.textContent = '选中文字后点左边的按钮';
+    el.textContent = '选中文字后点击左侧按钮';
     return;
   }
   var n = aiRtCount(s.range);
@@ -1050,7 +1050,7 @@ function bdSharePic(url, name, intro, note){
   /* 简介：按宽度折行，最多 5 行 */
   ctx.fillStyle = '#57493d';
   ctx.font = '400 24px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-  var lines = bdWrap(ctx, intro || '打开链接即可查看这个板块的全部内容', W - 96);
+  var lines = bdWrap(ctx, intro || '打开链接可查看该板块全部内容', W - 96);
   lines = lines.slice(0, 5);
   for(var i = 0; i < lines.length; i++){
     ctx.fillText(lines[i], 48, 228 + i * 38);
@@ -1164,7 +1164,7 @@ function paintBoardShares(){
   var host = $('bdShareList');
   if(!host) return;
   if(!BM.shares.length){
-    host.innerHTML = '<div class="bd-empty" style="padding:18px">还没有板块分享链接。点右上角「生成分享链接」试试。</div>';
+    host.innerHTML = '<div class="bd-empty" style="padding:18px">暂无板块分享链接。点击右上角「生成分享链接」创建。</div>';
     return;
   }
   host.innerHTML = BM.shares.map(function(x){
@@ -1897,7 +1897,7 @@ function voTplImport(){
 function voPubDialog(voteId){
   var v = voFind(voteId);
   if(!v) return;
-  if(!VO.pub) { toast('公示配置还在读取，稍等一下再点', 'err'); return; }
+  if(!VO.pub) { toast('公示配置读取中，请稍后重试', 'err'); return; }
   var tpls = VO.pub.templates;
   var cfg = VO.pub.byVote[voteId] || {};
   var opts = tpls.map(function(t){
@@ -2775,14 +2775,27 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.4.5', date: '2026-11-05', type: 'fix', title: '软件简介改书面表述；成绩单表头吸顶加固；视频悬浮球限大屏服务', items: [
+      '站主：卡片里「作业」「意见反馈」这些软件简介没按官方口径改；大屏视频关掉后右下角还留着悬浮球，只应在大屏服务里出现；轻量模式下全班成绩单的表头不跟随滚动',
+      '软件简介：点歌、作业查看、班级课表、听歌平台、课堂笔记、教学课件、每日日报、个人资料查询、全屏时钟、意见反馈等 14 张卡片的说明全部改为书面表述，去掉第二人称、语气词与「点击下方按钮」这类指令句',
+      '正文提示：账号与资料、成绩分享、AI 分析说明、导出加密提示、音频提示等改为无主语句；跳转与未保存提示改为第三人称陈述',
+      '内置公告：app.js 里 90 条早期长公告全部清空，只留 2 条离线兜底；云端公告仍是 4.4 批次的简洁版',
+      '成绩单表头：同时写 -webkit-sticky（微信内置浏览器等老内核只认带前缀的写法，之前会被当成 static，表现就是表头不跟随），top 改 -1px 消除透缝，暗色单独配色',
+      '视频悬浮球：关闭视频后只在大屏服务（板块 2）内显示；切到其它板块或回首页立即收起，回到大屏服务自动恢复',
+      '部署门禁：新增「站内文案书面化」硬性检查（scripts/copycheck.mjs），出现第二人称、口语动词、语气词任一处即阻止部署'
+    ], pub: [
+      { cat: '界面', text: '各软件卡片的说明文字改为书面表述' },
+      { cat: '界面', text: '大屏服务的视频悬浮球仅在板块内显示' },
+      { cat: '成绩', text: '全班成绩单表头滚动时始终吸在顶部' }
+    ] },
   { version: '4.4.4', date: '2026-11-05', type: 'chore', title: '全站文案统一为书面表述，公告改为只写更新内容', items: [
-      '站主：站内语言需要官方、简洁，抽完人之后的备注不该写成「这次是干嘛的」；公告只写更新了什么，不写怎么操作、能带来什么',
-      '统一措辞：提示与说明改为陈述句，去掉「点一下 / 试试 / 别把 / 就行 / 啦 / 哦」等口语与语气词；按钮动作用「点击」，状态用「已 / 暂无 / 无法」',
+      '站主：站内语言需官方、简洁，抽取备注不应使用口语提问式表述；公告只写更新内容，不写操作步骤与效果',
+      '统一措辞：提示与说明改为陈述句，去除口语动词、劝说句与句末语气词；按钮动作统一用「点击」，状态统一用「已 / 暂无 / 无法」',
       '大屏：抽取备注改为「备注 / 选填，填写本次抽取事由」；筛选说明压缩为两句；作业空态、导入导出、锁定与字体说明同步改写',
       '首页与时钟页：登录引导、隐藏区域、数据管理、备份与校园网说明、时钟功能说明全部改为书面表述，删除装饰性 emoji',
       '后台：成员档案、字段管理、提醒、回档等处的提示统一改写；「同学用它登录，告诉他初始密码」改为「成员使用该账号登录，请告知初始密码」',
       '公告：74 条历史公告全部重写，最长由 790 字压到 123 字，平均 35 字，只保留「更新了什么」；删除操作步骤、使用建议与效果描述',
-      '后台补充：把「你自己 / 你设的 / 稍等一下 / 手填」等第二人称与口语改为「当前账号 / 所设 / 正在加载 / 手动填写」'
+      '后台补充：将第二人称与口语表述统一改为「当前账号 / 所设 / 正在加载 / 手动填写」'
     ], pub: [
       { cat: '界面', text: '全站提示与说明文字统一为书面表述' }
     ] },
@@ -2810,7 +2823,7 @@ var REL_BUILTIN = [
       '【抽取历史】每次抽完自动记一条：时间、条件、抽了几人、抽到谁。结果页下方可以写备注（例如「语文课抽查背诵」），历史面板里也能补写。存本机 localStorage，管理员登录时整包推到云端 `pick_history`，换设备也看得到；单个人点「重抽」会同步改掉那条记录，不会出现「屏幕和记录对不上」',
       '【时钟返回】从作业看板点时钟进去，返回回到作业看板（带 `?big=1#/hw`）；从首页点进去还是回首页。原来写死 `./index.html`，一返回就掉到图标墙',
       '【Classworks 退场】首页「作业查看」卡片不再跳原站、不再挂人家的 logo，图标位置直接显示「作业」两个字；相关的那条置顶公告与访问提示里的一行同步改写。站内本来就是作业的正主，外部平台彻底不用了',
-      '【画像选人】个人画像顶部新增「查看画像」下拉，管理员可以挑任意同学看。默认仍然看本人；管理员本人不在成绩表里（班级电脑那种纯管理号）时自动落到第一个学生，不再只显示一句「没有你的名字」。普通同学看不到这个下拉，也切不动',
+      '【画像选人】个人画像顶部新增「查看画像」下拉，管理员可选择任意同学查看。默认仍显示本人；管理员本人不在成绩表内（班级电脑等纯管理账号）时自动落到第一个学生，不再仅提示「无本人成绩」。普通成员不显示该下拉，亦无法切换',
       '【实测】字体 5 套 computed 值互不相同；只勾「班干部」可抽 1 人；抽完历史里立刻出现记录、备注写入成功；`cls_clock_from=hw` 时返回链接是 `./index.html?big=1#/hw`；管理员选人后画像换成对方数据，非管理员切换无效'
     ], pub: [
       { cat: '作业', text: '作业查看不再跳外部平台，图标已换成「作业」；随机点名能抽班干部，还能翻历史、写备注' },
@@ -3091,7 +3104,7 @@ var REL_BUILTIN = [
       { cat: '资料', text: '勾选时会标注哪些字段在档案里设了可见性限制，避免勾了却不显示' }
     ] },
   { version: '3.15.4', date: '2026-10-28', type: 'fix', title: '用姓名也能登录', items: [
-      '站主在「信息分享」页登录不进去：页面提示「用户名：你的姓名」，可他自己的账号是拼音 yuzikang，按提示输「余子康」当然对不上',
+      '站主在「信息分享」页无法登录：页面提示「用户名：本人姓名」，但其账号为拼音，按提示输入中文姓名无法登录',
       '登录接口加了一层兜底：用户名查不到时，再按「姓名」找一次，全班唯一就放行 —— 同学记不住拼音也能登',
       '有多个同名账号时不再瞎猜，直接提示「请改用管理员给的登录名」',
       '分享页提示与报错文案改准确：用户名多数是姓名、个别是拼音；401 时顺带提醒「连错 5 次会锁 15 分钟」',
@@ -3265,7 +3278,7 @@ var REL_BUILTIN = [
     ] },
   { version: '3.9.25', date: '2026-10-25', type: 'feat', title: '翻页动画重做 · 时钟使用记录（本地 + 云端 + 后台）', items: [
       '翻页时钟的数字现在跟着卡片一起翻：上半片翻下去的同时，新的下半片从后面翻上来，不再「翻完才跳一下」',
-      '时钟页右上角多了「记录」，打开是右侧抽屉：今天几点到几点用了什么、用了多久一目了然',
+      '时钟页右上角多了「记录」，打开是右侧抽屉：当日各时段用途与时长一览',
       '自习会单独统计：今天一共自习多久、休息多久、用掉几个番茄',
       '登录后记录自动同步到云端，换设备也能看到；没登录就只记在这台设备上',
       '后台新增「安全 → 时钟记录」：按日期看谁在什么时候用了多久，点「明细」展开每一段',
@@ -3711,7 +3724,7 @@ var REL_BUILTIN = [
     ] },
   { version: '3.5.40', date: '2026-10-19', type: 'feat', title: '字段本人可编辑 · 投票明细 · 页面级在线时长 · 定向弹窗 · 导出图片',
     items: [
-      '字段管理：每个字段后面多了一个「本人可编辑」开关。打开后，同学可以在「我的资料」里点「改」直接修改这一项，改完立即生效；姓名/学号/身份/头衔永远只能由你改',
+      '字段管理：每个字段后面多了一个「本人可编辑」开关。打开后，同学可以在「我的资料」里点「改」直接修改这一项，修改后立即生效；姓名/学号/身份/头衔仅可由管理员修改',
       '投票管理：每场投票多了「投票明细」，能看到每一张票是谁投的、投给哪个选项、什么时候投的（撤回的票也会标出来）',
       '在线时长：新增「时间花在哪些页面」，能看到成绩分析、打砖块、后台各面板分别待了多久；每个人的明细里也有他自己的页面分布',
       '通用弹窗：新增「投放对象」——可以只弹给某个人、某几个人，或按身份（管理员/学生/老师）、按头衔（团支书/课代表…）投放',
@@ -3736,7 +3749,7 @@ var REL_BUILTIN = [
     ] },
   { version: '3.5.37', date: '2026-10-18', type: 'feat', title: '「仅管理员」更名「仅后端可见」，语义更明确',
     items: [
-      '改名叫「仅后端可见」了，谁能看到一目了然：你（后台档案详情 + 自己前台的「我的资料」）',
+      '更名为「仅后端可见」，可见范围明确：管理员（后台档案详情与本人前台的「我的资料」）',
       '其他所有人前台都查不到 —— 包括这个字段的主人本人（普通同学），连键都不会下发',
       '你在前台查询别的同学时依然没有特权，和大家的查询规则一视同仁',
       '存储值没变（还是 admin），原来设过的字段不用重新设置'
@@ -3748,7 +3761,7 @@ var REL_BUILTIN = [
       '在线时长现在覆盖所有页面：玩游戏的每分钟、后台挂着的每分钟都算在线',
       '后台「游戏数据」面板支持 13 款游戏的次数 / 时长 / 成绩展示'
     ] },
-  { version: '3.5.35', date: '2026-10-18', type: 'feat', title: '在线时长统计：单次 / 累计一目了然',
+  { version: '3.5.35', date: '2026-10-18', type: 'feat', title: '在线时长统计：单次与累计分别显示',
     items: [
       '新增「在线时长」面板（后台 → 安全）：每人累计在线、在线次数、最长单次、最近在线，可切 今天 / 7 / 30 / 90 天',
       '点「明细」可看每一段连续在线的起止时刻与时长',
@@ -3961,7 +3974,7 @@ function relMove(i, dir){
   if(j < 0 || j >= list.length) return;
   var t = list[i]; list[i] = list[j]; list[j] = t;
   paintReleases();
-  toast('顺序已调整，记得点「编辑」保存任一条以同步到云端', 'ok', 3500);
+  toast('顺序已调整，请点击「编辑」保存任一条以同步至云端', 'ok', 3500);
 }
 
 function relEdit(idx){
@@ -4322,7 +4335,7 @@ function scEditDisplay(){
 
       + '<div class="field"><label>趋势默认看几次</label>'
       +   '<select id="cfTrend">'
-      +     scCfgOpt(c.trendDefault, 'all', '全部（推荐 —— 你们一年才 6~8 次大考）')
+      +     scCfgOpt(c.trendDefault, 'all', '全部（推荐 —— 本班每年仅 6~8 次大型考试）')
       +     scCfgOpt(c.trendDefault, '5', '近 5 次')
       +     scCfgOpt(c.trendDefault, '3', '近 3 次')
       +   '</select></div>'
@@ -4345,7 +4358,7 @@ function scEditDisplay(){
 
       + '<div class="field"><label>下面这些内容的「可见范围」</label>'
       +   '<p class="muted" style="font-size:.78rem;margin:6px 0 8px">'
-      +     '这几块都是<b>给你看的分析</b>，落到学生手里容易变成公开处刑，所以默认全部隐藏。'
+      +     '以下内容<b>仅供管理员查看</b>，向学生开放易造成成绩公开比较，默认全部隐藏。'
       +     '你自己任何时候都能看到。</p>'
       +   SC_DISPLAY_ITEMS.map(function(it){
           return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)">'
@@ -4414,13 +4427,13 @@ function scEditDisplay(){
           paintDemo();
         }
         function paintDemo(){
-          var k = SC_CFG.aiKey || '你的密钥';
+          var k = SC_CFG.aiKey || '本人密钥';
           var on = bx.querySelector('#cfAiApi').value === 'on';
           var base = (API_BASE || '') + '/api/scores?action=ai';
           demo.innerHTML = on
-            ? '<div class="muted">自己先试一下（浏览器直接打开就是给人看的 Markdown）：</div>'
-              + '<div style="word-break:break-all"><a href="' + esc(base + '&k=' + encodeURIComponent(k) + '&what=me&no=你的学号&fmt=md') + '" target="_blank" rel="noopener">'
-              + esc(base + '&k=' + encodeURIComponent(k) + '&what=me&no=你的学号&fmt=md') + '</a></div>'
+            ? '<div class="muted">可先行测试（浏览器直接打开即为可读的 Markdown）：</div>'
+              + '<div style="word-break:break-all"><a href="' + esc(base + '&k=' + encodeURIComponent(k) + '&what=me&no=学号&fmt=md') + '" target="_blank" rel="noopener">'
+              + esc(base + '&k=' + encodeURIComponent(k) + '&what=me&no=学号&fmt=md') + '</a></div>'
               + '<div class="muted" style="margin-top:6px">'
               +   '<code>what=me</code> 单人 · <code>what=class</code> 班级概况 · <code>what=exams</code> 考试列表 · '
               +   '<code>fmt=json</code> 给程序读</div>'
@@ -4714,7 +4727,7 @@ function scNamePaint(){
         }).join('')
       + '</tbody></table></div>'
       + '<p class="muted" style="font-size:.8rem;margin:8px 0 0">取消关联后，这些成绩行会解绑账号（成绩数据不动，只是他个人页看不到自己的那部分）。'
-      + '如果其实是名字打错了，用上面的「② 改名」更合适 —— 改完就一劳永逸。</p>';
+      + '如为姓名录入错误，可使用上方「② 改名」，修改后长期有效。</p>';
   }
 
   el.innerHTML = html;
@@ -5112,7 +5125,7 @@ function scEditExam(id){
               return '<option value="' + esc(t) + '"' + (e && e.type === t ? ' selected' : '') + '>' + esc(t) + '</option>';
             }).join('') + '</select></div>'
       + '</div>'
-      + '<div class="field"><label>科目与满分（勾掉本次没考的科目；化学 / 生物按你们的规则默认赋分）</label>'
+      + '<div class="field"><label>科目与满分（取消勾选本次未考科目；化学 / 生物按本班规则默认赋分）</label>'
       +   '<div id="scSubjBox" style="margin-top:6px">'
       +     subs.map(scSubjRow).join('')
       +   '</div></div>'
@@ -6709,7 +6722,7 @@ function ishareForm(edit){
     +     '<input id="isMax" type="number" min="1" placeholder="不限" value="' + (edit && edit.maxViews ? edit.maxViews : '') + '"></div>'
     + '</div>'
     + '<div class="field"><label>登录页提示 · 用户名</label>'
-    +   '<input id="isHintU" maxlength="120" placeholder="用户名：你的姓名（例：张三）" value="' + esc(edit ? (edit.hintUser || '') : '') + '"></div>'
+    +   '<input id="isHintU" maxlength="120" placeholder="用户名：本人姓名（例：张三）" value="' + esc(edit ? (edit.hintUser || '') : '') + '"></div>'
     + '<div class="field"><label>登录页提示 · 密码</label>'
     +   '<input id="isHintP" maxlength="120" placeholder="密码：班级站登录密码；忘了找管理员重置" value="' + esc(edit ? (edit.hintPass || '') : '') + '"></div>';
 
