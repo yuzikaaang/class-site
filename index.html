@@ -4666,7 +4666,7 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .pfx-b .bx-lid{
   position:absolute;left:-6%;right:-6%;top:-9%;height:25%;z-index:2;
   transform-origin:50% 100%;transform-style:preserve-3d;
-  transition:transform .64s cubic-bezier(.3,.7,.2,1);
+  transition:transform .64s cubic-bezier(.3,.7,.2,1),opacity .26s ease .26s;
   border-radius:9px;background:linear-gradient(165deg,#fffdf8,#f3d9bd);
   border:1px solid rgba(120,53,15,.16);box-shadow:0 7px 14px rgba(120,53,15,.2);
 }
@@ -4674,9 +4674,10 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   background:linear-gradient(165deg,#443730,#2e241d);
   border-color:rgba(255,255,255,.1);box-shadow:0 7px 14px rgba(0,0,0,.45);
 }
-.pfx-b.open .bx-lid{transform:translate3d(0,-9%,0) rotateX(-104deg)}
+.pfx-b.open .bx-lid{transform:translate3d(0,-9%,0) rotateX(-104deg);opacity:0}
 .pfx-b.open .bx{transform:scale(.96) translateY(2%)}
 .pfx-b.open .bx-body{opacity:.5}
+.pfx-b.open .bx-mark{opacity:0;transition:opacity .2s ease}
 .pfx-b .bx-name{
   position:absolute;left:-8%;right:-8%;top:32%;z-index:3;pointer-events:none;
   display:flex;flex-direction:column;align-items:center;gap:3px;
@@ -4729,7 +4730,7 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   background:linear-gradient(180deg,rgba(0,0,0,.04),rgba(0,0,0,.42));
 }
 .pfx-c .cd-aura{
-  position:absolute;inset:-30%;opacity:.5;
+  position:absolute;inset:-30%;opacity:.72;
   background:radial-gradient(circle at 50% 42%,rgba(255,255,255,.9),transparent 62%);
 }
 .pfx-c .cd-front b{

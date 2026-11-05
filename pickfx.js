@@ -148,7 +148,8 @@
     var sw = swatch(it.no), cls = mode === 'card' ? 'pfx-c' : 'pfx-b';
     var style = 'style="--pc:' + sw.c + ';--ps:' + sw.s + '"';
     if (mode === 'card') {
-      return '<button type="button" class="pfx-cell ' + cls + '" data-i="' + i + '" ' + style + '>'
+      return '<button type="button" class="pfx-cell ' + cls + '" data-i="' + i + '" ' + style
+        + ' aria-label="' + (mode === 'card' ? '第 ' + (i + 1) + ' 张卡片' : '第 ' + (i + 1) + ' 个盲盒') + '">'
         + '<span class="cd-beam"></span>'
         + '<span class="cd-in">'
         +   '<span class="cd-face cd-back"><span class="cd-sig">'
@@ -164,7 +165,8 @@
         + '</span>'
         + '</button>';
     }
-    return '<button type="button" class="pfx-cell ' + cls + '" data-i="' + i + '" ' + style + '>'
+    return '<button type="button" class="pfx-cell ' + cls + '" data-i="' + i + '" ' + style
+      + ' aria-label="第 ' + (i + 1) + ' 个盲盒">'
       + '<span class="bx-beam"></span>'
       + '<span class="bx-glow"></span>'
       + '<span class="bx">'
