@@ -29,7 +29,7 @@ const LIST = process.argv.includes('--list');
 /* 只扫「用户可见文案」所在的文件。
    ⚠️ 不要扫 api/ 与 scripts/ —— 那里是接口与工具，不是给人看的。 */
 const FILES = [
-  'index.html', 'app.js', 'big.js', 'clock.html',
+  'index.html', 'app.js', 'big.js', 'pickfx.js', 'clock.html',
   'admin.html', 'admin-1.js', 'admin-2.js', 'admin-3.js',
   'share.html', 'share-card.js', 'basic.html', 'info.html',
 ];

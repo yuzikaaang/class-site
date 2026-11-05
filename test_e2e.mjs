@@ -12625,6 +12625,60 @@ console.log('\n【95】v4.4.5 软件简介书面化 / 表头吸顶 / 视频悬�
     && /videoBubbleHide\(\);   \/\* v4\.4\.5/.test(app));
 }
 
+console.log('\n【96】v4.5.0 抽取动画：盲盒 / 抽卡 / 宝箱，学号分段色');
+
+{
+  const fsx = fs.readFileSync(new URL('./pickfx.js', import.meta.url), 'utf8');
+  const big = fs.readFileSync(new URL('./big.js', import.meta.url), 'utf8');
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const sw = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+  const yml = fs.readFileSync(new URL('./.github/workflows/deploy-pages.yml', import.meta.url), 'utf8');
+  const chk = fs.readFileSync(new URL('./scripts/copycheck.mjs', import.meta.url), 'utf8');
+
+  /* ① 三套动画都在，且能按人数出格子 */
+  t('★三种动画模式齐备（box / card / case）',
+    /mode !== 'box' && mode !== 'card' && mode !== 'case'/.test(fsx)
+    && /'box'/.test(fsx) && /'card'/.test(fsx) && /'case'/.test(fsx));
+  t('★盲盒与抽卡逐张开启，宝箱是横向转盘', /gridCtl\(/.test(fsx) && /caseCtl\(/.test(fsx));
+
+  /* ② 学号分段色：01–10 … 51–62，61/62 与 51–60 同色 */
+  t('★六段色板（另含 1 个中性灰）', (fsx.match(/c: '#[0-9a-f]{6}', s: '#[0-9a-f]{6}'/g) || []).length === 7);
+  t('★61 / 62 号与 51–60 同段（夹到第 6 段）',
+    /Math\.min\(5, Math\.floor\(\(n - 1\) \/ 10\)\)/.test(fsx));
+  t('★无学号账号给中性灰（不参与分段）', /if \(!n \|\| n < 1\) return GREY/.test(fsx));
+
+  /* ③ 离线：不许有任何外链资源 */
+  const ext = (fsx.match(/https?:\/\/|\.mp3|\.wav|\.png|\.jpg|\.svg['"]|@import/g) || []);
+  t('★动画不依赖任何外部资源（离线可用）', ext.length === 0, ext.slice(0, 3).join(' '));
+  t('★音效用 WebAudio 现场合成（无音频文件）', /createOscillator/.test(fsx) && /cls_sfx/.test(fsx));
+
+  /* ④ 必须有跳过出口，且播完自动回结果页 */
+  t('★顶部常驻「跳过」', /class="pfx-skip"/.test(fsx) && /querySelector\('\.pfx-skip'\)\.addEventListener/.test(fsx));
+  t('★播完调用 onDone 回结果页', /if \(cb\) cb\(\)/.test(fsx) || /cb\(\)/.test(fsx));
+
+  /* ⑤ 与点名面板的接线 */
+  t('★关闭动画时直接出结果（不播放任何动画）',
+    /if\(p\.fx === 'off' \|\| typeof PickFX === 'undefined'\)\{\s*\n\s*commitPick\(picked, false\);/.test(big));
+  t('★单个重抽走单抽动画（single: true）', /single: true,\s*\n\s*onDone: apply/.test(big));
+  t('★关闭面板会撤掉舞台，不留浮层', /if\(typeof PickFX !== 'undefined'\) PickFX\.stop\(\);\s*\n\s*BIG\.pick\.state = 'setup';/.test(big));
+  t('★结果页带学号色条与学号', /--pc:' \+ sw\.c/.test(big) && /bpick-res-no/.test(big));
+  t('★抽取设置里可选动画档位并持久化',
+    /cls_pick_fx/.test(big) && /pickSetFx/.test(big) && /\['off', 'box', 'card', 'case'\]/.test(big));
+  t('★宝箱可选「抽取时隐藏姓名」', /cls_pick_hide/.test(big) && /pickHideToggle/.test(big));
+
+  /* ⑥ 发布链路：少一个，线上点名就报错或掉版本 */
+  t('★index.html 引入 pickfx.js（带版本查询串）', /pickfx\.js\?v=/.test(idx));
+  t('★Service Worker 预缓存 pickfx.js（断网也能抽）', /'\.\/pickfx\.js'/.test(sw));
+  t('★发布白名单含 pickfx.js', /^\s*pickfx\.js\s*$/m.test(yml));
+  t('★文案检查覆盖 pickfx.js', /'pickfx\.js'/.test(chk));
+
+  /* ⑦ 停针计算：必须用 offsetWidth，不能用 rect（入场 scale 会带偏） */
+  t('★转盘尺寸用 offsetWidth / offsetLeft（避开入场缩放）',
+    /a\.offsetWidth/.test(fsx) && /b\.offsetLeft - a\.offsetLeft/.test(fsx));
+  t('★宝箱隐藏姓名时只出光辉、停止后补名字',
+    /'<span class="pfx-orb"><\/span>'/.test(fsx) && /orb\.outerHTML = nameOf/.test(fsx));
+}
+
 console.log('\n' + '='.repeat(52));
 console.log('结果: ' + pass + ' 通过, ' + fail + ' 失败  (共 ' + (pass + fail) + ' 项)');
 if (fail) { console.log('\n失败项:'); fails.forEach(f => console.log('  - ' + f)); }

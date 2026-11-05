@@ -36,7 +36,7 @@
     tiles: {},
     _saveT: null,
     _clockT: null,
-    pick: { open: false, n: 1, state: 'setup', names: [], timer: null, roster: [], ex: {} }
+    pick: { open: false, n: 1, state: 'setup', names: [], timer: null, roster: [], ex: {}, fx: 'off', hideName: true }
   };
 
   function $(id){ return document.getElementById(id); }
@@ -1929,6 +1929,47 @@
 
   function rnd(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
+  /* ---------- v4.5.0 抽取动画：学号分段色 ----------
+     学号形如 250501，取末两位即班内序号（01–62）。
+     01–10 / 11–20 / 21–30 / 31–40 / 41–50 / 51–62 各一色；
+     61、62 归入最后一段 —— 站主要求与 51–60 同色。
+     老师与管理员账号没有学号，给中性灰，不参与分段。 */
+  var FX_KEY = 'cls_pick_fx', FX_HIDE_KEY = 'cls_pick_hide';
+  var FX_LIST = ['off', 'box', 'card', 'case'];
+
+  function loadFx(){
+    try{ var v = localStorage.getItem(FX_KEY); return FX_LIST.indexOf(v) >= 0 ? v : 'off'; }catch(e){ return 'off'; }
+  }
+  function saveFx(v){ try{ localStorage.setItem(FX_KEY, v); }catch(e){} }
+  function loadHide(){ try{ return localStorage.getItem(FX_HIDE_KEY) !== '0'; }catch(e){ return true; } }
+  function saveHide(v){ try{ localStorage.setItem(FX_HIDE_KEY, v ? '1' : '0'); }catch(e){} }
+
+  function sidNo(st){
+    var d = String((st && st.studentId) || '').replace(/\D/g, '');
+    if(d.length < 2) return 0;
+    var n = parseInt(d.slice(-2), 10);
+    return (n >= 1 && n <= 99) ? n : 0;
+  }
+  function stuOf(n){
+    var arr = BIG.pick.roster || [];
+    for(var i = 0; i < arr.length; i++) if(arr[i].name === n) return arr[i];
+    return null;
+  }
+  function fxSwatch(no){
+    return (typeof PickFX !== 'undefined') ? PickFX.swatch(no) : { c: '#7b8794', s: '#cbd5e1' };
+  }
+  function pickItem(n){ return { name: n, no: sidNo(stuOf(n)) }; }
+  function pickPoolItem(){ return pool().map(function (st){ return { name: st.name, no: sidNo(st) }; }); }
+
+  /* 不重复抽 n 个：先把候选洗成副本，抽一个删一个 */
+  function drawUnique(cand, n){
+    var rest = cand.slice(), out = [];
+    while(out.length < n && rest.length){
+      out.push(rest.splice(Math.floor(Math.random() * rest.length), 1)[0]);
+    }
+    return out;
+  }
+
   global.bigPickOpen = function (){ BIG.pickOpen(); };
 
   BIG.pickOpen = function (){
@@ -1937,6 +1978,8 @@
     BIG.pick.ex = loadEx();
     BIG.pick.f = loadF();
     BIG.pick.n = Math.min(Math.max(1, BIG.pick.n || 1), 10);
+    BIG.pick.fx = loadFx();
+    BIG.pick.hideName = loadHide();
     BIG.pick.state = 'setup';
     BIG.pick.names = [];
     BIG.pick.rec = null;
@@ -1959,6 +2002,8 @@
     var m = $('bpickMask');
     if(m) m.classList.remove('show');
     if(BIG.pick.timer){ clearInterval(BIG.pick.timer); BIG.pick.timer = null; }
+    /* 动画还在播的时候关面板，舞台要一起撤掉，否则会浮在首页上 */
+    if(typeof PickFX !== 'undefined') PickFX.stop();
     BIG.pick.state = 'setup';
   };
 
@@ -1971,41 +2016,63 @@
     BIG.pickBody();
   };
 
-  BIG.pickStart = function (){
-    var p = names(pool());
-    if(!p.length){ toast('当前条件下无可用人员，请调整条件', true); return; }
-    BIG.pick.state = 'rolling';
-    var n = Math.min(BIG.pick.n, p.length);
-    BIG.pick.names = [];
-    for(var i = 0; i < n; i++) BIG.pick.names.push(rnd(p));
+  /* v4.5.0：结果先定、动画后演。
+     这样动画中途点「跳过」、关面板、甚至动画资源出问题，都不会改变抽到的人，
+     也不会出现「看到的」和「记进历史」的两份名单。 */
+  function commitPick(picked, fx){
+    var p = BIG.pick;
+    p.names = picked.slice();
+    p.state = 'result';
+    try{ phAdd(picked); }catch(e){}
     BIG.pickBody();
+    try{
+      if(typeof SFX === 'undefined') return;
+      if(fx){ return; }                       /* 动画自己收过音，这里不叠加 */
+      if(SFX.pop) SFX.pop(); else if(SFX.success) SFX.success();
+    }catch(e){}
+  }
 
-    var t0 = Date.now();
-    if(BIG.pick.timer) clearInterval(BIG.pick.timer);
-    BIG.pick.timer = setInterval(function (){
-      var el = $('bpickRoll');
-      if(el){
-        el.innerHTML = BIG.pick.names.map(function (){
-          return '<div class="bpick-roll-item">' + esc0(rnd(p)) + '</div>';
-        }).join('');
-      }
-      if(Date.now() - t0 > 1400){
-        clearInterval(BIG.pick.timer);
-        BIG.pick.timer = null;
-        var picked = [], guard = 0;
-        while(picked.length < n && guard < 500){
-          guard++;
-          var x = rnd(p);
-          if(picked.indexOf(x) < 0) picked.push(x);
-        }
-        BIG.pick.names = picked;
-        BIG.pick.state = 'result';
-        try{ phAdd(picked); }catch(e){}
-        BIG.pickBody();
-        try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
-      }
-    }, 70);
+  BIG.pickStart = function (){
+    /* 上一次的舞台若因异常没撤干净，先清掉，避免两层叠在一起 */
+    if(typeof PickFX !== 'undefined') PickFX.stop();
+    var cand = names(pool());
+    if(!cand.length){ toast('当前条件下无可用人员，请调整条件', true); return; }
+    var p = BIG.pick;
+    var n = Math.min(p.n, cand.length);
+    var picked = drawUnique(cand, n);
+    p.names = picked.slice();
+
+    /* 关闭动画：直接出结果，不留滚动等待 */
+    if(p.fx === 'off' || typeof PickFX === 'undefined'){
+      commitPick(picked, false);
+      return;
+    }
+
+    p.state = 'fx';
+    BIG.pickBody();
+    PickFX.play({
+      mode: p.fx,
+      items: picked.map(pickItem),
+      pool: pickPoolItem(),
+      hide: !!p.hideName,
+      single: false,
+      onDone: function (){ commitPick(picked, true); }
+    });
   };
+
+  /* 写回抽取历史里那一条：单个人重抽后，记录必须跟屏幕一致 */
+  function syncRec(){
+    try{
+      var rec = BIG.pick.rec;
+      if(!rec || !rec.id) return;
+      var list = phMerge();
+      for(var k = 0; k < list.length; k++){
+        if(list[k].id === rec.id){ list[k].names = BIG.pick.names.slice(); list[k].n = BIG.pick.names.length; break; }
+      }
+      rec.names = BIG.pick.names.slice();
+      phSave(list, false);
+    }catch(e){}
+  }
 
   BIG.pickAgain = function (){
     BIG.pick.state = 'setup';
@@ -2013,25 +2080,30 @@
   };
 
   BIG.pickReroll = function (i){
-    var p = names(pool());
-    if(!p.length) return;
+    var cand = names(pool());
+    if(!cand.length) return;
     var others = BIG.pick.names.filter(function (_, k){ return k !== i; });
-    var cand = p.filter(function (n){ return others.indexOf(n) < 0; });
-    if(!cand.length) cand = p;
-    BIG.pick.names[i] = rnd(cand);
-    /* 单个人重抽 = 这次抽取的结果变了，历史里那条要跟着改，不然记录和屏幕对不上 */
-    try{
-      var rec = BIG.pick.rec;
-      if(rec && rec.id){
-        var list = phMerge();
-        for(var k = 0; k < list.length; k++){
-          if(list[k].id === rec.id){ list[k].names = BIG.pick.names.slice(); list[k].n = BIG.pick.names.length; break; }
-        }
-        rec.names = BIG.pick.names.slice();
-        phSave(list, false);
-      }
-    }catch(e){}
-    BIG.pickBody();
+    var rest = cand.filter(function (n){ return others.indexOf(n) < 0; });
+    if(!rest.length) rest = cand.slice();
+    var next = rnd(rest);
+
+    function apply(){
+      BIG.pick.names[i] = next;
+      syncRec();
+      BIG.pickBody();
+    }
+
+    var p = BIG.pick;
+    if(p.fx === 'off' || typeof PickFX === 'undefined'){ apply(); return; }
+    /* 单个重抽固定按「单抽」演：只开一个盒子 / 翻一张牌 / 转一轮 */
+    PickFX.play({
+      mode: p.fx,
+      items: [pickItem(next)],
+      pool: pickPoolItem(),
+      hide: !!p.hideName,
+      single: true,
+      onDone: apply
+    });
   };
 
   /* 条件面板开关 */
@@ -2064,6 +2136,19 @@
     else arr.push(role);
     f.role = arr;
     saveF();
+    BIG.pickBody();
+  };
+
+  /* v4.5.0：动画开关。选一次记一次，下次打开面板还是上次的选择。 */
+  BIG.pickSetFx = function (v){
+    if(FX_LIST.indexOf(v) < 0) return;
+    BIG.pick.fx = v;
+    saveFx(v);
+    BIG.pickBody();
+  };
+  BIG.pickHideToggle = function (){
+    BIG.pick.hideName = !BIG.pick.hideName;
+    saveHide(BIG.pick.hideName);
     BIG.pickBody();
   };
 
@@ -2115,6 +2200,44 @@
     return arr.join(' · ');
   }
 
+  /* 动画选择区（v4.5.0）：关闭 / 盲盒 / 抽卡 / 宝箱。
+     颜色图例与动画里的一致，取自 PickFX 的同一份色板，避免两处色值走偏。 */
+  function fxPanel(){
+    var p = BIG.pick, fx = p.fx || 'off';
+    var labels = [['off', '关闭'], ['box', '盲盒'], ['card', '抽卡'], ['case', '宝箱']];
+    var chips = labels.map(function (x){
+      return '<button type="button" class="bpick-chip sm' + (fx === x[0] ? ' on' : '') + '"'
+        + ' onclick="BIG.pickSetFx(\'' + x[0] + '\')">' + x[1] + '</button>';
+    }).join('');
+
+    var ranges = ['01–10', '11–20', '21–30', '31–40', '41–50', '51–62'];
+    var dots = ranges.map(function (r, i){
+      var sw = fxSwatch(i * 10 + 1);
+      return '<i style="--pc:' + sw.c + ';--ps:' + sw.s + '"></i>' + r;
+    }).join('');
+
+    var tip;
+    if(fx === 'off'){
+      tip = '<p class="bpick-fx-tip">关闭动画后，点击「开始抽取」直接显示结果。</p>';
+    } else if(fx === 'case'){
+      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。'
+        + (p.hideName ? '转盘停止前只显示光辉颜色，停止后显示姓名。' : '转盘过程中姓名随光辉一同显示。') + '</p>';
+    } else {
+      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。逐张开启，先显示光辉颜色，再显示姓名。</p>';
+    }
+
+    var hide = (fx === 'case')
+      ? '<div class="bpick-fx-row" style="margin-top:9px"><span class="bpick-fx-k">姓名</span>'
+        + '<div class="bpick-chips"><button type="button" class="bpick-chip sm' + (p.hideName ? ' on' : '') + '"'
+        + ' onclick="BIG.pickHideToggle()">抽取时隐藏姓名</button></div></div>'
+      : '';
+
+    return '<div class="bpick-fx"><div class="bpick-fx-row"><span class="bpick-fx-k">动画</span>'
+      + '<div class="bpick-chips">' + chips + '</div></div>' + hide + tip + '</div>';
+  }
+
+  function two(n){ n = String(n); return n.length < 2 ? '0' + n : n; }
+
   BIG.pickBody = function (){
     var box = $('bpickBody');
     if(!box) return;
@@ -2132,6 +2255,13 @@
 
     if(!all.length){
       box.innerHTML = head + '<div class="bpick-empty">名单加载失败。<br>请确认已登录，并检查网络后重试。</div>';
+      return;
+    }
+
+    /* 动画播放中：舞台盖在面板上方，这里只留一句占位，
+       避免背后露出半份结果 —— 也避免面板被误点。 */
+    if(p.state === 'fx'){
+      box.innerHTML = head + '<div class="bpick-empty">抽取动画播放中。</div>';
       return;
     }
 
@@ -2232,6 +2362,7 @@
         + '<div class="bpick-count"><button type="button" onclick="BIG.pickCount(-1)">−</button>'
         +   '<span><b>' + p.n + '</b> 人</span>'
         +   '<button type="button" onclick="BIG.pickCount(1)">+</button></div>'
+        + fxPanel()
         + '<button type="button" class="bpick-go" onclick="BIG.pickStart()">开始抽取</button>'
         + '<button type="button" class="bpick-link" onclick="BIG.pickExOpen()">名单设置'
         +   (exCount ? '（已排除 ' + exCount + ' 人）' : '') + '</button>'
@@ -2251,7 +2382,10 @@
     box.innerHTML = head
       + '<div class="bpick-res">'
       + p.names.map(function (n, i){
-          return '<div class="bpick-res-row"><b>' + esc0(n) + '</b>'
+          var no = sidNo(stuOf(n)), sw = fxSwatch(no);
+          return '<div class="bpick-res-row" style="--pc:' + sw.c + ';--ps:' + sw.s + '">'
+            + '<b>' + esc0(n) + '</b>'
+            + '<span class="bpick-res-no">' + (no ? two(no) + ' 号' : '') + '</span>'
             + '<button type="button" title="只重抽这一个" onclick="BIG.pickReroll(' + i + ')">' + ico('rotate-cw', 16) + '</button></div>';
         }).join('')
       + '</div>'

@@ -108,7 +108,7 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '4.4.5'
+const SITE_VER = '4.5.0'
 
 /* v3.9.16（站主）：缓存桶跟着版本走。
    ------------------------------------------------------------
@@ -130,7 +130,7 @@ const CACHE = 'class-site-' + SITE_VER
 const PRECACHE = ['./app.min.js', './auth-bus.js',
   /* v3.19.0：大屏模式（图标墙 / 作业页 / 点名）。离线也要能进大屏，
      所以跟着一起预缓存；它不是首屏必需，放在 app.min.js 之后即可。 */
-  './big.js', './favicon.svg', './manifest.webmanifest',
+  './big.js', './pickfx.js', './favicon.svg', './manifest.webmanifest',
   './fonts/inter-latin.woff2', './fonts/jetbrains-mono-latin.woff2',
   /* v3.5.40：作业/排期导出图片用的共享画笔，离线也要能生成 */
   './share-card.js', './badge.png', './clock.html']
