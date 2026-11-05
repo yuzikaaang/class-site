@@ -103,7 +103,7 @@ function paintStudy(){
 
 function saveStudy(){
   var c = STATE.study;
-  if(!c){ toast('还没加载完，稍等一下', 'err'); return; }
+  if(!c){ toast('正在加载', 'err'); return; }
   var typeBox = $('stBody').querySelector('#stOn');
   if(typeBox) c.on = typeBox.checked;
 
@@ -1135,7 +1135,7 @@ function addFieldDialog(){
   var body =
     '<div class="alert info" style="margin:0 0 14px">'
     +   '加完之后，每位同学都能在「编辑资料」里填这个字段，'
-    +   '前台也会按你设的可见性展示。'
+    +   '前台将按所设可见性展示。'
     + '</div>'
     + '<div class="field"><label>中文名称 <span class="muted">（同学看到的名字）</span></label>'
     +   '<input id="ffLabel" placeholder="例如：学籍号" maxlength="20" autocomplete="off"></div>'
@@ -1183,7 +1183,7 @@ function addFieldDialog(){
       function paintKeyHint(k){
         if(!keyHint) return;
         keyHint.textContent = keyManual
-          ? '你已手动指定键名；清空可恢复自动生成。'
+          ? '已手动指定键名；清空后恢复自动生成。'
           : (k ? '已按中文名自动生成：' + k + '（可以改）' : '填了中文名会自动生成；英文键名创建后不能再改。');
       }
       function syncKey(){
@@ -1802,7 +1802,7 @@ function profileImportDialog(){
                 if(ci2 >= picks.length){
                   bApply.textContent = '已应用 ' + done + ' 个字段';
                   bAll.disabled = bNone.disabled = true;
-                  toast('已按你的选择覆盖 ' + done + ' 个字段', 'ok');
+                  toast('已按所选覆盖 ' + done + ' 个字段', 'ok');
                   loadMembers();
                   return;
                 }
@@ -3457,7 +3457,7 @@ function renderSettings(){
     +     '<label style="display:flex;align-items:center;gap:10px;cursor:pointer">'
     +       '<input type="checkbox" id="stRegOpen" style="width:auto;margin:0">'
     +       '<span><b>开放自助注册</b><br>'
-    +       '<span class="muted" style="font-size:.76rem">关闭后：登录页不显示注册入口，注册接口直接拒绝。账号只能由你在「成员与档案」里创建</span></span>'
+    +       '<span class="muted" style="font-size:.76rem">关闭后登录页不显示注册入口，注册接口拒绝请求，账号仅可由管理员在「成员与档案」创建</span></span>'
     +     '</label>'
     +   '</div>'
     +   '<div class="field">'
@@ -4530,7 +4530,7 @@ function renderDj(){
     /* v3.5.27：时长库状态 —— 让站主一眼看到「哪些歌还没时长」入口 */
     +   '<div id="djDurStat" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;'
     +     'margin:-4px 0 12px;font-size:.8rem;color:var(--fg-3)">'
-    +     '<span>🎵 歌曲时长：先查<b>云端时长库</b>，没有再查网易云 / QQ 音乐；都没有就得你手填（不填不能排歌）</span>'
+    +     '<span>🎵 歌曲时长：先查<b>云端时长库</b>，未再查询网易云 / QQ 音乐；均无结果时需手动填写，否则无法排歌</span>'
     +     '<button class="btn btn-sm btn-ghost" id="djDurLibBtn" type="button">时长库 / 补录</button>'
     +   '</div>'
     +   '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:.85rem">'
@@ -4760,7 +4760,7 @@ function djRun(){
           + '<b>有 ' + noDurSongs.length + ' 首歌没有时长，按站规不能排歌</b><br>'
           + '<span style="font-size:.82rem">' + noDurSongs.slice(0, 8).map(function(s){ return esc(s.title || '?'); }).join('、')
           + (noDurSongs.length > 8 ? ' 等' : '') + '</span><br>'
-          + '<span style="font-size:.82rem;color:#57534e">时长会先去云端库找，再查网易云 / QQ 音乐；都查不到就得你手填。</span><br>'
+          + '<span style="font-size:.82rem;color:#57534e">时长优先从云端库匹配，其次查询网易云 / QQ 音乐；均未命中时需手动填写。</span><br>'
           + '<button class="btn btn-sm" id="djDurFillNow" style="margin-top:8px">立即补录 ' + noDurSongs.length + ' 首的时长</button>'
           + '</div>';
         var b0 = document.getElementById('djDurFillNow');
@@ -5650,7 +5650,7 @@ function djMakeImage(last, mode){
     }).catch(function(e){ toast('分享失败：' + (e.message || e), 'err'); });
   } else {
     ShareCard.download(card, fname)
-      .then(function(){ toast('图片已生成，去相册/下载里找一下', 'ok'); })
+      .then(function(){ toast('图片已生成，请在相册或下载目录查看', 'ok'); })
       .catch(function(e){ toast('生成失败：' + (e.message || e), 'err'); });
   }
 }

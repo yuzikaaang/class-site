@@ -4717,7 +4717,7 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
   /* ---- H. 前端护栏：后台要提醒「本人已设为私密」 ---- */
   const adminHtml39 = readAdm();
   t('★后台编辑弹窗标出「本人已设为私密」', /本人已设为私密/.test(adminHtml39));
-  t('★后台标出「已被你覆盖」的情况', /已被你覆盖/.test(adminHtml39));
+  t('★后台标出「已由字段设置覆盖」的情况', /已由字段设置覆盖/.test(adminHtml39));
   t('后台文案说明「后台权力最大」', /后台权力最大/.test(adminHtml39));
   const indexHtml39 = readIdx();
   t('★前台告知同学「以站主设置为准」', /以站主设置为准|则以站主设置为准/.test(indexHtml39));

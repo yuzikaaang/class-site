@@ -1413,7 +1413,7 @@ function bulkDelMembers(ids){
     var m = memberByKey(k);
     return m && m.userId != null && Number(m.userId) !== Number(mineId);
   });
-  if(!target.length){ toast('选中的只有你自己的账号或没有账号，不能删除', 'err', 3800); return; }
+  if(!target.length){ toast('所选仅含当前账号或未绑定账号，无法删除', 'err', 3800); return; }
   var skipped = ids.length - target.length;
   var hasProfile = target.some(function(k){ var m = memberByKey(k); return m && m.profileId != null; });
 
@@ -1421,7 +1421,7 @@ function bulkDelMembers(ids){
     title: '批量删除成员',
     html: '确定要删除选中的 <b>' + target.length + '</b> 个成员吗？',
     detail: '他们的账号与云端数据会一并清除；班级档案默认保留（变为「未认领」）。'
-          + (skipped ? '\n已自动跳过你自己的账号。' : ''),
+          + (skipped ? '\n已跳过当前账号。' : ''),
     warn: '不可撤销。如果只是想暂时阻止登录，请改用「批量禁用」。',
     danger: true,
     okText: '确认删除',
@@ -1635,7 +1635,7 @@ function bulkBan(keys){
   if(!targets.length){ toast('选中的成员都没有账号', 'err'); return; }
   var mineId = STATE.me ? STATE.me.id : 0;
   targets = targets.filter(function(m){ return Number(m.userId) !== Number(mineId); });
-  if(!targets.length){ toast('选中的只有你自己的账号，不能禁用', 'err'); return; }
+  if(!targets.length){ toast('所选仅含当前账号，无法禁用', 'err'); return; }
   confirmBox({
     title: '批量禁用',
     text: '确定为所选的 ' + targets.length + ' 个账号全部禁用吗？他们会被立刻踢下线且无法再登录。',
@@ -1945,12 +1945,12 @@ function memberDialog(m){
             function note(field){
               if(vp0[field] !== false) return '';
               return adminTouched(field)
-                ? '<span class="badge badge-purple" style="margin-left:6px" title="同学设过私密，但你在字段管理里改过该字段，以你为准">本人设过私密 · 已被你覆盖</span>'
+                ? '<span class="badge badge-purple" style="margin-left:6px" title="成员设为私密，但已在字段管理中调整，以字段设置为准">成员设为私密 · 已由字段设置覆盖</span>'
                 : '<span class="badge badge-orange" style="margin-left:6px" title="同学把这项设成了仅自己可见">本人已设为私密</span>';
             }
             return '<div class="field"><label>联系方式可见性（这个人）</label>'
             +   '<p class="hint" style="margin-bottom:8px">勾上 = 仅本人可见，同学查不到。'
-            +     '<b>后台权力最大</b>：你在「字段管理」里改过的字段，以你的设置为准。</p>'
+            +     '<b>后台权力最大</b>：在「字段管理」中调整过的字段，以字段设置为准。</p>'
             +   '<label class="chk"><input type="checkbox" id="mbWxHide"' + (vp0.wechat === false ? ' checked' : '') + '> 微信号仅本人可见' + note('wechat') + '</label>'
             +   '<label class="chk"><input type="checkbox" id="mbQqHide"' + (vp0.qq === false ? ' checked' : '') + '> QQ 号仅本人可见' + note('qq') + '</label>'
             +   '<label class="chk"><input type="checkbox" id="mbPhHide"' + (vp0.phone === false ? ' checked' : '') + '> 手机号仅本人可见' + note('phone') + '</label>'
@@ -2822,7 +2822,7 @@ function renderClassContent(){
     + '</div>'
     + '<div class="alert info" style="margin-bottom:14px">'
     +   '<b>公告</b>按站内四板块分类（网站内部 / 重要更新 / 班级事务 / 站主杂谈），可以指定只发给某几位同学；'
-    +   '<b>作业不再在这里编辑</b>——课代表在前端作业界面改自己的科目，你在前端用管理员账号可改全部科目。<br>'
+    +   '<b>作业不再在这里编辑</b>——课代表可修改本科目作业；管理员账号可修改全部科目。<br>'
     +   '列表里只显示标题和时间，<b>点「查看」看正文详情</b>。'
     + '</div>'
     + '<section class="panel" id="ccPanel"><div class="loading"><div class="spinner"></div>加载中…</div></section>';
@@ -3281,7 +3281,7 @@ function classContentDialog(idx){
       + '<div id="ccPinUntilWrap" style="margin-top:8px' + (pinMode === 'until' ? '' : ';display:none') + '">'
       +   '<label for="ccPinUntil">置顶到</label>'
       +   '<input type="datetime-local" id="ccPinUntil" value="' + attr(pinUntilVal) + '">'
-      +   '<p class="muted" style="font-size:.76rem;margin:4px 0 0">按你手机 / 电脑上的本地时间算，到点自动降为普通公告</p>'
+      +   '<p class="muted" style="font-size:.76rem;margin:4px 0 0">按设备本地时间计算，到期自动降为普通公告</p>'
       + '</div>'
       + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">置顶公告在班级站公告栏排最上方，并带「置顶」标签</p>'
       + '</div>'
@@ -3290,7 +3290,7 @@ function classContentDialog(idx){
       +   '<input id="ccDate" value="' + attr(c ? ((c._ref && c._ref.date) || '') : annNowStr()) + '" placeholder="YYYY-MM-DD HH:MM" style="flex:1;min-width:0">'
       +   '<button type="button" class="btn btn-sm btn-secondary" id="ccDateNow" style="white-space:nowrap">填入当前时间</button>'
       + '</div>'
-      + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">格式 <b>YYYY-MM-DD HH:MM</b>，按你设备上的本地时间。留空或格式不对会自动按当前时间填。</p></div>'
+      + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">格式 <b>YYYY-MM-DD HH:MM</b>，按设备本地时间。留空或格式不符时将自动填入当前时间。</p></div>'
       + '<div class="msg" id="ccMsg"></div>';
   }else if(isHomework){
     /* 作业：结构化编辑。每科 = 科目名 + 任务多行文本（一行一条）。
@@ -4659,7 +4659,7 @@ function durLibViewImport(st){
     + '<textarea id="durImpText" rows="7" placeholder="晴天 - 周杰伦&#10;三人游 - 方大同&#10;江南,林俊杰&#10;（歌名和歌手之间用 - 、, 或 ｜ 隔开都行；只写歌名也行）"'
     +   ' style="width:100%;padding:8px 12px;font-size:.84rem;resize:vertical;font-family:inherit"></textarea>'
     + '<p class="hint" style="margin:6px 0 0">匹配规则：<b>歌名完全一致</b>（忽略空格、括号里的版本名），'
-    + '<b>歌手部分符合即可</b> —— 比如歌单里是「周杰伦/费玉清」，你只写「周杰伦」也算命中。</p>'
+    + '<b>歌手部分符合即可</b> —— 如歌单为「周杰伦/费玉清」，填写「周杰伦」亦可命中。</p>'
     + '</div>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
     +   '<button class="btn btn-sm" id="durImpGo">导入并匹配时长库</button>'
@@ -5391,7 +5391,7 @@ function songRefundDialog(){
       + '<div class="field"><label for="srTime">达成时间</label>'
       + '<input id="srTime" type="datetime-local"></div>'
       + '<div class="alert info" style="margin:0">'
-      +   '提交后会真实在平台上生成一张券，券码直接显示给你。请手动把券码发给该同学。'
+      +   '提交后将在平台生成券码，请手动发送给该成员。'
       + '</div>'
       + '<div class="msg" id="srMsg"></div>',
     foot: '<button class="btn btn-ghost" data-no>取消</button>'
@@ -5510,7 +5510,7 @@ function renderCards(){
     +     '</div>'
     +   '</div>'
     +   '<div class="alert info" style="margin-bottom:14px">'
-    +     '列表改动保存后，让同学刷新一下页面就能看到最新内容。'
+    +     '保存后成员刷新页面即可看到最新内容。'
     +   '</div>'
     +   '<div id="dqBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
     +   '<div id="dqSched" style="margin-top:18px"></div>'
@@ -5883,7 +5883,7 @@ function paintSchedule(){
     ['random', '每次随机', '每次刷新随机抽一句（旧行为）'],
     ['order',  '按列表顺序轮换', '从起始日期起每天下一句，走到末尾从头再来'],
     ['rotate', '每 N 天换一句', '从起始日期起，每句停留 N 天再换'],
-    ['date',   '只按指定日期', '只显示你指定过的那几天，其它天不显示卡片'],
+    ['date',   '只按指定日期', '仅显示指定的日期，其余日期不显示卡片'],
   ];
 
   var modeHtml = modes.map(function(m){
