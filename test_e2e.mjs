@@ -12625,7 +12625,7 @@ console.log('\n【95】v4.4.5 软件简介书面化 / 表头吸顶 / 视频悬�
     && /videoBubbleHide\(\);   \/\* v4\.4\.5/.test(app));
 }
 
-console.log('\n【96】v4.5.0 抽取动画：盲盒 / 抽卡 / 宝箱，学号分段色');
+console.log('\n【96】v4.5.1 抽取动画：盲盒（两段式）/ 宝箱（卡间隙），学号分段色');
 
 {
   const fsx = fs.readFileSync(new URL('./pickfx.js', import.meta.url), 'utf8');
@@ -12635,11 +12635,12 @@ console.log('\n【96】v4.5.0 抽取动画：盲盒 / 抽卡 / 宝箱，学号�
   const yml = fs.readFileSync(new URL('./.github/workflows/deploy-pages.yml', import.meta.url), 'utf8');
   const chk = fs.readFileSync(new URL('./scripts/copycheck.mjs', import.meta.url), 'utf8');
 
-  /* ① 三套动画都在，且能按人数出格子 */
-  t('★三种动画模式齐备（box / card / case）',
-    /mode !== 'box' && mode !== 'card' && mode !== 'case'/.test(fsx)
-    && /'box'/.test(fsx) && /'card'/.test(fsx) && /'case'/.test(fsx));
-  t('★盲盒与抽卡逐张开启，宝箱是横向转盘', /gridCtl\(/.test(fsx) && /caseCtl\(/.test(fsx));
+  /* ① 两种动画都在，card 已移除 */
+  t('★两种动画模式齐备（box / case，已移除 card）',
+    /mode !== 'box' && mode !== 'case'/.test(fsx)
+    && /'box'/.test(fsx) && /'case'/.test(fsx)
+    && !/'card'/.test(fsx));
+  t('★盲盒两段式控制器、宝箱是横向转盘', /boxCtl\(/.test(fsx) && /caseCtl\(/.test(fsx));
 
   /* ② 学号分段色：01–10 … 51–62，61/62 与 51–60 同色 */
   t('★六段色板（另含 1 个中性灰）', (fsx.match(/c: '#[0-9a-f]{6}', s: '#[0-9a-f]{6}'/g) || []).length === 7);
@@ -12663,7 +12664,7 @@ console.log('\n【96】v4.5.0 抽取动画：盲盒 / 抽卡 / 宝箱，学号�
   t('★关闭面板会撤掉舞台，不留浮层', /if\(typeof PickFX !== 'undefined'\) PickFX\.stop\(\);\s*\n\s*BIG\.pick\.state = 'setup';/.test(big));
   t('★结果页带学号色条与学号', /--pc:' \+ sw\.c/.test(big) && /bpick-res-no/.test(big));
   t('★抽取设置里可选动画档位并持久化',
-    /cls_pick_fx/.test(big) && /pickSetFx/.test(big) && /\['off', 'box', 'card', 'case'\]/.test(big));
+    /cls_pick_fx/.test(big) && /pickSetFx/.test(big) && /\['off', 'box', 'case'\]/.test(big));
   t('★宝箱可选「抽取时隐藏姓名」', /cls_pick_hide/.test(big) && /pickHideToggle/.test(big));
 
   /* ⑥ 发布链路：少一个，线上点名就报错或掉版本 */
@@ -12675,8 +12676,15 @@ console.log('\n【96】v4.5.0 抽取动画：盲盒 / 抽卡 / 宝箱，学号�
   /* ⑦ 停针计算：必须用 offsetWidth，不能用 rect（入场 scale 会带偏） */
   t('★转盘尺寸用 offsetWidth / offsetLeft（避开入场缩放）',
     /a\.offsetWidth/.test(fsx) && /b\.offsetLeft - a\.offsetLeft/.test(fsx));
-  t('★宝箱隐藏姓名时只出光辉、停止后补名字',
-    /'<span class="pfx-orb"><\/span>'/.test(fsx) && /orb\.outerHTML = nameOf/.test(fsx));
+  t('★宝箱隐藏姓名时格子显学号段、停止后补名字',
+    /'<span class="pfx-seg">'/.test(fsx) && /seg\.outerHTML = nameOf/.test(fsx));
+
+  /* ⑧ v4.5.1：两段式盲盒 + 全屏泛色 + 卡间隙 + 末段极慢 */
+  t('★盲盒两段式（glow 露段 → open 露名）', /'glow'/.test(fsx) && /glowOne/.test(fsx) && /openOne/.test(fsx));
+  t('★全屏泛色提示层（flare + 段文字）', /pfx-flare/.test(fsx) && /setFlare/.test(fsx) && /学号段 /.test(fsx));
+  t('★宝箱减速末段极慢（分段缓动 easeCase）', /easeCase/.test(fsx) && /0\.86/.test(fsx));
+  t('★宝箱三成概率停针卡间隙', /nearMiss/.test(fsx) && /0\.32/.test(fsx));
+  t('★index.html 含全屏泛色层与盲盒 glow 态样式', /\.pfx-flare\b/.test(idx) && /\.pfx-b\.glow/.test(idx));
 }
 
 console.log('\n' + '='.repeat(52));

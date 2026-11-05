@@ -1935,7 +1935,7 @@
      61、62 归入最后一段 —— 站主要求与 51–60 同色。
      老师与管理员账号没有学号，给中性灰，不参与分段。 */
   var FX_KEY = 'cls_pick_fx', FX_HIDE_KEY = 'cls_pick_hide';
-  var FX_LIST = ['off', 'box', 'card', 'case'];
+  var FX_LIST = ['off', 'box', 'case'];
 
   function loadFx(){
     try{ var v = localStorage.getItem(FX_KEY); return FX_LIST.indexOf(v) >= 0 ? v : 'off'; }catch(e){ return 'off'; }
@@ -2095,7 +2095,7 @@
 
     var p = BIG.pick;
     if(p.fx === 'off' || typeof PickFX === 'undefined'){ apply(); return; }
-    /* 单个重抽固定按「单抽」演：只开一个盒子 / 翻一张牌 / 转一轮 */
+    /* 单个重抽固定按「单抽」演：只开一个盒子 / 转一轮 */
     PickFX.play({
       mode: p.fx,
       items: [pickItem(next)],
@@ -2200,11 +2200,11 @@
     return arr.join(' · ');
   }
 
-  /* 动画选择区（v4.5.0）：关闭 / 盲盒 / 抽卡 / 宝箱。
+  /* 动画选择区（v4.5.1）：关闭 / 盲盒 / 宝箱。
      颜色图例与动画里的一致，取自 PickFX 的同一份色板，避免两处色值走偏。 */
   function fxPanel(){
     var p = BIG.pick, fx = p.fx || 'off';
-    var labels = [['off', '关闭'], ['box', '盲盒'], ['card', '抽卡'], ['case', '宝箱']];
+    var labels = [['off', '关闭'], ['box', '盲盒'], ['case', '宝箱']];
     var chips = labels.map(function (x){
       return '<button type="button" class="bpick-chip sm' + (fx === x[0] ? ' on' : '') + '"'
         + ' onclick="BIG.pickSetFx(\'' + x[0] + '\')">' + x[1] + '</button>';
@@ -2220,10 +2220,10 @@
     if(fx === 'off'){
       tip = '<p class="bpick-fx-tip">关闭动画后，点击「开始抽取」直接显示结果。</p>';
     } else if(fx === 'case'){
-      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。'
-        + (p.hideName ? '转盘停止前只显示光辉颜色，停止后显示姓名。' : '转盘过程中姓名随光辉一同显示。') + '</p>';
+      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。转盘由快到慢，末段极慢；'
+        + (p.hideName ? '抽取中只显示学号段，停止后再揭示姓名。' : '抽取中姓名随学号段一同显示。') + '</p>';
     } else {
-      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。逐张开启，先显示光辉颜色，再显示姓名。</p>';
+      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。两段式：先开缝露学号段光辉，再点击揭示姓名。</p>';
     }
 
     var hide = (fx === 'case')

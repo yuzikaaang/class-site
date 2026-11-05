@@ -4534,9 +4534,10 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .bpick-hist-note{font-size:.78rem;padding:7px 10px}
 
 /* ============================================================================
- * 随机点名动画（v4.5.0 · pickfx.js）
- * 三套：盲盒 / 抽卡 / 宝箱转盘。盒子、卡面、光柱、指针全部 CSS 绘制，
- * 不引用任何图片与音频文件 —— 教室断网也能完整播放。
+ * 随机点名动画（v4.5.1 · pickfx.js）
+ * 两套：盲盒（两段式：先开缝露学号段光辉 + 全屏泛色，再揭示姓名）
+ *       / 宝箱转盘（由快到慢、末段极慢、停针卡间隙）。
+ * 盒子、光柱、指针、全屏泛色全部 CSS 绘制，不引用任何图片与音频文件 —— 教室断网也能完整播放。
  * 舞台底色跟随页面昼夜（与作业面板同一套 --bg-* / --fg-* 变量）。
  * ========================================================================== */
 .bpick-fx{margin:4px 0 14px;padding:11px 13px;border-radius:14px;background:var(--bg-2);border:1px solid rgba(120,53,15,.12)}
@@ -4591,8 +4592,8 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .pfx-lg{display:inline-flex;align-items:center;gap:5px;font-size:.73rem;color:var(--fg-2);font-variant-numeric:tabular-nums}
 .pfx-lg i{width:9px;height:9px;border-radius:50%;background:var(--pc);box-shadow:0 0 9px var(--ps)}
 
-/* ---------- 网格：盲盒 / 卡片 ---------- */
-.pfx-body{flex:1;min-height:clamp(180px,32vh,320px);display:flex;align-items:center;justify-content:center;padding:2px 0}
+/* ---------- 网格：盲盒 ---------- */
+.pfx-body{position:relative;z-index:2;flex:1;min-height:clamp(180px,32vh,320px);display:flex;align-items:center;justify-content:center;padding:2px 0}
 .pfx-grid{
   display:grid;gap:clamp(10px,1.6vw,20px);width:100%;margin:0 auto;justify-items:center;
   grid-template-columns:repeat(var(--cols,5),minmax(0,1fr));
@@ -4692,55 +4693,48 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 }
 .dark .pfx-b .bx-name b{background:#241c17}
 .pfx-b .bx-name em{font-style:normal;font-size:.7rem;color:var(--fg-3);font-variant-numeric:tabular-nums}
-.pfx-cell.flat .bx-name,.pfx-cell.flat .cd-in,.pfx-cell.flat .bx-lid{transition:none!important}
+.pfx-cell.flat .bx-name,.pfx-cell.flat .bx-lid{transition:none!important}
 
-/* 抽卡：深色卡背 + 六边班徽，翻开露光辉 */
-.pfx-c{width:100%;max-width:100%;aspect-ratio:3/4;perspective:900px}
-.pfx-c .cd-beam{
-  position:absolute;left:32%;right:32%;bottom:8%;height:0;z-index:0;border-radius:999px;
-  background:linear-gradient(180deg,transparent,var(--ps));filter:blur(6px);opacity:0;transition:.4s;
+/* ---------- 分层：全屏泛色层在网格之下，顶栏 / 图例 / 底栏在其上 ---------- */
+.pfx-bar,.pfx-legend-wrap,.pfx-foot{position:relative;z-index:3}
+
+/* ---------- 全屏泛色提示层（v4.5.1）----------
+   盲盒第一阶段 / 宝箱停下时点亮：满屏径向泛起该学号段颜色 + 中央段文字。
+   --fc / --fs 由 JS 按学号段写入；未点亮时透明，不挡视线。 */
+.pfx-flare{
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  opacity:0;transition:opacity .42s ease;
+  background:
+    radial-gradient(58% 58% at 50% 50%,var(--fs,transparent),transparent 70%),
+    radial-gradient(130% 120% at 50% 50%,var(--fc,transparent),transparent 78%);
 }
-.pfx-c.charge .cd-beam{height:140%;opacity:.9}
-.pfx-c .cd-in{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .74s cubic-bezier(.25,.9,.2,1)}
-.pfx-c.open .cd-in{transform:rotateY(180deg)}
-.pfx-c .cd-face{
-  position:absolute;inset:0;border-radius:12px;overflow:hidden;
-  -webkit-backface-visibility:hidden;backface-visibility:hidden;
-  display:flex;align-items:center;justify-content:center;
+.pfx-flare.on{opacity:1}
+.pfx-flare-seg{
+  font-size:clamp(1.7rem,4.4vw,2.8rem);font-weight:900;letter-spacing:.1em;color:#fff;
+  text-shadow:0 2px 18px var(--fs,transparent),0 0 34px var(--fc,transparent);
+  font-variant-numeric:tabular-nums;
 }
-.pfx-c .cd-back{
-  background:linear-gradient(155deg,#2b211a,#4a3527 55%,#2b211a);
-  border:1px solid rgba(249,196,145,.32);color:#f7c99a;
-  box-shadow:inset 0 0 26px rgba(0,0,0,.55),0 8px 18px rgba(0,0,0,.28);
+.pfx-flare-hint{
+  font-size:clamp(.78rem,1.4vw,.92rem);color:#fff;opacity:.92;letter-spacing:.08em;
+  text-shadow:0 1px 8px rgba(0,0,0,.55);
 }
-.pfx-c .cd-sig{width:54%;opacity:.82;display:block}
-.pfx-c .cd-foil{
-  position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(115deg,transparent 36%,rgba(255,255,255,.2) 48%,transparent 60%);
-  transform:translateX(-120%);animation:cdFoil 3.8s ease-in-out infinite;
-}
-@keyframes cdFoil{0%,74%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
-.pfx-c .cd-front{
-  transform:rotateY(180deg);flex-direction:column;gap:2px;
-  background:linear-gradient(158deg,var(--pc),var(--ps));
-  box-shadow:0 8px 22px rgba(0,0,0,.24);
-}
-.pfx-c .cd-front::after{
-  content:'';position:absolute;inset:0;
-  background:linear-gradient(180deg,rgba(0,0,0,.04),rgba(0,0,0,.42));
-}
-.pfx-c .cd-aura{
-  position:absolute;inset:-30%;opacity:.72;
-  background:radial-gradient(circle at 50% 42%,rgba(255,255,255,.9),transparent 62%);
-}
-.pfx-c .cd-front b{
-  position:relative;z-index:2;padding:0 7px;text-align:center;word-break:break-all;line-height:1.15;
-  font-size:clamp(.98rem,1.55vw,1.25rem);font-weight:900;color:#fff;
-  text-shadow:0 2px 8px rgba(0,0,0,.65),0 0 2px rgba(0,0,0,.4);
-}
-.pfx-c .cd-front em{
-  position:relative;z-index:2;font-style:normal;font-size:.7rem;color:#fff;opacity:.92;
-  text-shadow:0 1px 4px rgba(0,0,0,.5);
+
+/* ---------- 盲盒两段式（v4.5.1）----------
+   closed → glow：盒盖微开一条缝，透出学号段光辉（bx-beam / bx-glow），姓名不露。
+   glow → open：盒盖大开，姓名揭晓。全屏泛色只在单个 glow 时点亮。 */
+.pfx-b.glow .bx-lid{transform:translate3d(0,-3%,0) rotateX(-28deg)}
+.pfx-b.glow .bx-beam{height:118%;opacity:.95}
+.pfx-b.glow .bx-glow{opacity:.95;transform:scale(1.12)}
+.pfx-b.glow .bx-mark{opacity:.35;transition:opacity .2s ease}
+.pfx-b.glow .bx-name{opacity:0}
+
+/* ---------- 宝箱：格子学号段文字（v4.5.1）----------
+   隐藏姓名时，转盘格子上先显示学号段（如「31–40」），停下后再换成姓名。 */
+.pfx-tile .pfx-seg{
+  position:relative;z-index:2;color:#fff;font-weight:800;
+  font-size:.84rem;letter-spacing:.04em;font-variant-numeric:tabular-nums;
+  text-shadow:0 1px 5px rgba(0,0,0,.65);
 }
 
 /* 宝箱：横向转盘 + 铜指针 */
@@ -4828,8 +4822,8 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   .pfx-win{font-size:.72rem;padding:3px 9px}
 }
 @media(prefers-reduced-motion:reduce){
-  .pfx-c .cd-foil{animation:none}
   .pfx-cell.charge{animation:none}
+  .pfx-flare{transition:none!important}
 }
 /* 手机 / 窄屏：大屏模式的顶栏要压成横向滚动的胶囊条。
    ⚠️ 手机端 .sidebar 原本是「抽屉」：position:fixed + translateX(-100%)。
@@ -6468,17 +6462,17 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.5.0';
+var SITE_VERSION = '4.5.1';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=450" defer></script>
-<script src="./app.min.js?v=450" defer></script>
+<script src="./auth-bus.js?v=451" defer></script>
+<script src="./app.min.js?v=451" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=450" defer></script>
-<!-- v4.5.0：抽取动画（盲盒 / 抽卡 / 宝箱）。纯 CSS 绘制 + WebAudio 合成，
+<script src="./big.js?v=451" defer></script>
+<!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=450" defer></script>
+<script src="./pickfx.js?v=451" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

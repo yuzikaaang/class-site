@@ -1,29 +1,34 @@
 /* ============================================================================
- * pickfx.js —— 随机点名抽取动画（v4.5.0）
+ * pickfx.js —— 随机点名抽取动画（v4.5.1）
  * ----------------------------------------------------------------------------
- * 站主原话（2026-11-05）：
- *   「抽人可以新增个抽人动画……第一个是有点类似蛋仔派对里面的那个盲盒……
- *     第二个就有点类似原神那种抽卡……第三个就是类似 CS 里面那种开宝箱……
- *     但是要做我自己专属的，你毕竟你那个放在里面太突兀了。」
- *   「按照学号来排，每隔十个学号换一种颜色……0 到 10 号一种颜色……
- *     61 号和 62 号是 50 到 60 段的颜色。」
- *   「动画要自然，离线也可以用。」
+ * 站主原话（2026-11-06）：
+ *   「盲盒跟卡片差不多，那我们就用其中一个吧……那卡片就不要了。
+ *    现在只有两种模式。」
+ *   「盲盒……第一次点的时候，先揭开一点点，把光带出来什么颜色，
+ *    提示这个颜色是哪一个段的学号段，再点一下之后名字就出来了。
+ *    最好是全屏的那种颜色提醒，而不是太小。要制造一种紧张感。」
+ *   「宝箱……把颜色对应的学号段直接写在卡片上，隐藏姓名时悬念更大。
+ *    由快到慢的过程，最后一秒钟走得特别慢，最好卡在间隙上，
+ *    让人以为是上一个结果是下一个。颜色提醒搭配文字。」
  *
- * 三条硬约束（决定了实现方式）：
- *   ① 离线可用 → 不引任何外链、不加载图片音效文件；盒子/卡面/光效全部 CSS 画，
+ * 两条硬约束（沿用 v4.5.0）：
+ *   ① 离线可用 → 不引外链、不加载图片音效文件；盒子、光柱、指针全 CSS 绘制，
  *      音效走 WebAudio 现场合成，沿用站内 cls_sfx 开关。
- *   ② 不做成别人的复刻 → 不用蛋仔的橙盒、原神的星辉、CS 的红蓝箱。
- *      本站的三套都从「班级」这个身份出发：礼盒用牛皮纸 + 绶带 + 火漆，
- *      卡面用六边班徽 + 毛边纸纹，宝箱用刻度转盘 + 铜指针。
- *   ③ 动画不能挡事 → 顶部始终有「跳过」，播完自动回到结果页；
- *      系统开启「减少动态效果」时自动把时长压到 0.7 秒。
+ *   ② 动画不能挡事 → 顶部始终有「跳过」，播完自动回到结果页；
+ *      系统开启「减少动态效果」时把时长压到 0.7 秒以内。
  *
- * 对外只有一个入口：
+ * 两种模式：
+ *   · box  盲盒 —— 两段式：先开缝露学号段光辉（全屏泛色 + 段文字），
+ *                  再点击揭示姓名。两次紧张。
+ *   · case 宝箱 —— 横向转盘：由快到慢、末段极慢；约三成概率停针卡在间隙；
+ *                  隐藏姓名时格子先显学号段，停下泛色提示后再揭示姓名。
+ *
+ * 对外入口：
  *   PickFX.play({ mode, items, pool, hide, single, onDone })
- *     mode  : 'box' 盲盒 / 'card' 抽卡 / 'case' 宝箱转盘
+ *     mode  : 'box' 盲盒 / 'case' 宝箱转盘
  *     items : [{ name, no }]，no = 学号末两位（1–62），决定光辉颜色
  *     pool  : 候选名单，宝箱转盘用它铺背景格
- *     hide  : 宝箱模式是否隐藏姓名（只露光辉）
+ *     hide  : 宝箱模式是否隐藏姓名（先显学号段）
  *     single: 单个重抽，播完自动收场
  *   PickFX.stop()  立即收场（关闭点名面板时调用）
  * ========================================================================= */
@@ -43,17 +48,25 @@
     { c: '#0d8f66', s: '#6ee7b7' }    /* 绿 */
   ];
   var GREY = { c: '#7b8794', s: '#cbd5e1' };
+  var RANGES = ['01–10', '11–20', '21–30', '31–40', '41–50', '51–62'];
 
   function swatch(no) {
     var n = parseInt(no, 10);
     if (!n || n < 1) return GREY;               /* 无学号账号（老师/管理员）用中性灰 */
     return TIERS[Math.min(5, Math.floor((n - 1) / 10))];
   }
+  /* 学号段文字（如「31–40」），用于全屏提示与宝箱格子。无学号返回空串。 */
+  function tierRange(no) {
+    var n = parseInt(no, 10);
+    if (!n || n < 1) return '';
+    return RANGES[Math.min(5, Math.floor((n - 1) / 10))];
+  }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  function two(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
   function reduced() {
     try { return global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches; }
     catch (e) { return false; }
@@ -124,48 +137,46 @@
     S.rafs = [];
   }
 
-  function titleOf(mode) {
-    return mode === 'card' ? '卡片抽取' : (mode === 'case' ? '宝箱抽取' : '盲盒抽取');
-  }
+  function titleOf(mode) { return mode === 'case' ? '宝箱抽取' : '盲盒抽取'; }
   function subOf(mode, n, single) {
     if (single) return '单个重抽 · 共 1 人';
     if (mode === 'case') return '共 ' + n + ' 人 · 逐个开启';
-    return '共 ' + n + ' 个 · 逐个开启';
+    return '共 ' + n + ' 个 · 先露学号段，再揭示姓名';
   }
 
   function legendHtml() {
-    var ranges = ['01–10', '11–20', '21–30', '31–40', '41–50', '51–62'];
     return '<div class="pfx-legend">'
       + '<span class="pfx-lg-k">学号色</span>'
       + TIERS.map(function (t, i) {
-        return '<span class="pfx-lg"><i style="--pc:' + t.c + ';--ps:' + t.s + '"></i>' + ranges[i] + '</span>';
+        return '<span class="pfx-lg"><i style="--pc:' + t.c + ';--ps:' + t.s + '"></i>' + RANGES[i] + '</span>';
       }).join('')
       + '</div>';
   }
 
-  /* ---------- 盲盒 / 抽卡：网格 ---------- */
-  function cellHtml(mode, it, i) {
-    var sw = swatch(it.no), cls = mode === 'card' ? 'pfx-c' : 'pfx-b';
+  /* ---------- 全屏泛色提示层 ---------- */
+  /* 盲盒第一阶段、宝箱停下时点亮：满屏径向泛起该学号段颜色 + 中央段文字。
+     只在「单个焦点」时点亮 —— 「全部开盒」同时点亮多个不同段会撞色，故不亮。 */
+  function setFlare(root, it, hint) {
+    var sw = swatch(it.no), seg = tierRange(it.no);
+    root.style.setProperty('--fc', sw.c);
+    root.style.setProperty('--fs', sw.s);
+    var a = root.querySelector('.pfx-flare-seg');
+    var b = root.querySelector('.pfx-flare-hint');
+    if (a) a.textContent = seg ? ('学号段 ' + seg) : '';
+    if (b) b.textContent = hint || '';
+    var fl = root.querySelector('.pfx-flare');
+    if (fl) fl.classList.add('on');
+  }
+  function clearFlare(root) {
+    var fl = root.querySelector('.pfx-flare');
+    if (fl) fl.classList.remove('on');
+  }
+
+  /* ---------- 盲盒：牛皮纸盒 + 绶带 + 火漆印，两段式 ---------- */
+  function boxCellHtml(it, i) {
+    var sw = swatch(it.no);
     var style = 'style="--pc:' + sw.c + ';--ps:' + sw.s + '"';
-    if (mode === 'card') {
-      return '<button type="button" class="pfx-cell ' + cls + '" data-i="' + i + '" ' + style
-        + ' aria-label="' + (mode === 'card' ? '第 ' + (i + 1) + ' 张卡片' : '第 ' + (i + 1) + ' 个盲盒') + '">'
-        + '<span class="cd-beam"></span>'
-        + '<span class="cd-in">'
-        +   '<span class="cd-face cd-back"><span class="cd-sig">'
-        +     '<svg viewBox="0 0 48 48" aria-hidden="true">'
-        +       '<path d="M24 4 41 13.5v21L24 44 7 34.5v-21z" fill="none" stroke="currentColor" stroke-width="1.8"/>'
-        +       '<path d="M24 13.5 33.5 19v10L24 34.5 14.5 29V19z" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".65"/>'
-        +       '<circle cx="24" cy="24" r="3.4" fill="currentColor"/>'
-        +     '</svg></span><span class="cd-foil"></span></span>'
-        +   '<span class="cd-face cd-front"><span class="cd-aura"></span>'
-        +     '<b>' + esc(it.name) + '</b>'
-        +     '<em>' + (it.no ? two(it.no) + ' 号' : '') + '</em>'
-        +   '</span>'
-        + '</span>'
-        + '</button>';
-    }
-    return '<button type="button" class="pfx-cell ' + cls + '" data-i="' + i + '" ' + style
+    return '<button type="button" class="pfx-cell pfx-b" data-i="' + i + '" ' + style
       + ' aria-label="第 ' + (i + 1) + ' 个盲盒">'
       + '<span class="bx-beam"></span>'
       + '<span class="bx-glow"></span>'
@@ -177,96 +188,139 @@
       +   '<em>' + (it.no ? two(it.no) + ' 号' : '') + '</em></span>'
       + '</button>';
   }
-  function two(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
 
-  function gridCtl(root, items, opts) {
+  /* 盲盒控制器：closed → glow（开缝露学号段光辉 + 全屏泛色）→ open（揭示姓名）。
+     · 单个点击：glow 时点亮全屏 flare（沉浸紧张感），open 时熄灭。
+     · 全部开盒：第一步把所有 closed→glow（不亮 flare，避免多段撞色），
+       按钮变「全部揭示」；第二步把所有 glow→open。 */
+  function boxCtl(root, items, opts) {
     var cells = [].slice.call(root.querySelectorAll('.pfx-cell'));
-    var busy = {}, opened = 0, queue = [], running = false;
+    var allBtn = root.querySelector('.pfx-all');
+    var st = cells.map(function () { return 'closed'; });
+    var opened = 0, queue = [], running = false;
 
-    function open(i, fast) {
-      if (busy[i]) return;
+    function glowOne(i, fast) {
+      if (st[i] !== 'closed') return;
+      st[i] = 'glow';
       var cell = cells[i];
-      if (!cell || cell.classList.contains('open')) return;
-      busy[i] = true;
       cell.classList.add('charge');
-      charge();
+      if (!fast) charge();
       later(function () {
         if (!S) return;
         cell.classList.remove('charge');
-        cell.classList.add('open');
-        burst();
-        opened++;
-        if (opened === items.length) {
-          later(function () {
-            root.querySelector('.pfx-foot').classList.add('on');
-            var d = root.querySelector('.pfx-done');
-            d.disabled = false;
-            d.classList.add('ready');
-            if (opts.single) later(finish, 700);
-            else later(finish, 1600);
-          }, 420);
-        }
+        cell.classList.add('glow');
+        if (!fast) { setFlare(root, items[i], '点击揭示姓名'); burst(); }
+        refresh();
       }, fast ? 90 : 460);
     }
+
+    function openOne(i, fast) {
+      if (st[i] === 'open') return;
+      st[i] = 'open';
+      var cell = cells[i];
+      cell.classList.remove('glow');
+      cell.classList.add('open');
+      if (!fast) { clearFlare(root); burst(); chime(); }
+      opened++;
+      if (opened === items.length) {
+        clearFlare(root);
+        later(function () {
+          if (!S) return;
+          root.querySelector('.pfx-foot').classList.add('on');
+          var d = root.querySelector('.pfx-done');
+          d.disabled = false; d.classList.add('ready');
+          if (opts.single) later(finish, 700);
+          else later(finish, 1500);
+        }, 420);
+      }
+      refresh();
+    }
+
+    function clickCell(i) {
+      if (!S || S.ending) return;
+      var s = st[i];
+      if (s === 'closed') { glowOne(i, false); }
+      else if (s === 'glow') { openOne(i, false); }
+    }
+
+    cells.forEach(function (cell, i) {
+      cell.addEventListener('click', function () { clickCell(i); });
+    });
 
     function runQueue() {
       if (running || !queue.length) return;
       running = true;
       (function next() {
-        if (!S || !queue.length) { running = false; return; }
-        open(queue.shift(), true);
-        later(next, 210);
+        if (!S || !queue.length) { running = false; refresh(); return; }
+        var i = queue.shift();
+        if (st[i] === 'closed') glowOne(i, true);
+        later(next, 180);
       })();
     }
 
-    cells.forEach(function (cell, i) {
-      cell.addEventListener('click', function () {
-        if (!S || S.ending) return;
-        open(i, false);
-      });
-    });
+    /* 「全部开盒 / 全部揭示」按钮：按当前进度自动切换语义 */
+    function refresh() {
+      if (!allBtn) return;
+      var hasClosed = st.some(function (x) { return x === 'closed'; });
+      var hasGlow = st.some(function (x) { return x === 'glow'; });
+      if (hasClosed) { allBtn.disabled = false; allBtn.textContent = '全部开盒'; }
+      else if (hasGlow) { allBtn.disabled = false; allBtn.textContent = '全部揭示'; }
+      else { allBtn.disabled = true; allBtn.textContent = '已全部开启'; }
+    }
 
-    var allBtn = root.querySelector('.pfx-all');
     if (allBtn) {
       allBtn.addEventListener('click', function () {
         if (!S || S.ending) return;
-        allBtn.disabled = true;
-        allBtn.textContent = '开启中';
-        for (var i = 0; i < items.length; i++) {
-          if (!cells[i].classList.contains('open') && !busy[i]) queue.push(i);
+        clearFlare(root);
+        var hasClosed = st.some(function (x) { return x === 'closed'; });
+        if (hasClosed) {
+          for (var i = 0; i < items.length; i++) if (st[i] === 'closed') queue.push(i);
+          runQueue();
+        } else {
+          for (var j = 0; j < items.length; j++) if (st[j] === 'glow') openOne(j, true);
         }
-        runQueue();
+        later(refresh, 60);
       });
     }
 
     return {
-      /* 跳过：把未开的全部瞬间翻开，不做逐格动画 */
+      start: function () { refresh(); },
       flush: function () {
+        clearFlare(root);
         cells.forEach(function (cell, i) {
-          if (cell.classList.contains('open')) return;
-          busy[i] = true;
-          cell.classList.remove('charge');
+          if (st[i] === 'open') return;
+          st[i] = 'open';
+          cell.classList.remove('glow', 'charge');
           cell.classList.add('open', 'flat');
         });
         opened = items.length;
       },
-      count: function () { return opened; }
+      count: function () { return opened; },
+      refresh: refresh
     };
   }
 
-  /* ---------- 宝箱：横向转盘 ---------- */
+  /* ---------- 宝箱：横向转盘 + 铜指针 ---------- */
   function tileHtml(hide) {
     return function (it) {
-      var sw = swatch(it.no);
+      var sw = swatch(it.no), seg = tierRange(it.no);
       return '<div class="pfx-tile" style="--pc:' + sw.c + ';--ps:' + sw.s + '">'
         + (hide
-            ? '<span class="pfx-orb"></span>'
-            : '<span class="pfx-tn">' + esc(it.name) + '</span>')
+            ? '<span class="pfx-seg">' + (seg || '—') + '</span>'
+            : '<span class="pfx-tn">' + esc(it.name) + (it.no ? '<i>' + two(it.no) + '</i>' : '') + '</span>')
         + '</div>';
     };
   }
   function nameOf(it) {
     return '<span class="pfx-tn">' + esc(it.name) + (it.no ? '<i>' + two(it.no) + '</i>' : '') + '</span>';
+  }
+
+  /* 转盘减速曲线：前 86% 的时间走 90% 路程（较快），后 14% 走 10%（极慢）。
+     越往后越慢 —— 站主要求「最后一秒钟走得特别特别慢」，末段用五次方缓出。 */
+  function easeCase(p) {
+    if (p < 0.86) return (1 - Math.pow(1 - p / 0.86, 3)) * 0.90;
+    var q = (p - 0.86) / 0.14;
+    return 0.90 + (1 - Math.pow(1 - q, 5)) * 0.10;
   }
 
   function caseCtl(root, items, opts) {
@@ -298,16 +352,24 @@
       if (a) iw = a.offsetWidth || 104;
       pitch = (a && b) ? (b.offsetLeft - a.offsetLeft) : iw + 8;
       var wrapW = strip.clientWidth;
-      target = Math.max(0, at * pitch + iw / 2 - wrapW / 2 + (Math.random() * 14 - 7));
 
-      var dur = (i === 0 ? 3100 : 1500);
+      /* 卡间隙：约三成概率，停针偏向中奖格与邻格的间隙（视觉上「差点滑过去」），
+         偏移不超过半格的 44%，保证指向的仍是中奖格、不会指错人。
+         其余七成停在中奖格中心附近（±7px 微抖，避免每次都正中显得呆板）。 */
+      var nearMiss = Math.random() < 0.32;
+      var offset = nearMiss
+        ? (Math.random() < 0.5 ? -1 : 1) * pitch * 0.42
+        : (Math.random() * 14 - 7);
+      target = Math.max(0, at * pitch + iw / 2 - wrapW / 2 + offset);
+
+      var dur = (i === 0 ? 3400 : 1900);
       if (reduced()) dur = 620;
       var t0 = performance.now(), lastPx = 0;
 
       (function step(now) {
         if (!S || S.ending) return;
         var p = Math.min(1, (now - t0) / dur);
-        var e = 1 - Math.pow(1 - p, 5);
+        var e = easeCase(p);
         var x = target * e;
         reel.style.transform = 'translate3d(' + (-x) + 'px,0,0)';
         if (x - lastPx >= pitch * 0.9) { lastPx = x; tick(); }
@@ -318,33 +380,39 @@
 
     function settle(at) {
       var cell = reel.children[at];
+      var win = items[i];
       if (!cell) { next(); return; }
       cell.classList.add('win');
-      if (hide) {
-        var orb = cell.querySelector('.pfx-orb');
-        if (orb) orb.outerHTML = nameOf(items[i]);
-      }
       burst(); chime();
+      /* 停下先点亮全屏泛色 + 学号段文字（紧张一：是不是自己这一段） */
+      setFlare(root, win, hide ? '即将揭示姓名' : '');
+
+      /* 隐藏姓名：停顿后再把格子里的学号段换成姓名（紧张二：是不是自己） */
+      if (hide) {
+        later(function () {
+          if (!S || S.ending) return;
+          var seg = cell.querySelector('.pfx-seg');
+          if (seg) seg.outerHTML = nameOf(win);
+        }, 1200);
+      }
+
       wins.insertAdjacentHTML('beforeend',
-        '<span class="pfx-win" style="--pc:' + swatch(items[i].no).c + '">' + esc(items[i].name) + '</span>');
+        '<span class="pfx-win" style="--pc:' + swatch(win.no).c + '">' + esc(win.name) + '</span>');
       if (cntEl) cntEl.textContent = String(i + 1);
       i++;
-      next();
+      later(function () { if (!S || S.ending) return; clearFlare(root); next(); }, hide ? 1750 : 1050);
     }
 
     function next() {
-      if (i >= items.length) {
-        finale();
-        later(finish, 1000);
-        return;
-      }
-      later(round, 900);
+      if (i >= items.length) { finale(); later(finish, 1000); return; }
+      later(round, 600);
     }
 
     return {
       start: function () { round(); },
       flush: function () {
         rafCancel();
+        clearFlare(root);
         reel.style.transition = 'none';
         reel.style.transform = 'translate3d(' + (-target) + 'px,0,0)';
         for (var k = i; k < items.length; k++) {
@@ -378,9 +446,13 @@
       var cols = Math.min(n, vw < 620 ? 4 : 5);
       var cellw = vw < 620 ? 104 : (vw < 900 ? 158 : 200);
       body = '<div class="pfx-grid" style="--cols:' + cols + ';--cellw:' + cellw + 'px">'
-        + items.map(function (it, i) { return cellHtml(mode, it, i); }).join('')
+        + items.map(function (it, i) { return boxCellHtml(it, i); }).join('')
         + '</div>';
     }
+
+    /* 全屏泛色层：绝对定位铺满 .pfx，z-index 在网格之下、顶栏底栏之上 */
+    var flare = '<div class="pfx-flare"><div class="pfx-flare-seg"></div><div class="pfx-flare-hint"></div></div>';
+    var footAll = (mode === 'case' || opts.single) ? '' : '<button type="button" class="pfx-btn pfx-all">全部开盒</button>';
 
     return '<div class="pfx-in">'
       + '<div class="pfx-bar">'
@@ -390,8 +462,9 @@
       + '</div>'
       + '<div class="pfx-legend-wrap">' + legendHtml() + '</div>'
       + '<div class="pfx-body">' + body + '</div>'
+      + flare
       + '<div class="pfx-foot">'
-      +   (mode === 'case' || opts.single ? '' : '<button type="button" class="pfx-btn pfx-all">全部开启</button>')
+      +   footAll
       +   '<button type="button" class="pfx-btn pfx-done" disabled>查看结果</button>'
       + '</div>'
       + '</div>';
@@ -439,7 +512,7 @@
     }
 
     var mode = opts.mode;
-    if (mode !== 'box' && mode !== 'card' && mode !== 'case') mode = 'box';
+    if (mode !== 'box' && mode !== 'case') mode = 'box';
     var items = (opts.items || []).slice(0, 10);
     if (!items.length) { if (opts.onDone) opts.onDone(); return; }
 
@@ -454,7 +527,7 @@
       root: root, timers: [], rafs: [], mode: mode, items: items, opts: opts,
       ending: false, closed: false, skipped: false, ctl: null
     };
-    S.ctl = (mode === 'case') ? caseCtl(root, items, opts) : gridCtl(root, items, opts);
+    S.ctl = (mode === 'case') ? caseCtl(root, items, opts) : boxCtl(root, items, opts);
 
     root.querySelector('.pfx-skip').addEventListener('click', skip);
     root.querySelector('.pfx-done').addEventListener('click', function () {
@@ -463,7 +536,8 @@
       finish();
     });
 
-    if (mode === 'case') S.ctl.start();
+    /* box.start = 初始化按钮文字；case.start = 开转。两者都只调一次。 */
+    if (S.ctl.start) S.ctl.start();
   }
 
   function stop() {
