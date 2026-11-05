@@ -4695,19 +4695,21 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .pfx-b .bx-name em{font-style:normal;font-size:.7rem;color:var(--fg-3);font-variant-numeric:tabular-nums}
 .pfx-cell.flat .bx-name,.pfx-cell.flat .bx-lid{transition:none!important}
 
-/* ---------- 分层：全屏泛色层在网格之下，顶栏 / 图例 / 底栏在其上 ---------- */
+/* ---------- 分层：全屏泛色层覆盖网格（沉浸泛色 + 中央段文字），顶栏 / 图例 / 底栏在其上 ---------- */
 .pfx-bar,.pfx-legend-wrap,.pfx-foot{position:relative;z-index:3}
 
 /* ---------- 全屏泛色提示层（v4.5.1）----------
    盲盒第一阶段 / 宝箱停下时点亮：满屏径向泛起该学号段颜色 + 中央段文字。
-   --fc / --fs 由 JS 按学号段写入；未点亮时透明，不挡视线。 */
+   --fc / --fs 由 JS 按学号段写入；未点亮时透明，不挡视线。
+   z-index:2 覆盖在网格之上 —— 泛色半透明盖住盲盒营造沉浸感，中央段文字清晰可见；
+   顶栏 / 底栏 z-index:3 仍可点击（flare 本身 pointer-events:none）。 */
 .pfx-flare{
-  position:absolute;inset:0;z-index:1;pointer-events:none;
+  position:absolute;inset:0;z-index:2;pointer-events:none;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
   opacity:0;transition:opacity .42s ease;
   background:
-    radial-gradient(58% 58% at 50% 50%,var(--fs,transparent),transparent 70%),
-    radial-gradient(130% 120% at 50% 50%,var(--fc,transparent),transparent 78%);
+    radial-gradient(82% 82% at 50% 50%,var(--fs,transparent),transparent 72%),
+    radial-gradient(155% 140% at 50% 50%,var(--fc,transparent),transparent 84%);
 }
 .pfx-flare.on{opacity:1}
 .pfx-flare-seg{
@@ -4721,11 +4723,11 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 }
 
 /* ---------- 盲盒两段式（v4.5.1）----------
-   closed → glow：盒盖微开一条缝，透出学号段光辉（bx-beam / bx-glow），姓名不露。
+   closed → glow：盒盖掀开一条缝，透出学号段光辉（bx-beam / bx-glow），姓名不露。
    glow → open：盒盖大开，姓名揭晓。全屏泛色只在单个 glow 时点亮。 */
-.pfx-b.glow .bx-lid{transform:translate3d(0,-3%,0) rotateX(-28deg)}
-.pfx-b.glow .bx-beam{height:118%;opacity:.95}
-.pfx-b.glow .bx-glow{opacity:.95;transform:scale(1.12)}
+.pfx-b.glow .bx-lid{transform:translate3d(0,-4%,0) rotateX(-44deg)}
+.pfx-b.glow .bx-beam{height:132%;opacity:1}
+.pfx-b.glow .bx-glow{opacity:1;transform:scale(1.2)}
 .pfx-b.glow .bx-mark{opacity:.35;transition:opacity .2s ease}
 .pfx-b.glow .bx-name{opacity:0}
 
