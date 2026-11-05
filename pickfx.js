@@ -1,5 +1,5 @@
 /* ============================================================================
- * pickfx.js —— 随机点名抽取动画（v4.5.1）
+ * pickfx.js —— 随机点名抽取动画（v4.5.2）
  * ----------------------------------------------------------------------------
  * 站主原话（2026-11-06）：
  *   「盲盒跟卡片差不多，那我们就用其中一个吧……那卡片就不要了。
@@ -116,6 +116,16 @@
   function finale() {
     [523, 659, 784, 1046].forEach(function (f, i) { tone(f, 0.14, 0.04, 'triangle', i * 0.07); });
   }
+  /* 未中音效：低沉短促，与中奖的清亮 chime 形成反差 */
+  function missTone() { tone(196, 0.16, 0.028, 'sawtooth'); tone(130, 0.22, 0.02, 'sine', 0.03); }
+  /* Fisher-Yates 洗牌 */
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = (Math.random() * (i + 1)) | 0;
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
 
   /* ---------- 会话 ---------- */
   var S = null;
@@ -138,10 +148,11 @@
   }
 
   function titleOf(mode) { return mode === 'case' ? '宝箱抽取' : '盲盒抽取'; }
-  function subOf(mode, n, single) {
-    if (single) return '单个重抽 · 共 1 人';
-    if (mode === 'case') return '共 ' + n + ' 人 · 逐个开启';
-    return '共 ' + n + ' 个 · 先露学号段，再揭示姓名';
+  function subOf(mode, items, opts) {
+    if (opts && opts.single) return '单个重抽';
+    if (mode === 'case') return '共 ' + items.length + ' 人 · 逐个开启';
+    var hitN = items.filter(function (it) { return it.hit; }).length;
+    return '共 ' + items.length + ' 个盲盒 · 抽 ' + hitN + ' 人';
   }
 
   function legendHtml() {
@@ -176,6 +187,9 @@
   function boxCellHtml(it, i) {
     var sw = swatch(it.no);
     var style = 'style="--pc:' + sw.c + ';--ps:' + sw.s + '"';
+    var nameHtml = it.hit
+      ? '<b>' + esc(it.name) + '</b><em>' + (it.no ? two(it.no) + ' 号' : '') + '</em>'
+      : '<b class="bx-miss">未中</b>';
     return '<button type="button" class="pfx-cell pfx-b" data-i="' + i + '" ' + style
       + ' aria-label="第 ' + (i + 1) + ' 个盲盒">'
       + '<span class="bx-beam"></span>'
@@ -184,19 +198,22 @@
       +   '<span class="bx-body"><span class="bx-rib"></span><span class="bx-mark">?</span></span>'
       +   '<span class="bx-lid"><span class="bx-rib bx-rib-lid"></span></span>'
       + '</span>'
-      + '<span class="bx-name"><b>' + esc(it.name) + '</b>'
-      +   '<em>' + (it.no ? two(it.no) + ' 号' : '') + '</em></span>'
+      + '<span class="bx-name">' + nameHtml + '</span>'
       + '</button>';
   }
 
-  /* 盲盒控制器：closed → glow（开缝露学号段光辉 + 全屏泛色）→ open（揭示姓名）。
-     · 单个点击：glow 时点亮全屏 flare（沉浸紧张感），open 时熄灭。
-     · 全部开盒：第一步把所有 closed→glow（不亮 flare，避免多段撞色），
-       按钮变「全部揭示」；第二步把所有 glow→open。 */
+  /* 盲盒控制器：closed → glow（开缝露学号段光辉 + 全屏泛色）→ open（揭示结果）。
+     · 盲盒固定 10 格（池子不足按池子数），中奖者藏在里面、陪跑从池子补齐 ——
+       不论抽几人，盲盒总数恒定，不会因人数少而提前暴露结果。
+     · 中奖盲盒：glow 露段 → open 露姓名 + 清亮音效。
+     · 陪跑盲盒：glow 露段 → open 显示「未中」+ 低沉音效 + 暗淡。
+     · 中奖全部开完后启用「查看结果」，用户可继续开陪跑盲盒或直接看结果。 */
   function boxCtl(root, items, opts) {
     var cells = [].slice.call(root.querySelectorAll('.pfx-cell'));
     var allBtn = root.querySelector('.pfx-all');
+    var cntEl = root.querySelector('.pfx-cnt');
     var st = cells.map(function () { return 'closed'; });
+    var hitsCount = items.filter(function (it) { return it.hit; }).length;
     var opened = 0, queue = [], running = false;
 
     function glowOne(i, fast) {
@@ -218,19 +235,27 @@
       if (st[i] === 'open') return;
       st[i] = 'open';
       var cell = cells[i];
+      var it = items[i];
       cell.classList.remove('glow');
       cell.classList.add('open');
-      if (!fast) { clearFlare(root); burst(); chime(); }
-      opened++;
-      if (opened === items.length) {
+      if (!it.hit) cell.classList.add('miss');
+      if (!fast) {
+        clearFlare(root);
+        if (it.hit) { burst(); chime(); } else { missTone(); }
+      }
+      if (it.hit) {
+        opened++;
+        if (cntEl) cntEl.textContent = String(opened);
+      }
+      if (opened === hitsCount) {
         clearFlare(root);
         later(function () {
           if (!S) return;
           root.querySelector('.pfx-foot').classList.add('on');
           var d = root.querySelector('.pfx-done');
           d.disabled = false; d.classList.add('ready');
+          /* 单抽（重抽）自动收场；正常抽取让用户自己决定何时看结果 */
           if (opts.single) later(finish, 700);
-          else later(finish, 1500);
         }, 420);
       }
       refresh();
@@ -292,8 +317,10 @@
           st[i] = 'open';
           cell.classList.remove('glow', 'charge');
           cell.classList.add('open', 'flat');
+          if (!items[i].hit) cell.classList.add('miss');
         });
-        opened = items.length;
+        opened = hitsCount;
+        if (cntEl) cntEl.textContent = String(opened);
       },
       count: function () { return opened; },
       refresh: refresh
@@ -452,12 +479,18 @@
 
     /* 全屏泛色层：绝对定位铺满 .pfx，z-index 在网格之下、顶栏底栏之上 */
     var flare = '<div class="pfx-flare"><div class="pfx-flare-seg"></div><div class="pfx-flare-hint"></div></div>';
-    var footAll = (mode === 'case' || opts.single) ? '' : '<button type="button" class="pfx-btn pfx-all">全部开盒</button>';
+    /* box 模式底栏加「已抽中 X / N」计数 —— N 是中奖人数，不是盲盒总数 */
+    var footAll = '';
+    if (mode !== 'case' && !opts.single) {
+      var hitN = items.filter(function (it) { return it.hit; }).length;
+      footAll = '<button type="button" class="pfx-btn pfx-all">全部开盒</button>'
+        + '<span class="pfx-cnt-box">已抽中 <b class="pfx-cnt">0</b> / ' + hitN + '</span>';
+    }
 
     return '<div class="pfx-in">'
       + '<div class="pfx-bar">'
       +   '<div class="pfx-tit"><div class="pfx-title">' + titleOf(mode) + '</div>'
-      +     '<div class="pfx-sub">' + subOf(mode, items.length, opts.single) + '</div></div>'
+      +     '<div class="pfx-sub">' + subOf(mode, items, opts) + '</div></div>'
       +   '<button type="button" class="pfx-skip">跳过</button>'
       + '</div>'
       + '<div class="pfx-legend-wrap">' + legendHtml() + '</div>'
@@ -513,8 +546,26 @@
 
     var mode = opts.mode;
     if (mode !== 'box' && mode !== 'case') mode = 'box';
-    var items = (opts.items || []).slice(0, 10);
-    if (!items.length) { if (opts.onDone) opts.onDone(); return; }
+    var hits = (opts.items || []).slice(0, 10);
+    if (!hits.length) { if (opts.onDone) opts.onDone(); return; }
+
+    var pool = (opts.pool && opts.pool.length) ? opts.pool.slice() : hits.slice();
+    var items;
+    if (mode === 'box') {
+      /* 盲盒固定 10 格（池子不足按池子数）：中奖者藏在里面、陪跑从池子补齐、打乱顺序。
+         不论抽几人，盲盒总数恒定，不会因人数少而暴露结果范围。 */
+      var gridN = Math.min(10, pool.length);
+      var hitMap = {};
+      hits.forEach(function (h) { hitMap[h.name] = 1; });
+      var extras = pool.filter(function (p) { return !hitMap[p.name]; });
+      shuffle(extras);
+      var fill = extras.slice(0, gridN - hits.length);
+      items = hits.map(function (it) { return { name: it.name, no: it.no, hit: true }; })
+        .concat(fill.map(function (it) { return { name: it.name, no: it.no, hit: false }; }));
+      shuffle(items);
+    } else {
+      items = hits;
+    }
 
     var root = document.createElement('div');
     root.className = 'pfx';

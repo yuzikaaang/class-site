@@ -4693,6 +4693,12 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 }
 .dark .pfx-b .bx-name b{background:#241c17}
 .pfx-b .bx-name em{font-style:normal;font-size:.7rem;color:var(--fg-3);font-variant-numeric:tabular-nums}
+/* 未中盲盒（陪跑）：暗淡灰化，与中奖清亮形成反差 */
+.pfx-b.miss{opacity:.5}
+.pfx-b.miss .bx-name b.bx-miss{
+  font-size:.82rem;font-weight:800;color:var(--fg-3);letter-spacing:.08em;
+  background:transparent;box-shadow:none;
+}
 .pfx-cell.flat .bx-name,.pfx-cell.flat .bx-lid{transition:none!important}
 
 /* ---------- 分层：全屏泛色层覆盖网格（沉浸泛色 + 中央段文字），顶栏 / 图例 / 底栏在其上 ---------- */
@@ -4795,7 +4801,9 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .dark .pfx-win{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1);border-left-color:var(--pc)}
 
 /* ---------- 底部按钮 ---------- */
-.pfx-foot{display:flex;gap:10px;justify-content:center}
+.pfx-foot{display:flex;gap:10px;justify-content:center;align-items:center}
+.pfx-cnt-box{font-size:.85rem;color:var(--fg-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+.pfx-cnt-box b{color:var(--fg);font-weight:800}
 .pfx-btn{
   min-width:150px;padding:12px 26px;border-radius:14px;font:inherit;font-size:.92rem;font-weight:800;
   border:1px solid rgba(120,53,15,.2);background:var(--bg-2);color:var(--fg);cursor:pointer;transition:.16s;
@@ -6464,14 +6472,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.5.1';
+var SITE_VERSION = '4.5.2';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=451" defer></script>
-<script src="./app.min.js?v=451" defer></script>
+<script src="./auth-bus.js?v=452" defer></script>
+<script src="./app.min.js?v=452" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=451" defer></script>
+<script src="./big.js?v=452" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
 <script src="./pickfx.js?v=451" defer></script>

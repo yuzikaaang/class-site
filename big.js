@@ -2200,7 +2200,7 @@
     return arr.join(' · ');
   }
 
-  /* 动画选择区（v4.5.1）：关闭 / 盲盒 / 宝箱。
+  /* 动画选择区（v4.5.2）：关闭 / 盲盒 / 宝箱。
      颜色图例与动画里的一致，取自 PickFX 的同一份色板，避免两处色值走偏。 */
   function fxPanel(){
     var p = BIG.pick, fx = p.fx || 'off';
@@ -2223,7 +2223,7 @@
       tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。转盘由快到慢，末段极慢；'
         + (p.hideName ? '抽取中只显示学号段，停止后再揭示姓名。' : '抽取中姓名随学号段一同显示。') + '</p>';
     } else {
-      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。两段式：先开缝露学号段光辉，再点击揭示姓名。</p>';
+      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。固定 10 个盲盒，中奖者藏在其中；两段式：先开缝露学号段光辉，再点击揭示姓名或未中。</p>';
     }
 
     var hide = (fx === 'case')

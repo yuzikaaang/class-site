@@ -12625,7 +12625,7 @@ console.log('\n【95】v4.4.5 软件简介书面化 / 表头吸顶 / 视频悬�
     && /videoBubbleHide\(\);   \/\* v4\.4\.5/.test(app));
 }
 
-console.log('\n【96】v4.5.1 抽取动画：盲盒（两段式）/ 宝箱（卡间隙），学号分段色');
+console.log('\n【96】v4.5.2 抽取动画：盲盒（固定10格·两段式）/ 宝箱（卡间隙），学号分段色');
 
 {
   const fsx = fs.readFileSync(new URL('./pickfx.js', import.meta.url), 'utf8');
@@ -12685,6 +12685,16 @@ console.log('\n【96】v4.5.1 抽取动画：盲盒（两段式）/ 宝箱（卡
   t('★宝箱减速末段极慢（分段缓动 easeCase）', /easeCase/.test(fsx) && /0\.86/.test(fsx));
   t('★宝箱三成概率停针卡间隙', /nearMiss/.test(fsx) && /0\.32/.test(fsx));
   t('★index.html 含全屏泛色层与盲盒 glow 态样式', /\.pfx-flare\b/.test(idx) && /\.pfx-b\.glow/.test(idx));
+
+  /* ⑨ v4.5.2：盲盒固定 10 格 + 中奖/陪跑机制 */
+  t('★盲盒固定 10 格（gridN = min(10, pool.length)）', /gridN = Math\.min\(10, pool\.length\)/.test(fsx));
+  t('★中奖者藏盲盒里、陪跑从池子补齐', /hitMap\[/.test(fsx) && /extras\.filter|pool\.filter.*hitMap/.test(fsx) && /fill = extras\.slice/.test(fsx));
+  t('★盲盒打乱顺序（Fisher-Yates shuffle）', /function shuffle\(a\)/.test(fsx));
+  t('★盲盒区分中奖与陪跑（hit 标记 + missTone）', /it\.hit/.test(fsx) && /missTone\(\)/.test(fsx));
+  t('★opened 只数中奖（hitsCount）', /hitsCount = items\.filter/.test(fsx) && /opened === hitsCount/.test(fsx));
+  t('★跳过时 flush 给陪跑盲盒加 miss 类', /if \(!items\[i\]\.hit\) cell\.classList\.add\('miss'\)/.test(fsx));
+  t('★底栏显示「已抽中 X / N」计数', /pfx-cnt-box/.test(fsx) && /已抽中/.test(fsx));
+  t('★CSS 含未中盲盒暗淡样式', /\.pfx-b\.miss/.test(idx) && /\.bx-miss/.test(idx));
 }
 
 console.log('\n' + '='.repeat(52));
