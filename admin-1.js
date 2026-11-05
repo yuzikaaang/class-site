@@ -2155,7 +2155,7 @@ function memberDetailDialog(m){
   var archive = m.profileId == null
     ? '<div class="panel" style="margin-bottom:18px"><div class="panel-head"><h3>' + svg('file') + '班级档案</h3></div>'
       + '<div class="panel-body"><p class="muted" style="margin:0;font-size:.85rem">'
-      + '这位同学<b>还没有班级档案</b>。点「编辑」可以在同一个表单里补上学号、身份、联系方式。</p></div></div>'
+      + '这位同学<b>暂无班级档案</b>。点击「编辑」可在同一表单中补全学号、身份与联系方式。</p></div></div>'
     : '<div class="panel" style="margin-bottom:18px">'
       + '<div class="panel-head"><div><h3>' + svg('file') + '班级档案</h3>'
       +   '<p class="sub">' + esc(m.name || '(未命名)') + ' 的档案字段 · 每项可单独复制</p></div></div>'
@@ -2506,7 +2506,7 @@ function importDialog(){
       +     '<input type="file" id="imFile" accept=".xlsx,.xls" style="display:none"></label>'
       + '</div>'
 
-      + '<div id="imBody"><p class="muted" style="font-size:.85rem;margin:0">还没有选择文件。</p></div>'
+      + '<div id="imBody"><p class="muted" style="font-size:.85rem;margin:0">未选择文件。</p></div>'
       + '<div id="imProgWrap" style="display:none"><div class="progress-bar"><i id="imProg"></i></div>'
       + '<p id="imProgTxt" style="font-size:.78rem;color:var(--fg-3);margin:0"></p></div>'
       + '<div id="imErr" style="margin-top:14px"></div>'
@@ -3782,7 +3782,7 @@ function renderHomeworks(){
     + '</div>'
     + '<div class="alert info" style="margin-bottom:16px">'
     +   '<b>要新增某个日期的作业</b>：点左上角「＋ 新增作业」→ 填标题（如「国庆假期作业」）、'
-    +   '开始 / 结束日期 → 逐科添加任务 → 保存。到日子同学打开「作业」就能看到，日期过了自动归档。<br>'
+    +   '开始 / 结束日期 → 逐科添加任务 → 保存。到达起始日期后成员可在「作业」中查看，结束后自动归档。<br>'
     +   '每条任务下面可以单独挂<b>图片 / 音频 / 视频链接</b>（填直链），挂在哪条就显示在哪个任务下面。<br>'
     +   '附件文件由站主统一上传到仓库后给出链接，后台不提供直接上传。<br>'
     +   '日常改本科目作业不用进后台——课代表在自己科目的作业卡上点 ✏️ 即可（只能改自己那科）。'
@@ -4116,7 +4116,7 @@ function hwDialog(idx){
 
   openModal({
     title: isNew ? '新增作业' : '编辑作业',
-    sub: isNew ? '按日期区间新增，同学到日子就能看到' : (raw.title || ''),
+    sub: isNew ? '按日期区间新增，到期后成员可见' : (raw.title || ''),
     wide: true,
     body: '<div id="hwEd"></div>',
     foot: '<button class="btn btn-secondary" data-close>取消</button>'
@@ -5983,7 +5983,7 @@ function paintSchedule(){
 function dqFixedTable(cfg, list){
   var keys = Object.keys(cfg.fixed || {}).sort();
   if(!keys.length){
-    return '<div class="muted" style="font-size:.78rem;padding:6px 0">还没有指定任何日期。'
+    return '<div class="muted" style="font-size:.78rem;padding:6px 0">尚未指定任何日期。'
       + '比如想让 10 月 20 号显示第 3 句，就在上面填日期和序号后点「指定」。</div>';
   }
   var today = dqDayStr(new Date());

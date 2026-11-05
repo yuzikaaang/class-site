@@ -1522,7 +1522,7 @@ function profileImportDialog(){
         yes.disabled = true;
         parsed = [];
         if(!f){
-          prev.innerHTML = '<p class="muted" style="font-size:.85rem;margin:0">还没有选择文件。</p>';
+          prev.innerHTML = '<p class="muted" style="font-size:.85rem;margin:0">未选择文件。</p>';
           msg.className = 'msg';
           return;
         }
@@ -2485,7 +2485,7 @@ function paintGames(){
   if(!S.list.length){
     body.innerHTML = '<div class="empty">' + svg('activity', 38)
       + '<p>还没有任何游戏数据上云</p>'
-      + '<p class="muted" style="font-size:.82rem">同学登录后再去玩一局，这里就会有记录</p></div>';
+      + '<p class="muted" style="font-size:.82rem">成员登录并进行游戏后，此处将显示记录</p></div>';
     return;
   }
 
@@ -2796,7 +2796,7 @@ function loadOnline(){
     if(!body) return;
     if(!S.users.length){
       body.innerHTML = '<div class="empty">' + svg('inbox', 38) + '<p>还没有任何在线记录</p>'
-        + '<p style="font-size:.78rem;margin-top:8px">前端每 60 秒发一次心跳，第一个心跳到达后这里就会有数据</p></div>';
+        + '<p style="font-size:.78rem;margin-top:8px">前端每 60 秒发一次心跳，首次心跳上报后此处将显示数据</p></div>';
       return;
     }
 
@@ -3551,7 +3551,7 @@ function renderSettings(){
         return api('/content', { method: 'PUT', body: { items: { site_config: cfg } } });
       }).then(function(){
         msg.className = 'msg show ok';
-        msg.textContent = '已保存。同学下次打开/刷新班级站就会显示新的站点名称和副标题（浏览器标题栏、页头、页脚一起换）。';
+        msg.textContent = '已保存。成员下次打开或刷新班级站后将显示新的站点名称与副标题（浏览器标题栏、页头、页脚同步更换）。';
         toast('站点信息已保存', 'ok');
       }).catch(function(e){
         msg.className = 'msg show err';
@@ -5755,7 +5755,7 @@ function paintIsland(){
     +   '<div style="flex:1;min-width:0">'
     +     '<b style="font-size:.92rem">班级岛</b>'
     +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
-    +       '首页公告上面那条。<b>改动实时保存</b>，不用再点保存；同学刷新就能看到</p>'
+    +       '首页公告上面那条。<b>改动实时保存</b>，无需再点击保存；成员刷新后即生效</p>'
     +   '</div>'
     +   '<span class="ai-save-state" id="aiStage">已同步</span>'
     +   '<button class="btn btn-sm btn-secondary" id="aiReload">重新读取</button>'
@@ -6075,7 +6075,7 @@ function paintDayList(){
   var keys = Object.keys(AI.days || {}).sort();
   var host = $('aiDayList');
   if(!keys.length){
-    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">还没有单独设置的日期。点上面「填入当天课表」可以基于当天默认课表改一两个字。</p>';
+    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">尚未单独设置日期。点上面「填入当天课表」可以基于当天默认课表改一两个字。</p>';
     return;
   }
   host.innerHTML = keys.map(function(k){

@@ -3137,7 +3137,7 @@ function render(){
           /* 第二十七轮（2026-10-07）：成绩查询 / 意见反馈 需登录后查看。
              未登录只给引导，不渲染入口，避免隐私内容被未登录同学打开。 */
           contentHtml += '<div class="gate-box"><p class="gate-q">🔐 请先登录后查看</p>'+
-            '<p class="gate-hint" style="color:#6e635a;font-weight:400;margin:6px 0 10px">'+esc(l.title)+'需要登录后才能打开。登录后回到这里打开即可进入。</p>'+
+            '<p class="gate-hint" style="color:#6e635a;font-weight:400;margin:6px 0 10px">'+esc(l.title)+'需登录后查看，登录完成后返回本页。</p>'+
             '</div>';
         }
         contentHtml += (l.cardTip ? '<p class="card-hw-tip" style="font-size:.78rem;color:#af410f;margin-top:6px;line-height:1.6">'+esc(l.cardTip)+'</p>' : '');
@@ -6359,7 +6359,7 @@ function myProfileHtml(){
             + ' style="margin-top:10px;opacity:.55">保存修改（需管理员确认）</button>'
             + '<div class="mp-edittip">带 ✏️ 的项改完点上面的按钮提交，确认前仍显示原内容；带 🔒 的只能由管理员修改。</div>'
           : '')
-    : '<p class="mp-empty">还没有可展示的资料字段。有误请联系站主。</p>';
+    : '<p class="mp-empty">暂无可展示的资料字段，如有错误请联系管理员。</p>';
 
   return '<div class="acct-user" style="margin-bottom:12px">' +
       '<div class="acct-avatar">' + esc((p.name || '?').charAt(0)) + '</div>' +
@@ -11727,7 +11727,7 @@ function loadCloudData(){
   api('/data?view=cats').then(function(j){
     if(sum) sum.textContent='共 '+(j.total||0)+' 条，约 '+fmtBytes(j.bytes||0)+'。删除前需要验证登录密码。';
     if(!j.groups || !j.groups.length){
-      if(box) box.innerHTML='<p style="font-size:.82rem;color:#57534e;margin:0">云端还没有数据。主题、作业勾选、班级签、点歌记录等会自动同步上来。</p>';
+      if(box) box.innerHTML='<p style="font-size:.82rem;color:#57534e;margin:0">云端暂无数据。主题、作业勾选、班级签、点歌记录等会自动同步上来。</p>';
       return;
     }
     if(box) box.innerHTML=j.groups.map(function(g){
@@ -13071,8 +13071,8 @@ function voteRenderAll(){
   if(!list.length){
     voteBody('<div class="vote-empty">'
       + '<div class="vote-empty-ico">🗳️</div>'
-      + '<p>还没有投票。</p>'
-      + '<p class="vote-dim">管理员在后台发起投票后，这里就会出现。</p>'
+      + '<p>暂无投票。</p>'
+      + '<p class="vote-dim">管理员发起投票后将在此显示。</p>'
       + '</div>');
     return;
   }
@@ -14338,7 +14338,7 @@ function scRenderPane(){
 /* ---------- 全班成绩单 ---------- */
 function scRenderBoard(){
   if(!SC.rows.length){
-    scPane('<div class="sc-empty"><p>这次考试还没有成绩。</p></div>');
+    scPane('<div class="sc-empty"><p>本次考试暂无成绩。</p></div>');
     return;
   }
   var subs = SC.exam.subjects || [];
@@ -14521,7 +14521,7 @@ function scBoardAiCard(){
   var concl = '这次参考 <b>' + st.n + '</b> 人，班均 <b>' + fmtNum(st.avg) + '</b>、中位 <b>' + fmtNum(st.median)
     + '</b>，最高 ' + fmtNum(st.max) + '、最低 ' + fmtNum(st.min)
     + '，最高与最低相差 <b>' + fmtNum(st.max - st.min) + '</b> 分。'
-    + (d.careAll ? '按「总分明显落后 / 单科严重拖后腿」两条，有 <b>' + d.careAll + '</b> 人需要盯一下。' : '这次没有明显需要单独盯的人。');
+    + (d.careAll ? '按「总分明显落后 / 单科严重拖后腿」两条，有 <b>' + d.careAll + '</b> 人需重点关注。' : '这次没有明显需要单独盯的人。');
 
   var rowHtml = function(k, v){
     return v ? '<div class="sc-ai-row"><span class="sc-ai-k">' + k + '</span><span class="sc-ai-v">' + v + '</span></div>' : '';
@@ -16509,7 +16509,7 @@ function aiExportDlg(scene) {
     d.innerHTML = '<div class="ai-box ai-xbox">'
       + '<h3>导出 / 导入</h3>'
       + '<p class="ai-note">导出的文件都在你自己手机或电脑上，不经服务器。'
-      + '<b>设置包里默认不含密钥</b>，要带走的话勾一下。</p>'
+      + '<b>设置包里默认不含密钥</b>，如需一并导出，请勾选。</p>'
       + '<div class="ai-xgrid" id="aiXGrid"></div>'
       + '<label class="ai-xkey"><input type="checkbox" id="aiXKey"> 导出设置时把 API Key 一起写进去</label>'
       + '<p class="ai-note" id="aiXTip" style="margin:2px 0 10px">'
@@ -18066,7 +18066,7 @@ function scTrendBlock(meRow){
   var items = SC.me;
   if(!items || items.length < 2){
     return '<div class="sc-card"><div class="sc-card-h">历次趋势</div>'
-      + '<div class="sc-dim" style="padding:6px 0">目前只有一次考试的成绩，等下一次考完就能看到趋势和进退步了。</div></div>';
+      + '<div class="sc-dim" style="padding:6px 0">目前只有一次考试的成绩，完成下一次考试后可查看趋势与进退步。</div></div>';
   }
   /* 只保留有各科配置、能算出总分的 */
   var pts = items.map(function(it){
@@ -18192,7 +18192,7 @@ function scNoRankNotice(pair){
   }else if(pair.reason === 'no-prev-rank'){
     msg = '本次之前没有可对比的年级排名，<b>暂时无法判断进退步</b>。';
   }else if(pair.reason === 'empty'){
-    msg = '还没有成绩记录。';
+    msg = '暂无成绩记录。';
   }else return '';
   return '<div class="sc-norank"><b>说明</b>　' + msg + '（' + cnt + '；趋势图只画含年级排名的那几次，不会用更早的考试冒充本次。）'
     + '<br><span class="sc-dim">原因：年级排名由人工导入，未导入的考试不参与进退步分析。</span></div>';
@@ -19199,7 +19199,7 @@ function scShareDialog(edit){
   var cfg = SC.config || {};
   var isAdmin = scIsAdmin();
   var allow = isAdmin ? 'all' : (cfg.shareByStudent || 'none');
-  if(allow === 'none'){ alert('老师还没有开放分享功能。'); return; }
+  if(allow === 'none'){ alert('分享功能尚未开放。'); return; }
 
   var chosenEx = (edit && (edit.examIds || []).length) ? edit.examIds.map(Number) : null;
   var exOpts = SC.exams.map(function(e, i){

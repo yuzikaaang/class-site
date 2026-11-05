@@ -437,7 +437,7 @@ function paintHols(){
   var host = $('aiHolList');
   var list = (AI.holidays || []).slice().sort(function(a, b){ return a.from < b.from ? -1 : 1; });
   if(!list.length){
-    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">还没有假期区间。</p>';
+    host.innerHTML = '<p class="muted" style="font-size:.8rem;margin:0 0 8px">暂无假期区间。</p>';
     return;
   }
   host.innerHTML = list.map(function(h){
@@ -622,7 +622,7 @@ function paintBoards(){
   if(!host) return;
   var rows = bdRows();
   if(!rows.length){
-    host.innerHTML = '<div class="alert warn" style="margin:16px">还没有拿到板块清单。'
+    host.innerHTML = '<div class="alert warn" style="margin:16px">未获取到板块清单。'
       + '请先在手机或电脑上<b>登录并打开一次站点首页</b>，再回来点「刷新」。'
       + '（首页会自动把当前的板块和卡片上报到这里。）</div>';
     return;
@@ -1551,7 +1551,7 @@ function voPaint(){
   var box = $('voList');
   if(!box) return;
   if(!VO.list.length){
-    box.innerHTML = '<div class="panel"><p class="muted" style="margin:0;font-size:.86rem">还没有投票。点右上角「新建投票」发起一个。</p></div>';
+    box.innerHTML = '<div class="panel"><p class="muted" style="margin:0;font-size:.86rem">暂无投票。点击右上角「新建投票」创建。</p></div>';
     return;
   }
   box.innerHTML = VO.list.map(function(v){
@@ -1759,7 +1759,7 @@ function voToggleBallots(id){
           + '<th style="padding:6px 10px">投给</th><th style="padding:6px 10px">时间</th></tr></thead>'
           + '<tbody>' + rows.replace(/<td/g, '<td style="padding:6px 10px;border-top:1px solid var(--border)"') + '</tbody>'
           + '</table></div>'
-        : '<p class="muted" style="padding:12px;margin:0;font-size:.82rem">还没有人投票。</p>')
+        : '<p class="muted" style="padding:12px;margin:0;font-size:.82rem">暂无投票记录。</p>')
     + '</div>';
 }
 
@@ -2205,7 +2205,7 @@ function voEditorDialog(v){
       /* v3.19.0：公开（未登录也能看选项和结果，想投票仍需登录） */
       +   '<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voPublic"' + (!v || v.publicRead !== false ? ' checked' : '') + '> 公开（未登录也能看结果）</label>'
       + '</div>'
-      + '<p class="muted" style="font-size:.76rem;margin:-2px 0 10px">「公开」= 分享出去的链接打开就能看到有哪些选项、各多少票；不勾则必须登录才看得到。'
+      + '<p class="muted" style="font-size:.76rem;margin:-2px 0 10px">「公开」= 分享链接打开后可查看选项、各多少票；不勾则必须登录才看得到。'
       + '无论勾不勾，投票本身都必须登录。</p>'
       /* v3.5.14 #9：票数配额 + 撤回次数 */
       + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">'
@@ -2945,7 +2945,7 @@ var REL_BUILTIN = [
       '【大屏模式】自定义设置 → 界面 → 大屏模式。开了以后：顶部导航变成横排（还是原来那些入口），首页铺成图标墙，按板块分组，图标更大、点起来更容易',
       '【单功能页】点站内功能（成绩分析、投票、个人资料查询…）会进入「只有这一个功能」的页面，左上角「返回大屏」一键回来；外链入口直接新窗口打开',
       '【大屏作业页】作业图标点进去是仿 ClassWorks 的一整页：左边作业列表，右边实时时钟 + 今日事项 + 随机点名',
-      '【作业直接编辑】管理员（班级电脑专用账号）在作业页就能改：改文字、加一项、删一项、加一科、新建一期，改完自动同步云端，同学刷新就能看到',
+      '【作业直接编辑】管理员（班级电脑专用账号）在作业页就能改：改文字、加一项、删一项、加一科、新建一期，修改后自动同步云端，成员刷新后可见',
       '【随机点名】复用班级名单，默认只在学生里抽；支持一次抽多人、滚动动画、对某一个人单独重抽；可把请假 / 不参与的同学先排除，名单记在这台电脑上',
       '【时钟】作业页右侧就是实时时钟，点击进全屏时钟页',
       '【只记本机】大屏开关只存在这台设备，换电脑或清缓存要重新开（站主要求）；也支持链接后面加 ?big=1 直接进大屏',
@@ -3038,7 +3038,7 @@ var REL_BUILTIN = [
       '刚进翻页模式那一帧只是落数字、没有翻页动作，用「上一帧是否已有值」排除，不会凭空响一声',
       '音频 base64 内嵌进页面，进翻页模式时预解码 —— 断网、弱网也照响，不额外请求任何文件'
     ], pub: [
-      { cat: '体验', text: '翻页时钟现在有翻页声了，像真的翻页牌一样「啪」一下，不是电子滴滴声' },
+      { cat: '体验', text: '翻页时钟新增翻页音效，采用翻页牌质感声音，非电子提示音' },
       { cat: '体验', text: '在时钟页右上角「更多」里可以选：关闭 / 纸页 / 咔哒，还能拖音量条，点击就能先试听' },
       { cat: '其他', text: '默认是开着的（纸页、55%）。教室里嫌吵可以选「关闭」，设置会记住，换设备各记各的' },
       { cat: '其他', text: '关掉秒显示之后每分钟才翻一次，响的次数也会跟着变少' }
@@ -3399,7 +3399,7 @@ var REL_BUILTIN = [
   { version: '3.9.14', date: '2026-10-23', type: 'perf', title: '首屏不再「跳一下」', items: [
       '班级岛改为先占位再显示：以前它等数据回来才出现，会把整页顶下去约 176px（布局跳动 0.25，属于「差」）'
     ], pub: [
-      { cat: '速度', text: '打开首页时内容不再上下跳一下，看着更稳' }
+      { cat: '速度', text: '打开首页时内容不再上下跳动，视觉更稳定' }
     ] },
   { version: '3.9.13', date: '2026-10-23', type: 'perf', title: '首屏班徽不再走服务器', items: [
       '首页顶部还有一处内联脚本冷启动就拉服务器代理的班徽（110KB、约 3 秒），改为直接读站内 28KB 版本'
@@ -3568,7 +3568,7 @@ var REL_BUILTIN = [
       { cat: '班级', text: '首页新增班级小岛：显示时间和当天课程，打开能看整周课表' }
     ] },
   { version: '3.8.6', date: '2026-10-20', type: 'fix', title: '扫码播放页不再被登录提示挡住', items: [
-      '扫码打开 ?play= 播放页时，原来还会弹「登录一下，数据跟着你走」和开屏公告，把播放器整个盖住',
+      '扫码打开 ?play= 播放页时，此前会弹出登录引导与开屏公告，遮挡播放器',
       '现在把「分享链接（?t=）」和「播放页（?play=）」统一当成深链入口：不弹开屏、不推销登录，直接给内容'
     ], pub: [
       { cat: '作业', text: '导出的作业图片里，图片直链会直接显示，音频和视频会变成二维码，扫码就能播放' }
@@ -4453,7 +4453,7 @@ function scEditDisplay(){
             patch[it.key] = bx.querySelector('#cf_' + it.key).value;
           });
           api('/scores?action=config-save', { method: 'POST', body: { config: patch } })
-            .then(function(){ closeModal(); toast('已保存，学生刷新就能看到新设置'); })
+            .then(function(){ closeModal(); toast('已保存，成员刷新后生效'); })
             .catch(function(e){ toast('保存失败：' + (e.message || e), 'err'); });
         };
       },
@@ -4846,7 +4846,7 @@ function scPaintExams(){
   if(!list.length){
     $('scBody').innerHTML = '<div class="empty">'
       + '<div style="font-size:2rem;margin-bottom:10px">📊</div>'
-      + '还没有任何考试。<br>点右上角「新建考试」建一次（填名称、时间、分数线），'
+      + '暂无考试。<br>点右上角「新建考试」建一次（填名称、时间、分数线），'
       + '再「导入成绩」或直接手填。'
       + '</div>';
     return;
@@ -5924,7 +5924,7 @@ function scPaintRows(){
   var rows = SC_STATE.rows || [];
 
   if(!rows.length){
-    $('scRows').innerHTML = '<div class="empty">这次考试还没有成绩。<br>'
+    $('scRows').innerHTML = '<div class="empty">本次考试暂无成绩。<br>'
       + '点上面「加一行」手填，或者回列表用「导入成绩」传一张表。</div>';
     return;
   }
@@ -6163,7 +6163,7 @@ function paintPopups(){
   if(!list.length){
     $('popBody').innerHTML = '<div class="empty">'
       + '<div style="font-size:2rem;margin-bottom:10px">💬</div>'
-      + '还没有任何弹窗。<br>点右上角「新增弹窗」加一条，比如开屏弹一条班级公告。'
+      + '暂无弹窗。<br>点右上角「新增弹窗」加一条，比如开屏弹一条班级公告。'
       + '</div>';
     return;
   }
@@ -6569,7 +6569,7 @@ function paintIshare(){
   if($('isCount')) $('isCount').textContent = '共 ' + ISHARE.list.length + ' 条';
   if(!ISHARE.list.length){
     body.innerHTML = '<div class="empty">' + svg('users', 34)
-      + '<p>还没有分享链接。<br>点左上角「新建分享」，选好开放范围后会生成链接和二维码。</p></div>';
+      + '<p>暂无分享链接。<br>点左上角「新建分享」，选好开放范围后会生成链接和二维码。</p></div>';
     return;
   }
   body.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px">'

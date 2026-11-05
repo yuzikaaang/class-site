@@ -2332,7 +2332,7 @@ function sumRender(){
   var st = SUM.stats = sumStats(got.segs, got.pomo);
 
   if(!st.n){
-    box.innerHTML = '<div class="sum-empty">这段时间还没有记录。<br>'
+    box.innerHTML = '<div class="sum-empty">该时段暂无记录。<br>'
       + '换一个区间看看，或者先去用一会儿时钟（自习、倒计时、秒表都会记）。</div>';
     return;
   }
@@ -2749,7 +2749,7 @@ function logRender(){
   $('logSum').innerHTML = cards + modes;
 
   if(!m.segs.length){
-    $('logList').innerHTML = '<div class="lg-empty">这天还没有记录。<br>'
+    $('logList').innerHTML = '<div class="lg-empty">当日暂无记录。<br>'
       + '页面开着并且切过模式（数字 / 翻页 / 秒表 / 倒计时 / 自习）就会自动记一段，'
       + '不用手动开始。</div>';
   }else{
