@@ -158,7 +158,7 @@ function renderDates(){
     + '</div>'
     + '<div class="alert info" style="margin-bottom:16px">'
     +   '这里的每一条都会出现在首页「重要日期」倒计时里。'
-    +   '填了「考试范围」的事项，同学点开才有「查看考试范围」按钮。<br>'
+    +   '填了「考试范围」的事项，同学打开才有「查看考试范围」按钮。<br>'
     +   '<b>注意：清空云端不影响首页</b> —— 主站会自动回退到页面内置的那份日期，不会出现空白。'
     + '</div>'
     + '<section class="panel"><div id="dtBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
@@ -277,14 +277,14 @@ function dtDialog(key){
       +   '<input id="dtD" type="datetime-local" value="' + attr(toLocalInput(d.date)) + '"></div>'
       +   '<div class="field" style="flex:1;min-width:180px"><label for="dtE">结束日期（可选）</label>'
       +   '<input id="dtE" type="date" value="' + attr(toDayInput(d.endDate)) + '">'
-      +   '<p class="hint">只有跨天的事项才填，比如段考 13—14 日。</p></div>'
+      +   '<p class="hint">仅跨天事项需填写，如段考 13—14 日。</p></div>'
       + '</div>'
 
       + '<div class="field"><label>考试范围（可选）</label>'
       +   '<div id="dtScope">' + scopeRows() + '</div>'
       +   '<div style="margin-top:8px"><button type="button" class="btn btn-sm btn-ghost" id="dtScopeAdd">'
       +   svg('plus', 13) + ' 添加科目</button></div>'
-      +   '<p class="hint">填了之后，同学在首页点这条才会看到「查看考试范围」入口。</p></div>'
+      +   '<p class="hint">填写后，首页该条公告将显示「查看考试范围」入口。</p></div>'
 
       + '<div class="msg" id="dtMsg"></div>',
 
@@ -719,9 +719,9 @@ function collectRules(){
  * 我不可能重新再导一次，因为量太多了。」
  *
  * 于是有了这个按钮：扫一遍数据库，把**还是明文**的字段就地加密，
- * 已经是密文的自动跳过（幂等，中途断了再点一次就行，不会叠层）。
+ * 已经是密文的自动跳过（幂等，中途断了再点一次即可，不会叠层）。
  *
- * ⚠️ 为什么前端要循环调用而不是一次搞定：
+ * ⚠️ 为什么前端要循环调用而不是一次完成：
  *    Cloudflare Workers 免费版单个请求最多 50 个子请求，一行资料的 UPDATE
  *    算一次。全班 50 多人一次跑完会 500，所以每批 15 条、循环到 remaining=0。
  * ⚠️ 按钮运行期间禁用，防止重复点导致两批并发写同一行。
@@ -839,7 +839,7 @@ function repairFieldsDialog(){
             + '<br><span style="font-size:.78rem">这几项的历史数据无法通过本操作找回（列被删除时值就没了）。'
             + '恢复会重建空列，之后可以重新录入或从旧表格导入。</span></div>'
           : '<div class="alert ok">所有预置字段的数据库列都还在 —— 恢复后数据会立刻回来。</div>')
-      + '<p class="hint">恢复只补「定义」和「默认校验规则」，不会覆盖你改过的可见性、标签、本人可编辑开关。</p>';
+      + '<p class="hint">恢复仅补充定义与默认校验规则，不覆盖已调整的可见性、标签与本人可编辑设置。</p>';
     openModal({
       title: '字段体检 / 恢复', sub: '先把损失范围看清楚，再决定要不要恢复',
       body: html,
@@ -2143,7 +2143,7 @@ function renderViewLogs(){
     +         '这份记录只有管理员能看，用来在出现纠纷或信息被滥用时追溯。'
     +       '</p>'
     +       '<p style="margin:14px 0 0;font-size:.83rem;line-height:1.85;color:var(--fg-2)">'
-    +         '如果某位同学的资料被反复查看，可以点开「成员与档案」里那一行的'
+    +         '如果某位同学的资料被反复查看，可以打开「成员与档案」里那一行的'
     +         '<b>查看记录</b>按钮，单独看这条资料被谁查过。'
     +       '</p>'
     +     '</div>'
@@ -3361,7 +3361,7 @@ function secretDialog(item){
     body:
       '<div class="field"><label for="scName">令牌名称</label>'
       + '<input id="scName" maxlength="64" value="' + attr(isNew ? '' : item.name) + '" placeholder="如 CLOUDFLARE_API_TOKEN">'
-      + '<p class="hint">只能是大写字母、数字、下划线，且以大写字母开头。</p></div>'
+      + '<p class="hint">仅支持大写字母、数字与下划线，且以大写字母开头。</p></div>'
       + '<div class="field"><label for="scValue">令牌值</label>'
       + '<textarea id="scValue" rows="3" placeholder="粘贴令牌内容" style="font-family:monospace">' + attr(isNew ? '' : item.value) + '</textarea></div>'
       + '<div class="msg" id="scMsg"></div>',
@@ -3632,7 +3632,7 @@ function renderAccount(){
     +     '<input id="pwOld" type="password" autocomplete="current-password"></div>'
     +     '<div class="field"><label for="pwNew">新密码</label>'
     +     '<input id="pwNew" type="password" autocomplete="new-password" placeholder="6–64 位">'
-    +     '<p class="hint">建议用字母 + 数字组合，别和用户名一样。</p></div>'
+    +     '<p class="hint">建议使用字母与数字组合，且不同于登录名。</p></div>'
     +     '<div class="field"><label for="pwNew2">再输一次新密码</label>'
     +     '<input id="pwNew2" type="password" autocomplete="new-password"></div>'
     +     '<button class="btn" id="pwGo">' + svg('check', 14) + '修改密码</button>'
@@ -3840,7 +3840,7 @@ function openForceChangePwd(){
       + '<input id="fcOld" type="password" autocomplete="current-password"></div>'
       + '<div class="field"><label for="fcNew">新密码</label>'
       + '<input id="fcNew" type="password" autocomplete="new-password" placeholder="6–64 位">'
-      + '<p class="hint">建议字母 + 数字组合。</p></div>'
+      + '<p class="hint">建议使用字母与数字组合。</p></div>'
       + '<div class="field"><label for="fcNew2">再输一次新密码</label>'
       + '<input id="fcNew2" type="password" autocomplete="new-password"></div>'
       + '<div class="msg" id="fcMsg"></div>',
@@ -4178,7 +4178,7 @@ function paintAdminVer(){
   var a = $('adminVer'); if(a) a.textContent = txt;
   var h = $('headVer');  if(h) h.textContent = 'v' + SITE_VERSION;
 }
-/* 点一下回查线上后端构建号：等于最新 commit 前 7 位说明已经是新代码 */
+/* 点击回查线上后端构建号：等于最新 commit 前 7 位说明已经是新代码 */
 function checkAdminVer(){
   var el = $('adminVer') || $('headVer');
   if(!el) return;
@@ -5924,7 +5924,7 @@ function paintIsland(){
  *
  * 做法：任何一处改动（开关 / 学期 / 照片 / 横幅 / 组件 / 日期 / 假期）都调用
  *       aiTouch()，650ms 内没有新动作就自动 POST；顶部只显示状态，不再有保存按钮。
- *       保存失败会变成「保存失败，点此重试」，点一下重发。
+ *       保存失败会变成「保存失败，点此重试」，点击重发。
  * ========================================================================= */
 var AI_T = null, AI_BUSY = false, AI_AGAIN = false;
 function aiStage(txt, cls){

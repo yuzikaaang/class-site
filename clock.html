@@ -193,7 +193,7 @@ body.bg-green #pomoTime.warn,body.bg-gray #pomoTime.warn{color:#ff6b6b}
 @keyframes pomoFlash{0%,100%{opacity:1}45%{opacity:.12}}
 
 /* ---------- 全屏「时间到」提醒（v3.10.0） ----------
-   倒计时到点、自习阶段切换时整屏弹出约 3 秒，点一下可提前关闭；
+   倒计时到点、自习阶段切换时整屏弹出约 3 秒，点击可提前关闭；
    文字可在「更多」里自定义，留空默认「时间到！」。 */
 #fullAlert{
   position:fixed;left:0;right:0;top:0;bottom:0;z-index:120;
@@ -274,7 +274,7 @@ body.bg-green #bar button:hover,body.bg-gray #bar button:hover{background:rgba(2
 #bar button.cur{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.08)}
 body.bg-dark #bar button.cur,body.bg-black #bar button.cur,body.bg-navy #bar button.cur,
 body.bg-green #bar button.cur,body.bg-gray #bar button.cur{background:rgba(255,255,255,.14);border-color:transparent}
-/* 常驻悬浮开关（v3.10.3）：工具栏收起后也能一键点开，箭头随状态翻转。
+/* 常驻悬浮开关（v3.10.3）：工具栏收起后也能一键打开，箭头随状态翻转。
    放在右下角不挡时钟；iOS 上隐藏的工具栏偶尔还会吞点击，所以显式关掉它的 pointer-events */
 #barBtn{
   position:fixed;right:14px;bottom:14px;z-index:45;
@@ -296,7 +296,7 @@ body.bg-dark #barBtn,body.bg-black #barBtn,body.bg-navy #barBtn,
 body.bg-green #barBtn,body.bg-gray #barBtn{
   background:rgba(30,30,36,.82);border-color:rgba(255,255,255,.14)}
 
-/* 底部热区（v3.13）：工具栏收起时，屏幕最底下一整条都能点开它。
+/* 底部热区（v3.13）：工具栏收起时，屏幕最底下一整条都能打开它。
    z-index 压在工具栏和旋钮之下，这样栏里的按钮照样点得到 */
 #barHot{
   position:fixed;left:0;right:0;bottom:0;height:78px;z-index:38;
@@ -708,7 +708,7 @@ body.bg-dark .ds-loop input,body.bg-black .ds-loop input,body.bg-navy .ds-loop i
   background:transparent;color:inherit;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
 .ds-actions button.primary{background:#e08a4c;border-color:#e08a4c;color:#fff;flex:0 0 130px;margin:0 auto}
 
-/* v3.11.1：计时跑起来后只留数字（点一下才出现操作区） */
+/* v3.11.1：计时跑起来后只留数字（点击才出现操作区） */
 body.bare #modeName,
 body.bare #tmHead,
 body.bare #tmBar,
@@ -786,7 +786,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
       <button id="timerReset">重置</button>
     </div>
 
-    <div id="timerHint">点数字设时长 · 不设就直接开始是正计时</div>
+    <div id="timerHint">点击数字设定时长；直接开始则为正计时</div>
     <div id="markList"></div>
 
     <div class="subj-row" id="subjRow">
@@ -795,7 +795,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
       <button data-subj="化学">化学</button><button data-subj="生物">生物</button>
       <button data-subj="其他">其他</button>
     </div>
-    <input class="doing-inp" id="doingInp" maxlength="12" placeholder="这次做什么（如：试卷、练习）">
+    <input class="doing-inp" id="doingInp" maxlength="12" placeholder="本次事项（如：试卷、练习）">
   </div>
 </div>
 
@@ -863,9 +863,9 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
   <button id="aboutBtn">更多</button>
 </div>
 
-<!-- 常驻悬浮开关：工具栏收起后也有地方点开（iPad 上点空白处有时不灵，v3.10.3） -->
+<!-- 常驻悬浮开关：工具栏收起后也有地方打开（iPad 上点空白处有时不灵，v3.10.3） -->
 <button id="barBtn" title="展开工具栏" aria-label="展开工具栏"><span class="ar">▾</span></button>
-<!-- v3.13：工具栏收起时，屏幕最底下那条也能点开（站主要「直接点底部」） -->
+<!-- v3.13：工具栏收起时，屏幕最底下那条也能打开（站主要「直接点底部」） -->
 <div id="barHot" aria-hidden="true"></div>
 
 <div id="modeMenu">
@@ -876,11 +876,11 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 <div id="about">
   <div class="box">
     <h3>关于全屏时钟</h3>
-    <p>这是一个给班级同学用的在线时钟，分两块：<b>时钟</b>（数字 / 翻页）和<b>计时</b>（正计时 / 倒计时 / 番茄钟）。适合桌面常驻、教室投屏、自习计时。</p>
-    <p>正计时点开始就往上走，中途点「记一笔」写下这一段做了什么；倒计时先滚轮盘设时长；番茄钟按「专注 → 休息」自动循环，并记下今天完成了几个番茄。翻页时钟可以关掉秒，只留时分。</p>
+    <p>全屏时钟分为<b>时钟</b>（数字 / 翻页）与<b>计时</b>（正计时 / 倒计时 / 番茄钟）两部分，适用于教室投屏与自习计时。</p>
+    <p>正计时自启动后累计；途中可「记一笔」记录本段内容。倒计时需先设定时长。番茄钟按「专注 → 休息」循环，并统计当日完成次数。翻页时钟可隐藏秒数。</p>
 
     <div class="ab-sec">
-      <h4>提示音（点一下就能试听）</h4>
+      <h4>提示音（点击试听）</h4>
       <div class="snd-row" id="sndRow">
         <button data-snd="off">关闭</button>
         <button data-snd="ding">叮咚</button>
@@ -904,7 +904,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
         <input type="range" id="flipVolInp" min="0" max="100" step="5" value="55">
         <b id="flipVolVal">55%</b>
       </label>
-      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">每次翻页响一下；同一秒里时、分、秒三片一起翻时只响一声，不会叠成一片噪音。选音色的时候会立刻试听。</p>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">每次翻页播放一次；同一秒内多片同时翻动时仅播放一次。选择音色时即时试听。</p>
     </div>
 
     <div class="ab-sec">
@@ -919,26 +919,26 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
         <input type="range" id="noiseVolInp" min="0" max="100" step="5" value="70">
         <b id="noiseVolVal">70%</b>
       </label>
-      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">点一下开 / 关，可同时开几种混合；关掉这个面板后声音继续，再点「更多」回来就能关。音量拉到底就是静音，开着听歌也不打架。</p>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">点击开启或关闭，支持多种同时混合。关闭面板后声音继续播放，可再次进入「更多」关闭。音量为零时静音。</p>
     </div>
 
     <div class="ab-sec">
-      <h4>自定义名称（留空就用默认叫法）</h4>
+      <h4>自定义名称（留空则使用默认）</h4>
       <div class="name-grid">
         <label><span>数字</span><input data-nm="clock" maxlength="12" placeholder="数字时钟"></label>
         <label><span>翻页</span><input data-nm="flip" maxlength="12" placeholder="翻页时钟"></label>
         <label><span>计时</span><input data-nm="timer" maxlength="12" placeholder="计时"></label>
       </div>
       <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">
-        计时里的记录名字用「科目 · 这次做什么」：先在计时页点科目，再填这次做什么（如「试卷」「练习」），记录会按「科目 · 事项」分开统计。
+        记录名称采用「科目 · 事项」格式：先选择科目，再填写事项，记录将按科目与事项分别统计。
       </p>
     </div>
     <div class="ab-sec">
-      <h4>时间到提醒文字（留空默认「时间到！」）</h4>
+      <h4>提醒文字（留空默认「时间到」）</h4>
       <div class="name-grid">
         <label><span>提醒文字</span><input id="toastInp" maxlength="20" placeholder="时间到！"></label>
       </div>
-      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">倒计时到点、轮次切换时全屏弹出约 3 秒，点一下可提前关闭。</p>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">倒计时结束或轮次切换时全屏提示约 3 秒，点击可提前关闭。</p>
     </div>
 
     <div class="ab-sec">
@@ -949,7 +949,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
     <div class="ab-sec">
       <h4>提醒（可开多条，各用不同铃声）</h4>
       <div id="alertList"></div>
-      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">点右边的铃声按钮可以换音效，换一次试听一次。</p>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">点击右侧铃声按钮更换音效，更换后即时试听。</p>
     </div>
     <p><b>本页面仿照 <a href="https://yingming006.cn/time/?m=timer" target="_blank" rel="noopener">yingming006.cn/time</a> 制作</b>，功能与操作方式对齐原站，代码为本站自己实现。</p>
     <p style="font-size:12px;opacity:.7">快捷键：空格 开始 / 暂停 · R 重置 · M 记录 · F 全屏 · Esc 退出全屏 · 1~3 切换模式</p>
@@ -1369,7 +1369,7 @@ function tmDetailPaint(){
   if(bar) bar.style.display = (T.kind === 'up') ? 'none' : '';
   if(hint){
     hint.textContent = (T.kind === 'up')
-      ? '按开始就往上走 · 中途点「记一笔」把这段时间记下来'
+      ? '开始后自动累计，可随时「记一笔」记录本段内容'
       : (T.kind === 'down' ? '点数字设时长 · 设好按开始' : '点数字改专注 / 休息时长 · 跳过进下一段');
   }
 }
@@ -1427,7 +1427,7 @@ function tmStart(){
     T.markFrom = Date.now();
   }else{
     var ms = (T.kind === 'pomo') ? (focusMs() || 1500000) : downMs();
-    if(ms <= 0){ toast('先点一下数字设个时长'); openDur('focus'); return; }
+    if(ms <= 0){ toast('先点击数字设个时长'); openDur('focus'); return; }
     T.up = false; T.rounds = tmRounds(); T.round = 1; T.phase = 'focus';
     T.total = ms; T.left = ms; T.end = nowMs() + ms; T.run = true;
     T.hits = {};
@@ -1858,7 +1858,7 @@ function openDur(target){
   var sec = Math.round(((T.kind === 'down') ? downMs() : focusMs()) / 1000);
   DS.fresh = true;
   wheelSet(sec);
-  /* 面板刚弹出来那一下再对齐一次；但用户已经开滚了就别把人拉回来 */
+  /* 面板刚弹出来那一下再对齐一次；但用户已经开滚了就请勿人拉回来 */
   setTimeout(function(){ if(DS.fresh) wheelSet(sec); }, 80);
 }
 function closeDur(){
@@ -1885,7 +1885,7 @@ function saveDur(){
   }else{
     tmPaint();
   }
-  if(sec <= 0) toast('时长为 0：点开始就是正计时');
+  if(sec <= 0) toast('时长为 0：打开始就是正计时');
   else toast('已设 ' + fmtDur(sec) + (T.kind === 'pomo' && CFG.rounds ? ' · ' + CFG.rounds + ' 轮' : ''));
 }
 function fmtDur(sec){
@@ -2166,7 +2166,7 @@ function logPullAll(done){
       done && done();
     })
     .catch(function(){
-      LOG.pulled = true;                 /* 拉不到也别把推送堵死，退回原来的「本地优先」 */
+      LOG.pulled = true;                 /* 拉不到也请勿推送堵死，退回原来的「本地优先」 */
       logCloudSet('fail');
       flushLog();
       done && done();
@@ -2207,7 +2207,7 @@ function logStop(){
   LOG.cur = null;
   var now = Date.now();
   var d = Math.round((now - c.s) / 1000);
-  if(d < 3) return;                       /* 随手点一下不算 */
+  if(d < 3) return;                       /* 随手点击不算 */
   var day = dkey(c.s);                    /* 归到「开始那一刻」所在的日期 */
   var data = (day === LOG.day) ? LOG.data : logLoad(day);
   var seg = { m: c.m, s: c.s, e: now, d: d, dv: DEVICE };
@@ -2417,7 +2417,7 @@ function sumText(){
 /* ---- 导出图片 ---- */
 function sumPng(){
   var st = SUM.stats;
-  if(!st || !st.n){ toast('这段时间没有记录，先攒点数据吧'); return; }
+  if(!st || !st.n){ toast('该时间段暂无记录'); return; }
   var W = 760, P = 40;
   var lines = [];   /* 每行 {h} 累加高度 */
   var body = [];
@@ -2652,7 +2652,7 @@ function setSumFoot(t){
 function logMerged(day){
   var data = (day === LOG.day) ? LOG.data : logLoad(day);
   var segs = data.segs.slice();
-  /* 正在跑的那一段也先算进去，点开就能看到实时累计 */
+  /* 正在跑的那一段也先算进去，打开就能看到实时累计 */
   if(day === LOG.day && LOG.cur){
     segs.push({ m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: Math.round((Date.now() - LOG.cur.s) / 1000) });
   }
@@ -3050,7 +3050,7 @@ function paintNoise(){
 
 /* ---------------- 全屏「时间到」提醒（v3.10.0） ----------------
    倒计时到点、自习阶段切换时整屏弹出，默认文字「时间到！」，可在「更多」里改；
-   约 3 秒自动收起，点一下可提前关闭。 */
+   约 3 秒自动收起，点击可提前关闭。 */
 function toastText(){
   var t = CFG.toast && String(CFG.toast).trim();
   return t || '时间到！';
@@ -3120,7 +3120,7 @@ $('barBtn').onclick = function(e){
   if(e && e.stopPropagation) e.stopPropagation();
   toggleBar();
 };
-/* 底部那条热区：点一下就开 / 收工具栏 */
+/* 底部那条热区：点击就开 / 收工具栏 */
 if($('barHot')){
   $('barHot').onclick = function(e){
     if(e && e.stopPropagation) e.stopPropagation();
@@ -3566,7 +3566,7 @@ setInterval(clockTick, 250);
 loop();
 /* v3.10.4：进页面先跟云端总拉一次（登录了才拉），新设备/换设备都能看到历史 */
 logPullAll();
-/* 拉取卡住或离线时别把推送堵死：12 秒后照常推，退回原来的「本地优先」 */
+/* 拉取卡住或离线时请勿推送堵死：12 秒后照常推，退回原来的「本地优先」 */
 setTimeout(function(){ if(!LOG.pulled){ LOG.pulled = true; flushLog(); } }, 12000);
 /* 每 60 秒心跳一次：带上正在计时的那一段，换设备能近乎实时看到 */
 setInterval(logHeartbeat, 60000);

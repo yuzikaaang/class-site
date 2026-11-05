@@ -1786,13 +1786,13 @@ function memberDialog(m){
     + (hasUser
         ? '<div class="field"><label>用户名</label>'
           + '<input value="' + attr(m.username) + '" disabled>'
-          + '<p class="hint">登录名不可修改。要换登录名只能删除账号重建（档案不受影响）。</p></div>'
+          + '<p class="hint">登录名不可修改。如需更换，仅可删除账号后重建（档案不受影响）。</p></div>'
         : '<div class="field"><label for="mbUser">用户名 <span style="color:var(--danger)">*</span></label>'
           + '<input id="mbUser" placeholder="3–20 位，中英文/数字/下划线" autocomplete="off">'
-          + '<p class="hint">' + (isNew ? '同学用它登录，告诉他初始密码。' : '给这位只有通讯录的同学开一个登录账号。') + '</p></div>'
+          + '<p class="hint">' + (isNew ? '成员使用该账号登录，请告知初始密码。' : '为该成员创建登录账号。') + '</p></div>'
           + '<div class="field"><label for="mbPwd">初始密码 <span style="color:var(--danger)">*</span></label>'
           + '<input id="mbPwd" placeholder="6–64 位" autocomplete="new-password">'
-          + '<p class="hint">首次登录后会建议他自己改密码。</p></div>')
+          + '<p class="hint">首次登录后将提示修改密码。</p></div>')
 
     /* 未认领场景：开不开号由站长选（不开就只存通讯录） */
     + (!isNew && !hasUser
@@ -1857,7 +1857,7 @@ function memberDialog(m){
     +   '<div class="field"><label for="mbSid">学号</label>'
     +     '<input id="mbSid" maxlength="' + (ruleOf('student_id').digits || 20) + '"'
     +       ' inputmode="numeric" value="' + attr(isNew ? '' : m.studentId) + '" placeholder="如 250501">'
-    +     '<p class="hint">全部成员里唯一，重复会报错。</p></div>'
+    +     '<p class="hint">全站唯一，重复将报错。</p></div>'
     +   '<div class="field"><label for="mbIdentity">身份</label>'
     +     '<div class="fld-cp">'
     +       '<input id="mbIdentity" class="inp" maxlength="10" value="' + attr(identity0) + '" placeholder="学生">'
@@ -1876,7 +1876,7 @@ function memberDialog(m){
     +       '<option value="男"' + (!isNew && m.gender === '男' ? ' selected' : '') + '>男</option>'
     +       '<option value="女"' + (!isNew && m.gender === '女' ? ' selected' : '') + '>女</option>'
     +     '</select>'
-    +     '<p class="hint">只在随机点名「按性别抽」时用到，可以不填。</p></div>'
+    +     '<p class="hint">仅用于随机点名的性别筛选，可不填。</p></div>'
     + '</div>'
 
     + '<div class="mb-form-grid">'
@@ -1890,12 +1890,12 @@ function memberDialog(m){
                 + ((curTitles.indexOf(t) >= 0) ? ' checked' : '') + '> ' + esc(t) + '</label>';
             }).join(''))
     +     '</div>'
-    +     '<p class="hint">和「头衔任命」是同一份数据，这里改完那边立刻同步。</p></div>'
+    +     '<p class="hint">与「头衔任命」共用同一数据，修改后即时同步。</p></div>'
     + '</div>'
 
     + '<div class="field"><label for="mbEx">智学网账号</label>'
     + '<input id="mbEx" class="inp" maxlength="24" value="' + attr(isNew ? '' : m.examNo) + '" placeholder="如 11399395">'
-    + '<p class="hint">不属于隐私字段，同学查询时直接可见，不需要审核。</p></div>'
+    + '<p class="hint">属公开字段，成员查询时直接可见，无需审核。</p></div>'
 
     /* 🔴 v3.5.21：身份证号 / 发展团员编号以前**只能靠导入**。
        extraColsOf() 为了防止「同一列传两遍」把它们排除了（v3.5.16），
@@ -1908,13 +1908,13 @@ function memberDialog(m){
     +       ruleInputHtml('id_card', ruleOf('id_card'), (!isNew && (m.extra || {}).id_card) || '', 'mbIdCard', '18 位身份证号')
     +       cpBtnHtml('id_card')
     +     '</div>'
-    +     '<p class="hint">加密存储；前台是否可见由「字段管理」里的可见范围决定。</p></div>'
+    +     '<p class="hint">加密存储；可见范围由「字段管理」设定。</p></div>'
     +   '<div class="field"><label for="mbYln">发展团员编号</label>'
     +     '<div class="fld-cp">'
     +       ruleInputHtml('youth_league_no', ruleOf('youth_league_no'), (!isNew && (m.extra || {}).youth_league_no) || '', 'mbYln', '团员编号')
     +       cpBtnHtml('youth_league_no')
     +     '</div>'
-    +     '<p class="hint">入团时间等自定义字段在下方「其他资料字段」里。</p></div>'
+    +     '<p class="hint">入团时间等自定义字段见下方「其他资料字段」。</p></div>'
     + '</div>'
 
     + '<div class="field"><label>联系方式</label>'
@@ -2861,7 +2861,7 @@ function annFirstLine(text){
  * 这次要补的是**后台没有地方设置它们**——之前只能靠我手改数据。
  *
  * ⚠️ importantUntil 用 ISO 字符串存；表单用 datetime-local（本地时区，无时区后缀），
- *    两边靠下面两个函数换算。别把 datetime-local 的值直接塞进 importantUntil，
+ *    两边靠下面两个函数换算。请勿 datetime-local 的值直接塞进 importantUntil，
  *    那会被当成 UTC 解析，北京时间会差 8 小时。
  * ========================================================================= */
 function annPinState(a){
@@ -4435,7 +4435,7 @@ function vhDurNotice(){
  *  站主原话：「时长库那个里面呢也可以搜歌，就是直接线上搜歌，我搜歌名，
  *  然后匹配出对应的歌手和时间，然后我点击它就可以直接加到时长库。
  *  也可以直接导入，就是我导入歌名和歌手，如果拉取的歌单里面也有同样的
- *  歌名和歌手，只要相似就行 —— 歌名完全符合，歌手只要部分符合。
+ *  歌名和歌手，只要相似即可 —— 歌名完全符合，歌手只要部分符合。
  *  我打算预先准备一些，你也可以自己先准备好，比如周杰伦的、林俊杰的、方大同的。」
  *
  *  于是分成四块（用 tab 切）：
@@ -4448,7 +4448,7 @@ function openDurLib(){
   var state = { tab: 'lib', lib: [], q: '', results: null, searching: false, imp: null };
   openModal({
     title: '🎵 歌曲时长库',
-    sub: '存云端，全班设备共用；线上搜到点一下就能入库，也能整批导入歌名+歌手',
+    sub: '存云端，全班设备共用；线上搜到点击就能入库，也能整批导入歌名+歌手',
     wide: true,
     body: '<div id="durLibBody"><div class="loading"><div class="spinner"></div>同步中…</div></div>',
     foot: '<button class="btn btn-ghost" data-no>关闭</button>'
@@ -4843,7 +4843,7 @@ function durLibViewPreset(st){
   }).join('');
   var tot = names.reduce(function(a, n){ return a + DUR_PRESETS[n].length; }, 0);
   return '<div class="alert info" style="font-size:.82rem;margin:0 0 10px">'
-      + '这些是常见热门曲，点一下会<b>逐首联网查时长</b>（网易云 → QQ 音乐 → iTunes），'
+      + '这些是常见热门曲，点击会<b>逐首联网查时长</b>（网易云 → QQ 音乐 → iTunes），'
       + '查到的写进云端库，查不到的会记进「待补录」。共 ' + tot + ' 首，每首约 1 秒。</div>'
     + '<div style="border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden">'
     +   '<table style="width:100%;font-size:.86rem"><tbody>' + rows + '</tbody></table>'
@@ -5385,7 +5385,7 @@ function songRefundDialog(){
     body:
       '<div class="field"><label for="srName">同学姓名</label>'
       + '<input id="srName" maxlength="30" placeholder="如 张三">'
-      + '<p class="hint">必须与班级名单里的名字完全一致，否则本站台账对不上。</p></div>'
+      + '<p class="hint">须与班级名单中的姓名完全一致，否则无法对应。</p></div>'
       + '<div class="field"><label for="srGame">游戏</label>'
       + '<select id="srGame">' + gameOpts + '</select></div>'
       + '<div class="field"><label for="srTime">达成时间</label>'
@@ -5695,7 +5695,7 @@ function paintQuotes(){
   }
 
   /* v3.5.11：今天会轮到哪一句 —— 与主站**完全同一套**算法（含排期），
-     之前这里是自己另算的取模，排期一改就跟前台对不上，站主没法对照。 */
+     之前这里是自己另算的取模，排期一改就跟前台对不上，站主无法对照。 */
   var todayStr = dqDayStr(new Date());
   var todayIdx = dqTodayIdx(list, todayStr);
   var sched = STATE.quoteSched || { mode:'random' };

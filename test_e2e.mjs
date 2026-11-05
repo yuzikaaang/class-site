@@ -4743,7 +4743,7 @@ console.log('\n【40】第三十一轮·取消备用链接（v2.5.0）');
   t('★openCopyLink 不再渲染备用占位行',
     idx40.indexOf('hasBackup') < 0 && !/🔄 备用链接/.test(idx40));
   /* 弹窗说明文案不该再提「备用链接」 */
-  const copyTip = idx40.match(/复制班级服务站链接[\s\S]{0,200}?<\/p>/);
+  const copyTip = idx40.match(/复制链接后可分享至微信或 QQ[\s\S]{0,60}?<\/p>/);
   t('★复制链接弹窗文案不再提备用链接',
     !!copyTip && copyTip[0].indexOf('备用链接') < 0,
     copyTip ? copyTip[0].slice(0, 160) : 'not found');
@@ -4920,7 +4920,7 @@ console.log('\n【42】第三十一轮·双向心跳 + 会话级在线（v2.5.0�
   /* v2.6.1：计数变量由 ONLINE_FAILS 改名 NET_FAILS（含义收窄为「心跳连续失败」） */
   t('★连续失败才提示（NET_FAILS）', /NET_FAILS/.test(idx42) && /ONLINE_FAILS/.test(idx42) === false);
   t('★有离线横幅函数 setOfflineBanner', /function setOfflineBanner\(/.test(idx42));
-  t('★离线横幅文案含「连接不到服务端」', idx42.indexOf('连接不到服务端') >= 0);
+  t('★离线横幅文案含「无法连接服务端」', idx42.indexOf('无法连接服务端') >= 0);
   t('★离线横幅提示切换流量（移动数据）', /切换.*流量|移动数据/.test(idx42));
   t('★离线横幅有手动重试按钮', /heartbeatNow/.test(idx42));
   t('★心跳有超时保护（AbortController）', /AbortController/.test(idx42));
@@ -4944,7 +4944,7 @@ console.log('\n【43】第三十一轮·连不上服务端的离线提示（v2.5
   const idx43 = readIdx();
   /* api() 必须包装网络层错误 —— 否则前端只会拿到裸的 TypeError: Failed to fetch */
   t('★api() 有网络错误包装（.catch 里有 offline 标记）', /netErr\.offline\s*=\s*true/.test(idx43));
-  t('★网络错误被换成可读中文文案', idx43.indexOf('连接不到服务端，请检查网络') >= 0);
+  t('★网络错误被换成可读中文文案', idx43.indexOf('无法连接服务端，请检查网络') >= 0);
   /* v2.6.1：api 的业务错误仍原样抛出（调用方自己提示），但不再参与在线判定 */
   t('★业务错误（有 status）原样抛出、不参与在线判定',
     /if\(e && e\.status\) throw e;/.test(idx43));
@@ -6864,7 +6864,7 @@ console.log('\n【62】第五十七轮·字色共用逻辑 + 文案官方化检�
   t('★年级排名图注官方句式', /年级排名与班排名分别统计/.test(idx));
   t('★历次总分趋势只报统计范围', /统计 ' \+ pts\.length \+ ' 次考试/.test(idx));
   t('★各科趋势图注官方句式', /绿色为上涨，红色为下跌/.test(idx));
-  t('★后台建号提示已精简（去掉「只存哈希」技术解释）', /首次登录后会建议他自己改密码/.test(adm) && !/后台不保存明文/.test(adm));
+  t('★后台建号提示已精简（去掉「只存哈希」技术解释）', /首次登录后将提示修改密码/.test(adm) && !/后台不保存明文/.test(adm));
 
   /* ---- ⑦ 防误解话术全站清零（界面文案内；注释/更新记录不在扫描面） ---- */
   /* relSeed（后台内置历史更新记录）按站规「历史更新记录不改」保留原貌，
@@ -12580,7 +12580,7 @@ console.log('\n【94】v4.4.2 点名身份拆细（班干部 / 课代表，认�
   t('★后台身份栏明确写着「职务去头衔里勾」，不鼓励把职务塞进身份',
     /<b>班级职务不要写这里<\/b>/.test(adm1) && /头衔（可多选）/.test(adm1));
   t('★筛选面板底部写清了班干部 / 课代表怎么认',
-    /「班干部」认这些职务/.test(big) && /「头衔任命」/.test(big));
+    /「班干部」包含班长/.test(big) && /「头衔任命」/.test(big));
 }
 
 console.log('\n' + '='.repeat(52));

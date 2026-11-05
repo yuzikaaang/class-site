@@ -282,7 +282,7 @@
        ③ 字号可调（只对这一页生效）
        ④ 底部工具条：A− / A+ / 锁定
        ⑤ 左右两栏（语数英 / 物化生）+ 右栏小功能 + 底部其他，一屏看完
-       ⑦ 图片直接铺出来，音频点一下才播
+       ⑦ 图片直接铺出来，音频点击才播
      实现上刻意保持「数据形状不变」：仍然是 holiday_homeworks 里的
      items[].tasks[]，task 依旧可以是字符串或 {text,img,audio}。
      只改渲染与交互，云端结构不动，老数据不会丢。 */
@@ -299,15 +299,15 @@
      远程字体加载不到反而更难看。每项给一个在 Win / Mac 上都尽量有的备选栈。 */
   var FONT_KEY = 'cls_bhw_font';
   var FONTS = [
-    { id: 'hei', name: '黑体（默认）', desc: '笔画实、远看清晰',
+    { id: 'hei', name: '黑体（默认）', desc: '笔画均匀，远距离清晰',
       stack: "'Inter','PingFang SC','HarmonyOS Sans SC','Microsoft YaHei UI','Microsoft YaHei','Source Han Sans SC','Noto Sans CJK SC',system-ui,sans-serif" },
-    { id: 'song', name: '宋体', desc: '横细竖粗，正式',
+    { id: 'song', name: '宋体', desc: '横细竖粗，端正',
       stack: "'Songti SC','SimSun','Source Han Serif SC','Noto Serif CJK SC','STSong',serif" },
-    { id: 'kai', name: '楷体', desc: '像手写，柔和',
+    { id: 'kai', name: '楷体', desc: '接近手写，柔和',
       stack: "'Kaiti SC','KaiTi','STKaiti','楷体',serif" },
-    { id: 'round', name: '圆体', desc: '边角圆润，友好',
+    { id: 'round', name: '圆体', desc: '边角圆润',
       stack: "'YouYuan','Yuanti SC','Hiragino Sans GB','Microsoft YaHei UI','Microsoft YaHei',sans-serif" },
-    { id: 'deng', name: '等线', desc: '偏细，字面大',
+    { id: 'deng', name: '等线', desc: '笔画较细，字面较大',
       stack: "'DengXian','等线','Microsoft YaHei UI','Microsoft YaHei',sans-serif" }
   ];
   function readFont(){
@@ -386,7 +386,7 @@
   BIG.fs = readFs();
   BIG.fsStep = function (d){
     var n = BIG.fs + (d > 0 ? 1 : -1);
-    if(n < 0 || n >= FS_STEPS.length){ toast(n < 0 ? '已经是最小字号' : '已经是最大字号'); return; }
+    if(n < 0 || n >= FS_STEPS.length){ toast(n < 0 ? '已是最小字号' : '已是最大字号'); return; }
     BIG.fs = n;
     try{ localStorage.setItem(FS_KEY, String(n)); }catch(e){}
     applyFs();
@@ -407,7 +407,7 @@
     /* 按钮显示「点下去会变成什么」：现在明亮就写「暗色」，并配月亮图标 —— 比显示当前状态更好懂 */
     var ic = ico(dark ? 'sun' : 'moon', 15);
     b.innerHTML = (ic ? ic + ' ' : '') + (dark ? '明亮' : '暗色');
-    b.title = dark ? '当前暗色，点一下切明亮' : '当前明亮，点一下切暗色';
+    b.title = dark ? '切换为明亮模式' : '切换为暗色模式';
   }
   BIG.syncThemeBtn = syncThemeBtn;
   BIG.themeToggle = function (e){
@@ -430,7 +430,7 @@
       b.textContent = BIG.lockOn ? '已锁定' : '锁定';
       b.classList.toggle('bhw-lockon', BIG.lockOn);
     }
-    toast(BIG.lockOn ? '已锁定：先点右下角「解锁」' : '已解锁');
+    toast(BIG.lockOn ? '已锁定，点击右下角「解锁」' : '已解锁');
   };
   BIG.lockBlock = function (e){
     if(e && e.preventDefault) e.preventDefault();
@@ -497,9 +497,9 @@
   }
 
   /* 媒体渲染（站主第 7 条）：
-       图片 —— 直接铺在作业下面，一眼能看见；点一下只是放大，不是唯一入口。
+       图片 —— 直接铺在作业下面，一眼能看见；点击只是放大，不是唯一入口。
        视频 —— 原生播放器，同样直接显示。
-       音频 —— 仍然点一下才播（自动播放会被浏览器拦，也吵）。 */
+       音频 —— 仍然点击才播（自动播放会被浏览器拦，也吵）。 */
   function mediaHtml(o){
     var img = o && o.img, video = o && o.video, audio = o && o.audio, label = o && o.audioLabel;
     if(!img && !video && !audio) return '';
@@ -509,7 +509,7 @@
       out += isVid
         ? '<video class="bhw-img" src="' + attr0(img) + '" controls preload="metadata" playsinline></video>'
         : '<img class="bhw-img" src="' + attr0(img) + '" alt="作业配图" loading="lazy"'
-          + ' onload="BIG.relayout()" onclick="BIG.zoomImg(this.src)" title="点一下看大图">';
+          + ' onload="BIG.relayout()" onclick="BIG.zoomImg(this.src)" title="查看大图">';
     }
     if(video){
       out += '<video class="bhw-img" src="' + attr0(video) + '" controls preload="metadata" playsinline></video>';
@@ -551,7 +551,7 @@
     var text = o.text || '';
     /* 编辑态用 textarea + 自适应高度：单行 input 装不下长句，字一多就被框子截断。 */
     var main = admin
-      ? '<textarea class="bhw-in bhw-area" rows="1" placeholder="写一项作业…"'
+      ? '<textarea class="bhw-in bhw-area" rows="1" placeholder="输入作业内容"'
         + ' oninput="BIG.autoGrow(this)"'
         + ' onchange="BIG.hwTask(' + si + ',' + ti + ',this.value)">' + esc0(text) + '</textarea>'
       : '<span class="bhw-txt">' + esc0(text) + '</span>';
@@ -606,7 +606,7 @@
       try{
         openCat(1);
         setTimeout(function(){ if(typeof locateBoardCard === 'function') locateBoardCard('2'); }, 420);
-        toast('大屏模式未开启，已打开「作业查看」');
+        toast('未开启大屏模式，已打开作业查看');
       }catch(e){}
       return;
     }
@@ -659,8 +659,8 @@
       act.innerHTML = '<span class="bhw-sync" id="bhwSync"></span>'
         + sel
         + (admin && hw ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwRename()">重命名</button>' : '')
-        + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwExport()" title="把作业导出成文件带走">导出</button>' : '')
-        + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwImport()" title="从文件恢复作业并上传">导入</button>' : '')
+        + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwExport()" title="导出作业文件">导出</button>' : '')
+        + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwImport()" title="从文件导入作业">导入</button>' : '')
         + (admin ? '<button type="button" class="bhw-btn" onclick="BIG.hwNew()">' + ico('plus', 13) + ' 新建一期</button>' : '');
       syncBadge();
     }
@@ -675,8 +675,8 @@
       colA.innerHTML = '<div class="bhw-empty bhw-empty-page">'
         + '<b class="bhw-empty-t">当前没有作业</b>'
         + '<span>' + (admin
-            ? '今天不在任何一期作业的日期里。可点右上角「新建一期」；要看以前的，从下拉里选。'
-            : '今天不在任何一期作业的日期里，先歇会儿。')
+            ? '当前日期不在任何作业期次范围内。可新建期次，或从下拉列表选择历史期次。'
+            : '当前日期无作业安排。')
         + '</span></div>';
       colB.innerHTML = '';
       /* 空态横跨作业那两栏，居中在整块作业区，而不是缩在左三分之一 */
@@ -709,7 +709,7 @@
       if(hit) mainHtml += subjCard(hit.it, hit.si, admin);
     });
     colA.innerHTML = mainHtml || ('<div class="bhw-subj"><div class="bhw-empty">'
-      + (admin ? '还没有科目，可在下方「添加科目」里加。' : '暂时没有作业。') + '</div></div>');
+      + (admin ? '暂无科目，可在下方添加。' : '暂时没有作业。') + '</div></div>');
     colB.innerHTML = '';
 
     if(other){
@@ -720,7 +720,7 @@
 
     if(addHost){
       addHost.innerHTML = admin
-        ? '<input class="bhw-in" id="bhwNewSubj" placeholder="新科目名（如 政治 / 其他）"'
+        ? '<input class="bhw-in" id="bhwNewSubj" placeholder="科目名称"'
           + ' onkeydown="if(event.key===\'Enter\')BIG.hwAddSubj()">'
           + '<button type="button" class="bhw-audio" onclick="BIG.hwAddSubj()">' + ico('plus', 14) + ' 添加科目</button>'
           + '<span class="bhw-save" id="bhwSave"></span>'
@@ -897,8 +897,8 @@
       var left = cdDays(p.hol.d, now);
       rows += '<div class="bhw-cd-row">'
         + '<span class="bhw-cd-n">' + esc0(p.hol.name) + '</span>'
-        + '<span class="bhw-cd-v">' + (left <= 0 ? '就是今天' : '还有 ' + left + ' 天')
-        + (p.hol.days ? ' · 放 ' + p.hol.days + ' 天' : '') + '</span></div>';
+        + '<span class="bhw-cd-v">' + (left <= 0 ? '今天' : '还有 ' + left + ' 天')
+        + (p.hol.days ? ' · 假期 ' + p.hol.days + ' 天' : '') + '</span></div>';
     }
     box.innerHTML = '<span class="bhw-mini-k">倒计时</span>' + rows;
   }
@@ -922,7 +922,7 @@
       + '</div>'
       + '<div class="bhw-q-text">' + esc0(q.text) + '</div>'
       + (q.from ? '<div class="bhw-q-from">—— ' + esc0(q.from) + '</div>' : '')
-      + '<div class="bhw-q-tip">点一下换一句'
+      + '<div class="bhw-q-tip">换一句'
         + (BIG.quoteMin ? ' · 每 ' + BIG.quoteMin + ' 分钟自动换' : ' · 自动更换已关') + '</div>';
   }
   BIG.renderQuote = renderQuote;
@@ -984,7 +984,7 @@
   BIG.quoteNext = function (force){
     var p = quoteLocalPick();
     if(p) BIG.quoteData = { text: p.text, from: p.from || '' };
-    else if(!BIG.quoteData) BIG.quoteData = { text: '今天也要认真写作业。', from: '班级服务站' };
+    else if(!BIG.quoteData) BIG.quoteData = { text: '', from: '班级服务站' };
     renderQuote();
     if(force) quoteNet();
   };
@@ -1122,9 +1122,9 @@
     var hw = hwObj(); if(!hw) return;
     var el = $('bhwNewSubj');
     var name = el ? String(el.value || '').trim() : '';
-    if(!name){ toast('先写个科目名', true); if(el) el.focus(); return; }
+    if(!name){ toast('请填写科目名称', true); if(el) el.focus(); return; }
     var dup = (hw.items || []).some(function (x){ return String(x.subject || '').trim() === name; });
-    if(dup){ toast('已经有「' + name + '」这一科了', true); return; }
+    if(dup){ toast('已存在「' + name + '」这一科了', true); return; }
     hw.items.push({ subject: name, tasks: [''] });
     BIG.renderHw();
     touch();
@@ -1150,7 +1150,7 @@
     formSubjHtml();
   };
   BIG.hwNew = function (){
-    if(!adminOk()){ toast('只有管理员能新建作业', true); return; }
+    if(!adminOk()){ toast('仅管理员可新建作业', true); return; }
     FORM.mode = 'new';
     FORM.subjects = PRESET_SUBJECTS.slice();
     var t = $('bhwFormTitle'); if(t) t.textContent = '新建一期作业';
@@ -1165,7 +1165,7 @@
   };
   BIG.hwRename = function (){
     if(!adminOk()) return;
-    var hw = currentHw(); if(!hw){ toast('还没有作业可以改名', true); return; }
+    var hw = currentHw(); if(!hw){ toast('暂无可重命名的期次', true); return; }
     FORM.mode = 'rename';
     var t = $('bhwFormTitle'); if(t) t.textContent = '重命名这一期';
     var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
@@ -1204,7 +1204,7 @@
     var body = $('bhwQuoteBody');
     var opts = [
       { n: 1, t: '每 1 分钟' }, { n: 3, t: '每 3 分钟' }, { n: 5, t: '每 5 分钟（默认）' },
-      { n: 10, t: '每 10 分钟' }, { n: 30, t: '每 30 分钟' }, { n: 0, t: '不自动换，只手动' }
+      { n: 10, t: '每 10 分钟' }, { n: 30, t: '每 30 分钟' }, { n: 0, t: '仅手动' }
     ];
     if(body){
       body.innerHTML = opts.map(function (o){
@@ -1220,7 +1220,7 @@
   BIG.formSave = function (){
     var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
     var name = n ? String(n.value || '').trim() : '';
-    if(!name){ toast('给这一期起个名字', true); if(n) n.focus(); return; }
+    if(!name){ toast('期次名称', true); if(n) n.focus(); return; }
     var s0 = st ? String(st.value || '') : '';
     var e0 = en ? String(en.value || '') : '';
     if(s0 && e0 && e0 < s0){ toast('结束日期不能早于开始日期', true); return; }
@@ -1236,7 +1236,7 @@
         items: picked.map(function (s){ return { subject: s, tasks: [''] }; }),
       });
       BIG.hwId = id;
-      toast('已新建，六科已预设好，直接写作业');
+      toast('已创建，六科科目已预设');
     }else{
       var hw = currentHw();
       if(!hw){ toast('找不到这一期', true); return; }
@@ -1257,7 +1257,7 @@
 
      设计取舍：
        · 只做 JSON。结构自描述（带 kind / ver / exportedAt），另一台设备能认出来，
-         用记事本也能看；纯 text 没法区分「这是哪一期的第几项」。
+         用记事本也能看；纯 text 无法区分「这是哪一期的第几项」。
        · 导入兼容三种写法：纯数组 / {homeworks:[…]} / {items:{holiday_homeworks:…}}，
          手写或从后台复制过来的都能吃。
        · 合并规则按 id：同 id 覆盖（说明是同一期在两台机器上都改过，以导入的为准），
@@ -1302,12 +1302,12 @@
   };
 
   BIG.hwExport = function (){
-    if(!adminOk()){ toast('只有管理员能导出', true); return; }
+    if(!adminOk()){ toast('仅管理员可导出', true); return; }
     var list = hwList();
-    if(!list.length){ toast('还没有作业可以导出', true); return; }
+    if(!list.length){ toast('暂无可导出的作业', true); return; }
     var t = $('bhwIoTitle'); if(t) t.textContent = '导出作业';
     var tip = $('bhwIoTip');
-    if(tip) tip.textContent = '勾选要带走的内容，导出成一个 JSON 文件。拿到有网的电脑上点「导入」，那边会自动上传云端。';
+    if(tip) tip.textContent = '选择需导出的内容，生成 JSON 文件；在联网设备导入后自动同步至云端。';
     var ok = $('bhwIoOk'); if(ok){ ok.textContent = '导出所选'; ok.style.display = ''; }
     var body = $('bhwIoBody');
     if(body){
@@ -1358,7 +1358,7 @@
       return true;
     }catch(e){
       /* 老浏览器不支持 download：退回复制到剪贴板之外的方案 —— 直接弹一段可复制的文本 */
-      try{ toast('这台设备不支持直接下载文件，请改用「导入」里的粘贴框反向操作', true); }catch(e2){}
+      try{ toast('当前设备不支持文件下载，请使用导入功能', true); }catch(e2){}
       return false;
     }
   }
@@ -1369,7 +1369,7 @@
     var arr = [].slice.call(document.querySelectorAll('#bhwIoBody .bhw-io-ck'));
     arr.forEach(function (c){ if(c.checked) ids[String(c.getAttribute('data-id'))] = 1; });
     var picked = list.filter(function (x){ return ids[String(x.id)]; });
-    if(!picked.length){ toast('至少选一期再导出', true); return; }
+    if(!picked.length){ toast('请至少选择一期', true); return; }
     var payload = {
       app: '25级05班班级服务站',
       kind: 'holiday_homeworks',
@@ -1389,22 +1389,22 @@
   }
 
   BIG.hwImport = function (){
-    if(!adminOk()){ toast('只有管理员能导入', true); return; }
+    if(!adminOk()){ toast('仅管理员可导入', true); return; }
     var t = $('bhwIoTitle'); if(t) t.textContent = '导入作业';
     var tip = $('bhwIoTip');
-    if(tip) tip.textContent = '选之前导出的 JSON 文件，或把内容粘贴到下面。导入后会自动尝试上传云端；上传不上去也会先存本机，联网后自动补。';
+    if(tip) tip.textContent = '选择此前导出的 JSON 文件，或粘贴文件内容。导入后自动同步至云端；失败时暂存本机，联网后自动补传。';
     var ok = $('bhwIoOk'); if(ok){ ok.textContent = '导入'; ok.style.display = ''; }
     var body = $('bhwIoBody');
     if(body){
       body.innerHTML = ''
         + '<div class="bhw-io-file">'
         + '<button type="button" onclick="document.getElementById(\'bhwIoFile\').click()">选择 JSON 文件</button>'
-        + '<span id="bhwIoFileName">还没选文件</span>'
+        + '<span id="bhwIoFileName">未选择文件</span>'
         + '</div>'
         + '<input type="file" id="bhwIoFile" accept=".json,application/json,text/plain"'
         + ' style="display:none" onchange="BIG.ioFile(this)">'
-        + '<p class="bhw-io-tip" style="margin:0 0 6px">或者把文件内容粘贴到这里：</p>'
-        + '<textarea id="bhwIoText" placeholder="粘贴导出的 JSON 内容…"></textarea>';
+        + '<p class="bhw-io-tip" style="margin:0 0 6px">或粘贴文件内容：</p>'
+        + '<textarea id="bhwIoText" placeholder="粘贴 JSON 内容"></textarea>';
     }
     ioOpen('import');
   };
@@ -1419,7 +1419,7 @@
       var ta = $('bhwIoText');
       if(ta) ta.value = String(r.result || '');
     };
-    r.onerror = function (){ toast('这个文件读不出来，换个文件试试', true); };
+    r.onerror = function (){ toast('文件无法读取，请更换文件', true); };
     r.readAsText(f, 'utf-8');
   };
 
@@ -1433,11 +1433,11 @@
       var v = obj.items.holiday_homeworks;
       arr = (typeof v === 'string') ? JSON.parse(v) : v;
     }else if(obj && Array.isArray(obj.holidayHomeworks)) arr = obj.holidayHomeworks;
-    if(!Array.isArray(arr)) throw new Error('这不是作业数据（找不到作业列表）');
+    if(!Array.isArray(arr)) throw new Error('文件格式错误：未找到作业数据');
     return arr;
   }
 
-  /* 只保留认识的字段，别把乱七八糟的东西塞进云端 */
+  /* 只保留认识的字段，请勿乱七八糟的东西塞进云端 */
   function cleanHw(h){
     if(!h || typeof h !== 'object') return null;
     var items = [];
@@ -1471,12 +1471,12 @@
   function doImport(){
     var ta = $('bhwIoText');
     var txt = ta ? String(ta.value || '').trim() : '';
-    if(!txt){ toast('先选一个文件，或把内容粘贴进来', true); return; }
+    if(!txt){ toast('请选择文件或粘贴内容', true); return; }
     var arr;
     try{
       arr = parseImport(txt);
     }catch(e){
-      toast('读不了这个内容：' + (e && e.message || e), true);
+      toast('内容解析失败：' + (e && e.message || e), true);
       return;
     }
     var list = hwList();
@@ -1491,7 +1491,7 @@
       if(hit >= 0){ list[hit] = rec; upd++; }
       else { list.push(rec); add++; }
     });
-    if(!add && !upd){ toast('文件里没有可用的作业', true); return; }
+    if(!add && !upd){ toast('文件中无有效作业', true); return; }
 
     /* 导入完把视图切到「最近导入的那一期」，让人马上看到结果 */
     if(arr.length){
@@ -1501,7 +1501,7 @@
     BIG.ioClose();
     BIG.renderHw();
     persist();
-    var msg = '已导入：新增 ' + add + ' 期' + (upd ? '，更新 ' + upd + ' 期' : '') + (bad ? '，跳过 ' + bad + ' 条' : '');
+    var msg = '导入完成，新增 ' + add + ' 期' + (upd ? '，更新 ' + upd + ' 期' : '') + (bad ? '，跳过 ' + bad + ' 条' : '');
     toast(msg);
     setTimeout(function (){ syncBadge(); }, 1600);
   }
@@ -1517,14 +1517,14 @@
        · 学号可以设一个范围
        · 能按「本次总分第几名」「单科第几名 / 多少分」这些条件抽
        · 能按性别抽
-       · 名单设置里点一下「请假」不要跳回最上面
+       · 名单设置里点击「请假」不要跳回最上面
      实现：
        · 名单改用 /profile?action=roster 的 students（带学号、身份、性别），
          拿不到就退回老的姓名列表 —— 老设备/未登录也不至于空着。
        · 成绩条件读 /scores?action=list + action=board，前端算班级排名
          （总分 = 各科赋分优先，排名并列同名次）。
        · 条件存在本机 localStorage，班级电脑下次打开还是上次那一套。
-     ⚠️ 滚动位置：以前点一下就把整块 innerHTML 重绘，滚动条自然回到顶部。
+     ⚠️ 滚动位置：以前点击就把整块 innerHTML 重绘，滚动条自然回到顶部。
         现在只改被点的那一个按钮 + 顶部计数，DOM 不动，位置就不会跳。 */
 
   var EX_KEY = 'cls_big_pick_ex';      /* { 姓名: 'leave' | 'out' } */
@@ -1623,7 +1623,7 @@
     BIG.pickBody();
   };
   BIG.pickHistDel = function (id){
-    if(!confirm('删掉这条抽取记录？删了就找不回来了。')) return;
+    if(!confirm('删除该条抽取记录？删除后无法恢复。')) return;
     var list = phMerge().filter(function (x){ return x.id !== id; });
     phSave(list);
     BIG.pickBody();
@@ -1973,7 +1973,7 @@
 
   BIG.pickStart = function (){
     var p = names(pool());
-    if(!p.length){ toast('按现在的条件没人可抽，放宽一点试试', true); return; }
+    if(!p.length){ toast('当前条件下无可用人员，请调整条件', true); return; }
     BIG.pick.state = 'rolling';
     var n = Math.min(BIG.pick.n, p.length);
     BIG.pick.names = [];
@@ -2067,7 +2067,7 @@
     BIG.pickBody();
   };
 
-  /* 名单里点一下：正常 → 请假 → 不参与 → 正常。
+  /* 名单里点击：正常 → 请假 → 不参与 → 正常。
      ⚠️ 只改这一个按钮的 class 与内部文字，**不重绘整块** —— 否则滚动位置会跳回顶部
      （站主原话：「点请假之后它会自动跳转到最前面，我还要往下翻」）。 */
   BIG.pickExOne = function (name, btn){
@@ -2122,7 +2122,7 @@
 
     /* 历史面板不需要名单，先处理 —— 否则未登录、名单空的时候连历史都看不了 */
     if(p.state === 'hist'){
-      box.innerHTML = '<div class="bpick-state">抽取历史 · 由新到旧</div>' + histPanel()
+      box.innerHTML = '<div class="bpick-state">抽取历史（按时间倒序）</div>' + histPanel()
         + '<div class="bpick-foot"><button type="button" class="bpick-link" onclick="BIG.pickHist()">← 返回抽取</button></div>';
       return;
     }
@@ -2131,7 +2131,7 @@
       + (all.length ? '（共 ' + all.length + ' 人）' : '') + '</div>';
 
     if(!all.length){
-      box.innerHTML = head + '<div class="bpick-empty">名单还没加载出来。<br>请先登录（名单从云端读取），或在设置里稍后再试。</div>';
+      box.innerHTML = head + '<div class="bpick-empty">名单加载失败。<br>请确认已登录，并检查网络后重试。</div>';
       return;
     }
 
@@ -2170,9 +2170,9 @@
         }).join('');
       }
       var needSubj = (f.metric === 'subScore' || f.metric === 'subRank' || f.metric === 'subProgress');
-      /* 进步排名：上一次没考 / 这是最早一场，就没法算 */
+      /* 进步排名：上一次没考 / 这是最早一场，就无法算 */
       var progTip = (needProg(f.metric) && p.progNoPrev)
-        ? '<div class="bpick-f-tip" style="color:#b45309">这是最早的一次考试，没有「上一次」可比，进步排名算不出来。</div>'
+        ? '<div class="bpick-f-tip" style="color:#b45309">该场为最早考试，无上一场数据，无法计算进步排名。</div>'
         : '';
 
       var filterHtml = p.fOpen
@@ -2200,7 +2200,7 @@
                   +   '<select class="bpick-sel" onchange="BIG.pickSet(\'metric\',this.value)">' + metricOpts + '</select>'
                   +   (needSubj
                       ? '<select class="bpick-sel" onchange="BIG.pickSet(\'subj\',this.value)">'
-                        + (subjOpts || '<option value="">先等成绩加载…</option>') + '</select>'
+                        + (subjOpts || '<option value="">成绩加载中</option>') + '</select>'
                       : '')
                   + '</div>'
                 + (f.metric
@@ -2214,15 +2214,15 @@
                     : '')
                 : '')
             + progTip
-            + '<p class="bpick-f-tip">名次都是<b>本班排名</b>（不看年级）。条件可以叠加：比如「学生 + 男 + 总分名次 1–10」。'
-            + '「进步排名」按班级名次相比上一次考试提升的幅度排，1 = 进步最多。名单只记在这台电脑上。</p>'
-            + '<p class="bpick-f-tip">「班干部」认这些职务：班长 / 副班长 / 学习委员 / 劳动委员 / 生活委员 / 团支书 / 体育委员 / 宣传委员 / 文艺委员 / 纪律委员（其它「××委员」也认）；'
-            + '「课代表」认带「课代表」的职务（如「语文课代表」）。这些写在后台<b>「头衔任命」</b>里就行，不用改身份。</p>'
+            + '<p class="bpick-f-tip">名次均为<b>本班排名</b>。多个条件可叠加使用。'
+            + '「进步排名」按较上一场考试的班级名次提升幅度排序，1 为进步最大。</p>'
+            + '<p class="bpick-f-tip">「班干部」包含班长、副班长、学习委员、劳动委员、生活委员、团支书、体育委员、宣传委员、文艺委员、纪律委员；'
+            + '「课代表」包含各科课代表。职务以<b>「头衔任命」</b>为准。</p>'
             + '</div>')
         : '';
 
-      var noOne = left.length ? '' : '<div class="bpick-empty" style="padding:12px 0 4px">按现在的条件没有人可抽。<br>'
-        + '检查一下性别 / 学号 / 成绩条件，或点上面的「修改」放宽。</div>';
+      var noOne = left.length ? '' : '<div class="bpick-empty" style="padding:12px 0 4px">当前条件下无可用人员。<br>'
+        + '请调整性别、学号或成绩条件后重试。</div>';
 
       box.innerHTML = head + noOne
         + '<div class="bpick-cond">条件：' + esc0(condText())
@@ -2268,10 +2268,10 @@
     if(!rec || !rec.id) return '';
     BIG.pick.noteFor = rec.id;
     return '<div class="bpick-note">'
-      + '<div class="bpick-note-k">这次是干嘛的（写一句，以后翻得到）</div>'
-      + '<input class="bpick-note-in" maxlength="120" placeholder="例如：语文课抽查背诵"'
+      + '<div class="bpick-note-k">备注</div>'
+      + '<input class="bpick-note-in" maxlength="120" placeholder="选填，填写本次抽取事由"'
       +   ' value="' + attr0(rec.note || '') + '" oninput="BIG.pickNote(this.value)">'
-      + '<div class="bpick-note-tip">' + (adminOk() ? '会自动同步到云端，换台设备也看得到' : '暂时只记在这台电脑上（管理员登录后自动同步）') + '</div>'
+      + '<div class="bpick-note-tip">' + (adminOk() ? '已同步至云端' : '未登录，记录暂存本机') + '</div>'
       + '</div>';
   }
   function histCount(){
@@ -2281,10 +2281,10 @@
     var list = [];
     try{ list = phMerge(); }catch(e){ list = []; }
     if(!list.length){
-      return '<div class="bpick-empty">还没有抽取记录。<br>抽一次就会自动记下来，包括时间、条件、人数和抽到的人。</div>';
+      return '<div class="bpick-empty">暂无抽取记录。<br>完成抽取后将自动记录时间、条件、人数与结果。</div>';
     }
     return '<div class="bpick-hist-tip">'
-      + (adminOk() ? '已登录管理员：记录会自动同步到云端，换台设备也看得到' : '现在只记在这台电脑上；管理员登录后会自动补传到云端')
+      + (adminOk() ? '记录已同步至云端' : '记录暂存本机，管理员登录后自动上传')
       + '</div>'
       + '<div class="bpick-hist">' + list.map(function (r){
       var rid = attr0(r.id);
@@ -2298,7 +2298,7 @@
         + '<div class="bpick-hist-names">'
         +   r.names.map(function (n){ return '<span>' + esc0(n) + '</span>'; }).join('')
         + '</div>'
-        + '<input class="bpick-note-in bpick-hist-note" maxlength="120" placeholder="备注：这次用来干嘛"'
+        + '<input class="bpick-note-in bpick-hist-note" maxlength="120" placeholder="备注"'
         +   ' value="' + attr0(r.note || '') + '"'
         +   ' onfocus="BIG.pick.noteFor=\'' + rid + '\'"'
         +   ' oninput="BIG.pick.noteFor=\'' + rid + '\';BIG.pickNote(this.value)">'

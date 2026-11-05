@@ -166,7 +166,7 @@ function toggleLandscape(){
         LAND_ON = false;
         saveLandIntent();
         if(typeof refreshLandBtn === 'function') refreshLandBtn();
-        if(typeof uiMsg === 'function') uiMsg('这台设备不支持强制横屏，把手机横过来就好', '#b45309');
+        if(typeof uiMsg === 'function') uiMsg('当前设备不支持强制横屏，请将手机横置', '#b45309');
       }else{
         syncLandscapeClass();
       }
@@ -472,7 +472,7 @@ function stripEmojiInOptions(root){
    站点版本号（2026-10-07 新增）
    -----------------------------------------------------
    用途：站主要一眼判断「我改的东西到底推上线了没有」。
-   显示在首页最底部与后台页脚；点一下还能回查线上后端构建号。
+   显示在首页最底部与后台页脚；点击还能回查线上后端构建号。
 
    三段式  主版本 . 小更新 . 修复            （v3.6.1 起）
      第 1 段 大版本：1 = 纯前端；2 = 含后端 + 数据库；3 = 数据架构与权限体系
@@ -615,7 +615,7 @@ function checkOnlineVersion(){
     SW_BUSY = false;
     swCheckUpdate(false);            /* 顺手也催一次 SW */
     if(!online){
-      el.textContent = '站点版本 v' + SITE_VERSION + ' · 线上版本查询失败（可能没网）';
+      el.textContent = '站点版本 v' + SITE_VERSION + ' · 版本查询失败，请检查网络';
       return;
     }
     if(cmpVer(online, SITE_VERSION) > 0){
@@ -628,7 +628,7 @@ function checkOnlineVersion(){
       + (sha ? ' · 后端 ' + sha : '') + '（' + hhmm + ' 检查）';
   }).catch(function(){
     SW_BUSY = false;
-    el.textContent = '站点版本 v' + SITE_VERSION + ' · 检查失败（可能没网）';
+    el.textContent = '站点版本 v' + SITE_VERSION + ' · 检查失败，请检查网络';
   });
 }
 
@@ -1010,8 +1010,8 @@ function scheduleConfirm(){
      倒计时走完还没成功就回到原来的提示 + 重试按钮（可以再点）。
    文案与 README「断网 / 连不上服务器时」一节保持一致。 */
 var OFFLINE_TEXT = {
-  offline: '连接不到服务端，当前显示的是本地缓存 · 请检查网络，或切换到流量（移动数据）再试',
-  slow:    '服务器响应较慢，已切到本地缓存 · 正在自动重试，你也可以点右侧按钮重试'
+  offline: '无法连接服务端，当前显示本地缓存。请检查网络或切换移动数据。',
+  slow:    '服务端响应超时，已切换至本地缓存并自动重试，也可点击右侧按钮重试。'
 };
 
 /* 重试倒计时状态 */
@@ -1354,7 +1354,7 @@ var SITE_DATA = {
                     'daily'  当天不再弹，次日恢复（默认）
                     'once'   只弹一次，以后永不自动弹
                     'always' 每次进站/进板块都弹
-       bubble  —— true = 关掉后右下角留悬浮球，可随时点开重看（默认 true）
+       bubble  —— true = 关掉后右下角留悬浮球，可随时打开重看（默认 true）
 
      站主用法：想弹什么就往下面数组加一条即可；不用了删掉那条。 */
   popups: [
@@ -1408,7 +1408,7 @@ var SITE_DATA = {
      已彻底移除。详见 internal/notes.md 的「隐私改造」记录。 */
 /* ── 班级公告（新的放最上面，important:true 为置顶高亮）── */
   announcements: [
-    { date: "2026-10-17 20:30", text: "🔒 存量资料一键加密（v3.5.1）：加密上线前导入的资料不用再手动重导了 —— 后台「成员与档案」新增「🔒 一键加密存量」按钮，点一下自动分批把老资料转成密文，带进度条、断了能接着跑、重复点也不会重复加密。另外修了两个问题：① 学科热力图点开的明细里，「班内排名」之前误用了年级排名（比如校排 350 显示成班排 350），现在班内名次按本班实际成绩重新算，年级排名单独一行摆着；② 「需关注学生」表格适配手机端，一人一张卡片，列名齐全，不再挤成一团。", category: "site" },
+    { date: "2026-10-17 20:30", text: "🔒 存量资料一键加密（v3.5.1）：加密上线前导入的资料不用再手动重导了 —— 后台「成员与档案」新增「🔒 一键加密存量」按钮，点击自动分批把老资料转成密文，带进度条、断了能接着跑、重复点也不会重复加密。另外修了两个问题：① 学科热力图打开的明细里，「班内排名」之前误用了年级排名（比如校排 350 显示成班排 350），现在班内名次按本班实际成绩重新算，年级排名单独一行摆着；② 「需关注学生」表格适配手机端，一人一张卡片，列名齐全，不再挤成一团。", category: "site" },
     { date: "2026-10-17 18:20", text: "🔒 成员档案全量加密（v3.5.0）：姓名、学号、政治面貌、智学网账号、微信、QQ、手机号、身份证号、团员编号以及后台自定义的所有字段，现在全部以 AES-256-GCM 密文存进数据库 —— 直接打开数据库看到的是 <code>enc:v1:...</code> 这样的乱码，看不到任何真实信息。密钥就是你后台「秘钥管理」里那把 ADMIN_SECRETS_KEY（和令牌库同一把，不用另外配）。后台和前台照常显示明文，查询、认领、导入导出都不受影响。⚠️ 存量资料是「谁保存过、谁就转成密文」，没动过的仍是明文，慢慢会全部转完；⚠️ 密钥千万别删，删了就解不开了。", category: "site" },
     { date: "2026-10-17 16:50", text: "🔐 字段管理新增「仅管理员」可见级别（v3.4.1）：某些敏感字段（如身份证号、家庭信息）现在可以设为只有你在后台能看到 —— 前台查询里连本人都看不到，连键都不会下发。新增字段、快捷切换、单人例外三处都能选这一档。", category: "site" },
     { date: "2026-10-17 15:30", text: "⚔️ 成绩分析更新（v3.4.0）：①「成绩对比」可以再选一场考试放在一起比（最多 2 场），新增「跨考试进退步」表——两位同学的总分 / 班排 / 年级排名 / 各科分数逐项对比，进步退步一目了然，总分柱下也补了年级排名；② 个人画像「各科进退步」只固定科目列了，第一次考试那一列不再被误固定（进退步榜、需关注等表同样修好）；③ 年级排名各处都标注了是「物理方向」的年级排名，不是全校；④「历次上线率」开放给管理员查看；⑤ 页面顶部加了小横幅：成绩由人工手动录入，若有错误请联系管理员修改；⑥ 后台「新增字段」弹窗修复了不居中的问题。", category: "site" },
@@ -1779,7 +1779,7 @@ var IMPORTANT_DATES = [
 
 /* ── 考试范围弹窗 ──
    为什么单独一个弹窗：段考范围有六科、每科一大段，塞进倒计时那一小条会挤成一团，
-   手机上根本没法看。做成二级弹窗后，倒计时仍然清爽，想看的人点进去才是全文。 */
+   手机上根本无法看。做成二级弹窗后，倒计时仍然清爽，想看的人点进去才是全文。 */
 var EXAM_SCOPE = {};   /* 打开时按 name 存一份当前条目，避免把整段文本塞进 onclick */
 function openExamScope(name){
   for(var i=0;i<IMPORTANT_DATES.length;i++){
@@ -2065,7 +2065,7 @@ function copyVoteLink(){
 function copyHereLink(){
   var url = shareHere();
   aiCopyText(url).then(function(){
-    toastMini('链接已复制，粘贴发给同学就行');
+    toastMini('链接已复制，粘贴发给同学即可');
   }).catch(function(){
     /* 微信内置浏览器常禁 clipboard，退回手动选中 */
     var d = document.createElement('div');
@@ -2241,7 +2241,7 @@ function openLink(url, wechatOk, label){
   /* ===== v3.5.13（站主 #3）：点歌平台投稿上限守卫 =====
      后台在 site_config 配了 vhGuard:{ on, limit } 时，跳点歌平台前先查
      这位同学（按姓名匹配 requester）的未播投稿数 —— 达到上限就拦下来，
-     提示去换一首或联系管理员。检查失败/超时不拦（别把入口搞坏）。 */
+     提示去换一首或联系管理员。检查失败/超时不拦（请勿入口搞坏）。 */
   if(SITE_DATA.vhGuard && SITE_DATA.vhGuard.on && SITE_DATA.vhGuard.limit > 0 && /^https?:\/\//i.test(url)){
     try{
       var gBase = url.split('/').slice(0, 3).join('/');
@@ -2711,7 +2711,7 @@ function _audioSyncRateUI(){
   var now = document.getElementById('audioRateNow');
   if(now) now.textContent = _aRateDisplay(_audioRate) + '×';
   var b = document.getElementById('audioRateBtn');
-  if(b) b.title = '当前 ' + _aRateText(_audioRate) + '，点一下切换到下一档（最高 2×）';
+  if(b) b.title = '当前 ' + _aRateText(_audioRate) + '，点击切换到下一档（最高 2×）';
 }
 /* ---- 音量 ---- */
 function audioVolFromEvent(e){
@@ -2874,7 +2874,7 @@ function closeVideo(){
   if(b) b.textContent = '⛶ 放大';
   var body = document.getElementById('videoBody');
   if(body) body.innerHTML = ''; /* 关闭时清空，停止播放并释放资源 */
-  if(_videoUrl) videoBubbleShow(); /* 关闭后右下角出现悬浮球，点一下可继续看 */
+  if(_videoUrl) videoBubbleShow(); /* 关闭后右下角出现悬浮球，点击可继续看 */
 }
 /* 悬浮球：重新打开上次的视频 */
 function reopenVideo(){
@@ -3159,7 +3159,7 @@ function render(){
   grid.innerHTML = cats.map(function(c,i){
     var links = uiLinks(c.id);   /* 【自定义设置】经顺序覆盖层取 */
     var inner;
-    /* 成绩分析（板块 3）：站主 2026-10-15 原话「点开成绩分析直接展示而不是卡片+弹窗」
+    /* 成绩分析（板块 3）：站主 2026-10-15 原话「打开成绩分析直接展示而不是卡片+弹窗」
        —— 这个板块不再放卡片，直接把成绩分析本体铺进来（骨架见 scEmbedHtml）。 */
     if(c.id === 3){
       inner = scEmbedHtml();
@@ -3176,7 +3176,7 @@ function render(){
         var needBrowser = isWeChat() && !l.mainWechatOk && httpUrl(l.mainUrl);
         /* 门禁总开关关闭时直接视为「已通过」，不再渲染问答框（GATE_ENABLED=false） */
         var passed = gatePassed(l) || !gateOn();
-        /* v3.9.22：标题留在折叠态，其余内容都塞进 .card-detail，点开才显示 */
+        /* v3.9.22：标题留在折叠态，其余内容都塞进 .card-detail，打开才显示 */
         var contentHtml = '<div class="card-content"><h3><span class="f-t">'+esc(l.title)+'</span><span class="f-i">'+iconSvg('chevron-down',15)+'</span></h3>'
           + '<div class="card-detail">'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
         if(l.paused){
@@ -3216,9 +3216,9 @@ function render(){
           }
         }else if(l.needLogin && !isLoggedIn()){
           /* 第二十七轮（2026-10-07）：成绩查询 / 意见反馈 需登录后查看。
-             未登录只给引导，不渲染入口，避免隐私内容被未登录同学点开。 */
+             未登录只给引导，不渲染入口，避免隐私内容被未登录同学打开。 */
           contentHtml += '<div class="gate-box"><p class="gate-q">🔐 请先登录后查看</p>'+
-            '<p class="gate-hint" style="color:#6e635a;font-weight:400;margin:6px 0 10px">'+esc(l.title)+'需要登录后才能打开。登录后回到这里点开即可进入。</p>'+
+            '<p class="gate-hint" style="color:#6e635a;font-weight:400;margin:6px 0 10px">'+esc(l.title)+'需要登录后才能打开。登录后回到这里打开即可进入。</p>'+
             '</div>';
         }
         contentHtml += (l.cardTip ? '<p class="card-hw-tip" style="font-size:.78rem;color:#af410f;margin-top:6px;line-height:1.6">'+esc(l.cardTip)+'</p>' : '');
@@ -3536,7 +3536,7 @@ function uiDefault(){
     v: UI_V,
     fs: 1,              /* 字号缩放 0.85 ~ 1.35 */
     motion: 1,          /* 1 = 完整动效，0 = 精简 */
-    cardMode: 'compact',/* 【卡片折叠 v3.9.22】compact = 默认小窗口、点开看详情；open = 一直展开
+    cardMode: 'compact',/* 【卡片折叠 v3.9.22】compact = 默认小窗口、打开看详情；open = 一直展开
                           站主原话：「所有板块的卡片默认都是小窗口显示，因为一个卡片占用太大，
                           点击之后显示详情，用户可以在自定义设置里选择默认展开」 */
 
@@ -3598,7 +3598,7 @@ function normalizeUI(o){
   out.stack  = (o.stack  === 1) ? 1 : 0;   /* 【卡片堆叠 v35】缺省关，仅显式 1 才开 */
   /* 【v3.15.7 修复】cardMode 之前漏了读回 —— 每次 loadUI() 都被重置成 uiDefault 的
      'compact'，站主在 iPad 上选「全部展开」，一刷新 / 一升级又折叠回去，
-     老 iPad 上折叠卡点不开就等于整页没法用（他反复提过两次）。这里先补上读回，
+     老 iPad 上折叠卡点不开就等于整页无法用（他反复提过两次）。这里先补上读回，
      真正的记忆交给下面的设备级 key。 */
   out.cardMode = (o.cardMode === 'open') ? 'open' : 'compact';
   /* 【v3.5.6 每日一言来源】缺省联网（1），仅显式 0 才关 */
@@ -3745,7 +3745,7 @@ function motionOn(){
  *   UI.lite === 1   →  轻量（手动开启，落盘到 localStorage，长期生效）
  *   UI.lite === 0   →  完整（手动关闭，落盘，长期生效）
  *   其它（null）    →  跟随默认 = 完整
- * 默认给「完整」而不是「轻量」：高端机不该被无端降级，卡的人自己点一下就行。
+ * 默认给「完整」而不是「轻量」：高端机不该被无端降级，卡的人自己点击即可。
  */
 /* ===== 轻量模式：设备级记忆（v3.5.33）=====
  * 站主原话：「你要记住设备的选择，比如说设备在这个版本已经选择了轻量模式，
@@ -3873,8 +3873,8 @@ function syncThemeToBg(){
   var t = document.getElementById('themeToggle');
   if(t) t.innerHTML = want ? iconSvg('sun',17) : iconSvg('moon',17);
   if(typeof uiMsg === 'function')
-    uiMsg(want ? '背景偏深，已自动切到夜间模式（并关闭昼夜自动切换）'
-               : '背景偏亮，已自动切回日间模式（并关闭昼夜自动切换）');
+    uiMsg(want ? '背景偏暗，已切换为夜间模式（已关闭自动切换）'
+               : '背景偏亮，已切换为日间模式（已关闭自动切换）');
   return true;
 }
 
@@ -4293,7 +4293,7 @@ function api(path, opts){
   opts = opts || {};
   if(!apiReady()){
     return Promise.reject(new Error(
-      '后端还没配置好。请把 index.html 里的 API_BASE_DEFAULT 填成后端地址（或在页面 head 里注入 window.CLS_API_BASE）。'
+      '后端地址未配置。'
     ));
   }
   var headers = { 'Content-Type':'application/json' };
@@ -4337,7 +4337,7 @@ function api(path, opts){
        真连不上时心跳自然会连续失败、判定更准；请求自身的错误照旧由
        调用方的 try/catch 提示，不会因为这里放开而变得「报错没人管」。 */
     if(e && e.status) throw e;
-    var netErr = new Error('连接不到服务端，请检查网络，或切换到流量（移动数据）再试');
+    var netErr = new Error('无法连接服务端，请检查网络或切换移动数据。');
     netErr.offline = true;
     netErr.cause = e;
     throw netErr;
@@ -5707,7 +5707,7 @@ function renderAccount(){
       return;
     }
     acctCloseHidden(false);
-    /* 个人资料页（账号弹窗内嵌，不跳转；2026-10-06 站主要求「点开姓名就能改」） */
+    /* 个人资料页（账号弹窗内嵌，不跳转；2026-10-06 站主要求「打开姓名就能改」） */
     if(ACCT_TAB === 'myprofile'){
       if(title) title.innerHTML = iconSvg('contact',15) + ' 我的资料';
       box.innerHTML = myProfileHtml();
@@ -5794,8 +5794,8 @@ function acctForcePwdHtml(){
      跳过不清服务端标志（后台「待改密」徽章仍有意义），只记本地，
      之后个人中心常驻提示条，随时能改。 */
   return '<div class="acct-hint" style="margin-bottom:10px">你的账号目前用的是初始密码（出生日期），'
-    + '太容易被猜到。<b>建议</b>换一个只有自己知道的密码。'
-    + '不想现在改也没关系，点「暂不修改」即可跳过，之后随时可以在「我的账号」里改。</div>'
+    + '强度不足，建议更换为仅本人知晓的密码。'
+    + '可点击「暂不修改」跳过，之后可在「我的账号」中修改。</div>'
     + oldField
     + '<div class="acct-field"><label>新密码（至少 6 位）</label>'
     + '<input id="fpP1" type="password" autocomplete="new-password"></div>'
@@ -6107,7 +6107,7 @@ function doForceChangePwd(){
   var msg = document.getElementById('fpMsg');
   function say(t, cls){ if(msg){ msg.className = 'msg ' + (cls || 'err') + ' show'; msg.textContent = t; } }
 
-  if(!oldPwd){ say('请输入当前密码（初始密码一般是出生日期）'); return; }
+  if(!oldPwd){ say('请输入当前密码（初始密码为出生日期）'); return; }
   if(!p1 || p1.length < 6){ say('新密码至少 6 位'); return; }
   if(p1.length > 64){ say('新密码最长 64 位'); return; }
   if(p1 === oldPwd){ say('新密码不能和当前密码一样'); return; }
@@ -6245,7 +6245,7 @@ function acctProfileHtml(){
    认领/修改的入口本来就在首页的「个人资料查询」板块里（那一套逻辑很完整），
    这里不重复实现，直接把用户带过去。 */
 /* ---------- 我的资料：账号弹窗内嵌页（2026-10-06） ----------
-   站主要求：点开自己的姓名之后，就能查看并修改个人数据。
+   站主要求：打开自己的姓名之后，就能查看并修改个人数据。
    以前这里是「跳到首页资料查询板块去找输入框」，体验绕；
    现在直接在账号弹窗里开一页：只读信息 + 微信/QQ/手机号自助填写。
    姓名、学号、智学网账号、政治面貌由管理员维护，同学改不了（后端也拦）。 */
@@ -6454,8 +6454,8 @@ function myProfileHtml(){
     /* 只读区：管理员维护的字段 + 本人可见字段，全部可复制 */
     '<div class="acct-sw" style="margin-top:0">' +
       '<div style="width:100%"><span class="t">我的班级资料</span>' +
-        '<span class="s">带 <b>✏️</b> 的可以自己改，改完点下面「保存修改」，<b>管理员确认前仍显示原内容</b>；' +
-          '带 <b>🔒</b> 的只能由管理员维护，发现错误请找站主。<br>' +
+        '<span class="s">带 <b>✏️</b> 的字段可自行修改，保存后<b>管理员确认前仍显示原内容</b>；' +
+          '带 <b>🔒</b> 的字段由管理员维护，如有错误请联系站主。<br>' +
           '标了「仅自己可见」的项只有你能看到，其他同学（包括管理员）在前台都查不到。</span>' +
         mpList +
         '</div>' +
@@ -6770,7 +6770,7 @@ function syncPull(ask){
     if(ask){
       var doIt = confirm('云端有 ' + n + ' 项你的数据。\n\n' +
         '点「确定」= 用云端数据覆盖本机（适合换了新设备）\n' +
-        '点「取消」= 保持本机不变，之后可以手动「立即同步」把本机存上去');
+        '选择「取消」将保留本机数据，之后可手动同步。');
       if(!doIt) return { pulled:0 };
     }
     var cnt = 0;
@@ -6904,7 +6904,7 @@ function k0In(o, k){ return Object.prototype.hasOwnProperty.call(o, k); }
    自动上云（2026-10-05 新增 · 需求「每触发一次本地修改时自动上云」）
    ------------------------------------------------------------
    思路：不拦截每一次 localStorage 写入就去发请求——那会把后端打爆
-   （同学点一下作业、切一下主题就一个请求）。
+   （同学点击作业、切一下主题就一个请求）。
    改为「攒一攒再发」：
 
      markCloudDirty(key)  本地改了什么就登记一下（很便宜，只进内存 Set）
@@ -7017,7 +7017,7 @@ function scheduleCloudSync(){
   }, SYNC_DEBOUNCE_MS);
 }
 
-/** 真正推送：只推 dirty 的键，一次请求搞定 */
+/** 真正推送：只推 dirty 的键，一次请求完成 */
 function flushCloudSync(){
   if(__syncDebounceTimer !== null && __syncDebounceTimer !== undefined){
     clearTimeout(__syncDebounceTimer);
@@ -8854,7 +8854,7 @@ function renderSettings(){
   else if(UI_SEC === 'motion'){
     /* v3.9.22：卡片默认小窗口，这里给个开关（站主要求「用户可以在自定义设置里选择」） */
     var _cm = cardModeOn() ? 'open' : 'compact';
-    var _cmBtns = [['compact','小窗口','只显示图标和标题，点一下展开'],['open','全部展开','卡片直接显示完整内容']]
+    var _cmBtns = [['compact','小窗口','只显示图标和标题，点击展开'],['open','全部展开','卡片直接显示完整内容']]
       .map(function(m){
         var active = (m[0] === _cm);
         return '<button class="btn ' + (active ? '' : 'btn-secondary') + '" ' +
@@ -8865,7 +8865,7 @@ function renderSettings(){
       '<div class="ui-modes">' + _cmBtns + '</div>' +
       '<p class="ui-hint" style="margin-top:10px">当前：<b>' + (_cm === 'open' ? '全部展开' : '小窗口')
         + '</b>　<span style="opacity:.75">· 只影响这台设备</span></p>' +
-      '<p class="ui-hint">选「小窗口」时，卡片只留图标和标题，<b>点一下</b>展开描述和按钮，再点收起；'
+      '<p class="ui-hint">选「小窗口」时，卡片只留图标和标题，<b>点击</b>展开描述和按钮，再点收起；'
       + '这样一屏能看到更多入口。<br>想一眼看全所有内容，就选「全部展开」。</p>', false);
     html += secHtml('mo','动效','sliders-horizontal',
       '<div class="sw-row"><span class="t">完整动效<span class="s">拖拽、涟漪、圆形主题切换等</span></span>' +
@@ -9082,7 +9082,7 @@ function setBgVeil(v){ UI.bg.veil = Number(v) || 0; saveUI(); applyBg(); }
 
 function pickBgImage(input){
   var f = input.files && input.files[0]; if(!f) return;
-  if(f.size > 8 * 1024 * 1024){ uiMsg('图片大于 8MB，请换一张小一点的', '#af410f'); input.value = ''; return; }
+  if(f.size > 8 * 1024 * 1024){ uiMsg('图片超过 8MB，请更换较小文件', '#af410f'); input.value = ''; return; }
   var rd = new FileReader();
   rd.onload = function(){
     var img = new Image();
@@ -9773,7 +9773,7 @@ function islBindPhoto(host){
   var b = host && host.querySelector('.island-banner');
   if(!b) return;
   if(ISLAND && ISLAND.photo){ b.onclick = islPhotoOpen; return; }
-  /* v3.9.7：还没配照片时，管理员点一下给个去处提示；同学点了不弹任何东西 */
+  /* v3.9.7：还没配照片时，管理员点击给个去处提示；同学点了不弹任何东西 */
   b.onclick = function(){
     try{
       if(typeof isAdmin === 'function' && isAdmin()){
@@ -9944,7 +9944,7 @@ function islandRender(){
   if(!row) row = '<div class="island-chip"><span class="k">今日</span><span class="v" id="islTime">—</span></div>';
 
   /* v3.9.15（站主）：手机端太占地方 —— 四个信息块在窄屏折成「一行信息条」，
-     点一下才展开成原来的四格。位置不动（仍在公告上面），但高度从 ~172px 降到 ~90px。 */
+     点击才展开成原来的四格。位置不动（仍在公告上面），但高度从 ~172px 降到 ~90px。 */
   var meta = [];
   if(comps.indexOf('time') >= 0) meta.push('<span id="islTimeM">--:--</span>');
   if(comps.indexOf('weather') >= 0) meta.push('<span id="islWxM" onclick="event.stopPropagation();islWxOpen()">—</span>');
@@ -10072,7 +10072,7 @@ function islSet(id, txt){
   var b = document.getElementById(id + 'M');
   if(b) b.textContent = txt;
 }
-/* 手机端点一下信息条：展开 / 收起四个信息块 */
+/* 手机端点击信息条：展开 / 收起四个信息块 */
 function islandToggleMeta(){
   var host = document.getElementById('classIsland');
   if(!host) return;
@@ -10395,7 +10395,7 @@ function cardGuestAllowed(ref){
 
 /* 拦截提示：明确告诉对方「为什么点不动、怎么才能看」 */
 /* 从分享链接（?t=）或播放页（?play=）进来的访客：不弹开屏公告、不推销登录。
-   之前只判断了 t=，结果扫码播放时会被「登录一下」整块盖住，视频根本没法看。 */
+   之前只判断了 t=，结果扫码播放时会被「登录一下」整块盖住，视频根本无法看。 */
 function isShareEntry(){
   try{
     var sp = new URLSearchParams(location.search);
@@ -10535,7 +10535,7 @@ var HIDDEN_FUN_LINKS = [
   { icon: "🗂️", title: "云智安（网页应用集合站）", desc: "集合多种网页应用，登录后即可使用，账号密码见下方", url: "https://yqzan.cn/", login: { user: "xsyzclass5", pass: "xsyz985211" } },
   { icon: "🕹️", title: "小霸王游戏厅", desc: "在线复古红白机游戏合集，找回童年", url: "https://yikm.net/" },
   { icon: "🧩", title: "2048", desc: "经典数字合成小游戏", url: "https://play2048.co/" },
-  { icon: "🎮", title: "4399 小游戏", desc: "海量在线小游戏，点开即玩", url: "https://www.4399.com/" },
+  { icon: "🎮", title: "4399 小游戏", desc: "海量在线小游戏，打开即玩", url: "https://www.4399.com/" },
   { icon: "🎯", title: "7k7k 小游戏", desc: "另一大经典小游戏库", url: "https://www.7k7k.com/" },
   { icon: "🐍", title: "贪吃蛇", desc: "吃豆挑战：吃满50豆可赢点歌券（每周一张，周一刷新）", url: "games/snake.html" },
   { icon: "🧱", title: "俄罗斯方块", desc: "经典落块消除，手速大考", url: "games/tetris.html" },
@@ -10766,7 +10766,7 @@ var BOARD_STATE = { game: 'snake', range: 'all', data: null, loading: false, err
 
 function openGameBoard(){
   if(!isLoggedIn()){
-    if(typeof uiMsg === 'function') uiMsg('看排行榜需要先登录班级账号', '#af410f');
+    if(typeof uiMsg === 'function') uiMsg('查看排行榜需先登录', '#af410f');
     return;
   }
   var m = document.getElementById('gameBoardMask');
@@ -11031,7 +11031,7 @@ function togglePwd(inputId, btn){
       if(wrap && !wrap.querySelector('.pwd-ime-tip')){
         var tip = document.createElement('p');
         tip.className = 'pwd-ime-tip';
-        tip.textContent = '💡 本浏览器不支持密码遮蔽；若无法输入中文，点右侧眼睛「显示」后再输入即可。';
+        tip.textContent = '当前浏览器不支持密码遮蔽；无法输入中文时，可点击右侧「显示」后输入。';
         wrap.appendChild(tip);
       }
     }
@@ -11096,7 +11096,7 @@ function renderContactResults(id, out, j){
 
   if(!list.length){
     out.innerHTML = '<span style="color:#af410f">'+(j.message ? esc(j.message) : '未找到匹配的资料')+
-      '<br><span style="font-size:.82em;color:#6e635a">提示：可以试试学号后几位，或确认姓名是否写全。</span></span>';
+      '<br><span style="font-size:.82em;color:#6e635a">可尝试输入学号后几位，或核对姓名。</span></span>';
     return;
   }
 
@@ -11734,7 +11734,7 @@ function askDataEnc(mode,cb){
   if(t) t.textContent=(mode==='export')?'🔐 设置导出密码':'🔓 输入数据密码';
   if(d) d.innerHTML=(mode==='export')
     ? '导出内容含<b>姓名、班级签、点歌记录</b>等，将用你设置的密码加密。<br><b style="color:#af410f">请务必记住</b>——导入时要输入同一个密码，忘记将无法恢复。'
-    : '这份数据是加密过的，请输入导出时设置的密码。';
+    : '该数据已加密，请输入导出时设置的密码。';
   if(p2) p2.style.display=(mode==='export')?'':'none';
   if(err) err.style.display='none';
   if(p) p.value=''; if(p2) p2.value='';
@@ -11926,7 +11926,7 @@ function _dlJSON(json,name){
   setTimeout(function(){ URL.revokeObjectURL(url); },3000);
 }
 function _plainWarn(then){
-  if(!confirm('当前环境不支持加密（Web Crypto 需要 https 或 localhost 环境）。\n\n仍要以【明文】方式导出吗？这样文件里的姓名、班级签、点歌记录等都能被直接看到。')) return;
+  if(!confirm('当前环境不支持加密（Web Crypto 需 https 或 localhost）。\n\n仍以【明文】导出？文件中的姓名、班级签、点歌记录等将被直接读取。')) return;
   then();
 }
 function exportData(){
@@ -11935,7 +11935,7 @@ function exportData(){
   askDataEnc('export',function(pw){
     encPayload(collectAllData(),pw).then(function(w){
       _dlJSON(JSON.stringify(w),fname);
-      dataMsg('🔐 已加密导出，请记住密码');
+      dataMsg('已加密导出，请妥善保存密码');
       SFX.success();
     }).catch(function(){ dataMsg('❌ 加密失败，请重试','#af410f'); });
   });
@@ -11944,7 +11944,7 @@ function copyDataText(){
   if(!cryptoOK()){ _plainWarn(function(){ _copyOut(JSON.stringify(collectAllData()),'⚠️ 已复制明文数据（未加密）','#af410f'); }); return; }
   askDataEnc('export',function(pw){
     encPayload(collectAllData(),pw).then(function(w){
-      _copyOut(JSON.stringify(w),'🔐 已复制加密数据，请记住密码','#0a7d42');
+      _copyOut(JSON.stringify(w),'已复制加密数据，请妥善保存密码','#0a7d42');
     }).catch(function(){ dataMsg('❌ 加密失败，请重试','#af410f'); });
   });
 }
@@ -12016,7 +12016,7 @@ function applyImport(obj){
   var n=0;
   try{
     for(var k in obj){ localStorage.setItem(k, String(obj[k])); n++; }
-  }catch(e){ dataMsg('❌ 写入失败（存储空间不足）', '#af410f'); return; }
+  }catch(e){ dataMsg('写入失败：存储空间不足', '#af410f'); return; }
   dataMsg('✅ 已导入 ' + n + ' 项数据，即将刷新…');
   SFX.success();
   setTimeout(function(){ location.reload(); }, 800);
@@ -12024,8 +12024,8 @@ function applyImport(obj){
 function doImport(text){
   if(!text){ dataMsg('请先选择文件或粘贴数据', '#af410f'); return; }
   var obj=null;
-  try{ obj=JSON.parse(text); }catch(e){ dataMsg('❌ 数据格式不正确，无法导入', '#af410f'); return; }
-  if(!obj || typeof obj!=='object'){ dataMsg('❌ 数据格式不正确，无法导入', '#af410f'); return; }
+  try{ obj=JSON.parse(text); }catch(e){ dataMsg('数据格式不正确，无法导入', '#af410f'); return; }
+  if(!obj || typeof obj!=='object'){ dataMsg('数据格式不正确，无法导入', '#af410f'); return; }
   /* 【自定义设置】若选中的是「自定义设置」导出的配置文件，走配置导入通道（合并模式） */
   if(obj.app === 'class-site-ui-config'){
     var _r = applyUICfgObj(obj, 'merge');
@@ -12444,7 +12444,7 @@ function closePop(fromBubble){
   if(p && !fromBubble) popMarkSeen(p);
   popBubbleSync();
 }
-/** 悬浮球点开：不重新计「已弹」，只重看 */
+/** 悬浮球打开：不重新计「已弹」，只重看 */
 function popFromBubble(){
   var p = POP_CUR; if(!p) return;
   /* 从球打开时，展示逻辑与自动弹一致，但不再变更已读标记 */
@@ -12658,7 +12658,7 @@ function _renderHwItems(items, hwId){
         text = t.text; img = t.img; audio = t.audio; video = t.video; audioLabel = t.audioLabel;
       } else { text = t; img = null; audio = null; video = null; audioLabel = null; }
       var done = _isHwDone(hwId, it.subject, ti);
-      /* 图片：点开看大图。视频也走 img 通道（历史命名），
+      /* 图片：打开看大图。视频也走 img 通道（历史命名），
          所以这里要看扩展名决定是「当图片放大」还是「当视频播放」。 */
       var isVid = /\.(mp4|webm|mov|m4v|ogv|avi)(\?|#|$)/i.test(String(img || ''));
       var imgHtml = img
@@ -13112,7 +13112,7 @@ function voteDateText(x){
     return m ? m[0] : '';
   }
   /* v3.5.20：像 "Sun Oct 18" 这种缺年份的串，new Date() 会补成 2001 年 ——
-     年份离谱就直接认作无效，回退去字符串里找 YYYY-MM-DD，别把 2001 显示给用户。 */
+     年份离谱就直接认作无效，回退去字符串里找 YYYY-MM-DD，请勿 2001 显示给用户。 */
   if(d.getFullYear() < 2000 || d.getFullYear() > 2100){
     var m2 = String(x).match(/\d{4}-\d{2}-\d{2}/);
     return m2 ? m2[0] : '';
@@ -13349,7 +13349,7 @@ function voteCardHtml(v){
         + '</div></div>';
     }).join('');
   }else{
-    /* v3.5.14 #9：每个选项右侧一个点赞按钮，点一下直接投票（不再有提交表单）。
+    /* v3.5.14 #9：每个选项右侧一个点赞按钮，点击直接投票（不再有提交表单）。
        站主原话「改了几次点击还是无法投票」—— 以前点选项只是改本地草稿，
        必须再点「提交投票」才入库，很多人点了选项就走了。 */
     /* v3.5.24：排序一律按赞数从高到低（站主：「高赞的放在上面，排行榜实时更新」）。
@@ -13616,7 +13616,7 @@ function voteAskRetract(vid, oid){
     voteMsg(vid, '这场投票的撤回机会已经用完了（每人 ' + (v.retractLimit || 1) + ' 次）', 'err');
     return;
   }
-  var msg = '你已经投过这场票了。\n\n撤回后可以重新投票，但会消耗 1 次撤回机会'
+  var msg = '已参与本场投票。\n\n撤回后可重新投票，将消耗 1 次撤回机会'
     + '（还剩 ' + left + ' 次）。' + (v.multi ? '\n（多选撤回会清空本场全部选择）' : '')
     + '\n\n确定撤回吗？';
   if(!window.confirm(msg)) return;
@@ -13702,7 +13702,7 @@ var SC = {
   allRows: null,  /* 懒加载的历次全班成绩 { examId: {exam, rows} }，用于上线率趋势 */
   config: null,   /* 后台配置（对外展示档位等），进页面时取一次 */
   quadKey: null,  /* 四象限当前看哪一科 */
-  quadSel: null,  /* 四象限当前点开了哪个象限（0..3，null=没点开）——手机点开看名单 */
+  quadSel: null,  /* 四象限当前打开了哪个象限（0..3，null=没打开）——手机打开看名单 */
   quadDot: null,  /* 四象限当前点中的那一个人（下标，null=没点） */
   subTrend: 'score',  /* 各科趋势看分数还是看名次（'score' | 'rank'） */
   tailSortKey: 'd',   /* 进退步榜排序键（v3.3.0：合并成一张表，点表头排） */
@@ -13729,7 +13729,7 @@ var SC = {
 
 /* ---------------- 入口 ---------------- */
 /* 打开成绩分析。
-   v2.9.6 改版（站主原话：「点开成绩分析直接展示而不是卡片+弹窗」）：
+   v2.9.6 改版（站主原话：「打开成绩分析直接展示而不是卡片+弹窗」）：
    成绩分析现在**长在板块 3 里**，点侧边栏就看见内容，不再有卡片中转、也不再弹全屏框。
    这个函数名保留（通知跳转 / 弹窗白名单 / 老引用都指向它），语义改成「切到那个板块并确保已就绪」。 */
 function openScoreAnal(){
@@ -13800,7 +13800,7 @@ function scEase(p){ return 1 - Math.pow(1 - p, 3); }
 /* ============================================================================
  * v3.10.0（站主）：
  *   「图表内部的动画等屏幕转到那个页面才开始显示，不要打开板块就全部同时播；
- *     上滑翻走了再回去，图表要重新播一遍；文字（成绩、排名那些）第一次跳一下就行」
+ *     上滑翻走了再回去，图表要重新播一遍；文字（成绩、排名那些）第一次跳一下即可」
  *
  * 所以：柱状图 / 横条 / 雷达 / 行 → 交给 IntersectionObserver，进视口播、出视口复位，
  *       下次滚回来再播一遍；
@@ -14298,7 +14298,7 @@ function scFullMark(){
   return f || 750;
 }
 
-/* 我的那一行。三条路依次试，认出来就行：
+/* 我的那一行。三条路依次试，认出来即可：
    ① 后端标好的 uid；② 后端给的 mine 标记（含「姓名对照」别名，改过名也认）；
    ③ 本地按姓名比一次（纯兜底）。 */
 function scMyRow(){
@@ -14814,7 +14814,7 @@ function scArrow(k){
 function scSort(k){
   if(SC.sortKey === k) SC.sortAsc = !SC.sortAsc;
   else { SC.sortKey = k; SC.sortAsc = (k === 'rank' || k === 'name'); }
-  /* 重排整表会把下方所有块重建，热力图上正点开的格子也就跟着没了 —— 顺手清掉选中态 */
+  /* 重排整表会把下方所有块重建，热力图上正打开的格子也就跟着没了 —— 顺手清掉选中态 */
   SC.hmSel = null;
   scRenderBoard();
 }
@@ -14885,7 +14885,7 @@ function scChartHist(st, rk){
       + '" font-size="' + fs + '" font-weight="700" class="sc-bar-num" fill="#8a6a4a" text-anchor="middle">' + c + '</text>';
     /* 整根（含顶上数字）都挂在同一个 <g> 上，手指点哪都能命中 */
     return '<g class="sc-hb" data-hb="' + i + '" onclick="scHistTap(' + i + ')" style="cursor:pointer">'
-      + '<title>' + b0.lo + '–' + (b0.hi - 1) + ' 分：' + c + ' 人（点开看名单）</title>'
+      + '<title>' + b0.lo + '–' + (b0.hi - 1) + ' 分：' + c + ' 人（打开看名单）</title>'
       + rect + txt + '</g>';
   }).join('');
 
@@ -16307,7 +16307,7 @@ function aiResultHtml(md, model, scene) {
  * v3.17.0：导出 / 导入
  * ----------------------------------------------------------------------------
  * 站主要求：「能把这次诊断导出，也能把设置（包括 Key）导到另一台设备；
- * 顺便把提示词、选项都列出来；自己部署了本地 AI 的人，用接口按学号查就行。」
+ * 顺便把提示词、选项都列出来；自己部署了本地 AI 的人，用接口按学号查即可。」
  *
  * 三条路各管一段：
  *   · aiSceneMd  —— 一份诊断的快照（元信息 + 正文 + 当时喂进去的数据）
@@ -16968,7 +16968,7 @@ function scMeAnalysis(meRow, rk, st, myTotal, myRank, subs){
   var goodText = strong.length
     ? '相对班均领先的是 ' + strong.map(function(x){
         return '<b>' + esc(x.name) + '</b>（' + fmtNum(x.v) + '，超班均 ' + fmtNum(x.d) + ' 分）';
-      }).join(' 和 ') + ' —— 这几科是你的基本盘，稳住就行，不用再压时间。'
+      }).join(' 和 ') + ' —— 这几科是你的基本盘，稳住即可，不用再压时间。'
     : '这次没有明显超过班均的科目 —— 说明整体还在追赶阶段，别急着挑科大补，先把最拖后腿那科拉到班均附近最划算。';
 
   /* ---- ③ 短板：得分率最低的两科 ---- */
@@ -17984,7 +17984,7 @@ function scPkAiData(A, B, ctx){
     }
     if(edge.length && edge[0].d >= 8){
       todo.push('你的基本盘是 <b>' + esc(edge[0].name) + '</b>（领先 ' + fmtNum(edge[0].d)
-        + ' 分）。这一科不用再追加时间，保持现在的训练量就行 —— 时间挪给上面那一科。');
+        + ' 分）。这一科不用再追加时间，保持现在的训练量即可 —— 时间挪给上面那一科。');
     }
     if(ctx.anA && ctx.anB && ctx.anA.td != null && ctx.anB.td != null && ctx.anA.td !== 0){
       todo.push('从这两场的变化看，你自己这次<b>' + (ctx.anA.td > 0 ? '涨了 ' + fmtNum(ctx.anA.td) : '掉了 ' + fmtNum(Math.abs(ctx.anA.td)))
@@ -18628,7 +18628,7 @@ function scGradeTrend(){
     +   '</div></div>';
 }
 
-/* ---------- 跨考试上线率趋势（懒加载：点一下才去读历次全班成绩） ---------- */
+/* ---------- 跨考试上线率趋势（懒加载：点击才去读历次全班成绩） ---------- */
 function scLoadAllRows(){
   var need = SC.exams.filter(function(e){ return !SC.allRows || !SC.allRows[e.id]; });
   if(!need.length){ scRenderPane(); return; }
@@ -19307,7 +19307,7 @@ function scShareDialog(edit){
     +     '<div class="sc-dim" style="margin-top:4px;font-size:.74rem">只有你自己看得到，会显示在「我建过的分享」列表里</div>'
     +   '</div>'
     +   '<div id="shNamesWrap" style="display:none;margin-bottom:12px">'
-    +     '<label class="sc-sh-lb">挑同学（点一下选中）</label>'
+    +     '<label class="sc-sh-lb">挑同学（点击选中）</label>'
     +     '<div id="shNames" class="sc-sh-names">'
     +       SC.rows.map(function(r){
               var on = (edit && (edit.names || []).indexOf(r.name) >= 0) ? ' on' : '';
@@ -19457,7 +19457,7 @@ function scShareCreate(editId){
   var scope = scShEl('shScope').value;
   if(scope === 'picked' && !names.length){ alert('至少挑一位同学'); return; }
 
-  /* 分享哪些内容：至少留一项，否则对方点开是空白页 */
+  /* 分享哪些内容：至少留一项，否则对方打开是空白页 */
   var sections = { board: false, card: false };
   Array.prototype.forEach.call(scShAll('.sc-sh-sec input[data-sec]'), function(cb){
     var k = cb.getAttribute('data-sec');
@@ -19469,7 +19469,7 @@ function scShareCreate(editId){
     var grp = (k === 'avg' || k === 'table' || k === 'cut') ? 'board' : 'card';
     sections[k] = sections[grp] ? !!cb.checked : false;
   });
-  if(!sections.board && !sections.card){ alert('至少要勾一项分享内容，不然对方点开是空的。'); return; }
+  if(!sections.board && !sections.card){ alert('至少要勾一项分享内容，不然对方打开是空的。'); return; }
   /* 总开关开了但细项全关 → 那一块等于空的，提醒一下（不拦，让人自己决定） */
   var fine = function(g, keys){
     return sections[g] && keys.every(function(k){ return sections[k] === false; });
@@ -19511,7 +19511,7 @@ function scShareCreate(editId){
       var newToken = String(j.token || (url.split('t=')[1] || ''));
       scShEl('shOut').innerHTML =
           '<div class="sc-hint sc-hint-ok">'
-        + '<b>链接已生成。</b>把它发给要看的人就行 —— 对方不用登录。</div>'
+        + '<b>链接已生成。</b>把它发给要看的人即可 —— 对方不用登录。</div>'
         + '<div class="sc-sh-url"><input id="shUrl" readonly value="' + esc(url) + '">'
         + '<button class="btn btn-sm" id="shCopy">复制</button>'
         + '<button class="btn btn-sm btn-secondary" id="shPv">预览</button>'
@@ -19568,7 +19568,7 @@ function scShareList(){
             + '</div>';
         }).join('') + '</div>';
     /* v3.5.12 #9：预览 —— 就是真的打开那条分享链接，站内全屏弹窗打开，
-       看到的样子和同学点开完全一致（不能展示的本来就被后端裁掉了）。 */
+       看到的样子和同学打开完全一致（不能展示的本来就被后端裁掉了）。 */
     Array.prototype.forEach.call(box.querySelectorAll('[data-view]'), function(b){
       b.onclick = function(){
         var tk = b.getAttribute('data-token');
@@ -19598,7 +19598,7 @@ function scShareList(){
  * 站主要求：「分享页可以预览，页面设计和网站内部的一样，相当于把不能展示的东西隐藏了」
  *
  * 做法：**不另写一套预览渲染** —— 直接用 iframe 打开真实的 share.html?t=xxx。
- * 好处是所见即所得：预览就是同学点开看到的那一页，后端裁到什么样，
+ * 好处是所见即所得：预览就是同学打开看到的那一页，后端裁到什么样，
  * 预览就什么样（分享自己时只有一行、班均仍是全班口径、名次按全班算）。
  * 另写一套「模拟」迟早会和真页面走样，那才是预览最大的坑。
  */
@@ -19621,7 +19621,7 @@ function scSharePreview(tk){
     + '</div>'
     + '<div class="sc-pane" style="padding:10px 14px 14px">'
     +   '<p class="sc-figcap" style="margin:0">'
-    +     '这就是同学点开链接后看到的样子 —— <b>不能展示的内容后端原本就不会下发</b>，'
+    +     '这就是同学打开链接后看到的样子 —— <b>不能展示的内容后端原本就不会下发</b>，'
     +     '所以预览里没有的，别人也看不到。手机上看效果更像，可以点「新窗口打开」再缩窄窗口或用手机打开。</p>'
     + '</div></div>';
   document.body.appendChild(mask);
@@ -20542,7 +20542,7 @@ function scQuadrant(){
   /* ⚠️ v3.1.1 修正：块的顺序必须和下面 qOf() 的下标严格一一对应
      （0=总分低·单科弱 左下；1=总分强·单科弱 右下；2=总分低·单科强 左上；3=总分强·单科强 右上）。
      SVG 的 y 轴是反的（y 越小＝分数越高），原来按「从上往下」写，
-     结果块上的标题和图上的位置上下颠倒 —— 站主反馈「点开名单和图对不上」就是这个。
+     结果块上的标题和图上的位置上下颠倒 —— 站主反馈「打开名单和图对不上」就是这个。
      顺带用 Math.max(0, …) 兜住班均正好压在边界上时的负宽高。 */
   var quads = [
     { x: L,  y: my, w: mx - L,     h: H - B - my, c: '#f6f2ff', t: '总分低 / 单科弱', cls: 'sc-q1' },
@@ -20737,7 +20737,7 @@ function scHeatmap(){
   var rk = scRankMap(SC.basis);   /* 提出来算一次：原先每格都重算，60 行 × 6 科白跑 360 遍 */
   var st = scStats(SC.basis);
   var avgs = scSubjAvg();
-  /* v3.3.0：手机端没有悬停，所以每格都能点 —— 点开看这个人的总分 / 这一科 / 与班均差。
+  /* v3.3.0：手机端没有悬停，所以每格都能点 —— 打开看这个人的总分 / 这一科 / 与班均差。
      数据在这里一次性存好（SC._hm），点击只改 DOM，不重渲染整页（否则手机看明细会跳回顶部）。 */
   var cellIdx = 0;
   var cellsMeta = [];
@@ -21036,7 +21036,7 @@ function openMediaPlayer(url, label){
           ? '<video src="' + attr(url) + '" controls autoplay playsinline style="width:100%;border-radius:12px;background:#000"></video>'
           : '<audio src="' + attr(url) + '" controls autoplay style="width:100%"></audio>')
     +   '<p class="guest-tip" style="margin-top:10px">'
-    +     '如果浏览器拦了自动播放，点一下播放键就行。'
+    +     '如果浏览器拦了自动播放，点击播放键即可。'
     +     '<a href="' + attr(url) + '" target="_blank" rel="noopener" style="margin-left:8px">新窗口打开</a>'
     +   '</p>'
     + '</div></div>';
@@ -21656,11 +21656,11 @@ var CLASS_SIGN_POOL = [
   {t:'good', text:'午休去晒会儿太阳，下午效率直接翻倍。'},
   {t:'good', text:'今天适合主动跟一个人说句话，会有小惊喜。'},
   {t:'bad',  text:'今天容易走神，重要的事记在纸上，别全靠脑子。'},
-  {t:'bad',  text:'作业可能比你以为的多，早点开动，别熬到深夜。'},
+  {t:'bad',  text:'作业可能比你以为的多，早打开动，别熬到深夜。'},
   {t:'bad',  text:'今天别在老师背后比划，月亮不圆的时候容易被看到。'},
   {t:'bad',  text:'奶茶少喝一杯，今天的运气经不起太多糖分的考验。'},
   {t:'bad',  text:'粗心日提醒：交东西前多看一眼名字和日期。'},
-  {t:'mid',  text:'平平淡淡也是好日子，今天稳住就行。'},
+  {t:'mid',  text:'平平淡淡也是好日子，今天稳住即可。'},
   {t:'mid',  text:'运气一般，但你的努力比运气靠谱。'},
   {t:'mid',  text:'今天适合整理一下桌面和心情。'}
 ];
