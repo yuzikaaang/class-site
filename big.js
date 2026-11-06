@@ -291,12 +291,12 @@
      items[].tasks[]，task 依旧可以是字符串或 {text,img,audio}。
      只改渲染与交互，云端结构不动，老数据不会丢。 */
 
-  var FS_KEY = 'cls_bhw_fs2';
-  /* v4.7.3（站主）：字号范围拉大到 25%–300%。
-     投影到后墙用得上大字号，也有老师想一屏塞下更多内容。档位之间保持 1.15–1.3 倍，
-     既不会「按一下几乎没变」，也不会「按一下翻一倍」。 */
+  /* v4.8.0（站主）：「每次可以调节的少一点点，我甚至可以手动输入，每次就调 5%」。
+     档位制改成连续百分比：25%–300%，按一下 ±5%，中间那个数字可以直接点进去改。
+     老数据两种都认（v4.7.3 存的是档位索引，更早的是 8 档老索引），按实际倍率换算。 */
+  var FS_KEY = 'cls_bhw_fs3';
+  var FS_MIN = 25, FS_MAX = 300, FS_STEP = 5;
   var FS_STEPS = [0.25, 0.35, 0.5, 0.65, 0.8, 1, 1.2, 1.45, 1.75, 2.1, 2.55, 3];
-  var FS_DEFAULT = 5;                    /* 索引指向 100% */
   var SUBJ_A = ['语文', '数学', '英语'];
   var SUBJ_B = ['物理', '化学', '生物'];
   /* v4.3.0 站主要求：新建一期默认带上六科，不用每次手动加 */
@@ -381,37 +381,53 @@
      所以换了个键名，老值按「实际倍率最接近」换算过来。 */
   var FS_KEY_OLD = 'cls_bhw_fs';
   var FS_OLD = [0.85, 0.95, 1, 1.1, 1.2, 1.35, 1.5, 1.7];
+  function clampFs(n){
+    n = Math.round(Number(n));
+    if(!isFinite(n)) return 100;
+    if(n < FS_MIN) return FS_MIN;
+    if(n > FS_MAX) return FS_MAX;
+    return n;
+  }
   function readFs(){
     var n = null;
     try{ n = parseInt(localStorage.getItem(FS_KEY), 10); }catch(e){}
-    if(n >= 0 && n < FS_STEPS.length) return n;
+    if(n >= FS_MIN && n <= FS_MAX) return n;
+    /* v4.7.3 的档位索引 → 百分比 */
+    var idx = null;
+    try{ idx = parseInt(localStorage.getItem('cls_bhw_fs2'), 10); }catch(e){}
+    if(idx >= 0 && idx < FS_STEPS.length) return clampFs(FS_STEPS[idx] * 100);
+    /* 更早的 8 档老索引 → 百分比 */
     var old = null;
     try{ old = parseInt(localStorage.getItem(FS_KEY_OLD), 10); }catch(e){}
-    if(old >= 0 && old < FS_OLD.length){
-      var want = FS_OLD[old], best = FS_DEFAULT, bd = 9;
-      for(var i = 0; i < FS_STEPS.length; i++){
-        var d = Math.abs(FS_STEPS[i] - want);
-        if(d < bd){ bd = d; best = i; }
-      }
-      return best;
-    }
-    return FS_DEFAULT;
+    if(old >= 0 && old < FS_OLD.length) return clampFs(FS_OLD[old] * 100);
+    return 100;
   }
   function applyFs(){
     var h = $('bigHw');
-    if(h) h.style.setProperty('--bhw-fs', String(FS_STEPS[BIG.fs]));
+    if(h) h.style.setProperty('--bhw-fs', String(BIG.fs / 100));
     var v = $('bhwFsVal');
-    if(v) v.textContent = Math.round(FS_STEPS[BIG.fs] * 100) + '%';
-    /* 字号一变，卡片高度跟着变 —— 立刻重排一次（站主第 2 条：每次调字号都要实时重排） */
+    /* 数字框自己触发的那次不要回写，否则会把用户正在敲的「1」顶成「100」 */
+    if(v && v !== document.activeElement) v.value = String(BIG.fs);
+    /* 字号一变，卡片高度跟着变 —— 立刻重排一次 */
     if(BIG.hwOn) scheduleLayout();
   }
   BIG.fs = readFs();
   BIG.fsStep = function (d){
-    var n = BIG.fs + (d > 0 ? 1 : -1);
-    if(n < 0 || n >= FS_STEPS.length){ toast(n < 0 ? '已是最小字号' : '已是最大字号'); return; }
+    var n = clampFs(BIG.fs + (d > 0 ? FS_STEP : -FS_STEP));
+    if(n === BIG.fs){ toast(d > 0 ? '已到最大字号（' + FS_MAX + '%）' : '已到最小字号（' + FS_MIN + '%）'); return; }
+    BIG.fsSet(n);
+  };
+  /* v4.8.0：手动输入。留空 / 乱填都退回当前值，不报错也不跳字。 */
+  BIG.fsSet = function (v){
+    var raw = String(v == null ? '' : v).replace(/[^0-9]/g, '');
+    if(!raw){ applyFs(); return; }
+    var n = clampFs(parseInt(raw, 10));
+    var hitEdge = false;
+    if(n !== Math.round(Number(raw))) hitEdge = true;
     BIG.fs = n;
     try{ localStorage.setItem(FS_KEY, String(n)); }catch(e){}
     applyFs();
+    if(hitEdge) toast('字号范围 ' + FS_MIN + '%–' + FS_MAX + '%');
   };
 
   /* —— 锁定：锁上以后整页点击 / 滑动 / 滚动全部失效 ——
@@ -1366,14 +1382,18 @@
     var d = document, el = d.documentElement;
     try{
       if(fsEl()){
+        try{ if(window.FSKeep) FSKeep.off(); }catch(e){}
         (d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen || function(){}).call(d);
         return;
       }
       var req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
       if(!req){ toast('这个浏览器不支持网页全屏，可按 F11', true); return; }
       var p = req.call(el);
+      /* v4.8.0：记住「要全屏」，换到时钟 / 后台 / 作业页也不退出 */
+      try{ if(window.FSKeep) FSKeep.on(); }catch(e){}
       if(p && p.then){
         p.then(function(){ refreshFullBtn(); }, function(){
+          try{ if(window.FSKeep) FSKeep.off(); }catch(e){}
           toast('浏览器拒绝全屏，请按 F11', true);
         });
       }else{
@@ -2187,6 +2207,10 @@
     var out = {};
     for(var k in F_DEF) out[k] = (f[k] === undefined ? F_DEF[k] : f[k]);
     if(!Array.isArray(out.role)) out.role = ['学生'];
+    /* v4.8.0：老配置里可能存着「老师 / 管理员」，现在不认了，过滤掉；
+       过滤完空的就退回「学生」，否则会变成谁都抽不到 */
+    out.role = out.role.filter(function(r){ return r === '学生' || r === '课代表' || r === '班干部'; });
+    if(!out.role.length) out.role = ['学生'];
     /* v4.7.3：老版本存下来的残影 —— 考试已改成「不限成绩」，名次条件还留着 */
     if(!out.examId){ out.metric = ''; out.subj = ''; out.min = ''; out.max = ''; }
     return out;
@@ -2873,7 +2897,10 @@
       /* v4.4.0 起有「班干部」，v4.4.2 拆出「课代表」。
          身份值仍是后台「成员档案 → 身份」那个自由文本（maxlength 10），
          填「班长」「团支书」「语文课代表」都能被对应按钮认出来，不用改数据库。 */
-      var roles = ['学生', '班干部', '课代表', '老师', '管理员'];
+      /* v4.8.0（站主）：「随机点名只能抽学生，班主任、管理员这些都不要，
+         除了学生课代表和班干部，暂时只留这三个」。
+         老师 / 管理员本来就被 roleHit('学生') 排除在外，这里连按钮一起去掉。 */
+      var roles = ['学生', '课代表', '班干部'];
       var roleHtml = roles.map(function (r){
         var on = (f.role || []).indexOf(r) >= 0;
         return '<button type="button" class="bpick-chip' + (on ? ' on' : '') + '"'
@@ -2915,6 +2942,8 @@
                     + ' onclick="BIG.pickSet(\'gender\',\'' + g + '\')">' + lb + '</button>';
                 }).join('')
             + '</div></div>'
+            + '<div class="bpick-f-tip">性别和身份是在后台「成员档案」里填的；'
+            +   '档案里没填性别的人，选「男 / 女」时抽不到，选「不限」不影响。</div>'
             + '<div class="bpick-f-row"><span class="bpick-f-k">学号</span>'
             +   '<input class="bpick-in" inputmode="numeric" placeholder="起" value="' + attr0(f.sidMin) + '"'
             +     ' onchange="BIG.pickSet(\'sidMin\',this.value.trim())">'

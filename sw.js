@@ -108,7 +108,7 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '4.7.4'
+const SITE_VER = '4.8.0'
 
 /* v3.9.16（站主）：缓存桶跟着版本走。
    ------------------------------------------------------------
@@ -137,7 +137,9 @@ const PRECACHE = [/* v4.7.2：首页自己排第一个 —— 班级电脑常年
   './big.js', './pickfx.js', './favicon.svg', './manifest.webmanifest',
   './fonts/inter-latin.woff2', './fonts/jetbrains-mono-latin.woff2',
   /* v3.5.40：作业/排期导出图片用的共享画笔，离线也要能生成 */
-  './share-card.js', './badge.png', './clock.html']
+  './share-card.js', './badge.png', './clock.html', './fs-keep.js',
+  /* v4.8.0：后台也进预缓存 —— 它不在清单里时，第一次点「进后台」会被首页兜底顶掉 */
+  './admin.html']
 
 /* v4.7.2：给每个文件的下载加一条时间上限。
    起因（线上实测）：GitHub Pages 在国内网络下单文件要 3～8 秒，install 里
@@ -260,7 +262,22 @@ self.addEventListener('fetch', (event) => {
       let cached = null
       try {
         cache = await caches.open(CACHE)
-        cached = (await cache.match(request)) || (await cache.match('./index.html'))
+        cached = await cache.match(request)
+        /* v4.8.0（站主）：「从前台进后台要点两次」「从后台点首页也要点两次」。
+           根因就在这一行：以前不管请求的是哪个页面，缓存没命中都拿 ./index.html 顶，
+           而 admin.html 根本不在预缓存里 → 第一次点「进后台」收到的是**首页**，
+           后台那次网络请求跑完后才把 admin.html 写进缓存，所以第二次才进得去。
+           现在只有「打开站点根路径 / index.html」才允许用首页兜底；
+           其它页面（admin.html / clock.html / homework…）就老实等它自己的那份。 */
+        if (!cached) {
+          try {
+            const u = new URL(request.url)
+            /* 只有「打开站点首页」这一种情况才用首页兜底 */
+            if (u.pathname === '/' || /\/index\.html$/.test(u.pathname)) {
+              cached = await cache.match('./index.html')
+            }
+          } catch (e) { /* 解析失败就不用兜底 */ }
+        }
       } catch (e) { cached = null }
 
       /* v3.9.10（站主）：改成「缓存先给、后台再刷」

@@ -89,6 +89,7 @@ jobs:
             basic.html
             clock.html
             share-card.js
+            fs-keep.js
             admin.html
             share.html
             info.html

@@ -12540,8 +12540,9 @@ console.log('\n【94】v4.4.2 点名身份拆细（班干部 / 课代表，认�
   const adm1 = fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8');
   const prof = fs.readFileSync(new URL('./api/profile.js', import.meta.url), 'utf8');
 
-  t('★身份筛选 5 档：学生 / 班干部 / 课代表 / 老师 / 管理员',
-    /var roles = \['学生', '班干部', '课代表', '老师', '管理员'\];/.test(big));
+  t('★身份筛选 3 档：学生 / 课代表 / 班干部（v4.8.0 收敛）',
+    /var roles = \['学生', '课代表', '班干部'\];/.test(big));
+  t('★老师 / 管理员不进入候选池', /s\.indexOf\('老师'\) < 0 && s\.indexOf\('管理员'\) < 0/.test(big));
 
   const STAFF8 = ['班长', '副班长', '学习委员', '劳动委员', '团支书', '体育委员', '宣传委员', '纪律委员'];
   t('★班干部关键字表含站主说的 8 个职务', STAFF8.every(r => big.indexOf("'" + r + "'") >= 0));
@@ -12780,11 +12781,14 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /var cached = rosterCacheGet\(\)/.test(big43));
   t('★没有学号时按名单顺序补显示序号（_seq），不污染 studentId',
     /_seq: out\.length \+ 1/.test(big43) && /var sq = parseInt\(\(st && st\._seq\)/.test(big43));
-  t('★作业字号范围 25%–300%',
-    /FS_STEPS = \[0\.25,[^\]]*3\]/.test(big43) && /FS_DEFAULT = 5/.test(big43));
-  t('★老字号档位按实际倍率换算（不会把 100% 读成 50%）',
+  t('★作业字号范围 25%–300%（连续百分比）',
+    /FS_MIN = 25, FS_MAX = 300, FS_STEP = 5/.test(big43));
+  t('★字号按 5% 步进并支持手动输入',
+    /BIG\.fsStep = function \(d\)/.test(big43) && /FS_STEP : -FS_STEP/.test(big43)
+    && /BIG\.fsSet = function \(v\)/.test(big43));
+  t('★老档位按实际倍率换算（不会把 100% 读成 50%）',
     /FS_KEY_OLD = 'cls_bhw_fs'/.test(big43) && /FS_OLD = \[0\.85/.test(big43)
-    && /var d = Math\.abs\(FS_STEPS\[i\] - want\)/.test(big43));
+    && /FS_STEPS\[idx\] \* 100/.test(big43));
   t('★不限成绩时清空名次 / 分数条件（含老配置残影）',
     /if\(!v\)\{ f\.metric = ''; f\.subj = ''; f\.min = ''; f\.max = ''; \}/.test(big43)
     && /if\(!out\.examId\)\{ out\.metric = ''/.test(big43));
@@ -12806,6 +12810,23 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /quoteCatsPush\(cur\)/.test(app43));
   t('★云端 quote_source 保留 cats（原来只落 net 被丢掉）',
     /qs\.cats = v\.cats\.map\(String\)/.test(app43));
+
+  /* ⑨e v4.8.0：全屏守护、导航兜底、身份收敛、姓名解密、公告口径 */
+  const fsKeep = fs.readFileSync(new URL('./fs-keep.js', import.meta.url), 'utf8');
+  const swJs = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+  const adminJs = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const pre = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
+  t('★全屏守护：换页面自动恢复全屏', /global\.FSKeep = \{/.test(fsKeep)
+    && /pagehide/.test(fsKeep) && /function arm\(\)/.test(fsKeep));
+  t('★全屏守护脚本被三个页面引用并进预缓存',
+    /fs-keep\.js/.test(idx) && /fs-keep\.js/.test(swJs));
+  t('★SW 导航兜底只对首页生效（不再用首页顶替后台）',
+    /u\.pathname === '\/'/.test(swJs) && /admin\.html/.test(swJs));
+  t('★抽取身份只保留学生 / 课代表 / 班干部',
+    /var roles = \['学生', '课代表', '班干部'\]/.test(big43));
+  t('★后台游戏数据姓名解密后显示', /decField\(pkey, r\.who\)/.test(adminJs));
+  t('★公告门禁：禁止解释性表述与第二人称',
+    /BAN_EXPLAIN/.test(pre) && /公告里出现第二人称/.test(pre));
 }
 
 console.log('\n' + '='.repeat(52));

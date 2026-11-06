@@ -705,6 +705,10 @@ const GAME_META = [
 
 async function gameStats(req, res) {
   const sql = getSql();
+  /* v4.8.0（站主）：「后台游戏数据里的姓名显示成一串字符」——
+     档案里的姓名是 enc:v1: 开头的密文（见 _lib/profile-crypt.js），
+     这里直接把 p.name 吐出去就等于把密文画在表格里。统一解一次。 */
+  const pkey = await profileKey(req);
   const rows = await sql`
     select d.user_id, d.data_key, d.data_value, d.updated_at,
            u.username,
@@ -720,10 +724,16 @@ async function gameStats(req, res) {
   for (const r of rows) {
     const uid = Number(r.user_id);
     if (!byUser.has(uid)) {
+      let who = r.who;
+      try {
+        who = (await decField(pkey, r.who)) || r.username || '';
+        /* 解密失败 / 密钥没配时 decField 会返回「【…】」占位，别拿它当名字 */
+        if (String(who).indexOf('【') === 0) who = r.username || '';
+      } catch (e) { who = r.username || ''; }
       byUser.set(uid, {
         userId: uid,
         username: r.username,
-        name: r.who,
+        name: who,
         hi: {}, play: {}, coupons: [], updatedAt: null,
       });
     }

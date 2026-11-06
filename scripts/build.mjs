@@ -112,6 +112,15 @@ adm3 = adm3.replace(/<script src="\.\/admin(-\d+)?\.js(\?v=\d+)?"><\/script>/g,
   (m, part) => `<script src="./admin${part || ''}.js${TAG}"></script>`);
 if (adm3 !== adm3Before) write('admin.html', adm3);
 
+/* v4.8.0：全屏守护脚本三个页面都在用（index / clock / admin），
+   版本号跟构建走，否则升级后 SW 会一直递旧的那份。 */
+for (const f of ['index.html', 'clock.html', 'admin.html']) {
+  const src = read(f);
+  const out = src.replace(/<script src="\.\/fs-keep\.js(\?v=\d+)?"( defer)?><\/script>/,
+    (m, q, d) => `<script src="./fs-keep.js${TAG}"${d || ''}></script>`);
+  if (out !== src) write(f, out);
+}
+
 /* ---------------- 报告 ---------------- */
 const admHtml = read('admin.html');
 const admParts = [1, 2, 3].map((i) => 'admin-' + i + '.js').filter((f) => fs.existsSync(path.join(ROOT, f)));

@@ -991,6 +991,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
+<script src="./fs-keep.js?v=480" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -3236,6 +3237,8 @@ function toggleFs(){
   if(!canFs){ toast('这台设备的浏览器不支持网页全屏，可以用菜单里的「全屏」'); return; }
   try{
     if(!isFs()){
+      /* v4.8.0：记下「要全屏」，从时钟页再跳别的页面也不退出（见 fs-keep.js） */
+      try{ if(window.FSKeep) FSKeep.on(); }catch(e){}
       if(el.requestFullscreen) el.requestFullscreen();
       else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
       else if(el.mozRequestFullScreen) el.mozRequestFullScreen();
@@ -3251,6 +3254,7 @@ function toggleFs(){
       }, 420);
     }else{
       unlockLandscape();
+      try{ if(window.FSKeep) FSKeep.off(); }catch(e){}
       if(document.exitFullscreen) document.exitFullscreen();
       else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
       else if(document.mozCancelFullScreen) document.mozCancelFullScreen();

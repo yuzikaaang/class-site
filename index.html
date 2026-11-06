@@ -191,12 +191,15 @@ body::after{box-shadow:none}
 /* ===== 首屏快捷开关（v4.7.0）=====
    大屏 / 横屏 / 轻量 三个开关并排一行。站主要求「不要藏在自定义设置里」——
    藏起来的代价是点三四次才到，低配机器每一次点击都是实打实的卡顿。 */
-.side-quick{display:flex;gap:6px;margin:0 0 8px}
+.side-quick{display:flex;gap:6px;margin:0 0 8px;min-width:0}
 .side-btn.qk{
-  flex:1;min-width:0;text-align:center;padding:9px 4px;margin:0;
-  font-size:.78rem;font-weight:700;letter-spacing:.01em;white-space:nowrap;border-radius:11px;
+  flex:1 1 0;min-width:0;text-align:center;padding:9px 2px;margin:0;overflow:hidden;
+  /* v4.8.0（站主）：桌面上侧边栏只有 170–190px，「大屏：关」四个字会顶出按钮。
+     字号收到 .72rem、左右内边距 2px，窄屏再小一档，保证四个字永远放得下。 */
+  font-size:.72rem;font-weight:700;letter-spacing:0;white-space:nowrap;border-radius:11px;
   background:#eee3d8;color:#8a3b12;box-shadow:inset 0 0 0 1px rgba(120,53,15,.08);
 }
+@media (max-width:360px){.side-btn.qk{font-size:.68rem}}
 .side-btn.qk:hover{background:#e6d8ca}
 .dark .side-btn.qk{background:#3a332e;color:#e7c9a8;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
 .dark .side-btn.qk:hover{background:#453d37}
@@ -4314,7 +4317,13 @@ html.big-mode.big-hw .content{padding:0}
 }
 .bhw-bar button:hover{background:var(--tint);border-color:var(--grad-a)}
 .bhw-bar button:active{transform:scale(.96)}
-.bhw-fsval{font-size:.86rem;color:var(--fg-3);min-width:52px;text-align:center;font-variant-numeric:tabular-nums}
+.bhw-fsval{font-size:.86rem;color:var(--fg-3);min-width:62px;text-align:center;font-variant-numeric:tabular-nums;
+  display:inline-flex;align-items:center;justify-content:center;gap:1px}
+.bhw-fsin{width:33px;text-align:right;font:inherit;color:inherit;font-variant-numeric:tabular-nums;
+  background:transparent;border:1px solid transparent;border-radius:6px;padding:2px 2px;outline:none}
+.bhw-fsin:hover{border-color:rgba(0,0,0,.12);background:var(--tint)}
+.bhw-fsin:focus{border-color:var(--grad-a);background:var(--card);color:var(--fg)}
+.dark .bhw-fsin:hover{border-color:rgba(255,255,255,.18)}
 .bhw-bar .bhw-lockon{background:linear-gradient(135deg,var(--grad-a),var(--grad-b));color:#fff;border-color:transparent}
 #bhwThemeBtn{display:inline-flex;align-items:center;justify-content:center;gap:5px}
 #bhwThemeBtn svg{width:15px;height:15px}
@@ -5720,9 +5729,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
         <div class="bhw-bar-r">
-          <button type="button" onclick="BIG.fsStep(-1)" title="缩小字号">A−</button>
-          <span class="bhw-fsval" id="bhwFsVal">100%</span>
-          <button type="button" onclick="BIG.fsStep(1)" title="放大字号">A+</button>
+          <button type="button" onclick="BIG.fsStep(-1)" title="缩小字号（每次 5%）">A−</button>
+          <!-- v4.8.0：中间这个数字可以直接点进去改，按一下 ±5% -->
+          <span class="bhw-fsval" title="可以直接输入百分比（25–300）">
+            <input id="bhwFsVal" class="bhw-fsin" type="text" inputmode="numeric" value="100"
+              aria-label="字号百分比" onchange="BIG.fsSet(this.value)"
+              onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){this.value=BIG.fs;this.blur();}">%
+          </span>
+          <button type="button" onclick="BIG.fsStep(1)" title="放大字号（每次 5%）">A+</button>
           <button type="button" onclick="BIG.fontOpen()" title="换字体（只影响这一页）">字体</button>
           <!-- v4.3.1：主题切换不再跟着侧边栏一起藏起来，作业页自己留一个 -->
           <button type="button" id="bhwThemeBtn" onclick="BIG.themeToggle(event)" title="切换明亮 / 暗色">明亮</button>
@@ -6588,17 +6602,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.7.4';
+var SITE_VERSION = '4.8.0';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=474" defer></script>
-<script src="./app.min.js?v=474" defer></script>
+<script src="./auth-bus.js?v=480" defer></script>
+<script src="./app.min.js?v=480" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=474" defer></script>
+<script src="./fs-keep.js?v=480" defer></script>
+<script src="./big.js?v=480" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=474" defer></script>
+<script src="./pickfx.js?v=480" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
