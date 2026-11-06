@@ -31,6 +31,7 @@
 
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
 <link rel="apple-touch-icon" href="./icon-512.png">
 <meta name="theme-color" content="#141210">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2112,10 +2113,12 @@ html[data-lite="1"] body::after{display:none!important;animation:none!important;
 /* ③ 流光扫过 */
 html[data-lite="1"] .card::after{display:none!important;animation:none!important}
 /* ④ 各类入场 / 循环动画：统一停掉。用 .01ms 而不是 none，防止某些依赖
-   animationend 的逻辑收不到事件卡住（同 prefers-reduced-motion 的处理方式） */
-html[data-lite="1"] *,
-html[data-lite="1"] *::before,
-html[data-lite="1"] *::after{
+   animationend 的逻辑收不到事件卡住（同 prefers-reduced-motion 的处理方式）。
+   ⚠️ v4.6.0：必须排除 .pfx 子树 —— 抽取动画是「功能」不是「装饰」，
+   站主要求轻量模式下也完整播放（只降画质，不砍功能）。 */
+html[data-lite="1"] *:not(.pfx):not(.pfx *),
+html[data-lite="1"] *:not(.pfx):not(.pfx *)::before,
+html[data-lite="1"] *:not(.pfx):not(.pfx *)::after{
   animation-duration:.01ms!important;
   animation-iteration-count:1!important;
   transition-duration:.01ms!important;
@@ -4693,12 +4696,8 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 }
 .dark .pfx-b .bx-name b{background:#241c17}
 .pfx-b .bx-name em{font-style:normal;font-size:.7rem;color:var(--fg-3);font-variant-numeric:tabular-nums}
-/* 未中盲盒（陪跑）：暗淡灰化，与中奖清亮形成反差 */
-.pfx-b.miss{opacity:.5}
-.pfx-b.miss .bx-name b.bx-miss{
-  font-size:.82rem;font-weight:800;color:var(--fg-3);letter-spacing:.08em;
-  background:transparent;box-shadow:none;
-}
+/* 抽满次数后剩余的盲盒：置灰、不可点 */
+.pfx-b.dim{opacity:.32;filter:grayscale(.5);pointer-events:none}
 .pfx-cell.flat .bx-name,.pfx-cell.flat .bx-lid{transition:none!important}
 
 /* ---------- 分层：全屏泛色层覆盖网格（沉浸泛色 + 中央段文字），顶栏 / 图例 / 底栏在其上 ---------- */
@@ -4737,13 +4736,9 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .pfx-b.glow .bx-mark{opacity:.35;transition:opacity .2s ease}
 .pfx-b.glow .bx-name{opacity:0}
 
-/* ---------- 宝箱：格子学号段文字（v4.5.1）----------
-   隐藏姓名时，转盘格子上先显示学号段（如「31–40」），停下后再换成姓名。 */
-.pfx-tile .pfx-seg{
-  position:relative;z-index:2;color:#fff;font-weight:800;
-  font-size:.84rem;letter-spacing:.04em;font-variant-numeric:tabular-nums;
-  text-shadow:0 1px 5px rgba(0,0,0,.65);
-}
+/* ---------- 宝箱：卡片纯色块（v4.6.0）----------
+   隐藏姓名时卡片不写文字，只用学号段颜色 + 微光；学号段对照看顶部图例。
+   点开后由 JS 换成姓名（.revealed）。 */
 
 /* 宝箱：横向转盘 + 铜指针 */
 .pfx-case{width:100%;max-width:920px;display:flex;flex-direction:column;gap:12px}
@@ -4776,17 +4771,22 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 }
 .pfx-tile.win{z-index:3;animation:pfxWin .62s cubic-bezier(.2,1.4,.4,1) both;box-shadow:0 0 0 3px rgba(255,255,255,.92),0 0 34px var(--ps)}
 @keyframes pfxWin{0%{transform:scale(1)}45%{transform:scale(1.16)}100%{transform:scale(1.06)}}
-.pfx-mark{
-  position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;z-index:4;transform:translateX(-1px);
-  background:linear-gradient(180deg,transparent,var(--accent-ink) 18%,var(--accent-ink) 82%,transparent);
-  opacity:.75;pointer-events:none;
+/* 隐藏姓名：卡片纯色块 + 微光，不写任何文字 */
+.pfx-tile.is-color{
+  box-shadow:0 0 18px var(--ps),0 4px 12px rgba(0,0,0,.2),inset 0 0 20px rgba(255,255,255,.2);
 }
-.pfx-mark::before,.pfx-mark::after{
-  content:'';position:absolute;left:50%;transform:translateX(-50%);
-  border-left:7px solid transparent;border-right:7px solid transparent;
+.pfx-tile.is-color::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 38%,rgba(255,255,255,.46),transparent 64%);
 }
-.pfx-mark::before{top:0;border-top:9px solid var(--accent-ink)}
-.pfx-mark::after{bottom:0;border-bottom:9px solid var(--accent-ink)}
+/* 中间固定方框：不随卡片滚动，停下看框内哪张卡面积最大 */
+.pfx-frame{
+  position:absolute;left:50%;top:5px;bottom:5px;width:clamp(88px,10vw,104px);z-index:4;
+  transform:translateX(-50%);border-radius:13px;pointer-events:none;
+  border:2px solid var(--accent-ink);
+  box-shadow:0 0 0 2px rgba(255,255,255,.6),0 0 22px rgba(194,65,12,.32);
+}
+.dark .pfx-frame{border-color:#f9c491;box-shadow:0 0 0 2px rgba(0,0,0,.4),0 0 22px rgba(249,196,145,.28)}
 .pfx-mask{position:absolute;top:0;bottom:0;width:15%;z-index:3;pointer-events:none}
 .pfx-mask.l{left:0;background:linear-gradient(90deg,var(--bg-2),rgba(255,247,240,0))}
 .pfx-mask.r{right:0;background:linear-gradient(270deg,var(--bg-2),rgba(255,247,240,0))}
@@ -4835,6 +4835,22 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   .pfx-cell.charge{animation:none}
   .pfx-flare{transition:none!important}
 }
+
+/* ---------- 轻量模式 · 抽取动画降质（v4.6.0）----------
+   站主要求：轻量模式下动画也要完整看得到，只是「画质低一点」。
+   这里只减掉重绘最贵的部分（多层阴影、大半径渐变、电荷脉冲），
+   动画时序和揭示流程一律保留。 */
+html[data-lite="1"] .pfx-flare{
+  background:radial-gradient(120% 108% at 50% 50%,var(--fc,transparent),transparent 74%);
+}
+html[data-lite="1"] .pfx-b .bx-glow{filter:none}
+html[data-lite="1"] .pfx-cell.charge{animation:none}
+html[data-lite="1"] .pfx-strip-in{box-shadow:none}
+html[data-lite="1"] .pfx-tile{box-shadow:0 2px 6px rgba(0,0,0,.16)}
+html[data-lite="1"] .pfx-tile.is-color{box-shadow:0 0 10px var(--ps)}
+html[data-lite="1"] .pfx-tile.win{box-shadow:0 0 0 2px rgba(255,255,255,.9)}
+html[data-lite="1"] .pfx-frame{box-shadow:none}
+html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
 /* 手机 / 窄屏：大屏模式的顶栏要压成横向滚动的胶囊条。
    ⚠️ 手机端 .sidebar 原本是「抽屉」：position:fixed + translateX(-100%)。
       这里只改 position 不改 transform 的话，整条导航会被推到屏幕外 —— 实测踩到。 */
@@ -6472,14 +6488,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.5.2';
+var SITE_VERSION = '4.6.0';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=452" defer></script>
-<script src="./app.min.js?v=452" defer></script>
+<script src="./auth-bus.js?v=460" defer></script>
+<script src="./app.min.js?v=460" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=452" defer></script>
+<script src="./big.js?v=460" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
 <script src="./pickfx.js?v=451" defer></script>

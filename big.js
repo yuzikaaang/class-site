@@ -2052,11 +2052,15 @@
     BIG.pickBody();
     PickFX.play({
       mode: p.fx,
-      items: picked.map(pickItem),
-      pool: pickPoolItem(),
+      items: picked.map(pickItem),   /* 只用来知道抽几人 */
+      pool: pickPoolItem(),          /* 真正随机从这里取，点一次抽一个 */
       hide: !!p.hideName,
       single: false,
-      onDone: function (){ commitPick(picked, true); }
+      onDone: function (actual){
+        /* v4.6.0：动画里现抽的人才是最终结果；跳过/异常时回落到预抽名单 */
+        var res = (actual && actual.length) ? actual : picked;
+        commitPick(res, true);
+      }
     });
   };
 
@@ -2095,14 +2099,19 @@
 
     var p = BIG.pick;
     if(p.fx === 'off' || typeof PickFX === 'undefined'){ apply(); return; }
-    /* 单个重抽固定按「单抽」演：只开一个盒子 / 转一轮 */
+    /* 单个重抽固定按「单抽」演：从「排除已抽他人」的池子里现抽一个 */
     PickFX.play({
       mode: p.fx,
       items: [pickItem(next)],
-      pool: pickPoolItem(),
+      pool: rest.map(function (n){ return pickItem(n); }),
       hide: !!p.hideName,
       single: true,
-      onDone: apply
+      onDone: function (actual){
+        var who = (actual && actual.length) ? actual[0] : next;
+        BIG.pick.names[i] = who;
+        syncRec();
+        BIG.pickBody();
+      }
     });
   };
 
@@ -2200,7 +2209,7 @@
     return arr.join(' · ');
   }
 
-  /* 动画选择区（v4.5.2）：关闭 / 盲盒 / 宝箱。
+  /* 动画选择区（v4.6.0）：关闭 / 盲盒 / 宝箱。
      颜色图例与动画里的一致，取自 PickFX 的同一份色板，避免两处色值走偏。 */
   function fxPanel(){
     var p = BIG.pick, fx = p.fx || 'off';
@@ -2220,10 +2229,10 @@
     if(fx === 'off'){
       tip = '<p class="bpick-fx-tip">关闭动画后，点击「开始抽取」直接显示结果。</p>';
     } else if(fx === 'case'){
-      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。转盘由快到慢，末段极慢；'
-        + (p.hideName ? '抽取中只显示学号段，停止后再揭示姓名。' : '抽取中姓名随学号段一同显示。') + '</p>';
+      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。卡片横向滚动，中间方框内面积最大的即中选；'
+        + (p.hideName ? '抽取中只显示色块，停止后自动显示姓名。' : '抽取中姓名随卡片一同显示。') + '</p>';
     } else {
-      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。固定 10 个盲盒，中奖者藏在其中；两段式：先开缝露学号段光辉，再点击揭示姓名或未中。</p>';
+      tip = '<p class="bpick-fx-tip">颜色按学号分段：' + dots + '。格子数按条件人数（最多 10 个），点一次抽一人：先显学号段颜色，随后自动显示姓名。</p>';
     }
 
     var hide = (fx === 'case')

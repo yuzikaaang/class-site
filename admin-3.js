@@ -2720,8 +2720,34 @@ function voMountSongPick(host){
 
 /* v3.6.4（站主 #6）：版本记录不再单独占一页，作为「数据管理」的下半部分。
    拆成 html + mount 两半，两个入口都能用同一套逻辑。 */
-function releasesBlockHtml(){
+
+/* v4.6.0：站点资源下载 + 轻量模式开关。
+   站主原话：「后台新增下载班徽图标和站点图标，方便创建快捷方式时换图标。」
+   班徽给 PNG（做快捷方式图标更通用），站点图标给 ICO（Windows 快捷方式首选）。 */
+function siteAssetsHtml(){
+  var liteOn = false;
+  try { liteOn = localStorage.getItem('cls_lite_mode') === '1'; } catch(e){}
   return '<div class="toolbar" style="background:var(--panel);margin-top:18px">'
+    +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">站点资源</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '创建桌面快捷方式后，可右键「属性 → 更改图标」换成下载的图标</p></div>'
+    +   '<a class="btn btn-sm btn-secondary" href="./badge.png" download="班徽.png">' + svg('download',14) + ' 下载班徽</a>'
+    +   '<a class="btn btn-sm btn-secondary" href="./favicon.ico" download="favicon.ico">' + svg('download',14) + ' 下载站点图标</a>'
+    + '</div>'
+    + '<section class="panel" style="margin-bottom:18px"><div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
+    +   '<div style="flex:1;min-width:220px"><b style="font-size:.9rem">轻量模式</b>'
+    +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
+    +       '关闭实时模糊、背景辉光与装饰动画；抽取动画仍完整播放，仅画质略降。'
+    +       '低性能设备（如教室触屏一体机）建议开启，可明显改善输入与滚动。</p></div>'
+    +   '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">'
+    +     '<input type="checkbox" id="liteToggle"' + (liteOn ? ' checked' : '') + '>'
+    +     '<span style="font-size:.85rem">开启</span></label>'
+    + '</div></section>';
+}
+
+function releasesBlockHtml(){
+  return siteAssetsHtml()
+    + '<div class="toolbar" style="background:var(--panel);margin-top:18px">'
     +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">版本更新记录</b>'
     +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
     +       '部署前必须在这里有一条对应版本的记录，否则不允许部署</p></div>'
@@ -2737,6 +2763,12 @@ function mountReleasesBlock(){
   if($('relRefresh')) $('relRefresh').onclick = loadReleases;
   if($('relAdd')) $('relAdd').onclick = function(){ relEdit(null); };
   if($('relSync')) $('relSync').onclick = relSyncMissing;
+  if($('liteToggle')) $('liteToggle').onchange = function(){
+    var on = this.checked;
+    try { localStorage.setItem('cls_lite_mode', on ? '1' : '0'); } catch(e){}
+    if(on) document.documentElement.setAttribute('data-lite','1');
+    else document.documentElement.removeAttribute('data-lite');
+  };
   loadReleases();
 }
 
@@ -2775,6 +2807,17 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.6.0', date: '2026-11-06', type: 'feat', title: '抽取动画重做 + 希沃性能优化 + 图标下载', items: [
+      '站主：盲盒格子数按条件人数（最多 10 个），点一次抽一人、点几次抽几人，不存在「未中」',
+      '盲盒不再预先定人：每次点击时在条件范围内现抽一个没抽过的人，先显学号段颜色、随后自动显示姓名',
+      '宝箱重做：中间固定方框不动，卡片横向滚动，停下按方框内重叠面积最大判定；隐藏姓名时卡片只显纯色块与微光',
+      '单次点击：盲盒与宝箱均不再需点两次，露色后约 0.5～0.8 秒自动揭示姓名',
+      '性能：轻量模式改为「降质不降功能」，抽取动画完整播放但减少模糊与阴影；后台补上轻量模式，登录输入不再卡顿',
+      '后台「数据管理」新增站点资源：下载班徽 PNG 与站点图标 ICO，并提供轻量模式开关'
+    ], pub: [
+      { cat: '作业', text: '盲盒改为点一次抽一人，宝箱改为方框判定' },
+      { cat: '界面', text: '抽取动画改单次点击；新增轻量模式，低性能设备更流畅' }
+    ] },
   { version: '4.5.2', date: '2026-11-06', type: 'feat', title: '盲盒固定 10 格 + 中奖/陪跑机制', items: [
       '站主：不论抽几人，盲盒始终 10 个（条件池不足 10 才按池子数），不会因人数少而暴露结果范围',
       '中奖者藏在 10 个盲盒里，陪跑从条件池补齐、打乱顺序；逐个开盒才知道是中奖还是未中',

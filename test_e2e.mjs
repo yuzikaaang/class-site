@@ -12625,7 +12625,7 @@ console.log('\n【95】v4.4.5 软件简介书面化 / 表头吸顶 / 视频悬�
     && /videoBubbleHide\(\);   \/\* v4\.4\.5/.test(app));
 }
 
-console.log('\n【96】v4.5.2 抽取动画：盲盒（固定10格·两段式）/ 宝箱（卡间隙），学号分段色');
+console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ 宝箱（方框判定），学号分段色');
 
 {
   const fsx = fs.readFileSync(new URL('./pickfx.js', import.meta.url), 'utf8');
@@ -12634,6 +12634,8 @@ console.log('\n【96】v4.5.2 抽取动画：盲盒（固定10格·两段式）/
   const sw = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
   const yml = fs.readFileSync(new URL('./.github/workflows/deploy-pages.yml', import.meta.url), 'utf8');
   const chk = fs.readFileSync(new URL('./scripts/copycheck.mjs', import.meta.url), 'utf8');
+  const adminHtml = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const admin3 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
 
   /* ① 两种动画都在，card 已移除 */
   t('★两种动画模式齐备（box / case，已移除 card）',
@@ -12655,12 +12657,12 @@ console.log('\n【96】v4.5.2 抽取动画：盲盒（固定10格·两段式）/
 
   /* ④ 必须有跳过出口，且播完自动回结果页 */
   t('★顶部常驻「跳过」', /class="pfx-skip"/.test(fsx) && /querySelector\('\.pfx-skip'\)\.addEventListener/.test(fsx));
-  t('★播完调用 onDone 回结果页', /if \(cb\) cb\(\)/.test(fsx) || /cb\(\)/.test(fsx));
+  t('★播完调用 onDone 回结果页（并回传实际结果）', /if \(cb\) cb\(res\)/.test(fsx));
 
   /* ⑤ 与点名面板的接线 */
   t('★关闭动画时直接出结果（不播放任何动画）',
     /if\(p\.fx === 'off' \|\| typeof PickFX === 'undefined'\)\{\s*\n\s*commitPick\(picked, false\);/.test(big));
-  t('★单个重抽走单抽动画（single: true）', /single: true,\s*\n\s*onDone: apply/.test(big));
+  t('★单个重抽走单抽动画（single: true）', /single: true,\s*\n\s*onDone: function \(actual\)/.test(big));
   t('★关闭面板会撤掉舞台，不留浮层', /if\(typeof PickFX !== 'undefined'\) PickFX\.stop\(\);\s*\n\s*BIG\.pick\.state = 'setup';/.test(big));
   t('★结果页带学号色条与学号', /--pc:' \+ sw\.c/.test(big) && /bpick-res-no/.test(big));
   t('★抽取设置里可选动画档位并持久化',
@@ -12676,25 +12678,42 @@ console.log('\n【96】v4.5.2 抽取动画：盲盒（固定10格·两段式）/
   /* ⑦ 停针计算：必须用 offsetWidth，不能用 rect（入场 scale 会带偏） */
   t('★转盘尺寸用 offsetWidth / offsetLeft（避开入场缩放）',
     /a\.offsetWidth/.test(fsx) && /b\.offsetLeft - a\.offsetLeft/.test(fsx));
-  t('★宝箱隐藏姓名时格子显学号段、停止后补名字',
-    /'<span class="pfx-seg">'/.test(fsx) && /seg\.outerHTML = nameOf/.test(fsx));
 
-  /* ⑧ v4.5.1：两段式盲盒 + 全屏泛色 + 卡间隙 + 末段极慢 */
-  t('★盲盒两段式（glow 露段 → open 露名）', /'glow'/.test(fsx) && /glowOne/.test(fsx) && /openOne/.test(fsx));
+  /* ⑧ v4.6.0：盲盒现抽 + 单次揭示 + 宝箱方框判定 */
   t('★全屏泛色提示层（flare + 段文字）', /pfx-flare/.test(fsx) && /setFlare/.test(fsx) && /学号段 /.test(fsx));
   t('★宝箱减速末段极慢（分段缓动 easeCase）', /easeCase/.test(fsx) && /0\.86/.test(fsx));
-  t('★宝箱三成概率停针卡间隙', /nearMiss/.test(fsx) && /0\.32/.test(fsx));
   t('★index.html 含全屏泛色层与盲盒 glow 态样式', /\.pfx-flare\b/.test(idx) && /\.pfx-b\.glow/.test(idx));
 
-  /* ⑨ v4.5.2：盲盒固定 10 格 + 中奖/陪跑机制 */
-  t('★盲盒固定 10 格（gridN = min(10, pool.length)）', /gridN = Math\.min\(10, pool\.length\)/.test(fsx));
-  t('★中奖者藏盲盒里、陪跑从池子补齐', /hitMap\[/.test(fsx) && /extras\.filter|pool\.filter.*hitMap/.test(fsx) && /fill = extras\.slice/.test(fsx));
-  t('★盲盒打乱顺序（Fisher-Yates shuffle）', /function shuffle\(a\)/.test(fsx));
-  t('★盲盒区分中奖与陪跑（hit 标记 + missTone）', /it\.hit/.test(fsx) && /missTone\(\)/.test(fsx));
-  t('★opened 只数中奖（hitsCount）', /hitsCount = items\.filter/.test(fsx) && /opened === hitsCount/.test(fsx));
-  t('★跳过时 flush 给陪跑盲盒加 miss 类', /if \(!items\[i\]\.hit\) cell\.classList\.add\('miss'\)/.test(fsx));
-  t('★底栏显示「已抽中 X / N」计数', /pfx-cnt-box/.test(fsx) && /已抽中/.test(fsx));
-  t('★CSS 含未中盲盒暗淡样式', /\.pfx-b\.miss/.test(idx) && /\.bx-miss/.test(idx));
+  /* ⑨ v4.6.0：盲盒格子数按范围人数、点一次抽一人、现抽不预定 */
+  t('★盲盒格子数 = min(10, 范围人数)',
+    /gridN = \(mode === 'box'\) \? Math\.min\(10, pool\.length\)/.test(fsx));
+  t('★盲盒每次点开现抽一人（used 去重、不预定名单）',
+    /function drawOne\(\)/.test(fsx) && /used\[it\.name\] = 1/.test(fsx)
+    && /pool\.filter\(function \(it\) \{ return !used\[it\.name\]; \}\)/.test(fsx));
+  t('★点一次即抽，抽满 need 次停止',
+    /if \(st\[i\] !== 'closed' \|\| done >= need\) return/.test(fsx));
+  t('★盲盒单次点击自动揭示（露色后自动出姓名）',
+    /阶段二：自动揭示姓名/.test(fsx) && !/else if \(s === 'glow'\)/.test(fsx));
+  t('★抽满后剩余格子置灰不可点',
+    /c\.classList\.add\('dim'\)/.test(fsx) && /\.pfx-b\.dim/.test(idx));
+  t('★不存在「未中」概念（无 miss / 陪跑）',
+    !/bx-miss|missTone|\.pfx-b\.miss/.test(fsx));
+  t('★宝箱固定方框 + 重叠面积判定',
+    /pfx-frame/.test(fsx) && /Math\.min\(r\.right, fr\.right\)/.test(fsx));
+  t('★宝箱隐藏姓名只显纯色块（不写学号段文字）',
+    /is-color/.test(fsx) && /\.pfx-tile\.is-color/.test(idx) && !/pfx-seg/.test(fsx));
+  t('★动画回传实际抽取结果（finish 调 ctl.result）', /s\.ctl\.result\(\)/.test(fsx));
+
+  /* ⑩ v4.6.0：轻量模式降质不降功能 + 后台补轻量 */
+  t('★轻量模式豁免抽取动画（:not(.pfx)）', /:not\(\.pfx\):not\(\.pfx \*\)/.test(idx));
+  t('★轻量模式降卡片数/阴影（画质降、功能留）', /isLite\(\) \? 16 : 24/.test(fsx));
+  t('★后台支持轻量模式（data-lite + cls_lite_mode）',
+    /cls_lite_mode/.test(adminHtml) && /html\[data-lite="1"\]/.test(adminHtml));
+  t('★后台登录门轻量下极简（去模糊/阴影/动画）',
+    /html\[data-lite="1"\] #gate\{background:var\(--bg-1\)\}/.test(adminHtml));
+  t('★后台可下载班徽与站点图标', /badge\.png/.test(admin3) && /favicon\.ico/.test(admin3));
+  t('★favicon.ico 已生成并被引用',
+    /favicon\.ico/.test(idx) && /favicon\.ico/.test(adminHtml));
 }
 
 console.log('\n' + '='.repeat(52));

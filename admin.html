@@ -6,6 +6,19 @@
 <meta name="robots" content="noindex,nofollow">
 <title>管理后台 · 25级05班班级服务站</title>
 <link rel="icon" href="favicon.svg">
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<script>
+/* v4.6.0：后台此前完全没有轻量模式 —— 希沃触屏一体机上重特效一直在跑，
+   软键盘弹出（触发 resize 重排）时输入慢到 1 秒 1 个字。这里与主站对齐，
+   尽早打 data-lite，避免首屏闪一下。 */
+(function () {
+  try {
+    if (localStorage.getItem('cls_lite_mode') === '1') {
+      document.documentElement.setAttribute('data-lite', '1');
+    }
+  } catch (e) {}
+})();
+</script>
 <style>
 /* ============================================================
  * 25级05班班级服务站 · 管理后台
@@ -1150,6 +1163,38 @@ input[type="file"]::file-selector-button{
   transition:border-color .18s,background .18s;
 }
 input[type="file"]::file-selector-button:hover{border-color:var(--accent-ink);background:var(--tint)}
+
+/* ============================================================
+ * 轻量模式（v4.6.0）
+ * ------------------------------------------------------------
+ * 站主原话：「我们班电脑是触屏的，没有键盘鼠标，用系统软键盘打字，
+ *   特别特别卡，1 秒只能打一个字。用其他网页没这么卡。」
+ *
+ * 根因：后台此前完全没有轻量模式。main 页面有 data-lite 规则，
+ *   后台却让 backdrop-filter(14px) + 顶栏辉光 + rise-in 入场动画
+ *   一直跑；软键盘弹出触发 resize 重排时，这些每帧重绘把主线程占满。
+ *
+ * 这里与主站对齐：关实时模糊、关辉光、停动画、登录门改纯色。
+ * 功能一个不少，只是不「炫」。 */
+html[data-lite="1"] *,
+html[data-lite="1"] *::before,
+html[data-lite="1"] *::after{
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+  animation-duration:.01ms!important;
+  animation-iteration-count:1!important;
+  transition-duration:.01ms!important;
+}
+html[data-lite="1"] body::before{display:none!important}
+html[data-lite="1"] #gate{background:var(--bg-1)}
+html[data-lite="1"] .gate-card{box-shadow:none;animation:none;border-top-color:var(--btn-a)}
+/* 输入框聚焦不再画 3px 外环 —— 软键盘弹出时这圈阴影会跟着重排一起重绘 */
+html[data-lite="1"] .field input:focus,
+html[data-lite="1"] .field select:focus,
+html[data-lite="1"] .field textarea:focus,
+html[data-lite="1"] .inp:focus{box-shadow:none!important}
+html[data-lite="1"] .head{background:var(--bg-1)!important}
+html[data-lite="1"] .modal-mask{background:rgba(41,37,36,.62)!important}
 </style>
 </head>
 <body>
@@ -1754,13 +1799,13 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '4.5.2';
+var SITE_VERSION = '4.6.0';
 var VER_DATE = '2026-11-03';
 </script>
 <!-- v3.19.0：后台脚本按顶层横幅拆成三段（各 <120KB gzip），共享全局作用域，
      顺序固定，不能调换或异步加载。 -->
-<script src="./admin-1.js?v=452"></script>
-<script src="./admin-2.js?v=452"></script>
-<script src="./admin-3.js?v=452"></script>
+<script src="./admin-1.js?v=460"></script>
+<script src="./admin-2.js?v=460"></script>
+<script src="./admin-3.js?v=460"></script>
 </body>
 </html>

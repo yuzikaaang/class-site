@@ -1,35 +1,40 @@
 /* ============================================================================
- * pickfx.js —— 随机点名抽取动画（v4.5.2）
+ * pickfx.js —— 随机点名抽取动画（v4.6.0）
  * ----------------------------------------------------------------------------
  * 站主原话（2026-11-06）：
- *   「盲盒跟卡片差不多，那我们就用其中一个吧……那卡片就不要了。
- *    现在只有两种模式。」
- *   「盲盒……第一次点的时候，先揭开一点点，把光带出来什么颜色，
- *    提示这个颜色是哪一个段的学号段，再点一下之后名字就出来了。
- *    最好是全屏的那种颜色提醒，而不是太小。要制造一种紧张感。」
- *   「宝箱……把颜色对应的学号段直接写在卡片上，隐藏姓名时悬念更大。
- *    由快到慢的过程，最后一秒钟走得特别慢，最好卡在间隙上，
- *    让人以为是上一个结果是下一个。颜色提醒搭配文字。」
+ *   「盲盒数量是根据范围人数定的，最多 10 个。我选择抽几个，就点几次盲盒。
+ *    不可能没中，点到的都是中的。抽到谁是我点那个盲盒之后，在范围里随机选一个人，
+ *    不是盲盒直接对应一个人的名字。」
+ *   「不管是宝箱还是盲盒，不要我点两次。点完之后先显示颜色对应的学号段，
+ *    等 0.5~0.8 秒自动显示姓名。教室电脑性能不好，点两次会特别卡。」
+ *   「宝箱中间有个正方形方框，开始抽取时方框不动、后面的卡片在动。
+ *    停下来看方框里哪张卡面积最大就中。隐藏姓名时别在卡片上写学号段，太丑。」
  *
  * 两条硬约束（沿用 v4.5.0）：
- *   ① 离线可用 → 不引外链、不加载图片音效文件；盒子、光柱、指针全 CSS 绘制，
+ *   ① 离线可用 → 不引外链、不加载图片音效文件；盒子、光柱、卡片全 CSS 绘制，
  *      音效走 WebAudio 现场合成，沿用站内 cls_sfx 开关。
  *   ② 动画不能挡事 → 顶部始终有「跳过」，播完自动回到结果页；
  *      系统开启「减少动态效果」时把时长压到 0.7 秒以内。
  *
+ * 轻量模式（v4.6.0）：
+ *   html[data-lite="1"] 时降质不降功能 —— 宝箱卡片数 24→16、动画时长略缩、
+ *   多余模糊与多阴影由 CSS 关掉；抽取动画本身完整播放（index.html 已做豁免）。
+ *
  * 两种模式：
- *   · box  盲盒 —— 两段式：先开缝露学号段光辉（全屏泛色 + 段文字），
- *                  再点击揭示姓名。两次紧张。
- *   · case 宝箱 —— 横向转盘：由快到慢、末段极慢；约三成概率停针卡在间隙；
- *                  隐藏姓名时格子先显学号段，停下泛色提示后再揭示姓名。
+ *   · box  盲盒 —— 格子数 = min(10, 范围人数)。每格只是「抽取位」，
+ *                  点一次 = 在范围里现抽一个没抽过的人 → 露学号段颜色 0.45s
+ *                  → 自动揭示姓名 0.35s。抽满 need 次后剩余格子置灰。
+ *   · case 宝箱 —— 中间固定方框不动，卡片带横向滚动，停下按与方框的重叠面积
+ *                  最大判定中奖；隐藏姓名时卡片只显示纯色块 + 微光。
  *
  * 对外入口：
  *   PickFX.play({ mode, items, pool, hide, single, onDone })
- *     mode  : 'box' 盲盒 / 'case' 宝箱转盘
- *     items : [{ name, no }]，no = 学号末两位（1–62），决定光辉颜色
- *     pool  : 候选名单，宝箱转盘用它铺背景格
- *     hide  : 宝箱模式是否隐藏姓名（先显学号段）
+ *     mode  : 'box' 盲盒 / 'case' 宝箱
+ *     items : [{ name, no }]，只需长度 = 要抽几人；no = 学号末两位（1–62）
+ *     pool  : 范围候选名单（真正随机从这里取）
+ *     hide  : 宝箱模式是否隐藏姓名（先显学号段色块）
  *     single: 单个重抽，播完自动收场
+ *     onDone: function(pickedNames) 回传实际抽到的人（跳过也完整）
  *   PickFX.stop()  立即收场（关闭点名面板时调用）
  * ========================================================================= */
 (function (global) {
@@ -55,7 +60,7 @@
     if (!n || n < 1) return GREY;               /* 无学号账号（老师/管理员）用中性灰 */
     return TIERS[Math.min(5, Math.floor((n - 1) / 10))];
   }
-  /* 学号段文字（如「31–40」），用于全屏提示与宝箱格子。无学号返回空串。 */
+  /* 学号段文字（如「31–40」），用于全屏提示。无学号返回空串。 */
   function tierRange(no) {
     var n = parseInt(no, 10);
     if (!n || n < 1) return '';
@@ -69,6 +74,11 @@
   function two(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
   function reduced() {
     try { return global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    catch (e) { return false; }
+  }
+  /* 轻量模式：让动画降质不降功能 */
+  function isLite() {
+    try { return document.documentElement.getAttribute('data-lite') === '1'; }
     catch (e) { return false; }
   }
 
@@ -116,16 +126,6 @@
   function finale() {
     [523, 659, 784, 1046].forEach(function (f, i) { tone(f, 0.14, 0.04, 'triangle', i * 0.07); });
   }
-  /* 未中音效：低沉短促，与中奖的清亮 chime 形成反差 */
-  function missTone() { tone(196, 0.16, 0.028, 'sawtooth'); tone(130, 0.22, 0.02, 'sine', 0.03); }
-  /* Fisher-Yates 洗牌 */
-  function shuffle(a) {
-    for (var i = a.length - 1; i > 0; i--) {
-      var j = (Math.random() * (i + 1)) | 0;
-      var t = a[i]; a[i] = a[j]; a[j] = t;
-    }
-    return a;
-  }
 
   /* ---------- 会话 ---------- */
   var S = null;
@@ -148,11 +148,10 @@
   }
 
   function titleOf(mode) { return mode === 'case' ? '宝箱抽取' : '盲盒抽取'; }
-  function subOf(mode, items, opts) {
+  function subOf(mode, gridN, need, opts) {
     if (opts && opts.single) return '单个重抽';
-    if (mode === 'case') return '共 ' + items.length + ' 人 · 逐个开启';
-    var hitN = items.filter(function (it) { return it.hit; }).length;
-    return '共 ' + items.length + ' 个盲盒 · 抽 ' + hitN + ' 人';
+    if (mode === 'case') return '共 ' + need + ' 人 · 逐个开启';
+    return '共 ' + gridN + ' 个盲盒 · 抽 ' + need + ' 人';
   }
 
   function legendHtml() {
@@ -165,8 +164,7 @@
   }
 
   /* ---------- 全屏泛色提示层 ---------- */
-  /* 盲盒第一阶段、宝箱停下时点亮：满屏径向泛起该学号段颜色 + 中央段文字。
-     只在「单个焦点」时点亮 —— 「全部开盒」同时点亮多个不同段会撞色，故不亮。 */
+  /* 盲盒露段时、宝箱停下时点亮：满屏径向泛起该学号段颜色 + 中央段文字。 */
   function setFlare(root, it, hint) {
     var sw = swatch(it.no), seg = tierRange(it.no);
     root.style.setProperty('--fc', sw.c);
@@ -183,158 +181,178 @@
     if (fl) fl.classList.remove('on');
   }
 
-  /* ---------- 盲盒：牛皮纸盒 + 绶带 + 火漆印，两段式 ---------- */
-  function boxCellHtml(it, i) {
-    var sw = swatch(it.no);
-    var style = 'style="--pc:' + sw.c + ';--ps:' + sw.s + '"';
-    var nameHtml = it.hit
-      ? '<b>' + esc(it.name) + '</b><em>' + (it.no ? two(it.no) + ' 号' : '') + '</em>'
-      : '<b class="bx-miss">未中</b>';
-    return '<button type="button" class="pfx-cell pfx-b" data-i="' + i + '" ' + style
-      + ' aria-label="第 ' + (i + 1) + ' 个盲盒">'
+  /* ---------- 盲盒：牛皮纸盒 + 绶带 + 火漆印 ---------- */
+  /* 初始格没有姓名、没有颜色 —— 点开的一瞬间才决定里面是谁。 */
+  function boxCellHtml(i) {
+    return '<button type="button" class="pfx-cell pfx-b" data-i="' + i + '"'
+      + ' style="--pc:#7b8794;--ps:#cbd5e1" aria-label="第 ' + (i + 1) + ' 个盲盒">'
       + '<span class="bx-beam"></span>'
       + '<span class="bx-glow"></span>'
       + '<span class="bx">'
       +   '<span class="bx-body"><span class="bx-rib"></span><span class="bx-mark">?</span></span>'
       +   '<span class="bx-lid"><span class="bx-rib bx-rib-lid"></span></span>'
       + '</span>'
-      + '<span class="bx-name">' + nameHtml + '</span>'
+      + '<span class="bx-name"></span>'
       + '</button>';
   }
 
-  /* 盲盒控制器：closed → glow（开缝露学号段光辉 + 全屏泛色）→ open（揭示结果）。
-     · 盲盒固定 10 格（池子不足按池子数），中奖者藏在里面、陪跑从池子补齐 ——
-       不论抽几人，盲盒总数恒定，不会因人数少而提前暴露结果。
-     · 中奖盲盒：glow 露段 → open 露姓名 + 清亮音效。
-     · 陪跑盲盒：glow 露段 → open 显示「未中」+ 低沉音效 + 暗淡。
-     · 中奖全部开完后启用「查看结果」，用户可继续开陪跑盲盒或直接看结果。 */
-  function boxCtl(root, items, opts) {
+  /* 盲盒控制器（v4.6.0）：格子数 = min(10, 范围人数)，每格只是「抽取位」。
+     点一次 = 在范围里现抽一个没抽过的人 → 露学号段颜色 0.45s → 自动揭示姓名 0.35s。
+     抽满 need 次后剩余格子置灰；不存在「未中」。 */
+  function boxCtl(root, gridN, need, pool, opts) {
     var cells = [].slice.call(root.querySelectorAll('.pfx-cell'));
     var allBtn = root.querySelector('.pfx-all');
     var cntEl = root.querySelector('.pfx-cnt');
+    var used = {}, picked = [], done = 0;
     var st = cells.map(function () { return 'closed'; });
-    var hitsCount = items.filter(function (it) { return it.hit; }).length;
-    var opened = 0, queue = [], running = false;
+    var cellData = cells.map(function () { return null; });
+    var queue = [], running = false;
 
-    function glowOne(i, fast) {
-      if (st[i] !== 'closed') return;
+    function drawOne() {
+      var cand = pool.filter(function (it) { return !used[it.name]; });
+      if (!cand.length) return null;
+      var it = cand[(Math.random() * cand.length) | 0];
+      used[it.name] = 1;
+      return it;
+    }
+
+    function refresh() {
+      if (!allBtn) return;
+      if (done >= need) { allBtn.disabled = true; allBtn.textContent = '已抽满'; }
+      else { allBtn.disabled = false; allBtn.textContent = '全部抽取'; }
+    }
+
+    function fillCell(cell, it) {
+      var nameEl = cell.querySelector('.bx-name');
+      if (!nameEl) return;
+      nameEl.innerHTML = '<b>' + esc(it.name) + '</b>'
+        + '<em>' + (it.no ? two(it.no) + ' 号' : '') + '</em>';
+    }
+
+    function reveal(i, fast) {
+      if (!S || S.ending) return;
+      if (st[i] !== 'closed' || done >= need) return;
+      var it = drawOne();
+      if (!it) return;
+      done++;
+      picked.push(it);
+      cellData[i] = it;
       st[i] = 'glow';
       var cell = cells[i];
+      var sw = swatch(it.no);
+      cell.style.setProperty('--pc', sw.c);
+      cell.style.setProperty('--ps', sw.s);
       cell.classList.add('charge');
       if (!fast) charge();
+      /* 阶段一：开缝露学号段光辉 + 全屏泛色 */
       later(function () {
         if (!S) return;
         cell.classList.remove('charge');
         cell.classList.add('glow');
-        if (!fast) { setFlare(root, items[i], '点击揭示姓名'); burst(); }
+        if (!fast) { setFlare(root, it, ''); burst(); }
+        if (cntEl) cntEl.textContent = String(done);
         refresh();
-      }, fast ? 90 : 460);
-    }
-
-    function openOne(i, fast) {
-      if (st[i] === 'open') return;
-      st[i] = 'open';
-      var cell = cells[i];
-      var it = items[i];
-      cell.classList.remove('glow');
-      cell.classList.add('open');
-      if (!it.hit) cell.classList.add('miss');
-      if (!fast) {
-        clearFlare(root);
-        if (it.hit) { burst(); chime(); } else { missTone(); }
-      }
-      if (it.hit) {
-        opened++;
-        if (cntEl) cntEl.textContent = String(opened);
-      }
-      if (opened === hitsCount) {
-        clearFlare(root);
+        /* 阶段二：自动揭示姓名，无需第二次点击 */
         later(function () {
-          if (!S) return;
-          root.querySelector('.pfx-foot').classList.add('on');
-          var d = root.querySelector('.pfx-done');
-          d.disabled = false; d.classList.add('ready');
-          /* 单抽（重抽）自动收场；正常抽取让用户自己决定何时看结果 */
-          if (opts.single) later(finish, 700);
-        }, 420);
-      }
-      refresh();
+          if (!S || S.ending) return;
+          cell.classList.remove('glow');
+          cell.classList.add('open');
+          fillCell(cell, it);
+          clearFlare(root);
+          if (!fast) chime();
+          st[i] = 'open';
+          if (done >= need) finishUp();
+        }, fast ? 130 : 620);
+      }, fast ? 90 : 420);
     }
 
-    function clickCell(i) {
-      if (!S || S.ending) return;
-      var s = st[i];
-      if (s === 'closed') { glowOne(i, false); }
-      else if (s === 'glow') { openOne(i, false); }
+    function finishUp() {
+      cells.forEach(function (c, k) {
+        if (st[k] === 'closed') { c.disabled = true; c.classList.add('dim'); }
+      });
+      var foot = root.querySelector('.pfx-foot');
+      if (foot) foot.classList.add('on');
+      var d = root.querySelector('.pfx-done');
+      if (d) { d.disabled = false; d.classList.add('ready'); }
+      refresh();
+      if (opts.single) later(finish, 700);
     }
 
     cells.forEach(function (cell, i) {
-      cell.addEventListener('click', function () { clickCell(i); });
+      cell.addEventListener('click', function () {
+        if (!S || S.ending) return;
+        reveal(i, false);
+      });
     });
 
     function runQueue() {
       if (running || !queue.length) return;
       running = true;
       (function next() {
-        if (!S || !queue.length) { running = false; refresh(); return; }
+        if (!S || done >= need || !queue.length) { running = false; refresh(); return; }
         var i = queue.shift();
-        if (st[i] === 'closed') glowOne(i, true);
-        later(next, 180);
+        if (st[i] === 'closed') reveal(i, true);
+        later(next, 1000);
       })();
-    }
-
-    /* 「全部开盒 / 全部揭示」按钮：按当前进度自动切换语义 */
-    function refresh() {
-      if (!allBtn) return;
-      var hasClosed = st.some(function (x) { return x === 'closed'; });
-      var hasGlow = st.some(function (x) { return x === 'glow'; });
-      if (hasClosed) { allBtn.disabled = false; allBtn.textContent = '全部开盒'; }
-      else if (hasGlow) { allBtn.disabled = false; allBtn.textContent = '全部揭示'; }
-      else { allBtn.disabled = true; allBtn.textContent = '已全部开启'; }
     }
 
     if (allBtn) {
       allBtn.addEventListener('click', function () {
-        if (!S || S.ending) return;
-        clearFlare(root);
-        var hasClosed = st.some(function (x) { return x === 'closed'; });
-        if (hasClosed) {
-          for (var i = 0; i < items.length; i++) if (st[i] === 'closed') queue.push(i);
-          runQueue();
-        } else {
-          for (var j = 0; j < items.length; j++) if (st[j] === 'glow') openOne(j, true);
-        }
-        later(refresh, 60);
+        if (!S || S.ending || done >= need) return;
+        for (var i = 0; i < cells.length; i++) if (st[i] === 'closed') queue.push(i);
+        runQueue();
       });
     }
 
     return {
       start: function () { refresh(); },
+      result: function () { return picked.map(function (it) { return it.name; }); },
       flush: function () {
         clearFlare(root);
-        cells.forEach(function (cell, i) {
-          if (st[i] === 'open') return;
-          st[i] = 'open';
+        rafCancel();
+        /* 跳过 / 关面板：先把抽取次数补足，结果必须完整 */
+        while (picked.length < need) {
+          var it = drawOne();
+          if (!it) break;
+          picked.push(it);
+        }
+        var shown = {};
+        cellData.forEach(function (x) { if (x) shown[x.name] = 1; });
+        var rest = picked.filter(function (x) { return !shown[x.name]; });
+        var ri = 0;
+        cells.forEach(function (cell, k) {
+          if (st[k] === 'open') return;
+          st[k] = 'open';
           cell.classList.remove('glow', 'charge');
           cell.classList.add('open', 'flat');
-          if (!items[i].hit) cell.classList.add('miss');
+          var cur = cellData[k] || rest[ri++];
+          if (cur) {
+            cellData[k] = cur;
+            var sw = swatch(cur.no);
+            cell.style.setProperty('--pc', sw.c);
+            cell.style.setProperty('--ps', sw.s);
+            fillCell(cell, cur);
+          } else {
+            cell.classList.add('dim');
+          }
         });
-        opened = hitsCount;
-        if (cntEl) cntEl.textContent = String(opened);
+        done = need;
+        if (cntEl) cntEl.textContent = String(done);
+        refresh();
       },
-      count: function () { return opened; },
+      count: function () { return done; },
       refresh: refresh
     };
   }
 
-  /* ---------- 宝箱：横向转盘 + 铜指针 ---------- */
+  /* ---------- 宝箱：中间固定方框 + 横向滚动卡片 ---------- */
+  /* 隐藏姓名时卡片不写文字，只用学号段颜色 + 微光；对照靠顶部图例。 */
   function tileHtml(hide) {
     return function (it) {
-      var sw = swatch(it.no), seg = tierRange(it.no);
-      return '<div class="pfx-tile" style="--pc:' + sw.c + ';--ps:' + sw.s + '">'
-        + (hide
-            ? '<span class="pfx-seg">' + (seg || '—') + '</span>'
-            : '<span class="pfx-tn">' + esc(it.name) + (it.no ? '<i>' + two(it.no) + '</i>' : '') + '</span>')
+      var sw = swatch(it.no);
+      return '<div class="pfx-tile' + (hide ? ' is-color' : '') + '"'
+        + ' style="--pc:' + sw.c + ';--ps:' + sw.s + '">'
+        + (hide ? '' : '<span class="pfx-tn">' + esc(it.name) + (it.no ? '<i>' + two(it.no) + '</i>' : '') + '</span>')
         + '</div>';
     };
   }
@@ -342,28 +360,40 @@
     return '<span class="pfx-tn">' + esc(it.name) + (it.no ? '<i>' + two(it.no) + '</i>' : '') + '</span>';
   }
 
-  /* 转盘减速曲线：前 86% 的时间走 90% 路程（较快），后 14% 走 10%（极慢）。
-     越往后越慢 —— 站主要求「最后一秒钟走得特别特别慢」，末段用五次方缓出。 */
+  /* 转盘减速曲线：前 86% 的时间走 90% 路程（较快），后 14% 走 10%（极慢）。 */
   function easeCase(p) {
     if (p < 0.86) return (1 - Math.pow(1 - p / 0.86, 3)) * 0.90;
     var q = (p - 0.86) / 0.14;
     return 0.90 + (1 - Math.pow(1 - q, 5)) * 0.10;
   }
 
-  function caseCtl(root, items, opts) {
+  function caseCtl(root, need, pool, opts) {
     var reel = root.querySelector('.pfx-reel');
     var strip = root.querySelector('.pfx-strip-in');
+    var frame = root.querySelector('.pfx-frame');
     var wins = root.querySelector('.pfx-wins');
     var cntEl = root.querySelector('.pfx-cnt');
-    var pool = (opts.pool && opts.pool.length) ? opts.pool : items;
     var hide = !!opts.hide;
-    var i = 0, target = 0, pitch = 112, iw = 104;
+    var used = {}, picked = [], round = 0;
+    var iw = 104, pitch = 112;
 
-    function round() {
+    function drawOne() {
+      var cand = pool.filter(function (it) { return !used[it.name]; });
+      if (!cand.length) return null;
+      var it = cand[(Math.random() * cand.length) | 0];
+      used[it.name] = 1;
+      return it;
+    }
+
+    function spin() {
       if (!S || S.ending) return;
-      var win = items[i];
-      var M = 40 + Math.min(12, items.length * 2);
-      var at = M - 7;
+      if (round >= need) { finale(); later(finish, 900); return; }
+      var win = drawOne();
+      if (!win) { finale(); later(finish, 900); return; }
+      picked.push(win);
+
+      var M = isLite() ? 16 : 24;
+      var at = M - 6;
       var tiles = [];
       for (var k = 0; k < M; k++) tiles.push(pool[(Math.random() * pool.length) | 0]);
       tiles[at] = win;
@@ -373,124 +403,128 @@
       reel.innerHTML = tiles.map(tileHtml(hide)).join('');
 
       /* ⚠️ 必须用 offsetWidth / offsetLeft，不能用 getBoundingClientRect ——
-         舞台入场有 0.3s 的 scale 动画，rect 拿到的是「缩放后」的尺寸（实测 104 → 102.5），
-         而 transform 的位移是在未缩放坐标系里生效的，两者一混，中奖格会系统性偏左半个格。 */
+         舞台入场有 0.3s 的 scale 动画，rect 拿到的是「缩放后」的尺寸，
+         而 transform 的位移是在未缩放坐标系里生效的，两者一混，目标卡会系统性偏位。 */
       var a = reel.children[0], b = reel.children[1];
       if (a) iw = a.offsetWidth || 104;
       pitch = (a && b) ? (b.offsetLeft - a.offsetLeft) : iw + 8;
       var wrapW = strip.clientWidth;
 
-      /* 卡间隙：约三成概率，停针偏向中奖格与邻格的间隙（视觉上「差点滑过去」），
-         偏移不超过半格的 44%，保证指向的仍是中奖格、不会指错人。
-         其余七成停在中奖格中心附近（±7px 微抖，避免每次都正中显得呆板）。 */
-      var nearMiss = Math.random() < 0.32;
-      var offset = nearMiss
-        ? (Math.random() < 0.5 ? -1 : 1) * pitch * 0.42
-        : (Math.random() * 14 - 7);
-      target = Math.max(0, at * pitch + iw / 2 - wrapW / 2 + offset);
+      /* 目标卡停在方框中心附近（±0.22 格），保证它和方框的重叠面积最大；
+         偏差留一点，视觉上像「差点滑过去」，判定仍归目标卡。 */
+      var jitter = (Math.random() * 2 - 1) * pitch * 0.22;
+      var target = Math.max(0, at * pitch + iw / 2 - wrapW / 2 + jitter);
 
-      var dur = (i === 0 ? 3400 : 1900);
-      if (reduced()) dur = 620;
+      var dur = (round === 0 ? 3000 : 1700);
+      if (isLite()) dur = Math.round(dur * 0.8);
+      if (reduced()) dur = 600;
       var t0 = performance.now(), lastPx = 0;
 
       (function step(now) {
         if (!S || S.ending) return;
         var p = Math.min(1, (now - t0) / dur);
-        var e = easeCase(p);
-        var x = target * e;
+        var x = target * easeCase(p);
         reel.style.transform = 'translate3d(' + (-x) + 'px,0,0)';
         if (x - lastPx >= pitch * 0.9) { lastPx = x; tick(); }
         if (p < 1) raf(step);
-        else settle(at);
+        else settle();
       })(t0);
+      round++;
     }
 
-    function settle(at) {
-      var cell = reel.children[at];
-      var win = items[i];
-      if (!cell) { next(); return; }
+    function settle() {
+      var win = picked[picked.length - 1];
+      /* 面积最大判定：遍历所有卡片与固定方框的水平重叠宽度，取最大者 */
+      var best = -1, bestArea = 0;
+      if (frame) {
+        var fr = frame.getBoundingClientRect();
+        for (var k = 0; k < reel.children.length; k++) {
+          var r = reel.children[k].getBoundingClientRect();
+          var ov = Math.min(r.right, fr.right) - Math.max(r.left, fr.left);
+          if (ov > bestArea) { bestArea = ov; best = k; }
+        }
+      }
+      var cell = reel.children[best];
+      if (!cell) { later(spin, 500); return; }
       cell.classList.add('win');
       burst(); chime();
-      /* 停下先点亮全屏泛色 + 学号段文字（紧张一：是不是自己这一段） */
       setFlare(root, win, hide ? '即将揭示姓名' : '');
-
-      /* 隐藏姓名：停顿后再把格子里的学号段换成姓名（紧张二：是不是自己） */
+      /* 隐藏姓名：0.8 秒后自动在卡片上淡出姓名（单次点击，无第二次） */
       if (hide) {
         later(function () {
           if (!S || S.ending) return;
-          var seg = cell.querySelector('.pfx-seg');
-          if (seg) seg.outerHTML = nameOf(win);
-        }, 1200);
+          cell.innerHTML = nameOf(win);
+          cell.classList.add('revealed');
+        }, 800);
       }
-
       wins.insertAdjacentHTML('beforeend',
         '<span class="pfx-win" style="--pc:' + swatch(win.no).c + '">' + esc(win.name) + '</span>');
-      if (cntEl) cntEl.textContent = String(i + 1);
-      i++;
-      later(function () { if (!S || S.ending) return; clearFlare(root); next(); }, hide ? 1750 : 1050);
-    }
-
-    function next() {
-      if (i >= items.length) { finale(); later(finish, 1000); return; }
-      later(round, 600);
+      if (cntEl) cntEl.textContent = String(picked.length);
+      later(function () {
+        if (!S || S.ending) return;
+        clearFlare(root);
+        later(spin, 320);
+      }, hide ? 1500 : 950);
     }
 
     return {
-      start: function () { round(); },
+      start: function () { spin(); },
+      result: function () { return picked.map(function (it) { return it.name; }); },
       flush: function () {
         rafCancel();
         clearFlare(root);
-        reel.style.transition = 'none';
-        reel.style.transform = 'translate3d(' + (-target) + 'px,0,0)';
-        for (var k = i; k < items.length; k++) {
-          wins.insertAdjacentHTML('beforeend',
-            '<span class="pfx-win" style="--pc:' + swatch(items[k].no).c + '">' + esc(items[k].name) + '</span>');
+        while (picked.length < need) {
+          var it = drawOne();
+          if (!it) break;
+          picked.push(it);
         }
-        if (cntEl) cntEl.textContent = String(items.length);
-        i = items.length;
+        for (var k = 0; k < picked.length; k++) {
+          wins.insertAdjacentHTML('beforeend',
+            '<span class="pfx-win" style="--pc:' + swatch(picked[k].no).c + '">' + esc(picked[k].name) + '</span>');
+        }
+        if (cntEl) cntEl.textContent = String(picked.length);
       },
-      count: function () { return i; }
+      count: function () { return picked.length; }
     };
   }
 
   /* ---------- 外壳 ---------- */
-  function shell(mode, items, opts) {
+  function shell(mode, gridN, need, opts) {
     var body = '';
     if (mode === 'case') {
       body = '<div class="pfx-case">'
         + '<div class="pfx-case-hd">'
-        +   '<span>已开启 <b class="pfx-cnt">0</b> / ' + items.length + '</span>'
+        +   '<span>已开启 <b class="pfx-cnt">0</b> / ' + need + '</span>'
         +   '<span class="pfx-case-hint">' + (opts.hide ? '抽取中隐藏姓名，停止后显示' : '抽取中显示姓名') + '</span>'
         + '</div>'
         + '<div class="pfx-strip"><div class="pfx-strip-in"><div class="pfx-reel"></div></div>'
-        +   '<span class="pfx-mark"></span><span class="pfx-mask l"></span><span class="pfx-mask r"></span>'
+        +   '<span class="pfx-frame"></span><span class="pfx-mask l"></span><span class="pfx-mask r"></span>'
         + '</div>'
         + '<div class="pfx-wins"></div>'
         + '</div>';
     } else {
-      var n = items.length;
       var vw = global.innerWidth || 1440;
-      var cols = Math.min(n, vw < 620 ? 4 : 5);
+      var cols = Math.min(gridN, vw < 620 ? 4 : 5);
       var cellw = vw < 620 ? 104 : (vw < 900 ? 158 : 200);
+      var cellsHtml = '';
+      for (var ci = 0; ci < gridN; ci++) cellsHtml += boxCellHtml(ci);
       body = '<div class="pfx-grid" style="--cols:' + cols + ';--cellw:' + cellw + 'px">'
-        + items.map(function (it, i) { return boxCellHtml(it, i); }).join('')
+        + cellsHtml
         + '</div>';
     }
 
-    /* 全屏泛色层：绝对定位铺满 .pfx，z-index 在网格之下、顶栏底栏之上 */
+    /* 全屏泛色层：绝对定位铺满 .pfx，z-index 在网格之上、顶栏底栏之下 */
     var flare = '<div class="pfx-flare"><div class="pfx-flare-seg"></div><div class="pfx-flare-hint"></div></div>';
-    /* box 模式底栏加「已抽中 X / N」计数 —— N 是中奖人数，不是盲盒总数 */
     var footAll = '';
     if (mode !== 'case' && !opts.single) {
-      var hitN = items.filter(function (it) { return it.hit; }).length;
-      footAll = '<button type="button" class="pfx-btn pfx-all">全部开盒</button>'
-        + '<span class="pfx-cnt-box">已抽中 <b class="pfx-cnt">0</b> / ' + hitN + '</span>';
+      footAll = '<button type="button" class="pfx-btn pfx-all">全部抽取</button>'
+        + '<span class="pfx-cnt-box">已抽中 <b class="pfx-cnt">0</b> / ' + need + '</span>';
     }
 
     return '<div class="pfx-in">'
       + '<div class="pfx-bar">'
       +   '<div class="pfx-tit"><div class="pfx-title">' + titleOf(mode) + '</div>'
-      +     '<div class="pfx-sub">' + subOf(mode, items, opts) + '</div></div>'
+      +     '<div class="pfx-sub">' + subOf(mode, gridN, need, opts) + '</div></div>'
       +   '<button type="button" class="pfx-skip">跳过</button>'
       + '</div>'
       + '<div class="pfx-legend-wrap">' + legendHtml() + '</div>'
@@ -510,9 +544,12 @@
     var s = S;
     s.ending = true;
     if (!s.skipped) { try { finale(); } catch (e) {} }
+    /* 回传实际抽到的人 —— 中途跳过也必须完整 */
+    var res = [];
+    try { if (s.ctl && s.ctl.result) res = s.ctl.result() || []; } catch (e) {}
     var cb = s.opts.onDone;
     /* 先渲染结果页再淡出 —— 否则会看到背后旧画面闪一下 */
-    try { if (cb) cb(); } catch (e) {}
+    try { if (cb) cb(res); } catch (e) {}
     var root = s.root;
     root.classList.add('out');
     setTimeout(function () {
@@ -547,38 +584,28 @@
     var mode = opts.mode;
     if (mode !== 'box' && mode !== 'case') mode = 'box';
     var hits = (opts.items || []).slice(0, 10);
-    if (!hits.length) { if (opts.onDone) opts.onDone(); return; }
+    if (!hits.length) { if (opts.onDone) opts.onDone([]); return; }
 
     var pool = (opts.pool && opts.pool.length) ? opts.pool.slice() : hits.slice();
-    var items;
-    if (mode === 'box') {
-      /* 盲盒固定 10 格（池子不足按池子数）：中奖者藏在里面、陪跑从池子补齐、打乱顺序。
-         不论抽几人，盲盒总数恒定，不会因人数少而暴露结果范围。 */
-      var gridN = Math.min(10, pool.length);
-      var hitMap = {};
-      hits.forEach(function (h) { hitMap[h.name] = 1; });
-      var extras = pool.filter(function (p) { return !hitMap[p.name]; });
-      shuffle(extras);
-      var fill = extras.slice(0, gridN - hits.length);
-      items = hits.map(function (it) { return { name: it.name, no: it.no, hit: true }; })
-        .concat(fill.map(function (it) { return { name: it.name, no: it.no, hit: false }; }));
-      shuffle(items);
-    } else {
-      items = hits;
-    }
+    var need = Math.min(hits.length, pool.length);
+    if (need < 1) { if (opts.onDone) opts.onDone([]); return; }
+    /* 盲盒格子数 = min(10, 范围人数)；宝箱不铺格子，need 即转几轮 */
+    var gridN = (mode === 'box') ? Math.min(10, pool.length) : need;
 
     var root = document.createElement('div');
     root.className = 'pfx';
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-label', titleOf(mode));
-    root.innerHTML = shell(mode, items, opts);
+    root.innerHTML = shell(mode, gridN, need, opts);
     document.body.appendChild(root);
 
     S = {
-      root: root, timers: [], rafs: [], mode: mode, items: items, opts: opts,
+      root: root, timers: [], rafs: [], mode: mode, opts: opts,
       ending: false, closed: false, skipped: false, ctl: null
     };
-    S.ctl = (mode === 'case') ? caseCtl(root, items, opts) : boxCtl(root, items, opts);
+    S.ctl = (mode === 'case')
+      ? caseCtl(root, need, pool, opts)
+      : boxCtl(root, gridN, need, pool, opts);
 
     root.querySelector('.pfx-skip').addEventListener('click', skip);
     root.querySelector('.pfx-done').addEventListener('click', function () {
