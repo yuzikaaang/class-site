@@ -95,6 +95,9 @@ idx = idx.replace(/<script src="\.\/auth-bus\.js(\?v=\d+)?" defer><\/script>/,
 /* v3.19.0：大屏脚本也带版本号，否则 SW 缓存优先会一直递旧的那份 */
 idx = idx.replace(/<script src="\.\/big\.js(\?v=\d+)?" defer><\/script>/,
   `<script src="./big.js${TAG}" defer></script>`);
+/* v4.7.3：抽取动画脚本一直是手写 ?v=472，升级后没跟着变 —— 浏览器与 SW 可能继续发旧的那份 */
+idx = idx.replace(/<script src="\.\/pickfx\.js(\?v=\d+)?" defer><\/script>/,
+  `<script src="./pickfx.js${TAG}" defer></script>`);
 if (idx !== before) write('index.html', idx);
 
 /* ---------------- ④ admin.html 引用的 admin.js 也要带新版本号 ----------------
