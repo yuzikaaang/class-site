@@ -449,12 +449,14 @@
       cell.classList.add('win');
       burst(); chime();
       setFlare(root, win, hide ? '即将揭示姓名' : '');
-      /* 隐藏姓名：0.8 秒后自动在卡片上淡出姓名（单次点击，无第二次） */
+      /* 隐藏姓名：0.8 秒后自动在卡片上淡出姓名（单次点击，无第二次）。
+         姓名出现的同时让全屏泛色退去 —— 否则浓色盖住方框，名字看不清。 */
       if (hide) {
         later(function () {
           if (!S || S.ending) return;
           cell.innerHTML = nameOf(win);
           cell.classList.add('revealed');
+          clearFlare(root);
         }, 800);
       }
       wins.insertAdjacentHTML('beforeend',
