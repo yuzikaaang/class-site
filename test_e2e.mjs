@@ -5489,9 +5489,11 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
      首页交给 fetch handler 运行时缓存，离线兜底照样有。 */
   {
     const pc = /const PRECACHE = \[([^\]]*)\]/.exec(sw48);
-    t('★预缓存清单里不含 600KB 的 index.html（否则 SW 装不完）',
-      !!pc && !/index\.html/.test(pc[1]) && !/'\.\/'/.test(pc[1]),
+    t('★预缓存清单包含 index.html（断网能不能打开全看这一份）',
+      !!pc && /index\.html/.test(pc[1]) && /app\.min\.js/.test(pc[1]),
       pc ? pc[1] : '(未找到 PRECACHE)');
+    t('★预缓存每个文件都有超时上限（最慢的文件不能拖住整次安装）',
+      /function addWithTimeout\(cache, url, ms\)/.test(sw48));
   }
 
   /* ===== ② 前端：三个「主动催检查」的时机 =====
@@ -11707,7 +11709,7 @@ console.log('\n【93】v3.8.0 分享备注 · 我的资料改版 · 导航少等
     && /isBigEntry/.test(sw80) && /resolve\(null\), 2500\)/.test(sw80)
     && !/resolve\(null\), 900\)/.test(sw80));
   t('★v3.8.2 SW 预缓存逐个 add（一个 404 不再拖垮整个安装）',
-    /cache\.add\(u\)\.catch/.test(sw80)
+    /cache\.add\(url\)\.then/.test(sw80) && /addWithTimeout\(cache, u,/.test(sw80)
     && !/\.then\(\(cache\) => cache\.addAll\(PRECACHE\)\)/.test(sw80));
   t('★v3.8.1 切昼夜会重算弹窗字色（盯 html 的 class）',
     /observe\(document\.documentElement, \{ attributes:true, attributeFilter:\['class'\] \}\)/.test(idx80));
@@ -12313,7 +12315,7 @@ console.log('\n【新】v3.9.10 缓存优先 / 老 iPad / 门禁加固');
   t('★v3.9.16 SW 静态资源缓存优先 + 后台刷新', /stale-while-revalidate/.test(sw10)
     && /if \(cached\) \{\s*event\.waitUntil/.test(sw10)
     && /cache\.match\(request, \{ ignoreSearch: true \}\)/.test(sw10));
-  t('★v3.9.16 预缓存的是压缩版 app.min.js', /const PRECACHE = \['\.\/app\.min\.js'/.test(sw10));
+  t('★v3.9.16 预缓存的是压缩版 app.min.js', /const PRECACHE = \[[\s\S]{0,900}'\.\/app\.min\.js'/.test(sw10));
   t('★v3.9.16 缓存桶跟着版本走', /const CACHE = 'class-site-' \+ SITE_VER/.test(sw10));
 
   t('★v3.9.16 字号滑块兼容 touch/mouse（无 PointerEvent 也能拖）',

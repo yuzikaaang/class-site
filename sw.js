@@ -108,7 +108,7 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '4.7.1'
+const SITE_VER = '4.7.2'
 
 /* v3.9.16（站主）：缓存桶跟着版本走。
    ------------------------------------------------------------
@@ -127,13 +127,32 @@ const CACHE = 'class-site-' + SITE_VER
    v80（v2.10.0）：加入两个字体的 latin 子集 woff2（共约 78KB）——
    同源自托管替代 Google Fonts 外链（微信内置浏览器拦截外部字体域），
    预缓存保证首次离线访问英文字形也不掉。 */
-const PRECACHE = ['./app.min.js', './auth-bus.js',
+const PRECACHE = [/* v4.7.2：首页自己排第一个 —— 班级电脑常年没网，断网能不能打开
+     全看这一份在不在；以前靠「首次导航恰好经过 SW」+ activate 后补，第一次装
+     根本赶不上（实测线上：装到第 30 秒还停在 installing，断网重载直接白屏）。 */
+  './index.html',
+  './app.min.js', './auth-bus.js',
   /* v3.19.0：大屏模式（图标墙 / 作业页 / 点名）。离线也要能进大屏，
      所以跟着一起预缓存；它不是首屏必需，放在 app.min.js 之后即可。 */
   './big.js', './pickfx.js', './favicon.svg', './manifest.webmanifest',
   './fonts/inter-latin.woff2', './fonts/jetbrains-mono-latin.woff2',
   /* v3.5.40：作业/排期导出图片用的共享画笔，离线也要能生成 */
   './share-card.js', './badge.png', './clock.html']
+
+/* v4.7.2：给每个文件的下载加一条时间上限。
+   起因（线上实测）：GitHub Pages 在国内网络下单文件要 3～8 秒，install 里
+   Promise.all 一旦被最慢的那个（clock.html / badge.png）拖住，SW 就一直停在
+   installing，既不接管页面也不进 activate —— 这段真空期断网 = 打不开。
+   现在每个文件最多等 9 秒（首页 20 秒，它最大也最重要），超时就当它没抓到，
+   先让 SW 装好、能接管、能离线打开，剩下的文件下个版本或下次导航再补。 */
+function addWithTimeout(cache, url, ms){
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if(!done){ done = true; resolve(); } };
+    const t = setTimeout(finish, ms);
+    cache.add(url).then(() => { clearTimeout(t); finish(); }, () => { clearTimeout(t); finish(); });
+  });
+}
 
 self.addEventListener('install', (event) => {
   /* ⚠️ v3.8.2 关键修复：不能用 cache.addAll(PRECACHE)。
@@ -143,13 +162,9 @@ self.addEventListener('install', (event) => {
      表现就是：缓存明明写了策略却从来没用上、断网打不开、每次进站都重新下整页。
      现在逐个 add 并各自 catch：缺哪个就跳过，其余照常缓存。 */
   event.waitUntil(
-    caches.open(CACHE)
-      .then((cache) => Promise.all(
-        PRECACHE.map((u) => cache.add(u).catch(() => {
-          /* 单个文件取不到不算错（比如临时 404 的图），下个版本再补 */
-        }))
-      ))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) => Promise.all(
+      PRECACHE.map((u) => addWithTimeout(cache, u, /index\.html$/.test(u) ? 20000 : 9000))
+    )).then(() => self.skipWaiting())
   )
 })
 
@@ -168,16 +183,18 @@ self.addEventListener('activate', (event) => {
   )
 
   /* v4.3.2：装好之后补一份 index.html 兜底。
-     为什么不放 PRECACHE：那会在 install 里同步下载 117KB，弱网下能把安装卡到二十几秒，
-     反而让「断网打不开」更严重。这里等 3 秒（首屏已经画完），确认缓存里没有才补，
-     有就一次请求都不发。 */
+     v4.7.2：改成「缺了就补，补不到 15 秒后再试一次」——
+     首次安装时首页下载可能超时（见上面 addWithTimeout），
+     这一次重试能救回「刚装好就断网、结果打不开」的最坏情况。 */
   event.waitUntil((async () => {
     try {
-      await new Promise((r) => setTimeout(r, 3000))
       const cache = await caches.open(CACHE)
-      if (await cache.match('./index.html')) return
-      const res = await fetch('./index.html', { cache: 'no-store' })
-      if (res && res.ok) await cache.put('./index.html', res.clone())
+      for (let i = 0; i < 2; i++) {
+        await new Promise((r) => setTimeout(r, i === 0 ? 3000 : 15000))
+        if (await cache.match('./index.html')) return
+        const res = await fetch('./index.html', { cache: 'no-store' })
+        if (res && res.ok) { await cache.put('./index.html', res.clone()); return }
+      }
     } catch (e) { /* 没网就算了，下次导航成功时会补上 */ }
   })())
 })
