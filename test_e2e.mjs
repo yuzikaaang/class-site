@@ -2465,11 +2465,11 @@ console.log('\n【22】附件方案护栏：只填直链、不做上传（2026-1
   /* ---- 前端：编辑器仍要好用（说明文字 + 两个按钮） ---- */
   t('编辑器保留工具条 .ca-tools', idx.indexOf('class="ca-tools"') >= 0);
   t('编辑器保留「新增一条任务」按钮', idx.indexOf('caInsertTask()') >= 0);
-  t('编辑器新增「新增附件行」按钮', idx.indexOf('caInsertAttRow()') >= 0);
+  t('编辑器新增「添加附件」入口', idx.indexOf('caAttachOpen()') >= 0);
   t('caInsertAttRow 已定义', idx.indexOf('function caInsertAttRow') >= 0);
   t('caInsertLine 已定义（两个按钮共用）', idx.indexOf('function caInsertLine') >= 0);
-  t('编辑器说明文字引导「找站主要」链接',
-    idx.indexOf('附件文件由站主统一上传') >= 0);
+  t('编辑器说明文字引导「添加附件」面板',
+    idx.indexOf('添加附件</b> 选类型、填链接') >= 0);
   t('编辑器说明文字保留 📎 占位行写法', idx.indexOf('📎 [音频]') >= 0);
   t('编辑器说明文字保留「| 链接」写法', idx.indexOf('| 链接') >= 0);
 
@@ -11865,8 +11865,8 @@ console.log('\n【新】v3.8.5 作业导出直链 / 分享链接 404 修复');
   t('★v3.8.5 分享卡片支持 media（图片 / 二维码块）',
     /sec\.media\.push/.test(idx85) && /block\.media\.push/.test(idx85)
     && /\(b\.media \|\| \[\]\)\.forEach/.test(idx85));
-  t('★v3.8.5 图片按宽度等比、最高 300，音视频固定 112',
-    /Math\.min\(300, innerW \* md\.img\.naturalHeight/.test(idx85) && /hh = 112/.test(idx85));
+  t('★v3.8.5 图片按列宽等比、最高 300，音视频固定 112',
+    /Math\.min\(300 \* S, colW \* md\.img\.naturalHeight/.test(idx85) && /hh = 112 \* S/.test(idx85));
   t('★v3.8.5 直链能分清图片 / 音频 / 视频',
     /function hwLinkKind/.test(idx85)
     && /\(png\|jpe\?g\|gif\|webp\|bmp\|avif\|svg\)/.test(idx85)
@@ -12220,8 +12220,8 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
   t('★v3.9.16 主脚本改为压缩版外链 + defer',
     /<script src="\.\/app\.min\.js\?v=\d+" defer><\/script>/.test(idx98)
     && fs.statSync(new URL('./app.js', import.meta.url)).size > 600000);
-  t('★v3.9.8 HTML 体积降到原来的 1/4 以下（骨架 + 样式）',
-    idx98.length < 400000);
+  t('★v3.9.8 HTML 体积保持在 480KB 以内（拆分前 533KB）',
+    idx98.length < 480000);
   t('★v3.9.8 版本号留在 HTML（门禁能直接读到）',
     RE_SITE.test(idx98) && !/var SITE_VERSION/.test(app98));
   t('★v3.9.8 首屏骨架卡（公告 + 板块）',
@@ -12832,6 +12832,31 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /function paintReleases\(\)/.test(adminJs3) && /rel-gh/.test(adminJs3)
     && /REL_STATE\.open/.test(adminJs3) && /id="relSearch"/.test(adminJs3)
     && /__early/.test(adminJs3) && /早期版本/.test(adminJs3));
+
+  /* ⑨f v4.9.0：导出预览、科目分色打勾框、班徽黑底、附件面板、班级签历史 */
+  t('★v4.9.0 作业导出先开预览弹窗（不再直接下载）',
+    /id="exMask"/.test(idx) && /function exOpen\(card, fname, mode\)/.test(app43)
+    && !/ShareCard\.download\(card, fname\)/.test(app43));
+  t('★v4.9.0 预览可调字号 / 字体 / 单双列 / 纸张',
+    /id="exFs"/.test(idx) && /id="exFam"/.test(idx) && /id="exCols"/.test(idx)
+    && /id="exPaper"/.test(idx)
+    && /fs: Math\.min\(1\.6, Math\.max\(0\.8/.test(idx)
+    && /cols: Number\(st\.cols\) === 2 \? 2 : 1/.test(idx));
+  t('★v4.9.0 科目分色 + 打勾框',
+    /function subjColor\(name\)/.test(idx) && /SUBJ_COLORS/.test(idx)
+    && /o\.style\.check/.test(idx) && /roundRect\(ctx, bx, byy, bs, bs, 4\)/.test(idx));
+  t('★v4.9.0 双列按列宽排版（不再固定扣 150）',
+    /colW \* 0\.34/.test(idx) && /Math\.max\(56, colW - indent - rightW\)/.test(idx));
+  t('★v4.9.0 班徽黑底图会被识别并跳过',
+    /function badgeLooksOk\(img\)/.test(idx) && /black \/ opaque > 0\.45/.test(idx)
+    && /badBg: true/.test(idx));
+  t('★v4.9.0 作业附件图形化面板',
+    /function caAttachOpen\(\)/.test(app43) && /function caAttachInsert\(\)/.test(app43)
+    && /id="caAttBox"/.test(app43) && /ca-tools/.test(idx));
+  t('★v4.9.0 班级签历史日历按签等分色',
+    /function openSignHistory\(\)/.test(app43) && /function shPick\(day\)/.test(app43)
+    && /id="shGrid"/.test(idx) && /sh-day\.good/.test(idx)
+    && /90 \* 86400000/.test(app43));
 }
 
 console.log('\n' + '='.repeat(52));

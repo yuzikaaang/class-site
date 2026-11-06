@@ -1089,6 +1089,38 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .sign-tag.mid{background:rgba(251,146,60,.18);color:#d6d3d1}
 .sign-text{font-size:1rem;line-height:1.7;min-height:60px;margin:6px 0 4px;color:#f3ebe3}
 .sign-sub{font-size:0.75rem;color:#c6bfb8;margin-bottom:16px}
+.sign-acts{display:flex;gap:10px;justify-content:center}
+.sign-hist-btn{background:rgba(255,255,255,.1);color:#e7ded5;border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:8px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.86rem}
+.sign-hist-btn:hover{background:rgba(255,255,255,.18)}
+/* ===== v4.9.0：班级签历史日历 ===== */
+.sh-box{max-width:380px}
+.sh-body{padding:14px 16px 18px}
+.sh-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sh-nav button{border:none;background:#f2ede7;color:#57534e;width:30px;height:30px;border-radius:8px;font-size:1rem;cursor:pointer;line-height:1;font-family:inherit}
+.sh-nav span{font-weight:700;font-size:.9rem}
+.sh-week,.sh-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.sh-week span{text-align:center;font-size:.68rem;color:#a8a29e;padding-bottom:2px}
+.sh-day{aspect-ratio:1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.74rem;color:#78716c;background:#f7f3ee;cursor:default;position:relative;border:1px solid transparent;font-family:inherit}
+.sh-day.has{cursor:pointer}
+.sh-day.good{background:#fef3c7;color:#92400e;border-color:#fcd34d}
+.sh-day.mid{background:#e0f2fe;color:#0c4a6e;border-color:#bae6fd}
+.sh-day.bad{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+.sh-day.today{box-shadow:0 0 0 2px #c2410c inset}
+.sh-day.sel{outline:2px solid #c2410c;outline-offset:1px}
+.sh-legend{display:flex;align-items:center;gap:5px;font-size:.68rem;color:#8a7f76;margin:12px 0 10px;flex-wrap:wrap}
+.sh-legend .lg{width:10px;height:10px;border-radius:3px;display:inline-block;margin-left:6px;border:1px solid transparent}
+.sh-legend .lg:first-child{margin-left:0}
+.lg.good{background:#fcd34d}.lg.mid{background:#bae6fd}.lg.bad{background:#fecaca}.lg.none{background:#f7f3ee;border-color:#e7e2dc}
+.sh-detail{background:#faf6f1;border-radius:10px;padding:10px 12px;font-size:.78rem;line-height:1.7;color:#57534e;min-height:54px}
+.sh-detail b{color:#c2410c}
+.sh-note{font-size:.66rem;color:#a8a29e;margin-top:10px;text-align:center}
+.dark .sh-nav button{background:#332d29;color:#d6cfc7}
+.dark .sh-day{background:#2a2523;color:#a8a29e}
+.dark .sh-day.good{background:#42341a;color:#fcd34d;border-color:#78500f}
+.dark .sh-day.mid{background:#12303f;color:#7dd3fc;border-color:#1e4e63}
+.dark .sh-day.bad{background:#3f1d1d;color:#fca5a5;border-color:#7f2a2a}
+.dark .sh-detail{background:#2a2523;color:#d6cfc7}
+.dark .sh-week span,.dark .sh-legend,.dark .sh-note{color:#8a7f76}
 .sign-box .btn-qr{background:#9a3412;color:#fff;border:none;border-radius:999px;padding:8px 22px;font-weight:700;cursor:pointer}
 .confetti-mask{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:9991;padding:20px}
 .confetti-mask.show{display:flex}
@@ -1103,6 +1135,48 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .dark .link-note{color:#fdba74}
 .confetti-box p{font-size:0.9375rem;line-height:1.7;margin:0 0 16px}
 #confettiCanvas{position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9992}
+/* ===== v4.9.0：作业导出预览弹窗 =====
+   站主要求「导出图片先预览、能调字号字体排列」。左边看效果，右边改参数，底下保存。 */
+.ex-mask{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9995;padding:16px}
+.ex-mask.show{display:flex}
+.ex-box{background:#fffdfb;color:#332d29;border-radius:16px;width:100%;max-width:1000px;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.ex-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #efe4d9;font-weight:700;font-size:.95rem}
+.ex-head button{border:none;background:none;font-size:1.25rem;line-height:1;color:#9a8d82;cursor:pointer;padding:0 4px}
+.ex-body{display:flex;flex:1;min-height:0}
+.ex-stage{flex:1;background:#f1ece6;padding:16px;overflow:auto;display:flex;justify-content:center;align-items:flex-start;min-height:260px}
+.ex-paper{background:#fff;box-shadow:0 6px 24px rgba(0,0,0,.14);max-width:100%;margin:0 auto}
+.ex-paper canvas{display:block;max-width:100%;max-height:calc(94vh - 190px);width:auto;height:auto;margin:0 auto}
+.ex-loading{color:#8a7f76;font-size:.82rem;padding:40px 0}
+.ex-panel{width:262px;flex:0 0 262px;padding:14px 16px;overflow:auto;border-left:1px solid #efe4d9;background:#fffdfb}
+.ex-row{margin-bottom:14px}
+.ex-row>span{display:block;font-size:.72rem;color:#8a7f76;margin-bottom:6px;font-weight:700;letter-spacing:.02em}
+.ex-row input[type=range]{width:100%;accent-color:#c2410c}
+.ex-fsval{float:right;color:#c2410c;font-weight:700}
+.ex-seg{display:flex;gap:6px;flex-wrap:wrap}
+.ex-seg button{flex:1;min-width:52px;border:1px solid #e2d8cd;background:#fff;color:#57534e;border-radius:8px;padding:6px 0;font-size:.76rem;cursor:pointer;font-family:inherit}
+.ex-seg button.on{background:#c2410c;border-color:#c2410c;color:#fff;font-weight:700}
+.ex-chk{display:flex;align-items:center;gap:7px;font-size:.78rem;color:#57534e;margin-bottom:8px;cursor:pointer;user-select:none}
+.ex-chk input{accent-color:#c2410c;width:15px;height:15px}
+.ex-foot{display:flex;gap:8px;padding:12px 16px;border-top:1px solid #efe4d9;background:#fffdfb}
+.ex-foot button{flex:1;border:none;border-radius:10px;padding:10px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.88rem}
+.ex-foot .primary{background:#c2410c;color:#fff}
+.ex-foot .ghost{background:#f2ede7;color:#57534e}
+.ex-foot button[disabled]{opacity:.5;cursor:default}
+.dark .ex-box{background:#242020;color:#f3ebe3}
+.dark .ex-head{border-bottom-color:rgba(255,255,255,.1)}
+.dark .ex-panel{background:#242020;border-left-color:rgba(255,255,255,.1)}
+.dark .ex-stage{background:#1a1715}
+.dark .ex-seg button{background:#332d29;border-color:rgba(255,255,255,.14);color:#d6cfc7}
+.dark .ex-seg button.on{background:#c2410c;border-color:#c2410c;color:#fff}
+.dark .ex-chk,.dark .ex-row>span{color:#b8b1aa}
+.dark .ex-foot{background:#242020;border-top-color:rgba(255,255,255,.1)}
+.dark .ex-foot .ghost{background:#332d29;color:#d6cfc7}
+@media(max-width:700px){
+.ex-body{flex-direction:column}
+.ex-panel{width:auto;flex:0 0 auto;border-left:none;border-top:1px solid #efe4d9;max-height:42vh}
+.ex-stage{min-height:180px;padding:12px}
+.ex-seg button{min-width:44px}
+}
 .qr-box{color:#2b2521;background:#fff;border-radius:24px;padding:20px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .qr-head{display:flex;justify-content:center;align-items:center;margin-bottom:12px}
 .qr-head h3{color:#2f7355;font-size:1rem}
@@ -1359,6 +1433,18 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .ca-tools button{flex:1 1 auto;min-width:132px;padding:9px 10px;border-radius:10px;border:1px dashed #d8c9b4;background:#fffaf3;color:#57534e;font-size:.78rem;cursor:pointer;font-family:inherit;line-height:1.4}
 .ca-tools button:hover:not(:disabled){border-color:#c2410c;color:#c2410c;background:#fff5ea}
 .ca-tools button:disabled{opacity:.5;cursor:not-allowed}
+/* v4.9.0：作业附件面板（类型 / 挂到哪条 / 说明 / 链接） */
+.ca-att{background:#faf6f1;border:1px dashed #e2d8cd;border-radius:10px;padding:10px 12px;margin:0 0 10px}
+.ca-att-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ca-att-row>span{flex:0 0 34px;font-size:.74rem;color:#8a7f76}
+.ca-att-row input,.ca-att-row select{flex:1;min-width:0;border:1px solid #e2d8cd;border-radius:8px;padding:6px 8px;font-size:.8rem;background:#fff;color:#332d29;font-family:inherit}
+.ca-att-seg{display:flex;gap:6px}
+.ca-att-seg button{border:1px solid #e2d8cd;background:#fff;color:#57534e;border-radius:8px;padding:5px 10px;font-size:.76rem;cursor:pointer;font-family:inherit}
+.ca-att-seg button.on{background:#c2410c;border-color:#c2410c;color:#fff;font-weight:700}
+.ca-att-actions{display:flex;gap:8px;justify-content:flex-end}
+.ca-att-actions button{border:none;border-radius:8px;padding:6px 14px;font-size:.78rem;cursor:pointer;font-weight:700;font-family:inherit}
+.ca-att-actions .ghost{background:#efe8e0;color:#57534e}
+.ca-att-actions .primary{background:#c2410c;color:#fff}
 .dark .ca-tools button{background:#241f1b;border-color:#4a3f36;color:#c9bfb4}
 .dark .ca-tools button:hover:not(:disabled){border-color:#ea8a4d;color:#ea8a4d;background:#2b241e}
 /* 课代表编辑作业时的附件只读区（2026-10-07 第二十七轮：附件直链仅管理员可改） */
@@ -5206,13 +5292,86 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
 </div>
 
 <!-- ===== 班级签 / 彩带彩蛋弹窗 ===== -->
+<!-- ===== 作业导出预览（v4.9.0）===== -->
+<div class="ex-mask" id="exMask">
+  <div class="ex-box">
+    <div class="ex-head"><span>🖼 导出预览</span><button onclick="closeExPreview()" aria-label="关闭">✕</button></div>
+    <div class="ex-body">
+      <div class="ex-stage" id="exStage"><div class="ex-loading">正在生成预览…</div></div>
+      <div class="ex-panel">
+        <div class="ex-row">
+          <span>字号 <b class="ex-fsval" id="exFsVal">100%</b></span>
+          <input type="range" id="exFs" min="80" max="150" step="5" value="100">
+        </div>
+        <div class="ex-row">
+          <span>字体</span>
+          <div class="ex-seg" id="exFam">
+            <button type="button" data-fam="sans" class="on">黑体</button>
+            <button type="button" data-fam="serif">宋体</button>
+            <button type="button" data-fam="kai">楷体</button>
+            <button type="button" data-fam="mono">等宽</button>
+          </div>
+        </div>
+        <div class="ex-row">
+          <span>排列</span>
+          <div class="ex-seg" id="exCols">
+            <button type="button" data-cols="1" class="on">单列</button>
+            <button type="button" data-cols="2">双列</button>
+          </div>
+        </div>
+        <div class="ex-row">
+          <span>纸张</span>
+          <div class="ex-seg" id="exPaper">
+            <button type="button" data-paper="a4" class="on">A4 竖版</button>
+            <button type="button" data-paper="long">随内容</button>
+          </div>
+        </div>
+        <div class="ex-row">
+          <span>选项</span>
+          <label class="ex-chk"><input type="checkbox" id="exCheck" checked>每条前面加打勾框</label>
+          <label class="ex-chk"><input type="checkbox" id="exColor" checked>科目分色</label>
+          <label class="ex-chk"><input type="checkbox" id="exQr" checked>底部二维码</label>
+        </div>
+      </div>
+    </div>
+    <div class="ex-foot">
+      <button type="button" class="ghost" id="exShareBtn" onclick="exShare()">分享</button>
+      <button type="button" class="primary" id="exSaveBtn" onclick="exDownload()">保存图片</button>
+    </div>
+  </div>
+</div>
+
 <div class="sign-mask" id="signMask">
   <div class="sign-box">
     <h3>今日班级签</h3>
     <span class="sign-tag" id="signTag"></span>
     <div class="sign-text" id="signText"></div>
     <div class="sign-sub" id="signSub"></div>
-    <button class="btn-qr" onclick="closeSign()">收下</button>
+    <div class="sign-acts">
+      <button class="sign-hist-btn" onclick="openSignHistory()">历史</button>
+      <button class="btn-qr" onclick="closeSign()">收下</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 班级签历史日历（v4.9.0）===== -->
+<div class="allboard-mask" id="signHistMask">
+  <div class="allboard-box sh-box">
+    <div class="allboard-head"><span>班级签 · 历史</span><button onclick="closeSignHistory()">关闭</button></div>
+    <div class="sh-body">
+      <div class="sh-nav">
+        <button type="button" onclick="shNav(-1)" aria-label="上个月">‹</button>
+        <span id="shTitle">—</span>
+        <button type="button" onclick="shNav(1)" aria-label="下个月">›</button>
+      </div>
+      <div class="sh-week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+      <div class="sh-grid" id="shGrid"></div>
+      <div class="sh-legend">
+        <i class="lg good"></i>吉签<i class="lg mid"></i>凡签<i class="lg bad"></i>平签<i class="lg none"></i>未抽
+      </div>
+      <div class="sh-detail" id="shDetail">点一个有色格子，看那天的签。</div>
+      <div class="sh-note">只显示最近 90 天，记录保存在这台设备上。</div>
+    </div>
   </div>
 </div>
 <div class="confetti-mask" id="confettiMask">
@@ -5932,8 +6091,44 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     accentSoft: '#fff1e6',
   };
 
+  /* v4.9.0：导出可调项 —— 字体族由 style.family 决定。
+     用模块级变量而不是给每个调用点加参数，改动最小、也不会漏改。 */
+  var FONT_STACK = {
+    sans: '-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif',
+    serif: '"Songti SC","STSong","SimSun",Georgia,serif',
+    kai: '"Kaiti SC","STKaiti","KaiTi","Songti SC",serif',
+    mono: '"SFMono-Regular",Consolas,"Liberation Mono","Courier New",monospace',
+  };
+  var CUR_FAM = FONT_STACK.sans;
+
   function font(size, weight) {
-    return (weight || 400) + ' ' + size + 'px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif';
+    return (weight || 400) + ' ' + size + 'px ' + CUR_FAM;
+  }
+
+  /* 科目配色：固定常用科目，其余按名称哈希取色 —— 同一科每次导出颜色一致 */
+  var SUBJ_COLORS = {
+    '语文': '#c2410c', '数学': '#1d4ed8', '英语': '#7c3aed',
+    '物理': '#0891b2', '化学': '#15803d', '生物': '#4d7c0f',
+    '政治': '#b45309', '历史': '#92400e', '地理': '#0f766e',
+    '其他': '#78716c'
+  };
+  var SUBJ_PALETTE = ['#c2410c', '#1d4ed8', '#7c3aed', '#0891b2', '#15803d', '#4d7c0f', '#b45309', '#be123c', '#0f766e'];
+
+  function subjColor(name) {
+    var k = String(name || '').replace(/[（(].*$/, '').trim();
+    if (SUBJ_COLORS[k]) return SUBJ_COLORS[k];
+    var h = 0;
+    for (var i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) % 9973;
+    return SUBJ_PALETTE[h % SUBJ_PALETTE.length];
+  }
+
+  /* #rrggbb + 透明度 → rgba()，用于把科目色淡下来画分隔线 */
+  function withAlpha(hex, a) {
+    var h = String(hex || '').replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    if (!isFinite(n)) return 'rgba(0,0,0,' + a + ')';
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
 
   /* 按宽度折行（中文按字切，英文按词切，混合也能处理） */
@@ -5981,6 +6176,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       });
       if (sec.heading || sec.rows.length || sec.lines.length || sec.media.length) sections.push(sec);
     });
+    /* v4.9.0（站主）：导出可调项 —— 字号 / 字体 / 单双列 / A4 / 二维码 / 打勾框 / 科目色 */
+    var st = o.style || {};
+    var style = {
+      fs: Math.min(1.6, Math.max(0.8, Number(st.fs) || 1)),
+      family: FONT_STACK[st.family] ? st.family : 'sans',
+      cols: Number(st.cols) === 2 ? 2 : 1,
+      paper: st.paper === 'long' ? 'long' : 'a4',
+      qr: st.qr !== false,
+      check: st.check !== false,
+      subjColor: st.subjColor !== false,
+    };
+    if (style.paper === 'a4' && !o.minHeight) o.minHeight = Math.round((o.width && o.width > 320 ? o.width : STEP.W) * 1.414);
     return {
       title: o.title || '分享',
       subtitle: o.subtitle || '',
@@ -5994,31 +6201,34 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       qr: o.qr || null,
       qrLabel: o.qrLabel || '',
       minHeight: o.minHeight || 0,
+      style: style,
     };
   }
 
   /* ---- 测量：先用一个离屏 ctx 算折行与高度 ---- */
   function measure(o) {
+    CUR_FAM = FONT_STACK[o.style.family] || FONT_STACK.sans;
+    var S = o.style.fs;
     var cv = document.createElement('canvas');
     var ctx = cv.getContext('2d');
     var innerW = o.width - STEP.PAD * 2;
     var h = STEP.PAD;
 
-    ctx.font = font(STEP.TITLE, 700);
+    ctx.font = font(STEP.TITLE * S, 700);
     var hasBadge = !!o.__badge;
     var titleW = hasBadge ? innerW - STEP.BADGE - STEP.BADGE_GAP : innerW;
     var titleLines = wrap(ctx, o.title, titleW);
-    h += titleLines.length * (STEP.TITLE + 8);
+    h += titleLines.length * (STEP.TITLE * S + 8);
 
     if (o.subtitle) {
-      ctx.font = font(STEP.SUB);
+      ctx.font = font(STEP.SUB * S);
       var subLines = wrap(ctx, o.subtitle, innerW);
-      h += 6 + subLines.length * (STEP.SUB + 8);
+      h += 6 + subLines.length * (STEP.SUB * S + 8);
     }
 
     var badgeH = 0;
     if (o.badges.length) {
-      ctx.font = font(13, 600);
+      ctx.font = font(13 * S, 600);
       /* 粗略按每个徽章一行排（宽度够就并排） */
       var linesW = 0, rows = 1;
       o.badges.forEach(function (b) {
@@ -6028,58 +6238,78 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       badgeH = rows * (STEP.BADGE_H + 8) + 8;
       h += badgeH;
     }
+    var headH = h;
 
-    /* v3.8.7：作业导出的字号放大一档（站主：「作业的字号太小了」） */
-    var F = o.large ? 16.5 : 14;
-    var ROWH = o.large ? 36 : STEP.ROW;
-    var LINEH = o.large ? 28 : STEP.LINE;
-    var GAPROW = o.large ? 8 : STEP.GAP_ROW;
-
+    /* 单列 / 双列：列宽不同，高度也不同，所以先算列宽再量每一块 */
+    var colW = o.style.cols === 2 ? (innerW - 22) / 2 : innerW;
+    var colY = [0, 0];
     var parts = [];
+
     o.sections.forEach(function (s) {
-      var block = { heading: s.heading, rows: [], lines: [], media: [] };
-      var bh = 0;
-      if (s.heading) {
-        ctx.font = font(STEP.HEAD, 700);
-        bh += STEP.HEAD + 12;
-      }
-      ctx.font = font(F);
-      s.rows.forEach(function (r) {
-        var leftW = innerW - 150;
-        var lh = wrap(ctx, r.l, leftW);
-        var rh = r.r ? wrap(ctx, r.r, 140) : [''];
-        var lines = Math.max(lh.length, rh.length);
-        block.rows.push({ l: lh, r: rh, lines: lines });
-        bh += lines * ROWH + GAPROW;
-      });
-      s.lines.forEach(function (t) {
-        ctx.font = font(F);
-        var ls = wrap(ctx, t, innerW);
-        block.lines.push({ lines: ls });
-        bh += ls.length * LINEH;
-      });
-      /* 媒体块：图片按宽度等比（最高 300），音视频固定 112 高的二维码行 */
-      (s.media || []).forEach(function (md) {
-        var hh;
-        if (md.kind === 'image' && md.img && md.img.naturalWidth) {
-          hh = Math.min(300, innerW * md.img.naturalHeight / md.img.naturalWidth);
-        } else {
-          hh = 112;
-        }
-        block.media.push({ kind: md.kind, img: md.img, qr: md.qr, label: md.label, w: innerW, h: hh });
-        bh += hh + 14;
-      });
-      bh += STEP.GAP_SECTION;
-      h += bh;
-      parts.push(block);
+      var b = buildBlock(s, ctx, colW, S, o);
+      var col = (o.style.cols === 2 && colY[1] < colY[0]) ? 1 : 0;
+      b.col = col;
+      b.y = colY[col];
+      colY[col] += b.h + STEP.GAP_SECTION * S;
+      parts.push(b);
     });
 
+    var contentH = Math.max(colY[0], colY[1]);
+    h = headH + contentH;
+
     /* 底部二维码块（作业导出）：二维码 150 + 文字 40 */
-    if (o.qr) h += 150 + 44;
+    if (o.qr && o.style.qr) h += 150 + 44;
     if (o.footer) h += STEP.FOOT;
     h += STEP.PAD;
 
-    return { height: Math.round(h), blocks: parts, titleLines: titleLines };
+    return { height: Math.round(h), blocks: parts, titleLines: titleLines, headH: headH, colW: colW, contentBottom: Math.round(headH + contentH) };
+  }
+
+  /* 量一块：分段标题 + 任务行 + 媒体块。宽度是列宽，所有尺寸乘字号系数 S。 */
+  function buildBlock(s, ctx, colW, S, o) {
+    var F = (o.large ? 16.5 : 14) * S;
+    var ROWH = (o.large ? 36 : STEP.ROW) * S;
+    var LINEH = (o.large ? 28 : STEP.LINE) * S;
+    var GAPROW = (o.large ? 8 : STEP.GAP_ROW) * S;
+    var indent = o.style.check ? 26 : 0;
+
+    var block = {
+      heading: s.heading,
+      color: o.style.subjColor ? subjColor(s.heading) : COLORS.accent,
+      rows: [], lines: [], media: [], h: 0
+    };
+    var bh = 0;
+    if (s.heading) bh += STEP.HEAD * S + 14;
+    s.rows.forEach(function (r) {
+      ctx.font = font(F);
+      /* 右侧留白按列宽比例算：双列时列本来就窄，再固定扣 150 会把正文压成一条线 */
+      var rightW = r.r ? Math.min(150 * S, colW * 0.34) : 0;
+      var leftW = Math.max(56, colW - indent - rightW);
+      var lh = wrap(ctx, r.l, leftW);
+      var rh = r.r ? wrap(ctx, r.r, rightW) : [''];
+      var lines = Math.max(lh.length, rh.length);
+      block.rows.push({ l: lh, r: rh, lines: lines });
+      bh += lines * ROWH + GAPROW;
+    });
+    s.lines.forEach(function (t) {
+      ctx.font = font(F);
+      var ls = wrap(ctx, t, colW);
+      block.lines.push({ lines: ls });
+      bh += ls.length * LINEH;
+    });
+    /* 媒体块：图片按列宽等比（最高 300），音视频固定 112 高的二维码行 */
+    (s.media || []).forEach(function (md) {
+      var hh;
+      if (md.kind === 'image' && md.img && md.img.naturalWidth) {
+        hh = Math.min(300 * S, colW * md.img.naturalHeight / md.img.naturalWidth);
+      } else {
+        hh = 112 * S;
+      }
+      block.media.push({ kind: md.kind, img: md.img, qr: md.qr, label: md.label, w: colW, h: hh });
+      bh += hh + 14;
+    });
+    block.h = bh;
+    return block;
   }
 
   /* ---- 班徽（v3.5.42）----
@@ -6143,6 +6373,11 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       function fin(v) { if (!done) { done = true; badgeCache[url] = v; resolve(v); } }
       img.crossOrigin = 'anonymous';
       img.onload = function () {
+        /* v4.9.0（站主「班徽是矢量图，导出背景变黑」）：
+           有些矢量班徽本身带一整块纯黑底（仓库里的 favicon.svg 就是黑底白图），
+           在网页里被白色圆形容器衬着看不出来，画到导出图里就是一个黑方块。
+           这里先采样边缘，黑底占比过高就判为「不适合浅色长图」，换下一个候选。 */
+        if (!badgeLooksOk(img)) { fin({ ok: true, img: null, badBg: true }); return; }
         badgeCache[url] = { ok: true, img: img };
         fin({ ok: true, img: img });
       };
@@ -6173,6 +6408,29 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     });
   }
 
+  /* 班徽是否适合画在浅色纸上：边缘纯黑占比超过 45% 视为黑底图，跳过 */
+  function badgeLooksOk(img) {
+    try {
+      var s = 48;
+      var cv = document.createElement('canvas');
+      cv.width = cv.height = s;
+      var c = cv.getContext('2d');
+      c.drawImage(img, 0, 0, s, s);
+      var d = c.getImageData(0, 0, s, s).data;
+      var black = 0, opaque = 0;
+      for (var i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 40) continue;
+        opaque++;
+        if (d[i] < 24 && d[i + 1] < 24 && d[i + 2] < 24) black++;
+      }
+      if (opaque && black / opaque > 0.45) return false;
+      return true;
+    } catch (e) {
+      /* 画布被污染（跨域图）时读不到像素，按可用处理，让后面的绘制失败自己兜底 */
+      return true;
+    }
+  }
+
   function roundRect(ctx, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -6187,6 +6445,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   /** 画到 canvas 上并返回 canvas */
   function render(opts) {
     var o = normalize(opts);
+    CUR_FAM = FONT_STACK[o.style.family] || FONT_STACK.sans;
+    var S = o.style.fs;
     var m = measure(o);
     /* v3.8.7：优先一张 A4 —— 内容不够高就补白到 A4 比例，多了就自然延长 */
     var H = Math.max(m.height, o.minHeight || 0);
@@ -6197,10 +6457,10 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     ctx.scale(STEP.SCALE, STEP.SCALE);
     ctx.textBaseline = 'top';
 
-    var F = o.large ? 16.5 : 14;
-    var ROWH = o.large ? 36 : STEP.ROW;
-    var LINEH = o.large ? 28 : STEP.LINE;
-    var GAPROW = o.large ? 8 : STEP.GAP_ROW;
+    var F = (o.large ? 16.5 : 14) * S;
+    var ROWH = (o.large ? 36 : STEP.ROW) * S;
+    var LINEH = (o.large ? 28 : STEP.LINE) * S;
+    var GAPROW = (o.large ? 8 : STEP.GAP_ROW) * S;
 
     /* 背景 */
     ctx.fillStyle = COLORS.bg;
@@ -6217,10 +6477,13 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         ctx.save();
         roundRect(ctx, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE, 16);
         ctx.clip();
+        /* 圆形白底：万一班徽本身带黑底，也不会在纸上糊成一个黑方块 */
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE);
         ctx.drawImage(o.__badge.img, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE);
         ctx.restore();
         /* 细边框，浅色徽标也能看出边界 */
-        ctx.strokeStyle = 'rgba(0,0,0,.06)';
+        ctx.strokeStyle = 'rgba(0,0,0,.08)';
         ctx.lineWidth = 1;
         roundRect(ctx, o.width - STEP.PAD - STEP.BADGE, STEP.PAD - 6, STEP.BADGE, STEP.BADGE, 16);
         ctx.stroke();
@@ -6228,19 +6491,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     }
 
     ctx.fillStyle = COLORS.ink;
-    ctx.font = font(STEP.TITLE, 700);
+    ctx.font = font(STEP.TITLE * S, 700);
     m.titleLines.forEach(function (ln) {
       ctx.fillText(ln, x, y);
-      y += STEP.TITLE + 8;
+      y += STEP.TITLE * S + 8;
     });
 
     /* 副标题 */
     if (o.subtitle) {
-      ctx.font = font(STEP.SUB);
+      ctx.font = font(STEP.SUB * S);
       ctx.fillStyle = COLORS.ink2;
       wrap(ctx, o.subtitle, innerW).forEach(function (ln) {
         ctx.fillText(ln, x, y);
-        y += STEP.SUB + 8;
+        y += STEP.SUB * S + 8;
       });
     }
 
@@ -6248,7 +6511,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     if (o.badges.length) {
       y += 8;
       var bx = x, by = y;
-      ctx.font = font(13, 600);
+      ctx.font = font(13 * S, 600);
       o.badges.forEach(function (b) {
         var tw = ctx.measureText(b).width;
         var bw = tw + 24;
@@ -6263,47 +6526,69 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       y = by + STEP.BADGE_H + 14;
     }
 
-    /* 分段 */
+    /* 分段：按 measure 排好的列位绘制，双列时两块并排 */
     m.blocks.forEach(function (b) {
+      var cw = m.colW;
+      var bx = x + b.col * (cw + 22);
+      var oy = m.headH + b.y;
+
       if (b.heading) {
-        ctx.fillStyle = COLORS.accent;
-        ctx.font = font(STEP.HEAD, 700);
-        ctx.fillText(b.heading, x, y);
-        y += STEP.HEAD + 10;
-        /* 细分隔线 */
-        ctx.strokeStyle = COLORS.line;
+        ctx.font = font(STEP.HEAD * S, 700);
+        if (o.style.subjColor) {
+          ctx.fillStyle = b.color;
+          roundRect(ctx, bx, oy + 2, 5, STEP.HEAD * S - 3, 2.5);
+          ctx.fill();
+          ctx.fillText(b.heading, bx + 11, oy);
+        } else {
+          ctx.fillStyle = COLORS.accent;
+          ctx.fillText(b.heading, bx, oy);
+        }
+        oy += STEP.HEAD * S + 6;
+        /* 细分隔线：科目色淡一档，一眼能分清哪几行属于哪科 */
+        ctx.strokeStyle = o.style.subjColor ? withAlpha(b.color, 0.35) : COLORS.line;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + innerW, y);
+        ctx.moveTo(bx, oy);
+        ctx.lineTo(bx + cw, oy);
         ctx.stroke();
-        y += 10;
+        oy += 8;
       }
+
+      var indent = o.style.check ? 26 : 0;
       b.rows.forEach(function (r) {
         ctx.font = font(F);
         var maxLines = r.lines;
+        if (o.style.check) {
+          /* 打勾框：导出成纸质清单的样子，打印出来能直接拿笔勾 */
+          var bs = 17 * S;
+          var byy = oy + (ROWH - bs) / 2 - 2;
+          ctx.strokeStyle = '#c9bcae';
+          ctx.lineWidth = 1.4;
+          roundRect(ctx, bx, byy, bs, bs, 4);
+          ctx.stroke();
+        }
         for (var i = 0; i < maxLines; i++) {
           ctx.fillStyle = COLORS.ink;
-          if (r.l[i]) ctx.fillText(r.l[i], x, y + i * ROWH);
+          if (r.l[i]) ctx.fillText(r.l[i], bx + indent, oy + i * ROWH);
           if (r.r[i]) {
             ctx.fillStyle = COLORS.ink3;
             var rw = ctx.measureText(r.r[i]).width;
-            ctx.fillText(r.r[i], x + innerW - rw, y + i * ROWH);
+            ctx.fillText(r.r[i], bx + cw - rw, oy + i * ROWH);
           }
         }
-        y += maxLines * ROWH + GAPROW;
+        oy += maxLines * ROWH + GAPROW;
         ctx.strokeStyle = 'rgba(239,228,217,.7)';
         ctx.beginPath();
-        ctx.moveTo(x, y - 3);
-        ctx.lineTo(x + innerW, y - 3);
+        ctx.moveTo(bx, oy - 3);
+        ctx.lineTo(bx + cw, oy - 3);
         ctx.stroke();
       });
       b.lines.forEach(function (ln) {
         ctx.font = font(F);
         ctx.fillStyle = COLORS.ink2;
         ln.lines.forEach(function (t) {
-          ctx.fillText(t, x, y);
-          y += LINEH;
+          ctx.fillText(t, bx, oy);
+          oy += LINEH;
         });
       });
       /* 媒体块 */
@@ -6311,52 +6596,52 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         if (md.kind === 'image' && md.img) {
           try {
             ctx.save();
-            roundRect(ctx, x, y, md.w, md.h, 12);
+            roundRect(ctx, bx, oy, md.w, md.h, 12);
             ctx.clip();
-            ctx.drawImage(md.img, x, y, md.w, md.h);
+            ctx.drawImage(md.img, bx, oy, md.w, md.h);
             ctx.restore();
             ctx.strokeStyle = COLORS.line;
             ctx.lineWidth = 1;
-            roundRect(ctx, x, y, md.w, md.h, 12);
+            roundRect(ctx, bx, oy, md.w, md.h, 12);
             ctx.stroke();
           } catch (e) { /* 画不上就跳过，不毁整张图 */ }
-          y += md.h + 14;
+          oy += md.h + 14;
           return;
         }
         if (md.qr) {
-          var qs = 112;
+          var qs = 112 * S;
           ctx.fillStyle = '#fff';
-          roundRect(ctx, x, y, innerW, qs, 12);
+          roundRect(ctx, bx, oy, cw, qs, 12);
           ctx.fill();
           ctx.strokeStyle = COLORS.line;
           ctx.lineWidth = 1;
-          roundRect(ctx, x, y, innerW, qs, 12);
+          roundRect(ctx, bx, oy, cw, qs, 12);
           ctx.stroke();
-          try { ctx.drawImage(md.qr, x + 10, y + 0, qs, qs); } catch (e) {}
+          try { ctx.drawImage(md.qr, bx + 10, oy, qs, qs); } catch (e) {}
           ctx.fillStyle = COLORS.ink;
-          ctx.font = font(15, 700);
-          ctx.fillText(md.kind === 'video' ? '视频' : '音频', x + qs + 22, y + 36);
+          ctx.font = font(15 * S, 700);
+          ctx.fillText(md.kind === 'video' ? '视频' : '音频', bx + qs + 22, oy + 34 * S);
           ctx.fillStyle = COLORS.ink2;
-          ctx.font = font(13);
-          ctx.fillText('扫码在班级网站直接播放', x + qs + 22, y + 66);
+          ctx.font = font(13 * S);
+          ctx.fillText('扫码在班级网站直接播放', bx + qs + 22, oy + 64 * S);
           if (md.label) {
             ctx.fillStyle = COLORS.ink3;
-            ctx.font = font(12);
+            ctx.font = font(12 * S);
             var lb = String(md.label);
             if (lb.length > 26) lb = lb.slice(0, 25) + '…';
-            ctx.fillText(lb, x + qs + 22, y + 92);
+            ctx.fillText(lb, bx + qs + 22, oy + 90 * S);
           }
-          y += qs + 14;
+          oy += qs + 14;
         }
       });
-      y += STEP.GAP_SECTION - 6;
+      y = Math.max(y, oy);
     });
 
     /* 底部二维码：扫码进「作业查看」，其他页面灰、可登录解锁 */
-    if (o.qr) {
+    if (o.qr && o.style.qr) {
       var qs = 150;
       var qx = (o.width - qs) / 2;
-      y += 10;
+      y = m.contentBottom + 6;
       try { ctx.drawImage(o.qr, qx, y, qs, qs); } catch (e) {}
       ctx.textAlign = 'center';
       ctx.fillStyle = COLORS.ink2;
@@ -6368,6 +6653,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
     /* 页脚 */
     if (o.footer) {
+      if (!(o.qr && o.style.qr)) y = m.contentBottom + 8;
       ctx.strokeStyle = COLORS.line;
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -6602,18 +6888,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.8.1';
-var VER_DATE = '2026-11-03';
+var SITE_VERSION = '4.9.0';
+var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=481" defer></script>
-<script src="./app.min.js?v=481" defer></script>
+<script src="./auth-bus.js?v=490" defer></script>
+<script src="./app.min.js?v=490" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=481" defer></script>
-<script src="./big.js?v=481" defer></script>
+<script src="./fs-keep.js?v=490" defer></script>
+<script src="./big.js?v=490" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=481" defer></script>
+<script src="./pickfx.js?v=490" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

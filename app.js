@@ -12864,13 +12864,27 @@ function openCaEditor(hwId, subject){
   document.getElementById('caBody').innerHTML =
       '<p style="margin:0 0 8px;font-size:.78rem;color:#6e635a;line-height:1.7">' +
       (isAdm
-        ? '一行一条任务。音频 / 视频 / 图片附件请直接手写 <b>📎 [音频] 描述</b> 占位行，在描述后用 <b>| 链接</b> 带上网址（附件文件由站主统一上传，链接找站主要）。<br>你是管理员：全部科目都能改、本次保存直接生效。'
+        ? '一行一条任务。要挂图片 / 音频 / 视频，点下方 <b>📎 添加附件</b> 选类型、填链接，自动挂到所选任务下面。<br>你是管理员：全部科目都能改、本次保存直接生效。'
         : '一行一条任务。<b>你是本科目课代表：只能编辑文字内容</b>，附件直链需由管理员修改（见下方只读区）。') +
       '</p>' +
       (isAdm
         ? '<div class="ca-tools">' +
             '<button type="button" onclick="caInsertTask()">＋ 新增一条任务</button>' +
-            '<button type="button" onclick="caInsertAttRow()">📎 新增附件行</button>' +
+            '<button type="button" onclick="caAttachOpen()">📎 添加附件</button>' +
+          '</div>' +
+          '<div class="ca-att" id="caAttBox" style="display:none">' +
+            '<div class="ca-att-row"><span>类型</span><div class="ca-att-seg" id="caAttKind">' +
+              '<button type="button" data-k="图片" class="on">图片</button>' +
+              '<button type="button" data-k="音频">音频</button>' +
+              '<button type="button" data-k="视频">视频</button>' +
+            '</div></div>' +
+            '<div class="ca-att-row"><span>挂到</span><select id="caAttTask"></select></div>' +
+            '<div class="ca-att-row"><span>说明</span><input id="caAttDesc" placeholder="例：Unit 2 听力练习"></div>' +
+            '<div class="ca-att-row"><span>链接</span><input id="caAttUrl" placeholder="https://…（图片/音频/视频直链）"></div>' +
+            '<div class="ca-att-actions">' +
+              '<button type="button" class="ghost" onclick="caAttachClose()">取消</button>' +
+              '<button type="button" class="primary" onclick="caAttachInsert()">插入附件</button>' +
+            '</div>' +
           '</div>'
         : '<div class="ca-tools">' +
             '<button type="button" onclick="caInsertTask()">＋ 新增一条任务</button>' +
@@ -12901,6 +12915,83 @@ function caInsertAttRow(kind){
   kind = kind || '音频';
   caInsertLine('📎 [' + kind + ']  | ');
 }
+
+/* ---- v4.9.0：图形化添加附件 ----
+   站主：「作业前台可加图片/音频/视频，作为上一项的附属项」。
+   以前只能手写「📎 [音频] 描述 | 链接」，同学根本记不住格式；
+   现在选类型、选挂到哪条、填说明和链接，自动生成那一行。 */
+var CA_ATT_KIND = '图片';
+
+function caAttachOpen(){
+  var box = document.getElementById('caAttBox');
+  var ta = document.getElementById('caTa');
+  var sel = document.getElementById('caAttTask');
+  if(!box || !ta || !sel) return;
+  var lines = ta.value.split('\n');
+  sel.innerHTML = '';
+  var n = 0;
+  for(var i = 0; i < lines.length; i++){
+    var ln = lines[i].trim();
+    if(!ln || /^📎/.test(ln)) continue;
+    n++;
+    var op = document.createElement('option');
+    op.value = String(i);
+    op.textContent = n + '. ' + (ln.length > 26 ? ln.slice(0, 26) + '…' : ln);
+    sel.appendChild(op);
+  }
+  if(!n){
+    if(typeof uiMsg === 'function') uiMsg('先在文本框里写一条任务，再把附件挂上去', '#af410f');
+    return;
+  }
+  document.getElementById('caAttDesc').value = '';
+  document.getElementById('caAttUrl').value = '';
+  caAttKindSet('图片');
+  box.style.display = 'block';
+  var u = document.getElementById('caAttUrl');
+  if(u) u.focus();
+}
+
+function caAttachClose(){
+  var box = document.getElementById('caAttBox');
+  if(box) box.style.display = 'none';
+}
+
+function caAttKindSet(k){
+  CA_ATT_KIND = k || '图片';
+  var box = document.getElementById('caAttKind');
+  if(!box) return;
+  var btns = box.querySelectorAll('button');
+  for(var i = 0; i < btns.length; i++){
+    btns[i].className = (btns[i].getAttribute('data-k') === CA_ATT_KIND) ? 'on' : '';
+  }
+}
+
+function caAttachInsert(){
+  var ta = document.getElementById('caTa');
+  var sel = document.getElementById('caAttTask');
+  var desc = document.getElementById('caAttDesc');
+  var url = document.getElementById('caAttUrl');
+  if(!ta || !sel) return;
+  var u = String(url && url.value || '').trim();
+  if(!u){ if(typeof uiMsg === 'function') uiMsg('链接不能空着', '#af410f'); return; }
+  if(!/^https?:\/\//i.test(u)){
+    if(typeof uiMsg === 'function') uiMsg('链接要以 http:// 或 https:// 开头', '#af410f');
+    return;
+  }
+  var d = String(desc && desc.value || '').trim() || (CA_ATT_KIND === '图片' ? '图片附件' : '附件');
+  var idx = parseInt(sel.value, 10);
+  if(isNaN(idx)) idx = ta.value.split('\n').length - 1;
+  var lines = ta.value.split('\n');
+  lines.splice(idx + 1, 0, '📎 [' + CA_ATT_KIND + '] ' + d + ' | ' + u);
+  ta.value = lines.join('\n');
+  caAttachClose();
+  if(typeof uiMsg === 'function') uiMsg('附件已添加，请保存修改', '#2f7d4f');
+}
+
+document.addEventListener('click', function(e){
+  var b = e.target && e.target.closest ? e.target.closest('#caAttKind button') : null;
+  if(b) caAttKindSet(b.getAttribute('data-k'));
+});
 
 /* 在光标处**新起一行**插入 text，并把光标放到合适的位置。
    规则：
@@ -21227,21 +21318,9 @@ function hwExportImage(mode){
     };
     var fname = '作业-' + String(hw.start || '').replace(/[^0-9]/g, '') + '.png';
 
-    if(mode === 'share'){
-      ShareCard.share(card, fname).then(function(r){
-        if(r && r.shared) return;
-        if(r && r.canceled) return;
-        if(typeof uiMsg === 'function') uiMsg('这个浏览器不支持直接分享，图片已保存到下载', '#2f7d4f');
-      }).catch(function(e){
-        if(typeof uiMsg === 'function') uiMsg('分享失败：' + (e.message || e), '#b3261e');
-      });
-    } else {
-      ShareCard.download(card, fname).then(function(){
-        if(typeof uiMsg === 'function') uiMsg('图片已生成，去相册/下载里找一下', '#2f7d4f');
-      }).catch(function(e){
-        if(typeof uiMsg === 'function') uiMsg('生成失败：' + (e.message || e), '#b3261e');
-      });
-    }
+    /* v4.9.0（站主）：「导出图片要先预览、能调字号字体排列」——
+       不再点一下就闷头下载，先开预览弹窗，参数调满意再保存。 */
+    exOpen(card, fname, mode);
   }
 
   /* 先拿「作业查看」这张卡片的分享链接（后台已建过就直接复用），再画二维码 */
@@ -21261,6 +21340,199 @@ function hwExportImage(mode){
   if(imgJobs.length && typeof uiMsg === 'function') uiMsg('正在把作业里的图片一起画进去…', '#8a6a55');
   Promise.all([linkJob, Promise.all(imgJobs)]).then(finish);
 }
+
+/* ============================================================================
+ * v4.9.0 作业导出预览（站主 2026-11-07）
+ * ---------------------------------------------------------------------------
+ * 需求：「导出图片都要先预览并美化 UI，先做作业；可调字号 / 字体 / 排列」。
+ * 做法：导出按钮不再直接下载，先开这个弹窗 —— 左边实时预览，右边调参数，
+ *       底下才真正保存。参数存本机，下次打开还是上次那套。
+ * ========================================================================= */
+var EX = { card: null, fname: '', mode: 'download', style: null, token: 0, timer: 0 };
+
+function exStyleDefaults() {
+  var st = { fs: 1, family: 'sans', cols: 1, paper: 'a4', qr: true, check: true, subjColor: true };
+  try {
+    var raw = localStorage.getItem('cls_hw_ex_style');
+    if (raw) {
+      var o = JSON.parse(raw) || {};
+      if (o.fs) st.fs = Math.min(1.5, Math.max(0.8, Number(o.fs) || 1));
+      if (o.family) st.family = String(o.family);
+      if (o.cols) st.cols = Number(o.cols) === 2 ? 2 : 1;
+      if (o.paper) st.paper = o.paper === 'long' ? 'long' : 'a4';
+      if (o.qr === false) st.qr = false;
+      if (o.check === false) st.check = false;
+      if (o.subjColor === false) st.subjColor = false;
+    }
+  } catch (e) {}
+  return st;
+}
+
+function exSaveStyle() {
+  try { localStorage.setItem('cls_hw_ex_style', JSON.stringify(EX.style)); } catch (e) {}
+}
+
+function exOpen(card, fname, mode) {
+  if (!EX.style) EX.style = exStyleDefaults();
+  EX.card = card;
+  EX.fname = fname || '作业.png';
+  EX.mode = mode || 'download';
+  var mask = document.getElementById('exMask');
+  if (!mask) { /* 弹窗没加载出来时退回直接下载，功能不能丢 */
+    ShareCard.download(card, EX.fname);
+    return;
+  }
+  mask.classList.add('show');
+  exSyncUI();
+  exRender();
+}
+
+function closeExPreview() {
+  var mask = document.getElementById('exMask');
+  if (mask) mask.classList.remove('show');
+  EX.card = null;
+  clearTimeout(EX.timer);
+}
+document.addEventListener('DOMContentLoaded', function () {
+  var mask = document.getElementById('exMask');
+  if (mask) mask.addEventListener('click', function (e) { if (e.target === mask) closeExPreview(); });
+});
+
+function exSyncUI() {
+  var st = EX.style || exStyleDefaults();
+  var fs = document.getElementById('exFs');
+  if (fs) fs.value = String(Math.round(st.fs * 100));
+  var lab = document.getElementById('exFsVal');
+  if (lab) lab.textContent = Math.round(st.fs * 100) + '%';
+  function seg(id, attr, val) {
+    var box = document.getElementById(id);
+    if (!box) return;
+    var btns = box.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+      var on = String(btns[i].getAttribute(attr)) === String(val);
+      btns[i].className = on ? 'on' : '';
+    }
+  }
+  seg('exFam', 'data-fam', st.family);
+  seg('exCols', 'data-cols', st.cols);
+  seg('exPaper', 'data-paper', st.paper);
+  var c1 = document.getElementById('exCheck');
+  var c2 = document.getElementById('exColor');
+  var c3 = document.getElementById('exQr');
+  if (c1) c1.checked = !!st.check;
+  if (c2) c2.checked = !!st.subjColor;
+  if (c3) c3.checked = !!st.qr;
+}
+
+function exSet(k, v) {
+  if (!EX.style) EX.style = exStyleDefaults();
+  EX.style[k] = v;
+  exSaveStyle();
+  exSyncUI();
+  exRenderSoon();
+}
+
+function exRenderSoon() {
+  clearTimeout(EX.timer);
+  EX.timer = setTimeout(exRender, 140);
+}
+
+function exRender() {
+  var stage = document.getElementById('exStage');
+  if (!stage || !EX.card) return;
+  if (typeof ShareCard === 'undefined' || !ShareCard.renderAsync) {
+    stage.innerHTML = '<div class="ex-loading">图片组件没加载出来，请刷新页面</div>';
+    return;
+  }
+  var token = ++EX.token;
+  stage.innerHTML = '<div class="ex-loading">正在生成预览…</div>';
+  var card = {};
+  for (var k in EX.card) if (Object.prototype.hasOwnProperty.call(EX.card, k)) card[k] = EX.card[k];
+  card.style = EX.style;
+  ShareCard.renderAsync(card).then(function (cv) {
+    if (token !== EX.token) return;
+    var paper = document.createElement('div');
+    paper.className = 'ex-paper';
+    /* 预览只缩显示宽度，画布本身仍是 2 倍分辨率，保存出来不糊 */
+    paper.appendChild(cv);
+    stage.innerHTML = '';
+    stage.appendChild(paper);
+  }).catch(function (e) {
+    if (token !== EX.token) return;
+    stage.innerHTML = '<div class="ex-loading">预览失败：' + (e && e.message ? e.message : e) + '</div>';
+  });
+}
+
+function exCardForSave() {
+  var card = {};
+  for (var k in EX.card) if (Object.prototype.hasOwnProperty.call(EX.card, k)) card[k] = EX.card[k];
+  card.style = EX.style;
+  return card;
+}
+
+function exDownload() {
+  if (!EX.card) return;
+  var btn = document.getElementById('exSaveBtn');
+  if (btn) btn.disabled = true;
+  ShareCard.download(exCardForSave(), EX.fname).then(function () {
+    if (typeof uiMsg === 'function') uiMsg('图片已生成，去相册/下载里找一下', '#2f7d4f');
+    if (btn) btn.disabled = false;
+  }).catch(function (e) {
+    if (typeof uiMsg === 'function') uiMsg('生成失败：' + (e.message || e), '#b3261e');
+    if (btn) btn.disabled = false;
+  });
+}
+
+function exShare() {
+  if (!EX.card) return;
+  var btn = document.getElementById('exShareBtn');
+  if (btn) btn.disabled = true;
+  ShareCard.share(exCardForSave(), EX.fname).then(function (r) {
+    if (r && r.shared) return;
+    if (r && r.canceled) return;
+    if (typeof uiMsg === 'function') uiMsg('这个浏览器不支持直接分享，图片已保存到下载', '#2f7d4f');
+    if (btn) btn.disabled = false;
+  }).catch(function (e) {
+    if (typeof uiMsg === 'function') uiMsg('分享失败：' + (e.message || e), '#b3261e');
+    if (btn) btn.disabled = false;
+  });
+}
+
+/* 控件绑定：按钮组用事件委托，改一次参数重画一次 */
+(function bindExUI() {
+  var mask = document.getElementById('exMask');
+  if (!mask) return;
+
+  var fs = document.getElementById('exFs');
+  if (fs) fs.addEventListener('input', function () {
+    var v = Math.min(150, Math.max(80, Number(fs.value) || 100));
+    var lab = document.getElementById('exFsVal');
+    if (lab) lab.textContent = v + '%';
+    exSet('fs', v / 100);
+  });
+
+  function bindSeg(id, attr, key, cast) {
+    var box = document.getElementById(id);
+    if (!box) return;
+    box.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('button') : null;
+      if (!b || !box.contains(b)) return;
+      exSet(key, cast(b.getAttribute(attr)));
+    });
+  }
+  bindSeg('exFam', 'data-fam', 'family', String);
+  bindSeg('exCols', 'data-cols', 'cols', Number);
+  bindSeg('exPaper', 'data-paper', 'paper', String);
+
+  function bindChk(id, key) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', function () { exSet(key, !!el.checked); });
+  }
+  bindChk('exCheck', 'check');
+  bindChk('exColor', 'subjColor');
+  bindChk('exQr', 'qr');
+})();
 
 var _hwCalMonth = null;
 function showHomeworkCalendar(){
@@ -21767,7 +22039,7 @@ function openClassSign(){
   }
   var tag = document.getElementById('signTag');
   tag.className = 'sign-tag ' + (sign.t==='good'?'good':sign.t==='bad'?'bad':'mid');
-  tag.textContent = sign.t==='good' ? '吉签 ✨' : sign.t==='bad' ? '平签 ⚠️' : '凡签';
+  tag.textContent = sign.t==='good' ? '吉签' : sign.t==='bad' ? '平签' : '凡签';
   document.getElementById('signText').textContent = sign.text;
   document.getElementById('signSub').textContent = saved ? '今日已抽取，次日 0 点刷新 🌙' : '一天一签，明天 0 点刷新';
   document.getElementById('signMask').classList.add('show');
@@ -21776,6 +22048,107 @@ function openClassSign(){
 }
 function closeSign(){ document.getElementById('signMask').classList.remove('show'); }
 document.getElementById('signMask').addEventListener('click', function(e){ if(e.target.id==='signMask') closeSign(); });
+
+/* ---- v4.9.0：班级签历史日历 ----
+   站主：「班级签加历史日历，按签等分色，点击才看」。
+   数据不用另存：每天抽签本来就写了一条 cls_sign_YYYY-MM-DD，
+   这里把本机这些键扫出来，按月份铺成日历。只显示最近 90 天。 */
+var SH = { y: 0, m: 0, sel: '' };
+
+function shReadAll(){
+  var map = {};
+  try{
+    for(var i = 0; i < localStorage.length; i++){
+      var k = localStorage.key(i);
+      if(!k || k.indexOf('cls_sign_') !== 0) continue;
+      var day = k.slice(9);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      try{ map[day] = JSON.parse(localStorage.getItem(k)) || {}; }catch(e){ map[day] = {}; }
+    }
+  }catch(e){}
+  return map;
+}
+
+function shPad(n){ return n < 10 ? '0' + n : '' + n; }
+
+function shDayStr(y, m, d){ return y + '-' + shPad(m + 1) + '-' + shPad(d); }
+
+function openSignHistory(){
+  var d = new Date();
+  if(!SH.y){ SH.y = d.getFullYear(); SH.m = d.getMonth(); }
+  SH.sel = '';
+  var mask = document.getElementById('signHistMask');
+  if(!mask) return;
+  renderSignHistory();
+  mask.classList.add('show');
+}
+function closeSignHistory(){
+  var mask = document.getElementById('signHistMask');
+  if(mask) mask.classList.remove('show');
+}
+function shNav(delta){
+  SH.m += delta;
+  if(SH.m < 0){ SH.m += 12; SH.y--; }
+  if(SH.m > 11){ SH.m -= 12; SH.y++; }
+  SH.sel = '';
+  renderSignHistory();
+}
+function shPick(day){
+  SH.sel = day;
+  renderSignHistory();
+  var map = shReadAll();
+  var s = map[day];
+  var box = document.getElementById('shDetail');
+  if(!box) return;
+  if(!s){ box.textContent = '这天没有记录。'; return; }
+  var label = s.t === 'good' ? '吉签' : s.t === 'bad' ? '平签' : '凡签';
+  box.innerHTML = '<b>' + day.replace(/-/g, '/') + ' · ' + label + '</b><br>' + String(s.text || '').replace(/</g, '&lt;');
+}
+function renderSignHistory(){
+  var grid = document.getElementById('shGrid');
+  var title = document.getElementById('shTitle');
+  if(!grid || !title) return;
+  title.textContent = SH.y + ' 年 ' + (SH.m + 1) + ' 月';
+
+  var map = shReadAll();
+  var today = new Date();
+  var todayStr = shDayStr(today.getFullYear(), today.getMonth(), today.getDate());
+  var cutoff = new Date(today.getTime() - 90 * 86400000);
+  var cutoffStr = shDayStr(cutoff.getFullYear(), cutoff.getMonth(), cutoff.getDate());
+
+  var first = new Date(SH.y, SH.m, 1);
+  var offset = (first.getDay() + 6) % 7;   /* 周一开头 */
+  var days = new Date(SH.y, SH.m + 1, 0).getDate();
+
+  var html = '';
+  for(var i = 0; i < offset; i++) html += '<span class="sh-day" style="background:transparent;border:none"></span>';
+  for(var d = 1; d <= days; d++){
+    var ds = shDayStr(SH.y, SH.m, d);
+    var rec = map[ds];
+    var inRange = ds >= cutoffStr && ds <= todayStr;
+    var t = (rec && inRange) ? (rec.t === 'good' ? 'good' : rec.t === 'bad' ? 'bad' : 'mid') : '';
+    var cls = 'sh-day' + (t ? ' ' + t + ' has' : '') + (ds === todayStr ? ' today' : '') + (ds === SH.sel ? ' sel' : '');
+    var act = t ? ' onclick="shPick(\'' + ds + '\')"' : '';
+    html += '<span class="' + cls + '"' + act + '>' + d + '</span>';
+  }
+  /* 补齐整行，避免最后一行格子被拉宽 */
+  var tail = (offset + days) % 7;
+  if(tail) for(var j = tail; j < 7; j++) html += '<span class="sh-day" style="background:transparent;border:none"></span>';
+  grid.innerHTML = html;
+
+  var det = document.getElementById('shDetail');
+  if(det && !SH.sel){
+    var cnt = 0;
+    for(var key in map){ if(key >= cutoffStr && key <= todayStr) cnt++; }
+    det.innerHTML = cnt
+      ? '最近 90 天抽了 <b>' + cnt + '</b> 天，点有色格子看那天的签。'
+      : '最近 90 天暂无记录，抽取后将显示在此处。';
+  }
+}
+document.addEventListener('DOMContentLoaded', function(){
+  var m = document.getElementById('signHistMask');
+  if(m) m.addEventListener('click', function(e){ if(e.target === m) closeSignHistory(); });
+});
 
 /* ---- 彩带彩蛋：连续切主题触发 ---- */
 var CONFETTI_COLORS = ['#f97316','#fb923c','#fbbf24','#34d399','#fb7185','#a78bfa'];
