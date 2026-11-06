@@ -4022,6 +4022,20 @@ html.big-mode.big-hw .content{padding:0}
 }
 .bhw-top .bhw-btn:hover{background:#fff}
 .bhw-top .bhw-btn.ghost{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.4)}
+/* v4.7.1：本机改动提示条（只在有本地改动时出现，平时不占位） */
+.bhw-local{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 8px 5px 10px;border-radius:10px;
+  background:rgba(253,186,116,.24);border:1px solid rgba(253,186,116,.7);color:#fff;
+  font-size:calc(.74rem*var(--bhw-fs));font-weight:800;white-space:nowrap;
+}
+.bhw-local button{
+  border:none;border-radius:7px;padding:4px 8px;cursor:pointer;
+  font-size:calc(.72rem*var(--bhw-fs));font-weight:800;
+  background:rgba(255,255,255,.9);color:#7c2d12;
+}
+.bhw-local button:hover{background:#fff}
+/* v4.7.1：全屏按钮做成图标+文字，一眼能认出来 */
+.bhw-top .bhw-full{white-space:nowrap}
 
 /* —— 主体三列 —— */
 .bhw-grid{
@@ -6555,17 +6569,17 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.7.0';
+var SITE_VERSION = '4.7.1';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=470" defer></script>
-<script src="./app.min.js?v=470" defer></script>
+<script src="./auth-bus.js?v=471" defer></script>
+<script src="./app.min.js?v=471" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=470" defer></script>
+<script src="./big.js?v=471" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=470" defer></script>
+<script src="./pickfx.js?v=471" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

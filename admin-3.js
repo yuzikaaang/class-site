@@ -2721,6 +2721,66 @@ function voMountSongPick(host){
 /* v3.6.4（站主 #6）：版本记录不再单独占一页，作为「数据管理」的下半部分。
    拆成 html + mount 两半，两个入口都能用同一套逻辑。 */
 
+/* v4.7.1：大屏启动器（.bat）。
+   站主原话：「创建快捷方式在 d 盘的功能无效，它上面显示没有 program 文件，
+                  但实际是有这个文件夹的，我怀疑希沃限制了创建 c 盘文件的快捷方式。」
+   排查结论：Windows 快捷方式（.lnk）里存的是一整条**绝对路径**，一旦目标浏览器
+   不在那个位置（希沃常见情形：装在 D 盘、或者是 Edge 不是 Chrome、或者被还原卡
+   重定向），双击就报「找不到 program 文件」。这不是权限问题，是路径写死了。
+   所以改成发一个 .bat：它自己按常见位置挨个找 Chrome / Edge，
+   都找不到就用系统默认浏览器打开，永远不会「找不到 program 文件」。
+   而且 .bat 可以放在 D 盘任意位置，不受 C 盘写入限制。 */
+function launchBatText(){
+  var url = 'https://yuzikaaang.github.io/class-site/index.html?big=1';
+  return [
+    '@echo off',
+    'chcp 65001 >nul',
+    'rem ===== 25-05 class station : big screen launcher =====',
+    'rem Puts the classroom PC straight into big-screen mode.',
+    'rem No absolute path is required: the script finds the browser itself.',
+    'setlocal',
+    'set "URL=' + url + '"',
+    'set "EXE="',
+    'set "P1=%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"',
+    'set "P2=%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"',
+    'set "P3=%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"',
+    'set "P4=%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe"',
+    'set "P5=%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe"',
+    'set "P6=%LocalAppData%\\Microsoft\\Edge\\Application\\msedge.exe"',
+    'for %%P in ("%P1%" "%P2%" "%P3%" "%P4%" "%P5%" "%P6%") do (',
+    '  if not defined EXE if exist "%%~P" set "EXE=%%~P"',
+    ')',
+    'if defined EXE (',
+    '  start "" "%EXE%" --app="%URL%" --start-maximized --window-size=1920,1080 --disable-features=Translate,msEdgeSidebar',
+    ') else (',
+    '  echo Browser not found in common folders, opening with the default one.',
+    '  start "" "%URL%"',
+    ')',
+    'endlocal',
+    ''
+  ].join('\r\n');
+}
+
+function siteLaunchDownload(){
+  try{
+    var blob = new Blob([launchBatText()], { type: 'application/octet-stream' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'bigscreen-launcher.bat';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){
+      try{ URL.revokeObjectURL(a.href); }catch(e){}
+      try{ a.remove(); }catch(e){}
+    }, 1200);
+    if(typeof toast === 'function'){
+      toast('已下载启动器。若浏览器提示「不常见的文件」，选「保留」即可');
+    }
+  }catch(e){
+    if(typeof toast === 'function') toast('下载失败，请更换浏览器后重试', true);
+  }
+}
+
 /* v4.6.0：站点资源下载 + 轻量模式开关。
    站主原话：「后台新增下载班徽图标和站点图标，方便创建快捷方式时换图标。」
    班徽给 PNG（做快捷方式图标更通用），站点图标给 ICO（Windows 快捷方式首选）。 */
@@ -2733,13 +2793,25 @@ function siteAssetsHtml(){
     +       '创建桌面快捷方式后，可右键「属性 → 更改图标」换成下载的图标</p></div>'
     +   '<a class="btn btn-sm btn-secondary" href="./badge.png" download="班徽.png">' + svg('download',14) + ' 下载班徽</a>'
     +   '<a class="btn btn-sm btn-secondary" href="./favicon.ico" download="favicon.ico">' + svg('download',14) + ' 下载站点图标</a>'
+    +   '<button class="btn btn-sm btn-secondary" onclick="siteLaunchDownload()"'
+    +     ' title="一个 .bat，双击直接进大屏，不依赖浏览器安装路径">' + svg('download',14) + ' 下载大屏启动器</button>'
     + '</div>'
+    + '<section class="panel" style="margin-bottom:18px">'
+    +   '<b style="font-size:.9rem">班级电脑：怎么做到「双击就进大屏」</b>'
+    +   '<p class="muted" style="margin:6px 0 0;font-size:.82rem;line-height:1.75">'
+    +     '1. 下载上面的<b>大屏启动器</b>，放到 D 盘任意文件夹（不用管理员权限，也不写 C 盘）。<br>'
+    +     '2. 右键这个 .bat →「发送到 → 桌面快捷方式」，再右键快捷方式「属性 → 更改图标」选上面下载的 .ico。<br>'
+    +     '3. 双击快捷方式即可，浏览器窗口直接是「应用窗口」模式（没有地址栏和标签页）。<br>'
+    +     '<span style="opacity:.8">为什么不推荐手写 .lnk：快捷方式里存的是浏览器 .exe 的绝对路径，'
+    +     '浏览器换位置、或被还原卡重定向，就会报「找不到 program 文件」。启动器是自己去找浏览器，不会有这个问题。</span>'
+    +   '</p>'
+    + '</section>'
     + '<section class="panel" style="margin-bottom:18px"><div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
     +   '<div style="flex:1;min-width:220px"><b style="font-size:.9rem">轻量模式</b>'
     +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
     +       '关闭实时模糊、背景辉光与装饰动画；抽取动画仍完整播放，仅画质略降。'
     +       '低性能设备（如教室触屏一体机）建议开启，可明显改善输入与滚动。</p></div>'
-    +   '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">'
+    +   '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;white-space:nowrap;flex:none">'
     +     '<input type="checkbox" id="liteToggle"' + (liteOn ? ' checked' : '') + '>'
     +     '<span style="font-size:.85rem">开启</span></label>'
     + '</div></section>';
@@ -2807,6 +2879,19 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.7.1', date: '2026-11-06', type: 'feat', title: '离线适配、作业本机编辑、作业页全屏', items: [
+      '离线：断网时接口立即返回本机缓存，不再等 DNS 超时十几秒；大屏轮询离线自动跳过',
+      '离线：登录框离线时直接说明「无法登录，先用本机缓存」，不再转圈',
+      '作业：新增不依赖登录的「本机编辑」，班级电脑离线也能新增科目、改作业、新建期次',
+      '作业：本机改动单独存放并优先显示，未上传前不会被云端覆盖；顶栏提供「上传 / 放弃」',
+      '作业：新增「全屏」按钮，走 Fullscreen API，连任务栏一起隐藏，Esc 退出',
+      'PWA：不再强制竖屏（班级电脑是横屏），补齐大屏 / 作业两个快捷方式',
+      '后台：站点资源新增「大屏启动器」下载，自己找浏览器路径，不再出现找不到 program 文件'
+    ], pub: [
+      { cat: '作业', text: '班级电脑没网也能新增、修改作业，改动先存本机，可选上传或放弃' },
+      { cat: '作业', text: '作业页新增全屏按钮，投影时不显示任务栏' },
+      { cat: '界面', text: '断网时不再长时间等待，直接显示已保存的内容' }
+    ] },
   { version: '4.7.0', date: '2026-11-06', type: 'feat', title: '宝箱收尾、作业实时同步、名单与历史云同步', items: [
       '宝箱：减速改为单段单调曲线，落点精确居中，停下后不再「突然加快 / 跳一下」；中奖卡只加光圈不缩放',
       '宝箱：停下即自动揭示姓名，两种模式都不再需要第二次点击',

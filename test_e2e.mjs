@@ -12683,7 +12683,32 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /var ALERT_POLL = 12000/.test(big) && /function hwApply\(raw, opts\)/.test(big)
     && /bhw-flash/.test(idx) && /BIG\.hwRefreshNow/.test(big));
   t('★作业轮询不会覆盖正在编辑的内容（hwBusy 守卫）',
-    /function hwBusy\(\)/.test(big) && /!hwBusy\(\)\) hwApply/.test(big));
+    /function hwBusy\(\)/.test(big) && /!hwBusy\(\) && !hwLocalPending\(\)\) hwApply/.test(big));
+
+  /* ⑨c v4.7.1：离线适配 + 作业本机编辑 + 真全屏 + 启动器 */
+  t('★离线时接口快速失败（不再等 DNS 超时）',
+    /navigator\.onLine === false\)\{\s*var offErr/.test(fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8')));
+  t('★离线时登录直接说明，不转圈',
+    /当前没有网络，无法登录/.test(fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8')));
+  t('★大屏离线时跳过轮询',
+    /if\(navigator\.onLine === false\) return;/.test(big));
+  t('★作业本机编辑：不需要管理员登录也能改（canEdit）',
+    /function canEdit\(\)\{ return adminOk\(\) \|\| hwEditOn\(\); \}/.test(big)
+    && /BIG\.hwEditToggle = function/.test(big)
+    && /id="liteBtn"/.test(idx) !== null);
+  t('★作业本机改动优先显示且有上传/放弃出口',
+    /HW_LOCAL_KEY/.test(big) && /function hwLocalPending/.test(big)
+    && /BIG\.hwLocalUpload/.test(big) && /BIG\.hwLocalDiscard/.test(big)
+    && /bhw-local/.test(idx));
+  t('★作业页真全屏按钮（Fullscreen API）',
+    /BIG\.hwFull = function/.test(big) && /requestFullscreen/.test(big)
+    && /id="bhwFullBtn"/.test(big));
+  t('★PWA 不再锁竖屏 + 提供大屏 shortcuts',
+    /"orientation": "any"/.test(fs.readFileSync(new URL('./manifest.webmanifest', import.meta.url), 'utf8'))
+    && /"shortcuts"/.test(fs.readFileSync(new URL('./manifest.webmanifest', import.meta.url), 'utf8')));
+  t('★后台可下载大屏启动器（不写死浏览器路径）',
+    /function siteLaunchDownload/.test(fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8'))
+    && /launchBatText/.test(fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8')));
   t('★首屏三个快捷开关 + 后台入口',
     /id="bigBtn"/.test(idx) && /id="liteBtn"/.test(idx) && /id="adminEntryBtn"/.test(idx)
     && /function refreshQuick\(\)/.test(fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8')));

@@ -469,7 +469,59 @@
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
   }
 
-  function hwList(){ return (data().holidayHomeworks || []); }
+  /* ================= 本机编辑 / 本机改动（v4.7.1 · 站主第 2 条）=================
+     站主原话：「班级电脑的作业界面无法新增、修改作业，压根没有对应按钮。」
+     根因：编辑能力一直只挂在 adminOk() 上，而班级电脑长期离线、不可能登录管理员，
+     于是整块编辑 UI 连渲染都不渲染。
+
+     现在把两件事拆开：
+       · 能不能编辑 —— 任何设备点顶栏「编辑」就能改，改动存本机，离线也生效；
+       · 能不能上传 —— 仍然只有管理员登录时才会上云（权限口径没变）。
+     本机改动单独存一份（HW_LOCAL_KEY），优先级高于云端那份：
+       · 存在未上传改动时，12 秒轮询不会拿云端覆盖它（见 pollAlerts）；
+       · 顶栏挂「上传 / 放弃」两个按钮，由人决定怎么处理，不会静默丢。 */
+  var HW_LOCAL_KEY = 'cls_hw_local_v1';
+  var HW_EDIT_KEY  = 'cls_hw_edit';
+
+  function hwEditOn(){
+    try{ return localStorage.getItem(HW_EDIT_KEY) === '1'; }catch(e){ return false; }
+  }
+  BIG.hwEditOn = hwEditOn;
+
+  /* 读一次缓存在内存里：hwList() 被调得很频繁（渲染、排版、比对），
+     每次都 JSON.parse 一份作业列表在低配一体机上会白掉帧。 */
+  var _hwLocalCache;
+  function hwLocalRec(){
+    if(_hwLocalCache !== undefined) return _hwLocalCache;
+    _hwLocalCache = null;
+    try{
+      var o = JSON.parse(localStorage.getItem(HW_LOCAL_KEY) || 'null');
+      if(o && Array.isArray(o.list)) _hwLocalCache = o;
+    }catch(e){}
+    return _hwLocalCache;
+  }
+  function hwLocalPending(){ return !!hwLocalRec(); }
+  BIG.hwLocalPending = hwLocalPending;
+
+  function hwLocalSave(list){
+    var rec = { at: Date.now(), list: list || [] };
+    _hwLocalCache = rec;
+    try{ localStorage.setItem(HW_LOCAL_KEY, JSON.stringify(rec)); }catch(e){}
+  }
+  function hwLocalClear(){
+    _hwLocalCache = null;
+    try{ localStorage.removeItem(HW_LOCAL_KEY); }catch(e){}
+  }
+
+  /* 编辑权限：本机编辑开关或管理员，两者之一即可 */
+  function canEdit(){ return adminOk() || hwEditOn(); }
+
+  /* 有本机未上传的改动就优先用它 —— 否则云端一轮同步就把离线改的东西冲掉了 */
+  function hwList(){
+    var rec = hwLocalRec();
+    if(rec) return rec.list;
+    return (data().holidayHomeworks || []);
+  }
 
   /* v4.3.0（站主第 4 条）：没手动选期次时，只认「今天落在起止日期之内」的那一期。
      以前兜底取 list 最后一条 —— 那是「上一次作业」，学生放假回来第一天看到的是旧作业，
@@ -633,11 +685,33 @@
     try{ goHomeView(); }catch(e){}
   };
 
+  /* 本机改动条：渲染与「改完就地补一条」共用同一段 HTML */
+  function localStripHtml(){
+    if(!hwLocalPending()) return '';
+    return '<span class="bhw-local" title="这些改动只存在这台电脑上">'
+      + '本机改动'
+      + (adminOk() ? '<button type="button" onclick="BIG.hwLocalUpload()">上传</button>' : '')
+      + '<button type="button" onclick="BIG.hwLocalDiscard()">放弃</button></span>';
+  }
+  /* 保存后只补这一条，不整页重画 —— 重画会把正在输入的光标弄丢 */
+  function refreshLocalStrip(){
+    var act = $('bhwActions'); if(!act) return;
+    var ex = act.querySelector('.bhw-local');
+    var html = localStripHtml();
+    if(!html){ if(ex && ex.parentNode) ex.parentNode.removeChild(ex); return; }
+    if(ex){ ex.outerHTML = html; return; }
+    var sync = act.querySelector('#bhwSync');
+    if(sync) sync.insertAdjacentHTML('afterend', html);
+    else act.insertAdjacentHTML('afterbegin', html);
+  }
+
   BIG.renderHw = function (){
     var h = $('bigHw');
     if(!h) return;
     var hw = currentHw();
-    var admin = adminOk();
+    /* v4.7.1：admin 管的是「编辑 UI 出不出来」，不再是「有没有权限改」。
+       班级电脑离线、登不了管理员，也要能新增 / 修改（改动存本机）。 */
+    var admin = canEdit();
     var list = hwList();
     var act = $('bhwActions');
     var brand = $('bhwBrand');
@@ -664,10 +738,21 @@
         + ' title="点击立即从云端刷新作业" onclick="BIG.hwRefreshNow()"'
         + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();BIG.hwRefreshNow();}"></span>'
         + sel
+        /* v4.7.1：本机改动条。只有存过本机修改时才出现，平时不占位置。 */
+        + localStripHtml()
         + (admin && hw ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwRename()">重命名</button>' : '')
         + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwExport()" title="导出作业文件">导出</button>' : '')
         + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwImport()" title="从文件导入作业">导入</button>' : '')
-        + (admin ? '<button type="button" class="bhw-btn" onclick="BIG.hwNew()">' + ico('plus', 13) + ' 新建一期</button>' : '');
+        /* v4.7.1：没登录管理员也能进编辑态（班级电脑离线时的唯一入口） */
+        + (!adminOk()
+            ? '<button type="button" class="bhw-btn' + (hwEditOn() ? '' : ' ghost') + '"'
+              + ' onclick="BIG.hwEditToggle()" title="本机编辑：改动只存在这台电脑上">'
+              + (hwEditOn() ? '完成' : '编辑') + '</button>'
+            : '')
+        + (admin ? '<button type="button" class="bhw-btn" onclick="BIG.hwNew()">' + ico('plus', 13) + ' 新建一期</button>' : '')
+        /* v4.7.1：真全屏（连任务栏一起盖掉），投影 / 一体机上用 */
+        + '<button type="button" class="bhw-btn ghost bhw-full" onclick="BIG.hwFull()"'
+          + ' id="bhwFullBtn" title="全屏显示（隐藏任务栏），按 Esc 退出">⛶ 全屏</button>';
       syncBadge();
     }
 
@@ -1059,21 +1144,42 @@
   }
 
   function persist(){
-    if(!adminOk()) return;
+    if(!canEdit()) return;
     var list = hwList();
     /* v4.7.0：本机刚存下的这份就是「屏幕上这一份」，把比对基准一起推平 ——
        否则 12 秒后的轮询会把自己刚打的字当成「手机端改的」标黄一遍。 */
     try{ BIG.hwPrevData = list; BIG.hwPrev = JSON.stringify(list || []); }catch(e){}
+
+    /* v4.7.1：没登录管理员（班级电脑常态）→ 只写本机那份，一个网络请求都不发。
+       离线时 pushCloudContent 也只是白等一个超时，不如直接省掉。
+       ⚠️ 这条分支**不调 saveContentLocal**：它会把本机改动写进云端内容的本地缓存，
+       之后点「放弃」就再也回不到云端那份了 —— 显示层靠 hwList() 读本机覆盖就够。 */
+    if(!adminOk()){
+      hwLocalSave(list);
+      markSaved('已存本机（不会上传云端）');
+      syncBadge();
+      refreshLocalStrip();
+      return;
+    }
+
     try{
       if(typeof saveContentLocal === 'function') saveContentLocal('holiday_homeworks', list);
     }catch(e){}
+
+    hwLocalSave(list);   /* 先落本机，再等网络；网断了改动也不会丢 */
     try{
       pushCloudContent({ holiday_homeworks: list }, true).then(function (r){
-        if(r && r.ok) markSaved('已同步云端');
-        else markSaved('同步失败：' + ((r && r.error) || '未知原因') + '（已存本机）');
+        if(r && r.ok){
+          /* 云端已经是这份了，本机待上传标记可以撤掉 */
+          hwLocalClear();
+          markSaved('已同步云端');
+          BIG.renderHw();
+        } else {
+          markSaved('未上传：' + ((r && r.error) || '未知原因') + '（已存本机，可稍后点「上传」）');
+        }
         syncBadge();
       }).catch(function (e){
-        markSaved('同步失败：' + (e && e.message || e) + '（已存本机）');
+        markSaved('未上传：' + (e && e.message || e) + '（已存本机，可稍后点「上传」）');
         syncBadge();
       });
     }catch(e){}
@@ -1084,6 +1190,104 @@
     BIG._saveT = setTimeout(function (){ BIG._saveT = null; persist(); }, 700);
   }
   BIG.touch = touch;
+
+  /* ---------------- 本机编辑开关（v4.7.1）----------------
+     站主诉求：「班级电脑的作业界面压根没有新增 / 修改按钮」。
+     班级电脑离线、登不了管理员，所以给一个不依赖登录的编辑入口；
+     打开后整页进入编辑态，改完点「完成」退回只读，避免大屏上被误点。 */
+  BIG.hwEditToggle = function (){
+    var on = !hwEditOn();
+    try{ localStorage.setItem(HW_EDIT_KEY, on ? '1' : '0'); }catch(e){}
+    BIG.renderHw();
+    toast(on ? '已进入本机编辑，改完点右上角「完成」' : '已退出编辑');
+  };
+
+  /* 把本机改动推到云端（只有管理员能做，和原来的权限口径一致） */
+  BIG.hwLocalUpload = function (){
+    if(!adminOk()){ toast('请先登录管理员，才能上传到云端', true); return; }
+    var rec = hwLocalRec();
+    if(!rec){ toast('没有待上传的改动', true); return; }
+    if(typeof navigator !== 'undefined' && navigator.onLine === false){
+      toast('当前设备离线，联网后再点上传', true); return;
+    }
+    markSaved('正在上传…');
+    pushCloudContent({ holiday_homeworks: rec.list }, true).then(function (r){
+      if(r && r.ok){
+        hwLocalClear();
+        markSaved('已上传云端');
+        BIG.renderHw();
+        toast('已上传云端');
+      }else{
+        markSaved('上传失败：' + ((r && r.error) || '未知原因'));
+        toast('上传失败：' + ((r && r.error) || '未知原因'), true);
+      }
+    }).catch(function (e){
+      markSaved('上传失败：' + (e && e.message || e));
+      toast('上传失败，请检查网络', true);
+    });
+  };
+
+  /* 丢掉本机改动，回到云端那份 */
+  BIG.hwLocalDiscard = function (){
+    if(!hwLocalRec()) return;
+    if(!confirm('放弃这台电脑上的改动？放弃后显示云端那一份，本机改动不可恢复。')) return;
+    hwLocalClear();
+    BIG.renderHw();
+    /* 立刻拉一次云端，别让屏幕停在「本机那份」上等 12 秒轮询 */
+    BIG.hwRefreshNow();
+    toast('已放弃本机改动');
+  };
+
+  /* ---------------- 真全屏（v4.7.1 · 站主第 3 条）----------------
+     站主原话：「作业查看界面新增全屏窗口，是真正的全屏没有任务栏那种」。
+     只能走 Fullscreen API：F11 那种浏览器全屏救不了「带任务栏」的旧内核，
+     而 requestFullscreen 是页面级的，任务栏会被盖掉。
+     注意两点：
+       · 必须由点击触发（浏览器的安全限制），所以只能做成按钮；
+       · 一体机如果是老 Chromium，要带 webkit 前缀。 */
+  function fsEl(){
+    return document.fullscreenElement || document.webkitFullscreenElement
+      || document.msFullscreenElement || null;
+  }
+  BIG.hwFull = function (){
+    var d = document, el = d.documentElement;
+    try{
+      if(fsEl()){
+        (d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen || function(){}).call(d);
+        return;
+      }
+      var req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+      if(!req){ toast('这个浏览器不支持网页全屏，可按 F11', true); return; }
+      var p = req.call(el);
+      if(p && p.then){
+        p.then(function(){ refreshFullBtn(); }, function(){
+          toast('浏览器拒绝全屏，请按 F11', true);
+        });
+      }else{
+        setTimeout(refreshFullBtn, 300);
+      }
+    }catch(e){
+      toast('这个浏览器不支持网页全屏，可按 F11', true);
+    }
+  };
+  function refreshFullBtn(){
+    var b = $('bhwFullBtn');
+    if(!b) return;
+    b.textContent = fsEl() ? '⤡ 退出全屏' : '⛶ 全屏';
+  }
+  try{
+    ['fullscreenchange','webkitfullscreenchange','msfullscreenchange'].forEach(function (ev){
+      document.addEventListener(ev, refreshFullBtn);
+    });
+  }catch(e){}
+
+  /* 全屏变化后布局要重算（任务栏没了，可视高度变大，卡片该重新排） */
+  try{
+    document.addEventListener('fullscreenchange', function (){
+      if(BIG.hwOn) setTimeout(function (){ try{ BIG.relayout(); }catch(e){} }, 260);
+    });
+  }catch(e){}
+
 
   function hwObj(){
     var hw = currentHw();
@@ -1161,7 +1365,7 @@
     formSubjHtml();
   };
   BIG.hwNew = function (){
-    if(!adminOk()){ toast('仅管理员可新建作业', true); return; }
+    if(!canEdit()){ toast('当前不可编辑', true); return; }
     FORM.mode = 'new';
     FORM.subjects = PRESET_SUBJECTS.slice();
     var t = $('bhwFormTitle'); if(t) t.textContent = '新建一期作业';
@@ -1175,7 +1379,7 @@
     setTimeout(function(){ if(n) n.focus(); }, 60);
   };
   BIG.hwRename = function (){
-    if(!adminOk()) return;
+    if(!canEdit()) return;
     var hw = currentHw(); if(!hw){ toast('暂无可重命名的期次', true); return; }
     FORM.mode = 'rename';
     var t = $('bhwFormTitle'); if(t) t.textContent = '重命名这一期';
@@ -1281,7 +1485,10 @@
     var pending = false, off = false;
     try{ pending = (typeof hasPendingContentSync === 'function') && hasPendingContentSync(); }catch(e){}
     try{ off = (navigator.onLine === false); }catch(e){}
-    if(off){ el.className = 'bhw-sync off'; el.innerHTML = '<i></i>离线 · 存本机'; }
+    /* v4.7.1：本机改动优先显示 —— 它才是屏幕上真正画着的那一份 */
+    /* 文案和右边那条「本机改动 上传/放弃」错开，避免两个「本机改动」并排 */
+    if(hwLocalPending()){ el.className = 'bhw-sync pend'; el.innerHTML = '<i></i>未上传'; }
+    else if(off){ el.className = 'bhw-sync off'; el.innerHTML = '<i></i>离线 · 存本机'; }
     else if(pending){ el.className = 'bhw-sync pend'; el.innerHTML = '<i></i>待上传'; }
     else { el.className = 'bhw-sync'; el.innerHTML = '<i></i>已同步'; }
   }
@@ -1392,6 +1599,12 @@
   }
   /* 「已同步」角标点一下 = 立刻拉一次云端并重画 */
   BIG.hwRefreshNow = function (){
+    /* v4.7.1：离线时不必真发请求（要等 DNS 超时十几秒），直接说清楚 */
+    if(typeof navigator !== 'undefined' && navigator.onLine === false){
+      toast('当前设备离线，显示的是本机缓存；联网后可刷新', true);
+      syncBadge();
+      return;
+    }
     var el = $('bhwSync');
     if(el){ el.className = 'bhw-sync busy'; el.innerHTML = '<i></i>刷新中'; }
     if(typeof api !== 'function'){ syncBadge(); return; }
@@ -1399,6 +1612,12 @@
       var it = (j && j.items) || {};
       var raw = it.holiday_homeworks;
       if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = null; } }
+      /* 本机有未上传改动时不覆盖，避免手动刷新把自己的改动画掉 */
+      if(Array.isArray(raw) && hwLocalPending()){
+        toast('本机还有未上传的改动，已保留本机版本');
+        syncBadge();
+        return;
+      }
       var changed = Array.isArray(raw) ? hwApply(raw) : false;
       if(!changed) toast('已是最新作业');
       syncBadge();
@@ -1427,7 +1646,7 @@
   };
 
   BIG.hwExport = function (){
-    if(!adminOk()){ toast('仅管理员可导出', true); return; }
+    if(!canEdit()){ toast('当前不可导出', true); return; }
     var list = hwList();
     if(!list.length){ toast('暂无可导出的作业', true); return; }
     var t = $('bhwIoTitle'); if(t) t.textContent = '导出作业';
@@ -1514,7 +1733,7 @@
   }
 
   BIG.hwImport = function (){
-    if(!adminOk()){ toast('仅管理员可导入', true); return; }
+    if(!canEdit()){ toast('当前不可导入', true); return; }
     var t = $('bhwIoTitle'); if(t) t.textContent = '导入作业';
     var tip = $('bhwIoTip');
     if(tip) tip.textContent = '选择此前导出的 JSON 文件，或粘贴文件内容。导入后自动同步至云端；失败时暂存本机，联网后自动补传。';
@@ -2790,6 +3009,8 @@
 
   function pollAlerts(){
     if(!BIG.on) return;
+    /* v4.7.1：离线就直接跳过这一轮（12 秒一次的空请求在一体机上纯属浪费） */
+    try{ if(navigator.onLine === false) return; }catch(e){}
     try{
       if(typeof api !== 'function') return;
       api('/content').then(function (j){
@@ -2800,7 +3021,9 @@
         try{
           var hwRaw = it.holiday_homeworks;
           if(typeof hwRaw === 'string'){ try{ hwRaw = JSON.parse(hwRaw); }catch(e){ hwRaw = null; } }
-          if(Array.isArray(hwRaw) && !hwBusy()) hwApply(hwRaw);
+          /* v4.7.1：本机还有没上传的改动时同样不覆盖 —— 班级电脑离线改的作业，
+             不能因为它一联网就被云端旧版冲掉。要覆盖得由人点「放弃」或「上传」。 */
+          if(Array.isArray(hwRaw) && !hwBusy() && !hwLocalPending()) hwApply(hwRaw);
         }catch(e){}
         var raw = it.popups;
         if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = []; } }

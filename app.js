@@ -4261,6 +4261,17 @@ function api(path, opts){
   var init = { method: opts.method || 'GET', headers: headers };
   if(opts.body !== undefined) init.body = JSON.stringify(opts.body);
 
+  /* 🚀 v4.7.1（站主第 1 条）：班级电脑大部分时间没网。
+     浏览器的「断网」状态是确定的（navigator.onLine === false 基本不会误报），
+     这种情况下再去 fetch，会先等 DNS 超时（真机实测 8～20 秒）才失败 ——
+     点作业、点同步、点登录都像卡死了。这里直接快速失败，
+     调用方拿到 offline 标记可以立刻改走本机缓存。 */
+  if(typeof navigator !== 'undefined' && navigator.onLine === false){
+    var offErr = new Error('当前设备离线，先用本机缓存。');
+    offErr.offline = true;
+    return Promise.reject(offErr);
+  }
+
   return fetch(apiUrl(path), init).then(function(r){
     return r.json().catch(function(){ return { ok:false, error:'接口返回了非 JSON 内容（HTTP ' + r.status + '）' }; })
       .then(function(j){
@@ -6018,6 +6029,12 @@ function doLogin(){
   var u = val('acctU'), p = val('acctP');
   if(!u || !p){ acctMsg('请填写用户名和密码', 'err'); return; }
   if(!capPassed()){ acctMsg('请先输入图中的验证码', 'err'); return; }
+
+  /* v4.7.1（站主第 1 条）：离线时直接说清楚，别让「登录中…」转十几秒才报错 */
+  if(typeof navigator !== 'undefined' && navigator.onLine === false){
+    acctMsg('这台设备当前没有网络，无法登录。本站已缓存的内容仍可正常查看；联网后再登录即可同步。', 'err');
+    return;
+  }
 
   acctBusy(true, '登录中…');
   /* v2.9.9：优先浏览器本地派生 credential（服务端零派生，根治改密超时）；

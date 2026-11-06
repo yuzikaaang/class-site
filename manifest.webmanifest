@@ -5,9 +5,10 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "any",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
   "background_color": "#0b1220",
   "theme_color": "#0b1220",
-  "orientation": "portrait",
   "icons": [
     {
       "src": "./icon-512.png",
@@ -20,6 +21,28 @@
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "大屏模式",
+      "short_name": "大屏",
+      "description": "直接进入大屏模式（图标墙 / 作业看板）",
+      "url": "./index.html?big=1",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "作业看板",
+      "short_name": "作业",
+      "description": "直接打开大屏作业看板",
+      "url": "./index.html?big=1#/hw",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }
