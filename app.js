@@ -9574,6 +9574,14 @@ function islandBoot(){
   if(!apiReady()) return;
   api('/island').then(function(j){
     ISLAND = (j && j.data) || null;
+    /* v4.7.3：拿到学期开始日就落一份本机缓存 —— 时钟页是独立页面、不联网，
+       自己算不出「第几周」。放在这里而不是 islandWeekNo() 里，是因为首页
+       不一定渲染班级岛卡片（那几处才调 islandWeekNo）。 */
+    try{
+      if(ISLAND && ISLAND.startDate){
+        localStorage.setItem('cls_week_cache', JSON.stringify({ start: ISLAND.startDate }));
+      }
+    }catch(e){}
     islandRender();
     if(ISLAND && ISLAND.on && !ISLAND_TICK){
       ISLAND_TICK = setInterval(islandTick, 30000);
