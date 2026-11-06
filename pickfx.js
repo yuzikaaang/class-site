@@ -1,6 +1,19 @@
 /* ============================================================================
- * pickfx.js —— 随机点名抽取动画（v4.6.0）
+ * pickfx.js —— 随机点名抽取动画（v4.7.0）
  * ----------------------------------------------------------------------------
+ * v4.7.0 站主第 5 条（宝箱收尾）：
+ *   「到最后怎么又突然加快又跳了一下？我的意思不是慢慢减直接减到零，
+ *    如果它是两个卡片中间你就算面积，那你为什么还要再跳一下？」
+ *   「揭示的时候为什么还是要再点一下才显示名字？盲盒改了这里为什么不改？」
+ *   「不隐藏名字的话就更刺激一点：随机往后跳或往前跳或者不动，都有可能。」
+ * 落地：
+ *   · 减速曲线换成单段单调曲线，不再「先归零再猛冲」—— 之前 86% 处速度归零、
+ *     后 14% 又从 0 加速到顶峰，观感就是「突然加快再一顿」。
+ *   · 落点精确居中，落点后不再位移；中奖卡只用光圈高亮，不缩放（缩放 = 跳一下）。
+ *   · 停下即自动揭示姓名，两种模式都不需要第二次点击。
+ *   · 不隐藏姓名时，停稳后额外随机前后跳 0 / ±1 / ±2 格再落回中奖卡（纯气氛）；
+ *     隐藏姓名时不做这个位移 —— 反正看不见是谁，跳了只是莫名其妙。
+ *
  * 站主原话（2026-11-06）：
  *   「盲盒数量是根据范围人数定的，最多 10 个。我选择抽几个，就点几次盲盒。
  *    不可能没中，点到的都是中的。抽到谁是我点那个盲盒之后，在范围里随机选一个人，
@@ -360,11 +373,13 @@
     return '<span class="pfx-tn">' + esc(it.name) + (it.no ? '<i>' + two(it.no) + '</i>' : '') + '</span>';
   }
 
-  /* 转盘减速曲线：前 86% 的时间走 90% 路程（较快），后 14% 走 10%（极慢）。 */
+  /* 转盘减速曲线（v4.7.0）：单段、单调、终点速度归零。
+     旧版是两段拼接 —— 前段 easeOut 到 86% 时速度已经掉到 0，后段又从 0 起速，
+     于是「快→停→猛地一冲→再停」，站主看到的就是「突然加快又跳一下」。
+     这里用 1-(1-p)^3.4：起步快、一路减速、到 p=1 时速度为 0，全程没有二次加速。 */
   function easeCase(p) {
-    if (p < 0.86) return (1 - Math.pow(1 - p / 0.86, 3)) * 0.90;
-    var q = (p - 0.86) / 0.14;
-    return 0.90 + (1 - Math.pow(1 - q, 5)) * 0.10;
+    if (p >= 1) return 1;
+    return 1 - Math.pow(1 - p, 3.4);
   }
 
   function caseCtl(root, need, pool, opts) {
@@ -375,7 +390,7 @@
     var cntEl = root.querySelector('.pfx-cnt');
     var hide = !!opts.hide;
     var used = {}, picked = [], round = 0;
-    var iw = 104, pitch = 112;
+    var iw = 104, pitch = 112, curX = 0;
 
     function drawOne() {
       var cand = pool.filter(function (it) { return !used[it.name]; });
@@ -383,6 +398,37 @@
       var it = cand[(Math.random() * cand.length) | 0];
       used[it.name] = 1;
       return it;
+    }
+
+    /* 绝对位移（px），全程自己管，不依赖 CSS transition */
+    function moveTo(x, ms, ease, done) {
+      var from = curX;
+      if (ms <= 0) { curX = x; reel.style.transform = 'translate3d(' + (-x) + 'px,0,0)'; if (done) done(); return; }
+      var t0 = performance.now();
+      (function step(now) {
+        if (!S || S.ending) return;
+        var p = Math.min(1, (now - t0) / ms);
+        var k = ease ? ease(p) : p;
+        curX = from + (x - from) * k;
+        reel.style.transform = 'translate3d(' + (-curX) + 'px,0,0)';
+        if (p < 1) raf(step);
+        else if (done) done();
+      })(t0);
+    }
+
+    /* 把第 k 张卡摆到方框正中需要的位移 */
+    function centerOf(k) {
+      var el = reel.children[k];
+      if (!el) return 0;
+      return Math.max(0, el.offsetLeft + el.offsetWidth / 2 - strip.clientWidth / 2);
+    }
+
+    /* 气氛用的小跳：往前 / 往后各 1 格，或者原地不动（隐藏姓名时不用）。
+       站主要求「任何一点点就行」，所以只偏 1 格，不做 ±2 —— 偏太多像滑过头。
+       0 出现两次：让「以为要停」这件事有时真的就停住，才有猜不透的感觉。 */
+    function teaseStep() {
+      var poolT = [0, 0, 1, -1, 1];
+      return poolT[(Math.random() * poolT.length) | 0];
     }
 
     function spin() {
@@ -393,7 +439,8 @@
       picked.push(win);
 
       var M = isLite() ? 16 : 24;
-      var at = M - 6;
+      /* 中奖卡放在偏后位置：左右都要留出「小跳」的余量，否则位移会撞到两端 */
+      var at = Math.max(4, M - 9);
       var tiles = [];
       for (var k = 0; k < M; k++) tiles.push(pool[(Math.random() * pool.length) | 0]);
       tiles[at] = win;
@@ -401,6 +448,7 @@
       reel.style.transition = 'none';
       reel.style.transform = 'translate3d(0,0,0)';
       reel.innerHTML = tiles.map(tileHtml(hide)).join('');
+      curX = 0;
 
       /* ⚠️ 必须用 offsetWidth / offsetLeft，不能用 getBoundingClientRect ——
          舞台入场有 0.3s 的 scale 动画，rect 拿到的是「缩放后」的尺寸，
@@ -408,33 +456,38 @@
       var a = reel.children[0], b = reel.children[1];
       if (a) iw = a.offsetWidth || 104;
       pitch = (a && b) ? (b.offsetLeft - a.offsetLeft) : iw + 8;
-      var wrapW = strip.clientWidth;
 
-      /* 目标卡停在方框中心附近（±0.22 格），保证它和方框的重叠面积最大；
-         偏差留一点，视觉上像「差点滑过去」，判定仍归目标卡。 */
-      var jitter = (Math.random() * 2 - 1) * pitch * 0.22;
-      var target = Math.max(0, at * pitch + iw / 2 - wrapW / 2 + jitter);
+      /* 落点精确居中 —— 不再留 ±0.22 格的抖动偏差。
+         以前那个偏差让卡片停得歪一点、再靠 .win 缩放「吸」回来，
+         看起来就是「明明停了又跳一下」。现在停哪就是哪。 */
+      var winX = centerOf(at);
+      var maxX = Math.max(0, reel.scrollWidth - strip.clientWidth);
+      var tease = hide ? 0 : teaseStep();
+      var landX = Math.min(maxX, Math.max(0, winX + tease * pitch));
+      /* 撞到端点时放弃这次小跳，保证落点仍然在中奖卡上 */
+      if (Math.abs(landX - winX) < 1) landX = winX;
 
-      var dur = (round === 0 ? 3000 : 1700);
-      if (isLite()) dur = Math.round(dur * 0.8);
+      var dur = (round === 0 ? 2900 : 1600);
+      if (isLite()) dur = Math.round(dur * 0.82);
       if (reduced()) dur = 600;
       var t0 = performance.now(), lastPx = 0;
 
       (function step(now) {
         if (!S || S.ending) return;
         var p = Math.min(1, (now - t0) / dur);
-        var x = target * easeCase(p);
+        var x = landX * easeCase(p);
+        curX = x;
         reel.style.transform = 'translate3d(' + (-x) + 'px,0,0)';
         if (x - lastPx >= pitch * 0.9) { lastPx = x; tick(); }
         if (p < 1) raf(step);
-        else settle();
+        else settle(winX);
       })(t0);
       round++;
     }
 
-    function settle() {
+    /* 停下之后：隐藏姓名 → 立刻按面积判定中奖卡；不隐藏姓名 → 先「诈」一下再落回 */
+    function settle(winX) {
       var win = picked[picked.length - 1];
-      /* 面积最大判定：遍历所有卡片与固定方框的水平重叠宽度，取最大者 */
       var best = -1, bestArea = 0;
       if (frame) {
         var fr = frame.getBoundingClientRect();
@@ -444,29 +497,69 @@
           if (ov > bestArea) { bestArea = ov; best = k; }
         }
       }
+      if (best < 0) best = 0;
       var cell = reel.children[best];
       if (!cell) { later(spin, 500); return; }
-      cell.classList.add('win');
-      burst(); chime();
-      setFlare(root, win, hide ? '即将揭示姓名' : '');
-      /* 隐藏姓名：0.8 秒后自动在卡片上淡出姓名（单次点击，无第二次）。
-         姓名出现的同时让全屏泛色退去 —— 否则浓色盖住方框，名字看不清。 */
-      if (hide) {
+
+      /* 不隐藏姓名：如果这次落点故意偏了，停 0.35 秒「以为要停」→ 再滑回中奖卡。
+         隐藏姓名不玩这手 —— 反正看不见是谁，多跳一次只会让人莫名其妙。 */
+      var back = Math.abs(curX - winX) > 1;
+      if (back) {
+        burst();
         later(function () {
           if (!S || S.ending) return;
-          cell.innerHTML = nameOf(win);
-          cell.classList.add('revealed');
-          clearFlare(root);
-        }, 800);
+          moveTo(winX, 260, function (p) { return 1 - Math.pow(1 - p, 2); }, function () { revealWin(); });
+        }, 360);
+      } else {
+        revealWin();
       }
-      wins.insertAdjacentHTML('beforeend',
-        '<span class="pfx-win" style="--pc:' + swatch(win.no).c + '">' + esc(win.name) + '</span>');
-      if (cntEl) cntEl.textContent = String(picked.length);
-      later(function () {
+
+      function revealWin() {
         if (!S || S.ending) return;
-        clearFlare(root);
-        later(spin, 320);
-      }, hide ? 1500 : 950);
+        /* 落回后重新按面积确认一次（理论上仍是同一张，兜住亚像素误差） */
+        var c2 = cell;
+        if (frame) {
+          var f2 = frame.getBoundingClientRect(), bb = -1, ba = 0;
+          for (var j = 0; j < reel.children.length; j++) {
+            var rr = reel.children[j].getBoundingClientRect();
+            var ov2 = Math.min(rr.right, f2.right) - Math.max(rr.left, f2.left);
+            if (ov2 > ba) { ba = ov2; bb = j; }
+          }
+          if (bb >= 0 && reel.children[bb]) c2 = reel.children[bb];
+        }
+        /* 中奖卡上写「姓名 + 学号」：卡本身已经带学号段颜色，
+           再写一段「31–40」纯属重复，站主也嫌丑。 */
+        burst(); chime();
+        if (!hide) {
+          /* 不隐藏姓名：卡片上本来就写着名字，停下即是结果，不再等 */
+          c2.innerHTML = nameOf(win);
+          c2.classList.remove('is-color');
+          c2.classList.add('win', 'revealed');
+          wins.insertAdjacentHTML('beforeend',
+            '<span class="pfx-win" style="--pc:' + swatch(win.no).c + '">' + esc(win.name) + '</span>');
+        } else {
+          /* 隐藏姓名：先只点亮中奖卡 + 满屏打出学号段（0.9 秒），再把姓名顶上来。
+             站主要的就是「先看到段，再看到人」，且全程不用点第二次。 */
+          c2.classList.add('win');
+          setFlare(root, win, '即将揭示姓名');
+          later(function () {
+            if (!S || S.ending) return;
+            c2.innerHTML = nameOf(win);
+            c2.classList.remove('is-color');
+            c2.classList.add('revealed');
+            clearFlare(root);
+            chime();
+            wins.insertAdjacentHTML('beforeend',
+              '<span class="pfx-win" style="--pc:' + swatch(win.no).c + '">' + esc(win.name) + '</span>');
+          }, 900);
+        }
+        if (cntEl) cntEl.textContent = String(picked.length);
+        later(function () {
+          if (!S || S.ending) return;
+          clearFlare(root);
+          later(spin, 300);
+        }, hide ? 2100 : 1400);
+      }
     }
 
     return {
@@ -497,7 +590,7 @@
       body = '<div class="pfx-case">'
         + '<div class="pfx-case-hd">'
         +   '<span>已开启 <b class="pfx-cnt">0</b> / ' + need + '</span>'
-        +   '<span class="pfx-case-hint">' + (opts.hide ? '抽取中隐藏姓名，停止后显示' : '抽取中显示姓名') + '</span>'
+        +   '<span class="pfx-case-hint">' + (opts.hide ? '抽取中隐藏姓名，停下自动显示' : '抽取中显示姓名，停下自动揭示') + '</span>'
         + '</div>'
         + '<div class="pfx-strip"><div class="pfx-strip-in"><div class="pfx-reel"></div></div>'
         +   '<span class="pfx-frame"></span><span class="pfx-mask l"></span><span class="pfx-mask r"></span>'
@@ -595,7 +688,7 @@
     var gridN = (mode === 'box') ? Math.min(10, pool.length) : need;
 
     var root = document.createElement('div');
-    root.className = 'pfx';
+    root.className = 'pfx' + (mode === 'case' ? ' case-mode' : '');
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-label', titleOf(mode));
     root.innerHTML = shell(mode, gridN, need, opts);

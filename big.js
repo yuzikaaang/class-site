@@ -101,13 +101,17 @@
       buildHome();
       /* 从普通模式切过来时，当前可能停在某个板块 —— 回大屏首页最直观 */
       try{ goHomeView(); }catch(e){}
+      /* v4.7.0：切进大屏才开始「班级提醒 + 作业」轮询（以前只在开机时为真） */
+      try{ BIG.startAlerts(); }catch(e){}
       toast('大屏模式已开启');
     }else{
       BIG.closeHw();
+      try{ BIG.stopAlerts(); }catch(e){}
       try{ goHomeView(); }catch(e){}
       toast('已切回普通模式');
     }
     try{ renderSettings(); }catch(e){}
+    try{ if(typeof refreshQuick === 'function') refreshQuick(); }catch(e){}
   };
 
   /* ---------------- 图标墙 ---------------- */
@@ -656,7 +660,9 @@
               + esc0(x.title || '未命名') + '</option>';
           }).join('')
         + '</select>';
-      act.innerHTML = '<span class="bhw-sync" id="bhwSync"></span>'
+      act.innerHTML = '<span class="bhw-sync" id="bhwSync" role="button" tabindex="0"'
+        + ' title="点击立即从云端刷新作业" onclick="BIG.hwRefreshNow()"'
+        + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();BIG.hwRefreshNow();}"></span>'
         + sel
         + (admin && hw ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwRename()">重命名</button>' : '')
         + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwExport()" title="导出作业文件">导出</button>' : '')
@@ -729,6 +735,8 @@
 
     renderSide();
     scheduleLayout();
+    /* v4.7.0：记下「屏幕上这一份」是什么样，下一次轮询拿它做基准比差异 */
+    try{ BIG.hwPrevData = hwList(); BIG.hwPrev = JSON.stringify(BIG.hwPrevData || []); }catch(e){}
   };
 
   /* —— 卡片排布（v4.1.0）——
@@ -1053,6 +1061,9 @@
   function persist(){
     if(!adminOk()) return;
     var list = hwList();
+    /* v4.7.0：本机刚存下的这份就是「屏幕上这一份」，把比对基准一起推平 ——
+       否则 12 秒后的轮询会把自己刚打的字当成「手机端改的」标黄一遍。 */
+    try{ BIG.hwPrevData = list; BIG.hwPrev = JSON.stringify(list || []); }catch(e){}
     try{
       if(typeof saveContentLocal === 'function') saveContentLocal('holiday_homeworks', list);
     }catch(e){}
@@ -1279,6 +1290,120 @@
     window.addEventListener('online', function (){ syncBadge(); });
     window.addEventListener('offline', function (){ syncBadge(); });
   }catch(e){}
+
+  /* ================= 作业实时同步（v4.7.0 · 站主第 3 条）=================
+     站主原话：「我在手机上新增 / 修改了作业，大屏不会自动刷新，除非退出重进。
+                 ClassWorks 是手机上发完，大屏直接实时同步，还会把改动的地方高亮。」
+     做法（轮询，不做 WebSocket —— 无服务器、断网也能退化成缓存，够用）：
+       · 大屏模式本来每 20 秒就要拉一次 /api/content 看班级提醒，顺手把作业也一起比；
+       · 比对的是「上一次画到屏幕上的那份」，不是 SITE_DATA —— 否则 app.js 先在后台
+         把 SITE_DATA 更新了，这里再比就永远相等，大屏永远不重绘；
+       · 差异里的新增/改动作业项加 .bhw-flash 标黄 5 秒，让人一眼看到改在哪；
+       · 「已同步」角标可以点，点一下立刻强制拉一次（站主要求的手动刷新）。 */
+  BIG.hwPrev = '';
+  BIG.hwPrevData = null;
+  BIG.hwFlash = null;
+
+  /* 正在编辑 / 有未上传改动 → 暂停用云端覆盖本机作业 */
+  function hwBusy(){
+    try{ if(typeof hasPendingContentSync === 'function' && hasPendingContentSync()) return true; }catch(e){}
+    var ae = document.activeElement;
+    if(!ae) return false;
+    if(!/^(INPUT|TEXTAREA|SELECT)$/.test(String(ae.tagName || '').toUpperCase())) return false;
+    var host = $('bigHw');
+    return !!(host && host.contains(ae));
+  }
+
+  function hwNow(){
+    var arr = hwList();
+    return Array.isArray(arr) ? arr : [];
+  }
+  function hwDiff(prev, next){
+    var out = { tasks: {}, subs: {}, subNames: {}, added: 0, changed: 0 };
+    prev = Array.isArray(prev) ? prev : [];
+    var pm = {};
+    prev.forEach(function (p){ if(p && p.id != null) pm[String(p.id)] = p; });
+    next.forEach(function (p){
+      if(!p) return;
+      var pid = String(p.id);
+      var old = pm[pid];
+      if(!old){ out.added++; out.subNames[String(p.title || '')] = 1; return; }
+      var om = {};
+      (old.items || []).forEach(function (it){ om[String(it.subject || '')] = it; });
+      (p.items || []).forEach(function (it){
+        var sn = String(it.subject || ''), oi = om[sn];
+        if(!oi){ out.subs[pid + '|' + sn] = 1; out.subNames[sn] = 1; out.changed++; return; }
+        var ot = {};
+        (oi.tasks || []).forEach(function (t){ ot[String((t && t.text) || '')] = 1; });
+        (it.tasks || []).forEach(function (t, ti){
+          var s = String((t && t.text) || '');
+          if(s && !ot[s]){ out.tasks[s] = 1; out.subNames[sn] = 1; out.changed++; }
+          /* 同一位置换了内容（改字）也算改动：旧文本里有、新文本里没有的就已覆盖，
+             这里再兜一次「位置上原本有东西、现在不一样」 */
+          var oldT = (oi.tasks || [])[ti];
+          var oldS = String((oldT && oldT.text) || '');
+          if(oldS && s && oldS !== s){ out.tasks[s] = 1; out.subNames[sn] = 1; }
+        });
+      });
+    });
+    return out;
+  }
+  /* 把一份云端作业套到界面上；返回是否发生了变化 */
+  function hwApply(raw, opts){
+    opts = opts || {};
+    if(!Array.isArray(raw)) return false;
+    var nowStr = JSON.stringify(raw);
+    if(BIG.hwPrev === nowStr) return false;
+    var prevData = Array.isArray(BIG.hwPrevData) ? BIG.hwPrevData : hwNow();
+    var diff = hwDiff(prevData, raw);
+    try{ if(typeof applyCloudContent === 'function') applyCloudContent({ holiday_homeworks: raw }); }catch(e){}
+    try{ if(typeof contentCacheSet === 'function') contentCacheSet({ holiday_homeworks: raw }); }catch(e){}
+    BIG.hwFlash = diff;
+    BIG.hwPrev = nowStr;
+    BIG.hwPrevData = raw;
+    if(BIG.hwOn) BIG.renderHw();
+    try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
+    if(BIG.hwOn) hwFlashPaint();
+    return true;
+  }
+  function hwFlashPaint(){
+    var f = BIG.hwFlash;
+    if(!f) return;
+    var n = 0;
+    var rows = document.querySelectorAll('#bigHw .bhw-task');
+    for(var i = 0; i < rows.length; i++){
+      var el = rows[i];
+      var txt = el.querySelector('.bhw-txt');
+      var ta = el.querySelector('textarea');
+      var s = txt ? String(txt.textContent || '') : (ta ? String(ta.value || '') : '');
+      if(s && f.tasks[s]){ el.classList.add('bhw-flash'); n++; }
+    }
+    var cards = document.querySelectorAll('#bigHw .bhw-subj');
+    for(var j = 0; j < cards.length; j++){
+      var h = cards[j].querySelector('.bhw-subj-h b') || cards[j].querySelector('.bhw-subj-h input');
+      var nm = h ? String(h.value || h.textContent || '').trim() : '';
+      if(nm && f.subNames[nm]){ cards[j].classList.add('bhw-flash-card'); n++; }
+    }
+    if(n) toast(f.added ? '手机端刚更新了作业' : '作业有改动，已标出来');
+    setTimeout(function (){
+      var a = document.querySelectorAll('#bigHw .bhw-flash,#bigHw .bhw-flash-card');
+      for(var k = 0; k < a.length; k++) a[k].classList.remove('bhw-flash', 'bhw-flash-card');
+    }, 5000);
+  }
+  /* 「已同步」角标点一下 = 立刻拉一次云端并重画 */
+  BIG.hwRefreshNow = function (){
+    var el = $('bhwSync');
+    if(el){ el.className = 'bhw-sync busy'; el.innerHTML = '<i></i>刷新中'; }
+    if(typeof api !== 'function'){ syncBadge(); return; }
+    api('/content').then(function (j){
+      var it = (j && j.items) || {};
+      var raw = it.holiday_homeworks;
+      if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = null; } }
+      var changed = Array.isArray(raw) ? hwApply(raw) : false;
+      if(!changed) toast('已是最新作业');
+      syncBadge();
+    }).catch(function (){ toast('刷新失败，请检查网络', true); syncBadge(); });
+  };
 
   function stampText(){
     var d = new Date();
@@ -1532,11 +1657,43 @@
 
   var F_DEF = { role: ['学生'], gender: '', sidMin: '', sidMax: '', examId: '', metric: '', subj: '', min: '', max: '' };
 
+  /* v4.7.0（站主第 2 条）：名单设置改成云端共享。
+     原话：「不参与名单是可以上传的，云端同步哪个不参与哪个参与的，
+            省得我每次换设备都要重新填一次」。
+     所以真源变成云端内容键 pick_exclude（{ 姓名: 'leave' | 'out' }）：
+       · 管理员改一次就推云端，任何设备打开都拿到同一份；
+       · 没登录 / 普通同学只能改本机（权限跟「上传云端」保持一致）；
+       · 云端还没这份数据时，用本机旧名单兜底，并且管理员登录后自动补传。 */
+  function exClean(o){
+    var out = {};
+    if(!o || typeof o !== 'object' || Array.isArray(o)) return out;
+    Object.keys(o).forEach(function (k){
+      var v = o[k];
+      if((v === 'leave' || v === 'out') && String(k).trim()) out[String(k)] = v;
+    });
+    return out;
+  }
   function loadEx(){
-    try{ return JSON.parse(localStorage.getItem(EX_KEY) || '{}') || {}; }catch(e){ return {}; }
+    var d = data(), cloud = d && d.pickExclude;
+    if(cloud && typeof cloud === 'object' && !Array.isArray(cloud)){
+      var o = exClean(cloud);
+      try{ localStorage.setItem(EX_KEY, JSON.stringify(o)); }catch(e){}
+      return o;
+    }
+    var local = {};
+    try{ local = exClean(JSON.parse(localStorage.getItem(EX_KEY) || '{}')); }catch(e){ local = {}; }
+    if(Object.keys(local).length && adminOk() && typeof pushCloudContent === 'function'){
+      pushCloudContent({ pick_exclude: local }, true);
+    }
+    return local;
   }
   function saveEx(o){
-    try{ localStorage.setItem(EX_KEY, JSON.stringify(o)); }catch(e){}
+    var clean = exClean(o);
+    try{ localStorage.setItem(EX_KEY, JSON.stringify(clean)); }catch(e){}
+    try{ var d = data(); if(d) d.pickExclude = clean; }catch(e){}
+    try{
+      if(typeof pushCloudContent === 'function' && adminOk()) pushCloudContent({ pick_exclude: clean }, true);
+    }catch(e){}
   }
 
   /* ---------------- 抽取历史（v4.4.0 站主第 4 条） ----------------
@@ -1547,15 +1704,33 @@
      合并：本机 ∪ 云端，按 id 去重、时间倒序。这样换设备也能看到别人抽过的记录。 */
   var PH_KEY = 'cls_pick_hist';
   var PH_MAX = 300;
+  /* v4.7.0（站主第 1 条）：「抽取历史里经常删不掉一些记录」。
+     根因：删记录只改了本机数组，云端那份还在 SITE_DATA.pickHistory 里，
+     下一次 phMerge() 又把云端那份并回来 —— 列表看着原地复活。
+     解法：删过的人落一个「墓碑」id，phMerge 见到墓碑直接跳过；
+     同时把 SITE_DATA 里那份也改掉，任何一次内容上传都不会把旧的又推上去。 */
+  var PH_DEL_KEY = 'cls_pick_hist_del';
+  function phTomb(){
+    var a = [];
+    try{ a = JSON.parse(localStorage.getItem(PH_DEL_KEY) || '[]'); }catch(e){ a = []; }
+    return Array.isArray(a) ? a : [];
+  }
+  function phTombAdd(id){
+    var a = phTomb();
+    if(a.indexOf(id) < 0){ a.push(id); }
+    try{ localStorage.setItem(PH_DEL_KEY, JSON.stringify(a.slice(-600))); }catch(e){}
+  }
   function phLocal(){
     var a = [];
     try{ a = JSON.parse(localStorage.getItem(PH_KEY) || '[]'); }catch(e){ a = []; }
     return Array.isArray(a) ? a : [];
   }
   function phMerge(){
-    var map = {}, out = [];
+    var map = {}, out = [], dead = {};
+    phTomb().forEach(function (id){ dead[String(id)] = 1; });
     function add(x){
       if(!x || !x.id || map[x.id]) return;
+      if(dead[String(x.id)]) return;
       map[x.id] = 1;
       out.push({
         id: String(x.id),
@@ -1576,6 +1751,9 @@
   }
   function phSave(list, push){
     try{ localStorage.setItem(PH_KEY, JSON.stringify(list)); }catch(e){}
+    /* v4.7.0：本机就是「当前这份历史」的真源。不同步回 SITE_DATA 的话，
+       下一次别处触发的整包内容上传会拿旧的 SITE_DATA 把删掉的记录又推回云端。 */
+    try{ var d = data(); if(d && Array.isArray(list)) d.pickHistory = list; }catch(e){}
     if(push === false) return;
     /* 没登录 / 不是管理员就只落本机，等下次有人登管理员再说（列表本身会一起带上） */
     try{
@@ -1624,9 +1802,16 @@
   };
   BIG.pickHistDel = function (id){
     if(!confirm('删除该条抽取记录？删除后无法恢复。')) return;
-    var list = phMerge().filter(function (x){ return x.id !== id; });
+    var key = String(id);
+    /* ① 落墓碑（防止云端那份在下次合并时复活）
+       ② 从本机与 SITE_DATA 里同时摘掉
+       ③ 立刻推云端；推不上去也不要紧，墓碑会一直挡着 */
+    phTombAdd(key);
+    var list = phMerge().filter(function (x){ return String(x.id) !== key; });
     phSave(list);
+    if(BIG.pick.rec && String(BIG.pick.rec.id) === key) BIG.pick.rec = null;
     BIG.pickBody();
+    toast('已删除这条记录');
   };
 
   function loadF(){
@@ -2460,7 +2645,8 @@
       return a.name.localeCompare(b.name, 'zh-Hans-CN');
     });
     return '<div class="bpick-ex">'
-      + '<p class="bpick-ex-tip">点名字切换：不参与 / 请假。名单只记在这台电脑上。</p>'
+      + '<p class="bpick-ex-tip">点名字切换：不参与 / 请假。'
+      + (adminOk() ? '名单已同步云端，换设备不用重填。' : '当前未登录管理员，改动只存本机。') + '</p>'
       + '<div class="bpick-ex-list">'
       + arr.map(function (st){
           var k = p.ex[st.name] || '';
@@ -2495,7 +2681,9 @@
        · 大屏这边每 20 秒拉一次 /api/content，看到**新出现**的弹窗就整屏弹出来；
        · 只弹 24 小时内创建、在时间窗内、且投放对象命中本机的；
        · 老数据没有 createdAt → 直接标记为「已看过」，不会开机把历史消息全弹一遍。 */
-  var ALERT_POLL = 20000;
+  /* v4.7.0：从 20 秒提到 12 秒 —— 站主要「手机上刚发完，大屏就到」。
+     请求还是原来那一个 /api/content，只是同一份响应里多解析一个作业键。 */
+  var ALERT_POLL = 12000;
   BIG.alertSeen = {};
   BIG.alertT = null;
   BIG.alertQueue = [];
@@ -2606,6 +2794,14 @@
       if(typeof api !== 'function') return;
       api('/content').then(function (j){
         var it = (j && j.items) || {};
+        /* v4.7.0：一次请求两件事 —— 班级提醒 + 作业增量。省一次跨域往返。
+           ⚠️ 正在大屏上编辑作业、或本机还有没推上去的改动时，一律不覆盖 ——
+           否则 12 秒后一轮轮询会把刚打的字刷回旧版本。 */
+        try{
+          var hwRaw = it.holiday_homeworks;
+          if(typeof hwRaw === 'string'){ try{ hwRaw = JSON.parse(hwRaw); }catch(e){ hwRaw = null; } }
+          if(Array.isArray(hwRaw) && !hwBusy()) hwApply(hwRaw);
+        }catch(e){}
         var raw = it.popups;
         if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = []; } }
         if(!Array.isArray(raw)) return;
@@ -2710,6 +2906,8 @@
     applyFont();
     buildHome();
     if(BIG.on) BIG.startAlerts();
+    try{ if(typeof refreshQuick === 'function') refreshQuick(); }catch(e){}
+    try{ if(typeof refreshAdminEntry === 'function') refreshAdminEntry(); }catch(e){}
     var pi = $('bhwPickIco');
     if(pi) pi.innerHTML = ico('dices', 20);
     if(!BIG.on) return;

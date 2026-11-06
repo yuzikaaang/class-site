@@ -188,6 +188,19 @@ body::after{box-shadow:none}
 .side-btn{display:block;width:100%;text-align:left;background:#f6f1ec;color:#af410f;border:none;border-radius:12px;transition:background var(--t-base) var(--ease-out),transform var(--t-base) var(--ease-out);padding:11px 14px;font-size:.9rem;font-weight:600;cursor:pointer;margin-bottom:8px;transition:.2s}
 .side-btn:hover{background:#ede3d9}
 .side-btn.active{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;box-shadow:var(--sh-accent)}
+/* ===== 首屏快捷开关（v4.7.0）=====
+   大屏 / 横屏 / 轻量 三个开关并排一行。站主要求「不要藏在自定义设置里」——
+   藏起来的代价是点三四次才到，低配机器每一次点击都是实打实的卡顿。 */
+.side-quick{display:flex;gap:6px;margin:0 0 8px}
+.side-btn.qk{
+  flex:1;min-width:0;text-align:center;padding:9px 4px;margin:0;
+  font-size:.78rem;font-weight:700;letter-spacing:.01em;white-space:nowrap;border-radius:11px;
+  background:#eee3d8;color:#8a3b12;box-shadow:inset 0 0 0 1px rgba(120,53,15,.08);
+}
+.side-btn.qk:hover{background:#e6d8ca}
+.dark .side-btn.qk{background:#3a332e;color:#e7c9a8;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.dark .side-btn.qk:hover{background:#453d37}
+.side-btn.qk[data-on="1"]{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;box-shadow:var(--sh-accent)}
 .sidebar-mask{display:none}
 /* ===== 横屏切换（v3.5.39，v3.5.40 修方向与「重进卡住」） =====
    手机竖着拿、但用户点了「横屏查看」→ 把整个 body 转 90° 塞进横屏尺寸里。
@@ -3894,7 +3907,10 @@ html.big-mode .sidebar{
 html.big-mode .sidebar .side-tip{display:none}
 html.big-mode #sideCats{display:flex;flex-wrap:wrap;gap:6px}
 html.big-mode .side-btn{margin:0!important;padding:9px 15px;font-size:.95rem;white-space:nowrap;width:auto!important}
-html.big-mode #landBtn,html.big-mode #sfxBtn{display:none}
+html.big-mode #sfxBtn{display:none}
+/* v4.7.0：大屏模式下三个快捷开关也要在（横屏确实用不上，但别藏起来让人找） */
+html.big-mode .side-quick{flex:none;margin:0!important;order:9}
+html.big-mode .side-btn.qk{width:auto!important;padding:9px 11px!important;font-size:.85rem}
 html.big-mode #uiSetBtn{margin-left:auto!important}
 html.big-mode .fab{display:none}
 html.big-mode .sidebar-mask{display:none!important}
@@ -4408,6 +4424,17 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .bhw-sync.pend i{background:#fdba74}
 .bhw-sync.off{background:rgba(254,226,226,.2);border-color:rgba(252,165,165,.6)}
 .bhw-sync.off i{background:#fca5a5}
+/* v4.7.0：角标可点 = 立刻刷新（站主：「点一下那个已同步的地方，它就会自动刷新」） */
+.bhw-sync{cursor:pointer;user-select:none;transition:background .16s ease,transform .16s ease}
+.bhw-sync:hover{background:rgba(255,255,255,.3)}
+.bhw-sync:active{transform:scale(.94)}
+.bhw-sync:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bhw-sync.busy i{background:#fff;animation:bhwSpin .8s linear infinite}
+@keyframes bhwSpin{from{opacity:.25}to{opacity:1}}
+/* 手机端刚改过的作业项 / 科目卡片：标黄 5 秒，一眼看到改在哪 */
+.bhw-task.bhw-flash{background:rgba(250,204,21,.28);border-radius:8px;animation:bhwFlash 1.1s ease-in-out 3}
+.bhw-subj.bhw-flash-card{outline:2px solid rgba(250,204,21,.85);outline-offset:2px;animation:bhwFlash 1.1s ease-in-out 3}
+@keyframes bhwFlash{0%,100%{opacity:1}50%{opacity:.55}}
 
 /* —— 随机点名弹层 —— */
 /* v4.0.0：条件区（身份 / 性别 / 学号 / 成绩） */
@@ -4717,6 +4744,23 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
     radial-gradient(155% 140% at 50% 50%,var(--fc,transparent),transparent 84%);
 }
 .pfx-flare.on{opacity:1}
+/* v4.7.0：宝箱模式下按「面积」判定，中奖卡正好压在屏幕正中 —— 泛色层里的段文字
+   会被那张卡完全挡住（实测）。所以宝箱把提示文字挪到下方空白区，
+   盲盒仍然居中显示。 */
+/* v4.7.0：宝箱模式改用「底部一段色光」而不是满屏泛色 ——
+   满屏泛色会把中奖卡整块盖住（中奖卡正好在屏幕正中），而宝箱的高潮就是看那张卡。 */
+.pfx.case-mode .pfx-flare{
+  justify-content:flex-end;padding-bottom:5vh;
+  background:radial-gradient(58% 38% at 50% 94%,var(--fs,transparent),transparent 72%);
+}
+.pfx.case-mode .pfx-flare.on{opacity:.95}
+/* 浅色主题下白字落在浅色泛光上几乎看不见（实测）——宝箱的段提示改成实心色块胶囊 */
+.pfx.case-mode .pfx-flare-seg{
+  color:#fff;background:var(--fc,#7b8794);padding:9px 26px;border-radius:999px;
+  text-shadow:none;box-shadow:0 10px 26px rgba(0,0,0,.22);
+}
+.pfx.case-mode .pfx-flare-hint{color:#3f342c;text-shadow:none;opacity:.72}
+.dark .pfx.case-mode .pfx-flare-hint{color:#f5f5f4}
 .pfx-flare-seg{
   font-size:clamp(1.7rem,4.4vw,2.8rem);font-weight:900;letter-spacing:.1em;color:#fff;
   text-shadow:0 2px 18px var(--fs,transparent),0 0 34px var(--fc,transparent);
@@ -4735,6 +4779,14 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .pfx-b.glow .bx-glow{opacity:1;transform:scale(1.2)}
 .pfx-b.glow .bx-mark{opacity:.35;transition:opacity .2s ease}
 .pfx-b.glow .bx-name{opacity:0}
+/* v4.7.0：揭示姓名之后，盒身与光晕全部退场，只留一层以姓名为中心的小光晕 ——
+   否则姓名块下面压着「半透明盒子 + 一大团偏心的色斑」，远看像没画干净。 */
+.pfx-b.open .bx-glow{opacity:0}
+.pfx-b.open .bx-body{opacity:0}
+.pfx-b.open{
+  background:radial-gradient(circle at 50% 52%,var(--ps,transparent),transparent 66%);
+  border-radius:16px;
+}
 
 /* ---------- 宝箱：卡片纯色块（v4.6.0）----------
    隐藏姓名时卡片不写文字，只用学号段颜色 + 微光；学号段对照看顶部图例。
@@ -4769,8 +4821,16 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   background:radial-gradient(circle at 38% 32%,#fff,var(--ps) 44%,var(--pc) 80%);
   box-shadow:0 0 20px var(--ps),inset 0 -4px 10px rgba(0,0,0,.28);
 }
-.pfx-tile.win{z-index:3;animation:pfxWin .62s cubic-bezier(.2,1.4,.4,1) both;box-shadow:0 0 0 3px rgba(255,255,255,.92),0 0 34px var(--ps)}
-@keyframes pfxWin{0%{transform:scale(1)}45%{transform:scale(1.16)}100%{transform:scale(1.06)}}
+/* v4.7.0：中奖高亮只加光圈，**不加缩放** —— 缩放会被看成「停下之后又跳了一下」。
+   动画只动 box-shadow / 亮度，卡片本身位置分毫不动。 */
+.pfx-tile.win{z-index:3;animation:pfxWinGlow .9s ease-out both}
+@keyframes pfxWinGlow{
+  0%{box-shadow:0 0 0 0 rgba(255,255,255,.95),0 0 0 var(--ps)}
+  55%{box-shadow:0 0 0 4px rgba(255,255,255,.95),0 0 40px var(--ps)}
+  100%{box-shadow:0 0 0 3px rgba(255,255,255,.92),0 0 26px var(--ps)}
+}
+.pfx-tile.revealed .pfx-tn{animation:pfxNameIn .3s ease both}
+@keyframes pfxNameIn{from{opacity:0}to{opacity:1}}
 /* 隐藏姓名：卡片纯色块 + 微光，不写任何文字 */
 .pfx-tile.is-color{
   box-shadow:0 0 18px var(--ps),0 4px 12px rgba(0,0,0,.2),inset 0 0 20px rgba(255,255,255,.2);
@@ -5482,8 +5542,15 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   <aside class="sidebar" id="sidebar">
     <div class="side-tip">站点功能位于侧边栏，点击板块打开</div>
     <button class="side-btn" id="homeBtn" onclick="goHomeView()">🏠 首页</button>
+    <!-- v4.7.0（站主第 6 条）：「轻量模式、横屏、大屏模式这三个放在自定义设置里太难找了，
+         要点来点去，增加卡顿时间」—— 三个开关直接摆到首屏侧边栏，一步点到。 -->
+    <div class="side-quick" id="sideQuick">
+      <button class="side-btn qk" id="bigBtn" onclick="bigToggle(event)" data-on="0">大屏：关</button>
+      <button class="side-btn qk" id="landBtn" onclick="toggleLandscape()" data-on="0">横屏：关</button>
+      <button class="side-btn qk" id="liteBtn" onclick="toggleLiteQuick()" data-on="0">轻量：关</button>
+    </div>
     <div id="sideCats"></div>
-    <button class="side-btn" id="landBtn" onclick="toggleLandscape()" data-on="0">横屏查看：关</button>
+    <button class="side-btn" id="adminEntryBtn" onclick="gotoAdminPage()" style="display:none">🛠️ 班级服务站后台</button>
     <button class="side-btn" id="sfxBtn" onclick="toggleSfx()" style="margin-top:auto">🔔 音效：开</button>
     <button class="side-btn" id="uiSetBtn" onclick="openSettings()">⚙️ 自定义设置</button>
     <!-- ↓↓↓ 以下三项 2026-10-07 起隐藏（云端同步已接管：数据在云端，链接也由站点分享，
@@ -6488,17 +6555,17 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.6.1';
+var SITE_VERSION = '4.7.0';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=461" defer></script>
-<script src="./app.min.js?v=461" defer></script>
+<script src="./auth-bus.js?v=470" defer></script>
+<script src="./app.min.js?v=470" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=461" defer></script>
+<script src="./big.js?v=470" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=451" defer></script>
+<script src="./pickfx.js?v=470" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

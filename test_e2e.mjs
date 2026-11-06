@@ -8810,7 +8810,8 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     /writeLitePref\(UI\.lite\);/.test(IDX_530));
   t('v3.5.33 恢复默认不碰轻量选择（resetUICfg 里无 lite 相关清理）',
     !/removeItem\(LITE_KEY\)/.test(IDX_530));
-  t('v3.5.33 设置面板说明选择已记在设备上', /已记在这台设备上/.test(IDX_530));
+  /* v4.7.0：轻量开关移出设置面板，改由首屏快捷开关承载，说明文字也搬过去了 */
+  t('v3.5.33 设置面板说明选择已记在设备上', /记在这台设备上/.test(IDX_530));
   t('v3.5.31 轻量模式纯手动：不再有 UA / 内存 / 核数 / 长任务自动探测',
     !/autoLiteWanted/.test(IDX_530) && !/liteSelfCheck/.test(IDX_530)
     && !/deviceMemory/.test(IDX_530) && !/hardwareConcurrency/.test(IDX_530)
@@ -12669,6 +12670,24 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /cls_pick_fx/.test(big) && /pickSetFx/.test(big) && /\['off', 'box', 'case'\]/.test(big));
   t('★宝箱可选「抽取时隐藏姓名」', /cls_pick_hide/.test(big) && /pickHideToggle/.test(big));
 
+  /* ⑨b v4.7.0：抽取历史删除（墓碑）+ 名单云端同步 + 作业实时同步 */
+  t('★抽取历史删除落墓碑（删掉不会再被云端合并回来）',
+    /PH_DEL_KEY/.test(big) && /function phTombAdd\(id\)/.test(big)
+    && /if\(dead\[String\(x\.id\)\]\) return;/.test(big));
+  t('★删除历史时同步本机 SITE_DATA 副本（防止整包上传把它推回云端）',
+    /d\.pickHistory = list/.test(big));
+  t('★名单设置改存云端内容键 pick_exclude',
+    /pickExclude/.test(fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8')) && /pickExclude/.test(big)
+    && /'pick_exclude'/.test(fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8')));
+  t('★作业实时同步：轮询 12 秒 + 差异标黄 + 角标可点刷新',
+    /var ALERT_POLL = 12000/.test(big) && /function hwApply\(raw, opts\)/.test(big)
+    && /bhw-flash/.test(idx) && /BIG\.hwRefreshNow/.test(big));
+  t('★作业轮询不会覆盖正在编辑的内容（hwBusy 守卫）',
+    /function hwBusy\(\)/.test(big) && /!hwBusy\(\)\) hwApply/.test(big));
+  t('★首屏三个快捷开关 + 后台入口',
+    /id="bigBtn"/.test(idx) && /id="liteBtn"/.test(idx) && /id="adminEntryBtn"/.test(idx)
+    && /function refreshQuick\(\)/.test(fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8')));
+
   /* ⑥ 发布链路：少一个，线上点名就报错或掉版本 */
   t('★index.html 引入 pickfx.js（带版本查询串）', /pickfx\.js\?v=/.test(idx));
   t('★Service Worker 预缓存 pickfx.js（断网也能抽）', /'\.\/pickfx\.js'/.test(sw));
@@ -12681,7 +12700,16 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
 
   /* ⑧ v4.6.0：盲盒现抽 + 单次揭示 + 宝箱方框判定 */
   t('★全屏泛色提示层（flare + 段文字）', /pfx-flare/.test(fsx) && /setFlare/.test(fsx) && /学号段 /.test(fsx));
-  t('★宝箱减速末段极慢（分段缓动 easeCase）', /easeCase/.test(fsx) && /0\.86/.test(fsx));
+  /* v4.7.0：站主「到最后怎么又突然加快又跳一下」—— 分段缓动已废弃，
+     改成单段单调曲线 + 精确居中落点，并在测试里锁死「不许再出现分段」。 */
+  t('★宝箱减速为单段单调曲线（不再分段二次加速）',
+    /function easeCase\(p\)/.test(fsx) && /1 - Math\.pow\(1 - p, 3\.4\)/.test(fsx) && !/0\.86/.test(fsx));
+  t('★宝箱落点精确居中（不再留 jitter 抖动）',
+    /var winX = centerOf\(at\)/.test(fsx) && !/jitter/.test(fsx));
+  t('★宝箱停下自动揭示姓名（无第二次点击）',
+    /c2\.innerHTML = nameOf\(win\)/.test(fsx) && /c2\.classList\.add\('win', 'revealed'\)/.test(fsx));
+  t('★不隐藏姓名时随机前后跳（±2 格内），隐藏姓名不跳',
+    /function teaseStep\(\)/.test(fsx) && /var tease = hide \? 0 : teaseStep\(\)/.test(fsx));
   t('★index.html 含全屏泛色层与盲盒 glow 态样式', /\.pfx-flare\b/.test(idx) && /\.pfx-b\.glow/.test(idx));
 
   /* ⑨ v4.6.0：盲盒格子数按范围人数、点一次抽一人、现抽不预定 */

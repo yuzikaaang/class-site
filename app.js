@@ -92,7 +92,7 @@ function syncLandscapeClass(){
   var btn = document.getElementById('landBtn');
   if(btn){
     btn.setAttribute('data-on', LAND_ON ? '1' : '0');
-    btn.textContent = LAND_ON ? '📱 横屏查看：开' : '📱 横屏查看：关';
+    btn.textContent = landLabel(btn);
   }
   landscapePin();
 }
@@ -181,12 +181,52 @@ function toggleLandscape(){
   closeSidebar();
 }
 
+/* v4.7.0：横屏按钮文案。
+   首屏快捷开关是「大屏 / 横屏 / 轻量」并排的窄按钮，放不下「📱 横屏查看：开」这种长文案；
+   老位置（非 .qk）保持原文案不变。syncLandscapeClass 与 refreshLandBtn 共用这一处。 */
+function landLabel(btn){
+  if(btn && btn.classList && btn.classList.contains('qk')) return '横屏：' + (LAND_ON ? '开' : '关');
+  return LAND_ON ? '📱 横屏查看：开' : '📱 横屏查看：关';
+}
+
 /* 按钮态刷新（取消横屏 / 失败回退时都要调） */
 function refreshLandBtn(){
   var btn = document.getElementById('landBtn');
   if(!btn) return;
   btn.setAttribute('data-on', LAND_ON ? '1' : '0');
-  btn.textContent = LAND_ON ? '📱 横屏查看：开' : '📱 横屏查看：关';
+  btn.textContent = landLabel(btn);
+}
+
+/* ===== v4.7.0：首屏三个快捷开关（大屏 / 横屏 / 轻量）=====
+   站主原话：「这三个放在自定义设置里太难找了，要点来点去，增加卡顿时间」。
+   所以按钮摆在侧边栏第一屏，一次点击直达；这里只负责把状态刷成当前值。 */
+function refreshQuick(){
+  var big = document.getElementById('bigBtn');
+  if(big){
+    var on = false;
+    try{ on = !!(window.BIG && window.BIG.on); }catch(e){}
+    big.setAttribute('data-on', on ? '1' : '0');
+    big.textContent = '大屏：' + (on ? '开' : '关');
+  }
+  var lite = document.getElementById('liteBtn');
+  if(lite){
+    var lo = (UI.lite === 1);
+    lite.setAttribute('data-on', lo ? '1' : '0');
+    lite.textContent = '轻量：' + (lo ? '开' : '关');
+  }
+  refreshLandBtn();
+}
+/* 侧边栏「班级服务站后台」入口：只有管理员（或站长账号）才显示 */
+function refreshAdminEntry(){
+  var b = document.getElementById('adminEntryBtn');
+  if(!b) return;
+  var ok = false;
+  try{ ok = (typeof isAdmin === 'function') && isAdmin(); }catch(e){}
+  b.style.display = ok ? '' : 'none';
+}
+function toggleLiteQuick(){
+  setLiteMode(UI.lite === 1 ? 'off' : 'on');
+  refreshQuick();
 }
 
 /** 进页面时决定用竖屏还是横屏。
@@ -210,6 +250,7 @@ function initLandscape(){
   }
   syncLandscapeClass();
   setTimeout(syncLandscapeClass, 400);
+  setTimeout(function(){ try{ refreshQuick(); }catch(e){} }, 0);
 }
 
 /** 从后台切回来 / 页面被恢复时重新对齐（v3.5.40 重写）。
@@ -4729,6 +4770,8 @@ function setAuth(token, user){
   AUTH = { token: token || '', user: user || null };
   saveAuth();
   try{ refreshAcctBtn(); }catch(e){}
+  /* v4.7.0：登录 / 退出后侧边栏的「班级服务站后台」入口要跟着出现或消失 */
+  try{ refreshAdminEntry(); }catch(e){}
   return AUTH;
 }
 function isLoggedIn(){ return !!AUTH.token; }
@@ -4788,6 +4831,7 @@ var CONTENT_MAP = {
   vote_pub:          'votePub',      /* v3.5.13 投票公示（模版 + 每票配置），前台渲染公示 */
   important_dates:   null,           /* 特殊：落到 IMPORTANT_DATES，见 applyCloudContent() */
   pick_history:      'pickHistory',  /* v4.4.0 随机点名抽取记录（时间/条件/人数/名单/备注） */
+  pick_exclude:      'pickExclude',  /* v4.7.0 随机点名的请假 / 不参与名单（换设备不用重填） */
   site_config:       null            /* 特殊：见 applySiteConfig() */
 };
 
@@ -5983,9 +6027,6 @@ function doLogin(){
       setAuth(j.token, j.user);
       acctBusy(false);
       startHeartbeat();
-      syncRoster();   /* 登录后名单改从云端拉（2026-10-07） */
-      /* v3.7.0（站主 #3）：登录时把班徽下到本地，导出图片直接用缓存 */
-      try{ badgeCacheLoad(false); }catch(e){}
 
       /* 首次登录（管理员批量导入的初始密码）→ 建议改密。
          v2.10.0 起改为建议制：以前跳过过的账号不再弹强制态，
@@ -5999,18 +6040,25 @@ function doLogin(){
       }
       if(AUTH.user) AUTH.user.mustChangePassword = !!j.mustChangePassword;
 
-      acctMsg('登录成功，正在读取云端数据…', 'ok');
-      /* 拉一次「我认领的资料」，供资料查询页判断哪条是本人（可就地编辑联系方式） */
-      if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile();
-      /* 登录后自动拉一次云端数据（有则询问是否覆盖本机） */
-      syncPull(true).then(function(){
-        try{ closeAccount(); }catch(e){}
-        renderAccount();
-        /* v3.8.4：从分享链接被拦下来的，登录完直接回到那条分享的位置 */
-        try{ if(typeof afterLoginResume === 'function') afterLoginResume(); }catch(e){}
-        try{ if(typeof reportBoardCatalog === 'function') reportBoardCatalog(); }catch(e){}
-        if(typeof uiMsg === 'function') uiMsg('✅ 登录成功');
-      });
+      /* v4.7.0（站主：前台登录也卡）：
+         原来要等「拉云端数据」整个回来才关弹窗、才给成功提示 ——
+         低配一体机上这几秒看着像点了没反应，还会被误当成卡死。
+         现在拆成两步：先立刻关弹窗 + 出提示（用户马上看到结果），
+         再把同步与重绘丢到下一轮事件循环，让浏览器先把这一帧画完。 */
+      try{ closeAccount(); }catch(e){}
+      if(typeof uiMsg === 'function') uiMsg('✅ 登录成功');
+      setTimeout(function(){
+        try{ syncRoster(); }catch(e){}          /* 名单改从云端拉 */
+        try{ badgeCacheLoad(false); }catch(e){} /* 班徽下到本地，导出图片直接用缓存 */
+        try{ if(typeof pcLoadMyProfile === 'function') pcLoadMyProfile(); }catch(e){}
+        /* 登录后自动拉一次云端数据（有则询问是否覆盖本机） */
+        syncPull(true).then(function(){
+          try{ renderAccount(); }catch(e){}
+          /* v3.8.4：从分享链接被拦下来的，登录完直接回到那条分享的位置 */
+          try{ if(typeof afterLoginResume === 'function') afterLoginResume(); }catch(e){}
+          try{ if(typeof reportBoardCatalog === 'function') reportBoardCatalog(); }catch(e){}
+        }).catch(function(){});
+      }, 60);
     })
     .catch(function(e){ acctBusy(false); acctMsg(e.message, 'err'); });
 }
@@ -7125,6 +7173,7 @@ function readLocalContentValue(key){
     if(key === 'daily_quote') return SITE_DATA.dailyQuote;
     if(key === 'important_dates') return IMPORTANT_DATES;
     if(key === 'pick_history') return SITE_DATA.pickHistory;
+    if(key === 'pick_exclude') return SITE_DATA.pickExclude;
   }catch(e){}
   return undefined;
 }
@@ -8646,19 +8695,8 @@ function renderSettings(){
   var box = document.getElementById('uiSetBody'); if(!box) return;
   var html = '';
   if(UI_SEC === 'look'){
-    /* —— v3.19.0（站主）：大屏模式 ——
-       班级电脑 / 投影用。开了以后首页就是「一屏全功能」的图标墙，
-       顶部导航照旧；点站内功能进单功能页，点外链直接新窗口。
-       只记这台设备（站主要求「只存本机」），换电脑要重新开一次。 */
-    if(typeof BIG !== 'undefined' && BIG){
-      html += secHtml('bigscreen','大屏模式','monitor',
-        '<div class="sw-row"><span class="t">大屏模式<span class="s">班级电脑 / 投影：一屏显示全部功能，图标更大更好点</span></span>' +
-          swHtml(!!BIG.on, 'bigToggle(event)') + '</div>' +
-        '<p class="ui-hint">开之后：首页按板块分组铺成图标墙，顶部导航还在；'
-        + '点「成绩分析」这类站内功能会进入只有这一个功能的页面，左上角「返回大屏」可回来。<br>'
-        + '<b>只记在这台电脑上</b>，清缓存或换设备要重新打开。'
-        + (BIG.on ? '<br>当前：<b>已开启</b>' : '') + '</p>', true);
-    }
+    /* v4.7.0：大屏模式开关已移到首屏侧边栏（见上面「大屏 / 横屏 / 轻量」那一节）。
+       这里不再重复放一个开关 —— 两处开关最容易被误认成「点了没反应」。 */
     /* —— 主题自动切换（v2.5.3 站主要求：三选一 + 跟随系统/日出日落）—— */
     var tmode = themeAutoMode();
     var modeBtns = [
@@ -8798,29 +8836,18 @@ function renderSettings(){
       '<div class="sw-row"><span class="t">界面音效<span class="s">点击、成功、错误提示音</span></span>' +
         swHtml(SFX.isOn(), 'toggleSfxFromUI(event)') + '</div>', false);
 
-    /* —— 性能 / 轻量模式（v3.5.30，v3.5.31 改为纯手动）——
-       站主明确要求「由我手动更改，没有自动检测」，所以这里只有两档：
-       轻量 / 完整，选完立刻生效并落盘，换设备也记住。 */
     var liteOnNow = liteOn();
-    var liteBtns = [
-      ['off',  '完整', '全部特效：玻璃模糊、背景光斑、扫光'],
-      ['on',   '轻量', '关掉玻璃模糊 / 光斑 / 扫光 / 入场动画'],
-    ].map(function(m){
-      var active = (m[0] === 'on') === liteOnNow;
-      return '<button class="btn ' + (active ? '' : 'btn-secondary') + '" ' +
-        'style="flex:1;font-size:.76rem;padding:10px 4px" ' +
-        'onclick="setLiteMode(\'' + m[0] + '\')">' + m[1] + '</button>';
-    }).join('');
-    html += secHtml('perf','性能 / 轻量模式','activity',
-      '<div class="ui-modes">' + liteBtns + '</div>' +
-      '<p class="ui-hint" style="margin-top:10px">当前：<b>' + (liteOnNow ? '轻量模式' : '完整特效') + '</b>'
-      + '　<span style="opacity:.75">· 已记在这台设备上，升级新版本不会自己变回去</span></p>' +
-      '<p class="ui-hint">轻量模式会关掉：<br>'
-      + '· 玻璃模糊、背景光斑漂移、卡片流光、入场动画<br>'
-      + '· 听力播放器的唱片旋转与波形跳动（播放/倍速/拖动都正常）<br>'
-      + '· 作业里视频的预加载（点播放才开始加载）<br>'
-      + '画面不那么「透」，但滚动、切板块、听听力会明显跟手。'
-      + '<b>iPad / iPhone 或打开就卡，选「轻量」</b>；高端手机看着很顺就选「完整」。</p>', false);
+    /* —— 大屏模式 / 轻量模式（v4.7.0 移出设置面板）——
+       站主原话：「这三个放在自定义设置里太难找了，要点来点去，增加卡顿时间」。
+       现在大屏 / 横屏 / 轻量 三个开关在首屏侧边栏一点就到，这里只留一句指引，
+       不再放重复的开关（两处开关最容易出现「点了这头那头没变」的错觉）。 */
+    html += secHtml('perf','大屏 / 横屏 / 轻量','activity',
+      '<p class="ui-hint">这三个开关已移至<b>左侧边栏第一屏</b>，点击即可切换，无需进入设置面板。<br>'
+      + '· <b>大屏</b>：班级电脑 / 投影，一屏显示全部功能<br>'
+      + '· <b>横屏</b>：手机竖着拿也能按横屏排版显示<br>'
+      + '· <b>轻量</b>：关掉玻璃模糊、光斑、扫光、入场动画，低配设备明显跟手<br>'
+      + '当前：大屏 <b>' + ((typeof BIG !== 'undefined' && BIG && BIG.on) ? '开' : '关')
+      + '</b>　轻量 <b>' + (liteOnNow ? '开' : '关') + '</b>（轻量选择只记在这台设备上）</p>', false);
   }
   else {
     /* 云端数据入口（v2.10.1 需求⑧）：数据类操作统一收在「自定义设置」里，
@@ -9038,6 +9065,7 @@ function setLiteMode(m){
   saveUI();
   applyLite();
   renderSettings();
+  try{ refreshQuick(); }catch(e){}
   uiMsg(UI.lite === 1 ? '已切到轻量模式：玻璃模糊与重动画已关闭'
                       : '已切到完整特效');
   if(typeof SFX !== 'undefined' && SFX.click) SFX.click();
