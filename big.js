@@ -291,8 +291,12 @@
      items[].tasks[]，task 依旧可以是字符串或 {text,img,audio}。
      只改渲染与交互，云端结构不动，老数据不会丢。 */
 
-  var FS_KEY = 'cls_bhw_fs';
-  var FS_STEPS = [0.85, 0.95, 1, 1.1, 1.2, 1.35, 1.5, 1.7];
+  var FS_KEY = 'cls_bhw_fs2';
+  /* v4.7.3（站主）：字号范围拉大到 25%–300%。
+     投影到后墙用得上大字号，也有老师想一屏塞下更多内容。档位之间保持 1.15–1.3 倍，
+     既不会「按一下几乎没变」，也不会「按一下翻一倍」。 */
+  var FS_STEPS = [0.25, 0.35, 0.5, 0.65, 0.8, 1, 1.2, 1.45, 1.75, 2.1, 2.55, 3];
+  var FS_DEFAULT = 5;                    /* 索引指向 100% */
   var SUBJ_A = ['语文', '数学', '英语'];
   var SUBJ_B = ['物理', '化学', '生物'];
   /* v4.3.0 站主要求：新建一期默认带上六科，不用每次手动加 */
@@ -373,11 +377,25 @@
     }, BIG.quoteMin * 60000);
   };
 
+  /* 旧档位（v4.7.2 及以前）。索引语义变了，直接读老索引会把 100% 读成 50%，
+     所以换了个键名，老值按「实际倍率最接近」换算过来。 */
+  var FS_KEY_OLD = 'cls_bhw_fs';
+  var FS_OLD = [0.85, 0.95, 1, 1.1, 1.2, 1.35, 1.5, 1.7];
   function readFs(){
-    var n = 2;
+    var n = null;
     try{ n = parseInt(localStorage.getItem(FS_KEY), 10); }catch(e){}
-    if(!(n >= 0 && n < FS_STEPS.length)) n = 2;
-    return n;
+    if(n >= 0 && n < FS_STEPS.length) return n;
+    var old = null;
+    try{ old = parseInt(localStorage.getItem(FS_KEY_OLD), 10); }catch(e){}
+    if(old >= 0 && old < FS_OLD.length){
+      var want = FS_OLD[old], best = FS_DEFAULT, bd = 9;
+      for(var i = 0; i < FS_STEPS.length; i++){
+        var d = Math.abs(FS_STEPS[i] - want);
+        if(d < bd){ bd = d; best = i; }
+      }
+      return best;
+    }
+    return FS_DEFAULT;
   }
   function applyFs(){
     var h = $('bigHw');
@@ -705,7 +723,102 @@
     else act.insertAdjacentHTML('afterbegin', html);
   }
 
+  /* v4.7.3（站主）：「刷新的时候我正好在打字，输入框就没了」。
+     即使判断不出「在编辑」，重绘也会让光标和滚动位置飞掉。
+     所以每次重绘前后都把「焦点在哪个框、光标在第几字、滚到哪儿了」抄下来再放回去。
+     路径用从 #bigHw 往下的 childNodes 索引链表示 —— 同一份数据重绘出来的结构一致，
+     索引链必然还能对上同一个框。 */
+  function domPath(root, el){
+    var path = [];
+    var cur = el;
+    while(cur && cur !== root){
+      var p = cur.parentNode;
+      if(!p) return null;
+      var i = 0, n = p.firstChild;
+      while(n && n !== cur){ i++; n = n.nextSibling; }
+      path.unshift(i);
+      cur = p;
+    }
+    return path;
+  }
+  function domAt(root, path){
+    var cur = root;
+    for(var i = 0; i < path.length; i++){
+      if(!cur) return null;
+      cur = cur.childNodes[path[i]];
+    }
+    return cur;
+  }
+  function snapshotEdit(){
+    var host = $('bigHw');
+    if(!host) return null;
+    var out = { focus: null, scroll: [], dirty: [] };
+    var ae = document.activeElement;
+    if(ae && ae !== document.body && host.contains(ae) && /^(INPUT|TEXTAREA)$/.test(String(ae.tagName || '').toUpperCase())){
+      var path = domPath(host, ae);
+      if(path){
+        out.focus = { path: path, s: ae.selectionStart, e: ae.selectionEnd };
+      }
+    }
+    /* v4.7.3：还没提交的输入（改了值但没失焦）也要抄下来 ——
+       重绘后按原位置把字填回去，人才不会「打到一半全没了」。
+       数据本身不动：这是用户还没确认的内容，只在界面上原样搬一次。 */
+    var ips = host.querySelectorAll('input,textarea');
+    for(var q = 0; q < ips.length; q++){
+      var el = ips[q];
+      var tp = String(el.type || '').toLowerCase();
+      if(tp === 'checkbox' || tp === 'radio' || tp === 'file') continue;
+      if(String(el.value) === String(el.defaultValue)) continue;
+      var pp = domPath(host, el);
+      if(!pp) continue;
+      out.dirty.push({ path: pp, value: el.value,
+        s: el.selectionStart, e: el.selectionEnd });
+    }
+    /* 作业页可能有好几个滚动容器（两栏 + 其他科目），一起记 */
+    var box = host.querySelectorAll('.bhw-col,.bhw-other,#bhwColA,#bhwColB');
+    for(var i = 0; i < box.length; i++){
+      if(box[i].scrollTop) out.scroll.push({ path: domPath(host, box[i]), top: box[i].scrollTop });
+    }
+    var de = document.scrollingElement || document.documentElement;
+    out.winTop = de ? de.scrollTop : 0;
+    return out;
+  }
+  function restoreEdit(snap){
+    if(!snap) return;
+    var host = $('bigHw');
+    if(!host) return;
+    for(var i = 0; i < snap.scroll.length; i++){
+      var el = snap.scroll[i].path ? domAt(host, snap.scroll[i].path) : null;
+      if(el) el.scrollTop = snap.scroll[i].top;
+    }
+    /* 先回填未提交的内容，再放光标 —— 顺序反了会把光标顶到末尾 */
+    for(var d = 0; d < snap.dirty.length; d++){
+      var de2 = snap.dirty[d];
+      var dEl = de2.path ? domAt(host, de2.path) : null;
+      if(!dEl) continue;
+      dEl.value = de2.value;
+      if(dEl.tagName === 'TEXTAREA' && dEl.style && dEl.scrollHeight) BIG.autoGrow(dEl);
+    }
+    if(snap.focus){
+      var t = domAt(host, snap.focus.path);
+      if(t && t.focus){
+        try{
+          t.focus({ preventScroll: true });
+          if(snap.focus.s != null && t.setSelectionRange){
+            t.setSelectionRange(snap.focus.s, snap.focus.e);
+          }
+        }catch(e){}
+      }
+    }
+  }
+
   BIG.renderHw = function (){
+    var snap = snapshotEdit();
+    renderHwRaw();
+    restoreEdit(snap);
+  };
+
+  function renderHwRaw(){
     var h = $('bigHw');
     if(!h) return;
     var hw = currentHw();
@@ -822,7 +935,7 @@
     scheduleLayout();
     /* v4.7.0：记下「屏幕上这一份」是什么样，下一次轮询拿它做基准比差异 */
     try{ BIG.hwPrevData = hwList(); BIG.hwPrev = JSON.stringify(BIG.hwPrevData || []); }catch(e){}
-  };
+  }
 
   /* —— 卡片排布（v4.1.0）——
      站主要求：像 ClassWorks 那样「怎么省空间怎么排，不需要按顺序排」。
@@ -1511,14 +1624,29 @@
   BIG.hwPrevData = null;
   BIG.hwFlash = null;
 
-  /* 正在编辑 / 有未上传改动 → 暂停用云端覆盖本机作业 */
+  /* 正在编辑 / 有未上传改动 → 暂停用云端覆盖本机作业
+     v4.7.3（站主）：「我正好在打字，打到一半又刷新，输入框就没了」。
+     原来只看 document.activeElement —— 一旦点到别处（焦点没了但 textarea 里
+     还是半截话、onchange 也没触发），它就说「不忙」，接着整页重绘把字冲掉。
+     现在改成扫一遍：只要有任何输入框的值和「刚画上去时的值」不一样，就算在编辑。 */
+  function hwDirty(){
+    var host = $('bigHw');
+    if(!host) return false;
+    var ae = document.activeElement;
+    if(ae && host.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(String(ae.tagName || '').toUpperCase())) return true;
+    var arr = host.querySelectorAll('input,textarea');
+    for(var i = 0; i < arr.length; i++){
+      var el = arr[i];
+      var tp = String(el.type || '').toLowerCase();
+      if(tp === 'checkbox' || tp === 'radio' || tp === 'file') continue;
+      /* defaultValue 就是渲染时写进 HTML 的那份，用户改过就会不一样 */
+      if(String(el.value) !== String(el.defaultValue)) return true;
+    }
+    return false;
+  }
   function hwBusy(){
     try{ if(typeof hasPendingContentSync === 'function' && hasPendingContentSync()) return true; }catch(e){}
-    var ae = document.activeElement;
-    if(!ae) return false;
-    if(!/^(INPUT|TEXTAREA|SELECT)$/.test(String(ae.tagName || '').toUpperCase())) return false;
-    var host = $('bigHw');
-    return !!(host && host.contains(ae));
+    return hwDirty();
   }
 
   function hwNow(){
@@ -1555,12 +1683,14 @@
     });
     return out;
   }
-  /* 把一份云端作业套到界面上；返回是否发生了变化 */
+  /* 把一份云端作业套到界面上；返回是否发生了变化
+     v4.7.3：正在打字就先存一边，等手停下来再应用 —— 见 hwQueue。 */
   function hwApply(raw, opts){
     opts = opts || {};
     if(!Array.isArray(raw)) return false;
     var nowStr = JSON.stringify(raw);
     if(BIG.hwPrev === nowStr) return false;
+    if(BIG.hwOn && hwDirty()){ hwQueue(raw); return false; }
     var prevData = Array.isArray(BIG.hwPrevData) ? BIG.hwPrevData : hwNow();
     var diff = hwDiff(prevData, raw);
     try{ if(typeof applyCloudContent === 'function') applyCloudContent({ holiday_homeworks: raw }); }catch(e){}
@@ -1572,6 +1702,23 @@
     try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
     if(BIG.hwOn) hwFlashPaint();
     return true;
+  }
+
+  /* 排队：每秒看一次「还在打字吗」，手停下来（输入框失焦 / 值已提交）就应用。
+     不弹提示、不打断 —— 站主要的「无感刷新」就是这个意思：
+     字照打，改完一松手，别人才看到的那份就悄悄上来了，改动处照旧标黄。 */
+  var _hwQ = null, _hwQT = null;
+  function hwQueue(raw){
+    _hwQ = raw;
+    if(_hwQT) return;
+    _hwQT = setInterval(function (){
+      if(!_hwQ){ clearInterval(_hwQT); _hwQT = null; return; }
+      if(BIG.hwOn && hwDirty()) return;
+      var r = _hwQ; _hwQ = null;
+      clearInterval(_hwQT); _hwQT = null;
+      /* 同步过之后 hwPrev 已经变了，这里再比一次；一样就什么都不做 */
+      if(JSON.stringify(r) !== BIG.hwPrev) hwApply(r);
+    }, 1000);
   }
   function hwFlashPaint(){
     var f = BIG.hwFlash;
@@ -2040,15 +2187,43 @@
     var out = {};
     for(var k in F_DEF) out[k] = (f[k] === undefined ? F_DEF[k] : f[k]);
     if(!Array.isArray(out.role)) out.role = ['学生'];
+    /* v4.7.3：老版本存下来的残影 —— 考试已改成「不限成绩」，名次条件还留着 */
+    if(!out.examId){ out.metric = ''; out.subj = ''; out.min = ''; out.max = ''; }
     return out;
   }
   function saveF(){
     try{ localStorage.setItem(F_KEY, JSON.stringify(BIG.pick.f)); }catch(e){}
   }
 
-  /* 名单：优先云端（带学号/身份/性别），失败退回站内姓名列表 */
+  /* 名单：优先云端（带学号/身份/性别），失败退回本机缓存，再退站内姓名列表。
+     v4.7.3：班级电脑长期离线，原来一断网就退到 classList()，那份名单**没有学号**，
+     于是抽取动画里所有人都是同一个中性灰 —— 站主说的「颜色都一样」就是这儿来的。
+     现在每次成功拉到云端名单都存一份本机副本，离线直接用副本，颜色照常分段。 */
+  var ROSTER_KEY = 'cls_pick_roster_v1';
+  function rosterCacheGet(){
+    try{
+      var o = JSON.parse(localStorage.getItem(ROSTER_KEY) || 'null');
+      if(o && Array.isArray(o.list) && o.list.length) return o.list;
+    }catch(e){}
+    return null;
+  }
+  function rosterCacheSet(list){
+    try{ localStorage.setItem(ROSTER_KEY, JSON.stringify({ at: Date.now(), list: list })); }catch(e){}
+  }
   function loadRoster(done){
     function fallback(){
+      /* ① 先看本机缓存（带真学号，最准） */
+      var cached = rosterCacheGet();
+      if(cached){
+        BIG.pick.roster = cached.map(function (x){
+          return { name: x.name, studentId: String(x.studentId || ''), role: String(x.role || '学生'),
+                   gender: String(x.gender || ''), title: String(x.title || '') };
+        });
+        if(done) done();
+        return;
+      }
+      /* ② 连缓存都没有：用站内姓名列表，按名单顺序补一个「显示序号」。
+         只给颜色用（_seq），不写进 studentId —— 学号筛选仍然按真学号走，不会被假号骗到。 */
       var names = [];
       try{ if(typeof classList === 'function') names = classList() || []; }catch(e){}
       var seen = {}, out = [];
@@ -2056,7 +2231,7 @@
         var n = String(x || '').trim();
         if(!n || seen[n]) return;
         seen[n] = 1;
-        out.push({ name: n, studentId: '', role: '学生', gender: '', title: '' });
+        out.push({ name: n, studentId: '', role: '学生', gender: '', title: '', _seq: out.length + 1 });
       });
       BIG.pick.roster = out;
       if(done) done();
@@ -2080,6 +2255,7 @@
               title: String(x.title || ''),
             });
           });
+          rosterCacheSet(out);          /* 存一份，断网时用 */
           BIG.pick.roster = out;
           if(done) done();
         }).catch(fallback);
@@ -2301,7 +2477,10 @@
       if(f.sidMin !== '' && sid < Number(f.sidMin)) return false;
       if(f.sidMax !== '' && sid > Number(f.sidMax)) return false;
     }
-    if(f.metric){
+    /* v4.7.3：成绩条件只有在「选了某场考试」时才算数。
+       以前只看 f.metric —— 把考试切回「不限成绩」后残影还在，
+       于是屏幕上写着「总分名次 1–20」，实际 stat 已经清空，谁都抽不出来。 */
+    if(f.examId && f.metric){
       if(!stat) return false;
       var row = stat.byName[st.name];
       if(!row) return false;
@@ -2350,9 +2529,14 @@
 
   function sidNo(st){
     var d = String((st && st.studentId) || '').replace(/\D/g, '');
-    if(d.length < 2) return 0;
-    var n = parseInt(d.slice(-2), 10);
-    return (n >= 1 && n <= 99) ? n : 0;
+    if(d.length >= 2){
+      var n = parseInt(d.slice(-2), 10);
+      if(n >= 1 && n <= 99) return n;
+    }
+    /* v4.7.3：没有学号（离线缓存的姓名列表）就按名单顺序给个序号，
+       只为颜色分段，不参与任何筛选逻辑。 */
+    var sq = parseInt((st && st._seq) || 0, 10);
+    return (sq >= 1 && sq <= 99) ? sq : 0;
   }
   function stuOf(n){
     var arr = BIG.pick.roster || [];
@@ -2531,6 +2715,9 @@
     f[k] = v;
     if(k === 'examId'){
       BIG.pick.stat = null; BIG.pick.prog = null; BIG.pick.prevStat = null;
+      /* v4.7.3（站主）：切回「不限成绩」就把名次 / 分数条件一起清掉。
+         留着不显示只是障眼法 —— 顶部「条件：」那行还挂着，人以为它仍在生效。 */
+      if(!v){ f.metric = ''; f.subj = ''; f.min = ''; f.max = ''; }
       statOf(v, BIG.pickBody);
     }
     /* 切到「进步排名」时，上一次考试的成绩得现拉 */
@@ -2597,7 +2784,7 @@
     arr.push((f.role || ['学生']).join('/'));
     if(f.gender) arr.push(f.gender);
     if(f.sidMin !== '' || f.sidMax !== '') arr.push('学号 ' + (f.sidMin || '不限') + '–' + (f.sidMax || '不限'));
-    if(f.metric){
+    if(f.examId && f.metric){
       var stat = BIG.pick.stat;
       var mName = f.metric === 'totalRank' ? '总分名次（班级）'
         : f.metric === 'totalScore' ? '总分'

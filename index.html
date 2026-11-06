@@ -436,9 +436,28 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 /* v3.9.8：每日一言可点击换一句 */
 .quote{cursor:pointer;transition:box-shadow var(--t-base) var(--ease-out)}
 .quote:active{box-shadow:0 1px 2px rgba(120,53,15,.06)}
-.quote-refresh{font-size:.66rem;color:var(--fg-3);opacity:.5;margin-top:5px;text-align:right;transition:opacity .15s}
+.quote-refresh{font-size:.66rem;color:var(--fg-3);opacity:.5;transition:opacity .15s}
 .quote:hover .quote-refresh{opacity:.85}
 @media screen and (max-width:480px){.quote-refresh{opacity:.72}}
+/* v4.7.3：一言卡片右上角「换一句 / 类型」，卡片本身可以换行放分类面板 */
+.quote{flex-wrap:wrap}
+.quote-tools{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:5px}
+.quote-cfg{font-size:.66rem;color:var(--fg-3);opacity:.5;cursor:pointer;padding:1px 6px;border-radius:8px;
+  border:1px solid transparent;transition:opacity .15s,border-color .15s,color .15s}
+.quote:hover .quote-cfg{opacity:.85}
+.quote-cfg:hover{opacity:1;border-color:rgba(120,53,15,.2);color:var(--fg-2)}
+.dark .quote-cfg:hover{border-color:rgba(255,255,255,.22)}
+.quote-cats{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+  margin-top:10px;padding-top:10px;border-top:1px dashed rgba(120,53,15,.14)}
+.dark .quote-cats{border-top-color:rgba(255,255,255,.12)}
+.quote-cat{font-size:.7rem;line-height:1;padding:5px 9px;border-radius:99px;cursor:pointer;
+  background:rgba(120,53,15,.06);color:var(--fg-2);border:1px solid transparent;
+  transition:background .15s,color .15s,border-color .15s}
+.quote-cat:hover{background:rgba(120,53,15,.12)}
+.quote-cat.on{background:rgba(180,83,9,.14);color:#b45309;border-color:rgba(180,83,9,.3);font-weight:600}
+.dark .quote-cat{background:rgba(255,255,255,.07);color:#cbd5e1}
+.dark .quote-cat.on{background:rgba(251,146,60,.16);color:#fdba74;border-color:rgba(251,146,60,.3)}
+.quote-cats-tip{margin-left:auto;font-size:.66rem;color:var(--fg-3);opacity:.7}
 .dark .quote{background:#1b2432;border-color:rgba(255,255,255,.07)}
 .dark .quote-text{color:#f0c9a8}
 .dark .quote-from{color:#9aa7b8}
@@ -6569,14 +6588,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.7.2';
+var SITE_VERSION = '4.7.3';
 var VER_DATE = '2026-11-03';
 </script>
-<script src="./auth-bus.js?v=472" defer></script>
-<script src="./app.min.js?v=472" defer></script>
+<script src="./auth-bus.js?v=473" defer></script>
+<script src="./app.min.js?v=473" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./big.js?v=472" defer></script>
+<script src="./big.js?v=473" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
 <script src="./pickfx.js?v=472" defer></script>

@@ -47,9 +47,12 @@ body.sz-4{--fs:min(30vw,48vh,380px)}
   font-size:var(--fs);line-height:1;letter-spacing:-.02em;font-weight:700;
   font-variant-numeric:tabular-nums;white-space:nowrap;
 }
-#bigSub{margin-top:2.4vh;font-size:2.4vw;opacity:.55;letter-spacing:.06em;white-space:nowrap}
+/* v4.7.3（站主）：下面这行日期 / 周次原来太小，坐后排根本看不清。
+   从 2.4vw 提到 3.2vw（窄屏 4.2vw），并把不透明度从 .55 提到 .68 ——
+   字号一大，太淡会显得发灰。 */
+#bigSub{margin-top:2.4vh;font-size:3.2vw;opacity:.68;letter-spacing:.06em;white-space:nowrap}
 @media (max-aspect-ratio: 1/1){
-  #bigSub{font-size:3.2vw}
+  #bigSub{font-size:4.2vw}
 }
 
 /* ---------- 翻页时钟 ----------
@@ -1178,6 +1181,22 @@ var lastFlip = { h:'', m:'', s:'' };
 
 function two(n){ return n < 10 ? '0' + n : '' + n; }
 
+/* v4.7.3：教学周次。首页每次算完都会把「学期开始日」写进本机，
+   时钟页是独立页面、也不联网，直接读这份缓存自己算，断网照样准。 */
+function weekLabel(date){
+  try{
+    var o = JSON.parse(localStorage.getItem('cls_week_cache') || 'null');
+    if(!o || !o.start) return '';
+    var st = new Date(o.start + 'T00:00:00');
+    if(isNaN(st.getTime())) return '';
+    var d = new Date(date || Date.now());
+    d.setHours(0, 0, 0, 0);
+    var diff = Math.floor((d - st) / 86400000);
+    if(diff < 0) return '未开学';
+    return '第 ' + (Math.floor(diff / 7) + 1) + ' 周';
+  }catch(e){ return ''; }
+}
+
 function tickClock(){
   var d = new Date();
   var h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
@@ -1187,8 +1206,9 @@ function tickClock(){
   if(CFG.mode === 'clock'){
     $('bigTime').textContent = two(hh) + ':' + two(m) + ':' + two(s);
     var lu = lunarText(d);
+    var wk = weekLabel(d);
     $('bigSub').textContent = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'
-      + (lu ? '  ' + lu : '') + '  星期' + WEEK[d.getDay()];
+      + (lu ? '  ' + lu : '') + '  星期' + WEEK[d.getDay()] + (wk ? '  ·  ' + wk : '');
   }else if(CFG.mode === 'flip'){
     /* 第一次进来时 lastFlip 全是空串，那一帧只是「把数字落上去」，
        并没有翻页动作 —— 所以要先确认上一帧已经有值（had），再比差异。 */

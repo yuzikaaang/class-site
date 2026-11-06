@@ -3486,7 +3486,7 @@ function stackToggle(btn){
  *   任何"拖拽后直接改 DOM"的写法都会被下一次 render() 冲掉。
  * ===================================================== */
 
-var UI_KEY = 'cls_ui_cfg', UI_BG_KEY = 'cls_ui_bgimg', UI_V = 3;
+var UI_KEY = 'cls_ui_cfg', UI_BG_KEY = 'cls_ui_bgimg', UI_V = 4;
 /* v2：卡片堆叠默认关闭（试验功能，站主拍板）。v1 时期默认是开，
    升级时把老配置里带上的 stack=1 一并复位，避免老用户一直停在试验状态。 */
 
@@ -3517,6 +3517,9 @@ function uiDefault(){
        加上两张 340/420px、blur(120px) 且带 26s/34s 无限动画的光斑，
        这三样叠在 iPad 上会直接把 GPU 拖死，白屏就是渲染进程被回收了。 */
     lite: 0,
+    /* v4.7.3（站主）：每日一言可以只显示某几类。空数组 = 没设过，按云端 / 默认走。
+       放进 UI（跟用户配置一起存本机），管理员改完还会推到云端，全账号一致。 */
+    quoteCats: [],
     bg: { type:'theme', color:'#fffbf7', grad:'', veil:55 },  /* theme|solid|grad|image */
     order: {
       home: ['ann','quote','sign','daily','study','countdown'],
@@ -3567,6 +3570,10 @@ function normalizeUI(o){
      非法值一律当自动，避免老配置里混进奇怪的值把特效开关搞死。 */
   /* v3.5.31：只有明确的 1 才算轻量；历史上存过 null 的旧配置一律回落「完整」。 */
   out.lite = (o.lite === 1) ? 1 : 0;
+  /* v4.7.3：一言分类白名单，非法字符一律丢掉 */
+  out.quoteCats = Array.isArray(o.quoteCats)
+    ? o.quoteCats.map(String).filter(function(c){ return c.length === 1 && 'abcdefghijkl'.indexOf(c) >= 0; })
+    : [];
   /* 【v1→v2 迁移】v1 时期卡片堆叠默认是开，老配置里存的 1 属于「没得选的开」，
      不是用户主动开的，升级到 v2 一律复位为关。用户在 v2 下主动开的才保留。 */
   if((o.v || 1) < 2) out.stack = 0;
@@ -4884,8 +4891,14 @@ function applyCloudContent(items, opts){
     /* v3.5.9 每日一言来源：后台「首页卡片」统一配置，落到 SITE_DATA.quoteSource */
     if(k === 'quote_source'){
       if(typeof v !== 'object' || Array.isArray(v)) return;   /* 类型护栏 */
-      if(v.net !== 0 && v.net !== 1) return;
-      SITE_DATA.quoteSource = { net: v.net };
+      /* v4.7.3：原来只落了 net、把 cats 丢了 —— 后台 / 前台勾的分类永远不生效。
+         net 仍要求 0|1（老数据可能只有 net），cats 缺省为空 = 不限制。 */
+      var qs = { net: (v.net === 0 ? 0 : 1) };
+      if(Array.isArray(v.cats)){
+        qs.cats = v.cats.map(String).filter(function(c){ return c.length === 1 && 'abcdefghijkl'.indexOf(c) >= 0; });
+        if(!qs.cats.length) delete qs.cats;
+      }
+      SITE_DATA.quoteSource = qs;
       n++;
       return;
     }
@@ -5136,6 +5149,11 @@ function quoteCats(){
   var cloud = (window.SITE_DATA && SITE_DATA.quoteSource && typeof SITE_DATA.quoteSource === 'object')
     ? SITE_DATA.quoteSource : null;
   var arr = (cloud && Array.isArray(cloud.cats)) ? cloud.cats : null;
+  /* v4.7.3：云端没配过（老数据 / 离线没拉到）时，用本机这份 —— 站主在首页
+     点选过的分类，断网也得记住，不能一刷新就回到默认四类。 */
+  if(!arr || !arr.length){
+    arr = (typeof UI !== 'undefined' && Array.isArray(UI.quoteCats) && UI.quoteCats.length) ? UI.quoteCats : null;
+  }
   if(!arr || !arr.length) return ['a', 'b', 'd', 'i'];
   var out = arr.filter(function(c){ return QUOTE_CAT_ALL.indexOf(c) >= 0; });
   return out.length ? out : ['a', 'b', 'd', 'i'];
@@ -5160,16 +5178,85 @@ function renderDailyQuote(){
     '<div class="quote-body">'+
       '<div class="quote-text">'+emojiEscHtml(q.text)+'</div>'+
       (q.from ? '<div class="quote-from">—— '+esc(q.from)+'</div>' : '')+
-      '<div class="quote-refresh">换一句 ↻</div>'+
-    '</div>';
+      '<div class="quote-tools">'+
+        '<span class="quote-refresh">换一句 ↻</span>'+
+        '<span class="quote-cfg" role="button" tabindex="0" data-qcfg="1"'
+          + ' title="选择要显示哪几类内容">类型</span>'+
+      '</div>'+
+    '</div>'+
+    (_quoteCfgOpen ? quoteCfgHtml() : '');
   /* v3.9.8（站主）：点这条卡片就换一句新的 */
   el.onclick = function(e){
-    if(e && e.target && e.target.closest && e.target.closest('a,button')) return;
+    var cfg = e && e.target && e.target.closest ? e.target.closest('[data-qcfg]') : null;
+    if(cfg){ e.stopPropagation(); quoteCfgToggle(); return; }
+    if(e && e.target && e.target.closest && e.target.closest('a,button,[data-cat]')) return;
     var tip = el.querySelector('.quote-refresh');
     if(tip) tip.textContent = '换一句中…';
     fetchRemoteQuote(true);
     setTimeout(function(){ var t2 = el.querySelector('.quote-refresh'); if(t2) t2.textContent = '换一句 ↻'; }, 1200);
   };
+}
+
+/* v4.7.3（站主）：「随机一言我可以设置哪些类型行、哪些不行嘛，放前台，
+   云端同步、全账号都一样」。
+   原来只有后台「首页卡片」里有这排勾选，站主要走到后台才能改。
+   现在直接在卡片上点「类型」展开，勾完立刻生效；管理员勾的那一下会推到云端
+   （内容键 quote_source），别人刷新页面看到的就是同一套。 */
+var QUOTE_CATS_FE = [
+  ['a', '动画'], ['b', '漫画'], ['c', '游戏'], ['d', '文学'],
+  ['e', '原创'], ['f', '网络'], ['g', '其他'], ['h', '影视'],
+  ['i', '诗词'], ['j', '网易云'], ['k', '哲学'], ['l', '抖机灵']
+];
+var _quoteCfgOpen = false;
+function quoteCfgHtml(){
+  var cur = quoteCats();
+  return '<div class="quote-cats">'
+    + QUOTE_CATS_FE.map(function(c){
+        var on = cur.indexOf(c[0]) >= 0;
+        return '<button type="button" class="quote-cat' + (on ? ' on' : '') + '"'
+          + ' data-cat="' + c[0] + '" onclick="quoteCatToggle(\'' + c[0] + '\')">'
+          + (on ? '✓ ' : '') + c[1] + '</button>';
+      }).join('')
+    + '<span class="quote-cats-tip">'
+    + (isAdmin() ? '勾完即生效，并同步给所有人' : '勾完只在这台设备生效')
+    + '</span></div>';
+}
+function quoteCfgToggle(){
+  _quoteCfgOpen = !_quoteCfgOpen;
+  renderDailyQuote();
+}
+function quoteCatToggle(k){
+  var cur = quoteCats().slice();
+  var i = cur.indexOf(k);
+  if(i >= 0){
+    if(cur.length <= 1){ uiMsg('至少留一类，不然就没内容可显示了', '#b45309'); return; }
+    cur.splice(i, 1);
+  }else{
+    cur.push(k);
+  }
+  /* 按固定顺序排，存进云端 / 本机都是同一份，避免「同样的勾选不同的字符串」 */
+  var order = QUOTE_CATS_FE.map(function(c){ return c[0]; });
+  cur.sort(function(a, b){ return order.indexOf(a) - order.indexOf(b); });
+  UI.quoteCats = cur;
+  saveUI();
+  _quoteRemote = null;
+  renderDailyQuote();
+  fetchRemoteQuote(true);
+  quoteCatsPush(cur);
+}
+function quoteCatsPush(cats){
+  if(!isAdmin()) return;
+  if(typeof api !== 'function') return;
+  api('/content', { method: 'PUT', body: { items: { quote_source: {
+    net: quoteNetAllowed() ? 1 : 0,
+    cats: cats
+  } } } }).then(function(j){
+    if(j && j.ok === false) throw new Error(j.error || '保存失败');
+    if(!SITE_DATA.quoteSource) SITE_DATA.quoteSource = {};
+    SITE_DATA.quoteSource.cats = cats.slice();
+  }).catch(function(){
+    uiMsg('分类已在本机生效，但没能同步到云端', '#b45309');
+  });
 }
 
 /* 联网拉一句（hitokoto）。失败静默——本地兜底照样能用。
@@ -9504,6 +9591,7 @@ function islandMin(hhmm){
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
 
+var _weekCacheSaved = '';
 function islandWeekNo(date){
   if(!ISLAND || !ISLAND.startDate) return '';
   var st = new Date(ISLAND.startDate + 'T00:00:00');
@@ -9512,6 +9600,11 @@ function islandWeekNo(date){
   d.setHours(0, 0, 0, 0);
   var diff = Math.floor((d - st) / 86400000);
   if(diff < 0) return '未开学';
+  /* v4.7.3：把学期开始日留给时钟页 —— 它是独立页面、不联网，
+     自己算不出「第几周」，只能靠这里落一份缓存（同一天只写一次）。 */
+  if(_weekCacheSaved !== ISLAND.startDate){
+    try{ localStorage.setItem('cls_week_cache', JSON.stringify({ start: ISLAND.startDate })); _weekCacheSaved = ISLAND.startDate; }catch(e){}
+  }
   return '第 ' + (Math.floor(diff / 7) + 1) + ' 周';
 }
 

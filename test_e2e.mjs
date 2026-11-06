@@ -12769,6 +12769,43 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★后台可下载班徽与站点图标', /badge\.png/.test(admin3) && /favicon\.ico/.test(admin3));
   t('★favicon.ico 已生成并被引用',
     /favicon\.ico/.test(idx) && /favicon\.ico/.test(adminHtml));
+
+  /* ⑨d v4.7.3：离线名单带学号、作业字号范围、条件残影、无感刷新、时钟周次、一言分类 */
+  const big43 = fs.readFileSync(new URL('./big.js', import.meta.url), 'utf8');
+  const app43 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const clock43 = fs.readFileSync(new URL('./clock.html', import.meta.url), 'utf8');
+  t('★名单离线缓存：断网也带学号（颜色不再全变灰）',
+    /ROSTER_KEY = 'cls_pick_roster_v1'/.test(big43)
+    && /rosterCacheSet\(out\)/.test(big43)
+    && /var cached = rosterCacheGet\(\)/.test(big43));
+  t('★没有学号时按名单顺序补显示序号（_seq），不污染 studentId',
+    /_seq: out\.length \+ 1/.test(big43) && /var sq = parseInt\(\(st && st\._seq\)/.test(big43));
+  t('★作业字号范围 25%–300%',
+    /FS_STEPS = \[0\.25,[^\]]*3\]/.test(big43) && /FS_DEFAULT = 5/.test(big43));
+  t('★老字号档位按实际倍率换算（不会把 100% 读成 50%）',
+    /FS_KEY_OLD = 'cls_bhw_fs'/.test(big43) && /FS_OLD = \[0\.85/.test(big43)
+    && /var d = Math\.abs\(FS_STEPS\[i\] - want\)/.test(big43));
+  t('★不限成绩时清空名次 / 分数条件（含老配置残影）',
+    /if\(!v\)\{ f\.metric = ''; f\.subj = ''; f\.min = ''; f\.max = ''; \}/.test(big43)
+    && /if\(!out\.examId\)\{ out\.metric = ''/.test(big43));
+  t('★成绩条件只在选了考试时生效（hit / condText 同口径）',
+    (big43.match(/f\.examId && f\.metric/g) || []).length >= 2);
+  t('★作业无感刷新：识别未提交的输入 + 排队等手停',
+    /function hwDirty\(\)/.test(big43) && /el\.defaultValue/.test(big43)
+    && /function hwQueue\(raw\)/.test(big43));
+  t('★重绘保留焦点 / 光标 / 滚动位置',
+    /function snapshotEdit\(\)/.test(big43) && /function restoreEdit\(snap\)/.test(big43)
+    && /t\.setSelectionRange\(snap\.focus\.s, snap\.focus\.e\)/.test(big43));
+  t('★时钟页周次：首页缓存学期开始日，时钟页离线自算',
+    /cls_week_cache/.test(app43) && /function weekLabel\(date\)/.test(clock43)
+    && /weekLabel\(d\)/.test(clock43));
+  t('★时钟页日期行字号加大（2.4vw → 3.2vw）',
+    /#bigSub\{margin-top:2\.4vh;font-size:3\.2vw/.test(clock43));
+  t('★从前台设置一言分类（云同步）',
+    /function quoteCfgHtml\(\)/.test(app43) && /function quoteCatToggle\(k\)/.test(app43)
+    && /quoteCatsPush\(cur\)/.test(app43));
+  t('★云端 quote_source 保留 cats（原来只落 net 被丢掉）',
+    /qs\.cats = v\.cats\.map\(String\)/.test(app43));
 }
 
 console.log('\n' + '='.repeat(52));
