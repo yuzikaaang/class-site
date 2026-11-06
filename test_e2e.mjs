@@ -12815,6 +12815,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   const fsKeep = fs.readFileSync(new URL('./fs-keep.js', import.meta.url), 'utf8');
   const swJs = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
   const adminJs = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const adminJs3 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
   const pre = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
   t('★全屏守护：换页面自动恢复全屏', /global\.FSKeep = \{/.test(fsKeep)
     && /pagehide/.test(fsKeep) && /function arm\(\)/.test(fsKeep));
@@ -12827,6 +12828,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★后台游戏数据姓名解密后显示', /decField\(pkey, r\.who\)/.test(adminJs));
   t('★公告门禁：禁止解释性表述与第二人称',
     /BAN_EXPLAIN/.test(pre) && /公告里出现第二人称/.test(pre));
+  t('★版本记录按大版本分组、默认折叠、可搜索',
+    /function paintReleases\(\)/.test(adminJs3) && /rel-gh/.test(adminJs3)
+    && /REL_STATE\.open/.test(adminJs3) && /id="relSearch"/.test(adminJs3)
+    && /__early/.test(adminJs3) && /早期版本/.test(adminJs3));
 }
 
 console.log('\n' + '='.repeat(52));

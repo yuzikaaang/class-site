@@ -1195,6 +1195,15 @@ html[data-lite="1"] .field textarea:focus,
 html[data-lite="1"] .inp:focus{box-shadow:none!important}
 html[data-lite="1"] .head{background:var(--bg-1)!important}
 html[data-lite="1"] .modal-mask{background:rgba(41,37,36,.62)!important}
+/* v4.8.0：版本更新记录 —— 按大版本分组、默认折叠、可搜索 */
+.rel-group{margin:0 0 10px}
+.rel-gh{display:flex;align-items:center;gap:10px;width:100%;text-align:left;cursor:pointer;
+  padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:var(--panel);
+  font:inherit;color:var(--fg);transition:background .15s,border-color .15s}
+.rel-gh:hover{background:var(--tint);border-color:var(--grad-a)}
+.rel-gh b{font-size:.92rem}
+.rel-caret{width:14px;flex:0 0 14px;font-size:.8rem;color:var(--fg-3);text-align:center}
+.rel-gb{margin-top:10px;padding-left:6px}
 </style>
 </head>
 <body>
@@ -1799,14 +1808,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '4.8.0';
+var SITE_VERSION = '4.8.1';
 var VER_DATE = '2026-11-03';
 </script>
 <!-- v3.19.0：后台脚本按顶层横幅拆成三段（各 <120KB gzip），共享全局作用域，
      顺序固定，不能调换或异步加载。 -->
-<script src="./fs-keep.js?v=480"></script>
-<script src="./admin-1.js?v=480"></script>
-<script src="./admin-2.js?v=480"></script>
-<script src="./admin-3.js?v=480"></script>
+<script src="./fs-keep.js?v=481"></script>
+<script src="./admin-1.js?v=481"></script>
+<script src="./admin-2.js?v=481"></script>
+<script src="./admin-3.js?v=481"></script>
 </body>
 </html>

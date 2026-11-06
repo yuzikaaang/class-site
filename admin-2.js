@@ -5681,7 +5681,7 @@ function djFallbackCopy(text){
  *   走 /api/content PUT，后端只放行 admin / AI 助手，天然受保护。
  * ========================================================================= */
 
-var REL_STATE = { list: [], editing: null };
+var REL_STATE = { list: [], editing: null, open: {}, q: '' };
 
 /* 版本条目类型 → 展示标签 / 颜色（badge 样式复用后台已有的 badge-*） */
 var REL_TYPES = {

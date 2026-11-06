@@ -2823,6 +2823,9 @@ function releasesBlockHtml(){
     +   '<div style="flex:1;min-width:0"><b style="font-size:.92rem">版本更新记录</b>'
     +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
     +       '部署前必须在这里有一条对应版本的记录，否则不允许部署</p></div>'
+    +   '<div class="search" style="flex:0 1 240px;min-width:160px">' + svg('search')
+    +     '<input id="relSearch" placeholder="搜索版本号 / 标题 / 条目…" maxlength="40">'
+    +   '</div>'
     +   '<button class="btn btn-sm btn-secondary" id="relRefresh">' + svg('refresh',14) + ' 刷新</button>'
     +   '<button class="btn btn-sm btn-secondary" id="relSync">' + svg('download',14) + ' 补齐缺失版本</button>'
     +   '<button class="btn btn-sm" id="relAdd">' + svg('plus',14) + ' 新增版本</button>'
@@ -2835,6 +2838,13 @@ function mountReleasesBlock(){
   if($('relRefresh')) $('relRefresh').onclick = loadReleases;
   if($('relAdd')) $('relAdd').onclick = function(){ relEdit(null); };
   if($('relSync')) $('relSync').onclick = relSyncMissing;
+  if($('relSearch')){
+    $('relSearch').value = REL_STATE.q || '';
+    $('relSearch').oninput = debounce(function(e){
+      REL_STATE.q = e.target.value.trim();
+      paintReleases();
+    }, 220);
+  }
   if($('liteToggle')) $('liteToggle').onchange = function(){
     var on = this.checked;
     try { localStorage.setItem('cls_lite_mode', on ? '1' : '0'); } catch(e){}
@@ -2879,6 +2889,13 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.8.1', date: '2026-11-07', type: 'feat', title: '版本记录分组折叠与搜索', items: [
+      '版本记录按「主.小」版本号分组，默认全部折叠，点组标题展开',
+      '新增搜索框，可按版本号、标题、条目关键词过滤，命中时自动展开所在分组',
+      '不成形的历史版本号统一归入「早期版本」组'
+    ], pub: [
+      { cat: '界面', text: '更新记录按大版本折叠，可搜索' }
+    ] },
   { version: '4.8.0', date: '2026-11-07', type: 'feat', title: '字号步进、全屏保持、名单与身份、跳转与公告口径', items: [
       '作业字号改为连续百分比：25%–300%，A− / A+ 每次 5%，中间数字可直接输入；老档位按实际倍率换算',
       '新增 fs-keep.js 全屏守护：进入全屏后换页面（时钟 / 后台 / 作业）自动恢复全屏，按 Esc 或点退出即取消',
@@ -4157,29 +4174,85 @@ function paintReleases(){
       + '或点「填入最近几轮」一键导入这几天的主要改动</p></div>';
     return;
   }
-  body.innerHTML = list.map(function(r, i){
-    var ty = relTypeOf(r.type);
-    var items = (r.items || []).map(function(t){
-      return '<li style="margin:5px 0;line-height:1.7">' + esc(t) + '</li>';
-    }).join('');
-    return '<div class="panel" style="margin:0 0 14px;padding:14px 16px' + (r.highlight ? ';border-left:3px solid #af410f' : '') + '">'
-      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
-      +   '<b style="font-size:1rem">' + esc(relVerLabel(r.version)) + '</b>'
-      +   '<span class="badge ' + ty.cls + '">' + esc(ty.label) + '</span>'
-      +   (r.highlight ? '<span class="badge badge-green">重点</span>' : '')
-      +   '<span class="muted" style="font-size:.82rem">' + esc(r.date || '') + '</span>'
-      +   '<span style="flex:1"></span>'
-      +   '<button class="btn btn-sm btn-ghost" data-rel-up="' + i + '" title="上移">↑</button>'
-      +   '<button class="btn btn-sm btn-ghost" data-rel-down="' + i + '" title="下移">↓</button>'
-      +   '<button class="btn btn-sm btn-ghost" data-rel-edit="' + i + '">' + svg('edit',13) + ' 编辑</button>'
-      +   '<button class="btn btn-sm btn-ghost" data-rel-del="' + i + '" style="color:#b3261e">' + svg('trash',13) + ' 删除</button>'
-      + '</div>'
-      + (r.title ? '<div style="font-weight:700;margin-bottom:6px">' + esc(r.title) + '</div>' : '')
-      + (items ? '<ul style="margin:0;padding-left:20px;font-size:.86rem">' + items + '</ul>'
-               : '<p class="muted" style="margin:0;font-size:.84rem">（没有条目）</p>')
-      + '</div>';
-  }).join('');
 
+  /* v4.8.0（站主）：「版本更新记录太长了，可以折叠，按大版本号分类，
+     默认折叠起来，不然一页都翻不到底；还要能搜关键词」。
+     分组键取 主.小（4.8 / 4.7…），版本号不成形的老记录统一归到「早期版本」。 */
+  var q = String(REL_STATE.q || '').toLowerCase();
+  function hit(r){
+    if(!q) return true;
+    var blob = [r.version, r.title, (r.items || []).join(' ')].join(' ').toLowerCase();
+    return blob.indexOf(q) >= 0;
+  }
+  var shown = list.filter(hit);
+
+  if(!shown.length){
+    body.innerHTML = '<div class="empty">' + svg('search', 34)
+      + '<p>没有匹配「' + esc(REL_STATE.q) + '」的版本</p>'
+      + '<p class="muted" style="font-size:.82rem">可输入版本号（如 4.7）或功能词（如 作业、字号）</p></div>';
+    return;
+  }
+
+  var groups = [], map = {};
+  shown.forEach(function(r){
+    var m = String(r.version || '').match(/^(\d+)\.(\d+)/);
+    var key = m ? (m[1] + '.' + m[2]) : '__early';
+    if(!map[key]){ map[key] = { key: key, label: m ? ('v' + key) : '早期版本', rows: [] }; groups.push(map[key]); }
+    map[key].rows.push(r);
+  });
+  /* 有搜索词时全部展开，方便直接看到命中的那条 */
+  function isOpen(key){ return q ? true : !!REL_STATE.open[key]; }
+
+  body.innerHTML = '<div class="rel-sum" style="font-size:.8rem;color:var(--fg-3);margin:0 0 12px">'
+      + '共 ' + list.length + ' 个版本，' + groups.length + ' 组'
+      + (q ? '（筛出 ' + shown.length + ' 条）' : '，点击组标题展开')
+    + '</div>'
+    + groups.map(function(g){
+      var open = isOpen(g.key);
+      var dates = g.rows.map(function(r){ return String(r.date || ''); }).sort();
+      var span = dates[0] && dates[0] !== dates[dates.length - 1]
+        ? (dates[0] + ' ~ ' + dates[dates.length - 1]) : (dates[0] || '');
+      var cards = g.rows.map(function(r){
+        var i = list.indexOf(r);
+        var ty = relTypeOf(r.type);
+        var items = (r.items || []).map(function(t){
+          return '<li style="margin:5px 0;line-height:1.7">' + esc(t) + '</li>';
+        }).join('');
+        return '<div class="panel rel-card" style="margin:0 0 12px;padding:14px 16px' + (r.highlight ? ';border-left:3px solid #af410f' : '') + '">'
+          + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+          +   '<b style="font-size:1rem">' + esc(relVerLabel(r.version)) + '</b>'
+          +   '<span class="badge ' + ty.cls + '">' + esc(ty.label) + '</span>'
+          +   (r.highlight ? '<span class="badge badge-green">重点</span>' : '')
+          +   '<span class="muted" style="font-size:.82rem">' + esc(r.date || '') + '</span>'
+          +   '<span style="flex:1"></span>'
+          +   '<button class="btn btn-sm btn-ghost" data-rel-up="' + i + '" title="上移">↑</button>'
+          +   '<button class="btn btn-sm btn-ghost" data-rel-down="' + i + '" title="下移">↓</button>'
+          +   '<button class="btn btn-sm btn-ghost" data-rel-edit="' + i + '">' + svg('edit',13) + ' 编辑</button>'
+          +   '<button class="btn btn-sm btn-ghost" data-rel-del="' + i + '" style="color:#b3261e">' + svg('trash',13) + ' 删除</button>'
+          + '</div>'
+          + (r.title ? '<div style="font-weight:700;margin-bottom:6px">' + esc(r.title) + '</div>' : '')
+          + (items ? '<ul style="margin:0;padding-left:20px;font-size:.86rem">' + items + '</ul>'
+                   : '<p class="muted" style="margin:0;font-size:.84rem">（没有条目）</p>')
+          + '</div>';
+      }).join('');
+      return '<div class="rel-group">'
+        + '<button type="button" class="rel-gh" data-rel-g="' + attr(g.key) + '" aria-expanded="' + (open ? 'true' : 'false') + '">'
+        +   '<span class="rel-caret">' + (open ? '▾' : '▸') + '</span>'
+        +   '<b>' + esc(g.label) + '</b>'
+        +   '<span class="muted" style="font-size:.8rem">' + g.rows.length + ' 个版本'
+        +     (span ? ' · ' + esc(span) : '') + '</span>'
+        + '</button>'
+        + '<div class="rel-gb"' + (open ? '' : ' style="display:none"') + '>' + cards + '</div>'
+        + '</div>';
+    }).join('');
+
+  Array.prototype.forEach.call(body.querySelectorAll('[data-rel-g]'), function(b){
+    b.onclick = function(){
+      var k = b.getAttribute('data-rel-g');
+      REL_STATE.open[k] = !REL_STATE.open[k];
+      paintReleases();
+    };
+  });
   Array.prototype.forEach.call(body.querySelectorAll('[data-rel-edit]'), function(b){
     b.onclick = function(){ relEdit(parseInt(b.dataset.relEdit, 10)); };
   });
