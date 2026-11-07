@@ -12940,8 +12940,14 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   const apiFiles711 = fs.readFileSync(new URL('./api/files.js', import.meta.url), 'utf8');
   const apiGeo711 = fs.readFileSync(new URL('./api/geo.js', import.meta.url), 'utf8');
 
-  t('★v4.9.1 版本号升到 4.9.1',
-    /SITE_VERSION = '4\.9\.1'/.test(idx711) && /SITE_VER = '4\.9\.1'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  /* v4.9.2：这条只校验「本轮之后版本没退回去、且 index 与 sw 一致」，
+     具体数值由文件尾部 v4.9.2 段负责 */
+  {
+    const a = (idx711.match(/SITE_VERSION = '([\d.]+)'/) || [])[1] || '';
+    const b = (fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')
+      .match(/SITE_VER = '([\d.]+)'/) || [])[1] || '';
+    t('★版本号已到 4.9.1 以上且 index / sw 一致', a === b && /^4\.(9|1\d)\./.test(a));
+  }
 
   /* ① 宝箱落点概率分布 */
   t('★v4.7.11 宝箱落点支持 ±3 格且概率向外递减',
@@ -13118,8 +13124,38 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /data-fltab="txt"/.test(idx9) && /data-fltab="hist"/.test(idx9)
     && /function flHistRender\(\)/.test(app9) && /data-flact="ren"/.test(app9));
   t('★v4.9.1 中转站取满次数自动删原件、计数用独立短键',
-    /kv\.put\('fc:' \+ code/.test(files9) && /kv\.delete\('f:' \+ code\)/.test(files9)
-    && /TTL_CHOICES = \[1, 7, 30, 180\]/.test(files9));
+    /kv\.put\('fc:' \+ code/.test(files9) && /kv\.delete\('f:' \+ code\)/.test(files9));
+}
+
+/* ============================================================================
+ * v4.9.2（站主：KV 只有 1GB，最多留 3 天）
+ * ========================================================================== */
+{
+  const idx10 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const app10 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const files10 = fs.readFileSync(new URL('./api/files.js', import.meta.url), 'utf8');
+
+  t('★v4.9.2 中转站保存期只留 1 天 / 3 天（默认 3 天）',
+    /const TTL_CHOICES = \[1, 3\];/.test(files10) && /const DEFAULT_TTL = 3;/.test(files10)
+    && /data-ttl="3" class="on"/.test(idx10) && !/data-ttl="180"/.test(idx10));
+
+  t('★v4.9.2 上传前统计已用量，到软上限就拒绝',
+    /const SOFT_QUOTA = 700 \* 1024 \* 1024;/.test(files10)
+    && /async function kvUsage\(kv\)/.test(files10)
+    && /usage\.used \+ rec\.size > SOFT_QUOTA/.test(files10)
+    && /kv\.list\(\{ prefix: 'f:', limit: 1000, cursor \}\)/.test(files10));
+
+  t('★v4.9.2 容量写进 KV metadata，改名时保留',
+    /metadata: \{ size: rec\.size, at: rec\.at, kind: rec\.kind \}/.test(files10)
+    && (files10.match(/metadata: \{ size: rec\.size/g) || []).length >= 2);
+
+  t('★v4.9.2 前端显示已用空间并在上传 / 删除后刷新',
+    /function flQuotaLoad\(\)/.test(app10) && /id="flQuota"/.test(idx10)
+    && /action=quota/.test(app10) && /\.fl-quota\.warn/.test(idx10));
+
+  t('★v4.9.2 版本号升到 4.9.2',
+    /SITE_VERSION = '4\.9\.2'/.test(idx10)
+    && /SITE_VER = '4\.9\.2'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
 }
 
 console.log('\n' + '='.repeat(52));

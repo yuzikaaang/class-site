@@ -1195,6 +1195,17 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .fl-opts.hide{display:none}
 .fl-opts .fl-row{margin:10px 0 4px}
 .fl-tip{font-size:.7rem;color:var(--fg-3);line-height:1.6;margin:6px 0 2px}
+/* 第一行「已用 / 总数」+「还剩几天」，第二行进度条独占一整行 ——
+   挤在一行里条子只有几十像素，看不出用了多少 */
+.fl-quota{font-size:.7rem;color:var(--fg-3);line-height:1.6;margin:4px 0 8px;
+  display:grid;grid-template-columns:1fr auto;gap:3px 8px;align-items:center}
+.fl-quota span:last-child{text-align:right}
+.fl-quota i{grid-column:1 / -1;height:6px;border-radius:999px;background:rgba(120,53,15,.12);
+  overflow:hidden;display:block}
+.fl-quota i b{display:block;height:100%;width:0;border-radius:999px;
+  background:linear-gradient(90deg,#2f9e44,#a3d977);transition:width .3s}
+.fl-quota.warn i b{background:linear-gradient(90deg,#c2410c,#f59e0b)}
+.fl-quota.danger i b{background:linear-gradient(90deg,#b91c1c,#ef4444)}
 .fl-link{font-size:.74rem;color:var(--fg-3);background:var(--bg-2);border:1px dashed rgba(120,53,15,.2);
   border-radius:10px;padding:8px 10px;margin:0 0 10px;word-break:break-all;line-height:1.6}
 .fl-hist{display:flex;flex-direction:column;gap:9px;margin:4px 0 12px;max-height:min(52vh,460px);overflow:auto}
@@ -5596,7 +5607,7 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
       <label class="fl-drop" id="flDrop">
         <input type="file" id="flFile" style="display:none">
         <b>点击选择文件</b>
-        <span>也可以直接把文件拖进这个框　·　单个不超过 15MB</span>
+        <span>也可以直接把文件拖进这个框　·　单个不超过 15MB　·　最多存 3 天</span>
       </label>
       <div class="fl-prog" id="flProg"><i id="flProgIn"></i></div>
       <div class="fl-msg" id="flMsg"></div>
@@ -5612,11 +5623,10 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
     <div class="fl-opts" id="flOpts">
       <div class="fl-row">
         <span>保存</span>
+        <!-- v4.9.2（站主）：KV 一共 1GB，只留 1 天 / 3 天，默认 3 天 -->
         <div class="fl-seg" id="flTtl">
           <button type="button" data-ttl="1">1 天</button>
-          <button type="button" data-ttl="7" class="on">7 天</button>
-          <button type="button" data-ttl="30">30 天</button>
-          <button type="button" data-ttl="180">半年</button>
+          <button type="button" data-ttl="3" class="on">3 天</button>
         </div>
       </div>
       <div class="fl-row">
@@ -5633,6 +5643,8 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
         <input id="flMemo" class="fl-in" maxlength="60" placeholder="给自己看的标记，可不填">
       </div>
       <div class="fl-tip" id="flOptTip">取满次数后自动删除原件；到期也会自动消失。</div>
+      <!-- v4.9.2：剩余空间一眼可见，免得不知不觉把 1GB 塞满 -->
+      <div class="fl-quota" id="flQuota" style="display:none"></div>
     </div>
 
     <div class="fl-pane" id="flPaneGet" style="display:none">
@@ -7297,18 +7309,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.9.1';
+var SITE_VERSION = '4.9.2';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=491" defer></script>
-<script src="./app.min.js?v=491" defer></script>
+<script src="./auth-bus.js?v=492" defer></script>
+<script src="./app.min.js?v=492" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=491" defer></script>
-<script src="./big.js?v=491" defer></script>
+<script src="./fs-keep.js?v=492" defer></script>
+<script src="./big.js?v=492" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=491" defer></script>
+<script src="./pickfx.js?v=492" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

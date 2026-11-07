@@ -11,13 +11,15 @@
  * v4.9.1 新增（站主第 5、12 条）：
  *   · 单件上限 4MB → 15MB（KV 单值上限是 25MiB，base64 后约 20MB，留足余量）
  *   · 不止发文件，也能**直接发一段文本**（作业答案、链接、题目……）
- *   · 保存期可选 1 / 7 / 30 / 180 天（大文件更适合短，小文件给长的）
+ *   · 保存期只给 1 天 / 3 天（v4.9.2：站主算过账，KV 总共 1GB，宁可短不能满）
  *   · 可设「最多被取几次」，取满自动删除原件（防乱传）
  *   · 可以改名（凭删除口令），也可以随时提前删
  *   · 下载直链就是取件链接，直接发群里也能下
  *
- * KV 免费额度（2026 官方）：读 10 万次/天、写 1000 次/天、**存储合计 1GB**、
- * 单值 25MiB。班级用量远远够；1GB 大约等于 66 个 15MB 的文件。
+ * KV 免费额度（2026 官方）：读 10 万次/天、写 1000 次/天、列表 1000 次/天、
+ * **存储合计 1GB**、单值 25MiB。1GB ≈ 66 个 15MB 的文件，所以：
+ *   · 保存期硬上限 3 天，到点由 KV 自己过期删除，不用人记着清理；
+ *   · 上传前先算一次已用量，到 700MB 就不让再传了，永远不会把 1GB 撑爆。
  * ========================================================================= */
 
 import { handlePreflight } from './_lib/http.js';
@@ -26,7 +28,11 @@ const MAX_BYTES = 15 * 1024 * 1024;      /* 15MB */
 const MAX_TEXT = 20000;                  /* 纯文本最多 2 万字 */
 /* 去掉容易看错的 0 O 1 I L */
 const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
-const TTL_CHOICES = [1, 7, 30, 180];
+/* v4.9.2（站主）：KV 一共就 1GB，能留 3 天已经是上限，不再给 7/30/180 天 */
+const TTL_CHOICES = [1, 3];
+const DEFAULT_TTL = 3;
+/* 软上限 700MB：给同名/临时键留出余量，到这儿就拒绝新上传，绝不撞 1GB 硬墙 */
+const SOFT_QUOTA = 700 * 1024 * 1024;
 
 function ok(res, obj) {
   res.statusCode = 200;
@@ -66,9 +72,32 @@ function cdHeader(name) {
   return 'attachment; filename="' + ascii + '"; filename*=UTF-8\'\'' + encodeURIComponent(name || 'file');
 }
 function normTtl(v) {
-  const t = Number(v || 7);
-  return TTL_CHOICES.indexOf(t) >= 0 ? t : 7;
+  const t = Number(v || DEFAULT_TTL);
+  return TTL_CHOICES.indexOf(t) >= 0 ? t : DEFAULT_TTL;
 }
+/* ----------------------------------------------------------------------------
+ * 已用容量：list 一次带 metadata 就够（metadata.size 是上传时写进去的），
+ * 不用把每个文件都读出来。返回近似值 —— 只用来「快到顶了就别再传」，
+ * 不需要精确到字节。
+ * ------------------------------------------------------------------------- */
+async function kvUsage(kv) {
+  let used = 0, n = 0, cursor;
+  try {
+    for (let page = 0; page < 5; page++) {
+      const r = await kv.list({ prefix: 'f:', limit: 1000, cursor });
+      const keys = (r && r.keys) || [];
+      for (const k of keys) {
+        n++;
+        const m = k && k.metadata;
+        used += Number((m && m.size) || 0);
+      }
+      if (!r || r.list_complete) break;
+      cursor = r.cursor;
+    }
+  } catch (e) { /* 统计失败不影响主流程，按 0 算 */ }
+  return { used, n, cap: SOFT_QUOTA };
+}
+function mb(n) { return Math.round((Number(n) || 0) / 1048576 * 10) / 10; }
 function normMax(v) {
   const n = Number(v || 0);
   if (!isFinite(n) || n <= 0) return 0;      /* 0 = 不限次数 */
@@ -128,15 +157,28 @@ export default async function handler(req, res) {
       };
     }
 
+    /* v4.9.2：传之前先看一眼还剩多少地方 —— 满了就明说，别等 KV 写失败 */
+    const usage = await kvUsage(kv);
+    if (usage.used + rec.size > SOFT_QUOTA) {
+      return bad(res, 507,
+        '存储快满了（已用 ' + mb(usage.used) + 'MB / ' + mb(SOFT_QUOTA) + 'MB），'
+        + '先到「历史」里删掉一些不用的，或者等它们 3 天到期自动清掉再传。');
+    }
+
     const code = randStr(6);
     try {
-      await kv.put('f:' + code, JSON.stringify(rec), { expirationTtl: ttl * 86400 });
+      await kv.put('f:' + code, JSON.stringify(rec), {
+        expirationTtl: ttl * 86400,
+        /* size/at/kind 放进 metadata：list 时不用读值就知道占了多少 */
+        metadata: { size: rec.size, at: rec.at, kind: rec.kind },
+      });
     } catch (e) {
       return bad(res, 500, '存不进去：' + (e && e.message ? e.message : '未知错误'));
     }
     return ok(res, {
       code, delKey, kind: rec.kind, name: rec.name,
       size: rec.size, ttl, maxGet, exp: rec.exp,
+      quota: { used: usage.used + rec.size, cap: SOFT_QUOTA },
     });
   }
 
@@ -173,9 +215,20 @@ export default async function handler(req, res) {
     if (rec.del && rec.del !== delKey) return bad(res, 403, '删除口令不对');
     rec.name = name;
     const left = Math.max(60, Math.floor((rec.exp - Date.now()) / 1000));
-    try { await kv.put('f:' + code, JSON.stringify(rec), { expirationTtl: left }); }
+    try {
+      await kv.put('f:' + code, JSON.stringify(rec), {
+        expirationTtl: left,
+        metadata: { size: rec.size, at: rec.at, kind: rec.kind },
+      });
+    }
     catch (e) { return bad(res, 500, '改名没存上：' + (e && e.message ? e.message : '')); }
     return ok(res, { code, name });
+  }
+
+  /* ---------------- 剩余容量（面板上那行小字用） ---------------- */
+  if (method === 'GET' && action === 'quota') {
+    const u = await kvUsage(kv);
+    return ok(res, { used: u.used, cap: u.cap, count: u.n, maxTtl: DEFAULT_TTL });
   }
 
   /* ---------------- 查询 / 下载 ---------------- */

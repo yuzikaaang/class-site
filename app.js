@@ -23071,13 +23071,13 @@ function updGo(){
  *
  * 形态：
  *   ① 发文件 / 发文本 → 拿 6 位取件码 + 一条取件链接（链接就是下载地址）；
- *   ② 可选保存 1 / 7 / 30 / 180 天，可选「最多被取几次」（取满自动删原件）；
+ *   ② 保存 1 天或 3 天（v4.9.2 起 KV 只有 1GB，不再给长周期），可选「最多被取几次」；
  *   ③ 「历史」里存着本机发过的东西（取件码 + 删除口令都存本机），
  *      可以复制链接、改名、删除 —— 换设备就看不到别人的历史，这是有意的；
  *   ④ 上传用 XHR 才有真实进度事件（fetch 拿不到上传进度）。
  * ========================================================================== */
 var FL_KEY = 'cls_fl_hist_v1';
-var FL = { ttl: 7, maxGet: 0, busy: false, code: '', delKey: '', kind: 'file', tab: 'up' };
+var FL = { ttl: 3, maxGet: 0, busy: false, code: '', delKey: '', kind: 'file', tab: 'up' };
 function flEl(id){ return document.getElementById(id); }
 function flBase(){
   return (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
@@ -23091,6 +23091,7 @@ function openFiles(){
   m.classList.add('show');
   flShowDone(false);
   flTab(FL.tab || 'up');
+  flQuotaLoad();
   try{ if(typeof closeSidebar === 'function') closeSidebar(); }catch(e){}
 }
 function closeFiles(){
@@ -23134,6 +23135,30 @@ function flBytes(n){
 function flDaysLeft(exp){
   var d = Math.ceil((Number(exp || 0) - Date.now()) / 86400000);
   return d > 0 ? d : 0;
+}
+
+/* ---------------- 剩余空间（v4.9.2） ----------------
+   站主原话：「KV 总共就 1GB 还是比较少的，那我觉得最多就只能保留三天吧，
+   再多的话，我怕后面忘记删，然后就满掉了」。
+   所以：① 保存期只到 3 天，KV 到期自己删；② 面板上直接显示用了多少，
+   快到 700MB 时变橙、更满变红，上传到顶会被后端拦下并说明原因。 */
+function flQuotaLoad(){
+  var box = flEl('flQuota');
+  if(!box) return;
+  fetch(flBase() + '/api/files?action=quota&_=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j || !j.ok) return;
+      var used = Number(j.used) || 0, cap = Number(j.cap) || 1;
+      var pct = Math.min(100, Math.round(used / cap * 100));
+      box.style.display = '';
+      box.className = 'fl-quota' + (pct >= 85 ? ' danger' : (pct >= 60 ? ' warn' : ''));
+      box.innerHTML = '<span>已用 ' + flBytes(used) + ' / ' + flBytes(cap)
+        + '（' + (j.count || 0) + ' 件）</span>'
+        + '<span>最长 3 天自动清理</span>'
+        + '<i><b style="width:' + pct + '%"></b></i>';
+    })
+    .catch(function(){});
 }
 
 /* ---------------- 本机历史 ---------------- */
@@ -23220,8 +23245,8 @@ function flDone(code, delKey, meta){
     flHistAdd({
       code: code, delKey: delKey, kind: meta.kind || 'file',
       name: meta.name || '', size: meta.size || 0,
-      at: Date.now(), exp: meta.exp || (Date.now() + (meta.ttl || 7) * 86400000),
-      ttl: meta.ttl || 7, maxGet: meta.maxGet || 0, gets: 0, memo: meta.memo || '',
+      at: Date.now(), exp: meta.exp || (Date.now() + (meta.ttl || 3) * 86400000),
+      ttl: meta.ttl || 3, maxGet: meta.maxGet || 0, gets: 0, memo: meta.memo || '',
     });
   }
 }
@@ -23293,6 +23318,7 @@ function flUpload(f){
           kind: 'file', name: j.name || f.name, size: j.size, exp: j.exp,
           ttl: j.ttl, maxGet: j.maxGet, memo: (flEl('flMemo') || {}).value || '',
         });
+        flQuotaLoad();
         try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
       }else{
         flMsg('flMsg', 'err', (j && j.error) ? j.error : ('上传失败（HTTP ' + xhr.status + '）'));
@@ -23331,6 +23357,7 @@ function flSendText(){
           ttl: o.j.ttl, maxGet: o.j.maxGet, memo: memo,
         });
         if(ta) ta.value = '';
+        flQuotaLoad();
       }else{
         flMsg('flMsgTxt', 'err', (o.j && o.j.error) || '发送失败');
       }
@@ -23518,6 +23545,7 @@ function flQuery(){
         flPost('del', { code: code, delKey: rec.delKey }).then(function(o){
           if(o.j && o.j.ok){
             flHistDrop(code); flHistRender();
+            flQuotaLoad();
             flMsg('flMsgHist', 'ok', '已删除');
           }else{
             flMsg('flMsgHist', 'err', (o.j && o.j.error) || '删除失败');
