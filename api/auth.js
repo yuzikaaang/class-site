@@ -46,6 +46,11 @@ export default async function handler(req, res) {
       /* v2.10.0：公开的注册配置（登录页据此显示/隐藏注册入口、提示审核）。
          不需要登录 —— 没登录的人才是需要看这个的人。 */
       case 'register-config': return await registerConfig(req, res);
+      /* v4.10.1：公开的登录安全验证配置（登录页据此显示/隐藏图形验证码）。
+         同样不需要登录 —— 登录页就是给没登录的人用的。
+         默认 true（要验证）：老安装没有这个键时自动按「需要」走，
+         不会因为读不到设置就把防线悄悄关掉。 */
+      case 'login-config': return await loginConfig(req, res);
       default:
         return fail(res, 404, '未知的 action：' + (action || '(空)'));
     }
@@ -128,6 +133,15 @@ async function registerConfig(req, res) {
   const registerOpen = await getSiteSetting(sql, 'register_open', cfg().allowRegister);
   const review = await getSiteSetting(sql, 'register_review', true);
   return ok(res, { open: !!registerOpen, review: !!review });
+}
+
+/* v4.10.1：登录是否需要图形验证码（后台「站点设置」里可关）。
+   ⚠️ 默认 true：getSiteSetting 的兜底值就是 true，库里有旧值 null / 缺键
+   都按「需要验证」处理 —— 安全开关不能因为读失败而默认放开。 */
+async function loginConfig(req, res) {
+  const sql = getSql();
+  const captcha = await getSiteSetting(sql, 'login_captcha', true);
+  return ok(res, { captcha: captcha === null ? true : !!captcha });
 }
 
 /* ---------------- 登录 ---------------- */

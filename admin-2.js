@@ -3476,6 +3476,16 @@ function renderSettings(){
     +       '<span class="muted" style="font-size:.76rem">开启后：新注册的账号状态为「待审核」，在「成员与档案」里通过后才能登录；未审核账号无法登录</span></span>'
     +     '</label>'
     +   '</div>'
+    /* v4.10.1（站主第 2 条）：「后台可以设置登录的时候是否需要安全验证」。
+       图形验证码是纯前端防线（拦手工试密码，拦不住脚本 —— 服务端失败锁定
+       才是真防线）。关掉后登录 / 注册表单都不再渲染验证码，输个密码就能进。 */
+    +   '<div class="field">'
+    +     '<label style="display:flex;align-items:center;gap:10px;cursor:pointer">'
+    +       '<input type="checkbox" id="stLoginCaptcha" style="width:auto;margin:0">'
+    +       '<span><b>登录需要安全验证</b><br>'
+    +       '<span class="muted" style="font-size:.76rem">开启后：登录 / 注册时要输入图中的 4 位数字验证码（默认开启，建议保持）。关闭后登录页不再显示验证码，仅靠账号密码登录 —— 只建议在教室大屏等封闭环境关闭</span></span>'
+    +     '</label>'
+    +   '</div>'
     +   '<button class="btn" id="stPolicySave">' + svg('check', 14) + '保存策略</button>'
     +   '<div class="msg" id="stPolicyMsg"></div>'
 
@@ -3574,10 +3584,14 @@ function renderSettings(){
      管理员一旦保存即以 DB 值为准。 */
   api('/admin?action=settings').then(function(j){
     var s = (j && j.settings) || {};
-    var ro = $('stRegOpen'), rr = $('stRegReview');
+    var env = (j && j.envDefault) || {};
+    var ro = $('stRegOpen'), rr = $('stRegReview'), lc = $('stLoginCaptcha');
     if(ro) ro.checked = s.register_open === null || s.register_open === undefined
-      ? !!(j && j.envDefault && j.envDefault.register_open) : !!s.register_open;
+      ? !!(env && env.register_open) : !!s.register_open;
     if(rr) rr.checked = (s.register_review === null || s.register_review === undefined) ? true : !!s.register_review;
+    /* v4.10.1：登录安全验证 —— 未设置过按 envDefault（true）展示，默认开着 */
+    if(lc) lc.checked = (s.login_captcha === null || s.login_captcha === undefined)
+      ? !!(env && env.login_captcha) : !!s.login_captcha;
   }).catch(function(){ /* 读不到就保持默认勾选态，保存时以界面为准 */ });
 
   $('stPolicySave').onclick = function(){
@@ -3586,6 +3600,7 @@ function renderSettings(){
     api('/admin?action=set-settings', { method:'POST', body: {
       register_open: $('stRegOpen').checked,
       register_review: $('stRegReview').checked,
+      login_captcha: $('stLoginCaptcha').checked,
     }}).then(function(j){
       msg.className = 'msg ok show'; msg.textContent = j.message || '已保存，立即生效';
     }).catch(function(e){
@@ -4258,6 +4273,10 @@ function boot(){
   /* v4.9.1（站主第 11 条）：「后台右上角那个首页按钮，只是后台的首页，不用回前台」。
      以前它等于「回前台」，跟左边班徽重复，还容易误触。现在回到后台自己的「数据概览」。 */
   $('btnBackHome').onclick = function(){ go('overview'); try{ closeSide(); }catch(e){} };
+  /* v4.10.1（站主第 1 条）：顶栏「返回前台」——带文字、常驻可见。
+     复用 goFrontHome()：清掉 sessionStorage 里的 cls_next（就是它导致
+     退出后台后回到后台登录页）、放行 cls_force_home，直接跳前台首页。 */
+  $('btnToFront').onclick = function(){ goFrontHome(); };
   $('btnLogout').onclick = function(){ doLogout(false); };
   $('burger').onclick = function(){
     var s = $('side');

@@ -294,6 +294,9 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 }
 .icon-btn:hover{background:var(--danger-bg);color:var(--danger)}
 .icon-btn svg{width:16px;height:16px}
+/* v4.10.1：顶栏「返回前台」是带文字的常驻按钮（站主说纯图标找不到） */
+.head .icon-btn.with-text{width:auto;flex:0 0 auto;padding:0 12px;gap:6px;
+  font-size:.82rem;font-weight:700;white-space:nowrap}
 /* v2.5.0：运行时把 emoji 换成 SVG 后的内联容器（对齐与间距） */
 .ico-inline{display:inline-flex;align-items:center;vertical-align:-2px}
 .ico-inline>svg{width:15px;height:15px;vertical-align:0}
@@ -1297,6 +1300,14 @@ html[data-lite="1"] .modal-mask{background:rgba(41,37,36,.62)!important}
               title="点击回查线上后端构建号，核对改动有没有推上线">v—</span>
       </div>
       <div class="head-actions">
+        <!-- v4.10.1（站主第 1 条）：「后台新增一个按钮返回到前台，我没有任何一个按钮
+             可以直接返回到前台，每次退出都是直接退到后台登录界面」。
+             以前只有左上角班徽能回前台（藏在图标里，没人发现），这里放一个
+             带文字的常驻按钮，点一下就回班级站首页。 -->
+        <button class="icon-btn with-text" id="btnToFront" title="返回班级站首页（前台）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span>返回前台</span>
+        </button>
         <!-- 需求：可以点击后台的图标返回主界面 -->
         <button class="icon-btn" id="btnBackHome" title="返回主界面">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
@@ -1817,14 +1828,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '4.10.0';
+var SITE_VERSION = '4.10.1';
 var VER_DATE = '2026-11-07';
 </script>
 <!-- v3.19.0：后台脚本按顶层横幅拆成三段（各 <120KB gzip），共享全局作用域，
      顺序固定，不能调换或异步加载。 -->
-<script src="./fs-keep.js?v=4100"></script>
-<script src="./admin-1.js?v=4100"></script>
-<script src="./admin-2.js?v=4100"></script>
-<script src="./admin-3.js?v=4100"></script>
+<script src="./fs-keep.js?v=4101"></script>
+<script src="./admin-1.js?v=4101"></script>
+<script src="./admin-2.js?v=4101"></script>
+<script src="./admin-3.js?v=4101"></script>
 </body>
 </html>

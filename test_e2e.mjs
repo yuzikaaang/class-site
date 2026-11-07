@@ -13077,9 +13077,9 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /html\.big-hw \.sidebar/.test(idx9));
 
   /* ④ 首页信息栏 */
-  t('★v4.9.1 大屏首页信息栏加高、班徽不再被裁',
-    /html\.big-mode \.content>header\{[\s\S]{0,160}?min-height:96px/.test(idx9)
-    && /html\.big-mode \.content>header \.logo\{[\s\S]{0,160}?position:static/.test(idx9));
+  t('★v4.9.1 大屏首页信息栏加高、班徽不再被裁（v4.10.1 起选择器为 header.big-brand-top）',
+    /html\.big-mode header\.big-brand-top\{[\s\S]{0,160}?min-height:96px/.test(idx9)
+    && /html\.big-mode header\.big-brand-top \.logo\{[\s\S]{0,160}?position:static/.test(idx9));
 
   /* ⑥ 宝箱每轮等长 */
   t('★v4.9.1 宝箱连抽每轮时长一致（都是完整减速）',
@@ -13219,14 +13219,85 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   /* ③④ 大屏首页下移 + 启动脚本真全屏 */
   t('★v4.10.0 1920×1080 大屏首页整体下移：顶部留 20px 安全区，页头贴下沿',
     /html\.big-mode \.layout\{padding:20px 18px 4px\}/.test(idx11)
-    && /html\.big-mode \.content>header\{padding:24px 18px 0;margin-bottom:0;/.test(idx11));
+    && /html\.big-mode header\.big-brand-top\{padding:24px 18px 0;margin-bottom:0;/.test(idx11));
   t('★v4.10.0 启动脚本用 --start-fullscreen 真全屏',
     /--start-fullscreen/.test(adm311)
     && /--start-fullscreen/.test(fs.readFileSync('/workspace/班级电脑准备包/启动大屏.bat', 'utf8')));
 
-  t('★v4.10.0 版本号升到 4.10.0（index / sw / admin 三处一致）',
-    /SITE_VERSION = '4\.10\.0'/.test(idx11) && /SITE_VER = '4\.10\.0'/.test(sw11)
-    && /SITE_VERSION = '4\.10\.0'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+  t('★v4.10.0 之后版本未回退（当前 >= 4.10.0，且 index 与 sw 一致）',
+    (function(){
+      const cur = (idx11.match(/SITE_VERSION = '([\d.]+)'/) || [])[1] || '0';
+      const swv = (sw11.match(/SITE_VER = '([\d.]+)'/) || [])[1] || '0';
+      const pa = String(cur).split('.').map(Number), pb = [4, 10, 0];
+      let ge = true;
+      for (let i = 0; i < 3; i++){ if ((pa[i] || 0) !== pb[i]){ ge = (pa[i] || 0) > pb[i]; break; } }
+      return ge && cur === swv;
+    })());
+}
+
+/* ============================================================================
+ * v4.10.1（站主 3 条：返回前台按钮 / 验证码开关 / 大屏标题上移）
+ * ========================================================================== */
+{
+  const idx12 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const adm12 = fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8');
+  const a2_12  = fs.readFileSync(new URL('./admin-2.js', import.meta.url), 'utf8');
+  const a3_12  = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+  const app12  = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const big12  = fs.readFileSync(new URL('./big.js', import.meta.url), 'utf8');
+  const auth12 = fs.readFileSync(new URL('./api/auth.js', import.meta.url), 'utf8');
+  const admApi = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+
+  /* ① 后台返回前台按钮 */
+  t('★v4.10.1 后台顶栏有带文字的「返回前台」按钮（btnToFront + 图标 + 文字）',
+    /id="btnToFront"[\s\S]{0,400}返回前台/.test(adm12)
+    && /icon-btn\.with-text\{width:auto/.test(adm12));
+  t('★v4.10.1 返回前台走 goFrontHome（清 cls_next + cls_force_home + #/home）',
+    /\$\('btnToFront'\)\.onclick = function\(\)\{ goFrontHome\(\); \};/.test(a2_12)
+    && /sessionStorage\.removeItem\('cls_next'\)/.test(a2_12));
+
+  /* ② 登录安全验证开关 */
+  t('★v4.10.1 后端 login-config 公开接口（默认 true，缺键不放宽）',
+    /case 'login-config': return await loginConfig\(req, res\);/.test(auth12)
+    && /getSiteSetting\(sql, 'login_captcha', true\)/.test(auth12)
+    && /captcha === null \? true : !!captcha/.test(auth12));
+  t('★v4.10.1 settings 白名单含 login_captcha，envDefault 为 true',
+    /const SETTING_KEYS = \['register_open', 'register_review', 'login_captcha'\];/.test(admApi)
+    && /envDefault: \{ register_open: !!cfg\(\)\.allowRegister, login_captcha: true \}/.test(admApi));
+  t('★v4.10.1 前端 CAP_REQUIRED 默认 true + 启动拉 login-config',
+    /var CAP_REQUIRED = true;/.test(app12)
+    && /api\('\/auth\?action=login-config'\)/.test(app12)
+    && /loadLoginConfig\(\);/.test(app12));
+  t('★v4.10.1 登录 / 注册表单的验证码字段按开关渲染，capPassed 有兜底',
+    /var capField = CAP_REQUIRED/.test(app12)
+    && (app12.match(/capField \+/g) || []).length >= 2
+    && /if\(CAP_REQUIRED === false\) return true;/.test(app12));
+  t('★v4.10.1 后台系统设置面板有「登录需要安全验证」开关并随保存写库',
+    /id="stLoginCaptcha"/.test(a2_12)
+    && /login_captcha: \$\('stLoginCaptcha'\)\.checked,/.test(a2_12)
+    && /if\(lc\) lc\.checked = \(s\.login_captcha === null[\s\S]{0,140}env && env\.login_captcha\)/.test(a2_12));
+
+  /* ③ 大屏标题上移 */
+  t('★v4.10.1 大屏开启时把标题卡搬到功能栏前（moveBrandTop DOM 搬家）',
+    /function moveBrandTop\(on\)\{/.test(big12)
+    && /layout\.insertBefore\(hd, side\);/.test(big12)
+    && /hd\.classList\.add\('big-brand-top'\);/.test(big12)
+    && /moveBrandTop\(BIG\.on\);/.test(big12));
+  t('★v4.10.1 大屏标题规则全部改认 big-brand-top，并带安全区（::before 暗渐变）',
+    /html\.big-mode header\.big-brand-top\{[\s\S]{0,120}padding:30px 24px 12px;/.test(idx12)
+    && /html\.big-mode header\.big-brand-top::before\{/.test(idx12)
+    && !/html\.big-mode \.content>header\{padding:30px/.test(idx12));
+  t('★v4.10.1 作业页隐藏标题卡也要认新位置（big-hw header.big-brand-top）',
+    /html\.big-hw header\.big-brand-top,/.test(idx12));
+  t('v4.10.1 功能栏 sticky 位置避开课表（top:46px）',
+    /position:sticky;top:46px;z-index:900/.test(idx12));
+  t('★v4.10.1 作业页顶栏取站名兼容新位置',
+    /header\.big-brand-top h1'\) \|\| document\.querySelector\('\.content>header h1'\)/.test(big12));
+
+  t('★v4.10.1 版本号升到 4.10.1（index / sw / admin / worker 四处一致）',
+    /SITE_VERSION = '4\.10\.1'/.test(idx12) && /SITE_VER = '4\.10\.1'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+    && /SITE_VERSION = '4\.10\.1'/.test(adm12)
+    && /API_VER = '4\.10\.1'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8')));
 }
 
 console.log('\n' + '='.repeat(52));

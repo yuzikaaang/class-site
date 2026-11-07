@@ -5861,6 +5861,27 @@ function refreshHwViews(){
    与历史行为一致（不显示注册入口）。 */
 var REGISTER_OPEN = false;
 
+/** v4.10.1：登录是否需要图形验证码（后台「站点设置 → 登录安全验证」）。
+ *  默认 true —— 安全开关必须「默认开」：读不到配置、接口失败、离线，
+ *  都按「需要验证」走，绝不会因为拉取失败把防线悄悄关掉。
+ *  只有后台明确把开关拨到「关」，前端才不再渲染验证码、不再校验。 */
+var CAP_REQUIRED = true;
+
+/** v4.10.1：拉取登录安全验证配置（公开接口，无需登录） */
+function loadLoginConfig(){
+  if(!apiReady()) return;
+  api('/auth?action=login-config').then(function(j){
+    var on = !(j && j.captcha === false);   /* 缺字段 / null 都按 true */
+    if(on === CAP_REQUIRED) return;          /* 没变化就不用重渲染 */
+    CAP_REQUIRED = on;
+    /* 账号弹窗正开着 → 重渲染一次，让验证码字段随开关出现 / 消失 */
+    var m = document.getElementById('acctMask');
+    if(m && m.classList.contains('show') && !isLoggedIn()){
+      renderAccount();
+    }
+  }).catch(function(){ /* 拉不到就维持 true：验证码照显示、照校验 */ });
+}
+
 /** v2.10.0：拉取注册配置（总开关 + 审核），决定注册 tab 显隐 */
 function loadRegisterConfig(){
   if(!apiReady()) return;
@@ -5978,16 +5999,22 @@ function renderAccount(){
       '</div>'
     : '';
 
+  /* v4.10.1：安全验证字段按开关走。后台关掉「登录安全验证」时这里整体不渲染，
+     登录 / 注册表单都少一行；开关是启动时拉的，拉不到默认 true（照显示）。 */
+  var capField = CAP_REQUIRED
+    ? '<div class="acct-field"><label>安全验证</label>' + capHtml() + '</div>'
+    : '';
+
   var form = ACCT_TAB === 'register'
     ? '<div class="acct-field"><label>用户名</label><input id="acctU" placeholder="3–20 位，中英文/数字/下划线" autocomplete="username"></div>' +
       '<div class="acct-field"><label>显示名（可选）</label><input id="acctD" placeholder="同学们看到的名字" autocomplete="nickname"></div>' +
       '<div class="acct-field"><label>密码</label><input id="acctP" type="password" placeholder="至少 6 位" autocomplete="new-password"></div>' +
       '<div class="acct-field"><label>确认密码</label><input id="acctP2" type="password" placeholder="再输一次" autocomplete="new-password"></div>' +
-      '<div class="acct-field"><label>安全验证</label>' + capHtml() + '</div>' +
+      capField +
       '<button class="acct-btn" id="acctGo" onclick="doRegister()">注册并登录</button>'
     : '<div class="acct-field"><label>用户名</label><input id="acctU" placeholder="输入用户名" autocomplete="username"></div>' +
       '<div class="acct-field"><label>密码</label><input id="acctP" type="password" placeholder="输入密码" autocomplete="current-password"></div>' +
-      '<div class="acct-field"><label>安全验证</label>' + capHtml() + '</div>' +
+      capField +
       '<p class="acct-hint" style="margin:2px 0 10px">💡 用户名为本人<b>姓名</b>，初始密码是<b>出生日期 8 位数字</b>（如 2010 年 7 月 10 日生 → <code>20100710</code>）。</p>' +
       '<button class="acct-btn" id="acctGo" onclick="doLogin()">登录</button>';
 
@@ -5997,7 +6024,8 @@ function renderAccount(){
     '<b>不登录也完全不影响使用</b>，数据照样存在你自己手机上。</p>';
 
   /* 渲染并绑定图形验证码（每次进登录页都是一张全新的图）。
-     「换一张」的点击由 capBind() 内部绑定，这里不再重复绑一遍。 */
+     「换一张」的点击由 capBind() 内部绑定，这里不再重复绑一遍。
+     v4.10.1：开关关掉时没有验证码 DOM，capInit/capBind 内部自行判空返回。 */
   capInit();
   capBind();
 
@@ -6243,6 +6271,10 @@ function capBind(){
 /* 校验入口：通过返回 true；未通过则提示 + 换一张新码，返回 false。
    ⚠️ 每次失败都换新码 —— 让手工试错的人每次都得重新读图。 */
 function capPassed(){
+  /* v4.10.1：后台关掉「登录安全验证」时直接放行。
+     兜底判断：即使 DOM 里没有验证码（开关关闭后重渲染过），
+     也不该再把用户卡在「请先输入图中的验证码」。 */
+  if(CAP_REQUIRED === false) return true;
   var wrap = document.getElementById('capWrap');
   var tip  = document.getElementById('capTip');
   var inp  = document.getElementById('capInput');
@@ -8437,6 +8469,7 @@ function loadAdminAudit(){
   loadAuth();
   refreshAcctBtn();
   loadRegisterConfig();   /* v2.10.0：后台注册总开关 → 注册 tab 显隐 */
+  loadLoginConfig();      /* v4.10.1：后台登录安全验证开关 → 验证码显隐 */
   /* 有 token 就静默校验一次（顺带拿云端数据条数），失效会自动清掉 */
   if(AUTH.token){
     api('/auth?action=me').then(function(j){

@@ -86,6 +86,35 @@
     var el = document.documentElement;
     if(BIG.on) el.classList.add('big-mode');
     else el.classList.remove('big-mode', 'big-cat', 'big-hw');
+    moveBrandTop(BIG.on);
+  }
+
+  /* ---------------- 标题上移（v4.10.1 站主第 3 条） ----------------
+     站主要求：「标题放在上面，操作跟作业看板要求一样，预留位置防止课表遮挡，
+     功能栏放在标题下面」。
+     做法：开大屏时把 .content>header（站名 + 班徽）**搬**到 .sidebar
+     （导航功能栏）前面，成为 .layout 的直接子元素；关大屏时搬回 content
+     第一位。是 DOM 搬家不是复制 —— 普通模式一个像素都不动。 */
+  function moveBrandTop(on){
+    try{
+      var hd = document.querySelector('.content>header');
+      var side = document.querySelector('.sidebar');
+      var layout = document.querySelector('.layout');
+      if(!hd || !side || !layout) return;
+      if(on){
+        if(hd.parentNode !== layout || hd.nextElementSibling !== side){
+          layout.insertBefore(hd, side);
+        }
+        hd.classList.add('big-brand-top');
+      }else{
+        var content = document.querySelector('.content');
+        if(!content) return;
+        if(hd.parentNode !== content || content.firstChild !== hd){
+          content.insertBefore(hd, content.firstChild);
+        }
+        hd.classList.remove('big-brand-top');
+      }
+    }catch(e){}
   }
 
   /* 设置面板里的开关：只影响这台设备 */
@@ -869,7 +898,9 @@
     if(brand){
       var nm = '';
       try{
-        var h1 = document.querySelector('.content>header h1');
+        /* v4.10.1：大屏下标题卡被搬到 .sidebar 前面（big-brand-top），
+           不能再只认 .content>header，否则作业页顶栏拿不到站名 */
+        var h1 = document.querySelector('header.big-brand-top h1') || document.querySelector('.content>header h1');
         if(h1) nm = String(h1.textContent || '').trim();
       }catch(e){}
       brand.textContent = nm || '班级服务站';

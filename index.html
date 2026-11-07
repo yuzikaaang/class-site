@@ -4212,7 +4212,9 @@ html[data-motion="off"] .welcome-mask.show{
 html.big-mode{font-size:17px}
 html.big-mode .layout{display:block;max-width:1520px;padding:12px 20px 40px}
 html.big-mode .sidebar{
-  position:sticky;top:8px;z-index:900;width:auto;height:auto;max-height:none;
+  /* v4.10.1：功能栏挪到标题卡下面后，sticky 位置要避开课表浮窗（约 36px 高），
+     滚动时功能栏停在课表下沿，不再被压住 */
+  position:sticky;top:46px;z-index:900;width:auto;height:auto;max-height:none;
   flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px;
   padding:8px 10px;border-radius:16px;overflow:visible;margin-bottom:14px;
 }
@@ -4227,10 +4229,13 @@ html.big-mode #uiSetBtn{margin-left:auto!important}
 html.big-mode .fab{display:none}
 html.big-mode .sidebar-mask{display:none!important}
 html.big-mode .content{max-width:none;padding:0}
-html.big-mode .content>header{padding:18px 22px;border-radius:18px;margin-bottom:14px}
-html.big-mode .content>header h1{font-size:1.45rem;line-height:1.3}
-html.big-mode .content>header p#brandSub{display:none}
-html.big-mode .content>header .logo{width:46px;height:46px;margin-top:8px}
+/* v4.10.1（站主第 3 条）：大屏首页顺序改成「标题在上、功能栏在下」——
+   big.js 把 .content>header 搬到 .sidebar 前面并加 .big-brand-top，
+   这里所有大屏标题规则都改认这个新位置（普通模式仍是 .content>header）。 */
+html.big-mode header.big-brand-top{padding:18px 22px;border-radius:18px;margin-bottom:10px}
+html.big-mode header.big-brand-top h1{font-size:1.45rem;line-height:1.3}
+html.big-mode header.big-brand-top p#brandSub{display:none}
+html.big-mode header.big-brand-top .logo{width:46px;height:46px;margin-top:8px}
 /* v4.9.1（站主第 4 条）：「大屏服务首页的信息栏可以长一点，班徽都显示不全了」。
    原样：header 只有 8~18px 内边距（约 46~60px 高），而 .logo 是 position:absolute;
    top:20px; right:20px 的 72px 方块 —— 顶出容器下沿，被卡片压掉一半。
@@ -4239,16 +4244,28 @@ html.big-mode .content>header .logo{width:46px;height:46px;margin-top:8px}
 @media(min-width:900px){
   /* v4.10.0（站主第 4 条）：「大屏首页也跟服务站一样往下挪一点点，最上面会被课表挡住」。
      做法跟作业页顶栏一致：顶部多留一段空白（深色卡片本身当安全区），
-     内容贴下沿排；整块再往下让一点，避开教室一体机那个课表浮窗。 */
+     内容贴下沿排；整块再往下让一点，避开教室一体机那个课表浮窗。
+     v4.10.1：标题卡搬到最上面后，安全区做在标题卡自己身上
+     （padding-top + ::before 暗渐变，和 .bhw-top 同一套），
+     课表压到的是这段空档，压不到标题和班徽。 */
   html.big-mode .layout{padding-top:calc(24px * var(--bhw-fs,1))}
-  html.big-mode .content>header{
+  html.big-mode header.big-brand-top{
+    position:relative;
     display:flex;align-items:flex-end;gap:20px;
     min-height:96px;padding:30px 24px 12px;
   }
-  html.big-mode .content>header h1{
+  /* 上半段那条更暗的「安全区」，让空档看起来是有意留的，不是没对齐（同 .bhw-top） */
+  html.big-mode header.big-brand-top::before{
+    content:'';position:absolute;left:0;right:0;top:0;
+    height:30px;
+    background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,0));
+    border-radius:0 0 10px 10px;pointer-events:none;
+  }
+  html.big-mode header.big-brand-top>*{position:relative;z-index:1}
+  html.big-mode header.big-brand-top h1{
     flex:1 1 auto;min-width:0;text-align:left;margin:0;
   }
-  html.big-mode .content>header .logo{
+  html.big-mode header.big-brand-top .logo{
     position:static;order:9;flex:0 0 62px;
     width:62px;height:62px;margin:0 46px 0 0;
   }
@@ -4326,9 +4343,12 @@ html.big-hw #bigHw{display:block}
 html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important}
 /* 作业页是「专用页」：把全站导航、页头大标题、页脚全部收掉。
    v4.9.1（站主第 3 条）：不再要求 html 上带 big-mode —— 普通模式下直接打开
-   作业查看也会进这一页，那条顶部导航同样要收掉，否则会压在作业顶栏上。 */
+   作业查看也会进这一页，那条顶部导航同样要收掉，否则会压在作业顶栏上。
+   v4.10.1：大屏下标题卡搬到了 .sidebar 前面（big-brand-top），
+   两条选择器都要写，否则作业页顶部会多一条标题卡。 */
 html.big-hw .sidebar,
 html.big-hw .content>header,
+html.big-hw header.big-brand-top,
 html.big-hw footer{display:none!important}
 html.big-hw .layout{padding:0!important;max-width:none}
 html.big-hw .content{padding:0}
@@ -5355,11 +5375,13 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   /* v4.10.0（站主第 4 条）：教室一体机就是 1920×1080，正好落在这条规则上。
      原来这里为了「一屏装下」把页头压到 82px、顶部只留 6px —— 结果课表浮窗正好
      压在标题和班徽上。现在跟服务站顶栏一样：顶部留 26px 安全区，页头内部再让 30px，
-     内容贴下沿；多出来的 30 来像素不会把分组挤到第二屏（实测 1080p 仍是一屏）。 */
+     内容贴下沿；多出来的 30 来像素不会把分组挤到第二屏（实测 1080p 仍是一屏）。
+     v4.10.1：标题卡搬到最上面（big-brand-top），安全区照旧做在它自己身上。 */
   html.big-mode .layout{padding:20px 18px 4px}
-  html.big-mode .content>header{padding:24px 18px 0;margin-bottom:0;border-radius:15px;min-height:82px}
-  html.big-mode .content>header h1{font-size:1.2rem}
-  html.big-mode .content>header .logo{width:52px;height:52px;flex:0 0 52px;margin:0 44px 0 0}
+  html.big-mode header.big-brand-top{padding:24px 18px 0;margin-bottom:0;border-radius:15px;min-height:82px}
+  html.big-mode header.big-brand-top::before{height:24px}
+  html.big-mode header.big-brand-top h1{font-size:1.2rem}
+  html.big-mode header.big-brand-top .logo{width:52px;height:52px;flex:0 0 52px;margin:0 44px 0 0}
   html.big-mode footer{margin-top:5px;font-size:.68rem;line-height:1.45}
   html.big-mode .big-group{margin:2px 0 0}
   html.big-mode .big-group h2{margin:0 0 5px;font-size:.82rem}
@@ -5377,10 +5399,11 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   html.big-mode #sideCats{flex-wrap:nowrap}
   html.big-mode .side-btn{flex:none;font-size:.85rem;padding:8px 12px}
   html.big-mode #uiSetBtn{margin-left:0!important}
-  html.big-mode .content>header{padding:14px 16px;border-radius:16px}
-  html.big-mode .content>header h1{font-size:1.05rem;line-height:1.4;word-break:break-word}
+  /* v4.10.1：标题卡搬到最上面（big-brand-top），窄屏规则跟着改 */
+  html.big-mode header.big-brand-top{padding:14px 16px;border-radius:16px}
+  html.big-mode header.big-brand-top h1{font-size:1.05rem;line-height:1.4;word-break:break-word}
   /* v4.9.1：窄屏也保留右侧 44px 给主题按钮，班徽不会跟它叠在一起 */
-  html.big-mode .content>header .logo{width:34px;height:34px;margin:0 44px 4px 0}
+  html.big-mode header.big-brand-top .logo{width:34px;height:34px;margin:0 44px 4px 0}
   html.big-mode .layout{padding:10px 10px 30px}
 }
 @media(max-width:760px){
@@ -7323,18 +7346,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.0';
+var SITE_VERSION = '4.10.1';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4100" defer></script>
-<script src="./app.min.js?v=4100" defer></script>
+<script src="./auth-bus.js?v=4101" defer></script>
+<script src="./app.min.js?v=4101" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4100" defer></script>
-<script src="./big.js?v=4100" defer></script>
+<script src="./fs-keep.js?v=4101" defer></script>
+<script src="./big.js?v=4101" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4100" defer></script>
+<script src="./pickfx.js?v=4101" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

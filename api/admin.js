@@ -532,11 +532,12 @@ async function reviewUser(req, res, me, b) {
 }
 
 /* ---------------- v2.10.0：站点设置（后台可改的站点级开关） ----------------
-   目前两个键：
+   目前三个键：
      register_open   注册总开关（关掉后注册入口隐藏、接口 403）
      register_review 注册是否需管理员审核
+     login_captcha   v4.10.1：登录 / 注册是否需要图形验证码（默认 true）
    白名单收口：不在表里的键一律忽略，防止脏数据把设置表当垃圾桶。 */
-const SETTING_KEYS = ['register_open', 'register_review'];
+const SETTING_KEYS = ['register_open', 'register_review', 'login_captcha'];
 async function getSettings(req, res) {
   const sql = getSql();
   const out = {};
@@ -545,7 +546,10 @@ async function getSettings(req, res) {
     out[k] = v;
   }
   /* 一并给出「环境变量默认值」，后台展示「未设置时的兜底」有据可查 */
-  return ok(res, { settings: out, envDefault: { register_open: !!cfg().allowRegister } });
+  return ok(res, {
+    settings: out,
+    envDefault: { register_open: !!cfg().allowRegister, login_captcha: true },
+  });
 }
 
 async function saveSettings(req, res, me, b) {
