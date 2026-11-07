@@ -123,11 +123,20 @@ function normDays(raw) {
 
 function normHolidays(raw) {
   const list = Array.isArray(raw) ? raw.slice(0, MAX_HOLIDAYS) : [];
+  /* v4.7.9：开始 / 返校时间精确到分钟（"18:30"）。不填就是整段日期，
+     老数据没有这两个字段，照样能读。 */
+  const isTime = (v) => /^\d{1,2}:\d{2}$/.test(String(v || '').trim());
+  const pad = (v) => {
+    const p = String(v).trim().split(':');
+    return ('0' + parseInt(p[0], 10)).slice(-2) + ':' + ('0' + parseInt(p[1], 10)).slice(-2);
+  };
   return list.map((h, i) => {
     const from = isDate(h && h.from) ? h.from : '';
     if (!from) return null;
     const to = isDate(h && h.to) && h.to >= from ? h.to : from;
-    return { id: str(h && h.id, 16) || ('h' + i), from, to, label: str(h && h.label, 20) || '假期' };
+    const fromTime = isTime(h && h.fromTime) ? pad(h.fromTime) : '';
+    const toTime = isTime(h && h.toTime) ? pad(h.toTime) : '';
+    return { id: str(h && h.id, 16) || ('h' + i), from, to, label: str(h && h.label, 20) || '假期', fromTime, toTime };
   }).filter(Boolean).sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0));
 }
 

@@ -4182,7 +4182,7 @@ function apiUrl(path){ return (API_BASE || '') + '/api' + path; }
  *   · 7 天自动刷新一次（后台换了班徽也能跟着换），换设备重新登录会重新下载。
  * 整个过程不打扰用户：失败就静默，导出时还有 local/proxy 两级兜底。
  * ========================================================================= */
-var BADGE_LS = '__cls_badge_src';
+var BADGE_LS = '__cls_badge_src_v2';
 var BADGE_TS_LS = '__cls_badge_ts';
 var BADGE_TTL = 7 * 86400000;
 var __badgeLoading = null;
@@ -9944,6 +9944,65 @@ function islSwitchView(){
   islandBanner();
 }
 
+/* v4.7.9：假期的开始 / 结束时刻。
+   h.fromTime / h.toTime 形如 "18:30"，没填就用 00:00 / 23:59。
+   toTime 就是「返校时间」—— 小长假一般当天晚上就要回去上晚自习。 */
+function islHolTs(dateStr, timeStr, isEnd){
+  var t = String(timeStr || '').trim();
+  if(!/^\d{1,2}:\d{2}$/.test(t)) t = isEnd ? '23:59' : '00:00';
+  var p = t.split(':');
+  var hh = ('0' + parseInt(p[0], 10)).slice(-2);
+  var mm = ('0' + parseInt(p[1], 10)).slice(-2);
+  var dt = new Date(String(dateStr) + 'T' + hh + ':' + mm + ':00');
+  return isNaN(dt.getTime()) ? 0 : dt.getTime();
+}
+/* 剩余多久：不足 24 小时按「X 小时 Y 分」说，超过就说「N 天」。
+   站主原话：「如果放假是低于 24 小时，你就显示小时嘛」。 */
+function islLeftText(ms){
+  if(ms <= 0) return '即将结束';
+  if(ms < 86400000){
+    var h = Math.floor(ms / 3600000);
+    var m = Math.floor((ms % 3600000) / 60000);
+    if(h <= 0) return m + ' 分钟';
+    return h + ' 小时' + (m > 0 ? ' ' + m + ' 分' : '');
+  }
+  return Math.floor(ms / 86400000) + ' 天';
+}
+/* 假期横幅的文案。
+   v4.7.9 站主指出的两个坑：
+     ① 今天 + 明天放假时，原来写「已放假 1 天 · 距开学还有 2 天」——
+        把结束那天又数了一遍，看着像放了三天。现在只说「还剩 1 天」。
+     ② 21 点后切到「明日事项」，原来把今天那句原样搬过来（还是「已放假 1 天」），
+        看着像今天就在放假。明天要单独说「明天放假 · 共 N 天」。 */
+function islHolText(t){
+  var label = esc(t.label);
+  var backTime = /^\d{1,2}:\d{2}$/.test(String(t.toTime || '')) ? String(t.toTime) : '';
+  var backDay = t.isTomorrow ? '明天' : (t.lastDay ? '今天' : String(t.to).slice(5).replace('-', '/'));
+  var back = backTime ? (backDay + ' ' + backTime + ' 返校') : '';
+
+  if(t.isTomorrow){
+    /* 明天说的是「还没发生的事」，不能套今天的口径（站主指的第二个坑） */
+    if(t.firstDay){
+      return '<b>' + label + '</b>　明天开始放假 · 共 ' + t.totalDays + ' 天'
+        + (back ? '　<span class="isl-hol-sub">' + esc(back) + '</span>' : '');
+    }
+    if(t.lastDay){
+      return '<b>' + label + '</b>　明天第 ' + t.dayNo + ' 天（共 ' + t.totalDays + ' 天）· '
+        + (backTime ? esc(backTime) + ' 返校' : '当天结束')
+        + '　<span class="isl-hol-sub">' + esc(t.to.slice(5).replace('-', '/')) + '</span>';
+    }
+    return '<b>' + label + '</b>　明天第 ' + t.dayNo + ' 天 · 共 ' + t.totalDays + ' 天';
+  }
+
+  if(t.lastDay){
+    return '<b>' + label + '</b>　今天最后一天 · '
+      + (backTime ? esc(backTime) + ' 返校' : '明天开始上课')
+      + (t.leftMs > 0 && t.leftMs < 86400000 ? '（还剩 ' + islLeftText(t.leftMs) + '）' : '');
+  }
+  return '<b>' + label + '</b>　放假第 ' + t.dayNo + ' 天 · 还剩 ' + islLeftText(t.leftMs)
+    + (back ? '　<span class="isl-hol-sub">' + esc(back) + '</span>' : '');
+}
+
 function islandToday(offset){
   var d = new Date();
   if(offset) d.setDate(d.getDate() + offset);
@@ -9954,13 +10013,27 @@ function islandToday(offset){
   var hs = ISLAND.holidays || [];
   for(var i = 0; i < hs.length; i++){
     if(hs[i].from <= key && key <= hs[i].to){
-      var passed = islandDaysBetween(hs[i].from, key);
-      var left = islandDaysBetween(key, hs[i].to);
+      var h = hs[i];
+      /* v4.7.9（站主）：假期可以精确到分钟 —— 比如「周二 18:30 返校」。
+         没填时间就按「开始日 00:00 / 结束日 23:59」算，老数据完全兼容。 */
+      var startTs = islHolTs(h.from, h.fromTime, false);
+      var endTs = islHolTs(h.to, h.toTime, true);
+      var dayNo = (islandDaysBetween(h.from, key) || 0) + 1;
+      var totalDays = (islandDaysBetween(h.from, h.to) || 0) + 1;
+      var base = offset ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0) : new Date();
       return {
         kind: 'holiday',
-        label: hs[i].label || '假期',
-        passed: (passed == null ? 0 : passed) + 1,
-        left: (left == null ? 0 : left) + 1,
+        label: h.label || '假期',
+        from: h.from, to: h.to,
+        fromTime: h.fromTime || '', toTime: h.toTime || '',
+        dayNo: dayNo,
+        totalDays: totalDays,
+        startTs: startTs,
+        endTs: endTs,
+        leftMs: endTs - base.getTime(),
+        firstDay: dayNo === 1,
+        lastDay: key === h.to,
+        isTomorrow: !!offset,
         key: key, date: d,
       };
     }
@@ -10106,9 +10179,8 @@ function islandBanner(){
 
   if(t.kind === 'holiday'){
     host.innerHTML = '<div class="island-banner hol">'
-      + tagRow('放假中')
-      + '<span class="txt"><b>' + esc(t.label) + '</b>　已放假 ' + t.passed + ' 天'
-      +   ' · 距开学还有 ' + t.left + ' 天</span>'
+      + tagRow(tomorrow ? (t.firstDay ? '明天放假' : '明日放假') : (t.firstDay ? '今天放假' : '放假中'))
+      + '<span class="txt">' + islHolText(t) + '</span>'
       + '</div>';
     islBindPhoto(host);
     if(footL) footL.textContent = '假期';
@@ -21143,21 +21215,53 @@ function hwLinkKind(u){
 /* 用 fetch 取图再画：直接给 <img> 加 crossOrigin 时，图床不带 CORS 头就会
    污染 canvas，toBlob 直接抛 SecurityError，整张图都导不出来。
    fetch 失败就降级成一行文字，绝不让整张图挂掉。 */
-function hwLoadImage(url){
+/* 导出图里放不下整条长链，留「域名 + 末段」够核对就行 */
+function hwShortUrl(u){
+  var s = String(u || '').replace(/^https?:\/\//i, '');
+  if(s.length <= 46) return s;
+  var parts = s.split('/');
+  var tail = parts[parts.length - 1] || '';
+  var host = parts[0] || '';
+  if(tail.length > 30) tail = tail.slice(-30);
+  return host + '/…/' + tail;
+}
+function hwFetchBlob(url){
   return fetch(url, { mode: 'cors', credentials: 'omit' }).then(function(r){
     if(!r.ok) throw new Error('HTTP ' + r.status);
     return r.blob();
-  }).then(function(b){
-    return new Promise(function(resolve, reject){
-      var obj = URL.createObjectURL(b);
-      var im = new Image();
-      im.onload = function(){
-        /* 不 revoke：画的时候还要用 */
-        resolve(im);
-      };
-      im.onerror = function(){ URL.revokeObjectURL(obj); reject(new Error('图片解码失败')); };
-      im.src = obj;
+  });
+}
+function hwDecodeBlob(b){
+  return new Promise(function(resolve, reject){
+    var obj = URL.createObjectURL(b);
+    var im = new Image();
+    im.onload = function(){
+      /* 不 revoke：画的时候还要用 */
+      resolve(im);
+    };
+    im.onerror = function(){ URL.revokeObjectURL(obj); reject(new Error('图片解码失败')); };
+    im.src = obj;
+  });
+}
+/* v4.7.9（站主）：「图片直链没有变成直接查看的照片」。
+   图床（ax1x / smms / bilibili…）基本都不给 CORS 头，浏览器 fetch 直接被拦。
+   所以先自己取一次，失败就交给服务端 /api/img 代取 —— 代理带 CORS 头回来，
+   对 canvas 来说等同同源图片，能直接画。 */
+function hwLoadImage(url){
+  var u = String(url || '').trim();
+  if(!u) return Promise.reject(new Error('空地址'));
+  var direct = hwFetchBlob(u)
+    .then(hwDecodeBlob)
+    .catch(function(e){
+      if(typeof apiUrl !== 'function') throw e;
+      return hwFetchBlob(apiUrl('/img?u=' + encodeURIComponent(u)))
+        .then(hwDecodeBlob);
     });
+  return direct.catch(function(e){
+    /* 代理也失败时，把原因带上，方便前端提示到底卡在哪 */
+    var err = new Error(e && e.message ? e.message : '图片取不到');
+    err.__url = u;
+    throw err;
   });
 }
 
@@ -21300,15 +21404,20 @@ function hwExportImage(mode){
   }).filter(function(s){ return s.rows.length || s.media.length; });
 
   function finish(){
-    /* 图片取不到（图床没开 CORS / 404）→ 退回一行文字链接，不能让整张图失败 */
+    /* 图片取不到（图床删图 / 404 / 代理也失败）→ 退回一行文字，不能让整张图失败。
+       v4.7.9：不再是干巴巴一条网址 —— 直接写「打不开」，并给出短链方便核对。 */
     sections.forEach(function(sec){
       sec.media = sec.media.filter(function(m){
         if(m.__fail){
-          sec.lines.push((m.kind === 'image' ? '图片：' : '链接：') + m.url);
+          if(m.kind === 'image'){
+            sec.lines.push('图片打不开（链接可能已失效）：' + hwShortUrl(m.url));
+          }else{
+            sec.lines.push('链接：' + hwShortUrl(m.url));
+          }
           return false;
         }
         if((m.kind === 'audio' || m.kind === 'video') && !m.qr){
-          sec.lines.push(m.url);
+          sec.lines.push(hwShortUrl(m.url));
           return false;
         }
         return true;

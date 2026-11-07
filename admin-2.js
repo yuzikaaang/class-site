@@ -3917,7 +3917,7 @@ function adminPageName(){
 /** v3.7.0（站主 #3）：登录时把班徽存本地，导出直接读缓存（后台同前台一套逻辑） */
 function adminBadgeCacheGet(){
   try{
-    var v = localStorage.getItem('__cls_badge_src') || '';
+    var v = localStorage.getItem('__cls_badge_src_v2') || '';
     return v.indexOf('data:image/') === 0 ? v : '';
   }catch(e){ return ''; }
 }
@@ -3937,7 +3937,7 @@ function adminBadgeCacheLoad(force){
         var d = String(fr.result || '');
         if(d.indexOf('data:image/') !== 0) return;
         try{
-          localStorage.setItem('__cls_badge_src', d);
+          localStorage.setItem('__cls_badge_src_v2', d);
           localStorage.setItem('__cls_badge_ts', String(Date.now()));
         }catch(e){}
       };
@@ -5855,15 +5855,19 @@ function paintIsland(){
 
     + '<section class="panel ai-sec">'
     +   '<div class="panel-head"><div><h3>假期（寒假 / 暑假 / 小长假）</h3>'
-    +     '<p class="sub">这段时间内横幅显示「已放假 N 天 · 距开学还有 M 天」，不再显示课表</p></div></div>'
+    +     '<p class="sub">这段时间内横幅显示放假第几天、还剩多久，不再显示课表。时间可以只填日期，也可以精确到分钟（返校当晚用得上）</p></div></div>'
     +   '<div class="panel-body">'
     +     '<div id="aiHolList"></div>'
     +     '<div class="ai-dform">'
     +       '<input class="gate-input" id="ahLabel" maxlength="16" placeholder="名称，如 寒假">'
-    +       '<input class="gate-input" type="date" id="ahFrom">'
-    +       '<input class="gate-input" type="date" id="ahTo">'
+    +       '<input class="gate-input" type="date" id="ahFrom" title="放假第一天">'
+    +       '<input class="gate-input" type="time" id="ahFromTime" title="开始时间，不填按 00:00" placeholder="00:00">'
+    +       '<span class="ah-arrow">→</span>'
+    +       '<input class="gate-input" type="date" id="ahTo" title="返校那天">'
+    +       '<input class="gate-input" type="time" id="ahToTime" title="返校时间，不填按 23:59" placeholder="18:00">'
     +       '<button class="btn btn-sm" id="ahAdd">添加</button>'
     +     '</div>'
+    +     '<p class="muted" style="font-size:.72rem;margin:6px 0 0">例：周一 08:00 放假 → 周二 18:30 返校，就填「周一 · 08:00 → 周二 · 18:30」。</p>'
     +   '</div>'
     + '</section>';
 

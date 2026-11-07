@@ -1696,6 +1696,7 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .island-banner.left-align .tag{align-self:flex-start}
 .island-banner.hol{background:rgba(255,255,255,.14);border-style:dashed}
 .island-banner.hol .tag{color:#fff;background:rgba(255,255,255,.20);border-color:rgba(255,255,255,.28)}
+.isl-hol-sub{font-size:.74em;opacity:.72;white-space:nowrap}
 .island-foot{display:flex;justify-content:center;align-items:center;gap:14px;
   margin-top:8px;font-size:.58rem;color:rgba(255,255,255,.42);position:relative;z-index:1}
 .island-foot b{color:rgba(255,255,255,.66);font-weight:700}
@@ -5795,7 +5796,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         var FALL  = 'https://s41.ax1x.com/2026/06/07/pmmhF6H.png';
         function store(d){
           try{
-            localStorage.setItem('__cls_badge_src', d);
+            localStorage.setItem('__cls_badge_src_v2', d);
             localStorage.setItem('__cls_badge_ts', String(Date.now()));
           }catch(e){}
         }
@@ -5803,7 +5804,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           var el = document.getElementById('siteLogoImg');
           if(!el) return;
           var c = '';
-          try{ c = localStorage.getItem('__cls_badge_src') || ''; }catch(e){}
+          try{ c = localStorage.getItem('__cls_badge_src_v2') || ''; }catch(e){}
           if(c.indexOf('data:image/') === 0){ el.src = c; return; }
           fetch(API_B).then(function(r){
             if(!r.ok) throw new Error('HTTP ' + r.status);
@@ -6417,13 +6418,27 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       var c = cv.getContext('2d');
       c.drawImage(img, 0, 0, s, s);
       var d = c.getImageData(0, 0, s, s).data;
+      function at(x, y) {
+        var i = (y * s + x) * 4;
+        return { r: d[i], g: d[i + 1], b: d[i + 2], a: d[i + 3] };
+      }
+      /* v4.7.9：先看四个角 —— 班徽都是圆形/圆角，真正的透明底图四角一定透。
+         四角里有三个以上是「不透明的黑」，就是补齐过黑底的图（icons/badge-256
+         旧版就是这样，黑底占 39%，比 45% 阈值低，一直被放过）。 */
+      var corners = [at(1, 1), at(s - 2, 1), at(1, s - 2), at(s - 2, s - 2)];
+      var darkCorners = 0;
+      corners.forEach(function (p) {
+        if (p.a > 200 && p.r < 26 && p.g < 26 && p.b < 26) darkCorners++;
+      });
+      if (darkCorners >= 3) return false;
+
       var black = 0, opaque = 0;
       for (var i = 0; i < d.length; i += 4) {
         if (d[i + 3] < 40) continue;
         opaque++;
         if (d[i] < 24 && d[i + 1] < 24 && d[i + 2] < 24) black++;
       }
-      if (opaque && black / opaque > 0.45) return false;
+      if (opaque && black / opaque > 0.30) return false;
       return true;
     } catch (e) {
       /* 画布被污染（跨域图）时读不到像素，按可用处理，让后面的绘制失败自己兜底 */
@@ -6888,18 +6903,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.7.8';
+var SITE_VERSION = '4.7.9';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=478" defer></script>
-<script src="./app.min.js?v=478" defer></script>
+<script src="./auth-bus.js?v=479" defer></script>
+<script src="./app.min.js?v=479" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=478" defer></script>
-<script src="./big.js?v=478" defer></script>
+<script src="./fs-keep.js?v=479" defer></script>
+<script src="./big.js?v=479" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=478" defer></script>
+<script src="./pickfx.js?v=479" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

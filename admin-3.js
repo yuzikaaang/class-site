@@ -443,7 +443,8 @@ function paintHols(){
   host.innerHTML = list.map(function(h){
     return '<div class="ai-ovitem ai-ovclick' + (AI_HOL_EDIT === h.id ? ' on' : '') + '" data-holedit="' + attr(h.id) + '">'
       + '<span class="ai-ovtag off">' + esc(h.label || '假期') + '</span>'
-      + '<b>' + esc(h.from.slice(5)) + ' – ' + esc(h.to.slice(5)) + '</b>'
+      + '<b>' + esc(h.from.slice(5)) + (h.fromTime ? ' ' + esc(h.fromTime) : '')
+      + ' – ' + esc(h.to.slice(5)) + (h.toTime ? ' ' + esc(h.toTime) : '') + '</b>'
       + '<span class="muted"></span>'
       + '<button type="button" class="ai-mini" data-hcopy="' + attr(h.id) + '" title="复用：复制到下面表单，改日期再加一条">复用</button>'
       + '<button type="button" data-hdel="' + attr(h.id) + '" title="删除">✕</button>'
@@ -466,6 +467,8 @@ function paintHols(){
       $('ahLabel').value = h0.label || '';
       $('ahFrom').value = h0.from;
       $('ahTo').value = h0.to;
+      if($('ahFromTime')) $('ahFromTime').value = h0.fromTime || '';
+      if($('ahToTime')) $('ahToTime').value = h0.toTime || '';
       var b0 = $('ahAdd');
       if(b0) b0.textContent = '添加';
       paintHols();
@@ -484,6 +487,8 @@ function aiEditHol(id){
   $('ahLabel').value = h.label || '';
   $('ahFrom').value = h.from;
   $('ahTo').value = h.to;
+  if($('ahFromTime')) $('ahFromTime').value = h.fromTime || '';
+  if($('ahToTime')) $('ahToTime').value = h.toTime || '';
   var b = $('ahAdd');
   if(b) b.textContent = '更新这一段';
   paintHols();
@@ -491,6 +496,8 @@ function aiEditHol(id){
 function aiCancelHol(){
   AI_HOL_EDIT = null;
   $('ahLabel').value = ''; $('ahFrom').value = ''; $('ahTo').value = '';
+  if($('ahFromTime')) $('ahFromTime').value = '';
+  if($('ahToTime')) $('ahToTime').value = '';
   var b = $('ahAdd');
   if(b) b.textContent = '添加';
 }
@@ -499,14 +506,19 @@ function aiAddHoliday(){
   var label = String($('ahLabel').value || '').trim().slice(0, 16);
   var from = $('ahFrom').value || '';
   var to = $('ahTo').value || from;
+  var fromTime = ($('ahFromTime') && $('ahFromTime').value) || '';
+  var toTime = ($('ahToTime') && $('ahToTime').value) || '';
   if(!from){ toast('先选开始日期', 'warn'); return; }
   if(to < from){ toast('结束日期不能早于开始日期', 'warn'); return; }
+  if(to === from && toTime && fromTime && toTime < fromTime){
+    toast('结束时间不能早于开始时间', 'warn'); return;
+  }
   if(AI_HOL_EDIT){
     var cur = (AI.holidays || []).filter(function(x){ return x.id === AI_HOL_EDIT; })[0];
-    if(cur){ cur.from = from; cur.to = to; cur.label = label || '假期'; }
+    if(cur){ cur.from = from; cur.to = to; cur.label = label || '假期'; cur.fromTime = fromTime; cur.toTime = toTime; }
     toast('已更新，自动保存中…', 'ok', 2200);
   }else{
-    AI.holidays.push({ id: 'h' + Date.now().toString(36), from: from, to: to, label: label || '假期' });
+    AI.holidays.push({ id: 'h' + Date.now().toString(36), from: from, to: to, label: label || '假期', fromTime: fromTime, toTime: toTime });
     toast('已添加，自动保存中…', 'ok', 2200);
   }
   aiCancelHol();
@@ -2889,6 +2901,20 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.7.9', date: '2026-11-07', type: 'fix', title: '作业图片代理、班徽黑底、假期精确到分钟', items: [
+      '作业导出的图片直链改走服务端代理取图：图床不给跨域头也能画成照片，不再退成一串网址',
+      '图片确实打不开时，导出图写「图片打不开（链接可能已失效）」并附短链，不再只丢一整条长网址',
+      '修复班徽黑底：仓库里那张 256px 班徽是黑底不透明图（黑色占 39%，低于原来的 45% 判定线），已换成透明底并让检测识别「四角全黑」',
+      '本机缓存的旧黑底班徽会自动作废重下，不用手动清缓存',
+      '假期可以填到分钟：开始时间 + 返校时间（如周二 18:30），不填就按整天算',
+      '假期文案重写：今天 + 明天放假时只说「还剩 1 天」，不再把结束那天多数一遍',
+      '剩余不足 24 小时直接显示「还剩 X 小时 Y 分」',
+      '晚上 21 点后切到「明日事项」时，假期明确写「明天开始放假 · 共 N 天」，不再照搬今天的「放假第几天」'
+    ], pub: [
+      { cat: '作业', text: '导出图里的图片显示成照片' },
+      { cat: '界面', text: '班徽背景显示正常' },
+      { cat: '界面', text: '假期可精确到返校时间' }
+    ] },
   { version: '4.7.8', date: '2026-11-07', type: 'fix', title: '公告时间与排序修正', items: [
       '公告排序改为统一补全时间后再比较：只填日期的公告按当天 23:59 计算，不再被同一天带时间的旧公告压到下面',
       '修正 v4.8、v4.9 两条公告的时间（原先只填了日期，导致新公告排在 v4.7 之后）',

@@ -1036,7 +1036,12 @@
         if(typeof islandToday === 'function' && typeof ISLAND !== 'undefined' && ISLAND && ISLAND.on){
           var t = islandToday(0);
           if(t){
-            if(t.kind === 'holiday') txt = (t.label || '放假中') + ' · 距开学 ' + t.left + ' 天';
+            if(t.kind === 'holiday'){
+              /* v4.7.9：口径跟首页横幅统一 —— 不再「距开学 N 天」（结束日被多数一次），
+                 不足 24 小时直接说小时。 */
+              txt = (t.label || '放假中') + ' · 放假第 ' + t.dayNo + ' 天 · 还剩 '
+                + (typeof islLeftText === 'function' ? islLeftText(t.leftMs) : '');
+            }
             else if(t.kind === 'off') txt = (t.label || '今天休息') + (t.text ? ' · ' + t.text : '');
             else txt = t.text || '今天没有安排';
             sub = '今日事项';

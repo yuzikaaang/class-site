@@ -24,6 +24,7 @@ import adminHandler, { runAutoBackup } from './admin.js';
 import profileHandler from './profile.js';
 import contentHandler from './content.js';
 import badgeHandler from './badge.js';
+import imgHandler from './img.js';
 import gamesHandler from './games.js';
 import studyHandler from './study.js';
 import scoresHandler from './scores.js';
@@ -42,7 +43,7 @@ import { cors } from './_lib/http.js';
    于是回查永远对不上提交号、每次都红了 120 秒后判失败：job 红，线上其实是新的。
    所以加一个**由代码本身带出去**的版本号：只要线上换了代码，它就会变。
    纪律：每轮发布与前台 SITE_VERSION 同步（测试里有断言锁死两者相等）。 */
-const API_VER = '4.7.8';
+const API_VER = '4.7.9';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
 async function adaptRequest(request, env) {
@@ -157,6 +158,10 @@ export default {
         /* v3.6.4：班徽代理（跨域图床 → 同源可画） */
         case 'badge':
           await badgeHandler(req, res);
+          break;
+        /* v4.7.9：作业里的图片直链代理（图床没 CORS，浏览器画不进 canvas） */
+        case 'img':
+          await imgHandler(req, res);
           break;
         case 'games':
           await gamesHandler(req, res);

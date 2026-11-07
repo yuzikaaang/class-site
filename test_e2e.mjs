@@ -11330,7 +11330,7 @@ console.log('\n【87】v3.5.40 字段本人编辑 / 投票明细 / 页面在线 
     /djImgBtn/.test(adm540) && /djShareBtn/.test(adm540) && /function djShareImage/.test(adm540));
   t('★v3.5.40 作业有导出图片 / 分享（含图片直链）',
     /function hwExportImage/.test(idx540) && /hwExportImage\('share'\)/.test(idx540)
-    && /图片：' : '链接：'\) \+ m\.url/.test(idx540));
+    && /hwShortUrl\(m\.url\)/.test(idx540));
   t('v3.5.40 分享不支持时自动退回下载',
     /navigator\.canShare/.test(share540) && /return downloadCanvas\(cv, opts/.test(share540));
 
@@ -11876,7 +11876,7 @@ console.log('\n【新】v3.8.5 作业导出直链 / 分享链接 404 修复');
     /function hwLoadImage/.test(idx85) && /mode: 'cors'/.test(idx85)
     && /URL\.createObjectURL\(b\)/.test(idx85));
   t('★v3.8.5 图片取不到时降级成文字，不毁整张图',
-    idx85.indexOf("'图片：' : '链接：'") >= 0 && /__fail/.test(idx85));
+    /图片打不开（链接可能已失效）：\s*' \+ hwShortUrl/.test(idx85) && /__fail/.test(idx85));
   t('★v3.8.5 音视频二维码指向站内播放页 ?play=',
     /function hwQrCanvas/.test(idx85) && /function hwPlayUrl/.test(idx85)
     && /index\.html\?play=/.test(idx85));
@@ -11983,8 +11983,8 @@ console.log('\n【新】v3.9.3 赋分增值→赋分 / 班级岛横幅 / 假期�
     /function shorthand/.test(isl93) && /const ABBR = \{/.test(isl93));
   t('★v3.9.3 按日期覆盖优先于星期默认值',
     /var text = \(day && day\.text\) \|\| \(ISLAND\.banner \|\| \{\}\)\[dow\]/.test(idx93));
-  t('★v3.9.3 假期区间显示「已放假 N 天 · 距开学还有 M 天」',
-    /已放假 ' \+ t\.passed \+ ' 天/.test(idx93) && /距开学还有 ' \+ t\.left \+ ' 天/.test(idx93));
+  t('★v3.9.3 假期区间显示放假第几天（v4.7.9 改为「放假第 N 天 · 还剩 X」）',
+    /function islHolText\(t\)/.test(idx93) && /放假第 ' \+ t\.dayNo \+ ' 天/.test(idx93));
   t('★v3.9.3 某天标不上课时显示放假而不是课表',
     /if\(day && day\.off\)/.test(idx93) && /kind: 'off'/.test(idx93));
 
@@ -12848,7 +12848,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★v4.7.7 双列按列宽排版（不再固定扣 150）',
     /colW \* 0\.34/.test(idx) && /Math\.max\(56, colW - indent - rightW\)/.test(idx));
   t('★v4.7.7 班徽黑底图会被识别并跳过',
-    /function badgeLooksOk\(img\)/.test(idx) && /black \/ opaque > 0\.45/.test(idx)
+    /function badgeLooksOk\(img\)/.test(idx) && /black \/ opaque > 0\.30/.test(idx)
     && /badBg: true/.test(idx));
   t('★v4.7.7 作业附件图形化面板',
     /function caAttachOpen\(\)/.test(app43) && /function caAttachInsert\(\)/.test(app43)
@@ -12867,6 +12867,36 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★v4.7.8 后台内容排序同样归一化纯日期',
     /var ccTime = function\(v\)/.test(fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8'))
     && /s \+= ' 23:59'/.test(fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8')));
+
+  /* ---- v4.7.9：图片代理 / 班徽黑底 / 假期精确到分钟 ---- */
+  const app79 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const idxHtml79 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  t('★v4.7.9 图片直链经 /api/img 代理兜底再画',
+    /hwFetchBlob\(apiUrl\('\/img\?u=' \+ encodeURIComponent\(u\)\)\)/.test(app79)
+    && /function hwFetchBlob\(url\)/.test(app79));
+  t('★v4.7.9 图片打不开时给「链接可能已失效」而不是整条长网址',
+    /图片打不开（链接可能已失效）/.test(app79) && /function hwShortUrl\(u\)/.test(app79));
+  t('★v4.7.9 班徽四角全黑判为黑底图、阈值降到 30%',
+    /darkCorners >= 3/.test(idxHtml79) && /black \/ opaque > 0\.30/.test(idxHtml79));
+  t('★v4.7.9 班徽缓存键升级，旧黑底缓存自动作废',
+    /__cls_badge_src_v2/.test(app79) && /__cls_badge_src_v2/.test(idxHtml79));
+  t('★v4.7.9 假期支持 fromTime / toTime（精确到分钟）',
+    /h\.fromTime/.test(app79) && /function islHolTs\(dateStr, timeStr, isEnd\)/.test(app79));
+  t('★v4.7.9 剩余不足 24 小时按小时显示',
+    /function islLeftText\(ms\)/.test(app79) && /ms < 86400000/.test(app79));
+  t('★v4.7.9 明日视图单独说「明天开始放假 · 共 N 天」',
+    /明天开始放假 · 共 /.test(app79) && /isTomorrow/.test(app79));
+  t('★v4.7.9 假期不再出现「距开学 N 天」的错误多数一天',
+    !/已放假 ' \+ t\.passed/.test(app79) && !/距开学还有 ' \+ t\.left/.test(app79));
+  const apiIsland79 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
+  t('★v4.7.9 后端假期归一化保留时间字段',
+    /fromTime/.test(apiIsland79) && /toTime/.test(apiIsland79));
+  const apiImg79 = fs.readFileSync(new URL('./api/img.js', import.meta.url), 'utf8');
+  t('★v4.7.9 /api/img 拒绝内网地址、限制 8MB、只收图片',
+    /isPrivateHost/.test(apiImg79) && /MAX_BYTES = 8 \* 1024 \* 1024/.test(apiImg79)
+    && /\^image\\\//.test(apiImg79));
+  const wk79 = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  t('★v4.7.9 worker 注册 img 路由', /case 'img':/.test(wk79));
 }
 
 console.log('\n' + '='.repeat(52));
