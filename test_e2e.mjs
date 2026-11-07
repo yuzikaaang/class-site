@@ -12834,33 +12834,37 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /__early/.test(adminJs3) && /早期版本/.test(adminJs3));
 
   /* ⑨f v4.9.0：导出预览、科目分色打勾框、班徽黑底、附件面板、班级签历史 */
-  t('★v4.9.0 作业导出先开预览弹窗（不再直接下载）',
+  t('★v4.7.7 作业导出先开预览弹窗（不再直接下载）',
     /id="exMask"/.test(idx) && /function exOpen\(card, fname, mode\)/.test(app43)
     && !/ShareCard\.download\(card, fname\)/.test(app43));
-  t('★v4.9.0 预览可调字号 / 字体 / 单双列 / 纸张',
+  t('★v4.7.7 预览可调字号 / 字体 / 单双列 / 纸张',
     /id="exFs"/.test(idx) && /id="exFam"/.test(idx) && /id="exCols"/.test(idx)
     && /id="exPaper"/.test(idx)
     && /fs: Math\.min\(1\.6, Math\.max\(0\.8/.test(idx)
     && /cols: Number\(st\.cols\) === 2 \? 2 : 1/.test(idx));
-  t('★v4.9.0 科目分色 + 打勾框',
+  t('★v4.7.7 科目分色 + 打勾框',
     /function subjColor\(name\)/.test(idx) && /SUBJ_COLORS/.test(idx)
     && /o\.style\.check/.test(idx) && /roundRect\(ctx, bx, byy, bs, bs, 4\)/.test(idx));
-  t('★v4.9.0 双列按列宽排版（不再固定扣 150）',
+  t('★v4.7.7 双列按列宽排版（不再固定扣 150）',
     /colW \* 0\.34/.test(idx) && /Math\.max\(56, colW - indent - rightW\)/.test(idx));
-  t('★v4.9.0 班徽黑底图会被识别并跳过',
+  t('★v4.7.7 班徽黑底图会被识别并跳过',
     /function badgeLooksOk\(img\)/.test(idx) && /black \/ opaque > 0\.45/.test(idx)
     && /badBg: true/.test(idx));
-  t('★v4.9.0 作业附件图形化面板',
+  t('★v4.7.7 作业附件图形化面板',
     /function caAttachOpen\(\)/.test(app43) && /function caAttachInsert\(\)/.test(app43)
     && /id="caAttBox"/.test(app43) && /ca-tools/.test(idx));
-  t('★v4.9.0 班级签历史日历按签等分色',
+  t('★v4.7.7 班级签历史日历按签等分色',
     /function openSignHistory\(\)/.test(app43) && /function shPick\(day\)/.test(app43)
     && /id="shGrid"/.test(idx) && /sh-day\.good/.test(idx)
     && /90 \* 86400000/.test(app43));
-  t('★v4.9.1 公告排序补全时间（只填日期按 23:59 算）',
+  t('★v4.7.8 公告排序补全时间（只填日期按 23:59 算）',
     /function annSortKey\(a\)/.test(app43) && /\+ ' 23:59'/.test(app43)
     && (app43.match(/annSortKey\(b\)\.localeCompare\(annSortKey\(a\)\)/g) || []).length >= 2);
-  t('★v4.9.1 后台内容排序同样归一化纯日期',
+  const preGate = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
+  t('★v4.7.8 12 小时内只许升小版本（按距上次中版本算）',
+    /bumpedMinor/.test(preGate) && /HOURS = 12/.test(preGate)
+    && /function minorFirstSeen\(v2\)/.test(preGate) && /版本号倒退/.test(preGate));
+  t('★v4.7.8 后台内容排序同样归一化纯日期',
     /var ccTime = function\(v\)/.test(fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8'))
     && /s \+= ' 23:59'/.test(fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8')));
 }

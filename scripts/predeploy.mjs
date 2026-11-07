@@ -37,6 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import zlib from 'node:zlib';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -141,6 +142,67 @@ try {
   if (!Array.isArray(announcements)) announcements = [];
 } catch (e) {
   die('读取云端内容失败：' + (e.message || e));
+}
+
+/* ---------- ③a 中版本节奏：12 小时内只许升小版本 ----------
+ * 站主原话（2026-11-07）：
+ *   「如果你是 12 个小时内一直更新的东西的话，它属于一个小更新，你不能说
+ *     4.6、4.7、4.8、4.9，你这几个小时就更新这么多个版本不太现实。12 个小时内
+ *     更新的东西，即使更新再大它也算是同一个版本里面的，你只能给它更新小版本，
+ *     不能更新中版本。」
+ *
+ * 判定基准：**距上一次升中版本的时间**（不是距上一次任意发版）——
+ *   否则连着发几个小版本会把中版本无限往后拖。
+ *   例：4.7.0 发于 11-06 14:42，那么在 11-07 02:42 之前只能发 4.7.x；
+ *       过了这个点，才允许发 4.8.0。
+ *
+ * 首现时间取自 git 提交历史（提交信息以 vX.Y.Z 开头）。
+ * 取不到（浅克隆 / 无 git）就放行，只提示，不阻断 —— 门禁不能因为环境缺失误杀。 */
+const vnum = (s) => String(s || '').split('.').map((x) => parseInt(x, 10) || 0);
+
+function cmpVer(a, b) {
+  const A = vnum(a), B = vnum(b);
+  for (let i = 0; i < 3; i++) {
+    if (A[i] !== B[i]) return A[i] > B[i] ? 1 : -1;
+  }
+  return 0;
+}
+
+/** 某个「主.小」第一次出现的提交时间（毫秒），取不到返回 0 */
+function minorFirstSeen(v2) {
+  try {
+    const out = execFileSync('git', ['log', '--format=%at%x09%s'], { cwd: ROOT, encoding: 'utf8' });
+    const re = new RegExp('v' + v2.replace(/\./g, '\\.') + '\\.0(?![0-9.])');
+    let ts = 0;
+    for (const line of out.split('\n')) {
+      const at = Number((line.split('\t')[0] || '').trim()) || 0;
+      if (at && re.test(line)) ts = at;   /* git log 是新→旧，最后一次命中的就是最早 */
+    }
+    return ts * 1000;
+  } catch (e) { return 0; }
+}
+
+const cloudTopVer = (notes[0] && notes[0].version) || '';
+if (cloudTopVer) {
+  if (cmpVer(VER, cloudTopVer) < 0) {
+    die('版本号倒退了：本地是 ' + VER + '，云端已发布到 ' + cloudTopVer + '。'
+      + '\n   降版本要连云端 release_notes 一起改，否则同学看到的是「越更越旧」。');
+  }
+  const cm = vnum(cloudTopVer), lm = vnum(VER);
+  const bumpedMinor = lm[1] > cm[1] || lm[0] > cm[0];
+  if (bumpedMinor) {
+    const HOURS = 12;
+    const prev2 = cm[0] + '.' + cm[1];
+    const seenAt = minorFirstSeen(prev2);
+    if (seenAt && Date.now() - seenAt < HOURS * 3600 * 1000) {
+      const left = Math.ceil((HOURS * 3600 * 1000 - (Date.now() - seenAt)) / 3600000);
+      die('中版本升得太快：v' + prev2 + ' 系列第一次发布距今不到 ' + HOURS + ' 小时'
+        + '（约 ' + new Date(seenAt).toLocaleString('zh-CN') + ' 首发，还差 ' + left + ' 小时）。'
+        + '\n   站主规矩：12 小时内只许升小版本 —— 把这次的改动挂到 v' + prev2 + '.x 上，'
+        + '\n   等过了 ' + HOURS + ' 小时再开新的中版本。');
+    }
+  }
+  console.log('③a 中版本节奏正常：' + VER + '（云端 ' + cloudTopVer + '）');
 }
 
 /* ---------- ③ 云端版本记录 ---------- */
