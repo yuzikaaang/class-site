@@ -12791,11 +12791,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /var cached = rosterCacheGet\(\)/.test(big43));
   t('★没有学号时按名单顺序补显示序号（_seq），不污染 studentId',
     /_seq: out\.length \+ 1/.test(big43) && /var sq = parseInt\(\(st && st\._seq\)/.test(big43));
-  t('★作业字号范围 25%–450%（连续百分比）',
-    /* v4.10.2（需求 1）：字号基准从 100 改成 **150**（150 = 1.0 倍），
-       所以原来 300% 的「3 倍」上限现在记作 450。 */
-    /FS_MIN = 25, FS_MAX = 450, FS_STEP = 5/.test(big43)
-    && /var FS_BASE = 150;/.test(big43));
+  t('★作业字号范围 25%–300%（连续百分比）',
+    /* v4.10.3（站主第 4 条）：字号基准改回 **100**（100 = 1.5 倍 = 旧 150% 的外观），
+       范围也跟着收回到 25%–300%。 */
+    /FS_MIN = 25, FS_MAX = 300, FS_STEP = 5/.test(big43)
+    && /var FS_BASE = 100;/.test(big43)
+    && /var FS_MUL = 1\.5;/.test(big43));
   t('★字号按 5% 步进并支持手动输入',
     /BIG\.fsStep = function \(d\)/.test(big43) && /FS_STEP : -FS_STEP/.test(big43)
     && /BIG\.fsSet = function \(v\)/.test(big43));
@@ -13349,9 +13350,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   const swV  = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
 
   /* ① 字号基准 150 + 顶栏/右栏/站名分离 */
-  t('★v4.10.2 字号基准 = 150（150 即 1.0 倍），存储键换新防串档',
-    /var FS_BASE = 150;/.test(bigV) && /var FS_KEY = 'cls_bhw_fs4';/.test(bigV)
-    && /BIG\.fs \/ FS_BASE/.test(bigV));
+  t('★v4.10.3 字号基准 = 100（100 即 1.5 倍 = 旧 150% 的外观），存储键换新防串档',
+    /var FS_BASE = 100;/.test(bigV) && /var FS_KEY = 'cls_bhw_fs5';/.test(bigV)
+    && /var FS_MUL = 1\.5;/.test(bigV)
+    && /BIG\.fs \/ FS_BASE \* FS_MUL/.test(bigV));
   t('★v4.10.2 顶栏与右栏字号固定（--bhw-fx 1.5 = 旧 150% 外观），不随作业滑块',
     /--bhw-fx:1\.5/.test(idxV) && /--bhw-fbrand:1\.8/.test(idxV)
     /* 顶栏 / 右栏用的是 var(--bhw-fx)（固定 1.5），作业正文用 var(--bhw-fs)（跟滑块） */
@@ -13465,12 +13467,50 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.2 版本号升到 4.10.2（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.2'/.test(idxV) && /SITE_VER = '4\.10\.2'/.test(swV)
-    && /API_VER = '4\.10\.2'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.2'/.test(admV));
-  t('★v4.10.2 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.2');
+  t('★v4.10.3 版本号升到 4.10.3（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.3'/.test(idxV) && /SITE_VER = '4\.10\.3'/.test(swV)
+    && /API_VER = '4\.10\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.3'/.test(admV));
+  t('★v4.10.3 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.3');
+
+  /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
+  {
+    const adm1V = fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8');
+    const adm2V = fs.readFileSync(new URL('./admin-2.js', import.meta.url), 'utf8');
+    const pubV  = fs.readFileSync(new URL('./tools/publish_release.mjs', import.meta.url), 'utf8');
+
+    /* ① 后台会话失效**只清后台自己的会话**，绝不连坐删掉主站共享的 cls_auth。
+       这就是「点返回首页 → 先回后台登录界面 → 自动登录又回后台 → 退不出前台」的根因。 */
+    t('★v4.10.3 后台 401 只登出后台自己，不删主站共享登录态',
+      /doLogout\(true, true\)/.test(adm1V)
+      && /function doLogout\(silent, keepShared\)/.test(adm2V)
+      && /keepShared \? STATE\.token : ''/.test(adm2V));
+    /* ② 网络抖动 / 超时 / 5xx 不当成登出，保留登录态并给「重试」按钮 */
+    t('★v4.10.3 后台连接失败保留登录态并提供重试',
+      /is401/.test(adm2V) && /gRetry/.test(adm2V));
+    /* ③ 返回前台用 location.replace + 清掉全部回跳状态 */
+    t('★v4.10.3 返回前台用 location.replace 并清回跳状态',
+      /location\.replace\(u\)/.test(adm2V)
+      && /cls_force_home/.test(adm2V)
+      && /cls_return_view/.test(adm2V)
+      && /_from=admin/.test(adm2V));
+    /* ④ 前台认 _from=admin 这个信号，并且强制铺首页 */
+    t('★v4.10.3 前台识别 ?_from=admin 并强制铺首页',
+      /_from=admin/.test(appV) && /cls_force_home/.test(appV));
+    /* ⑤ 登录完不把用户送回后台 */
+    t('★v4.10.3 登录后不按 cls_next 回跳后台',
+      /admin\\\.html/i.test(appV));
+    /* ⑥ 作业编辑态不再套两层卡片 */
+    t('★v4.10.3 作业卡片复用节点时不再套两层（innerHTML 换成搬内部内容）',
+      /nf\.innerHTML/.test(bigV) && /el\.__hwHtml = c\.html/.test(bigV));
+    /* ⑦ 公告用两段版本号共用一条 + 真实当前时间 */
+    t('★v4.10.3 公告按「主.小」共用一条且用真实当前时间',
+      /VER\.split\('\.'\)\.slice\(0, 2\)\.join\('\.'\)/.test(pubV)
+      && /function nowStamp/.test(pubV)
+      && /date: nowStamp\(\)/.test(pubV)
+      && /hit\.date = nowStamp\(\)/.test(pubV));
+  }
 
   /* ===== 全量语法自检 =====
      v4.10.2 教训：一次改文案时把中文标点写进了单引号字符串，

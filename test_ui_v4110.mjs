@@ -198,7 +198,14 @@ console.log('\n【3】字号只调作业正文，顶栏 / 右栏 / 站名不跟�
   t('右侧功能栏字号不跟着变', a.side === b.side, `${a.side} → ${b.side}`);
   t('站名字号不跟着变（--bhw-fbrand 固定 1.8）', a.brand === b.brand && b.brandVar === '1.8', `${a.brand} → ${b.brand} var=${b.brandVar}`);
   t('作业正文字号确实跟着滑块放大', b.card > a.card, `${a.card} → ${b.card}`);
-  t('字号基准是 150（显示 150 = 1.0 倍）', b.fsVar !== '' && Math.abs(parseFloat(b.fsVar) - 300 / 150) < 0.02, `--bhw-fs=${b.fsVar}`);
+  t('字号基准是 100（显示 100 = 1.5 倍 = 旧 150 档的样子）', b.fsVar !== '' && Math.abs(parseFloat(b.fsVar) - 300 / 100 * 1.5) < 0.02, `--bhw-fs=${b.fsVar}`);
+
+  /* v4.10.3（站主：「我要的是 100 是之前 150 的效果」）：
+     滑块显示 100 时，作业正文字号必须等于旧刻度 150% 的那个大小。 */
+  await page.evaluate(() => { try { BIG.fsSet(100); } catch (e) {} });
+  await page.waitForTimeout(500);
+  const c = await read();
+  t('滑块显示 100 时倍率正好是 1.5', Math.abs(parseFloat(c.fsVar) - 1.5) < 0.02, `--bhw-fs=${c.fsVar}`);
 }
 
 /* ------------------------------------------------------------------ 4) 作业顶栏变矮 */

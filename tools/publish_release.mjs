@@ -121,27 +121,113 @@ let anns = items0.announcements;
 if (typeof anns === 'string') { try { anns = JSON.parse(anns); } catch { anns = []; } }
 if (!Array.isArray(anns)) anns = [];
 
-/* 公告口径：把 pub 拼成一条，格式跟历史公告一致 */
-const text = 'v' + note.version.split('.').slice(0, 2).join('.') + ' 更新！内容如下：'
-  + note.pub.map(p => '【' + p.cat + '】' + p.text).join(' ');
-/* 公告是否已存在：按**完整版本号**判，不按前两位 ——
-   前两位判会把 v4.10.1 的公告误当成 v4.10.2 的，导致新公告永远发不出去。 */
-const exists = anns.some(a => String(a && a.text || '').indexOf('v' + note.version + ' ') === 0
-  || String(a && a.text || '').indexOf('v' + note.version + '！') === 0);
-if (exists) {
-  console.log('· 公告已存在 v' + note.version.split('.').slice(0, 2).join('.') + '，不重复发');
+/* 公告口径：把 pub 拼成一条，格式跟历史公告一致。
+ *
+ * v4.10.3（站主两条明确要求）：
+ *   ① 「同一个版本发同一个公告就可以了」
+ *      —— 公告标题只带**前两段版本号**（v4.10），不是完整三段号。
+ *      v4.10.0 / 4.10.1 / 4.10.2 / 4.10.3 全都往**同一条** v4.10 公告里追加，
+ *      不要每次小版本都新开一条公告（那样首页会出现好几条「v4.10 更新」）。
+ *      这条规矩在 scripts/predeploy.mjs 的 ③b / ③c 门禁里也是同一个口径。
+ *   ② 「公告时间错误……首页那两个公告时间现在都显示 11 月 8 号 12 点，
+ *      我现在都没有到 11 月 8 号」
+ *      —— 以前日期写死成 note.date + ' 12:00'，note.date 又是发布日志里
+ *      手填的日期（常常填了「明天」）。现在改成**用真实的当前时间**，
+ *      并且跟着时区走（本地时间），保证「几点的公告就显示几点」。
+ */
+const VER2 = VER.split('.').slice(0, 2).join('.');   /* v4.10.3 → v4.10 */
+/* 找同一条 v4.10 公告：标题以「v4.10 」开头，且后面不能紧跟数字或点
+   （免得把 v4.10.3 这种三段号当成 v4.10 那条）。 */
+const ver2Re = new RegExp('^v' + VER2.replace(/\./g, '\\.') + '(?![0-9.])');
+let hit = anns.find(a => a && ver2Re.test(String(a.text || '')));
+
+/* 真实当前时间（本地时区），格式 'YYYY-MM-DD HH:MM' —— 和前台
+   annSortKey() 认的 'YYYY-MM-DD 23:59' 同一种格式。 */
+function nowStamp() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+    + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/* 规范化后比对，避免「；」和「，」的差异误判 */
+function norm(s) {
+  return String(s || '')
+    .replace(/[\s\u3000]/g, '')
+    .replace(/[·・\-—–、,，。.！!？?：:；;（）()\[\]【】「」"'’‘]/g, '');
+}
+/* 把这次要发的 pub 追加进公告正文（同分类合并成一行，用「；」隔开） */
+function appendPubs(text, pubs) {
+  const lines = String(text || '').replace(/\r/g, '').split('\n').filter((l) => l.trim());
+  for (const p of pubs) {
+    const cat = String(p.cat || '其他').trim();
+    const body = String(p.text || '').trim();
+    if (!body) continue;
+    const tag = '【' + cat + '】';
+    /* v4.10.3：**先看所有行**有没有写过这一条（同一分类可能已经有多行，
+       只看最后一行会漏判 → 重复发布同一条）。 */
+    let already = false;
+    for (const l of lines) {
+      if (!l.startsWith(tag)) continue;
+      const cur = l.slice(tag.length).replace(/[；;]\s*$/, '');
+      if (cur.split(/[；;]/).some((s) => norm(s) === norm(body))) { already = true; break; }
+    }
+    if (already) continue;
+    /* 找最后一条同分类的行，试着并进去 */
+    let at = -1;
+    for (let i = lines.length - 1; i >= 1; i--) {
+      if (lines[i].startsWith(tag)) { at = i; break; }
+    }
+    if (at >= 0) {
+      const cur = lines[at].slice(tag.length).replace(/[；;]\s*$/, '');
+      /* v4.10.3：合并后如果一行超过 28 个汉字（门禁 ③d 的硬闸），
+         就不再往这一行后面接，**另起一行**写这条 —— 一条只写一个结果。 */
+      const mergedLine = tag + cur + '；' + body;
+      const han = (mergedLine.match(/[\u4e00-\u9fa5]/g) || []).length;
+      if (han > 28) lines.push(tag + body);
+      else lines[at] = mergedLine;
+    } else {
+      lines.push(tag + body);
+    }
+  }
+  return lines.join('\n');
+}
+
+if (hit) {
+  /* 同一条公告：把这次的内容追加进去，并刷新时间为真实当前时间 */
+  const merged = appendPubs(hit.text, note.pub);
+  if (merged === hit.text) {
+    console.log('· v' + VER2 + ' 公告已包含本次全部内容，不重复写');
+  } else {
+    hit.text = merged;
+    hit.date = nowStamp();
+    const ar = await fetch(API + '/api/content', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ items: { announcements: anns } }),
+    });
+    const aj = await ar.json().catch(() => ({}));
+    if (!aj || aj.ok === false) {
+      console.error('⚠ 公告写入失败（版本记录已写成功，可稍后手动补）：' + (aj.error || JSON.stringify(aj).slice(0, 200)));
+    } else {
+      console.log('✓ 已并入 v' + VER2 + ' 公告（时间 ' + hit.date + '）');
+    }
+  }
 } else {
-  anns.unshift({ date: note.date + ' 12:00', text });
+  /* 这一批还没有公告 → 新开一条（标题用两段版本号） */
+  const text = 'v' + VER2 + ' 更新！内容如下：\n'
+    + note.pub.map(p => '【' + p.cat + '】' + p.text).join('\n');
+  anns.unshift({ date: nowStamp(), text });
   const ar = await fetch(API + '/api/content', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
     body: JSON.stringify({ items: { announcements: anns } }),
   });
-  const aj = await ar.json();
+  const aj = await ar.json().catch(() => ({}));
   if (!aj || aj.ok === false) {
-    console.error('⚠ 公告写入失败（版本记录已写成功，可稍后手动补）：' + JSON.stringify(aj).slice(0, 200));
+    console.error('⚠ 公告写入失败（版本记录已写成功，可稍后手动补）：' + (aj.error || JSON.stringify(aj).slice(0, 200)));
   } else {
-    console.log('✓ 公告已发布：' + text);
+    console.log('✓ 公告已发布：' + text.split('\n')[0]);
   }
 }
 

@@ -328,15 +328,35 @@
   /* v4.8.0（站主）：「每次可以调节的少一点点，我甚至可以手动输入，每次就调 5%」。
      档位制改成连续百分比：25%–300%，按一下 ±5%，中间那个数字可以直接点进去改。
      老数据两种都认（v4.7.3 存的是档位索引，更早的是 8 档老索引），按实际倍率换算。 */
-  /* v4.10.2（站主第 1 条）：刻度整体重新标定 —— **150 才是标准尺寸**。
-     以前 100% = 1.0 倍，数字看着别扭（大屏上正文偏小）；现在 150% = 1.0 倍，
-     也就是说「150 相当于原来的 100」，比例关系整个挪了 1.5 倍。
-       · 换算：倍率 = 显示值 / 150（旧值 ×1.5 就是新值，外观完全不变）
-       · 范围：25–450（旧 25–300 对应 0.167–2.0 倍 → 新 25–450）
-       · 默认：150（= 1.0 倍，就是现在的标准大小） */
-  var FS_KEY = 'cls_bhw_fs4';
-  var FS_MIN = 25, FS_MAX = 450, FS_STEP = 5;
-  var FS_BASE = 150;                       /* 显示 150 = 1.0 倍 */
+  /* v4.10.3（站主第 2 条：字号搞反了 —— 这次一次改对）：
+   *
+   * 【站主的原话】
+   *   「你似乎把字号大小搞反了，现在默认打开是 250 才是我们之前 150 的效果，
+   *     我要的是 100 是之前 150 的效果」
+   *
+   * 【前两次到底错在哪】
+   *   v4.10.1 之前：刻度 100 = 1.0 倍，站主嫌大屏正文偏小。
+   *   v4.10.2（我做的）：把基准挪到 150 —— 显示 150 = 1.0 倍，
+   *     于是「之前的 150% 外观」变成了新刻度的 225，站主一看就说搞反了。
+   *   v4.10.3（现在）：基准挪回 **100**，但**保留「1.0 倍 = 旧 150% 外观」**。
+   *     也就是说站主要的其实是：
+   *       · 新刻度上显示 **100**，
+   *       · 它的**外观等于旧刻度 150% 的样子**（还是那么大，没变小），
+   *       · 同时比旧的 100% 更大 —— 也就是旧 150% 这个尺寸升格成了「标准」。
+   *     实现方式：显示值仍然是 0–100% 系的百分比，但真正乘到 CSS 上的是
+   *     `显示值 / 100 × 1.5` —— 100% 就等于旧 150% 的放大倍率。
+   *
+   * 【刻度与迁移】
+   *   · 显示范围 25–300（跟 v4.10.1 一样，不用记新数字）
+   *   · 倍率 = 显示值 / 100 × 1.5（100 → 1.5 倍 = 旧 150% 的样子）
+   *   · 默认 100（= 旧 150% 的外观）—— 正是站主要的那个数
+   *   · 旧存储键 cls_bhw_fs3（v4.10.x 的刻度）按 ÷1.5 迁回来
+   *   · v4.10.2 的键 cls_bhw_fs4 也认：它是「×1.5 后的数」，÷1.5 即回旧值
+   */
+  var FS_KEY = 'cls_bhw_fs5';
+  var FS_MIN = 25, FS_MAX = 300, FS_STEP = 5;
+  var FS_BASE = 100;                       /* 显示 100 = 1.5 倍（= 旧 150% 的外观） */
+  var FS_MUL = 1.5;                        /* 1.5 倍就是「标准」 */
   var FS_STEPS = [0.25, 0.35, 0.5, 0.65, 0.8, 1, 1.2, 1.45, 1.75, 2.1, 2.55, 3];
   var SUBJ_A = ['语文', '数学', '英语'];
   var SUBJ_B = ['物理', '化学', '生物'];
@@ -435,15 +455,19 @@
     if(n > FS_MAX) return FS_MAX;
     return n;
   }
-  /* v4.10.2：老刻度（100 = 1.0 倍）→ 新刻度（150 = 1.0 倍），外观不变 */
+  /* v4.10.3：倍率 → 显示值（100 = 1.5 倍 = 旧 150% 的外观） */
   function fsFromRatio(r){
-    return clampFs(Math.round(r * FS_BASE));
+    return clampFs(Math.round(r / FS_MUL * FS_BASE));
   }
   function readFs(){
     var n = null;
     try{ n = parseInt(localStorage.getItem(FS_KEY), 10); }catch(e){}
     if(n >= FS_MIN && n <= FS_MAX) return n;
-    /* v4.10.x 的刻度：100 = 1.0 倍 → ×1.5 转新刻度 */
+    /* v4.10.2 的键：它是「旧值 ×1.5」记的（基准 150）→ ÷1.5 回旧值再换算 */
+    var prev2 = null;
+    try{ prev2 = parseInt(localStorage.getItem('cls_bhw_fs4'), 10); }catch(e){}
+    if(prev2 >= 25 && prev <= 450) return fsFromRatio(prev2 / 150);
+    /* v4.10.x 的刻度：100 = 1.0 倍 → 换算到新刻度 */
     var prev = null;
     try{ prev = parseInt(localStorage.getItem('cls_bhw_fs3'), 10); }catch(e){}
     if(prev >= 25 && prev <= 300) return fsFromRatio(prev / 100);
@@ -459,8 +483,9 @@
   }
   function applyFs(){
     var h = $('bigHw');
-    /* 倍率 = 显示值 / 150（150 = 1.0 倍） */
-    if(h) h.style.setProperty('--bhw-fs', String(BIG.fs / FS_BASE));
+    /* v4.10.3：倍率 = 显示值 / 100 × 1.5
+       —— 显示 100 就是 1.5 倍，正是旧刻度 150% 的那个大小（站主要的标准）。 */
+    if(h) h.style.setProperty('--bhw-fs', String(BIG.fs / FS_BASE * FS_MUL));
     var v = $('bhwFsVal');
     /* 数字框自己触发的那次不要回写，否则会把用户正在敲的「1」顶成「100」 */
     if(v && v !== document.activeElement) v.value = String(BIG.fs);
@@ -1110,7 +1135,34 @@
       if(el){
         /* 内容没变 → 旧节点原地留着，连 innerHTML 都不碰 */
         if(el.__hwHtml !== c.html){
-          el.innerHTML = c.html;
+          /* v4.10.3（站主：「点击编辑后旁边颜色出现两层，底下还有一层，
+             点完成也没恢复」）：
+             以前这里是 `el.innerHTML = c.html` —— **c.html 本身就是一整张
+             `<div class="bhw-subj" data-hwkey="s0">…</div>` 卡片**，
+             直接塞进 el.innerHTML 等于「卡片里再套一张卡片」：
+               · 外层 el 自己带 4px 彩色左边框 → 看到「两层颜色」；
+               · 内层又带一条 → 「底下还有一层」；
+               · 而且内层也带 data-hwkey，切回只读再套一层，永远消不掉。
+             现在改成：把新卡片的**内部内容**搬进旧节点，再把新卡片的外层
+             属性（彩色边框等）同步过来。节点本身还是原来那个（DOM 复用保留，
+             滚动位置/焦点路径都不变）。 */
+          var d2 = document.createElement('div');
+          d2.innerHTML = c.html;
+          var nf = d2.firstElementChild;
+          if(nf){
+            el.innerHTML = nf.innerHTML;
+            /* 外层属性同步（style 里是彩色左边框，data-hwkey 保持不变） */
+            var attrs = nf.attributes;
+            for(var ai = 0; ai < attrs.length; ai++){
+              var an = attrs[ai];
+              if(an.name === 'data-hwkey') continue;
+              if(an.name === 'style'){
+                el.setAttribute('style', an.value);
+              }else if(el.getAttribute(an.name) !== an.value){
+                el.setAttribute(an.name, an.value);
+              }
+            }
+          }
           el.__hwHtml = c.html;
         }
         frag.appendChild(el);

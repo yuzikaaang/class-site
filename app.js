@@ -835,7 +835,7 @@ function swOnUpdateFound(worker){
   paintVersion();
   /* v4.10.2（站主第 8 条）：「检测新版本并弹窗提醒，用户点击更新后有安装进度条，
      到 100% 时自动刷新页面」。
-     v4.10.0 只打了个标记（页脚一行小字），等���完全忘了有更新这回事 —— 站主说
+     v4.10.0 只打了个标记（页脚一行小字），等自己完全忘了有更新这回事 —— 站主说
      「你现在就相当于把那个更新的弹窗又给我删掉」。现在这里补上弹窗。 */
   try{ updNotify(worker); }catch(e){}
 }
@@ -9858,9 +9858,28 @@ function openCat(id){
     else setRoute('board/' + id);
   }catch(e){}
 }
+/* v4.10.3（站主：返回首页退不出前台）：
+   goHomeView() 以前只切视图 + setRoute('') 清地址栏 hash，
+   但**从不处理「我其实是从后台 / 别的页跳过来的」这种情况**：
+   · 游客条、弹窗里的「返回主页」按钮点下去只是把视图切回首页，
+     地址栏还留着 #/board/3 之类的深链 —— 刷新一下又跳回那个板块，
+     站主就以为「返回主页没生效」。
+   · 从后台「返回前台」过来时，前台 boot 里的「返回记忆」会按 cls_return_view
+     把人送回上次看的板块，而不是首页。
+   现在统一：返回主页 = **地址栏也换成根路径 + 清掉所有回跳状态**，
+   并且在 URL 上留 ?_from=admin 之类的标记时强制铺首页。 */
 function goHomeView(){
   __activeCat = null;
   try{ setRoute(''); }catch(e){}
+  /* 地址栏彻底回到根路径（不带任何 hash），刷新也不会跳回别处 */
+  try{
+    var u = location.pathname;
+    if(location.search && !/_from=admin/.test(location.search)) u += location.search;
+    history.replaceState(null, '', u);
+  }catch(e){}
+  /* 清掉「上次看到哪」，别让 boot 的返回记忆又把视图拽走 */
+  try{ sessionStorage.removeItem('cls_return_view'); }catch(e){}
+  try{ sessionStorage.removeItem('cls_next'); }catch(e){}
   studyBubbleHide();
   videoBubbleHide();   /* v4.4.5：回首页时视频悬浮球一并收起 */
   var home = document.getElementById('homeView');
@@ -11036,6 +11055,17 @@ function guestDeny(){
 function afterLoginResume(){
   var next = '';
   try{ next = ClsAuth.takeNext(); }catch(e){}
+
+  /* v4.10.3（站主：返回首页退不出后台 —— 最后一道保险）：
+     「刚才想去哪」如果指向的是**后台**（admin.html），
+     那绝不能照着跳 —— 站主明明是从后台点「返回前台」回首页的，
+     登录完却又被 cls_next 送回后台，于是「先回后台登录界面 →
+     又自动登录回后台 → 退不出前台」。
+     这种情况直接忽略 next，留在前台首页。 */
+  if(next && /admin\.html/i.test(String(next))){
+    next = '';
+    try{ sessionStorage.removeItem('cls_return_view'); }catch(e){}
+  }
 
   if(next){
     var base = location.pathname + location.search;
@@ -22454,15 +22484,36 @@ try{ if(typeof mkScanAll === 'function') mkScanAll(900); }catch(e){}
  * 必须在 goHomeView() 之后执行，否则会被其覆盖回首页 */
 (function(){
   /* v4.9.1（站主第 11 条）：后台点班徽过来 = 就是要看首页。
-     这时候不要再去恢复「上次看到哪」，直接铺首页。 */
+     这时候不要再去恢复「上次看到哪」，直接铺首页。
+   *
+   * v4.10.3（站主：返回首页退不出后台）：
+     「从后台返回前台」现在有两种信号了 —— sessionStorage 的 cls_force_home，
+     以及 URL 上的 ?_from=admin（后台 goFrontHome 带的）。
+     两个都认，并且**都要清干净**：
+     以前只认 cls_force_home 一个信号，后台换了种跳法就漏判，
+     于是「返回记忆」把站主送回上次看的板块（后台的概览、某个板块…），
+     站主看到的就是「返回前台后又被拽走、再也回不到首页」。
+     另外 **cls_return_view 必须在 force 分支里清掉** ——
+     它记着「上次看到哪」，不清的话下次打开还会被拽回去。 */
   var force = false;
   try{
     force = sessionStorage.getItem('cls_force_home') === '1';
     if(force) sessionStorage.removeItem('cls_force_home');
   }catch(e){}
+  try{
+    if(/_from=admin/.test(String(location.search || ''))) force = true;
+  }catch(e){}
   if(force){
+    /* 顺手把 URL 上的标记也洗掉（地址栏干干净净） */
+    try{
+      var u = location.pathname;
+      var rest = String(location.search || '').replace(/_from=admin/, '').replace(/^\?&/, '').replace(/[?&]$/, '');
+      if(rest) u += '?' + rest;
+      history.replaceState(null, '', u + location.hash);
+    }catch(e){}
     try{ goHomeView(); }catch(e){}
     try{ sessionStorage.removeItem('cls_return_view'); }catch(e){}
+    try{ sessionStorage.removeItem('cls_next'); }catch(e){}
     return;
   }
   var v = null;

@@ -229,7 +229,13 @@ function api(path, opts){
       return { ok:false, error:'接口返回了非 JSON 内容（HTTP ' + r.status + '）' };
     }).then(function(j){
       if(r.status === 401){
-        doLogout(true);
+        /* v4.10.3（站主：返回首页退不出后台）：
+           会话失效**只清后台自己的会话**（keepShared = true），
+           绝不连坐删掉主站共享的 cls_auth —— 以前这里一删，
+           主站就变成未登录 → 弹登录 → 登录完又按 cls_next 跳回后台，
+           站主看到的正是「先回后台登录界面、又自动登录回后台、
+           再也退不出前台」，只能整个关页面重开。 */
+        doLogout(true, true);
         throw new Error(j.error || '登录已过期，请重新登录');
       }
       /* 未改初始密码 → 后端拦截，这里把强制改密弹窗拉起来 */

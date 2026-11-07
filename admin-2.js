@@ -3909,19 +3909,63 @@ function openForceChangePwd(){
  *   ② 留一条 cls_force_home，首页启动时据此直接铺首页、不恢复上次视图；
  *   ③ 跳转带 #/home，地址栏本身就是「首页」，即便脚本没跑到也是对的。
  * ========================================================================== */
+/* v4.10.3（站主：返回首页退不出后台 —— 这是他点得最多的那个按钮）：
+ *
+ * 【原来的问题】
+ *   · 用 location.href 而不是 location.replace —— 后台这一页还留在浏览历史里，
+ *     站主按「后退」又回到后台，看起来就像「退不出前台」。
+ *   · 只清了 cls_next / cls_admin_from_home，**没清 cls_return_view**。
+ *     前台的 boot 里有「返回记忆」逻辑：cls_return_view 记着上次看到哪，
+ *     回来时会 openCat(那个板块) —— 于是「返回前台」经常把人送回某个板块，
+ *     而不是首页（站主说的「不是直接返回到首页」）。
+ *   · 没清 cls_admin_land（横屏记忆）等其它跨页状态。
+ *
+ * 【现在】
+ *   · location.replace —— 后台不进历史，后退键不会又回后台；
+ *   · cls_return_view / cls_next / cls_admin_from_home / cls_return_view
+ *     全部清干净，并放行 cls_force_home —— 前台一定铺首页；
+ *   · 带一个时间戳参数绕开 SW 缓存，免得拿到旧页面。
+ */
 function goFrontHome(){
   try{
     sessionStorage.removeItem('cls_next');
     sessionStorage.removeItem('cls_admin_from_home');
+    sessionStorage.removeItem('cls_return_view');
+    sessionStorage.removeItem('cls_admin_land');
     sessionStorage.setItem('cls_force_home', '1');
   }catch(e){}
-  location.href = 'index.html#/home';
+  var u = 'index.html?_from=admin&_r=' + Date.now() + '#/home';
+  try{ location.replace(u); }
+  catch(e){ location.href = u; }
   return false;
 }
 
-function doLogout(silent){
+/* v4.10.3（站主：返回首页退不出后台 —— 这次修的是根上的东西）：
+ *
+ * 【站主的原话】
+ *   「每次我点击了那些你所谓的返回主页按钮之后呢，它都是先返回到后台的登录界面，
+ *     而不是直接返回到首页……由于我之前说过了这种东西要自动登录，然后又自动登录回了后台……
+ *     我现在点那个反按钮就没反应，相当于说我在后台已经退不出，已经回不到前台了，
+ *     我必须得整个关闭页面重新进入才只能到前台。」
+ *
+ * 【根因 —— 以前这里只有一条 doLogout，两种完全不同的场景共用它】
+ *   场景 A：站主自己点「退出登录」→ 应该清掉登录态，回登录门。没问题。
+ *   场景 B：会话在**别处**失效了（token 过期、换设备、被踢）→
+ *           api() 收到 401 就调 doLogout(true)，把 token 清掉、回到登录门。
+ *           **这里原来也把 localStorage 的 cls_auth（主站共享登录态）一起删了**，
+ *           于是主站那边也跟着变成「未登录」→ 主站弹登录 → 登录完 afterLoginResume()
+ *           又按 cls_next 跳回后台 → 站主看到的就是「先回后台登录界面、
+ *           又自动登录回后台、再也退不出前台」，只能整个关页面重开。
+ *
+ * 【修法】
+ *   · doLogout(silent, keepShared) —— 第二个参数为真时**保留主站共享登录态**。
+ *     会话失效走这条路（api() 的 401 分支），站主主动登出才清。
+ */
+function doLogout(silent, keepShared){
   var finish = function(){
-    setToken(''); setUser(null);
+    /* keepShared = true：只清后台自己的会话，主站的 cls_auth 留着不动 */
+    setToken(keepShared ? STATE.token : '');
+    setUser(keepShared ? STATE.me : null);
     $('app').classList.remove('show');
     $('gate').classList.remove('hide');
     $('gP').value = '';
@@ -4319,7 +4363,8 @@ function boot(){
   /* 校验 token 是否还有效，并顺手确认 role */
   api('/auth?action=me').then(function(j){
     if(!j.user || j.user.role !== 'admin'){
-      doLogout(true);
+      /* 真的不是管理员 → 这才清登录态（keepShared 保持主站登录态不动） */
+      doLogout(true, true);
       gateMsg('这个账号不是管理员，无法进入后台。');
       return;
     }
@@ -4327,8 +4372,34 @@ function boot(){
     setUser(j.user);
     if(j.mustChangePassword){ $('gate').classList.add('hide'); openForceChangePwd(); return; }
     enterApp();
-  }).catch(function(){
-    doLogout(true);
+  }).catch(function(e){
+    /* v4.10.3（站主：返回首页退不出后台）：
+       这里以前是 doLogout(true) —— 只要 /auth?action=me 失败（**包括网络抖动、
+       超时、Cloudflare 偶发 5xx**）就把登录态清掉、回登录门。
+       结果：站主在后台点「返回前台」，前台一加载就因为同样原因被判未登录，
+       弹登录框；登录完 afterLoginResume 又按 cls_next 跳回后台 ——
+       「先回后台登录界面 → 又自动登录回后台 → 退不出前台」。
+       现在改成：**只有明确的 401（会话真的失效）才清登录态**，
+       其余（网络错误 / 服务端异常）一律保留登录态，只提示一句，
+       并给一个「重试」按钮，站主点一下就能继续用后台。 */
+    var is401 = !!(e && (e.status === 401 || /登录已过期|401/.test(String(e.message || ''))));
+    if(is401){
+      doLogout(true, true);
+      gateMsg('登录已过期，请重新登录。');
+      return;
+    }
+    gateMsg('连不上服务器（' + ((e && e.message) || '网络错误') + '），登录状态仍保留，可点下方重试。');
+    var retry = document.getElementById('gRetry');
+    if(!retry){
+      retry = document.createElement('button');
+      retry.id = 'gRetry';
+      retry.className = 'btn btn-block';
+      retry.style.marginTop = '10px';
+      retry.textContent = '重试进入后台';
+      retry.onclick = function(){ location.reload(); };
+      var gmsg = document.getElementById('gMsg');
+      if(gmsg && gmsg.parentNode) gmsg.parentNode.insertBefore(retry, gmsg.nextSibling);
+    }
   });
 }
 
