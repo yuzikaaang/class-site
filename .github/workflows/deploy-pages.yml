@@ -91,6 +91,9 @@ jobs:
             share-card.js
             fs-keep.js
             admin.html
+            # v4.7.11：版本更新检查用。⚠️ 不在白名单里 → 线上 404，
+            # 前端拿不到版本就永远不会提示更新（部署完记得回查这一个）。
+            version.json
             share.html
             info.html
             sw.js
