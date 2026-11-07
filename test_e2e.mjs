@@ -12906,12 +12906,14 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   const bat710 = adm79.slice(i710, adm79.indexOf('function siteLaunchDownload'));
   t('★v4.7.10 启动器不再用 for 循环拼浏览器路径（含括号变量会打断解析）',
     i710 > 0 && !/for %%P in/.test(bat710));
-  t('★v4.7.10 启动器逐个 if exist 找浏览器',
-    /if not defined EXE if exist "%ProgramFiles\(x86\)%/.test(bat710));
+  t('★v4.7.10 启动器逐个 if exist + goto 找浏览器（命中 32 位路径那一支）',
+    /goto :b_chrome2/.test(bat710) && /goto :b_edge2/.test(bat710) && /goto :no_browser/.test(bat710));
   t('★v4.7.10 启动器写「启动日志.txt」',
     /启动日志\.txt/.test(bat710) && />>"%LOG%" echo/.test(bat710));
   t('★v4.7.10 启动后回查进程，判断是真起来还是立刻崩',
-    /tasklist \/fi "imagename=%~nxEXE"/.test(bat710) && /goto :died/.test(bat710));
+    /tasklist \/fi "imagename eq %LEAF%"/.test(bat710) && /goto :died/.test(bat710));
+  t('★v4.7.10 不再用 %~nxVAR 这种不存在的语法取 exe 名',
+    !/%~nxEXE/.test(bat710) && /set "LEAF=chrome.exe"/.test(bat710));
   t('★v4.7.10 失败时停住窗口并打印日志',
     /:hold/.test(bat710) && /type "%LOG%"/.test(bat710) && /pause/.test(bat710));
   t('★v4.7.10 成功时窗口停留 8 秒，不再一闪而过',
