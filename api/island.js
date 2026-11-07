@@ -69,6 +69,14 @@ const DEFAULT_ISLAND = {
   on: true,
   term: '2026 年秋季 · 高二上',
   startDate: '2026-09-01',
+  /* v4.10.4（站主第 7 条）：大屏右下角那张卡要算「学期还剩多少天」，
+     光有开学日期不够，必须有学期结束日期。
+     站主原话：「班级岛里面可以加一个学习结束输入框」 —— 于是加这两个：
+       endDate    本学期最后一天（含）
+       enrollDate 高一入学那天（只用来算「高中总进度」那条柱子）
+     都是可留空的：留空时前台不显示对应那一行，不会出现 NaN。 */
+  endDate: '',
+  enrollDate: '2025-09-01',
   components: ['time', 'weather', 'week', 'term'],
   banner: DEFAULT_BANNER,
   days: {},
@@ -154,6 +162,9 @@ function normalize(raw) {
     on: o.on !== false,
     term: str(o.term, 30) || DEFAULT_ISLAND.term,
     startDate: isDate(o.startDate) ? o.startDate : DEFAULT_ISLAND.startDate,
+    /* v4.10.4：学期结束日 · 高中入学日（都允许空 —— 空着前台就不显示那一行） */
+    endDate: isDate(o.endDate) ? o.endDate : '',
+    enrollDate: isDate(o.enrollDate) ? o.enrollDate : DEFAULT_ISLAND.enrollDate,
     components: comps.length ? comps : DEFAULT_ISLAND.components,
     banner: normBanner(o.banner, legacyTt),
     days: normDays(o.days),

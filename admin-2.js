@@ -5855,6 +5855,11 @@ var AI_DAYS = [
 ];
 
 function renderIsland(){
+  /* v4.10.4：重画之前先把还没发出去的改动**同步收一遍**。
+     以前直接 $('view').innerHTML = '加载中…'，650ms 后才到点的 aiFlush 再去读 DOM
+     就什么也读不到了（aiCollect 读到 null），于是把刚改的东西写回成空值。
+     顺序不能反：aiFlush() 里的 aiCollect() 是同步执行的，必须在换 DOM 之前调。 */
+  if(AI_T){ clearTimeout(AI_T); AI_T = null; try{ aiFlush(); }catch(e){} }
   $('view').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
   api('/island').then(function(j){
     AI = (j && j.data) || {};
@@ -5886,9 +5891,16 @@ function paintIsland(){
     +     '<div class="bd-grid2" style="margin-top:10px">'
     +       '<div class="field"><label>学期名称</label>'
     +         '<input class="gate-input" id="aiTerm" maxlength="30" value="' + attr(AI.term || '') + '" placeholder="2026 年秋季 · 高二上"></div>'
-    +       '<div class="field"><label>开学那一周的周一（算周数用）</label>'
+    +       '<div class="field"><label>开学第一天（第一周从这天算）</label>'
     +         '<input class="gate-input" id="aiStart" type="date" value="' + attr(AI.startDate || '') + '"></div>'
+    +       '<div class="field"><label>学期结束（最后一天）</label>'
+    +         '<input class="gate-input" id="aiEnd" type="date" value="' + attr(AI.endDate || '') + '"></div>'
+    +       '<div class="field"><label>高一入学日（算高中总进度）</label>'
+    +         '<input class="gate-input" id="aiEnroll" type="date" value="' + attr(AI.enrollDate || '') + '"></div>'
     +     '</div>'
+    +     '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
+    +       '开学第一天<b>不一定是周一</b>：周三开学就填周三，那一周照样算第 1 周（只是不满 7 天）。'
+    +       '「学期结束」填了以后，大屏作业页右下角才会显示学期倒计时；「高一入学日」用来算高中总进度条</p>'
     +   '</div>'
     + '</section>'
 
@@ -6017,6 +6029,8 @@ function paintIsland(){
   $('aiOn').onchange = aiTouch;
   $('aiTerm').oninput = aiTouch;
   $('aiStart').onchange = aiTouch;
+  if($('aiEnd'))    $('aiEnd').onchange = aiTouch;
+  if($('aiEnroll')) $('aiEnroll').onchange = aiTouch;
 
   /* 照片：输入即存 + 实时预览（有效地址才显示缩略图） */
   var ph = $('aiPhoto');
@@ -6061,12 +6075,38 @@ function aiTouch(){
   clearTimeout(AI_T);
   AI_T = setTimeout(aiFlush, 650);
 }
+/* v4.10.4（站主第 1 条：班级岛的两个设置每次都被重置 —— 根因就在这个函数）
+ * ----------------------------------------------------------------------------
+ * 站主原话：「班级岛的基本里面在首页显示班级岛以及今日事项照片，这两个我已经
+ *            输过很多次了，但是每次一更新的时候他们就会重置掉，我就需要重新输入」。
+ *
+ * 以前这里写的是：
+ *     AI.on    = !!(on && on.checked);
+ *     AI.photo = String((ph && ph.value) || '');
+ * 也就是说 —— **DOM 不在，就当「用户把开关关了、把照片删了」**。
+ *
+ * 什么时候 DOM 会不在？三种，全都是日常操作：
+ *   ① 改完班级岛，650ms 还没到就切到了别的板块（view.innerHTML 被整块换掉）；
+ *   ② 改完点「重新读取」，renderIsland 先把 view 换成「加载中…」；
+ *   ③ 关页面时 pagehide 补发的 aiFlushBeacon。
+ * 一旦命中，pending 的那次保存就把 on=false、photo='' 写回云端 ——
+ * 站主看到的现象正是「设一次丢一次，每次都得重新输」。
+ *
+ * 现在改成：**AI 是云端的快照，DOM 上有这个控件才覆盖它，没有就原样留着。**
+ * 顺带把 banner 的写法也统一成「存在才改」，语义一致。
+ * -------------------------------------------------------------------------- */
 function aiCollect(){
-  var on = $('aiOn'), term = $('aiTerm'), st = $('aiStart'), ph = $('aiPhoto');
-  AI.on = !!(on && on.checked);
-  AI.term = String((term && term.value) || '').trim();
-  AI.startDate = String((st && st.value) || '').trim();
-  AI.photo = String((ph && ph.value) || '').trim().slice(0, 500);
+  /* AI 还没读回来（面板没加载完 / 接口失败）就什么都别写回去，
+     否则等于拿一份空配置覆盖云端。 */
+  if(!AI || typeof AI !== 'object') return null;
+  var on = $('aiOn'), term = $('aiTerm'), st = $('aiStart');
+  var en = $('aiEnd'), er = $('aiEnroll'), ph = $('aiPhoto');
+  if(on)  AI.on = !!on.checked;
+  if(term) AI.term = String(term.value || '').trim();
+  if(st)  AI.startDate = String(st.value || '').trim();
+  if(en)  AI.endDate = String(en.value || '').trim();
+  if(er)  AI.enrollDate = String(er.value || '').trim();
+  if(ph)  AI.photo = String(ph.value || '').trim().slice(0, 500);
   Array.prototype.forEach.call(document.querySelectorAll('#aiBanner [data-bk]'), function(el){
     AI.banner[el.getAttribute('data-bk')] = String(el.value || '').trim().slice(0, 60);
   });
@@ -6074,6 +6114,8 @@ function aiCollect(){
     on: AI.on,
     term: AI.term,
     startDate: AI.startDate,
+    endDate: AI.endDate || '',
+    enrollDate: AI.enrollDate || '',
     components: (AI.components || []).slice(),
     banner: AI.banner,
     days: AI.days,
@@ -6087,6 +6129,7 @@ function aiFlush(){
   AI_BUSY = true;
   AI_AGAIN = false;
   var data = aiCollect();
+  if(!data){ AI_BUSY = false; return; }     /* 配置没读回来就别发，免得覆盖云端 */
   api('/island', { method: 'POST', body: { data: data } }).then(function(j){
     AI_BUSY = false;
     if(j && j.data) AI = j.data;
@@ -6103,7 +6146,9 @@ function aiFlush(){
 function aiFlushBeacon(){
   if(!AI_T && !AI_BUSY) return;
   try{
-    var body = JSON.stringify({ data: aiCollect() });
+    var d = aiCollect();
+    if(!d) return;                       /* 同上：没读到配置就不写回 */
+    var body = JSON.stringify({ data: d });
     fetch(API_BASE + '/api/island', {
       method: 'POST', keepalive: true,
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + STATE.token },

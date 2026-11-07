@@ -1367,6 +1367,56 @@
     box.innerHTML = '<span class="bhw-mini-k">倒计时</span>' + rows;
   }
   BIG.renderCd = renderCd;
+
+  /* ==========================================================================
+   * v4.10.4（站主第 7 条）：右下角「学期 / 高考 / 高中进度」卡片
+   * --------------------------------------------------------------------------
+   * 站主原话：「大屏模式的作业查看右下角显示一个卡片：第一行某学期已经开学多少天，
+   *   第二行学期还剩多少天，第三行离 2028 年高考还剩多少天，第四行显示一个高中进度条，
+   *   要有具体的进度条以及百分比，某学期以及开学的日期是根据后台班级岛上的两个数据来推的」。
+   *
+   * 数据不在本页算 —— 统一走 app.js 的 islandProgress()，这样后台改一次，
+   * 首页、班级岛、大屏三处一定是同一个数，不会各算各的。
+   * 没填「学期结束」时「还剩多少天」那行自动不出现（不显示 0 / NaN）。
+   * ========================================================================== */
+  function renderProg(){
+    var box = $('bhwProg'); if(!box) return;
+    var p = null;
+    try{ if(typeof islandProgress === 'function') p = islandProgress(); }catch(e){}
+    if(!p || (!p.start && !p.end)){ box.style.display = 'none'; return; }
+    box.style.display = '';
+
+    var rows = '';
+    if(p.sinceStart !== null && p.sinceStart !== undefined){
+      rows += '<div class="bhw-prog-row"><span>本学期已开学</span>'
+        + '<b>' + p.sinceStart + '<i>天</i></b></div>';
+    }
+    if(p.leftTerm !== null && p.leftTerm !== undefined){
+      rows += '<div class="bhw-prog-row"><span>本学期还剩</span>'
+        + '<b>' + (p.leftTerm <= 0 ? 0 : p.leftTerm) + '<i>天</i></b></div>';
+    }
+    if(p.leftGaokao !== null && p.leftGaokao !== undefined){
+      rows += '<div class="bhw-prog-row"><span>距 2028 年高考</span>'
+        + '<b>' + Math.max(0, p.leftGaokao) + '<i>天</i></b></div>';
+    }
+
+    var pct = (p.hiPct === null || p.hiPct === undefined) ? null : Math.round(p.hiPct * 10) / 10;
+    var bar = '';
+    if(pct !== null){
+      bar = '<div class="bhw-prog-bar"><i style="width:' + pct + '%"></i></div>'
+        + '<div class="bhw-prog-pct"><span>高中总进度</span><b>' + pct + '%</b></div>';
+    }
+
+    /* 学期名去掉「2026 年秋季 · 」这种前缀，只留「高二上」 */
+    var term = String(p.term || '').replace(/^\d{4}\s*年\s*/, '');
+    if(term.indexOf('·') >= 0) term = term.split('·').pop().trim();
+    var hd = '<div class="bhw-prog-hd"><b>' + esc0(term || '本学期') + '</b>'
+      + (p.start ? '<span>· ' + esc0(String(p.start).replace(/-/g, '/')) + ' 开学</span>' : '')
+      + '</div>';
+
+    box.innerHTML = hd + rows + bar;
+  }
+  BIG.renderProg = renderProg;
   BIG.cdScope = function (){
     var it = BIG._cdImp;
     if(!it || !it.scope || !it.scope.length) return;
@@ -1488,8 +1538,10 @@
     /* v4.3.0：进了作业页才起这两组定时器 —— 倒计时 30 秒刷一次（天/时粒度，不用每秒重排），
        一言按用户设的分钟数自动换。离开作业页由 leaveHwUi 收掉。 */
     renderCd();
+    /* v4.10.4：右下角进度卡跟倒计时一起刷 —— 跨天时天数是会变的 */
+    renderProg();
     if(BIG._cdT) clearInterval(BIG._cdT);
-    BIG._cdT = setInterval(function (){ if(BIG.hwOn) renderCd(); }, 30000);
+    BIG._cdT = setInterval(function (){ if(BIG.hwOn){ renderCd(); renderProg(); } }, 30000);
     if(!BIG.quoteData) BIG.quoteNext(false);
     BIG.quoteAuto();
   }

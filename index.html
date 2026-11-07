@@ -1862,6 +1862,15 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .island-foot{display:flex;justify-content:center;align-items:center;gap:14px;
   margin-top:8px;font-size:.58rem;color:rgba(255,255,255,.42);position:relative;z-index:1}
 .island-foot b{color:rgba(255,255,255,.66);font-weight:700}
+/* v4.10.4（站主第 7 条）：学期倒计时落在班级岛右下角，不额外占一行。
+   绝对定位到最右边，中间那对「今日事项 · 第 N 周」保持原来的居中不变。 */
+.island-foot .isl-termleft{position:absolute;right:0;top:0;
+  color:rgba(255,255,255,.42);font-variant-numeric:tabular-nums;white-space:nowrap}
+.island-foot .isl-termleft:empty{display:none}
+@media screen and (max-width:420px){
+  /* 窄屏实在放不下就不显示（大屏作业页那张卡里还有完整版） */
+  .island-foot .isl-termleft{display:none}
+}
 /* 窄屏（≤420 / ≤370）四个信息块再缩一档 —— 保证「22° 多云」这类最长文案完整显示 */
 @media screen and (max-width:420px){
   .island{padding:11px 11px;border-radius:20px}
@@ -4575,6 +4584,51 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 .dark .bhw-mini{background:#2a2523;border-color:rgba(255,255,255,.08)}
 .bhw-mini-k{font-size:calc(.64rem*var(--bhw-fs-s));font-weight:800;letter-spacing:.1em;color:var(--fg-3)}
 .bhw-mini-v{font-size:calc(.82rem*var(--bhw-fs-s));line-height:1.5;font-weight:700;color:var(--fg);overflow-wrap:anywhere}
+
+/* ============================================================================
+ * v4.10.4（站主第 7 条）：大屏作业页右下角的「学期 / 高考 / 高中进度」卡片
+ * ----------------------------------------------------------------------------
+ * 四行：本学期已开学多少天 · 学期还剩多少天 · 距 2028 高考还剩多少天 · 高中总进度条。
+ * 数据来自班级岛（term / startDate / endDate / enrollDate），后台改一次三处同步。
+ * margin-top:auto 把它顶到右栏最底部 —— 上面内容再长也不会把它挤走。
+ * ========================================================================= */
+.bhw-prog{
+  margin-top:auto;flex:0 0 auto;
+  background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:14px;
+  padding:11px 13px;display:flex;flex-direction:column;gap:6px;
+}
+.dark .bhw-prog{background:#2a2523;border-color:rgba(255,255,255,.08)}
+.bhw-prog-hd{
+  font-size:calc(.66rem*var(--bhw-fs-s));font-weight:800;letter-spacing:.06em;
+  color:var(--fg-3);display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;
+}
+.bhw-prog-hd b{color:var(--fg);font-weight:800}
+.bhw-prog-row{
+  display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  font-size:calc(.72rem*var(--bhw-fs-s));color:var(--fg-3);line-height:1.35;
+}
+.bhw-prog-row b{
+  font-size:calc(.92rem*var(--bhw-fs-s));font-weight:800;color:var(--fg);
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em;
+}
+.bhw-prog-row b i{font-style:normal;font-size:.62em;font-weight:700;color:var(--fg-3);margin-left:2px}
+.bhw-prog-bar{
+  height:9px;border-radius:99px;background:rgba(120,53,15,.10);overflow:hidden;margin-top:2px;
+}
+.dark .bhw-prog-bar{background:rgba(255,255,255,.10)}
+.bhw-prog-bar i{
+  display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,var(--grad-a),var(--grad-b));
+  transition:width .55s cubic-bezier(.22,1,.36,1);
+}
+.bhw-prog-pct{
+  display:flex;align-items:baseline;justify-content:space-between;gap:6px;
+  font-size:calc(.64rem*var(--bhw-fs-s));color:var(--fg-3);font-variant-numeric:tabular-nums;
+}
+.bhw-prog-pct b{
+  font-size:calc(.82rem*var(--bhw-fs-s));font-weight:800;color:var(--fg);
+  font-variant-numeric:tabular-nums;
+}
 .bhw-pick{
   display:flex;align-items:center;gap:10px;cursor:pointer;text-align:left;
   background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:14px;padding:10px 12px;
@@ -6414,6 +6468,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           </button>
           <!-- v4.3.0：随机一言放最底下，点击就换 -->
           <div class="bhw-quote" id="bhwQuote" style="display:none" onclick="BIG.quoteTap(event)"></div>
+          <!-- v4.10.4（站主第 7 条）：学期 / 高考 / 高中进度，钉在右栏最底部 -->
+          <div class="bhw-prog" id="bhwProg" style="display:none"></div>
         </aside>
       </div>
 
@@ -7439,18 +7495,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.3';
+var SITE_VERSION = '4.10.4';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4103" defer></script>
-<script src="./app.min.js?v=4103" defer></script>
+<script src="./auth-bus.js?v=4104" defer></script>
+<script src="./app.min.js?v=4104" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4103" defer></script>
-<script src="./big.js?v=4103" defer></script>
+<script src="./fs-keep.js?v=4104" defer></script>
+<script src="./big.js?v=4104" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4103" defer></script>
+<script src="./pickfx.js?v=4104" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

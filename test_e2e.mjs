@@ -13420,7 +13420,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /function updNotify\(/.test(appV) && /function updGo\(/.test(appV)
     && /swOnUpdateFound/.test(appV) && /updNotify\(worker\)/.test(appV));
   t('★v4.10.2 点更新有进度条走到 100% 并自动刷新',
-    /setP\(100/.test(appV) && /location\.replace\(location\.pathname/.test(appV));
+    /* v4.10.4：跳转改成 updReloadUrl()（保留 query + hash，更新完不回首页），
+       所以这里同时接受新旧两种写法。 */
+    /setP\(100/.test(appV)
+    && (/location\.replace\(updReloadUrl\(\)\)/.test(appV) || /location\.replace\(location\.pathname/.test(appV)));
   t('★v4.10.2 同一次会话不重复弹更新窗',
     /cls_upd_seen/.test(appV));
 
@@ -13467,12 +13470,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.3 版本号升到 4.10.3（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.3'/.test(idxV) && /SITE_VER = '4\.10\.3'/.test(swV)
-    && /API_VER = '4\.10\.3'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.3'/.test(admV));
-  t('★v4.10.3 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.3');
+  t('★v4.10.4 版本号升到 4.10.4（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.4'/.test(idxV) && /SITE_VER = '4\.10\.4'/.test(swV)
+    && /API_VER = '4\.10\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.4'/.test(admV));
+  t('★v4.10.4 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.4');
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {
@@ -13510,6 +13513,46 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /function nowStamp/.test(pubV)
       && /date: nowStamp\(\)/.test(pubV)
       && /hit\.date = nowStamp\(\)/.test(pubV));
+  }
+
+  /* ===== v4.10.4 专项：班级岛不被重置 / 放假天数 / 进度卡 / 更新弹窗 ===== */
+  {
+    const islV = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
+    const adm2V4104 = fs.readFileSync(new URL('./admin-2.js', import.meta.url), 'utf8');
+
+    /* ① 班级岛配置被重置：aiCollect 不能因为 DOM 不在就写空值 */
+    t('★v4.10.4 aiCollect 先判断控件存不存在，不得写回空值',
+      /if\(on\)\s+AI\.on = !!on\.checked/.test(adm2V4104)
+      && /if\(ph\)\s+AI\.photo =/.test(adm2V4104)
+      && !/AI\.on = !!\(on && on\.checked\)/.test(adm2V4104));
+    t('★v4.10.4 班级岛面板重画前先把未发的修改 flush 掉',
+      /if\(AI_T\)\{ clearTimeout\(AI_T\); AI_T = null; try\{ aiFlush\(\); \}catch\(e\)\{\} \}/.test(adm2V4104));
+    t('★v4.10.4 班级岛新增学期结束 / 高一入学两个字段',
+      /endDate: isDate\(o\.endDate\) \? o\.endDate : ''/.test(islV)
+      && /enrollDate: isDate\(o\.enrollDate\)/.test(islV)
+      && /id="aiEnd"/.test(adm2V4104) && /id="aiEnroll"/.test(adm2V4104));
+
+    /* ② 放假天数：中午 12 点以后放假，当天不算 */
+    t('★v4.10.4 中午 12:00 以后放假当天不计入天数',
+      /fromMin >= 720/.test(appV) && /skipFirst/.test(appV));
+
+    /* ③ 进度卡：数据统一走 islandProgress，大屏只负责画 */
+    t('★v4.10.4 学期 / 高考 / 高中进度度量从班级岛统一推',
+      /function islandProgress\(\)/.test(appV)
+      && /GAOKAO_DATE = '2028-06-07'/.test(appV)
+      && /BIG\.renderProg = renderProg/.test(bigV)
+      && /id="bhwProg"/.test(idxV));
+    t('★v4.10.4 班级岛右下角显示学期倒计时',
+      /id="islTermLeft"/.test(appV) && /function islandTermLeft\(\)/.test(appV));
+
+    /* ④ 更新弹窗：深链不打扰、更新完留在原页 */
+    t('★v4.10.4 深链进入不弹更新窗（3.x 以前除外）',
+      /function updShouldPopup/.test(appV)
+      && /updMajor\(ver\) < 4/.test(appV)
+      && /updIsDeepLink/.test(appV));
+    t('★v4.10.4 更新完保留 query 与 hash，不再被甩回首页',
+      /function updReloadUrl/.test(appV)
+      && /location\.replace\(updReloadUrl\(\)\)/.test(appV));
   }
 
   /* ===== 全量语法自检 =====

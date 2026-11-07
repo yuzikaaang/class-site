@@ -873,6 +873,8 @@ function updNotify(worker){
       /* 不是更新（同一个版本重新触发了 install）→ 不打扰 */
       return;
     }
+    /* v4.10.4：深链页不弹窗，只让页脚那行提示挂着（见 updShouldPopup） */
+    if(newVer && !updShouldPopup(newVer)) return;
     var info = (j && j.v && (!newVer || updNewer(j.v, cur)))
       ? j
       : { v: newVer || '', title: '检测到新版本',
@@ -9938,6 +9940,9 @@ function islandBoot(){
       }
     }catch(e){}
     islandRender();
+    /* v4.10.4：班级岛数据到了之后，通知大屏作业页把右下角那张进度卡补上
+       （直接从 #/hw 深链进来的话，大屏比 /api/island 先画完）。 */
+    try{ if(window.BIG && BIG.renderProg) BIG.renderProg(); }catch(e){}
     if(ISLAND && ISLAND.on && !ISLAND_TICK){
       ISLAND_TICK = setInterval(islandTick, 30000);
     }
@@ -9975,6 +9980,65 @@ function islandDaysBetween(a, b){
   var A = new Date(a + 'T00:00:00'), B = new Date(b + 'T00:00:00');
   if(isNaN(A.getTime()) || isNaN(B.getTime())) return null;
   return Math.round((B - A) / 86400000);
+}
+
+/* ============================================================================
+ * v4.10.4（站主第 7 条）：学期 / 高中进度
+ * ----------------------------------------------------------------------------
+ * 站主原话：「大屏模式的作业查看右下角显示一个卡片：第一行某学期已经开学多少天，
+ *   第二行学期还剩多少天，第三行离 2028 年高考还剩多少天，第四行显示一个高中进度条，
+ *   要有具体的进度条以及百分比，某学期以及开学的日期是根据后台班级岛上的两个数据来推的」。
+ *
+ * 数据全部从班级岛取（term / startDate / endDate / enrollDate），不另外存一套，
+ * 站主在后台改一次，首页、班级岛、大屏三处一起变。
+ * ========================================================================= */
+var GAOKAO_DATE = '2028-06-07';   /* 2025 级这届的高考日 */
+
+function islandProgress(){
+  if(!ISLAND) return null;
+  var today = islandDateKey(new Date());
+  var st = ISLAND.startDate || '';
+  var en = ISLAND.endDate || '';
+  var er = ISLAND.enrollDate || '';
+  var o = {
+    term: String(ISLAND.term || ''),
+    start: st, end: en, enroll: er, gaokao: GAOKAO_DATE,
+    sinceStart: null, leftTerm: null, totalTerm: null,
+    leftGaokao: islandDaysBetween(today, GAOKAO_DATE),
+    hiDone: null, hiTotal: null, hiPct: null,
+  };
+  if(st){
+    var s = islandDaysBetween(st, today);
+    if(s !== null) o.sinceStart = s + 1;          /* 开学当天算第 1 天 */
+  }
+  if(st && en){
+    var t = islandDaysBetween(st, en);
+    if(t !== null) o.totalTerm = t + 1;
+  }
+  if(en){
+    var l = islandDaysBetween(today, en);
+    if(l !== null) o.leftTerm = l;                /* 今天就是最后一天 → 0 */
+  }
+  if(er){
+    var done = islandDaysBetween(er, today);
+    var all = islandDaysBetween(er, GAOKAO_DATE);
+    if(done !== null && all !== null && all > 0){
+      o.hiDone = done;
+      o.hiTotal = all;
+      o.hiPct = Math.max(0, Math.min(100, done / all * 100));
+    }
+  }
+  return o;
+}
+
+/* 班级岛右下角那行小字：学期还剩多少天。没填「学期结束」就什么都不显示 */
+function islandTermLeft(){
+  var el = document.getElementById('islTermLeft');
+  if(!el) return;
+  var p = null;
+  try{ p = islandProgress(); }catch(e){}
+  if(!p || p.leftTerm === null || p.leftTerm === undefined){ el.textContent = ''; return; }
+  el.textContent = p.leftTerm <= 0 ? '学期已结束' : '学期还剩 ' + p.leftTerm + ' 天';
 }
 
 /* ============================================================================
@@ -10379,8 +10443,19 @@ function islandToday(offset){
         }
         if(h.toTime && key === h.to && nowT >= endTs) continue;
       }
-      var dayNo = (islandDaysBetween(h.from, key) || 0) + 1;
-      var totalDays = (islandDaysBetween(h.from, h.to) || 0) + 1;
+      /* v4.10.4（站主第 2 条）：中午 12:00 以后才开始放的假，**当天不算第 1 天**。
+         站主原话：「我是 6 号晚上 10 点放的假，放到 8 号下午 6:40，那么 6 号那一天呢
+         就不算放假了，虽然说我是从那天开始算的，那实际上呢它就大约是两天的时间，
+         也不能说是三天。所以呢 7 号是放假第一天，8 号是放假第二天」。
+         判定口径：开始时间 >= 12:00 就把开始日整段抹掉（不是按半天算）。
+         没填开始时间的（只写日期）按 00:00 算，仍然计入 —— 老数据行为不变。 */
+      var fromMin = islandMin(h.fromTime);
+      var skipFirst = (fromMin !== null && fromMin >= 720) ? 1 : 0;
+      var dayNo = (islandDaysBetween(h.from, key) || 0) + 1 - skipFirst;
+      var totalDays = (islandDaysBetween(h.from, h.to) || 0) + 1 - skipFirst;
+      /* 极端情况：当天 22:00 放到当天 23:00，减完是 0 —— 兜底成 1，别出现「第 0 天」 */
+      if(totalDays < 1) totalDays = 1;
+      if(dayNo < 1) dayNo = 1;
       var base = offset ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0) : new Date();
       return {
         kind: 'holiday',
@@ -10477,11 +10552,15 @@ function islandRender(){
        现在总览画在天气弹窗顶部（#islWxOv），班级岛只留原来的「天气」小格子。 */
     + '<div class="island-row" id="islBannerRow"></div>'
     + '<div class="island-foot"><span id="islFootL">今日事项</span>'
-    +   '<b id="islFoot"></b></div>';
+    +   '<b id="islFoot"></b>'
+    /* v4.10.4（站主第 7 条）：学期倒计时直接落在班级岛右下角，
+       不额外占一块地方。没填「学期结束」时这块整个不出现。 */
+    +   '<span class="isl-termleft" id="islTermLeft"></span></div>';
 
   islandBanner();
   islandTick();
   islandWeather();
+  islandTermLeft();
 }
 
 /* 第二行：一行横幅 */
@@ -10611,6 +10690,8 @@ function islandTick(){
     if(h === 21 || h === 0) islandBanner();
   }
   ISL_TICK_H = h;
+  /* v4.10.4：跨天之后「学期还剩多少天」也要跟着减 1（页面开着过夜） */
+  try{ islandTermLeft(); }catch(e){}
 }
 
 /* v3.9.21：失败后最多自动重试一次（用函数对象当开关，避免再开一个全局变量） */
@@ -23136,6 +23217,56 @@ syncAutoInit(); /* 自动云同步：每 1 分钟双向同步（推本机 + 拉�
  * 每段都是真的，数字才不心虚。
  * ========================================================================== */
 var UPD = { busy: false, info: null, shown: false };
+
+/* ============================================================================
+ * v4.10.4（站主第 5 条）：更新弹窗的「分寸」
+ * ----------------------------------------------------------------------------
+ * 站主原话：「如果用户通过比如说我分享的二维码呀，或者说分享的链接跳转到站内的
+ *   某一个固定的卡片的话，那你就这个时候呢还是一样不要自动更新……所以你现在我让
+ *   你做这个更新弹窗的意义就是在这，就是不要自动更新，因为这样会打断用户，而且
+ *   你更新完之后你会返回到首页。所以呢这个更新弹窗也是一样的，它在哪一个界面都可以弹，
+ *   不一定一定是要在首页……但是更新完之后呢，你还要是在这个页面」。
+ *
+ * 于是三条规矩：
+ *   ① 从深链（分享链接 / 二维码，落点是 #/board/1/card/xx 这种）进来 → **不弹窗**，
+ *      页脚那行「发现新版本 · 点击立即更新」照样在，想更就点一下。人家是来看内容的，
+ *      弹窗一出来就把内容盖住了。
+ *   ② 唯一例外：版本还停在 3.x 以前 —— 那种老版本的页面结构都对不上了，
+ *      不提醒会一直卡在旧界面，这时无论在哪都照弹。
+ *   ③ 弹窗本身和「当前在哪个页」无关（作业页、成绩页、试卷分析页都照弹），
+ *      真正要守住的是「更新完留在原页」—— 见 updReloadUrl()。
+ * ========================================================================== */
+function updMajor(v){ return updParse(v)[0] || 0; }
+
+/* 当前地址是不是「某个固定卡片」这种深链 */
+function updIsDeepLink(){
+  try{
+    var h = String(location.hash || '').replace(/^#/, '');
+    if(!h || h === '/') return false;
+    if(/^\/?(home)?$/i.test(h)) return false;
+    return true;
+  }catch(e){ return false; }
+}
+
+/* 这个版本要不要主动弹窗 */
+function updShouldPopup(ver){
+  if(updMajor(ver) < 4) return true;      /* 太老了，必须提醒 */
+  return !updIsDeepLink();                /* 深链页不打扰，普通页面照弹 */
+}
+
+/* 更新后重新进入用的地址：**原封不动保留 query 和 hash**。
+   以前这里只写 location.pathname，于是「更新完就回首页」——
+   深链、板块、页码全丢了。 */
+function updReloadUrl(){
+  try{
+    var x = new URL(location.href);
+    x.searchParams.delete('_r');
+    x.searchParams.set('_r', Date.now());
+    return x.pathname + (x.search || '') + (x.hash || '');
+  }catch(e){
+    return location.pathname + '?_r=' + Date.now() + (location.hash || '');
+  }
+}
 function updParse(v){
   return String(v || '').split('.').map(function (x){ return parseInt(x, 10) || 0; });
 }
@@ -23155,6 +23286,8 @@ function updCheck(){
       if(!j || !j.v) return;
       var cur = (typeof SITE_VERSION !== 'undefined') ? SITE_VERSION : '';
       if(!updNewer(j.v, cur)) return;                       /* 已是最新 → 什么也不做 */
+      /* v4.10.4：深链进来的不弹窗，交给页脚那行提示（见 updShouldPopup 注释） */
+      if(!updShouldPopup(j.v)) return;
       try{ if(sessionStorage.getItem('cls_upd_seen') === j.v) return; }catch(e){}
       UPD.info = j;
       UPD.shown = true;              /* v4.10.2：已弹过就别再弹第二次（SW 那条路会接着弹） */
@@ -23259,13 +23392,12 @@ function updGo(){
     return new Promise(function(res){ setTimeout(res, 320); });
   }).then(function (){
     setP(100, '更新完成，正在刷新…');
-    /* 进度条到 100% → 自动刷新（站主要求，不让他再点一次） */
+    /* 进度条到 100% → 自动刷新（站主要求，不让他再点一次）
+       v4.10.4：刷新地址保留 pathname + search + hash —— 更新完还停在原页面，
+       不会再被甩回首页（站主第 5 条）。 */
     setTimeout(function (){
-      try{
-        location.replace(location.pathname + '?_r=' + Date.now() + location.hash);
-      }catch(e){
-        location.reload();
-      }
+      try{ location.replace(updReloadUrl()); }
+      catch(e){ location.reload(); }
     }, 460);
   }).catch(function (){
     try{ location.reload(); }catch(e){}
