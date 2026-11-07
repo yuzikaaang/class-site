@@ -646,8 +646,10 @@ var SW_HAS_UPDATE = false;  /* 已检测到有新版本 */
 var SW_NEW_VER = '';        /* 线上具体版本号（拿得到才有） */
 var SW_RELOADING = false;   /* 防止 controllerchange 反复触发刷新 */
 var SW_BUSY = false;        /* 正在检查更新，避免连点 */
-var SW_BOOT_AT = Date.now();/* 页面打开时刻，用于判断「能不能直接自动刷新」 */
-var SW_AUTO_WINDOW = 15000; /* 打开后多少毫秒内发现更新 = 直接自动刷新 */
+var SW_BOOT_AT = Date.now();/* 页面打开时刻（保留给诊断用） */
+/* v4.10.0（站主第 2 条）：这个「15 秒内自动刷新」的窗口已经取消。
+   站主要求「打开不刷新，由我自己点更新」，所以发现新版只提示、不接管。 */
+var SW_AUTO_WINDOW = 0;
 
 /* 版本号比较：a > b 返回 1，a < b 返回 -1，相等 0。缺位补 0（2.6 等价 2.6.0） */
 function cmpVer(a, b){
@@ -708,7 +710,13 @@ function paintVersion(){
 function checkOnlineVersion(){
   var el = document.getElementById('verLine');
   if(!el) return;
-  if(SW_HAS_UPDATE){ hardRefresh(); return; }   /* 已知有新版本，直接刷新 */
+  /* v4.10.0（站主第 2 条）：已知有新版本时，走带进度条的 updGo（清缓存 → 注销 SW
+     → 重取），而不是直接硬刷 —— 站主就是想看见「更新到一半」的那个过程。 */
+  if(SW_HAS_UPDATE){
+    if(typeof updGo === 'function') updGo();
+    else hardRefresh();
+    return;
+  }
   if(SW_BUSY) return;
   SW_BUSY = true;
   el.textContent = '正在检查更新…';
@@ -817,13 +825,12 @@ function swCheckUpdate(manual){
 }
 
 /* ---------- 发现新版本 ----------
-   页面刚打开（还没开始做事）→ 直接让新 SW 立刻接管，接管后会自动刷新，
-   用户无感拿到新版；已经用了一会儿 → 只做提示，不打断。 */
+   v4.10.0（站主第 2 条）：「打开就自动刷新到最新，所以从来看不到更新的加载动画。
+   建议打开之后不刷新，由我手动更新。」
+   于是这里不再悄悄接管 + reload，只老老实实打个标记；
+   版本检查弹窗（updCheck）照旧会拉 version.json 逐版本比对，
+   站主点「立即更新」才走三段进度 → 刷新。 */
 function swOnUpdateFound(worker){
-  if(Date.now() - SW_BOOT_AT < SW_AUTO_WINDOW && worker){
-    try{ worker.postMessage({ type: 'SKIP_WAITING' }); }catch(e){}
-    return;
-  }
   SW_HAS_UPDATE = true;
   paintVersion();
 }
@@ -858,14 +865,9 @@ function swRegister(){
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     /* 首次安装时 controller 从「无」到「有」也会触发，那不算更新 */
     if(!hadController){ hadController = true; return; }
-    if(SW_RELOADING) return;
-    if(Date.now() - SW_BOOT_AT < SW_AUTO_WINDOW){
-      /* 刚打开不久 → 直接刷，用户几乎无感 */
-      SW_RELOADING = true;
-      location.reload();
-      return;
-    }
-    /* 已经用了一会儿 → 不打断，只在页脚标出来等用户点 */
+    /* v4.10.0（站主第 2 条）：只有「站主自己点了更新」才刷新。
+       以前刚打开 20 秒内一律 reload，新版一闪就换完了，更新进度根本来不及看。 */
+    if(SW_RELOADING){ return; }
     SW_HAS_UPDATE = true;
     paintVersion();
   });

@@ -4237,9 +4237,13 @@ html.big-mode .content>header .logo{width:46px;height:46px;margin-top:8px}
    电脑 / 大屏下改成「一行 flex」：标题吃掉剩余宽度，班徽按自身尺寸稳稳站在右边，
    容器给足 min-height，班徽再也不会被裁。 */
 @media(min-width:900px){
+  /* v4.10.0（站主第 4 条）：「大屏首页也跟服务站一样往下挪一点点，最上面会被课表挡住」。
+     做法跟作业页顶栏一致：顶部多留一段空白（深色卡片本身当安全区），
+     内容贴下沿排；整块再往下让一点，避开教室一体机那个课表浮窗。 */
+  html.big-mode .layout{padding-top:calc(24px * var(--bhw-fs,1))}
   html.big-mode .content>header{
-    display:flex;align-items:center;gap:20px;
-    min-height:96px;padding:16px 24px;
+    display:flex;align-items:flex-end;gap:20px;
+    min-height:96px;padding:30px 24px 12px;
   }
   html.big-mode .content>header h1{
     flex:1 1 auto;min-width:0;text-align:left;margin:0;
@@ -5004,6 +5008,11 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   background:var(--pc,#7b8794);box-shadow:0 0 9px var(--ps,transparent);
 }
 .bpick-res-no{font-size:.74rem;color:var(--fg-3);font-variant-numeric:tabular-nums;min-width:3.2em;text-align:right}
+/* v4.10.0（站主第 1 条）：按成绩抽时，名字下面挂一行对应的分数 / 名次 */
+.bpick-res-row b .bpick-res-tag{display:block;margin-top:2px;font-size:.72rem;font-weight:700;
+  letter-spacing:0;color:var(--fg-3)}
+.bpick-res.c3 .bpick-res-row b .bpick-res-tag{font-size:.64rem}
+.bpick-res.c4 .bpick-res-row b .bpick-res-tag{font-size:.58rem}
 
 /* ---------- 舞台 ---------- */
 .pfx{
@@ -5281,6 +5290,7 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   color:var(--fg);
 }
 .dark .pfx-win{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1);border-left-color:var(--pc)}
+.pfx-win-v{display:block;margin-top:1px;font-style:normal;font-size:.86em;font-weight:600;opacity:.72}
 
 /* ---------- 底部按钮 ---------- */
 .pfx-foot{display:flex;gap:10px;justify-content:center;align-items:center}
@@ -5342,8 +5352,12 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
    页头也收薄，5 个分组一屏装得下（约 1040px）。
    字号仍留在 1rem 上下，后排看得清；格子改成居中对齐，项数少的组不会歪在左边。 */
 @media(min-width:1600px){
-  html.big-mode .layout{padding:6px 18px 4px}
-  html.big-mode .content>header{padding:12px 18px;margin-bottom:7px;border-radius:15px;min-height:82px}
+  /* v4.10.0（站主第 4 条）：教室一体机就是 1920×1080，正好落在这条规则上。
+     原来这里为了「一屏装下」把页头压到 82px、顶部只留 6px —— 结果课表浮窗正好
+     压在标题和班徽上。现在跟服务站顶栏一样：顶部留 26px 安全区，页头内部再让 30px，
+     内容贴下沿；多出来的 30 来像素不会把分组挤到第二屏（实测 1080p 仍是一屏）。 */
+  html.big-mode .layout{padding:20px 18px 4px}
+  html.big-mode .content>header{padding:24px 18px 0;margin-bottom:0;border-radius:15px;min-height:82px}
   html.big-mode .content>header h1{font-size:1.2rem}
   html.big-mode .content>header .logo{width:52px;height:52px;flex:0 0 52px;margin:0 44px 0 0}
   html.big-mode footer{margin-top:5px;font-size:.68rem;line-height:1.45}
@@ -7309,18 +7323,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.9.2';
+var SITE_VERSION = '4.10.0';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=492" defer></script>
-<script src="./app.min.js?v=492" defer></script>
+<script src="./auth-bus.js?v=4100" defer></script>
+<script src="./app.min.js?v=4100" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=492" defer></script>
-<script src="./big.js?v=492" defer></script>
+<script src="./fs-keep.js?v=4100" defer></script>
+<script src="./big.js?v=4100" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=492" defer></script>
+<script src="./pickfx.js?v=4100" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

@@ -5601,16 +5601,16 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★强制刷新后清掉地址栏的 ?_r= 标记（收藏 / 分享不带时间戳）',
     /searchParams\.has\('_r'\)/.test(idx48) && /history\.replaceState/.test(idx48));
 
-  /* ===== ⑥ 别打断正在用的人 ===== */
-  t('★页面打开 15 秒内发现更新 → 自动刷新（用户无感）',
-    /var SW_AUTO_WINDOW = 15000/.test(idx48)
-    && /Date\.now\(\) - SW_BOOT_AT < SW_AUTO_WINDOW/.test(idx48)
-    && /location\.reload\(\)/.test(idx48));
+  /* ===== ⑥ 别打断正在用的人（v4.10.0：彻底取消自动刷新，全部等站主手动点） ===== */
+  t('★v4.10.0 打开页面永不自动刷新（15 秒窗口取消，发现更新只标记）',
+    /var SW_AUTO_WINDOW = 0;/.test(idx48)
+    && !/Date\.now\(\) - SW_BOOT_AT < SW_AUTO_WINDOW/.test(idx48)
+    && !/postMessage\(\{ type: 'SKIP_WAITING' \}\)/.test(idx48));
   t('★用了一会儿则只提示不打断（页脚标记，等用户点）',
     /SW_HAS_UPDATE = true;\s*\n\s*paintVersion\(\);/.test(idx48));
   t('★首次安装不算「更新」（不做提示也不刷新）',
     /if\(!hadController\)\{ hadController = true; return; \}/.test(idx48));
-  t('★防重复刷新（SW_RELOADING 守卫）', /if\(SW_RELOADING\) return;/.test(idx48));
+  t('★防重复刷新（SW_RELOADING 守卫）', /if\(SW_RELOADING\)\{ return; \}/.test(idx48));
 
   /* ===== ⑦ 页脚三态 ===== */
   t('★页脚：有新版时切成醒目提示',
@@ -5618,8 +5618,8 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
     && /el\.classList\.add\('ver-new'\)/.test(idx48));
   t('★页脚：已最新时显示「已是最新版本」',
     /已是最新版本 v/.test(idx48));
-  t('★页脚：再次点击 = 直接更新（不用先检查）',
-    /if\(SW_HAS_UPDATE\)\{ hardRefresh\(\); return; \}/.test(idx48));
+  t('★页脚：再次点击 = 带进度更新（v4.10.0 改走 updGo，不再裸 hardRefresh）',
+    /if\(SW_HAS_UPDATE\)\{[\s\S]{0,120}updGo\(\);/.test(idx48));
   t('★「发现新版本」样式已定义（含暗色 + 减少动效）',
     /\.footer-sub\.ver-new\{/.test(idx48)
     && /\.dark \.footer-sub\.ver-new\{/.test(idx48)
@@ -13153,9 +13153,80 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /function flQuotaLoad\(\)/.test(app10) && /id="flQuota"/.test(idx10)
     && /action=quota/.test(app10) && /\.fl-quota\.warn/.test(idx10));
 
-  t('★v4.9.2 版本号升到 4.9.2',
-    /SITE_VERSION = '4\.9\.2'/.test(idx10)
-    && /SITE_VER = '4\.9\.2'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('★v4.9.2 之后版本未回退（当前 ≥ 4.9.2）',
+    (function(){
+      const cur = (idx10.match(/SITE_VERSION = '([\d.]+)'/) || [])[1] || '0';
+      const pa = String(cur).split('.').map(Number), pb = [4, 9, 2];
+      for (let i = 0; i < 3; i++){ if ((pa[i] || 0) !== pb[i]) return (pa[i] || 0) > pb[i]; }
+      return true;
+    })());
+}
+
+/* ============================================================================
+ * v4.10.0（站主 4 条：点名身份 / 成绩随抽随显 / 更新改手动 / 大屏再下移）
+ * ========================================================================== */
+{
+  const idx11 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const big11 = fs.readFileSync(new URL('./big.js', import.meta.url), 'utf8');
+  const pfx11 = fs.readFileSync(new URL('./pickfx.js', import.meta.url), 'utf8');
+  const app11 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const adm311 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+  const sw11 = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+
+  /* ① 身份三选一（单选） */
+  t('★v4.10.0 点名身份改成单选（pickRole 只留一个 + 老配置只认第一个）',
+    /function \(role\)\{[\s\S]{0,120}f\.role = \[role\];/.test(big11)
+    && /out\.role = \[out\.role\[0\]\];/.test(big11));
+  t('★v4.10.0 pickSet 写回 role 时统一按数组存',
+    /if\(k === 'role'\) v = \[String\(v \|\| '学生'\)\];/.test(big11));
+
+  /* ① 成绩随抽随显：结果卡与动画都带分数 */
+  t('★v4.10.0 抽人结果带条件值（pickItem / pickPoolItem 都带 sub）',
+    /function pickItem\(n\)\{ return \{ name: n, no: sidNo\(stuOf\(n\)\), sub: condValText\(n\) \}; \}/.test(big11)
+    && /pickPoolItem\(\)[\s\S]{0,80}sub: condValText\(st\.name\)/.test(big11));
+  t('★v4.10.0 动画中奖卡渲染分数小字（winSub + .pfx-win-v）',
+    /function winSub\(it\)\{[\s\S]{0,160}pfx-win-v/.test(pfx11)
+    && (pfx11.match(/esc\(win\.name\)\)? ?\+ ?winSub\(/g) || []).length >= 2
+    && (pfx11.match(/esc\(picked\[k\]\.name\)\)? ?\+ ?winSub\(/g) || []).length >= 1
+    && /\.pfx-win-v\{/.test(idx11));
+  t('★v4.10.0 结果列表在名字下挂分数标签（.bpick-res-tag）',
+    /\.bpick-res-row b \.bpick-res-tag\{/.test(idx11));
+
+  /* ① 「可抽 0 人」：名字归一 + 学号兜底 + 错误原因可见 */
+  t('★v4.10.0 成绩表名字归一（normName 去全部空白含全角）+ 学号索引兜底',
+    /function normName\(s\)\{ return String\(s == null \? '' : s\)\.replace\(\/\[\\s\\u3000\]\+\/g, ''\)\; \}/.test(big11)
+    && /byNo\[r\.no\]/.test(big11) && /function statRow\(stat, st\)/.test(big11)
+    && /var row = statRow\(stat, st\);/.test(big11));
+  t('★v4.10.0 成绩取不到时给出明确原因（statErrText：401/403/404/离线）',
+    /function statErrText\(e\)\{/.test(big11)
+    && /if\(code === 401\) return '当前设备没登录/.test(big11)
+    && /if\(code === 403\) return '这场考试还没发布/.test(big11)
+    && /BIG\.pick\.statErr = statErrText\(e\);/.test(big11));
+
+  /* ② 更新改手动：不再自动接管 */
+  t('★v4.10.0 打开不再自动刷新（窗口置 0，发现更新只标记不接管）',
+    /var SW_AUTO_WINDOW = 0;/.test(app11)
+    && /function swOnUpdateFound\(worker\)\{[\s\S]{0,200}SW_HAS_UPDATE = true;/.test(app11)
+    && !/SKIP_WAITING/.test(app11));
+  t('★v4.10.0 SW 安装后不再 skipWaiting（install 链干净；message 兜底可留）',
+    !/PRECISE_MARKER/.test(sw11)
+    && !/\.then\(\(\) => self\.skipWaiting\(\)\)/.test(sw11)
+    && !/then\(\(\) => self\.skipWaiting\(\)\)/.test(sw11)
+    && /PRECACHE\.map\(\(u\) => addWithTimeout/.test(sw11));
+  t('★v4.10.0 已知有新版本时点版本行走带进度的 updGo',
+    /if\(SW_HAS_UPDATE\)\{[\s\S]{0,120}updGo\(\);/.test(app11));
+
+  /* ③④ 大屏首页下移 + 启动脚本真全屏 */
+  t('★v4.10.0 1920×1080 大屏首页整体下移：顶部留 20px 安全区，页头贴下沿',
+    /html\.big-mode \.layout\{padding:20px 18px 4px\}/.test(idx11)
+    && /html\.big-mode \.content>header\{padding:24px 18px 0;margin-bottom:0;/.test(idx11));
+  t('★v4.10.0 启动脚本用 --start-fullscreen 真全屏',
+    /--start-fullscreen/.test(adm311)
+    && /--start-fullscreen/.test(fs.readFileSync('/workspace/班级电脑准备包/启动大屏.bat', 'utf8')));
+
+  t('★v4.10.0 版本号升到 4.10.0（index / sw / admin 三处一致）',
+    /SITE_VERSION = '4\.10\.0'/.test(idx11) && /SITE_VER = '4\.10\.0'/.test(sw11)
+    && /SITE_VERSION = '4\.10\.0'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
 }
 
 console.log('\n' + '='.repeat(52));

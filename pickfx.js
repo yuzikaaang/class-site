@@ -552,7 +552,7 @@
           c2.classList.remove('is-color');
           c2.classList.add('win', 'revealed');
           wins.insertAdjacentHTML('beforeend',
-            '<span class="pfx-win" style="--pc:' + swatch(win.no).c + '">' + esc(win.name) + '</span>');
+            '<span class="pfx-win" style="--pc:' + swatch(win.no).c + '">' + esc(win.name) + winSub(win) + '</span>');
         } else {
           /* 隐藏姓名：先只点亮中奖卡 + 满屏打出学号段（0.9 秒），再把姓名顶上来。
              站主要的就是「先看到段，再看到人」，且全程不用点第二次。 */
@@ -566,7 +566,7 @@
             clearFlare(root);
             chime();
             wins.insertAdjacentHTML('beforeend',
-              '<span class="pfx-win" style="--pc:' + swatch(win.no).c + '">' + esc(win.name) + '</span>');
+              '<span class="pfx-win" style="--pc:' + swatch(win.no).c + '">' + esc(win.name) + winSub(win) + '</span>');
           }, 900);
         }
         if (cntEl) cntEl.textContent = String(picked.length);
@@ -591,12 +591,19 @@
         }
         for (var k = 0; k < picked.length; k++) {
           wins.insertAdjacentHTML('beforeend',
-            '<span class="pfx-win" style="--pc:' + swatch(picked[k].no).c + '">' + esc(picked[k].name) + '</span>');
+            '<span class="pfx-win" style="--pc:' + swatch(picked[k].no).c + '">' + esc(picked[k].name) + winSub(picked[k]) + '</span>');
         }
         if (cntEl) cntEl.textContent = String(picked.length);
       },
       count: function () { return picked.length; }
     };
+  }
+
+  /* v4.10.0（站主第 1 条）：按成绩条件抽时，中奖卡上顺带写出对应的分数 / 名次，
+     「语文 103」这样一行小字；没设成绩条件时 sub 为空，不占位。 */
+  function winSub(it){
+    var v = (it && it.sub) ? String(it.sub) : '';
+    return v ? '<i class="pfx-win-v">' + esc(v) + '</i>' : '';
   }
 
   /* ---------- 外壳 ---------- */

@@ -108,7 +108,7 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '4.9.2'
+const SITE_VER = '4.10.0'
 
 /* v3.9.16（站主）：缓存桶跟着版本走。
    ------------------------------------------------------------
@@ -163,10 +163,15 @@ self.addEventListener('install', (event) => {
      整个 install 就 reject，Service Worker **永远装不上**。
      表现就是：缓存明明写了策略却从来没用上、断网打不开、每次进站都重新下整页。
      现在逐个 add 并各自 catch：缺哪个就跳过，其余照常缓存。 */
+  /* v4.10.0（站主第 2 条）：装好之后**不再自动接管**。
+     以前这里 skipWaiting 一调，新 SW 立刻 activate + claim，旧页面被顶掉、
+     站点自己刷一遍，站主根本看不到「更新中」的进度条。
+     现在新 SW 老实待在 waiting，等页面点「立即更新」（会注销 SW 再重载）才真正换班。
+     ⚠️ 首次安装不受影响：那时候没有页面被这个 SW 控制，浏览器会直接激活。 */
   event.waitUntil(
     caches.open(CACHE).then((cache) => Promise.all(
       PRECACHE.map((u) => addWithTimeout(cache, u, /index\.html$/.test(u) ? 20000 : 9000))
-    )).then(() => self.skipWaiting())
+    ))
   )
 })
 

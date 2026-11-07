@@ -2856,7 +2856,8 @@ function launchBatText(){
     'echo   [OK] browser: %EXE%',
     'call :log "browser=%EXE%"',
     '',
-    'start "" "%EXE%" --app="%URL%" --user-data-dir="%PROFILE%" --start-maximized --window-size=1920,1080 --no-first-run --no-default-browser-check --disable-features=Translate,msEdgeSidebar',
+    'rem  v4.10.0: use --start-fullscreen (fills the screen; F11 / Esc to exit).',
+    'start "" "%EXE%" --app="%URL%" --user-data-dir="%PROFILE%" --start-fullscreen --no-first-run --no-default-browser-check --disable-features=Translate,msEdgeSidebar',
     'call :log "start sent, waiting 4s to verify the process"',
     '',
     'rem  hidden window has no console input, so use ping instead of timeout',
@@ -3049,6 +3050,16 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.10.0', date: '2026-11-07', type: 'feat', title: '点名身份三选一、成绩随抽随显、更新改手动、大屏再下移', items: [
+      '随机点名的身份改成三选一（学生 / 课代表 / 班干部）：三个是包含关系，多选没有意义，现在点哪个就是哪个',
+      '按成绩条件抽人时，结果卡片和滚动动画里直接带出对应的分数 / 名次（比如「语文 103」或「第 5 名」），抽到的结果与判定依据同时呈现',
+      '成绩条件「可抽 0 人」的问题修了：成绩表名字带空格 / 全角空格 / 用别名都能对上名册，学号也能兜底；真取不到成绩时会明确说原因（没登录 / 考试未发布 / 断网）',
+      '打开页面不再自动刷新到新版：发现新版本只在页脚提示，点「立即更新」才走三段进度换新版，更新动画能完整看到',
+      '大屏首页的标题和班徽整体下移，顶部留出安全区，教室一体机上的课表浮窗不再压住它',
+      '班级电脑启动脚本改用真全屏参数（--start-fullscreen），不再比最大化小一圈'
+    ], pub: [
+      { cat: '通知', text: '随机点名支持按成绩抽并显示对应分数，更新改为手动触发' }
+    ] },
   { version: '4.9.2', date: '2026-11-07', type: 'fix', title: '中转站改为最多存 3 天，并加上容量保护', items: [
       '文件中转站的保存期改为只能选 1 天或 3 天（原来能选 7 / 30 / 180 天）。KV 总容量只有 1GB，长周期很容易忘删而塞满，3 天到点由服务器自己清掉',
       '发文件页多了一条「已用空间」进度：实时显示用了多少 / 上限多少、现在有几件，超过六成转橙、八成五转红',

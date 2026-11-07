@@ -2392,6 +2392,9 @@
        过滤完空的就退回「学生」，否则会变成谁都抽不到 */
     out.role = out.role.filter(function(r){ return r === '学生' || r === '课代表' || r === '班干部'; });
     if(!out.role.length) out.role = ['学生'];
+    /* v4.10.0（站主第 1 条）：「身份是三选一，不能又是学生又是班干部，
+       不然会被学生所包含」。老配置里存过多选，这里只认第一个。 */
+    out.role = [out.role[0]];
     /* v4.7.3：老版本存下来的残影 —— 考试已改成「不限成绩」，名次条件还留着 */
     if(!out.examId){ out.metric = ''; out.subj = ''; out.min = ''; out.max = ''; }
     return out;
@@ -2496,20 +2499,37 @@
     return s;
   }
 
+  /* v4.10.0（站主第 1 条）：成绩读不到时，要把「为什么」说出来。
+     以前失败只是把 stat 置空，于是界面写着「按条件可抽 0 人」，
+     看着像功能坏了，其实多半是没登录 / 这场还没发布。 */
+  function statErrText(e){
+    var code = Number(e && e.status);
+    if(code === 401) return '当前设备没登录，成绩接口不给数据';
+    if(code === 403) return '这场考试还没发布，或没对当前账号开放';
+    if(code === 404) return '这场考试的成绩已经不在了';
+    if(e && e.offline) return '当前是离线状态，先连上网再试';
+    return '成绩没取到，检查网络后重试';
+  }
+
   function statOf(examId, done){
-    if(!examId){ BIG.pick.stat = null; BIG.pick.prog = null; if(done) done(); return; }
+    if(!examId){ BIG.pick.stat = null; BIG.pick.prog = null; BIG.pick.statErr = ''; if(done) done(); return; }
     if(BIG.pick.stat && String(BIG.pick.stat.id) === String(examId)){ afterStat(done); return; }
     BIG.pick.prog = null;
     var cache = BIG.pick.statCache || (BIG.pick.statCache = {});
     var key = String(examId);
-    if(cache[key]){ BIG.pick.stat = cache[key]; afterStat(done); return; }
+    if(cache[key]){ BIG.pick.stat = cache[key]; BIG.pick.statErr = ''; afterStat(done); return; }
     try{
       if(typeof api !== 'function'){ if(done) done(); return; }
       api('/scores?action=board&exam=' + encodeURIComponent(examId)).then(function (j){
         cache[key] = buildStat(j);
         BIG.pick.stat = cache[key];
+        BIG.pick.statErr = BIG.pick.stat ? '' : '这场考试还没有成绩记录';
         afterStat(done);
-      }).catch(function (){ BIG.pick.stat = null; BIG.pick.prog = null; if(done) done(); });
+      }).catch(function (e){
+        BIG.pick.stat = null; BIG.pick.prog = null;
+        BIG.pick.statErr = statErrText(e);
+        if(done) done();
+      });
     }catch(e){ if(done) done(); }
   }
 
@@ -2583,7 +2603,7 @@
       rankBy(function (x){ return x.sub[k]; }, function (x, k2){ x.subRank[k] = k2; });
     });
     var byName = {};
-    rows.forEach(function (x){ if(!byName[x.name]) byName[x.name] = x; });
+    rows.forEach(function (x){ var k = normName(x.name); if(k && !byName[k]) byName[k] = x; });
     BIG.pick.prog = { rows: rows, byName: byName };
   }
 
@@ -2597,7 +2617,8 @@
     /* 只留本班的学生：年级大表里的外班行一律丢掉，后面的排名自然就是班级名次 */
     var inClass = rosterSet();
     var rows = (board.rows || []).map(function (r){
-      return { name: String(r.name || '').trim(), s: r.s || {}, total: 0, totalRank: null, sub: {} };
+      return { name: String(r.name || '').trim(), no: String(r.no || '').replace(/\D/g, ''),
+               s: r.s || {}, total: 0, totalRank: null, sub: {} };
     }).filter(function (r){
       if(!r.name) return false;
       return inClass ? !!inClass[r.name] : true;
@@ -2632,9 +2653,31 @@
         if(r.sub[sb.key]) r.sub[sb.key].rank = k;
       });
     });
-    var byName = {};
-    rows.forEach(function (r){ if(r.name && !byName[r.name]) byName[r.name] = r; });
-    return { id: exam.id, name: exam.name || '', subjects: subs, rows: rows, byName: byName };
+    /* v4.10.0（站主第 1 条）：名字按「去掉所有空白」比对，并额外建学号索引。
+       成绩表是导入的，名字里常有前后空格、全角空格，甚至用的是别名；
+       只按原样字符串查，就会出现「明明有分却一个都抽不到」。 */
+    var byName = {}, byNo = {};
+    rows.forEach(function (r){
+      var k = normName(r.name);
+      if(k && !byName[k]) byName[k] = r;
+      if(r.no && !byNo[r.no]) byNo[r.no] = r;
+    });
+    return { id: exam.id, name: exam.name || '', subjects: subs, rows: rows, byName: byName, byNo: byNo };
+  }
+
+  /* 名字归一：去首尾与中间所有空白（含全角空格），用于成绩表与名册之间的比对 */
+  function normName(s){ return String(s == null ? '' : s).replace(/[\s\u3000]+/g, ''); }
+
+  /* 在一场考试的成绩里找人：先按名字（归一后），再按学号兜底。
+     站主的成绩表是导入的，名字带空格 / 用了别名都很常见；
+     只按原始字符串比，会出现「设置了条件显示可抽 0 人」。 */
+  function statRow(stat, st){
+    if(!stat) return null;
+    var n = normName(st && st.name);
+    if(n && stat.byName && stat.byName[n]) return stat.byName[n];
+    var sid = String((st && st.studentId) || '').replace(/\D/g, '');
+    if(sid && stat.byNo && stat.byNo[sid]) return stat.byNo[sid];
+    return null;
   }
 
   function inRange(v, min, max){
@@ -2687,13 +2730,13 @@
        于是屏幕上写着「总分名次 1–20」，实际 stat 已经清空，谁都抽不出来。 */
     if(f.examId && f.metric){
       if(!stat) return false;
-      var row = stat.byName[st.name];
+      var row = statRow(stat, st);
       if(!row) return false;
       var v = null;
       if(f.metric === 'totalRank') v = row.totalRank;
       else if(f.metric === 'totalScore') v = row.total;
       else if(needProg(f.metric)){
-        var pr = BIG.pick.prog, prr = pr && pr.byName[st.name];
+        var pr = BIG.pick.prog, prr = pr && pr.byName[normName(st.name)];
         if(!prr) return false;
         v = (f.metric === 'totalProgress') ? prr.totalRank : (prr.subRank || {})[f.subj];
       }
@@ -2751,8 +2794,10 @@
   function fxSwatch(no){
     return (typeof PickFX !== 'undefined') ? PickFX.swatch(no) : { c: '#7b8794', s: '#cbd5e1' };
   }
-  function pickItem(n){ return { name: n, no: sidNo(stuOf(n)) }; }
-  function pickPoolItem(){ return pool().map(function (st){ return { name: st.name, no: sidNo(st) }; }); }
+  function pickItem(n){ return { name: n, no: sidNo(stuOf(n)), sub: condValText(n) }; }
+  function pickPoolItem(){
+    return pool().map(function (st){ return { name: st.name, no: sidNo(st), sub: condValText(st.name) }; });
+  }
 
   /* 不重复抽 n 个：先把候选洗成副本，抽一个删一个 */
   function drawUnique(cand, n){
@@ -2917,6 +2962,8 @@
   /* 条件改动：写回内存 + 本机，然后重画（条件区在顶部，重画不影响下面的名单滚动） */
   BIG.pickSet = function (k, v){
     var f = BIG.pick.f || (BIG.pick.f = loadF());
+    /* v4.10.0：身份改成单选后，这里统一按数组存，别让 '学生' 这种字符串混进来 */
+    if(k === 'role') v = [String(v || '学生')];
     f[k] = v;
     if(k === 'examId'){
       BIG.pick.stat = null; BIG.pick.prog = null; BIG.pick.prevStat = null;
@@ -2933,13 +2980,12 @@
     saveF();
     BIG.pickBody();
   };
+  /* v4.10.0（站主第 1 条）：身份三选一。
+     以前是「多选标签」，选上「学生」再点「班干部」等于还是学生（学生本来就包含班干部），
+     屏幕上看着加了条件、实际没变，站主以为坏了。现在改成单选：点哪个就是哪个。 */
   BIG.pickRole = function (role){
     var f = BIG.pick.f || (BIG.pick.f = loadF());
-    var arr = (f.role || []).slice();
-    var i = arr.indexOf(role);
-    if(i >= 0){ if(arr.length > 1) arr.splice(i, 1); }
-    else arr.push(role);
-    f.role = arr;
+    f.role = [role];
     saveF();
     BIG.pickBody();
   };
@@ -2984,9 +3030,45 @@
     if(c) c.textContent = String(pool().length);
   };
 
+  /* v4.10.0（站主第 1 条）：抽完之后要把「凭什么抽到这几个人」摆在明面上 ——
+     比如按「语文 100–110」抽的，每个人名字后面就标出他的语文成绩。
+     分数 / 名次 / 进步排名都按当前这条条件取，没设条件就返回 null（不显示）。 */
+  function condValOf(name){
+    var f = BIG.pick.f || F_DEF;
+    if(!f.examId || !f.metric) return null;
+    var stat = BIG.pick.stat;
+    if(!stat) return null;
+    var st = stuOf(name) || { name: name };
+    var row = statRow(stat, st);
+    var subName = f.subj || '';
+    (stat.subjects || []).forEach(function (sb){ if(sb.key === f.subj) subName = sb.name; });
+    var cell = (row && row.sub) ? (row.sub[f.subj] || {}) : {};
+    var v = null, tag = '';
+
+    if(f.metric === 'totalRank'){ v = row ? row.totalRank : null; tag = '总分'; }
+    else if(f.metric === 'totalScore'){ v = row ? row.total : null; tag = '总分'; }
+    else if(f.metric === 'subScore'){ v = cell.score; tag = subName; }
+    else if(f.metric === 'subRank'){ v = cell.rank; tag = subName; }
+    else if(f.metric === 'totalProgress' || f.metric === 'subProgress'){
+      var pr = BIG.pick.prog, prr = pr && pr.byName[normName(name)];
+      if(f.metric === 'totalProgress'){ v = prr ? prr.totalRank : null; tag = '总分'; }
+      else { v = (prr && prr.subRank) ? prr.subRank[f.subj] : null; tag = subName; }
+      if(v == null || !isFinite(v)) return null;
+      return { tag: tag, val: '进步第 ' + v + ' 名' };
+    }
+    if(v == null || !isFinite(v)) return null;
+    if(f.metric.indexOf('Rank') >= 0) return { tag: tag, val: '第 ' + v + ' 名' };
+    return { tag: tag, val: String(Math.round(v * 10) / 10) };
+  }
+  function condValText(name){
+    var c = condValOf(name);
+    return c ? (c.tag ? c.tag + ' ' : '') + c.val : '';
+  }
+  BIG.pickCondVal = condValText;   /* 调试/外部调用 */
+
   function condText(){
     var f = BIG.pick.f || F_DEF, arr = [];
-    arr.push((f.role || ['学生']).join('/'));
+    arr.push((f.role && f.role[0]) || '学生');
     if(f.gender) arr.push(f.gender);
     if(f.sidMin !== '' || f.sidMax !== '') arr.push('学号 ' + (f.sidMin || '不限') + '–' + (f.sidMax || '不限'));
     if(f.examId && f.metric){
@@ -3154,6 +3236,11 @@
                     : '')
                 : '')
             + progTip
+            + ((f.examId && !stat)
+                ? ('<div class="bpick-f-tip" style="color:#b45309">'
+                   + esc0(BIG.pick.statErr || '这场考试的成绩还在读取，稍等一下…')
+                   + '（读不到成绩时，成绩条件会把所有人都筛掉）</div>')
+                : '')
             + '<p class="bpick-f-tip">名次均为<b>本班排名</b>。多个条件可叠加使用。'
             + '「进步排名」按较上一场考试的班级名次提升幅度排序，1 为进步最大。</p>'
             + '<p class="bpick-f-tip">「班干部」包含班长、副班长、学习委员、劳动委员、生活委员、团支书、体育委员、宣传委员、文艺委员、纪律委员；'
@@ -3195,8 +3282,11 @@
       + '<div class="bpick-res' + (ncol > 1 ? ' c' + ncol : '') + '">'
       + p.names.map(function (n, i){
           var no = sidNo(stuOf(n)), sw = fxSwatch(no);
+          var cv = condValOf(n);
           return '<div class="bpick-res-row" style="--pc:' + sw.c + ';--ps:' + sw.s + '">'
-            + '<b>' + esc0(n) + '</b>'
+            + '<b>' + esc0(n)
+            +   (cv ? '<small class="bpick-res-tag">' + esc0((cv.tag ? cv.tag + ' ' : '') + cv.val) + '</small>' : '')
+            + '</b>'
             + '<span class="bpick-res-no">' + (no ? two(no) + ' 号' : '') + '</span>'
             + '<button type="button" title="只重抽这一个" onclick="BIG.pickReroll(' + i + ')">' + ico('rotate-cw', 16) + '</button></div>';
         }).join('')
