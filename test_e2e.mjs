@@ -12857,6 +12857,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /function openSignHistory\(\)/.test(app43) && /function shPick\(day\)/.test(app43)
     && /id="shGrid"/.test(idx) && /sh-day\.good/.test(idx)
     && /90 \* 86400000/.test(app43));
+  t('★v4.9.1 公告排序补全时间（只填日期按 23:59 算）',
+    /function annSortKey\(a\)/.test(app43) && /\+ ' 23:59'/.test(app43)
+    && (app43.match(/annSortKey\(b\)\.localeCompare\(annSortKey\(a\)\)/g) || []).length >= 2);
+  t('★v4.9.1 后台内容排序同样归一化纯日期',
+    /var ccTime = function\(v\)/.test(fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8'))
+    && /s \+= ' 23:59'/.test(fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8')));
 }
 
 console.log('\n' + '='.repeat(52));

@@ -2987,13 +2987,19 @@ function loadClassContent(){
       }).join('\n');
     });
 
-    /* 按时间倒序，新的在前；没有时间的沉底 */
+    /* 按时间倒序，新的在前；没有时间的沉底。
+       【v4.9.1】纯日期（2026-11-07）统一按当天 23:59 算 ——
+       否则它会被 Date.parse 当成 00:00，比同一天带时间的旧记录还早，
+       表现为「新发的公告沉到下面」（站主 2026-11-07 反馈）。 */
+    var ccTime = function(v){
+      var s = String(v || '');
+      if(!s) return 0;
+      if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) s += ' 23:59';
+      var t = Date.parse(s);
+      return isNaN(t) ? 0 : t;
+    };
     out.sort(function(a, b){
-      var ta = a.time ? Date.parse(a.time) : 0;
-      var tb = b.time ? Date.parse(b.time) : 0;
-      if(isNaN(ta)) ta = 0;
-      if(isNaN(tb)) tb = 0;
-      return tb - ta;
+      return ccTime(b.time) - ccTime(a.time);
     });
 
     S.list = out;

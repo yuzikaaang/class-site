@@ -3028,12 +3028,24 @@ function isImportant(a){
   return true;
 }
 
+/* 【v4.9.1】公告排序键。
+   踩过的坑（2026-11-07）：v4.8 / v4.9 的公告只填了日期「2026-11-07」，
+   而更早的公告填的是「2026-11-07 00:06」。纯字符串比较时，
+   带时间的永远大于只有日期的，于是新公告被顶到旧公告下面
+   （站主原话：「4.9 怎么还在 4.7 的下面」）。
+   统一补成「日期 23:59」——缺时间的按当天最晚算，新发的自然在最上面。 */
+function annSortKey(a){
+  var d = String((a && a.date) || '');
+  if(!d) return '';
+  return /\d{1,2}:\d{2}/.test(d) ? d : d.slice(0, 10) + ' 23:59';
+}
+
 /* 公告栏（支持分类筛选；置顶永远在最上方；弹窗内按分类小节展示） */
 function renderBoard(){
   var annAll = (SITE_DATA.announcements || []);
   var ann = annAll.slice().sort(function(a,b){
     if((isImportant(b)?1:0) !== (isImportant(a)?1:0)) return (isImportant(b)?1:0) - (isImportant(a)?1:0);
-    return (b.date || '').localeCompare(a.date || '');
+    return annSortKey(b).localeCompare(annSortKey(a));
   });
   var board = document.getElementById('board');
   if(ann.length === 0){ board.style.display = 'none'; return; }
@@ -11494,7 +11506,7 @@ function renderAllBoard(){
   var to=toInp?toInp.value:'';
   var ann=(SITE_DATA.announcements||[]).slice().sort(function(a,b){
     if((isImportant(b)?1:0)!==(isImportant(a)?1:0)) return (isImportant(b)?1:0)-(isImportant(a)?1:0);
-    return (b.date||'').localeCompare(a.date||'');
+    return annSortKey(b).localeCompare(annSortKey(a));
   });
   var scoped=ann.filter(function(a){
     if(ck!=='all' && (a.category||'misc')!==ck) return false;
