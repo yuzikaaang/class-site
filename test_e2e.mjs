@@ -12900,6 +12900,24 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   const adm79 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
   t('★v4.7.9 大屏启动器把 Profile 放进脚本同目录（抗还原）',
     /--user-data-dir="%PROFILE%"/.test(adm79) && /set "PROFILE=%DIR%profile"/.test(adm79));
+
+  /* ---- v4.7.10：启动器「黑框一闪就没」 ---- */
+  const i710 = adm79.indexOf('function launchBatText');
+  const bat710 = adm79.slice(i710, adm79.indexOf('function siteLaunchDownload'));
+  t('★v4.7.10 启动器不再用 for 循环拼浏览器路径（含括号变量会打断解析）',
+    i710 > 0 && !/for %%P in/.test(bat710));
+  t('★v4.7.10 启动器逐个 if exist 找浏览器',
+    /if not defined EXE if exist "%ProgramFiles\(x86\)%/.test(bat710));
+  t('★v4.7.10 启动器写「启动日志.txt」',
+    /启动日志\.txt/.test(bat710) && />>"%LOG%" echo/.test(bat710));
+  t('★v4.7.10 启动后回查进程，判断是真起来还是立刻崩',
+    /tasklist \/fi "imagename=%~nxEXE"/.test(bat710) && /goto :died/.test(bat710));
+  t('★v4.7.10 失败时停住窗口并打印日志',
+    /:hold/.test(bat710) && /type "%LOG%"/.test(bat710) && /pause/.test(bat710));
+  t('★v4.7.10 成功时窗口停留 8 秒，不再一闪而过',
+    /timeout \/t 8/.test(bat710));
+  t('★v4.7.10 版本号升到 4.7.10',
+    /SITE_VERSION = '4.7.10'/.test(fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8')));
 }
 
 console.log('\n' + '='.repeat(52));
