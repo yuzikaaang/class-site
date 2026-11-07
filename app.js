@@ -791,6 +791,9 @@ function hardRefresh(){
     }
   };
 
+  /* v4.9.1：手动「清缓存重载」时，接口缓存也要一起清 —— 否则点了还是旧成绩 */
+  try{ if(typeof apiCacheClear === 'function') apiCacheClear(); }catch(e){}
+
   var step = Promise.resolve()
     .then(unregisterAll)     /* ① 先让 SW 退场，免得它把缓存又写回来 */
     .then(wipeCaches)        /* ② 清空所有缓存 */
@@ -4342,6 +4345,68 @@ function siteBadgeUrl(){
   try{ return new URL(u, location.href).href; }catch(e){ return u; }
 }
 
+/* ============================================================================
+ * v4.9.1（站主第 1 条）：只读接口的本地缓存
+ * ----------------------------------------------------------------------------
+ * 站主原话：「尽量全量都有缓存，比如随机点名的名单、人员对应的字段、作业信息、
+ *   成绩信息……省得每次都要重新加载，也同时减轻数据库，我怕用量会超。」
+ *
+ * 做法：在 api() 里给**一小撮只读 GET** 加一层「缓存优先 + 后台静默更新」：
+ *   · 10 分钟内命中过就直接返回上次的 JSON（不发请求，秒开、零数据库读）；
+ *   · 命中缓存的同时后台悄悄重新拉一次，把新数据写回缓存 ——
+ *     所以「新鲜度」最多差 10 分钟，但**再打开就是最新的**，不用手动刷；
+ *   · 请求失败（断网 / 数据库抽风）时，就算过期也把旧数据顶上去，
+ *     页面不会因为一次网络抖动变成空白。
+ *
+ * 只缓这几种「读多写少、体积中等」的：名册、考试列表、单场成绩、板块目录、班级岛。
+ * 登录态、写操作、内容（/content 自己有专门的缓存）一律**不进**这里。
+ * ========================================================================= */
+var API_CACHE_TTL = 10 * 60 * 1000;        /* 10 分钟算「新鲜」 */
+var API_CACHE_MAX = 600 * 1024;            /* 单条超过 600KB 不存，别把 localStorage 撑爆 */
+var API_CACHE_RULES = [
+  /^\/scores\?action=list/,
+  /^\/scores\?action=config/,
+  /^\/scores\?action=board&exam=/,
+  /^\/scores\?action=me$/,
+  /^\/profile\?action=roster/,
+  /^\/boards\?action=meta/,
+  /^\/island$/,
+];
+function apiCacheKey(path){
+  var p = String(path || '');
+  for(var i = 0; i < API_CACHE_RULES.length; i++){
+    if(API_CACHE_RULES[i].test(p)) return '__cls_api:' + p;
+  }
+  return '';
+}
+function apiCacheGet(k){
+  if(!k) return null;
+  try{
+    var o = JSON.parse(localStorage.getItem(k) || 'null');
+    if(o && o.v && typeof o.v === 'object') return o;
+  }catch(e){}
+  return null;
+}
+function apiCachePut(k, j){
+  if(!k || !j) return;
+  try{
+    var raw = JSON.stringify({ at: Date.now(), v: j });
+    if(raw.length > API_CACHE_MAX){ localStorage.removeItem(k); return; }
+    localStorage.setItem(k, raw);
+  }catch(e){
+    /* 配额满了：把这份缓存自己删掉，绝不让它拖累别的功能 */
+    try{ localStorage.removeItem(k); }catch(_){}
+  }
+}
+function apiCacheClear(){
+  try{
+    for(var i = localStorage.length - 1; i >= 0; i--){
+      var k = localStorage.key(i);
+      if(k && k.indexOf('__cls_api:') === 0) localStorage.removeItem(k);
+    }
+  }catch(e){}
+}
+
 /* 统一的 API 调用：自动带 token、自动处理登录过期 */
 function api(path, opts){
   opts = opts || {};
@@ -4355,15 +4420,30 @@ function api(path, opts){
   var init = { method: opts.method || 'GET', headers: headers };
   if(opts.body !== undefined) init.body = JSON.stringify(opts.body);
 
+  /* v4.9.1（站主第 1 条）：只读接口先看本地缓存 */
+  var ck = String(init.method || 'GET').toUpperCase() === 'GET' ? apiCacheKey(path) : '';
+  var cached = apiCacheGet(ck);
+  var fresh = !!(cached && (Date.now() - cached.at) < API_CACHE_TTL);
+
   /* 🚀 v4.7.1（站主第 1 条）：班级电脑大部分时间没网。
      浏览器的「断网」状态是确定的（navigator.onLine === false 基本不会误报），
      这种情况下再去 fetch，会先等 DNS 超时（真机实测 8～20 秒）才失败 ——
      点作业、点同步、点登录都像卡死了。这里直接快速失败，
      调用方拿到 offline 标记可以立刻改走本机缓存。 */
   if(typeof navigator !== 'undefined' && navigator.onLine === false){
+    /* v4.9.1：断网时有缓存就直接给数据，比抛错让页面空着强 */
+    if(cached) return Promise.resolve(cached.v);
     var offErr = new Error('当前设备离线，先用本机缓存。');
     offErr.offline = true;
     return Promise.reject(offErr);
+  }
+
+  /* 缓存还新鲜：立刻返回上次的 JSON，同时后台悄悄更新（不阻塞、不闪屏） */
+  if(fresh){
+    fetch(apiUrl(path), init).then(function(r){ return r.json(); }).then(function(j){
+      if(j && j.ok !== false) apiCachePut(ck, j);
+    }).catch(function(){});
+    return Promise.resolve(cached.v);
   }
 
   return fetch(apiUrl(path), init).then(function(r){
@@ -4381,6 +4461,7 @@ function api(path, opts){
           err.status = r.status;
           throw err;
         }
+        apiCachePut(ck, j);
         return j;
       });
   }).then(function(j){
@@ -4401,7 +4482,11 @@ function api(path, opts){
          · 服务端偶尔慢（实测单次可到 10 秒）会让它频繁误报。
        真连不上时心跳自然会连续失败、判定更准；请求自身的错误照旧由
        调用方的 try/catch 提示，不会因为这里放开而变得「报错没人管」。 */
+    /* v4.9.1：网络失败但手里有旧缓存 —— 先把旧数据给出去，页面照常用。
+       ⚠️ 顺序不能反：带 status 的是服务端明确回的错误（401/403/500），
+       那种要如实抛给调用方，不能被旧数据盖成「一切正常」。 */
     if(e && e.status) throw e;
+    if(cached) return cached.v;
     var netErr = new Error('无法连接服务端，请检查网络或切换移动数据。');
     netErr.offline = true;
     netErr.cause = e;
@@ -9760,6 +9845,9 @@ function islWxOpen(){
   m.classList.add('show');
   document.body.style.overflow = 'hidden';
   islWxLoad();
+  /* v4.9.1：顶部「今日总览」（城市 / 天气 / 最高最低 / 建议）也在这里补一次，
+     班级岛没打开过、或之前没取到温度时，弹窗里也不会空着。 */
+  try{ islandWeather(); }catch(e){}
 }
 function islWxClose(){
   var m = document.getElementById('islWxMask');
@@ -10231,8 +10319,9 @@ function islandRender(){
     +   '<b class="isl-cue" id="islCue">详情</b>'
     + '</div>'
     + '<div class="island-row isl-chips">' + row + '</div>'
-    /* v4.7.11（站主第 3 条）：今天总览 —— 城市 / 天气 / 最高最低 / 一句建议 */
-    + '<div class="island-wxbar" id="islWxBar" style="display:none"></div>'
+    /* v4.9.1（站主第 8 条）：天气总览**不放班级岛**了。
+       站主原话：「我的意思不是放到班级岛里，是我点了那个天气按钮之后在这里面显示」。
+       现在总览画在天气弹窗顶部（#islWxOv），班级岛只留原来的「天气」小格子。 */
     + '<div class="island-row" id="islBannerRow"></div>'
     + '<div class="island-foot"><span id="islFootL">今日事项</span>'
     +   '<b id="islFoot"></b></div>';
@@ -10442,7 +10531,7 @@ function islWxShow(v, city){
   islSet('islWx', v.t + '° ' + v.s);
   var m = document.getElementById('islWxM');
   if(m) m.textContent = v.t + '° ' + v.s;
-  var bar = document.getElementById('islWxBar');
+  var bar = document.getElementById('islWxOv');
   if(!bar) return;
   var place = city || (ISL_GEO && ISL_GEO.city) || '修水';
   var range = (v.tmax != null && v.tmin != null)
@@ -14284,7 +14373,7 @@ function scEase(p){ return 1 - Math.pow(1 - p, 3); }
         transform-box 不靠谱，会以 (0,0) 为中心缩放） ---- */
 function scBarState(svg){
   if(svg.__bars) return svg.__bars;
-  var bars = svg.querySelectorAll('.sc-bar');
+  var bars = svg.querySelectorAll('.sc-hbar');
   var axis = svg.querySelector('.sc-axis');
   var baseY = axis ? parseFloat(axis.getAttribute('y1')) : NaN;
   var items = [];
@@ -15349,7 +15438,7 @@ function scChartHist(st, rk){
     var h = H - B - yOf(c);
     var b0 = hist[i] || { lo: 0, list: [] };
     var rect = '<rect x="' + (xOf(i) + 1).toFixed(1) + '" y="' + yOf(c).toFixed(1) + '" width="' + Math.max(1, bw - 2).toFixed(1)
-      + '" height="' + Math.max(0, h).toFixed(1) + '" class="sc-bar" fill="#f0c9a3" rx="2"/>';
+      + '" height="' + Math.max(0, h).toFixed(1) + '" class="sc-hbar" fill="#f0c9a3" rx="2"/>';
     /* 空柱没高度，点了也没意义 —— 只有有人的柱子才可点 */
     if(c <= 0){
       return '<g class="sc-hb" data-hb="' + i + '"><title>' + b0.lo + '–' + (b0.hi - 1) + ' 分：0 人</title>' + rect + '</g>';
@@ -15636,7 +15725,22 @@ function scViewBar(){
   if(!scIsAdmin() || !SC.rows.length) return '';
   var me = scMyRow();
   var cur = SC.viewAs ? String(SC.viewAs) : (me ? String(me.id) : String(SC.rows[0].id));
-  var opts = SC.rows.map(function(r){
+  /* v4.9.1（站主第 9 条）：下拉按**学号**从小到大排，跟成绩单一致；
+     没有学号的（老师 / 旁听）按姓名排在最后，不插在中间乱序。
+     以前直接用 SC.rows 的原始顺序（后端按总分排），找个人得从头翻到尾。 */
+  var order = SC.rows.slice().sort(function(a, b){
+    var x = String(a.studentId == null ? '' : a.studentId).trim();
+    var y = String(b.studentId == null ? '' : b.studentId).trim();
+    if(x && y && x !== y){
+      var nx = parseFloat(x), ny = parseFloat(y);
+      if(isFinite(nx) && isFinite(ny) && nx !== ny) return nx - ny;
+      return x < y ? -1 : 1;
+    }
+    if(x && !y) return -1;
+    if(!x && y) return 1;
+    return String(a.name || '') < String(b.name || '') ? -1 : 1;
+  });
+  var opts = order.map(function(r){
     /* ⚠️ esc() 里直接 .replace，只吃字符串；成绩行 id 是数字，不过 String() 这里必炸 */
     return '<option value="' + esc(String(r.id)) + '"' + (String(r.id) === cur ? ' selected' : '') + '>'
       + esc(r.name) + (r.studentId ? '（' + esc(String(r.studentId)) + '）' : '') + '</option>';
@@ -20273,15 +20377,32 @@ function scPrint(){
     scPrintHeadFill();
     /* v4.7.11（站主第 8 条）：图表打印出来是空白的真因 ——
        柱状图 / 雷达图有入场动画，只有滚到视口才播；停在屏幕外的卡片
-       opacity 还是 0，浏览器打出来就是一片白。这里在打印前强制收掉动画。 */
+       opacity 还是 0，浏览器打出来就是一片白。这里在打印前强制收掉动画。
+
+       v4.9.1（站主第 9 条）：「纸前面有一大段空白」。根因是 visibility:hidden
+       的元素**照样占版面**，首页那一整屏把成绩分析顶到了后面几页。
+       只把它绝对定位到纸面顶端还不够 —— 后面的整页依然会照常出纸（4 页空白）。
+       所以打印这段时间把成绩分析块**临时挪到 body 下**，其余内容整块不排版，
+       打印结束再放回原位（父节点 + 下一个兄弟都记着，放回去位置不变）。 */
+    var host = document.querySelector('.sc-embed');
+    var back = null, iso = false;
+    if(host && host.parentNode && host.parentNode !== document.body){
+      back = { p: host.parentNode, n: host.nextSibling };
+      try{ document.body.appendChild(host); iso = true; }catch(e){ back = null; }
+    }
     document.body.classList.add('sc-printing');
+    if(iso) document.body.classList.add('sc-printing-iso');
     /* 给浏览器一帧时间应用 class，再唤起打印 */
     setTimeout(function(){
       window.print();
       /* 打印对话框关掉后恢复（不然页面上那些块就一直藏着了） */
       setTimeout(function(){
+        if(back){
+          try{ back.p.insertBefore(host, back.n || null); }catch(e){ try{ back.p.appendChild(host); }catch(_){} }
+        }
         scResetPrintHide();
         document.body.classList.remove('sc-printing');
+        document.body.classList.remove('sc-printing-iso');
       }, 300);
     }, 60);
   };
@@ -20295,17 +20416,23 @@ function scPrintHeadFill(){
   var rows = Array.isArray(SC.rows) ? SC.rows : [];
   var name = ex.name || ex.title || '成绩分析';
   var n = rows.length;
-  var sum = 0, top = -1, low = 1e9;
+  var sum = 0, cnt = 0, top = -1, low = 1e9;
   rows.forEach(function (r){
-    /* 行里的总分统一走 scTotal()，直接读 r.total 在不同版本里字段名不一样 */
-    var v = (typeof scTotal === 'function') ? Number(scTotal(r, 'graded'))
-          : Number(r.total_graded != null ? r.total_graded : r.total);
+    /* 行里的总分统一走 scTotal()，直接读 r.total 在不同版本里字段名不一样。
+       ⚠️ v4.9.1（站主第 9 条）：这里以前写的是 `Number(scTotal(...))` ——
+       scTotal 没有成绩时返回 **null**，而 Number(null) === 0 且 isFinite(0) 为真，
+       于是一条条全被当成「0 分」累加。均分 = 0 / 人数 = 0，纸上就印出「总分均分 0」。
+       现在先判空再转数字，并且只除以真正的有效人数。 */
+    var raw = (typeof scTotal === 'function') ? scTotal(r, 'graded')
+            : (r.total_graded != null ? r.total_graded : r.total);
+    if(raw == null || raw === '') return;
+    var v = Number(raw);
     if(!isFinite(v)) return;
-    sum += v;
+    sum += v; cnt++;
     if(v > top) top = v;
     if(v < low) low = v;
   });
-  var avg = n ? Math.round(sum / n * 10) / 10 : 0;
+  var avg = cnt ? Math.round(sum / cnt * 10) / 10 : 0;
   var d = new Date();
   function p(x){ return (x < 10 ? '0' : '') + x; }
   var when = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
@@ -21424,7 +21551,15 @@ function showCurrentHomework(forceId){
   /* 下拉：最近的排在前面 */
   var sel = document.getElementById('hwPickSel');
   if(sel){
-    sel.innerHTML = all.slice().reverse().map(function(x){
+    /* v4.9.1（站主第 2 条）：按**时间**排（近的在前），不再按录入顺序倒序 */
+    var ordered = all.slice().sort(function(a, b){
+      var x = String(a.start || a.end || ''), y = String(b.start || b.end || '');
+      if(x !== y) return x < y ? 1 : -1;
+      var xe = String(a.end || ''), ye = String(b.end || '');
+      if(xe !== ye) return xe < ye ? 1 : -1;
+      return String(a.title || '') < String(b.title || '') ? 1 : -1;
+    });
+    sel.innerHTML = ordered.map(function(x){
       return '<option value="' + attr(x.id) + '"' + (hw && String(x.id) === String(hw.id) ? ' selected' : '') + '>'
         + esc(x.title) + '（' + esc(x.start || '') + ' ~ ' + esc(x.end || '') + '）</option>';
     }).join('');
@@ -21775,6 +21910,13 @@ function exOpen(card, fname, mode) {
     ShareCard.download(card, EX.fname);
     return;
   }
+  /* v4.9.1（站主第 10 条）：「点导出图片先把作业那个窗口自动关掉」——
+     预览弹层层级比作业弹窗低，不关就得先手动关一次才看得见预览。 */
+  try{ if(typeof closeHwCurrent === 'function') closeHwCurrent(); }catch(e){}
+  try{
+    var hm = document.getElementById('hwCurrentMask');
+    if(hm && hm.classList && hm.classList.contains('show')) hm.classList.remove('show');
+  }catch(e){}
   mask.classList.add('show');
   exSyncUI();
   exRender();
@@ -21783,12 +21925,20 @@ function exOpen(card, fname, mode) {
 /* v4.7.11（站主第 9 条）：电脑端预览太小，加「滚轮缩放 + 拖动平移」。
    手机端本来就能双指放大，这里不拦 touch，免得跟系统手势打架。 */
 var EXZ = { z: 1 };
-function exApplyZoom() {
+/* v4.9.1（站主第 10 条）：「我要放大局部，看里面的图/字清不清楚」。
+   ① 宽度真的撑开了（CSS 里 .ex-paper.zoomed 禁止 flex 收缩，老版被压回去，
+      所以只有百分号在动）；
+   ② 以鼠标位置为锚点放大 —— 放大后指针底下还是同一块内容，不用再自己找；
+   ③ 拖动平移照旧，双击复位。 */
+function exApplyZoom(anchor) {
   var stage = document.getElementById('exStage');
   var paper = stage ? stage.querySelector('.ex-paper') : null;
   var lab = document.getElementById('exZoomVal');
   if (lab) lab.textContent = EXZ.z <= 1.001 ? '' : Math.round(EXZ.z * 100) + '%';
   if (!paper) return;
+  var prevW = paper.offsetWidth || 1;
+  var sl = stage ? stage.scrollLeft : 0;
+  var st = stage ? stage.scrollTop : 0;
   if (EXZ.z <= 1.001) {
     paper.style.width = '';
     paper.classList.remove('zoomed');
@@ -21799,6 +21949,17 @@ function exApplyZoom() {
   if (stage) {
     if (EXZ.z > 1.001) stage.classList.add('zooming');
     else stage.classList.remove('zooming', 'dragging');
+  }
+  /* 按放大比例把滚动位置一起缩放，视觉上「原地放大」 */
+  if (stage && EXZ.z > 1.001) {
+    var k = (paper.offsetWidth || prevW) / prevW;
+    if (anchor) {
+      stage.scrollLeft = (sl + anchor.x) * k - anchor.x;
+      stage.scrollTop = (st + anchor.y) * k - anchor.y;
+    } else {
+      stage.scrollLeft = sl * k;
+      stage.scrollTop = st * k;
+    }
   }
 }
 function exZoomReset() {
@@ -21931,11 +22092,13 @@ function exShare() {
     stage0.addEventListener('wheel', function (e) {
       if (!mask.classList.contains('show')) return;
       e.preventDefault();
-      var step = e.deltaY > 0 ? -0.12 : 0.12;
-      var z = Math.min(4, Math.max(1, Math.round((EXZ.z + step) * 100) / 100));
+      /* 步长按当前倍数走：小倍数细调、大倍数快速拉，滚一格不会一下跳没 */
+      var step = (e.deltaY > 0 ? -1 : 1) * Math.max(0.1, Math.min(0.4, EXZ.z * 0.18));
+      var z = Math.min(6, Math.max(1, Math.round((EXZ.z + step) * 100) / 100));
       if (z === EXZ.z) return;
       EXZ.z = z;
-      exApplyZoom();
+      var box = stage0.getBoundingClientRect();
+      exApplyZoom({ x: e.clientX - box.left + stage0.scrollLeft, y: e.clientY - box.top + stage0.scrollTop });
     }, { passive: false });
     stage0.addEventListener('dblclick', function (e) {
       if (e.target && e.target.closest && e.target.closest('.ex-paper')) exZoomReset();
@@ -22156,6 +22319,18 @@ try{ if(typeof mkScanAll === 'function') mkScanAll(900); }catch(e){}
 /* 返回记忆：从外链/小游戏返回时，恢复到跳转前的视图（隐藏空间/分类/首页）。
  * 必须在 goHomeView() 之后执行，否则会被其覆盖回首页 */
 (function(){
+  /* v4.9.1（站主第 11 条）：后台点班徽过来 = 就是要看首页。
+     这时候不要再去恢复「上次看到哪」，直接铺首页。 */
+  var force = false;
+  try{
+    force = sessionStorage.getItem('cls_force_home') === '1';
+    if(force) sessionStorage.removeItem('cls_force_home');
+  }catch(e){}
+  if(force){
+    try{ goHomeView(); }catch(e){}
+    try{ sessionStorage.removeItem('cls_return_view'); }catch(e){}
+    return;
+  }
   var v = null;
   try{ v = sessionStorage.getItem('cls_return_view'); sessionStorage.removeItem('cls_return_view'); }catch(e){}
   if(v === 'hidden'){
@@ -22888,18 +23063,34 @@ function updGo(){
 })();
 
 /* ============================================================================
- * v4.7.11（站主第 6 条）：文件中转站
+ * 文件中转站（v4.7.11 起，v4.9.1 按站主第 12 条大改）
  * ----------------------------------------------------------------------------
- * 「手机、U 盘、电脑、班级电脑之间互通太麻烦，想拿网站当媒介」。
- * 走站内 KV（不用开新账号），单文件 4MB，7 天有效，6 位取件码。
- * 上传用 XHR 才有真实的进度事件（fetch 拿不到上传进度）。
+ * 站主原话：「不一定非要上传文件，我也可以直接在这里输入文本；还要能设最多被取
+ *   几次、取几次后自动删原件；分享也有期限（能保存几天就能分享几天）；可以直接把
+ *   链接发给他们下载；我也能看到历史、能编辑、删除。」
+ *
+ * 形态：
+ *   ① 发文件 / 发文本 → 拿 6 位取件码 + 一条取件链接（链接就是下载地址）；
+ *   ② 可选保存 1 / 7 / 30 / 180 天，可选「最多被取几次」（取满自动删原件）；
+ *   ③ 「历史」里存着本机发过的东西（取件码 + 删除口令都存本机），
+ *      可以复制链接、改名、删除 —— 换设备就看不到别人的历史，这是有意的；
+ *   ④ 上传用 XHR 才有真实进度事件（fetch 拿不到上传进度）。
  * ========================================================================== */
-var FL = { ttl: 7, busy: false, code: '', delKey: '', file: null };
+var FL_KEY = 'cls_fl_hist_v1';
+var FL = { ttl: 7, maxGet: 0, busy: false, code: '', delKey: '', kind: 'file', tab: 'up' };
 function flEl(id){ return document.getElementById(id); }
+function flBase(){
+  return (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+}
+function flUrl(code){
+  return location.origin + flBase() + '/api/files?code=' + encodeURIComponent(code);
+}
 function openFiles(){
   var m = flEl('flMask');
   if(!m) return;
   m.classList.add('show');
+  flShowDone(false);
+  flTab(FL.tab || 'up');
   try{ if(typeof closeSidebar === 'function') closeSidebar(); }catch(e){}
 }
 function closeFiles(){
@@ -22907,17 +23098,26 @@ function closeFiles(){
   if(m) m.classList.remove('show');
   var p = flEl('flProg'); if(p) p.classList.remove('on');
   var in2 = flEl('flProgIn'); if(in2) in2.style.width = '0%';
+  flShowDone(false);
 }
 function flTab(k){
-  var up = flEl('flPaneUp'), gt = flEl('flPaneGet');
-  if(up) up.style.display = (k === 'up') ? '' : 'none';
-  if(gt) gt.style.display = (k === 'get') ? '' : 'none';
+  FL.tab = k;
+  var map = { up: 'flPaneUp', txt: 'flPaneTxt', get: 'flPaneGet', hist: 'flPaneHist' };
+  Object.keys(map).forEach(function(key){
+    var el = flEl(map[key]);
+    if(el) el.style.display = (key === k) ? '' : 'none';
+  });
+  var opts = flEl('flOpts');
+  if(opts) opts.classList.toggle('hide', !(k === 'up' || k === 'txt'));
+  var done = flEl('flDonePane');
+  if(done && k !== 'up' && k !== 'txt') done.style.display = 'none';
   var btns = document.querySelectorAll('[data-fltab]');
   for(var i = 0; i < btns.length; i++) btns[i].classList.toggle('on', btns[i].getAttribute('data-fltab') === k);
   if(k === 'get'){
     var inp = flEl('flIn');
     if(inp) setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 60);
   }
+  if(k === 'hist') flHistRender();
 }
 function flMsg(id, kind, text){
   var el = flEl(id);
@@ -22931,16 +23131,135 @@ function flBytes(n){
   if(n < 1048576) return (n / 1024).toFixed(1) + ' KB';
   return (n / 1048576).toFixed(2) + ' MB';
 }
+function flDaysLeft(exp){
+  var d = Math.ceil((Number(exp || 0) - Date.now()) / 86400000);
+  return d > 0 ? d : 0;
+}
+
+/* ---------------- 本机历史 ---------------- */
+function flHistLoad(){
+  try{
+    var a = JSON.parse(localStorage.getItem(FL_KEY) || '[]');
+    return Array.isArray(a) ? a : [];
+  }catch(e){ return []; }
+}
+function flHistSave(a){
+  try{ localStorage.setItem(FL_KEY, JSON.stringify((a || []).slice(0, 60))); }catch(e){}
+}
+function flHistAdd(rec){
+  var a = flHistLoad().filter(function(x){ return String(x.code) !== String(rec.code); });
+  a.unshift(rec);
+  flHistSave(a);
+}
+function flHistPatch(code, patch){
+  var a = flHistLoad();
+  for(var i = 0; i < a.length; i++){
+    if(String(a[i].code) === String(code)){ for(var k in patch) a[i][k] = patch[k]; break; }
+  }
+  flHistSave(a);
+}
+function flHistDrop(code){
+  flHistSave(flHistLoad().filter(function(x){ return String(x.code) !== String(code); }));
+}
+function flHistRender(){
+  var box = flEl('flHist');
+  if(!box) return;
+  var a = flHistLoad();
+  flMsg('flMsgHist', '', '');
+  if(!a.length){
+    box.innerHTML = '<div class="fl-hist-empty">这台设备还没发过东西。<br>发出去之后，取件码和删除口令会记在这里，方便再找回来。</div>';
+    return;
+  }
+  box.innerHTML = a.map(function(r){
+    var left = flDaysLeft(r.exp);
+    var dead = left <= 0;
+    var kindTag = (r.kind === 'text') ? '文本' : '文件';
+    var meta = [];
+    meta.push(flBytes(r.size));
+    meta.push(dead ? '已过期' : ('还剩 ' + left + ' 天'));
+    if(r.maxGet) meta.push('可取 ' + (r.gets || 0) + '/' + r.maxGet + ' 次');
+    if(r.memo) meta.push('备注：' + esc(r.memo));
+    meta.push('取件码 ' + esc(r.code));
+    return '<div class="fl-hist-item' + (dead ? ' dead' : '') + '">'
+      + '<div class="fl-hist-top"><b>' + esc(r.name || '未命名') + '</b>'
+      +   '<span class="fl-hist-tag">' + kindTag + '</span></div>'
+      + '<div class="fl-hist-meta">' + meta.join('　·　') + '</div>'
+      + '<div class="fl-hist-acts">'
+      +   '<button type="button" class="fl-mini" data-flact="copy" data-code="' + attr(r.code) + '">复制链接</button>'
+      +   '<button type="button" class="fl-mini" data-flact="open" data-code="' + attr(r.code) + '">去取件</button>'
+      +   '<button type="button" class="fl-mini" data-flact="ren" data-code="' + attr(r.code) + '">改名</button>'
+      +   '<button type="button" class="fl-mini danger" data-flact="del" data-code="' + attr(r.code) + '">删除</button>'
+      + '</div></div>';
+  }).join('');
+}
+
+/* ---------------- 发送成功后的结果卡 ---------------- */
+function flShowDone(on){
+  var p = flEl('flDonePane');
+  if(!p) return;
+  p.style.display = on ? '' : 'none';
+  if(!on) return;
+  var up = flEl('flPaneUp'), tx = flEl('flPaneTxt'), op = flEl('flOpts');
+  if(up) up.style.display = 'none';
+  if(tx) tx.style.display = 'none';
+  if(op) op.classList.add('hide');
+}
+function flDone(code, delKey, meta){
+  FL.code = code; FL.delKey = delKey;
+  var c = flEl('flCode'); if(c) c.textContent = code;
+  var tip = flEl('flCodeTip');
+  if(tip){
+    tip.innerHTML = (meta && meta.kind === 'text')
+      ? '该文本已保存至云端。对方打开本站 →「文件中转站」→ 取件，输入这 6 位即可查看并复制。<br>也可将下方链接直接发送给对方，点击即可查看原文。'
+      : '在另一台设备打开本站 →「文件中转站」→ 取件，输入这 6 位即可下载。<br>也可将下方链接直接发送给对方，点击即可下载。';
+  }
+  var lk = flEl('flLink');
+  if(lk) lk.textContent = flUrl(code);
+  flShowDone(true);
+  if(meta){
+    flHistAdd({
+      code: code, delKey: delKey, kind: meta.kind || 'file',
+      name: meta.name || '', size: meta.size || 0,
+      at: Date.now(), exp: meta.exp || (Date.now() + (meta.ttl || 7) * 86400000),
+      ttl: meta.ttl || 7, maxGet: meta.maxGet || 0, gets: 0, memo: meta.memo || '',
+    });
+  }
+}
+function flCopy(text, okId, okText){
+  var done = function(){ flMsg(okId || 'flMsg', 'ok', okText || '已复制'); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(function(){ flFallbackCopy(text); done(); });
+  }else{
+    flFallbackCopy(text); done();
+  }
+}
+function flFallbackCopy(text){
+  try{
+    var t = document.createElement('textarea');
+    t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select();
+    document.execCommand('copy');
+    document.body.removeChild(t);
+  }catch(e){}
+}
+function flPost(action, body){
+  return fetch(flBase() + '/api/files?action=' + action, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }).then(function(r){ return r.json().then(function(j){ return { s: r.status, j: j }; }); });
+}
+
+/* ---------------- 发文件 ---------------- */
 function flUpload(f){
   if(!f || FL.busy) return;
-  if(f.size > 4 * 1024 * 1024){
-    flMsg('flMsg', 'err', '这个文件 ' + flBytes(f.size) + '，超过 4MB 上限。更大的文件请使用 U 盘传输。');
+  if(f.size > 15 * 1024 * 1024){
+    flMsg('flMsg', 'err', '这个文件 ' + flBytes(f.size) + '，超过 15MB 上限。更大的课件建议放网盘，这里只发链接。');
     return;
   }
   FL.busy = true;
   FL.file = f;
-  var prog = flEl('flProg'), inn = flEl('flProgIn'), done = flEl('flDone');
-  if(done) done.classList.remove('on');
+  var prog = flEl('flProg'), inn = flEl('flProgIn');
   if(prog) prog.classList.add('on');
   if(inn) inn.style.width = '4%';
   flMsg('flMsg', '', '正在读取文件…');
@@ -22954,9 +23273,8 @@ function flUpload(f){
     var dataUrl = String(reader.result || '');
     var b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
     flMsg('flMsg', '', '正在上传…');
-    var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', base + '/api/files?action=up', true);
+    xhr.open('POST', flBase() + '/api/files?action=up', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.upload.onprogress = function(e){
       if(!e.lengthComputable) return;
@@ -22969,12 +23287,12 @@ function flUpload(f){
       var j = null;
       try{ j = JSON.parse(xhr.responseText || '{}'); }catch(e){ j = null; }
       if(xhr.status === 200 && j && j.ok){
-        FL.code = j.code;
-        FL.delKey = j.delKey;
-        var c = flEl('flCode');
-        if(c) c.textContent = j.code;
-        if(done) done.classList.add('on');
-        flMsg('flMsg', 'ok', '上传完成：' + flBytes(j.size) + '，保存 ' + j.ttl + ' 天。');
+        flMsg('flMsg', 'ok', '上传完成：' + flBytes(j.size) + '，保存 ' + j.ttl + ' 天'
+          + (j.maxGet ? '，最多可取 ' + j.maxGet + ' 次' : '') + '。');
+        flDone(j.code, j.delKey, {
+          kind: 'file', name: j.name || f.name, size: j.size, exp: j.exp,
+          ttl: j.ttl, maxGet: j.maxGet, memo: (flEl('flMemo') || {}).value || '',
+        });
         try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
       }else{
         flMsg('flMsg', 'err', (j && j.error) ? j.error : ('上传失败（HTTP ' + xhr.status + '）'));
@@ -22984,18 +23302,50 @@ function flUpload(f){
       FL.busy = false;
       flMsg('flMsg', 'err', '网络断了，没传上去。');
     };
-    xhr.send(JSON.stringify({ name: f.name, type: f.type || 'application/octet-stream', data: b64, ttl: FL.ttl }));
+    xhr.send(JSON.stringify({
+      name: f.name, type: f.type || 'application/octet-stream', data: b64,
+      ttl: FL.ttl, maxGet: FL.maxGet, memo: (flEl('flMemo') || {}).value || '',
+    }));
   };
   reader.readAsDataURL(f);
 }
+
+/* ---------------- 发文本 ---------------- */
+function flSendText(){
+  if(FL.busy) return;
+  var ta = flEl('flText');
+  var text = String((ta && ta.value) || '');
+  if(!text.trim()){ flMsg('flMsgTxt', 'err', '先写点内容再发。'); return; }
+  FL.busy = true;
+  flMsg('flMsgTxt', '', '正在发送…');
+  var memo = (flEl('flMemo') || {}).value || '';
+  var name = '文本 ' + new Date().toLocaleString('zh-CN', { hour12: false });
+  flPost('text', { text: text, ttl: FL.ttl, maxGet: FL.maxGet, memo: memo, name: name })
+    .then(function(o){
+      FL.busy = false;
+      if(o.s === 200 && o.j && o.j.ok){
+        flMsg('flMsgTxt', 'ok', '已发送，保存 ' + o.j.ttl + ' 天'
+          + (o.j.maxGet ? '，最多可取 ' + o.j.maxGet + ' 次' : '') + '。');
+        flDone(o.j.code, o.j.delKey, {
+          kind: 'text', name: name, size: o.j.size, exp: o.j.exp,
+          ttl: o.j.ttl, maxGet: o.j.maxGet, memo: memo,
+        });
+        if(ta) ta.value = '';
+      }else{
+        flMsg('flMsgTxt', 'err', (o.j && o.j.error) || '发送失败');
+      }
+    })
+    .catch(function(){ FL.busy = false; flMsg('flMsgTxt', 'err', '网络没通，稍后再试。'); });
+}
+
+/* ---------------- 取件 ---------------- */
 function flQuery(){
   var inp = flEl('flIn');
   var code = String((inp && inp.value) || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
   if(code.length !== 6){ flMsg('flMsg2', 'err', '取件码是 6 位，再数一下。'); return; }
-  var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
   flMsg('flMsg2', '', '正在查…');
   var card = flEl('flCard'); if(card) card.style.display = 'none';
-  fetch(base + '/api/files?code=' + encodeURIComponent(code) + '&meta=1')
+  fetch(flBase() + '/api/files?code=' + encodeURIComponent(code) + '&meta=1')
     .then(function(r){ return r.json().then(function(j){ return { s: r.status, j: j }; }); })
     .then(function(o){
       var j = o.j || {};
@@ -23004,24 +23354,40 @@ function flQuery(){
         return;
       }
       flMsg('flMsg2', '', '');
-      var left = Math.max(0, Math.ceil((j.exp - Date.now()) / 86400000));
-      if(card){
-        card.style.display = '';
+      var left = flDaysLeft(j.exp);
+      var times = j.maxGet ? ('　·　还能取 ' + j.left + ' 次') : '';
+      if(!card) return;
+      card.style.display = '';
+      if(j.kind === 'text'){
+        card.innerHTML = '<b>' + emojiEscHtml(j.name || '文本') + '</b>'
+          + '<div class="m">' + flBytes(j.size) + '　·　还剩 ' + left + ' 天' + times
+          + '　·　' + new Date(j.at).toLocaleString('zh-CN', { hour12: false }) + '</div>'
+          + '<textarea class="fl-ta" id="flGotText" rows="8" readonly>' + esc(j.text || '') + '</textarea>'
+          + '<div class="fl-acts" style="margin-top:10px">'
+          +   '<button type="button" class="fl-btn" id="flCopyTxt">复制文本</button>'
+          +   '<a class="fl-btn ghost" style="text-decoration:none;text-align:center;line-height:1.5"'
+          +     ' href="' + attr(flUrl(code)) + '&inline=1" target="_blank" rel="noopener">新窗口打开</a>'
+          + '</div>';
+        var cp = flEl('flCopyTxt');
+        if(cp) cp.onclick = function(){ flCopy(String((flEl('flGotText') || {}).value || ''), 'flMsg2', '文本已复制'); };
+      }else{
         card.innerHTML = '<b>' + emojiEscHtml(j.name) + '</b>'
-          + '<div class="m">' + flBytes(j.size) + '　·　还剩 ' + left + ' 天　·　'
-          + '上传于 ' + new Date(j.at).toLocaleString('zh-CN', { hour12: false }) + '</div>'
-          + '<a class="fl-btn" style="display:block;text-align:center;text-decoration:none;line-height:1.4"'
-          + ' href="' + base + '/api/files?code=' + encodeURIComponent(code) + '" download>'
-          + '下载这个文件</a>';
+          + '<div class="m">' + flBytes(j.size) + '　·　还剩 ' + left + ' 天' + times
+          + '　·　上传于 ' + new Date(j.at).toLocaleString('zh-CN', { hour12: false }) + '</div>'
+          + '<a class="fl-btn" style="display:block;text-align:center;text-decoration:none;line-height:1.5"'
+          + ' href="' + attr(flUrl(code)) + '" download>下载这个文件</a>';
       }
     })
     .catch(function(){ flMsg('flMsg2', 'err', '网络没通，稍后再试。'); });
 }
+
+/* ---------------- 绑定 ---------------- */
 (function bindFiles(){
   function init(){
     var m = flEl('flMask');
     if(!m) return;
     m.addEventListener('click', function(e){ if(e.target === m) closeFiles(); });
+
     var drop = flEl('flDrop'), file = flEl('flFile');
     if(drop && file){
       drop.addEventListener('click', function(){ file.click(); });
@@ -23037,47 +23403,129 @@ function flQuery(){
         if(f) flUpload(f);
       });
     }
-    var seg = document.querySelectorAll('[data-ttl]');
-    for(var i = 0; i < seg.length; i++){
-      seg[i].addEventListener('click', function(){
-        for(var k = 0; k < seg.length; k++) seg[k].classList.remove('on');
-        this.classList.add('on');
-        FL.ttl = Number(this.getAttribute('data-ttl')) || 7;
+
+    /* 保存天数 / 可取次数：两段按钮共用一个委托 */
+    function segBind(boxId, attrName, key){
+      var box = flEl(boxId);
+      if(!box) return;
+      box.addEventListener('click', function(e){
+        var b = e.target && e.target.closest ? e.target.closest('button') : null;
+        if(!b || !box.contains(b)) return;
+        var all = box.querySelectorAll('button');
+        for(var i = 0; i < all.length; i++) all[i].classList.remove('on');
+        b.classList.add('on');
+        FL[key] = Number(b.getAttribute(attrName)) || 0;
+        var tip = flEl('flOptTip');
+        if(tip){
+          tip.textContent = '保存 ' + FL.ttl + ' 天'
+            + (FL.maxGet ? ('，被取 ' + FL.maxGet + ' 次后自动删除原件') : '，不限取用次数')
+            + '；到期也会自动消失。';
+        }
       });
     }
+    segBind('flTtl', 'data-ttl', 'ttl');
+    segBind('flMax', 'data-max', 'maxGet');
+
+    var st = flEl('flSendTxt');
+    if(!st){
+      /* 发文本的按钮动态补在文本域下面（省得再占一段 HTML） */
+      var ta = flEl('flText');
+      if(ta && ta.parentNode){
+        var btn = document.createElement('button');
+        btn.type = 'button'; btn.id = 'flSendTxt'; btn.className = 'fl-btn';
+        btn.style.marginTop = '10px'; btn.textContent = '发送这段文本';
+        btn.onclick = flSendText;
+        ta.parentNode.insertBefore(btn, ta.nextSibling);
+      }
+    }
+
     var cp = flEl('flCopyCode');
     if(cp) cp.onclick = function(){
       if(!FL.code) return;
-      var done = function(){ flMsg('flMsg', 'ok', '取件码 ' + FL.code + ' 已复制'); };
-      if(navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(FL.code).then(done).catch(function(){});
+      flCopy(FL.code, 'flMsg', '取件码 ' + FL.code + ' 已复制');
+    };
+    var cl = flEl('flCopyLink');
+    if(cl) cl.onclick = function(){
+      if(!FL.code) return;
+      flCopy(flUrl(FL.code), 'flMsg', '取件链接已复制，直接发给对方即可');
+    };
+    var sh = flEl('flShare');
+    if(sh) sh.onclick = function(){
+      if(!FL.code) return;
+      var url = flUrl(FL.code);
+      if(navigator.share){
+        navigator.share({ title: '班级文件中转站', text: '取件码 ' + FL.code, url: url }).catch(function(){});
       }else{
-        try{
-          var t = document.createElement('textarea');
-          t.value = FL.code; document.body.appendChild(t); t.select();
-          document.execCommand('copy'); document.body.removeChild(t); done();
-        }catch(e){}
+        flCopy(url, 'flMsg', '这个浏览器不支持直接分享，链接已复制');
       }
     };
     var del = flEl('flDel');
     if(del) del.onclick = function(){
       if(!FL.code || !FL.delKey) return;
-      if(!confirm('删除这个文件？删掉后取件码立刻失效。')) return;
-      var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
-      fetch(base + '/api/files?action=del', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: FL.code, delKey: FL.delKey }),
-      }).then(function(r){ return r.json(); }).then(function(j){
-        if(j && j.ok){
+      if(!confirm('删除后取件码立刻失效，别人就取不到了。确定删除？')) return;
+      flPost('del', { code: FL.code, delKey: FL.delKey }).then(function(o){
+        if(o.j && o.j.ok){
+          flHistDrop(FL.code);
           flMsg('flMsg', 'ok', '已删除，取件码作废。');
-          var done2 = flEl('flDone'); if(done2) done2.classList.remove('on');
+          flShowDone(false);
+          flTab(FL.tab || 'up');
           FL.code = ''; FL.delKey = '';
         }else{
-          flMsg('flMsg', 'err', (j && j.error) || '删除失败');
+          flMsg('flMsg', 'err', (o.j && o.j.error) || '删除失败');
         }
       }).catch(function(){ flMsg('flMsg', 'err', '网络没通'); });
     };
+    var back = flEl('flDoneBack');
+    if(back) back.onclick = function(){
+      flShowDone(false);
+      flTab(FL.tab === 'txt' ? 'txt' : 'up');
+    };
+
+    var hist = flEl('flHist');
+    if(hist) hist.addEventListener('click', function(e){
+      var b = e.target && e.target.closest ? e.target.closest('[data-flact]') : null;
+      if(!b) return;
+      var act = b.getAttribute('data-flact');
+      var code = b.getAttribute('data-code');
+      var rec = null;
+      flHistLoad().forEach(function(x){ if(String(x.code) === String(code)) rec = x; });
+      if(!rec) return;
+      if(act === 'copy'){ flCopy(flUrl(code), 'flMsgHist', '链接已复制'); return; }
+      if(act === 'open'){
+        flTab('get');
+        var inp = flEl('flIn');
+        if(inp){ inp.value = code; flQuery(); }
+        return;
+      }
+      if(act === 'ren'){
+        var nn = prompt('新的名字（对方看到的就是这个）', rec.name || '');
+        if(nn == null) return;
+        nn = String(nn).trim();
+        if(!nn) return;
+        flPost('ren', { code: code, delKey: rec.delKey, name: nn }).then(function(o){
+          if(o.j && o.j.ok){
+            flHistPatch(code, { name: nn });
+            flHistRender();
+            flMsg('flMsgHist', 'ok', '已改名');
+          }else{
+            flMsg('flMsgHist', 'err', (o.j && o.j.error) || '改名失败');
+          }
+        }).catch(function(){ flMsg('flMsgHist', 'err', '网络没通'); });
+        return;
+      }
+      if(act === 'del'){
+        if(!confirm('删除「' + (rec.name || code) + '」？删掉后取件码立刻失效。')) return;
+        flPost('del', { code: code, delKey: rec.delKey }).then(function(o){
+          if(o.j && o.j.ok){
+            flHistDrop(code); flHistRender();
+            flMsg('flMsgHist', 'ok', '已删除');
+          }else{
+            flMsg('flMsgHist', 'err', (o.j && o.j.error) || '删除失败');
+          }
+        }).catch(function(){ flMsg('flMsgHist', 'err', '网络没通'); });
+      }
+    });
+
     var q = flEl('flQuery');
     if(q) q.onclick = flQuery;
     var inp = flEl('flIn');

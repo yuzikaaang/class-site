@@ -6996,7 +6996,7 @@ console.log('\n【64】第五十九轮·成绩分析暗色全覆盖检查');
 
   /* ---- ③ 六个图表函数 SVG 语义 class 接线（函数体内断言）---- */
   t('★scChartHist 接线：柱/柱顶数/轴字/网格/均分线/中位线/分数线/我的标记',
-    ['class="sc-bar"', 'sc-bar-num', 'sc-axdim', 'sc-hgrid', 'sc-mk-avg', 'sc-mk-mid',
+    ['class="sc-hbar"', 'sc-bar-num', 'sc-axdim', 'sc-hgrid', 'sc-mk-avg', 'sc-mk-mid',
      'sc-cut-line', 'sc-cut-txt', 'sc-mine-dot', 'sc-tip', 'sc-axis']
       .every(c => fnBody('scChartHist').includes(c)));
   t('★scRadar 接线：网格/辐条/轴标签/tips/班均虚线/我的多边形/顶点/图例',
@@ -7026,7 +7026,7 @@ console.log('\n【64】第五十九轮·成绩分析暗色全覆盖检查');
     && /\.dark \.sc-svg \.sc-mine-line\{stroke:#f87171\}/.test(idx)
     && /\.dark \.sc-svg \.sc-mine-dot\{fill:#f87171\}/.test(idx)
     && /\.dark \.sc-svg \.sc-avg\{stroke:#a8998c\}/.test(idx)
-    && /\.dark \.sc-svg \.sc-bar\{fill:#c98d5e\}/.test(idx)
+    && /\.dark \.sc-svg \.sc-hbar\{fill:#c98d5e\}/.test(idx)
     && /\.dark \.sc-svg \.sc-grade-line\{stroke:#c4b5fd\}/.test(idx));
   t('★直方图均分/中位线 line 与 text 分开覆盖（旧写法会把文字也描边）',
     /\.dark \.sc-svg line\.sc-mk-avg\{stroke:#a8998c\}/.test(idx)
@@ -12690,7 +12690,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
 
   /* ⑨c v4.7.1：离线适配 + 作业本机编辑 + 真全屏 + 启动器 */
   t('★离线时接口快速失败（不再等 DNS 超时）',
-    /navigator\.onLine === false\)\{\s*var offErr/.test(fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8')));
+    /navigator\.onLine === false\)\{[\s\S]{0,400}?var offErr/.test(fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8')));
   t('★离线时登录直接说明，不转圈',
     /当前没有网络，无法登录/.test(fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8')));
   t('★大屏离线时跳过轮询',
@@ -12762,7 +12762,8 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
 
   /* ⑩ v4.6.0：轻量模式降质不降功能 + 后台补轻量 */
   t('★轻量模式豁免抽取动画（:not(.pfx)）', /:not\(\.pfx\):not\(\.pfx \*\)/.test(idx));
-  t('★轻量模式降卡片数/阴影（画质降、功能留）', /isLite\(\) \? 16 : 24/.test(fsx));
+  t('★轻量模式降卡片数/阴影（画质降、功能留）', /var M = Math\.min\(60, Math\.max\(24, pool\.length\)\)/.test(fsx)
+    && /isLite\(\)\) M = Math\.min\(M, 24\)/.test(fsx));
   t('★后台支持轻量模式（data-lite + cls_lite_mode）',
     /cls_lite_mode/.test(adminHtml) && /html\[data-lite="1"\]/.test(adminHtml));
   t('★后台登录门轻量下极简（去模糊/阴影/动画）',
@@ -12939,8 +12940,8 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   const apiFiles711 = fs.readFileSync(new URL('./api/files.js', import.meta.url), 'utf8');
   const apiGeo711 = fs.readFileSync(new URL('./api/geo.js', import.meta.url), 'utf8');
 
-  t('★v4.7.11 版本号升到 4.7.11',
-    /SITE_VERSION = '4\.7\.11'/.test(idx711) && /SITE_VER = '4\.7\.11'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+  t('★v4.9.1 版本号升到 4.9.1',
+    /SITE_VERSION = '4\.9\.1'/.test(idx711) && /SITE_VER = '4\.9\.1'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
 
   /* ① 宝箱落点概率分布 */
   t('★v4.7.11 宝箱落点支持 ±3 格且概率向外递减',
@@ -12963,9 +12964,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /nominatim\.openstreetmap\.org/.test(apiGeo711) && /FALLBACK = \{ city: '修水'/.test(apiGeo711));
   t('★v4.7.11 worker 注册 geo / files 路由',
     /case 'geo'/.test(wk711) && /case 'files'/.test(wk711));
-  t('★v4.7.11 天气总览含城市 / 最高最低 / 建议，图标为内联 SVG',
-    /islWxBar/.test(app711) && /function wxIcon/.test(app711) && /function wxTip/.test(app711)
-    && /\.island-wxbar\{/.test(idx711));
+  /* v4.9.1（站主第 8 条）：总览从班级岛搬进天气弹窗（#islWxOv），类名仍是 .island-wxbar */
+  t('★v4.9.1 天气总览含城市 / 最高最低 / 建议，图标为内联 SVG（在弹窗里）',
+    /islWxOv/.test(app711) && /function wxIcon/.test(app711) && /function wxTip/.test(app711)
+    && /\.island-wxbar\{/.test(idx711) && /id="islWxOv"/.test(idx711));
 
   /* ④ 每日一言 */
   t('★v4.7.11 每日一言勾选后本地先改云端值再重绘（修「点了没反应」）',
@@ -12978,9 +12980,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /ncol = nn >= 17 \? 4/.test(big711) && /\.bpick-res\.c3/.test(idx711));
 
   /* ⑥ 文件中转站 */
-  t('★v4.7.11 文件中转站：6 位取件码、4MB 上限、7 天过期、防网页渲染',
-    /randStr\(6\)/.test(apiFiles711) && /MAX_BYTES = 4 \* 1024 \* 1024/.test(apiFiles711)
-    && /application\/octet-stream/.test(apiFiles711) && /filename\*=UTF-8/.test(apiFiles711));
+  /* v4.9.1（站主第 5、12 条）：上限提到 15MB，新增文本 / 次数 / 改名 */
+  t('★v4.9.1 文件中转站：6 位取件码、15MB 上限、次数与文本、防网页渲染',
+    /randStr\(6\)/.test(apiFiles711) && /MAX_BYTES = 15 \* 1024 \* 1024/.test(apiFiles711)
+    && /application\/octet-stream/.test(apiFiles711) && /filename\*=UTF-8/.test(apiFiles711)
+    && /action === 'text'/.test(apiFiles711) && /action === 'ren'/.test(apiFiles711)
+    && /maxGet/.test(apiFiles711));
   t('★v4.7.11 中转站用 XHR 才有真实上传进度',
     /xhr\.upload\.onprogress/.test(app711) && /id="flMask"/.test(idx711));
 
@@ -13003,8 +13008,9 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /exApplyZoom/.test(app711) && /addEventListener\('wheel'/.test(app711) && /\.ex-paper\.zoomed/.test(idx711));
 
   /* ⑩ 后台图标回首页 */
-  t('★v4.7.11 后台左上角图标链接回前台首页',
-    /<a class="side-brand" href="index\.html"/.test(idx711.replace(/\n/g, ' ')) || /<a class="side-brand" href="index\.html"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+  t('★v4.9.1 后台左上角图标一次点击直达前台首页',
+    /<a class="side-brand" href="index\.html#\/home"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8'))
+    && /function goFrontHome\(\)/.test(fs.readFileSync(new URL('./admin-2.js', import.meta.url), 'utf8')));
 
   /* ⑪ 假期按时刻生效 */
   t('★v4.7.11 假期从开始时刻生效，白天仍显示当天课表',
@@ -13029,6 +13035,91 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   /* ⑮ 大屏字号封顶 */
   t('★v4.7.11 大屏右栏字号封顶 1.35 倍，避免放大后显示不全',
     /--bhw-fs-s:min\(var\(--bhw-fs,1\),1\.35\)/.test(idx711));
+}
+
+/* ============================================================================
+ * v4.9.1（站主 12 条）
+ * ========================================================================== */
+{
+  const idx9 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const app9 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const big9 = fs.readFileSync(new URL('./big.js', import.meta.url), 'utf8');
+  const pick9 = fs.readFileSync(new URL('./pickfx.js', import.meta.url), 'utf8');
+  const files9 = fs.readFileSync(new URL('./api/files.js', import.meta.url), 'utf8');
+  const adm29 = fs.readFileSync(new URL('./admin-2.js', import.meta.url), 'utf8');
+
+  /* ① 全量缓存 */
+  t('★v4.9.1 只读接口走本地缓存（缓存优先 + 后台静默更新）',
+    /function apiCacheKey\(path\)/.test(app9) && /API_CACHE_TTL/.test(app9)
+    && /apiCachePut\(ck, j\)/.test(app9) && /if\(fresh\)\{/.test(app9)
+    && app9.includes("'/scores?action=board&exam="));
+  t('★v4.9.1 离线时优先返回缓存，不再直接抛错',
+    /if\(cached\) return Promise\.resolve\(cached\.v\)/.test(app9));
+  t('★v4.9.1 清缓存重载会一并清掉接口缓存',
+    /apiCacheClear\(\)/.test(app9) && /function apiCacheClear/.test(app9));
+
+  /* ② 作业按时间排序 */
+  t('★v4.9.1 作业期次按时间排序（不再按录入顺序倒序）',
+    /function hwSortDesc\(list\)/.test(big9) && /hwSortDesc\(list\)\.map/.test(big9)
+    && !/list\.slice\(\)\.reverse\(\)\.map/.test(big9)
+    && /var ordered = all\.slice\(\)\.sort/.test(app9));
+
+  /* ③ 大屏作业页顶栏 */
+  t('★v4.9.1 大屏作业页顶栏高度翻倍、内容贴下沿',
+    /min-height:calc\(96px\*var\(--bhw-fs,1\)\)/.test(idx9)
+    && /\.bhw-top\{[\s\S]{0,200}?align-items:flex-end/.test(idx9)
+    && /html\.big-hw \.sidebar/.test(idx9));
+
+  /* ④ 首页信息栏 */
+  t('★v4.9.1 大屏首页信息栏加高、班徽不再被裁',
+    /html\.big-mode \.content>header\{[\s\S]{0,160}?min-height:96px/.test(idx9)
+    && /html\.big-mode \.content>header \.logo\{[\s\S]{0,160}?position:static/.test(idx9));
+
+  /* ⑥ 宝箱每轮等长 */
+  t('★v4.9.1 宝箱连抽每轮时长一致（都是完整减速）',
+    /var dur = 2900;/.test(pick9) && !/round === 0 \? 2900 : 1600/.test(pick9));
+
+  /* ⑦ 批量删除打勾 */
+  t('★v4.9.1 点名批量管理点击后真出现勾',
+    /el\.textContent = BIG\.pick\.sel\[k\] \? '✓' : ''/.test(big9));
+
+  /* ⑧ 天气总览进弹窗 */
+  t('★v4.9.1 天气总览在弹窗顶部，班级岛不再有该条',
+    /id="islWxOv"/.test(idx9) && !/id="islWxBar"/.test(idx9)
+    && /function islWxOpen\(\)\{[\s\S]{0,300}?islandWeather/.test(app9));
+
+  /* ⑨ 成绩分析 */
+  t('★v4.9.1 打印均分不会再因为 Number(null) 变 0',
+    /if\(raw == null \|\| raw === ''\) return;/.test(app9)
+    && /var avg = cnt \?/.test(app9));
+  t('★v4.9.1 直方图柱子改名 sc-hbar，打印不再被工具条规则吃掉',
+    /class="sc-hbar"/.test(app9) && /\.sc-hbar\{/.test(idx9)
+    && !/\.sc-hb \.sc-bar\{/.test(idx9));
+  t('★v4.9.1 打印时成绩分析块绝对定位到纸面顶端（消除整页空白）',
+    /\.sc-embed\{background:#fff !important;[\s\S]{0,200}?position:absolute !important/.test(idx9));
+  t('★v4.9.1 画像下拉按学号排序',
+    /studentId == null \? '' : a\.studentId/.test(app9) && /var order = SC\.rows\.slice\(\)\.sort/.test(app9));
+
+  /* ⑩ 导出预览 */
+  t('★v4.9.1 导出预览打开时自动关掉作业窗口',
+    /closeHwCurrent\(\)[\s\S]{0,200}?mask\.classList\.add\('show'\)/.test(app9));
+  t('★v4.9.1 导出预览放大真的放大（禁止 flex 收缩 + 鼠标锚点）',
+    /\.ex-paper\.zoomed\{max-width:none;flex:0 0 auto\}/.test(idx9)
+    && /exApplyZoom\(\{ x: e\.clientX/.test(app9));
+
+  /* ⑪ 后台回首页 */
+  t('★v4.9.1 后台右上角首页按钮回后台数据概览',
+    /\$\('btnBackHome'\)\.onclick = function\(\)\{ go\('overview'\)/.test(adm29));
+  t('★v4.9.1 前台启动识别 cls_force_home，直接铺首页',
+    /cls_force_home/.test(app9) && /if\(force\)\{/.test(app9));
+
+  /* ⑫ 文件中转站 */
+  t('★v4.9.1 中转站前端四个页签 + 历史管理',
+    /data-fltab="txt"/.test(idx9) && /data-fltab="hist"/.test(idx9)
+    && /function flHistRender\(\)/.test(app9) && /data-flact="ren"/.test(app9));
+  t('★v4.9.1 中转站取满次数自动删原件、计数用独立短键',
+    /kv\.put\('fc:' \+ code/.test(files9) && /kv\.delete\('f:' \+ code\)/.test(files9)
+    && /TTL_CHOICES = \[1, 7, 30, 180\]/.test(files9));
 }
 
 console.log('\n' + '='.repeat(52));

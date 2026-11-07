@@ -1248,8 +1248,14 @@ html[data-lite="1"] .modal-mask{background:rgba(41,37,36,.62)!important}
   <div class="scrim" id="scrim"></div>
 
   <aside class="side" id="side">
-    <!-- v4.7.11（站主第 10 条）：点左上角这个图标直接回前台首页 -->
-    <a class="side-brand" href="index.html" title="返回前台首页" style="text-decoration:none;color:inherit">
+    <!-- v4.7.11（站主第 10 条）：点左上角这个图标直接回前台首页
+         v4.9.1（站主第 11 条）：「第一次点又回到后台登录界面，第二次点才到首页」。
+         真因：直接 href 过去时，sessionStorage 里可能还留着上一轮的「登录后要去哪」
+         （cls_next，比如之前被弹回登录页时记下的 admin.html），首页启动后按它又把人
+         送了回来 —— 第二次因为没有这条记录了，才正常落到首页。
+         这里改成「先清现场 + 明确要求首页」，一次点到位。 -->
+    <a class="side-brand" href="index.html#/home" title="返回前台首页"
+       onclick="return goFrontHome()" style="text-decoration:none;color:inherit">
       <div class="mark ink-auto">班</div>
       <div>
         <h1>管理后台</h1>
@@ -1811,14 +1817,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '4.7.11';
+var SITE_VERSION = '4.9.1';
 var VER_DATE = '2026-11-07';
 </script>
 <!-- v3.19.0：后台脚本按顶层横幅拆成三段（各 <120KB gzip），共享全局作用域，
      顺序固定，不能调换或异步加载。 -->
-<script src="./fs-keep.js?v=4711"></script>
-<script src="./admin-1.js?v=4711"></script>
-<script src="./admin-2.js?v=4711"></script>
-<script src="./admin-3.js?v=4711"></script>
+<script src="./fs-keep.js?v=491"></script>
+<script src="./admin-1.js?v=491"></script>
+<script src="./admin-2.js?v=491"></script>
+<script src="./admin-3.js?v=491"></script>
 </body>
 </html>

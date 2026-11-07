@@ -1186,6 +1186,32 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .fl-card{margin-top:14px;border:1px solid rgba(120,53,15,.14);border-radius:14px;padding:14px;background:var(--bg-2)}
 .fl-card b{display:block;font-size:.95rem;word-break:break-all;margin-bottom:4px}
 .fl-card .m{font-size:.74rem;color:var(--fg-3);line-height:1.6;margin-bottom:10px}
+/* v4.9.1（站主第 12 条）：发文本 / 公共选项 / 历史 / 结果链接 */
+.fl-ta{width:100%;box-sizing:border-box;resize:vertical;min-height:110px;
+  border:1.5px solid rgba(120,53,15,.2);background:var(--bg-2);color:var(--fg);
+  border-radius:12px;padding:10px 12px;font-size:.86rem;line-height:1.65;font-family:inherit}
+.fl-ta:focus{outline:none;border-color:var(--grad-a)}
+.fl-opts{padding:0 18px 6px}
+.fl-opts.hide{display:none}
+.fl-opts .fl-row{margin:10px 0 4px}
+.fl-tip{font-size:.7rem;color:var(--fg-3);line-height:1.6;margin:6px 0 2px}
+.fl-link{font-size:.74rem;color:var(--fg-3);background:var(--bg-2);border:1px dashed rgba(120,53,15,.2);
+  border-radius:10px;padding:8px 10px;margin:0 0 10px;word-break:break-all;line-height:1.6}
+.fl-hist{display:flex;flex-direction:column;gap:9px;margin:4px 0 12px;max-height:min(52vh,460px);overflow:auto}
+.fl-hist-item{border:1px solid rgba(120,53,15,.14);border-radius:13px;padding:11px 12px;background:var(--bg-2)}
+.fl-hist-item.dead{opacity:.6}
+.fl-hist-top{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.fl-hist-top b{font-size:.86rem;word-break:break-all;flex:1;min-width:0}
+.fl-hist-tag{flex:none;font-size:.66rem;font-weight:800;border-radius:999px;padding:2px 7px;
+  background:var(--tint-2);color:var(--accent-ink)}
+.fl-hist-meta{font-size:.72rem;color:var(--fg-3);line-height:1.6;margin-bottom:8px;word-break:break-all}
+.fl-hist-acts{display:flex;gap:6px;flex-wrap:wrap}
+.fl-mini{border:1px solid rgba(120,53,15,.18);background:var(--bg-1);color:var(--fg-2);
+  border-radius:8px;padding:4px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit}
+.fl-mini:hover{border-color:var(--grad-a);color:var(--accent-ink)}
+.fl-mini.danger{color:#b91c1c;border-color:rgba(185,28,28,.28)}
+.fl-hist-empty{font-size:.78rem;color:var(--fg-3);text-align:center;padding:24px 0;line-height:1.7}
+
 @media (max-width:420px){ .fl-code{font-size:1.7rem} }
 /* 版本更新弹窗（v4.7.11） */
 .up-mask{position:fixed;inset:0;background:rgba(24,16,10,.55);backdrop-filter:blur(4px);
@@ -1226,11 +1252,15 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .ex-paper{background:#fff;box-shadow:0 6px 24px rgba(0,0,0,.14);max-width:100%;margin:0 auto}
 .ex-paper canvas{display:block;max-width:100%;max-height:calc(94vh - 190px);width:auto;height:auto;margin:0 auto}
 /* v4.7.11（站主第 9 条）：电脑端预览支持滚轮放大。放大后靠宽度撑开，
-   而不是 transform —— transform 放大的部分滚动条够不到，右半边会看不见。 */
-.ex-paper.zoomed{max-width:none}
+   而不是 transform —— transform 放大的部分滚动条够不到，右半边会看不见。
+   v4.9.1（站主第 10 条）：「百分号在加，但画面没放大」的真因 ——
+   .ex-stage 是 flex 容器，.ex-paper 是 flex item，宽度设成 200% 会被
+   flex-shrink 立刻压回容器宽度，于是只有数字在变。这里禁止收缩，
+   并且放大后改成左对齐，否则居中溢出会把左半边顶到滚动条够不到的地方。 */
+.ex-paper.zoomed{max-width:none;flex:0 0 auto}
 .ex-paper.zoomed canvas{max-width:none;max-height:none;width:100%;height:auto}
 .ex-zoom{font-size:.68rem;font-weight:700;color:#a8a29e;margin-left:8px}
-.ex-stage.zooming{cursor:grab}
+.ex-stage.zooming{cursor:grab;justify-content:flex-start;align-items:flex-start}
 .ex-stage.dragging{cursor:grabbing;user-select:none}
 .ex-loading{color:#8a7f76;font-size:.82rem;padding:40px 0}
 .ex-panel{width:262px;flex:0 0 262px;padding:14px 16px;overflow:auto;border-left:1px solid #efe4d9;background:#fffdfb}
@@ -1783,13 +1813,18 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .island-banner.hol{background:rgba(255,255,255,.14);border-style:dashed}
 .island-banner.hol .tag{color:#fff;background:rgba(255,255,255,.20);border-color:rgba(255,255,255,.28)}
 .isl-hol-sub{font-size:.74em;opacity:.72;white-space:nowrap}
-/* v4.7.11（站主第 3 条）：班级岛天气总览 —— 图标换成 SVG，右排一句建议 */
+/* v4.9.1（站主第 8 条）：天气总览从「班级岛里的一条」搬到**天气弹窗顶部**。
+   .island-wxbar 这个类名保留（JS 里的 .isl-wx-* 子元素照旧），只是换了位置和皮肤：
+   弹窗里是白底卡片，配色要跟着弹窗走，不能再半透明。 */
 .island-wxbar{
   display:flex;align-items:center;gap:7px;flex-wrap:wrap;
-  margin:0 2px 2px;padding:7px 11px;border-radius:12px;
-  background:linear-gradient(135deg,rgba(56,148,255,.10),rgba(251,191,36,.12));
-  border:1px solid rgba(56,148,255,.16);font-size:.78rem;color:var(--fg-2);
+  margin:2px 0 10px;padding:10px 13px;border-radius:13px;
+  background:linear-gradient(135deg,rgba(56,148,255,.10),rgba(251,191,36,.14));
+  border:1px solid rgba(56,148,255,.18);font-size:.84rem;color:var(--fg-2);
 }
+.dark .island-wxbar{background:linear-gradient(135deg,rgba(56,148,255,.14),rgba(251,191,36,.10));
+  border-color:rgba(56,148,255,.24)}
+.island-wxbar .isl-wx-tip{font-size:.76rem}
 .isl-wx-ico{width:26px;height:26px;flex:0 0 auto}
 .isl-wx-city{font-weight:800;color:var(--fg)}
 .isl-wx-name{font-weight:700;color:var(--accent-ink)}
@@ -2692,7 +2727,7 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .dark .sc-svg text.sc-mk-mid{fill:#c9b8aa}
 .dark .sc-svg .sc-cut-line{stroke:#e8b184}             /* 分数线：配置色（默认 #b45309）暗底不可读，统一提亮 */
 .dark .sc-svg .sc-cut-txt{fill:#e8b184}
-.dark .sc-svg .sc-bar{fill:#c98d5e}                    /* 直方图柱 */
+.dark .sc-svg .sc-hbar{fill:#c98d5e}                    /* 直方图柱 */
 .dark .sc-svg .sc-bar-num{fill:#fdba74}                /* 柱顶人数 */
 .dark .sc-svg .sc-grade-line{stroke:#c4b5fd}           /* 年级排名折线（旧 #7c3aed 暗底仅 1.97） */
 .dark .sc-svg .sc-grade-dot{fill:#c4b5fd}
@@ -2929,9 +2964,9 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .sc-qchip.me{background:#fff3ea;border-color:#f5c9a8;color:#c2410c}
 /* 总分分布：点柱子看分段名单（v3.14.0） */
 .sc-hb{cursor:pointer}
-.sc-hb .sc-bar{transition:fill .15s}
-.sc-hb:hover .sc-bar{fill:#e8b183}
-.sc-hb.on .sc-bar{fill:#c2410c}
+.sc-hb .sc-hbar{transition:fill .15s}
+.sc-hb:hover .sc-hbar{fill:#e8b183}
+.sc-hb.on .sc-hbar{fill:#c2410c}
 .sc-hb.on .sc-bar-num{fill:#c2410c}
 .sc-hlist{display:flex;flex-direction:column;gap:1px;margin-top:4px;max-height:280px;overflow:auto;
   -webkit-overflow-scrolling:touch}
@@ -2967,8 +3002,8 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .dark .sc-hrow .n{color:#e7ddd3}
 .dark .sc-hrow .r{color:#9a8b7c}
 .dark .sc-hrow.me .n{color:#fb923c}
-.dark .sc-hb:hover .sc-bar{fill:#8a6440}
-.dark .sc-hb.on .sc-bar{fill:#fb923c}
+.dark .sc-hb:hover .sc-hbar{fill:#8a6440}
+.dark .sc-hb.on .sc-hbar{fill:#fb923c}
 .dark .sc-hb.on .sc-bar-num{fill:#fb923c}
 
 /* 点某个圆点 → 这一个人的明细（v3.1.1） */
@@ -3479,6 +3514,18 @@ body.sc-printing .sc-embed *{
 }
 @media print{
   @page{margin:12mm}
+  /* v4.9.1（站主第 9 条）：纸上「前面一大段空白」的真因 ——
+     打印规则用的是 `body *{visibility:hidden}`：隐藏但**照样占位置**，
+     于是作业页 / 首页那一整屏元素把成绩分析顶到了第二、第三页。
+     这里把成绩分析块直接绝对定位到纸的左上角，前面的空白就没了。 */
+  .sc-embed{
+    position:absolute !important;left:0 !important;top:0 !important;
+    right:0 !important;width:auto !important;
+  }
+  html,body{height:auto !important;overflow:visible !important}
+  /* v4.9.1：打印期间成绩分析块被 JS 临时挪成 body 的直接子元素，
+     其余内容整块不排版 —— 否则前面那些隐藏元素照样占版面，白白多出好几页空白。 */
+  body.sc-printing-iso > *:not(.sc-embed){display:none !important}
   /* v4.7.11：纸上要有标题 / 班徽 / 基本信息 / 生成时间 */
   .sc-embed .sc-print-head{
     display:flex !important;align-items:center;gap:14px;
@@ -3489,12 +3536,16 @@ body.sc-printing .sc-embed *{
   .sc-embed .sc-ph-title{font-size:17pt;font-weight:900;color:#292524;letter-spacing:.02em;line-height:1.25}
   .sc-embed .sc-ph-meta{font-size:9.5pt;color:#57534e;margin-top:4px}
   .sc-embed .sc-ph-time{font-size:8.5pt;color:#78716c;text-align:right;white-space:nowrap;line-height:1.55}
-  html,body{background:#fff !important}
+  /* v4.9.1：纸面只留白 —— 自定义背景图/渐变也不印，否则右下角会带一片色块 */
+  html,body{background:#fff !important;background-image:none !important}
   body *{visibility:hidden !important}
   .sc-embed,.sc-embed *{visibility:visible !important}
   .sc-embed{background:#fff !important;border:none !important;border-radius:0 !important;
     box-shadow:none !important;margin:0 !important;overflow:visible !important;
-    position:static !important}
+    position:absolute !important;left:0 !important;top:0 !important;right:0 !important;width:auto !important}
+  /* ⚠️ 这里的 .sc-bar 是**顶部分段工具条**，不是直方图的柱子。
+     v4.9.1 起直方图的柱子改叫 .sc-hbar（原来同名，打印时被这条规则一起 display:none，
+     站主看到的「总分分布柱子印不出来」就是它）。 */
   .sc-embed .sc-bar,
   .sc-embed .sc-tabs,
   .sc-embed .sc-seg{display:none !important}
@@ -3578,6 +3629,15 @@ body.sc-printing .sc-embed *{
   .sc-embed .sc-svg{min-width:0 !important}
   .sc-embed .sc-pos-me span{background:#292524 !important;color:#fff !important;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  /* v4.9.1（站主第 9 条）：分数段那根四色横条、上线情况的彩色圆点，全靠
+     background 上色；浏览器打印默认「不印背景色和背景图」，于是纸上是空的。
+     这里对成绩分析里所有用背景上色的元素强制按原色输出。 */
+  .sc-embed, .sc-embed *{
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+    color-adjust:exact !important;
+  }
 
   /* ---- ④ v3.5.12（#7）：按勾选项隐藏。用 display:none 才真的不占纸面 ---- */
   .sc-embed .print-hide{display:none !important}
@@ -4160,6 +4220,24 @@ html.big-mode .content>header{padding:18px 22px;border-radius:18px;margin-bottom
 html.big-mode .content>header h1{font-size:1.45rem;line-height:1.3}
 html.big-mode .content>header p#brandSub{display:none}
 html.big-mode .content>header .logo{width:46px;height:46px;margin-top:8px}
+/* v4.9.1（站主第 4 条）：「大屏服务首页的信息栏可以长一点，班徽都显示不全了」。
+   原样：header 只有 8~18px 内边距（约 46~60px 高），而 .logo 是 position:absolute;
+   top:20px; right:20px 的 72px 方块 —— 顶出容器下沿，被卡片压掉一半。
+   电脑 / 大屏下改成「一行 flex」：标题吃掉剩余宽度，班徽按自身尺寸稳稳站在右边，
+   容器给足 min-height，班徽再也不会被裁。 */
+@media(min-width:900px){
+  html.big-mode .content>header{
+    display:flex;align-items:center;gap:20px;
+    min-height:96px;padding:16px 24px;
+  }
+  html.big-mode .content>header h1{
+    flex:1 1 auto;min-width:0;text-align:left;margin:0;
+  }
+  html.big-mode .content>header .logo{
+    position:static;order:9;flex:0 0 62px;
+    width:62px;height:62px;margin:0 46px 0 0;
+  }
+}
 html.big-mode footer{margin-top:18px}
 
 /* —— 图标墙 —— */
@@ -4229,21 +4307,38 @@ html.big-mode .tab-page h2{font-size:1.3rem}
     'Source Han Sans SC','Noto Sans CJK SC',system-ui,sans-serif;
   font-family:var(--bhw-font);
 }
-html.big-mode.big-hw #bigHw{display:block}
+html.big-hw #bigHw{display:block}
 html.big-mode.big-hw #homeView,html.big-mode.big-hw #grid{display:none!important}
-/* 作业页是「专用页」：把全站导航、页头大标题、页脚全部收掉 */
-html.big-mode.big-hw .sidebar,
-html.big-mode.big-hw .content>header,
-html.big-mode.big-hw footer{display:none!important}
-html.big-mode.big-hw .layout{padding:0!important;max-width:none}
-html.big-mode.big-hw .content{padding:0}
+/* 作业页是「专用页」：把全站导航、页头大标题、页脚全部收掉。
+   v4.9.1（站主第 3 条）：不再要求 html 上带 big-mode —— 普通模式下直接打开
+   作业查看也会进这一页，那条顶部导航同样要收掉，否则会压在作业顶栏上。 */
+html.big-hw .sidebar,
+html.big-hw .content>header,
+html.big-hw footer{display:none!important}
+html.big-hw .layout{padding:0!important;max-width:none}
+html.big-hw .content{padding:0}
+html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!important}
 
-/* —— 顶栏 —— */
+/* —— 顶栏 ——
+   v4.9.1（站主第 3 条）：「最顶栏再往下延长一倍，把所有信息都放到下面那一半，
+   因为上面那一半正好跟课表差不多大，课表有时候会把下面的东西挡住。」
+   做法：整条高度翻倍（min-height 96px），内容一律贴着下沿排（align-items:flex-end），
+   上面那半留纯色空档，被什么盖住都不影响按钮。 */
 .bhw-top{
-  display:flex;align-items:center;gap:14px;padding:9px 18px;margin-bottom:10px;
+  display:flex;align-items:flex-end;gap:14px;
+  padding:calc(30px*var(--bhw-fs,1)) 18px 13px;min-height:calc(96px*var(--bhw-fs,1));
+  margin:0 0 10px;
   background:linear-gradient(135deg,#7c2d12,#9a3412);color:#fff;border-radius:0 0 16px 16px;
-  box-shadow:0 6px 18px rgba(124,45,18,.18);
+  box-shadow:0 6px 18px rgba(124,45,18,.18);position:relative;z-index:950;
 }
+/* 上半段那条更暗的「安全区」，让空档看起来是有意留的，不是没对齐 */
+.bhw-top::before{
+  content:'';position:absolute;left:0;right:0;top:0;
+  height:calc(30px*var(--bhw-fs,1));
+  background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,0));
+  border-radius:0 0 10px 10px;pointer-events:none;
+}
+.bhw-top>*{position:relative;z-index:1}
 .bhw-back{
   border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);color:#fff;
   border-radius:11px;padding:7px 13px;font-size:calc(.86rem*var(--bhw-fs));font-weight:700;
@@ -5237,9 +5332,9 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
    字号仍留在 1rem 上下，后排看得清；格子改成居中对齐，项数少的组不会歪在左边。 */
 @media(min-width:1600px){
   html.big-mode .layout{padding:6px 18px 4px}
-  html.big-mode .content>header{padding:8px 18px;margin-bottom:7px;border-radius:15px}
-  html.big-mode .content>header h1{font-size:1.14rem}
-  html.big-mode .content>header .logo{width:32px;height:32px;margin-top:2px}
+  html.big-mode .content>header{padding:12px 18px;margin-bottom:7px;border-radius:15px;min-height:82px}
+  html.big-mode .content>header h1{font-size:1.2rem}
+  html.big-mode .content>header .logo{width:52px;height:52px;flex:0 0 52px;margin:0 44px 0 0}
   html.big-mode footer{margin-top:5px;font-size:.68rem;line-height:1.45}
   html.big-mode .big-group{margin:2px 0 0}
   html.big-mode .big-group h2{margin:0 0 5px;font-size:.82rem}
@@ -5259,7 +5354,8 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   html.big-mode #uiSetBtn{margin-left:0!important}
   html.big-mode .content>header{padding:14px 16px;border-radius:16px}
   html.big-mode .content>header h1{font-size:1.05rem;line-height:1.4;word-break:break-word}
-  html.big-mode .content>header .logo{width:34px;height:34px;margin:0 0 4px}
+  /* v4.9.1：窄屏也保留右侧 44px 给主题按钮，班徽不会跟它叠在一起 */
+  html.big-mode .content>header .logo{width:34px;height:34px;margin:0 44px 4px 0}
   html.big-mode .layout{padding:10px 10px 30px}
 }
 @media(max-width:760px){
@@ -5480,8 +5576,9 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
 </div>
 
 <!-- ===== 班级签 / 彩带彩蛋弹窗 ===== -->
-<!-- ===== 文件中转站（v4.7.11 站主第 6 条）=====
-     手机 ↔ 电脑 ↔ 班级电脑传几兆以内的小文件：上传拿 6 位取件码，另一台输码下载。 -->
+<!-- ===== 文件中转站（v4.7.11 站主第 6 条 · v4.9.1 站主第 12 条扩充）=====
+     手机 ↔ 电脑 ↔ 班级电脑传小文件 / 一段文本：发出去拿 6 位取件码，
+     另一台输码就能取。可以设保存天数、最多被取几次，也能在「历史」里改名 / 删除。 -->
 <div class="fl-mask" id="flMask">
   <div class="fl-box">
     <div class="fl-head">
@@ -5489,34 +5586,53 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
       <button type="button" onclick="closeFiles()" aria-label="关闭">✕</button>
     </div>
     <div class="fl-tabs">
-      <button type="button" class="on" data-fltab="up" onclick="flTab('up')">上传</button>
+      <button type="button" class="on" data-fltab="up" onclick="flTab('up')">发文件</button>
+      <button type="button" data-fltab="txt" onclick="flTab('txt')">发文本</button>
       <button type="button" data-fltab="get" onclick="flTab('get')">取件</button>
+      <button type="button" data-fltab="hist" onclick="flTab('hist')">历史</button>
     </div>
 
     <div class="fl-pane" id="flPaneUp">
       <label class="fl-drop" id="flDrop">
         <input type="file" id="flFile" style="display:none">
         <b>点击选择文件</b>
-        <span>也可以直接把文件拖进这个框　·　单个不超过 4MB</span>
+        <span>也可以直接把文件拖进这个框　·　单个不超过 15MB</span>
       </label>
+      <div class="fl-prog" id="flProg"><i id="flProgIn"></i></div>
+      <div class="fl-msg" id="flMsg"></div>
+    </div>
+
+    <div class="fl-pane" id="flPaneTxt" style="display:none">
+      <textarea id="flText" class="fl-ta" rows="6" maxlength="20000"
+        placeholder="把要传的文本贴在这里（作业答案、题目、链接……最多 2 万字）"></textarea>
+      <div class="fl-msg" id="flMsgTxt"></div>
+    </div>
+
+    <!-- 公共选项：发文件 / 发文本都要用，所以放外面，切页签不会丢 -->
+    <div class="fl-opts" id="flOpts">
       <div class="fl-row">
         <span>保存</span>
         <div class="fl-seg" id="flTtl">
           <button type="button" data-ttl="1">1 天</button>
           <button type="button" data-ttl="7" class="on">7 天</button>
           <button type="button" data-ttl="30">30 天</button>
+          <button type="button" data-ttl="180">半年</button>
         </div>
       </div>
-      <div class="fl-prog" id="flProg"><i id="flProgIn"></i></div>
-      <div class="fl-msg" id="flMsg"></div>
-      <div class="fl-done" id="flDone">
-        <div class="fl-code" id="flCode">------</div>
-        <div class="fl-code-tip">在另一台设备打开本站 → 侧边栏「文件中转站」→ 取件，输入这 6 位</div>
-        <div class="fl-acts">
-          <button type="button" class="fl-btn" id="flCopyCode">复制取件码</button>
-          <button type="button" class="fl-btn ghost" id="flDel">删除这个文件</button>
+      <div class="fl-row">
+        <span>可取</span>
+        <div class="fl-seg" id="flMax">
+          <button type="button" data-max="0" class="on">不限</button>
+          <button type="button" data-max="1">1 次</button>
+          <button type="button" data-max="3">3 次</button>
+          <button type="button" data-max="5">5 次</button>
         </div>
       </div>
+      <div class="fl-row">
+        <span>备注</span>
+        <input id="flMemo" class="fl-in" maxlength="60" placeholder="给自己看的标记，可不填">
+      </div>
+      <div class="fl-tip" id="flOptTip">取满次数后自动删除原件；到期也会自动消失。</div>
     </div>
 
     <div class="fl-pane" id="flPaneGet" style="display:none">
@@ -5526,6 +5642,27 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
       </div>
       <div class="fl-msg" id="flMsg2"></div>
       <div class="fl-card" id="flCard" style="display:none"></div>
+    </div>
+
+    <div class="fl-pane" id="flPaneHist" style="display:none">
+      <div class="fl-msg" id="flMsgHist"></div>
+      <div class="fl-hist" id="flHist"></div>
+    </div>
+
+    <!-- 发成功后的结果卡：四个页签共用一张（关掉面板就消失，记录还在「历史」里） -->
+    <div class="fl-pane" id="flDonePane" style="display:none">
+      <div class="fl-code" id="flCode">------</div>
+      <div class="fl-code-tip" id="flCodeTip">在另一台设备打开本站 → 「文件中转站」→ 取件，输入这 6 位。<br>也可将下方链接直接发送给对方，点击即可下载。</div>
+      <div class="fl-link" id="flLink"></div>
+      <div class="fl-acts">
+        <button type="button" class="fl-btn" id="flCopyCode">复制取件码</button>
+        <button type="button" class="fl-btn" id="flCopyLink">复制链接</button>
+      </div>
+      <div class="fl-acts" style="margin-top:8px">
+        <button type="button" class="fl-btn ghost" id="flShare">分享</button>
+        <button type="button" class="fl-btn ghost" id="flDel">删除</button>
+        <button type="button" class="fl-btn ghost" id="flDoneBack">再发一个</button>
+      </div>
     </div>
   </div>
 </div>
@@ -6251,6 +6388,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           <div><b id="islWxTitle">修水 · 接下来 24 小时</b><span class="isl-wx-sub" id="islWxSub"></span></div>
           <button class="isl-wx-close" onclick="islWxClose()" aria-label="关闭">✕</button>
         </div>
+        <!-- v4.9.1（站主第 8 条）：今日总览（城市 / 天气 / 最高最低 / 一句建议）就放这儿 -->
+        <div class="island-wxbar" id="islWxOv" style="display:none;margin:0 10px 6px"></div>
         <div class="isl-wx-body" id="islWxBody"><div class="isl-wx-load">天气加载中</div></div>
         <div class="isl-wx-tip">数据来源 Open-Meteo</div>
       </div>
@@ -7158,18 +7297,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.7.11';
+var SITE_VERSION = '4.9.1';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4711" defer></script>
-<script src="./app.min.js?v=4711" defer></script>
+<script src="./auth-bus.js?v=491" defer></script>
+<script src="./app.min.js?v=491" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4711" defer></script>
-<script src="./big.js?v=4711" defer></script>
+<script src="./fs-keep.js?v=491" defer></script>
+<script src="./big.js?v=491" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4711" defer></script>
+<script src="./pickfx.js?v=491" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

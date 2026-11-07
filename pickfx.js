@@ -447,7 +447,13 @@
       if (!win) { finale(); later(finish, 900); return; }
       picked.push(win);
 
-      var M = isLite() ? 16 : 24;
+      /* v4.9.1（站主第 6 条）：「连抽 10 次，第一次是从快到慢，后面几次就动一下下」。
+         ① 条带长度跟着池子上限走 —— 池里有多少人就铺多少张（最多 60），
+            看起来才像「把整个库都轮了一遍」；
+         ② 每一轮的长度和时长完全一致（下面 dur 不再按 round 打折），
+            于是每一次都是「从头快到尾慢」，不会第二轮显得敷衍。 */
+      var M = Math.min(60, Math.max(24, pool.length));
+      if (isLite()) M = Math.min(M, 24);
       /* 中奖卡放在偏后位置：左右都要留出「小跳」的余量，否则位移会撞到两端 */
       var at = Math.max(4, M - 9);
       var tiles = [];
@@ -476,7 +482,8 @@
       /* 撞到端点时放弃这次小跳，保证落点仍然在中奖卡上 */
       if (Math.abs(landX - winX) < 1) landX = winX;
 
-      var dur = (round === 0 ? 2900 : 1600);
+      /* 每一轮都跑满同样的时长（原来第 2 轮起砍到 1600ms，观感上就是「敷衍动一下」） */
+      var dur = 2900;
       if (isLite()) dur = Math.round(dur * 0.82);
       if (reduced()) dur = 600;
       var t0 = performance.now(), lastPx = 0;

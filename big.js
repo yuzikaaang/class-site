@@ -563,6 +563,22 @@
     return (data().holidayHomeworks || []);
   }
 
+  /* v4.9.1（站主第 2 条）：「作业筛选按时间顺序来，不能按我添加的顺序」。
+     期次下拉 / 历史列表原来直接 list.slice().reverse() —— 那是**录入顺序**倒过来，
+     后补录的旧假期会排到最前面。这里统一按开始日期（缺则结束日期）排，
+     同一天的再按结束日期、标题兜底，保证每次打开顺序都一样。 */
+  function hwSortDesc(list){
+    return (list || []).slice().sort(function (a, b){
+      var x = String((a && (a.start || a.end)) || '');
+      var y = String((b && (b.start || b.end)) || '');
+      if(x !== y) return x < y ? 1 : -1;
+      var xe = String((a && a.end) || ''), ye = String((b && b.end) || '');
+      if(xe !== ye) return xe < ye ? 1 : -1;
+      return String((a && a.title) || '') < String((b && b.title) || '') ? 1 : -1;
+    });
+  }
+  BIG.hwSortDesc = hwSortDesc;
+
   /* v4.3.0（站主第 4 条）：没手动选期次时，只认「今天落在起止日期之内」的那一期。
      以前兜底取 list 最后一条 —— 那是「上一次作业」，学生放假回来第一天看到的是旧作业，
      会以为今天还要写。现在没有就返回 null，页面显示「当前没有作业」。 */
@@ -863,7 +879,7 @@
     if(act){
       var sel = '<select class="bhw-sel" onchange="BIG.hwPick(this.value)" title="切换作业期次">'
         + '<option value="">当前作业</option>'
-        + list.slice().reverse().map(function (x){
+        + hwSortDesc(list).map(function (x){
             return '<option value="' + attr0(x.id) + '"'
               + (hw && String(x.id) === String(hw.id) ? ' selected' : '') + '>'
               + esc0(x.title || '未命名') + '</option>';
@@ -1906,7 +1922,7 @@
     if(body){
       body.innerHTML = '<label class="bhw-io-all"><input type="checkbox" id="bhwIoAll" checked'
         + ' onchange="BIG.ioAll(this.checked)"> 全选（' + list.length + ' 期）</label>'
-        + list.slice().reverse().map(function (x){
+        + hwSortDesc(list).map(function (x){
             var n = (x.items || []).length;
             var cnt = 0;
             (x.items || []).forEach(function (it){ cnt += (it.tasks || []).length; });
@@ -2309,6 +2325,11 @@
     if(BIG.pick.sel[k]) delete BIG.pick.sel[k];
     else BIG.pick.sel[k] = 1;
     if(el && el.parentNode) el.parentNode.classList.toggle('on', !!BIG.pick.sel[k]);
+    /* v4.9.1（站主第 7 条）：「批量删除那个不会打勾，虽然显示，但框里没有勾」。
+       真因：勾是**渲染时**写进按钮文字里的（'✓' 或空），点一下只改了父元素的
+       .on 类（只换背景色），从来没改过这行文字 —— 于是框变色了但没有勾。
+       这里点的时候把文字一起写掉。 */
+    if(el) el.textContent = BIG.pick.sel[k] ? '✓' : '';
     var b = document.getElementById('bpickSelDel');
     if(b){
       var n = Object.keys(BIG.pick.sel).length;

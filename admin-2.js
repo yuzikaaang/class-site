@@ -3885,6 +3885,25 @@ function openForceChangePwd(){
   });
 }
 
+/* ============================================================================
+ * v4.9.1（站主第 11 条）：左上角班徽 → 一次点到位回前台首页
+ * ----------------------------------------------------------------------------
+ * 只做三件事，不碰任何权限：
+ *   ① 清掉 sessionStorage 里的「登录后要去哪」（cls_next）—— 它就是
+ *      「第一次点又回到后台登录界面」的元凶；
+ *   ② 留一条 cls_force_home，首页启动时据此直接铺首页、不恢复上次视图；
+ *   ③ 跳转带 #/home，地址栏本身就是「首页」，即便脚本没跑到也是对的。
+ * ========================================================================== */
+function goFrontHome(){
+  try{
+    sessionStorage.removeItem('cls_next');
+    sessionStorage.removeItem('cls_admin_from_home');
+    sessionStorage.setItem('cls_force_home', '1');
+  }catch(e){}
+  location.href = 'index.html#/home';
+  return false;
+}
+
 function doLogout(silent){
   var finish = function(){
     setToken(''); setUser(null);
@@ -4236,9 +4255,9 @@ function boot(){
     applyTheme(cur === 'dark' ? '' : 'dark');
   };
   $('btnRefresh').onclick = function(){ go(STATE.page); };
-  /* 返回主界面（需求 13）。直接跳转，登录态靠 localStorage 里的 token 带过去，
-     回到主站仍是登录状态，不用重新登。 */
-  $('btnBackHome').onclick = function(){ location.href = 'index.html'; };
+  /* v4.9.1（站主第 11 条）：「后台右上角那个首页按钮，只是后台的首页，不用回前台」。
+     以前它等于「回前台」，跟左边班徽重复，还容易误触。现在回到后台自己的「数据概览」。 */
+  $('btnBackHome').onclick = function(){ go('overview'); try{ closeSide(); }catch(e){} };
   $('btnLogout').onclick = function(){ doLogout(false); };
   $('burger').onclick = function(){
     var s = $('side');
