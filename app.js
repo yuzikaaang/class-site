@@ -20297,8 +20297,10 @@ function scPrintHeadFill(){
   var n = rows.length;
   var sum = 0, top = -1, low = 1e9;
   rows.forEach(function (r){
-    var v = Number(r.total_graded != null ? r.total_graded : r.total);
-    if(isNaN(v)) return;
+    /* 行里的总分统一走 scTotal()，直接读 r.total 在不同版本里字段名不一样 */
+    var v = (typeof scTotal === 'function') ? Number(scTotal(r, 'graded'))
+          : Number(r.total_graded != null ? r.total_graded : r.total);
+    if(!isFinite(v)) return;
     sum += v;
     if(v > top) top = v;
     if(v < low) low = v;
