@@ -23077,7 +23077,7 @@ function updGo(){
  *   ④ 上传用 XHR 才有真实进度事件（fetch 拿不到上传进度）。
  * ========================================================================== */
 var FL_KEY = 'cls_fl_hist_v1';
-var FL = { ttl: 3, maxGet: 0, busy: false, code: '', delKey: '', kind: 'file', tab: 'up' };
+var FL = { ttl: 3, maxGet: 0, busy: false, code: '', delKey: '', kind: 'file', tab: 'up', pending: 0 };
 function flEl(id){ return document.getElementById(id); }
 function flBase(){
   return (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
@@ -23091,6 +23091,7 @@ function openFiles(){
   m.classList.add('show');
   flShowDone(false);
   flTab(FL.tab || 'up');
+  FL.pending = 0;
   flQuotaLoad();
   try{ if(typeof closeSidebar === 'function') closeSidebar(); }catch(e){}
 }
@@ -23149,7 +23150,10 @@ function flQuotaLoad(){
     .then(function(r){ return r.json(); })
     .then(function(j){
       if(!j || !j.ok) return;
-      var used = Number(j.used) || 0, cap = Number(j.cap) || 1;
+      /* KV 的 list 是最终一致的：刚写进去的那件，最多要一分钟才出现在统计里。
+         所以本次会话自己先记着（FL.pending），取两者较大的那个 —— 传完立刻就能
+         看到数字往上走，过一会儿服务端数据追上来了也一致。 */
+      var used = Math.max(Number(j.used) || 0, FL.pending || 0), cap = Number(j.cap) || 1;
       var pct = Math.min(100, Math.round(used / cap * 100));
       box.style.display = '';
       box.className = 'fl-quota' + (pct >= 85 ? ' danger' : (pct >= 60 ? ' warn' : ''));
@@ -23318,6 +23322,7 @@ function flUpload(f){
           kind: 'file', name: j.name || f.name, size: j.size, exp: j.exp,
           ttl: j.ttl, maxGet: j.maxGet, memo: (flEl('flMemo') || {}).value || '',
         });
+        FL.pending += Number(j.size) || 0;
         flQuotaLoad();
         try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
       }else{
@@ -23357,6 +23362,7 @@ function flSendText(){
           ttl: o.j.ttl, maxGet: o.j.maxGet, memo: memo,
         });
         if(ta) ta.value = '';
+        FL.pending += Number(o.j.size) || 0;
         flQuotaLoad();
       }else{
         flMsg('flMsgTxt', 'err', (o.j && o.j.error) || '发送失败');
