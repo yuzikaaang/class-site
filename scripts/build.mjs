@@ -47,6 +47,29 @@ write('app.min.js', appMin);
 const hash = crypto.createHash('sha1').update(appMin).digest('hex').slice(0, 8);
 write('.build-meta.json', JSON.stringify({ version: VER, appMin: hash, at: new Date().toISOString() }, null, 2));
 
+/* ---------------- ①-b version.json：前端启动时检查有没有新版 ----------------
+   v4.7.11（站主第 2 条）：「每次打开自动检查一次，有新版就弹窗告诉他改了什么」。
+   只写版本号 + 最近一条更新内容，几十字节，随便拉。
+   更新内容直接从 admin-3.js 的 REL_BUILTIN 取第一条 —— 那是后台「版本更新」里
+   站主看到的那份，不会出现「弹窗说的和公告不一样」。 */
+let updRel = null;
+try {
+  const relSrc = fs.readFileSync(path.join(ROOT, 'admin-3.js'), 'utf8');
+  const i = relSrc.indexOf('var REL_BUILTIN = [');
+  const j = relSrc.indexOf('\n];', i);
+  if (i >= 0 && j > i) {
+    const arr = Function('return ' + relSrc.slice(i + 'var REL_BUILTIN = '.length, j + 2))();
+    if (Array.isArray(arr) && arr.length) updRel = arr[0];
+  }
+} catch (e) { updRel = null; }
+const updJson = {
+  v: VER,
+  at: new Date().toISOString().slice(0, 10),
+  title: (updRel && updRel.title) || '',
+  items: (updRel && Array.isArray(updRel.items)) ? updRel.items.slice(0, 8) : [],
+};
+write('version.json', JSON.stringify(updJson, null, 2));
+
 /* ---------------- ② admin.html 内联大脚本 → admin.js ---------------- */
 let adm = read('admin.html');
 /* v3.19.0：后台脚本已拆成 admin-1/2/3.js 三个普通脚本，admin.html 里不再有大段内联。

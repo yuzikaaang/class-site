@@ -2,36 +2,111 @@
 /* =====================================================
    全站音效（Web Audio 合成，无音频文件；侧边栏可关）
    ===================================================== */
+/* v4.7.11（站主第 7 条）：音效从「一个总开关 + 一套声音」升级成
+   「每种事件单独选音色 / 单独静音」，并多给 4 套音色（清脆 / 柔和 / 木质 / 电子）。
+   仍然是 Web Audio 现场合成 —— 不下载任何音频文件，离线也能响。 */
 var SFX=(function(){
   var AC=null,on=true;
   try{ on=localStorage.getItem('cls_sfx')!=='off'; }catch(e){}
-  function ac(){ if(!AC){ try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} } if(AC&&AC.state==='suspended')AC.resume(); return AC; }
-  function tone(f,d,t,v,delay){
+
+  var MAP_KEY='cls_sfx_map';
+  var THEMES=[['crisp','清脆'],['soft','柔和'],['wood','木质'],['arcade','电子']];
+  var EVENTS=[['click','点击'],['pop','弹层 / 抽取'],['success','成功'],
+              ['error','出错'],['chime','提示音'],['notify','新消息']];
+  var DEF={click:'crisp',pop:'soft',success:'soft',error:'crisp',chime:'wood',notify:'arcade'};
+  var WAVE={crisp:'triangle',soft:'sine',wood:'square',arcade:'square'};
+  var VOL={crisp:0.05,soft:0.045,wood:0.03,arcade:0.032};
+
+  function readMap(){
+    var o=null;
+    try{ o=JSON.parse(localStorage.getItem(MAP_KEY)||'null'); }catch(e){ o=null; }
+    if(!o||typeof o!=='object') o={};
+    var out={};
+    EVENTS.forEach(function(e){
+      var k=e[0], v=o[k];
+      var okTheme=THEMES.some(function(t){ return t[0]===v; });
+      out[k]=(v==='off'||okTheme)?v:DEF[k];
+    });
+    return out;
+  }
+  var MAP=readMap();
+  function saveMap(){
+    try{ localStorage.setItem(MAP_KEY,JSON.stringify(MAP)); }catch(e){}
+  }
+
+  function ac(){
+    if(!AC){ try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} }
+    if(AC&&AC.state==='suspended'){ try{AC.resume();}catch(e){} }
+    return AC;
+  }
+  function tone(f,d,t,v,delay,slideTo){
     var c=ac(); if(!c)return;
     var o=c.createOscillator(),g=c.createGain();
-    o.type=t||'sine';o.frequency.value=f;
+    o.type=t||'sine';
     var t0=c.currentTime+(delay||0);
+    o.frequency.setValueAtTime(f,t0);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(40,slideTo),t0+d);
     g.gain.setValueAtTime(v||0.04,t0);
     g.gain.exponentialRampToValueAtTime(0.001,t0+d);
     o.connect(g);g.connect(c.destination);o.start(t0);o.stop(t0+d+0.03);
   }
-  function play(fn){ if(!on)return; try{fn();}catch(e){} }
+  function play(ev){
+    if(!on)return;
+    var th=MAP[ev];
+    if(!th||th==='off')return;
+    var w=WAVE[th]||'sine', v=VOL[th]||0.04;
+    try{
+      if(ev==='click') tone(680,0.045,w,v);
+      else if(ev==='pop') tone(520,0.13,w,v,0,940);
+      else if(ev==='success'){ tone(640,0.08,w,v); tone(960,0.10,w,v,0.075); }
+      else if(ev==='error') tone(250,0.16,w,v,0,150);
+      else if(ev==='chime'){ tone(880,0.07,w,v); tone(1170,0.09,w,v,0.07); }
+      else if(ev==='notify'){ tone(700,0.06,w,v); tone(700,0.06,w,v,0.14); }
+      else if(ev==='fanfare'){
+        [523,659,784,1047].forEach(function(f,i){ tone(f,i===3?0.18:0.09,w,v,i*0.08); });
+      }
+    }catch(e){}
+  }
   function refreshBtn(){
     var b=document.getElementById('sfxBtn');
     if(b) b.textContent='🔔 音效：'+(on?'开':'关');
   }
   refreshBtn();
   return {
-    click:function(){ play(function(){tone(700,0.05,'triangle',0.025);}); },
-    pop:function(){ play(function(){tone(880,0.07,'sine',0.035);}); },
-    success:function(){ play(function(){tone(660,0.08,'sine',0.045);setTimeout(function(){tone(990,0.1,'sine',0.04);},70);}); },
-    error:function(){ play(function(){tone(200,0.14,'sawtooth',0.035);}); },
-    fanfare:function(){ play(function(){tone(523,0.09,'triangle',0.05);setTimeout(function(){tone(659,0.09,'triangle',0.05);},80);setTimeout(function(){tone(784,0.09,'triangle',0.05);},160);setTimeout(function(){tone(1047,0.16,'triangle',0.05);},240);}); },
+    click:function(){play('click');},
+    pop:function(){play('pop');},
+    success:function(){play('success');},
+    error:function(){play('error');},
+    fanfare:function(){play('fanfare');},
+    chime:function(){play('chime');},
+    notify:function(){play('notify');},
     setOn:function(v){ on=v; try{localStorage.setItem('cls_sfx',v?'on':'off');}catch(e){} refreshBtn(); },
-    isOn:function(){ return on; }
+    isOn:function(){ return on; },
+    themes:THEMES,
+    events:EVENTS,
+    get:function(ev){ return MAP[ev]; },
+    set:function(ev,th){
+      if(!MAP.hasOwnProperty(ev)) return;
+      var ok=(th==='off')||THEMES.some(function(t){ return t[0]===th; });
+      if(!ok) return;
+      MAP[ev]=th; saveMap();
+      if(th!=='off'){ play(ev==='notify'||ev==='chime'||ev==='error'||ev==='success'?ev:'click'); }
+    },
+    resetAll:function(){
+      MAP=readMap(); MAP={}; EVENTS.forEach(function(e){ MAP[e[0]]=DEF[e[0]]; }); saveMap(); refreshBtn();
+    }
   };
 })();
 function toggleSfx(){ SFX.setOn(!SFX.isOn()); if(SFX.isOn()) SFX.success(); }
+/* v4.7.11（站主第 7 条）：单个事件换音色 / 静音，改完就地重绘那一行 */
+function sfxSetEv(ev, th){
+  try{ SFX.set(ev, th); }catch(e){}
+  /* 只重绘这一行，不整个面板重建 —— 否则滚动位置会被弹回顶部 */
+  var btns = document.querySelectorAll('.sfx-row[data-ev="' + ev + '"] .sfx-th');
+  for(var i = 0; i < btns.length; i++){
+    btns[i].classList.toggle('on', btns[i].getAttribute('data-th') === th);
+  }
+}
 
 /* ============================================================================
  * 横屏切换（v3.5.39：与后台 admin.html 完全同款）
@@ -4862,6 +4937,7 @@ var CONTENT_MAP = {
   important_dates:   null,           /* 特殊：落到 IMPORTANT_DATES，见 applyCloudContent() */
   pick_history:      'pickHistory',  /* v4.4.0 随机点名抽取记录（时间/条件/人数/名单/备注） */
   pick_exclude:      'pickExclude',  /* v4.7.0 随机点名的请假 / 不参与名单（换设备不用重填） */
+  pick_hist_del:     'pickHistDel',  /* v4.7.11 抽取历史的删除墓碑（跨设备同步删除） */
   site_config:       null            /* 特殊：见 applySiteConfig() */
 };
 
@@ -5251,10 +5327,21 @@ function quoteCatToggle(k){
   cur.sort(function(a, b){ return order.indexOf(a) - order.indexOf(b); });
   UI.quoteCats = cur;
   saveUI();
+  /* v4.7.11（站主第 4 条）：「我点击那个打勾的选项它没有反应，刷新了一下但没生效」。
+     根因：quoteCats() 优先读云端 SITE_DATA.quoteSource.cats，而这里只改了本机 UI，
+     紧接着 renderDailyQuote() 又按**旧的云端值**重画，于是勾选状态被顶回去，
+     要等异步 PUT 回来才变 —— 看起来就是「点了没反应」。管理员才会中招。
+     修法：先把云端那份同步改成新值（本地先行），再重画；PUT 失败也不回滚。 */
+  try{
+    if(!SITE_DATA.quoteSource || typeof SITE_DATA.quoteSource !== 'object') SITE_DATA.quoteSource = {};
+    SITE_DATA.quoteSource.cats = cur.slice();
+  }catch(e){}
   _quoteRemote = null;
   renderDailyQuote();
   fetchRemoteQuote(true);
   quoteCatsPush(cur);
+  /* 大屏那一页也开着同一份设置，勾完要一起变 */
+  try{ if(window.BIG && BIG.quoteCfgRefresh) BIG.quoteCfgRefresh(); }catch(e){}
 }
 function quoteCatsPush(cats){
   if(!isAdmin()) return;
@@ -7290,6 +7377,7 @@ function readLocalContentValue(key){
     if(key === 'important_dates') return IMPORTANT_DATES;
     if(key === 'pick_history') return SITE_DATA.pickHistory;
     if(key === 'pick_exclude') return SITE_DATA.pickExclude;
+    if(key === 'pick_hist_del') return SITE_DATA.pickHistDel;
   }catch(e){}
   return undefined;
 }
@@ -8948,9 +9036,26 @@ function renderSettings(){
       '<div class="sw-row"><span class="t">网络状态提示<span class="s">连不上服务器时，页面顶部弹一条提示并可点「重试」。<b>当前默认关闭</b> —— 关了不影响任何功能，也不影响后台的在线状态</span></span>' +
         swHtml(netWatchOn(), 'toggleNetWatch(event)') + '</div>' +
       '<p class="ui-hint">关闭后所有动效立即静止（跟随系统的「减少动态效果」设置也同理）。<br>「卡片堆叠」是试验功能，默认关闭，觉得不好用可随时关掉。</p>', true);
+    /* v4.7.11（站主第 7 条）：音效不再是「一个总开关」，每种事件单独选音色 / 单独关。 */
+    var sfxRows = SFX.events.map(function(ev){
+      var cur = SFX.get(ev[0]);
+      var btns = SFX.themes.map(function(t){
+        return '<button type="button" class="sfx-th' + (cur === t[0] ? ' on' : '') + '"'
+          + ' data-th="' + t[0] + '"'
+          + ' onclick="sfxSetEv(\'' + ev[0] + '\',\'' + t[0] + '\')">' + t[1] + '</button>';
+      }).join('');
+      btns += '<button type="button" class="sfx-th' + (cur === 'off' ? ' on' : '') + '"'
+        + ' data-th="off"'
+        + ' onclick="sfxSetEv(\'' + ev[0] + '\',\'off\')">关</button>';
+      return '<div class="sfx-row" data-ev="' + ev[0] + '"><span class="sfx-name">' + ev[1] + '</span>'
+        + '<div class="sfx-opts">' + btns + '</div></div>';
+    }).join('');
     html += secHtml('sfx','音效','droplet',
-      '<div class="sw-row"><span class="t">界面音效<span class="s">点击、成功、错误提示音</span></span>' +
-        swHtml(SFX.isOn(), 'toggleSfxFromUI(event)') + '</div>', false);
+      '<div class="sw-row"><span class="t">界面音效（总开关）<span class="s">关掉后所有声音都不响</span></span>' +
+        swHtml(SFX.isOn(), 'toggleSfxFromUI(event)') + '</div>'
+      + '<div class="sfx-list">' + sfxRows + '</div>'
+      + '<p class="ui-hint">每一行单独选择音色，点击即可试听；不需要的类别直接选「关」。'
+      + '设置只保存在这台设备。</p>', false);
 
     var liteOnNow = liteOn();
     /* —— 大屏模式 / 轻量模式（v4.7.0 移出设置面板）——
@@ -10011,6 +10116,7 @@ function islandToday(offset){
   if(!ISLAND) return { kind: 'none' };
 
   var hs = ISLAND.holidays || [];
+  var soon = '';
   for(var i = 0; i < hs.length; i++){
     if(hs[i].from <= key && key <= hs[i].to){
       var h = hs[i];
@@ -10018,6 +10124,20 @@ function islandToday(offset){
          没填时间就按「开始日 00:00 / 结束日 23:59」算，老数据完全兼容。 */
       var startTs = islHolTs(h.from, h.fromTime, false);
       var endTs = islHolTs(h.to, h.toTime, true);
+      /* v4.7.11（站主第 11 条）：假期从「开始时刻」才算，不是从 00:00。
+         站主原话：「我放假是 11 月 6 号晚上 10 点，那 10 点之前你就显示 11 月 6 号，
+         因为当天是有课的；10 点之后你再显示放假信息。」
+         同理，结束日返校时刻一过，也不再显示「放假第 N 天」，回到当天课表。
+         （只有「看今天」才做时刻判断；「看明天」是预告，照旧。） */
+      if(!offset){
+        var nowT = Date.now();
+        if(h.fromTime && key === h.from && nowT < startTs){
+          soon = (String(h.fromTime) >= '18:00' ? '今晚 ' : '今天 ')
+               + h.fromTime + ' 开始放假' + (h.label ? '（' + h.label + '）' : '');
+          continue;
+        }
+        if(h.toTime && key === h.to && nowT >= endTs) continue;
+      }
       var dayNo = (islandDaysBetween(h.from, key) || 0) + 1;
       var totalDays = (islandDaysBetween(h.from, h.to) || 0) + 1;
       var base = offset ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0) : new Date();
@@ -10052,6 +10172,7 @@ function islandToday(offset){
     bold: (day && day.text) ? !!day.bold : undefined,
     center: !(day && day.text && day.center === false),
     size: (day && day.text && day.size) ? Number(day.size) : 0,
+    soon: soon,
     key: key, date: d,
   };
 }
@@ -10110,6 +10231,8 @@ function islandRender(){
     +   '<b class="isl-cue" id="islCue">详情</b>'
     + '</div>'
     + '<div class="island-row isl-chips">' + row + '</div>'
+    /* v4.7.11（站主第 3 条）：今天总览 —— 城市 / 天气 / 最高最低 / 一句建议 */
+    + '<div class="island-wxbar" id="islWxBar" style="display:none"></div>'
     + '<div class="island-row" id="islBannerRow"></div>'
     + '<div class="island-foot"><span id="islFootL">今日事项</span>'
     +   '<b id="islFoot"></b></div>';
@@ -10209,6 +10332,7 @@ function islandBanner(){
     + (t.center === false ? ' left-align' : '') + '"'
     + (ISLAND.photo ? ' title="点击查看照片"' : '') + '>'
     + tagRow((tomorrow ? '明日事项' : '今日事项') + cam)
+    + (t.soon ? '<span class="isl-soon">' + esc(t.soon) + '</span>' : '')
     + '<span class="' + cls + '"' + (t.size ? ' style="font-size:' + t.size + 'px"' : '') + '>'
     +   islFmt(txt) + '</span>'
     + '</div>';
@@ -10250,10 +10374,92 @@ function islandTick(){
 /* v3.9.21：失败后最多自动重试一次（用函数对象当开关，避免再开一个全局变量） */
 function islWxRetry(){}
 
+/* v4.7.11（站主第 3 条）：天气按访客 IP 定位，拿不到就回修水。
+   同时把「今天最高 / 最低 / 天气 / 一句建议」做成一条总览，放在班级岛最上面。 */
+var ISL_GEO = null;
+function islGeoLoad(cb){
+  var cache = null;
+  try{ cache = JSON.parse(localStorage.getItem('__cls_geo') || 'null'); }catch(e){}
+  if(cache && cache.v && cache.at && (Date.now() - cache.at) < 6 * 3600000){
+    ISL_GEO = cache.v; cb(ISL_GEO); return;
+  }
+  if(typeof api !== 'function'){ cb(null); return; }
+  api('/geo').then(function(j){
+    var v = (j && j.ok && j.lat) ? { city: j.city || '', region: j.region || '', lat: j.lat, lon: j.lon } : null;
+    if(v){
+      ISL_GEO = v;
+      try{ localStorage.setItem('__cls_geo', JSON.stringify({ at: Date.now(), v: v })); }catch(e){}
+    }
+    cb(v);
+  }).catch(function(){ cb(null); });
+}
+
+/* 天气图标（内联 SVG，替代原来的 emoji —— 站主嫌 emoji 丑） */
+function wxIcon(code){
+  var c = Number(code);
+  var sun = '<circle cx="17" cy="17" r="6.4" fill="#fbbf24"/>'
+    + '<g stroke="#f59e0b" stroke-width="2" stroke-linecap="round">'
+    + '<path d="M17 4.5v3M17 26.5v3M4.5 17h3M26.5 17h3M8.2 8.2l2.1 2.1M23.7 23.7l2.1 2.1M25.8 8.2l-2.1 2.1M10.3 23.7l-2.1 2.1"/></g>';
+  var cloud = '<path d="M12 24h12.5a5.5 5.5 0 0 0 .6-10.96A7.5 7.5 0 0 0 10.6 14 5 5 0 0 0 12 24z" fill="#cbd5e1"/>';
+  var rain = '<g stroke="#60a5fa" stroke-width="2" stroke-linecap="round">'
+    + '<path d="M13 25.5l-1.6 4M18 25.5l-1.6 4M23 25.5l-1.6 4"/></g>';
+  var snow = '<g fill="#93c5fd"><circle cx="12.5" cy="28" r="1.7"/><circle cx="18.5" cy="28" r="1.7"/><circle cx="24.5" cy="28" r="1.7"/></g>';
+  var bolt = '<path d="M18.5 21l-4.6 7h3.4l-1.4 5 6-7.6h-3.6z" fill="#f59e0b"/>';
+  var fog = '<g stroke="#cbd5e1" stroke-width="2.2" stroke-linecap="round">'
+    + '<path d="M6 15h18M8 20h16M6 25h14"/></g>';
+  var body;
+  if(c === 0 || c === 1) body = sun;
+  else if(c === 2) body = '<g transform="translate(4,-4) scale(.86)">' + sun + '</g>'
+      + '<path d="M11 25h13a5 5 0 0 0 .5-9.97A7 7 0 0 0 11 17 4.5 4.5 0 0 0 11 25z" fill="#e2e8f0"/>';
+  else if(c === 3) body = cloud;
+  else if(c === 45 || c === 48) body = fog;
+  else if(c >= 71 && c <= 77) body = cloud + snow;
+  else if(c === 85 || c === 86) body = cloud + snow;
+  else if(c >= 95) body = cloud + bolt;
+  else if(c >= 51 && c <= 67) body = cloud + rain;
+  else if(c >= 80 && c <= 82) body = cloud + rain;
+  else body = cloud;
+  return '<svg class="isl-wx-ico" viewBox="0 0 34 34" aria-hidden="true">' + body + '</svg>';
+}
+
+/* 一句人话建议：短、能执行，不写小作文 */
+function wxTip(code, tmax, tmin, pop){
+  var c = Number(code) || 0;
+  if(c >= 95) return '有雷阵雨，外出注意安全';
+  if((c >= 71 && c <= 77) || c === 85 || c === 86) return '有雪，路面湿滑注意保暖';
+  if((c >= 51 && c <= 67) || (c >= 80 && c <= 82)) return '有雨，记得带伞';
+  if(c === 45 || c === 48) return '有雾，路上慢一点';
+  if(tmax != null && tmax >= 33) return '高温，注意防晒补水';
+  if(tmin != null && tmin <= 3) return '气温偏低，注意保暖';
+  if(pop != null && pop >= 50) return '可能下雨，建议带伞';
+  if(c <= 1) return '天气不错，适宜户外活动';
+  return '天气平稳，注意增减衣物';
+}
+
+/* 把天气写进 chip + 顶部总览条 */
+function islWxShow(v, city){
+  if(!v) return;
+  islSet('islWx', v.t + '° ' + v.s);
+  var m = document.getElementById('islWxM');
+  if(m) m.textContent = v.t + '° ' + v.s;
+  var bar = document.getElementById('islWxBar');
+  if(!bar) return;
+  var place = city || (ISL_GEO && ISL_GEO.city) || '修水';
+  var range = (v.tmax != null && v.tmin != null)
+    ? '<b>' + Math.round(v.tmax) + '°</b><i>/</i>' + Math.round(v.tmin) + '°'
+    : '<b>' + v.t + '°</b>';
+  bar.innerHTML = wxIcon(v.code)
+    + '<span class="isl-wx-city">' + esc(place) + '</span>'
+    + '<span class="isl-wx-name">' + esc(v.s) + '</span>'
+    + '<span class="isl-wx-range">' + range + '</span>'
+    + '<span class="isl-wx-tip">' + esc(wxTip(v.code, v.tmax, v.tmin, v.pop)) + '</span>';
+  bar.style.display = '';
+}
+
 function islandWeather(){
   if(!document.getElementById('islWx')) return;
   if(ISLAND_WX){
-    islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
+    islWxShow(ISLAND_WX, ISLAND_WX.city);
     return;
   }
   var cache = null;
@@ -10262,7 +10468,7 @@ function islandWeather(){
   var fresh = hasCache && (Date.now() - cache.t) < 30 * 60000;
   if(fresh){
     ISLAND_WX = cache.v;
-    islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
+    islWxShow(ISLAND_WX, ISLAND_WX.city);
     return;
   }
   /* v3.9.10：轻量模式不主动联网（省流量、少一次 200ms+ 的请求）；
@@ -10270,41 +10476,59 @@ function islandWeather(){
   if(liteOn()){
     if(hasCache){
       ISLAND_WX = cache.v;
-      islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
+      islWxShow(ISLAND_WX, ISLAND_WX.city);
     }else{
       islSet('islWx', '—');
     }
     return;
   }
-  /* Open-Meteo：免费、免 key、允许跨域；坐标按修水县取的 */
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=29.03&longitude=114.57'
-      + '&current=temperature_2m,weather_code&timezone=Asia%2FShanghai')
-    .then(function(r){ return r.json(); })
-    .then(function(j){
-      var c = (j && j.current) || {};
-      if(c.temperature_2m == null) throw new Error('no data');
-      var v = { t: Math.round(c.temperature_2m), s: ISLAND_WX_TXT[c.weather_code] || '天气' };
-      ISLAND_WX = v;
-      try{ localStorage.setItem('__cls_wx', JSON.stringify({ t: Date.now(), v: v })); }catch(e){}
-      islSet('islWx', v.t + '° ' + v.s);
-    })
-    .catch(function(){
-      /* v3.9.21：请求偶尔失败不要立刻把温度抹成「—」——
-         有上次的值就先顶着，并在一分钟后再试一次（只重试一次）。 */
-      var old2 = null;
-      try{ old2 = JSON.parse(localStorage.getItem('__cls_wx') || 'null'); }catch(e){}
-      if(old2 && old2.v && old2.v.t != null){
-        ISLAND_WX = old2.v;
-        islSet('islWx', ISLAND_WX.t + '° ' + ISLAND_WX.s);
-      }else{
-        var e3 = document.getElementById('islWx');
-        if(e3) e3.textContent = '—';
-      }
-      if(!islWxRetry._done){
-        islWxRetry._done = true;
-        setTimeout(function(){ ISLAND_WX = null; islandWeather(); }, 60000);
-      }
-    });
+
+  islGeoLoad(function (geo) {
+    var lat = geo && geo.lat ? geo.lat : 29.03;
+    var lon = geo && geo.lon ? geo.lon : 114.57;
+    var city = geo && geo.city ? geo.city : '修水';
+    /* Open-Meteo：免费、免 key、允许跨域。
+       v4.7.11 起坐标来自 /api/geo（按访客 IP），并多取今天的最高 / 最低 / 降水概率。 */
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon
+        + '&current=temperature_2m,weather_code'
+        + '&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max'
+        + '&timezone=Asia%2FShanghai&forecast_days=1')
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        var c = (j && j.current) || {};
+        if(c.temperature_2m == null) throw new Error('no data');
+        var dl = (j && j.daily) || {};
+        var v = {
+          t: Math.round(c.temperature_2m),
+          s: ISLAND_WX_TXT[c.weather_code] || '天气',
+          code: Number(c.weather_code) || 0,
+          tmax: Array.isArray(dl.temperature_2m_max) ? dl.temperature_2m_max[0] : null,
+          tmin: Array.isArray(dl.temperature_2m_min) ? dl.temperature_2m_min[0] : null,
+          pop: Array.isArray(dl.precipitation_probability_max) ? dl.precipitation_probability_max[0] : null,
+          city: city
+        };
+        ISLAND_WX = v;
+        try{ localStorage.setItem('__cls_wx', JSON.stringify({ t: Date.now(), v: v })); }catch(e){}
+        islWxShow(v, city);
+      })
+      .catch(function(){
+        /* v3.9.21：请求偶尔失败不要立刻把温度抹成「—」——
+           有上次的值就先顶着，并在一分钟后再试一次（只重试一次）。 */
+        var old2 = null;
+        try{ old2 = JSON.parse(localStorage.getItem('__cls_wx') || 'null'); }catch(e){}
+        if(old2 && old2.v && old2.v.t != null){
+          ISLAND_WX = old2.v;
+          islWxShow(ISLAND_WX, old2.v.city || city);
+        }else{
+          var e3 = document.getElementById('islWx');
+          if(e3) e3.textContent = '—';
+        }
+        if(!islWxRetry._done){
+          islWxRetry._done = true;
+          setTimeout(function(){ ISLAND_WX = null; islandWeather(); }, 60000);
+        }
+      });
+  });
 }
 
 /* ============================================================
@@ -14008,6 +14232,9 @@ function closeScoreAnal(){
    容器 id 沿用原来的 scBar / scTabs / scPaneBox —— 渲染函数一行都不用改。 */
 function scEmbedHtml(){
   return '<div class="sc-embed" id="scEmbed">'
+    /* v4.7.11（站主第 8 条）：打印出来没有标题、基本信息、班徽和时间。
+       这一块平时 display:none，只在 @media print 里出现。 */
+    + '<div class="sc-print-head" id="scPrintHead"></div>'
     + '<div class="sc-notebar">✍️ 成绩由人工手动录入，若有错误请联系管理员修改</div>'
     + '<div class="sc-bar" id="scBar"></div>'
     + '<div class="sc-tabs" id="scTabs"></div>'
@@ -15021,7 +15248,10 @@ function scGradedBlock(){
       + '</tr>';
   }).join('');
 
-  return '<div class="sc-card-h" style="margin-top:22px">仅赋分排名'
+  /* v4.7.11（站主第 8 条）：这一块原来是裸标题 + 表格，没有 .sc-card 外壳，
+     所以别处都有的折叠箭头它没有。包一层就自动获得折叠能力。 */
+  return '<div class="sc-card" data-scblk="board_grd" style="margin-top:22px">'
+    + '<div class="sc-card-h">仅赋分排名'
       + '<span class="sc-h-note">' + esc(d.C.name) + ' + ' + esc(d.B.name) + '：增值 → 赋分</span>'
       + '</div>'
     + '<div class="sc-hint">'
@@ -15031,7 +15261,8 @@ function scGradedBlock(){
       + '</div>'
     + '<div class="sc-tblwrap" data-scroll-keep><table class="sc-tbl sc-gd-tbl">'
     +   '<thead>' + head + '</thead><tbody>' + body + '</tbody>'
-    + '</table></div>';
+    + '</table></div>'
+    + '</div>';
 }
 
 function scGArrow(k){
@@ -20039,13 +20270,52 @@ function scPrint(){
     scPrintSave(next);
     scPrintClose();
     scApplyPrintState(next);
+    scPrintHeadFill();
+    /* v4.7.11（站主第 8 条）：图表打印出来是空白的真因 ——
+       柱状图 / 雷达图有入场动画，只有滚到视口才播；停在屏幕外的卡片
+       opacity 还是 0，浏览器打出来就是一片白。这里在打印前强制收掉动画。 */
+    document.body.classList.add('sc-printing');
     /* 给浏览器一帧时间应用 class，再唤起打印 */
     setTimeout(function(){
       window.print();
       /* 打印对话框关掉后恢复（不然页面上那些块就一直藏着了） */
-      setTimeout(function(){ scResetPrintHide(); }, 300);
+      setTimeout(function(){
+        scResetPrintHide();
+        document.body.classList.remove('sc-printing');
+      }, 300);
     }, 60);
   };
+}
+/* 打印页眉：标题 / 班级 / 人数 / 均分 / 生成时间 / 班徽。
+   屏幕上看不到（CSS 里 display:none），只在纸上出现。 */
+function scPrintHeadFill(){
+  var box = document.getElementById('scPrintHead');
+  if(!box) return;
+  var ex = SC.exam || {};
+  var rows = Array.isArray(SC.rows) ? SC.rows : [];
+  var name = ex.name || ex.title || '成绩分析';
+  var n = rows.length;
+  var sum = 0, top = -1, low = 1e9;
+  rows.forEach(function (r){
+    var v = Number(r.total_graded != null ? r.total_graded : r.total);
+    if(isNaN(v)) return;
+    sum += v;
+    if(v > top) top = v;
+    if(v < low) low = v;
+  });
+  var avg = n ? Math.round(sum / n * 10) / 10 : 0;
+  var d = new Date();
+  function p(x){ return (x < 10 ? '0' : '') + x; }
+  var when = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+    + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  box.innerHTML =
+    '<img class="sc-ph-badge" src="icons/badge-256.png" alt="" onerror="this.style.display=\'none\'">'
+    + '<div class="sc-ph-main">'
+    +   '<div class="sc-ph-title">' + esc(name) + ' · 成绩分析</div>'
+    +   '<div class="sc-ph-meta">25级05班　参考 ' + n + ' 人　总分均分 <b>' + avg + '</b>'
+    +     (top >= 0 ? '　最高 ' + top + '　最低 ' + low : '') + '</div>'
+    + '</div>'
+    + '<div class="sc-ph-time">生成于<br>' + when + '</div>';
 }
 function scPrintClose(){
   var m = document.getElementById('scPkMask');
@@ -21508,10 +21778,38 @@ function exOpen(card, fname, mode) {
   exRender();
 }
 
+/* v4.7.11（站主第 9 条）：电脑端预览太小，加「滚轮缩放 + 拖动平移」。
+   手机端本来就能双指放大，这里不拦 touch，免得跟系统手势打架。 */
+var EXZ = { z: 1 };
+function exApplyZoom() {
+  var stage = document.getElementById('exStage');
+  var paper = stage ? stage.querySelector('.ex-paper') : null;
+  var lab = document.getElementById('exZoomVal');
+  if (lab) lab.textContent = EXZ.z <= 1.001 ? '' : Math.round(EXZ.z * 100) + '%';
+  if (!paper) return;
+  if (EXZ.z <= 1.001) {
+    paper.style.width = '';
+    paper.classList.remove('zoomed');
+  } else {
+    paper.classList.add('zoomed');
+    paper.style.width = Math.round(EXZ.z * 100) + '%';
+  }
+  if (stage) {
+    if (EXZ.z > 1.001) stage.classList.add('zooming');
+    else stage.classList.remove('zooming', 'dragging');
+  }
+}
+function exZoomReset() {
+  EXZ.z = 1;
+  exApplyZoom();
+  var stage = document.getElementById('exStage');
+  if (stage) { stage.scrollLeft = 0; stage.scrollTop = 0; }
+}
 function closeExPreview() {
   var mask = document.getElementById('exMask');
   if (mask) mask.classList.remove('show');
   EX.card = null;
+  EXZ.z = 1;
   clearTimeout(EX.timer);
 }
 document.addEventListener('DOMContentLoaded', function () {
@@ -21578,6 +21876,7 @@ function exRender() {
     paper.appendChild(cv);
     stage.innerHTML = '';
     stage.appendChild(paper);
+    exApplyZoom();
   }).catch(function (e) {
     if (token !== EX.token) return;
     stage.innerHTML = '<div class="ex-loading">预览失败：' + (e && e.message ? e.message : e) + '</div>';
@@ -21623,6 +21922,43 @@ function exShare() {
 (function bindExUI() {
   var mask = document.getElementById('exMask');
   if (!mask) return;
+
+  /* v4.7.11：滚轮缩放 / 双击复位 / 放大后按住拖动平移 */
+  var stage0 = document.getElementById('exStage');
+  if (stage0) {
+    stage0.addEventListener('wheel', function (e) {
+      if (!mask.classList.contains('show')) return;
+      e.preventDefault();
+      var step = e.deltaY > 0 ? -0.12 : 0.12;
+      var z = Math.min(4, Math.max(1, Math.round((EXZ.z + step) * 100) / 100));
+      if (z === EXZ.z) return;
+      EXZ.z = z;
+      exApplyZoom();
+    }, { passive: false });
+    stage0.addEventListener('dblclick', function (e) {
+      if (e.target && e.target.closest && e.target.closest('.ex-paper')) exZoomReset();
+    });
+    var drag = null;
+    stage0.addEventListener('mousedown', function (e) {
+      if (EXZ.z <= 1.001 || e.button !== 0) return;
+      if (e.target && e.target.closest && e.target.closest('button,input')) return;
+      drag = { x: e.clientX, y: e.clientY, l: stage0.scrollLeft, t: stage0.scrollTop };
+      stage0.classList.add('dragging');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      stage0.scrollLeft = drag.l - (e.clientX - drag.x);
+      stage0.scrollTop = drag.t - (e.clientY - drag.y);
+    });
+    window.addEventListener('mouseup', function () {
+      if (!drag) return;
+      drag = null;
+      stage0.classList.remove('dragging');
+    });
+    /* 关闭弹窗时把缩放还原，下次打开是新的一页 */
+    mask.addEventListener('click', function (e) { if (e.target === mask) exZoomReset(); });
+  }
 
   var fs = document.getElementById('exFs');
   if (fs) fs.addEventListener('input', function () {
@@ -22422,3 +22758,329 @@ try{ islandBoot(); }catch(e){ console.warn('[island]', e); }
 hwPopInit(); /* 开屏通知弹窗：大假作业发布提醒（进站自动弹；可「不再显示」） */
 popInit();   /* 通用弹窗引擎：按 SITE_DATA.popups 排队弹「开屏弹」（默认空，配了才弹） */
 syncAutoInit(); /* 自动云同步：每 1 分钟双向同步（推本机 + 拉云端），回前台立刻补跑 */
+
+/* ============================================================================
+ * v4.7.11（站主第 2 条）：打开页面自动检查版本，有新版才弹窗
+ * ----------------------------------------------------------------------------
+ * 站主原话：「每次打开的时候自动进行一次检查，如果目前就是最新的那就没事；
+ *   如果检测到有更新的版本，就弹窗告诉他有新版本、该版本新增了什么内容；
+ *   点更新后有个小圆圈一直转、加载，下载好了自动刷新，最好加个进度条。」
+ *
+ * 数据来自构建时生成的 version.json（几十字节，和「版本更新」公告同源）。
+ * 判定：线上版本 > 本页的 SITE_VERSION 才算有新版 —— 本页已经是最新就不弹。
+ *
+ * 「下载」这一步在 PWA 里其实做不了真进度（没有可下载的包），
+ * 所以进度条拆成三段真实动作：清缓存 → 注销旧 Service Worker → 重新取一次页面。
+ * 每段都是真的，数字才不心虚。
+ * ========================================================================== */
+var UPD = { busy: false, info: null };
+function updParse(v){
+  return String(v || '').split('.').map(function (x){ return parseInt(x, 10) || 0; });
+}
+function updNewer(a, b){
+  var x = updParse(a), y = updParse(b);
+  for(var i = 0; i < 3; i++){
+    if((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  }
+  return false;
+}
+function updCheck(){
+  try{ if(liteOn()) return; }catch(e){}
+  if(!/^https?:/.test(location.protocol)) return;
+  fetch('version.json?_=' + Date.now(), { cache: 'no-store' })
+    .then(function (r){ return r.ok ? r.json() : null; })
+    .then(function (j){
+      if(!j || !j.v) return;
+      var cur = (typeof SITE_VERSION !== 'undefined') ? SITE_VERSION : '';
+      if(!updNewer(j.v, cur)) return;                       /* 已是最新 → 什么也不做 */
+      try{ if(sessionStorage.getItem('cls_upd_seen') === j.v) return; }catch(e){}
+      UPD.info = j;
+      updShow(j);
+    })
+    .catch(function (){ /* 网络不好就静默，别打扰 */ });
+}
+function updShow(j){
+  var mask = document.getElementById('upMask');
+  if(!mask) return;
+  var vEl = document.getElementById('upVer');
+  var tEl = document.getElementById('upTitle');
+  var lEl = document.getElementById('upList');
+  if(vEl) vEl.textContent = 'v' + j.v;
+  if(tEl) tEl.textContent = j.title || '本次更新包含若干改进';
+  if(lEl){
+    var items = Array.isArray(j.items) ? j.items : [];
+    lEl.innerHTML = items.length
+      ? items.map(function (x){ return '<li>' + emojiEscHtml(x) + '</li>'; }).join('')
+      : '<li>修复了一些已知问题，体验更顺。</li>';
+  }
+  mask.classList.add('show');
+}
+function updClose(){
+  var mask = document.getElementById('upMask');
+  if(mask) mask.classList.remove('show');
+  if(UPD.info){
+    try{ sessionStorage.setItem('cls_upd_seen', UPD.info.v); }catch(e){}
+  }
+}
+function updGo(){
+  if(UPD.busy) return;
+  UPD.busy = true;
+  var btn = document.getElementById('upGo');
+  var bar = document.getElementById('upProg');
+  var inn = document.getElementById('upProgIn');
+  var st = document.getElementById('upStatus');
+  if(btn){ btn.disabled = true; btn.textContent = '更新中…'; }
+  if(bar) bar.classList.add('on');
+  if(st) st.classList.add('on');
+  function setP(p, txt){
+    if(inn) inn.style.width = p + '%';
+    if(st) st.textContent = txt;
+  }
+  setP(8, '正在准备…');
+  setTimeout(function (){ setP(28, '正在清理旧缓存…'); }, 220);
+
+  var p1 = ('caches' in window)
+    ? caches.keys().then(function (keys){
+        return Promise.all(keys.map(function (k){ return caches.delete(k); }));
+      }).catch(function (){})
+    : Promise.resolve();
+  var p2 = (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+    ? navigator.serviceWorker.getRegistrations().then(function (rs){
+        return Promise.all(rs.map(function (r){ return r.unregister(); }));
+      }).catch(function (){})
+    : Promise.resolve();
+
+  Promise.all([p1, p2]).then(function (){
+    setP(62, '正在下载新版本…');
+    /* 带 _r= 的地址会绕过 Service Worker 缓存（见 sw.js），确保拿到的是新版 */
+    return fetch(location.pathname + '?_r=' + Date.now(), { cache: 'no-store' }).catch(function (){});
+  }).then(function (){
+    setP(90, '即将完成…');
+    setTimeout(function (){
+      setP(100, '更新完成，正在刷新…');
+      setTimeout(function (){
+        try{
+          location.replace(location.pathname + '?_r=' + Date.now() + location.hash);
+        }catch(e){
+          location.reload();
+        }
+      }, 420);
+    }, 380);
+  }).catch(function (){
+    location.reload();
+  });
+}
+(function bindUpd(){
+  function init(){
+    var later = document.getElementById('upLater');
+    var go = document.getElementById('upGo');
+    if(later) later.onclick = updClose;
+    if(go) go.onclick = updGo;
+    var mask = document.getElementById('upMask');
+    if(mask) mask.addEventListener('click', function (e){ if(e.target === mask) updClose(); });
+    /* 晚 2.6 秒再查：先把首屏和班级岛让出来，别和内容请求抢 */
+    setTimeout(updCheck, 2600);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+
+/* ============================================================================
+ * v4.7.11（站主第 6 条）：文件中转站
+ * ----------------------------------------------------------------------------
+ * 「手机、U 盘、电脑、班级电脑之间互通太麻烦，想拿网站当媒介」。
+ * 走站内 KV（不用开新账号），单文件 4MB，7 天有效，6 位取件码。
+ * 上传用 XHR 才有真实的进度事件（fetch 拿不到上传进度）。
+ * ========================================================================== */
+var FL = { ttl: 7, busy: false, code: '', delKey: '', file: null };
+function flEl(id){ return document.getElementById(id); }
+function openFiles(){
+  var m = flEl('flMask');
+  if(!m) return;
+  m.classList.add('show');
+  try{ if(typeof closeSidebar === 'function') closeSidebar(); }catch(e){}
+}
+function closeFiles(){
+  var m = flEl('flMask');
+  if(m) m.classList.remove('show');
+  var p = flEl('flProg'); if(p) p.classList.remove('on');
+  var in2 = flEl('flProgIn'); if(in2) in2.style.width = '0%';
+}
+function flTab(k){
+  var up = flEl('flPaneUp'), gt = flEl('flPaneGet');
+  if(up) up.style.display = (k === 'up') ? '' : 'none';
+  if(gt) gt.style.display = (k === 'get') ? '' : 'none';
+  var btns = document.querySelectorAll('[data-fltab]');
+  for(var i = 0; i < btns.length; i++) btns[i].classList.toggle('on', btns[i].getAttribute('data-fltab') === k);
+  if(k === 'get'){
+    var inp = flEl('flIn');
+    if(inp) setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 60);
+  }
+}
+function flMsg(id, kind, text){
+  var el = flEl(id);
+  if(!el) return;
+  el.className = 'fl-msg' + (kind ? ' ' + kind : '');
+  el.textContent = text || '';
+}
+function flBytes(n){
+  n = Number(n) || 0;
+  if(n < 1024) return n + ' B';
+  if(n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1048576).toFixed(2) + ' MB';
+}
+function flUpload(f){
+  if(!f || FL.busy) return;
+  if(f.size > 4 * 1024 * 1024){
+    flMsg('flMsg', 'err', '这个文件 ' + flBytes(f.size) + '，超过 4MB 上限。更大的文件请使用 U 盘传输。');
+    return;
+  }
+  FL.busy = true;
+  FL.file = f;
+  var prog = flEl('flProg'), inn = flEl('flProgIn'), done = flEl('flDone');
+  if(done) done.classList.remove('on');
+  if(prog) prog.classList.add('on');
+  if(inn) inn.style.width = '4%';
+  flMsg('flMsg', '', '正在读取文件…');
+
+  var reader = new FileReader();
+  reader.onerror = function(){
+    FL.busy = false;
+    flMsg('flMsg', 'err', '读不到这个文件，请换一个再试。');
+  };
+  reader.onload = function(){
+    var dataUrl = String(reader.result || '');
+    var b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    flMsg('flMsg', '', '正在上传…');
+    var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', base + '/api/files?action=up', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.upload.onprogress = function(e){
+      if(!e.lengthComputable) return;
+      var p = Math.round(4 + (e.loaded / e.total) * 92);
+      if(inn) inn.style.width = p + '%';
+    };
+    xhr.onload = function(){
+      FL.busy = false;
+      if(inn) inn.style.width = '100%';
+      var j = null;
+      try{ j = JSON.parse(xhr.responseText || '{}'); }catch(e){ j = null; }
+      if(xhr.status === 200 && j && j.ok){
+        FL.code = j.code;
+        FL.delKey = j.delKey;
+        var c = flEl('flCode');
+        if(c) c.textContent = j.code;
+        if(done) done.classList.add('on');
+        flMsg('flMsg', 'ok', '上传完成：' + flBytes(j.size) + '，保存 ' + j.ttl + ' 天。');
+        try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
+      }else{
+        flMsg('flMsg', 'err', (j && j.error) ? j.error : ('上传失败（HTTP ' + xhr.status + '）'));
+      }
+    };
+    xhr.onerror = function(){
+      FL.busy = false;
+      flMsg('flMsg', 'err', '网络断了，没传上去。');
+    };
+    xhr.send(JSON.stringify({ name: f.name, type: f.type || 'application/octet-stream', data: b64, ttl: FL.ttl }));
+  };
+  reader.readAsDataURL(f);
+}
+function flQuery(){
+  var inp = flEl('flIn');
+  var code = String((inp && inp.value) || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+  if(code.length !== 6){ flMsg('flMsg2', 'err', '取件码是 6 位，再数一下。'); return; }
+  var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+  flMsg('flMsg2', '', '正在查…');
+  var card = flEl('flCard'); if(card) card.style.display = 'none';
+  fetch(base + '/api/files?code=' + encodeURIComponent(code) + '&meta=1')
+    .then(function(r){ return r.json().then(function(j){ return { s: r.status, j: j }; }); })
+    .then(function(o){
+      var j = o.j || {};
+      if(o.s !== 200 || !j.ok){
+        flMsg('flMsg2', 'err', j.error || '没查到这个取件码。');
+        return;
+      }
+      flMsg('flMsg2', '', '');
+      var left = Math.max(0, Math.ceil((j.exp - Date.now()) / 86400000));
+      if(card){
+        card.style.display = '';
+        card.innerHTML = '<b>' + emojiEscHtml(j.name) + '</b>'
+          + '<div class="m">' + flBytes(j.size) + '　·　还剩 ' + left + ' 天　·　'
+          + '上传于 ' + new Date(j.at).toLocaleString('zh-CN', { hour12: false }) + '</div>'
+          + '<a class="fl-btn" style="display:block;text-align:center;text-decoration:none;line-height:1.4"'
+          + ' href="' + base + '/api/files?code=' + encodeURIComponent(code) + '" download>'
+          + '下载这个文件</a>';
+      }
+    })
+    .catch(function(){ flMsg('flMsg2', 'err', '网络没通，稍后再试。'); });
+}
+(function bindFiles(){
+  function init(){
+    var m = flEl('flMask');
+    if(!m) return;
+    m.addEventListener('click', function(e){ if(e.target === m) closeFiles(); });
+    var drop = flEl('flDrop'), file = flEl('flFile');
+    if(drop && file){
+      drop.addEventListener('click', function(){ file.click(); });
+      file.addEventListener('change', function(){ if(file.files && file.files[0]) flUpload(file.files[0]); });
+      ['dragenter','dragover'].forEach(function(ev){
+        drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); });
+      });
+      ['dragleave','drop'].forEach(function(ev){
+        drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); });
+      });
+      drop.addEventListener('drop', function(e){
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if(f) flUpload(f);
+      });
+    }
+    var seg = document.querySelectorAll('[data-ttl]');
+    for(var i = 0; i < seg.length; i++){
+      seg[i].addEventListener('click', function(){
+        for(var k = 0; k < seg.length; k++) seg[k].classList.remove('on');
+        this.classList.add('on');
+        FL.ttl = Number(this.getAttribute('data-ttl')) || 7;
+      });
+    }
+    var cp = flEl('flCopyCode');
+    if(cp) cp.onclick = function(){
+      if(!FL.code) return;
+      var done = function(){ flMsg('flMsg', 'ok', '取件码 ' + FL.code + ' 已复制'); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(FL.code).then(done).catch(function(){});
+      }else{
+        try{
+          var t = document.createElement('textarea');
+          t.value = FL.code; document.body.appendChild(t); t.select();
+          document.execCommand('copy'); document.body.removeChild(t); done();
+        }catch(e){}
+      }
+    };
+    var del = flEl('flDel');
+    if(del) del.onclick = function(){
+      if(!FL.code || !FL.delKey) return;
+      if(!confirm('删除这个文件？删掉后取件码立刻失效。')) return;
+      var base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+      fetch(base + '/api/files?action=del', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: FL.code, delKey: FL.delKey }),
+      }).then(function(r){ return r.json(); }).then(function(j){
+        if(j && j.ok){
+          flMsg('flMsg', 'ok', '已删除，取件码作废。');
+          var done2 = flEl('flDone'); if(done2) done2.classList.remove('on');
+          FL.code = ''; FL.delKey = '';
+        }else{
+          flMsg('flMsg', 'err', (j && j.error) || '删除失败');
+        }
+      }).catch(function(){ flMsg('flMsg', 'err', '网络没通'); });
+    };
+    var q = flEl('flQuery');
+    if(q) q.onclick = flQuery;
+    var inp = flEl('flIn');
+    if(inp) inp.addEventListener('keydown', function(e){ if(e.key === 'Enter') flQuery(); });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();

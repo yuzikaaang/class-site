@@ -1569,8 +1569,11 @@ async function listProfiles(req, res) {
         studentId: (await d(r.student_id)) || '',
         politics: (await d(r.politics)) || '',
         examNo: (await d(r.exam_no)) || '',
-        /* v4.0.0：性别（明文列）。后台表单回显、Excel 导出都用它。 */
-        gender: r.gender || '',
+        /* v4.0.0：性别（明文列）。后台表单回显、Excel 导出都用它。
+           v4.7.11：老数据里「性别」曾被当成自定义字段写进 extra，
+           系统列是空的 —— 这里回退读一次，详情页就只显示一个性别、
+           而且值是对的。下次保存/重新导入会自动写回系统列。 */
+        gender: r.gender || extra.gender || extra['性别'] || '',
         role: r.role || '学生',
         /* v3.5.22：档案里的「身份」（profiles.role）单独给一个键，
            避免与账号角色 role 混淆（前端编辑表单两个都要用） */
@@ -3915,6 +3918,11 @@ async function batchProfiles(req, res, me, b) {
       const examNo = cText(raw.examNo, 24);
       const roleIn = cText(raw.role, 10);          /* Excel 里显式给了才动 */
       const role = roleIn || '学生';
+      /* v4.7.11（站主第 13 条）：以前批量导入**不认「性别」列**，那一列被当成
+         自定义字段写进 extra，于是每个人的详情里出现两个「性别」：
+         系统那个空着、自定义那个有值。现在把「性别」当系统列收进来。 */
+      const gRaw = cText(raw.gender, 4);
+      const gender = (gRaw === '男' || gRaw === '女') ? gRaw : null;
       const wechat = cContact(raw.wechat);
       const qq = cContact(raw.qq);
       const phone = cContact(raw.phone);
@@ -3942,7 +3950,7 @@ async function batchProfiles(req, res, me, b) {
          `multiple assignments to same column "id_card"`，整批 61 行全废。
          这里把「本函数已按固定列处理过的」列排除，保证每列只写一次。 */
       const FIXED_COLS_WRITTEN = ['name', 'student_id', 'name_bidx', 'student_id_bidx',
-        'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status',
+        'politics', 'exam_no', 'role', 'gender', 'wechat', 'qq', 'phone', 'contact_status',
         'id_card', 'youth_league_no'];
       const exCols = Object.keys(ex).filter((k) => isSafeFieldFormat(k).ok && !FIXED_COLS_WRITTEN.includes(k));
 
@@ -4043,6 +4051,11 @@ async function batchProfiles(req, res, me, b) {
           params.push(roleIn);
           sets.push('role = $' + params.length);
         }
+        /* 性别同理：表里没这一列（或填了别的字）就不动 */
+        if (gender && gender !== String(cur.gender || '')) {
+          params.push(gender);
+          sets.push('gender = $' + params.length);
+        }
         /* 联系方式状态跟着联系方式走；没写联系方式就不动 */
         const touchedContact = sets.some((x) => /^(wechat|qq|phone)\s*=/.test(x));
         if (touchedContact) {
@@ -4069,10 +4082,10 @@ async function batchProfiles(req, res, me, b) {
       } else {
         /* 双保险：即便 exCols 里混进重复列名，INSERT 也不能出现同名列 */
         const cols = Array.from(new Set(['name', 'student_id', 'name_bidx', 'student_id_bidx',
-          'politics', 'exam_no', 'role', 'wechat', 'qq', 'phone', 'contact_status',
+          'politics', 'exam_no', 'role', 'gender', 'wechat', 'qq', 'phone', 'contact_status',
           'id_card', 'youth_league_no', ...exCols]));
         const params = [
-          eName, eSid, nameBidx, sidBidx, ePolitics, eExamNo, (roleIn || '学生'),
+          eName, eSid, nameBidx, sidBidx, ePolitics, eExamNo, (roleIn || '学生'), gender,
           eWechat, eQq, ePhone, cst, eIdCard, eYln,
         ];
         for (const col of exCols) params.push(await encField(pkey, ex[col]));

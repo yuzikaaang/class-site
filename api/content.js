@@ -50,6 +50,7 @@ const ALLOW_CONTENT_KEYS = [
   'vote_pub',           // v3.5.13 投票公示：{ templates:[{id,name,template}], byVote:{ [voteId]:{tplId,on} } }
   'pick_history',       // v4.4.0 随机点名抽取记录：[{id,at,cond,n,names[],note}]
   'pick_exclude',       // v4.7.0 随机点名的请假 / 不参与名单：{ 姓名: 'leave'|'out' }
+  'pick_hist_del',      // v4.7.11 抽取历史墓碑：['pk...'] —— 让「删掉的记录」在所有设备都不再复活
 ];
 
 /* 课代表能改的字段——只有作业相关。

@@ -350,6 +350,12 @@
        · 自动轮换间隔可设：1 / 3 / 5 / 10 / 30 分钟，或关掉
        · 出处用小一号、淡色，和正文分开 */
   var QI_KEY = 'cls_bhw_quote_min';
+  /* v4.7.11（站主第 4 条）：「大屏作业查看里那个每日一言，有时候不太适合放在班上展出」
+     单独给大屏一个隐藏开关，不影响首页卡片。 */
+  var QH_KEY = 'cls_bhw_quote_hide';
+  BIG.quoteHidden = (function (){
+    try{ return localStorage.getItem(QH_KEY) === '1'; }catch(e){ return false; }
+  })();
   BIG.quoteMin = (function (){
     var n = 5;
     try{
@@ -1091,6 +1097,7 @@
         var en = d.endDate ? new Date(String(d.endDate).slice(0, 10) + 'T23:59:59') : st;
         if(now.getTime() > en.getTime()) return;      /* 已经过去的整条不显示 */
         if(!best || st < best.st) best = { name: d.name || '', st: st, en: en,
+          scope: Array.isArray(d.scope) ? d.scope : [],
           during: !!(d.endDate && now.getTime() >= st.getTime()) };
       });
       out.imp = best;
@@ -1115,8 +1122,13 @@
     box.style.display = '';
     var rows = '';
     if(p.imp){
-      rows += '<div class="bhw-cd-row">'
-        + '<span class="bhw-cd-n">' + esc0(p.imp.name) + '</span>'
+      /* v4.7.11（站主第 14 条）：填了考试范围的考试，点这一行就能看范围 */
+      var hasSc = !!(p.imp.scope && p.imp.scope.length);
+      BIG._cdImp = hasSc ? p.imp : null;
+      rows += '<div class="bhw-cd-row' + (hasSc ? ' tap' : '') + '"'
+        + (hasSc ? ' onclick="BIG.cdScope()" title="点击查看考试范围"' : '') + '>'
+        + '<span class="bhw-cd-n">' + esc0(p.imp.name)
+        + (hasSc ? '<i class="bhw-cd-more">范围</i>' : '') + '</span>'
         + '<span class="bhw-cd-v' + (p.imp.during ? ' during' : '') + '">'
         + (p.imp.during ? '进行中' : cdLeftText(p.imp.st, now)) + '</span></div>';
     }
@@ -1130,10 +1142,18 @@
     box.innerHTML = '<span class="bhw-mini-k">倒计时</span>' + rows;
   }
   BIG.renderCd = renderCd;
+  BIG.cdScope = function (){
+    var it = BIG._cdImp;
+    if(!it || !it.scope || !it.scope.length) return;
+    try{
+      if(typeof openExamScope === 'function'){ openExamScope(it.name); return; }
+    }catch(e){}
+  };
 
   /* ---------------- 随机一言（v4.3.0） ---------------- */
   function renderQuote(){
     var box = $('bhwQuote'); if(!box) return;
+    if(BIG.quoteHidden){ box.style.display = 'none'; return; }
     var q = BIG.quoteData;
     if(!q || !q.text){ box.style.display = 'none'; return; }
     box.style.display = '';
@@ -1553,19 +1573,76 @@
   };
 
   /* ---------------- 一言轮换间隔弹窗（v4.3.0） ---------------- */
-  BIG.quoteCfg = function (){
-    var body = $('bhwQuoteBody');
+  /* v4.7.11（站主第 4 条）：大屏这一页也要能改「显示哪几类」和「整块隐藏」。
+     类型与首页共用同一份 quote_source（云端），所以这儿勾了，首页也跟着变。 */
+  var QC_FE = [
+    ['a', '动画'], ['b', '漫画'], ['c', '游戏'], ['d', '文学'],
+    ['e', '原创'], ['f', '网络'], ['g', '其他'], ['h', '影视'],
+    ['i', '诗词'], ['j', '网易云'], ['k', '哲学'], ['l', '抖机灵']
+  ];
+  function qcList(){
+    try{ if(typeof quoteCats === 'function') return quoteCats(); }catch(e){}
+    return ['a', 'b', 'd', 'i'];
+  }
+  function quoteCfgHtml(){
     var opts = [
-      { n: 1, t: '每 1 分钟' }, { n: 3, t: '每 3 分钟' }, { n: 5, t: '每 5 分钟（默认）' },
+      { n: 1, t: '每 1 分钟' }, { n: 3, t: '每 3 分钟' }, { n: 5, t: '每 5 分钟' },
       { n: 10, t: '每 10 分钟' }, { n: 30, t: '每 30 分钟' }, { n: 0, t: '仅手动' }
     ];
-    if(body){
-      body.innerHTML = opts.map(function (o){
-        return '<button type="button" class="bhw-opt' + (o.n === BIG.quoteMin ? ' on' : '') + '"'
-          + ' onclick="BIG.quoteSetMin(' + o.n + ')">' + o.t + '</button>';
-      }).join('');
-    }
+    var cur = qcList();
+    var h = '';
+    h += '<div class="bhw-q-sec">';
+    h += '<div class="bhw-q-sec-k">是否在大屏显示</div>';
+    h += '<button type="button" class="bhw-opt' + (BIG.quoteHidden ? '' : ' on') + '"'
+       + ' onclick="BIG.quoteHideSet(false)">显示</button>';
+    h += '<button type="button" class="bhw-opt' + (BIG.quoteHidden ? ' on' : '') + '"'
+       + ' onclick="BIG.quoteHideSet(true)">隐藏</button>';
+    h += '</div>';
+    h += '<div class="bhw-q-sec">';
+    h += '<div class="bhw-q-sec-k">自动更换</div>';
+    h += opts.map(function (o){
+      return '<button type="button" class="bhw-opt' + (o.n === BIG.quoteMin ? ' on' : '') + '"'
+        + ' onclick="BIG.quoteSetMin(' + o.n + ')">' + o.t + '</button>';
+    }).join('');
+    h += '</div>';
+    h += '<div class="bhw-q-sec">';
+    h += '<div class="bhw-q-sec-k">内容类型（勾上的才会出现）</div>';
+    h += QC_FE.map(function (c){
+      var on = cur.indexOf(c[0]) >= 0;
+      return '<button type="button" class="bhw-opt' + (on ? ' on' : '') + '"'
+        + ' onclick="BIG.quoteCatSet(\'' + c[0] + '\')">' + (on ? '✓ ' : '') + c[1] + '</button>';
+    }).join('');
+    h += '</div>';
+    h += '<p class="bhw-io-tip" style="margin:10px 2px 0">'
+       + (typeof isAdmin === 'function' && isAdmin()
+          ? '勾完即生效，并同步给所有人（首页那张卡片也一样）'
+          : '勾完只在这台设备生效')
+       + '</p>';
+    return h;
+  }
+  BIG.quoteCfg = function (){
+    var body = $('bhwQuoteBody');
+    if(body) body.innerHTML = quoteCfgHtml();
     var m = $('bhwQuoteMask'); if(m) m.classList.add('show');
+  };
+  BIG.quoteCfgRefresh = function (){
+    var body = $('bhwQuoteBody');
+    if(body && body.innerHTML) body.innerHTML = quoteCfgHtml();
+    renderQuote();
+  };
+  BIG.quoteHideSet = function (v){
+    BIG.quoteHidden = !!v;
+    try{ localStorage.setItem(QH_KEY, v ? '1' : '0'); }catch(e){}
+    renderQuote();
+    BIG.quoteCfg();
+    try{ if(typeof SFX !== 'undefined' && SFX.click) SFX.click(); }catch(e){}
+    toast(v ? '大屏已隐藏每日一言' : '大屏已显示每日一言');
+  };
+  BIG.quoteCatSet = function (k){
+    try{
+      if(typeof quoteCatToggle === 'function') quoteCatToggle(k);
+    }catch(e){}
+    BIG.quoteCfgRefresh();
   };
   BIG.quoteClose = function (){
     var m = $('bhwQuoteMask'); if(m) m.classList.remove('show');
@@ -2101,10 +2178,24 @@
      解法：删过的人落一个「墓碑」id，phMerge 见到墓碑直接跳过；
      同时把 SITE_DATA 里那份也改掉，任何一次内容上传都不会把旧的又推上去。 */
   var PH_DEL_KEY = 'cls_pick_hist_del';
+  /* v4.7.11（站主第 12 条）：「我在手机上删了一次，打开电脑发现记录还在」。
+     根因：墓碑只写在本机 localStorage —— 删的那台知道，别的设备不知道，
+     它们合并时把云端那份又并回来，记录原地复活。
+     现在墓碑也上云（内容键 pick_hist_del），合并时本机 + 云端一起认。 */
   function phTomb(){
     var a = [];
     try{ a = JSON.parse(localStorage.getItem(PH_DEL_KEY) || '[]'); }catch(e){ a = []; }
-    return Array.isArray(a) ? a : [];
+    if(!Array.isArray(a)) a = [];
+    try{
+      var d = data();
+      if(d && Array.isArray(d.pickHistDel)){
+        d.pickHistDel.forEach(function (id){
+          var k = String(id || '');
+          if(k && a.indexOf(k) < 0) a.push(k);
+        });
+      }
+    }catch(e){}
+    return a;
   }
   function phTombAdd(id){
     var a = phTomb();
@@ -2149,7 +2240,8 @@
     /* 没登录 / 不是管理员就只落本机，等下次有人登管理员再说（列表本身会一起带上） */
     try{
       if(typeof pushCloudContent === 'function' && adminOk()){
-        pushCloudContent({ pick_history: list }, true);
+        /* 墓碑跟着一起推 —— 否则别的设备仍会把它加回来 */
+        pushCloudContent({ pick_history: list, pick_hist_del: phTomb() }, true);
       }
     }catch(e){}
   }
@@ -2202,7 +2294,70 @@
     phSave(list);
     if(BIG.pick.rec && String(BIG.pick.rec.id) === key) BIG.pick.rec = null;
     BIG.pickBody();
-    toast('已删除这条记录');
+    toast(adminOk() ? '已删除，云端同步中' : '已在本机删除（登录管理员才会同步到其他设备）');
+  };
+
+  /* ---------------- 批量删除（v4.7.11 站主第 12 条） ---------------- */
+  BIG.pickSelToggle = function (){
+    BIG.pick.selMode = !BIG.pick.selMode;
+    BIG.pick.sel = {};
+    BIG.pickBody();
+  };
+  BIG.pickSelOne = function (id, el){
+    BIG.pick.sel = BIG.pick.sel || {};
+    var k = String(id);
+    if(BIG.pick.sel[k]) delete BIG.pick.sel[k];
+    else BIG.pick.sel[k] = 1;
+    if(el && el.parentNode) el.parentNode.classList.toggle('on', !!BIG.pick.sel[k]);
+    var b = document.getElementById('bpickSelDel');
+    if(b){
+      var n = Object.keys(BIG.pick.sel).length;
+      b.textContent = '删除选中' + (n ? '（' + n + '）' : '');
+      b.disabled = !n;
+    }
+  };
+  BIG.pickSelAll = function (){
+    var list = [];
+    try{ list = phMerge(); }catch(e){ list = []; }
+    var sel = BIG.pick.sel || {};
+    var allOn = list.length > 0 && list.every(function (r){ return sel[String(r.id)]; });
+    BIG.pick.sel = {};
+    if(!allOn) list.forEach(function (r){ BIG.pick.sel[String(r.id)] = 1; });
+    BIG.pickBody();
+  };
+  function phDelMany(ids){
+    var del = {};
+    ids.forEach(function (id){ del[String(id)] = 1; phTombAdd(String(id)); });
+    var list = phMerge().filter(function (x){ return !del[String(x.id)]; });
+    phSave(list);
+    if(BIG.pick.rec && del[String(BIG.pick.rec.id)]) BIG.pick.rec = null;
+    /* 立即再推一次：确保云端那份也把墓碑带上，不等下一次保存 */
+    try{
+      if(typeof pushCloudContent === 'function' && adminOk()){
+        pushCloudContent({ pick_history: list, pick_hist_del: phTomb() }, true);
+      }
+    }catch(e){}
+    return ids.length;
+  }
+  BIG.pickSelDel = function (){
+    var ids = Object.keys(BIG.pick.sel || {});
+    if(!ids.length) return;
+    if(!confirm('删除选中的 ' + ids.length + ' 条抽取记录？删除后无法恢复。')) return;
+    phDelMany(ids);
+    BIG.pick.sel = {};
+    BIG.pickBody();
+    toast('已删除 ' + ids.length + ' 条' + (adminOk() ? '，云端同步中' : '（仅本机）'));
+  };
+  /* 「删除 30 天前」——站主说的「按时间批量删」，比一条条点省事 */
+  BIG.pickSelOld = function (days){
+    var cut = Date.now() - (days || 30) * 86400000;
+    var ids = [];
+    try{ ids = phMerge().filter(function (r){ return Number(r.at) < cut; }).map(function (r){ return r.id; }); }catch(e){}
+    if(!ids.length){ toast('没有 ' + (days || 30) + ' 天前的记录'); return; }
+    if(!confirm('删除 ' + (days || 30) + ' 天前的 ' + ids.length + ' 条记录？')) return;
+    phDelMany(ids);
+    BIG.pickBody();
+    toast('已删除 ' + ids.length + ' 条');
   };
 
   function loadF(){
@@ -3013,8 +3168,10 @@
       return;
     }
 
+    var nn = p.names.length;
+    var ncol = nn >= 17 ? 4 : (nn >= 9 ? 3 : (nn >= 5 ? 2 : 1));
     box.innerHTML = head
-      + '<div class="bpick-res">'
+      + '<div class="bpick-res' + (ncol > 1 ? ' c' + ncol : '') + '">'
       + p.names.map(function (n, i){
           var no = sidNo(stuOf(n)), sw = fxSwatch(no);
           return '<div class="bpick-res-row" style="--pc:' + sw.c + ';--ps:' + sw.s + '">'
@@ -3051,16 +3208,36 @@
     if(!list.length){
       return '<div class="bpick-empty">暂无抽取记录。<br>完成抽取后将自动记录时间、条件、人数与结果。</div>';
     }
+    var selMode = !!BIG.pick.selMode;
+    var sel = BIG.pick.sel || {};
+    var selN = Object.keys(sel).length;
+    var bar = selMode
+      ? '<div class="bpick-hist-bar">'
+        +   '<button type="button" class="bpick-hist-b" onclick="BIG.pickSelAll()">全选 / 取消</button>'
+        +   '<button type="button" class="bpick-hist-b danger" id="bpickSelDel"'
+        +     ' onclick="BIG.pickSelDel()"' + (selN ? '' : ' disabled') + '>'
+        +     '删除选中' + (selN ? '（' + selN + '）' : '') + '</button>'
+        +   '<button type="button" class="bpick-hist-b" onclick="BIG.pickSelOld(30)">删除 30 天前</button>'
+        + '</div>'
+      : '';
     return '<div class="bpick-hist-tip">'
-      + (adminOk() ? '记录已同步至云端' : '记录暂存本机，管理员登录后自动上传')
+      + '<span>' + (adminOk() ? '记录已同步至云端' : '记录暂存本机，管理员登录后自动上传') + '</span>'
+      + '<button type="button" class="bpick-hist-mng" onclick="BIG.pickSelToggle()">'
+      +   (selMode ? '完成' : '批量管理') + '</button>'
       + '</div>'
+      + bar
       + '<div class="bpick-hist">' + list.map(function (r){
       var rid = attr0(r.id);
-      return '<div class="bpick-hist-item">'
+      var on = !!sel[String(r.id)];
+      return '<div class="bpick-hist-item' + (on ? ' on' : '') + '">'
         + '<div class="bpick-hist-top">'
+        +   (selMode
+            ? '<button type="button" class="bpick-hist-chk" onclick="BIG.pickSelOne(\'' + rid + '\',this)"'
+              + ' aria-label="选中这条">' + (on ? '✓' : '') + '</button>'
+            : '')
         +   '<b>' + esc0(phTime(r.at)) + '</b>'
         +   '<span class="bpick-hist-n">' + r.n + ' 人</span>'
-        +   '<button type="button" class="bpick-hist-x" onclick="BIG.pickHistDel(\'' + rid + '\')">删</button>'
+        +   (selMode ? '' : '<button type="button" class="bpick-hist-x" onclick="BIG.pickHistDel(\'' + rid + '\')">删</button>')
         + '</div>'
         + '<div class="bpick-hist-cond">条件：' + esc0(r.cond || '不限（全部可抽的人）') + '</div>'
         + '<div class="bpick-hist-names">'

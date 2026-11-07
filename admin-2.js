@@ -1587,11 +1587,20 @@ function profileImportDialog(){
                  而这两列本来就是 profiles 的内置列（单条编辑一直支持），
                  批量导入却始终不认 —— 数据被静默丢弃。这次补上。 */
               idCard:        pick(r, ['身份证号','身份证','证件号']),
-              youthLeagueNo: pick(r, ['发展团员编号','团员编号','入团编号'])
+              youthLeagueNo: pick(r, ['发展团员编号','团员编号','入团编号']),
+              /* v4.7.11（站主第 13 条）：性别本来就是系统列（大屏按性别抽人靠它），
+                 以前导入当成自定义字段，结果详情里冒出两个「性别」。 */
+              gender:        pick(r, ['性别'])
             };
-            /* 自定义字段：中文名优先，其次英文字段名 */
+            /* 自定义字段：中文名优先，其次英文字段名。
+               跳过系统列（性别 / 身份证号 / 团员编号 等），否则会重复显示一份。 */
             var ex = {};
+            var SYS_KEYS = ['gender','性别','id_card','身份证号','身份证','证件号',
+                            'youth_league_no','发展团员编号','团员编号','入团编号',
+                            'name','姓名','student_id','学号','politics','政治面貌'];
             extras.forEach(function(f){
+              if(SYS_KEYS.indexOf(String(f.label || '').trim()) >= 0) return;
+              if(f.field === 'gender' || f.field === 'id_card' || f.field === 'youth_league_no') return;
               var v = pick(r, [f.label, f.field]);
               if(v) ex[f.field] = v;
             });

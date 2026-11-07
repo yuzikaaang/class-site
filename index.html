@@ -1137,6 +1137,85 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 #confettiCanvas{position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9992}
 /* ===== v4.9.0：作业导出预览弹窗 =====
    站主要求「导出图片先预览、能调字号字体排列」。左边看效果，右边改参数，底下保存。 */
+/* 文件中转站（v4.7.11） */
+.fl-mask{position:fixed;inset:0;background:rgba(24,16,10,.55);backdrop-filter:blur(4px);
+  display:none;align-items:center;justify-content:center;z-index:9997;padding:16px}
+.fl-mask.show{display:flex}
+.fl-box{width:min(440px,95vw);max-height:90vh;overflow:auto;background:var(--bg-1);color:var(--fg);
+  border-radius:20px;box-shadow:0 26px 70px rgba(0,0,0,.4);padding:0 0 16px}
+.dark .fl-box{background:#221f1d}
+.fl-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;font-weight:800}
+.fl-head button{border:none;background:none;font-size:1.2rem;color:var(--fg-3);cursor:pointer;padding:0 4px}
+.fl-tabs{display:flex;gap:6px;padding:0 18px 10px}
+.fl-tabs button{flex:1;border:1px solid rgba(120,53,15,.16);background:var(--bg-2);color:var(--fg-2);
+  border-radius:10px;padding:8px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit}
+.fl-tabs button.on{background:var(--tint);border-color:var(--grad-a);color:var(--accent-ink)}
+.fl-pane{padding:0 18px}
+.fl-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  border:2px dashed rgba(120,53,15,.24);border-radius:16px;padding:26px 16px;cursor:pointer;
+  text-align:center;background:var(--bg-2);transition:border-color .15s,background .15s}
+.fl-drop:hover,.fl-drop.over{border-color:var(--grad-a);background:var(--tint)}
+.fl-drop b{font-size:.95rem;color:var(--accent-ink)}
+.fl-drop span{font-size:.72rem;color:var(--fg-3);line-height:1.6}
+.fl-row{display:flex;align-items:center;gap:10px;margin:14px 0 6px;font-size:.78rem;color:var(--fg-3)}
+.fl-seg{display:flex;gap:6px;flex:1}
+.fl-seg button{flex:1;border:1px solid rgba(120,53,15,.16);background:var(--bg-2);color:var(--fg-2);
+  border-radius:9px;padding:7px 0;font-size:.76rem;font-weight:700;cursor:pointer;font-family:inherit}
+.fl-seg button.on{background:var(--accent-ink);border-color:var(--accent-ink);color:#fff}
+.fl-prog{height:7px;border-radius:999px;background:var(--bg-3);overflow:hidden;margin-top:12px;display:none}
+.fl-prog.on{display:block}
+.fl-prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--btn-a),var(--btn-b));transition:width .2s}
+.fl-msg{font-size:.76rem;color:var(--fg-3);margin-top:10px;min-height:1em;line-height:1.6}
+.fl-msg.err{color:#b91c1c}
+.fl-msg.ok{color:#15803d}
+.fl-done{display:none;margin-top:14px;text-align:center;border-top:1px dashed rgba(120,53,15,.16);padding-top:14px}
+.fl-done.on{display:block}
+.fl-code{font-size:2.1rem;font-weight:900;letter-spacing:.22em;color:var(--accent-ink);
+  font-variant-numeric:tabular-nums;padding-left:.22em}
+.fl-code-tip{font-size:.72rem;color:var(--fg-3);line-height:1.6;margin:6px 0 12px}
+.fl-acts{display:flex;gap:8px}
+.fl-btn{flex:1;border:none;border-radius:11px;padding:10px;font-size:.82rem;font-weight:800;cursor:pointer;
+  background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;font-family:inherit}
+.fl-btn.ghost{background:var(--bg-3);color:var(--fg-2)}
+.fl-btn:disabled{opacity:.6;cursor:default}
+.fl-get{display:flex;gap:8px;margin-top:6px}
+.fl-in{flex:1;border:1.5px solid rgba(120,53,15,.2);background:var(--bg-2);color:var(--fg);
+  border-radius:11px;padding:11px 13px;font-size:1.05rem;font-weight:800;letter-spacing:.16em;
+  text-align:center;text-transform:uppercase;font-family:inherit;min-width:0}
+.fl-in:focus{outline:none;border-color:var(--grad-a)}
+.fl-card{margin-top:14px;border:1px solid rgba(120,53,15,.14);border-radius:14px;padding:14px;background:var(--bg-2)}
+.fl-card b{display:block;font-size:.95rem;word-break:break-all;margin-bottom:4px}
+.fl-card .m{font-size:.74rem;color:var(--fg-3);line-height:1.6;margin-bottom:10px}
+@media (max-width:420px){ .fl-code{font-size:1.7rem} }
+/* 版本更新弹窗（v4.7.11） */
+.up-mask{position:fixed;inset:0;background:rgba(24,16,10,.55);backdrop-filter:blur(4px);
+  display:none;align-items:center;justify-content:center;z-index:9998;padding:18px}
+.up-mask.show{display:flex}
+.up-box{width:min(430px,94vw);max-height:86vh;overflow:auto;background:var(--bg-1);color:var(--fg);
+  border-radius:20px;padding:22px 22px 16px;box-shadow:0 26px 70px rgba(0,0,0,.4);
+  animation:upIn .26s cubic-bezier(.22,1,.36,1)}
+@keyframes upIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+.up-spark{font-size:1.6rem;line-height:1;margin-bottom:6px}
+.up-box h3{margin:0 0 6px;font-size:1.12rem;letter-spacing:-.01em}
+.up-box h3 b{color:var(--accent-ink);font-variant-numeric:tabular-nums}
+.up-title{margin:0 0 12px;font-size:.82rem;color:var(--fg-3);line-height:1.55}
+.up-list{margin:0 0 14px;padding:0 0 0 18px;font-size:.83rem;line-height:1.68;color:var(--fg-2)}
+.up-list li{margin-bottom:5px}
+.up-prog{height:7px;border-radius:999px;background:var(--bg-3);overflow:hidden;display:none}
+.up-prog.on{display:block}
+.up-prog i{display:block;height:100%;width:0;border-radius:999px;
+  background:linear-gradient(90deg,var(--btn-a),var(--btn-b));transition:width .28s ease}
+.up-status{font-size:.72rem;color:var(--fg-3);margin-top:7px;min-height:1em;display:none}
+.up-status.on{display:block}
+.up-foot{display:flex;gap:10px;margin-top:16px}
+.up-foot button{flex:1;border:none;border-radius:13px;padding:12px;font-size:.9rem;font-weight:800;
+  cursor:pointer;font-family:inherit}
+.up-later{background:var(--bg-3);color:var(--fg-2)}
+.up-later:hover{background:var(--bg-2)}
+.up-go{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;
+  box-shadow:0 8px 20px rgba(194,65,12,.24)}
+.up-go:disabled{opacity:.7;cursor:default}
+.dark .up-box{background:#221f1d}
 .ex-mask{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9995;padding:16px}
 .ex-mask.show{display:flex}
 .ex-box{background:#fffdfb;color:#332d29;border-radius:16px;width:100%;max-width:1000px;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)}
@@ -1146,6 +1225,13 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .ex-stage{flex:1;background:#f1ece6;padding:16px;overflow:auto;display:flex;justify-content:center;align-items:flex-start;min-height:260px}
 .ex-paper{background:#fff;box-shadow:0 6px 24px rgba(0,0,0,.14);max-width:100%;margin:0 auto}
 .ex-paper canvas{display:block;max-width:100%;max-height:calc(94vh - 190px);width:auto;height:auto;margin:0 auto}
+/* v4.7.11（站主第 9 条）：电脑端预览支持滚轮放大。放大后靠宽度撑开，
+   而不是 transform —— transform 放大的部分滚动条够不到，右半边会看不见。 */
+.ex-paper.zoomed{max-width:none}
+.ex-paper.zoomed canvas{max-width:none;max-height:none;width:100%;height:auto}
+.ex-zoom{font-size:.68rem;font-weight:700;color:#a8a29e;margin-left:8px}
+.ex-stage.zooming{cursor:grab}
+.ex-stage.dragging{cursor:grabbing;user-select:none}
 .ex-loading{color:#8a7f76;font-size:.82rem;padding:40px 0}
 .ex-panel{width:262px;flex:0 0 262px;padding:14px 16px;overflow:auto;border-left:1px solid #efe4d9;background:#fffdfb}
 .ex-row{margin-bottom:14px}
@@ -1697,6 +1783,25 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
 .island-banner.hol{background:rgba(255,255,255,.14);border-style:dashed}
 .island-banner.hol .tag{color:#fff;background:rgba(255,255,255,.20);border-color:rgba(255,255,255,.28)}
 .isl-hol-sub{font-size:.74em;opacity:.72;white-space:nowrap}
+/* v4.7.11（站主第 3 条）：班级岛天气总览 —— 图标换成 SVG，右排一句建议 */
+.island-wxbar{
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  margin:0 2px 2px;padding:7px 11px;border-radius:12px;
+  background:linear-gradient(135deg,rgba(56,148,255,.10),rgba(251,191,36,.12));
+  border:1px solid rgba(56,148,255,.16);font-size:.78rem;color:var(--fg-2);
+}
+.isl-wx-ico{width:26px;height:26px;flex:0 0 auto}
+.isl-wx-city{font-weight:800;color:var(--fg)}
+.isl-wx-name{font-weight:700;color:var(--accent-ink)}
+.isl-wx-range{font-variant-numeric:tabular-nums;color:var(--fg-2)}
+.isl-wx-range b{color:#c2410c;font-weight:900}
+.isl-wx-range i{font-style:normal;opacity:.45;margin:0 1px}
+.isl-wx-tip{margin-left:auto;font-size:.72rem;color:var(--fg-3);white-space:nowrap}
+@media (max-width:520px){
+  .island-wxbar{font-size:.72rem;padding:6px 9px;gap:6px}
+  .isl-wx-ico{width:22px;height:22px}
+  .isl-wx-tip{margin-left:0;flex:0 0 100%;white-space:normal}
+}
 .island-foot{display:flex;justify-content:center;align-items:center;gap:14px;
   margin-top:8px;font-size:.58rem;color:rgba(255,255,255,.42);position:relative;z-index:1}
 .island-foot b{color:rgba(255,255,255,.66);font-weight:700}
@@ -2125,6 +2230,15 @@ html:not([data-bg="theme"]) body::after{display:none}
 .sw-row{display:flex;align-items:center;gap:12px;padding:9px 0}
 .sw-row .t{flex:1;min-width:0;font-size:.84rem;color:var(--fg);font-weight:600;text-align:left}
 .sw-row .s{display:block;font-size:.7rem;color:var(--fg-3);font-weight:400;margin-top:2px;line-height:1.4}
+/* v4.7.11（站主第 7 条）：音效逐项设置 */
+.sfx-list{margin:6px 0 4px;border-top:1px dashed rgba(120,53,15,.12);padding-top:8px}
+.sfx-row{display:flex;align-items:center;gap:10px;padding:5px 0;flex-wrap:wrap}
+.sfx-name{flex:0 0 84px;font-size:.76rem;color:var(--fg-2);font-weight:700}
+.sfx-opts{display:flex;gap:5px;flex-wrap:wrap;flex:1;min-width:0}
+.sfx-th{border:1px solid rgba(120,53,15,.16);background:var(--bg-2);color:var(--fg-3);
+  border-radius:7px;padding:4px 8px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit}
+.sfx-th:hover{border-color:var(--grad-a)}
+.sfx-th.on{background:var(--accent-ink);border-color:var(--accent-ink);color:#fff}
 
 /* ⑥ Velocity-Based Slider Snap（速度吸附） */
 .snap{position:relative;padding:12px 2px 4px;touch-action:none;user-select:none;-webkit-user-select:none}
@@ -3355,8 +3469,26 @@ html[data-motion="off"] .sc-ai-typing span{animation:none!important}
        ② 所有滚动容器一律 max-height:none + overflow:visible（热力图 420px 就是它）；
        ③ SVG 内所有 shape 显式给 fill / stroke，并强制 color-adjust:exact。
    ========================================================================= */
+/* v4.7.11（站主第 8 条）：打印前把入场动画收掉 —— 视口外的图表 opacity 还是 0，
+   打印出来就是空白。这个类由「开始打印」按钮加上，打印结束再摘掉。 */
+.sc-print-head{display:none}
+body.sc-printing .sc-embed,
+body.sc-printing .sc-embed *{
+  opacity:1 !important;transform:none !important;
+  animation:none !important;transition:none !important;
+}
 @media print{
   @page{margin:12mm}
+  /* v4.7.11：纸上要有标题 / 班徽 / 基本信息 / 生成时间 */
+  .sc-embed .sc-print-head{
+    display:flex !important;align-items:center;gap:14px;
+    padding:0 0 10px;margin:0 0 14px;border-bottom:2px solid #e0d6cb;
+  }
+  .sc-embed .sc-ph-badge{width:52px;height:52px;object-fit:contain;flex:0 0 auto;display:block}
+  .sc-embed .sc-ph-main{flex:1;min-width:0}
+  .sc-embed .sc-ph-title{font-size:17pt;font-weight:900;color:#292524;letter-spacing:.02em;line-height:1.25}
+  .sc-embed .sc-ph-meta{font-size:9.5pt;color:#57534e;margin-top:4px}
+  .sc-embed .sc-ph-time{font-size:8.5pt;color:#78716c;text-align:right;white-space:nowrap;line-height:1.55}
   html,body{background:#fff !important}
   body *{visibility:hidden !important}
   .sc-embed,.sc-embed *{visibility:visible !important}
@@ -4233,7 +4365,12 @@ html.big-mode.big-hw .content{padding:0}
 .bhw-empty{color:var(--fg-3);text-align:center;padding:30px 10px;font-size:calc(.9rem*var(--bhw-fs))}
 
 /* —— 右栏小功能 —— */
-.bhw-side{display:flex;flex-direction:column;gap:10px;min-height:calc(100vh - 190px)}
+.bhw-side{display:flex;flex-direction:column;gap:10px;min-height:calc(100vh - 190px);min-width:0}
+/* v4.7.11（站主第 15 条）：底部「A+」只会放大作业正文，右栏这些卡片跟着一起放大
+   就会把倒计时 / 一言撑到看不全。这里给右栏单独一个「封顶倍率」：
+   小字号时跟着涨一点，涨到 1.35 倍就停住，永远留得住一行。
+   时钟另算，最多 1.12 倍。 */
+.bhw-side{--bhw-fs-s:min(var(--bhw-fs,1),1.35)}
 .bhw-side .bhw-clock{flex:0 0 auto}
 /* v4.3.0：一言不再拉满整列（那样只剩一大片空白），卡片包住自己的内容 */
 .bhw-side .bhw-quote{flex:0 0 auto}
@@ -4247,8 +4384,9 @@ html.big-mode.big-hw .content{padding:0}
    v4.1.0：时钟**不跟字号缩放** —— 站主反馈「字号放大把时钟也放大，时间就显示不全了」。
    时钟是给后排看时间的，本来就该固定大号；字号只作用于作业正文。 */
 .bhw-clock-t{
-  font-size:2.55rem;font-weight:900;line-height:1.06;
+  font-size:calc(2.55rem*min(var(--bhw-fs,1),1.12));font-weight:900;line-height:1.06;
   letter-spacing:.01em;font-variant-numeric:tabular-nums;white-space:nowrap;
+  max-width:100%;overflow:hidden;
 }
 .bhw-clock-s{font-size:.74rem;opacity:.85;margin-top:5px;white-space:nowrap}
 .bhw-mini{
@@ -4256,8 +4394,8 @@ html.big-mode.big-hw .content{padding:0}
   display:flex;flex-direction:column;gap:4px;
 }
 .dark .bhw-mini{background:#2a2523;border-color:rgba(255,255,255,.08)}
-.bhw-mini-k{font-size:calc(.64rem*var(--bhw-fs));font-weight:800;letter-spacing:.1em;color:var(--fg-3)}
-.bhw-mini-v{font-size:calc(.82rem*var(--bhw-fs));line-height:1.5;font-weight:700;color:var(--fg)}
+.bhw-mini-k{font-size:calc(.64rem*var(--bhw-fs-s));font-weight:800;letter-spacing:.1em;color:var(--fg-3)}
+.bhw-mini-v{font-size:calc(.82rem*var(--bhw-fs-s));line-height:1.5;font-weight:700;color:var(--fg);overflow-wrap:anywhere}
 .bhw-pick{
   display:flex;align-items:center;gap:10px;cursor:pointer;text-align:left;
   background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:14px;padding:10px 12px;
@@ -4279,17 +4417,21 @@ html.big-mode.big-hw .content{padding:0}
 .bhw-cd{gap:6px}
 .bhw-cd-row{
   display:flex;align-items:baseline;justify-content:space-between;gap:8px;
-  font-size:calc(.78rem*var(--bhw-fs));line-height:1.45;
+  font-size:calc(.78rem*var(--bhw-fs-s));line-height:1.45;min-width:0;
 }
 .bhw-cd-n{
   font-weight:800;color:var(--fg);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .bhw-cd-v{
   flex:none;font-weight:800;color:#9a3412;font-variant-numeric:tabular-nums;
-  font-size:calc(.76rem*var(--bhw-fs));
+  font-size:calc(.76rem*var(--bhw-fs-s));white-space:nowrap;
 }
 .dark .bhw-cd-v{color:#f0a884}
 .bhw-cd-v.during{color:#15803d}
+.bhw-cd-row.tap{cursor:pointer;border-radius:8px;padding:2px 4px;margin:-2px -4px}
+.bhw-cd-row.tap:hover{background:var(--tint)}
+.bhw-cd-more{font-style:normal;font-size:.6rem;font-weight:800;color:#c2410c;border:1px solid rgba(194,65,12,.35);
+  border-radius:999px;padding:0 5px;margin-left:6px;vertical-align:middle}
 
 /* —— 随机一言（v4.3.0）——
    站主原话：「那一块全是每日一句，还不太好看，出处应该颜色更淡一点」。
@@ -4312,12 +4454,12 @@ html.big-mode.big-hw .content{padding:0}
 .bhw-q-gear{padding:2px 5px;display:flex;align-items:center}
 .bhw-q-gear svg{width:13px;height:13px}
 .bhw-q-text{
-  font-size:calc(.95rem*var(--bhw-fs));line-height:1.62;font-weight:600;color:var(--fg);
-  letter-spacing:.01em;
+  font-size:calc(.95rem*var(--bhw-fs-s));line-height:1.62;font-weight:600;color:var(--fg);
+  letter-spacing:.01em;overflow-wrap:anywhere;
 }
 .bhw-q-from{
-  font-size:calc(.72rem*var(--bhw-fs));line-height:1.4;font-weight:400;
-  color:var(--fg-3);opacity:.75;text-align:right;
+  font-size:calc(.72rem*var(--bhw-fs-s));line-height:1.4;font-weight:400;
+  color:var(--fg-3);opacity:.75;text-align:right;overflow-wrap:anywhere;
 }
 .bhw-q-tip{
   font-size:.66rem;color:var(--fg-3);opacity:.55;border-top:1px dashed rgba(120,53,15,.12);
@@ -4327,6 +4469,10 @@ html.big-mode.big-hw .content{padding:0}
 /* —— 弹窗：换字体 / 一言间隔（v4.3.0）—— */
 .bhw-fontbox{max-width:420px}
 .bhw-font-list,.bhw-opt-list{display:flex;flex-direction:column;gap:8px;margin:12px 0 4px}
+/* v4.7.11：大屏随机一言设置分区（按钮横排自动折行） */
+.bhw-q-sec{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.bhw-q-sec-k{flex:0 0 100%;font-size:.72rem;font-weight:800;color:var(--fg-3);letter-spacing:.06em;margin:0 2px -2px}
+#bhwQuoteBody .bhw-opt{flex:0 0 auto}
 .bhw-font-item{
   display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;cursor:pointer;
   border:1.5px solid rgba(120,53,15,.14);background:var(--bg-2);color:var(--fg);
@@ -4632,7 +4778,26 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   padding:20px;border-radius:16px;text-align:center;font-size:2.05rem;font-weight:900;
   border:2px solid var(--grad-a);background:var(--tint-2);color:var(--accent-ink);letter-spacing:.04em;
 }
-.bpick-res{display:flex;flex-direction:column;gap:10px;margin:8px 0}
+/* v4.7.11（站主第 5 条）：抽到十几二十人时，单列要滚好几屏。
+   改成按人数自动分列，并把字阶一起压下来 —— 目标是一屏看完，不滚动。 */
+.bpick-res{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin:8px 0}
+.bpick-res.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bpick-res.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.bpick-res.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.bpick-res.c2 .bpick-res-row{padding:12px 12px}
+.bpick-res.c2 .bpick-res-row b{font-size:1.5rem}
+.bpick-res.c3 .bpick-res-row{padding:9px 9px;gap:6px}
+.bpick-res.c3 .bpick-res-row b{font-size:1.18rem}
+.bpick-res.c3 .bpick-res-no,.bpick-res.c4 .bpick-res-no{font-size:.62rem;min-width:2.5em}
+.bpick-res.c3 .bpick-res-row button,.bpick-res.c4 .bpick-res-row button{padding:5px;border-radius:8px}
+.bpick-res.c3 .bpick-res-row button svg,.bpick-res.c4 .bpick-res-row button svg{width:13px;height:13px}
+.bpick-res.c4 .bpick-res-row{padding:7px 7px;gap:4px}
+.bpick-res.c4 .bpick-res-row b{font-size:.98rem;letter-spacing:0}
+.bpick-res.c4 .bpick-res-row button{padding:4px}
+@media (max-width:560px){
+  .bpick-res.c3,.bpick-res.c4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bpick-res.c3 .bpick-res-row b,.bpick-res.c4 .bpick-res-row b{font-size:1.15rem}
+}
 .bpick-res-row{
   display:flex;align-items:center;gap:10px;padding:16px 20px;border-radius:16px;
   border:2px solid var(--grad-a);background:var(--tint);
@@ -4669,7 +4834,29 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .bpick-note-in:focus{border-color:var(--grad-a);box-shadow:0 0 0 3px rgba(194,65,12,.1)}
 .bpick-note-tip{font-size:.68rem;color:var(--fg-3);margin-top:6px}
 .bpick-hist{display:flex;flex-direction:column;gap:10px;margin:6px 0 4px;max-height:min(58vh,560px);overflow:auto;padding-right:2px}
-.bpick-hist-tip{font-size:.72rem;color:var(--fg-3);margin:2px 0 8px;line-height:1.5}
+.bpick-hist-tip{font-size:.72rem;color:var(--fg-3);margin:2px 0 8px;line-height:1.5;
+  display:flex;align-items:center;justify-content:space-between;gap:10px}
+.bpick-hist-mng{
+  flex:none;border:1px solid rgba(120,53,15,.18);background:var(--bg-2);color:var(--fg-2);
+  border-radius:8px;padding:3px 10px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;
+}
+.bpick-hist-mng:hover{border-color:var(--grad-a);color:var(--accent-ink)}
+.bpick-hist-bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
+.bpick-hist-b{
+  border:1px solid rgba(120,53,15,.18);background:var(--bg-2);color:var(--fg-2);
+  border-radius:9px;padding:6px 11px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:inherit;
+}
+.bpick-hist-b:hover{border-color:var(--grad-a)}
+.bpick-hist-b.danger{color:#b91c1c;border-color:rgba(185,28,28,.3)}
+.bpick-hist-b.danger:hover{background:rgba(185,28,28,.08)}
+.bpick-hist-b:disabled{opacity:.45;cursor:not-allowed}
+.bpick-hist-chk{
+  flex:none;width:20px;height:20px;border-radius:6px;border:1.5px solid rgba(120,53,15,.28);
+  background:var(--bg-2);color:#fff;font-size:.72rem;font-weight:900;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;
+}
+.bpick-hist-item.on{border-color:var(--grad-a);box-shadow:0 0 0 2px rgba(194,65,12,.16)}
+.bpick-hist-item.on .bpick-hist-chk{background:var(--accent-ink);border-color:var(--accent-ink)}
 .bpick-hist-item{
   border:1px solid rgba(120,53,15,.14);border-radius:14px;padding:12px 14px;background:var(--bg-1);
 }
@@ -5293,10 +5480,77 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
 </div>
 
 <!-- ===== 班级签 / 彩带彩蛋弹窗 ===== -->
+<!-- ===== 文件中转站（v4.7.11 站主第 6 条）=====
+     手机 ↔ 电脑 ↔ 班级电脑传几兆以内的小文件：上传拿 6 位取件码，另一台输码下载。 -->
+<div class="fl-mask" id="flMask">
+  <div class="fl-box">
+    <div class="fl-head">
+      <span>📦 文件中转站</span>
+      <button type="button" onclick="closeFiles()" aria-label="关闭">✕</button>
+    </div>
+    <div class="fl-tabs">
+      <button type="button" class="on" data-fltab="up" onclick="flTab('up')">上传</button>
+      <button type="button" data-fltab="get" onclick="flTab('get')">取件</button>
+    </div>
+
+    <div class="fl-pane" id="flPaneUp">
+      <label class="fl-drop" id="flDrop">
+        <input type="file" id="flFile" style="display:none">
+        <b>点击选择文件</b>
+        <span>也可以直接把文件拖进这个框　·　单个不超过 4MB</span>
+      </label>
+      <div class="fl-row">
+        <span>保存</span>
+        <div class="fl-seg" id="flTtl">
+          <button type="button" data-ttl="1">1 天</button>
+          <button type="button" data-ttl="7" class="on">7 天</button>
+          <button type="button" data-ttl="30">30 天</button>
+        </div>
+      </div>
+      <div class="fl-prog" id="flProg"><i id="flProgIn"></i></div>
+      <div class="fl-msg" id="flMsg"></div>
+      <div class="fl-done" id="flDone">
+        <div class="fl-code" id="flCode">------</div>
+        <div class="fl-code-tip">在另一台设备打开本站 → 侧边栏「文件中转站」→ 取件，输入这 6 位</div>
+        <div class="fl-acts">
+          <button type="button" class="fl-btn" id="flCopyCode">复制取件码</button>
+          <button type="button" class="fl-btn ghost" id="flDel">删除这个文件</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="fl-pane" id="flPaneGet" style="display:none">
+      <div class="fl-get">
+        <input id="flIn" class="fl-in" maxlength="6" placeholder="6 位取件码" autocomplete="off" spellcheck="false">
+        <button type="button" class="fl-btn" id="flQuery">查一下</button>
+      </div>
+      <div class="fl-msg" id="flMsg2"></div>
+      <div class="fl-card" id="flCard" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 版本更新提示（v4.7.11 站主第 2 条）=====
+     打开页面自动查一次 version.json；有新版才出现。手机 / 平板 / 大屏同一套。 -->
+<div class="up-mask" id="upMask">
+  <div class="up-box">
+    <div class="up-spark">✨</div>
+    <h3>有新版本 <b id="upVer">—</b></h3>
+    <p class="up-title" id="upTitle"></p>
+    <ul class="up-list" id="upList"></ul>
+    <div class="up-prog" id="upProg"><i id="upProgIn"></i></div>
+    <div class="up-status" id="upStatus"></div>
+    <div class="up-foot">
+      <button type="button" class="up-later" id="upLater">稍后</button>
+      <button type="button" class="up-go" id="upGo">立即更新</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 作业导出预览（v4.9.0）===== -->
 <div class="ex-mask" id="exMask">
   <div class="ex-box">
-    <div class="ex-head"><span>🖼 导出预览</span><button onclick="closeExPreview()" aria-label="关闭">✕</button></div>
+    <div class="ex-head"><span>🖼 导出预览</span><span class="ex-zoom" id="exZoomVal" title="滚轮缩放，双击复位"></span><button onclick="closeExPreview()" aria-label="关闭">✕</button></div>
     <div class="ex-body">
       <div class="ex-stage" id="exStage"><div class="ex-loading">正在生成预览…</div></div>
       <div class="ex-panel">
@@ -5753,7 +6007,8 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
     </div>
     <div id="sideCats"></div>
     <button class="side-btn" id="adminEntryBtn" onclick="gotoAdminPage()" style="display:none">🛠️ 班级服务站后台</button>
-    <button class="side-btn" id="sfxBtn" onclick="toggleSfx()" style="margin-top:auto">🔔 音效：开</button>
+    <button class="side-btn" id="filesBtn" onclick="openFiles()" style="margin-top:auto">📦 文件中转站</button>
+    <button class="side-btn" id="sfxBtn" onclick="toggleSfx()">🔔 音效：开</button>
     <button class="side-btn" id="uiSetBtn" onclick="openSettings()">⚙️ 自定义设置</button>
     <!-- ↓↓↓ 以下三项 2026-10-07 起隐藏（云端同步已接管：数据在云端，链接也由站点分享，
          不再需要本地导出/备份/复制链接）。用 display:none 而不是删掉，
@@ -5956,8 +6211,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
     <div class="bhw-form-mask" id="bhwQuoteMask">
       <div class="bhw-form bhw-fontbox">
-        <h3>随机一言 · 自动更换</h3>
-        <p class="bhw-io-tip">离线时使用站内语录库，联网后自动补充。</p>
+        <h3>随机一言 · 设置</h3>
+        <p class="bhw-io-tip">离线时使用站内语录库，联网后自动补充。不适合展出的内容可以整块隐藏，或只留某几类。</p>
         <div class="bhw-opt-list" id="bhwQuoteBody"></div>
         <div class="bhw-form-foot">
           <button type="button" onclick="BIG.quoteClose()">关闭</button>
@@ -6903,18 +7158,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.7.10';
+var SITE_VERSION = '4.7.11';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4710" defer></script>
-<script src="./app.min.js?v=4710" defer></script>
+<script src="./auth-bus.js?v=4711" defer></script>
+<script src="./app.min.js?v=4711" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4710" defer></script>
-<script src="./big.js?v=4710" defer></script>
+<script src="./fs-keep.js?v=4711" defer></script>
+<script src="./big.js?v=4711" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4710" defer></script>
+<script src="./pickfx.js?v=4711" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

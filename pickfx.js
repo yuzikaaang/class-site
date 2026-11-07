@@ -423,12 +423,21 @@
       return Math.max(0, el.offsetLeft + el.offsetWidth / 2 - strip.clientWidth / 2);
     }
 
-    /* 气氛用的小跳：往前 / 往后各 1 格，或者原地不动（隐藏姓名时不用）。
-       站主要求「任何一点点就行」，所以只偏 1 格，不做 ±2 —— 偏太多像滑过头。
-       0 出现两次：让「以为要停」这件事有时真的就停住，才有猜不透的感觉。 */
+    /* v4.7.11（站主第 1 条）：落点偏移从「±1 或不动」扩到 ±3，且概率向外递减。
+       站主原话：「范围是前三到后三里面随机选一个，但每个比例不一样，中间 50%，
+       两边依次递减，越往外越小，但不代表没有。」
+       权重（单侧合计 100）：0 → 50，±1 → 各 18，±2 → 各 6，±3 → 各 1。
+       中间一半的次数「真就停住」，剩下的一半往两边散，最外圈 1% 保留惊喜。 */
+    var TEASE_W = [[0, 50], [1, 18], [-1, 18], [2, 6], [-2, 6], [3, 1], [-3, 1]];
+    var TEASE_POOL = (function () {
+      var a = [];
+      for (var i = 0; i < TEASE_W.length; i++) {
+        for (var k = 0; k < TEASE_W[i][1]; k++) a.push(TEASE_W[i][0]);
+      }
+      return a;
+    })();
     function teaseStep() {
-      var poolT = [0, 0, 1, -1, 1];
-      return poolT[(Math.random() * poolT.length) | 0];
+      return TEASE_POOL[(Math.random() * TEASE_POOL.length) | 0];
     }
 
     function spin() {

@@ -12924,8 +12924,111 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /if defined QUIET ping -n 5 127\.0\.0\.1/.test(bat710) && /if not defined QUIET timeout \/t 4/.test(bat710));
   t('★v4.7.10 退出码 0/1/2 区分 成功 / 失败 / 默认浏览器',
     /:ok_quiet/.test(bat710) && /if defined QUIET exit \/b 2/.test(bat710));
-  t('★v4.7.10 版本号升到 4.7.10',
-    /SITE_VERSION = '4.7.10'/.test(fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8')));
+  t('★v4.7.10 启动器版本标记写入生成函数',
+    /big screen launcher  v4\.7\.10/.test(bat710));
+
+  /* ================= v4.7.11 ================= */
+  const idx711 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const app711 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const big711 = fs.readFileSync(new URL('./big.js', import.meta.url), 'utf8');
+  const adm711 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+  const pick711 = fs.readFileSync(new URL('./pickfx.js', import.meta.url), 'utf8');
+  const wk711 = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+  const apiAdm711 = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+  const apiContent711 = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
+  const apiFiles711 = fs.readFileSync(new URL('./api/files.js', import.meta.url), 'utf8');
+  const apiGeo711 = fs.readFileSync(new URL('./api/geo.js', import.meta.url), 'utf8');
+
+  t('★v4.7.11 版本号升到 4.7.11',
+    /SITE_VERSION = '4\.7\.11'/.test(idx711) && /SITE_VER = '4\.7\.11'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+
+  /* ① 宝箱落点概率分布 */
+  t('★v4.7.11 宝箱落点支持 ±3 格且概率向外递减',
+    /TEASE_W = \[\[0, 50\], \[1, 18\], \[-1, 18\], \[2, 6\], \[-2, 6\], \[3, 1\], \[-3, 1\]\]/.test(pick711)
+    && /TEASE_POOL/.test(pick711));
+
+  /* ② 版本更新 */
+  t('★v4.7.11 前端会拉 version.json 并比较版本（已是最新则不弹）',
+    /version\.json\?_=/.test(app711) && /function updNewer/.test(app711) && /updCheck/.test(app711));
+  t('★v4.7.11 更新进度条分三段真实动作：清缓存 / 注 SW / 重取页面',
+    /caches\.delete/.test(app711) && /unregister\(\)/.test(app711) && /\?_r=/.test(app711));
+  t('★v4.7.11 更新弹窗含标题、条目、进度条、稍后/立即更新',
+    /id="upMask"/.test(idx711) && /id="upList"/.test(idx711) && /id="upProgIn"/.test(idx711));
+  t('★v4.7.11 构建产出 version.json（版本号 + 最近一条更新内容）',
+    fs.existsSync(new URL('./version.json', import.meta.url))
+    && /version\.json/.test(fs.readFileSync(new URL('./scripts/build.mjs', import.meta.url), 'utf8')));
+
+  /* ③ 天气按 IP */
+  t('★v4.7.11 天气按 IP 定位，失败回退修水',
+    /nominatim\.openstreetmap\.org/.test(apiGeo711) && /FALLBACK = \{ city: '修水'/.test(apiGeo711));
+  t('★v4.7.11 worker 注册 geo / files 路由',
+    /case 'geo'/.test(wk711) && /case 'files'/.test(wk711));
+  t('★v4.7.11 天气总览含城市 / 最高最低 / 建议，图标为内联 SVG',
+    /islWxBar/.test(app711) && /function wxIcon/.test(app711) && /function wxTip/.test(app711)
+    && /\.island-wxbar\{/.test(idx711));
+
+  /* ④ 每日一言 */
+  t('★v4.7.11 每日一言勾选后本地先改云端值再重绘（修「点了没反应」）',
+    /SITE_DATA\.quoteSource\.cats = cur\.slice\(\)/.test(app711));
+  t('★v4.7.11 大屏一言可整块隐藏 + 按类型勾选',
+    /cls_bhw_quote_hide/.test(big711) && /BIG\.quoteHideSet/.test(big711) && /BIG\.quoteCatSet/.test(big711));
+
+  /* ⑤ 点名结果分列 */
+  t('★v4.7.11 点名结果按人数分 2~4 列',
+    /ncol = nn >= 17 \? 4/.test(big711) && /\.bpick-res\.c3/.test(idx711));
+
+  /* ⑥ 文件中转站 */
+  t('★v4.7.11 文件中转站：6 位取件码、4MB 上限、7 天过期、防网页渲染',
+    /randStr\(6\)/.test(apiFiles711) && /MAX_BYTES = 4 \* 1024 \* 1024/.test(apiFiles711)
+    && /application\/octet-stream/.test(apiFiles711) && /filename\*=UTF-8/.test(apiFiles711));
+  t('★v4.7.11 中转站用 XHR 才有真实上传进度',
+    /xhr\.upload\.onprogress/.test(app711) && /id="flMask"/.test(idx711));
+
+  /* ⑦ 音效 */
+  t('★v4.7.11 音效支持 4 套音色 + 6 类事件 + 单项关闭',
+    /THEMES=\[\['crisp'/.test(app711) && /EVENTS=\[\['click'/.test(app711)
+    && /MAP\[ev\]=th/.test(app711));
+  t('★v4.7.11 音效设置逐行渲染，不整面板重绘',
+    /class="sfx-row" data-ev="/.test(app711)
+    && /querySelectorAll\('\.sfx-row\[data-ev=/.test(app711));
+
+  /* ⑧ 成绩分析 */
+  t('★v4.7.11 仅赋分排名包进 .sc-card 才能折叠',
+    /data-scblk="board_grd"/.test(app711));
+  t('★v4.7.11 打印页眉含班徽 / 标题 / 人数 / 均分 / 生成时间',
+    /scPrintHeadFill/.test(app711) && /\.sc-ph-badge/.test(idx711) && /sc-printing/.test(idx711));
+
+  /* ⑨ 导出预览缩放 */
+  t('★v4.7.11 导出预览支持滚轮缩放与拖动',
+    /exApplyZoom/.test(app711) && /addEventListener\('wheel'/.test(app711) && /\.ex-paper\.zoomed/.test(idx711));
+
+  /* ⑩ 后台图标回首页 */
+  t('★v4.7.11 后台左上角图标链接回前台首页',
+    /<a class="side-brand" href="index\.html"/.test(idx711.replace(/\n/g, ' ')) || /<a class="side-brand" href="index\.html"/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+
+  /* ⑪ 假期按时刻生效 */
+  t('★v4.7.11 假期从开始时刻生效，白天仍显示当天课表',
+    /if\(h\.fromTime && key === h\.from && nowT < startTs\)/.test(app711));
+
+  /* ⑫ 历史删除跨设备 */
+  t('★v4.7.11 抽取历史墓碑上云（pick_hist_del）',
+    /pick_hist_del/.test(big711) && /pick_hist_del/.test(apiContent711) && /pickHistDel/.test(app711));
+  t('★v4.7.11 历史支持批量删除与「删除 30 天前」',
+    /BIG\.pickSelDel/.test(big711) && /BIG\.pickSelOld/.test(big711));
+
+  /* ⑬ 性别字段 */
+  t('★v4.7.11 批量导入写系统性别列，extra 里跳过同名项',
+    /const gender = \(gRaw === '男'/.test(apiAdm711) && /SYS_KEYS/.test(fs.readFileSync(new URL('./admin-2.js', import.meta.url), 'utf8')));
+  t('★v4.7.11 后台详情把 gender 视为系统字段（不再重复显示两个性别）',
+    /'role', 'title', 'gender'/.test(fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8')));
+
+  /* ⑭ 大屏考试范围 */
+  t('★v4.7.11 大屏倒计时可点击查看考试范围',
+    /BIG\.cdScope/.test(big711) && /bhw-cd-more/.test(idx711));
+
+  /* ⑮ 大屏字号封顶 */
+  t('★v4.7.11 大屏右栏字号封顶 1.35 倍，避免放大后显示不全',
+    /--bhw-fs-s:min\(var\(--bhw-fs,1\),1\.35\)/.test(idx711));
 }
 
 console.log('\n' + '='.repeat(52));

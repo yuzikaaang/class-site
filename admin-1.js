@@ -2144,7 +2144,9 @@ function memberDetailDialog(m){
 
   /* ① 班级档案 */
   var meta = STATE.members.fieldMeta || [];
-  var FIXED = ['name', 'student_id', 'politics', 'exam_no', 'role', 'title', 'wechat', 'qq', 'phone'];
+  /* v4.7.11（站主第 13 条）：gender 也算系统字段 —— 不加的话，
+     旧数据里那份「性别」会在「其他资料字段」里再显示一遍，变成两个性别。 */
+  var FIXED = ['name', 'student_id', 'politics', 'exam_no', 'role', 'title', 'gender', 'wechat', 'qq', 'phone'];
   var extraFields = meta.filter(function(f){ return FIXED.indexOf(f.field) < 0; });
 
   var extraRows = extraFields.map(function(f){
