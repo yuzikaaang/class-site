@@ -24,15 +24,29 @@
 
 import { handlePreflight } from './_lib/http.js';
 
-const MAX_BYTES = 15 * 1024 * 1024;      /* 15MB */
+const MAX_BYTES = 24 * 1024 * 1024;      /* 24MB —— 二进制直存，KV 单值上限 25MiB */
+const MAX_BYTES_LEGACY = 15 * 1024 * 1024; /* 老通道（base64 塞 JSON）只能用 15MB */
 const MAX_TEXT = 20000;                  /* 纯文本最多 2 万字 */
 /* 去掉容易看错的 0 O 1 I L */
 const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
-/* v4.9.2（站主）：KV 一共就 1GB，能留 3 天已经是上限，不再给 7/30/180 天 */
-const TTL_CHOICES = [1, 3];
+/* v4.10.5（站主第 3 条）：保存天数自己设，1~15 天。
+   站主原话：「保存的天数我可以自己设置 1~15 天」。超过 50MB 的文件最多只能存 1 天
+   （目前单件上限 24MB，这条自动兜底，等以后换存储就生效）。 */
+const TTL_MIN = 1;
+const TTL_MAX = 15;
 const DEFAULT_TTL = 3;
+const BIG_FILE = 50 * 1024 * 1024;       /* 超过这个体积 → 只给 1 天 */
 /* 软上限 700MB：给同名/临时键留出余量，到这儿就拒绝新上传，绝不撞 1GB 硬墙 */
 const SOFT_QUOTA = 700 * 1024 * 1024;
+/* 键前缀：
+     f:  —— 老记录（JSON，文件在里面以 base64 躺着）
+     b:  —— v4.10.5 起的文件字节（二进制直存，省掉 base64 的 33% 膨胀）
+     fm: —— v4.10.5 起的元数据（单独一个几百字节的小键，
+            这样「只看信息」和「改名」都不用把 24MB 整个读出来） */
+const KB = 'b:';
+const KM = 'fm:';
+const KF = 'f:';
+const KC = 'fc:';
 
 function ok(res, obj) {
   res.statusCode = 200;
@@ -71,9 +85,13 @@ function cdHeader(name) {
   const ascii = String(name || 'file').replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
   return 'attachment; filename="' + ascii + '"; filename*=UTF-8\'\'' + encodeURIComponent(name || 'file');
 }
-function normTtl(v) {
-  const t = Number(v || DEFAULT_TTL);
-  return TTL_CHOICES.indexOf(t) >= 0 ? t : DEFAULT_TTL;
+function normTtl(v, size) {
+  let t = Math.round(Number(v || DEFAULT_TTL));
+  if (!isFinite(t) || t < TTL_MIN) t = DEFAULT_TTL;
+  if (t > TTL_MAX) t = TTL_MAX;
+  /* 站主：超过 50MB 的最多存 1 天（现在单件上限 24MB，等以后换存储自动生效） */
+  if (Number(size) > BIG_FILE) t = 1;
+  return t;
 }
 /* ----------------------------------------------------------------------------
  * 已用容量：list 一次带 metadata 就够（metadata.size 是上传时写进去的），
@@ -81,10 +99,16 @@ function normTtl(v) {
  * 不需要精确到字节。
  * ------------------------------------------------------------------------- */
 async function kvUsage(kv) {
-  let used = 0, n = 0, cursor;
-  try {
+  let used = 0, n = 0;
+  /* v4.10.5：新记录拆成 fm:（元数据，metadata.size 就是文件大小）+ b:（字节），
+     老记录仍在 f: 里。统计只看「有 size 的那一层」，不会把同一个文件算两遍。 */
+  for (const prefix of [KM, KF]) {
+    let cursor;
     for (let page = 0; page < 5; page++) {
-      const r = await kv.list({ prefix: 'f:', limit: 1000, cursor });
+      let r;
+      try {
+        r = await kv.list({ prefix, limit: 1000, cursor });
+      } catch (e) { break; }
       const keys = (r && r.keys) || [];
       for (const k of keys) {
         n++;
@@ -94,14 +118,15 @@ async function kvUsage(kv) {
       if (!r || r.list_complete) break;
       cursor = r.cursor;
     }
-  } catch (e) { /* 统计失败不影响主流程，按 0 算 */ }
+  }
   return { used, n, cap: SOFT_QUOTA };
 }
 function mb(n) { return Math.round((Number(n) || 0) / 1048576 * 10) / 10; }
 function normMax(v) {
   const n = Number(v || 0);
   if (!isFinite(n) || n <= 0) return 0;      /* 0 = 不限次数 */
-  return Math.max(1, Math.min(999, Math.floor(n)));
+  /* v4.10.5（站主第 3 条）：取用次数可以设 1~50 次，或者不限 */
+  return Math.max(1, Math.min(50, Math.floor(n)));
 }
 
 export default async function handler(req, res) {
@@ -115,23 +140,78 @@ export default async function handler(req, res) {
   const action = String(q.action || '').toLowerCase();
   const method = String(req.method || 'GET').toUpperCase();
 
-  /* ---------------- 上传（文件 / 文本） ---------------- */
+  /* ---------------- 上传文件（二进制直传，v4.10.5） ----------------
+     为什么加这一条：老通道是「FileReader 读成 base64 → 塞进 JSON POST」，
+     base64 会让体积 ×4/3，15MB 的文件在 KV 里要占 20MB，离 25MiB 单值上限很近，
+     所以老通道只能到 15MB。现在直接把 File 当请求体发过来（Content-Type:
+     application/octet-stream），worker 用 arrayBuffer() 接住，KV 里存原始字节 ——
+     24MB 的文件就占 24MB，不膨胀。
+     元数据单独放一个几百字节的 fm: 小键：
+       · 查信息（?meta=1）不用把 24MB 整个读出来；
+       · 改名只重写小键，不用重写 24MB 的字节（KV 写次数省着用）。 */
+  if (method === 'POST' && action === 'upb') {
+    const buf = req.__rawBuf;
+    if (!buf || !buf.byteLength) return bad(res, 400, '没有收到文件内容');
+    const size = buf.byteLength;
+    if (size > MAX_BYTES) {
+      return bad(res, 413, '文件太大了（上限 ' + mb(MAX_BYTES) + 'MB）。更大的课件建议放网盘，这里只挂个链接。');
+    }
+    const name = String(q.name || '未命名文件').slice(0, 120);
+    const type = String(q.type || 'application/octet-stream').slice(0, 120);
+    const memo = String(q.memo || '').slice(0, 60);
+    const ttl = normTtl(q.ttl, size);
+    const maxGet = normMax(q.maxGet);
+    const at = Date.now();
+
+    const usage = await kvUsage(kv);
+    if (usage.used + size > SOFT_QUOTA) {
+      return bad(res, 507,
+        '存储快满了（已用 ' + mb(usage.used) + 'MB / ' + mb(SOFT_QUOTA) + 'MB），'
+        + '先到「历史」里删掉一些不用的，或者等它们到期自动清掉再传。');
+    }
+
+    const code = randStr(6);
+    const delKey = randStr(20);
+    const meta = {
+      v: 2, kind: 'file', name, type, size, at,
+      exp: at + ttl * 86400000, ttl, maxGet, memo, del: delKey,
+    };
+    try {
+      await kv.put(KB + code, buf, { expirationTtl: ttl * 86400 });
+      await kv.put(KM + code, JSON.stringify(meta), {
+        expirationTtl: ttl * 86400,
+        metadata: { size, at, kind: 'file' },
+      });
+    } catch (e) {
+      /* 只写进去一半就失败 → 把可能残留的字节清掉，别白占 24MB */
+      try { await kv.delete(KB + code); } catch (e2) {}
+      try { await kv.delete(KM + code); } catch (e2) {}
+      return bad(res, 500, '存不进去：' + (e && e.message ? e.message : '未知错误'));
+    }
+    return ok(res, {
+      code, delKey, kind: 'file', name, size, ttl, maxGet, exp: meta.exp,
+      quota: { used: usage.used + size, cap: SOFT_QUOTA },
+    });
+  }
+
+  /* ---------------- 上传（文本 / 老 base64 通道） ---------------- */
   if (method === 'POST' && (action === 'up' || action === 'text')) {
     let body = {};
     try { body = JSON.parse(req.body || '{}'); } catch (e) { return bad(res, 400, '请求格式不对'); }
 
     const isText = action === 'text' || String(body.kind || '') === 'text';
-    const ttl = normTtl(body.ttl);
     const maxGet = normMax(body.maxGet);
     const memo = String(body.memo || '').slice(0, 60);
     const delKey = randStr(20);
     const at = Date.now();
+    let ttl = normTtl(body.ttl);
     let rec = null;
 
     if (isText) {
       const text = String(body.text || '');
       if (!text.trim()) return bad(res, 400, '文本是空的');
       if (text.length > MAX_TEXT) return bad(res, 413, '文本太长了（上限 2 万字）');
+      ttl = normTtl(body.ttl, new TextEncoder().encode(text).length);
       rec = {
         kind: 'text',
         name: String(body.name || ('文本 ' + new Date(at).toLocaleString('zh-CN', { hour12: false }))).slice(0, 120),
@@ -147,9 +227,10 @@ export default async function handler(req, res) {
 
       /* base64 长度 → 原始字节数（粗略，够用来卡上限） */
       const approx = Math.floor(b64.length * 3 / 4);
-      if (approx > MAX_BYTES) {
-        return bad(res, 413, '文件太大了（上限 15MB）。更大的课件建议放在网盘，这里放链接。');
+      if (approx > MAX_BYTES_LEGACY) {
+        return bad(res, 413, '文件太大了（老通道上限 15MB）。请刷新页面重试，新通道可以到 24MB。');
       }
+      ttl = normTtl(body.ttl, approx);
       rec = {
         kind: 'file',
         name, type, size: approx, at, exp: at + ttl * 86400000,
@@ -189,13 +270,24 @@ export default async function handler(req, res) {
     const code = String(body.code || '').toUpperCase().trim();
     const delKey = String(body.delKey || '');
     if (!code || !delKey) return bad(res, 400, '缺少取件码或删除口令');
-    const raw = await kv.get('f:' + code);
+    /* v4.10.5：新记录（fm: + b:） */
+    const metaRaw = await kv.get(KM + code);
+    if (metaRaw) {
+      let m = null;
+      try { m = JSON.parse(metaRaw); } catch (e) { m = null; }
+      if (m && m.del && m.del !== delKey) return bad(res, 403, '删除口令不对');
+      await kv.delete(KM + code);
+      try { await kv.delete(KB + code); } catch (e) {}
+      try { await kv.delete(KC + code); } catch (e) {}
+      return ok(res, { deleted: true });
+    }
+    const raw = await kv.get(KF + code);
     if (!raw) return ok(res, { deleted: true, already: true });
     let rec = null;
     try { rec = JSON.parse(raw); } catch (e) { rec = null; }
     if (rec && rec.del && rec.del !== delKey) return bad(res, 403, '删除口令不对');
-    await kv.delete('f:' + code);
-    try { await kv.delete('fc:' + code); } catch (e) {}
+    await kv.delete(KF + code);
+    try { await kv.delete(KC + code); } catch (e) {}
     return ok(res, { deleted: true });
   }
 
@@ -208,7 +300,24 @@ export default async function handler(req, res) {
     const name = String(body.name || '').trim().slice(0, 120);
     if (!code || !delKey) return bad(res, 400, '缺少取件码或删除口令');
     if (!name) return bad(res, 400, '新名字是空的');
-    const raw = await kv.get('f:' + code);
+    /* v4.10.5：新记录的元数据在 fm: 小键里 —— 改名只用重写几百字节，
+       不用把 24MB 的文件字节再读一遍再写一遍（KV 写次数省着用）。 */
+    const metaRaw = await kv.get(KM + code);
+    if (metaRaw) {
+      let m = null;
+      try { m = JSON.parse(metaRaw); } catch (e) { return bad(res, 500, '记录损坏'); }
+      if (m.del && m.del !== delKey) return bad(res, 403, '删除口令不对');
+      m.name = name;
+      const left = Math.max(60, Math.floor((m.exp - Date.now()) / 1000));
+      try {
+        await kv.put(KM + code, JSON.stringify(m), {
+          expirationTtl: left,
+          metadata: { size: m.size, at: m.at, kind: m.kind },
+        });
+      } catch (e) { return bad(res, 500, '改名没存上：' + (e && e.message ? e.message : '')); }
+      return ok(res, { code, name });
+    }
+    const raw = await kv.get(KF + code);
     if (!raw) return bad(res, 404, '取件码不存在或已过期');
     let rec = null;
     try { rec = JSON.parse(raw); } catch (e) { return bad(res, 500, '记录损坏'); }
@@ -216,7 +325,7 @@ export default async function handler(req, res) {
     rec.name = name;
     const left = Math.max(60, Math.floor((rec.exp - Date.now()) / 1000));
     try {
-      await kv.put('f:' + code, JSON.stringify(rec), {
+      await kv.put(KF + code, JSON.stringify(rec), {
         expirationTtl: left,
         metadata: { size: rec.size, at: rec.at, kind: rec.kind },
       });
@@ -236,16 +345,23 @@ export default async function handler(req, res) {
   if (!code) return bad(res, 400, '缺少取件码');
   if (!/^[2-9A-HJ-NP-Z]{6}$/.test(code)) return bad(res, 400, '取件码格式不对（6 位，不含 0 O 1 I L）');
 
-  const raw = await kv.get('f:' + code);
-  if (!raw) return bad(res, 404, '取件码不存在或已过期');
-
+  /* v4.10.5：新记录先看 fm:（元数据小键），没有再回落到老的 f: */
   let rec = null;
-  try { rec = JSON.parse(raw); } catch (e) { rec = null; }
-  if (!rec || (!rec.b64 && !rec.text)) return bad(res, 404, '这个取件码的内容已经失效');
+  const metaRaw = await kv.get(KM + code);
+  if (metaRaw) {
+    try { rec = JSON.parse(metaRaw); } catch (e) { rec = null; }
+  }
+  if (!rec) {
+    const raw = await kv.get(KF + code);
+    if (!raw) return bad(res, 404, '取件码不存在或已过期');
+    try { rec = JSON.parse(raw); } catch (e) { rec = null; }
+  }
+  if (!rec) return bad(res, 404, '取件码不存在或已过期');
+  if (rec.kind !== 'text' && !rec.b64 && !metaRaw) return bad(res, 404, '这个取件码的内容已经失效');
 
   const maxGet = Number(rec.maxGet || 0);
   let gets = 0;
-  try { gets = Number(await kv.get('fc:' + code)) || 0; } catch (e) { gets = 0; }
+  try { gets = Number(await kv.get(KC + code)) || 0; } catch (e) { gets = 0; }
 
   /* 只查信息，不下载也不计数 */
   if (q.meta === '1' || q.meta === 'true') {
@@ -265,8 +381,16 @@ export default async function handler(req, res) {
     });
   }
 
+  /* 「取满次数就作废」要同时清掉新旧两套键 */
+  async function dropAll() {
+    try { await kv.delete(KM + code); } catch (e) {}
+    try { await kv.delete(KB + code); } catch (e) {}
+    try { await kv.delete(KF + code); } catch (e) {}
+    try { await kv.delete(KC + code); } catch (e) {}
+  }
+
   if (maxGet && gets >= maxGet) {
-    try { await kv.delete('f:' + code); } catch (e) {}
+    await dropAll();
     return bad(res, 410, '这个取件码的取用次数已经用完了');
   }
 
@@ -274,11 +398,10 @@ export default async function handler(req, res) {
   try {
     const n = gets + 1;
     const leftTtl = Math.max(60, Math.floor((rec.exp - Date.now()) / 1000));
-    await kv.put('fc:' + code, String(n), { expirationTtl: leftTtl });
+    await kv.put(KC + code, String(n), { expirationTtl: leftTtl });
     if (maxGet && n >= maxGet) {
       /* 取满了：把原件删掉，取件码立即作废（这次下载照常给） */
-      try { await kv.delete('f:' + code); } catch (e) {}
-      try { await kv.delete('fc:' + code); } catch (e) {}
+      await dropAll();
     }
   } catch (e) { /* 计数失败不影响这次下载 */ }
 
@@ -297,10 +420,20 @@ export default async function handler(req, res) {
   }
 
   /* 真下载：二进制直出，绝不按网页渲染 */
-  let bytes;
-  try { bytes = base64ToBytes(rec.b64); } catch (e) { return bad(res, 500, '文件解码失败'); }
+  let bytes = null;
+  if (!rec.b64) {
+    try {
+      const buf = await kv.get(KB + code, 'arrayBuffer');
+      if (buf) bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+    } catch (e) { bytes = null; }
+    if (!bytes) return bad(res, 404, '文件内容已经过期了，让对方重新发一次');
+  } else {
+    try { bytes = base64ToBytes(rec.b64); } catch (e) { return bad(res, 500, '文件解码失败'); }
+  }
   res.statusCode = 200;
-  res.setHeader('Content-Type', 'application/octet-stream');
+  /* 类型按上传时记的走：图片在浏览器里能直接预览，其他一律按下载处理 */
+  res.setHeader('Content-Type', /^(image|application\/pdf|audio|video)\//i.test(String(rec.type || ''))
+    ? String(rec.type) : 'application/octet-stream');
   res.setHeader('Content-Disposition', cdHeader(rec.name));
   res.setHeader('Content-Length', String(bytes.length));
   res.setHeader('Cache-Control', 'private, max-age=0, no-store');

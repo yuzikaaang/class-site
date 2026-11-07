@@ -1173,6 +1173,14 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .fl-seg button{flex:1;border:1px solid rgba(120,53,15,.16);background:var(--bg-2);color:var(--fg-2);
   border-radius:9px;padding:7px 0;font-size:.76rem;font-weight:700;cursor:pointer;font-family:inherit}
 .fl-seg button.on{background:var(--accent-ink);border-color:var(--accent-ink);color:#fff}
+/* v4.10.5：保存天数 / 取用次数改成数字输入（1~15 天、0~50 次） */
+.fl-num{width:66px;flex:0 0 auto;text-align:center;font-variant-numeric:tabular-nums;
+  font-weight:800;padding:7px 6px}
+.fl-unit{color:var(--fg-3);font-weight:700;margin-left:-4px}
+.fl-hint{color:var(--fg-3);opacity:.85;font-size:.7rem;margin-left:auto}
+/* 微信内下载提示：微信内置浏览器点 <a download> 没反应，得引导去外部浏览器 */
+.fl-wxtip{font-size:.72rem;line-height:1.7;color:#8a4b00;background:#fff7e6;
+  border:1px solid #ffd591;border-radius:10px;padding:9px 11px;margin:10px 0 2px}
 .fl-prog{height:7px;border-radius:999px;background:var(--bg-3);overflow:hidden;margin-top:12px;display:none}
 .fl-prog.on{display:block}
 .fl-prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--btn-a),var(--btn-b));transition:width .2s}
@@ -2864,6 +2872,10 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .sc-empty-ico{font-size:2rem;margin-bottom:10px}
 .sc-empty p{margin:6px 0;font-size:.86rem;line-height:1.7}
 .sc-dim{color:#7a6a5c}
+/* v4.10.5（站主第 2 条）：成绩分析顶部那行「用的是缓存 / 正在缓存」提示 */
+.sc-offtip{font-size:.74rem;line-height:1.6;color:#8a4b00;background:#fff7e6;
+  border:1px solid #ffd591;border-radius:9px;padding:7px 10px;margin:0 0 8px;
+  font-weight:600}
 .sc-hint{font-size:.78rem;color:#6e635a;background:#fdf8f3;border:1px solid #f0e7de;border-radius:10px;padding:9px 12px;line-height:1.7;margin-bottom:12px}
 /* v4.4.0：个人画像「查看画像」选择条 */
 .sc-viewbar{
@@ -5028,6 +5040,18 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .bpick-head button:hover{background:var(--tint)}
 .bpick-state{font-size:.85rem;color:var(--fg-3);margin-bottom:14px}
 .bpick-state b{font-size:1.1rem;color:var(--accent-ink)}
+/* v4.10.5（站主第 1 条）：点名条件旁的「查看」→ 列出这个范围里的人 */
+.bpick-peek{display:flex;flex-wrap:wrap;gap:7px;padding:10px 12px;margin:2px 0 12px;
+  border-radius:12px;background:var(--bg-2);border:1px solid rgba(120,53,15,.12);
+  max-height:34vh;overflow:auto}
+.bpick-peek-h{flex:0 0 100%;font-size:.72rem;font-weight:800;color:var(--fg-3);
+  letter-spacing:.04em;margin-bottom:2px}
+.bpick-peek-h span{font-weight:600;opacity:.8}
+.bpick-peek-i{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;
+  background:var(--bg);border:1px solid rgba(120,53,15,.1);font-size:.8rem;white-space:nowrap}
+.bpick-peek-i b{font-weight:800;color:var(--fg)}
+.bpick-peek-i i{font-style:normal;font-size:.7rem;color:var(--fg-3);font-variant-numeric:tabular-nums}
+.bpick-peek-i u{text-decoration:none;font-size:.7rem;color:var(--accent-ink);font-weight:700}
 .bpick-count{display:flex;align-items:center;justify-content:center;gap:26px;margin:10px 0 18px}
 .bpick-count button{
   width:52px;height:52px;border-radius:50%;border:1px solid rgba(120,53,15,.18);background:var(--bg-2);
@@ -5791,7 +5815,7 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
       <label class="fl-drop" id="flDrop">
         <input type="file" id="flFile" style="display:none">
         <b>点击选择文件</b>
-        <span>也可以直接把文件拖进这个框　·　单个不超过 15MB　·　最多存 3 天</span>
+        <span>也可以直接把文件拖进这个框　·　单个不超过 24MB　·　最多存 15 天</span>
       </label>
       <div class="fl-prog" id="flProg"><i id="flProgIn"></i></div>
       <div class="fl-msg" id="flMsg"></div>
@@ -5807,20 +5831,19 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
     <div class="fl-opts" id="flOpts">
       <div class="fl-row">
         <span>保存</span>
-        <!-- v4.9.2（站主）：KV 一共 1GB，只留 1 天 / 3 天，默认 3 天 -->
-        <div class="fl-seg" id="flTtl">
-          <button type="button" data-ttl="1">1 天</button>
-          <button type="button" data-ttl="3" class="on">3 天</button>
-        </div>
+        <!-- v4.10.5（站主第 3 条）：保存天数自己设，1~15 天（原来是 1/3 两个按钮） -->
+        <input id="flTtlNum" class="fl-in fl-num" type="number" inputmode="numeric"
+          min="1" max="15" step="1" value="3">
+        <span class="fl-unit">天</span>
+        <span class="fl-hint">最长 15 天，到期自动清理</span>
       </div>
       <div class="fl-row">
         <span>可取</span>
-        <div class="fl-seg" id="flMax">
-          <button type="button" data-max="0" class="on">不限</button>
-          <button type="button" data-max="1">1 次</button>
-          <button type="button" data-max="3">3 次</button>
-          <button type="button" data-max="5">5 次</button>
-        </div>
+        <!-- v4.10.5：取用次数 1~50，0 = 不限 -->
+        <input id="flMaxNum" class="fl-in fl-num" type="number" inputmode="numeric"
+          min="0" max="50" step="1" value="0">
+        <span class="fl-unit">次</span>
+        <span class="fl-hint">0 = 不限次数</span>
       </div>
       <div class="fl-row">
         <span>备注</span>
@@ -7495,18 +7518,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.4';
+var SITE_VERSION = '4.10.5';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4104" defer></script>
-<script src="./app.min.js?v=4104" defer></script>
+<script src="./auth-bus.js?v=4105" defer></script>
+<script src="./app.min.js?v=4105" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4104" defer></script>
-<script src="./big.js?v=4104" defer></script>
+<script src="./fs-keep.js?v=4105" defer></script>
+<script src="./big.js?v=4105" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4104" defer></script>
+<script src="./pickfx.js?v=4105" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

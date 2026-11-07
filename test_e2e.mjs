@@ -2886,7 +2886,8 @@ console.log('\n【29】第二十七轮·自动云同步（1 分钟双向）');
   t('定义 markAllContentDirty', idxHtml.indexOf('function markAllContentDirty(') >= 0);
 
   /* ---- 节拍：基准 60 秒、退避封顶 5 分钟 ---- */
-  t('基准间隔为 60000ms', /var SYNC_INTERVAL\s*=\s*60000/.test(idxHtml));
+  /* v4.10.5（站主第 6 条）：1 分钟太频繁，白白烧 Neon 额度，改成 3 分钟 */
+  t('基准间隔为 180000ms（3 分钟）', /var SYNC_INTERVAL\s*=\s*180000/.test(idxHtml));
   t('退避上限为 300000ms', /var SYNC_MAX_BACKOFF\s*=\s*300000/.test(idxHtml));
 
   /* ---- 启动接入 ---- */
@@ -13003,8 +13004,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
 
   /* ⑥ 文件中转站 */
   /* v4.9.1（站主第 5、12 条）：上限提到 15MB，新增文本 / 次数 / 改名 */
-  t('★v4.9.1 文件中转站：6 位取件码、15MB 上限、次数与文本、防网页渲染',
-    /randStr\(6\)/.test(apiFiles711) && /MAX_BYTES = 15 \* 1024 \* 1024/.test(apiFiles711)
+  /* v4.10.5（站主第 3 条）：单件 15MB → 24MB，改成二进制直传（不再 base64 塞 JSON） */
+  t('★v4.10.5 文件中转站：6 位取件码、24MB 上限、二进制直传、次数与文本',
+    /randStr\(6\)/.test(apiFiles711) && /MAX_BYTES = 24 \* 1024 \* 1024/.test(apiFiles711)
+    && /action === 'upb'/.test(apiFiles711) && /__rawBuf/.test(apiFiles711)
     && /application\/octet-stream/.test(apiFiles711) && /filename\*=UTF-8/.test(apiFiles711)
     && /action === 'text'/.test(apiFiles711) && /action === 'ren'/.test(apiFiles711)
     && /maxGet/.test(apiFiles711));
@@ -13147,8 +13150,9 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★v4.9.1 中转站前端四个页签 + 历史管理',
     /data-fltab="txt"/.test(idx9) && /data-fltab="hist"/.test(idx9)
     && /function flHistRender\(\)/.test(app9) && /data-flact="ren"/.test(app9));
-  t('★v4.9.1 中转站取满次数自动删原件、计数用独立短键',
-    /kv\.put\('fc:' \+ code/.test(files9) && /kv\.delete\('f:' \+ code\)/.test(files9));
+  t('★v4.10.5 中转站取满次数自动删原件、计数用独立短键',
+    /kv\.put\(KC \+ code/.test(files9) && /async function dropAll\(\)/.test(files9)
+    && /kv\.delete\(KB \+ code\)/.test(files9) && /kv\.delete\(KM \+ code\)/.test(files9));
 }
 
 /* ============================================================================
@@ -13159,15 +13163,18 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   const app10 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
   const files10 = fs.readFileSync(new URL('./api/files.js', import.meta.url), 'utf8');
 
-  t('★v4.9.2 中转站保存期只留 1 天 / 3 天（默认 3 天）',
-    /const TTL_CHOICES = \[1, 3\];/.test(files10) && /const DEFAULT_TTL = 3;/.test(files10)
-    && /data-ttl="3" class="on"/.test(idx10) && !/data-ttl="180"/.test(idx10));
+  /* v4.10.5（站主第 3 条）：「保存的天数我可以自己设置 1~15 天」 */
+  t('★v4.10.5 中转站保存期可设 1~15 天（默认 3 天），取用次数 1~50 或不限',
+    /const TTL_MIN = 1;/.test(files10) && /const TTL_MAX = 15;/.test(files10)
+    && /const DEFAULT_TTL = 3;/.test(files10)
+    && /id="flTtlNum"/.test(idx10) && /min="1" max="15"/.test(idx10)
+    && /id="flMaxNum"/.test(idx10) && /Math\.min\(50/.test(files10));
 
-  t('★v4.9.2 上传前统计已用量，到软上限就拒绝',
+  t('★v4.10.5 上传前统计已用量，到软上限就拒绝',
     /const SOFT_QUOTA = 700 \* 1024 \* 1024;/.test(files10)
     && /async function kvUsage\(kv\)/.test(files10)
-    && /usage\.used \+ rec\.size > SOFT_QUOTA/.test(files10)
-    && /kv\.list\(\{ prefix: 'f:', limit: 1000, cursor \}\)/.test(files10));
+    && /usage\.used \+ size > SOFT_QUOTA/.test(files10)
+    && /for \(const prefix of \[KM, KF\]\)/.test(files10));
 
   t('★v4.9.2 容量写进 KV metadata，改名时保留',
     /metadata: \{ size: rec\.size, at: rec\.at, kind: rec\.kind \}/.test(files10)
@@ -13470,12 +13477,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.4 版本号升到 4.10.4（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.4'/.test(idxV) && /SITE_VER = '4\.10\.4'/.test(swV)
-    && /API_VER = '4\.10\.4'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.4'/.test(admV));
-  t('★v4.10.4 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.4');
+  t('★v4.10.5 版本号升到 4.10.5（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.5'/.test(idxV) && /SITE_VER = '4\.10\.5'/.test(swV)
+    && /API_VER = '4\.10\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.5'/.test(admV));
+  t('★v4.10.5 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.5');
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {
@@ -13553,6 +13560,83 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.10.4 更新完保留 query 与 hash，不再被甩回首页',
       /function updReloadUrl/.test(appV)
       && /location\.replace\(updReloadUrl\(\)\)/.test(appV));
+  }
+
+  /* ===== v4.10.5 专项：放假两头算 / 点名查看 / 离线缓存 / 时钟 / 省数据库 / 微信兜底 ===== */
+  {
+    const files5 = fs.readFileSync(new URL('./api/files.js', import.meta.url), 'utf8');
+    const auth5 = fs.readFileSync(new URL('./api/auth.js', import.meta.url), 'utf8');
+    const content5 = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
+    const clock5 = fs.readFileSync(new URL('./clock.html', import.meta.url), 'utf8');
+    const share5 = fs.readFileSync(new URL('./share-card.js', import.meta.url), 'utf8');
+
+    /* ① 放假天数：开始日 >= 12:00 不算；结束日 < 12:00（早上返校）也不算 */
+    t('★v4.10.5 放假开始日 >= 12:00 不算，结束日 < 12:00（早上返校）也不算',
+      /fromMin >= 720/.test(appV) && /toMin < 720/.test(appV) && /skipLast/.test(appV)
+      && /if\(skipLast && key === h\.to\)/.test(appV));
+    t('★v4.10.5 早上返校那天落回「今日事项」并给出「明天 8:00 返校」提示',
+      /continue;/.test(appV) && /返校' \+ \(h\.label/.test(appV));
+    t('★v4.10.5 开始日已过放假时刻时文案为「今晚起放假」',
+      /startTonight/.test(appV) && /今晚 ' \+ esc/.test(appV));
+
+    /* ② 随机点名「查看」 */
+    t('★v4.10.5 点名可查看当前范围内的名单',
+      /BIG\.pickPeek = function/.test(bigV) && /function peekHtml\(\)/.test(bigV)
+      && /bpick-peek-i/.test(bigV) && /\.bpick-peek\{/.test(idxV));
+
+    /* ③ 离线缓存 */
+    t('★v4.10.5 点名数据（名单 / 考试 / 成绩）落本机',
+      /cls_pick_exams_v1/.test(bigV) && /cls_pick_stat_v1/.test(bigV)
+      && /function statCachePut/.test(bigV) && /statCacheWarm/.test(bigV));
+    t('★v4.10.5 成绩分析可缓存离线并在断网时用缓存渲染',
+      /cls_sc_cache_v1/.test(appV) && /function scCachePut/.test(appV)
+      && /function scCacheAll/.test(appV) && /function scOfflineTip/.test(appV)
+      && /scCacheGet\('board', ex\.id\)/.test(appV));
+
+    /* ④ 时钟改版 */
+    t('★v4.10.5 时钟与计时并排放在顶上（gap 4ch）',
+      /id="topRow"/.test(clock5) && /gap:4ch/.test(clock5)
+      && /class="clk-col"/.test(clock5) && /class="tm-col"/.test(clock5));
+    t('★v4.10.5 计时区常驻，切换时钟不影响计时',
+      /k === 'timer'\).*className = 'view on'/.test(clock5) || /if\(k === 'timer'\)\{ \$\(VIEWS\[k\]\)\.className = 'view on'/.test(clock5));
+    t('★v4.10.5 默认打开是时钟界面（不再默认计时）',
+      /applyMode\(modeFromUrl\(\) \|\| \(\(CFG\.mode === 'flip'\) \? 'flip' : 'clock'\)\)/.test(clock5));
+    t('★v4.10.5 背景色首屏恢复（不会先闪一下默认色）',
+      /localStorage\.getItem\('cls_clock_cfg'\)/.test(clock5)
+      && /document\.body\.className = 'bg-' \+ b/.test(clock5));
+    t('★v4.10.5 翻页字号独立可调（--fwk 五档，与数字字号互不影响）',
+      /var FLIP_SIZES/.test(clock5) && /function applyFlipSize/.test(clock5)
+      && /--fwk/.test(clock5) && /id="flipSizeBtn"/.test(clock5));
+    t('★v4.10.5 翻页字号写进配置默认值（否则存了读不回来）',
+      /flipSize:3,/.test(clock5));
+
+    /* ⑤ 中转站：二进制直传 + 24MB + 1~15 天 + 1~50 次 */
+    t('★v4.10.5 中转站二进制直传（不再 base64 塞 JSON）',
+      /action === 'upb'/.test(files5) && /__rawBuf/.test(files5)
+      && /xhr\.send\(f\)/.test(appV) && /application\/octet-stream/.test(appV));
+    t('★v4.10.5 中转站元数据独立小键（查信息 / 改名不读整份文件）',
+      /const KM = 'fm:'/.test(files5) && /const KB = 'b:'/.test(files5)
+      && /kv\.get\(KM \+ code\)/.test(files5));
+    t('★v4.10.5 中转站保存 1~15 天、取用 1~50 次或不限',
+      /const TTL_MIN = 1;/.test(files5) && /const TTL_MAX = 15;/.test(files5)
+      && /Math\.min\(50/.test(files5) && /id="flTtlNum"/.test(idxV));
+
+    /* ⑥ 微信内下载 / 导出兜底 */
+    t('★v4.10.5 微信里文件下载引导「在浏览器打开」',
+      /isWeChat\(\)/.test(appV) && /在浏览器打开/.test(appV) && /flCopyDl/.test(appV));
+    t('★v4.10.5 微信里图片导出改成「长按保存」',
+      /function showImgSaveTip/.test(appV) && /长按/.test(appV)
+      && /function wxSaveTip/.test(share5) && /isWx\(\)/.test(share5));
+
+    /* ⑦ 省数据库 */
+    t('★v4.10.5 内容读取加 60 秒内存缓存，写入即失效',
+      /CONTENT_CACHE_MS = 60 \* 1000/.test(content5) && /async function loadContentPack/.test(content5)
+      && /contentCacheDrop\(\)/.test(content5));
+    t('★v4.10.5 前台同步降到 3 分钟、心跳降到 6 分钟、在线窗口 7 分钟',
+      /var SYNC_INTERVAL = 180000/.test(appV) && /HB_EVERY_MS = 6 \* 60 \* 1000/.test(appV)
+      && /ONLINE_WINDOW_SEC = 420/.test(auth5));
+    t('★v4.10.5 时钟页日志心跳降到 5 分钟',
+      /setInterval\(logHeartbeat, 5 \* 60 \* 1000\)/.test(clock5));
   }
 
   /* ===== 全量语法自检 =====

@@ -1005,6 +1005,12 @@ var NET_FAILS_MAX = 2;        /* 连续失败几次才弹横幅 */
    30 秒给了充足余量：正常请求（≤10 秒）绝不会再被误杀，
    而真断网时 fetch 会立刻 reject（不是等到超时），提示照样很快出现。 */
 var HB_TIMEOUT_MS = 30 * 1000;
+/* v4.10.5（站主第 6 条）：心跳从 1 分钟改成 6 分钟。
+   每次心跳都要写一次 sessions.last_seen_at，也就是一次数据库写 +
+   一次实例唤醒 —— 只要间隔小于 5 分钟，Neon 就永远不会「休眠」，
+   一天挂 12 小时就正好把免费额度吃光。6 分钟能留出真正的空闲窗口。
+   页面上看不见在线状态的人感受不到差别；后台「在线人数」精度变成 7 分钟内。 */
+var HB_EVERY_MS = 6 * 60 * 1000;
 
 /* 心跳失败后多久自动补打一次做「快速确认」。
    真断网时 fetch 会立刻 reject，这一次补打就能凑够 2 次、及时弹提示；
@@ -1077,14 +1083,22 @@ function startHeartbeat(){
     });
   };
   beat();
-  window.__hbTimer = setInterval(beat, 60000);
-  /* 页面重新回到前台时立刻补一次心跳（后台标签页里是不打的） */
+  window.__hbTimer = setInterval(beat, HB_EVERY_MS);
+  /* 页面切到后台就停表、切回来立刻补一次 —— 挂着的标签页不再白烧数据库 */
   if(!window.__hbVisBound){
     window.__hbVisBound = true;
     document.addEventListener('visibilitychange', function(){
-      if(!document.hidden && typeof AUTH !== 'undefined' && AUTH && AUTH.token){
-        if(typeof window.__hbNow === 'function') window.__hbNow();
+      if(document.hidden){
+        if(window.__hbTimer){ clearInterval(window.__hbTimer); window.__hbTimer = 0; }
+        return;
       }
+      if(typeof AUTH === 'undefined' || !AUTH || !AUTH.token) return;
+      if(typeof window.__hbNow === 'function') window.__hbNow();
+      startHeartbeat();
+    });
+    /* 断网恢复时立刻补一次，比等下一轮快 */
+    window.addEventListener('online', function(){
+      if(typeof window.__hbNow === 'function') window.__hbNow();
     });
   }
   window.__hbNow = beat;
@@ -8074,7 +8088,11 @@ var SYNC_STATE = {
   running: false,
   failStreak: 0
 };
-var SYNC_INTERVAL = 60000;      /* 基准间隔 1 分钟 */
+/* v4.10.5（站主第 6 条）：「要尽量去省 Neon 数据库……我怕免费额度不够用」。
+   原来每分钟同步一轮：内容增量 + 个人数据，一次页面开一整天就是 700+ 次数据库请求。
+   改成 3 分钟一轮 —— 本机改动依旧是立刻生效（只影响「跨设备看到」的快慢），
+   配合服务端 60 秒的内容内存缓存，数据库实际请求量能降到原来的 1/5 左右。 */
+var SYNC_INTERVAL = 180000;     /* 基准间隔 3 分钟 */
 var SYNC_MAX_BACKOFF = 300000;  /* 退避上限 5 分钟 */
 var __syncTimer = null;
 
@@ -10390,6 +10408,14 @@ function islHolText(t){
   var backDay = t.isTomorrow ? '明天' : (t.lastDay ? '今天' : String(t.to).slice(5).replace('-', '/'));
   var back = backTime ? (backDay + ' ' + backTime + ' 返校') : '';
 
+  /* v4.10.5：开始日 >= 12:00 且已经过了放假时刻 —— 人确实放假了，但这天不算第 1 天 */
+  if(t.startTonight && !t.isTomorrow){
+    return '<b>' + label + '</b>　今晚 ' + esc(String(t.fromTime || '')) + ' 起放假 · 共 '
+      + t.totalDays + ' 天'
+      + '　<span class="isl-hol-sub">'
+      + esc(String(t.firstKey || '').slice(5).replace('-', '/')) + ' 起算第 1 天</span>';
+  }
+
   if(t.isTomorrow){
     /* 明天说的是「还没发生的事」，不能套今天的口径（站主指的第二个坑） */
     if(t.firstDay){
@@ -10405,8 +10431,11 @@ function islHolText(t){
   }
 
   if(t.lastDay){
-    return '<b>' + label + '</b>　今天最后一天 · '
-      + (backTime ? esc(backTime) + ' 返校' : '明天开始上课')
+    /* v4.10.5：假期只有一天时（比如「7 号放假、8 号早上返校」），
+       光写「今天最后一天」看不出是第几天 —— 补一个「第 N 天 / 共 N 天」。 */
+    return '<b>' + label + '</b>　今天最后一天'
+      + (t.totalDays > 1 ? '（第 ' + t.dayNo + ' 天 / 共 ' + t.totalDays + ' 天）' : '')
+      + ' · ' + (backTime ? esc(backTime) + ' 返校' : '明天开始上课')
       + (t.leftMs > 0 && t.leftMs < 86400000 ? '（还剩 ' + islLeftText(t.leftMs) + '）' : '');
   }
   return '<b>' + label + '</b>　放假第 ' + t.dayNo + ' 天 · 还剩 ' + islLeftText(t.leftMs)
@@ -10443,19 +10472,41 @@ function islandToday(offset){
         }
         if(h.toTime && key === h.to && nowT >= endTs) continue;
       }
-      /* v4.10.4（站主第 2 条）：中午 12:00 以后才开始放的假，**当天不算第 1 天**。
-         站主原话：「我是 6 号晚上 10 点放的假，放到 8 号下午 6:40，那么 6 号那一天呢
-         就不算放假了，虽然说我是从那天开始算的，那实际上呢它就大约是两天的时间，
-         也不能说是三天。所以呢 7 号是放假第一天，8 号是放假第二天」。
-         判定口径：开始时间 >= 12:00 就把开始日整段抹掉（不是按半天算）。
-         没填开始时间的（只写日期）按 00:00 算，仍然计入 —— 老数据行为不变。 */
+      /* v4.10.5（站主）：假期两头都按 **12:00** 划界 —— 开始日和结束日都可能不算。
+         ① 开始时间 >= 12:00 → 开始日不算（6 号晚 10 点才放，6 号那天是上课日）；
+         ② 结束时间 < 12:00 → 结束日不算（8 号早上 8 点就返校了，8 号是上课日，
+            要正常显示当天的事项，而不是「放假第 2 天」）。
+         站主原话：「6 号晚上 10 点放的假，放到 8 号下午 6:40，那么 6 号那一天呢
+         就不算放假了……所以呢 7 号是放假第一天，8 号是放假第二天」+
+         「如果是早上返校的那天也不属于放假，而且要正常显示当日事项」。
+         没填时间的（只写日期）按 00:00 / 23:59 算，仍然两头都计入 —— 老数据行为不变。 */
       var fromMin = islandMin(h.fromTime);
+      var toMin = islandMin(h.toTime);
       var skipFirst = (fromMin !== null && fromMin >= 720) ? 1 : 0;
+      var skipLast = (toMin !== null && toMin < 720) ? 1 : 0;
+
+      /* 早上返校的那天：整天都不算假期 → 直接放行，落回下面的「今日 / 明日事项」。
+         （明天那一格会在事项上方补一句「明天 8:00 返校」，别让人以为白放了一天） */
+      if(skipLast && key === h.to){
+        if(offset) soon = '明天 ' + h.toTime + ' 返校' + (h.label ? '（' + h.label + '结束）' : '');
+        continue;
+      }
+
       var dayNo = (islandDaysBetween(h.from, key) || 0) + 1 - skipFirst;
-      var totalDays = (islandDaysBetween(h.from, h.to) || 0) + 1 - skipFirst;
+      var totalDays = (islandDaysBetween(h.from, h.to) || 0) + 1 - skipFirst - skipLast;
       /* 极端情况：当天 22:00 放到当天 23:00，减完是 0 —— 兜底成 1，别出现「第 0 天」 */
       if(totalDays < 1) totalDays = 1;
+      /* dayNo 为 0 说明「开始日 >= 12:00，而且现在确实已经过放假时刻了」——
+         这时人已经放假了，但仍按站主口径「这天不算第 1 天」，
+         文案改成「今晚 22:00 起放假 · 共 2 天（7 号是第 1 天）」。 */
+      var startTonight = dayNo < 1;
       if(dayNo < 1) dayNo = 1;
+      var firstKey = (function(){
+        if(!skipFirst) return h.from;
+        var b = new Date(String(h.from) + 'T00:00:00');
+        if(isNaN(b.getTime())) return h.from;
+        return islandDateKey(new Date(b.getTime() + skipFirst * 86400000));
+      })();
       var base = offset ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0) : new Date();
       return {
         kind: 'holiday',
@@ -10468,7 +10519,11 @@ function islandToday(offset){
         endTs: endTs,
         leftMs: endTs - base.getTime(),
         firstDay: dayNo === 1,
-        lastDay: key === h.to,
+        /* v4.10.5：假期真正第一天（开始日 >= 12:00 时是「开始日 +1」） */
+        firstKey: firstKey,
+        startTonight: startTonight,
+        /* v4.10.5：结束日早上返校时，最后一天是「结束日 -1」那天 */
+        lastDay: (islandDaysBetween(key, h.to) || 0) === skipLast && !startTonight,
         isTomorrow: !!offset,
         key: key, date: d,
       };
@@ -10623,7 +10678,8 @@ function islandBanner(){
 
   if(t.kind === 'holiday'){
     host.innerHTML = '<div class="island-banner hol">'
-      + tagRow(tomorrow ? (t.firstDay ? '明天放假' : '明日放假') : (t.firstDay ? '今天放假' : '放假中'))
+      + tagRow(tomorrow ? (t.firstDay ? '明天放假' : '明日放假')
+                        : (t.startTonight ? '假期开始' : (t.firstDay ? '今天放假' : '放假中')))
       + '<span class="txt">' + islHolText(t) + '</span>'
       + '</div>';
     islBindPhoto(host);
@@ -14914,6 +14970,121 @@ function scLoading(txt){
   scPane('<div class="sc-empty"><div class="spinner"></div><p>' + (txt || '加载中…') + '</p></div>');
 }
 
+/* ---------------- v4.10.5（站主第 2 条）：成绩分析离线可看 ----------------
+   站主原话：「包括成绩分析里面的东西，在无网的情况下也应该可以查看的。
+   我会在有网的时候把这些成绩数据都加载一遍。」
+   做法：每次成功取到数据就顺手存本机（考试列表 / 配置 / 每场成绩单），
+   网络失败时用缓存顶上，并在页面上明说「这是几号的缓存」——
+   绝不装作是最新的，成绩这种东西数据旧了要让人知道。
+   缓存放在 cls_sc_cache_v1：{ list:{at,d}, config:{at,d}, boards:{ 考试id:{at,d} } }，
+   成绩单最多留 6 场（一场约 20KB，6 场 120KB，离 5MB 上限很远）。 */
+var SC_CACHE_KEY = 'cls_sc_cache_v1';
+var SC_BOARD_KEEP = 6;
+function scCacheRead(){
+  try{
+    var o = JSON.parse(localStorage.getItem(SC_CACHE_KEY) || 'null');
+    if(o && typeof o === 'object' && !Array.isArray(o)) return o;
+  }catch(e){}
+  return { boards: {} };
+}
+function scCacheWrite(o){
+  try{
+    o = o || {};
+    if(!o.boards || typeof o.boards !== 'object') o.boards = {};
+    var ids = Object.keys(o.boards).sort(function (a, b){
+      return (o.boards[b].at || 0) - (o.boards[a].at || 0);
+    });
+    var keep = {};
+    ids.slice(0, SC_BOARD_KEEP).forEach(function (k){ keep[k] = o.boards[k]; });
+    o.boards = keep;
+    localStorage.setItem(SC_CACHE_KEY, JSON.stringify(o));
+  }catch(e){
+    /* 写不下（配额满）→ 只留最近 2 场再试，仍不行就放弃，不影响在线使用 */
+    try{
+      var small = scCacheRead();
+      small.boards = o.boards || {};
+      var ids2 = Object.keys(small.boards).sort(function (a, b){
+        return (small.boards[b].at || 0) - (small.boards[a].at || 0);
+      });
+      var k2 = {};
+      ids2.slice(0, 2).forEach(function (k){ k2[k] = small.boards[k]; });
+      small.boards = k2;
+      localStorage.setItem(SC_CACHE_KEY, JSON.stringify(small));
+    }catch(e2){}
+  }
+}
+function scCachePut(kind, id, data){
+  var o = scCacheRead();
+  if(kind === 'board'){
+    if(!o.boards) o.boards = {};
+    o.boards[String(id)] = { at: Date.now(), d: data };
+  }else{
+    o[kind] = { at: Date.now(), d: data };
+  }
+  scCacheWrite(o);
+}
+function scCacheGet(kind, id){
+  var o = scCacheRead();
+  if(kind === 'board') return (o.boards && o.boards[String(id)]) || null;
+  return o[kind] || null;
+}
+function scStamp(ms){
+  var d = new Date(Number(ms) || 0);
+  var p = function (n){ return (n < 10 ? '0' : '') + n; };
+  if(!ms) return '';
+  return (d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+/* 页面顶部那行提示（离线 / 缓存进度都用它）：txt 为空就收起 */
+function scCacheTip(txt){
+  var bar = document.getElementById('scBar');
+  if(!bar) return;
+  var old = document.getElementById('scOffTip');
+  if(!txt){ if(old && old.parentNode) old.parentNode.removeChild(old); return; }
+  if(old){ old.textContent = txt; return; }
+  var div = document.createElement('div');
+  div.id = 'scOffTip';
+  div.className = 'sc-offtip';
+  div.textContent = txt;
+  bar.parentNode.insertBefore(div, bar.nextSibling);
+}
+/* 只在真的用了缓存时才出现，绝不装作是最新的数据 */
+function scOfflineTip(at, where){
+  if(!at){ scCacheTip(null); return; }
+  scCacheTip('当前连不上服务器，下面显示的是 ' + scStamp(at) + ' 缓存的'
+    + (where || '成绩') + '，可能不是最新的。');
+}
+/* v4.10.5（站主第 2 条）：「我会在有网的时候把这些成绩数据都加载一遍」——
+   给他一个按钮，一次把所有考试的成绩都存到本机，之后断网也能翻。
+   （不做后台偷偷预热：那会白烧 Neon 的查询额度，站主第 6 条明确要省。） */
+function scCacheAll(){
+  var list = (SC.exams || []).slice();
+  if(!list.length) return;
+  if(SC._caching) return;
+  SC._caching = true;
+  var i = 0, ok = 0, bad = 0;
+  function step(){
+    if(i >= list.length){
+      SC._caching = false;
+      scCacheTip(ok
+        ? ('已把 ' + ok + ' 场考试的成绩存到本机' + (bad ? ('，' + bad + ' 场没取到') : '')
+           + '。之后断网也能打开这些成绩。')
+        : '一场都没存上，检查一下网络再试。');
+      setTimeout(function(){ scCacheTip(null); }, 6000);
+      return;
+    }
+    var ex = list[i++];
+    scCacheTip('正在缓存成绩 ' + i + ' / ' + list.length + '：' + (ex.name || ''));
+    api('/scores?action=board&exam=' + ex.id).then(function(d){
+      scCachePut('board', ex.id, d);
+      ok++;
+    }).catch(function(){ bad++; }).then(function(){
+      /* 中间歇一下：Neon 免费额度有限，别一口气打满 */
+      setTimeout(step, 260);
+    });
+  }
+  step();
+}
+
 /* ---------------- 取数 ---------------- */
 function scLoad(){
   SC.loading = true;
@@ -14940,6 +15111,10 @@ function scLoad(){
       return (b.id || 0) - (a.id || 0);
     });
     SC.loaded = true;
+    /* v4.10.5：成功取到就顺手存一份，断网时才有的看 */
+    scCachePut('list', 0, SC.exams);
+    if(cfg) scCachePut('config', 0, cfg);
+    scOfflineTip(null);
     /* 站主把整个功能关了 → 学生这里只看到一句话（他自己不受影响） */
     if(cfg && cfg.access === 'off' && !scIsAdmin()){
       document.getElementById('scBar').innerHTML = '';
@@ -14962,8 +15137,25 @@ function scLoad(){
     }
     scPickExam(SC.exams[0].id);
   }).catch(function(e){
+    /* v4.10.5：先看本机有没有下过这份数据 —— 有就照常显示，只是标一句「这是缓存」 */
+    var cl = scCacheGet('list'), cc = scCacheGet('config');
+    if(cl && cl.d && cl.d.length){
+      SC.exams = cl.d.slice().sort(function(a, b){
+        if(a.date !== b.date) return a.date < b.date ? 1 : -1;
+        return (b.id || 0) - (a.id || 0);
+      });
+      if(cc && cc.d) SC.config = cc.d;
+      SC.loaded = true;
+      SC.offline = true;
+      if(SC.config && !SC.basisSet && SC.config.rankBasis){ SC.basis = SC.config.rankBasis; SC.basisSet = true; }
+      /* 离线时 access 判定照旧（配置也来自缓存） */
+      scPickExam(SC.exams[0].id);
+      scOfflineTip(cl.at, '成绩');
+      return;
+    }
     SC.loading = false;
     scPane('<div class="sc-empty"><p>读取失败：' + esc(e.message || e) + '</p>'
+      + '<p class="sc-dim">这台设备还没缓存过成绩数据，连上网打开一次，之后再断网也能看。</p>'
       + '<button class="btn" onclick="SC.loaded=false;scLoad()">重试</button></div>');
   });
 }
@@ -14989,11 +15181,29 @@ function scPickExam(id){
     /* v4.4.0：换了考试，成绩行的 id 全换了，画像「看谁」要跟着复位 */
     SC.viewAs = null;
     SC.loading = false;
+    /* v4.10.5：这场考完就存本机，断网时还能看 */
+    scCachePut('board', ex.id, d);
+    scOfflineTip(null);
     scRenderAll();
     /* v3.5.6：需关注里的「连续两次退步」要看上一场，异步补一次，回来再重画这一块 */
     scLoadPrevPack(ex.id);
   }).catch(function(e){
+    /* v4.10.5：断网 / 服务器抽风 → 用这场考试的缓存顶上，页面照样能翻能看 */
+    var cb = scCacheGet('board', ex.id);
+    if(cb && cb.d && cb.d.rows){
+      var d2 = cb.d;
+      SC.exam = d2.exam || ex;
+      SC.rows = d2.rows || [];
+      SC.pkA = null; SC.pkB = null;
+      SC.viewAs = null;
+      SC.loading = false;
+      SC.offline = true;
+      scRenderAll();
+      scOfflineTip(cb.at, '「' + (d2.exam && d2.exam.name ? d2.exam.name : ex.name) + '」');
+      return;
+    }
     scPane('<div class="sc-empty"><p>读取失败：' + esc(e.message || e) + '</p>'
+      + '<p class="sc-dim">这场考试你还没在有网时打开过，所以没有缓存。</p>'
       + '<button class="btn" onclick="scPickExam(' + id + ')">重试</button></div>');
   });
 }
@@ -15179,6 +15389,8 @@ function scRenderBar(){
     +   '<button onclick="scPrint()" title="按 A4 版式打印当前页面">打印</button>'
     +   '<button onclick="scShareDialog()" title="生成一个免登录的只读链接">分享</button>'
     +   '<button onclick="copyHereLink()" title="复制当前这一页的直达链接，同学打开就落在这里">链接</button>'
+    /* v4.10.5（站主第 2 条）：在有网的时候点一下，全部成绩存到本机，断网也能看 */
+    +   '<button onclick="scCacheAll()" title="把全部考试的成绩存到这台设备，断网时也能打开">缓存离线</button>'
     + '</div>'
     + '</div>'
     + '<div class="sc-meta">'
@@ -17154,6 +17366,9 @@ function aiSafeName(s) {
 
 /* 下载。微信里 <a download> 有时没反应，所以返回 false 让调用方退回复制。 */
 function aiDownload(name, text, mime) {
+  /* v4.10.5（站主第 4 条）：微信内置浏览器直接不认 <a download>，
+     与其「点了没反应」，不如立刻返回 false，让调用方切到「复制文本」。 */
+  if(typeof isWeChat === 'function' && isWeChat()) return false;
   try {
     var blob = new Blob([text], { type: (mime || 'text/plain') + ';charset=utf-8' });
     var url = URL.createObjectURL(blob);
@@ -20044,6 +20259,10 @@ function scExportCard(cfg, note, badge){
   /* 存成本地文件（桌面浏览器走这条路） */
   function scSaveBlob(blob){
     var url = URL.createObjectURL(blob);
+    /* v4.10.5（站主第 4 条）：微信里 <a download> 点了没反应 —— 改成把图铺出来让他长按保存 */
+    if(typeof isWeChat === 'function' && isWeChat()){
+      try{ showImgSaveTip(url, fileName); return; }catch(e){}
+    }
     var a = document.createElement('a');
     a.href = url; a.download = fileName;
     document.body.appendChild(a); a.click();
@@ -23502,6 +23721,41 @@ function flDaysLeft(exp){
   var d = Math.ceil((Number(exp || 0) - Date.now()) / 86400000);
   return d > 0 ? d : 0;
 }
+/* v4.10.5（站主第 4 条）：「微信内打开不支持的一些东西，比如文件中转站的文件下载、
+   成绩分析里的照片导出、作业分析照片导出」。
+   微信内置浏览器（X5 / WKWebView）不认 <a download>，点下去什么都不会发生；
+   blob 图片也不能直接落到相册。所以统一在这里判断一次（isWeChat 见文件前面），：
+     · 文件 → 引导「右上角 ··· → 在浏览器打开」，并给「复制下载链接」；
+     · 图片 → 直接把图显示出来，提示「长按保存到相册」（见 showImgSaveTip）。 */
+/* 微信里给图片/文件用的兜底弹层：把图片铺出来，让他长按保存 */
+function showImgSaveTip(url, name){
+  var old = document.getElementById('wxImgMask');
+  if(old) old.parentNode.removeChild(old);
+  var mask = document.createElement('div');
+  mask.id = 'wxImgMask';
+  mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.92);'
+    + 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:14px';
+  mask.innerHTML = '<div style="color:#fff;font-size:14px;line-height:1.7;text-align:center;max-width:340px">'
+    + '微信里不能直接保存图片<br>请<b>长按下面这张图</b> → 选「保存图片」</div>'
+    + '<img src="' + attr(url) + '" alt="" style="max-width:100%;max-height:68vh;border-radius:12px;'
+    + 'box-shadow:0 10px 40px rgba(0,0,0,.5)">'
+    + '<div style="display:flex;gap:10px;margin-top:4px">'
+    + '<button type="button" style="padding:9px 18px;border-radius:10px;border:0;background:#fff;'
+    + 'color:#111;font-weight:800;font-size:14px">关闭</button></div>';
+  document.body.appendChild(mask);
+  var btn = mask.querySelector('button');
+  var close = function(){ try{ mask.parentNode.removeChild(mask); }catch(e){} };
+  if(btn) btn.onclick = close;
+  mask.addEventListener('click', function(e){ if(e.target === mask) close(); });
+  /* 文件名当提示用，避免用户不知道存的是什么 */
+  if(name){
+    var t = document.createElement('div');
+    t.style.cssText = 'color:rgba(255,255,255,.55);font-size:12px;word-break:break-all;max-width:320px;text-align:center';
+    t.textContent = name;
+    mask.insertBefore(t, mask.querySelector('img'));
+  }
+  return true;
+}
 
 /* ---------------- 剩余空间（v4.9.2） ----------------
    站主原话：「KV 总共就 1GB 还是比较少的，那我觉得最多就只能保留三天吧，
@@ -23524,7 +23778,7 @@ function flQuotaLoad(){
       box.className = 'fl-quota' + (pct >= 85 ? ' danger' : (pct >= 60 ? ' warn' : ''));
       box.innerHTML = '<span>已用 ' + flBytes(used) + ' / ' + flBytes(cap)
         + '（' + (j.count || 0) + ' 件）</span>'
-        + '<span>最长 3 天自动清理</span>'
+        + '<span>最长 15 天自动清理</span>'
         + '<i><b style="width:' + pct + '%"></b></i>';
     })
     .catch(function(){});
@@ -23646,34 +23900,103 @@ function flPost(action, body){
 }
 
 /* ---------------- 发文件 ---------------- */
+/* v4.10.5（站主第 3 条）：
+   ① 单件上限 15MB → **24MB**。做法不是「放宽检查」，而是换了传输方式：
+      老通道把文件读成 base64 再塞进 JSON，体积 ×4/3，24MB 的文件要占 32MB 的
+      KV 值，直接超过 25MiB 单值上限；现在直接 xhr.send(File)，worker 用
+      arrayBuffer() 接住，KV 存原始字节 —— 存多少就是多少。
+   ② 保存天数自己设 1~15 天（原来只有 1/3 两天）。
+   ③ 取用次数 1~50 或不限（0 = 不限）。
+   站主原话：「文件大小肯定是不能超过 600 兆的……超过 50 兆的文件，最多只能保存一天，
+   然后我想了想，把它改到最长 15 天自动清理吧，保存的天数我可以自己设置 1~15 天，
+   取用设置可以设置 1~50 次或者不限」。
+   （600MB 需要 R2，KV 单值硬上限 25MiB，所以先到 24MB，50MB 那条兜底逻辑留在后端。） */
+var FL_MAX = 24 * 1024 * 1024;
 function flUpload(f){
   if(!f || FL.busy) return;
-  if(f.size > 15 * 1024 * 1024){
-    flMsg('flMsg', 'err', '这个文件 ' + flBytes(f.size) + '，超过 15MB 上限。更大的课件建议放网盘，这里只发链接。');
+  if(f.size > FL_MAX){
+    flMsg('flMsg', 'err', '这个文件 ' + flBytes(f.size) + '，超过 24MB 上限。'
+      + '更大的课件建议放网盘，这里只挂个链接。');
     return;
   }
   FL.busy = true;
   FL.file = f;
   var prog = flEl('flProg'), inn = flEl('flProgIn');
   if(prog) prog.classList.add('on');
-  if(inn) inn.style.width = '4%';
-  flMsg('flMsg', '', '正在读取文件…');
+  if(inn) inn.style.width = '6%';
+  flMsg('flMsg', '', '正在上传…');
 
+  var memo = (flEl('flMemo') || {}).value || '';
+  var qs = 'action=upb'
+    + '&name=' + encodeURIComponent(f.name || '未命名文件')
+    + '&type=' + encodeURIComponent(f.type || 'application/octet-stream')
+    + '&ttl=' + encodeURIComponent(String(FL.ttl || 3))
+    + '&maxGet=' + encodeURIComponent(String(FL.maxGet || 0))
+    + '&memo=' + encodeURIComponent(memo);
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', flBase() + '/api/files?' + qs, true);
+  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+  xhr.upload.onprogress = function(e){
+    if(!e.lengthComputable) return;
+    var p = Math.round(6 + (e.loaded / e.total) * 90);
+    if(inn) inn.style.width = p + '%';
+  };
+  xhr.onload = function(){
+    var j = null;
+    try{ j = JSON.parse(xhr.responseText || '{}'); }catch(e){ j = null; }
+    if(xhr.status === 200 && j && j.ok){
+      FL.busy = false;
+      if(inn) inn.style.width = '100%';
+      flMsg('flMsg', 'ok', '上传完成：' + flBytes(j.size) + '，保存 ' + j.ttl + ' 天'
+        + (j.maxGet ? '，最多可取 ' + j.maxGet + ' 次' : '') + '。');
+      flDone(j.code, j.delKey, {
+        kind: 'file', name: j.name || f.name, size: j.size, exp: j.exp,
+        ttl: j.ttl, maxGet: j.maxGet, memo: memo,
+      });
+      FL.pending += Number(j.size) || 0;
+      flQuotaLoad();
+      try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
+      return;
+    }
+    /* 后端还没更新到认 upb 的那一版（前后端部署有几秒～几分钟的时差）→ 退回老通道 */
+    if(xhr.status === 400 || xhr.status === 404 || xhr.status === 405 || xhr.status === 415){
+      flUploadLegacy(f, memo);
+      return;
+    }
+    FL.busy = false;
+    flMsg('flMsg', 'err', (j && j.error) ? j.error : ('上传失败（HTTP ' + xhr.status + '）'));
+  };
+  xhr.onerror = function(){
+    FL.busy = false;
+    flMsg('flMsg', 'err', '网络断了，没传上去。');
+  };
+  xhr.send(f);
+}
+
+/* 老通道（base64 塞 JSON）：只在后端还没更新到 v4.10.5 时兜底，上限只能 15MB */
+function flUploadLegacy(f, memo){
+  if(f.size > 15 * 1024 * 1024){
+    FL.busy = false;
+    flMsg('flMsg', 'err', '服务器版本较旧，单件最大 15MB。刷新页面后再试，新版本可以到 24MB。');
+    return;
+  }
+  var prog = flEl('flProg'), inn = flEl('flProgIn');
   var reader = new FileReader();
   reader.onerror = function(){
     FL.busy = false;
     flMsg('flMsg', 'err', '读不到这个文件，请换一个再试。');
   };
   reader.onload = function(){
+    flMsg('flMsg', '', '正在上传（兼容模式）…');
     var dataUrl = String(reader.result || '');
     var b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
-    flMsg('flMsg', '', '正在上传…');
     var xhr = new XMLHttpRequest();
     xhr.open('POST', flBase() + '/api/files?action=up', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.upload.onprogress = function(e){
       if(!e.lengthComputable) return;
-      var p = Math.round(4 + (e.loaded / e.total) * 92);
+      var p = Math.round(6 + (e.loaded / e.total) * 90);
       if(inn) inn.style.width = p + '%';
     };
     xhr.onload = function(){
@@ -23686,7 +24009,7 @@ function flUpload(f){
           + (j.maxGet ? '，最多可取 ' + j.maxGet + ' 次' : '') + '。');
         flDone(j.code, j.delKey, {
           kind: 'file', name: j.name || f.name, size: j.size, exp: j.exp,
-          ttl: j.ttl, maxGet: j.maxGet, memo: (flEl('flMemo') || {}).value || '',
+          ttl: j.ttl, maxGet: j.maxGet, memo: memo,
         });
         FL.pending += Number(j.size) || 0;
         flQuotaLoad();
@@ -23695,13 +24018,10 @@ function flUpload(f){
         flMsg('flMsg', 'err', (j && j.error) ? j.error : ('上传失败（HTTP ' + xhr.status + '）'));
       }
     };
-    xhr.onerror = function(){
-      FL.busy = false;
-      flMsg('flMsg', 'err', '网络断了，没传上去。');
-    };
+    xhr.onerror = function(){ FL.busy = false; flMsg('flMsg', 'err', '网络断了，没传上去。'); };
     xhr.send(JSON.stringify({
       name: f.name, type: f.type || 'application/octet-stream', data: b64,
-      ttl: FL.ttl, maxGet: FL.maxGet, memo: (flEl('flMemo') || {}).value || '',
+      ttl: FL.ttl, maxGet: FL.maxGet, memo: memo,
     }));
   };
   reader.readAsDataURL(f);
@@ -23773,8 +24093,17 @@ function flQuery(){
         card.innerHTML = '<b>' + emojiEscHtml(j.name) + '</b>'
           + '<div class="m">' + flBytes(j.size) + '　·　还剩 ' + left + ' 天' + times
           + '　·　上传于 ' + new Date(j.at).toLocaleString('zh-CN', { hour12: false }) + '</div>'
-          + '<a class="fl-btn" style="display:block;text-align:center;text-decoration:none;line-height:1.5"'
-          + ' href="' + attr(flUrl(code)) + '" download>下载这个文件</a>';
+          + (isWeChat()
+              ? '<div class="fl-wxtip">微信内置浏览器不支持直接下载文件。<br>'
+                + '点右上角「<b>···</b>」→「<b>在浏览器打开</b>」就能正常下载；'
+                + '也可以把下面这条链接复制出去，粘到浏览器里打开。</div>'
+                + '<button type="button" class="fl-btn" id="flCopyDl">复制下载链接</button>'
+              : '<a class="fl-btn" style="display:block;text-align:center;text-decoration:none;line-height:1.5"'
+                + ' href="' + attr(flUrl(code)) + '" download>下载这个文件</a>');
+        var cdl = flEl('flCopyDl');
+        if(cdl) cdl.onclick = function(){
+          flCopy(flUrl(code), 'flMsg2', '下载链接已复制，粘到浏览器地址栏打开即可下载');
+        };
       }
     })
     .catch(function(){ flMsg('flMsg2', 'err', '网络没通，稍后再试。'); });
@@ -23803,27 +24132,42 @@ function flQuery(){
       });
     }
 
-    /* 保存天数 / 可取次数：两段按钮共用一个委托 */
-    function segBind(boxId, attrName, key){
-      var box = flEl(boxId);
-      if(!box) return;
-      box.addEventListener('click', function(e){
-        var b = e.target && e.target.closest ? e.target.closest('button') : null;
-        if(!b || !box.contains(b)) return;
-        var all = box.querySelectorAll('button');
-        for(var i = 0; i < all.length; i++) all[i].classList.remove('on');
-        b.classList.add('on');
-        FL[key] = Number(b.getAttribute(attrName)) || 0;
+    /* 保存天数 / 可取次数：v4.10.5 起改成两个数字输入框（1~15 天、0~50 次），
+       顺便把选择记在本机，下次打开还是上次那套。 */
+    var FL_OPT_KEY = 'cls_fl_opt';
+    function numBind(id, key, min, max, dft){
+      var el = flEl(id);
+      if(!el) return;
+      var last = {};
+      try{ last = JSON.parse(localStorage.getItem(FL_OPT_KEY) || '{}') || {}; }catch(e){ last = {}; }
+      if(typeof last[key] === 'number') FL[key] = last[key];
+      el.value = String(FL[key]);
+      var norm = function(){
+        var v = Math.round(Number(el.value));
+        if(!isFinite(v)) v = dft;
+        v = Math.max(min, Math.min(max, v));
+        el.value = String(v);
+        FL[key] = v;
         var tip = flEl('flOptTip');
         if(tip){
           tip.textContent = '保存 ' + FL.ttl + ' 天'
             + (FL.maxGet ? ('，被取 ' + FL.maxGet + ' 次后自动删除原件') : '，不限取用次数')
             + '；到期也会自动消失。';
         }
-      });
+        try{
+          var o = {};
+          try{ o = JSON.parse(localStorage.getItem(FL_OPT_KEY) || '{}') || {}; }catch(e){ o = {}; }
+          o[key] = v;
+          localStorage.setItem(FL_OPT_KEY, JSON.stringify(o));
+        }catch(e){}
+      };
+      el.addEventListener('input', norm);
+      el.addEventListener('change', norm);
+      el.addEventListener('blur', norm);
+      norm();
     }
-    segBind('flTtl', 'data-ttl', 'ttl');
-    segBind('flMax', 'data-max', 'maxGet');
+    numBind('flTtlNum', 'ttl', 1, 15, 3);
+    numBind('flMaxNum', 'maxGet', 0, 50, 0);
 
     var st = flEl('flSendTxt');
     if(!st){

@@ -45,23 +45,36 @@ import { cors } from './_lib/http.js';
    于是回查永远对不上提交号、每次都红了 120 秒后判失败：job 红，线上其实是新的。
    所以加一个**由代码本身带出去**的版本号：只要线上换了代码，它就会变。
    纪律：每轮发布与前台 SITE_VERSION 同步（测试里有断言锁死两者相等）。 */
-const API_VER = '4.10.4';
+const API_VER = '4.10.5';
 
 /** 把 Workers 的 Request 适配成业务代码熟悉的形状 */
 async function adaptRequest(request, env) {
   const url = new URL(request.url);
 
   /* 预读请求体（Get / Head 没有 body，跳过）
-     ⚠️ 用 text() 而不是 arrayBuffer()：业务代码全是 JSON，纯文本链路最稳。
+     ⚠️ 默认用 text() 而不是 arrayBuffer()：业务代码绝大多数是 JSON，纯文本链路最稳。
         代价是**不能用 multipart/form-data** —— 二进制段经这一趟会坏。
         （曾经有个作业附件上传接口也走这条路，2026-10-07 第二十六轮已移除，
-          附件改回「站主手动放文件 + 填直链」。） */
+          附件改回「站主手动放文件 + 填直链」。）
+     v4.10.5：文件中转站改成二进制直传，Content-Type 是 application/octet-stream 时
+       必须走 arrayBuffer() —— 走 text() 会把 >127 的字节按 UTF-8 解码坏掉
+       （跟 /api/badge 那次是同一个坑）。此时文本 body 留空。 */
   let rawBody = '';
+  let rawBuf = null;
+  const contentType = String(request.headers.get('content-type') || '');
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    try {
-      rawBody = await request.text();
-    } catch {
-      rawBody = '';
+    if (/^application\/octet-stream/i.test(contentType)) {
+      try {
+        rawBuf = await request.arrayBuffer();
+      } catch {
+        rawBuf = null;
+      }
+    } else {
+      try {
+        rawBody = await request.text();
+      } catch {
+        rawBody = '';
+      }
     }
   }
 
@@ -81,6 +94,7 @@ async function adaptRequest(request, env) {
     query,
     body: rawBody,
     __rawBody: rawBody,
+    __rawBuf: rawBuf,
     __env: env,
     __isWorkers: true,
   };

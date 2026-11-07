@@ -438,10 +438,48 @@
     return renderAsync(opts).then(function (cv) { return downloadCanvas(cv, opts, filename); });
   }
 
+  /* v4.10.5（站主第 4 条）：微信内置浏览器不认 <a download> —— 点了没反应，
+     图片根本落不到相册（成绩分析 / 作业分析的照片导出全受影响）。
+     所以微信里改成「把图铺出来，提示长按保存」，这是微信里唯一能走通的路。 */
+  function isWx() {
+    var ua = String((navigator && navigator.userAgent) || '');
+    return /MicroMessenger/i.test(ua) && !/wxwork/i.test(ua);
+  }
+  function wxSaveTip(url, name) {
+    var old = document.getElementById('scWxMask');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var mask = document.createElement('div');
+    mask.id = 'scWxMask';
+    mask.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.93);'
+      + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      + 'padding:18px;gap:14px;box-sizing:border-box';
+    mask.innerHTML =
+      '<div style="color:#fff;font-size:15px;line-height:1.7;text-align:center;max-width:340px;font-weight:700">'
+      + '微信里不能直接保存图片<br><span style="font-weight:400;font-size:13px;opacity:.8">'
+      + '长按下面这张图 → 选「保存图片」</span></div>'
+      + '<img src="' + url + '" alt="" style="max-width:100%;max-height:64vh;border-radius:12px;'
+      + 'box-shadow:0 12px 44px rgba(0,0,0,.55);background:#fff">'
+      + (name
+        ? '<div style="color:rgba(255,255,255,.5);font-size:12px;word-break:break-all;'
+          + 'max-width:320px;text-align:center">' + name + '</div>'
+        : '')
+      + '<button type="button" style="padding:10px 22px;border-radius:11px;border:0;background:#fff;'
+      + 'color:#111;font-weight:800;font-size:14px;font-family:inherit">关闭</button>';
+    document.body.appendChild(mask);
+    var close = function () {
+      try { mask.parentNode.removeChild(mask); } catch (e) {}
+    };
+    var btn = mask.querySelector('button');
+    if (btn) btn.onclick = close;
+    mask.addEventListener('click', function (e) { if (e.target === mask) close(); });
+    return true;
+  }
+
   function downloadCanvas(cv, opts, filename) {
     var name = filename || ((opts && opts.title ? String(opts.title) : '卡片') + '.png');
     return toBlob(cv).then(function (blob) {
       var url = URL.createObjectURL(blob);
+      if (isWx()) { wxSaveTip(url, name); return blob; }
       var a = document.createElement('a');
       a.href = url;
       a.download = name;

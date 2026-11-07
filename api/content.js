@@ -104,14 +104,27 @@ function parseDbTime(v) {
   return t;
 }
 
-async function readContent(req, res) {
-  const sql = getSql();
-  const since = Number(req.query.since) || 0;
+/* ---------------- v4.10.5（站主第 6 条）：内容读取的内存缓存 ----------------
+   站主原话：「还要尽量去省 Neon 数据库……我怕免费额度不够用，可以想想有没有什么办法可以降这个」。
+   /api/content 是全班每台设备最频繁的接口（前台每轮同步都要读一次），
+   内容是「很多人读、很少人写」的典型 —— 所以缓存在 Worker 实例内存里：
+     · 同一个热点实例上 60 秒内只查一次库；
+     · 任何一次写入（含 AI 助手 / 课代表改作业）都会立刻把缓存清掉，
+       管理员改完公告刷新就能看到，不会出现「改了没生效」的错觉。
+   命中率不高的时候也只是回落到原来的一次查询，没有任何副作用。 */
+const CONTENT_CACHE_MS = 60 * 1000;
+let _cCache = { at: 0, items: null, latest: 0 };
+
+async function loadContentPack(sql) {
+  const now = Date.now();
+  if (_cCache.items && now - _cCache.at < CONTENT_CACHE_MS) {
+    return { items: JSON.parse(JSON.stringify(_cCache.items)), latest: _cCache.latest, cached: true };
+  }
 
   const uid = await systemUserId(sql);
   if (!uid) {
     /* 一个管理员都没有（全新库）：返回空，前端会继续用本地兜底 */
-    return ok(res, { items: {}, serverTime: Date.now(), empty: true });
+    return { items: {}, latest: 0, empty: true, cached: false };
   }
 
   /* ⚠️ 必须用「整个数组当一个参数」的写法（与 api/data.js:212 的 unnest 同一套路），
@@ -133,29 +146,37 @@ async function readContent(req, res) {
   let latest = 0;
 
   rows.forEach((r) => {
-    /* ⚠️ data_value 是 jsonb 列：驱动可能直接给出**已解析好的对象**，
-       也可能给 JSON 文本（取决于驱动 / 测试桩）。
-       以前这里写死 JSON.parse(raw)，碰到对象就抛异常被 catch 吞掉，
-       于是「库里有数据、接口永远返回空」。现在统一走 jsonCol()。 */
     const val = jsonCol(r.data_value);
     if (val === null || val === undefined) return;
-
-    /* 时间戳：v3.9.10 用容错解析（见 parseDbTime）。
-       原来写 `Date.parse(str.replace(' ','T') + 'Z')`，遇到 `2026-10-22 15:31:50.123+00`
-       这种已带偏移的串会拼成 `...123+00Z` → NaN → latest 恒 0 → 增量恒失效。 */
     const t = parseDbTime(r.updated_at);
     if (t > latest) latest = t;
 
     if (r.data_key === ANNOUNCE_KEY) {
-      /* 历史键：里面直接就是公告数组 */
       items.announcements = val;
     } else if (val && typeof val === 'object' && !Array.isArray(val)) {
-      /* 通用键：里面是 { contentKey: value } 的字典 */
       Object.keys(val).forEach((k) => {
         if (ALLOW_CONTENT_KEYS.includes(k)) items[k] = val[k];
       });
     }
   });
+
+  _cCache = { at: now, items: JSON.parse(JSON.stringify(items)), latest };
+  return { items, latest, cached: false };
+}
+
+/* 写入 / 删除后一定要调它，否则最多 60 秒后大家才看到新内容 */
+function contentCacheDrop() { _cCache = { at: 0, items: null, latest: 0 }; }
+
+async function readContent(req, res) {
+  const sql = getSql();
+  const since = Number(req.query.since) || 0;
+
+  const pack = await loadContentPack(sql);
+  const items = pack.items;
+  const latest = pack.latest;
+  if (pack.empty) {
+    return ok(res, { items: {}, serverTime: Date.now(), empty: true });
+  }
 
   /* v3.7.0：非管理员请求不带后台专用键（见 ADMIN_ONLY_KEYS 注释）。
      判断身份失败时按「普通同学」处理 —— 宁可少给，不能多漏。 */
@@ -306,6 +327,9 @@ async function writeContent(req, res) {
   await audit(u.id, 'content-update', 'site_content', null,
     '更新云端内容：' + changed.join(', '));
 
+  /* v4.10.5：写完立刻清缓存 —— 管理员改完公告刷新就要看到，不能等 60 秒 */
+  contentCacheDrop();
+
   return ok(res, {
     message: '已保存',
     updated: changed,
@@ -422,6 +446,8 @@ async function caSaveSubject(req, res) {
 
   await audit(u.id, 'content-ca-subject', 'site_content', String(hw.id || ''),
     (isAdmin ? '管理员' : '课代表') + '修改作业科目「' + subject + '」（' + tasks.length + ' 条）');
+
+  contentCacheDrop();   /* v4.10.5：同上，改完立刻可见 */
 
   return ok(res, {
     message: subject + ' 已保存',

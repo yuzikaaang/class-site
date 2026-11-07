@@ -30,9 +30,44 @@ body.bg-navy{background:#0e1a2b;color:#e8eefc}
 body.bg-green{background:#0f241d;color:#e6f6ee}
 body.bg-gray{background:#2b2b2e;color:#f2f2f2}
 
-#stage{position:fixed;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;flex-direction:column}
+#stage{position:fixed;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;
+  justify-content:flex-start;flex-direction:column;
+  /* v4.10.5（站主第 3 条）：时钟和计时都挪到最顶上，不再垂直居中 */
+  /* 顶上那排子模式是 fixed 在 12px 处、约 38px 高，内容要让开它 */
+  padding-top:calc(60px + env(safe-area-inset-top));box-sizing:border-box;
+  overflow-y:auto;overflow-x:hidden}
 .view{display:none;width:100%;text-align:center}
 .view.on{display:block}
+
+/* ---------- v4.10.5：顶上左右两栏（左时钟 / 右计时，中间隔 4 个字宽） ---------- */
+#topRow{display:flex;align-items:center;justify-content:center;
+  gap:4ch;                     /* 站主原话：「隔大概四个字符那么宽就可以了」 */
+  width:100%;padding:0 2vw;box-sizing:border-box}
+#topRow .clk-col{flex:0 1 auto;min-width:0;text-align:center}
+#topRow .tm-col{flex:0 0 auto;max-width:52vw;text-align:center}
+#topRow .view{width:auto}
+/* 并排之后每边只占半幅，字号按比例收一点 —— 档位（小/中/大/超大）的语义不变 */
+#topRow #bigTime{font-size:calc(var(--fs) * .58)}
+#topRow #timerTime{font-size:calc(var(--fs) * .46)}
+/* 翻页字号独立可调（站主第 3 条）：--fwk 是 5 档系数，由「翻页字号」按钮改，
+   跟数字时钟的 4 档字号（--fs）完全两套，互不影响。 */
+#topRow #flipView{--fw:calc(min(15vw, 34vh, 200px) * var(--fwk, 1))}
+#topRow .actions{margin-top:1.8vh}
+#topRow .actions button{min-width:6.4vw;height:5.4vh;min-height:38px;padding:0 1.1vw;
+  margin:.4vh .35vw;font-size:1.05vw}
+#topRow .subj-row{gap:4px;margin-top:1.2vh}
+#topRow .subj-row button{padding:4px 9px;font-size:.76rem}
+#topRow .doing-inp{max-width:100%;margin-top:1vh}
+#topRow #timerHint{font-size:.72rem;margin-top:1vh}
+@media (max-width:880px){
+  /* 手机 / 窄窗口：左右排会挤爆，改成上下排，间距仍是 4 个字宽的视觉量 */
+  #topRow{flex-direction:column;gap:2.2vh}
+  #topRow .tm-col{max-width:96vw}
+  #topRow #bigTime{font-size:calc(var(--fs) * .84)}
+  #topRow #timerTime{font-size:calc(var(--fs) * .62)}
+  #topRow #flipView{--fw:calc(min(24vw, 40vh, 220px) * var(--fwk, 1))}
+  #topRow .actions button{min-width:18vw;font-size:3.6vw;height:42px}
+}
 
 /* ---------- 字号档位（4 档，全部由 --fs 推导） ---------- */
 /* v3.9.24：加一道 vh 上限——横屏（尤其手机横过来只有 390 高）时
@@ -639,6 +674,11 @@ body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.
   color:inherit;font:inherit;font-size:13px;font-weight:600;cursor:pointer;opacity:.5;white-space:nowrap;
   transition:background .15s,color .15s,opacity .15s}
 #subTabs button.on{background:#141414;color:#fff;opacity:1}
+/* v4.10.5：两组子模式（时钟 / 计时）中间那道竖线 */
+#subTabs .sub-sep{align-self:center;width:1px;height:18px;margin:0 4px;border-radius:1px;
+  background:rgba(0,0,0,.16);flex:0 0 auto}
+body.bg-dark #subTabs .sub-sep,body.bg-black #subTabs .sub-sep,body.bg-navy #subTabs .sub-sep,
+body.bg-green #subTabs .sub-sep,body.bg-gray #subTabs .sub-sep{background:rgba(255,255,255,.22)}
 body.bg-dark #subTabs,body.bg-black #subTabs,body.bg-navy #subTabs,body.bg-green #subTabs,body.bg-gray #subTabs{
   background:rgba(30,30,34,.75);border-color:rgba(255,255,255,.14)}
 body.bg-dark #subTabs button.on,body.bg-black #subTabs button.on,body.bg-navy #subTabs button.on,
@@ -753,19 +793,37 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </style>
 </head>
 <body class="bg-light f-auto">
+<script>
+/* v4.10.5（站主第 3 条）：「记得我上次退出的时候背景颜色是什么，然后复用那个背景颜色」。
+   saveCfg 本来就把 bg 一起存了，但样式是等脚本跑完才套上去的 ——
+   在 <body> 一出现就补上这次的上次背景，打开的第一帧就是那个颜色，不会先闪一下浅灰。 */
+(function(){
+  try{
+    var c = JSON.parse(localStorage.getItem('cls_clock_cfg') || 'null');
+    var b = c && c.bg;
+    if(b && /^(light|dark|black|cream|navy|green|gray)$/.test(b)) document.body.className = 'bg-' + b;
+  }catch(e){}
+})();
+</script>
 
 <div id="stage">
   <!-- 顶部子模式：时钟页是 数字/翻页，计时页是 正计时/倒计时/番茄钟（v3.12.0） -->
   <div id="subTabs"></div>
   <div id="modeName"></div>
 
-  <!-- 时钟：数字 -->
+  <!-- v4.10.5（站主第 3 条）：「把时钟和计时全部放在顶上，左边是时钟（可以切换数字和翻页），
+       右边是计时（正计时、倒计时、番茄钟），中间隔大概四个字符那么宽」。
+       所以这里改成一行两栏：左栏时钟、右栏计时，CSS 用 gap:4ch 隔开。
+       计时区**常驻显示**，不再和时钟互斥切换（原来的 .view.on 只管左边时钟那两个）。 -->
+  <div id="topRow">
+    <div class="clk-col">
+      <!-- 时钟：数字 -->
   <div class="view on" id="clockView">
     <div id="bigTime">00:00:00</div>
     <div id="bigSub"></div>
   </div>
 
-  <!-- 时钟：翻页 -->
+      <!-- 时钟：翻页 -->
   <div class="view" id="flipView">
     <div class="flip-row">
       <div class="flip" id="flipH"><div class="half top"><div class="txt">00</div></div><div class="half bottom"><div class="txt">00</div></div></div>
@@ -775,9 +833,11 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
       <div class="flip" id="flipS"><div class="half top"><div class="txt">00</div></div><div class="half bottom"><div class="txt">00</div></div></div>
     </div>
   </div>
+    </div>
 
-  <!-- 计时：正计时 / 倒计时 / 番茄钟 -->
-  <div class="view" id="timerView">
+    <div class="tm-col">
+      <!-- 计时：正计时 / 倒计时 / 番茄钟 -->
+  <div class="view on" id="timerView">
     <div id="timerTime">00:00</div>
     <div id="tmBar"><i id="tmBarIn"></i></div>
     <div id="tmHead"><span id="tmRound"></span><span id="tmPhase" class="hide">专注</span></div>
@@ -799,6 +859,8 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
       <button data-subj="其他">其他</button>
     </div>
     <input class="doing-inp" id="doingInp" maxlength="12" placeholder="本次事项（如：试卷、练习）">
+  </div>
+    </div>
   </div>
 </div>
 
@@ -859,6 +921,8 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
   <button id="modeBtn">数字</button>
   <button id="fontBtn">字体 · 自动</button>
   <button id="sizeBtn">字号 · 中</button>
+  <!-- v4.10.5（站主第 3 条）：翻页时钟的字号单独调，不受「字号」那档管 -->
+  <button id="flipSizeBtn" style="display:none">翻页字号 · 中</button>
   <button id="bgBtn">背景</button>
   <button id="h12Btn">24 小时</button>
   <button id="secBtn" style="display:none">秒 · 显示</button>
@@ -991,7 +1055,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=4104" defer></script>
+<script src="./fs-keep.js?v=4105" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -1001,6 +1065,10 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 
 var CFG_KEY = 'cls_clock_cfg';
 var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5, ts:0,
+  /* v4.10.5（站主第 3 条）：翻页字号是独立的一档，必须写进默认值 ——
+     恢复配置那圈是 `for(var k in CFG)`，CFG 里没有这个键的话，
+     存进去的 flipSize 永远读不回来（这次就是这么踩到的）。 */
+  flipSize:3,
   flipSec:true, pf:25, pb:5, pomoDone:0, pomoDate:'',
   /* v3.16.0：翻页音效 —— 关 / 纸页 / 咔哒，音量 0~1 */
   flipSnd:'paper', flipVol:0.55,
@@ -1132,27 +1200,50 @@ function currentSub(){
 function paintSubTabs(){
   var box = $('subTabs');
   if(!box) return;
-  var list = (CFG.mode === 'timer') ? SUB_TABS.timer : SUB_TABS.clock;
-  var cur = currentSub();
   box.innerHTML = '';
-  list.forEach(function(p){
+  /* v4.10.5（站主第 3 条）：两栏同时显示之后，两组子模式也一起摆出来 ——
+     左边一组管时钟（数字 / 翻页），右边一组管计时（正计时 / 倒计时 / 番茄钟），
+     中间一道竖线分开，点哪组就切哪块，互不影响。 */
+  function mk(k, label, on, fn){
     var b = document.createElement('button');
-    b.textContent = p[1];
-    b.className = (p[0] === cur) ? 'on' : '';
-    b.setAttribute('data-k', p[0]);
+    b.textContent = label;
+    b.className = (on ? 'on' : '');
+    b.setAttribute('data-k', k);
     b.onclick = function(e){
       if(e){ e.stopPropagation(); e.preventDefault(); }
-      if(CFG.mode === 'timer') tmSetKind(p[0]);
-      else applyMode(p[0]);
+      fn();
       paintSubTabs();
     };
     box.appendChild(b);
+  }
+  var curClock = (CFG.mode === 'flip') ? 'flip' : 'clock';
+  var curTk = CFG.tk || 'up';
+  SUB_TABS.clock.forEach(function(p){
+    mk(p[0], p[1], p[0] === curClock && CFG.mode !== 'timer', function(){ applyMode(p[0]); });
+  });
+  var sep = document.createElement('span');
+  sep.className = 'sub-sep';
+  sep.setAttribute('aria-hidden', 'true');
+  box.appendChild(sep);
+  SUB_TABS.timer.forEach(function(p){
+    mk(p[0], p[1], p[0] === curTk && CFG.mode === 'timer', function(){
+      tmSetKind(p[0]);
+      applyMode('timer');
+    });
   });
 }
 function applyMode(m){
   if(m === 'stop' || m === 'pomo') m = 'timer';
   CFG.mode = m; saveCfg();
-  for(var k in VIEWS){ if(VIEWS.hasOwnProperty(k)) $(VIEWS[k]).className = 'view' + (k === m ? ' on' : ''); }
+  /* v4.10.5（站主第 3 条）：计时区和时钟**同时**显示。
+     左边时钟永远在（只切「数字 / 翻页」），右边计时区一直亮着，
+     两栏之间由 CSS 的 gap:4ch 隔开。选中「计时」时左边就退回数字时钟。 */
+  var left = (m === 'timer') ? 'clock' : m;
+  for(var k in VIEWS){
+    if(!VIEWS.hasOwnProperty(k)) continue;
+    if(k === 'timer'){ $(VIEWS[k]).className = 'view on'; continue; }
+    $(VIEWS[k]).className = 'view' + (k === left ? ' on' : '');
+  }
   $('modeBtn').textContent = MODE_NAME[m];
   var top = (m === 'timer') ? 'timer' : 'clock';
   var items = $('modeMenu').getElementsByTagName('button');
@@ -1160,7 +1251,7 @@ function applyMode(m){
     items[i].className = (items[i].getAttribute('data-m') === top) ? 'cur' : '';
   }
   $('modeMenu').className = '';
-  if(m === 'clock' || m === 'flip') tickClock();
+  tickClock();   /* v4.10.5：三种模式都要画左栏的时钟 */
   if(m === 'timer'){
     if(T.kind !== (CFG.tk || 'up')) tmSetKind(CFG.tk || 'up');
     else tmPaint();
@@ -1172,6 +1263,9 @@ function applyMode(m){
   /* 「秒 · 显示」只在翻页模式下有意义，别的时候不占工具栏位置 */
   var sb = $('secBtn');
   if(sb) sb.style.display = (m === 'flip') ? '' : 'none';
+  /* v4.10.5：翻页字号按钮也只在翻页时钟下出现 */
+  var flb = $('flipSizeBtn');
+  if(flb) flb.style.display = (m === 'flip') ? '' : 'none';
   /* 上面那轮 className 会把 nosec 抹掉，切回翻页时要补上 */
   if(m === 'flip' && CFG.flipSec === false) applyFlipSec();
 }
@@ -1204,13 +1298,15 @@ function tickClock(){
   var hh = h;
   if(CFG.h12){ hh = h % 12; if(hh === 0) hh = 12; }
 
-  if(CFG.mode === 'clock'){
+  /* v4.10.5：计时模式下左栏照样显示数字时钟，所以这里不能只看 CFG.mode */
+  var cm = (CFG.mode === 'flip') ? 'flip' : 'clock';
+  if(cm === 'clock'){
     $('bigTime').textContent = two(hh) + ':' + two(m) + ':' + two(s);
     var lu = lunarText(d);
     var wk = weekLabel(d);
     $('bigSub').textContent = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'
       + (lu ? '  ' + lu : '') + '  星期' + WEEK[d.getDay()] + (wk ? '  ·  ' + wk : '');
-  }else if(CFG.mode === 'flip'){
+  }else if(cm === 'flip'){
     /* 第一次进来时 lastFlip 全是空串，那一帧只是「把数字落上去」，
        并没有翻页动作 —— 所以要先确认上一帧已经有值（had），再比差异。 */
     var had = lastFlip.h !== '' || lastFlip.m !== '';
@@ -3105,7 +3201,8 @@ function clockTick(){
   tickClock();
 }
 function loop(){
-  if(CFG.mode === 'timer' && T.run) tmPaint();
+  /* v4.10.5：计时区常驻 —— 不管左边在看时钟还是翻页，只要计时在跑就继续画 */
+  if(T.run) tmPaint();
   requestAnimationFrame ? requestAnimationFrame(loop) : setTimeout(loop, 100);
 }
 
@@ -3178,6 +3275,25 @@ function applySize(z){
 function cycleSize(){
   var cur = parseInt(CFG.size || 2, 10);
   applySize((cur % 4) + 1);
+}
+
+/* v4.10.5（站主第 3 条）：「时钟的翻页，它的字号不受到我这个控制，翻页字号也可以调那个大小」。
+   翻页时钟的字号本来就由 --fw 单独算（跟数字时钟那套 --fs 档位无关），
+   这里再给它一个**独立**的 5 档按钮，两个字号互不干扰。 */
+var FLIP_SIZES = [
+  [0.55, '很小'], [0.72, '小'], [0.92, '中'], [1.15, '大'], [1.45, '超大']
+];
+function applyFlipSize(n){
+  n = parseInt(n, 10);
+  if(!(n >= 1 && n <= FLIP_SIZES.length)) n = 3;
+  CFG.flipSize = n; saveCfg();
+  var el = $('flipView');
+  if(el) el.style.setProperty('--fwk', String(FLIP_SIZES[n - 1][0]));
+  var b = $('flipSizeBtn');
+  if(b) b.textContent = '翻页字号 · ' + FLIP_SIZES[n - 1][1];
+}
+function cycleFlipSize(){
+  applyFlipSize((parseInt(CFG.flipSize || 3, 10) % FLIP_SIZES.length) + 1);
 }
 function applyFont(f){
   CFG.font = f; saveCfg();
@@ -3339,6 +3455,7 @@ $('fontBtn').onclick = cycleFont;
 $('bgBtn').onclick = cycleBg;
 $('h12Btn').onclick = function(){ CFG.h12 = !CFG.h12; saveCfg(); applyH12(); };
 $('sizeBtn').onclick = cycleSize;
+$('flipSizeBtn').onclick = cycleFlipSize;
 $('fsBtn').onclick = toggleFs;
 $('aboutBtn').onclick = function(e){ e.stopPropagation(); $('about').className = 'show'; };
 $('aboutClose').onclick = function(){ $('about').className = ''; };
@@ -3539,17 +3656,19 @@ $('stage').ondblclick = function(e){
   toggleFs();
 };
 
-/* 键盘 */
+/* 键盘。
+   v4.10.5：计时区现在常驻显示，所以空格 / r / m 不再要求「先切到计时模式」——
+   看到计时器就能直接按，符合直觉。 */
 document.onkeydown = function(e){
   var tag = (e.target && e.target.nodeName) || '';
   if(tag === 'INPUT') return;
   var k = e.key;
   if(k === ' '){ e.preventDefault();
-    if(CFG.mode === 'timer'){ if(T.run || T.paused) tmToggle(); else tmStart(); }
+    if(T.run || T.paused) tmToggle(); else tmStart();
   }
   else if(k === 'f' || k === 'F'){ toggleFs(); }
-  else if(k === 'r' || k === 'R'){ if(CFG.mode === 'timer') tmReset(); }
-  else if(k === 'm' || k === 'M'){ if(CFG.mode === 'timer') tmMark(); }
+  else if(k === 'r' || k === 'R'){ tmReset(); }
+  else if(k === 'm' || k === 'M'){ tmMark(); }
   else if(k === '1') applyMode('clock');
   else if(k === '2') applyMode('flip');
   else if(k === '3') applyMode('timer');
@@ -3559,6 +3678,9 @@ document.onkeydown = function(e){
 /* ---------------- 启动 ---------------- */
 applyFont(CFG.font || 'auto');
 applySize(CFG.size || 2);
+/* v4.10.5（站主第 3 条）：背景色记忆 —— 上次退出时是什么背景，这次打开还是那个。
+   saveCfg 本来就把 bg 一起存了，这里额外在 <body> 开头补一段首屏脚本（见下面），
+   保证「一打开就是上次那个颜色」，不会先闪一下浅灰再变。 */
 applyBg(CFG.bg || 'light');
 applyH12();
 /* 支持 ./clock.html?m=pomo 直接进某个模式（首页「番茄时钟」卡片就指到这里） */
@@ -3569,7 +3691,11 @@ function modeFromUrl(){
   if(m === 'pomo'){ CFG.tk = 'pomo'; return 'timer'; }
   return (m && MODE_NAME[m]) ? m : '';
 }
-applyMode(modeFromUrl() || CFG.mode || 'clock');
+/* v4.10.5（站主第 3 条）：「默认点击打开之后是时钟界面」——
+   不带参数进来时一律落在时钟（数字 / 翻页沿用上次的选择），
+   不再因为上次停在计时页就直接开成计时器。要计时请点右边的「正计时 / 倒计时 / 番茄钟」。 */
+applyMode(modeFromUrl() || ((CFG.mode === 'flip') ? 'flip' : 'clock'));
+applyFlipSize(CFG.flipSize || 3);
 applyFlipSec();
 if(CFG.mode === 'timer'){ T.kind = CFG.tk || 'up'; tmReset(); }
 bindSettings();
@@ -3593,7 +3719,11 @@ logPullAll();
 /* 拉取卡住或离线时请勿推送堵死：12 秒后照常推，退回原来的「本地优先」 */
 setTimeout(function(){ if(!LOG.pulled){ LOG.pulled = true; flushLog(); } }, 12000);
 /* 每 60 秒心跳一次：带上正在计时的那一段，换设备能近乎实时看到 */
-setInterval(logHeartbeat, 60000);
+/* v4.10.5（站主第 6 条）：时钟页的心跳从 1 分钟改成 5 分钟 ——
+   每次心跳都是一次数据库写，1 分钟一次会让 Neon 永远不休眠，白烧免费额度。
+   计时记录本来就是「事后看」的东西，5 分钟的同步延迟没人感觉得到；
+   点返回 / 切后台 / 时间到 都会立刻同步一次（logSyncNow），所以不丢数据。 */
+setInterval(logHeartbeat, 5 * 60 * 1000);
 setTimeout(function(){ $('hint').className = 'hide'; }, 5000);
 setTimeout(showBar, 600);
 

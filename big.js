@@ -1269,9 +1269,12 @@
           if(t){
             if(t.kind === 'holiday'){
               /* v4.7.9：口径跟首页横幅统一 —— 不再「距开学 N 天」（结束日被多数一次），
-                 不足 24 小时直接说小时。 */
-              txt = (t.label || '放假中') + ' · 放假第 ' + t.dayNo + ' 天 · 还剩 '
-                + (typeof islLeftText === 'function' ? islLeftText(t.leftMs) : '');
+                 不足 24 小时直接说小时。
+                 v4.10.5：开始日 >= 12:00 时，当天是「今晚开始」而不是「第 1 天」。 */
+              txt = t.startTonight
+                ? ((t.label || '放假中') + ' · 今晚 ' + (t.fromTime || '') + ' 起 · 共 ' + t.totalDays + ' 天')
+                : ((t.label || '放假中') + ' · 放假第 ' + t.dayNo + ' 天 · 还剩 '
+                   + (typeof islLeftText === 'function' ? islLeftText(t.leftMs) : ''));
             }
             else if(t.kind === 'off') txt = (t.label || '今天休息') + (t.text ? ' · ' + t.text : '');
             else txt = t.text || '今天没有安排';
@@ -2853,15 +2856,77 @@
   }
 
   /* 成绩：考试列表 + 某次考试的班级排名（总分 / 单科，分数 / 名次） */
+  /* v4.10.5（站主第 2 条）：「随机点名里面的这些范围、成绩、学号这些字段都要加到
+     缓存里面，防止无网的时候也可以用。我会在有网的时候把这些成绩数据都加载一遍，
+     包括成绩分析里面的东西，在无网的情况下也应该可以查看」。
+     所以三样东西全部落本机：
+       · 名单（含学号 / 身份 / 性别 / 头衔）—— 早就有 ROSTER_KEY；
+       · 考试列表 —— 新增 EXAMS_KEY；
+       · 每场考试的成绩表 —— 新增 STAT_KEY（最多留 8 场，别把 localStorage 撑爆）。
+     读取顺序一律「缓存先上屏 → 有网再刷新」，断网时界面照样能用。 */
+  var EXAMS_KEY = 'cls_pick_exams_v1';
+  var STAT_KEY  = 'cls_pick_stat_v1';
+  var STAT_KEEP = 8;
+
+  function examsCacheGet(){
+    try{
+      var a = JSON.parse(localStorage.getItem(EXAMS_KEY) || 'null');
+      return Array.isArray(a) ? a : null;
+    }catch(e){ return null; }
+  }
+  function statCacheGet(){
+    try{
+      var o = JSON.parse(localStorage.getItem(STAT_KEY) || 'null');
+      return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
+    }catch(e){ return {}; }
+  }
+  function statCachePut(examId, stat){
+    var o = statCacheGet();
+    try{ o[String(examId)] = { at: Date.now(), d: stat }; }catch(e){ return; }
+    var keys = Object.keys(o).sort(function (a, b){
+      return (Number(o[b] && o[b].at) || 0) - (Number(o[a] && o[a].at) || 0);
+    });
+    var out = {};
+    keys.slice(0, STAT_KEEP).forEach(function (k){ out[k] = o[k]; });
+    /* 先删后写：万一新数据比旧的大，直接覆盖可能超配额，删掉再写更稳 */
+    try{
+      localStorage.removeItem(STAT_KEY);
+      localStorage.setItem(STAT_KEY, JSON.stringify(out));
+    }catch(e){
+      /* 还是写不下 → 只留最近 3 场再试一次，实在不行就放弃（不影响在线使用） */
+      try{
+        var small = {};
+        keys.slice(0, 3).forEach(function (k){ if(out[k]) small[k] = out[k]; });
+        localStorage.setItem(STAT_KEY, JSON.stringify(small));
+      }catch(e2){}
+    }
+  }
+  function statCacheWarm(){
+    var o = statCacheGet(), cache = {};
+    Object.keys(o).forEach(function (k){
+      var v = o[k];
+      if(v && v.d) cache[k] = v.d;
+    });
+    return cache;
+  }
+
   function loadExams(done){
     if(BIG.pick.exams) { if(done) done(); return; }
+    var cached = examsCacheGet();
+    if(cached && cached.length) BIG.pick.exams = cached;      /* 缓存先上屏 */
     try{
-      if(typeof api !== 'function'){ BIG.pick.exams = []; if(done) done(); return; }
+      if(typeof api !== 'function'){ if(!BIG.pick.exams) BIG.pick.exams = []; if(done) done(); return; }
       api('/scores?action=list').then(function (j){
-        BIG.pick.exams = (j && j.exams) || [];
+        var arr = (j && j.exams) || [];
+        if(arr.length || !(cached && cached.length)) BIG.pick.exams = arr;
+        if(arr.length){ try{ localStorage.setItem(EXAMS_KEY, JSON.stringify(arr)); }catch(e){} }
         if(done) done();
-      }).catch(function (){ BIG.pick.exams = []; if(done) done(); });
-    }catch(e){ BIG.pick.exams = []; if(done) done(); }
+      }).catch(function (){
+        /* 断网 / 没登录 → 用缓存那份，别把列表清空 */
+        if(!BIG.pick.exams || !BIG.pick.exams.length) BIG.pick.exams = cached || [];
+        if(done) done();
+      });
+    }catch(e){ if(!BIG.pick.exams) BIG.pick.exams = []; if(done) done(); }
   }
 
   /* v4.1.0：名次一律按**本班**算。
@@ -2894,7 +2959,8 @@
     if(!examId){ BIG.pick.stat = null; BIG.pick.prog = null; BIG.pick.statErr = ''; if(done) done(); return; }
     if(BIG.pick.stat && String(BIG.pick.stat.id) === String(examId)){ afterStat(done); return; }
     BIG.pick.prog = null;
-    var cache = BIG.pick.statCache || (BIG.pick.statCache = {});
+    /* v4.10.5：内存缓存 → 本机缓存（断网也能用）→ 网络 */
+    var cache = BIG.pick.statCache || (BIG.pick.statCache = statCacheWarm());
     var key = String(examId);
     if(cache[key]){ BIG.pick.stat = cache[key]; BIG.pick.statErr = ''; afterStat(done); return; }
     try{
@@ -2903,6 +2969,7 @@
         cache[key] = buildStat(j);
         BIG.pick.stat = cache[key];
         BIG.pick.statErr = BIG.pick.stat ? '' : '这场考试还没有成绩记录';
+        if(BIG.pick.stat) statCachePut(key, BIG.pick.stat);   /* 存一份，断网时用 */
         afterStat(done);
       }).catch(function (e){
         BIG.pick.stat = null; BIG.pick.prog = null;
@@ -2930,13 +2997,14 @@
     var pid = prevExamId();
     BIG.pick.progNoPrev = false;
     if(!pid){ BIG.pick.prevStat = null; BIG.pick.progNoPrev = true; if(done) done(); return; }
-    var cache = BIG.pick.statCache || (BIG.pick.statCache = {});
+    var cache = BIG.pick.statCache || (BIG.pick.statCache = statCacheWarm());
     if(cache[pid]){ BIG.pick.prevStat = cache[pid]; if(done) done(); return; }
     try{
       if(typeof api !== 'function'){ if(done) done(); return; }
       api('/scores?action=board&exam=' + encodeURIComponent(pid)).then(function (j){
         cache[pid] = buildStat(j);
         BIG.pick.prevStat = cache[pid];
+        if(BIG.pick.prevStat) statCachePut(pid, BIG.pick.prevStat);
         if(done) done();
       }).catch(function (){ BIG.pick.prevStat = null; if(done) done(); });
     }catch(e){ if(done) done(); }
@@ -3851,6 +3919,32 @@
 
   function two(n){ n = String(n); return n.length < 2 ? '0' + n : n; }
 
+  /* ---------------- v4.10.5（站主第 1 条）：查看当前范围内是哪些人 ----------------
+     点一下「查看」，把 pool() 里真正会被抽到的人列出来：
+     姓名 + 学号末两位 + 在这个条件下这个人的值（分数 / 名次）。
+     请假和不参与的人已经在 pool() 里被剔掉了，所以看到的名单就是抽签的取值范围。 */
+  function peekHtml(){
+    var p = BIG.pick;
+    if(!p.peek || p.state !== 'setup') return '';
+    var arr = pool();
+    if(!arr.length) return '';
+    var rows = arr.map(function (st){
+      var no = sidNo(st);
+      var sub = condValText(st.name);
+      return '<span class="bpick-peek-i"><b>' + esc0(st.name) + '</b>'
+        + (no ? '<i>' + ('0' + no).slice(-2) + '</i>' : '')
+        + (sub ? '<u>' + esc0(sub) + '</u>' : '')
+        + '</span>';
+    }).join('');
+    return '<div class="bpick-peek">'
+      + '<div class="bpick-peek-h">这个范围里的 ' + arr.length + ' 个人'
+      + '<span>（已排除请假 / 不参与）</span></div>' + rows + '</div>';
+  }
+  BIG.pickPeek = function (){
+    BIG.pick.peek = !BIG.pick.peek;
+    BIG.pickBody();
+  };
+
   BIG.pickBody = function (){
     var box = $('bpickBody');
     if(!box) return;
@@ -3864,7 +3958,14 @@
     }
 
     var head = '<div class="bpick-state">按条件可抽 <b id="bpickHeadCount">' + left.length + '</b> 人'
-      + (all.length ? '（共 ' + all.length + ' 人）' : '') + '</div>';
+      + (all.length ? '（共 ' + all.length + ' 人）' : '')
+      /* v4.10.5（站主第 1 条）：「按条件可抽取 n 人的那个地方可以加一个查看功能，
+         因为我就点击查看，我就可以看到在这个范围内是哪些人」 */
+      + (left.length
+          ? ' <button type="button" class="bpick-link" style="margin:0 0 0 6px"'
+            + ' onclick="BIG.pickPeek()">' + (p.peek ? '收起名单' : '查看') + '</button>'
+          : '')
+      + '</div>';
 
     if(!all.length){
       box.innerHTML = head + '<div class="bpick-empty">名单加载失败。<br>请确认已登录，并检查网络后重试。</div>';
@@ -3987,6 +4088,7 @@
         + '<div class="bpick-cond">条件：' + esc0(condText())
         +   '<button type="button" class="bpick-link" style="margin:0 0 0 8px" onclick="BIG.pickFilter()">'
         +   (p.fOpen ? '收起' : '修改') + '</button></div>'
+        + peekHtml()
         + filterHtml
         + '<div class="bpick-count"><button type="button" onclick="BIG.pickCount(-1)">−</button>'
         +   '<span><b>' + p.n + '</b> 人</span>'
