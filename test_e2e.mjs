@@ -12897,6 +12897,9 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\^image\\\//.test(apiImg79));
   const wk79 = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
   t('★v4.7.9 worker 注册 img 路由', /case 'img':/.test(wk79));
+  const adm79 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+  t('★v4.7.9 大屏启动器把 Profile 放进脚本同目录（抗还原）',
+    /--user-data-dir="%PROFILE%"/.test(adm79) && /set "PROFILE=%DIR%profile"/.test(adm79));
 }
 
 console.log('\n' + '='.repeat(52));
