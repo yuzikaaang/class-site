@@ -221,8 +221,19 @@
     var cellData = cells.map(function () { return null; });
     var queue = [], running = false;
 
+    /* v4.10.2（站主第 7 条）：配额算好的名单（opts.locked）优先。
+       没有 locked 时行为跟以前一模一样 —— 纯随机抽。
+       有 locked 时：只在 locked 里挑，但**挑的顺序仍随机**，
+       所以动画看着还是「随机开箱」，但结果一定符合配额
+       （学号段 / 成绩段 / 男女 / 班干部 的 最多 / 最少 人数）。 */
     function drawOne() {
       var cand = pool.filter(function (it) { return !used[it.name]; });
+      if(opts.locked && opts.locked.length){
+        var lock = {};
+        for(var li = 0; li < opts.locked.length; li++) lock[opts.locked[li]] = 1;
+        var sub = cand.filter(function (it) { return lock[it.name]; });
+        if(sub.length) cand = sub;
+      }
       if (!cand.length) return null;
       var it = cand[(Math.random() * cand.length) | 0];
       used[it.name] = 1;
@@ -379,7 +390,21 @@
      这里用 1-(1-p)^3.4：起步快、一路减速、到 p=1 时速度为 0，全程没有二次加速。 */
   function easeCase(p) {
     if (p >= 1) return 1;
-    return 1 - Math.pow(1 - p, 3.4);
+    if (p <= 0) return 0;
+    /* v4.10.2（站主第 6 条）：「如果你随机跳转到前面和后面的话，你这个动画可以再过渡的再完美一点」。
+       原来的 1-(1-p)^3.4 到 90% 时速度已经掉到 0.06 左右，末尾几乎停住，
+       接着又硬切到「回位」动画 —— 中间那一下像「顿了一拍」。
+       现在换成指数略低的 3.0（尾巴更平顺），并且**回位动画改成同一条曲线**，
+       两段衔接处速度连续，看起来就是一次连贯的滑行，不像「跳一下再弹回来」。 */
+    return 1 - Math.pow(1 - p, 3.0);
+  }
+  /* 回位用的小幅缓动：起步慢、中间快、末尾轻收 —— 和主曲线观感一致 */
+  function easeSettle(p) {
+    if (p >= 1) return 1;
+    if (p <= 0) return 0;
+    return p < 0.5
+      ? 2 * p * p
+      : 1 - Math.pow(-2 * p + 2, 2.4) / 2;
   }
 
   function caseCtl(root, need, pool, opts) {
@@ -392,8 +417,19 @@
     var used = {}, picked = [], round = 0;
     var iw = 104, pitch = 112, curX = 0;
 
+    /* v4.10.2（站主第 7 条）：配额算好的名单（opts.locked）优先。
+       没有 locked 时行为跟以前一模一样 —— 纯随机抽。
+       有 locked 时：只在 locked 里挑，但**挑的顺序仍随机**，
+       所以动画看着还是「随机开箱」，但结果一定符合配额
+       （学号段 / 成绩段 / 男女 / 班干部 的 最多 / 最少 人数）。 */
     function drawOne() {
       var cand = pool.filter(function (it) { return !used[it.name]; });
+      if(opts.locked && opts.locked.length){
+        var lock = {};
+        for(var li = 0; li < opts.locked.length; li++) lock[opts.locked[li]] = 1;
+        var sub = cand.filter(function (it) { return lock[it.name]; });
+        if(sub.length) cand = sub;
+      }
       if (!cand.length) return null;
       var it = cand[(Math.random() * cand.length) | 0];
       used[it.name] = 1;
@@ -438,6 +474,55 @@
     })();
     function teaseStep() {
       return TEASE_POOL[(Math.random() * TEASE_POOL.length) | 0];
+    }
+
+    /* v4.10.2（站主第 6 条）：铺一条「相邻不同色」的卡片带。
+       做法：把候选按学号段分档 → 各档轮流取牌（round-robin），
+       这样相邻两张几乎必然不同段；某一档用完了就跳过它，接下一档。
+       中奖卡最后放到指定位置（它的颜色由 win 决定）。 */
+    function buildStrip(poolArr, M, win, at) {
+      var buckets = {}, order = [];
+      poolArr.forEach(function (it) {
+        var t = tierOf(it.no);
+        if (!(t in buckets)) { buckets[t] = []; order.push(t); }
+        buckets[t].push(it);
+      });
+      /* 每档内部洗牌 */
+      order.forEach(function (t) {
+        var b = buckets[t];
+        for (var i = b.length - 1; i > 0; i--) {
+          var j = (Math.random() * (i + 1)) | 0;
+          var tmp = b[i]; b[i] = b[j]; b[j] = tmp;
+        }
+      });
+      var tiles = [], idx = {}, ti = 0;
+      while (tiles.length < M) {
+        var progressed = false;
+        for (var oi = 0; oi < order.length && tiles.length < M; oi++) {
+          var t = order[(ti + oi) % order.length];
+          var bk = buckets[t];
+          if (!bk || (idx[t] || 0) >= bk.length) continue;
+          var it = bk[idx[t]++];
+          /* 相邻同色就跳过这一张（换下一档）—— 保证视觉上颜色不连片 */
+          if (tiles.length) {
+            var prev = tiles[tiles.length - 1];
+            if (tierOf(prev.no) === t && bk.length - idx[t] > 0) continue;
+          }
+          tiles.push(it);
+          progressed = true;
+        }
+        if (!progressed) {
+          /* 候选用完了 → 用整池随机补齐（条件不满足时的兜底） */
+          while (tiles.length < M) {
+            tiles.push(poolArr[(Math.random() * poolArr.length) | 0]);
+          }
+          break;
+        }
+        ti++;
+      }
+      /* 中奖卡放到指定位置 */
+      if (at >= 0 && at < tiles.length) tiles[at] = win;
+      return tiles;
     }
 
     function spin() {
@@ -522,10 +607,13 @@
       var back = Math.abs(curX - winX) > 1;
       if (back) {
         burst();
+        /* v4.10.2（站主第 6 条）：回位这段以前只有 260ms、还是一条很「急」的曲线，
+           视觉上是「弹回去」而不是「滑回去」。现在加长到 420ms，
+           曲线换成 easeSettle（缓入缓出），跟主减速曲线是同一挂味道，衔接就顺了。 */
         later(function () {
           if (!S || S.ending) return;
-          moveTo(winX, 260, function (p) { return 1 - Math.pow(1 - p, 2); }, function () { revealWin(); });
-        }, 360);
+          moveTo(winX, 420, easeSettle, function () { revealWin(); });
+        }, 420);
       } else {
         revealWin();
       }

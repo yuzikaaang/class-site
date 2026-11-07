@@ -456,6 +456,17 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .quote-cat{font-size:.7rem;line-height:1;padding:5px 9px;border-radius:99px;cursor:pointer;
   background:rgba(120,53,15,.06);color:var(--fg-2);border:1px solid transparent;
   transition:background .15s,color .15s,border-color .15s}
+/* v4.10.2（站主第 9 条）：「打勾的时候明明打的是这个，却给那个打勾」。
+   根因之二：勾上的那一项以前是往文字前面插一个「✓ 」，**按钮宽度当场变了**，
+   这一行是 flex-wrap，宽度一变后面的按钮全部移位 —— 于是第二次点下去
+   点到的已经不是屏幕上看着的那个了，看起来就像「勾串了位」。
+   现在改成固定宽度的勾号槽（一直占位，靠透明度显隐），开与关宽度完全一样，
+   整行永远不会因为勾选而重排。 */
+.quote-cat::before{
+  content:'\2713';display:inline-block;width:1em;margin-right:2px;
+  opacity:0;transition:opacity .15s;
+}
+.quote-cat.on::before{opacity:1}
 .quote-cat:hover{background:rgba(120,53,15,.12)}
 .quote-cat.on{background:rgba(180,83,9,.14);color:#b45309;border-color:rgba(180,83,9,.3);font-weight:600}
 .dark .quote-cat{background:rgba(255,255,255,.07);color:#cbd5e1}
@@ -4251,24 +4262,45 @@ html.big-mode header.big-brand-top .logo{width:46px;height:46px;margin-top:8px}
   html.big-mode .layout{padding-top:calc(24px * var(--bhw-fs,1))}
   html.big-mode header.big-brand-top{
     position:relative;
-    display:flex;align-items:flex-end;gap:20px;
-    min-height:96px;padding:30px 24px 12px;
+    /* v4.10.2（站主第 10 条）：「班徽这个明暗切换按钮，还有这个服务站的名字，
+       你都最起码要居中吧，为什么全部都靠下面？」
+       原来 align-items:flex-end —— 标题和班徽一律贴着下沿，上半段空一大块。
+       现在改成居中：明暗按钮脱离绝对定位进入 flex 流（不再浮在左上角），
+       标题居中、班徽居中；顶部 30px 安全区（避课表）仍由 padding-top 留着。 */
+    display:flex;align-items:center;justify-content:center;gap:20px;
+    /* v4.10.2（需求 12）：站主要求「班徽、明暗按钮、站名都最起码要居中，
+       为什么全部都靠下面」。
+       原来的 padding:30px 24px 12px 上下不对称 + align-items:flex-end，
+       内容整体沉到下半段。改成：
+         · 上下 padding 对称（24px / 24px），min-height 收到 84px；
+         · align-items:center —— 内容真的在标题卡里居中；
+       顶部 30px 的课表安全区改成 ::before 的**独立绝对定位层**
+       （叠在标题卡上部，不占布局高度），所以它不再把内容顶下去。 */
+    min-height:84px;padding:24px;
+  }
+  /* 大屏下的明暗切换按钮：改成 flex 里的一员，跟标题、班徽同一水平中线 */
+  html.big-mode header.big-brand-top .theme-btn{
+    position:static;order:0;flex:none;
+    width:42px;height:42px;font-size:1.05rem;
+    background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);
+  }
+  html.big-mode header.big-brand-top h1{
+    order:1;flex:0 1 auto;min-width:0;text-align:center;margin:0;
+  }
+  html.big-mode header.big-brand-top .logo{
+    order:2;position:static;flex:none;
+    width:62px;height:62px;margin:0;
   }
   /* 上半段那条更暗的「安全区」，让空档看起来是有意留的，不是没对齐（同 .bhw-top） */
   html.big-mode header.big-brand-top::before{
+    /* 安全区：绝对定位叠在标题卡上部 30px（课表压到的是这段），
+       **不占布局高度**，所以标题 / 班徽 / 明暗按钮仍然是真居中。 */
     content:'';position:absolute;left:0;right:0;top:0;
     height:30px;
     background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,0));
     border-radius:0 0 10px 10px;pointer-events:none;
   }
   html.big-mode header.big-brand-top>*{position:relative;z-index:1}
-  html.big-mode header.big-brand-top h1{
-    flex:1 1 auto;min-width:0;text-align:left;margin:0;
-  }
-  html.big-mode header.big-brand-top .logo{
-    position:static;order:9;flex:0 0 62px;
-    width:62px;height:62px;margin:0 46px 0 0;
-  }
 }
 html.big-mode footer{margin-top:18px}
 
@@ -4332,6 +4364,12 @@ html.big-mode .tab-page h2{font-size:1.3rem}
    ============================================================ */
 #bigHw{
   display:none;--bhw-fs:1;padding:0 0 58px;
+  /* v4.10.2（站主第 1 条）：字号刻度重新标定。
+     ① --bhw-fs 只跟「作业正文」走（滑块控制的就是它）；
+     ② --bhw-fx   = 顶栏文字 / 右侧功能栏的固定字号 —— 站主要求「这两处不参与调整，
+                    字号就保持现在 150% 的样子」，所以钉死在 1.5 倍；
+     ③ --bhw-fbrand = 站名「25级05班班级服务站」—— 站主要求按 180 档，钉在 1.8 倍。 */
+  --bhw-fx:1.5;--bhw-fbrand:1.8;
   /* 大屏远看：中文优先用笔画更实、字面更大的字体。
      PingFang（Mac）/ HarmonyOS（华为）/ Microsoft YaHei UI（Win10+，比旧 YaHei 清晰）。
      v4.3.0：整栈收进 --bhw-font，底栏「字体」按钮直接换这个变量（见 big.js applyFont）。 */
@@ -4360,8 +4398,14 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
    做法：整条高度翻倍（min-height 96px），内容一律贴着下沿排（align-items:flex-end），
    上面那半留纯色空档，被什么盖住都不影响按钮。 */
 .bhw-top{
-  display:flex;align-items:flex-end;gap:14px;
-  padding:calc(30px*var(--bhw-fs,1)) 18px 13px;min-height:calc(96px*var(--bhw-fs,1));
+  display:flex;align-items:center;gap:14px;
+  /* v4.10.2（站主第 9 条）：「大屏作业的最顶上那个标题栏有点太长，减掉 1/3」。
+     min-height 96px → 64px，安全区暗带同步收窄 30px → 18px。 */
+  /* v4.10.2（需求 1 + 13）：顶栏高度**固定 64px**，不再乘 var(--bhw-fs) ——
+     需求 1 明确说「标题以及右侧功能栏的字号不进行调整」，
+     既然字号不动，高度跟着作业字号滑块伸缩就不合理（滑一下顶栏就变高）。
+     64px = 原来 96px 的 2/3，正好是站主要求的「减掉 1/3」。 */
+  padding:18px 18px 13px;min-height:64px;
   margin:0 0 10px;
   background:linear-gradient(135deg,#7c2d12,#9a3412);color:#fff;border-radius:0 0 16px 16px;
   box-shadow:0 6px 18px rgba(124,45,18,.18);position:relative;z-index:950;
@@ -4369,27 +4413,28 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 /* 上半段那条更暗的「安全区」，让空档看起来是有意留的，不是没对齐 */
 .bhw-top::before{
   content:'';position:absolute;left:0;right:0;top:0;
-  height:calc(30px*var(--bhw-fs,1));
+  height:18px;
   background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,0));
   border-radius:0 0 10px 10px;pointer-events:none;
 }
 .bhw-top>*{position:relative;z-index:1}
 .bhw-back{
   border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);color:#fff;
-  border-radius:11px;padding:7px 13px;font-size:calc(.86rem*var(--bhw-fs));font-weight:700;
+  border-radius:11px;padding:7px 13px;font-size:calc(.86rem*var(--bhw-fx));font-weight:700;
   cursor:pointer;white-space:nowrap;
 }
 .bhw-back:hover{background:rgba(255,255,255,.22)}
-.bhw-brand{flex:1;text-align:center;font-weight:900;font-size:calc(1.02rem*var(--bhw-fs));letter-spacing:.08em}
+/* v4.10.2：站名按 180 档 → --bhw-fbrand（1.8 倍） */
+.bhw-brand{flex:1;text-align:center;font-weight:900;font-size:calc(1.02rem*var(--bhw-fbrand));letter-spacing:.08em}
 .bhw-top-act{display:flex;align-items:center;gap:8px;flex:none}
 .bhw-sel{
   padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.35);
-  background:rgba(255,255,255,.14);color:#fff;font-size:calc(.8rem*var(--bhw-fs));max-width:300px;
+  background:rgba(255,255,255,.14);color:#fff;font-size:calc(.8rem*var(--bhw-fx));max-width:300px;
 }
 .bhw-sel option{color:#1c1917}
 .bhw-top .bhw-btn{
   background:rgba(255,255,255,.94);color:#7c2d12;border:none;border-radius:10px;
-  padding:7px 12px;font-size:calc(.8rem*var(--bhw-fs));font-weight:800;cursor:pointer;
+  padding:7px 12px;font-size:calc(.8rem*var(--bhw-fx));font-weight:800;cursor:pointer;
 }
 .bhw-top .bhw-btn:hover{background:#fff}
 .bhw-top .bhw-btn.ghost{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.4)}
@@ -4397,11 +4442,11 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 .bhw-local{
   display:inline-flex;align-items:center;gap:6px;padding:5px 8px 5px 10px;border-radius:10px;
   background:rgba(253,186,116,.24);border:1px solid rgba(253,186,116,.7);color:#fff;
-  font-size:calc(.74rem*var(--bhw-fs));font-weight:800;white-space:nowrap;
+  font-size:calc(.74rem*var(--bhw-fx));font-weight:800;white-space:nowrap;
 }
 .bhw-local button{
   border:none;border-radius:7px;padding:4px 8px;cursor:pointer;
-  font-size:calc(.72rem*var(--bhw-fs));font-weight:800;
+  font-size:calc(.72rem*var(--bhw-fx));font-weight:800;
   background:rgba(255,255,255,.9);color:#7c2d12;
 }
 .bhw-local button:hover{background:#fff}
@@ -4500,7 +4545,9 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
    就会把倒计时 / 一言撑到看不全。这里给右栏单独一个「封顶倍率」：
    小字号时跟着涨一点，涨到 1.35 倍就停住，永远留得住一行。
    时钟另算，最多 1.12 倍。 */
-.bhw-side{--bhw-fs-s:min(var(--bhw-fs,1),1.35)}
+/* v4.10.2（站主第 1 条）：右栏字号**钉死**在 1.35 倍 —— 改动前设成 150% 时
+   min(1.5,1.35) 就是 1.35，现在不再跟着作业字号滑块变。 */
+.bhw-side{--bhw-fs-s:1.35}
 .bhw-side .bhw-clock{flex:0 0 auto}
 /* v4.3.0：一言不再拉满整列（那样只剩一大片空白），卡片包住自己的内容 */
 .bhw-side .bhw-quote{flex:0 0 auto}
@@ -4514,7 +4561,7 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
    v4.1.0：时钟**不跟字号缩放** —— 站主反馈「字号放大把时钟也放大，时间就显示不全了」。
    时钟是给后排看时间的，本来就该固定大号；字号只作用于作业正文。 */
 .bhw-clock-t{
-  font-size:calc(2.55rem*min(var(--bhw-fs,1),1.12));font-weight:900;line-height:1.06;
+  font-size:calc(2.55rem*1.12);font-weight:900;line-height:1.06;
   letter-spacing:.01em;font-variant-numeric:tabular-nums;white-space:nowrap;
   max-width:100%;overflow:hidden;
 }
@@ -4539,8 +4586,8 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
   display:flex;align-items:center;justify-content:center;
 }
 .bhw-pick-ico svg{stroke:#fff}
-.bhw-pick b{font-size:calc(.9rem*var(--bhw-fs));display:block}
-.bhw-pick span{font-size:calc(.68rem*var(--bhw-fs));color:var(--fg-3)}
+.bhw-pick b{font-size:calc(.9rem*var(--bhw-fx));display:block}
+.bhw-pick span{font-size:calc(.68rem*var(--bhw-fx));color:var(--fg-3)}
 
 /* —— 侧栏倒计时（v4.3.0）——
    重要日期 / 最近节假日各一行，名称在左、剩余时间在右。没有可显示的整块隐藏。 */
@@ -4620,6 +4667,14 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 }
 .bhw-opt:hover{border-color:var(--grad-a);background:var(--tint)}
 .bhw-opt.on{border-color:var(--grad-a);background:var(--tint);color:#9a3412}
+/* v4.10.2（站主第 9 条）：一言分类的勾号 —— 固定宽度槽，靠透明度显隐。
+   以前是往文字前面塞「✓ 」，勾上之后按钮变宽、整行重排，
+   后面的按钮跟着移位，于是「点 A 却给 B 打了勾」。 */
+.bhw-opt-cat::before{
+  content:'\2713';display:inline-block;width:1em;margin-right:2px;
+  opacity:0;transition:opacity .15s;
+}
+.bhw-opt-cat.on::before{opacity:1}
 
 /* —— 新建期：预设科目 chips —— */
 .bhw-form-subj{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px}
@@ -4868,6 +4923,38 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 .bpick-in{width:88px}
 .bpick-sel{flex:1;max-width:260px}
 .bpick-dash{color:var(--fg-3)}
+/* v4.10.2（站主第 3 条）：学号输入 = 固定前缀 + 只填两位的框 + 滚轮下拉。
+   前缀（2505）写在框**外面**，框里只放末两位 —— 「用户老是忘记输了」的前缀终于不用手打了。
+   滚轮下拉列的是名单里现成的学号，手机上原生 select 就是滚轮。 */
+.bpick-sid{display:inline-flex;align-items:center;gap:6px}
+.bpick-sid-pre{
+  font-size:.86rem;font-weight:800;color:var(--fg-3);letter-spacing:.04em;
+  padding:7px 8px;border-radius:9px 0 0 9px;
+  background:rgba(120,53,15,.08);border:1px solid rgba(120,53,15,.18);border-right:none;
+}
+.bpick-sid-in{
+  width:52px;text-align:center;border-radius:0 9px 9px 0;
+}
+.bpick-sid-wheel{max-width:180px;flex:0 1 auto}
+.dark .bpick-sid-pre{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14)}
+/* v4.10.2（站主第 7 条）：配额面板（最多 / 最少抽几个） */
+.bpick-w{
+  border:1px solid rgba(120,53,15,.14);border-radius:14px;padding:12px 14px;margin-bottom:12px;
+  background:var(--bg-2);
+}
+.bpick-w-h{font-size:.78rem;font-weight:800;color:var(--fg-3);margin-bottom:8px;letter-spacing:.06em}
+.bpick-w-dim{margin-bottom:10px}
+.bpick-w-dim>b{display:block;font-size:.76rem;font-weight:800;color:var(--fg-2);margin:0 0 5px}
+.bpick-w-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap}
+.bpick-w-k{flex:0 0 84px;font-size:.75rem;color:var(--fg-3)}
+.bpick-w-in{
+  width:66px;padding:5px 8px;border-radius:8px;border:1px solid rgba(120,53,15,.18);
+  background:var(--bg-1);color:var(--fg);font-size:.78rem;font-family:inherit;text-align:center;
+}
+.bpick-w-sep{color:var(--fg-3);font-size:.8rem}
+.bpick-chk{display:inline-flex;align-items:center;gap:6px;font-size:.76rem;color:var(--fg-2);cursor:pointer}
+.bpick-chk input{width:15px;height:15px;accent-color:var(--grad-a);cursor:pointer}
+.dark .bpick-w{background:#2a2523;border-color:rgba(255,255,255,.08)}
 .bpick-f-tip{font-size:.72rem;color:var(--fg-3);margin:6px 0 0;line-height:1.6}
 .bpick-mask{
   position:fixed;inset:0;z-index:1400;display:none;align-items:center;justify-content:center;
@@ -5378,10 +5465,14 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
      内容贴下沿；多出来的 30 来像素不会把分组挤到第二屏（实测 1080p 仍是一屏）。
      v4.10.1：标题卡搬到最上面（big-brand-top），安全区照旧做在它自己身上。 */
   html.big-mode .layout{padding:20px 18px 4px}
-  html.big-mode header.big-brand-top{padding:24px 18px 0;margin-bottom:0;border-radius:15px;min-height:82px}
+  /* v4.10.2（需求 12）：原来这里是 padding:24px 18px 0 —— 底部 padding 归零，
+     再叠加 align-items:center，内容整体就沉到卡片下半段，看着「全部靠下面」。
+     改成上下对称（18px / 18px），min-height 也放到 84px，
+     顶部 24px 安全区照旧由 ::before 绝对定位层承担（不占布局高度）。 */
+  html.big-mode header.big-brand-top{padding:18px;margin-bottom:0;border-radius:15px;min-height:84px}
   html.big-mode header.big-brand-top::before{height:24px}
   html.big-mode header.big-brand-top h1{font-size:1.2rem}
-  html.big-mode header.big-brand-top .logo{width:52px;height:52px;flex:0 0 52px;margin:0 44px 0 0}
+  html.big-mode header.big-brand-top .logo{width:52px;height:52px;flex:none;margin:0}
   html.big-mode footer{margin-top:5px;font-size:.68rem;line-height:1.45}
   html.big-mode .big-group{margin:2px 0 0}
   html.big-mode .big-group h2{margin:0 0 5px;font-size:.82rem}
@@ -7346,18 +7437,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.1';
+var SITE_VERSION = '4.10.2';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4101" defer></script>
-<script src="./app.min.js?v=4101" defer></script>
+<script src="./auth-bus.js?v=4102" defer></script>
+<script src="./app.min.js?v=4102" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4101" defer></script>
-<script src="./big.js?v=4101" defer></script>
+<script src="./fs-keep.js?v=4102" defer></script>
+<script src="./big.js?v=4102" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4101" defer></script>
+<script src="./pickfx.js?v=4102" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

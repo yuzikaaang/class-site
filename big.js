@@ -97,7 +97,12 @@
      第一位。是 DOM 搬家不是复制 —— 普通模式一个像素都不动。 */
   function moveBrandTop(on){
     try{
-      var hd = document.querySelector('.content>header');
+      /* ⚠️ v4.10.2（站主第 9 条）：这里原来查的是 '.content>header'，
+         可是开大屏时 header 已经被搬到 .layout 下了 —— 再查 '.content>header'
+         一律是 null，于是 moveBrandTop 直接 return，**header 永远搬不回去**。
+         症状就是站主说的「关掉大屏之后，标题栏单独列出来一栏，刷新才恢复」。
+         现在改成先认 .big-brand-top（自己加的标记），再退回普通 header。 */
+      var hd = document.querySelector('header.big-brand-top') || document.querySelector('.content>header');
       var side = document.querySelector('.sidebar');
       var layout = document.querySelector('.layout');
       if(!hd || !side || !layout) return;
@@ -323,8 +328,15 @@
   /* v4.8.0（站主）：「每次可以调节的少一点点，我甚至可以手动输入，每次就调 5%」。
      档位制改成连续百分比：25%–300%，按一下 ±5%，中间那个数字可以直接点进去改。
      老数据两种都认（v4.7.3 存的是档位索引，更早的是 8 档老索引），按实际倍率换算。 */
-  var FS_KEY = 'cls_bhw_fs3';
-  var FS_MIN = 25, FS_MAX = 300, FS_STEP = 5;
+  /* v4.10.2（站主第 1 条）：刻度整体重新标定 —— **150 才是标准尺寸**。
+     以前 100% = 1.0 倍，数字看着别扭（大屏上正文偏小）；现在 150% = 1.0 倍，
+     也就是说「150 相当于原来的 100」，比例关系整个挪了 1.5 倍。
+       · 换算：倍率 = 显示值 / 150（旧值 ×1.5 就是新值，外观完全不变）
+       · 范围：25–450（旧 25–300 对应 0.167–2.0 倍 → 新 25–450）
+       · 默认：150（= 1.0 倍，就是现在的标准大小） */
+  var FS_KEY = 'cls_bhw_fs4';
+  var FS_MIN = 25, FS_MAX = 450, FS_STEP = 5;
+  var FS_BASE = 150;                       /* 显示 150 = 1.0 倍 */
   var FS_STEPS = [0.25, 0.35, 0.5, 0.65, 0.8, 1, 1.2, 1.45, 1.75, 2.1, 2.55, 3];
   var SUBJ_A = ['语文', '数学', '英语'];
   var SUBJ_B = ['物理', '化学', '生物'];
@@ -418,28 +430,37 @@
   var FS_OLD = [0.85, 0.95, 1, 1.1, 1.2, 1.35, 1.5, 1.7];
   function clampFs(n){
     n = Math.round(Number(n));
-    if(!isFinite(n)) return 100;
+    if(!isFinite(n)) return FS_BASE;
     if(n < FS_MIN) return FS_MIN;
     if(n > FS_MAX) return FS_MAX;
     return n;
+  }
+  /* v4.10.2：老刻度（100 = 1.0 倍）→ 新刻度（150 = 1.0 倍），外观不变 */
+  function fsFromRatio(r){
+    return clampFs(Math.round(r * FS_BASE));
   }
   function readFs(){
     var n = null;
     try{ n = parseInt(localStorage.getItem(FS_KEY), 10); }catch(e){}
     if(n >= FS_MIN && n <= FS_MAX) return n;
+    /* v4.10.x 的刻度：100 = 1.0 倍 → ×1.5 转新刻度 */
+    var prev = null;
+    try{ prev = parseInt(localStorage.getItem('cls_bhw_fs3'), 10); }catch(e){}
+    if(prev >= 25 && prev <= 300) return fsFromRatio(prev / 100);
     /* v4.7.3 的档位索引 → 百分比 */
     var idx = null;
     try{ idx = parseInt(localStorage.getItem('cls_bhw_fs2'), 10); }catch(e){}
-    if(idx >= 0 && idx < FS_STEPS.length) return clampFs(FS_STEPS[idx] * 100);
+    if(idx >= 0 && idx < FS_STEPS.length) return fsFromRatio(FS_STEPS[idx]);
     /* 更早的 8 档老索引 → 百分比 */
     var old = null;
     try{ old = parseInt(localStorage.getItem(FS_KEY_OLD), 10); }catch(e){}
-    if(old >= 0 && old < FS_OLD.length) return clampFs(FS_OLD[old] * 100);
-    return 100;
+    if(old >= 0 && old < FS_OLD.length) return fsFromRatio(FS_OLD[old]);
+    return FS_BASE;
   }
   function applyFs(){
     var h = $('bigHw');
-    if(h) h.style.setProperty('--bhw-fs', String(BIG.fs / 100));
+    /* 倍率 = 显示值 / 150（150 = 1.0 倍） */
+    if(h) h.style.setProperty('--bhw-fs', String(BIG.fs / FS_BASE));
     var v = $('bhwFsVal');
     /* 数字框自己触发的那次不要回写，否则会把用户正在敲的「1」顶成「100」 */
     if(v && v !== document.activeElement) v.value = String(BIG.fs);
@@ -582,8 +603,13 @@
     try{ localStorage.removeItem(HW_LOCAL_KEY); }catch(e){}
   }
 
-  /* 编辑权限：本机编辑开关或管理员，两者之一即可 */
-  function canEdit(){ return adminOk() || hwEditOn(); }
+  /* v4.10.2（站主第 5 条）：「之前设计是在上面的标题功能栏里点『编辑』才能编辑，
+     点『完成』之后就不能编辑了？现在怎么是可以直接编辑的？」
+     —— 之前 v4.7.1 把权限改成了「管理员登录 OR 本机编辑开关」，
+     结果管理员一登录就永远处于可编辑态，顶部那个「编辑 / 完成」按钮反而成了摆设。
+     现在改回站主要的原设计：**能不能编辑，只看顶部那个开关**。
+     管理员身份只决定「改完能不能上云」，不再影响「能不能改」。 */
+  function canEdit(){ return hwEditOn(); }
 
   /* 有本机未上传的改动就优先用它 —— 否则云端一轮同步就把离线改的东西冲掉了 */
   function hwList(){
@@ -687,11 +713,11 @@
     z.classList.add('show');
   };
 
-  function taskHtml(it, si, ti, t, admin){
+  function taskHtml(it, si, ti, t, edit){
     var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
     var text = o.text || '';
     /* 编辑态用 textarea + 自适应高度：单行 input 装不下长句，字一多就被框子截断。 */
-    var main = admin
+    var main = edit
       ? '<textarea class="bhw-in bhw-area" rows="1" placeholder="输入作业内容"'
         + ' oninput="BIG.autoGrow(this)"'
         + ' onchange="BIG.hwTask(' + si + ',' + ti + ',this.value)">' + esc0(text) + '</textarea>'
@@ -699,7 +725,7 @@
     return '<div class="bhw-task">'
       + '<span class="bhw-dot"></span>'
       + '<div style="flex:1;min-width:0">' + main + mediaHtml(o) + '</div>'
-      + (admin ? '<button type="button" class="bhw-x" title="删除这一项"'
+      + (edit ? '<button type="button" class="bhw-x" title="删除这一项"'
         + ' onclick="BIG.hwDelTask(' + si + ',' + ti + ')">' + ico('x', 13) + '</button>' : '')
       + '</div>';
   }
@@ -715,25 +741,33 @@
     for(var i = 0; i < arr.length; i++) BIG.autoGrow(arr[i]);
   }
 
-  function subjCard(it, si, admin){
+  /* v4.10.2（站主第 5 条）：第三个参数是「能不能编辑」（edit），
+     不是「是不是管理员」—— 只有点了顶部「编辑」开关才传 true，
+     这样卡片上的输入框、删除键、「添加一项」按钮才出现。
+     （以前这里传的是 adminOk()，导致管理员不看开关也能改。） */
+  function subjCard(it, si, edit){
     var name = String(it.subject || '');
     var tasks = it.tasks || [];
     var st = subjStyle(name);
     var accent = st.c || '#9a3412';
     var head = '<div class="bhw-subj-h">'
-      + (admin
+      + (edit
           ? '<input class="bhw-in" value="' + attr0(name) + '" placeholder="科目"'
             + ' onchange="BIG.hwSubjName(' + si + ',this.value)"'
             + ' style="flex:none;max-width:7em;font-weight:900;color:' + attr0(accent) + '">'
           : '<b style="color:' + attr0(accent) + '">' + esc0(name) + '</b>')
       + '<span class="bhw-cnt">' + tasks.length + ' 项</span>'
-      + (admin ? '<button type="button" class="bhw-x" title="删除这一科"'
+      + (edit ? '<button type="button" class="bhw-x" title="删除这一科"'
           + ' onclick="BIG.hwDelSubj(' + si + ')">' + ico('trash', 13) + '</button>' : '')
       + '</div>';
-    var rows = tasks.map(function (t, ti){ return taskHtml(it, si, ti, t, admin); }).join('');
-    return '<div class="bhw-subj" style="border-left:4px solid ' + attr0(accent) + '">'
+    var rows = tasks.map(function (t, ti){ return taskHtml(it, si, ti, t, edit); }).join('');
+    /* v4.10.2（站主第 2 条）：给卡片一个**稳定标识**（期次内科目序号）。
+       以前排版算法拿「DOM 里的先后」当排序依据 —— 卡片一旦被搬过，
+       下次再排结果就变了，于是每次刷新卡片都换位置，看起来就是「闪一下」。
+       有了稳定 key，同一张卡每次都排在同一个位置。 */
+    return '<div class="bhw-subj" data-hwkey="s' + si + '" style="border-left:4px solid ' + attr0(accent) + '">'
       + head + rows
-      + (admin ? '<button type="button" class="bhw-add" onclick="BIG.hwAddTask(' + si + ')">'
+      + (edit ? '<button type="button" class="bhw-add" onclick="BIG.hwAddTask(' + si + ')">'
           + ico('plus', 12) + ' 添加一项</button>' : '')
       + '</div>';
   }
@@ -889,9 +923,15 @@
     var h = $('bigHw');
     if(!h) return;
     var hw = currentHw();
-    /* v4.7.1：admin 管的是「编辑 UI 出不出来」，不再是「有没有权限改」。
-       班级电脑离线、登不了管理员，也要能新增 / 修改（改动存本机）。 */
-    var admin = canEdit();
+    /* v4.10.2（站主第 5 条）：把两件事彻底拆开。
+       · edit  = 顶部「编辑 / 完成」开关开没开 → 决定**卡片能不能改**
+                 （输入框、删除按钮、「添加一项」「添加科目」都归它管）；
+       · admin = 有没有登录管理员 → 只决定**改动往哪存**
+                 （本机还是云端）以及哪些管理按钮可见。
+       以前这两件事被 canEdit() 混成一个「admin」变量，
+       结果管理员一登录卡片就直接能改，顶部那个「编辑」按钮形同虚设。 */
+    var edit = canEdit();
+    var admin = adminOk();
     var list = hwList();
     var act = $('bhwActions');
     var brand = $('bhwBrand');
@@ -925,13 +965,13 @@
         + (admin && hw ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwRename()">重命名</button>' : '')
         + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwExport()" title="导出作业文件">导出</button>' : '')
         + (admin ? '<button type="button" class="bhw-btn ghost" onclick="BIG.hwImport()" title="从文件导入作业">导入</button>' : '')
-        /* v4.7.1：没登录管理员也能进编辑态（班级电脑离线时的唯一入口） */
-        + (!adminOk()
-            ? '<button type="button" class="bhw-btn' + (hwEditOn() ? '' : ' ghost') + '"'
-              + ' onclick="BIG.hwEditToggle()" title="本机编辑：改动只存在这台电脑上">'
-              + (hwEditOn() ? '完成' : '编辑') + '</button>'
-            : '')
-        + (admin ? '<button type="button" class="bhw-btn" onclick="BIG.hwNew()">' + ico('plus', 13) + ' 新建一期</button>' : '')
+        /* v4.10.2（站主第 5 条）：编辑开关**人人都能点**（原来只有非管理员才有）。
+           点「编辑」→ 卡片变成可编辑；点「完成」→ 变回只读。
+           管理员登录与否只影响改动往哪存，不影响能不能改。 */
+        + '<button type="button" class="bhw-btn' + (hwEditOn() ? '' : ' ghost') + '"'
+          + ' onclick="BIG.hwEditToggle()" title="点「编辑」后作业卡片才能改，点「完成」恢复只读">'
+          + (hwEditOn() ? '完成' : '编辑') + '</button>'
+        + (edit && admin ? '<button type="button" class="bhw-btn" onclick="BIG.hwNew()">' + ico('plus', 13) + ' 新建一期</button>' : '')
         /* v4.7.1：真全屏（连任务栏一起盖掉），投影 / 一体机上用 */
         + '<button type="button" class="bhw-btn ghost bhw-full" onclick="BIG.hwFull()"'
           + ' id="bhwFullBtn" title="全屏显示（隐藏任务栏），按 Esc 退出">⛶ 全屏</button>';
@@ -976,23 +1016,55 @@
       else extras.push({ it: it, si: si });
     });
 
-    var mainHtml = '';
+    /* v4.10.2（站主第 2 条）：「刷新的时候卡片会重新排列，会突然闪一下。
+       如果没有新增特别多内容、不造成卡片大小更改的话，不要让卡片突然闪一下。」
+
+       根因：以前每次重绘都 `colA.innerHTML = mainHtml` —— **整块推倒重建**。
+       ① 所有卡片节点被销毁再新建 → 浏览器要重新排版、重新画一遍 → 视觉上就是「闪一下」；
+       ② 新节点没有旧节点的高度记忆 → layoutCards 量出来的顺序可能变 → 卡片换位置。
+
+       现在改成**按卡片增量更新**：
+         · 每张卡有稳定 key（data-hwkey）；
+         · 新旧 HTML 一模一样 → 直接把旧节点搬过去，DOM 完全不重建（零闪烁）；
+         · 只有真的改了内容的那几张卡才重建；
+         · 顺序也由 layoutCards 按稳定 key 决定（见 layoutCards 里的排序说明）。 */
+    var cards = [];
     SUBJ_A.concat(SUBJ_B).forEach(function (k){
       var hit = mapA[k] || mapB[k];
-      if(hit) mainHtml += subjCard(hit.it, hit.si, admin);
+      if(hit) cards.push({ key: 's' + hit.si, html: subjCard(hit.it, hit.si, edit) });
     });
-    colA.innerHTML = mainHtml || ('<div class="bhw-subj"><div class="bhw-empty">'
-      + (admin ? '暂无科目，可在下方添加。' : '暂时没有作业。') + '</div></div>');
-    colB.innerHTML = '';
-
-    if(other){
-      other.innerHTML = extras.length
-        ? extras.map(function (x){ return subjCard(x.it, x.si, admin); }).join('')
-        : '';
+    var emptyHtml = '<div class="bhw-subj"><div class="bhw-empty">'
+      + (edit ? '暂无科目，可在下方添加。' : '暂时没有作业。') + '</div></div>';
+    /* 两栏合起来算 —— layoutCards 会把卡片在两栏之间搬，只看一栏会重复/漏掉 */
+    var pool = [].slice.call(colA.children).concat([].slice.call(colB.children));
+    pool = pool.filter(isCard);
+    if(!cards.length){
+      colA.innerHTML = emptyHtml;
+      colB.innerHTML = '';
+    }else{
+      /* 所有主科目卡先统一放进 colA，再由 layoutCards 按高度分到两栏。
+         applyCards 会把原来在 colB 的节点搬回 colA（复用的节点直接搬，DOM 不重建）。 */
+      applyCards(colA, cards, pool);
+      /* colB 里的旧位置现在都空了 —— 清掉，layoutCards 稍后会重新往里放 */
+      colB.innerHTML = '';
     }
 
+    if(other){
+      var exCards = extras.map(function (x){
+        return { key: 's' + x.si, html: subjCard(x.it, x.si, edit) };
+      });
+      var exPool = other ? [].slice.call(other.children).filter(isCard) : [];
+      if(exCards.length){
+        if(other) applyCards(other, exCards, exPool);
+      }else if(other){
+        other.innerHTML = '';
+      }
+    }
+
+    /* v4.10.2（站主第 5 条）：「添加科目」也归编辑态管 ——
+       只读时底栏那一行整个不占位置，卡片上也不再有「添加一项」按钮。 */
     if(addHost){
-      addHost.innerHTML = admin
+      addHost.innerHTML = edit
         ? '<input class="bhw-in" id="bhwNewSubj" placeholder="科目名称"'
           + ' onkeydown="if(event.key===\'Enter\')BIG.hwAddSubj()">'
           + '<button type="button" class="bhw-audio" onclick="BIG.hwAddSubj()">' + ico('plus', 14) + ' 添加科目</button>'
@@ -1016,6 +1088,50 @@
     if(a.length !== b.length) return false;
     for(var i = 0; i < a.length; i++) if(a[i] !== b[i]) return false;
     return true;
+  }
+
+  /* v4.10.2（站主第 2 条）：按卡片增量更新，避免整块 innerHTML 重建导致闪烁。
+     cards: [{ key, html }]（按期望顺序）
+     pool : 现有卡片节点（两栏合起来的）
+     规则：同 key 且 HTML 完全一样 → **复用旧节点**（DOM 不重建，零闪烁）；
+           HTML 变了 → 只重建这一张；新 key → 新建；旧 key 多余 → 删掉。 */
+  function applyCards(host, cards, pool){
+    if(!host) return;
+    var byKey = {};
+    (pool || []).forEach(function(el){
+      var k = el.getAttribute ? el.getAttribute('data-hwkey') : '';
+      if(k && !byKey[k]) byKey[k] = el;
+    });
+    var used = {};
+    var frag = document.createDocumentFragment();
+    cards.forEach(function(c){
+      var el = byKey[c.key];
+      used[c.key] = 1;
+      if(el){
+        /* 内容没变 → 旧节点原地留着，连 innerHTML 都不碰 */
+        if(el.__hwHtml !== c.html){
+          el.innerHTML = c.html;
+          el.__hwHtml = c.html;
+        }
+        frag.appendChild(el);
+      }else{
+        var d = document.createElement('div');
+        d.innerHTML = c.html;
+        var first = d.firstElementChild;
+        if(first){
+          first.__hwHtml = c.html;
+          frag.appendChild(first);
+        }
+      }
+    });
+    /* 用不上的旧卡片删掉 */
+    Object.keys(byKey).forEach(function(k){
+      if(used[k]) return;
+      var el = byKey[k];
+      if(el.parentNode) el.parentNode.removeChild(el);
+    });
+    host.innerHTML = '';
+    host.appendChild(frag);
   }
   BIG.layoutCards = function (){
     var colA = $('bhwColA'), colB = $('bhwColB');
@@ -1047,9 +1163,19 @@
     var gap = 10, ha = 0, hb = 0, planA = [], planB = [];
     /* 高的先放、谁矮放谁（LPT 装箱）：比按科目顺序轮流塞更均衡，
        同样 6 张卡两栏高度差能压到几像素，底部留白也就更少。 */
-    cards.map(function (el, i){
-      return { el: el, h: el.getBoundingClientRect().height, i: i };
-    }).sort(function (a, b){ return b.h - a.h || a.i - b.i; })
+    cards.map(function(el, i){
+      return { el: el, h: el.getBoundingClientRect().height,
+               k: String(el.getAttribute('data-hwkey') || ('i' + i)) };
+    }).sort(function (a, b){
+      /* ⚠️ v4.10.2（站主第 2 条）：**排序必须与 DOM 当前位置无关**。
+         以前并列时用 a.i（DOM 下标）定次序，而 i 取决于卡片此刻在左栏还是右栏、
+         排在第几个 —— 排一次搬一次，下一次再排结果就变了。
+         于是每次刷新（哪怕内容一个字没改）卡片也会换位置、整块区域「闪一下」。
+         现在改用卡片自带的 data-hwkey（期次内科目序号）排序：
+         同样的内容 → 同样的结果 → 位置不变 → 不闪。 */
+      if(b.h !== a.h) return b.h - a.h;
+      return a.k < b.k ? -1 : (a.k > b.k ? 1 : 0);
+    })
       .forEach(function (x){
         if(ha <= hb){ planA.push(x); ha += x.h + gap; }
         else { planB.push(x); hb += x.h + gap; }
@@ -1400,7 +1526,11 @@
     var on = !hwEditOn();
     try{ localStorage.setItem(HW_EDIT_KEY, on ? '1' : '0'); }catch(e){}
     BIG.renderHw();
-    toast(on ? '已进入本机编辑，改完点右上角「完成」' : '已退出编辑');
+    /* v4.10.2（站主第 5 条）：文案跟着身份走 ——
+       登录了管理员就是「改完会上传云端」，没登录就是「只存本机」。 */
+    toast(on
+      ? (adminOk() ? '已进入编辑，改完点右上角「完成」，改动会同步到云端' : '已进入编辑，改完点右上角「完成」（改动只存本机）')
+      : '已退出编辑，卡片恢复只读');
   };
 
   /* 把本机改动推到云端（只有管理员能做，和原来的权限口径一致） */
@@ -1455,16 +1585,32 @@
     try{
       if(fsEl()){
         try{ if(window.FSKeep) FSKeep.off(); }catch(e){}
-        (d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen || function(){}).call(d);
+        var ex = d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen;
+        if(!ex){ toast('这个浏览器退不出网页全屏，请按 Esc 键', true); return; }
+        var p = ex.call(d);
+        /* v4.10.2（站主第 11 条）：「点网站里的全屏开关退不出全屏」。
+           退出不能只看 exitFullscreen() 有没有被调用 —— 得**退出后再核对一次**：
+           有些内核第一次调用会被静默忽略，必须补第二次才真的退掉。
+           另外必须区分两种「全屏」：
+             ① 网页全屏 —— 本页面 requestFullscreen 出来的，网页能自己退；
+             ② 浏览器窗口全屏 —— BAT 用 --start-fullscreen 启动的，网页**退不掉**，
+                只能按 F11 / Esc（这是站主「不知道怎么退」的真正原因）。
+           所以退完要告诉用户一句：网页退了，但窗口还全屏的话按 F11。 */
+        if(p && p.then){
+          p.then(function(){ setTimeout(afterExitFull, 260); },
+                 function(){ setTimeout(afterExitFull, 260); });
+        }else{
+          setTimeout(afterExitFull, 260);
+        }
         return;
       }
       var req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
       if(!req){ toast('这个浏览器不支持网页全屏，可按 F11', true); return; }
-      var p = req.call(el);
+      var p2 = req.call(el);
       /* v4.8.0：记住「要全屏」，换到时钟 / 后台 / 作业页也不退出 */
       try{ if(window.FSKeep) FSKeep.on(); }catch(e){}
-      if(p && p.then){
-        p.then(function(){ refreshFullBtn(); }, function(){
+      if(p2 && p2.then){
+        p2.then(function(){ refreshFullBtn(); }, function(){
           try{ if(window.FSKeep) FSKeep.off(); }catch(e){}
           toast('浏览器拒绝全屏，请按 F11', true);
         });
@@ -1475,10 +1621,44 @@
       toast('这个浏览器不支持网页全屏，可按 F11', true);
     }
   };
+
+  /* 退出网页全屏之后：核对 + 补刀 + 提示 */
+  function afterExitFull(){
+    if(fsEl()){
+      /* 还在全屏 → 第一次没生效，再补一次 */
+      try{
+        var ex = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+        if(ex) ex.call(document);
+      }catch(e){}
+      setTimeout(function(){
+        refreshFullBtn();
+        if(fsEl()) toast('网页全屏退不掉，请直接按键盘 Esc', true);
+        else tipWindowFull();
+      }, 460);
+      return;
+    }
+    refreshFullBtn();
+    tipWindowFull();
+  }
+  /* 窗口本身还占满屏幕（没有任务栏）→ 说明是浏览器窗口级全屏，网页管不着 */
+  function winLookFull(){
+    try{
+      if(!window.screen || !window.screen.height) return false;
+      return window.innerHeight >= (window.screen.height - 4);
+    }catch(e){ return false; }
+  }
+  function tipWindowFull(){
+    if(winLookFull()){
+      toast('网页已退出全屏；但窗口还是全屏（没有任务栏），按 F11 切换，或把启动方式改成「最大化」', true);
+    }
+  }
   function refreshFullBtn(){
     var b = $('bhwFullBtn');
     if(!b) return;
     b.textContent = fsEl() ? '⤡ 退出全屏' : '⛶ 全屏';
+    b.setAttribute('title', fsEl()
+      ? '退出网页全屏（退出后窗口若仍满屏，请按 F11）'
+      : '全屏显示（隐藏任务栏），按 Esc 退出');
   }
   try{
     ['fullscreenchange','webkitfullscreenchange','msfullscreenchange'].forEach(function (ev){
@@ -1622,11 +1802,17 @@
   /* ---------------- 一言轮换间隔弹窗（v4.3.0） ---------------- */
   /* v4.7.11（站主第 4 条）：大屏这一页也要能改「显示哪几类」和「整块隐藏」。
      类型与首页共用同一份 quote_source（云端），所以这儿勾了，首页也跟着变。 */
-  var QC_FE = [
-    ['a', '动画'], ['b', '漫画'], ['c', '游戏'], ['d', '文学'],
-    ['e', '原创'], ['f', '网络'], ['g', '其他'], ['h', '影视'],
-    ['i', '诗词'], ['j', '网易云'], ['k', '哲学'], ['l', '抖机灵']
-  ];
+  /* v4.10.2（站主第 9 条）：以前这里自己抄了一份分类表（QC_FE），
+     app.js 里还有一份（QUOTE_CATS_FE）。两份常量各改各的，顺序一旦对不上，
+     勾选状态就会「串位」—— 明明点了这个，那个却打上了勾。
+     现在统一：优先用 app.js 那份，本文件只留一份兜底副本。 */
+  var QC_FE = (typeof QUOTE_CATS_FE !== 'undefined' && Array.isArray(QUOTE_CATS_FE) && QUOTE_CATS_FE.length)
+    ? QUOTE_CATS_FE
+    : [
+      ['a', '动画'], ['b', '漫画'], ['c', '游戏'], ['d', '文学'],
+      ['e', '原创'], ['f', '网络'], ['g', '其他'], ['h', '影视'],
+      ['i', '诗词'], ['j', '网易云'], ['k', '哲学'], ['l', '抖机灵']
+    ];
   function qcList(){
     try{ if(typeof quoteCats === 'function') return quoteCats(); }catch(e){}
     return ['a', 'b', 'd', 'i'];
@@ -1656,8 +1842,10 @@
     h += '<div class="bhw-q-sec-k">内容类型（勾上的才会出现）</div>';
     h += QC_FE.map(function (c){
       var on = cur.indexOf(c[0]) >= 0;
-      return '<button type="button" class="bhw-opt' + (on ? ' on' : '') + '"'
-        + ' onclick="BIG.quoteCatSet(\'' + c[0] + '\')">' + (on ? '✓ ' : '') + c[1] + '</button>';
+      /* v4.10.2：勾号由 CSS 的 ::before 画（固定宽度槽），
+         文字里不要再插「✓ 」—— 那会让这一行重排，看着就像打到别的分类上。 */
+      return '<button type="button" class="bhw-opt bhw-opt-cat' + (on ? ' on' : '') + '"'
+        + ' onclick="BIG.quoteCatSet(\'' + c[0] + '\')">' + c[1] + '</button>';
     }).join('');
     h += '</div>';
     h += '<p class="bhw-io-tip" style="margin:10px 2px 0">'
@@ -2171,6 +2359,62 @@
   var F_KEY  = 'cls_big_pick_f';       /* 抽取条件，只存本机 */
 
   var F_DEF = { role: ['学生'], gender: '', sidMin: '', sidMax: '', examId: '', metric: '', subj: '', min: '', max: '' };
+
+  /* ---------- v4.10.2（站主第 7 条）：权重 / 配额 ----------
+     站主原话：「随便点名再加一点功能，就是有一个权重功能，比如说这次点的时候呢，
+     我们可以说每个学号段，每个成绩段，还有男女班干部课代表，都可以设置最多和最少抽几个人，
+     包括还可以设置比如说上次抽中的人不参与本次抽取。」
+
+     设计：
+       · W_DEF 里列出**可配额的维度**：
+           sid   学号段（01–10 / 11–20 / … / 51–62，跟颜色分段一致）
+           grade 成绩段（按所选考试的名次分档 1-10 / 11-20 / …）
+           sex   性别（男 / 女）
+           role  身份（学生 / 课代表 / 班干部）
+       · 每个维度下每一档可以设 min（至少抽几个）/ max（最多抽几个），空 = 不限。
+       · 另有一个总开关：上次抽中的人不参与本次抽取。
+       · 抽取时按维度逐一检查配额：不足 min 的先补，超了 max 的跳过。
+
+     存储：跟条件一起存在本机 F_KEY 里（f.w = { sid:{'0':{min,max}}, ... }，
+     f.noLast = 1），老配置没有这字段时按默认值走。 */
+  var W_DEF = {
+    sid:   ['01–10', '11–20', '21–30', '31–40', '41–50', '51–62'],
+    grade: ['名次 1–10', '名次 11–20', '名次 21–30', '名次 31–40', '名次 41–50', '名次 51+'],
+    sex:   ['男', '女'],
+    role:  ['学生', '课代表', '班干部'],
+  }
+  /* 维度中文名（放在 W_DEF 旁边，免得用到时才定义） */
+  var W_DIM_NAME = { sid: '学号段', grade: '成绩段', sex: '性别', role: '身份' };
+  var W_KEY = 'cls_big_pick_w';
+  function wClean(o){
+    var out = {};
+    if(!o || typeof o !== 'object' || Array.isArray(o)) return out;
+    Object.keys(W_DEF).forEach(function(dim){
+      var src = o[dim];
+      if(!src || typeof src !== 'object' || Array.isArray(src)) return;
+      var d = {};
+      W_DEF[dim].forEach(function(_, i){
+        var v = src[String(i)];
+        if(!v || typeof v !== 'object') return;
+        var mn = parseInt(v.min, 10), mx = parseInt(v.max, 10);
+        var e = {};
+        if(isFinite(mn) && mn > 0) e.min = mn;
+        if(isFinite(mx) && mx > 0) e.max = mx;
+        if(e.min || e.max) d[String(i)] = e;
+      });
+      if(Object.keys(d).length) out[dim] = d;
+    });
+    return out;
+  }
+  function loadW(){
+    try{
+      var o = JSON.parse(localStorage.getItem(W_KEY) || 'null');
+      return wClean(o);
+    }catch(e){ return {}; }
+  }
+  function saveW(w){
+    try{ localStorage.setItem(W_KEY, JSON.stringify(wClean(w))); }catch(e){}
+  }
 
   /* v4.7.0（站主第 2 条）：名单设置改成云端共享。
      原话：「不参与名单是可以上传的，云端同步哪个不参与哪个参与的，
@@ -2741,6 +2985,56 @@
     return s.indexOf(group) >= 0;
   }
 
+  /* ---------- 学号工具（v4.10.2 · 站主第 3 条） ----------
+     站主原话：「你在每个学号输入框外面的文本新增 2505，用户只要输入后面两位数字就可以了，
+     因为所有人学号前面四位是一样的，用户老是忘记输了」。
+
+     所以：
+       · 输入框外面固定显示公共前缀（2505），里面只填两位；
+       · 内部仍存**完整学号**（250501）—— 判定逻辑一个字都不用改，
+         老存档里存的也是完整学号，直接能用；
+       · 再配一个「滚轮」下拉（原生 select，手机上就是滚轮），
+         列出名单里**现成存在**的学号，从 1 一直到最大那个，不用自己想。 */
+  var SID_PREFIX_FALLBACK = '2505';
+  function sidPrefix(){
+    var cnt = {};
+    (BIG.pick.roster || []).forEach(function(st){
+      var d = String((st && st.studentId) || '').replace(/\D/g, '');
+      if(d.length >= 6){
+        var p = d.slice(0, 4);
+        cnt[p] = (cnt[p] || 0) + 1;
+      }
+    });
+    var best = '', n = 0;
+    for(var k in cnt){ if(cnt[k] > n){ n = cnt[k]; best = k; } }
+    return best || SID_PREFIX_FALLBACK;
+  }
+  /* 取学号末两位（'250501' → '01'） */
+  function sidTail(v){
+    var d = String(v == null ? '' : v).replace(/\D/g, '');
+    return d.length >= 2 ? d.slice(-2) : d;
+  }
+  /* 末两位 → 完整学号 */
+  function sidFull(tail){
+    var d = String(tail == null ? '' : tail).replace(/\D/g, '');
+    if(!d) return '';
+    if(d.length < 2) d = '0' + d;
+    return sidPrefix() + d;
+  }
+  /* 名单里现成的学号（按学号升序），给滚轮下拉用 */
+  function sidList(){
+    var seen = {}, out = [];
+    (BIG.pick.roster || []).forEach(function(st){
+      var d = String((st && st.studentId) || '').replace(/\D/g, '');
+      if(d.length < 4) return;
+      var tail = d.slice(-2);
+      if(seen[tail]) return;
+      seen[tail] = 1;
+      out.push({ tail: tail, full: d, name: String((st && st.name) || '') });
+    });
+    out.sort(function(a, b){ return Number(a.full) - Number(b.full); });
+    return out;
+  }
   /* 条件命中判定：身份 / 性别 / 学号范围 / 成绩条件，取交集 */
   function hit(st, f, stat){
     var roles = (f.role && f.role.length) ? f.role : ['学生'];
@@ -2786,6 +3080,102 @@
       if(ex[st.name]) return false;
       return hit(st, f, stat);
     });
+  }
+
+  /* ---------- v4.10.2：配额（最少 / 最多）辅助 ----------
+     每个维度先算出「这个人属于哪一档」，再统计各档已抽人数。 */
+  function wTierOf(dim, st, stat){
+    if(dim === 'sid'){
+      var no = sidNo(st);
+      if(!no) return -1;
+      return Math.min(5, Math.floor((no - 1) / 10));
+    }
+    if(dim === 'sex'){
+      var g = String((st && st.gender) || '');
+      if(g === '男') return 0;
+      if(g === '女') return 1;
+      return -1;
+    }
+    if(dim === 'role'){
+      var r = String((st && st.role) || '学生') + ' ' + String((st && st.title) || '');
+      if(roleHit('课代表', r)) return 1;
+      if(roleHit('班干部', r)) return 2;
+      return 0;
+    }
+    if(dim === 'grade'){
+      /* 按当前所选成绩条件的名次分档（没选考试 / 没成绩 → 不参与这一维） */
+      var f = BIG.pick.f || F_DEF;
+      if(!f.examId || !f.metric || !stat) return -1;
+      var row = statRow(stat, st);
+      if(!row) return -1;
+      var v = null;
+      if(f.metric === 'totalRank') v = row.totalRank;
+      else if(f.metric === 'totalScore') v = row.total;
+      else if(needProg(f.metric)){
+        var pr = BIG.pick.prog, prr = pr && pr.byName[normName(st.name)];
+        if(!prr) return -1;
+        v = (f.metric === 'totalProgress') ? prr.totalRank : (prr.subRank || {})[f.subj];
+      }
+      else {
+        var cell = row.sub[f.subj] || {};
+        v = (f.metric === 'subScore') ? cell.score : cell.rank;
+      }
+      if(v == null || !isFinite(Number(v))) return -1;
+      var n = Number(v);
+      if(n <= 0) return -1;
+      return Math.min(5, Math.floor((n - 1) / 10));
+    }
+    return -1;
+  }
+  /* 已抽到的各档人数统计 */
+  function wCount(dim, picked, stat){
+    var c = {};
+    picked.forEach(function(nm){
+      var st = stuOf(nm);
+      if(!st) return;
+      var t = wTierOf(dim, st, stat);
+      if(t < 0) return;
+      c[t] = (c[t] || 0) + 1;
+    });
+    return c;
+  }
+  /* 这个人现在还能不能抽（受 max 限制） */
+  function wAllow(dim, st, picked, stat){
+    var w = BIG.pick.w || {};
+    var cfg = w[dim];
+    if(!cfg) return true;
+    var t = wTierOf(dim, st, stat);
+    if(t < 0) return true;                     /* 不属于任何档 → 不受这一维限制 */
+    var e = cfg[String(t)];
+    if(!e || !e.max) return true;
+    var c = wCount(dim, picked, stat);
+    return (c[t] || 0) < e.max;
+  }
+  /* 这个人是不是「某个维度还差最少人数」——差的人优先抽 */
+  function wNeed(dim, st, picked, stat){
+    var w = BIG.pick.w || {};
+    var cfg = w[dim];
+    if(!cfg) return false;
+    var t = wTierOf(dim, st, stat);
+    if(t < 0) return false;
+    var e = cfg[String(t)];
+    if(!e || !e.min) return false;
+    var c = wCount(dim, picked, stat);
+    return (c[t] || 0) < e.min;
+  }
+  /* 有没有哪一维把这个人卡住了 */
+  function wBlocked(st, picked, stat){
+    for(var d in W_DEF){
+      if(!wAllow(d, st, picked, stat)) return true;
+    }
+    return false;
+  }
+  /* 有没有哪一维还差人（用来决定「优先抽谁」） */
+  function wAnyNeed(st, picked, stat){
+    for(var d in W_DEF){
+      if(wNeed(d, st, picked, stat)) return true;
+    }
+    return false;
   }
   function names(arr){ return arr.map(function (x){ return x.name; }); }
 
@@ -2839,6 +3229,60 @@
     return out;
   }
 
+  /* ---------- v4.10.2（站主第 7 条）：带配额的抽取 ----------
+     规则：
+       ① 「上次抽中的人不参与本次抽取」开关开着 → 先把上次那批人从候选里剔掉；
+       ② 每一维（学号段 / 成绩段 / 性别 / 身份）的 max 是硬上限 ——
+          已经抽够这一档的人，不再抽同档的；
+       ③ 某一维的 min 是「保底」—— 还差人时优先从这一档里抽，
+          这样「至少抽 2 个女生」这种要求才能真的满足；
+       ④ 条件冲突（比如「至少 3 个男生」但范围里只有 2 个男生）时优先保证 max 不超，
+          能满足多少满足多少，并在结果里说明。 */
+  function drawQuota(cand, n){
+    var stat = BIG.pick.stat;
+    var picked = [];
+    var rest = cand.slice();
+    /* ① 排除上次抽中的人 */
+    var excl = BIG.pick.exclLast && lastPickedNames();
+    if(excl && excl.length){
+      rest = rest.filter(function(x){ return excl.indexOf(x) < 0; });
+    }
+    var guard = rest.length * 4 + 40;
+    while(picked.length < n && rest.length && guard-- > 0){
+      /* 先看有没有「差保底」的候选 */
+      var idx = -1;
+      for(var i = 0; i < rest.length; i++){
+        var st = stuOf(rest[i]);
+        if(!st) continue;
+        if(wBlocked(st, picked, stat)) continue;
+        if(wAnyNeed(st, picked, stat)){ idx = i; break; }
+      }
+      if(idx < 0){
+        /* 没有保底需求 → 随机挑一个没超 max 的 */
+        var free = [];
+        for(var j = 0; j < rest.length; j++){
+          var st2 = stuOf(rest[j]);
+          if(!st2 || wBlocked(st2, picked, stat)) continue;
+          free.push(j);
+        }
+        if(!free.length) break;      /* 全被 max 卡住 → 只能到此为止 */
+        idx = free[Math.floor(Math.random() * free.length)];
+      }
+      picked.push(rest[idx]);
+      rest.splice(idx, 1);
+    }
+    return picked;
+  }
+  /* 上一次抽到的人（从抽取历史最新一条取） */
+  function lastPickedNames(){
+    try{
+      var list = phMerge();
+      if(!list || !list.length) return [];
+      var rec = list[0];
+      return (rec && Array.isArray(rec.names)) ? rec.names.slice() : [];
+    }catch(e){ return []; }
+  }
+
   global.bigPickOpen = function (){ BIG.pickOpen(); };
 
   BIG.pickOpen = function (){
@@ -2846,6 +3290,11 @@
     if(!m) return;
     BIG.pick.ex = loadEx();
     BIG.pick.f = loadF();
+    /* v4.10.2：配额配置（本机存） */
+    BIG.pick.w = loadW();
+    BIG.pick.exclLast = 0;
+    try{ BIG.pick.exclLast = (localStorage.getItem('cls_big_pick_exclast') === '1') ? 1 : 0; }catch(e){}
+    BIG.pick.wOpen = false;
     BIG.pick.n = Math.min(Math.max(1, BIG.pick.n || 1), 10);
     BIG.pick.fx = loadFx();
     BIG.pick.hideName = loadHide();
@@ -2880,10 +3329,35 @@
     if(e && e.target && e.target.id === 'bpickMask') BIG.pickClose();
   };
 
+  /* v4.10.2（站主第 4 条）：「如果抽取人数小于我所选人数，比如说我范围只有 5 个人，
+     那我最多就只能加到 5 个人，不能加到 6；如果我是已经加到 6，再重新选的范围的话，
+     那你就自动帮我改到最大值 5」。
+
+     以前只夹到 10，完全不看当前范围里到底有几个人 ——
+     范围只有 5 个时也能把人数加到 6，抽的时候直接少抽一个，看着像「抽少了」。
+     现在：**人数上限 = 当前条件下可抽的人数**（同时不超过 10）。 */
+  function pickMaxN(){
+    var can = pool().length;
+    if(!can) return 1;
+    return Math.max(1, Math.min(10, can));
+  }
   BIG.pickCount = function (d){
-    BIG.pick.n = Math.min(Math.max(1, (BIG.pick.n || 1) + d), 10);
+    var max = pickMaxN();
+    var n = (BIG.pick.n || 1) + d;
+    if(n > max){ n = max; }
+    if(n < 1){ n = 1; }
+    BIG.pick.n = n;
     BIG.pickBody();
   };
+  /* 条件一变（范围改了），人数立刻跟着可用人数收一下 */
+  function clampPickN(){
+    var max = pickMaxN();
+    if((BIG.pick.n || 1) > max){
+      BIG.pick.n = max;
+      return true;
+    }
+    return false;
+  }
 
   /* v4.5.0：结果先定、动画后演。
      这样动画中途点「跳过」、关面板、甚至动画资源出问题，都不会改变抽到的人，
@@ -2908,7 +3382,12 @@
     if(!cand.length){ toast('当前条件下无可用人员，请调整条件', true); return; }
     var p = BIG.pick;
     var n = Math.min(p.n, cand.length);
-    var picked = drawUnique(cand, n);
+    /* v4.10.2：走带配额的抽取（配额 + 排除上次都从这里生效） */
+    var picked = drawQuota(cand, n);
+    /* 配额把人数卡住了 → 如实说明，不要假装抽够了 */
+    if(picked.length < n){
+      toast('按配额只能抽到 ' + picked.length + ' 人（其余条件冲突了）', true);
+    }
     p.names = picked.slice();
 
     /* 关闭动画：直接出结果，不留滚动等待 */
@@ -2923,6 +3402,10 @@
       mode: p.fx,
       items: picked.map(pickItem),   /* 只用来知道抽几人 */
       pool: pickPoolItem(),          /* 真正随机从这里取，点一次抽一个 */
+      /* v4.10.2（站主第 7 条）：把配额算好的名单锁给动画 ——
+         动画只在名单里揭晓（顺序仍随机，看着还是随机开箱），
+         这样「最多 / 最少抽几个」在动画模式下也真的生效。 */
+      locked: picked.slice(),
       hide: !!p.hideName,
       single: false,
       onDone: function (actual){
@@ -3008,6 +3491,9 @@
       loadPrevStat(function (){ calcProg(); BIG.pickBody(); });
     }
     if(k !== 'metric' && k !== 'subj' && k !== 'min' && k !== 'max'){ /* 其它条件即时生效 */ }
+    /* v4.10.2（站主第 4 条）：范围改了，人数上限跟着变 ——
+       已经加到 6，范围缩到 5 个，就自动落回 5。 */
+    clampPickN();
     saveF();
     BIG.pickBody();
   };
@@ -3017,6 +3503,108 @@
   BIG.pickRole = function (role){
     var f = BIG.pick.f || (BIG.pick.f = loadF());
     f.role = [role];
+    /* v4.10.2：身份换了（学生 → 班干部），可抽人数可能变少 → 人数跟着收 */
+    clampPickN();
+    saveF();
+    BIG.pickBody();
+  };
+
+  /* ---------- v4.10.2（站主第 7 条）：配额面板 ----------
+     每个维度一栏，每一档两个小框：最少 / 最多。留空 = 不限。 */
+  function wPanelHtml(){
+    var w = BIG.pick.w || {};
+    var h = '';
+    h += '<div class="bpick-w-h">配额（留空 = 不限）</div>';
+    Object.keys(W_DEF).forEach(function(dim){
+      var cfg = w[dim] || {};
+      h += '<div class="bpick-w-dim"><b>' + esc0(W_DIM_NAME[dim] || dim) + '</b>';
+      W_DEF[dim].forEach(function(lb, i){
+        var e = cfg[String(i)] || {};
+        h += '<div class="bpick-w-row"><span class="bpick-w-k">' + esc0(lb) + '</span>'
+          + '<input class="bpick-w-in" type="number" min="0" max="99" placeholder="最少" value="'
+          +   (e.min ? String(e.min) : '') + '"'
+          +   ' onchange="BIG.pickW(\'' + dim + '\',' + i + ',\'min\',this.value)">'
+          + '<span class="bpick-w-sep">/</span>'
+          + '<input class="bpick-w-in" type="number" min="0" max="99" placeholder="最多" value="'
+          +   (e.max ? String(e.max) : '') + '"'
+          +   ' onchange="BIG.pickW(\'' + dim + '\',' + i + ',\'max\',this.value)">'
+          + '</div>';
+      });
+      h += '</div>';
+    });
+    h += '<p class="bpick-f-tip">「最少」是保底：还差人时优先从这一档抽；'
+      + '「最多」是上限：这一档抽够了就不再抽同档的人。</p>';
+    return h;
+  }
+
+  BIG.pickWOpen = function (){
+    BIG.pick.wOpen = !BIG.pick.wOpen;
+    BIG.pickBody();
+  };
+  BIG.pickW = function (dim, i, kind, val){
+    var w = BIG.pick.w || (BIG.pick.w = {});
+    if(!w[dim]) w[dim] = {};
+    var e = w[dim][String(i)] || (w[dim][String(i)] = {});
+    var n = parseInt(val, 10);
+    if(!isFinite(n) || n <= 0){ delete e[kind]; }
+    else { e[kind] = Math.min(99, n); }
+    /* min > max 是自相矛盾的 → 把 max 顶上去 */
+    if(e.min && e.max && e.min > e.max) e.max = e.min;
+    BIG.pick.w = wClean(w);
+    saveW(BIG.pick.w);
+    BIG.pickBody();
+  };
+  BIG.pickExclLast = function (on){
+    BIG.pick.exclLast = on ? 1 : 0;
+    try{ localStorage.setItem('cls_big_pick_exclast', on ? '1' : '0'); }catch(e){}
+    BIG.pickBody();
+  };
+
+  /* v4.10.2（站主第 3 条）：学号输入框（起 / 止）。
+     结构：固定前缀文字（2505）+ 只填两位的输入框 + 一个「滚轮」下拉。
+     下拉里列的是名单里**现成存在**的学号 —— 站主原话：
+     「我使用文本选择就是类似一个滚轮，然后我可以从 1 选到现在目前已有的学号」。 */
+  function sidField(which, cur){
+    var pre = sidPrefix();
+    var tail = sidTail(cur);
+    var opts = ['<option value="">不限</option>'];
+    sidList().forEach(function(x){
+      opts.push('<option value="' + attr0(x.tail) + '"'
+        + (String(x.tail) === String(tail) ? ' selected' : '') + '>'
+        + esc0(x.tail) + (x.name ? ' ' + esc0(x.name) : '') + '</option>');
+    });
+    return '<span class="bpick-sid">'
+      + '<span class="bpick-sid-pre">' + esc0(pre) + '</span>'
+      + '<input class="bpick-in bpick-sid-in" inputmode="numeric" maxlength="2"'
+      +   ' placeholder="起" value="' + attr0(tail) + '"'
+      +   ' onchange="BIG.pickSid(\'' + which + '\',this.value)"'
+      +   ' oninput="this.value=this.value.replace(/\\D/g,\'\')">'
+      + '<select class="bpick-sel bpick-sid-wheel" onchange="BIG.pickSid(\'' + which + '\',this.value)">'
+      +   opts.join('')
+      + '</select>'
+      + '</span>';
+  }
+
+  /* v4.10.2（站主第 3 条）：设学号范围的统一入口。
+     两个输入框（起 / 止）和两个滚轮下拉都走这里，规则只有一条：
+     **左边永远不能大于右边**。
+     用户把左边填大了怎么办？自动对调并说明一句 —— 比默默不生效好。 */
+  BIG.pickSid = function (which, val){
+    var f = BIG.pick.f || (BIG.pick.f = loadF());
+    var d = String(val == null ? '' : val).replace(/\D/g, '');
+    if(d.length > 2) d = d.slice(-2);
+    if(!d){
+      f[which] = '';
+      saveF();
+      BIG.pickBody();
+      return;
+    }
+    f[which] = sidFull(d);
+    if(f.sidMin && f.sidMax && Number(f.sidMin) > Number(f.sidMax)){
+      var t = f.sidMin; f.sidMin = f.sidMax; f.sidMax = t;
+      toast('已自动对调：左边学号必须小于右边');
+    }
+    clampPickN();
     saveF();
     BIG.pickBody();
   };
@@ -3101,7 +3689,10 @@
     var f = BIG.pick.f || F_DEF, arr = [];
     arr.push((f.role && f.role[0]) || '学生');
     if(f.gender) arr.push(f.gender);
-    if(f.sidMin !== '' || f.sidMax !== '') arr.push('学号 ' + (f.sidMin || '不限') + '–' + (f.sidMax || '不限'));
+    if(f.sidMin !== '' || f.sidMax !== ''){
+      /* v4.10.2：摘要里也只显示末两位（前缀都一样，不必重复） */
+      arr.push('学号 ' + (f.sidMin ? sidTail(f.sidMin) : '不限') + '–' + (f.sidMax ? sidTail(f.sidMax) : '不限'));
+    }
     if(f.examId && f.metric){
       var stat = BIG.pick.stat;
       var mName = f.metric === 'totalRank' ? '总分名次（班级）'
@@ -3239,12 +3830,13 @@
             + '<div class="bpick-f-tip">性别和身份是在后台「成员档案」里填的；'
             +   '档案里没填性别的人，选「男 / 女」时抽不到，选「不限」不影响。</div>'
             + '<div class="bpick-f-row"><span class="bpick-f-k">学号</span>'
-            +   '<input class="bpick-in" inputmode="numeric" placeholder="起" value="' + attr0(f.sidMin) + '"'
-            +     ' onchange="BIG.pickSet(\'sidMin\',this.value.trim())">'
+            +   sidField('sidMin', f.sidMin)
             +   '<span class="bpick-dash">–</span>'
-            +   '<input class="bpick-in" inputmode="numeric" placeholder="止" value="' + attr0(f.sidMax) + '"'
-            +     ' onchange="BIG.pickSet(\'sidMax\',this.value.trim())">'
+            +   sidField('sidMax', f.sidMax)
             + '</div>'
+            + '<div class="bpick-f-tip">学号前面几位都一样（' + esc0(sidPrefix()) + '），'
+            +   '框里只填最后两位就行；右边那个下拉可以直接滚着选现成的学号。'
+            +   '左边的学号必须小于右边的，填反了会自动对调。</div>'
             + '<div class="bpick-f-row"><span class="bpick-f-k">成绩</span>'
             +   '<select class="bpick-sel" onchange="BIG.pickSet(\'examId\',this.value)">' + examOpts + '</select>'
             + '</div>'
@@ -3279,6 +3871,11 @@
             + '</div>')
         : '';
 
+      /* v4.10.2（站主第 7 条）：配额面板入口 + 「上次抽中的人不参与」开关 */
+      var wPanel = '';
+      if(p.wOpen){
+        wPanel = '<div class="bpick-w">' + wPanelHtml() + '</div>';
+      }
       var noOne = left.length ? '' : '<div class="bpick-empty" style="padding:12px 0 4px">当前条件下无可用人员。<br>'
         + '请调整性别、学号或成绩条件后重试。</div>';
 
@@ -3291,6 +3888,15 @@
         +   '<span><b>' + p.n + '</b> 人</span>'
         +   '<button type="button" onclick="BIG.pickCount(1)">+</button></div>'
         + fxPanel()
+        + '<div class="bpick-f-row" style="margin:2px 0 10px">'
+        +   '<button type="button" class="bpick-link" onclick="BIG.pickWOpen()">'
+        +     (p.wOpen ? '收起配额设置' : '配额设置（最多 / 最少抽几个）') + '</button>'
+        +   '<label class="bpick-chk"><input type="checkbox"'
+        +     (p.exclLast ? ' checked' : '')
+        +     ' onchange="BIG.pickExclLast(this.checked)">'
+        +     '<span>上次抽中的人不参与本次抽取</span></label>'
+        + '</div>'
+        + wPanel
         + '<button type="button" class="bpick-go" onclick="BIG.pickStart()">开始抽取</button>'
         + '<button type="button" class="bpick-link" onclick="BIG.pickExOpen()">名单设置'
         +   (exCount ? '（已排除 ' + exCount + ' 人）' : '') + '</button>'

@@ -2856,8 +2856,12 @@ function launchBatText(){
     'echo   [OK] browser: %EXE%',
     'call :log "browser=%EXE%"',
     '',
-    'rem  v4.10.0: use --start-fullscreen (fills the screen; F11 / Esc to exit).',
-    'start "" "%EXE%" --app="%URL%" --user-data-dir="%PROFILE%" --start-fullscreen --no-first-run --no-default-browser-check --disable-features=Translate,msEdgeSidebar',
+    'rem  v4.10.2: back to --start-maximized.',
+    'rem  v4.10.0 had switched this to --start-fullscreen, but then the in-page',
+    'rem  fullscreen toggle could not leave fullscreen, and the station got stuck',
+    'rem  in a state nobody could get out of. Maximized keeps the title bar and',
+    'rem  task bar, so Esc / F11 / the page toggle all still work.',
+    'start "" "%EXE%" --app="%URL%" --user-data-dir="%PROFILE%" --start-maximized --window-size=1920,1080 --no-first-run --no-default-browser-check --disable-features=Translate,msEdgeSidebar',
     'call :log "start sent, waiting 4s to verify the process"',
     '',
     'rem  hidden window has no console input, so use ping instead of timeout',
@@ -3050,6 +3054,25 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.10.2', date: '2026-11-08', type: 'feat', title: '作业字号以 150 为基准、随机点名加配额权重、版本更新弹窗与进度条', items: [
+      '大屏作业字号重新定标：150 就是标准尺寸（以前 100 是标准），顶栏、右侧功能栏的字号固定在原来 150% 的样子，不再跟着作业滑块一起变大变小；站名「25级05班班级服务站」按 180 号的字排',
+      '作业看板刷新不再闪：卡片按内容复用旧节点、排序按学号键固定，没有新增内容、卡片大小没变的时候整块不会重排',
+      '随机点名的学号输入框外面固定显示「2505」，你只要输后面两位数字；旁边加了一个滚轮下拉，可以从 01 一路选到名单里现有的学号；左边填的学号比右边大时会自动帮你调换',
+      '随机点名的抽取人数不会超过范围人数：范围里只有 5 个人就最多只能加到 5，已经加到 6 再缩小范围会自动落回 5',
+      '作业编辑改回原来的设计：必须点顶部功能栏的「编辑」才能改，点「完成」恢复只读，作业卡片上不再常驻「添加一项」按钮',
+      '宝箱动画过渡重新调过：随机跳到前面或后面时起步更利、落点更缓，回位不再一顿一顿；同一学号段（同色）不会并排出现，条件实在满足不了时按条件来',
+      '随机点名新增配额（权重）功能：学号段、成绩段、男女、班干部课代表每一档都能设「最多抽几个」和「最少抽几个」；还能勾选「上次抽中的人不参与本次抽取」',
+      '版本更新改成「检测 + 弹窗提醒」：发现新版本会弹窗告诉你，点更新有安装进度条走到 100% 后自动刷新到最新版（不会在你正用的时候偷偷刷新）',
+      '每日一言的「内容类型」打勾不再错位：勾号改成固定宽度的样式，不再把文字挤到隔壁；本机勾选也不会再被云端同步覆盖',
+      '中转站取件里的文本「新窗口打开」不再报拼写错误（地址拼接错了）；抽取历史的备注可以在历史列表里直接补改',
+      '大屏启动方式改回「最大化」：原来用全屏启动时，站内全屏开关退不出来，退出全屏会被卡住',
+      '大屏关掉后标题栏单独掉下来一栏的 bug 修了；大屏标题（班徽、明暗切换、站名）改成居中排列，不再全挤在下面',
+      '大屏作业页最顶上的标题栏缩短了约三分之一（96px → 64px），内容垂直居中'
+    ], pub: [
+      { cat: '界面', text: '大屏作业字号以 150 为基准，标题与功能栏字号固定' },
+      { cat: '学习', text: '随机点名新增配额权重：各档最多最少人数、上次抽中不参与' },
+      { cat: '体验', text: '作业看板刷新保持稳定，版本更新有弹窗提醒和进度条' }
+    ] },
   { version: '4.10.1', date: '2026-11-07', type: 'feat', title: '后台一键返回前台、登录验证码可开关、大屏标题上移', items: [
       '后台顶栏新增带文字的「返回前台」按钮，点击后直接返回班级站首页（以前只能靠左上角班徽，且退出后会回到后台登录界面）',
       '后台「系统设置」新增「登录需要安全验证」开关：关掉后登录 / 注册不再显示图形验证码，输密码即可登录（默认开启，建议保留）',

@@ -833,6 +833,60 @@ function swCheckUpdate(manual){
 function swOnUpdateFound(worker){
   SW_HAS_UPDATE = true;
   paintVersion();
+  /* v4.10.2（站主第 8 条）：「检测新版本并弹窗提醒，用户点击更新后有安装进度条，
+     到 100% 时自动刷新页面」。
+     v4.10.0 只打了个标记（页脚一行小字），等���完全忘了有更新这回事 —— 站主说
+     「你现在就相当于把那个更新的弹窗又给我删掉」。现在这里补上弹窗。 */
+  try{ updNotify(worker); }catch(e){}
+}
+
+/* ---------- 弹窗提醒「有新版本」 ----------
+   更新说明统一从 version.json 取（那份就是发布时写的），
+   拿不到就退回一句通用提示，不能因为拿不到说明就不提醒。 */
+function updNotify(worker){
+  if(typeof UPD === 'undefined') return;
+  if(UPD.busy || UPD.shown) return;
+  var cur = (typeof SITE_VERSION !== 'undefined') ? SITE_VERSION : '';
+  /* 先把版本号问出来：sw.js 里的 SITE_VER 是最准的（它就是触发这次更新的那个文件） */
+  var verP = fetch('sw.js?_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.ok ? r.text() : ''; })
+    .then(function(t){
+      var m = /SITE_VER\s*=\s*['\"]([^'\"]+)['\"]/.exec(t || '');
+      return m ? m[1] : '';
+    })
+    .catch(function(){ return ''; });
+
+  var infoP = fetch('version.json?_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .catch(function(){ return null; });
+
+  Promise.all([verP, infoP]).then(function(res){
+    if(UPD.busy || UPD.shown) return;
+    var newVer = res[0] || '';
+    /* 用户已经在这个版本上点过「稍后」→ 同一版本不再打扰 */
+    try{ if(newVer && sessionStorage.getItem('cls_upd_seen') === newVer) return; }catch(e){}
+    var j = res[1];
+    /* version.json 也可能还没同步到最新（后端先发、静态文件后发），
+       这时至少把 sw.js 里的版本号显示出来。 */
+    if(!newVer && j && j.v) newVer = j.v;
+    if(newVer && cur && !updNewer(newVer, cur)){
+      /* 不是更新（同一个版本重新触发了 install）→ 不打扰 */
+      return;
+    }
+    var info = (j && j.v && (!newVer || updNewer(j.v, cur)))
+      ? j
+      : { v: newVer || '', title: '检测到新版本',
+          items: ['正在获取本次更新的完整说明…', '点「立即更新」即可切换到最新版。'] };
+    if(!info.v) info.v = newVer || '';
+    UPD.info = info;
+    UPD.shown = true;
+    updShow(info);
+  }).catch(function(){
+    if(UPD.busy || UPD.shown) return;
+    UPD.shown = true;
+    UPD.info = { v: '', title: '检测到新版本', items: ['点「立即更新」即可切换到最新版。'] };
+    updShow(UPD.info);
+  });
 }
 
 function swWatchInstall(reg){
@@ -5074,6 +5128,16 @@ function applyCloudContent(items, opts){
         if(!qs.cats.length) delete qs.cats;
       }
       SITE_DATA.quoteSource = qs;
+      /* v4.10.2：云端这份「到达」的时刻。
+         本机若有过比它更晚的改动（quoteCatsAt > quoteCatsCloudAt），本机继续赢 ——
+         这样同步不会把刚打的勾顶回去，勾也就不会「跑到别的分类上」。 */
+      try{
+        if(typeof UI !== 'undefined'){
+          var now = Date.now();
+          if(!UI.quoteCatsCloudAt || now > UI.quoteCatsCloudAt) UI.quoteCatsCloudAt = now;
+          if(typeof saveUI === 'function') saveUI();
+        }
+      }catch(e){}
       n++;
       return;
     }
@@ -5320,18 +5384,41 @@ function localQuoteOfToday(){
 /* v3.9.8（站主）：每日一言可以只显示某些分类
    后台「首页卡片 → 每日一言 → 内容分类」里勾选；没配过就用原来的四类。 */
 var QUOTE_CAT_ALL = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'];
+/* v4.10.2（站主第 9 条）：「打勾的时候有时明明是打这个，却给那个打勾」。
+   根因不是渲染错位，是**数据源打架**：
+     · 本机点一下 → 改的是 UI.quoteCats（以及本机缓存的 SITE_DATA.quoteSource.cats）；
+     · 但 quoteCats() 读的是**云端**那份；
+     · 云端同步（1 分钟一次 / 切回前台）一到，就把本机刚点的结果整份盖掉。
+   于是「本机选中的那一类」被打回原样，看起来就像勾跑到了别的分类上。
+     非管理员更明显 —— quoteCatsPush() 对非管理员直接 return，本机那份根本传不上去，
+     每次同步都会被云端盖回来。
+
+   修法：**本机优先 + 时间戳裁决**。
+     · 本机 UI.quoteCats 一旦有人动过（记 UI.quoteCatsAt），在云端追上本机之前一直算数；
+     · 云端那份比本机新 → 才由云端接管（后台改的照常同步下来）。
+     · 两个时间戳都随 UI 一起存本机，刷新页面也不丢。 */
 function quoteCats(){
   var cloud = (window.SITE_DATA && SITE_DATA.quoteSource && typeof SITE_DATA.quoteSource === 'object')
     ? SITE_DATA.quoteSource : null;
-  var arr = (cloud && Array.isArray(cloud.cats)) ? cloud.cats : null;
-  /* v4.7.3：云端没配过（老数据 / 离线没拉到）时，用本机这份 —— 站主在首页
-     点选过的分类，断网也得记住，不能一刷新就回到默认四类。 */
-  if(!arr || !arr.length){
-    arr = (typeof UI !== 'undefined' && Array.isArray(UI.quoteCats) && UI.quoteCats.length) ? UI.quoteCats : null;
-  }
-  if(!arr || !arr.length) return ['a', 'b', 'd', 'i'];
-  var out = arr.filter(function(c){ return QUOTE_CAT_ALL.indexOf(c) >= 0; });
-  return out.length ? out : ['a', 'b', 'd', 'i'];
+  var cloudArr = (cloud && Array.isArray(cloud.cats)) ? cloud.cats : null;
+  var localArr = (typeof UI !== 'undefined' && Array.isArray(UI.quoteCats) && UI.quoteCats.length) ? UI.quoteCats : null;
+
+  var localAt = (typeof UI !== 'undefined') ? (UI.quoteCatsAt || 0) : 0;
+  var cloudAt = (typeof UI !== 'undefined') ? (UI.quoteCatsCloudAt || 0) : 0;
+
+  /* 本机有未同步的改动 → 本机说了算（哪怕云端有值） */
+  if(localArr && localAt > cloudAt) return quoteCatsNorm(localArr);
+  /* 否则以云端为准；云端没有才用本机 */
+  if(cloudArr && cloudArr.length) return quoteCatsNorm(cloudArr);
+  if(localArr) return quoteCatsNorm(localArr);
+  return ['a', 'b', 'd', 'i'];
+}
+function quoteCatsNorm(arr){
+  var out = (arr || []).filter(function(c){ return QUOTE_CAT_ALL.indexOf(c) >= 0; });
+  /* 去重 + 按固定顺序排 —— 免得同一类出现两次，勾选状态看着像「串位」 */
+  var seen = {}, uniq = [];
+  out.forEach(function(c){ if(!seen[c]){ seen[c] = 1; uniq.push(c); } });
+  return uniq.length ? uniq : ['a', 'b', 'd', 'i'];
 }
 function quoteNetAllowed(){
   var cloud = (window.SITE_DATA && SITE_DATA.quoteSource && typeof SITE_DATA.quoteSource === 'object')
@@ -5388,9 +5475,12 @@ function quoteCfgHtml(){
   return '<div class="quote-cats">'
     + QUOTE_CATS_FE.map(function(c){
         var on = cur.indexOf(c[0]) >= 0;
+        /* v4.10.2：勾号由 CSS 的 ::before 画（固定宽度槽），
+           这里只出文字 —— 不要再往文字里塞「✓ 」，那会让按钮宽度变化、
+           整行重排，看起来就像「打勾打到别的分类上」。 */
         return '<button type="button" class="quote-cat' + (on ? ' on' : '') + '"'
           + ' data-cat="' + c[0] + '" onclick="quoteCatToggle(\'' + c[0] + '\')">'
-          + (on ? '✓ ' : '') + c[1] + '</button>';
+          + c[1] + '</button>';
       }).join('')
     + '<span class="quote-cats-tip">'
     + (isAdmin() ? '勾完即生效，并同步给所有人' : '勾完只在这台设备生效')
@@ -5413,6 +5503,7 @@ function quoteCatToggle(k){
   var order = QUOTE_CATS_FE.map(function(c){ return c[0]; });
   cur.sort(function(a, b){ return order.indexOf(a) - order.indexOf(b); });
   UI.quoteCats = cur;
+  UI.quoteCatsAt = Date.now();          /* v4.10.2：本机改动时间戳，云端追上之前以本机为准 */
   saveUI();
   /* v4.7.11（站主第 4 条）：「我点击那个打勾的选项它没有反应，刷新了一下但没生效」。
      根因：quoteCats() 优先读云端 SITE_DATA.quoteSource.cats，而这里只改了本机 UI，
@@ -5440,6 +5531,14 @@ function quoteCatsPush(cats){
     if(j && j.ok === false) throw new Error(j.error || '保存失败');
     if(!SITE_DATA.quoteSource) SITE_DATA.quoteSource = {};
     SITE_DATA.quoteSource.cats = cats.slice();
+    /* v4.10.2：本机已经上去了 → 云端时间戳跟上，
+       之后云端那份再同步下来也不会跟本机打架（也就不会再出现勾选错位）。 */
+    try{
+      if(typeof UI !== 'undefined'){
+        UI.quoteCatsCloudAt = Date.now();
+        if(typeof saveUI === 'function') saveUI();
+      }
+    }catch(e){}
   }).catch(function(){
     uiMsg('分类已在本机生效，但没能同步到云端', '#b45309');
   });
@@ -22985,7 +23084,7 @@ syncAutoInit(); /* 自动云同步：每 1 分钟双向同步（推本机 + 拉�
  * 所以进度条拆成三段真实动作：清缓存 → 注销旧 Service Worker → 重新取一次页面。
  * 每段都是真的，数字才不心虚。
  * ========================================================================== */
-var UPD = { busy: false, info: null };
+var UPD = { busy: false, info: null, shown: false };
 function updParse(v){
   return String(v || '').split('.').map(function (x){ return parseInt(x, 10) || 0; });
 }
@@ -23007,6 +23106,7 @@ function updCheck(){
       if(!updNewer(j.v, cur)) return;                       /* 已是最新 → 什么也不做 */
       try{ if(sessionStorage.getItem('cls_upd_seen') === j.v) return; }catch(e){}
       UPD.info = j;
+      UPD.shown = true;              /* v4.10.2：已弹过就别再弹第二次（SW 那条路会接着弹） */
       updShow(j);
     })
     .catch(function (){ /* 网络不好就静默，别打扰 */ });
@@ -23030,10 +23130,18 @@ function updShow(j){
 function updClose(){
   var mask = document.getElementById('upMask');
   if(mask) mask.classList.remove('show');
-  if(UPD.info){
+  if(UPD.info && UPD.info.v){
     try{ sessionStorage.setItem('cls_upd_seen', UPD.info.v); }catch(e){}
   }
 }
+/* v4.10.2（站主第 8 条）：点「立即更新」→ 安装进度条走到 100% → 自动刷新页面。
+   流程改成四段，每一段的进度都是**真做了一件事**才往前推（不是假动画）：
+     ① 让装好的新 SW 立刻接管（SKIP_WAITING，sw.js 里监听这条消息）
+     ② 注销旧 SW + 清空旧缓存
+     ③ 带时间戳拉一遍新版首页（绕过 HTTP 缓存 + SW 缓存）
+     ④ 进度条 100% → 自动刷新
+   进度条到 100% 的那一刻必须自己刷新（站主原话：「到 100% 的时候，它会自动刷新页面」），
+   所以最后一步不是让用户手动点。 */
 function updGo(){
   if(UPD.busy) return;
   UPD.busy = true;
@@ -23048,38 +23156,68 @@ function updGo(){
     if(inn) inn.style.width = p + '%';
     if(st) st.textContent = txt;
   }
-  setP(8, '正在准备…');
-  setTimeout(function (){ setP(28, '正在清理旧缓存…'); }, 220);
+  setP(6, '正在准备新版本…');
 
-  var p1 = ('caches' in window)
-    ? caches.keys().then(function (keys){
-        return Promise.all(keys.map(function (k){ return caches.delete(k); }));
-      }).catch(function (){})
-    : Promise.resolve();
-  var p2 = (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
-    ? navigator.serviceWorker.getRegistrations().then(function (rs){
-        return Promise.all(rs.map(function (r){ return r.unregister(); }));
-      }).catch(function (){})
-    : Promise.resolve();
+  /* ① 让 waiting 中的新 SW 立刻接管 —— 这一步是真的在装 */
+  var step1 = new Promise(function(resolve){
+    var done = false;
+    function fin(){ if(!done){ done = true; resolve(); } }
+    /* 等 controllerchange：新 SW 接管后会触发；最多等 2.5 秒 */
+    var t = setTimeout(fin, 2500);
+    try{
+      if(navigator.serviceWorker && navigator.serviceWorker.addEventListener){
+        navigator.serviceWorker.addEventListener('controllerchange', function(){
+          clearTimeout(t); setTimeout(fin, 60);
+        });
+      }
+      var waiting = null;
+      try{ waiting = (SW_REG && SW_REG.waiting) || null; }catch(e){}
+      if(waiting && waiting.postMessage){
+        waiting.postMessage({ type: 'SKIP_WAITING' });
+        setP(18, '正在安装新版本…');
+      }else{
+        setP(18, '正在安装新版本…');
+      }
+    }catch(e){ clearTimeout(t); fin(); }
+  });
 
-  Promise.all([p1, p2]).then(function (){
-    setP(62, '正在下载新版本…');
+  /* ② 注销旧 SW + 清缓存 —— 必须在新 SW 接管之后做 */
+  var step2 = Promise.all([
+    ('caches' in window)
+      ? caches.keys().then(function (keys){
+          return Promise.all(keys.map(function (k){ return caches.delete(k); }));
+        }).catch(function (){})
+      : Promise.resolve(),
+    (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+      ? navigator.serviceWorker.getRegistrations().then(function (rs){
+          /* 只注销**旧**的：新接管的那个留着，它管新版本的离线缓存 */
+          return Promise.all(rs.map(function (r){ return r.unregister(); }));
+        }).catch(function (){})
+      : Promise.resolve()
+  ]).catch(function (){});
+
+  step1.then(function (){
+    setP(42, '正在清理旧缓存…');
+    return step2;
+  }).then(function (){
+    setP(68, '正在下载新版本…');
     /* 带 _r= 的地址会绕过 Service Worker 缓存（见 sw.js），确保拿到的是新版 */
     return fetch(location.pathname + '?_r=' + Date.now(), { cache: 'no-store' }).catch(function (){});
   }).then(function (){
-    setP(90, '即将完成…');
+    setP(88, '即将完成…');
+    return new Promise(function(res){ setTimeout(res, 320); });
+  }).then(function (){
+    setP(100, '更新完成，正在刷新…');
+    /* 进度条到 100% → 自动刷新（站主要求，不让他再点一次） */
     setTimeout(function (){
-      setP(100, '更新完成，正在刷新…');
-      setTimeout(function (){
-        try{
-          location.replace(location.pathname + '?_r=' + Date.now() + location.hash);
-        }catch(e){
-          location.reload();
-        }
-      }, 420);
-    }, 380);
+      try{
+        location.replace(location.pathname + '?_r=' + Date.now() + location.hash);
+      }catch(e){
+        location.reload();
+      }
+    }, 460);
   }).catch(function (){
-    location.reload();
+    try{ location.reload(); }catch(e){}
   });
 }
 (function bindUpd(){
@@ -23118,7 +23256,16 @@ function flBase(){
   return (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
 }
 function flUrl(code){
-  return location.origin + flBase() + '/api/files?code=' + encodeURIComponent(code);
+  /* v4.10.2（站主第 10 条）：「取件里的文本点『新窗口打开』提示拼写错误打不开」。
+     根因就在这一行 —— 原来把 location.origin 和 flBase() 拼在一起，
+     而 flBase() 返回的 API_BASE **本身就是绝对地址**
+     （https://api.classsite.dpdns.org），拼出来是
+        https://yuzikaaang.github.iohttps://api.classsite.dpdns.org/api/files?...
+     这种非法 URL，浏览器直接报「网址有拼写错误」。
+     现在按 API_BASE 有没有值分别拼。 */
+  var b = flBase();
+  if(!b) return location.origin + '/api/files?code=' + encodeURIComponent(code);
+  return b + '/api/files?code=' + encodeURIComponent(code);
 }
 function openFiles(){
   var m = flEl('flMask');
@@ -23252,6 +23399,7 @@ function flHistRender(){
       +   '<button type="button" class="fl-mini" data-flact="copy" data-code="' + attr(r.code) + '">复制链接</button>'
       +   '<button type="button" class="fl-mini" data-flact="open" data-code="' + attr(r.code) + '">去取件</button>'
       +   '<button type="button" class="fl-mini" data-flact="ren" data-code="' + attr(r.code) + '">改名</button>'
+      +   '<button type="button" class="fl-mini" data-flact="memo" data-code="' + attr(r.code) + '">备注</button>'
       +   '<button type="button" class="fl-mini danger" data-flact="del" data-code="' + attr(r.code) + '">删除</button>'
       + '</div></div>';
   }).join('');
@@ -23579,6 +23727,18 @@ function flQuery(){
             flMsg('flMsgHist', 'err', (o.j && o.j.error) || '改名失败');
           }
         }).catch(function(){ flMsg('flMsgHist', 'err', '网络没通'); });
+        return;
+      }
+      /* v4.10.2（站主第 10 条）：「我每次增加那个内容之后，我希望我可以编辑那个备注，
+         有时候可能当初发的时候忘备注了」。
+         备注只存在本机历史里（后端 KV 那份是发的时候写死的，
+         改它要另外一套鉴权，收益不大），所以这里直接改本机那份。 */
+      if(act === 'memo'){
+        var mm = prompt('给这条加个备注（对方看不到，只你自己看）', rec.memo || '');
+        if(mm == null) return;
+        flHistPatch(code, { memo: String(mm).slice(0, 60) });
+        flHistRender();
+        flMsg('flMsgHist', 'ok', '备注已保存');
         return;
       }
       if(act === 'del'){

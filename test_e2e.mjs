@@ -5605,7 +5605,10 @@ console.log('\n【48】第三十九轮·iOS 刷不了：更新检测 + 一键强
   t('★v4.10.0 打开页面永不自动刷新（15 秒窗口取消，发现更新只标记）',
     /var SW_AUTO_WINDOW = 0;/.test(idx48)
     && !/Date\.now\(\) - SW_BOOT_AT < SW_AUTO_WINDOW/.test(idx48)
-    && !/postMessage\(\{ type: 'SKIP_WAITING' \}\)/.test(idx48));
+    /* v4.10.2（需求 8）：SKIP_WAITING 只在**用户点了「更新」之后**才发，
+       打开页面时绝不能自动发 —— 所以这里改成「不在自动路径里发」，
+       由下面 v4.10.2 的新断言来锁「点更新才发」。 */
+    && !/swOnUpdateFound[\s\S]{0,400}?postMessage\(\{ type: 'SKIP_WAITING' \}\)/.test(idx48));
   t('★用了一会儿则只提示不打断（页脚标记，等用户点）',
     /SW_HAS_UPDATE = true;\s*\n\s*paintVersion\(\);/.test(idx48));
   t('★首次安装不算「更新」（不做提示也不刷新）',
@@ -12696,7 +12699,11 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★大屏离线时跳过轮询',
     /if\(navigator\.onLine === false\) return;/.test(big));
   t('★作业本机编辑：不需要管理员登录也能改（canEdit）',
-    /function canEdit\(\)\{ return adminOk\(\) \|\| hwEditOn\(\); \}/.test(big)
+    /* v4.10.2（需求 5）：改回「必须点顶部功能栏的『编辑』才能编辑」。
+       所以 canEdit 只看 hwEditOn()，不再看 adminOk() ——
+       管理员不点「编辑」也一样不能改，才符合站主要求的旧设计。 */
+    /function canEdit\(\)\{ return hwEditOn\(\); \}/.test(big)
+    && !/function canEdit\(\)\{ return adminOk\(\)/.test(big)
     && /BIG\.hwEditToggle = function/.test(big)
     && /id="liteBtn"/.test(idx) !== null);
   t('★作业本机改动优先显示且有上传/放弃出口',
@@ -12731,7 +12738,9 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   /* v4.7.0：站主「到最后怎么又突然加快又跳一下」—— 分段缓动已废弃，
      改成单段单调曲线 + 精确居中落点，并在测试里锁死「不许再出现分段」。 */
   t('★宝箱减速为单段单调曲线（不再分段二次加速）',
-    /function easeCase\(p\)/.test(fsx) && /1 - Math\.pow\(1 - p, 3\.4\)/.test(fsx) && !/0\.86/.test(fsx));
+    /* v4.10.2（需求 6）：指数由 3.4 微调为 3.0 —— 起手更利、尾段更缓，
+       前后跳（tease）时过渡更顺。单段单调的属性不能变。 */
+    /function easeCase\(p\)/.test(fsx) && /1 - Math\.pow\(1 - p, 3(\.0)?\)/.test(fsx) && !/0\.86/.test(fsx));
   t('★宝箱落点精确居中（不再留 jitter 抖动）',
     /var winX = centerOf\(at\)/.test(fsx) && !/jitter/.test(fsx));
   t('★宝箱停下自动揭示姓名（无第二次点击）',
@@ -12782,14 +12791,20 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /var cached = rosterCacheGet\(\)/.test(big43));
   t('★没有学号时按名单顺序补显示序号（_seq），不污染 studentId',
     /_seq: out\.length \+ 1/.test(big43) && /var sq = parseInt\(\(st && st\._seq\)/.test(big43));
-  t('★作业字号范围 25%–300%（连续百分比）',
-    /FS_MIN = 25, FS_MAX = 300, FS_STEP = 5/.test(big43));
+  t('★作业字号范围 25%–450%（连续百分比）',
+    /* v4.10.2（需求 1）：字号基准从 100 改成 **150**（150 = 1.0 倍），
+       所以原来 300% 的「3 倍」上限现在记作 450。 */
+    /FS_MIN = 25, FS_MAX = 450, FS_STEP = 5/.test(big43)
+    && /var FS_BASE = 150;/.test(big43));
   t('★字号按 5% 步进并支持手动输入',
     /BIG\.fsStep = function \(d\)/.test(big43) && /FS_STEP : -FS_STEP/.test(big43)
     && /BIG\.fsSet = function \(v\)/.test(big43));
   t('★老档位按实际倍率换算（不会把 100% 读成 50%）',
+    /* v4.10.2：倍率统一走 fsFromRatio()（按 FS_BASE=150 换算成新的百分数刻度）。 */
     /FS_KEY_OLD = 'cls_bhw_fs'/.test(big43) && /FS_OLD = \[0\.85/.test(big43)
-    && /FS_STEPS\[idx\] \* 100/.test(big43));
+    && /function fsFromRatio\(r\)/.test(big43)
+    && /fsFromRatio\(FS_STEPS\[idx\]\)/.test(big43)
+    && /fsFromRatio\(FS_OLD\[old\]\)/.test(big43));
   t('★不限成绩时清空名次 / 分数条件（含老配置残影）',
     /if\(!v\)\{ f\.metric = ''; f\.subj = ''; f\.min = ''; f\.max = ''; \}/.test(big43)
     && /if\(!out\.examId\)\{ out\.metric = ''/.test(big43));
@@ -13040,7 +13055,9 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
 
   /* ⑮ 大屏字号封顶 */
   t('★v4.7.11 大屏右栏字号封顶 1.35 倍，避免放大后显示不全',
-    /--bhw-fs-s:min\(var\(--bhw-fs,1\),1\.35\)/.test(idx711));
+    /* v4.10.2（需求 1）：右栏字号**不再跟着滑块走**，固定 1.35 倍
+       （= 现在 150% 时的样子），所以改成固定值而不是 min() 表达式。 */
+    /\.bhw-side\{--bhw-fs-s:1\.35\}/.test(idx711));
 }
 
 /* ============================================================================
@@ -13072,14 +13089,20 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
 
   /* ③ 大屏作业页顶栏 */
   t('★v4.9.1 大屏作业页顶栏高度翻倍、内容贴下沿',
-    /min-height:calc\(96px\*var\(--bhw-fs,1\)\)/.test(idx9)
-    && /\.bhw-top\{[\s\S]{0,200}?align-items:flex-end/.test(idx9)
+    /* v4.10.2（需求 1 + 13）：顶栏高度**固定 64px**，不再乘 var(--bhw-fs) ——
+       需求 1 明确说「标题以及右侧功能栏的字号不进行调整」，
+       既然字号不动，高度跟着作业字号滑块伸缩就不合理（滑一下顶栏就变高）。
+       64px = 原来 96px 的 2/3，正好是站主要求的「减掉 1/3」。 */
+    /min-height:64px/.test(idx9)
+    && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idx9)
     && /html\.big-hw \.sidebar/.test(idx9));
 
   /* ④ 首页信息栏 */
   t('★v4.9.1 大屏首页信息栏加高、班徽不再被裁（v4.10.1 起选择器为 header.big-brand-top）',
-    /html\.big-mode header\.big-brand-top\{[\s\S]{0,160}?min-height:96px/.test(idx9)
-    && /html\.big-mode header\.big-brand-top \.logo\{[\s\S]{0,160}?position:static/.test(idx9));
+    /* v4.10.2（需求 12）：大屏标题改成**居中**排布（站名 / 班徽 / 明暗按钮都居中），
+       所以不再撑 min-height，改为 flex 居中 + 固定内边距。 */
+    /html\.big-mode header\.big-brand-top\{[\s\S]{0,700}?justify-content:center/.test(idx9)
+    && /html\.big-mode header\.big-brand-top \.logo\{[\s\S]{0,700}?position:static/.test(idx9));
 
   /* ⑥ 宝箱每轮等长 */
   t('★v4.9.1 宝箱连抽每轮时长一致（都是完整减速）',
@@ -13207,7 +13230,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★v4.10.0 打开不再自动刷新（窗口置 0，发现更新只标记不接管）',
     /var SW_AUTO_WINDOW = 0;/.test(app11)
     && /function swOnUpdateFound\(worker\)\{[\s\S]{0,200}SW_HAS_UPDATE = true;/.test(app11)
-    && !/SKIP_WAITING/.test(app11));
+    /* v4.10.2（需求 8）：「不自动刷新」保留，但必须**检测 + 弹窗**；
+       SKIP_WAITING 移到 updGo（用户点了更新之后）才发。 */
+    && !/swOnUpdateFound[\s\S]{0,400}?SKIP_WAITING/.test(app11)
+    && /function updGo\(/.test(app11));
   t('★v4.10.0 SW 安装后不再 skipWaiting（install 链干净；message 兜底可留）',
     !/PRECISE_MARKER/.test(sw11)
     && !/\.then\(\(\) => self\.skipWaiting\(\)\)/.test(sw11)
@@ -13218,11 +13244,15 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
 
   /* ③④ 大屏首页下移 + 启动脚本真全屏 */
   t('★v4.10.0 1920×1080 大屏首页整体下移：顶部留 20px 安全区，页头贴下沿',
+    /* v4.10.2（需求 12）：标题卡 padding 由「上厚下薄」改成上下对称，
+       内容才真正居中（顶部安全区改由 ::before 绝对定位层承担，不占布局高度）。 */
     /html\.big-mode \.layout\{padding:20px 18px 4px\}/.test(idx11)
-    && /html\.big-mode header\.big-brand-top\{padding:24px 18px 0;margin-bottom:0;/.test(idx11));
+    && /html\.big-mode header\.big-brand-top\{padding:18px;margin-bottom:0;/.test(idx11));
   t('★v4.10.0 启动脚本用 --start-fullscreen 真全屏',
-    /--start-fullscreen/.test(adm311)
-    && /--start-fullscreen/.test(fs.readFileSync('/workspace/班级电脑准备包/启动大屏.bat', 'utf8')));
+    /* v4.10.2（需求 11）：改回 --start-maximized ——
+       浏览器窗口级全屏会让站内全屏开关退不出来（网页管不了窗口全屏）。 */
+    /--start-maximized/.test(adm311)
+    && /--start-maximized/.test(fs.readFileSync('/workspace/班级电脑准备包/启动大屏.bat', 'utf8')));
 
   t('★v4.10.0 之后版本未回退（当前 >= 4.10.0，且 index 与 sw 一致）',
     (function(){
@@ -13284,7 +13314,8 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /hd\.classList\.add\('big-brand-top'\);/.test(big12)
     && /moveBrandTop\(BIG\.on\);/.test(big12));
   t('★v4.10.1 大屏标题规则全部改认 big-brand-top，并带安全区（::before 暗渐变）',
-    /html\.big-mode header\.big-brand-top\{[\s\S]{0,120}padding:30px 24px 12px;/.test(idx12)
+    /* v4.10.2（需求 12）：标题改为居中，内边距由 30px 收到 18px。 */
+    /html\.big-mode header\.big-brand-top\{[\s\S]{0,200}padding:18px 22px/.test(idx12)
     && /html\.big-mode header\.big-brand-top::before\{/.test(idx12)
     && !/html\.big-mode \.content>header\{padding:30px/.test(idx12));
   t('★v4.10.1 作业页隐藏标题卡也要认新位置（big-hw header.big-brand-top）',
@@ -13295,9 +13326,169 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /header\.big-brand-top h1'\) \|\| document\.querySelector\('\.content>header h1'\)/.test(big12));
 
   t('★v4.10.1 版本号升到 4.10.1（index / sw / admin / worker 四处一致）',
-    /SITE_VERSION = '4\.10\.1'/.test(idx12) && /SITE_VER = '4\.10\.1'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-    && /SITE_VERSION = '4\.10\.1'/.test(adm12)
-    && /API_VER = '4\.10\.1'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8')));
+    /* v4.10.2 起版本号会继续往上走，这里改成「四处彼此一致」而不是写死 4.10.1，
+       免得每升一次版就得改这条断言。 */
+    (function () {
+      const a = idx12.match(/SITE_VERSION = '([\d.]+)'/);
+      const b = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').match(/SITE_VER = '([\d.]+)'/);
+      const c = adm12.match(/SITE_VERSION = '([\d.]+)'/);
+      const d = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').match(/API_VER = '([\d.]+)'/);
+      return !!(a && b && c && d && a[1] === b[1] && a[1] === c[1] && a[1] === d[1]);
+    })());
+}
+
+/* ============================================================================
+ * v4.10.2（站主本轮 14 条）
+ * ========================================================================== */
+{
+  const idxV = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const bigV = fs.readFileSync(new URL('./big.js', import.meta.url), 'utf8');
+  const appV = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const fxV  = fs.readFileSync(new URL('./pickfx.js', import.meta.url), 'utf8');
+  const admV = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+  const swV  = fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+
+  /* ① 字号基准 150 + 顶栏/右栏/站名分离 */
+  t('★v4.10.2 字号基准 = 150（150 即 1.0 倍），存储键换新防串档',
+    /var FS_BASE = 150;/.test(bigV) && /var FS_KEY = 'cls_bhw_fs4';/.test(bigV)
+    && /BIG\.fs \/ FS_BASE/.test(bigV));
+  t('★v4.10.2 顶栏与右栏字号固定（--bhw-fx 1.5 = 旧 150% 外观），不随作业滑块',
+    /--bhw-fx:1\.5/.test(idxV) && /--bhw-fbrand:1\.8/.test(idxV)
+    /* 顶栏 / 右栏用的是 var(--bhw-fx)（固定 1.5），作业正文用 var(--bhw-fs)（跟滑块） */
+    && /font-size:calc\(\.\d+rem\*var\(--bhw-fx\)\)/.test(idxV)
+    && !/\.bhw-top[^{]*\{[\s\S]{0,200}?font-size:calc\(\.\d+rem\*var\(--bhw-fs/.test(idxV));
+  t('★v4.10.2 站名字号 = 180 档（--bhw-fbrand）',
+    /\.bhw-brand\{[\s\S]{0,200}?var\(--bhw-fbrand/.test(idxV));
+
+  /* ② 刷新不闪：增量渲染 + 稳定排序 */
+  t('★v4.10.2 作业卡片增量渲染（HTML 没变就复用旧节点，不整块重建）',
+    /function applyCards\(/.test(bigV) && /__hwHtml/.test(bigV)
+    && /data-hwkey/.test(bigV));
+  t('★v4.10.2 卡片排序按 data-hwkey 稳定（不再用 DOM 下标，避免重排跳动）',
+    /data-hwkey/.test(bigV) && /a\.k < b\.k \? -1/.test(bigV)
+    && !/a\.i < b\.i/.test(bigV));
+
+  /* ③ 学号 2505 前缀 + 滚轮 + 左小右大 */
+  t('★v4.10.2 学号输入框外固定「2505」前缀，只填末两位',
+    /function sidPrefix\(\)/.test(bigV) && /function sidTail\(/.test(bigV)
+    && /bpick-sid-pre/.test(bigV) && /maxlength="2"/.test(bigV));
+  t('★v4.10.2 学号滚轮下拉列出名单里现成的学号',
+    /function sidList\(\)/.test(bigV) && /bpick-sid-wheel/.test(bigV));
+  t('★v4.10.2 左边学号必须小于右边（填反了自动对调）',
+    /BIG\.pickSid = function/.test(bigV) && /Number\(f\.sidMin\) > Number\(f\.sidMax\)/.test(bigV)
+    && /已自动对调/.test(bigV));
+
+  /* ④ 抽取人数上限 */
+  t('★v4.10.2 抽取人数不超过范围人数（范围 5 人最多加到 5）',
+    /function pickMaxN\(\)/.test(bigV) && /function clampPickN\(\)/.test(bigV)
+    && /clampPickN\(\)/.test(bigV));
+
+  /* ⑤ 作业编辑回到顶部开关 */
+  t('★v4.10.2 作业编辑必须点顶部「编辑」开关（canEdit 只看 hwEditOn）',
+    /function canEdit\(\)\{ return hwEditOn\(\); \}/.test(bigV)
+    && /hwEditToggle/.test(bigV));
+  t('★v4.10.2 卡片上不再常驻「添加一项」按钮（不占空间）',
+    /addHost\.innerHTML = edit\s*\?/.test(bigV)
+    && /只读时底栏那一行整个不占位置/.test(bigV));
+
+  /* ⑥ 宝箱动画 */
+  t('★v4.10.2 同一学号段（同色）不并排（buildStrip 交错铺条带）',
+    /function buildStrip\(/.test(fxV) && /tierOf/.test(fxV));
+  t('★v4.10.2 宝箱过渡曲线调过（easeCase 3.0 + easeSettle 2.4）',
+    /1 - Math\.pow\(1 - p, 3(\.0)?\)/.test(fxV)
+    && /1 - Math\.pow\(-2 \* p \+ 2, 2\.4\) \/ 2/.test(fxV));
+
+  /* ⑦ 配额权重 */
+  t('★v4.10.2 配额模型覆盖学号段/成绩段/性别/身份四维',
+    /var W_DEF = \{/.test(bigV) && /sid:/.test(bigV) && /grade:/.test(bigV)
+    && /sex:/.test(bigV) && /role:/.test(bigV));
+  t('★v4.10.2 每档可设最多 / 最少人数（wAllow 上限 / wNeed 保底）',
+    /function wAllow\(/.test(bigV) && /function wNeed\(/.test(bigV)
+    && /function wCount\(/.test(bigV));
+  t('★v4.10.2 抽取走配额算法（先保底再随机填，超 max 的跳过）',
+    /function drawQuota\(/.test(bigV) && /wAnyNeed/.test(bigV) && /wBlocked/.test(bigV));
+  t('★v4.10.2 配额名单锁给动画（动画结果也必须符合配额）',
+    /locked: picked\.slice\(\)/.test(bigV) && /opts\.locked/.test(fxV));
+  t('★v4.10.2 「上次抽中的人不参与本次抽取」可开关并落盘',
+    /BIG\.pickExclLast = function/.test(bigV) && /cls_big_pick_exclast/.test(bigV)
+    && /function lastPickedNames\(\)/.test(bigV));
+
+  /* ⑧ 版本更新弹窗 + 进度条 */
+  t('★v4.10.2 发现新版本弹窗提醒（不自动刷新，但必须弹窗）',
+    /function updNotify\(/.test(appV) && /function updGo\(/.test(appV)
+    && /swOnUpdateFound/.test(appV) && /updNotify\(worker\)/.test(appV));
+  t('★v4.10.2 点更新有进度条走到 100% 并自动刷新',
+    /setP\(100/.test(appV) && /location\.replace\(location\.pathname/.test(appV));
+  t('★v4.10.2 同一次会话不重复弹更新窗',
+    /cls_upd_seen/.test(appV));
+
+  /* ⑨ 一言分类打勾不错位 */
+  t('★v4.10.2 一言分类勾号交给 CSS（不再往文字里塞 ✓，避免按钮移位）',
+    /\.quote-cat::before\{[\s\S]{0,80}?content:'\\2713'/.test(idxV)
+    && /\.bhw-opt-cat::before\{[\s\S]{0,80}?content:'\\2713'/.test(idxV)
+    && !/quote-cat[^\n]{0,200}✓ /.test(bigV));
+  t('★v4.10.2 本机勾选优先于云端（时间戳裁决，不再被同步覆盖）',
+    /quoteCatsAt/.test(appV) && /quoteCatsCloudAt/.test(appV));
+
+  /* ⑩ 中转站 */
+  t('★v4.10.2 中转站文本地址拼接正确（不再拼出非法 URL）',
+    /function flUrl\(code\)/.test(appV) && !/location\.origin \+ flBase\(\)/.test(appV));
+  t('★v4.10.2 抽取历史可以补改备注',
+    /data-flact="memo"/.test(appV) && /flHistPatch\(code, \{ memo:/.test(appV));
+
+  /* ⑪ 全屏 */
+  t('★v4.10.2 启动脚本改回「最大化」（全屏会让站内全屏开关退不出）',
+    /* 只看 launchBatText() 里真正拼出来的那条 start 命令行 ——
+       函数注释里提到 --start-fullscreen 是正常的（那是「为什么改回来」的说明）。 */
+    /start "" "%EXE%"[\s\S]{0,200}?--start-maximized/.test(admV)
+    && !/start "" "%EXE%"[\s\S]{0,200}?--start-fullscreen/.test(admV));
+  t('★v4.10.2 站内全屏退出有核对与补刀（退出后仍全屏会再试一次并提示 F11）',
+    /function afterExitFull\(/.test(bigV) && /function tipWindowFull\(/.test(bigV)
+    && /按 F11/.test(bigV));
+
+  /* ⑫ 大屏标题居中 */
+  t('★v4.10.2 大屏标题居中（站名 / 班徽 / 明暗按钮都居中）',
+    /* 大屏规则在 @media(min-width:900px) 里，块前有一大段注释，
+       所以匹配「实际声明」这一串，而不是去查 flex-end
+       （注释里正好提到了原来的 align-items:flex-end，会误判）。 */
+    /html\.big-mode header\.big-brand-top\{[\s\S]{0,900}?display:flex;align-items:center;justify-content:center/.test(idxV)
+    && /html\.big-mode header\.big-brand-top \.theme-btn\{[\s\S]{0,300}?position:static/.test(idxV)
+    && /html\.big-mode header\.big-brand-top h1\{[\s\S]{0,200}?text-align:center/.test(idxV));
+  t('★v4.10.2 关闭大屏后标题栏归位（moveBrandTop 认新的 header 位置）',
+    /document\.querySelector\('header\.big-brand-top'\) \|\| document\.querySelector\('\.content>header'\)/.test(bigV));
+
+  /* ⑬ 顶栏缩短 */
+  t('★v4.10.2 大屏作业顶栏缩短约 1/3（96px → 64px）且内容垂直居中',
+    /* 高度固定 64px，不乘 --bhw-fs（需求 1：标题栏不参与字号调整） */
+    /min-height:64px/.test(idxV)
+    && !/min-height:calc\(64px\*var\(--bhw-fs/.test(idxV)
+    && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
+
+  /* ⑭ 版本号 */
+  t('★v4.10.2 版本号升到 4.10.2（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.2'/.test(idxV) && /SITE_VER = '4\.10\.2'/.test(swV)
+    && /API_VER = '4\.10\.2'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.2'/.test(admV));
+  t('★v4.10.2 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.2');
+
+  /* ===== 全量语法自检 =====
+     v4.10.2 教训：一次改文案时把中文标点写进了单引号字符串，
+     整个 big.js 语法报废 —— 而 e2e 全是正则断言，抓不到。
+     所以这里补一条「所有前端脚本都能被解析」的硬断言。 */
+  t('★所有前端脚本语法正确（能被 new Function 解析）',
+    (function () {
+      const files = ['app.js', 'big.js', 'pickfx.js', 'fs-keep.js', 'admin-1.js', 'admin-2.js', 'admin-3.js', 'sw.js'];
+      for (const f of files) {
+        try {
+          new Function(fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8'));
+        } catch (e) {
+          console.log('    ↳ 语法错误 ' + f + ': ' + e.message);
+          return false;
+        }
+      }
+      return true;
+    })());
 }
 
 console.log('\n' + '='.repeat(52));
