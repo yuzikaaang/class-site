@@ -12918,6 +12918,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /:hold/.test(bat710) && /type "%LOG%"/.test(bat710) && /pause/.test(bat710));
   t('★v4.7.10 成功时窗口停留 8 秒，不再一闪而过',
     /timeout \/t 8/.test(bat710));
+  t('★v4.7.10 启动器支持静默模式（vbs 无黑框调用）',
+    /if \/i "%~1"=="quiet" set "QUIET=1"/.test(bat710) && /if defined QUIET exit \/b 1/.test(bat710));
+  t('★v4.7.10 静默模式用 ping 代替 timeout（隐藏窗口没有控制台输入）',
+    /if defined QUIET ping -n 5 127\.0\.0\.1/.test(bat710) && /if not defined QUIET timeout \/t 4/.test(bat710));
+  t('★v4.7.10 退出码 0/1/2 区分 成功 / 失败 / 默认浏览器',
+    /:ok_quiet/.test(bat710) && /if defined QUIET exit \/b 2/.test(bat710));
   t('★v4.7.10 版本号升到 4.7.10',
     /SITE_VERSION = '4.7.10'/.test(fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8')));
 }
