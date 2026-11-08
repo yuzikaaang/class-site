@@ -13478,12 +13478,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.6 版本号升到 4.10.6（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.6'/.test(idxV) && /SITE_VER = '4\.10\.6'/.test(swV)
-    && /API_VER = '4\.10\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.6'/.test(admV));
-  t('★v4.10.6 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.6');
+  t('★v4.10.7 版本号升到 4.10.7（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.7'/.test(idxV) && /SITE_VER = '4\.10\.7'/.test(swV)
+    && /API_VER = '4\.10\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.7'/.test(admV));
+  t('★v4.10.7 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.7');
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {

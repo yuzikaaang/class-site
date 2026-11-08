@@ -309,7 +309,9 @@ async function pull(req, cfg, kv) {
 
 async function getToken(req, cfg, kv, force) {
   const cache = force ? null : (await kvGet(kv, K_TOK) || null);
-  if (cache && cache.token && Number(cache.exp || 0) > Date.now() + 60 * 1000) return cache.token;
+  if (cache && cache.token && Number(cache.exp || 0) > Date.now() + 60 * 1000) {
+    return { token: String(cache.token), uid: String(cache.uid || '') };
+  }
   if (!cfg.user || !cfg.pass) throw new Error('还没有填考试看板的账号密码');
 
   const r = await nvFetch(cfg.base + '/api/login', {
@@ -324,8 +326,11 @@ async function getToken(req, cfg, kv, force) {
   }
   const token = String(r.json.token);
   const exp = Number(r.json.expiresAt || 0) || (Date.now() + 20 * 3600 * 1000);
-  if (kv) await kvPut(kv, K_TOK, { token: token, exp: exp, at: Date.now() });
-  return token;
+  /* v4.10.6：顺手记下登录账号的 id —— 新增的临时考试要带 createdBy，
+     否则上游会把它当成「别人的考试」，班级管理员账号保存时会被清洗掉。 */
+  const uid = String((r.json.user && r.json.user.id) || '');
+  if (kv) await kvPut(kv, K_TOK, { token: token, exp: exp, uid: uid, at: Date.now() });
+  return { token: token, uid: uid };
 }
 
 /** 只提交 majors 这一个域：其余字段服务端按域保留，不会因为没带就被清空 */
@@ -345,6 +350,7 @@ function toWire(majors) {
     if (m.endAt) o.endAt = m.endAt;
     if (m.publishedAt) o.publishedAt = m.publishedAt;
     if (m.createdVia) o.createdVia = m.createdVia;
+    if (m.createdBy) o.createdBy = m.createdBy;
     return o;
   });
 }
@@ -362,11 +368,11 @@ async function push(req, cfg, kv, data) {
     }, 12000);
   };
 
-  let tok = await getToken(req, cfg, kv, false);
-  let r = await send(tok);
+  let auth = await getToken(req, cfg, kv, false);
+  let r = await send(auth.token);
   if (r.status === 401) {
-    tok = await getToken(req, cfg, kv, true);
-    r = await send(tok);
+    auth = await getToken(req, cfg, kv, true);
+    r = await send(auth.token);
   }
   if (r.status === 409) {
     return { conflict: true, message: '考试看板上的数据刚被改过，请先同步一次再写回' };
@@ -386,7 +392,7 @@ async function push(req, cfg, kv, data) {
 
 /* ---------------- 本地编辑 ---------------- */
 
-function addLocal(data, cfg, p) {
+function addLocal(data, cfg, p, createdBy) {
   const cls = classOf(data, cfg);
   const date = str(p.date, 10);
   const start = str(p.start, 5);
@@ -418,6 +424,7 @@ function addLocal(data, cfg, p) {
     targetClassIds: cls.id ? [cls.id] : [],
     targetGradeIds: cls.gradeId ? [cls.gradeId] : [],
     local: true,
+    createdBy: createdBy || '',
     items: [{
       id: itemId,
       name: subject,
@@ -579,7 +586,10 @@ export default async function handler(req, res) {
       const cfg = await loadCfg(req);
       let data = (await kvGet(kv, K_DATA)) || null;
       if (!data) data = await pull(req, cfg, kv);
-      const made = addLocal(data, cfg, b);
+      /* 能登录就带上 createdBy；没填账号也不拦着，先存本机 */
+      let who = '';
+      try { who = (await getToken(req, cfg, kv, false)).uid; } catch (e) { who = ''; }
+      const made = addLocal(data, cfg, b, who);
       await kvPut(kv, K_DATA, data);
       _mem = { at: Date.now(), data: data };
 
