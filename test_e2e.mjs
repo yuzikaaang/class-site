@@ -13478,12 +13478,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.9 版本号升到 4.10.9（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.9'/.test(idxV) && /SITE_VER = '4\.10\.9'/.test(swV)
-    && /API_VER = '4\.10\.9'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.9'/.test(admV));
-  t('★v4.10.9 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.9');
+  t('★v4.10.10 版本号升到 4.10.10（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.10'/.test(idxV) && /SITE_VER = '4\.10\.10'/.test(swV)
+    && /API_VER = '4\.10\.10'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.10'/.test(admV));
+  t('★v4.10.10 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.10');
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {
@@ -13677,9 +13677,27 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && !/addLocal/.test(exV) && !/getToken/.test(exV)
       && /K_PIN = 'exam_pin_v1'/.test(exV));
 
-    t('★v4.10.8 挑选接口仅管理员，最多 80 场',
-      /act === 'pin'/.test(exV) && /最多只能挑 80 场/.test(exV)
+    t('★v4.10.10 挑选接口仅管理员，上限按 PIN_MAX 收口',
+      /act === 'pin'/.test(exV) && /PIN_MAX = \d+/.test(exV)
+      && /pinCount\(p\) > PIN_MAX/.test(exV)
       && /只有管理员能改考试同步设置/.test(exV));
+
+    /* v4.10.10：三级挑选 + 分组 + 回源 */
+    t('★v4.10.10 挑选分整场 / 某天 / 单科三级，另有批量接口',
+      /scope === 'major'/.test(exV) && /scope === 'day'/.test(exV)
+      && /act === 'bulk'/.test(exV) && /K_PIN = 'exam_pin_v1'/.test(exV)
+      && /pins\.majors/.test(exV) && /pins\.days/.test(exV) && /pins\.items/.test(exV));
+    t('★v4.10.10 整场挑选存 majorId（上游加科目能自动带上，不摊成 itemId）',
+      /function pinOf\(pins, majorId, date, itemId\)/.test(exV)
+      && /pinArr\(p\.majors\)\.indexOf\(majorId\)/.test(exV)
+      && /off/.test(exV));
+    t('★v4.10.10 list 按考试群分组返回（跨天大考不拆成一天一条）',
+      /function groupAll\(data, cfg, pins\)/.test(exV)
+      && /groups: groups/.test(exV) && /daysN/.test(exV)
+      && /days: days/.test(exV) && /auto: days\.some/.test(exV));
+    t('★v4.10.10 fresh=1 真回源，带 ETag 条件请求 + 节流',
+      /query\.fresh\) \|\| ''\) === '1'/.test(exV) && /If-None-Match/.test(exV)
+      && /r\.status === 304/.test(exV) && /15000/.test(exV));
 
     t('★v4.10.6 大屏考试块钉在左栏最上面，且不参与科目卡装箱',
       /colA\.insertBefore\(b2\.firstElementChild, colA\.firstElementChild\)/.test(bigV)
@@ -13695,8 +13713,27 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /id="bhwExamAdd"/.test(idxV)
       && /bhw-pick[\s\S]{0,600}?id="bhwExamAdd"/.test(idxV));
 
-    t('★v4.10.6 大屏考试有本机缓存（断网也能显示上次同步）',
-      /cls_big_exam_v1/.test(bigV) && /examCacheGet/.test(bigV));
+    t('★v4.10.10 大屏整份 list 落本机缓存（断网弹窗与作业看板都能用）',
+      /cls_big_exam_v2/.test(bigV) && /examCacheGet/.test(bigV)
+      && /examApply\(c, true\)/.test(bigV));
+
+    /* v4.10.10：作业看板呈现 */
+    t('★v4.10.10 考试块按「考试名 → 日期周几 → 科目时间」三层排，字号跟作业缩放',
+      /bhex-date/.test(bigV) && /bhex-mname/.test(bigV)
+      && /calc\(\.92rem\*var\(--bhw-fs\)\)/.test(idxV.replace(/\n/g, ''))
+      && /class="bhex-time"/.test(bigV));
+    t('★v4.10.10 只显示今天与昨天，前天起自动隐藏',
+      /examShift\(today, -1\)/.test(bigV) && /d\.date < floor/.test(bigV));
+    t('★v4.10.10 作业看板最多 6 科，超出提示还剩多少',
+      /EXAM_LIMIT = 6/.test(bigV) && /used \+ items\.length > EXAM_LIMIT/.test(bigV)
+      && /bhex-more/.test(bigV));
+    t('★v4.10.10 弹窗六个时段档位 + 跟随档位的批量按钮',
+      /id: 'week'/.test(bigV) && /id: 'next'/.test(bigV) && /id: 'month'/.test(bigV)
+      && /id: 'nmonth'/.test(bigV) && /id: 'term'/.test(bigV) && /id: 'all'/.test(bigV)
+      && /BIG\.examBulk/.test(bigV) && /examScopeLabel\(scope\)/.test(bigV));
+    t('★v4.10.10 弹窗按考试折叠，默认收起',
+      /BIG\.examOpen/.test(bigV) && /bex-caret/.test(bigV)
+      && /if\(!open\) return '<div class="bex-grp">'/.test(bigV));
 
     t('★v4.10.8 后台「考试同步」页改为只读（同步 / 查看 / 挑选，无写回）',
       /id:'exams'/.test(adm1V) && /exams: *renderExams/.test(adm1V)

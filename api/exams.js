@@ -34,6 +34,7 @@ import {
   cors, handlePreflight, ok, fail, body, requireUser, audit,
 } from './_lib/http.js';
 import { profileKey, encField, decField } from './_lib/profile-crypt.js';
+import { getSiteSetting } from './_lib/db.js';
 
 const DEF_BASE = 'https://examboard.dpdns.org';
 const K_CFG = 'exam_cfg_v1';
@@ -95,7 +96,11 @@ async function nvFetch(url, opt, ms) {
     const txt = await r.text();
     let j = null;
     try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
-    return { status: r.status, json: j, text: txt };
+    /* v4.10.10：把 ETag 带回去，下次回源就能发 If-None-Match 换 304，
+       既省流量，也让「手动刷新」足够便宜，可以频繁点。 */
+    let etag = '';
+    try { etag = r.headers.get('ETag') || ''; } catch (e) { etag = ''; }
+    return { status: r.status, json: j, text: txt, etag: etag };
   } catch (e) {
     return { status: 0, json: null, text: String((e && e.message) || e) };
   } finally {
@@ -246,8 +251,6 @@ function classOf(data, cfg) {
 function buildDays(data, cfg, nowMs, pins) {
   const cls = classOf(data, cfg);
   const today = dayOf(nowMs);
-  const pinSet = {};
-  ((pins && pins.ids) || []).forEach(function (x) { pinSet[x] = 1; });
   const rows = [];
   const seen = {};
   (data.majors || []).forEach(function (m) {
@@ -268,7 +271,7 @@ function buildDays(data, cfg, nowMs, pins) {
 
     its.forEach(function (i) {
       const d = String(i.startTime).slice(0, 10);
-      const pinned = !!pinSet[i.id];
+      const pinned = pinOf(pins, m.id, d, i.id).on;
       /* v4.10.8：今天没这场、也没手动挑 → 不显示；手动挑的哪怕不是今天也照显示 */
       if (!hitToday && !pinned) return;
       if (seen[i.id]) return;
@@ -302,14 +305,24 @@ function buildDays(data, cfg, nowMs, pins) {
 
 /* ---------------- 上游读写 ---------------- */
 
-async function pull(req, cfg, kv) {
-  const r = await nvFetch(cfg.base + '/api/exams', { method: 'GET' }, 9000);
+async function pull(req, cfg, kv, prev) {
+  const headers = {};
+  if (prev && prev.etag) headers['If-None-Match'] = prev.etag;
+  const r = await nvFetch(cfg.base + '/api/exams', { method: 'GET', headers: headers }, 9000);
+  /* 304：上游没变，直接把旧的续个时间戳，省一次 5KB 的下载 */
+  if (r.status === 304 && prev) {
+    prev.at = Date.now();
+    if (kv) await kvPut(kv, K_DATA, prev);
+    _mem = { at: Date.now(), data: prev };
+    return prev;
+  }
   if (r.status !== 200 || !r.json) {
     throw new Error('考试看板没有返回数据（HTTP ' + r.status + '）');
   }
   const data = normSnap(r.json);
   data.at = Date.now();
   data.dirty = false;
+  data.etag = String(r.etag || '');
   const cls = classOf(data, cfg);
   data.clsId = cls.id;
   data.clsName = cls.name;
@@ -319,25 +332,101 @@ async function pull(req, cfg, kv) {
 }
 
 
-/* ---------------- 手动挑选（v4.10.8） ----------------
-   站主原话（2026-11-08）：
-     「暂时先不做写入，只做读取……新增考试那里改成考试看板，我可以一键查看所有的
-       考试数据，考试数据最右边有个加号，点一下把我点的那一次考试放到作业看板上。」
-   所以站内只保存「挑了哪几场」这一份清单，绝不碰上游的考试数据 —— 挑错了、删错了，
-   考试看板那边一点影响都没有。清单极小（几十字节），存 KV 的 exam_pin_v1。 */
+/* ---------------- 手动挑选（v4.10.10） ----------------
+   站主原话（2026-11-08，第二轮）：
+     「我可以添加单场也可以添加考试群，比如说这次段考他要考两天，那我可以直接把这个
+       段考给加上去……我也可以按天来加，可以一键添加本周所有的考试。」
+   所以挑选清单从「一串场次 id」升级成三级，粒度各管各的：
+
+     majors[]  'major_xxx'                整场考试（跨几天都算一场）
+     days[]    'major_xxx|2026-12-01'     某一场考试的某一天
+     items[]   'exam_xxx'                 单独一场科目
+
+   为什么整场要存 majorId 而不是把里面的场次 id 摊开存：
+   站主会回考试看板改数据（改名、加一场、删一场）。存 majorId 的话，那边加了一科，
+   我们这边自动跟着多出来；存一排 itemId 的话，新增的那科永远不会被包含。
+
+   旧数据兼容：v4.10.8 只存过 { ids: [...] }，读到就当成 items，不清空、不报错。 */
+
+const PIN_MAX = 160;
+
+function pinArr(v) {
+  return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string' && x; }) : [];
+}
 
 async function loadPins(kv) {
   const o = (await kvGet(kv, K_PIN)) || null;
-  const ids = (o && Array.isArray(o.ids))
-    ? o.ids.filter(function (x) { return typeof x === 'string' && x; })
-    : [];
-  return { ids: ids.slice(0, 80), at: Number((o && o.at) || 0) };
+  /* v4.10.8 的旧结构：只有 ids */
+  if (o && Array.isArray(o.ids) && !o.majors && !o.days && !o.items) {
+    return {
+      majors: [], days: [], off: [],
+      items: pinArr(o.ids).slice(0, PIN_MAX), at: Number(o.at || 0),
+    };
+  }
+  return {
+    majors: pinArr(o && o.majors).slice(0, 40),
+    days: pinArr(o && o.days).slice(0, PIN_MAX),
+    items: pinArr(o && o.items).slice(0, PIN_MAX),
+    /* off：被整场/某天带出来、但站主单独点了叉的科目。优先级最高 */
+    off: pinArr(o && o.off).slice(0, PIN_MAX),
+    at: Number((o && o.at) || 0),
+  };
 }
 
-async function savePins(kv, ids) {
-  const next = { ids: ids.slice(0, 80), at: Date.now() };
+async function savePins(kv, p) {
+  const next = {
+    majors: pinArr(p && p.majors).slice(0, 40),
+    days: pinArr(p && p.days).slice(0, PIN_MAX),
+    items: pinArr(p && p.items).slice(0, PIN_MAX),
+    off: pinArr(p && p.off).slice(0, PIN_MAX),
+    at: Date.now(),
+  };
   if (kv) await kvPut(kv, K_PIN, next);
   return next;
+}
+
+/** 这一场科目算不算「被挑中」；by 说明是靠哪一级挑中的 */
+function pinOf(pins, majorId, date, itemId) {
+  const p = pins || {};
+  /* 单独划掉的优先：整场挑了、但某一科点了叉，就不显示 */
+  if (pinArr(p.off).indexOf(itemId) >= 0) return { on: false, by: 'off' };
+  if (pinArr(p.majors).indexOf(majorId) >= 0) return { on: true, by: 'major' };
+  if (pinArr(p.days).indexOf(majorId + '|' + date) >= 0) return { on: true, by: 'day' };
+  if (pinArr(p.items).indexOf(itemId) >= 0) return { on: true, by: 'item' };
+  return { on: false, by: '' };
+}
+
+/** 反查一场科目属于哪场考试、哪一天 */
+function findItem(data, itemId) {
+  const ms = (data && data.majors) || [];
+  for (let a = 0; a < ms.length; a++) {
+    const its = ms[a].items || [];
+    for (let b = 0; b < its.length; b++) {
+      if (its[b].id === itemId) {
+        return { majorId: ms[a].id, date: String(its[b].startTime || '').slice(0, 10) };
+      }
+    }
+  }
+  return null;
+}
+
+/** 某场考试（可限定某一天）里所有科目的 id */
+function idsOf(data, majorId, date) {
+  const ms = (data && data.majors) || [];
+  const m = ms.filter(function (x) { return x.id === majorId; })[0];
+  if (!m) return [];
+  const out = [];
+  (m.items || []).forEach(function (i) {
+    const d = String(i.startTime || '').slice(0, 10);
+    if (date && d !== date) return;
+    out.push(i.id);
+  });
+  return out;
+}
+
+function pinCount(pins) {
+  const p = pins || {};
+  return pinArr(p.majors).length + pinArr(p.days).length + pinArr(p.items).length;
 }
 
 /** 这一场考试算不算「我们班的」：班级 / 年级两级过滤，任一条不匹配就跳过 */
@@ -357,44 +446,158 @@ function itemsOfClass(m, cls) {
   });
 }
 
+const WD_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+function weekdayOf(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
+  if (!m) return '';
+  const t = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return WD_CN[t.getUTCDay()] || '';
+}
+
 /**
- * 把整份快照摊成「一天一场」的清单 —— 「查看所有考试」那个弹窗就用这份。
- * 和 buildDays 的区别：这里**不按今天过滤**，所有排过的考试都在，按时间升序。
+ * 把整份快照按「考试群」分组 —— 弹窗与作业看板都用这一份。
+ *
+ * 站主原话（2026-11-08 第二轮）：
+ *   「如果是大考，比如说他分了几天的话，那你就是给他列到同一个考试里面，你不要单独列」
+ *   「我建议是按照时间去分类，顶上可以筛选时间段」
+ *
+ * 所以这里**不再摊平成一天一场**，而是一场考试一个节点，里面按天分层：
+ *   { id, name, start, end, daysN, count, auto, allOn, anyOn,
+ *     days: [{ date, wd, allOn, anyOn, items: [{ id, name, start, end, pin, by }] }] }
+ * 跨天的大考天然是一个节点，前端不用自己拼。
+ *
+ * 不按「今天」过滤 —— 今天是前端的事（前端还要算筛选档位、滚动窗口）。
  */
-function listAll(data, cfg, pins) {
+function groupAll(data, cfg, pins) {
   const cls = classOf(data, cfg);
   const today = dayOf(Date.now());
-  const pinSet = {};
-  ((pins && pins.ids) || []).forEach(function (x) { pinSet[x] = 1; });
   const out = [];
+
   (data.majors || []).forEach(function (m) {
     if (!m.publishedAt && !m.temporary && !m.local) return;   /* 草稿不给看 */
     if (!majorOfClass(m, cls)) return;
     const its = itemsOfClass(m, cls);
-    const dates = {};
-    its.forEach(function (i) { dates[String(i.startTime).slice(0, 10)] = 1; });
-    const auto = !!dates[today];   /* 今天自动就该显示的，弹窗里标「已显示」，不给加号 */
+    if (!its.length) return;
+
+    const byDay = {};
     its.forEach(function (i) {
       const d = String(i.startTime).slice(0, 10);
-      out.push({
-        auto: auto,
-        id: i.id,
+      (byDay[d] || (byDay[d] = [])).push(i);
+    });
+
+    const days = Object.keys(byDay).sort().map(function (d) {
+      const items = byDay[d].slice().sort(function (a, b) {
+        return hhmm(a.startTime).localeCompare(hhmm(b.startTime));
+      }).map(function (i) {
+        const p = pinOf(pins, m.id, d, i.id);
+        return {
+          id: i.id,
+          name: i.name || '考试',
+          start: hhmm(i.startTime),
+          end: hhmm(i.endTime),
+          pin: p.on,
+          by: p.by,
+        };
+      });
+      let on = 0;
+      items.forEach(function (x) { if (x.pin) on++; });
+      return {
         date: d,
-        start: hhmm(i.startTime),
-        end: hhmm(i.endTime),
-        name: i.name || '考试',
-        major: m.name || '',
-        majorId: m.id,
-        temporary: m.temporary === true,
-        pinned: !!pinSet[i.id],
+        wd: weekdayOf(d),
+        items: items,
+        onCnt: on,
+        allOn: on === items.length && items.length > 0,
+        anyOn: on > 0,
+      };
+    });
+
+    let count = 0;
+    let onCnt = 0;
+    days.forEach(function (d) {
+      count += d.items.length;
+      onCnt += d.onCnt;
+    });
+
+    out.push({
+      id: m.id,
+      name: m.name || '考试',
+      temporary: m.temporary === true,
+      start: days[0].date,
+      end: days[days.length - 1].date,
+      daysN: days.length,
+      count: count,
+      onCnt: onCnt,
+      allOn: onCnt > 0 && onCnt === count,
+      anyOn: onCnt > 0,
+      /* 今天正好落在这一场的某一天 → 作业看板自动显示这一整场 */
+      auto: days.some(function (d) { return d.date === today; }),
+      days: days,
+    });
+  });
+
+  out.sort(function (a, b) {
+    if (a.start !== b.start) return a.start.localeCompare(b.start);
+    return String(a.name).localeCompare(String(b.name));
+  });
+  return out;
+}
+
+/** 摊平一份：后台表格、测试脚本用；前端折叠视图不用它 */
+function flatOf(groups) {
+  const out = [];
+  (groups || []).forEach(function (g) {
+    g.days.forEach(function (d) {
+      d.items.forEach(function (i) {
+        out.push({
+          id: i.id, date: d.date, wd: d.wd,
+          start: i.start, end: i.end, name: i.name,
+          major: g.name, majorId: g.id,
+          temporary: g.temporary, auto: g.auto,
+          pinned: i.pin, by: i.by,
+        });
       });
     });
   });
-  out.sort(function (a, b) {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    return String(a.start).localeCompare(String(b.start));
-  });
   return out;
+}
+
+/* ---------------- 读：拿到一份可用的快照 ---------------- */
+
+/**
+ * fresh=1 时真的回上游问一次（带 If-None-Match，304 就沿用本地那份）。
+ * 为什么必须回源：v4.10.8 的 list 只读 KV，站主在考试看板改了名字，站内永远是旧的
+ * —— 「12 月 1 号那个考试我把物化生三个字删掉了，但是他还没有及时的刷新」。
+ * 15 秒节流：手动刷新连点几下也不会把上游打爆。
+ */
+async function takeData(req, cfg, kv, fresh) {
+  let data = _mem.at && (Date.now() - _mem.at < MEM_MS) ? _mem.data : null;
+  if (!data) data = await kvGet(kv, K_DATA);
+  if (!fresh) return { data: data, hit: true };
+  const at = Number((data && data.at) || 0);
+  if (data && at && Date.now() - at < 15000) return { data: data, hit: true };
+  try {
+    const next = await pull(req, cfg, kv, data);
+    return { data: next || data, hit: false };
+  } catch (e) {
+    /* 回源失败不报错：手上还有缓存就先给缓存，前端能看就行 */
+    return { data: data, hit: true, err: String((e && e.message) || e) };
+  }
+}
+
+/** 学期区间：「本学期」这一档筛选用。班级岛里只存当前学期，没有历史学期表 */
+async function termOf() {
+  try {
+    const o = await getSiteSetting(null, 'island', null);
+    if (!o || typeof o !== 'object') return { name: '', start: '', end: '' };
+    const s = str(o.startDate, 10);
+    const e = str(o.endDate, 10);
+    const start = isDay(s) ? s : '';
+    let end = isDay(e) ? e : '';
+    if (!end && start) end = dayOf(msOfLocal(start + 'T00:00') + 200 * DAY_MS);
+    return { name: str(o.term, 30), start: start, end: end };
+  } catch (e) {
+    return { name: '', start: '', end: '' };
+  }
 }
 
 /* ---------------- 对外 ---------------- */
@@ -411,12 +614,11 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && (action === 'today' || action === '')) {
       const cfg = await loadCfg(req);
       const fresh = String((req.query && req.query.fresh) || '') === '1';
-      let data = (!fresh && _mem.at && (Date.now() - _mem.at < MEM_MS)) ? _mem.data : null;
-      if (!data) data = await kvGet(kv, K_DATA);
+      let data = (await takeData(req, cfg, kv, fresh)).data;
       if (!data) {
         /* 从没同步过：现拉一次，让大屏第一次打开就有东西看 */
         try {
-          data = await pull(req, cfg, kv);
+          data = await pull(req, cfg, kv, null);
         } catch (e) {
           return ok(res, {
             at: 0, today: dayOf(Date.now()), days: [], empty: true,
@@ -430,7 +632,7 @@ export default async function handler(req, res) {
         at: Number(data.at || 0),
         today: dayOf(now),
         days: buildDays(data, cfg, now, pins),
-        pins: pins.ids,
+        pins: { majors: pins.majors, days: pins.days, items: pins.items },
         title: data.title || '',
         cls: classOf(data, cfg).name || '',
         dirty: data.dirty === true,
@@ -438,22 +640,27 @@ export default async function handler(req, res) {
       });
     }
 
-    /* ---------- 读：全部考试（公开，「查看所有考试」弹窗用） ---------- */
+    /* ---------- 读：全部考试（公开，作业看板 + 弹窗都用这一份） ----------
+       v4.10.10：不再摊平，直接按考试群分组；fresh=1 会回上游问一次。 */
     if (req.method === 'GET' && action === 'list') {
       const cfg = await loadCfg(req);
-      let data = _mem.at && (Date.now() - _mem.at < MEM_MS) ? _mem.data : null;
-      if (!data) data = await kvGet(kv, K_DATA);
+      const fresh = String((req.query && req.query.fresh) || '') === '1';
+      let got = await takeData(req, cfg, kv, fresh);
+      let data = got.data;
       if (!data) {
         try {
-          data = await pull(req, cfg, kv);
+          data = await pull(req, cfg, kv, null);
+          got = { data: data, hit: false };
         } catch (e) {
           return ok(res, {
-            at: 0, today: dayOf(Date.now()), items: [], pins: [], empty: true,
+            at: 0, today: dayOf(Date.now()), groups: [], items: [], empty: true,
+            pins: { majors: [], days: [], items: [] }, term: await termOf(),
             error: '还没有同步过考试数据',
           });
         }
       }
       const pins = await loadPins(kv);
+      const groups = groupAll(data, cfg, pins);
       return ok(res, {
         at: Number(data.at || 0),
         today: dayOf(Date.now()),
@@ -461,8 +668,13 @@ export default async function handler(req, res) {
         cls: classOf(data, cfg).name || '',
         srcAt: Number(data.updatedAt || 0),
         base: cfg.base,
-        items: listAll(data, cfg, pins),
-        pins: pins.ids,
+        groups: groups,
+        items: flatOf(groups),
+        pins: { majors: pins.majors, days: pins.days, items: pins.items },
+        pinAt: pins.at,
+        term: await termOf(),
+        cached: got.hit === true,
+        stale: !!got.err,
       });
     }
 
@@ -480,7 +692,9 @@ export default async function handler(req, res) {
           classId: cfg.classId,
           className: cfg.className,
         },
-        pins: pins.ids,
+        pins: { majors: pins.majors, days: pins.days, items: pins.items },
+        pinAt: pins.at,
+        term: await termOf(),
         kv: !!kv,
         /* 班级下拉用：同步过一次之后就知道云端有哪些班 */
         classes: data ? data.classes.map(function (c) {
@@ -555,28 +769,135 @@ export default async function handler(req, res) {
       });
     }
 
-    /* 手动挑选：把某一场上/下作业看板。只动我们自己的清单，不碰上游。 */
+    /* 手动挑选：把某一场 / 某一天 / 整场考试上/下作业看板。只动我们自己的清单。 */
     if (act === 'pin') {
-      const id = str(b.id, 80);
+      const scope = str(b.scope, 10) || 'item';
+      const id = str(b.id, 120);
       if (!id) return fail(res, 400, '缺少考试 id');
+      if (['major', 'day', 'item'].indexOf(scope) < 0) return fail(res, 400, '未知的挑选层级');
       const on = b.on === true;
-      const pins = await loadPins(kv);
-      const has = pins.ids.indexOf(id) >= 0;
-      let ids = pins.ids.slice();
-      if (on && !has) ids.push(id);
-      if (!on && has) ids = ids.filter(function (x) { return x !== id; });
-      /* 上限 80 场，防止误操作把整份考试表都塞进来 */
-      if (ids.length > 80) return fail(res, 400, '最多只能挑 80 场');
-      const next = await savePins(kv, ids);
-      await audit(u.id, 'exams.pin', 'exam_data', 1, (on ? '加入' : '移出') + '：' + id);
-      return ok(res, { ids: next.ids, at: next.at });
+      const cur = await loadPins(kv);
+      const p = {
+        majors: cur.majors.slice(), days: cur.days.slice(),
+        items: cur.items.slice(), off: cur.off.slice(),
+      };
+      const rm = function (arr, v) {
+        const i = arr.indexOf(v);
+        if (i >= 0) arr.splice(i, 1);
+      };
+      const add = function (arr, v) { if (arr.indexOf(v) < 0) arr.push(v); };
+
+      if (scope === 'major') {
+        if (on) {
+          add(p.majors, id);
+          /* 整场重新挑回来 = 我这场全都要，把之前单独划掉的那些撤掉 */
+          const ids = idsOf(await kvGet(kv, K_DATA), id, '');
+          p.off = p.off.filter(function (x) { return ids.indexOf(x) < 0; });
+        } else {
+          rm(p.majors, id);
+        }
+      } else if (scope === 'day') {
+        if (on) {
+          add(p.days, id);
+          const bar = id.indexOf('|');
+          if (bar > 0) {
+            const ids = idsOf(await kvGet(kv, K_DATA), id.slice(0, bar), id.slice(bar + 1));
+            p.off = p.off.filter(function (x) { return ids.indexOf(x) < 0; });
+          }
+        } else {
+          rm(p.days, id);
+        }
+      } else {
+        if (on) {
+          add(p.items, id);
+          /* 重新点回来时把之前的排除撤掉 */
+          p.off = p.off.filter(function (x) { return x !== id; });
+        } else {
+          rm(p.items, id);
+          /* 这一科若是被「整场」或「某天」带出来的，取消就要单独记一条排除，
+             否则整场还挑着，它马上又冒出来 */
+          const own = findItem(await kvGet(kv, K_DATA), id);
+          if (own) {
+            const base = pinOf(
+              { majors: p.majors, days: p.days, items: [] },
+              own.majorId, own.date, id,
+            );
+            if (base.on) add(p.off, id);
+          }
+        }
+      }
+
+      if (pinCount(p) > PIN_MAX) return fail(res, 400, '最多只能挑 ' + PIN_MAX + ' 项');
+      const next = await savePins(kv, p);
+      await audit(u.id, 'exams.pin', 'exam_data', 1,
+        (on ? '加入' : '移出') + '（' + scope + '）：' + id);
+      return ok(res, {
+        pins: { majors: next.majors, days: next.days, items: next.items },
+        at: next.at,
+      });
+    }
+
+    /* 批量：把一段时间内的考试整段加上 / 整段移出 */
+    if (act === 'bulk') {
+      const from = str(b.from, 10);
+      const to = str(b.to, 10);
+      if (!isDay(from) || !isDay(to)) return fail(res, 400, '时间段不正确');
+      if (from > to) return fail(res, 400, '开始日期晚于结束日期');
+      const on = b.on === true;
+      const cfg = await loadCfg(req);
+      let data = (await takeData(req, cfg, kv, false)).data;
+      if (!data) return fail(res, 400, '还没有考试数据，先同步一次');
+      const cur = await loadPins(kv);
+      const p = {
+        majors: cur.majors.slice(), days: cur.days.slice(),
+        items: cur.items.slice(), off: cur.off.slice(),
+      };
+      const rm = function (arr, v) {
+        const i = arr.indexOf(v);
+        if (i >= 0) arr.splice(i, 1);
+      };
+      const add = function (arr, v) { if (arr.indexOf(v) < 0) arr.push(v); };
+
+      let hit = 0;
+      groupAll(data, cfg, { majors: [], days: [], items: [], off: [] }).forEach(function (g) {
+        const ds = g.days.filter(function (d) { return d.date >= from && d.date <= to; });
+        if (!ds.length) return;
+        hit += 1;
+        if (ds.length === g.days.length) {
+          /* 整场都在区间里 → 存整场，以后上游加科目也能自动带上 */
+          if (on) add(p.majors, g.id); else rm(p.majors, g.id);
+        } else {
+          ds.forEach(function (d) {
+            const k = g.id + '|' + d.date;
+            if (on) add(p.days, k); else rm(p.days, k);
+          });
+        }
+        /* 加了就别再排除里面的科目；移出了也把排除清掉，免得下次加回来缺科 */
+        ds.forEach(function (d) {
+          d.items.forEach(function (i) {
+            p.off = p.off.filter(function (x) { return x !== i.id; });
+          });
+        });
+      });
+
+      if (pinCount(p) > PIN_MAX) return fail(res, 400, '最多只能挑 ' + PIN_MAX + ' 项');
+      const next = await savePins(kv, p);
+      await audit(u.id, 'exams.pin', 'exam_data', hit,
+        (on ? '批量加入 ' : '批量移出 ') + from + ' ~ ' + to);
+      return ok(res, {
+        pins: { majors: next.majors, days: next.days, items: next.items },
+        at: next.at, hit: hit,
+      });
     }
 
     /* 清空挑选 */
     if (act === 'pinClear') {
-      const next = await savePins(kv, []);
+      const next = await savePins(kv, { majors: [], days: [], items: [], off: [] });
       await audit(u.id, 'exams.pin', 'exam_data', 1, '清空手动挑选');
-      return ok(res, { ids: next.ids, at: next.at });
+      return ok(res, {
+        pins: { majors: next.majors, days: next.days, items: next.items },
+        at: next.at,
+      });
     }
 
     return fail(res, 400, '不支持的 action');

@@ -4672,96 +4672,149 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 .dark .bhw-examadd:hover{background:#2a2523}
 .bhw-examadd-plus{font-size:calc(.9rem*var(--bhw-fx));line-height:1;font-weight:700}
 
-/* —— 考试块（v4.10.6）——
-   钉在左栏最上面：标题一行，下面每场一行 —— 左科目、右时间。
-   跨天的大型考试按天分组，日期用小标题隔开；已经过去的那天压暗。 */
+/* —— 考试块（v4.10.10）——
+   钉在左栏最上面。一场考试一块：考试名 → 日期周几 → 该天每科一行。
+   字号走 --bhw-fs，跟作业正文一起缩放；科目与时间用作业同款亮色，
+   昨天及更早那几行整体压暗，跟今天拉开层次。 */
 .bhex{
   background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:14px;
-  padding:10px 12px 8px;margin:0 0 10px;
+  padding:11px 13px 9px;margin:0 0 10px;
   box-shadow:0 1px 2px rgba(120,53,15,.04);
   border-left:4px solid var(--grad-a);
 }
 .dark .bhex{background:#2a2523;border-color:rgba(255,255,255,.08)}
-.bhex-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 6px}
-.bhex-h b{font-size:calc(.86rem*var(--bhw-fx));color:var(--fg);letter-spacing:.02em}
-.bhex-h span{font-size:calc(.68rem*var(--bhw-fx));color:var(--fg-3)}
-.bhex-day{
-  font-size:calc(.66rem*var(--bhw-fx));color:var(--fg-3);
-  margin:6px 0 3px;padding-top:5px;border-top:1px dashed rgba(120,53,15,.14);
+.bhex-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 4px}
+.bhex-h b{
+  font-size:calc(.92rem*var(--bhw-fs));font-weight:800;color:var(--fg);
+  letter-spacing:.01em;line-height:1.3;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-.bhex-day:first-child{margin-top:0;padding-top:0;border-top:none}
-.bhex-row{
-  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
-  padding:3px 0;
+.bhex-h span{font-size:calc(.68rem*var(--bhw-fs));color:var(--fg-3);flex:none}
+.bhex-m{margin-top:7px}
+.bhex-m + .bhex-m{margin-top:10px;padding-top:9px;border-top:1px dashed rgba(120,53,15,.14)}
+.bhex-mname{
+  font-size:calc(.78rem*var(--bhw-fs));font-weight:800;color:var(--fg-2);
+  margin:0 0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
+.bhex-date{
+  font-size:calc(.72rem*var(--bhw-fs));font-weight:700;color:var(--fg-3);
+  margin:8px 0 2px;font-variant-numeric:tabular-nums;
+}
+.bhex-m .bhex-date:first-child{margin-top:4px}
+.bhex-date.bhex-past{opacity:.6}
+.bhex-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:2px 0}
 .bhex-sub{
-  font-size:calc(.9rem*var(--bhw-fx));color:var(--fg);font-weight:600;
+  font-size:calc(.92rem*var(--bhw-fs));color:var(--fg);font-weight:600;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .bhex-time{
-  font-size:calc(.78rem*var(--bhw-fx));color:var(--fg-2);
+  font-size:calc(.82rem*var(--bhw-fs));color:var(--fg-2);font-weight:600;
   font-variant-numeric:tabular-nums;flex:none;
 }
-.bhex-row.bhex-off{opacity:.45}
-/* v4.10.8：同一天混着几场不同考试时，行尾标出考试名称；同一天的标题里也带名称 */
-.bhex-mj{
-  flex:1;min-width:0;margin-left:8px;text-align:right;
-  font-size:calc(.66rem*var(--bhw-fx));color:var(--fg-3);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+/* 昨天及更早：整行压暗 */
+.bhex-row.bhex-off{opacity:.42}
+/* 超过 6 科时的那行小字：不是按钮，只是告诉还有多少 */
+.bhex-more{
+  margin-top:7px;font-size:calc(.66rem*var(--bhw-fs));color:var(--fg-3);
+  text-align:right;letter-spacing:.02em;
 }
-.bhex-day-m{font-style:normal;color:var(--fg-2);font-weight:700}
 
-/* —— 考试看板弹窗（v4.10.8：查看全部 + 挑一场） —— */
-.bex-box.bex-wide{max-width:520px;width:min(94vw,520px)}
-.bex-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:2px}
+/* —— 考试看板弹窗（v4.10.10：筛档位 + 折叠 + 三档挑选）—— */
+.bex-box.bex-wide{max-width:620px;width:min(96vw,620px)}
+.bex-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
 .bex-go{
   flex:none;text-decoration:none;font-size:.74rem;font-weight:700;
   color:#b45309;padding:4px 9px;border-radius:999px;
   background:rgba(180,83,9,.09);border:1px solid rgba(180,83,9,.18);
 }
 .bex-go:hover{background:rgba(180,83,9,.15)}
-.bex-list{max-height:54vh;overflow-y:auto;margin:6px -4px 2px;padding:0 4px;overscroll-behavior:contain}
+.bex-tabs{
+  display:flex;align-items:center;gap:5px;flex-wrap:nowrap;
+  overflow-x:auto;padding:0 0 3px;margin:0 -2px 4px;
+}
+.bex-tabs::-webkit-scrollbar{height:0}
+.bex-tab{
+  flex:none;border:1px solid rgba(120,53,15,.16);background:var(--bg-1);
+  color:var(--fg-2);font-family:inherit;font-size:.74rem;font-weight:700;
+  padding:4px 9px;border-radius:999px;cursor:pointer;transition:.16s;
+}
+.bex-tab.on{background:var(--grad-a);border-color:transparent;color:#fff}
+.bex-bulk{
+  flex:none;margin-left:auto;border:1px dashed rgba(21,128,61,.42);
+  background:rgba(21,128,61,.06);color:#15803d;
+  font-family:inherit;font-size:.74rem;font-weight:800;
+  padding:4px 9px;border-radius:999px;cursor:pointer;white-space:nowrap;
+}
+.bex-bulk:hover{background:rgba(21,128,61,.13)}
+.bex-bulk:disabled{opacity:.55;cursor:default}
+.bex-tip{margin:2px 0 8px;font-size:.74rem;line-height:1.6;color:var(--fg-3)}
+.bex-list{max-height:52vh;overflow-y:auto;margin:0 -4px 4px;padding:0 4px;overscroll-behavior:contain}
 .bex-list::-webkit-scrollbar{width:6px}
 .bex-list::-webkit-scrollbar-thumb{background:rgba(120,53,15,.18);border-radius:3px}
-.bex-g{
-  position:sticky;top:0;z-index:1;
-  font-size:.68rem;font-weight:700;color:var(--fg-3);
-  padding:8px 6px 4px;margin-top:2px;
-  background:var(--bg-1);
-  box-shadow:0 6px 8px -6px rgba(120,53,15,.14);
+.bex-grp{
+  border:1px solid rgba(120,53,15,.13);border-radius:12px;background:var(--bg-3);
+  margin:0 0 7px;overflow:hidden;
 }
-.bex-g.today{color:#b45309}
-.bex-it{
-  display:flex;align-items:center;gap:9px;
-  padding:6px 8px;border-radius:9px;
+.bex-grp.open{box-shadow:0 2px 10px rgba(120,53,15,.07)}
+.bex-gh{display:flex;align-items:center;gap:8px;padding:8px 10px}
+.bex-caret{
+  flex:none;width:18px;height:18px;display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--fg-3);cursor:pointer;padding:0;
+  transition:transform .18s;
 }
-.bex-it.pinned{background:rgba(21,128,61,.07)}
+.bex-caret.open{transform:rotate(90deg);color:var(--grad-a)}
+.bex-gn{
+  flex:1;min-width:0;font-size:.86rem;font-weight:800;color:var(--fg);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.bex-gm{flex:none;font-size:.7rem;color:var(--fg-3);font-variant-numeric:tabular-nums}
+.bex-gb{padding:0 10px 8px 36px;border-top:1px solid rgba(120,53,15,.08)}
+.bex-day{display:flex;align-items:center;gap:8px;padding:6px 0 3px}
+.bex-dd{
+  flex:1;min-width:0;font-size:.72rem;font-weight:700;color:var(--fg-2);
+  font-variant-numeric:tabular-nums;
+}
+.bex-it{display:flex;align-items:center;gap:8px;padding:3px 0}
 .bex-it-sub{
-  width:60px;flex:none;font-size:.82rem;font-weight:700;color:var(--fg);
+  flex:1;min-width:0;font-size:.84rem;color:var(--fg);font-weight:600;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-.bex-it-tm{flex:none;font-size:.78rem;color:var(--fg-2);font-variant-numeric:tabular-nums}
-.bex-it-mj{
-  flex:1;min-width:0;text-align:right;font-size:.7rem;color:var(--fg-3);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+.bex-it-tm{flex:none;font-size:.74rem;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.bex-add{
+  flex:none;border:1px solid rgba(120,53,15,.18);background:var(--bg-1);color:var(--fg-2);
+  font-family:inherit;font-size:.7rem;font-weight:800;padding:3px 8px;border-radius:999px;
+  cursor:pointer;white-space:nowrap;transition:.16s;
 }
-.bex-it-add{
-  flex:none;width:26px;height:26px;margin-left:auto;
-  display:inline-flex;align-items:center;justify-content:center;
-  border-radius:8px;border:1px solid rgba(120,53,15,.20);
-  background:var(--bg-2);color:var(--fg-2);
-  font-size:.9rem;line-height:1;cursor:pointer;font-family:inherit;
+.bex-add:hover{border-color:var(--grad-a);color:var(--fg)}
+/* 今天本来就会自动显示：不给按钮，标一个「自动」，免得点了取消却还在 */
+.bex-auto{
+  flex:none;font-size:.68rem;font-weight:700;color:var(--fg-3);
+  padding:3px 8px;border-radius:999px;background:rgba(120,53,15,.06);
+  border:1px solid rgba(120,53,15,.10);white-space:nowrap;
 }
-.bex-it-add:hover{border-color:var(--grad-a);color:var(--fg)}
-.bex-it-add:disabled{opacity:.5;cursor:default}
-.bex-it-add.on{background:#15803d;border-color:#15803d;color:#fff}
-.bex-it-on{
-  flex:none;margin-left:auto;width:56px;text-align:center;
-  font-size:.68rem;color:var(--fg-3);
+.bex-add.on{background:#15803d;border-color:#15803d;color:#fff}
+.bex-add:disabled{opacity:.55;cursor:default}
+.bex-dot{
+  flex:none;width:22px;height:22px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(120,53,15,.18);background:var(--bg-1);color:var(--fg-2);
+  font-family:inherit;font-size:.74rem;font-weight:800;cursor:pointer;transition:.16s;padding:0;
 }
+.bex-dot:hover{border-color:var(--grad-a);color:var(--fg)}
+.bex-dot.on{background:#15803d;border-color:#15803d;color:#fff}
+.bex-dot:disabled{opacity:.55;cursor:default}
 .bex-empty{padding:22px 0;text-align:center;font-size:.8rem;color:var(--fg-3)}
+/* 深色：描边改走白色微透明，否则褐色描边在近黑底上几乎看不见 */
+.dark .bex-tab{border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.03)}
+.dark .bex-tab.on{border-color:transparent}
+.dark .bex-add{border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.05)}
+.dark .bex-dot{border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.05)}
+.dark .bex-grp{border-color:rgba(255,255,255,.10)}
+.dark .bex-gb{border-top-color:rgba(255,255,255,.07)}
+.dark .bex-add.on,.dark .bex-dot.on{border-color:#15803d}
+.dark .bex-caret{color:#a8a29e}
+.dark .bex-auto{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.08)}
 
-/* —— 新增考试弹窗 —— */
 .bex-mask{
   position:fixed;inset:0;z-index:3200;display:flex;align-items:center;justify-content:center;
   background:rgba(28,20,14,.46);backdrop-filter:blur(3px);padding:18px;
@@ -4773,18 +4826,6 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
   border:1px solid rgba(120,53,15,.12);
 }
 .bex-t{font-size:1.05rem;font-weight:800;color:var(--fg)}
-.bex-tip{margin:6px 0 12px;font-size:.76rem;line-height:1.65;color:var(--fg-3)}
-.bex-f{display:flex;align-items:center;gap:10px;margin:0 0 9px}
-.bex-f>span{width:86px;flex:none;font-size:.8rem;color:var(--fg-2)}
-.bex-f input{
-  flex:1;min-width:0;background:var(--bg-2);border:1px solid rgba(120,53,15,.16);
-  border-radius:10px;padding:8px 10px;font-size:.86rem;color:var(--fg);font-family:inherit;
-}
-.bex-f input:focus{outline:none;border-color:var(--grad-a)}
-.bex-two{display:flex;gap:10px}
-.bex-two .bex-f{flex:1;margin-bottom:9px}
-.bex-two .bex-f>span{width:auto}
-.bex-msg{min-height:18px;font-size:.76rem;color:#8a6a55;margin:2px 0 6px;line-height:1.5}
 .bex-btns{display:flex;gap:10px;justify-content:flex-end}
 .bex-btn{
   border:none;border-radius:11px;padding:9px 16px;font-size:.86rem;font-weight:700;
@@ -7636,18 +7677,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.9';
+var SITE_VERSION = '4.10.10';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4109" defer></script>
-<script src="./app.min.js?v=4109" defer></script>
+<script src="./auth-bus.js?v=41010" defer></script>
+<script src="./app.min.js?v=41010" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4109" defer></script>
-<script src="./big.js?v=4109" defer></script>
+<script src="./fs-keep.js?v=41010" defer></script>
+<script src="./big.js?v=41010" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4109" defer></script>
+<script src="./pickfx.js?v=41010" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

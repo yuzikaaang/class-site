@@ -1313,130 +1313,220 @@
     renderQuote();
   }
 
-  /* ---------------- 考试（v4.10.6） ----------------
-     站主原话（2026-11-08）：
-       「左侧的作业栏会检测，如果检测到今天有考试的话，就会把考试的信息同步过来，
-         如果今天有多场考试的话，那就一行显示一个。做卡片的左边统一都显示考试科目，
-         右边就显示对应的时间。如果是那种大型的跨天考试的话，那 n 天的数据都显示
-         在这个作业看板上。」
-       「可以在随机点名的下面加一个小按钮，用于新增一些考试数据。」
-   
-     数据从哪来：本站后端 /api/exams?action=today —— 后端已经把考试看板的整份快照
-     拉下来、按班级过滤好、把「今天这场大考的所有天」都摊平了。大屏只管画。
-     本机另存一份 cls_big_exam_v1：教室断网时先画上次的，不空着。 */
-  var EXAM_KEY = 'cls_big_exam_v1';
-  var EXAM_TTL = 5 * 60 * 1000;      /* 5 分钟主动刷一次，够用又不打上游 */
-  BIG.exam = { at: 0, today: '', days: [], loaded: false, busy: false, at2: 0 };
+  /* ---------------- 考试（v4.10.10） ----------------
+     站主原话（2026-11-08 第二轮）：
+       「顶部写考试名称，第二行写第一天的日期，第三行这些就写第一天的科目，
+         后面是第二天的日期，再后面是第二天的科目」
+       「一般考试不会超过两天，单天最多不会超过四科」
+       「考试只保留一天 —— 昨天还能看到，颜色更淡；前天就自动隐藏，
+         空出来的位置给后面继续显示」
+       「多场合并，重复的只显示一次；本周肯定包含今天，所以要合并」
+       「考试时间和科目用亮一点的颜色，类似作业的那种文字」
 
-  function examTodayLocal(d){
+     所以这块：
+       · 块头一场考试一个名字；混着好几场就写「考试安排」
+       · 块内「12/1 周一」小标题 + 该天每科一行（科目左、时间右）
+       · 只画今天和昨天；最多 6 科，前面的过期后后面自动补位
+       · 字号走 --bhw-fs，跟作业正文一起缩放
+
+     数据从哪来：/api/exams?action=list —— 后端按考试群分好组，前端只算「哪天显示」。
+     整份响应缓存在 cls_big_exam_v2：断网时弹窗和作业看板都还有东西看。 */
+  var EXAM_KEY = 'cls_big_exam_v2';
+  var EXAM_TTL = 5 * 60 * 1000;      /* 5 分钟主动刷一次，够用又不打上游 */
+  var EXAM_LIMIT = 6;                /* 作业看板上最多 6 科，多的等前面的过期补位 */
+
+  BIG.examList = {
+    groups: [], pins: { majors: [], days: [], items: [] },
+    today: '', term: null, base: '', title: '', cls: '', at: 0, cacheAt: 0,
+  };
+  BIG.exam = { at: 0, loaded: false, busy: false };
+  BIG.examScope = '';        /* 弹窗当前筛选档位，空 = 还没定 */
+  BIG.examOpen = {};         /* 弹窗里哪几场是展开的 */
+  BIG.examLoading = false;
+
+  function examToday(d){
     var t = d || new Date();
     var p = function (n){ return (n < 10 ? '0' : '') + n; };
     return t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate());
   }
-  function examWeekCn(day){
+  function examDateOf(day){
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
-    if(!m) return '';
-    var d = new Date(+m[1], +m[2] - 1, +m[3]);
-    var w = '日一二三四五六'[d.getDay()];
-    return '周' + w;
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
   }
+  function examWeekCn(day){
+    var d = examDateOf(day);
+    return d ? '周' + '日一二三四五六'[d.getDay()] : '';
+  }
+  function examShift(day, n){
+    var d = examDateOf(day);
+    if(!d) return '';
+    d.setDate(d.getDate() + n);
+    return examToday(d);
+  }
+  /** 这一周的周一 */
+  function examMon(day){
+    var d = examDateOf(day);
+    if(!d) return '';
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return examToday(d);
+  }
+  function examMD(day){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
+    return m ? (+m[2]) + '/' + (+m[3]) : String(day || '');
+  }
+  /** 「今天 · 12/1 周一」这种小标题：今天/明天/昨天直接写中文，一眼能认 */
+  function examDayLabel(day, isToday){
+    var base = examDateOf(day);
+    if(!base) return '';
+    var t0 = new Date();
+    var diff = Math.round((base - new Date(t0.getFullYear(), t0.getMonth(), t0.getDate())) / 86400000);
+    var head = isToday ? '今天' : (diff === 1 ? '明天' : (diff === -1 ? '昨天' : ''));
+    return (head ? head + ' · ' : '') + examMD(day) + ' ' + examWeekCn(day);
+  }
+
   function examCacheGet(){
     try{
       var o = JSON.parse(localStorage.getItem(EXAM_KEY) || 'null');
-      if(o && Array.isArray(o.days)) return o;
+      if(o && Array.isArray(o.groups)) return o;
     }catch(e){}
     return null;
   }
-  function examCachePut(o){
-    try{
-      localStorage.setItem(EXAM_KEY, JSON.stringify({
-        at: Number(o.at || 0), today: String(o.today || ''), days: o.days || [],
-      }));
-    }catch(e){}
+  function examApply(j, fromCache){
+    if(!j || !Array.isArray(j.groups)) return;
+    BIG.examList = {
+      groups: j.groups,
+      pins: j.pins || { majors: [], days: [], items: [] },
+      today: String(j.today || examToday()),
+      term: j.term || null,
+      base: String(j.base || ''),
+      title: String(j.title || ''),
+      cls: String(j.cls || ''),
+      at: Number(j.at || 0),
+      cacheAt: fromCache ? Number(j.cacheAt || 0) : Date.now(),
+    };
+    BIG.exam.at = BIG.examList.at;
+    BIG.exam.loaded = true;
+    if(!fromCache){
+      try{
+        localStorage.setItem(EXAM_KEY, JSON.stringify({
+          groups: BIG.examList.groups, pins: BIG.examList.pins,
+          today: BIG.examList.today, term: BIG.examList.term,
+          base: BIG.examList.base, title: BIG.examList.title,
+          cls: BIG.examList.cls, at: BIG.examList.at, cacheAt: Date.now(),
+        }));
+      }catch(e){}
+    }
   }
 
-  BIG.examLoad = function (cb){
+  BIG.examLoad = function (cb, force){
     /* 先上缓存：教室电脑经常一开机就断网 */
     if(!BIG.exam.loaded){
       var c0 = examCacheGet();
-      if(c0){
-        BIG.exam.at = c0.at; BIG.exam.today = c0.today; BIG.exam.days = c0.days || [];
-        BIG.exam.loaded = true;
-        paintExam();
-      }
+      if(c0){ examApply(c0, true); paintExam(); }
     }
     if(typeof api !== 'function'){ if(cb) cb(); return; }
-    api('/exams?action=today').then(function (j){
-      BIG.exam.at = Number((j && j.at) || 0);
-      BIG.exam.today = String((j && j.today) || examTodayLocal());
-      BIG.exam.days = (j && Array.isArray(j.days)) ? j.days : [];
+    api('/exams?action=list' + (force ? '&fresh=1' : '')).then(function (j){
+      examApply(j, false);
       BIG.exam.loaded = true;
-      BIG.exam.at2 = Date.now();
-      examCachePut(BIG.exam);
       paintExam();
+      if(document.getElementById('bexMask')) examPanelPaint();
       if(cb) cb();
     }).catch(function (){
       BIG.exam.loaded = true;
-      if(!BIG.exam.days.length){
+      if(!BIG.examList.groups.length){
         var c2 = examCacheGet();
-        if(c2){
-          BIG.exam.at = c2.at; BIG.exam.today = c2.today; BIG.exam.days = c2.days || [];
-        }
+        if(c2) examApply(c2, true);
       }
       paintExam();
       if(cb) cb();
     });
   };
 
-  /** 「12/1 周一」这种小标题；今天/明天直接写中文，一眼能认 */
-  function examDayLabel(day, isToday){
-    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
-    if(!m) return '';
-    var today = BIG.exam.today || examTodayLocal();
-    var base = new Date(+m[1], +m[2] - 1, +m[3]);
-    var t0 = new Date();
-    var diff = Math.round((base - new Date(t0.getFullYear(), t0.getMonth(), t0.getDate())) / 86400000);
-    var head = isToday ? '今天' : (diff === 1 ? '明天' : (diff === -1 ? '昨天' : ''));
-    var md = (+m[2]) + '/' + (+m[3]);
-    return (head ? head + ' · ' : '') + md + ' ' + examWeekCn(day);
+  /* -------- 要画哪几天：今天 + 昨天，前天起自动隐藏 -------- */
+  function examStops(){
+    var L = BIG.examList;
+    if(!L || !L.groups || !L.groups.length) return [];
+    var today = L.today || examToday();
+    var floor = examShift(today, -1);
+    var out = [];
+    L.groups.forEach(function (g){
+      var auto = g.auto === true;      /* 今天落在这一场里 → 这一场所有天都显示 */
+      (g.days || []).forEach(function (d){
+        if(d.date < floor) return;
+        if(!auto && !d.anyOn) return;
+        out.push({ g: g, d: d, past: d.date < today });
+      });
+    });
+    out.sort(function (a, b){
+      if(a.d.date !== b.d.date) return a.d.date.localeCompare(b.d.date);
+      return String(a.g.start).localeCompare(String(b.g.start));
+    });
+    return out;
+  }
+
+  /** 混着好几场时块头写什么：全在本周就「本周考试安排」，否则「考试安排」 */
+  function examHeadTitle(stops){
+    var today = BIG.examList.today || examToday();
+    var a = stops[0].d.date;
+    var b = stops[stops.length - 1].d.date;
+    var mon = examMon(today);
+    if(a >= mon && b <= examShift(mon, 6)) return '本周考试安排';
+    if(a >= examShift(mon, 7) && b <= examShift(mon, 13)) return '下周考试安排';
+    if(a.slice(0, 7) === today.slice(0, 7) && b.slice(0, 7) === today.slice(0, 7)) return '本月考试安排';
+    return '考试安排';
   }
 
   function examHtml(){
-    var days = BIG.exam.days || [];
-    if(!days.length) return '';
-    var total = 0;
-    days.forEach(function (d){ total += (d.items || []).length; });
-    if(!total) return '';
+    var stops = examStops();
+    if(!stops.length) return '';
 
-    var multi = days.length > 1 || !days[0].isToday;
+    /* 按考试归并；块的先后 = 这场最早那天的先后 */
+    var order = [], map = {};
+    stops.forEach(function (s){
+      if(!map[s.g.id]){ map[s.g.id] = { g: s.g, days: [] }; order.push(s.g.id); }
+      map[s.g.id].days.push(s);
+    });
+
+    var total = 0;
+    stops.forEach(function (s){ total += (s.d.items || []).length; });
+    var dayN = {};
+    stops.forEach(function (s){ dayN[s.d.date] = 1; });
+    var dayCount = Object.keys(dayN).length;
+
+    /* 6 科上限：按天整段装，装不下就停，剩下的只报个数 */
+    var used = 0, cut = false, body = '';
+    for(var k = 0; k < order.length && !cut; k++){
+      var box = map[order[k]];
+      var sec = '';
+      for(var i = 0; i < box.days.length; i++){
+        var s = box.days[i];
+        var items = s.d.items || [];
+        if(used + items.length > EXAM_LIMIT){ cut = true; break; }
+        used += items.length;
+        sec += '<div class="bhex-date' + (s.past ? ' bhex-past' : '') + '">'
+          + esc0(examDayLabel(s.d.date, s.d.date === BIG.examList.today)) + '</div>';
+        items.forEach(function (it){
+          sec += '<div class="bhex-row' + (s.past ? ' bhex-off' : '') + '">'
+            + '<span class="bhex-sub">' + esc0(it.name || '考试') + '</span>'
+            + '<span class="bhex-time">' + esc0(it.start || '') + '–' + esc0(it.end || '') + '</span>'
+            + '</div>';
+        });
+      }
+      if(!sec) continue;
+      body += order.length > 1
+        ? '<div class="bhex-m"><div class="bhex-mname">' + esc0(box.g.name) + '</div>' + sec + '</div>'
+        : sec;
+    }
+    if(!body) return '';
+
     var head = '<div class="bhex-h">'
-      + '<b>' + (multi ? '考试安排' : '今日考试') + '</b>'
-      + '<span>' + total + ' 场' + (multi ? ' · ' + days.length + ' 天' : '') + '</span>'
+      + '<b>' + esc0(order.length > 1 ? examHeadTitle(stops) : map[order[0]].g.name) + '</b>'
+      + '<span>' + total + ' 场' + (dayCount > 1 ? ' · ' + dayCount + ' 天' : '') + '</span>'
       + '</div>';
 
-    var body = days.map(function (d){
-      var items = d.items || [];
-      /* v4.10.8：一整天的场次都属于同一场考试时，把考试名称提到这一天的小标题里，
-         省得每一行都重复一遍；同一天混着几场考试，才在行尾标名字。 */
-      var one = (items.length && items.every(function (x){ return x.major === items[0].major; }))
-        ? String(items[0].major || '') : '';
-      var cap = '';
-      if(one){
-        cap = '<div class="bhex-day">'
-          + (multi ? esc0(examDayLabel(d.date, !!d.isToday)) + ' · ' : '')
-          + '<i class="bhex-day-m">' + esc0(one) + '</i></div>';
-      }else if(multi){
-        cap = '<div class="bhex-day">' + esc0(examDayLabel(d.date, !!d.isToday)) + '</div>';
-      }
-      var rows = items.map(function (it){
-        return '<div class="bhex-row' + (d.isToday ? '' : ' bhex-off') + '">'
-          + '<span class="bhex-sub">' + esc0(it.name || '考试') + '</span>'
-          + (one ? '' : '<span class="bhex-mj">' + esc0(it.major || '') + '</span>')
-          + '<span class="bhex-time">' + esc0(it.start || '') + '–' + esc0(it.end || '') + '</span>'
-          + '</div>';
-      }).join('');
-      return cap + rows;
-    }).join('');
+    if(cut && total > used){
+      body += '<div class="bhex-more">还有 ' + (total - used) + ' 科 · 前面的考完自动补上</div>';
+    }
 
     return '<div class="bhex" id="bhwExam">' + head + body + '</div>';
   }
@@ -1471,17 +1561,105 @@
   }
   BIG.examPaint = paintExam;
 
-  /* -------- 考试看板（v4.10.8）--------
-     站主原话（2026-11-08）：
-       「新增考试那里改成考试看板，我可以一键查看所有的考试数据，考试数据最右边有个
-         加号，点一下把我点的那一次考试放到作业看板上……最顶上就是前往考试看板。」
-     所以这一块只做两件事：把上游排好的考试全列出来、让站主挑哪一场进作业看板。
-     站内**不写回**上游，点加号只是在本站记一条「这场要显示」。 */
+  /* -------- 考试看板（v4.10.10）--------
+     站主原话：
+       「我可以一键查看所有的考试数据……最顶上就是前往考试看板」
+       「我建议是按照时间去分类，顶上可以筛选时间段：这周、下周、这个月、下个月、
+         某个学期」
+       「大考分了几天的话，给他列到同一个考试里面，不要单独列」
+       「考试的具体信息我是可以折叠的，类似成绩分析那样，只显示考试名称，
+         点击箭头之后才展示具体的」
+       「前端和后端都能实时刷新……这些都要用缓存，即使没有网络也可以读取之前的缓存」
+     所以这一块做四件事：筛档位、折展开、三档挑选、刷新与缓存。 */
 
-  BIG.examList = { items: [], base: '', title: '', cls: '', today: '', loading: false };
+  var EXAM_SCOPES = [
+    { id: 'week', label: '本周' },
+    { id: 'next', label: '下周' },
+    { id: 'month', label: '本月' },
+    { id: 'nmonth', label: '下月' },
+    { id: 'term', label: '本学期' },
+    { id: 'all', label: '全部' },
+  ];
+
+  function examScopeLabel(id){
+    for(var i = 0; i < EXAM_SCOPES.length; i++){
+      if(EXAM_SCOPES[i].id === id) return EXAM_SCOPES[i].label;
+    }
+    return '';
+  }
+
+  function examScopeRange(id){
+    var t = new Date();
+    var y = t.getFullYear(), m = t.getMonth(), d = t.getDate();
+    var mon = new Date(y, m, d - ((t.getDay() + 6) % 7));
+    var pad = function (n){ return (n < 10 ? '0' : '') + n; };
+    var fmt = function (x){ return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()); };
+    var add = function (x, n){ return new Date(x.getFullYear(), x.getMonth(), x.getDate() + n); };
+    if(id === 'week') return [fmt(mon), fmt(add(mon, 6))];
+    if(id === 'next') return [fmt(add(mon, 7)), fmt(add(mon, 13))];
+    if(id === 'month') return [fmt(new Date(y, m, 1)), fmt(new Date(y, m + 1, 0))];
+    if(id === 'nmonth') return [fmt(new Date(y, m + 1, 1)), fmt(new Date(y, m + 2, 0))];
+    if(id === 'term'){
+      var tr = BIG.examList.term || {};
+      if(tr.start && tr.end) return [tr.start, tr.end];
+    }
+    return ['0000-01-01', '9999-12-31'];
+  }
+
+  /** 默认停在本周；本周没考试就自动跳到最近有考试的那一档 */
+  function examPickScope(){
+    var L = BIG.examList;
+    var today = L.today || examToday();
+    var dates = [];
+    (L.groups || []).forEach(function (g){
+      (g.days || []).forEach(function (d){ dates.push(d.date); });
+    });
+    if(!dates.length) return 'all';
+    dates.sort();
+    var next = '';
+    for(var i = 0; i < dates.length; i++){
+      if(dates[i] >= today){ next = dates[i]; break; }
+    }
+    if(!next) next = dates[dates.length - 1];
+    for(var k = 0; k < EXAM_SCOPES.length; k++){
+      var r = examScopeRange(EXAM_SCOPES[k].id);
+      if(next >= r[0] && next <= r[1]) return EXAM_SCOPES[k].id;
+    }
+    return 'all';
+  }
+
+  function examFilter(scope){
+    var r = examScopeRange(scope);
+    var out = [];
+    (BIG.examList.groups || []).forEach(function (g){
+      var ds = (g.days || []).filter(function (d){ return d.date >= r[0] && d.date <= r[1]; });
+      if(!ds.length) return;
+      out.push({ g: g, days: ds });
+    });
+    return out;
+  }
+
+  function examPinBtn(scope, id, on, label, auto){
+    /* 今天本来就会自动显示的，给了按钮反而误导：点了取消也还在。直接标「自动」 */
+    if(auto){
+      return '<span class="bex-auto" title="今天本来就会显示，无需挑选">自动</span>';
+    }
+    return '<button type="button" class="bex-add' + (on ? ' on' : '') + '"'
+      + ' data-pin="' + esc0(scope + ':' + id) + '" data-on="' + (on ? '0' : '1') + '"'
+      + ' title="' + (on ? '已在作业看板，点击移出' : '放到作业看板') + '">'
+      + (on ? '✓ ' : '＋ ') + esc0(label) + '</button>';
+  }
+  function examPinDot(id, on){
+    return '<button type="button" class="bex-dot' + (on ? ' on' : '') + '"'
+      + ' data-pin="' + esc0('item:' + id) + '" data-on="' + (on ? '0' : '1') + '"'
+      + ' title="' + (on ? '已在作业看板，点击移出' : '放到作业看板') + '">'
+      + (on ? '✓' : '＋') + '</button>';
+  }
 
   BIG.examPanel = function (){
     if(document.getElementById('bexMask')) return;
+    BIG.examScope = '';
+    BIG.examOpen = {};
     var mask = document.createElement('div');
     mask.className = 'bex-mask';
     mask.id = 'bexMask';
@@ -1491,15 +1669,28 @@
       +     '<div class="bex-t">考试看板</div>'
       +     '<a class="bex-go" id="bexGo" href="https://examboard.dpdns.org" target="_blank" rel="noopener">前往考试看板 ↗</a>'
       +   '</div>'
+      +   '<div class="bex-tabs" id="bexTabs">'
+      +     EXAM_SCOPES.map(function (s){
+              return '<button type="button" class="bex-tab" data-scope="' + s.id + '">' + s.label + '</button>';
+            }).join('')
+      +     '<button type="button" class="bex-bulk" id="bexBulk">＋本周</button>'
+      +   '</div>'
       +   '<p class="bex-tip" id="bexTip">正在读取考试数据…</p>'
       +   '<div class="bex-list" id="bexList"></div>'
       +   '<div class="bex-btns">'
+      +     '<button type="button" class="bex-btn ghost" id="bexReload">刷新</button>'
       +     '<button type="button" class="bex-btn ghost" onclick="BIG.examPanelClose()">关闭</button>'
       +   '</div>'
       + '</div>';
     mask.addEventListener('click', function (e){ if(e.target === mask) BIG.examPanelClose(); });
     document.body.appendChild(mask);
-    BIG.examPanelLoad();
+
+    /* 先在缓存上画一遍，再回源 —— 断网也立刻有东西看。
+       没缓存时先显示「正在读取」，不要闪一下「没有考试」。 */
+    BIG.examLoading = true;
+    examPanelPaint();
+    BIG.examLoading = false;
+    BIG.examPanelLoad(true);
   };
 
   BIG.examPanelClose = function (){
@@ -1507,107 +1698,213 @@
     if(m && m.parentNode) m.parentNode.removeChild(m);
   };
 
-  BIG.examPanelLoad = function (){
+  function examReloadBtn(busy){
+    var b = $('bexReload');
+    if(!b) return;
+    b.disabled = !!busy;
+    b.textContent = busy ? '刷新中…' : '刷新';
+  }
+
+  /** fresh=true 时绕开 api 的 3 分钟缓存，让后端真的回上游问一次 */
+  BIG.examPanelLoad = function (fresh){
+    if(BIG.examLoading) return;
+    BIG.examLoading = true;
+    examReloadBtn(true);
     var tip = $('bexTip');
-    if(tip) tip.textContent = '正在读取考试数据…';
-    api('/exams?action=list').then(function (j){
-      BIG.examList = {
-        items: (j && Array.isArray(j.items)) ? j.items : [],
-        base: String((j && j.base) || ''),
-        title: String((j && j.title) || ''),
-        cls: String((j && j.cls) || ''),
-        today: String((j && j.today) || examTodayLocal()),
-      };
+    if(tip && !BIG.examList.groups.length) tip.textContent = '正在读取考试数据…';
+    api('/exams?action=list' + (fresh ? '&fresh=1' : '')).then(function (j){
+      examApply(j, false);
+      BIG.examLoading = false;
+      examReloadBtn(false);
       examPanelPaint();
+      paintExam();
     }).catch(function (e){
-      var box = $('bexList');
-      if(tip) tip.textContent = '读取失败：' + String((e && e.message) || '网络不可用');
-      if(box) box.innerHTML = '<div class="bex-empty">连不上本站后端，稍后再试。</div>';
+      BIG.examLoading = false;
+      examReloadBtn(false);
+      if(!BIG.examList.groups.length){
+        var c = examCacheGet();
+        if(c) examApply(c, true);
+      }
+      examPanelPaint(String((e && e.message) || ''));
     });
   };
 
-  function examPanelPaint(){
-    var box = $('bexList'); if(!box) return;
-    var L = BIG.examList, items = L.items || [];
+  function examAgo(ms){
+    var n = Math.max(0, Math.round((Date.now() - ms) / 60000));
+    if(n < 1) return '刚刚';
+    if(n < 60) return n + ' 分钟前';
+    var h = Math.round(n / 60);
+    if(h < 24) return h + ' 小时前';
+    return Math.round(h / 24) + ' 天前';
+  }
+
+  function examPanelPaint(err){
+    var box = $('bexList');
+    if(!box) return;
+    var L = BIG.examList;
     var tip = $('bexTip');
     var go = $('bexGo');
     if(go && L.base) go.href = L.base;
 
-    if(!items.length){
-      if(tip) tip.textContent = '考试看板上暂时没有排好的考试';
-      box.innerHTML = '<div class="bex-empty">暂无可显示的考试。</div>';
+    if(!BIG.examScope) BIG.examScope = examPickScope();
+    var scope = BIG.examScope;
+
+    /* 顶栏档位 */
+    Array.prototype.forEach.call(document.querySelectorAll('#bexTabs [data-scope]'), function (b){
+      b.className = 'bex-tab' + (b.getAttribute('data-scope') === scope ? ' on' : '');
+    });
+    var bulk = $('bexBulk');
+    if(bulk){
+      bulk.textContent = '＋' + examScopeLabel(scope);
+      /* 「全部」档不给批量：一键把整份考试表塞进作业看板太危险 */
+      bulk.style.display = scope === 'all' ? 'none' : '';
+    }
+
+    if(!L.groups.length){
+      /* 还在读的时候别先报「没有考试」，否则每次打开都闪一下空态 */
+      if(BIG.examLoading && !err){
+        if(tip) tip.textContent = '正在读取考试数据…';
+        box.innerHTML = '';
+        return;
+      }
+      if(tip){
+        tip.textContent = err
+          ? '连不上本站后端（' + err + '）。有缓存时会先显示上次的数据。'
+          : '考试看板上暂时没有排好的考试。';
+      }
+      box.innerHTML = '<div class="bex-empty">' + (err ? '暂时读不到考试数据。' : '暂时没有考试。') + '</div>';
       return;
     }
 
-    var today = L.today || examTodayLocal();
-    var shown = 0;
-    items.forEach(function (it){ if(it.pinned) shown++; });
+    var rows = examFilter(scope);
+    var onCnt = 0, allCnt = 0;
+    (L.groups || []).forEach(function (g){ onCnt += g.onCnt || 0; allCnt += g.count || 0; });
+
     if(tip){
-      tip.textContent = '共 ' + items.length + ' 场' + (L.cls ? ' · ' + L.cls : '')
-        + (shown ? ' · 已挑 ' + shown + ' 场' : '')
-        + '。点右侧加号把这一场放到作业看板。';
+      var inScope = 0;
+      rows.forEach(function (row){ row.days.forEach(function (d){ inScope += d.items.length; }); });
+      var when = L.cacheAt ? ' · 数据 ' + examAgo(L.cacheAt) : '';
+      tip.textContent = (L.cls ? L.cls + ' · ' : '') + '共 ' + allCnt + ' 场'
+        + (inScope !== allCnt ? '（' + examScopeLabel(scope) + ' ' + inScope + ' 场）' : '')
+        + (onCnt ? ' · 已在看板 ' + onCnt + ' 场' : '')
+        + when
+        + (err ? '（离线，显示的是缓存）' : '');
     }
 
-    var groups = {}, order = [];
-    items.forEach(function (it){
-      if(!groups[it.date]){ groups[it.date] = []; order.push(it.date); }
-      groups[it.date].push(it);
-    });
-    order.sort();
+    if(!rows.length){
+      box.innerHTML = '<div class="bex-empty">' + examScopeLabel(scope) + '没有考试。换个时间段看看。</div>';
+      return;
+    }
 
-    var html = '';
-    order.forEach(function (d){
-      var arr = groups[d];
-      var one = (arr.length && arr.every(function (x){ return x.major === arr[0].major; }))
-        ? String(arr[0].major || '') : '';
-      html += '<div class="bex-g' + (d === today ? ' today' : '') + '">'
-        + esc0(examDayLabel(d, d === today))
-        + (one ? ' · ' + esc0(one) : '')
+    box.innerHTML = rows.map(function (row){
+      var g = row.g;
+      var open = !!BIG.examOpen[g.id];
+      var total = 0, on = 0;
+      row.days.forEach(function (d){ total += d.items.length; on += d.onCnt; });
+      var head = '<div class="bex-gh">'
+        + '<button type="button" class="bex-caret' + (open ? ' open' : '') + '" data-open="' + esc0(g.id) + '" aria-label="展开">'
+        +   '<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">'
+        +     '<path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+        +   '</svg>'
+        + '</button>'
+        + '<span class="bex-gn">' + esc0(g.name) + '</span>'
+        + '<span class="bex-gm">' + esc0(examMD(g.start)) + (g.daysN > 1 ? '–' + esc0(examMD(g.end)) : '') + ' · ' + (g.count || total) + ' 场</span>'
+        + examPinBtn('major', g.id, g.allOn === true, '整场', g.auto === true)
         + '</div>';
-      arr.forEach(function (it){
-        var btn;
-        if(it.pinned){
-          btn = '<button type="button" class="bex-it-add on" data-pin="' + esc0(it.id)
-            + '" data-on="0" title="已在作业看板，点击移出">✓</button>';
-        }else if(it.auto){
-          btn = '<span class="bex-it-on" title="今天自动显示，无需挑选">已显示</span>';
-        }else{
-          btn = '<button type="button" class="bex-it-add" data-pin="' + esc0(it.id)
-            + '" data-on="1" title="放到作业看板">＋</button>';
-        }
-        html += '<div class="bex-it' + (it.pinned ? ' pinned' : '') + '">'
-          + '<span class="bex-it-sub">' + esc0(it.name) + '</span>'
-          + '<span class="bex-it-tm">' + esc0(it.start) + '–' + esc0(it.end) + '</span>'
-          + (one ? '' : '<span class="bex-it-mj">' + esc0(it.major) + '</span>')
-          + btn
-          + '</div>';
-      });
-    });
-    box.innerHTML = html;
+      if(!open) return '<div class="bex-grp">' + head + '</div>';
 
-    Array.prototype.forEach.call(box.querySelectorAll('[data-pin]'), function (b){
+      var body = row.days.map(function (d){
+        var line = '<div class="bex-day">'
+          + '<span class="bex-dd">' + esc0(examDayLabel(d.date, d.date === L.today)) + '</span>'
+          + examPinBtn('day', g.id + '|' + d.date, d.allOn, '这天', g.auto === true)
+          + '</div>';
+        return line + d.items.map(function (it){
+          return '<div class="bex-it' + (it.pin ? ' pinned' : '') + '">'
+            + '<span class="bex-it-sub">' + esc0(it.name) + '</span>'
+            + '<span class="bex-it-tm">' + esc0(it.start) + '–' + esc0(it.end) + '</span>'
+            + (g.auto ? '' : examPinDot(it.id, it.pin))
+            + '</div>';
+        }).join('');
+      }).join('');
+      return '<div class="bex-grp open">' + head + '<div class="bex-gb">' + body + '</div></div>';
+    }).join('');
+
+    Array.prototype.forEach.call(box.querySelectorAll('[data-open]'), function (b){
       b.onclick = function (){
-        BIG.examPin(b.getAttribute('data-pin'), b.getAttribute('data-on') === '1', b);
+        var id = b.getAttribute('data-open');
+        BIG.examOpen[id] = !BIG.examOpen[id];
+        examPanelPaint();
       };
     });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-pin]'), function (b){
+      b.onclick = function (){
+        var raw = String(b.getAttribute('data-pin') || '');
+        var bar = raw.indexOf(':');
+        if(bar < 0) return;
+        BIG.examPin(raw.slice(0, bar), raw.slice(bar + 1), b.getAttribute('data-on') === '1', b);
+      };
+    });
+
+    /* 档位按钮 */
+    Array.prototype.forEach.call(document.querySelectorAll('#bexTabs [data-scope]'), function (b){
+      b.onclick = function (){
+        BIG.examScope = b.getAttribute('data-scope');
+        examPanelPaint();
+      };
+    });
+    if(bulk){
+      bulk.onclick = function (){ BIG.examBulk(); };
+    }
+    var rl = $('bexReload');
+    if(rl) rl.onclick = function (){ BIG.examPanelLoad(true); };
   }
 
-  /** 挑一场上/下作业看板。只改本站的挑选清单，考试看板那边一个字都不动 */
-  BIG.examPin = function (id, on, btn){
+  /** 挑一场 / 一天 / 一整场。只改本站的挑选清单，考试看板那边一个字都不动 */
+  BIG.examPin = function (scope, id, on, btn){
     if(!id || BIG.exam.busy) return;
     BIG.exam.busy = true;
-    var old = btn ? btn.textContent : '';
-    if(btn){ btn.disabled = true; btn.textContent = '…'; }
-    api('/exams?action=pin', { method: 'POST', body: { action: 'pin', id: id, on: !!on } })
+    var old = btn ? btn.innerHTML : '';
+    if(btn){ btn.disabled = true; }
+    api('/exams?action=pin', { method: 'POST', body: { action: 'pin', scope: scope, id: id, on: !!on } })
       .then(function (){
         BIG.exam.busy = false;
-        BIG.examPanelLoad();      /* 按钮状态以服务器为准，不在本地猜 */
-        BIG.examLoad();           /* 作业看板那一块跟着变 */
+        BIG.examPanelLoad(true);    /* 状态以服务器为准，不在本地猜；带 fresh 绕开 3 分钟缓存 */
         if(typeof toast === 'function') toast(on ? '已放到作业看板' : '已从作业看板移出');
       })
       .catch(function (e){
         BIG.exam.busy = false;
-        if(btn){ btn.disabled = false; btn.textContent = old; }
+        if(btn){ btn.disabled = false; btn.innerHTML = old; }
+        if(typeof toast === 'function') toast(String((e && e.message) || '操作失败'));
+      });
+  };
+
+  /** 一键把当前档位的考试全加上（本周 / 下周 / 本月 / 下月 / 本学期） */
+  BIG.examBulk = function (){
+    var scope = BIG.examScope;
+    if(!scope || scope === 'all' || BIG.exam.busy) return;
+    var r = examScopeRange(scope);
+    var n = 0;
+    examFilter(scope).forEach(function (row){
+      row.days.forEach(function (d){ n += d.items.length; });
+    });
+    if(!n){
+      if(typeof toast === 'function') toast(examScopeLabel(scope) + '没有考试');
+      return;
+    }
+    BIG.exam.busy = true;
+    var b = $('bexBulk');
+    var old = b ? b.textContent : '';
+    if(b){ b.disabled = true; b.textContent = '正在加入…'; }
+    api('/exams?action=bulk', { method: 'POST', body: { action: 'bulk', from: r[0], to: r[1], on: true } })
+      .then(function (){
+        BIG.exam.busy = false;
+        if(b){ b.disabled = false; b.textContent = old; }
+        if(typeof toast === 'function') toast('已把' + examScopeLabel(scope) + ' ' + n + ' 场放到作业看板');
+        BIG.examPanelLoad(true);
+      })
+      .catch(function (e){
+        BIG.exam.busy = false;
+        if(b){ b.disabled = false; b.textContent = old; }
         if(typeof toast === 'function') toast(String((e && e.message) || '操作失败'));
       });
   };
