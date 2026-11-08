@@ -13479,12 +13479,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.12 版本号升到 4.10.12（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.12'/.test(idxV) && /SITE_VER = '4\.10\.12'/.test(swV)
-    && /API_VER = '4\.10\.12'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.12'/.test(admV));
-  t('★v4.10.12 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.12');
+  t('★v4.10.13 版本号升到 4.10.13（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.13'/.test(idxV) && /SITE_VER = '4\.10\.13'/.test(swV)
+    && /API_VER = '4\.10\.13'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.13'/.test(admV));
+  t('★v4.10.13 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.13');
   t('★v4.10.12 侧栏今日事项每秒重算剩余时间（sideTick 进同一个 1 秒定时器）',
     /function sideTick\(\)/.test(bigV) && /BIG\.sideTick = sideTick/.test(bigV)
     && /sideTick\(\);/.test(bigV) && /tt\.kind !== 'holiday'/.test(bigV));
@@ -13615,11 +13615,13 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /scCacheGet\('board', ex\.id\)/.test(appV));
 
     /* ④ 时钟改版 */
-    t('★v4.10.5 时钟与计时并排放在顶上（gap 4ch）',
-      /id="topRow"/.test(clock5) && /gap:4ch/.test(clock5)
-      && /class="clk-col"/.test(clock5) && /class="tm-col"/.test(clock5));
-    t('★v4.10.5 计时区常驻，切换时钟不影响计时',
-      /k === 'timer'\).*className = 'view on'/.test(clock5) || /if\(k === 'timer'\)\{ \$\(VIEWS\[k\]\)\.className = 'view on'/.test(clock5));
+    t('★v4.10.13 时钟与计时互斥：点数字 / 翻页才显示大时钟',
+      /id="topRow"/.test(clock5) && /class="clk-col"/.test(clock5) && /class="tm-col"/.test(clock5)
+      && /className = 'view' \+ \(k === m \? ' on' : ''\)/.test(clock5));
+    t('★v4.10.13 计时页面右上角有一枚小的当前时间（只在计时类模式出现）',
+      /id="tmNow"/.test(clock5) && /body\.tm-on #tmNow\{display:flex\}/.test(clock5)
+      && /body\.bare #tmNow\{display:none\}/.test(clock5)
+      && /min-width:96px/.test(clock5) && /tn\.textContent = two\(hh\)/.test(clock5));
     t('★v4.10.5 默认打开是时钟界面（不再默认计时）',
       /applyMode\(modeFromUrl\(\) \|\| \(\(CFG\.mode === 'flip'\) \? 'flip' : 'clock'\)\)/.test(clock5));
     t('★v4.10.5 背景色首屏恢复（不会先闪一下默认色）',

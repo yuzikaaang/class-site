@@ -51,7 +51,12 @@ t('顶层两个模式：时钟 / 计时', modes.length === 2 && modes.includes('
 await goTop(page, 'clock');
 await page.waitForTimeout(300);
 const clockTabs = await page.evaluate(() => [...document.querySelectorAll('#subTabs button')].map((b) => b.textContent));
-t('时钟页上面是「数字 / 翻页」', clockTabs.length === 2 && clockTabs[0] === '数字' && clockTabs[1] === '翻页', JSON.stringify(clockTabs));
+/* v4.10.13：五个子模式排成一行（数字 / 翻页 | 正计时 / 倒计时 / 番茄钟），
+   中间一道竖线只是分组，点哪边就整个切过去。 */
+t('子标签是「数字 / 翻页 / 正计时 / 倒计时 / 番茄钟」五个',
+  clockTabs.length === 5 && clockTabs[0] === '数字' && clockTabs[1] === '翻页'
+  && clockTabs[2] === '正计时' && clockTabs[3] === '倒计时' && clockTabs[4] === '番茄钟',
+  JSON.stringify(clockTabs));
 
 /* 2. 数字时钟：时间格式 + 日期 + 农历 */
 await goSub(page, 'clock');
@@ -240,7 +245,8 @@ const pm0 = await page.evaluate(() => ({
   btn: document.getElementById('timerBtn').textContent,
   mark: getComputedStyle(document.getElementById('markBtn')).display,
 }));
-t('计时页上面是「正计时 / 倒计时 / 番茄钟」', pm0.tabs.join('/') === '正计时/倒计时/番茄钟', JSON.stringify(pm0.tabs));
+t('计时页那几个子标签仍在同一行（正计时 / 倒计时 / 番茄钟）',
+  pm0.tabs.join('/').indexOf('正计时/倒计时/番茄钟') > 0, JSON.stringify(pm0.tabs));
 t('刚进来是正计时 00:00', pm0.time.indexOf('00:00') === 0, pm0.time);
 t('正计时才有「记一笔」', pm0.mark !== 'none', pm0.mark);
 t('还没开始时按钮是「开始」', /开始/.test(pm0.btn), pm0.btn);

@@ -39,34 +39,45 @@ body.bg-gray{background:#2b2b2e;color:#f2f2f2}
 .view{display:none;width:100%;text-align:center}
 .view.on{display:block}
 
-/* ---------- v4.10.5：顶上左右两栏（左时钟 / 右计时，中间隔 4 个字宽） ---------- */
+/* ---------- v4.10.13：时钟与计时回到互斥 ----------
+   站主第 3 条（v4.10.5）原本让两栏并排常驻；站主看过真机之后改口：
+   「只有点击数字或翻页的时候才显示左边这个时钟」，选正计时 / 倒计时 / 番茄钟时
+   只留计时器，不再两边都亮。于是这里退回单栏居中，字号也回到各自的默认档，
+   不再按半幅压缩。计时页面右上角那个小的当前时间由 #tmNow 负责。 */
 #topRow{display:flex;align-items:center;justify-content:center;
-  gap:4ch;                     /* 站主原话：「隔大概四个字符那么宽就可以了」 */
   width:100%;padding:0 2vw;box-sizing:border-box}
-#topRow .clk-col{flex:0 1 auto;min-width:0;text-align:center}
-#topRow .tm-col{flex:0 0 auto;max-width:52vw;text-align:center}
+#topRow .clk-col,#topRow .tm-col{flex:0 1 auto;min-width:0;max-width:96vw;text-align:center}
 #topRow .view{width:auto}
-/* 并排之后每边只占半幅，字号按比例收一点 —— 档位（小/中/大/超大）的语义不变 */
-#topRow #bigTime{font-size:calc(var(--fs) * .58)}
-#topRow #timerTime{font-size:calc(var(--fs) * .46)}
 /* 翻页字号独立可调（站主第 3 条）：--fwk 是 5 档系数，由「翻页字号」按钮改，
-   跟数字时钟的 4 档字号（--fs）完全两套，互不影响。 */
-#topRow #flipView{--fw:calc(min(15vw, 34vh, 200px) * var(--fwk, 1))}
-#topRow .actions{margin-top:1.8vh}
-#topRow .actions button{min-width:6.4vw;height:5.4vh;min-height:38px;padding:0 1.1vw;
-  margin:.4vh .35vw;font-size:1.05vw}
-#topRow .subj-row{gap:4px;margin-top:1.2vh}
-#topRow .subj-row button{padding:4px 9px;font-size:.76rem}
-#topRow .doing-inp{max-width:100%;margin-top:1vh}
-#topRow #timerHint{font-size:.72rem;margin-top:1vh}
-@media (max-width:880px){
-  /* 手机 / 窄窗口：左右排会挤爆，改成上下排，间距仍是 4 个字宽的视觉量 */
-  #topRow{flex-direction:column;gap:2.2vh}
-  #topRow .tm-col{max-width:96vw}
-  #topRow #bigTime{font-size:calc(var(--fs) * .84)}
-  #topRow #timerTime{font-size:calc(var(--fs) * .62)}
-  #topRow #flipView{--fw:calc(min(24vw, 40vh, 220px) * var(--fwk, 1))}
-  #topRow .actions button{min-width:18vw;font-size:3.6vw;height:42px}
+   跟数字时钟的 4 档字号（--fs）完全两套，互不影响。
+   注意「关掉秒」时卡片会放大（下面 #flipView.nosec 那条），这里的选择器带了
+   #topRow，特异性更高，所以关秒的放大要在这里补一份，否则会被这条压住。 */
+#topRow #flipView{--fw:calc(min(24vw, 54vh, 300px) * var(--fwk, 1))}
+#topRow #flipView.nosec{--fw:calc(min(38vw, 58vh, 430px) * var(--fwk, 1))}
+
+/* 计时模式下右上角那枚小的当前时间：一行、淡一点，宽度约等于工具栏一个按钮。
+   只做状态提示，不接任何点击，不跟计时器抢注意力。 */
+#tmNow{
+  position:fixed;right:16px;top:calc(62px + env(safe-area-inset-top));z-index:30;
+  display:none;align-items:center;justify-content:center;
+  min-width:96px;height:32px;padding:0 12px;border-radius:11px;
+  font-size:15px;font-weight:600;letter-spacing:.02em;font-variant-numeric:tabular-nums;
+  color:inherit;opacity:.62;background:rgba(0,0,0,.045);
+  border:1px solid rgba(0,0,0,.06);pointer-events:none;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+}
+body.bg-dark #tmNow,body.bg-black #tmNow,body.bg-navy #tmNow,
+body.bg-green #tmNow,body.bg-gray #tmNow{
+  background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12)}
+body.tm-on #tmNow{display:flex}
+body.bare #tmNow{display:none}
+/* 窄屏（手机竖屏）：顶部一行放不下「数字 / 翻页 | 正计时 / 倒计时 / 番茄钟」
+   这五个子标签，会被右边的「记录」压掉半个字。这里把子标签整体挪到第二行，
+   小时间挪到第一行中间偏右（返回和记录之间），内容区相应往下让。 */
+@media (max-width:560px){
+  #tmNow{top:calc(16px + env(safe-area-inset-top));right:78px;
+    min-width:80px;height:32px;font-size:14px;padding:0 8px}
+  #stage{padding-top:calc(104px + env(safe-area-inset-top))}
 }
 
 /* ---------- 字号档位（4 档，全部由 --fs 推导） ---------- */
@@ -684,6 +695,14 @@ body.bg-dark #subTabs,body.bg-black #subTabs,body.bg-navy #subTabs,body.bg-green
 body.bg-dark #subTabs button.on,body.bg-black #subTabs button.on,body.bg-navy #subTabs button.on,
 body.bg-green #subTabs button.on,body.bg-gray #subTabs button.on{background:#f5f5f5;color:#111}
 body.bare #subTabs{display:none}
+/* v4.10.13 窄屏：顶部一行放不下「数字 / 翻页 | 正计时 / 倒计时 / 番茄钟」这五个标签，
+   会被右边的「记录」压掉半个字。这里把子标签整体挪到第二行，字号收小一点。
+   （必须写在 #subTabs 定义之后才盖得住，媒体查询本身不提高优先级。） */
+@media (max-width:560px){
+  #subTabs{top:calc(60px + env(safe-area-inset-top));max-width:calc(100vw - 16px);
+    gap:2px;padding:3px}
+  #subTabs button{height:28px;padding:0 9px;font-size:12px}
+}
 
 #tmHead{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:1.2vh;
   font-size:calc(var(--fs) * .11);opacity:.6;letter-spacing:.02em}
@@ -762,6 +781,9 @@ body.bare #subjRow,
 body.bare #doingInp,
 body.bare #timerView .actions{display:none}
 body.bare #timerTime{cursor:pointer}
+/* v4.10.13：极简模式（开始计时后只剩数字）整块回到屏幕正中。
+   v4.10.5 把内容统一顶到上面之后，这条一直缺着，数字会偏在高处。 */
+body.bare #stage{justify-content:center;padding-top:0}
 
 /* 提醒设置行 */
 .al-row{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px;text-align:left}
@@ -811,10 +833,9 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
   <div id="subTabs"></div>
   <div id="modeName"></div>
 
-  <!-- v4.10.5（站主第 3 条）：「把时钟和计时全部放在顶上，左边是时钟（可以切换数字和翻页），
-       右边是计时（正计时、倒计时、番茄钟），中间隔大概四个字符那么宽」。
-       所以这里改成一行两栏：左栏时钟、右栏计时，CSS 用 gap:4ch 隔开。
-       计时区**常驻显示**，不再和时钟互斥切换（原来的 .view.on 只管左边时钟那两个）。 -->
+  <!-- v4.10.13：时钟与计时互斥 —— 点「数字 / 翻页」只显示大时钟，
+       点「正计时 / 倒计时 / 番茄钟」只显示计时器，两者不再并排挤在一行。
+       计时页面的当前时间退成右上角一枚小字（见下面的 #tmNow）。 -->
   <div id="topRow">
     <div class="clk-col">
       <!-- 时钟：数字 -->
@@ -837,7 +858,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 
     <div class="tm-col">
       <!-- 计时：正计时 / 倒计时 / 番茄钟 -->
-  <div class="view on" id="timerView">
+  <div class="view" id="timerView">
     <div id="timerTime">00:00</div>
     <div id="tmBar"><i id="tmBarIn"></i></div>
     <div id="tmHead"><span id="tmRound"></span><span id="tmPhase" class="hide">专注</span></div>
@@ -866,6 +887,9 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 
 <a id="back" href="./index.html" title="返回班级服务站">← 返回</a>
 <button id="logBtn" title="看看今天用了多久">记录</button>
+<!-- v4.10.13：计时页面右上角的当前时间。只做状态提示，宽度约等于一个工具栏按钮，
+     字号比计时数字小得多，不抢注意力；只在计时类模式下出现。 -->
+<div id="tmNow" aria-hidden="true">00:00:00</div>
 
 <aside id="logPanel" aria-hidden="true">
   <div class="lg-head">
@@ -1055,7 +1079,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=41012" defer></script>
+<script src="./fs-keep.js?v=41013" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -1201,9 +1225,8 @@ function paintSubTabs(){
   var box = $('subTabs');
   if(!box) return;
   box.innerHTML = '';
-  /* v4.10.5（站主第 3 条）：两栏同时显示之后，两组子模式也一起摆出来 ——
-     左边一组管时钟（数字 / 翻页），右边一组管计时（正计时 / 倒计时 / 番茄钟），
-     中间一道竖线分开，点哪组就切哪块，互不影响。 */
+  /* v4.10.13：五个子模式还是排成一行（左边两个管时钟、右边三个管计时），
+     中间一道竖线只是分组提示 —— 现在一次只亮一块，点哪边就整个切过去。 */
   function mk(k, label, on, fn){
     var b = document.createElement('button');
     b.textContent = label;
@@ -1235,15 +1258,14 @@ function paintSubTabs(){
 function applyMode(m){
   if(m === 'stop' || m === 'pomo') m = 'timer';
   CFG.mode = m; saveCfg();
-  /* v4.10.5（站主第 3 条）：计时区和时钟**同时**显示。
-     左边时钟永远在（只切「数字 / 翻页」），右边计时区一直亮着，
-     两栏之间由 CSS 的 gap:4ch 隔开。选中「计时」时左边就退回数字时钟。 */
-  var left = (m === 'timer') ? 'clock' : m;
+  /* v4.10.13：一次只亮一块。站主看过真机后改口 ——
+     「只有点击数字或翻页的时候才显示左边这个时钟」，正计时 / 倒计时 / 番茄钟
+     只留计时器，两边不再同时亮。计时模式下当前时间退到右上角的小字（#tmNow）。 */
   for(var k in VIEWS){
     if(!VIEWS.hasOwnProperty(k)) continue;
-    if(k === 'timer'){ $(VIEWS[k]).className = 'view on'; continue; }
-    $(VIEWS[k]).className = 'view' + (k === left ? ' on' : '');
+    $(VIEWS[k]).className = 'view' + (k === m ? ' on' : '');
   }
+  try{ document.body.classList[m === 'timer' ? 'add' : 'remove']('tm-on'); }catch(e){}
   $('modeBtn').textContent = MODE_NAME[m];
   var top = (m === 'timer') ? 'timer' : 'clock';
   var items = $('modeMenu').getElementsByTagName('button');
@@ -1251,7 +1273,7 @@ function applyMode(m){
     items[i].className = (items[i].getAttribute('data-m') === top) ? 'cur' : '';
   }
   $('modeMenu').className = '';
-  tickClock();   /* v4.10.5：三种模式都要画左栏的时钟 */
+  tickClock();   /* 右上角的小时间三种模式都要跟着走 */
   if(m === 'timer'){
     if(T.kind !== (CFG.tk || 'up')) tmSetKind(CFG.tk || 'up');
     else tmPaint();
@@ -1298,8 +1320,13 @@ function tickClock(){
   var hh = h;
   if(CFG.h12){ hh = h % 12; if(hh === 0) hh = 12; }
 
-  /* v4.10.5：计时模式下左栏照样显示数字时钟，所以这里不能只看 CFG.mode */
-  var cm = (CFG.mode === 'flip') ? 'flip' : 'clock';
+  /* v4.10.13：计时页面右上角那枚小时间，跟大时钟共用一个 tick；
+     另外两种模式（数字 / 翻页）它不显示，但照样写值，切过去就是准的。 */
+  var tn = $('tmNow');
+  if(tn) tn.textContent = two(hh) + ':' + two(m) + ':' + two(s);
+
+  /* 互斥之后这里只看 CFG.mode：计时模式不画时钟，省掉一轮没用的重排 */
+  var cm = CFG.mode;
   if(cm === 'clock'){
     $('bigTime').textContent = two(hh) + ':' + two(m) + ':' + two(s);
     var lu = lunarText(d);
@@ -3201,7 +3228,8 @@ function clockTick(){
   tickClock();
 }
 function loop(){
-  /* v4.10.5：计时区常驻 —— 不管左边在看时钟还是翻页，只要计时在跑就继续画 */
+  /* v4.10.13：计时器只在计时页面出现，但计时在后台照样走（切去看时钟不停表），
+     所以这里照旧一直画，切回来就是对的。 */
   if(T.run) tmPaint();
   requestAnimationFrame ? requestAnimationFrame(loop) : setTimeout(loop, 100);
 }
@@ -3657,18 +3685,21 @@ $('stage').ondblclick = function(e){
 };
 
 /* 键盘。
-   v4.10.5：计时区现在常驻显示，所以空格 / r / m 不再要求「先切到计时模式」——
-   看到计时器就能直接按，符合直觉。 */
+   v4.10.13：时钟和计时互斥之后，计时页面才看得见计时器 ——
+   在时钟页面直接按空格会让人「听见在跑、却看不见」，所以先自动切到计时再开始。
+   r / m 只在计时页面才有意义，别的时候不响应。 */
 document.onkeydown = function(e){
   var tag = (e.target && e.target.nodeName) || '';
   if(tag === 'INPUT') return;
   var k = e.key;
+  var inTimer = (CFG.mode === 'timer');
   if(k === ' '){ e.preventDefault();
+    if(!inTimer) applyMode('timer');
     if(T.run || T.paused) tmToggle(); else tmStart();
   }
   else if(k === 'f' || k === 'F'){ toggleFs(); }
-  else if(k === 'r' || k === 'R'){ tmReset(); }
-  else if(k === 'm' || k === 'M'){ tmMark(); }
+  else if(k === 'r' || k === 'R'){ if(inTimer) tmReset(); }
+  else if(k === 'm' || k === 'M'){ if(inTimer) tmMark(); }
   else if(k === '1') applyMode('clock');
   else if(k === '2') applyMode('flip');
   else if(k === '3') applyMode('timer');
