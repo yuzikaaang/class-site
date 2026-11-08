@@ -32,9 +32,11 @@ body.bg-gray{background:#2b2b2e;color:#f2f2f2}
 
 #stage{position:fixed;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;
   justify-content:flex-start;flex-direction:column;
-  /* v4.10.5（站主第 3 条）：时钟和计时都挪到最顶上，不再垂直居中 */
-  /* 顶上那排子模式是 fixed 在 12px 处、约 38px 高，内容要让开它 */
-  padding-top:calc(60px + env(safe-area-inset-top));box-sizing:border-box;
+  /* v4.10.14（站主）：「这些时钟都要居中，不要太偏上了」。
+     顶部留 60px 让开那排子标签，底部留 40px 给工具栏，余下的空间里由 #topRow
+     自己垂直居中 —— 这样上下留白差不多，视觉中心就在屏幕中间。 */
+  padding-top:calc(60px + env(safe-area-inset-top));
+  padding-bottom:calc(70px + env(safe-area-inset-bottom));box-sizing:border-box;
   overflow-y:auto;overflow-x:hidden}
 .view{display:none;width:100%;text-align:center}
 .view.on{display:block}
@@ -45,6 +47,7 @@ body.bg-gray{background:#2b2b2e;color:#f2f2f2}
    只留计时器，不再两边都亮。于是这里退回单栏居中，字号也回到各自的默认档，
    不再按半幅压缩。计时页面右上角那个小的当前时间由 #tmNow 负责。 */
 #topRow{display:flex;align-items:center;justify-content:center;
+  flex:1 1 auto;               /* 占满标签与工具栏之间那块地方，内容在里面垂直居中 */
   width:100%;padding:0 2vw;box-sizing:border-box}
 #topRow .clk-col,#topRow .tm-col{flex:0 1 auto;min-width:0;max-width:96vw;text-align:center}
 #topRow .view{width:auto}
@@ -77,7 +80,8 @@ body.bare #tmNow{display:none}
 @media (max-width:560px){
   #tmNow{top:calc(16px + env(safe-area-inset-top));right:78px;
     min-width:80px;height:32px;font-size:14px;padding:0 8px}
-  #stage{padding-top:calc(104px + env(safe-area-inset-top))}
+  #stage{padding-top:calc(104px + env(safe-area-inset-top));
+    padding-bottom:calc(104px + env(safe-area-inset-bottom))}
 }
 
 /* ---------- 字号档位（4 档，全部由 --fs 推导） ---------- */
@@ -501,9 +505,10 @@ body.f-serif{font-family:"Songti SC","SimSun",Georgia,serif}
   body.sz-3{--fs:min(25vw,230px)}
   body.sz-4{--fs:min(31vw,280px)}
 }
-/* 横屏：底部有工具栏，内容整体上移一点，别被压住 */
+/* 横屏：底部有工具栏，内容别被压住。
+   v4.10.14：这里原来是 13vh，等于把居中块硬抬了 40px（1920×1080 下），
+   站主看着就觉得偏上。现在上下留白固定（60 / 70），中心落在屏幕中间。 */
 @media (min-aspect-ratio: 1/1){
-  #stage{padding-bottom:13vh}
   #pomoPhase{margin-bottom:1.6vh}
   #pomoSet{margin-top:1.8vh}
   #pomoHint{margin-top:1.2vh}
@@ -783,7 +788,7 @@ body.bare #timerView .actions{display:none}
 body.bare #timerTime{cursor:pointer}
 /* v4.10.13：极简模式（开始计时后只剩数字）整块回到屏幕正中。
    v4.10.5 把内容统一顶到上面之后，这条一直缺着，数字会偏在高处。 */
-body.bare #stage{justify-content:center;padding-top:0}
+body.bare #stage{justify-content:center;padding-top:0;padding-bottom:0}
 
 /* 提醒设置行 */
 .al-row{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px;text-align:left}
@@ -1079,7 +1084,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=41013" defer></script>
+<script src="./fs-keep.js?v=41014" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）

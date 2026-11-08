@@ -13479,12 +13479,19 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.13 版本号升到 4.10.13（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.13'/.test(idxV) && /SITE_VER = '4\.10\.13'/.test(swV)
-    && /API_VER = '4\.10\.13'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.13'/.test(admV));
-  t('★v4.10.13 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.13');
+  t('★v4.10.14 版本号升到 4.10.14（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.14'/.test(idxV) && /SITE_VER = '4\.10\.14'/.test(swV)
+    && /API_VER = '4\.10\.14'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.14'/.test(admV));
+  t('★v4.10.14 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.14');
+  {
+    const clockV14 = fs.readFileSync(new URL('./clock.html', import.meta.url), 'utf8');
+    t('★v4.10.14 时钟整屏垂直居中（topRow 撑满、上下留白对称、13vh 已去掉）',
+      /#topRow\{[^}]*flex:1 1 auto/.test(clockV14) && /padding-bottom:calc\(70px/.test(clockV14)
+      && !/padding-bottom:13vh/.test(clockV14)
+      && /body\.bare #stage\{justify-content:center;padding-top:0;padding-bottom:0\}/.test(clockV14));
+  }
   t('★v4.10.12 侧栏今日事项每秒重算剩余时间（sideTick 进同一个 1 秒定时器）',
     /function sideTick\(\)/.test(bigV) && /BIG\.sideTick = sideTick/.test(bigV)
     && /sideTick\(\);/.test(bigV) && /tt\.kind !== 'holiday'/.test(bigV));
