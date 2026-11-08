@@ -13478,13 +13478,19 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && !/min-height:calc\(64px\*var\(--bhw-fs/.test(idxV)
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
-  /* ⑭ 版本号 */
-  t('★v4.10.16 版本号升到 4.10.16（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.16'/.test(idxV) && /SITE_VER = '4\.10\.16'/.test(swV)
-    && /API_VER = '4\.10\.16'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.16'/.test(admV));
-  t('★v4.10.16 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.16');
+  /* ⑭ 版本号：从 index.html 读当前版本，校验四处一致 —— 不写死数字，
+     否则每次升版本这条旧断言都会误报（v4.10.17 踩过一次）。 */
+  const curVer = (idxV.match(/var SITE_VERSION = '([\d.]+)'/) || [])[1];
+  const verRe = new RegExp('SITE_VERSION = \'' + curVer.replace(/\./g, '\\.') + '\'');
+  const swRe = new RegExp('SITE_VER = \'' + curVer.replace(/\./g, '\\.') + '\'');
+  const apiRe = new RegExp('API_VER = \'' + curVer.replace(/\./g, '\\.') + '\'');
+  const relRe = new RegExp('version: \'' + curVer.replace(/\./g, '\\.') + '\'');
+  t('★版本号四处一致（index / sw / worker / 后台更新日志）',
+    !!curVer && verRe.test(idxV) && swRe.test(swV)
+    && apiRe.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && relRe.test(admV));
+  t('★version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === curVer);
 
   /* ---- v4.10.16：每项截止时间 / 日历跳转 / 历史拦截 / 普通模式新增 ---- */
   {
@@ -13551,10 +13557,28 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★v4.10.11 导出图的行级 media 跟在那一项后面',
     /row\.media/.test(appV) && /r\.media \|\| \[\]/.test(idxV)
     && /media: rmedia/.test(idxV) && /bh \+= hh \+ 10/.test(idxV));
-  t('★v4.10.11 作业页两栏改成 1fr / 2fr，卡片按是否折行选栏',
-    /grid-template-columns:minmax\(0,1fr\) minmax\(0,2fr\) 300px/.test(idxV)
+  t('★v4.10.11 作业页卡片按「是否折行」选栏（v4.10.17 起两栏改回等宽 1fr/1fr）',
+    /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\) 300px/.test(idxV)
     && /hh > lh \* 1\.45/.test(bigV) && /planB/.test(bigV)
     && /function cardKeyNo/.test(bigV));
+
+  /* ---- v4.10.17：两栏等宽 + 考试卡保持改前宽度 + 日期条可折叠 ---- */
+  t('★v4.10.17 两栏各 1/2：grid 改 minmax(0,1fr) minmax(0,1fr) 300px',
+    /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\) 300px/.test(idxV)
+    && !/minmax\(0,2fr\)/.test(idxV.slice(idxV.indexOf('.bhw-grid{'), idxV.indexOf('.bhw-grid{') + 400)));
+  t('★v4.10.17 考试卡宽度锁为左栏 2/3（= 改前 1/3 内容区），窄屏单列恢复撑满',
+    /\.bhex\{[\s\S]{0,400}?width:66\.6667%;box-sizing:border-box/.test(idxV)
+    && /\.bhex\{width:100%\}/.test(idxV));
+  t('★v4.10.17 日期条可折叠：收起按钮 + 工具条常驻开关 + 本机记忆',
+    /class="ds-fold" onclick="BIG\.dsToggle\(\)"/.test(bigV)
+    && /id="bhwDsBtn"/.test(idxV)
+    && /DS_FOLD_KEY = 'cls_bhw_ds_fold'/.test(bigV)
+    && /BIG\.dsToggle = function/.test(bigV)
+    && /applyDsFold\(\)/.test(bigV));
+  t('★v4.10.17 收起后整条不占位，科目按钮下移、页面底部留白减 46px',
+    /html\.bhw-ds-fold \.bhw-datestrip\{display:none\}/.test(idxV)
+    && /html\.bhw-ds-fold \.bhw-addsubj\{bottom:58px\}/.test(idxV)
+    && /html\.bhw-ds-fold #bigHw\{padding-bottom:132px\}/.test(idxV));
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {

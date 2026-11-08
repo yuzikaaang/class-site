@@ -4477,10 +4477,11 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 .bhw-top .bhw-full{white-space:nowrap}
 
 /* —— 主体三列 —— */
-/* v4.10.11（站主）：「两种尺寸，小尺寸放在左边的 1/3 屏，大尺寸放在右边的 2/3 屏」。
-   所以两栏不再等宽 —— 左 1fr、右 2fr；卡片该进哪一栏由 big.js 的 layoutCards() 量宽度决定。 */
+/* v4.10.17（站主）：「1/3 和 2/3 改掉，现在就是 1/2 和 1/2」—— 两栏回到等宽，
+   各占一半。卡片该进哪一栏仍由 big.js 的 layoutCards() 量真实折行决定
+   （两栏同宽后量哪一栏结果都一样）。考试卡不跟着左栏变宽，见下面 .bhex。 */
 .bhw-grid{
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) 300px;
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 300px;
   gap:12px;padding:0 16px;align-items:start;
 }
 /* v4.1.0：卡片不再「左三右三」死板落位。big.js 的 layoutCards() 在每次渲染 / 每次
@@ -4749,6 +4750,22 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
   .bhw-datestrip .ds-day{max-width:none}
   .bhw-datestrip .ds-today{display:none}
 }
+/* v4.10.17（站主）：「下面那一栏那个日期、那个日历我可以折叠下去，太占空间」。
+   收起时整条不占位：科目按钮下移 46px、页面底部留白同步减 46px。
+   底部工具条的「日期」按钮常驻做开关，收起状态只存本机，刷新后还是上次那样。 */
+.bhw-datestrip .ds-fold{
+  flex:none;border:1px solid rgba(120,53,15,.16);background:var(--bg-2,#fff);color:var(--fg);
+  border-radius:9px;height:32px;min-width:auto;padding:0 10px;font-size:.76rem;font-weight:800;
+  cursor:pointer;font-family:inherit;
+}
+.bhw-datestrip .ds-fold:hover{border-color:var(--grad-a)}
+html.bhw-ds-fold .bhw-datestrip{display:none}
+html.bhw-ds-fold .bhw-addsubj{bottom:58px}
+html.bhw-ds-fold #bigHw{padding-bottom:132px}
+/* 日期条正在显示时，开关点亮，一眼看得出当前是展开还是收起 */
+.bhw-bar button#bhwDsBtn.on{
+  background:linear-gradient(135deg,var(--grad-a),var(--grad-b));color:#fff;border-color:transparent;
+}
 /* 整月日历弹窗 */
 .bhw-calbox{width:min(420px,94vw)}
 .bhw-cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -4909,6 +4926,9 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
   padding:11px 13px 9px;margin:0 0 10px;
   box-shadow:0 1px 2px rgba(120,53,15,.04);
   border-left:4px solid var(--grad-a);
+  /* v4.10.17：两栏各占一半后，考试卡仍是改前 1/3 内容区那么宽（= 现左栏的 2/3），
+     不跟着左栏一起变宽。它与右栏卡片之间留出的那点空隙，站主说「没办法就那样」。 */
+  width:66.6667%;box-sizing:border-box;
 }
 .dark .bhex{background:#2a2523;border-color:rgba(255,255,255,.08)}
 .bhex-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 4px}
@@ -5176,6 +5196,8 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 @media(max-width:1180px){
   .bhw-grid{grid-template-columns:1fr}
   .bhw-col,.bhw-side{min-height:0}
+  /* 单列时左栏就是整行，考试卡恢复撑满（上面 2/3 的宽度锁定只在两栏时才有意义） */
+  .bhex{width:100%}
   .bhw-bar{padding:0 12px;gap:6px}
   .bhw-bar-tip{display:none}
   .bhw-brand{font-size:1rem}
@@ -6909,6 +6931,9 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           <!-- v4.3.1：主题切换不再跟着侧边栏一起藏起来，作业页自己留一个 -->
           <button type="button" id="bhwThemeBtn" onclick="BIG.themeToggle(event)" title="切换明亮 / 暗色">明亮</button>
           <button type="button" id="bhwLockBtn" onclick="BIG.lockToggle()">锁定</button>
+          <!-- v4.10.17：底部日期条占 46px，站主要求能折叠。收起后这个开关常驻，随时能展开 -->
+          <button type="button" id="bhwDsBtn" class="on" onclick="BIG.dsToggle()"
+            title="收起底部日期条" aria-pressed="true">日期</button>
         </div>
       </nav>
 
@@ -8031,18 +8056,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.16';
+var SITE_VERSION = '4.10.17';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=41016" defer></script>
-<script src="./app.min.js?v=41016" defer></script>
+<script src="./auth-bus.js?v=41017" defer></script>
+<script src="./app.min.js?v=41017" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=41016" defer></script>
-<script src="./big.js?v=41016" defer></script>
+<script src="./fs-keep.js?v=41017" defer></script>
+<script src="./big.js?v=41017" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=41016" defer></script>
+<script src="./pickfx.js?v=41017" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

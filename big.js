@@ -1019,6 +1019,7 @@
     var h = $('bigHw'); if(h) h.style.display = 'block';
     try{ setRoute('hw'); }catch(e){}
     applyFs();
+    applyDsFold();   /* v4.10.17：日期条收起状态存本机，每次进作业页都摆一遍 */
     BIG.renderHw();
     try{ BIG.examLoad(); }catch(e){}   /* v4.10.6：每次进作业页都刷新一次考试 */
     startClock();
@@ -1029,6 +1030,31 @@
     leaveHwUi();
     try{ goHomeView(); }catch(e){}
   };
+
+  /* v4.10.17（站主）：「下面那一栏那个日期、那个日历我可以折叠下去，太占空间」。
+     收起后日期条整条不占位；底部工具条的「日期」按钮常驻做开关，随时能展开。
+     状态只存本机（班级电脑刷新后仍是上次那样），不写云端、不跟账号。 */
+  var DS_FOLD_KEY = 'cls_bhw_ds_fold';
+  function dsFolded(){
+    try{ return localStorage.getItem(DS_FOLD_KEY) === '1'; }catch(e){ return false; }
+  }
+  function applyDsFold(){
+    var folded = dsFolded();
+    document.documentElement.classList.toggle('bhw-ds-fold', folded);
+    var btn = $('bhwDsBtn');
+    if(btn){
+      btn.classList.toggle('on', !folded);
+      btn.setAttribute('aria-pressed', folded ? 'false' : 'true');
+      btn.title = folded ? '展开底部日期条' : '收起底部日期条';
+    }
+  }
+  BIG.dsToggle = function (){
+    var folded = !dsFolded();
+    try{ localStorage.setItem(DS_FOLD_KEY, folded ? '1' : '0'); }catch(e){}
+    applyDsFold();
+    if(!folded){ try{ renderDateStrip(); }catch(e){} }  /* 展开时顺手刷一次，跨天了也对 */
+  };
+  applyDsFold();   /* defer 脚本执行时 DOM 已就绪，进作业页前先摆好上次的收起状态 */
 
   /* v4.12.0：底部日期条。一整周七天，点哪天落到那天的期次；
      左右翻周，右边「日历」开整月网格；不在今天时给一个「回今天」。 */
@@ -1058,7 +1084,8 @@
     html += '</div></div>'
       + '<button type="button" class="ds-nav" onclick="BIG.hwWeekShift(1)" title="下一周">›</button>'
       + '<button type="button" class="ds-cal" onclick="BIG.calOpen()" title="打开整月日历">日历</button>'
-      + (BIG.hwViewDate ? '<button type="button" class="ds-today" onclick="BIG.hwToday()">回今天</button>' : '');
+      + (BIG.hwViewDate ? '<button type="button" class="ds-today" onclick="BIG.hwToday()">回今天</button>' : '')
+      + '<button type="button" class="ds-fold" onclick="BIG.dsToggle()" title="收起日期栏，扩大作业显示区域">收起</button>';
     host.innerHTML = html;
   }
 
@@ -1432,8 +1459,10 @@
   /* v4.10.11（站主）：「两种尺寸，小尺寸放在左边的 1/3 屏，大尺寸放在右边的 2/3 屏，
      这个尺寸其实就是长度尺寸……如果科目的那些文字都比较短，你就放在左边的 1/3 屏，
      如果它文字比较长的话，你就放在右边的 2/3 屏」。
-     判据不猜字数 —— 把同一张卡分别塞进窄栏与宽栏量一次自然高度：
-     窄栏里明显变高（多折了好几行）就归大卡，否则小卡。 */
+     v4.10.17：两栏改成各 1/2 等宽，但「按内容长短分栏」这条判据保留 ——
+     折行多的（长作业）进右栏，一行放得下的（短作业）留左栏。
+     判据不猜字数 —— 直接把卡片放进栏里量每项文字渲染后的真实高度，
+     超过一行多一点就归大卡。 */
   function cardKeyNo(k){
     var m = /^s(\d+)$/.exec(String(k || ''));
     return m ? Number(m[1]) : 9999;
@@ -1469,7 +1498,8 @@
     var planA = [], planB = [];
     cards.forEach(function (el, i){
       var k = String(el.getAttribute('data-hwkey') || ('i' + i));
-      /* 放进左栏（1/3 宽）量：只要有一项文字折成了两行以上，就说明这科「文字比较长」，
+      /* v4.10.17：两栏等宽（各 1/2）后，放进左栏量即可 —— 两栏同宽，量哪边结果一样。
+         只要有一项文字折成了两行以上，就说明这科「文字比较长」，
          该去右栏当大卡；全都一行放得下 → 小卡留左栏。
          不按字数猜 —— 中英文混排、字号缩放都会影响实际宽度，直接看渲染结果最准。 */
       colA.appendChild(el);
