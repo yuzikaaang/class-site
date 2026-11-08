@@ -13479,12 +13479,15 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.11 版本号升到 4.10.11（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.11'/.test(idxV) && /SITE_VER = '4\.10\.11'/.test(swV)
-    && /API_VER = '4\.10\.11'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.11'/.test(admV));
-  t('★v4.10.11 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.11');
+  t('★v4.10.12 版本号升到 4.10.12（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.12'/.test(idxV) && /SITE_VER = '4\.10\.12'/.test(swV)
+    && /API_VER = '4\.10\.12'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.12'/.test(admV));
+  t('★v4.10.12 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.12');
+  t('★v4.10.12 侧栏今日事项每秒重算剩余时间（sideTick 进同一个 1 秒定时器）',
+    /function sideTick\(\)/.test(bigV) && /BIG\.sideTick = sideTick/.test(bigV)
+    && /sideTick\(\);/.test(bigV) && /tt\.kind !== 'holiday'/.test(bigV));
 
   /* ---- v4.10.11：倒计时实时 / 导出图配图归位 / 1/3 与 2/3 分栏 ---- */
   t('★v4.10.11 大屏倒计时每秒只改数字（cdSnap + cdTick，不整块重建）',

@@ -1332,6 +1332,28 @@
     renderQuote();
   }
 
+  /* v4.10.12（站主）：「大屏里面的今日事项里面这个倒计时……是通过本机的时间去实时的更新的」。
+     侧栏这块显示的是「放假第 N 天 · 还剩 4 小时 54 分」，以前只在重绘时才重算 ——
+     跟倒计时同一个毛病。这里每秒按本机时间重算这一行字，结构不动。 */
+  function sideTick(){
+    var c = $('bhwCourses');
+    if(!c || c.style.display === 'none') return;
+    var b = c.querySelector('.bhw-mini-v');
+    if(!b) return;
+    var tt = null;
+    try{
+      if(typeof islandToday === 'function' && typeof ISLAND !== 'undefined' && ISLAND && ISLAND.on){
+        tt = islandToday(0);
+      }
+    }catch(e){}
+    /* 只有「正在放假、且已过放假时刻」才带剩余时间；其余状态交给整块重绘 */
+    if(!tt || tt.kind !== 'holiday' || tt.startTonight) return;
+    var txt = (tt.label || '放假中') + ' · 放假第 ' + tt.dayNo + ' 天 · 还剩 '
+      + (typeof islLeftText === 'function' ? islLeftText(tt.leftMs) : '');
+    if(b.textContent !== txt) b.textContent = txt;
+  }
+  BIG.sideTick = sideTick;
+
   /* ---------------- 考试（v4.10.10） ----------------
      站主原话（2026-11-08 第二轮）：
        「顶部写考试名称，第二行写第一天的日期，第三行这些就写第一天的科目，
@@ -2217,6 +2239,7 @@
     BIG._cdT = setInterval(function (){
       if(!BIG.hwOn) return;
       cdTick();
+      sideTick();          /* v4.10.12：侧栏「今日事项」的剩余时间也每秒走 */
       if((++BIG._cdTickN % 30) === 0){ renderCd(); renderProg(); }
     }, 1000);
     if(!BIG.quoteData) BIG.quoteNext(false);
