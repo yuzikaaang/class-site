@@ -4384,7 +4384,7 @@ html.big-mode .tab-page h2{font-size:1.3rem}
    · 所有字号都走 --bhw-fs，底部 A− / A+ 只改这一个变量
    ============================================================ */
 #bigHw{
-  display:none;padding:0 0 178px;   /* v4.12.0：日期条 + 科目按钮 + 工具栏三层 */
+  display:none;padding:0 0 104px;   /* v4.10.18：日期条 + 工具栏两层（科目按钮已移到作业卡上方） */
   /* v4.10.3（站主第 2 条：字号基准重标定 —— 「100 才是之前 150 的效果」）。
      ① --bhw-fs = 作业正文缩放（跟滑块走）。
         滑块显示 **100** 时它是 **1.5 倍** —— 也就是旧刻度 150% 的那个大小，
@@ -4696,13 +4696,13 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
   font-size:calc(.76rem*var(--bhw-fs));font-weight:700;cursor:pointer;
 }
 .bhw-audio:hover{background:rgba(249,115,22,.16)}
-/* v4.11.0：底部那排科目按钮改成「贴着工具栏上方常驻」——
-   原来它跟着文档流排在最后，页面不满一屏时正好钻进固定工具栏底下，看不见。
-   常驻之后滚到哪儿都能点；只读态没有内容，:empty 直接不占位。 */
+/* v4.10.18（站主）：快捷作业卡（七个科目按钮）不再贴底栏，改排到作业卡上方。
+   跟着文档流走，跟作业卡一起上下滚动；只读态没有内容，:empty 直接不占位。 */
 .bhw-addsubj{
-  position:fixed;left:0;right:0;bottom:104px;z-index:1100;   /* v4.12.0：日期条上方 */
-  display:flex;align-items:center;gap:8px;padding:9px 16px;flex-wrap:wrap;
-  background:rgba(253,248,242,.97);border-top:1px solid rgba(120,53,15,.10);
+  display:flex;align-items:center;gap:8px;padding:9px 14px;flex-wrap:wrap;
+  margin:0 16px 12px;box-sizing:border-box;
+  background:rgba(253,248,242,.97);border:1px solid rgba(120,53,15,.10);
+  border-radius:12px;
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
 }
 
@@ -4760,8 +4760,7 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 }
 .bhw-datestrip .ds-fold:hover{border-color:var(--grad-a)}
 html.bhw-ds-fold .bhw-datestrip{display:none}
-html.bhw-ds-fold .bhw-addsubj{bottom:58px}
-html.bhw-ds-fold #bigHw{padding-bottom:132px}
+html.bhw-ds-fold #bigHw{padding-bottom:58px}
 /* 日期条正在显示时，开关点亮，一眼看得出当前是展开还是收起 */
 .bhw-bar button#bhwDsBtn.on{
   background:linear-gradient(135deg,var(--grad-a),var(--grad-b));color:#fff;border-color:transparent;
@@ -6883,6 +6882,9 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         <div class="bhw-top-act" id="bhwActions"></div>
       </header>
 
+      <!-- v4.10.18（站主）：快捷作业卡（七个科目按钮）从底栏上移到这里，排在作业卡上方 -->
+      <div class="bhw-addsubj" id="bhwAddSubj"></div>
+
       <div class="bhw-grid">
         <div class="bhw-col" id="bhwColA"></div>
         <div class="bhw-col" id="bhwColB"></div>
@@ -6913,7 +6915,6 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       </div>
 
       <div class="bhw-foot" id="bhwOther"></div>
-      <div class="bhw-addsubj" id="bhwAddSubj"></div>
       <div class="bhw-datestrip" id="bhwDateStrip"></div>
 
       <nav class="bhw-bar" aria-label="页面工具">
@@ -8056,18 +8057,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.17';
+var SITE_VERSION = '4.10.18';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=41017" defer></script>
-<script src="./app.min.js?v=41017" defer></script>
+<script src="./auth-bus.js?v=41018" defer></script>
+<script src="./app.min.js?v=41018" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=41017" defer></script>
-<script src="./big.js?v=41017" defer></script>
+<script src="./fs-keep.js?v=41018" defer></script>
+<script src="./big.js?v=41018" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=41017" defer></script>
+<script src="./pickfx.js?v=41018" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

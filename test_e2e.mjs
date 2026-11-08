@@ -13575,10 +13575,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /DS_FOLD_KEY = 'cls_bhw_ds_fold'/.test(bigV)
     && /BIG\.dsToggle = function/.test(bigV)
     && /applyDsFold\(\)/.test(bigV));
-  t('★v4.10.17 收起后整条不占位，科目按钮下移、页面底部留白减 46px',
+  t('★v4.10.18 收起后整条不占位，页面底部留白 58px（科目按钮已移到作业卡上方，不再贴底）',
     /html\.bhw-ds-fold \.bhw-datestrip\{display:none\}/.test(idxV)
-    && /html\.bhw-ds-fold \.bhw-addsubj\{bottom:58px\}/.test(idxV)
-    && /html\.bhw-ds-fold #bigHw\{padding-bottom:132px\}/.test(idxV));
+    && /html\.bhw-ds-fold #bigHw\{padding-bottom:58px\}/.test(idxV)
+    && /padding:0 0 104px/.test(idxV));
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {

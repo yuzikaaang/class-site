@@ -136,15 +136,15 @@ const init = await page.evaluate(() => {
     on: btn.classList.contains('on'),
     pressed: btn.getAttribute('aria-pressed'),
     pad: getComputedStyle(document.getElementById('bigHw')).paddingBottom,
-    addBottom: getComputedStyle(document.querySelector('.bhw-addsubj')).bottom
+    addPos: getComputedStyle(document.querySelector('.bhw-addsubj')).position
   };
 });
 t('③ 日期条初始展开，七天 + 日历 + 收起按钮齐全',
   init.display !== 'none' && init.days === 7 && init.cal && init.fold,
   'days=' + init.days + ' display=' + init.display);
 t('③ 工具条「日期」开关展开态点亮', init.on && init.pressed === 'true');
-t('③ 展开态占位：#bigHw 178px / 科目按钮 104px',
-  init.pad === '178px' && init.addBottom === '104px', init.pad + ' / ' + init.addBottom);
+t('③ 展开态占位：#bigHw 104px（工具栏 58 + 日期条 46），科目按钮不再固定底部',
+  init.pad === '104px' && init.addPos !== 'fixed', init.pad + ' / pos=' + init.addPos);
 
 await page.screenshot({ path: OUT + '/01-等宽分栏-日期展开.png', fullPage: false });
 
@@ -161,15 +161,14 @@ const folded = await page.evaluate(() => {
     on: btn.classList.contains('on'),
     pressed: btn.getAttribute('aria-pressed'),
     title: btn.title,
-    pad: getComputedStyle(document.getElementById('bigHw')).paddingBottom,
-    addBottom: getComputedStyle(document.querySelector('.bhw-addsubj')).bottom
+    pad: getComputedStyle(document.getElementById('bigHw')).paddingBottom
   };
 });
 t('④ 点收起后 html 带 bhw-ds-fold，日期条整条不占位',
   folded.cls && folded.display === 'none');
 t('④ 收起状态写进本机 localStorage', folded.stored === '1');
-t('④ 收起后底部留白减 46px（178→132），科目按钮下移（104→58）',
-  folded.pad === '132px' && folded.addBottom === '58px', folded.pad + ' / ' + folded.addBottom);
+t('④ 收起后底部留白减 46px（104→58）',
+  folded.pad === '58px', folded.pad);
 t('④ 工具条开关变为收起态（不高亮、提示可展开）',
   !folded.on && folded.pressed === 'false' && /展开/.test(folded.title), folded.title);
 
@@ -186,7 +185,7 @@ const opened = await page.evaluate(() => ({
   pad: getComputedStyle(document.getElementById('bigHw')).paddingBottom
 }));
 t('⑤ 点工具条「日期」可展开回来，七天重新出现',
-  !opened.cls && opened.display !== 'none' && opened.days === 7 && opened.pad === '178px');
+  !opened.cls && opened.display !== 'none' && opened.days === 7 && opened.pad === '104px');
 t('⑤ 展开状态同样写回 localStorage', opened.stored === '0');
 
 /* ---------- ⑥ 折叠状态刷新后仍在 ---------- */
@@ -202,7 +201,7 @@ const persisted = await page.evaluate(() => ({
   pad: getComputedStyle(document.getElementById('bigHw')).paddingBottom
 }));
 t('⑥ 折叠后刷新页面，仍是收起状态（只记本机）',
-  persisted.cls && persisted.display === 'none' && persisted.stored === '1' && persisted.pad === '132px');
+  persisted.cls && persisted.display === 'none' && persisted.stored === '1' && persisted.pad === '58px');
 
 /* ---------- ⑦ 无脚本报错 ---------- */
 t('⑦ 全程无 JS 运行时报错', errs.length === 0, errs.slice(0, 2).join(' | '));

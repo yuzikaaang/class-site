@@ -2530,10 +2530,11 @@
        · 11/9 ~ 11/13 → 「高二上 · 第11周作业」
        · 11/14、11/15 → 「高二上 · 第11周周末作业」
      左右箭头整周翻，可以提前跳到未来某一周写。月历弹窗用来跨月跳。 */
+  /* v4.10.18（站主）：没手动跳到某一天时，锚点就是「今天」本身。
+     以前会 fallback 到当前期次的第一天，结果点「回今天」高亮的却是
+     期次第一天（比如周六回今天，却亮到周末作业的周六），改成真·今天。 */
   function hwAnchor(){
     if(BIG.hwViewDate) return BIG.hwViewDate;
-    var h = currentHw();
-    if(h && h.start) return String(h.start).slice(0, 10);
     return todayStr();
   }
   BIG.hwJumpTo = function (dStr){

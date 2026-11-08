@@ -21988,10 +21988,10 @@ function hwNormalPeriodAt(dateStr){
   }catch(e){}
   return null;
 }
+/* v4.10.18（站主）：没手动跳到某一天时，锚点就是「今天」本身，不再 fallback 到期次第一天
+   （否则点「回今天」高亮的还是那一期的第一天）。与大屏 hwAnchor 同一口径。 */
 function hwNormAnchor(){
   if(window.__HW_VIEW_DATE) return window.__HW_VIEW_DATE;
-  var h = window.__HW_VIEWING;
-  if(h && h.start) return String(h.start).slice(0, 10);
   return _hwDateStr(new Date());
 }
 function hwNormJump(dateStr){
