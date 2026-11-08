@@ -5358,9 +5358,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
      两者本质都是「首页那张小卡片」的配置，拆两个入口反而不好找。 */
   t('★后台两块已合并为「首页卡片」板块',
     /id:'cards',/.test(adm47) && /function renderCards\(\)/.test(adm47));
-  /* v2.7.1 起内容组 10 项（合并后的 9 项 + 成绩分析）；v3.5.6 再加「投票管理」= 11 */
-  t('★内容组导航项为 13 项（12 项 + v3.15 信息分享）',
-    (adm47.match(/group:'内容'/g) || []).length === 13,
+  /* v2.7.1 起内容组 10 项（合并后的 9 项 + 成绩分析）；v3.5.6 再加「投票管理」= 11；
+     v3.15 信息分享 = 12；v4.10.6 考试同步 = 14（v3.8.7 班级岛也在这一组） */
+  t('★内容组导航项为 14 项（含 v4.10.6 考试同步）',
+    (adm47.match(/group:'内容'/g) || []).length === 14,
     '实际 ' + (adm47.match(/group:'内容'/g) || []).length + ' 项');
   t('★v3.15.2 成员导出按字段元数据出列（新增字段自动带上）',
     /function memberExportCols\(meta\)/.test(adm47) && /function memberCell\(m, f\)/.test(adm47)
@@ -13477,12 +13478,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.5 版本号升到 4.10.5（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.5'/.test(idxV) && /SITE_VER = '4\.10\.5'/.test(swV)
-    && /API_VER = '4\.10\.5'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.5'/.test(admV));
-  t('★v4.10.5 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.5');
+  t('★v4.10.6 版本号升到 4.10.6（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.6'/.test(idxV) && /SITE_VER = '4\.10\.6'/.test(swV)
+    && /API_VER = '4\.10\.6'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.6'/.test(admV));
+  t('★v4.10.6 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.6');
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {
@@ -13637,6 +13638,70 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /ONLINE_WINDOW_SEC = 420/.test(auth5));
     t('★v4.10.5 时钟页日志心跳降到 5 分钟',
       /setInterval\(logHeartbeat, 5 \* 60 \* 1000\)/.test(clock5));
+  }
+
+  /* ===== v4.10.6 专项：接考试看板（大屏今日考试 + 后台同步 / 写回） ===== */
+  {
+    const exV = fs.readFileSync(new URL('./api/exams.js', import.meta.url), 'utf8');
+    const wkV = fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8');
+    const bigV = fs.readFileSync(new URL('./big.js', import.meta.url), 'utf8');
+    const adm1V = fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8');
+    const adm3V = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+
+    t('★v4.10.6 Worker 注册了 /api/exams 路由',
+      /import examsHandler from '\.\/exams\.js'/.test(wkV)
+      && /case 'exams':/.test(wkV) && /await examsHandler\(req, res\)/.test(wkV));
+
+    t('★v4.10.6 后端存在，且读接口公开、写接口仅管理员',
+      /export default async function handler/.test(exV)
+      && /action === 'today'/.test(exV)
+      && /u\.role !== 'admin'/.test(exV));
+
+    t('★v4.10.6 账号密码用 AES-GCM 加密存放，不写进前端',
+      /profileKey\(req\)/.test(exV) && /encField\(key, cfg\.passNew\)/.test(exV)
+      && /decField\(key, cfg\.pass\)/.test(exV));
+
+    t('★v4.10.6 KV 三个键分开：配置 / 数据 / token',
+      /K_CFG = 'exam_cfg_v1'/.test(exV) && /K_DATA = 'exam_data_v1'/.test(exV)
+      && /K_TOK = 'exam_tok_v1'/.test(exV));
+
+    /* 跨天规则：今天不在任何一场里就整场跳过；在的话把这场**所有天**的场次都摊出去 */
+    t('★v4.10.6 跨天考试：今天命中就列出这场所有天，今天没有就整场不出现',
+      /if \(!dates\[today\]\) return;/.test(exV)
+      && /its\.forEach\(function \(i\) \{/.test(exV)
+      && /past: d < today/.test(exV));
+
+    /* 写回只提交 majors 域 + 版本校验，绝不整份覆盖 */
+    t('★v4.10.6 写回只提交 majors 域并带版本号，冲突不覆盖',
+      /majors: toWire\(data\.majors\)/.test(exV)
+      && /baseRevisions: \{ major:/.test(exV)
+      && /r\.status === 409/.test(exV)
+      && /先同步一次再写回/.test(exV));
+
+    t('★v4.10.6 只允许删除本站新增的考试（考试看板建的只读）',
+      /if \(!data\.majors\[i\]\.local\) throw new Error/.test(exV));
+
+    t('★v4.10.6 大屏考试块钉在左栏最上面，且不参与科目卡装箱',
+      /colA\.insertBefore\(b2\.firstElementChild, colA\.firstElementChild\)/.test(bigV)
+      && /'<div class="bhex" id="bhwExam">/.test(bigV)
+      && !/bhex bhw-subj/.test(bigV));
+
+    t('★v4.10.6 大屏行内左科目、右时间',
+      /class="bhex-sub"/.test(bigV) && /class="bhex-time"/.test(bigV)
+      && /it\.start/.test(bigV) && /it\.end/.test(bigV));
+
+    t('★v4.10.6 「新增考试」只在管理员身份显示，且位于点名按钮之后',
+      /if\(eb\) eb\.style\.display = adminOk\(\) \? '' : 'none'/.test(bigV)
+      && /id="bhwExamAdd"/.test(idxV)
+      && /bhw-pick[\s\S]{0,600}?id="bhwExamAdd"/.test(idxV));
+
+    t('★v4.10.6 大屏考试有本机缓存（断网也能显示上次同步）',
+      /cls_big_exam_v1/.test(bigV) && /examCacheGet/.test(bigV));
+
+    t('★v4.10.6 后台新增「考试同步」页并接到路由',
+      /id:'exams'/.test(adm1V) && /exams: *renderExams/.test(adm1V)
+      && /function renderExams\(\)/.test(adm3V)
+      && /exSync/.test(adm3V) && /exPush/.test(adm3V) && /exAdd/.test(adm3V));
   }
 
   /* ===== 全量语法自检 =====

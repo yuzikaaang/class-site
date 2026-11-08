@@ -820,6 +820,7 @@
     try{ setRoute('hw'); }catch(e){}
     applyFs();
     BIG.renderHw();
+    try{ BIG.examLoad(); }catch(e){}   /* v4.10.6：每次进作业页都刷新一次考试 */
     startClock();
   };
 
@@ -1023,6 +1024,7 @@
       if(other) other.innerHTML = '';
       if(addHost) addHost.innerHTML = '';
       renderSide();
+      paintExam();          /* v4.10.6：没有作业时也要能看到今天考什么 */
       return;
     }
     colA.style.gridColumn = '';
@@ -1098,6 +1100,7 @@
     }
 
     renderSide();
+    paintExam();            /* v4.10.6：考试块固定钉在左栏最上面 */
     scheduleLayout();
     /* v4.7.0：记下「屏幕上这一份」是什么样，下一次轮询拿它做基准比差异 */
     try{ BIG.hwPrevData = hwList(); BIG.hwPrev = JSON.stringify(BIG.hwPrevData || []); }catch(e){}
@@ -1260,6 +1263,9 @@
      顺序按站主要求：时钟 → 今日事项 → 倒计时（重要日期 / 最近节假日） → 随机点名 → 随机一言（最底）。
      倒计时必须压在点名上面，一言单独放最下面，不再和别的挤在一块。 */
   function renderSide(){
+    /* v4.10.6：「新增考试」只给管理员 —— 写回考试看板要管理员身份 */
+    var eb = $('bhwExamAdd');
+    if(eb) eb.style.display = adminOk() ? '' : 'none';
     var c = $('bhwCourses');
     if(c){
       var txt = '', sub = '';
@@ -1293,6 +1299,230 @@
     renderCd();
     renderQuote();
   }
+
+  /* ---------------- 考试（v4.10.6） ----------------
+     站主原话（2026-11-08）：
+       「左侧的作业栏会检测，如果检测到今天有考试的话，就会把考试的信息同步过来，
+         如果今天有多场考试的话，那就一行显示一个。做卡片的左边统一都显示考试科目，
+         右边就显示对应的时间。如果是那种大型的跨天考试的话，那 n 天的数据都显示
+         在这个作业看板上。」
+       「可以在随机点名的下面加一个小按钮，用于新增一些考试数据。」
+   
+     数据从哪来：本站后端 /api/exams?action=today —— 后端已经把考试看板的整份快照
+     拉下来、按班级过滤好、把「今天这场大考的所有天」都摊平了。大屏只管画。
+     本机另存一份 cls_big_exam_v1：教室断网时先画上次的，不空着。 */
+  var EXAM_KEY = 'cls_big_exam_v1';
+  var EXAM_TTL = 5 * 60 * 1000;      /* 5 分钟主动刷一次，够用又不打上游 */
+  BIG.exam = { at: 0, today: '', days: [], loaded: false, busy: false, at2: 0 };
+
+  function examTodayLocal(d){
+    var t = d || new Date();
+    var p = function (n){ return (n < 10 ? '0' : '') + n; };
+    return t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate());
+  }
+  function examWeekCn(day){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
+    if(!m) return '';
+    var d = new Date(+m[1], +m[2] - 1, +m[3]);
+    var w = '日一二三四五六'[d.getDay()];
+    return '周' + w;
+  }
+  function examCacheGet(){
+    try{
+      var o = JSON.parse(localStorage.getItem(EXAM_KEY) || 'null');
+      if(o && Array.isArray(o.days)) return o;
+    }catch(e){}
+    return null;
+  }
+  function examCachePut(o){
+    try{
+      localStorage.setItem(EXAM_KEY, JSON.stringify({
+        at: Number(o.at || 0), today: String(o.today || ''), days: o.days || [],
+      }));
+    }catch(e){}
+  }
+
+  BIG.examLoad = function (cb){
+    /* 先上缓存：教室电脑经常一开机就断网 */
+    if(!BIG.exam.loaded){
+      var c0 = examCacheGet();
+      if(c0){
+        BIG.exam.at = c0.at; BIG.exam.today = c0.today; BIG.exam.days = c0.days || [];
+        BIG.exam.loaded = true;
+        paintExam();
+      }
+    }
+    if(typeof api !== 'function'){ if(cb) cb(); return; }
+    api('/exams?action=today').then(function (j){
+      BIG.exam.at = Number((j && j.at) || 0);
+      BIG.exam.today = String((j && j.today) || examTodayLocal());
+      BIG.exam.days = (j && Array.isArray(j.days)) ? j.days : [];
+      BIG.exam.loaded = true;
+      BIG.exam.at2 = Date.now();
+      examCachePut(BIG.exam);
+      paintExam();
+      if(cb) cb();
+    }).catch(function (){
+      BIG.exam.loaded = true;
+      if(!BIG.exam.days.length){
+        var c2 = examCacheGet();
+        if(c2){
+          BIG.exam.at = c2.at; BIG.exam.today = c2.today; BIG.exam.days = c2.days || [];
+        }
+      }
+      paintExam();
+      if(cb) cb();
+    });
+  };
+
+  /** 「12/1 周一」这种小标题；今天/明天直接写中文，一眼能认 */
+  function examDayLabel(day, isToday){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
+    if(!m) return '';
+    var today = BIG.exam.today || examTodayLocal();
+    var base = new Date(+m[1], +m[2] - 1, +m[3]);
+    var t0 = new Date();
+    var diff = Math.round((base - new Date(t0.getFullYear(), t0.getMonth(), t0.getDate())) / 86400000);
+    var head = isToday ? '今天' : (diff === 1 ? '明天' : (diff === -1 ? '昨天' : ''));
+    var md = (+m[2]) + '/' + (+m[3]);
+    return (head ? head + ' · ' : '') + md + ' ' + examWeekCn(day);
+  }
+
+  function examHtml(){
+    var days = BIG.exam.days || [];
+    if(!days.length) return '';
+    var total = 0;
+    days.forEach(function (d){ total += (d.items || []).length; });
+    if(!total) return '';
+
+    var multi = days.length > 1 || !days[0].isToday;
+    var head = '<div class="bhex-h">'
+      + '<b>' + (multi ? '考试安排' : '今日考试') + '</b>'
+      + '<span>' + total + ' 场' + (multi ? ' · ' + days.length + ' 天' : '') + '</span>'
+      + '</div>';
+
+    var body = days.map(function (d){
+      var rows = (d.items || []).map(function (it){
+        return '<div class="bhex-row' + (d.isToday ? '' : ' bhex-off') + '">'
+          + '<span class="bhex-sub">' + esc0(it.name || '考试') + '</span>'
+          + '<span class="bhex-time">' + esc0(it.start || '') + '–' + esc0(it.end || '') + '</span>'
+          + '</div>';
+      }).join('');
+      var cap = multi
+        ? '<div class="bhex-day">' + esc0(examDayLabel(d.date, !!d.isToday)) + '</div>'
+        : '';
+      return cap + rows;
+    }).join('');
+
+    return '<div class="bhex" id="bhwExam">' + head + body + '</div>';
+  }
+
+  /* 固定钉在左栏最上面：它**不带** .bhw-subj 类，所以不进 layoutCards 的装箱计算，
+     也不会被 applyCards 当成科目卡复用。作业重新渲染会把 colA 的卡片搬来搬去，
+     所以每次渲染完都要再摆一次。 */
+  function paintExam(){
+    var colA = $('bhwColA');
+    if(!colA) return;
+    var html = examHtml();
+    var old = document.getElementById('bhwExam');
+    if(!html){
+      if(old && old.parentNode) old.parentNode.removeChild(old);
+      return;
+    }
+    if(old){
+      if(old.__html !== html){
+        old.__html = html;
+        var box = document.createElement('div');
+        box.innerHTML = html;
+        var nf = box.firstElementChild;
+        if(nf && old.parentNode) old.parentNode.replaceChild(nf, old);
+      }else if(colA.firstElementChild !== old){
+        colA.insertBefore(old, colA.firstElementChild);
+      }
+      return;
+    }
+    var b2 = document.createElement('div');
+    b2.innerHTML = html;
+    if(b2.firstElementChild) colA.insertBefore(b2.firstElementChild, colA.firstElementChild);
+  }
+  BIG.examPaint = paintExam;
+
+  /* -------- 新增考试（大屏上直接加，写回考试看板） -------- */
+  BIG.examForm = function (){
+    if(document.getElementById('bexMask')) return;
+    var day = examTodayLocal();
+    var mask = document.createElement('div');
+    mask.className = 'bex-mask';
+    mask.id = 'bexMask';
+    mask.innerHTML = ''
+      + '<div class="bex-box" role="dialog" aria-label="新增考试">'
+      +   '<div class="bex-t">新增考试</div>'
+      +   '<p class="bex-tip">保存后会同时在考试看板里建一场临时考试；教室断网时先存本机，联网后再写回。</p>'
+      +   '<label class="bex-f"><span>科目</span>'
+      +     '<input id="bexSub" maxlength="12" placeholder="如 数学" autocomplete="off"></label>'
+      +   '<label class="bex-f"><span>日期</span>'
+      +     '<input id="bexDate" type="date" value="' + day + '"></label>'
+      +   '<div class="bex-two">'
+      +     '<label class="bex-f"><span>开始</span><input id="bexSt" type="time" value="08:00"></label>'
+      +     '<label class="bex-f"><span>结束</span><input id="bexEn" type="time" value="09:30"></label>'
+      +   '</div>'
+      +   '<label class="bex-f"><span>名称（可空）</span>'
+      +     '<input id="bexName" maxlength="20" placeholder="留空就按「科目（临时）」"></label>'
+      +   '<div class="bex-msg" id="bexMsg"></div>'
+      +   '<div class="bex-btns">'
+      +     '<button type="button" class="bex-btn ghost" onclick="BIG.examFormClose()">取消</button>'
+      +     '<button type="button" class="bex-btn" id="bexSave" onclick="BIG.examSave()">保存并写回</button>'
+      +   '</div>'
+      + '</div>';
+    mask.addEventListener('click', function (e){ if(e.target === mask) BIG.examFormClose(); });
+    document.body.appendChild(mask);
+    setTimeout(function (){ var i = $('bexSub'); if(i) i.focus(); }, 30);
+  };
+
+  BIG.examFormClose = function (){
+    var m = document.getElementById('bexMask');
+    if(m && m.parentNode) m.parentNode.removeChild(m);
+  };
+
+  BIG.examSave = function (){
+    if(BIG.exam.busy) return;
+    var v = function (id){ var e = $(id); return e ? String(e.value || '').trim() : ''; };
+    var msg = $('bexMsg');
+    var say = function (t, color){
+      if(msg){ msg.textContent = t || ''; msg.style.color = color || '#8a6a55'; }
+    };
+    var subject = v('bexSub'), date = v('bexDate'), st = v('bexSt'), en = v('bexEn');
+    if(!subject){ say('请填科目'); return; }
+    if(!date){ say('请选日期'); return; }
+    if(!st || !en){ say('请填起止时间'); return; }
+    if(en <= st){ say('结束时间要晚于开始时间'); return; }
+
+    BIG.exam.busy = true;
+    var btn = $('bexSave');
+    if(btn){ btn.disabled = true; btn.textContent = '保存中…'; }
+    say('正在写回考试看板…');
+
+    api('/exams?action=add', { method: 'POST', body: {
+      action: 'add', subject: subject, date: date, start: st, end: en,
+      name: v('bexName'), push: true,
+    } }).then(function (j){
+      BIG.exam.busy = false;
+      var okPush = !!(j && j.pushed);
+      var note = (j && j.note) || '';
+      if(okPush){
+        setTimeout(BIG.examFormClose, 260);
+        if(typeof toast === 'function') toast('已保存：' + subject + ' ' + st + '–' + en);
+        BIG.examLoad();
+      }else{
+        say('已存本机，但还没写回：' + (note || '联网后在后台点「写回」'), '#b45309');
+        if(btn){ btn.disabled = false; btn.textContent = '重试写回'; }
+      }
+    }).catch(function (e){
+      BIG.exam.busy = false;
+      if(btn){ btn.disabled = false; btn.textContent = '保存并写回'; }
+      say(String((e && e.message) || '保存失败'));
+    });
+  };
 
   /* ---------------- 倒计时（v4.3.0） ----------------
      数据直接复用全站的 IMPORTANT_DATES / HOLIDAYS，不再单独配一份：
@@ -4486,6 +4716,12 @@
     var pi = $('bhwPickIco');
     if(pi) pi.innerHTML = ico('dices', 20);
     if(!BIG.on) return;
+    /* v4.10.6：考试数据先拉一次，之后每 5 分钟刷一次（只在 大屏 模式下跑，
+       普通同学打开网页不会因此多打一次接口） */
+    try{
+      BIG.examLoad();
+      setInterval(function (){ if(BIG.hwOn || document.visibilityState === 'visible') BIG.examLoad(); }, EXAM_TTL);
+    }catch(e){}
     syncThemeBtn();
     /* v4.3.1（站主第 1 条）：大屏模式打开网站直接进作业页，不用再点一次图标墙。
        但别的深链（比如 #/board/3）不能抢 —— 只有 hash 为空或本来就是 #/hw 才自动进。 */

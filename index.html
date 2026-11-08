@@ -4657,6 +4657,85 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 .bhw-pick b{font-size:calc(.9rem*var(--bhw-fx));display:block}
 .bhw-pick span{font-size:calc(.68rem*var(--bhw-fx));color:var(--fg-3)}
 
+/* —— 新增考试入口（v4.10.6）——
+   站主原话：「在随机点名的下面加一个小按钮，用于新增一些考试数据。」
+   故意做小：它不是每天都用，别把侧栏的视觉重心抢走。 */
+.bhw-examadd{
+  display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;
+  margin-top:-2px;padding:4px 10px;border-radius:10px;
+  background:transparent;border:1px dashed rgba(120,53,15,.28);
+  color:var(--fg-3);font-family:inherit;font-size:calc(.72rem*var(--bhw-fx));line-height:1.35;
+  transition:border-color .18s,color .18s,background .18s;
+}
+.bhw-examadd:hover{border-color:var(--grad-a);color:var(--fg);background:#fff}
+.dark .bhw-examadd{border-color:rgba(255,255,255,.16)}
+.dark .bhw-examadd:hover{background:#2a2523}
+.bhw-examadd-plus{font-size:calc(.9rem*var(--bhw-fx));line-height:1;font-weight:700}
+
+/* —— 考试块（v4.10.6）——
+   钉在左栏最上面：标题一行，下面每场一行 —— 左科目、右时间。
+   跨天的大型考试按天分组，日期用小标题隔开；已经过去的那天压暗。 */
+.bhex{
+  background:var(--bg-2);border:1px solid rgba(120,53,15,.10);border-radius:14px;
+  padding:10px 12px 8px;margin:0 0 10px;
+  box-shadow:0 1px 2px rgba(120,53,15,.04);
+  border-left:4px solid var(--grad-a);
+}
+.dark .bhex{background:#2a2523;border-color:rgba(255,255,255,.08)}
+.bhex-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 6px}
+.bhex-h b{font-size:calc(.86rem*var(--bhw-fx));color:var(--fg);letter-spacing:.02em}
+.bhex-h span{font-size:calc(.68rem*var(--bhw-fx));color:var(--fg-3)}
+.bhex-day{
+  font-size:calc(.66rem*var(--bhw-fx));color:var(--fg-3);
+  margin:6px 0 3px;padding-top:5px;border-top:1px dashed rgba(120,53,15,.14);
+}
+.bhex-day:first-child{margin-top:0;padding-top:0;border-top:none}
+.bhex-row{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:3px 0;
+}
+.bhex-sub{
+  font-size:calc(.9rem*var(--bhw-fx));color:var(--fg);font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.bhex-time{
+  font-size:calc(.78rem*var(--bhw-fx));color:var(--fg-2);
+  font-variant-numeric:tabular-nums;flex:none;
+}
+.bhex-row.bhex-off{opacity:.45}
+
+/* —— 新增考试弹窗 —— */
+.bex-mask{
+  position:fixed;inset:0;z-index:3200;display:flex;align-items:center;justify-content:center;
+  background:rgba(28,20,14,.46);backdrop-filter:blur(3px);padding:18px;
+}
+.bex-box{
+  width:min(420px,94vw);max-height:88vh;overflow:auto;
+  background:var(--bg);border-radius:18px;padding:18px 18px 14px;
+  box-shadow:0 24px 60px rgba(28,20,14,.28);
+}
+.bex-t{font-size:1.05rem;font-weight:800;color:var(--fg)}
+.bex-tip{margin:6px 0 12px;font-size:.76rem;line-height:1.65;color:var(--fg-3)}
+.bex-f{display:flex;align-items:center;gap:10px;margin:0 0 9px}
+.bex-f>span{width:86px;flex:none;font-size:.8rem;color:var(--fg-2)}
+.bex-f input{
+  flex:1;min-width:0;background:var(--bg-2);border:1px solid rgba(120,53,15,.16);
+  border-radius:10px;padding:8px 10px;font-size:.86rem;color:var(--fg);font-family:inherit;
+}
+.bex-f input:focus{outline:none;border-color:var(--grad-a)}
+.bex-two{display:flex;gap:10px}
+.bex-two .bex-f{flex:1;margin-bottom:9px}
+.bex-two .bex-f>span{width:auto}
+.bex-msg{min-height:18px;font-size:.76rem;color:#8a6a55;margin:2px 0 6px;line-height:1.5}
+.bex-btns{display:flex;gap:10px;justify-content:flex-end}
+.bex-btn{
+  border:none;border-radius:11px;padding:9px 16px;font-size:.86rem;font-weight:700;
+  font-family:inherit;cursor:pointer;color:#fff;
+  background:linear-gradient(135deg,var(--grad-a),var(--grad-b));
+}
+.bex-btn.ghost{background:var(--bg-2);color:var(--fg-2);box-shadow:inset 0 0 0 1px rgba(120,53,15,.14)}
+.bex-btn:disabled{opacity:.6;cursor:default}
+
 /* —— 侧栏倒计时（v4.3.0）——
    重要日期 / 最近节假日各一行，名称在左、剩余时间在右。没有可显示的整块隐藏。 */
 .bhw-cd{gap:6px}
@@ -6489,6 +6568,13 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
             <span class="bhw-pick-ico" id="bhwPickIco"></span>
             <span><b>随机点名</b><span>按身份 / 性别 / 学号 / 成绩抽取</span></span>
           </button>
+          <!-- v4.10.6（站主）：「在随机点名的下面加一个小按钮，用于新增一些考试数据。」
+               只给管理员看：写回要管理员身份，同学点了只会拿到 403。 -->
+          <button type="button" class="bhw-examadd" id="bhwExamAdd" onclick="BIG.examForm()" style="display:none"
+            title="新增一场考试，同时写回考试看板">
+            <span class="bhw-examadd-plus" aria-hidden="true">＋</span>
+            <span>新增考试</span>
+          </button>
           <!-- v4.3.0：随机一言放最底下，点击就换 -->
           <div class="bhw-quote" id="bhwQuote" style="display:none" onclick="BIG.quoteTap(event)"></div>
           <!-- v4.10.4（站主第 7 条）：学期 / 高考 / 高中进度，钉在右栏最底部 -->
@@ -7518,18 +7604,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.5';
+var SITE_VERSION = '4.10.6';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4105" defer></script>
-<script src="./app.min.js?v=4105" defer></script>
+<script src="./auth-bus.js?v=4106" defer></script>
+<script src="./app.min.js?v=4106" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4105" defer></script>
-<script src="./big.js?v=4105" defer></script>
+<script src="./fs-keep.js?v=4106" defer></script>
+<script src="./big.js?v=4106" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4105" defer></script>
+<script src="./pickfx.js?v=4106" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
