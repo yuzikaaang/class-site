@@ -13557,9 +13557,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★v4.10.11 导出图的行级 media 跟在那一项后面',
     /row\.media/.test(appV) && /r\.media \|\| \[\]/.test(idxV)
     && /media: rmedia/.test(idxV) && /bh \+= hh \+ 10/.test(idxV));
-  t('★v4.10.11 作业页卡片按「是否折行」选栏（v4.10.17 起两栏改回等宽 1fr/1fr）',
+  t('★v4.10.19 作业页卡片按「顺序切分 + 高度均衡」分栏（两栏各 1/2，省空间）',
     /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\) 300px/.test(idxV)
-    && /hh > lh \* 1\.45/.test(bigV) && /planB/.test(bigV)
+    && /bestK/.test(bigV) && /Math\.abs\(leftH - rightH\)/.test(bigV)
+    && /getBoundingClientRect\(\)\.height/.test(bigV)
     && /function cardKeyNo/.test(bigV));
 
   /* ---- v4.10.17：两栏等宽 + 考试卡保持改前宽度 + 日期条可折叠 ---- */

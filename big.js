@@ -1456,13 +1456,13 @@
     host.innerHTML = '';
     host.appendChild(frag);
   }
-  /* v4.10.11（站主）：「两种尺寸，小尺寸放在左边的 1/3 屏，大尺寸放在右边的 2/3 屏，
-     这个尺寸其实就是长度尺寸……如果科目的那些文字都比较短，你就放在左边的 1/3 屏，
-     如果它文字比较长的话，你就放在右边的 2/3 屏」。
-     v4.10.17：两栏改成各 1/2 等宽，但「按内容长短分栏」这条判据保留 ——
-     折行多的（长作业）进右栏，一行放得下的（短作业）留左栏。
-     判据不猜字数 —— 直接把卡片放进栏里量每项文字渲染后的真实高度，
-     超过一行多一点就归大卡。 */
+  /* v4.10.19（站主）：两栏各 1/2 等宽后，不再按「文字折没折行」分栏 ——
+     那样短作业几乎全堆左栏、右栏空一大片，反而浪费空间。
+     改成「顺序切分 + 高度均衡」：先量出每张卡的自然高度，再按科目顺序
+     从头到尾找一个切分点，前几科进左栏、后几科进右栏，让
+     「左栏(含考试卡)」与「右栏」总高尽量接近 ——
+     科目顺序从头到尾不断开，左右又均衡，整块作业区占的竖向空间最小（省空间）。
+     判据不猜字数 —— 直接把卡片放进栏里量整卡渲染后的真实高度。 */
   function cardKeyNo(k){
     var m = /^s(\d+)$/.exec(String(k || ''));
     return m ? Number(m[1]) : 9999;
@@ -1495,27 +1495,6 @@
     cards.forEach(function (el){ el.style.flex = '0 0 auto'; });
     void colA.offsetHeight;
 
-    var planA = [], planB = [];
-    cards.forEach(function (el, i){
-      var k = String(el.getAttribute('data-hwkey') || ('i' + i));
-      /* v4.10.17：两栏等宽（各 1/2）后，放进左栏量即可 —— 两栏同宽，量哪边结果一样。
-         只要有一项文字折成了两行以上，就说明这科「文字比较长」，
-         该去右栏当大卡；全都一行放得下 → 小卡留左栏。
-         不按字数猜 —— 中英文混排、字号缩放都会影响实际宽度，直接看渲染结果最准。 */
-      colA.appendChild(el);
-      var big = false;
-      var ts = el.querySelectorAll('.bhw-txt,.bhw-area');
-      for(var ti = 0; ti < ts.length; ti++){
-        var tx = ts[ti];
-        var cs = window.getComputedStyle(tx);
-        var lh = parseFloat(cs.lineHeight);
-        if(!lh || isNaN(lh)) lh = (parseFloat(cs.fontSize) || 16) * 1.5;
-        /* ⚠️ .bhw-txt 是 inline span，clientHeight 恒为 0 —— 必须量 rect 高度 */
-        var hh = tx.getBoundingClientRect().height;
-        if(hh > lh * 1.45){ big = true; break; }
-      }
-      (big ? planB : planA).push({ el: el, k: k });
-    });
     /* 栏内按科目顺序排（而不是按高度）—— 语文、数学、英语一眼能顺着找，
        位置也不会因为某一科多写两行就跳来跳去 */
     var byKey = function (a, b){
@@ -1523,8 +1502,38 @@
       if(x !== y) return x - y;
       return a.k < b.k ? -1 : (a.k > b.k ? 1 : 0);
     };
-    planA.sort(byKey);
-    planB.sort(byKey);
+
+    /* v4.10.19：两栏等宽，放左栏量整卡高度结果一样（appendChild 会强制重排，
+       紧接着读 getBoundingClientRect 能拿到准确的自然高度）。 */
+    var seq = [];
+    cards.forEach(function (el, i){
+      var k = String(el.getAttribute('data-hwkey') || ('i' + i));
+      colA.appendChild(el);
+      seq.push({ el: el, k: k, h: el.getBoundingClientRect().height });
+    });
+    seq.sort(byKey);
+
+    /* 考试卡固定钉在左栏最上面，它占掉的高度算进左栏，切分点才会把它让出来 */
+    var exam = document.getElementById('bhwExam');
+    var hExam = exam ? exam.getBoundingClientRect().height : 0;
+
+    /* 顺序切分：前 k 科进左栏、后面的进右栏，找一个切分点让
+       「左栏(考试卡 + 前 k 科)」与「右栏(后 n-k 科)」总高最接近。 */
+    var n = seq.length, total = 0;
+    seq.forEach(function (m){ total += m.h; });
+    var prefix = 0, bestK = 0, bestDiff = Infinity;
+    for(var k = 0; k <= n; k++){
+      var leftH = hExam + prefix;
+      var rightH = total - prefix;
+      var diff = Math.abs(leftH - rightH);
+      if(diff < bestDiff){ bestDiff = diff; bestK = k; }
+      if(k < n) prefix += seq[k].h;
+    }
+
+    var planA = [], planB = [];
+    for(var j = 0; j < n; j++){
+      (j < bestK ? planA : planB).push(seq[j]);
+    }
 
     var curA = [].slice.call(colA.children).filter(isCard);
     var curB = [].slice.call(colB.children).filter(isCard);
