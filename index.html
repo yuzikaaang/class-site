@@ -4727,7 +4727,8 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
   position:sticky;top:0;z-index:1;
   font-size:.68rem;font-weight:700;color:var(--fg-3);
   padding:8px 6px 4px;margin-top:2px;
-  background:linear-gradient(var(--bg-1) 72%,transparent);
+  background:var(--bg-1);
+  box-shadow:0 6px 8px -6px rgba(120,53,15,.14);
 }
 .bex-g.today{color:#b45309}
 .bex-it{
@@ -4767,8 +4768,9 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 }
 .bex-box{
   width:min(420px,94vw);max-height:88vh;overflow:auto;
-  background:var(--bg);border-radius:18px;padding:18px 18px 14px;
+  background:var(--bg-1);border-radius:18px;padding:18px 18px 14px;
   box-shadow:0 24px 60px rgba(28,20,14,.28);
+  border:1px solid rgba(120,53,15,.12);
 }
 .bex-t{font-size:1.05rem;font-weight:800;color:var(--fg)}
 .bex-tip{margin:6px 0 12px;font-size:.76rem;line-height:1.65;color:var(--fg-3)}
@@ -5183,7 +5185,7 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
   letter-spacing:.04em;margin-bottom:2px}
 .bpick-peek-h span{font-weight:600;opacity:.8}
 .bpick-peek-i{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;
-  background:var(--bg);border:1px solid rgba(120,53,15,.1);font-size:.8rem;white-space:nowrap}
+  background:var(--bg-1);border:1px solid rgba(120,53,15,.1);font-size:.8rem;white-space:nowrap}
 .bpick-peek-i b{font-weight:800;color:var(--fg)}
 .bpick-peek-i i{font-style:normal;font-size:.7rem;color:var(--fg-3);font-variant-numeric:tabular-nums}
 .bpick-peek-i u{text-decoration:none;font-size:.7rem;color:var(--accent-ink);font-weight:700}
@@ -7634,18 +7636,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.8';
+var SITE_VERSION = '4.10.9';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4108" defer></script>
-<script src="./app.min.js?v=4108" defer></script>
+<script src="./auth-bus.js?v=4109" defer></script>
+<script src="./app.min.js?v=4109" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4108" defer></script>
-<script src="./big.js?v=4108" defer></script>
+<script src="./fs-keep.js?v=4109" defer></script>
+<script src="./big.js?v=4109" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4108" defer></script>
+<script src="./pickfx.js?v=4109" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
