@@ -108,7 +108,7 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '4.10.19'
+const SITE_VER = '4.10.20'
 
 /* v3.9.16（站主）：缓存桶跟着版本走。
    ------------------------------------------------------------
@@ -118,6 +118,10 @@ const SITE_VER = '4.10.19'
    改成 class-site-<版本> 后，新版本 = 新桶 = 首次导航必然走网络，旧桶在
    activate 时被删掉，既不会看到旧版，也不会让缓存无限堆积。 */
 const CACHE = 'class-site-' + SITE_VER
+/* v4.10.20（站主）：跨域图片直链（作业配图 / 班级岛图 / 班徽等）的独立缓存桶。
+   不跟版本桶一起删 —— 图片 URL 稳定，可跨版本复用；上限 200 张，超了删最旧。 */
+const IMG_CACHE = 'cls-img-cache-v1'
+const IMG_MAX = 200
 /* 预缓存清单：**只放小文件**。
    ⚠️ 不要把 index.html（600KB）放进来 —— install 会因为它变慢一大截，
    弱网下甚至装不完（真机实测 SW 卡在 installing 25 秒都没装好，
@@ -231,6 +235,48 @@ self.addEventListener('fetch', (event) => {
        缓存毫无意义。直接放行走网络。 */
     if (u.searchParams.has('_') || u.searchParams.has('_r')) return
   } catch (e) { /* URL 解析失败就按原逻辑走 */ }
+
+  /* v4.10.20（站主）：跨域图片直链缓存 —— 作业配图 / 班级岛图 / 班徽这些直链，
+     有网时顺手缓存，断网时用缓存顶，图片不再裂。 */
+  {
+    let isCrossImg = false
+    try{
+      const u = new URL(request.url)
+      isCrossImg = u.origin !== self.location.origin &&
+        (request.destination === 'image' || /\.(png|jpe?g|gif|webp|bmp|svg|avif|ico)(\?|#|$)/i.test(u.pathname))
+    }catch(e){}
+    if(isCrossImg){
+      event.respondWith((async () => {
+        try{
+          const cache = await caches.open(IMG_CACHE)
+          const cached = await cache.match(request, { ignoreSearch: true }).catch(() => null)
+          const netP = fetch(request)
+            .then((res) => {
+              /* 跨域图是 opaque 响应，status 恒为 0、res.ok 恒 false，
+                 但照样能缓存、能返回给浏览器显示 */
+              if(res && (res.ok || res.type === 'opaque')){
+                cache.put(request, res.clone()).catch(() => {})
+                /* 超上限删最旧的，别让图片桶无限涨（站主见过 D 盘 500MB 的教训） */
+                cache.keys().then((keys) => {
+                  if(keys.length > IMG_MAX){
+                    keys.slice(0, keys.length - IMG_MAX).forEach((k) => cache.delete(k).catch(() => {}))
+                  }
+                }).catch(() => {})
+              }
+              return res
+            })
+            .catch(() => null)
+          if(cached){
+            event.waitUntil(netP.catch(() => {}))
+            return cached
+          }
+          const r = await netP
+          return r || Response.error()
+        }catch(e){ return fetch(request) }
+      })())
+      return
+    }
+  }
 
   /* 导航请求（打开页面）：v3.8.0 起改成「最多等 900ms 的网络优先」
    * ------------------------------------------------------------

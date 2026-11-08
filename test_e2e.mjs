@@ -11393,7 +11393,9 @@ console.log('\n【88】v3.5.42 作业勾选不丢 · 导出带班徽 · 可选�
   t('★v3.5.42 作业可切换历史期次（下拉 + forceId）',
     /id="hwPickSel"/.test(idx542) && /function showCurrentHomework\(forceId\)/.test(idx542)
     && /window\.__HW_VIEWING/.test(idx542));
-  t('v3.5.42 导出的就是当前正在看的那一份', /var hw = window\.__HW_VIEWING \|\| getCurrentHomework/.test(idx542));
+  t('v3.5.42 导出的就是当前正在看的那一份（v4.10.20 起支持多期批量，仍默认勾选正在看的那一期）',
+    /function hwExportBuild/.test(idx542) && /function hwExportPick/.test(idx542)
+    && /viewingId/.test(idx542) && /hwExportPeriods/.test(idx542));
 
   /* ---- 版本 ---- */
   t('v3.7.0 四处版本号一致',
@@ -13580,6 +13582,54 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /html\.bhw-ds-fold \.bhw-datestrip\{display:none\}/.test(idxV)
     && /html\.bhw-ds-fold #bigHw\{padding-bottom:58px\}/.test(idxV)
     && /padding:0 0 104px/.test(idxV));
+
+  /* ===== v4.10.20 专项：日期条默认收起 / 字号归整 / 空期次 / 图片缓存 / 导出批量 / 缓存清理 / 暗色防闪 / 公告时间 ===== */
+  {
+    /* ① 日期条默认收起 + 1 分钟自动收起 */
+    t('★v4.10.20 日期条默认收起，展开后 1 分钟无操作自动收起',
+      /v === null \? true : \(v === '1'\)/.test(bigV)
+      && /DS_AUTO_T = setTimeout/.test(bigV)
+      && /60 \* 1000/.test(bigV)
+      && /dsAutoFoldArm\(\)/.test(bigV));
+    /* ② 字号非 5 倍数先归整 */
+    t('★v4.10.20 字号非 5 倍数先归到最近的 5 的倍数，再 ±5',
+      /cur % FS_STEP !== 0/.test(bigV)
+      && /Math\.ceil\(cur \/ FS_STEP\) \* FS_STEP/.test(bigV)
+      && /Math\.floor\(cur \/ FS_STEP\) \* FS_STEP/.test(bigV));
+    /* ③ 空期次不落库不显示（大屏） */
+    t('★v4.10.20 空期次（没科目或全没内容）不落库',
+      /function hwIsEmpty\(hw\)/.test(bigV)
+      && /if\(hw\._auto && hwIsEmpty\(hw\)\) return hw/.test(bigV));
+    /* ④ 导入保留截止时间 */
+    t('★v4.10.20 导入不丢每项截止时间',
+      /function cleanHw\(h\)/.test(bigV) && /if\(t\.due\) o\.due = String\(t\.due\)/.test(bigV));
+    /* ⑤ 导出支持批量选择 */
+    t('★v4.10.20 导出图片可多期批量选择（合进一张长图）',
+      /function hwExportPeriods\(\)/.test(appV) && /function hwExportBuild\(periods, mode\)/.test(appV)
+      && /function hwExportPick\(periods, mode\)/.test(appV)
+      && /function hwPeriodEmpty\(hw\)/.test(appV)
+      && /data-hw-exall/.test(appV) && /title: multi \? '作业合集'/.test(appV));
+    /* ⑥ SW 图片直链缓存 */
+    t('★v4.10.20 图片直链独立缓存桶 + 200 张上限 + opaque 也缓存',
+      /IMG_CACHE = 'cls-img-cache-v1'/.test(swV) && /IMG_MAX = 200/.test(swV)
+      && /caches\.open\(IMG_CACHE\)/.test(swV)
+      && /res\.ok \|\| res\.type === 'opaque'/.test(swV)
+      && /ignoreSearch: true/.test(swV));
+    /* ⑦ 缓存清理 */
+    t('★v4.10.20 设置改名「全站设置」+ 数据管理新增缓存清理',
+      /function clearTempCache\(\)/.test(appV) && /function clearLocalData\(\)/.test(appV)
+      && /secHtml\('cache','缓存清理'/.test(appV)
+      && /全站设置/.test(idxV));
+    /* ⑧ 天气温度颜色 + 公告时间 */
+    t('★v4.10.20 天气温度深色提高对比 + 公告时间兼容两种格式',
+      /\.isl-wx-range b\{color:#7c2d12/.test(idxV) && /\.dark \.isl-wx-range b\{color:#fdba74/.test(idxV)
+      && /function annDateLabel\(d\)/.test(appV));
+    /* ⑨ 暗色防闪白 */
+    t('★v4.10.20 刷新/首次进入同步套用暗色，不先闪亮色',
+      /cls_theme_hold/.test(idxV) && /matchMedia\('\(prefers-color-scheme: dark\)'\)/.test(idxV)
+      && /h >= 18 \|\| h < 6\.5/.test(idxV)
+      && /documentElement\.classList\.add\('dark'\)/.test(idxV));
+  }
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {

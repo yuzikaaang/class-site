@@ -500,7 +500,15 @@
   }
   BIG.fs = readFs();
   BIG.fsStep = function (d){
-    var n = clampFs(BIG.fs + (d > 0 ? FS_STEP : -FS_STEP));
+    var cur = BIG.fs, n;
+    if(cur % FS_STEP !== 0){
+      /* v4.10.20（站主）：当前不是 5 的倍数（手动输入 / 旧值迁移来的），
+         先按加减方向归到离它最近的 5 的倍数，之后才按 ±5 走。 */
+      n = clampFs(d > 0 ? Math.ceil(cur / FS_STEP) * FS_STEP : Math.floor(cur / FS_STEP) * FS_STEP);
+      if(n === cur) n = clampFs(cur + (d > 0 ? FS_STEP : -FS_STEP));
+    }else{
+      n = clampFs(cur + (d > 0 ? FS_STEP : -FS_STEP));
+    }
     if(n === BIG.fs){ toast(d > 0 ? '已到最大字号（' + FS_MAX + '%）' : '已到最小字号（' + FS_MIN + '%）'); return; }
     BIG.fsSet(n);
   };
@@ -713,9 +721,26 @@
     AUTO_CACHE[id] = p;
     return p;
   }
-  /* 真正写内容了才把这份 _auto 收进列表；站主要「空壳不存」 */
+  /* v4.10.20（站主）：一个期次算不算「空」—— 没科目，或所有科目所有任务都没内容
+     （文字和图片/音频/视频都空）。这种期次视为误操作，不落库、筛选里不显示。 */
+  function hwIsEmpty(hw){
+    var items = (hw && hw.items) || [];
+    if(!items.length) return true;
+    for(var i = 0; i < items.length; i++){
+      var tasks = items[i].tasks || [];
+      for(var j = 0; j < tasks.length; j++){
+        var t = tasks[j];
+        var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
+        if(String(o.text || '').trim()) return false;
+        if(o.img || o.audio || o.video) return false;
+      }
+    }
+    return true;
+  }
+  /* 真正写内容了才把这份 _auto 收进列表；站主要「空壳不存」。 */
   function materialize(hw){
     if(!hw) return hw;
+    if(hw._auto && hwIsEmpty(hw)) return hw;   /* 空壳 + 没内容 → 保持 _auto，不落库 */
     var list = hwList();
     for(var i = 0; i < list.length; i++){
       if(String(list[i].id) === String(hw.id)){ delete hw._auto; return list[i]; }
@@ -1036,7 +1061,20 @@
      状态只存本机（班级电脑刷新后仍是上次那样），不写云端、不跟账号。 */
   var DS_FOLD_KEY = 'cls_bhw_ds_fold';
   function dsFolded(){
-    try{ return localStorage.getItem(DS_FOLD_KEY) === '1'; }catch(e){ return false; }
+    /* v4.10.20：本机没记过（第一次进）默认收起，点底部「日期」才展开 */
+    var v = null;
+    try{ v = localStorage.getItem(DS_FOLD_KEY); }catch(e){}
+    return v === null ? true : (v === '1');
+  }
+  var DS_AUTO_T = null;
+  function dsAutoFoldArm(){
+    if(DS_AUTO_T) clearTimeout(DS_AUTO_T);
+    DS_AUTO_T = setTimeout(function (){
+      DS_AUTO_T = null;
+      if(dsFolded()) return;                       /* 已经收起就不动 */
+      try{ localStorage.setItem(DS_FOLD_KEY, '1'); }catch(e){}
+      applyDsFold();
+    }, 60 * 1000);                                 /* 展开后 1 分钟没点，自动收起 */
   }
   function applyDsFold(){
     var folded = dsFolded();
@@ -1052,7 +1090,7 @@
     var folded = !dsFolded();
     try{ localStorage.setItem(DS_FOLD_KEY, folded ? '1' : '0'); }catch(e){}
     applyDsFold();
-    if(!folded){ try{ renderDateStrip(); }catch(e){} }  /* 展开时顺手刷一次，跨天了也对 */
+    if(!folded){ try{ renderDateStrip(); }catch(e){} dsAutoFoldArm(); }  /* 展开时启动自动收起 */
   };
   applyDsFold();   /* defer 脚本执行时 DOM 已就绪，进作业页前先摆好上次的收起状态 */
 
@@ -1087,6 +1125,9 @@
       + (BIG.hwViewDate ? '<button type="button" class="ds-today" onclick="BIG.hwToday()">回今天</button>' : '')
       + '<button type="button" class="ds-fold" onclick="BIG.dsToggle()" title="收起日期栏，扩大作业显示区域">收起</button>';
     host.innerHTML = html;
+    /* v4.10.20：日期条上任何点击（翻周/选天/日历/回今天）都算「在用」，
+       重置 1 分钟自动收起计时器 */
+    host.onclick = function (){ dsAutoFoldArm(); };
   }
 
   /* 本机改动条：渲染与「改完就地补一条」共用同一段 HTML */
@@ -2630,6 +2671,13 @@
        站主要「有内容才存」，所以落库这个动作本身就等于「已经有内容了」。 */
     try{ materialize(currentHw()); }catch(e){}
     var list = hwList();
+    /* v4.10.20：把空期次从列表里剔掉 —— 建了周作业但没写任何内容，
+       当误操作处理，不保存、筛选里也不会出现。 */
+    var cleaned = list.filter(function (h){ return !hwIsEmpty(h); });
+    if(cleaned.length !== list.length){
+      list = cleaned;
+      toast('没写内容的空期次已不保存');
+    }
     /* v4.7.0：本机刚存下的这份就是「屏幕上这一份」，把比对基准一起推平 ——
        否则 12 秒后的轮询会把自己刚打的字当成「手机端改的」标黄一遍。 */
     try{ BIG.hwPrevData = list; BIG.hwPrev = JSON.stringify(list || []); }catch(e){}
@@ -3599,6 +3647,7 @@
           if(t.audio) o.audio = String(t.audio);
           if(t.video) o.video = String(t.video);
           if(t.audioLabel) o.audioLabel = String(t.audioLabel);
+          if(t.due) o.due = String(t.due);   /* v4.10.20：导入别再把截止时间丢掉 */
           tasks.push(o);
         }else{
           tasks.push(String(t));

@@ -3129,6 +3129,19 @@ function annSortKey(a){
   return /\d{1,2}:\d{2}/.test(d) ? d : d.slice(0, 10) + ' 23:59';
 }
 
+/* v4.10.20：公告日期显示。兼容「YYYY-MM-DD HH:MM」和 ISO「YYYY-MM-DDTHH:MM:SS.sssZ」
+   两种写法（后者是某次写公告时误用 toISOString 留下的），统一显示成「MM-DD HH:MM」，
+   没带时间就只显示「MM-DD」，避免 ISO 的 T / Z 露出来变成乱码。 */
+function annDateLabel(d){
+  d = String(d == null ? '' : d).trim();
+  if(!d) return '';
+  var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(d);
+  if(m) return m[2] + '-' + m[3] + ' ' + m[4] + ':' + m[5];
+  var m2 = /^(\d{4})-(\d{2})-(\d{2})/.exec(d);
+  if(m2) return m2[2] + '-' + m2[3];
+  return d;
+}
+
 /* 公告栏（支持分类筛选；置顶永远在最上方；弹窗内按分类小节展示） */
 function renderBoard(){
   var annAll = (SITE_DATA.announcements || []);
@@ -3154,7 +3167,7 @@ function renderBoard(){
     return '<ul class="board-list">' + items.map(function(a){
       return '<li>' +
         '<div class="board-meta">' +
-          '<span class="board-date' + (isImportant(a) ? ' hot' : '') + '">' + esc(a.date.slice(5)) + '</span>' +
+          '<span class="board-date' + (isImportant(a) ? ' hot' : '') + '">' + esc(annDateLabel(a.date)) + '</span>' +
           /* 永久置顶显示「置顶」，限时置顶显示「限时置顶」——让同学知道它什么时候会掉下来 */
           (isImportant(a) ? '<span class="board-pin">' + (a.importantUntil ? '限时置顶' : '置顶') + '</span>' : '') +
         '</div>' +
@@ -4092,7 +4105,7 @@ function applyUICfg(){
   STACK_OPEN = {};    /* 【卡片堆叠 v35】配置变更（导入/恢复默认）后清展开记忆，回到默认堆叠态 */
   /* data-motion 由 applyLite() 统一设置（轻量模式强制 off） */
   var sb = document.getElementById('uiSetBtn');
-  if(sb) sb.innerHTML = iconSvg('settings', 15, 'margin-right:7px;vertical-align:-2px') + '自定义设置';
+  if(sb) sb.innerHTML = iconSvg('settings', 15, 'margin-right:7px;vertical-align:-2px') + '全站设置';
 }
 
 /* ============================================================
@@ -9284,6 +9297,17 @@ function renderSettings(){
         '<button class="btn btn-secondary" style="flex:1;min-width:110px;font-size:.76rem;padding:9px 6px" ' +
           'onclick="hardRefresh()">强制刷新</button>' +
       '</div>', true);
+    /* v4.10.20（站主）：缓存清理 —— 站主发现班级电脑缓存越堆越多（旧版本 + 临时数据），
+       这里分两类：临时缓存可放心删，本地数据需确认。 */
+    html += secHtml('cache','缓存清理','trash-2',
+      '<p class="ui-hint">清理这台设备上的旧缓存，腾出空间。<br>'
+      + '· <b>临时缓存</b>：天气、班徽、旧版本页面、图片直链等，删了不影响使用，联网会自动重新获取；<br>'
+      + '· <b>本地数据</b>：成绩分析、班级名单等缓存，删掉后下次要重新联网加载，一般不建议清。</p>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+        + '<button class="btn btn-secondary" style="flex:1;min-width:110px;font-size:.76rem;padding:9px 6px" onclick="clearTempCache()">清理临时缓存</button>'
+        + '<button class="btn btn-gray" style="flex:1;min-width:110px;font-size:.76rem;padding:9px 6px" onclick="clearLocalData()">清理本地数据</button>'
+      + '</div>'
+      + '<p class="ui-hint" id="cacheMsg" style="margin-top:8px;color:#0a7d42;min-height:1.2em"></p>', true);
   }
   box.innerHTML = html;
 
@@ -9297,6 +9321,52 @@ function renderSettings(){
   }
   if(UI_SEC === 'order') renderSortList();
   /* v2.5.0 起已无运行时 emoji 引擎（图标都在渲染时就地生成），无需任何触发 */
+}
+
+/* —— 缓存清理（v4.10.20 站主）——
+   站主发现班级电脑缓存越堆越多（旧版本缓存 + 临时数据）。
+   分两类：临时缓存可放心删，本地数据需确认。 */
+function clearTempCache(){
+  var msg = document.getElementById('cacheMsg');
+  function done(txt){
+    if(msg) msg.textContent = txt;
+    if(typeof uiMsg === 'function') uiMsg(txt, '#2f7d4f');
+  }
+  /* ① 临时 localStorage 键：天气 / 地理位置 / 班徽 / 云端内容 / 周次 —— 联网都会自动重取 */
+  var tempKeys = ['__cls_wx','__cls_wx_h2','__cls_geo','__cls_badge_src_v2','__cls_badge_ts',
+    'cls_content_cache_v1','cls_content_since_v1','__cls_cat_report','cls_week_cache'];
+  var removed = 0;
+  tempKeys.forEach(function(k){
+    try{ if(localStorage.getItem(k) !== null){ localStorage.removeItem(k); removed++; } }catch(e){}
+  });
+  /* ② 浏览器缓存（SW 桶 + 图片直链桶），联网后会自动重新缓存 */
+  function finishCache(){
+    done('已清理临时缓存：本地 ' + removed + ' 项 + 浏览器缓存');
+  }
+  try{
+    if(window.caches && window.caches.keys){
+      window.caches.keys().then(function(keys){
+        var del = keys.filter(function(k){ return /^class-site-|^cls-img-cache-/.test(k); });
+        Promise.all(del.map(function(k){ return window.caches.delete(k).catch(function(){}); }))
+          .then(finishCache);
+      }).catch(finishCache);
+    }else finishCache();
+  }catch(e){ finishCache(); }
+}
+
+function clearLocalData(){
+  var msg = document.getElementById('cacheMsg');
+  if(!confirm('确定清理本地数据缓存吗？\n\n这会清掉成绩分析缓存、班级名单缓存等。\n下次打开这些内容时需要重新联网加载，一般不建议清理。')){
+    return;
+  }
+  var dataKeys = ['cls_sc_cache_v1','cls_roster_cache_v1','cls_class_list'];
+  var removed = 0;
+  dataKeys.forEach(function(k){
+    try{ if(localStorage.getItem(k) !== null){ localStorage.removeItem(k); removed++; } }catch(e){}
+  });
+  var txt = '已清理本地数据 ' + removed + ' 项';
+  if(msg) msg.textContent = txt;
+  if(typeof uiMsg === 'function') uiMsg(txt, '#b45309');
 }
 
 /* ---------- 设置面板里的「检查更新」（v2.6.4） ----------
@@ -12161,7 +12231,7 @@ function renderAllBoard(){
       ? '<li class="ann-cat"><h4 style="margin:12px 0 8px;color:#af410f;font-size:.95rem">🔎 匹配结果（'+hits.length+'）</h4>'+
         '<ul style="list-style:none;padding:0;margin:0">'+hits.map(function(a){
           return '<li class="ann-item hl"><div class="board-meta">'+
-            '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(a.date.slice(5))+'</span>'+
+            '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(annDateLabel(a.date))+'</span>'+
             (isImportant(a)?'<span class="board-pin">'+(a.importantUntil?'限时置顶':'置顶')+'</span>':'')+'</div>'+
             '<p class="board-text">'+annHighlight(a,q)+'</p></li>';
         }).join('')+'</ul></li>'
@@ -12176,7 +12246,7 @@ function renderAllBoard(){
       return '<li class="ann-cat"><h4 onclick="toggleAnnCat(this)" style="margin:12px 0 8px;color:#af410f;font-size:.95rem;cursor:pointer;user-select:none">'+esc(c.name)+'（'+items.length+'）▾</h4>'+
         '<ul style="list-style:none;padding:0;margin:0">'+items.map(function(a){
           return '<li class="ann-item"><div class="board-meta">'+
-            '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(a.date.slice(5))+'</span>'+
+            '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(annDateLabel(a.date))+'</span>'+
             (isImportant(a)?'<span class="board-pin">'+(a.importantUntil?'限时置顶':'置顶')+'</span>':'')+'</div>'+
             '<p class="board-text">'+emojiEscHtml(a.text)+'</p></li>';
         }).join('')+'</ul></li>';
@@ -22489,19 +22559,70 @@ function hwDueShort(t){
   return (ms < Date.now() ? '已截止 ' : '截止 ') + hm;
 }
 
+/* v4.10.20（站主）：日期短写 2026-11-03 → 11/3，多期导出的分隔标题用 */
+function hwShortDate(s){
+  s = String(s || '');
+  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return parseInt(m[2], 10) + '/' + parseInt(m[3], 10);
+  return s;
+}
+/* v4.10.20（站主）：一个期次算不算「空」—— 与大屏 big.js 的 hwIsEmpty 同一口径：
+   没科目，或所有科目所有任务（文字/图片/音频/视频）都空。这种期次不进导出清单。 */
+function hwPeriodEmpty(hw){
+  var items = (hw && hw.items) || [];
+  if(!items.length) return true;
+  for(var i = 0; i < items.length; i++){
+    var tasks = items[i].tasks || [];
+    for(var j = 0; j < tasks.length; j++){
+      var t = tasks[j];
+      var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
+      if(String(o.text || '').trim()) return false;
+      if(o.img || o.audio || o.video) return false;
+    }
+  }
+  return true;
+}
+/* 可导出的期次（按开始时间从早到晚），空壳期次不列 */
+function hwExportPeriods(){
+  var list = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
+  return list.filter(function(hw){ return hw && !hwPeriodEmpty(hw); })
+    .sort(function(a, b){
+      var x = String(a.start || ''), y = String(b.start || '');
+      if(x < y) return -1;
+      if(x > y) return 1;
+      return 0;
+    });
+}
+
 function hwExportImage(mode){
   if(typeof ShareCard === 'undefined'){
     if(typeof uiMsg === 'function') uiMsg('图片组件没加载出来，请刷新页面重试', '#af410f');
     return;
   }
-  /* 导出「正在看的那一份」（下拉可选以前的），不是永远导出当天 */
-  var hw = window.__HW_VIEWING || getCurrentHomework();
-  if(!hw){
+  var periods = hwExportPeriods();
+  if(!periods.length){
     if(typeof uiMsg === 'function') uiMsg('没有可导出的作业', '#af410f');
     return;
   }
+  /* v4.10.20（站主）：「导出作业可以批量选择或全选」——
+     只有一份就直接出；多份先弹多选，选完合进同一张长图。 */
+  if(periods.length === 1) hwExportBuild([periods[0]], mode);
+  else hwExportPick(periods, mode);
+}
 
-  var items = hw.items || [];
+/* 期次名 · 日期范围（多期导出时的分隔标题） */
+function hwPeriodLabel(hw){
+  var range = hwShortDate(hw.start || '') + ' ~ ' + hwShortDate(hw.end || '');
+  var title = String(hw.title || '').trim();
+  if(title && title !== '作业') return title + '　·　' + range;
+  return range;
+}
+
+/* 真正出图：periods 可以是一份，也可以是多份（合进一张长图） */
+function hwExportBuild(periods, mode){
+  if(!periods || !periods.length) return;
+  var multi = periods.length > 1;
+  var totalSubjects = 0;
   var totalTasks = 0;
   var seen = {};
   var imgJobs = [];
@@ -22524,38 +22645,48 @@ function hwExportImage(mode){
   /* v4.10.11（站主）：「明明图片对应的是英语的第二张，但是他把这个图片放到了最后」。
      根因：media 原来是**科目级**数组，画的时候统一排在整科所有作业项之后 ——
      所以第二项配的图跑到科尾去了。现在每条作业项自带一份 media，跟着那一行走。 */
-  var sections = items.map(function(it){
-    var rows = [], media = [];
-    (it.tasks || []).forEach(function(t){
-      var obj = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
-      var text = obj.text || '';
-      var img = obj.img || '';
-      var audio = obj.audio || '';
-      var video = obj.video || '';
-      /* 这一项自己的图 / 音频二维码都挂在 row.media 上；
-         只有正文里顺手写的直链（没有独立图片字段）才留一份到科目级，避免重复铺满 */
-      var row = { l: text, r: hwDueShort(obj), media: [] };
-      if(text) totalTasks++;
-      else if(img || audio || video) totalTasks++;
+  function periodSections(hw){
+    var items = hw.items || [];
+    var sections = items.map(function(it){
+      var rows = [], media = [];
+      (it.tasks || []).forEach(function(t){
+        var obj = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
+        var text = obj.text || '';
+        var img = obj.img || '';
+        var audio = obj.audio || '';
+        var video = obj.video || '';
+        var row = { l: text, r: hwDueShort(obj), media: [] };
+        if(text) totalTasks++;
+        else if(img || audio || video) totalTasks++;
 
-      if(img) addMedia(row.media, 'image', img, text);
-      if(audio) addMedia(row.media, hwLinkKind(audio) === 'video' ? 'video' : 'audio', audio, text);
-      if(video) addMedia(row.media, 'video', video, text);
+        if(img) addMedia(row.media, 'image', img, text);
+        if(audio) addMedia(row.media, hwLinkKind(audio) === 'video' ? 'video' : 'audio', audio, text);
+        if(video) addMedia(row.media, 'video', video, text);
 
-      /* 正文里直接写出来的直链也认：是图片就直接画，是音视频就转二维码 */
-      var urls = text.match(/https?:\/\/[^\s，。、）)】"'<>]+/g) || [];
-      urls.forEach(function(u){
-        var k = hwLinkKind(u);
-        if(k) addMedia(row.media, k, u, '');
+        /* 正文里直接写出来的直链也认：是图片就直接画，是音视频就转二维码 */
+        var urls = text.match(/https?:\/\/[^\s，。、）)】"'<>]+/g) || [];
+        urls.forEach(function(u){
+          var k = hwLinkKind(u);
+          if(k) addMedia(row.media, k, u, '');
+        });
+
+        /* 有图没文字的项也要占一行，否则图无处可挂又跑回科尾 */
+        if(row.l || row.media.length) rows.push(row);
       });
-
-      /* 有图没文字的项也要占一行，否则图无处可挂又跑回科尾 */
-      if(row.l || row.media.length) rows.push(row);
+      return { heading: it.subject || '其他', rows: rows, lines: [], media: media };
+    }).filter(function(s){
+      if(!s.rows.length && !s.media.length) return false;
+      return true;
     });
-    return { heading: it.subject || '其他', rows: rows, lines: [], media: media };
-  }).filter(function(s){
-    if(!s.rows.length && !s.media.length) return false;
-    return true;
+    totalSubjects += sections.length;
+    return sections;
+  }
+
+  /* 多期时每期前面加一条分隔标题（期次名 + 日期范围），一眼分清哪块是哪周 */
+  var sections = [];
+  periods.forEach(function(hw){
+    if(multi) sections.push({ heading: hwPeriodLabel(hw), rows: [], lines: [], media: [] });
+    sections = sections.concat(periodSections(hw));
   });
 
   function finish(){
@@ -22587,10 +22718,15 @@ function hwExportImage(mode){
       });
     });
 
+    var first = periods[0], last = periods[periods.length - 1];
     var card = {
-      title: hw.title || '作业',
-      subtitle: (hw.start || '') + ' ~ ' + (hw.end || ''),
-      badges: ['共 ' + items.length + ' 科', totalTasks + ' 项任务'],
+      title: multi ? '作业合集' : (first.title || '作业'),
+      subtitle: multi
+        ? periods.map(function(p){ return (p.start || '') + ' ~ ' + (p.end || ''); }).join('　·　')
+        : ((first.start || '') + ' ~ ' + (first.end || '')),
+      badges: multi
+        ? ['共 ' + periods.length + ' 期', '共 ' + totalSubjects + ' 科', totalTasks + ' 项任务']
+        : ['共 ' + totalSubjects + ' 科', totalTasks + ' 项任务'],
       sections: sections,
       footer: '由 25级05班 班级服务站生成 · ' + new Date().toLocaleDateString('zh-CN'),
       badge: (typeof siteBadgeList === 'function') ? siteBadgeList() : siteBadgeUrl(),
@@ -22600,7 +22736,9 @@ function hwExportImage(mode){
       qrLabel: '扫码打开「作业查看」· 其他页面需登录',
       minHeight: Math.round(760 * 1.414),
     };
-    var fname = '作业-' + String(hw.start || '').replace(/[^0-9]/g, '') + '.png';
+    var fname = multi
+      ? ('作业合集-' + String(first.start || '').replace(/[^0-9]/g, '') + '.png')
+      : ('作业-' + String(first.start || '').replace(/[^0-9]/g, '') + '.png');
 
     /* v4.9.0（站主）：「导出图片要先预览、能调字号字体排列」——
        不再点一下就闷头下载，先开预览弹窗，参数调满意再保存。 */
@@ -22623,6 +22761,66 @@ function hwExportImage(mode){
 
   if(imgJobs.length && typeof uiMsg === 'function') uiMsg('正在把作业里的图片一起画进去…', '#8a6a55');
   Promise.all([linkJob, Promise.all(imgJobs)]).then(finish);
+}
+
+/* v4.10.20（站主）：多份期次时先弹多选（全选 / 全不选），再合进一张长图 */
+function hwExportPick(periods, mode){
+  var viewing = window.__HW_VIEWING;
+  var viewingId = viewing ? String(viewing.id) : '';
+  var html = '<div class="allboard-mask show" id="hwExPickMask"><div class="allboard-box" style="max-width:520px">'
+    + '<div class="allboard-head"><span>导出哪些期的作业</span><button onclick="hwExportPickClose()">关闭</button></div>'
+    + '<div style="padding:12px 16px 0;overflow:auto;max-height:64vh">'
+    +   '<div class="sc-hint">勾选要合进<b>同一张长图</b>的期次，按时间先后排好；没勾的不会出现在图上。</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px">'
+    +     '<button class="btn btn-sm btn-secondary" data-hw-exall="1">全选</button>'
+    +     '<button class="btn btn-sm btn-secondary" data-hw-exall="0">全不选</button>'
+    +   '</div>'
+    +   periods.map(function(hw, i){
+          var subjN = (hw.items || []).length;
+          var taskN = 0;
+          (hw.items || []).forEach(function(it){ taskN += (it.tasks || []).length; });
+          var label = hwPeriodLabel(hw);
+          var checked = (viewingId && String(hw.id) === viewingId) ? ' checked' : '';
+          return '<label class="sc-ex-row">'
+            + '<input type="checkbox" data-hw-exidx="' + i + '"' + checked + '>'
+            + '<span class="t">' + esc(label)
+            +   '<span class="s">' + subjN + ' 科 ' + taskN + ' 项</span>'
+            + '</span></label>';
+        }).join('')
+    + '</div>'
+    + '<div style="display:flex;gap:10px;padding:0 16px 16px">'
+    +   '<button class="btn btn-secondary" style="flex:1" onclick="hwExportPickClose()">取消</button>'
+    +   '<button class="btn" style="flex:1" id="hwExPickGo">导出图片</button>'
+    + '</div>'
+    + '</div></div>';
+
+  var host = document.createElement('div');
+  host.innerHTML = html;
+  document.body.appendChild(host);
+
+  function setAll(v){
+    Array.prototype.forEach.call(host.querySelectorAll('[data-hw-exidx]'), function(cb){ cb.checked = v; });
+  }
+  Array.prototype.forEach.call(host.querySelectorAll('[data-hw-exall]'), function(b){
+    b.onclick = function(){ setAll(b.getAttribute('data-hw-exall') === '1'); };
+  });
+  document.getElementById('hwExPickGo').onclick = function(){
+    var picked = [];
+    periods.forEach(function(hw, i){
+      var cb = host.querySelector('[data-hw-exidx="' + i + '"]');
+      if(cb && cb.checked) picked.push(hw);
+    });
+    hwExportPickClose();
+    if(!picked.length){
+      if(typeof uiMsg === 'function') uiMsg('至少勾选一期作业', '#af410f');
+      return;
+    }
+    hwExportBuild(picked, mode);
+  };
+}
+function hwExportPickClose(){
+  var m = document.getElementById('hwExPickMask');
+  if(m && m.parentNode) m.parentNode.removeChild(m);
 }
 
 /* ============================================================================
