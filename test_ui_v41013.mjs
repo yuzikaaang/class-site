@@ -52,7 +52,7 @@ const V = (page, sel) => page.evaluate((s) => {
   const c0 = { clk: await V(page, '#clockView'), flip: await V(page, '#flipView'), timer: await V(page, '#timerView'), now: await V(page, '#tmNow') };
   t('计时模式只显示计时器，大时钟收起',
     c0.clk === 'none' && c0.flip === 'none' && c0.timer === 'block', JSON.stringify(c0));
-  t('计时模式右上角出现小的当前时间', c0.now === 'flex', JSON.stringify(c0));
+  t('计时模式左上角出现小的当前时间', c0.now === 'flex', JSON.stringify(c0));
 
   const now0 = await page.evaluate(() => document.getElementById('tmNow').textContent);
   t('小时间是 时:分:秒', /^\d{2}:\d{2}:\d{2}$/.test(now0), now0);
@@ -65,15 +65,18 @@ const V = (page, sel) => page.evaluate((s) => {
     const n = document.getElementById('tmNow').getBoundingClientRect();
     const b = document.querySelector('#bar button').getBoundingClientRect();
     const rec = document.getElementById('logBtn').getBoundingClientRect();
+    const back = document.getElementById('back').getBoundingClientRect();
+    const hit = (a, c) => !(a.right <= c.left || a.left >= c.right || a.bottom <= c.top || a.top >= c.bottom);
     return {
       nw: Math.round(n.width), nh: Math.round(n.height), bw: Math.round(b.width), bh: Math.round(b.height),
-      right: Math.round(innerWidth - n.right), gapRec: Math.round(n.top - rec.bottom),
-      overlapsRec: !(n.right <= rec.left || n.left >= rec.right || n.bottom <= rec.top || n.top >= rec.bottom),
+      gapBack: Math.round(n.left - back.right), sameRow: Math.abs(n.top - back.top) <= 4,
+      overlapsRec: hit(n, rec), overlapsBack: hit(n, back),
     };
   });
   t('小时间宽度与工具栏按钮相近（0.9~1.8 倍）',
     geo.nw >= geo.bw * 0.9 && geo.nw <= geo.bw * 1.8, JSON.stringify(geo));
-  t('小时间不压住「记录」按钮', !geo.overlapsRec && geo.gapRec >= 0, JSON.stringify(geo));
+  t('小时间紧挨「← 返回」右侧、同一行', geo.gapBack >= 0 && geo.gapBack <= 20 && geo.sameRow && !geo.overlapsBack, JSON.stringify(geo));
+  t('小时间不压住「记录」按钮', !geo.overlapsRec, JSON.stringify(geo));
 
   /* 计时器应该居中 */
   const mid = await page.evaluate(() => {

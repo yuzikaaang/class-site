@@ -13339,13 +13339,45 @@ function toggleHwDone(hwId, subject, ti, el){
     if(prog) prog.textContent = done + '/' + all.length + ' 已完成';
   }
 }
+/* v4.12.0：普通模式也要「淡色小字显示截止时间、过期项默认隐藏」。
+   跟大屏同一套口径：只读态把过了截止的项收进「已截止 N 项」，点开才铺开。 */
+function hwDueOverdue(t){
+  if(!t || typeof t !== 'object' || !t.due) return false;
+  var v = String(t.due);
+  if(v.length >= 16 && v.charAt(10) === ' ') v = v.slice(0, 10) + 'T' + v.slice(11);
+  var ms = new Date(v).getTime();
+  return !isNaN(ms) && ms < Date.now();
+}
+function hwDueLong(t){
+  if(!t || typeof t !== 'object' || !t.due) return '';
+  var v = String(t.due);
+  if(v.length >= 16 && v.charAt(10) === ' ') v = v.slice(0, 10) + 'T' + v.slice(11);
+  var d = new Date(v), ms = d.getTime();
+  if(isNaN(ms)) return '';
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  var hm = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  return (ms < Date.now() ? '已截止 ' : '截止 ') + hm;
+}
+window.__HW_DUE_OPEN = window.__HW_DUE_OPEN || {};
+function hwDueFold(btn, key){
+  var box = btn && btn.nextElementSibling;
+  if(!box) return;
+  var on = box.hasAttribute('hidden');
+  if(on){ box.removeAttribute('hidden'); window.__HW_DUE_OPEN[key] = 1; }
+  else { box.setAttribute('hidden', ''); delete window.__HW_DUE_OPEN[key]; }
+  btn.classList.toggle('on', on);
+  var ar = btn.querySelector('.hw-duefold-ar');
+  if(ar) ar.textContent = on ? '收起' : '展开';
+}
+
 /* 把作业 items 渲染成美化后的科目卡片（任务可点选「已完成」；支持单条配图，点击放大） */
 function _renderHwItems(items, hwId){
   if(!items || !items.length) return '<div style="padding:18px;text-align:center;color:#6e635a">该作业暂无具体科目内容。</div>';
   return items.map(function(it){
     var s = HW_SUBJECT_STYLE[it.subject] || { c:'#6e635a', e:'square-pen' };
-    var total = (it.tasks||[]).length;
-    var tasks = (it.tasks||[]).map(function(t, ti){
+    var all = it.tasks || [];
+    var total = all.length;
+    function oneTask(t, ti){
       var text, img, audio, video, audioLabel;
       if(t && typeof t === 'object'){
         text = t.text; img = t.img; audio = t.audio; video = t.video; audioLabel = t.audioLabel;
@@ -13367,12 +13399,29 @@ function _renderHwItems(items, hwId){
       var videoHtml = video
         ? '<div class="hw-imgs hw-video"><video src="'+esc(video)+'" controls preload="'+_hwVidPreload()+'" playsinline></video></div>'
         : '';
-      return '<div class="hw-task'+(done?' done':'')+'" onclick="toggleHwDone(\''+esc(hwId)+'\',\''+esc(it.subject)+'\','+ti+',this)">'
+      var dt = hwDueLong(t), over = hwDueOverdue(t);
+      return '<div class="hw-task'+(done?' done':'')+(over?' hw-over':'')+'" onclick="toggleHwDone(\''+esc(hwId)+'\',\''+esc(it.subject)+'\','+ti+',this)">'
         + '<span class="hw-check" aria-hidden="true"></span>'
-        + '<span class="hw-task-text">'+esc(text)+'</span>'
+        + '<span class="hw-task-text">'+esc(text)
+        + (dt ? '<em class="hw-due'+(over?' over':'')+'">'+esc(dt)+'</em>' : '')
+        + '</span>'
         + '</div>' + imgHtml + audioHtml + videoHtml;
-    }).join('');
-    var doneCnt = (it.tasks||[]).filter(function(t, ti){ return _isHwDone(hwId, it.subject, ti); }).length;
+    }
+    var vis = [], over = [];
+    all.forEach(function(t, ti){ if(hwDueOverdue(t)) over.push(ti); else vis.push(ti); });
+    var tasks = vis.map(function(ti){ return oneTask(all[ti], ti); }).join('');
+    if(over.length){
+      var key = 'n' + String(hwId || '') + '_' + esc(it.subject);
+      var open = !!window.__HW_DUE_OPEN[key];
+      tasks += '<button type="button" class="hw-duefold'+(open?' on':'')+'"'
+        + ' aria-expanded="'+(open?'true':'false')+'"'
+        + ' onclick="hwDueFold(this,\''+key.replace(/'/g, "\\'")+'\')">'
+        + iconSvg('timer',12) + ' 已截止 ' + over.length + ' 项'
+        + '<span class="hw-duefold-ar">'+(open?'收起':'展开')+'</span></button>'
+        + '<div class="hw-duehidden"'+(open?'':' hidden')+'>'
+        + over.map(function(ti){ return oneTask(all[ti], ti); }).join('') + '</div>';
+    }
+    var doneCnt = all.filter(function(t, ti){ return _isHwDone(hwId, it.subject, ti); }).length;
     var progHtml = total ? '<span class="hw-progress">'+doneCnt+'/'+total+' 已完成</span>' : '';
     /* 课代表编辑入口（2026-10-06）：登录 + 本科目课代表（或管理员）才显示 */
     var editBtnHtml = _canEditSubject(it.subject)
@@ -21921,22 +21970,140 @@ function shortName(n){
   return s.length > 8 ? s.slice(0, 7) + '…' : s;
 }
 
+/* ================= 普通模式：日历合进作业查看弹窗（v4.12.0）=================
+   站主确认「普通模式日历合进作业查看弹窗」「点 11/14 自动落到第11周周末作业」。
+   数据跟大屏是同一份 SITE_DATA.holidayHomeworks，自动期次也直接借 BIG.ensurePeriod，
+   所以普通模式点出来的「第11周周末作业」和大屏看到的是同一期。 */
+function hwNormalPeriodAt(dateStr){
+  var all = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
+  for(var i = 0; i < all.length; i++){
+    var s0 = String(all[i].start || '').slice(0, 10), e0 = String(all[i].end || '').slice(0, 10);
+    if(s0 && e0 && s0 <= dateStr && dateStr <= e0) return all[i];
+  }
+  try{
+    if(window.BIG && typeof BIG.ensurePeriod === 'function'){
+      var d = new Date(dateStr + 'T00:00:00');
+      if(!isNaN(d.getTime())){ var p = BIG.ensurePeriod(d); if(p) return p; }
+    }
+  }catch(e){}
+  return null;
+}
+function hwNormAnchor(){
+  if(window.__HW_VIEW_DATE) return window.__HW_VIEW_DATE;
+  var h = window.__HW_VIEWING;
+  if(h && h.start) return String(h.start).slice(0, 10);
+  return _hwDateStr(new Date());
+}
+function hwNormJump(dateStr){
+  window.__HW_VIEW_DATE = dateStr;
+  window.__HW_VIEW_CAL_OPEN = false;
+  showCurrentHomework();
+}
+function hwNormShift(n){
+  var d = new Date(hwNormAnchor() + 'T00:00:00');
+  if(isNaN(d.getTime())) return;
+  d.setDate(d.getDate() + 7 * (n || 0));
+  hwNormJump(_hwDateStr(d));
+}
+function hwNormToday(){ window.__HW_VIEW_DATE = null; showCurrentHomework(); }
+function hwNormWeekOf(dateStr){
+  try{
+    if(window.BIG && typeof BIG.weekOf === 'function'){
+      var d = new Date(dateStr + 'T00:00:00');
+      if(!isNaN(d.getTime())) return BIG.weekOf(d);
+    }
+  }catch(e){}
+  return null;
+}
+function hwNormStripRender(){
+  var host = document.getElementById('hwNormStrip'); if(!host) return;
+  var anchor = hwNormAnchor(), today = _hwDateStr(new Date());
+  var d0 = new Date(anchor + 'T00:00:00');
+  var wd = (d0.getDay() + 6) % 7;
+  var mon = new Date(d0.getTime()); mon.setDate(mon.getDate() - wd);
+  var view = window.__HW_VIEWING;
+  var rs = String((view && view.start) || '').slice(0, 10);
+  var re = String((view && view.end) || '').slice(0, 10);
+  var wk = hwNormWeekOf(anchor);
+  var names = ['一','二','三','四','五','六','日'];
+  var html = '<button type="button" class="ns-nav" onclick="hwNormShift(-1)" title="上一周">‹</button>'
+    + '<div class="ns-days">';
+  for(var i = 0; i < 7; i++){
+    var d = new Date(mon.getTime()); d.setDate(d.getDate() + i);
+    var ds = _hwDateStr(d);
+    var inr = !!(rs && re && ds >= rs && ds <= re);
+    var cls = 'ns-day' + (i >= 5 ? ' we' : '') + (inr ? ' inrange' : '')
+      + (ds === today ? ' today' : '') + (ds === anchor ? ' cur' : '');
+    html += '<button type="button" class="' + cls + '" onclick="hwNormJump(\'' + ds + '\')" title="' + ds + '">'
+      + '<span class="ns-w">' + names[i] + '</span><span class="ns-d">' + d.getDate() + '</span></button>';
+  }
+  html += '</div>'
+    + '<button type="button" class="ns-nav" onclick="hwNormShift(1)" title="下一周">›</button>'
+    + '<button type="button" class="ns-cal" onclick="hwNormCalToggle()" title="整月日历">' + (wk ? '第' + wk.no + '周' : '日历') + '</button>'
+    + (window.__HW_VIEW_DATE ? '<button type="button" class="ns-today" onclick="hwNormToday()">今天</button>' : '');
+  host.innerHTML = html;
+}
+window.__HW_CAL_MONTH = null;
+function hwNormCalToggle(){
+  window.__HW_VIEW_CAL_OPEN = !window.__HW_VIEW_CAL_OPEN;
+  if(window.__HW_VIEW_CAL_OPEN){
+    var d = new Date(hwNormAnchor() + 'T00:00:00');
+    window.__HW_CAL_MONTH = { y: d.getFullYear(), m: d.getMonth() };
+  }
+  hwNormCalRender();
+}
+function hwNormCalNav(n){
+  var c = window.__HW_CAL_MONTH; if(!c) return;
+  c.m += (n || 0);
+  if(c.m < 0){ c.m = 11; c.y--; } if(c.m > 11){ c.m = 0; c.y++; }
+  hwNormCalRender();
+}
+function hwNormCalRender(){
+  var box = document.getElementById('hwNormCal'); if(!box) return;
+  if(!window.__HW_VIEW_CAL_OPEN){ box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  var c = window.__HW_CAL_MONTH;
+  if(!c){ var d0 = new Date(); c = window.__HW_CAL_MONTH = { y: d0.getFullYear(), m: d0.getMonth() }; }
+  var first = new Date(c.y, c.m, 1), last = new Date(c.y, c.m + 1, 0).getDate();
+  var lead = (first.getDay() + 6) % 7, today = _hwDateStr(new Date()), anchor = hwNormAnchor();
+  var html = '<div class="nc-head"><button type="button" onclick="hwNormCalNav(-1)">‹</button>'
+    + '<span>' + c.y + ' 年 ' + (c.m + 1) + ' 月</span>'
+    + '<button type="button" onclick="hwNormCalNav(1)">›</button></div><div class="nc-grid">';
+  ['一','二','三','四','五','六','日'].forEach(function(w){ html += '<span class="nc-wk">' + w + '</span>'; });
+  for(var i = 0; i < lead; i++) html += '<span class="nc-empty"></span>';
+  for(var d = 1; d <= last; d++){
+    var dd = new Date(c.y, c.m, d), ds = _hwDateStr(dd);
+    var we = (dd.getDay() === 0 || dd.getDay() === 6);
+    var cls = 'nc-day' + (we ? ' we' : '') + (ds === today ? ' today' : '') + (ds === anchor ? ' cur' : '');
+    html += '<button type="button" class="' + cls + '" onclick="hwNormJump(\'' + ds + '\')">' + d + '</button>';
+  }
+  html += '</div>';
+  box.innerHTML = html;
+}
+
 function showCurrentHomework(forceId){
   var mask = document.getElementById('hwCurrentMask');
   var title = document.getElementById('hwCurrentTitle');
   var list = document.getElementById('hwCurrentList');
   if(!mask || !list) return;
   /* v3.5.42（站主 #2）：可以看/导出之前某一期作业，不再只能看「当前」那一份。
-     forceId 由下拉框给出；不传则仍按「今天落在哪一期 / 最近一期」自动选。 */
+     forceId 由下拉框给出；不传则按日期锚点（日历）或「今天/最近一期」自动选。 */
   var all = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
+  window.__HW_PICKED = !!forceId || !!window.__HW_VIEW_DATE;
   var hw = null;
   if(forceId){
     for(var fi = 0; fi < all.length; fi++){
       if(String(all[fi].id) === String(forceId)){ hw = all[fi]; break; }
     }
+    window.__HW_VIEW_DATE = null;         /* 选了具体期次就按它，不再按日期锚点 */
   }
+  if(!hw && window.__HW_VIEW_DATE) hw = hwNormalPeriodAt(window.__HW_VIEW_DATE);
   if(!hw) hw = getCurrentHomework();
   window.__HW_VIEWING = hw || null;
+
+  /* 管理员才显示「＋ 新增作业」（站主：只有管理员会显示新增作业按钮） */
+  var addBtn = document.getElementById('hwAddBtn');
+  if(addBtn){ try{ addBtn.style.display = (typeof isAdmin === 'function' && isAdmin()) ? '' : 'none'; }catch(e){ addBtn.style.display = 'none'; } }
 
   /* 下拉：最近的排在前面 */
   var sel = document.getElementById('hwPickSel');
@@ -21950,18 +22117,23 @@ function showCurrentHomework(forceId){
       return String(a.title || '') < String(b.title || '') ? 1 : -1;
     });
     sel.innerHTML = ordered.map(function(x){
-      return '<option value="' + attr(x.id) + '"' + (hw && String(x.id) === String(hw.id) ? ' selected' : '') + '>'
+      return '<option value="' + attr(x.id) + '"' + (hw && String(x.id) === String(hw.id) && !window.__HW_VIEW_DATE ? ' selected' : '') + '>'
         + esc(x.title) + '（' + esc(x.start || '') + ' ~ ' + esc(x.end || '') + '）</option>';
     }).join('');
     sel.onchange = function(){ showCurrentHomework(sel.value); };
   }
+  hwNormStripRender();
+  hwNormCalRender();
+  closeHwEdit();            /* 换期次时收起编辑区，避免改到别的一期 */
   if(!hw){
     if(title) title.textContent = '当前作业';
-    list.innerHTML = '<div style="padding:24px;text-align:center;color:#6e635a">暂未找到当前作业记录。<br>请通过「历史作业（日期）」日历查看所有已同步的作业。</div>';
+    list.innerHTML = '<div style="padding:24px;text-align:center;color:#6e635a">这一周暂无作业记录。<br>管理员可点右上角「＋ 新增作业」开始写。</div>';
     mask.classList.add('show');
     return;
   }
-  if(title) title.textContent = hw.title + '（' + hw.start + ' ~ ' + hw.end + '）';
+  /* v4.12.0：日期范围已经在下面的「查看」下拉和日期条里，标题只留期次名，
+     免得窄屏顶栏被挤成竖排。 */
+  if(title) title.textContent = hw.title;
   var demoHtml = hw.isDemo
     ? '<div style="background:#fff7ed;border:1px solid #ffd8a8;color:#d46b08;padding:10px 12px;border-radius:10px;font-size:.82rem;font-weight:700;margin-bottom:12px">⚠️ 示例测试数据，并非真实作业</div>'
     : '';
@@ -21969,6 +22141,166 @@ function showCurrentHomework(forceId){
   mask.classList.add('show');
 }
 function closeHwCurrent(){ var m=document.getElementById('hwCurrentMask'); if(m) m.classList.remove('show'); }
+
+/* ================= 普通模式：管理员在弹窗内新增 / 编辑作业（v4.12.0）=================
+   站主：「普通模式下也可以作业新增，只有管理员会显示新增作业按钮，功能与大屏一致」；
+   又确认「普通模式的样式跟现在一样」「弹窗内直接改」。所以这里不搬大屏两栏，
+   就在作业查看弹窗里换成单列编辑区：7 个科目按钮 + 每项文字 + 每项右侧时钟按钮。
+   数据直接写 SITE_DATA.holidayHomeworks（和大屏同一份），保存后两边都能看到。 */
+var HW_ADD = null;
+var HWA_SUBJ = ['语文','数学','英语','物理','化学','生物','其他'];
+function closeHwEdit(){
+  var list = document.getElementById('hwCurrentList'); if(list) list.style.display = '';
+  var zone = document.getElementById('hwEditZone');
+  if(zone){ zone.style.display = 'none'; zone.innerHTML = ''; }
+  HW_ADD = null;
+}
+function openHwAdd(){
+  var ok = false; try{ ok = (typeof isAdmin === 'function' && isAdmin()); }catch(e){}
+  if(!ok){ if(typeof uiMsg === 'function') uiMsg('仅管理员可新增作业', '#af410f'); return; }
+  /* 没明确翻过日历/下拉时，默认写「今天所在的那一周」，不误落到刚结束的旧期次；
+     想补写别的周，先用日期条点过去再点新增。 */
+  var base = window.__HW_PICKED
+    ? (window.__HW_VIEWING || hwNormalPeriodAt(hwNormAnchor()))
+    : (hwNormalPeriodAt(_hwDateStr(new Date())) || window.__HW_VIEWING);
+  if(!base){ if(typeof uiMsg === 'function') uiMsg('找不到这一期的作业，换个日期再试', '#af410f'); return; }
+  /* v4.12.0：改历史作业前先拦一下，跟大屏同一个口径（站主「进编辑就拦」） */
+  var bend = String(base.end || '').slice(0, 10);
+  if(bend && bend < _hwDateStr(new Date())){
+    if(!window.confirm('「' + (base.title || '这一期') + '」已经结束，确定要编辑吗？')) return;
+  }
+  var p;
+  try{ p = JSON.parse(JSON.stringify(base)); }catch(e){ return; }
+  delete p._auto;
+  if(!p.items) p.items = [];
+  HW_ADD = { period: p, dueOpen: null };
+  var list = document.getElementById('hwCurrentList'); if(list) list.style.display = 'none';
+  var zone = document.getElementById('hwEditZone'); if(zone) zone.style.display = 'block';
+  hwAddRender();
+}
+function hwaTaskRow(it, si, t, ti){
+  var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
+  var due = String(o.due || '').slice(0, 16);
+  var show = HW_ADD.dueOpen === (si + ':' + ti);
+  return '<div class="hwa-task">'
+    + '<textarea rows="1" placeholder="作业内容"'
+    + ' onchange="hwAddSetTask(' + si + ',' + ti + ',this.value)">' + esc(o.text || '') + '</textarea>'
+    + '<button type="button" class="hwa-clock' + (due ? ' has' : '') + '" title="设截止时间"'
+    + ' onclick="hwAddDueToggle(' + si + ',' + ti + ')">' + iconSvg('timer', 14) + '</button>'
+    + '<button type="button" class="hwa-del" title="删除这一项"'
+    + ' onclick="hwAddDelTask(' + si + ',' + ti + ')">×</button>'
+    + '</div>'
+    + '<div class="hwa-duerow"' + (show ? '' : ' hidden') + '>'
+    + '<input type="datetime-local" step="60" value="' + esc(due) + '"'
+    + ' onchange="hwAddDueSet(' + si + ',' + ti + ',this.value)">'
+    + '<button type="button" onclick="hwAddDueSet(' + si + ',' + ti + ',\'\')">清除</button>'
+    + (due ? '<span style="font-size:.72rem;color:#8a827b">' + esc(hwDueLong(o)) + '</span>' : '')
+    + '</div>';
+}
+function hwAddRender(){
+  var z = document.getElementById('hwEditZone'); if(!z || !HW_ADD) return;
+  var p = HW_ADD.period, items = p.items || [];
+  var html = '<div class="hwa-bar"><b>' + esc(p.title || '这一期') + '</b>'
+    + '<span>' + esc(p.start || '') + ' ~ ' + esc(p.end || '') + '</span></div>'
+    + '<div class="hwa-subj">' + HWA_SUBJ.map(function(sn){
+        var has = sn !== '其他' && items.some(function(it){ return String(it.subject || '').trim() === sn; });
+        return '<button type="button" class="' + (has ? 'has' : '') + '"' + (has ? ' disabled' : '')
+          + ' onclick="hwAddSubj(\'' + sn + '\')">' + (has ? '✓ ' : '＋ ') + esc(sn) + '</button>';
+      }).join('') + '</div>';
+  html += items.map(function(it, si){
+    var rows = (it.tasks || []).map(function(t, ti){ return hwaTaskRow(it, si, t, ti); }).join('');
+    return '<div class="hwa-card"><div class="hwa-card-h"><b>' + esc(it.subject || '未命名') + '</b>'
+      + '<button type="button" onclick="hwAddDelSubj(' + si + ')">删除这一科</button></div>'
+      + rows
+      + '<button type="button" class="hwa-addtask" onclick="hwAddTask(' + si + ')">＋ 添加一项</button></div>';
+  }).join('');
+  html += '<div class="hwa-foot"><button type="button" onclick="closeHwEdit()">取消</button>'
+    + '<button type="button" class="primary" onclick="hwAddSave()">保存</button></div>';
+  z.innerHTML = html;
+}
+function hwaObj(si, ti){
+  var arr = HW_ADD.period.items[si].tasks || (HW_ADD.period.items[si].tasks = []);
+  var t = arr[ti];
+  if(t && typeof t === 'object') return t;
+  arr[ti] = { text: String(t == null ? '' : t) };
+  return arr[ti];
+}
+function hwAddSetTask(si, ti, v){ if(!HW_ADD) return; hwaObj(si, ti).text = String(v || ''); }
+function hwAddDueSet(si, ti, v){
+  if(!HW_ADD) return;
+  var o = hwaObj(si, ti);
+  if(v) o.due = String(v).slice(0, 16); else delete o.due;
+  hwAddRender();
+}
+function hwAddDueToggle(si, ti){
+  if(!HW_ADD) return;
+  var k = si + ':' + ti;
+  HW_ADD.dueOpen = (HW_ADD.dueOpen === k) ? null : k;
+  hwAddRender();
+}
+function hwAddTask(si){
+  if(!HW_ADD) return;
+  var it = HW_ADD.period.items[si];
+  (it.tasks || (it.tasks = [])).push({ text: '' });
+  HW_ADD.dueOpen = null;
+  hwAddRender();
+}
+function hwAddDelTask(si, ti){
+  if(!HW_ADD) return;
+  var arr = HW_ADD.period.items[si].tasks || [];
+  if(ti >= 0 && ti < arr.length) arr.splice(ti, 1);
+  HW_ADD.dueOpen = null;
+  hwAddRender();
+}
+function hwAddSubj(name){
+  if(!HW_ADD) return;
+  name = String(name || '').trim();
+  if(name === '其他'){
+    var v = window.prompt('科目名称', '');
+    if(v === null) return;
+    name = String(v || '').trim();
+    if(!name){ if(typeof uiMsg === 'function') uiMsg('请填写科目名称', '#af410f'); return; }
+  }
+  var items = HW_ADD.period.items;
+  if(items.some(function(it){ return String(it.subject || '').trim() === name; })){
+    if(typeof uiMsg === 'function') uiMsg('「' + name + '」已经在里面了', '#af410f');
+    return;
+  }
+  items.push({ subject: name, tasks: [{ text: '' }] });
+  hwAddRender();
+}
+function hwAddDelSubj(si){
+  if(!HW_ADD) return;
+  var it = HW_ADD.period.items[si];
+  if(!window.confirm('删除「' + (it.subject || '这一科') + '」以及它下面的所有作业？')) return;
+  HW_ADD.period.items.splice(si, 1);
+  HW_ADD.dueOpen = null;
+  hwAddRender();
+}
+function hwAddSave(){
+  if(!HW_ADD) return;
+  var p = HW_ADD.period;
+  var list = window.SITE_DATA.holidayHomeworks || (window.SITE_DATA.holidayHomeworks = []);
+  var idx = -1;
+  for(var i = 0; i < list.length; i++){ if(String(list[i].id) === String(p.id)){ idx = i; break; } }
+  if(idx >= 0) list[idx] = p; else list.push(p);
+  try{ if(typeof saveContentLocal === 'function') saveContentLocal('holiday_homeworks', list); }catch(e){}
+  function done(ok, msg){
+    if(typeof uiMsg === 'function') uiMsg(msg, ok ? '#15803d' : '#af410f');
+    try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
+    try{ if(window.BIG && typeof BIG.renderHw === 'function' && BIG.hwOn) BIG.renderHw(); }catch(e){}
+    var keepId = p.id;
+    closeHwEdit();
+    window.__HW_VIEW_DATE = null;
+    showCurrentHomework(keepId);
+  }
+  if(typeof pushCloudContent === 'function'){
+    pushCloudContent({ holiday_homeworks: list }, true).then(function(r){
+      done(!!(r && r.ok), (r && r.ok) ? '作业已保存并同步云端' : '已存本机，云端同步稍后再试');
+    }).catch(function(){ done(false, '已存本机，云端同步稍后再试'); });
+  }else done(true, '作业已保存');
+}
+
 
 /* ============================================================================
  * v3.5.40（站主 #7）：作业导出图片 / 分享
@@ -22143,6 +22475,20 @@ function hwBoardRef(){
   return { boardId: 1, card: '2' };
 }
 
+/* v4.12.0（站主）：「导出日常周图片时，作业项后要带截止时间」，
+   过期的也照常导出、右列用灰字标「已截止」。这里不依赖 big.js 的 BIG.dueText ——
+   普通模式导出时那份渲染逻辑未必跑过，自己解析一遍最稳。 */
+function hwDueShort(t){
+  if(!t || typeof t !== 'object' || !t.due) return '';
+  var v = String(t.due);
+  if(v.length >= 16 && v.charAt(10) === ' ') v = v.slice(0, 10) + 'T' + v.slice(11);
+  var d = new Date(v), ms = d.getTime();
+  if(isNaN(ms)) return '';
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  var hm = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  return (ms < Date.now() ? '已截止 ' : '截止 ') + hm;
+}
+
 function hwExportImage(mode){
   if(typeof ShareCard === 'undefined'){
     if(typeof uiMsg === 'function') uiMsg('图片组件没加载出来，请刷新页面重试', '#af410f');
@@ -22188,7 +22534,7 @@ function hwExportImage(mode){
       var video = obj.video || '';
       /* 这一项自己的图 / 音频二维码都挂在 row.media 上；
          只有正文里顺手写的直链（没有独立图片字段）才留一份到科目级，避免重复铺满 */
-      var row = { l: text, r: '', media: [] };
+      var row = { l: text, r: hwDueShort(obj), media: [] };
       if(text) totalTasks++;
       else if(img || audio || video) totalTasks++;
 

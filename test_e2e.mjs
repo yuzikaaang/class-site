@@ -13479,12 +13479,35 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.15 版本号升到 4.10.15（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.15'/.test(idxV) && /SITE_VER = '4\.10\.15'/.test(swV)
-    && /API_VER = '4\.10\.15'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.15'/.test(admV));
-  t('★v4.10.15 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.15');
+  t('★v4.10.16 版本号升到 4.10.16（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.16'/.test(idxV) && /SITE_VER = '4\.10\.16'/.test(swV)
+    && /API_VER = '4\.10\.16'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.16'/.test(admV));
+  t('★v4.10.16 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.16');
+
+  /* ---- v4.10.16：每项截止时间 / 日历跳转 / 历史拦截 / 普通模式新增 ---- */
+  {
+    const appV16 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    t('★v4.10.16 每项截止时间：due 解析 + 只读折叠 + 行尾时钟按钮',
+      /function dueMs\(t\)/.test(bigV) && /function isOverdue\(t\)/.test(bigV)
+      && /function dueText\(t, short\)/.test(bigV)
+      && /BIG\.dueOpen = function/.test(bigV) && /bhw-duebtn/.test(bigV)
+      && /已截止 ' \+ overIdx\.length \+ ' 项/.test(bigV));
+    t('★v4.10.16 导出图右列带截止时间（含已截止）',
+      /function hwDueShort\(t\)/.test(appV16) && /r: hwDueShort\(obj\)/.test(appV16));
+    t('★v4.10.16 大屏底部日期条 + 整月日历 + 未来周锚点',
+      /BIG\.hwViewDate = null/.test(bigV) && /BIG\.hwJumpTo = function/.test(bigV)
+      && /BIG\.calOpen = function/.test(bigV) && /id="bhwDateStrip"/.test(idxV)
+      && /function renderDateStrip\(\)/.test(bigV));
+    t('★v4.10.16 改历史作业进编辑先弹拦截',
+      /function isHistoryHw\(hw\)/.test(bigV) && /BIG\.histAsk = function/.test(bigV)
+      && /id="bhwHistMask"/.test(idxV));
+    t('★v4.10.16 普通模式管理员新增作业 + 日历合进弹窗',
+      /function openHwAdd\(\)/.test(appV16) && /id="hwAddBtn"/.test(idxV)
+      && /function hwNormStripRender\(\)/.test(appV16) && /id="hwNormCal"/.test(idxV)
+      && /isAdmin\(\).*?\?\s*''\s*:\s*'none'/.test(appV16));
+  }
 
   /* ---- v4.11.0：作业期次按学期自动按周生成 ---- */
   t('★v4.11.0 周次以学期开始日所在周的周一为第 1 周',
@@ -13497,8 +13520,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★v4.11.0 自动期次只在内存里造，改了内容才落库',
     /_auto: true/.test(bigV) && /function materialize\(hw\)/.test(bigV)
     && /try\{ materialize\(currentHw\(\)\); \}catch\(e\)\{\}/.test(bigV));
-  t('★v4.11.0 没有实体期次时落到本周自动期次',
-    /return hit \|\| ensurePeriod\(new Date\(\)\)/.test(bigV));
+  t('★v4.10.16 没有实体期次时落到日历锚点那天的自动期次',
+    /var t = BIG\.hwViewDate \|\| todayStr\(\)/.test(bigV)
+    && /var p = ensurePeriod\(d\)/.test(bigV)
+    && /return ensurePeriod\(new Date\(\)\)/.test(bigV));
   t('★v4.11.0 顶栏去掉「新建一期」，改「设置」（调这一周范围）',
     !/新建一期<\/button>/.test(bigV) && /BIG\.hwWeekSetting\(\)/.test(bigV)
     && /调整这一周的起止日期/.test(bigV));
@@ -13644,10 +13669,11 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.10.13 时钟与计时互斥：点数字 / 翻页才显示大时钟',
       /id="topRow"/.test(clock5) && /class="clk-col"/.test(clock5) && /class="tm-col"/.test(clock5)
       && /className = 'view' \+ \(k === m \? ' on' : ''\)/.test(clock5));
-    t('★v4.10.13 计时页面右上角有一枚小的当前时间（只在计时类模式出现）',
+    t('★v4.10.16 计时页面的小当前时间挨着「返回」，只在计时类模式出现',
       /id="tmNow"/.test(clock5) && /body\.tm-on #tmNow\{display:flex\}/.test(clock5)
       && /body\.bare #tmNow\{display:none\}/.test(clock5)
-      && /min-width:96px/.test(clock5) && /tn\.textContent = two\(hh\)/.test(clock5));
+      && /left:95px/.test(clock5) && /min-width:92px/.test(clock5)
+      && /tn\.textContent = two\(hh\)/.test(clock5));
     t('★v4.10.5 默认打开是时钟界面（不再默认计时）',
       /applyMode\(modeFromUrl\(\) \|\| \(\(CFG\.mode === 'flip'\) \? 'flip' : 'clock'\)\)/.test(clock5));
     t('★v4.10.5 背景色首屏恢复（不会先闪一下默认色）',

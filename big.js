@@ -590,6 +590,47 @@
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
   }
 
+  /* ================= 每项截止时间（v4.12.0）=================
+     站主原话：「每一个小项都可以设置一个截止日期，精确到分钟，也可以不设，
+     显示为淡色小字，过期项默认隐藏」。
+     字段：task.due = 'YYYY-MM-DDTHH:mm'（本机时间，不带时区，换设备也读得懂）。
+     没设过 / 清空 = 空字符串，跟老数据完全兼容 —— 老数据里根本没有这个字段。 */
+  function dueMs(t){
+    if(!t || typeof t !== 'object') return 0;
+    var s = String(t.due || '').trim();
+    if(!s) return 0;
+    if(s.length >= 16 && s.charAt(10) === ' ') s = s.slice(0, 10) + 'T' + s.slice(11);
+    var d = new Date(s);
+    var v = d.getTime();
+    return isNaN(v) ? 0 : v;
+  }
+  function isOverdue(t){ var m = dueMs(t); return !!m && m < Date.now(); }
+  /* 文案分两种：卡片上是「截止 11/13 22:00」，导出图上要更短（右侧那一列窄） */
+  function dueText(t, short){
+    var m = dueMs(t); if(!m) return '';
+    var d = new Date(m);
+    function p(n){ return (n < 10 ? '0' : '') + n; }
+    var md = (d.getMonth() + 1) + '/' + d.getDate();
+    if(d.getFullYear() !== new Date().getFullYear()) md = (d.getFullYear() % 100) + '/' + md;
+    var hm = md + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    if(isOverdue(t)) return short ? '已截止' : '已截止 ' + hm;
+    return short ? hm : '截止 ' + hm;
+  }
+  BIG.dueMs = dueMs; BIG.isOverdue = isOverdue; BIG.dueText = dueText;
+
+  /* 过期项默认收起：展开状态只存在内存里，重绘不丢，刷新页面就回到收起 */
+  BIG._dueOpen = {};
+  BIG.dueFold = function (btn, key){
+    var box = btn && btn.nextElementSibling;
+    if(!box) return;
+    var on = box.hasAttribute('hidden');
+    if(on){ box.removeAttribute('hidden'); BIG._dueOpen[key] = 1; }
+    else { box.setAttribute('hidden', ''); delete BIG._dueOpen[key]; }
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    try{ scheduleLayout(); }catch(e){}
+  };
+
   /* ================= 按学期自动排周次（v4.11.0）=================
      站主原话：「不要让我一期一期新建，系统自动帮我建好。分为周作业和周末作业，
      名称就是第几周，第 11 周对应 11/9–11/13 这样。」
@@ -635,6 +676,10 @@
   }
   /* 同一个「周」反复调用要拿到同一个对象，否则每次渲染都被当成新数据整块重建 */
   var AUTO_CACHE = {};
+  /* v4.12.0（站主）：「日历视图：底部日期条可跳转前后期次，可提前编辑未来作业；
+     点 11/14 自动落到第11周周末作业」。hwViewDate 是「当前在看哪一天/哪一周」的锚点，
+     为空 = 看今天。设了它，currentHw() 就落到那一天所在的自动期次。 */
+  BIG.hwViewDate = null;
   function ensurePeriod(date){
     var w = weekOf(date);
     if(!w) return null;
@@ -768,21 +813,29 @@
     if(BIG.hwId){
       for(var i = 0; i < list.length; i++){ if(String(list[i].id) === String(BIG.hwId)) return list[i]; }
     }
-    var t = todayStr(), hit = null;
+    /* v4.12.0：有日历锚点就按那一天找（可以提前编辑未来某一周 / 周末），
+       否则还是按今天。找实体期次优先，找不到就造那一天的自动期次。 */
+    var t = BIG.hwViewDate || todayStr(), hit = null;
     for(var j = 0; j < list.length; j++){
       var x = list[j];
       var s = String(x.start || '').slice(0, 10) || String(x.end || '').slice(0, 10);
       var e = String(x.end || '').slice(0, 10) || s;
       if(!s) continue;
       if(s <= t && t <= e){
-        /* 万一有两期重叠，取日期更靠近今天的（结束日期更晚的那期） */
+        /* 万一有两期重叠，取日期更靠近锚点的（结束日期更晚的那期） */
         if(!hit || e > (String(hit.end || '').slice(0, 10))) hit = x;
       }
+    }
+    if(hit) return hit;
+    var d = new Date(t + 'T00:00:00');
+    if(!isNaN(d.getTime())){
+      var p = ensurePeriod(d);
+      if(p) return p;
     }
     /* v4.11.0：今天不在任何实体期次里，就落到「本周自动期次」——
        站主要「系统自动帮我建好」，不需要人先点新建。这一份是内存里的 _auto，
        一个字都没改就离开的话不会写进云端。 */
-    return hit || ensurePeriod(new Date());
+    return ensurePeriod(new Date());
   }
 
   function subjStyle(s){
@@ -845,15 +898,28 @@
   function taskHtml(it, si, ti, t, edit){
     var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
     var text = o.text || '';
+    var over = isOverdue(o);
+    var dt = dueText(o, false);
     /* 编辑态用 textarea + 自适应高度：单行 input 装不下长句，字一多就被框子截断。 */
     var main = edit
       ? '<textarea class="bhw-in bhw-area" rows="1" placeholder="输入作业内容"'
         + ' oninput="BIG.autoGrow(this)"'
         + ' onchange="BIG.hwTask(' + si + ',' + ti + ',this.value)">' + esc0(text) + '</textarea>'
       : '<span class="bhw-txt">' + esc0(text) + '</span>';
-    return '<div class="bhw-task">'
+    /* v4.12.0（站主）：「截止时间那个时钟按钮放在每个作业项的右侧」——
+       所以按钮跟删除键并排挂在行尾，不压正文；有截止时间时按钮变实心。 */
+    var dueBtn = edit
+      ? '<button type="button" class="bhw-duebtn' + (dt ? ' has' : '') + (over ? ' over' : '') + '"'
+        + ' title="' + (dt ? esc0(dt) + '，点击修改' : '设置这一项的截止时间') + '"'
+        + ' onclick="BIG.dueOpen(' + si + ',' + ti + ',this)">' + ico('timer', 13) + '</button>'
+      : '';
+    var dueTag = dt
+      ? '<span class="bhw-due' + (over ? ' over' : '') + '">' + esc0(dt) + '</span>'
+      : '';
+    return '<div class="bhw-task' + (over ? ' over' : '') + '">'
       + '<span class="bhw-dot"></span>'
-      + '<div style="flex:1;min-width:0">' + main + mediaHtml(o) + '</div>'
+      + '<div style="flex:1;min-width:0">' + main + mediaHtml(o) + dueTag + '</div>'
+      + dueBtn
       + (edit ? '<button type="button" class="bhw-x" title="删除这一项"'
         + ' onclick="BIG.hwDelTask(' + si + ',' + ti + ')">' + ico('x', 13) + '</button>' : '')
       + '</div>';
@@ -889,13 +955,36 @@
       + (edit ? '<button type="button" class="bhw-x" title="删除这一科"'
           + ' onclick="BIG.hwDelSubj(' + si + ')">' + ico('trash', 13) + '</button>' : '')
       + '</div>';
-    var rows = tasks.map(function (t, ti){ return taskHtml(it, si, ti, t, edit); }).join('');
+
+    /* v4.12.0（站主）：「过期项默认隐藏，编辑态可见」。
+       只读态把过了截止时间的小项收进「已截止 N 项」，点开才铺开（灰字）；
+       编辑态一项不藏，方便改时间或删掉。原始 ti 一直跟着数据走，
+       过滤只影响「显示哪些」，不会打乱 hwTask / hwDelTask 的索引。 */
+    var visIdx = [], overIdx = [];
+    tasks.forEach(function (t, ti){
+      if(!edit && isOverdue(t)) overIdx.push(ti); else visIdx.push(ti);
+    });
+    var rows = visIdx.map(function (ti){ return taskHtml(it, si, ti, tasks[ti], edit); }).join('');
+    var fold = '';
+    if(overIdx.length){
+      var key = 's' + si;
+      var open = !!BIG._dueOpen[key];
+      fold = '<button type="button" class="bhw-duefold' + (open ? ' on' : '') + '"'
+        + ' aria-expanded="' + (open ? 'true' : 'false') + '"'
+        + ' onclick="BIG.dueFold(this,\'' + key + '\')">'
+        + ico('timer', 12) + ' 已截止 ' + overIdx.length + ' 项'
+        + '<span class="bhw-duefold-ar">' + (open ? '收起' : '展开') + '</span></button>'
+        + '<div class="bhw-duehidden"' + (open ? '' : ' hidden') + '>'
+        + overIdx.map(function (ti){ return taskHtml(it, si, ti, tasks[ti], false); }).join('')
+        + '</div>';
+    }
+
     /* v4.10.2（站主第 2 条）：给卡片一个**稳定标识**（期次内科目序号）。
        以前排版算法拿「DOM 里的先后」当排序依据 —— 卡片一旦被搬过，
        下次再排结果就变了，于是每次刷新卡片都换位置，看起来就是「闪一下」。
        有了稳定 key，同一张卡每次都排在同一个位置。 */
     return '<div class="bhw-subj" data-hwkey="s' + si + '" style="border-left:4px solid ' + attr0(accent) + '">'
-      + head + rows
+      + head + rows + fold
       + (edit ? '<button type="button" class="bhw-add" onclick="BIG.hwAddTask(' + si + ')">'
           + ico('plus', 12) + ' 添加一项</button>' : '')
       + '</div>';
@@ -940,6 +1029,38 @@
     leaveHwUi();
     try{ goHomeView(); }catch(e){}
   };
+
+  /* v4.12.0：底部日期条。一整周七天，点哪天落到那天的期次；
+     左右翻周，右边「日历」开整月网格；不在今天时给一个「回今天」。 */
+  function renderDateStrip(){
+    var host = $('bhwDateStrip'); if(!host) return;
+    var anchor = hwAnchor();
+    var d0 = new Date(anchor + 'T00:00:00');
+    var w = weekOf(d0);
+    if(!w || isNaN(d0.getTime())){ host.innerHTML = ''; return; }
+    var hw = currentHw();
+    var s = String((hw && hw.start) || '').slice(0, 10);
+    var e = String((hw && hw.end) || '').slice(0, 10);
+    var today = todayStr();
+    var wkName = ['一','二','三','四','五','六','日'];
+    var html = '<button type="button" class="ds-nav" onclick="BIG.hwWeekShift(-1)" title="上一周">‹</button>'
+      + '<div class="ds-week"><span class="ds-weekno">第 ' + w.no + ' 周</span><div class="ds-days">';
+    for(var i = 0; i < 7; i++){
+      var d = new Date(w.mon.getTime()); d.setDate(d.getDate() + i);
+      var ds = ymd(d);
+      var inRange = !!(s && e && ds >= s && ds <= e);
+      var cls = 'ds-day' + (i >= 5 ? ' we' : '') + (inRange ? ' inrange' : '')
+        + (ds === today ? ' today' : '') + (ds === anchor ? ' cur' : '');
+      html += '<button type="button" class="' + cls + '" onclick="BIG.hwJumpTo(\'' + ds + '\')"'
+        + ' title="' + ds + (inRange ? ' · 当前期次' : '') + '">'
+        + '<span class="ds-w">' + wkName[i] + '</span><span class="ds-d">' + d.getDate() + '</span></button>';
+    }
+    html += '</div></div>'
+      + '<button type="button" class="ds-nav" onclick="BIG.hwWeekShift(1)" title="下一周">›</button>'
+      + '<button type="button" class="ds-cal" onclick="BIG.calOpen()" title="打开整月日历">日历</button>'
+      + (BIG.hwViewDate ? '<button type="button" class="ds-today" onclick="BIG.hwToday()">回今天</button>' : '');
+    host.innerHTML = html;
+  }
 
   /* 本机改动条：渲染与「改完就地补一条」共用同一段 HTML */
   function localStripHtml(){
@@ -1060,6 +1181,7 @@
     var h = $('bigHw');
     if(!h) return;
     var hw = currentHw();
+    renderDateStrip();      /* v4.12.0：日期条常驻，空态也要能翻期次 */
     /* v4.10.2（站主第 5 条）：把两件事彻底拆开。
        · edit  = 顶部「编辑 / 完成」开关开没开 → 决定**卡片能不能改**
                  （输入框、删除按钮、「添加一项」「添加科目」都归它管）；
@@ -2368,8 +2490,90 @@
 
   BIG.hwPick = function (v){
     BIG.hwId = v || null;
+    if(v) BIG.hwViewDate = null;   /* 选了具体期次就别再按日期锚点找 */
     BIG.renderHw();
     try{ setRoute('hw' + (v ? '/' + encodeURIComponent(v) : '')); }catch(e){}
+  };
+
+  /* ================= 日历跳转（v4.12.0）=================
+     底部日期条是一整周（周一~周日），点哪天就落到那一天所在的期次：
+       · 11/9 ~ 11/13 → 「高二上 · 第11周作业」
+       · 11/14、11/15 → 「高二上 · 第11周周末作业」
+     左右箭头整周翻，可以提前跳到未来某一周写。月历弹窗用来跨月跳。 */
+  function hwAnchor(){
+    if(BIG.hwViewDate) return BIG.hwViewDate;
+    var h = currentHw();
+    if(h && h.start) return String(h.start).slice(0, 10);
+    return todayStr();
+  }
+  BIG.hwJumpTo = function (dStr){
+    var d = new Date(String(dStr) + 'T00:00:00');
+    if(isNaN(d.getTime())) return;
+    BIG.hwId = null;
+    BIG.hwViewDate = ymd(d);
+    BIG.renderHw();
+    try{ setRoute('hw/' + BIG.hwViewDate); }catch(e){}
+  };
+  BIG.hwWeekShift = function (n){
+    var d = new Date(hwAnchor() + 'T00:00:00');
+    if(isNaN(d.getTime())) return;
+    d.setDate(d.getDate() + 7 * (n || 0));
+    BIG.hwJumpTo(ymd(d));
+  };
+  BIG.hwToday = function (){
+    BIG.hwId = null; BIG.hwViewDate = null;
+    BIG.renderHw();
+    try{ setRoute('hw'); }catch(e){}
+  };
+
+  /* —— 整月日历弹窗（站主确认「弹整月日历」）—— */
+  BIG._calMonth = null;
+  function calRender(){
+    var m = $('bhwCalMask'); if(!m) return;
+    if(!BIG._calMonth){ var d0 = new Date(); BIG._calMonth = { y: d0.getFullYear(), m: d0.getMonth() }; }
+    var Y = BIG._calMonth.y, M = BIG._calMonth.m;
+    var ttl = $('bhwCalTitle'); if(ttl) ttl.textContent = Y + ' 年 ' + (M + 1) + ' 月';
+    var body = $('bhwCalBody'); if(!body) return;
+    var first = new Date(Y, M, 1), last = new Date(Y, M + 1, 0).getDate();
+    var lead = (first.getDay() + 6) % 7;             /* 周一打头 */
+    var today = todayStr(), anchor = hwAnchor();
+    var html = '<div class="bhw-cal-wk">'
+      + ['一','二','三','四','五','六','日'].map(function (w){ return '<span>' + w + '</span>'; }).join('')
+      + '</div><div class="bhw-cal-grid">';
+    for(var i = 0; i < lead; i++) html += '<span class="bhw-cal-empty"></span>';
+    for(var d = 1; d <= last; d++){
+      var dd = new Date(Y, M, d), ds = ymd(dd);
+      var wd = (dd.getDay() + 6) % 7;
+      var cls = 'bhw-cal-day' + (wd >= 5 ? ' we' : '')
+        + (ds === today ? ' today' : '') + (ds === anchor ? ' cur' : '');
+      /* 只在第一天和第二段开头标一下周次，格子保持干净 */
+      var w = weekOf(dd);
+      var tag = w ? '<i>' + w.no + '</i>' : '';
+      html += '<button type="button" class="' + cls + '"'
+        + ' onclick="BIG.calPick(\'' + ds + '\')" title="' + ds + (w ? ' · 第' + w.no + '周' : '') + '">'
+        + '<b>' + d + '</b>' + tag + '</button>';
+    }
+    html += '</div>';
+    body.innerHTML = html;
+  }
+  BIG.calOpen = function (){
+    var base = new Date(hwAnchor() + 'T00:00:00');
+    if(!isNaN(base.getTime())) BIG._calMonth = { y: base.getFullYear(), m: base.getMonth() };
+    var m = $('bhwCalMask'); if(!m) return;
+    calRender();
+    m.classList.add('show');
+  };
+  BIG.calClose = function (){ var m = $('bhwCalMask'); if(m) m.classList.remove('show'); };
+  BIG.calNav = function (n){
+    if(!BIG._calMonth) return;
+    BIG._calMonth.m += (n || 0);
+    if(BIG._calMonth.m < 0){ BIG._calMonth.m = 11; BIG._calMonth.y--; }
+    if(BIG._calMonth.m > 11){ BIG._calMonth.m = 0; BIG._calMonth.y++; }
+    calRender();
+  };
+  BIG.calPick = function (dStr){
+    BIG.calClose();
+    BIG.hwJumpTo(dStr);
   };
 
   BIG.markSaved = function (txt){ markSaved(txt); };
@@ -2435,8 +2639,14 @@
      站主诉求：「班级电脑的作业界面压根没有新增 / 修改按钮」。
      班级电脑离线、登不了管理员，所以给一个不依赖登录的编辑入口；
      打开后整页进入编辑态，改完点「完成」退回只读，避免大屏上被误点。 */
-  BIG.hwEditToggle = function (){
-    var on = !hwEditOn();
+  /* v4.12.0（站主）：「修改之前作业要有一个弹窗拦截提醒」，细则确认「进编辑就拦」。
+     判据是这一期的结束日期早于今天 —— 未来期次（提前写）不算历史，不拦。 */
+  function isHistoryHw(hw){
+    var e = String((hw && hw.end) || '').slice(0, 10);
+    return !!e && e < todayStr();
+  }
+  BIG.isHistoryHw = isHistoryHw;
+  function doEditToggle(on){
     try{ localStorage.setItem(HW_EDIT_KEY, on ? '1' : '0'); }catch(e){}
     BIG.renderHw();
     /* v4.10.2（站主第 5 条）：文案跟着身份走 ——
@@ -2444,6 +2654,29 @@
     toast(on
       ? (adminOk() ? '已进入编辑，改完点右上角「完成」，改动会同步到云端' : '已进入编辑，改完点右上角「完成」（改动只存本机）')
       : '已退出编辑，卡片恢复只读');
+  }
+  BIG.hwEditToggle = function (){
+    var on = !hwEditOn();
+    if(on && isHistoryHw(currentHw())){ BIG.histAsk(); return; }
+    doEditToggle(on);
+  };
+  BIG.histAsk = function (){
+    var m = $('bhwHistMask');
+    var hw = currentHw();
+    var ttl = $('bhwHistText');
+    if(ttl){
+      ttl.textContent = '「' + (hw ? (hw.title || '这一期') : '这一期') + '」'
+        + ((hw && (hw.start || hw.end)) ? '（' + (hw.start || '') + ' ~ ' + (hw.end || '') + '）' : '')
+        + ' 已经结束。改动会写回原来的那一周，确定要编辑吗？';
+    }
+    if(m){ m.classList.add('show'); return; }
+    /* 弹窗 DOM 没加载出来时用原生确认兜底，不能静默放行 */
+    if(confirm('这一期作业已经结束，确定要编辑吗？')) doEditToggle(true);
+  };
+  BIG.histCancel = function (){ var m = $('bhwHistMask'); if(m) m.classList.remove('show'); };
+  BIG.histConfirm = function (){
+    var m = $('bhwHistMask'); if(m) m.classList.remove('show');
+    doEditToggle(true);
   };
 
   /* 把本机改动推到云端（只有管理员能做，和原来的权限口径一致） */
@@ -2659,6 +2892,64 @@
     hw.items.push({ subject: name, tasks: [''] });
     BIG.renderHw();
     touch();
+  };
+
+  /* ================= 单项截止时间的设置（v4.12.0）=================
+     时钟按钮挂在每一项的右侧（见 taskHtml），点开这个小弹窗：
+       · datetime-local 精确到分钟；
+       · 留空 / 点「清除」= 这一项不设截止；
+       · 三个快捷按钮只是帮着把输入框填好，最终仍以「保存」为准。
+     老数据里一项可能只是个字符串，设时间时统一升级成对象 {text,due}，
+     读的那一侧（taskHtml / 导出）两种都认。 */
+  BIG._dueCtx = null;
+  function duePad(n){ return (n < 10 ? '0' : '') + n; }
+  function dueLocalVal(d){
+    return d.getFullYear() + '-' + duePad(d.getMonth() + 1) + '-' + duePad(d.getDate())
+      + 'T' + duePad(d.getHours()) + ':' + duePad(d.getMinutes());
+  }
+  BIG.dueOpen = function (si, ti, btn){
+    var hw = hwObj(); if(!hw || !hw.items[si]) return;
+    var arr = hw.items[si].tasks || [];
+    if(ti < 0 || ti >= arr.length) return;
+    var t = arr[ti];
+    var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
+    BIG._dueCtx = { si: si, ti: ti };
+    var m = $('bhwDueMask'); if(!m) return;
+    var inp = $('bhwDueInput'); if(inp) inp.value = String(o.due || '').slice(0, 16);
+    var ttl = $('bhwDueTitle');
+    if(ttl) ttl.textContent = '截止时间 · ' + (hw.items[si].subject || '这一科') + ' 第 ' + (ti + 1) + ' 项';
+    m.classList.add('show');
+    if(inp) setTimeout(function (){ try{ inp.focus(); }catch(e){} }, 60);
+  };
+  BIG.dueClose = function (){
+    var m = $('bhwDueMask'); if(m) m.classList.remove('show');
+    BIG._dueCtx = null;
+  };
+  function dueWrite(val){
+    var c = BIG._dueCtx; if(!c) return;
+    var hw = hwObj(); if(!hw || !hw.items[c.si]) return;
+    var arr = hw.items[c.si].tasks || [];
+    if(c.ti < 0 || c.ti >= arr.length) return;
+    var t = arr[c.ti];
+    var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
+    if(val) o.due = val; else delete o.due;
+    arr[c.ti] = o;
+    BIG.dueClose();
+    BIG.renderHw();
+    touch();
+    toast(val ? '已设截止时间' : '已清除截止时间');
+  }
+  BIG.dueSave = function (){
+    var inp = $('bhwDueInput');
+    dueWrite(inp ? String(inp.value || '').slice(0, 16) : '');
+  };
+  BIG.dueClear = function (){ dueWrite(''); };
+  BIG.dueQuick = function (n){
+    var d = new Date(); d.setHours(22, 0, 0, 0);
+    if(n === 0 && new Date().getHours() >= 22) d.setDate(d.getDate() + 1);
+    else if(n === 7){ var wd = (d.getDay() + 6) % 7; d.setDate(d.getDate() + (7 - wd)); }
+    else if(n > 0) d.setDate(d.getDate() + n);
+    var inp = $('bhwDueInput'); if(inp) inp.value = dueLocalVal(d);
   };
 
   /* v4.11.0（站主第 4 条）：设置这一周的起止。
