@@ -13624,11 +13624,41 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.10.20 天气温度深色提高对比 + 公告时间兼容两种格式',
       /\.isl-wx-range b\{color:#7c2d12/.test(idxV) && /\.dark \.isl-wx-range b\{color:#fdba74/.test(idxV)
       && /function annDateLabel\(d\)/.test(appV));
-    /* ⑨ 暗色防闪白 */
+    /* ⑨ 暗色防闪白（v4.10.21：sun 模式改用精确日出日落，不再写死 18:00/6:30） */
     t('★v4.10.20 刷新/首次进入同步套用暗色，不先闪亮色',
       /cls_theme_hold/.test(idxV) && /matchMedia\('\(prefers-color-scheme: dark\)'\)/.test(idxV)
-      && /h >= 18 \|\| h < 6\.5/.test(idxV)
+      && /var calcSun = function\(isRise\)/.test(idxV)
+      && /var lat = 29\.03, lng = 114\.55/.test(idxV)
       && /documentElement\.classList\.add\('dark'\)/.test(idxV));
+  }
+
+  /* ===== v4.10.21 专项：上轮回归修复 ===== */
+  {
+    /* ① 导出清单要和大屏看的是同一份（含本机未上传 + 正在看的自动期次） */
+    t('★v4.10.21 导出清单走 BIG.hwList，并补入正在看的自动期次',
+      /function hwExportPeriods\(\)/.test(appV)
+      && /BIG\.hwList/.test(appV)
+      && /window\.__HW_VIEWING/.test(appV)
+      && /BIG\.hwList = hwList/.test(bigV));
+    /* ② 多期同图不能被跨期去重吞掉 */
+    t('★v4.10.21 多期导出：同一张图每期各留一份（去重按期内）',
+      /var imgMemo = \{\}/.test(appV)
+      && /seen = \{\};/.test(appV)
+      && /if\(!imgMemo\[u\]\) imgMemo\[u\] = hwLoadImage\(u\)/.test(appV));
+    /* ③ 多选弹窗有默认勾选、关闭后不留空壳 */
+    t('★v4.10.21 导出多选默认勾选最新一期，关闭时整块移除',
+      /var fallbackIdx = hasViewing \? -1 : periods\.length - 1/.test(appV)
+      && /i === fallbackIdx/.test(appV)
+      && /host\.id = 'hwExPickHost'/.test(appV)
+      && /getElementById\('hwExPickHost'\)/.test(appV));
+    /* ④ 清理缓存保留当前版本桶，别把离线能力一起清掉 */
+    t('★v4.10.21 清理临时缓存保留当前版本桶',
+      /var keep = 'class-site-' \+ \(window\.SITE_VERSION \|\| ''\)/.test(appV)
+      && /k !== keep/.test(appV));
+    /* ⑤ SW 先精确匹配再忽略查询串，图换了能生效 */
+    t('★v4.10.21 图片缓存先精确匹配，再退 ignoreSearch',
+      /cache\.match\(request\)\.catch\(\(\) => null\)/.test(swV)
+      && /ignoreSearch: true/.test(swV));
   }
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */

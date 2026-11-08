@@ -813,6 +813,9 @@
     if(rec) return rec.list;
     return (data().holidayHomeworks || []);
   }
+  /* v4.10.21：导出图片要和大屏看的是同一份数据（含「本机已改、还没上传」的那份）。
+     以前 app.js 直接读 SITE_DATA，班级电脑不登录管理员时导出的是云端旧内容。 */
+  BIG.hwList = hwList;
 
   /* v4.9.1（站主第 2 条）：「作业筛选按时间顺序来，不能按我添加的顺序」。
      期次下拉 / 历史列表原来直接 list.slice().reverse() —— 那是**录入顺序**倒过来，

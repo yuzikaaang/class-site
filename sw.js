@@ -108,7 +108,7 @@
    读 12KB 的 sw.js 比读 600KB 的首页快得多、也省流量
    （线上实测：首页在弱网下 30 秒都下不完，而 sw.js 1~5 秒）。
    e2e 测试里有护栏会校验两者相等，改版本号时别漏。 */
-const SITE_VER = '4.10.20'
+const SITE_VER = '4.10.21'
 
 /* v3.9.16（站主）：缓存桶跟着版本走。
    ------------------------------------------------------------
@@ -249,7 +249,12 @@ self.addEventListener('fetch', (event) => {
       event.respondWith((async () => {
         try{
           const cache = await caches.open(IMG_CACHE)
-          const cached = await cache.match(request, { ignoreSearch: true }).catch(() => null)
+          /* v4.10.21：先按完整地址精确匹配，再退到忽略查询串。
+             只用 ignoreSearch 时，图床换了图但地址带 ?t= 时间戳的话，
+             永远命中第一次那张旧图；先精确匹配就能让新图落地，
+             离线时再靠 ignoreSearch 兜住同一张图的其他参数。 */
+          const cached = (await cache.match(request).catch(() => null))
+            || (await cache.match(request, { ignoreSearch: true }).catch(() => null))
           const netP = fetch(request)
             .then((res) => {
               /* 跨域图是 opaque 响应，status 恒为 0、res.ok 恒 false，

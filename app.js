@@ -9346,7 +9346,12 @@ function clearTempCache(){
   try{
     if(window.caches && window.caches.keys){
       window.caches.keys().then(function(keys){
-        var del = keys.filter(function(k){ return /^class-site-|^cls-img-cache-/.test(k); });
+        /* v4.10.21：保留当前版本那个桶 —— 它装着本次版本的预缓存，删了之后
+           SW 不会重新 install，离线时会连页面都打不开。只清旧版本的。 */
+        var keep = 'class-site-' + (window.SITE_VERSION || '');
+        var del = keys.filter(function(k){
+          return /^class-site-|^cls-img-cache-/.test(k) && k !== keep;
+        });
         Promise.all(del.map(function(k){ return window.caches.delete(k).catch(function(){}); }))
           .then(finishCache);
       }).catch(finishCache);
@@ -22584,7 +22589,22 @@ function hwPeriodEmpty(hw){
 }
 /* 可导出的期次（按开始时间从早到晚），空壳期次不列 */
 function hwExportPeriods(){
-  var list = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
+  /* v4.10.21：优先用大屏那份列表（big.js 的 hwList 会把「本机已改、未上传」的
+     覆盖版本算进去）。v4.10.20 直接用 SITE_DATA，班级电脑离线编辑后导出的
+     是云端旧内容 —— 这是回归，恢复成与屏幕一致的来源。 */
+  var list = null;
+  try{ if(window.BIG && typeof BIG.hwList === 'function') list = BIG.hwList(); }catch(e){}
+  if(!Array.isArray(list)) list = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
+  list = list.slice();
+  /* 正在看的那一期若还没落库（自动期次 / 刚编辑完），也要能导出 */
+  var v = window.__HW_VIEWING;
+  if(v && !hwPeriodEmpty(v)){
+    var has = false;
+    for(var i = 0; i < list.length; i++){
+      if(String(list[i] && list[i].id) === String(v.id)){ has = true; break; }
+    }
+    if(!has) list.push(v);
+  }
   return list.filter(function(hw){ return hw && !hwPeriodEmpty(hw); })
     .sort(function(a, b){
       var x = String(a.start || ''), y = String(b.start || '');
@@ -22626,6 +22646,9 @@ function hwExportBuild(periods, mode){
   var totalTasks = 0;
   var seen = {};
   var imgJobs = [];
+  /* v4.10.21：同一张图可能出现在多期里。下载只做一次（按 URL 复用），
+     但每一期各自保留自己那条 media —— 否则第二期那张会被静默吞掉。 */
+  var imgMemo = {};
 
   /* 一条直链只画一次：图片进 media 等加载，音视频当场生成二维码 */
   function addMedia(list, kind, url, label){
@@ -22634,7 +22657,8 @@ function hwExportBuild(periods, mode){
     seen[u] = 1;
     var md = { kind: kind, url: u, label: label || '', img: null, qr: null };
     if(kind === 'image'){
-      imgJobs.push(hwLoadImage(u).then(function(im){ md.img = im; })
+      if(!imgMemo[u]) imgMemo[u] = hwLoadImage(u);
+      imgJobs.push(imgMemo[u].then(function(im){ md.img = im; })
         .catch(function(){ md.__fail = true; }));
     }else{
       md.qr = hwQrCanvas(hwPlayUrl(u), 224);
@@ -22685,6 +22709,9 @@ function hwExportBuild(periods, mode){
   /* 多期时每期前面加一条分隔标题（期次名 + 日期范围），一眼分清哪块是哪周 */
   var sections = [];
   periods.forEach(function(hw){
+    /* v4.10.21：去重只在「同一期内」生效。跨期共用的图（同一张讲义/班徽）
+       每期都要画出来，不能被上一期记过就跳过。 */
+    seen = {};
     if(multi) sections.push({ heading: hwPeriodLabel(hw), rows: [], lines: [], media: [] });
     sections = sections.concat(periodSections(hw));
   });
@@ -22767,6 +22794,11 @@ function hwExportBuild(periods, mode){
 function hwExportPick(periods, mode){
   var viewing = window.__HW_VIEWING;
   var viewingId = viewing ? String(viewing.id) : '';
+  /* v4.10.21：正在看的那一期可能不在清单里（自动期次 / 已切走），
+     这时默认勾「最新的一期」，不能让用户一进来一个都没勾、点导出被拦。 */
+  var hasViewing = false;
+  periods.forEach(function(hw){ if(viewingId && String(hw.id) === viewingId) hasViewing = true; });
+  var fallbackIdx = hasViewing ? -1 : periods.length - 1;
   var html = '<div class="allboard-mask show" id="hwExPickMask"><div class="allboard-box" style="max-width:520px">'
     + '<div class="allboard-head"><span>导出哪些期的作业</span><button onclick="hwExportPickClose()">关闭</button></div>'
     + '<div style="padding:12px 16px 0;overflow:auto;max-height:64vh">'
@@ -22780,7 +22812,7 @@ function hwExportPick(periods, mode){
           var taskN = 0;
           (hw.items || []).forEach(function(it){ taskN += (it.tasks || []).length; });
           var label = hwPeriodLabel(hw);
-          var checked = (viewingId && String(hw.id) === viewingId) ? ' checked' : '';
+          var checked = ((viewingId && String(hw.id) === viewingId) || i === fallbackIdx) ? ' checked' : '';
           return '<label class="sc-ex-row">'
             + '<input type="checkbox" data-hw-exidx="' + i + '"' + checked + '>'
             + '<span class="t">' + esc(label)
@@ -22795,6 +22827,8 @@ function hwExportPick(periods, mode){
     + '</div></div>';
 
   var host = document.createElement('div');
+  /* v4.10.21：给外层一个 id，关闭时整块摘掉，不在 body 里留空壳 */
+  host.id = 'hwExPickHost';
   host.innerHTML = html;
   document.body.appendChild(host);
 
@@ -22819,6 +22853,8 @@ function hwExportPick(periods, mode){
   };
 }
 function hwExportPickClose(){
+  var h = document.getElementById('hwExPickHost');
+  if(h && h.parentNode) h.parentNode.removeChild(h);
   var m = document.getElementById('hwExPickMask');
   if(m && m.parentNode) m.parentNode.removeChild(m);
 }

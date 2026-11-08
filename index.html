@@ -27,8 +27,38 @@
       }else if(mode === 'system'){
         dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
       }else if(mode === 'sun'){
-        var h = nd.getHours() + nd.getMinutes() / 60;
-        dark = (h >= 18 || h < 6.5);  /* 本地时间近似，精确值 initTheme 会再算 */
+        /* v4.10.21：原来这里用写死的 18:00 / 6:30，与 initTheme 按经纬度算的
+           日出日落对不上 —— 修水夏季 19:20 才日落，18:00 之后会先闪一下暗色；
+           冬季 17:35 已日落，18:00 之前又会先闪亮色。这里把同一套 NOAA 算法
+           抄进来（同一坐标、同一公式），保证首屏判断与 initTheme 完全一致。 */
+        var lat = 29.03, lng = 114.55, tz = -nd.getTimezoneOffset() / 60;
+        var N = Math.floor((Date.UTC(nd.getFullYear(), nd.getMonth(), nd.getDate())
+              - Date.UTC(nd.getFullYear(), 0, 0)) / 86400000);
+        var calcSun = function(isRise){
+          var lngHour = lng / 15;
+          var t = N + (((isRise ? 6 : 18) - lngHour) / 24);
+          var M = (0.9856 * t) - 3.289;
+          var L = M + 1.916 * Math.sin(M * Math.PI / 180) + 0.020 * Math.sin(2 * M * Math.PI / 180) + 282.634;
+          L = ((L % 360) + 360) % 360;
+          var RA = Math.atan(0.91764 * Math.tan(L * Math.PI / 180)) * 180 / Math.PI;
+          RA = ((RA % 360) + 360) % 360;
+          var Lq = Math.floor(L / 90) * 90, RAq = Math.floor(RA / 90) * 90;
+          RA = (RA + (Lq - RAq)) / 15;
+          var sinDec = 0.39782 * Math.sin(L * Math.PI / 180);
+          var cosDec = Math.cos(Math.asin(sinDec));
+          var cosH = (Math.cos(90.833 * Math.PI / 180) - sinDec * Math.sin(lat * Math.PI / 180))
+                   / (cosDec * Math.cos(lat * Math.PI / 180));
+          cosH = Math.max(-1, Math.min(1, cosH));
+          var H = isRise
+            ? (360 - Math.acos(cosH) * 180 / Math.PI) / 15
+            : (Math.acos(cosH) * 180 / Math.PI) / 15;
+          var T = H + RA - (0.06571 * t) - 6.622;
+          var UT = ((T - lngHour) % 24 + 24) % 24;
+          return ((UT + tz) % 24 + 24) % 24;
+        };
+        var rise = calcSun(true), set = calcSun(false);
+        var nowH = nd.getHours() + nd.getMinutes() / 60;
+        dark = (set > rise) ? (nowH >= set || nowH < rise) : (nowH >= set && nowH < rise);
       }
     }
     if(dark) document.documentElement.classList.add('dark');
@@ -8094,18 +8124,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.20';
+var SITE_VERSION = '4.10.21';
 var VER_DATE = '2026-11-09';
 </script>
-<script src="./auth-bus.js?v=41020" defer></script>
-<script src="./app.min.js?v=41020" defer></script>
+<script src="./auth-bus.js?v=41021" defer></script>
+<script src="./app.min.js?v=41021" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=41020" defer></script>
-<script src="./big.js?v=41020" defer></script>
+<script src="./fs-keep.js?v=41021" defer></script>
+<script src="./big.js?v=41021" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=41020" defer></script>
+<script src="./pickfx.js?v=41021" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
