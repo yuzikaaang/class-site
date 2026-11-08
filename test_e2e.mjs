@@ -11870,8 +11870,9 @@ console.log('\n【新】v3.8.5 作业导出直链 / 分享链接 404 修复');
   t('★v3.8.5 分享卡片支持 media（图片 / 二维码块）',
     /sec\.media\.push/.test(idx85) && /block\.media\.push/.test(idx85)
     && /\(b\.media \|\| \[\]\)\.forEach/.test(idx85));
-  t('★v3.8.5 图片按列宽等比、最高 300，音视频固定 112',
-    /Math\.min\(300 \* S, colW \* md\.img\.naturalHeight/.test(idx85) && /hh = 112 \* S/.test(idx85));
+  t('★v4.10.11 图片先按列宽等比、超 300 再反算宽度（不再压扁），音视频固定 112',
+    /var maxH = 300 \* S/.test(idx85) && /hh = colW \* ratio/.test(idx85)
+    && /ww = maxH \/ ratio/.test(idx85) && /hh = 112 \* S/.test(idx85));
   t('★v3.8.5 直链能分清图片 / 音频 / 视频',
     /function hwLinkKind/.test(idx85)
     && /\(png\|jpe\?g\|gif\|webp\|bmp\|avif\|svg\)/.test(idx85)
@@ -13478,12 +13479,28 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.10 版本号升到 4.10.10（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.10'/.test(idxV) && /SITE_VER = '4\.10\.10'/.test(swV)
-    && /API_VER = '4\.10\.10'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.10'/.test(admV));
-  t('★v4.10.10 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.10');
+  t('★v4.10.11 版本号升到 4.10.11（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.11'/.test(idxV) && /SITE_VER = '4\.10\.11'/.test(swV)
+    && /API_VER = '4\.10\.11'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.11'/.test(admV));
+  t('★v4.10.11 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.11');
+
+  /* ---- v4.10.11：倒计时实时 / 导出图配图归位 / 1/3 与 2/3 分栏 ---- */
+  t('★v4.10.11 大屏倒计时每秒只改数字（cdSnap + cdTick，不整块重建）',
+    /function cdSnap\(now\)/.test(bigV) && /function cdTick\(\)/.test(bigV)
+    && /if\(s\.sig !== BIG\._cdSig\)\{ renderCd\(\); return; \}/.test(bigV)
+    && /\}, 1000\);/.test(bigV));
+  t('★v4.10.11 班级岛放假倒计时每秒刷新，横幅节点不重建',
+    /function islHolTick\(\)/.test(appV) && /el\.innerHTML !== html/.test(appV)
+    && /ISLAND_TICK = setInterval\(islandTick, 1000\)/.test(appV));
+  t('★v4.10.11 导出图的行级 media 跟在那一项后面',
+    /row\.media/.test(appV) && /r\.media \|\| \[\]/.test(idxV)
+    && /media: rmedia/.test(idxV) && /bh \+= hh \+ 10/.test(idxV));
+  t('★v4.10.11 作业页两栏改成 1fr / 2fr，卡片按是否折行选栏',
+    /grid-template-columns:minmax\(0,1fr\) minmax\(0,2fr\) 300px/.test(idxV)
+    && /hh > lh \* 1\.45/.test(bigV) && /planB/.test(bigV)
+    && /function cardKeyNo/.test(bigV));
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {

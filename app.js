@@ -9898,7 +9898,8 @@ function islandBoot(){
        （直接从 #/hw 深链进来的话，大屏比 /api/island 先画完）。 */
     try{ if(window.BIG && BIG.renderProg) BIG.renderProg(); }catch(e){}
     if(ISLAND && ISLAND.on && !ISLAND_TICK){
-      ISLAND_TICK = setInterval(islandTick, 30000);
+      /* v4.10.11：1 秒一次 —— 假期倒计时按本机时间实时走（其余工作每 30 次做一遍） */
+      ISLAND_TICK = setInterval(islandTick, 1000);
     }
   }).catch(function(){ /* 接口没上就当作没有岛 */ });
 }
@@ -10327,7 +10328,8 @@ function islLeftText(ms){
   if(ms < 86400000){
     var h = Math.floor(ms / 3600000);
     var m = Math.floor((ms % 3600000) / 60000);
-    if(h <= 0) return m + ' 分钟';
+    /* v4.10.11：最后一分钟不再写「0 分钟」—— 看着像已经结束了 */
+    if(h <= 0) return m > 0 ? m + ' 分钟' : '不到 1 分钟';
     return h + ' 小时' + (m > 0 ? ' ' + m + ' 分' : '');
   }
   return Math.floor(ms / 86400000) + ' 天';
@@ -10616,7 +10618,7 @@ function islandBanner(){
     host.innerHTML = '<div class="island-banner hol">'
       + tagRow(tomorrow ? (t.firstDay ? '明天放假' : '明日放假')
                         : (t.startTonight ? '假期开始' : (t.firstDay ? '今天放假' : '放假中')))
-      + '<span class="txt">' + islHolText(t) + '</span>'
+      + '<span class="txt" id="islHolTxt">' + islHolText(t) + '</span>'
       + '</div>';
     islBindPhoto(host);
     if(footL) footL.textContent = '假期';
@@ -10672,10 +10674,24 @@ function islandToggleMeta(){
 }
 
 var ISL_TICK_H = null;
+/* v4.10.11（站主）：「还有多少个分钟……是通过本机的时间去实时的更新的」。
+   假期横幅里的「还剩 X 小时 Y 分」以前只在 21 点 / 跨天重画，一天都不动；
+   现在每秒按本机时间重算这一行字，只在真的变了才写 DOM（不重建整块）。 */
+function islHolTick(){
+  var el = document.getElementById('islHolTxt');
+  if(!el || !ISLAND) return;
+  var tomorrow = islShowTomorrow();
+  var t = islandToday(tomorrow ? 1 : 0);
+  if(!t || t.kind !== 'holiday'){ islandBanner(); return; }   /* 假期结束 / 换状态 → 整块重画 */
+  var html = islHolText(t);
+  if(el.innerHTML !== html) el.innerHTML = html;
+}
 function islandTick(){
   if(!ISLAND || !ISLAND.on) return;
   var d = new Date();
   islSet('islTime', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'));
+  /* 假期倒计时每秒走一次字；其余情况这一句什么都不做 */
+  try{ islHolTick(); }catch(e){}
   /* 跨过 21:00（或跨天）时重画横幅：不用刷新页面也能切到「明日事项」 */
   var h = d.getHours();
   if(ISL_TICK_H !== null && ISL_TICK_H !== h){
@@ -10683,8 +10699,11 @@ function islandTick(){
   }
   ISL_TICK_H = h;
   /* v4.10.4：跨天之后「学期还剩多少天」也要跟着减 1（页面开着过夜） */
-  try{ islandTermLeft(); }catch(e){}
+  if((++ISL_TICK_N % 30) === 0){
+    try{ islandTermLeft(); }catch(e){}
+  }
 }
+var ISL_TICK_N = 0;
 
 /* v3.9.21：失败后最多自动重试一次（用函数对象当开关，避免再开一个全局变量） */
 function islWxRetry(){}
@@ -22156,6 +22175,9 @@ function hwExportImage(mode){
     list.push(md);
   }
 
+  /* v4.10.11（站主）：「明明图片对应的是英语的第二张，但是他把这个图片放到了最后」。
+     根因：media 原来是**科目级**数组，画的时候统一排在整科所有作业项之后 ——
+     所以第二项配的图跑到科尾去了。现在每条作业项自带一份 media，跟着那一行走。 */
   var sections = items.map(function(it){
     var rows = [], media = [];
     (it.tasks || []).forEach(function(t){
@@ -22164,41 +22186,58 @@ function hwExportImage(mode){
       var img = obj.img || '';
       var audio = obj.audio || '';
       var video = obj.video || '';
-      if(text) { rows.push({ l: text, r: '' }); totalTasks++; }
-      else if(img || audio || video) { totalTasks++; }
+      /* 这一项自己的图 / 音频二维码都挂在 row.media 上；
+         只有正文里顺手写的直链（没有独立图片字段）才留一份到科目级，避免重复铺满 */
+      var row = { l: text, r: '', media: [] };
+      if(text) totalTasks++;
+      else if(img || audio || video) totalTasks++;
 
-      if(img) addMedia(media, 'image', img, text);
-      if(audio) addMedia(media, hwLinkKind(audio) === 'video' ? 'video' : 'audio', audio, text);
-      if(video) addMedia(media, 'video', video, text);
+      if(img) addMedia(row.media, 'image', img, text);
+      if(audio) addMedia(row.media, hwLinkKind(audio) === 'video' ? 'video' : 'audio', audio, text);
+      if(video) addMedia(row.media, 'video', video, text);
 
       /* 正文里直接写出来的直链也认：是图片就直接画，是音视频就转二维码 */
       var urls = text.match(/https?:\/\/[^\s，。、）)】"'<>]+/g) || [];
       urls.forEach(function(u){
         var k = hwLinkKind(u);
-        if(k) addMedia(media, k, u, '');
+        if(k) addMedia(row.media, k, u, '');
       });
+
+      /* 有图没文字的项也要占一行，否则图无处可挂又跑回科尾 */
+      if(row.l || row.media.length) rows.push(row);
     });
     return { heading: it.subject || '其他', rows: rows, lines: [], media: media };
-  }).filter(function(s){ return s.rows.length || s.media.length; });
+  }).filter(function(s){
+    if(!s.rows.length && !s.media.length) return false;
+    return true;
+  });
 
   function finish(){
     /* 图片取不到（图床删图 / 404 / 代理也失败）→ 退回一行文字，不能让整张图失败。
-       v4.7.9：不再是干巴巴一条网址 —— 直接写「打不开」，并给出短链方便核对。 */
-    sections.forEach(function(sec){
-      sec.media = sec.media.filter(function(m){
+       v4.7.9：不再是干巴巴一条网址 —— 直接写「打不开」，并给出短链方便核对。
+       v4.10.11：行级 media 与科目级 media 都要过这一遍。 */
+    function clean(list, lines){
+      return list.filter(function(m){
         if(m.__fail){
           if(m.kind === 'image'){
-            sec.lines.push('图片打不开（链接可能已失效）：' + hwShortUrl(m.url));
+            lines.push('图片打不开（链接可能已失效）：' + hwShortUrl(m.url));
           }else{
-            sec.lines.push('链接：' + hwShortUrl(m.url));
+            lines.push('链接：' + hwShortUrl(m.url));
           }
           return false;
         }
         if((m.kind === 'audio' || m.kind === 'video') && !m.qr){
-          sec.lines.push(hwShortUrl(m.url));
+          lines.push(hwShortUrl(m.url));
           return false;
         }
         return true;
+      });
+    }
+    sections.forEach(function(sec){
+      sec.media = clean(sec.media, sec.lines);
+      if(!sec.rows) return;
+      sec.rows.forEach(function(r){
+        if(r && r.media && r.media.length) r.media = clean(r.media, sec.lines);
       });
     });
 

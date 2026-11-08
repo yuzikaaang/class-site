@@ -1201,6 +1201,15 @@
     host.innerHTML = '';
     host.appendChild(frag);
   }
+  /* v4.10.11（站主）：「两种尺寸，小尺寸放在左边的 1/3 屏，大尺寸放在右边的 2/3 屏，
+     这个尺寸其实就是长度尺寸……如果科目的那些文字都比较短，你就放在左边的 1/3 屏，
+     如果它文字比较长的话，你就放在右边的 2/3 屏」。
+     判据不猜字数 —— 把同一张卡分别塞进窄栏与宽栏量一次自然高度：
+     窄栏里明显变高（多折了好几行）就归大卡，否则小卡。 */
+  function cardKeyNo(k){
+    var m = /^s(\d+)$/.exec(String(k || ''));
+    return m ? Number(m[1]) : 9999;
+  }
   BIG.layoutCards = function (){
     var colA = $('bhwColA'), colB = $('bhwColB');
     if(!colA || !colB) return;
@@ -1228,26 +1237,36 @@
        直接量会把拉伸后的高度当成内容高度，越排越偏。 */
     cards.forEach(function (el){ el.style.flex = '0 0 auto'; });
     void colA.offsetHeight;
-    var gap = 10, ha = 0, hb = 0, planA = [], planB = [];
-    /* 高的先放、谁矮放谁（LPT 装箱）：比按科目顺序轮流塞更均衡，
-       同样 6 张卡两栏高度差能压到几像素，底部留白也就更少。 */
-    cards.map(function(el, i){
-      return { el: el, h: el.getBoundingClientRect().height,
-               k: String(el.getAttribute('data-hwkey') || ('i' + i)) };
-    }).sort(function (a, b){
-      /* ⚠️ v4.10.2（站主第 2 条）：**排序必须与 DOM 当前位置无关**。
-         以前并列时用 a.i（DOM 下标）定次序，而 i 取决于卡片此刻在左栏还是右栏、
-         排在第几个 —— 排一次搬一次，下一次再排结果就变了。
-         于是每次刷新（哪怕内容一个字没改）卡片也会换位置、整块区域「闪一下」。
-         现在改用卡片自带的 data-hwkey（期次内科目序号）排序：
-         同样的内容 → 同样的结果 → 位置不变 → 不闪。 */
-      if(b.h !== a.h) return b.h - a.h;
+
+    var planA = [], planB = [];
+    cards.forEach(function (el, i){
+      var k = String(el.getAttribute('data-hwkey') || ('i' + i));
+      /* 放进左栏（1/3 宽）量：只要有一项文字折成了两行以上，就说明这科「文字比较长」，
+         该去右栏当大卡；全都一行放得下 → 小卡留左栏。
+         不按字数猜 —— 中英文混排、字号缩放都会影响实际宽度，直接看渲染结果最准。 */
+      colA.appendChild(el);
+      var big = false;
+      var ts = el.querySelectorAll('.bhw-txt,.bhw-area');
+      for(var ti = 0; ti < ts.length; ti++){
+        var tx = ts[ti];
+        var cs = window.getComputedStyle(tx);
+        var lh = parseFloat(cs.lineHeight);
+        if(!lh || isNaN(lh)) lh = (parseFloat(cs.fontSize) || 16) * 1.5;
+        /* ⚠️ .bhw-txt 是 inline span，clientHeight 恒为 0 —— 必须量 rect 高度 */
+        var hh = tx.getBoundingClientRect().height;
+        if(hh > lh * 1.45){ big = true; break; }
+      }
+      (big ? planB : planA).push({ el: el, k: k });
+    });
+    /* 栏内按科目顺序排（而不是按高度）—— 语文、数学、英语一眼能顺着找，
+       位置也不会因为某一科多写两行就跳来跳去 */
+    var byKey = function (a, b){
+      var x = cardKeyNo(a.k), y = cardKeyNo(b.k);
+      if(x !== y) return x - y;
       return a.k < b.k ? -1 : (a.k > b.k ? 1 : 0);
-    })
-      .forEach(function (x){
-        if(ha <= hb){ planA.push(x); ha += x.h + gap; }
-        else { planB.push(x); hb += x.h + gap; }
-      });
+    };
+    planA.sort(byKey);
+    planB.sort(byKey);
 
     var curA = [].slice.call(colA.children).filter(isCard);
     var curB = [].slice.call(colB.children).filter(isCard);
@@ -1642,7 +1661,7 @@
   function examPinBtn(scope, id, on, label, auto){
     /* 今天本来就会自动显示的，给了按钮反而误导：点了取消也还在。直接标「自动」 */
     if(auto){
-      return '<span class="bex-auto" title="今天本来就会显示，无需挑选">自动</span>';
+      return '<span class="bex-auto" title="今天默认显示，无需挑选">自动</span>';
     }
     return '<button type="button" class="bex-add' + (on ? ' on' : '') + '"'
       + ' data-pin="' + esc0(scope + ':' + id) + '" data-on="' + (on ? '0' : '1') + '"'
@@ -1927,7 +1946,8 @@
     var m = Math.floor((sec % 3600) / 60);
     if(d > 0) return d + ' 天 ' + h + ' 时';
     if(h > 0) return h + ' 小时 ' + m + ' 分';
-    return m + ' 分';
+    /* v4.10.11：最后一分钟不写「0 分」 */
+    return m > 0 ? m + ' 分' : '不到 1 分';
   }
   function cdPick(){
     var now = new Date(), out = { imp: null, hol: null };
@@ -1958,9 +1978,27 @@
     }catch(e){}
     return out;
   }
+  /* v4.10.11（站主）：「这个还有多少分钟是通过本机的时间去实时的更新的，
+     不能说我 3 分钟刷新，那我就 3 分钟之后再刷新出这个时间」。
+     所以文案拆成两步：cdSnap() 只算字（每秒一次，纯计算不碰 DOM），
+     renderCd() 才建结构。cdTick() 拿新字跟屏幕上的比，变了才写 textContent ——
+     既不会每秒重建 DOM（那会闪），也不会等下一次整块重绘才动。 */
+  function cdSnap(now){
+    var p = cdPick(), o = { imp: p.imp, hol: p.hol, impTxt: '', holTxt: '' };
+    if(p.imp) o.impTxt = p.imp.during ? '进行中' : cdLeftText(p.imp.st, now);
+    if(p.hol){
+      var left = cdDays(p.hol.d, now);
+      o.holTxt = (left <= 0 ? '今天' : '还有 ' + left + ' 天')
+        + (p.hol.days ? ' · 假期 ' + p.hol.days + ' 天' : '');
+    }
+    o.sig = (p.imp ? p.imp.name + '#' + p.imp.st.getTime() + '#' + (p.imp.during ? 1 : 0) : '-')
+      + '/' + (p.hol ? p.hol.name + '#' + p.hol.d.getTime() : '-');
+    return o;
+  }
   function renderCd(){
     var box = $('bhwCd'); if(!box) return;
-    var now = new Date(), p = cdPick();
+    var s = cdSnap(new Date()), p = { imp: s.imp, hol: s.hol };
+    BIG._cdSig = s.sig;
     if(!p.imp && !p.hol){ box.style.display = 'none'; return; }
     box.style.display = '';
     var rows = '';
@@ -1972,19 +2010,28 @@
         + (hasSc ? ' onclick="BIG.cdScope()" title="点击查看考试范围"' : '') + '>'
         + '<span class="bhw-cd-n">' + esc0(p.imp.name)
         + (hasSc ? '<i class="bhw-cd-more">范围</i>' : '') + '</span>'
-        + '<span class="bhw-cd-v' + (p.imp.during ? ' during' : '') + '">'
-        + (p.imp.during ? '进行中' : cdLeftText(p.imp.st, now)) + '</span></div>';
+        + '<span class="bhw-cd-v' + (p.imp.during ? ' during' : '') + '" id="bhwCdImpV">'
+        + esc0(s.impTxt) + '</span></div>';
     }
     if(p.hol){
-      var left = cdDays(p.hol.d, now);
       rows += '<div class="bhw-cd-row">'
         + '<span class="bhw-cd-n">' + esc0(p.hol.name) + '</span>'
-        + '<span class="bhw-cd-v">' + (left <= 0 ? '今天' : '还有 ' + left + ' 天')
-        + (p.hol.days ? ' · 假期 ' + p.hol.days + ' 天' : '') + '</span></div>';
+        + '<span class="bhw-cd-v" id="bhwCdHolV">' + esc0(s.holTxt) + '</span></div>';
     }
     box.innerHTML = '<span class="bhw-mini-k">倒计时</span>' + rows;
   }
+  /* 每秒调用：只改数字。换条 / 进入进行中这类结构性变化交给 sig 判断后重建 */
+  function cdTick(){
+    var box = $('bhwCd'); if(!box) return;
+    var s = cdSnap(new Date());
+    if(s.sig !== BIG._cdSig){ renderCd(); return; }
+    var iv = $('bhwCdImpV');
+    if(iv && s.imp && iv.textContent !== s.impTxt) iv.textContent = s.impTxt;
+    var hv = $('bhwCdHolV');
+    if(hv && s.hol && hv.textContent !== s.holTxt) hv.textContent = s.holTxt;
+  }
   BIG.renderCd = renderCd;
+  BIG.cdTick = cdTick;
 
   /* ==========================================================================
    * v4.10.4（站主第 7 条）：右下角「学期 / 高考 / 高中进度」卡片
@@ -2159,13 +2206,19 @@
     if(BIG._clockT) clearInterval(BIG._clockT);
     BIG._clockT = setInterval(tick, 1000);
 
-    /* v4.3.0：进了作业页才起这两组定时器 —— 倒计时 30 秒刷一次（天/时粒度，不用每秒重排），
-       一言按用户设的分钟数自动换。离开作业页由 leaveHwUi 收掉。 */
+    /* v4.3.0：进了作业页才起这两组定时器 —— 一言按用户设的分钟数自动换。
+       v4.10.11：倒计时改成每秒 tick 只改字（cdTick），每 30 秒整块重建一次兜住跨天；
+       以前是 30 秒整块重建，看上去「半天不动」。 */
     renderCd();
     /* v4.10.4：右下角进度卡跟倒计时一起刷 —— 跨天时天数是会变的 */
     renderProg();
     if(BIG._cdT) clearInterval(BIG._cdT);
-    BIG._cdT = setInterval(function (){ if(BIG.hwOn){ renderCd(); renderProg(); } }, 30000);
+    BIG._cdTickN = 0;
+    BIG._cdT = setInterval(function (){
+      if(!BIG.hwOn) return;
+      cdTick();
+      if((++BIG._cdTickN % 30) === 0){ renderCd(); renderProg(); }
+    }, 1000);
     if(!BIG.quoteData) BIG.quoteNext(false);
     BIG.quoteAuto();
   }
