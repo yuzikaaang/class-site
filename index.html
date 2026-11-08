@@ -4384,7 +4384,7 @@ html.big-mode .tab-page h2{font-size:1.3rem}
    · 所有字号都走 --bhw-fs，底部 A− / A+ 只改这一个变量
    ============================================================ */
 #bigHw{
-  display:none;padding:0 0 58px;
+  display:none;padding:0 0 126px;   /* v4.11.0：底部常驻的科目按钮 + 工具栏 */
   /* v4.10.3（站主第 2 条：字号基准重标定 —— 「100 才是之前 150 的效果」）。
      ① --bhw-fs = 作业正文缩放（跟滑块走）。
         滑块显示 **100** 时它是 **1.5 倍** —— 也就是旧刻度 150% 的那个大小，
@@ -4556,11 +4556,31 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
   font-size:calc(.76rem*var(--bhw-fs));font-weight:700;cursor:pointer;
 }
 .bhw-audio:hover{background:rgba(249,115,22,.16)}
-.bhw-addsubj{display:flex;align-items:center;gap:8px;padding:0 16px;margin-top:8px;flex-wrap:wrap}
+/* v4.11.0：底部那排科目按钮改成「贴着工具栏上方常驻」——
+   原来它跟着文档流排在最后，页面不满一屏时正好钻进固定工具栏底下，看不见。
+   常驻之后滚到哪儿都能点；只读态没有内容，:empty 直接不占位。 */
+.bhw-addsubj{
+  position:fixed;left:0;right:0;bottom:58px;z-index:1100;
+  display:flex;align-items:center;gap:8px;padding:9px 16px;flex-wrap:wrap;
+  background:rgba(253,248,242,.97);border-top:1px solid rgba(120,53,15,.10);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+}
+.bhw-addsubj:empty{display:none}
 .bhw-addsubj .bhw-in{
   border:1px dashed rgba(120,53,15,.25);max-width:200px;padding:6px 10px;border-radius:9px;
   font-size:calc(.8rem*var(--bhw-fs));
 }
+/* v4.11.0：底部七个科目按钮，点一下就在这一期建卡；已有的置灰 */
+.bhw-subjbtn{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:calc(62px*var(--bhw-fs));height:calc(30px*var(--bhw-fs));
+  border:1px solid rgba(120,53,15,.18);background:var(--tint-2);color:var(--accent-ink);
+  border-radius:9px;padding:0 12px;font-size:calc(.78rem*var(--bhw-fs));font-weight:700;
+  font-family:inherit;cursor:pointer;transition:background .15s,opacity .15s;
+}
+.bhw-subjbtn:hover{background:rgba(249,115,22,.16)}
+.bhw-subjbtn.has{opacity:.34;cursor:default}
+.bhw-subjbtn.has:hover{background:var(--tint-2)}
 .bhw-save{font-size:calc(.72rem*var(--bhw-fs));color:var(--fg-3);margin-left:auto}
 .bhw-empty{color:var(--fg-3);text-align:center;padding:30px 10px;font-size:calc(.9rem*var(--bhw-fs))}
 
@@ -7749,18 +7769,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.14';
+var SITE_VERSION = '4.10.15';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=41014" defer></script>
-<script src="./app.min.js?v=41014" defer></script>
+<script src="./auth-bus.js?v=41015" defer></script>
+<script src="./app.min.js?v=41015" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=41014" defer></script>
-<script src="./big.js?v=41014" defer></script>
+<script src="./fs-keep.js?v=41015" defer></script>
+<script src="./big.js?v=41015" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=41014" defer></script>
+<script src="./pickfx.js?v=41015" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

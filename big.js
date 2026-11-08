@@ -590,6 +590,101 @@
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
   }
 
+  /* ================= 按学期自动排周次（v4.11.0）=================
+     站主原话：「不要让我一期一期新建，系统自动帮我建好。分为周作业和周末作业，
+     名称就是第几周，第 11 周对应 11/9–11/13 这样。」
+
+     规则（站主逐条确认过）：
+       · 起点：学期开始日所在那一周的周一。2026-09-01 是周二，所以第 1 周从 8/31 起；
+       · 周作业 = 周一 ~ 周五；周末作业 = 周六 ~ 周日；
+       · 名称带学期前缀：「高二上 · 第11周作业」「高二上 · 第11周周末作业」；
+       · 学期开始日之后的日期一直往后数，不因为学期结束就停；
+       · 期次先只在内存里造出来（_auto），**改了内容才落库**，空壳不存。
+     学期名与开学日都来自 app.js 的 islandProgress()，后台改一次这里就跟着变。 */
+  var TERM_BASE = null;
+  function termBase(){
+    if(TERM_BASE) return TERM_BASE;
+    var p = null;
+    try{ if(typeof islandProgress === 'function') p = islandProgress(); }catch(e){}
+    var st = p && p.start ? String(p.start).slice(0, 10) : '';
+    if(!st) return null;
+    var d = new Date(st + 'T00:00:00');
+    if(isNaN(d.getTime())) return null;
+    var wd = (d.getDay() + 6) % 7;      /* 周一 = 0 */
+    d.setDate(d.getDate() - wd);        /* 开学日所在周的周一 */
+    TERM_BASE = { mon: d, term: p && p.term ? String(p.term) : '' };
+    return TERM_BASE;
+  }
+  function ymd(d){
+    function p(n){ return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  function weekOf(date){
+    var b = termBase();
+    if(!b) return null;
+    var d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    var no = Math.floor(Math.round((d - b.mon) / 86400000) / 7) + 1;
+    var mon = new Date(b.mon.getTime()); mon.setDate(mon.getDate() + (no - 1) * 7);
+    var sun = new Date(mon.getTime()); sun.setDate(sun.getDate() + 6);
+    return { no: no, mon: mon, sun: sun, term: b.term };
+  }
+  function periodTitle(no, weekend){
+    var b = termBase();
+    var pre = (b && b.term) ? b.term + ' · ' : '';
+    return pre + '第' + no + '周' + (weekend ? '周末作业' : '作业');
+  }
+  /* 同一个「周」反复调用要拿到同一个对象，否则每次渲染都被当成新数据整块重建 */
+  var AUTO_CACHE = {};
+  function ensurePeriod(date){
+    var w = weekOf(date);
+    if(!w) return null;
+    var day = new Date(date);
+    var weekend = (day.getDay() === 0 || day.getDay() === 6);
+    var id = 'w' + ymd(w.mon) + (weekend ? 'we' : '');
+    var list = hwList();
+    for(var i = 0; i < list.length; i++){ if(String(list[i].id) === id) return list[i]; }
+    if(AUTO_CACHE[id]) return AUTO_CACHE[id];
+
+    var sat = new Date(w.mon.getTime()); sat.setDate(sat.getDate() + 5);
+    var p = { id: id, _auto: true, title: periodTitle(w.no, weekend), items: [] };
+    if(weekend){
+      /* 周末作业从「周作业结束日的下一天」开始 —— 站主把这一周改到周六，
+         周末就自动只剩周日；改到周日就整段没有周末作业。 */
+      var from = new Date(sat.getTime());
+      for(var j = 0; j < list.length; j++){
+        var wk = list[j];
+        if(String(wk.id) !== ('w' + ymd(w.mon))) continue;
+        var e = new Date(String(wk.end || '').slice(0, 10) + 'T00:00:00');
+        if(!isNaN(e.getTime()) && e >= w.mon){
+          from = new Date(e.getTime()); from.setDate(from.getDate() + 1);
+        }
+      }
+      if(from > w.sun) return null;      /* 这一周没有周末了 */
+      p.start = ymd(from); p.end = ymd(w.sun);
+    }else{
+      var fri = new Date(w.mon.getTime()); fri.setDate(fri.getDate() + 4);
+      p.start = ymd(w.mon); p.end = ymd(fri);   /* 默认周一 ~ 周五；要连周六写在「设置」里改 */
+    }
+    AUTO_CACHE[id] = p;
+    return p;
+  }
+  /* 真正写内容了才把这份 _auto 收进列表；站主要「空壳不存」 */
+  function materialize(hw){
+    if(!hw) return hw;
+    var list = hwList();
+    for(var i = 0; i < list.length; i++){
+      if(String(list[i].id) === String(hw.id)){ delete hw._auto; return list[i]; }
+    }
+    if(!hw._auto) return hw;
+    delete hw._auto;
+    list.push(hw);
+    return hw;
+  }
+  BIG.weekOf = weekOf;
+  BIG.ensurePeriod = ensurePeriod;
+  BIG.periodTitle = periodTitle;
+
+
   /* ================= 本机编辑 / 本机改动（v4.7.1 · 站主第 2 条）=================
      站主原话：「班级电脑的作业界面无法新增、修改作业，压根没有对应按钮。」
      根因：编辑能力一直只挂在 adminOk() 上，而班级电脑长期离线、不可能登录管理员，
@@ -684,7 +779,10 @@
         if(!hit || e > (String(hit.end || '').slice(0, 10))) hit = x;
       }
     }
-    return hit;
+    /* v4.11.0：今天不在任何实体期次里，就落到「本周自动期次」——
+       站主要「系统自动帮我建好」，不需要人先点新建。这一份是内存里的 _auto，
+       一个字都没改就离开的话不会写进云端。 */
+    return hit || ensurePeriod(new Date());
   }
 
   function subjStyle(s){
@@ -1010,7 +1108,10 @@
         + '<button type="button" class="bhw-btn' + (hwEditOn() ? '' : ' ghost') + '"'
           + ' onclick="BIG.hwEditToggle()" title="点「编辑」后作业卡片才能改，点「完成」恢复只读">'
           + (hwEditOn() ? '完成' : '编辑') + '</button>'
-        + (edit && admin ? '<button type="button" class="bhw-btn" onclick="BIG.hwNew()">' + ico('plus', 13) + ' 新建一期</button>' : '')
+        /* v4.11.0（站主第 4 条）：「新建一期」去掉 —— 期次按周自动就有了；
+           换成「设置」，用来改这一周的起止（周三四放假那种情况）。 */
+        + (edit ? '<button type="button" class="bhw-btn" onclick="BIG.hwWeekSetting()"'
+          + ' title="调整这一周的起止日期">设置</button>' : '')
         /* v4.7.1：真全屏（连任务栏一起盖掉），投影 / 一体机上用 */
         + '<button type="button" class="bhw-btn ghost bhw-full" onclick="BIG.hwFull()"'
           + ' id="bhwFullBtn" title="全屏显示（隐藏任务栏），按 Esc 退出">⛶ 全屏</button>';
@@ -1074,7 +1175,7 @@
       if(hit) cards.push({ key: 's' + hit.si, html: subjCard(hit.it, hit.si, edit) });
     });
     var emptyHtml = '<div class="bhw-subj"><div class="bhw-empty">'
-      + (edit ? '暂无科目，可在下方添加。' : '暂时没有作业。') + '</div></div>';
+      + (edit ? '这一周还没有科目，点下面按钮加一科。' : '这一周暂时没有作业。') + '</div></div>';
     /* 两栏合起来算 —— layoutCards 会把卡片在两栏之间搬，只看一栏会重复/漏掉 */
     var pool = [].slice.call(colA.children).concat([].slice.call(colB.children));
     pool = pool.filter(isCard);
@@ -1101,13 +1202,18 @@
       }
     }
 
-    /* v4.10.2（站主第 5 条）：「添加科目」也归编辑态管 ——
-       只读时底栏那一行整个不占位置，卡片上也不再有「添加一项」按钮。 */
+    /* v4.11.0（站主第 4 条）：「底部新增 7 个按钮 —— 语数英物化生 + 其他，
+       点一下自动建对应科目卡」。原来的「科目名称 + 添加科目」输入框撤掉，
+       常驻这排按钮，缺哪科点哪科；已经有了的置灰。 */
     if(addHost){
       addHost.innerHTML = edit
-        ? '<input class="bhw-in" id="bhwNewSubj" placeholder="科目名称"'
-          + ' onkeydown="if(event.key===\'Enter\')BIG.hwAddSubj()">'
-          + '<button type="button" class="bhw-audio" onclick="BIG.hwAddSubj()">' + ico('plus', 14) + ' 添加科目</button>'
+        ? PRESET_SUBJECTS.map(function (s){
+            var has = (hw.items || []).some(function (it){ return String(it.subject || '').trim() === s; });
+            return '<button type="button" class="bhw-subjbtn' + (has ? ' has' : '') + '"'
+              + ' onclick="BIG.hwQuickSubj(\'' + s + '\')" title="' + (has ? s + ' 已存在' : '添加' + s) + '">'
+              + s + '</button>';
+          }).join('')
+          + '<button type="button" class="bhw-subjbtn" onclick="BIG.hwQuickSubj(\'其他\')" title="添加其他科目">其他</button>'
           + '<span class="bhw-save" id="bhwSave"></span>'
         : '';
     }
@@ -2276,6 +2382,9 @@
 
   function persist(){
     if(!canEdit()) return;
+    /* v4.11.0：真正落库前，把当前这份「自动期次」收进列表 ——
+       站主要「有内容才存」，所以落库这个动作本身就等于「已经有内容了」。 */
+    try{ materialize(currentHw()); }catch(e){}
     var list = hwList();
     /* v4.7.0：本机刚存下的这份就是「屏幕上这一份」，把比对基准一起推平 ——
        否则 12 秒后的轮询会把自己刚打的字当成「手机端改的」标黄一遍。 */
@@ -2534,6 +2643,43 @@
     touch();
   };
 
+  /* v4.11.0（站主第 4 条）：底部那排科目按钮，点一下就在这一期里建一张卡。
+     「其他」要自己起名 —— 站主确认过「弹框输名称」。 */
+  BIG.hwQuickSubj = function (name){
+    var hw = hwObj(); if(!hw){ toast('当前没有作业期次', true); return; }
+    name = String(name || '').trim();
+    if(name === '其他'){
+      var v = window.prompt('科目名称', '');
+      if(v === null) return;
+      name = String(v || '').trim();
+      if(!name){ toast('请填写科目名称', true); return; }
+    }
+    var dup = (hw.items || []).some(function (x){ return String(x.subject || '').trim() === name; });
+    if(dup){ toast('「' + name + '」已经在里面了', true); return; }
+    hw.items.push({ subject: name, tasks: [''] });
+    BIG.renderHw();
+    touch();
+  };
+
+  /* v4.11.0（站主第 4 条）：设置这一周的起止。
+     站主原话：「比如周三四放假，那这一周就只有周一二有作业」。
+     只动这一期自己的 start / end，其它周不受影响；
+     把结束日改到周六，周末作业就自动只剩周日（见 ensurePeriod）。 */
+  BIG.hwWeekSetting = function (){
+    if(!canEdit()){ toast('当前不可编辑', true); return; }
+    var hw = currentHw();
+    if(!hw){ toast('当前没有作业期次', true); return; }
+    FORM.mode = 'week';
+    var t = $('bhwFormTitle'); if(t) t.textContent = String(hw.title || '这一周') + ' · 调整范围';
+    var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
+    if(n){ n.value = plain(hw.title || ''); n.style.display = 'none'; }
+    if(n && n.previousElementSibling) n.previousElementSibling.style.display = 'none';
+    if(st) st.value = String(hw.start || '').slice(0, 10);
+    if(en) en.value = String(hw.end || '').slice(0, 10);
+    var sj = $('bhwFormSubj'); if(sj){ sj.innerHTML = ''; sj.style.display = 'none'; }
+    var m = $('bhwFormMask'); if(m) m.classList.add('show');
+  };
+
   /* —— 新建 / 重命名（站主第 1 条）—— */
   var FORM = { mode: 'new', subjects: PRESET_SUBJECTS.slice() };
   function formSubjHtml(){
@@ -2553,6 +2699,14 @@
     if(i >= 0) FORM.subjects.splice(i, 1); else FORM.subjects.push(s);
     formSubjHtml();
   };
+  /* 「设置」只调日期、不改名字，所以把名称那一行临时收起来；
+     下次打开新建 / 重命名再放回去。 */
+  function showFormName(on){
+    var n = $('bhwFormName');
+    if(!n) return;
+    n.style.display = on ? '' : 'none';
+    if(n.previousElementSibling) n.previousElementSibling.style.display = on ? '' : 'none';
+  }
   BIG.hwNew = function (){
     if(!canEdit()){ toast('当前不可编辑', true); return; }
     FORM.mode = 'new';
@@ -2560,6 +2714,7 @@
     var t = $('bhwFormTitle'); if(t) t.textContent = '新建一期作业';
     var d = todayStr();
     var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
+    showFormName(true);
     if(n) n.value = '';
     if(st) st.value = d;
     if(en) en.value = d;
@@ -2573,6 +2728,7 @@
     FORM.mode = 'rename';
     var t = $('bhwFormTitle'); if(t) t.textContent = '重命名这一期';
     var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
+    showFormName(true);
     if(n) n.value = plain(hw.title || '');
     if(st) st.value = hw.start || '';
     if(en) en.value = hw.end || '';
@@ -2689,10 +2845,38 @@
   BIG.formSave = function (){
     var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
     var name = n ? String(n.value || '').trim() : '';
-    if(!name){ toast('期次名称', true); if(n) n.focus(); return; }
     var s0 = st ? String(st.value || '') : '';
     var e0 = en ? String(en.value || '') : '';
     if(s0 && e0 && e0 < s0){ toast('结束日期不能早于开始日期', true); return; }
+    /* v4.11.0：只改这一周的范围，不动名字 */
+    if(FORM.mode === 'week'){
+      var hw0 = currentHw();
+      if(!hw0){ toast('找不到这一期', true); return; }
+      materialize(hw0);
+      if(s0) hw0.start = s0;
+      if(e0) hw0.end = e0;
+      /* v4.11.0：把这一周推到周六，周末作业就往后缩一天；推到周日就整段没有。
+         虚拟的周末期次靠 AUTO_CACHE 重算，实体化的那份这里就地改 start。 */
+      AUTO_CACHE = {};
+      var w = weekOf(new Date(String(hw0.start || '') + 'T00:00:00'));
+      if(w){
+        var weId = 'w' + ymd(w.mon) + 'we';
+        var from = new Date(String(hw0.end || '') + 'T00:00:00');
+        if(!isNaN(from.getTime())){
+          from.setDate(from.getDate() + 1);
+          var l2 = hwList();
+          for(var k = 0; k < l2.length; k++){
+            if(String(l2[k].id) === weId && from <= w.sun) l2[k].start = ymd(from);
+          }
+        }
+      }
+      BIG.formClose();
+      BIG.renderHw();
+      persist();
+      toast('已更新这一周的范围');
+      return;
+    }
+    if(!name){ toast('期次名称', true); if(n) n.focus(); return; }
     if(FORM.mode === 'new'){
       var list = hwList();
       var id = 'hw' + Date.now();

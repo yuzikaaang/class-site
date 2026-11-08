@@ -13398,9 +13398,9 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★v4.10.2 作业编辑必须点顶部「编辑」开关（canEdit 只看 hwEditOn）',
     /function canEdit\(\)\{ return hwEditOn\(\); \}/.test(bigV)
     && /hwEditToggle/.test(bigV));
-  t('★v4.10.2 卡片上不再常驻「添加一项」按钮（不占空间）',
+  t('★v4.11.0 底栏只在编辑态渲染，且换成七个科目按钮',
     /addHost\.innerHTML = edit\s*\?/.test(bigV)
-    && /只读时底栏那一行整个不占位置/.test(bigV));
+    && /PRESET_SUBJECTS\.map/.test(bigV) && /BIG\.hwQuickSubj/.test(bigV));
 
   /* ⑥ 宝箱动画 */
   t('★v4.10.2 同一学号段（同色）不并排（buildStrip 交错铺条带）',
@@ -13479,12 +13479,31 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.14 版本号升到 4.10.14（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.14'/.test(idxV) && /SITE_VER = '4\.10\.14'/.test(swV)
-    && /API_VER = '4\.10\.14'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.14'/.test(admV));
-  t('★v4.10.14 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.14');
+  t('★v4.10.15 版本号升到 4.10.15（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.15'/.test(idxV) && /SITE_VER = '4\.10\.15'/.test(swV)
+    && /API_VER = '4\.10\.15'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.15'/.test(admV));
+  t('★v4.10.15 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.15');
+
+  /* ---- v4.11.0：作业期次按学期自动按周生成 ---- */
+  t('★v4.11.0 周次以学期开始日所在周的周一为第 1 周',
+    /function termBase\(\)/.test(bigV) && /setDate\(d\.getDate\(\) - wd\)/.test(bigV)
+    && /function weekOf\(date\)/.test(bigV) && /Math\.floor\(Math\.round\(\(d - b\.mon\) \/ 86400000\) \/ 7\) \+ 1/.test(bigV));
+  t('★v4.11.0 期次名带学期前缀，周末另起一期',
+    /function periodTitle\(no, weekend\)/.test(bigV)
+    && /b\.term \+ ' · '/.test(bigV) && /'第' \+ no \+ '周'/.test(bigV)
+    && /weekend \? '周末作业' : '作业'/.test(bigV));
+  t('★v4.11.0 自动期次只在内存里造，改了内容才落库',
+    /_auto: true/.test(bigV) && /function materialize\(hw\)/.test(bigV)
+    && /try\{ materialize\(currentHw\(\)\); \}catch\(e\)\{\}/.test(bigV));
+  t('★v4.11.0 没有实体期次时落到本周自动期次',
+    /return hit \|\| ensurePeriod\(new Date\(\)\)/.test(bigV));
+  t('★v4.11.0 顶栏去掉「新建一期」，改「设置」（调这一周范围）',
+    !/新建一期<\/button>/.test(bigV) && /BIG\.hwWeekSetting\(\)/.test(bigV)
+    && /调整这一周的起止日期/.test(bigV));
+  t('★v4.11.0 把这一周推到周六，周末作业自动往后缩',
+    /AUTO_CACHE = \{\}/.test(bigV) && /l2\[k\]\.start = ymd\(from\)/.test(bigV));
   {
     const clockV14 = fs.readFileSync(new URL('./clock.html', import.meta.url), 'utf8');
     t('★v4.10.14 时钟整屏垂直居中（topRow 撑满、上下留白对称、13vh 已去掉）',
