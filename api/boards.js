@@ -43,22 +43,15 @@ const DEFAULT_CATALOG = {
     { id: 3, name: '成绩分析', cards: [] },
     { id: 7, name: '班级事务', cards: [
       { id: '17', title: '意见反馈', sub: '' },
-      { id: '15', title: '排行榜', sub: '' },
       { id: '16', title: '班级活动', sub: '' },
     ] },
     { id: 8, name: '其他工具', cards: [
       { id: '10', title: '个人资料查询', sub: '' },
-      { id: '11', title: '番茄时钟', sub: '' },
-      { id: '12', title: '私人云盘', sub: '' },
+      { id: '30', title: '全屏时钟', sub: '' },
     ] },
     { id: 2, name: '大屏服务', cards: [
       { id: '3', title: '班级课表', sub: 'ClassIsland' },
-      { id: '4', title: '屏幕批注', sub: 'ICC-CE' },
       { id: '5', title: '听歌平台', sub: '' },
-    ] },
-    { id: 5, name: '学习资料', active: false, cards: [
-      { id: '6', title: '课堂笔记', sub: '' },
-      { id: '7', title: '教学课件', sub: '' },
     ] },
     { id: 9, name: '📲 安装为应用', cards: [] },
   ],

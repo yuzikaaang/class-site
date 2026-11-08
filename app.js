@@ -1692,10 +1692,6 @@ var SITE_DATA = {
     { id: 8, name: "其他工具" },
     /* 2026-10-16 v2.10.0：站主要求「大屏服务」下移到【其他工具】分类下方 */
     { id: 2, name: "大屏服务" },
-    /* 2026-10-16 v2.10.0：站主要求隐藏侧边栏【学习资料】按钮。
-       active:false = uiCats() 直接过滤掉，入口不再渲染；
-       数据保留（链接/暂停文案还在），以后想恢复只需删这个标记。 */
-    { id: 5, name: "学习资料", active: false },
     { id: 9, name: "📲 安装为应用" }
   ],
   links: [
@@ -1726,13 +1722,7 @@ var SITE_DATA = {
       mainLabel: "前往官方页面", mainUrl: "https://www.classisland.tech/", mainWechatOk: true,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
-    {
-      id: 4,
-      categoryId: 2, title: "屏幕批注", subtitle: "ICC-CE", icon: "./icons/pmz6J6U.png", active: false,
-      desc: "智能课堂绘图增强工具，\n面向教师的交互式绘图方案，\n支持智能笔迹处理、PPT 实时标注、多点触控手势与自定义设置。",
-      mainLabel: "前往官方页面", mainUrl: "https://cjk-is-so-cute.netlify.app/", mainWechatOk: false,
-      extraLabel: "", extraUrl: "", extraWechatOk: true
-    },
+    /* v4.10.8（站主）：屏幕批注一直关着，删掉，不再留入口。 */
     {
       id: 5,
       categoryId: 2, title: "听歌平台", subtitle: "EchoMusic", icon: "./icons/pnpe3ff.png",
@@ -1740,38 +1730,7 @@ var SITE_DATA = {
       mainLabel: "查看项目", mainUrl: "https://github.com/hoowhoami/EchoMusic", mainWechatOk: false,
       extraLabel: "", extraUrl: "", extraWechatOk: true
     },
-    {
-      id: 6,
-      categoryId: 5, title: "课堂笔记", icon: "", iconText: "笔记", paused: true,
-      pausedMsg: "📌 以后查看课堂笔记 / 课件，请线下在班上大屏查看。",
-      desc: "课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载不受限速影响。\n笔记为截图，支持在线预览；加载缓慢时建议下载查看。\n如无法打开，可将链接复制至浏览器访问（微信内置页面可能存在兼容性问题）。",
-      mainLabel: "", mainUrl: "", mainWechatOk: true,
-      extraLabel: "", extraUrl: "", extraWechatOk: true,
-      gate: {
-        question: "请回答本班科任男女人数之比（共10人）",
-        answers: ["ac18bd73597efe3e39320f1c78d6fa7d8baacb81e29b4db28638146a16894e2c", "7321b13f59cde5cf414fe889f0cc93d3912387dad2ee1097dd25365e1e0867fc"],
-        hint: "四字，格式为「男_女_」",
-        url: "", code: "",
-        sUrl: "CxgHQkYXHxpOHxsAAFccCgkcVQ1DBx1wT3VPZB0+GzU7V0M=", sCode: "VBQfWQ==",
-        version: "2026-08-23-v3"
-      }
-    },
-    {
-      id: 7,
-      categoryId: 5, title: "教学课件", icon: "", iconText: "课件", paused: true,
-      pausedMsg: "📌 以后查看课堂笔记 / 课件，请线下在班上大屏查看。",
-      desc: "课件资源存储于天翼云盘。\n需登录天翼云盘网页端，无需安装客户端，下载不受限速影响。\n如无法打开，可将链接复制至浏览器访问（微信内置页面可能存在兼容性问题）。",
-      mainLabel: "", mainUrl: "", mainWechatOk: true,
-      extraLabel: "", extraUrl: "", extraWechatOk: true,
-      gate: {
-        question: "请回答在高一下学期中零排的常驻嘉宾是？",
-        answers: ["9d782e21981e703e909d86136724dea48c956e805bf3be2fc69652c697ee626e"],
-        hint: "三个字，全名",
-        url: "", code: "",
-        sUrl: "CxgHQkYXHxpOHxsAAFccCgkcVQ1DBx1PdHpbaBU2Gy0THwA=", sCode: "Ew0DCw==",
-        version: "2026-08-23-v3"
-      }
-    },
+    /* v4.10.8（站主）：学习资料整块下线（课堂笔记 / 教学课件），卡片与门禁一并删除。 */
     {
       id: 8, categoryId: 0, title: "每日日报", icon: "",
       desc: "实时热点资讯聚合，\n点击按钮查看当日内容。",
@@ -1797,21 +1756,7 @@ var SITE_DATA = {
     },
     /* v3.9.25（站主）：「其他工具这个番茄钟就可以不要了，我有（全屏时钟）就够了」
        —— 番茄钟已经并进全屏时钟的自习模式，这里把整张卡片删掉。 */
-    {
-      id: 12,
-      categoryId: 8, title: "私人云盘", icon: "", iconText: "云盘", active: false,
-      desc: "用于同步班级重要文件、应用与软件，支持随时取用。",
-      mainLabel: "", mainUrl: "", mainWechatOk: true,
-      extraLabel: "", extraUrl: "", extraWechatOk: true,
-      gate: {
-        question: "请输入私人云盘的访问密码",
-        answers: ["5e67cd33facc7b1ac3169e55cd8b161c655cc939c6f9322c0f56919ffaa432c3"],
-        hint: "仅管理员持有访问密码",
-        url: "",
-        code: "",
-        version: "2026-08-23-v1"
-      }
-    },
+    /* v4.10.8（站主）：私人云盘不再使用，删掉（番茄钟也早已并入全屏时钟）。 */
     {
       id: 17,
       categoryId: 7, title: "意见反馈", icon: "", iconText: "📮",
@@ -1820,13 +1765,7 @@ var SITE_DATA = {
       extraLabel: "", extraUrl: "", extraWechatOk: true,
       needLogin: true
     },
-    {
-      id: 15,
-      categoryId: 7, title: "排行榜", icon: "", iconText: "排行", comingSoon: true, active: false,
-      desc: "班级排行榜功能开发中。",
-      mainLabel: "开发中", mainUrl: "", mainWechatOk: true,
-      extraLabel: "", extraUrl: "", extraWechatOk: true
-    },
+    /* v4.10.8（站主）：排行榜一直是「开发中」，删掉。 */
     {
       id: 16,
       categoryId: 7, title: "班级活动", icon: "", iconText: "活动", comingSoon: true,
@@ -9845,8 +9784,6 @@ function openCat(id){
   for(var i=0;i<pages.length;i++){ pages[i].classList.remove('active'); }
   var page = document.getElementById('tab-cat-'+id);
   if(page) page.classList.add('active');
-  if(id === 5){ showStudyNotice(); }
-  else { studyBubbleHide(); }
   /* v4.4.5：视频悬浮球只在大屏服务（板块 2）内出现；切到别的板块就收起 */
   if(id === 2){ if(_videoUrl) setTimeout(videoBubbleShow, 0); }
   else { videoBubbleHide(); }
@@ -9900,7 +9837,6 @@ function goHomeView(){
   /* 清掉「上次看到哪」，别让 boot 的返回记忆又把视图拽走 */
   try{ sessionStorage.removeItem('cls_return_view'); }catch(e){}
   try{ sessionStorage.removeItem('cls_next'); }catch(e){}
-  studyBubbleHide();
   videoBubbleHide();   /* v4.4.5：回首页时视频悬浮球一并收起 */
   var home = document.getElementById('homeView');
   var grid = document.getElementById('grid');
@@ -12844,39 +12780,10 @@ function wipeAllData(){
   setTimeout(function(){ location.reload(); }, 800);
 }
 
-/* ---- 学习资料网络限制提示弹窗（关闭后显示带红点悬浮球） ---- */
-function studyBubbleShow(){
-  var b=document.getElementById('studyBubble'); if(!b) return;
-  if(window.__activeCat !== 5){ b.style.display='none'; actSyncBubble(); return; } /* 仅在学习资料板块内显示 */
-  var off=false; try{ off=localStorage.getItem('cls_study_notice_dismissed')==='1'; }catch(e){}
-  b.style.display = off ? 'none' : 'flex';
-  actSyncBubble(); /* 活动球可见时上移，避免两个球叠一起 */
-}
-function studyBubbleHide(){
-  var b=document.getElementById('studyBubble'); if(b) b.style.display='none';
-  actSyncBubble();
-}
-function showStudyNotice(){
-  try{ if(localStorage.getItem('cls_study_notice_dismissed')==='1') return; }catch(e){}
-  studyBubbleHide();
-  var m=document.getElementById('studyNoticeMask'); if(m) m.classList.add('show');
-}
-function closeStudyNotice(){
-  var m=document.getElementById('studyNoticeMask'); if(m) m.classList.remove('show');
-  studyBubbleShow();
-}
-function dismissStudyNotice(){
-  var cb=document.getElementById('studyNoticeNoShow');
-  var off=false;
-  if(cb && cb.checked){ try{ localStorage.setItem('cls_study_notice_dismissed','1'); }catch(e){} off=true; }
-  var m=document.getElementById('studyNoticeMask'); if(m) m.classList.remove('show');
-  if(off) studyBubbleHide(); else studyBubbleShow();
-}
-
 /* 右下角悬浮球统一排布：依次从下往上叠，避免互相遮挡。
    通用弹窗引擎的 popBubble 也由本函数协调；新增悬浮球务必加进下方 ids 数组。 */
 function actSyncBubble(){
-  var ids = ['hwPopBubble','videoBubble','audioBubble','studyBubble','actBubble','popBubble'];
+  var ids = ['hwPopBubble','videoBubble','audioBubble','actBubble','popBubble'];
   var base = 16, GAP = 58;
   for(var i = 0; i < ids.length; i++){
     var el = document.getElementById(ids[i]);

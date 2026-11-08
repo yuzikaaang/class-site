@@ -752,8 +752,8 @@ var PAGES = [
   { id:'boards',        label:'板块管理', icon:'layers',    group:'内容',  title:'板块管理（名称 / 简介 / 排序 / 分享链接）' },
   /* v3.8.7（站主）：首页班级岛 + 课程表 */
   { id:'island',        label:'班级岛',   icon:'clock',     group:'内容',  title:'班级岛（今日事项横幅）' },
-  /* v4.10.6（站主）：接考试看板 —— 同步整份快照到本站、在这里新增考试再写回 */
-  { id:'exams',         label:'考试同步', icon:'calendar',  group:'内容',  title:'考试同步（考试看板接入 / 同步 / 写回）' },
+  /* v4.10.8（站主）：接考试看板 —— 只读同步，挑哪几场进大屏作业看板 */
+  { id:'exams',         label:'考试同步', icon:'calendar',  group:'内容',  title:'考试同步（考试看板 · 只读同步与挑选）' },
   { id:'homeworks',     label:'作业管理', icon:'file',      group:'内容',  title:'作业管理' },
   { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
   { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },

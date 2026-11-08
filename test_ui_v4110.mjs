@@ -40,6 +40,13 @@ for (let i = 1; i <= 24; i++) {
 
 function mockApi(route) {
   const u = route.request().url();
+  /* v4.10.8：大屏作业看板只给管理员进，登录态校验也要回管理员 */
+  if (u.includes('/auth?action=me')) {
+    return route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ ok: true, user: { username: 'aibot', role: 'admin' }, cloudKeys: [] }),
+    });
+  }
   if (u.includes('/api/island')) {
     return route.fulfill({
       status: 200, contentType: 'application/json',
@@ -90,6 +97,8 @@ page.on('console', (m) => {
 await page.addInitScript(() => {
   localStorage.setItem('cls_login_guide_v1', '1');
   localStorage.setItem('cls_welcome_v1', '1');
+  /* v4.10.8：大屏作业看板只给管理员进 */
+  localStorage.setItem('cls_auth', JSON.stringify({ token: 'TESTTOKEN', user: { username: 'aibot', role: 'admin' } }));
 });
 await page.route('**/api/**', mockApi);
 /* 带时间戳绕开浏览器缓存，保证测到的是最新代码 */
@@ -244,7 +253,7 @@ console.log('\n【5】作业必须点顶部「编辑」才能改（需求 5）')
       canEdit: typeof window.canEdit === 'function' ? window.canEdit() : null,
     };
   });
-  t('顶栏有「编辑 / 完成」按钮（人人都能点）', r.hasBtn, r.label);
+  t('顶栏有「编辑 / 完成」按钮（管理员可见）', r.hasBtn, r.label);
   t('按钮初始文案是「编辑」', /编辑/.test(r.label), r.label);
   t('只读态下没有「添加一项」输入框', !/添加科目/.test(r.addHostHtml), r.addHostHtml.slice(0, 60));
 }

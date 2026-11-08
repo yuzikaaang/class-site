@@ -38,7 +38,8 @@ import { profileKey, encField, decField } from './_lib/profile-crypt.js';
 const DEF_BASE = 'https://examboard.dpdns.org';
 const K_CFG = 'exam_cfg_v1';
 const K_DATA = 'exam_data_v1';
-const K_TOK = 'exam_tok_v1';
+/* v4.10.8：站内不再写回上游，只存「手动挑了哪几场」这一份很小的清单 */
+const K_PIN = 'exam_pin_v1';
 
 /* 内存缓存：同一个 isolate 里连续打开大屏不必每次都打上游 */
 const MEM_MS = 90 * 1000;
@@ -242,10 +243,13 @@ function classOf(data, cfg) {
  *   · 今天不在任何一场的范围内 → 不显示（明天有也不提前占地方）。
  * 每行给：科目（左）+ 起止时间（右），大屏直接照着画。
  */
-function buildDays(data, cfg, nowMs) {
+function buildDays(data, cfg, nowMs, pins) {
   const cls = classOf(data, cfg);
   const today = dayOf(nowMs);
+  const pinSet = {};
+  ((pins && pins.ids) || []).forEach(function (x) { pinSet[x] = 1; });
   const rows = [];
+  const seen = {};
   (data.majors || []).forEach(function (m) {
     if (m.endedAt && m.endedAt < nowMs) return;
     /* 未发布的草稿不显示；临时考试本来就没有 publishedAt */
@@ -260,18 +264,25 @@ function buildDays(data, cfg, nowMs) {
 
     const dates = {};
     its.forEach(function (i) { dates[String(i.startTime).slice(0, 10)] = 1; });
-    if (!dates[today]) return;   /* 今天没有这场 → 整场不进来 */
+    const hitToday = !!dates[today];
 
     its.forEach(function (i) {
       const d = String(i.startTime).slice(0, 10);
+      const pinned = !!pinSet[i.id];
+      /* v4.10.8：今天没这场、也没手动挑 → 不显示；手动挑的哪怕不是今天也照显示 */
+      if (!hitToday && !pinned) return;
+      if (seen[i.id]) return;
+      seen[i.id] = 1;
       rows.push({
         date: d,
+        id: i.id,
         name: i.name,
         start: hhmm(i.startTime),
         end: hhmm(i.endTime),
         major: m.name,
         majorId: m.id,
         temporary: m.temporary,
+        pinned: pinned,
         past: d < today,
       });
     });
@@ -307,145 +318,83 @@ async function pull(req, cfg, kv) {
   return data;
 }
 
-async function getToken(req, cfg, kv, force) {
-  const cache = force ? null : (await kvGet(kv, K_TOK) || null);
-  if (cache && cache.token && Number(cache.exp || 0) > Date.now() + 60 * 1000) {
-    return { token: String(cache.token), uid: String(cache.uid || '') };
-  }
-  if (!cfg.user || !cfg.pass) throw new Error('还没有填考试看板的账号密码');
 
-  const r = await nvFetch(cfg.base + '/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: cfg.user, password: cfg.pass }),
-  }, 10000);
-  if (r.status === 429) throw new Error('登录太频繁，请过几分钟再试');
-  if (r.status === 401) throw new Error('账号或密码不正确（连续错 5 次会锁 15 分钟）');
-  if (r.status !== 200 || !r.json || !r.json.token) {
-    throw new Error('登录失败（HTTP ' + r.status + '）');
-  }
-  const token = String(r.json.token);
-  const exp = Number(r.json.expiresAt || 0) || (Date.now() + 20 * 3600 * 1000);
-  /* v4.10.6：顺手记下登录账号的 id —— 新增的临时考试要带 createdBy，
-     否则上游会把它当成「别人的考试」，班级管理员账号保存时会被清洗掉。 */
-  const uid = String((r.json.user && r.json.user.id) || '');
-  if (kv) await kvPut(kv, K_TOK, { token: token, exp: exp, uid: uid, at: Date.now() });
-  return { token: token, uid: uid };
+/* ---------------- 手动挑选（v4.10.8） ----------------
+   站主原话（2026-11-08）：
+     「暂时先不做写入，只做读取……新增考试那里改成考试看板，我可以一键查看所有的
+       考试数据，考试数据最右边有个加号，点一下把我点的那一次考试放到作业看板上。」
+   所以站内只保存「挑了哪几场」这一份清单，绝不碰上游的考试数据 —— 挑错了、删错了，
+   考试看板那边一点影响都没有。清单极小（几十字节），存 KV 的 exam_pin_v1。 */
+
+async function loadPins(kv) {
+  const o = (await kvGet(kv, K_PIN)) || null;
+  const ids = (o && Array.isArray(o.ids))
+    ? o.ids.filter(function (x) { return typeof x === 'string' && x; })
+    : [];
+  return { ids: ids.slice(0, 80), at: Number((o && o.at) || 0) };
 }
 
-/** 只提交 majors 这一个域：其余字段服务端按域保留，不会因为没带就被清空 */
-function toWire(majors) {
-  return majors.map(function (m) {
-    const o = {
-      id: m.id,
-      name: m.name,
-      source: m.source,
-      temporary: m.temporary,
-      order: m.order,
-      targetClassIds: m.targetClassIds,
-      targetGradeIds: m.targetGradeIds,
-      items: m.items,
-    };
-    if (m.startAt) o.startAt = m.startAt;
-    if (m.endAt) o.endAt = m.endAt;
-    if (m.publishedAt) o.publishedAt = m.publishedAt;
-    if (m.createdVia) o.createdVia = m.createdVia;
-    if (m.createdBy) o.createdBy = m.createdBy;
-    return o;
+async function savePins(kv, ids) {
+  const next = { ids: ids.slice(0, 80), at: Date.now() };
+  if (kv) await kvPut(kv, K_PIN, next);
+  return next;
+}
+
+/** 这一场考试算不算「我们班的」：班级 / 年级两级过滤，任一条不匹配就跳过 */
+function majorOfClass(m, cls) {
+  if (m.endedAt && m.endedAt > 0 && Number(m.endedAt) < Date.now() - 400 * 86400000) return false;
+  if (m.targetClassIds && m.targetClassIds.length && m.targetClassIds.indexOf(cls.id) < 0) return false;
+  if (m.targetGradeIds && m.targetGradeIds.length && m.targetGradeIds.indexOf(cls.gradeId) < 0) return false;
+  return true;
+}
+
+/** 这场考试里属于我们班、且已启用的场次 */
+function itemsOfClass(m, cls) {
+  return (m.items || []).filter(function (i) {
+    return i.enabled !== false
+      && (!i.targetClassIds || !i.targetClassIds.length || i.targetClassIds.indexOf(cls.id) >= 0)
+      && isDay(String(i.startTime || '').slice(0, 10));
   });
 }
 
-async function push(req, cfg, kv, data) {
-  const send = async function (tok) {
-    return nvFetch(cfg.base + '/api/exams', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok },
-      body: JSON.stringify({
-        majors: toWire(data.majors),
-        baseUpdatedAt: Number(data.updatedAt || 0),
-        baseRevisions: { major: Number((data.revisions || {}).major || 0) },
-      }),
-    }, 12000);
-  };
-
-  let auth = await getToken(req, cfg, kv, false);
-  let r = await send(auth.token);
-  if (r.status === 401) {
-    auth = await getToken(req, cfg, kv, true);
-    r = await send(auth.token);
-  }
-  if (r.status === 409) {
-    return { conflict: true, message: '考试看板上的数据刚被改过，请先同步一次再写回' };
-  }
-  if (r.status !== 200 || !r.json || r.json.ok !== true) {
-    const msg = (r.json && (r.json.error || r.json.code)) || ('HTTP ' + r.status);
-    throw new Error('写回失败：' + msg);
-  }
-  data.updatedAt = Number(r.json.updatedAt || Date.now());
-  if (r.json.revisions && typeof r.json.revisions === 'object') data.revisions = r.json.revisions;
-  data.dirty = false;
-  data.pushedAt = Date.now();
-  if (kv) await kvPut(kv, K_DATA, data);
-  _mem = { at: Date.now(), data: data };
-  return { ok: true, updatedAt: data.updatedAt };
-}
-
-/* ---------------- 本地编辑 ---------------- */
-
-function addLocal(data, cfg, p, createdBy) {
+/**
+ * 把整份快照摊成「一天一场」的清单 —— 「查看所有考试」那个弹窗就用这份。
+ * 和 buildDays 的区别：这里**不按今天过滤**，所有排过的考试都在，按时间升序。
+ */
+function listAll(data, cfg, pins) {
   const cls = classOf(data, cfg);
-  const date = str(p.date, 10);
-  const start = str(p.start, 5);
-  const end = str(p.end, 5);
-  if (!isDay(date)) throw new Error('日期格式不对（应为 YYYY-MM-DD）');
-  if (!isHm(start) || !isHm(end)) throw new Error('时间格式不对（应为 HH:MM）');
-  const st = msOfLocal(date + 'T' + start);
-  const en = msOfLocal(date + 'T' + end);
-  if (!st || !en) throw new Error('日期或时间无法识别');
-  if (en <= st) throw new Error('结束时间要晚于开始时间');
-
-  const subject = str(p.subject, 20) || '考试';
-  const name = str(p.name, 40) || (subject + '（临时）');
-  const stamp = Date.now();
-  const majorId = 'major_cs_' + stamp + '_' + rnd(4);
-  const itemId = 'exam_cs_' + stamp + '_' + rnd(4);
-
-  const maxOrder = data.majors.reduce(function (n, m) { return Math.max(n, Number(m.order || 0)); }, 0);
-  data.majors.push({
-    id: majorId,
-    name: name,
-    source: 'quick',
-    temporary: true,
-    order: maxOrder + 1,
-    startAt: st,
-    endAt: en,
-    publishedAt: stamp,
-    endedAt: 0,
-    targetClassIds: cls.id ? [cls.id] : [],
-    targetGradeIds: cls.gradeId ? [cls.gradeId] : [],
-    local: true,
-    createdBy: createdBy || '',
-    items: [{
-      id: itemId,
-      name: subject,
-      order: 0,
-      enabled: true,
-      startTime: date + 'T' + start,
-      endTime: date + 'T' + end,
-      targetClassIds: cls.id ? [cls.id] : [],
-    }],
+  const today = dayOf(Date.now());
+  const pinSet = {};
+  ((pins && pins.ids) || []).forEach(function (x) { pinSet[x] = 1; });
+  const out = [];
+  (data.majors || []).forEach(function (m) {
+    if (!m.publishedAt && !m.temporary && !m.local) return;   /* 草稿不给看 */
+    if (!majorOfClass(m, cls)) return;
+    const its = itemsOfClass(m, cls);
+    const dates = {};
+    its.forEach(function (i) { dates[String(i.startTime).slice(0, 10)] = 1; });
+    const auto = !!dates[today];   /* 今天自动就该显示的，弹窗里标「已显示」，不给加号 */
+    its.forEach(function (i) {
+      const d = String(i.startTime).slice(0, 10);
+      out.push({
+        auto: auto,
+        id: i.id,
+        date: d,
+        start: hhmm(i.startTime),
+        end: hhmm(i.endTime),
+        name: i.name || '考试',
+        major: m.name || '',
+        majorId: m.id,
+        temporary: m.temporary === true,
+        pinned: !!pinSet[i.id],
+      });
+    });
   });
-  data.dirty = true;
-  return { id: majorId, name: name };
-}
-
-/** 只允许删「本站加的」：考试看板里原本排好的段考不在站内提供删除入口 */
-function delLocal(data, id) {
-  const i = data.majors.findIndex(function (m) { return m.id === id; });
-  if (i < 0) throw new Error('没有找到这场考试');
-  if (!data.majors[i].local) throw new Error('这场考试是在考试看板里建的，请到那边删除');
-  data.majors.splice(i, 1);
-  data.dirty = true;
+  out.sort(function (a, b) {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return String(a.start).localeCompare(String(b.start));
+  });
+  return out;
 }
 
 /* ---------------- 对外 ---------------- */
@@ -476,14 +425,44 @@ export default async function handler(req, res) {
         }
       }
       const now = Date.now();
+      const pins = await loadPins(kv);
       return ok(res, {
         at: Number(data.at || 0),
         today: dayOf(now),
-        days: buildDays(data, cfg, now),
+        days: buildDays(data, cfg, now, pins),
+        pins: pins.ids,
         title: data.title || '',
         cls: classOf(data, cfg).name || '',
         dirty: data.dirty === true,
         srcAt: Number(data.updatedAt || 0),
+      });
+    }
+
+    /* ---------- 读：全部考试（公开，「查看所有考试」弹窗用） ---------- */
+    if (req.method === 'GET' && action === 'list') {
+      const cfg = await loadCfg(req);
+      let data = _mem.at && (Date.now() - _mem.at < MEM_MS) ? _mem.data : null;
+      if (!data) data = await kvGet(kv, K_DATA);
+      if (!data) {
+        try {
+          data = await pull(req, cfg, kv);
+        } catch (e) {
+          return ok(res, {
+            at: 0, today: dayOf(Date.now()), items: [], pins: [], empty: true,
+            error: '还没有同步过考试数据',
+          });
+        }
+      }
+      const pins = await loadPins(kv);
+      return ok(res, {
+        at: Number(data.at || 0),
+        today: dayOf(Date.now()),
+        title: data.title || '',
+        cls: classOf(data, cfg).name || '',
+        srcAt: Number(data.updatedAt || 0),
+        base: cfg.base,
+        items: listAll(data, cfg, pins),
+        pins: pins.ids,
       });
     }
 
@@ -494,15 +473,14 @@ export default async function handler(req, res) {
       if (u.role !== 'admin') return fail(res, 403, '只有管理员能查看考试同步状态');
       const cfg = await loadCfg(req);
       const data = (await kvGet(kv, K_DATA)) || null;
+      const pins = await loadPins(kv);
       return ok(res, {
         cfg: {
           base: cfg.base,
-          user: cfg.user,
-          hasPass: cfg.hasPass,
           classId: cfg.classId,
           className: cfg.className,
-          autoPush: cfg.autoPush,
         },
+        pins: pins.ids,
         kv: !!kv,
         /* 班级下拉用：同步过一次之后就知道云端有哪些班 */
         classes: data ? data.classes.map(function (c) {
@@ -529,117 +507,76 @@ export default async function handler(req, res) {
       });
     }
 
-    /* ---------- 写：以下全部仅管理员 ---------- */
+    /* ---------- 写：以下全部仅管理员 ----------
+       v4.10.8 起站内**不再写回考试看板**，这里的「写」只写我们自己的两样小东西：
+       ① 看板地址与绑定班级；② 手动挑了哪几场。考试数据本身永远只读。 */
     if (req.method !== 'POST') return fail(res, 405, '不支持的方法');
 
     const u = await requireUser(req, res);
     if (!u) return;
-    if (u.role !== 'admin') return fail(res, 403, '只有管理员能改考试数据');
+    if (u.role !== 'admin') return fail(res, 403, '只有管理员能改考试同步设置');
 
     const b = (await body(req)) || {};
     const act = str(b.action, 20);
 
-    /* 保存源地址 / 账号 / 绑定班级 */
+    /* 保存看板地址 / 绑定班级 */
     if (act === 'cfg') {
       const cfg = await loadCfg(req);
       cfg.base = (str(b.base, 200) || DEF_BASE).replace(/\/+$/, '');
-      if (!/^https?:\/\//i.test(cfg.base)) return fail(res, 400, '源地址要以 http:// 或 https:// 开头');
-      cfg.user = str(b.user, 100);
-      cfg.passNew = str(b.pass, 200) || '';   /* 留空 = 不改密码 */
+      if (!/^https?:\/\//i.test(cfg.base)) return fail(res, 400, '看板地址要以 http:// 或 https:// 开头');
       cfg.classId = str(b.classId, 80);
       cfg.className = str(b.className, 40);
-      cfg.autoPush = b.autoPush === true;
       await saveCfg(req, cfg);
-      /* 账号换了就把旧 token 丢掉，免得一直用别人的 */
-      await kvDel(kv, K_TOK);
-      await audit(u.id, 'exams.cfg', 'site_setting', 0, '考试同步：' + cfg.base + (cfg.user ? ' · ' + cfg.user : ''));
+      await audit(u.id, 'exams.cfg', 'site_setting', 0, '考试看板：' + cfg.base);
       return ok(res, { saved: true });
     }
 
-    /* 测试连接（只拉公开快照，不需要密码） */
+    /* 测试连接（只拉公开快照） */
     if (act === 'test') {
       const cfg = await loadCfg(req);
       const r = await nvFetch(cfg.base + '/api/exams', { method: 'GET' }, 8000);
       if (r.status !== 200 || !r.json) return fail(res, 502, '连不上考试看板（HTTP ' + r.status + '）');
       const d = normSnap(r.json);
       const cls = classOf(d, cfg);
-      return ok(res, { title: d.title, majors: d.majors.length, cls: cls.name, classes: d.classes.map(function (c) { return c.name; }) });
+      return ok(res, {
+        title: d.title, majors: d.majors.length, cls: cls.name,
+        classes: d.classes.map(function (c) { return c.name; }),
+      });
     }
 
-    /* 同步：把云端整份快照拉到本机 */
+    /* 同步：把云端整份快照拉到本站副本 */
     if (act === 'sync') {
       const cfg = await loadCfg(req);
-      const old = (await kvGet(kv, K_DATA)) || null;
-      if (old && old.dirty === true && b.force !== true) {
-        return fail(res, 409, '本机还有没写回的改动，先写回或勾选「覆盖本机」再同步');
-      }
       const data = await pull(req, cfg, kv);
       await audit(u.id, 'exams.sync', 'exam_data', 1, '同步 ' + data.majors.length + ' 场 · ' + data.title);
       return ok(res, {
         at: data.at, title: data.title, cls: classOf(data, cfg).name,
-        majors: data.majors.length, dirty: false,
+        majors: data.majors.length,
       });
     }
 
-    /* 新增一场考试（先落本地，再按需要写回） */
-    if (act === 'add') {
-      const cfg = await loadCfg(req);
-      let data = (await kvGet(kv, K_DATA)) || null;
-      if (!data) data = await pull(req, cfg, kv);
-      /* 能登录就带上 createdBy；没填账号也不拦着，先存本机 */
-      let who = '';
-      try { who = (await getToken(req, cfg, kv, false)).uid; } catch (e) { who = ''; }
-      const made = addLocal(data, cfg, b, who);
-      await kvPut(kv, K_DATA, data);
-      _mem = { at: Date.now(), data: data };
-
-      let pushed = false;
-      let note = '';
-      if (b.push === true) {
-        try {
-          const r = await push(req, cfg, kv, data);
-          if (r && r.conflict) note = r.message;
-          else pushed = true;
-        } catch (e) {
-          note = String((e && e.message) || e);
-        }
-      }
-      await audit(u.id, 'exams.add', 'exam_data', 1, made.name + ' · 写回=' + (pushed ? '是' : '否'));
-      return ok(res, { id: made.id, name: made.name, pushed: pushed, note: note, dirty: data.dirty === true });
+    /* 手动挑选：把某一场上/下作业看板。只动我们自己的清单，不碰上游。 */
+    if (act === 'pin') {
+      const id = str(b.id, 80);
+      if (!id) return fail(res, 400, '缺少考试 id');
+      const on = b.on === true;
+      const pins = await loadPins(kv);
+      const has = pins.ids.indexOf(id) >= 0;
+      let ids = pins.ids.slice();
+      if (on && !has) ids.push(id);
+      if (!on && has) ids = ids.filter(function (x) { return x !== id; });
+      /* 上限 80 场，防止误操作把整份考试表都塞进来 */
+      if (ids.length > 80) return fail(res, 400, '最多只能挑 80 场');
+      const next = await savePins(kv, ids);
+      await audit(u.id, 'exams.pin', 'exam_data', 1, (on ? '加入' : '移出') + '：' + id);
+      return ok(res, { ids: next.ids, at: next.at });
     }
 
-    /* 删除本站新增的考试 */
-    if (act === 'del') {
-      const cfg = await loadCfg(req);
-      const data = (await kvGet(kv, K_DATA)) || null;
-      if (!data) return fail(res, 400, '还没有同步过考试数据');
-      delLocal(data, str(b.id, 80));
-      await kvPut(kv, K_DATA, data);
-      _mem = { at: Date.now(), data: data };
-      let pushed = false;
-      let note = '';
-      if (b.push === true) {
-        try {
-          const r = await push(req, cfg, kv, data);
-          if (r && r.conflict) note = r.message;
-          else pushed = true;
-        } catch (e) {
-          note = String((e && e.message) || e);
-        }
-      }
-      await audit(u.id, 'exams.del', 'exam_data', 1, str(b.id, 80) + ' · 写回=' + (pushed ? '是' : '否'));
-      return ok(res, { pushed: pushed, note: note, dirty: data.dirty === true });
-    }
-
-    /* 写回：把本机 majors 整域提交给考试看板 */
-    if (act === 'push') {
-      const cfg = await loadCfg(req);
-      const data = (await kvGet(kv, K_DATA)) || null;
-      if (!data) return fail(res, 400, '还没有同步过考试数据');
-      const r = await push(req, cfg, kv, data);
-      if (r && r.conflict) return fail(res, 409, r.message);
-      await audit(u.id, 'exams.push', 'exam_data', 1, data.majors.length + ' 场已写回');
-      return ok(res, { updatedAt: r.updatedAt, majors: data.majors.length });
+    /* 清空挑选 */
+    if (act === 'pinClear') {
+      const next = await savePins(kv, []);
+      await audit(u.id, 'exams.pin', 'exam_data', 1, '清空手动挑选');
+      return ok(res, { ids: next.ids, at: next.at });
     }
 
     return fail(res, 400, '不支持的 action');

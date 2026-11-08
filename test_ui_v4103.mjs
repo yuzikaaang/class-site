@@ -113,9 +113,12 @@ console.log('\n【场景 4】作业编辑不套两层、点完成能恢复');
   const ROSTER=[]; for(let i=1;i<=24;i++) ROSTER.push({studentId:'2505'+String(i).padStart(2,'0'),name:'学生'+String(i).padStart(2,'0'),gender:i%2===0?'男':'女',role:'学生'});
   const ctx=await browser.newContext({viewport:{width:1920,height:1080}});
   const page=await ctx.newPage();
-  await page.addInitScript(()=>{localStorage.setItem('cls_login_guide_v1','1');localStorage.setItem('cls_welcome_v1','1');});
+  /* v4.10.8：大屏作业看板只给管理员进，测试也用管理员身份 */
+  await page.addInitScript(()=>{localStorage.setItem('cls_login_guide_v1','1');localStorage.setItem('cls_welcome_v1','1');
+    localStorage.setItem('cls_auth', JSON.stringify({token:'TESTTOKEN', user:{username:'aibot', role:'admin'}}));});
   await page.route('**/api/**',(route)=>{
     const u=route.request().url();
+    if(u.includes('/auth?action=me')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,user:{username:'aibot',role:'admin'},cloudKeys:[]})});
     if(u.includes('/api/content')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,items:{announcements:[],holiday_homeworks:[{id:'hw1',start:'2026-11-01',end:'2026-11-30',items:[{subject:'语文',tasks:[{text:'默写《岳阳楼记》第三段'}]},{subject:'数学',tasks:[{text:'课本 P42 习题'}]}]}]},serverTime:1,count:1})});
     if(u.includes('action=roster')||u.includes('/api/profile')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,students:ROSTER})});
     return route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'});

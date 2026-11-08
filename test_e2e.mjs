@@ -5833,8 +5833,8 @@ console.log('\n【51】第四十三轮·成绩分析开工：入口改名 + 占�
   /* ===== ④ comingSoon 支持自定义提示文案 ===== */
   t('★comingSoon 分支支持 comingSoonMsg 自定义提示',
     /comingSoonMsg \|\| '功能开发中'/.test(idx51));
-  t('★排行榜等旧卡片不受影响（无 msg 时回退默认文案）',
-    /comingSoon: true, active: false/.test(idx51));
+  t('★占位卡片（班级活动）仍走 comingSoon 分支',
+    /comingSoon: true/.test(idx51));
 }
 
 console.log('\n【52】第四十三轮·成绩分析后端地基（v2.7.0）');
@@ -13478,12 +13478,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /\.bhw-top\{[\s\S]{0,200}?align-items:center/.test(idxV));
 
   /* ⑭ 版本号 */
-  t('★v4.10.7 版本号升到 4.10.7（index / sw / worker 三处 + admin 更新日志）',
-    /SITE_VERSION = '4\.10\.7'/.test(idxV) && /SITE_VER = '4\.10\.7'/.test(swV)
-    && /API_VER = '4\.10\.7'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-    && /version: '4\.10\.7'/.test(admV));
-  t('★v4.10.7 version.json 与站内版本一致',
-    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.7');
+  t('★v4.10.8 版本号升到 4.10.8（index / sw / worker 三处 + admin 更新日志）',
+    /SITE_VERSION = '4\.10\.8'/.test(idxV) && /SITE_VER = '4\.10\.8'/.test(swV)
+    && /API_VER = '4\.10\.8'/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+    && /version: '4\.10\.8'/.test(admV));
+  t('★v4.10.8 version.json 与站内版本一致',
+    JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8')).v === '4.10.8');
 
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {
@@ -13661,25 +13661,25 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       /profileKey\(req\)/.test(exV) && /encField\(key, cfg\.passNew\)/.test(exV)
       && /decField\(key, cfg\.pass\)/.test(exV));
 
-    t('★v4.10.6 KV 三个键分开：配置 / 数据 / token',
+    t('★v4.10.8 KV 三个键分开：配置 / 数据 / 手动挑选',
       /K_CFG = 'exam_cfg_v1'/.test(exV) && /K_DATA = 'exam_data_v1'/.test(exV)
-      && /K_TOK = 'exam_tok_v1'/.test(exV));
+      && /K_PIN = 'exam_pin_v1'/.test(exV));
 
     /* 跨天规则：今天不在任何一场里就整场跳过；在的话把这场**所有天**的场次都摊出去 */
-    t('★v4.10.6 跨天考试：今天命中就列出这场所有天，今天没有就整场不出现',
-      /if \(!dates\[today\]\) return;/.test(exV)
-      && /its\.forEach\(function \(i\) \{/.test(exV)
+    t('★v4.10.8 跨天考试：今天命中列出这场所有天；手动挑的即使不是今天也显示',
+      /const hitToday = !!dates\[today\];/.test(exV)
+      && /if \(!hitToday && !pinned\) return;/.test(exV)
       && /past: d < today/.test(exV));
 
     /* 写回只提交 majors 域 + 版本校验，绝不整份覆盖 */
-    t('★v4.10.6 写回只提交 majors 域并带版本号，冲突不覆盖',
-      /majors: toWire\(data\.majors\)/.test(exV)
-      && /baseRevisions: \{ major:/.test(exV)
-      && /r\.status === 409/.test(exV)
-      && /先同步一次再写回/.test(exV));
+    t('★v4.10.8 站内彻底不写回上游（push / toWire / 登录全部移除）',
+      !/toWire/.test(exV) && !/async function push\(/.test(exV)
+      && !/addLocal/.test(exV) && !/getToken/.test(exV)
+      && /K_PIN = 'exam_pin_v1'/.test(exV));
 
-    t('★v4.10.6 只允许删除本站新增的考试（考试看板建的只读）',
-      /if \(!data\.majors\[i\]\.local\) throw new Error/.test(exV));
+    t('★v4.10.8 挑选接口仅管理员，最多 80 场',
+      /act === 'pin'/.test(exV) && /最多只能挑 80 场/.test(exV)
+      && /只有管理员能改考试同步设置/.test(exV));
 
     t('★v4.10.6 大屏考试块钉在左栏最上面，且不参与科目卡装箱',
       /colA\.insertBefore\(b2\.firstElementChild, colA\.firstElementChild\)/.test(bigV)
@@ -13690,7 +13690,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       /class="bhex-sub"/.test(bigV) && /class="bhex-time"/.test(bigV)
       && /it\.start/.test(bigV) && /it\.end/.test(bigV));
 
-    t('★v4.10.6 「新增考试」只在管理员身份显示，且位于点名按钮之后',
+    t('★v4.10.8 「考试看板」按钮只在管理员身份显示，且位于点名按钮之后',
       /if\(eb\) eb\.style\.display = adminOk\(\) \? '' : 'none'/.test(bigV)
       && /id="bhwExamAdd"/.test(idxV)
       && /bhw-pick[\s\S]{0,600}?id="bhwExamAdd"/.test(idxV));
@@ -13698,10 +13698,11 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.10.6 大屏考试有本机缓存（断网也能显示上次同步）',
       /cls_big_exam_v1/.test(bigV) && /examCacheGet/.test(bigV));
 
-    t('★v4.10.6 后台新增「考试同步」页并接到路由',
+    t('★v4.10.8 后台「考试同步」页改为只读（同步 / 查看 / 挑选，无写回）',
       /id:'exams'/.test(adm1V) && /exams: *renderExams/.test(adm1V)
       && /function renderExams\(\)/.test(adm3V)
-      && /exSync/.test(adm3V) && /exPush/.test(adm3V) && /exAdd/.test(adm3V));
+      && /exSync/.test(adm3V) && /exPin/.test(adm3V)
+      && !/exPush/.test(adm3V) && !/exAdd/.test(adm3V));
   }
 
   /* ===== 全量语法自检 =====

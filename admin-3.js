@@ -3054,6 +3054,20 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.10.8', date: '2026-11-08', type: 'feat', title: '考试看板改为只读接入：一键查看全部考试、按需挑进作业看板；大屏作业页仅管理员可进；新增高中天数；下线四个废弃板块', items: [
+      '「新增考试」改为「考试看板」：点击后列出考试看板上排好的全部场次，按日期分组，每行显示科目、起止时间与考试名称',
+      '每行右侧一个加号，点击即可把这一场放到大屏作业看板，再点一次移出；挑选结果存在云端，换设备同样生效',
+      '今天本来就会自动出现的场次标记为「已显示」，无需重复挑选；跨天的大型考试依然把每一天都列出来',
+      '弹窗右上角新增「前往考试看板」，改考试仍到 examboard 操作；站内不再向上游写入任何数据',
+      '大屏作业看板仅管理员可进：同学可以使用大屏模式，但点击作业卡会提示权限不足，卡片上也标注「仅管理员」',
+      '大屏右下角学期卡新增「已步入高中 N 天」，排在本学期已开学之上',
+      '后台「考试同步」改为只读：仅需填写看板地址与显示班级，不再保存账号密码；同步与挑选都在这一页完成',
+      '下线长期不用的板块：学习资料（课堂笔记 / 教学课件）、私人云盘、排行榜、屏幕批注，连同学习资料访问提示弹窗一并删除'
+    ], pub: [
+      { cat: '学习', text: '大屏作业页可直接看到今天的考试安排' },
+      { cat: '资料', text: '考试看板一键查看，可按需挑进作业看板' },
+      { cat: '界面', text: '首页精简，下线已停用的板块' }
+    ] },
   { version: '4.10.7', date: '2026-11-08', type: 'fix', title: '考试写回更稳：新增的临时考试带上创建者，班级管理员账号也能正常保存', items: [
       '新增考试时会顺带记下是哪个账号建的，写回考试看板后不会被对方的权限清洗掉（用班级管理员账号时更容易遇上这个问题）',
       '没有填账号也不影响：先存本机，等填好账号再点「写回考试看板」',
@@ -7463,25 +7477,19 @@ function ishareForm(edit){
 }
 
 /* ============================================================================
- * v4.10.6（站主）考试同步 —— 考试看板（Novora）接入
+ * v4.10.8（站主）考试看板 —— 只读同步
  * ----------------------------------------------------------------------------
  * 站主原话（2026-11-08）：
- *   「可以完整读具体每一天的数据，包括日程以及考试时间这些，然后也可以写，
- *     因为我想在后台也做一个数据同步的功能，会把那个数据拉到我们这个服务站的
- *     数据库里面，然后我也可以在这边新加数据，然后写回去」
+ *   「暂时先不做写入，只做读取……后台的话，也暂时先不支持写入吧，然后后台有些
+ *     东西我填的，比如说考试看板的地址啊，这些你可以让我在后台填。」
  *
- * 这一页做四件事：
- *   ① 填考试看板的地址 / 账号 → 存进云端（密码 AES-GCM 加密，见 api/exams.js）
- *   ② 「立即同步」把整份快照拉下来，存成本站的一份副本（KV，不占 Neon）
- *   ③ 在这里新增考试 → 直接写回考试看板（临时考试，只挂本班）
- *   ④ 大屏作业页会读这份副本，显示今天/跨天考试的安排
- *
- * 为什么写回要这么小心：
- *   上游是「整份快照 + 域增量」的保存模型，只提交 majors 这一个域，
- *   再带 baseRevisions.major 做并发校验。两边同时改会回 409 —— 这时先同步再写回，
- *   绝不做「覆盖式强推」，否则可能把别的设备刚改的考试抹掉。
+ * 所以这一页只做三件事：
+ *   ① 填考试看板的地址、选只显示哪个班（**不用账号密码**，读的是公开快照）
+ *   ② 「立即同步」把整份快照拉到本站副本（存 KV，不建表、不占 Neon 额度）
+ *   ③ 列出全部考试，右侧加号决定哪几场进大屏作业看板
+ * 考试数据本身永远只读 —— 站内不往 examboard 写任何一个字。
  * ========================================================================= */
-var EX = { state: null, busy: false };
+var EX = { state: null, items: [], busy: false };
 
 function exWhen(ms){
   if(!ms) return '—';
@@ -7492,29 +7500,27 @@ function exWhen(ms){
       + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
   }catch(e){ return '—'; }
 }
-function exDayOf(ms){
-  if(!ms) return '';
-  var d = new Date(Number(ms));
-  var p = function(n){ return (n<10?'0':'')+n; };
-  return p(d.getMonth()+1) + '/' + p(d.getDate());
+function exDayTxt(day){
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
+  if(!m) return String(day || '');
+  try{
+    var d = new Date(+m[1], +m[2]-1, +m[3]);
+    return (+m[2]) + '/' + (+m[3]) + ' 周' + '日一二三四五六'[d.getDay()];
+  }catch(e){ return String(day || ''); }
 }
 
 function renderExams(){
   $('view').innerHTML =
     '<div class="alert info" style="margin-bottom:16px">'
-    +   '把<b>考试看板</b>的考试安排接进本站：大屏作业页会自动显示今天（含跨天考试的所有天）的场次，'
-    +   '这一页负责同步、补录和写回。数据存在本机的云端 KV 里，不占数据库额度。'
+    +   '把<b>考试看板</b>里的考试安排接进本站：填好看板地址后点「立即同步」，'
+    +   '大屏作业页会自动显示今天（含跨天考试的所有天）的场次；'
+    +   '也可以在最下面的清单里手动挑任意一场放上去。'
+    +   '<br>数据只读，本站不会改动考试看板上的任何内容；副本存本机云端 KV，不占数据库额度。'
     + '</div>'
     + '<section class="panel" style="margin-bottom:16px">'
-    +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">① 连接考试看板</h3></div>'
+    +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">① 考试看板地址</h3></div>'
     +   '<div class="field"><label>看板地址</label>'
     +     '<input id="exBase" placeholder="https://examboard.dpdns.org"></div>'
-    +   '<div style="display:flex;gap:10px;flex-wrap:wrap">'
-    +     '<div class="field" style="flex:1;min-width:160px"><label>管理员账号</label>'
-    +       '<input id="exUser" autocomplete="username" placeholder="后台登录名"></div>'
-    +     '<div class="field" style="flex:1;min-width:160px"><label>密码</label>'
-    +       '<input id="exPass" type="password" autocomplete="current-password" placeholder="留空 = 不改"></div>'
-    +   '</div>'
     +   '<div class="field"><label>只显示哪个班</label>'
     +     '<select id="exCls"><option value="">（同步后可选）</option></select>'
     +     '<p class="hint" style="margin:6px 0 0">大型考试里有的科目只排给某几个班（比如物化生只排本班），选对班级才不会把别班的场次算进来。</p></div>'
@@ -7525,66 +7531,52 @@ function renderExams(){
     +   '<p class="hint" id="exCfgMsg" style="margin:8px 0 0"></p>'
     + '</section>'
     + '<section class="panel" style="margin-bottom:16px">'
-    +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">② 同步与写回</h3></div>'
+    +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">② 同步</h3></div>'
     +   '<div id="exStat" class="muted" style="font-size:.82rem;line-height:1.9">读取中…</div>'
     +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
     +     '<button class="btn btn-sm" id="exSync">立即同步</button>'
-    +     '<button class="btn btn-sm btn-ghost" id="exPush">写回考试看板</button>'
+    +     '<a class="btn btn-sm btn-ghost" id="exOpen" href="https://examboard.dpdns.org" target="_blank" rel="noopener">打开考试看板 ↗</a>'
     +   '</div>'
-    +   '<p class="hint" style="margin:8px 0 0">同步 = 用考试看板的数据覆盖本机副本；写回 = 把本机新增的考试提交上去。'
-    +     '两边都改过时，先同步看清楚再决定，系统不会强行覆盖。</p>'
-    + '</section>'
-    + '<section class="panel" style="margin-bottom:16px">'
-    +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">③ 新增考试</h3></div>'
-    +   '<div style="display:flex;gap:10px;flex-wrap:wrap">'
-    +     '<div class="field" style="width:120px"><label>科目</label><input id="exAddSub" maxlength="12" placeholder="数学"></div>'
-    +     '<div class="field" style="width:160px"><label>日期</label><input id="exAddDate" type="date"></div>'
-    +     '<div class="field" style="width:120px"><label>开始</label><input id="exAddSt" type="time" value="08:00"></div>'
-    +     '<div class="field" style="width:120px"><label>结束</label><input id="exAddEn" type="time" value="09:30"></div>'
-    +     '<div class="field" style="flex:1;min-width:160px"><label>名称（可空）</label><input id="exAddName" maxlength="20" placeholder="留空 = 科目（临时）"></div>'
-    +   '</div>'
-    +   '<button class="btn btn-sm" id="exAdd" style="margin-top:4px">保存并写回</button>'
-    +   '<p class="hint" id="exAddMsg" style="margin:8px 0 0"></p>'
+    +   '<p class="hint" style="margin:8px 0 0">同步 = 用考试看板的最新数据覆盖本站副本。考试看板那边改了之后，点一次即可。</p>'
     + '</section>'
     + '<section class="panel">'
-    +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">④ 本机副本里的考试</h3></div>'
+    +   '<div class="panel-head"><h3 style="margin:0;font-size:.95rem">③ 全部考试（只读）</h3></div>'
+    +   '<p class="hint" style="margin:0 0 10px">右侧加号 = 把这一场放到大屏作业看板；再点一次移出。'
+    +     '标记「已显示」的是今天本来就会自动出现的场次，不用挑。</p>'
     +   '<div id="exList" class="muted" style="font-size:.82rem">读取中…</div>'
     + '</section>';
 
-  /* 日期默认今天 */
-  var td = new Date();
-  var p2 = function(n){ return (n<10?'0':'')+n; };
-  var dt = $('exAddDate');
-  if(dt) dt.value = td.getFullYear() + '-' + p2(td.getMonth()+1) + '-' + p2(td.getDate());
-
   $('exSaveCfg').onclick = exSaveCfg;
   $('exTest').onclick = exTest;
-  $('exSync').onclick = function(){ exSync(false); };
-  $('exPush').onclick = exPush;
-  $('exAdd').onclick = exAdd;
-
+  $('exSync').onclick = exSync;
   exLoad();
 }
 
 function exBusy(on){
   EX.busy = !!on;
-  ['exSaveCfg','exTest','exSync','exPush','exAdd'].forEach(function(id){
+  ['exSaveCfg','exTest','exSync'].forEach(function(id){
     var b = $(id); if(b) b.disabled = !!on;
   });
 }
 
 function exLoad(){
-  api('/exams?action=state').then(function(j){
-    EX.state = j;
-    var c = (j && j.cfg) || {};
-    if($('exBase')) $('exBase').value = c.base || '';
-    if($('exUser')) $('exUser').value = c.user || '';
-    if($('exPass')) $('exPass').placeholder = c.hasPass ? '已保存（留空 = 不改）' : '还没设置';
+  var get = function(p){
+    return api(p).catch(function(){ return null; });
+  };
+  Promise.all([get('/exams?action=state'), get('/exams?action=list')]).then(function(r){
+    var st = r[0] || {}, ls = r[1] || {};
+    EX.state = st;
+    EX.items = (ls && Array.isArray(ls.items)) ? ls.items : [];
 
-    /* 班级下拉 */
+    var c = st.cfg || {};
+    if($('exBase')) $('exBase').value = c.base || '';
+    var go = $('exOpen');
+    if(go && c.base) go.href = c.base;
+
+    /* 班级下拉：同步过一次之后云端会带回班级清单 */
     var sel = $('exCls');
     if(sel){
-      var list = (j && j.classes) || [];
+      var list = st.classes || [];
       var cur = c.classId || '';
       sel.innerHTML = '<option value="">（自动：第一个班）</option>' + list.map(function(x){
         return '<option value="' + esc(x.id) + '"' + (x.id === cur ? ' selected' : '') + '>'
@@ -7592,48 +7584,60 @@ function exLoad(){
       }).join('');
     }
 
-    var d = j && j.data;
+    var d = st.data;
     var stat = $('exStat');
     if(stat){
       if(!d){
-        stat.innerHTML = '本机暂无副本。填写地址与账号后点击「立即同步」。';
+        stat.innerHTML = '本站暂无副本。填写地址后点击「立即同步」。';
       }else{
+        var pinN = EX.items.filter(function(x){ return x.pinned; }).length;
         stat.innerHTML =
           '云端标题：<b>' + esc(d.title || '（未命名）') + '</b><br>'
-          + '本机副本更新于：' + esc(exWhen(d.at)) + '<br>'
-          + '考试场次：<b>' + d.majors.length + '</b> 场'
-          + (d.dirty ? '　<span style="color:#b45309">有改动还没写回</span>' : '　<span style="color:#15803d">与云端一致</span>')
-          + (d.pushedAt ? '<br>上次写回：' + esc(exWhen(d.pushedAt)) : '');
+          + '本站副本更新于：' + esc(exWhen(d.at)) + '<br>'
+          + '考试场次：<b>' + EX.items.length + '</b> 场'
+          + '　手动挑了 <b>' + pinN + '</b> 场';
       }
     }
-
-    var list2 = $('exList');
-    if(list2){
-      if(!d || !d.majors.length){
-        list2.innerHTML = '暂无考试数据。';
-      }else{
-        var rows = d.majors.slice().sort(function(a,b){ return (a.startAt||0)-(b.startAt||0); }).map(function(m){
-          var dates = {};
-          (m.items||[]).forEach(function(i){ dates[String(i.startTime||'').slice(5,10)] = 1; });
-          var dayTxt = Object.keys(dates).sort().join('、').replace(/-/g,'/');
-          return '<tr>'
-            + '<td>' + esc(m.name || '') + (m.local ? ' <span class="muted" style="font-size:.72rem">本站新增</span>' : '') + '</td>'
-            + '<td style="white-space:nowrap">' + esc(dayTxt) + '</td>'
-            + '<td style="text-align:right">' + (m.items||[]).length + ' 场</td>'
-            + '<td style="text-align:right">'
-            +   (m.local ? '<button class="btn btn-sm btn-ghost" data-exdel="' + esc(m.id) + '">删除</button>' : '<span class="muted">考试看板管理</span>')
-            + '</td></tr>';
-        }).join('');
-        list2.innerHTML = '<div class="table-wrap"><table style="font-size:.82rem"><thead><tr>'
-          + '<th>考试</th><th>日期</th><th style="text-align:right">场次</th><th></th>'
-          + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
-        Array.prototype.forEach.call(list2.querySelectorAll('[data-exdel]'), function(b){
-          b.onclick = function(){ exDel(b.getAttribute('data-exdel')); };
-        });
-      }
-    }
+    exPaint();
   }).catch(function(e){
     if($('exStat')) $('exStat').textContent = '读取失败：' + e.message;
+  });
+}
+
+function exPaint(){
+  var box = $('exList'); if(!box) return;
+  var items = EX.items || [];
+  if(!items.length){
+    box.innerHTML = '暂无考试数据。先在上面点「立即同步」。';
+    return;
+  }
+  var today = (EX.state && EX.state.today) || '';
+  var rows = items.map(function(it){
+    var act;
+    if(it.pinned){
+      act = '<button class="btn btn-sm btn-ghost" data-exun="' + esc(it.id) + '">移出</button>';
+    }else if(it.auto){
+      act = '<span class="muted" style="font-size:.74rem">已显示</span>';
+    }else{
+      act = '<button class="btn btn-sm" data-expin="' + esc(it.id) + '">加入</button>';
+    }
+    return '<tr>'
+      + '<td style="white-space:nowrap">' + esc(exDayTxt(it.date)) + '</td>'
+      + '<td>' + esc(it.name || '') + '</td>'
+      + '<td style="white-space:nowrap;font-variant-numeric:tabular-nums">' + esc(it.start) + '–' + esc(it.end) + '</td>'
+      + '<td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.major || '') + '</td>'
+      + '<td style="text-align:right;white-space:nowrap">' + act + '</td>'
+      + '</tr>';
+  }).join('');
+  box.innerHTML = '<div class="table-wrap"><table style="font-size:.82rem"><thead><tr>'
+    + '<th>日期</th><th>科目</th><th>时间</th><th>考试</th><th></th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  Array.prototype.forEach.call(box.querySelectorAll('[data-expin]'), function(b){
+    b.onclick = function(){ exPin(b.getAttribute('data-expin'), true); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-exun]'), function(b){
+    b.onclick = function(){ exPin(b.getAttribute('data-exun'), false); };
   });
 }
 
@@ -7641,17 +7645,13 @@ function exSaveCfg(){
   if(EX.busy) return;
   exBusy(true);
   var sel = $('exCls');
-  var body = {
+  api('/exams?action=cfg', { method: 'POST', body: {
     action: 'cfg',
     base: ($('exBase') || {}).value || '',
-    user: ($('exUser') || {}).value || '',
-    pass: ($('exPass') || {}).value || '',
     classId: sel ? sel.value : '',
     className: sel && sel.selectedIndex >= 0 ? (sel.options[sel.selectedIndex].textContent || '') : '',
-  };
-  api('/exams?action=cfg', { method: 'POST', body: body }).then(function(){
+  } }).then(function(){
     toast('已保存', 'ok');
-    if($('exPass')) $('exPass').value = '';
     exBusy(false);
     exLoad();
   }).catch(function(e){
@@ -7675,14 +7675,10 @@ function exTest(){
   });
 }
 
-function exSync(force){
+function exSync(){
   if(EX.busy) return;
-  if(!force && EX.state && EX.state.data && EX.state.data.dirty){
-    if(!confirm('本机还有没写回的改动，同步会覆盖掉它们。继续？')) return;
-    force = true;
-  }
   exBusy(true);
-  api('/exams?action=sync', { method: 'POST', body: { action: 'sync', force: !!force } }).then(function(j){
+  api('/exams?action=sync', { method: 'POST', body: { action: 'sync' } }).then(function(j){
     exBusy(false);
     toast('已同步 ' + j.majors + ' 场', 'ok');
     exLoad();
@@ -7692,63 +7688,13 @@ function exSync(force){
   });
 }
 
-function exPush(){
-  if(EX.busy) return;
-  exBusy(true);
-  api('/exams?action=push', { method: 'POST', body: { action: 'push' } }).then(function(j){
-    exBusy(false);
-    toast('已写回 ' + j.majors + ' 场', 'ok');
-    exLoad();
-  }).catch(function(e){
-    exBusy(false);
-    toast(e.message, 'err');
-  });
-}
-
-function exAdd(){
-  if(EX.busy) return;
-  var sub = ($('exAddSub') || {}).value || '';
-  var date = ($('exAddDate') || {}).value || '';
-  var st = ($('exAddSt') || {}).value || '';
-  var en = ($('exAddEn') || {}).value || '';
-  var name = ($('exAddName') || {}).value || '';
-  var msg = $('exAddMsg');
-  if(!sub){ if(msg) msg.textContent = '请填科目'; return; }
-  if(!date){ if(msg) msg.textContent = '请选日期'; return; }
-  if(!st || !en){ if(msg) msg.textContent = '请填起止时间'; return; }
-  if(en <= st){ if(msg) msg.textContent = '结束时间要晚于开始时间'; return; }
-  exBusy(true);
-  if(msg) msg.textContent = '正在写回考试看板…';
-  api('/exams?action=add', { method: 'POST', body: {
-    action: 'add', subject: sub, date: date, start: st, end: en, name: name, push: true,
-  } }).then(function(j){
-    exBusy(false);
-    if(j && j.pushed){
-      if(msg) msg.textContent = '已保存并写回。';
-      toast('已新增：' + sub, 'ok');
-      if($('exAddSub')) $('exAddSub').value = '';
-      if($('exAddName')) $('exAddName').value = '';
-    }else{
-      if(msg) msg.textContent = '已存本机，但还没写回：' + ((j && j.note) || '稍后点「写回考试看板」');
-    }
-    exLoad();
-  }).catch(function(e){
-    exBusy(false);
-    if(msg) msg.textContent = e.message;
-    toast(e.message, 'err');
-  });
-}
-
-function exDel(id){
+function exPin(id, on){
   if(EX.busy || !id) return;
-  if(!confirm('删除这场考试？会同时从考试看板移除。')) return;
-  exBusy(true);
-  api('/exams?action=del', { method: 'POST', body: { action: 'del', id: id, push: true } }).then(function(j){
-    exBusy(false);
-    toast(j && j.pushed ? '已删除并写回' : '已在本机删除，尚未写回', 'ok');
-    exLoad();
-  }).catch(function(e){
-    exBusy(false);
-    toast(e.message, 'err');
-  });
+  api('/exams?action=pin', { method: 'POST', body: { action: 'pin', id: id, on: !!on } })
+    .then(function(){
+      toast(on ? '已放到大屏作业看板' : '已移出大屏作业看板', 'ok');
+      exLoad();
+    }).catch(function(e){
+      toast(e.message, 'err');
+    });
 }

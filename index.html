@@ -4703,6 +4703,62 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
   font-variant-numeric:tabular-nums;flex:none;
 }
 .bhex-row.bhex-off{opacity:.45}
+/* v4.10.8：同一天混着几场不同考试时，行尾标出考试名称；同一天的标题里也带名称 */
+.bhex-mj{
+  flex:1;min-width:0;margin-left:8px;text-align:right;
+  font-size:calc(.66rem*var(--bhw-fx));color:var(--fg-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.bhex-day-m{font-style:normal;color:var(--fg-2);font-weight:700}
+
+/* —— 考试看板弹窗（v4.10.8：查看全部 + 挑一场） —— */
+.bex-box.bex-wide{max-width:520px;width:min(94vw,520px)}
+.bex-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:2px}
+.bex-go{
+  flex:none;text-decoration:none;font-size:.74rem;font-weight:700;
+  color:#b45309;padding:4px 9px;border-radius:999px;
+  background:rgba(180,83,9,.09);border:1px solid rgba(180,83,9,.18);
+}
+.bex-go:hover{background:rgba(180,83,9,.15)}
+.bex-list{max-height:54vh;overflow-y:auto;margin:6px -4px 2px;padding:0 4px;overscroll-behavior:contain}
+.bex-list::-webkit-scrollbar{width:6px}
+.bex-list::-webkit-scrollbar-thumb{background:rgba(120,53,15,.18);border-radius:3px}
+.bex-g{
+  position:sticky;top:0;z-index:1;
+  font-size:.68rem;font-weight:700;color:var(--fg-3);
+  padding:8px 6px 4px;margin-top:2px;
+  background:linear-gradient(var(--bg-1) 72%,transparent);
+}
+.bex-g.today{color:#b45309}
+.bex-it{
+  display:flex;align-items:center;gap:9px;
+  padding:6px 8px;border-radius:9px;
+}
+.bex-it.pinned{background:rgba(21,128,61,.07)}
+.bex-it-sub{
+  width:60px;flex:none;font-size:.82rem;font-weight:700;color:var(--fg);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.bex-it-tm{flex:none;font-size:.78rem;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.bex-it-mj{
+  flex:1;min-width:0;text-align:right;font-size:.7rem;color:var(--fg-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.bex-it-add{
+  flex:none;width:26px;height:26px;margin-left:auto;
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:8px;border:1px solid rgba(120,53,15,.20);
+  background:var(--bg-2);color:var(--fg-2);
+  font-size:.9rem;line-height:1;cursor:pointer;font-family:inherit;
+}
+.bex-it-add:hover{border-color:var(--grad-a);color:var(--fg)}
+.bex-it-add:disabled{opacity:.5;cursor:default}
+.bex-it-add.on{background:#15803d;border-color:#15803d;color:#fff}
+.bex-it-on{
+  flex:none;margin-left:auto;width:56px;text-align:center;
+  font-size:.68rem;color:var(--fg-3);
+}
+.bex-empty{padding:22px 0;text-align:center;font-size:.8rem;color:var(--fg-3)}
 
 /* —— 新增考试弹窗 —— */
 .bex-mask{
@@ -6235,32 +6291,6 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   </div>
 </div>
 
-<!-- ===== 学习资料网络限制提示弹窗 ===== -->
-<div class="allboard-mask" id="studyNoticeMask">
-  <div class="allboard-box" style="max-width:440px">
-    <div class="allboard-head"><span>📚 班级电脑端访问提示</span><button onclick="closeStudyNotice()">关闭</button></div>
-    <div style="padding:18px 22px;font-size:.92rem;line-height:1.8;color:#57534e">
-      <p style="margin:0 0 8px;font-weight:700;color:#af410f">关于校园网络访问限制的说明</p>
-      <p style="margin:0 0 8px">部分云盘与外部学习平台受<strong>校园网络限制及未备案网站审核影响，</strong>无法正常联网，导致：</p>
-      <ul style="margin:6px 0 12px 18px;padding:0">
-        <li>课堂笔记、课件等学习资源无法实时同步至云端；</li>
-        <li>部分未备案网址在校园网环境下可能显示「无网络」。</li>
-      </ul>
-      <p style="margin:0 0 12px">作业已统一放在站内「作业查看」里，不再依赖外部平台；其余资源仍以老师线下安排为准。</p>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap;gap:8px">
-        <label style="font-size:.78rem;color:#6e635a;cursor:pointer;display:inline-flex;align-items:center;gap:6px">
-          <input type="checkbox" id="studyNoticeNoShow"> 不再显示此提示
-        </label>
-        <button class="btn" onclick="dismissStudyNotice()">我知道了</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- 学习资料提示悬浮球（关闭弹窗后出现，带红点；已勾选不再显示则不出现） -->
-<button id="studyBubble" onclick="showStudyNotice()" title="查看访问提示" aria-label="查看访问提示" style="display:none;position:fixed;right:14px;bottom:16px;z-index:1045;width:48px;height:48px;border-radius:50%;border:none;background:rgba(249,115,22,.95);color:#fff;font-size:1.3rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(194,65,12,.22)">💬<span style="position:absolute;top:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#ff4757;border:2px solid #fff"></span></button>
-
-
 <!-- ===== 复制链接弹窗（主链接，唯一入口） ===== -->
 <div class="allboard-mask" id="copyLinkMask">
   <div class="allboard-box" style="max-width:360px">
@@ -6568,12 +6598,12 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
             <span class="bhw-pick-ico" id="bhwPickIco"></span>
             <span><b>随机点名</b><span>按身份 / 性别 / 学号 / 成绩抽取</span></span>
           </button>
-          <!-- v4.10.6（站主）：「在随机点名的下面加一个小按钮，用于新增一些考试数据。」
-               只给管理员看：写回要管理员身份，同学点了只会拿到 403。 -->
-          <button type="button" class="bhw-examadd" id="bhwExamAdd" onclick="BIG.examForm()" style="display:none"
-            title="新增一场考试，同时写回考试看板">
-            <span class="bhw-examadd-plus" aria-hidden="true">＋</span>
-            <span>新增考试</span>
+          <!-- v4.10.8（站主）：「新增考试那里改成考试看板，我可以一键查看所有的考试数据，
+               最右边有个加号，点一下把那一场放到作业看板上。」站内不再写回考试看板。 -->
+          <button type="button" class="bhw-examadd" id="bhwExamAdd" onclick="BIG.examPanel()" style="display:none"
+            title="查看考试看板上的全部考试，挑一场放到作业看板">
+            <span class="bhw-examadd-plus" aria-hidden="true">☰</span>
+            <span>考试看板</span>
           </button>
           <!-- v4.3.0：随机一言放最底下，点击就换 -->
           <div class="bhw-quote" id="bhwQuote" style="display:none" onclick="BIG.quoteTap(event)"></div>
@@ -7604,18 +7634,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.10.7';
+var SITE_VERSION = '4.10.8';
 var VER_DATE = '2026-11-07';
 </script>
-<script src="./auth-bus.js?v=4107" defer></script>
-<script src="./app.min.js?v=4107" defer></script>
+<script src="./auth-bus.js?v=4108" defer></script>
+<script src="./app.min.js?v=4108" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4107" defer></script>
-<script src="./big.js?v=4107" defer></script>
+<script src="./fs-keep.js?v=4108" defer></script>
+<script src="./big.js?v=4108" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4107" defer></script>
+<script src="./pickfx.js?v=4108" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

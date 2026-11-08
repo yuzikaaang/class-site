@@ -161,7 +161,12 @@
        站内工具 → 打开它所在的板块，并只留这一张卡
        外链     → 新窗口（微信里走既有引导） */
   function actionOf(catId, l){
-    if(l.id === 2) return function (){ BIG.openHw(); };
+    /* v4.10.8：作业看板只给管理员。这里先拦一道，进去之后 openHw 还会再拦一次
+       （防止有人直接敲 #/hw 路由）。 */
+    if(l.id === 2) return function (){
+      if(!adminOk()){ toast('作业看板仅管理员可查看'); return; }
+      BIG.openHw();
+    };
     if(l.paused) return null;
     if(l.contactQuery) return function (){ openCardAlone(catId, l); };
     if(typeof httpUrl === 'function' && httpUrl(l.mainUrl)){
@@ -212,7 +217,8 @@
         var act = actionOf(c.id, l);
         tiles.push({
           title: l.title,
-          sub: l.paused ? '暂停开放' : (l.subtitle || ''),
+          sub: l.paused ? '暂停开放'
+            : (l.id === 2 && !adminOk() ? '仅管理员' : (l.subtitle || '')),
           icon: l.icon || '',
           iconText: l.iconText || String(l.title || '').slice(0, 1),
           off: !act,
@@ -810,6 +816,13 @@
       }catch(e){}
       return;
     }
+    /* v4.10.8（站主）：「大屏模式里面的作业看板只支持管理员访问，普通用户可以用大屏模式，
+       但是不能点击作业看板。」大屏作业页里有作业内容、点名、改作业这些管理动作，
+       同学在大屏上点进来容易误改，直接挡住。 */
+    if(!adminOk()){
+      toast('作业看板仅管理员可查看');
+      return;
+    }
     BIG.hwOn = true;
     document.documentElement.classList.add('big-hw');
     document.documentElement.classList.remove('big-cat');
@@ -1402,15 +1415,26 @@
       + '</div>';
 
     var body = days.map(function (d){
-      var rows = (d.items || []).map(function (it){
+      var items = d.items || [];
+      /* v4.10.8：一整天的场次都属于同一场考试时，把考试名称提到这一天的小标题里，
+         省得每一行都重复一遍；同一天混着几场考试，才在行尾标名字。 */
+      var one = (items.length && items.every(function (x){ return x.major === items[0].major; }))
+        ? String(items[0].major || '') : '';
+      var cap = '';
+      if(one){
+        cap = '<div class="bhex-day">'
+          + (multi ? esc0(examDayLabel(d.date, !!d.isToday)) + ' · ' : '')
+          + '<i class="bhex-day-m">' + esc0(one) + '</i></div>';
+      }else if(multi){
+        cap = '<div class="bhex-day">' + esc0(examDayLabel(d.date, !!d.isToday)) + '</div>';
+      }
+      var rows = items.map(function (it){
         return '<div class="bhex-row' + (d.isToday ? '' : ' bhex-off') + '">'
           + '<span class="bhex-sub">' + esc0(it.name || '考试') + '</span>'
+          + (one ? '' : '<span class="bhex-mj">' + esc0(it.major || '') + '</span>')
           + '<span class="bhex-time">' + esc0(it.start || '') + '–' + esc0(it.end || '') + '</span>'
           + '</div>';
       }).join('');
-      var cap = multi
-        ? '<div class="bhex-day">' + esc0(examDayLabel(d.date, !!d.isToday)) + '</div>'
-        : '';
       return cap + rows;
     }).join('');
 
@@ -1447,81 +1471,145 @@
   }
   BIG.examPaint = paintExam;
 
-  /* -------- 新增考试（大屏上直接加，写回考试看板） -------- */
-  BIG.examForm = function (){
+  /* -------- 考试看板（v4.10.8）--------
+     站主原话（2026-11-08）：
+       「新增考试那里改成考试看板，我可以一键查看所有的考试数据，考试数据最右边有个
+         加号，点一下把我点的那一次考试放到作业看板上……最顶上就是前往考试看板。」
+     所以这一块只做两件事：把上游排好的考试全列出来、让站主挑哪一场进作业看板。
+     站内**不写回**上游，点加号只是在本站记一条「这场要显示」。 */
+
+  BIG.examList = { items: [], base: '', title: '', cls: '', today: '', loading: false };
+
+  BIG.examPanel = function (){
     if(document.getElementById('bexMask')) return;
-    var day = examTodayLocal();
     var mask = document.createElement('div');
     mask.className = 'bex-mask';
     mask.id = 'bexMask';
     mask.innerHTML = ''
-      + '<div class="bex-box" role="dialog" aria-label="新增考试">'
-      +   '<div class="bex-t">新增考试</div>'
-      +   '<p class="bex-tip">保存后会同时在考试看板里建一场临时考试；教室断网时先存本机，联网后再写回。</p>'
-      +   '<label class="bex-f"><span>科目</span>'
-      +     '<input id="bexSub" maxlength="12" placeholder="如 数学" autocomplete="off"></label>'
-      +   '<label class="bex-f"><span>日期</span>'
-      +     '<input id="bexDate" type="date" value="' + day + '"></label>'
-      +   '<div class="bex-two">'
-      +     '<label class="bex-f"><span>开始</span><input id="bexSt" type="time" value="08:00"></label>'
-      +     '<label class="bex-f"><span>结束</span><input id="bexEn" type="time" value="09:30"></label>'
+      + '<div class="bex-box bex-wide" role="dialog" aria-label="考试看板">'
+      +   '<div class="bex-hd">'
+      +     '<div class="bex-t">考试看板</div>'
+      +     '<a class="bex-go" id="bexGo" href="https://examboard.dpdns.org" target="_blank" rel="noopener">前往考试看板 ↗</a>'
       +   '</div>'
-      +   '<label class="bex-f"><span>名称（可空）</span>'
-      +     '<input id="bexName" maxlength="20" placeholder="留空就按「科目（临时）」"></label>'
-      +   '<div class="bex-msg" id="bexMsg"></div>'
+      +   '<p class="bex-tip" id="bexTip">正在读取考试数据…</p>'
+      +   '<div class="bex-list" id="bexList"></div>'
       +   '<div class="bex-btns">'
-      +     '<button type="button" class="bex-btn ghost" onclick="BIG.examFormClose()">取消</button>'
-      +     '<button type="button" class="bex-btn" id="bexSave" onclick="BIG.examSave()">保存并写回</button>'
+      +     '<button type="button" class="bex-btn ghost" onclick="BIG.examPanelClose()">关闭</button>'
       +   '</div>'
       + '</div>';
-    mask.addEventListener('click', function (e){ if(e.target === mask) BIG.examFormClose(); });
+    mask.addEventListener('click', function (e){ if(e.target === mask) BIG.examPanelClose(); });
     document.body.appendChild(mask);
-    setTimeout(function (){ var i = $('bexSub'); if(i) i.focus(); }, 30);
+    BIG.examPanelLoad();
   };
 
-  BIG.examFormClose = function (){
+  BIG.examPanelClose = function (){
     var m = document.getElementById('bexMask');
     if(m && m.parentNode) m.parentNode.removeChild(m);
   };
 
-  BIG.examSave = function (){
-    if(BIG.exam.busy) return;
-    var v = function (id){ var e = $(id); return e ? String(e.value || '').trim() : ''; };
-    var msg = $('bexMsg');
-    var say = function (t, color){
-      if(msg){ msg.textContent = t || ''; msg.style.color = color || '#8a6a55'; }
-    };
-    var subject = v('bexSub'), date = v('bexDate'), st = v('bexSt'), en = v('bexEn');
-    if(!subject){ say('请填科目'); return; }
-    if(!date){ say('请选日期'); return; }
-    if(!st || !en){ say('请填起止时间'); return; }
-    if(en <= st){ say('结束时间要晚于开始时间'); return; }
-
-    BIG.exam.busy = true;
-    var btn = $('bexSave');
-    if(btn){ btn.disabled = true; btn.textContent = '保存中…'; }
-    say('正在写回考试看板…');
-
-    api('/exams?action=add', { method: 'POST', body: {
-      action: 'add', subject: subject, date: date, start: st, end: en,
-      name: v('bexName'), push: true,
-    } }).then(function (j){
-      BIG.exam.busy = false;
-      var okPush = !!(j && j.pushed);
-      var note = (j && j.note) || '';
-      if(okPush){
-        setTimeout(BIG.examFormClose, 260);
-        if(typeof toast === 'function') toast('已保存：' + subject + ' ' + st + '–' + en);
-        BIG.examLoad();
-      }else{
-        say('已存本机，但还没写回：' + (note || '联网后在后台点「写回」'), '#b45309');
-        if(btn){ btn.disabled = false; btn.textContent = '重试写回'; }
-      }
+  BIG.examPanelLoad = function (){
+    var tip = $('bexTip');
+    if(tip) tip.textContent = '正在读取考试数据…';
+    api('/exams?action=list').then(function (j){
+      BIG.examList = {
+        items: (j && Array.isArray(j.items)) ? j.items : [],
+        base: String((j && j.base) || ''),
+        title: String((j && j.title) || ''),
+        cls: String((j && j.cls) || ''),
+        today: String((j && j.today) || examTodayLocal()),
+      };
+      examPanelPaint();
     }).catch(function (e){
-      BIG.exam.busy = false;
-      if(btn){ btn.disabled = false; btn.textContent = '保存并写回'; }
-      say(String((e && e.message) || '保存失败'));
+      var box = $('bexList');
+      if(tip) tip.textContent = '读取失败：' + String((e && e.message) || '网络不可用');
+      if(box) box.innerHTML = '<div class="bex-empty">连不上本站后端，稍后再试。</div>';
     });
+  };
+
+  function examPanelPaint(){
+    var box = $('bexList'); if(!box) return;
+    var L = BIG.examList, items = L.items || [];
+    var tip = $('bexTip');
+    var go = $('bexGo');
+    if(go && L.base) go.href = L.base;
+
+    if(!items.length){
+      if(tip) tip.textContent = '考试看板上暂时没有排好的考试';
+      box.innerHTML = '<div class="bex-empty">暂无可显示的考试。</div>';
+      return;
+    }
+
+    var today = L.today || examTodayLocal();
+    var shown = 0;
+    items.forEach(function (it){ if(it.pinned) shown++; });
+    if(tip){
+      tip.textContent = '共 ' + items.length + ' 场' + (L.cls ? ' · ' + L.cls : '')
+        + (shown ? ' · 已挑 ' + shown + ' 场' : '')
+        + '。点右侧加号把这一场放到作业看板。';
+    }
+
+    var groups = {}, order = [];
+    items.forEach(function (it){
+      if(!groups[it.date]){ groups[it.date] = []; order.push(it.date); }
+      groups[it.date].push(it);
+    });
+    order.sort();
+
+    var html = '';
+    order.forEach(function (d){
+      var arr = groups[d];
+      var one = (arr.length && arr.every(function (x){ return x.major === arr[0].major; }))
+        ? String(arr[0].major || '') : '';
+      html += '<div class="bex-g' + (d === today ? ' today' : '') + '">'
+        + esc0(examDayLabel(d, d === today))
+        + (one ? ' · ' + esc0(one) : '')
+        + '</div>';
+      arr.forEach(function (it){
+        var btn;
+        if(it.pinned){
+          btn = '<button type="button" class="bex-it-add on" data-pin="' + esc0(it.id)
+            + '" data-on="0" title="已在作业看板，点击移出">✓</button>';
+        }else if(it.auto){
+          btn = '<span class="bex-it-on" title="今天自动显示，无需挑选">已显示</span>';
+        }else{
+          btn = '<button type="button" class="bex-it-add" data-pin="' + esc0(it.id)
+            + '" data-on="1" title="放到作业看板">＋</button>';
+        }
+        html += '<div class="bex-it' + (it.pinned ? ' pinned' : '') + '">'
+          + '<span class="bex-it-sub">' + esc0(it.name) + '</span>'
+          + '<span class="bex-it-tm">' + esc0(it.start) + '–' + esc0(it.end) + '</span>'
+          + (one ? '' : '<span class="bex-it-mj">' + esc0(it.major) + '</span>')
+          + btn
+          + '</div>';
+      });
+    });
+    box.innerHTML = html;
+
+    Array.prototype.forEach.call(box.querySelectorAll('[data-pin]'), function (b){
+      b.onclick = function (){
+        BIG.examPin(b.getAttribute('data-pin'), b.getAttribute('data-on') === '1', b);
+      };
+    });
+  }
+
+  /** 挑一场上/下作业看板。只改本站的挑选清单，考试看板那边一个字都不动 */
+  BIG.examPin = function (id, on, btn){
+    if(!id || BIG.exam.busy) return;
+    BIG.exam.busy = true;
+    var old = btn ? btn.textContent : '';
+    if(btn){ btn.disabled = true; btn.textContent = '…'; }
+    api('/exams?action=pin', { method: 'POST', body: { action: 'pin', id: id, on: !!on } })
+      .then(function (){
+        BIG.exam.busy = false;
+        BIG.examPanelLoad();      /* 按钮状态以服务器为准，不在本地猜 */
+        BIG.examLoad();           /* 作业看板那一块跟着变 */
+        if(typeof toast === 'function') toast(on ? '已放到作业看板' : '已从作业看板移出');
+      })
+      .catch(function (e){
+        BIG.exam.busy = false;
+        if(btn){ btn.disabled = false; btn.textContent = old; }
+        if(typeof toast === 'function') toast(String((e && e.message) || '操作失败'));
+      });
   };
 
   /* ---------------- 倒计时（v4.3.0） ----------------
@@ -1620,6 +1708,12 @@
     box.style.display = '';
 
     var rows = '';
+    /* v4.10.8（站主）：「还要显示我已经步入高中多少天了，放在本学期已开学的上面」。
+       口径和「高中总进度」同一条基线（入学日期），入学当天算第 1 天。 */
+    if(p.hiDone !== null && p.hiDone !== undefined){
+      rows += '<div class="bhw-prog-row"><span>已步入高中</span>'
+        + '<b>' + (p.hiDone + 1) + '<i>天</i></b></div>';
+    }
     if(p.sinceStart !== null && p.sinceStart !== undefined){
       rows += '<div class="bhw-prog-row"><span>本学期已开学</span>'
         + '<b>' + p.sinceStart + '<i>天</i></b></div>';
