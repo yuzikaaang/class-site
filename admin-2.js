@@ -5897,10 +5897,14 @@ function paintIsland(){
     +         '<input class="gate-input" id="aiEnd" type="date" value="' + attr(AI.endDate || '') + '"></div>'
     +       '<div class="field"><label>高一入学日（算高中总进度）</label>'
     +         '<input class="gate-input" id="aiEnroll" type="date" value="' + attr(AI.enrollDate || '') + '"></div>'
+    +       '<div class="field"><label>几点后自动看「明日事项」</label>'
+    +         '<input class="gate-input" id="aiNight" type="time" value="' + attr(AI.nightFrom || '21:00') + '"></div>'
     +     '</div>'
     +     '<p class="muted" style="font-size:.74rem;margin:8px 0 0">'
     +       '开学第一天<b>不一定是周一</b>：周三开学就填周三，那一周照样算第 1 周（只是不满 7 天）。'
-    +       '「学期结束」填了以后，大屏作业页右下角才会显示学期倒计时；「高一入学日」用来算高中总进度条</p>'
+    +       '「学期结束」填了以后，大屏作业页右下角才会显示学期倒计时；「高一入学日」用来算高中总进度条。'
+    +       '<br>「几点后自动看明日事项」默认 <b>21:00</b>：到这个点，首页班级岛和大屏作业页右栏都自动显示'
+    +       '明天的安排（旁边还能手动切回今天）。改成 20:30，两处一起提前。</p>'
     +   '</div>'
     + '</section>'
 
@@ -6031,6 +6035,7 @@ function paintIsland(){
   $('aiStart').onchange = aiTouch;
   if($('aiEnd'))    $('aiEnd').onchange = aiTouch;
   if($('aiEnroll')) $('aiEnroll').onchange = aiTouch;
+  if($('aiNight'))  $('aiNight').onchange = aiTouch;
 
   /* 照片：输入即存 + 实时预览（有效地址才显示缩略图） */
   var ph = $('aiPhoto');
@@ -6100,12 +6105,13 @@ function aiCollect(){
      否则等于拿一份空配置覆盖云端。 */
   if(!AI || typeof AI !== 'object') return null;
   var on = $('aiOn'), term = $('aiTerm'), st = $('aiStart');
-  var en = $('aiEnd'), er = $('aiEnroll'), ph = $('aiPhoto');
+  var en = $('aiEnd'), er = $('aiEnroll'), ph = $('aiPhoto'), nf = $('aiNight');
   if(on)  AI.on = !!on.checked;
   if(term) AI.term = String(term.value || '').trim();
   if(st)  AI.startDate = String(st.value || '').trim();
   if(en)  AI.endDate = String(en.value || '').trim();
   if(er)  AI.enrollDate = String(er.value || '').trim();
+  if(nf)  AI.nightFrom = String(nf.value || '').trim().slice(0, 5);
   if(ph)  AI.photo = String(ph.value || '').trim().slice(0, 500);
   Array.prototype.forEach.call(document.querySelectorAll('#aiBanner [data-bk]'), function(el){
     AI.banner[el.getAttribute('data-bk')] = String(el.value || '').trim().slice(0, 60);
@@ -6116,6 +6122,7 @@ function aiCollect(){
     startDate: AI.startDate,
     endDate: AI.endDate || '',
     enrollDate: AI.enrollDate || '',
+    nightFrom: AI.nightFrom || '21:00',
     components: (AI.components || []).slice(),
     banner: AI.banner,
     days: AI.days,

@@ -1094,6 +1094,8 @@
     try{ localStorage.setItem(DS_FOLD_KEY, folded ? '1' : '0'); }catch(e){}
     applyDsFold();
     if(!folded){ try{ renderDateStrip(); }catch(e){} dsAutoFoldArm(); }  /* 展开时启动自动收起 */
+    /* 日期条占了 46px 竖向空间，右栏可用高度跟着变 */
+    setTimeout(function (){ try{ fitSide(); }catch(e){} }, 60);
   };
   applyDsFold();   /* defer 脚本执行时 DOM 已就绪，进作业页前先摆好上次的收起状态 */
 
@@ -1309,6 +1311,10 @@
         + '<button type="button" class="bhw-btn ghost bhw-full" onclick="BIG.hwFull()"'
           + ' id="bhwFullBtn" title="全屏显示（隐藏任务栏），按 Esc 退出">⛶ 全屏</button>';
       syncBadge();
+      /* v4.10.26（站主）：「页面刷新之后，明明还是全屏模式，右上角却从『退出全屏』
+         变回『全屏』」。按钮每次重绘都是新节点，必须在建好之后按**当前真实状态**写一次字，
+         不能只等 fullscreenchange（刷新时那件事早就发生过了）。 */
+      try{ refreshFullBtn(); }catch(e){}
     }
 
     var colA = $('bhwColA'), colB = $('bhwColB'), other = $('bhwOther'), addHost = $('bhwAddSubj');
@@ -1598,6 +1604,7 @@
       _layTimer = null;
       growAll();
       BIG.layoutCards();
+      try{ fitSide(); }catch(e){}
     }, 50);
   }
   BIG.relayout = scheduleLayout;
@@ -1605,29 +1612,45 @@
   /* ---------------- 侧栏（v4.3.0 重排） ----------------
      顺序按站主要求：时钟 → 今日事项 → 倒计时（重要日期 / 最近节假日） → 随机点名 → 随机一言（最底）。
      倒计时必须压在点名上面，一言单独放最下面，不再和别的挤在一块。 */
+  /* v4.10.26（站主）：「今日事项（普通模式的班级岛设置相同）切换为明日事项的时间
+     可以在后台修改，而且影响作业看板的区域」。
+     所以这里跟首页班级岛用**同一套**判断（islShowTomorrow），后台「几点后看明日」改一次，
+     两处一起变；侧栏那块也跟着写「明日事项 / 今日事项」。 */
+  function sideDayOffset(){
+    try{ if(typeof islShowTomorrow === 'function' && islShowTomorrow()) return 1; }catch(e){}
+    return 0;
+  }
+  var _sideOff = null;
   function renderSide(){
     /* v4.10.6：「新增考试」只给管理员 —— 写回考试看板要管理员身份 */
     var eb = $('bhwExamAdd');
     if(eb) eb.style.display = adminOk() ? '' : 'none';
     var c = $('bhwCourses');
     if(c){
-      var txt = '', sub = '';
+      var txt = '', sub = '', off = sideDayOffset();
       try{
         if(typeof islandToday === 'function' && typeof ISLAND !== 'undefined' && ISLAND && ISLAND.on){
-          var t = islandToday(0);
+          var t = islandToday(off);
           if(t){
             if(t.kind === 'holiday'){
               /* v4.7.9：口径跟首页横幅统一 —— 不再「距开学 N 天」（结束日被多数一次），
                  不足 24 小时直接说小时。
-                 v4.10.5：开始日 >= 12:00 时，当天是「今晚开始」而不是「第 1 天」。 */
-              txt = t.startTonight
-                ? ((t.label || '放假中') + ' · 今晚 ' + (t.fromTime || '') + ' 起 · 共 ' + t.totalDays + ' 天')
-                : ((t.label || '放假中') + ' · 放假第 ' + t.dayNo + ' 天 · 还剩 '
-                   + (typeof islLeftText === 'function' ? islLeftText(t.leftMs) : ''));
+                 v4.10.5：开始日 >= 12:00 时，当天是「今晚开始」而不是「第 1 天」。
+                 v4.10.26：看明天时不能说「放假第 1 天」—— 明天还没到。 */
+              if(off){
+                if(t.firstDay) txt = (t.label || '放假中') + ' · 明天开始放假 · 共 ' + t.totalDays + ' 天';
+                else if(t.lastDay && t.toTime) txt = (t.label || '放假中') + ' · 明天第 ' + t.dayNo + ' 天 · ' + t.toTime + ' 返校';
+                else txt = (t.label || '放假中') + ' · 明天第 ' + t.dayNo + ' 天（共 ' + t.totalDays + ' 天）';
+              }else{
+                txt = t.startTonight
+                  ? ((t.label || '放假中') + ' · 今晚 ' + (t.fromTime || '') + ' 起 · 共 ' + t.totalDays + ' 天')
+                  : ((t.label || '放假中') + ' · 放假第 ' + t.dayNo + ' 天 · 还剩 '
+                     + (typeof islLeftText === 'function' ? islLeftText(t.leftMs) : ''));
+              }
             }
-            else if(t.kind === 'off') txt = (t.label || '今天休息') + (t.text ? ' · ' + t.text : '');
-            else txt = t.text || '今天没有安排';
-            sub = '今日事项';
+            else if(t.kind === 'off') txt = (t.label || (off ? '明天休息' : '今天休息')) + (t.text ? ' · ' + t.text : '');
+            else txt = t.text || (off ? '明天没有安排' : '今天没有安排');
+            sub = off ? '明日事项' : '今日事项';
           }
         }
       }catch(e){}
@@ -1635,18 +1658,82 @@
         c.style.display = '';
         c.innerHTML = '<span class="bhw-mini-k">' + esc0(sub) + '</span>'
           + '<b class="bhw-mini-v">' + esc0(txt) + '</b>';
+        /* v4.10.26（站主）：「作业看板的今日事项点击也可以显示同普通版的图片」。
+           首页那张照片点开是同一个弹层（islPhotoOpen），这里直接复用。 */
+        var photo = false;
+        try{ photo = !!(typeof ISLAND !== 'undefined' && ISLAND && ISLAND.photo); }catch(e){}
+        c.classList.toggle('can-photo', photo);
+        c.style.cursor = photo ? 'zoom-in' : '';
+        c.title = photo ? '点击查看照片' : '';
+        c.onclick = photo ? function (){
+          try{ if(typeof islPhotoOpen === 'function') islPhotoOpen(); }catch(e){}
+        } : null;
       }else{
         c.style.display = 'none';
+        c.onclick = null;
       }
+      _sideOff = off;
     }
     renderCd();
     renderQuote();
+    if(_fitRaf) cancelAnimationFrame(_fitRaf);
+    _fitRaf = requestAnimationFrame(fitSide);
   }
+
+  /* v4.10.26：右栏「永远装得下」。
+     可用高度 = 视口 - 底部工具条（+日期条） - 右栏顶端；
+     内容比它高就整体等比缩小，最小 62%（再小就真的看不清了）。
+     用 transform 而不是改字号：所有块一起缩，间距/图标/进度条比例不变。 */
+  var _fitRaf = 0;
+  function fitSide(){
+    _fitRaf = 0;
+    var side = $('bhwSide'), inn = $('bhwSideIn');
+    if(!side || !inn || !BIG.hwOn) return;
+    /* 窄屏是单列布局，不锁高度 */
+    try{ if(window.innerWidth <= 1180) { side.style.height=''; side.style.maxHeight=''; inn.style.transform=''; inn.style.width=''; return; } }catch(e){}
+    var bar = document.querySelector('.bhw-bar');
+    var barH = bar ? bar.getBoundingClientRect().height : 58;
+    var ds = $('bhwDateStrip');
+    var dsH = (ds && getComputedStyle(ds).display !== 'none') ? ds.getBoundingClientRect().height : 0;
+    var r = side.getBoundingClientRect();
+    var topDoc = r.top + (window.scrollY || window.pageYOffset || 0);
+    var avail = window.innerHeight - barH - dsH - topDoc - 8;
+    if(avail < 160) avail = 160;
+    side.style.height = avail + 'px';
+    side.style.maxHeight = avail + 'px';
+    inn.style.zoom = '';
+    inn.style.transform = '';
+    inn.style.width = '';
+    var natural = inn.scrollHeight;
+    var s = 1;
+    if(natural > avail + 1){
+      s = Math.max(0.6, avail / natural);
+      inn.style.transform = 'scale(' + s + ')';
+      inn.style.transformOrigin = 'top left';
+      inn.style.width = (100 / s) + '%';
+      /* 变宽后折行变少，高度会降一点 —— 再量一次，把比例提回去（只回调一点点，避免来回抖） */
+      var n2 = inn.scrollHeight;
+      if(n2 > 0){
+        var s2 = Math.min(1, avail / n2);
+        if(s2 > s && s2 - s <= 0.1){
+          s = s2;
+          inn.style.transform = 'scale(' + s + ')';
+          inn.style.width = (100 / s) + '%';
+        }
+      }
+    }
+    BIG._sideScale = Math.round(s * 1000) / 1000;
+  }
+  BIG.fitSide = fitSide;
 
   /* v4.10.12（站主）：「大屏里面的今日事项里面这个倒计时……是通过本机的时间去实时的更新的」。
      侧栏这块显示的是「放假第 N 天 · 还剩 4 小时 54 分」，以前只在重绘时才重算 ——
      跟倒计时同一个毛病。这里每秒按本机时间重算这一行字，结构不动。 */
   function sideTick(){
+    /* 跨过后台设的「明日事项」时刻（默认 21:00）：整块换标题和内容 */
+    var off = sideDayOffset();
+    if(_sideOff === null) _sideOff = off;
+    else if(off !== _sideOff){ renderSide(); return; }
     var c = $('bhwCourses');
     if(!c || c.style.display === 'none') return;
     var b = c.querySelector('.bhw-mini-v');
@@ -1654,13 +1741,19 @@
     var tt = null;
     try{
       if(typeof islandToday === 'function' && typeof ISLAND !== 'undefined' && ISLAND && ISLAND.on){
-        tt = islandToday(0);
+        tt = islandToday(off);
       }
     }catch(e){}
     /* 只有「正在放假、且已过放假时刻」才带剩余时间；其余状态交给整块重绘 */
     if(!tt || tt.kind !== 'holiday' || tt.startTonight) return;
-    var txt = (tt.label || '放假中') + ' · 放假第 ' + tt.dayNo + ' 天 · 还剩 '
-      + (typeof islLeftText === 'function' ? islLeftText(tt.leftMs) : '');
+    var txt;
+    if(off){
+      if(tt.lastDay && tt.toTime) txt = (tt.label || '放假中') + ' · 明天第 ' + tt.dayNo + ' 天 · ' + tt.toTime + ' 返校';
+      else txt = (tt.label || '放假中') + ' · 明天第 ' + tt.dayNo + ' 天（共 ' + tt.totalDays + ' 天）';
+    }else{
+      txt = (tt.label || '放假中') + ' · 放假第 ' + tt.dayNo + ' 天 · 还剩 '
+        + (typeof islLeftText === 'function' ? islLeftText(tt.leftMs) : '');
+    }
     if(b.textContent !== txt) b.textContent = txt;
   }
   BIG.sideTick = sideTick;
@@ -2842,6 +2935,12 @@
         return;
       }
       var req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+      /* v4.10.26：窗口本身已经满屏（F11 / --start-fullscreen），网页没法「退出」
+         窗口全屏 —— 直接告诉用户按 F11，比再 requestFullscreen 一次更像它会做的事。 */
+      if(winLookFull()){
+        toast('当前是浏览器窗口全屏（没有任务栏），按 F11 或 Esc 退出', true);
+        return;
+      }
       if(!req){ toast('这个浏览器不支持网页全屏，可按 F11', true); return; }
       var p2 = req.call(el);
       /* v4.8.0：记住「要全屏」，换到时钟 / 后台 / 作业页也不退出 */
@@ -2892,9 +2991,14 @@
   function refreshFullBtn(){
     var b = $('bhwFullBtn');
     if(!b) return;
-    b.textContent = fsEl() ? '⤡ 退出全屏' : '⛶ 全屏';
-    b.setAttribute('title', fsEl()
-      ? '退出网页全屏（退出后窗口若仍满屏，请按 F11）'
+    /* v4.10.26：不只认 Fullscreen API —— 一体机常用 --start-fullscreen / F11，
+       这时 document.fullscreenElement 是空的，但窗口确实占满整块屏。
+       两种都算「现在就是全屏」，按钮就得写「退出全屏」，不然字和实际状态对不上。 */
+    var on = !!fsEl() || winLookFull();
+    b.textContent = on ? '⤡ 退出全屏' : '⛶ 全屏';
+    b.setAttribute('title', on
+      ? (fsEl() ? '退出网页全屏（退出后窗口若仍满屏，请按 F11）'
+                : '当前是浏览器窗口全屏，按 F11 退出')
       : '全屏显示（隐藏任务栏），按 Esc 退出');
   }
   try{

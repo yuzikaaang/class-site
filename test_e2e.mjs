@@ -12370,8 +12370,9 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
   const adm17 = readAdm();
   const isl17 = fs.readFileSync(new URL('./api/island.js', import.meta.url), 'utf8');
 
-  t('★v3.9.17 21 点后默认看明天（islIsNight + 可手动覆盖）',
-    /function islIsNight\(\)\{ return new Date\(\)\.getHours\(\) >= 21; \}/.test(app17)
+  /* v4.10.26：时刻从写死的 21:00 改为班级岛设置项 nightFrom（默认 21:00） */
+  t('★v3.9.17 到点后默认看明天（时刻可设 + 可手动覆盖）',
+    /function islNightMin\(\)/.test(app17) && />= islNightMin\(\)/.test(app17)
     && /var ISL_VIEW = null;/.test(app17) && /function islShowTomorrow\(\)/.test(app17));
   t('★v3.9.17 明天有临时安排优先，没有再用星期课表',
     /function islandToday\(offset\)/.test(app17) && /if\(offset\) d\.setDate\(d\.getDate\(\) \+ offset\)/.test(app17)
@@ -12379,7 +12380,9 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
   t('★v3.9.17 标签会变成「明日事项」', /\(tomorrow \? '明日事项' : '今日事项'\)/.test(app17));
   t('★v3.9.17 21 点后出现「看今天 / 看明天」按钮', /class="isl-switch"/.test(app17)
     && /看今天|看明天/.test(app17) && /islSwitchView/.test(app17));
-  t('★v3.9.17 挂到 21 点自动重画（不用刷新）', /if\(h === 21 \|\| h === 0\) islandBanner\(\);/.test(app17));
+  t('★v3.9.17 到点自动重画（不用刷新）',
+    /var tmr = islShowTomorrow\(\);/.test(app17)
+    && /if\(ISL_TICK_T !== null && ISL_TICK_T !== tmr\) islandBanner\(\);/.test(app17));
   t('★v3.9.17 字号（12–32）存进当天配置并渲染',
     /function clampSize/.test(isl17) && /size: clampSize\(v\.size\)/.test(isl17)
     && /font-size:' \+ t\.size \+ 'px/.test(app17));
@@ -13560,14 +13563,17 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /row\.media/.test(appV) && /r\.media \|\| \[\]/.test(idxV)
     && /media: rmedia/.test(idxV) && /bh \+= hh \+ 10/.test(idxV));
   t('★v4.10.19 作业页卡片按「顺序切分 + 高度均衡」分栏（两栏各 1/2，省空间）',
-    /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\) 300px/.test(idxV)
+    /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(idxV)
+    && /padding:0 332px 0 16px/.test(idxV)
     && /bestK/.test(bigV) && /Math\.abs\(leftH - rightH\)/.test(bigV)
     && /getBoundingClientRect\(\)\.height/.test(bigV)
     && /function cardKeyNo/.test(bigV));
 
   /* ---- v4.10.17：两栏等宽 + 考试卡保持改前宽度 + 日期条可折叠 ---- */
-  t('★v4.10.17 两栏各 1/2：grid 改 minmax(0,1fr) minmax(0,1fr) 300px',
-    /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\) 300px/.test(idxV)
+  /* v4.10.26：右栏改成绝对定位（300px），网格只留两列 —— 仍然是一人一半 */
+  t('★v4.10.17 两栏各 1/2（右栏 300px 绝对定位，不吃分栏宽度）',
+    /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(idxV)
+    && /\.bhw-side\{[\s\S]{0,160}?width:300px/.test(idxV)
     && !/minmax\(0,2fr\)/.test(idxV.slice(idxV.indexOf('.bhw-grid{'), idxV.indexOf('.bhw-grid{') + 400)));
   t('★v4.10.17 考试卡宽度锁为左栏 2/3（= 改前 1/3 内容区），窄屏单列恢复撑满',
     /\.bhex\{[\s\S]{0,400}?width:66\.6667%;box-sizing:border-box/.test(idxV)

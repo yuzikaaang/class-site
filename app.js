@@ -9972,6 +9972,14 @@ function buildSidebar(){
   box.innerHTML = cats.map(function(c){
     return '<button class="side-btn" data-cat="'+c.id+'" onclick="openCat('+c.id+')">'+esc(c.name)+'</button>';
   }).join('');
+  /* v4.10.26（站主）：「刷新之后侧边栏那张卡片的高亮没了」。
+     高亮是加在按钮上的类，而 render() 会把 #sideCats 整块重建 ——
+     云端内容晚到一次（rerenderAll）就会把 openCat 刚点亮的那个按钮换掉。
+     重建完立刻按当前板块补一次，任何重绘都不会再把高亮弄丢。 */
+  if(typeof __activeCat !== 'undefined' && __activeCat != null){
+    var cur = box.querySelector('.side-btn[data-cat="'+__activeCat+'"]');
+    if(cur) cur.classList.add('active');
+  }
 }
 var __activeCat = null;
 function openCat(id){
@@ -10519,9 +10527,25 @@ function islPhotoBind(){
 }
 /* 今天该显示什么：假期倒计时 / 这天不上课 / 具体文案 */
 /* v3.9.17（站主）：21 点后默认看「明天」。
-   ISL_VIEW：null = 自动（21 点后明天）｜'today'｜'tomorrow'（用户手动切的） */
+   ISL_VIEW：null = 自动（到点后明天）｜'today'｜'tomorrow'（用户手动切的）
+   v4.10.26（站主）：「切换为明日事项的时间可以在后台修改，而且影响作业看板的区域」。
+   阈值从写死的 21:00 改成班级岛设置项 nightFrom（后台 → 班级岛 → 基本），
+   首页横幅、看今天/看明天按钮、大屏作业页右栏三处共用这一个判断。 */
 var ISL_VIEW = null;
-function islIsNight(){ return new Date().getHours() >= 21; }
+function islNightMin(){
+  var m = 21 * 60;
+  try{
+    if(typeof ISLAND !== 'undefined' && ISLAND && ISLAND.nightFrom){
+      var v = /^(\d{1,2}):(\d{2})$/.exec(String(ISLAND.nightFrom));
+      if(v) m = Number(v[1]) * 60 + Number(v[2]);
+    }
+  }catch(e){}
+  return (m >= 0 && m < 1440) ? m : 21 * 60;
+}
+function islIsNight(){
+  var d = new Date();
+  return (d.getHours() * 60 + d.getMinutes()) >= islNightMin();
+}
 function islShowTomorrow(){
   if(ISL_VIEW === 'today') return false;
   if(ISL_VIEW === 'tomorrow') return true;
@@ -10897,7 +10921,7 @@ function islandToggleMeta(){
   if(cue) cue.textContent = on ? '收起' : '详情';
 }
 
-var ISL_TICK_H = null;
+var ISL_TICK_H = null;   /* v4.10.26：改用 ISL_TICK_T（今日/明日状态），保留声明兼容老缓存 */
 /* v4.10.11（站主）：「还有多少个分钟……是通过本机的时间去实时的更新的」。
    假期横幅里的「还剩 X 小时 Y 分」以前只在 21 点 / 跨天重画，一天都不动；
    现在每秒按本机时间重算这一行字，只在真的变了才写 DOM（不重建整块）。 */
@@ -10916,18 +10940,18 @@ function islandTick(){
   islSet('islTime', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'));
   /* 假期倒计时每秒走一次字；其余情况这一句什么都不做 */
   try{ islHolTick(); }catch(e){}
-  /* 跨过 21:00（或跨天）时重画横幅：不用刷新页面也能切到「明日事项」 */
-  var h = d.getHours();
-  if(ISL_TICK_H !== null && ISL_TICK_H !== h){
-    if(h === 21 || h === 0) islandBanner();
-  }
-  ISL_TICK_H = h;
+  /* 跨过「明日事项」时刻（后台可改，默认 21:00）或跨天时重画横幅：
+     不用刷新页面也能切到「明日事项」。v4.10.26 起不再写死 21 点。 */
+  var tmr = islShowTomorrow();
+  if(ISL_TICK_T !== null && ISL_TICK_T !== tmr) islandBanner();
+  ISL_TICK_T = tmr;
   /* v4.10.4：跨天之后「学期还剩多少天」也要跟着减 1（页面开着过夜） */
   if((++ISL_TICK_N % 30) === 0){
     try{ islandTermLeft(); }catch(e){}
   }
 }
 var ISL_TICK_N = 0;
+var ISL_TICK_T = null;
 
 /* v3.9.21：失败后最多自动重试一次（用函数对象当开关，避免再开一个全局变量） */
 function islWxRetry(){}

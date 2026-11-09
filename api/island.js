@@ -77,6 +77,10 @@ const DEFAULT_ISLAND = {
      都是可留空的：留空时前台不显示对应那一行，不会出现 NaN。 */
   endDate: '',
   enrollDate: '2025-09-01',
+  /* v4.10.26（站主）：「切换为明日事项的时间可以在后台修改」。
+     到这个点，首页班级岛与大屏作业页右栏一起切到「明日事项」。
+     老数据没有这个字段 → 默认 21:00，行为跟改之前完全一样。 */
+  nightFrom: '21:00',
   components: ['time', 'weather', 'week', 'term'],
   banner: DEFAULT_BANNER,
   days: {},
@@ -94,6 +98,14 @@ function clampSize(v) {
 
 function str(v, max) { return String(v == null ? '' : v).trim().slice(0, max); }
 function isDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')); }
+/** 「几点后看明日事项」：只收 00:00–23:59，格式统一补零；不合法就回默认 21:00 */
+function normNight(v) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim());
+  if (!m) return DEFAULT_ISLAND.nightFrom;
+  const h = Number(m[1]), mi = Number(m[2]);
+  if (!(h >= 0 && h < 24 && mi >= 0 && mi < 60)) return DEFAULT_ISLAND.nightFrom;
+  return ('0' + h).slice(-2) + ':' + ('0' + mi).slice(-2);
+}
 
 function normBanner(raw, legacyTimetable) {
   const o = (raw && typeof raw === 'object') ? raw : null;
@@ -165,6 +177,7 @@ function normalize(raw) {
     /* v4.10.4：学期结束日 · 高中入学日（都允许空 —— 空着前台就不显示那一行） */
     endDate: isDate(o.endDate) ? o.endDate : '',
     enrollDate: isDate(o.enrollDate) ? o.enrollDate : DEFAULT_ISLAND.enrollDate,
+    nightFrom: normNight(o.nightFrom),
     components: comps.length ? comps : DEFAULT_ISLAND.components,
     banner: normBanner(o.banner, legacyTt),
     days: normDays(o.days),
