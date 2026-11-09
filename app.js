@@ -9384,7 +9384,6 @@ function renderSettings(){
     }).join('');
     html += secHtml('cards','卡片显示','list',
       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + cardBtns + '</div>'
-      + '<p class="ui-hint">点击切换显示状态，仅对当前设备生效。</p>'
       + '<button class="btn btn-gray" style="font-size:.76rem;padding:9px 12px;margin-top:4px" '
       + 'onclick="bigResetPrefs()">恢复大屏默认</button>', true);
   }
