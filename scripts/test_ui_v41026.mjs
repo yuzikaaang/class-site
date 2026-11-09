@@ -50,11 +50,6 @@ function mock(page, island) {
     return J({ ok: true });
   });
 }
-const hhmm = (d) => ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-const now = new Date();
-const before = new Date(now.getTime() - 2 * 60000);
-const after = new Date(now.getTime() + 60 * 60000);
-
 const browser = await chromium.launch({ executablePath: CH, args: ['--no-sandbox'] });
 
 /* ============ A. 1366×768：编辑不动右栏 + 全内容可见 ============ */
@@ -64,6 +59,8 @@ const browser = await chromium.launch({ executablePath: CH, args: ['--no-sandbox
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message.slice(0, 160)));
   await mock(page, ISLAND);
+  /* 固定在本机 20:00：断言「明日事项」的开关时刻不受运行测试的真实时间影响（跨午夜也不会翻） */
+  await page.clock.install({ time: new Date('2026-11-09T20:00:00') });
   await page.goto(SITE.replace('index.html', 'index.html?big=1'), { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(1600);
   await page.evaluate((HW) => {
@@ -126,8 +123,8 @@ const browser = await chromium.launch({ executablePath: CH, args: ['--no-sandbox
   });
   t('⑦ 非全屏时按钮写「全屏」', /^⛶ 全屏$/.test(fsBtn2.trim()), fsBtn2);
 
-  /* 明日事项时刻：改成 1 分钟前 → 一定看明天；改成 1 小时后 → 一定看今天 */
-  await page.evaluate((v) => { ISLAND.nightFrom = v; BIG.renderHw(); }, hhmm(before));
+  /* 明日事项时刻：固定 20:00 下，19:00 已过 → 看明天；21:00 未到 → 看今天 */
+  await page.evaluate(() => { ISLAND.nightFrom = '19:00'; BIG.renderHw(); });
   await page.waitForTimeout(500);
   const tomorrow = await page.evaluate(() => ({
     k: (document.querySelector('#bhwCourses .bhw-mini-k') || {}).textContent,
@@ -135,7 +132,7 @@ const browser = await chromium.launch({ executablePath: CH, args: ['--no-sandbox
   }));
   t('⑧ 时刻设成刚刚过去 → 右栏显示「明日事项」', tomorrow.k === '明日事项' && !!tomorrow.v, JSON.stringify(tomorrow));
 
-  await page.evaluate((v) => { ISLAND.nightFrom = v; BIG.renderHw(); }, hhmm(after));
+  await page.evaluate(() => { ISLAND.nightFrom = '21:00'; BIG.renderHw(); });
   await page.waitForTimeout(500);
   const today = await page.evaluate(() => ({
     k: (document.querySelector('#bhwCourses .bhw-mini-k') || {}).textContent,

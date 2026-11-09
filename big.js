@@ -2914,6 +2914,14 @@
     var d = document, el = d.documentElement;
     try{
       if(fsEl()){
+        /* v4.10.26：刚被 FSKeep 自动恢复出来的全屏不算「用户要退出」。
+           刷新后第一次点击会先触发恢复（pointerdown），click 到这里时
+           document.fullscreenElement 已经是真，直接退就等于「点全屏反而退出」。 */
+        if(window.__fsJustOn && (Date.now() - window.__fsJustOn) < 1500){
+          try{ delete window.__fsJustOn; }catch(e){ window.__fsJustOn = 0; }
+          refreshFullBtn();
+          return;
+        }
         try{ if(window.FSKeep) FSKeep.off(); }catch(e){}
         var ex = d.exitFullscreen || d.webkitExitFullscreen || d.msExitFullscreen;
         if(!ex){ toast('这个浏览器退不出网页全屏，请按 Esc 键', true); return; }

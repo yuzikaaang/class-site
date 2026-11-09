@@ -39,12 +39,21 @@
   }
   function ask() {
     var d = document.documentElement;
+    var p = null;
     try {
-      if (d.requestFullscreen) return d.requestFullscreen({ navigationUI: 'hide' });
-      if (d.webkitRequestFullscreen) return d.webkitRequestFullscreen();
-      if (d.msRequestFullscreen) return d.msRequestFullscreen();
+      if (d.requestFullscreen) p = d.requestFullscreen({ navigationUI: 'hide' });
+      else if (d.webkitRequestFullscreen) p = d.webkitRequestFullscreen();
+      else if (d.msRequestFullscreen) p = d.msRequestFullscreen();
     } catch (e) { return null; }
-    return null;
+    /* v4.10.26：记下「这一次全屏是自动恢复的」。
+       刷新后按钮按真实状态写「退出全屏」，但用户点它时，pointerdown 先触发
+       这里的自动恢复（页面瞬间变全屏），click 再走 BIG.hwFull 就会误判成
+       「已经在全屏 → 退出」——表现正是站主说的「点全屏反而退出」。
+       big.js 看到这个时间戳（1.5 秒内）就知道是刚恢复的，不再反手退出。 */
+    if (p && p.then) {
+      p = p.then(function (v) { try { window.__fsJustOn = Date.now(); } catch (e) {} return v; });
+    }
+    return p;
   }
   function arm() {
     if (armed) return;
