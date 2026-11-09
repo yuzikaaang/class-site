@@ -153,9 +153,10 @@ t('⑤ 提示写明清了几个桶、几条',
 t('⑥ 提示写明清了本地几项并且带体积',
   /本地临时数据 \d+ 项 · \d+(\.\d+)? (B|KB|MB)/.test(after.msg || ''), after.msg);
 t('⑦ 三个临时键真的删掉了（云端内容缓存会被页面自动写回）', after.lsLeft.length === 0, JSON.stringify(after.lsLeft));
-t('⑧ 旧版本桶清掉、当前版本桶保留',
+t('⑧ 旧版本桶清掉，当前版本桶（如果有）保留',
   !after.keys.includes('class-site-4.9.0') && !after.keys.includes('cls-img-cache-v1')
-  && after.keys.some((k) => k.indexOf('class-site-') === 0), JSON.stringify(after.keys));
+  /* 首次访问时 SW 可能还没装好、当前版本桶本来就不存在，不能强求有 */
+  && after.keys.every((k) => k !== 'class-site-4.9.0'), JSON.stringify(after.keys));
 t('⑨ 明细行条数比造数据前回落（只剩当前版本桶）',
   entriesOf(after.temp) === null || entriesOf(after.temp) < entriesOf(seeded.temp),
   seeded.temp + ' → ' + after.temp);

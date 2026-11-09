@@ -9407,13 +9407,17 @@ function measureCacheUse(){
     if(navigator.storage && navigator.storage.estimate){
       totalJob = navigator.storage.estimate().then(function(st){
         var d = (st && st.usageDetails) || {};
-        /* usageDetails.caches 是图片 + 页面缓存的真实占用；localStorage 另有记账，自己加。
-           浏览器有时把 caches 报成 0（刚装好 SW / 还没落盘），那就退回自己逐条量的值，
-           免得出现「本地 63 KB、总量 0 B」这种自相矛盾的数字。 */
-        var cs2 = (typeof d.caches === 'number' && d.caches > 0) ? d.caches : cs.bytes;
-        if(typeof d.caches === 'number' || cs.bytes > 0) return cs2 + lsT.bytes + lsD.bytes;
-        if(st && typeof st.usage === 'number') return st.usage;
-        return null;
+        /* 缓存那部分：浏览器报的数和自己逐条量的数取大的。
+           两个都可能偏小 —— 刚装 SW 时 caches 报 0；localStorage 压根不计入
+           quota 用量（这时 usage 也是 0），直接用 usage 会得出「本地 63 KB、总量 0 B」。 */
+        var cacheBytes = cs.bytes;
+        if(typeof d.caches === 'number' && d.caches > cacheBytes) cacheBytes = d.caches;
+        else if(typeof d.caches !== 'number' && st && typeof st.usage === 'number' && st.usage > cacheBytes){
+          cacheBytes = st.usage;
+        }
+        var lsBytes = lsT.bytes + lsD.bytes;
+        if(!cacheBytes && !lsBytes) return null;
+        return cacheBytes + lsBytes;
       }).catch(function(){ return null; });
     }
     return totalJob.then(function(total){
