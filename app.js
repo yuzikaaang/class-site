@@ -9303,6 +9303,17 @@ function renderSettings(){
       '<p class="ui-hint">清理这台设备上的旧缓存，腾出空间。<br>'
       + '· <b>临时缓存</b>：天气、班徽、旧版本页面、图片直链等，删了不影响使用，联网会自动重新获取；<br>'
       + '· <b>本地数据</b>：成绩分析、班级名单等缓存，删掉后下次要重新联网加载，一般不建议清。</p>'
+      /* v4.10.22（站主）：得先看得见占了多少，才知道要不要清 */
+      + '<div class="up-row"><span class="k">已占用</span>'
+        + '<span class="v" id="cacheUsed">统计中…</span></div>'
+      + '<div class="up-row"><span class="k" style="flex:0 0 auto">其中 · 临时缓存</span>'
+        + '<span class="v" id="cacheUsedT" style="font-family:inherit;font-weight:600;flex:1 1 auto;'
+        +   'min-width:0;text-align:right;line-height:1.45;word-break:break-word">—</span></div>'
+      + '<div class="up-row"><span class="k" style="flex:0 0 auto">其中 · 本地数据</span>'
+        + '<span class="v" id="cacheUsedD" style="font-family:inherit;font-weight:600;flex:1 1 auto;'
+        +   'min-width:0;text-align:right;line-height:1.45;word-break:break-word">—</span></div>'
+      + '<p class="ui-hint" style="margin:6px 0 10px">总量由浏览器统计，含图片缓存；' +
+        '明细条数是实际数出来的，图片缓存只知道张数（跨域图片读不出体积）。</p>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
         + '<button class="btn btn-secondary" style="flex:1;min-width:110px;font-size:.76rem;padding:9px 6px" onclick="clearTempCache()">清理临时缓存</button>'
         + '<button class="btn btn-gray" style="flex:1;min-width:110px;font-size:.76rem;padding:9px 6px" onclick="clearLocalData()">清理本地数据</button>'
@@ -9320,43 +9331,157 @@ function renderSettings(){
     });
   }
   if(UI_SEC === 'order') renderSortList();
+  /* 「缓存清理」在「数据」分组里，这里按元素在不在判断，分组改了也不会漏统计 */
+  if(document.getElementById('cacheUsed')) refreshCacheUse();
   /* v2.5.0 起已无运行时 emoji 引擎（图标都在渲染时就地生成），无需任何触发 */
 }
 
-/* —— 缓存清理（v4.10.20 站主）——
+/* —— 缓存清理（v4.10.20 站主；v4.10.22 增加「占了多少 / 清了多少」）——
    站主发现班级电脑缓存越堆越多（旧版本缓存 + 临时数据）。
    分两类：临时缓存可放心删，本地数据需确认。 */
+var CACHE_TEMP_KEYS = ['__cls_wx','__cls_wx_h2','__cls_geo','__cls_badge_src_v2','__cls_badge_ts',
+  'cls_content_cache_v1','cls_content_since_v1','__cls_cat_report','cls_week_cache'];
+var CACHE_DATA_KEYS = ['cls_sc_cache_v1','cls_roster_cache_v1','cls_class_list'];
+var CACHE_BUCKET_RE = /^class-site-|^cls-img-cache-/;
+
+function fmtCacheSize(n){
+  if(n == null || n < 0) return '—';
+  if(n < 1024) return Math.round(n) + ' B';
+  if(n < 1048576) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
+  return (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB';
+}
+
+/* localStorage 只能自己量：一个字符按 2 字节算（UTF-16），和浏览器记账差不了多少 */
+function lsCacheBytes(keys){
+  var bytes = 0, count = 0;
+  (keys || []).forEach(function(k){
+    try{
+      var v = localStorage.getItem(k);
+      if(v !== null){ bytes += (k.length + v.length) * 2; count++; }
+    }catch(e){}
+  });
+  return { bytes: bytes, count: count };
+}
+
+/* 浏览器缓存逐条数。
+   跨域图片是 opaque 响应，body 读不出来（blob().size 恒为 0），所以只记张数；
+   总量另问浏览器自己（navigator.storage.estimate）。 */
+function cacheStoreStats(){
+  var out = { buckets: 0, entries: 0, bytes: 0, opaque: 0, names: [], byName: {} };
+  if(!(window.caches && caches.keys)) return Promise.resolve(out);
+  return caches.keys().then(function(names){
+    var mine = (names || []).filter(function(n){ return CACHE_BUCKET_RE.test(n); });
+    out.buckets = mine.length;
+    out.names = mine;
+    return mine.reduce(function(chain, name){
+      return chain.then(function(){
+        return caches.open(name).then(function(c){
+          return c.keys().then(function(list){
+            out.entries += list.length;
+            out.byName[name] = list.length;
+            return list.reduce(function(seq, req){
+              return seq.then(function(){
+                return c.match(req).then(function(res){
+                  if(!res) return;
+                  var cl = parseInt(res.headers.get('content-length') || '', 10);
+                  if(cl > 0){ out.bytes += cl; return; }
+                  if(res.type === 'opaque'){ out.opaque++; return; }
+                  return res.clone().blob()
+                    .then(function(b){ out.bytes += b.size; })
+                    .catch(function(){});
+                }).catch(function(){});
+              });
+            }, Promise.resolve());
+          });
+        }).catch(function(){});
+      });
+    }, Promise.resolve()).then(function(){ return out; });
+  }).catch(function(){ return out; });
+}
+
+function measureCacheUse(){
+  var lsT = lsCacheBytes(CACHE_TEMP_KEYS);
+  var lsD = lsCacheBytes(CACHE_DATA_KEYS);
+  return cacheStoreStats().then(function(cs){
+    var totalJob = Promise.resolve(null);
+    if(navigator.storage && navigator.storage.estimate){
+      totalJob = navigator.storage.estimate().then(function(st){
+        var d = (st && st.usageDetails) || {};
+        /* usageDetails.caches 是图片 + 页面缓存的真实占用；localStorage 另有记账，自己加 */
+        if(typeof d.caches === 'number') return d.caches + lsT.bytes + lsD.bytes;
+        if(st && typeof st.usage === 'number') return st.usage;
+        return null;
+      }).catch(function(){ return null; });
+    }
+    return totalJob.then(function(total){
+      return { total: total, cache: cs, lsTemp: lsT, lsData: lsD };
+    });
+  });
+}
+
+function paintCacheUse(u){
+  var a = document.getElementById('cacheUsed');
+  if(a) a.textContent = (u.total == null) ? '无法统计' : fmtCacheSize(u.total);
+  var t = document.getElementById('cacheUsedT');
+  if(t){
+    var parts = [];
+    if(u.cache.buckets) parts.push(u.cache.buckets + ' 个缓存桶 · ' + u.cache.entries + ' 条');
+    if(u.lsTemp.count) parts.push('本地 ' + u.lsTemp.count + ' 项 · ' + fmtCacheSize(u.lsTemp.bytes));
+    t.textContent = parts.length ? parts.join(' + ') : '空的';
+  }
+  var d = document.getElementById('cacheUsedD');
+  if(d) d.textContent = u.lsData.count
+    ? (u.lsData.count + ' 项 · ' + fmtCacheSize(u.lsData.bytes))
+    : '空的';
+}
+
+function refreshCacheUse(){
+  var a = document.getElementById('cacheUsed');
+  if(a) a.textContent = '统计中…';
+  return measureCacheUse().then(paintCacheUse).catch(function(){
+    var b = document.getElementById('cacheUsed');
+    if(b) b.textContent = '统计失败';
+  });
+}
+
 function clearTempCache(){
   var msg = document.getElementById('cacheMsg');
-  function done(txt){
-    if(msg) msg.textContent = txt;
-    if(typeof uiMsg === 'function') uiMsg(txt, '#2f7d4f');
+  function say(txt, color){
+    if(msg){ msg.textContent = txt; msg.style.color = color || '#0a7d42'; }
+    if(typeof uiMsg === 'function') uiMsg(txt, color || '#2f7d4f');
   }
-  /* ① 临时 localStorage 键：天气 / 地理位置 / 班徽 / 云端内容 / 周次 —— 联网都会自动重取 */
-  var tempKeys = ['__cls_wx','__cls_wx_h2','__cls_geo','__cls_badge_src_v2','__cls_badge_ts',
-    'cls_content_cache_v1','cls_content_since_v1','__cls_cat_report','cls_week_cache'];
-  var removed = 0;
-  tempKeys.forEach(function(k){
-    try{ if(localStorage.getItem(k) !== null){ localStorage.removeItem(k); removed++; } }catch(e){}
+  say('正在统计并清理…', '#8a6a55');
+
+  /* 先量再删：删完再问浏览器要体积，它要过一阵才回收，前后差值会是 0 */
+  measureCacheUse().then(function(before){
+    var removed = 0;
+    CACHE_TEMP_KEYS.forEach(function(k){
+      try{ if(localStorage.getItem(k) !== null){ localStorage.removeItem(k); removed++; } }catch(e){}
+    });
+    /* v4.10.21：保留当前版本那个桶 —— 它装着本次版本的预缓存，删了之后
+       SW 不会重新 install，离线时会连页面都打不开。只清旧版本的。 */
+    var keep = 'class-site-' + (window.SITE_VERSION || '');
+    var del = (before.cache.names || []).filter(function(k){ return k !== keep; });
+    var jobs = [];
+    try{
+      if(window.caches && window.caches.delete){
+        jobs = del.map(function(k){ return window.caches.delete(k).catch(function(){}); });
+      }
+    }catch(e){}
+    return Promise.all(jobs).then(function(){
+      var delN = 0;
+      del.forEach(function(k){ delN += (before.cache.byName[k] || 0); });
+      var parts = [];
+      if(del.length) parts.push('旧版本缓存 ' + del.length + ' 个桶 · ' + delN + ' 条');
+      if(removed) parts.push('本地临时数据 ' + removed + ' 项 · ' + fmtCacheSize(before.lsTemp.bytes));
+      say(parts.length
+        ? ('已清理：' + parts.join('；'))
+        : '没有需要清理的临时缓存');
+      return refreshCacheUse();
+    });
+  }).catch(function(){
+    say('清理失败，刷新页面后再试一次', '#af410f');
   });
-  /* ② 浏览器缓存（SW 桶 + 图片直链桶），联网后会自动重新缓存 */
-  function finishCache(){
-    done('已清理临时缓存：本地 ' + removed + ' 项 + 浏览器缓存');
-  }
-  try{
-    if(window.caches && window.caches.keys){
-      window.caches.keys().then(function(keys){
-        /* v4.10.21：保留当前版本那个桶 —— 它装着本次版本的预缓存，删了之后
-           SW 不会重新 install，离线时会连页面都打不开。只清旧版本的。 */
-        var keep = 'class-site-' + (window.SITE_VERSION || '');
-        var del = keys.filter(function(k){
-          return /^class-site-|^cls-img-cache-/.test(k) && k !== keep;
-        });
-        Promise.all(del.map(function(k){ return window.caches.delete(k).catch(function(){}); }))
-          .then(finishCache);
-      }).catch(finishCache);
-    }else finishCache();
-  }catch(e){ finishCache(); }
 }
 
 function clearLocalData(){
@@ -9364,14 +9489,17 @@ function clearLocalData(){
   if(!confirm('确定清理本地数据缓存吗？\n\n这会清掉成绩分析缓存、班级名单缓存等。\n下次打开这些内容时需要重新联网加载，一般不建议清理。')){
     return;
   }
-  var dataKeys = ['cls_sc_cache_v1','cls_roster_cache_v1','cls_class_list'];
+  var stat = lsCacheBytes(CACHE_DATA_KEYS);
   var removed = 0;
-  dataKeys.forEach(function(k){
+  CACHE_DATA_KEYS.forEach(function(k){
     try{ if(localStorage.getItem(k) !== null){ localStorage.removeItem(k); removed++; } }catch(e){}
   });
-  var txt = '已清理本地数据 ' + removed + ' 项';
-  if(msg) msg.textContent = txt;
+  var txt = removed
+    ? ('已清理本地数据 ' + removed + ' 项 · ' + fmtCacheSize(stat.bytes))
+    : '没有可清理的本地数据';
+  if(msg){ msg.textContent = txt; msg.style.color = '#b45309'; }
   if(typeof uiMsg === 'function') uiMsg(txt, '#b45309');
+  refreshCacheUse();
 }
 
 /* ---------- 设置面板里的「检查更新」（v2.6.4） ----------

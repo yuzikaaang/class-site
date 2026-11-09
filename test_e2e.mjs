@@ -13661,6 +13661,36 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /ignoreSearch: true/.test(swV));
   }
 
+  /* ===== v4.10.22 专项：缓存占用 / 清理体积 ===== */
+  {
+    /* ① 面板三行 + 打开分组就统计 */
+    t('★v4.10.22 缓存清理显示已占用 / 临时缓存 / 本地数据三行',
+      /id="cacheUsed"/.test(appV) && /id="cacheUsedT"/.test(appV)
+      && /id="cacheUsedD"/.test(appV)
+      && /document\.getElementById\('cacheUsed'\)\) refreshCacheUse\(\)/.test(appV));
+    /* ② 总量取浏览器记账 + 自己量的 localStorage */
+    t('★v4.10.22 总量取 usageDetails.caches，再叠加本地存储体积',
+      /function measureCacheUse\(\)/.test(appV)
+      && /navigator\.storage\.estimate\(\)/.test(appV)
+      && /typeof d\.caches === 'number'/.test(appV)
+      && /function lsCacheBytes\(keys\)/.test(appV));
+    /* ③ 单条体积优先 Content-Length，读不到再读 blob；opaque 只记张数不编数字 */
+    t('★v4.10.22 单条体积优先读 Content-Length，跨域图片只记张数',
+      /res\.headers\.get\('content-length'\)/.test(appV)
+      && /res\.clone\(\)\.blob\(\)/.test(appV)
+      && /res\.type === 'opaque'\)\{ out\.opaque\+\+/.test(appV));
+    /* ④ 先量后删：删除前拿一份统计，删完直接报数字 */
+    t('★v4.10.22 清理先量后删，提示里报桶数 / 条数 / 本地体积',
+      /measureCacheUse\(\)\.then\(function\(before\)/.test(appV)
+      && /'旧版本缓存 ' \+ del\.length \+ ' 个桶 · ' \+ delN \+ ' 条'/.test(appV)
+      && /'本地临时数据 ' \+ removed \+ ' 项 · ' \+ fmtCacheSize\(before\.lsTemp\.bytes\)/.test(appV)
+      && /function fmtCacheSize\(n\)/.test(appV));
+    /* ⑤ 本地数据清理也报体积，并且窄屏能换行 */
+    t('★v4.10.22 本地数据清理报体积 + 明细行窄屏可换行',
+      /'已清理本地数据 ' \+ removed \+ ' 项 · ' \+ fmtCacheSize\(stat\.bytes\)/.test(appV)
+      && /min-width:0;text-align:right;line-height:1\.45;word-break:break-word/.test(appV));
+  }
+
   /* ===== v4.10.3 专项：返回首页 / 编辑态两层 / 公告口径 ===== */
   {
     const adm1V = fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8');
