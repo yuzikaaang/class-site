@@ -142,6 +142,9 @@ await p.waitForTimeout(800);
 const after = await p.evaluate(async () => ({
   msg: (document.getElementById('cacheMsg') || {}).textContent,
   temp: (document.getElementById('cacheUsedT') || {}).textContent,
+  data: (document.getElementById('cacheUsedD') || {}).textContent,
+  total: (document.getElementById('cacheUsed') || {}).textContent,
+  csBytes: (await cacheStoreStats()).bytes,
   keys: await caches.keys(),
   /* cls_content_cache_v1 每次联网都会被页面重新写回，不在「应当消失」之列 */
   lsLeft: ['__cls_wx','__cls_geo','cls_week_cache'].filter((k) => localStorage.getItem(k) !== null),
@@ -157,6 +160,15 @@ t('⑧ 旧版本桶清掉，当前版本桶（如果有）保留',
   !after.keys.includes('class-site-4.9.0') && !after.keys.includes('cls-img-cache-v1')
   /* 首次访问时 SW 可能还没装好、当前版本桶本来就不存在，不能强求有 */
   && after.keys.every((k) => k !== 'class-site-4.9.0'), JSON.stringify(after.keys));
+/* 清完之后总量只该等于「保留的当前版本桶（可实测）」+ 本地存储；
+   浏览器删除后不立刻减，若还把它报的旧数字算进去，这条就会失败 */
+t('⑨b 清完之后总量不再含浏览器滞后的旧数字',
+  (() => {
+    const total = parseB(after.total) || 0;
+    const ls = (parseB(after.temp) || 0) + (parseB(after.data) || 0);
+    return total <= after.csBytes + ls + 8192;
+  })(),
+  after.total + ' vs 实测桶 ' + after.csBytes + ' B + 本地 ' + ((parseB(after.temp) || 0) + (parseB(after.data) || 0)) + ' B');
 t('⑨ 明细行条数比造数据前回落（只剩当前版本桶）',
   entriesOf(after.temp) === null || entriesOf(after.temp) < entriesOf(seeded.temp),
   seeded.temp + ' → ' + after.temp);

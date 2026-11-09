@@ -9410,10 +9410,17 @@ function measureCacheUse(){
         /* 缓存那部分：浏览器报的数和自己逐条量的数取大的。
            两个都可能偏小 —— 刚装 SW 时 caches 报 0；localStorage 压根不计入
            quota 用量（这时 usage 也是 0），直接用 usage 会得出「本地 63 KB、总量 0 B」。 */
+        /* Chromium 删完缓存不会立刻把占用减下来，estimate 会继续报旧数字。
+           所以只在「确实量不出来」的时候才信它：
+             · 一个桶都没有 → 缓存是空的，0
+             · 全部条目都读得到体积（不透明条目为 0）→ 用自己量的，比 estimate 准
+             · 有跨域图片（opaque，读不出体积）→ 才拿 estimate 兜底 */
         var cacheBytes = cs.bytes;
-        if(typeof d.caches === 'number' && d.caches > cacheBytes) cacheBytes = d.caches;
-        else if(typeof d.caches !== 'number' && st && typeof st.usage === 'number' && st.usage > cacheBytes){
-          cacheBytes = st.usage;
+        if(cs.buckets === 0) cacheBytes = 0;
+        else if(cs.opaque > 0){
+          var est = (typeof d.caches === 'number') ? d.caches
+            : ((st && typeof st.usage === 'number') ? st.usage : 0);
+          if(est > cacheBytes) cacheBytes = est;
         }
         var lsBytes = lsT.bytes + lsD.bytes;
         if(!cacheBytes && !lsBytes) return null;
