@@ -9379,13 +9379,12 @@ function renderSettings(){
     var cardBtns = BHW_CARD_DEFS.map(function(k){
       var on = !!bp.cards[k[0]];
       return '<button type="button" class="ui-tab bhw-card-tg' + (on ? ' active' : '') + '" '
-        + 'style="flex:1 1 30%;font-size:.74rem" '
+        + 'style="flex:1 1 22%;min-width:86px;font-size:.72rem;padding:7px 6px" '
         + 'onclick="bigToggleCard(\'' + k[0] + '\')">' + k[1] + (on ? ' · 显示' : ' · 已隐藏') + '</button>';
     }).join('');
     html += secHtml('cards','卡片显示','list',
       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + cardBtns + '</div>'
-      + '<p class="ui-hint">控制右侧各卡片的显示状态，点击可切换显示或隐藏，'
-      + '随机点名与随机一言也在本组内。设置仅对当前设备的大屏作业页生效。</p>'
+      + '<p class="ui-hint">点击切换显示状态，仅对当前设备生效。</p>'
       + '<button class="btn btn-gray" style="font-size:.76rem;padding:9px 12px;margin-top:4px" '
       + 'onclick="bigResetPrefs()">恢复大屏默认</button>', true);
   }
