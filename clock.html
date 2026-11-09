@@ -1086,7 +1086,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=41026" defer></script>
+<script src="./fs-keep.js?v=4110" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -1306,16 +1306,36 @@ var lastFlip = { h:'', m:'', s:'' };
 function two(n){ return n < 10 ? '0' + n : '' + n; }
 
 /* v4.7.3：教学周次。首页每次算完都会把「学期开始日」写进本机，
-   时钟页是独立页面、也不联网，直接读这份缓存自己算，断网照样准。 */
+   时钟页是独立页面、也不联网，直接读这份缓存自己算，断网照样准。
+
+   v4.11.0（站主）：「第几周没有随周数更改，今天已经是 11 周，但显示还是 10 周」。
+   根因不是没读缓存 —— 是**两套算法口径不同**：
+     作业看板（big.js）按「开学日所在那一周的周一」起算（2026-09-01 是周二，
+     第 1 周从 8/31 起，11/9 是第 11 周）；
+     这里以前直接拿开学日当第 1 天，于是同样的日期少算一周。
+   现在两边统一成「周一为周首」，缓存里如果带了首页算好的 mon 就直接用。 */
+function weekMon(){
+  var o = null;
+  try{ o = JSON.parse(localStorage.getItem('cls_week_cache') || 'null'); }catch(e){ return null; }
+  if(!o) return null;
+  var base = String(o.mon || o.start || '').slice(0, 10);
+  if(!base) return null;
+  var st = new Date(base + 'T00:00:00');
+  if(isNaN(st.getTime())) return null;
+  if(!o.mon){
+    /* 老缓存只有 start：自己往前推到周一（周一 = 0） */
+    var wd = (st.getDay() + 6) % 7;
+    st.setDate(st.getDate() - wd);
+  }
+  return st;
+}
 function weekLabel(date){
   try{
-    var o = JSON.parse(localStorage.getItem('cls_week_cache') || 'null');
-    if(!o || !o.start) return '';
-    var st = new Date(o.start + 'T00:00:00');
-    if(isNaN(st.getTime())) return '';
+    var mon = weekMon();
+    if(!mon) return '';
     var d = new Date(date || Date.now());
     d.setHours(0, 0, 0, 0);
-    var diff = Math.floor((d - st) / 86400000);
+    var diff = Math.floor((d - mon) / 86400000);
     if(diff < 0) return '未开学';
     return '第 ' + (Math.floor(diff / 7) + 1) + ' 周';
   }catch(e){ return ''; }

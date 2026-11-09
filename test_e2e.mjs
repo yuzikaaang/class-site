@@ -5074,15 +5074,19 @@ console.log('\n【45】第三十三轮·主题自动切换三选一（v2.5.3）'
     /\.ui-modes\{display:flex/.test(idx45) && /@media \(max-width:380px\)/.test(idx45));
 
   /* ---- 手动切换不被立刻弹回 ---- */
-  t('★手动切换后写当天 hold 标记（不再被自动弹回）',
-    /setItem\('cls_theme_hold', sunTodayKey\(\)\)/.test(idx45));
-  t('★hold 为当天时自动逻辑跳过',
-    /if\(hold === sunTodayKey\(\)\) return;/.test(idx45)
-    || /if\(hold && hold === sunTodayKey\(\)\)\{/.test(idx45));
+  /* v4.11.0：hold 从「当天」升级成「相位」（日期 + 昼/夜），见 themePhaseKey */
+  t('★手动切换后写当前相位标记（不再被自动弹回）',
+    /function themeHoldSet\(\)\{[\s\S]{0,120}cls_theme_hold/.test(idx45)
+    && /themeHoldSet\(\);/.test(idx45));
+  t('★相位未变时自动逻辑让位（themeHoldOn 收口）',
+    /function themeHoldOn\(\)\{/.test(idx45) && /if\(themeHoldOn\(\)\)\{/.test(idx45));
   /* 🔴 v2.5.3 真 bug 回归护栏：hold 检查必须在 applyAutoTheme 内部，
      否则启动 / 系统主题变化 / API 回填 三条路径都会把用户手动选的色弹回去。 */
   t('★hold 检查收口在 applyAutoTheme 内部（不只放在外层）',
-    /function applyAutoTheme\(force\)\{[\s\S]{0,700}hold && hold === sunTodayKey\(\)/.test(idx45));
+    /function applyAutoTheme\(force\)\{[\s\S]{0,900}themeHoldOn\(\)/.test(idx45));
+  /* v4.11.0：自动算出来的结果也要记相位 + 落盘，否则刷新会翻色 */
+  t('★v4.11.0 自动应用后写相位并把颜色落盘',
+    /themeHoldSet\(\);\n\}/.test(idx45) && /localStorage\.setItem\('cls_theme', cur\)/.test(idx45));
   t('★改模式时清掉 hold（新规则立即生效）',
     /localStorage\.removeItem\('cls_theme_hold'\)/.test(idx45));
 
@@ -12886,8 +12890,8 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /function annSortKey\(a\)/.test(app43) && /\+ ' 23:59'/.test(app43)
     && (app43.match(/annSortKey\(b\)\.localeCompare\(annSortKey\(a\)\)/g) || []).length >= 2);
   const preGate = fs.readFileSync(new URL('./scripts/predeploy.mjs', import.meta.url), 'utf8');
-  t('★v4.7.8 12 小时内只许升小版本（按距上次中版本算）',
-    /bumpedMinor/.test(preGate) && /HOURS = 12/.test(preGate)
+  t('★v4.7.8 6 小时内只许升小版本（按距上次中版本算）',
+    /bumpedMinor/.test(preGate) && /HOURS = 6/.test(preGate) && !/HOURS = 12/.test(preGate)
     && /function minorFirstSeen\(v2\)/.test(preGate) && /版本号倒退/.test(preGate));
   t('★v4.7.8 后台内容排序同样归一化纯日期',
     /var ccTime = function\(v\)/.test(fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8'))
@@ -13564,16 +13568,17 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /media: rmedia/.test(idxV) && /bh \+= hh \+ 10/.test(idxV));
   t('★v4.10.19 作业页卡片按「顺序切分 + 高度均衡」分栏（两栏各 1/2，省空间）',
     /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(idxV)
-    && /padding:0 332px 0 16px/.test(idxV)
+    /* v4.11.0：给右栏让出的宽度改由 --bhw-side-w 控制（设置里可调，默认 320） */
+    && /padding:0 calc\(var\(--bhw-side-w,320px\) \+ 32px\) 0 16px/.test(idxV)
     && /bestK/.test(bigV) && /Math\.abs\(leftH - rightH\)/.test(bigV)
     && /getBoundingClientRect\(\)\.height/.test(bigV)
     && /function cardKeyNo/.test(bigV));
 
   /* ---- v4.10.17：两栏等宽 + 考试卡保持改前宽度 + 日期条可折叠 ---- */
   /* v4.10.26：右栏改成绝对定位（300px），网格只留两列 —— 仍然是一人一半 */
-  t('★v4.10.17 两栏各 1/2（右栏 300px 绝对定位，不吃分栏宽度）',
+  t('★v4.10.17 两栏各 1/2（右栏绝对定位、宽度可调，不吃分栏宽度）',
     /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(idxV)
-    && /\.bhw-side\{[\s\S]{0,160}?width:300px/.test(idxV)
+    && /\.bhw-side\{[\s\S]{0,160}?width:var\(--bhw-side-w,320px\)/.test(idxV)
     && !/minmax\(0,2fr\)/.test(idxV.slice(idxV.indexOf('.bhw-grid{'), idxV.indexOf('.bhw-grid{') + 400)));
   t('★v4.10.17 考试卡宽度锁为左栏 2/3（= 改前 1/3 内容区），窄屏单列恢复撑满',
     /\.bhex\{[\s\S]{0,400}?width:66\.6667%;box-sizing:border-box/.test(idxV)

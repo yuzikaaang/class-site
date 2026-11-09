@@ -3747,6 +3747,95 @@ function saveUI(){
   try{ localStorage.setItem(UI_KEY, JSON.stringify(UI)); }catch(e){}
 }
 
+/* ============================================================================
+ * v4.11.0（站主）：大屏作业看板的**本机**偏好
+ * ----------------------------------------------------------------------------
+ * 站主原话：「大屏作业那个栏还是要宽一点……我要预留在顶栏，预留一些空间给我的课表，
+ * 防止课表遮挡后面的文字。我可以在设置里面填具体顶栏那个预留要多大，比如 20px，
+ * 我只填数字就行。该设置仅保存在本机」；又说随机点名/随机一言关掉后找不到打开的地方，
+ * 「把这些都放在大屏模式里作业看板的设置里」。
+ *
+ * 三项都只落 localStorage['cls_bhw_prefs']，**不进云端**（每台机器的课表位置不同）。
+ *   w      右栏宽度（px，220~520，默认 300）
+ *   topPad 顶栏右侧留白（px，0~320，默认 0）—— 给挂在屏幕右上角的课表窗口让位
+ *   cards  七块卡片各自显不显示
+ * ========================================================================= */
+var BHW_PREF_KEY = 'cls_bhw_prefs';
+var BHW_CARD_DEFS = [
+  ['clock',   '时钟'],
+  ['courses', '今日事项'],
+  ['cd',      '倒计时'],
+  ['pick',    '随机点名'],
+  ['exam',    '考试看板'],
+  ['quote',   '随机一言'],
+  ['prog',    '学期进度']
+];
+function bhwPrefsDefault(){
+  var c = {};
+  BHW_CARD_DEFS.forEach(function(k){ c[k[0]] = 1; });
+  return { w: 320, topPad: 0, cards: c };
+}
+function bhwPrefs(){
+  var d = bhwPrefsDefault();
+  try{
+    var o = JSON.parse(localStorage.getItem(BHW_PREF_KEY) || 'null');
+    if(o && typeof o === 'object'){
+      if(typeof o.w === 'number' && o.w >= 220 && o.w <= 520) d.w = Math.round(o.w);
+      if(typeof o.topPad === 'number' && o.topPad >= 0 && o.topPad <= 320) d.topPad = Math.round(o.topPad);
+      if(o.cards && typeof o.cards === 'object'){
+        BHW_CARD_DEFS.forEach(function(k){ if(o.cards[k[0]] === 0) d.cards[k[0]] = 0; });
+      }
+      /* 升级迁移：老配置没有 cards，就把 v4.7.11 那个「隐藏随机一言」的键搬进来 */
+      if(!o.cards && localStorage.getItem('cls_bhw_quote_hide') === '1') d.cards.quote = 0;
+    }else if(localStorage.getItem('cls_bhw_quote_hide') === '1'){
+      d.cards.quote = 0;
+    }
+  }catch(e){}
+  return d;
+}
+function applyBhwPrefs(p){
+  var q = p || bhwPrefs();
+  var r = document.documentElement;
+  try{
+    r.style.setProperty('--bhw-side-w', q.w + 'px');
+    r.style.setProperty('--bhw-top-pad', q.topPad + 'px');
+  }catch(e){}
+  try{ if(window.BIG && BIG.refreshPrefs) BIG.refreshPrefs(q); }catch(e){}
+}
+function saveBhwPrefs(p){
+  try{ localStorage.setItem(BHW_PREF_KEY, JSON.stringify(p)); }catch(e){}
+  applyBhwPrefs(p);
+}
+function bigSetPref(k, v){
+  var p = bhwPrefs();
+  v = parseInt(v, 10);
+  if(isNaN(v)) return;
+  if(k === 'w') p.w = Math.max(220, Math.min(520, v));
+  else if(k === 'topPad') p.topPad = Math.max(0, Math.min(320, v));
+  else return;
+  saveBhwPrefs(p);
+}
+function bigToggleCard(k){
+  var p = bhwPrefs();
+  p.cards[k] = p.cards[k] ? 0 : 1;
+  /* 老的「随机一言隐藏」键继续同步，两个版本之间来回切换结果一致 */
+  if(k === 'quote'){ try{ localStorage.setItem('cls_bhw_quote_hide', p.cards[k] ? '0' : '1'); }catch(e){} }
+  saveBhwPrefs(p);
+  if(typeof renderSettings === 'function') renderSettings();
+}
+function bigResetPrefs(){
+  try{ localStorage.removeItem('cls_bhw_quote_hide'); }catch(e){}
+  saveBhwPrefs(bhwPrefsDefault());
+  if(typeof renderSettings === 'function') renderSettings();
+  if(typeof uiMsg === 'function') uiMsg('已恢复大屏默认设置');
+}
+/* 别的标签页改了偏好，这边立刻跟上 */
+try{
+  window.addEventListener('storage', function(e){
+    if(e && e.key === BHW_PREF_KEY) applyBhwPrefs();
+  });
+}catch(e){}
+
 /* ---------- 顺序覆盖层（核心） ----------
  * 【不变量】返回数组的元素集合与 items 完全相同，只是顺序不同：
  *   · 站主新增项：saved 里没有 → 追加到末尾，用户一定能看到（卡片不会「消失」）
@@ -8653,6 +8742,9 @@ function themeRippleCenter(ev){
 function applyThemeSwitch(next){
   var d = document.documentElement;
   d.classList.toggle('dark', next);
+  /* v4.11.0：真改了颜色就落一次盘 —— 以前只在 toggleTheme 里写，
+     别的入口（自动切换、仅这次切换）走这里时不写，刷新后就对不上了 */
+  try{ localStorage.setItem('cls_theme', next ? 'dark' : 'light'); }catch(e){}
   applyBg();
   var b = document.getElementById('themeToggle');
   if(b) b.innerHTML = next ? iconSvg('sun',17) : iconSvg('moon',17);
@@ -9260,6 +9352,42 @@ function renderSettings(){
       + '· <b>轻量</b>：关掉玻璃模糊、光斑、扫光、入场动画，低配设备明显跟手<br>'
       + '当前：大屏 <b>' + ((typeof BIG !== 'undefined' && BIG && BIG.on) ? '开' : '关')
       + '</b>　轻量 <b>' + (liteOnNow ? '开' : '关') + '</b>（轻量选择只记在这台设备上）</p>', false);
+  }
+  else if(UI_SEC === 'big'){
+    /* v4.11.0（站主）：大屏作业看板的本机设置。
+       「那个栏还是要宽一点」「顶栏留一块给我的课表」「随机关掉了找不到打开的地方」
+       —— 三件事都收在这里，且只存本机。 */
+    var bp = bhwPrefs();
+    html += secHtml('sidew','右侧功能栏宽度','sliders-horizontal',
+      '<div class="ui-row"><span class="lb">宽度</span>'
+      + '<input type="number" id="uiSideW" min="220" max="520" step="10" value="' + bp.w + '" '
+      + 'style="width:92px;padding:7px 9px;border-radius:9px;border:1px solid #e4ddd6;'
+      + 'background:var(--bg-1,#fff);color:inherit;font-family:inherit;font-size:.82rem" '
+      + 'onchange="bigSetPref(\'w\', this.value)">'
+      + '<span style="font-size:.78rem;color:var(--fg-3)">px</span></div>'
+      + '<p class="ui-hint">右侧功能栏宽度，单位像素，范围 220–520。'
+      + '数值增大时卡片更舒展，作业区相应变窄。</p>', true);
+    html += secHtml('toppad','顶栏右侧留白','type',
+      '<div class="ui-row"><span class="lb">留白</span>'
+      + '<input type="number" id="uiTopPad" min="0" max="320" step="2" value="' + bp.topPad + '" '
+      + 'style="width:92px;padding:7px 9px;border-radius:9px;border:1px solid #e4ddd6;'
+      + 'background:var(--bg-1,#fff);color:inherit;font-family:inherit;font-size:.82rem" '
+      + 'onchange="bigSetPref(\'topPad\', this.value)">'
+      + '<span style="font-size:.78rem;color:var(--fg-3)">px</span></div>'
+      + '<p class="ui-hint">顶栏右侧预留的空白宽度，单位像素，范围 0–320。'
+      + '用于避让固定在屏幕右上角的课表窗口，避免遮挡顶栏按钮与标题。数值 0 表示不预留。</p>', true);
+    var cardBtns = BHW_CARD_DEFS.map(function(k){
+      var on = !!bp.cards[k[0]];
+      return '<button type="button" class="ui-tab bhw-card-tg' + (on ? ' active' : '') + '" '
+        + 'style="flex:1 1 30%;font-size:.74rem" '
+        + 'onclick="bigToggleCard(\'' + k[0] + '\')">' + k[1] + (on ? ' · 显示' : ' · 已隐藏') + '</button>';
+    }).join('');
+    html += secHtml('cards','卡片显示','list',
+      '<div style="display:flex;flex-wrap:wrap;gap:6px">' + cardBtns + '</div>'
+      + '<p class="ui-hint">控制右侧各卡片的显示状态，点击可切换显示或隐藏，'
+      + '随机点名与随机一言也在本组内。设置仅对当前设备的大屏作业页生效。</p>'
+      + '<button class="btn btn-gray" style="font-size:.76rem;padding:9px 12px;margin-top:4px" '
+      + 'onclick="bigResetPrefs()">恢复大屏默认</button>', true);
   }
   else {
     /* 云端数据入口（v2.10.1 需求⑧）：数据类操作统一收在「自定义设置」里，
@@ -10122,7 +10250,11 @@ function islandBoot(){
        不一定渲染班级岛卡片（那几处才调 islandWeekNo）。 */
     try{
       if(ISLAND && ISLAND.startDate){
-        localStorage.setItem('cls_week_cache', JSON.stringify({ start: ISLAND.startDate }));
+        var _wm = islandWeekMon();
+        localStorage.setItem('cls_week_cache', JSON.stringify({
+          start: ISLAND.startDate,
+          mon: _wm ? _hwDateStr(_wm) : ''
+        }));
       }
     }catch(e){}
     islandRender();
@@ -10147,18 +10279,36 @@ function islandMin(hhmm){
 }
 
 var _weekCacheSaved = '';
+/* v4.11.0（站主）：「时钟页第几周没随周数更改，今天 11 周还显示 10 周」。
+   根因是两边口径不同：作业看板按「开学日所在那一周的周一」起算，
+   这里以前拿开学日当第 1 天 —— 2026-09-01 是周二，于是同样的日期少算一周。
+   现在统一成周一为周首，并把算好的周一也写进缓存，时钟页直接照着数。 */
+function islandWeekMon(){
+  if(!ISLAND || !ISLAND.startDate) return null;
+  var st = new Date(String(ISLAND.startDate).slice(0, 10) + 'T00:00:00');
+  if(isNaN(st.getTime())) return null;
+  var wd = (st.getDay() + 6) % 7;      /* 周一 = 0 */
+  st.setDate(st.getDate() - wd);
+  st.setHours(0, 0, 0, 0);
+  return st;
+}
 function islandWeekNo(date){
-  if(!ISLAND || !ISLAND.startDate) return '';
-  var st = new Date(ISLAND.startDate + 'T00:00:00');
-  if(isNaN(st.getTime())) return '';
+  var mon = islandWeekMon();
+  if(!mon) return '';
   var d = new Date(date || Date.now());
   d.setHours(0, 0, 0, 0);
-  var diff = Math.floor((d - st) / 86400000);
+  var diff = Math.round((d - mon) / 86400000);
   if(diff < 0) return '未开学';
   /* v4.7.3：把学期开始日留给时钟页 —— 它是独立页面、不联网，
      自己算不出「第几周」，只能靠这里落一份缓存（同一天只写一次）。 */
   if(_weekCacheSaved !== ISLAND.startDate){
-    try{ localStorage.setItem('cls_week_cache', JSON.stringify({ start: ISLAND.startDate })); _weekCacheSaved = ISLAND.startDate; }catch(e){}
+    try{
+      localStorage.setItem('cls_week_cache', JSON.stringify({
+        start: ISLAND.startDate,
+        mon: _hwDateStr(mon)
+      }));
+      _weekCacheSaved = ISLAND.startDate;
+    }catch(e){}
   }
   return '第 ' + (Math.floor(diff / 7) + 1) + ' 周';
 }
@@ -22306,6 +22456,25 @@ function hwNormCalNav(n){
   if(c.m < 0){ c.m = 11; c.y--; } if(c.m > 11){ c.m = 0; c.y++; }
   hwNormCalRender();
 }
+/* v4.11.0（站主）：「普通模式和大屏模式的作业查看那个日历，有作业的那天在数字下面打个点」。
+   判定直接复用大屏那份（同一份数据、同一套自动期次），避免两边各算一套又对不上。 */
+function hwNormHasWork(ds){
+  try{
+    if(window.BIG && typeof BIG.hasWorkOn === 'function') return !!BIG.hasWorkOn(ds);
+  }catch(e){}
+  var hw = hwNormalPeriodAt(ds);
+  if(!hw) return false;
+  var items = hw.items || [];
+  for(var i = 0; i < items.length; i++){
+    var ts = items[i].tasks || [];
+    for(var j = 0; j < ts.length; j++){
+      var t = ts[j];
+      if(typeof t === 'string'){ if(t.trim()) return true; }
+      else if(t && (String(t.text || '').trim() || t.img || t.audio || t.video)) return true;
+    }
+  }
+  return false;
+}
 function hwNormCalRender(){
   var box = document.getElementById('hwNormCal'); if(!box) return;
   if(!window.__HW_VIEW_CAL_OPEN){ box.style.display = 'none'; return; }
@@ -22323,7 +22492,9 @@ function hwNormCalRender(){
     var dd = new Date(c.y, c.m, d), ds = _hwDateStr(dd);
     var we = (dd.getDay() === 0 || dd.getDay() === 6);
     var cls = 'nc-day' + (we ? ' we' : '') + (ds === today ? ' today' : '') + (ds === anchor ? ' cur' : '');
-    html += '<button type="button" class="' + cls + '" onclick="hwNormJump(\'' + ds + '\')">' + d + '</button>';
+    var dot = hwNormHasWork(ds) ? '<i class="nc-dot"></i>' : '';
+    html += '<button type="button" class="' + cls + '" onclick="hwNormJump(\'' + ds + '\')">'
+      + d + dot + '</button>';
   }
   html += '</div>';
   box.innerHTML = html;
@@ -23542,9 +23713,7 @@ function toggleTheme(ev){
   /* v2.5.3：自动模式下手动切换 = 用户明确表态，标记「今天别再自动切我」，
      否则 30 秒后就被自动逻辑弹回去，体验很糟。
      切回暗色同理 —— 用户想要的当前状态应该被保住，直到明天或改模式。 */
-  if(themeAutoEnabled()){
-    try{ localStorage.setItem('cls_theme_hold', sunTodayKey()); }catch(e){}
-  }
+  if(themeAutoEnabled()) themeHoldSet();
   radialTheme(_c.x, _c.y, next);
   /* v3.7.6：手动切昼夜后，等过渡动画过半再校准弹窗字色 */
   try{ if(typeof mkScanAll === 'function') mkScanAll(380); }catch(e){}
@@ -23572,6 +23741,32 @@ function toggleTheme(ev){
    ============================================================ */
 var THEME_AUTO_KEY = 'cls_theme_auto2';      /* 新键，避免与老键语义混淆 */
 var THEME_MODES = ['off', 'system', 'sun'];
+
+/* v4.11.0（站主）：「刷新之后明明是深色页面，刷新完却变成浅色；更新完又变浅，
+   而且不会自动回到深色」。
+   根因：手动切换只记了「今天这一天」（hold = 日期），而页面刷新 / 被更新重载时
+   只要那个键没对上（或跨过午夜），自动逻辑就立刻按自己的判断把页面翻回去。
+   改成**相位键**：日期 + 当前这一段该亮还是该暗（白天段 / 夜晚段）。
+     · 还在同一段里 → 刷新、重载、更新后都保持用户选的那个；
+     · 跨过日出日落（相位变了）→ 交还给自动模式。
+   于是「今晚手动选深色，深夜刷新还是深色；明早日出后照样自动变亮」。 */
+function themePhaseKey(){
+  var m = themeAutoMode();
+  if(m === 'off') return 'off';
+  return sunTodayKey() + '|' + (isNightTime() ? 'n' : 'd');
+}
+function themeHoldOn(){
+  var h = null;
+  try{ h = localStorage.getItem('cls_theme_hold'); }catch(e){ return false; }
+  if(!h) return false;
+  var k = themePhaseKey();
+  if(k === 'off') return false;
+  /* 兼容老值（纯日期）：升级前当天手动改过的，照样认 */
+  return h === k || h === sunTodayKey();
+}
+function themeHoldSet(){
+  try{ localStorage.setItem('cls_theme_hold', themePhaseKey()); }catch(e){}
+}
 
 function themeAutoMode(){
   var m = null;
@@ -23718,10 +23913,9 @@ function applyAutoTheme(force){
        ② 系统主题变化监听（matchMedia change）
        ③ sunFetch() 拿到 API 数据后的重算
      判定统一收口于此：当天手动改过 → 自动逻辑整体让位。 */
-  var hold = null;
-  try{ hold = localStorage.getItem('cls_theme_hold'); }catch(e){}
-  if(hold && hold === sunTodayKey()){
-    _lastAutoNight = null;   /* 状态复位，明天 hold 失效后能正常接管 */
+  /* v4.11.0：判定从「同一天」改成「同一相位」（见 themePhaseKey） */
+  if(themeHoldOn()){
+    _lastAutoNight = null;   /* 状态复位，相位变了以后能正常接管 */
     return;
   }
   sunTimes();                     /* 确保有今天的日出日落（可能触发本地估算） */
@@ -23739,6 +23933,20 @@ function applyAutoTheme(force){
     /* v3.7.6：昼夜切换后重算弹窗字色 */
     try{ if(typeof mkScanAll === 'function') mkScanAll(160); }catch(e){}
   }
+  /* v4.11.0：把最终状态落盘 —— 之前只在「颜色真的变了」时才写 cls_theme，
+     首屏由内联脚本直接上色、applyAutoTheme 发现一致就跳过，键一直是空的，
+     刷新时 initTheme 读到 null 就按亮色处理，于是「明明是深色，刷新变浅色」。 */
+  try{
+    var cur = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    if(localStorage.getItem('cls_theme') !== cur) localStorage.setItem('cls_theme', cur);
+  }catch(e){}
+  /* v4.11.0（站主）：「刷新完之后明明是深色页面，刷新完却变成浅色」。
+     以前只有**手动**切换才记相位（hold），自动模式算出来的结果不记 ——
+     于是刷新 / 被更新重载时，启动逻辑手里没有「上一次这个相位用的是哪个颜色」，
+     只能重新猜（系统偏好、日出日落、或缓存没到位时的默认亮色），颜色就被翻掉了。
+     现在自动逻辑每定一次也把相位写进 hold：同一相位内刷新、重载、更新都保持原样，
+     相位真的变了（日出 / 日落 / 跨天 / 系统换色）才重新判定。 */
+  themeHoldSet();
 }
 /* 系统主题变化监听：mode='system' 时立刻跟随 */
 if(window.matchMedia){
@@ -23781,7 +23989,7 @@ function themeAskOnce(){
   closeThemeAutoAsk();
   applyLightTheme();
   _lastAutoNight = null;   /* 下次自动检查会重新判断；此处静默期由 ignoreUntil 控制 */
-  try{ localStorage.setItem('cls_theme_hold', sunTodayKey()); }catch(e){}
+  themeHoldSet();
   SFX.success();
 }
 /* 关闭自动切换（保持亮色） */
@@ -24033,10 +24241,12 @@ function initTheme(){
      此处只是为了让**首屏**不闪一下错误的颜色（避免先暗后亮的抖动）。 */
   var mode = themeAutoMode();
   if(mode !== 'off'){
-    var hold = null;
-    try{ hold = localStorage.getItem('cls_theme_hold'); }catch(e){}
-    if(hold === sunTodayKey()){
-      /* 今天用户手动改过，尊重它 */
+    /* v4.11.0：手动选过且还在同一相位 → 尊重它（刷新/更新后不再被自动逻辑翻回去） */
+    if(themeHoldOn()){
+      /* v4.11.0：cls_theme 为空（首屏脚本已按日出日落画好、但还没落盘）时，
+         以页面上真实的状态为准，别再按 null 当成亮色翻回去 */
+      var saved = localStorage.getItem('cls_theme');
+      dark = saved ? (saved === 'dark') : document.documentElement.classList.contains('dark');
     }else{
       dark = isNightTime();
     }
@@ -24057,6 +24267,9 @@ function initTheme(){
   }, 30000);
 }
 initTheme();
+/* v4.11.0：大屏的两项几何参数（右栏宽度 / 顶栏右侧留白）首屏就落成 CSS 变量，
+   免得打开大屏作业页时先按默认 300 排一遍再跳一下 */
+try{ applyBhwPrefs(); }catch(e){}
 /* 站点入口问答：首次进入需回答（本地记住，版本变更需重新回答） */
 async function submitSiteGate(){
   var g = document.getElementById('siteGate');

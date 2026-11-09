@@ -62,9 +62,14 @@ try {
     if (Array.isArray(arr) && arr.length) updRel = arr[0];
   }
 } catch (e) { updRel = null; }
+/* v4.11.0：日期取版本记录里那一天，避免凌晨发布时 UTC 与本地差一天
+   （首页页脚写「11-10 更新」，version.json 却是 11-09，对不上） */
+const _ld = new Date();
+const _localYmd = _ld.getFullYear() + '-'
+  + String(_ld.getMonth() + 1).padStart(2, '0') + '-' + String(_ld.getDate()).padStart(2, '0');
 const updJson = {
   v: VER,
-  at: new Date().toISOString().slice(0, 10),
+  at: (updRel && updRel.date) || _localYmd,
   title: (updRel && updRel.title) || '',
   items: (updRel && Array.isArray(updRel.items)) ? updRel.items.slice(0, 8) : [],
 };

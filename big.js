@@ -750,6 +750,25 @@
     list.push(hw);
     return hw;
   }
+  /* v4.11.0（站主）：「日历里，有作业的那天在数字下面打个点」。
+     口径与期次一致：先看已存的期次（含本机未上传的改动），
+     没有就按这一周自动算出来的期次判断；空期次不算「有作业」。 */
+  function hwHasWorkOn(dStr){
+    var ds = String(dStr || '').slice(0, 10);
+    if(!ds) return false;
+    var list = hwList();
+    for(var i = 0; i < list.length; i++){
+      var s0 = String((list[i] && list[i].start) || '').slice(0, 10);
+      var e0 = String((list[i] && list[i].end) || '').slice(0, 10);
+      if(s0 && e0 && s0 <= ds && ds <= e0) return !hwIsEmpty(list[i]);
+    }
+    var d = new Date(ds + 'T00:00:00');
+    if(isNaN(d.getTime())) return false;
+    var p = ensurePeriod(d);
+    return p ? !hwIsEmpty(p) : false;
+  }
+  BIG.hasWorkOn = hwHasWorkOn;
+
   BIG.weekOf = weekOf;
   BIG.ensurePeriod = ensurePeriod;
   BIG.periodTitle = periodTitle;
@@ -1621,6 +1640,43 @@
     return 0;
   }
   var _sideOff = null;
+  /* ================= v4.11.0 本机偏好（全站设置 → 大屏）=================
+     站主：「随机关掉了找不到地方打开」「栏要宽一点」「顶栏给我的课表留点空」。
+     偏好在 app.js 的 bhwPrefs()（只存本机），这里只负责按它显示 / 隐藏卡片。 */
+  function bhwPref(){
+    try{ if(typeof global.bhwPrefs === 'function') return global.bhwPrefs(); }catch(e){}
+    return { w: 320, topPad: 0, cards: {} };
+  }
+  function cardOn(k){
+    var p = bhwPref();
+    return !p.cards || p.cards[k] !== 0;
+  }
+  /* 只负责「藏」。要显示时不去抢 display —— 各块自己知道有没有内容可显示 */
+  function applyCardPrefs(){
+    var pairs = [
+      ['clock',   $('bhwClock')],
+      ['courses', $('bhwCourses')],
+      ['cd',      $('bhwCd')],
+      ['pick',    document.querySelector('.bhw-pick')],
+      ['exam',    $('bhwExamAdd')],
+      ['quote',   $('bhwQuote')],
+      ['prog',    $('bhwProg')]
+    ];
+    for(var i = 0; i < pairs.length; i++){
+      var el = pairs[i][1];
+      if(!el) continue;
+      if(!cardOn(pairs[i][0])) el.style.display = 'none';
+      else if(pairs[i][0] === 'clock' || pairs[i][0] === 'pick') el.style.display = '';
+    }
+    BIG.quoteHidden = !cardOn('quote');
+  }
+  BIG.applyCardPrefs = applyCardPrefs;
+  BIG.refreshPrefs = function (){
+    applyCardPrefs();
+    try{ renderSide(); }catch(e){}
+    try{ scheduleLayout(); }catch(e){}
+  };
+
   function renderSide(){
     /* v4.10.6：「新增考试」只给管理员 —— 写回考试看板要管理员身份 */
     var eb = $('bhwExamAdd');
@@ -1676,6 +1732,9 @@
     }
     renderCd();
     renderQuote();
+    /* 最后一刀：设置里关掉的卡片在这里统一藏起来（放在各块渲染之后，
+       否则刚被渲染逻辑写回 display:''） */
+    applyCardPrefs();
     if(_fitRaf) cancelAnimationFrame(_fitRaf);
     _fitRaf = requestAnimationFrame(fitSide);
   }
@@ -2512,6 +2571,7 @@
       + '</div>';
 
     box.innerHTML = hd + rows + bar;
+    applyCardPrefs();
   }
   BIG.renderProg = renderProg;
   BIG.cdScope = function (){
@@ -2726,9 +2786,11 @@
       /* 只在第一天和第二段开头标一下周次，格子保持干净 */
       var w = weekOf(dd);
       var tag = w ? '<i>' + w.no + '</i>' : '';
+      /* v4.11.0：有作业的那天，数字下面打一个小点 */
+      var dot = hwHasWorkOn(ds) ? '<em class="bhw-cal-dot"></em>' : '';
       html += '<button type="button" class="' + cls + '"'
         + ' onclick="BIG.calPick(\'' + ds + '\')" title="' + ds + (w ? ' · 第' + w.no + '周' : '') + '">'
-        + '<b>' + d + '</b>' + tag + '</button>';
+        + '<b>' + d + '</b>' + tag + dot + '</button>';
     }
     html += '</div>';
     body.innerHTML = html;
