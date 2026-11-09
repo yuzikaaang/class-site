@@ -9407,8 +9407,11 @@ function measureCacheUse(){
     if(navigator.storage && navigator.storage.estimate){
       totalJob = navigator.storage.estimate().then(function(st){
         var d = (st && st.usageDetails) || {};
-        /* usageDetails.caches 是图片 + 页面缓存的真实占用；localStorage 另有记账，自己加 */
-        if(typeof d.caches === 'number') return d.caches + lsT.bytes + lsD.bytes;
+        /* usageDetails.caches 是图片 + 页面缓存的真实占用；localStorage 另有记账，自己加。
+           浏览器有时把 caches 报成 0（刚装好 SW / 还没落盘），那就退回自己逐条量的值，
+           免得出现「本地 63 KB、总量 0 B」这种自相矛盾的数字。 */
+        var cs2 = (typeof d.caches === 'number' && d.caches > 0) ? d.caches : cs.bytes;
+        if(typeof d.caches === 'number' || cs.bytes > 0) return cs2 + lsT.bytes + lsD.bytes;
         if(st && typeof st.usage === 'number') return st.usage;
         return null;
       }).catch(function(){ return null; });
@@ -9435,10 +9438,17 @@ function paintCacheUse(u){
     : '空的';
 }
 
+/* 分组切换时可能连着触发两次统计，只让最后一次的结果落到面板上，
+   否则先发后到的旧结果会把新数字盖回去 */
+var CACHE_MEASURE_SEQ = 0;
 function refreshCacheUse(){
+  var seq = ++CACHE_MEASURE_SEQ;
   var a = document.getElementById('cacheUsed');
   if(a) a.textContent = '统计中…';
-  return measureCacheUse().then(paintCacheUse).catch(function(){
+  return measureCacheUse().then(function(u){
+    if(seq === CACHE_MEASURE_SEQ) paintCacheUse(u);
+  }).catch(function(){
+    if(seq !== CACHE_MEASURE_SEQ) return;
     var b = document.getElementById('cacheUsed');
     if(b) b.textContent = '统计失败';
   });

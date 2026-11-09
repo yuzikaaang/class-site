@@ -20,6 +20,12 @@ const t = (n, ok, x) => {
 const SIZE_RE = /^\d+(\.\d+)?\s?(B|KB|MB)$/;
 const num = (txt, re) => { const m = String(txt || '').match(re); return m ? Number(m[1]) : null; };
 const entriesOf = (txt) => num(txt, /· (\d+) 条/);
+const parseB = (txt) => {
+  const m = String(txt || '').match(/([\d.]+)\s*(B|KB|MB)/);
+  if (!m) return null;
+  const u = { B: 1, KB: 1024, MB: 1048576 }[m[2]];
+  return parseFloat(m[1]) * u;
+};
 const localOf = (txt) => num(txt, /本地 (\d+) 项/);
 
 const b = await chromium.launch({ executablePath: CH, args: ['--no-sandbox'] });
@@ -33,8 +39,13 @@ await p.route('**/api/**', (r) => {
   if (u.includes('/api/content')) return J({ ok: true, items: { holiday_homeworks: [], announcements: [] } });
   return J({ ok: true });
 });
-await p.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 60000 });
-await p.waitForTimeout(2200);
+const ready = async (pg, ms = 600) => {
+  await pg.waitForFunction(() => typeof window.openSettings === 'function', null, { timeout: 45000 });
+  await pg.waitForTimeout(ms);
+};
+
+await p.goto(SITE, { waitUntil: 'commit', timeout: 60000 });
+await ready(p, 1200);
 
 const shotCache = async (name) => {
   await p.evaluate(() => {
@@ -60,8 +71,8 @@ const readPanel = async () => {
 };
 
 await p.evaluate(() => { try { localStorage.setItem('cls_login_guide_v1', '1'); } catch (e) {} });
-await p.reload({ waitUntil: 'domcontentloaded' });
-await p.waitForTimeout(1800);
+await p.reload({ waitUntil: 'commit', timeout: 60000 });
+await ready(p, 1200);
 
 await p.evaluate(() => { openSettings(); uiSec('data'); });
 const base = await readPanel();
@@ -104,6 +115,11 @@ const truth = await p.evaluate(async () => {
 
 t('① 已占用显示成体积（不是「统计中…」/「无法统计」）',
   !!base.total && SIZE_RE.test(base.total.trim()), base.total);
+t('①b 总量不低于自己量到的本地体积（不出现「本地有、总量 0」）',
+  (() => { const a = parseB(base.total); const b = parseB(base.temp);
+    if (a === null) return false;
+    return b === null ? a >= 0 : a + 1 >= b; })(),
+  base.total + ' vs ' + base.temp);
 t('② 缓存条数与实际条目数一致',
   entriesOf(seeded.temp) === truth.entries,
   '面板 ' + entriesOf(seeded.temp) + ' / 实际 ' + truth.entries);
@@ -173,11 +189,11 @@ t('⑬ 本地数据行随之归零', /空的/.test(cleared.data || ''), cleared.
   const m = await b.newContext({ viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true });
   const mp = await m.newPage();
   await mp.route('**/api/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, user: null, items: { holiday_homeworks: [], announcements: [] } }) }));
-  await mp.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await mp.waitForTimeout(1800);
+  await mp.goto(SITE, { waitUntil: 'commit', timeout: 60000 });
+  await ready(mp, 1200);
   await mp.evaluate(() => { try { localStorage.setItem('cls_login_guide_v1', '1'); } catch (e) {} });
-  await mp.reload({ waitUntil: 'domcontentloaded' });
-  await mp.waitForTimeout(1500);
+  await mp.reload({ waitUntil: 'commit', timeout: 60000 });
+  await ready(mp, 1000);
   await mp.evaluate(() => { openSettings(); uiSec('data'); });
   await mp.waitForFunction(() => {
     const a = document.getElementById('cacheUsed');
