@@ -127,9 +127,19 @@ idx = idx.replace(/<script src="\.\/big\.js(\?v=\d+)?" defer><\/script>/,
 idx = idx.replace(/<script src="\.\/pickfx\.js(\?v=\d+)?" defer><\/script>/,
   `<script src="./pickfx.js${TAG}" defer></script>`);
 /* v4.12.0：新手导览脚本必须排在 app.min.js 之前（defer 按顺序执行），
-   否则 app.js 启动时 TOUR 还不存在，首页导览会被静默跳过。版本号同样跟着构建走。 */
-idx = idx.replace(/<script src="\.\/tour\.js(\?v=\d+)?" defer><\/script>/,
-  `<script src="./tour.js${TAG}" defer></script>`);
+   否则 app.js 启动时 TOUR 还不存在，首页导览会被静默跳过。
+   ⚠️ 这里用**内容指纹**而不是版本号：tour.js 不在 app.min.js 里，
+   改两句文案不会升版本号，用版本号做串会让老设备的 SW 一直递旧的那一份。 */
+const tourHash = crypto.createHash('sha1').update(read('tour.js')).digest('hex').slice(0, 6);
+idx = idx.replace(/<script src="\.\/tour\.js(\?[^"]*)?" defer><\/script>/,
+  `<script src="./tour.js?v=${tourHash}" defer></script>`);
+/* 教程页里的「重看导览」也引用同一个文件，同样换指纹 */
+{
+  const g = read('guide.html');
+  const g2 = g.replace(/<script src="\.\/tour\.js(\?[^"]*)?"><\/script>/,
+    `<script src="./tour.js?v=${tourHash}"></script>`);
+  if (g2 !== g) write('guide.html', g2);
+}
 if (idx !== before) write('index.html', idx);
 
 /* ---------------- ④ admin.html 引用的 admin.js 也要带新版本号 ----------------

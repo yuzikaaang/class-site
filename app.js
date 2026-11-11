@@ -9174,7 +9174,7 @@ function tourBoot(){
   }
   setTimeout(function(){
     try{ TOUR.startWhenFree('home'); }catch(e){}
-  }, force ? 260 : 1700);
+  }, force ? 300 : 2400);
 }
 
 function openSettings(){

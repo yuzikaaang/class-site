@@ -249,16 +249,23 @@
     rafId = requestAnimationFrame(tick);
   }
 
-  function show(i) {
+  function show(i, retry) {
     if (!run) return;
-    /* 目标不存在、或这一刻高度为 0（公告为空、一言还没渲染完）→ 跳到下一步，
-       绝不停在一个 12×12 的空洞上。全部跳完就当作完成。 */
+    /* 目标不存在、或这一刻高度为 0（公告为空、学习卡还没渲染完）→ 先等 650ms 再看一次，
+       仍然为 0 才跳到下一步，绝不停在一个 12×12 的空洞上。全部跳完就当作完成。 */
     if (i >= run.steps.length) { finish('done'); return; }
     var s = run.steps[i];
     var el = document.querySelector(s.sel);
     if (!el) { return show(i + 1); }
     var rr0 = el.getBoundingClientRect();
-    if (rr0.width < 8 || rr0.height < 8) { return show(i + 1); }
+    if (rr0.width < 8 || rr0.height < 8) {
+      if (!retry) {
+        var my = ++run.tick;
+        setTimeout(function () { if (run && run.tick === my) show(i, 1); }, 650);
+        return;
+      }
+      return show(i + 1);
+    }
 
     run.i = i;
 
@@ -364,7 +371,7 @@
     var dom = build();
     dom.hit.style.display = 'block';
     run = {
-      scene: scene, steps: steps, i: at,
+      scene: scene, steps: steps, i: at, tick: 0,
       hit: dom.hit, hole: dom.hole, tip: dom.tip, dotsEl: dom.dotsEl, arrow: null
     };
     show(at);
