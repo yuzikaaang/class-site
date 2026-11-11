@@ -256,7 +256,12 @@
     if (i >= run.steps.length) { finish('done'); return; }
     var s = run.steps[i];
     var el = document.querySelector(s.sel);
-    if (!el) { return show(i + 1); }
+    if (!el) {
+      /* 元素被板块管理隐藏 / 未渲染 → 同上，从步数里去掉 */
+      run.steps.splice(i, 1);
+      if (i >= run.steps.length) { finish('done'); return; }
+      return show(i);
+    }
     var rr0 = el.getBoundingClientRect();
     if (rr0.width < 8 || rr0.height < 8) {
       if (!retry) {
