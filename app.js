@@ -9173,7 +9173,11 @@ function tourBoot(){
     try{ if(typeof BIG !== 'undefined' && BIG && BIG.on) return; }catch(e){}
   }
   setTimeout(function(){
-    try{ TOUR.startWhenFree('home'); }catch(e){}
+    try{
+      /* 这 2.4 秒里用户可能已经切到大屏（侧边栏一键切换），再确认一次 */
+      if(!force && typeof BIG !== 'undefined' && BIG && BIG.on) return;
+      TOUR.startWhenFree('home');
+    }catch(e){}
   }, force ? 300 : 2400);
 }
 
