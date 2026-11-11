@@ -41,7 +41,7 @@
     ],
     home: [
       { t: 'island', sel: '#classIsland', title: '班级岛',
-        text: '今日课程、当前周次与天气。点击横幅可展开完整课表。' },
+        text: '今日课程与当前教学周，右上角「详情」可展开完整课表。' },
       { t: 'board', sel: '#board', title: '班级公告',
         text: '通知与活动集中发布在此。标题后的数字为未读条数。' },
       { t: 'sign', sel: '#signBar', title: '今日班级签',
