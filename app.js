@@ -6185,7 +6185,8 @@ function renderAccount(){
       setTimeout(function(){
         var m = document.getElementById('acctMask');
         if(m && m.classList.contains('show')){
-          try{ TOUR.start('login'); }catch(e){}
+          /* 等欢迎弹窗之类先关掉再开始（导览会盖在登录框上，位置才不会错） */
+          try{ TOUR.startWhenFree('login'); }catch(e){}
         }
       }, 260);
     }

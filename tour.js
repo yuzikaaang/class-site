@@ -350,10 +350,12 @@
     destroy();
   }
 
-  /* 有别的弹窗压着时不启动，等它关掉 */
+  /* 有别的弹窗压着时不启动，等它关掉。
+     ⚠️ 登录弹层（#acctMask）和设置面板（#uiSetMask）本身也是 .allboard-mask，
+     而导览正是要在它们**里面**工作 —— 必须排除，否则登录导览永远等不到「无遮挡」。 */
   function blocked() {
-    var sels = ['.welcome-mask.show', '.allboard-mask.show', '#hwPop.show',
-      '.hwpop.show', '#loginGuideMask.show', '.site-gate.show'];
+    var sels = ['.welcome-mask.show', '#hwPop.show', '.hwpop.show', '#loginGuideMask.show',
+      '.allboard-mask.show:not(#acctMask):not(#uiSetMask)'];
     for (var i = 0; i < sels.length; i++) {
       var el = document.querySelector(sels[i]);
       if (el) {
