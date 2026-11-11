@@ -112,8 +112,9 @@ jobs:
             qrcode.jpg
             fonts
             icons
-            # v4.13.0：使用教程里的界面截图（12 张）。漏了这行线上教程页全是空框。
-            img/guide
+            # v4.13.0：使用教程里的界面截图。⚠️ 必须写 img（整个目录）而不是 img/guide ——
+            # cp -r img/guide _site/ 只会得到 _site/guide/，线上 /img/guide/*.jpg 全 404。
+            img
             games
             homework
             vendor

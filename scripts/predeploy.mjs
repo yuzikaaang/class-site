@@ -659,9 +659,10 @@ console.log('③i README 已同步到 ' + VER + '（当前版本 / 更新日志�
   /* ⑦ 截图必须进 Pages 发布清单（否则线上 404，本地却正常） */
   const wf = fs.existsSync(path.join(ROOT, '.github', 'workflows', 'deploy-pages.yml'))
     ? read('.github/workflows/deploy-pages.yml') : '';
-  if (wf && !/img\/guide/.test(wf)) {
-    die('GitHub Pages 发布清单里没有 img/guide —— 教程里的截图线上会 404。'
-      + '\n   在 .github/workflows/deploy-pages.yml 的 SOURCE_FILES 里补上 img/guide/。');
+  if (wf && !/^\s+img\s*$/m.test(wf)) {
+    die('GitHub Pages 发布清单里没有 img 目录 —— 教程里的截图线上会 404。'
+      + '\n   ⚠️ 必须写整目录 img，写 img/guide 会被 cp 成 _site/guide/，路径对不上。'
+      + '\n   在 .github/workflows/deploy-pages.yml 的 SOURCE_FILES 里补一行 img。');
   }
 
   console.log('③j 教程 / 导览 / 板块一致：' + mapKeys.length + ' 个条目 / '
