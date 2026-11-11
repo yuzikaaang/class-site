@@ -32,6 +32,8 @@ const FILES = [
   'index.html', 'app.js', 'big.js', 'pickfx.js', 'clock.html',
   'admin.html', 'admin-1.js', 'admin-2.js', 'admin-3.js',
   'share.html', 'share-card.js', 'basic.html', 'info.html',
+  /* v4.12.0：教程页与导览文案同样是同学直接看到的，一并检查 */
+  'guide.html', 'tour.js',
 ];
 
 /* ---------- 规则表 ----------

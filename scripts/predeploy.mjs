@@ -526,6 +526,105 @@ if (hitStale.length) {
 }
 console.log('③i README 已同步到 ' + VER + '（当前版本 / 更新日志首条 / 功能关键词 / 无过时表述）');
 
+/* ---------- ③j 教程 / 导览 / 首页板块 三方一致（v4.12.0）----------
+   站主原话（2026-11-11）：「后续我可能会加一些新内容，新内容也需要同时去适配，
+   所以这个也要加门禁 —— 以后如果添加了新内容，这两个地方要一起改。」
+
+   四个来源必须给出同一份 key 集合，任何一处缺了就拦：
+     · index.html 的 data-topic     —— 首页真实存在的板块（导览走到的对象）
+     · tour.js  的 t: '…'           —— 导览步骤（含登录段）
+     · guide.html 的 data-topic     —— 教程里对应的说明条目
+     · scripts/tour-map.json        —— 唯一登记表（人写的那份）
+
+   新增一个板块时漏掉任何一处，报错会直接点名缺哪个 key。 ------------------- */
+{
+  const mapPath = path.join(ROOT, 'scripts', 'tour-map.json');
+  if (!fs.existsSync(mapPath)) {
+    die('缺少 scripts/tour-map.json —— 它是导览与教程的唯一登记表。'
+      + '\n   新增板块时要在这里登记，门禁靠它做三向比对。');
+  }
+  let tmap = null;
+  try { tmap = JSON.parse(fs.readFileSync(mapPath, 'utf8')); }
+  catch (e) { die('scripts/tour-map.json 不是合法 JSON：' + (e.message || e)); }
+
+  const scenes = (tmap && tmap.scenes) || {};
+  const flat = [];
+  Object.keys(scenes).forEach((k) => (scenes[k].steps || []).forEach((s) => flat.push(s)));
+  const mapKeys = [...new Set(flat)];
+
+  const topicsOf = (html) => [...new Set([...String(html).matchAll(/data-topic="([^"]+)"/g)].map((m) => m[1]))];
+  const idxTopics = topicsOf(idx);
+  const guidePath = path.join(ROOT, 'guide.html');
+  const guideTopics = fs.existsSync(guidePath) ? topicsOf(fs.readFileSync(guidePath, 'utf8')) : [];
+  const tourPath = path.join(ROOT, 'tour.js');
+  if (!fs.existsSync(tourPath)) {
+    die('缺少 tour.js —— 首页导览脚本不在，站点的首次引导会整段失效。');
+  }
+  const tourSrc = read('tour.js');
+  const tourPairs = [...tourSrc.matchAll(/\{\s*t:\s*'([^']+)',\s*sel:\s*'#([^']+)'/g)]
+    .map((m) => ({ t: m[1], sel: m[2] }));
+  const tourKeys = [...new Set(tourPairs.map((p) => p.t))];
+
+  if (!mapKeys.length) {
+    die('scripts/tour-map.json 里没有任何步骤登记（scenes 下的 steps 全为空）。');
+  }
+
+  const diff = (a, b) => a.filter((x) => b.indexOf(x) < 0);
+
+  /* ① 首页场景 == index.html 的板块 */
+  const homeSteps = ((scenes.home && scenes.home.steps) || []);
+  const missInIdx = diff(homeSteps, idxTopics);
+  const extraInIdx = diff(idxTopics, homeSteps);
+  if (missInIdx.length || extraInIdx.length) {
+    die('首页板块与导览登记不一致：'
+      + (missInIdx.length ? '\n   · 登记了但首页没有 data-topic：' + missInIdx.join('、') : '')
+      + (extraInIdx.length ? '\n   · 首页有 data-topic 但登记表没写：' + extraInIdx.join('、') : '')
+      + '\n\n   新增板块五步：① index.html 加 data-topic ② tour-map.json 登记 '
+      + '\n   ③ tour.js 加一步 ④ guide.html 加说明条目 ⑤ 重新跑门禁。');
+  }
+
+  /* ② 登记表 == tour.js 的步骤 */
+  const missInTour = diff(mapKeys, tourKeys);
+  const extraInTour = diff(tourKeys, mapKeys);
+  if (missInTour.length || extraInTour.length) {
+    die('tour-map.json 与 tour.js 不一致：'
+      + (missInTour.length ? '\n   · 登记了但 tour.js 没写：' + missInTour.join('、') : '')
+      + (extraInTour.length ? '\n   · tour.js 有但登记表没写：' + extraInTour.join('、') : '')
+      + '\n\n   tour.js 的步骤格式：{ t: \'板块key\', sel: \'#元素id\', title: \'…\', text: \'…\' }');
+  }
+
+  /* ③ 登记表 == guide.html 的说明条目 */
+  const missInGuide = diff(mapKeys, guideTopics);
+  const extraInGuide = diff(guideTopics, mapKeys);
+  if (missInGuide.length || extraInGuide.length) {
+    die('使用教程与登记表不一致：'
+      + (missInGuide.length ? '\n   · 登记了但 guide.html 没有说明条目：' + missInGuide.join('、') : '')
+      + (extraInGuide.length ? '\n   · guide.html 有但登记表没写：' + extraInGuide.join('、') : '')
+      + '\n\n   guide.html 里给条目加 data-topic="板块key"，教程与导览必须同时覆盖。');
+  }
+
+  /* ④ 首页那一段的锚点必须真的存在（id 写错时导览会定位到左上角） */
+  const badSel = [];
+  tourPairs.filter((p) => homeSteps.indexOf(p.t) >= 0).forEach((p) => {
+    if (idx.indexOf('id="' + p.sel + '"') < 0) badSel.push(p.t + ' → #' + p.sel);
+  });
+  if (badSel.length) {
+    die('tour.js 里的锚点在 index.html 找不到：\n   ' + badSel.join('\n   ')
+      + '\n   元素被改名或删掉后，导览会定位到屏幕左上角。');
+  }
+
+  /* ⑤ 两个新文件必须进 Service Worker 预缓存（断网时打不开 = 白装） */
+  if (!/['"]\.\/tour\.js['"]/.test(sw)) {
+    die('sw.js 的 PRECACHE 里没有 ./tour.js —— 离线设备首次进入时导览会静默失效。');
+  }
+  if (!/['"]\.\/guide\.html['"]/.test(sw)) {
+    die('sw.js 的 PRECACHE 里没有 ./guide.html —— 断网时教程页打不开。');
+  }
+
+  console.log('③j 教程 / 导览 / 板块一致：' + mapKeys.length + ' 个条目'
+    + '（首页 ' + homeSteps.length + ' 步，登录 ' + ((scenes.login && scenes.login.steps.length) || 0) + ' 步）');
+}
+
 /* ---------- ④ 部署前备份 ---------- */
 if (DRY) {
   console.log('④ 跳过备份（--dry-run）\n✅ 检查通过（未备份、未部署）');

@@ -88,6 +88,11 @@ jobs:
             admin-3.js
             basic.html
             clock.html
+            # v4.12.0：新手导览脚本。⚠️ 必须排在 index.html 引用的位置，
+            # 漏发布 → 首页导览静默失效（TOUR 未定义，启动函数直接返回）。
+            tour.js
+            # v4.12.0：使用教程独立页。不在白名单里时，书签按钮点过去就是 404。
+            guide.html
             share-card.js
             fs-keep.js
             admin.html

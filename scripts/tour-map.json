@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "note": "新手导览与使用教程的唯一登记表。新增板块时必须同时改这里、tour.js、guide.html、index.html，缺一处 predeploy 会拦。",
+  "scenes": {
+    "login": {
+      "where": "app.js",
+      "steps": ["login-user", "login-pass", "login-cap", "login-go"]
+    },
+    "home": {
+      "where": "index.html",
+      "steps": ["island", "board", "sign", "daily", "quote", "study", "count", "guide"]
+    }
+  }
+}

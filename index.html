@@ -598,9 +598,6 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .dark .signbar-title{color:#b8b1aa}
 .dark .signbar-sub{color:#b8b1aa}
 @media(max-width:768px){.signbar{max-width:none;padding:9px 12px}.signbar-sub{white-space:normal}}
-.site-gate{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:24px}
-.site-gate.show{display:flex}
-.site-gate-box{background:#fff;border-radius:24px;padding:28px 26px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .board-more{display:block;width:100%;border-top:1px solid #f0e6dc;background:#fdf8f3;color:#af410f;font-size:.85rem;font-weight:600;padding:10px;cursor:pointer;border:none}
 .board-more:hover{background:#f4ede6}
 /* 弹窗居中（v2.6.6 重做，修 iPad 不居中 / 长内容被裁顶）
@@ -658,6 +655,8 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .theme-btn{position:absolute;right:12px;top:12px;z-index:10;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:.25s}
 .theme-btn:hover{background:rgba(255,255,255,.35);transform:scale(1.05)}
+/* v4.12.0：书签按钮放在主题按钮左侧。窄屏另有一段覆盖（≤640px 媒体查询内）。 */
+#guideBtn{left:64px}
 
 /* ===== 亮色模式内联色值兜底（站规：亮色 / 暗色双模式可读性）=====
    #6e635a 落白底仅 2.44:1（远低于 AA 的 4.5:1），亮色下统一映射到 --fg-3（#6e635a → 5.38:1）。
@@ -733,9 +732,6 @@ mark{background:#ffe58a;color:#222;border-radius:3px;padding:0 2px}
 .dark .side-btn.active{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;box-shadow:var(--sh-accent)}
 .dark footer p{color:#a8a29e !important}
 .dark footer p:first-child{color:#d6d3d1 !important}
-.dark .site-gate-box{background:#262220;color:#e4d8cb}
-.dark .site-gate-box h2{color:#e4d8cb}
-.dark .site-gate-box p{color:#d6d3d1}
 .dark .allboard-box{background:#262220}
 .dark .allboard-list li{border-color:#332d29}
 .dark .qr-box{background:#262220}
@@ -1997,6 +1993,11 @@ input.pwd-mask.pwd-plain{-webkit-text-security:none;text-security:none}
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   header .theme-btn{grid-area:theme;position:static;width:34px;height:34px;font-size:.95rem;
     background:rgba(255,255,255,.18)}
+  /* v4.12.0：教程书签按钮。窄屏 header 是三列网格，两个 .theme-btn 都落在
+     grid-area:theme 会完全重叠（实测 412px 下两者 rect 一模一样），
+     所以把书签改成绝对定位，贴在主题按钮左侧。 */
+  header #guideBtn{position:absolute;right:52px;top:2px;left:auto;
+    width:34px;height:34px;font-size:.95rem;background:rgba(255,255,255,.18)}
 
   .island{padding:10px 12px;border-radius:18px;margin-bottom:12px}
   .island.isl-boot{min-height:92px}
@@ -6294,22 +6295,6 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   </div>
 </div>
 
-<!-- ===== 站点入口问答（首次进入需回答） ===== -->
-<div class="site-gate" id="siteGate">
-  <div class="site-gate-box">
-    <div style="font-size:2.6rem;margin-bottom:8px">🔒</div>
-    <h2 style="color:#292524;font-size:1.1rem;margin:0 0 10px">进入班级服务站</h2>
-    <p id="siteGateQ" style="color:#57534e;font-size:.92rem;line-height:1.7;margin:0 0 14px"></p>
-    <span style="display:block;position:relative">
-      <input id="siteGateInput" type="text" placeholder="请输入答案" class="gate-input pwd-mask" autocomplete="off" style="width:100%;text-align:center;padding-right:40px" onkeydown="if(event.key==='Enter')submitSiteGate()">
-      <button type="button" class="eye-btn" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;justify-content:center" onclick="togglePwd('siteGateInput', this)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-    </span>
-    <button class="btn" style="width:100%;margin-top:12px" onclick="submitSiteGate()">验证进入</button>
-    <p class="pwd-ime-tip" style="text-align:center">输入法无法输入中文时，可使用拼音或英文</p>
-    <p id="siteGateErr" style="color:#af410f;font-weight:600;font-size:.85rem;margin:10px 0 0"></p>
-  </div>
-</div>
-
 <!-- ===== 隐藏娱乐天地：门禁（点击班徽5次唤起） ===== -->
 <div class="allboard-mask" id="hiddenGateMask">
   <div class="allboard-box" style="max-width:360px;text-align:center">
@@ -6845,6 +6830,7 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
       <button class="ui-tab"        data-sec="motion" onclick="uiSec('motion')">动效</button>
       <button class="ui-tab"        data-sec="big"    onclick="uiSec('big')">大屏</button>
       <button class="ui-tab"        data-sec="data"   onclick="uiSec('data')">数据</button>
+          <button class="ui-tab"        data-sec="help"   onclick="uiSec('help')">帮助</button>
     </div>
     <div class="ui-body" id="uiSetBody" data-scroll-keep></div>
     <div class="ui-foot">
@@ -6885,7 +6871,8 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
     <button class="side-btn" id="adminEntryBtn" onclick="gotoAdminPage()" style="display:none">🛠️ 班级服务站后台</button>
     <button class="side-btn" id="filesBtn" onclick="openFiles()" style="margin-top:auto">📦 文件中转站</button>
     <button class="side-btn" id="sfxBtn" onclick="toggleSfx()">🔔 音效：开</button>
-    <button class="side-btn" id="uiSetBtn" onclick="openSettings()">⚙️ 全站设置</button>
+    <button class="side-btn" id="sideGuideBtn" onclick="openGuide()">📖 使用教程</button>
+<button class="side-btn" id="uiSetBtn" onclick="openSettings()">⚙️ 全站设置</button>
     <!-- ↓↓↓ 以下三项 2026-10-07 起隐藏（云端同步已接管：数据在云端，链接也由站点分享，
          不再需要本地导出/备份/复制链接）。用 display:none 而不是删掉，
          哪天要用把 display:none 去掉即可，代码都还在。 -->
@@ -6900,6 +6887,7 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   <main class="content">
     <header>
       <button class="theme-btn" id="themeToggle" onclick="toggleTheme(event)" aria-label="切换主题">🌙</button>
+<button class="theme-btn" id="guideBtn" data-topic="guide" onclick="openGuide()" aria-label="使用教程" title="使用教程">📖</button>
       <h1 id="brandTitle">🏫 25级05班班级服务站</h1>
       <p id="brandSub">班级服务 · 资源 · 工具</p>
       <!-- v3.7.1：班徽不再直接请求 ./badge.png（Pages 上经常 404 且要等十几秒），
@@ -6963,18 +6951,18 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     <!-- 首页视图：公告 / 每日日报 / 每日一言 / 倒计时 -->
     <section class="home-view" id="homeView">
       <!-- v3.8.7：班级岛（时间 / 天气 / 周数 / 学期 + 当日课程），位置在公告上面 -->
-      <section class="island isl-boot" id="classIsland" aria-hidden="true"></section>
-      <section class="board" id="board" data-scroll-keep>
+      <section class="island isl-boot" id="classIsland" data-topic="island" aria-hidden="true"></section>
+      <section class="board" id="board" data-topic="board" data-scroll-keep>
         <!-- v3.9.8：脚本还没跑起来时先摆三张骨架卡，页面不是一片空白 -->
         <div class="skel-card"><span class="skel-tag"></span><span class="skel-line w70"></span><span class="skel-line w92"></span></div>
         <div class="skel-card"><span class="skel-tag"></span><span class="skel-line w60"></span><span class="skel-line w85"></span></div>
         <div class="skel-card"><span class="skel-tag"></span><span class="skel-line w76"></span><span class="skel-line w90"></span></div>
       </section>
-      <section class="signbar" id="signBar"></section>
-      <section class="daily" id="dailyNews"></section>
-      <section class="quote" id="dailyQuoteBar"></section>
-      <section class="study" id="studyCard"></section>
-      <section class="countdown" id="countdown"></section>
+      <section class="signbar" id="signBar" data-topic="sign"></section>
+      <section class="daily" id="dailyNews" data-topic="daily"></section>
+      <section class="quote" id="dailyQuoteBar" data-topic="quote"></section>
+      <section class="study" id="studyCard" data-topic="study"></section>
+      <section class="countdown" id="countdown" data-topic="count"></section>
     </section>
 
     <!-- ===== 大屏首页（v3.19.0）：一屏显示全部功能，按板块分组 =====
@@ -8171,18 +8159,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.11.0';
+var SITE_VERSION = '4.12.0';
 var VER_DATE = '2026-11-09';
 </script>
-<script src="./auth-bus.js?v=4110" defer></script>
-<script src="./app.min.js?v=4110" defer></script>
+<script src="./auth-bus.js?v=4120" defer></script>
+<script src="./tour.js?v=4120" defer></script>
+<script src="./app.min.js?v=4120" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4110" defer></script>
-<script src="./big.js?v=4110" defer></script>
+<script src="./fs-keep.js?v=4120" defer></script>
+<script src="./big.js?v=4120" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4110" defer></script>
+<script src="./pickfx.js?v=4120" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

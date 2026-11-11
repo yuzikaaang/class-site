@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>使用教程 · 25级05班班级服务站</title>
+<meta name="theme-color" content="#f97316">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<script>
+/* 首屏主题：与首页同一套判断，避免暗色用户打开教程先闪白 */
+(function(){
+  try{
+    var t = localStorage.getItem('cls_theme');
+    if(!t){
+      var auto = localStorage.getItem('cls_theme_auto2') || 'off';
+      var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      t = (auto === 'system' && dark) ? 'dark' : 'light';
+    }
+    if(t === 'dark') document.documentElement.classList.add('dark');
+  }catch(e){}
+})();
+</script>
+<style>
+:root{
+  --bg:#f7f2ec; --bg-1:#fffdfb; --bg-2:#f1e9e1;
+  --fg:#292524; --fg-2:#57534e; --fg-3:#8a7a6d;
+  --line:#e8ded4; --brand:#c2410c; --brand-2:#f97316;
+  --sh:0 8px 26px rgba(80,45,20,.07);
+}
+.dark{
+  --bg:#1c1917; --bg-1:#262220; --bg-2:#221e1c;
+  --fg:#f2e9e1; --fg-2:#c9bdb2; --fg-3:#a8a29e;
+  --line:#3a332e; --brand:#f0a868; --brand-2:#ea8a3c;
+  --sh:0 8px 26px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased;
+}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+code{background:var(--bg-2);border-radius:5px;padding:1px 5px;font-size:.86em;
+  font-family:ui-monospace,Menlo,Consolas,monospace}
+
+/* 顶栏 */
+.hd{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
+  padding:12px 16px;background:color-mix(in srgb,var(--bg) 86%,transparent);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+}
+.hd h1{flex:1;margin:0;font-size:1rem;font-weight:800;letter-spacing:.01em}
+.hd .btn-back,.hd .btn-theme{
+  border:none;background:var(--bg-2);color:var(--fg-2);border-radius:10px;
+  padding:7px 11px;font-size:.78rem;font-weight:700;font-family:inherit;cursor:pointer;
+}
+.hd .btn-theme{width:36px;padding:7px 0;text-align:center;font-size:.95rem}
+
+.wrap{max-width:1040px;margin:0 auto;padding:18px 16px 64px;display:grid;
+  grid-template-columns:212px minmax(0,1fr);gap:28px;align-items:start}
+
+/* 目录 */
+.toc{position:sticky;top:70px;font-size:.82rem}
+.toc h2{font-size:.68rem;letter-spacing:.1em;color:var(--fg-3);margin:0 0 8px;font-weight:800}
+.toc a{display:block;padding:7px 10px;border-radius:8px;color:var(--fg-2);font-weight:600}
+.toc a:hover{background:var(--bg-2);text-decoration:none;color:var(--brand)}
+.toc a.on{background:var(--bg-2);color:var(--brand)}
+
+/* 主体 */
+main{min-width:0}
+.search{position:relative;margin-bottom:20px}
+.search input{
+  width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--line);
+  background:var(--bg-1);color:var(--fg);font-family:inherit;font-size:.86rem;outline:none;
+  box-shadow:var(--sh);
+}
+.search input:focus{border-color:var(--brand-2)}
+.search .hint{font-size:.72rem;color:var(--fg-3);margin:7px 2px 0}
+
+section.card{
+  background:var(--bg-1);border-radius:18px;padding:20px 22px;margin-bottom:18px;
+  box-shadow:var(--sh);scroll-margin-top:74px;
+}
+section.card>h2{
+  font-size:1.05rem;margin:0 0 4px;display:flex;align-items:center;gap:9px;
+}
+section.card>h2 .no{
+  flex:0 0 auto;width:24px;height:24px;border-radius:8px;display:inline-flex;
+  align-items:center;justify-content:center;font-size:.74rem;font-weight:800;
+  background:linear-gradient(135deg,var(--brand-2),var(--brand));color:#fff;
+}
+section.card>.lead{color:var(--fg-3);font-size:.8rem;margin:0 0 16px}
+h3{font-size:.92rem;margin:20px 0 6px;color:var(--fg)}
+h3:first-of-type{margin-top:8px}
+p{margin:0 0 9px;color:var(--fg-2)}
+ul,ol{margin:0 0 10px;padding-left:20px;color:var(--fg-2)}
+li{margin:3px 0}
+.kv{display:grid;grid-template-columns:74px minmax(0,1fr);gap:6px 12px;font-size:.84rem;
+  margin:8px 0 12px;padding:11px 13px;background:var(--bg-2);border-radius:11px}
+.kv dt{color:var(--fg-3);font-weight:700}
+.kv dd{margin:0;color:var(--fg-2)}
+.tip{
+  border-left:3px solid var(--brand-2);background:var(--bg-2);border-radius:0 10px 10px 0;
+  padding:9px 13px;font-size:.82rem;color:var(--fg-2);margin:10px 0;
+}
+.tip b{color:var(--brand)}
+
+/* 首页板块条目 */
+.item{border-top:1px solid var(--line);padding:14px 0 4px}
+.item:first-of-type{border-top:none}
+.item h3{margin:0 0 4px;font-size:.88rem;display:flex;align-items:center;gap:8px}
+.item h3 .tag{
+  font-size:.64rem;font-weight:800;letter-spacing:.04em;color:var(--brand);
+  background:color-mix(in srgb,var(--brand-2) 14%,transparent);
+  border-radius:5px;padding:1px 6px;
+}
+.item p{font-size:.83rem;margin:0 0 6px}
+.item .where{font-size:.72rem;color:var(--fg-3)}
+
+.no-hit{display:none}
+.empty{display:none;text-align:center;color:var(--fg-3);font-size:.85rem;padding:28px 0}
+
+/* 页脚 */
+.foot{
+  margin-top:26px;padding:18px 20px;border-radius:16px;background:var(--bg-1);
+  box-shadow:var(--sh);display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+}
+.foot p{flex:1 1 210px;margin:0;font-size:.78rem;color:var(--fg-3)}
+.foot button,.foot a.btn{
+  border:none;border-radius:10px;padding:9px 14px;font-size:.78rem;font-weight:800;
+  font-family:inherit;cursor:pointer;background:var(--bg-2);color:var(--brand);
+}
+.foot a.btn{background:linear-gradient(135deg,var(--brand-2),var(--brand));color:#fff}
+.foot a.btn:hover{text-decoration:none}
+
+/* 手机 */
+@media (max-width:760px){
+  .wrap{grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 12px 56px}
+  .toc{position:static;display:grid;grid-template-columns:1fr 1fr;gap:6px;
+    padding-bottom:4px}
+  .toc h2{display:none}
+  .toc a{white-space:nowrap;background:var(--bg-1);box-shadow:var(--sh);
+    font-size:.75rem;padding:7px 9px;border-radius:9px;text-align:left;
+    overflow:hidden;text-overflow:ellipsis}
+  section.card{padding:16px 15px;border-radius:15px}
+  .kv{grid-template-columns:64px minmax(0,1fr);font-size:.8rem}
+}
+</style>
+</head>
+<body>
+
+<header class="hd">
+  <a class="btn-back" href="./index.html">← 返回</a>
+  <h1>使用教程</h1>
+  <button class="btn-theme" id="themeBtn" aria-label="切换深浅色" title="切换深浅色">深</button>
+</header>
+
+<div class="wrap">
+  <nav class="toc" id="toc">
+    <h2>目录</h2>
+    <a href="#c1">1 · 一分钟上手</a>
+    <a href="#c2">2 · 首页八个区块</a>
+    <a href="#c3">3 · 大屏模式</a>
+    <a href="#c4">4 · 全屏时钟</a>
+    <a href="#c5">5 · 账号与资料</a>
+    <a href="#c6">6 · 设置面板</a>
+    <a href="#c7">7 · 常见问题</a>
+  </nav>
+
+  <main id="main">
+
+    <div class="search">
+      <input id="q" type="search" placeholder="搜索功能，例如：作业、大屏、签到、点歌" autocomplete="off">
+      <p class="hint" id="qhint">输入关键词筛选，清空后显示全部。</p>
+    </div>
+
+    <div class="empty" id="empty">没有匹配的条目，可换一个关键词。</div>
+
+    <!-- 1 -->
+    <section class="card" id="c1" data-search>
+      <h2><span class="no">1</span>一分钟上手</h2>
+      <p class="lead">站点是网页应用，手机与电脑均可打开，加入桌面后近似独立应用。</p>
+
+      <h3>打开方式</h3>
+      <ul>
+        <li>浏览器输入站点地址，或在班群通过二维码进入。</li>
+        <li>手机浏览器菜单选择「添加到主屏幕」，下次从桌面图标直接打开。</li>
+        <li>微信内可直接打开，但定位、离线缓存等功能在系统浏览器中更完整。</li>
+      </ul>
+
+      <h3>首次进入会发生什么</h3>
+      <p>系统会显示一段新手导览，按屏幕提示点击「下一步」即可。导览覆盖首页每个区块的位置与用途，走完后不再自动出现。若中途退出，下次从上次停下的那一步继续。</p>
+      <div class="tip"><b>提示</b>：导览结束后仍可随时查看。顶部书签按钮打开本教程，或在「全站设置 → 帮助」中重新播放。</div>
+
+      <h3>登录与否的区别</h3>
+      <div class="kv">
+        <dt>未登录</dt><dd>全部功能可正常使用，设置与记录只保存在当前设备。</dd>
+        <dt>已登录</dt><dd>作业勾选、点歌记录、个人资料同步至云端，更换设备无需重新设置。</dd>
+      </div>
+
+      <h3>页面结构</h3>
+      <p>页面由三部分组成：顶部为站点标题与深色模式按钮，左侧为功能侧边栏（手机上点击左上角图标展开），中间为首页内容区。功能入口大多在侧边栏中。</p>
+    </section>
+
+    <!-- 2 -->
+    <section class="card" id="c2" data-search>
+      <h2><span class="no">2</span>首页八个区块</h2>
+      <p class="lead">首页从上到下固定为八个区块，顺序可在「全站设置 → 排序」中调整。</p>
+
+      <div class="item" data-topic="island">
+        <h3>班级岛 <span class="tag">首页第一屏</span></h3>
+        <p class="where">位置：页面最上方横幅</p>
+        <p>显示当前时间、日期、当日课程、天气与当前教学周。点击横幅可展开完整课表，再点一次收起。</p>
+        <p>周次按开学日所在周的周一起算，与教室张贴的周次一致。</p>
+      </div>
+
+      <div class="item" data-topic="board">
+        <h3>班级公告 <span class="tag">首页第二块</span></h3>
+        <p class="where">位置：班级岛下方</p>
+        <p>班级通知、活动安排、临时调整集中发布于此。标题展开后显示全文，标题右侧的数字表示未读条数。</p>
+        <p>重要公告会置顶；公告可在右上角切换「全部 / 未读」。</p>
+      </div>
+
+      <div class="item" data-topic="sign">
+        <h3>签到 <span class="tag">首页第三块</span></h3>
+        <p class="where">位置：公告下方细条</p>
+        <p>每日签到一次，右侧显示连续签到天数与累计天数。断签后连续天数重新计算。</p>
+      </div>
+
+      <div class="item" data-topic="daily">
+        <h3>今日班级签 <span class="tag">首页第四块</span></h3>
+        <p class="where">位置：签到下方</p>
+        <p>每天自动更换一句班级签，与公告互相独立，不承载通知内容。点击可查看历史。</p>
+      </div>
+
+      <div class="item" data-topic="quote">
+        <h3>每日一言 <span class="tag">首页第五块</span></h3>
+        <p class="where">位置：班级签下方</p>
+        <p>随机展示一句短语，点击可切换下一条。来源可在「全站设置 → 外观」中调整。</p>
+      </div>
+
+      <div class="item" data-topic="study">
+        <h3>学习卡片 <span class="tag">首页第六块</span></h3>
+        <p class="where">位置：每日一言下方</p>
+        <p>自习计时与学习时长统计入口，记录每次自习的起止时间与累计时长。</p>
+      </div>
+
+      <div class="item" data-topic="count">
+        <h3>倒计时 <span class="tag">首页第七块</span></h3>
+        <p class="where">位置：学习卡片下方</p>
+        <p>显示距离重要考试的剩余天数。目标日期在「全站设置」中修改，修改后立即生效。</p>
+      </div>
+
+      <div class="item" data-topic="guide">
+        <h3>大屏与使用教程 <span class="tag">首页常驻入口</span></h3>
+        <p class="where">位置：左上角书签按钮 / 侧边栏「使用教程」</p>
+        <p>书签按钮打开本教程。侧边栏可切换大屏模式、横屏显示与轻量模式，三个开关位于侧边栏第一屏。</p>
+        <p>大屏模式用于教室投影，一屏显示全部功能；轻量模式关闭模糊与动效，低配设备更流畅。</p>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="card" id="c3" data-search>
+      <h2><span class="no">3</span>大屏模式</h2>
+      <p class="lead">面向教室电脑与投影，把常用功能铺满一屏。</p>
+
+      <h3>进入与退出</h3>
+      <p>侧边栏第一行点击「大屏：关」，按钮变为「大屏：开」即进入；再点击一次退出。进入后顶栏变为横向导航条。</p>
+
+      <h3>九宫格首页</h3>
+      <p>进入大屏后首页换成图标墙，全部功能按板块排列，点击任一图标进入单功能页，页面上方出现返回条。</p>
+
+      <h3>作业看板</h3>
+      <p>作业查看页右侧为功能栏，包含七张卡片。卡片可在「全站设置 → 大屏」中逐张关闭，右侧栏宽度与顶栏留白也可在该页调整，范围分别为 220–520 像素与 0–320 像素。</p>
+      <div class="tip"><b>提示</b>：右侧栏宽度与卡片开关只保存在当前设备，不影响其他设备。顶栏留白用于避让固定在右上角的课表窗口。</div>
+
+      <h3>随机点名</h3>
+      <p>支持按性别、学号、成绩等条件筛选后抽取，抽取结果可记录。点名开关同样位于「全站设置 → 大屏」。</p>
+
+      <h3>课表窗口</h3>
+      <p>课表窗口固定在屏幕右上角，可拖动位置。若遮挡顶栏按钮，调大顶栏留白即可避让。</p>
+    </section>
+
+    <!-- 4 -->
+    <section class="card" id="c4" data-search>
+      <h2><span class="no">4</span>全屏时钟</h2>
+      <p class="lead">独立页面，适合教室大屏常驻显示。</p>
+
+      <h3>显示内容</h3>
+      <ul>
+        <li>大号时间、日期、星期与当前教学周。</li>
+        <li>下方显示当日课程与下一节课的上课时间。</li>
+        <li>支持深色与浅色两套底色，随站点主题同步。</li>
+      </ul>
+
+      <h3>自习计时</h3>
+      <p>点击计时按钮开始自习计时，再次点击暂停。每次计时结束后记录时长，可在后台「时钟记录」中查看汇总。</p>
+
+      <h3>周次口径</h3>
+      <p>第 1 周从开学日所在周的周一算起，每周一零点进入下一周。若显示周次与实际不符，先确认设备日期正确，再强制刷新页面。</p>
+    </section>
+
+    <!-- 5 -->
+    <section class="card" id="c5" data-search>
+      <h2><span class="no">5</span>账号与个人资料</h2>
+      <p class="lead">账号由班委统一创建，用户名即本人姓名。</p>
+
+      <h3>登录</h3>
+      <div class="item" data-topic="login-user">
+        <h3>用户名 <span class="tag">必填</span></h3>
+        <p>填写本人姓名，须与班级名单完全一致，不加空格与标点。</p>
+      </div>
+      <div class="item" data-topic="login-pass">
+        <h3>密码 <span class="tag">必填</span></h3>
+        <p>初始密码为出生日期 8 位数字。例如 2010 年 7 月 10 日出生，初始密码为 <code>20100710</code>。首次登录后系统要求修改为新密码。</p>
+      </div>
+      <div class="item" data-topic="login-cap">
+        <h3>安全验证 <span class="tag">按需</span></h3>
+        <p>按图填写数字。图像无法辨认时，点击右上角刷新按钮更换一张。连续输错次数过多会暂时锁定，等待倒计时结束后重试。</p>
+      </div>
+      <div class="item" data-topic="login-go">
+        <h3>提交 <span class="tag">操作</span></h3>
+        <p>确认无误后点击「登录」。登录后作业勾选、点歌记录与个人设置同步至云端；未登录时数据仅保存于本机。</p>
+      </div>
+
+      <h3>修改密码与资料</h3>
+      <p>登录后点击右上角头像进入「我的账号」，可修改密码与个人资料。资料修改需经班委审核，审核通过后对其他同学可见。</p>
+
+      <h3>头衔与点歌券</h3>
+      <ul>
+        <li><b>头衔</b>：由班委任命，显示在个人资料与排行榜中。</li>
+        <li><b>点歌券</b>：参与班级活动获得，用于点歌排队。余额可在个人中心查看。</li>
+      </ul>
+
+      <h3>忘记密码</h3>
+      <p>联系班委在后台重置。重置后的密码为新的初始密码，登录后需再次修改。</p>
+    </section>
+
+    <!-- 6 -->
+    <section class="card" id="c6" data-search>
+      <h2><span class="no">6</span>设置面板</h2>
+      <p class="lead">侧边栏「全站设置」打开，共六个页签，全部只影响当前设备。</p>
+
+      <h3>外观</h3>
+      <p>字号、背景、深色模式与每日一言来源。深色模式可选跟随系统、按日出日落自动切换或固定。</p>
+
+      <h3>排序</h3>
+      <p>拖动调整首页区块顺序，也可隐藏暂时不用的区块。调整结果只在本设备生效。</p>
+
+      <h3>动效</h3>
+      <p>控制入场动画、光斑与扫光效果。低配设备建议关闭，页面切换更跟手。</p>
+
+      <h3>大屏</h3>
+      <p>右侧功能栏宽度、顶栏右侧留白、七张卡片显示开关，以及恢复大屏默认。详见第 3 章。</p>
+
+      <h3>数据</h3>
+      <p>云端数据查看、配置导出与导入、恢复默认、版本检查、缓存清理。换设备时用导出导入搬迁设置。</p>
+
+      <h3>帮助</h3>
+      <p>查看导览状态、重新播放新手导览、重置导览记录，以及打开本教程。</p>
+    </section>
+
+    <!-- 7 -->
+    <section class="card" id="c7" data-search>
+      <h2><span class="no">7</span>常见问题</h2>
+
+      <h3>页面内容没有更新</h3>
+      <p>进入「全站设置 → 数据 → 版本与更新」，先点「检查更新」，仍无效则点「强制刷新」。手机上必要时完全关闭页面后重新打开。</p>
+
+      <h3>提示无法打开或一直白屏</h3>
+      <ul>
+        <li>确认网络连接正常，切换 Wi-Fi 与移动数据后重试。</li>
+        <li>浏览器版本过低时，可先用「基础版」查看公告与作业。</li>
+        <li>清除浏览器缓存后重新打开。</li>
+      </ul>
+
+      <h3>断网时能否使用</h3>
+      <p>已加载过的页面与数据可离线查看，包括本教程。公告更新、点歌等需要联网的操作在恢复网络后自动同步。</p>
+
+      <h3>换手机后设置丢失</h3>
+      <p>设置默认只保存在本机。登录后可在「数据」中导出配置，在新设备导入；作业勾选与点歌记录登录后自动同步。</p>
+
+      <h3>周次或日期显示不正确</h3>
+      <p>先检查设备日期与时间是否为自动获取，再强制刷新页面。仍不正确请联系班委核对开学日期设置。</p>
+    </section>
+
+    <div class="foot">
+      <p>教程内容随站点更新，遇到未覆盖的问题可在班级群反馈。</p>
+      <button id="replay">重看新手导览</button>
+      <a class="btn" href="./index.html">返回首页</a>
+    </div>
+
+  </main>
+</div>
+
+<script src="./tour.js?v=41200"></script>
+<script>
+(function(){
+  var doc = document.documentElement;
+
+  /* 主题切换：写回 cls_theme，和首页共用同一个键 */
+  var tb = document.getElementById('themeBtn');
+  function syncBtn(){ tb.textContent = doc.classList.contains('dark') ? '浅' : '深'; }
+  syncBtn();
+  tb.addEventListener('click', function(){
+    doc.classList.toggle('dark');
+    try{ localStorage.setItem('cls_theme', doc.classList.contains('dark') ? 'dark' : 'light'); }catch(e){}
+    syncBtn();
+  });
+
+  /* 本地搜索：只过滤带 data-search 的区块，按条目粒度定位 */
+  var q = document.getElementById('q');
+  var empty = document.getElementById('empty');
+  var hint = document.getElementById('qhint');
+  var cards = [].slice.call(document.querySelectorAll('section.card'));
+  var items = [].slice.call(document.querySelectorAll('[data-topic]'));
+
+  function clearMarks(){
+    items.forEach(function(el){ el.classList.remove('no-hit'); });
+    [].slice.call(document.querySelectorAll('h3')).forEach(function(el){ el.classList.remove('no-hit'); });
+    [].slice.call(document.querySelectorAll('p,ul,ol,.kv,.tip')).forEach(function(el){ el.classList.remove('no-hit'); });
+  }
+
+  function filter(){
+    var k = (q.value || '').trim().toLowerCase();
+    clearMarks();
+    if(!k){
+      cards.forEach(function(c){ c.style.display = ''; });
+      empty.style.display = 'none';
+      hint.textContent = '输入关键词筛选，清空后显示全部。';
+      return;
+    }
+    var total = 0;
+    cards.forEach(function(card){
+      var hit = 0;
+      /* 条目级：命中就整条保留，否则隐藏 */
+      var own = [].slice.call(card.querySelectorAll('[data-topic]'));
+      if(own.length){
+        own.forEach(function(it){
+          var ok = it.textContent.toLowerCase().indexOf(k) >= 0;
+          it.classList.toggle('no-hit', !ok);
+          if(ok) hit++;
+        });
+      }
+      if(!own.length){
+        hit = card.textContent.toLowerCase().indexOf(k) >= 0 ? 1 : 0;
+      }
+      card.style.display = hit ? '' : 'none';
+      if(hit) total++;
+    });
+    empty.style.display = total ? 'none' : 'block';
+    hint.textContent = total ? ('命中 ' + total + ' 个章节') : '没有匹配的条目';
+  }
+  q.addEventListener('input', filter);
+
+  /* 目录高亮 */
+  var links = [].slice.call(document.querySelectorAll('#toc a'));
+  var obs = new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if(!e.isIntersecting) return;
+      links.forEach(function(a){ a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id); });
+    });
+  }, { rootMargin: '-72px 0px -70% 0px' });
+  cards.forEach(function(c){ obs.observe(c); });
+
+  /* 重看导览：清掉记录并回到首页自动开始 */
+  document.getElementById('replay').addEventListener('click', function(){
+    try{
+      if(window.TOUR) TOUR.reset();
+      else localStorage.removeItem('cls_tour_v1');
+    }catch(e){}
+    location.href = './index.html?tour=1';
+  });
+})();
+</script>
+</body>
+</html>

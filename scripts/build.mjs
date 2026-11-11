@@ -126,6 +126,10 @@ idx = idx.replace(/<script src="\.\/big\.js(\?v=\d+)?" defer><\/script>/,
 /* v4.7.3：抽取动画脚本一直是手写 ?v=472，升级后没跟着变 —— 浏览器与 SW 可能继续发旧的那份 */
 idx = idx.replace(/<script src="\.\/pickfx\.js(\?v=\d+)?" defer><\/script>/,
   `<script src="./pickfx.js${TAG}" defer></script>`);
+/* v4.12.0：新手导览脚本必须排在 app.min.js 之前（defer 按顺序执行），
+   否则 app.js 启动时 TOUR 还不存在，首页导览会被静默跳过。版本号同样跟着构建走。 */
+idx = idx.replace(/<script src="\.\/tour\.js(\?v=\d+)?" defer><\/script>/,
+  `<script src="./tour.js${TAG}" defer></script>`);
 if (idx !== before) write('index.html', idx);
 
 /* ---------------- ④ admin.html 引用的 admin.js 也要带新版本号 ----------------

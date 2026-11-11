@@ -365,6 +365,7 @@ document.addEventListener('click',function(e){
    历史：原先此处还有 XOR/Base64 工具（xorEncrypt/xorDecrypt），
       只服务于点歌平台的密钥解混淆；第二十八轮点歌功能整体迁到后台后已移除。
    ===================================================== */
+/* 卡片门禁 / 隐藏空间的答案盐值（进站口令层已于 v4.12.0 移除，此盐值仍被 checkGate 使用） */
 var GATE_SALT = 'cls2505-gate-salt';
 /* CONTACT_SALT 已随通讯录数据一起移除（2026-10-05），不要再加回来 */
 function sha256Raw(latin1){
@@ -1777,27 +1778,7 @@ var SITE_DATA = {
 };
 /* ===================================================== */
 
-/* ── 站点入口问答（首次打开需回答，answers 为哈希）── */
-var SITE_GATE = {
-  question: "请回答举办“给未来自己的一封信”当天所对应的节日。",
-  /* 答案以 SHA-256 存储，不出现明文。为照顾「输入法切不出中文 / 只会英文键盘」的同学，
-     额外接受：中文别名、错别字、全拼、缩写、英文。新增答案用 hashSecret(明文, GATE_SALT) 生成。 */
-  answers: [
-    "725f83c579b242c8f55fd871f950c2b87f06e0d05f66065d658d1a74e7d06c80", /* 标准答案（三个字） */
-    "68bc7fd010888eaaaddaf9b9d31f25dfbac8918e20043c30bd85f113a5ca743c", /* 前两个字 */
-    "906dba96dc9f70f65b3f270a155f6d021d8f30733cd61014e69f39282de1c66f", /* 别名一 */
-    "ab89374858196c85b0545916fa32686edfddb8790219bcac63932876d871eb25", /* 别名二 */
-    "37c681d68e334c8d17c20050171df05c9a514a43d04f60458bb50dbfe0e60fea", /* 农历日期叫法 */
-    "7f46a07d533679aee472a9239607a02f551420513f5e30eb43a27a43d6350c6d", /* 常见错字 */
-    "2275311545501cc80a9540d3c00a50f1c5c3211223d82f3833330a3f9f541296", /* 全拼 */
-    "9294f0a54fe8392b985448a08999d130a1aacb0cc3f3e2d88f8fca0f6b33dafe", /* 全拼+jie */
-    "e9fae19194a8bd4bd5c5de3b43c80c4fbb460dbd044dff6b5fa9ff00d15c47f2", /* 拼音首字母 */
-    "3eb9458649cd696b90acae91c2f419113bcbc672ce71d3158199732503c02b41", /* 英文 */
-    "5d13ec93993f41453a708ae6d8664c9e3f5da47ecd8812316ff35dbcf9e0d9f2"  /* 英文全称 */
-  ],
-  hint: "三个字；输入法打不出中文时，可直接输拼音或英文",
-  version: "2026-08-23-v1"
-};
+
 
 /* ── 学期与节假日倒计时配置（可在此修改）── */
 var SEMESTER = {
@@ -4319,7 +4300,6 @@ var AUTH = { token:'', user:null };   /* 当前登录态 */
 
    不同步的键（有意排除）：
      cls_auth         登录 token，各设备各登各的
-     cls_site_gate    站点门禁是否已通过，安全相关
      cls_lock_*       输错密码的锁定计时，安全相关
      cls_gate_*       各入口的验证状态，安全相关
      cls_device_id    设备标识，本来就该各不相同
@@ -6196,6 +6176,20 @@ function renderAccount(){
   }
   /* v2.5.0：账号面板每次重绘，就地再图标化一次（不挂监听）。 */
   try{ iconifyStatic(box); }catch(e){}
+
+  /* v4.12.0：登录弹层首次打开，说明三个输入项的填写方式。
+     只对「未登录 + 登录 tab」生效；注册 tab、个人中心、强制改密都不弹。
+     TOUR.start 内部有运行中判断，重复调用不会叠出第二层。 */
+  try{
+    if(!isLoggedIn() && ACCT_TAB === 'login' && window.TOUR){
+      setTimeout(function(){
+        var m = document.getElementById('acctMask');
+        if(m && m.classList.contains('show')){
+          try{ TOUR.start('login'); }catch(e){}
+        }
+      }, 260);
+    }
+  }catch(e){}
 }
 
 function acctMsg(t, cls){
@@ -9142,6 +9136,47 @@ function rippleOn(btn, ev){
 
 var UI_SEC = 'look';
 
+/* v4.12.0（站主）：使用教程独立页。顶栏书签按钮与侧边栏共用这一入口。 */
+function openGuide(){ location.href = './guide.html'; }
+
+/* 重看导览：清记录 → 回首页 → 立刻启动（不等下次刷新，便于测试） */
+function tourReplay(){
+  try{ if(window.TOUR) TOUR.reset(); }catch(e){}
+  try{ closeSettings(); }catch(e){}
+  try{ if(typeof goHomeView === 'function') goHomeView(); }catch(e){}
+  setTimeout(function(){
+    try{ if(window.TOUR) TOUR.start('home', true); }catch(e){}
+  }, 360);
+}
+/* 只清记录，不立刻启动 */
+function tourReset(){
+  try{ if(window.TOUR) TOUR.reset(); }catch(e){}
+  try{ renderSettings(); }catch(e){}
+  uiMsg('导览记录已清除，下次进入首页将重新播放', '#0a7d42');
+}
+
+/* v4.12.0：首页导览的启动时机。
+   三条规矩：
+     ① 从分享链接 / 固定卡片深链进入 → 不弹（对方是来看内容的）；
+     ② 大屏模式 → 不弹（教室电脑每次重启都弹会打断使用），可在设置里手动重看；
+     ③ 地址带 ?tour=1（教程页「重看」按钮）→ 强制弹，并立刻把参数从地址栏抹掉，
+        避免之后每次刷新都重弹。 */
+function tourBoot(){
+  if(typeof TOUR === 'undefined' || !TOUR.startWhenFree) return;
+  var force = /[?&]tour=1/.test(location.search);
+  if(force){
+    try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){}
+  }else{
+    try{ if(typeof isShareEntry === 'function' && isShareEntry()) return; }catch(e){}
+    var h = String(location.hash || '').replace(/^#/, '');
+    if(h && h !== '/' && !/^\/?home$/i.test(h)) return;
+    try{ if(typeof BIG !== 'undefined' && BIG && BIG.on) return; }catch(e){}
+  }
+  setTimeout(function(){
+    try{ TOUR.startWhenFree('home'); }catch(e){}
+  }, force ? 260 : 1700);
+}
+
 function openSettings(){
   var busy = document.querySelector('.allboard-mask.show');
   if(busy && busy.id !== 'uiSetMask'){ busy.classList.remove('show'); }
@@ -9386,6 +9421,35 @@ function renderSettings(){
       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + cardBtns + '</div>'
       + '<button class="btn btn-gray" style="font-size:.76rem;padding:9px 12px;margin-top:4px" '
       + 'onclick="bigResetPrefs()">恢复大屏默认</button>', true);
+  }
+  else if(UI_SEC === 'help'){
+    /* v4.12.0（站主）：导览状态 / 重看 / 重置 + 教程入口。
+       站主要求「设置里重置掉它，就可以再过一遍，当作测试」——
+       所以重置后直接在本页启动，不必再刷新一次。 */
+    var ts = (typeof TOUR !== 'undefined' && TOUR.status) ? TOUR.status()
+      : { login: 0, home: 0, all: false };
+    var lineOf = function(name, v){
+      if(v === -1) return name + '：已完成';
+      if(v > 0) return name + '：停在第 ' + v + ' 步';
+      return name + '：未开始';
+    };
+    html += secHtml('tour','新手导览','compass',
+      '<div class="up-row"><span class="k">登录导览</span>'
+      + '<span class="v" style="font-family:inherit;font-weight:700">' + lineOf('', ts.login).replace(/^：/, '') + '</span></div>'
+      + '<div class="up-row"><span class="k">首页导览</span>'
+      + '<span class="v" style="font-family:inherit;font-weight:700">' + lineOf('', ts.home).replace(/^：/, '') + '</span></div>'
+      + '<p class="ui-hint">导览在首次进入时自动出现，覆盖首页每个区块的位置与用途；'
+      + '登录弹层首次打开时另有一段，说明三个输入项的填写方式。</p>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      + '<button class="btn" style="flex:1;min-width:120px;font-size:.76rem;padding:9px 6px" '
+      + 'onclick="tourReplay()">重看新手导览</button>'
+      + '<button class="btn btn-secondary" style="flex:1;min-width:120px;font-size:.76rem;padding:9px 6px" '
+      + 'onclick="tourReset()">重置导览记录</button>'
+      + '</div>', true);
+    html += secHtml('doc','使用教程','book-open',
+      '<p class="ui-hint">教程按区块说明功能位置、作用与常见问题，可离线查看；'
+      + '页面顶部提供关键词搜索，支持按功能名直接定位。</p>'
+      + '<button class="btn" style="font-size:.76rem;padding:9px 12px" onclick="openGuide()">打开使用教程</button>', true);
   }
   else {
     /* 云端数据入口（v2.10.1 需求⑧）：数据类操作统一收在「自定义设置」里，
@@ -12421,8 +12485,6 @@ function maybeShowLoginGuide(){
   }catch(e){ return; }
   var m = document.getElementById('loginGuideMask');
   if(!m) return;
-  /* 如果此刻正压着别的弹窗（比如站点门禁），就别挤在一起弹 */
-  if(document.getElementById('siteGate') && document.getElementById('siteGate').classList.contains('show')) return;
   m.classList.add('show');
 }
 /** @param {boolean} gotoLogin true = 顺手把登录框打开 */
@@ -24268,52 +24330,12 @@ initTheme();
 /* v4.11.0：大屏的两项几何参数（右栏宽度 / 顶栏右侧留白）首屏就落成 CSS 变量，
    免得打开大屏作业页时先按默认 300 排一遍再跳一下 */
 try{ applyBhwPrefs(); }catch(e){}
-/* 站点入口问答：首次进入需回答（本地记住，版本变更需重新回答） */
-async function submitSiteGate(){
-  var g = document.getElementById('siteGate');
-  var input = document.getElementById('siteGateInput');
-  var err = document.getElementById('siteGateErr');
-  if(!g || !err) return;
-  var remain = lockRemain('site');
-  if(remain > 0){
-    startLockTimer('site', err, input);
-    return;
-  }
-  var v = await hashSecret(normAnswer(input ? input.value : ''), GATE_SALT);
-  if(v == null){ err.textContent = '当前环境不支持验证，请用浏览器打开'; return; }
-  var ok = false;
-  for(var i=0;i<SITE_GATE.answers.length;i++){ if(SITE_GATE.answers[i]===v){ ok=true; break; } }
-  if(ok){
-    onPassOk('site');
-    if(__lockTimers['site']) clearInterval(__lockTimers['site']);
-    try{ localStorage.setItem('cls_site_gate', SITE_GATE.version); }catch(e){}
-    SFX.success();
-    g.classList.remove('show');
-  }else{
-    var r = onPassFail('site');
-    SFX.error();
-    err.textContent = r.remain > 0
-      ? '💡 提示：' + SITE_GATE.hint + '　🔒 已连续错误 ' + r.count + ' 次，请 ' + Math.ceil(r.remain/1000) + ' 秒后再试'
-      : '💡 提示：' + SITE_GATE.hint;
-    if(r.remain > 0) startLockTimer('site', err, input);
-  }
-}
-(function(){
-  var g = document.getElementById('siteGate');
-  if(!g) return;
-  /* 门禁总开关关闭（GATE_ENABLED=false）时不再拦人，直接进站 */
-  if(!gateOn()) return;
-  var needGate = true;
-  try{ needGate = (localStorage.getItem('cls_site_gate') !== SITE_GATE.version); }catch(e){}
-  if(needGate){
-    document.getElementById('siteGateQ').textContent = SITE_GATE.question;
-    g.classList.add('show');
-  }
-})();
 try{
   /* 登录引导：首次打开且未登录才弹（maybeShowLoginGuide 内部已判断，弹过即跳过） */
   setTimeout(maybeShowLoginGuide, 1200);
 }catch(e){}
+/* v4.12.0：首页导览。比登录引导晚半秒发起，遇到弹窗未被关闭会自动顺延重试。 */
+try{ tourBoot(); }catch(e){}
 /* ⚠️ 顺序要紧：contentBoot() 必须先于 hwPopInit()。
    它会先用本地缓存把 SITE_DATA 覆盖成云端内容，再去后台同步；
    若放到 hwPopInit() 之后，开屏弹窗判断「今天是否在通知期内」时

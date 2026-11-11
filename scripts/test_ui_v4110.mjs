@@ -93,7 +93,9 @@ const browser = await chromium.launch({ executablePath: CH, args: ['--no-sandbox
   page.on('pageerror', (e) => errs.push(e.message.slice(0, 160)));
   await page.clock.install({ time: new Date('2026-11-09T23:00:00+08:00') });
   await page.addInitScript(() => {
-    try { localStorage.setItem('cls_theme_auto2', 'sun'); localStorage.setItem('cls_login_guide_v1', '1'); } catch (e) {}
+    try { localStorage.setItem('cls_theme_auto2', 'sun'); localStorage.setItem('cls_login_guide_v1', '1');
+      /* v4.12.0：导览会盖住整页，这里预置「已完成」，避免干扰本脚本的视觉断言 */
+      localStorage.setItem('cls_tour_v1', JSON.stringify({ login: { done: 1 }, home: { done: 1 } })); } catch (e) {}
   });
   await mock(page, ISLAND);
   await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 60000 });
