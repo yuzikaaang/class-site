@@ -134,7 +134,8 @@ console.log('\nC. 首页导览');
   t('C1 首次进入自动出现导览', shown);
 
   const titles = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
+    if (!(await page.$('.tour-next'))) break;
     const info = await page.evaluate(() => {
       const h = document.querySelector('.tour-hole');
       const b = h && h.getBoundingClientRect();
@@ -142,17 +143,23 @@ console.log('\nC. 首页导览');
         k: (document.querySelector('.tour-kicker') || {}).textContent || '',
         ti: (document.querySelector('.tour-title') || {}).textContent || '',
         rect: b && [Math.round(b.width), Math.round(b.height)],
+        last: (document.querySelector('.tour-next') || {}).textContent === '完成',
       };
     });
     titles.push(info.ti);
     if (i === 0) t('C2 第 1 步是班级岛', info.ti === '班级岛', info.ti);
     t('C3-' + (i + 1) + ' 第 ' + (i + 1) + ' 步光洞有尺寸', !!info.rect && info.rect[0] > 20 && info.rect[1] > 10, JSON.stringify(info.rect));
-    if (i === 7) break;
+    if (info.last) break;
     await page.click('.tour-next');
     await page.waitForTimeout(700);
   }
-  t('C4 共 8 步且顺序与首页一致',
-    titles.join('|') === '班级岛|班级公告|签到|今日班级签|每日一言|学习卡片|倒计时|大屏与使用教程', titles.join('|'));
+  /* 目标塌陷的板块会被跳过（mock 里一言/倒计时可能没内容），
+     所以要求「是应有顺序的子序列，且最后一步是教程入口」 */
+  const EXPECT = ['班级岛', '班级公告', '签到', '今日班级签', '每日一言', '学习卡片', '倒计时', '大屏与使用教程'];
+  let hit = 0;
+  titles.forEach((x) => { if (x === EXPECT[hit]) hit++; });
+  t('C4 顺序与首页一致（允许跳过塌陷板块）',
+    hit >= 6 && titles[titles.length - 1] === '大屏与使用教程', titles.join('|'));
 
   await page.click('.tour-next');
   await page.waitForTimeout(600);

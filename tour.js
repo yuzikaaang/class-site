@@ -140,16 +140,11 @@
     return true;
   }
 
-  /* 过滤掉目标不存在、或存在但没有尺寸的步骤。
-     ⚠️ v4.12.0 实测：公告为空时 #board 的高度为 0，光洞会缩成 12×12 的小点
-     （测试里必现）。这类「当前没有内容所以塌陷」的板块直接跳过，
-     进度点数量跟着真实步数走，不会出现「框了个寂寞」。 */
+  /* 只过滤「DOM 里根本没有」的步骤。
+     高度为 0 的（公告为空、一言还没渲染完）留到执行时再判断 —— 见 show()。 */
   function liveSteps(scene) {
     return (STEPS[scene] || []).filter(function (s) {
-      var el = document.querySelector(s.sel);
-      if (!el) return false;
-      var r = el.getBoundingClientRect();
-      return r.width >= 8 && r.height >= 8;
+      return !!document.querySelector(s.sel);
     });
   }
 
@@ -256,18 +251,22 @@
 
   function show(i) {
     if (!run) return;
-    run.i = i;
+    /* 目标不存在、或这一刻高度为 0（公告为空、一言还没渲染完）→ 跳到下一步，
+       绝不停在一个 12×12 的空洞上。全部跳完就当作完成。 */
+    if (i >= run.steps.length) { finish('done'); return; }
     var s = run.steps[i];
-
     var el = document.querySelector(s.sel);
-    if (el) {
-      try {
-        var rr = el.getBoundingClientRect();
-        if (rr.top < 40 || rr.bottom > window.innerHeight - 40) {
-          el.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' });
-        }
-      } catch (e) {}
-    }
+    if (!el) { return show(i + 1); }
+    var rr0 = el.getBoundingClientRect();
+    if (rr0.width < 8 || rr0.height < 8) { return show(i + 1); }
+
+    run.i = i;
+
+    try {
+      if (rr0.top < 40 || rr0.bottom > window.innerHeight - 40) {
+        el.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' });
+      }
+    } catch (e) {}
 
     var tip = run.tip;
     tip.innerHTML = ''
@@ -372,12 +371,14 @@
     return true;
   }
 
-  /* 延后启动：等到没有遮挡为止，最多试 8 次（约 12 秒） */
+  /* 延后启动：等到没有遮挡为止。
+     ⚠️ v4.12.0 线上实测：首次访问会先弹「欢迎来到5班服务站」，很多人会读一会
+     再关。原来上限 8 次（12 秒）太短，读完再关就再也不弹了 —— 放宽到 24 次（36 秒）。 */
   function startWhenFree(scene, tries) {
     tries = tries || 0;
     if (run) return;
     if (blocked()) {
-      if (tries < 8) setTimeout(function () { startWhenFree(scene, tries + 1); }, 1500);
+      if (tries < 24) setTimeout(function () { startWhenFree(scene, tries + 1); }, 1500);
       return;
     }
     start(scene);
