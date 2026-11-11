@@ -9153,7 +9153,7 @@ function tourReplay(){
 function tourReset(){
   try{ if(window.TOUR) TOUR.reset(); }catch(e){}
   try{ renderSettings(); }catch(e){}
-  uiMsg('导览记录已清除，下次进入首页将重新播放', '#0a7d42');
+  uiMsg('导览记录已清除，下次进入首页或任一板块时会重新播放', '#0a7d42');
 }
 
 /* v4.12.0：首页导览的启动时机。
@@ -9190,6 +9190,7 @@ function openSettings(){
   renderSettings();
   m.classList.add('show');
   SFX.pop();
+  try{ if(window.TOUR) TOUR.maybe('settings', 800); }catch(e){}
 }
 function closeSettings(){
   var m = document.getElementById('uiSetMask'); if(m) m.classList.remove('show');
@@ -9431,20 +9432,25 @@ function renderSettings(){
     /* v4.12.0（站主）：导览状态 / 重看 / 重置 + 教程入口。
        站主要求「设置里重置掉它，就可以再过一遍，当作测试」——
        所以重置后直接在本页启动，不必再刷新一次。 */
+    /* v4.13.0：导览扩到八个场景，按板块分别记录；这里逐段列状态，方便确认哪一段没走 */
     var ts = (typeof TOUR !== 'undefined' && TOUR.status) ? TOUR.status()
-      : { login: 0, home: 0, all: false };
-    var lineOf = function(name, v){
-      if(v === -1) return name + '：已完成';
-      if(v > 0) return name + '：停在第 ' + v + ' 步';
-      return name + '：未开始';
+      : { list: [], done: 0, total: 0, all: false };
+    var NAME_OF = {
+      login: '登录', home: '首页', services: '常用服务', hwpop: '作业弹窗',
+      scores: '成绩分析', big: '大屏模式', settings: '全站设置', files: '文件中转站'
     };
+    var rows = '';
+    (ts.list || []).forEach(function(it){
+      var v = it.state === 2 ? '已完成' : (it.state === 1 ? '停在第 ' + (it.at + 1) + ' 步' : '未开始');
+      rows += '<div class="up-row"><span class="k">' + (NAME_OF[it.scene] || it.scene) + '</span>'
+        + '<span class="v" style="font-family:inherit;font-weight:700">' + v + '</span></div>';
+    });
     html += secHtml('tour','新手导览','compass',
-      '<div class="up-row"><span class="k">登录导览</span>'
-      + '<span class="v" style="font-family:inherit;font-weight:700">' + lineOf('', ts.login).replace(/^：/, '') + '</span></div>'
-      + '<div class="up-row"><span class="k">首页导览</span>'
-      + '<span class="v" style="font-family:inherit;font-weight:700">' + lineOf('', ts.home).replace(/^：/, '') + '</span></div>'
-      + '<p class="ui-hint">导览在首次进入时自动出现，覆盖首页每个区块的位置与用途；'
-      + '登录弹层首次打开时另有一段，说明三个输入项的填写方式。</p>'
+      '<div class="up-row"><span class="k">总体进度</span>'
+      + '<span class="v" style="font-family:inherit;font-weight:700">' + (ts.done || 0) + ' / ' + (ts.total || 0) + ' 段已完成</span></div>'
+      + rows
+      + '<p class="ui-hint">首页第一次打开时自动开始，走到侧边栏即为完成；'
+      + '之后每进入一个板块，该板块第一次打开时再单独走一遍。</p>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
       + '<button class="btn" style="flex:1;min-width:120px;font-size:.76rem;padding:9px 6px" '
       + 'onclick="tourReplay()">重看新手导览</button>'
@@ -9452,8 +9458,8 @@ function renderSettings(){
       + 'onclick="tourReset()">重置导览记录</button>'
       + '</div>', true);
     html += secHtml('doc','使用教程','book-open',
-      '<p class="ui-hint">教程按区块说明功能位置、作用与常见问题，可离线查看；'
-      + '页面顶部提供关键词搜索，支持按功能名直接定位。</p>'
+      '<p class="ui-hint">教程按板块说明功能位置与用途，配界面截图，可离线查看；'
+      + '页面顶部提供关键词搜索，输入「作业」「大屏」等词直接定位。</p>'
       + '<button class="btn" style="font-size:.76rem;padding:9px 12px" onclick="openGuide()">打开使用教程</button>', true);
   }
   else {
@@ -10240,6 +10246,13 @@ function openCat(id){
     if(id === 3) setRoute('scores');
     else if(id === 7) setRoute('votes');
     else setRoute('board/' + id);
+  }catch(e){}
+  /* v4.13.0：板块级导览 —— 每个板块第一次打开时各走一遍 */
+  try{
+    if(window.TOUR){
+      if(id === 1) TOUR.maybe('services', 1000);
+      else if(id === 3) TOUR.maybe('scores', 1500);
+    }
   }catch(e){}
 }
 /* v4.10.3（站主：返回首页退不出前台）：
@@ -22613,6 +22626,7 @@ function showCurrentHomework(forceId){
     if(title) title.textContent = '当前作业';
     list.innerHTML = '<div style="padding:24px;text-align:center;color:#6e635a">这一周暂无作业记录。<br>管理员可点右上角「＋ 新增作业」开始写。</div>';
     mask.classList.add('show');
+    try{ if(window.TOUR) TOUR.maybe('hwpop', 900); }catch(e){}
     return;
   }
   /* v4.12.0：日期范围已经在下面的「查看」下拉和日期条里，标题只留期次名，
@@ -22623,6 +22637,7 @@ function showCurrentHomework(forceId){
     : '';
   list.innerHTML = demoHtml + _renderHwItems(hw.items, hw.id);
   mask.classList.add('show');
+  try{ if(window.TOUR) TOUR.maybe('hwpop', 900); }catch(e){}
 }
 function closeHwCurrent(){ var m=document.getElementById('hwCurrentMask'); if(m) m.classList.remove('show'); }
 
@@ -24614,6 +24629,7 @@ function openFiles(){
   flTab(FL.tab || 'up');
   FL.pending = 0;
   flQuotaLoad();
+  try{ if(window.TOUR) TOUR.maybe('files', 900); }catch(e){}
   try{ if(typeof closeSidebar === 'function') closeSidebar(); }catch(e){}
 }
 function closeFiles(){

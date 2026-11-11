@@ -1,14 +1,46 @@
 {
-  "version": 1,
-  "note": "新手导览与使用教程的唯一登记表。新增板块时必须同时改这里、tour.js、guide.html、index.html，缺一处 predeploy 会拦。",
+  "version": 2,
+  "note": "新手导览与使用教程的唯一登记表。新增板块时必须同时改这里、tour.js、guide.html、index.html（首页板块），缺一处 predeploy 会拦。scenes 的 key 与 tour.js 的 STEPS、设置「帮助」页签的场景名一一对应。",
   "scenes": {
     "login": {
-      "where": "app.js",
+      "name": "登录",
+      "where": "app.js · renderAccount",
       "steps": ["login-user", "login-pass", "login-cap", "login-go"]
     },
     "home": {
-      "where": "index.html",
-      "steps": ["island", "board", "sign", "daily", "quote", "study", "count", "guide"]
+      "name": "首页",
+      "where": "index.html · data-topic",
+      "steps": ["island", "board", "sign", "daily", "quote", "study", "count", "more"]
+    },
+    "services": {
+      "name": "常用服务",
+      "where": "app.js · openCat(1)",
+      "steps": ["svc-song", "svc-hw"]
+    },
+    "hwpop": {
+      "name": "作业弹窗",
+      "where": "app.js · showCurrentHomework",
+      "steps": ["hwpop-period", "hwpop-list", "hwpop-tools"]
+    },
+    "scores": {
+      "name": "成绩分析",
+      "where": "app.js · openCat(3)",
+      "steps": ["sc-note", "sc-exam", "sc-pane"]
+    },
+    "big": {
+      "name": "大屏模式",
+      "where": "big.js · setMode",
+      "steps": ["big-nav", "big-tiles", "big-tile"]
+    },
+    "settings": {
+      "name": "全站设置",
+      "where": "app.js · openSettings",
+      "steps": ["set-tabs", "set-look", "set-order", "set-big", "set-data", "set-help"]
+    },
+    "files": {
+      "name": "文件中转站",
+      "where": "app.js · openFiles",
+      "steps": ["files-tabs", "files-drop", "files-act"]
     }
   }
 }

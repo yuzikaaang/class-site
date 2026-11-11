@@ -133,6 +133,7 @@
     applyClass();
     if(BIG.on){
       buildHome();
+      try{ if(window.TOUR) TOUR.maybe('big', 1100); }catch(e){}
       /* 从普通模式切过来时，当前可能停在某个板块 —— 回大屏首页最直观 */
       try{ goHomeView(); }catch(e){}
       /* v4.7.0：切进大屏才开始「班级提醒 + 作业」轮询（以前只在开机时为真） */

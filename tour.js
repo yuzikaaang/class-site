@@ -1,19 +1,23 @@
 /* ============================================================================
- * tour.js —— 新手导览（v4.12.0）
+ * tour.js —— 新手导览（v4.13.0）
  * ----------------------------------------------------------------------------
  * 站主要求：
- *   「首次打开要有新手导览，详细一点，公告下面还有班级签这些都要走到；
- *     第一次要强制点一次；要有动画，不能光聚个光；设置里能重置，重置后再过一遍。」
+ *   「首页一点开就进入，最后介绍侧边栏；用户点了其他板块后，对每个板块
+ *     再分别导览一次，同样用聚光式的效果。」
  *
  * 做法：
- *   · 分两段独立记录 —— login（登录弹层内）、home（首页板块）。
- *     某一段目标元素缺失（例如安全验证被后台关掉）时自动跳过该步，不卡死。
- *   · 光洞从上一个元素平滑滑到下一个（340ms），高亮环呼吸，气泡延迟淡入。
- *   · 无「跳过」按钮；点击遮罩只抖动气泡提示。Esc 可退出，退出后下次从断点续播。
- *   · 不做老用户豁免：升级后所有设备第一次进入都会走一遍（站主要求「一视同仁」）。
+ *   · 每个场景独立记录完成状态（cls_tour_v1），互不影响。
+ *     login 登录弹层 / home 首页 / services 常用服务 / hwpop 作业弹窗 /
+ *     scores 成绩分析 / big 大屏模式 / settings 全站设置 / files 文件中转站。
+ *   · 目标元素缺失或高度为 0（板块被隐藏、内容为空）时自动跳过该步，
+ *     进度点同步收缩，不会出现「框了个空」或跳号。
+ *   · 光洞在上一个元素位置的基础上平滑滑动（340ms），高亮环呼吸，
+ *     气泡延迟淡入，底部进度点逐级点亮。
+ *   · 无「跳过」按钮；点遮罩只抖动气泡提示。Esc 可退出，下次从断点续播。
+ *   · 不做老用户豁免：升级后所有设备第一次进入都会走一遍（站主要求一视同仁）。
  *
- * 登记表：scripts/tour-map.json —— 导览步骤 / 教程章节 / 首页板块三者的 key 必须一致，
- *   由 scripts/predeploy.mjs 三向比对，缺一处就拦部署。
+ * 登记表：scripts/tour-map.json —— 导览步骤 / 教程条目 / 首页板块三者 key 必须一致，
+ *   由 scripts/predeploy.mjs 四向比对，缺一处就拦部署。
  * ========================================================================= */
 (function (window, document) {
   'use strict';
@@ -21,8 +25,9 @@
   var LS_KEY = 'cls_tour_v1';
 
   /* ---------- 步骤表 ----------
-     字段：t = topic key（与 tour-map.json、guide.html 对齐）；sel = 目标元素；
-           title / text = 气泡文案（书面表述，不带第二人称）。 */
+     字段：t = topic key（与 tour-map.json、guide.html 对齐）
+           sel / sels = 目标元素（sels 取第一个有尺寸的，兼容「手机悬浮球 / 桌面侧边栏」）
+           title / text = 气泡文案，书面表述，只描述同学能做的事。 */
   var STEPS = {
     login: [
       { t: 'login-user', sel: '#acctU', title: '用户名',
@@ -36,25 +41,79 @@
     ],
     home: [
       { t: 'island', sel: '#classIsland', title: '班级岛',
-        text: '今日课程、天气与当前周次；点击横幅展开完整课表。' },
+        text: '今日课程、当前周次与天气。点击横幅可展开完整课表。' },
       { t: 'board', sel: '#board', title: '班级公告',
-        text: '班级通知与活动集中发布于此；标题后的数字为未读条数。' },
-      { t: 'sign', sel: '#signBar', title: '签到',
-        text: '每日签到一次，连续签到天数显示于右侧。' },
-      { t: 'daily', sel: '#dailyNews', title: '今日班级签',
-        text: '每日一句班级签，与公告相互独立。' },
+        text: '通知与活动集中发布在此。标题后的数字为未读条数。' },
+      { t: 'sign', sel: '#signBar', title: '今日班级签',
+        text: '每天可抽一次签，点右侧按钮查看今日签文，次日 0 点刷新。' },
+      { t: 'daily', sel: '#dailyNews', title: '每日日报',
+        text: '汇总当天的班级动态与提醒，没有内容时不显示。' },
       { t: 'quote', sel: '#dailyQuoteBar', title: '每日一言',
-        text: '随机展示一句短语，点击可切换下一条。' },
+        text: '随机展示一句短语，点击可更换一条。' },
       { t: 'study', sel: '#studyCard', title: '学习卡片',
-        text: '自习计时与学习时长统计入口。' },
+        text: '自习计时与学习时长统计，未启用时不显示。' },
       { t: 'count', sel: '#countdown', title: '倒计时',
-        text: '重要考试倒计时；目标日期可在设置中修改。' },
-      { t: 'guide', sel: '#guideBtn', title: '大屏与使用教程',
-        text: '侧边栏可切换大屏模式，用于教室投影；本按钮打开使用教程。' }
+        text: '距重要考试的剩余天数，日期由管理员统一维护。' },
+      { t: 'more', sels: ['.fab', '#sidebar'], title: '侧边栏',
+        text: '点此展开侧边栏：常用服务、成绩分析、大屏模式、设置与使用教程都在里面。' }
+    ],
+    services: [
+      { t: 'svc-song', sel: '#tab-cat-1 [data-card="1"]', title: '点歌平台',
+        text: '在站外 VoiceHub 运行，账号为学号，初始密码为出生日期。' },
+      { t: 'svc-hw', sel: '#tab-cat-1 [data-card="2"]', title: '作业查看',
+        text: '作业在站内查看，不跳转其他网站。点卡片标题展开说明与按钮。' }
+    ],
+    hwpop: [
+      { t: 'hwpop-period', sels: ['#hwNormStrip', '#hwPickBar'], title: '期次与日期',
+        text: '上方下拉切换作业期次，下方日期条按月排列，带点的日期有作业。' },
+      { t: 'hwpop-list', sel: '#hwCurrentList', title: '作业清单',
+        text: '按科目分组，右侧显示该科目已完成的条数。' },
+      { t: 'hwpop-tools', sel: '#hwExpBtn', title: '勾选与导出',
+        text: '勾选条目即记录完成；「导出图片」可把整份作业存成一张长图。' }
+    ],
+    scores: [
+      { t: 'sc-note', sel: '.sc-notebar', title: '成绩来源',
+        text: '成绩由管理员手动录入，发现错误请联系管理员核对。' },
+      { t: 'sc-exam', sel: '#scBar', title: '选择考试',
+        text: '下拉切换考试场次，成绩单与排名随之更新。' },
+      { t: 'sc-pane', sel: '#scPaneBox', title: '成绩内容',
+        text: '登录后此处出现三个页签：全班成绩单按总分或单科排序，我的画像看本人强弱项，成绩对比可任选两人逐科比较。' }
+    ],
+    big: [
+      { t: 'big-nav', sel: '#sidebar', title: '顶部导航',
+        text: '大屏模式下侧边栏变为顶部导航条，每个按钮对应一个板块。' },
+      { t: 'big-tiles', sel: '#bigGroups', title: '功能分组',
+        text: '功能按板块分组排列，磁贴即为入口。' },
+      { t: 'big-tile', sel: '#bigGroups .big-tile', title: '进入功能',
+        text: '点击磁贴进入对应功能；作业看板仅管理员可打开。' }
+    ],
+    settings: [
+      { t: 'set-tabs', sel: '#uiSetMask .ui-tabs', title: '六个页签',
+        text: '外观、排序、动效、大屏、数据、帮助，点击切换。' },
+      { t: 'set-look', sel: '#uiSetMask .ui-tab[data-sec="look"]', title: '外观',
+        text: '深浅色、背景与字号等显示设置。' },
+      { t: 'set-order', sel: '#uiSetMask .ui-tab[data-sec="order"]', title: '排序',
+        text: '调整首页板块的先后顺序，也可以隐藏暂时不用的板块。' },
+      { t: 'set-big', sel: '#uiSetMask .ui-tab[data-sec="big"]', title: '大屏',
+        text: '大屏右栏宽度、顶栏留白与卡片开关，仅保存在本机。' },
+      { t: 'set-data', sel: '#uiSetMask .ui-tab[data-sec="data"]', title: '数据',
+        text: '导出、导入本机设置；「恢复默认」会清空自定义内容。' },
+      { t: 'set-help', sel: '#uiSetMask .ui-tab[data-sec="help"]', title: '帮助',
+        text: '重看新手导览、重置导览记录、打开使用教程。' }
+    ],
+    files: [
+      { t: 'files-tabs', sel: '#flMask [data-fltab="up"]', title: '四种用途',
+        text: '发文件、发文本、取件、历史，按需切换。' },
+      { t: 'files-drop', sel: '#flDrop', title: '上传',
+        text: '点击或拖入文件上传，单个不超过 24MB，最多保存 15 天。' },
+      { t: 'files-act', sel: '#flMask [data-fltab="get"]', title: '取件',
+        text: '同学发来的文件在这里取：输入 6 位取件码即可下载。上传成功后同样会生成取件码，复制后发给对方。' }
     ]
   };
 
-  /* ---------- 状态：{ login:{done:1} | {at:2}, home:… } ---------- */
+  var SCENES = ['login', 'home', 'services', 'hwpop', 'scores', 'big', 'settings', 'files'];
+
+  /* ---------- 状态：{ home:{done:1} | {at:2} } ---------- */
   function readState() {
     try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; } catch (e) { return {}; }
   }
@@ -122,29 +181,47 @@
     document.head.appendChild(st);
   }
 
-  var run = null;   /* { scene, steps, i, hole, tip, arrow, dots, hit, dotsEl } */
+  var run = null;
   var rafId = 0, followUntil = 0;
 
   function reduced() {
     try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
   }
 
-  /* 目标元素是否真的可见（有尺寸且不在视口外太多） */
-  function visible(el) {
-    if (!el) return false;
-    var r = el.getBoundingClientRect();
-    if (r.width < 4 || r.height < 4) return false;
-    var vh = window.innerHeight, vw = window.innerWidth;
-    if (r.bottom < -40 || r.top > vh + 40) return false;
-    if (r.right < -40 || r.left > vw + 40) return false;
-    return true;
+  function selList(s) { return s.sels || [s.sel]; }
+
+  function hasAny(s) {
+    var l = selList(s);
+    for (var i = 0; i < l.length; i++) { if (document.querySelector(l[i])) return true; }
+    return false;
   }
 
-  /* 只过滤「DOM 里根本没有」的步骤。
-     高度为 0 的（公告为空、一言还没渲染完）留到执行时再判断 —— 见 show()。 */
+  /* 取第一个「存在且有尺寸」的目标 —— 手机取悬浮球、桌面取侧边栏 */
+  function pickEl(s) {
+    var l = selList(s);
+    for (var i = 0; i < l.length; i++) {
+      var el = document.querySelector(l[i]);
+      if (!el) continue;
+      var r = el.getBoundingClientRect();
+      if (r.width >= 8 && r.height >= 8) return el;
+    }
+    return null;
+  }
+
+  /* 元素在、但既没有文字也没有图 → 空壳（例如未登录时的成绩页签栏），
+     不计入步数，否则进度点会从「2 / 4」跳到「3 / 3」。 */
+  function hollow(s) {
+    var el = pickEl(s);
+    if (!el) return false;                 /* 没有尺寸：留给 show() 重试或跳过 */
+    if (el.querySelector('img,svg,canvas,input,select,textarea')) return false;
+    return !String(el.textContent || '').replace(/\s+/g, '');
+  }
+
+  /* 只保留 DOM 里存在的步骤（完全没有这个元素的场景直接跳过） */
   function liveSteps(scene) {
     return (STEPS[scene] || []).filter(function (s) {
-      return !!document.querySelector(s.sel);
+      if (!hasAny(s)) return true;
+      return !hollow(s);
     });
   }
 
@@ -188,7 +265,7 @@
 
   function place() {
     if (!run) return;
-    var el = document.querySelector(run.steps[run.i].sel);
+    var el = pickEl(run.steps[run.i]);
     if (!el) return;
     var r = el.getBoundingClientRect();
     var pad = 6;
@@ -201,7 +278,6 @@
     run.hole.style.width = w + 'px';
     run.hole.style.height = h + 'px';
 
-    /* 气泡：优先放元素下方，放不下改上方，再不行贴视口底部 */
     var tip = run.tip;
     tip.style.visibility = 'hidden';
     tip.style.left = '0px';
@@ -219,7 +295,6 @@
     tip.style.top = ty + 'px';
     tip.style.visibility = 'visible';
 
-    /* 箭头 */
     var arrow = run.arrow;
     if (!arrow) {
       arrow = document.createElement('div');
@@ -232,7 +307,6 @@
     arrow.style[arrowSide] = '-6px';
     arrow.style[arrowSide === 'top' ? 'bottom' : 'top'] = 'auto';
 
-    /* 进度点 */
     if (run.dotsEl) {
       run.dotsEl.style.bottom = 'max(18px, env(safe-area-inset-bottom))';
     }
@@ -251,26 +325,18 @@
 
   function show(i, retry) {
     if (!run) return;
-    /* 目标不存在、或这一刻高度为 0（公告为空、学习卡还没渲染完）→ 先等 650ms 再看一次，
-       仍然为 0 才跳到下一步，绝不停在一个 12×12 的空洞上。全部跳完就当作完成。 */
     if (i >= run.steps.length) { finish('done'); return; }
     var s = run.steps[i];
-    var el = document.querySelector(s.sel);
+
+    var el = pickEl(s);
     if (!el) {
-      /* 元素被板块管理隐藏 / 未渲染 → 同上，从步数里去掉 */
-      run.steps.splice(i, 1);
-      if (i >= run.steps.length) { finish('done'); return; }
-      return show(i);
-    }
-    var rr0 = el.getBoundingClientRect();
-    if (rr0.width < 8 || rr0.height < 8) {
-      if (!retry) {
+      if (hasAny(s) && !retry) {
+        /* 元素在，但此刻高度为 0（面板还在动画、内容未渲染）→ 等 650ms 再看一次 */
         var my = ++run.tick;
         setTimeout(function () { if (run && run.tick === my) show(i, 1); }, 650);
         return;
       }
-      /* 仍然是空壳（例如学习卡片没配置内容）→ 直接从这一步列表里去掉，
-         进度点跟着变少；否则用户会看到「5 / 8」下一跳「7 / 8」，以为漏了一步。 */
+      /* 确实没有这个东西（板块被隐藏、内容为空）→ 从步数里去掉，进度点同步收缩 */
       run.steps.splice(i, 1);
       if (i >= run.steps.length) { finish('done'); return; }
       return show(i);
@@ -279,6 +345,7 @@
     run.i = i;
 
     try {
+      var rr0 = el.getBoundingClientRect();
       if (rr0.top < 40 || rr0.bottom > window.innerHeight - 40) {
         el.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' });
       }
@@ -310,10 +377,8 @@
     };
     acts.appendChild(nb);
 
-    /* 内容重建后箭头节点没了，重置引用 */
     run.arrow = null;
 
-    /* 进度点 */
     var dots = run.dotsEl;
     dots.innerHTML = '';
     run.steps.forEach(function (_, k) {
@@ -327,7 +392,6 @@
     place();
     setTimeout(function () { if (run) run.tip.classList.add('in'); }, reduced() ? 0 : 130);
 
-    /* 记录断点（未完成前） */
     var st = readState();
     st[run.scene] = { at: i };
     writeState(st);
@@ -339,23 +403,18 @@
     if (!run) return;
     var scene = run.scene;
     var st = readState();
-    if (reason === 'done') {
-      st[scene] = { done: 1 };
-      writeState(st);
-    } else {
-      /* 中途退出：保留断点，下次从当前步继续 */
-      st[scene] = { at: run.i };
-      writeState(st);
-    }
+    if (reason === 'done') st[scene] = { done: 1 };
+    else st[scene] = { at: run.i };
+    writeState(st);
     destroy();
   }
 
-  /* 有别的弹窗压着时不启动，等它关掉。
-     ⚠️ 登录弹层（#acctMask）和设置面板（#uiSetMask）本身也是 .allboard-mask，
-     而导览正是要在它们**里面**工作 —— 必须排除，否则登录导览永远等不到「无遮挡」。 */
+  /* 有别的弹窗压着时不启动。
+     ⚠️ 导览本身就要在弹层**里面**工作：登录 (#acctMask)、设置 (#uiSetMask)、
+     作业 (#hwCurrentMask)、文件 (#flMask) 都必须排除，否则永远等不到「无遮挡」。 */
   function blocked() {
     var sels = ['.welcome-mask.show', '#hwPop.show', '.hwpop.show', '#loginGuideMask.show',
-      '.allboard-mask.show:not(#acctMask):not(#uiSetMask)'];
+      '.allboard-mask.show:not(#acctMask):not(#uiSetMask):not(#hwCurrentMask):not(#flMask):not(#dataMask)'];
     for (var i = 0; i < sels.length; i++) {
       var el = document.querySelector(sels[i]);
       if (el) {
@@ -370,21 +429,19 @@
     if (run) return false;
     if (!STEPS[scene]) return false;
     if (!force && sceneDone(scene)) return false;
-    /* 大屏模式一律不自动弹（教室电脑每次重启都弹会打断使用）。
-       放在 start 里而不是只放在调用方：big.js 是 defer 里排在 app.min.js 之后的那一份，
-       app.js 顶层启动时 BIG 还不存在，只能延后再判 —— 这里再从入口兜一次底。 */
+    /* 大屏模式不自动弹首页导览（教室电脑每次重启都弹会打断使用）。
+       放在 start 里而不是只放调用方：big.js 排在 app.min.js 之后，
+       app.js 顶层启动时 BIG 还不存在，只能延后再判。 */
     if (!force && scene === 'home' && window.BIG && window.BIG.on) return false;
 
     var steps = liveSteps(scene);
     if (!steps.length) return false;
 
-    /* 断点续播：拿到过滤后的真实起点 */
     var at = sceneAt(scene);
     if (at >= steps.length) at = 0;
     if (force) at = 0;
 
     var dom = build();
-    dom.hit.style.display = 'block';
     run = {
       scene: scene, steps: steps, i: at, tick: 0,
       hit: dom.hit, hole: dom.hole, tip: dom.tip, dotsEl: dom.dotsEl, arrow: null
@@ -393,9 +450,7 @@
     return true;
   }
 
-  /* 延后启动：等到没有遮挡为止。
-     ⚠️ v4.12.0 线上实测：首次访问会先弹「欢迎来到5班服务站」，很多人会读一会
-     再关。原来上限 8 次（12 秒）太短，读完再关就再也不弹了 —— 放宽到 24 次（36 秒）。 */
+  /* 等没遮挡了再启动；最多等 36 秒（有人会把欢迎弹窗读完才关） */
   function startWhenFree(scene, tries) {
     tries = tries || 0;
     if (run) return;
@@ -406,23 +461,34 @@
     start(scene);
   }
 
+  /* 进入某个界面后调用：延时一小会儿（等布局稳定）再试 */
+  function maybe(scene, delay) {
+    if (sceneDone(scene)) return;
+    setTimeout(function () {
+      try { startWhenFree(scene); } catch (e) {}
+    }, delay == null ? 700 : delay);
+  }
+
   function reset() {
     try { localStorage.removeItem(LS_KEY); } catch (e) {}
   }
 
   function status() {
     var s = readState();
-    var out = { home: 0, login: 0, all: true };
-    ['login', 'home'].forEach(function (k) {
-      if (s[k] && s[k].done) out[k] = -1;
-      else if (s[k] && typeof s[k].at === 'number') out[k] = s[k].at + 1;
-      else out[k] = 0;
-      if (out[k] !== -1) out.all = false;
+    var out = { list: [], all: true, done: 0, total: SCENES.length };
+    SCENES.forEach(function (k) {
+      var row = s[k] || {};
+      var st = row.done ? 2 : (typeof row.at === 'number' ? 1 : 0);
+      out.list.push({ scene: k, state: st, at: row.at || 0 });
+      if (st === 2) out.done++;
+      else out.all = false;
     });
+    /* 兼容旧字段 */
+    out.home = (s.home && s.home.done) ? -1 : (s.home && typeof s.home.at === 'number' ? s.home.at + 1 : 0);
+    out.login = (s.login && s.login.done) ? -1 : (s.login && typeof s.login.at === 'number' ? s.login.at + 1 : 0);
     return out;
   }
 
-  /* Esc 退出（保留断点） */
   document.addEventListener('keydown', function (e) {
     if (!run) return;
     if (e.key === 'Escape') { e.preventDefault(); finish('escape'); }
@@ -435,8 +501,10 @@
   window.addEventListener('scroll', function () { if (run) place(); }, { passive: true });
 
   window.TOUR = {
+    scenes: SCENES,
     start: start,
     startWhenFree: startWhenFree,
+    maybe: maybe,
     reset: reset,
     status: status,
     finish: function (r) { finish(r || 'escape'); },

@@ -526,13 +526,14 @@ if (hitStale.length) {
 }
 console.log('③i README 已同步到 ' + VER + '（当前版本 / 更新日志首条 / 功能关键词 / 无过时表述）');
 
-/* ---------- ③j 教程 / 导览 / 首页板块 三方一致（v4.12.0）----------
-   站主原话（2026-11-11）：「后续我可能会加一些新内容，新内容也需要同时去适配，
+/* ---------- ③j 教程 / 导览 / 板块 四向一致（v4.13.0）----------
+   站主原话：「后续我可能会加一些新内容，新内容也需要同时去适配，
    所以这个也要加门禁 —— 以后如果添加了新内容，这两个地方要一起改。」
 
    四个来源必须给出同一份 key 集合，任何一处缺了就拦：
      · index.html 的 data-topic     —— 首页真实存在的板块（导览走到的对象）
-     · tour.js  的 t: '…'           —— 导览步骤（含登录段）
+     · tour.js  的 t: '…'           —— 导览步骤（八个场景：登录 / 首页 / 常用服务 /
+                                        作业弹窗 / 成绩分析 / 大屏 / 设置 / 文件中转站）
      · guide.html 的 data-topic     —— 教程里对应的说明条目
      · scripts/tour-map.json        —— 唯一登记表（人写的那份）
 
@@ -541,29 +542,45 @@ console.log('③i README 已同步到 ' + VER + '（当前版本 / 更新日志�
   const mapPath = path.join(ROOT, 'scripts', 'tour-map.json');
   if (!fs.existsSync(mapPath)) {
     die('缺少 scripts/tour-map.json —— 它是导览与教程的唯一登记表。'
-      + '\n   新增板块时要在这里登记，门禁靠它做三向比对。');
+      + '\n   新增板块时要在这里登记，门禁靠它做四向比对。');
   }
   let tmap = null;
   try { tmap = JSON.parse(fs.readFileSync(mapPath, 'utf8')); }
   catch (e) { die('scripts/tour-map.json 不是合法 JSON：' + (e.message || e)); }
 
   const scenes = (tmap && tmap.scenes) || {};
+  const sceneKeys = Object.keys(scenes);
   const flat = [];
-  Object.keys(scenes).forEach((k) => (scenes[k].steps || []).forEach((s) => flat.push(s)));
+  sceneKeys.forEach((k) => (scenes[k].steps || []).forEach((s) => flat.push(s)));
   const mapKeys = [...new Set(flat)];
 
   const topicsOf = (html) => [...new Set([...String(html).matchAll(/data-topic="([^"]+)"/g)].map((m) => m[1]))];
   const idxTopics = topicsOf(idx);
   const guidePath = path.join(ROOT, 'guide.html');
-  const guideTopics = fs.existsSync(guidePath) ? topicsOf(fs.readFileSync(guidePath, 'utf8')) : [];
+  if (!fs.existsSync(guidePath)) die('缺少 guide.html —— 使用教程页不在，侧边栏入口会 404。');
+  const guideHtml = fs.readFileSync(guidePath, 'utf8');
+  const guideTopics = topicsOf(guideHtml);
+
   const tourPath = path.join(ROOT, 'tour.js');
   if (!fs.existsSync(tourPath)) {
-    die('缺少 tour.js —— 首页导览脚本不在，站点的首次引导会整段失效。');
+    die('缺少 tour.js —— 新手导览脚本不在，站点的首次引导会整段失效。');
   }
   const tourSrc = read('tour.js');
-  const tourPairs = [...tourSrc.matchAll(/\{\s*t:\s*'([^']+)',\s*sel:\s*'#([^']+)'/g)]
-    .map((m) => ({ t: m[1], sel: m[2] }));
-  const tourKeys = [...new Set(tourPairs.map((p) => p.t))];
+  /* 步骤对象内没有嵌套花括号，逐条取 t 与目标选择器（sel 或 sels） */
+  const tourSteps = [];
+  {
+    const re = /\{\s*t:\s*'([^']+)'([^{}]*)\}/g;
+    let m;
+    while ((m = re.exec(tourSrc))) {
+      const body = m[2];
+      const sel = (body.match(/sel:\s*'([^']+)'/) || [])[1];
+      const selsRaw = (body.match(/sels:\s*\[([^\]]*)\]/) || [])[1];
+      const sels = sel ? [sel]
+        : (selsRaw ? [...selsRaw.matchAll(/'([^']+)'/g)].map((x) => x[1]) : []);
+      tourSteps.push({ t: m[1], sels });
+    }
+  }
+  const tourKeys = [...new Set(tourSteps.map((p) => p.t))];
 
   if (!mapKeys.length) {
     die('scripts/tour-map.json 里没有任何步骤登记（scenes 下的 steps 全为空）。');
@@ -571,7 +588,7 @@ console.log('③i README 已同步到 ' + VER + '（当前版本 / 更新日志�
 
   const diff = (a, b) => a.filter((x) => b.indexOf(x) < 0);
 
-  /* ① 首页场景 == index.html 的板块 */
+  /* ① 首页场景 == index.html 的 data-topic */
   const homeSteps = ((scenes.home && scenes.home.steps) || []);
   const missInIdx = diff(homeSteps, idxTopics);
   const extraInIdx = diff(idxTopics, homeSteps);
@@ -603,17 +620,35 @@ console.log('③i README 已同步到 ' + VER + '（当前版本 / 更新日志�
       + '\n\n   guide.html 里给条目加 data-topic="板块key"，教程与导览必须同时覆盖。');
   }
 
-  /* ④ 首页那一段的锚点必须真的存在（id 写错时导览会定位到左上角） */
+  /* ④ 首页那一段的目标必须在 index.html 里真实存在（写错时导览会定位到左上角） */
+  const selExists = (html, sel) => {
+    const m = String(sel).match(/^([#.])([A-Za-z0-9_-]+)/);
+    if (!m) return true;                       /* 复杂选择器（后代 / 属性）不在这里验 */
+    return m[1] === '#'
+      ? html.indexOf('id="' + m[2] + '"') >= 0
+      : html.indexOf('class="' + m[2]) >= 0;
+  };
   const badSel = [];
-  tourPairs.filter((p) => homeSteps.indexOf(p.t) >= 0).forEach((p) => {
-    if (idx.indexOf('id="' + p.sel + '"') < 0) badSel.push(p.t + ' → #' + p.sel);
+  tourSteps.filter((p) => homeSteps.indexOf(p.t) >= 0).forEach((p) => {
+    if (!p.sels.length) { badSel.push(p.t + ' → 没写目标'); return; }
+    /* 一组 sels 里至少有「一个」能在首页找到就算通过（手机悬浮球 / 桌面侧边栏二选一） */
+    if (!p.sels.some((x) => selExists(idx, x))) badSel.push(p.t + ' → ' + p.sels.join(' / '));
   });
   if (badSel.length) {
     die('tour.js 里的锚点在 index.html 找不到：\n   ' + badSel.join('\n   ')
       + '\n   元素被改名或删掉后，导览会定位到屏幕左上角。');
   }
 
-  /* ⑤ 两个新文件必须进 Service Worker 预缓存（断网时打不开 = 白装） */
+  /* ⑤ 教程里的截图必须真实存在（图文教程最怕图挂了，页面只剩空框） */
+  const imgs = [...guideHtml.matchAll(/<img[^>]+src="([^"]+)"/g)]
+    .map((m) => m[1]).filter((x) => !/^(https?:|data:)/.test(x));
+  const missImg = imgs.filter((src) => !fs.existsSync(path.join(ROOT, src.replace(/^\.\//, ''))));
+  if (missImg.length) {
+    die('guide.html 引用的截图不存在：\n   ' + missImg.join('\n   ')
+      + '\n   重新运行截图脚本生成到 img/guide/ 后再发布。');
+  }
+
+  /* ⑥ 两个文件必须进 Service Worker 预缓存（断网时打不开 = 白装） */
   if (!/['"]\.\/tour\.js['"]/.test(sw)) {
     die('sw.js 的 PRECACHE 里没有 ./tour.js —— 离线设备首次进入时导览会静默失效。');
   }
@@ -621,8 +656,17 @@ console.log('③i README 已同步到 ' + VER + '（当前版本 / 更新日志�
     die('sw.js 的 PRECACHE 里没有 ./guide.html —— 断网时教程页打不开。');
   }
 
-  console.log('③j 教程 / 导览 / 板块一致：' + mapKeys.length + ' 个条目'
-    + '（首页 ' + homeSteps.length + ' 步，登录 ' + ((scenes.login && scenes.login.steps.length) || 0) + ' 步）');
+  /* ⑦ 截图必须进 Pages 发布清单（否则线上 404，本地却正常） */
+  const wf = fs.existsSync(path.join(ROOT, '.github', 'workflows', 'deploy-pages.yml'))
+    ? read('.github/workflows/deploy-pages.yml') : '';
+  if (wf && !/img\/guide/.test(wf)) {
+    die('GitHub Pages 发布清单里没有 img/guide —— 教程里的截图线上会 404。'
+      + '\n   在 .github/workflows/deploy-pages.yml 的 SOURCE_FILES 里补上 img/guide/。');
+  }
+
+  console.log('③j 教程 / 导览 / 板块一致：' + mapKeys.length + ' 个条目 / '
+    + sceneKeys.length + ' 个场景（' + sceneKeys.map((k) => (scenes[k].steps || []).length).join('+')
+    + ' 步），截图 ' + imgs.length + ' 张');
 }
 
 /* ---------- ④ 部署前备份 ---------- */

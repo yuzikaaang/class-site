@@ -107,10 +107,20 @@ li{margin:3px 0}
 }
 .tip b{color:var(--brand)}
 
-/* 首页板块条目 */
+/* 截图 */
+figure{margin:14px 0 18px;text-align:center}
+figure img{
+  width:100%;max-width:430px;display:block;margin:0 auto;border-radius:12px;
+  border:1px solid var(--line);background:var(--bg-2);cursor:zoom-in;
+}
+/* 大屏截图横向铺开，不按手机宽度限制 */
+figure img.wide{max-width:100%;border-radius:10px}
+figcaption{font-size:.72rem;color:var(--fg-3);margin-top:7px;text-align:center;line-height:1.6}
+
+/* 条目 */
 .item{border-top:1px solid var(--line);padding:14px 0 4px}
 .item:first-of-type{border-top:none}
-.item h3{margin:0 0 4px;font-size:.88rem;display:flex;align-items:center;gap:8px}
+.item h3{margin:0 0 4px;font-size:.88rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .item h3 .tag{
   font-size:.64rem;font-weight:800;letter-spacing:.04em;color:var(--brand);
   background:color-mix(in srgb,var(--brand-2) 14%,transparent);
@@ -135,6 +145,14 @@ li{margin:3px 0}
 .foot a.btn{background:linear-gradient(135deg,var(--brand-2),var(--brand));color:#fff}
 .foot a.btn:hover{text-decoration:none}
 
+/* 看大图 */
+.lb{position:fixed;inset:0;z-index:60;background:rgba(12,8,5,.9);display:none;
+  align-items:center;justify-content:center;padding:18px}
+.lb.show{display:flex}
+.lb img{max-width:100%;max-height:100%;border-radius:10px}
+.lb button{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;
+  border:none;background:rgba(255,255,255,.18);color:#fff;font-size:1.1rem;cursor:pointer}
+
 /* 手机 */
 @media (max-width:760px){
   .wrap{grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 12px 56px}
@@ -146,6 +164,7 @@ li{margin:3px 0}
     overflow:hidden;text-overflow:ellipsis}
   section.card{padding:16px 15px;border-radius:15px}
   .kv{grid-template-columns:64px minmax(0,1fr);font-size:.8rem}
+  figure img{border-radius:10px;max-width:100%}
 }
 </style>
 </head>
@@ -161,319 +180,507 @@ li{margin:3px 0}
   <nav class="toc" id="toc">
     <h2>目录</h2>
     <a href="#c1">1 · 一分钟上手</a>
-    <a href="#c2">2 · 首页八个区块</a>
-    <a href="#c3">3 · 大屏模式</a>
-    <a href="#c4">4 · 全屏时钟</a>
-    <a href="#c5">5 · 账号与资料</a>
-    <a href="#c6">6 · 设置面板</a>
-    <a href="#c7">7 · 常见问题</a>
+    <a href="#c2">2 · 首页</a>
+    <a href="#c3">3 · 常用服务</a>
+    <a href="#c4">4 · 作业查看</a>
+    <a href="#c5">5 · 成绩分析</a>
+    <a href="#c6">6 · 大屏模式</a>
+    <a href="#c7">7 · 全屏时钟</a>
+    <a href="#c8">8 · 侧边栏与设置</a>
+    <a href="#c9">9 · 文件中转站</a>
+    <a href="#c10">10 · 登录与账号</a>
+    <a href="#c11">11 · 常见问题</a>
   </nav>
 
   <main id="main">
 
     <div class="search">
-      <input id="q" type="search" placeholder="搜索功能，例如：作业、大屏、签到、点歌" autocomplete="off">
+      <input id="q" type="search" placeholder="搜索功能，例如：作业、大屏、点歌、设置" autocomplete="off">
       <p class="hint" id="qhint">输入关键词筛选，清空后显示全部。</p>
     </div>
 
     <div class="empty" id="empty">没有匹配的条目，可换一个关键词。</div>
 
     <!-- 1 -->
-    <section class="card" id="c1" data-search>
+    <section class="card" id="c1">
       <h2><span class="no">1</span>一分钟上手</h2>
-      <p class="lead">站点是网页应用，手机与电脑均可打开，加入桌面后近似独立应用。</p>
+      <p class="lead">站点是网页应用，手机与电脑均可打开，添加到桌面后近似独立应用。</p>
 
       <h3>打开方式</h3>
       <ul>
-        <li>浏览器输入站点地址，或在班群通过二维码进入。</li>
-        <li>手机浏览器菜单选择「添加到主屏幕」，下次从桌面图标直接打开。</li>
-        <li>微信内可直接打开，但定位、离线缓存等功能在系统浏览器中更完整。</li>
+        <li>浏览器输入站点地址，或在班群扫描二维码进入。</li>
+        <li>手机浏览器菜单中选择「添加到主屏幕」，下次从桌面图标直接打开。</li>
+        <li>微信内可直接打开；离线缓存、文件上传等功能在系统浏览器中更稳定。</li>
       </ul>
 
+      <h3>页面结构</h3>
+      <p>页面分三部分：顶部为站点标题与深浅色按钮，左侧为功能侧边栏，中间为内容区。手机上点左上角圆形按钮展开侧边栏。</p>
+      <figure>
+        <img src="./img/guide/sidebar.jpg" alt="侧边栏" loading="lazy">
+        <figcaption>侧边栏：顶部为首页与三个显示开关，中间是六个板块，底部为文件中转站、音效、使用教程与全站设置。</figcaption>
+      </figure>
+
       <h3>首次进入会发生什么</h3>
-      <p>系统会显示一段新手导览，按屏幕提示点击「下一步」即可。导览覆盖首页每个区块的位置与用途，走完后不再自动出现。若中途退出，下次从上次停下的那一步继续。</p>
-      <div class="tip"><b>提示</b>：导览结束后仍可随时查看。顶部书签按钮打开本教程，或在「全站设置 → 帮助」中重新播放。</div>
+      <p>系统会显示一段新手导览，用一个高亮光圈依次指出每个区块的位置，按「下一步」走完即可。导览分两轮：首页一轮，之后每进入一个板块，该板块第一次打开时各有一轮。</p>
+      <div class="tip"><b>提示</b>：中途退出不要紧，下次会从停下的那一步继续。想重看，到「全站设置 → 帮助」点「重看新手导览」。</div>
 
       <h3>登录与否的区别</h3>
       <div class="kv">
-        <dt>未登录</dt><dd>全部功能可正常使用，设置与记录只保存在当前设备。</dd>
-        <dt>已登录</dt><dd>作业勾选、点歌记录、个人资料同步至云端，更换设备无需重新设置。</dd>
+        <dt>未登录</dt><dd>首页、公告、点歌、作业查看、大屏、时钟均可使用，设置与记录只保存在当前设备。</dd>
+        <dt>已登录</dt><dd>作业勾选、点歌记录与个人资料同步到云端，换设备无需重新设置；成绩分析需要登录后才能查看。</dd>
       </div>
-
-      <h3>页面结构</h3>
-      <p>页面由三部分组成：顶部为站点标题与深色模式按钮，左侧为功能侧边栏（手机上点击左上角图标展开），中间为首页内容区。功能入口大多在侧边栏中。</p>
     </section>
 
     <!-- 2 -->
-    <section class="card" id="c2" data-search>
-      <h2><span class="no">2</span>首页八个区块</h2>
-      <p class="lead">首页从上到下固定为八个区块，顺序可在「全站设置 → 排序」中调整。</p>
-      <div class="tip"><b>说明</b>：以下区块均可在「全站设置 → 排序」中隐藏。未启用的区块不显示，首页会直接跳过，新手导览同样跳过该步。</div>
+    <section class="card" id="c2">
+      <h2><span class="no">2</span>首页</h2>
+      <p class="lead">从上到下为班级岛、班级公告、今日班级签、每日日报、每日一言、学习卡片、倒计时，最后是侧边栏入口。</p>
+      <div class="tip"><b>说明</b>：顺序可在「全站设置 → 排序」中调整，也可以隐藏暂时不用的区块。未启用或不显示内容的区块，首页与新手导览都会自动跳过。</div>
+
+      <figure>
+        <img src="./img/guide/home-top.jpg" alt="首页上半部分" loading="lazy">
+        <figcaption>首页上半部分：班级岛横幅与班级公告。</figcaption>
+      </figure>
 
       <div class="item" data-topic="island">
-        <h3>班级岛 <span class="tag">首页第一屏</span></h3>
+        <h3>班级岛 <span class="tag">第一屏</span></h3>
         <p class="where">位置：页面最上方横幅</p>
-        <p>显示当前时间、日期、当日课程、天气与当前教学周。点击横幅可展开完整课表，再点一次收起。</p>
-        <p>周次按开学日所在周的周一起算，与教室张贴的周次一致。</p>
+        <p>显示当日课程、当前教学周与天气。点击横幅展开完整课表，再点一次收起。</p>
+        <p>周次按开学日所在周的周一起算，与教室张贴的周次一致。左侧出现「今晚有课」之类的标签时，表示当天有额外安排。</p>
       </div>
 
       <div class="item" data-topic="board">
-        <h3>班级公告 <span class="tag">首页第二块</span></h3>
+        <h3>班级公告 <span class="tag">第二块</span></h3>
         <p class="where">位置：班级岛下方</p>
-        <p>班级通知、活动安排、临时调整集中发布于此。标题展开后显示全文，标题右侧的数字表示未读条数。</p>
-        <p>重要公告会置顶；公告可在右上角切换「全部 / 未读」。</p>
+        <p>班级通知、活动安排与临时调整集中发布于此。标题右侧的数字为未读条数，展开该条即视为已读。</p>
+        <p>重要公告置顶显示；分类标签分为「重要更新」与「班级事务」两类，可按标签筛选。</p>
       </div>
 
       <div class="item" data-topic="sign">
-        <h3>签到 <span class="tag">首页第三块</span></h3>
-        <p class="where">位置：公告下方细条</p>
-        <p>每日签到一次，右侧显示连续签到天数与累计天数。断签后连续天数重新计算。</p>
+        <h3>今日班级签 <span class="tag">第三块</span></h3>
+        <p class="where">位置：公告下方卡片</p>
+        <p>每天可抽一次签，点右侧「抽一签」查看今日签文。签文分吉签、凡签、平签三类，纯属娱乐。</p>
+        <p>抽过之后按钮变为「看今日签」，次日 0 点刷新，可以重新抽。</p>
       </div>
 
       <div class="item" data-topic="daily">
-        <h3>今日班级签 <span class="tag">首页第四块</span></h3>
-        <p class="where">位置：签到下方</p>
-        <p>每天自动更换一句班级签，与公告互相独立，不承载通知内容。点击可查看历史。</p>
+        <h3>每日日报 <span class="tag">第四块</span></h3>
+        <p class="where">位置：班级签下方</p>
+        <p>每天一条的班级日报入口，内容由管理员在后台维护。未配置内容时该区块不显示，首页会直接跳过。</p>
       </div>
 
       <div class="item" data-topic="quote">
-        <h3>每日一言 <span class="tag">首页第五块</span></h3>
-        <p class="where">位置：班级签下方</p>
-        <p>随机展示一句短语，点击可切换下一条。来源可在「全站设置 → 外观」中调整。</p>
+        <h3>每日一言 <span class="tag">第五块</span></h3>
+        <p class="where">位置：每日日报下方</p>
+        <p>随机展示一句短语，每天自动更换。点整条卡片可换一句，点「类型」可以只保留想看的几类内容。</p>
       </div>
 
       <div class="item" data-topic="study">
-        <h3>学习卡片 <span class="tag">首页第六块</span></h3>
+        <h3>学习卡片 <span class="tag">第六块</span></h3>
         <p class="where">位置：每日一言下方</p>
-        <p>自习计时与学习时长统计入口，记录每次自习的起止时间与累计时长。</p>
+        <p>自习计时与学习时长统计的入口，记录每次自习的起止时间与累计时长。当前版本暂未启用，因此首页不显示这一块。</p>
       </div>
 
       <div class="item" data-topic="count">
-        <h3>倒计时 <span class="tag">首页第七块</span></h3>
+        <h3>倒计时 <span class="tag">第七块</span></h3>
         <p class="where">位置：学习卡片下方</p>
-        <p>显示距离重要考试的剩余天数。目标日期在「全站设置」中修改，修改后立即生效。</p>
+        <p>显示距离重要考试与节日的剩余天数，例如「元旦 51 天」。目标日期由管理员在后台维护，同学看到的是统一结果，无法自行修改。</p>
       </div>
 
-      <div class="item" data-topic="guide">
-        <h3>大屏与使用教程 <span class="tag">首页常驻入口</span></h3>
-        <p class="where">位置：左上角书签按钮 / 侧边栏「使用教程」</p>
-        <p>书签按钮打开本教程。侧边栏可切换大屏模式、横屏显示与轻量模式，三个开关位于侧边栏第一屏。</p>
-        <p>大屏模式用于教室投影，一屏显示全部功能；轻量模式关闭模糊与动效，低配设备更流畅。</p>
+      <figure>
+        <img src="./img/guide/home-mid.jpg" alt="首页下半部分" loading="lazy">
+        <figcaption>首页下半部分：今日班级签与考试、节日倒计时。</figcaption>
+      </figure>
+
+      <div class="item" data-topic="more">
+        <h3>侧边栏 <span class="tag">首页收尾</span></h3>
+        <p class="where">位置：手机左上角圆形按钮；电脑为左侧常驻栏</p>
+        <p>点此展开侧边栏。常用服务、成绩分析、班级事务、其他工具、大屏服务五个板块，以及大屏、横屏、轻量三个显示开关，都在里面。</p>
+        <p>首页导览走到这一步即结束；此后进入某个板块时，会再单独讲一遍该板块。</p>
       </div>
     </section>
 
     <!-- 3 -->
-    <section class="card" id="c3" data-search>
-      <h2><span class="no">3</span>大屏模式</h2>
-      <p class="lead">面向教室电脑与投影，把常用功能铺满一屏。</p>
+    <section class="card" id="c3">
+      <h2><span class="no">3</span>常用服务</h2>
+      <p class="lead">在侧边栏点「常用服务」进入。卡片默认收起，只显示标题；点标题展开说明与按钮。</p>
 
-      <h3>进入与退出</h3>
-      <p>侧边栏第一行点击「大屏：关」，按钮变为「大屏：开」即进入；再点击一次退出。进入后顶栏变为横向导航条。</p>
+      <figure>
+        <img src="./img/guide/services.jpg" alt="常用服务" loading="lazy">
+        <figcaption>常用服务：两张卡片，点标题右侧箭头展开。</figcaption>
+      </figure>
 
-      <h3>九宫格首页</h3>
-      <p>进入大屏后首页换成图标墙，全部功能按板块排列，点击任一图标进入单功能页，页面上方出现返回条。</p>
+      <div class="item" data-topic="svc-song">
+        <h3>点歌平台</h3>
+        <p class="where">位置：常用服务第一张卡片</p>
+        <p>在站外 VoiceHub 运行，点「前往入口」会跳到另一个网站，需要单独登录：账号为学号，初始密码为出生日期。</p>
+        <p>服务器资源有限，跳转后可能要等几秒才打得开。微信内若提示无法访问，按页面提示改用系统浏览器。</p>
+      </div>
 
-      <h3>作业看板</h3>
-      <p>作业查看页右侧为功能栏，包含七张卡片。卡片可在「全站设置 → 大屏」中逐张关闭，右侧栏宽度与顶栏留白也可在该页调整，范围分别为 220–520 像素与 0–320 像素。</p>
-      <div class="tip"><b>提示</b>：右侧栏宽度与卡片开关只保存在当前设备，不影响其他设备。顶栏留白用于避让固定在右上角的课表窗口。</div>
+      <div class="item" data-topic="svc-hw">
+        <h3>作业查看</h3>
+        <p class="where">位置：常用服务第二张卡片</p>
+        <p>作业在站内查看，不跳转其他网站。展开后有两个按钮：「查看当前作业」按今天的日期自动定位所属期次，「历史作业」按时段检索往期。</p>
+        <p>大屏模式下的作业看板仅管理员可打开，同学通过这张卡片查看即可。</p>
+      </div>
 
-      <h3>随机点名</h3>
-      <p>支持按性别、学号、成绩等条件筛选后抽取，抽取结果可记录。点名开关同样位于「全站设置 → 大屏」。</p>
-
-      <h3>课表窗口</h3>
-      <p>课表窗口固定在屏幕右上角，可拖动位置。若遮挡顶栏按钮，调大顶栏留白即可避让。</p>
+      <figure>
+        <img src="./img/guide/services-open.jpg" alt="展开后的常用服务" loading="lazy">
+        <figcaption>展开后：上方为点歌平台的说明与入口，下方为作业查看的两个按钮。</figcaption>
+      </figure>
     </section>
 
     <!-- 4 -->
-    <section class="card" id="c4" data-search>
-      <h2><span class="no">4</span>全屏时钟</h2>
-      <p class="lead">独立页面，适合教室大屏常驻显示。</p>
+    <section class="card" id="c4">
+      <h2><span class="no">4</span>作业查看</h2>
+      <p class="lead">点「查看当前作业」后弹出的窗口，作业按科目分组，逐条勾选即记录完成。</p>
 
-      <h3>显示内容</h3>
-      <ul>
-        <li>大号时间、日期、星期与当前教学周。</li>
-        <li>下方显示当日课程与下一节课的上课时间。</li>
-        <li>支持深色与浅色两套底色，随站点主题同步。</li>
-      </ul>
+      <figure>
+        <img src="./img/guide/hwpop.jpg" alt="作业弹窗" loading="lazy">
+        <figcaption>作业弹窗：顶部为导出与分享，中间是期次下拉与日期条，下方按科目列出作业条目。</figcaption>
+      </figure>
 
-      <h3>自习计时</h3>
-      <p>点击计时按钮开始自习计时，再次点击暂停。每次计时结束后记录时长，可在后台「时钟记录」中查看汇总。</p>
+      <div class="item" data-topic="hwpop-period">
+        <h3>期次与日期</h3>
+        <p class="where">位置：弹窗上部下拉框与日期条</p>
+        <p>上方「查看」下拉框切换作业期次，例如「国庆假期作业」。下方日期条按周排列，带小圆点的日期表示当天有作业，点击该日期即跳到对应期次。</p>
+        <p>日期条右侧显示当前教学周，点左右箭头可翻到上一周或下一周。</p>
+      </div>
 
-      <h3>周次口径</h3>
-      <p>第 1 周从开学日所在周的周一算起，每周一零点进入下一周。若显示周次与实际不符，先确认设备日期正确，再强制刷新页面。</p>
+      <div class="item" data-topic="hwpop-list">
+        <h3>作业清单</h3>
+        <p class="where">位置：弹窗主体</p>
+        <p>按语文、数学、英语等科目分组，每条作业一行，右侧显示该科目已完成的条数，例如「0 / 4 已完成」。</p>
+        <p>需要看具体要求的作业（例如「共 5 张」），展开条目可以看详细说明。</p>
+      </div>
+
+      <div class="item" data-topic="hwpop-tools">
+        <h3>勾选与导出</h3>
+        <p class="where">位置：每条作业左侧方框；弹窗右上角按钮</p>
+        <p>点方框打勾即记录完成，右上角的完成计数同步变化。登录后勾选结果保存到云端，换设备仍然保留。</p>
+        <p>「导出图片」把整份作业画成一张长图，方便发到班群；「分享」生成图片并调起系统分享面板。</p>
+      </div>
     </section>
 
     <!-- 5 -->
-    <section class="card" id="c5" data-search>
-      <h2><span class="no">5</span>账号与个人资料</h2>
-      <p class="lead">账号由班委统一创建，用户名即本人姓名。</p>
+    <section class="card" id="c5">
+      <h2><span class="no">5</span>成绩分析</h2>
+      <p class="lead">在侧边栏点「成绩分析」进入。这一块需要登录才能查看具体成绩。</p>
 
-      <h3>登录</h3>
-      <div class="item" data-topic="login-user">
-        <h3>用户名 <span class="tag">必填</span></h3>
-        <p>填写本人姓名，须与班级名单完全一致，不加空格与标点。</p>
-      </div>
-      <div class="item" data-topic="login-pass">
-        <h3>密码 <span class="tag">必填</span></h3>
-        <p>初始密码为出生日期 8 位数字。例如 2010 年 7 月 10 日出生，初始密码为 <code>20100710</code>。首次登录后系统要求修改为新密码。</p>
-      </div>
-      <div class="item" data-topic="login-cap">
-        <h3>安全验证 <span class="tag">按需</span></h3>
-        <p>按图填写数字。图像无法辨认时，点击右上角刷新按钮更换一张。连续输错次数过多会暂时锁定，等待倒计时结束后重试。</p>
-      </div>
-      <div class="item" data-topic="login-go">
-        <h3>提交 <span class="tag">操作</span></h3>
-        <p>确认无误后点击「登录」。登录后作业勾选、点歌记录与个人设置同步至云端；未登录时数据仅保存于本机。</p>
+      <figure>
+        <img src="./img/guide/scores.jpg" alt="成绩分析" loading="lazy">
+        <figcaption>未登录时：顶部为数据来源说明，中间提示登录，点「去登录」即可。</figcaption>
+      </figure>
+
+      <div class="item" data-topic="sc-note">
+        <h3>成绩来源</h3>
+        <p class="where">位置：页面顶部说明条</p>
+        <p>成绩由管理员手动录入。分数、排名与实际情况有出入时，联系管理员核对，页面上无法自行修改。</p>
       </div>
 
-      <h3>修改密码与资料</h3>
-      <p>登录后点击右上角头像进入「我的账号」，可修改密码与个人资料。资料修改需经班委审核，审核通过后对其他同学可见。</p>
+      <div class="item" data-topic="sc-exam">
+        <h3>选择考试</h3>
+        <p class="where">位置：说明条下方下拉框</p>
+        <p>下拉切换考试场次，例如月考、期中、期末。切换后成绩单、排名与图表一起更新。</p>
+      </div>
 
-      <h3>头衔与点歌券</h3>
-      <ul>
-        <li><b>头衔</b>：由班委任命，显示在个人资料与排行榜中。</li>
-        <li><b>点歌券</b>：参与班级活动获得，用于点歌排队。余额可在个人中心查看。</li>
-      </ul>
-
-      <h3>忘记密码</h3>
-      <p>联系班委在后台重置。重置后的密码为新的初始密码，登录后需再次修改。</p>
+      <div class="item" data-topic="sc-pane">
+        <h3>成绩内容 <span class="tag">需登录</span></h3>
+        <p class="where">位置：考试选择下方</p>
+        <p>未登录时显示登录提示，点「去登录」完成登录后回到本页即可查看。登录后出现三个页签：</p>
+        <ul>
+          <li><b>全班成绩单</b>：按总分或单科排序，显示各科分数、总分与班级排名。</li>
+          <li><b>我的画像</b>：只看本人，展示各科强弱项与历次考试的变化趋势。</li>
+          <li><b>成绩对比</b>：任选两人、同一场考试，逐科比较分差。</li>
+        </ul>
+      </div>
     </section>
 
     <!-- 6 -->
-    <section class="card" id="c6" data-search>
-      <h2><span class="no">6</span>设置面板</h2>
-      <p class="lead">侧边栏「全站设置」打开，共六个页签，全部只影响当前设备。</p>
+    <section class="card" id="c6">
+      <h2><span class="no">6</span>大屏模式</h2>
+      <p class="lead">面向教室电脑与投影，把全部功能铺满一屏。在侧边栏点「大屏：关」切换为开启。</p>
 
-      <h3>外观</h3>
-      <p>字号、背景、深色模式与每日一言来源。深色模式可选跟随系统、按日出日落自动切换或固定。</p>
+      <h3>进入与退出</h3>
+      <p>点侧边栏的「大屏：关」即进入，按钮文字变为「大屏：开」。再点一次回到普通模式。大屏模式会记住状态，同一台设备下次打开仍是上次的样子。</p>
+      <p>横屏与轻量两个开关与它并排，作用分别是把页面旋转成横向、关闭模糊与动画以提升低配设备流畅度。</p>
 
-      <h3>排序</h3>
-      <p>拖动调整首页区块顺序，也可隐藏暂时不用的区块。调整结果只在本设备生效。</p>
+      <figure>
+        <img class="wide" src="./img/guide/big-home.jpg" alt="大屏首页" loading="lazy">
+        <figcaption>大屏首页：顶部为标题与导航条，下方按板块分组铺开磁贴。</figcaption>
+      </figure>
 
-      <h3>动效</h3>
-      <p>控制入场动画、光斑与扫光效果。低配设备建议关闭，页面切换更跟手。</p>
+      <div class="item" data-topic="big-nav">
+        <h3>顶部导航</h3>
+        <p class="where">位置：大屏界面第二行</p>
+        <p>大屏模式下侧边栏变为横向导航条：首页、常用服务、成绩分析、班级事务、其他工具、大屏服务、安装为应用，右侧是文件中转站、使用教程、全站设置与三个显示开关。</p>
+      </div>
 
-      <h3>大屏</h3>
-      <p>右侧功能栏宽度、顶栏右侧留白、七张卡片显示开关，以及恢复大屏默认。详见第 3 章。</p>
+      <div class="item" data-topic="big-tiles">
+        <h3>功能分组</h3>
+        <p class="where">位置：导航条下方</p>
+        <p>功能按板块分组排列，每组一个标题。磁贴即入口，标题下方的小字说明用途，例如「点歌平台 · VoiceHub」。</p>
+      </div>
 
-      <h3>数据</h3>
-      <p>云端数据查看、配置导出与导入、恢复默认、版本检查、缓存清理。换设备时用导出导入搬迁设置。</p>
+      <div class="item" data-topic="big-tile">
+        <h3>进入功能</h3>
+        <p class="where">位置：任意磁贴</p>
+        <p>点击磁贴进入对应功能，页面顶部出现「← 返回大屏」。作业看板仅管理员可打开，其他同学点了会提示无权限。</p>
+      </div>
 
-      <h3>帮助</h3>
-      <p>查看导览状态、重新播放新手导览、重置导览记录，以及打开本教程。</p>
+      <figure>
+        <img class="wide" src="./img/guide/big-hw.jpg" alt="大屏作业看板" loading="lazy">
+        <figcaption>大屏作业看板：左侧语文、数学、英语，右侧物理、化学、生物，最右为小功能与作业进度。</figcaption>
+      </figure>
     </section>
 
     <!-- 7 -->
-    <section class="card" id="c7" data-search>
-      <h2><span class="no">7</span>常见问题</h2>
+    <section class="card" id="c7">
+      <h2><span class="no">7</span>全屏时钟</h2>
+      <p class="lead">在侧边栏「其他工具」中找到「全屏时钟」，适合自习课投到教室屏幕。</p>
 
-      <h3>页面内容没有更新</h3>
-      <p>进入「全站设置 → 数据 → 版本与更新」，先点「检查更新」，仍无效则点「强制刷新」。手机上必要时完全关闭页面后重新打开。</p>
+      <figure>
+        <img src="./img/guide/clock.jpg" alt="全屏时钟" loading="lazy">
+        <figcaption>全屏时钟：大号时间、日期与当前教学周，下方为计时与显示选项。</figcaption>
+      </figure>
 
-      <h3>提示无法打开或一直白屏</h3>
-      <ul>
-        <li>确认网络连接正常，切换 Wi-Fi 与移动数据后重试。</li>
-        <li>浏览器版本过低时，可先用「基础版」查看公告与作业。</li>
-        <li>清除浏览器缓存后重新打开。</li>
-      </ul>
+      <h3>显示内容</h3>
+      <p>显示时间、日期、星期与当前教学周。数字与翻页两种样式可切换，翻页样式还可以隐藏秒数，减少屏幕闪烁。</p>
 
-      <h3>断网时能否使用</h3>
-      <p>已加载过的页面与数据可离线查看，包括本教程。公告更新、点歌等需要联网的操作在恢复网络后自动同步。</p>
+      <h3>自习计时</h3>
+      <p>可设定倒计时或正计时，时间到有提示音。切到别的页面再回来，计时继续，不影响已经过去的时间。</p>
 
-      <h3>换手机后设置丢失</h3>
-      <p>设置默认只保存在本机。登录后可在「数据」中导出配置，在新设备导入；作业勾选与点歌记录登录后自动同步。</p>
-
-      <h3>周次或日期显示不正确</h3>
-      <p>先检查设备日期与时间是否为自动获取，再强制刷新页面。仍不正确请联系班委核对开学日期设置。</p>
+      <h3>周次口径</h3>
+      <p>与班级岛一致：第 1 周从开学日所在周的周一开始计算，所以屏幕上显示的周次与教室张贴的一致。</p>
     </section>
 
-    <div class="foot">
-      <p>教程内容随站点更新，遇到未覆盖的问题可在班级群反馈。</p>
-      <button id="replay">重看新手导览</button>
-      <a class="btn" href="./index.html">返回首页</a>
-    </div>
+    <!-- 8 -->
+    <section class="card" id="c8">
+      <h2><span class="no">8</span>侧边栏与设置</h2>
+      <p class="lead">显示类设置都收在「全站设置」里，改完立即生效，只影响当前设备。</p>
+
+      <figure>
+        <img src="./img/guide/settings.jpg" alt="全站设置" loading="lazy">
+        <figcaption>全站设置：顶部六个页签，中间为当前页签内容，底部为恢复默认与配置导入导出。</figcaption>
+      </figure>
+
+      <div class="item" data-topic="set-tabs">
+        <h3>六个页签</h3>
+        <p class="where">位置：弹窗顶部</p>
+        <p>外观、排序、动效、大屏、数据、帮助。点页签切换，改动即时保存，不需要点确定。</p>
+      </div>
+
+      <div class="item" data-topic="set-look">
+        <h3>外观</h3>
+        <p class="where">位置：第一个页签</p>
+        <p>深浅色、背景图、字体大小与圆角风格。深浅色可选跟随系统，日出日落前后自动切换。</p>
+      </div>
+
+      <div class="item" data-topic="set-order">
+        <h3>排序</h3>
+        <p class="where">位置：第二个页签</p>
+        <p>调整首页各区块的先后顺序，用上下箭头移动。也可以把暂时不看的区块隐藏，首页会直接跳过。</p>
+      </div>
+
+      <div class="item" data-topic="set-big">
+        <h3>大屏</h3>
+        <p class="where">位置：第四个页签</p>
+        <p>调整大屏作业看板右栏的宽度、顶栏预留的空白高度，并开关右栏的七张卡片。这几项只保存在当前设备，不影响别人。</p>
+      </div>
+
+      <div class="item" data-topic="set-data">
+        <h3>数据</h3>
+        <p class="where">位置：第五个页签</p>
+        <p>查看云端同步了哪些数据，可逐条删除或清空。底部「恢复默认」会清空本机全部自定义设置，操作前先导出备份。</p>
+      </div>
+
+      <div class="item" data-topic="set-help">
+        <h3>帮助</h3>
+        <p class="where">位置：第六个页签</p>
+        <p>显示八段导览各自的完成情况。「重看新手导览」从首页第一步重新开始；「重置导览记录」清空记录，下次进入时重新播放。</p>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section class="card" id="c9">
+      <h2><span class="no">9</span>文件中转站</h2>
+      <p class="lead">在侧边栏底部点「文件中转站」。用于在手机与教室电脑之间传文件，不必登录网盘。</p>
+
+      <figure>
+        <img src="./img/guide/files.jpg" alt="文件中转站" loading="lazy">
+        <figcaption>文件中转站：顶部四个页签，中间为上传区，上传后生成取件码。</figcaption>
+      </figure>
+
+      <div class="item" data-topic="files-tabs">
+        <h3>四种用途</h3>
+        <p class="where">位置：弹窗顶部</p>
+        <ul>
+          <li><b>发文件</b>：上传任意文件，生成取件码。</li>
+          <li><b>发文本</b>：传一段文字，适合发链接或账号。</li>
+          <li><b>取件</b>：输入取件码下载别人发的文件。</li>
+          <li><b>历史</b>：查看自己发过的记录，可提前删除。</li>
+        </ul>
+      </div>
+
+      <div class="item" data-topic="files-drop">
+        <h3>上传</h3>
+        <p class="where">位置：发文件页签内</p>
+        <p>点击选择文件，也可以直接把文件拖进虚线框。单个文件不超过 24MB，最多保存 15 天，到期自动清理。</p>
+      </div>
+
+      <div class="item" data-topic="files-act">
+        <h3>取件与分享</h3>
+        <p class="where">位置：上传完成后的结果页</p>
+        <p>上传成功会生成一串取件码，点旁边的复制按钮发给同学。教室里在另一台设备输入这串码即可下载。</p>
+      </div>
+    </section>
+
+    <!-- 10 -->
+    <section class="card" id="c10">
+      <h2><span class="no">10</span>登录与账号</h2>
+      <p class="lead">点首页顶部的账号按钮打开登录窗口。账号由管理员统一创建，不支持自行注册。</p>
+
+      <figure>
+        <img src="./img/guide/login.jpg" alt="登录窗口" loading="lazy">
+        <figcaption>登录窗口：用户名、密码与安全验证三项，下方为登录按钮。</figcaption>
+      </figure>
+
+      <div class="item" data-topic="login-user">
+        <h3>用户名</h3>
+        <p class="where">位置：第一行输入框</p>
+        <p>填写本人姓名，须与班级名单一致，不要加空格或标点。</p>
+      </div>
+
+      <div class="item" data-topic="login-pass">
+        <h3>密码</h3>
+        <p class="where">位置：第二行输入框</p>
+        <p>初始密码为出生日期 8 位数字，例如 2010 年 7 月 10 日对应 <code>20100710</code>。首次登录后建议在个人资料中修改。</p>
+      </div>
+
+      <div class="item" data-topic="login-cap">
+        <h3>安全验证</h3>
+        <p class="where">位置：第三行</p>
+        <p>按图填写数字。图像看不清时，点右上角刷新按钮换一张。后台关掉验证时这一行不会出现。</p>
+      </div>
+
+      <div class="item" data-topic="login-go">
+        <h3>登录</h3>
+        <p class="where">位置：窗口底部按钮</p>
+        <p>确认三项填写无误后点击登录。登录失败会提示具体原因，密码错误与账号不存在的提示不同，按提示处理即可。</p>
+        <p>忘记密码联系管理员重置；登录状态会保存在本机，换设备需要重新登录。</p>
+      </div>
+    </section>
+
+    <!-- 11 -->
+    <section class="card" id="c11">
+      <h2><span class="no">11</span>常见问题</h2>
+
+      <h3>页面内容没有更新</h3>
+      <p>站点会缓存页面以便离线打开。看到「有新版本」提示时点「立即更新」；没有提示时，下拉刷新一次，或在浏览器中清除该站点数据后重新打开。</p>
+
+      <h3>提示无法打开或一直白屏</h3>
+      <p>微信内置浏览器对部分功能支持有限，改用系统浏览器打开。仍然白屏时，检查网络是否正常，或在设置中关闭轻量模式后再试。</p>
+
+      <h3>断网时能否使用</h3>
+      <p>首页、教程页、大屏与时钟已缓存到本机，断网可以打开。公告、作业、成绩等云端内容需要联网，断网时显示上次缓存的内容。</p>
+
+      <h3>换手机后设置丢失</h3>
+      <p>外观、排序、大屏偏好只存在当前设备，换设备需要重新设置。登录后作业勾选与点歌记录跟账号走，不受影响。</p>
+
+      <h3>周次或日期显示不正确</h3>
+      <p>周次按开学日所在周的周一起算。若与教室张贴的周次相差一周，多为开学日期设置有误，联系管理员核对后台的学期起始日。</p>
+
+      <h3>成绩或作业内容有误</h3>
+      <p>这两类内容由管理员录入，前台只能查看与勾选，无法修改。发现错误请直接联系管理员或课代表。</p>
+
+      <div class="foot">
+        <p>本页与新手导览由同一份登记表维护，新增板块时两处会一起更新。</p>
+        <a class="btn" href="./index.html?tour=1">重看新手导览</a>
+        <a class="btn" href="./index.html">返回首页</a>
+      </div>
+    </section>
 
   </main>
 </div>
 
-<script src="./tour.js?v=538040"></script>
+<div class="lb" id="lb"><button id="lbClose" aria-label="关闭">✕</button><img id="lbImg" alt=""></div>
+
 <script>
 (function(){
-  var doc = document.documentElement;
+  'use strict';
 
-  /* 主题切换：写回 cls_theme，和首页共用同一个键 */
+  /* ---------- 深浅色 ---------- */
   var tb = document.getElementById('themeBtn');
-  function syncBtn(){ tb.textContent = doc.classList.contains('dark') ? '浅' : '深'; }
-  syncBtn();
+  function syncBtn(){ tb.textContent = document.documentElement.classList.contains('dark') ? '浅' : '深'; }
   tb.addEventListener('click', function(){
-    doc.classList.toggle('dark');
-    try{ localStorage.setItem('cls_theme', doc.classList.contains('dark') ? 'dark' : 'light'); }catch(e){}
+    var d = document.documentElement.classList.toggle('dark');
+    try{ localStorage.setItem('cls_theme', d ? 'dark' : 'light'); }catch(e){}
     syncBtn();
   });
+  syncBtn();
 
-  /* 本地搜索：只过滤带 data-search 的区块，按条目粒度定位 */
+  /* ---------- 搜索 ---------- */
   var q = document.getElementById('q');
   var empty = document.getElementById('empty');
-  var hint = document.getElementById('qhint');
   var cards = [].slice.call(document.querySelectorAll('section.card'));
-  var items = [].slice.call(document.querySelectorAll('[data-topic]'));
 
-  function clearMarks(){
-    items.forEach(function(el){ el.classList.remove('no-hit'); });
-    [].slice.call(document.querySelectorAll('h3')).forEach(function(el){ el.classList.remove('no-hit'); });
-    [].slice.call(document.querySelectorAll('p,ul,ol,.kv,.tip')).forEach(function(el){ el.classList.remove('no-hit'); });
-  }
+  function norm(s){ return (s || '').toLowerCase().replace(/\s+/g, ''); }
 
   function filter(){
-    var k = (q.value || '').trim().toLowerCase();
-    clearMarks();
-    if(!k){
-      cards.forEach(function(c){ c.style.display = ''; });
+    var kw = norm(q.value);
+    if (!kw) {
+      cards.forEach(function(c){
+        c.classList.remove('no-hit');
+        [].forEach.call(c.querySelectorAll('.item,.no-hit'), function(x){ x.classList.remove('no-hit'); });
+      });
       empty.style.display = 'none';
-      hint.textContent = '输入关键词筛选，清空后显示全部。';
       return;
     }
     var total = 0;
-    cards.forEach(function(card){
-      var hit = 0;
-      /* 条目级：命中就整条保留，否则隐藏 */
-      var own = [].slice.call(card.querySelectorAll('[data-topic]'));
-      if(own.length){
-        own.forEach(function(it){
-          var ok = it.textContent.toLowerCase().indexOf(k) >= 0;
-          it.classList.toggle('no-hit', !ok);
-          if(ok) hit++;
-        });
+    cards.forEach(function(c){
+      /* 常见问题这类没有 .item 的章节，整节按文本匹配 */
+      var items = [].slice.call(c.querySelectorAll('.item'));
+      if (!items.length) {
+        var hit = norm(c.textContent).indexOf(kw) >= 0;
+        c.classList.toggle('no-hit', !hit);
+        if (hit) total++;
+        return;
       }
-      if(!own.length){
-        hit = card.textContent.toLowerCase().indexOf(k) >= 0 ? 1 : 0;
-      }
-      card.style.display = hit ? '' : 'none';
-      if(hit) total++;
+      var shown = 0;
+      items.forEach(function(it){
+        var hit = norm(it.textContent).indexOf(kw) >= 0;
+        it.classList.toggle('no-hit', !hit);
+        if (hit) shown++;
+      });
+      c.classList.toggle('no-hit', shown === 0);
+      total += shown;
     });
     empty.style.display = total ? 'none' : 'block';
-    hint.textContent = total ? ('命中 ' + total + ' 个章节') : '没有匹配的条目';
   }
   q.addEventListener('input', filter);
 
-  /* 目录高亮 */
-  var links = [].slice.call(document.querySelectorAll('#toc a'));
-  var obs = new IntersectionObserver(function(es){
-    es.forEach(function(e){
-      if(!e.isIntersecting) return;
-      links.forEach(function(a){ a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id); });
-    });
-  }, { rootMargin: '-72px 0px -70% 0px' });
-  cards.forEach(function(c){ obs.observe(c); });
+  /* ---------- 目录高亮 ---------- */
+  var links = [].slice.call(document.querySelectorAll('.toc a'));
+  var secs = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+  function onScroll(){
+    var y = window.scrollY + 120, cur = 0;
+    secs.forEach(function(s, i){ if (s && s.offsetTop <= y) cur = i; });
+    links.forEach(function(a, i){ a.classList.toggle('on', i === cur); });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
 
-  /* 重看导览：清掉记录并回到首页自动开始 */
-  document.getElementById('replay').addEventListener('click', function(){
-    try{
-      if(window.TOUR) TOUR.reset();
-      else localStorage.removeItem('cls_tour_v1');
-    }catch(e){}
-    location.href = './index.html?tour=1';
+  /* ---------- 点图看大图 ---------- */
+  var lb = document.getElementById('lb'), lbImg = document.getElementById('lbImg');
+  document.addEventListener('click', function(e){
+    if (e.target.tagName === 'IMG' && e.target.closest('figure')) {
+      lbImg.src = e.target.src;
+      lb.classList.add('show');
+    }
   });
+  function closeLb(){ lb.classList.remove('show'); lbImg.src = ''; }
+  lb.addEventListener('click', closeLb);
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeLb(); });
 })();
 </script>
 </body>

@@ -112,6 +112,8 @@ jobs:
             qrcode.jpg
             fonts
             icons
+            # v4.13.0：使用教程里的界面截图（12 张）。漏了这行线上教程页全是空框。
+            img/guide
             games
             homework
             vendor
