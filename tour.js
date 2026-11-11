@@ -375,7 +375,7 @@
 
     var tip = run.tip;
     tip.innerHTML = ''
-      + '<p class="tour-kicker">' + (i + 1) + ' / ' + run.steps.length + '</p>'
+      + '<p class="tour-kicker">' + (i + 1) + ' / ' + (run.total || run.steps.length) + '</p>'
       + '<p class="tour-title"></p>'
       + '<p class="tour-text"></p>'
       + '<div class="tour-acts"></div>';
@@ -401,13 +401,17 @@
 
     run.arrow = null;
 
+    /* 进度点总数固定为开跑时的步数：中途把「空掉的那一步」剔掉时，
+       分母不跟着变，避免出现「5 / 8」下一屏变「6 / 7」 */
     var dots = run.dotsEl;
+    var dn = run.total || run.steps.length;
     dots.innerHTML = '';
-    run.steps.forEach(function (_, k) {
+    for (var k = 0; k < dn; k++) {
       var d = document.createElement('i');
-      d.className = 'tour-dot' + (k <= i ? ' on' : '');
+      /* 走到最后一步时把剩余点一起点亮（中途剔除过步骤时分母仍按原始步数） */
+      d.className = 'tour-dot' + ((k <= i || i >= run.steps.length - 1) ? ' on' : '');
       dots.appendChild(d);
-    });
+    }
 
     tip.classList.remove('in');
     void tip.offsetWidth;
@@ -465,7 +469,7 @@
 
     var dom = build();
     run = {
-      scene: scene, steps: steps, i: at, tick: 0,
+      scene: scene, steps: steps, i: at, tick: 0, total: steps.length,
       hit: dom.hit, hole: dom.hole, tip: dom.tip, dotsEl: dom.dotsEl, arrow: null
     };
     show(at);
