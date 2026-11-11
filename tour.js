@@ -368,6 +368,10 @@
     if (run) return false;
     if (!STEPS[scene]) return false;
     if (!force && sceneDone(scene)) return false;
+    /* 大屏模式一律不自动弹（教室电脑每次重启都弹会打断使用）。
+       放在 start 里而不是只放在调用方：big.js 是 defer 里排在 app.min.js 之后的那一份，
+       app.js 顶层启动时 BIG 还不存在，只能延后再判 —— 这里再从入口兜一次底。 */
+    if (!force && scene === 'home' && window.BIG && window.BIG.on) return false;
 
     var steps = liveSteps(scene);
     if (!steps.length) return false;
