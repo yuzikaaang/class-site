@@ -264,7 +264,11 @@
         setTimeout(function () { if (run && run.tick === my) show(i, 1); }, 650);
         return;
       }
-      return show(i + 1);
+      /* 仍然是空壳（例如学习卡片没配置内容）→ 直接从这一步列表里去掉，
+         进度点跟着变少；否则用户会看到「5 / 8」下一跳「7 / 8」，以为漏了一步。 */
+      run.steps.splice(i, 1);
+      if (i >= run.steps.length) { finish('done'); return; }
+      return show(i);
     }
 
     run.i = i;
