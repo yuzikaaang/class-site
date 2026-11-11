@@ -217,11 +217,33 @@
     return !String(el.textContent || '').replace(/\s+/g, '');
   }
 
-  /* 只保留 DOM 里存在的步骤（完全没有这个元素的场景直接跳过） */
+  /* 元素被「排序 → 隐藏」关掉时是 display:none，导览不该算这一步。
+     ⚠️ v4.13.0 线上实测：学习卡片隐藏后仍被算进 8 步，走到第 6 步才被
+     show() 里的兜底剔掉 —— 进度点从「5 / 8」跳到「6 / 7」，看着像漏了一步。
+     所以在开跑前就把不可见的步骤剔掉。 */
+  function hiddenAll(s) {
+    var l = selList(s), any = false;
+    for (var i = 0; i < l.length; i++) {
+      var el = document.querySelector(l[i]);
+      if (!el) continue;
+      any = true;
+      var cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+      var r = el.getBoundingClientRect();
+      if (r.width >= 8 && r.height >= 8) return false;   /* 有一个能用的就不算隐藏 */
+    }
+    return any;
+  }
+
+  /* 只保留「存在且看得见」的步骤。剔除原因记在 TOUR._skipped，便于线上排查 */
+  var skipped = [];
   function liveSteps(scene) {
+    skipped = [];
     return (STEPS[scene] || []).filter(function (s) {
-      if (!hasAny(s)) return true;
-      return !hollow(s);
+      if (!hasAny(s)) return true;         /* 还没渲染出来：留给 show() 重试 */
+      if (hiddenAll(s)) { skipped.push(s.t + ':hidden'); return false; }
+      if (hollow(s)) { skipped.push(s.t + ':hollow'); return false; }
+      return true;
     });
   }
 
@@ -450,12 +472,20 @@
     return true;
   }
 
-  /* 等没遮挡了再启动；最多等 36 秒（有人会把欢迎弹窗读完才关） */
-  function startWhenFree(scene, tries) {
+  /* 等没遮挡了再启动；最多等 36 秒（有人会把欢迎弹窗读完才关）。
+     settle：首页板块多、渲染有先后，若这一刻发现有步骤「暂时不可见」，
+     再等两轮（2.1 秒）才认账 —— 否则会把「还没画出来」当成「被隐藏」，
+     导览少一步。持久隐藏的板块（例如学习卡片被关掉）等满两轮后照常按实有块数走。 */
+  function startWhenFree(scene, tries, settle) {
     tries = tries || 0;
+    settle = settle || 0;
     if (run) return;
     if (blocked()) {
-      if (tries < 24) setTimeout(function () { startWhenFree(scene, tries + 1); }, 1500);
+      if (tries < 24) setTimeout(function () { startWhenFree(scene, tries + 1, settle); }, 1500);
+      return;
+    }
+    if (scene === 'home' && settle < 3 && liveSteps(scene).length < (STEPS[scene] || []).length) {
+      setTimeout(function () { startWhenFree(scene, tries, settle + 1); }, 700);
       return;
     }
     start(scene);
@@ -508,6 +538,7 @@
     reset: reset,
     status: status,
     finish: function (r) { finish(r || 'escape'); },
-    isOn: function () { return !!run; }
+    isOn: function () { return !!run; },
+    _skipped: function () { return skipped.slice(); }
   };
 })(window, document);
