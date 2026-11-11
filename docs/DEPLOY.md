@@ -58,7 +58,7 @@ node scripts/push-gitee.mjs     # 推 Gitee
 | 1 | `index.html` | 板块 `<section>` 上加 `data-topic="key"`（key 用小写英文，短） |
 | 2 | `scripts/tour-map.json` | 在 `scenes.home.steps` 里加这个 key |
 | 3 | `tour.js` | `STEPS.home` 里加一步：`{ t:'key', sel:'#元素id', title:'…', text:'…' }` |
-| 4 | `guide.html` | 「首页八个区块」里加一条 `<div class="item" data-topic="key">`，写清位置/作用/提示 |
+| 4 | `guide.html` | 「首页」一章里加一条 `<div class="item" data-topic="key">`，写清位置/作用/提示，并配一张截图 |
 | 5 | 跑门禁 | `node scripts/predeploy.mjs --dry-run`，四者齐了才放行 |
 
 漏了会报成这样，直接点名缺哪个 key：
@@ -79,3 +79,35 @@ node scripts/push-gitee.mjs     # 推 Gitee
 
 只加登录弹层里的说明时，只改 `tour.js` 的 `STEPS.login` 与 `tour-map.json` 的
 `scenes.login.steps`，首页那四个来源不动。
+
+## 六之二、新增一个「板块导览」（v4.13.0）
+
+除首页外，常用服务、作业弹窗、成绩分析、大屏、设置、文件中转站各有独立导览，
+场景名见 `tour-map.json`。新增一个板块导览时：
+
+| 步 | 改哪儿 | 具体做什么 |
+| --- | --- | --- |
+| 1 | `tour.js` | 在 `STEPS` 里加一个场景数组，每步写 `sel` 或 `sels`（多个目标取第一个可见的） |
+| 2 | `scripts/tour-map.json` | 加同名场景，列出同样的 key |
+| 3 | `app.js` / `big.js` | 在该板块**打开的位置**加一行 `try{ if(window.TOUR) TOUR.maybe('场景名', 900); }catch(e){}` |
+| 4 | `guide.html` | 对应章节里加 `data-topic="key"` 条目 |
+| 5 | `tour.js` 的 `SCENES` | 把场景名加进数组，设置「帮助」页签才会统计到它 |
+
+`TOUR.maybe()` 内部会判断该场景是否已完成、当前是否有弹窗遮挡，不满足条件就直接返回，
+所以可以放心挂在每次打开的地方，不必自己写判断。
+
+## 六之三、教程截图（v4.13.0）
+
+截图放在 `img/guide/`，文件名与章节对应（`home-top / sidebar / services / hwpop / scores /
+big-home / big-hw / clock / settings / files / login`）。重新生成：
+
+```bash
+node scripts/build.mjs                      # 先保证本地是最新版本号
+node /tmp/guide-shots2.mjs                  # 本地 8899 端口起服务后跑，覆盖 img/guide/*.jpg
+```
+
+两条固定检查：
+
+- **图片文件必须存在**：`guide.html` 里 `<img src>` 指向的文件缺失就拦。
+- **`img` 必须是整目录进发布清单**：写 `img/guide` 会被 `cp -r` 成 `_site/guide/`，
+  线上 `/img/guide/*.jpg` 全 404（v4.13.0 踩过）。
