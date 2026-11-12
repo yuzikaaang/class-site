@@ -80,14 +80,16 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
    整块又被 .ov 的 overflow-y 撑着，手机上「选关」简直没法看。
    改成：标题和按钮固定，中间那块单独滚动；列数交给 auto-fill 自适应，
    窄屏 8 列、宽屏 10 列，100 关最多 13 行，一屏基本能看完。 */
-#ovMenu{justify-content:flex-start;padding:14px 12px 12px;gap:6px}
+#ovMenu{justify-content:center;padding:14px 12px 12px;gap:6px}
 #ovMenu h2{margin-top:2px}
-.lvwrap{flex:1 1 auto;min-height:0;width:100%;max-width:430px;overflow-y:auto;
+.lvwrap{flex:0 1 auto;min-height:0;width:100%;max-width:430px;max-height:min(62vh,470px);overflow-y:auto;
   -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
   margin:2px 0 6px;padding:2px;border-radius:12px}
 .lvwrap::-webkit-scrollbar{width:5px}
 .lvwrap::-webkit-scrollbar-thumb{background:rgba(120,150,255,.28);border-radius:3px}
-#lvGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(33px,1fr));gap:4px;width:100%}
+/* 100 关 = 10×10 最整齐；限一下最大宽度，宽屏自然就排成 10 列 */
+#lvGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:4px;
+  width:100%;max-width:366px;margin:0 auto}
 #lvGrid button{border:1px solid rgba(120,150,255,.18);background:rgba(120,150,255,.09);color:#c3d0f5;
   border-radius:7px;padding:5px 0 4px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;
   font-variant-numeric:tabular-nums;line-height:1.1;transition:background .1s}
