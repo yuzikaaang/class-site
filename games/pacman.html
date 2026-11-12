@@ -14,8 +14,12 @@ body{
   background:radial-gradient(110% 70% at 50% 0%,#141c3e,#070a16 65%);
   color:#e9ecff;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
   display:flex;flex-direction:column;align-items:center;
-  padding:calc(6px + env(safe-area-inset-top)) 10px calc(6px + env(safe-area-inset-bottom));
-  height:100vh;height:100dvh;gap:5px;
+  padding:calc(6px + env(safe-area-inset-top)) 10px calc(12px + env(safe-area-inset-bottom));
+  /* ⚠️ v4.15.2：不要用 100dvh 撑 body。
+     安卓 Edge / 部分内核的 100dvh 取的是「地址栏收起后」的高度，比实际可视区
+     高几十像素；body 一旦按它撑开，底部多出来的高度会由 #stage 的 auto margin
+     吃掉，方向键「下」就被推出屏幕。高度改由 JS 量 innerHeight 写成 --app-h。 */
+  height:100%;height:var(--app-h,100%);gap:5px;
 }
 .bar{width:100%;max-width:430px;display:flex;align-items:center;gap:6px;flex:none}
 a.back{color:#9db1ff;text-decoration:none;font-size:13px;opacity:.8;padding:5px 8px;border-radius:8px;flex:none}
@@ -52,6 +56,8 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
 @media (max-height:760px){ #dpad{grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,56px)} }
 @media (max-height:640px){ #dpad{grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);gap:4px}
   #dpad button{font-size:16px;border-radius:11px} }
+@media (max-height:560px){ #dpad{grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px);gap:3px}
+  #dpad button{font-size:14px;border-radius:10px} }
 @media (hover:hover) and (pointer:fine){ #dpad{display:none} }
 /* 覆盖层 */
 .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -1076,39 +1082,87 @@ document.addEventListener('visibilitychange', function(){
 });
 
 /* ---------- 启动 ---------- */
-/* v4.15.1：迷宫尺寸改成「量出来算」，不再靠 CSS 里减一个估的固定值。
-   旧写法 calc(100dvh - 276px) 有两个坑：
-     ① 老内核（含部分微信 X5）不认 dvh，整条 width 失效 → canvas 用固有宽度 456px
-        把版面撑爆，方向键「下」被 body 的 overflow:hidden 裁掉；
-     ② 276 是估的，顶栏/HUD/方向键在 56px 档时实际占得更多，照样溢出。
-   现在按真实 offsetHeight 求可用高度，再取「宽度」与「可用高度」的较小值。 */
+/* v4.15.2：布局不再靠任何视口单位算，全按实测像素来。
+   上一版败在 body 用 100dvh 撑高：安卓 Edge 的 100dvh 是「地址栏收起后」的高度，
+   比真正能看见的地方高 40~60px。body 撑大以后，#stage 的 auto margin 把多出来的
+   高度分给上下，方向键就被顶出屏幕 —— 所以截图里「上下各有大片空白，但▼不见了」。
+   现在：
+     ① body 高度由 JS 量 innerHeight（优先 visualViewport）写成 --app-h，钉死；
+     ② 迷宫边长照旧取「宽度」与「可用高度」的较小值；
+     ③ 最后再量一次方向键的底边，真掉出视口就按超出量继续缩，最多三轮。 */
+/* 三个高度来源在真机上可能不一致：visualViewport 是真实可视区，
+   innerHeight / clientHeight 有时仍是「地址栏收起后」的大视口。
+   取最小值 = 按最保守的那个排，宁可迷宫小两像素，也不让 ▼ 掉出屏幕。 */
+function viewH(){
+  var c = [];
+  try { if (window.visualViewport && window.visualViewport.height) c.push(window.visualViewport.height); } catch (e){}
+  if (window.innerHeight) c.push(window.innerHeight);
+  if (document.documentElement.clientHeight) c.push(document.documentElement.clientHeight);
+  var v = Math.round(Math.min.apply(null, c.length ? c : [640]));
+  return v > 200 ? v : 640;   /* 量出个位数说明是异常值，别拿它去算 */
+}
+function viewW(){
+  var vv = window.visualViewport;
+  if (vv && vv.width) return Math.round(vv.width);
+  return Math.round(window.innerWidth || document.documentElement.clientWidth || 360);
+}
+function setStageSize(size){
+  var st = document.getElementById('stage');
+  if (!st) return;
+  st.style.width = size + 'px';
+  st.style.height = size + 'px';
+}
 function fitStage(){
   var stage = document.getElementById('stage');
   var dpad = document.getElementById('dpad');
   var bar = document.querySelector('.bar');
   var hud = document.querySelector('.hud');
   if (!stage || !bar || !hud) return;
-  var vh = window.innerHeight || document.documentElement.clientHeight || 640;
-  var vw = window.innerWidth || document.documentElement.clientWidth || 360;
+
+  var vh = viewH(), vw = viewW();
+  document.documentElement.style.setProperty('--app-h', vh + 'px');
+
   var dpadH = 0;
   try {
     var dcs = window.getComputedStyle(dpad);
     if (dcs.display !== 'none' && dcs.visibility !== 'hidden') dpadH = dpad.offsetHeight;
   } catch (e){ dpadH = 0; }
+
   var bs = window.getComputedStyle(document.body);
   var padT = parseFloat(bs.paddingTop) || 0;
   var padB = parseFloat(bs.paddingBottom) || 0;
-  var gaps = (dpadH ? 3 : 2) * 5;      /* body 里 4 个子元素 = 3 个 5px 间距 */
-  var avail = vh - padT - padB - bar.offsetHeight - hud.offsetHeight - dpadH - gaps - 4;
-  var size = Math.floor(Math.min(vw * 0.96, avail));
-  if (size < 150) size = Math.max(120, Math.floor(avail));
-  stage.style.width = size + 'px';
-  stage.style.height = size + 'px';
+  var gap = parseFloat(bs.rowGap);
+  if (!(gap > 0)) gap = 5;
+  var gaps = (dpadH ? 3 : 2) * gap;   /* 顶栏 / HUD / 迷宫 / 方向键，之间 3 个间距 */
+
+  var avail = vh - padT - padB - bar.offsetHeight - hud.offsetHeight - dpadH - gaps;
+  var maxW = Math.min(Math.floor(vw * 0.96), 460);
+  var size = Math.floor(Math.min(maxW, avail));
+  if (size < 140) size = Math.max(110, Math.floor(avail));
+  setStageSize(size);
+
+  /* 反馈校正：上面全按 offsetHeight 估的，这里直接看底边有没有出界 */
+  var target = dpadH ? dpad : stage;
+  for (var i = 0; i < 4; i++){
+    var over = Math.ceil(target.getBoundingClientRect().bottom - (vh - padB));
+    if (over <= 1) break;
+    size -= over;
+    if (size < 120) size = 120;
+    setStageSize(size);
+    if (size <= 120) break;
+  }
 }
 fitStage();
 window.addEventListener('resize', fitStage);
 window.addEventListener('orientationchange', function(){ setTimeout(fitStage, 150); });
+try {
+  if (window.visualViewport){
+    window.visualViewport.addEventListener('resize', fitStage);
+    window.visualViewport.addEventListener('scroll', fitStage);
+  }
+} catch (e){}
 setTimeout(fitStage, 80);        /* 字体换来换去会改顶栏高度，再量一次 */
+setTimeout(fitStage, 600);       /* 有些机器首帧字体还没落定 */
 
 buildMenu();
 /* 先装一关当背景，菜单后面能看到实际迷宫，不是一块黑 */
@@ -1146,6 +1200,22 @@ if (/[?&]selftest=1/.test(location.search)){
     grid: function(){ return grid; },
     save: function(){ return save; },
     win: win,
+    layout: function(){
+      function r(el){ if(!el) return null; var b = el.getBoundingClientRect(); return [Math.round(b.top), Math.round(b.bottom), Math.round(b.height)]; }
+      return {
+        vh: viewH(),
+        visual: window.visualViewport ? Math.round(window.visualViewport.height) : null,
+        inner: window.innerHeight || null,
+        client: document.documentElement.clientHeight || null,
+        appH: document.documentElement.style.getPropertyValue('--app-h'),
+        body: r(document.body),
+        bar: r(document.querySelector('.bar')),
+        hud: r(document.querySelector('.hud')),
+        stage: r(document.getElementById('stage')),
+        dpad: r(document.getElementById('dpad')),
+        down: r(document.querySelector('#dpad [data-d="d"]'))
+      };
+    },
     setTime: function(t){ timeLeft = t; },
     teleport: function(x, y){ pac.x = x; pac.y = y; pac.prog = 0; }
   };
