@@ -72,7 +72,17 @@ console.log('\nA. 下落砖块 · 清波演出');
   ok(dist[2].p3 === 0 && dist[3].p3 > 0, 'A13 第 4 波起出硬砖', { w3: dist[2].p3, w4: dist[3].p3 });
   ok(dist[6].p3 === 0.4 && dist[6].p2 === 0.5, 'A14 高波次封顶 50% 中砖 / 40% 硬砖', dist[6]);
 
-  ok(errs.length === 0, 'A15 无 JS 报错', errs.slice(0, 2));
+  /* 死因文案：以前「球掉了」也会显示「砖墙压到底」（三元条件写反了） */
+  const wall = await p.evaluate(() => {
+    /* 必须开新局后**同步**连按：不重开的话球早掉出去了，测到的是「球掉了」 */
+    window.__clsBk.start();
+    for (let i = 0; i < 30; i++) window.__clsBk.press();
+    return { st: window.__clsBk.snap().st, sub: document.getElementById('ovOverSub').textContent };
+  });
+  ok(wall.st === 'over', 'A15 砖墙压到危险线即结束', wall.st);
+  ok(wall.sub === '砖墙压到底了', 'A16 结算说明与实际死因一致', wall.sub);
+
+  ok(errs.length === 0, 'A17 无 JS 报错', errs.slice(0, 2));
   await p.close();
 }
 

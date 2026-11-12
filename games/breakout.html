@@ -302,7 +302,11 @@ function spawnBall(){
 
 function toastNow(t, c){ toast = t; toastC = c || '#fff'; toastT = 1.6; }
 
-function gameOver(){
+/* cause 决定结算页那句说明。
+   ⚠️ 原来写的是 `bricks.length ? '砖墙压到底了' : '球全部掉出去了'` ——
+   球死的时候砖墙当然还在，于是「球掉了」永远显示成「砖墙压到底」，
+   两个死法共用一句错话。现在由调用方明确告诉它为什么结束。 */
+function gameOver(cause){
   if (st === 'over') return;
   st = 'over';
   stopBgm();
@@ -319,7 +323,8 @@ function gameOver(){
   document.getElementById('rWave').textContent = wave;
   document.getElementById('rBroke').textContent = broke;
   document.getElementById('rCombo').textContent = bestCombo;
-  document.getElementById('ovOverSub').textContent = bricks.length ? '砖墙压到底了' : '球全部掉出去了';
+  document.getElementById('ovOverSub').textContent =
+    cause === 'ball' ? '球全部掉出去了' : (cause === 'quit' ? '本局已放弃' : '砖墙压到底了');
   syncOv();
 
   /* 上云：云端最高分按「生存秒数」算（榜单单位是秒），同时记一次游玩时长。
@@ -350,7 +355,7 @@ function pressDown(){
   for (var i = 0; i < bricks.length; i++) bricks[i].row++;
   shake = Math.min(9, shake + 3.5);
   for (var j = 0; j < bricks.length; j++){
-    if (by(bricks[j]) + BH >= DANGER) { gameOver(); return; }
+    if (by(bricks[j]) + BH >= DANGER) { gameOver('wall'); return; }
   }
 }
 
@@ -533,7 +538,9 @@ function stepBall(bl, dt){
     bl.stuck -= dt;
     bl.x = padX; bl.y = PAD_Y - bl.r - 2;
     if (bl.stuck <= 0){
-      var a0 = rnd(-0.34, 0.34), sp0 = ballSpeed();
+      /* 首发角度收窄到 ±0.22rad（约 12°）：原来 ±0.34 时球一出手就往边上飘，
+         玩家还没反应过来就已经落到挡板外面了，第一局往往 3 秒就结束 */
+      var a0 = rnd(-0.22, 0.22), sp0 = ballSpeed();
       bl.vx = Math.sin(a0) * sp0; bl.vy = -Math.cos(a0) * sp0;
     }
     return;
@@ -656,7 +663,7 @@ function update(dt){
   /* 球 */
   for (var i = 0; i < balls.length; i++) stepBall(balls[i], dt);
   balls = balls.filter(function(b){ return !b.dead; });
-  if (!balls.length){ gameOver(); return; }
+  if (!balls.length){ gameOver('ball'); return; }
 
   /* 技能球 */
   for (var j = drops.length - 1; j >= 0; j--){
@@ -1181,7 +1188,7 @@ function startGame(){
 document.getElementById('btnStart').addEventListener('click', startGame);
 document.getElementById('btnAgain').addEventListener('click', startGame);
 document.getElementById('btnResume').addEventListener('click', togglePause);
-document.getElementById('btnQuit').addEventListener('click', function(){ st = 'over'; gameOver(); });
+document.getElementById('btnQuit').addEventListener('click', function(){ gameOver('quit'); });
 
 /* 首次进入先铺好砖墙，介绍层后面能看到实际场地，不留黑屏 */
 initDust();
