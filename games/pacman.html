@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#070a16">
+<title>迷宫吃豆 · 25级05班</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
+body{
+  background:radial-gradient(110% 70% at 50% 0%,#141c3e,#070a16 65%);
+  color:#e9ecff;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  display:flex;flex-direction:column;align-items:center;padding:6px 10px 0;height:100vh;gap:5px;
+}
+.bar{width:100%;max-width:430px;display:flex;align-items:center;gap:6px;flex:none}
+a.back{color:#9db1ff;text-decoration:none;font-size:13px;opacity:.8;padding:5px 8px;border-radius:8px;flex:none}
+a.back:active{background:rgba(157,177,255,.15)}
+.bar h1{font-size:15px;margin:0;flex:1;letter-spacing:.05em;font-weight:700}
+.bar .lvl{font-size:12px;color:#7f92c9;font-variant-numeric:tabular-nums}
+.hud{display:flex;gap:12px;font-size:12px;color:#7f92c9;flex:none;flex-wrap:wrap;justify-content:center}
+.hud b{color:#ffd166;font-variant-numeric:tabular-nums;font-weight:700}
+.hud .warn b{color:#f87171}
+#stage{position:relative;width:min(96vw,calc(100vh - 250px));
+  border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.6);flex:none;background:#050813;margin:auto 0}
+canvas{display:block;width:100%;height:auto;touch-action:none}
+/* 方向键 */
+#dpad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,62px);gap:5px;flex:none}
+#dpad button{border:none;border-radius:14px;background:rgba(120,150,255,.13);color:#c3d0f5;
+  font-size:19px;font-weight:800;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(120,150,255,.16);transition:background .08s}
+#dpad button:active,#dpad button.on{background:rgba(120,170,255,.36);color:#fff}
+#dpad .sp{visibility:hidden}
+@media (hover:hover) and (pointer:fine){ #dpad{display:none} }
+/* 覆盖层 */
+.ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;padding:16px;text-align:center;background:rgba(7,10,22,.94);
+  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);z-index:6;overflow-y:auto}
+.ov.hide{display:none}
+.ov h2{margin:0;font-size:19px;color:#ffd166;letter-spacing:.04em}
+.ov .sub{font-size:12px;color:#7f92c9;margin:0;line-height:1.6}
+.ov ul{margin:0;padding:0;list-style:none;font-size:12px;line-height:1.65;color:#b9c6ea;text-align:left;max-width:290px}
+.ov li::before{content:"·";color:#4ade80;margin-right:6px;font-weight:800}
+.ov .k{color:#ffd166;font-weight:700}
+.btn{border:none;border-radius:13px;padding:11px 26px;font-size:14px;font-weight:800;cursor:pointer;
+  background:linear-gradient(135deg,#3ee0c0,#22b894);color:#06201a;box-shadow:0 8px 22px rgba(62,224,192,.26);
+  font-family:inherit;flex:none}
+.btn:active{transform:scale(.96)}
+.btn.ghost{background:#1b2547;color:#9db1ff;box-shadow:none;padding:10px 20px;font-size:13px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:7px;width:100%;max-width:270px}
+.stats div{background:#111a33;border-radius:10px;padding:8px 6px}
+.stats span{display:block;font-size:11px;color:#6f83b8}
+.stats b{font-size:16px;color:#ffd166;font-variant-numeric:tabular-nums}
+.stars{font-size:26px;letter-spacing:6px;color:#3a4463;margin:2px 0}
+.stars i{font-style:normal}
+.stars i.on{color:#ffd166;text-shadow:0 0 14px rgba(255,209,102,.7)}
+/* 关卡选择 */
+#lvGrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;width:100%;max-width:330px;margin-top:2px}
+#lvGrid button{border:1px solid rgba(120,150,255,.18);background:rgba(120,150,255,.09);color:#c3d0f5;
+  border-radius:9px;padding:8px 0 6px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;
+  font-variant-numeric:tabular-nums;line-height:1.15}
+#lvGrid button .s{display:block;font-size:8.5px;color:#ffd166;letter-spacing:.5px;margin-top:2px}
+#lvGrid button:disabled{opacity:.32;cursor:not-allowed}
+#lvGrid button.cur{background:linear-gradient(135deg,#3ee0c0,#22b894);color:#06201a;border-color:transparent}
+#lvGrid button.cur .s{color:#06201a}
+</style>
+</head>
+<body>
+<div class="bar">
+  <a class="back" href="../index.html">← 返回</a>
+  <h1>迷宫吃豆</h1>
+  <span class="lvl" id="hLv">第 1 关</span>
+</div>
+<div class="hud">
+  <span id="hTimeWrap">剩余 <b id="hTime">0s</b></span>
+  <span>豆子 <b id="hBean">0</b></span>
+  <span>分数 <b id="hScore">0</b></span>
+  <span>生命 <b id="hLife">3</b></span>
+</div>
+
+<div id="stage">
+  <canvas id="cv"></canvas>
+</div>
+
+<div id="dpad">
+  <button class="sp"></button>
+  <button data-d="u">▲</button>
+  <button class="sp"></button>
+  <button data-d="l">◀</button>
+  <button data-d="s">II</button>
+  <button data-d="r">▶</button>
+  <button class="sp"></button>
+  <button data-d="d">▼</button>
+  <button class="sp"></button>
+</div>
+
+<div class="ov" id="ovMenu">
+  <h2>选择关卡</h2>
+  <p class="sub" id="menuSub">共 100 关 · 通关后解锁下一关</p>
+  <div id="lvGrid"></div>
+  <button class="btn ghost" id="btnHelp">玩法说明</button>
+</div>
+
+<div class="ov hide" id="ovIntro">
+  <h2>迷宫吃豆</h2>
+  <ul>
+    <li>吃掉迷宫里<span class="k">所有豆子</span>即通关，限时内完成</li>
+    <li>被追捕者碰到 <span class="k">掉一条命</span>，3 条命掉光就失败</li>
+    <li>吃 <span class="k">能量豆</span>（大圆点）后 7 秒内可以反过来吃它们</li>
+    <li>金色 <span class="k">技能卡</span>：无敌 / 冰冻 / 磁吸，吃到即生效</li>
+    <li>手机：划屏幕或点下方方向键 · 电脑：方向键 / WASD</li>
+    <li>剩余时间越多，星级越高（最多三星）</li>
+  </ul>
+  <button class="btn" id="btnBegin">开始第 1 关</button>
+  <button class="btn ghost" id="btnBackMenu">返回选关</button>
+</div>
+
+<div class="ov hide" id="ovOver">
+  <h2 id="overTitle">通关</h2>
+  <div class="stars" id="overStars"><i>★</i><i>★</i><i>★</i></div>
+  <p class="sub" id="overSub"></p>
+  <div class="stats">
+    <div><span>用时</span><b id="rTime">0.0s</b></div>
+    <div><span>本关得分</span><b id="rScore">0</b></div>
+    <div><span>最高连吃</span><b id="rChain">0</b></div>
+    <div><span>历史总星</span><b id="rStars">0</b></div>
+  </div>
+  <button class="btn" id="btnNext">下一关</button>
+  <button class="btn ghost" id="btnRetry">重玩本关</button>
+  <button class="btn ghost" id="btnToMenu">选关</button>
+</div>
+
+<script src="cloud.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ============================================================================
+ * 迷宫吃豆 v4.15.0
+ * ----------------------------------------------------------------------------
+ * 100 关，难度**每一关平滑上调一点点**，不是 1~20 关一个档位那样跳台阶。
+ * 三个维度同时推进：
+ *   1) 追捕者速度 4.0 → 5.6 格/秒（线性）
+ *   2) 追捕者「迷路率」0.26 → 0（前期会拐错弯，后期严格最短路）
+ *   3) 能量豆 4 → 1 颗（越后面越难靠它翻盘）
+ * 追捕者数量只在第 11 关从 2 只加到 3 只（数量只能整数跳，其余维度补平滑）。
+ *
+ * 迷宫为什么用「递归回溯 + 随机破墙」而不是手画：
+ *   100 关手画不现实。递归回溯生成的是**完美迷宫**（任意两点唯一通路），
+ *   但完美迷宫全是死胡同 —— 吃豆人被堵在死路里必死，体验极差。
+ *   所以生成后再按 openRate 随机拆掉一部分墙，制造环路，死路大幅减少。
+ *   同一关每次进入都是同一张图（用关卡号当种子），保证公平、可刷星。
+ *
+ * 为什么实体要「格子坐标 + 格间进度」两段式：
+ *   只在格子中心允许转向，格与格之间做线性插值，这是吃豆人手感的来源。
+ *   如果每帧自由转向，贴着墙角会穿墙，而且没有「贴脸甩尾」的紧张感。
+ * ========================================================================= */
+
+/* ---------- 网格 ----------
+   正方形 19×19：粗网格 9×9 展开后正好是 1+9*2=19。
+   手机竖屏下横向迷宫只能占 3/4 屏高，正方形能多吃掉 80px，
+   而且迷宫本来就不必是宽的。 */
+var GW = 19, GH = 19, CELL = 24;
+var cv = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+var DPR = Math.min(2, window.devicePixelRatio || 1);
+cv.width = GW * CELL * DPR;
+cv.height = GH * CELL * DPR;
+ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+var DIRS = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+var TOTAL_LV = 100;
+var SAVE_KEY = 'cls_pm_save_v1';
+
+/* ---------- 运行时 ---------- */
+var grid = [];            // 1=墙 0=路
+var beans = [];           // 0=空 1=普通豆 2=能量豆
+var leftBeans = 0, totalBeans = 0;
+var cards = [];           // {x,y,kind,taken}
+var pac = null, ghosts = [];
+var pacHome = { x: 1, y: 1 };
+var st = 'menu';          // menu | intro | play | pause | over
+var lv = 1, score = 0, life = 3, chain = 0, bestChain = 0;
+var timeLimit = 90, timeLeft = 90, elapsed = 0;
+var energyT = 0, freezeT = 0, magnetT = 0, invinT = 0;
+var hint = '', hintT = 0;
+var animT = 0;
+var save = { max: 1, stars: {} };
+
+try {
+  var s0 = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+  if (s0 && typeof s0.max === 'number') save = { max: Math.max(1, Math.min(TOTAL_LV, s0.max)), stars: s0.stars || {} };
+} catch (e){}
+
+/* 云端「通关关数」最好成绩。pushHi 是覆盖写，所以必须先用 pullHi 拉一次做比较，
+   否则换台设备一局低分就把云端的高分盖掉了。 */
+var cloudBestLv = 0;
+
+function persist(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e){}
+}
+
+/* ---------- 随机（可复现：关卡号当种子） ---------- */
+var _seed = 1;
+function seed(n){ _seed = (n * 2654435761) % 4294967296 || 1; }
+function rnd(){
+  _seed ^= _seed << 13; _seed ^= _seed >>> 17; _seed ^= _seed << 5;
+  _seed = _seed >>> 0;
+  return _seed / 4294967296;
+}
+function rint(n){ return Math.floor(rnd() * n); }
+
+/* ============================================================================
+ * 难度曲线
+ * ========================================================================= */
+function lvParam(L){
+  var t = (L - 1) / (TOTAL_LV - 1);          // 0..1
+  return {
+    t: t,
+    gspeed: 4.0 + 1.6 * t,                    // 格/秒
+    pspeed: 6.3,
+    wander: Math.max(0, 0.26 - 0.26 * t),     // 追捕者拐错弯的概率
+    energizers: Math.max(1, Math.round(4 - 3 * t)),
+    ghosts: L <= 10 ? 2 : 3,
+    openRate: 0.20 + 0.14 * (1 - t)           // 越前面墙拆得越多（路越宽越好走）
+  };
+}
+
+/* ============================================================================
+ * 迷宫生成：递归回溯（粗网格 10×8）→ 展开成 21×17 → 随机破墙
+ * ========================================================================= */
+function genMaze(openRate){
+  var CW = 9, CH = 9, i, j, x, y;
+
+  /* 1. 粗网格递归回溯 */
+  var vis = [], open = {}, stack = [[rint(CW), rint(CH)]];
+  for (i = 0; i < CW; i++){ vis.push(new Array(CH).fill(false)); }
+  vis[stack[0][0]][stack[0][1]] = true;
+
+  while (stack.length){
+    var cur = stack[stack.length - 1], nb = [];
+    for (var k = 0; k < 4; k++){
+      var nx = cur[0] + DIRS[k].x, ny = cur[1] + DIRS[k].y;
+      if (nx < 0 || ny < 0 || nx >= CW || ny >= CH) continue;
+      if (vis[nx][ny]) continue;
+      nb.push([nx, ny]);
+    }
+    if (!nb.length){ stack.pop(); continue; }
+    var pick = nb[rint(nb.length)];
+    open[cur[0] + ',' + cur[1] + '>' + pick[0] + ',' + pick[1]] = 1;
+    open[pick[0] + ',' + pick[1] + '>' + cur[0] + ',' + cur[1]] = 1;
+    vis[pick[0]][pick[1]] = true;
+    stack.push(pick);
+  }
+
+  /* 2. 展开：节点 (i,j) → (1+i*2, 1+j*2)，连接处打通中间的墙 */
+  var g = [];
+  for (y = 0; y < GH; y++){ g.push(new Array(GW).fill(1)); }
+  for (i = 0; i < CW; i++){
+    for (j = 0; j < CH; j++) g[1 + j * 2][1 + i * 2] = 0;
+  }
+  for (i = 0; i < CW - 1; i++){
+    for (j = 0; j < CH; j++){
+      if (open[i + ',' + j + '>' + (i + 1) + ',' + j]) g[1 + j * 2][2 + i * 2] = 0;
+    }
+  }
+  for (i = 0; i < CW; i++){
+    for (j = 0; j < CH - 1; j++){
+      if (open[i + ',' + j + '>' + i + ',' + (j + 1)]) g[2 + j * 2][1 + i * 2] = 0;
+    }
+  }
+
+  /* 3. 随机破墙制造环路：完美迷宫全是死胡同，被追到死路里必死 */
+  for (y = 1; y < GH - 1; y++){
+    for (x = 1; x < GW - 1; x++){
+      if (g[y][x] !== 1) continue;
+      if (rnd() < openRate) g[y][x] = 0;
+    }
+  }
+
+  /* 4. 连通性修复：从中心找一块通路当出生点，把不连通的路重新填成墙 */
+  var sx = 0, sy = 0, found = false;
+  for (var rad = 0; rad < 10 && !found; rad++){
+    for (y = 1; y < GH - 1 && !found; y++){
+      for (x = 1; x < GW - 1 && !found; x++){
+        if (g[y][x] === 0 && Math.abs(x - (GW >> 1)) <= rad && Math.abs(y - (GH >> 1)) <= rad){
+          sx = x; sy = y; found = true;
+        }
+      }
+    }
+  }
+  if (!found){ sx = 1; sy = 1; g[sy][sx] = 0; }
+
+  var reach = distField(g, sx, sy);
+  for (y = 0; y < GH; y++){
+    for (x = 0; x < GW; x++){
+      if (g[y][x] === 0 && reach[y][x] < 0) g[y][x] = 1;
+    }
+  }
+  return { g: g, sx: sx, sy: sy };
+}
+
+/* 从 (sx,sy) 出发的 BFS 距离场，-1 表示不可达 */
+function distField(g, sx, sy){
+  var d = [], i;
+  for (i = 0; i < GH; i++){ d.push(new Array(GW).fill(-1)); }
+  if (g[sy][sx] !== 0) return d;
+  var q = [[sx, sy]], head = 0;
+  d[sy][sx] = 0;
+  while (head < q.length){
+    var c = q[head++], cx = c[0], cy = c[1], cd = d[cy][cx];
+    for (var k = 0; k < 4; k++){
+      var nx = cx + DIRS[k].x, ny = cy + DIRS[k].y;
+      if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+      if (g[ny][nx] !== 0) continue;
+      if (d[ny][nx] >= 0) continue;
+      d[ny][nx] = cd + 1;
+      q.push([nx, ny]);
+    }
+  }
+  return d;
+}
+
+/* ============================================================================
+ * 关卡装载
+ * ========================================================================= */
+function loadLevel(L){
+  lv = L;
+  var p = lvParam(L);
+  seed(L * 7919 + 13);
+
+  var mz = genMaze(p.openRate);
+  grid = mz.g;
+
+  /* 豆子 */
+  beans = [];
+  var y, x;
+  for (y = 0; y < GH; y++){ beans.push(new Array(GW).fill(0)); }
+  totalBeans = 0;
+  for (y = 0; y < GH; y++){
+    for (x = 0; x < GW; x++){
+      if (grid[y][x] !== 0) continue;
+      beans[y][x] = 1; totalBeans++;
+    }
+  }
+  beans[mz.sy][mz.sx] = 0; totalBeans--;
+
+  /* 能量豆：在离出生点较远的角落均匀撒 */
+  var fld = distField(grid, mz.sx, mz.sy), cand = [];
+  for (y = 0; y < GH; y++){
+    for (x = 0; x < GW; x++){
+      if (grid[y][x] === 0 && beans[y][x] === 1 && fld[y][x] > 6) cand.push([x, y, fld[y][x]]);
+    }
+  }
+  /* 兜底：地图太小时上面的筛选可能一个都不剩，那就退回全部通路格，
+     否则后面取 cand[i] 会拿到 undefined，幽灵出生点直接崩 */
+  if (!cand.length){
+    for (y = 0; y < GH; y++){
+      for (x = 0; x < GW; x++){
+        if (grid[y][x] === 0 && (x !== mz.sx || y !== mz.sy)) cand.push([x, y, 99]);
+      }
+    }
+  }
+  cand.sort(function(a, b){ return b[2] - a[2]; });
+  for (var e = 0; e < p.energizers && e < cand.length; e++){
+    var idx = Math.floor(e * cand.length / p.energizers);
+    beans[cand[idx][1]][cand[idx][0]] = 2;
+  }
+
+  /* 技能卡：3 关起每 3 关一张，位置随机 */
+  cards = [];
+  if (L >= 3 && L % 3 === 0){
+    var cc = cand[Math.floor(cand.length * 0.5)] || [mz.sx, mz.sy];
+    cards.push({ x: cc[0], y: cc[1], kind: ['invin', 'freeze', 'magnet'][L % 3], taken: false });
+  }
+
+  /* 吃豆人 */
+  pacHome = { x: mz.sx, y: mz.sy };
+  pac = { x: mz.sx, y: mz.sy, dir: { x: 0, y: 0 }, next: { x: 0, y: 0 }, prog: 0 };
+  for (var k = 0; k < 4; k++){
+    if (grid[pac.y + DIRS[k].y] && grid[pac.y + DIRS[k].y][pac.x + DIRS[k].x] === 0){
+      pac.dir = DIRS[k]; break;
+    }
+  }
+
+  /* 追捕者：放在离出生点最远的几个格子上 */
+  ghosts = [];
+  var far = cand.slice().sort(function(a, b){ return b[2] - a[2]; });
+  var gcol = ['#ff5a6e', '#ff9ecb', '#5ce1e6'];
+  for (var gi = 0; gi < p.ghosts; gi++){
+    var spot = far[Math.min(far.length - 1, gi * 3)] || [mz.sx, mz.sy];
+    var gd = DIRS[gi % 4];
+    ghosts.push({
+      x: spot[0], y: spot[1], home: { x: spot[0], y: spot[1] },
+      dir: gd, prog: 0, speed: p.gspeed, color: gcol[gi],
+      state: 'run', respawn: 0
+    });
+  }
+
+  /* 计时：按豆子数量算，避免「迷宫变大时间反而更少」 */
+  timeLimit = Math.round(totalBeans * 0.62) + 12;
+  timeLeft = timeLimit;
+  elapsed = 0;
+  energyT = 0; freezeT = 0; magnetT = 0; invinT = 0;
+  chain = 0; bestChain = 0;
+  score = 0; life = 3;
+  leftBeans = totalBeans;
+  hint = '吃光全部豆子就通关'; hintT = 2.4;
+}
+
+/* ============================================================================
+ * 移动
+ * ========================================================================= */
+function canGo(g, x, y, d){
+  if (!d || (!d.x && !d.y)) return false;
+  var nx = x + d.x, ny = y + d.y;
+  if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) return false;
+  return g[ny][nx] === 0;
+}
+
+function stepEntity(e, dt, isPac){
+  if (e.prog === 0 && (!e.dir || (!e.dir.x && !e.dir.y))) return;
+  e.prog += e.speed * dt;
+
+  var guard = 0;
+  while (e.prog >= 1 && guard++ < 6){
+    e.prog -= 1;
+    e.x += e.dir.x; e.y += e.dir.y;
+
+    if (isPac){
+      /* 到格中心：先看有没有预输入的方向 */
+      if (canGo(grid, e.x, e.y, e.next)) e.dir = e.next;
+      if (!canGo(grid, e.x, e.y, e.dir)){ e.dir = { x: 0, y: 0 }; e.prog = 0; break; }
+    } else {
+      e.dir = ghostPick(e);
+      if (!e.dir){ e.prog = 0; break; }
+    }
+    eatAt(e.x, e.y, isPac);
+  }
+}
+
+/* 追捕者选方向：BFS 最短路 + 迷路率 + 不掉头 */
+function ghostPick(g){
+  var p = lvParam(lv);
+  var tx = pac.x, ty = pac.y;
+  if (g.state === 'home'){ tx = g.home.x; ty = g.home.y; }
+
+  var opts = [];
+  for (var k = 0; k < 4; k++){
+    var d = DIRS[k], nx = g.x + d.x, ny = g.y + d.y;
+    if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+    if (grid[ny][nx] !== 0) continue;
+    opts.push(d);
+  }
+  if (!opts.length) return null;
+
+  /* 迷路：随机拐，但不允许原路返回（否则原地抖） */
+  if (g.state === 'run' && rnd() < p.wander){
+    var forward = opts.filter(function(d){ return !(d.x === -g.dir.x && d.y === -g.dir.y); });
+    var pool = forward.length ? forward : opts;
+    return pool[rint(pool.length)];
+  }
+
+  var fld = distField(grid, tx, ty);
+  var best = null, bd = 1e9;
+  for (var i = 0; i < opts.length; i++){
+    var o = opts[i], nx2 = g.x + o.x, ny2 = g.y + o.y;
+    var w = fld[ny2][nx2];
+    if (w < 0) continue;
+    if (o.x === -g.dir.x && o.y === -g.dir.y) w += 40;   /* 尽量不掉头 */
+    if (w < bd){ bd = w; best = o; }
+  }
+  return best || opts[0];
+}
+
+/* ============================================================================
+ * 吃
+ * ========================================================================= */
+function eatAt(x, y, isPac){
+  if (!isPac) return;
+  if (beans[y] && beans[y][x] === 1){
+    beans[y][x] = 0; leftBeans--; score += 10; chain = 0;
+  } else if (beans[y] && beans[y][x] === 2){
+    beans[y][x] = 0; leftBeans--; score += 50;
+    energyT = 7; chain = 0;
+    hint = '能量豆！7 秒内可以反吃它们'; hintT = 2;
+  }
+  for (var i = 0; i < cards.length; i++){
+    var c = cards[i];
+    if (!c.taken && c.x === x && c.y === y){
+      c.taken = true;
+      if (c.kind === 'invin'){ invinT = 5; hint = '无敌 5 秒'; }
+      else if (c.kind === 'freeze'){ freezeT = 4; hint = '冰冻 4 秒'; }
+      else { magnetT = 6; hint = '磁吸 6 秒'; }
+      hintT = 2;
+      score += 30;
+    }
+  }
+  if (leftBeans <= 0) win();
+}
+
+/* 磁吸：把半径 3 格内的豆子直接吸走（走过就吃，不要求精确踩格子） */
+function magnetSuck(){
+  if (magnetT <= 0) return;
+  for (var dy = -3; dy <= 3; dy++){
+    for (var dx = -3; dx <= 3; dx++){
+      if (dx * dx + dy * dy > 10) continue;
+      var x = pac.x + dx, y = pac.y + dy;
+      if (x < 0 || y < 0 || x >= GW || y >= GH) continue;
+      if (!beans[y]) continue;
+      if (beans[y][x] === 1){ beans[y][x] = 0; leftBeans--; score += 10; }
+    }
+  }
+}
+
+/* ============================================================================
+ * 碰撞
+ * ========================================================================= */
+function dist2(a, b){
+  var ax = a.x + a.prog * (a.dir ? a.dir.x : 0);
+  var ay = a.y + a.prog * (a.dir ? a.dir.y : 0);
+  var bx = b.x + b.prog * (b.dir ? b.dir.x : 0);
+  var by = b.y + b.prog * (b.dir ? b.dir.y : 0);
+  var dx = ax - bx, dy = ay - by;
+  return dx * dx + dy * dy;
+}
+
+function checkHit(){
+  for (var i = 0; i < ghosts.length; i++){
+    var g = ghosts[i];
+    if (g.state !== 'run' && g.state !== 'scared') continue;
+    /* 判据取 0.55 格，接近圆心重叠才死 —— 半径取太大会「擦边就死」，手感很差 */
+    if (dist2(pac, g) > 0.55 * 0.55) continue;
+
+    if (g.state === 'scared'){
+      chain++;
+      if (chain > bestChain) bestChain = chain;
+      score += 200 * Math.pow(2, Math.min(3, chain - 1));
+      g.state = 'home'; g.respawn = 2.2;
+      g.x = g.home.x; g.y = g.home.y; g.prog = 0;
+      hint = '连吃 +' + (200 * Math.pow(2, Math.min(3, chain - 1))); hintT = 1.2;
+    } else if (invinT > 0){
+      /* 无敌：把追捕者弹回家，自己不掉命 */
+      g.state = 'home'; g.respawn = 2.2;
+      g.x = g.home.x; g.y = g.home.y; g.prog = 0;
+      hint = '无敌撞飞了它'; hintT = 1.2;
+    } else {
+      life--;
+      if (life <= 0){ lose('生命耗尽了'); return; }
+      /* 掉命后回到出生点，追捕者全部遣返，给个喘息的机会 */
+      pac.x = pacHome.x; pac.y = pacHome.y; pac.prog = 0;
+      pac.dir = { x: 0, y: 0 }; pac.next = { x: 0, y: 0 };
+      for (var k2 = 0; k2 < 4; k2++){
+        var d2 = DIRS[k2];
+        if (grid[pacHome.y + d2.y] && grid[pacHome.y + d2.y][pacHome.x + d2.x] === 0){
+          pac.dir = d2; break;
+        }
+      }
+      restartPos();
+      hint = '被抓住了 · 还剩 ' + life + ' 条命'; hintT = 2;
+      return;
+    }
+  }
+}
+
+function restartPos(){
+  for (var i = 0; i < ghosts.length; i++){
+    var g = ghosts[i];
+    g.x = g.home.x; g.y = g.home.y; g.prog = 0; g.state = 'home'; g.respawn = 1.6;
+  }
+  energyT = 0;
+}
+
+/* ============================================================================
+ * 局面
+ * ========================================================================= */
+function startLevel(L){
+  loadLevel(L);
+  st = 'play';
+  document.getElementById('hLv').textContent = '第 ' + L + ' 关';
+  syncOv();
+}
+
+function win(){
+  var ratio = timeLeft / timeLimit;
+  var star = ratio > 0.45 ? 3 : (ratio > 0.18 ? 2 : 1);
+  save.max = Math.max(save.max, Math.min(TOTAL_LV, lv + 1));
+  save.stars[lv] = Math.max(save.stars[lv] || 0, star);
+  persist();
+  finish('通关', star, '本关用时 ' + elapsed.toFixed(1) + 's，剩余 ' + Math.ceil(timeLeft) + 's');
+
+  /* 上云：榜单比的是「通关关数」（save.max - 1），不是单关分数 ——
+     关数才是这个游戏真正的进度，单关分数一关只有几十，排不出区别。 */
+  try {
+    if (window.CLS_CLOUD){
+      var cleared = Math.max(0, save.max - 1);
+      CLS_CLOUD.addPlay('pacman', Math.round(elapsed * 1000), { score: cleared });
+      if (cleared > cloudBestLv){
+        cloudBestLv = cleared;
+        CLS_CLOUD.pushHi('pacman_hi', cleared);
+      }
+    }
+  } catch (e){}
+}
+
+function lose(reason){
+  finish('挑战失败', 0, reason);
+}
+
+function finish(title, star, sub){
+  st = 'over';
+  document.getElementById('overTitle').textContent = title;
+  var stars = document.querySelectorAll('#overStars i');
+  for (var i = 0; i < 3; i++) stars[i].classList.toggle('on', i < star);
+  document.getElementById('overSub').textContent = sub;
+  document.getElementById('rTime').textContent = elapsed.toFixed(1) + 's';
+  document.getElementById('rScore').textContent = score;
+  document.getElementById('rChain').textContent = bestChain;
+  var tot = 0;
+  for (var k in save.stars) tot += save.stars[k];
+  document.getElementById('rStars').textContent = tot + ' / ' + (TOTAL_LV * 3);
+  document.getElementById('btnNext').style.display = (star > 0 && lv < TOTAL_LV) ? '' : 'none';
+  syncOv();
+}
+
+function syncOv(){
+  document.getElementById('ovMenu').classList.toggle('hide', st !== 'menu');
+  document.getElementById('ovIntro').classList.toggle('hide', st !== 'intro');
+  document.getElementById('ovOver').classList.toggle('hide', st !== 'over');
+}
+
+/* ============================================================================
+ * 主循环
+ * ========================================================================= */
+var last = 0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if (!last) last = ts;
+  var dt = Math.min(0.05, (ts - last) / 1000);
+  last = ts;
+  animT += dt;
+  if (st === 'play') update(dt);
+  draw();
+}
+
+function update(dt){
+  elapsed += dt;
+  timeLeft -= dt;
+  if (timeLeft <= 0){ timeLeft = 0; lose('时间到了'); return; }
+
+  /* ⚠️ 这几个是 IIFE 内的局部变量，不能走 window[k]（window 上没有它们） */
+  if (energyT > 0) energyT = Math.max(0, energyT - dt);
+  if (freezeT > 0) freezeT = Math.max(0, freezeT - dt);
+  if (magnetT > 0) magnetT = Math.max(0, magnetT - dt);
+  if (invinT > 0) invinT = Math.max(0, invinT - dt);
+  if (hintT > 0) hintT -= dt;
+
+  var p = lvParam(lv);
+
+  pac.speed = p.pspeed;
+  stepEntity(pac, dt, true);
+  magnetSuck();
+
+  for (var i = 0; i < ghosts.length; i++){
+    var g = ghosts[i];
+    if (g.state === 'home'){
+      g.respawn -= dt;
+      if (g.respawn <= 0){ g.state = 'run'; g.prog = 0; }
+      continue;
+    }
+    if (freezeT > 0) continue;
+    if (g.state === 'scared'){
+      g.speed = p.gspeed * 0.45;
+    } else {
+      g.speed = p.gspeed;
+    }
+    stepEntity(g, dt, false);
+  }
+
+  if (energyT <= 0){
+    for (var j = 0; j < ghosts.length; j++){
+      if (ghosts[j].state === 'scared'){ ghosts[j].state = 'run'; }
+    }
+  } else {
+    for (var m = 0; m < ghosts.length; m++){
+      if (ghosts[m].state === 'run') ghosts[m].state = 'scared';
+    }
+  }
+
+  checkHit();
+  if (st !== 'play') return;
+
+  document.getElementById('hTime').textContent = Math.ceil(timeLeft) + 's';
+  document.getElementById('hBean').textContent = leftBeans;
+  document.getElementById('hScore').textContent = score;
+  document.getElementById('hLife').textContent = life;
+  document.getElementById('hTimeWrap').classList.toggle('warn', timeLeft < 15);
+}
+
+/* ============================================================================
+ * 绘制
+ * ========================================================================= */
+function px(e){ return (e.x + (e.dir ? e.dir.x : 0) * e.prog + 0.5) * CELL; }
+function py(e){ return (e.y + (e.dir ? e.dir.y : 0) * e.prog + 0.5) * CELL; }
+
+function draw(){
+  ctx.clearRect(0, 0, GW * CELL, GH * CELL);
+  ctx.fillStyle = '#050813';
+  ctx.fillRect(0, 0, GW * CELL, GH * CELL);
+
+  /* 墙 */
+  drawWalls();
+
+  /* 豆子 */
+  for (var yy = 0; yy < GH; yy++){
+    if (!beans[yy]) continue;
+    for (var xx = 0; xx < GW; xx++){
+      var b = beans[yy][xx];
+      if (!b) continue;
+      var cx = (xx + 0.5) * CELL, cy = (yy + 0.5) * CELL;
+      if (b === 1){
+        ctx.fillStyle = '#ffdc9a';
+        ctx.beginPath(); ctx.arc(cx, cy, 2.3, 0, Math.PI * 2); ctx.fill();
+      } else {
+        var pulse = 1 + Math.sin(animT * 5) * 0.18;
+        ctx.save();
+        ctx.shadowColor = '#ffd166'; ctx.shadowBlur = 12;
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath(); ctx.arc(cx, cy, 5 * pulse, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  /* 技能卡 */
+  for (var ci = 0; ci < cards.length; ci++){
+    var c = cards[ci];
+    if (c.taken) continue;
+    var cxx = (c.x + 0.5) * CELL, cyy = (c.y + 0.5) * CELL;
+    var col = c.kind === 'invin' ? '#ffe14d' : (c.kind === 'freeze' ? '#8fd8ff' : '#c9a6ff');
+    ctx.save();
+    ctx.translate(cxx, cyy);
+    ctx.rotate(Math.sin(animT * 2) * 0.12);
+    ctx.shadowColor = col; ctx.shadowBlur = 14;
+    ctx.fillStyle = col;
+    rr(-CELL * 0.3, -CELL * 0.3, CELL * 0.6, CELL * 0.6, 5);
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#0a0f22';
+    ctx.font = '700 10px -apple-system,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(c.kind === 'invin' ? '盾' : (c.kind === 'freeze' ? '冰' : '磁'), cxx, cyy + 0.5);
+  }
+
+  /* 追捕者 */
+  for (var gi = 0; gi < ghosts.length; gi++) drawGhost(ghosts[gi]);
+
+  /* 吃豆人 */
+  drawPac();
+
+  /* 提示条 */
+  if (hintT > 0 && hint){
+    ctx.globalAlpha = Math.min(1, hintT / 0.5);
+    ctx.font = '700 13px -apple-system,"PingFang SC",sans-serif';
+    var tw = ctx.measureText(hint).width + 30;
+    var bx2 = (GW * CELL - tw) / 2, by2 = GH * CELL - 34;
+    ctx.fillStyle = 'rgba(5,8,19,.9)';
+    rr(bx2, by2, tw, 24, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,170,255,.4)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#cfe0ff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(hint, GW * CELL / 2, by2 + 12.5);
+    ctx.globalAlpha = 1;
+  }
+
+  /* 冰冻 / 无敌的屏幕提示 */
+  if (freezeT > 0){
+    ctx.fillStyle = 'rgba(140,200,255,.10)';
+    ctx.fillRect(0, 0, GW * CELL, GH * CELL);
+  }
+  if (invinT > 0){
+    ctx.fillStyle = 'rgba(255,225,77,.07)';
+    ctx.fillRect(0, 0, GW * CELL, GH * CELL);
+  }
+}
+
+function rr(x, y, w, h, r){
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/* 墙：先一次性填色，再把所有亮边攒进一条 path 一次 stroke。
+   逐格 stroke 是 357 次绘制调用，手机上会明显掉帧。 */
+function drawWalls(){
+  var x, y;
+  ctx.fillStyle = '#18234d';
+  for (y = 0; y < GH; y++){
+    if (!grid[y]) continue;
+    for (x = 0; x < GW; x++){
+      if (grid[y][x] === 1) ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    }
+  }
+  ctx.strokeStyle = 'rgba(110,150,255,.22)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (y = 0; y < GH; y++){
+    if (!grid[y]) continue;
+    for (x = 0; x < GW; x++){
+      if (grid[y][x] !== 1) continue;
+      var X = x * CELL, Y = y * CELL;
+      if (!grid[y - 1] || grid[y - 1][x] === 0){ ctx.moveTo(X, Y + 0.5); ctx.lineTo(X + CELL, Y + 0.5); }
+      if (!grid[y + 1] || grid[y + 1][x] === 0){ ctx.moveTo(X, Y + CELL - 0.5); ctx.lineTo(X + CELL, Y + CELL - 0.5); }
+      if (!grid[y][x - 1]){ ctx.moveTo(X + 0.5, Y); ctx.lineTo(X + 0.5, Y + CELL); }
+      if (!grid[y][x + 1]){ ctx.moveTo(X + CELL - 0.5, Y); ctx.lineTo(X + CELL - 0.5, Y + CELL); }
+    }
+  }
+  ctx.stroke();
+}
+
+function drawPac(){
+  var X = px(pac), Y = py(pac), R = CELL * 0.42;
+  var ang = 0;
+  if (pac.dir.x === 1) ang = 0;
+  else if (pac.dir.x === -1) ang = Math.PI;
+  else if (pac.dir.y === 1) ang = Math.PI / 2;
+  else if (pac.dir.y === -1) ang = -Math.PI / 2;
+
+  var moving = pac.dir.x !== 0 || pac.dir.y !== 0;
+  var open = moving ? (0.12 + Math.abs(Math.sin(animT * 11)) * 0.34) : 0.18;
+
+  ctx.save();
+  ctx.translate(X, Y);
+  ctx.rotate(ang);
+  if (invinT > 0){
+    ctx.shadowColor = '#ffe14d'; ctx.shadowBlur = 18;
+  }
+  ctx.fillStyle = '#ffe14d';
+  ctx.beginPath();
+  ctx.arc(0, 0, R, open * Math.PI, (2 - open) * Math.PI);
+  ctx.lineTo(0, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGhost(g){
+  var X = px(g), Y = py(g), R = CELL * 0.40;
+  var scared = g.state === 'scared';
+  var home = g.state === 'home';
+
+  ctx.save();
+  if (home) ctx.globalAlpha = 0.35;
+
+  /* 身体：上半圆 + 下方三段波浪 */
+  ctx.beginPath();
+  ctx.arc(X, Y - R * 0.15, R, Math.PI, 0);
+  ctx.lineTo(X + R, Y + R * 0.72);
+  var w = R * 2 / 3;
+  ctx.lineTo(X + R - w, Y + R * 0.72);
+  ctx.lineTo(X + R - w * 1.5, Y + R * 0.3);
+  ctx.lineTo(X + R - w * 2, Y + R * 0.72);
+  ctx.lineTo(X + R - w * 3, Y + R * 0.72);
+  ctx.closePath();
+  ctx.fillStyle = scared ? (energyT > 2 || Math.floor(animT * 8) % 2 ? '#2a3f8f' : '#e8eeff') : g.color;
+  if (!home && !scared){ ctx.shadowColor = g.color; ctx.shadowBlur = 10; }
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  /* 眼睛 */
+  if (!scared){
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(X - R * 0.34, Y - R * 0.2, R * 0.28, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(X + R * 0.34, Y - R * 0.2, R * 0.28, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1a2244';
+    var ox = g.dir ? g.dir.x * R * 0.1 : 0, oy = g.dir ? g.dir.y * R * 0.1 : 0;
+    ctx.beginPath(); ctx.arc(X - R * 0.34 + ox, Y - R * 0.2 + oy, R * 0.13, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(X + R * 0.34 + ox, Y - R * 0.2 + oy, R * 0.13, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(X - R * 0.3, Y - R * 0.15, R * 0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(X + R * 0.3, Y - R * 0.15, R * 0.1, 0, Math.PI * 2); ctx.fill();
+    /* 惊吓的嘴 */
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(X - R * 0.4, Y + R * 0.3);
+    ctx.lineTo(X - R * 0.2, Y + R * 0.14);
+    ctx.lineTo(X, Y + R * 0.3);
+    ctx.lineTo(X + R * 0.2, Y + R * 0.14);
+    ctx.lineTo(X + R * 0.4, Y + R * 0.3);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ============================================================================
+ * 输入
+ * ========================================================================= */
+function setDir(d){
+  if (st !== 'play') return;
+  pac.next = d;
+  /* 当前就能走就直接走，不用等到下一格 */
+  if (canGo(grid, pac.x, pac.y, d) && pac.prog < 0.35){ pac.dir = d; }
+}
+
+document.addEventListener('keydown', function(e){
+  var k = e.key;
+  if (k === 'ArrowUp' || k === 'w' || k === 'W'){ setDir({ x: 0, y: -1 }); e.preventDefault(); }
+  else if (k === 'ArrowDown' || k === 's' || k === 'S'){ setDir({ x: 0, y: 1 }); e.preventDefault(); }
+  else if (k === 'ArrowLeft' || k === 'a' || k === 'A'){ setDir({ x: -1, y: 0 }); e.preventDefault(); }
+  else if (k === 'ArrowRight' || k === 'd' || k === 'D'){ setDir({ x: 1, y: 0 }); e.preventDefault(); }
+});
+
+/* 手机：在画布上滑动转向（位移超过 16px 判定方向，然后重新起算原点） */
+var tx0 = 0, ty0 = 0, swiping = false;
+cv.addEventListener('touchstart', function(e){
+  if (st !== 'play') return;
+  swiping = true;
+  tx0 = e.touches[0].clientX; ty0 = e.touches[0].clientY;
+  e.preventDefault();
+}, { passive: false });
+cv.addEventListener('touchmove', function(e){
+  if (st !== 'play' || !swiping) return;
+  var dx = e.touches[0].clientX - tx0, dy = e.touches[0].clientY - ty0;
+  if (Math.abs(dx) > 16 || Math.abs(dy) > 16){
+    if (Math.abs(dx) > Math.abs(dy)) setDir({ x: dx > 0 ? 1 : -1, y: 0 });
+    else setDir({ x: 0, y: dy > 0 ? 1 : -1 });
+    tx0 = e.touches[0].clientX; ty0 = e.touches[0].clientY;
+  }
+  e.preventDefault();
+}, { passive: false });
+cv.addEventListener('touchend', function(){ swiping = false; });
+
+/* 方向键按钮 */
+var dpad = document.getElementById('dpad');
+dpad.addEventListener('pointerdown', function(e){
+  var b = e.target.closest('button[data-d]');
+  if (!b) return;
+  var d = b.getAttribute('data-d');
+  if (d === 's'){ st = (st === 'play' ? 'pause' : 'play'); return; }
+  var map = { u: { x: 0, y: -1 }, d: { x: 0, y: 1 }, l: { x: -1, y: 0 }, r: { x: 1, y: 0 } };
+  if (map[d]) setDir(map[d]);
+  e.preventDefault();
+}, { passive: false });
+
+/* ============================================================================
+ * 菜单
+ * ========================================================================= */
+function buildMenu(){
+  var gridEl = document.getElementById('lvGrid');
+  var html = '';
+  for (var i = 1; i <= TOTAL_LV; i++){
+    var locked = i > save.max;
+    var s = save.stars[i] || 0;
+    var stxt = s ? '★'.repeat(s) : '';
+    html += '<button data-lv="' + i + '"' + (locked ? ' disabled' : '') + '>'
+      + i + '<span class="s">' + (stxt || (locked ? '锁' : '—')) + '</span></button>';
+  }
+  gridEl.innerHTML = html;
+  var tot = 0;
+  for (var k in save.stars) tot += save.stars[k];
+  document.getElementById('menuSub').textContent =
+    '已解锁 ' + save.max + ' / ' + TOTAL_LV + ' 关 · 累计 ' + tot + ' / ' + (TOTAL_LV * 3) + ' 星';
+}
+
+document.getElementById('lvGrid').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-lv]');
+  if (!b || b.disabled) return;
+  startLevel(parseInt(b.getAttribute('data-lv'), 10));
+});
+
+document.getElementById('btnHelp').addEventListener('click', function(){
+  st = 'intro'; syncOv();
+});
+document.getElementById('btnBegin').addEventListener('click', function(){
+  startLevel(Math.min(save.max, TOTAL_LV));
+});
+document.getElementById('btnBackMenu').addEventListener('click', backToMenu);
+document.getElementById('btnToMenu').addEventListener('click', backToMenu);
+document.getElementById('btnRetry').addEventListener('click', function(){ startLevel(lv); });
+document.getElementById('btnNext').addEventListener('click', function(){ startLevel(Math.min(TOTAL_LV, lv + 1)); });
+
+function backToMenu(){
+  st = 'menu';
+  buildMenu();
+  syncOv();
+}
+
+/* 切走自动暂停 */
+document.addEventListener('visibilitychange', function(){
+  if (document.hidden && st === 'play') st = 'pause';
+});
+
+/* ---------- 启动 ---------- */
+buildMenu();
+/* 先装一关当背景，菜单后面能看到实际迷宫，不是一块黑 */
+loadLevel(1);
+st = 'menu';
+syncOv();
+requestAnimationFrame(loop);
+
+/* 拉云端最高通关关数：比本地高就采纳（换设备不丢进度参照） */
+try {
+  if (window.CLS_CLOUD){
+    CLS_CLOUD.pullHi('pacman_hi', function(v){
+      if (v > cloudBestLv) cloudBestLv = v;
+    });
+  }
+} catch (e){}
+
+/* 自测钩子：只在 ?selftest=1 时挂载。线上正常访问拿不到 —— 否则谁都能
+   在控制台调 win() 白嫖全部星星。部署前核对关卡生成 / 存档解锁时用它。 */
+if (/[?&]selftest=1/.test(location.search)){
+  window.__clsPm = {
+    snap: function(){
+      return {
+        st: st, lv: lv, life: life, score: score,
+        total: totalBeans, left: leftBeans,
+        timeLeft: timeLeft, timeLimit: timeLimit,
+        ghosts: ghosts.length,
+        pac: { x: pac.x, y: pac.y, dir: pac.dir, prog: pac.prog },
+        ghostPos: ghosts.map(function(g){ return { x: g.x, y: g.y, state: g.state }; })
+      };
+    },
+    start: startLevel,
+    load: loadLevel,
+    param: lvParam,
+    grid: function(){ return grid; },
+    save: function(){ return save; },
+    win: win,
+    setTime: function(t){ timeLeft = t; },
+    teleport: function(x, y){ pac.x = x; pac.y = y; pac.prog = 0; }
+  };
+}
+})();
+</script>
+</body>
+</html>

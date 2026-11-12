@@ -27,6 +27,11 @@ const GAMES = {
   bird:   { name: '像素飞鸟',    icon: '🐦', unit: '管',   key: 'bird_hi'   },
   tetris: { name: '俄罗斯方块',  icon: '🧱', unit: '分',   key: 'tetris_hi' },
   doodle: { name: '涂鸦跳跃',    icon: '🦘', unit: '高度', key: 'doodle_hi' },
+  /* v4.14.1：打砖块改成时间制后比「生存秒数」；迷宫吃豆比「通关关数」。
+     ⚠️ 这里加一项，前端 app.js 的 boardPaint() 里 GAMES 也要加同名一项，
+        否则后台有榜、前台没签，玩家永远点不到。 */
+  breakout: { name: '下落砖块', icon: '🧱', unit: '秒', key: 'breakout_hi' },
+  pacman:   { name: '迷宫吃豆', icon: '🟡', unit: '关', key: 'pacman_hi'   },
 };
 
 /* 传入的 game 参数必须在这个表里，避免被拿来当任意键名拼接 */
