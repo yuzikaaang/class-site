@@ -182,6 +182,24 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .field input:focus,.field select:focus,.field textarea:focus{
   border-color:var(--btn-b);box-shadow:0 0 0 3px var(--tint);
 }
+/* v4.14.0（站主第 2 条）：密码强度条，与前台同一套分级（红 → 橙 → 黄绿 → 绿）。
+   后台是独立页面，没有 app.js，所以评分函数在 admin-2.js 里另存一份，
+   改规则时两边一起改（index.html 的 .pwm 样式同理）。 */
+.pwm{display:flex;align-items:center;gap:8px;margin-top:7px;min-height:16px}
+.pwm-bars{display:flex;gap:3px;flex:1;min-width:0}
+.pwm-bars i{flex:1;height:5px;border-radius:99px;background:var(--border-2);transition:background .18s ease}
+.pwm-txt{flex:none;min-width:4.4em;text-align:right;font-size:.7rem;font-weight:700;color:var(--fg-3)}
+.pwm[data-lv="1"] .pwm-bars i:nth-child(-n+1){background:#d64545}
+.pwm[data-lv="1"] .pwm-txt{color:var(--danger)}
+.pwm[data-lv="2"] .pwm-bars i:nth-child(-n+2){background:#e08a3c}
+.pwm[data-lv="2"] .pwm-txt{color:#9a5b00}
+.pwm[data-lv="3"] .pwm-bars i:nth-child(-n+3){background:#b9a52a}
+.pwm[data-lv="3"] .pwm-txt{color:#77650a}
+.pwm[data-lv="4"] .pwm-bars i:nth-child(-n+4){background:#2f9e44}
+.pwm[data-lv="4"] .pwm-txt{color:#1e7a35}
+html[data-theme="dark"] .pwm[data-lv="2"] .pwm-txt{color:#ffb46b}
+html[data-theme="dark"] .pwm[data-lv="3"] .pwm-txt{color:#e6d264}
+html[data-theme="dark"] .pwm[data-lv="4"] .pwm-txt{color:#7ee2a0}
 /* 「仅本人可见」勾选项（2026-10-08）：窄行、不上 46px 高度。
    ⚠️ 2026-10-09 修复：原来没写 width，被后面第 608 行的全局 `.chk{width:15px}`
       （那是给表格里真复选框用的）命中 —— label 本身被压成 15px 宽，
@@ -1828,14 +1846,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '4.13.0';
+var SITE_VERSION = '4.14.0';
 var VER_DATE = '2026-11-09';
 </script>
 <!-- v3.19.0：后台脚本按顶层横幅拆成三段（各 <120KB gzip），共享全局作用域，
      顺序固定，不能调换或异步加载。 -->
-<script src="./fs-keep.js?v=4130"></script>
-<script src="./admin-1.js?v=4130"></script>
-<script src="./admin-2.js?v=4130"></script>
-<script src="./admin-3.js?v=4130"></script>
+<script src="./fs-keep.js?v=4140"></script>
+<script src="./admin-1.js?v=4140"></script>
+<script src="./admin-2.js?v=4140"></script>
+<script src="./admin-3.js?v=4140"></script>
 </body>
 </html>

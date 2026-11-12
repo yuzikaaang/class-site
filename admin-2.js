@@ -3655,7 +3655,8 @@ function renderAccount(){
     +     '<div class="field"><label for="pwOld">当前密码</label>'
     +     '<input id="pwOld" type="password" autocomplete="current-password"></div>'
     +     '<div class="field"><label for="pwNew">新密码</label>'
-    +     '<input id="pwNew" type="password" autocomplete="new-password" placeholder="6–64 位">'
+    +     '<input id="pwNew" type="password" autocomplete="new-password" placeholder="6–64 位" oninput="pwmInput(this)">'
+    +     '<div class="pwm"><span class="pwm-bars"><i></i><i></i><i></i><i></i></span><span class="pwm-txt"></span></div>'
     +     '<p class="hint">建议使用字母与数字组合，且不同于登录名。</p></div>'
     +     '<div class="field"><label for="pwNew2">再输一次新密码</label>'
     +     '<input id="pwNew2" type="password" autocomplete="new-password"></div>'
@@ -3863,7 +3864,8 @@ function openForceChangePwd(){
       + '<div class="field"><label for="fcOld">当前密码（初始密码）</label>'
       + '<input id="fcOld" type="password" autocomplete="current-password"></div>'
       + '<div class="field"><label for="fcNew">新密码</label>'
-      + '<input id="fcNew" type="password" autocomplete="new-password" placeholder="6–64 位">'
+      + '<input id="fcNew" type="password" autocomplete="new-password" placeholder="6–64 位" oninput="pwmInput(this)">'
+      + '<div class="pwm"><span class="pwm-bars"><i></i><i></i><i></i><i></i></span><span class="pwm-txt"></span></div>'
       + '<p class="hint">建议使用字母与数字组合。</p></div>'
       + '<div class="field"><label for="fcNew2">再输一次新密码</label>'
       + '<input id="fcNew2" type="password" autocomplete="new-password"></div>'
@@ -6301,4 +6303,44 @@ function aiPrevFmt(text){
     h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
     return head ? '<span class="ln-em">' + h + '</span>' : h;
   }).join('\n');
+}
+
+/* ============================================================================
+ * v4.14.0（站主第 2 条）：密码强度条
+ * ----------------------------------------------------------------------------
+ * 站主原话：「输入密码阶段有密码条，强弱从红到绿」。
+ * 后台是独立页面（admin.html 只加载 fs-keep.js + admin-1/2/3.js），
+ * 拿不到 app.js 里的 pwdScore，所以这里保留一份同规则实现 ——
+ * ⚠️ 改评分规则时，app.js 的 pwdScore 与这里必须一起改，否则前后台标准不一致。
+ * 只挂在「设置 / 修改新密码」的框上，登录框不评。
+ * ========================================================================= */
+var PWM_LABEL = ['', '弱', '一般', '较强', '强'];
+function pwdScore(v){
+  v = String(v == null ? '' : v);
+  if(!v) return 0;
+  if(v.length < 6) return 1;
+  var s = 1;
+  if(v.length >= 8) s++;
+  if(v.length >= 12) s++;
+  var kinds = 0;
+  if(/[a-z]/.test(v)) kinds++;
+  if(/[A-Z]/.test(v)) kinds++;
+  if(/[0-9]/.test(v)) kinds++;
+  if(/[^A-Za-z0-9]/.test(v)) kinds++;
+  if(kinds >= 3) s++;
+  if(kinds >= 4 && v.length >= 10) s++;
+  if(/^(.)\1+$/.test(v)) s = 1;
+  if(/(.)\1{2,}/.test(v)) s = Math.max(1, s - 1);
+  if(/^[0-9]+$/.test(v)) s = Math.min(s, 2);
+  return Math.max(1, Math.min(4, s));
+}
+/** 输入框旁边画强度：结构固定为 input + .pwm（同一 .field 内） */
+function pwmInput(inp){
+  if(!inp || !inp.parentNode) return;
+  var m = inp.parentNode.querySelector('.pwm');
+  if(!m) return;
+  var lv = pwdScore(inp.value);
+  m.setAttribute('data-lv', lv ? String(lv) : '0');
+  var t = m.querySelector('.pwm-txt');
+  if(t) t.textContent = lv ? PWM_LABEL[lv] : '';
 }

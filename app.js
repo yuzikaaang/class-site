@@ -6144,7 +6144,7 @@ function renderAccount(){
   var form = ACCT_TAB === 'register'
     ? '<div class="acct-field"><label>用户名</label><input id="acctU" placeholder="3–20 位，中英文/数字/下划线" autocomplete="username"></div>' +
       '<div class="acct-field"><label>显示名（可选）</label><input id="acctD" placeholder="同学们看到的名字" autocomplete="nickname"></div>' +
-      '<div class="acct-field"><label>密码</label><input id="acctP" type="password" placeholder="至少 6 位" autocomplete="new-password"></div>' +
+      '<div class="acct-field"><label>密码</label><input id="acctP" type="password" placeholder="至少 6 位" autocomplete="new-password" data-pwm="1">' + pwmHtml() + '</div>' +
       '<div class="acct-field"><label>确认密码</label><input id="acctP2" type="password" placeholder="再输一次" autocomplete="new-password"></div>' +
       capField +
       '<button class="acct-btn" id="acctGo" onclick="doRegister()">注册并登录</button>'
@@ -6193,6 +6193,54 @@ function renderAccount(){
   }catch(e){}
 }
 
+/* ---------- v4.14.0（站主第 2 条）：密码强度条 ----------
+   站主原话：「输入密码阶段有密码条，强弱从红到绿」。
+   评分刻意保守：长度、字符种类各占一份，纯数字 / 纯字母 / 连续重复会压分 ——
+   班站最常见的弱密码就是「20100710」这类生日，必须一眼看出不行。
+   1–4 级：弱（红）→ 一般（橙）→ 较强（黄绿）→ 强（绿），4 格逐级点亮。
+   ⚠️ 只挂在「设置新密码」的输入框上。登录框验证的是旧密码，评强弱没有意义。 */
+var PWM_LABEL = ['', '弱', '一般', '较强', '强'];
+function pwdScore(v){
+  v = String(v == null ? '' : v);
+  if(!v) return 0;
+  if(v.length < 6) return 1;
+  var s = 1;
+  if(v.length >= 8) s++;
+  if(v.length >= 12) s++;
+  var kinds = 0;
+  if(/[a-z]/.test(v)) kinds++;
+  if(/[A-Z]/.test(v)) kinds++;
+  if(/[0-9]/.test(v)) kinds++;
+  if(/[^A-Za-z0-9]/.test(v)) kinds++;
+  if(kinds >= 3) s++;
+  if(kinds >= 4 && v.length >= 10) s++;
+  if(/^(.)\1+$/.test(v)) s = 1;                  /* 全是同一个字符 */
+  if(/(.)\1{2,}/.test(v)) s = Math.max(1, s - 1);/* 连续三个以上重复 */
+  if(/^[0-9]+$/.test(v)) s = Math.min(s, 2);     /* 纯数字最多到「一般」 */
+  return Math.max(1, Math.min(4, s));
+}
+function pwmHtml(){
+  return '<div class="pwm" aria-hidden="true">'
+    + '<span class="pwm-bars"><i></i><i></i><i></i><i></i></span>'
+    + '<span class="pwm-txt"></span></div>';
+}
+function pwmPaint(m, v){
+  if(!m) return;
+  var lv = pwdScore(v);
+  m.setAttribute('data-lv', lv ? String(lv) : '0');
+  var t = m.querySelector('.pwm-txt');
+  if(t) t.textContent = lv ? PWM_LABEL[lv] : '';
+}
+/* 一个委托覆盖所有动态表单（账号面板每次整块重绘，逐个绑会漏） */
+try{
+  document.addEventListener('input', function(e){
+    var t = e.target;
+    if(!t || !t.getAttribute || !t.getAttribute('data-pwm')) return;
+    var host = t.parentNode;
+    pwmPaint(host && host.querySelector ? host.querySelector('.pwm') : null, t.value);
+  });
+}catch(e){}
+
 function acctMsg(t, cls){
   var el = document.getElementById('acctMsg');
   if(el){ el.textContent = t || ''; el.className = 'acct-msg ' + (cls || ''); }
@@ -6224,7 +6272,7 @@ function acctForcePwdHtml(){
     + '可点击「暂不修改」跳过，之后可在「我的账号」中修改。</div>'
     + oldField
     + '<div class="acct-field"><label>新密码（至少 6 位）</label>'
-    + '<input id="fpP1" type="password" autocomplete="new-password"></div>'
+    + '<input id="fpP1" type="password" autocomplete="new-password" data-pwm="1">' + pwmHtml() + '</div>'
     + '<div class="acct-field"><label>再输一遍确认</label>'
     + '<input id="fpP2" type="password" autocomplete="new-password"></div>'
     + '<button class="acct-btn" id="fpGo" onclick="doForceChangePwd()">保存并继续</button>'
@@ -7128,7 +7176,7 @@ function showChangePwd(){
   if(!box) return;
   box.innerHTML = '<div class="acct-prompt">' +
     '<input id="pwdOld" class="inp" type="password" placeholder="原密码" autocomplete="current-password">' +
-    '<input id="pwdNew" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">' +
+    '<input id="pwdNew" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password" data-pwm="1">' + pwmHtml() +
     '<div class="acct-row" style="margin-top:0">' +
       '<button class="acct-btn" onclick="doChangePwd()">确认修改</button>' +
       '<button class="acct-btn ghost" onclick="document.getElementById(\'acctPwdBox\').innerHTML=\'\'">取消</button>' +
@@ -15875,6 +15923,12 @@ function scSetTab(t){
 }
 
 function scRenderPane(){
+  /* v4.14.0：「查看画像」的搜索弹层挂到了 body 上，重绘前清掉旧的，
+     否则切页签 / 换考试会留下一层浮在屏幕上的空列表 */
+  var orphan = document.querySelectorAll('body > .sc-vpick-pop');
+  for(var i = 0; i < orphan.length; i++){
+    if(orphan[i].parentNode) orphan[i].parentNode.removeChild(orphan[i]);
+  }
   if(SC.tab === 'me') scRenderMe();
   else if(SC.tab === 'pk') scRenderPk();
   else scRenderBoard();
@@ -16611,7 +16665,7 @@ function scChartSegments(st){
    规则：
      · 默认看本人（学生兼管理员也是先看自己）
      · 管理员本人不在成绩表里（纯管理号，比如班级电脑那个）→ 自动落到成绩表第一个人
-     · 只有管理员看得到「查看画像」下拉，普通同学看不到、也切不了 */
+     · 只有管理员看得到「查看画像」搜索框，普通同学看不到、也切不了 */
 function scViewRow(){
   if(SC.viewAs){
     for(var i = 0; i < SC.rows.length; i++){
@@ -16629,35 +16683,201 @@ function scViewPick(id){
   SC.viewAs = id ? String(id) : null;
   scRenderPane();
 }
+/* v4.14.0（站主第 1 条）：「查看画像」改成可搜索的自动补全。
+   站主原话：「管理员查看他人画像的时候，使用自动补全搜索可以直接查看对应人的姓名，
+              排序方式采用学号排序，不采用姓名排序」
+   以前是 <select>：全班六十来号人要从头翻到尾，手机上更难找。
+   现在点一下弹出搜索框，输姓名或学号即时筛；列表恒按学号从小到大，
+   没学号的（老师 / 旁听）排最后，与成绩单顺序一致。 */
+function scViewSort(a, b){
+  var x = String(a.studentId == null ? '' : a.studentId).trim();
+  var y = String(b.studentId == null ? '' : b.studentId).trim();
+  if(x && y && x !== y){
+    var nx = parseFloat(x), ny = parseFloat(y);
+    if(isFinite(nx) && isFinite(ny) && nx !== ny) return nx - ny;
+    return x < y ? -1 : 1;
+  }
+  if(x && !y) return -1;
+  if(!x && y) return 1;
+  return String(a.name || '') < String(b.name || '') ? -1 : 1;
+}
+function scViewCur(){
+  var me = scMyRow();
+  if(SC.viewAs){
+    for(var i = 0; i < SC.rows.length; i++){
+      if(String(SC.rows[i].id) === String(SC.viewAs)) return SC.rows[i];
+    }
+  }
+  return me || SC.rows[0] || null;
+}
+function scViewName(r){
+  if(!r) return '选择同学';
+  return String(r.name || '') + (r.studentId ? '（' + String(r.studentId) + '）' : '');
+}
 function scViewBar(){
   if(!scIsAdmin() || !SC.rows.length) return '';
-  var me = scMyRow();
-  var cur = SC.viewAs ? String(SC.viewAs) : (me ? String(me.id) : String(SC.rows[0].id));
-  /* v4.9.1（站主第 9 条）：下拉按**学号**从小到大排，跟成绩单一致；
-     没有学号的（老师 / 旁听）按姓名排在最后，不插在中间乱序。
-     以前直接用 SC.rows 的原始顺序（后端按总分排），找个人得从头翻到尾。 */
-  var order = SC.rows.slice().sort(function(a, b){
-    var x = String(a.studentId == null ? '' : a.studentId).trim();
-    var y = String(b.studentId == null ? '' : b.studentId).trim();
-    if(x && y && x !== y){
-      var nx = parseFloat(x), ny = parseFloat(y);
-      if(isFinite(nx) && isFinite(ny) && nx !== ny) return nx - ny;
-      return x < y ? -1 : 1;
-    }
-    if(x && !y) return -1;
-    if(!x && y) return 1;
-    return String(a.name || '') < String(b.name || '') ? -1 : 1;
-  });
-  var opts = order.map(function(r){
-    /* ⚠️ esc() 里直接 .replace，只吃字符串；成绩行 id 是数字，不过 String() 这里必炸 */
-    return '<option value="' + esc(String(r.id)) + '"' + (String(r.id) === cur ? ' selected' : '') + '>'
-      + esc(r.name) + (r.studentId ? '（' + esc(String(r.studentId)) + '）' : '') + '</option>';
-  }).join('');
+  var cur = scViewCur();
   return '<div class="sc-viewbar">'
     + '<span class="sc-viewbar-k">查看画像</span>'
-    + '<select class="sc-viewbar-sel" onchange="scViewPick(this.value)">' + opts + '</select>'
+    + '<div class="sc-vpick" id="scVPick">'
+    +   '<button type="button" class="sc-vpick-btn" id="scVPickBtn" aria-haspopup="listbox" aria-expanded="false" onclick="scVPickToggle(event)">'
+    +     '<span id="scVPickCur">' + esc(scViewName(cur)) + '</span>'
+    +     '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>'
+    +   '</button>'
+    +   '<div class="sc-vpick-pop" id="scVPickPop" hidden>'
+    +     '<div class="sc-vpick-search"><input id="scVPickInp" type="search" placeholder="输入姓名或学号…" autocomplete="off" oninput="scVPickType(this.value)" onkeydown="scVPickKey(event)"></div>'
+    +     '<div class="sc-vpick-list" id="scVPickList" role="listbox" aria-label="选择要查看画像的同学"></div>'
+    +     '<div class="sc-vpick-foot" id="scVPickFoot"></div>'
+    +   '</div>'
+    + '</div>'
     + (SC.viewAs ? '<span class="sc-viewbar-tip">正在看别人的画像</span>' : '')
     + '</div>';
+}
+function scVPickOpen(){
+  var pop = document.getElementById('scVPickPop');
+  var btn = document.getElementById('scVPickBtn');
+  if(!pop || !btn || !pop.hidden) return;
+  /* 成绩面板 .sc-pane 是 overflow:auto，手机上这一栏只有一百多像素高，
+     下拉挂在里面会被直接裁掉。所以改成 fixed 定位、挂到 body 上，
+     位置按按钮的实时坐标算，向上向下都能放。 */
+  var old = document.querySelectorAll('body > .sc-vpick-pop');
+  for(var k = 0; k < old.length; k++){
+    if(old[k] !== pop && old[k].parentNode) old[k].parentNode.removeChild(old[k]);
+  }
+  document.body.appendChild(pop);
+  pop.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  var inp = document.getElementById('scVPickInp');
+  if(inp) inp.value = '';
+  scVPickType('');
+  var r = btn.getBoundingClientRect();
+  var vw = window.innerWidth || 360, vh = window.innerHeight || 640;
+  var w = Math.max(Math.min(r.width, 420), Math.min(260, vw - 16));
+  var below = vh - r.bottom - 10;
+  var above = r.top - 10;
+  var up = below < 240 && above > below;
+  var avail = Math.max(160, Math.min(up ? above : below, 420));
+  pop.style.position = 'fixed';
+  pop.style.width = w + 'px';
+  pop.style.right = 'auto';
+  pop.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) + 'px';
+  pop.style.top = up ? 'auto' : Math.round(r.bottom + 6) + 'px';
+  pop.style.bottom = up ? Math.round(vh - r.top + 6) + 'px' : 'auto';
+  pop.style.zIndex = '9990';
+  var list = document.getElementById('scVPickList');
+  if(list) list.style.maxHeight = Math.max(96, avail - 96) + 'px';
+  if(inp) setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 20);
+}
+function scVPickClose(){
+  var pop = document.getElementById('scVPickPop');
+  if(pop) pop.hidden = true;
+  var b = document.getElementById('scVPickBtn');
+  if(b) b.setAttribute('aria-expanded', 'false');
+}
+function scVPickToggle(e){
+  if(e && e.stopPropagation) e.stopPropagation();
+  var pop = document.getElementById('scVPickPop');
+  if(!pop) return;
+  if(pop.hidden) scVPickOpen(); else scVPickClose();
+}
+/* 点面板外面收起。弹层挂在 body 上，所以输入的点击也要放过，
+   否则点搜索框的瞬间就被判成「点了外面」。 */
+try{
+  document.addEventListener('click', function(e){
+    var box = document.getElementById('scVPick');
+    var pop = document.getElementById('scVPickPop');
+    if(!box || !e.target) return;
+    if(box.contains(e.target)) return;
+    if(pop && pop.contains(e.target)) return;
+    scVPickClose();
+  });
+  /* 页面一滚，按钮就跑了，fixed 弹层会脱节 —— 直接收起最省事 */
+  window.addEventListener('scroll', function(e){
+    var pop = document.getElementById('scVPickPop');
+    if(!pop || pop.hidden) return;
+    if(pop.contains(e.target)) return;
+    scVPickClose();
+  }, true);
+  window.addEventListener('resize', function(){
+    var pop = document.getElementById('scVPickPop');
+    if(pop && !pop.hidden) scVPickClose();
+  });
+}catch(e){}
+
+function scVPickHi(text, q){
+  text = String(text == null ? '' : text);
+  var key = String(q == null ? '' : q).trim();
+  if(!key) return esc(text);
+  var i = text.toLowerCase().indexOf(key.toLowerCase());
+  if(i < 0) return esc(text);
+  return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + key.length)) + '</mark>' + esc(text.slice(i + key.length));
+}
+function scVPickType(q){
+  var raw = String(q == null ? '' : q);
+  var key = raw.trim().toLowerCase().replace(/\s+/g, '');
+  var list = SC.rows.slice().sort(scViewSort).filter(function(r){
+    if(!key) return true;
+    var n = String(r.name || '').toLowerCase().replace(/\s+/g, '');
+    var s = String(r.studentId == null ? '' : r.studentId).toLowerCase();
+    return n.indexOf(key) >= 0 || s.indexOf(key) >= 0;
+  });
+  SC._vpRows = list;
+  SC._vpIdx = 0;
+  var cur = scViewCur();
+  var box = document.getElementById('scVPickList');
+  if(box){
+    box.innerHTML = !list.length
+      ? '<div class="sc-vpick-none">没有找到「' + esc(raw.trim()) + '」</div>'
+      : list.map(function(r, i){
+          var sid = r.studentId == null ? '' : String(r.studentId);
+          var on = cur && String(cur.id) === String(r.id);
+          return '<button type="button" class="sc-vpick-item' + (on ? ' on' : '') + '" role="option" aria-selected="' + (on ? 'true' : 'false') + '" data-i="' + i + '" onclick="scVPickChoose(' + i + ')">'
+            + '<span class="sc-vpick-nm">' + scVPickHi(r.name, raw) + '</span>'
+            + '<span class="sc-vpick-sid">' + (sid ? scVPickHi(sid, raw) : '无学号') + '</span>'
+            + (on ? '<span class="sc-vpick-ok">当前</span>' : '')
+            + '</button>';
+        }).join('');
+  }
+  var foot = document.getElementById('scVPickFoot');
+  if(foot) foot.textContent = '共 ' + SC.rows.length + ' 人 · 按学号排序' + (key ? ' · 匹配 ' + list.length + ' 人' : '');
+}
+function scVPickNav(){
+  var box = document.getElementById('scVPickList');
+  if(!box) return;
+  var items = box.querySelectorAll('.sc-vpick-item');
+  for(var i = 0; i < items.length; i++){
+    var on = i === SC._vpIdx;
+    items[i].classList.toggle('nav', on);
+    if(on && items[i].scrollIntoView) items[i].scrollIntoView({ block: 'nearest' });
+  }
+}
+function scVPickKey(e){
+  var list = SC._vpRows || [];
+  if(e.key === 'Escape'){
+    e.preventDefault(); scVPickClose();
+    var b = document.getElementById('scVPickBtn');
+    if(b){ try{ b.focus(); }catch(_e){} }
+    return;
+  }
+  if(!list.length) return;
+  if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+    e.preventDefault();
+    var d = e.key === 'ArrowDown' ? 1 : -1;
+    SC._vpIdx = (SC._vpIdx + d + list.length) % list.length;
+    scVPickNav();
+  }else if(e.key === 'Enter'){
+    e.preventDefault();
+    scVPickChoose(SC._vpIdx);
+  }
+}
+function scVPickChoose(i){
+  var r = (SC._vpRows || [])[i];
+  if(!r) return;
+  var me = scMyRow();
+  /* 选中自己就把 viewAs 清掉：否则顶部会挂一条「正在看别人的画像」 */
+  SC.viewAs = (me && String(me.id) === String(r.id)) ? null : String(r.id);
+  scVPickClose();
+  scRenderPane();
 }
 
 function scRenderMe(){

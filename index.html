@@ -2942,12 +2942,74 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
   background:#fff;border:1px solid #f0e7de;border-radius:12px;padding:8px 12px;margin-bottom:12px;
 }
 .sc-viewbar-k{font-size:.76rem;font-weight:700;color:#6e635a;white-space:nowrap}
-.sc-viewbar-sel{
-  flex:1 1 180px;min-width:0;padding:7px 10px;border-radius:9px;font-size:.84rem;font-family:inherit;
-  border:1px solid #e7dcd0;background:#fffdfa;color:#3f342c;outline:none;
-}
-.sc-viewbar-sel:focus{border-color:#c2410c;box-shadow:0 0 0 3px rgba(194,65,12,.1)}
 .sc-viewbar-tip{font-size:.72rem;color:#b45309;white-space:nowrap}
+/* v4.14.0（站主第 1 条）：「查看画像」由下拉框改成可搜索的自动补全。
+   六十来号人翻下拉太费劲，输入姓名或学号直接筛；列表恒按学号排序。
+   弹层用 absolute 挂在选择条里（.sc-pane 会滚动，fixed 会跟丢位置）。 */
+.sc-vpick{position:relative;flex:1 1 200px;min-width:0}
+.sc-vpick-btn{
+  width:100%;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;
+  border:1px solid #e7dcd0;background:#fffdfa;color:#3f342c;font-family:inherit;font-size:.84rem;
+  text-align:left;cursor:pointer;outline:none;
+}
+.sc-vpick-btn>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-vpick-btn>svg{flex:none;opacity:.5}
+.sc-vpick-btn:focus-visible{border-color:#c2410c;box-shadow:0 0 0 3px rgba(194,65,12,.12)}
+.sc-vpick-pop{
+  position:absolute;z-index:32;left:0;right:0;top:calc(100% + 6px);
+  background:#fff;border:1px solid #eadfd4;border-radius:12px;overflow:hidden;
+  box-shadow:0 14px 34px rgba(70,45,20,.18);
+}
+.sc-vpick-pop[hidden]{display:none}
+.sc-vpick-search{padding:8px;border-bottom:1px solid #f5efe8;background:#fffdfa}
+.sc-vpick-search input{
+  width:100%;height:36px;padding:0 10px;border-radius:9px;outline:none;
+  border:1px solid #e7dcd0;background:#fff;color:#3f342c;font-family:inherit;font-size:.84rem;
+}
+.sc-vpick-search input:focus{border-color:#c2410c;box-shadow:0 0 0 3px rgba(194,65,12,.1)}
+.sc-vpick-list{max-height:min(42vh,280px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:4px}
+.sc-vpick-item{
+  display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;border:none;border-radius:8px;
+  background:none;color:#3f342c;font-family:inherit;font-size:.84rem;text-align:left;cursor:pointer;
+}
+.sc-vpick-item:hover,.sc-vpick-item.nav{background:#fdf2e9}
+.sc-vpick-item.on{background:#fdf2e9;box-shadow:inset 2px 0 0 #c2410c}
+.sc-vpick-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-vpick-sid{flex:none;font-size:.72rem;color:#8a7a6c;font-variant-numeric:tabular-nums}
+.sc-vpick-ok{flex:none;font-size:.66rem;color:#b45309;border:1px solid #f0d9bf;border-radius:99px;padding:1px 6px}
+.sc-vpick-none{padding:18px 10px;text-align:center;color:#8a7a6c;font-size:.8rem}
+.sc-vpick-foot{padding:6px 10px;border-top:1px solid #f5efe8;background:#fffdfa;font-size:.68rem;color:#8a7a6c}
+.sc-vpick mark{background:#ffe3b0;color:inherit;border-radius:3px;padding:0 1px}
+.dark .sc-viewbar{background:#221f1d;border-color:#3a332e}
+.dark .sc-viewbar-k{color:#a8a29e}
+.dark .sc-vpick-btn,.dark .sc-vpick-search input{background:#1a1715;border-color:#453d37;color:#e4d8cb}
+.dark .sc-vpick-pop{background:#211d1a;border-color:#453d37}
+.dark .sc-vpick-search{background:#1a1715;border-color:#332d29}
+.dark .sc-vpick-item{color:#e4d8cb}
+.dark .sc-vpick-item:hover,.dark .sc-vpick-item.on,.dark .sc-vpick-item.nav{background:#2e2926}
+.dark .sc-vpick-foot{background:#1a1715;border-color:#332d29}
+.dark .sc-vpick mark{background:#5a4420;color:#f4ede6}
+/* v4.14.0（站主第 2 条）：密码强度条，红 → 橙 → 黄绿 → 绿。
+   只挂在「设置新密码」的输入框上（注册 / 首次改密 / 个人中心改密），
+   登录框不挂 —— 那是验证旧密码，评强弱没有意义还容易误导。 */
+.pwm{display:flex;align-items:center;gap:8px;margin-top:7px;min-height:16px}
+.pwm-bars{display:flex;gap:3px;flex:1;min-width:0}
+.pwm-bars i{flex:1;height:5px;border-radius:99px;background:#eee4da;transition:background .18s ease}
+.pwm-txt{flex:none;min-width:4.4em;text-align:right;font-size:.7rem;font-weight:700;color:#8a7a6c}
+.pwm[data-lv="1"] .pwm-bars i:nth-child(-n+1){background:#d64545}
+.pwm[data-lv="1"] .pwm-txt{color:#b3261e}
+.pwm[data-lv="2"] .pwm-bars i:nth-child(-n+2){background:#e08a3c}
+.pwm[data-lv="2"] .pwm-txt{color:#9a5b00}
+.pwm[data-lv="3"] .pwm-bars i:nth-child(-n+3){background:#b9a52a}
+.pwm[data-lv="3"] .pwm-txt{color:#77650a}
+.pwm[data-lv="4"] .pwm-bars i:nth-child(-n+4){background:#2f9e44}
+.pwm[data-lv="4"] .pwm-txt{color:#1e7a35}
+.dark .pwm-bars i{background:#3a332e}
+.dark .pwm-txt{color:#a8a29e}
+.dark .pwm[data-lv="1"] .pwm-txt{color:#ff8f85}
+.dark .pwm[data-lv="2"] .pwm-txt{color:#ffb46b}
+.dark .pwm[data-lv="3"] .pwm-txt{color:#e6d264}
+.dark .pwm[data-lv="4"] .pwm-txt{color:#7ee2a0}
 .sc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
 .sc-stat{background:#fff;border:1px solid #f0e7de;border-radius:12px;padding:9px 6px;text-align:center}
 .sc-stat b{display:block;font-size:1.05rem;color:#b45309;font-variant-numeric:tabular-nums}
@@ -8151,19 +8213,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.13.0';
+var SITE_VERSION = '4.14.0';
 var VER_DATE = '2026-11-09';
 </script>
-<script src="./auth-bus.js?v=4130" defer></script>
+<script src="./auth-bus.js?v=4140" defer></script>
 <script src="./tour.js?v=040507" defer></script>
-<script src="./app.min.js?v=4130" defer></script>
+<script src="./app.min.js?v=4140" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4130" defer></script>
-<script src="./big.js?v=4130" defer></script>
+<script src="./fs-keep.js?v=4140" defer></script>
+<script src="./big.js?v=4140" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4130" defer></script>
+<script src="./pickfx.js?v=4140" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
