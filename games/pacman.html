@@ -13,18 +13,33 @@ html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
 body{
   background:radial-gradient(110% 70% at 50% 0%,#141c3e,#070a16 65%);
   color:#e9ecff;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
-  display:flex;flex-direction:column;align-items:center;padding:6px 10px 0;height:100vh;gap:5px;
+  display:flex;flex-direction:column;align-items:center;
+  padding:calc(6px + env(safe-area-inset-top)) 10px calc(6px + env(safe-area-inset-bottom));
+  height:100vh;height:100dvh;gap:5px;
 }
 .bar{width:100%;max-width:430px;display:flex;align-items:center;gap:6px;flex:none}
 a.back{color:#9db1ff;text-decoration:none;font-size:13px;opacity:.8;padding:5px 8px;border-radius:8px;flex:none}
 a.back:active{background:rgba(157,177,255,.15)}
-.bar h1{font-size:15px;margin:0;flex:1;letter-spacing:.05em;font-weight:700}
+.bar h1{font-size:15px;margin:0;flex:1;letter-spacing:.06em;font-weight:800;
+  background:linear-gradient(100deg,#e9f2ff,#9fd0ff 55%,#8ff0d8);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.bgm{border:1px solid rgba(120,150,255,.22);background:rgba(120,150,255,.1);color:#c3d0f5;
+  width:30px;height:30px;border-radius:9px;font-size:14px;line-height:1;cursor:pointer;flex:none;
+  display:flex;align-items:center;justify-content:center;font-family:inherit;padding:0}
+.bgm.off{opacity:.5}
+.bgm:active{background:rgba(120,170,255,.3)}
 .bar .lvl{font-size:12px;color:#7f92c9;font-variant-numeric:tabular-nums}
-.hud{display:flex;gap:12px;font-size:12px;color:#7f92c9;flex:none;flex-wrap:wrap;justify-content:center}
+.hud{display:flex;gap:10px;font-size:11.5px;color:#7f92c9;flex:none;flex-wrap:nowrap;
+  justify-content:center;white-space:nowrap}
 .hud b{color:#ffd166;font-variant-numeric:tabular-nums;font-weight:700}
 .hud .warn b{color:#f87171}
-#stage{position:relative;width:min(96vw,calc(100vh - 250px));
-  border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.6);flex:none;background:#050813;margin:auto 0}
+/* ⚠️ v4.15.0：迷宫尺寸必须给方向键留够位置。
+   原来写死 calc(100vh - 250px)，可「顶栏 + HUD + 方向键 + 间距」实测要 267px，
+   在 640px 高的手机上方向键的「下」直接被 body 的 overflow:hidden 裁掉了。
+   现在用 dvh（随浏览器地址栏收缩）并把预留值提到 276，短屏再把按键缩小。 */
+#stage{position:relative;width:min(96vw,calc(100dvh - 276px));
+  border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.6),
+  0 0 0 1px rgba(120,160,255,.13);flex:none;background:#050813;margin:auto 0}
 canvas{display:block;width:100%;height:auto;touch-action:none}
 /* 方向键 */
 #dpad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,62px);gap:5px;flex:none}
@@ -33,6 +48,10 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
   border:1px solid rgba(120,150,255,.16);transition:background .08s}
 #dpad button:active,#dpad button.on{background:rgba(120,170,255,.36);color:#fff}
 #dpad .sp{visibility:hidden}
+/* 矮屏：按键跟着缩，保证「下」永远在屏幕里 */
+@media (max-height:760px){ #dpad{grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,56px)} }
+@media (max-height:640px){ #dpad{grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);gap:4px}
+  #dpad button{font-size:16px;border-radius:11px} }
 @media (hover:hover) and (pointer:fine){ #dpad{display:none} }
 /* 覆盖层 */
 .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -56,15 +75,29 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
 .stars{font-size:26px;letter-spacing:6px;color:#3a4463;margin:2px 0}
 .stars i{font-style:normal}
 .stars i.on{color:#ffd166;text-shadow:0 0 14px rgba(255,209,102,.7)}
-/* 关卡选择 */
-#lvGrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;width:100%;max-width:330px;margin-top:2px}
+/* ============================ 关卡选择 ============================
+   v4.15.0：100 个关卡格子原来 6 列，要排 17 行，一屏根本放不下，
+   整块又被 .ov 的 overflow-y 撑着，手机上「选关」简直没法看。
+   改成：标题和按钮固定，中间那块单独滚动；列数交给 auto-fill 自适应，
+   窄屏 8 列、宽屏 10 列，100 关最多 13 行，一屏基本能看完。 */
+#ovMenu{justify-content:flex-start;padding:14px 12px 12px;gap:6px}
+#ovMenu h2{margin-top:2px}
+.lvwrap{flex:1 1 auto;min-height:0;width:100%;max-width:430px;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  margin:2px 0 6px;padding:2px;border-radius:12px}
+.lvwrap::-webkit-scrollbar{width:5px}
+.lvwrap::-webkit-scrollbar-thumb{background:rgba(120,150,255,.28);border-radius:3px}
+#lvGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(33px,1fr));gap:4px;width:100%}
 #lvGrid button{border:1px solid rgba(120,150,255,.18);background:rgba(120,150,255,.09);color:#c3d0f5;
-  border-radius:9px;padding:8px 0 6px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;
-  font-variant-numeric:tabular-nums;line-height:1.15}
-#lvGrid button .s{display:block;font-size:8.5px;color:#ffd166;letter-spacing:.5px;margin-top:2px}
-#lvGrid button:disabled{opacity:.32;cursor:not-allowed}
-#lvGrid button.cur{background:linear-gradient(135deg,#3ee0c0,#22b894);color:#06201a;border-color:transparent}
+  border-radius:7px;padding:5px 0 4px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;
+  font-variant-numeric:tabular-nums;line-height:1.1;transition:background .1s}
+#lvGrid button .s{display:block;font-size:7.5px;color:#ffd166;letter-spacing:0;margin-top:1px;
+  height:9px;line-height:9px;overflow:hidden;white-space:nowrap}
+#lvGrid button:disabled{opacity:.3;cursor:not-allowed;border-style:dashed}
+#lvGrid button.cur{background:linear-gradient(135deg,#3ee0c0,#22b894);color:#06201a;border-color:transparent;
+  box-shadow:0 0 0 2px rgba(62,224,192,.28)}
 #lvGrid button.cur .s{color:#06201a}
+#lvGrid button:not(:disabled):active{background:rgba(120,170,255,.3)}
 </style>
 </head>
 <body>
@@ -72,6 +105,7 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
   <a class="back" href="../index.html">← 返回</a>
   <h1>迷宫吃豆</h1>
   <span class="lvl" id="hLv">第 1 关</span>
+  <button class="bgm" id="bgmBtn" type="button">🎵</button>
 </div>
 <div class="hud">
   <span id="hTimeWrap">剩余 <b id="hTime">0s</b></span>
@@ -99,8 +133,15 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
 <div class="ov" id="ovMenu">
   <h2>选择关卡</h2>
   <p class="sub" id="menuSub">共 100 关 · 通关后解锁下一关</p>
-  <div id="lvGrid"></div>
+  <div class="lvwrap" id="lvWrap"><div id="lvGrid"></div></div>
   <button class="btn ghost" id="btnHelp">玩法说明</button>
+</div>
+
+<div class="ov hide" id="ovPause">
+  <h2>暂停中</h2>
+  <p class="sub">点「II」或下面按钮继续</p>
+  <button class="btn" id="btnResume">继续</button>
+  <button class="btn ghost" id="btnToMenu2">选关</button>
 </div>
 
 <div class="ov hide" id="ovIntro">
@@ -133,6 +174,7 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
 </div>
 
 <script src="cloud.js"></script>
+<script src="bgm.js"></script>
 <script>
 (function(){
 'use strict';
@@ -576,9 +618,15 @@ function restartPos(){
 /* ============================================================================
  * 局面
  * ========================================================================= */
+/* 背景音乐（WebAudio 必须由用户手势启动，所以绑在「开一局」上） */
+var bgm = window.CLS_BGM || null;
+if (bgm) bgm.bind(document.getElementById('bgmBtn'), 'pacman');
+function startBgm(){ try { if (bgm) bgm.start('pacman'); } catch (e){} }
+
 function startLevel(L){
   loadLevel(L);
   st = 'play';
+  startBgm();
   document.getElementById('hLv').textContent = '第 ' + L + ' 关';
   syncOv();
 }
@@ -628,6 +676,7 @@ function finish(title, star, sub){
 function syncOv(){
   document.getElementById('ovMenu').classList.toggle('hide', st !== 'menu');
   document.getElementById('ovIntro').classList.toggle('hide', st !== 'intro');
+  document.getElementById('ovPause').classList.toggle('hide', st !== 'pause');
   document.getElementById('ovOver').classList.toggle('hide', st !== 'over');
 }
 
@@ -916,6 +965,13 @@ document.addEventListener('keydown', function(e){
   else if (k === 'ArrowDown' || k === 's' || k === 'S'){ setDir({ x: 0, y: 1 }); e.preventDefault(); }
   else if (k === 'ArrowLeft' || k === 'a' || k === 'A'){ setDir({ x: -1, y: 0 }); e.preventDefault(); }
   else if (k === 'ArrowRight' || k === 'd' || k === 'D'){ setDir({ x: 1, y: 0 }); e.preventDefault(); }
+  else if (k === ' ' || k === 'p' || k === 'P'){
+    /* 电脑端没有方向键面板，暂停只能靠键盘 */
+    if (st === 'play') st = 'pause';
+    else if (st === 'pause') st = 'play';
+    syncOv();
+    e.preventDefault();
+  }
 });
 
 /* 手机：在画布上滑动转向（位移超过 16px 判定方向，然后重新起算原点） */
@@ -944,7 +1000,12 @@ dpad.addEventListener('pointerdown', function(e){
   var b = e.target.closest('button[data-d]');
   if (!b) return;
   var d = b.getAttribute('data-d');
-  if (d === 's'){ st = (st === 'play' ? 'pause' : 'play'); return; }
+  if (d === 's'){
+    if (st === 'play') st = 'pause';
+    else if (st === 'pause') st = 'play';
+    syncOv();
+    return;
+  }
   var map = { u: { x: 0, y: -1 }, d: { x: 0, y: 1 }, l: { x: -1, y: 0 }, r: { x: 1, y: 0 } };
   if (map[d]) setDir(map[d]);
   e.preventDefault();
@@ -960,7 +1021,8 @@ function buildMenu(){
     var locked = i > save.max;
     var s = save.stars[i] || 0;
     var stxt = s ? '★'.repeat(s) : '';
-    html += '<button data-lv="' + i + '"' + (locked ? ' disabled' : '') + '>'
+    html += '<button data-lv="' + i + '"' + (locked ? ' disabled' : '')
+      + (i === save.max ? ' class="cur"' : '') + '>'
       + i + '<span class="s">' + (stxt || (locked ? '锁' : '—')) + '</span></button>';
   }
   gridEl.innerHTML = html;
@@ -968,6 +1030,14 @@ function buildMenu(){
   for (var k in save.stars) tot += save.stars[k];
   document.getElementById('menuSub').textContent =
     '已解锁 ' + save.max + ' / ' + TOTAL_LV + ' 关 · 累计 ' + tot + ' / ' + (TOTAL_LV * 3) + ' 星';
+
+  /* 打到第 60 关的人再进选关，别让他从第 1 关开始往上翻 */
+  var wrap = document.getElementById('lvWrap');
+  var cur = gridEl.querySelector('.cur');
+  if (wrap && cur && wrap.clientHeight > 0){
+    var r1 = cur.getBoundingClientRect(), r2 = wrap.getBoundingClientRect();
+    wrap.scrollTop += (r1.top - r2.top) - wrap.clientHeight / 2 + r1.height / 2;
+  }
 }
 
 document.getElementById('lvGrid').addEventListener('click', function(e){
@@ -984,6 +1054,10 @@ document.getElementById('btnBegin').addEventListener('click', function(){
 });
 document.getElementById('btnBackMenu').addEventListener('click', backToMenu);
 document.getElementById('btnToMenu').addEventListener('click', backToMenu);
+document.getElementById('btnToMenu2').addEventListener('click', backToMenu);
+document.getElementById('btnResume').addEventListener('click', function(){
+  if (st === 'pause'){ st = 'play'; syncOv(); }
+});
 document.getElementById('btnRetry').addEventListener('click', function(){ startLevel(lv); });
 document.getElementById('btnNext').addEventListener('click', function(){ startLevel(Math.min(TOTAL_LV, lv + 1)); });
 
@@ -995,7 +1069,7 @@ function backToMenu(){
 
 /* 切走自动暂停 */
 document.addEventListener('visibilitychange', function(){
-  if (document.hidden && st === 'play') st = 'pause';
+  if (document.hidden && st === 'play'){ st = 'pause'; syncOv(); }
 });
 
 /* ---------- 启动 ---------- */

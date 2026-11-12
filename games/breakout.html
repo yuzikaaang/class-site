@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#090c18">
+<meta name="theme-color" content="#060913">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="../icon-192.png">
 <title>下落砖块 · 25级05班</title>
@@ -11,36 +11,56 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
 body{
-  background:radial-gradient(120% 70% at 50% 0%,#1a2350,#090c18 62%);
+  background:
+    radial-gradient(130% 60% at 50% -10%,#1b2a63 0%,rgba(10,14,32,0) 62%),
+    radial-gradient(90% 50% at 50% 105%,#132a4d 0%,rgba(6,9,19,0) 60%),
+    #060913;
   color:#e9ecff;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
-  display:flex;flex-direction:column;align-items:center;padding:8px 10px 10px;gap:6px;
+  display:flex;flex-direction:column;align-items:center;
+  padding:calc(8px + env(safe-area-inset-top)) 10px calc(8px + env(safe-area-inset-bottom));gap:6px;
+  height:100vh;height:100dvh;
 }
-.bar{width:100%;max-width:430px;display:flex;align-items:center;gap:6px}
+.bar{width:100%;max-width:430px;display:flex;align-items:center;gap:6px;flex:none}
 a.back{color:#9db1ff;text-decoration:none;font-size:13px;opacity:.8;padding:5px 8px;border-radius:8px;flex:none}
 a.back:active{background:rgba(157,177,255,.15)}
-.bar h1{font-size:15px;margin:0;flex:1;letter-spacing:.05em;font-weight:700}
-.hud{display:flex;gap:14px;font-size:12px;color:#7f92c9;justify-content:center;flex-wrap:wrap}
-.hud b{color:#ffd166;font-variant-numeric:tabular-nums;font-weight:700}
-#wrap{position:relative;width:min(430px,94vw,calc((100vh - 112px) * .6667));
-  border-radius:16px;overflow:hidden;box-shadow:0 16px 44px rgba(0,0,0,.6);flex:none;margin:auto 0}
-canvas{display:block;width:100%;height:auto;background:#080b18;touch-action:none}
+.bar h1{font-size:15px;margin:0;flex:1;letter-spacing:.06em;font-weight:800;
+  background:linear-gradient(100deg,#e8f1ff,#8fd8ff 55%,#7cf7d0);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.bgm{border:1px solid rgba(120,150,255,.22);background:rgba(120,150,255,.1);color:#c3d0f5;
+  width:30px;height:30px;border-radius:9px;font-size:14px;line-height:1;cursor:pointer;flex:none;
+  display:flex;align-items:center;justify-content:center;font-family:inherit;padding:0}
+.bgm.off{opacity:.5}
+.bgm:active{background:rgba(120,170,255,.3)}
+.hud{display:flex;gap:14px;font-size:12px;color:#7f92c9;justify-content:center;flex-wrap:wrap;flex:none}
+.hud b{color:#ffd166;font-variant-numeric:tabular-nums;font-weight:800}
+/* 画布高度按「视口减掉顶栏 + HUD + 内边距」算，宽度受 430 上限约束，取小的那个 */
+#wrap{position:relative;width:min(430px,96vw,calc((100dvh - 108px) * .6667));
+  border-radius:18px;overflow:hidden;flex:none;margin:auto 0;background:#070a15;
+  box-shadow:0 0 0 1px rgba(120,160,255,.14),0 18px 50px rgba(0,0,0,.75),
+             0 0 60px rgba(56,110,255,.14) inset}
+canvas{display:block;width:100%;height:auto;touch-action:none}
 .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:8px;padding:16px;text-align:center;background:rgba(8,11,24,.92);
-  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);z-index:5;overflow-y:auto}
+  gap:8px;padding:16px;text-align:center;
+  background:radial-gradient(80% 60% at 50% 40%,rgba(22,32,72,.9),rgba(5,8,18,.96));
+  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);z-index:5;overflow-y:auto}
 .ov.hide{display:none}
-.ov h2{margin:0;font-size:20px;color:#ffd166;letter-spacing:.04em}
-.ov .sub{font-size:12px;color:#7f92c9;margin:0}
-.ov ul{margin:2px 0;padding:0;list-style:none;font-size:12px;line-height:1.7;color:#b9c6ea;text-align:left;max-width:286px}
+.ov h2{margin:0;font-size:21px;letter-spacing:.06em;
+  background:linear-gradient(100deg,#ffe6a6,#ffd166 40%,#7cf7d0);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.ov .sub{font-size:12px;color:#8b9dcf;margin:0;line-height:1.6}
+.ov ul{margin:2px 0;padding:0;list-style:none;font-size:12px;line-height:1.75;color:#b9c6ea;text-align:left;max-width:290px}
 .ov li{margin:2px 0}
-.ov li::before{content:"·";color:#4ade80;margin-right:6px;font-weight:800}
-.ov .k{color:#ffd166;font-weight:700}
+.ov li::before{content:"▸";color:#4ade80;margin-right:7px;font-weight:800;font-size:10px}
+.ov .k{color:#ffd166;font-weight:800}
 .btn{border:none;border-radius:13px;padding:12px 30px;font-size:15px;font-weight:800;cursor:pointer;
-  background:linear-gradient(135deg,#3ee0c0,#22b894);color:#06201a;box-shadow:0 8px 22px rgba(62,224,192,.28);
-  font-family:inherit}
+  background:linear-gradient(135deg,#3ee0c0,#22b894);color:#06201a;
+  box-shadow:0 8px 24px rgba(62,224,192,.3),inset 0 -2px 0 rgba(0,0,0,.16);
+  font-family:inherit;transition:transform .1s}
 .btn:active{transform:scale(.96)}
 .btn.ghost{background:#1b2547;color:#9db1ff;box-shadow:none;padding:10px 22px;font-size:13px}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:7px;width:100%;max-width:280px}
-.stats div{background:#111a33;border-radius:10px;padding:8px 6px}
+.stats div{background:linear-gradient(180deg,#141d3b,#0f1730);border:1px solid rgba(120,150,255,.12);
+  border-radius:11px;padding:8px 6px}
 .stats span{display:block;font-size:11px;color:#6f83b8}
 .stats b{font-size:16px;color:#ffd166;font-variant-numeric:tabular-nums}
 </style>
@@ -49,6 +69,7 @@ canvas{display:block;width:100%;height:auto;background:#080b18;touch-action:none
 <div class="bar">
   <a class="back" href="../index.html">← 返回</a>
   <h1>下落砖块</h1>
+  <button class="bgm" id="bgmBtn" type="button">🎵</button>
 </div>
 <div class="hud">
   <span>存活 <b id="hTime">0.0s</b></span>
@@ -94,6 +115,7 @@ canvas{display:block;width:100%;height:auto;background:#080b18;touch-action:none
 </div>
 
 <script src="cloud.js"></script>
+<script src="bgm.js"></script>
 <script>
 (function(){
 'use strict';
@@ -108,13 +130,17 @@ canvas{display:block;width:100%;height:auto;background:#080b18;touch-action:none
  * 为什么用「整体下压」而不是「每块自由下落」：
  *   整体下压 = 网格行号 +1，实现只有一个 for 循环，永远不会出现半格错位；
  *   而且视觉上是「一堵墙在压下来」，压迫感比零散下落强得多。
- *   代价是被打穿的洞会跟着下移，看起来像洞在往下跑 —— 但对玩家来说
- *   这反而强化了「墙在动」的错觉，不违和。
  *
  * 电脑端为什么老版本玩不了：
  *   老代码 keydown 里是 px = px ± 26，按一下瞬移 26px，长按也不连续，
  *   手感是「一下一下弹」而不是「持续移动」，玩两下就放弃。
  *   这里改成按住期间每帧按速度积分（keyLeft / keyRight 布尔 + dt）。
+ *
+ * v4.15.0 的视觉重做（站主：「界面应该好看一点点」「整个消失后可以有些效果」）：
+ *   1) 砖块从「两块纯色渐变」改成有高光、内阴影、硬度纹理、外发光的立体块；
+ *   2) 清空一波时打一套组合拳：白闪 → 冲击波环 → 全场碎片 → 慢动作 → 大字；
+ *   3) 球带拖尾残影，挡板带光带，连击在球的位置直接飘字；
+ *   4) 背景加缓慢上浮的尘埃和顶部光束，暗但不空。
  * ========================================================================= */
 
 var W = 480, H = 720;
@@ -124,29 +150,42 @@ var DPR = Math.min(2, window.devicePixelRatio || 1);
 cv.width = W * DPR; cv.height = H * DPR;
 ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
+/* 点阵底纹：做成 pattern 反复用，避免每帧画上百个圆 */
+var dotPat = null;
+(function(){
+  try {
+    var pc = document.createElement('canvas');
+    pc.width = pc.height = 44;
+    var pg = pc.getContext('2d');
+    pg.fillStyle = 'rgba(150,190,255,.06)';
+    pg.beginPath(); pg.arc(22, 22, 1.15, 0, 6.2832); pg.fill();
+    dotPat = ctx.createPattern(pc, 'repeat');
+  } catch (e){ dotPat = null; }
+})();
+
 /* ---- 场地参数 ---- */
 var COLS = 7, ROWS = 5;
 var BW = 60, BH = 22, GAP = 6, STEP = BH + GAP;      /* 28 */
 var GX = (W - (COLS * BW + (COLS - 1) * GAP)) / 2;   /* 12 */
-var GY = 110;                                        /* 砖墙初始顶部 */
-var DANGER = 652;                                    /* 砖块底边越过就结束 */
+var GY = 110;
+var DANGER = 652;
 var PAD_Y = 676, PAD_H = 13, PAD_W0 = 92;
 var BALL_R = 7;
 
 /* ---- 状态 ---- */
 var st = 'intro';
-var bricks = [], balls = [], drops = [], parts = [];
-var padX = W / 2, padW = PAD_W0;
+var bricks = [], balls = [], drops = [], parts = [], rings = [], pops = [], dust = [];
+var padX = W / 2, padW = PAD_W0, padTrail = 0;
 var wave = 1, score = 0, broke = 0, survive = 0;
 var combo = 0, comboT = 0, bestCombo = 0;
 var fallEvery = 10, fallAcc = 0;
 var fx = { pierce: 0, shield: 0, slow: 0, wide: 0 };
 var toast = '', toastC = '#fff', toastT = 0;
 var shake = 0, nextWaveIn = 0;
+var flash = 0, slowMo = 0;
 var keyL = false, keyR = false;
-/* 云端最好成绩（生存秒数）。up云只写不读就会「这台机刷了高分，换台机又从头算」，
-   所以开局先 pullHi 拉一次，结束时只有超过它才 pushHi —— pushHi 是覆盖写，
-   低分也推的话会把别人/别处的高分直接盖掉。 */
+/* 云端最好成绩（生存秒数）。pushHi 是覆盖写，所以开局先 pullHi 拉一次，
+   结束时只有超过它才 pushHi —— 否则换台设备打一局低分就把高分盖掉。 */
 var cloudBest = 0;
 
 var SKILLS = [
@@ -187,23 +226,48 @@ function findBrick(col, row){
   return null;
 }
 
+/* ============================ 背景尘埃 ============================ */
+
+function initDust(){
+  dust = [];
+  for (var i = 0; i < 46; i++){
+    dust.push({
+      x: rnd(0, W), y: rnd(0, H),
+      r: rnd(0.6, 1.9), vy: rnd(-9, -26), vx: rnd(-5, 5),
+      a: rnd(0.06, 0.26), ph: rnd(0, 6.28), sp: rnd(0.4, 1.3)
+    });
+  }
+}
+function stepDust(dt, t){
+  for (var i = 0; i < dust.length; i++){
+    var d = dust[i];
+    d.y += d.vy * dt; d.x += d.vx * dt;
+    if (d.y < -6){ d.y = H + 6; d.x = rnd(0, W); }
+    if (d.x < -6) d.x = W + 6;
+    if (d.x > W + 6) d.x = -6;
+    d.a2 = d.a * (0.55 + 0.45 * Math.sin(t * d.sp + d.ph));
+  }
+}
+
 /* ============================ 生成波次 ============================ */
 
 /* 硬度分布随波次推进，每一波比上一波再硬一点点（不是台阶式突跳） */
 function hpDist(w){
-  var p3 = Math.min(0.40, Math.max(0, (w - 6) * 0.03));
-  var p2 = Math.min(0.50, Math.max(0, (w - 2) * 0.045));
+  /* v4.15.0：原来第 2 波还是清一色 1 击砖（p2 从第 3 波才开始），
+     前两波看着一模一样、也没手感差别。改成第 2 波就掺 5% 中砖、第 4 波起出硬砖。 */
+  var p3 = Math.min(0.40, Math.max(0, (w - 3) * 0.035));
+  var p2 = Math.min(0.50, Math.max(0, (w - 1) * 0.05));
   return { p2: p2, p3: p3 };
 }
 
 function newWave(){
   bricks = []; drops = []; nextWaveIn = 0;
-  var d = hpDist(wave), pool = [], r, c, q, hp;
+  var d = hpDist(wave), pool, r, c, q, hp;
   for (r = 0; r < ROWS; r++){
     for (c = 0; c < COLS; c++){
       q = Math.random();
       hp = q < d.p3 ? 3 : (q < d.p3 + d.p2 ? 2 : 1);
-      bricks.push({ col: c, row: r, hp: hp, max: hp, kind: 'n' });
+      bricks.push({ col: c, row: r, hp: hp, max: hp, kind: 'n', hitT: 0 });
     }
   }
   /* 每波固定 3 块技能砖；第 3 波起再随机加 1~2 块炸弹砖 */
@@ -221,10 +285,11 @@ function reset(){
   wave = 1; score = 0; broke = 0; survive = 0;
   combo = 0; comboT = 0; bestCombo = 0;
   fx = { pierce: 0, shield: 0, slow: 0, wide: 0 };
-  balls = []; parts = [];
-  padX = W / 2; padW = PAD_W0;
+  balls = []; parts = []; rings = []; pops = [];
+  padX = W / 2; padW = PAD_W0; padTrail = 0;
   fallEvery = 10; fallAcc = 0;
-  toast = ''; toastT = 0; shake = 0;
+  toast = ''; toastT = 0; shake = 0; flash = 0; slowMo = 0;
+  clearing = false;
   newWave();
   spawnBall();
   st = 'play';
@@ -232,14 +297,15 @@ function reset(){
 }
 
 function spawnBall(){
-  balls.push({ x: padX, y: PAD_Y - BALL_R - 2, vx: 0, vy: 0, r: BALL_R, stuck: 0.75, dead: false });
+  balls.push({ x: padX, y: PAD_Y - BALL_R - 2, vx: 0, vy: 0, r: BALL_R, stuck: 0.75, dead: false, tr: [] });
 }
 
-function toastNow(t, c){ toast = t; toastC = c || '#fff'; toastT = 1.5; }
+function toastNow(t, c){ toast = t; toastC = c || '#fff'; toastT = 1.6; }
 
 function gameOver(){
   if (st === 'over') return;
   st = 'over';
+  stopBgm();
   var best = null;
   try { best = JSON.parse(localStorage.getItem('cls_bk_best') || 'null'); } catch (e){}
   if (!best || survive > best.t) {
@@ -277,6 +343,7 @@ function pressDown(){
     fx.shield--;
     toastNow('护盾抵消了一次下压', '#60a5fa');
     shake = 5;
+    rings.push({ x: W / 2, y: PAD_Y - 10, r: 14, max: W * 0.7, life: 0.5, maxLife: 0.5, c: '96,165,250' });
     return;
   }
   if (!bricks.length) return;
@@ -287,20 +354,59 @@ function pressDown(){
   }
 }
 
-/* ============================ 伤害与清波 ============================ */
+/* ============================ 打击特效 ============================ */
 
-function burst(b, n){
+function shards(b, n, power){
   n = n || 8;
-  var x = bx(b) + BW / 2, y = by(b) + BH / 2;
+  var x0 = bx(b), y0 = by(b);
   var col = b.hp >= 3 ? '#f472b6' : (b.hp === 2 ? '#fbbf24' : '#38bdf8');
   for (var i = 0; i < n; i++){
     parts.push({
-      x: x + rnd(-BW / 2, BW / 2), y: y + rnd(-BH / 2, BH / 2),
-      vx: rnd(-140, 140), vy: rnd(-180, 40),
-      s: rnd(2, 5), c: col, life: 0.55, max: 0.55
+      x: rnd(x0, x0 + BW), y: rnd(y0, y0 + BH),
+      vx: rnd(-150, 150) * (power || 1), vy: rnd(-210, 30) * (power || 1),
+      s: rnd(2.5, 6), c: col,
+      rot: rnd(0, 6.28), vr: rnd(-9, 9),
+      g: 620, life: rnd(0.45, 0.85), max: 0.85
     });
   }
 }
+
+/* 清波：白闪 + 冲击波 + 慢动作 + 全场碎片 + 中央大字。
+   整套只放一次（clearing 标记），否则炸弹连锁清空时会叠加好几层。 */
+var clearing = false;
+function waveClearFx(){
+  if (clearing) return;
+  clearing = true;
+  flash = 0.5;
+  slowMo = 0.6;
+  shake = 13;
+  rings.push({ x: W / 2, y: H * 0.42, r: 20, max: 340, life: 0.95, maxLife: 0.95, c: '124,247,208', delay: 0 });
+  rings.push({ x: W / 2, y: H * 0.42, r: 16, max: 440, life: 1.05, maxLife: 1.05, c: '143,216,255', delay: 0.09 });
+  rings.push({ x: W / 2, y: H * 0.42, r: 12, max: 260, life: 0.7,  maxLife: 0.7,  c: '255,255,255', delay: 0.18 });
+  pops.push({ x: W / 2, y: H * 0.38, txt: '第 ' + wave + ' 波 · 清空', c: '#7cf7d0', life: 1.35, max: 1.35, size: 30 });
+  pops.push({ x: W / 2, y: H * 0.38 + 34, txt: '+' + (120 + wave * 30) + ' 分', c: '#ffd166', life: 1.2, max: 1.2, size: 17 });
+  for (var i = 0; i < 90; i++){
+    parts.push({
+      x: rnd(GX, GX + COLS * BW + (COLS - 1) * GAP),
+      y: rnd(GY, DANGER - 40),
+      vx: rnd(-260, 260), vy: rnd(-330, 60),
+      s: rnd(2, 5.5), c: ['#7cf7d0', '#8fd8ff', '#ffd166', '#ffffff'][i % 4],
+      rot: rnd(0, 6.28), vr: rnd(-12, 12),
+      g: 520, life: rnd(0.7, 1.25), max: 1.25
+    });
+  }
+  if (window.CLS_BGM) { /* 清波时不打断音乐，只是视觉庆祝 */ }
+}
+
+function comboPop(b, mult){
+  pops.push({
+    x: bx(b) + BW / 2, y: by(b) + BH / 2,
+    txt: 'x' + mult.toFixed(1), c: mult >= 1.9 ? '#ffd166' : '#8fd8ff',
+    life: 0.55, max: 0.55, size: 14, rise: 26
+  });
+}
+
+/* ============================ 伤害与清波 ============================ */
 
 function removeBrick(b){
   var i = bricks.indexOf(b);
@@ -309,7 +415,8 @@ function removeBrick(b){
   broke++;
   if (b.kind === 'skill') spawnDrop(b);
   if (b.kind === 'bomb') bombBlast(b);
-  if (!bricks.length) nextWaveIn = 0.45;
+  if (!bricks.length && !clearing) waveClearFx();
+  if (!bricks.length && nextWaveIn <= 0) nextWaveIn = 1.15;
 }
 
 function damage(b){
@@ -317,9 +424,11 @@ function damage(b){
   if (combo > bestCombo) bestCombo = combo;
   var mult = Math.min(2, 1 + combo * 0.04);
   score += Math.round(b.max * 10 * mult);
+  if (mult >= 1.28 && combo % 3 === 0) comboPop(b, mult);
   if (fx.pierce > 0) b.hp = 0; else b.hp--;
-  if (b.hp <= 0){ burst(b, 9); removeBrick(b); }
-  else burst(b, 3);
+  b.hitT = 0.12;
+  if (b.hp <= 0){ shards(b, 10, 1); removeBrick(b); }
+  else shards(b, 3, 0.7);
 }
 
 /* 炸弹：3×3 连爆，连到别的炸弹砖会继续炸；代价是立刻下压一格 */
@@ -343,14 +452,16 @@ function bombBlast(src){
   }
   for (var i = 0; i < gone.length; i++){
     score += 6; broke++;
-    burst(gone[i], 6);
+    shards(gone[i], 7, 1.2);
     var idx = bricks.indexOf(gone[i]);
     if (idx >= 0) bricks.splice(idx, 1);
   }
+  rings.push({ x: bx(src) + BW / 2, y: by(src) + BH / 2, r: 8, max: 190, life: 0.45, maxLife: 0.45, c: '248,113,113' });
   fallAcc = fallEvery;   /* 下一帧立即下压 */
   shake = 10;
   toastNow('炸弹引爆 · 立即下压一格', '#f87171');
-  if (!bricks.length) nextWaveIn = 0.45;
+  if (!bricks.length && !clearing) waveClearFx();
+  if (!bricks.length && nextWaveIn <= 0) nextWaveIn = 1.15;
 }
 
 function nextWave(){
@@ -359,8 +470,9 @@ function nextWave(){
   score += 120 + wave * 30;
   fallEvery = Math.max(4, 10 - (wave - 1) * 0.6);
   fallAcc = 0;
+  clearing = false;
   newWave();
-  toastNow('第 ' + wave + ' 波 · 每 ' + fallEvery.toFixed(1) + ' 秒下压一格', '#4ade80');
+  toastNow('第 ' + wave + ' 波 · 每 ' + fallEvery.toFixed(1) + ' 秒下压一格', '#7cf7d0');
 }
 
 /* ============================ 技能 ============================ */
@@ -377,7 +489,7 @@ function applySkill(s){
       balls.push({
         x: padX + rnd(-16, 16), y: PAD_Y - BALL_R - 2,
         vx: Math.sin(a) * sp, vy: -Math.cos(a) * sp,
-        r: BALL_R, stuck: 0, dead: false
+        r: BALL_R, stuck: 0, dead: false, tr: []
       });
     }
   } else if (s.k === 'shield'){
@@ -387,6 +499,7 @@ function applySkill(s){
   }
   score += 25;
   toastNow(s.n + ' · ' + s.d, s.c);
+  pops.push({ x: padX, y: PAD_Y - 30, txt: s.n, c: s.c, life: 0.8, max: 0.8, size: 18, rise: 34 });
 }
 
 /* ============================ 物理 ============================ */
@@ -442,34 +555,77 @@ function stepBall(bl, dt){
         bl.vx = Math.sin(ang) * sp;
         bl.vy = -Math.cos(ang) * sp;
         combo = 0; comboT = 0;
+        padTrail = 1;
+        for (var q = 0; q < 5; q++){
+          parts.push({
+            x: bl.x + rnd(-6, 6), y: PAD_Y - 2,
+            vx: rnd(-60, 60), vy: rnd(-70, -10), s: rnd(1.5, 3),
+            c: '#8ff5e2', rot: 0, vr: 0, g: 240, life: 0.3, max: 0.3
+          });
+        }
       }
     }
     hitTest(bl);
     if (bl.y - bl.r > H){ bl.dead = true; return; }
   }
+  /* 拖尾：只留最近 6 个采样点 */
+  bl.tr.push({ x: bl.x, y: bl.y });
+  if (bl.tr.length > 6) bl.tr.shift();
 }
 
 /* ============================ 主循环 ============================ */
 
-var last = 0;
+var last = 0, clock = 0;
 function loop(ts){
   requestAnimationFrame(loop);
   if (!last) last = ts;
   var dt = Math.min(0.05, (ts - last) / 1000);
   last = ts;
-  if (st === 'play') update(dt);
-  else updateParts(dt * 0.5);
+  clock += dt;
+
+  stepDust(dt, clock);
+
+  if (st === 'play'){
+    /* 清波慢动作：只有游戏时间被拉慢，特效和界面不受影响 */
+    var gdt = dt * (slowMo > 0 ? 0.34 : 1);
+    if (slowMo > 0) slowMo = Math.max(0, slowMo - dt);
+    update(gdt);
+    updateParts(dt);
+  } else {
+    updateParts(dt * 0.6);
+  }
   draw();
 }
 
 function updateParts(dt){
   for (var i = parts.length - 1; i >= 0; i--){
     var p = parts[i];
-    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 620 * dt; p.life -= dt;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.g || 620) * dt;
+    if (p.vr) p.rot += p.vr * dt;
+    p.life -= dt;
     if (p.life <= 0) parts.splice(i, 1);
+  }
+  for (var j = rings.length - 1; j >= 0; j--){
+    var r = rings[j];
+    if (r.delay > 0){ r.delay -= dt; continue; }
+    r.life -= dt;
+    var k = 1 - r.life / r.maxLife;
+    r.r = 20 + (r.max - 20) * (1 - Math.pow(1 - k, 2.2));
+    if (r.life <= 0) rings.splice(j, 1);
+  }
+  for (var m = pops.length - 1; m >= 0; m--){
+    var p2 = pops[m];
+    p2.life -= dt;
+    if (p2.rise) p2.y -= p2.rise * dt;
+    if (p2.life <= 0) pops.splice(m, 1);
+  }
+  for (var n = 0; n < bricks.length; n++){
+    if (bricks[n].hitT > 0) bricks[n].hitT -= dt;
   }
   if (shake > 0) shake = Math.max(0, shake - dt * 34);
   if (toastT > 0) toastT -= dt;
+  if (flash > 0) flash = Math.max(0, flash - dt * 3.2);
+  if (padTrail > 0) padTrail = Math.max(0, padTrail - dt * 3);
 }
 
 function update(dt){
@@ -507,8 +663,8 @@ function update(dt){
     var d = drops[j];
     d.y += d.vy * dt; d.sp += dt * 3;
     if (d.y > H + 24){ drops.splice(j, 1); continue; }
-    if (d.y + 11 >= PAD_Y && d.y - 11 <= PAD_Y + PAD_H &&
-        Math.abs(d.x - padX) < padW / 2 + 11){
+    if (d.y + 12 >= PAD_Y && d.y - 12 <= PAD_Y + PAD_H &&
+        Math.abs(d.x - padX) < padW / 2 + 12){
       applySkill(d.s); drops.splice(j, 1);
     }
   }
@@ -516,13 +672,11 @@ function update(dt){
   /* 连击衰减 */
   if (comboT > 0){ comboT -= dt; if (comboT <= 0) combo = 0; }
 
-  /* 清波后的短暂间隔 */
+  /* 清波后的短暂间隔（1.15s，留给庆祝特效） */
   if (nextWaveIn > 0){
     nextWaveIn -= dt;
     if (nextWaveIn <= 0) nextWave();
   }
-
-  updateParts(dt);
 
   document.getElementById('hTime').textContent = survive.toFixed(1) + 's';
   document.getElementById('hWave').textContent = wave;
@@ -534,70 +688,176 @@ function update(dt){
 function draw(){
   ctx.save();
   if (shake > 0.2) ctx.translate(rnd(-shake, shake) * 0.55, rnd(-shake, shake) * 0.55);
-
-  ctx.fillStyle = '#080b18';
-  ctx.fillRect(-20, -20, W + 40, H + 40);
-
-  var g = ctx.createRadialGradient(W / 2, 0, 0, W / 2, 0, H * 0.9);
-  g.addColorStop(0, 'rgba(64,96,208,.22)');
-  g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-
-  /* 下落格子线：让「还有几格会压下来」看得见 */
-  ctx.strokeStyle = 'rgba(120,150,255,.07)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  var gridW = COLS * BW + (COLS - 1) * GAP;
-  for (var gy2 = GY; gy2 < DANGER; gy2 += STEP){
-    ctx.moveTo(GX, gy2 + 0.5);
-    ctx.lineTo(GX + gridW, gy2 + 0.5);
+  /* 清波瞬间整屏轻推一下（缩放 2%），比单纯白闪更有「冲击」的感觉 */
+  if (flash > 0){
+    var z = 1 + flash * 0.035;
+    ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
   }
-  ctx.stroke();
 
-  /* 危险线 */
-  ctx.strokeStyle = 'rgba(248,113,113,.32)';
-  ctx.lineWidth = 2; ctx.setLineDash([9, 9]);
-  ctx.beginPath(); ctx.moveTo(0, DANGER); ctx.lineTo(W, DANGER); ctx.stroke();
-  ctx.setLineDash([]);
+  drawBg();
+  drawGridLines();
+  drawDangerLine();
 
   for (var i = 0; i < bricks.length; i++) drawBrick(bricks[i]);
   for (var j = 0; j < drops.length; j++) drawDrop(drops[j]);
 
-  for (var k = 0; k < parts.length; k++){
-    var p = parts[k];
-    ctx.globalAlpha = Math.max(0, p.life / p.max);
-    ctx.fillStyle = p.c;
-    ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
-  }
-  ctx.globalAlpha = 1;
+  drawParts();
+  drawRings();
 
   drawPad();
   for (var m = 0; m < balls.length; m++) drawBall(balls[m]);
+
+  /* 清波白闪：压在场地上，但**不能盖住**顶部进度条和中央大字，
+     否则庆祝的那一瞬字是全白的，等于白做 */
+  if (flash > 0){
+    ctx.fillStyle = 'rgba(200,255,245,' + (flash * 0.62) + ')';
+    ctx.fillRect(-20, -20, W + 40, H + 40);
+  }
+
   drawTopBar();
+  drawPops();
   drawToast();
 
   ctx.restore();
 }
 
+function drawBg(){
+  ctx.fillStyle = '#070a15';
+  ctx.fillRect(-20, -20, W + 40, H + 40);
+
+  /* 顶部光束：从上方打下来的一束冷光，让上半屏不空 */
+  var g = ctx.createRadialGradient(W / 2, -60, 0, W / 2, -60, H * 1.05);
+  g.addColorStop(0, 'rgba(72,120,255,.30)');
+  g.addColorStop(0.45, 'rgba(48,80,190,.10)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  /* 点阵底纹：一次性做成 pattern，比每帧画几百个小圆便宜得多 */
+  if (dotPat){ ctx.fillStyle = dotPat; ctx.fillRect(0, 0, W, H); }
+
+  /* 底部暖光：挡板区域有一点温度，跟上方冷光形成对比 */
+  var g2 = ctx.createRadialGradient(W / 2, H, 0, W / 2, H, H * 0.5);
+  g2.addColorStop(0, 'rgba(34,184,148,.16)');
+  g2.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
+
+  /* 砖墙往下漏的一点光：让「墙悬在上面」有实体感 */
+  if (bricks.length){
+    var low = 0;
+    for (var bi = 0; bi < bricks.length; bi++){
+      var bm = by(bricks[bi]) + BH;
+      if (bm > low) low = bm;
+    }
+    if (low > 0 && low < DANGER){
+      var gl = ctx.createLinearGradient(0, low, 0, low + 130);
+      gl.addColorStop(0, 'rgba(120,200,255,.10)');
+      gl.addColorStop(1, 'rgba(120,200,255,0)');
+      ctx.fillStyle = gl;
+      ctx.fillRect(GX - 10, low, COLS * BW + (COLS - 1) * GAP + 20, 130);
+    }
+  }
+
+  /* 尘埃 */
+  for (var i = 0; i < dust.length; i++){
+    var d = dust[i];
+    ctx.fillStyle = 'rgba(160,200,255,' + (d.a2 || d.a) + ')';
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 6.2832); ctx.fill();
+  }
+
+  /* 四周压暗，视线收在中间 */
+  var vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.78);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,.5)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+}
+
+function drawGridLines(){
+  var gridW = COLS * BW + (COLS - 1) * GAP;
+  ctx.strokeStyle = 'rgba(120,150,255,.06)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (var gy2 = GY; gy2 < DANGER; gy2 += STEP){
+    ctx.moveTo(GX, gy2 + 0.5);
+    ctx.lineTo(GX + gridW, gy2 + 0.5);
+  }
+  ctx.stroke();
+}
+
+function drawDangerLine(){
+  var pulse = 0.25 + 0.12 * Math.sin(clock * 3);
+  ctx.strokeStyle = 'rgba(248,113,113,' + pulse + ')';
+  ctx.lineWidth = 2; ctx.setLineDash([9, 9]);
+  ctx.beginPath(); ctx.moveTo(0, DANGER); ctx.lineTo(W, DANGER); ctx.stroke();
+  ctx.setLineDash([]);
+  /* 危险线下的红色余晖，砖块靠近时更亮 */
+  var near = 0;
+  for (var i = 0; i < bricks.length; i++){
+    var d = DANGER - (by(bricks[i]) + BH);
+    if (near === 0 || d < near) near = d;
+  }
+  if (bricks.length && near < STEP * 3){
+    var a = clamp(0.24 - near / (STEP * 12), 0.04, 0.22);
+    var g = ctx.createLinearGradient(0, DANGER - 60, 0, DANGER);
+    g.addColorStop(0, 'rgba(248,113,113,0)');
+    g.addColorStop(1, 'rgba(248,113,113,' + a + ')');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, DANGER - 60, W, 60);
+  }
+}
+
 function drawBrick(b){
   var x = bx(b), y = by(b);
-  var c0, c1;
-  if (b.hp >= 3){ c0 = '#f472b6'; c1 = '#9d174d'; }
-  else if (b.hp === 2){ c0 = '#fbbf24'; c1 = '#b45309'; }
-  else { c0 = '#38bdf8'; c1 = '#0369a1'; }
+  /* 同硬度也做「深浅交替」的一点点差：整片砖墙才有砖的质感，不是一片色块 */
+  var odd = ((b.col + b.row) & 1) === 1;
+  var c0, c1, glow;
+  if (b.hp >= 3){
+    c0 = odd ? '#ff9ede' : '#ff86cf'; c1 = odd ? '#8e1160' : '#7d0f55';
+    glow = 'rgba(244,114,182,.55)';
+  } else if (b.hp === 2){
+    c0 = odd ? '#ffd88a' : '#ffcc68'; c1 = odd ? '#9a5208' : '#8a4807';
+    glow = 'rgba(251,191,36,.5)';
+  } else {
+    c0 = odd ? '#8bdcff' : '#78cdf7'; c1 = odd ? '#0a4f8a' : '#094679';
+    glow = 'rgba(56,189,248,.45)';
+  }
+
+  /* 外发光：硬度越高越亮，一眼能看出「这块很硬」 */
+  ctx.save();
+  ctx.shadowColor = glow;
+  ctx.shadowBlur = 8 + (b.max - b.hp) * 2;
   var g = ctx.createLinearGradient(x, y, x, y + BH);
   g.addColorStop(0, c0); g.addColorStop(1, c1);
-  rr(x, y, BW, BH, 6);
+  rr(x, y, BW, BH, 7);
   ctx.fillStyle = g; ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
 
-  /* 受损裂纹：掉一格血画一条折线 */
+  /* 顶部高光条 + 底部暗边，做出饼干一样的厚度 */
+  ctx.save();
+  rr(x, y, BW, BH, 7); ctx.clip();
+  var hg = ctx.createLinearGradient(x, y, x, y + BH * 0.5);
+  hg.addColorStop(0, 'rgba(255,255,255,.42)');
+  hg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hg; ctx.fillRect(x, y, BW, BH * 0.55);
+  ctx.fillStyle = 'rgba(0,0,0,.28)';
+  ctx.fillRect(x, y + BH - 4, BW, 4);
+  /* 受击瞬间整块发白 */
+  if (b.hitT > 0){
+    ctx.fillStyle = 'rgba(255,255,255,' + (b.hitT * 2.6) + ')';
+    ctx.fillRect(x, y, BW, BH);
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = 'rgba(255,255,255,.26)';
+  ctx.lineWidth = 1;
+  rr(x + 0.5, y + 0.5, BW - 1, BH - 1, 6.5); ctx.stroke();
+
+  /* 受损裂纹：掉一格血画一条折线，裂缝里透红 */
   if (b.hp < b.max){
-    ctx.strokeStyle = 'rgba(0,0,0,.45)';
-    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(0,0,0,.5)';
+    ctx.lineWidth = 1.7;
     var n = b.max - b.hp;
     for (var i = 0; i < n; i++){
-      var sx = x + 14 + i * 18;
+      var sx = x + 13 + i * 17;
       ctx.beginPath();
       ctx.moveTo(sx, y + 3);
       ctx.lineTo(sx + 6, y + BH * 0.45);
@@ -607,18 +867,26 @@ function drawBrick(b){
   }
 
   if (b.kind === 'skill'){
+    /* 技能砖：金色斜菱形 + 呼吸光圈 */
+    var pr = 0.6 + 0.4 * Math.sin(clock * 4 + b.col);
     ctx.save();
     ctx.translate(x + BW / 2, y + BH / 2);
     ctx.rotate(Math.PI / 4);
-    ctx.fillStyle = 'rgba(255,255,255,.92)';
+    ctx.shadowColor = 'rgba(255,209,102,' + pr + ')';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = '#fff8e1';
     ctx.fillRect(-4.5, -4.5, 9, 9);
     ctx.restore();
-    ctx.strokeStyle = 'rgba(255,255,255,.85)';
-    ctx.lineWidth = 1.6;
-    rr(x + 1.5, y + 1.5, BW - 3, BH - 3, 5);
+    ctx.strokeStyle = 'rgba(255,224,140,' + (0.5 + 0.3 * pr) + ')';
+    ctx.lineWidth = 1.8;
+    rr(x + 2, y + 2, BW - 4, BH - 4, 5);
     ctx.stroke();
   } else if (b.kind === 'bomb'){
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+    /* 炸弹砖：白叉 + 红色脉冲底 */
+    var a = 0.12 + 0.14 * Math.sin(clock * 6 + b.row);
+    ctx.fillStyle = 'rgba(255,80,80,' + a + ')';
+    rr(x, y, BW, BH, 7); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(x + BW / 2 - 6, y + BH / 2 - 6); ctx.lineTo(x + BW / 2 + 6, y + BH / 2 + 6);
     ctx.moveTo(x + BW / 2 + 6, y + BH / 2 - 6); ctx.lineTo(x + BW / 2 - 6, y + BH / 2 + 6);
@@ -629,31 +897,106 @@ function drawBrick(b){
 
 function drawDrop(d){
   var s = d.s;
+  var pulse = 1 + 0.08 * Math.sin(clock * 8);
   ctx.save();
   ctx.translate(d.x, d.y);
-  ctx.shadowColor = s.c; ctx.shadowBlur = 16;
-  ctx.fillStyle = s.c;
-  ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowColor = s.c; ctx.shadowBlur = 18;
+  var g = ctx.createRadialGradient(0, -3, 1, 0, 0, 14 * pulse);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.45, s.c);
+  g.addColorStop(1, s.c);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, 12 * pulse, 0, 6.2832); ctx.fill();
   ctx.restore();
-  ctx.fillStyle = 'rgba(8,11,24,.9)';
-  ctx.font = '700 11px -apple-system,"PingFang SC",sans-serif';
+  /* 下落拖影 */
+  ctx.fillStyle = 'rgba(255,255,255,.12)';
+  ctx.beginPath(); ctx.ellipse(d.x, d.y - 16, 4, 10, 0, 0, 6.2832); ctx.fill();
+
+  ctx.fillStyle = 'rgba(10,14,28,.92)';
+  ctx.font = '800 11.5px -apple-system,"PingFang SC",sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(s.n.charAt(0), d.x, d.y + 0.5);
 }
 
+function drawParts(){
+  for (var i = 0; i < parts.length; i++){
+    var p = parts[i];
+    ctx.globalAlpha = Math.max(0, Math.min(1, p.life / p.max));
+    ctx.fillStyle = p.c;
+    if (p.rot){
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 1.4);
+      ctx.restore();
+    } else {
+      ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawRings(){
+  for (var i = 0; i < rings.length; i++){
+    var r = rings[i];
+    if (r.delay > 0) continue;
+    var a = Math.max(0, r.life / r.maxLife);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(' + r.c + ',' + (a * 0.8) + ')';
+    ctx.lineWidth = 1.5 + a * 9;
+    ctx.shadowColor = 'rgba(' + r.c + ',' + (a * 0.9) + ')';
+    ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 6.2832); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawPops(){
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (var i = 0; i < pops.length; i++){
+    var p = pops[i];
+    var k = p.life / p.max;
+    var a = Math.min(1, k * 2.2);
+    var grow = p.size > 20 ? 1 + (1 - k) * 0.18 : 1;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.translate(p.x, p.y);
+    ctx.scale(grow, grow);
+    ctx.font = '800 ' + p.size + 'px -apple-system,"PingFang SC",sans-serif';
+    ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 8;
+    ctx.fillStyle = p.c;
+    ctx.fillText(p.txt, 0, 0);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawPad(){
   var x = padX - padW / 2;
+
+  /* 挡板下方的光晕：接球瞬间更亮 */
+  var glowA = 0.5 + padTrail * 0.5;
+  ctx.save();
+  ctx.shadowColor = 'rgba(62,224,192,' + glowA + ')';
+  ctx.shadowBlur = 16 + padTrail * 14;
   var g = ctx.createLinearGradient(0, PAD_Y, 0, PAD_Y + PAD_H);
-  g.addColorStop(0, '#8ff5e2'); g.addColorStop(1, '#12a58a');
+  g.addColorStop(0, '#a8ffe9'); g.addColorStop(0.5, '#3ee0c0'); g.addColorStop(1, '#0f8f78');
   rr(x, PAD_Y, padW, PAD_H, 7);
-  ctx.fillStyle = g;
-  ctx.shadowColor = 'rgba(62,224,192,.7)'; ctx.shadowBlur = 16;
-  ctx.fill();
-  ctx.shadowBlur = 0;
+  ctx.fillStyle = g; ctx.fill();
+  ctx.restore();
+
+  /* 顶面高光 */
+  ctx.fillStyle = 'rgba(255,255,255,.35)';
+  rr(x + 4, PAD_Y + 2, padW - 8, 3, 1.5); ctx.fill();
+
+  /* 两端的能量点 */
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  ctx.beginPath(); ctx.arc(x + 6, PAD_Y + PAD_H / 2, 2.2, 0, 6.2832); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + padW - 6, PAD_Y + PAD_H / 2, 2.2, 0, 6.2832); ctx.fill();
 
   /* 护盾：挡板上面一条蓝光 */
   if (fx.shield > 0){
-    ctx.strokeStyle = 'rgba(96,165,250,.95)';
+    var pul = 0.7 + 0.3 * Math.sin(clock * 6);
+    ctx.strokeStyle = 'rgba(96,165,250,' + pul + ')';
     ctx.lineWidth = 3;
     ctx.shadowColor = 'rgba(96,165,250,.9)'; ctx.shadowBlur = 12;
     ctx.beginPath(); ctx.moveTo(10, PAD_Y - 8); ctx.lineTo(W - 10, PAD_Y - 8); ctx.stroke();
@@ -663,64 +1006,92 @@ function drawPad(){
 
 function drawBall(bl){
   var gold = fx.pierce > 0;
+
+  /* 拖尾：越靠后越淡越小 */
+  for (var i = 0; i < bl.tr.length; i++){
+    var t = bl.tr[i], k = (i + 1) / bl.tr.length;
+    ctx.globalAlpha = k * 0.22;
+    ctx.fillStyle = gold ? '#fbbf24' : '#93c5fd';
+    ctx.beginPath(); ctx.arc(t.x, t.y, bl.r * k * 0.9, 0, 6.2832); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
   ctx.save();
   ctx.shadowColor = gold ? '#fbbf24' : '#93c5fd';
-  ctx.shadowBlur = 15;
-  ctx.fillStyle = gold ? '#fde68a' : '#e6ecff';
-  ctx.beginPath(); ctx.arc(bl.x, bl.y, bl.r, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 16;
+  var g = ctx.createRadialGradient(bl.x - bl.r * 0.35, bl.y - bl.r * 0.35, 0.5, bl.x, bl.y, bl.r);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(1, gold ? '#fbbf24' : '#c7d7ff');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(bl.x, bl.y, bl.r, 0, 6.2832); ctx.fill();
   ctx.restore();
 }
 
-/* 顶部下压进度条：越接近下压，条越短、越红 */
+/* 顶部下压进度条：越接近下压，条越长、越红；底色带刻度 */
 function drawTopBar(){
-  var h = 26, y = 6, x0 = 14, w = W - 28;
+  var h = 26, y = 8, x0 = 14, w = W - 28;
   var left = fallEvery - fallAcc;
   var r = fx.slow > 0 ? 1 : clamp(fallAcc / fallEvery, 0, 1);
 
   ctx.fillStyle = 'rgba(255,255,255,.07)';
-  rr(x0, y, w, h, 8); ctx.fill();
+  rr(x0, y, w, h, 9); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,150,255,.18)'; ctx.lineWidth = 1;
+  rr(x0 + 0.5, y + 0.5, w - 1, h - 1, 8.5); ctx.stroke();
+
+  /* 四等分刻度：能看出还剩多少比例 */
+  ctx.strokeStyle = 'rgba(6,9,19,.5)'; ctx.lineWidth = 1;
+  for (var q = 1; q < 4; q++){
+    ctx.beginPath();
+    ctx.moveTo(x0 + w * q / 4, y + 4);
+    ctx.lineTo(x0 + w * q / 4, y + h - 4);
+    ctx.stroke();
+  }
 
   var g = ctx.createLinearGradient(x0, 0, x0 + w, 0);
   if (fx.slow > 0){ g.addColorStop(0, '#c084fc'); g.addColorStop(1, '#8b5cf6'); }
-  else { g.addColorStop(0, '#22c55e'); g.addColorStop(0.55, '#eab308'); g.addColorStop(1, '#ef4444'); }
+  else { g.addColorStop(0, '#3ee0c0'); g.addColorStop(0.55, '#eab308'); g.addColorStop(1, '#ef4444'); }
   ctx.fillStyle = g;
   /* 进度条从 0 长到满（满了就下压），比「从满缩短」更符合直觉 */
-  rr(x0, y, Math.max(6, w * r), h, 8); ctx.fill();
+  var fw = Math.max(8, w * r);
+  rr(x0, y, fw, h, 9); ctx.fill();
+  /* 前沿一点高光，像在「充能」 */
+  ctx.fillStyle = 'rgba(255,255,255,.5)';
+  rr(Math.max(x0 + 2, x0 + fw - 5), y + 4, 3, h - 8, 1.5); ctx.fill();
 
-  ctx.fillStyle = fx.slow > 0 ? '#f5e6ff' : '#eef2ff';
-  ctx.font = '700 12.5px -apple-system,"PingFang SC",sans-serif';
+  ctx.fillStyle = fx.slow > 0 ? '#f5e6ff' : '#ffffff';
+  ctx.font = '800 12.5px -apple-system,"PingFang SC",sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   /* 白字要压在绿→黄→红的渐变上，不加阴影中段基本看不清 */
-  ctx.shadowColor = 'rgba(0,0,0,.75)'; ctx.shadowBlur = 4;
+  ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 4;
   ctx.fillText(
     fx.slow > 0 ? '时缓中 · 下压已冻结' : left.toFixed(1) + 's 后下压一格',
     W / 2, y + h / 2 + 0.5
   );
   ctx.shadowBlur = 0;
 
-  /* 右侧剩余格数：还能压几次才到底。
-     ⚠️ low 必须从 0 起算最大底边 —— 之前写成 DANGER，bm 永远小于它，
-     if 一次都不进，low 一直是 652，于是无论砖墙在哪都显示「余 0 格」。 */
+  /* 右侧剩余格数：还能压几次才到底 */
   var low = 0, cnt = 0;
   for (var i = 0; i < bricks.length; i++){
     var bm = by(bricks[i]) + BH;
     if (bm > low) low = bm;
   }
   if (bricks.length) cnt = Math.max(0, Math.floor((DANGER - low) / STEP));
-  ctx.textAlign = 'right';
-  ctx.font = '700 11px -apple-system,"PingFang SC",sans-serif';
-  ctx.fillStyle = cnt <= 3 ? '#f87171' : 'rgba(200,214,255,.55)';
-  ctx.fillText('余 ' + cnt + ' 格', W - 16, 44);
+  if (bricks.length){
+    ctx.textAlign = 'right';
+    ctx.font = '800 11px -apple-system,"PingFang SC",sans-serif';
+    ctx.fillStyle = cnt <= 3 ? '#f87171' : 'rgba(200,214,255,.55)';
+    ctx.fillText('余 ' + cnt + ' 格', W - 16, 46);
+  }
 }
 
 function drawToast(){
   if (toastT <= 0 || !toast) return;
   var a = Math.min(1, toastT / 0.4);
   ctx.globalAlpha = a;
-  ctx.font = '700 13px -apple-system,"PingFang SC",sans-serif';
-  var w = Math.min(W - 32, ctx.measureText(toast).width + 36);
-  var x = (W - w) / 2, y = 52;
-  ctx.fillStyle = 'rgba(8,11,24,.88)';
+  ctx.font = '800 13px -apple-system,"PingFang SC",sans-serif';
+  var w = Math.min(W - 32, ctx.measureText(toast).width + 38);
+  var x = (W - w) / 2, y = 54;
+  ctx.fillStyle = 'rgba(8,11,24,.9)';
   rr(x, y, w, 30, 15); ctx.fill();
   ctx.strokeStyle = toastC; ctx.lineWidth = 1.2; ctx.stroke();
   ctx.fillStyle = toastC;
@@ -791,8 +1162,17 @@ function togglePause(){
   syncOv();
 }
 
+/* ---------- 背景音乐 ----------
+   WebAudio 必须由用户手势启动，所以绑在「开始挑战」上；结算后不停，
+   让循环继续跑（音乐本身就是完整的 8 小节，停在哪都突兀）。 */
+var bgm = window.CLS_BGM || null;
+function startBgm(){ try { if (bgm) bgm.start('breakout'); } catch (e){} }
+function stopBgm(){ /* 结算时保留音乐，这里留空以便将来需要静音 */ }
+if (bgm) bgm.bind(document.getElementById('bgmBtn'), 'breakout');
+
 function startGame(){
   reset();
+  startBgm();
   document.getElementById('hTime').textContent = '0.0s';
   document.getElementById('hWave').textContent = '1';
   document.getElementById('hScore').textContent = '0';
@@ -804,6 +1184,7 @@ document.getElementById('btnResume').addEventListener('click', togglePause);
 document.getElementById('btnQuit').addEventListener('click', function(){ st = 'over'; gameOver(); });
 
 /* 首次进入先铺好砖墙，介绍层后面能看到实际场地，不留黑屏 */
+initDust();
 newWave();
 syncOv();
 requestAnimationFrame(loop);
@@ -827,14 +1208,20 @@ if (/[?&]selftest=1/.test(location.search)){
         survive: survive, wave: wave, score: score,
         padX: padX, padW: padW, fallEvery: fallEvery, fallAcc: fallAcc,
         fx: { pierce: fx.pierce, shield: fx.shield, slow: fx.slow, wide: fx.wide },
-        kinds: bricks.map(function(b){ return b.kind; }).filter(function(k){ return k !== 'n'; })
+        kinds: bricks.map(function(b){ return b.kind; }).filter(function(k){ return k !== 'n'; }),
+        hps: bricks.map(function(b){ return b.hp; }),
+        fxLive: { flash: flash, slowMo: slowMo, rings: rings.length, pops: pops.length }
       };
     },
     press: pressDown,
     start: startGame,
     pause: togglePause,
     applySkill: applySkill,
-    skills: SKILLS
+    skills: SKILLS,
+    /* 硬度分布是纯函数，直接透给测试，省得为了验证曲线去连打十几波 */
+    dist: hpDist,
+    /* 清波特效的单测入口：把砖全清掉，看 fxLive 有没有起来 */
+    clearAll: function(){ while (bricks.length) removeBrick(bricks[0]); }
   };
 }
 })();
