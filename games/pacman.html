@@ -37,9 +37,9 @@ a.back:active{background:rgba(157,177,255,.15)}
    原来写死 calc(100vh - 250px)，可「顶栏 + HUD + 方向键 + 间距」实测要 267px，
    在 640px 高的手机上方向键的「下」直接被 body 的 overflow:hidden 裁掉了。
    现在用 dvh（随浏览器地址栏收缩）并把预留值提到 276，短屏再把按键缩小。 */
-#stage{position:relative;width:min(96vw,calc(100dvh - 276px));
+#stage{position:relative;width:min(96vw,420px);height:min(96vw,420px);
   border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.6),
-  0 0 0 1px rgba(120,160,255,.13);flex:none;background:#050813;margin:auto 0}
+  0 0 0 1px rgba(120,160,255,.13);flex:0 0 auto;background:#050813;margin:auto 0}
 canvas{display:block;width:100%;height:auto;touch-action:none}
 /* 方向键 */
 #dpad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,62px);gap:5px;flex:none}
@@ -104,7 +104,7 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
 </head>
 <body>
 <div class="bar">
-  <a class="back" href="../index.html">← 返回</a>
+  <a class="back" href="../" onclick="if(document.referrer&&document.referrer.indexOf(location.host)===0){history.back();return false}">← 返回</a>
   <h1>迷宫吃豆</h1>
   <span class="lvl" id="hLv">第 1 关</span>
   <button class="bgm" id="bgmBtn" type="button">🎵</button>
@@ -1076,6 +1076,40 @@ document.addEventListener('visibilitychange', function(){
 });
 
 /* ---------- 启动 ---------- */
+/* v4.15.1：迷宫尺寸改成「量出来算」，不再靠 CSS 里减一个估的固定值。
+   旧写法 calc(100dvh - 276px) 有两个坑：
+     ① 老内核（含部分微信 X5）不认 dvh，整条 width 失效 → canvas 用固有宽度 456px
+        把版面撑爆，方向键「下」被 body 的 overflow:hidden 裁掉；
+     ② 276 是估的，顶栏/HUD/方向键在 56px 档时实际占得更多，照样溢出。
+   现在按真实 offsetHeight 求可用高度，再取「宽度」与「可用高度」的较小值。 */
+function fitStage(){
+  var stage = document.getElementById('stage');
+  var dpad = document.getElementById('dpad');
+  var bar = document.querySelector('.bar');
+  var hud = document.querySelector('.hud');
+  if (!stage || !bar || !hud) return;
+  var vh = window.innerHeight || document.documentElement.clientHeight || 640;
+  var vw = window.innerWidth || document.documentElement.clientWidth || 360;
+  var dpadH = 0;
+  try {
+    var dcs = window.getComputedStyle(dpad);
+    if (dcs.display !== 'none' && dcs.visibility !== 'hidden') dpadH = dpad.offsetHeight;
+  } catch (e){ dpadH = 0; }
+  var bs = window.getComputedStyle(document.body);
+  var padT = parseFloat(bs.paddingTop) || 0;
+  var padB = parseFloat(bs.paddingBottom) || 0;
+  var gaps = (dpadH ? 3 : 2) * 5;      /* body 里 4 个子元素 = 3 个 5px 间距 */
+  var avail = vh - padT - padB - bar.offsetHeight - hud.offsetHeight - dpadH - gaps - 4;
+  var size = Math.floor(Math.min(vw * 0.96, avail));
+  if (size < 150) size = Math.max(120, Math.floor(avail));
+  stage.style.width = size + 'px';
+  stage.style.height = size + 'px';
+}
+fitStage();
+window.addEventListener('resize', fitStage);
+window.addEventListener('orientationchange', function(){ setTimeout(fitStage, 150); });
+setTimeout(fitStage, 80);        /* 字体换来换去会改顶栏高度，再量一次 */
+
 buildMenu();
 /* 先装一关当背景，菜单后面能看到实际迷宫，不是一块黑 */
 loadLevel(1);

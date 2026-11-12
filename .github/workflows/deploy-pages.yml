@@ -87,6 +87,9 @@ jobs:
             admin-2.js
             admin-3.js
             basic.html
+            # v4.15.1：GitHub Pages 的兜底 404。⚠️ 必须叫 404.html 且放在站点根目录，
+            # Pages 才会自动接管「找不到页面」；漏发布的话走错地址还是 GitHub 那张 404。
+            404.html
             clock.html
             # v4.12.0：新手导览脚本。⚠️ 必须排在 index.html 引用的位置，
             # 漏发布 → 首页导览静默失效（TOUR 未定义，启动函数直接返回）。

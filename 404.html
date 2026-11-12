@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>页面走丢了 · 25级05班班级服务站</title>
+<!-- ============================================================================
+     v4.15.1：GitHub Pages 的兜底 404
+     ----------------------------------------------------------------------------
+     站主实测：从游戏页点「返回」偶尔会落到 404，地址栏停在 github.io 上，
+     下面写着「找不到该页面」。原因多半是旧版本页面 / 手输路径 / 缓存里的老链接
+     指向了一个不存在的文件（例如早期的 ./homework/ 目录）。
+
+     与其让人对着 GitHub 的 404 发呆，不如自己接管：
+       · 说清楚「这个地址没有页面」
+       · 1.8 秒后自动回首页
+       · 给一个立刻能点的按钮
+     静态站点没有服务端，404.html 是 Pages 唯一能挂的兜底页。
+     ========================================================================= -->
+<style>
+body{margin:0;min-height:100vh;background:#0a1020;color:#e9ecff;
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  display:flex;align-items:center;justify-content:center;padding:24px;
+  box-sizing:border-box;text-align:center}
+.card{max-width:360px}
+.code{font-size:58px;font-weight:800;letter-spacing:2px;
+  background:linear-gradient(100deg,#ffb27a,#f97316 55%,#ffd166);
+  -webkit-background-clip:text;background-clip:text;color:transparent;line-height:1.1}
+h1{font-size:17px;margin:10px 0 6px;font-weight:800}
+p{font-size:13px;color:#8b9ac0;line-height:1.7;margin:0 0 18px}
+a.btn{display:inline-block;padding:11px 26px;border-radius:12px;text-decoration:none;
+  background:linear-gradient(135deg,#ffb27a,#f97316);color:#241505;font-weight:800;font-size:14px;
+  box-shadow:0 10px 26px rgba(249,115,22,.28)}
+.tip{font-size:12px;color:#5f6e93;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="code">404</div>
+  <h1>这个地址没有页面</h1>
+  <p>可能是链接抄错了一个字母，也可能是旧版本留下的地址。<br>马上带你回班级服务站。</p>
+  <a class="btn" id="go" href="/">回班级服务站</a>
+  <div class="tip" id="tip">1.8 秒后自动跳转…</div>
+</div>
+<script>
+(function(){
+  /* 站点部署在 GitHub Pages 的 /class-site/ 子目录下，也可能是自定义域名根目录。
+     只做一件事：判断当前路径属于哪种情况，拼出真正的首页地址。 */
+  var p = location.pathname || '/';
+  var base = '/';
+  if (p.indexOf('/class-site/') === 0 || p === '/class-site') base = '/class-site/';
+  var go = document.getElementById('go');
+  if (go) go.setAttribute('href', base);
+  setTimeout(function(){ location.replace(base); }, 1800);
+})();
+</script>
+</body>
+</html>

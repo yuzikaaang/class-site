@@ -67,7 +67,7 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
 </head>
 <body>
 <div class="bar">
-  <a class="back" href="../index.html">← 返回</a>
+  <a class="back" href="../" onclick="if(document.referrer&&document.referrer.indexOf(location.host)===0){history.back();return false}">← 返回</a>
   <h1>下落砖块</h1>
   <button class="bgm" id="bgmBtn" type="button">🎵</button>
 </div>
@@ -147,22 +147,16 @@ canvas{display:block;width:100%;height:auto;touch-action:none}
 var W = 480, H = 720;
 var cv = document.getElementById('cv');
 var ctx = cv.getContext('2d');
-var DPR = Math.min(2, window.devicePixelRatio || 1);
+/* v4.15.1：DPR 从 2 降到 1.5。
+   480×720 的画布在 DPR 2 时要画 960×1440 ≈ 138 万像素，手机 GPU 每帧要填五遍背景，
+   单这一项就吃掉大半帧预算。1.5 倍（720×1080）肉眼几乎看不出区别，像素量只剩 56%。 */
+var DPR = Math.min(1.5, window.devicePixelRatio || 1);
 cv.width = W * DPR; cv.height = H * DPR;
 ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-/* 点阵底纹：做成 pattern 反复用，避免每帧画上百个圆 */
-var dotPat = null;
-(function(){
-  try {
-    var pc = document.createElement('canvas');
-    pc.width = pc.height = 44;
-    var pg = pc.getContext('2d');
-    pg.fillStyle = 'rgba(150,190,255,.06)';
-    pg.beginPath(); pg.arc(22, 22, 1.15, 0, 6.2832); pg.fill();
-    dotPat = ctx.createPattern(pc, 'repeat');
-  } catch (e){ dotPat = null; }
-})();
+/* v4.15.1：背景改成一次性预渲染（见 buildBg）。
+   原来这里是每帧建的点阵 pattern，现在挪进离屏画布，只建一次。 */
+var bgCv = null, bgPad = 20;
 
 /* ---- 场地参数 ---- */
 var COLS = 7, ROWS = 5;
@@ -231,7 +225,7 @@ function findBrick(col, row){
 
 function initDust(){
   dust = [];
-  for (var i = 0; i < 46; i++){
+  for (var i = 0; i < 18; i++){   /* v4.15.1：46 → 18，尘埃是氛围不是主角 */
     dust.push({
       x: rnd(0, W), y: rnd(0, H),
       r: rnd(0.6, 1.9), vy: rnd(-9, -26), vx: rnd(-5, 5),
@@ -391,7 +385,7 @@ function waveClearFx(){
   rings.push({ x: W / 2, y: H * 0.42, r: 12, max: 260, life: 0.7,  maxLife: 0.7,  c: '255,255,255', delay: 0.18 });
   pops.push({ x: W / 2, y: H * 0.38, txt: '第 ' + wave + ' 波 · 清空', c: '#7cf7d0', life: 1.35, max: 1.35, size: 30 });
   pops.push({ x: W / 2, y: H * 0.38 + 34, txt: '+' + (120 + wave * 30) + ' 分', c: '#ffd166', life: 1.2, max: 1.2, size: 17 });
-  for (var i = 0; i < 90; i++){
+  for (var i = 0; i < 36; i++){   /* v4.15.1：90 → 36，碎片少一半还多，画面照样够热闹 */
     parts.push({
       x: rnd(GX, GX + COLS * BW + (COLS - 1) * GAP),
       y: rnd(GY, DANGER - 40),
@@ -433,7 +427,7 @@ function damage(b){
   if (mult >= 1.28 && combo % 3 === 0) comboPop(b, mult);
   if (fx.pierce > 0) b.hp = 0; else b.hp--;
   b.hitT = 0.12;
-  if (b.hp <= 0){ shards(b, 10, 1); removeBrick(b); }
+  if (b.hp <= 0){ shards(b, 6, 1); removeBrick(b); }   /* v4.15.1：10 → 6 */
   else shards(b, 3, 0.7);
 }
 
@@ -578,7 +572,7 @@ function stepBall(bl, dt){
   }
   /* 拖尾：只留最近 6 个采样点 */
   bl.tr.push({ x: bl.x, y: bl.y });
-  if (bl.tr.length > 6) bl.tr.shift();
+  if (bl.tr.length > 4) bl.tr.shift();   /* v4.15.1：6 → 4，拖尾够看就行 */
 }
 
 /* ============================ 主循环 ============================ */
@@ -729,27 +723,60 @@ function draw(){
   ctx.restore();
 }
 
-function drawBg(){
-  ctx.fillStyle = '#070a15';
-  ctx.fillRect(-20, -20, W + 40, H + 40);
+/* ============================ 背景 ============================
+ * v4.15.1 性能改造：底色、顶部光束、点阵底纹、底部暖光、四周暗角
+ * 这五层全是不动的，原先是每帧重建 3 个渐变 + 5 次全屏 fillRect。
+ * 在手机上这相当于每帧多填一千万像素，帧率直接掉一半。
+ * 现在一次性画进离屏画布（bgCv），每帧只 drawImage 一次；
+ * 每帧还在动的只剩「砖墙漏光」和尘埃。 */
+function buildBg(){
+  var s = DPR;
+  bgCv = document.createElement('canvas');
+  bgCv.width = Math.round((W + bgPad * 2) * s);
+  bgCv.height = Math.round((H + bgPad * 2) * s);
+  var g = bgCv.getContext('2d');
+  g.setTransform(s, 0, 0, s, 0, 0);
+  g.translate(bgPad, bgPad);
+
+  g.fillStyle = '#070a15';
+  g.fillRect(-bgPad, -bgPad, W + bgPad * 2, H + bgPad * 2);
 
   /* 顶部光束：从上方打下来的一束冷光，让上半屏不空 */
-  var g = ctx.createRadialGradient(W / 2, -60, 0, W / 2, -60, H * 1.05);
-  g.addColorStop(0, 'rgba(72,120,255,.30)');
-  g.addColorStop(0.45, 'rgba(48,80,190,.10)');
-  g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  var rg = g.createRadialGradient(W / 2, -60, 0, W / 2, -60, H * 1.05);
+  rg.addColorStop(0, 'rgba(72,120,255,.30)');
+  rg.addColorStop(0.45, 'rgba(48,80,190,.10)');
+  rg.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, W, H);
 
-  /* 点阵底纹：一次性做成 pattern，比每帧画几百个小圆便宜得多 */
-  if (dotPat){ ctx.fillStyle = dotPat; ctx.fillRect(0, 0, W, H); }
+  /* 点阵底纹 */
+  try {
+    var pc = document.createElement('canvas');
+    pc.width = pc.height = 44;
+    var pg = pc.getContext('2d');
+    pg.fillStyle = 'rgba(150,190,255,.06)';
+    pg.beginPath(); pg.arc(22, 22, 1.15, 0, 6.2832); pg.fill();
+    g.fillStyle = g.createPattern(pc, 'repeat');
+    g.fillRect(0, 0, W, H);
+  } catch (e){}
 
-  /* 底部暖光：挡板区域有一点温度，跟上方冷光形成对比 */
-  var g2 = ctx.createRadialGradient(W / 2, H, 0, W / 2, H, H * 0.5);
-  g2.addColorStop(0, 'rgba(34,184,148,.16)');
-  g2.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
+  /* 底部暖光：跟上方冷光形成对比 */
+  var rg2 = g.createRadialGradient(W / 2, H, 0, W / 2, H, H * 0.5);
+  rg2.addColorStop(0, 'rgba(34,184,148,.16)');
+  rg2.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = rg2; g.fillRect(0, 0, W, H);
 
-  /* 砖墙往下漏的一点光：让「墙悬在上面」有实体感 */
+  /* 四周压暗，视线收在中间 */
+  var vg = g.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.78);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,.5)');
+  g.fillStyle = vg; g.fillRect(-bgPad, -bgPad, W + bgPad * 2, H + bgPad * 2);
+}
+
+function drawBg(){
+  if (!bgCv) buildBg();
+  ctx.drawImage(bgCv, -bgPad, -bgPad, W + bgPad * 2, H + bgPad * 2);
+
+  /* 砖墙往下漏的一点光：让「墙悬在上面」有实体感（这条随砖墙位置动，必须实时画） */
   if (bricks.length){
     var low = 0;
     for (var bi = 0; bi < bricks.length; bi++){
@@ -765,18 +792,14 @@ function drawBg(){
     }
   }
 
-  /* 尘埃 */
+  /* 尘埃（数量已从 46 降到 18，见 initDust） */
+  ctx.fillStyle = '#a0c8ff';
   for (var i = 0; i < dust.length; i++){
     var d = dust[i];
-    ctx.fillStyle = 'rgba(160,200,255,' + (d.a2 || d.a) + ')';
-    ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 6.2832); ctx.fill();
+    ctx.globalAlpha = d.a2 || d.a;
+    ctx.fillRect(d.x, d.y, d.r * 2, d.r * 2);
   }
-
-  /* 四周压暗，视线收在中间 */
-  var vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.78);
-  vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(0,0,0,.5)');
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
 }
 
 function drawGridLines(){
@@ -813,15 +836,39 @@ function drawDangerLine(){
   }
 }
 
-function drawBrick(b){
-  var x = bx(b), y = by(b);
-  /* 同硬度也做「深浅交替」的一点点差：整片砖墙才有砖的质感，不是一片色块 */
-  var odd = ((b.col + b.row) & 1) === 1;
+/* ============================ 砖块 ============================
+ * v4.15.1 性能改造：同一种「硬度 + 深浅」的砖长得完全一样，
+ * 原来却每帧每块重画一遍 createLinearGradient ×2 + clip + shadowBlur(8~14) + stroke。
+ * 一屏 35 块就是 70 个渐变、35 次高斯模糊 —— 手机上这条是掉帧的头号原因。
+ * 现在把 6 种外观（3 档硬度 × 深浅）预渲染成带外发光的贴图，运行时只 drawImage。 */
+function rrOn(g, x, y, w, h, r){
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+var brickSprites = {};
+function brickSprite(hp, odd){
+  var key = hp + (odd ? 'o' : 'e');
+  if (brickSprites[key]) return brickSprites[key];
+
+  var PAD = 9, w = BW + PAD * 2, h = BH + PAD * 2;
+  var c = document.createElement('canvas');
+  c.width = Math.round(w * DPR); c.height = Math.round(h * DPR);
+  var g = c.getContext('2d');
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.translate(PAD, PAD);
+
   var c0, c1, glow;
-  if (b.hp >= 3){
+  if (hp >= 3){
     c0 = odd ? '#ff9ede' : '#ff86cf'; c1 = odd ? '#8e1160' : '#7d0f55';
     glow = 'rgba(244,114,182,.55)';
-  } else if (b.hp === 2){
+  } else if (hp === 2){
     c0 = odd ? '#ffd88a' : '#ffcc68'; c1 = odd ? '#9a5208' : '#8a4807';
     glow = 'rgba(251,191,36,.5)';
   } else {
@@ -829,35 +876,48 @@ function drawBrick(b){
     glow = 'rgba(56,189,248,.45)';
   }
 
-  /* 外发光：硬度越高越亮，一眼能看出「这块很硬」 */
-  ctx.save();
-  ctx.shadowColor = glow;
-  ctx.shadowBlur = 8 + (b.max - b.hp) * 2;
-  var g = ctx.createLinearGradient(x, y, x, y + BH);
-  g.addColorStop(0, c0); g.addColorStop(1, c1);
-  rr(x, y, BW, BH, 7);
-  ctx.fillStyle = g; ctx.fill();
-  ctx.restore();
+  /* 外发光：只在生成贴图时算一次 */
+  var g1 = g.createLinearGradient(0, 0, 0, BH);
+  g1.addColorStop(0, c0); g1.addColorStop(1, c1);
+  g.shadowColor = glow; g.shadowBlur = 9;
+  rrOn(g, 0, 0, BW, BH, 7);
+  g.fillStyle = g1; g.fill();
+  g.shadowBlur = 0;
 
   /* 顶部高光条 + 底部暗边，做出饼干一样的厚度 */
-  ctx.save();
-  rr(x, y, BW, BH, 7); ctx.clip();
-  var hg = ctx.createLinearGradient(x, y, x, y + BH * 0.5);
+  g.save();
+  rrOn(g, 0, 0, BW, BH, 7); g.clip();
+  var hg = g.createLinearGradient(0, 0, 0, BH * 0.55);
   hg.addColorStop(0, 'rgba(255,255,255,.42)');
   hg.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = hg; ctx.fillRect(x, y, BW, BH * 0.55);
-  ctx.fillStyle = 'rgba(0,0,0,.28)';
-  ctx.fillRect(x, y + BH - 4, BW, 4);
-  /* 受击瞬间整块发白 */
-  if (b.hitT > 0){
-    ctx.fillStyle = 'rgba(255,255,255,' + (b.hitT * 2.6) + ')';
-    ctx.fillRect(x, y, BW, BH);
-  }
-  ctx.restore();
+  g.fillStyle = hg; g.fillRect(0, 0, BW, BH * 0.55);
+  g.fillStyle = 'rgba(0,0,0,.28)';
+  g.fillRect(0, BH - 4, BW, 4);
+  g.restore();
 
-  ctx.strokeStyle = 'rgba(255,255,255,.26)';
-  ctx.lineWidth = 1;
-  rr(x + 0.5, y + 0.5, BW - 1, BH - 1, 6.5); ctx.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.26)';
+  g.lineWidth = 1;
+  rrOn(g, 0.5, 0.5, BW - 1, BH - 1, 6.5); g.stroke();
+
+  c.__pad = PAD;
+  brickSprites[key] = c;
+  return c;
+}
+
+function drawBrick(b){
+  var x = bx(b), y = by(b);
+  var odd = ((b.col + b.row) & 1) === 1;
+  var sp = brickSprite(Math.min(3, b.hp), odd);
+  var PAD = sp.__pad;
+  ctx.drawImage(sp, x - PAD, y - PAD, BW + PAD * 2, BH + PAD * 2);
+
+  /* 受击瞬间整块发白：一层半透明白，比重新生成贴图便宜得多 */
+  if (b.hitT > 0){
+    ctx.globalAlpha = Math.min(0.9, b.hitT * 2.6);
+    ctx.fillStyle = '#ffffff';
+    rr(x, y, BW, BH, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
 
   /* 受损裂纹：掉一格血画一条折线，裂缝里透红 */
   if (b.hp < b.max){
@@ -875,13 +935,13 @@ function drawBrick(b){
   }
 
   if (b.kind === 'skill'){
-    /* 技能砖：金色斜菱形 + 呼吸光圈 */
+    /* 技能砖：金色斜菱形 + 呼吸光圈（去掉 shadowBlur，改用一圈半透明描边） */
     var pr = 0.6 + 0.4 * Math.sin(clock * 4 + b.col);
     ctx.save();
     ctx.translate(x + BW / 2, y + BH / 2);
     ctx.rotate(Math.PI / 4);
-    ctx.shadowColor = 'rgba(255,209,102,' + pr + ')';
-    ctx.shadowBlur = 12;
+    ctx.fillStyle = 'rgba(255,209,102,' + (0.18 + pr * 0.2) + ')';
+    ctx.fillRect(-9, -9, 18, 18);
     ctx.fillStyle = '#fff8e1';
     ctx.fillRect(-4.5, -4.5, 9, 9);
     ctx.restore();
@@ -906,16 +966,17 @@ function drawBrick(b){
 function drawDrop(d){
   var s = d.s;
   var pulse = 1 + 0.08 * Math.sin(clock * 8);
-  ctx.save();
-  ctx.translate(d.x, d.y);
-  ctx.shadowColor = s.c; ctx.shadowBlur = 18;
-  var g = ctx.createRadialGradient(0, -3, 1, 0, 0, 14 * pulse);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.45, s.c);
-  g.addColorStop(1, s.c);
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(0, 0, 12 * pulse, 0, 6.2832); ctx.fill();
-  ctx.restore();
+  /* v4.15.1：去掉 shadowBlur(18)，换成两层半透明圆当光晕 */
+  ctx.fillStyle = s.c;
+  ctx.globalAlpha = 0.16;
+  ctx.beginPath(); ctx.arc(d.x, d.y, 20 * pulse, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 0.3;
+  ctx.beginPath(); ctx.arc(d.x, d.y, 15 * pulse, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.arc(d.x, d.y, 11 * pulse, 0, 6.2832); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.9)';
+  ctx.beginPath(); ctx.arc(d.x - 2.5, d.y - 3, 3.4, 0, 6.2832); ctx.fill();
+
   /* 下落拖影 */
   ctx.fillStyle = 'rgba(255,255,255,.12)';
   ctx.beginPath(); ctx.ellipse(d.x, d.y - 16, 4, 10, 0, 0, 6.2832); ctx.fill();
@@ -948,13 +1009,14 @@ function drawRings(){
     var r = rings[i];
     if (r.delay > 0) continue;
     var a = Math.max(0, r.life / r.maxLife);
-    ctx.save();
-    ctx.strokeStyle = 'rgba(' + r.c + ',' + (a * 0.8) + ')';
-    ctx.lineWidth = 1.5 + a * 9;
-    ctx.shadowColor = 'rgba(' + r.c + ',' + (a * 0.9) + ')';
-    ctx.shadowBlur = 14;
+    /* v4.15.1：原先是 shadowBlur(14) 描一圈，改成「粗淡外圈 + 细亮内圈」，
+       观感近似，但不用每帧做高斯模糊 */
+    ctx.strokeStyle = 'rgba(' + r.c + ',' + (a * 0.28) + ')';
+    ctx.lineWidth = 2 + a * 16;
     ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 6.2832); ctx.stroke();
-    ctx.restore();
+    ctx.strokeStyle = 'rgba(' + r.c + ',' + (a * 0.8) + ')';
+    ctx.lineWidth = 1.5 + a * 7;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 6.2832); ctx.stroke();
   }
 }
 
@@ -970,7 +1032,12 @@ function drawPops(){
     ctx.translate(p.x, p.y);
     ctx.scale(grow, grow);
     ctx.font = '800 ' + p.size + 'px -apple-system,"PingFang SC",sans-serif';
-    ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 8;
+    /* v4.15.1：飘字去掉 shadowBlur(8)，改成深色描边压一层，边缘一样干净 */
+    if (p.size >= 20){
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(4,8,18,.65)';
+      ctx.strokeText(p.txt, 0, 0);
+    }
     ctx.fillStyle = p.c;
     ctx.fillText(p.txt, 0, 0);
     ctx.restore();
@@ -981,16 +1048,18 @@ function drawPops(){
 function drawPad(){
   var x = padX - padW / 2;
 
-  /* 挡板下方的光晕：接球瞬间更亮 */
-  var glowA = 0.5 + padTrail * 0.5;
-  ctx.save();
-  ctx.shadowColor = 'rgba(62,224,192,' + glowA + ')';
-  ctx.shadowBlur = 16 + padTrail * 14;
+  /* v4.15.1：挡板光晕原来用 shadowBlur(16+14)，改成两层半透明底板，
+     接球瞬间只是把透明度调高，不再触发阴影模糊 */
+  var glowA = 0.2 + padTrail * 0.26;
+  ctx.fillStyle = 'rgba(62,224,192,' + glowA + ')';
+  rr(x - 7, PAD_Y - 7, padW + 14, PAD_H + 14, 12); ctx.fill();
+  ctx.fillStyle = 'rgba(62,224,192,' + (glowA * 0.7) + ')';
+  rr(x - 3, PAD_Y - 3, padW + 6, PAD_H + 6, 9); ctx.fill();
+
   var g = ctx.createLinearGradient(0, PAD_Y, 0, PAD_Y + PAD_H);
   g.addColorStop(0, '#a8ffe9'); g.addColorStop(0.5, '#3ee0c0'); g.addColorStop(1, '#0f8f78');
   rr(x, PAD_Y, padW, PAD_H, 7);
   ctx.fillStyle = g; ctx.fill();
-  ctx.restore();
 
   /* 顶面高光 */
   ctx.fillStyle = 'rgba(255,255,255,.35)';
@@ -1004,11 +1073,12 @@ function drawPad(){
   /* 护盾：挡板上面一条蓝光 */
   if (fx.shield > 0){
     var pul = 0.7 + 0.3 * Math.sin(clock * 6);
-    ctx.strokeStyle = 'rgba(96,165,250,' + pul + ')';
-    ctx.lineWidth = 3;
-    ctx.shadowColor = 'rgba(96,165,250,.9)'; ctx.shadowBlur = 12;
+    ctx.strokeStyle = 'rgba(96,165,250,' + (pul * 0.28) + ')';
+    ctx.lineWidth = 7;
     ctx.beginPath(); ctx.moveTo(10, PAD_Y - 8); ctx.lineTo(W - 10, PAD_Y - 8); ctx.stroke();
-    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(96,165,250,' + pul + ')';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(10, PAD_Y - 8); ctx.lineTo(W - 10, PAD_Y - 8); ctx.stroke();
   }
 }
 
@@ -1024,15 +1094,17 @@ function drawBall(bl){
   }
   ctx.globalAlpha = 1;
 
-  ctx.save();
-  ctx.shadowColor = gold ? '#fbbf24' : '#93c5fd';
-  ctx.shadowBlur = 16;
-  var g = ctx.createRadialGradient(bl.x - bl.r * 0.35, bl.y - bl.r * 0.35, 0.5, bl.x, bl.y, bl.r);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(1, gold ? '#fbbf24' : '#c7d7ff');
-  ctx.fillStyle = g;
+  /* v4.15.1：球的光晕改用两层半透明圆，去掉 shadowBlur(16) 和每帧径向渐变 */
+  ctx.fillStyle = gold ? '#fbbf24' : '#93c5fd';
+  ctx.globalAlpha = 0.22;
+  ctx.beginPath(); ctx.arc(bl.x, bl.y, bl.r * 2.2, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 0.34;
+  ctx.beginPath(); ctx.arc(bl.x, bl.y, bl.r * 1.5, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = gold ? '#fde68a' : '#eaf2ff';
   ctx.beginPath(); ctx.arc(bl.x, bl.y, bl.r, 0, 6.2832); ctx.fill();
-  ctx.restore();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(bl.x - bl.r * 0.3, bl.y - bl.r * 0.35, bl.r * 0.42, 0, 6.2832); ctx.fill();
 }
 
 /* 顶部下压进度条：越接近下压，条越长、越红；底色带刻度 */
@@ -1069,13 +1141,12 @@ function drawTopBar(){
   ctx.fillStyle = fx.slow > 0 ? '#f5e6ff' : '#ffffff';
   ctx.font = '800 12.5px -apple-system,"PingFang SC",sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  /* 白字要压在绿→黄→红的渐变上，不加阴影中段基本看不清 */
-  ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 4;
-  ctx.fillText(
-    fx.slow > 0 ? '时缓中 · 下压已冻结' : left.toFixed(1) + 's 后下压一格',
-    W / 2, y + h / 2 + 0.5
-  );
-  ctx.shadowBlur = 0;
+  /* 白字要压在绿→黄→红的渐变上，描一圈深色边比阴影便宜也更清楚 */
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(6,9,19,.62)';
+  var barTxt = fx.slow > 0 ? '时缓中 · 下压已冻结' : left.toFixed(1) + 's 后下压一格';
+  ctx.strokeText(barTxt, W / 2, y + h / 2 + 0.5);
+  ctx.fillText(barTxt, W / 2, y + h / 2 + 0.5);
 
   /* 右侧剩余格数：还能压几次才到底 */
   var low = 0, cnt = 0;

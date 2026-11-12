@@ -118,7 +118,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 </script>
 </head>
 <body>
-<a class="back" href="../">← 返回班级站</a>
+<a class="back" href="../" onclick="if(document.referrer&&document.referrer.indexOf(location.host)===0){history.back();return false}">← 返回班级站</a>
 <h1>🃏 记忆翻牌</h1>
 <div class="score">步数：<b id="mv">0</b> · 配对：<b id="pairs">0</b>/8</div>
 <div class="grid" id="grid"></div>

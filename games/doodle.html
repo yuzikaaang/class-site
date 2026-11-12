@@ -175,7 +175,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 </head>
 <body>
 <div class="topbar">
-  <a class="back" href="../">← 返回</a>
+  <a class="back" href="../" onclick="if(document.referrer&&document.referrer.indexOf(location.host)===0){history.back();return false}">← 返回</a>
   <span class="brand">🦘 涂鸦跳跃</span>
   <span class="badge">🎟 10000 高得券</span>
 </div>

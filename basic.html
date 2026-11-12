@@ -6,14 +6,22 @@
 <title>25级05班班级服务站 · 基础版</title>
 <!-- ============================================================================
      v3.9.10：老设备「基础版」
+     v4.15.1：补上「作业」和「成绩分析」两个刚需，并修掉 404
      ----------------------------------------------------------------------------
      站主反馈 iPad 打开首页是一片白。首页要靠 app.js（近 1MB）渲染，老内核
      一旦有它不认的 API 就整段停住，于是什么都出不来。
      这一页刻意做成最保守的样子：
        · 只有 ES5 语法，不引任何外部脚本 / 字体 / 图片
        · 无 CSS 变量、无 flex gap、无 backdrop-filter、无动画
-       · 只用 XHR 拉两个公开接口（公告 + 今日事项），失败也有静态文案兜底
+       · 只用 XHR 拉公开接口（公告 + 今日事项 + 作业）和登录接口（成绩），
+         失败也有静态文案兜底
      目标：任何还能上网的设备，打开都能看到字。
+
+     ⚠️ v4.15.1 修的两个问题：
+     ① 原来「作业」按钮写的是 ./homework/ —— 站点根本没有这个目录
+        （作业是完整版里的一个路由），点进去在 GitHub Pages 上就是 404。
+        现在改成页内锚点，作业内容直接在这一页拉出来看。
+     ② 只有公告没有作业/成绩，弱网下等于半个废页。现在两样都内置。
      ========================================================================= -->
 <style>
 body{margin:0;padding:0;background:#fdf8f3;color:#292524;
@@ -24,6 +32,7 @@ h1{font-size:18px;margin:0 0 4px}
 .sub{color:#8a7f76;font-size:13px;margin:0 0 14px}
 .box{background:#fff;border:1px solid #f0e3d6;border-radius:12px;padding:12px 14px;margin-bottom:12px}
 .box h2{font-size:14px;margin:0 0 8px;color:#9a3412}
+.box h2 span{float:right;font-size:12px;color:#b9aca1;font-weight:400}
 .item{border-top:1px solid #f6eee6;padding:9px 0}
 .item:first-child{border-top:0;padding-top:0}
 .meta{color:#a89e95;font-size:12px}
@@ -36,16 +45,55 @@ h1{font-size:18px;margin:0 0 4px}
 .banner b{color:#ffd7bb;font-size:12px;letter-spacing:1px}
 .banner p{margin:6px 0 0;white-space:pre-wrap;font-weight:700}
 .tip{color:#a89e95;font-size:12px;margin-top:14px;text-align:center}
+/* 作业 */
+.hwtitle{font-size:14px;font-weight:700;color:#3a2f28;margin:0 0 2px}
+.hwsub{font-size:12px;color:#a89e95;margin:0 0 8px}
+.subject{margin:10px 0 0}
+.subject b{display:inline-block;font-size:12.5px;color:#b45309;background:#fff7ed;
+  border:1px solid #fde3c8;border-radius:6px;padding:1px 8px;margin-bottom:4px}
+.subject ul{margin:2px 0 0;padding:0 0 0 18px}
+.subject li{font-size:13.5px;margin:2px 0;word-break:break-word}
+.subject li a{color:#c2410c}
+.more{display:inline-block;margin-top:10px;font-size:13px;color:#c2410c;
+  background:#fff7ed;border:1px solid #fde3c8;border-radius:8px;padding:6px 12px;
+  text-decoration:none;cursor:pointer;-webkit-appearance:none}
+.old{display:none;margin-top:10px;border-top:1px dashed #f0e3d6;padding-top:10px}
+.old.on{display:block}
+.old .hwtitle{font-size:13px;margin-top:12px}
+/* 成绩 */
+.scoretop{font-size:14px;font-weight:700;color:#3a2f28;margin:0 0 2px}
+.rank{font-size:12.5px;color:#8a7f76;margin:0 0 8px}
+.subs{width:100%;border-collapse:collapse;margin-top:4px}
+.subs td{font-size:13.5px;padding:5px 0;border-top:1px solid #f6eee6}
+.subs td.n{color:#6b5f57}
+.subs td.v{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.subs td.v em{font-style:normal;font-size:11px;color:#b9aca1;font-weight:400;margin-left:3px}
+.sum{margin-top:8px;padding-top:8px;border-top:1px solid #f0e3d6;font-size:13.5px;color:#3a2f28}
+.sum b{font-size:19px;color:#c2410c;font-variant-numeric:tabular-nums}
+/* 登录 */
+.login input{display:block;width:100%;box-sizing:border-box;margin:0 0 8px;padding:10px 12px;
+  font-size:15px;border:1px solid #f0e3d6;border-radius:9px;background:#fffdfb;color:#292524;
+  font-family:inherit;-webkit-appearance:none}
+.login button{display:block;width:100%;padding:11px 0;border:none;border-radius:9px;
+  background:#f97316;color:#fff;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;
+  -webkit-appearance:none}
+.login button:disabled{opacity:.6}
+.msg{font-size:12.5px;margin:8px 0 0;min-height:16px}
+.msg.err{color:#c0392b}
+.msg.ok{color:#0f8f78}
+.linkbtn{background:none;border:none;color:#a89e95;font-size:12px;text-decoration:underline;
+  padding:0;margin-top:8px;font-family:inherit;cursor:pointer}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>25级05班 · 班级服务站</h1>
-  <p class="sub">基础版（老设备专用）· 只显示公告与今日安排</p>
+  <p class="sub">基础版（老设备专用）· 公告 / 作业 / 成绩都能看</p>
 
   <div class="nav">
     <a href="./index.html">完整版</a>
-    <a class="sec" href="./homework/">作业</a>
+    <a class="sec" href="#hw">作业</a>
+    <a class="sec" href="#score">成绩分析</a>
   </div>
 
   <div class="banner" id="islandBox" style="display:none">
@@ -53,49 +101,97 @@ h1{font-size:18px;margin:0 0 4px}
     <p id="islandText">—</p>
   </div>
 
+  <div class="box" id="hw">
+    <h2>作业</h2>
+    <div id="hwBody"><div class="meta">正在加载…</div></div>
+  </div>
+
+  <div class="box" id="score">
+    <h2>成绩分析 <span id="scoreWho"></span></h2>
+    <div id="scoreBody"><div class="meta">正在加载…</div></div>
+  </div>
+
   <div class="box">
     <h2>班级公告</h2>
     <div id="annList"><div class="meta">正在加载…</div></div>
   </div>
 
-  <p class="tip">这一页不加载任何特效脚本，所以旧设备也能打开。<br>想看完整功能，请在较新的浏览器里打开完整版。</p>
+  <p class="tip">这一页不加载任何特效脚本，所以旧设备也能打开。<br>作业和成绩都是从这里直接读班级服务器，不需要进完整版。</p>
 </div>
 
 <script>
 /* 纯 ES5：XHR + 字符串拼接，不依赖任何 polyfill */
 (function(){
   var API = 'https://api.classsite.dpdns.org';
+  var AUTH_KEY = 'cls_auth';
 
-  function get(path, cb){
+  function get(path, cb, opts){
     try{
       var xhr = new XMLHttpRequest();
       xhr.open('GET', API + path, true);
-      xhr.timeout = 12000;
+      xhr.timeout = (opts && opts.timeout) || 12000;
+      if (opts && opts.token) xhr.setRequestHeader('Authorization', 'Bearer ' + opts.token);
       xhr.onreadystatechange = function(){
         if(xhr.readyState !== 4) return;
-        if(xhr.status >= 200 && xhr.status < 300){
-          try{ cb(JSON.parse(xhr.responseText)); }catch(e){ cb(null); }
-        }else{ cb(null); }
+        var j = null;
+        try{ j = JSON.parse(xhr.responseText); }catch(e){ j = null; }
+        cb(j, xhr.status);
       };
-      xhr.ontimeout = function(){ cb(null); };
-      xhr.onerror = function(){ cb(null); };
+      xhr.ontimeout = function(){ cb(null, 0); };
+      xhr.onerror = function(){ cb(null, 0); };
       xhr.send(null);
-    }catch(e){ cb(null); }
+    }catch(e){ cb(null, 0); }
+  }
+
+  function post(path, data, cb){
+    try{
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', API + path, true);
+      xhr.timeout = 15000;
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onreadystatechange = function(){
+        if(xhr.readyState !== 4) return;
+        var j = null;
+        try{ j = JSON.parse(xhr.responseText); }catch(e){ j = null; }
+        cb(j, xhr.status);
+      };
+      xhr.ontimeout = function(){ cb(null, 0); };
+      xhr.onerror = function(){ cb(null, 0); };
+      xhr.send(JSON.stringify(data));
+    }catch(e){ cb(null, 0); }
   }
 
   function esc(s){
     return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
-  /* ---- 今日事项 ---- */
+  function pad2(n){ return (n < 10 ? '0' : '') + n; }
+
+  function loadAuth(){
+    try{
+      var raw = localStorage.getItem(AUTH_KEY);
+      if(!raw) return null;
+      var o = JSON.parse(raw);
+      if(o && o.token) return o;
+    }catch(e){}
+    return null;
+  }
+  function saveAuth(o){
+    try{
+      if(o && o.token) localStorage.setItem(AUTH_KEY, JSON.stringify(o));
+      else localStorage.removeItem(AUTH_KEY);
+    }catch(e){}
+  }
+
+  /* ================= 今日事项 ================= */
   get('/api/island', function(j){
     var d = j && j.data;
     if(!d || d.on === false) return;
     var txt = '';
     var today = new Date();
-    var pad = function(n){ return (n < 10 ? '0' : '') + n; };
-    var key = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate());
+    var key = today.getFullYear() + '-' + pad2(today.getMonth() + 1) + '-' + pad2(today.getDate());
     var day = d.days && d.days[key];
     var dows = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
     if(day && day.text) txt = day.text;
@@ -105,7 +201,7 @@ h1{font-size:18px;margin:0 0 4px}
     document.getElementById('islandBox').style.display = '';
   });
 
-  /* ---- 公告 ---- */
+  /* ================= 公告 ================= */
   get('/api/content', function(j){
     var list = (j && j.items && j.items.announcements) || [];
     var host = document.getElementById('annList');
@@ -123,6 +219,198 @@ h1{font-size:18px;margin:0 0 4px}
     }
     host.innerHTML = html;
   });
+
+  /* ================= 作业 ================= */
+  function taskHtml(t){
+    if(typeof t === 'string') return esc(t);
+    if(!t) return '';
+    var s = esc(t.text || t.title || '');
+    if(t.img) s += '<br><a href="' + esc(t.img) + '" target="_blank">查看附件图</a>';
+    if(t.audio) s += '<br><a href="' + esc(t.audio) + '" target="_blank">' + esc(t.audioLabel || '听音频') + '</a>';
+    return s;
+  }
+
+  function hwHtml(h){
+    var html = '<div class="hwtitle">' + esc(h.title || '作业') + '</div>'
+      + '<div class="hwsub">' + esc(h.start || '') + (h.end ? ' → ' + esc(h.end) : '') + '</div>';
+    var items = h.items || [];
+    for(var i = 0; i < items.length; i++){
+      var it = items[i] || {};
+      var tasks = it.tasks || [];
+      if(!tasks.length) continue;
+      html += '<div class="subject"><b>' + esc(it.subject || '其他') + '</b><ul>';
+      for(var k = 0; k < tasks.length; k++){
+        var th = taskHtml(tasks[k]);
+        if(th) html += '<li>' + th + '</li>';
+      }
+      html += '</ul></div>';
+    }
+    return html;
+  }
+
+  get('/api/content', function(j){
+    var host = document.getElementById('hwBody');
+    var arr = (j && j.items && j.items.holiday_homeworks) || [];
+    var list = [];
+    for(var i = 0; i < arr.length; i++){
+      if(arr[i] && (arr[i].items || []).length) list.push(arr[i]);
+    }
+    if(!list.length){
+      host.innerHTML = '<div class="meta">目前没有发布中的作业。老师布置后，这里和完整版会一起更新。</div>';
+      return;
+    }
+    /* 按结束日期倒序：最近的一次放最前面 */
+    list.sort(function(a, b){
+      return String(b.end || '').localeCompare(String(a.end || ''));
+    });
+
+    var html = hwHtml(list[0]);
+    if(list.length > 1){
+      var old = '';
+      for(var m = 1; m < list.length; m++) old += hwHtml(list[m]);
+      html += '<div class="more" id="hwMore">展开更早的 ' + (list.length - 1) + ' 份作业</div>'
+        + '<div class="old" id="hwOld">' + old + '</div>';
+    }
+    host.innerHTML = html;
+
+    var more = document.getElementById('hwMore');
+    if(more){
+      more.onclick = function(){
+        var box = document.getElementById('hwOld');
+        var on = box.className.indexOf('on') >= 0;
+        box.className = on ? 'old' : 'old on';
+        more.innerHTML = on ? ('展开更早的 ' + (list.length - 1) + ' 份作业') : '收起更早的作业';
+      };
+    }
+  });
+
+  /* ================= 成绩 ================= */
+  var scoreBox = document.getElementById('scoreBody');
+
+  function renderLogin(msg, isErr){
+    scoreBox.innerHTML =
+      '<div class="login">'
+      + '<div class="meta" style="margin-bottom:8px">成绩需登录后查看（用户名可填姓名，也可填管理员分配的拼音账号）。</div>'
+      + '<input id="lgUser" type="text" placeholder="用户名 / 姓名" autocomplete="username">'
+      + '<input id="lgPwd" type="password" placeholder="密码" autocomplete="current-password">'
+      + '<button id="lgBtn" type="button">登录并查看成绩</button>'
+      + '<p class="msg' + (isErr ? ' err' : '') + '" id="lgMsg">' + esc(msg || '') + '</p>'
+      + '</div>';
+    var btn = document.getElementById('lgBtn');
+    var pwd = document.getElementById('lgPwd');
+    var usr = document.getElementById('lgUser');
+    function doLogin(){
+      var u = (usr.value || '').replace(/^\s+|\s+$/g, '');
+      var p = pwd.value || '';
+      var msgEl = document.getElementById('lgMsg');
+      if(!u || !p){ msgEl.className = 'msg err'; msgEl.innerHTML = '用户名和密码都要填。'; return; }
+      btn.disabled = true;
+      msgEl.className = 'msg';
+      msgEl.innerHTML = '正在登录…';
+      post('/api/auth?action=login', { username: u, password: p }, function(r, code){
+        btn.disabled = false;
+        if(r && r.ok && r.token){
+          saveAuth({ token: r.token, user: r.user || null });
+          msgEl.className = 'msg ok'; msgEl.innerHTML = '登录成功，正在读取成绩…';
+          loadScore();
+        } else {
+          msgEl.className = 'msg err';
+          msgEl.innerHTML = esc((r && r.error) || ('登录失败（' + code + '），检查一下用户名和密码。'));
+        }
+      });
+    }
+    btn.onclick = doLogin;
+    pwd.onkeydown = function(e){ if((e.keyCode || e.which) === 13) doLogin(); };
+  }
+
+  function renderScore(list){
+    if(!list.length){
+      scoreBox.innerHTML = '<div class="meta">暂无发布中的成绩。老师导入并发布后，此处会自动显示。</div>';
+      return;
+    }
+    /* 服务端按考试日期正序返回，最后一条 = 最近一次 */
+    var ex = list[list.length - 1];
+    var s = ex.s || {};
+    var subs = ex.subjects || [];
+    var html = '<div class="scoretop">' + esc(ex.name || '考试') + '</div>'
+      + '<div class="rank">' + esc(ex.date || '')
+      + (ex.type ? ' · ' + esc(ex.type) : '')
+      + (ex.schoolRank ? ' · 校排名第 ' + esc(ex.schoolRank) : '')
+      + '</div>';
+    html += '<table class="subs">';
+    var total = 0, counted = 0, missing = 0;
+    for(var i = 0; i < subs.length; i++){
+      var sb = subs[i] || {};
+      var key = sb.key;
+      var name = sb.name || key;
+      var v = s[key];
+      var has = (v !== undefined && v !== null && v !== '');
+      var num = has ? Number(v) : NaN;
+      html += '<tr><td class="n">' + esc(name)
+        + (sb.graded ? ' <em style="color:#b9aca1;font-size:11px">赋分</em>' : '')
+        + '</td><td class="v">'
+        + (has && !isNaN(num) ? esc(num) : '<span style="color:#d6cdc6">—</span>')
+        + (sb.full ? '<em>/' + esc(sb.full) + '</em>' : '')
+        + '</td></tr>';
+      if(has && !isNaN(num)){ total += num; counted++; }
+      else missing++;
+    }
+    /* 兜底：subjects 没配全时，把成绩里出现过的科目也列出来 */
+    if(!subs.length){
+      for(var k in s){
+        if(!Object.prototype.hasOwnProperty.call(s, k)) continue;
+        var num2 = Number(s[k]);
+        if(isNaN(num2)) continue;
+        html += '<tr><td class="n">' + esc(k) + '</td><td class="v">' + esc(num2) + '</td></tr>';
+        total += num2; counted++;
+      }
+    }
+    html += '</table>';
+    if(counted){
+      html += '<div class="sum">原始总分 <b>' + total + '</b>'
+        + (missing ? '<span class="meta">（' + missing + ' 科暂无分数）</span>' : '')
+        + '</div>';
+    }
+    html += '<button class="linkbtn" id="lgOut" type="button">退出登录</button>';
+    scoreBox.innerHTML = html;
+
+    var out = document.getElementById('lgOut');
+    if(out){
+      out.onclick = function(){
+        saveAuth(null);
+        document.getElementById('scoreWho').innerHTML = '';
+        loadScore();
+      };
+    }
+  }
+
+  function loadScore(){
+    var a = loadAuth();
+    if(!a || !a.token){
+      document.getElementById('scoreWho').innerHTML = '';
+      renderLogin('', false);
+      return;
+    }
+    var who = (a.user && (a.user.displayName || a.user.display_name || a.user.username)) || '';
+    document.getElementById('scoreWho').innerHTML = who ? esc(who) : '';
+    scoreBox.innerHTML = '<div class="meta">正在读取成绩…</div>';
+    get('/api/scores?action=me', function(j, code){
+      if(code === 401 || code === 403){
+        saveAuth(null);
+        document.getElementById('scoreWho').innerHTML = '';
+        renderLogin('登录状态已过期，请重新登录。', true);
+        return;
+      }
+      if(!j || !j.ok){
+        scoreBox.innerHTML = '<div class="meta">成绩读取失败'
+          + (code ? '（' + code + '）' : '') + '，网络好一点时再刷新这一页。</div>';
+        return;
+      }
+      renderScore(j.items || []);
+    }, { token: a.token });
+  }
+
+  loadScore();
 })();
 </script>
 </body>
