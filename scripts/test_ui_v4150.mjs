@@ -136,132 +136,13 @@ console.log('\nB. 循环背景音乐');
   await p.close();
 }
 
-/* ============================ 三、吃豆人：布局不再超出屏幕 ============================ */
-console.log('\nC. 迷宫吃豆 · 布局');
-for (const [tag, w, h] of [['320×568', 320, 568], ['360×640', 360, 640], ['390×844', 390, 844], ['412×915', 412, 915]]) {
-  const ctx = await b.newContext({
-    viewport: { width: w, height: h }, isMobile: true, hasTouch: true,
-    userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36',
-  });
-  const p = await ctx.newPage();
-  const errs = watch(p);
-  await p.goto(BASE + 'pacman.html?selftest=1', { waitUntil: 'domcontentloaded' });
-  await p.waitForTimeout(700);
-
-  const geo = await p.evaluate(() => {
-    const dpad = document.getElementById('dpad').getBoundingClientRect();
-    const down = document.querySelector('#dpad button[data-d="d"]').getBoundingClientRect();
-    const stage = document.getElementById('stage').getBoundingClientRect();
-    return {
-      vh: innerHeight,
-      dpadBottom: Math.round(dpad.bottom),
-      downBottom: Math.round(down.bottom),
-      stageW: Math.round(stage.width),
-      stageH: Math.round(stage.height),
-      dpadW: Math.round(dpad.width),
-    };
-  });
-  ok(geo.downBottom <= geo.vh + 0.5, tag + ' 方向键「▼」完整在屏幕内', { 底边: geo.downBottom, 屏高: geo.vh });
-  ok(geo.dpadBottom <= geo.vh + 0.5, tag + ' 整个方向键面板未被裁切', geo.dpadBottom);
-  ok(Math.abs(geo.stageW - geo.stageH) <= 1, tag + ' 迷宫保持正方形', [geo.stageW, geo.stageH]);
-
-  /* 100 关的选关网格：有滚动区，且最后一条在滚动内容里（不是被直接切掉） */
-  const menu = await p.evaluate(() => {
-    const wrap = document.getElementById('lvWrap');
-    const grid = document.getElementById('lvGrid');
-    const btns = grid.querySelectorAll('button').length;
-    const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-    return {
-      btns, cols,
-      wrapH: Math.round(wrap.clientHeight),
-      scrollH: wrap.scrollHeight,
-      canScroll: getComputedStyle(wrap).overflowY,
-      menuFits: document.getElementById('ovMenu').getBoundingClientRect().bottom <= innerHeight + 0.5,
-    };
-  });
-  ok(menu.btns === 100, tag + ' 选关面板 100 个按钮齐全', menu.btns);
-  ok(menu.cols >= 8, tag + ' 列数自适应（≥8 列）', menu.cols);
-  ok(menu.canScroll === 'auto' || menu.canScroll === 'scroll', tag + ' 列表是独立滚动区', menu.canScroll);
-  ok(menu.menuFits, tag + ' 选关面板整体不超出屏幕', { 高: menu.wrapH, 内容: menu.scrollH });
-
-  await p.close();
-  await ctx.close();
-}
-
-/* ============================ 四、吃豆人：交互 ============================ */
-console.log('\nD. 迷宫吃豆 · 交互');
-{
-  const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  const p = await ctx.newPage();
-  const errs = watch(p);
-  await p.goto(BASE + 'pacman.html?selftest=1', { waitUntil: 'domcontentloaded' });
-  await p.waitForTimeout(600);
-
-  /* 打一关出来，存档里 max 会变成 2，选关应自动滚到第 2 关 */
-  await p.evaluate(() => {
-    window.__clsPm.start(1);
-    window.__clsPm.teleport(1, 1);
-    window.__clsPm.setTime(window.__clsPm.snap().timeLimit * 0.8);
-    window.__clsPm.win();
-  });
-  await p.waitForTimeout(300);
-  const afterWin = await p.evaluate(() => window.__clsPm.save());
-  ok(afterWin.max === 2, 'D1 通关解锁下一关', afterWin.max);
-
-  const over = await p.evaluate(() => ({
-    shown: !document.getElementById('ovOver').classList.contains('hide'),
-    title: document.getElementById('overTitle').textContent,
-    stars: document.querySelectorAll('#overStars i.on').length,
-  }));
-  ok(over.shown && over.title === '通关', 'D2 结算面板正常弹出', over);
-  ok(over.stars === 3, 'D3 剩余时间充足给三星', over.stars);
-
-  await p.click('#btnToMenu');
-  await p.waitForTimeout(400);
-  const back = await p.evaluate(() => {
-    const wrap = document.getElementById('lvWrap');
-    const cur = document.querySelector('#lvGrid .cur');
-    const r1 = cur ? cur.getBoundingClientRect() : null;
-    const r2 = wrap.getBoundingClientRect();
-    return {
-      menuShown: !document.getElementById('ovMenu').classList.contains('hide'),
-      curLv: cur ? cur.getAttribute('data-lv') : null,
-      inView: r1 ? (r1.top >= r2.top - 2 && r1.bottom <= r2.bottom + 2) : false,
-      scrollTop: Math.round(wrap.scrollTop),
-    };
-  });
-  ok(back.menuShown, 'D4 返回选关面板');
-  ok(back.curLv === '2', 'D5 当前关标了高亮', back.curLv);
-
-  /* 暂停面板 */
-  await p.click('#lvGrid button[data-lv="2"]');
-  await p.waitForTimeout(700);
-  await p.click('#dpad button[data-d="s"]');
-  await p.waitForTimeout(200);
-  const pause = await p.evaluate(() => ({
-    st: window.__clsPm.snap().st,
-    shown: !document.getElementById('ovPause').classList.contains('hide'),
-  }));
-  ok(pause.st === 'pause' && pause.shown, 'D6 点 II 弹出暂停面板', pause);
-
-  await p.click('#btnResume');
-  await p.waitForTimeout(200);
-  const resumed = await p.evaluate(() => ({
-    st: window.__clsPm.snap().st,
-    hidden: document.getElementById('ovPause').classList.contains('hide'),
-  }));
-  ok(resumed.st === 'play' && resumed.hidden, 'D7 点继续回到游戏', resumed);
-
-  const music = await p.evaluate(() => window.CLS_BGM.status());
-  ok(music.playing && music.song === 'pacman', 'D8 吃豆人用自己的曲子', music.song);
-
-  ok(errs.length === 0, 'D9 无 JS 报错', errs.slice(0, 2));
-  await p.close();
-  await ctx.close();
-}
-
-await b.close();
-
+/* ============================ 三、吃豆人 =============================
+ * v4.15.3：吃豆人整页按 1980 街机原版重写，迷宫由 19×19 正方形改为原版
+ * 224×288 比例，选关面板由 100 关平铺改为 255 关分组折叠，旧版这里的两段
+ * 断言（正方形迷宫、#lvGrid 平铺、snap()/win() 接口）已随旧设计一并失效。
+ * 现在的吃豆人断言全部由 scripts/test_ui_v4153.mjs 承担，本脚本只保留
+ * 打砖块清波演出与背景音乐这两段 —— 那是这一版独有、且至今仍然有效的部分。
+ */
 console.log('\n' + '='.repeat(52));
 console.log(`通过 ${pass} 项，失败 ${fail} 项`);
 process.exit(fail ? 1 : 0);

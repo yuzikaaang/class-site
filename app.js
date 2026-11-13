@@ -11791,7 +11791,7 @@ var HIDDEN_FUN_LINKS = [
   { icon: "🃏", title: "记忆翻牌", desc: "翻牌配对，练记忆力", url: "games/memory.html" },
   { icon: "🐦", title: "像素飞鸟", desc: "一飞冲天，穿过水管拿高分", url: "games/bird.html" },
   { icon: "🧱", title: "下落砖块", desc: "砖墙往下压，撑得越久分越高", url: "games/breakout.html" },
-  { icon: "🟡", title: "迷宫吃豆", desc: "100 关迷宫，吃光豆子躲追捕", url: "games/pacman.html" },
+  { icon: "🟡", title: "迷宫吃豆", desc: "255 关，1980 街机原版规则", url: "games/pacman.html" },
   { icon: "🍬", title: "消消乐", desc: "三连消除，连击爆分", url: "games/match3.html" },
   { icon: "💣", title: "扫雷", desc: "推理翻格，雷数自定", url: "games/minesweeper.html" },
   { icon: "🦘", title: "涂鸦跳跃", desc: "一路向上，踩弹簧起飞", url: "games/doodle.html" },
