@@ -2017,18 +2017,46 @@
     });
   };
 
-  /* -------- 要画哪几天：今天 + 昨天，前天起自动隐藏 -------- */
+  /* -------- 要画哪几天：跟着「当前查看的这一期作业」走 --------
+     v4.15.7（站主）：「考试看板只能手动加，不会根据今天有没有考试自动显示；
+     退回去看上周末的作业，那一期的考试又不出现」。
+     原来的口径是「今天 + 昨天」，跟作业期次完全脱钩 —— 翻到别的期次，
+     考试块还是按今天在算，自然看不到那一期的场次。
+     现在窗口 = 当前这一期作业的起止日期：
+       · 今天有考试 → 这一期里就有，自动出现，不用点＋
+       · 翻到上周 / 上周末的期次 → 显示那一期的考试
+       · 手动加进来的场次按日期落位，翻到对应期次一样看得到 */
+  function examWindow(){
+    var t = (BIG.examList && BIG.examList.today) || examToday();
+    var hw = null;
+    try{ hw = currentHw(); }catch(e){}
+    var s = hw && String(hw.start || '').slice(0, 10);
+    var e = hw && String(hw.end || '').slice(0, 10);
+    if(!s || !e || s > e) return [t, t];
+    var a = examDateOf(s), b = examDateOf(e);
+    /* 手动建的长假期作业可能跨几十天，一次铺太多没意义：
+       跨度超过 31 天就只取锚点附近的一段 */
+    if(a && b && (b - a) / 86400000 > 31){
+      var anchor = examDateOf(t) || a;
+      var from = new Date(anchor.getTime()); from.setDate(from.getDate() - 3);
+      var to = new Date(anchor.getTime()); to.setDate(to.getDate() + 27);
+      if(from < a) from = a;
+      if(to > b) to = b;
+      return [examToday(from), examToday(to)];
+    }
+    return [s, e];
+  }
+
   function examStops(){
     var L = BIG.examList;
     if(!L || !L.groups || !L.groups.length) return [];
     var today = L.today || examToday();
-    var floor = examShift(today, -1);
+    var w = examWindow();
     var out = [];
     L.groups.forEach(function (g){
-      var auto = g.auto === true;      /* 今天落在这一场里 → 这一场所有天都显示 */
       (g.days || []).forEach(function (d){
-        if(d.date < floor) return;
-        if(!auto && !d.anyOn) return;
+        if(d.date < w[0] || d.date > w[1]) return;
+        if(!(d.items || []).length && !d.anyOn) return;
         out.push({ g: g, d: d, past: d.date < today });
       });
     });
@@ -2047,6 +2075,8 @@
     var mon = examMon(today);
     if(a >= mon && b <= examShift(mon, 6)) return '本周考试安排';
     if(a >= examShift(mon, 7) && b <= examShift(mon, 13)) return '下周考试安排';
+    /* 翻到往期作业时，标题直接写那一段日期，比笼统的「考试安排」清楚 */
+    if(b < mon) return examMD(a) + (a === b ? '' : '–' + examMD(b)) + ' 考试安排';
     if(a.slice(0, 7) === today.slice(0, 7) && b.slice(0, 7) === today.slice(0, 7)) return '本月考试安排';
     return '考试安排';
   }
@@ -2148,6 +2178,9 @@
      所以这一块做四件事：筛档位、折展开、三档挑选、刷新与缓存。 */
 
   var EXAM_SCOPES = [
+    /* v4.15.7：「本期」= 当前正在看的这一期作业，默认就停在这里 ——
+       手动加入的场次会落在这一期，不会再看死「今天」 */
+    { id: 'cur', label: '本期' },
     { id: 'week', label: '本周' },
     { id: 'next', label: '下周' },
     { id: 'month', label: '本月' },
@@ -2164,6 +2197,7 @@
   }
 
   function examScopeRange(id){
+    if(id === 'cur') return examWindow();
     var t = new Date();
     var y = t.getFullYear(), m = t.getMonth(), d = t.getDate();
     var mon = new Date(y, m, d - ((t.getDay() + 6) % 7));
@@ -2181,7 +2215,7 @@
     return ['0000-01-01', '9999-12-31'];
   }
 
-  /** 默认停在本周；本周没考试就自动跳到最近有考试的那一档 */
+  /** 默认停在本期；本期没考试再找最近有考试的那一档 */
   function examPickScope(){
     var L = BIG.examList;
     var today = L.today || examToday();
@@ -2190,6 +2224,11 @@
       (g.days || []).forEach(function (d){ dates.push(d.date); });
     });
     if(!dates.length) return 'all';
+    /* 当前这一期里有考试 → 直接停在本期，跟作业看板看到的是同一段日期 */
+    var w = examWindow();
+    for(var q = 0; q < dates.length; q++){
+      if(dates[q] >= w[0] && dates[q] <= w[1]) return 'cur';
+    }
     dates.sort();
     var next = '';
     for(var i = 0; i < dates.length; i++){
@@ -2248,7 +2287,7 @@
       +     EXAM_SCOPES.map(function (s){
               return '<button type="button" class="bex-tab" data-scope="' + s.id + '">' + s.label + '</button>';
             }).join('')
-      +     '<button type="button" class="bex-bulk" id="bexBulk">＋本周</button>'
+      +     '<button type="button" class="bex-bulk" id="bexBulk">＋本期</button>'
       +   '</div>'
       +   '<p class="bex-tip" id="bexTip">正在读取考试数据…</p>'
       +   '<div class="bex-list" id="bexList"></div>'
