@@ -241,6 +241,25 @@ function classOf(data, cfg) {
 /* ---------------- 「今天考什么」 ---------------- */
 
 /**
+ * 没点「发布」的考试，只要今天正落在它的考试日区间里，就照样显示。
+ * 站主 2026-11-14：在考试看板建了「第11周周末限时训练」（当天开考），
+ * 存成了草稿没发布，这边按草稿过滤掉 → 大屏一片空白。
+ * 只放行「今天在区间内」的，纯未来草稿仍然不露面。
+ */
+function liveDraft(m, nowMs) {
+  const today = dayOf(nowMs);
+  let lo = '', hi = '';
+  (m.items || []).forEach(function (i) {
+    if (i.enabled === false) return;
+    const d = String(i.startTime || '').slice(0, 10);
+    if (!isDay(d)) return;
+    if (!lo || d < lo) lo = d;
+    if (!hi || d > hi) hi = d;
+  });
+  return !!lo && lo <= today && today <= hi;
+}
+
+/**
  * 大屏要的只有一个问题：今天有没有考试。
  * 规则（站主定）：
  *   · 今天是某场大型考试的其中一天 → 这场考试的**所有天**都列出来（n 天全显示），
@@ -255,8 +274,9 @@ function buildDays(data, cfg, nowMs, pins) {
   const seen = {};
   (data.majors || []).forEach(function (m) {
     if (m.endedAt && m.endedAt < nowMs) return;
-    /* 未发布的草稿不显示；临时考试本来就没有 publishedAt */
-    if (!m.publishedAt && !m.temporary && !m.local) return;
+    /* 未发布的草稿不显示；临时考试本来就没有 publishedAt。
+       今天已经开考的草稿例外 —— 见 liveDraft 注释。 */
+    if (!m.publishedAt && !m.temporary && !m.local && !liveDraft(m, nowMs)) return;
     if (m.targetClassIds.length && m.targetClassIds.indexOf(cls.id) < 0) return;
     if (m.targetGradeIds.length && m.targetGradeIds.indexOf(cls.gradeId) < 0) return;
 
@@ -474,7 +494,8 @@ function groupAll(data, cfg, pins) {
   const out = [];
 
   (data.majors || []).forEach(function (m) {
-    if (!m.publishedAt && !m.temporary && !m.local) return;   /* 草稿不给看 */
+    /* 草稿不给看，但今天已经开考的草稿必须显示（v4.15.6，见 liveDraft） */
+    if (!m.publishedAt && !m.temporary && !m.local && !liveDraft(m, Date.now())) return;
     if (!majorOfClass(m, cls)) return;
     const its = itemsOfClass(m, cls);
     if (!its.length) return;
@@ -568,11 +589,21 @@ function flatOf(groups) {
  * 为什么必须回源：v4.10.8 的 list 只读 KV，站主在考试看板改了名字，站内永远是旧的
  * —— 「12 月 1 号那个考试我把物化生三个字删掉了，但是他还没有及时的刷新」。
  * 15 秒节流：手动刷新连点几下也不会把上游打爆。
+ *
+ * v4.15.6：就算前端没带 fresh=1，快照超过 10 分钟也自动回源一次。
+ * 以前 KV 只在后台手动同步时才更新，站主在考试看板新建了考试，大屏一直看不到，
+ * 这次「第11周周末限时训练」当天开考就是这么卡住的。10 分钟一拉 ≈ 每小时 6 次。
  */
+const AUTO_FRESH_MS = 10 * 60 * 1000;
+
 async function takeData(req, cfg, kv, fresh) {
   let data = _mem.at && (Date.now() - _mem.at < MEM_MS) ? _mem.data : null;
   if (!data) data = await kvGet(kv, K_DATA);
-  if (!fresh) return { data: data, hit: true };
+  if (!fresh) {
+    if (!data) return { data: null, hit: true };
+    const age = Date.now() - Number(data.at || 0);
+    if (!age || age < AUTO_FRESH_MS) return { data: data, hit: true };
+  }
   const at = Number((data && data.at) || 0);
   if (data && at && Date.now() - at < 15000) return { data: data, hit: true };
   try {

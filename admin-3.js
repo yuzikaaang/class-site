@@ -21,7 +21,7 @@
 function aiStrip(text){
   return String(text == null ? '' : text)
     .split('\n')
-    .map(function(l){ return l.replace(/^#\s?/, ''); })
+    .map(function(l){ return l.replace(/^# ?/, ''); })
     .join('\n')
     .replace(/\{\d{0,2}[bs]{0,2}([^{}]+)\}/g, '$1')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
@@ -32,7 +32,7 @@ function aiStrip(text){
 function aiToHtml(text){
   return String(text == null ? '' : text).split('\n').map(function(line){
     var head = false;
-    if(/^#\s?/.test(line)){ head = true; line = line.replace(/^#\s?/, ''); }
+    if(/^# ?/.test(line)){ head = true; line = line.replace(/^# ?/, ''); }
     var h = esc(line);
     h = h.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, txt){
       if(!sz && !fl) return all;
@@ -83,9 +83,15 @@ function aiFromHtml(root){
       if(n.nodeType !== 1) continue;
       var nm = n.nodeName;
       if(nm === 'BR'){ nl(); continue; }
-      if(nm === 'DIV' || nm === 'P'){ nl(); walk(n, ctx); nl(); continue; }
+      if(nm === 'DIV' || nm === 'P'){
+        /* v4.15.6：块级元素只当一次换行，以前前后各补一个 \n，会多出空行 */
+        if(out && out.charAt(out.length - 1) !== '\n') nl();
+        walk(n, ctx);
+        if(out && out.charAt(out.length - 1) !== '\n') nl();
+        continue;
+      }
       if(nm === 'SPAN' && String(n.className || '').indexOf('ln-em') >= 0){
-        nl();
+        if(out && out.charAt(out.length - 1) !== '\n') nl();
         out += '# ';
         walk(n, styleCtx(n, ctx));
         continue;
@@ -117,6 +123,7 @@ function aiRtLoad(text){
 }
 
 var AI_RT_RANGE = null;   /* 点工具栏会让输入框失焦，先记住最后一段选择 */
+var AI_RT_CARET = null;   /* v4.15.6：最后的光标位置（整行强调只认光标，不用选区） */
 
 function aiRtSel(){
   var box = $('adRich');
@@ -128,14 +135,124 @@ function aiRtSel(){
   return { sel: sel, range: r };
 }
 
-function aiRtRestore(){
-  if(!AI_RT_RANGE) return false;
+/* v4.15.6：随时把「选中一段」和「光标在哪」分开存两份。
+   手机上点按钮会先让输入框失焦，选区常常被清掉；点「整行强调」时用的是
+   光标位置，所以不能只存非折叠选区。 */
+function aiRtSaveSel(){
+  var s = aiRtSel();
+  if(!s) return;
   try{
+    if(s.range.collapsed) AI_RT_CARET = s.range.cloneRange();
+    else{
+      AI_RT_RANGE = s.range.cloneRange();
+      AI_RT_CARET = s.range.cloneRange();
+    }
+  }catch(e){}
+}
+
+/* which：'range' 取选中段（B / S / 字号），'caret' 取光标（整行强调） */
+function aiRtRestore(which){
+  var box = $('adRich');
+  var r = which === 'caret' ? (AI_RT_CARET || AI_RT_RANGE) : (AI_RT_RANGE || AI_RT_CARET);
+  if(!box || !r) return false;
+  try{
+    if(!box.contains(r.commonAncestorContainer)) return false;
     var sel = window.getSelection();
     sel.removeAllRanges();
-    sel.addRange(AI_RT_RANGE);
+    sel.addRange(r);
     return true;
   }catch(e){ return false; }
+}
+
+/* v4.15.6：把文本节点里的 \n 换成真正的 <br>。
+   安卓软键盘 / 粘贴在 pre-wrap 的编辑框里会直接塞换行字符，整块内容就变成
+   一个大文本节点 —— 结果「整行强调」分不清行，一按就把全文圈进去。
+   换行前后按「全局字符偏移」还原光标，不会跳位置。 */
+function aiRtTextOffset(root, node, offset){
+  var off = 0, done = false;
+  function len(n){
+    if(n.nodeType === 3) return n.nodeValue.length;
+    if(n.nodeName === 'BR') return 1;
+    var s = 0;
+    for(var c = n.firstChild; c; c = c.nextSibling) s += len(c);
+    return s;
+  }
+  (function walk(n){
+    if(done) return;
+    if(n === node){
+      if(n.nodeType === 3) off += Math.min(offset, n.nodeValue.length);
+      else{
+        for(var i = 0; i < offset && i < n.childNodes.length; i++) off += len(n.childNodes[i]);
+      }
+      done = true; return;
+    }
+    if(n.nodeType === 3){ off += n.nodeValue.length; return; }
+    if(n.nodeName === 'BR'){ off += 1; return; }
+    for(var c = n.firstChild; c; c = c.nextSibling) walk(c);
+  })(root);
+  return off;
+}
+function aiRtCaretAt(root, off){
+  var acc = 0, found = null;
+  (function walk(n){
+    if(found) return;
+    if(n.nodeType === 3){
+      if(acc + n.nodeValue.length >= off){ found = { node: n, offset: Math.max(0, off - acc) }; return; }
+      acc += n.nodeValue.length; return;
+    }
+    if(n.nodeName === 'BR'){
+      if(acc + 1 > off){
+        found = { node: n.parentNode, offset: Array.prototype.indexOf.call(n.parentNode.childNodes, n) };
+        return;
+      }
+      acc += 1; return;
+    }
+    for(var c = n.firstChild; c; c = c.nextSibling) walk(c);
+  })(root);
+  if(!found) return null;
+  try{
+    var r = document.createRange();
+    r.setStart(found.node, found.offset);
+    r.collapse(true);
+    return r;
+  }catch(e){ return null; }
+}
+function aiRtNormalize(){
+  var box = $('adRich');
+  if(!box) return false;
+  var sel = window.getSelection();
+  var r0 = (sel && sel.rangeCount) ? sel.getRangeAt(0) : null;
+  var caretOff = -1, hadCaret = false;
+  if(r0 && box.contains(r0.commonAncestorContainer)){
+    hadCaret = true;
+    caretOff = aiRtTextOffset(box, r0.startContainer, r0.startOffset);
+  }
+  var walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+  var nodes = [], n;
+  while((n = walker.nextNode())){ if(n.nodeValue.indexOf('\n') >= 0) nodes.push(n); }
+  if(!nodes.length) return false;
+  for(var i = 0; i < nodes.length; i++){
+    var node = nodes[i];
+    var parts = node.nodeValue.split('\n');
+    var frag = document.createDocumentFragment();
+    for(var k = 0; k < parts.length; k++){
+      if(k) frag.appendChild(document.createElement('br'));
+      if(parts[k]) frag.appendChild(document.createTextNode(parts[k]));
+    }
+    if(node.parentNode) node.parentNode.replaceChild(frag, node);
+  }
+  if(hadCaret && caretOff >= 0){
+    var r = aiRtCaretAt(box, caretOff);
+    if(r){
+      try{
+        var s2 = window.getSelection();
+        s2.removeAllRanges();
+        s2.addRange(r);
+        AI_RT_CARET = r.cloneRange();
+      }catch(e){}
+    }
+  }
+  return true;
 }
 
 function aiRtCount(range){
@@ -271,13 +388,47 @@ function aiRtFmt(kind, val){
 function aiRtHead(){
   var box = $('adRich');
   if(!box) return;
+  /* 先把「换行字符」整理成真正的行边界，否则整块内容会被当成一行 */
+  aiRtNormalize();
   var s = aiRtSel();
-  if(!s) return;
-  /* 文本节点的父节点就是顶层节点；元素则往上找到 box 的直接子节点 */
-  var top = s.range.startContainer;
-  while(top && top.parentNode !== box) top = top.parentNode;
-  if(!top || top.parentNode !== box){ toast('先把光标放到要强调的那一行', 'warn', 2000); return; }
+  if(!s || !box.contains(s.range.commonAncestorContainer)){
+    if(!aiRtRestore('caret') && !aiRtRestore('range')){
+      toast('请将光标置于要强调的那一行', 'warn', 2200);
+      return;
+    }
+    s = aiRtSel();
+  }
+  if(!s){ toast('请将光标置于要强调的那一行', 'warn', 2200); return; }
+  if(!AI_RT_CARET || !AI_RT_CARET.startContainer) aiRtSaveSel();
 
+  var kids = Array.prototype.slice.call(box.childNodes);
+  if(!kids.length){
+    /* 空编辑框：直接建一行强调，光标放进去 */
+    var sp0 = document.createElement('span');
+    sp0.className = 'ln-em';
+    sp0.appendChild(document.createElement('br'));
+    box.appendChild(sp0);
+    aiRtSync();
+    return;
+  }
+
+  var r = s.range;
+  /* 找到光标落在哪个顶层节点上；光标正好落在节点之间时按 childNodes 的下标算 */
+  var top = null;
+  if(r.startContainer === box){
+    top = box.childNodes[r.startOffset] || null;
+    if(top && top.nodeName === 'BR'){
+      /* 落在换行符上：优先算左边那一行（手指点在行尾更常见） */
+      var prev = top.previousSibling;
+      if(prev && prev.nodeName !== 'BR') top = prev;
+    }
+  }else{
+    top = r.startContainer;
+    while(top && top.parentNode !== box) top = top.parentNode;
+  }
+  if(!top || top.parentNode !== box){ toast('请将光标置于要强调的那一行', 'warn', 2200); return; }
+
+  /* 已经是强调行 → 再点一次取消 */
   if(top.nodeName === 'SPAN' && String(top.className || '').indexOf('ln-em') >= 0){
     var p = top.parentNode;
     while(top.firstChild) p.insertBefore(top.firstChild, top);
@@ -286,28 +437,31 @@ function aiRtHead(){
     return;
   }
 
-  var kids = Array.prototype.slice.call(box.childNodes);
+  /* 以 <br> 为界取「这一行」：从 top 往左右扩到换行符为止 */
   var i = kids.indexOf(top);
   if(i < 0) return;
   var a = i, b = i;
   while(a > 0 && kids[a - 1].nodeName !== 'BR') a--;
   while(b < kids.length - 1 && kids[b + 1].nodeName !== 'BR') b++;
+
   var span = document.createElement('span');
   span.className = 'ln-em';
   box.insertBefore(span, kids[a]);
   for(var k = a; k <= b; k++) span.appendChild(kids[k]);
-  if(!span.textContent.trim()) span.appendChild(document.createElement('br'));
+  if(!span.textContent.trim() && !span.querySelector('br')) span.appendChild(document.createElement('br'));
   aiRtSync();
 }
 
-/* 编辑器初始化：回车插 <br>、粘贴只留纯文字、输入法不打断 */
+/* 编辑器初始化：回车插换行、粘贴只留纯文字、输入法不打断 */
 function aiRtInit(){
   var box = $('adRich');
-  if(!box) return;
+  if(!box || box.__rtInit) return;
+  box.__rtInit = true;
   box.addEventListener('keydown', function(e){
     if(e.key === 'Enter' && !e.isComposing){
       e.preventDefault();
       document.execCommand('insertLineBreak');
+      aiRtNormalize();
       aiRtSync();
     }
   });
@@ -317,27 +471,45 @@ function aiRtInit(){
     try{ txt = (e.clipboardData || window.clipboardData).getData('text') || ''; }catch(err){}
     txt = txt.replace(/\r\n?/g, '\n');
     if(txt) document.execCommand('insertText', false, txt);
+    aiRtNormalize();
     aiRtSync();
   });
   box.addEventListener('input', function(e){
     if(e.isComposing) return;
+    aiRtNormalize();
     aiRtSync();
   });
-  box.addEventListener('compositionend', function(){ aiRtSync(); });
-  box.addEventListener('keyup', aiRtTip);
-  box.addEventListener('mouseup', function(){ setTimeout(aiRtTip, 0); });
-  box.addEventListener('touchend', function(){ setTimeout(aiRtTip, 0); });
+  box.addEventListener('compositionend', function(){
+    aiRtNormalize();
+    aiRtSync();
+  });
+  box.addEventListener('keyup', function(){ aiRtSaveSel(); aiRtTip(); });
+  box.addEventListener('mouseup', function(){ setTimeout(function(){ aiRtSaveSel(); aiRtTip(); }, 0); });
+  box.addEventListener('touchend', function(){ setTimeout(function(){ aiRtSaveSel(); aiRtTip(); }, 0); });
   document.addEventListener('selectionchange', function(){
-    var s = aiRtSel();
-    if(s && !s.range.collapsed) AI_RT_RANGE = s.range.cloneRange();
+    aiRtSaveSel();
     if(document.activeElement === box) aiRtTip();
   });
-  /* 点工具栏按钮时请勿输入框的焦点抢走，否则选区没了 */
+  /* 点工具栏按钮时别让输入框的焦点和选区被抢走。
+     安卓上只有 mousedown 不够 —— 软键盘 / 触屏的点击序列是 pointerdown → touchstart，
+     到这里焦点就已经跳走了，所以三种都拦。下拉框（选字号）要保留原生选择器，不拦。 */
   var bar = document.querySelector('.ai-charbar');
   if(bar){
-    bar.addEventListener('mousedown', function(e){
-      if(e.target && e.target.nodeName === 'BUTTON') e.preventDefault();
-    });
+    var keep = function(e){
+      var t = e.target;
+      if(!t || !t.tagName) return;
+      if(t.tagName === 'SELECT' || (t.closest && t.closest('select'))) return;
+      if(!(t.tagName === 'BUTTON' || (t.closest && t.closest('button')))) return;
+      /* 焦点跳走之前先把手里的光标 / 选区存下来，点完按钮再还原 */
+      aiRtSaveSel();
+      /* 鼠标点按钮：拦掉默认行为，选区原地不动。
+         触屏不拦 —— 拦了 touchstart 会把随后的 click 一起吞掉，按钮就点不动了。 */
+      if(e.type === 'mousedown') e.preventDefault();
+      if(e.type === 'pointerdown' && e.pointerType === 'mouse') e.preventDefault();
+    };
+    bar.addEventListener('mousedown', keep);
+    bar.addEventListener('pointerdown', keep);
+    bar.addEventListener('touchstart', keep, { passive: true });
   }
 }
 
@@ -412,7 +584,8 @@ function aiFillDay(){
 
 function aiAddDay(){
   var d = $('adDate').value || '';
-  var text = String($('adText').value || '').trim().slice(0, 200);
+  /* v4.15.6：只裁掉首尾的空行，行内缩进与空格原样保留；上限跟接口的 600 对齐 */
+  var text = String($('adText').value || '').replace(/^\n+|\n+$/g, '').slice(0, 600);
   var off = !!$('adOff').checked;
   if(!d){ toast('先选日期', 'warn'); return; }
   if(!text && !off){ toast('写点今日事项，或者勾「不上课」', 'warn', 2800); return; }
@@ -3054,6 +3227,30 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.15.6', date: '2026-11-14', type: 'fix', title: '班级岛排版 · 富文本编辑与大屏适配', items: [
+      '修复：班级岛的多行文字被合并成一段，行首缩进与空行丢失，整块挤在一起',
+      '改：首页横幅改为一行一块（pre-wrap），打几个空格就显示几个空格，空行照原样保留',
+      '修复：大屏作业看板的今日事项只显示纯文本，**加粗**、{22b字号}、~~删除线~~ 变成字面符号或直接失效',
+      '改：大屏今日事项与首页共用同一套行内格式解析',
+      '修复：后台「整行强调」不管光标在第几行都强调第一行，预览里却全部行都带底色',
+      '改：整行强调以 <br> 为行边界，光标落在哪个顶层节点就强调哪一行；再点一次取消',
+      '修复：手机端点字号、加粗、整行强调提示「请把光标移到上面」，框选后依然无效',
+      '改：触屏点工具栏按钮前先保存光标与选区，点完再还原；字号下拉框保留原生行为',
+      '改：编辑框里软键盘输入的换行字符统一转成 <br>，与回车键的结果一致',
+      '改：保存时只裁掉首尾空行，行内缩进与连续空格原样提交；长度上限 200 提到 600，与接口对齐',
+      '修复：右侧功能栏内容过多时被顶出屏幕，底部的学期进度整块看不见',
+      '改：整栏缩放到 60% 仍装不下时，只让今日事项内部滚动，时钟 / 倒计时 / 点名 / 一言 / 进度保持完整',
+      '修复：考试看板新建的考试没点发布、当天已经开考时被当作草稿隐藏，作业看板看不到这场考试',
+      '改：考试快照超过 10 分钟自动回源一次，不再依赖后台手动点同步',
+      '版本号升至 4.15.6，后端接口版本同步'
+    ], pub: [
+      { cat: '界面', text: '班级岛按行显示，缩进与空行保留' },
+      { cat: '界面', text: '大屏今日事项同步加粗与字号' },
+      { cat: '修复', text: '整行强调只作用于光标所在行' },
+      { cat: '修复', text: '手机端字号与加粗可以正常点选' },
+      { cat: '界面', text: '右侧功能栏内容多时全部留在屏幕内' },
+      { cat: '修复', text: '当天开考的考试在作业看板正常显示' }
+    ] },
   { version: '4.15.5', date: '2026-11-13', type: 'fix', title: '大屏作业看板 · 中文输入修复', items: [
       '修复：大屏用软键盘打中文时拼音与候选字都不出现，英文正常',
       '原因：作业卡片整块重建内部结构，输入框节点被替换；输入法的组合状态绑在节点上，节点一换，拼音和候选窗一起作废。英文不依赖组合，每个字母直接写进内容，所以只有中文受影响',

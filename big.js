@@ -46,6 +46,32 @@
     var t = (typeof stripEmoji === 'function') ? stripEmoji(s) : String(s == null ? '' : s);
     return (typeof esc === 'function') ? esc(t) : t;
   }
+  /* v4.15.6（站主）：作业看板右栏的「今日事项」跟首页用同一套写法 ——
+     一行一块、行首缩进与连续空格原样保留，**粗** / ~~横线~~ / {22b字} 都能认。
+     以前这里只做转义，后台设的强调会变成字面上的两个星号。 */
+  function bhwFmtIsland(text){
+    var lines = String(text == null ? '' : text).split('\n');
+    var out = [];
+    for(var i = 0; i < lines.length; i++){
+      var raw = lines[i];
+      var em = /^# ?/.test(raw);
+      var t = em ? raw.replace(/^# ?/, '') : raw;
+      var html = esc0(t);
+      html = html.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, inner){
+        if(!sz && !fl) return all;
+        var st = '';
+        if(sz) st += 'font-size:' + sz + 'px;';
+        if(fl.indexOf('b') >= 0) st += 'font-weight:900;';
+        if(fl.indexOf('s') >= 0) st += 'text-decoration:line-through;';
+        return st ? '<span style="' + st + '">' + inner + '</span>' : inner;
+      });
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+      html = html.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+      if(!html){ out.push('<span class="bhw-ln bhw-ln-blank"><br></span>'); continue; }
+      out.push('<span class="bhw-ln' + (em ? ' em' : '') + '">' + html + '</span>');
+    }
+    return out.join('');
+  }
   function iconKeyOf(t){
     var s = String(t == null ? '' : t);
     if(typeof EMOJI_ICON_MAP === 'undefined') return '';
@@ -1716,7 +1742,7 @@
     if(eb) eb.style.display = adminOk() ? '' : 'none';
     var c = $('bhwCourses');
     if(c){
-      var txt = '', sub = '', off = sideDayOffset();
+      var txt = '', sub = '', off = sideDayOffset(), fmt = false, fsize = 0;
       try{
         if(typeof islandToday === 'function' && typeof ISLAND !== 'undefined' && ISLAND && ISLAND.on){
           var t = islandToday(off);
@@ -1738,7 +1764,7 @@
               }
             }
             else if(t.kind === 'off') txt = (t.label || (off ? '明天休息' : '今天休息')) + (t.text ? ' · ' + t.text : '');
-            else txt = t.text || (off ? '明天没有安排' : '今天没有安排');
+            else { txt = t.text || (off ? '明天没有安排' : '今天没有安排'); fmt = true; fsize = Number(t.size) || 0; }
             sub = off ? '明日事项' : '今日事项';
           }
         }
@@ -1746,7 +1772,7 @@
       if(txt){
         c.style.display = '';
         c.innerHTML = '<span class="bhw-mini-k">' + esc0(sub) + '</span>'
-          + '<b class="bhw-mini-v">' + esc0(txt) + '</b>';
+          + '<b class="bhw-mini-v"' + (fsize ? ' style="font-size:' + fsize + 'px"' : '') + '>' + (fmt ? bhwFmtIsland(txt) : esc0(txt)) + '</b>';
         /* v4.10.26（站主）：「作业看板的今日事项点击也可以显示同普通版的图片」。
            首页那张照片点开是同一个弹层（islPhotoOpen），这里直接复用。 */
         var photo = false;
@@ -1782,7 +1808,8 @@
     var side = $('bhwSide'), inn = $('bhwSideIn');
     if(!side || !inn || !BIG.hwOn) return;
     /* 窄屏是单列布局，不锁高度 */
-    try{ if(window.innerWidth <= 1180) { side.style.height=''; side.style.maxHeight=''; inn.style.transform=''; inn.style.width=''; return; } }catch(e){}
+    try{ if(window.innerWidth <= 1180) { side.style.height=''; side.style.maxHeight=''; side.classList.remove('tight'); inn.style.transform=''; inn.style.width=''; inn.style.height=''; return; } }catch(e){}
+    side.classList.remove('tight');
     var bar = document.querySelector('.bhw-bar');
     var barH = bar ? bar.getBoundingClientRect().height : 58;
     var ds = $('bhwDateStrip');
@@ -1796,6 +1823,7 @@
     inn.style.zoom = '';
     inn.style.transform = '';
     inn.style.width = '';
+    inn.style.height = '';
     var natural = inn.scrollHeight;
     var s = 1;
     if(natural > avail + 1){
@@ -1812,6 +1840,16 @@
           inn.style.transform = 'scale(' + s + ')';
           inn.style.width = (100 / s) + '%';
         }
+      }
+      /* v4.15.6（站主）：「内容多的时候右侧功能栏一样要全在上面」。
+         缩到 60% 还装不下，就把「今日事项」这一张压成可滚动的 ——
+         其余卡片（时钟 / 倒计时 / 点名 / 一言 / 进度）保持完整，不会被挤出屏幕。
+         ⚠️ 必须量 transform 之后的真实高度：改 width 会重新折行，前面那两次
+         scrollHeight 都是改宽度之前的值，拿它算会漏判（实测差 34px 溢出）。 */
+      var visH = inn.getBoundingClientRect().height;
+      if(visH > avail + 1){
+        side.classList.add('tight');
+        inn.style.height = (avail / s) + 'px';
       }
     }
     BIG._sideScale = Math.round(s * 1000) / 1000;

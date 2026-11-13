@@ -6291,9 +6291,15 @@ function aiInline(sz, fl, txt){
   return st ? '<span style="' + st + '">' + txt + '</span>' : txt;
 }
 function aiPrevFmt(text){
-  return String(text == null ? '' : text).split('\n').map(function(line){
-    var head = false, t = line;
-    if(/^#\s?/.test(t)){ head = true; t = t.replace(/^#\s?/, ''); }
+  var raw0 = String(text == null ? '' : text);
+  /* v4.15.6：空内容返回空串，交给外层显示「这里是预览」，不再是一条空白行 */
+  if(!raw0.trim()) return '';
+  var lines = raw0.split('\n');
+  var out = [];
+  for(var i = 0; i < lines.length; i++){
+    var raw = lines[i];
+    var head = /^# ?/.test(raw);
+    var t = head ? raw.replace(/^# ?/, '') : raw;
     var h = esc(t);
     h = h.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, txt){
       if(!sz && !fl) return all;
@@ -6301,8 +6307,10 @@ function aiPrevFmt(text){
     });
     h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
     h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
-    return head ? '<span class="ln-em">' + h + '</span>' : h;
-  }).join('\n');
+    if(!h){ out.push('<span class="ln ln-blank"><br></span>'); continue; }
+    out.push('<span class="ln' + (head ? ' ln-em' : '') + '">' + h + '</span>');
+  }
+  return out.join('');
 }
 
 /* ============================================================================

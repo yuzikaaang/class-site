@@ -11106,10 +11106,9 @@ function islInline(sz, fl, txt){
   if(fl.indexOf('s') >= 0) st += 'text-decoration:line-through;';
   return st ? '<span style="' + st + '">' + txt + '</span>' : txt;
 }
-function islFmtLine(line, forceHead){
-  var head = !!forceHead;
+function islFmtLine(line){
   var t = String(line == null ? '' : line);
-  if(/^#\s?/.test(t)){ head = true; t = t.replace(/^#\s?/, ''); }
+  if(/^# ?/.test(t)) t = t.replace(/^# ?/, '');
   var html = esc(t);
   html = html.replace(/\{(\d{0,2})([bs]{0,2})([^{}]+)\}/g, function(all, sz, fl, txt){
     if(!sz && !fl) return all;
@@ -11117,11 +11116,23 @@ function islFmtLine(line, forceHead){
   });
   html = html.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
   html = html.replace(/~~([^~]+)~~/g, '<s>$1</s>');
-  return head ? '<span class="ln-em">' + html + '</span>' : html;
+  return html;
 }
+/* v4.15.6（站主）：一段一行，空格与空行原样保留。
+   以前把各行用 \n 拼起来，靠 CSS 的 pre-line 折行 —— 行首缩进的空格会被
+   合并掉，空行也会少一行，整块看起来挤在一起。现在每行都是独立的块，
+   文字容器用 pre-wrap，打几个空格就显示几个空格。 */
 function islFmt(text){
   var lines = String(text == null ? '' : text).split('\n');
-  return lines.map(function(l){ return islFmtLine(l, false); }).join('\n');
+  var out = [];
+  for(var i = 0; i < lines.length; i++){
+    var raw = lines[i];
+    var em = /^# ?/.test(raw);
+    var html = islFmtLine(raw);
+    if(!html){ out.push('<span class="ln ln-blank"><br></span>'); continue; }
+    out.push('<span class="ln' + (em ? ' ln-em' : '') + '">' + html + '</span>');
+  }
+  return out.join('');
 }
 
 function islandBanner(){
