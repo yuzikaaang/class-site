@@ -789,6 +789,33 @@
   var HW_LOCAL_KEY = 'cls_hw_local_v1';
   var HW_EDIT_KEY  = 'cls_hw_edit';
 
+  /* ---------------- 中文输入法保护（v4.15.5）----------------
+     站主反馈：大屏用软键盘打中文，拼音和候选字都不出来，英文正常。
+     原因是作业卡片整块 innerHTML 重绘，输入框节点被替换；IME 的组合状态
+     绑在那个节点上，节点一换，拼音和候选窗一起作废。英文不靠组合，
+     每个字母直接写进 value，所以看起来只有中文坏。
+     做法：捕获组合状态，组合进行中把重绘排队，组合结束后再补一次。
+     ---- 注意：_imeOn 也被 autoGrow / hwDirty 使用，声明必须在这两处之前。 */
+  var _imeOn = false, _imePending = false, _imeT = null, _imeBound = false;
+
+  function imeBind(host){
+    if(!host || _imeBound) return;
+    _imeBound = true;
+    host.addEventListener('compositionstart', function (){ _imeOn = true; }, true);
+    host.addEventListener('compositionend', function (){
+      _imeOn = false;
+      if(_imeT) clearTimeout(_imeT);
+      /* 留 150 毫秒：有些软键盘在 compositionend 之后还会补一次 input，
+         立刻重绘又会把刚上屏的字和光标一起带走。 */
+      _imeT = setTimeout(function (){
+        _imeT = null;
+        if(_imePending){ _imePending = false; BIG.renderHw(); }
+      }, 150);
+    }, true);
+    host.addEventListener('blur', function (){ _imeOn = false; }, true);
+  }
+  BIG.imeBusy = function (){ return _imeOn || !!_imeT; };
+
   function hwEditOn(){
     try{ return localStorage.getItem(HW_EDIT_KEY) === '1'; }catch(e){ return false; }
   }
@@ -976,6 +1003,8 @@
   /* 自适应高度：先归零再读 scrollHeight，字号一变重算一遍（见 applyFs / layoutCards） */
   BIG.autoGrow = function (el){
     if(!el) return;
+    /* 组合中不改高度：文本框一伸缩，候选窗的位置就跟丢了 */
+    if(_imeOn) return;
     el.style.height = 'auto';
     el.style.height = (el.scrollHeight + 2) + 'px';
   };
@@ -1265,6 +1294,9 @@
   }
 
   BIG.renderHw = function (){
+    /* 组合中（正在打拼音）不重绘：输入框一换，拼音和候选窗就没了 */
+    if(_imeOn || _imeT){ _imePending = true; return; }
+    imeBind($('bigHw'));
     var snap = snapshotEdit();
     renderHwRaw();
     restoreEdit(snap);
@@ -3512,6 +3544,9 @@
      还是半截话、onchange 也没触发），它就说「不忙」，接着整页重绘把字冲掉。
      现在改成扫一遍：只要有任何输入框的值和「刚画上去时的值」不一样，就算在编辑。 */
   function hwDirty(){
+    /* 正在拼中文时 value 还没变，旧判定会说「不忙」→ 轮询把整页重绘，
+       拼音当场作废。所以组合中一律当作在编辑。 */
+    if(_imeOn) return true;
     var host = $('bigHw');
     if(!host) return false;
     var ae = document.activeElement;
