@@ -30,12 +30,20 @@ body.bg-navy{background:#0e1a2b;color:#e8eefc}
 body.bg-green{background:#0f241d;color:#e6f6ee}
 body.bg-gray{background:#2b2b2e;color:#f2f2f2}
 
+/* ---------- v4.17.0：大屏顶部整体让位 ----------
+   站主：「大屏时钟最上面那排（返回 / 数字 / 翻页 | 正计时 / 倒计时 / 番茄钟 / 记录）
+   顶上会有课表悬浮窗挡着，往下挪 20px」。
+   这一行是三个各自定位的元素（#back / #subTabs / #logBtn），单挪中间会参差，
+   所以统一由一个变量控制：宽屏（投屏场景）推 20px，手机不动。 */
+:root{--clk-top-push:0px}
+@media (min-width:1180px){:root{--clk-top-push:20px}}
+
 #stage{position:fixed;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;
   justify-content:flex-start;flex-direction:column;
   /* v4.10.14（站主）：「这些时钟都要居中，不要太偏上了」。
      顶部留 60px 让开那排子标签，底部留 40px 给工具栏，余下的空间里由 #topRow
      自己垂直居中 —— 这样上下留白差不多，视觉中心就在屏幕中间。 */
-  padding-top:calc(60px + env(safe-area-inset-top));
+  padding-top:calc(60px + var(--clk-top-push) + env(safe-area-inset-top));
   padding-bottom:calc(70px + env(safe-area-inset-bottom));box-sizing:border-box;
   overflow-y:auto;overflow-x:hidden}
 .view{display:none;width:100%;text-align:center}
@@ -65,7 +73,7 @@ body.bg-gray{background:#2b2b2e;color:#f2f2f2}
    现在整块挪到返回按钮正下方、左边缘对齐，字号 15px → 30px，
    去掉底色与描边，只留文字本身。 */
 #tmNow{
-  position:fixed;left:16px;top:calc(62px + env(safe-area-inset-top));z-index:30;
+  position:fixed;left:16px;top:calc(62px + var(--clk-top-push) + env(safe-area-inset-top));z-index:30;
   display:none;align-items:center;justify-content:flex-start;
   padding:0;border:0;background:none;
   font-size:30px;font-weight:700;letter-spacing:.01em;font-variant-numeric:tabular-nums;
@@ -82,8 +90,8 @@ body.bare #tmNow{display:none}
    小时间也排到这一行**下方**（v4.16.0：原来放在 58px，正好压住第二行的
    「数字」两个字，秒数被盖掉半截），内容区相应往下让。 */
 @media (max-width:560px){
-  #tmNow{left:16px;top:calc(100px + env(safe-area-inset-top));right:auto;font-size:22px}
-  #stage{padding-top:calc(134px + env(safe-area-inset-top));
+  #tmNow{left:16px;top:calc(100px + var(--clk-top-push) + env(safe-area-inset-top));right:auto;font-size:22px}
+  #stage{padding-top:calc(134px + var(--clk-top-push) + env(safe-area-inset-top));
     padding-bottom:calc(104px + env(safe-area-inset-bottom))}
 }
 
@@ -377,7 +385,7 @@ body.bg-dark #modeMenu button.cur,body.bg-black #modeMenu button.cur,body.bg-nav
 body.bg-green #modeMenu button.cur,body.bg-gray #modeMenu button.cur{background:rgba(255,255,255,.14)}
 
 #back{
-  position:fixed;left:16px;top:16px;z-index:35;padding:9px 14px;border-radius:12px;
+  position:fixed;left:16px;top:calc(16px + var(--clk-top-push));z-index:35;padding:9px 14px;border-radius:12px;
   font-size:13px;font-weight:600;text-decoration:none;color:inherit;
   background:rgba(255,255,255,.7);border:1px solid rgba(0,0,0,.1);
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:opacity .2s;
@@ -388,7 +396,7 @@ body.bg-dark #back,body.bg-black #back,body.bg-navy #back,body.bg-green #back,bo
 
 /* 提示气泡 */
 #hint{
-  position:fixed;left:50%;top:calc(60px + env(safe-area-inset-top));transform:translateX(-50%);
+  position:fixed;left:50%;top:calc(60px + var(--clk-top-push) + env(safe-area-inset-top));transform:translateX(-50%);
   padding:8px 16px;border-radius:999px;font-size:12px;
   background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.08);color:#333;
   transition:opacity .4s;z-index:30;
@@ -596,7 +604,7 @@ body.bg-green .sum-custom input,body.bg-gray .sum-custom input{border-color:rgba
 
 /* ---------- v3.9.25：右上角「记录」与右侧抽屉 ---------- */
 #logBtn{
-  position:fixed;right:16px;top:16px;z-index:36;height:38px;padding:0 14px;border-radius:12px;
+  position:fixed;right:16px;top:calc(16px + var(--clk-top-push));z-index:36;height:38px;padding:0 14px;border-radius:12px;
   display:flex;align-items:center;gap:6px;font-family:inherit;font-size:13px;font-weight:600;
   color:inherit;cursor:pointer;border:1px solid rgba(0,0,0,.1);background:rgba(255,255,255,.72);
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
@@ -730,7 +738,7 @@ body.bg-green .lg-foot,body.bg-gray .lg-foot{border-top-color:rgba(255,255,255,.
 
 /* ---------- 计时模块（v3.11.0） ---------- */
 /* 顶部子模式（v3.12.0） */
-#subTabs{position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);
+#subTabs{position:fixed;left:50%;top:calc(12px + var(--clk-top-push) + env(safe-area-inset-top));transform:translateX(-50%);
   z-index:34;display:flex;gap:3px;padding:4px;border-radius:13px;
   background:rgba(255,255,255,.72);border:1px solid rgba(0,0,0,.08);
   -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
@@ -753,7 +761,7 @@ body.bare #subTabs{display:none}
    会被右边的「记录」压掉半个字。这里把子标签整体挪到第二行，字号收小一点。
    （必须写在 #subTabs 定义之后才盖得住，媒体查询本身不提高优先级。） */
 @media (max-width:560px){
-  #subTabs{top:calc(60px + env(safe-area-inset-top));max-width:calc(100vw - 16px);
+  #subTabs{top:calc(60px + var(--clk-top-push) + env(safe-area-inset-top));max-width:calc(100vw - 16px);
     gap:2px;padding:3px}
   #subTabs button{height:28px;padding:0 9px;font-size:12px}
 }
@@ -1137,7 +1145,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=4161" defer></script>
+<script src="./fs-keep.js?v=4162" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）

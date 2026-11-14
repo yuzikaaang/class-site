@@ -13825,9 +13825,18 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.16.0 小当前时间在「返回」下方、无外框、字号翻倍',
       /id="tmNow"/.test(clock5) && /body\.tm-on #tmNow\{display:flex\}/.test(clock5)
       && /body\.bare #tmNow\{display:none\}/.test(clock5)
-      && /top:calc\(62px \+ env\(safe-area-inset-top\)\)/.test(clock5)
+      && /top:calc\(62px \+ var\(--clk-top-push\) \+ env\(safe-area-inset-top\)\)/.test(clock5)
       && /font-size:30px/.test(clock5) && /background:none/.test(clock5)
       && /tn\.textContent = two\(hh\)/.test(clock5));
+    /* v4.16.2：大屏顶上常有课表悬浮窗，顶部整行（返回 / 五个标签 / 记录）一起下移，
+       偏移量统一走 --clk-top-push；宽屏 20px，窄屏 0。 */
+    t('★v4.16.2 顶部整行由 --clk-top-push 统一下移，宽屏 20px、手机不动',
+      /:root\{--clk-top-push:0px\}/.test(clock5)
+      && /@media \(min-width:1180px\)\{:root\{--clk-top-push:20px\}\}/.test(clock5)
+      && /#back\{[\s\S]{0,160}?top:calc\(16px \+ var\(--clk-top-push\)\)/.test(clock5)
+      && /#logBtn\{[\s\S]{0,200}?top:calc\(16px \+ var\(--clk-top-push\)\)/.test(clock5)
+      && /#subTabs\{position:fixed;left:50%;top:calc\(12px \+ var\(--clk-top-push\)/.test(clock5)
+      && /padding-top:calc\(60px \+ var\(--clk-top-push\) \+ env\(safe-area-inset-top\)\)/.test(clock5));
     t('★v4.10.5 默认打开是时钟界面（不再默认计时）',
       /applyMode\(modeFromUrl\(\) \|\| \(\(CFG\.mode === 'flip'\) \? 'flip' : 'clock'\)\)/.test(clock5));
     t('★v4.10.5 背景色首屏恢复（不会先闪一下默认色）',
