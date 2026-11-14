@@ -1648,9 +1648,10 @@
     });
     seq.sort(byKey);
 
-    /* 考试卡固定钉在左栏最上面，它占掉的高度算进左栏，切分点才会把它让出来 */
+    /* v4.15.8：考试卡已经搬到两栏上方（.bhw-grid 第 2 行），不再占左栏高度，
+       切分点只按科目卡自己算。万一它还留在 colA 里（旧缓存页面），就照旧计进去。 */
     var exam = document.getElementById('bhwExam');
-    var hExam = exam ? exam.getBoundingClientRect().height : 0;
+    var hExam = (exam && exam.parentNode === colA) ? exam.getBoundingClientRect().height : 0;
 
     /* 顺序切分：前 k 科进左栏、后面的进右栏，找一个切分点让
        「左栏(考试卡 + 前 k 科)」与「右栏(后 n-k 科)」总高最接近。 */
@@ -1916,6 +1917,11 @@
   var EXAM_KEY = 'cls_big_exam_v2';
   var EXAM_TTL = 5 * 60 * 1000;      /* 5 分钟主动刷一次，够用又不打上游 */
   var EXAM_LIMIT = 6;                /* 作业看板上最多 6 科，多的等前面的过期补位 */
+  /* v4.15.8：考试卡改成整行横排后，宽屏一行能并下 7、8 场；还按 6 卡着，
+     多出来的那科会被压成「还有 1 科」小字，明明有位置显示。窄屏仍是 6。 */
+  function examLimit(){
+    try{ return window.innerWidth >= 1400 ? 8 : EXAM_LIMIT; }catch(e){ return EXAM_LIMIT; }
+  }
 
   BIG.examList = {
     groups: [], pins: { majors: [], days: [], items: [] },
@@ -2106,28 +2112,34 @@
     var dayCount = Object.keys(dayN).length;
 
     /* 6 科上限：按天整段装，装不下就停，剩下的只报个数 */
-    var used = 0, cut = false, body = '';
+    var used = 0, cut = false, body = '', moreHtml = '', limit = examLimit();
     for(var k = 0; k < order.length && !cut; k++){
       var box = map[order[k]];
       var sec = '';
       for(var i = 0; i < box.days.length; i++){
         var s = box.days[i];
         var items = s.d.items || [];
-        if(used + items.length > EXAM_LIMIT){ cut = true; break; }
+        if(used + items.length > limit){ cut = true; break; }
         used += items.length;
-        sec += '<div class="bhex-date' + (s.past ? ' bhex-past' : '') + '">'
-          + esc0(examDayLabel(s.d.date, s.d.date === BIG.examList.today)) + '</div>';
+        /* v4.15.8：一天一块（日期 + 当天各科），各块在宽屏上横向并排。
+           原来一行一科铺满整行，考试卡占满整行宽后一条要横跨一千多像素。 */
+        var rows = '';
         items.forEach(function (it){
-          sec += '<div class="bhex-row' + (s.past ? ' bhex-off' : '') + '">'
+          rows += '<div class="bhex-row' + (s.past ? ' bhex-off' : '') + '">'
             + '<span class="bhex-sub">' + esc0(it.name || '考试') + '</span>'
             + '<span class="bhex-time">' + esc0(it.start || '') + '–' + esc0(it.end || '') + '</span>'
             + '</div>';
         });
+        sec += '<div class="bhex-day">'
+          + '<div class="bhex-date' + (s.past ? ' bhex-past' : '') + '">'
+          + esc0(examDayLabel(s.d.date, s.d.date === BIG.examList.today)) + '</div>'
+          + rows + '</div>';
       }
       if(!sec) continue;
-      body += order.length > 1
-        ? '<div class="bhex-m"><div class="bhex-mname">' + esc0(box.g.name) + '</div>' + sec + '</div>'
-        : sec;
+      /* 单场就不写考试名（标题已经写了），多场才需要分组小标题；都没有内容就不留空壳 */
+      body += '<div class="bhex-m">'
+        + (order.length > 1 ? '<div class="bhex-mname">' + esc0(box.g.name) + '</div>' : '')
+        + sec + '</div>';
     }
     if(!body) return '';
 
@@ -2137,22 +2149,60 @@
       + '</div>';
 
     if(cut && total > used){
-      body += '<div class="bhex-more">还有 ' + (total - used) + ' 科 · 前面的考完自动补上</div>';
+      moreHtml = '<div class="bhex-more">还有 ' + (total - used) + ' 科 · 前面的考完自动补上</div>';
     }
 
-    return '<div class="bhex" id="bhwExam">' + head + body + '</div>';
+    /* v4.15.8：场次行统一装进 .bhex-body —— 它在 CSS 里是网格，
+       考试名、日期各占一行，各科场次并排铺开（原来一行一科会把整行拉得很长）。 */
+    return '<div class="bhex" id="bhwExam">' + head
+      + '<div class="bhex-body">' + body + '</div>' + moreHtml + '</div>';
   }
 
   /* 固定钉在左栏最上面：它**不带** .bhw-subj 类，所以不进 layoutCards 的装箱计算，
      也不会被 applyCards 当成科目卡复用。作业重新渲染会把 colA 的卡片搬来搬去，
      所以每次渲染完都要再摆一次。 */
+  /* 考试卡占掉多少高度，就让下面两栏的最小高度少多少 —— 否则整页会多滚一屏。
+     写进 CSS 变量给 .bhw-col 用；高度会随字号、窗口宽度变，所以每次重绘都重算，
+     再用 ResizeObserver 兜住字号/换行引起的二次变化。 */
+  function syncExamH(el){
+    var grid = document.querySelector('.bhw-grid');
+    if(!grid) return;
+    var h = 0;
+    if(el && el.parentNode === grid){
+      try{ h = Math.ceil(el.getBoundingClientRect().height) + 10; }catch(e){ h = 0; }
+    }
+    grid.style.setProperty('--bhw-exam-h', (h > 0 ? h : 0) + 'px');
+  }
+  try{
+    var _exRo = new ResizeObserver(function (){
+      syncExamH(document.getElementById('bhwExam'));
+    });
+    BIG.watchExamH = function (el){
+      if(!el || el.__ro) return el;
+      el.__ro = 1;
+      try{ _exRo.observe(el); }catch(e){}
+      return el;
+    };
+  }catch(e){ BIG.watchExamH = function (el){ return el; }; }
+
+  /* v4.15.8（站主）：「考试卡它是只占左侧 1/2 那个栏，右侧那个是不算的」。
+     原来这块插在 colA 里 —— colA 只占两栏中的左边一半，所以考试卡再宽也只有半屏。
+     现在挂到 .bhw-grid 上，CSS 给 grid-column:1/span 2 让它横跨作业两列，
+     科目卡整体让到下一行。有考试时才占位置，没有就整行塌成 0 高。 */
   function paintExam(){
-    var colA = $('bhwColA');
-    if(!colA) return;
+    var grid = document.querySelector('.bhw-grid');
+    if(!grid) return;
+    var add = $('bhwAddSubj');
+    var anchor = (add && add.parentNode === grid) ? add : null;
+    var put = function (el){
+      if(anchor) grid.insertBefore(el, anchor.nextSibling);
+      else grid.insertBefore(el, grid.firstChild);
+    };
     var html = examHtml();
     var old = document.getElementById('bhwExam');
     if(!html){
       if(old && old.parentNode) old.parentNode.removeChild(old);
+      syncExamH(null);
       return;
     }
     if(old){
@@ -2161,15 +2211,25 @@
         var box = document.createElement('div');
         box.innerHTML = html;
         var nf = box.firstElementChild;
-        if(nf && old.parentNode) old.parentNode.replaceChild(nf, old);
-      }else if(colA.firstElementChild !== old){
-        colA.insertBefore(old, colA.firstElementChild);
+        if(nf && old.parentNode){
+          old.parentNode.replaceChild(nf, old);
+          BIG.watchExamH(nf);
+          syncExamH(nf);
+        }
+      }else{
+        if(old.previousSibling !== anchor) put(old);
+        BIG.watchExamH(old);
+        syncExamH(old);
       }
       return;
     }
     var b2 = document.createElement('div');
     b2.innerHTML = html;
-    if(b2.firstElementChild) colA.insertBefore(b2.firstElementChild, colA.firstElementChild);
+    if(b2.firstElementChild){
+      put(b2.firstElementChild);
+      BIG.watchExamH(b2.firstElementChild);
+      syncExamH(b2.firstElementChild);
+    }
   }
   BIG.examPaint = paintExam;
 

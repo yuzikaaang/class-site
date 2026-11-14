@@ -4620,20 +4620,28 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 .bhw-grid{
   position:relative;
   display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  grid-template-rows:auto auto;
+  /* v4.15.8：第 1 行科目按钮、第 2 行考试卡（整行）、第 3 行两栏作业卡 */
+  grid-template-rows:auto auto auto;
   gap:0 12px;
   /* v4.11.0：右侧给功能栏让出的宽度改由 --bhw-side-w 决定（设置里可调） */
   padding:0 calc(var(--bhw-side-w,320px) + 32px) 0 16px;align-items:start;
 }
 #bhwAddSubj{grid-column:1 / span 2;grid-row:1}
-#bhwColA{grid-column:1;grid-row:2}
-#bhwColB{grid-column:2;grid-row:2}
+/* v4.15.8（站主）：「考试卡它是只占左侧 1/2 那个栏，右侧那个是不算的」——
+   考试卡原来塞在 colA 里面，两栏等宽后天然只有一半宽。现在把它拎到网格里，
+   跨作业两列占满整行，科目卡整体往下挪一行；没有考试时这一行高度为 0，
+   不留空隙。 */
+.bhw-grid>#bhwExam{grid-column:1 / span 2;grid-row:2}
+#bhwColA{grid-column:1;grid-row:3}
+#bhwColB{grid-column:2;grid-row:3}
 /* v4.1.0：卡片不再「左三右三」死板落位。big.js 的 layoutCards() 在每次渲染 / 每次
    调字号 / 图片加载完后，按卡片真实高度贪心塞进当前更矮的一栏 —— ClassWorks 那种
    「怎么省空间怎么排，不按科目顺序」。所以卡片保持自身高度，不再 flex 撑满。 */
 .bhw-col{
   display:flex;flex-direction:column;gap:10px;min-width:0;
-  min-height:calc(100vh - 190px);align-content:flex-start;
+  /* v4.15.8：两栏最小高度要减去头顶考试卡占掉的那段（--bhw-exam-h 由 big.js 量出来写），
+     否则考试卡一出现，两栏还被撑到「整屏 - 190px」，整页就往下多滚两百像素。 */
+  min-height:calc(100vh - 190px - var(--bhw-exam-h,0px));align-content:flex-start;
 }
 .bhw-col>.bhw-subj{flex:0 0 auto}
 .bhw-subj{
@@ -5147,6 +5155,21 @@ html.bhw-ds-fold #bigHw{padding-bottom:58px}
   margin-top:7px;font-size:calc(.66rem*var(--bhw-fs));color:var(--fg-3);
   text-align:right;letter-spacing:.02em;
 }
+/* v4.15.8：考试卡现在是整行宽，再一行一科往下排的话一条要横跨一千多像素，
+   还白占半屏高度。改成「日期 + 当天各科」横着流：日期当行首小标签，后面几科
+   一路并排，宽度够就全在一行里，整卡高度压到两三行。 */
+.bhex-body{display:flex;flex-wrap:wrap;gap:4px 30px;align-items:flex-start}
+.bhex-body>.bhex-m{
+  display:flex;flex-wrap:wrap;gap:4px 30px;align-items:flex-start;
+  flex:1 1 100%;
+}
+.bhex-body .bhex-mname{flex:1 1 100%;margin:0 0 2px}
+.bhex-body .bhex-day{
+  display:flex;flex-wrap:wrap;gap:2px 18px;align-items:baseline;
+  flex:0 1 auto;max-width:100%;min-width:0;
+}
+.bhex-body .bhex-day>.bhex-date{margin:0;flex:none}
+.bhex-body .bhex-day>.bhex-row{flex:0 0 auto}
 
 /* —— 考试看板弹窗（v4.10.10：筛档位 + 折叠 + 三档挑选）—— */
 .bex-box.bex-wide{max-width:620px;width:min(96vw,620px)}
@@ -5379,6 +5402,9 @@ html.bhw-ds-fold #bigHw{padding-bottom:58px}
   .bhw-col,.bhw-side{min-height:0}
   /* 单列：没有「右栏」，三块顺序回到 预选栏 → 作业卡 → 小功能 */
   #bhwAddSubj{grid-column:1;grid-row:1;margin:0 0 12px}
+  /* v4.15.8：单列时全部交给自动放置（DOM 顺序就是 科目按钮 → 考试卡 → 两栏），
+     否则 colA 会先被塞进第 1 行，考试卡反被挤到作业卡下面。 */
+  .bhw-grid>#bhwExam{grid-column:1;grid-row:auto}
   #bhwColA,#bhwColB{grid-column:1;grid-row:auto}
   .bhw-side{position:static;width:auto;height:auto;max-height:none;overflow:visible;margin-top:12px}
   .bhw-side-in{min-height:0;transform:none!important;width:auto!important}
@@ -8233,19 +8259,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.15.7';
+var SITE_VERSION = '4.15.8';
 var VER_DATE = '2026-11-14';
 </script>
-<script src="./auth-bus.js?v=4157" defer></script>
+<script src="./auth-bus.js?v=4158" defer></script>
 <script src="./tour.js?v=040507" defer></script>
-<script src="./app.min.js?v=4157" defer></script>
+<script src="./app.min.js?v=4158" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4157" defer></script>
-<script src="./big.js?v=4157" defer></script>
+<script src="./fs-keep.js?v=4158" defer></script>
+<script src="./big.js?v=4158" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4157" defer></script>
+<script src="./pickfx.js?v=4158" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
