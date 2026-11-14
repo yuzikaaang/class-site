@@ -1495,6 +1495,13 @@
         : '';
     }
 
+    /* v4.15.7：这一期一科都没有时，让左栏占满整行 ——
+       否则考试块只占左半，右边留一大片空白。
+       有科目时恢复两栏，交给 layoutCards 切分。 */
+    var noSubj = !(hw.items || []).length;
+    colA.style.gridColumn = noSubj ? '1 / span 2' : '';
+    colB.style.display = noSubj ? 'none' : '';
+
     renderSide();
     paintExam();            /* v4.10.6：考试块固定钉在左栏最上面 */
     scheduleLayout();
