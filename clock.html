@@ -58,31 +58,32 @@ body.bg-gray{background:#2b2b2e;color:#f2f2f2}
 #topRow #flipView{--fw:calc(min(24vw, 54vh, 300px) * var(--fwk, 1))}
 #topRow #flipView.nosec{--fw:calc(min(38vw, 58vh, 430px) * var(--fwk, 1))}
 
-/* 计时模式下那枚小的当前时间：一行、淡一点，宽度约等于工具栏一个按钮。
-   只做状态提示，不接任何点击，不跟计时器抢注意力。
-   v4.10.16（站主）：「小钟表放在返回的旁边」——从右侧「记录」下面挪到左上角，
-   「← 返回」右边界 89px，这里从 95px 起，跟返回按钮同一行、同一高度。 */
+/* 计时模式下那枚当前时间。
+   v4.10.16：原先贴在「← 返回」右边。
+   v4.16.0（站主）：「放到返回的下面来，字再大一点点，大概是现在的两倍；
+   可以跟背景融在一起，不用外面那个框框」——大屏顶上常有课表悬浮窗，压着同一行。
+   现在整块挪到返回按钮正下方、左边缘对齐，字号 15px → 30px，
+   去掉底色与描边，只留文字本身。 */
 #tmNow{
-  position:fixed;left:95px;top:calc(16px + env(safe-area-inset-top));z-index:30;
-  display:none;align-items:center;justify-content:center;
-  min-width:92px;height:38px;padding:0 12px;border-radius:12px;
-  font-size:15px;font-weight:600;letter-spacing:.02em;font-variant-numeric:tabular-nums;
-  color:inherit;opacity:.72;background:rgba(255,255,255,.7);
-  border:1px solid rgba(0,0,0,.1);pointer-events:none;
-  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  position:fixed;left:16px;top:calc(62px + env(safe-area-inset-top));z-index:30;
+  display:none;align-items:center;justify-content:flex-start;
+  padding:0;border:0;background:none;
+  font-size:30px;font-weight:700;letter-spacing:.01em;font-variant-numeric:tabular-nums;
+  color:inherit;opacity:.9;pointer-events:none;
+  text-shadow:0 1px 2px rgba(0,0,0,.10);
 }
 body.bg-dark #tmNow,body.bg-black #tmNow,body.bg-navy #tmNow,
 body.bg-green #tmNow,body.bg-gray #tmNow{
-  background:rgba(30,30,34,.7);border-color:rgba(255,255,255,.14)}
+  text-shadow:0 1px 3px rgba(0,0,0,.55)}
 body.tm-on #tmNow{display:flex}
 body.bare #tmNow{display:none}
 /* 窄屏（手机竖屏）：顶部一行放不下「数字 / 翻页 | 正计时 / 倒计时 / 番茄钟」
    这五个子标签，会被右边的「记录」压掉半个字。这里把子标签整体挪到第二行，
-   小时间留在第一行紧挨「← 返回」，内容区相应往下让。 */
+   小时间也排到这一行**下方**（v4.16.0：原来放在 58px，正好压住第二行的
+   「数字」两个字，秒数被盖掉半截），内容区相应往下让。 */
 @media (max-width:560px){
-  #tmNow{left:95px;top:calc(16px + env(safe-area-inset-top));right:auto;
-    min-width:78px;height:38px;font-size:13px;padding:0 8px}
-  #stage{padding-top:calc(104px + env(safe-area-inset-top));
+  #tmNow{left:16px;top:calc(100px + env(safe-area-inset-top));right:auto;font-size:22px}
+  #stage{padding-top:calc(134px + env(safe-area-inset-top));
     padding-bottom:calc(104px + env(safe-area-inset-bottom))}
 }
 
@@ -577,6 +578,13 @@ body.bg-green .sum-custom input,body.bg-gray .sum-custom input{border-color:rgba
 }
 .sum-paper .sp-note:focus{border-color:#e08a4c;box-shadow:0 0 0 3px rgba(224,138,76,.14)}
 .sum-paper .sp-foot{margin-top:10px;font-size:10.5px;color:#a89a8c;display:flex;justify-content:space-between}
+/* v4.16.0：导出小项开关 */
+.sum-opt{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px}
+.sum-opt label{display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600}
+.sum-opt input{width:15px;height:15px;accent-color:#c2410c;cursor:pointer}
+.sum-opt-tip{font-size:11.5px;opacity:.5}
+.sum-paper .sp-row.sp-sub{padding-left:16px;font-size:11.5px;opacity:.75}
+.sum-paper .sp-row.sp-sub span:first-child::before{content:'· ';opacity:.5}
 .sum-actions{display:flex;gap:8px;margin-top:12px}
 .sum-actions button{
   flex:1;height:38px;border-radius:11px;border:1px solid rgba(0,0,0,.1);background:#fff;
@@ -670,6 +678,45 @@ body.bg-green .lg-m .tag,body.bg-gray .lg-m .tag{background:rgba(255,255,255,.09
 .lg-m .tag.focus{background:rgba(224,138,76,.18)}
 .lg-m .tag.rest{background:rgba(60,159,106,.18)}
 .lg-d{flex:0 0 auto;font-size:12px;opacity:.55;font-variant-numeric:tabular-nums}
+/* ---------- 记录聚合（v4.16.0）----------
+   类型 → 科目 → 小项 → 每一次。默认只摊到科目这一层，小项要再点一下，
+   这样一天几十段也不会把抽屉拉成一条长河。 */
+.lga{display:flex;flex-direction:column;gap:9px}
+.lga-g{border:1px solid rgba(0,0,0,.07);border-radius:12px;overflow:hidden;background:rgba(255,255,255,.55)}
+body.bg-dark .lga-g,body.bg-black .lga-g,body.bg-navy .lga-g,
+body.bg-green .lga-g,body.bg-gray .lga-g{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.09)}
+.lga-h{width:100%;display:flex;align-items:center;gap:9px;padding:10px 12px;border:0;
+  background:rgba(0,0,0,.035);color:inherit;font:inherit;cursor:pointer;text-align:left}
+body.bg-dark .lga-h,body.bg-black .lga-h,body.bg-navy .lga-h,
+body.bg-green .lga-h,body.bg-gray .lga-h{background:rgba(255,255,255,.05)}
+.lga-k{flex:1;font-size:13px;font-weight:700;letter-spacing:.02em}
+.lga-t{font-size:12.5px;font-weight:700;opacity:.68;font-variant-numeric:tabular-nums}
+.lga-ar{font-style:normal;font-size:15px;opacity:.38;transition:transform .2s;line-height:1;flex:0 0 auto}
+.lga-g.on>.lga-h .lga-ar{transform:rotate(90deg)}
+.lga-b{display:none;padding:2px 4px 6px}
+.lga-g.on>.lga-b{display:block}
+.lga-s{padding:5px 8px 4px;border-radius:9px}
+.lga-s+.lga-s{border-top:1px dashed rgba(0,0,0,.08);margin-top:3px}
+body.bg-dark .lga-s+.lga-s,body.bg-black .lga-s+.lga-s,body.bg-navy .lga-s+.lga-s,
+body.bg-green .lga-s+.lga-s,body.bg-gray .lga-s+.lga-s{border-top-color:rgba(255,255,255,.09)}
+.lga-sh{display:flex;align-items:baseline;gap:8px;padding:3px 2px}
+.lga-sh span{font-size:13px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lga-sh b{font-size:12px;opacity:.58;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.lga-iw{margin:1px 0 1px 10px}
+.lga-i{width:100%;display:flex;align-items:baseline;gap:8px;padding:5px 7px;border:0;border-radius:8px;
+  background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:left}
+.lga-i:hover{background:rgba(0,0,0,.045)}
+body.bg-dark .lga-i:hover,body.bg-black .lga-i:hover,body.bg-navy .lga-i:hover,
+body.bg-green .lga-i:hover,body.bg-gray .lga-i:hover{background:rgba(255,255,255,.07)}
+.lga-i span{flex:1;font-size:12.5px;opacity:.85;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lga-i b{font-size:11.5px;opacity:.5;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.lga-iw.on>.lga-i .lga-ar{transform:rotate(90deg)}
+.lga-ib{display:none;padding:1px 0 6px 10px}
+.lga-iw.on>.lga-ib{display:block}
+.lga-r{display:flex;align-items:baseline;gap:10px;padding:2px 0;font-size:11.5px;opacity:.6;
+  font-variant-numeric:tabular-nums}
+.lga-r span{flex:1}
+.lga-r b{font-weight:600;opacity:.9}
 .lg-empty{padding:26px 4px;font-size:12.5px;opacity:.5;line-height:1.9}
 .lg-foot{padding:12px 18px calc(14px + env(safe-area-inset-bottom));font-size:11.5px;opacity:.55;
   border-top:1px solid rgba(0,0,0,.06);display:flex;align-items:center;gap:6px}
@@ -936,6 +983,10 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
       <input type="date" id="sumFrom"><span>~</span><input type="date" id="sumTo">
     </div>
     <div id="sumPreview"></div>
+    <div class="sum-opt">
+      <label><input type="checkbox" id="sumItems"> 导出小项</label>
+      <span class="sum-opt-tip">不勾只列科目合计</span>
+    </div>
     <div class="sum-actions">
       <button class="primary" id="sumPng">导出图片</button>
       <button id="sumTxt">导出文字</button>
@@ -1086,7 +1137,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=4158" defer></script>
+<script src="./fs-keep.js?v=4160" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -1288,7 +1339,7 @@ function applyMode(m){
   if(m !== 'timer') setBare(false);
   paintSubTabs();
   applyName();
-  logStart(logModeOf());
+  syncLogRun();                /* v4.16.0：没开始计时就不开段 */
   /* 「秒 · 显示」只在翻页模式下有意义，别的时候不占工具栏位置 */
   var sb = $('secBtn');
   if(sb) sb.style.display = (m === 'flip') ? '' : 'none';
@@ -1582,7 +1633,7 @@ function tmSetKind(k){
   paintMarks();
   tmIdle();
   setBare(false);
-  logStart(logModeOf());
+  syncLogRun();                /* v4.16.0：切到倒计时只是设定时长，还没开始 */
 }
 function tmReset(){
   T.marks = [];
@@ -1590,7 +1641,7 @@ function tmReset(){
   paintMarks();
   tmIdle();
   setBare(false);
-  logStart(logModeOf());
+  syncLogRun();
 }
 function tmStart(){
   if(T.kind === 'up'){
@@ -1719,7 +1770,7 @@ function tmMark(){
   if(T.marks.length > 30) T.marks.shift();
   T.markFrom = now;
   paintMarks();
-  logStop(); logStart(logModeOf());     /* 时间线也按「记一笔」切开 */
+  if(T.run){ logStop(); logStart(logModeOf()); }   /* 时间线也按「记一笔」切开 */
   beep(0);
 }
 function paintMarks(){
@@ -2273,10 +2324,14 @@ function logPull(day, done){
 /* 正在计时的那一段，按「进行中」的快照推上去（心跳 / 时间到 / 返回时用） */
 function logLiveSnap(){
   if(!LOG.cur) return null;
-  var d = Math.round((Date.now() - LOG.cur.s) / 1000);
+  var d = logCurSec();
   if(d < 3) return null;
   var seg = { m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: d, dv: DEVICE };
   if(LOG.cur.n) seg.n = LOG.cur.n;
+  if(LOG.cur.t) seg.t = LOG.cur.t;
+  if(LOG.cur.sj) seg.sj = LOG.cur.sj;
+  if(LOG.cur.it) seg.it = LOG.cur.it;
+  if(LOG.cur.k) seg.k = LOG.cur.k;
   return { day: dkey(LOG.cur.s), seg: seg };
 }
 function logHeartbeat(){
@@ -2364,29 +2419,77 @@ function logModeOf(){
   if(T.up) return 'pomo:focus';
   return (T.phase === 'rest') ? 'pomo:rest' : 'pomo:focus';
 }
+/* v4.16.0（站主）：「设置好 20 分钟但还没开始的那种，不算到时间里去，
+   只算已经开始计时的时间」。所以一段的时长不再拿「结束时刻 − 开始时刻」，
+   而是**真正跑着的那部分**累计：
+     · LOG.cur.acc = 之前跑过的秒数；
+     · LOG.cur.at  = 这一小截开始跑的时刻（暂停时清零）。
+   没按开始就没有段；暂停、切后台、退出去都会把已跑的秒数留住。
+   段上顺带记一个 t（目标秒数），记录里就能写「设定 20 分钟 · 实际坚持 10 分钟」。 */
 function logStart(mode){
   logEnsure();
   var nm = segNameOf();
   /* 名称变了也要切一段：换了科目 / 改了名字，算另一件事 */
   if(LOG.cur && LOG.cur.m === mode && (LOG.cur.n || '') === nm) return;
   logStop();
-  LOG.cur = { m: mode, s: Date.now(), n: nm };
+  var cur = { m: mode, s: Date.now(), n: nm, acc: 0, at: Date.now() };
+  try{
+    if(CFG.mode === 'timer' && T.run && !T.up){
+      var tg = (T.kind === 'down') ? Math.round(downMs() / 1000) : (T.kind === 'pomo' ? Math.round((focusMs() || 1500000) / 1000) : 0);
+      if(tg > 0) cur.t = tg;
+    }
+  }catch(e){}
+  /* v4.16.0：科目与小项分开存，记录里才能「英语 → 默写 → 每一次」这样收起来。
+     以前只有一个 n（「英语·默写」拼在一起），回头再拆容易歧义；
+     选了「其他」按没填科目算，跟导出里的空栏对齐。 */
+  try{
+    var _sj = String(CFG.subj || '').trim();
+    cur.sj = (_sj === '其他') ? '' : _sj;
+    cur.it = (CFG.mode === 'timer') ? String(CFG.doing || '').trim() : '';
+    cur.k = (CFG.mode === 'timer') ? (T.kind || 'up') : CFG.mode;
+  }catch(e){}
+  LOG.cur = cur;
+}
+/* 只有「真的在跑」才记账：还没按开始、或者已经暂停，都不该凭空多出一段 */
+function syncLogRun(){
+  var running = true;
+  try{
+    /* 时钟页（数字 / 翻页）打开就算在用，不拆「开始」这个动作；
+       计时页只认真正跑起来的那段 —— 设好时长没按开始、暂停中都不记。 */
+    running = (CFG.mode === 'timer') ? !!T.run : true;
+  }catch(e){ running = true; }
+  if(running && !LOG.cur) logStart(logModeOf());
+  else if(!running && LOG.cur) logStop();
+  else if(running && LOG.cur) logStart(logModeOf());   /* 名字 / 科目变了要切段 */
+}
+function logCurSec(){
+  if(!LOG.cur) return 0;
+  return Math.round(Number(LOG.cur.acc || 0) + (LOG.cur.at ? (Date.now() - LOG.cur.at) / 1000 : 0));
 }
 function logStop(){
   if(!LOG.cur) return;
   var c = LOG.cur;
   LOG.cur = null;
   var now = Date.now();
-  var d = Math.round((now - c.s) / 1000);
+  var d = logCurSecOf(c, now);
   if(d < 3) return;                       /* 随手点击不算 */
   var day = dkey(c.s);                    /* 归到「开始那一刻」所在的日期 */
   var data = (day === LOG.day) ? LOG.data : logLoad(day);
   var seg = { m: c.m, s: c.s, e: now, d: d, dv: DEVICE };
   if(c.n) seg.n = c.n;
+  if(c.t) seg.t = c.t;
+  if(c.sj) seg.sj = c.sj;
+  if(c.it) seg.it = c.it;
+  if(c.k) seg.k = c.k;
   data.segs.push(seg);
   if(data.segs.length > 600) data.segs = data.segs.slice(-600);
   if(day === LOG.day) LOG.data = data;
   logWrite(day, data);
+}
+/* 传进来的那一段到 now 为止真正跑了多久 */
+function logCurSecOf(c, now){
+  if(!c) return 0;
+  return Math.round(Number(c.acc || 0) + (c.at ? (((now || Date.now()) - c.at) / 1000) : 0));
 }
 function logPomo(n){
   n = Number(n) || 0;
@@ -2403,7 +2506,7 @@ function logPomo(n){
    对应每个分区时长、每个科目的总时长；用户自定义的归到「其他」；显示哪天用得最久；
    生成前可以实时预览并修改，底部留几行让用户写想法；样式至少包含班徽、标题、
    导出日期、导出时间段」 */
-var SUM = { range: 'week', from: '', to: '', segs: [], stats: null, title: '', note: '' };
+var SUM = { range: 'week', from: '', to: '', segs: [], stats: null, title: '', note: '', items: false };
 
 function sumTermStart(){
   var d = new Date(), m = d.getMonth() + 1, y = d.getFullYear();
@@ -2459,7 +2562,7 @@ function logRange(from, to){
 var SUBJ_LIST = ['语文', '数学', '英语', '物理', '化学', '生物'];
 function sumStats(segs, pomo){
   var focus = 0, rest = 0, other = 0, total = 0;
-  var byName = {}, bySubj = {}, byDay = {};
+  var byName = {}, bySubj = {}, bySubjItems = {}, byDay = {};
   segs.forEach(function(x){
     var d = Number(x.d) || 0;
     total += d;
@@ -2469,10 +2572,19 @@ function sumStats(segs, pomo){
     var t = segName(x.m);
     var key = x.n ? (x.n + '·' + t) : t;
     byName[key] = (byName[key] || 0) + d;
-    if(x.m === 'pomo:focus'){
-      var s0 = (x.n || '').split('·')[0];
-      var sb = (SUBJ_LIST.indexOf(s0) >= 0) ? s0 : '其他';
+    /* v4.16.0：科目统计不再只认番茄钟 —— 倒计时、正计时、番茄钟都按科目归。
+       六科之外的（含没选科目、选了「其他」）统一进「其他」那一栏。
+       小项单独收一份，导出时勾上「导出小项」才会展开。 */
+    var kd = segKindOf(x);
+    if(kd === 'down' || kd === 'up' || kd === 'pomo'){
+      var sj = segSubjOf(x);
+      var sb = (SUBJ_LIST.indexOf(sj) >= 0) ? sj : '其他';
       bySubj[sb] = (bySubj[sb] || 0) + d;
+      var inm = segItemOf(x);
+      if(inm){
+        if(!bySubjItems[sb]) bySubjItems[sb] = {};
+        bySubjItems[sb][inm] = (bySubjItems[sb][inm] || 0) + d;
+      }
     }
     var day = dkey(x.s);
     byDay[day] = (byDay[day] || 0) + d;
@@ -2483,9 +2595,22 @@ function sumStats(segs, pomo){
   });
   return {
     total: total, focus: focus, rest: rest, other: other, pomo: pomo || 0,
-    byName: byName, bySubj: bySubj, byDay: byDay, bestDay: bestDay,
+    byName: byName, bySubj: bySubj, bySubjItems: bySubjItems, byDay: byDay, bestDay: bestDay,
     n: segs.length
   };
+}
+/* 导出用的科目行：七栏固定（语数英物化生 + 其他），勾了小项就在科目下面缩进一行行铺开 */
+function sumSubjRows(st){
+  var out = [];
+  SUBJ_LIST.concat(['其他']).forEach(function(k){
+    out.push({ name:k, sec:Number(st.bySubj[k]) || 0, ind:0 });
+    if(!SUM.items) return;
+    var box = st.bySubjItems[k] || {};
+    Object.keys(box).sort(function(a, b){ return box[b] - box[a]; }).forEach(function(it){
+      out.push({ name:it, sec:Number(box[it]) || 0, ind:1 });
+    });
+  });
+  return out;
 }
 function sumDayText(k){
   var p = String(k).split('-');
@@ -2536,8 +2661,10 @@ function sumRender(){
     +   '<div class="sp-num"><i>自习</i><b>' + durText(st.focus) + '</b></div>'
     +   '<div class="sp-num"><i>番茄</i><b>' + st.pomo + ' 个</b></div>'
     + '</div>'
-    + '<h5>按事项</h5>' + rows(st.byName)
-    + (Object.keys(st.bySubj).length ? '<h5>按科目</h5>' + rows(st.bySubj) : '')
+    + '<h5>按科目</h5>' + sumSubjRows(st).map(function(r){
+        return '<div class="sp-row' + (r.ind ? ' sp-sub' : '') + '"><span>' + esc(r.name) + '</span><span>'
+          + (r.sec ? durText(r.sec) : '—') + '</span></div>';
+      }).join('')
     + '<h5>用得最久的一天</h5>'
     + '<div class="sp-row"><span>' + (st.bestDay ? sumDayText(st.bestDay.day) : '—') + '</span><span>'
     +   (st.bestDay ? durText(st.bestDay.sec) : '—') + '</span></div>'
@@ -2563,16 +2690,10 @@ function sumText(){
   L.push('总时长：' + durText(st.total));
   L.push('自习：' + durText(st.focus) + '　休息：' + durText(st.rest) + '　番茄：' + st.pomo + ' 个');
   L.push('');
-  L.push('【按事项】');
-  Object.keys(st.byName).sort(function(a, b){ return st.byName[b] - st.byName[a]; })
-    .forEach(function(k){ L.push('  ' + k + '：' + durText(st.byName[k])); });
-  if(Object.keys(st.bySubj).length){
-    L.push('');
-    L.push('【按科目】');
-    SUBJ_LIST.concat(['其他']).forEach(function(k){
-      if(st.bySubj[k]) L.push('  ' + k + '：' + durText(st.bySubj[k]));
-    });
-  }
+  L.push('【按科目】');
+  sumSubjRows(st).forEach(function(r){
+    L.push((r.ind ? '    ' : '  ') + r.name + '：' + (r.sec ? durText(r.sec) : '—'));
+  });
   L.push('');
   L.push('用得最久的一天：' + (st.bestDay ? sumDayText(st.bestDay.day) + '（' + durText(st.bestDay.sec) + '）' : '—'));
   if(SUM.note){
@@ -2594,13 +2715,15 @@ function sumPng(){
   var body = [];
   var push = function(h){ body.push(h); };
 
-  var nameKeys = Object.keys(st.byName).sort(function(a, b){ return st.byName[b] - st.byName[a]; }).slice(0, 12);
-  var subjKeys = SUBJ_LIST.concat(['其他']).filter(function(k){ return st.bySubj[k]; });
+  /* v4.16.0：导出只留「按科目」（七栏固定，勾了小项再铺开）+「用得最久的一天」，
+     不再按事项重复铺一遍；哪一次、几点到几点这种明细只留在记录抽屉里看。 */
+  var sRows = sumSubjRows(st);
   var noteLines = SUM.note ? wrapText(SUM.note, 30) : [];
 
-  var H = P + 56 + 24 + 12 + 72 + 26 + nameKeys.length * 24 + 26
-    + (subjKeys.length ? 26 + subjKeys.length * 24 : 0)
-    + 26 + 26 + (SUM.note ? (26 + noteLines.length * 22) : 0) + 44 + P;
+  var H = P + 56 + 24 + 12 + 72 + 26
+    + (26 + sRows.length * 24 + 2)
+    + (26 + 24 + 2)
+    + (SUM.note ? (26 + noteLines.length * 22) : 0) + 44 + P + 8;
 
   var cv = document.createElement('canvas');
   var scale = 2;
@@ -2658,26 +2781,34 @@ function sumPng(){
     y += 62 + 26;
 
     /* 列表 */
-    var section = function(title, pairs){
+    var section = function(title, rows){
       ctx.fillStyle = '#9a8a7a';
       ctx.font = '800 11.5px "PingFang SC","Microsoft YaHei",sans-serif';
       ctx.fillText(title, P, y);
-      y += 24;
-      ctx.font = '400 13px "PingFang SC","Microsoft YaHei",sans-serif';
-      pairs.forEach(function(p){
-        ctx.fillStyle = '#2a2118';
-        ctx.fillText(p[0], P + 2, y);
+      y += 26;
+      rows.forEach(function(r){
+        var ind = r.ind ? 14 : 0;
+        if(ind){
+          ctx.fillStyle = '#6b5443';
+          ctx.font = '400 12px "PingFang SC","Microsoft YaHei",sans-serif';
+        }else{
+          ctx.fillStyle = '#2a2118';
+          ctx.font = '600 13px "PingFang SC","Microsoft YaHei",sans-serif';
+        }
+        ctx.fillText(r.name, P + 2 + ind, y);
         ctx.fillStyle = '#6b5443';
-        var w = ctx.measureText(p[1]).width;
-        ctx.fillText(p[1], W - P - 2 - w, y);
+        ctx.font = '400 13px "PingFang SC","Microsoft YaHei",sans-serif';
+        var w2 = ctx.measureText(r.dur).width;
+        ctx.fillText(r.dur, W - P - 2 - w2, y);
         y += 24;
       });
       y += 2;
     };
-    section('按事项', nameKeys.map(function(k){ return [k, durText(st.byName[k])]; }));
-    if(subjKeys.length) section('按科目', subjKeys.map(function(k){ return [k, durText(st.bySubj[k])]; }));
-    section('用得最久的一天', [[st.bestDay ? sumDayText(st.bestDay.day) : '—',
-      st.bestDay ? durText(st.bestDay.sec) : '—']]);
+    section('按科目', sRows.map(function(r){
+      return { name:r.name, dur:(r.sec ? durText(r.sec) : '—'), ind:r.ind };
+    }));
+    section('用得最久的一天', [{ name:(st.bestDay ? sumDayText(st.bestDay.day) : '—'),
+      dur:(st.bestDay ? durText(st.bestDay.sec) : '—'), ind:0 }]);
 
     if(noteLines.length){
       ctx.fillStyle = '#9a8a7a';
@@ -2774,6 +2905,15 @@ function sumBind(){
       };
     });
   }
+  if($('sumItems')){
+    try{ SUM.items = localStorage.getItem('cls_clock_sum_items') === '1'; }catch(e){}
+    $('sumItems').checked = !!SUM.items;
+    $('sumItems').onchange = function(){
+      SUM.items = !!this.checked;
+      try{ localStorage.setItem('cls_clock_sum_items', SUM.items ? '1' : '0'); }catch(e){}
+      sumRefresh();
+    };
+  }
   if($('sumFrom')) $('sumFrom').onchange = function(){ SUM.from = this.value; sumRefresh(); };
   if($('sumTo')) $('sumTo').onchange = function(){ SUM.to = this.value; sumRefresh(); };
   if($('sumPng')) $('sumPng').onclick = function(e){ if(e) e.stopPropagation(); sumPng(); };
@@ -2823,22 +2963,34 @@ function setSumFoot(t){
 function logMerged(day){
   var data = (day === LOG.day) ? LOG.data : logLoad(day);
   var segs = data.segs.slice();
-  /* 正在跑的那一段也先算进去，打开就能看到实时累计 */
+  /* 正在跑的那一段也先算进去，打开就能看到实时累计（v4.16.0：按真正跑的秒数） */
   if(day === LOG.day && LOG.cur){
-    segs.push({ m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: Math.round((Date.now() - LOG.cur.s) / 1000) });
+    var cs = { m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: logCurSec() };
+    if(LOG.cur.n) cs.n = LOG.cur.n;
+    if(LOG.cur.sj) cs.sj = LOG.cur.sj;
+    if(LOG.cur.it) cs.it = LOG.cur.it;
+    if(LOG.cur.k) cs.k = LOG.cur.k;
+    if(LOG.cur.t) cs.t = LOG.cur.t;
+    segs.push(cs);
   }
   var out = [];
   segs.filter(logSegOk).sort(function(a, b){ return a.s - b.s; }).forEach(function(x){
     var last = out[out.length - 1];
-    /* v3.13：名字不同就是两件事，不能并成一行（顺手把名字和设备带过来） */
-    if(last && last.m === x.m && (last.n || '') === (x.n || '') && x.s - last.e < 120000){
+    /* 名字不同就是两件事，不能并成一行；v4.16.0 起类型不同（倒计时 / 正计时）也不并。
+       合并时长改用**累加**：中间暂停过的那几分钟不该算进来。 */
+    if(last && last.m === x.m && (last.n || '') === (x.n || '')
+       && (last.k || '') === (x.k || '') && x.s >= last.e - 2000 && x.s - last.e < 120000){
       last.e = x.e;
-      last.d = Math.round((last.e - last.s) / 1000);
+      last.d = Math.round(Number(last.d || 0) + Number(x.d || 0));
       if(!last.dv && x.dv) last.dv = x.dv;
     }else{
       var it = { m: x.m, s: x.s, e: x.e, d: x.d };
       if(x.n) it.n = x.n;
       if(x.dv) it.dv = x.dv;
+      if(x.sj) it.sj = x.sj;
+      if(x.it) it.it = x.it;
+      if(x.k) it.k = x.k;
+      if(x.t) it.t = x.t;
       out.push(it);
     }
   });
@@ -2874,6 +3026,111 @@ function logDayLabel(day){
   var p = day.split('-');
   return Number(p[1]) + ' 月 ' + Number(p[2]) + ' 日';
 }
+/* ---------------- 记录聚合（v4.16.0） ----------------
+   站主原话：
+     「一个月可能有几十次甚至 100 多次，你把每一次都列出来太详细了，会特别长」
+     「倒计时分一类、正计时分一类、番茄钟分一类」
+     「倒计时按科目整理，英语科后面写共计多久；填了默写的，英语下面就有一个默写，
+       默写这里共计多少分钟；再点一下可以看是哪一次的默写」
+     「小项里的时长不一定等于大项的总时长，有时候我没写小项」
+   所以抽屉里不再一段一行，改成三层：
+     类型 → 科目 → 小项 → （点开）每一次
+   时长按实际跑的秒数加总，没填小项的只体现在科目那一行。 */
+var LOG_KIND = {
+  down:  { label:'倒计时', o:1 },
+  up:    { label:'正计时', o:2 },
+  pomo:  { label:'番茄钟', o:3 },
+  clock: { label:'时钟',   o:4 },
+  timer: { label:'计时',   o:2.5 }
+};
+function segKindOf(x){
+  var k = (x && x.k) ? String(x.k) : '';
+  if(k === 'flip') return 'clock';
+  if(k === 'pomoRest') return 'pomo';
+  if(k) return k;
+  if(!x) return 'timer';
+  if(x.m === 'clock' || x.m === 'flip') return 'clock';
+  if(x.m === 'pomo:focus' || x.m === 'pomo:rest' || x.m === 'pomo:long') return 'pomo';
+  return 'timer';
+}
+/* 老记录只有拼好的 n（「英语·默写」），这里退回按中点拆一次 */
+function segSubjOf(x){
+  if(x && x.sj !== undefined) return String(x.sj || '');
+  var n = String((x && x.n) || '');
+  var i = n.indexOf('·');
+  return i > 0 ? n.slice(0, i) : n;
+}
+function segItemOf(x){
+  if(x && x.it !== undefined) return String(x.it || '');
+  var n = String((x && x.n) || '');
+  var i = n.indexOf('·');
+  return i >= 0 ? n.slice(i + 1) : '';
+}
+function segDateShort(ts){
+  var d = new Date(ts);
+  return (d.getMonth() + 1) + '/' + d.getDate();
+}
+function logAggHtml(segs){
+  var groups = {}, order = [];
+  segs.forEach(function(x){
+    var k = segKindOf(x);
+    var g = groups[k];
+    if(!g){ g = groups[k] = { k:k, label:(LOG_KIND[k] || LOG_KIND.timer).label, total:0, subs:{} }; order.push(k); }
+    g.total += Number(x.d) || 0;
+    var sj = segSubjOf(x), it = segItemOf(x);
+    var sub = g.subs[sj];
+    if(!sub){ sub = g.subs[sj] = { name:sj, total:0, items:{} }; }
+    sub.total += Number(x.d) || 0;
+    if(it){
+      var box = sub.items[it];
+      if(!box){ box = sub.items[it] = { name:it, total:0, list:[] }; }
+      box.total += Number(x.d) || 0;
+      box.list.push(x);
+    }
+  });
+  order.sort(function(a, b){
+    return ((LOG_KIND[a] || LOG_KIND.timer).o) - ((LOG_KIND[b] || LOG_KIND.timer).o);
+  });
+  var html = '';
+  order.forEach(function(k){
+    var g = groups[k];
+    var subKeys = Object.keys(g.subs).sort(function(a, b){ return g.subs[b].total - g.subs[a].total; });
+    var body = '';
+    subKeys.forEach(function(sk){
+      var sub = g.subs[sk];
+      var nm = sk || '未填科目';
+      body += '<div class="lga-s"><div class="lga-sh"><span>' + esc(nm) + '</span>'
+        + '<b>' + durText(sub.total) + '</b></div>';
+      var itKeys = Object.keys(sub.items).sort(function(a, b){ return sub.items[b].total - sub.items[a].total; });
+      itKeys.forEach(function(ik){
+        var box = sub.items[ik];
+        var rows = box.list.slice().sort(function(a, b){ return b.s - a.s; }).slice(0, 60).map(function(x){
+          return '<div class="lga-r"><span>' + segDateShort(x.s) + ' ' + hm(x.s) + '–' + hm(x.e) + '</span>'
+            + '<b>' + durText(x.d) + '</b></div>';
+        }).join('');
+        body += '<div class="lga-iw"><button type="button" class="lga-i" onclick="logAggToggle(this)">'
+          + '<span>' + esc(ik) + '</span><b>' + durText(box.total) + '</b>'
+          + '<em class="lga-ar">›</em></button>'
+          + '<div class="lga-ib">' + rows + '</div></div>';
+      });
+      body += '</div>';
+    });
+    html += '<div class="lga-g on"><button type="button" class="lga-h" onclick="logAggToggle(this)">'
+      + '<span class="lga-k">' + esc(g.label) + '</span>'
+      + '<b class="lga-t">' + durText(g.total) + '</b>'
+      + '<em class="lga-ar">›</em></button>'
+      + '<div class="lga-b">' + body + '</div></div>';
+  });
+  return '<div class="lga">' + html + '</div>';
+}
+function logAggToggle(el){
+  var box = el && el.parentNode;
+  if(!box || !box.classList) return;
+  box.classList.toggle('on');
+}
+/* 抽屉里那些行是拼字符串生成的（内联 onclick），得挂到 window 上才点得动 */
+try{ window.logAggToggle = logAggToggle; }catch(e){}
+
 function logRender(){
   var day = LOG.view || dkey();
   var m = logMerged(day);
@@ -2894,20 +3151,9 @@ function logRender(){
     + '<div class="lg-card"><i>' + w + '休息</i><b>' + (rest ? durText(rest) : '—') + '</b></div>'
     + '<div class="lg-card"><i>' + w + '番茄</i><b>' + m.pomo + '<em>个</em></b></div>'
     + '</div>';
-  /* v3.10.0：按「名称 · 类型」归类 —— 自己起的名字排前面 */
-  var byName = {};
-  m.segs.forEach(function(x){
-    var t = segName(x.m);
-    var k = x.n ? (x.n + '·' + t) : t;
-    byName[k] = (byName[k] || 0) + x.d;
-  });
-  var keys = Object.keys(byName).sort(function(a, b){ return byName[b] - byName[a]; });
+  /* v4.16.0：这一行原来按「名称·类型」再铺一遍，跟下面的三级聚合重复了，
+     现在只留设备统计 —— 换了设备能看出哪台记的。 */
   var modes = '';
-  if(keys.length){
-    modes = '<div class="lg-modes">' + keys.map(function(k){
-      return esc(k) + ' ' + durText(byName[k]);
-    }).join(' · ') + '</div>';
-  }
   /* v3.13：这一天在各台设备上各用了多久 */
   var byDev = {};
   m.segs.forEach(function(x){ var d = x.dv || '未记录设备'; byDev[d] = (byDev[d] || 0) + x.d; });
@@ -2921,18 +3167,9 @@ function logRender(){
 
   if(!m.segs.length){
     $('logList').innerHTML = '<div class="lg-empty">当日暂无记录。<br>'
-      + '页面开着并且切过模式（数字 / 翻页 / 秒表 / 倒计时 / 自习）就会自动记一段，'
-      + '不用手动开始。</div>';
+      + '开始计时（正计时 / 倒计时 / 番茄钟）后才会记时长，设好时长没按开始不算。</div>';
   }else{
-    var rows = m.segs.slice(-60).reverse().map(function(x){
-      var t = x.m === 'pomo:focus' || x.m === 'pomo:rest' || x.m === 'pomo:long' ? segTag(x.m) : '';
-      return '<div class="lg-row"><span class="lg-t">' + hm(x.s) + ' – ' + hm(x.e) + '</span>'
-        + '<span class="lg-m"><span class="tag ' + t + '">' + segName(x.m) + '</span>'
-        + (x.n ? '<span class="lg-n">' + esc(x.n) + '</span>' : '')
-        + '<span class="lg-dev">' + esc(x.dv || '未记录设备') + '</span></span>'
-        + '<span class="lg-d">' + durText(x.d) + '</span></div>';
-    }).join('');
-    $('logList').innerHTML = rows;
+    $('logList').innerHTML = logAggHtml(m.segs);
   }
   logFootPaint();
 }
@@ -3450,12 +3687,13 @@ function keepAwake(){
 }
 document.addEventListener('visibilitychange', function(){
   if(!document.hidden) keepAwake();
-  /* 切到后台就不算在用，回来再接着记 —— 不然整晚挂着会记成一夜 */
+  /* v4.16.0（站主）：「中途十分钟的时候我退出应用了，这个要算十分钟」。
+     切到后台不再把这一段掐断 —— 计时在跑就继续按秒记账，回来时接着算；
+     本来就没在跑（暂停 / 没开始）的，本来也没有段可记。 */
   if(document.hidden){
-    logStop();
-    logSyncNow();                      /* v3.10.4：切后台先把这一段推上去，别等回来 */
+    logSyncNow();                      /* 先把当前进度推上去，别等回来 */
   }else{
-    logStart(logModeOf());
+    syncLogRun();
     /* 回来时顺手看一眼云端：另一台设备这段时间记的东西能马上并进来 */
     logPull(dkey(), function(){
       if($('logPanel') && $('logPanel').className === 'show') logRender();
@@ -3612,7 +3850,7 @@ function bindSettings(){
       CFG.names[k] = inp.value.slice(0, 12);
       saveCfg();
       applyName();
-      logStart(logModeOf());     /* 名字变了，从现在起算新的一段 */
+      if(LOG.cur) logStart(logModeOf());   /* 名字变了，从现在起算新的一段 */
     };
   });
   var sr = $('subjRow');
@@ -3623,7 +3861,7 @@ function bindSettings(){
         var v = b.getAttribute('data-subj');
         CFG.subj = (CFG.subj === v) ? '' : v;   /* 再点一次取消 */
         saveCfg(); applyName();
-        logStart(logModeOf());
+        if(LOG.cur) logStart(logModeOf());
       };
     });
   }
@@ -3633,7 +3871,7 @@ function bindSettings(){
     di.oninput = function(){
       CFG.doing = di.value.slice(0, 12);
       saveCfg(); applyName();
-      logStart(logModeOf());       /* 换了做的事，从现在起算新的一段 */
+      if(LOG.cur) logStart(logModeOf());   /* 换了做的事，从现在起算新的一段 */
     };
   }
   var nr = $('noiseRow');
@@ -3767,7 +4005,7 @@ paintTmOpts();
 logEnsure();
 logPomo(pomoDoneToday());   /* 把今天的番茄数补进记录，后台能直接看到 */
 applyName();
-logStart(logModeOf());
+/* v4.16.0：进页面不自作主张开一段 —— 没按开始就没有计时 */
 keepAwake();
 clockTick();
 setInterval(clockTick, 250);

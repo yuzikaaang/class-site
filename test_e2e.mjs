@@ -2987,7 +2987,9 @@ console.log('\n【31】第二十七轮·游戏排行榜（⑪）');
   /* ---- 已登录：空榜也能正常返回结构 ---- */
   const empty = await call('/api/games?action=leaderboard', { token: adminToken });
   t('登录后排行榜返回 200', empty.status === 200 && empty.body.ok, JSON.stringify(empty.body).slice(0, 160));
-  t('返回包含四个游戏', empty.body.games && Object.keys(empty.body.games).length === 4,
+  /* v4.14.1 加了「下落砖块」「迷宫吃豆」，现在一共 6 个 */
+  t('返回包含全部 6 个游戏', !!empty.body.games
+    && ['snake', 'bird', 'tetris', 'doodle', 'breakout', 'pacman'].every(k => !!empty.body.games[k]),
     JSON.stringify(Object.keys(empty.body.games || {})));
   t('每个游戏有 meta.unit', !!(empty.body.games.snake && empty.body.games.snake.meta && empty.body.games.snake.meta.unit));
   t('默认 range 为 all', empty.body.range === 'all', String(empty.body.range));
@@ -5211,7 +5213,7 @@ console.log('\n【46】第三十四轮·公告时间纪律 + 每日一言随机 
   t('★每道题都有解析', quizObjs.every(m => m[4] && m[4].length > 8));
 
   /* ===== ④ 学习卡片 —— 前端逻辑 ===== */
-  t('★首页有学习卡片容器 #studyCard', /<section class="study" id="studyCard">/.test(idx46));
+  t('★首页有学习卡片容器 #studyCard', /<section class="study" id="studyCard"/.test(idx46));
   t('★有 .study 样式体系（含暗色模式）',
     /\.study\{background:#fff/.test(idx46) && /\.dark \.study\{/.test(idx46));
   t('★有渲染入口 renderStudyCard', /function renderStudyCard\(\)/.test(idx46));
@@ -9837,7 +9839,7 @@ console.log('\n【85】第七十三轮·v3.3.0 需关注学生加单科线（比
     addEventListener() {}, removeEventListener() {}, appendChild() {}, removeChild() {},
     setAttribute(k, v) { this._attrs[k] = v; }, getAttribute(k) { return this._attrs[k] ?? null; },
     removeAttribute() {}, hasAttribute() { return false; }, closest() { return null; },
-    insertBefore() {}, replaceChild() {}, matches() { return false; }, cloneNode() { return mkEl(tag); },
+    insertBefore() {}, replaceChild() {}, matches() { return false; }, contains() { return false; }, cloneNode() { return mkEl(tag); },
     querySelector() { return null; }, querySelectorAll() { return []; },
     focus() {}, blur() {}, remove() {}, click() {}, dispatchEvent() {},
     getBoundingClientRect() { return { top: 0, left: 0, width: 0, height: 0 }; },
@@ -12034,8 +12036,8 @@ console.log('\n【新】v3.9.4 首屏同步渲染 / 横幅换行 / 统计异步'
     && /s\.async = true/.test(idx94));
 
   /* ---- 横幅换行 ---- */
-  t('★v3.9.4 前台横幅按换行展示（pre-line、不再截断行数）',
-    /\.island-banner \.txt\{[^}]*white-space:pre-line;/.test(idx94)
+  t('★v4.15.6 前台横幅按换行展示（pre-wrap，行首空格与空行都保留）',
+    /\.island-banner \.txt\{[^}]*white-space:pre-wrap;/.test(idx94)
     && !/-webkit-line-clamp/.test(idx94.slice(idx94.indexOf('.island-banner .txt{'), idx94.indexOf('.island-banner .txt{') + 220)));
   t('★v3.9.4+ 后台「按日期临时改」是多行输入区（v3.9.20 起是可编辑富文本）',
     /id="adRich" contenteditable="true"/.test(adm94)
@@ -12261,11 +12263,11 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
     && /cats: STATE\.quoteCats/.test(adm98));
 
   /* ---- 4) 按字排版 + 默认加粗 ---- */
-  t('★v3.9.8 前端解析 **加粗** / ~~横线~~ / 行首 #',
-    /function islFmt/.test(app98)
-    && /\(\[\^\*\]\+\)/.test(app98) && /<b>\$1<\/b>/.test(app98)
-    && /\(\[\^~\]\+\)/.test(app98) && /<s>\$1<\/s>/.test(app98)
-    && /\^#\\s\?/.test(app98));
+  t('★v4.15.6 前端解析 **加粗** / ~~横线~~ / 行首 #',
+    /function islFmtLine/.test(app98) && /function islFmt\(/.test(app98)
+    && app98.includes('[^*]+') && app98.includes("'<b>$1</b>'")
+    && app98.includes('[^~]+') && app98.includes("'<s>$1</s>'")
+    && app98.includes('/^# ?/'));
   t('★v3.9.17 字重分层：默认 700 / 整块加粗 800 / 行内加粗 900 / 取消 500',
     /\.island-banner \.txt\{[^}]*font-weight:700/.test(idx98)
     && /\.island-banner \.txt\.bold\{font-weight:800\}/.test(idx98)
@@ -12448,9 +12450,13 @@ console.log('\n【新】v3.9.17 明日事项 / 编辑器开关 / 字号');
     && /lg-card wide/.test(clk));
   t('★v3.11.1 卡片标题跟着看的那天走（今日 / 昨日 / 具体日期）',
     /function dayWord\(day\)/.test(clk) && /昨日/.test(clk) && /<i>' \+ w \+ '自习<\/i>/.test(clk));
-  t('★v3.9.25 切到后台停止计时', /if\(document\.hidden\)\{?\s*logStop\(\);/.test(clk)
+  /* v4.16.0：切到后台不再把这一段掐断（站主要「中途退出也算」），
+     只把当前进度推上去；真正离开页面（pagehide）才落库。 */
+  t('★v4.16.0 切到后台继续计时（不再掐断，只推一次）',
+    /if\(document\.hidden\)\{\s*logSyncNow\(\);/.test(clk)
+    && !/if\(document\.hidden\)\{\s*logStop\(\);/.test(clk)
     && /pagehide/.test(clk));
-  t('★v3.10.4 切后台顺手推一次（logSyncNow）', /logStop\(\);\s*logSyncNow\(\);/.test(clk));
+  t('★v3.10.4 切后台顺手推一次（logSyncNow）', /if\(document\.hidden\)\{\s*logSyncNow\(\);/.test(clk));
   t('★v3.9.25 登录后推到 /api/data', /flushLog/.test(clk) && /CLK_API \+ '\/api\/data'/.test(clk));
 
   /* 后端 */
@@ -13142,7 +13148,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
   t('★v4.9.1 打印时成绩分析块绝对定位到纸面顶端（消除整页空白）',
     /\.sc-embed\{background:#fff !important;[\s\S]{0,200}?position:absolute !important/.test(idx9));
   t('★v4.9.1 画像下拉按学号排序',
-    /studentId == null \? '' : a\.studentId/.test(app9) && /var order = SC\.rows\.slice\(\)\.sort/.test(app9));
+    /studentId == null \? '' : a\.studentId/.test(app9) && /var list = SC\.rows\.slice\(\)\.sort/.test(app9));
 
   /* ⑩ 导出预览 */
   t('★v4.9.1 导出预览打开时自动关掉作业窗口',
@@ -13580,9 +13586,9 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(idxV)
     && /\.bhw-side\{[\s\S]{0,160}?width:var\(--bhw-side-w,320px\)/.test(idxV)
     && !/minmax\(0,2fr\)/.test(idxV.slice(idxV.indexOf('.bhw-grid{'), idxV.indexOf('.bhw-grid{') + 400)));
-  t('★v4.10.17 考试卡宽度锁为左栏 2/3（= 改前 1/3 内容区），窄屏单列恢复撑满',
-    /\.bhex\{[\s\S]{0,400}?width:66\.6667%;box-sizing:border-box/.test(idxV)
-    && /\.bhex\{width:100%\}/.test(idxV));
+  t('★v4.15.8 考试卡横跨作业两列占满整行',
+    /\.bhw-grid>#bhwExam\{grid-column:1 \/ span 2/.test(idxV)
+    && /\.bhw-grid>#bhwExam\{grid-column:1;grid-row:auto\}/.test(idxV));
   t('★v4.10.17 日期条可折叠：收起按钮 + 工具条常驻开关 + 本机记忆',
     /class="ds-fold" onclick="BIG\.dsToggle\(\)"/.test(bigV)
     && /id="bhwDsBtn"/.test(idxV)
@@ -13815,10 +13821,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.10.13 时钟与计时互斥：点数字 / 翻页才显示大时钟',
       /id="topRow"/.test(clock5) && /class="clk-col"/.test(clock5) && /class="tm-col"/.test(clock5)
       && /className = 'view' \+ \(k === m \? ' on' : ''\)/.test(clock5));
-    t('★v4.10.16 计时页面的小当前时间挨着「返回」，只在计时类模式出现',
+    /* v4.16.0：从「返回」右边挪到正下方，字号翻倍，去掉底色与描边 */
+    t('★v4.16.0 小当前时间在「返回」下方、无外框、字号翻倍',
       /id="tmNow"/.test(clock5) && /body\.tm-on #tmNow\{display:flex\}/.test(clock5)
       && /body\.bare #tmNow\{display:none\}/.test(clock5)
-      && /left:95px/.test(clock5) && /min-width:92px/.test(clock5)
+      && /top:calc\(62px \+ env\(safe-area-inset-top\)\)/.test(clock5)
+      && /font-size:30px/.test(clock5) && /background:none/.test(clock5)
       && /tn\.textContent = two\(hh\)/.test(clock5));
     t('★v4.10.5 默认打开是时钟界面（不再默认计时）',
       /applyMode\(modeFromUrl\(\) \|\| \(\(CFG\.mode === 'flip'\) \? 'flip' : 'clock'\)\)/.test(clock5));
@@ -13919,8 +13927,8 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       /query\.fresh\) \|\| ''\) === '1'/.test(exV) && /If-None-Match/.test(exV)
       && /r\.status === 304/.test(exV) && /15000/.test(exV));
 
-    t('★v4.10.6 大屏考试块钉在左栏最上面，且不参与科目卡装箱',
-      /colA\.insertBefore\(b2\.firstElementChild, colA\.firstElementChild\)/.test(bigV)
+    t('★v4.15.8 大屏考试块挂在作业区网格上（不再塞进左栏）',
+      /grid\.insertBefore\(el, anchor\.nextSibling\)/.test(bigV)
       && /'<div class="bhex" id="bhwExam">/.test(bigV)
       && !/bhex bhw-subj/.test(bigV));
 
@@ -13942,10 +13950,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       /bhex-date/.test(bigV) && /bhex-mname/.test(bigV)
       && /calc\(\.92rem\*var\(--bhw-fs\)\)/.test(idxV.replace(/\n/g, ''))
       && /class="bhex-time"/.test(bigV));
-    t('★v4.10.10 只显示今天与昨天，前天起自动隐藏',
-      /examShift\(today, -1\)/.test(bigV) && /d\.date < floor/.test(bigV));
-    t('★v4.10.10 作业看板最多 6 科，超出提示还剩多少',
-      /EXAM_LIMIT = 6/.test(bigV) && /used \+ items\.length > EXAM_LIMIT/.test(bigV)
+    t('★v4.15.7 考试窗口跟随当前作业期次',
+      /function examWindow\(\)/.test(bigV) && /var w = examWindow\(\)/.test(bigV)
+      && /d\.date < w\[0\] \|\| d\.date > w\[1\]/.test(bigV));
+    t('★v4.15.8 看板考试场次上限 6（宽屏 8），超出提示还剩多少',
+      /var EXAM_LIMIT = 6/.test(bigV) && /function examLimit\(\)/.test(bigV)
+      && /innerWidth >= 1400 \? 8 : EXAM_LIMIT/.test(bigV)
       && /bhex-more/.test(bigV));
     t('★v4.10.10 弹窗六个时段档位 + 跟随档位的批量按钮',
       /id: 'week'/.test(bigV) && /id: 'next'/.test(bigV) && /id: 'month'/.test(bigV)

@@ -3787,14 +3787,30 @@ function saveBhwPrefs(p){
   try{ localStorage.setItem(BHW_PREF_KEY, JSON.stringify(p)); }catch(e){}
   applyBhwPrefs(p);
 }
-function bigSetPref(k, v){
+/* v4.16.0（站主）：「我输入 40px 进去，但那个颜色是灰的，也不知道有没有修改成功」。
+   两个原因叠在一起：① 输入框只绑了 change，敲完数字不失焦、不回车就永远不生效；
+   ② 生效后也没有任何回执，面板又盖着大屏，看不见。现在改成边输边应用，
+   并在框旁边直接写「已应用 · 当前 XXpx」。 */
+function bigSetPref(k, v, el){
   var p = bhwPrefs();
-  v = parseInt(v, 10);
+  v = parseInt(String(v == null ? '' : v).replace(/[^0-9]/g, ''), 10);
   if(isNaN(v)) return;
   if(k === 'w') p.w = Math.max(220, Math.min(520, v));
   else if(k === 'topPad') p.topPad = Math.max(0, Math.min(320, v));
   else return;
   saveBhwPrefs(p);
+  try{
+    var ok = document.getElementById(k === 'w' ? 'uiSideWOk' : 'uiTopPadOk');
+    if(ok){
+      var real = (k === 'w') ? p.w : p.topPad;
+      ok.textContent = (real === v) ? ('已应用 · ' + real + 'px') : ('已按范围改为 ' + real + 'px');
+      ok.style.color = (real === v) ? '#15803d' : '#b45309';
+      if(el){
+        clearTimeout(el.__okT);
+        el.__okT = setTimeout(function(){ ok.textContent = ''; }, 2400);
+      }
+    }
+  }catch(e){}
 }
 function bigToggleCard(k){
   var p = bhwPrefs();
@@ -9452,8 +9468,9 @@ function renderSettings(){
       + '<input type="number" id="uiSideW" min="220" max="520" step="10" value="' + bp.w + '" '
       + 'style="width:92px;padding:7px 9px;border-radius:9px;border:1px solid #e4ddd6;'
       + 'background:var(--bg-1,#fff);color:inherit;font-family:inherit;font-size:.82rem" '
-      + 'onchange="bigSetPref(\'w\', this.value)">'
-      + '<span style="font-size:.78rem;color:var(--fg-3)">px</span></div>'
+      + 'oninput="bigSetPref(\'w\', this.value, this)" onchange="bigSetPref(\'w\', this.value, this)">'
+      + '<span style="font-size:.78rem;color:var(--fg-3)">px</span>'
+      + '<span class="ui-ok" id="uiSideWOk"></span></div>'
       + '<p class="ui-hint">右侧功能栏宽度，单位像素，范围 220–520。'
       + '数值增大时卡片更舒展，作业区相应变窄。</p>', true);
     html += secHtml('toppad','顶栏右侧留白','type',
@@ -9461,8 +9478,9 @@ function renderSettings(){
       + '<input type="number" id="uiTopPad" min="0" max="320" step="2" value="' + bp.topPad + '" '
       + 'style="width:92px;padding:7px 9px;border-radius:9px;border:1px solid #e4ddd6;'
       + 'background:var(--bg-1,#fff);color:inherit;font-family:inherit;font-size:.82rem" '
-      + 'onchange="bigSetPref(\'topPad\', this.value)">'
-      + '<span style="font-size:.78rem;color:var(--fg-3)">px</span></div>'
+      + 'oninput="bigSetPref(\'topPad\', this.value, this)" onchange="bigSetPref(\'topPad\', this.value, this)">'
+      + '<span style="font-size:.78rem;color:var(--fg-3)">px</span>'
+      + '<span class="ui-ok" id="uiTopPadOk"></span></div>'
       + '<p class="ui-hint">顶栏右侧预留的空白宽度，单位像素，范围 0–320。'
       + '用于避让固定在屏幕右上角的课表窗口，避免遮挡顶栏按钮与标题。数值 0 表示不预留。</p>', true);
     var cardBtns = BHW_CARD_DEFS.map(function(k){
@@ -24585,6 +24603,8 @@ initTheme();
 /* v4.11.0：大屏的两项几何参数（右栏宽度 / 顶栏右侧留白）首屏就落成 CSS 变量，
    免得打开大屏作业页时先按默认 300 排一遍再跳一下 */
 try{ applyBhwPrefs(); }catch(e){}
+/* v4.16.0：进大屏就把大屏自己记的明暗摆回去（详见 big.js 的 applyBhwTheme） */
+try{ if(window.BIG && BIG.applyBhwTheme) BIG.applyBhwTheme(); }catch(e){}
 try{
   /* 登录引导：首次打开且未登录才弹（maybeShowLoginGuide 内部已判断，弹过即跳过） */
   setTimeout(maybeShowLoginGuide, 1200);
@@ -24654,10 +24674,62 @@ function updIsDeepLink(){
   }catch(e){ return false; }
 }
 
+/* v4.16.0：大屏模式（?big=1，作业看板 / 分类看板）算不算「深链」？
+   原来它带着 #/hw 这样的 hash，被当成分享链接，一进大屏就永远不提示更新 ——
+   站主只能先点返回、回首页翻到底再看版本号。大屏也要提醒。 */
+function updIsBigMode(){
+  try{
+    if(location.search.indexOf('big=1') >= 0) return true;
+    var h = document.documentElement;
+    if(h && h.className && /\bbig-mode\b/.test(h.className)) return true;
+    if(document.body && document.body.classList && document.body.classList.contains('big-mode')) return true;
+  }catch(e){}
+  return false;
+}
 /* 这个版本要不要主动弹窗 */
 function updShouldPopup(ver){
   if(updMajor(ver) < 4) return true;      /* 太老了，必须提醒 */
+  if(updIsBigMode()) return true;         /* 大屏作业页也提醒，5 秒没人动就自己更 */
   return !updIsDeepLink();                /* 深链页不打扰，普通页面照弹 */
+}
+
+/* ---------- 大屏模式：更新弹窗 5 秒自动更 ----------
+   站主原话：「由于是大屏模式，不可能时刻在线，5 秒之内没有做出反应就默认自动更新」。
+   每一跳都先确认弹窗还挂着 —— 点了「稍后」、已经开始更新、弹窗被关掉，都立刻收手。 */
+var UPD_AUTO_T = null;
+function updAutoTick(){
+  var box = document.querySelector('#upMask .up-box');
+  var tip = document.getElementById('upAuto');
+  if(UPD_AUTO_T){ clearTimeout(UPD_AUTO_T); UPD_AUTO_T = null; }
+  if(!updIsBigMode()){
+    if(tip && tip.parentNode) tip.parentNode.removeChild(tip);
+    return;
+  }
+  if(!box) return;
+  if(!tip){
+    tip = document.createElement('div');
+    tip.className = 'up-auto';
+    tip.id = 'upAuto';
+    box.appendChild(tip);
+  }
+  var left = 5;
+  var tick = function(){
+    var mask = document.getElementById('upMask');
+    if(!mask || !mask.classList.contains('show') || UPD.busy){
+      UPD_AUTO_T = null;
+      return;
+    }
+    if(left <= 0){
+      UPD_AUTO_T = null;
+      tip.textContent = '正在更新…';
+      updGo();
+      return;
+    }
+    tip.textContent = left + ' 秒后自动更新 · 点「稍后」可取消';
+    left--;
+    UPD_AUTO_T = setTimeout(tick, 1000);
+  };
+  tick();
 }
 
 /* 更新后重新进入用的地址：**原封不动保留 query 和 hash**。
@@ -24716,8 +24788,13 @@ function updShow(j){
       : '<li>修复了一些已知问题，体验更顺。</li>';
   }
   mask.classList.add('show');
+  try{ updAutoTick(); }catch(e){}
 }
 function updClose(){
+  if(UPD_AUTO_T){ clearTimeout(UPD_AUTO_T); UPD_AUTO_T = null; }
+  /* 倒数提示块跟着弹窗一起收走：留着的话下次打开会先闪一下旧数字 */
+  var tip = document.getElementById('upAuto');
+  if(tip && tip.parentNode) tip.parentNode.removeChild(tip);
   var mask = document.getElementById('upMask');
   if(mask) mask.classList.remove('show');
   if(UPD.info && UPD.info.v){

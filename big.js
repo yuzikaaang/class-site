@@ -570,10 +570,36 @@
     b.title = dark ? '切换为明亮模式' : '切换为暗色模式';
   }
   BIG.syncThemeBtn = syncThemeBtn;
+  /* v4.16.0（站主）：「大屏里我切了暗色，退出之后再进来又变亮色了，
+     更新完之后也偶尔自己变亮」。全站那套自动切换（日出日落 / 跟随系统）会在
+     启动时重新判定，把大屏里手选的暗色覆盖掉。这里给大屏单独记一个键，
+     进大屏时以它为准 —— 大屏是挂着不动的投影，用户手动定的颜色应当一直保持。 */
+  function rememberBhwTheme(){
+    try{
+      localStorage.setItem('cls_bhw_theme',
+        document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    }catch(e){}
+  }
+  function applyBhwTheme(){
+    var v = '';
+    try{ v = localStorage.getItem('cls_bhw_theme') || ''; }catch(e){}
+    if(v !== 'dark' && v !== 'light') return;
+    var want = (v === 'dark');
+    var d = document.documentElement;
+    if(d.classList.contains('dark') === want){ try{ syncThemeBtn(); }catch(e){} return; }
+    d.classList.toggle('dark', want);
+    try{ localStorage.setItem('cls_theme', v); }catch(e){}
+    try{ if(typeof applyBg === 'function') applyBg(); }catch(e){}
+    /* 顺手把「这个相位已经定过色」写下来，自动切换当天就不会再来翻一遍 */
+    try{ if(typeof themeHoldSet === 'function') themeHoldSet(); }catch(e){}
+    try{ syncThemeBtn(); }catch(e){}
+  }
+  BIG.applyBhwTheme = applyBhwTheme;
+
   BIG.themeToggle = function (e){
     try{ if(typeof toggleTheme === 'function') toggleTheme(e || window.event); }catch(err){}
-    setTimeout(syncThemeBtn, 60);
-    setTimeout(syncThemeBtn, 420);   /* 扩散动画结束后再对一次，防止动画中途被覆盖 */
+    setTimeout(function(){ syncThemeBtn(); rememberBhwTheme(); }, 60);
+    setTimeout(function(){ syncThemeBtn(); rememberBhwTheme(); }, 420);   /* 扩散动画结束后再对一次，防止动画中途被覆盖 */
   };
   /* 自动切换（日出日落 / 跟随系统）也会改 html.dark，按钮要跟着变 */
   try{
@@ -1093,6 +1119,43 @@
       + '</div>';
   }
 
+  /* ---------- v4.16.0：大屏左下角的版本号 ----------
+     站主原话：「大屏模式打开之后默认跳到作业看板，有时候发现它不是最新版，
+     又要先点返回、到大屏首页往下翻、再点最新版，特别麻烦。左下角也放个版本号，
+     点一下能查是不是最新，包括更新弹窗也跟正常模式一样，5 秒没反应就自动更新。」 */
+  function verPaint(){
+    var el = $('bhwVer');
+    if(el && typeof SITE_VERSION !== 'undefined') el.textContent = 'v' + SITE_VERSION;
+  }
+  function verCheck(){
+    var el = $('bhwVer');
+    if(!el) return;
+    var base = (typeof SITE_VERSION !== 'undefined') ? ('v' + SITE_VERSION) : 'v—';
+    var done = function (txt){
+      el.textContent = txt;
+      setTimeout(function (){ if(el) el.textContent = base; }, 2600);
+    };
+    if(window.SW_HAS_UPDATE){
+      if(typeof window.updNotify === 'function') window.updNotify();
+      else done('发现新版本');
+      return;
+    }
+    el.textContent = '正在检查…';
+    if(typeof window.fetchOnlineSiteVersion !== 'function'){ done('查询失败'); el.textContent = base; return; }
+    Promise.resolve(window.fetchOnlineSiteVersion()).then(function (v){
+      if(!v){ done('查询失败'); return; }
+      if(typeof window.cmpVer === 'function' && window.cmpVer(v, SITE_VERSION) > 0){
+        try{ window.SW_HAS_UPDATE = true; window.SW_NEW_VER = v; }catch(e){}
+        el.textContent = '发现 v' + v;
+        if(typeof window.updNotify === 'function') window.updNotify();
+        else setTimeout(function (){ el.textContent = base; }, 3000);
+      }else{
+        done('已是最新');
+      }
+    }).catch(function (){ done('查询失败'); });
+  }
+  BIG.verCheck = verCheck;
+
   BIG.openHw = function (id){
     if(id) BIG.hwId = id;
     /* 大屏作业页是给班级电脑用的。普通模式下（手机常态）打开这条链接，
@@ -1123,8 +1186,10 @@
     try{ setRoute('hw'); }catch(e){}
     applyFs();
     applyDsFold();   /* v4.10.17：日期条收起状态存本机，每次进作业页都摆一遍 */
+    try{ applyBhwTheme(); }catch(e){}   /* v4.16.0：大屏里手选的明暗，进来先摆回去 */
     BIG.renderHw();
     try{ BIG.examLoad(); }catch(e){}   /* v4.10.6：每次进作业页都刷新一次考试 */
+    try{ verPaint(); }catch(e){}
     startClock();
   };
 
@@ -6073,6 +6138,15 @@
           if(!m) return;
           var cur = (typeof SITE_VERSION !== 'undefined') ? String(SITE_VERSION) : '';
           if(!cur || !verGt(m[1], cur)) return;
+          /* v4.16.0：更新弹窗正开着、或刚点了「稍后」→ 这条静默强刷让路。
+             两条路同时跑会互相打断：弹窗刚弹出来（它有 5 秒倒计时），
+             这里 4 秒一到就整页重载，用户看到的是「闪一下就没了」。 */
+          try{
+            var mk = document.getElementById('upMask');
+            if(mk && mk.classList.contains('show')) return;
+            if(sessionStorage.getItem('cls_upd_seen') === m[1]) return;
+            if(window.SW_HAS_UPDATE) return;
+          }catch(e){}
           try{ localStorage.setItem(T_KEY, String(Date.now())); }catch(e){}
           try{ sessionStorage.setItem(N_KEY, String(n + 1)); }catch(e){}
           /* 让等待中的新 SW 立刻接管（install 里已有 skipWaiting，这条是推处于 waiting 的） */
