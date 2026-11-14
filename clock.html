@@ -1137,7 +1137,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=4160" defer></script>
+<script src="./fs-keep.js?v=4161" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -2543,7 +2543,10 @@ function logRange(from, to){
     var data = logLoad(k);
     (data.segs || []).forEach(function(x){
       if(!logSegOk(x)) return;
-      out.segs.push({ m: x.m, s: x.s, e: x.e, d: x.d, n: x.n || '' });
+      /* v4.16.0：k / sj / it / t 必须一起带出来 —— 汇总按科目分栏时全靠这几个字段，
+         少搬一个，整段时间就会被判成「没有科目」全塞进「其他」。 */
+      out.segs.push({ m: x.m, s: x.s, e: x.e, d: x.d, n: x.n || '',
+        k: x.k, sj: x.sj, it: x.it, t: x.t, dv: x.dv });
     });
     out.pomo += Number(data.pomo) || 0;
     d.setDate(d.getDate() + 1);
@@ -2553,7 +2556,8 @@ function logRange(from, to){
     var cd = dkey(LOG.cur.s);
     if(cd >= from && cd <= to){
       var dur = Math.round((Date.now() - LOG.cur.s) / 1000);
-      if(dur >= 3) out.segs.push({ m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: dur, n: LOG.cur.n || '', dv: DEVICE });
+      if(dur >= 3) out.segs.push({ m: LOG.cur.m, s: LOG.cur.s, e: Date.now(), d: dur, n: LOG.cur.n || '',
+        k: LOG.cur.k, sj: LOG.cur.sj, it: LOG.cur.it, t: LOG.cur.t, dv: DEVICE });
     }
   }
   return out;

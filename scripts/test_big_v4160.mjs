@@ -63,7 +63,8 @@ console.log('\n① 大屏作业页左下角的版本号');
     return { txt: el.textContent.trim(), x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), vis: getComputedStyle(el).display };
   });
   ok('版本号在页面上', !!info, info);
-  ok('文字是当前版本', info && /^v4\.16\.0$/.test(info.txt), info && info.txt);
+  const cur = await p.evaluate(() => window.SITE_VERSION);
+  ok('文字是当前版本', info && info.txt === 'v' + cur, info && info.txt + ' vs ' + cur);
   ok('位置在左下角', info && info.x < 120 && info.y > 560, info);
   await ctx.close();
 }
