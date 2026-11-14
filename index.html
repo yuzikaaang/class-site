@@ -5106,16 +5106,17 @@ html.bhw-ds-fold #bigHw{padding-bottom:58px}
   padding:11px 13px 9px;margin:0 0 10px;
   box-shadow:0 1px 2px rgba(120,53,15,.04);
   border-left:4px solid var(--grad-a);
-  /* v4.10.17：两栏各占一半后，考试卡仍是改前 1/3 内容区那么宽（= 现左栏的 2/3），
-     不跟着左栏一起变宽。它与右栏卡片之间留出的那点空隙，站主说「没办法就那样」。 */
-  width:66.6667%;box-sizing:border-box;
+  /* v4.15.7：两栏等宽后仍写着 66.67%，考试名稍长就被截成「第11周周末限时…」。
+     改成占满所在栏宽，标题、日期、场次计数都能完整排下。 */
+  width:100%;box-sizing:border-box;
 }
 .dark .bhex{background:#2a2523;border-color:rgba(255,255,255,.08)}
 .bhex-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 4px}
 .bhex-h b{
   font-size:calc(.92rem*var(--bhw-fs));font-weight:800;color:var(--fg);
   letter-spacing:.01em;line-height:1.3;min-width:0;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  /* v4.15.7：考试名超过一行时换成两行，不再截成「第11周周末限时…」 */
+  overflow-wrap:anywhere;
 }
 .bhex-h span{font-size:calc(.68rem*var(--bhw-fs));color:var(--fg-3);flex:none}
 .bhex-m{margin-top:7px}
