@@ -1625,8 +1625,10 @@
         /* v4.11.0（站主第 4 条）：「新建一期」去掉 —— 期次按周自动就有了；
            换成「设置」，用来改这一周的起止（周三四放假那种情况）。
            v4.16.4：同一个面板里再加上全局阈值（截止前提醒 / 截止后隐藏）。 */
-        + (edit ? '<button type="button" class="bhw-btn" onclick="BIG.hwCfgOpen()"'
-          + ' title="作业看板设置：本周起止、截止提醒与隐藏">设置</button>' : '')
+        /* v4.16.4：只读态也留着这个入口 —— 截止提醒的阈值是全局设置，
+           不该逼着人先点「编辑」才找得到。 */
+        + '<button type="button" class="bhw-btn ghost" onclick="BIG.hwCfgOpen()"'
+          + ' title="作业看板设置：本周起止、截止提醒与隐藏">设置</button>'
         /* v4.7.1：真全屏（连任务栏一起盖掉），投影 / 一体机上用 */
         + '<button type="button" class="bhw-btn ghost bhw-full" onclick="BIG.hwFull()"'
           + ' id="bhwFullBtn" title="全屏显示（隐藏任务栏），按 Esc 退出">⛶ 全屏</button>';
@@ -3992,11 +3994,13 @@
      上面是本周起止，下面是两个全局阈值（截止前提醒 / 截止后隐藏）。
      日期仍然只影响「当前这一期」，阈值走云端、所有设备同步。 */
   BIG.hwCfgOpen = function (){
-    if(!canEdit()){ toast('当前不可编辑', true); return; }
+    /* v4.16.4：这里**不要求先进编辑态**。两个阈值是全局设置，随手就该能改；
+       只有「本周起止」属于改作业，只读态把它禁掉并说明原因。 */
+    var ro = !canEdit();
     var hw = currentHw();
     var s = $('bhwCfgStart'), e = $('bhwCfgEnd'), a = $('bhwCfgAlert'), h = $('bhwCfgHide');
-    if(s) s.value = hw ? String(hw.start || '').slice(0, 10) : '';
-    if(e) e.value = hw ? String(hw.end || '').slice(0, 10) : '';
+    if(s){ s.value = hw ? String(hw.start || '').slice(0, 10) : ''; s.disabled = ro || !hw; }
+    if(e){ e.value = hw ? String(hw.end || '').slice(0, 10) : ''; e.disabled = ro || !hw; }
     var p = hwSettings();
     if(a) a.value = p.alertMin;
     if(h) h.value = p.hideMin;
@@ -4004,10 +4008,10 @@
     if(t) t.textContent = (hw ? String(hw.title || '这一期') : '作业看板') + ' · 设置';
     var tip = $('bhwCfgRangeTip');
     if(tip){
-      tip.textContent = hw
-        ? '只影响这一期：周三四放假那种情况，把结束日提前即可。'
-        : '当前日期不在任何作业期次里，日期这一栏暂时改不了。';
-      tip.style.color = hw ? '' : '#b45309';
+      if(!hw) tip.textContent = '当前日期不在任何作业期次里，日期这一栏暂时改不了。';
+      else if(ro) tip.textContent = '这一期的起止日期要先点「编辑」才能改；下面两个阈值随时可改。';
+      else tip.textContent = '只影响这一期：周三四放假那种情况，把结束日提前即可。';
+      tip.style.color = (hw && !ro) ? '' : '#b45309';
     }
     var by = $('bhwCfgBy');
     if(by){
@@ -4046,6 +4050,9 @@
     var st = sv('bhwCfgStart'), en = sv('bhwCfgEnd');
     var aRaw = sv('bhwCfgAlert'), hRaw = sv('bhwCfgHide');
     var hw = currentHw();
+    /* 只读态日期框是禁用的，读出来是空 —— 直接跳过，别误报「起止要一起填」 */
+    var canRange = canEdit();
+    if(!canRange){ st = ''; en = ''; }
     if(hw && (st || en)){
       if(!st || !en){ toast('起止日期要一起填', true); return; }
       if(st > en){ toast('开始日期不能晚于结束日期', true); return; }

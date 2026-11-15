@@ -213,6 +213,27 @@ console.log('\n③ 看板设置：本周起止 + 两个阈值，阈值上传云�
   await ctx.close();
 }
 
+/* ============ ③b 只读态也能进设置：阈值随手改，日期要先进编辑 ============ */
+console.log('\n③b 只读态打开设置：阈值可改，本周起止先禁用');
+{
+  const { ctx, p } = await open({ edit: false });
+  const r = await p.evaluate(() => {
+    BIG.hwCfgOpen();
+    const m = document.getElementById('bhwCfgMask');
+    return {
+      show: !!(m && m.classList.contains('show')),
+      startDisabled: (document.getElementById('bhwCfgStart') || {}).disabled,
+      alertDisabled: (document.getElementById('bhwCfgAlert') || {}).disabled,
+      tip: (document.getElementById('bhwCfgRangeTip') || {}).textContent || ''
+    };
+  });
+  ok('只读态设置面板能打开', r.show === true, r);
+  ok('只读态日期框被禁用', r.startDisabled === true, r);
+  ok('阈值仍然可以改', r.alertDisabled !== true, r);
+  ok('并说明要先点「编辑」', /编辑/.test(r.tip), r.tip);
+  await ctx.close();
+}
+
 /* ===================== ④ 两段式预设截止时间 ===================== */
 console.log('\n④ 预设截止时间：先点日期，再点时间点');
 {
