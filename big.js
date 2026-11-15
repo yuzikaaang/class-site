@@ -306,6 +306,8 @@
     BIG.hwOn = false;
     if(BIG._clockT){ clearInterval(BIG._clockT); BIG._clockT = null; }
     stopHwTimers();
+    /* v4.16.3：分贝仪只在作业页采样，切走就松开麦克风 */
+    try{ if(typeof dbStop === 'function') dbStop(); }catch(e){}
   }
 
   wrap('goHomeView', function (){
@@ -1191,6 +1193,10 @@
     try{ BIG.examLoad(); }catch(e){}   /* v4.10.6：每次进作业页都刷新一次考试 */
     try{ verPaint(); }catch(e){}
     startClock();
+    /* v4.16.3：进作业页就把分贝仪挂上（浏览器会问一次麦克风权限） */
+    try{ if(typeof dbStart === 'function') dbStart(); }catch(e){}
+    /* v4.16.3：上次下班前没传上去的改动，一进页面就补一次 */
+    try{ if(typeof hwRetryIfPending === 'function') hwRetryIfPending(); }catch(e){}
   };
 
   BIG.closeHw = function (){
@@ -1198,6 +1204,150 @@
     leaveHwUi();
     try{ goHomeView(); }catch(e){}
   };
+
+  /* ================= 分贝仪（v4.16.3 · 站主第 4 条）=================
+     站主原话：「在大屏作业看板底部功能栏的最右侧新增分贝仪的功能，
+     可以显示当前分贝数，分贝数前面有呼吸灯，不同颜色代表不同分贝区间，
+     分为安静（绿色）、一般（黄色）、嘈杂（橙色）、吵闹（红色），
+     点击数字可以进入设置界面，本轮具体的设置功能暂时不做」。
+
+     做法：getUserMedia 取麦克风 → AnalyserNode 读时域波形 → 算 RMS →
+     20*log10(rms) + 94 折成近似分贝。麦克风没有声压级校准，
+     这个数是「相对响度」，看趋势、比安静与吵闹够用，不当声级计用。
+     采样只在作业页可见时跑（250ms 一次），切走就关掉音轨 ——
+     教室电脑常年开着，不能一直占着麦克风。 */
+  var DB_RULES = [
+    { max: 45,  name: '安静', color: '#2f9e5f' },
+    { max: 60,  name: '一般', color: '#d9a821' },
+    { max: 75,  name: '嘈杂', color: '#e07a2f' },
+    { max: 999, name: '吵闹', color: '#d24a3d' }
+  ];
+  var DB = { ctx:null, stream:null, an:null, buf:null, timer:null, v:0, lvl:-1, on:false, busy:false, err:'' };
+
+  function dbEl(id){ return document.getElementById(id); }
+  function dbLvlOf(v){
+    for(var i = 0; i < DB_RULES.length; i++){ if(v < DB_RULES[i].max) return i; }
+    return DB_RULES.length - 1;
+  }
+  function dbPaint(){
+    var box = dbEl('bhwDb'), num = dbEl('bhwDbNum');
+    if(!box || !num) return;
+    if(!DB.on){
+      box.classList.add('off');
+      num.textContent = '--';
+      var n0 = dbEl('bhwDbNow'), l0 = dbEl('bhwDbLvl');
+      if(n0) n0.textContent = '--';
+      if(l0) l0.textContent = DB.err === 'NotAllowedError' ? '未授权麦克风' : (DB.err ? '未开启' : '未开启');
+      return;
+    }
+    box.classList.remove('off');
+    var v = Math.round(DB.v);
+    num.textContent = String(v);
+    var lv = dbLvlOf(DB.v);
+    if(lv !== DB.lvl){
+      DB.lvl = lv;
+      box.setAttribute('data-lvl', String(lv));
+    }
+    var nb = dbEl('bhwDbNow'), nl = dbEl('bhwDbLvl');
+    if(nb) nb.textContent = String(v);
+    if(nl) nl.textContent = DB_RULES[lv].name;
+  }
+  function dbTick(){
+    if(!DB.on || !DB.an) return;
+    try{ DB.an.getFloatTimeDomainData(DB.buf); }catch(e){ return; }
+    var sum = 0, n = DB.buf.length;
+    for(var i = 0; i < n; i++){ var x = DB.buf[i]; sum += x * x; }
+    var rms = Math.sqrt(sum / n);
+    var raw = 20 * Math.log10(rms > 1e-7 ? rms : 1e-7) + 94;
+    if(raw < 0) raw = 0;
+    if(raw > 120) raw = 120;
+    /* 指数平滑：直接显示瞬时值，数字会跟着每个字乱跳，后排看着像坏了 */
+    DB.v = DB.v ? (DB.v * 0.7 + raw * 0.3) : raw;
+    dbPaint();
+  }
+  function dbMicBtnPaint(){
+    var b = dbEl('bhwDbMicBtn');
+    if(b) b.textContent = DB.on ? '关闭麦克风' : (DB.err === 'NotAllowedError' ? '重新授权' : '开启麦克风');
+  }
+  function dbStart(){
+    if(DB.on || DB.busy) return;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      DB.err = 'unsupported'; dbPaint(); dbMicBtnPaint(); return;
+    }
+    DB.busy = true;
+    navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    }).then(function (stream){
+      DB.busy = false;
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC){
+        try{ stream.getTracks().forEach(function (t){ t.stop(); }); }catch(e){}
+        DB.err = 'unsupported'; dbPaint(); dbMicBtnPaint(); return;
+      }
+      DB.stream = stream;
+      DB.ctx = new AC();
+      var src = DB.ctx.createMediaStreamSource(stream);
+      DB.an = DB.ctx.createAnalyser();
+      DB.an.fftSize = 1024;
+      DB.an.smoothingTimeConstant = 0.6;
+      DB.buf = new Float32Array(DB.an.fftSize);
+      src.connect(DB.an);
+      DB.on = true; DB.err = ''; DB.v = 0; DB.lvl = -1;
+      if(DB.ctx.state === 'suspended'){ try{ DB.ctx.resume(); }catch(e){} }
+      if(DB.timer) clearInterval(DB.timer);
+      DB.timer = setInterval(dbTick, 250);
+      dbPaint(); dbMicBtnPaint();
+    }).catch(function (e){
+      DB.busy = false;
+      DB.on = false;
+      DB.err = String((e && e.name) || e || 'error');
+      dbPaint(); dbMicBtnPaint();
+    });
+  }
+  function dbStop(){
+    if(DB.timer){ clearInterval(DB.timer); DB.timer = null; }
+    try{ if(DB.stream) DB.stream.getTracks().forEach(function (t){ t.stop(); }); }catch(e){}
+    try{ if(DB.ctx && DB.ctx.close) DB.ctx.close(); }catch(e){}
+    DB.stream = null; DB.ctx = null; DB.an = null;
+    DB.on = false; DB.v = 0; DB.lvl = -1;
+    dbPaint(); dbMicBtnPaint();
+  }
+  function dbRulesPaint(){
+    var box = dbEl('bhwDbRules');
+    if(!box || box.getAttribute('data-done') === '1') return;
+    var html = '', lo = 0;
+    DB_RULES.forEach(function (r){
+      var range = (r.max > 200) ? (lo + ' dB 以上') : (lo + '–' + r.max + ' dB');
+      html += '<div class="bhw-dbrule"><i style="background:' + r.color + '"></i>'
+        + r.name + '<b>' + range + '</b></div>';
+      lo = r.max;
+    });
+    box.innerHTML = html;
+    box.setAttribute('data-done', '1');
+  }
+  BIG.dbOpen = function (ev){
+    if(ev && ev.stopPropagation) ev.stopPropagation();
+    dbRulesPaint(); dbPaint(); dbMicBtnPaint();
+    var m = dbEl('bhwDbMask');
+    if(m) m.classList.add('show');
+  };
+  BIG.dbClose = function (){
+    var m = dbEl('bhwDbMask');
+    if(m) m.classList.remove('show');
+  };
+  BIG.dbToggleMic = function (){
+    if(DB.on) dbStop(); else dbStart();
+    setTimeout(dbMicBtnPaint, 80);
+  };
+  BIG.dbStart = dbStart;
+  BIG.dbStop = dbStop;
+  /* 切到后台就别采样了（大屏切到别的窗口时没必要一直读麦克风） */
+  try{
+    document.addEventListener('visibilitychange', function (){
+      if(document.visibilityState === 'hidden'){ if(DB.timer){ clearInterval(DB.timer); DB.timer = null; } }
+      else if(DB.on && !DB.timer){ DB.timer = setInterval(dbTick, 250); }
+    });
+  }catch(e){}
 
   /* v4.10.17（站主）：「下面那一栏那个日期、那个日历我可以折叠下去，太占空间」。
      收起后日期条整条不占位；底部工具条的「日期」按钮常驻做开关，随时能展开。
@@ -1278,9 +1428,11 @@
   /* 本机改动条：渲染与「改完就地补一条」共用同一段 HTML */
   function localStripHtml(){
     if(!hwLocalPending()) return '';
-    return '<span class="bhw-local" title="这些改动只存在这台电脑上">'
+    /* v4.16.3：未登录也能传了（合并通道），「上传」按钮不再看身份 ——
+       自动上传失败时这里是唯一的重试入口，藏起来等于把路堵死。 */
+    return '<span class="bhw-local" title="这些改动还没传到云端">'
       + '本机改动'
-      + (adminOk() ? '<button type="button" onclick="BIG.hwLocalUpload()">上传</button>' : '')
+      + '<button type="button" onclick="BIG.hwLocalUpload()">上传</button>'
       + '<button type="button" onclick="BIG.hwLocalDiscard()">放弃</button></span>';
   }
   /* 保存后只补这一条，不整页重画 —— 重画会把正在输入的光标弄丢 */
@@ -3082,39 +3234,96 @@
        否则 12 秒后的轮询会把自己刚打的字当成「手机端改的」标黄一遍。 */
     try{ BIG.hwPrevData = list; BIG.hwPrev = JSON.stringify(list || []); }catch(e){}
 
-    /* v4.7.1：没登录管理员（班级电脑常态）→ 只写本机那份，一个网络请求都不发。
-       离线时 pushCloudContent 也只是白等一个超时，不如直接省掉。
-       ⚠️ 这条分支**不调 saveContentLocal**：它会把本机改动写进云端内容的本地缓存，
-       之后点「放弃」就再也回不到云端那份了 —— 显示层靠 hwList() 读本机覆盖就够。 */
-    if(!adminOk()){
-      hwLocalSave(list);
-      markSaved('已存本机（不会上传云端）');
-      syncBadge();
-      refreshLocalStrip();
-      return;
-    }
-
-    try{
-      if(typeof saveContentLocal === 'function') saveContentLocal('holiday_homeworks', list);
-    }catch(e){}
-
+    /* v4.16.3（站主第 3 条）：不再分「登录了才上传」。
+       以前未登录就直接 return，班级电脑（常年不登录管理员）改的作业
+       永远停在 localStorage，云端一直是旧的 —— 手机端再加一科，
+       云端就成了一份没有电脑改动的数据，两边互相覆盖。
+       现在一律先落本机、再合并上传；权限由服务端那条 hw-save 通道把关，
+       它只认作业、按 id 合并，不会整包冲掉别人写的期次。 */
     hwLocalSave(list);   /* 先落本机，再等网络；网断了改动也不会丢 */
-    try{
-      pushCloudContent({ holiday_homeworks: list }, true).then(function (r){
-        if(r && r.ok){
-          /* 云端已经是这份了，本机待上传标记可以撤掉 */
-          hwLocalClear();
-          markSaved('已同步云端');
-          BIG.renderHw();
-        } else {
-          markSaved('未上传：' + ((r && r.error) || '未知原因') + '（已存本机，可稍后点「上传」）');
-        }
+    hwUploadSoon(list);  /* 合并上传：成功清本机标记，失败保留等补传 */
+  }
+
+  /* ---------------- 合并上传（v4.16.3） ----------------
+     站主实测的两个现象：
+       · 班级电脑改了语文，五分钟过去云端还是没有；
+       · 手机端加了化学，等电脑这边同步完，化学出现了、语文被盖掉了。
+     根因是「整包替换」：谁后上传谁赢，另一台没上传的改动直接消失。
+     现在改成按 id 合并 —— 云端已有的期次原样保留，只覆盖这台机器明确改过的那些。
+     另外加两道保护：
+       · 1.2 秒节流 + 串行，边打字边保存不会把云端打成筛子；
+       · 上传途中又有新改动，传完自动接着传最新那份。 */
+  var _hwUpQueued = null, _hwUpTimer = null, _hwUpBusy = false, _hwUpLastAt = 0;
+
+  function hwCloudSave(list){
+    if(typeof api !== 'function') return Promise.resolve({ ok:false, error:'后端未配置' });
+    if(typeof navigator !== 'undefined' && navigator.onLine === false){
+      return Promise.resolve({ ok:false, error:'当前离线' });
+    }
+    var dev = '';
+    try{ dev = (typeof DEVICE !== 'undefined' && DEVICE) ? String(DEVICE) : ''; }catch(e){}
+    return api('/content?action=hw-save', {
+      method: 'POST',
+      body: { list: list || [], dev: dev }
+    }).then(function (j){
+      if(!j || j.ok === false) return { ok:false, error:(j && j.error) || '云端未确认' };
+      return { ok:true, list: Array.isArray(j.list) ? j.list : (list || []) };
+    }).catch(function (e){
+      return { ok:false, error:String((e && e.message) || e) };
+    });
+  }
+  BIG.hwCloudSave = hwCloudSave;
+
+  function hwUploadSoon(list){
+    if(list) _hwUpQueued = list;
+    if(_hwUpBusy) return;                 /* 传完会自己接着传最新这份 */
+    if(_hwUpTimer) return;
+    var wait = Math.max(0, 1200 - (Date.now() - _hwUpLastAt));
+    _hwUpTimer = setTimeout(function (){ _hwUpTimer = null; hwUploadFlush(); }, wait);
+  }
+
+  function hwUploadFlush(){
+    var list = _hwUpQueued;
+    if(!list || _hwUpBusy) return;
+    _hwUpQueued = null;
+    _hwUpBusy = true;
+    _hwUpLastAt = Date.now();
+    var sent = JSON.stringify(list);
+    markSaved('正在上传…');
+
+    hwCloudSave(list).then(function (r){
+      _hwUpBusy = false;
+      var editing = hwDirty();
+      if(r && r.ok){
+        var merged = Array.isArray(r.list) ? r.list : list;
+        /* 先把合并结果写进内存与缓存，再决定要不要撤掉本机那份 ——
+           顺序反了会出现「本机清了、SITE_DATA 还是旧的」，屏幕当场空掉。 */
+        try{ if(typeof applyCloudContent === 'function') applyCloudContent({ holiday_homeworks: merged }); }catch(e){}
+        try{ if(typeof contentCacheSet === 'function') contentCacheSet({ holiday_homeworks: merged }); }catch(e){}
+        /* ⚠️ 这里不能用 saveContentLocal：它会 markContentDirty，
+           把作业挂进通用内容队列，下一次 flush 会用整包 PUT 推一遍，
+           又回到「谁后推谁赢」的老路上，合并白做了。 */
+
+        /* 只在本机那份没变时才撤标记：上传这一两秒里可能又打了几行，
+           那几行不能跟着一起被清掉。 */
+        var cur = hwLocalRec();
+        var same = !cur || JSON.stringify(cur.list) === sent;
+        if(same) hwLocalClear();
+
+        BIG.hwPrevData = merged;
+        BIG.hwPrev = JSON.stringify(merged);
+        if(same) markSaved('已同步云端');
         syncBadge();
-      }).catch(function (e){
-        markSaved('未上传：' + (e && e.message || e) + '（已存本机，可稍后点「上传」）');
+        refreshLocalStrip();
+        if(!editing && same){ try{ BIG.renderHw(); }catch(e){} }
+        try{ if(typeof window.syncNotice === 'function') window.syncNotice('ok', '作业已同步'); }catch(e){}
+      }else{
+        markSaved('未上传：' + ((r && r.error) || '未知原因'));
         syncBadge();
-      });
-    }catch(e){}
+        try{ if(typeof window.syncNotice === 'function') window.syncNotice('err', '同步失败 · 已存本机'); }catch(e){}
+      }
+      if(_hwUpQueued) hwUploadSoon(_hwUpQueued);
+    });
   }
   function touch(){
     markSaved('正在保存…');
@@ -3122,6 +3331,25 @@
     BIG._saveT = setTimeout(function (){ BIG._saveT = null; persist(); }, 700);
   }
   BIG.touch = touch;
+
+  /* ---------------- 断网 / 失败后的自动补传（v4.16.3） ----------------
+     以前作业的补传挂在通用内容队列上（DIRTY_CONTENT），
+     现在作业改走合并通道，那条队列不再管它 —— 所以这里自己补三个触发点：
+     联网、回到前台、45 秒兜底巡检。只有「本机真的还有没传上去的改动」才发请求。 */
+  function hwRetryIfPending(){
+    try{
+      if(!hwLocalPending()) return;
+      if(typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      hwUploadSoon(hwList());
+    }catch(e){}
+  }
+  try{
+    window.addEventListener('online', function (){ setTimeout(hwRetryIfPending, 800); });
+    document.addEventListener('visibilitychange', function (){
+      if(document.visibilityState === 'visible') setTimeout(hwRetryIfPending, 1000);
+    });
+    setInterval(hwRetryIfPending, 45000);
+  }catch(e){}
 
   /* ---------------- 本机编辑开关（v4.7.1）----------------
      站主诉求：「班级电脑的作业界面压根没有新增 / 修改按钮」。
@@ -3169,27 +3397,15 @@
 
   /* 把本机改动推到云端（只有管理员能做，和原来的权限口径一致） */
   BIG.hwLocalUpload = function (){
-    if(!adminOk()){ toast('请先登录管理员，才能上传到云端', true); return; }
+    /* v4.16.3：不再要求登录管理员 —— 走合并通道，任何设备都能把本机改动送上去。 */
     var rec = hwLocalRec();
     if(!rec){ toast('没有待上传的改动', true); return; }
     if(typeof navigator !== 'undefined' && navigator.onLine === false){
       toast('当前设备离线，联网后再点上传', true); return;
     }
-    markSaved('正在上传…');
-    pushCloudContent({ holiday_homeworks: rec.list }, true).then(function (r){
-      if(r && r.ok){
-        hwLocalClear();
-        markSaved('已上传云端');
-        BIG.renderHw();
-        toast('已上传云端');
-      }else{
-        markSaved('上传失败：' + ((r && r.error) || '未知原因'));
-        toast('上传失败：' + ((r && r.error) || '未知原因'), true);
-      }
-    }).catch(function (e){
-      markSaved('上传失败：' + (e && e.message || e));
-      toast('上传失败，请检查网络', true);
-    });
+    _hwUpQueued = rec.list;
+    if(_hwUpTimer){ clearTimeout(_hwUpTimer); _hwUpTimer = null; }
+    hwUploadFlush();   /* 手动点就别等那 1.2 秒节流了 */
   };
 
   /* 丢掉本机改动，回到云端那份 */

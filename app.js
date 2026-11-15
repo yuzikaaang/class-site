@@ -7090,6 +7090,41 @@ function mpLegacyCopy(text, done){
   }catch(e){ toastMini('复制失败，请长按输入框手动复制', true); }
 }
 
+/* ================= 左下角同步状态（v4.16.3·站主第 2 / 3 条）=================
+   站主原话：「作业同步需要有小弹窗提示，比如在同步后左下角显示同步状态，
+   已同步（绿色），同步失败（红色）」，以及「在本地数据编辑之后，上传要和
+   第二点一样在左下角弹窗显示上传成功（绿色）或上传失败（红色）」。
+   两条链路（云端拉到新内容、本机改动传上去）都用这一个浮条，
+   免得同一件事出现两种提示样式。 */
+var _syncNT = null, _syncNLast = { key:'', at:0 };
+function syncNotice(kind, text, force){
+  try{
+    var key = String(kind) + '|' + String(text);
+    var now = Date.now();
+    /* 同一句话 5 秒内不重复弹：连续打字时每次保存都会走一遍成功分支，
+       不去重的话左下角会一直闪。 */
+    if(!force && _syncNLast.key === key && now - _syncNLast.at < 5000) return;
+    _syncNLast = { key:key, at:now };
+
+    var el = document.getElementById('syncToast');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'syncToast';
+      document.body.appendChild(el);
+    }
+    el.className = 'sync-toast ' + (kind === 'err' ? 'err' : 'ok') + ' show';
+    el.innerHTML = '<i></i><span></span>';
+    /* 用 textContent 写正文，作业标题里带尖括号也不会被当成标签 */
+    el.lastChild.textContent = String(text == null ? '' : text);
+    if(_syncNT) clearTimeout(_syncNT);
+    _syncNT = setTimeout(function (){
+      _syncNT = null;
+      try{ el.classList.remove('show'); }catch(e){}
+    }, kind === 'err' ? 3600 : 2400);
+  }catch(e){}
+}
+window.syncNotice = syncNotice;
+
 /** 我的资料里的小提示（站内没有全局 toast，这里做一个轻量浮条） */
 function toastMini(text, isErr){
   try{

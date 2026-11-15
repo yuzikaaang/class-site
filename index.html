@@ -5443,6 +5443,37 @@ html.bhw-ds-fold #bigHw{padding-bottom:58px}
 .bhw-ver:active{transform:scale(.97)}
 .dark .bhw-ver{color:#c9bcae}
 
+/* ---------- v4.16.3：左下角同步状态（站主第 2 / 3 条） ----------
+   「作业同步需要有小弹窗提示，在同步后左下角显示同步状态，
+     已同步（绿色），同步失败（红色）」。
+   位置在全站左下角，大屏里落在版本号上方（bar 58 + 版本号约 26 + 间距）。
+   成功绿、失败红，2.6 秒自己淡出；同一句话 5 秒内不重复弹，
+   免得边打字边保存时一直闪。 */
+.sync-toast{
+  position:fixed;left:16px;bottom:112px;z-index:1450;
+  display:flex;align-items:center;gap:9px;max-width:min(72vw,340px);
+  padding:10px 15px;border-radius:13px;color:#fff;
+  font-size:.85rem;font-weight:800;letter-spacing:.01em;line-height:1.35;
+  box-shadow:0 10px 26px rgba(0,0,0,.20);
+  opacity:0;transform:translateY(10px);pointer-events:none;
+  transition:opacity .2s ease,transform .2s ease;
+}
+.sync-toast.show{opacity:1;transform:translateY(0)}
+.sync-toast.ok{background:linear-gradient(135deg,#2f9e5f,#217346)}
+.sync-toast.err{background:linear-gradient(135deg,#d24a3d,#a52a20)}
+.sync-toast i{
+  flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:#fff;
+  box-shadow:0 0 0 3px rgba(255,255,255,.32);
+  animation:syncDotPulse 1.6s ease-in-out infinite;
+}
+@keyframes syncDotPulse{
+  0%,100%{transform:scale(1);opacity:.95}
+  50%{transform:scale(1.35);opacity:.55}
+}
+@media (max-width:560px){
+  .sync-toast{left:10px;bottom:96px;font-size:.8rem;padding:9px 13px}
+}
+
 /* —— 底部工具条（仿 ClassWorks）：字号 / 锁定 ——
    v4.1.2：按钮组居中。原来贴右下角，鼠标/手在屏幕边上不好点（站主原话
    「有时候在侧面我在班级电脑上太大了不好点」）。提示文字用绝对定位留在左下。 */
@@ -5475,6 +5506,79 @@ html.bhw-ds-fold #bigHw{padding-bottom:58px}
 .bhw-bar .bhw-lockon{background:linear-gradient(135deg,var(--grad-a),var(--grad-b));color:#fff;border-color:transparent}
 #bhwThemeBtn{display:inline-flex;align-items:center;justify-content:center;gap:5px}
 #bhwThemeBtn svg{width:15px;height:15px}
+
+/* ---------- v4.16.3：底部分贝仪（站主第 4 条） ----------
+   放在功能栏最右侧，避开居中的按钮组（bar-r）。左边一盏呼吸灯，
+   颜色按分贝区间走：安静绿 / 一般黄 / 嘈杂橙 / 吵闹红。
+   数字本身也跟着变色，后排一眼就能看出班上吵不吵。 */
+.bhw-db{
+  position:absolute;right:18px;top:50%;transform:translateY(-50%);
+  display:flex;align-items:center;gap:7px;height:38px;padding:0 12px 0 11px;
+  border-radius:12px;border:1px solid rgba(120,53,15,.16);background:var(--bg-2);
+}
+.dark .bhw-db{border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.06)}
+.bhw-db-led{
+  width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:#9aa0a6;
+  animation:dbBreath 2.4s ease-in-out infinite;
+}
+@keyframes dbBreath{
+  0%,100%{opacity:.5;transform:scale(.88)}
+  50%{opacity:1;transform:scale(1.16)}
+}
+.bhw-db-num{
+  border:0;background:none;font-family:inherit;padding:0;min-width:36px;
+  font-size:1.02rem;font-weight:900;font-variant-numeric:tabular-nums;
+  color:var(--fg);cursor:pointer;text-align:right;line-height:1;
+}
+.bhw-db-num:hover{opacity:.72}
+.bhw-db-unit{font-size:.7rem;font-weight:800;color:var(--fg-3);letter-spacing:.02em}
+/* 四档配色：灯与数字同一套色 */
+.bhw-db[data-lvl="0"] .bhw-db-led{background:#2f9e5f;box-shadow:0 0 9px rgba(47,158,95,.85)}
+.bhw-db[data-lvl="1"] .bhw-db-led{background:#d9a821;box-shadow:0 0 9px rgba(217,168,33,.85)}
+.bhw-db[data-lvl="2"] .bhw-db-led{background:#e07a2f;box-shadow:0 0 9px rgba(224,122,47,.9)}
+.bhw-db[data-lvl="3"] .bhw-db-led{background:#d24a3d;box-shadow:0 0 10px rgba(210,74,61,.95)}
+.bhw-db[data-lvl="0"] .bhw-db-num{color:#2f8a56}
+.bhw-db[data-lvl="1"] .bhw-db-num{color:#a97c12}
+.bhw-db[data-lvl="2"] .bhw-db-num{color:#c1691f}
+.bhw-db[data-lvl="3"] .bhw-db-num{color:#c0392b}
+.bhw-db.off .bhw-db-led{background:#9aa0a6;box-shadow:none;animation:none;opacity:.55}
+
+/* —— 分贝仪设置弹层 —— */
+.bhw-dbmask{
+  position:fixed;inset:0;z-index:1500;display:none;align-items:center;justify-content:center;
+  background:rgba(20,12,6,.42);backdrop-filter:blur(3px);
+}
+.bhw-dbmask.show{display:flex}
+.bhw-dbbox{
+  width:min(92vw,420px);padding:22px 22px 16px;border-radius:18px;
+  background:var(--card,#fff);color:var(--fg,#141414);
+  border:1px solid rgba(120,53,15,.14);box-shadow:0 18px 50px rgba(0,0,0,.24);
+}
+.dark .bhw-dbbox{background:#241f1c;color:#f3ece4;border-color:rgba(255,255,255,.12)}
+.bhw-dbbox h3{margin:0 0 14px;font-size:1.06rem;font-weight:900}
+.bhw-dbnow{display:flex;align-items:baseline;gap:6px;margin:0 0 14px}
+.bhw-dbnow b{font-size:2.1rem;font-weight:900;font-variant-numeric:tabular-nums;line-height:1}
+.bhw-dbnow span{font-size:.8rem;font-weight:800;color:var(--fg-3,#8a7f74)}
+.bhw-dbnow em{margin-left:auto;font-style:normal;font-size:.82rem;font-weight:800;
+  padding:3px 10px;border-radius:999px;background:var(--tint,rgba(0,0,0,.06))}
+.bhw-dbrules{display:flex;flex-direction:column;gap:7px;margin-bottom:12px}
+.bhw-dbrule{display:flex;align-items:center;gap:9px;font-size:.84rem;font-weight:700}
+.bhw-dbrule i{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.bhw-dbrule b{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums;color:var(--fg-3,#8a7f74)}
+.bhw-dbtip{margin:0 0 14px;font-size:.76rem;line-height:1.6;color:var(--fg-3,#8a7f74)}
+.bhw-dbact{display:flex;gap:10px;justify-content:flex-end}
+.bhw-dbact button{
+  border:1px solid rgba(120,53,15,.18);background:var(--bg-2,#f6f3ef);color:inherit;
+  border-radius:11px;padding:9px 16px;font-family:inherit;font-size:.86rem;font-weight:800;cursor:pointer;
+}
+.dark .bhw-dbact button{border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.07)}
+.bhw-dbact button:hover{opacity:.82}
+
+/* 窄屏（横屏平板 / 小一体机）：底部按钮组会挤到分贝仪，这里只留灯和数字 */
+@media (max-width:1024px){
+  .bhw-db{right:10px;padding:0 9px;gap:6px;height:34px}
+  .bhw-db-unit{display:none}
+}
 
 /* —— 锁定遮罩：锁上以后整页点击 / 滚动全部失效，只留右下角「解锁」 ——
    v4.3.1（站主第 2 条）：遮罩不再加模糊 / 半透明底。
@@ -7144,7 +7248,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.16.2</button>
+        title="点击检查是否为最新版本">v4.16.3</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -7165,7 +7269,32 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           <button type="button" id="bhwDsBtn" class="on" onclick="BIG.dsToggle()"
             title="收起底部日期条" aria-pressed="true">日期</button>
         </div>
+
+        <!-- v4.16.3（站主第 4 条）：最右侧分贝仪。灯随分贝变色，点数字进设置。
+             四档：安静（绿）/ 一般（黄）/ 嘈杂（橙）/ 吵闹（红）。 -->
+        <div class="bhw-db" id="bhwDb" data-lvl="0" title="环境分贝（点击数字查看设置）">
+          <i class="bhw-db-led" id="bhwDbLed"></i>
+          <button type="button" class="bhw-db-num" id="bhwDbNum" onclick="BIG.dbOpen(event)"
+            title="点击进入分贝仪设置">--</button>
+          <span class="bhw-db-unit">dB</span>
+        </div>
       </nav>
+
+      <!-- v4.16.3：分贝仪设置。站主说「本轮具体的设置功能暂时不做」，
+           所以这一版只放入口、当前读数、四档说明和一个麦克风开关
+           （关掉麦克风是隐私必需，不算设置项）。 -->
+      <div class="bhw-dbmask" id="bhwDbMask" onclick="if(event.target===this)BIG.dbClose()">
+        <div class="bhw-dbbox">
+          <h3>分贝仪</h3>
+          <div class="bhw-dbnow"><b id="bhwDbNow">--</b><span>dB</span><em id="bhwDbLvl">未开启</em></div>
+          <div class="bhw-dbrules" id="bhwDbRules"></div>
+          <p class="bhw-dbtip">阈值与灵敏度等具体设置将在下一版开放。</p>
+          <div class="bhw-dbact">
+            <button type="button" id="bhwDbMicBtn" onclick="BIG.dbToggleMic()">开启麦克风</button>
+            <button type="button" onclick="BIG.dbClose()">关闭</button>
+          </div>
+        </div>
+      </div>
 
       <div class="bhw-lock" id="bhwLock" onclick="BIG.lockBlock(event)">
         <div class="bhw-lock-hint">已锁定，页面暂不响应点击与滑动</div>
@@ -8286,19 +8415,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.16.2';
+var SITE_VERSION = '4.16.3';
 var VER_DATE = '2026-11-14';
 </script>
-<script src="./auth-bus.js?v=4162" defer></script>
+<script src="./auth-bus.js?v=4163" defer></script>
 <script src="./tour.js?v=040507" defer></script>
-<script src="./app.min.js?v=4162" defer></script>
+<script src="./app.min.js?v=4163" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4162" defer></script>
-<script src="./big.js?v=4162" defer></script>
+<script src="./fs-keep.js?v=4163" defer></script>
+<script src="./big.js?v=4163" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4162" defer></script>
+<script src="./pickfx.js?v=4163" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

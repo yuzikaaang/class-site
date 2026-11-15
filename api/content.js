@@ -79,6 +79,11 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && String(req.query.action || '').toLowerCase() === 'ca-save-subject') {
       return await caSaveSubject(req, res);
     }
+    /* v4.16.3：作业合并保存 —— 班级电脑的编辑开关不依赖登录，
+       所以给它单独一条「只写作业、按 id 合并」的通道，见 hwSaveMerge 的说明。 */
+    if (req.method === 'POST' && String(req.query.action || '').toLowerCase() === 'hw-save') {
+      return await hwSaveMerge(req, res);
+    }
     return fail(res, 405, '不支持的方法');
   } catch (e) {
     console.error('[content]', req.method, e);
@@ -333,6 +338,116 @@ async function writeContent(req, res) {
   return ok(res, {
     message: '已保存',
     updated: changed,
+    serverTime: Date.now(),
+  });
+}
+
+/* ---------------- 作业合并保存（v4.16.3·站主第 3 条） ----------------
+   POST ?action=hw-save   body: { list: [...], dels?: ['期次 id'], dev?: '设备名' }
+
+   为什么单独开一条通道：
+     大屏作业页的「编辑」开关刻意做成不依赖登录（班级电脑登不了管理员，
+     也常年没空去登），但 PUT /api/content 要求 admin / AI。
+     结果就是：班级电脑改的作业只落在本机，云端永远等不到，
+     手机端再加一科，云端还是一份没有电脑改动的旧数据 —— 两边互相覆盖。
+
+   为什么是「按 id 合并」而不是整包替换：
+     两台设备各自只在手里那份上改，谁先上传谁的整包就赢，
+     另一台的改动当场消失（站主实测：电脑改了语文，手机加了化学，语文被冲掉）。
+     这里先把云端那份读出来，按 id 逐期合并，只让「出发的这台机器明确改过的期次」
+     覆盖同 id 的旧记录，其余期次原样保留。这样电脑的语文和手机的化学可以共存。
+
+   安全口径：
+     · 只认 holiday_homeworks 这一个键，别的键一律不动（公告等仍要管理员）；
+     · 不接受整包清空（list 与 dels 都为空直接拒）；
+     · 体积上限与 PUT 一致；
+     · 每次写入记一条审计，出问题能倒查。 */
+/* 按 id 合并两份作业列表（导出以便脚本直接测，不依赖数据库）：
+     · 云端已有的期次先占位（保序），
+     · 提交上来的同 id 期次就地覆盖（这是「这台机器明确改过的那一期」），
+     · 提交上来的新 id 追加到末尾，
+     · dels 里的 id 删掉（给整期删除留的口子，当前前端还没有整期删除）。 */
+export function mergeHwById(prev, incoming, dels) {
+  const byId = new Map();
+  const order = [];
+  const put = (h) => {
+    if (!h || typeof h !== 'object') return;
+    if (h.id === undefined || h.id === null || h.id === '') return;
+    const id = String(h.id);
+    if (!byId.has(id)) order.push(id);
+    byId.set(id, h);
+  };
+  (Array.isArray(prev) ? prev : []).forEach(put);
+  (Array.isArray(incoming) ? incoming : []).forEach(put);
+  (Array.isArray(dels) ? dels : []).forEach((id) => { byId.delete(String(id)); });
+  return order.filter((id) => byId.has(id)).map((id) => byId.get(id));
+}
+
+async function hwSaveMerge(req, res) {
+  const b = await body(req);
+  const incoming = Array.isArray(b && b.list) ? b.list : null;
+  if (!incoming) return fail(res, 400, 'list 必须是数组');
+  const dels = Array.isArray(b && b.dels) ? b.dels.map(String) : [];
+  if (!incoming.length && !dels.length) return fail(res, 400, '没有要保存的作业');
+
+  for (const h of incoming) {
+    if (!h || typeof h !== 'object' || Array.isArray(h)) {
+      return fail(res, 400, '作业期次格式不对');
+    }
+  }
+  const rawLen = JSON.stringify(incoming).length;
+  if (rawLen > MAX_CHARS) {
+    return fail(res, 400, `作业内容太大（${Math.round(rawLen / 1024)}KB，上限 ${MAX_CHARS / 1024}KB）`);
+  }
+  if (incoming.length > MAX_ITEMS) {
+    return fail(res, 400, `作业期次过多（${incoming.length} 条，上限 ${MAX_ITEMS} 条）`);
+  }
+
+  const sql = getSql();
+  const uid = await systemUserId(sql);
+  if (!uid) return fail(res, 500, '没有可用的系统账号，无法保存云端作业');
+
+  const cur = await sql`
+    select data_value from user_data
+     where user_id = ${uid} and data_key = ${CONTENT_KEY}
+  `;
+  /* 同 writeContent：读不出来就拒绝，绝不把整包存量冲掉 */
+  let doc = {};
+  if (cur.length) {
+    const p = jsonCol(cur[0].data_value);
+    if (cur[0].data_value === null || cur[0].data_value === undefined) doc = {};
+    else if (p && typeof p === 'object' && !Array.isArray(p)) doc = p;
+    else {
+      return fail(res, 500,
+        '云端现有内容读不出来，已中止保存以防覆盖历史数据，请联系管理员检查数据库');
+    }
+  }
+
+  const prev = Array.isArray(doc.holiday_homeworks) ? doc.holiday_homeworks : [];
+  const merged = mergeHwById(prev, incoming, dels);
+
+  doc.holiday_homeworks = merged;
+
+  await sql`
+    insert into user_data (user_id, data_key, data_value, updated_at)
+    values (${uid}, ${CONTENT_KEY}, ${JSON.stringify(doc)}, now())
+    on conflict (user_id, data_key)
+    do update set data_value = excluded.data_value, updated_at = now()
+  `;
+
+  contentCacheDrop();
+
+  try {
+    await audit(uid, 'hw-save-merge', 'site_content', null,
+      '作业合并保存：提交 ' + incoming.length + ' 期 / 云端共 ' + merged.length + ' 期'
+      + (dels.length ? ' / 删除 ' + dels.length + ' 期' : '')
+      + (b && b.dev ? ' / 来自 ' + String(b.dev).slice(0, 40) : ''));
+  } catch (e) { /* 审计失败不影响保存 */ }
+
+  return ok(res, {
+    message: '已保存',
+    list: merged,
+    count: merged.length,
     serverTime: Date.now(),
   });
 }
