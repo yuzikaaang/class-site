@@ -117,6 +117,19 @@ if (!wj || wj.ok === false) {
 console.log('✓ release_notes 已写入（当前 ' + notes.length + ' 条）');
 
 /* ---------- 5. 顺带把公告也发出去 ---------- */
+/* 公告必须带站内板块，否则前台按缺省落进「站主杂谈」。
+ *
+ * v4.16.5（站主反馈）：
+ *   「你那个班级公告，我最近这几次版本更新你给我寄到了站主杂谈里面去，
+ *     这个应该是网站内部的，不应该放在站主杂谈。」
+ *   原因：本脚本新开公告时只写了 { date, text }，漏了 category；
+ *         app.js 渲染时 (a.category || 'misc') → 全部算成「💭 站主杂谈」。
+ *         v4.9 及更早的公告由后台手发，category 都是 'site'（网站内部）。
+ *   现在：版本更新公告一律写 category: 'site'；遇到条目不规范的，按同一口径补齐。
+ *   门禁：scripts/predeploy.mjs ③b2 会检查这一条，漏写直接拦。 */
+const ANN_CAT = 'site';                                  /* 📡 网站内部 */
+const ANN_CATS = ['site', 'activity', 'class', 'misc'];  /* 站内四板块 */
+
 let anns = items0.announcements;
 if (typeof anns === 'string') { try { anns = JSON.parse(anns); } catch { anns = []; } }
 if (!Array.isArray(anns)) anns = [];
@@ -196,11 +209,14 @@ function appendPubs(text, pubs) {
 if (hit) {
   /* 同一条公告：把这次的内容追加进去，并刷新时间为真实当前时间 */
   const merged = appendPubs(hit.text, note.pub);
-  if (merged === hit.text) {
+  /* v4.16.5：老公告缺 category（见文件头 ③ 注释），顺手补回站内板块 */
+  const needCat = ANN_CATS.indexOf(String(hit.category || '')) < 0;
+  if (merged === hit.text && !needCat) {
     console.log('· v' + VER2 + ' 公告已包含本次全部内容，不重复写');
   } else {
     hit.text = merged;
     hit.date = nowStamp();
+    if (needCat) hit.category = ANN_CAT;
     const ar = await fetch(API + '/api/content', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -217,7 +233,7 @@ if (hit) {
   /* 这一批还没有公告 → 新开一条（标题用两段版本号） */
   const text = 'v' + VER2 + ' 更新！内容如下：\n'
     + note.pub.map(p => '【' + p.cat + '】' + p.text).join('\n');
-  anns.unshift({ date: nowStamp(), text });
+  anns.unshift({ date: nowStamp(), text, category: ANN_CAT });
   const ar = await fetch(API + '/api/content', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },

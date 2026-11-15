@@ -235,6 +235,39 @@ if (!hit) {
 }
 console.log('③b 云端公告存在 v' + VER2 + '：' + String(hit.text).slice(0, 34).replace(/\n/g, ' ') + '…');
 
+/* ---------- ③b2 公告要挂在站内板块上 ----------
+ * v4.16.5（站主反馈）：
+ *   「你那个班级公告，我最近这几次版本更新你给我寄到了站主杂谈里面去，
+ *     这个应该是网站内部的，不应该放在站主杂谈。」
+ *   根因不在前台：app.js 渲染时按 (a.category || 'misc') 分栏，公告缺 category
+ *   就整条落进「💭 站主杂谈」。工具链里 tools/publish_release.mjs 新开公告时
+ *   漏写 category，于是 v4.10 起的版本公告全跑去了杂谈。
+ *   这里把它做成硬闸门：分类不是站内四板块之一，就不许部署。
+ *   （--fix-announce 会按历史口径补成 site，与后台手发的老公告一致。） */
+const ANN_CATS = ['site', 'activity', 'class', 'misc'];
+if (ANN_CATS.indexOf(String(hit.category || '')) < 0) {
+  if (FIX) {
+    const list = announcements.map((a) => (a === hit ? { ...a, category: 'site' } : a));
+    const r = await fetch(API + '/api/content', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ key: 'announcements', value: list }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) die('自动补齐公告分类失败：' + (j.error || ('HTTP ' + r.status)));
+    hit.category = 'site';
+    announcements = list;
+    console.log('③b2 已把 v' + VER2 + ' 公告归入「网站内部」');
+  } else {
+    die('云端 v' + VER2 + ' 公告没有站内板块（category），前台会把它算进「站主杂谈」。'
+      + '\n   站主要求：版本更新公告归「📡 网站内部」，与历史公告一致。'
+      + '\n   可以直接跑：node scripts/predeploy.mjs --fix-announce（自动补成 site）'
+      + '\n   也可以在后台「班级内容」里把这条公告的分类改成「网站内部」。');
+  }
+} else {
+  console.log('③b2 公告板块：' + hit.category);
+}
+
 /* ---------- ③c 本次内容已追加进公告 ---------- */
 /* 规范化：去掉空白、标点、项目符号后再比对，避免「；」和「，」的差异误判 */
 function norm(s) {
