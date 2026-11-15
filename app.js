@@ -5132,6 +5132,9 @@ var CONTENT_MAP = {
   pick_history:      'pickHistory',  /* v4.4.0 随机点名抽取记录（时间/条件/人数/名单/备注） */
   pick_exclude:      'pickExclude',  /* v4.7.0 随机点名的请假 / 不参与名单（换设备不用重填） */
   pick_hist_del:     'pickHistDel',  /* v4.7.11 抽取历史的删除墓碑（跨设备同步删除） */
+  /* v4.16.4：作业看板全局设置（截止前提醒 / 截止后隐藏）。落点是 window.HW_SET，
+     不在 SITE_DATA 里，见 applyCloudContent() 的 hw_settings 分支。 */
+  hw_settings:       null,
   site_config:       null            /* 特殊：见 applySiteConfig() */
 };
 
@@ -5205,6 +5208,14 @@ function applyCloudContent(items, opts){
     if(k === 'vote_pub'){
       if(typeof v !== 'object' || Array.isArray(v)) return;
       SITE_DATA.votePub = v;
+      n++;
+      return;
+    }
+    /* v4.16.4：作业看板的全局设置（截止前提醒 / 截止后隐藏）。
+       大屏那边自己存一份本机副本，这里只负责把云端这份递过去。 */
+    if(k === 'hw_settings'){
+      if(typeof v !== 'object' || Array.isArray(v)) return;
+      try{ if(window.BIG && BIG.applyHwPrefs) BIG.applyHwPrefs(v); }catch(e){}
       n++;
       return;
     }

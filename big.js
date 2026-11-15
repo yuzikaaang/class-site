@@ -304,7 +304,8 @@
     if(h) h.style.display = 'none';
     document.documentElement.classList.remove('big-hw');
     BIG.hwOn = false;
-    if(BIG._clockT){ clearInterval(BIG._clockT); BIG._clockT = null; }
+    BIG._clockRun = 0;
+    if(BIG._clockT){ clearTimeout(BIG._clockT); BIG._clockT = null; }
     stopHwTimers();
     /* v4.16.3：分贝仪只在作业页采样，切走就松开麦克风 */
     try{ if(typeof dbStop === 'function') dbStop(); }catch(e){}
@@ -1028,6 +1029,8 @@
     var o = (t && typeof t === 'object') ? t : { text: String(t == null ? '' : t) };
     var text = o.text || '';
     var over = isOverdue(o);
+    /* v4.16.4：离截止不到 n 分钟 → 整行框出来并呼吸（n 在设置里改，0 表示关掉） */
+    var left = over ? null : isDueSoon(o);
     var dt = dueText(o, false);
     /* 编辑态用 textarea + 自适应高度：单行 input 装不下长句，字一多就被框子截断。 */
     var main = edit
@@ -1045,13 +1048,25 @@
     var dueTag = dt
       ? '<span class="bhw-due' + (over ? ' over' : '') + '">' + esc0(dt) + '</span>'
       : '';
-    return '<div class="bhw-task' + (over ? ' over' : '') + '">'
+    /* 剩多少时间直接写出来：只看「截止 22:00」还得自己算，写成「还剩 12 分钟」才一眼明白 */
+    var leftTag = (left && left > 0)
+      ? '<span class="bhw-dueleft">还剩 ' + dueLeftText(left) + '</span>'
+      : '';
+    return '<div class="bhw-task' + (over ? ' over' : '') + (left ? ' due-soon' : '') + '">'
       + '<span class="bhw-dot"></span>'
-      + '<div style="flex:1;min-width:0">' + main + mediaHtml(o) + dueTag + '</div>'
+      + '<div style="flex:1;min-width:0">' + main + mediaHtml(o) + dueTag + leftTag + '</div>'
       + dueBtn
       + (edit ? '<button type="button" class="bhw-x" title="删除这一项"'
         + ' onclick="BIG.hwDelTask(' + si + ',' + ti + ')">' + ico('x', 13) + '</button>' : '')
       + '</div>';
+  }
+  /** 剩余时长说成人话：90 秒内按「不到 1 分钟」，1 小时内按分钟，再往上带小时 */
+  function dueLeftText(ms){
+    if(ms < 60000) return '不到 1 分钟';
+    var m = Math.ceil(ms / 60000);
+    if(m < 60) return m + ' 分钟';
+    var h = Math.floor(m / 60), r = m % 60;
+    return h + ' 小时' + (r ? ' ' + r + ' 分' : '');
   }
 
   /* 自适应高度：先归零再读 scrollHeight，字号一变重算一遍（见 applyFs / layoutCards） */
@@ -1090,10 +1105,12 @@
     /* v4.12.0（站主）：「过期项默认隐藏，编辑态可见」。
        只读态把过了截止时间的小项收进「已截止 N 项」，点开才铺开（灰字）；
        编辑态一项不藏，方便改时间或删掉。原始 ti 一直跟着数据走，
-       过滤只影响「显示哪些」，不会打乱 hwTask / hwDelTask 的索引。 */
+       过滤只影响「显示哪些」，不会打乱 hwTask / hwDelTask 的索引。
+       v4.16.4：收起来的时机改由设置里的「截止后 n 分钟」决定 ——
+       刚过点几分钟的还留在正文里（红字「已截止」），过了 n 分钟才收。 */
     var visIdx = [], overIdx = [];
     tasks.forEach(function (t, ti){
-      if(!edit && isOverdue(t)) overIdx.push(ti); else visIdx.push(ti);
+      if(!edit && isDueHidden(t)) overIdx.push(ti); else visIdx.push(ti);
     });
     var rows = visIdx.map(function (ti){ return taskHtml(it, si, ti, tasks[ti], edit); }).join('');
     var fold = '';
@@ -1242,15 +1259,20 @@
     }
     box.classList.remove('off');
     var v = Math.round(DB.v);
-    num.textContent = String(v);
+    /* v4.16.4：整数没变就不写 DOM —— 原来每拍无条件改一次文本，
+       大屏连开几小时后这些白写的文本会累积成可感的卡顿 */
+    if(DB.shown !== v){
+      DB.shown = v;
+      num.textContent = String(v);
+    }
     var lv = dbLvlOf(DB.v);
     if(lv !== DB.lvl){
       DB.lvl = lv;
       box.setAttribute('data-lvl', String(lv));
     }
     var nb = dbEl('bhwDbNow'), nl = dbEl('bhwDbLvl');
-    if(nb) nb.textContent = String(v);
-    if(nl) nl.textContent = DB_RULES[lv].name;
+    if(nb && nb.__v !== v){ nb.textContent = String(v); nb.__v = v; }
+    if(nl && nl.__lv !== lv){ nl.textContent = DB_RULES[lv].name; nl.__lv = lv; }
   }
   function dbTick(){
     if(!DB.on || !DB.an) return;
@@ -1292,10 +1314,12 @@
       DB.an.smoothingTimeConstant = 0.6;
       DB.buf = new Float32Array(DB.an.fftSize);
       src.connect(DB.an);
-      DB.on = true; DB.err = ''; DB.v = 0; DB.lvl = -1;
+      DB.on = true; DB.err = ''; DB.v = 0; DB.lvl = -1; DB.shown = null;
       if(DB.ctx.state === 'suspended'){ try{ DB.ctx.resume(); }catch(e){} }
       if(DB.timer) clearInterval(DB.timer);
-      DB.timer = setInterval(dbTick, 250);
+      /* v4.16.4：250 → 400 毫秒。这个数值只影响读数的刷新感，
+         人眼看分贝变化本来也不需要每秒四次；降下来给主线程留余量。 */
+      DB.timer = setInterval(dbTick, 400);
       dbPaint(); dbMicBtnPaint();
     }).catch(function (e){
       DB.busy = false;
@@ -1309,7 +1333,7 @@
     try{ if(DB.stream) DB.stream.getTracks().forEach(function (t){ t.stop(); }); }catch(e){}
     try{ if(DB.ctx && DB.ctx.close) DB.ctx.close(); }catch(e){}
     DB.stream = null; DB.ctx = null; DB.an = null;
-    DB.on = false; DB.v = 0; DB.lvl = -1;
+    DB.on = false; DB.v = 0; DB.lvl = -1; DB.shown = null;
     dbPaint(); dbMicBtnPaint();
   }
   function dbRulesPaint(){
@@ -1345,7 +1369,7 @@
   try{
     document.addEventListener('visibilitychange', function (){
       if(document.visibilityState === 'hidden'){ if(DB.timer){ clearInterval(DB.timer); DB.timer = null; } }
-      else if(DB.on && !DB.timer){ DB.timer = setInterval(dbTick, 250); }
+      else if(DB.on && !DB.timer){ DB.timer = setInterval(dbTick, 400); }
     });
   }catch(e){}
 
@@ -1599,9 +1623,10 @@
           + ' onclick="BIG.hwEditToggle()" title="点「编辑」后作业卡片才能改，点「完成」恢复只读">'
           + (hwEditOn() ? '完成' : '编辑') + '</button>'
         /* v4.11.0（站主第 4 条）：「新建一期」去掉 —— 期次按周自动就有了；
-           换成「设置」，用来改这一周的起止（周三四放假那种情况）。 */
-        + (edit ? '<button type="button" class="bhw-btn" onclick="BIG.hwWeekSetting()"'
-          + ' title="调整这一周的起止日期">设置</button>' : '')
+           换成「设置」，用来改这一周的起止（周三四放假那种情况）。
+           v4.16.4：同一个面板里再加上全局阈值（截止前提醒 / 截止后隐藏）。 */
+        + (edit ? '<button type="button" class="bhw-btn" onclick="BIG.hwCfgOpen()"'
+          + ' title="作业看板设置：本周起止、截止提醒与隐藏">设置</button>' : '')
         /* v4.7.1：真全屏（连任务栏一起盖掉），投影 / 一体机上用 */
         + '<button type="button" class="bhw-btn ghost bhw-full" onclick="BIG.hwFull()"'
           + ' id="bhwFullBtn" title="全屏显示（隐藏任务栏），按 Esc 退出">⛶ 全屏</button>';
@@ -2277,6 +2302,35 @@
     return [s, e];
   }
 
+  /* v4.16.4（站主）：「不一定说一定要整天过完了才变整天的，你只要考完一科就变一科」。
+     例：今天 8:00–10:00 语文、10:20–11:30 物理，10:10 打开时语文该变灰、物理不该。
+     所以判断精确到**单场**：日期 + 结束时间 vs 现在。
+     没有结束时间的场次退回「这一天过完才算」—— 没有别的依据。 */
+  function examItemOver(date, it){
+    var day = examDateOf(date);
+    if(!day) return false;
+    var end = String((it && it.end) || '').trim();
+    var m = /^(\d{1,2})\s*[:：.．]\s*(\d{1,2})?/.exec(end);
+    if(!m) return examDayOver(date);
+    var e = new Date(day.getTime());
+    e.setHours(+m[1], +(m[2] || 0), 0, 0);
+    /* 结束时间早于开场时间（写成 23:00–01:00 这种）按次日算 */
+    var st = /^(\d{1,2})\s*[:：.．]\s*(\d{1,2})?/.exec(String((it && it.start) || '').trim());
+    if(st && (+m[1]) < (+st[1])) e.setDate(e.getDate() + 1);
+    return Date.now() > e.getTime();
+  }
+  function examDayOver(date){
+    var day = examDateOf(date);
+    if(!day) return false;
+    var t0 = new Date();
+    return day < new Date(t0.getFullYear(), t0.getMonth(), t0.getDate());
+  }
+  function examDayAllOver(s){
+    var items = (s && s.d && s.d.items) || [];
+    if(!items.length) return !!(s && s.d && s.past);
+    return items.every(function (it){ return examItemOver(s.d.date, it); });
+  }
+
   function examStops(){
     var L = BIG.examList;
     if(!L || !L.groups || !L.groups.length) return [];
@@ -2341,14 +2395,17 @@
         /* v4.15.8：一天一块（日期 + 当天各科），各块在宽屏上横向并排。
            原来一行一科铺满整行，考试卡占满整行宽后一条要横跨一千多像素。 */
         var rows = '';
+        var dayOver = examDayAllOver(s);
         items.forEach(function (it){
-          rows += '<div class="bhex-row' + (s.past ? ' bhex-off' : '') + '">'
+          /* v4.16.4：单场到点就灰，不等整天结束 */
+          var off = s.past || examItemOver(s.d.date, it);
+          rows += '<div class="bhex-row' + (off ? ' bhex-off' : '') + '">'
             + '<span class="bhex-sub">' + esc0(it.name || '考试') + '</span>'
             + '<span class="bhex-time">' + esc0(it.start || '') + '–' + esc0(it.end || '') + '</span>'
             + '</div>';
         });
         sec += '<div class="bhex-day">'
-          + '<div class="bhex-date' + (s.past ? ' bhex-past' : '') + '">'
+          + '<div class="bhex-date' + (dayOver ? ' bhex-past' : '') + '">'
           + esc0(examDayLabel(s.d.date, s.d.date === BIG.examList.today)) + '</div>'
           + rows + '</div>';
       }
@@ -2424,6 +2481,10 @@
     }
     if(old){
       if(old.__html !== html){
+        /* v4.16.4：换节点前先把旧的从观察器里摘掉 —— 只 observe 不 unobserve，
+           每 5 分钟一次重绘都会把旧节点留在观察器里，开一整天就是几百个。
+           这种累积是「页面越开越卡」最典型的一种来源。 */
+        try{ if(_exRo && old.__ro) _exRo.unobserve(old); }catch(e){}
         old.__html = html;
         var box = document.createElement('div');
         box.innerHTML = html;
@@ -3070,10 +3131,16 @@
 
   /* 时钟：精确到秒（站主第 2 条） */
   function startClock(){
+    var lastSec = -1;
     function tick(){
       var t = $('bhwClockT'), s = $('bhwClockS'), b = $('bhwClock');
       if(!t) return;
       var d = new Date();
+      /* v4.16.4（站主实测）：只在「秒」真的变了才写 DOM。
+         原来每秒无条件重写三个节点，开一两个小时后主线程本来就紧，
+         这些白写的文本还会触发重排，越跑越卡。 */
+      if(d.getSeconds() === lastSec) return;
+      lastSec = d.getSeconds();
       function p(n){ return (n < 10 ? '0' : '') + n; }
       t.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
       var wk = '日一二三四五六'.charAt(d.getDay());
@@ -3083,29 +3150,48 @@
       if(b) b.title = '点击打开全屏时钟';
     }
     tick();
-    if(BIG._clockT) clearInterval(BIG._clockT);
-    BIG._clockT = setInterval(tick, 1000);
+    /* v4.16.4（站主实测）：「过一两个小时，时钟开始跳秒 —— 秒数是对的，
+       但时快时慢」。根因是 setInterval 会累积漂移：每次回调都比上一次晚一点，
+       主线程一忙就直接跳过一整拍。改成自己排下一次、并对齐到下一个整秒：
+       每次都用当前时间算还差多少毫秒，误差不往下攒，卡一下也能立刻追回来。 */
+    if(BIG._clockT){ clearTimeout(BIG._clockT); BIG._clockT = null; }
+    BIG._clockRun = 1;
+    (function loopClock(){
+      if(!BIG._clockRun) return;
+      tick();
+      var wait = 1000 - (Date.now() % 1000) + 6;
+      if(wait < 60) wait += 1000;
+      BIG._clockT = setTimeout(loopClock, wait);
+    })();
 
     /* v4.3.0：进了作业页才起这两组定时器 —— 一言按用户设的分钟数自动换。
        v4.10.11：倒计时改成每秒 tick 只改字（cdTick），每 30 秒整块重建一次兜住跨天；
-       以前是 30 秒整块重建，看上去「半天不动」。 */
+       以前是 30 秒整块重建，看上去「半天不动」。
+       v4.16.4：同样换成对齐整秒的链式调度，和上面的大时钟一套口径。 */
     renderCd();
     /* v4.10.4：右下角进度卡跟倒计时一起刷 —— 跨天时天数是会变的 */
     renderProg();
-    if(BIG._cdT) clearInterval(BIG._cdT);
+    if(BIG._cdT){ clearTimeout(BIG._cdT); BIG._cdT = null; }
     BIG._cdTickN = 0;
-    BIG._cdT = setInterval(function (){
-      if(!BIG.hwOn) return;
-      cdTick();
-      sideTick();          /* v4.10.12：侧栏「今日事项」的剩余时间也每秒走 */
-      if((++BIG._cdTickN % 30) === 0){ renderCd(); renderProg(); }
-    }, 1000);
+    BIG._cdRun = 1;
+    (function loopCd(){
+      if(!BIG._cdRun) return;
+      if(BIG.hwOn){
+        cdTick();
+        sideTick();          /* v4.10.12：侧栏「今日事项」的剩余时间也每秒走 */
+        if((++BIG._cdTickN % 30) === 0){ renderCd(); renderProg(); }
+      }
+      var wait = 1000 - (Date.now() % 1000) + 6;
+      if(wait < 60) wait += 1000;
+      BIG._cdT = setTimeout(loopCd, wait);
+    })();
     if(!BIG.quoteData) BIG.quoteNext(false);
     BIG.quoteAuto();
   }
 
   function stopHwTimers(){
-    if(BIG._cdT){ clearInterval(BIG._cdT); BIG._cdT = null; }
+    BIG._cdRun = 0;
+    if(BIG._cdT){ clearTimeout(BIG._cdT); BIG._cdT = null; }
     if(BIG._quoteT){ clearInterval(BIG._quoteT); BIG._quoteT = null; }
   }
 
@@ -3255,6 +3341,26 @@
        · 上传途中又有新改动，传完自动接着传最新那份。 */
   var _hwUpQueued = null, _hwUpTimer = null, _hwUpBusy = false, _hwUpLastAt = 0;
 
+  /* v4.16.4（站主）：「作业上传可以不匿名」。
+     登录了就报登录名；班级电脑通常没登录，就报一个能认出这台机器的名字。
+     服务端会把它写进被改的那几期（by / at），审计日志也带同一份。 */
+  function meName(){
+    try{
+      var u = (typeof AUTH !== 'undefined' && AUTH && AUTH.user) || null;
+      if(u) return String(u.displayName || u.display_name || u.name || u.username || '').trim();
+    }catch(e){}
+    return '';
+  }
+  function meLabel(){
+    var n = meName();
+    if(n) return n;
+    try{
+      if(typeof DEVICE !== 'undefined' && DEVICE) return String(DEVICE);
+    }catch(e){}
+    return '班级电脑';
+  }
+  BIG.meLabel = meLabel;
+
   function hwCloudSave(list){
     if(typeof api !== 'function') return Promise.resolve({ ok:false, error:'后端未配置' });
     if(typeof navigator !== 'undefined' && navigator.onLine === false){
@@ -3264,10 +3370,10 @@
     try{ dev = (typeof DEVICE !== 'undefined' && DEVICE) ? String(DEVICE) : ''; }catch(e){}
     return api('/content?action=hw-save', {
       method: 'POST',
-      body: { list: list || [], dev: dev }
+      body: { list: list || [], dev: dev, by: meLabel() }
     }).then(function (j){
       if(!j || j.ok === false) return { ok:false, error:(j && j.error) || '云端未确认' };
-      return { ok:true, list: Array.isArray(j.list) ? j.list : (list || []) };
+      return { ok:true, list: Array.isArray(j.list) ? j.list : (list || []), by: j.by || '' };
     }).catch(function (e){
       return { ok:false, error:String((e && e.message) || e) };
     });
@@ -3346,9 +3452,14 @@
   try{
     window.addEventListener('online', function (){ setTimeout(hwRetryIfPending, 800); });
     document.addEventListener('visibilitychange', function (){
-      if(document.visibilityState === 'visible') setTimeout(hwRetryIfPending, 1000);
+      if(document.visibilityState === 'visible'){ setTimeout(hwRetryIfPending, 1000); setTimeout(hwSideRefresh, 1600); }
     });
     setInterval(hwRetryIfPending, 45000);
+    /* v4.16.4：右侧的今日事项也跟着巡检 —— 内部有 90 秒节流，
+       不会每 45 秒就打一次 /api/island */
+    setInterval(function (){
+      if(BIG.hwOn && document.visibilityState !== 'hidden') hwSideRefresh();
+    }, 45000);
   }catch(e){}
 
   /* ---------------- 本机编辑开关（v4.7.1）----------------
@@ -3617,6 +3728,102 @@
     touch();
   };
 
+  /* ================= v4.16.4 作业看板全局设置 =================
+     站主原话：「距离截止时间还剩前 n 分钟的时候，对应科目的作业要有一个强调提醒，
+     比如框出来 + 动画；过了截止时间 n 分钟后隐藏该项。这两个 n 都在设置里改。
+     这个设置是要上传云端的，所以我修改是同步的」。
+     两个值都按「分钟」存，0 = 关掉这项行为。
+     云端键 hw_settings（后端 /api/content?action=hw-prefs），本机再留一份缓存，
+     断网时先用本机这份，联网拿到云端再覆盖。 */
+  var HW_SET_KEY = 'cls_hw_settings';
+  var HW_SET_DEF = { alertMin: 30, hideMin: 60 };
+  function hwSetNum(v, def){
+    var n = Number(v);
+    if(!isFinite(n)) return def;
+    return Math.max(0, Math.min(1440, Math.round(n)));
+  }
+  function hwSettings(){
+    var out = { alertMin: HW_SET_DEF.alertMin, hideMin: HW_SET_DEF.hideMin };
+    try{
+      var o = JSON.parse(localStorage.getItem(HW_SET_KEY) || 'null');
+      if(o && typeof o === 'object'){
+        out.alertMin = hwSetNum(o.alertMin, HW_SET_DEF.alertMin);
+        out.hideMin = hwSetNum(o.hideMin, HW_SET_DEF.hideMin);
+      }
+    }catch(e){}
+    return out;
+  }
+  BIG.hwSettings = hwSettings;
+
+  /** 云端那份到了：值变了才重绘，避免 60 秒轮询每次都重建作业卡 */
+  BIG.applyHwPrefs = function (o){
+    if(!o || typeof o !== 'object') return;
+    var p = hwSettings();
+    var nxt = {
+      alertMin: hwSetNum(o.alertMin, p.alertMin),
+      hideMin: hwSetNum(o.hideMin, p.hideMin)
+    };
+    if(nxt.alertMin === p.alertMin && nxt.hideMin === p.hideMin) return;
+    try{ localStorage.setItem(HW_SET_KEY, JSON.stringify(nxt)); }catch(e){}
+    if(BIG.hwOn){ try{ BIG.renderHw(); }catch(e){} }
+  };
+
+  function hwSettingsPush(p){
+    if(typeof api !== 'function') return Promise.resolve({ ok:false, error:'后端未配置' });
+    if(typeof navigator !== 'undefined' && navigator.onLine === false){
+      return Promise.resolve({ ok:false, error:'当前离线' });
+    }
+    var dev = '';
+    try{ dev = (typeof DEVICE !== 'undefined' && DEVICE) ? String(DEVICE) : ''; }catch(e){}
+    return api('/content?action=hw-prefs', {
+      method: 'POST',
+      body: { prefs: p, dev: dev }
+    }).then(function (j){
+      if(!j || j.ok === false) return { ok:false, error:(j && j.error) || '云端未确认' };
+      return { ok:true, prefs: j.prefs || p };
+    }).catch(function (e){
+      return { ok:false, error:String((e && e.message) || e) };
+    });
+  }
+  BIG.hwSettingsSave = function (p){
+    var nxt = { alertMin: hwSetNum(p && p.alertMin, hwSettings().alertMin),
+                hideMin: hwSetNum(p && p.hideMin, hwSettings().hideMin) };
+    try{ localStorage.setItem(HW_SET_KEY, JSON.stringify(nxt)); }catch(e){}
+    hwSettingsPush(nxt).then(function (r){
+      if(r && r.ok){
+        if(r.prefs) try{ localStorage.setItem(HW_SET_KEY, JSON.stringify(r.prefs)); }catch(e){}
+        if(typeof window.syncNotice === 'function') window.syncNotice('ok', '看板设置已同步');
+      }else{
+        if(typeof window.syncNotice === 'function') window.syncNotice('err', '设置未同步 · 已存本机');
+      }
+      if(BIG.hwOn){ try{ BIG.renderHw(); }catch(e){} }
+    });
+    if(BIG.hwOn){ try{ BIG.renderHw(); }catch(e){} }
+    return nxt;
+  };
+
+  /* 距离截止还差多少毫秒：没设截止返回 null */
+  function dueLeft(t){
+    var m = dueMs(t);
+    return m ? (m - Date.now()) : null;
+  }
+  /** 快截止了：还没过期，且剩余时间在提醒窗口内 */
+  function isDueSoon(t){
+    var left = dueLeft(t);
+    if(left === null || left <= 0) return null;
+    var w = hwSettings().alertMin * 60000;
+    return (w > 0 && left <= w) ? left : null;
+  }
+  /** 过期够久，该从只读列表里收起来了 */
+  function isDueHidden(t){
+    var left = dueLeft(t);
+    if(left === null || left >= 0) return false;
+    var w = hwSettings().hideMin * 60000;
+    return (-left) >= w;
+  }
+  BIG.isDueSoon = isDueSoon;
+  BIG.isDueHidden = isDueHidden;
+
   /* ================= 单项截止时间的设置（v4.12.0）=================
      时钟按钮挂在每一项的右侧（见 taskHtml），点开这个小弹窗：
        · datetime-local 精确到分钟；
@@ -3639,6 +3846,10 @@
     BIG._dueCtx = { si: si, ti: ti };
     var m = $('bhwDueMask'); if(!m) return;
     var inp = $('bhwDueInput'); if(inp) inp.value = String(o.due || '').slice(0, 16);
+    /* v4.16.4：每次打开都重置两段式预设的选中态，按现有值重新点亮能对上的那颗 */
+    DUE_PICK = { day: null, time: null };
+    try{ duePickSync(); }catch(e){}
+    try{ BIG.dueHint(); }catch(e){}
     var ttl = $('bhwDueTitle');
     if(ttl) ttl.textContent = '截止时间 · ' + (hw.items[si].subject || '这一科') + ' 第 ' + (ti + 1) + ' 项';
     m.classList.add('show');
@@ -3667,31 +3878,186 @@
     dueWrite(inp ? String(inp.value || '').slice(0, 16) : '');
   };
   BIG.dueClear = function (){ dueWrite(''); };
+  /* ---- v4.16.4（站主）：预设改成「先点日期、再点时间」两段式 ----
+     站主原话：「我需要先点一个时间再点个时间点，这样就是预设时间；
+     比如说我想快捷选择明天晚上 6:50，那我就先点一下明天，再点一下 6:50」。
+     两段互不依赖先后：只点日期就先按 22:00 补，只点时间就按今天补；
+     点完立刻写进输入框，输入框仍是最终依据，随时可以改成 18:45。 */
+  var DUE_PICK = { day: null, time: null };
+  function duePickSync(){
+    var box = $('bhwDueMask'), inp = $('bhwDueInput');
+    if(!box) return;
+    var v = inp ? String(inp.value || '') : '';
+    var d = v ? new Date(v) : null;
+    if(!d || isNaN(d.getTime())){
+      var all0 = box.querySelectorAll('[data-due-day],[data-due-time]');
+      for(var i = 0; i < all0.length; i++) all0[i].classList.remove('on');
+      return;
+    }
+    var now = new Date();
+    var d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var t0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var diff = Math.round((t0 - d0) / 86400000);
+    var pp = function (n){ return (n < 10 ? '0' : '') + n; };
+    var hm = pp(d.getHours()) + ':' + pp(d.getMinutes());
+    var dayKey = diff === 0 ? '0' : diff === 1 ? '1' : (d.getDay() === 0 ? 'sun' : '');
+    var days = box.querySelectorAll('[data-due-day]');
+    for(var a = 0; a < days.length; a++){
+      days[a].classList.toggle('on', String(days[a].getAttribute('data-due-day')) === String(dayKey));
+    }
+    var ts = box.querySelectorAll('[data-due-time]');
+    for(var b = 0; b < ts.length; b++){
+      ts[b].classList.toggle('on', String(ts[b].getAttribute('data-due-time')) === hm);
+    }
+    DUE_PICK.day = (dayKey === '0' || dayKey === '1' || dayKey === 'sun') ? (dayKey === 'sun' ? 'sun' : Number(dayKey)) : null;
+    DUE_PICK.time = hm;
+  }
+  function duePickDate(){
+    var d = new Date();
+    if(DUE_PICK.day === 'sun'){
+      /* 「周日」= 最近的那个周日；今天就是周日 → 今天 */
+      var add = (7 - d.getDay()) % 7;
+      d.setDate(d.getDate() + add);
+    }else if(typeof DUE_PICK.day === 'number'){
+      d.setDate(d.getDate() + DUE_PICK.day);
+    }
+    return d;
+  }
+  function duePickApply(){
+    var d = duePickDate();
+    var t = DUE_PICK.time || '22:00';
+    var hm = String(t).split(':');
+    d.setHours(Number(hm[0]) || 0, Number(hm[1]) || 0, 0, 0);
+    /* 选了「今天 12:00」但现在已经 23:00 —— 自动挪到明天，
+       否则一保存就是个已截止的时间，等于白点 */
+    if(DUE_PICK.day !== null && d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
+    var inp = $('bhwDueInput');
+    if(inp) inp.value = dueLocalVal(d);
+    BIG.dueHint();
+  }
+  BIG.dueDay = function (n, btn){
+    DUE_PICK.day = n;
+    var box = $('bhwDueMask');
+    if(box){
+      var arr = box.querySelectorAll('[data-due-day]');
+      for(var i = 0; i < arr.length; i++) arr[i].classList.toggle('on', arr[i] === btn);
+    }
+    duePickApply();
+  };
+  BIG.dueTime = function (t, btn){
+    DUE_PICK.time = t;
+    var box = $('bhwDueMask');
+    if(box){
+      var arr = box.querySelectorAll('[data-due-time]');
+      for(var i = 0; i < arr.length; i++) arr[i].classList.toggle('on', arr[i] === btn);
+    }
+    duePickApply();
+  };
+  /** 输入框变成什么样，下面那句「已选：明天 周三 18:50」就跟着说清楚 */
+  BIG.dueHint = function (){
+    var el = $('bhwDueHint'); if(!el) return;
+    var inp = $('bhwDueInput');
+    var v = inp ? String(inp.value || '') : '';
+    if(!v){ el.textContent = '先点日期、再点时间；也可以直接在输入框里改。'; return; }
+    var t = new Date(v);
+    if(isNaN(t.getTime())){ el.textContent = '这个时间看不懂，请重新选一次。'; return; }
+    var now = new Date();
+    var d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var t0 = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    var diff = Math.round((t0 - d0) / 86400000);
+    var wk = '日一二三四五六'.charAt(t.getDay());
+    var pp = function (n){ return (n < 10 ? '0' : '') + n; };
+    var head = diff === 0 ? '今天' : diff === 1 ? '明天' : diff === -1 ? '昨天'
+      : (t.getMonth() + 1) + '月' + t.getDate() + '日';
+    var out = '已选：' + head + ' 周' + wk + ' ' + pp(t.getHours()) + ':' + pp(t.getMinutes());
+    if(t.getTime() < Date.now()) out += '（这个时间已经过了）';
+    el.textContent = out;
+  };
+  /* 旧接口留着：万一还有地方按「今晚 / 明天 / 下周一」调用，不要报错 */
   BIG.dueQuick = function (n){
     var d = new Date(); d.setHours(22, 0, 0, 0);
     if(n === 0 && new Date().getHours() >= 22) d.setDate(d.getDate() + 1);
     else if(n === 7){ var wd = (d.getDay() + 6) % 7; d.setDate(d.getDate() + (7 - wd)); }
     else if(n > 0) d.setDate(d.getDate() + n);
     var inp = $('bhwDueInput'); if(inp) inp.value = dueLocalVal(d);
+    BIG.dueHint();
   };
 
   /* v4.11.0（站主第 4 条）：设置这一周的起止。
      站主原话：「比如周三四放假，那这一周就只有周一二有作业」。
      只动这一期自己的 start / end，其它周不受影响；
      把结束日改到周六，周末作业就自动只剩周日（见 ensurePeriod）。 */
-  BIG.hwWeekSetting = function (){
+  /* v4.16.4（站主）：「作业看板里面的那个设置，它不一定只包含修改本次作业时间，
+     也包含修改全局的」—— 所以「设置」不再直接弹日期表单，而是打开一个面板：
+     上面是本周起止，下面是两个全局阈值（截止前提醒 / 截止后隐藏）。
+     日期仍然只影响「当前这一期」，阈值走云端、所有设备同步。 */
+  BIG.hwCfgOpen = function (){
     if(!canEdit()){ toast('当前不可编辑', true); return; }
     var hw = currentHw();
-    if(!hw){ toast('当前没有作业期次', true); return; }
-    FORM.mode = 'week';
-    var t = $('bhwFormTitle'); if(t) t.textContent = String(hw.title || '这一周') + ' · 调整范围';
-    var n = $('bhwFormName'), st = $('bhwFormStart'), en = $('bhwFormEnd');
-    if(n){ n.value = plain(hw.title || ''); n.style.display = 'none'; }
-    if(n && n.previousElementSibling) n.previousElementSibling.style.display = 'none';
-    if(st) st.value = String(hw.start || '').slice(0, 10);
-    if(en) en.value = String(hw.end || '').slice(0, 10);
-    var sj = $('bhwFormSubj'); if(sj){ sj.innerHTML = ''; sj.style.display = 'none'; }
-    var m = $('bhwFormMask'); if(m) m.classList.add('show');
+    var s = $('bhwCfgStart'), e = $('bhwCfgEnd'), a = $('bhwCfgAlert'), h = $('bhwCfgHide');
+    if(s) s.value = hw ? String(hw.start || '').slice(0, 10) : '';
+    if(e) e.value = hw ? String(hw.end || '').slice(0, 10) : '';
+    var p = hwSettings();
+    if(a) a.value = p.alertMin;
+    if(h) h.value = p.hideMin;
+    var t = $('bhwCfgTitle');
+    if(t) t.textContent = (hw ? String(hw.title || '这一期') : '作业看板') + ' · 设置';
+    var tip = $('bhwCfgRangeTip');
+    if(tip){
+      tip.textContent = hw
+        ? '只影响这一期：周三四放假那种情况，把结束日提前即可。'
+        : '当前日期不在任何作业期次里，日期这一栏暂时改不了。';
+      tip.style.color = hw ? '' : '#b45309';
+    }
+    var by = $('bhwCfgBy');
+    if(by){
+      var who = hw ? String(hw.by || '').trim() : '';
+      var at = hw ? String(hw.at || '') : '';
+      if(who){
+        var stamp = '';
+        try{
+          /* ⚠️ 别先 slice 再 new Date：云端存的是 UTC 的 ISO 串，
+             截成 '2026-11-15T03:05' 再解析会被当成本地时间，整整差一个时区。 */
+          var d = new Date(at);
+          if(at && !isNaN(d.getTime())){
+            var pp = function (n){ return (n < 10 ? '0' : '') + n; };
+            stamp = ' · ' + (d.getMonth() + 1) + '-' + d.getDate() + ' '
+              + pp(d.getHours()) + ':' + pp(d.getMinutes());
+          }
+        }catch(e){}
+        by.textContent = '最后修改：' + who + stamp;
+        by.style.color = '';
+      }else{
+        by.textContent = '最后修改：还没有人上传过这一期';
+        by.style.color = 'var(--fg-3)';
+      }
+    }
+    var m = $('bhwCfgMask'); if(m) m.classList.add('show');
+  };
+  /* 旧名字留着：历史调用点与测试脚本还在用它 */
+  BIG.hwWeekSetting = BIG.hwCfgOpen;
+
+  BIG.hwCfgClose = function (){
+    var m = $('bhwCfgMask'); if(m) m.classList.remove('show');
+  };
+
+  BIG.hwCfgSave = function (){
+    var sv = function (id){ var el = $(id); return el ? String(el.value || '').trim() : ''; };
+    var st = sv('bhwCfgStart'), en = sv('bhwCfgEnd');
+    var aRaw = sv('bhwCfgAlert'), hRaw = sv('bhwCfgHide');
+    var hw = currentHw();
+    if(hw && (st || en)){
+      if(!st || !en){ toast('起止日期要一起填', true); return; }
+      if(st > en){ toast('开始日期不能晚于结束日期', true); return; }
+      if(String(hw.start || '').slice(0, 10) !== st || String(hw.end || '').slice(0, 10) !== en){
+        hw.start = st; hw.end = en;
+        touch();       /* 期次改动照旧走作业那条合并上传 */
+      }
+    }
+    BIG.hwSettingsSave({ alertMin: aRaw, hideMin: hRaw });
+    BIG.hwCfgClose();
+    try{ BIG.renderHw(); }catch(e){}
+    toast('设置已保存');
   };
 
   /* —— 新建 / 重命名（站主第 1 条）—— */
@@ -4101,17 +4467,40 @@
       var it = (j && j.items) || {};
       var raw = it.holiday_homeworks;
       if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = null; } }
-      /* 本机有未上传改动时不覆盖，避免手动刷新把自己的改动画掉 */
+      /* v4.16.4（站主）：「刷新的时候要把右侧也都刷新一下 ——
+         比如我改了班级岛里的今日事项，作业看板这边刷新只刷了作业」。
+         同一次请求回来的还有今日事项、公告、看板设置，全应用一遍；
+         作业那份有未上传改动时单独排除，别把本机刚改的盖掉。 */
+      try{
+        var rest = {};
+        Object.keys(it).forEach(function (k){ if(k !== 'holiday_homeworks') rest[k] = it[k]; });
+        if(Object.keys(rest).length && typeof applyCloudContent === 'function') applyCloudContent(rest);
+      }catch(e){}
       if(Array.isArray(raw) && hwLocalPending()){
         toast('本机还有未上传的改动，已保留本机版本');
+        try{ hwSideRefresh(true); }catch(e){}
         syncBadge();
         return;
       }
       var changed = Array.isArray(raw) ? hwApply(raw) : false;
-      if(!changed) toast('已是最新作业');
+      try{ hwSideRefresh(true); }catch(e){}
+      if(!changed) toast('已是最新');
       syncBadge();
     }).catch(function (){ toast('刷新失败，请检查网络', true); syncBadge(); });
   };
+
+  /* 右侧（今日事项 / 班级岛 / 进度卡）单独再拉一次。
+     作业和班级岛是两套接口，只刷作业的话「今日事项」永远停在进来时那一份。
+     90 秒内不重复拉，避免 45 秒巡检把接口打满。 */
+  var _sideAt = 0;
+  function hwSideRefresh(force){
+    var now = Date.now();
+    if(!force && now - _sideAt < 90000) return;
+    _sideAt = now;
+    try{ if(typeof global.islandBoot === 'function') global.islandBoot(); }catch(e){}
+    try{ renderSide(); }catch(e){}
+  }
+  BIG.hwSideRefresh = hwSideRefresh;
 
   function stampText(){
     var d = new Date();
@@ -6399,6 +6788,15 @@
     try{
       BIG.examLoad();
       setInterval(function (){ if(BIG.hwOn || document.visibilityState === 'visible') BIG.examLoad(); }, EXAM_TTL);
+    }catch(e){}
+    /* v4.16.4（站主）：「考完一科就变一科」—— 场次到点要自己变灰，
+       不能等 5 分钟一次的接口刷新。paintExam 内部会比对 HTML，
+       没变化时只重算一次高度，不会白重建整块。 */
+    try{
+      setInterval(function (){
+        if(!BIG.hwOn || document.visibilityState === 'hidden') return;
+        paintExam();
+      }, 60000);
     }catch(e){}
     syncThemeBtn();
     /* v4.3.1（站主第 1 条）：大屏模式打开网站直接进作业页，不用再点一次图标墙。

@@ -4714,6 +4714,36 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 .bhw-due.over{color:#b45309;opacity:.92}
 .bhw-task.over .bhw-txt{opacity:.5}
 .dark .bhw-due{opacity:.85}
+
+/* v4.16.4（站主）：「距离截止还剩前 n 分钟，对应科目的作业要有个强调提醒，
+   比如框出来，并伴随动画」。用绝对定位的伪元素画框 —— 不占布局，
+   不会因为多了一圈框把整张卡的高度顶出去（那会让两栏排版来回跳）。 */
+.bhw-task{position:relative}
+.bhw-task.due-soon::before{
+  content:'';position:absolute;left:-2px;right:-2px;top:-1px;bottom:-1px;
+  border:2px solid rgba(210,74,61,.6);border-radius:9px;pointer-events:none;
+  animation:bhwDueFrame 1.9s ease-in-out infinite;
+}
+@keyframes bhwDueFrame{
+  0%,100%{opacity:.32;box-shadow:0 0 0 0 rgba(210,74,61,0)}
+  50%{opacity:1;box-shadow:0 0 13px 2px rgba(210,74,61,.26)}
+}
+/* 剩余时间：跟着框一起跳，越近越显眼 */
+.bhw-dueleft{
+  display:inline-block;margin:3px 0 0 6px;padding:1px 7px;border-radius:999px;
+  font-size:calc(.68rem*var(--bhw-fs));font-weight:800;letter-spacing:0;
+  color:#b3261e;background:rgba(210,74,61,.12);
+  animation:bhwDueTick 1.9s ease-in-out infinite;
+}
+@keyframes bhwDueTick{
+  0%,100%{opacity:.72}
+  50%{opacity:1;background:rgba(210,74,61,.22)}
+}
+.dark .bhw-task.due-soon::before{border-color:rgba(255,138,124,.65)}
+.dark .bhw-dueleft{color:#ffb4a8;background:rgba(210,74,61,.22)}
+@media (prefers-reduced-motion:reduce){
+  .bhw-task.due-soon::before,.bhw-dueleft{animation:none;opacity:1}
+}
 /* 行尾的时钟按钮：跟删除键一个量级，设过时间的变实心 */
 .bhw-duebtn{
   border:none;background:transparent;color:var(--fg-3);cursor:pointer;padding:3px;
@@ -4848,6 +4878,24 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
   border-radius:9px;padding:6px 11px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;
 }
 .bhw-duebox .bhw-due-quick button:hover{border-color:var(--grad-a)}
+/* v4.16.4：两段式预设（日期一行、时间点一行） */
+.bhw-due-preset{margin:12px 0 2px}
+.bhw-due-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:7px}
+.bhw-due-k{
+  font-size:.74rem;font-weight:900;color:var(--fg-3);width:2.4em;flex:none;
+}
+.bhw-due-preset button{
+  border:1px solid rgba(120,53,15,.18);background:var(--bg-2);color:var(--fg);
+  border-radius:9px;padding:6px 13px;font-size:.8rem;font-weight:700;cursor:pointer;
+  font-family:inherit;font-variant-numeric:tabular-nums;transition:background .15s,border-color .15s;
+}
+.bhw-due-preset button:hover{border-color:var(--grad-a)}
+.bhw-due-preset button.on{
+  background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;border-color:transparent;
+}
+.bhw-due-hint{
+  margin:2px 0 0;font-size:.76rem;font-weight:700;color:#b45309;line-height:1.6;
+}
 .bhw-duebox .bhw-due-tip{font-size:.76rem;color:var(--fg-3);line-height:1.6;margin:8px 0 0}
 /* 媒体：图片直接铺出来（站主：不要「打开才能看」，看图一眼就要看见）；
    点击只是放大，不是唯一入口。音频仍然点击才播。 */
@@ -5666,6 +5714,28 @@ html.bhw-locked,html.bhw-locked body{overflow:hidden!important;height:100%;touch
 }
 .bhw-form-foot button.primary{
   background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;border-color:transparent;
+}
+/* v4.16.4：作业看板设置面板 */
+.bhw-cfgbox{width:min(600px,94vw);max-height:90vh;overflow:auto}
+.bhw-cfg-sec{
+  margin-top:14px;padding:12px 14px;border-radius:14px;
+  background:var(--bg-2);border:1px solid rgba(120,53,15,.1);
+}
+.bhw-cfg-sec:first-of-type{margin-top:0}
+.bhw-cfg-h{
+  display:flex;align-items:center;gap:8px;
+  font-size:.86rem;font-weight:900;letter-spacing:.01em;
+}
+.bhw-cfg-cloud{
+  font-size:.66rem;font-weight:800;padding:1px 7px;border-radius:999px;
+  color:#15803d;background:rgba(21,128,61,.12);
+}
+.bhw-cfg-sec .bhw-due-tip{margin:6px 0 2px}
+.bhw-cfg-sec .bhw-form-row{margin-top:2px}
+.bhw-cfgbox input[type=number]{font-variant-numeric:tabular-nums}
+.bhw-cfg-by{
+  margin:8px 0 0;font-size:.74rem;font-weight:700;color:var(--fg-3);
+  font-variant-numeric:tabular-nums;
 }
 
 /* —— 导出 / 导入（v4.2.0）——
@@ -7248,7 +7318,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.16.3</button>
+        title="点击检查是否为最新版本">v4.16.4</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -7335,17 +7405,70 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <div class="bhw-form bhw-duebox">
         <h3 id="bhwDueTitle">设置截止时间</h3>
         <label for="bhwDueInput">截止时间（精确到分钟，留空表示不设）</label>
-        <input id="bhwDueInput" type="datetime-local" step="60">
-        <div class="bhw-due-quick">
-          <button type="button" onclick="BIG.dueQuick(0)">今晚 22:00</button>
-          <button type="button" onclick="BIG.dueQuick(1)">明天 22:00</button>
-          <button type="button" onclick="BIG.dueQuick(7)">下周一 22:00</button>
+        <input id="bhwDueInput" type="datetime-local" step="60"
+          oninput="BIG.dueHint()" onchange="BIG.dueHint()">
+        <!-- v4.16.4（站主）：预设改成「先点日期、再点时间」两步。
+             例：想选明天 18:50，先点「明天」，再点「18:50」，上面输入框立刻变成那个时刻；
+             仍然可以直接改输入框（比如改成 18:45）。 -->
+        <div class="bhw-due-preset">
+          <div class="bhw-due-line">
+            <span class="bhw-due-k">日期</span>
+            <button type="button" data-due-day="0" onclick="BIG.dueDay(0,this)">今天</button>
+            <button type="button" data-due-day="1" onclick="BIG.dueDay(1,this)">明天</button>
+            <button type="button" data-due-day="sun" onclick="BIG.dueDay('sun',this)">周日</button>
+          </div>
+          <div class="bhw-due-line">
+            <span class="bhw-due-k">时间</span>
+            <button type="button" data-due-time="12:00" onclick="BIG.dueTime('12:00',this)">12:00</button>
+            <button type="button" data-due-time="18:50" onclick="BIG.dueTime('18:50',this)">18:50</button>
+            <button type="button" data-due-time="22:00" onclick="BIG.dueTime('22:00',this)">22:00</button>
+          </div>
+          <p class="bhw-due-hint" id="bhwDueHint">先点日期、再点时间；也可以直接在输入框里改。</p>
         </div>
-        <p class="bhw-due-tip">过了这个时间的作业会在只读态自动收进「已截止」，编辑态仍可见、可改。</p>
+        <p class="bhw-due-tip">过了这个时间的作业会在只读态自动收进「已截止」；收起的时机在「设置」里调（默认 60 分钟）。</p>
         <div class="bhw-form-foot">
           <button type="button" onclick="BIG.dueClear()">清除</button>
           <button type="button" onclick="BIG.dueClose()">取消</button>
           <button type="button" class="primary" onclick="BIG.dueSave()">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- v4.16.4（站主）：作业看板设置。上面管这一期的起止，下面两个阈值走云端、
+         所有设备同步：「截止前多少分钟开始强调」「截止后多少分钟隐藏该项」。 -->
+    <div class="bhw-form-mask" id="bhwCfgMask" onclick="if(event.target===this)BIG.hwCfgClose()">
+      <div class="bhw-form bhw-cfgbox">
+        <h3 id="bhwCfgTitle">作业看板设置</h3>
+
+        <div class="bhw-cfg-sec">
+          <b class="bhw-cfg-h">本周范围</b>
+          <p class="bhw-due-tip" id="bhwCfgRangeTip">只影响这一期：周三四放假那种情况，把结束日提前即可。</p>
+          <div class="bhw-form-row">
+            <div><label for="bhwCfgStart">开始日期</label><input id="bhwCfgStart" type="date"></div>
+            <div><label for="bhwCfgEnd">结束日期</label><input id="bhwCfgEnd" type="date"></div>
+          </div>
+          <!-- v4.16.4：上传不再匿名，这里直接说清楚这一期最后是谁改的 -->
+          <p class="bhw-cfg-by" id="bhwCfgBy"></p>
+        </div>
+
+        <div class="bhw-cfg-sec">
+          <b class="bhw-cfg-h">截止提醒<span class="bhw-cfg-cloud">云端同步</span></b>
+          <div class="bhw-form-row">
+            <div>
+              <label for="bhwCfgAlert">截止前多少分钟开始强调</label>
+              <input id="bhwCfgAlert" type="number" min="0" max="1440" step="5" inputmode="numeric">
+            </div>
+            <div>
+              <label for="bhwCfgHide">截止后多少分钟隐藏该项</label>
+              <input id="bhwCfgHide" type="number" min="0" max="1440" step="5" inputmode="numeric">
+            </div>
+          </div>
+          <p class="bhw-due-tip">填 0 表示关掉这一项：不强调，或者一过截止就收进「已截止」。设置存云端，换设备一样生效。</p>
+        </div>
+
+        <div class="bhw-form-foot">
+          <button type="button" onclick="BIG.hwCfgClose()">取消</button>
+          <button type="button" class="primary" onclick="BIG.hwCfgSave()">保存</button>
         </div>
       </div>
     </div>
@@ -8415,19 +8538,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.16.3';
+var SITE_VERSION = '4.16.4';
 var VER_DATE = '2026-11-14';
 </script>
-<script src="./auth-bus.js?v=4163" defer></script>
+<script src="./auth-bus.js?v=4164" defer></script>
 <script src="./tour.js?v=040507" defer></script>
-<script src="./app.min.js?v=4163" defer></script>
+<script src="./app.min.js?v=4164" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4163" defer></script>
-<script src="./big.js?v=4163" defer></script>
+<script src="./fs-keep.js?v=4164" defer></script>
+<script src="./big.js?v=4164" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4163" defer></script>
+<script src="./pickfx.js?v=4164" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

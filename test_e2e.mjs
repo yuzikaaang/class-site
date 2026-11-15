@@ -12234,8 +12234,10 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
   t('★v3.9.16 主脚本改为压缩版外链 + defer',
     /<script src="\.\/app\.min\.js\?v=\d+" defer><\/script>/.test(idx98)
     && fs.statSync(new URL('./app.js', import.meta.url)).size > 600000);
-  t('★v3.9.8 HTML 体积保持在 480KB 以内（拆分前 533KB）',
-    idx98.length < 480000);
+  /* v4.16.4：作业看板设置面板、截止提醒样式加进来，基线抬到 505K 字符；
+     拆分前是 533KB，仍留了余量。 */
+  t('★v4.16.4 HTML 体积保持在 505K 字符以内（拆分前 533KB）',
+    idx98.length < 505000);
   t('★v3.9.8 版本号留在 HTML（门禁能直接读到）',
     RE_SITE.test(idx98) && !/var SITE_VERSION/.test(app98));
   t('★v3.9.8 首屏骨架卡（公告 + 板块）',
@@ -13546,8 +13548,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     && /var p = ensurePeriod\(d\)/.test(bigV)
     && /return ensurePeriod\(new Date\(\)\)/.test(bigV));
   t('★v4.11.0 顶栏去掉「新建一期」，改「设置」（调这一周范围）',
-    !/新建一期<\/button>/.test(bigV) && /BIG\.hwWeekSetting\(\)/.test(bigV)
-    && /调整这一周的起止日期/.test(bigV));
+    !/新建一期<\/button>/.test(bigV) && /BIG\.hwCfgOpen\(\)/.test(bigV)
+    && /作业看板设置：本周起止、截止提醒与隐藏/.test(bigV));
+  /* v4.16.4：同一个面板里还管两个全局阈值，且阈值要走云端 */
+  t('★v4.16.4 设置面板含两个阈值，并写明存云端',
+    /BIG\.hwSettingsSave\(/.test(bigV) && /action=hw-prefs/.test(bigV)
+    && /function hwSettings\(\)/.test(bigV));
   t('★v4.11.0 把这一周推到周六，周末作业自动往后缩',
     /AUTO_CACHE = \{\}/.test(bigV) && /l2\[k\]\.start = ymd\(from\)/.test(bigV));
   {

@@ -51,6 +51,7 @@ const ALLOW_CONTENT_KEYS = [
   'pick_history',       // v4.4.0 随机点名抽取记录：[{id,at,cond,n,names[],note}]
   'pick_exclude',       // v4.7.0 随机点名的请假 / 不参与名单：{ 姓名: 'leave'|'out' }
   'pick_hist_del',      // v4.7.11 抽取历史墓碑：['pk...'] —— 让「删掉的记录」在所有设备都不再复活
+  'hw_settings',        // v4.16.4 作业看板全局设置：{ alertMin, hideMin }（截止前提醒 / 截止后隐藏）
 ];
 
 /* 课代表能改的字段——只有作业相关。
@@ -83,6 +84,11 @@ export default async function handler(req, res) {
        所以给它单独一条「只写作业、按 id 合并」的通道，见 hwSaveMerge 的说明。 */
     if (req.method === 'POST' && String(req.query.action || '').toLowerCase() === 'hw-save') {
       return await hwSaveMerge(req, res);
+    }
+    /* v4.16.4：作业看板的全局设置（截止前提醒 / 截止后隐藏）单独一条通道。
+       跟作业一样不要求登录 —— 班级电脑是改这些的主要设备。 */
+    if (req.method === 'POST' && String(req.query.action || '').toLowerCase() === 'hw-prefs') {
+      return await hwPrefsSave(req, res);
     }
     return fail(res, 405, '不支持的方法');
   } catch (e) {
@@ -426,6 +432,27 @@ async function hwSaveMerge(req, res) {
   const prev = Array.isArray(doc.holiday_homeworks) ? doc.holiday_homeworks : [];
   const merged = mergeHwById(prev, incoming, dels);
 
+  /* v4.16.4（站主）：「作业上传可以不匿名」—— 谁改的就记在谁名下，
+     不再是一份没有作者的公共文档。登录了就记用户名；班级电脑通常没登录，
+     就记这台设备报上来的名字，再退回设备标识。
+     ⚠️ 署名只用于「这是谁改的」这类追溯，不参与权限判断 ——
+        写作业的门槛仍然只看这条通道本身（只认作业、按 id 合并）。 */
+  let who = '';
+  try {
+    const u = await currentUser(req);
+    if (u) who = String(u.displayName || u.username || '').trim();
+  } catch (e) { /* 没带 token / 会话过期，按未登录处理 */ }
+  if (!who && b && b.by) who = String(b.by).trim().slice(0, 40);
+  if (!who && b && b.dev) who = String(b.dev).trim().slice(0, 40);
+  if (!who) who = '未署名设备';
+  const nowIso = new Date().toISOString();
+  const touched = new Set(incoming.map((h) => String(h.id)));
+  merged.forEach((h) => {
+    if (!h || typeof h !== 'object' || !touched.has(String(h.id))) return;
+    h.by = who;
+    h.at = nowIso;
+  });
+
   doc.holiday_homeworks = merged;
 
   await sql`
@@ -441,15 +468,76 @@ async function hwSaveMerge(req, res) {
     await audit(uid, 'hw-save-merge', 'site_content', null,
       '作业合并保存：提交 ' + incoming.length + ' 期 / 云端共 ' + merged.length + ' 期'
       + (dels.length ? ' / 删除 ' + dels.length + ' 期' : '')
-      + (b && b.dev ? ' / 来自 ' + String(b.dev).slice(0, 40) : ''));
+      + ' / 修改人 ' + who);
   } catch (e) { /* 审计失败不影响保存 */ }
 
   return ok(res, {
     message: '已保存',
     list: merged,
     count: merged.length,
+    by: who,
     serverTime: Date.now(),
   });
+}
+
+/* ---------------- v4.16.4：作业看板的全局设置 ----------------
+   站主原话：「作业看板里面的那个设置……也包含修改就是全局的，
+   比如说截止前 n 分钟强调提醒、过了截止 n 分钟隐藏该项，
+   这个设置是要上传云端的，所以呢我修改是同步的」。
+   两个 n 都是「分钟」，范围 0–1440（一天），0 表示关掉这项行为。
+   跟作业同一条匿名通道：班级电脑是主要操作设备，不能卡在登录上。 */
+const HW_PREF_DEF = { alertMin: 30, hideMin: 60 };
+const HW_PREF_MAX = 1440;
+
+function hwPrefNum(v, def) {
+  const n = Number(v);
+  if (!isFinite(n)) return def;
+  return Math.max(0, Math.min(HW_PREF_MAX, Math.round(n)));
+}
+
+async function hwPrefsSave(req, res) {
+  const b = await body(req);
+  const src = (b && b.prefs && typeof b.prefs === 'object') ? b.prefs : b;
+  const prefs = {
+    alertMin: hwPrefNum(src && src.alertMin, HW_PREF_DEF.alertMin),
+    hideMin: hwPrefNum(src && src.hideMin, HW_PREF_DEF.hideMin),
+  };
+
+  const sql = getSql();
+  const uid = await systemUserId(sql);
+  if (!uid) return fail(res, 500, '没有可用的系统账号，无法保存看板设置');
+
+  const cur = await sql`
+    select data_value from user_data
+     where user_id = ${uid} and data_key = ${CONTENT_KEY}
+  `;
+  let doc = {};
+  if (cur.length) {
+    const p = jsonCol(cur[0].data_value);
+    if (cur[0].data_value === null || cur[0].data_value === undefined) doc = {};
+    else if (p && typeof p === 'object' && !Array.isArray(p)) doc = p;
+    else return fail(res, 500, '云端现有内容读不出来，已中止保存以防覆盖历史数据');
+  }
+
+  doc.hw_settings = prefs;
+
+  await sql`
+    insert into user_data (user_id, data_key, data_value, updated_at)
+    values (${uid}, ${CONTENT_KEY}, ${JSON.stringify(doc)}, now())
+    on conflict (user_id, data_key)
+    do update set data_value = excluded.data_value, updated_at = now()
+  `;
+
+  contentCacheDrop();
+
+  try {
+    await audit(uid, 'hw-prefs-save', 'site_content', null,
+      '作业看板设置：截止前 ' + prefs.alertMin + ' 分钟提醒 / 截止后 '
+      + prefs.hideMin + ' 分钟隐藏'
+      + (b && b.dev ? ' / 来自 ' + String(b.dev).slice(0, 40) : ''));
+  } catch (e) { /* 审计失败不影响保存 */ }
+
+  return ok(res, { message: '已保存', prefs, serverTime: Date.now() });
 }
 
 /* ---------------- 课代表：单科作业保存（2026-10-06） ----------------
