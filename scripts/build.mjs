@@ -140,6 +140,9 @@ idx = idx.replace(/<script src="\.\/tour\.js(\?[^"]*)?" defer><\/script>/,
     `<script src="./tour.js?v=${tourHash}"></script>`);
   if (g2 !== g) write('guide.html', g2);
 }
+/* v4.16.5：大屏左下角那个版本号是写在按钮里的静态文本，
+   发版时很容易忘（线上一直显示上一版）。构建时统一对齐。 */
+idx = idx.replace(/(id="bhwVer"[^>]*>)v[\d.]+(<\/button>)/, '$1v' + VER + '$2');
 if (idx !== before) write('index.html', idx);
 
 /* ---------------- ④ admin.html 引用的 admin.js 也要带新版本号 ----------------

@@ -1174,6 +1174,7 @@
     }).catch(function (){ done('查询失败'); });
   }
   BIG.verCheck = verCheck;
+  BIG.verPaint = verPaint;
 
   BIG.openHw = function (id){
     if(id) BIG.hwId = id;
@@ -6789,6 +6790,10 @@
     applyClass();
     applyFs();
     applyFont();
+    /* v4.16.5：左下角版本号以前只在 openHw() 里写一次，
+       页面里那段 HTML 文本就成了「永远停在发版那天」的旧号。
+       现在一进页面就按 SITE_VERSION 摆正。 */
+    try{ verPaint(); }catch(e){}
     buildHome();
     if(BIG.on) BIG.startAlerts();
     try{ if(typeof refreshQuick === 'function') refreshQuick(); }catch(e){}
