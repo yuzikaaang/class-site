@@ -3740,6 +3740,10 @@
   var HW_SET_KEY = 'cls_hw_settings';
   var HW_SET_DEF = { alertMin: 30, hideMin: 60 };
   function hwSetNum(v, def){
+    /* v4.16.5：空着不算 0。输入框被误清空时若按「0」处理，
+       等于悄悄把这项功能关掉；这里按「没填 → 维持原值」处理，
+       真要关掉就明确填 0。 */
+    if(v === '' || v === null || v === undefined) return def;
     var n = Number(v);
     if(!isFinite(n)) return def;
     return Math.max(0, Math.min(1440, Math.round(n)));
@@ -3821,7 +3825,9 @@
     var left = dueLeft(t);
     if(left === null || left >= 0) return false;
     var w = hwSettings().hideMin * 60000;
-    return (-left) >= w;
+    /* v4.16.5：0 表示「不自动收起」。以前少了这个判断，
+       设成 0 反而是一过截止就立刻藏起来 —— 与设置项旁边的说明相反。 */
+    return w > 0 && (-left) >= w;
   }
   BIG.isDueSoon = isDueSoon;
   BIG.isDueHidden = isDueHidden;

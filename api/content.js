@@ -490,6 +490,8 @@ const HW_PREF_DEF = { alertMin: 30, hideMin: 60 };
 const HW_PREF_MAX = 1440;
 
 function hwPrefNum(v, def) {
+  /* v4.16.5：空字符串/null 视为「没给」，沿用默认；0 才是明确关闭 */
+  if (v === '' || v === null || v === undefined) return def;
   const n = Number(v);
   if (!isFinite(n)) return def;
   return Math.max(0, Math.min(HW_PREF_MAX, Math.round(n)));

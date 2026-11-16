@@ -11,6 +11,11 @@ import { mergeHwById } from '../api/content.js';
 
 const EXE = '/root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome';
 const BASE = process.env.BASE || 'http://127.0.0.1:8899';
+/* v4.16.5：期次日期改成「今天」。
+   以前写死 2026-11-09~11-15，过了那天 currentHw() 就落到「本周自动期次」，
+   hwTask 改的根本不是这份数据，上传断言全部扑空 —— 看着像产品没上传，
+   其实是测试数据过期。 */
+const DAY = (() => { const d = new Date(); const z = n => ('0' + n).slice(-2); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); })();
 
 let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) { pass++; console.log('  ✓ ' + n); } else { fail++; console.log('  ✗ ' + n + (x === undefined ? '' : ' → ' + JSON.stringify(x))); } };
@@ -18,7 +23,7 @@ const ok = (n, c, x) => { if (c) { pass++; console.log('  ✓ ' + n); } else { f
 /* ===================== ① 合并算法（纯函数） ===================== */
 console.log('\n① 按 id 合并：两台设备的改动不互相覆盖');
 {
-  const hw = (id, txt) => ({ id, title: id, start: '2026-11-09', end: '2026-11-15', items: [{ subject: '语文', tasks: [{ text: txt }] }] });
+  const hw = (id, txt) => ({ id, title: id, start: DAY, end: DAY, items: [{ subject: '语文', tasks: [{ text: txt }] }] });
 
   const a = mergeHwById([hw('w1', '云端语文')], [hw('w2', '手机化学')], []);
   ok('云端语文 + 提交化学 → 两期都在', a.length === 2 && a[0].id === 'w1' && a[1].id === 'w2', a.map(x => x.id));
@@ -54,7 +59,7 @@ async function open(opts = {}) {
   /* 云端状态的活副本：POST 之后 GET 必须能读到刚写进去的东西，
      否则轮询会把页面又拉回旧数据，测出来的就是 mock 的问题而不是产品的。 */
   let cloud = [
-    { id: 'w', title: '本周', start: '2026-11-09', end: '2026-11-15', items: [{ subject: '语文', tasks: [{ text: 'a' }] }] },
+    { id: 'w', title: '本周', start: DAY, end: DAY, items: [{ subject: '语文', tasks: [{ text: 'a' }] }] },
     ...extraList
   ];
 

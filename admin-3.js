@@ -3227,6 +3227,21 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.16.5', date: '2026-11-16', type: 'fix', title: '全站巡检 · 两处阈值与后台切页修正', items: [
+      '现象：作业看板「截止后隐藏」填 0，按说明是不自动收起，实际却一过截止就收进「已截止」',
+      '现象：设置面板里把阈值输入框清空后保存，这一项被悄悄改成 0（等于关掉），原值丢了',
+      '现象：后台快速连点侧栏切换页面，成绩分析、通用弹窗的数据回来时控制台报错，页面偶尔空着',
+      '根因：隐藏判定只比「过了多久」，没判 0 表示关闭；空字符串被 Number() 算成 0',
+      '根因：异步请求回来时目标容器已随页面切走，直接写 innerHTML 会命中 null',
+      '修法：0 只表示「不自动收起」，其余按分钟比较',
+      '修法：没填（空 / null）按「维持原值」处理，要关掉就明确填 0；前后端同一套口径',
+      '修法：成绩分析、通用弹窗在写页面前先确认容器还在，不在就安静退出',
+      '巡检：普通模式 35 个入口、后台 28 个页面、手机端 390 宽逐页溢出、大屏考试与截止提醒全部走查',
+      '版本号升至 4.16.5，后端接口版本同步'
+    ], pub: [
+      { cat: '修复', text: '截止后隐藏填 0 即不收起' },
+      { cat: '修复', text: '阈值输入框清空后保留原值' }
+    ] },
   { version: '4.16.4', date: '2026-11-15', type: 'fix', title: '长开不卡 · 考试逐科变灰 · 截止提醒', items: [
       '现象：作业看板连开一两个小时后整体发涩，时钟会出现跳秒，秒数本身没错但快慢不匀',
       '现象：考试卡要等一整天过完才一起变灰，上午那科考完了还亮着',
@@ -6171,7 +6186,11 @@ function scNameBind(name, target){
 }
 
 function scLoad(){
-  $('scBody').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  var box = $('scBody');
+  /* v4.16.5：快速切页时这个容器已经被下一屏替换掉了，
+     异步回调再往这里写 innerHTML 会抛 TypeError。 */
+  if(!box) return;
+  box.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
   var jobs = [ api('/scores?action=list') ];
   if(!SC_STATE.meta) jobs.push(api('/scores?action=meta'));
 
@@ -6180,15 +6199,18 @@ function scLoad(){
     if(r[1]) SC_STATE.meta = r[1];
     scPaintExams();
   }).catch(function(e){
-    $('scBody').innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+    var b2 = $('scBody');
+    if(b2) b2.innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
   });
 }
 
 /* ---------------- 考试列表 ---------------- */
 function scPaintExams(){
+  var box = $('scBody');
+  if(!box) return;                    /* v4.16.5：容器已随页面切走 */
   var list = SC_STATE.exams;
   if(!list.length){
-    $('scBody').innerHTML = '<div class="empty">'
+    box.innerHTML = '<div class="empty">'
       + '<div style="font-size:2rem;margin-bottom:10px">📊</div>'
       + '暂无考试。<br>点右上角「新建考试」建一次（填名称、时间、分数线），'
       + '再「导入成绩」或直接手填。'
@@ -6196,8 +6218,8 @@ function scPaintExams(){
     return;
   }
 
-  $('scBody').innerHTML = list.map(scExamCard).join('');
-  $('scBody').onclick = function(ev){
+  box.innerHTML = list.map(scExamCard).join('');
+  box.onclick = function(ev){
     var b = ev.target.closest ? ev.target.closest('[data-sc-act]') : null;
     if(!b) return;
     var id = Number(b.getAttribute('data-sc-id'));
@@ -7465,9 +7487,14 @@ function renderPopups(){
 }
 
 function loadPopups(){
-  $('popBody').innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
+  var box = $('popBody');
+  if(!box) return;                    /* v4.16.5：容器已随页面切走 */
+  box.innerHTML = '<div class="loading"><div class="spinner"></div>加载中…</div>';
   popLoad().then(function(){ paintPopups(); })
-    .catch(function(e){ $('popBody').innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>'; });
+    .catch(function(e){
+      var b2 = $('popBody');
+      if(b2) b2.innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>';
+    });
 }
 
 function popScopeName(scope){
@@ -7503,15 +7530,17 @@ function popTargetText(t){
 }
 
 function paintPopups(){
+  var box = $('popBody');
+  if(!box) return;                    /* v4.16.5：容器已随页面切走 */
   var list = POP_STATE.list || [];
   if(!list.length){
-    $('popBody').innerHTML = '<div class="empty">'
+    box.innerHTML = '<div class="empty">'
       + '<div style="font-size:2rem;margin-bottom:10px">💬</div>'
       + '暂无弹窗。<br>点右上角「新增弹窗」加一条，比如开屏弹一条班级公告。'
       + '</div>';
     return;
   }
-  $('popBody').innerHTML = list.map(function(p, i){
+  box.innerHTML = list.map(function(p, i){
     var badge = p.scope === 'boot' ? 'badge-green' : 'badge';
     var media = [];
     if(p.video) media.push('视频');
@@ -7552,19 +7581,19 @@ function paintPopups(){
   }).join('');
 
   /* 事件用循环绑定（不用 inline onclick，避免 IIFE 内函数外露） */
-  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-edit]'), function(b){
+  Array.prototype.forEach.call(box.querySelectorAll('[data-pop-edit]'), function(b){
     b.onclick = function(){ popEdit(+b.dataset.popEdit); };
   });
-  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-preview]'), function(b){
+  Array.prototype.forEach.call(box.querySelectorAll('[data-pop-preview]'), function(b){
     b.onclick = function(){ popPreview(+b.dataset.popPreview); };
   });
-  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-del]'), function(b){
+  Array.prototype.forEach.call(box.querySelectorAll('[data-pop-del]'), function(b){
     b.onclick = function(){ popDelete(+b.dataset.popDel); };
   });
-  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-up]'), function(b){
+  Array.prototype.forEach.call(box.querySelectorAll('[data-pop-up]'), function(b){
     b.onclick = function(){ popMove(+b.dataset.popUp, -1); };
   });
-  Array.prototype.forEach.call($('popBody').querySelectorAll('[data-pop-down]'), function(b){
+  Array.prototype.forEach.call(box.querySelectorAll('[data-pop-down]'), function(b){
     b.onclick = function(){ popMove(+b.dataset.popDown, 1); };
   });
 }

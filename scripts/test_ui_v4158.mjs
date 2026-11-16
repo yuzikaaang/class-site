@@ -13,6 +13,10 @@ import { chromium } from 'playwright-core';
 const EXE = '/root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome';
 const BASE = process.env.BASE || 'http://127.0.0.1:8899';
 const today = (() => { const d = new Date(); const z = n => ('0' + n).slice(-2); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); })();
+/* v4.16.5：考试两天改成「昨天 + 今天」。
+   以前写死 2026-11-14/15，跨过这两天后期次与考试全落在窗口外，
+   考试卡压根不渲染，整套断言扑空。 */
+const D0 = (() => { const d = new Date(Date.now() - 86400000); const z = n => ('0' + n).slice(-2); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); })();
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => {
@@ -23,15 +27,15 @@ const ok = (name, cond, extra) => {
 const ISL = { on: true, term: '2026 年秋季 · 高二上', startDate: '2026-09-01', endDate: '2027-01-20', components: ['time'], banner: {}, days: {}, holidays: [], photo: '' };
 const mkItem = (s, n) => ({ subject: s, tasks: Array.from({ length: n }, (_, i) => ({ text: s + '作业第' + (i + 1) + '项：完成课本练习与错题整理' })) });
 const HWS = [
-  { id: 'w11we', title: '第11周周末作业', start: '2026-11-14', end: '2026-11-15',
+  { id: 'w11we', title: '第11周周末作业', start: D0, end: today,
     items: [mkItem('语文', 3), mkItem('数学', 4), mkItem('英语', 3), mkItem('物理', 3), mkItem('化学', 2), mkItem('生物', 2)] },
 ];
 const mkDay = (date, names, wd) => ({ date, wd, anyOn: false, items: names.map((n, i) => ({ id: date + '_' + i, name: n, start: '08:20', end: '10:20', pin: false })) });
 const EXAMS = {
   ok: true, today, base: '', title: '高二', cls: '',
   groups: [
-    { id: 'g11', name: '第11周周末限时训练', start: '2026-11-14', end: '2026-11-15', auto: false, count: 6,
-      days: [mkDay('2026-11-14', ['数学', '物理', '化学', '语文'], '六'), mkDay('2026-11-15', ['生物', '英语'], '日')] },
+    { id: 'g11', name: '第11周周末限时训练', start: D0, end: today, auto: false, count: 6,
+      days: [mkDay(D0, ['数学', '物理', '化学', '语文'], '六'), mkDay(today, ['生物', '英语'], '日')] },
   ],
   pins: { majors: [], days: [], items: [] },
   term: { name: '高二上', start: '2026-09-01', end: '2027-01-31' },
@@ -167,7 +171,7 @@ console.log('\n⑥ 没有考试时不占位');
 
 console.log('\n⑦ 当期一科作业都没有时，考试卡照样占满整行');
 {
-  const { ctx, p } = await open({ w: 1920, h: 1080, hws: [{ id: 'empty', title: '第11周周末作业', start: '2026-11-14', end: '2026-11-15', items: [] }] });
+  const { ctx, p } = await open({ w: 1920, h: 1080, hws: [{ id: 'empty', title: '第11周周末作业', start: D0, end: today, items: [] }] });
   const g = await geom(p);
   ok('考试卡还在', g.has, g);
   ok('仍然横跨整行', g.examW >= (g.colAw + g.colBw) - 16 || g.examW >= g.innerW - 2, { examW: g.examW, innerW: g.innerW, colAw: g.colAw });

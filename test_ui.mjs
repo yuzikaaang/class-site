@@ -88,6 +88,12 @@ console.log('\n【1】手机端首屏密度（390×844）');
   await page.addInitScript(() => {
     localStorage.setItem('cls_login_guide_v1', '1');
     localStorage.setItem('cls_welcome_v1', '1');
+    /* v4.16.5：新手导览会在首访时铺一层透明遮罩（.tour-hit），
+       测试点「班级岛」这类元素会被它挡住。这里直接标成八个场景都看过。 */
+    localStorage.setItem('cls_tour_v1', JSON.stringify({
+      login: { done: 1 }, home: { done: 1 }, services: { done: 1 }, hwpop: { done: 1 },
+      scores: { done: 1 }, big: { done: 1 }, settings: { done: 1 }, files: { done: 1 }
+    }));
   });
   await page.route('**/api/**', mockApi);
   await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded', timeout: 120000 });
@@ -143,6 +149,11 @@ console.log('\n【2】老内核（无 PointerEvent）拖字号滑块');
     try { delete window.PointerEvent; } catch (e) {}
     localStorage.setItem('cls_login_guide_v1', '1');
     localStorage.setItem('cls_welcome_v1', '1');
+    /* v4.16.5：同上，导览遮罩会吃掉触摸事件 */
+    localStorage.setItem('cls_tour_v1', JSON.stringify({
+      login: { done: 1 }, home: { done: 1 }, services: { done: 1 }, hwpop: { done: 1 },
+      scores: { done: 1 }, big: { done: 1 }, settings: { done: 1 }, files: { done: 1 }
+    }));
   });
   await page.route('**/api/**', mockApi);
   await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded', timeout: 120000 });

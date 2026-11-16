@@ -40,7 +40,7 @@ async function open(opts = {}) {
   let cloudPrefs = { alertMin: 30, hideMin: 60 };   /* 云端那份设置的活副本 */
 
   const hw = {
-    id: 'w', title: '本周', start: '2026-11-09', end: '2026-11-15',
+    id: 'w', title: '本周', start: today, end: today,
     by: '余子康', at: new Date(now - 3600000).toISOString(),
     items: [
       { subject: '语文', tasks: [
@@ -191,7 +191,7 @@ console.log('\n③ 看板设置：本周起止 + 两个阈值，阈值上传云�
   ok('设置面板打开了', opened.show === true, opened);
   ok('两个阈值按当前值预填（30 / 60）', String(opened.alert) === '30' && String(opened.hide) === '60', opened);
   ok('面板里写明这一期最后是谁改的', /余子康/.test(opened.by), opened.by);
-  ok('本周起止也带进来了', opened.start === '2026-11-09', opened.start);
+  ok('本周起止也带进来了', opened.start === today, opened.start);
 
   await p.evaluate(() => {
     document.getElementById('bhwCfgAlert').value = '5';

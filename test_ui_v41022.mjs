@@ -166,7 +166,9 @@ t('⑨b 清完之后总量不再含浏览器滞后的旧数字',
   (() => {
     const total = parseB(after.total) || 0;
     const ls = (parseB(after.temp) || 0) + (parseB(after.data) || 0);
-    return total <= after.csBytes + ls + 8192;
+    /* v4.16.5：页面显示的是「3.9 MB」这种一位小数，换算成字节最多差 0.05 MB；
+       原来只留 8KB 容差，会把四舍五入当成「旧数字没清干净」。 */
+    return total <= after.csBytes + ls + 65536;
   })(),
   after.total + ' vs 实测桶 ' + after.csBytes + ' B + 本地 ' + ((parseB(after.temp) || 0) + (parseB(after.data) || 0)) + ' B');
 t('⑨ 明细行条数比造数据前回落（只剩当前版本桶）',
