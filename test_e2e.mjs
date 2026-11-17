@@ -13193,7 +13193,20 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /const SOFT_QUOTA = 700 \* 1024 \* 1024;/.test(files10)
     && /async function kvUsage\(kv\)/.test(files10)
     && /usage\.used \+ size > SOFT_QUOTA/.test(files10)
-    && /for \(const prefix of \[KM, KF\]\)/.test(files10));
+    /* v4.16.6：多文件批次的总大小记在 fbs: 这层，统计前缀多一个 */
+    && /for \(const prefix of \[KM, KF, KBS\]\)/.test(files10));
+
+  /* v4.16.6（站主）：一个取件码挂多个文件 —— 排队、确认上传、逐个改名 */
+  t('★v4.16.6 中转站一个取件码挂多个文件',
+    /const KBS = 'fbs:'/.test(files10) && /const KBI = 'fbi:'/.test(files10)
+    && /const KBT = 'fbt:'/.test(files10) && /const MAX_ITEMS = 20/.test(files10)
+    && /action === 'pick'/.test(files10) && /b\.items\.push\(item\)/.test(files10)
+    && /function batchPage/.test(files10));
+  t('★v4.16.6 中转站前端先排队再上传，主名可改后缀锁住',
+    /function flQueueAdd/.test(app10) && /function flUploadQueue/.test(app10)
+    && /function flSplitName/.test(app10) && /data-qi=/.test(app10)
+    && /id="flFile" multiple/.test(idx10) && /id="flQueue"/.test(idx10)
+    && /id="flQGo"/.test(idx10));
 
   t('★v4.9.2 容量写进 KV metadata，改名时保留',
     /metadata: \{ size: rec\.size, at: rec\.at, kind: rec\.kind \}/.test(files10)
@@ -13857,7 +13870,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /* ⑤ 中转站：二进制直传 + 24MB + 1~15 天 + 1~50 次 */
     t('★v4.10.5 中转站二进制直传（不再 base64 塞 JSON）',
       /action === 'upb'/.test(files5) && /__rawBuf/.test(files5)
-      && /xhr\.send\(f\)/.test(appV) && /application\/octet-stream/.test(appV));
+      && /xhr\.send\(it\.f\)/.test(appV) && /application\/octet-stream/.test(appV));
     t('★v4.10.5 中转站元数据独立小键（查信息 / 改名不读整份文件）',
       /const KM = 'fm:'/.test(files5) && /const KB = 'b:'/.test(files5)
       && /kv\.get\(KM \+ code\)/.test(files5));
@@ -13867,7 +13880,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
 
     /* ⑥ 微信内下载 / 导出兜底 */
     t('★v4.10.5 微信里文件下载引导「在浏览器打开」',
-      /isWeChat\(\)/.test(appV) && /在浏览器打开/.test(appV) && /flCopyDl/.test(appV));
+      /isWeChat\(\)/.test(appV) && /在浏览器打开/.test(appV) && /data-flcopy/.test(appV));
     t('★v4.10.5 微信里图片导出改成「长按保存」',
       /function showImgSaveTip/.test(appV) && /长按/.test(appV)
       && /function wxSaveTip/.test(share5) && /isWx\(\)/.test(share5));

@@ -40,9 +40,15 @@ function routeAll(page, island) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: {} }) });
     }
     if (u.includes('/api/files')) {
+      /* v4.16.6：取件改成 action=pick，返回按「整批文件」的 items 列表（单件也是一条） */
       return route.fulfill({
         status: 200, contentType: 'application/json',
-        body: JSON.stringify({ ok: true, code: 'ABC234', kind: 'file', name: '课件.pdf', size: 1048576, at: Date.now() - 3600000, exp: Date.now() + 86400000, maxGet: 0, gets: 0, left: null, memo: '' }),
+        body: JSON.stringify({
+          ok: true, code: 'ABC234', kind: 'files', count: 1,
+          items: [{ id: 'it1', name: '课件.pdf', type: 'application/pdf', size: 1048576, at: Date.now() - 3600000 }],
+          ttl: 3, at: Date.now() - 3600000, exp: Date.now() + 86400000,
+          maxGet: 0, gets: 0, left: null, memo: '', ticket: 'tk-test-123456',
+        }),
       });
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
@@ -319,7 +325,8 @@ console.log('\n【5】中转站：上限与保存期、微信下载兜底');
   t('保存天数输入框 1~15 天', ui.ttlMin === '1' && ui.ttlMax === '15' && ui.ttlVal === '3', JSON.stringify(ui));
   t('取用次数输入框 0~50', ui.mxMax === '50' && ui.mxVal === '0', JSON.stringify(ui));
   t('前端单件上限是 24MB', ui.limit === 24, 'FL_MAX=' + ui.limit);
-  t('面板文案写的是 24MB / 15 天', /24MB/.test(ui.drop) && /15 天/.test(ui.drop), ui.drop);
+  /* v4.16.6：说明改成「多选」口径，24MB 限额与「共用一个取件码」都要在 */
+  t('面板文案写的是 24MB / 共用一个取件码', /24MB/.test(ui.drop) && /取件码/.test(ui.drop), ui.drop);
 
   /* 超限拦截 */
   const reject = await page.evaluate(async () => {
@@ -360,7 +367,8 @@ console.log('\n【5】中转站：上限与保存期、微信下载兜底');
     const card = document.getElementById('flCard');
     return {
       tip: card ? /在浏览器打开/.test(card.textContent) : false,
-      copyBtn: !!(document.getElementById('flCopyDl')),
+      /* v4.16.6：微信里每个文件各给一个「复制链接」按钮 */
+      copyBtn: !!document.querySelector('[data-flcopy]'),
       downloadLink: card ? !!card.querySelector('a[download]') : false,
       isWx: typeof isWeChat === 'function' ? isWeChat() : null,
     };
@@ -368,7 +376,7 @@ console.log('\n【5】中转站：上限与保存期、微信下载兜底');
   t('微信环境识别正确', wx.isWx === true, 'isWeChat=' + wx.isWx);
   t('微信里不显示直接下载按钮', wx.downloadLink === false);
   t('微信里提示「在浏览器打开」', wx.tip === true);
-  t('微信里提供「复制下载链接」', wx.copyBtn === true);
+  t('微信里每一项都有「复制链接」', wx.copyBtn === true);
   await ctx2.close();
 }
 

@@ -506,8 +506,11 @@ export default async function handler(req, res) {
         await dropBatch(kv, pc);
         return bad(res, 410, '这个取件码的取用次数已经用完了');
       }
-      try { await kv.put(KBC + pc, String(gets + 1), { expirationTtl: batchLeftSec(pb) }); } catch (e) {}
-      gets += 1;
+      /* 不限次数时不落计数键：每次点「查一下」都写一次，KV 写额度很快就见底了 */
+      if (maxGet) {
+        try { await kv.put(KBC + pc, String(gets + 1), { expirationTtl: batchLeftSec(pb) }); } catch (e) {}
+        gets += 1;
+      }
       let tk = '';
       try { tk = String(await kv.get(KBT + pc) || ''); } catch (e) { tk = ''; }
       if (!tk) {
@@ -581,8 +584,10 @@ export default async function handler(req, res) {
         await dropBatch(kv, code);
         return bad(res, 410, '这个取件码的取用次数已经用完了');
       }
-      try { await kv.put(KBC + code, String(gets + 1), { expirationTtl: batchLeftSec(dlb) }); } catch (e) {}
-      gets += 1;
+      if (maxGet) {
+        try { await kv.put(KBC + code, String(gets + 1), { expirationTtl: batchLeftSec(dlb) }); } catch (e) {}
+        gets += 1;
+      }
     }
     /* 没有票据就现发一张，塞进列表页的每个下载链接里 */
     let myTk = cur;

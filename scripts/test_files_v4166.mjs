@@ -95,10 +95,10 @@ ok('pick 成功', p1.status === 200 && p1.json.ok, p1.json);
 ok('拿到 3 个文件', Array.isArray(p1.json.items) && p1.json.items.length === 3, p1.json.items);
 ok('文件名按上传时的样子', p1.json.items.map((x) => x.name).join('|') === '语文笔记.txt|数学卷.pptx|英语听力.mp3', p1.json.items);
 ok('给了票据', typeof p1.json.ticket === 'string' && p1.json.ticket.length >= 12, p1.json.ticket);
-ok('计数 +1', p1.json.gets === 1, p1.json.gets);
+ok('不限次数时 gets 保持 0', p1.json.gets === 0, p1.json.gets);
 const tk = p1.json.ticket;
 const pickCount = async () => Number((await kv.get('fbc:' + code)) || 0);
-ok('KV 里记着取了 1 次', (await pickCount()) === 1, await pickCount());
+ok('不限次数不写计数键（省 KV 写）', (await pickCount()) === 0, await pickCount());
 
 /* ================= ③ 逐个下载 + 改名 ================= */
 console.log('③ 按 id 下载，文件名用改过之后的');
@@ -120,7 +120,7 @@ ok('改名成功', renRes.status === 200 && renRes.json.ok, renRes.json);
 const d2 = await call(kv, { query: { code, id: c.json.itemId, tk } });
 const cd2 = d2.headers['content-disposition'] || '';
 ok('再下载用的是新名字', /%E5%90%AC%E5%8A%9B%E6%9D%90%E6%96%99/.test(cd2), cd2);
-ok('下载不重复计数（还是 1 次）', (await pickCount()) === 1, await pickCount());
+ok('带票据反复下载不写计数键', (await pickCount()) === 0, await pickCount());
 
 /* ================= ④ 不带 id 打开 ================= */
 console.log('④ 不带 id：单个直接下，多个给列表页');
