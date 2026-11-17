@@ -24962,7 +24962,7 @@ function updGo(){
  *   ④ 上传用 XHR 才有真实进度事件（fetch 拿不到上传进度）。
  * ========================================================================== */
 var FL_KEY = 'cls_fl_hist_v1';
-var FL = { ttl: 3, maxGet: 0, busy: false, code: '', delKey: '', kind: 'file', tab: 'up', pending: 0 };
+var FL = { ttl: 3, maxGet: 0, busy: false, code: '', delKey: '', kind: 'file', tab: 'up', pending: 0, q: [] };
 function flEl(id){ return document.getElementById(id); }
 function flBase(){
   return (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
@@ -24986,6 +24986,7 @@ function openFiles(){
   flShowDone(false);
   flTab(FL.tab || 'up');
   FL.pending = 0;
+  flQueueRender();
   flQuotaLoad();
   try{ if(window.TOUR) TOUR.maybe('files', 900); }catch(e){}
   try{ if(typeof closeSidebar === 'function') closeSidebar(); }catch(e){}
@@ -25132,21 +25133,35 @@ function flHistRender(){
   box.innerHTML = a.map(function(r){
     var left = flDaysLeft(r.exp);
     var dead = left <= 0;
-    var kindTag = (r.kind === 'text') ? '文本' : '文件';
+    /* v4.16.6：一个取件码可能挂着好几个文件，历史里也按批显示 */
+    var files = (r.files && r.files.length) ? r.files : [];
+    var cnt = Number(r.count || files.length || 0) || 1;
+    if(files.length && cnt < files.length) cnt = files.length;
+    var isMulti = r.kind !== 'text' && cnt > 1;
+    var kindTag = (r.kind === 'text') ? '文本' : (isMulti ? (cnt + ' 个文件') : '文件');
+    var title = (r.kind === 'text')
+      ? (r.name || '未命名')
+      : (isMulti ? ((files[0] ? files[0].name : (r.name || '')) + ' 等 ' + cnt + ' 个') : (files[0] ? files[0].name : (r.name || '未命名')));
     var meta = [];
     meta.push(flBytes(r.size));
     meta.push(dead ? '已过期' : ('还剩 ' + left + ' 天'));
     if(r.maxGet) meta.push('可取 ' + (r.gets || 0) + '/' + r.maxGet + ' 次');
     if(r.memo) meta.push('备注：' + esc(r.memo));
     meta.push('取件码 ' + esc(r.code));
+    var fileRows = isMulti ? ('<div class="fl-hist-files">' + files.map(function(f){
+      return '<div class="fl-hf"><span>' + esc(f.name) + '</span>'
+        + '<button type="button" class="fl-mini" data-flact="renitem" data-code="' + attr(r.code)
+        + '" data-id="' + attr(f.id) + '" data-old="' + attr(f.name) + '">改名</button></div>';
+    }).join('') + '</div>') : '';
     return '<div class="fl-hist-item' + (dead ? ' dead' : '') + '">'
-      + '<div class="fl-hist-top"><b>' + esc(r.name || '未命名') + '</b>'
+      + '<div class="fl-hist-top"><b>' + esc(title) + '</b>'
       +   '<span class="fl-hist-tag">' + kindTag + '</span></div>'
       + '<div class="fl-hist-meta">' + meta.join('　·　') + '</div>'
+      + fileRows
       + '<div class="fl-hist-acts">'
       +   '<button type="button" class="fl-mini" data-flact="copy" data-code="' + attr(r.code) + '">复制链接</button>'
       +   '<button type="button" class="fl-mini" data-flact="open" data-code="' + attr(r.code) + '">去取件</button>'
-      +   '<button type="button" class="fl-mini" data-flact="ren" data-code="' + attr(r.code) + '">改名</button>'
+      +   (isMulti ? '' : '<button type="button" class="fl-mini" data-flact="ren" data-code="' + attr(r.code) + '">改名</button>')
       +   '<button type="button" class="fl-mini" data-flact="memo" data-code="' + attr(r.code) + '">备注</button>'
       +   '<button type="button" class="fl-mini danger" data-flact="del" data-code="' + attr(r.code) + '">删除</button>'
       + '</div></div>';
@@ -25166,12 +25181,27 @@ function flShowDone(on){
 }
 function flDone(code, delKey, meta){
   FL.code = code; FL.delKey = delKey;
+  var items = (meta && meta.items) || [];
   var c = flEl('flCode'); if(c) c.textContent = code;
   var tip = flEl('flCodeTip');
   if(tip){
-    tip.innerHTML = (meta && meta.kind === 'text')
-      ? '该文本已保存至云端。对方打开本站 →「文件中转站」→ 取件，输入这 6 位即可查看并复制。<br>也可将下方链接直接发送给对方，点击即可查看原文。'
-      : '在另一台设备打开本站 →「文件中转站」→ 取件，输入这 6 位即可下载。<br>也可将下方链接直接发送给对方，点击即可下载。';
+    if(meta && meta.kind === 'text'){
+      tip.innerHTML = '该文本已保存至云端。对方打开本站 →「文件中转站」→ 取件，输入这 6 位即可查看并复制。<br>也可将下方链接直接发送给对方，点击即可查看原文。';
+    }else if(items.length > 1){
+      tip.innerHTML = '这 ' + items.length + ' 个文件共用一个取件码。对方打开本站 →「文件中转站」→ 取件，'
+        + '输入这 6 位将显示整批文件，可逐个下载。<br>也可将下方链接直接发送给对方，点击后显示这批文件的列表。';
+    }else{
+      tip.innerHTML = '在另一台设备打开本站 →「文件中转站」→ 取件，输入这 6 位即可下载。<br>也可将下方链接直接发送给对方，点击即可下载。';
+    }
+  }
+  var list = flEl('flDoneList');
+  if(list){
+    list.innerHTML = items.length > 1
+      ? items.map(function(x){
+          return '<div class="fl-dl-i"><b>' + esc(x.name) + '</b>'
+            + '<span class="fl-qsize">' + flBytes(x.size) + '</span></div>';
+        }).join('')
+      : '';
   }
   var lk = flEl('flLink');
   if(lk) lk.textContent = flUrl(code);
@@ -25182,6 +25212,8 @@ function flDone(code, delKey, meta){
       name: meta.name || '', size: meta.size || 0,
       at: Date.now(), exp: meta.exp || (Date.now() + (meta.ttl || 3) * 86400000),
       ttl: meta.ttl || 3, maxGet: meta.maxGet || 0, gets: 0, memo: meta.memo || '',
+      count: items.length || 1,
+      files: items.map(function(x){ return { id: x.id || '', name: x.name || '', size: x.size || 0 }; }),
     });
   }
 }
@@ -25223,119 +25255,242 @@ function flPost(action, body){
    取用设置可以设置 1~50 次或者不限」。
    （600MB 需要 R2，KV 单值硬上限 25MiB，所以先到 24MB，50MB 那条兜底逻辑留在后端。） */
 var FL_MAX = 24 * 1024 * 1024;
-function flUpload(f){
-  if(!f || FL.busy) return;
-  if(f.size > FL_MAX){
-    flMsg('flMsg', 'err', '这个文件 ' + flBytes(f.size) + '，超过 24MB 上限。'
-      + '更大的课件建议放网盘，这里只挂个链接。');
-    return;
+/* v4.16.6（站主原话）：「有时候我可能是拖两个进去，或者我拖一个进去，但是每次只传了
+   一个，另一个没有传进去。我想一个取件码就可以同时取多个文件……你放进去不要立马上传，
+   下面再新增一个上传按钮，点击之后才一项一项慢慢上传。文件名可以修改，只支持改前面
+   那部分，.ppt / .txt 这些后缀不能改，可以在框后面标注出来。」
+   于是：选文件 / 拖文件 → 只进队列，能逐个改名；点「上传」才一个一个传，
+   第一个建取件码，后面的接着往同一个码里加。 */
+var FL_MAX_ITEMS = 20;
+
+/* 拆成「主名 + 后缀」：只改主名，后缀原样跟着走 */
+function flSplitName(name){
+  var n = String(name == null ? '' : name);
+  var i = n.lastIndexOf('.');
+  if(i <= 0 || i === n.length - 1) return { main: n, ext: '' };
+  return { main: n.slice(0, i), ext: n.slice(i) };
+}
+function flJoinName(main, ext){
+  var m = String(main == null ? '' : main).replace(/[\\/:*?"<>|\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim();
+  if(!m) m = '未命名';
+  if(m.length > 80) m = m.slice(0, 80);
+  return m + (ext || '');
+}
+function flItemName(it){ return flJoinName(it.main, it.ext); }
+
+/* 选 / 拖进来的文件先排队 */
+function flQueueAdd(files){
+  var arr = files ? Array.prototype.slice.call(files) : [];
+  if(!arr.length) return;
+  var added = 0, skipped = [];
+  for(var i = 0; i < arr.length; i++){
+    var f = arr[i];
+    if(!f) continue;
+    if(FL.q.length >= FL_MAX_ITEMS){ skipped.push(f.name + '（一次最多 ' + FL_MAX_ITEMS + ' 个）'); continue; }
+    if(Number(f.size) > FL_MAX){ skipped.push(f.name + '（' + flBytes(f.size) + '，超过 24MB）'); continue; }
+    var sp = flSplitName(f.name || '未命名文件');
+    FL.q.push({ f: f, main: sp.main, ext: sp.ext, size: Number(f.size) || 0 });
+    added++;
   }
-  FL.busy = true;
-  FL.file = f;
-  var prog = flEl('flProg'), inn = flEl('flProgIn');
-  if(prog) prog.classList.add('on');
-  if(inn) inn.style.width = '6%';
-  flMsg('flMsg', '', '正在上传…');
-
-  var memo = (flEl('flMemo') || {}).value || '';
-  var qs = 'action=upb'
-    + '&name=' + encodeURIComponent(f.name || '未命名文件')
-    + '&type=' + encodeURIComponent(f.type || 'application/octet-stream')
-    + '&ttl=' + encodeURIComponent(String(FL.ttl || 3))
-    + '&maxGet=' + encodeURIComponent(String(FL.maxGet || 0))
-    + '&memo=' + encodeURIComponent(memo);
-
-  var xhr = new XMLHttpRequest();
-  xhr.open('POST', flBase() + '/api/files?' + qs, true);
-  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-  xhr.upload.onprogress = function(e){
-    if(!e.lengthComputable) return;
-    var p = Math.round(6 + (e.loaded / e.total) * 90);
-    if(inn) inn.style.width = p + '%';
-  };
-  xhr.onload = function(){
-    var j = null;
-    try{ j = JSON.parse(xhr.responseText || '{}'); }catch(e){ j = null; }
-    if(xhr.status === 200 && j && j.ok){
-      FL.busy = false;
-      if(inn) inn.style.width = '100%';
-      flMsg('flMsg', 'ok', '上传完成：' + flBytes(j.size) + '，保存 ' + j.ttl + ' 天'
-        + (j.maxGet ? '，最多可取 ' + j.maxGet + ' 次' : '') + '。');
-      flDone(j.code, j.delKey, {
-        kind: 'file', name: j.name || f.name, size: j.size, exp: j.exp,
-        ttl: j.ttl, maxGet: j.maxGet, memo: memo,
-      });
-      FL.pending += Number(j.size) || 0;
-      flQuotaLoad();
-      try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
-      return;
-    }
-    /* 后端还没更新到认 upb 的那一版（前后端部署有几秒～几分钟的时差）→ 退回老通道 */
-    if(xhr.status === 400 || xhr.status === 404 || xhr.status === 405 || xhr.status === 415){
-      flUploadLegacy(f, memo);
-      return;
-    }
-    FL.busy = false;
-    flMsg('flMsg', 'err', (j && j.error) ? j.error : ('上传失败（HTTP ' + xhr.status + '）'));
-  };
-  xhr.onerror = function(){
-    FL.busy = false;
-    flMsg('flMsg', 'err', '网络断了，没传上去。');
-  };
-  xhr.send(f);
+  flQueueRender();
+  if(skipped.length){
+    flMsg('flMsg', 'err', '这几个没加进来：' + skipped.join('；'));
+  }else if(added){
+    flMsg('flMsg', '', '已排好 ' + added + ' 个文件，确认无误就点下面的「上传」。');
+  }
+}
+function flQueueRender(){
+  var box = flEl('flQueue'), foot = flEl('flQFoot'), sum = flEl('flQSum'), go = flEl('flQGo');
+  if(!box) return;
+  box.innerHTML = FL.q.map(function(it, i){
+    return '<div class="fl-qitem" data-i="' + i + '">'
+      + '<span class="fl-qname">'
+      +   '<input class="fl-qin" data-qi="' + i + '" maxlength="80" spellcheck="false"'
+      +     ' value="' + attr(it.main) + '" aria-label="文件名">'
+      +   '<span class="fl-qext">' + (it.ext ? esc(it.ext) : '<i>无后缀</i>') + '</span>'
+      + '</span>'
+      + '<span class="fl-qsize">' + flBytes(it.size) + '</span>'
+      + '<button type="button" class="fl-qdel" data-qdel="' + i + '" aria-label="移除">✕</button>'
+      + '</div>';
+  }).join('');
+  var n = FL.q.length, bytes = 0;
+  FL.q.forEach(function(x){ bytes += Number(x.size) || 0; });
+  if(foot) foot.style.display = n ? '' : 'none';
+  if(sum) sum.textContent = n ? ('共 ' + n + ' 个 · ' + flBytes(bytes) + ' · 共用一个取件码') : '';
+  if(go){ go.textContent = n ? ('上传 ' + n + ' 个') : '上传'; go.disabled = !!FL.busy || !n; }
+}
+function flQueueClear(){
+  if(FL.busy) return;
+  FL.q = [];
+  flQueueRender();
+  var p = flEl('flProg'); if(p) p.classList.remove('on');
+  var inn = flEl('flProgIn'); if(inn) inn.style.width = '0%';
+  flMsg('flMsg', '', '');
 }
 
-/* 老通道（base64 塞 JSON）：只在后端还没更新到 v4.10.5 时兜底，上限只能 15MB */
-function flUploadLegacy(f, memo){
-  if(f.size > 15 * 1024 * 1024){
-    FL.busy = false;
-    flMsg('flMsg', 'err', '服务器版本较旧，单件最大 15MB。刷新页面后再试，新版本可以到 24MB。');
-    return;
-  }
-  var prog = flEl('flProg'), inn = flEl('flProgIn');
-  var reader = new FileReader();
-  reader.onerror = function(){
-    FL.busy = false;
-    flMsg('flMsg', 'err', '读不到这个文件，请换一个再试。');
-  };
-  reader.onload = function(){
-    flMsg('flMsg', '', '正在上传（兼容模式）…');
-    var dataUrl = String(reader.result || '');
-    var b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+/* 一个文件一个请求。第一个不带 code → 新建取件码；后面的带上 code+delKey 往同一批里加 */
+function flUploadOne(it, opt){
+  return new Promise(function(resolve, reject){
+    var memo = (flEl('flMemo') || {}).value || '';
+    var qs = 'action=upb'
+      + '&name=' + encodeURIComponent(flItemName(it))
+      + '&type=' + encodeURIComponent(it.f.type || 'application/octet-stream')
+      + '&ttl=' + encodeURIComponent(String(FL.ttl || 3))
+      + '&maxGet=' + encodeURIComponent(String(FL.maxGet || 0))
+      + '&memo=' + encodeURIComponent(memo);
+    if(opt && opt.code){
+      qs += '&code=' + encodeURIComponent(opt.code) + '&delKey=' + encodeURIComponent(opt.delKey || '');
+    }
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', flBase() + '/api/files?action=up', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.open('POST', flBase() + '/api/files?' + qs, true);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
     xhr.upload.onprogress = function(e){
-      if(!e.lengthComputable) return;
-      var p = Math.round(6 + (e.loaded / e.total) * 90);
-      if(inn) inn.style.width = p + '%';
+      if(!e.lengthComputable || !opt || !opt.onProg) return;
+      opt.onProg(e.loaded / e.total);
     };
     xhr.onload = function(){
-      FL.busy = false;
-      if(inn) inn.style.width = '100%';
       var j = null;
       try{ j = JSON.parse(xhr.responseText || '{}'); }catch(e){ j = null; }
-      if(xhr.status === 200 && j && j.ok){
-        flMsg('flMsg', 'ok', '上传完成：' + flBytes(j.size) + '，保存 ' + j.ttl + ' 天'
-          + (j.maxGet ? '，最多可取 ' + j.maxGet + ' 次' : '') + '。');
-        flDone(j.code, j.delKey, {
-          kind: 'file', name: j.name || f.name, size: j.size, exp: j.exp,
-          ttl: j.ttl, maxGet: j.maxGet, memo: memo,
-        });
-        FL.pending += Number(j.size) || 0;
-        flQuotaLoad();
-        try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
-      }else{
-        flMsg('flMsg', 'err', (j && j.error) ? j.error : ('上传失败（HTTP ' + xhr.status + '）'));
-      }
+      if(xhr.status === 200 && j && j.ok){ resolve(j); return; }
+      var err = new Error((j && j.error) || ('上传失败（HTTP ' + xhr.status + '）'));
+      err.status = xhr.status;
+      reject(err);
     };
-    xhr.onerror = function(){ FL.busy = false; flMsg('flMsg', 'err', '网络断了，没传上去。'); };
-    xhr.send(JSON.stringify({
-      name: f.name, type: f.type || 'application/octet-stream', data: b64,
-      ttl: FL.ttl, maxGet: FL.maxGet, memo: memo,
-    }));
-  };
-  reader.readAsDataURL(f);
+    xhr.onerror = function(){
+      var e = new Error('网络断了，没传上去。');
+      e.status = 0;
+      reject(e);
+    };
+    xhr.send(it.f);
+  });
+}
+
+/* 主流程：一项一项传，进度按「第几个 / 共几个」算 */
+function flUploadQueue(){
+  if(FL.busy) return;
+  var q = FL.q.slice();
+  if(!q.length){ flMsg('flMsg', 'err', '先选文件。'); return; }
+  FL.busy = true;
+  var prog = flEl('flProg'), inn = flEl('flProgIn');
+  if(prog) prog.classList.add('on');
+  if(inn) inn.style.width = '0%';
+  var go = flEl('flQGo'); if(go) go.disabled = true;
+
+  var done = [], fails = [], ids = { code: '', delKey: '' }, first = null, idx = 0;
+
+  function finish(){
+    FL.busy = false;
+    if(inn) inn.style.width = '100%';
+    if(!done.length){
+      flMsg('flMsg', 'err', fails.length ? (fails[0].name + '：' + fails[0].msg) : '都没传上去。');
+      flQueueRender();
+      return;
+    }
+    var total = 0;
+    done.forEach(function(x){ total += Number(x.size) || 0; });
+    flDone(ids.code, ids.delKey, {
+      kind: 'file',
+      name: done.length > 1 ? (done.length + ' 个文件') : done[0].name,
+      size: total, exp: first && first.exp, ttl: (first && first.ttl) || FL.ttl,
+      maxGet: (first && first.maxGet) || FL.maxGet,
+      memo: (flEl('flMemo') || {}).value || '',
+      items: done,
+    });
+    if(fails.length){
+      var tip = flEl('flCodeTip');
+      if(tip){
+        tip.innerHTML += '<br><span style="color:#b91c1c">有 ' + fails.length + ' 个没传上去：'
+          + fails.map(function(x){ return esc(x.name) + '（' + esc(x.msg) + '）'; }).join('；')
+          + '。其余已经传好，取件码就在上面。</span>';
+      }
+    }else{
+      flMsg('flMsg', 'ok', '全部传完了，共 ' + done.length + ' 个文件。');
+    }
+    FL.q = [];
+    flQueueRender();
+    flQuotaLoad();
+    try{ if(typeof SFX !== 'undefined' && SFX.success) SFX.success(); }catch(e){}
+  }
+
+  function step(){
+    if(idx >= q.length){ finish(); return; }
+    var it = q[idx];
+    flMsg('flMsg', '', '正在上传第 ' + (idx + 1) + ' / ' + q.length + ' 个：' + flItemName(it));
+    flUploadOne(it, {
+      code: ids.code, delKey: ids.delKey,
+      onProg: function(f){
+        var p = ((idx + Math.max(0, Math.min(1, f))) / q.length) * 100;
+        if(inn) inn.style.width = Math.max(2, Math.round(p)) + '%';
+      },
+    }).then(function(j){
+      if(!ids.code){ ids.code = j.code; ids.delKey = j.delKey; first = j; }
+      done.push({ id: j.itemId || '', name: j.name || flItemName(it), size: j.size || it.size });
+      FL.pending += Number(j.size) || 0;
+      idx++; step();
+    }).catch(function(e){
+      /* 后端还是老版本（认不出 upb）→ 只有单个文件时才退回老通道 */
+      if(idx === 0 && q.length === 1 && (!e.status || e.status === 400 || e.status === 404
+          || e.status === 405 || e.status === 415)){
+        flUploadLegacy(it.f, (flEl('flMemo') || {}).value || '', flItemName(it)).then(function(j){
+          ids.code = j.code; ids.delKey = j.delKey; first = j;
+          done.push({ name: j.name || flItemName(it), size: j.size || it.size });
+          FL.pending += Number(j.size) || 0;
+          finish();
+        }).catch(function(e2){
+          fails.push({ name: flItemName(it), msg: e2.message || '上传失败' });
+          finish();
+        });
+        return;
+      }
+      fails.push({ name: flItemName(it), msg: e.message || '上传失败' });
+      idx++; step();
+    });
+  }
+  step();
+}
+
+/* 老代码里的调用点：改成入队 */
+function flUpload(f){ flQueueAdd([f]); }
+
+/* 老通道（base64 塞 JSON）：只在后端还没更新到认 upb 时兜底，上限只能 15MB */
+function flUploadLegacy(f, memo, name){
+  return new Promise(function(resolve, reject){
+    if(f.size > 15 * 1024 * 1024){
+      reject(new Error('服务器版本较旧，单件最大 15MB。刷新页面后再试，新版本可以到 24MB。'));
+      return;
+    }
+    var inn = flEl('flProgIn');
+    var reader = new FileReader();
+    reader.onerror = function(){ reject(new Error('读不到这个文件，请换一个再试。')); };
+    reader.onload = function(){
+      flMsg('flMsg', '', '正在上传（兼容模式）…');
+      var dataUrl = String(reader.result || '');
+      var b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', flBase() + '/api/files?action=up', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.upload.onprogress = function(e){
+        if(!e.lengthComputable) return;
+        var p = Math.round(6 + (e.loaded / e.total) * 90);
+        if(inn) inn.style.width = p + '%';
+      };
+      xhr.onload = function(){
+        if(inn) inn.style.width = '100%';
+        var j = null;
+        try{ j = JSON.parse(xhr.responseText || '{}'); }catch(e){ j = null; }
+        if(xhr.status === 200 && j && j.ok){ resolve(j); return; }
+        var err = new Error((j && j.error) || ('上传失败（HTTP ' + xhr.status + '）'));
+        err.status = xhr.status;
+        reject(err);
+      };
+      xhr.onerror = function(){ reject(new Error('网络断了，没传上去。')); };
+      xhr.send(JSON.stringify({
+        name: name || f.name, type: f.type || 'application/octet-stream', data: b64,
+        ttl: FL.ttl, maxGet: FL.maxGet, memo: memo,
+      }));
+    };
+    reader.readAsDataURL(f);
+  });
 }
 
 /* ---------------- 发文本 ---------------- */
@@ -25369,13 +25524,22 @@ function flSendText(){
 }
 
 /* ---------------- 取件 ---------------- */
+/* 下载地址：带 id 才是「这一批里的某一个」；带 tk 表示这次取件已经计过数 */
+function flDlUrl(code, id, tk){
+  var u = flUrl(code);
+  if(id) u += '&id=' + encodeURIComponent(id);
+  if(tk) u += '&tk=' + encodeURIComponent(tk);
+  return u;
+}
+
+/* ---------------- 取件 ---------------- */
 function flQuery(){
   var inp = flEl('flIn');
   var code = String((inp && inp.value) || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
   if(code.length !== 6){ flMsg('flMsg2', 'err', '取件码是 6 位，再数一下。'); return; }
   flMsg('flMsg2', '', '正在查…');
   var card = flEl('flCard'); if(card) card.style.display = 'none';
-  fetch(flBase() + '/api/files?code=' + encodeURIComponent(code) + '&meta=1')
+  fetch(flBase() + '/api/files?action=pick&code=' + encodeURIComponent(code))
     .then(function(r){ return r.json().then(function(j){ return { s: r.status, j: j }; }); })
     .then(function(o){
       var j = o.j || {};
@@ -25386,12 +25550,13 @@ function flQuery(){
       flMsg('flMsg2', '', '');
       var left = flDaysLeft(j.exp);
       var times = j.maxGet ? ('　·　还能取 ' + j.left + ' 次') : '';
+      var atTxt = j.at ? new Date(j.at).toLocaleString('zh-CN', { hour12: false }) : '';
       if(!card) return;
       card.style.display = '';
+
       if(j.kind === 'text'){
-        card.innerHTML = '<b>' + emojiEscHtml(j.name || '文本') + '</b>'
-          + '<div class="m">' + flBytes(j.size) + '　·　还剩 ' + left + ' 天' + times
-          + '　·　' + new Date(j.at).toLocaleString('zh-CN', { hour12: false }) + '</div>'
+        card.innerHTML = '<b>' + emojiEscHtml(j.items && j.items[0] ? j.items[0].name : '文本') + '</b>'
+          + '<div class="m">' + flBytes(j.items && j.items[0] ? j.items[0].size : 0) + '　·　还剩 ' + left + ' 天' + times + '</div>'
           + '<textarea class="fl-ta" id="flGotText" rows="8" readonly>' + esc(j.text || '') + '</textarea>'
           + '<div class="fl-acts" style="margin-top:10px">'
           +   '<button type="button" class="fl-btn" id="flCopyTxt">复制文本</button>'
@@ -25400,22 +25565,60 @@ function flQuery(){
           + '</div>';
         var cp = flEl('flCopyTxt');
         if(cp) cp.onclick = function(){ flCopy(String((flEl('flGotText') || {}).value || ''), 'flMsg2', '文本已复制'); };
-      }else{
-        card.innerHTML = '<b>' + emojiEscHtml(j.name) + '</b>'
-          + '<div class="m">' + flBytes(j.size) + '　·　还剩 ' + left + ' 天' + times
-          + '　·　上传于 ' + new Date(j.at).toLocaleString('zh-CN', { hour12: false }) + '</div>'
-          + (isWeChat()
-              ? '<div class="fl-wxtip">微信内置浏览器不支持直接下载文件。<br>'
-                + '点右上角「<b>···</b>」→「<b>在浏览器打开</b>」就能正常下载；'
-                + '也可以把下面这条链接复制出去，粘到浏览器里打开。</div>'
-                + '<button type="button" class="fl-btn" id="flCopyDl">复制下载链接</button>'
-              : '<a class="fl-btn" style="display:block;text-align:center;text-decoration:none;line-height:1.5"'
-                + ' href="' + attr(flUrl(code)) + '" download>下载这个文件</a>');
-        var cdl = flEl('flCopyDl');
-        if(cdl) cdl.onclick = function(){
-          flCopy(flUrl(code), 'flMsg2', '下载链接已复制，粘到浏览器地址栏打开即可下载');
+        return;
+      }
+
+      /* v4.16.6：一批可能有好几个文件，列出来挨个下 */
+      var items = j.items || [];
+      var tk = j.ticket || '';
+      var total = 0;
+      items.forEach(function(x){ total += Number(x.size) || 0; });
+      var wx = isWeChat();
+      var rows = items.map(function(it){
+        var nm = '<span class="nm">' + emojiEscHtml(it.name || '文件')
+          + '<em>' + flBytes(it.size) + '</em></span>';
+        if(wx){
+          return '<div class="fl-get-i">' + nm
+            + '<button type="button" class="dl" data-flcopy="' + attr(flDlUrl(code, it.id, tk)) + '">复制链接</button></div>';
+        }
+        return '<div class="fl-get-i">' + nm
+          + '<a class="dl" href="' + attr(flDlUrl(code, it.id, tk)) + '" download="' + attr(it.name || '') + '">下载</a></div>';
+      }).join('');
+
+      card.innerHTML = '<b>' + (items.length > 1 ? (items.length + ' 个文件') : emojiEscHtml((items[0] || {}).name || '文件')) + '</b>'
+        + '<div class="m">' + (items.length > 1 ? ('共 ' + flBytes(total) + '　·　') : '')
+        + '还剩 ' + left + ' 天' + times + (atTxt ? ('　·　上传于 ' + atTxt) : '') + '</div>'
+        + (wx
+            ? '<div class="fl-wxtip">微信内置浏览器不支持直接下载文件。<br>'
+              + '点右上角「<b>···</b>」→「<b>在浏览器打开</b>」就能正常下载；'
+              + '也可以把每一项的链接复制出去，粘到浏览器里打开。</div>'
+            : '')
+        + '<div class="fl-get-list">' + rows + '</div>'
+        + (items.length > 1 && !wx
+            ? '<button type="button" class="fl-btn ghost" id="flDlAll" style="margin-top:2px;width:100%;display:block">全部下载（逐个触发）</button>'
+            : '');
+
+      var cps = card.querySelectorAll('[data-flcopy]');
+      for(var i = 0; i < cps.length; i++){
+        cps[i].onclick = function(){
+          flCopy(this.getAttribute('data-flcopy'), 'flMsg2', '下载链接已复制，粘到浏览器地址栏打开即可下载');
         };
       }
+      var all = flEl('flDlAll');
+      if(all) all.onclick = function(){
+        items.forEach(function(it, k){
+          setTimeout(function(){
+            var a = document.createElement('a');
+            a.href = flDlUrl(code, it.id, tk);
+            a.download = it.name || '';
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function(){ try{ a.parentNode.removeChild(a); }catch(e){} }, 1500);
+          }, k * 900);
+        });
+        flMsg('flMsg2', '', '正在逐个开始下载，浏览器可能问一次「是否允许下载多个文件」。');
+      };
     })
     .catch(function(){ flMsg('flMsg2', 'err', '网络没通，稍后再试。'); });
 }
@@ -25430,7 +25633,11 @@ function flQuery(){
     var drop = flEl('flDrop'), file = flEl('flFile');
     if(drop && file){
       drop.addEventListener('click', function(){ file.click(); });
-      file.addEventListener('change', function(){ if(file.files && file.files[0]) flUpload(file.files[0]); });
+      /* v4.16.6：多选 → 全部入队；选完把 input 清空，同一个文件能再选一次 */
+      file.addEventListener('change', function(){
+        if(file.files && file.files.length) flQueueAdd(file.files);
+        try{ file.value = ''; }catch(e){}
+      });
       ['dragenter','dragover'].forEach(function(ev){
         drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); });
       });
@@ -25438,10 +25645,35 @@ function flQuery(){
         drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); });
       });
       drop.addEventListener('drop', function(e){
-        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if(f) flUpload(f);
+        var fs = e.dataTransfer && e.dataTransfer.files;
+        if(fs && fs.length) flQueueAdd(fs);
       });
     }
+
+    /* 队列：改名、移除、清空、上传 */
+    var queue = flEl('flQueue');
+    if(queue){
+      queue.addEventListener('input', function(e){
+        var t = e.target;
+        if(!t || !t.getAttribute) return;
+        var i = Number(t.getAttribute('data-qi'));
+        if(!isFinite(i) || !FL.q[i]) return;
+        FL.q[i].main = String(t.value || '');
+      });
+      queue.addEventListener('click', function(e){
+        var b = e.target && e.target.closest ? e.target.closest('[data-qdel]') : null;
+        if(!b) return;
+        var i = Number(b.getAttribute('data-qdel'));
+        if(!isFinite(i)) return;
+        FL.q.splice(i, 1);
+        flQueueRender();
+        flMsg('flMsg', '', FL.q.length ? '' : '队列空了。');
+      });
+    }
+    var qc = flEl('flQClear');
+    if(qc) qc.onclick = flQueueClear;
+    var qg = flEl('flQGo');
+    if(qg) qg.onclick = flUploadQueue;
 
     /* 保存天数 / 可取次数：v4.10.5 起改成两个数字输入框（1~15 天、0~50 次），
        顺便把选择记在本机，下次打开还是上次那套。 */
@@ -25551,6 +25783,28 @@ function flQuery(){
         if(inp){ inp.value = code; flQuery(); }
         return;
       }
+      if(act === 'renitem'){
+        /* v4.16.6：一批里改某一个文件的名字 —— 后缀锁住，只改前面的 */
+        var rid = b.getAttribute('data-id') || '';
+        var rold = b.getAttribute('data-old') || '';
+        var rsp = flSplitName(rold);
+        var rm = prompt('新文件名（后缀 ' + (rsp.ext || '无') + ' 保持不变）', rsp.main);
+        if(rm == null) return;
+        var rfull = flJoinName(rm, rsp.ext);
+        flPost('ren', { code: code, delKey: rec.delKey, id: rid, name: rfull }).then(function(o){
+          if(o.j && o.j.ok){
+            var fl2 = (rec.files || []).map(function(x){
+              return (String(x.id) === String(rid)) ? { id: x.id, name: rfull, size: x.size } : x;
+            });
+            flHistPatch(code, { files: fl2 });
+            flHistRender();
+            flMsg('flMsgHist', 'ok', '已改名为 ' + rfull);
+          }else{
+            flMsg('flMsgHist', 'err', (o.j && o.j.error) || '改名失败');
+          }
+        }).catch(function(){ flMsg('flMsgHist', 'err', '网络没通'); });
+        return;
+      }
       if(act === 'ren'){
         var nn = prompt('新的名字（对方看到的就是这个）', rec.name || '');
         if(nn == null) return;
@@ -25558,7 +25812,10 @@ function flQuery(){
         if(!nn) return;
         flPost('ren', { code: code, delKey: rec.delKey, name: nn }).then(function(o){
           if(o.j && o.j.ok){
-            flHistPatch(code, { name: nn });
+            var f1 = (rec.files || []).map(function(x, i){
+              return i === 0 ? { id: x.id, name: nn, size: x.size } : x;
+            });
+            flHistPatch(code, { name: nn, files: f1 });
             flHistRender();
             flMsg('flMsgHist', 'ok', '已改名');
           }else{

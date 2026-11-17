@@ -47,6 +47,17 @@ const KB = 'b:';
 const KM = 'fm:';
 const KF = 'f:';
 const KC = 'fc:';
+/* v4.16.6：一次传多个文件，共用一个取件码。
+   形态变了 —— 一个取件码下挂着若干个文件，所以元数据和字节都按「批次 + 条目」两层存：
+     fbs:  批次元数据（items 列表、保存期、次数、备注、删除口令）
+     fbi:  批次里每个文件的字节   fbi:<code>:<itemId>
+     fbc:  这批被取了几次
+     fbt:  取件票据 —— 拿到它之后，同一批里挨个下载不再重复计数 */
+const KBS = 'fbs:';
+const KBI = 'fbi:';
+const KBC = 'fbc:';
+const KBT = 'fbt:';
+const MAX_ITEMS = 20;                    /* 一个取件码最多挂 20 个文件 */
 
 function ok(res, obj) {
   res.statusCode = 200;
@@ -101,8 +112,9 @@ function normTtl(v, size) {
 async function kvUsage(kv) {
   let used = 0, n = 0;
   /* v4.10.5：新记录拆成 fm:（元数据，metadata.size 就是文件大小）+ b:（字节），
-     老记录仍在 f: 里。统计只看「有 size 的那一层」，不会把同一个文件算两遍。 */
-  for (const prefix of [KM, KF]) {
+     老记录仍在 f: 里。统计只看「有 size 的那一层」，不会把同一个文件算两遍。
+     v4.16.6：多文件批次在 fbs: 里记总大小；fbi: 那些字节键故意不带 size。 */
+  for (const prefix of [KM, KF, KBS]) {
     let cursor;
     for (let page = 0; page < 5; page++) {
       let r;
@@ -127,6 +139,81 @@ function normMax(v) {
   if (!isFinite(n) || n <= 0) return 0;      /* 0 = 不限次数 */
   /* v4.10.5（站主第 3 条）：取用次数可以设 1~50 次，或者不限 */
   return Math.max(1, Math.min(50, Math.floor(n)));
+}
+
+/* ---------------- 批次（v4.16.6 多文件共用取件码） ---------------- */
+function batchTotal(b) {
+  const items = (b && b.items) || [];
+  let n = 0;
+  for (const it of items) n += Number(it && it.size) || 0;
+  return n;
+}
+function batchLeftSec(b) {
+  return Math.max(60, Math.floor(((Number(b && b.exp) || 0) - Date.now()) / 1000));
+}
+async function readBatch(kv, code) {
+  const raw = await kv.get(KBS + code);
+  if (!raw) return null;
+  try {
+    const b = JSON.parse(raw);
+    return (b && Array.isArray(b.items)) ? b : null;
+  } catch (e) { return null; }
+}
+async function putBatch(kv, code, b) {
+  /* 元数据的 metadata.size 记「这批一共多大」—— kvUsage 只认这一层，
+     文件字节那些键故意不带 size，免得同一个文件被算两遍。 */
+  await kv.put(KBS + code, JSON.stringify(b), {
+    expirationTtl: batchLeftSec(b),
+    metadata: { size: batchTotal(b), at: b.at, kind: 'files', n: (b.items || []).length },
+  });
+}
+async function dropBatch(kv, code) {
+  const b = await readBatch(kv, code);
+  if (b) {
+    for (const it of (b.items || [])) {
+      try { await kv.delete(KBI + code + ':' + it.id); } catch (e) {}
+    }
+  }
+  try { await kv.delete(KBS + code); } catch (e) {}
+  try { await kv.delete(KBC + code); } catch (e) {}
+  try { await kv.delete(KBT + code); } catch (e) {}
+}
+/* 直接给浏览器看的一页：一次取多个文件时，链接点开就是这个列表 */
+function batchPage(code, b, tk) {
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+  const size = (n) => {
+    n = Number(n) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(2) + ' MB';
+  };
+  const qs = (id) => '/api/files?code=' + encodeURIComponent(code)
+    + '&id=' + encodeURIComponent(id) + (tk ? '&tk=' + encodeURIComponent(tk) : '');
+  const rows = (b.items || []).map((it) => '<li>'
+    + '<div class="n">' + esc(it.name) + '</div>'
+    + '<div class="s">' + size(it.size) + '</div>'
+    + '<a href="' + esc(qs(it.id)) + '">下载</a></li>').join('');
+  return '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<title>取件 · 班级文件中转站</title><style>'
+    + 'body{margin:0;padding:22px 16px 40px;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;'
+    + 'background:#faf7f3;color:#2b2119}'
+    + 'h1{font-size:1.1rem;margin:0 0 4px}p.tip{margin:0 0 16px;font-size:.78rem;color:#8a7a6a;line-height:1.6}'
+    + '.code{display:inline-block;font-weight:900;letter-spacing:.18em;color:#b45309;font-size:1.05rem}'
+    + 'ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}'
+    + 'li{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #eadfd2;border-radius:12px;padding:11px 13px}'
+    + '.n{flex:1;min-width:0;font-size:.88rem;font-weight:700;word-break:break-all}'
+    + '.s{font-size:.72rem;color:#8a7a6a;white-space:nowrap}'
+    + 'a{flex:0 0 auto;text-decoration:none;background:#b45309;color:#fff;font-size:.78rem;font-weight:800;'
+    + 'padding:8px 14px;border-radius:9px}'
+    + '</style></head><body>'
+    + '<h1>这个取件码里有 ' + (b.items || []).length + ' 个文件</h1>'
+    + '<p class="tip">取件码 <span class="code">' + esc(code) + '</span>'
+    + '　·　保存 ' + Number(b.ttl || 0) + ' 天'
+    + '　·　一次取件算一次，挨个下载不会重复计数</p>'
+    + '<ul>' + rows + '</ul></body></html>';
 }
 
 export default async function handler(req, res) {
@@ -159,10 +246,49 @@ export default async function handler(req, res) {
     const name = String(q.name || '未命名文件').slice(0, 120);
     const type = String(q.type || 'application/octet-stream').slice(0, 120);
     const memo = String(q.memo || '').slice(0, 60);
+    const at = Date.now();
+    /* v4.16.6：带 code 就是「往这个取件码里再加一个文件」，不带就新开一批。
+       新开的那一批即使只有一个文件，也走批次结构 —— 单文件多文件同一套，
+       以后想再加一个文件不会卡在「这条是老记录」上。 */
+    const addCode = String(q.code || '').toUpperCase().trim();
+    const addDel = String(q.delKey || '');
+
+    if (addCode) {
+      if (!/^[2-9A-HJ-NP-Z]{6}$/.test(addCode)) return bad(res, 400, '取件码格式不对');
+      const b = await readBatch(kv, addCode);
+      if (!b) return bad(res, 404, '这个取件码不存在或已经过期，重新开始传一次');
+      if (b.del && b.del !== addDel) return bad(res, 403, '删除口令不对，不能往这个取件码里加文件');
+      if ((b.items || []).length >= MAX_ITEMS) {
+        return bad(res, 400, '一个取件码最多放 ' + MAX_ITEMS + ' 个文件，分两次传吧');
+      }
+      const usage = await kvUsage(kv);
+      if (usage.used + size > SOFT_QUOTA) {
+        return bad(res, 507,
+          '存储快满了（已用 ' + mb(usage.used) + 'MB / ' + mb(SOFT_QUOTA) + 'MB），'
+          + '先到「历史」里删掉一些不用的，或者等它们到期自动清掉再传。');
+      }
+      const item = { id: randStr(4), name, type, size, at };
+      try {
+        await kv.put(KBI + addCode + ':' + item.id, buf, {
+          expirationTtl: batchLeftSec(b),
+          metadata: { at, batch: addCode },
+        });
+        b.items.push(item);
+        await putBatch(kv, addCode, b);
+      } catch (e) {
+        try { await kv.delete(KBI + addCode + ':' + item.id); } catch (e2) {}
+        return bad(res, 500, '存不进去：' + (e && e.message ? e.message : '未知错误'));
+      }
+      return ok(res, {
+        code: addCode, delKey: b.del, itemId: item.id, name, size,
+        index: b.items.length - 1, count: b.items.length,
+        ttl: b.ttl, maxGet: Number(b.maxGet || 0), exp: b.exp,
+        quota: { used: usage.used + size, cap: SOFT_QUOTA },
+      });
+    }
+
     const ttl = normTtl(q.ttl, size);
     const maxGet = normMax(q.maxGet);
-    const at = Date.now();
-
     const usage = await kvUsage(kv);
     if (usage.used + size > SOFT_QUOTA) {
       return bad(res, 507,
@@ -172,24 +298,22 @@ export default async function handler(req, res) {
 
     const code = randStr(6);
     const delKey = randStr(20);
-    const meta = {
-      v: 2, kind: 'file', name, type, size, at,
-      exp: at + ttl * 86400000, ttl, maxGet, memo, del: delKey,
+    const item = { id: randStr(4), name, type, size, at };
+    const batch = {
+      v: 3, kind: 'files', at, exp: at + ttl * 86400000, ttl, maxGet, memo, del: delKey,
+      items: [item],
     };
     try {
-      await kv.put(KB + code, buf, { expirationTtl: ttl * 86400 });
-      await kv.put(KM + code, JSON.stringify(meta), {
-        expirationTtl: ttl * 86400,
-        metadata: { size, at, kind: 'file' },
-      });
+      await kv.put(KBI + code + ':' + item.id, buf, { expirationTtl: ttl * 86400, metadata: { at, batch: code } });
+      await putBatch(kv, code, batch);
     } catch (e) {
-      /* 只写进去一半就失败 → 把可能残留的字节清掉，别白占 24MB */
-      try { await kv.delete(KB + code); } catch (e2) {}
-      try { await kv.delete(KM + code); } catch (e2) {}
+      try { await kv.delete(KBI + code + ':' + item.id); } catch (e2) {}
+      try { await kv.delete(KBS + code); } catch (e2) {}
       return bad(res, 500, '存不进去：' + (e && e.message ? e.message : '未知错误'));
     }
     return ok(res, {
-      code, delKey, kind: 'file', name, size, ttl, maxGet, exp: meta.exp,
+      code, delKey, itemId: item.id, name, size, index: 0, count: 1,
+      ttl, maxGet, exp: batch.exp,
       quota: { used: usage.used + size, cap: SOFT_QUOTA },
     });
   }
@@ -270,6 +394,13 @@ export default async function handler(req, res) {
     const code = String(body.code || '').toUpperCase().trim();
     const delKey = String(body.delKey || '');
     if (!code || !delKey) return bad(res, 400, '缺少取件码或删除口令');
+    /* v4.16.6：批次（一个码挂多个文件）—— 删一次连里面的文件字节一起清 */
+    const delBatch = await readBatch(kv, code);
+    if (delBatch) {
+      if (delBatch.del && delBatch.del !== delKey) return bad(res, 403, '删除口令不对');
+      await dropBatch(kv, code);
+      return ok(res, { deleted: true, count: (delBatch.items || []).length });
+    }
     /* v4.10.5：新记录（fm: + b:） */
     const metaRaw = await kv.get(KM + code);
     if (metaRaw) {
@@ -300,6 +431,21 @@ export default async function handler(req, res) {
     const name = String(body.name || '').trim().slice(0, 120);
     if (!code || !delKey) return bad(res, 400, '缺少取件码或删除口令');
     if (!name) return bad(res, 400, '新名字是空的');
+    /* v4.16.6：批次里逐个文件改名（带 id）；只挂一个文件时可以不带 */
+    const renBatch = await readBatch(kv, code);
+    if (renBatch) {
+      if (renBatch.del && renBatch.del !== delKey) return bad(res, 403, '删除口令不对');
+      const items = renBatch.items || [];
+      const wantId = String(body.id || '');
+      let target = null;
+      if (wantId) target = items.find((x) => String(x.id) === wantId) || null;
+      else if (items.length === 1) target = items[0];
+      if (!target) return bad(res, 400, '这个取件码里有多个文件，要指明改哪一个');
+      target.name = name;
+      try { await putBatch(kv, code, renBatch); }
+      catch (e) { return bad(res, 500, '改名没存上：' + (e && e.message ? e.message : '')); }
+      return ok(res, { code, id: target.id, name });
+    }
     /* v4.10.5：新记录的元数据在 fm: 小键里 —— 改名只用重写几百字节，
        不用把 24MB 的文件字节再读一遍再写一遍（KV 写次数省着用）。 */
     const metaRaw = await kv.get(KM + code);
@@ -340,10 +486,145 @@ export default async function handler(req, res) {
     return ok(res, { used: u.used, cap: u.cap, count: u.n, maxTtl: DEFAULT_TTL });
   }
 
+  /* ---------------- 取件（v4.16.6 新增） ----------------
+     以前「查一下」走的是 ?meta=1（不计数），真正的计数发生在下载那一刻。
+     一次要取好几个文件时，那样会变成「每下一个扣一次」，设了 2 次就只能下两个文件。
+     现在取件这一步就把这一批算一次，并给一张票据：拿着票据在同一批里挨个下载，
+     不再重复扣次数。老的单文件记录仍按原来的口径（下载时计数）。 */
+  if (method === 'GET' && action === 'pick') {
+    const pc = String(q.code || '').toUpperCase().trim();
+    if (!pc) return bad(res, 400, '缺少取件码');
+    if (!/^[2-9A-HJ-NP-Z]{6}$/.test(pc)) return bad(res, 400, '取件码格式不对（6 位，不含 0 O 1 I L）');
+
+    const pb = await readBatch(kv, pc);
+    if (pb) {
+      const items = pb.items || [];
+      const maxGet = Number(pb.maxGet || 0);
+      let gets = 0;
+      try { gets = Number(await kv.get(KBC + pc)) || 0; } catch (e) { gets = 0; }
+      if (maxGet && gets >= maxGet) {
+        await dropBatch(kv, pc);
+        return bad(res, 410, '这个取件码的取用次数已经用完了');
+      }
+      try { await kv.put(KBC + pc, String(gets + 1), { expirationTtl: batchLeftSec(pb) }); } catch (e) {}
+      gets += 1;
+      let tk = '';
+      try { tk = String(await kv.get(KBT + pc) || ''); } catch (e) { tk = ''; }
+      if (!tk) {
+        tk = randStr(16);
+        try {
+          await kv.put(KBT + pc, tk, { expirationTtl: Math.min(7200, batchLeftSec(pb)) });
+        } catch (e) { tk = ''; }
+      }
+      return ok(res, {
+        code: pc, kind: 'files', count: items.length, items,
+        ttl: pb.ttl, exp: pb.exp, at: pb.at, memo: pb.memo || '',
+        maxGet, gets, left: maxGet ? Math.max(0, maxGet - gets) : null,
+        ticket: tk,
+      });
+    }
+
+    /* 老记录（单件 / 文本）：不在这里计数，交给下载那一刻，口径保持不变 */
+    let old = null;
+    const om = await kv.get(KM + pc);
+    if (om) { try { old = JSON.parse(om); } catch (e) { old = null; } }
+    if (!old) {
+      const or = await kv.get(KF + pc);
+      if (!or) return bad(res, 404, '取件码不存在或已过期');
+      try { old = JSON.parse(or); } catch (e) { return bad(res, 500, '记录损坏'); }
+    }
+    if (!old) return bad(res, 404, '取件码不存在或已过期');
+    let gets = 0;
+    try { gets = Number(await kv.get(KC + pc)) || 0; } catch (e) { gets = 0; }
+    const maxGet = Number(old.maxGet || 0);
+    if (maxGet && gets >= maxGet) {
+      try { await kv.delete(KC + pc); } catch (e) {}
+      return bad(res, 410, '这个取件码的取用次数已经用完了');
+    }
+    return ok(res, {
+      code: pc, kind: old.kind || 'file',
+      items: [{ id: '', name: old.name, type: old.type, size: old.size, at: old.at }],
+      count: 1, ttl: old.ttl, exp: old.exp, at: old.at, memo: old.memo || '',
+      maxGet, gets, left: maxGet ? Math.max(0, maxGet - gets) : null,
+      ticket: '',
+      text: (old.kind === 'text') ? String(old.text || '') : '',
+    });
+  }
+
   /* ---------------- 查询 / 下载 ---------------- */
   const code = String(q.code || '').toUpperCase().trim();
   if (!code) return bad(res, 400, '缺少取件码');
   if (!/^[2-9A-HJ-NP-Z]{6}$/.test(code)) return bad(res, 400, '取件码格式不对（6 位，不含 0 O 1 I L）');
+
+  /* v4.16.6：批次优先 —— 一个码下面可能挂着好几个文件 */
+  const dlb = await readBatch(kv, code);
+  if (dlb) {
+    const items = dlb.items || [];
+    const maxGet = Number(dlb.maxGet || 0);
+    let gets = 0;
+    try { gets = Number(await kv.get(KBC + code)) || 0; } catch (e) { gets = 0; }
+
+    if (q.meta === '1' || q.meta === 'true') {
+      return ok(res, {
+        code, kind: 'files', count: items.length, items,
+        ttl: dlb.ttl, exp: dlb.exp, memo: dlb.memo || '',
+        maxGet, gets, left: maxGet ? Math.max(0, maxGet - gets) : null,
+      });
+    }
+
+    const tk = String(q.tk || '');
+    let cur = '';
+    try { cur = String(await kv.get(KBT + code) || ''); } catch (e) { cur = ''; }
+    const withTicket = !!(tk && cur && tk === cur);
+    if (!withTicket) {
+      if (maxGet && gets >= maxGet) {
+        await dropBatch(kv, code);
+        return bad(res, 410, '这个取件码的取用次数已经用完了');
+      }
+      try { await kv.put(KBC + code, String(gets + 1), { expirationTtl: batchLeftSec(dlb) }); } catch (e) {}
+      gets += 1;
+    }
+    /* 没有票据就现发一张，塞进列表页的每个下载链接里 */
+    let myTk = cur;
+    if (!myTk) {
+      myTk = randStr(16);
+      try {
+        await kv.put(KBT + code, myTk, { expirationTtl: Math.min(7200, batchLeftSec(dlb)) });
+      } catch (e) { myTk = ''; }
+    }
+
+    const wantId = String(q.id || '');
+    let target = null;
+    if (wantId) target = items.find((x) => String(x.id) === wantId) || null;
+    else if (items.length === 1) target = items[0];
+    if (wantId && !target) return bad(res, 404, '这个文件不在这一批里');
+
+    /* 一批多个文件、又没指明哪一个 → 给一页列表，挨个点 */
+    if (!target) {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'private, max-age=0, no-store');
+      res.end(batchPage(code, dlb, myTk));
+      return;
+    }
+
+    let bytes = null;
+    try {
+      const buf = await kv.get(KBI + code + ':' + target.id, 'arrayBuffer');
+      if (buf) bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+    } catch (e) { bytes = null; }
+    if (!bytes) return bad(res, 404, '文件内容已经过期了，让对方重新发一次');
+    res.statusCode = 200;
+    res.setHeader('Content-Type', /^(image|application\/pdf|audio|video)\//i.test(String(target.type || ''))
+      ? String(target.type) : 'application/octet-stream');
+    /* 文件名用改过之后的那个 */
+    res.setHeader('Content-Disposition', cdHeader(target.name || '文件'));
+    res.setHeader('Content-Length', String(bytes.length));
+    res.setHeader('Cache-Control', 'private, max-age=0, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(bytes);
+    return;
+  }
 
   /* v4.10.5：新记录先看 fm:（元数据小键），没有再回落到老的 f: */
   let rec = null;

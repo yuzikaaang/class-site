@@ -1238,6 +1238,43 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 /* 微信内下载提示：微信内置浏览器点 <a download> 没反应，得引导去外部浏览器 */
 .fl-wxtip{font-size:.72rem;line-height:1.7;color:#8a4b00;background:#fff7e6;
   border:1px solid #ffd591;border-radius:10px;padding:9px 11px;margin:10px 0 2px}
+/* v4.16.6：待上传队列 —— 选好的先排着，确认后才一个一个传 */
+.fl-queue{display:flex;flex-direction:column;gap:8px;margin-top:11px;max-height:min(38vh,300px);overflow:auto}
+.fl-queue:empty{display:none}
+.fl-qitem{display:flex;align-items:center;gap:8px;border:1px solid rgba(120,53,15,.16);
+  border-radius:11px;padding:8px 9px;background:var(--bg-2)}
+.fl-qitem.bad{border-color:#f0a6a6;background:#fff5f5}
+.dark .fl-qitem.bad{background:#2c1d1d}
+.fl-qname{flex:1;min-width:0;display:flex;align-items:center}
+.fl-qname.plain{font-size:.8rem;font-weight:700;word-break:break-all;line-height:1.4}
+.fl-qin{flex:1;min-width:0;border:1px solid transparent;background:transparent;color:var(--fg);
+  border-radius:7px;padding:4px 5px;font-size:.8rem;font-weight:700;font-family:inherit}
+.fl-qin:hover{border-color:rgba(120,53,15,.16)}
+.fl-qin:focus{outline:none;border-color:var(--grad-a);background:var(--bg-1)}
+.fl-qext{font-size:.74rem;font-weight:800;color:var(--fg-3);white-space:nowrap;padding-left:2px}
+.fl-qext i{font-style:normal;font-weight:600;opacity:.7}
+.fl-qsize{font-size:.68rem;color:var(--fg-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+.fl-qdel{border:none;background:transparent;color:var(--fg-3);font-size:.9rem;cursor:pointer;
+  padding:2px 4px;line-height:1;border-radius:6px}
+.fl-qdel:hover{color:#b91c1c;background:rgba(185,28,28,.08)}
+.fl-qfoot{display:flex;align-items:center;gap:8px;margin-top:11px}
+.fl-qsum{flex:1;min-width:0;font-size:.72rem;color:var(--fg-3);line-height:1.5}
+.fl-qfoot .fl-btn{flex:0 0 auto;padding:9px 18px}
+.fl-qfoot .fl-btn.ghost{padding:9px 12px}
+/* 结果页 / 取件页里的文件列表 */
+.fl-dlist{margin:0 0 11px;display:flex;flex-direction:column;gap:7px}
+.fl-dl-h{font-size:.72rem;color:var(--fg-3);line-height:1.5}
+.fl-dl-i{display:flex;align-items:center;gap:8px;border:1px solid rgba(120,53,15,.14);
+  border-radius:9px;padding:8px 10px;background:var(--bg-2);text-align:left}
+.fl-dl-i b{flex:1;min-width:0;font-size:.8rem;word-break:break-all;margin:0}
+.fl-get-list{display:flex;flex-direction:column;gap:8px;margin:2px 0 10px}
+.fl-get-i{display:flex;align-items:center;gap:8px;border:1px solid rgba(120,53,15,.14);
+  border-radius:10px;padding:9px 10px;background:var(--bg-1)}
+.fl-get-i .nm{flex:1;min-width:0;font-size:.82rem;font-weight:700;word-break:break-all;line-height:1.4}
+.fl-get-i .nm em{display:block;font-style:normal;font-size:.68rem;font-weight:600;color:var(--fg-3);margin-top:2px}
+.fl-get-i .dl{flex:0 0 auto;font-size:.76rem;font-weight:800;color:#fff;text-decoration:none;
+  background:linear-gradient(135deg,var(--btn-a),var(--btn-b));border-radius:8px;padding:8px 13px;
+  border:none;font-family:inherit;cursor:pointer}
 .fl-prog{height:7px;border-radius:999px;background:var(--bg-3);overflow:hidden;margin-top:12px;display:none}
 .fl-prog.on{display:block}
 .fl-prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--btn-a),var(--btn-b));transition:width .2s}
@@ -1270,6 +1307,10 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .fl-opts{padding:0 18px 6px}
 .fl-opts.hide{display:none}
 .fl-opts .fl-row{margin:10px 0 4px}
+/* v4.16.6：.fl-in 的 flex:1 会把「保存 / 可取」数字框一起拉宽，这里钉回 66px；
+   备注框也跟着恢复成正常字号、左对齐 */
+.fl-opts .fl-num{flex:0 0 66px;width:66px}
+.fl-opts #flMemo{font-size:.82rem;letter-spacing:0;text-align:left}
 .fl-tip{font-size:.7rem;color:var(--fg-3);line-height:1.6;margin:6px 0 2px}
 /* 第一行「已用 / 总数」+「还剩几天」，第二行进度条独占一整行 ——
    挤在一行里条子只有几十像素，看不出用了多少 */
@@ -1287,6 +1328,11 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .fl-hist{display:flex;flex-direction:column;gap:9px;margin:4px 0 12px;max-height:min(52vh,460px);overflow:auto}
 .fl-hist-item{border:1px solid rgba(120,53,15,.14);border-radius:13px;padding:11px 12px;background:var(--bg-2)}
 .fl-hist-item.dead{opacity:.6}
+/* v4.16.6：一批多个文件时，历史里逐个列出来，各自可改名 */
+.fl-hist-files{display:flex;flex-direction:column;gap:5px;margin:6px 0 7px}
+.fl-hf{display:flex;align-items:center;gap:8px;font-size:.74rem;color:var(--fg-2)}
+.fl-hf span{flex:1;min-width:0;word-break:break-all}
+.fl-hf .fl-mini{flex:0 0 auto;padding:3px 8px;font-size:.68rem}
 .fl-hist-top{display:flex;align-items:center;gap:8px;margin-bottom:3px}
 .fl-hist-top b{font-size:.86rem;word-break:break-all;flex:1;min-width:0}
 .fl-hist-tag{flex:none;font-size:.66rem;font-weight:800;border-radius:999px;padding:2px 7px;
@@ -6633,10 +6679,17 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
 
     <div class="fl-pane" id="flPaneUp">
       <label class="fl-drop" id="flDrop">
-        <input type="file" id="flFile" style="display:none">
+        <input type="file" id="flFile" multiple style="display:none">
         <b>点击选择文件</b>
-        <span>也可以直接把文件拖进这个框　·　单个不超过 24MB　·　最多存 15 天</span>
+        <span>一次可以选好几个，也可以一起拖进来　·　单个不超过 24MB　·　最多 20 个共用一个取件码</span>
       </label>
+      <!-- v4.16.6：选好的文件先排队，确认之后才一个一个传 -->
+      <div class="fl-queue" id="flQueue"></div>
+      <div class="fl-qfoot" id="flQFoot" style="display:none">
+        <span class="fl-qsum" id="flQSum"></span>
+        <button type="button" class="fl-btn ghost" id="flQClear">清空</button>
+        <button type="button" class="fl-btn" id="flQGo">上传</button>
+      </div>
       <div class="fl-prog" id="flProg"><i id="flProgIn"></i></div>
       <div class="fl-msg" id="flMsg"></div>
     </div>
@@ -6692,6 +6745,7 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
     <div class="fl-pane" id="flDonePane" style="display:none">
       <div class="fl-code" id="flCode">------</div>
       <div class="fl-code-tip" id="flCodeTip">在另一台设备打开本站 → 「文件中转站」→ 取件，输入这 6 位。<br>也可将下方链接直接发送给对方，点击即可下载。</div>
+      <div class="fl-dlist" id="flDoneList"></div>
       <div class="fl-link" id="flLink"></div>
       <div class="fl-acts">
         <button type="button" class="fl-btn" id="flCopyCode">复制取件码</button>
@@ -7318,7 +7372,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.16.5</button>
+        title="点击检查是否为最新版本">v4.16.6</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -8538,19 +8592,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.16.5';
-var VER_DATE = '2026-11-16';
+var SITE_VERSION = '4.16.6';
+var VER_DATE = '2026-11-17';
 </script>
-<script src="./auth-bus.js?v=4165" defer></script>
+<script src="./auth-bus.js?v=4166" defer></script>
 <script src="./tour.js?v=040507" defer></script>
-<script src="./app.min.js?v=4165" defer></script>
+<script src="./app.min.js?v=4166" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4165" defer></script>
-<script src="./big.js?v=4165" defer></script>
+<script src="./fs-keep.js?v=4166" defer></script>
+<script src="./big.js?v=4166" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4165" defer></script>
+<script src="./pickfx.js?v=4166" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
