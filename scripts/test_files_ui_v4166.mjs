@@ -160,7 +160,13 @@ await p.waitForTimeout(900);
 const got = await p.evaluate(() => ({
   rows: [...document.querySelectorAll('#flCard .fl-get-i')].map((e) => ({
     nm: (e.querySelector('.nm') || {}).textContent || '',
-    href: (e.querySelector('a') || {}).getAttribute ? e.querySelector('a').getAttribute('href') : '',
+    /* v4.16.7 起下载改成 button[data-fldl]（兼容 Edge/PWA），旧 <a> 仍兜底 */
+    href: (function(){
+      var btn = e.querySelector('[data-fldl]');
+      if(btn) return btn.getAttribute('data-fldl');
+      var a = e.querySelector('a');
+      return (a && a.getAttribute) ? a.getAttribute('href') : '';
+    })(),
   })),
   head: (document.querySelector('#flCard b') || {}).textContent || '',
   all: !!document.getElementById('flDlAll'),

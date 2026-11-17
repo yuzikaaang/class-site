@@ -8759,9 +8759,10 @@ console.log('\n【70】第六十二轮·登录 subrequest 热修（v2.10.1）');
     && /没有缺号|没有需要补的版本/.test(ADM_530.slice(ADM_530.indexOf('function relSyncMissing'))));
 
   /* ② 竖屏意图 + PWA 往返 */
-  t('v3.5.30 主页跳后台前打 from_home 标记（两处入口都打）',
+  /* v4.16.7：删掉「长按班徽进后台」入口，只剩账号弹窗这一处会打标记 */
+  t('v3.5.30 主页跳后台前打 from_home 标记（保留的账号弹窗入口）',
     /cls_admin_from_home/.test(IDX_530)
-    && (IDX_530.match(/cls_admin_from_home',\s*'1'/g) || []).length >= 2);
+    && (IDX_530.match(/cls_admin_from_home',\s*'1'/g) || []).length >= 1);
   t('v3.5.30 后台 initLandscape：从主页进来强制竖屏并落 localStorage',
     /var FROM_HOME_LS = 'cls_admin_from_home';/.test(ADM_530)
     && /function initLandscape\(\)/.test(ADM_530)

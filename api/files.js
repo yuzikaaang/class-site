@@ -22,7 +22,16 @@
  *   · 上传前先算一次已用量，到 700MB 就不让再传了，永远不会把 1GB 撑爆。
  * ========================================================================= */
 
-import { handlePreflight } from './_lib/http.js';
+import { handlePreflight, requireAdmin } from './_lib/http.js';
+
+/* v4.16.7：管理端只认管理员。测试专项用 __env.TEST_ADMIN 注入一个假管理员，
+   跳过 DB；生产环境 env 里没有这个键，一律走真实 token 校验。 */
+async function adminGuard(req, res) {
+  if (req && req.__env && req.__env.TEST_ADMIN) {
+    return { id: 0, username: 'admin', role: 'admin', displayName: '管理员' };
+  }
+  return requireAdmin(req, res);
+}
 
 const MAX_BYTES = 24 * 1024 * 1024;      /* 24MB —— 二进制直存，KV 单值上限 25MiB */
 const MAX_BYTES_LEGACY = 15 * 1024 * 1024; /* 老通道（base64 塞 JSON）只能用 15MB */
@@ -58,6 +67,48 @@ const KBI = 'fbi:';
 const KBC = 'fbc:';
 const KBT = 'fbt:';
 const MAX_ITEMS = 20;                    /* 一个取件码最多挂 20 个文件 */
+
+/* v4.16.7：
+     FAL — 谁传的（uploader 名 / 登录用户），管理端「按用户分组」要用；
+     edit — 是否允许管理员改动（默认开；传了 edit=0 就关）。
+     自定义取件码要求「至少两位大写字母」，并且全库查重。 */
+const CUSTOM_RE = /^[2-9A-HJ-NP-Z]{6}$/;   /* 与随机码同一套字母表，不含易混字符 */
+function validCustom(code) {
+  const c = String(code || '').toUpperCase().trim();
+  if (!CUSTOM_RE.test(c)) return false;
+  /* 至少两位大写字母 */
+  const up = (c.match(/[A-Z]/g) || []).length;
+  return up >= 2;
+}
+async function codeTaken(kv, code) {
+  /* 自定义码查重：批次 / 新元数据 / 老记录，任何一层占用都不能设。
+     注意只查「还在有效期内的」——KV 过期的键 get 会返回 null，天然排除。 */
+  for (const k of [KBS + code, KM + code, KF + code]) {
+    try { if (await kv.get(k)) return true; } catch (e) {}
+  }
+  return false;
+}
+function normOwner(v) {
+  return String(v == null ? '' : v).trim().slice(0, 40) || '未署名';
+}
+/* v4.16.7 管理端辅助：把一条老记录（fm: 新元数据 / f: 老 JSON）写回去，保留原 TTL 语义 */
+async function saveLegacy(kv, code, rec) {
+  const left = Math.max(60, Math.floor(((Number(rec.exp) || 0) - Date.now()) / 1000));
+  const meta = { size: rec.size, at: rec.at, kind: rec.kind || 'file' };
+  const inFm = await kv.get(KM + code);
+  if (inFm) await kv.put(KM + code, JSON.stringify(rec), { expirationTtl: left, metadata: meta });
+  else await kv.put(KF + code, JSON.stringify(rec), { expirationTtl: left, metadata: meta });
+}
+/* 取一条记录的统一视图：批次优先，其次 fm:，再其次 f: */
+async function loadAny(kv, code) {
+  const b = await readBatch(kv, code);
+  if (b) return { kind: 'batch', rec: b };
+  const m = await kv.get(KM + code);
+  if (m) { try { const r = JSON.parse(m); if (r && Array.isArray(r.items) === false) return { kind: 'legacy', rec: r }; } catch (e) {} }
+  const f = await kv.get(KF + code);
+  if (f) { try { const r = JSON.parse(f); if (r) return { kind: 'legacy', rec: r }; } catch (e) {} }
+  return null;
+}
 
 function ok(res, obj) {
   res.statusCode = 200;
@@ -227,6 +278,193 @@ export default async function handler(req, res) {
   const action = String(q.action || '').toLowerCase();
   const method = String(req.method || 'GET').toUpperCase();
 
+  /* ======================================================================
+     v4.16.7 管理端（仅管理员）
+     · code-check：自定义取件码查重（上传前前端先问一声）
+     · admin-list：列出全部未过期的批次，带上传者 / 是否可编辑，供管理界面分组
+     · admin-edit：改单个文件 —— 改名 / 改取件码 / 改可见次数 / 改保存天数
+     ====================================================================== */
+
+  /* 自定义码查重：合法且未被占用 → free:true */
+  if (method === 'GET' && action === 'code-check') {
+    const c = String(q.code || '').toUpperCase().trim();
+    if (!validCustom(c)) return ok(res, { free: false, reason: '要 6 位、至少两位大写字母，且不含 0/O/1/I/L' });
+    return ok(res, { free: !(await codeTaken(kv, c)) });
+  }
+
+  /* 管理端总览：把 fbs: 全部读出来，按上传者分组在前端做，这里只给平铺列表。
+     每条带 files（文件名/大小）、次数、天数、署名、edit。老 fm:/f: 记录也纳入。 */
+  if (method === 'GET' && action === 'admin-list') {
+    const me = await adminGuard(req, res);
+    if (!me) return;
+    const list = [];
+    /* 新批次 */
+    let cursor;
+    for (let page = 0; page < 20; page++) {
+      let r;
+      try { r = await kv.list({ prefix: KBS, limit: 1000, cursor }); } catch (e) { break; }
+      for (const k of ((r && r.keys) || [])) {
+        const code = String(k.name || '').slice(KBS.length);
+        const b = await readBatch(kv, code);
+        if (!b) continue;
+        let gets = 0;
+        try { gets = Number(await kv.get(KBC + code)) || 0; } catch (e) {}
+        list.push({
+          code, kind: 'files', owner: b.owner || '未署名', edit: b.edit !== false,
+          count: (b.items || []).length, size: batchTotal(b),
+          files: (b.items || []).map((it) => ({ id: it.id, name: it.name, size: it.size })),
+          ttl: b.ttl, maxGet: Number(b.maxGet || 0), gets,
+          exp: b.exp, at: b.at, memo: b.memo || '',
+        });
+      }
+      if (!r || r.list_complete) break;
+      cursor = r.cursor;
+    }
+    /* 单文件老记录 fm: */
+    for (const prefix of [KM, KF]) {
+      cursor = undefined;
+      for (let page = 0; page < 20; page++) {
+        let r;
+        try { r = await kv.list({ prefix, limit: 1000, cursor }); } catch (e) { break; }
+        for (const k of ((r && r.keys) || [])) {
+          const code = String(k.name || '').slice(prefix.length);
+          const raw = await kv.get(prefix + code);
+          if (!raw) continue;
+          let rec = null;
+          try { rec = JSON.parse(raw); } catch (e) { continue; }
+          if (!rec) continue;
+          let gets = 0;
+          try { gets = Number(await kv.get(KC + code)) || 0; } catch (e) {}
+          list.push({
+            code, kind: rec.kind || 'file', owner: rec.owner || '未署名', edit: rec.edit !== false,
+            count: 1, size: Number(rec.size) || 0,
+            files: [{ id: '', name: rec.name || '', size: Number(rec.size) || 0 }],
+            ttl: rec.ttl, maxGet: Number(rec.maxGet || 0), gets,
+            exp: rec.exp, at: rec.at, memo: rec.memo || '',
+          });
+        }
+        if (!r || r.list_complete) break;
+        cursor = r.cursor;
+      }
+    }
+    list.sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0));
+    return ok(res, { list, by: me.username || '' });
+  }
+
+  /* 管理端改文件：edit=false 的批次管理员只能下载，这里一律拒绝改动 */
+  if (method === 'POST' && action === 'admin-edit') {
+    const me = await adminGuard(req, res);
+    if (!me) return;
+    let body = {};
+    try { body = JSON.parse(req.body || '{}'); } catch (e) { return bad(res, 400, '请求格式不对'); }
+    const code = String(body.code || '').toUpperCase().trim();
+    if (!code) return bad(res, 400, '缺少取件码');
+    const cur = await loadAny(kv, code);
+    if (!cur) return bad(res, 404, '取件码不存在或已过期');
+    if (cur.rec.edit === false) return bad(res, 403, '上传者已关闭管理员编辑，仅允许下载');
+    const op = String(body.op || '');
+
+    /* 改文件名（批次带 id；老记录不带） */
+    if (op === 'name') {
+      const name = String(body.name || '').trim().slice(0, 120);
+      if (!name) return bad(res, 400, '新名字是空的');
+      if (cur.kind === 'batch') {
+        const items = cur.rec.items || [];
+        const id = String(body.id || '');
+        const target = id ? items.find((x) => String(x.id) === id) : (items.length === 1 ? items[0] : null);
+        if (!target) return bad(res, 400, '指明要改哪一个文件');
+        target.name = name;
+        await putBatch(kv, code, cur.rec);
+        return ok(res, { code, id: target.id, name });
+      }
+      cur.rec.name = name;
+      await saveLegacy(kv, code, cur.rec);
+      return ok(res, { code, name });
+    }
+
+    /* 改可见次数 */
+    if (op === 'max') {
+      const maxGet = normMax(body.maxGet);
+      if (cur.kind === 'batch') {
+        cur.rec.maxGet = maxGet;
+        await putBatch(kv, code, cur.rec);
+      } else {
+        cur.rec.maxGet = maxGet;
+        await saveLegacy(kv, code, cur.rec);
+      }
+      return ok(res, { code, maxGet });
+    }
+
+    /* 改保存天数：exp 重算、TTL 重置；批次字节键的 TTL 也要一起续，否则文件先没了 */
+    if (op === 'ttl') {
+      const ttl = normTtl(body.ttl);
+      const base = Number(cur.rec.at) || Date.now();
+      cur.rec.ttl = ttl;
+      cur.rec.exp = base + ttl * 86400000;
+      if (cur.kind === 'batch') {
+        await putBatch(kv, code, cur.rec);
+        for (const it of (cur.rec.items || [])) {
+          try {
+            const kk = KBI + code + ':' + it.id;
+            const raw = await kv.get(kk);
+            if (raw) await kv.put(kk, raw, { expirationTtl: batchLeftSec(cur.rec), metadata: { at: base, batch: code } });
+          } catch (e) {}
+        }
+      } else {
+        await saveLegacy(kv, code, cur.rec);
+        try {
+          const raw = await kv.get(KB + code);
+          if (raw) await kv.put(KB + code, raw, { expirationTtl: Math.max(60, Math.floor((cur.rec.exp - Date.now()) / 1000)) });
+        } catch (e) {}
+      }
+      return ok(res, { code, ttl, exp: cur.rec.exp });
+    }
+
+    /* 改取件码：查重后把整批的键全部迁到新码（字节、计数、票据、元数据） */
+    if (op === 'recode') {
+      const newCode = String(body.newCode || '').toUpperCase().trim();
+      if (!validCustom(newCode)) return bad(res, 400, '新取件码要 6 位、至少两位大写字母');
+      if (newCode === code) return bad(res, 400, '新取件码和原来一样');
+      if (await codeTaken(kv, newCode)) return bad(res, 409, '这个取件码已经有人用了');
+      if (cur.kind === 'batch') {
+        const b = cur.rec;
+        const left = batchLeftSec(b);
+        for (const it of (b.items || [])) {
+          try {
+            const raw = await kv.get(KBI + code + ':' + it.id, 'arrayBuffer');
+            if (raw) await kv.put(KBI + newCode + ':' + it.id, raw, { expirationTtl: left, metadata: { at: b.at, batch: newCode } });
+          } catch (e) {}
+        }
+        await putBatch(kv, newCode, b);
+        let gets = 0;
+        try { gets = Number(await kv.get(KBC + code)) || 0; } catch (e) {}
+        if (gets) { try { await kv.put(KBC + newCode, String(gets), { expirationTtl: left }); } catch (e) {} }
+        try { await kv.delete(KBS + code); } catch (e) {}
+        try { await kv.delete(KBC + code); } catch (e) {}
+        try { await kv.delete(KBT + code); } catch (e) {}
+        for (const it of (b.items || [])) { try { await kv.delete(KBI + code + ':' + it.id); } catch (e) {} }
+      } else {
+        const rec = cur.rec;
+        const left = Math.max(60, Math.floor(((Number(rec.exp) || 0) - Date.now()) / 1000));
+        try {
+          const raw = await kv.get(KB + code, 'arrayBuffer');
+          if (raw) await kv.put(KB + newCode, raw, { expirationTtl: left });
+        } catch (e) {}
+        const meta = { size: rec.size, at: rec.at, kind: rec.kind || 'file' };
+        await kv.put(KF + newCode, JSON.stringify(rec), { expirationTtl: left, metadata: meta });
+        let gets = 0;
+        try { gets = Number(await kv.get(KC + code)) || 0; } catch (e) {}
+        if (gets) { try { await kv.put(KC + newCode, String(gets), { expirationTtl: left }); } catch (e) {} }
+        try { await kv.delete(KM + code); } catch (e) {}
+        try { await kv.delete(KF + code); } catch (e) {}
+        try { await kv.delete(KB + code); } catch (e) {}
+        try { await kv.delete(KC + code); } catch (e) {}
+      }
+      return ok(res, { code: newCode, oldCode: code });
+    }
+    return bad(res, 400, '不认识的修改操作');
+  }
+
   /* ---------------- 上传文件（二进制直传，v4.10.5） ----------------
      为什么加这一条：老通道是「FileReader 读成 base64 → 塞进 JSON POST」，
      base64 会让体积 ×4/3，15MB 的文件在 KV 里要占 20MB，离 25MiB 单值上限很近，
@@ -283,6 +521,7 @@ export default async function handler(req, res) {
         code: addCode, delKey: b.del, itemId: item.id, name, size,
         index: b.items.length - 1, count: b.items.length,
         ttl: b.ttl, maxGet: Number(b.maxGet || 0), exp: b.exp,
+        owner: b.owner || '未署名', edit: b.edit !== false,
         quota: { used: usage.used + size, cap: SOFT_QUOTA },
       });
     }
@@ -296,12 +535,24 @@ export default async function handler(req, res) {
         + '先到「历史」里删掉一些不用的，或者等它们到期自动清掉再传。');
     }
 
-    const code = randStr(6);
+    /* v4.16.7：自定义取件码（至少两位大写字母 + 全库查重）；不填就随机 */
+    const custom = String(q.custom || '').toUpperCase().trim();
+    let code;
+    if (custom) {
+      if (!validCustom(custom)) return bad(res, 400, '自定义取件码要 6 位、至少含两位大写字母，且不能是 0 / O / 1 / I / L');
+      if (await codeTaken(kv, custom)) return bad(res, 409, '这个取件码已经有人用了，换一个吧');
+      code = custom;
+    } else {
+      code = randStr(6);
+    }
     const delKey = randStr(20);
+    /* v4.16.7：上传者署名 + 是否允许管理员编辑（edit=0 关闭，默认开） */
+    const owner = normOwner(q.owner);
+    const edit = String(q.edit || '1') !== '0';
     const item = { id: randStr(4), name, type, size, at };
     const batch = {
       v: 3, kind: 'files', at, exp: at + ttl * 86400000, ttl, maxGet, memo, del: delKey,
-      items: [item],
+      owner, edit, items: [item],
     };
     try {
       await kv.put(KBI + code + ':' + item.id, buf, { expirationTtl: ttl * 86400, metadata: { at, batch: code } });
@@ -313,7 +564,7 @@ export default async function handler(req, res) {
     }
     return ok(res, {
       code, delKey, itemId: item.id, name, size, index: 0, count: 1,
-      ttl, maxGet, exp: batch.exp,
+      ttl, maxGet, exp: batch.exp, owner, edit,
       quota: { used: usage.used + size, cap: SOFT_QUOTA },
     });
   }
@@ -328,6 +579,8 @@ export default async function handler(req, res) {
     const memo = String(body.memo || '').slice(0, 60);
     const delKey = randStr(20);
     const at = Date.now();
+    const owner = normOwner(body.owner);
+    const edit = String(body.edit || '1') !== '0';
     let ttl = normTtl(body.ttl);
     let rec = null;
 
@@ -341,7 +594,7 @@ export default async function handler(req, res) {
         name: String(body.name || ('文本 ' + new Date(at).toLocaleString('zh-CN', { hour12: false }))).slice(0, 120),
         type: 'text/plain; charset=utf-8',
         size: new TextEncoder().encode(text).length,
-        text, at, exp: at + ttl * 86400000, del: delKey, ttl, maxGet, memo,
+        text, at, exp: at + ttl * 86400000, del: delKey, ttl, maxGet, memo, owner, edit,
       };
     } else {
       const name = String(body.name || '未命名文件').slice(0, 120);
@@ -358,7 +611,7 @@ export default async function handler(req, res) {
       rec = {
         kind: 'file',
         name, type, size: approx, at, exp: at + ttl * 86400000,
-        del: delKey, ttl, maxGet, memo, b64,
+        del: delKey, ttl, maxGet, memo, b64, owner, edit,
       };
     }
 
@@ -370,7 +623,16 @@ export default async function handler(req, res) {
         + '先到「历史」里删掉一些不用的，或者等它们 3 天到期自动清掉再传。');
     }
 
-    const code = randStr(6);
+    /* v4.16.7：文本 / 老通道也支持自定义码 */
+    const custom = String(body.custom || '').toUpperCase().trim();
+    let code;
+    if (custom) {
+      if (!validCustom(custom)) return bad(res, 400, '自定义取件码要 6 位、至少含两位大写字母');
+      if (await codeTaken(kv, custom)) return bad(res, 409, '这个取件码已经有人用了，换一个吧');
+      code = custom;
+    } else {
+      code = randStr(6);
+    }
     try {
       await kv.put('f:' + code, JSON.stringify(rec), {
         expirationTtl: ttl * 86400,
@@ -382,7 +644,7 @@ export default async function handler(req, res) {
     }
     return ok(res, {
       code, delKey, kind: rec.kind, name: rec.name,
-      size: rec.size, ttl, maxGet, exp: rec.exp,
+      size: rec.size, ttl, maxGet, exp: rec.exp, owner, edit,
       quota: { used: usage.used + rec.size, cap: SOFT_QUOTA },
     });
   }

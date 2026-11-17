@@ -1312,6 +1312,29 @@ footer{text-align:center;margin-top:40px;padding:20px;color:#af410f;font-weight:
 .fl-opts .fl-num{flex:0 0 66px;width:66px}
 .fl-opts #flMemo{font-size:.82rem;letter-spacing:0;text-align:left}
 .fl-tip{font-size:.7rem;color:var(--fg-3);line-height:1.6;margin:6px 0 2px}
+.fl-adm-edit{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:var(--fg-2);cursor:pointer}
+.fl-adm-edit input{width:16px;height:16px;accent-color:var(--btn-a)}
+/* v4.16.7 管理界面 */
+.fl-adm-bar{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.fl-adm-mode{font-size:.78rem;font-weight:700;padding:6px 14px;border-radius:8px;border:1px solid rgba(120,53,15,.2);
+  background:var(--bg-1);color:var(--fg-2);cursor:pointer}
+.fl-adm-mode.on{background:linear-gradient(135deg,var(--btn-a),var(--btn-b));color:#fff;border-color:transparent}
+.fl-adm{max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.fl-adm-empty{color:var(--fg-3);font-size:.8rem;text-align:center;padding:24px 8px}
+.fl-adm-group{border:1px solid rgba(120,53,15,.14);border-radius:10px;overflow:hidden}
+.fl-adm-gh{display:flex;justify-content:space-between;align-items:center;padding:8px 11px;background:rgba(120,53,15,.06);
+  font-size:.8rem;font-weight:800;color:var(--accent-ink)}
+.fl-adm-gh span{font-weight:600;color:var(--fg-3);font-size:.72rem}
+.fl-adm-row{padding:9px 11px;border-top:1px solid rgba(120,53,15,.08);font-size:.8rem}
+.fl-adm-row:first-child{border-top:0}
+.fl-adm-code{font-family:ui-monospace,monospace;font-weight:900;letter-spacing:.08em;color:var(--accent-ink)}
+.fl-adm-meta{color:var(--fg-3);font-size:.7rem;margin-top:2px}
+.fl-adm-files{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.fl-adm-files li{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:.75rem}
+.fl-adm-files li b{flex:1;min-width:0;word-break:break-all;font-weight:600}
+.fl-adm-acts{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.fl-adm-acts .fl-mini,.fl-adm-files .fl-mini{font-size:.7rem;padding:4px 8px}
+.fl-adm-locked{font-size:.7rem;color:#b45309;background:rgba(180,83,9,.1);padding:3px 8px;border-radius:6px}
 /* 第一行「已用 / 总数」+「还剩几天」，第二行进度条独占一整行 ——
    挤在一行里条子只有几十像素，看不出用了多少 */
 .fl-quota{font-size:.7rem;color:var(--fg-3);line-height:1.6;margin:4px 0 8px;
@@ -6675,13 +6698,14 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
       <button type="button" data-fltab="txt" onclick="flTab('txt')">发文本</button>
       <button type="button" data-fltab="get" onclick="flTab('get')">取件</button>
       <button type="button" data-fltab="hist" onclick="flTab('hist')">历史</button>
+      <button type="button" data-fltab="admin" onclick="flTab('admin')" id="flTabAdmin" style="display:none">管理</button>
     </div>
 
     <div class="fl-pane" id="flPaneUp">
       <label class="fl-drop" id="flDrop">
         <input type="file" id="flFile" multiple style="display:none">
         <b>点击选择文件</b>
-        <span>一次可以选好几个，也可以一起拖进来　·　单个不超过 24MB　·　最多 20 个共用一个取件码</span>
+        <span>支持批量选取或多文件拖入　·　单个文件不超过 24MB　·　单个取件码最多容纳 20 个文件</span>
       </label>
       <!-- v4.16.6：选好的文件先排队，确认之后才一个一个传 -->
       <div class="fl-queue" id="flQueue"></div>
@@ -6722,6 +6746,16 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
         <span>备注</span>
         <input id="flMemo" class="fl-in" maxlength="60" placeholder="给自己看的标记，可不填">
       </div>
+      <!-- v4.16.7：自定义取件码（至少两位大写字母，留空则系统随机） -->
+      <div class="fl-row">
+        <span>取件码</span>
+        <input id="flCustom" class="fl-in" maxlength="6" placeholder="留空随机·自定义需含≥2位大写字母"
+          autocomplete="off" spellcheck="false" style="text-transform:uppercase">
+      </div>
+      <!-- v4.16.7：是否允许管理员代为编辑（默认开） -->
+      <div class="fl-row">
+        <label class="fl-adm-edit"><input type="checkbox" id="flAdmEdit" checked> 允许管理员编辑本条文件</label>
+      </div>
       <div class="fl-tip" id="flOptTip">取满次数后自动删除原件；到期也会自动消失。</div>
       <!-- v4.9.2：剩余空间一眼可见，免得不知不觉把 1GB 塞满 -->
       <div class="fl-quota" id="flQuota" style="display:none"></div>
@@ -6739,6 +6773,17 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
     <div class="fl-pane" id="flPaneHist" style="display:none">
       <div class="fl-msg" id="flMsgHist"></div>
       <div class="fl-hist" id="flHist"></div>
+    </div>
+
+    <!-- v4.16.7：管理员专用面板（按用户 / 按文件两种视角，改文件状态） -->
+    <div class="fl-pane" id="flPaneAdmin" style="display:none">
+      <div class="fl-adm-bar">
+        <button type="button" class="fl-adm-mode on" data-flam="user" onclick="flAdmMode('user')">按用户</button>
+        <button type="button" class="fl-adm-mode" data-flam="file" onclick="flAdmMode('file')">按文件</button>
+        <button type="button" class="fl-mini" onclick="flAdminLoad()">刷新</button>
+      </div>
+      <div class="fl-msg" id="flMsgAdmin"></div>
+      <div class="fl-adm" id="flAdmin"></div>
     </div>
 
     <!-- 发成功后的结果卡：四个页签共用一张（关掉面板就消失，记录还在「历史」里） -->
@@ -7372,7 +7417,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.16.6</button>
+        title="点击检查是否为最新版本">v4.16.7</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -8592,19 +8637,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.16.6';
+var SITE_VERSION = '4.16.7';
 var VER_DATE = '2026-11-17';
 </script>
-<script src="./auth-bus.js?v=4166" defer></script>
+<script src="./auth-bus.js?v=4167" defer></script>
 <script src="./tour.js?v=040507" defer></script>
-<script src="./app.min.js?v=4166" defer></script>
+<script src="./app.min.js?v=4167" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4166" defer></script>
-<script src="./big.js?v=4166" defer></script>
+<script src="./fs-keep.js?v=4167" defer></script>
+<script src="./big.js?v=4167" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4166" defer></script>
+<script src="./pickfx.js?v=4167" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
