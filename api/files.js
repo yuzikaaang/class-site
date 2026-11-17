@@ -568,8 +568,12 @@ export default async function handler(req, res) {
     try { gets = Number(await kv.get(KBC + code)) || 0; } catch (e) { gets = 0; }
 
     if (q.meta === '1' || q.meta === 'true') {
+      /* 顺带给一份 name / size（第一个文件的名字与整批总大小）：
+         浏览器里还留着旧版页面时，它只看这两个字段，至少不会显示空白 */
+      const first = items[0] || {};
       return ok(res, {
         code, kind: 'files', count: items.length, items,
+        name: first.name || '', size: batchTotal(dlb),
         ttl: dlb.ttl, exp: dlb.exp, memo: dlb.memo || '',
         maxGet, gets, left: maxGet ? Math.max(0, maxGet - gets) : null,
       });

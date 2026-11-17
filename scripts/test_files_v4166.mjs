@@ -130,6 +130,9 @@ ok('列表页里有 3 个文件名', ['语文笔记.txt', '数学卷.pptx', '听
 /* HTML 里 & 会写成 &amp;（合法转义），所以只看参数名在不在 */
 ok('列表页链接带 id 和票据', /[?&]amp;id=/.test(String(multi.body)) && /[?&]amp;tk=/.test(String(multi.body)));
 
+const mb1 = await call(kv, { query: { code, meta: '1' } });
+ok('meta 给旧页面留了 name / size', mb1.json.name === '语文笔记.txt' && mb1.json.size === 9, [mb1.json.name, mb1.json.size]);
+
 const kv2 = new MockKV();
 const one = await up(kv2, '单件.pdf', 'PDF');
 const solo = await call(kv2, { query: { code: one.json.code } });
