@@ -294,10 +294,26 @@ function refreshQuick(){
 /* 侧边栏「班级服务站后台」入口：只有管理员（或站长账号）才显示 */
 function refreshAdminEntry(){
   var b = document.getElementById('adminEntryBtn');
-  if(!b) return;
-  var ok = false;
-  try{ ok = (typeof isAdmin === 'function') && isAdmin(); }catch(e){}
-  b.style.display = ok ? '' : 'none';
+  if(b){
+    var ok = false;
+    try{ ok = (typeof isAdmin === 'function') && isAdmin(); }catch(e){}
+    b.style.display = ok ? '' : 'none';
+  }
+  /* v4.16.9：产物索引入口同样仅管理员可见（站主要求「我能直接跳过去看更新截图」） */
+  var a = document.getElementById('artifactIdxBtn');
+  if(a){
+    var ok2 = false;
+    try{ ok2 = (typeof isAdmin === 'function') && isAdmin(); }catch(e){}
+    a.style.display = ok2 ? '' : 'none';
+  }
+}
+/* v4.16.9：打开 WorkBuddy 产物索引（新标签页；手机端被拦截时退回当前页跳转） */
+function openArtifactIndex(){
+  var url = (typeof ARTIFACT_INDEX_URL === 'string' && ARTIFACT_INDEX_URL)
+    ? ARTIFACT_INDEX_URL : 'https://workbuddy.link/p/wE79VgSnppmeb15X5A5b2l';
+  var w = null;
+  try{ w = window.open(url, '_blank', 'noopener'); }catch(e){}
+  if(!w){ try{ location.href = url; }catch(e){} }
 }
 function toggleLiteQuick(){
   setLiteMode(UI.lite === 1 ? 'off' : 'on');
@@ -3090,6 +3106,40 @@ function cdUnits(d){
 
 /* v4.16.8：公告不再分板块——前台只有一个公告列表，全部按时间倒序（置顶在最上方） */
 
+/* v4.16.9（站主要求）：**每条公告内部**按类型聚合。
+   背景：同一条版本公告会被多次小版本追加（v4.16.0 到 v4.16.8 都往同一条里加），
+   于是【界面】【安全】这类条目散落在各处，读者要一行行翻。现在改成：
+   同类型的条目并到一处（分号连成一行），类型顺序按**首次出现**排；
+   没有【类型】前缀的行（如「v4.16 更新！内容如下：」）保留在最前。 */
+function annGroupLines(text){
+  var lines = String(text == null ? '' : text).replace(/\r/g, '').split('\n');
+  var head = [], order = [], map = {};
+  for(var i = 0; i < lines.length; i++){
+    var s = lines[i].trim();
+    if(!s) continue;
+    var m = /^【([^】]{1,10})】\s*([\s\S]*)$/.exec(s);
+    if(!m){ head.push(s); continue; }
+    var tag = m[1], body = String(m[2] || '').trim();
+    if(!map[tag]){ map[tag] = []; order.push(tag); }
+    /* 一行里可能已经用「；」合并了多条，拆开逐条收集，聚合后不出现重复标点 */
+    var parts = body.split(/[；;]/);
+    for(var j = 0; j < parts.length; j++){
+      var v = parts[j].trim().replace(/[。．.]+$/, '');
+      if(v) map[tag].push(v);
+    }
+  }
+  var out = head.slice();
+  for(var k = 0; k < order.length; k++){
+    var t = order[k];
+    out.push('【' + t + '】' + map[t].join('；'));
+  }
+  return out;
+}
+/* 聚合后渲染成 HTML（逐行转义 + emoji 处理） */
+function annGroupHtml(text){
+  return annGroupLines(text).map(function(s){ return emojiEscHtml(s); }).join('<br>');
+}
+
 /* 置顶是否仍生效：支持限时置顶（importantUntil 之后自动失效） */
 function isImportant(a){
   if(!a || !a.important) return false;
@@ -3138,7 +3188,7 @@ function renderBoard(){
           /* 永久置顶显示「置顶」，限时置顶显示「限时置顶」——让同学知道它什么时候会掉下来 */
           (isImportant(a) ? '<span class="board-pin">' + (a.importantUntil ? '限时置顶' : '置顶') + '</span>' : '') +
         '</div>' +
-        '<p class="board-text' + (isImportant(a) ? ' important' : '') + '">' + emojiEscHtml(a.text) + '</p>' +
+        '<p class="board-text' + (isImportant(a) ? ' important' : '') + '">' + annGroupHtml(a.text) + '</p>' +
       '</li>';
     }).join('') + '</ul>';
   }
@@ -12719,7 +12769,7 @@ function renderAllBoard(){
           return '<li class="ann-item"><div class="board-meta">'+
             '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(annDateLabel(a.date))+'</span>'+
             (isImportant(a)?'<span class="board-pin">'+(a.importantUntil?'限时置顶':'置顶')+'</span>':'')+'</div>'+
-            '<p class="board-text">'+emojiEscHtml(a.text)+'</p></li>';
+            '<p class="board-text">'+annGroupHtml(a.text)+'</p></li>';
         }).join('')+'</ul>'
       : '<li style="padding:18px;color:#6e635a;text-align:center">暂无公告</li>';
   }

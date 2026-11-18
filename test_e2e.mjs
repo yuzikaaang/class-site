@@ -4734,10 +4734,10 @@ console.log('\n【39】第三十轮修正·「后台权力最大」（v2.4.1）'
 console.log('\n【40】第三十一轮·取消备用链接（v2.5.0）');
 {
   const idx40 = readIdx();
-  /* 备用链接（WorkBuddy 托管）已取消：SITE_DATA.siteLinks 只应有主链接。
-     v4.16.8：站内新增「产物索引」管理员专属入口（ARTIFACT_INDEX_URL），这是合法的
-     workbuddy.link 用途，与原「备用域名」不是一回事——排除该行后再检查域名。 */
-  const idx40NoArtifact = idx40.replace(/^\s*var ARTIFACT_INDEX_URL\s*=.*$/gm, '');
+  /* 备用链接（WorkBuddy 托管的整站镜像）已取消：SITE_DATA.siteLinks 只应有主链接。
+     v4.16.8/4.16.9：站内新增「产物索引」管理员入口，用的是 workbuddy.link/p/<id> 页面分享路径，
+     与「整站备用域名」不是一回事——把 /p/ 分享链接排除后再检查域名。 */
+  const idx40NoArtifact = idx40.replace(/https:\/\/workbuddy\.link\/p\/[A-Za-z0-9_-]+/g, '');
   t('★index.html 不再出现 workbuddy.link 备用域名（产物索引入口除外）', idx40NoArtifact.indexOf('workbuddy.link') < 0);
   t('★v4.16.8 管理员产物索引入口链接存在', /var ARTIFACT_INDEX_URL\s*=\s*'https:\/\/workbuddy\.link\/p\//.test(idx40));
   const linksBlock = idx40.match(/siteLinks:\s*\[[\s\S]*?\]/);

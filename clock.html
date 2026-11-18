@@ -578,6 +578,9 @@ body.bg-green .sum-custom input,body.bg-gray .sum-custom input{border-color:rgba
 .sum-paper .sp-num b{font-size:16px;color:#b45309;font-weight:800}
 .sum-paper h5{margin:12px 0 6px;font-size:11.5px;color:#9a8a7a;font-weight:800;letter-spacing:.04em}
 .sum-paper .sp-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:12.5px}
+/* v4.16.9：暂停记录行——理由可能很长，左栏可换行、右栏时长不折行 */
+.sum-paper .sp-pause span:first-child{flex:1;min-width:0;word-break:break-word}
+.sum-paper .sp-pause span:last-child{white-space:nowrap}
 .sum-paper .sp-row span:last-child{color:#6b5443;font-variant-numeric:tabular-nums}
 .sum-paper .sp-note{
   width:100%;min-height:56px;margin-top:10px;padding:8px 10px;border-radius:9px;
@@ -794,6 +797,37 @@ body.bg-dark #tmBar,body.bg-black #tmBar,body.bg-navy #tmBar{background:rgba(255
 }
 #durSheet.show .ds-box{transform:none}
 body.bg-dark .ds-box,body.bg-black .ds-box,body.bg-navy .ds-box{background:#1d1d22;color:#eee}
+
+/* v4.16.9：暂停理由弹窗（暂停后点「继续」时弹出；10 秒内没输入自动跳过） */
+#pauseSheet{position:fixed;left:0;right:0;top:0;bottom:0;z-index:95;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.42);opacity:0;visibility:hidden;transition:opacity .18s,visibility .18s;padding:18px}
+#pauseSheet.show{opacity:1;visibility:visible}
+.ps-box{width:100%;max-width:420px;background:#fff;color:#222;border-radius:18px;padding:18px 20px calc(16px + env(safe-area-inset-bottom));
+  box-shadow:0 18px 60px rgba(0,0,0,.28);transform:translateY(10px) scale(.985);transition:transform .22s cubic-bezier(.2,.8,.3,1)}
+#pauseSheet.show .ps-box{transform:none}
+body.bg-dark .ps-box,body.bg-black .ps-box,body.bg-navy .ps-box{background:#1d1d22;color:#eee}
+.ps-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.ps-head b{font-size:16px}
+.ps-cd{font-size:12px;color:#b45309;background:#fef3c7;border-radius:999px;padding:3px 10px;white-space:nowrap}
+body.bg-dark .ps-cd,body.bg-black .ps-cd,body.bg-navy .ps-cd{background:#3a2f16;color:#fbbf24}
+.ps-q{font-size:13.5px;opacity:.85;margin:0 0 8px}
+.ps-ta{width:100%;box-sizing:border-box;border:1px solid rgba(0,0,0,.14);border-radius:12px;padding:10px 12px;
+  font:inherit;font-size:14px;line-height:1.55;resize:none;background:rgba(0,0,0,.03);color:inherit}
+body.bg-dark .ps-ta,body.bg-black .ps-ta,body.bg-navy .ps-ta{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16)}
+.ps-ta:focus{outline:2px solid #f59e0b;outline-offset:1px}
+.ps-meta{margin:9px 0 0;font-size:12.5px;opacity:.72;font-variant-numeric:tabular-nums}
+.ps-acts{display:flex;gap:10px;margin-top:14px}
+.ps-acts button{flex:1;border:none;border-radius:12px;padding:11px 12px;font:inherit;font-weight:600;font-size:14.5px;cursor:pointer}
+.ps-acts .ps-skip{background:rgba(0,0,0,.07);color:inherit}
+body.bg-dark .ps-acts .ps-skip,body.bg-black .ps-acts .ps-skip,body.bg-navy .ps-acts .ps-skip{background:rgba(255,255,255,.12)}
+.ps-acts .ps-ok{background:#f59e0b;color:#231a05}
+/* 记录抽屉里的暂停记录 */
+.lg-pauses{margin:10px 0 0}
+.lg-pause-row{display:flex;gap:8px;align-items:baseline;padding:6px 0;border-top:1px dashed rgba(0,0,0,.1);font-size:12.5px}
+body.bg-dark .lg-pause-row,body.bg-black .lg-pause-row,body.bg-navy .lg-pause-row{border-color:rgba(255,255,255,.14)}
+.lg-pause-row b{font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.lg-pause-row span{flex:1;opacity:.78;word-break:break-word}
+.lg-pause-row em{font-style:normal;opacity:.55;white-space:nowrap}
 .ds-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .ds-head b{font-size:15px}
 .ds-head button{width:32px;height:32px;border-radius:50%;border:none;background:rgba(0,0,0,.06);color:inherit;font-size:14px;cursor:pointer}
@@ -1144,8 +1178,22 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
   </div>
 </div>
 
+<!-- v4.16.9：暂停理由弹窗（暂停后点「继续」弹出；10 秒无输入自动跳过） -->
+<div id="pauseSheet" aria-hidden="true">
+  <div class="ps-box">
+    <div class="ps-head"><b>这段时间在干什么？</b><span class="ps-cd" id="psCd">10 秒后自动继续</span></div>
+    <p class="ps-q">可留空直接跳过；写了会记进今天的记录与报告。</p>
+    <textarea class="ps-ta" id="psReason" rows="3" maxlength="100" placeholder="例如：接水、问老师题、休息一下…"></textarea>
+    <p class="ps-meta" id="psMeta"></p>
+    <div class="ps-acts">
+      <button type="button" class="ps-skip" id="psSkip">跳过</button>
+      <button type="button" class="ps-ok" id="psOk">确定</button>
+    </div>
+  </div>
+</div>
+
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=4168" defer></script>
+<script src="./fs-keep.js?v=4169" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -1517,6 +1565,8 @@ var T = {
   phase:'focus', round:1, rounds:0,
   hits:{}, marks:[], markFrom:0
 };
+/* v4.16.9：暂停记录状态（声明必须早于 tmIdle —— 初始化就会调它） */
+var PAUSE = { at: 0, rec: null, tick: null, onDone: null };
 function focusMs(){ return Math.max(0, Math.min(99 * 3600, Number(CFG.focusSec) || 0)) * 1000; }
 function downMs(){ return Math.max(0, Math.min(99 * 3600, Number(CFG.downSec) || 0)) * 1000; }
 function restMs(){ return Math.max(0, Math.min(99, Number(CFG.restSec) || 0)) * 60000; }
@@ -1624,6 +1674,7 @@ function tmPaint(){
 function tmIdle(){
   T.run = false; T.paused = false; T.up = false;
   T.upAcc = 0; T.upStart = 0;
+  PAUSE.at = 0;                 /* v4.16.9：重置/切模式时清掉暂停起点，避免下次继续误弹 */
   T.round = 1; T.rounds = tmRounds();
   T.phase = 'focus';
   T.hits = {};
@@ -1652,6 +1703,7 @@ function tmReset(){
   syncLogRun();
 }
 function tmStart(){
+  PAUSE.at = 0;                 /* v4.16.9：全新开始，不继承上一次的暂停起点 */
   if(T.kind === 'up'){
     T.up = true; T.upAcc = 0; T.upStart = nowMs(); T.run = true;
     T.markFrom = Date.now();
@@ -1674,22 +1726,86 @@ function tmToggle(){
     if(T.up){ T.upAcc += nowMs() - T.upStart; T.upStart = 0; }
     else T.left = Math.max(0, T.end - nowMs());
     T.run = false; T.paused = true;
+    PAUSE.at = Date.now();       /* v4.16.9：记下暂停起点，继续时据此算暂停时长 */
     tmBtn('继续');
     logStop();
     setBare(false);
-  }else{
-    if(T.up){ T.upStart = nowMs(); }
-    else{
-      if(T.left <= 0){ T.left = T.total || focusMs() || 1500000; }
-      T.end = nowMs() + T.left;
-    }
-    T.run = true; T.paused = false;
-    tmBtn('暂停');
-    beep(0);
-    logStart(logModeOf());
-    autoBare();
+    tmPaint();
+    return;
   }
+  /* v4.16.9（站主要求）：暂停满 3 秒再点「继续」时，先问一句这段时间在干什么。
+     暂停太短（<3 秒）不打扰，直接恢复；弹窗里点「确定」写理由、「跳过」不写，
+     10 秒内输入框没内容则自动跳过并恢复。 */
+  var pauseSec = PAUSE.at ? Math.round((Date.now() - PAUSE.at) / 1000) : 0;
+  if(pauseSec >= 3){
+    PAUSE.onDone = tmResume;
+    tmPaint();
+    pauseSheetOpen(PAUSE.at);
+    return;
+  }
+  tmResume();
+}
+/* 真正恢复计时（暂停理由弹窗关闭后调用） */
+function tmResume(){
+  if(T.up){ T.upStart = nowMs(); }
+  else{
+    if(T.left <= 0){ T.left = T.total || focusMs() || 1500000; }
+    T.end = nowMs() + T.left;
+  }
+  T.run = true; T.paused = false;
+  tmBtn('暂停');
+  beep(0);
+  logStart(logModeOf());
+  autoBare();
   tmPaint();
+}
+/* ---------- v4.16.9 暂停理由弹窗 ---------- */
+/* 暂停时长文字：精确到秒（站主要求「5 分钟整就是 5 分 00 秒」） */
+function pauseDurText(sec){
+  sec = Math.max(0, Math.round(Number(sec) || 0));
+  var m = Math.floor(sec / 60), s = sec % 60;
+  if(m <= 0) return s + ' 秒';
+  return m + ' 分 ' + (s < 10 ? '0' : '') + s + ' 秒';
+}
+function pauseSheetOpen(fromTs){
+  var now = Date.now();
+  PAUSE.rec = { s: fromTs, e: now, d: Math.max(1, Math.round((now - fromTs) / 1000)) };
+  var box = $('pauseSheet'), ta = $('psReason');
+  if(!box || !ta) { pauseSheetClose(true); return; }
+  ta.value = '';
+  $('psMeta').textContent = '本次暂停 ' + pauseDurText(PAUSE.rec.d)
+    + '（' + hms(fromTs) + ' – ' + hms(now) + '）';
+  box.className = 'show';
+  box.setAttribute('aria-hidden', 'false');
+  var left = 10;
+  $('psCd').textContent = left + ' 秒后自动继续';
+  if(PAUSE.tick) clearInterval(PAUSE.tick);
+  PAUSE.tick = setInterval(function(){
+    left--;
+    if(left > 0){ $('psCd').textContent = left + ' 秒后自动继续'; return; }
+    pauseSheetClose(true);       /* 10 秒无输入 → 按跳过处理并恢复 */
+  }, 1000);
+  setTimeout(function(){ try{ ta.focus(); }catch(e){} }, 60);
+}
+/* 一旦开始打字就停掉自动跳过（站主：十秒打不完字，打了字就不能自动跳） */
+function pauseSheetStopAuto(){
+  if(PAUSE.tick){ clearInterval(PAUSE.tick); PAUSE.tick = null; }
+  var cd = $('psCd');
+  if(cd) cd.textContent = '输入中 · 点下方按钮继续';
+}
+function pauseSheetClose(skip){
+  if(PAUSE.tick){ clearInterval(PAUSE.tick); PAUSE.tick = null; }
+  var box = $('pauseSheet');
+  if(box){ box.className = ''; box.setAttribute('aria-hidden', 'true'); }
+  var rec = PAUSE.rec; PAUSE.rec = null;
+  if(rec && rec.d >= 3){
+    var ta = $('psReason');
+    var reason = (!skip && ta) ? String(ta.value || '').trim().slice(0, 100) : '';
+    logPause(rec, reason);
+  }
+  PAUSE.at = 0;
+  var fn = PAUSE.onDone; PAUSE.onDone = null;
+  if(fn) fn();
 }
 function tmDone(){
   var wasRest = (T.phase === 'rest');
@@ -2184,6 +2300,8 @@ function dkey(ts){
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
 }
 function hm(ts){ var d = new Date(ts); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+/* v4.16.9：带秒的时间（暂停弹窗里显示时间段用，短暂停也看得出差别） */
+function hms(ts){ var d = new Date(ts); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
 function durText(sec){
   sec = Math.max(0, Math.round(sec));
   if(sec < 60) return sec + ' 秒';
@@ -2198,9 +2316,12 @@ function logSegOk(x){
 function logLoad(day){
   var raw = null;
   try{ raw = JSON.parse(localStorage.getItem(LOG_PREFIX + day) || 'null'); }catch(e){}
-  if(Array.isArray(raw)) return { v: 2, pomo: 0, segs: raw.filter(logSegOk) };
-  if(raw && Array.isArray(raw.segs)) return { v: 2, pomo: Number(raw.pomo) || 0, segs: raw.segs.filter(logSegOk) };
-  return { v: 2, pomo: 0, segs: [] };
+  if(Array.isArray(raw)) return { v: 2, pomo: 0, segs: raw.filter(logSegOk), pauses: [] };
+  /* v4.16.9：pauses = 暂停记录 [{s:暂停开始, e:恢复时间, d:秒, r:理由(可空)}]，
+     跟 segs 一起存同一个键、同步云端；读的时候不能丢，否则换设备就看不到。 */
+  if(raw && Array.isArray(raw.segs)) return { v: 2, pomo: Number(raw.pomo) || 0,
+    segs: raw.segs.filter(logSegOk), pauses: Array.isArray(raw.pauses) ? raw.pauses : [] };
+  return { v: 2, pomo: 0, segs: [], pauses: [] };
 }
 function logEnsure(){
   var k = dkey();
@@ -2258,7 +2379,21 @@ function logMerge(a, b){
   eat(a && a.segs);
   eat(b && b.segs);
   out.sort(function(x, y){ return x.s - y.s; });
-  return { v: 2, pomo: Math.max(Number(a && a.pomo) || 0, Number(b && b.pomo) || 0), segs: out };
+  /* v4.16.9：暂停记录也合并（按「开始时间@结束时间」去重），多设备同步时不互相覆盖 */
+  var pIdx = {}, pOut = [];
+  function eatP(list){
+    (list || []).forEach(function(p){
+      if(!p || !Number(p.s) || !Number(p.e)) return;
+      var k = p.s + '@' + p.e;
+      if(pIdx[k] !== undefined) return;
+      pIdx[k] = pOut.length;
+      pOut.push(p);
+    });
+  }
+  eatP(a && a.pauses);
+  eatP(b && b.pauses);
+  pOut.sort(function(x, y){ return x.s - y.s; });
+  return { v: 2, pomo: Math.max(Number(a && a.pomo) || 0, Number(b && b.pomo) || 0), segs: out, pauses: pOut };
 }
 /* 这一天 3 分钟内跟云端对过账没有（多设备同时用的时候，太久没对账就不能直接覆盖） */
 function logFresh(day){
@@ -2507,6 +2642,18 @@ function logPomo(n){
   data.pomo = n;
   logWrite(LOG.day, data);
 }
+/* v4.16.9：写一条暂停记录（s 开始 / e 结束 / d 秒 / r 理由）。理由留空就不写 r 字段。 */
+function logPause(rec, reason){
+  if(!rec || !Number(rec.s) || !Number(rec.e)) return;
+  var day = dkey(rec.s);                 /* 归到暂停开始那一刻所在日期 */
+  var data = (day === LOG.day) ? logEnsure() : logLoad(day);
+  if(!Array.isArray(data.pauses)) data.pauses = [];
+  var item = { s: Number(rec.s), e: Number(rec.e), d: Math.max(1, Math.round(Number(rec.d) || 0)) };
+  if(reason) item.r = String(reason).slice(0, 100);
+  data.pauses.push(item);
+  if(data.pauses.length > 80) data.pauses = data.pauses.slice(-80);   /* 一天最多留 80 条，防无限增长 */
+  logWrite(day, data);
+}
 
 /* ---------------- 总结 / 报告（v3.10.0） ----------------
    站主：「记录的前台内部新增总结功能，可以总结时间段的时长，还可以快捷选择
@@ -2542,7 +2689,7 @@ function sumRange(){
 }
 /* 把区间里每天的数据拼起来（同时把每天的小番茄数加起来） */
 function logRange(from, to){
-  var out = { segs: [], pomo: 0 };
+  var out = { segs: [], pomo: 0, pauses: [] };
   var d = new Date(from + 'T00:00:00');
   var end = new Date(to + 'T00:00:00');
   var n = 0;
@@ -2557,6 +2704,10 @@ function logRange(from, to){
         k: x.k, sj: x.sj, it: x.it, t: x.t, dv: x.dv });
     });
     out.pomo += Number(data.pomo) || 0;
+    /* v4.16.9：暂停记录也收进来（只取落在区间内的那几天） */
+    (data.pauses || []).forEach(function(p){
+      if(p && Number(p.s)) out.pauses.push(p);
+    });
     d.setDate(d.getDate() + 1);
   }
   /* 正在跑的那一段也要算进去，否则刚用了几分钟就看「还没有记录」 */
@@ -2572,7 +2723,7 @@ function logRange(from, to){
 }
 
 var SUBJ_LIST = ['语文', '数学', '英语', '物理', '化学', '生物'];
-function sumStats(segs, pomo){
+function sumStats(segs, pomo, pauses){
   var focus = 0, rest = 0, other = 0, total = 0;
   var byName = {}, bySubj = {}, bySubjItems = {}, byDay = {};
   segs.forEach(function(x){
@@ -2605,9 +2756,15 @@ function sumStats(segs, pomo){
   Object.keys(byDay).forEach(function(k){
     if(!bestDay || byDay[k] > bestDay.sec) bestDay = { day: k, sec: byDay[k] };
   });
+  /* v4.16.9：暂停统计——总次数、总时长，明细按时间排序 */
+  var plist = (pauses || []).filter(function(p){ return p && Number(p.s) > 0; })
+    .slice().sort(function(a, b){ return a.s - b.s; });
+  var pauseTotal = 0;
+  plist.forEach(function(p){ pauseTotal += Math.max(0, Number(p.d) || 0); });
   return {
     total: total, focus: focus, rest: rest, other: other, pomo: pomo || 0,
     byName: byName, bySubj: bySubj, bySubjItems: bySubjItems, byDay: byDay, bestDay: bestDay,
+    pauses: plist, pauseTotal: pauseTotal, pauseCount: plist.length,
     n: segs.length
   };
 }
@@ -2637,7 +2794,7 @@ function sumRender(){
   SUM.from = r.from; SUM.to = r.to;
   var got = logRange(r.from, r.to);
   SUM.segs = got.segs;
-  var st = SUM.stats = sumStats(got.segs, got.pomo);
+  var st = SUM.stats = sumStats(got.segs, got.pomo, got.pauses);
 
   if(!st.n){
     box.innerHTML = '<div class="sum-empty">该时段暂无记录。<br>'
@@ -2680,6 +2837,16 @@ function sumRender(){
     + '<h5>用得最久的一天</h5>'
     + '<div class="sp-row"><span>' + (st.bestDay ? sumDayText(st.bestDay.day) : '—') + '</span><span>'
     +   (st.bestDay ? durText(st.bestDay.sec) : '—') + '</span></div>'
+    /* v4.16.9：暂停记录 —— 共几次、合计多久，逐条列时间段 / 时长 / 理由 */
+    + '<h5>暂停记录' + (st.pauseCount ? '（' + st.pauseCount + ' 次 · 合计 ' + pauseDurText(st.pauseTotal) + '）' : '') + '</h5>'
+    + (st.pauseCount
+        ? '<div class="sp-pauses">' + st.pauses.map(function(p){
+            return '<div class="sp-row sp-pause"><span>'
+              + hm(p.s) + ' – ' + hm(p.e)
+              + (p.r ? ' · ' + esc(p.r) : '')
+              + '</span><span>' + pauseDurText(p.d) + '</span></div>';
+          }).join('') + '</div>'
+        : '<div class="sp-row"><span>该时段没有暂停</span><span>—</span></div>')
     + '<h5>想说的话（可留空）</h5>'
     + '<textarea class="sp-note" id="sumNote" maxlength="200" placeholder="写点给自己的话，会一起印在报告上…">'
     +   esc(SUM.note) + '</textarea>'
@@ -2708,6 +2875,16 @@ function sumText(){
   });
   L.push('');
   L.push('用得最久的一天：' + (st.bestDay ? sumDayText(st.bestDay.day) + '（' + durText(st.bestDay.sec) + '）' : '—'));
+  /* v4.16.9：暂停记录（每次的时间段 / 时长 / 理由，理由没写就空着） */
+  L.push('');
+  L.push('【暂停记录】共 ' + st.pauseCount + ' 次，合计 ' + pauseDurText(st.pauseTotal));
+  if(st.pauseCount){
+    st.pauses.forEach(function(p){
+      L.push('  ' + hm(p.s) + ' – ' + hm(p.e) + '　' + pauseDurText(p.d) + (p.r ? '　' + p.r : ''));
+    });
+  }else{
+    L.push('  该时段没有暂停');
+  }
   if(SUM.note){
     L.push('');
     L.push('【想说的话】');
@@ -3006,7 +3183,7 @@ function logMerged(day){
       out.push(it);
     }
   });
-  return { pomo: data.pomo || 0, segs: out };
+  return { pomo: data.pomo || 0, segs: out, pauses: Array.isArray(data.pauses) ? data.pauses : [] };
 }
 function modeName(m){
   return MODE_NAME[String(m).indexOf('pomo:') === 0 ? 'pomo' : m] || '时钟';
@@ -3158,11 +3335,24 @@ function logRender(){
   if($('logPick') && $('logPick').value !== day) $('logPick').value = day;
 
   var w = dayWord(day);
+  /* v4.16.9：暂停记录（当天的）——摘要卡里显示次数与合计，列表底部逐条列 */
+  var plist = (m.pauses || []).slice().sort(function(a, b){ return a.s - b.s; });
+  var pauseTotal = 0;
+  plist.forEach(function(p){ pauseTotal += Math.max(0, Number(p.d) || 0); });
+  var pauseRows = plist.map(function(p){
+    return '<div class="lg-pause-row"><b>' + hm(p.s) + '–' + hm(p.e) + '</b>'
+      + '<span>' + (p.r ? esc(p.r) : '（未填写原因）') + '</span>'
+      + '<em>' + pauseDurText(p.d) + '</em></div>';
+  }).join('');
   var cards = '<div class="lg-cards">'
     + '<div class="lg-card wide"><i>' + w + '自习</i><b>' + (focus ? durText(focus) : '还没有') + '</b></div>'
     + '<div class="lg-card"><i>' + w + '休息</i><b>' + (rest ? durText(rest) : '—') + '</b></div>'
     + '<div class="lg-card"><i>' + w + '番茄</i><b>' + m.pomo + '<em>个</em></b></div>'
+    + '<div class="lg-card"><i>' + w + '暂停</i><b>' + (plist.length ? plist.length + '<em>次</em>' : '—') + '</b></div>'
     + '</div>';
+  if(plist.length){
+    cards += '<div class="lg-modes">合计暂停 ' + pauseDurText(pauseTotal) + '</div>';
+  }
   /* v4.16.0：这一行原来按「名称·类型」再铺一遍，跟下面的三级聚合重复了，
      现在只留设备统计 —— 换了设备能看出哪台记的。 */
   var modes = '';
@@ -3177,11 +3367,15 @@ function logRender(){
   }
   $('logSum').innerHTML = cards + modes;
 
-  if(!m.segs.length){
+  if(!m.segs.length && !plist.length){
     $('logList').innerHTML = '<div class="lg-empty">当日暂无记录。<br>'
       + '开始计时（正计时 / 倒计时 / 番茄钟）后才会记时长，设好时长没按开始不算。</div>';
   }else{
-    $('logList').innerHTML = logAggHtml(m.segs);
+    $('logList').innerHTML = (m.segs.length ? logAggHtml(m.segs) : '')
+      + (plist.length
+          ? '<div class="lg-pauses"><div class="lg-modes">暂停记录 · 共 ' + plist.length
+            + ' 次，合计 ' + pauseDurText(pauseTotal) + '</div>' + pauseRows + '</div>'
+          : '');
   }
   logFootPaint();
 }
@@ -3795,6 +3989,18 @@ document.addEventListener('click', function(e){
 $('dsClose').onclick = closeDur;
 $('dsOk').onclick = saveDur;
 $('durSheet').onclick = function(e){ if(e.target === this) closeDur(); };
+
+/* v4.16.9：暂停理由弹窗 —— 确定保存理由、跳过不保存，两者都恢复计时；
+   输入框一有内容就停掉 10 秒自动跳过，避免打字打到一半被跳过。 */
+$('psOk').onclick = function(){ pauseSheetClose(false); };
+$('psSkip').onclick = function(){ pauseSheetClose(true); };
+$('psReason').addEventListener('input', function(){
+  if(String(this.value || '').length) pauseSheetStopAuto();
+});
+$('psReason').addEventListener('keydown', function(e){
+  if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); pauseSheetClose(false); }
+});
+$('pauseSheet').onclick = function(e){ if(e.target === this) pauseSheetClose(true); };
 function paintSnd(){
   var row = $('sndRow');
   if(!row) return;
@@ -3967,7 +4173,14 @@ $('stage').ondblclick = function(e){
    r / m 只在计时页面才有意义，别的时候不响应。 */
 document.onkeydown = function(e){
   var tag = (e.target && e.target.nodeName) || '';
-  if(tag === 'INPUT') return;
+  if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+  /* v4.16.9：暂停理由弹窗开着时——空格/回车 = 确定，Esc = 跳过，其余不响应 */
+  var ps = $('pauseSheet');
+  if(ps && ps.className === 'show'){
+    if(e.key === 'Escape'){ e.preventDefault(); pauseSheetClose(true); }
+    else if(e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); pauseSheetClose(false); }
+    return;
+  }
   var k = e.key;
   var inTimer = (CFG.mode === 'timer');
   if(k === ' '){ e.preventDefault();

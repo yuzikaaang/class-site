@@ -7269,6 +7269,8 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
     <button class="side-btn" onclick="openData()" style="display:none">💾 数据管理</button>
     <button class="side-btn" onclick="openExport()" style="display:none">📦 导出备份</button>
     <button class="side-btn" id="copyLinkBtn" onclick="openCopyLink()" style="display:none">🔗 复制链接</button>
+    <!-- v4.16.9：管理员专属——直达 WorkBuddy 产物索引（各版本更新截图） -->
+    <button class="side-btn" id="artifactIdxBtn" onclick="openArtifactIndex()" style="display:none" title="查看各版本更新的截图与文件">🖼️ 产物索引</button>
   </aside>
   <div class="sidebar-mask" id="sideMask" onclick="closeSidebar()"></div>
   <button class="fab ink-auto" id="fabBtn" onclick="openSidebar()" aria-label="打开侧边栏">☰</button>
@@ -7411,7 +7413,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.16.8</button>
+        title="点击检查是否为最新版本">v4.16.9</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -8631,19 +8633,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.16.8';
+var SITE_VERSION = '4.16.9';
 var VER_DATE = '2026-11-17';
 </script>
-<script src="./auth-bus.js?v=4168" defer></script>
+<script src="./auth-bus.js?v=4169" defer></script>
 <script src="./tour.js?v=040507" defer></script>
-<script src="./app.min.js?v=4168" defer></script>
+<script src="./app.min.js?v=4169" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4168" defer></script>
-<script src="./big.js?v=4168" defer></script>
+<script src="./fs-keep.js?v=4169" defer></script>
+<script src="./big.js?v=4169" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4168" defer></script>
+<script src="./pickfx.js?v=4169" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
