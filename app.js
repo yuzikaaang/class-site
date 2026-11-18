@@ -3088,8 +3088,7 @@ function cdUnits(d){
     '<div class="cd-box"><span class="cd-num">'+pad2(d.seconds)+'</span><span class="cd-unit">秒</span></div>';
 }
 
-/* 公告分类筛选状态：'all' 或 site/class/activity/misc */
-var annFilter = 'all';
+/* v4.16.8：公告不再分板块——前台只有一个公告列表，全部按时间倒序（置顶在最上方） */
 
 /* 置顶是否仍生效：支持限时置顶（importantUntil 之后自动失效） */
 function isImportant(a){
@@ -3123,27 +3122,14 @@ function annDateLabel(d){
   return d;
 }
 
-/* 公告栏（支持分类筛选；置顶永远在最上方；弹窗内按分类小节展示） */
+/* 公告栏（v4.16.8：不再分类——置顶永远在最上方，其余按时间倒序；点「查看全部」进弹窗） */
 function renderBoard(){
-  var annAll = (SITE_DATA.announcements || []);
-  var ann = annAll.slice().sort(function(a,b){
+  var ann = (SITE_DATA.announcements || []).slice().sort(function(a,b){
     if((isImportant(b)?1:0) !== (isImportant(a)?1:0)) return (isImportant(b)?1:0) - (isImportant(a)?1:0);
     return annSortKey(b).localeCompare(annSortKey(a));
   });
   var board = document.getElementById('board');
   if(ann.length === 0){ board.style.display = 'none'; return; }
-  var filtered = (annFilter && annFilter !== 'all') ? ann.filter(function(a){ return (a.category || 'misc') === annFilter; }) : ann;
-  /* 【自定义设置】uiAnnCats 把 '总览' 钉在最后，其余按用户顺序 */
-  var CATS = uiAnnCats([
-    { key: 'site',    name: '📡 网站内部' },
-    { key: 'activity',name: '🔔 重要更新' },
-    { key: 'class',   name: '🏫 班级事务' },
-    { key: 'misc',    name: '💭 站主杂谈' },
-    { key: 'all',     name: '总览' }
-  ]);
-  var filterBar = '<div class="board-filters">' + CATS.map(function(c){
-    return '<button class="filter-btn' + (annFilter === c.key ? ' active' : '') + '" onclick="setAnnFilter(\'' + c.key + '\')">' + esc(c.name) + '</button>';
-  }).join('') + '</div>';
   function renderList(items){
     return '<ul class="board-list">' + items.map(function(a){
       return '<li>' +
@@ -3156,31 +3142,20 @@ function renderBoard(){
       '</li>';
     }).join('') + '</ul>';
   }
-  var body = '';
-  if(annFilter === 'all'){
-    var pinned = filtered.filter(isImportant);
-    var others = filtered.filter(function(a){ return !isImportant(a); });
-    var visibleAnn = pinned.concat(others.slice(0, pinned.length ? 1 : 2));
-    var hiddenCount = ann.length - visibleAnn.length;
-    body = renderList(visibleAnn) + (hiddenCount > 0 ? '<button class="board-more" onclick="showAllBoard()">查看全部 ' + hiddenCount + ' 条公告</button>' : '');
-  }else if(filtered.length === 0){
-    body = '<div class="board-empty">该分类暂无公告</div>';
-  }else{
-    body = renderList(filtered);
-  }
+  var pinned = ann.filter(isImportant);
+  var others = ann.filter(function(a){ return !isImportant(a); });
+  var visibleAnn = pinned.concat(others.slice(0, pinned.length ? 1 : 2));
+  var hiddenCount = ann.length - visibleAnn.length;
+  var body = renderList(visibleAnn) + (hiddenCount > 0 ? '<button class="board-more" onclick="showAllBoard()">查看全部 ' + hiddenCount + ' 条公告</button>' : '');
   board.style.display = '';
   board.innerHTML =
-    '<div class="board-head"><h2>📢 公告</h2><span class="board-count">' + filtered.length + ' 条</span>' +
+    '<div class="board-head"><h2>📢 公告</h2><span class="board-count">' + ann.length + ' 条</span>' +
     '<button class="btn-qr" id="acctBtn" onclick="openAccount()">登录</button>' +
     '<button class="btn-qr" onclick="openQr(\'' + SITE_DATA.qrUrl + '\')">公众号</button>' +
     '<button class="btn-qr" style="background:#3e3733" onclick="openRepoDialog()">仓库</button></div>' +
-    filterBar + body;
+    body;
   /* 公告栏是整块重绘的，所以每次都得把登录按钮的状态同步一次 */
   refreshAcctBtn();
-}
-function setAnnFilter(cat){
-  annFilter = cat;
-  renderBoard();
 }
 
 function render(){
@@ -9872,7 +9847,7 @@ function renderSortList(group, catId){
     '<button class="ui-tab' + (SORT_G === 'cat'    ? ' active' : '') + '" style="flex:0 0 auto;padding:7px 10px" onclick="sortTab(\'cat\')">侧栏</button>' +
     '<button class="ui-tab' + (SORT_G === 'card'   ? ' active' : '') + '" style="flex:0 0 auto;padding:7px 10px" onclick="sortTab(\'card\')">卡片</button>' +
     '<button class="ui-tab' + (SORT_G === 'game'   ? ' active' : '') + '" style="flex:0 0 auto;padding:7px 10px" onclick="sortTab(\'game\')">小游戏</button>' +
-    '<button class="ui-tab' + (SORT_G === 'annCat' ? ' active' : '') + '" style="flex:0 0 auto;padding:7px 10px" onclick="sortTab(\'annCat\')">公告分类</button>' +
+    /* v4.16.8：公告不再分类，去掉「公告分类」排序页 */
   '</div>';
 
   if(SORT_G === 'card'){
@@ -9896,9 +9871,8 @@ function renderSortList(group, catId){
   }else if(SORT_G === 'game'){
     items = uiGames().map(function(g){ return { key:g.url, title:g.title, ico:'list' }; });
   }else{
-    var nm = { site:'网站内部', activity:'重要更新', class:'班级事务', misc:'站主杂谈' };
-    items = uiAnnCats(ANN_CATS).filter(function(c){ return c.key !== 'all'; })
-      .map(function(c){ return { key:c.key, title:nm[c.key] || c.name, ico:'list' }; });
+    /* v4.16.8：公告不再分类——此分支（annCat 排序）已随「公告分类」页移除，保留兜底 */
+    items = [];
   }
 
   if(!items.length){
@@ -12617,13 +12591,9 @@ function closeLoginGuide(gotoLogin){
   if(gotoLogin) setTimeout(openAccount, 200);
 }
 
-/* ---- 全部公告弹窗（按板块折叠 / 搜索 / 范围筛选 / 模糊匹配） ---- */
-var ANN_CATS = [
-  { key: 'site',     name: '📡 网站内部' },
-  { key: 'activity', name: '🔔 重要更新' },
-  { key: 'class',    name: '🏫 班级事务' },
-  { key: 'misc',     name: '💭 站主杂谈' }
-];
+/* ---- 全部公告弹窗（v4.16.8 不再分类：按时间倒序单列 / 搜索 / 范围筛选 / 模糊匹配） ---- */
+/* 兼容保留：uiAnnCats / 自定义排序仍会引用该数组，但公告本身不再分板块 */
+var ANN_CATS = [];
 /* 相近词词典：模糊搜索用，猜用户实际想搜什么（彩蛋 ↔ 隐藏 ↔ 暗号 …） */
 var ANN_SYN = {
   '彩蛋':['彩蛋','隐藏','暗号','秘密','探索','入口'],
@@ -12716,12 +12686,10 @@ function renderAllBoard(){
   if(!list) return;
   var title=document.getElementById('allBoardTitle');
   var inp=document.getElementById('allSearchInput');
-  var catSel=document.getElementById('allSearchCat');
   var timeSel=document.getElementById('allSearchTime');
   var fromInp=document.getElementById('allDateFrom');
   var toInp=document.getElementById('allDateTo');
   var q=inp?inp.value.trim():'';
-  var ck=catSel?catSel.value:'all';
   var tk=timeSel?timeSel.value:'all';
   var from=fromInp?fromInp.value:'';
   var to=toInp?toInp.value:'';
@@ -12729,10 +12697,7 @@ function renderAllBoard(){
     if((isImportant(b)?1:0)!==(isImportant(a)?1:0)) return (isImportant(b)?1:0)-(isImportant(a)?1:0);
     return annSortKey(b).localeCompare(annSortKey(a));
   });
-  var scoped=ann.filter(function(a){
-    if(ck!=='all' && (a.category||'misc')!==ck) return false;
-    return annDateOk(a,tk,from,to);
-  });
+  var scoped=ann.filter(function(a){ return annDateOk(a,tk,from,to); });
   saveAnnFilter();
   if(q){
     var hits=scoped.filter(function(a){ return annMatch(a,q); });
@@ -12747,31 +12712,25 @@ function renderAllBoard(){
         }).join('')+'</ul></li>'
       : '<li style="padding:18px;color:#6e635a;text-align:center">未找到匹配公告，可尝试相近关键词（如「彩蛋 / 隐藏」）</li>';
   }else{
-    if(title) title.textContent='全部公告（'+scoped.length+' 条）';
-    var grouped={};
-    scoped.forEach(function(a){ var c=a.category||'misc'; (grouped[c]=grouped[c]||[]).push(a); });
-    var html=uiAnnCats(ANN_CATS).map(function(c){   /* 【自定义设置】分类顺序 */
-      var items=grouped[c.key];
-      if(!items||!items.length) return '';
-      return '<li class="ann-cat"><h4 onclick="toggleAnnCat(this)" style="margin:12px 0 8px;color:#af410f;font-size:.95rem;cursor:pointer;user-select:none">'+esc(c.name)+'（'+items.length+'）▾</h4>'+
-        '<ul style="list-style:none;padding:0;margin:0">'+items.map(function(a){
+    /* v4.16.8：公告不再分类——全部公告按时间倒序一条列到底（置顶在最上方） */
+    if(title) title.textContent='全部公告 · 按时间（'+scoped.length+' 条）';
+    list.innerHTML = scoped.length
+      ? '<ul style="list-style:none;padding:0;margin:0">'+scoped.map(function(a){
           return '<li class="ann-item"><div class="board-meta">'+
             '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(annDateLabel(a.date))+'</span>'+
             (isImportant(a)?'<span class="board-pin">'+(a.importantUntil?'限时置顶':'置顶')+'</span>':'')+'</div>'+
             '<p class="board-text">'+emojiEscHtml(a.text)+'</p></li>';
-        }).join('')+'</ul></li>';
-    }).filter(Boolean).join('') || '<li style="padding:18px;color:#6e635a;text-align:center">暂无公告</li>';
-    list.innerHTML=html;
+        }).join('')+'</ul>'
+      : '<li style="padding:18px;color:#6e635a;text-align:center">暂无公告</li>';
   }
 }
 function showAllBoard(){
   var mask=document.getElementById('allBoardMask');
   if(mask){
     var f=loadAnnFilter();
-    var t=document.getElementById('allSearchTime'), c=document.getElementById('allSearchCat'),
+    var t=document.getElementById('allSearchTime'),
         fi=document.getElementById('allDateFrom'), ti=document.getElementById('allDateTo');
     if(t && f.t) t.value=f.t;
-    if(c && f.c) c.value=f.c;
     if(fi && f.f) fi.value=f.f;
     if(ti && f.t2) ti.value=f.t2;
     onAllSearchScope();
@@ -13264,6 +13223,9 @@ function fallbackCopyData(json,msg,color){
   document.body.removeChild(ta);
 }
 /* ---- 复制网页链接（侧边栏按钮 → 弹窗列出主链接/备用链接） ---- */
+/* v4.16.8：产物索引的 WorkBuddy 分享链接（仅管理员可见；站点内展示 + 一键复制）。
+   图片与文档已内嵌在链接页面里，链接永久不变；每次版本更新由维护脚本原地同步内容。 */
+var ARTIFACT_INDEX_URL = 'https://workbuddy.link/p/wE79VgSnppmeb15X5A5b2l';
 function openCopyLink(){
   var list=document.getElementById('siteLinkList');
   if(list){
@@ -13276,10 +13238,30 @@ function openCopyLink(){
         (l.note ? '<div class="link-note">'+esc(l.note)+'</div>' : '')+
         '</div>';
     }).join('');
+    /* 仅管理员可见：产物索引分享入口 */
+    if(typeof isAdmin==='function' && isAdmin()){
+      html += '<div id="artIndexEntry" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
+        '<div style="display:flex;align-items:center;gap:10px">'+
+        '<span style="flex:1;font-size:.85rem;color:#9a3412;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📦 产物索引（管理员专用）</span>'+
+        '<button class="btn" style="min-width:64px;padding:7px 12px;font-size:.8rem;background:#9a3412;color:#fff;border-color:#9a3412" onclick="copyArtifactIndex(this)">复制链接</button></div>'+
+        '<div class="link-note" style="color:#9a3412">按版本归档的全部截图与文档，图片可直接看。复制后可发给他人查看。</div>'+
+        '<div style="font-size:.7rem;color:#b45309;margin-top:6px;line-height:1.5">⚠️ 该链接依托 WorkBuddy 服务，沙箱关闭后可能暂时无法打开，需要时让维护方重新发布即可。</div>'+
+        '</div>';
+    }
     list.innerHTML=html;
   }
   var m=document.getElementById('copyLinkMask'); if(m) m.classList.add('show');
   SFX.pop();
+}
+/* 复制产物索引分享链接（独立于 siteLinks 索引） */
+function copyArtifactIndex(btn){
+  var url=ARTIFACT_INDEX_URL;
+  var done=function(){ if(btn){ btn.textContent='✅ 已复制'; setTimeout(function(){ btn.textContent='复制链接'; },1600); } SFX.success(); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(done, function(){ fallbackCopyLink(url, done); });
+  }else{
+    fallbackCopyLink(url, done);
+  }
 }
 function closeCopyLink(){ var m=document.getElementById('copyLinkMask'); if(m) m.classList.remove('show'); }
 (function(){ var m=document.getElementById('copyLinkMask'); if(m) m.addEventListener('click',function(e){ if(e.target.id==='copyLinkMask') closeCopyLink(); }); })();

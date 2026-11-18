@@ -4735,8 +4735,11 @@ console.log('\n【40】第三十一轮·取消备用链接（v2.5.0）');
 {
   const idx40 = readIdx();
   /* 备用链接（WorkBuddy 托管）已取消：SITE_DATA.siteLinks 只应有主链接。
-     用两个信号交叉验证：① 不该再出现 workbuddy.link 域名；② siteLinks 里只有一项。 */
-  t('★index.html 不再出现 workbuddy.link 备用域名', idx40.indexOf('workbuddy.link') < 0);
+     v4.16.8：站内新增「产物索引」管理员专属入口（ARTIFACT_INDEX_URL），这是合法的
+     workbuddy.link 用途，与原「备用域名」不是一回事——排除该行后再检查域名。 */
+  const idx40NoArtifact = idx40.replace(/^\s*var ARTIFACT_INDEX_URL\s*=.*$/gm, '');
+  t('★index.html 不再出现 workbuddy.link 备用域名（产物索引入口除外）', idx40NoArtifact.indexOf('workbuddy.link') < 0);
+  t('★v4.16.8 管理员产物索引入口链接存在', /var ARTIFACT_INDEX_URL\s*=\s*'https:\/\/workbuddy\.link\/p\//.test(idx40));
   const linksBlock = idx40.match(/siteLinks:\s*\[[\s\S]*?\]/);
   t('★siteLinks 只剩主链接一项', !!linksBlock
     && (linksBlock[0].match(/\{/g) || []).length === 1
@@ -13293,7 +13296,16 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /* v4.10.2（需求 11）：改回 --start-maximized ——
        浏览器窗口级全屏会让站内全屏开关退不出来（网页管不了窗口全屏）。 */
     /--start-maximized/.test(adm311)
-    && /--start-maximized/.test(fs.readFileSync('/workspace/班级电脑准备包/启动大屏.bat', 'utf8')));
+    && (function(){
+      /* v4.16.8：产物归档后该文件被重命名进「资料_班级电脑准备包」，动态查找避免写死旧路径 */
+      const roots = ['/workspace/资料_班级电脑准备包', '/workspace/班级电脑准备包'];
+      for(const dir of roots){
+        if(!fs.existsSync(dir)) continue;
+        const f = fs.readdirSync(dir).find(n => n.endsWith('启动大屏.bat'));
+        if(f) return /--start-maximized/.test(fs.readFileSync(dir + '/' + f, 'utf8'));
+      }
+      return false;
+    })());
 
   t('★v4.10.0 之后版本未回退（当前 >= 4.10.0，且 index 与 sw 一致）',
     (function(){

@@ -2820,9 +2820,8 @@ function renderClassContent(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel);flex-wrap:wrap;gap:8px">'
     +   '<button class="btn btn-sm" id="ccAdd">' + svg('plus', 14) + '新增内容</button>'
-    +   '<select id="ccCatFilter" class="gate-input inp-sm" style="width:auto;min-width:140px">'
-    +     [{ v:'全部', n:'全部' }, { v:'site', n:'📡 网站内部' }, { v:'activity', n:'🔔 重要更新' },
-          { v:'class', n:'🏫 班级事务' }, { v:'misc', n:'💭 站主杂谈' }, { v:'__hw__', n:'📝 作业' }].map(function(c){
+    +   '<select id="ccCatFilter" class="gate-input inp-sm" style="width:auto;min-width:120px">'
+    +     [{ v:'全部', n:'全部' }, { v:'__ann__', n:'📢 公告' }, { v:'__hw__', n:'📝 作业' }].map(function(c){
           return '<option value="' + attr(c.v) + '"' + (S.cat === c.v ? ' selected' : '') + '>' + esc(c.n) + '</option>';
         }).join('')
     +   '</select>'
@@ -2832,7 +2831,7 @@ function renderClassContent(){
     +   '<span class="muted" style="font-size:.8rem" id="ccCount">加载中…</span>'
     + '</div>'
     + '<div class="alert info" style="margin-bottom:14px">'
-    +   '<b>公告</b>按站内四板块分类（网站内部 / 重要更新 / 班级事务 / 站主杂谈），可以指定只发给某几位同学；'
+    +   '<b>公告</b>不再分板块，全部按时间展示，可以指定只发给某几位同学；'
     +   '<b>作业不再在这里编辑</b>——课代表可修改本科目作业；管理员账号可修改全部科目。<br>'
     +   '列表里只显示标题和时间，<b>点「查看」看正文详情</b>。'
     + '</div>'
@@ -3042,15 +3041,13 @@ function paintClassContent(){
     return;
   }
 
-  /* ③ 过滤 + 排序 + 搜索（2026-10-06：站主要求按前端四板块 + 作业分开找，能搜能排）
-        分类下拉的值同时匹配公告的板块分类（cat）与「📝 作业」这类 kind。 */
+  /* ③ 过滤 + 排序 + 搜索（v4.16.8：公告不再分板块——只按「公告 / 作业」过滤，能搜能排） */
   var rows = S.list;
   if(S.cat && S.cat !== '全部'){
-    var catKey = S.cat;
-    if(catKey === '__hw__'){
+    if(S.cat === '__hw__'){
       rows = rows.filter(function(c){ return c.kind === '作业'; });
-    } else {
-      rows = rows.filter(function(c){ return c.kind === '公告' && (c.cat || '') === catKey; });
+    } else if(S.cat === '__ann__'){
+      rows = rows.filter(function(c){ return c.kind === '公告'; });
     }
   }
   if(S.q){
@@ -3253,13 +3250,7 @@ function classContentDialog(idx){
   /* 「作业」已从后台编辑移除（2026-10-06）：课代表在前端作业界面改本科目，
      站主用管理员账号登录前端也能改全部科目。这里不再新建/编辑作业。 */
   var KIND_OPTS = ['公告', '活动', '课程表', '值日安排', '其他'];
-  /* 主站公告分类（index.html ANN_CATS 的键） */
-  var ANN_CATS = [
-    { key: 'site',     name: '网站内部' },
-    { key: 'activity', name: '重要更新' },
-    { key: 'class',    name: '班级事务' },
-    { key: 'misc',     name: '站主杂谈' }
-  ];
+  /* v4.16.8：公告不再分板块，后台不再维护 ANN_CATS 分类列表 */
 
   /* ---------- 按类型生成表单 ---------- */
   var bodyHtml = '';
@@ -3280,13 +3271,7 @@ function classContentDialog(idx){
          同学看公告只关心「有什么变化」，过程和不必要的语气都该省掉。 */
       + '<p class="muted" style="font-size:.76rem;margin:4px 0 0">面向全班，<b>字越少越好</b>：说清「改了什么」即可，不必解释过程，不用语气词、感叹号。</p>'
       + '</div>'
-      + '<div class="field"><label for="ccCat">分类</label>'
-      + '<select id="ccCat">'
-      + ANN_CATS.map(function(k){
-          var cur = c ? ((c._ref && c._ref.category) || 'site') : 'site';
-          return '<option value="' + attr(k.key) + '"' + (cur === k.key ? ' selected' : '') + '>' + esc(k.name) + '</option>';
-        }).join('')
-      + '</select></div>'
+      /* v4.16.8：公告不再分类——去掉「分类」下拉，category 统一写 'site' 兼容云端数据结构 */
       + '<div class="field"><label for="ccPin">置顶</label>'
       + '<select id="ccPin">'
       +   [['none', '不置顶'],
@@ -3436,7 +3421,7 @@ function classContentDialog(idx){
 
         if(isAnnounce){
           var textV = box.querySelector('#ccBody').value.trim();
-          var cat = box.querySelector('#ccCat').value;
+          var cat = 'site';   /* v4.16.8：公告不再分类，统一写 'site' 兼容云端数据结构 */
           var pinV = box.querySelector('#ccPin') ? box.querySelector('#ccPin').value : 'none';
           if(!textV){ msg.className = 'msg err show'; msg.textContent = '请填写公告正文'; return; }
 
