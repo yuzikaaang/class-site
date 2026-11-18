@@ -5072,6 +5072,7 @@ function loadAuth(){
       ClsAuth.onChange(function(token, user){
         AUTH = { token:token || '', user:user || null };
         try{ refreshAcctBtn(); }catch(e){}
+        try{ refreshAdminEntry(); }catch(e){}   /* v4.16.9：登录态变化后侧边栏管理员入口/产物索引跟着刷新 */
         try{ startHeartbeat(); }catch(e){}
       });
     }
@@ -8766,6 +8767,7 @@ function loadAdminAudit(){
       AUTH.user = j.user;
       saveAuth();
       refreshAcctBtn();
+      try{ refreshAdminEntry(); }catch(e){}   /* v4.16.9：校验回来后按最新身份刷新管理员入口 */
       window.__cloudKeyCount = (j.cloudKeys || []).length;
       /* v2.9.9：刷新后若账号仍带强制改密标志（比如改密前刷新了页面），
          直接恢复强制改密态 —— 表单会补一个「当前密码」输入框，
@@ -24655,6 +24657,9 @@ function initTheme(){
   }, 30000);
 }
 initTheme();
+/* v4.16.9：已有登录态直接刷新侧边栏管理员入口（后台 / 产物索引）——
+   之前只在登录动作那一刻刷，刷新页面后这两个按钮会消失，要重新登录才回来。 */
+try{ refreshAdminEntry(); }catch(e){}
 /* v4.11.0：大屏的两项几何参数（右栏宽度 / 顶栏右侧留白）首屏就落成 CSS 变量，
    免得打开大屏作业页时先按默认 300 排一遍再跳一下 */
 try{ applyBhwPrefs(); }catch(e){}
