@@ -703,6 +703,46 @@ console.log('③i README 已同步到 ' + VER + '（当前版本 / 更新日志�
     + ' 步），截图 ' + imgs.length + ' 张');
 }
 
+/* ---------- ③k 交付产物归档规范（站主 2026-11-18）----------
+ * 站主原话：「700 多个产物太多太杂，按版本+日期+具体内容重命名归类，过时的不要删，
+ *   并写到部署门禁里，确保换模型之后也照这个方式做。」
+ * 所以每次部署前扫一遍产物根目录：
+ *   · 顶层不许留散落产物文件（白名单除外：索引页 / 规范文档）
+ *   · 每个产物目录名必须是「v版本_日期_内容」或「资料_主题」
+ * 产物根目录默认 /workspace，可用环境变量 CLS_ARTIFACTS 覆盖；
+ * 目录不存在（纯 CI 环境）只提示、不阻断 —— 门禁不能因环境缺失误杀。 */
+const ART = process.env.CLS_ARTIFACTS || '/workspace';
+if (!fs.existsSync(ART)) {
+  console.warn('③k 产物目录不存在（' + ART + '），跳过归档规范检查（纯 CI 环境属正常）。');
+} else {
+  const KEEP = new Set(['.codebuddy', '产物索引.html', '产物归档规范.md']);
+  const ARTEXT = /\.(png|jpe?g|gif|webp|bmp|svg|md|html?|json|js|mjs|py|zip|sql|txt|xlsx?|csv|mp3|wav|ico|vbs|bat)$/i;
+  const RE_VER = /^v\d+(?:\.\d+){2,3}_\d{4}-\d{2}-\d{2}_.+$/;
+  const RE_DOC = /^资料_.+/;
+  const top = fs.readdirSync(ART);
+  const isDir = (n) => { try { return fs.statSync(path.join(ART, n)).isDirectory(); } catch { return false; } };
+
+  const stray = top.filter((n) => !KEEP.has(n) && !isDir(n) && ARTEXT.test(n));
+  if (stray.length) {
+    die('交付产物根目录有 ' + stray.length + ' 个散落产物没有归档：\n   '
+      + stray.slice(0, 12).join('\n   ') + (stray.length > 12 ? '\n   …' : '')
+      + '\n   按「版本_日期_具体内容」放进对应版本文件夹，一个都不要删。'
+      + '\n   规则见 ' + path.join(ART, '产物归档规范.md') + '。');
+  }
+
+  const badDirs = top.filter((n) => !KEEP.has(n) && isDir(n)
+    && !RE_VER.test(n) && !RE_DOC.test(n));
+  if (badDirs.length) {
+    die('有 ' + badDirs.length + ' 个产物目录命名不规范：\n   '
+      + badDirs.slice(0, 12).join('\n   ') + (badDirs.length > 12 ? '\n   …' : '')
+      + '\n   应为「v版本_日期_内容」或「资料_主题」，规则见产物归档规范.md。');
+  }
+
+  console.log('③k 产物归档规范通过（'
+    + top.filter((n) => RE_VER.test(n)).length + ' 个版本目录 / '
+    + top.filter((n) => RE_DOC.test(n)).length + ' 个资料目录，顶层无散落产物）');
+}
+
 /* ---------- ④ 部署前备份 ---------- */
 if (DRY) {
   console.log('④ 跳过备份（--dry-run）\n✅ 检查通过（未备份、未部署）');
