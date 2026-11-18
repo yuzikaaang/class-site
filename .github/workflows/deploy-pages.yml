@@ -121,6 +121,10 @@ jobs:
             games
             homework
             vendor
+            # v4.16.10：产物索引（版本截图归档）。⚠️ 必须整目录发布：
+            # index.html 里图片走 a/*.jpg 相对路径，漏了 a/ 就整页全是破图。
+            # 单页几百 KB（图片分文件 + 懒加载），比原来 14MB 内嵌版快得多。
+            artifacts
           )
 
           for f in "${SOURCE_FILES[@]}"; do

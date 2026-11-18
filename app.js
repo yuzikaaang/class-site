@@ -307,10 +307,24 @@ function refreshAdminEntry(){
     a.style.display = ok2 ? '' : 'none';
   }
 }
-/* v4.16.9：打开 WorkBuddy 产物索引（新标签页；手机端被拦截时退回当前页跳转） */
+/* v4.16.10（站主）：产物索引改走**站内同域版**。
+   原因是分享链接版是 14MB 单文件（图片全 base64 内嵌），手机从班站跳过去
+   要下完整个文件才能显示，一直转圈进不去。站点版把图片拆成独立文件、
+   滚到哪才加载哪，首屏只有几百 KB，从班站打开基本瞬开。
+   分享链接（发给别人看）仍保留在「复制网页链接」弹窗里。 */
+var ARTIFACT_INDEX_URL = 'https://workbuddy.link/p/wE79VgSnppmeb15X5A5b2l';
+var ARTIFACT_SITE_URL = 'artifacts/';
+/* 打开产物索引（默认站内版；新标签页，手机端被拦截时退回当前页跳转） */
 function openArtifactIndex(){
-  var url = (typeof ARTIFACT_INDEX_URL === 'string' && ARTIFACT_INDEX_URL)
-    ? ARTIFACT_INDEX_URL : 'https://workbuddy.link/p/wE79VgSnppmeb15X5A5b2l';
+  var url = (typeof ARTIFACT_SITE_URL === 'string' && ARTIFACT_SITE_URL)
+    ? ARTIFACT_SITE_URL : 'artifacts/';
+  var w = null;
+  try{ w = window.open(url, '_blank', 'noopener'); }catch(e){}
+  if(!w){ try{ location.href = url; }catch(e){} }
+}
+/* 打开 WorkBuddy 分享链接版（给没有班站账号的人看） */
+function openArtifactShare(){
+  var url = ARTIFACT_INDEX_URL;
   var w = null;
   try{ w = window.open(url, '_blank', 'noopener'); }catch(e){}
   if(!w){ try{ location.href = url; }catch(e){} }
@@ -3106,12 +3120,14 @@ function cdUnits(d){
 
 /* v4.16.8：公告不再分板块——前台只有一个公告列表，全部按时间倒序（置顶在最上方） */
 
-/* v4.16.9（站主要求）：**每条公告内部**按类型聚合。
+/* v4.16.10（站主要求）：**每条公告内部**按类型聚合并「一条一行」。
    背景：同一条版本公告会被多次小版本追加（v4.16.0 到 v4.16.8 都往同一条里加），
-   于是【界面】【安全】这类条目散落在各处，读者要一行行翻。现在改成：
-   同类型的条目并到一处（分号连成一行），类型顺序按**首次出现**排；
-   没有【类型】前缀的行（如「v4.16 更新！内容如下：」）保留在最前。 */
-function annGroupLines(text){
+   于是【界面】【安全】这类条目散落在各处，读者要一行行翻。
+   v4.16.9 先把同类条目用「；」连成一行，结果整段糊成一坨更难读；
+   本版改为：类型标题独占一行，下面每条单独一行并带序号（`1. 2. 3.`），
+   只有一条时不显示序号（避免「1.」让人以为还有下一条）。
+   类型顺序按**首次出现**排；没有【类型】前缀的行（如「v4.16 更新！内容如下：」）保留在最前。 */
+function annGroupParse(text){
   var lines = String(text == null ? '' : text).replace(/\r/g, '').split('\n');
   var head = [], order = [], map = {};
   for(var i = 0; i < lines.length; i++){
@@ -3128,16 +3144,32 @@ function annGroupLines(text){
       if(v) map[tag].push(v);
     }
   }
-  var out = head.slice();
+  var groups = [];
   for(var k = 0; k < order.length; k++){
-    var t = order[k];
-    out.push('【' + t + '】' + map[t].join('；'));
+    groups.push({ tag: order[k], items: map[order[k]] });
   }
-  return out;
+  return { head: head, groups: groups };
 }
-/* 聚合后渲染成 HTML（逐行转义 + emoji 处理） */
+/* 渲染成 HTML：类型标题独占一行，条目一行一个、带序号。
+   序号用 flex 行手写而不是 <ol>：Chromium 在 white-space:pre-line 容器里
+   对 ol 的悬挂缩进处理不一致，长条目换行后会顶格；flex 两列必然对齐。 */
 function annGroupHtml(text){
-  return annGroupLines(text).map(function(s){ return emojiEscHtml(s); }).join('<br>');
+  var parsed = annGroupParse(text), out = [], i, k;
+  for(i = 0; i < parsed.head.length; i++){
+    out.push('<div class="ann-line">' + emojiEscHtml(parsed.head[i]) + '</div>');
+  }
+  for(k = 0; k < parsed.groups.length; k++){
+    var g = parsed.groups[k], rows = '', multi = g.items.length > 1;
+    for(i = 0; i < g.items.length; i++){
+      rows += '<div class="ann-row">' +
+        (multi ? '<span class="ann-num">' + (i + 1) + '.</span>' : '') +
+        '<span class="ann-txt">' + emojiEscHtml(g.items[i]) + '</span></div>';
+    }
+    out.push('<div class="ann-sec">' +
+      '<div class="ann-tag">【' + emojiEscHtml(g.tag) + '】</div>' + rows +
+      '</div>');
+  }
+  return out.join('');
 }
 
 /* 置顶是否仍生效：支持限时置顶（importantUntil 之后自动失效） */
@@ -3188,7 +3220,7 @@ function renderBoard(){
           /* 永久置顶显示「置顶」，限时置顶显示「限时置顶」——让同学知道它什么时候会掉下来 */
           (isImportant(a) ? '<span class="board-pin">' + (a.importantUntil ? '限时置顶' : '置顶') + '</span>' : '') +
         '</div>' +
-        '<p class="board-text' + (isImportant(a) ? ' important' : '') + '">' + annGroupHtml(a.text) + '</p>' +
+        '<div class="board-text' + (isImportant(a) ? ' important' : '') + '">' + annGroupHtml(a.text) + '</div>' +
       '</li>';
     }).join('') + '</ul>';
   }
@@ -12760,7 +12792,7 @@ function renderAllBoard(){
           return '<li class="ann-item hl"><div class="board-meta">'+
             '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(annDateLabel(a.date))+'</span>'+
             (isImportant(a)?'<span class="board-pin">'+(a.importantUntil?'限时置顶':'置顶')+'</span>':'')+'</div>'+
-            '<p class="board-text">'+annHighlight(a,q)+'</p></li>';
+            '<div class="board-text">'+annHighlight(a,q)+'</div></li>';
         }).join('')+'</ul></li>'
       : '<li style="padding:18px;color:#6e635a;text-align:center">未找到匹配公告，可尝试相近关键词（如「彩蛋 / 隐藏」）</li>';
   }else{
@@ -12771,7 +12803,7 @@ function renderAllBoard(){
           return '<li class="ann-item"><div class="board-meta">'+
             '<span class="board-date'+(isImportant(a)?' hot':'')+'">'+esc(annDateLabel(a.date))+'</span>'+
             (isImportant(a)?'<span class="board-pin">'+(a.importantUntil?'限时置顶':'置顶')+'</span>':'')+'</div>'+
-            '<p class="board-text">'+annGroupHtml(a.text)+'</p></li>';
+            '<div class="board-text">'+annGroupHtml(a.text)+'</div></li>';
         }).join('')+'</ul>'
       : '<li style="padding:18px;color:#6e635a;text-align:center">暂无公告</li>';
   }
@@ -13275,9 +13307,8 @@ function fallbackCopyData(json,msg,color){
   document.body.removeChild(ta);
 }
 /* ---- 复制网页链接（侧边栏按钮 → 弹窗列出主链接/备用链接） ---- */
-/* v4.16.8：产物索引的 WorkBuddy 分享链接（仅管理员可见；站点内展示 + 一键复制）。
-   图片与文档已内嵌在链接页面里，链接永久不变；每次版本更新由维护脚本原地同步内容。 */
-var ARTIFACT_INDEX_URL = 'https://workbuddy.link/p/wE79VgSnppmeb15X5A5b2l';
+/* v4.16.10：产物索引入口拆成两路——站内版（同域、图片按需加载，打开最快）
+   与 WorkBuddy 分享链接（发给没有班站账号的人看）。变量定义在文件上方。 */
 function openCopyLink(){
   var list=document.getElementById('siteLinkList');
   if(list){
@@ -13290,14 +13321,15 @@ function openCopyLink(){
         (l.note ? '<div class="link-note">'+esc(l.note)+'</div>' : '')+
         '</div>';
     }).join('');
-    /* 仅管理员可见：产物索引分享入口 */
+    /* 仅管理员可见：产物索引入口（站内打开 + 复制分享链接） */
     if(typeof isAdmin==='function' && isAdmin()){
       html += '<div id="artIndexEntry" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
-        '<div style="display:flex;align-items:center;gap:10px">'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
         '<span style="flex:1;font-size:.85rem;color:#9a3412;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📦 产物索引（管理员专用）</span>'+
-        '<button class="btn" style="min-width:64px;padding:7px 12px;font-size:.8rem;background:#9a3412;color:#fff;border-color:#9a3412" onclick="copyArtifactIndex(this)">复制链接</button></div>'+
-        '<div class="link-note" style="color:#9a3412">按版本归档的全部截图与文档，图片可直接看。复制后可发给他人查看。</div>'+
-        '<div style="font-size:.7rem;color:#b45309;margin-top:6px;line-height:1.5">⚠️ 该链接依托 WorkBuddy 服务，沙箱关闭后可能暂时无法打开，需要时让维护方重新发布即可。</div>'+
+        '<button class="btn" style="min-width:62px;padding:7px 10px;font-size:.8rem;background:#9a3412;color:#fff;border-color:#9a3412" onclick="openArtifactIndex()">打开</button>'+
+        '<button class="btn" style="min-width:62px;padding:7px 10px;font-size:.8rem;background:#fff;color:#9a3412;border-color:#e7c9a8" onclick="copyArtifactIndex(this)">复制链接</button></div>'+
+        '<div class="link-note" style="color:#9a3412">按版本归档的全部截图与文档。站内版打开最快（图片按需加载）；复制的分享链接可发给他人。</div>'+
+        '<div style="font-size:.7rem;color:#b45309;margin-top:6px;line-height:1.5">⚠️ 分享链接依托 WorkBuddy 服务，沙箱关闭后可能暂时无法打开；站内版不受影响。</div>'+
         '</div>';
     }
     list.innerHTML=html;
