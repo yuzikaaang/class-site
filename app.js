@@ -313,7 +313,11 @@ function refreshAdminEntry(){
    滚到哪才加载哪，首屏只有几百 KB，从班站打开基本瞬开。
    分享链接（发给别人看）仍保留在「复制网页链接」弹窗里。 */
 var ARTIFACT_INDEX_URL = 'https://workbuddy.link/p/wE79VgSnppmeb15X5A5b2l';
-var ARTIFACT_SITE_URL = 'artifacts/';
+/* 带 ?_r= 让 Service Worker 直接放行（sw.js 对带 _r 的请求不接管）。
+   设备上装的若是旧版 SW（还不认识 artifacts 路径），不看这个参数就会被
+   「900ms 网络优先」多拖一倍时间；带上参数无论新旧 SW 都走浏览器原生加载。
+   页内图片是 `a/xxx.jpg`，仍由 SW 缓存，（第二次打开更快）。 */
+var ARTIFACT_SITE_URL = 'artifacts/?_r=1';
 /* 打开产物索引（默认站内版；新标签页，手机端被拦截时退回当前页跳转） */
 function openArtifactIndex(){
   var url = (typeof ARTIFACT_SITE_URL === 'string' && ARTIFACT_SITE_URL)
