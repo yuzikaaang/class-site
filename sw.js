@@ -239,6 +239,11 @@ self.addEventListener('fetch', (event) => {
        一天就能塞进几百份 index.html 副本）；而且它们本来就是「我就要最新的」语义，
        缓存毫无意义。直接放行走网络。 */
     if (u.searchParams.has('_') || u.searchParams.has('_r')) return
+    /* v4.16.10：产物索引目录（artifacts/）不走 Service Worker。
+       实测：同样一个 211KB 的索引页，经过本 SW 的「900ms 网络优先」导航逻辑
+       要 11.7 秒，直接交给浏览器只要 3.3 秒——多出来的时间全耗在等待与串行请求上。
+       索引页本身很小，图片又是按需加载，绕过 SW 更快；断网时打不开可以接受。 */
+    if (u.origin === self.location.origin && u.pathname.indexOf('/artifacts/') >= 0) return
   } catch (e) { /* URL 解析失败就按原逻辑走 */ }
 
   /* v4.10.20（站主）：跨域图片直链缓存 —— 作业配图 / 班级岛图 / 班徽这些直链，
