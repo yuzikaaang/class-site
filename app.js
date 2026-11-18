@@ -13325,7 +13325,7 @@ function openCopyLink(){
     if(typeof isAdmin==='function' && isAdmin()){
       html += '<div id="artIndexEntry" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
         '<div style="display:flex;align-items:center;gap:8px">'+
-        '<span style="flex:1;font-size:.85rem;color:#9a3412;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📦 产物索引（管理员专用）</span>'+
+        '<span style="flex:1;font-size:.85rem;color:#9a3412;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📦 产物索引</span>'+
         '<button class="btn" style="min-width:62px;padding:7px 10px;font-size:.8rem;background:#9a3412;color:#fff;border-color:#9a3412" onclick="openArtifactIndex()">打开</button>'+
         '<button class="btn" style="min-width:62px;padding:7px 10px;font-size:.8rem;background:#fff;color:#9a3412;border-color:#e7c9a8" onclick="copyArtifactIndex(this)">复制链接</button></div>'+
         '<div class="link-note" style="color:#9a3412">按版本归档的全部截图与文档。站内版打开最快（图片按需加载）；复制的分享链接可发给他人。</div>'+
