@@ -256,13 +256,17 @@ body::after{box-shadow:none}
    藏起来的代价是点三四次才到，低配机器每一次点击都是实打实的卡顿。 */
 .side-quick{display:flex;gap:6px;margin:0 0 8px;min-width:0}
 .side-btn.qk{
-  flex:1 1 0;min-width:0;text-align:center;padding:9px 2px;margin:0;overflow:hidden;
-  /* v4.8.0（站主）：桌面上侧边栏只有 170–190px，「大屏：关」四个字会顶出按钮。
-     字号收到 .72rem、左右内边距 2px，窄屏再小一档，保证四个字永远放得下。 */
-  font-size:.72rem;font-weight:700;letter-spacing:0;white-space:nowrap;border-radius:11px;
+  /* v4.16.11（站主）：三个开关从单行「大屏：关」改成两行——上行名称、下行开/关。
+     原来四个汉字挤在 58px 宽里，iPad Safari 字体渲染偏宽时截断/重叠；
+     两行后每行最多两字，任何设备都放得下。仍保持并排三等分。 */
+  flex:1 1 0;min-width:0;text-align:center;padding:7px 2px 6px;margin:0;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  line-height:1.15;letter-spacing:0;border-radius:11px;
   background:#eee3d8;color:#8a3b12;box-shadow:inset 0 0 0 1px rgba(120,53,15,.08);
 }
-@media (max-width:360px){.side-btn.qk{font-size:.68rem}}
+.side-btn.qk .qk-n{font-size:.74rem;font-weight:700;white-space:nowrap}
+.side-btn.qk .qk-s{font-size:.66rem;font-weight:600;opacity:.82;white-space:nowrap}
+@media (max-width:360px){.side-btn.qk .qk-n{font-size:.7rem}.side-btn.qk .qk-s{font-size:.62rem}}
 .side-btn.qk:hover{background:#e6d8ca}
 .dark .side-btn.qk{background:#3a332e;color:#e7c9a8;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
 .dark .side-btn.qk:hover{background:#453d37}
@@ -346,6 +350,32 @@ html.force-landscape header{padding:26px 22px}
 }
 @media(min-width:901px){
   .theme-btn{right:auto;left:16px;top:16px}
+}
+/* ===== v4.16.11（站主）：平板横屏侧栏按电脑端那样常驻 =====
+   现象：iPad 横屏时侧栏是浮层抽屉盖在内容上，三个开关又挤，看着很局促。
+   根因：抽屉断点是「宽度 ≤900px」。iPad Safari 因地址栏/缩放/分屏，
+   报出的 CSS 视口宽度常掉到 900 以下，就误判成手机走了抽屉。
+   修法：横屏 + 高度够大（≥560px，手机横屏只有 390~430）平等平板，
+   强制回到电脑端式常驻侧栏——不再盖住内容，跟桌面体验一致。
+   手机竖屏（portrait）、手机横屏（高度小）、大屏模式（big-mode）都不受影响。 */
+@media (orientation:landscape) and (min-height:560px) and (min-width:640px) and (max-width:1180px){
+  html:not(.big-mode) .layout{display:flex;gap:16px;max-width:1200px;margin:0 auto;padding:16px 14px}
+  html:not(.big-mode) .sidebar{
+    position:sticky;top:14px;left:auto;
+    width:220px;max-width:none;height:calc(100vh - 28px);
+    transform:none!important;
+    background:rgba(255,253,251,.9);backdrop-filter:blur(12px);
+    border:1px solid rgba(120,53,15,.055);border-radius:18px;
+    padding:14px;z-index:auto;overflow-y:auto;
+  }
+  html:not(.big-mode) .sidebar.open{transform:none!important}
+  html:not(.big-mode) .sidebar-mask,
+  html:not(.big-mode) .fab{display:none!important}
+  html:not(.big-mode) .content{padding:0}
+  /* 平板横屏侧栏更宽裕，三个开关字号回正常档 */
+  html:not(.big-mode) .side-btn.qk .qk-n{font-size:.8rem}
+  html:not(.big-mode) .side-btn.qk .qk-s{font-size:.72rem}
+  html.dark:not(.big-mode) .sidebar{background:rgba(38,34,32,.92)}
 }
 /* 站点头部 = 反相区块（参照 Tech Style 的 inverted section）：
    用深色底 + 点阵纹理 + 顶部径向辉光，与浅色页面形成戏剧性对比。 */
@@ -7265,10 +7295,14 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
     <button class="side-btn" id="homeBtn" onclick="goHomeView()">🏠 首页</button>
     <!-- v4.7.0（站主第 6 条）：「轻量模式、横屏、大屏模式这三个放在自定义设置里太难找了，
          要点来点去，增加卡顿时间」—— 三个开关直接摆到首屏侧边栏，一步点到。 -->
+    <!-- v4.16.11（站主）：三个快捷开关改成两行——上行名称、下行开/关。
+         原来单行「大屏：关」四个字挤在 58px 宽里，iPad Safari 字体渲染偏宽时
+         就会截断成「大屏：」甚至重叠。两行后每个按钮只需放下「大屏」两字，
+         状态另起一行小字，任何设备都不会再挤。 -->
     <div class="side-quick" id="sideQuick">
-      <button class="side-btn qk" id="bigBtn" onclick="bigToggle(event)" data-on="0">大屏：关</button>
-      <button class="side-btn qk" id="landBtn" onclick="toggleLandscape()" data-on="0">横屏：关</button>
-      <button class="side-btn qk" id="liteBtn" onclick="toggleLiteQuick()" data-on="0">轻量：关</button>
+      <button class="side-btn qk" id="bigBtn" onclick="bigToggle(event)" data-on="0"><span class="qk-n">大屏</span><span class="qk-s">关</span></button>
+      <button class="side-btn qk" id="landBtn" onclick="toggleLandscape()" data-on="0"><span class="qk-n">横屏</span><span class="qk-s">关</span></button>
+      <button class="side-btn qk" id="liteBtn" onclick="toggleLiteQuick()" data-on="0"><span class="qk-n">轻量</span><span class="qk-s">关</span></button>
     </div>
     <div id="sideCats"></div>
     <button class="side-btn" id="adminEntryBtn" onclick="gotoAdminPage()" style="display:none">🛠️ 班级服务站后台</button>
@@ -7426,7 +7460,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.16.10</button>
+        title="点击检查是否为最新版本">v4.16.11</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -8646,19 +8680,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.16.10';
+var SITE_VERSION = '4.16.11';
 var VER_DATE = '2026-11-17';
 </script>
-<script src="./auth-bus.js?v=41610" defer></script>
+<script src="./auth-bus.js?v=41611" defer></script>
 <script src="./tour.js?v=040507" defer></script>
-<script src="./app.min.js?v=41610" defer></script>
+<script src="./app.min.js?v=41611" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=41610" defer></script>
-<script src="./big.js?v=41610" defer></script>
+<script src="./fs-keep.js?v=41611" defer></script>
+<script src="./big.js?v=41611" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=41610" defer></script>
+<script src="./pickfx.js?v=41611" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

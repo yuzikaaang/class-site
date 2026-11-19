@@ -167,7 +167,9 @@ function syncLandscapeClass(){
   var btn = document.getElementById('landBtn');
   if(btn){
     btn.setAttribute('data-on', LAND_ON ? '1' : '0');
-    btn.textContent = landLabel(btn);
+    var s = btn.querySelector('.qk-s');
+    if(s) s.textContent = LAND_ON ? '开' : '关';
+    else btn.textContent = landLabel(btn);
   }
   landscapePin();
 }
@@ -269,7 +271,9 @@ function refreshLandBtn(){
   var btn = document.getElementById('landBtn');
   if(!btn) return;
   btn.setAttribute('data-on', LAND_ON ? '1' : '0');
-  btn.textContent = landLabel(btn);
+  var s = btn.querySelector('.qk-s');
+  if(s) s.textContent = LAND_ON ? '开' : '关';
+  else btn.textContent = landLabel(btn);
 }
 
 /* ===== v4.7.0：首屏三个快捷开关（大屏 / 横屏 / 轻量）=====
@@ -281,13 +285,17 @@ function refreshQuick(){
     var on = false;
     try{ on = !!(window.BIG && window.BIG.on); }catch(e){}
     big.setAttribute('data-on', on ? '1' : '0');
-    big.textContent = '大屏：' + (on ? '开' : '关');
+    var bs = big.querySelector('.qk-s');
+    if(bs) bs.textContent = on ? '开' : '关';
+    else big.textContent = '大屏：' + (on ? '开' : '关');
   }
   var lite = document.getElementById('liteBtn');
   if(lite){
     var lo = (UI.lite === 1);
     lite.setAttribute('data-on', lo ? '1' : '0');
-    lite.textContent = '轻量：' + (lo ? '开' : '关');
+    var ls = lite.querySelector('.qk-s');
+    if(ls) ls.textContent = lo ? '开' : '关';
+    else lite.textContent = '轻量：' + (lo ? '开' : '关');
   }
   refreshLandBtn();
 }
