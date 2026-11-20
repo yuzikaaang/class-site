@@ -23072,6 +23072,90 @@ function showCurrentHomework(forceId){
 }
 function closeHwCurrent(){ var m=document.getElementById('hwCurrentMask'); if(m) m.classList.remove('show'); }
 
+/* ================= v4.17.1（站主）：普通模式作业查看「刷新」按钮 =================
+   站主要求：普通模式的作业查看也要能刷新，功能像大屏的呼吸灯 —— 双向：
+     · 本机有未上传的内容改动 → 先上传（走现有内容队列 flush）；
+     · 云端作业比本机新 → 拉取最新版，并给新增/改动的科目卡 5 分钟蓝色呼吸强调；
+     · 一样 → 绿字提示「已是最新」；失败 → 红字提示。
+   检测同样带 since（省免费额度），成功/失败走左下角 syncNotice。 */
+var _hwNormRefreshing = false;
+function hwNormRefresh(btn){
+  if(_hwNormRefreshing) return;
+  if(typeof navigator !== 'undefined' && navigator.onLine === false){
+    try{ syncNotice('err', '当前离线，显示的是本机缓存'); }catch(e){}
+    return;
+  }
+  _hwNormRefreshing = true;
+  if(btn){ btn.disabled = true; btn.textContent = '⟳ 刷新中…'; }
+  var done = function(){
+    _hwNormRefreshing = false;
+    if(btn){ btn.disabled = false; btn.textContent = '⟳ 刷新'; }
+  };
+
+  /* ① 先把本机还没推上去的内容改动发出去（普通模式编辑走的是通用内容队列） */
+  var pushStep = (typeof hasPendingContentSync === 'function' && hasPendingContentSync() && typeof flushContentSync === 'function')
+    ? flushContentSync().catch(function(){ return { ok:false }; })
+    : Promise.resolve({ ok:true });
+
+  return Promise.resolve(pushStep).then(function(){
+    /* ② 带 since 拉取云端（没变化后端回空包，省额度） */
+    var since = 0;
+    try{ since = Number(localStorage.getItem(CONTENT_SINCE_KEY)) || 0; }catch(e){}
+    return api('/content' + (since ? '?since=' + since : '')).then(function(j){
+      if(!j || j.ok === false) throw new Error((j && j.error) || '接口异常');
+      if(j.serverTime){ try{ localStorage.setItem(CONTENT_SINCE_KEY, new Date(j.serverTime).getTime()); }catch(e){} }
+      var it = j.items || {};
+      var raw = it.holiday_homeworks;
+      if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = null; } }
+      if(!Array.isArray(raw)){
+        /* 增量空包 = 云端没变化 */
+        done();
+        try{ syncNotice('ok', '已是最新'); }catch(e){}
+        return { changed:false };
+      }
+
+      /* 比对本机当前作业，判断云端是否有新增/改动 */
+      var cur = (window.SITE_DATA && SITE_DATA.holidayHomeworks) || [];
+      var sig = function(list){
+        return (list || []).map(function(h){
+          var items = (h && h.items || []).map(function(it2){
+            return String(it2.subject || '') + ':' + (it2.tasks || []).map(function(t){
+              return String((t && t.text) || t || '');
+            }).join('|');
+          }).join(';');
+          return String((h && h.id) || '') + String((h && h.title) || '') + items;
+        }).join('#');
+      };
+      var changed = sig(raw) !== sig(cur);
+
+      /* 应用云端作业（只覆盖作业键，其它键保持本机最新） */
+      try{ if(typeof applyCloudContent === 'function') applyCloudContent({ holiday_homeworks: raw }); }catch(e){}
+      try{ if(typeof contentCacheSet === 'function') contentCacheSet({ holiday_homeworks: raw }); }catch(e){}
+      try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
+
+      if(changed){
+        /* 5 分钟蓝色呼吸强调：给当前弹窗里每个科目卡戴上 hw-fresh */
+        try{
+          var cards = document.querySelectorAll('#hwCurrentList .hw-item');
+          for(var i=0;i<cards.length;i++) cards[i].classList.add('hw-fresh');
+          setTimeout(function(){
+            var a = document.querySelectorAll('#hwCurrentList .hw-item.hw-fresh');
+            for(var k=0;k<a.length;k++) a[k].classList.remove('hw-fresh');
+          }, 300000);
+        }catch(e){}
+        try{ syncNotice('ok', '已拉取云端最新作业（新内容高亮 5 分钟）'); }catch(e){}
+      }else{
+        try{ syncNotice('ok', '已是最新'); }catch(e){}
+      }
+      done();
+      return { changed:changed };
+    });
+  }).catch(function(err){
+    done();
+    try{ syncNotice('err', '刷新失败 · ' + ((err && err.message) || '请检查网络')); }catch(e){}
+  });
+}
+
 /* ================= 普通模式：管理员在弹窗内新增 / 编辑作业（v4.12.0）=================
    站主：「普通模式下也可以作业新增，只有管理员会显示新增作业按钮，功能与大屏一致」；
    又确认「普通模式的样式跟现在一样」「弹窗内直接改」。所以这里不搬大屏两栏，

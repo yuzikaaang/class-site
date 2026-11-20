@@ -13581,6 +13581,34 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /\.hwcal-dot\.on\{background:\s*rgba\(255,\s*255,\s*255/.test(idxV17));
   }
 
+  /* ---- v4.17.1：作业双向自动同步（每分钟检测 + 呼吸灯判断 + 普通模式刷新）---- */
+  {
+    const appV171 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const idxV171 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+    t('★v4.17.1 大屏每分钟双向检测作业（hwSyncTick + 60 秒 + since 增量）',
+      /function hwSyncTick\(manual\)/.test(bigV)
+      && /var HW_SYNC_MS = 60000/.test(bigV)
+      && /setInterval\(function\(\)\{ hwSyncTick\(false\); \}, HW_SYNC_MS\)/.test(bigV)
+      && /api\('\/content' \+ \(since \? '\?since=' \+ since : ''\)\)/.test(bigV));
+    t('★v4.17.1 双向判定：本地有未上传就上传、云端新就拉取、一致不处理',
+      /if\(hwLocalPending\(\)\)\{/.test(bigV)
+      && /hwUploadSoon\(hwList\(\)\)/.test(bigV)
+      && /hwApply\(cloudArr, \{ fresh: true \}\)/.test(bigV)
+      && /JSON\.stringify\(cloudArr\) === BIG\.hwPrev/.test(bigV));
+    t('★v4.17.1 上传成功绿字已上传最近作业、失败红字',
+      /syncNotice\('ok', '已上传最近作业'\)/.test(bigV)
+      && /syncNotice\('err', '上传失败 · 已存本机'\)/.test(bigV));
+    t('★v4.17.1 呼吸灯点击走双向判断（hwRefreshNow 调 hwSyncTick）',
+      /BIG\.hwRefreshNow = function \(\){ hwSyncTick\(true\); }/.test(bigV));
+    t('★v4.17.1 拉到云端新作业用 5 分钟蓝色呼吸强调（模仿截止提醒）',
+      /hwFlashPaint\(opts\.fresh \? 300000 : 5000, !!opts\.fresh\)/.test(bigV)
+      && /\.hw-fresh-card/.test(idxV171) && /@keyframes bhwFresh/.test(idxV171));
+    t('★v4.17.1 普通模式作业查看新增刷新按钮与刷新函数',
+      /id="hwNormRefreshBtn" onclick="hwNormRefresh\(this\)"/.test(idxV171)
+      && /function hwNormRefresh\(btn\)/.test(appV171)
+      && /syncNotice\('ok', '已拉取云端最新作业（新内容高亮 5 分钟）'\)/.test(appV171));
+  }
+
   }
 
   /* ---- v4.11.0：作业期次按学期自动按周生成 ---- */

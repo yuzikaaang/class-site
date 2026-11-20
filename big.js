@@ -3425,11 +3425,13 @@
         syncBadge();
         refreshLocalStrip();
         if(!editing && same){ try{ BIG.renderHw(); }catch(e){} }
-        try{ if(typeof window.syncNotice === 'function') window.syncNotice('ok', '作业已同步'); }catch(e){}
+        /* v4.17.1：站主要求「上传成功左下角绿字：已上传最近作业」 */
+        try{ if(typeof window.syncNotice === 'function') window.syncNotice('ok', '已上传最近作业'); }catch(e){}
       }else{
         markSaved('未上传：' + ((r && r.error) || '未知原因'));
         syncBadge();
-        try{ if(typeof window.syncNotice === 'function') window.syncNotice('err', '同步失败 · 已存本机'); }catch(e){}
+        /* v4.17.1：上传失败红字提示，与成功绿字成对 */
+        try{ if(typeof window.syncNotice === 'function') window.syncNotice('err', '上传失败 · 已存本机'); }catch(e){}
       }
       if(_hwUpQueued) hwUploadSoon(_hwUpQueued);
     });
@@ -4422,7 +4424,8 @@
     BIG.hwPrevData = raw;
     if(BIG.hwOn) BIG.renderHw();
     try{ if(typeof refreshHwViews === 'function') refreshHwViews(); }catch(e){}
-    if(BIG.hwOn) hwFlashPaint();
+    /* v4.17.1：从云端拉取（本地旧）时用 5 分钟蓝色呼吸强调；本机即时改动仍标黄 5 秒 */
+    if(BIG.hwOn) hwFlashPaint(opts.fresh ? 300000 : 5000, !!opts.fresh);
     return true;
   }
 
@@ -4442,9 +4445,16 @@
       if(JSON.stringify(r) !== BIG.hwPrev) hwApply(r);
     }, 1000);
   }
-  function hwFlashPaint(){
+  /* v4.17.1（站主）：新增两档强调。
+     原 bhw-flash = 标黄 5 秒（本机即时改动用，不变）；
+     hw-fresh   = 蓝色呼吸框 5 分钟 —— 从云端**拉取**到新作业时，
+                  模仿截止提醒那种呼吸强调，5 分钟内一眼能认出哪些是刚同步来的。 */
+  function hwFlashPaint(ms, fresh){
+    ms = ms || 5000;
     var f = BIG.hwFlash;
     if(!f) return;
+    var cls = fresh ? 'hw-fresh' : 'bhw-flash';
+    var ccls = fresh ? 'hw-fresh-card' : 'bhw-flash-card';
     var n = 0;
     var rows = document.querySelectorAll('#bigHw .bhw-task');
     for(var i = 0; i < rows.length; i++){
@@ -4452,56 +4462,110 @@
       var txt = el.querySelector('.bhw-txt');
       var ta = el.querySelector('textarea');
       var s = txt ? String(txt.textContent || '') : (ta ? String(ta.value || '') : '');
-      if(s && f.tasks[s]){ el.classList.add('bhw-flash'); n++; }
+      if(s && f.tasks[s]){ el.classList.add(cls); n++; }
     }
     var cards = document.querySelectorAll('#bigHw .bhw-subj');
     for(var j = 0; j < cards.length; j++){
       var h = cards[j].querySelector('.bhw-subj-h b') || cards[j].querySelector('.bhw-subj-h input');
       var nm = h ? String(h.value || h.textContent || '').trim() : '';
-      if(nm && f.subNames[nm]){ cards[j].classList.add('bhw-flash-card'); n++; }
+      if(nm && f.subNames[nm]){ cards[j].classList.add(ccls); n++; }
     }
-    if(n) toast(f.added ? '手机端刚更新了作业' : '作业有改动，已标出来');
+    /* 新增期次没有具体条目可标时，整张作业卡也戴上呼吸框，保证一定看得见 */
+    if(!n && f.added){
+      var first = document.querySelector('#bigHw .bhw-subj');
+      if(first){ first.classList.add(ccls); n++; }
+    }
+    if(n) toast(fresh ? '已从云端拉取最新作业' : (f.added ? '手机端刚更新了作业' : '作业有改动，已标出来'));
     setTimeout(function (){
-      var a = document.querySelectorAll('#bigHw .bhw-flash,#bigHw .bhw-flash-card');
-      for(var k = 0; k < a.length; k++) a[k].classList.remove('bhw-flash', 'bhw-flash-card');
-    }, 5000);
+      var a = document.querySelectorAll('#bigHw .hw-fresh,#bigHw .hw-fresh-card');
+      for(var k = 0; k < a.length; k++) a[k].classList.remove('hw-fresh', 'hw-fresh-card');
+    }, fresh ? ms : 5000);
   }
-  /* 「已同步」角标点一下 = 立刻拉一次云端并重画 */
-  BIG.hwRefreshNow = function (){
-    /* v4.7.1：离线时不必真发请求（要等 DNS 超时十几秒），直接说清楚 */
+  /* ============= v4.17.1：每分钟双向检测作业版本（站主本轮需求）=============
+     站主原话：大屏作业上传不及时、容易被同步覆盖 → 改成每分钟检测云端版本：
+       · 一样       → 不做处理；
+       · 云端旧     → 上传本地，左下角绿字「已上传最近作业」；
+       · 云端新本地旧 → 拉取最新版，新增内容蓝色呼吸强调 5 分钟（模仿截止提醒）；
+       · 双向；点「已同步」呼吸灯可手动跑同一套判断（云端旧就点它上传）。
+     省额度：请求带 since（云端没变后端回空包），后端还有 60 秒内存缓存，
+     所以即使大屏开一整天，数据库也约每分钟最多查 1 次，免费额度扛得住。
+     判「云端旧」的依据：本机有未上传改动（hwLocalPending）—— 本机刚改过没传，
+     云端自然是旧的；判「一样」的依据：云端作业 JSON 与屏幕上那份相同。 */
+  var HW_SYNC_VER_KEY = 'cls_hw_sync_ver';
+  var HW_SYNC_MS = 60000;
+  var _hwSyncBusy = false;
+
+  function hwSyncReadVer(){ try{ return Number(localStorage.getItem(HW_SYNC_VER_KEY)) || 0; }catch(e){ return 0; } }
+  function hwSyncWriteVer(v){ try{ if(v) localStorage.setItem(HW_SYNC_VER_KEY, String(v)); }catch(e){} }
+
+  function hwSyncTick(manual){
+    if(_hwSyncBusy) return;
     if(typeof navigator !== 'undefined' && navigator.onLine === false){
-      toast('当前设备离线，显示的是本机缓存；联网后可刷新', true);
-      syncBadge();
-      return;
+      if(manual) toast('当前离线，显示本机缓存；联网后再试', true);
+      syncBadge(); return;
     }
+    if(typeof api !== 'function'){ if(manual) toast('后端未配置', true); return; }
+    /* 正在打字 / 中文输入法组合中：这一轮跳过，别把输入框冲掉（排队留给下一分钟） */
+    if(hwDirty() || _imeOn){ if(manual) toast('正在编辑，写完再刷新', true); return; }
+
+    _hwSyncBusy = true;
     var el = $('bhwSync');
-    if(el){ el.className = 'bhw-sync busy'; el.innerHTML = '<i></i>刷新中'; }
-    if(typeof api !== 'function'){ syncBadge(); return; }
-    api('/content').then(function (j){
+    if(manual && el){ el.className = 'bhw-sync busy'; el.innerHTML = '<i></i>检测中'; }
+    var since = hwSyncReadVer();
+    api('/content' + (since ? '?since=' + since : '')).then(function(j){
+      _hwSyncBusy = false;
+      if(!j || j.ok === false) throw new Error((j && j.error) || '接口异常');
+      hwSyncWriteVer(Number(j.serverTime) || 0);
+
       var it = (j && j.items) || {};
-      var raw = it.holiday_homeworks;
-      if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = null; } }
-      /* v4.16.4（站主）：「刷新的时候要把右侧也都刷新一下 ——
-         比如我改了班级岛里的今日事项，作业看板这边刷新只刷了作业」。
-         同一次请求回来的还有今日事项、公告、看板设置，全应用一遍；
-         作业那份有未上传改动时单独排除，别把本机刚改的盖掉。 */
+      /* 除作业外的键（今日事项 / 公告 / 看板设置）照旧应用一次 */
       try{
         var rest = {};
-        Object.keys(it).forEach(function (k){ if(k !== 'holiday_homeworks') rest[k] = it[k]; });
+        Object.keys(it).forEach(function(k){ if(k !== 'holiday_homeworks') rest[k] = it[k]; });
         if(Object.keys(rest).length && typeof applyCloudContent === 'function') applyCloudContent(rest);
       }catch(e){}
-      if(Array.isArray(raw) && hwLocalPending()){
-        toast('本机还有未上传的改动，已保留本机版本');
+
+      var raw = it.holiday_homeworks;
+      if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = null; } }
+      var cloudArr = Array.isArray(raw) ? raw : null;
+
+      /* ① 本机有未上传改动 = 云端过旧 → 合并上传本地（不覆盖云端其它期次） */
+      if(hwLocalPending()){
+        if(manual) toast('云端较旧，正在上传本机作业…');
+        hwUploadSoon(hwList());
         try{ hwSideRefresh(true); }catch(e){}
         syncBadge();
         return;
       }
-      var changed = Array.isArray(raw) ? hwApply(raw) : false;
+      /* ② 云端没变化（增量空包）→ 一样，不做处理；手动点才给反馈 */
+      if(!cloudArr){
+        if(manual) toast('已是最新，云端没有新作业');
+        try{ hwSideRefresh(true); }catch(e){}
+        syncBadge(); return;
+      }
+      if(JSON.stringify(cloudArr) === BIG.hwPrev){
+        if(manual) toast('已是最新');
+        try{ hwSideRefresh(true); }catch(e){}
+        syncBadge(); return;
+      }
+      /* ③ 云端新、本地旧 → 拉取，新增内容蓝色呼吸强调 5 分钟 */
+      var changed = hwApply(cloudArr, { fresh: true });
       try{ hwSideRefresh(true); }catch(e){}
-      if(!changed) toast('已是最新');
+      if(changed){
+        try{ if(typeof window.syncNotice === 'function') window.syncNotice('ok', '已拉取云端最新作业'); }catch(e){}
+      } else if(manual) toast('已是最新');
       syncBadge();
-    }).catch(function (){ toast('刷新失败，请检查网络', true); syncBadge(); });
-  };
+    }).catch(function(err){
+      _hwSyncBusy = false;
+      if(manual) toast('检测失败：' + ((err && err.message) || '网络异常'), true);
+      try{ if(typeof window.syncNotice === 'function') window.syncNotice('err', '云端检测失败 · 已用本机缓存'); }catch(e){}
+      syncBadge();
+    });
+  }
+
+  /* 「已同步」呼吸灯点击 = 手动跑一次双向判断（站主：云端旧就点它上传，云端新就拉取） */
+  BIG.hwRefreshNow = function (){ hwSyncTick(true); };
+  BIG.hwSyncTick = hwSyncTick;
 
   /* 右侧（今日事项 / 班级岛 / 进度卡）单独再拉一次。
      作业和班级岛是两套接口，只刷作业的话「今日事项」永远停在进来时那一份。
@@ -6667,8 +6731,13 @@
     try{ if(navigator.onLine === false) return; }catch(e){}
     try{
       if(typeof api !== 'function') return;
-      api('/content').then(function (j){
+      /* v4.17.1：带上 since 走增量 —— 云端没变化时后端回空包，配合 60 秒内存缓存，
+         12 秒一轮也不会白拉 16KB，省免费额度。 */
+      var _plSince = 0;
+      try{ _plSince = Number(localStorage.getItem('cls_hw_sync_ver')) || 0; }catch(e){}
+      api('/content' + (_plSince ? '?since=' + _plSince : '')).then(function (j){
         var it = (j && j.items) || {};
+        try{ if(j && j.serverTime) localStorage.setItem('cls_hw_sync_ver', String(j.serverTime)); }catch(e){}
         /* v4.7.0：一次请求两件事 —— 班级提醒 + 作业增量。省一次跨域往返。
            ⚠️ 正在大屏上编辑作业、或本机还有没推上去的改动时，一律不覆盖 ——
            否则 12 秒后一轮轮询会把刚打的字刷回旧版本。 */
@@ -6677,7 +6746,8 @@
           if(typeof hwRaw === 'string'){ try{ hwRaw = JSON.parse(hwRaw); }catch(e){ hwRaw = null; } }
           /* v4.7.1：本机还有没上传的改动时同样不覆盖 —— 班级电脑离线改的作业，
              不能因为它一联网就被云端旧版冲掉。要覆盖得由人点「放弃」或「上传」。 */
-          if(Array.isArray(hwRaw) && !hwBusy() && !hwLocalPending()) hwApply(hwRaw);
+          /* v4.17.1：12 秒轮询发现云端新作业同样用 5 分钟蓝色呼吸强调，和每分钟检测口径一致 */
+          if(Array.isArray(hwRaw) && !hwBusy() && !hwLocalPending()) hwApply(hwRaw, { fresh: true });
         }catch(e){}
         var raw = it.popups;
         if(typeof raw === 'string'){ try{ raw = JSON.parse(raw); }catch(e){ raw = []; } }
@@ -6705,9 +6775,15 @@
     if(BIG.alertT) clearInterval(BIG.alertT);
     pollAlerts();
     BIG.alertT = setInterval(pollAlerts, ALERT_POLL);
+    /* v4.17.1：作业双向检测独立成每分钟一次（带 since 增量 + 后端 60 秒缓存，省额度）。
+       进来先跑一次，之后每 60 秒一次；和 12 秒的弹窗轮询互不干扰。 */
+    if(BIG.hwSyncT) clearInterval(BIG.hwSyncT);
+    setTimeout(function(){ hwSyncTick(false); }, 1200);
+    BIG.hwSyncT = setInterval(function(){ hwSyncTick(false); }, HW_SYNC_MS);
   };
   BIG.stopAlerts = function (){
     if(BIG.alertT){ clearInterval(BIG.alertT); BIG.alertT = null; }
+    if(BIG.hwSyncT){ clearInterval(BIG.hwSyncT); BIG.hwSyncT = null; }
   };
 
   /* ---------------- 启动 ---------------- */
