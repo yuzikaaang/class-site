@@ -4915,7 +4915,8 @@ html.big-hw #bigHome,html.big-hw #homeView,html.big-hw #grid{display:none!import
 .hwa-card{background:#fff}
 .dark .hwa-card{background:#2f2a27}
 .hwa-task textarea,.hwa-duerow input{background:#fff}
-.dark .hwa-task textarea,.dark .hwa-duerow input{background:#2b2724}
+.dark .hwa-task textarea,.dark .hwa-duerow input{background:#2b2724;color:#eee;color-scheme:dark}
+.dark .hwa-task textarea::placeholder,.dark .hwa-duerow input::placeholder{color:#9c9088}
 
 /* v4.12.0：顶栏加了「＋ 新增作业」之后，标题会被挤成竖排。
    这里让标题独占一行、可正常换行，按钮组自己换到第二行右对齐。 */
@@ -7495,7 +7496,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.17.1</button>
+        title="点击检查是否为最新版本">v4.17.2</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -8715,19 +8716,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.17.1';
+var SITE_VERSION = '4.17.2';
 var VER_DATE = '2026-11-17';
 </script>
-<script src="./auth-bus.js?v=4171" defer></script>
+<script src="./auth-bus.js?v=4172" defer></script>
 <script src="./tour.js?v=040507" defer></script>
-<script src="./app.min.js?v=4171" defer></script>
+<script src="./app.min.js?v=4172" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4171" defer></script>
-<script src="./big.js?v=4171" defer></script>
+<script src="./fs-keep.js?v=4172" defer></script>
+<script src="./big.js?v=4172" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4171" defer></script>
+<script src="./pickfx.js?v=4172" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

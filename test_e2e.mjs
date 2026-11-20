@@ -13609,6 +13609,17 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /syncNotice\('ok', '已拉取云端最新作业（新内容高亮 5 分钟）'\)/.test(appV171));
   }
 
+  /* ---- v4.17.2：暗色模式作业编辑框字色修复 ---- */
+  {
+    const idxV172 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+    t('★v4.17.2 暗色模式新增作业输入框补足文字色与日期控件配色',
+      /\.dark \.hwa-task textarea,\.dark \.hwa-duerow input\{background:#2b2724;color:#eee;color-scheme:dark\}/
+        .test(idxV172));
+    t('★v4.17.2 暗色模式作业输入框 placeholder 有对比色',
+      /\.dark \.hwa-task textarea::placeholder,\.dark \.hwa-duerow input::placeholder\{color:#9c9088\}/
+        .test(idxV172));
+  }
+
   }
 
   /* ---- v4.11.0：作业期次按学期自动按周生成 ---- */
