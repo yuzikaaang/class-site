@@ -14127,7 +14127,17 @@ function openCaEditor(hwId, subject){
   var it = null, items = hw.items || [];
   for(var j = 0; j < items.length; j++){ if(items[j] && items[j].subject === subject){ it = items[j]; break; } }
   var orig = (it && it.tasks || []).slice();
-  CA_CTX = { hwId: String(hw.id), hwLabel: (hw.start || '') + ' ~ ' + (hw.end || ''), subject: subject, orig: orig };
+  /* v4.17.0：课代表编辑也要能设截止时间（原来只有大屏/管理员的整包编辑器能设）。
+     dueByText 用「任务原文」当 key 存时间——这样同学在文本框里增删、调序任务后，
+     时间仍能贴回原来那条，不会因行号变化串到别的作业上。 */
+  var dueByText = {};
+  for(var di = 0; di < orig.length; di++){
+    var dt = orig[di];
+    if(dt && typeof dt === 'object' && dt.due && dt.text){
+      dueByText[String(dt.text)] = String(dt.due).slice(0, 16);
+    }
+  }
+  CA_CTX = { hwId: String(hw.id), hwLabel: (hw.start || '') + ' ~ ' + (hw.end || ''), subject: subject, orig: orig, dueByText: dueByText };
 
   var taVal = orig.map(function(t){
     if(t && typeof t === 'object'){
@@ -14221,10 +14231,18 @@ function openCaEditor(hwId, subject){
             '<button type="button" onclick="caInsertTask()">＋ 新增一条任务</button>' +
           '</div>') +
       chipsHtml +
-      '<textarea id="caTa" class="ca-ta"></textarea>' +
+      '<textarea id="caTa" class="ca-ta" oninput="caDueRefresh()"></textarea>' +
+      /* v4.17.0：截止时间面板——每个文字任务一行，可填精确到分钟的时间。
+         留空 = 不设截止；管理员 / 课代表都能用（服务端按科目头衔校验）。 */
+      '<div class="ca-due-box">' +
+        '<div class="ca-due-h">⏰ 截止时间（可选，精确到分钟）</div>' +
+        '<div id="caDueRows"></div>' +
+        '<div class="ca-due-tip">给某条作业填上时间，到点后作业看板会提示；留空则不限制。修改上面的任务文字后，这里会自动更新。</div>' +
+      '</div>' +
       '<button class="acct-btn" id="caGo" style="margin-top:10px" onclick="caSave()">保存修改</button>' +
       '<div class="acct-msg" id="caMsg"></div>';
   document.getElementById('caTa').value = editorText;
+  caDueRefresh();
   document.getElementById('caMask').classList.add('show');
   if(typeof SFX !== 'undefined' && SFX && SFX.pop) SFX.pop();
 }
@@ -14373,6 +14391,48 @@ function closeCaEditor(){
   CA_CTX = null;
 }
 
+/* v4.17.0：根据 textarea 里当前的「文字任务行」渲染截止时间输入框。
+   - 跳过空行和 📎 附件行（附件的截止时间随附件对象走，不在这里单独设）；
+   - 用任务原文去 CA_CTX.dueByText 取值，改文字/调序都不会串；
+   - oninput 实时刷新，新增或删掉任务行后输入框立即跟上。 */
+function _caTaskLines(){
+  var ta = document.getElementById('caTa');
+  if(!ta) return [];
+  var out = [];
+  ta.value.split('\n').forEach(function(line){
+    var s = String(line).replace(/\s+$/, '');
+    if(!s.trim() || /^\s*📎/.test(s)) return;
+    out.push(s.trim());
+  });
+  return out;
+}
+function caDueRefresh(){
+  var box = document.getElementById('caDueRows');
+  if(!box || !CA_CTX) return;
+  var lines = _caTaskLines();
+  if(!lines.length){
+    box.innerHTML = '<div class="ca-due-empty">先在上面写一条作业，就可以给它设截止时间。</div>';
+    return;
+  }
+  box.innerHTML = lines.map(function(txt, i){
+    var val = CA_CTX.dueByText[txt] || '';
+    return '<div class="ca-due-row">' +
+      '<span class="ca-due-label" title="' + esc(txt) + '">' + (i + 1) + '. ' + esc(txt) + '</span>' +
+      '<input type="datetime-local" step="60" value="' + esc(val) + '"' +
+      ' aria-label="第' + (i+1) + '条作业的截止时间"' +
+      ' onchange="caDueSet(this,' + i + ')">' +
+      '</div>';
+  }).join('');
+}
+function caDueSet(inp, idx){
+  if(!CA_CTX) return;
+  var lines = _caTaskLines();
+  if(idx < 0 || idx >= lines.length) return;
+  var txt = lines[idx], val = String(inp.value || '').slice(0, 16);
+  if(val) CA_CTX.dueByText[txt] = val;
+  else delete CA_CTX.dueByText[txt];
+}
+
 function caSay(t, cls){
   var el = document.getElementById('caMsg');
   if(el){ el.textContent = t || ''; el.className = 'acct-msg ' + (cls || '') + ' show'; }
@@ -14443,6 +14503,23 @@ function caSave(){
   if(CA_CTX.lockedAtt && CA_CTX.lockedAtt.length){
     tasks = CA_CTX.lockedAtt.concat(tasks);
   }
+
+  /* v4.17.0：把截止时间面板里填的时间贴回对应任务。
+     按任务文字匹配 dueByText —— 字符串任务升级成 {text, due}，对象任务补 .due。
+     没填时间的保持原样（对象若原有 due 但面板清空了，这里删掉）。 */
+  var dm = CA_CTX.dueByText || {};
+  tasks = tasks.map(function(t){
+    var text = (t && typeof t === 'object') ? String(t.text || '') : String(t == null ? '' : t);
+    var due = dm[text];
+    if(t && typeof t === 'object' && !Array.isArray(t)){
+      var o = {};
+      for(var k in t){ if(Object.prototype.hasOwnProperty.call(t, k)) o[k] = t[k]; }
+      if(due) o.due = due; else delete o.due;
+      return o;
+    }
+    if(due) return { text: text, due: due };
+    return t;
+  });
 
   var btn = document.getElementById('caGo');
   if(btn) btn.disabled = true;
@@ -22973,8 +23050,8 @@ function showCurrentHomework(forceId){
     }).join('');
     sel.onchange = function(){ showCurrentHomework(sel.value); };
   }
-  hwNormStripRender();
-  hwNormCalRender();
+  /* v4.17.0：当前作业的日期条 + 整月日历容器已移除（更简洁），
+     按日期检索统一走「历史作业」弹窗，这里不再铺日历。 */
   closeHwEdit();            /* 换期次时收起编辑区，避免改到别的一期 */
   if(!hw){
     if(title) title.textContent = '当前作业';
@@ -23961,11 +24038,16 @@ function _renderHwCalendar(){
     var dStr = _hwCalMonth.y+'-'+pad2(_hwCalMonth.m+1)+'-'+pad2(d);
     var hw = _findHwByDate(dStr);
     var isToday = dStr === todayStr;
-    var style = 'padding:8px 0;border-radius:8px;cursor:pointer;font-size:.85rem;text-align:center;';
+    /* v4.17.0：改成纵向 flex，数字下方放打点（有作业的日期）。 */
+    var style = 'padding:6px 0 8px;border-radius:8px;cursor:pointer;font-size:.85rem;text-align:center;'
+      + 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;line-height:1.1;';
     if(hw){ style += 'background:#9a3412;color:#fff;font-weight:700;'; }
     else if(isToday){ style += 'border:2px solid #9a3412;color:#af410f;font-weight:700;'; }
     else { style += 'color:#57534e;'; }
-    html += '<div data-d="'+dStr+'" style="'+style+'">'+d+'</div>';
+    /* v4.17.0：保留整格涂红的同时，数字下方再加一个小白点标识有作业，
+       涂红格用浅色点、普通格用橙色点，一眼能数出哪几天有作业。 */
+    var dot = hw ? '<i class="hwcal-dot' + (hw ? ' on' : '') + '"></i>' : '';
+    html += '<div data-d="'+dStr+'" style="'+style+'"><span class="hwcal-d">'+d+'</span>'+dot+'</div>';
   }
   html += '</div>';
   body.innerHTML = html;

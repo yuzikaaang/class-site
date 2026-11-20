@@ -13552,10 +13552,35 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.10.16 改历史作业进编辑先弹拦截',
       /function isHistoryHw\(hw\)/.test(bigV) && /BIG\.histAsk = function/.test(bigV)
       && /id="bhwHistMask"/.test(idxV));
-    t('★v4.10.16 普通模式管理员新增作业 + 日历合进弹窗',
+    /* v4.17.0 起当前作业的日历已移除，断言跟着调整：新增作业入口保留、日历容器移除 */
+    t('★v4.10.16 普通模式管理员新增作业（日历已在 v4.17.0 移除）',
       /function openHwAdd\(\)/.test(appV16) && /id="hwAddBtn"/.test(idxV)
-      && /function hwNormStripRender\(\)/.test(appV16) && /id="hwNormCal"/.test(idxV)
+      && !/id="hwNormCal"/.test(idxV)
       && /isAdmin\(\).*?\?\s*''\s*:\s*'none'/.test(appV16));
+
+  /* ---- v4.17.0：普通模式课代表可设截止 + 当前作业去日历 + 历史作业打点 ---- */
+  {
+    const appV17 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const idxV17 = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+    const apiV17 = fs.readFileSync(new URL('./api/content.js', import.meta.url), 'utf8');
+    t('★v4.17.0 后端单科保存放行 due 字段',
+      /t\.due === undefined \|\| t\.due === null \|\| t\.due === ''/.test(apiV17)
+      && /typeof t\.due === 'string' && t\.due\.length <= 16/.test(apiV17));
+    t('★v4.17.0 课代表编辑器有截止时间面板（按任务文字存 due）',
+      /function caDueRefresh\(\)/.test(appV17) && /function caDueSet\(inp, idx\)/.test(appV17)
+      && /CA_CTX = \{[^}]*dueByText/.test(appV17)
+      && /ca-due-box/.test(appV17) && /oninput="caDueRefresh\(\)"/.test(appV17));
+    t('★v4.17.0 caSave 把面板时间贴回任务对象',
+      /CA_CTX\.dueByText \|\| \{\}/.test(appV17)
+      && /if\(due\) return \{ text: text, due: due \}/.test(appV17)
+      && /o\.due = due/.test(appV17));
+    t('★v4.17.0 当前作业移除日期条与日历容器',
+      !/id="hwNormStrip"/.test(idxV17) && !/id="hwNormCal"/.test(idxV17));
+    t('★v4.17.0 历史作业日历有作业日期加白色打点',
+      /class="hwcal-dot' \+ \(hw \? ' on'/.test(appV17)
+      && /\.hwcal-dot\.on\{background:\s*rgba\(255,\s*255,\s*255/.test(idxV17));
+  }
+
   }
 
   /* ---- v4.11.0：作业期次按学期自动按周生成 ---- */

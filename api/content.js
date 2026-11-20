@@ -593,8 +593,12 @@ async function caSaveSubject(req, res) {
         (t.img === undefined || t.img === null || typeof t.img === 'string') &&
         (t.audio === undefined || t.audio === null || typeof t.audio === 'string') &&
         (t.video === undefined || t.video === null || typeof t.video === 'string') &&
-        (t.audioLabel === undefined || t.audioLabel === null || typeof t.audioLabel === 'string');
-      if (!shapeOk) return fail(res, 400, '任务条目格式不对（应为文本或 {text, img/audio/video} 附件对象）');
+        (t.audioLabel === undefined || t.audioLabel === null || typeof t.audioLabel === 'string') &&
+        /* v4.17.0：截止时间。课代表在普通模式作业编辑里也能给自己科目的每项作业设 due
+           （格式 'YYYY-MM-DDTHH:mm'，最多 16 字符），这里必须放行，否则保存报格式错。 */
+        (t.due === undefined || t.due === null || t.due === '' ||
+          (typeof t.due === 'string' && t.due.length <= 16));
+      if (!shapeOk) return fail(res, 400, '任务条目格式不对（应为文本或 {text, img/audio/video/due} 附件对象）');
       continue;
     }
     return fail(res, 400, '任务条目格式不对（应为文本或附件对象）');
