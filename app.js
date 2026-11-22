@@ -15713,9 +15713,15 @@ var PG = (function(){
     h += '<div class="pg-onehead"><span class="big">'+(arr.length?cur:'—')+' <small>/ 满分 '+SUBJG[s]+'</small></span>'
       + '<span class="goal">目标 '+goal+'</span>'+rawTag(s)
       + (arr.length?('<span class="gap '+(cur>=goal?'up':'dn')+'">'+(cur>=goal?('已达标 +'+(cur-goal)):('距目标 '+(goal-cur)))+'</span>'):'')+'</div>';
+    /* v4.18.3 目标输入区：无记录时也要显示，否则新用户看不到、改不了默认目标 */
+    function goalBlock(){
+      return '<div class="pg-onegoal"><label>'+s+' 目标分'+(RAW[s]?'（原始分）':'')+'</label>'
+        + '<input type="number" data-og="'+s+'" value="'+goal+'"><button class="pg-btn ghost" onclick="PG.saveOneGoal(\''+s+'\')">保存</button></div>';
+    }
     if(!arr.length){
       h += '<div class="pg-empty"><div class="ico">📈</div><p>还没有「'+s+'」的记录</p>'
         + '<p style="font-size:.75rem">点上方「记一次成绩」录入，或切到别的学期看看</p></div>';
+      h += goalBlock();
       h += '</div>';
       return h;
     }
@@ -15729,18 +15735,19 @@ var PG = (function(){
       var dd = prev ? r.v-prev.v : 0;
       var col = dd>0?'var(--pg-up)':(dd<0?'var(--pg-down)':'var(--fg-3)');
       var ok = r.v>=goal;
-      return '<div class="pg-sr'+(i>=4?' more':'')+'"><span class="sd">'+fmtD(r.date)+'</span>'
+      return '<div class="pg-sr'+(i>=4?' more':'')+'" data-rid="'+r.id+'"><span class="sd">'+fmtD(r.date)+'</span>'
         + '<span class="sv">'+r.v+' <small>/'+(r.full||SUBJG[s])+'</small></span>'
         + '<span class="sdl" style="color:'+col+'">'+(prev?(dd>0?'↑+'+dd:(dd<0?'↓'+dd:'—')):'首次')+'</span>'
         + '<span class="srf">'+esc(r.name||r.t||'')+(r.rf?' · '+esc(r.rf):'')+'</span>'
-        + '<span class="sok" style="color:'+(ok?'var(--pg-up)':'var(--pg-down)')+'">'+(ok?'达标':'差'+(goal-r.v))+'</span></div>';
+        + '<span class="sok" style="color:'+(ok?'var(--pg-up)':'var(--pg-down)')+'">'+(ok?'达标':'差'+(goal-r.v))+'</span>'
+        + '<button class="pg-rec-del" title="删除这一条" aria-label="删除这一条" onclick="PG.delOneRec(\''+r.id+'\')">×</button></div>';
     }).join('');
-    h += '<div class="pg-onelist-h">逐次记录 <span>最近在前</span></div>';
+    h += '<div class="pg-onelist-h">逐次记录 <span>最近在前</span>'
+      + '<button class="pg-clear-subj" title="清空「'+s+'」的全部记录" onclick="PG.clearSubj(\''+s+'\')">清空本科</button></div>';
     h += '<div class="pg-sub-recs" id="pg_recs_'+s+'">'+rows+'</div>';
     if(arr.length>4) h += '<button class="pg-rec-more" id="pg_recMore_'+s+'" onclick="PG.toggleRecs(\''+s+'\')">展开全部 '+arr.length+' 次记录 ▾</button>';
     /* 本科目标（单独改一科的） */
-    h += '<div class="pg-onegoal"><label>'+s+' 目标分'+(RAW[s]?'（原始分）':'')+'</label>'
-      + '<input type="number" data-og="'+s+'" value="'+goal+'"><button class="pg-btn ghost" onclick="PG.saveOneGoal(\''+s+'\')">保存</button></div>';
+    h += goalBlock();
     /* 本科一句话分析 */
     var d = vals.length>1 ? (cur-vals[vals.length-2]) : 0;
     h += '<div class="pg-sub-ai">✨ '+s+' 最近 '+cur+' 分，'+(cur>=goal?('已达标，近 '+vals.length+' 次'+(d>=0?'保持上升':'略有波动')):('距目标 '+(goal-cur)+' 分，近 '+vals.length+' 次'+(d>0?'在稳步追赶':'提升偏慢')))+'，按每次小目标逐步逼近。</div>';
@@ -15753,6 +15760,24 @@ var PG = (function(){
     var v = Number(inp.value); if(isNaN(v)||v<0) return;
     goals[s] = v; saveGoals2(); mount();
     if(typeof syncNotice==='function') syncNotice('ok', s+' 目标已保存');
+  }
+  /* v4.18.3 删除：单条 = 某次考试某一科；清空本科 = 这一科全部记录 */
+  function delOneRec(id){
+    var i=-1; recs.forEach(function(x,k){ if(x.id===id) i=k; });
+    if(i<0) return;
+    var who = recs[i];
+    if(typeof confirm==='function' && !confirm('确定删除这条记录？\n'+who.date+' · '+who.subj+' '+(who.v||'')+' 分'+(who.name?(' · '+who.name):'')+'，删除后无法恢复。')) return;
+    recs.splice(i,1); save(); mount();
+    if(typeof syncNotice==='function') syncNotice('ok','已删除这条记录');
+  }
+  function clearSubj(s){
+    var arr = subjRecs(s);
+    if(!arr.length){ if(typeof syncNotice==='function') syncNotice('err','「'+s+'」目前没有记录'); return; }
+    if(typeof confirm==='function' && !confirm('确定清空「'+s+'」的全部 '+arr.length+' 条记录？\n删除后无法恢复，其他科目不受影响。')) return;
+    var ids = {}; arr.forEach(function(r){ ids[r.id]=1; });
+    recs = recs.filter(function(x){ return !ids[x.id]; });
+    save(); mount();
+    if(typeof syncNotice==='function') syncNotice('ok','已清空「'+s+'」的记录');
   }
 
   /* ---------- 面板挂载与页面切换 ---------- */
@@ -15965,7 +15990,7 @@ var PG = (function(){
     openEdit:openEdit, closeEdit:closeEdit, renderEditList:renderEditList, saveEditRow:saveEditRow, delEditRow:delEditRow,
     toggleBoard:toggleBoard, toggleRecs:toggleRecs, foldAll:foldAll, chartMode:chartMode, ptClick:ptClick,
     saveGoals:saveGoals, aiAnalyze:aiAnalyze, aiStop:aiStop, curType:curType,
-    setTerm:setTerm, setSubj:setSubj, saveOneGoal:saveOneGoal,
+    setTerm:setTerm, setSubj:setSubj, saveOneGoal:saveOneGoal, delOneRec:delOneRec, clearSubj:clearSubj,
     _rows:function(){ return sheetRows; },
     _data:function(){ return {recs:recs,goals:goals}; },
     _terms:function(){ return {list:TERMS.map(function(t){ return {key:t.key,name:t.name,start:t.start,end:t.end}; }),cur:TERM_CUR,scope:scopeRecs().length,total:recs.length}; },

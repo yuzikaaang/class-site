@@ -14183,6 +14183,41 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /hwExEmpty/.test(appV));
   }
 
+  /* ===== v4.18.3 导览不挡点击 + 无记录也显示目标框 + 删除成绩 ===== */
+  {
+    const appV183 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const tourV183 = fs.readFileSync(new URL('./tour.js', import.meta.url), 'utf8');
+    const pgCss183 = fs.readFileSync(new URL('./pg.css', import.meta.url), 'utf8');
+    /* ① 导览遮罩放行点击 */
+    t('★v4.18.3 导览遮罩 pointer-events:none 不挡输入',
+      /\.tour-hit\{[^}]*pointer-events:none/.test(tourV183));
+    /* ② 无记录科目也渲染目标输入框 */
+    t('★v4.18.3 无记录时显示目标框（goalBlock 提前定义并在空态调用）',
+      /function goalBlock\(\)/.test(appV183)
+      && /if\(!arr\.length\)\{[\s\S]{0,200}h \+= goalBlock\(\)/.test(appV183)
+      && /逐次记录[\s\S]{0,900}h \+= goalBlock\(\)/.test(appV183));
+    /* ③ 删除：单条 + 清空本科 + 暴露接口 */
+    t('★v4.18.3 单条删除 delOneRec（确认 + splice + save）',
+      /function delOneRec\(id\)/.test(appV183) && /confirm\(/.test(appV183)
+      && /recs\.splice\(i,1\); save\(\); mount\(\)/.test(appV183));
+    t('★v4.18.3 清空本科 clearSubj（按科过滤 + 确认）',
+      /function clearSubj\(s\)/.test(appV183)
+      && /recs = recs\.filter\(function\(x\)\{ return !ids\[x\.id\]; \}\)/.test(appV183));
+    t('★v4.18.3 删除接口暴露 + 每行删除按钮 + 清空按钮',
+      /delOneRec:delOneRec, clearSubj:clearSubj/.test(appV183)
+      && /PG\.delOneRec\(/.test(appV183) && /PG\.clearSubj\(/.test(appV183)
+      && /class="pg-rec-del"/.test(appV183) && /class="pg-clear-subj"/.test(appV183));
+    t('★v4.18.3 删除按钮 CSS 齐全（含明暗变量）',
+      /\.pg-clear-subj\{/.test(pgCss183) && /\.pg-rec-del\{/.test(pgCss183)
+      && /--pg-no-ink/.test(pgCss183));
+    /* ④ 版本号四处一致 */
+    t('★v4.18.3 版本号前台/后台/SW/API 四处一致',
+      /var SITE_VERSION = '4\.18\.3'/.test(readIdx())
+      && /const SITE_VER = '4\.18\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+      && /const API_VER = '4\.18\.3';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+      && /var SITE_VERSION = '4\.18\.3'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+  }
+
   /* ===== 全量语法自检 =====
      v4.10.2 教训：一次改文案时把中文标点写进了单引号字符串，
      整个 big.js 语法报废 —— 而 e2e 全是正则断言，抓不到。

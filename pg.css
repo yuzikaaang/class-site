@@ -68,8 +68,15 @@
 .pg-onehead .goal{font-size:.78rem;color:var(--fg-2);font-weight:700}
 .pg-onehead .gap{font-size:.8rem;font-weight:800;margin-left:auto}
 .pg-onehead .gap.up{color:var(--pg-up)} .pg-onehead .gap.dn{color:var(--pg-down)}
-.pg-onelist-h{font-size:.82rem;font-weight:800;margin:16px 0 8px}
+.pg-onelist-h{font-size:.82rem;font-weight:800;margin:16px 0 8px;display:flex;align-items:center;gap:6px}
 .pg-onelist-h span{font-size:.7rem;font-weight:500;color:var(--fg-3);margin-left:6px}
+/* v4.18.3 删除：整科清空 + 单条 × */
+.pg-clear-subj{order:3;margin-left:auto;border:1px solid var(--pg-no-ink);background:transparent;color:var(--pg-no-ink);
+  border-radius:8px;padding:3px 10px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;transition:.18s}
+.pg-clear-subj:hover{background:var(--pg-no-bg)}
+.pg-rec-del{border:0;background:transparent;color:var(--fg-3);font-size:1.15rem;line-height:1;cursor:pointer;
+  padding:0 2px;flex-shrink:0;transition:.18s;font-family:inherit}
+.pg-rec-del:hover{color:var(--pg-no-ink);background:var(--pg-no-bg);border-radius:6px}
 .pg-sr .sok{font-size:.68rem;font-weight:700;white-space:nowrap}
 .pg-onegoal{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px dashed var(--pg-line)}
 .pg-onegoal label{font-size:.78rem;font-weight:800;color:var(--fg-2)}

@@ -134,7 +134,11 @@
     if (cssAdded || document.getElementById('tourCss')) return;
     cssAdded = true;
     var css = ''
-      + '.tour-hit{position:fixed;inset:0;z-index:9997;background:transparent;cursor:default}'
+      /* v4.18.3：遮罩改为不拦截点击 —— 导览气泡照常显示（下一步/完成可点），
+         但底下的输入框、下拉、按钮都能正常操作。老版本这层全屏透明 div 会吃掉
+         所有点击，导致平时成绩的目标框「看得见点不到」。视觉的暗底由 .tour-hole
+         的 box-shadow 负责，与这层无关，所以去掉拦截不影响聚光效果。 */
+      + '.tour-hit{position:fixed;inset:0;z-index:9997;background:transparent;cursor:default;pointer-events:none}'
       + '.tour-hole{position:fixed;z-index:9998;pointer-events:none;border-radius:16px;'
       + 'box-shadow:0 0 0 9999px rgba(24,16,10,.66);'
       + 'transition:left .34s cubic-bezier(.32,.72,0,1),top .34s cubic-bezier(.32,.72,0,1),'
