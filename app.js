@@ -15419,20 +15419,20 @@ var PG = (function(){
   }
   function curTermName(){ return TERM_CUR==='all' ? '全部三年' : (TERM_KEYS[TERM_CUR]?TERM_KEYS[TERM_CUR].name:'本学期'); }
   function setTerm(k){ if(k==='all'||TERM_KEYS[k]){ TERM_CUR=k; mount(); } }
-  /* 学期切换条：横向滚动的胶囊，当前学期带「本学期」标记 */
+  /* v4.18.2：学期切换改成下拉选一个（原来一排胶囊太占地方） */
   function termBarHtml(){
     if(!TERMS.length) return '';
-    var pills = TERMS.map(function(t){
-      var on = t.key===TERM_CUR;
-      return '<button data-t="'+t.key+'" class="'+(on?'on':'')+'" onclick="PG.setTerm(\''+t.key+'\')">'
-        + t.name + (isCurTerm(t.key)?'<small>本学期</small>':'') + '</button>';
+    var opts = TERMS.map(function(t){
+      return '<option value="'+t.key+'"'+(t.key===TERM_CUR?' selected':'')+'>'
+        + t.name + (isCurTerm(t.key)?'（本学期）':'') + '</option>';
     }).join('');
-    pills += '<button data-t="all" class="'+(TERM_CUR==='all'?'on':'')+'" onclick="PG.setTerm(\'all\')">全部三年</button>';
+    opts += '<option value="all"'+(TERM_CUR==='all'?' selected':'')+'>全部三年</option>';
     var hint = TERM_CUR==='all'
-      ? '正在看全部三年 · 共 '+recs.length+' 条记录'
-      : ('范围 '+TERM_KEYS[TERM_CUR].start+' ~ '+TERM_KEYS[TERM_CUR].end+' · '+scopeRecs().length+' 条');
-    return '<div class="pg-termbar"><div class="pg-terms" id="pg_terms">'+pills+'</div>'
-      + '<div class="pg-termhint">'+hint+'</div></div>';
+      ? '全部三年 · 共 '+recs.length+' 条'
+      : (TERM_KEYS[TERM_CUR].start+' ~ '+TERM_KEYS[TERM_CUR].end+' · '+scopeRecs().length+' 条');
+    return '<div class="pg-termbar"><label class="pg-sel-lb">学期</label>'
+      + '<select class="pg-select" id="pg_termSel" onchange="PG.setTerm(this.value)">'+opts+'</select>'
+      + '<span class="pg-termhint">'+hint+'</span></div>';
   }
   function isCurTerm(k){
     /* 真正含今天（后台覆盖过的学期以新起止为准）的那一期才是「本学期」 */
@@ -15690,6 +15690,71 @@ var PG = (function(){
     return h;
   }
 
+  /* ---------- v4.18.2 科目下拉选一科看：取代四标签 + 六科全列 ---------- */
+  var curSubj = '语文';
+  function setSubj(s){ if(SUBJ.indexOf(s)<0) return; curSubj=s; mount(); }
+  function subjSelectHtml(){
+    var opts = SUBJ.map(function(s){
+      var n = subjRecs(s).length;
+      return '<option value="'+s+'"'+(s===curSubj?' selected':'')+'>'+s+(RAW[s]?'（原始分）':'')+(n?(' · '+n+'次'):'')+'</option>';
+    }).join('');
+    return '<div class="pg-subjbar"><label class="pg-sel-lb">科目</label>'
+      + '<select class="pg-select pg-subj-sel" id="pg_subjSel" onchange="PG.setSubj(this.value)">'+opts+'</select>'
+      + '<button class="pg-btn ghost pg-edit-mini" onclick="PG.openEdit(curSubj)">✎ 编辑历史</button></div>';
+  }
+  /* 单科详情：趋势大图 + 逐次记录 + 本科目标 + 本科 AI 小结 */
+  function renderOneSubject(s){
+    var arr = subjRecs(s);
+    var goal = Number(goals[s])||0;
+    var cur = arr.length ? Number(arr[arr.length-1].v) : 0;
+    var h = '<div class="pg-card pg-onecard">';
+    /* 头部一行：当前分 / 目标 / 原始分标注 */
+    h += '<div class="pg-card-h"><b>'+s+' · 成绩趋势</b><span>'+(arr.length?('共 '+arr.length+' 次记录')+'':'暂无记录')+'</span></div>';
+    h += '<div class="pg-onehead"><span class="big">'+(arr.length?cur:'—')+' <small>/ 满分 '+SUBJG[s]+'</small></span>'
+      + '<span class="goal">目标 '+goal+'</span>'+rawTag(s)
+      + (arr.length?('<span class="gap '+(cur>=goal?'up':'dn')+'">'+(cur>=goal?('已达标 +'+(cur-goal)):('距目标 '+(goal-cur)))+'</span>'):'')+'</div>';
+    if(!arr.length){
+      h += '<div class="pg-empty"><div class="ico">📈</div><p>还没有「'+s+'」的记录</p>'
+        + '<p style="font-size:.75rem">点上方「记一次成绩」录入，或切到别的学期看看</p></div>';
+      h += '</div>';
+      return h;
+    }
+    /* 趋势图（跟手滑动 / 缩小总趋势）—— 复用原 chartHtml */
+    h += chartHtml(s, arr);
+    h += '<div class="pg-pt-detail" id="pg_detail_'+s+'"></div>';
+    /* 逐次记录（最近 4 条，多的展开） */
+    var vals = arr.map(function(r){ return Number(r.v); });
+    var rows = arr.slice().reverse().map(function(r,i){
+      var prev = i+1 < arr.length ? arr[arr.length-2-i] : null;
+      var dd = prev ? r.v-prev.v : 0;
+      var col = dd>0?'var(--pg-up)':(dd<0?'var(--pg-down)':'var(--fg-3)');
+      var ok = r.v>=goal;
+      return '<div class="pg-sr'+(i>=4?' more':'')+'"><span class="sd">'+fmtD(r.date)+'</span>'
+        + '<span class="sv">'+r.v+' <small>/'+(r.full||SUBJG[s])+'</small></span>'
+        + '<span class="sdl" style="color:'+col+'">'+(prev?(dd>0?'↑+'+dd:(dd<0?'↓'+dd:'—')):'首次')+'</span>'
+        + '<span class="srf">'+esc(r.name||r.t||'')+(r.rf?' · '+esc(r.rf):'')+'</span>'
+        + '<span class="sok" style="color:'+(ok?'var(--pg-up)':'var(--pg-down)')+'">'+(ok?'达标':'差'+(goal-r.v))+'</span></div>';
+    }).join('');
+    h += '<div class="pg-onelist-h">逐次记录 <span>最近在前</span></div>';
+    h += '<div class="pg-sub-recs" id="pg_recs_'+s+'">'+rows+'</div>';
+    if(arr.length>4) h += '<button class="pg-rec-more" id="pg_recMore_'+s+'" onclick="PG.toggleRecs(\''+s+'\')">展开全部 '+arr.length+' 次记录 ▾</button>';
+    /* 本科目标（单独改一科的） */
+    h += '<div class="pg-onegoal"><label>'+s+' 目标分'+(RAW[s]?'（原始分）':'')+'</label>'
+      + '<input type="number" data-og="'+s+'" value="'+goal+'"><button class="pg-btn ghost" onclick="PG.saveOneGoal(\''+s+'\')">保存</button></div>';
+    /* 本科一句话分析 */
+    var d = vals.length>1 ? (cur-vals[vals.length-2]) : 0;
+    h += '<div class="pg-sub-ai">✨ '+s+' 最近 '+cur+' 分，'+(cur>=goal?('已达标，近 '+vals.length+' 次'+(d>=0?'保持上升':'略有波动')):('距目标 '+(goal-cur)+' 分，近 '+vals.length+' 次'+(d>0?'在稳步追赶':'提升偏慢')))+'，按每次小目标逐步逼近。</div>';
+    h += '</div>';
+    return h;
+  }
+  function saveOneGoal(s){
+    var inp = document.querySelector('.pg-onegoal input[data-og="'+s+'"]');
+    if(!inp) return;
+    var v = Number(inp.value); if(isNaN(v)||v<0) return;
+    goals[s] = v; saveGoals2(); mount();
+    if(typeof syncNotice==='function') syncNotice('ok', s+' 目标已保存');
+  }
+
   /* ---------- 面板挂载与页面切换 ---------- */
   var page = 'overview';
   function mount(){
@@ -15704,14 +15769,14 @@ var PG = (function(){
     box.innerHTML = '<div class="pg-wrap">'
       + '<div class="pg-bar"><span class="pg-priv">🔒 仅自己可见</span><button class="pg-btn pg-add" onclick="PG.openSheet()">＋ 记一次成绩</button></div>'
       + termBarHtml()
-      + '<div class="pg-seg"><button data-p="overview" class="'+(page==='overview'?'on':'')+'" onclick="PG.tab(\'overview\')">总览</button>'
-      + '<button data-p="records" class="'+(page==='records'?'on':'')+'" onclick="PG.tab(\'records\')">记录</button>'
-      + '<button data-p="analysis" class="'+(page==='analysis'?'on':'')+'" onclick="PG.tab(\'analysis\')">分析</button>'
-      + '<button data-p="goals" class="'+(page==='goals'?'on':'')+'" onclick="PG.tab(\'goals\')">目标</button></div>'
-      + '<div class="pg-page '+(page==='overview'?'on':'')+'" id="pg_overview">'+renderOverview()+'</div>'
-      + '<div class="pg-page '+(page==='records'?'on':'')+'" id="pg_records">'+renderRecords()+'</div>'
-      + '<div class="pg-page '+(page==='analysis'?'on':'')+'" id="pg_analysis">'+renderAnalysis()+'</div>'
-      + '<div class="pg-page '+(page==='goals'?'on':'')+'" id="pg_goals">'+renderGoals()+'</div>'
+      + '<div class="pg-overview">'+renderOverview()+'</div>'
+      + subjSelectHtml()
+      + '<div class="pg-onewrap" id="pg_onewrap">'+renderOneSubject(curSubj)+'</div>'
+      + '<div class="pg-card pg-span2 pg-ai-card" style="margin-top:14px"><span class="badge">✨ AI 学情分析（基于本人录入的数据 · 不发送姓名）</span>'
+      + '<div id="pg_aiText">'+localAi()+'</div>'
+      + '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="pg-btn" id="pg_aiBtn" onclick="PG.aiAnalyze()">生成 AI 分析</button>'
+      + '<button class="pg-btn ghost" onclick="PG.aiStop()">收起 / 停止</button></div>'
+      + '<div class="pg-note" style="margin:10px 0 0">AI 会把脱敏后的分数发给已配置的接口（不含姓名），也可以只用上面的本地规则分析。</div></div>'
       + '</div>'
       + '<div class="pg-mask" id="pg_mask"><div class="pg-sheet">'
       + '<div class="pg-sheet-h"><b>记一次成绩</b><button onclick="PG.closeSheet()" aria-label="关闭">×</button></div>'
@@ -15734,15 +15799,13 @@ var PG = (function(){
     });
     /* 目标进度条入场 */
     setTimeout(function(){ var bar=document.getElementById('pg_goalBar'); if(bar){ var t=0; SUBJ.forEach(function(s){ var r=latest(s); if(r) t+=Number(r.v); }); var gt=goalTotal(); bar.style.width=Math.min(100,gt?t/gt*100:0)+'%'; } },120);
-    SUBJ.forEach(function(s){ var arr=subjRecs(s); if(arr.length){ var idx=0; arr.forEach(function(r,k){ if(CHART[s]&&CHART[s].sel===r.id) idx=k; }); showDetail(s,idx); } });
-    bindDrags(); syncFoldBtn();
+    /* 只初始化当前选中科目的图：详情卡 + 跟手拖动 */
+    (function(){ var arr=subjRecs(curSubj); if(arr.length){ var idx=0; arr.forEach(function(r,k){ if(CHART[curSubj]&&CHART[curSubj].sel===r.id) idx=k; }); showDetail(curSubj,idx); } })();
+    setTimeout(bindDrags, 40);
   }
+  /* v4.18.2：保留 tab() 只做兼容（saveRec 里还调用），现在页面不靠它切页 */
   function tab(p){
-    page = p;
-    Array.prototype.forEach.call(document.querySelectorAll('.pg-seg button'), function(b){ b.classList.toggle('on', b.getAttribute('data-p')===p); });
-    Array.prototype.forEach.call(document.querySelectorAll('.pg-page'), function(pg){ pg.classList.toggle('on', pg.id==='pg_'+p); });
-    if(p==='analysis') setTimeout(bindDrags,40);
-    if(p==='overview') setTimeout(function(){ var bar=document.getElementById('pg_goalBar'); if(bar){ var t=0; SUBJ.forEach(function(s){ var r=latest(s); if(r) t+=Number(r.v); }); var gt=goalTotal(); bar.style.width=Math.min(100,gt?t/gt*100:0)+'%'; } },80);
+    setTimeout(function(){ var bar=document.getElementById('pg_goalBar'); if(bar){ var t=0; SUBJ.forEach(function(s){ var r=latest(s); if(r) t+=Number(r.v); }); var gt=goalTotal(); bar.style.width=Math.min(100,gt?t/gt*100:0)+'%'; } },80);
   }
 
   /* ---------- 录入弹层 ---------- */
@@ -15902,7 +15965,7 @@ var PG = (function(){
     openEdit:openEdit, closeEdit:closeEdit, renderEditList:renderEditList, saveEditRow:saveEditRow, delEditRow:delEditRow,
     toggleBoard:toggleBoard, toggleRecs:toggleRecs, foldAll:foldAll, chartMode:chartMode, ptClick:ptClick,
     saveGoals:saveGoals, aiAnalyze:aiAnalyze, aiStop:aiStop, curType:curType,
-    setTerm:setTerm,
+    setTerm:setTerm, setSubj:setSubj, saveOneGoal:saveOneGoal,
     _rows:function(){ return sheetRows; },
     _data:function(){ return {recs:recs,goals:goals}; },
     _terms:function(){ return {list:TERMS.map(function(t){ return {key:t.key,name:t.name,start:t.start,end:t.end}; }),cur:TERM_CUR,scope:scopeRecs().length,total:recs.length}; },
@@ -15917,6 +15980,7 @@ function scEnsureMounted(){
   if(!isLoggedIn()){
     document.getElementById('scBar').innerHTML = '';
     document.getElementById('scTabs').innerHTML = '';
+    var _nb = document.getElementById('scNotebar'); if(_nb) _nb.style.display = 'none';
     document.getElementById('scPaneBox').innerHTML =
       '<div class="sc-empty">'
       + '<div class="sc-empty-ico">🔐</div>'
@@ -15941,9 +16005,11 @@ function scEmbedHtml(){
     /* v4.7.11（站主第 8 条）：打印出来没有标题、基本信息、班徽和时间。
        这一块平时 display:none，只在 @media print 里出现。 */
     + '<div class="sc-print-head" id="scPrintHead"></div>'
-    + '<div class="sc-notebar">✍️ 成绩由人工手动录入，若有错误请联系管理员修改</div>'
-    + '<div class="sc-bar" id="scBar"></div>'
+    /* v4.18.2：四个标签挪到最顶上；考试选择 / 导出那层工具栏放到标签下方，
+       且只在「全班成绩单」标签显示——平时成绩没有导出图片/分享这些功能，压根不摆出来。 */
     + '<div class="sc-tabs" id="scTabs"></div>'
+    + '<div class="sc-notebar" id="scNotebar">✍️ 成绩由人工手动录入，若有错误请联系管理员修改</div>'
+    + '<div class="sc-bar" id="scBar"></div>'
     + '<div class="sc-pane" id="scPaneBox"></div>'
     + '</div>';
 }
@@ -16675,6 +16741,7 @@ function scRenderAll(){
   scHeatBind();
   scRenderBar();
   scRenderTabs();
+  scBarVisible();
   scRenderPane();
 }
 
@@ -16687,6 +16754,15 @@ function scDateRange(ex){
   return a + ' ~ ' + b;
 }
 
+/* v4.18.2：考试选择 / 导出图片 / 分享这些按钮只对「全班成绩单」有意义。
+   平时成绩、画像、对比各自有自己的数据入口，切到这些标签就把这一层整块藏起来，
+   免得摆着一堆点不动或会导错内容的按钮。 */
+function scBarVisible(){
+  var show = (SC.tab === 'board');
+  var bar = document.getElementById('scBar'), note = document.getElementById('scNotebar');
+  if(bar) bar.style.display = show ? '' : 'none';
+  if(note) note.style.display = show ? '' : 'none';
+}
 function scRenderBar(){
   var opts = SC.exams.map(function(e){
     return '<option value="' + e.id + '"' + (SC.exam && e.id === SC.exam.id ? ' selected' : '') + '>'
@@ -16736,7 +16812,7 @@ function scRenderTabs(){
     + '<button class="' + (SC.tab === 'pk' ? 'on' : '') + '" onclick="scSetTab(\'pk\')">成绩对比</button>';
 }
 function scSetTab(t){
-  SC.tab = t; scRenderTabs(); scRenderPane();
+  SC.tab = t; scRenderTabs(); scBarVisible(); scRenderPane();
   /* v3.18.0：三种视角各有一条链接，#/scores/me 直接落到我的画像；v4.18.0 加平时成绩 */
   try{ setRoute(t === 'me' ? 'scores/me' : (t === 'daily' ? 'scores/daily' : (t === 'pk' ? 'scores/pk' : 'scores'))); }catch(e){}
 }
@@ -24156,8 +24232,9 @@ function hwExportPeriods(){
   return list.filter(function(hw){ return hw && !hwPeriodEmpty(hw); })
     .sort(function(a, b){
       var x = String(a.start || ''), y = String(b.start || '');
-      if(x < y) return -1;
-      if(x > y) return 1;
+      /* v4.18.2（站主）：最新的排最前面。作业越来越多，导出时不用往下翻找最近一期。 */
+      if(x > y) return -1;
+      if(x < y) return 1;
       return 0;
     });
 }
@@ -24342,31 +24419,29 @@ function hwExportBuild(periods, mode){
 function hwExportPick(periods, mode){
   var viewing = window.__HW_VIEWING;
   var viewingId = viewing ? String(viewing.id) : '';
-  /* v4.10.21：正在看的那一期可能不在清单里（自动期次 / 已切走），
-     这时默认勾「最新的一期」，不能让用户一进来一个都没勾、点导出被拦。 */
+  /* v4.18.2：periods 已是「最新在前」。正在看的那一期没有就默认勾最新一期（索引 0）。 */
   var hasViewing = false;
   periods.forEach(function(hw){ if(viewingId && String(hw.id) === viewingId) hasViewing = true; });
-  var fallbackIdx = hasViewing ? -1 : periods.length - 1;
+  var fallbackId = hasViewing ? '' : String(periods[0] && periods[0].id);
+  /* 勾选状态按 id 记，搜索过滤后索引会变，用 id 才不会串位 */
+  var picked = {};
+  periods.forEach(function(hw){
+    var id = String(hw.id);
+    picked[id] = (viewingId && id === viewingId) || (fallbackId && id === fallbackId);
+  });
+  var keyword = '';
+
   var html = '<div class="allboard-mask show" id="hwExPickMask"><div class="allboard-box" style="max-width:520px">'
     + '<div class="allboard-head"><span>导出哪些期的作业</span><button onclick="hwExportPickClose()">关闭</button></div>'
     + '<div style="padding:12px 16px 0;overflow:auto;max-height:64vh">'
-    +   '<div class="sc-hint">勾选要合进<b>同一张长图</b>的期次，按时间先后排好；没勾的不会出现在图上。</div>'
-    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px">'
+    +   '<div class="sc-hint">默认只导最新一期。勾选要合进<b>同一张长图</b>的期次，没勾的不会出现在图上。</div>'
+    +   '<div class="hw-ex-tools">'
+    +     '<input id="hwExSearch" class="gate-input" type="search" placeholder="🔍 搜索期次名称，如 第11周 / 周末" autocomplete="off">'
     +     '<button class="btn btn-sm btn-secondary" data-hw-exall="1">全选</button>'
     +     '<button class="btn btn-sm btn-secondary" data-hw-exall="0">全不选</button>'
     +   '</div>'
-    +   periods.map(function(hw, i){
-          var subjN = (hw.items || []).length;
-          var taskN = 0;
-          (hw.items || []).forEach(function(it){ taskN += (it.tasks || []).length; });
-          var label = hwPeriodLabel(hw);
-          var checked = ((viewingId && String(hw.id) === viewingId) || i === fallbackIdx) ? ' checked' : '';
-          return '<label class="sc-ex-row">'
-            + '<input type="checkbox" data-hw-exidx="' + i + '"' + checked + '>'
-            + '<span class="t">' + esc(label)
-            +   '<span class="s">' + subjN + ' 科 ' + taskN + ' 项</span>'
-            + '</span></label>';
-        }).join('')
+    +   '<div id="hwExList"></div>'
+    +   '<div class="hw-ex-empty" id="hwExEmpty" style="display:none">没有匹配的期次，请更换关键字</div>'
     + '</div>'
     + '<div style="display:flex;gap:10px;padding:0 16px 16px">'
     +   '<button class="btn btn-secondary" style="flex:1" onclick="hwExportPickClose()">取消</button>'
@@ -24375,29 +24450,52 @@ function hwExportPick(periods, mode){
     + '</div></div>';
 
   var host = document.createElement('div');
-  /* v4.10.21：给外层一个 id，关闭时整块摘掉，不在 body 里留空壳 */
   host.id = 'hwExPickHost';
   host.innerHTML = html;
   document.body.appendChild(host);
 
+  var listEl = host.querySelector('#hwExList');
+  function renderList(){
+    var kw = keyword.trim().toLowerCase();
+    var shown = periods.filter(function(hw){
+      if(!kw) return true;
+      return String(hwPeriodLabel(hw)).toLowerCase().indexOf(kw) >= 0 || String(hw.title||'').toLowerCase().indexOf(kw) >= 0;
+    });
+    host.querySelector('#hwExEmpty').style.display = shown.length ? 'none' : 'block';
+    listEl.innerHTML = shown.map(function(hw){
+      var id = String(hw.id);
+      var subjN = (hw.items || []).length;
+      var taskN = 0;
+      (hw.items || []).forEach(function(it){ taskN += (it.tasks || []).length; });
+      return '<label class="sc-ex-row">'
+        + '<input type="checkbox" data-hw-exid="' + esc(id) + '"' + (picked[id]?' checked':'') + '>'
+        + '<span class="t">' + esc(hwPeriodLabel(hw))
+        +   '<span class="s">' + subjN + ' 科 ' + taskN + ' 项</span>'
+        + '</span></label>';
+    }).join('');
+    /* 勾选变化写回 picked（用事件委托，重渲染后仍有效） */
+    Array.prototype.forEach.call(listEl.querySelectorAll('[data-hw-exid]'), function(cb){
+      cb.onchange = function(){ picked[cb.getAttribute('data-hw-exid')] = cb.checked; };
+    });
+  }
+  renderList();
+  var search = host.querySelector('#hwExSearch');
+  search.oninput = function(){ keyword = search.value; renderList(); };
   function setAll(v){
-    Array.prototype.forEach.call(host.querySelectorAll('[data-hw-exidx]'), function(cb){ cb.checked = v; });
+    periods.forEach(function(hw){ picked[String(hw.id)] = v; });
+    renderList();
   }
   Array.prototype.forEach.call(host.querySelectorAll('[data-hw-exall]'), function(b){
     b.onclick = function(){ setAll(b.getAttribute('data-hw-exall') === '1'); };
   });
   document.getElementById('hwExPickGo').onclick = function(){
-    var picked = [];
-    periods.forEach(function(hw, i){
-      var cb = host.querySelector('[data-hw-exidx="' + i + '"]');
-      if(cb && cb.checked) picked.push(hw);
-    });
+    var chosen = periods.filter(function(hw){ return picked[String(hw.id)]; });
     hwExportPickClose();
-    if(!picked.length){
+    if(!chosen.length){
       if(typeof uiMsg === 'function') uiMsg('至少勾选一期作业', '#af410f');
       return;
     }
-    hwExportBuild(picked, mode);
+    hwExportBuild(chosen, mode);
   };
 }
 function hwExportPickClose(){

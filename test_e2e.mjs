@@ -13760,8 +13760,9 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /if\(!imgMemo\[u\]\) imgMemo\[u\] = hwLoadImage\(u\)/.test(appV));
     /* ③ 多选弹窗有默认勾选、关闭后不留空壳 */
     t('★v4.10.21 导出多选默认勾选最新一期，关闭时整块移除',
-      /var fallbackIdx = hasViewing \? -1 : periods\.length - 1/.test(appV)
-      && /i === fallbackIdx/.test(appV)
+      /* v4.18.2：periods 已改为最新在前，fallback 取索引 0；勾选状态按 id 记，搜索过滤不错位 */
+      /fallbackId = hasViewing \? '' : String\(periods\[0\]/.test(appV)
+      && /picked\[String\(hw\.id\)\]/.test(appV)
       && /host\.id = 'hwExPickHost'/.test(appV)
       && /getElementById\('hwExPickHost'\)/.test(appV));
     /* ④ 清理缓存保留当前版本桶，别把离线能力一起清掉 */
@@ -14131,7 +14132,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       /function scopeRecs\(\)/.test(pgsrc) && /function subjRecs\(s\)\{ return scopeRecs\(\)/.test(pgsrc)
       && /byDateRecent = scopeRecs\(\)/.test(pgsrc) && /byDate = \{\}; scopeRecs\(\)/.test(pgsrc));
     t('★v4.18.1 学期切换条 UI + setTerm + 全部三年',
-      /function termBarHtml\(\)/.test(pgsrc) && /PG\.setTerm\(\\'all\\'\)/.test(pgsrc)
+      /function termBarHtml\(\)/.test(pgsrc) && /option value="all"/.test(pgsrc)
       && /TERM_CUR==='all'/.test(pgsrc) && /setTerm:setTerm/.test(pgsrc)
       && /\+ termBarHtml\(\)/.test(pgsrc));
     t('★v4.18.1 历史学期录入默认日期落该学期 + 录完自动切过去',
@@ -14140,6 +14141,46 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.1 学期切换条 CSS 存在且走主题变量',
       /\.pg-termbar\{/.test(pgCssV) && /\.pg-terms button\.on\{/.test(pgCssV)
       && /var\(--bg-2\)/.test(pgCssV) && /var\(--fg-2\)/.test(pgCssV));
+  }
+
+  /* ===== v4.18.2 布局收敛 + 导出排序搜索 ===== */
+  {
+    const pgsrc = readIdx();
+    const pgCssV = fs.readFileSync(new URL('./pg.css', import.meta.url), 'utf8');
+    /* ① 成绩分析：四标签在上、大考工具栏仅全班成绩单显示 */
+    t('★v4.18.2 四标签挪到工具栏上方',
+      /id="scTabs"><\/div>'[\s\S]{0,200}id="scNotebar"/.test(pgsrc)
+      && /id="scNotebar"/.test(pgsrc));
+    t('★v4.18.2 导出等按钮只在全班成绩单显示',
+      /function scBarVisible\(\)/.test(pgsrc) && /var show = \(SC\.tab === 'board'\)/.test(pgsrc)
+      && /bar\.style\.display = show/.test(pgsrc) && /note\.style\.display = show/.test(pgsrc)
+      && /scRenderTabs\(\); scBarVisible\(\); scRenderPane\(\)/.test(pgsrc));
+    /* ② 平时成绩：科目下拉选一科 + 学期下拉 + 去掉四标签六科全列 */
+    t('★v4.18.2 科目下拉选一科看，取代四标签',
+      /var curSubj = '语文'/.test(pgsrc) && /function setSubj\(s\)/.test(pgsrc)
+      && /function subjSelectHtml\(\)/.test(pgsrc) && /function renderOneSubject\(s\)/.test(pgsrc)
+      && /setSubj:setSubj/.test(pgsrc) && /PG\.setSubj\(this\.value\)/.test(pgsrc));
+    t('★v4.18.2 mount 用单科详情替换 pg-seg 四标签',
+      /\+ subjSelectHtml\(\)/.test(pgsrc) && /renderOneSubject\(curSubj\)/.test(pgsrc)
+      && /\+ '<div class="pg-overview">'\+renderOverview\(\)/.test(pgsrc)
+      && /\+ '<div class="pg-seg"/.test(pgsrc) === false);
+    t('★v4.18.2 学期改成下拉框（select 而非胶囊）',
+      /class="pg-select" id="pg_termSel" onchange="PG\.setTerm\(this\.value\)"/.test(pgsrc)
+      && /option value="all"/.test(pgsrc));
+    t('★v4.18.2 分科目标单独保存',
+      /function saveOneGoal\(s\)/.test(pgsrc) && /data-og="/.test(pgsrc) && /saveOneGoal:saveOneGoal/.test(pgsrc));
+    t('★v4.18.2 新 UI 的 CSS 齐全（下拉/单科卡/搜索框）',
+      /\.pg-subj-sel\{/.test(pgCssV) && /\.pg-onehead\{/.test(pgCssV)
+      && /\.pg-onegoal\{/.test(pgCssV) && /color-scheme/.test(pgCssV));
+    /* ③ 作业导出：最新在前 + 搜索 */
+    t('★v4.18.2 导出期次最新在前（降序）',
+      /if\(x > y\) return -1;/.test(appV) && /if\(x < y\) return 1;/.test(appV));
+    t('★v4.18.2 导出弹窗搜索期次名称',
+      /id="hwExSearch"/.test(appV) && /placeholder="🔍 搜索期次名称/.test(appV)
+      && /search\.oninput = function/.test(appV) && /hwPeriodLabel\(hw\)\)\.toLowerCase\(\)\.indexOf\(kw\)/.test(appV));
+    t('★v4.18.2 搜索过滤后勾选按 id 不错位',
+      /data-hw-exid="/.test(appV) && /picked\[cb\.getAttribute\('data-hw-exid'\)\] = cb\.checked/.test(appV)
+      && /hwExEmpty/.test(appV));
   }
 
   /* ===== 全量语法自检 =====
