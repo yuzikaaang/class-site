@@ -15333,6 +15333,31 @@ var PG = (function(){
   var RAW = { '化学':1,'生物':1 };            // 赋分科目，平常见原始分
   var DX = 96;                                 // 折线相邻点间距 px
   var recs = [], goals = {}, seq = 0;
+  /* v4.18.4 目标数据结构：
+     goals[科目]         = 原始分目标（数字，六科；化学/生物即「原始分目标」）
+     goals._asg[科目]    = 赋分后目标（只有化学/生物有意义；null=没填，留空）
+     goals._rank[basis]  = 总分排名目标 {grade:年级前N, class:班级前N}，basis=raw|asg
+     goals._subRank[科目]= 单科班级排名目标 {raw:班级前N, asg:班级前N}
+     全部新增字段默认留空；旧扁平数据自动迁移，原目标数字原样保留。 */
+  function numOrEmpty(v){ return (v!=null && v!=='' && !isNaN(Number(v))) ? Number(v) : ''; }
+  function normalizeGoals(g){
+    var out = {};
+    if(!g || typeof g !== 'object') g = {};
+    SUBJ.forEach(function(s){ out[s] = (g[s]!=null && !isNaN(Number(g[s]))) ? Number(g[s]) : DEF_GOALS[s]; });
+    out._asg = {};
+    SUBJ.forEach(function(s){ out._asg[s] = numOrEmpty(g._asg && g._asg[s]); });
+    var r0 = (g._rank && g._rank.raw) || {}, r1 = (g._rank && g._rank.asg) || {};
+    out._rank = {
+      raw: { grade:numOrEmpty(r0.grade), class:numOrEmpty(r0['class']) },
+      asg: { grade:numOrEmpty(r1.grade), class:numOrEmpty(r1['class']) }
+    };
+    out._subRank = {};
+    SUBJ.forEach(function(s){
+      var c = g._subRank && g._subRank[s];
+      out._subRank[s] = { raw:numOrEmpty(c&&c.raw), asg:numOrEmpty(c&&c.asg) };
+    });
+    return out;
+  }
   var CHART = {};                              // 每科 {mode:'slide'|'all', sel, count}
   var loaded = false, aiText = '', aiBusy = false;
   var TERMS = [], TERM_CUR = '', TERM_KEYS = {};  // v4.19.0 学期列表 / 当前学期key / key→对象
@@ -15348,7 +15373,7 @@ var PG = (function(){
     var r = readLS(KEY, null);
     recs = Array.isArray(r) ? r : [];
     var g = readLS(GKEY, null);
-    goals = (g && typeof g === 'object') ? g : Object.assign({}, DEF_GOALS);
+    goals = normalizeGoals(g);
     /* 兼容旧样本里用 v/f 字段、新结构用 got/full；统一到 v/full */
     recs.forEach(function(x){ if(x.got != null && x.v == null) x.v = x.got; if(x.full == null) x.full = SUBJG[x.subj]; });
     var mx = 0; recs.forEach(function(x){ var m = /^r(\d+)$/.exec(x.id||''); if(m) mx = Math.max(mx, +m[1]); });
@@ -15446,7 +15471,36 @@ var PG = (function(){
   function latest(s){ var a = subjRecs(s); return a[a.length-1] || null; }
   function fmtD(d){ return String(d||'').slice(5).replace('-','/'); }
   function rawTag(s){ return RAW[s] ? '<span class="raw">原始分</span>' : ''; }
-  function goalTotal(){ return SUBJ.reduce(function(a,s){ return a + (Number(goals[s])||0); }, 0); }
+  /* 目标总分：raw=六科原始分目标相加；asg=语数英物不变、化学生物取赋分目标（未填则用原始分兜底） */
+  function goalTotal(basis){
+    if(!loaded) load();
+    var b = basis || 'raw';
+    return SUBJ.reduce(function(a,s){
+      if(b === 'asg' && RAW[s] && goals._asg && goals._asg[s] !== '' && goals._asg[s] != null) return a + Number(goals._asg[s]);
+      return a + (Number(goals[s])||0);
+    }, 0);
+  }
+  /* 单科目标（按口径）：画像里按当前赋分口径取目标分 */
+  function goalOf(s, basis){
+    if(!loaded) load();
+    var b = basis || 'raw';
+    if(b === 'asg' && RAW[s] && goals._asg && goals._asg[s] !== '' && goals._asg[s] != null) return Number(goals._asg[s]);
+    return Number(goals[s])||0;
+  }
+  /* 赋分后目标是否已填齐（化学生物） */
+  function asgGoalsFilled(){ if(!loaded) load(); return SUBJ.filter(function(s){ return RAW[s]; }).every(function(s){ return goals._asg && goals._asg[s] !== '' && goals._asg[s] != null; }); }
+  /* 供个人画像读取的目标视图（不暴露内部对象） */
+  function goalView(basis){
+    if(!loaded) load();
+    var b = basis || 'raw';
+    return {
+      total: goalTotal(b),
+      asgFilled: asgGoalsFilled(),
+      scores: SUBJ.map(function(s){ return { s:s, goal:goalOf(s,b), isRaw:!!RAW[s] }; }),
+      rank: { grade:(goals._rank[b]||{}).grade, class:(goals._rank[b]||{}).class },
+      subRank: SUBJ.map(function(s){ return { s:s, cls:goals._subRank[s] ? goals._subRank[s][b] : '' }; })
+    };
+  }
 
   /* ---------- SVG 折线（一条长折线，跟手滑动 / 缩小看总趋势） ---------- */
   function lineSvg(s, arr, mini){
@@ -15572,12 +15626,23 @@ var PG = (function(){
     var fullTotal = SUBJ.reduce(function(a,s){ return a+SUBJG[s]; },0);
     var h = '';
     h += '<div class="pg-grid">';
-    h += '<div class="pg-card"><div class="pg-card-h"><b>目标进度</b><span>按各科最近成绩汇总</span></div>'
+    /* v4.18.4 目标进度：目标总分自动按各科目标相加（赋分前/后各一套，免手填） */
+    var gtAsg = goalTotal('asg');
+    var asgFilled = asgGoalsFilled();
+    var rkRaw = goals._rank.raw || {}, rkAsg = goals._rank.asg || {};
+    function rankTxt(r){ var a=[]; if(r.grade!==''&&r.grade!=null) a.push('年级前'+r.grade); if(r['class']!==''&&r['class']!=null) a.push('班级前'+r['class']); return a.length?a.join(' · '):''; }
+    var rkRawT = rankTxt(rkRaw), rkAsgT = rankTxt(rkAsg);
+    h += '<div class="pg-card"><div class="pg-card-h"><b>目标进度</b>'
+      + '<button class="pg-gset-btn" onclick="PG.openGoalSheet()">⚙ 设置目标</button></div>'
       + '<div class="pg-goal-num">'+total+'<small>/ 目标 '+gt+'</small></div>'
       + '<div class="pg-bar-track"><i id="pg_goalBar"></i><em></em></div>'
       + '<div class="pg-goal-meta"><span>总得分率 '+(fullTotal?(total/fullTotal*100).toFixed(1):'0')+'%</span>'
       + '<span>目标得分率 '+(fullTotal?(gt/fullTotal*100).toFixed(1):'0')+'%</span>'
-      + '<span class="gap">'+(total>=gt?('已超目标 '+(total-gt)+' 分'):('距目标 '+(gt-total)+' 分'))+'</span></div></div>';
+      + '<span class="gap">'+(total>=gt?('已超目标 '+(total-gt)+' 分'):('距目标 '+(gt-total)+' 分'))+'</span></div>'
+      + '<div class="pg-gt-grid">'
+      + '<div class="pg-gt-cell"><span class="k">赋分前目标总分</span><b>'+gt+'</b><span class="d">'+(rkRawT||'排名未设')+'</span></div>'
+      + '<div class="pg-gt-cell"><span class="k">赋分后目标总分</span><b>'+gtAsg+'</b><span class="d">'+(asgFilled?'':'(化学生物赋分目标未填，暂按原始分) ')+(rkAsgT||'排名未设')+'</span></div>'
+      + '</div></div>';
     h += '<div class="pg-card"><div class="pg-card-h"><b>最近成绩 · 对照目标</b><span>各科最近一次</span></div><div class="pg-pills">'
       + lats.map(function(r){ var ok=r.v>=(Number(goals[r.subj])||0); var d=ok?'达标':('差 '+((Number(goals[r.subj])||0)-r.v));
           return '<span class="pg-pill '+(ok?'ok':'no')+'">'+r.subj+' '+r.v+'<span class="d">'+d+'</span>'+rawTag(r.subj)+'</span>'; }).join('')
@@ -15715,8 +15780,15 @@ var PG = (function(){
       + (arr.length?('<span class="gap '+(cur>=goal?'up':'dn')+'">'+(cur>=goal?('已达标 +'+(cur-goal)):('距目标 '+(goal-cur)))+'</span>'):'')+'</div>';
     /* v4.18.3 目标输入区：无记录时也要显示，否则新用户看不到、改不了默认目标 */
     function goalBlock(){
-      return '<div class="pg-onegoal"><label>'+s+' 目标分'+(RAW[s]?'（原始分）':'')+'</label>'
-        + '<input type="number" data-og="'+s+'" value="'+goal+'"><button class="pg-btn ghost" onclick="PG.saveOneGoal(\''+s+'\')">保存</button></div>';
+      var rawInput = '<div class="pg-og-cell"><label>'+s+' 原始分目标</label><input type="number" data-og="'+s+'" value="'+goal+'"></div>';
+      var asgInput = '';
+      if(RAW[s]){
+        var av = goals._asg && goals._asg[s]!=null ? goals._asg[s] : '';
+        asgInput = '<div class="pg-og-cell"><label>'+s+' 赋分后目标 <span class="pg-og-tip">仅大考画像用</span></label>'
+          + '<input type="number" data-oa="'+s+'" value="'+av+'" placeholder="留空"></div>';
+      }
+      return '<div class="pg-onegoal'+' pg-onegoal2'+'">'+rawInput+asgInput
+        + '<button class="pg-btn ghost pg-og-save" onclick="PG.saveOneGoal(\''+s+'\')">保存目标</button></div>';
     }
     if(!arr.length){
       h += '<div class="pg-empty"><div class="ico">📈</div><p>还没有「'+s+'」的记录</p>'
@@ -15758,8 +15830,72 @@ var PG = (function(){
     var inp = document.querySelector('.pg-onegoal input[data-og="'+s+'"]');
     if(!inp) return;
     var v = Number(inp.value); if(isNaN(v)||v<0) return;
-    goals[s] = v; saveGoals2(); mount();
+    goals[s] = v;
+    /* v4.18.4：化学生物的赋分后目标一并保存（留空则不覆盖） */
+    var ai = document.querySelector('.pg-onegoal input[data-oa="'+s+'"]');
+    if(ai && RAW[s]){ var av = ai.value==='' ? '' : Number(ai.value); if(ai.value==='' || (!isNaN(av)&&av>=0)) goals._asg[s] = av; }
+    saveGoals2(); mount();
     if(typeof syncNotice==='function') syncNotice('ok', s+' 目标已保存');
+  }
+  /* ---------- v4.18.4 统一目标设置弹窗（平时成绩 / 个人画像共用） ----------
+     一个弹窗填完：六科分数目标（化学生物含赋分后目标）+ 总分排名目标（赋分前/后×年级/班级）
+     + 单科班级排名目标（六科，化学生物含赋分后）。挂到 body，两端入口都能开。 */
+  function openGoalSheet(){
+    if(!loaded) load();
+    var old = document.getElementById('pg_goalMask'); if(old && old.parentNode) old.parentNode.removeChild(old);
+    var h = '<div class="pg-gmask" id="pg_goalMask"><div class="pg-gsheet">'
+      + '<div class="pg-sheet-h"><b>🎯 设置我的目标</b><button onclick="PG.closeGoalSheet()" aria-label="关闭">×</button></div>'
+      + '<div class="pg-note" style="margin-top:0">这里填的目标会和「平时成绩」双端同步。留空的项目不参与对照。语文/数学/英语/物理不分赋分；化学/生物可分别设原始分目标与赋分后目标。</div>'
+      + '<div class="pg-gs-sec"><div class="pg-gs-t">① 分数目标</div><div class="pg-gs-grid">';
+    SUBJ.forEach(function(s){
+      h += '<div class="pg-gs-cell"><label>'+s+(RAW[s]?' <span class="pg-gs-tag">赋分科</span>':'')+'</label>'
+        + '<div class="pg-gs-row"><span>原始分</span><input type="number" data-gs="'+s+'" value="'+goals[s]+'" placeholder="留空"></div>';
+      if(RAW[s]) h += '<div class="pg-gs-row"><span>赋分后</span><input type="number" data-gsa="'+s+'" value="'+(goals._asg[s]!=null?goals._asg[s]:'')+'" placeholder="留空"></div>';
+      h += '</div>';
+    });
+    h += '</div></div>'
+      + '<div class="pg-gs-sec"><div class="pg-gs-t">② 总分排名目标 <span class="pg-gs-hint">年级 / 班级前几名</span></div><div class="pg-gs-grid pg-gs-rank">';
+    [['raw','赋分前'],['asg','赋分后']].forEach(function(p){
+      var r = goals._rank[p[0]] || {};
+      h += '<div class="pg-gs-cell"><label>'+p[1]+'</label>'
+        + '<div class="pg-gs-row"><span>年级前</span><input type="number" data-gr="'+p[0]+'-g" value="'+(r.grade!=null?r.grade:'')+'" placeholder="留空"></div>'
+        + '<div class="pg-gs-row"><span>班级前</span><input type="number" data-gr="'+p[0]+'-c" value="'+(r['class']!=null?r['class']:'')+'" placeholder="留空"></div></div>';
+    });
+    h += '</div></div>'
+      + '<div class="pg-gs-sec"><div class="pg-gs-t">③ 单科班级排名目标 <span class="pg-gs-hint">每科班级前几名</span></div><div class="pg-gs-grid">';
+    SUBJ.forEach(function(s){
+      var sr = goals._subRank[s] || {};
+      h += '<div class="pg-gs-cell"><label>'+s+'</label>'
+        + '<div class="pg-gs-row"><span>班级前</span><input type="number" data-gcr="'+s+'" value="'+(sr.raw!=null?sr.raw:'')+'" placeholder="留空"></div>';
+      if(RAW[s]) h += '<div class="pg-gs-row"><span>赋分后</span><input type="number" data-gca="'+s+'" value="'+(sr.asg!=null?sr.asg:'')+'" placeholder="留空"></div>';
+      h += '</div>';
+    });
+    h += '</div></div>'
+      + '<button class="pg-btn pg-gs-save" onclick="PG.saveGoalSheet()">保存全部目标</button>'
+      + '</div></div>';
+    document.body.insertAdjacentHTML('beforeend', h);
+    var mask = document.getElementById('pg_goalMask');
+    if(mask) mask.addEventListener('click', function(e){ if(e.target===mask) closeGoalSheet(); });
+  }
+  function closeGoalSheet(){ var m=document.getElementById('pg_goalMask'); if(m&&m.parentNode) m.parentNode.removeChild(m); }
+  function saveGoalSheet(){
+    if(!loaded) load();
+    var mask = document.getElementById('pg_goalMask'); if(!mask) return;
+    function val(sel){ var el=mask.querySelector(sel); if(!el) return ''; return el.value===''?'':Number(el.value); }
+    SUBJ.forEach(function(s){
+      var v = val('[data-gs="'+s+'"]'); if(v!=='' && !isNaN(v) && v>=0) goals[s]=v;
+      if(RAW[s]){ var a=val('[data-gsa="'+s+'"]'); goals._asg[s] = (a===''||(Number(a)>=0&&!isNaN(a)))?a:goals._asg[s]; }
+      var cr=val('[data-gcr="'+s+'"]'); goals._subRank[s] = goals._subRank[s]||{raw:'',asg:''};
+      goals._subRank[s].raw = (cr===''||(Number(cr)>=0&&!isNaN(cr)))?cr:'';
+      if(RAW[s]){ var ca=val('[data-gca="'+s+'"]'); goals._subRank[s].asg = (ca===''||(Number(ca)>=0&&!isNaN(ca)))?ca:''; }
+    });
+    [['raw','g','grade'],['raw','c','class'],['asg','g','grade'],['asg','c','class']].forEach(function(x){
+      var v=val('[data-gr="'+x[0]+'-'+x[1]+'"]'); goals._rank[x[0]] = goals._rank[x[0]]||{grade:'',class:''};
+      goals._rank[x[0]][x[2]] = (v===''||(Number(v)>=0&&!isNaN(v)))?v:'';
+    });
+    saveGoals2(); closeGoalSheet();
+    if(typeof scRenderPane==='function') scRenderPane(); else mount();
+    if(typeof syncNotice==='function') syncNotice('ok','✓ 目标已保存，平时成绩与画像已同步');
   }
   /* v4.18.3 删除：单条 = 某次考试某一科；清空本科 = 这一科全部记录 */
   function delOneRec(id){
@@ -15993,6 +16129,9 @@ var PG = (function(){
     setTerm:setTerm, setSubj:setSubj, saveOneGoal:saveOneGoal, delOneRec:delOneRec, clearSubj:clearSubj,
     _rows:function(){ return sheetRows; },
     _data:function(){ return {recs:recs,goals:goals}; },
+    /* v4.18.4 目标双端接口：给个人画像读目标、给两端统一弹窗读写 */
+    goalView:goalView, goalTotal:goalTotal, goalOf:goalOf, asgGoalsFilled:asgGoalsFilled,
+    openGoalSheet:openGoalSheet, saveGoalSheet:saveGoalSheet,
     _terms:function(){ return {list:TERMS.map(function(t){ return {key:t.key,name:t.name,start:t.start,end:t.end}; }),cur:TERM_CUR,scope:scopeRecs().length,total:recs.length}; },
     _termOf:function(d){ return termOf(d); },
     _rebuild:function(){ buildTerms(); }
@@ -17849,6 +17988,40 @@ function scRenderMe(){
     + '</div>'
     + '</div>';
 
+  /* ①-b v4.18.4 我的目标卡：目标分跟当前赋分口径切换，双端与「平时成绩」同步 */
+  if(typeof PG !== 'undefined' && PG && typeof PG.goalView === 'function'){
+    var gv = PG.goalView(SC.basis === 'graded' ? 'asg' : 'raw');
+    var basisTxt = SC.basis === 'graded' ? '赋分后' : '赋分前';
+    var gapTxt = (gv.total && myTotal != null)
+      ? (myTotal >= gv.total ? ('已超目标 ' + fmtNum(myTotal - gv.total) + ' 分') : ('距目标 ' + fmtNum(gv.total - myTotal) + ' 分'))
+      : '';
+    /* 总分排名目标达成 */
+    var gr = gv.rank || {}, grBits = [];
+    if(gr.grade !== '' && gr.grade != null) grBits.push('年级前 ' + gr.grade + (meRow.schoolRank != null ? (meRow.schoolRank <= gr.grade ? ' ✓已达成' : '（现 ' + meRow.schoolRank + '）') : ''));
+    if(gr['class'] !== '' && gr['class'] != null) grBits.push('班级前 ' + gr['class'] + (myRank ? (myRank <= gr['class'] ? ' ✓已达成' : '（现 ' + myRank + '）') : ''));
+    /* 各科班级排名目标达成 */
+    var subRankBits = [];
+    (gv.subRank || []).forEach(function(it){
+      if(it.cls === '' || it.cls == null) return;
+      var s = subs.filter(function(x){ return x.key === it.s || x.name === it.s; })[0];
+      if(!s) return;
+      var real = rk.subj[s.key] ? rk.subj[s.key].rank[meRow.id] : null;
+      subRankBits.push(esc(s.name) + ' 前' + it.cls + (real ? (real <= it.cls ? ' ✓' : '（现' + real + '）') : ''));
+    });
+    html += '<div class="sc-card sc-goalcard" data-scblk="me_goal">'
+      + '<div class="sc-card-h">🎯 我的目标 <span class="sc-goal-basis">' + basisTxt + '口径 · 与平时成绩同步</span>'
+      +   '<button class="sc-goal-set" onclick="PG.openGoalSheet()">⚙ 设置目标</button></div>'
+      + '<div class="sc-goal-main">'
+      +   '<div class="sc-goal-total"><b>' + (gv.total || '—') + '</b><span>目标总分（' + basisTxt + '）</span>'
+      +     (gapTxt ? '<em>' + gapTxt + '</em>' : '') + '</div>'
+      +   (gv.total && !gv.asgFilled && SC.basis === 'graded' ? '<div class="sc-dim" style="font-size:.72rem">化学/生物未设赋分后目标，暂按原始分目标计入。</div>' : '')
+      + '</div>'
+      + (grBits.length ? '<div class="sc-goal-line"><b>总分排名目标</b><span>' + grBits.join('　') + '</span></div>' : '')
+      + (subRankBits.length ? '<div class="sc-goal-line"><b>单科班级目标</b><span>' + subRankBits.join('　') + '</span></div>' : '')
+      + (!grBits.length && !subRankBits.length ? '<div class="sc-dim" style="font-size:.76rem">还没设排名目标，点右上「⚙ 设置目标」填上年级/班级前几名。</div>' : '')
+      + '</div>';
+  }
+
   /* ② 上线情况 —— 特控/本科/600 三条线都是按「赋分总分」划的，
      原始口径下总分与它们不可比（站主要求：原始分不跟三线比较），故只在赋分口径显示。 */
   var cuts = (SC.exam.cutlines || []).filter(function(c){ return c.score != null; });
@@ -19687,16 +19860,49 @@ function scMeAnalysis(meRow, rk, st, myTotal, myRank, subs){
     return v ? '<div class="sc-ai-row"><span class="sc-ai-k">' + k + '</span><span class="sc-ai-v">' + v + '</span></div>' : '';
   };
 
+  /* v4.18.4 目标专项：结合本人定的目标总分/排名目标与本次实际，给达成情况与差距建议 */
+  var goalText = '';
+  if(typeof PG !== 'undefined' && PG && typeof PG.goalView === 'function' && myTotal != null){
+    var gv = PG.goalView(SC.basis === 'graded' ? 'asg' : 'raw');
+    var gbits = [];
+    if(gv.total){
+      gbits.push(myTotal >= gv.total
+        ? '本次总分已<b>达到目标 ' + fmtNum(gv.total) + '</b>（超 ' + fmtNum(myTotal - gv.total) + ' 分）'
+        : '距目标总分 <b>' + fmtNum(gv.total) + '</b> 还差 <b>' + fmtNum(gv.total - myTotal) + '</b> 分');
+    }
+    var gr = gv.rank || {};
+    if(gr['class'] !== '' && gr['class'] != null && myRank){
+      gbits.push(myRank <= gr['class'] ? ('班级排名已达目标（前 ' + gr['class'] + '）') : ('班级排名距「前 ' + gr['class'] + '」还差 ' + (myRank - gr['class']) + ' 名'));
+    }
+    if(gr.grade !== '' && gr.grade != null && meRow.schoolRank != null){
+      gbits.push(meRow.schoolRank <= gr.grade ? ('年级排名已达目标（前 ' + gr.grade + '）') : ('年级排名距「前 ' + gr.grade + '」还差 ' + (meRow.schoolRank - gr.grade) + ' 名'));
+    }
+    /* 找出离单科班级目标最远的一科，给具体动作 */
+    var worstSub = null;
+    (gv.subRank || []).forEach(function(it){
+      if(it.cls === '' || it.cls == null) return;
+      var s = subs.filter(function(x){ return x.key === it.s || x.name === it.s; })[0];
+      if(!s) return;
+      var real = (rk.subj[s.key] && rk.subj[s.key].rank[meRow.id]) || null;
+      if(real && real > it.cls && (!worstSub || (real - it.cls) > (worstSub.gap))){
+        worstSub = { name:s.name, gap:real - it.cls, target:it.cls };
+      }
+    });
+    if(worstSub) gbits.push('单科里 <b>' + esc(worstSub.name) + '</b> 离班级前 ' + worstSub.target + ' 的目标最远（差 ' + worstSub.gap + ' 名），优先补这一科');
+    if(gbits.length) goalText = gbits.join('；') + '。目标可在「设置目标」里随时调整，两端同步。';
+  }
+
   var bodyHtml = '<div class="sc-ai-concl">' + concl + '</div>'
     + rowHtml('亮点', goodText)
     + rowHtml('短板', weakText)
     + rowHtml('均衡', balanceText)
     + rowHtml('趋势', trendText)
     + rowHtml('上线', cutText)
+    + rowHtml('目标', goalText)
     + '<div class="sc-ai-todo"><b>下一步可以这样做</b><ol>'
     +   todos.map(function(t){ return '<li>' + t + '</li>'; }).join('')
     + '</ol></div>'
-    + '<div class="sc-figcap">按当前考试数据实时算（定位 / 单科强弱 / 均衡度 / 历次趋势 / 上线距离五类规则），'
+    + '<div class="sc-figcap">按当前考试数据实时算（定位 / 单科强弱 / 均衡度 / 历次趋势 / 上线距离 / 目标达成六类规则），'
     + '换考试、切赋分口径都会重算。</div>';
 
   /* v3.16.1：换了考试就把上一场的结果丢掉 —— 否则切过去还显示着上一场的分析，

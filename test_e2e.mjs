@@ -14210,12 +14210,66 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.3 删除按钮 CSS 齐全（含明暗变量）',
       /\.pg-clear-subj\{/.test(pgCss183) && /\.pg-rec-del\{/.test(pgCss183)
       && /--pg-no-ink/.test(pgCss183));
-    /* ④ 版本号四处一致 */
-    t('★v4.18.3 版本号前台/后台/SW/API 四处一致',
-      /var SITE_VERSION = '4\.18\.3'/.test(readIdx())
-      && /const SITE_VER = '4\.18\.3'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-      && /const API_VER = '4\.18\.3';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-      && /var SITE_VERSION = '4\.18\.3'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+    /* ④ 版本号四处一致（随版本升级同步到 4.18.4） */
+    t('★版本 前台/后台/SW/API 四处一致',
+      /var SITE_VERSION = '4\.18\.4'/.test(readIdx())
+      && /const SITE_VER = '4\.18\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+      && /const API_VER = '4\.18\.4';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+      && /var SITE_VERSION = '4\.18\.4'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+  }
+
+  /* ===== v4.18.4 目标双端同步 + 赋分目标 + 排名目标 + AI目标专项 ===== */
+  {
+    const appV184 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const pgCss184 = fs.readFileSync(new URL('./pg.css', import.meta.url), 'utf8');
+    const idxV184 = readIdx();
+    /* ① 数据结构迁移与读取接口 */
+    t('★v4.18.4 目标结构 normalizeGoals 迁移旧数据（_asg/_rank/_subRank）',
+      /function normalizeGoals\(g\)/.test(appV184)
+      && /out\._asg\[s\] = numOrEmpty/.test(appV184)
+      && /out\._rank = \{/.test(appV184) && /out\._subRank\[s\]/.test(appV184)
+      && /goals = normalizeGoals\(g\)/.test(appV184));
+    t('★v4.18.4 目标总分双口径自动算 + 未填赋分目标兜底',
+      /function goalTotal\(basis\)/.test(appV184)
+      && /b === 'asg' && RAW\[s\]/.test(appV184)
+      && /function asgGoalsFilled\(\)/.test(appV184)
+      && /function goalView\(basis\)/.test(appV184));
+    /* ② 平时成绩目标卡：设置按钮 + 双口径目标总分格 + 双目标输入 */
+    t('★v4.18.4 平时成绩目标进度卡双口径展示 + 设置入口',
+      /pg-gset-btn/.test(appV184) && /PG\.openGoalSheet\(\)/.test(appV184)
+      && /pg-gt-grid/.test(appV184) && /赋分前目标总分/.test(appV184) && /赋分后目标总分/.test(appV184));
+    t('★v4.18.4 化学生物双目标输入（data-og + data-oa）',
+      /data-oa="/.test(appV184) && /goals\._asg\[s\] = av/.test(appV184)
+      && /pg-onegoal2/.test(appV184));
+    /* ③ 统一弹窗：一个弹窗全填 + 保存双端同步 */
+    t('★v4.18.4 统一目标弹窗（分数/排名/班级目标分区）',
+      /function openGoalSheet\(\)/.test(appV184) && /function saveGoalSheet\(\)/.test(appV184)
+      && /pg_goalMask/.test(appV184)
+      && /data-gs=/.test(appV184) && /data-gr=/.test(appV184) && /data-gcr=/.test(appV184)
+      && /data-gsa=/.test(appV184) && /data-gca=/.test(appV184));
+    t('★v4.18.4 保存目标后 scRenderPane 双端重绘 + 接口暴露',
+      /saveGoals2\(\); closeGoalSheet\(\)/.test(appV184)
+      && /scRenderPane\(\)/.test(appV184)
+      && /goalView:goalView, goalTotal:goalTotal/.test(appV184)
+      && /openGoalSheet:openGoalSheet, saveGoalSheet:saveGoalSheet/.test(appV184));
+    /* ④ 个人画像目标卡 + AI 目标专项 */
+    t('★v4.18.4 个人画像我的目标卡（跟口径 + 排名达成 + 设置按钮）',
+      /sc-goalcard/.test(appV184) && /data-scblk="me_goal"/.test(appV184)
+      && /PG\.goalView\(SC\.basis === 'graded' \? 'asg' : 'raw'\)/.test(appV184)
+      && /sc-goal-basis/.test(appV184) && /sc-goal-set/.test(appV184));
+    t('★v4.18.4 AI 分析末尾目标专项（rowHtml 目标）',
+      /rowHtml\('目标', goalText\)/.test(appV184)
+      && /var goalText = ''/.test(appV184)
+      && /距目标总分/.test(appV184) && /已达目标/.test(appV184));
+    /* ⑤ 读取接口 load 保护（防止从画像直达时 goals 未初始化） */
+    t('★v4.18.4 goalView/goalTotal 读取前 load 保护',
+      /function goalTotal\(basis\)\{\s*if\(!loaded\) load\(\)/.test(appV184)
+      && /function goalView\(basis\)\{\s*if\(!loaded\) load\(\)/.test(appV184));
+    /* ⑥ 样式齐全（明暗） */
+    t('★v4.18.4 CSS 弹窗/目标卡样式齐全',
+      /\.pg-gmask\{/.test(pgCss184) && /\.pg-gsheet\{/.test(pgCss184)
+      && /\.pg-gt-grid\{/.test(pgCss184) && /\.pg-onegoal2\{/.test(pgCss184)
+      && /\.sc-goalcard/.test(idxV184) && /\.dark \.sc-goal-total b/.test(idxV184));
   }
 
   /* ===== 全量语法自检 =====
