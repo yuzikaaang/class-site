@@ -14077,6 +14077,42 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && !/exPush/.test(adm3V) && !/exAdd/.test(adm3V));
   }
 
+  /* ===== v4.18.0 平时成绩板块 ===== */
+  {
+    const pgsrc = readIdx();
+    const pgCssV = fs.readFileSync(new URL('./pg.css', import.meta.url), 'utf8');
+    const dataJsV = readApi('data.js');
+    t('★v4.18.0 平时成绩模块存在且挂到全局',
+      /var PG = \(function\(\)/.test(pgsrc) && /window\.PG = PG/.test(pgsrc)
+      && /function mount\(\)/.test(pgsrc));
+    t('★v4.18.0 平时成绩作为「我的画像」旁的第四个标签',
+      /scSetTab\(\\'daily\\'\)/.test(pgsrc) && /\>平时成绩\</.test(pgsrc)
+      && /SC\.tab === 'daily'/.test(pgsrc));
+    t('★v4.18.0 平时成绩面板分发到 PG.mount',
+      /SC\.tab === 'daily'\)\{ if\(typeof PG/.test(pgsrc) && /PG\.mount\(\)/.test(pgsrc));
+    t('★v4.18.0 按日期×单科的数据模型与六科趋势图',
+      /cls_grade_log_v1/.test(pgsrc) && /cls_grade_goals_v1/.test(pgsrc)
+      && /subjRecs/.test(pgsrc) && /lineSvg/.test(pgsrc)
+      && /PH?YS|物理/.test(pgsrc));
+    t('★v4.18.0 折线连续跟手滑动 + 缩小看总趋势两模式',
+      /pointerdown/.test(pgsrc) && /pointermove/.test(pgsrc)
+      && /mode==='all'/.test(pgsrc) && /缩小看总趋势/.test(pgsrc)
+      && /看每次明细/.test(pgsrc));
+    t('★v4.18.0 明暗双模式走 CSS 变量，SVG 也用变量',
+      /--pg-brand/.test(pgCssV) && /\.dark\{/.test(pgCssV)
+      && /stroke="var\(--pg-/.test(pgsrc)
+      && /pg\.css\?v=\d+/.test(pgsrc));
+    t('★v4.18.0 平时成绩样式表进预缓存（离线可显示）',
+      /'\.\/pg\.css'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')));
+    t('★v4.18.0 私有数据后端白名单按用户隔离',
+      /'cls_grade_log_v1'/.test(dataJsV) && /'cls_grade_goals_v1'/.test(dataJsV)
+      && /where user_id = \$\{u\.id\}/.test(dataJsV));
+    t('★v4.18.0 AI 分析脱敏（不发姓名）且走 aiRequest',
+      /不含姓名/.test(pgsrc) && /aiRequest\(msg/.test(pgsrc) && /aiPayload/.test(pgsrc));
+    t('★v4.18.0 深链 scores/daily 路由',
+      /p\[1\] === 'daily'/.test(pgsrc) && /t === 'daily' \? 'scores\/daily'/.test(pgsrc));
+  }
+
   /* ===== 全量语法自检 =====
      v4.10.2 教训：一次改文案时把中文标点写进了单引号字符串，
      整个 big.js 语法报废 —— 而 e2e 全是正则断言，抓不到。

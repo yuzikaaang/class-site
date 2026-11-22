@@ -2067,6 +2067,7 @@ function parseRoute(raw){
   if(p[0] === 'scores'){
     if(p[1] === 'exam' && p[2]) out.exam = parseInt(p[2], 10);
     if(p[1] === 'me') out.tab = 'me';
+    if(p[1] === 'daily') out.tab = 'daily';
     if(p[1] === 'pk') out.tab = 'pk';
     return out;
   }
@@ -2104,6 +2105,7 @@ function routeOfView(){
   if(id === 3){
     var t = (typeof SC !== 'undefined' && SC && SC.tab) ? SC.tab : 'board';
     if(t === 'me') return 'scores/me';
+    if(t === 'daily') return 'scores/daily';
     if(t === 'pk') return 'scores/pk';
     return 'scores';
   }
@@ -4409,6 +4411,8 @@ var CLOUD_KEYS = [
   'cls_dj_my_songs','cls_dj_pending','cls_dj_history','cls_dj_copy_note',
   /* 学习与班级事务 */
   'cls_study_plan','cls_notice_read','cls_class_list',
+  /* v4.18.0 平时成绩：个人私有，按 user_id 隔离 */
+  'cls_grade_log_v1','cls_grade_goals_v1',
   /* 站内偏好 */
   'cls_ann_filter','cls_board_collapsed','cls_side_open','cls_return_view',
 ];
@@ -15306,6 +15310,505 @@ function openScoreAnal(){
 }
 /* 内嵌挂载：切到板块后、以及 render() 重建 DOM 之后，都要调一次。
    两种情况不一样 —— 第一次要真的去请求，后面只是「容器被重建了，重绘一下」。 */
+
+/* ============================================================================
+ * v4.18.0 平时成绩（PG = Personal Grades）
+ * ----------------------------------------------------------------------------
+ * 成绩分析板块里与「我的画像」并列的第四个标签。个人私有数据，按 user_id 隔离。
+ * 来源：效果原型 v0.6（方案已按站主多轮反馈定稿）。改造要点：
+ *   · 数据从演示样本改为 localStorage(cls_grade_log_v1 / cls_grade_goals_v1)，
+ *     两键已进 CLOUD_KEYS 与后端白名单，随现有个人数据通道自动云同步、按账号隔离。
+ *   · 配色一律走 var(--pg-*)，随昼夜主题自动切换；SVG 表现属性也用 CSS 变量。
+ *   · toast 走 syncNotice；AI 走 aiRequest（只发脱敏分数、不发姓名），失败有规则兜底。
+ *   · 未登录不给录入，数据接口层本身也按 user_id 隔离，前端不提供「看别人」入口。
+ * ========================================================================= */
+var PG = (function(){
+  var KEY = 'cls_grade_log_v1', GKEY = 'cls_grade_goals_v1';
+  var SUBJG = { '语文':150,'数学':150,'英语':150,'物理':100,'化学':100,'生物':100 };
+  var SUBJ = Object.keys(SUBJG);
+  var DEF_GOALS = { '语文':120,'数学':130,'英语':120,'物理':90,'化学':90,'生物':90 };
+  var RAW = { '化学':1,'生物':1 };            // 赋分科目，平常见原始分
+  var DX = 96;                                 // 折线相邻点间距 px
+  var recs = [], goals = {}, seq = 0;
+  var CHART = {};                              // 每科 {mode:'slide'|'all', sel, count}
+  var loaded = false, aiText = '', aiBusy = false;
+
+  /* ---------- 本地存储（云同步交给 hookLocalStorage + CLOUD_KEYS） ---------- */
+  function readLS(k, def){
+    try{ var v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); }
+    catch(e){ return def; }
+  }
+  function writeLS(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function load(){
+    var r = readLS(KEY, null);
+    recs = Array.isArray(r) ? r : [];
+    var g = readLS(GKEY, null);
+    goals = (g && typeof g === 'object') ? g : Object.assign({}, DEF_GOALS);
+    /* 兼容旧样本里用 v/f 字段、新结构用 got/full；统一到 v/full */
+    recs.forEach(function(x){ if(x.got != null && x.v == null) x.v = x.got; if(x.full == null) x.full = SUBJG[x.subj]; });
+    var mx = 0; recs.forEach(function(x){ var m = /^r(\d+)$/.exec(x.id||''); if(m) mx = Math.max(mx, +m[1]); });
+    seq = mx;
+    loaded = true;
+  }
+  function save(){ writeLS(KEY, recs); }
+  function saveGoals(){ writeLS(GKEY, goals); }
+
+  /* ---------- 数据聚合 ---------- */
+  function subjRecs(s){ return recs.filter(function(r){ return r.subj === s; }).sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); }); }
+  function latest(s){ var a = subjRecs(s); return a[a.length-1] || null; }
+  function fmtD(d){ return String(d||'').slice(5).replace('-','/'); }
+  function rawTag(s){ return RAW[s] ? '<span class="raw">原始分</span>' : ''; }
+  function goalTotal(){ return SUBJ.reduce(function(a,s){ return a + (Number(goals[s])||0); }, 0); }
+
+  /* ---------- SVG 折线（一条长折线，跟手滑动 / 缩小看总趋势） ---------- */
+  function lineSvg(s, arr, mini){
+    var VW = mini ? 420 : (DX*(arr.length-1)+80), H = 190, pad = 40, top = 32, bot = 42;
+    var max = SUBJG[s];
+    var minv = Math.min.apply(null, arr.map(function(r){ return Number(r.v); }));
+    var min = Math.max(0, minv - 14);
+    var x = function(i){ return arr.length <= 1 ? VW/2 : pad + i*(VW-2*pad)/(arr.length-1); };
+    var y = function(v){ return H - bot - (v-min)/(max-min||1)*(H-top-bot); };
+    var goal = Number(goals[s])||0, gy = y(goal);
+    var gid = 'pg_g_' + s + '_' + (mini?'all':Math.random().toString(36).slice(2,7));
+    var g = '';
+    for(var i=0;i<=3;i++){ var yy = top + i*(H-top-bot)/3; g += '<line x1="'+pad+'" y1="'+yy+'" x2="'+(VW-pad)+'" y2="'+yy+'" stroke="var(--pg-grid)" stroke-dasharray="3 5"/>'; }
+    var pts = arr.map(function(r,i){ return x(i)+','+y(r.v); }).join(' ');
+    var area = 'M '+x(0)+' '+(H-bot)+' L '+arr.map(function(r,i){ return x(i)+','+y(r.v); }).join(' L ')+' L '+x(arr.length-1)+' '+(H-bot)+' Z';
+    var dots = '', labels = '';
+    arr.forEach(function(r,i){
+      if(mini){
+        dots += '<circle cx="'+x(i)+'" cy="'+y(r.v)+'" r="2.5" fill="var(--pg-brand2)"/>';
+      }else{
+        var sel = (CHART[s]&&CHART[s].sel) === r.id;
+        var col = r.v >= goal ? 'var(--pg-up)' : 'var(--pg-down)';
+        dots += '<g onclick="PG.ptClick(event,\''+s+'\',\''+r.id+'\')" class="pg-pt'+(sel?' sel':'')+'" data-id="'+r.id+'">'
+          + '<circle cx="'+x(i)+'" cy="'+y(r.v)+'" r="'+(sel?7:5)+'" fill="'+(sel?'var(--fg)':'var(--pg-brand2)')+'" stroke="var(--pg-brand)" stroke-width="'+(sel?3:2)+'"/>'
+          + '<text x="'+x(i)+'" y="'+(y(r.v)-13)+'" fill="'+col+'" font-size="11" font-weight="700" text-anchor="middle">'+r.v+'</text>'
+          + '</g>';
+      }
+      var step = mini ? (arr.length>8?2:1) : 1;
+      if(i%step===0 || i===arr.length-1) labels += '<text x="'+x(i)+'" y="'+(H-14)+'" fill="var(--fg-3)" font-size="10" text-anchor="middle">'+fmtD(r.date)+'</text>';
+    });
+    return '<svg viewBox="0 0 '+VW+' '+H+'"'+(mini?'':' style="width:'+VW+'px;height:190px"')+'>'
+      + '<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--pg-brand)" stop-opacity=".35"/><stop offset="1" stop-color="var(--pg-brand)" stop-opacity="0"/></linearGradient></defs>'
+      + g
+      + '<line x1="'+pad+'" y1="'+gy+'" x2="'+(VW-pad)+'" y2="'+gy+'" stroke="var(--pg-warn)" stroke-dasharray="6 4"/>'
+      + '<text x="'+(pad+2)+'" y="'+(gy-7)+'" fill="var(--pg-warn)" font-size="11" text-anchor="start">目标 '+goal+'</text>'
+      + '<path d="'+area+'" fill="url(#'+gid+')"/>'
+      + '<polyline points="'+pts+'" fill="none" stroke="var(--pg-brand2)" stroke-width="'+(mini?2:2.5)+'" stroke-linejoin="round"/>'
+      + dots + labels + '</svg>';
+  }
+  function chartHtml(s, arr){
+    var old = CHART[s] || {};
+    var mode = old.mode || 'slide';
+    CHART[s] = { mode:mode, sel: old.sel || arr[arr.length-1].id, count:arr.length };
+    return '<div class="pg-chart-scroll" id="pg_cs_'+s+'" data-x="0" data-max="0">'
+        + '<div class="pg-chart-track" id="pg_ct_'+s+'">'+lineSvg(s,arr,false)+'</div></div>'
+      + '<div id="pg_ca_'+s+'" style="display:'+(mode==='all'?'block':'none')+'">'+lineSvg(s,arr,true)+'</div>'
+      + '<div class="pg-chart-nav"><button class="pg-mini-toggle" id="pg_mt_'+s+'" onclick="PG.chartMode(\''+s+'\')">'+(mode==='all'?'看每次明细':'缩小看总趋势')+'</button></div>'
+      + '<div class="pg-chart-tip" id="pg_tip_'+s+'">'+(mode==='all'?('总趋势：全部 '+arr.length+' 次一屏看全 · 点「看每次明细」回到滑动'):('按住左右滑动看全部 '+arr.length+' 次 · 点圆点看详情'))+'</div>';
+  }
+  function bindDrag(s, wrap, track){
+    var sx=0, sy=0, ox=0, moved=false, deciding=false;
+    wrap.addEventListener('pointerdown', function(e){
+      if(CHART[s] && CHART[s].mode==='all') return;
+      deciding=true; moved=false; sx=e.clientX; sy=e.clientY; ox=+wrap.dataset.x;
+      wrap.classList.add('dragging'); track.style.transition='none';
+      try{ wrap.setPointerCapture(e.pointerId); }catch(_){}
+    });
+    wrap.addEventListener('pointermove', function(e){
+      if(!deciding) return;
+      var dx=e.clientX-sx, dy=e.clientY-sy;
+      if(!moved){
+        if(Math.abs(dx)>5||Math.abs(dy)>5){ moved=true; if(Math.abs(dy)>Math.abs(dx)){ deciding=false; wrap.classList.remove('dragging'); return; } }
+        else return;
+      }
+      var m=+wrap.dataset.max, nx=Math.max(0,Math.min(m,ox-dx));
+      wrap.dataset.x=nx; track.style.transform='translateX('+(-nx)+'px)';
+    });
+    var end=function(){ deciding=false; wrap.classList.remove('dragging'); };
+    wrap.addEventListener('pointerup',end); wrap.addEventListener('pointercancel',end);
+  }
+  function initDrag(s){
+    var st=CHART[s]; if(!st||st.mode==='all') return;
+    var wrap=document.getElementById('pg_cs_'+s), track=document.getElementById('pg_ct_'+s);
+    if(!wrap||!track) return;
+    var width=track.scrollWidth, view=wrap.clientWidth;
+    if(!view) return;
+    if(!wrap._bound){ wrap._bound=true; bindDrag(s,wrap,track); }
+    var max=Math.max(0,width-view), inited=wrap.dataset.init==='1', oldMax=+wrap.dataset.max||1;
+    var ratio=inited?(+wrap.dataset.x||0)/oldMax:1;
+    wrap.dataset.max=max; wrap.dataset.x=max*ratio; wrap.dataset.init='1';
+    track.style.transform='translateX('+(-max*ratio)+'px)';
+  }
+  function bindDrags(){ SUBJ.forEach(initDrag); }
+  function ptClick(e,s,id){
+    var wrap=document.getElementById('pg_cs_'+s);
+    if(wrap&&wrap.classList.contains('dragging')) return;
+    e.stopPropagation();
+    var arr=subjRecs(s), i=-1; arr.forEach(function(r,k){ if(r.id===id) i=k; });
+    if(i<0) return;
+    CHART[s].sel=id;
+    var board=document.getElementById('pg_board_'+s);
+    if(board) Array.prototype.forEach.call(board.querySelectorAll('.pg-pt'),function(g){ g.classList.toggle('sel', g.getAttribute('data-id')===id); });
+    showDetail(s,i);
+  }
+  function chartMode(s){
+    var st=CHART[s]; if(!st) return;
+    st.mode = st.mode==='all' ? 'slide' : 'all';
+    var all = st.mode==='all';
+    var ca=document.getElementById('pg_ca_'+s), ct=document.getElementById('pg_ct_'+s);
+    if(ca) ca.style.display=all?'block':'none';
+    if(ct) ct.parentNode.style.display=all?'none':'block';
+    var mt=document.getElementById('pg_mt_'+s); if(mt) mt.textContent=all?'看每次明细':'缩小看总趋势';
+    var tip=document.getElementById('pg_tip_'+s); if(tip) tip.textContent=all?('总趋势：全部 '+st.count+' 次一屏看全 · 点「看每次明细」回到滑动'):('按住左右滑动看全部 '+st.count+' 次 · 点圆点看详情');
+    if(!all) setTimeout(function(){ initDrag(s); },30);
+  }
+  function showDetail(s,i){
+    var arr=subjRecs(s), r=arr[i], box=document.getElementById('pg_detail_'+s);
+    if(!r||!box) return;
+    var ok = r.v >= (Number(goals[r.subj])||0);
+    box.innerHTML = '<div class="h">📌 这一次 · '+r.date+' · '+esc(r.name||'')+'</div>'
+      + '<div class="kv"><span>类型 '+esc(r.t||'')+'</span>'
+      + '<span style="color:'+(ok?'var(--pg-up)':'var(--pg-down)')+'">'+r.subj+' '+r.v+' / '+(r.full||SUBJG[r.subj])+'（'+(ok?'达标':'差'+((Number(goals[r.subj])||0)-r.v))+'）</span>'
+      + '<span>班级 '+(r.rc||'未填')+'</span><span>年级 '+(r.rs||'未填')+'</span>'+(RAW[r.subj]?'<span style="color:var(--pg-warn)">原始分</span>':'')+'</div>'
+      + '<div class="rf">📝 '+esc(r.rf||'这次没写反思')+'</div>';
+  }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  /* ---------- 四个页面的渲染 ---------- */
+  function renderOverview(){
+    var lats = SUBJ.map(latest).filter(Boolean);
+    var total = lats.reduce(function(a,r){ return a + Number(r.v); },0);
+    var gt = goalTotal();
+    var fullTotal = SUBJ.reduce(function(a,s){ return a+SUBJG[s]; },0);
+    var h = '';
+    h += '<div class="pg-grid">';
+    h += '<div class="pg-card"><div class="pg-card-h"><b>目标进度</b><span>按各科最近成绩汇总</span></div>'
+      + '<div class="pg-goal-num">'+total+'<small>/ 目标 '+gt+'</small></div>'
+      + '<div class="pg-bar-track"><i id="pg_goalBar"></i><em></em></div>'
+      + '<div class="pg-goal-meta"><span>总得分率 '+(fullTotal?(total/fullTotal*100).toFixed(1):'0')+'%</span>'
+      + '<span>目标得分率 '+(fullTotal?(gt/fullTotal*100).toFixed(1):'0')+'%</span>'
+      + '<span class="gap">'+(total>=gt?('已超目标 '+(total-gt)+' 分'):('距目标 '+(gt-total)+' 分'))+'</span></div></div>';
+    h += '<div class="pg-card"><div class="pg-card-h"><b>最近成绩 · 对照目标</b><span>各科最近一次</span></div><div class="pg-pills">'
+      + lats.map(function(r){ var ok=r.v>=(Number(goals[r.subj])||0); var d=ok?'达标':('差 '+((Number(goals[r.subj])||0)-r.v));
+          return '<span class="pg-pill '+(ok?'ok':'no')+'">'+r.subj+' '+r.v+'<span class="d">'+d+'</span>'+rawTag(r.subj)+'</span>'; }).join('')
+      + '</div></div>';
+    /* 最近录入 */
+    h += '<div class="pg-card pg-span2"><div class="pg-card-h"><b>最近录入</b><span>按日期 · 单科 · 含考试名称</span></div><div id="pg_recentBox">';
+    var byDateRecent = recs.slice().sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); }).slice(0,8);
+    h += byDateRecent.length ? byDateRecent.map(function(r){ var ok=r.v>=(Number(goals[r.subj])||0);
+        return '<div class="pg-mini-sc"><span><b>'+r.subj+' '+r.v+'</b> <span style="color:var(--fg-3)">/ '+(r.full||SUBJG[r.subj])+'</span> · '+fmtD(r.date)+' · '+esc(r.name||r.t||'')+'</span>'
+          + '<span style="color:'+(ok?'var(--pg-up)':'var(--pg-down)')+'">'+(ok?'达标':('差'+((Number(goals[r.subj])||0)-r.v)))+'</span></div>'; }).join('')
+      : '<div class="pg-empty"><div class="ico">📊</div><p>还没有成绩记录</p><p style="font-size:.75rem">点右下「记一次成绩」开始</p></div>';
+    h += '</div></div>';
+    h += '<div class="pg-card pg-span2 pg-quick"><div><div style="font-size:.94rem;font-weight:800;margin-bottom:5px">快速录入</div>'
+      + '<div style="font-size:.76rem;color:var(--fg-3)">选一个日期，填考试名称，把当天实际考的科目和分数记进去，每科可单独写反思</div></div>'
+      + '<button class="pg-btn" onclick="PG.openSheet()">＋ 记一次成绩</button></div>';
+    h += '</div>';
+    return h;
+  }
+
+  function renderRecords(){
+    var h = '<div class="pg-two" style="margin-bottom:14px"><button class="pg-btn" onclick="PG.openSheet()">＋ 记一次成绩</button>'
+      + '<button class="pg-btn ghost" onclick="PG.openEdit(\'语文\')">✎ 按科目编辑历史</button></div>';
+    var byDate = {}; recs.forEach(function(r){ (byDate[r.date]=byDate[r.date]||[]).push(r); });
+    var dates = Object.keys(byDate).sort().reverse();
+    if(!dates.length) return h + '<div class="pg-card"><div class="pg-empty"><div class="ico">📝</div><p>还没有记录</p></div></div>';
+    h += dates.map(function(d,i){
+      var arr = byDate[d];
+      return '<div class="pg-rec'+(i===0?' open':'')+'"><div class="pg-rec-h" onclick="this.parentNode.classList.toggle(\'open\')">'
+        + '<div><div class="t">'+fmtD(d)+' <span style="font-size:.7rem;color:var(--fg-3);font-weight:500">'+esc(arr[0].name||'')+'</span></div>'
+        + '<div class="d">'+d+' · 当天录入 '+arr.length+' 科</div></div>'
+        + '<div class="cnt">'+arr.map(function(r){ return r.subj; }).join(' / ')+'</div></div>'
+        + '<div class="pg-rec-body">'+arr.map(function(r){ var ok=r.v>=(Number(goals[r.subj])||0);
+            return '<div class="pg-mini-sc"><span><b>'+r.subj+' '+r.v+'</b> <span style="color:var(--fg-3)">/ '+(r.full||SUBJG[r.subj])+'</span>'
+              + (r.rc||r.rs?(' · 班'+(r.rc||'—')+'/年'+(r.rs||'—')):'')+'</span>'
+              + '<span style="color:'+(ok?'var(--pg-up)':'var(--pg-down)')+'">'+(ok?'达标':('差'+((Number(goals[r.subj])||0)-r.v)))+'</span>'
+              + (r.rf?'<div style="font-size:.7rem;color:var(--fg-2);margin-top:3px;flex-basis:100%">📝 '+esc(r.rf)+'</div>':'')+'</div>'; }).join('')
+        + '</div></div>';
+    }).join('');
+    return h;
+  }
+
+  function renderAnalysis(){
+    var h = '<div class="pg-note" style="margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;gap:10px">'
+      + '<span>六科默认收起，点科目标题展开看大趋势图；展开后可左右滑动、点圆点看详情。</span>'
+      + '<button class="pg-fold-all" id="pg_foldAll" onclick="PG.foldAll()">展开全部</button></div>';
+    h += '<div class="pg-grid" id="pg_boards">';
+    h += SUBJ.map(function(s){
+      var arr = subjRecs(s);
+      if(!arr.length){
+        return '<div class="pg-card pg-board"><div class="pg-card-h"><b>'+s+' · 趋势</b></div>'
+          + '<div class="pg-empty" style="padding:16px"><p style="font-size:.78rem">还没有「'+s+'」的记录</p></div>'
+          + '<button class="pg-edit-btn" onclick="PG.openEdit(\''+s+'\')">✎ 编辑「'+s+'」的历史记录</button></div>';
+      }
+      var vals = arr.map(function(r){ return Number(r.v); });
+      var cur = vals[vals.length-1], pre = vals[vals.length-2], d = cur - pre;
+      var goal = Number(goals[s])||0;
+      var rows = arr.slice().reverse().map(function(r,i){
+        var prev = i+1 < arr.length ? arr[arr.length-2-i] : null;
+        var dd = prev ? r.v-prev.v : 0;
+        var col = dd>0?'var(--pg-up)':(dd<0?'var(--pg-down)':'var(--fg-3)');
+        return '<div class="pg-sr'+(i>=3?' more':'')+'"><span class="sd">'+fmtD(r.date)+'</span>'
+          + '<span class="sv">'+r.v+' <small>/'+(r.full||SUBJG[s])+'</small></span>'
+          + '<span class="sdl" style="color:'+col+'">'+(prev?(dd>0?'↑+'+dd:(dd<0?'↓'+dd:'—')):'首次')+'</span>'
+          + '<span class="srf">'+esc(r.rf||'—')+'<span class="sn">'+esc(r.name||r.t||'')+'</span></span></div>';
+      }).join('');
+      var ok = cur>=goal;
+      var ai = ok
+        ? '<b>'+s+'</b> 最近 '+cur+' 分已达标（目标 '+goal+(RAW[s]?'，原始分':'')+'），近 '+vals.length+' 次'+(d>=0?'呈上升趋势':'略有波动')+'，保持当前节奏即可。'
+        : '<b>'+s+'</b> 最近 '+cur+' 分，距目标 '+goal+' 还差 '+(goal-cur)+' 分；近 '+vals.length+' 次'+(d>0?'在稳步追赶':'提升偏慢')+'，建议按每次小目标逐步逼近。';
+      return '<div class="pg-card pg-board collapsed" id="pg_board_'+s+'">'
+        + '<div class="pg-card-h bhead" onclick="PG.toggleBoard(\''+s+'\')">'
+        + '<div><b>'+s+' · 趋势</b><div class="bmini"><span class="v">'+cur+'</span><span>/ 满分 '+SUBJG[s]+'</span><span class="sep">·</span><span>目标 '+goal+'</span>'+rawTag(s)+'</div></div>'
+        + '<div style="display:flex;align-items:center;gap:10px"><span class="bdelta" style="color:'+(d>=0?'var(--pg-up)':'var(--pg-down)')+'">'+(d>=0?'↑+'+d:'↓'+d)+'</span><span class="arw">▾</span></div></div>'
+        + '<div class="bbody">'
+        + chartHtml(s,arr)
+        + '<div class="pg-pt-detail" id="pg_detail_'+s+'"></div>'
+        + '<div class="delta-line">较上次 <b class="'+(d<0?'dn':'')+'">'+(d>=0?'↑ +'+d:'↓ '+d)+'</b> 分 · 共 '+vals.length+' 次记录 · 橙色虚线为目标</div>'
+        + '<div class="pg-sub-recs" id="pg_recs_'+s+'">'+rows+'</div>'
+        + (arr.length>3?'<button class="pg-rec-more" id="pg_recMore_'+s+'" onclick="PG.toggleRecs(\''+s+'\')">展开全部 '+arr.length+' 次记录 ▾</button>':'')
+        + '<div class="pg-sub-ai">✨ '+ai+'</div>'
+        + '<button class="pg-edit-btn" style="margin-top:11px" onclick="PG.openEdit(\''+s+'\')">✎ 编辑「'+s+'」的历史记录</button>'
+        + '</div></div>';
+    }).join('');
+    h += '</div>';
+    /* 总 AI 卡 */
+    h += '<div class="pg-card pg-span2 pg-ai-card" style="margin-top:14px"><span class="badge">✨ AI 学情分析（基于本人录入的数据 · 不发送姓名）</span>'
+      + '<div id="pg_aiText">'+localAi()+'</div>'
+      + '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="pg-btn" id="pg_aiBtn" onclick="PG.aiAnalyze()">生成 AI 分析</button>'
+      + '<button class="pg-btn ghost" onclick="PG.aiStop()">收起 / 停止</button></div>'
+      + '<div class="pg-note" style="margin:10px 0 0">AI 分析会把脱敏后的分数发送给已配置的接口（不含姓名），也可以只用上方的本地规则分析。</div></div>';
+    return h;
+  }
+  function localAi(){
+    var total=0, weak=[], lats={};
+    SUBJ.forEach(function(s){ var r=latest(s); if(r){ lats[s]=r.v; total+=Number(r.v); if(r.v<(Number(goals[s])||0)) weak.push(s); } });
+    var gt=goalTotal();
+    if(!Object.keys(lats).length) return '<p>录入几次成绩后，这里会给出整体趋势与薄弱科建议。</p>';
+    return '<p>当前已录入科目最近成绩合计 <span class="hl">'+total+'</span> 分，目标 '+gt+' 分，'+(total>=gt?'已达标':'还差 '+(gt-total)+' 分')+'。整体'+(weak.length?('有 '+weak.length+' 科未达标'):'各科均已达标')+'。</p>'
+      + '<p>'+(weak.length?('重点关注 <span class="dn">'+weak.map(function(s){ return s+'（'+lats[s]+'，差'+((Number(goals[s])||0)-lats[s])+'）'; }).join('、')+'</span>，它们拖住了总目标。'):'优势科目继续保持，可尝试把目标上调。')+'</p>'
+      + '<p>建议：目标拆到单科、拆到每次。每次只记当天考的科目，并写一句这一科的反思——积累几次后，趋势和建议会越来越贴近本人的真实情况。</p>';
+  }
+
+  function renderGoals(){
+    var h = '<div class="pg-card"><div class="pg-card-h"><b>我的目标分数</b><span id="pg_totalGoalTip">总目标 '+goalTotal()+'</span></div><div class="pg-goal-set">';
+    h += SUBJ.map(function(s){ return '<div class="pg-g-input"><label>'+s+' <span class="full">/ 满分 '+SUBJG[s]+'</span>'+(RAW[s]?'<span class="rawtag">原始分目标</span>':'')+'</label>'
+      + '<input type="number" data-g="'+s+'" value="'+(Number(goals[s])||0)+'"></div>'; }).join('');
+    h += '</div><button class="pg-btn" style="margin-top:16px" onclick="PG.saveGoals()">保存目标</button>'
+      + '<div class="pg-note">目标会显示在「总览」最上方当提醒；单科目标用于胶囊达标判断与各科趋势图里的橙色目标虚线。<br>'
+      + '<b style="color:var(--pg-warn)">说明：生物、化学是赋分科目，但平常考试不赋分——录入和对照的都是「原始分」，这两科的目标也是原始分目标。</b></div></div>';
+    return h;
+  }
+
+  /* ---------- 面板挂载与页面切换 ---------- */
+  var page = 'overview';
+  function mount(){
+    if(!loaded) load();
+    if(typeof isLoggedIn === 'function' && !isLoggedIn()){
+      var box=document.getElementById('scPaneBox');
+      if(box) box.innerHTML = '<div class="sc-empty"><div class="sc-empty-ico">🔐</div><p>平时成绩需要登录后才能记录与查看（数据仅自己可见）。</p><button class="btn" onclick="needLogin(ClsAuth.here(\'#/scores/daily\'))">去登录</button></div>';
+      return;
+    }
+    var box = document.getElementById('scPaneBox');
+    if(!box) return;
+    box.innerHTML = '<div class="pg-wrap">'
+      + '<div class="pg-bar"><span class="pg-priv">🔒 仅自己可见</span><button class="pg-btn pg-add" onclick="PG.openSheet()">＋ 记一次成绩</button></div>'
+      + '<div class="pg-seg"><button data-p="overview" class="'+(page==='overview'?'on':'')+'" onclick="PG.tab(\'overview\')">总览</button>'
+      + '<button data-p="records" class="'+(page==='records'?'on':'')+'" onclick="PG.tab(\'records\')">记录</button>'
+      + '<button data-p="analysis" class="'+(page==='analysis'?'on':'')+'" onclick="PG.tab(\'analysis\')">分析</button>'
+      + '<button data-p="goals" class="'+(page==='goals'?'on':'')+'" onclick="PG.tab(\'goals\')">目标</button></div>'
+      + '<div class="pg-page '+(page==='overview'?'on':'')+'" id="pg_overview">'+renderOverview()+'</div>'
+      + '<div class="pg-page '+(page==='records'?'on':'')+'" id="pg_records">'+renderRecords()+'</div>'
+      + '<div class="pg-page '+(page==='analysis'?'on':'')+'" id="pg_analysis">'+renderAnalysis()+'</div>'
+      + '<div class="pg-page '+(page==='goals'?'on':'')+'" id="pg_goals">'+renderGoals()+'</div>'
+      + '</div>'
+      + '<div class="pg-mask" id="pg_mask"><div class="pg-sheet">'
+      + '<div class="pg-sheet-h"><b>记一次成绩</b><button onclick="PG.closeSheet()" aria-label="关闭">×</button></div>'
+      + '<div class="pg-two"><div class="pg-fld" style="flex:1"><label>日期</label><input type="date" id="pg_fDate"></div>'
+      + '<div class="pg-fld" style="flex:1"><label>考试类型</label><div class="pg-type-pick"><button class="on" data-t="班级性测试">班级性测试</button><button data-t="校级周考">校级周考</button></div></div></div>'
+      + '<div class="pg-fld"><label>考试名称（自己起，如「第13周周末心理训练」「第2单元测试」）</label><input id="pg_fName" placeholder="如：第13周周末心理训练"></div>'
+      + '<div class="pg-fld"><label>这一天的科目与分数（每科可单独写反思）</label><div id="pg_sheetRows"></div>'
+      + '<button class="pg-add-row" onclick="PG.addRow()">＋ 添加一科</button></div>'
+      + '<div class="pg-fld"><label>班级排名 / 年级排名（选填，有排名时才填）</label><div class="pg-two"><input id="pg_fRankC" type="number" placeholder="班级名次"><input id="pg_fRankS" type="number" placeholder="年级名次"></div></div>'
+      + '<div class="pg-note">数据仅保存在当前账号下，其他人无法查看。每次只记当天实际考的科目，留空的科目不会保存、不计入趋势。</div>'
+      + '<button class="pg-btn" style="width:100%" onclick="PG.saveRec()">保存成绩</button></div></div>'
+      + '<div class="pg-mask" id="pg_editMask"><div class="pg-sheet">'
+      + '<div class="pg-sheet-h"><b>按科目编辑历史成绩</b><button onclick="PG.closeEdit()" aria-label="关闭">×</button></div>'
+      + '<div class="pg-fld"><label>选择科目</label><select id="pg_edSubj" onchange="PG.renderEditList()">'+SUBJ.map(function(s){ return '<option>'+s+'</option>'; }).join('')+'</select></div>'
+      + '<div class="pg-note" style="margin-top:0">改分数、改排名、改备注、删错录的都在这里。保存后趋势图和总览会一起更新。</div>'
+      + '<div id="pg_edList"></div></div></div>';
+    /* 录入弹层的类型按钮绑定 */
+    Array.prototype.forEach.call(document.querySelectorAll('#pg_mask .pg-type-pick button'), function(b){
+      b.onclick = function(){ Array.prototype.forEach.call(b.parentNode.children, function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
+    });
+    /* 目标进度条入场 */
+    setTimeout(function(){ var bar=document.getElementById('pg_goalBar'); if(bar){ var t=0; SUBJ.forEach(function(s){ var r=latest(s); if(r) t+=Number(r.v); }); var gt=goalTotal(); bar.style.width=Math.min(100,gt?t/gt*100:0)+'%'; } },120);
+    SUBJ.forEach(function(s){ var arr=subjRecs(s); if(arr.length){ var idx=0; arr.forEach(function(r,k){ if(CHART[s]&&CHART[s].sel===r.id) idx=k; }); showDetail(s,idx); } });
+    bindDrags(); syncFoldBtn();
+  }
+  function tab(p){
+    page = p;
+    Array.prototype.forEach.call(document.querySelectorAll('.pg-seg button'), function(b){ b.classList.toggle('on', b.getAttribute('data-p')===p); });
+    Array.prototype.forEach.call(document.querySelectorAll('.pg-page'), function(pg){ pg.classList.toggle('on', pg.id==='pg_'+p); });
+    if(p==='analysis') setTimeout(bindDrags,40);
+    if(p==='overview') setTimeout(function(){ var bar=document.getElementById('pg_goalBar'); if(bar){ var t=0; SUBJ.forEach(function(s){ var r=latest(s); if(r) t+=Number(r.v); }); var gt=goalTotal(); bar.style.width=Math.min(100,gt?t/gt*100:0)+'%'; } },80);
+  }
+
+  /* ---------- 录入弹层 ---------- */
+  var sheetRows = [];
+  function rowHtml(r,i){
+    var opts = SUBJ.map(function(s){ return '<option value="'+s+'"'+(s===r.s?' selected':'')+'>'+s+(RAW[s]?'（原始分）':'')+'</option>'; }).join('');
+    return '<div class="pg-srow-card"><div class="pg-srow-top">'
+      + '<select onchange="PG.rowSubj('+i+',this.value)">'+opts+'</select>'
+      + '<input class="sc" type="number" placeholder="分数" value="'+r.v+'" oninput="PG._rows()['+i+'].v=this.value">'
+      + '<input class="fl" type="number" value="'+r.f+'" oninput="PG._rows()['+i+'].f=this.value" title="满分">'
+      + '<button class="del" onclick="PG.delRow('+i+')">×</button></div>'
+      + '<textarea placeholder="这一科的反思 / 备注（选填）" oninput="PG._rows()['+i+'].rf=this.value">'+esc(r.rf)+'</textarea></div>';
+  }
+  /* 暴露给内联 oninput 用：内联脚本里的 sheetRows 需要指向模块内的数组 */
+  function setRows(arr){ sheetRows = arr; }
+  function renderRows(){ var el=document.getElementById('pg_sheetRows'); if(el) el.innerHTML=sheetRows.map(rowHtml).join(''); }
+  function rowSubj(i,v){ sheetRows[i].s=v; sheetRows[i].f=SUBJG[v]; renderRows(); }
+  function addRow(){ var used=sheetRows.map(function(r){ return r.s; }); var next=SUBJ.find(function(s){ return used.indexOf(s)<0; })||'语文'; sheetRows.push({s:next,v:'',f:SUBJG[next],rf:''}); renderRows(); }
+  function delRow(i){ if(sheetRows.length>1) sheetRows.splice(i,1); renderRows(); }
+  function openSheet(){
+    if(typeof isLoggedIn==='function' && !isLoggedIn()){ if(typeof needLogin==='function') needLogin(); return; }
+    setRows([{s:'语文',v:'',f:150,rf:''},{s:'数学',v:'',f:150,rf:''}]);
+    var d=document.getElementById('pg_fDate'); if(d) d.value=new Date().toLocaleDateString('sv-SE');
+    renderRows(); var m=document.getElementById('pg_mask'); if(m) m.classList.add('on');
+  }
+  function closeSheet(){ var m=document.getElementById('pg_mask'); if(m) m.classList.remove('on'); }
+  function curType(){ var b=document.querySelector('#pg_mask .pg-type-pick button.on'); return b?b.getAttribute('data-t'):'班级性测试'; }
+  function saveRec(){
+    var date=document.getElementById('pg_fDate').value; if(!date) date=new Date().toLocaleDateString('sv-SE');
+    var name=document.getElementById('pg_fName').value.trim()||'日常测试';
+    var rc=document.getElementById('pg_fRankC').value, rs=document.getElementById('pg_fRankS').value, t=curType();
+    var added=0;
+    sheetRows.forEach(function(r){
+      if(r.v!=='' && r.v!=null && !isNaN(Number(r.v))){
+        recs.push({ id:'r'+(++seq), date:date, subj:r.s, v:Number(r.v), full:Number(r.f)||SUBJG[r.s], t:t, name:name, rc:rc?Number(rc):undefined, rs:rs?Number(rs):undefined, rf:r.rf||'' });
+        added++;
+      }
+    });
+    if(!added){ if(typeof syncNotice==='function') syncNotice('err','没填分数，未保存'); return; }
+    save();
+    document.getElementById('pg_fName').value=''; document.getElementById('pg_fRankC').value=''; document.getElementById('pg_fRankS').value='';
+    closeSheet(); tab('overview'); mount();
+    if(typeof syncNotice==='function') syncNotice('ok','✓ 已保存，仅自己可见');
+  }
+
+  /* ---------- 按科目编辑 ---------- */
+  function openEdit(s){ var sel=document.getElementById('pg_edSubj'); if(sel) sel.value=s; renderEditList(); var m=document.getElementById('pg_editMask'); if(m) m.classList.add('on'); }
+  function closeEdit(){ var m=document.getElementById('pg_editMask'); if(m) m.classList.remove('on'); mount(); }
+  function renderEditList(){
+    var sel=document.getElementById('pg_edSubj'); if(!sel) return;
+    var s=sel.value, arr=subjRecs(s).slice().reverse(), box=document.getElementById('pg_edList');
+    if(!box) return;
+    if(!arr.length){ box.innerHTML='<div class="pg-empty" style="padding:16px"><p style="font-size:.78rem">还没有「'+s+'」的记录</p></div>'; return; }
+    box.innerHTML = arr.map(function(r){
+      var tp = r.t==='校级周考' ? '<option selected>校级周考</option><option>班级性测试</option>' : '<option selected>班级性测试</option><option>校级周考</option>';
+      return '<div class="pg-eitem" id="pg_ed_'+r.id+'"><div class="eh"><b>'+s+' · '+r.date+'</b><span style="font-size:.62rem;color:var(--fg-3)">'+r.id+'</span></div>'
+        + '<div class="eg"><div><label>日期</label><input type="date" data-f="date" value="'+r.date+'"></div>'
+        + '<div><label>分数</label><input type="number" data-f="v" value="'+r.v+'"></div>'
+        + '<div><label>满分</label><input type="number" data-f="full" value="'+(r.full||SUBJG[s])+'"></div>'
+        + '<div><label>类型</label><select data-f="t">'+tp+'</select></div>'
+        + '<div><label>考试名称</label><input data-f="name" value="'+esc(r.name||'')+'"></div>'
+        + '<div><label>班级排名</label><input type="number" data-f="rc" value="'+(r.rc||'')+'"></div>'
+        + '<div><label>年级排名</label><input type="number" data-f="rs" value="'+(r.rs||'')+'"></div>'
+        + '<div><label>得分率(自动)</label><input value="'+(r.v/(r.full||SUBJG[s])*100).toFixed(1)+'%" disabled style="opacity:.6"></div></div>'
+        + '<textarea data-f="rf" placeholder="这一科的反思/备注">'+esc(r.rf||'')+'</textarea>'
+        + '<div class="ebtns"><button class="sv2" onclick="PG.saveEditRow(\''+r.id+'\')">保存这条</button><button class="dl2" onclick="PG.delEditRow(\''+r.id+'\')">删除</button></div></div>';
+    }).join('');
+  }
+  function readEdit(id){ var box=document.getElementById('pg_ed_'+id), o={}; if(!box) return o; Array.prototype.forEach.call(box.querySelectorAll('[data-f]'),function(e){ o[e.getAttribute('data-f')]=e.value; }); return o; }
+  function saveEditRow(id){ var o=readEdit(id), r=null; recs.forEach(function(x){ if(x.id===id) r=x; }); if(!r) return;
+    r.date=o.date; r.v=Number(o.v); r.full=Number(o.full)||SUBJG[r.subj]; r.t=o.t; r.name=o.name;
+    r.rc=o.rc?Number(o.rc):undefined; r.rs=o.rs?Number(o.rs):undefined; r.rf=o.rf;
+    save(); mount(); renderEditList(); if(typeof syncNotice==='function') syncNotice('ok','✓ 已更新');
+  }
+  function delEditRow(id){ if(typeof confirm==='function' && !confirm('确定删除这条记录？删除后无法恢复。')) return;
+    var i=-1; recs.forEach(function(x,k){ if(x.id===id) i=k; }); if(i>=0) recs.splice(i,1);
+    save(); mount(); renderEditList(); if(typeof syncNotice==='function') syncNotice('ok','已删除');
+  }
+
+  /* ---------- 折叠 ---------- */
+  function toggleBoard(s){ var b=document.getElementById('pg_board_'+s); if(!b) return;
+    var opening=b.classList.contains('collapsed'); b.classList.toggle('collapsed');
+    if(opening) setTimeout(function(){ initDrag(s); },40);
+    syncFoldBtn();
+  }
+  function toggleRecs(s){ var box=document.getElementById('pg_recs_'+s), btn=document.getElementById('pg_recMore_'+s); if(!box) return;
+    var on=box.classList.toggle('expanded'); if(btn) btn.textContent=on?'收起记录 ▴':('展开全部 '+subjRecs(s).length+' 次记录 ▾');
+  }
+  function foldAll(){ var bs=Array.prototype.slice.call(document.querySelectorAll('#pg_boards .pg-board'));
+    var anyClosed=bs.some(function(b){ return b.classList.contains('collapsed'); });
+    bs.forEach(function(b){ if(anyClosed) b.classList.remove('collapsed'); else b.classList.add('collapsed'); });
+    if(anyClosed) setTimeout(bindDrags,60); syncFoldBtn();
+  }
+  function syncFoldBtn(){ var bs=Array.prototype.slice.call(document.querySelectorAll('#pg_boards .pg-board'));
+    var btn=document.getElementById('pg_foldAll'); if(!btn) return;
+    var anyClosed=bs.some(function(b){ return b.classList.contains('collapsed'); });
+    btn.textContent=anyClosed?'展开全部':'收起全部';
+  }
+
+  /* ---------- 目标保存 ---------- */
+  function saveGoals(){
+    Array.prototype.forEach.call(document.querySelectorAll('.pg-g-input input[data-g]'), function(inp){
+      var v=Number(inp.value); if(!isNaN(v)&&v>=0) goals[inp.getAttribute('data-g')]=v;
+    });
+    saveGoals2(); mount(); if(typeof syncNotice==='function') syncNotice('ok','目标已保存');
+  }
+  function saveGoals2(){ writeLS(GKEY, goals); }
+
+  /* ---------- AI（脱敏：只发分数与科目，不含姓名） ---------- */
+  function aiPayload(){
+    var lines = [];
+    SUBJ.forEach(function(s){
+      var arr=subjRecs(s); if(!arr.length) return;
+      lines.push(s+'（满分'+SUBJG[s]+'，目标'+(Number(goals[s])||0)+'）：'+arr.map(function(r){ return r.date+' '+r.v+'分'+(r.rf?('（'+r.rf+'）'):''); }).join('；'));
+    });
+    return '以下是某学生六科平时成绩的脱敏记录（不含姓名）。请给出：①整体趋势判断 ②薄弱科定位 ③具体到分数的下次小目标建议 ④学习习惯提醒。用简洁中文分点作答，语气温和鼓励。\n\n'+lines.join('\n');
+  }
+  function aiAnalyze(){
+    var host=document.getElementById('pg_aiText'); if(!host) return;
+    if(aiBusy) return;
+    if(typeof aiReady==='function' && !aiReady()){ if(typeof aiDlgOpen==='function') aiDlgOpen(); return; }
+    aiBusy=true; var btn=document.getElementById('pg_aiBtn'); if(btn) btn.textContent='生成中…';
+    host.innerHTML='<div class="sc-ai-typing"><span></span><span></span><span></span>正在生成…</div>';
+    var msg=[{role:'user',content:aiPayload()}];
+    try{
+      aiRequest(msg, function(delta,full){
+        var now=Date.now(); if(now-(aiAnalyze._last||0)<90) return; aiAnalyze._last=now;
+        host.innerHTML=aiMd(full);
+      }, function(full){
+        aiBusy=false; aiText=full; host.innerHTML=aiMd(full); var b=document.getElementById('pg_aiBtn'); if(b) b.textContent='重新生成 AI 分析';
+      }, function(err){
+        aiBusy=false; host.innerHTML=localAi()+'<p style="color:var(--pg-down);font-size:.72rem;margin-top:8px">AI 未成功：'+esc(err)+'。上面已显示本地规则分析。</p>';
+        var b=document.getElementById('pg_aiBtn'); if(b) b.textContent='重试 AI 分析';
+      }, {maxTok:900});
+    }catch(e){ aiBusy=false; host.innerHTML=localAi(); }
+  }
+  function aiStop(){ aiBusy=false; var host=document.getElementById('pg_aiText'); if(host) host.innerHTML=aiText?aiMd(aiText):localAi(); var b=document.getElementById('pg_aiBtn'); if(b) b.textContent=aiText?'重新生成 AI 分析':'生成 AI 分析'; }
+  function aiMd(t){
+    var s=esc(t||'');
+    s=s.replace(/^\s*[-*]\s+/gm,'• ').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+    s=s.split(/\n{2,}/).map(function(p){ return p.replace(/\n/g,'<br>'); }).join('</p><p>');
+    return '<p>'+s+'</p>';
+  }
+
+  return {
+    mount:mount, tab:tab, openSheet:openSheet, closeSheet:closeSheet, addRow:addRow, delRow:delRow, rowSubj:rowSubj, saveRec:saveRec,
+    openEdit:openEdit, closeEdit:closeEdit, renderEditList:renderEditList, saveEditRow:saveEditRow, delEditRow:delEditRow,
+    toggleBoard:toggleBoard, toggleRecs:toggleRecs, foldAll:foldAll, chartMode:chartMode, ptClick:ptClick,
+    saveGoals:saveGoals, aiAnalyze:aiAnalyze, aiStop:aiStop, curType:curType,
+    _rows:function(){ return sheetRows; },
+    _data:function(){ return {recs:recs,goals:goals}; }
+  };
+})();
+window.PG = PG;
+
 function scEnsureMounted(){
   if(!document.getElementById('scPaneBox')) return;   /* 不在这个板块里，什么都不做 */
   if(!isLoggedIn()){
@@ -16124,13 +16627,15 @@ function scRenderTabs(){
   document.getElementById('scTabs').innerHTML =
     '<button class="' + (SC.tab === 'board' ? 'on' : '') + '" onclick="scSetTab(\'board\')">全班成绩单</button>'
     + '<button class="' + (SC.tab === 'me' ? 'on' : '') + '" onclick="scSetTab(\'me\')">我的画像</button>'
+    /* v4.18.0 平时成绩：个人私有，紧挨「我的画像」 */
+    + '<button class="' + (SC.tab === 'daily' ? 'on' : '') + '" onclick="scSetTab(\'daily\')">平时成绩</button>'
     /* v2.10.0 成绩对比 PK：任选两人 + 同一场考试（数据用当前考试的 SC.rows） */
     + '<button class="' + (SC.tab === 'pk' ? 'on' : '') + '" onclick="scSetTab(\'pk\')">成绩对比</button>';
 }
 function scSetTab(t){
   SC.tab = t; scRenderTabs(); scRenderPane();
-  /* v3.18.0：三种视角各有一条链接，#/scores/me 直接落到我的画像 */
-  try{ setRoute(t === 'me' ? 'scores/me' : (t === 'pk' ? 'scores/pk' : 'scores')); }catch(e){}
+  /* v3.18.0：三种视角各有一条链接，#/scores/me 直接落到我的画像；v4.18.0 加平时成绩 */
+  try{ setRoute(t === 'me' ? 'scores/me' : (t === 'daily' ? 'scores/daily' : (t === 'pk' ? 'scores/pk' : 'scores'))); }catch(e){}
 }
 
 function scRenderPane(){
@@ -16140,7 +16645,8 @@ function scRenderPane(){
   for(var i = 0; i < orphan.length; i++){
     if(orphan[i].parentNode) orphan[i].parentNode.removeChild(orphan[i]);
   }
-  if(SC.tab === 'me') scRenderMe();
+  if(SC.tab === 'daily'){ if(typeof PG !== 'undefined' && PG && typeof PG.mount === 'function') PG.mount(); }
+  else if(SC.tab === 'me') scRenderMe();
   else if(SC.tab === 'pk') scRenderPk();
   else scRenderBoard();
 }

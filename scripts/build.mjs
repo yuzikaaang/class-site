@@ -143,6 +143,10 @@ idx = idx.replace(/<script src="\.\/tour\.js(\?[^"]*)?" defer><\/script>/,
 /* v4.16.5：大屏左下角那个版本号是写在按钮里的静态文本，
    发版时很容易忘（线上一直显示上一版）。构建时统一对齐。 */
 idx = idx.replace(/(id="bhwVer"[^>]*>)v[\d.]+(<\/button>)/, '$1v' + VER + '$2');
+/* v4.18.0：平时成绩样式单独成文件，link 的版本号跟构建走，
+   否则 SW 缓存优先会一直递旧的那份样式。 */
+idx = idx.replace(/<link rel="stylesheet" href="\.\/pg\.css(\?v=\d+)?"?>/,
+  `<link rel="stylesheet" href="./pg.css?v=${VER.replace(/\./g, '')}">`);
 if (idx !== before) write('index.html', idx);
 
 /* ---------------- ④ admin.html 引用的 admin.js 也要带新版本号 ----------------

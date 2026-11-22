@@ -56,6 +56,9 @@ const ALLOW_KEYS = [
   'cls_study_plan',         // 学习计划
   'cls_notice_read',        // 通知已读位点
   'cls_class_list',         // 班级名单（用户自存）
+  /* v4.18.0 平时成绩：个人私有数据，按 user_id 隔离，别人看不到 */
+  'cls_grade_log_v1',       // 平时成绩逐条记录（日期×单科）
+  'cls_grade_goals_v1',     // 平时成绩分科目标
   /* 站内偏好 */
   'cls_ann_filter',         // 公告分类筛选
   'cls_board_collapsed',    // 公告栏折叠
@@ -141,6 +144,10 @@ const KEY_GROUPS = [
     'cls_study_plan':  '学习计划',
     'cls_notice_read': '通知已读位点',
     'cls_class_list':  '班级名单（自存）',
+  } },
+  { cat: 'grade', label: '平时成绩', keys: {
+    'cls_grade_log_v1':   '平时成绩记录',
+    'cls_grade_goals_v1': '平时成绩目标',
   } },
   { cat: 'pref', label: '站内偏好', keys: {
     'cls_ann_filter':     '公告分类筛选',
