@@ -15775,8 +15775,16 @@ var PG = (function(){
     var h = '<div class="pg-card pg-onecard">';
     /* 头部一行：当前分 / 目标 / 原始分标注 */
     h += '<div class="pg-card-h"><b>'+s+' · 成绩趋势</b><span>'+(arr.length?('共 '+arr.length+' 次记录')+'':'暂无记录')+'</span></div>';
+    /* v4.18.5 单科班级排名目标（平时成绩录的是原始分，用原始那一套） */
+    var srRaw = goals._subRank[s] ? goals._subRank[s].raw : '';
+    var lastRc = arr.length ? arr[arr.length-1].rc : null;
+    var srTxt = '';
+    if(srRaw !== '' && srRaw != null){
+      srTxt = '<span class="pg-rkg' + (lastRc && Number(lastRc) <= Number(srRaw) ? ' up' : '') + '">班目标前 ' + srRaw
+        + (lastRc ? ' · 现第 ' + lastRc + (Number(lastRc) <= Number(srRaw) ? ' ✓' : '') : '') + '</span>';
+    }
     h += '<div class="pg-onehead"><span class="big">'+(arr.length?cur:'—')+' <small>/ 满分 '+SUBJG[s]+'</small></span>'
-      + '<span class="goal">目标 '+goal+'</span>'+rawTag(s)
+      + '<span class="goal">目标 '+goal+'</span>'+rawTag(s)+srTxt
       + (arr.length?('<span class="gap '+(cur>=goal?'up':'dn')+'">'+(cur>=goal?('已达标 +'+(cur-goal)):('距目标 '+(goal-cur)))+'</span>'):'')+'</div>';
     /* v4.18.3 目标输入区：无记录时也要显示，否则新用户看不到、改不了默认目标 */
     function goalBlock(){
@@ -17975,8 +17983,24 @@ function scRenderMe(){
 
   var html = bar;
 
-  /* ① 概览卡 */
+  /* ① 概览卡（v4.18.5：目标并入概览，右上角设置入口，不再单独占一张卡） */
+  var gv = null, gapTxt = '', gapOk = false, grBits = [], subGoalMap = {}, subRankMap = {};
+  if(typeof PG !== 'undefined' && PG && typeof PG.goalView === 'function'){
+    gv = PG.goalView(SC.basis === 'graded' ? 'asg' : 'raw');
+    if(gv.total && myTotal != null){
+      gapOk = myTotal >= gv.total;
+      gapTxt = gapOk ? ('已超 ' + fmtNum(myTotal - gv.total) + ' 分') : ('距目标 ' + fmtNum(gv.total - myTotal) + ' 分');
+    }
+    var gr = gv.rank || {};
+    if(gr.grade !== '' && gr.grade != null) grBits.push('年级前 ' + gr.grade + (meRow.schoolRank != null ? (meRow.schoolRank <= gr.grade ? ' ✓' : '（现 ' + meRow.schoolRank + '）') : ''));
+    if(gr['class'] !== '' && gr['class'] != null) grBits.push('班级前 ' + gr['class'] + (myRank ? (myRank <= gr['class'] ? ' ✓' : '（现 ' + myRank + '）') : ''));
+    (gv.scores || []).forEach(function(x){ subGoalMap[x.s] = x.goal; });
+    (gv.subRank || []).forEach(function(x){ subRankMap[x.s] = x.cls; });
+  }
   html += '<div class="sc-card sc-overview">'
+    + '<div class="sc-ov-head"><span class="sc-ov-lead">🎯 目标进度</span>'
+    +   (gv ? '<button class="sc-ov-set" onclick="PG.openGoalSheet()" title="设置目标分数与排名目标">⚙ 设置目标</button>' : '')
+    + '</div>'
     + '<div class="sc-ov-main">'
     +   '<div class="sc-ov-total"><b>' + (myTotal == null ? '—' : myTotal) + '</b><span>总分（' + (SC.basis === 'graded' ? '赋分' : '原始') + '）</span></div>'
     +   '<div class="sc-ov-items">'
@@ -17986,41 +18010,15 @@ function scRenderMe(){
     +     scOvItem('联考排名', meRow.leagueRank != null ? meRow.leagueRank : '—', '年级联考')
     +   '</div>'
     + '</div>'
+    + (gv && gv.total ? '<div class="sc-ov-goal">'
+        + '<div class="sc-ovg-main"><b>' + gv.total + '</b><span>目标总分 · ' + (SC.basis === 'graded' ? '赋分后' : '赋分前') + '</span>'
+        +   (gapTxt ? '<em class="' + (gapOk ? 'ok' : 'no') + '">' + gapTxt + '</em>' : '') + '</div>'
+        + (grBits.length ? '<div class="sc-ovg-tags"><span class="sc-ovg-lead">总分排名目标</span>' + grBits.map(function(t){ return '<span class="sc-ovg-tag' + (/✓/.test(t) ? ' ok' : '') + '">' + t + '</span>'; }).join('') + '</div>' : '')
+        + (gv.total && !gv.asgFilled && SC.basis === 'graded' ? '<div class="sc-ovg-note">化学/生物未设赋分后目标，暂按原始分目标计入</div>' : '')
+        + '</div>' : '')
     + '</div>';
 
-  /* ①-b v4.18.4 我的目标卡：目标分跟当前赋分口径切换，双端与「平时成绩」同步 */
-  if(typeof PG !== 'undefined' && PG && typeof PG.goalView === 'function'){
-    var gv = PG.goalView(SC.basis === 'graded' ? 'asg' : 'raw');
-    var basisTxt = SC.basis === 'graded' ? '赋分后' : '赋分前';
-    var gapTxt = (gv.total && myTotal != null)
-      ? (myTotal >= gv.total ? ('已超目标 ' + fmtNum(myTotal - gv.total) + ' 分') : ('距目标 ' + fmtNum(gv.total - myTotal) + ' 分'))
-      : '';
-    /* 总分排名目标达成 */
-    var gr = gv.rank || {}, grBits = [];
-    if(gr.grade !== '' && gr.grade != null) grBits.push('年级前 ' + gr.grade + (meRow.schoolRank != null ? (meRow.schoolRank <= gr.grade ? ' ✓已达成' : '（现 ' + meRow.schoolRank + '）') : ''));
-    if(gr['class'] !== '' && gr['class'] != null) grBits.push('班级前 ' + gr['class'] + (myRank ? (myRank <= gr['class'] ? ' ✓已达成' : '（现 ' + myRank + '）') : ''));
-    /* 各科班级排名目标达成 */
-    var subRankBits = [];
-    (gv.subRank || []).forEach(function(it){
-      if(it.cls === '' || it.cls == null) return;
-      var s = subs.filter(function(x){ return x.key === it.s || x.name === it.s; })[0];
-      if(!s) return;
-      var real = rk.subj[s.key] ? rk.subj[s.key].rank[meRow.id] : null;
-      subRankBits.push(esc(s.name) + ' 前' + it.cls + (real ? (real <= it.cls ? ' ✓' : '（现' + real + '）') : ''));
-    });
-    html += '<div class="sc-card sc-goalcard" data-scblk="me_goal">'
-      + '<div class="sc-card-h">🎯 我的目标 <span class="sc-goal-basis">' + basisTxt + '口径 · 与平时成绩同步</span>'
-      +   '<button class="sc-goal-set" onclick="PG.openGoalSheet()">⚙ 设置目标</button></div>'
-      + '<div class="sc-goal-main">'
-      +   '<div class="sc-goal-total"><b>' + (gv.total || '—') + '</b><span>目标总分（' + basisTxt + '）</span>'
-      +     (gapTxt ? '<em>' + gapTxt + '</em>' : '') + '</div>'
-      +   (gv.total && !gv.asgFilled && SC.basis === 'graded' ? '<div class="sc-dim" style="font-size:.72rem">化学/生物未设赋分后目标，暂按原始分目标计入。</div>' : '')
-      + '</div>'
-      + (grBits.length ? '<div class="sc-goal-line"><b>总分排名目标</b><span>' + grBits.join('　') + '</span></div>' : '')
-      + (subRankBits.length ? '<div class="sc-goal-line"><b>单科班级目标</b><span>' + subRankBits.join('　') + '</span></div>' : '')
-      + (!grBits.length && !subRankBits.length ? '<div class="sc-dim" style="font-size:.76rem">还没设排名目标，点右上「⚙ 设置目标」填上年级/班级前几名。</div>' : '')
-      + '</div>';
-  }
+  /* ①-b v4.18.5 目标已并入上方概览卡与下方各科卡，不再单独成卡 */
 
   /* ② 上线情况 —— 特控/本科/600 三条线都是按「赋分总分」划的，
      原始口径下总分与它们不可比（站主要求：原始分不跟三线比较），故只在赋分口径显示。 */
@@ -18058,8 +18056,8 @@ function scRenderMe(){
       + '</div>';
   }
 
-  /* ④ 各科卡片（分数 / 班均 / 班内排名 / 与班均差） */
-  html += '<div class="sc-card" data-scblk="me_subj"><div class="sc-card-h">各科情况</div><div class="sc-subs">'
+  /* ④ 各科卡片（分数 / 班均 / 班内排名 / 与班均差 / 目标达成） */
+  html += '<div class="sc-card" data-scblk="me_subj"><div class="sc-card-h">各科情况 <span class="sc-sub-hint">目标与达成情况见每科底部</span></div><div class="sc-subs">'
     + subs.map(function(s){
         var v = scSubScore(meRow, s, SC.basis);
         var sr = rk.subj[s.key].rank[meRow.id];
@@ -18071,6 +18069,23 @@ function scRenderMe(){
         });
         var avg = all.length ? all.reduce(function(a, b){ return a + b; }, 0) / all.length : 0;
         var rate = (v != null && s.full) ? v / s.full : null;
+        /* v4.18.5 单科目标与达成（分数目标 + 班级排名目标） */
+        var sg = Number(subGoalMap[s.name] || subGoalMap[s.key] || 0);
+        var scr = subRankMap[s.name] != null ? subRankMap[s.name] : subRankMap[s.key];
+        var hasRankGoal = scr !== '' && scr != null;
+        var goalRow = '';
+        if(sg || hasRankGoal){
+          var bits = [];
+          if(sg) bits.push(v == null
+            ? '<span class="sc-sg-item">目标 <b>' + sg + '</b> · 未考</span>'
+            : (v >= sg
+                ? '<span class="sc-sg-item ok">目标 <b>' + sg + '</b> · ✓ 已达成（+' + fmtNum(v - sg) + '）</span>'
+                : '<span class="sc-sg-item no">目标 <b>' + sg + '</b> · 还差 ' + fmtNum(sg - v) + ' 分</span>'));
+          if(hasRankGoal) bits.push(sr
+            ? '<span class="sc-sg-item' + (sr <= scr ? ' ok' : ' no') + '">班目标前 <b>' + scr + '</b> · ' + (sr <= scr ? '✓ 现第 ' + sr : '现第 ' + sr) + '</span>'
+            : '<span class="sc-sg-item">班目标前 <b>' + scr + '</b></span>');
+          goalRow = '<div class="sc-sub-goal">' + bits.join('') + '</div>';
+        }
         return '<div class="sc-sub">'
           + '<div class="sc-sub-top"><b>' + esc(s.name) + '</b>'
           +   (s.graded && SC.basis === 'graded' ? '<span class="sc-tag">赋分</span>' : '')
@@ -18079,6 +18094,7 @@ function scRenderMe(){
           + (v == null ? '' : '<div class="sc-sub-diff ' + (v - avg >= 0 ? 'up' : 'down') + '">'
               + (v - avg >= 0 ? '高于班均 ' : '低于班均 ') + fmtNum(Math.abs(v - avg)) + ' 分</div>')
           + (rate == null ? '' : '<div class="sc-sub-bar"><i style="width:' + (rate * 100).toFixed(1) + '%"></i></div>')
+          + goalRow
           + '</div>';
       }).join('')
     + '</div></div>';
@@ -18127,19 +18143,20 @@ function scRenderMe(){
       + '</div>';
   }
 
-  /* ⑤b AI 分析（v3.5.6）—— 本地规则引擎，不联网、不调模型，隐私不出班 */
-  html += scMeAnalysis(meRow, rk, st, myTotal, myRank, subs);
-
-  /* ⑥ 趋势与进退步（用历次数据） */
-  html += scTrendBlock(meRow);
-
-  /* ⑦ 各科趋势网格（每科一张小卡 + 迷你折线） */
+  /* ⑤b 各科趋势网格（每科一张小卡 + 迷你折线）—— 紧跟「各科情况 / 六科画像」，
+     让「各科现状 → 各科走势」连在一起看（v4.18.5 站主要求调整条理） */
   html += scSubjTrend();
-  /* ⑦b 各科进退步（近几次分数 + 年级排名逐次对比） */
+  /* ⑤c 各科进退步（近几次分数 + 年级排名逐次对比） */
   html += scSubjectProgress();
+
+  /* ⑥ 总分趋势与进退步（用历次数据） */
+  html += scTrendBlock(meRow);
 
   /* ⑧ 年级进退步（靠校排名，和班排名分开看） */
   html += scGradeTrend();
+
+  /* ⑨ AI 分析放最后：先看数据，再看结论（v4.18.5 顺序调整） */
+  html += scMeAnalysis(meRow, rk, st, myTotal, myRank, subs);
 
   /* ⑨ 跨考试上线率 —— v3.5.14 站主要求「我的画像的历史上线率不要了」，已下线。
      （函数 scCutTrend 保留：管理员没有本人成绩时的兜底卡片还在用） */

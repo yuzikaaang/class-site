@@ -14210,12 +14210,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.3 删除按钮 CSS 齐全（含明暗变量）',
       /\.pg-clear-subj\{/.test(pgCss183) && /\.pg-rec-del\{/.test(pgCss183)
       && /--pg-no-ink/.test(pgCss183));
-    /* ④ 版本号四处一致（随版本升级同步到 4.18.4） */
+    /* ④ 版本号四处一致（随版本升级同步到 4.18.5） */
     t('★版本 前台/后台/SW/API 四处一致',
-      /var SITE_VERSION = '4\.18\.4'/.test(readIdx())
-      && /const SITE_VER = '4\.18\.4'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-      && /const API_VER = '4\.18\.4';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-      && /var SITE_VERSION = '4\.18\.4'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+      /var SITE_VERSION = '4\.18\.5'/.test(readIdx())
+      && /const SITE_VER = '4\.18\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+      && /const API_VER = '4\.18\.5';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+      && /var SITE_VERSION = '4\.18\.5'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
   }
 
   /* ===== v4.18.4 目标双端同步 + 赋分目标 + 排名目标 + AI目标专项 ===== */
@@ -14252,11 +14252,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /scRenderPane\(\)/.test(appV184)
       && /goalView:goalView, goalTotal:goalTotal/.test(appV184)
       && /openGoalSheet:openGoalSheet, saveGoalSheet:saveGoalSheet/.test(appV184));
-    /* ④ 个人画像目标卡 + AI 目标专项 */
-    t('★v4.18.4 个人画像我的目标卡（跟口径 + 排名达成 + 设置按钮）',
-      /sc-goalcard/.test(appV184) && /data-scblk="me_goal"/.test(appV184)
-      && /PG\.goalView\(SC\.basis === 'graded' \? 'asg' : 'raw'\)/.test(appV184)
-      && /sc-goal-basis/.test(appV184) && /sc-goal-set/.test(appV184));
+    /* ④ 个人画像目标（v4.18.5 已并入概览卡与各科卡，不再单独成卡） */
+    t('★v4.18.4 个人画像读取目标（跟赋分口径）',
+      /PG\.goalView\(SC\.basis === 'graded' \? 'asg' : 'raw'\)/.test(appV184)
+      && /subGoalMap\[x\.s\] = x\.goal/.test(appV184));
     t('★v4.18.4 AI 分析末尾目标专项（rowHtml 目标）',
       /rowHtml\('目标', goalText\)/.test(appV184)
       && /var goalText = ''/.test(appV184)
@@ -14266,10 +14265,52 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       /function goalTotal\(basis\)\{\s*if\(!loaded\) load\(\)/.test(appV184)
       && /function goalView\(basis\)\{\s*if\(!loaded\) load\(\)/.test(appV184));
     /* ⑥ 样式齐全（明暗） */
-    t('★v4.18.4 CSS 弹窗/目标卡样式齐全',
+    t('★v4.18.4 CSS 弹窗/目标样式齐全',
       /\.pg-gmask\{/.test(pgCss184) && /\.pg-gsheet\{/.test(pgCss184)
       && /\.pg-gt-grid\{/.test(pgCss184) && /\.pg-onegoal2\{/.test(pgCss184)
-      && /\.sc-goalcard/.test(idxV184) && /\.dark \.sc-goal-total b/.test(idxV184));
+      && /\.sc-ov-set\{/.test(idxV184) && /\.dark \.sc-ovg-main b/.test(idxV184));
+  }
+
+  /* ===== v4.18.5 目标并入卡片 + 弹窗背景 + 画像顺序调整 ===== */
+  {
+    const appV185 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const pgCss185 = fs.readFileSync(new URL('./pg.css', import.meta.url), 'utf8');
+    const idxV185 = readIdx();
+    /* ① 弹窗遮罩加深 + 卡片不透明（明暗各一套） */
+    t('★v4.18.5 目标弹窗背景不透明（深色遮罩 + 模糊 + 明暗卡片底）',
+      /\.pg-gmask\{position:fixed;inset:0;z-index:10060;background:rgba\(28,25,23,\.66\)/.test(pgCss185)
+      && /backdrop-filter:blur\(3px\)/.test(pgCss185)
+      && /\.pg-gsheet\{background:#fffdfb/.test(pgCss185)
+      && /html\.dark \.pg-gsheet\{background:#262220/.test(pgCss185)
+      && /html\.dark \.pg-gmask\{background:rgba\(0,0,0,\.74\)\}/.test(pgCss185));
+    /* ② 独立目标卡移除，目标并入概览卡 */
+    t('★v4.18.5 画像独立目标卡已移除（并入概览卡）',
+      !/sc-goalcard/.test(appV185) && !/\.sc-goalcard/.test(idxV185)
+      && !/data-scblk="me_goal"/.test(appV185));
+    t('★v4.18.5 概览卡右上角设置入口 + 目标总分/差距/排名达成',
+      /class="sc-ov-head"/.test(appV185) && /class="sc-ov-set"/.test(appV185)
+      && /class="sc-ov-goal"/.test(appV185) && /class="sc-ovg-main"/.test(appV185)
+      && /sc-ovg-tag/.test(appV185) && /PG\.openGoalSheet\(\)/.test(appV185));
+    /* ③ 各科情况里逐科显示目标与达成 */
+    t('★v4.18.5 各科情况逐科显示分数目标/班级排名目标达成',
+      /subRankMap\[x\.s\] = x\.cls/.test(appV185)
+      && /class="sc-sub-goal"/.test(appV185) && /class="sc-sg-item/.test(appV185)
+      && /还差 ' \+ fmtNum\(sg - v\)/.test(appV185)
+      && /班目标前 <b>/.test(appV185));
+    /* ④ 画像卡片顺序：各科情况 → 各科趋势 → 总分趋势 → AI 收尾 */
+    t('★v4.18.5 画像卡片顺序（各科趋势紧跟各科情况，AI 分析收尾）',
+      /html \+= scSubjTrend\(\);[\s\S]{0,200}html \+= scSubjectProgress\(\);[\s\S]{0,300}html \+= scTrendBlock\(meRow\);[\s\S]{0,200}html \+= scGradeTrend\(\);[\s\S]{0,300}html \+= scMeAnalysis\(/.test(appV185)
+      && !/html \+= scMeAnalysis\([\s\S]{0,200}html \+= scTrendBlock\(meRow\)/.test(appV185));
+    /* ⑤ 平时成绩单科卡班级排名目标 */
+    t('★v4.18.5 平时成绩单科卡显示班级排名目标与当前名次',
+      /goals\._subRank\[s\] \? goals\._subRank\[s\]\.raw : ''/.test(appV185)
+      && /class="pg-rkg/.test(appV185) && /班目标前 /.test(appV185)
+      && /\.pg-onehead \.pg-rkg\{/.test(pgCss185));
+    /* ⑥ 概览卡样式明暗齐全 */
+    t('★v4.18.5 概览目标样式明暗齐全',
+      /\.sc-ov-head\{/.test(idxV185) && /\.sc-ov-lead\{/.test(idxV185)
+      && /\.sc-ovg-tag\.ok\{/.test(idxV185) && /\.sc-sg-item\.no\{/.test(idxV185)
+      && /\.dark \.sc-ovg-tag\.ok\{/.test(idxV185) && /\.dark \.sc-sg-item\.ok\{/.test(idxV185));
   }
 
   /* ===== 全量语法自检 =====
