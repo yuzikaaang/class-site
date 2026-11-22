@@ -15321,6 +15321,9 @@ function openScoreAnal(){
  *   · 配色一律走 var(--pg-*)，随昼夜主题自动切换；SVG 表现属性也用 CSS 变量。
  *   · toast 走 syncNotice；AI 走 aiRequest（只发脱敏分数、不发姓名），失败有规则兜底。
  *   · 未登录不给录入，数据接口层本身也按 user_id 隔离，前端不提供「看别人」入口。
+ *   · v4.19.0：按学期分组。学期范围复用班级岛后台的「入学日 / 学期名 / 起止日」，
+ *     自动推算高中三年六个学期；默认落在当前学期，可切换到任意学期或「全部三年」。
+ *     学期是「看数据时的筛选口径」，不改原始记录（记录只存日期，归属按日期现算）。
  * ========================================================================= */
 var PG = (function(){
   var KEY = 'cls_grade_log_v1', GKEY = 'cls_grade_goals_v1';
@@ -15332,6 +15335,8 @@ var PG = (function(){
   var recs = [], goals = {}, seq = 0;
   var CHART = {};                              // 每科 {mode:'slide'|'all', sel, count}
   var loaded = false, aiText = '', aiBusy = false;
+  var TERMS = [], TERM_CUR = '', TERM_KEYS = {};  // v4.19.0 学期列表 / 当前学期key / key→对象
+  var TERM_NAMES = ['高一上','高一下','高二上','高二下','高三上','高三下'];
 
   /* ---------- 本地存储（云同步交给 hookLocalStorage + CLOUD_KEYS） ---------- */
   function readLS(k, def){
@@ -15348,13 +15353,96 @@ var PG = (function(){
     recs.forEach(function(x){ if(x.got != null && x.v == null) x.v = x.got; if(x.full == null) x.full = SUBJG[x.subj]; });
     var mx = 0; recs.forEach(function(x){ var m = /^r(\d+)$/.exec(x.id||''); if(m) mx = Math.max(mx, +m[1]); });
     seq = mx;
+    buildTerms();
     loaded = true;
   }
   function save(){ writeLS(KEY, recs); }
   function saveGoals(){ writeLS(GKEY, goals); }
 
+  /* ---------- v4.19.0 学期：从班级岛配置推算高中三年六个学期 ----------
+     数据源全部来自班级岛后台现有字段（不新增后台项）：
+       · enrollDate 高一入学日 → 定「高一上」的起点年份
+       · term 学期名（如「高二上」）→ 定当前落在哪一期
+       · startDate/endDate → 覆盖当前学期的实际起止（后台填了就以它为准）
+     推算规则：秋季 9/1~次年1/31 为「上」，春季 2/1~7/31 为「下」；
+     每年两期，从入学日年份连排三期共六个，足够覆盖高中三年。
+     归属按记录日期现算，不写进记录本体——改了学期配置后归属自动跟着变。 */
+  function pad2(n){ return (n<10?'0':'')+n; }
+  function ymdLocal(y,m,d){ return y+'-'+pad2(m)+'-'+pad2(d); }
+  function buildTerms(){
+    var island = (typeof ISLAND !== 'undefined') ? ISLAND : null;
+    var enroll = (island && island.enrollDate) ? String(island.enrollDate) : '';
+    var start  = (island && island.startDate)  ? String(island.startDate)  : '';
+    var end    = (island && island.endDate)    ? String(island.endDate)    : '';
+    var termNm = (island && island.term)       ? String(island.term)       : '';
+    var y0 = parseInt(enroll.slice(0,4), 10);
+    /* 无入学日时退回今天所在学年：9 月及以后算当年入学，1~8 月算上年入学 */
+    if(!y0 || isNaN(y0)){
+      var now = new Date(); var yy = now.getFullYear(), mm = now.getMonth()+1;
+      y0 = mm>=9 ? yy : yy-1;
+    }
+    var out = [];
+    for(var i=0;i<6;i++){
+      var ay = y0 + Math.floor(i/2);           /* 该学年的秋季年份 */
+      var upper = (i%2===0);
+      var s = upper ? ymdLocal(ay,9,1)   : ymdLocal(ay+1,2,1);
+      var e = upper ? ymdLocal(ay+1,1,31): ymdLocal(ay+1,7,31);
+      out.push({ key:'t'+i, name:TERM_NAMES[i], start:s, end:e });
+    }
+    /* 用后台学期名定位当前期；名称解析不到再用开学日/今天落区间 */
+    var idx = -1;
+    /* 后台学期名里含「高一上 / 高二下」这类全称时直接对号入座 */
+    for(var j=0;j<TERM_NAMES.length;j++){ if(termNm.indexOf(TERM_NAMES[j])>=0){ idx=j; break; } }
+    if(idx<0 && start){ for(var a=0;a<6;a++){ if(start>=out[a].start && start<=out[a].end){ idx=a; break; } } }
+    if(idx<0){ var td=new Date().toLocaleDateString('sv-SE'); for(var b=0;b<6;b++){ if(td>=out[b].start && td<=out[b].end){ idx=b; break; } } }
+    if(idx<0) idx=0;
+    /* 当前学期用后台填的起止覆盖（若有），让「本学期范围」以站主设置为准 */
+    if(start) out[idx].start = start;
+    if(end)   out[idx].end   = end;
+    TERMS = out; TERM_KEYS = {};
+    TERMS.forEach(function(t){ TERM_KEYS[t.key]=t; });
+    TERM_CUR = out[idx].key;                     /* 默认本学期 */
+  }
+  /* 某条记录属于哪个学期 key；落在空隙（寒暑假）归到相邻学期，避免记录「消失」 */
+  function termOf(date){
+    date = String(date||'');
+    if(!date) return '';
+    for(var i=0;i<TERMS.length;i++){ if(date>=TERMS[i].start && date<=TERMS[i].end) return TERMS[i].key; }
+    /* 假期：找起点最近且晚于该日期的学期；都没有就归最后一个 */
+    for(var j=0;j<TERMS.length;j++){ if(date<TERMS[j].start) return TERMS[j].key; }
+    return TERMS.length ? TERMS[TERM_NAMES.length-1].key : '';
+  }
+  /* 当前视图口径：'all' = 全部三年；否则只留该学期的记录 */
+  function scopeRecs(){
+    if(!TERMS.length || TERM_CUR==='all') return recs;
+    return recs.filter(function(r){ return termOf(r.date)===TERM_CUR; });
+  }
+  function curTermName(){ return TERM_CUR==='all' ? '全部三年' : (TERM_KEYS[TERM_CUR]?TERM_KEYS[TERM_CUR].name:'本学期'); }
+  function setTerm(k){ if(k==='all'||TERM_KEYS[k]){ TERM_CUR=k; mount(); } }
+  /* 学期切换条：横向滚动的胶囊，当前学期带「本学期」标记 */
+  function termBarHtml(){
+    if(!TERMS.length) return '';
+    var pills = TERMS.map(function(t){
+      var on = t.key===TERM_CUR;
+      return '<button data-t="'+t.key+'" class="'+(on?'on':'')+'" onclick="PG.setTerm(\''+t.key+'\')">'
+        + t.name + (isCurTerm(t.key)?'<small>本学期</small>':'') + '</button>';
+    }).join('');
+    pills += '<button data-t="all" class="'+(TERM_CUR==='all'?'on':'')+'" onclick="PG.setTerm(\'all\')">全部三年</button>';
+    var hint = TERM_CUR==='all'
+      ? '正在看全部三年 · 共 '+recs.length+' 条记录'
+      : ('范围 '+TERM_KEYS[TERM_CUR].start+' ~ '+TERM_KEYS[TERM_CUR].end+' · '+scopeRecs().length+' 条');
+    return '<div class="pg-termbar"><div class="pg-terms" id="pg_terms">'+pills+'</div>'
+      + '<div class="pg-termhint">'+hint+'</div></div>';
+  }
+  function isCurTerm(k){
+    /* 真正含今天（后台覆盖过的学期以新起止为准）的那一期才是「本学期」 */
+    var td = new Date().toLocaleDateString('sv-SE');
+    var t = TERM_KEYS[k];
+    return !!(t && td>=t.start && td<=t.end);
+  }
+
   /* ---------- 数据聚合 ---------- */
-  function subjRecs(s){ return recs.filter(function(r){ return r.subj === s; }).sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); }); }
+  function subjRecs(s){ return scopeRecs().filter(function(r){ return r.subj === s; }).sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); }); }
   function latest(s){ var a = subjRecs(s); return a[a.length-1] || null; }
   function fmtD(d){ return String(d||'').slice(5).replace('-','/'); }
   function rawTag(s){ return RAW[s] ? '<span class="raw">原始分</span>' : ''; }
@@ -15496,7 +15584,7 @@ var PG = (function(){
       + '</div></div>';
     /* 最近录入 */
     h += '<div class="pg-card pg-span2"><div class="pg-card-h"><b>最近录入</b><span>按日期 · 单科 · 含考试名称</span></div><div id="pg_recentBox">';
-    var byDateRecent = recs.slice().sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); }).slice(0,8);
+    var byDateRecent = scopeRecs().slice().sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); }).slice(0,8);
     h += byDateRecent.length ? byDateRecent.map(function(r){ var ok=r.v>=(Number(goals[r.subj])||0);
         return '<div class="pg-mini-sc"><span><b>'+r.subj+' '+r.v+'</b> <span style="color:var(--fg-3)">/ '+(r.full||SUBJG[r.subj])+'</span> · '+fmtD(r.date)+' · '+esc(r.name||r.t||'')+'</span>'
           + '<span style="color:'+(ok?'var(--pg-up)':'var(--pg-down)')+'">'+(ok?'达标':('差'+((Number(goals[r.subj])||0)-r.v)))+'</span></div>'; }).join('')
@@ -15512,7 +15600,7 @@ var PG = (function(){
   function renderRecords(){
     var h = '<div class="pg-two" style="margin-bottom:14px"><button class="pg-btn" onclick="PG.openSheet()">＋ 记一次成绩</button>'
       + '<button class="pg-btn ghost" onclick="PG.openEdit(\'语文\')">✎ 按科目编辑历史</button></div>';
-    var byDate = {}; recs.forEach(function(r){ (byDate[r.date]=byDate[r.date]||[]).push(r); });
+    var byDate = {}; scopeRecs().forEach(function(r){ (byDate[r.date]=byDate[r.date]||[]).push(r); });
     var dates = Object.keys(byDate).sort().reverse();
     if(!dates.length) return h + '<div class="pg-card"><div class="pg-empty"><div class="ico">📝</div><p>还没有记录</p></div></div>';
     h += dates.map(function(d,i){
@@ -15615,6 +15703,7 @@ var PG = (function(){
     if(!box) return;
     box.innerHTML = '<div class="pg-wrap">'
       + '<div class="pg-bar"><span class="pg-priv">🔒 仅自己可见</span><button class="pg-btn pg-add" onclick="PG.openSheet()">＋ 记一次成绩</button></div>'
+      + termBarHtml()
       + '<div class="pg-seg"><button data-p="overview" class="'+(page==='overview'?'on':'')+'" onclick="PG.tab(\'overview\')">总览</button>'
       + '<button data-p="records" class="'+(page==='records'?'on':'')+'" onclick="PG.tab(\'records\')">记录</button>'
       + '<button data-p="analysis" class="'+(page==='analysis'?'on':'')+'" onclick="PG.tab(\'analysis\')">分析</button>'
@@ -15676,7 +15765,13 @@ var PG = (function(){
   function openSheet(){
     if(typeof isLoggedIn==='function' && !isLoggedIn()){ if(typeof needLogin==='function') needLogin(); return; }
     setRows([{s:'语文',v:'',f:150,rf:''},{s:'数学',v:'',f:150,rf:''}]);
-    var d=document.getElementById('pg_fDate'); if(d) d.value=new Date().toLocaleDateString('sv-SE');
+    var d=document.getElementById('pg_fDate');
+    if(d){
+      var today=new Date().toLocaleDateString('sv-SE');
+      /* 查看历史学期时，默认日期落在该学期内，避免录完却不在当前筛选里看不到 */
+      if(TERM_CUR!=='all' && TERM_KEYS[TERM_CUR] && !isCurTerm(TERM_CUR)) d.value=TERM_KEYS[TERM_CUR].start;
+      else d.value=today;
+    }
     renderRows(); var m=document.getElementById('pg_mask'); if(m) m.classList.add('on');
   }
   function closeSheet(){ var m=document.getElementById('pg_mask'); if(m) m.classList.remove('on'); }
@@ -15695,8 +15790,12 @@ var PG = (function(){
     if(!added){ if(typeof syncNotice==='function') syncNotice('err','没填分数，未保存'); return; }
     save();
     document.getElementById('pg_fName').value=''; document.getElementById('pg_fRankC').value=''; document.getElementById('pg_fRankS').value='';
-    closeSheet(); tab('overview'); mount();
-    if(typeof syncNotice==='function') syncNotice('ok','✓ 已保存，仅自己可见');
+    closeSheet();
+    /* 录入日期若不在当前查看学期，自动切过去，保证刚录的能立刻看到 */
+    var dest = termOf(date);
+    if(dest && dest!==TERM_CUR) TERM_CUR=dest;
+    tab('overview'); mount();
+    if(typeof syncNotice==='function') syncNotice('ok','✓ 已保存到'+curTermName()+'，仅自己可见');
   }
 
   /* ---------- 按科目编辑 ---------- */
@@ -15803,8 +15902,12 @@ var PG = (function(){
     openEdit:openEdit, closeEdit:closeEdit, renderEditList:renderEditList, saveEditRow:saveEditRow, delEditRow:delEditRow,
     toggleBoard:toggleBoard, toggleRecs:toggleRecs, foldAll:foldAll, chartMode:chartMode, ptClick:ptClick,
     saveGoals:saveGoals, aiAnalyze:aiAnalyze, aiStop:aiStop, curType:curType,
+    setTerm:setTerm,
     _rows:function(){ return sheetRows; },
-    _data:function(){ return {recs:recs,goals:goals}; }
+    _data:function(){ return {recs:recs,goals:goals}; },
+    _terms:function(){ return {list:TERMS.map(function(t){ return {key:t.key,name:t.name,start:t.start,end:t.end}; }),cur:TERM_CUR,scope:scopeRecs().length,total:recs.length}; },
+    _termOf:function(d){ return termOf(d); },
+    _rebuild:function(){ buildTerms(); }
   };
 })();
 window.PG = PG;

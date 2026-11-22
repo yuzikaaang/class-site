@@ -14113,6 +14113,35 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       /p\[1\] === 'daily'/.test(pgsrc) && /t === 'daily' \? 'scores\/daily'/.test(pgsrc));
   }
 
+  /* ===== v4.18.1 平时成绩按学期查看 ===== */
+  {
+    const pgsrc = readIdx();
+    const pgCssV = fs.readFileSync(new URL('./pg.css', import.meta.url), 'utf8');
+    t('★v4.18.1 从班级岛配置推算三年六学期',
+      /function buildTerms\(\)/.test(pgsrc) && /island\.enrollDate/.test(pgsrc)
+      && /island\.startDate/.test(pgsrc) && /TERM_NAMES = \['高一上'/.test(pgsrc)
+      && /y0 \+ Math\.floor\(i\/2\)/.test(pgsrc));
+    t('★v4.18.1 当前学期用后台起止覆盖 + 默认落本学期',
+      /out\[idx\]\.start = start/.test(pgsrc) && /out\[idx\]\.end   = end/.test(pgsrc)
+      && /TERM_CUR = out\[idx\]\.key/.test(pgsrc));
+    t('★v4.18.1 记录按日期归期，寒暑假不丢',
+      /function termOf\(date\)/.test(pgsrc) && /date>=TERMS\[i\]\.start/.test(pgsrc)
+      && /date<TERMS\[j\]\.start/.test(pgsrc));
+    t('★v4.18.1 全部视图按学期过滤（scopeRecs）',
+      /function scopeRecs\(\)/.test(pgsrc) && /function subjRecs\(s\)\{ return scopeRecs\(\)/.test(pgsrc)
+      && /byDateRecent = scopeRecs\(\)/.test(pgsrc) && /byDate = \{\}; scopeRecs\(\)/.test(pgsrc));
+    t('★v4.18.1 学期切换条 UI + setTerm + 全部三年',
+      /function termBarHtml\(\)/.test(pgsrc) && /PG\.setTerm\(\\'all\\'\)/.test(pgsrc)
+      && /TERM_CUR==='all'/.test(pgsrc) && /setTerm:setTerm/.test(pgsrc)
+      && /\+ termBarHtml\(\)/.test(pgsrc));
+    t('★v4.18.1 历史学期录入默认日期落该学期 + 录完自动切过去',
+      /isCurTerm\(TERM_CUR\)/.test(pgsrc) && /TERM_KEYS\[TERM_CUR\]\.start/.test(pgsrc)
+      && /var dest = termOf\(date\)/.test(pgsrc) && /TERM_CUR=dest/.test(pgsrc));
+    t('★v4.18.1 学期切换条 CSS 存在且走主题变量',
+      /\.pg-termbar\{/.test(pgCssV) && /\.pg-terms button\.on\{/.test(pgCssV)
+      && /var\(--bg-2\)/.test(pgCssV) && /var\(--fg-2\)/.test(pgCssV));
+  }
+
   /* ===== 全量语法自检 =====
      v4.10.2 教训：一次改文案时把中文标点写进了单引号字符串，
      整个 big.js 语法报废 —— 而 e2e 全是正则断言，抓不到。

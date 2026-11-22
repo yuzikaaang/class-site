@@ -34,6 +34,19 @@
 .pg-seg{display:flex;gap:6px;background:var(--bg-2);padding:5px;border-radius:12px;margin-bottom:14px;max-width:520px}
 .pg-seg button{flex:1;border:0;background:transparent;color:var(--fg-2);padding:9px 0;border-radius:9px;font-size:.82rem;font-weight:800;cursor:pointer;transition:.25s;font-family:inherit}
 .pg-seg button.on{background:linear-gradient(135deg,var(--pg-brand),var(--pg-brand2));color:#fff;box-shadow:0 6px 16px rgba(175,65,15,.28)}
+/* v4.19.0 学期切换条：横向滚动胶囊，手机横滑即可，不换行不撑破宽度 */
+.pg-termbar{margin:0 0 14px}
+.pg-terms{display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 8px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.pg-terms::-webkit-scrollbar{height:4px}
+.pg-terms::-webkit-scrollbar-thumb{background:var(--pg-line);border-radius:4px}
+.pg-terms button{flex:0 0 auto;border:1px solid var(--pg-line);background:var(--bg-2);color:var(--fg-2);
+  border-radius:20px;padding:7px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;
+  white-space:nowrap;transition:.18s;display:flex;align-items:center;gap:5px}
+.pg-terms button:hover{border-color:var(--pg-brand)}
+.pg-terms button.on{background:linear-gradient(135deg,var(--pg-brand),var(--pg-brand2));color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(175,65,15,.22)}
+.pg-terms button small{font-size:.6rem;font-weight:800;padding:1px 5px;border-radius:8px;background:rgba(255,255,255,.22);line-height:1.3}
+.pg-terms button:not(.on) small{background:var(--pg-ok-bg);color:var(--pg-ok-ink)}
+.pg-termhint{font-size:.72rem;color:var(--fg-3);margin-top:2px;padding-left:3px}
 .pg-page{display:none;animation:pgFade .32s ease}
 .pg-page.on{display:block}
 @keyframes pgFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
