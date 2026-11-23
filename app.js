@@ -10418,6 +10418,8 @@ function openCat(id){
   if(cur) cur.classList.add('active');
   /* 成绩分析（板块 3）是内嵌的：一切过去就把它挂起来（没登录就给登录引导） */
   if(id === 3 && typeof scEnsureMounted === 'function'){ scEnsureMounted(); }
+  /* v4.18.9：切换板块后重算口径悬浮器显隐——离开成绩板块立刻收起 */
+  try{ scRenderFloatBasis(); }catch(e){}
   /* v3.5.6 投票专区（板块 7）：同一套「内嵌即挂载」的路子 */
   if(id === 7 && typeof voteEnsureMounted === 'function'){ voteEnsureMounted(); }
   var homeBtn = document.getElementById('homeBtn');
@@ -10477,6 +10479,8 @@ function goHomeView(){
   var homeBtn = document.getElementById('homeBtn');
   if(homeBtn) homeBtn.classList.add('active');
   closeSidebar();
+  /* v4.18.9：回首页收起口径悬浮器 */
+  try{ scRenderFloatBasis(); }catch(e){}
 }
 function openSidebar(){ var s=document.getElementById('sidebar'); var m=document.getElementById('sideMask'); if(s) s.classList.add('open'); if(m) m.classList.add('show'); }
 function closeSidebar(){ var s=document.getElementById('sidebar'); var m=document.getElementById('sideMask'); if(s) s.classList.remove('open'); if(m) m.classList.remove('show'); }
@@ -16391,9 +16395,10 @@ function scEmbedHtml(){
     + '<div class="sc-notebar" id="scNotebar">✍️ 成绩由人工手动录入，若有错误请联系管理员修改</div>'
     + '<div class="sc-bar" id="scBar"></div>'
     + '<div class="sc-pane" id="scPaneBox"></div>'
-    /* v4.18.8：总分口径常驻悬浮器——只在这个板块进入视口时显示，
-       切到「我的画像 / 平时成绩」等任意标签都跟着走，且切换不更新页面滚动位置。 */
-    + '<div class="sc-float-basis" id="scFloatBasis" aria-label="总分口径切换"></div>'
+    /* v4.18.9：口径悬浮器已移出本板块、挂到 body。
+       原因：.tab-page.active 的 pageIn 动画残留 transform，祖先一旦有 transform，
+       里面的 position:fixed 就会相对祖先定位——滚动时"贴板块顶"而不跟随视口。
+       挂 body 后 fixed 才真正相对视口，滑到哪都跟随。详见 scRenderFloatBasis。 */
     + '</div>';
 }
 /* ============================================================================
@@ -17195,27 +17200,42 @@ function scSetBasis(b){
    · 两个按钮复用 scSetBasis，跟原顶部按钮完全同一套逻辑；
    · 只在成绩分析板块进入视口时淡入，离开板块自动淡出，避免在整个网站乱飘；
    · 用 IntersectionObserver，老浏览器回退到「板块已挂载就一直显示」。 */
+/* v4.18.9：右上角常驻口径悬浮器。
+   · DOM 挂到 body（不在 .tab-page 内），fixed 真正相对视口——滑到任何位置都跟随；
+   · 显隐改为「状态驱动」：只在成绩分析板块 + 已登录 + 数据已加载 + 非「平时成绩」标签时出现；
+     平时成绩不算赋分，切到它会立即隐藏；离开成绩板块 / 回首页也隐藏。
+   · 不再用 IntersectionObserver，避免滚出板块就被误隐藏。 */
+function scFloatBasisEl(){
+  var el = document.getElementById('scFloatBasis');
+  if(!el){
+    el = document.createElement('div');
+    el.className = 'sc-float-basis';
+    el.id = 'scFloatBasis';
+    try{ el.setAttribute('aria-label', '总分口径切换'); }catch(e){}
+    document.body.appendChild(el);
+  }
+  return el;
+}
 function scRenderFloatBasis(){
-  var el = document.getElementById('scFloatBasis'); if(!el) return;
-  /* 未登录 / 功能未开放时板块里是引导提示，这时悬浮器不该出现 */
-  try{ if(typeof isLoggedIn === 'function' && !isLoggedIn()){ el.classList.remove('show'); el.innerHTML=''; return; } }catch(e){}
+  var el = scFloatBasisEl();
+  var show = false;
+  try{
+    var onBoard = (typeof __activeCat !== 'undefined' && Number(__activeCat) === 3);
+    var logged = (typeof isLoggedIn === 'function' && isLoggedIn());
+    var loaded = !!(typeof SC !== 'undefined' && SC.loaded);
+    var notDaily = (typeof SC === 'undefined' || SC.tab !== 'daily');
+    show = onBoard && logged && loaded && notDaily;
+  }catch(e){ show = false; }
+  if(!show){ el.classList.remove('show'); el.innerHTML=''; return; }
   el.innerHTML = '<span class="sc-fb-cap">总分</span>'
     + '<div class="sc-fb-seg">'
     + '<button class="' + (SC.basis === 'graded' ? 'on' : '') + '" onclick="scSetBasis(\'graded\')">赋分</button>'
     + '<button class="' + (SC.basis === 'raw' ? 'on' : '') + '" onclick="scSetBasis(\'raw\')">原始</button>'
     + '</div>';
+  el.classList.add('show');
 }
-var _scFloatObs = null;
-function scFloatBasisWatch(){
-  var el = document.getElementById('scFloatBasis'); if(!el) return;
-  if(!('IntersectionObserver' in window)){ el.classList.add('show'); return; }
-  if(_scFloatObs){ try{ _scFloatObs.disconnect(); }catch(e){} }
-  var root = document.getElementById('scEmbed') || el.parentNode;
-  _scFloatObs = new IntersectionObserver(function(entries){
-    entries.forEach(function(en){ el.classList.toggle('show', !!en.isIntersecting); });
-  }, { threshold: 0, rootMargin: '0px 0px -15% 0px' });
-  if(root) _scFloatObs.observe(root);
-}
+/* 兼容旧调用点：render() 重建后 / 进入板块后都调它重算显隐 */
+function scFloatBasisWatch(){ scRenderFloatBasis(); }
 
 function scRenderTabs(){
   var hasMe = !!scMyRow();
@@ -17229,6 +17249,8 @@ function scRenderTabs(){
 }
 function scSetTab(t){
   SC.tab = t; scRenderTabs(); scBarVisible(); scRenderPane();
+  /* v4.18.9：切标签时重算悬浮器显隐——平时成绩不算赋分，切到它立即隐藏 */
+  try{ scRenderFloatBasis(); }catch(e){}
   /* v3.18.0：三种视角各有一条链接，#/scores/me 直接落到我的画像；v4.18.0 加平时成绩 */
   try{ setRoute(t === 'me' ? 'scores/me' : (t === 'daily' ? 'scores/daily' : (t === 'pk' ? 'scores/pk' : 'scores'))); }catch(e){}
 }

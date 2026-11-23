@@ -14214,12 +14214,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.3 删除按钮 CSS 齐全（含明暗变量）',
       /\.pg-clear-subj\{/.test(pgCss183) && /\.pg-rec-del\{/.test(pgCss183)
       && /--pg-no-ink/.test(pgCss183));
-    /* ④ 版本号四处一致（随版本升级同步到 4.18.8） */
+    /* ④ 版本号四处一致（随版本升级同步到 4.18.9） */
     t('★版本 前台/后台/SW/API 四处一致',
-      /var SITE_VERSION = '4\.18\.8'/.test(readIdx())
-      && /const SITE_VER = '4\.18\.8'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-      && /const API_VER = '4\.18\.8';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-      && /var SITE_VERSION = '4\.18\.8'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+      /var SITE_VERSION = '4\.18\.9'/.test(readIdx())
+      && /const SITE_VER = '4\.18\.9'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+      && /const API_VER = '4\.18\.9';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+      && /var SITE_VERSION = '4\.18\.9'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
   }
 
   /* ===== v4.18.4 目标双端同步 + 赋分目标 + 排名目标 + AI目标专项 ===== */
@@ -14423,12 +14423,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     const app = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
     const idx = readIdx();
     const rel188 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
-    /* ① 悬浮切换器：DOM 骨架 + 渲染 + 视口观察 + 挂进生命周期 */
-    t('★v4.18.8 悬浮切换器 DOM 骨架与渲染函数',
-      /id="scFloatBasis"/.test(app)
-      && /function scRenderFloatBasis\(\)/.test(app)
-      && /function scFloatBasisWatch\(\)/.test(app)
-      && /IntersectionObserver/.test(app));
+    /* ① 悬浮切换器：渲染函数 + 兼容挂载调用（DOM 创建方式 v4.18.9 改到 body，见下方 4.18.9 断言） */
+    t('★v4.18.8 悬浮切换器渲染函数与挂载调用',
+      /function scRenderFloatBasis\(\)/.test(app)
+      && /function scFloatBasisWatch\(\)/.test(app));
     t('★v4.18.8 悬浮器按钮复用 scSetBasis 且两口径齐全',
       /scSetBasis\(\\'graded\\'\)/.test(app) && /scSetBasis\(\\'raw\\'\)/.test(app));
     t('★v4.18.8 悬浮器挂进 scRenderAll 与挂载流程',
@@ -14458,6 +14456,42 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.8 公告条目均不超过 28 汉字且无禁词',
       (function(){
         const block = rel188.slice(rel188.indexOf("version: '4.18.8'"), rel188.indexOf("version: '4.18.7'"));
+        const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
+          && texts.every(x => !ban.some(w => x.includes(w)));
+      })());
+  }
+
+  /* ===== v4.18.9 悬浮器真跟随 + 平时成绩隐藏 ===== */
+  {
+    const app = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const rel189 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    /* ① DOM 挂到 body：懒创建函数 + appendChild，脱离 .tab-page 的 transform 祖先 */
+    t('★v4.18.9 悬浮器挂 body（真正 fixed 跟随视口）',
+      /function scFloatBasisEl\(\)/.test(app)
+      && /document\.body\.appendChild\(el\)/.test(app)
+      && /el\.id = 'scFloatBasis'/.test(app)
+      && /function scFloatBasisEl\(\)[\s\S]{0,400}document\.body\.appendChild/.test(app));
+    /* ② scEmbedHtml 骨架里不再内嵌悬浮器 DOM */
+    t('★v4.18.9 悬浮器已移出成绩板块骨架',
+      !/class="sc-float-basis" id="scFloatBasis"/.test(app));
+    /* ③ 显隐改为状态驱动：在板块 + 非日常标签，且不再用 IO */
+    t('★v4.18.9 显隐按状态判断且移除视口观察器',
+      /Number\(__activeCat\) === 3/.test(app)
+      && /SC\.tab !== 'daily'/.test(app)
+      && !/_scFloatObs = new IntersectionObserver/.test(app));
+    /* ④ 切标签 / 离开板块 / 回首页都会重算显隐 */
+    t('★v4.18.9 标签与板块切换同步悬浮器显隐',
+      (app.match(/scRenderFloatBasis\(\);/g) || []).length >= 4);
+    /* ⑤ 版本记录与公告口径 */
+    t('★v4.18.9 版本更新记录与公告口径齐全',
+      /version: '4\.18\.9'/.test(rel189)
+      && /总分切换按钮改为始终跟随页面滚动/.test(rel189)
+      && /总分切换按钮只在成绩分析相关页面显示/.test(rel189));
+    t('★v4.18.9 公告条目均不超过 28 汉字且无禁词',
+      (function(){
+        const block = rel189.slice(rel189.indexOf("version: '4.18.9'"), rel189.indexOf("version: '4.18.8'"));
         const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
         const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
         return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
