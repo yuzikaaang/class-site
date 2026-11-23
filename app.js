@@ -13015,12 +13015,12 @@ function impEditForm(key){
   var scope=Array.isArray(d.scope)?d.scope.slice():[];
   var box=document.getElementById('impEditBody'); if(!box) return;
   function scopeRows(){
-    if(!scope.length) return '<div style="font-size:.76rem;color:#8a827b;padding:4px 0">还没有科目，点「添加科目」</div>';
+    if(!scope.length) return '<div class="imp-tip">还没有科目，点「添加科目」</div>';
     return scope.map(function(s,i){
       return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start">'
-        + '<input data-is="' + i + '" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:76px;flex:0 0 76px;min-width:0">'
-        + '<textarea data-it="' + i + '" rows="2" maxlength="600" placeholder="考试范围" style="flex:1;min-width:0;width:100%">'+esc(s.txt||'')+'</textarea>'
-        + '<button type="button" onclick="impScopeDel('+i+')" style="flex-shrink:0">×</button></div>';
+        + '<input class="imp-inp" data-is="' + i + '" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:76px;flex:0 0 76px;min-width:0">'
+        + '<textarea class="imp-area" data-it="' + i + '" rows="2" maxlength="600" placeholder="考试范围" style="flex:1;min-width:0;width:100%">'+esc(s.txt||'')+'</textarea>'
+        + '<button type="button" class="imp-x" onclick="impScopeDel('+i+')" aria-label="删除这一科">×</button></div>';
     }).join('');
   }
   function harvest(){
@@ -13028,20 +13028,20 @@ function impEditForm(key){
     Array.prototype.forEach.call(box.querySelectorAll('[data-it]'),function(inp){ var i=Number(inp.dataset.it); if(scope[i]) scope[i].txt=inp.value; });
   }
   window.__IMP_SCOPE=scope; window.__IMP_HARVEST=harvest; window.__IMP_KEY=key;
-  box.innerHTML='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+  box.innerHTML='<div class="imp-edit-head">'
       + '<button class="btn btn-sm btn-ghost" onclick="impEditRender()">← 返回列表</button>'
       + '<b>'+(isNew?'新增重要日期':('编辑 '+esc(d.name||'')))+'</b></div>'
-    + '<div style="margin-bottom:10px"><label style="display:block;font-size:.8rem;font-weight:700;margin-bottom:4px">名称</label>'
-      + '<input id="impN" maxlength="30" value="'+esc(d.name||'')+'" placeholder="例如：第一次段考" style="width:100%"></div>'
-    + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
-      + '<div style="flex:1;min-width:180px"><label style="display:block;font-size:.8rem;font-weight:700;margin-bottom:4px">开始时间</label>'
-      +   '<input id="impD" type="datetime-local" value="'+esc(impEditToLocal(d.date))+'" style="width:100%"></div>'
-      + '<div style="flex:1;min-width:160px"><label style="display:block;font-size:.8rem;font-weight:700;margin-bottom:4px">结束日期（可选）</label>'
-      +   '<input id="impE" type="date" value="'+esc(d.endDate?String(d.endDate).slice(0,10):'')+'" style="width:100%"></div></div>'
-    + '<div style="margin-bottom:8px"><label style="display:block;font-size:.8rem;font-weight:700;margin-bottom:4px">考试范围（可选）</label>'
+    + '<div style="margin-bottom:12px"><label class="imp-lbl" for="impN">名称</label>'
+      + '<input id="impN" class="imp-inp" maxlength="30" value="'+esc(d.name||'')+'" placeholder="例如：第一次段考"></div>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+      + '<div style="flex:1;min-width:180px"><label class="imp-lbl" for="impD">开始时间</label>'
+      +   '<input id="impD" class="imp-inp" type="datetime-local" value="'+esc(impEditToLocal(d.date))+'"></div>'
+      + '<div style="flex:1;min-width:160px"><label class="imp-lbl" for="impE">结束日期（可选）</label>'
+      +   '<input id="impE" class="imp-inp" type="date" value="'+esc(d.endDate?String(d.endDate).slice(0,10):'')+'"></div></div>'
+    + '<div style="margin-bottom:8px"><span class="imp-lbl">考试范围（可选）</span>'
       + '<div id="impScope">'+scopeRows()+'</div>'
       + '<button type="button" class="btn btn-sm btn-ghost" onclick="impScopeAdd()" style="margin-top:6px">＋ 添加科目</button>'
-      + '<div style="font-size:.72rem;color:#8a827b;margin-top:4px">填了范围的，同学点「查看全部」才有「查看考试范围」入口</div></div>'
+      + '<div class="imp-tip">填了范围的，同学点「查看全部」后才会出现「查看考试范围」入口</div></div>'
     + '<div id="impMsg" style="color:#af410f;font-size:.8rem;min-height:18px"></div>'
     + '<button class="btn" onclick="impEditSave()">'+(isNew?'新增':'保存')+'</button>';
 }
@@ -13050,12 +13050,12 @@ function impScopeDel(i){ if(window.__IMP_HARVEST) window.__IMP_HARVEST(); window
 function impScopeRedraw(){
   var box=document.getElementById('impEditBody'), holder=document.getElementById('impScope'); if(!box||!holder) return;
   var scope=window.__IMP_SCOPE||[];
-  if(!scope.length){ holder.innerHTML='<div style="font-size:.76rem;color:#8a827b;padding:4px 0">还没有科目，点「添加科目」</div>'; return; }
+  if(!scope.length){ holder.innerHTML='<div class="imp-tip">还没有科目，点「添加科目」</div>'; return; }
   holder.innerHTML=scope.map(function(s,i){
     return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start">'
-      + '<input data-is="'+i+'" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:76px;flex:0 0 76px;min-width:0">'
-      + '<textarea data-it="'+i+'" rows="2" maxlength="600" placeholder="考试范围" style="flex:1;min-width:0;width:100%">'+esc(s.txt||'')+'</textarea>'
-      + '<button type="button" onclick="impScopeDel('+i+')" style="flex-shrink:0">×</button></div>';
+      + '<input class="imp-inp" data-is="'+i+'" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:76px;flex:0 0 76px;min-width:0">'
+      + '<textarea class="imp-area" data-it="'+i+'" rows="2" maxlength="600" placeholder="考试范围" style="flex:1;min-width:0;width:100%">'+esc(s.txt||'')+'</textarea>'
+      + '<button type="button" class="imp-x" onclick="impScopeDel('+i+')" aria-label="删除这一科">×</button></div>';
   }).join('');
 }
 function impEditSave(){
@@ -15551,7 +15551,10 @@ var PG = (function(){
     out._subRank = {};
     SUBJ.forEach(function(s){
       var c = g._subRank && g._subRank[s];
-      out._subRank[s] = { raw:numOrEmpty(c&&c.raw), asg:numOrEmpty(c&&c.asg) };
+      var rawV = numOrEmpty(c&&c.raw), asgV = numOrEmpty(c&&c.asg);
+      /* v4.18.8：非赋分科（语数英物）两口径排名目标视为同一份，未填 asg 时以 raw 为准 */
+      if(!RAW[s]) asgV = rawV;
+      out._subRank[s] = { raw:rawV, asg:asgV };
     });
     return out;
   }
@@ -15695,7 +15698,12 @@ var PG = (function(){
       asgFilled: asgGoalsFilled(),
       scores: SUBJ.map(function(s){ return { s:s, goal:goalOf(s,b), isRaw:!!RAW[s] }; }),
       rank: { grade:(goals._rank[b]||{}).grade, class:(goals._rank[b]||{}).class },
-      subRank: SUBJ.map(function(s){ return { s:s, cls:goals._subRank[s] ? goals._subRank[s][b] : '' }; })
+      /* v4.18.8：语数英物不赋分，两个口径本就没有区别，班级排名目标统一读 raw 那一份；
+         化学/生物才按当前口径分 asg。这样赋分口径下这四科不会再显示成「未设」。 */
+      subRank: SUBJ.map(function(s){
+        var sr = goals._subRank[s] || {};
+        return { s:s, cls: RAW[s] ? sr[b] : sr.raw };
+      })
     };
   }
 
@@ -16093,6 +16101,7 @@ var PG = (function(){
       var cr=val('[data-gcr="'+s+'"]'); goals._subRank[s] = goals._subRank[s]||{raw:'',asg:''};
       goals._subRank[s].raw = (cr===''||(Number(cr)>=0&&!isNaN(cr)))?cr:'';
       if(RAW[s]){ var ca=val('[data-gca="'+s+'"]'); goals._subRank[s].asg = (ca===''||(Number(ca)>=0&&!isNaN(ca)))?ca:''; }
+      else goals._subRank[s].asg = goals._subRank[s].raw;   /* v4.18.8：非赋分科两口径共用同一排名目标 */
     });
     [['raw','g','grade'],['raw','c','class'],['asg','g','grade'],['asg','c','class']].forEach(function(x){
       var v=val('[data-gr="'+x[0]+'-'+x[1]+'"]'); goals._rank[x[0]] = goals._rank[x[0]]||{grade:'',class:''};
@@ -16361,6 +16370,8 @@ function scEnsureMounted(){
   if(!SC.loaded){ scLoad(); return; }
   /* 数据还在内存里（render() 重建会把容器清空），重绘即可，不必再请求一次 */
   scRenderAll();
+  /* v4.18.8：render() 重建板块后 DOM 是全新的，悬浮观察器要重新绑定 */
+  scFloatBasisWatch();
 }
 /* 老函数名兼容：原先用来关弹窗。现在没有弹窗了，就当「返回首页」。 */
 function closeScoreAnal(){
@@ -16380,6 +16391,9 @@ function scEmbedHtml(){
     + '<div class="sc-notebar" id="scNotebar">✍️ 成绩由人工手动录入，若有错误请联系管理员修改</div>'
     + '<div class="sc-bar" id="scBar"></div>'
     + '<div class="sc-pane" id="scPaneBox"></div>'
+    /* v4.18.8：总分口径常驻悬浮器——只在这个板块进入视口时显示，
+       切到「我的画像 / 平时成绩」等任意标签都跟着走，且切换不更新页面滚动位置。 */
+    + '<div class="sc-float-basis" id="scFloatBasis" aria-label="总分口径切换"></div>'
     + '</div>';
 }
 /* ============================================================================
@@ -17112,6 +17126,7 @@ function scRenderAll(){
   scRenderTabs();
   scBarVisible();
   scRenderPane();
+  scRenderFloatBasis();
 }
 
 /* 考试日期的显示文案：跨天显示成 2026-05-14 ~ 05-15，单日就一个日期 */
@@ -17141,10 +17156,8 @@ function scRenderBar(){
   document.getElementById('scBar').innerHTML =
     '<div class="sc-bar-row">'
     + '<select class="sc-sel" onchange="scPickExam(Number(this.value))">' + opts + '</select>'
-    + '<div class="sc-seg">'
-    +   '<button class="' + (SC.basis === 'graded' ? 'on' : '') + '" onclick="scSetBasis(\'graded\')">总分赋分</button>'
-    +   '<button class="' + (SC.basis === 'raw' ? 'on' : '') + '" onclick="scSetBasis(\'raw\')">总分原始</button>'
-    + '</div>'
+    /* v4.18.8：总分赋分/原始两个口径按钮移到右上角常驻悬浮器（scFloatBasis），
+       这里不再重复——切标签到「我的画像」时也能随时切口径，不用跑回顶部。 */
     + '<div class="sc-seg sc-seg-icon">'
     +   '<button onclick="scExportDialog()" title="勾选要导出的内容，生成一张图片（可直接发微信）">导出图片</button>'
     +   '<button onclick="scPrint()" title="按 A4 版式打印当前页面">打印</button>'
@@ -17163,11 +17176,45 @@ function scRenderBar(){
 }
 
 function scSetBasis(b){
+  if(b === SC.basis) return;                 /* v4.18.8：点当前口径不重绘，避免无谓跳动 */
+  /* v4.18.8：悬浮器在数据加载完成前也可能可见，此时 SC.exam 为空，重绘会报错；忽略即可 */
+  if(!SC.loaded || !SC.exam) return;
+  /* v4.18.8 无感切换：重绘只替换板块内部 DOM，理论上不动页面滚动条；
+     但内容高度变化可能让浏览器自动微调 scrollY，这里记住并还原，做到「切了还停在原处」。 */
+  var sy = (window.pageYOffset != null) ? window.pageYOffset : (document.documentElement.scrollTop || 0);
+  var sx = (window.pageXOffset != null) ? window.pageXOffset : (document.documentElement.scrollLeft || 0);
   SC.basis = b;
   SC.basisSet = true;
   /* 分段是按分数切的，换了口径（原始 / 赋分）就重新点 */
   SC.histSel = null; SC.histWho = null;
   scRenderAll();
+  try{ window.scrollTo(sx, sy); }catch(e){}
+}
+
+/* v4.18.8：右上角常驻口径悬浮器。
+   · 两个按钮复用 scSetBasis，跟原顶部按钮完全同一套逻辑；
+   · 只在成绩分析板块进入视口时淡入，离开板块自动淡出，避免在整个网站乱飘；
+   · 用 IntersectionObserver，老浏览器回退到「板块已挂载就一直显示」。 */
+function scRenderFloatBasis(){
+  var el = document.getElementById('scFloatBasis'); if(!el) return;
+  /* 未登录 / 功能未开放时板块里是引导提示，这时悬浮器不该出现 */
+  try{ if(typeof isLoggedIn === 'function' && !isLoggedIn()){ el.classList.remove('show'); el.innerHTML=''; return; } }catch(e){}
+  el.innerHTML = '<span class="sc-fb-cap">总分</span>'
+    + '<div class="sc-fb-seg">'
+    + '<button class="' + (SC.basis === 'graded' ? 'on' : '') + '" onclick="scSetBasis(\'graded\')">赋分</button>'
+    + '<button class="' + (SC.basis === 'raw' ? 'on' : '') + '" onclick="scSetBasis(\'raw\')">原始</button>'
+    + '</div>';
+}
+var _scFloatObs = null;
+function scFloatBasisWatch(){
+  var el = document.getElementById('scFloatBasis'); if(!el) return;
+  if(!('IntersectionObserver' in window)){ el.classList.add('show'); return; }
+  if(_scFloatObs){ try{ _scFloatObs.disconnect(); }catch(e){} }
+  var root = document.getElementById('scEmbed') || el.parentNode;
+  _scFloatObs = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){ el.classList.toggle('show', !!en.isIntersecting); });
+  }, { threshold: 0, rootMargin: '0px 0px -15% 0px' });
+  if(root) _scFloatObs.observe(root);
 }
 
 function scRenderTabs(){

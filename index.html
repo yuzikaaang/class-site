@@ -658,6 +658,26 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .imp-edit-actions .imp-del{color:#af410f}
 .dark .imp-edit-name{color:#f5f0ea}
 .dark .imp-edit-count,.dark .imp-edit-meta{color:#a89e94}
+/* v4.18.8：重要日期表单输入统一成网站暖色风格（原来裸原生白框，跟界面不搭） */
+.imp-lbl{display:block;font-size:.8rem;font-weight:700;color:#5c534c;margin-bottom:5px}
+.dark .imp-lbl{color:#d8cabd}
+.imp-inp,.imp-area{width:100%;border:1.5px solid #e8d9cd;border-radius:11px;background:#faf4ee;color:#2b2521;font-size:.9rem;font-family:inherit;padding:0 12px;box-sizing:border-box;outline:none;transition:border-color .15s,box-shadow .15s,background .15s;-webkit-appearance:none;appearance:none;color-scheme:light}
+.imp-inp:hover,.imp-area:hover{background:#fdf8f3}
+.imp-inp:focus,.imp-area:focus{background:#fffdfb}
+.imp-inp{height:42px}
+.imp-area{min-height:52px;padding:9px 12px;line-height:1.45;resize:vertical}
+.imp-inp:focus,.imp-area:focus{border-color:#c2410c;box-shadow:0 0 0 3px rgba(194,65,12,.12)}
+.imp-inp::placeholder,.imp-area::placeholder{color:#b3a79c}
+.dark .imp-inp,.dark .imp-area{background:#221e1b;border-color:#4a4038;color:#f0e6dc;color-scheme:dark}
+.dark .imp-inp:focus,.dark .imp-area:focus{border-color:#fb923c;box-shadow:0 0 0 3px rgba(251,146,60,.15)}
+.dark .imp-inp::placeholder,.dark .imp-area::placeholder{color:#7d7268}
+/* × 删除某一科按钮 */
+.imp-x{flex:0 0 30px;width:30px;height:30px;border:1.5px solid #e4ddd6;border-radius:9px;background:#fffdfb;color:#af410f;font-size:1.1rem;line-height:1;cursor:pointer}
+.imp-x:hover{background:#fdf0ea;border-color:#c2410c}
+.dark .imp-x{background:#221e1b;border-color:#4a4038;color:#f08a5d}
+/* 提示文字 */
+.imp-tip{font-size:.72rem;color:#8a827b;margin-top:5px;line-height:1.5}
+.dark .imp-tip{color:#a89e94}
 .allboard-list{overflow-y:auto;list-style:none;margin:0;padding:0;max-height:60vh}
 .allboard-list li{padding:13px 18px;border-bottom:1px solid #f4ede6}
 .allboard-list li:last-child{border-bottom:none}
@@ -3095,6 +3115,29 @@ html[data-lite="1"] .video-mask{background:rgba(0,0,0,.75)}
 .sc-fine input{width:14px;height:14px;accent-color:#c2410c;margin:0}
 .dark .sc-fine{background:#1f1c19;border-color:#3a322c;color:#e7e5e4}
 .dark .sc-pk-group-h{color:#fdba74}
+/* v4.18.8：总分口径常驻悬浮器（右上角，成绩分析板块进入视口才出现） */
+.sc-float-basis{position:fixed;top:72px;right:14px;z-index:1040;display:flex;align-items:center;gap:6px;
+  padding:5px 6px 5px 11px;border:1.5px solid #e2d5c8;border-radius:999px;background:rgba(255,253,251,.96);
+  box-shadow:0 6px 20px rgba(124,45,18,.16);backdrop-filter:blur(8px);opacity:0;visibility:hidden;
+  transform:translateY(-8px);transition:opacity .22s,transform .22s,visibility .22s;pointer-events:none}
+.sc-float-basis.show{opacity:1;visibility:visible;transform:none;pointer-events:auto}
+.sc-fb-cap{font-size:.74rem;font-weight:800;color:#9a3412;white-space:nowrap}
+.sc-fb-seg{display:inline-flex;border:1.5px solid #e2d5c8;border-radius:999px;overflow:hidden;background:#fff}
+.sc-fb-seg button{padding:5px 13px;border:none;background:#fff;color:#6e635a;font-size:.78rem;font-weight:800;
+  cursor:pointer;font-family:inherit;line-height:1.2;transition:background .15s,color .15s}
+.sc-fb-seg button+button{border-left:1.5px solid #e2d5c8}
+.sc-fb-seg button.on{background:#c2410c;color:#fff}
+.dark .sc-float-basis{background:rgba(38,34,32,.95);border-color:#4a4038;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.dark .sc-fb-cap{color:#fdba74}
+.dark .sc-fb-seg{background:#2e2926;border-color:#4a4038}
+.dark .sc-fb-seg button{background:#2e2926;color:#c9b8aa}
+.dark .sc-fb-seg button+button{border-left-color:#4a4038}
+.dark .sc-fb-seg button.on{background:#c2410c;color:#fff}
+@media(max-width:520px){
+  .sc-float-basis{top:64px;right:10px;padding:4px 5px 4px 9px;gap:5px}
+  .sc-fb-cap{font-size:.7rem}
+  .sc-fb-seg button{padding:5px 10px;font-size:.74rem}
+}
 .sc-bar{padding:12px 18px 10px;border-bottom:1px solid #f5efe8}
 .sc-bar-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .sc-sel{flex:1;min-width:160px;height:44px;padding:0 34px 0 13px;border:1px solid #e4ddd6;
@@ -6641,7 +6684,7 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   }catch(e){}
 })();
 </script>
-<link rel="stylesheet" href="./pg.css?v=4187">
+<link rel="stylesheet" href="./pg.css?v=4188">
 </head>
 <body>
 
@@ -7566,7 +7609,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.18.7</button>
+        title="点击检查是否为最新版本">v4.18.8</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -8786,19 +8829,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.18.7';
+var SITE_VERSION = '4.18.8';
 var VER_DATE = '2026-11-17';
 </script>
-<script src="./auth-bus.js?v=4187" defer></script>
+<script src="./auth-bus.js?v=4188" defer></script>
 <script src="./tour.js?v=b2cd14" defer></script>
-<script src="./app.min.js?v=4187" defer></script>
+<script src="./app.min.js?v=4188" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4187" defer></script>
-<script src="./big.js?v=4187" defer></script>
+<script src="./fs-keep.js?v=4188" defer></script>
+<script src="./big.js?v=4188" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4187" defer></script>
+<script src="./pickfx.js?v=4188" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

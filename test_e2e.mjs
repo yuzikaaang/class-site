@@ -14214,12 +14214,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.3 删除按钮 CSS 齐全（含明暗变量）',
       /\.pg-clear-subj\{/.test(pgCss183) && /\.pg-rec-del\{/.test(pgCss183)
       && /--pg-no-ink/.test(pgCss183));
-    /* ④ 版本号四处一致（随版本升级同步到 4.18.7） */
+    /* ④ 版本号四处一致（随版本升级同步到 4.18.8） */
     t('★版本 前台/后台/SW/API 四处一致',
-      /var SITE_VERSION = '4\.18\.7'/.test(readIdx())
-      && /const SITE_VER = '4\.18\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-      && /const API_VER = '4\.18\.7';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-      && /var SITE_VERSION = '4\.18\.7'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+      /var SITE_VERSION = '4\.18\.8'/.test(readIdx())
+      && /const SITE_VER = '4\.18\.8'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+      && /const API_VER = '4\.18\.8';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+      && /var SITE_VERSION = '4\.18\.8'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
   }
 
   /* ===== v4.18.4 目标双端同步 + 赋分目标 + 排名目标 + AI目标专项 ===== */
@@ -14415,6 +14415,53 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
         const block = rel187.slice(rel187.indexOf("version: '4.18.7'"), rel187.indexOf("version: '4.18.6'"));
         const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
         return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28);
+      })());
+  }
+
+  /* ===== v4.18.8 口径悬浮切换 + 表单风格 + 非赋分科排名目标共用 ===== */
+  {
+    const app = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const idx = readIdx();
+    const rel188 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    /* ① 悬浮切换器：DOM 骨架 + 渲染 + 视口观察 + 挂进生命周期 */
+    t('★v4.18.8 悬浮切换器 DOM 骨架与渲染函数',
+      /id="scFloatBasis"/.test(app)
+      && /function scRenderFloatBasis\(\)/.test(app)
+      && /function scFloatBasisWatch\(\)/.test(app)
+      && /IntersectionObserver/.test(app));
+    t('★v4.18.8 悬浮器按钮复用 scSetBasis 且两口径齐全',
+      /scSetBasis\(\\'graded\\'\)/.test(app) && /scSetBasis\(\\'raw\\'\)/.test(app));
+    t('★v4.18.8 悬浮器挂进 scRenderAll 与挂载流程',
+      /scRenderFloatBasis\(\);/.test(app) && /scFloatBasisWatch\(\);/.test(app));
+    /* ② 顶部原两个口径按钮已删除 */
+    t('★v4.18.8 顶部工具条原总分口径按钮已移除',
+      !/onclick="scSetBasis\(\\'graded\\'\)">总分赋分/.test(app)
+      && !/onclick="scSetBasis\(\\'raw\\'\)">总分原始/.test(app));
+    /* ③ 无感切换：scSetBasis 记住并还原滚动位置 */
+    t('★v4.18.8 口径切换记住并还原滚动位置',
+      /window\.pageYOffset/.test(app) && /window\.scrollTo\(sx, sy\)/.test(app));
+    /* ④ 表单风格：CSS 类齐全并用在表单上 */
+    t('★v4.18.8 重要日期表单统一暖色风格类',
+      /\.imp-inp/.test(idx) && /\.imp-area/.test(idx) && /color-scheme:dark/.test(idx)
+      && /class="imp-inp"/.test(app) && /class="imp-area"/.test(app) && /class="imp-lbl"/.test(app));
+    /* ⑤ 非赋分科目标排名两口径共用 */
+    t('★v4.18.8 goalView 非赋分科排名读 raw',
+      /RAW\[s\] \? sr\[b\] : sr\.raw/.test(app));
+    t('★v4.18.8 normalizeGoals/saveGoalSheet 非赋分科 asg 同步 raw',
+      /if\(!RAW\[s\]\) asgV = rawV/.test(app)
+      && /else goals\._subRank\[s\]\.asg = goals\._subRank\[s\]\.raw/.test(app));
+    /* ⑥ 版本记录与公告口径 */
+    t('★v4.18.8 版本更新记录与公告口径齐全',
+      /version: '4\.18\.8'/.test(rel188)
+      && /总分口径切换改为右上角常驻按钮，随时可切/.test(rel188)
+      && /修复部分科目在赋分口径下不显示班级排名目标/.test(rel188));
+    t('★v4.18.8 公告条目均不超过 28 汉字且无禁词',
+      (function(){
+        const block = rel188.slice(rel188.indexOf("version: '4.18.8'"), rel188.indexOf("version: '4.18.7'"));
+        const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
+          && texts.every(x => !ban.some(w => x.includes(w)));
       })());
   }
 
