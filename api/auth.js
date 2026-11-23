@@ -217,10 +217,11 @@ async function login(req, res) {
   }
 
   if (!u || !good) {
-    await bumpFail(sql, u ? u.id : null, username);
+    const policy = await lockPolicy(sql);
+    await bumpFail(sql, u ? u.id : null, username, policy);
     /* v3.15.4：文案补一句方向 —— 用户名多数是姓名，也有拼音的，别让人反复瞎试
-       （连错 5 次会锁 15 分钟，比猜错更麻烦） */
-    return fail(res, 401, '用户名或密码不对。用户名多数就是姓名，个别账号是拼音（忘了可以问管理员）');
+       v4.18.6：锁定阈值改为读后台配置，提示语跟着配置走，不再写死数字 */
+    return fail(res, 401, '用户名或密码不对。用户名多数就是姓名，个别账号是拼音（忘了可以问管理员）；连续输错 ' + policy.maxFails + ' 次将锁定 ' + policy.lockMinutes + ' 分钟');
   }
   if (u.status !== 'active') {
     /* v2.10.0：区分「待审核」与「已禁用」—— 提示语不同，
@@ -307,9 +308,25 @@ async function logLogin(sql, req, userId) {
 
 /* ---------------- 登录限流（基于 users 表，跨实例生效） ----------------
    需要 schema.sql 里的 failed_count / locked_until 两列；
-   若老库没执行过 ALTER，这里会静默降级（不阻断登录），并在日志里提示。 */
-const MAX_FAILS = 5;
-const LOCK_MINUTES = 15;
+   若老库没执行过 ALTER，这里会静默降级（不阻断登录），并在日志里提示。
+
+   v4.18.6：失败次数 / 锁定时长改为后台「站点设置」可配（login_max_fails /
+   login_lock_minutes），默认仍是 5 次 / 15 分钟。管理员改完立即生效，
+   不需要重新部署。读取有兜底：设置缺失 / 读失败一律回默认值，安全开关
+   不能因为读失败而放开。 */
+const DEFAULT_MAX_FAILS = 5;
+const DEFAULT_LOCK_MINUTES = 15;
+
+async function lockPolicy(sql) {
+  const rawMax = await getSiteSetting(sql, 'login_max_fails', DEFAULT_MAX_FAILS);
+  const rawMin = await getSiteSetting(sql, 'login_lock_minutes', DEFAULT_LOCK_MINUTES);
+  const max = Number(rawMax);
+  const min = Number(rawMin);
+  return {
+    maxFails: Number.isFinite(max) && max >= 1 && max <= 20 ? Math.floor(max) : DEFAULT_MAX_FAILS,
+    lockMinutes: Number.isFinite(min) && min >= 1 && min <= 1440 ? Math.floor(min) : DEFAULT_LOCK_MINUTES,
+  };
+}
 
 async function lockRemain(sql, username) {
   try {
@@ -361,16 +378,35 @@ function toTime(v) {
   return Number.isFinite(t) ? t : 0;
 }
 
-async function bumpFail(sql, userId, username) {
+async function bumpFail(sql, userId, username, policy) {
+  const maxFails = policy.maxFails;
+  const lockMinutes = policy.lockMinutes;
   try {
-    await sql`
-      update users
-         set failed_count = failed_count + 1,
-             locked_until = case when failed_count + 1 >= ${MAX_FAILS}
-                                 then now() + (${LOCK_MINUTES} || ' minutes')::interval
-                                 else locked_until end
-       where lower(username) = ${username}
-    `;
+    /* v4.18.6 修复「退出刷新后又能登」的根因：
+       旧代码按 lower(username)=输入值 更新 failed_count。用户名多数是中文姓名，
+       登录时既可以用姓名也可以用拼音（见上方 v3.15.4），一旦输入的是别名/大小写
+       不一致，UPDATE 命中 0 行，失败计数和锁根本没落到库里 —— 表现为「锁了，
+       但退出刷新又能登」。改为优先按 userId 更新；查不到用户（用户名猜错）时才
+       回退按 username，保证不存在的账号也有计数（虽然不落到具体人）。 */
+    if (userId) {
+      await sql`
+        update users
+           set failed_count = failed_count + 1,
+               locked_until = case when failed_count + 1 >= ${maxFails}
+                                   then now() + (${lockMinutes} || ' minutes')::interval
+                                   else locked_until end
+         where id = ${userId}
+      `;
+    } else {
+      await sql`
+        update users
+           set failed_count = failed_count + 1,
+               locked_until = case when failed_count + 1 >= ${maxFails}
+                                   then now() + (${lockMinutes} || ' minutes')::interval
+                                   else locked_until end
+         where lower(username) = ${username}
+      `;
+    }
   } catch (e) {
     console.warn('[auth] 限流未生效（可能缺少 failed_count/locked_until 列）：', e.message);
   }

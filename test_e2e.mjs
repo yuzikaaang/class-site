@@ -5368,9 +5368,10 @@ console.log('\n【47】第三十六轮·心跳简化 + 学习卡片隐藏 + 重�
   t('★后台两块已合并为「首页卡片」板块',
     /id:'cards',/.test(adm47) && /function renderCards\(\)/.test(adm47));
   /* v2.7.1 起内容组 10 项（合并后的 9 项 + 成绩分析）；v3.5.6 再加「投票管理」= 11；
-     v3.15 信息分享 = 12；v4.10.6 考试同步 = 14（v3.8.7 班级岛也在这一组） */
-  t('★内容组导航项为 14 项（含 v4.10.6 考试同步）',
-    (adm47.match(/group:'内容'/g) || []).length === 14,
+     v3.15 信息分享 = 12；v4.10.6 考试同步 = 14（v3.8.7 班级岛也在这一组）；
+     v4.18.6 删「重要日期 / 点歌管理 / 信息分享」三个面板 → 11 项 */
+  t('★内容组导航项为 11 项（v4.18.6 精简三面板后）',
+    (adm47.match(/group:'内容'/g) || []).length === 11,
     '实际 ' + (adm47.match(/group:'内容'/g) || []).length + ' 项');
   t('★v3.15.2 成员导出按字段元数据出列（新增字段自动带上）',
     /function memberExportCols\(meta\)/.test(adm47) && /function memberCell\(m, f\)/.test(adm47)
@@ -11855,8 +11856,10 @@ console.log('\n【新】v3.8.4 板块管理 / 板块分享链接');
 
   /* ---- 后台 ---- */
   t('★v3.8.4 后台侧栏有「板块管理」', /id:'boards'/.test(adm84) && /boards:\s*renderBoards,/.test(adm84));
-  t('★v3.8.4 板块行能改名称 / 简介 / 排序 / 隐藏 / 游客可见',
-    /data-bf="name"/.test(adm84) && /data-bf="intro"/.test(adm84)
+  /* v4.18.6：大板块简介已删，简介下放到每张卡片（data-cf="desc"） */
+  t('★v3.8.4 板块行能改名称 / 排序 / 隐藏 / 游客可见（简介已下放到卡片）',
+    /data-bf="name"/.test(adm84) && !/data-bf="intro"/.test(adm84)
+    && /data-cf="desc"/.test(adm84)
     && /data-bact="up"/.test(adm84) && /data-bf="hidden"/.test(adm84) && /data-bf="guestOk"/.test(adm84));
   t('★v3.8.4 显示板块位置（首页第 N 项 / 侧栏第 N 项）',
     /首页第 ' \+ \(i \+ 1\) \+ ' 项 · 侧栏第/.test(adm84));
@@ -13344,9 +13347,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /case 'login-config': return await loginConfig\(req, res\);/.test(auth12)
     && /getSiteSetting\(sql, 'login_captcha', true\)/.test(auth12)
     && /captcha === null \? true : !!captcha/.test(auth12));
-  t('★v4.10.1 settings 白名单含 login_captcha，envDefault 为 true',
-    /const SETTING_KEYS = \['register_open', 'register_review', 'login_captcha'\];/.test(admApi)
-    && /envDefault: \{ register_open: !!cfg\(\)\.allowRegister, login_captcha: true \}/.test(admApi));
+  /* v4.18.6：白名单新增 login_max_fails / login_lock_minutes，envDefault 补 5 / 15 */
+  t('★v4.10.1 settings 白名单含 login_captcha（v4.18.6 加限流两键）',
+    /const SETTING_KEYS = \['register_open', 'register_review', 'login_captcha', 'login_max_fails', 'login_lock_minutes'\];/.test(admApi)
+    && /envDefault: \{ register_open: !!cfg\(\)\.allowRegister, login_captcha: true, login_max_fails: 5, login_lock_minutes: 15 \}/.test(admApi));
   t('★v4.10.1 前端 CAP_REQUIRED 默认 true + 启动拉 login-config',
     /var CAP_REQUIRED = true;/.test(app12)
     && /api\('\/auth\?action=login-config'\)/.test(app12)
@@ -14210,12 +14214,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.3 删除按钮 CSS 齐全（含明暗变量）',
       /\.pg-clear-subj\{/.test(pgCss183) && /\.pg-rec-del\{/.test(pgCss183)
       && /--pg-no-ink/.test(pgCss183));
-    /* ④ 版本号四处一致（随版本升级同步到 4.18.5） */
+    /* ④ 版本号四处一致（随版本升级同步到 4.18.6） */
     t('★版本 前台/后台/SW/API 四处一致',
-      /var SITE_VERSION = '4\.18\.5'/.test(readIdx())
-      && /const SITE_VER = '4\.18\.5'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-      && /const API_VER = '4\.18\.5';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-      && /var SITE_VERSION = '4\.18\.5'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+      /var SITE_VERSION = '4\.18\.6'/.test(readIdx())
+      && /const SITE_VER = '4\.18\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+      && /const API_VER = '4\.18\.6';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+      && /var SITE_VERSION = '4\.18\.6'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
   }
 
   /* ===== v4.18.4 目标双端同步 + 赋分目标 + 排名目标 + AI目标专项 ===== */
@@ -14311,6 +14315,72 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       /\.sc-ov-head\{/.test(idxV185) && /\.sc-ov-lead\{/.test(idxV185)
       && /\.sc-ovg-tag\.ok\{/.test(idxV185) && /\.sc-sg-item\.no\{/.test(idxV185)
       && /\.dark \.sc-ovg-tag\.ok\{/.test(idxV185) && /\.dark \.sc-sg-item\.ok\{/.test(idxV185));
+  }
+
+  /* ===== v4.18.6 登录限流可设 + 后台面板精简 + 卡片简介 + 公告去味 ===== */
+  {
+    const app = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const auth = fs.readFileSync(new URL('./api/auth.js', import.meta.url), 'utf8');
+    const adminApi = fs.readFileSync(new URL('./api/admin.js', import.meta.url), 'utf8');
+    const a1 = fs.readFileSync(new URL('./admin-1.js', import.meta.url), 'utf8');
+    const a2 = fs.readFileSync(new URL('./admin-2.js', import.meta.url), 'utf8');
+    const a3 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    const boards = fs.readFileSync(new URL('./api/boards.js', import.meta.url), 'utf8');
+    const copy = fs.readFileSync(new URL('./scripts/copycheck.mjs', import.meta.url), 'utf8');
+    const rel186 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    /* ① 登录限流可配置 + 修刷新失效根因 */
+    t('★v4.18.6 登录限流改为后台可配（默认5/15）',
+      /DEFAULT_MAX_FAILS = 5/.test(auth) && /DEFAULT_LOCK_MINUTES = 15/.test(auth)
+      && /getSiteSetting\(sql, 'login_max_fails'/.test(auth)
+      && /getSiteSetting\(sql, 'login_lock_minutes'/.test(auth));
+    t('★v4.18.6 修复姓名登录计数未落库（bumpFail 按 userId 写锁）',
+      /if \(userId\)/.test(auth) && /where id = \$\{userId\}/.test(auth)
+      && /bumpFail\(sql, u \? u\.id : null, username, policy\)/.test(auth));
+    t('★v4.18.6 后台设置接口收两个数字键并校验范围',
+      /'login_max_fails', 'login_lock_minutes'/.test(adminApi)
+      && /login_max_fails: \[1, 20\]/.test(adminApi) && /login_lock_minutes: \[1, 1440\]/.test(adminApi));
+    t('★v4.18.6 后台有限流输入 UI 与保存',
+      /id="stMaxFails"/.test(a2) && /id="stLockMin"/.test(a2)
+      && /login_max_fails: mf/.test(a2) && /login_lock_minutes: lm/.test(a2));
+    /* ② 重要日期搬前台 + 后台面板删除 */
+    t('★v4.18.6 前台重要日期管理函数齐全',
+      /function openImpEdit\(/.test(app) && /function impEditForm\(/.test(app)
+      && /function impEditSave\(/.test(app) && /function impEditDel\(/.test(app)
+      && /openImpEdit\(\)/.test(app));
+    t('★v4.18.6 后台重要日期面板已删',
+      !/id:'dates'/.test(a1) && !/function renderDates\(/.test(a2) && !/function dtDialog\(/.test(a2));
+    /* ③ 信息分享并入板块管理 + 点歌管理撤销 */
+    t('★v4.18.6 信息分享入口并入板块管理、侧栏原入口删除',
+      !/id:'ishare'/.test(a1) && /id="bdIshare"/.test(a3)
+      && /id="isBack"/.test(a3) && /renderIshare\(\)/.test(a3));
+    t('★v4.18.6 点歌管理撤销、投稿统计与点歌券并入排歌周期',
+      !/id:'song'/.test(a1) && !/function renderSong\(/.test(a1)
+      && /function songExtraHtml\(/.test(a1) && /function bindSongExtra\(/.test(a1)
+      && /songExtraHtml\(\)/.test(a2) && /bindSongExtra\(\)/.test(a2)
+      && !/id="vhGuardOn"/.test(a1) && !/id="sgSongs"/.test(a1));
+    t('★v4.18.6 排歌周期面板改名',
+      /label:'排歌周期'/.test(a1));
+    /* ④ 卡片简介改造 + 缓存 + 无感刷新 */
+    t('★v4.18.6 卡片简介入库与后台可编辑',
+      /desc: String\(k\.desc/.test(boards) && /v\.desc !== undefined/.test(boards)
+      && /data-cf="desc"/.test(a3) && !/data-bf="intro"/.test(a3));
+    t('★v4.18.6 前台卡片简介云端覆盖 + 缓存 + 无感刷新',
+      /hasOwnProperty\.call\(k, 'desc'\)/.test(app)
+      && /data-card-desc=/.test(app) && /function boardMetaSoftRefresh\(/.test(app)
+      && /cls_board_meta_cache/.test(app) && /function boardMetaCacheLoad\(/.test(app));
+    /* ⑤ 公告去 AI 味固化到门禁 */
+    t('★v4.18.6 文案门禁新增公告口语拖沓规则',
+      /公告口语拖沓/.test(copy) && /也可一键|一键清空某一科/.test(copy));
+    t('★v4.18.6 版本更新记录含新公告且旧反面例已修',
+      /version: '4\.18\.6'/.test(rel186)
+      && /连续输错密码会锁定，次数与时长可按班级调整/.test(rel186)
+      && !/成绩可逐条删除，也可一键清空某一科/.test(rel186));
+    t('★v4.18.6 公告条目均不超过 28 汉字',
+      (function(){
+        const pubBlock = rel186.slice(rel186.indexOf("version: '4.18.6'"), rel186.indexOf("version: '4.18.5'"));
+        const texts = [...pubBlock.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28);
+      })());
   }
 
   /* ===== 全量语法自检 =====

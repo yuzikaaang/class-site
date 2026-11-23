@@ -738,10 +738,11 @@ function renderBoards(){
     +   '<div style="flex:1;min-width:0">'
     +     '<b style="font-size:.92rem">板块管理</b>'
     +     '<p class="muted" style="margin:4px 0 0;font-size:.8rem">'
-    +       '改名 / 写简介 / 调顺序 / 隐藏 / 游客可见 —— <b>改完立刻全站生效，不用发版</b>；'
+    +       '改名 / 调顺序 / 隐藏 / 游客可见，展开卡片还能改每张卡片的简介 —— <b>改完立刻全站生效，不用发版</b>；'
     +       '下面还能为整个板块或单张卡片生成分享链接</p>'
     +   '</div>'
     +   '<button class="btn btn-sm" id="bdNew">＋ 生成分享链接</button>'
+    +   '<button class="btn btn-sm btn-secondary" id="bdIshare">个人信息分享</button>'
     +   '<button class="btn btn-sm btn-secondary" id="bdRe">刷新</button>'
     + '</div>'
     + '<section class="panel" style="margin-bottom:16px">'
@@ -754,6 +755,8 @@ function renderBoards(){
     + '</section>';
 
   $('bdNew').onclick = function(){ bdShareForm(null); };
+  /* v4.18.6：个人信息分享并入板块管理（原独立面板已删），从这里进入 */
+  $('bdIshare').onclick = function(){ renderIshare(); };
   $('bdRe').onclick = function(){ BM.ready = false; loadBoards(true); };
   loadBoards();
 }
@@ -818,12 +821,18 @@ function paintBoards(){
     var cardsHtml = (r.cards || []).map(function(c){
       var m = BM.meta.cards[String(c.id)] || {};
       var nm = m.title || c.title || ('卡片 ' + c.id);
+      /* v4.18.6：卡片简介 —— 云端改过用云端值，否则用前端照搬上报的初值 */
+      var descVal = (m.desc !== undefined && m.desc !== null) ? m.desc : (c.desc || '');
       return '<div class="bd-card-row" data-card="' + attr(c.id) + '">'
-        + '<input class="gate-input bd-c-title" data-cf="title" value="' + attr(nm) + '">'
-        + '<span class="bd-c-id">#' + esc(c.id) + '</span>'
-        + '<label class="bd-check"><input type="checkbox" data-cf="guestOk"'
-        +   (m.guestOk === false ? '' : ' checked') + '> 游客可见</label>'
-        + '<button class="btn btn-sm btn-secondary" data-cact="share">单独分享</button>'
+        + '<div class="bd-c-line">'
+        +   '<input class="gate-input bd-c-title" data-cf="title" value="' + attr(nm) + '">'
+        +   '<span class="bd-c-id">#' + esc(c.id) + '</span>'
+        +   '<label class="bd-check"><input type="checkbox" data-cf="guestOk"'
+        +     (m.guestOk === false ? '' : ' checked') + '> 游客可见</label>'
+        +   '<button class="btn btn-sm btn-secondary" data-cact="share">单独分享</button>'
+        + '</div>'
+        + '<input class="gate-input bd-c-desc" data-cf="desc" maxlength="300"'
+        +   ' placeholder="卡片简介（展开后显示在标题下，可留空）" value="' + attr(descVal) + '">'
         + '</div>';
     }).join('') || '<div class="bd-empty">这个板块下面没有卡片</div>';
 
@@ -841,8 +850,6 @@ function paintBoards(){
             : '<button class="btn btn-sm" data-bact="share">分享</button>')
       +   '<button class="btn btn-sm btn-secondary" data-bact="cards">卡片 ' + (r.cards || []).length + ' 张</button>'
       + '</div>'
-      + '<input class="gate-input bd-intro" data-bf="intro" maxlength="200"'
-      +   ' placeholder="板块简介（显示在板块页顶部，可留空）" value="' + attr(r.intro) + '">'
       + '<div class="bd-cards"' + (BM.open[r.id] ? '' : ' hidden') + '>' + cardsHtml + '</div>'
       + '</div>';
   }).join('');
@@ -3227,6 +3234,20 @@ function loadReleases(){
  * ⚠️ 加新版本时：在这里追加一条，同时在 index.html/admin.html 升 SITE_VERSION。
  * ========================================================================= */
 var REL_BUILTIN = [
+  { version: '4.18.6', date: '2026-11-23', type: 'fix', title: '限流可设 · 面板精简 · 卡片简介', items: [
+      '设置：登录失败次数与锁定时长改为后台可设置，默认五次、十五分钟',
+      '修复：用姓名或别名登录时失败计数未记入账号、退出刷新后锁定失效',
+      '调整：重要日期与考试范围移至首页倒计时板块，管理员在前台新增、修改与删除，后台对应面板下线',
+      '调整：信息分享并入板块管理，撤销点歌管理，投稿统计与点歌券管理并入排歌周期',
+      '调整：卡片简介改为后台可编辑，取消大板块简介；简介存本机缓存并在后台改动后自动更新',
+      '版本号升至 4.18.6，前后端同步'
+    ], pub: [
+      { cat: '安全', text: '连续输错密码会锁定，次数与时长可按班级调整' },
+      { cat: '修复', text: '修复部分账号输错密码后锁定失效的问题' },
+      { cat: '体验', text: '首页倒计时新增考试日期，可按需要增删' },
+      { cat: '体验', text: '信息查询入口调整，点歌功能整合到排歌周期' },
+      { cat: '体验', text: '功能卡片简介可直接修改，改动即时生效' }
+    ] },
   { version: '4.18.5', date: '2026-11-22', type: 'feat', title: '目标并入卡片 · 画像更顺', items: [
       '修复：设置目标弹窗背后的遮罩改为深色半透明加模糊，弹窗本身不再透出页面',
       '调整：个人画像不再单独占一张目标卡，目标总分与排名目标并入顶部概览卡',
@@ -3259,7 +3280,7 @@ var REL_BUILTIN = [
       '版本号升至 4.18.3，前后端同步'
     ], pub: [
       { cat: '成绩', text: '平时成绩无记录也能改目标，导览不挡点击' },
-      { cat: '成绩', text: '成绩可逐条删除，也可一键清空某一科' }
+      { cat: '成绩', text: '成绩支持逐条删除与按科目清空' }
     ] },
   { version: '4.18.2', date: '2026-11-22', type: 'feat', title: '布局更清爽 · 导出好找', items: [
       '调整：成绩分析四个标签移到最顶层，导出图片等按钮只在「全班成绩单」显示',
@@ -8105,6 +8126,7 @@ function ishareUrl(sh){
 function renderIshare(){
   $('view').innerHTML =
     '<div class="toolbar" style="background:var(--panel)">'
+    +   '<button class="btn btn-sm btn-secondary" id="isBack">← 板块管理</button>'
     +   '<button class="btn btn-sm" id="isAdd">' + svg('plus', 14) + '新建分享</button>'
     +   '<span style="flex:1"></span>'
     +   '<button class="btn btn-sm btn-secondary" id="isRefresh">' + svg('refresh', 14) + '刷新</button>'
@@ -8120,6 +8142,7 @@ function renderIshare(){
     +   '<div class="panel-body" id="isBody"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
     + '</section>';
 
+  $('isBack').onclick = function(){ renderBoards(); };
   $('isAdd').onclick = function(){ ishareForm(null); };
   $('isRefresh').onclick = function(){ ISHARE.loaded = false; loadIshare(); };
   if(ISHARE.loaded) paintIshare(); else loadIshare();

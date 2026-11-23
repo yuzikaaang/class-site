@@ -6627,7 +6627,7 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   }catch(e){}
 })();
 </script>
-<link rel="stylesheet" href="./pg.css?v=4185">
+<link rel="stylesheet" href="./pg.css?v=4186">
 </head>
 <body>
 
@@ -7197,6 +7197,14 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   </div>
 </div>
 
+<!-- ===== v4.18.6 重要日期管理弹窗（管理员在前台直接增改删，功能同原后台） ===== -->
+<div class="allboard-mask" id="impEditMask">
+  <div class="allboard-box" style="max-width:520px">
+    <div class="allboard-head"><span>管理重要日期与考试范围</span><button onclick="closeImpEdit()">关闭</button></div>
+    <div id="impEditBody" style="padding:12px 16px 16px;overflow-y:auto;flex:1;min-height:0;text-align:left"></div>
+  </div>
+</div>
+
 <!-- ===== 复制链接弹窗（主链接，唯一入口） ===== -->
 <div class="allboard-mask" id="copyLinkMask">
   <div class="allboard-box" style="max-width:360px">
@@ -7544,7 +7552,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.18.5</button>
+        title="点击检查是否为最新版本">v4.18.6</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -8764,19 +8772,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.18.5';
+var SITE_VERSION = '4.18.6';
 var VER_DATE = '2026-11-17';
 </script>
-<script src="./auth-bus.js?v=4185" defer></script>
+<script src="./auth-bus.js?v=4186" defer></script>
 <script src="./tour.js?v=b2cd14" defer></script>
-<script src="./app.min.js?v=4185" defer></script>
+<script src="./app.min.js?v=4186" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4185" defer></script>
-<script src="./big.js?v=4185" defer></script>
+<script src="./fs-keep.js?v=4186" defer></script>
+<script src="./big.js?v=4186" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4185" defer></script>
+<script src="./pickfx.js?v=4186" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」

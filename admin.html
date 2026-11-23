@@ -925,8 +925,10 @@ label.chk{width:auto;height:auto;display:flex;align-items:center}
 .bd-check-lg{display:flex;margin:10px 0;font-size:.8rem;line-height:1.6}
 .bd-intro{width:100%;margin-top:8px}
 .bd-cards{margin-top:10px;border-top:1px dashed var(--border);padding-top:10px}
-.bd-card-row{display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap}
+.bd-card-row{display:block;padding:7px 0;border-bottom:1px dashed var(--border)}
+.bd-c-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .bd-c-title{flex:1 1 160px;min-width:0}
+.bd-c-desc{width:100%;margin-top:6px;font-size:.78rem}
 .bd-c-id{font-size:.7rem;color:var(--fg-3)}
 .bd-empty{padding:8px 0;color:var(--fg-3);font-size:.8rem}
 .bd-nos{font-size:.72rem;color:var(--fg-3);background:var(--bg-2);border-radius:8px;padding:4px 8px}
@@ -1848,14 +1850,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 /* 版本号留在 HTML：部署门禁只读这一处 */
-var SITE_VERSION = '4.18.5';
+var SITE_VERSION = '4.18.6';
 var VER_DATE = '2026-11-17';
 </script>
 <!-- v3.19.0：后台脚本按顶层横幅拆成三段（各 <120KB gzip），共享全局作用域，
      顺序固定，不能调换或异步加载。 -->
-<script src="./fs-keep.js?v=4185"></script>
-<script src="./admin-1.js?v=4185"></script>
-<script src="./admin-2.js?v=4185"></script>
-<script src="./admin-3.js?v=4185"></script>
+<script src="./fs-keep.js?v=4186"></script>
+<script src="./admin-1.js?v=4186"></script>
+<script src="./admin-2.js?v=4186"></script>
+<script src="./admin-3.js?v=4186"></script>
 </body>
 </html>

@@ -195,6 +195,8 @@ async function reportCatalog(req, res) {
         id: String(k.id || '').slice(0, 20),
         title: String(k.title || '').slice(0, 60),
         sub: String(k.sub || '').slice(0, 40),
+        /* v4.18.6：把前端卡片简介照搬入库，作为后台可编辑的初值 */
+        desc: String(k.desc || '').slice(0, 300),
       }))
       : [],
     active: c.active !== false,
@@ -236,6 +238,7 @@ async function saveMeta(req, res) {
     const cur = cards[id] || {};
     const next = { ...cur };
     if (v.title !== undefined) next.title = String(v.title).trim().slice(0, 60);
+    if (v.desc !== undefined) next.desc = String(v.desc).trim().slice(0, 300);
     if (v.guestOk !== undefined) next.guestOk = !!v.guestOk;
     if (v.hidden !== undefined) next.hidden = !!v.hidden;
     cards[id] = next;

@@ -3089,8 +3089,11 @@ function updateCountdown(){
   var semList = IMPORTANT_DATES.map(function(d){ return { name:d.name, date:d.date, endDate:d.endDate, d:new Date(d.date) }; })
     .sort(function(a,b){ return a.d - b.d; })
     .filter(function(d){ return impState(d, now) !== 'over'; });
+  /* v4.18.6：管理员在前台直接管理重要日期/考试范围（原后台面板已搬到这里） */
+  var impAdminBtn = '';
+  try{ if(typeof isAdmin === 'function' && isAdmin()) impAdminBtn = '<span class="cd-viewall" onclick="openImpEdit()" style="cursor:pointer;margin-left:10px;color:#af410f;font-weight:700">管理</span>'; }catch(e){}
   var semHtml = '<div class="cd-sem">' +
-    '<div class="cd-head">'+iconSvg('calendar',15)+' 重要日期倒计时<span class="cd-viewall" onclick="openAllImp()" style="cursor:pointer">查看全部</span></div>' +
+    '<div class="cd-head">'+iconSvg('calendar',15)+' 重要日期倒计时<span class="cd-viewall" onclick="openAllImp()" style="cursor:pointer">查看全部</span>'+impAdminBtn+'</div>' +
     (semList.length === 0 ? '<div class="cd-empty">暂无重要日期</div>' :
       '<div class="imp-mobile">' +
         '<div class="imp-area">' +
@@ -3304,7 +3307,8 @@ function render(){
         var passed = gatePassed(l) || !gateOn();
         /* v3.9.22：标题留在折叠态，其余内容都塞进 .card-detail，打开才显示 */
         var contentHtml = '<div class="card-content"><h3><span class="f-t">'+esc(l.title)+'</span><span class="f-i">'+iconSvg('chevron-down',15)+'</span></h3>'
-          + '<div class="card-detail">'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')+(l.desc?'<p>'+esc(l.desc)+'</p>':'');
+          + '<div class="card-detail">'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')
+          + '<p data-card-desc="'+esc(l.id)+'"'+(l.desc?'':' style="display:none"')+'>'+esc(l.desc||'')+'</p>';
         if(l.paused){
           contentHtml += '<div class="paused-box">'+(l.pausedMsg ? emojiEscHtml(l.pausedMsg) : (iconSvg('ban',15)+' 因网络问题，暂时关闭，恢复开放时间另行通知'))+'</div>';
         }else if(l.gate && !passed){
@@ -11585,6 +11589,8 @@ function applyBoardMeta(m){
     k = BOARD_META.cards[String(l.id)];
     if(!k) continue;
     if(k.title) l.title = k.title;
+    /* v4.18.6：卡片简介后台可编辑 —— 云端有 desc 字段（含空串，支持清空）就覆盖本地初值 */
+    if(Object.prototype.hasOwnProperty.call(k, 'desc')) l.desc = String(k.desc == null ? '' : k.desc);
     if(k.hidden) l.active = false;
   }
 }
@@ -11605,9 +11611,53 @@ function boardIntroHtml(id){
   return '<div class="cat-intro">' + esc(t) + '</div>';
 }
 
+var BOARD_META_CACHE_KEY = 'cls_board_meta_cache';
+/* v4.18.6：板块/卡片设置（含卡片简介）加本机缓存 —— 启动先套缓存秒开，
+   后台改完走「无感刷新」静默同步，不必每次都等数据库往返。 */
+function boardMetaCacheLoad(){
+  try{
+    var raw = localStorage.getItem(BOARD_META_CACHE_KEY);
+    if(!raw) return false;
+    var j = JSON.parse(raw);
+    if(!j || typeof j !== 'object') return false;
+    applyBoardMeta(j);
+    return true;
+  }catch(e){ return false; }
+}
+function boardMetaCacheSave(j){
+  try{ localStorage.setItem(BOARD_META_CACHE_KEY, JSON.stringify(j)); }catch(e){}
+}
+/* 后台改了卡片简介后，首页打开着也能自己更新（页面可见时每 60 秒静默拉一次；
+   只覆盖数据 + 局部刷新卡片简介文本，不整页重绘，避免打断正在看的页面）。 */
+function boardMetaSoftRefresh(){
+  if(!apiReady()) return;
+  try{
+    api('/boards?action=meta').then(function(j){
+      if(!j || !j.cards) return;
+      var before = JSON.stringify(BOARD_META.cards || {});
+      var after = JSON.stringify(j.cards || {});
+      if(before === after) return;   /* 没变化，什么都不做 */
+      applyBoardMeta(j);
+      boardMetaCacheSave(j);
+      /* 局部更新已渲染卡片的简介段落（data-card-desc 标记），不碰其它 DOM */
+      try{
+        Array.prototype.forEach.call(document.querySelectorAll('[data-card-desc]'), function(el){
+          var id = el.getAttribute('data-card-desc');
+          var m = BOARD_META.cards[String(id)];
+          if(!m || !Object.prototype.hasOwnProperty.call(m, 'desc')) return;
+          el.textContent = String(m.desc == null ? '' : m.desc);
+          el.style.display = m.desc ? '' : 'none';
+        });
+      }catch(e){}
+    }).catch(function(){});
+  }catch(e){}
+}
 function boardMetaLoad(cb){
+  /* 先用缓存秒开（若有） */
+  try{ boardMetaCacheLoad(); }catch(e){}
   if(!apiReady()){ if(cb) cb(); return; }
   api('/boards?action=meta').then(function(j){
+    boardMetaCacheSave(j);
     applyBoardMeta(j);
     try{ render(); }catch(e){}
     if(cb) cb();
@@ -11911,7 +11961,8 @@ function reportBoardCatalog(){
       active: c.active !== false,
       cards: SITE_DATA.links
         .filter(function(l){ return l.categoryId === c.id; })
-        .map(function(l){ return { id: l.id, title: l.title, sub: l.subtitle || '' }; })
+        /* v4.18.6：连同卡片简介一起上报，后台就能看到前台现有 desc 并编辑 */
+        .map(function(l){ return { id: l.id, title: l.title, sub: l.subtitle || '', desc: l.desc || '' }; })
     };
   });
   api('/boards?action=catalog', { method:'POST', body: { cats: cats } })
@@ -12905,6 +12956,145 @@ function openAllImp(){
 function closeAllImp(){
   if(impTimer){ clearInterval(impTimer); impTimer = null; }
   var m=document.getElementById('allImpMask'); if(m) m.classList.remove('show');
+}
+
+/* ============================================================================
+ * v4.18.6：重要日期 / 考试范围管理（原后台「重要日期」面板搬到前台）
+ * ----------------------------------------------------------------------------
+ * 管理员在前台「重要日期倒计时 → 管理」直接增改删，功能与旧后台一致：
+ *   · 数据源就是 IMPORTANT_DATES（applyCloudContent 已把它接到云端 important_dates）
+ *   · 保存走 pushCloudContent({important_dates}) + applyCloudContent 立即刷新首页
+ *   · 字段沿用 { name, date, endDate?, scope?[{sub,txt}] }，与主站渲染完全对齐，
+ *     多写少写字段都会被主站静默吞掉，所以这里只硬编码这几个键。
+ * ========================================================================= */
+function impEditList(){ return Array.isArray(IMPORTANT_DATES) ? IMPORTANT_DATES.slice() : []; }
+function openImpEdit(){
+  var ok=false; try{ ok=(typeof isAdmin==='function'&&isAdmin()); }catch(e){}
+  if(!ok){ if(typeof uiMsg==='function') uiMsg('仅管理员可管理重要日期','#af410f'); return; }
+  var m=document.getElementById('impEditMask'); if(m) m.classList.add('show');
+  impEditRender();
+}
+function closeImpEdit(){ var m=document.getElementById('impEditMask'); if(m) m.classList.remove('show'); }
+function impEditFmt(v){
+  if(!v) return '—';
+  var d=new Date(v); if(isNaN(d.getTime())) return String(v).slice(0,10);
+  function p(n){ return (n<10?'0':'')+n; }
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+}
+function impEditRender(){
+  var box=document.getElementById('impEditBody'); if(!box) return;
+  var list=impEditList();
+  var head='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+    + '<button class="btn btn-sm" onclick="impEditForm(null)">＋ 新增日期</button>'
+    + '<span style="flex:1;font-size:.78rem;color:#8a827b">共 '+list.length+' 项 · 改动即刻同步到首页</span></div>';
+  if(!list.length){ box.innerHTML=head+'<div style="padding:22px;text-align:center;color:#8a827b;font-size:.85rem">还没有重要日期，点「新增日期」加一条</div>'; return; }
+  var sorted=list.slice().sort(function(a,b){ return String(a.date||'')<String(b.date||'')?-1:1; });
+  var rows=sorted.map(function(d){
+    var dt=impEditFmt(d.date)+(d.endDate?(' — '+impEditFmt(d.endDate)):'');
+    var sc=Array.isArray(d.scope)?d.scope.filter(function(x){return x&&x.txt;}):[];
+    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px dashed rgba(140,140,140,.25)">'
+      + '<div style="flex:1;min-width:0"><b style="font-size:.88rem">'+esc(d.name||'(未命名)')+'</b>'
+      +   '<div style="font-size:.74rem;color:#8a827b;margin-top:2px">'+esc(dt)+(sc.length?(' · 范围 '+sc.length+' 科'):'')+'</div></div>'
+      + '<button class="btn btn-sm btn-ghost" onclick="impEditForm(\''+esc(d.name).replace(/'/g,"\\'")+'\')">编辑</button>'
+      + '<button class="btn btn-sm btn-ghost" style="color:#af410f" onclick="impEditDel(\''+esc(d.name).replace(/'/g,"\\'")+'\')">删除</button>'
+      + '</div>';
+  }).join('');
+  box.innerHTML=head+rows;
+}
+function impEditToLocal(v){ if(!v) return ''; var s=String(v); return s.length>16?s.slice(0,16):s; }
+function impEditForm(key){
+  var list=impEditList(), isNew=(key===null||key===undefined);
+  var d=isNew?{name:'',date:'',endDate:'',scope:[]}:(list.filter(function(x){return x.name===key;})[0]||{name:'',date:'',scope:[]});
+  var scope=Array.isArray(d.scope)?d.scope.slice():[];
+  var box=document.getElementById('impEditBody'); if(!box) return;
+  function scopeRows(){
+    if(!scope.length) return '<div style="font-size:.76rem;color:#8a827b;padding:4px 0">还没有科目，点「添加科目」</div>';
+    return scope.map(function(s,i){
+      return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start">'
+        + '<input data-is="' + i + '" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:84px">'
+        + '<textarea data-it="' + i + '" rows="2" maxlength="600" placeholder="考试范围" style="flex:1">'+esc(s.txt||'')+'</textarea>'
+        + '<button type="button" onclick="impScopeDel('+i+')" style="flex-shrink:0">×</button></div>';
+    }).join('');
+  }
+  function harvest(){
+    Array.prototype.forEach.call(box.querySelectorAll('[data-is]'),function(inp){ var i=Number(inp.dataset.is); if(scope[i]) scope[i].sub=inp.value; });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-it]'),function(inp){ var i=Number(inp.dataset.it); if(scope[i]) scope[i].txt=inp.value; });
+  }
+  window.__IMP_SCOPE=scope; window.__IMP_HARVEST=harvest; window.__IMP_KEY=key;
+  box.innerHTML='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+      + '<button class="btn btn-sm btn-ghost" onclick="impEditRender()">← 返回列表</button>'
+      + '<b>'+(isNew?'新增重要日期':('编辑 '+esc(d.name||'')))+'</b></div>'
+    + '<div style="margin-bottom:10px"><label style="display:block;font-size:.8rem;font-weight:700;margin-bottom:4px">名称</label>'
+      + '<input id="impN" maxlength="30" value="'+esc(d.name||'')+'" placeholder="例如：第一次段考" style="width:100%"></div>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+      + '<div style="flex:1;min-width:180px"><label style="display:block;font-size:.8rem;font-weight:700;margin-bottom:4px">开始时间</label>'
+      +   '<input id="impD" type="datetime-local" value="'+esc(impEditToLocal(d.date))+'" style="width:100%"></div>'
+      + '<div style="flex:1;min-width:160px"><label style="display:block;font-size:.8rem;font-weight:700;margin-bottom:4px">结束日期（可选）</label>'
+      +   '<input id="impE" type="date" value="'+esc(d.endDate?String(d.endDate).slice(0,10):'')+'" style="width:100%"></div></div>'
+    + '<div style="margin-bottom:8px"><label style="display:block;font-size:.8rem;font-weight:700;margin-bottom:4px">考试范围（可选）</label>'
+      + '<div id="impScope">'+scopeRows()+'</div>'
+      + '<button type="button" class="btn btn-sm btn-ghost" onclick="impScopeAdd()" style="margin-top:6px">＋ 添加科目</button>'
+      + '<div style="font-size:.72rem;color:#8a827b;margin-top:4px">填了范围的，同学点「查看全部」才有「查看考试范围」入口</div></div>'
+    + '<div id="impMsg" style="color:#af410f;font-size:.8rem;min-height:18px"></div>'
+    + '<button class="btn" onclick="impEditSave()">'+(isNew?'新增':'保存')+'</button>';
+}
+function impScopeAdd(){ if(window.__IMP_HARVEST) window.__IMP_HARVEST(); window.__IMP_SCOPE.push({sub:'',txt:''}); impScopeRedraw(); }
+function impScopeDel(i){ if(window.__IMP_HARVEST) window.__IMP_HARVEST(); window.__IMP_SCOPE.splice(i,1); impScopeRedraw(); }
+function impScopeRedraw(){
+  var box=document.getElementById('impEditBody'), holder=document.getElementById('impScope'); if(!box||!holder) return;
+  var scope=window.__IMP_SCOPE||[];
+  if(!scope.length){ holder.innerHTML='<div style="font-size:.76rem;color:#8a827b;padding:4px 0">还没有科目，点「添加科目」</div>'; return; }
+  holder.innerHTML=scope.map(function(s,i){
+    return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start">'
+      + '<input data-is="'+i+'" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:84px">'
+      + '<textarea data-it="'+i+'" rows="2" maxlength="600" placeholder="考试范围" style="flex:1">'+esc(s.txt||'')+'</textarea>'
+      + '<button type="button" onclick="impScopeDel('+i+')" style="flex-shrink:0">×</button></div>';
+  }).join('');
+}
+function impEditSave(){
+  if(window.__IMP_HARVEST) window.__IMP_HARVEST();
+  var box=document.getElementById('impEditBody'), msg=document.getElementById('impMsg'); if(!box) return;
+  var name=(document.getElementById('impN').value||'').trim();
+  var date=(document.getElementById('impD').value||'').trim();
+  var end=(document.getElementById('impE').value||'').trim();
+  function err(t){ if(msg) msg.textContent=t; }
+  if(!name){ err('名称不能为空'); return; }
+  if(!date){ err('请选择开始时间'); return; }
+  if(end && end<date.slice(0,10)){ err('结束日期不能早于开始日期'); return; }
+  var key=window.__IMP_KEY, isNew=(key===null||key===undefined);
+  var list=impEditList();
+  if(list.some(function(x){ return x.name===name && x.name!==key; })){ err('已经有一条叫「'+name+'」的了，换个名字'); return; }
+  var item={name:name,date:date};
+  if(end) item.endDate=end;
+  var real=(window.__IMP_SCOPE||[]).filter(function(s){return (s.txt||'').trim();}).map(function(s){return {sub:(s.sub||'').trim(),txt:s.txt.trim()};});
+  if(real.length) item.scope=real;
+  var next=list.slice();
+  if(isNew) next.push(item);
+  else{ var at=-1; for(var i=0;i<next.length;i++){ if(next[i].name===key){at=i;break;} } if(at>=0) next[at]=item; else next.push(item); }
+  function done(ok,synced){
+    if(typeof uiMsg==='function') uiMsg(ok?(synced?'已保存并同步云端':'已保存到本机'):'本机已存，云端同步稍后再试', ok?'#15803d':'#af410f');
+    IMPORTANT_DATES = next;   /* 直接整体替换（applyCloudContent 对空数组有护栏，删除到空时不生效） */
+    try{ updateCountdown(); }catch(e){}
+    try{ if(document.getElementById('allImpMask').classList.contains('show')) renderAllImp(); }catch(e){}
+    impEditRender();
+  }
+  if(typeof pushCloudContent==='function'){
+    pushCloudContent({important_dates:next}, true).then(function(r){ done(!!(r&&r.ok), !!(r&&r.ok)); }).catch(function(){ done(false,false); });
+  }else{ IMPORTANT_DATES=next; done(true,false); }
+}
+function impEditDel(key){
+  if(!window.confirm('确定删除「'+key+'」吗？删除后首页倒计时不再显示这一条。')) return;
+  var list=impEditList(), next=list.filter(function(x){return x.name!==key;});
+  function done(ok){
+    if(typeof uiMsg==='function') uiMsg(ok?'已删除':'本机已删，云端同步稍后再试', ok?'#15803d':'#af410f');
+    IMPORTANT_DATES = next;
+    try{ updateCountdown(); }catch(e){}
+    try{ if(document.getElementById('allImpMask').classList.contains('show')) renderAllImp(); }catch(e){}
+    impEditRender();
+  }
+  if(typeof pushCloudContent==='function'){
+    pushCloudContent({important_dates:next}, true).then(function(r){ done(!!(r&&r.ok)); }).catch(function(){ done(false); });
+  }else{ IMPORTANT_DATES=next; done(true); }
 }
 function openAllHol(){
   var mask = document.getElementById('allHolMask');
@@ -25845,6 +26035,11 @@ contentBoot();
 /* v3.8.4（站主）：板块分享深链 —— ?b=板块 或 ?t=分享token，进来直接定位。
    放在 contentBoot 之后：先把云端内容和板块设置拿到，再决定跳到哪儿。 */
 try{ boardShareBoot(); }catch(e){ console.warn('[boardShare]', e); }
+/* v4.18.6：卡片简介无感刷新 —— 页面开着时每 60 秒静默拉一次板块设置，
+   后台改了卡片简介，前台不用刷新页面就会自动更新。页面隐藏时跳过，省流量。 */
+setInterval(function(){
+  try{ if(!document.hidden && typeof boardMetaSoftRefresh === 'function') boardMetaSoftRefresh(); }catch(e){}
+}, 60000);
 /* v3.8.5：作业导出图里的音视频二维码 → 扫码打开 ?play=，站内直接播放 */
 try{ playLinkBoot(); }catch(e){ console.warn('[play]', e); }
 /* v3.8.7：首页班级岛（时间/天气/周数/学期 + 当日课程） */

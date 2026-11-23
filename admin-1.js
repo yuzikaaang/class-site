@@ -48,7 +48,6 @@ var STATE = {
   /* 2026-10-06 新增 */
   quotes: { list: [] },
   study: null,
-  dates:  { list: [] },
   secrets: { list: [], encrypted: false, hasKey: false },
   /* 2026-10-07 新增：游戏数据（最高分 / 游玩时长 / 券获取时间） */
   games: { list: [], meta: [], summary: null, q: '', tab: 'play', week: '' },
@@ -749,22 +748,19 @@ var PAGES = [
   { id:'viewlogs',      label:'查看记录', icon:'eye',       group:'用户',  title:'资料查看记录' },
   { id:'classcontent',  label:'班级内容', icon:'layers',    group:'内容',  title:'班级内容（公告 / 作业 / 活动）' },
   /* v3.8.4（站主）：板块改名 / 简介 / 排序 / 隐藏 + 板块分享链接 */
-  { id:'boards',        label:'板块管理', icon:'layers',    group:'内容',  title:'板块管理（名称 / 简介 / 排序 / 分享链接）' },
+  { id:'boards',        label:'板块管理', icon:'layers',    group:'内容',  title:'板块管理（名称 / 排序 / 卡片简介 / 分享链接）' },
   /* v3.8.7（站主）：首页班级岛 + 课程表 */
   { id:'island',        label:'班级岛',   icon:'clock',     group:'内容',  title:'班级岛（今日事项横幅）' },
   /* v4.10.8（站主）：接考试看板 —— 只读同步，挑哪几场进大屏作业看板 */
   { id:'exams',         label:'考试同步', icon:'calendar',  group:'内容',  title:'考试同步（考试看板 · 只读同步与挑选）' },
   { id:'homeworks',     label:'作业管理', icon:'file',      group:'内容',  title:'作业管理' },
-  { id:'song',          label:'点歌管理', icon:'activity',  group:'内容',  title:'点歌管理' },
-  { id:'dj',            label:'抽歌排期', icon:'music',     group:'内容',  title:'抽歌排期（抽签 / 歌单排除 / 历史公示）' },
+  { id:'dj',            label:'排歌周期', icon:'music',     group:'内容',  title:'排歌周期（抽签 / 投稿统计 / 点歌券 / 历史公示）' },
   { id:'scores',        label:'成绩分析', icon:'activity',  group:'内容',  title:'成绩分析（考试 / 导入 / 改分 / 发布）' },
   { id:'votes',         label:'投票管理', icon:'check',     group:'内容',  title:'投票管理（发起投票 / 截止时间 / 结果）' },
   /* v3.15.0（站主）：个人信息分享 —— 发链接给同学，登录后直接查资料 */
-  { id:'ishare',        label:'信息分享', icon:'users',     group:'内容',  title:'个人信息分享（登录后查询 · 链接 / 二维码 / 开放范围）' },
 
   { id:'popups',        label:'通用弹窗', icon:'bell',      group:'内容',  title:'通用弹窗（开屏弹 / 板块弹）' },
   { id:'cards',         label:'首页卡片', icon:'layers',    group:'内容',  title:'首页卡片（每日一言 / 学习卡片）' },
-  { id:'dates',         label:'重要日期', icon:'calendar',  group:'内容',  title:'重要日期 / 考试范围' },
   { id:'games',         label:'游戏数据', icon:'activity',  group:'内容',  title:'游戏数据（最高分 / 游玩时长 / 点歌券）' },
   { id:'logins',        label:'登录记录', icon:'activity',  group:'安全',  title:'登录记录' },
   { id:'online',        label:'在线时长', icon:'clock',     group:'安全',  title:'在线时长（单次 / 累计）' },
@@ -858,16 +854,13 @@ function go(page){
     island:        renderIsland,
     exams:         renderExams,
     homeworks:     renderHomeworks,
-    song:          renderSong,
     dj:            renderDj,
     scores:        renderScores,
     votes:         renderVotes,
-    ishare:        renderIshare,
     backup:        renderBackup,
     releases:      renderReleases,
     popups:        renderPopups,
     cards:         renderCards,
-    dates:         renderDates,
     games:         renderGames,
     logins:        renderLogins,
     online:        renderOnline,
@@ -5040,43 +5033,16 @@ function vhFetchCards(){
 }
 
 /* ---- 面板骨架 ---- */
-function renderSong(){
-  $('view').innerHTML =
-    '<div class="alert info" style="margin-bottom:16px">'
-    +   '本页数据**实时来自点歌平台**（VoiceHub），不是云端缓存 —— 同学在首页点的歌、'
-    +   '领的券都会立刻出现在这里。此处的增删会真实作用到平台上，全班同步生效。'
-    + '</div>'
-    /* ===== v3.5.13（站主 #3）：VoiceHub 投稿上限 + 投稿统计 ===== */
-    + '<section class="panel" style="margin-bottom:16px">'
-    +   '<h3 style="margin:0 0 10px;font-size:.9rem">🛡 投稿上限守卫</h3>'
-    +   '<p class="muted" style="margin:0 0 10px;font-size:.78rem">'
-    +     '开启后，同学在班级网站点「点歌平台」入口时，先查 ta 的<b>未播投稿数</b>，'
-    +     '达到上限会弹提示（同名同学会误伤，默认关）。保存后约 1 分钟内全班生效。</p>'
-    +   '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
-    +     '<label style="display:flex;align-items:center;gap:6px;font-size:.84rem">'
-    +       '<input type="checkbox" id="vhGuardOn"> 开启守卫</label>'
-    +     '<div class="field" style="margin:0;width:150px"><label>每人未播投稿上限</label>'
-    +       '<input id="vhGuardLimit" type="number" min="1" max="20" value="3"></div>'
-    +     '<button class="btn btn-sm" id="vhGuardSave">保存</button>'
-    +     '<span class="muted" id="vhGuardState" style="font-size:.76rem"></span>'
-    +   '</div>'
-    + '</section>'
+/* ---- v4.18.6：原「点歌管理」面板已撤销，只保留「投稿统计」与「点歌券管理」两块，
+       由「抽歌排期（排歌周期）」面板调用下方函数嵌进去。投稿上限守卫、实时歌单已移除。 ---- */
+function songExtraHtml(){
+  return ''
     + '<section class="panel" style="margin-bottom:16px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'
     +     '<h3 style="margin:0;font-size:.9rem">📊 投稿统计（未播为准）</h3>'
     +     '<button class="btn btn-sm btn-ghost" id="vhStatReload">' + svg('refresh', 14) + ' 刷新</button>'
     +   '</div>'
     +   '<div id="vhStats"><div class="muted" style="font-size:.8rem">点「刷新」读取。</div></div>'
-    + '</section>'
-    + '<section class="panel" style="margin-bottom:16px">'
-    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'
-    +     '<h3 style="margin:0;font-size:.9rem">🎵 实时歌单</h3>'
-    +     '<div style="display:flex;gap:8px">'
-    +       '<button class="btn btn-sm btn-ghost" id="sgRefund">' + svg('ticket', 14) + ' 游戏券补发</button>'
-    +       '<button class="btn btn-sm btn-ghost" id="sgReload">' + svg('refresh', 14) + ' 刷新</button>'
-    +     '</div>'
-    +   '</div>'
-    +   '<div id="sgSongs"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
     + '</section>'
     + '<section class="panel">'
     +   '<h3 style="margin:0 0 10px;font-size:.9rem">🎟 点歌券管理</h3>'
@@ -5089,42 +5055,22 @@ function renderSong(){
     +   '</div>'
     +   '<div id="sgCards"><div class="loading"><div class="spinner"></div>加载中…</div></div>'
     + '</section>';
-
-  var rb = $('sgReload');
-  if(rb) rb.onclick = function(){ loadSong(); };
-  /* v3.5.13 投稿上限守卫：读/存 site_config.vhGuard */
-  (function(){
-    api('/content?keys=site_config').then(function(j){
-      var g = (j && j.items && j.items.site_config && j.items.site_config.vhGuard) || {};
-      var onEl = $('vhGuardOn'), limEl = $('vhGuardLimit'), st = $('vhGuardState');
-      if(onEl) onEl.checked = !!g.on;
-      if(limEl) limEl.value = Math.max(1, Number(g.limit) || 3);
-      if(st) st.textContent = g.on ? ('当前：已开启（上限 ' + (Number(g.limit) || 3) + ' 首）') : '当前：未开启';
-    }).catch(function(){});
-    var sb = $('vhGuardSave');
-    if(sb) sb.onclick = function(){
-      var onEl = $('vhGuardOn'), limEl = $('vhGuardLimit');
-      api('/content?keys=site_config').then(function(j){
-        var cfg = (j && j.items && j.items.site_config) || {};
-        cfg.vhGuard = { on: !!(onEl && onEl.checked), limit: Math.max(1, Number(limEl && limEl.value) || 3) };
-        return api('/content', { method:'PUT', body:{ items:{ site_config: cfg } } });
-      }).then(function(){
-        toast('守卫设置已保存', 'ok');
-        var st = $('vhGuardState');
-        if(st) st.textContent = (onEl && onEl.checked)
-          ? ('当前：已开启（上限 ' + (Number(limEl && limEl.value) || 3) + ' 首）') : '当前：未开启';
-      }).catch(function(e){ toast('保存失败：' + e.message, 'err'); });
-    };
-  })();
-  /* v3.5.13 投稿统计：走后端代理读 VoiceHub 公开歌单（上游无 CORS） */
+}
+function loadSongCards(){
+  var cb2 = $('sgCards');
+  if(!cb2) return;
+  if(typeof VH_ENABLED !== 'undefined' && !VH_ENABLED){ cb2.innerHTML=''; return; }
+  vhFetchCards().then(function(list){
+    STATE.song.cards = list;
+    paintSongCards();
+  }).catch(function(e){ STATE.song.cards=[]; paintSongCards(e); });
+}
+function bindSongExtra(){
   (function(){
     var btn = $('vhStatReload'), box = $('vhStats');
     function loadStats(){
       if(!box) return;
       box.innerHTML = '<div class="loading"><div class="spinner"></div>读取中…</div>';
-      /* v3.5.15 热修：VH_API 是 `.../api/open`，以前用 replace(/\/api$/) 去掉尾巴，
-         结果 base 还带着 `/api/open`，被 /vh 代理的「只收 https 站点」校验挡下，
-         报「base 必须是 https:// 开头的完整站点地址」。改用 URL.origin 取站点根。 */
       var base = '';
       try{ base = new URL(VH_API).origin; }catch(e){ base = ''; }
       if(!base){
@@ -5158,7 +5104,7 @@ function renderSong(){
                 + '<td>' + r.t + '</td></tr>';
             }).join('')
           + '</tbody></table></div>'
-          + '<p class="muted" style="font-size:.74rem;margin:8px 0 0">数据来自 VoiceHub 公开歌单（5 分钟缓存）；「排期到某天 / 自动标已播」需要 VoiceHub 登录态，开放 API 暂不支持，见更新记录说明。</p>';
+          + '<p class="muted" style="font-size:.74rem;margin:8px 0 0">数据来自 VoiceHub 公开歌单（5 分钟缓存）。</p>';
       }).catch(function(e){
         box.innerHTML = '<div class="alert danger">读取失败：' + esc(e.message || e) + '</div>';
       });
@@ -5166,12 +5112,9 @@ function renderSong(){
     if(btn) btn.onclick = loadStats;
     loadStats();
   })();
-  var rfb = $('sgRefund');
-  if(rfb) rfb.onclick = songRefundDialog;
   var cb = $('sgCreate');
-  if(cb) cb.onclick = songCreateCards;
-
-  loadSong();
+  if(cb) cb.onclick = function(){ songCreateCards(function(){ loadSongCards(); }); };
+  loadSongCards();
 }
 
 /* ---- 取数 ---- */

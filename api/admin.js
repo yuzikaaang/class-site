@@ -532,12 +532,14 @@ async function reviewUser(req, res, me, b) {
 }
 
 /* ---------------- v2.10.0：站点设置（后台可改的站点级开关） ----------------
-   目前三个键：
-     register_open   注册总开关（关掉后注册入口隐藏、接口 403）
-     register_review 注册是否需管理员审核
-     login_captcha   v4.10.1：登录 / 注册是否需要图形验证码（默认 true）
+   目前五个键：
+     register_open        注册总开关（关掉后注册入口隐藏、接口 403）
+     register_review      注册是否需管理员审核
+     login_captcha        v4.10.1：登录 / 注册是否需要图形验证码（默认 true）
+     login_max_fails      v4.18.6：连续输错几次锁定（默认 5）
+     login_lock_minutes   v4.18.6：锁定时长分钟（默认 15）
    白名单收口：不在表里的键一律忽略，防止脏数据把设置表当垃圾桶。 */
-const SETTING_KEYS = ['register_open', 'register_review', 'login_captcha'];
+const SETTING_KEYS = ['register_open', 'register_review', 'login_captcha', 'login_max_fails', 'login_lock_minutes'];
 async function getSettings(req, res) {
   const sql = getSql();
   const out = {};
@@ -548,18 +550,28 @@ async function getSettings(req, res) {
   /* 一并给出「环境变量默认值」，后台展示「未设置时的兜底」有据可查 */
   return ok(res, {
     settings: out,
-    envDefault: { register_open: !!cfg().allowRegister, login_captcha: true },
+    envDefault: { register_open: !!cfg().allowRegister, login_captcha: true, login_max_fails: 5, login_lock_minutes: 15 },
   });
 }
 
 async function saveSettings(req, res, me, b) {
   const sql = getSql();
   const done = [];
+  /* v4.18.6：登录限流两项是数字（次数/分钟），其余仍是布尔开关。
+     数字键单独校验范围，跟 auth.js 的 lockPolicy 保持一致，防止写入越界值。 */
+  const NUM_KEYS = { login_max_fails: [1, 20], login_lock_minutes: [1, 1440] };
   for (const k of SETTING_KEYS) {
     if (!(k in b)) continue;
     const v = b[k];
-    if (typeof v !== 'boolean') return fail(res, 400, k + ' 必须是布尔值');
-    await setSiteSetting(sql, k, v);
+    if (k in NUM_KEYS) {
+      const n = Number(v);
+      const [lo, hi] = NUM_KEYS[k];
+      if (!Number.isInteger(n) || n < lo || n > hi) return fail(res, 400, k + ' 必须是 ' + lo + '–' + hi + ' 的整数');
+      await setSiteSetting(sql, k, n);
+    } else {
+      if (typeof v !== 'boolean') return fail(res, 400, k + ' 必须是布尔值');
+      await setSiteSetting(sql, k, v);
+    }
     done.push(k);
   }
   if (!done.length) return fail(res, 400, '没有要保存的设置');

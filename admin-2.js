@@ -132,261 +132,6 @@ function saveStudy(){
 }
 
 /* ============================================================================
- * ⑪-F 面板：重要日期 / 考试范围（2026-10-06 新增）
- * ---------------------------------------------------------------------------
- * 需求「重要日期 / 考试范围也要能上云」。
- *
- * 云端字段：important_dates
- *   [
- *     { name:"寒假", date:"2027-01-30T00:00:00" },                       ← 单日
- *     { name:"第一次段考", date:"2026-10-13T00:00:00",
- *       endDate:"2026-10-14",                                            ← 跨天事项才填
- *       scope:[ { sub:"语文", txt:"..." }, ... ] }                       ← 填了才显示「查看考试范围」
- *   ]
- *
- * ⚠️ 字段名必须与主站 index.html 里的 IMPORTANT_DATES 完全一致 ——
- *    主站是**整体替换**这个数组（applyCloudContent 里对 important_dates 的特判），
- *    这里多写/少写一个字段都会被静默吞掉：比如漏了 endDate，段考就退化成单日；
- *    漏了 scope，「查看考试范围」按钮直接消失。所以下面硬编码这几个键名。
- * ========================================================================= */
-function renderDates(){
-  $('view').innerHTML =
-    '<div class="toolbar" style="background:var(--panel)">'
-    +   '<button class="btn btn-sm" id="dtAdd">' + svg('plus', 14) + '新增日期</button>'
-    +   '<span style="flex:1"></span>'
-    +   '<button class="btn btn-sm btn-secondary" id="dtRefresh">' + svg('refresh', 14) + '刷新</button>'
-    + '</div>'
-    + '<div class="alert info" style="margin-bottom:16px">'
-    +   '这里的每一条都会出现在首页「重要日期」倒计时里。'
-    +   '填了「考试范围」的事项，同学打开才有「查看考试范围」按钮。<br>'
-    +   '<b>注意：清空云端不影响首页</b> —— 主站会自动回退到页面内置的那份日期，不会出现空白。'
-    + '</div>'
-    + '<section class="panel"><div id="dtBody"><div class="loading"><div class="spinner"></div>加载中…</div></div></section>';
-
-  $('dtAdd').onclick     = function(){ dtDialog(null); };
-  $('dtRefresh').onclick = function(){ loadDates(); };
-  loadDates();
-}
-
-function loadDates(){
-  api('/content').then(function(j){
-    var items = (j && j.items) || {};
-    STATE.dates.list = Array.isArray(items.important_dates) ? items.important_dates : [];
-    paintDates();
-  }).catch(function(e){
-    var b = $('dtBody');
-    if(b) b.innerHTML = '<div class="empty">' + svg('alert', 34) + '<p>加载失败：' + esc(e.message) + '</p></div>';
-  });
-}
-
-function dtFmtDate(v){
-  if(!v) return '—';
-  var d = new Date(v);
-  if(isNaN(d.getTime())) return String(v).slice(0, 10);
-  function p(n){ return (n < 10 ? '0' : '') + n; }
-  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-}
-
-function paintDates(){
-  var body = $('dtBody');
-  if(!body) return;
-  var list = STATE.dates.list || [];
-
-  if(!list.length){
-    body.innerHTML = '<div class="empty">' + svg('calendar', 38) + '<p>云端还没有重要日期</p>'
-      + '<p class="muted" style="font-size:.78rem">首页此刻显示的是页面内置的那份（寒假 + 第一次段考）</p></div>';
-    return;
-  }
-
-  var sorted = list.slice().sort(function(a, b){
-    return String(a.date || '') < String(b.date || '') ? -1 : 1;
-  });
-
-  body.innerHTML =
-    '<div class="muted" style="font-size:.78rem;margin-bottom:8px">共 <b>' + sorted.length + '</b> 项</div>'
-    + '<div class="table-wrap"><table><thead><tr>'
-    +   '<th>名称</th><th class="nowrap" style="width:200px">日期</th>'
-    +   '<th class="nowrap" style="width:90px">考试范围</th>'
-    +   '<th style="text-align:right;width:130px">操作</th>'
-    + '</tr></thead><tbody>'
-    + sorted.map(function(d){
-        var dateText = dtFmtDate(d.date);
-        if(d.endDate) dateText += ' — ' + dtFmtDate(d.endDate);
-        var sc = Array.isArray(d.scope) ? d.scope.filter(function(x){ return x && x.txt; }) : [];
-        return '<tr>'
-          + '<td><b>' + esc(d.name || '(未命名)') + '</b></td>'
-          + '<td class="muted nowrap" style="font-size:.78rem">' + esc(dateText) + '</td>'
-          + '<td class="nowrap">' + (sc.length
-              ? '<span class="badge badge-blue">' + sc.length + ' 科</span>'
-              : '<span class="muted">无</span>') + '</td>'
-          + '<td style="text-align:right"><div class="row-actions">'
-          +   '<button data-dt-edit="' + esc(d.name) + '">编辑</button>'
-          +   '<button class="danger" data-dt-del="' + esc(d.name) + '">删除</button>'
-          + '</div></td></tr>';
-      }).join('')
-    + '</tbody></table></div>';
-
-  Array.prototype.forEach.call(body.querySelectorAll('[data-dt-edit]'), function(b){
-    b.onclick = function(){ dtDialog(b.dataset.dtEdit); };
-  });
-  Array.prototype.forEach.call(body.querySelectorAll('[data-dt-del]'), function(b){
-    b.onclick = function(){ dtDelete(b.dataset.dtDel); };
-  });
-}
-
-/**
- * 新增/编辑重要日期。
- * @param {string|null} key 传 null = 新增；传名称 = 编辑那一条
- */
-function dtDialog(key){
-  var list = STATE.dates.list || [];
-  var isNew = (key === null || key === undefined);
-  var d = isNew ? { name:'', date:'', endDate:'', scope:[] }
-                : (list.find(function(x){ return x.name === key; }) || { name:'', date:'', endDate:'', scope:[] });
-  var scope = Array.isArray(d.scope) ? d.scope.slice() : [];
-
-  /* 把 ISO 时间裁成 datetime-local 需要的 "YYYY-MM-DDTHH:mm" */
-  function toLocalInput(v){
-    if(!v) return '';
-    var t = String(v);
-    return t.length > 16 ? t.slice(0, 16) : t;
-  }
-  function toDayInput(v){ return v ? String(v).slice(0, 10) : ''; }
-
-  function scopeRows(){
-    if(!scope.length) return '<div class="muted" style="font-size:.78rem;padding:6px 0">还没有科目，点下面的「添加科目」</div>';
-    return scope.map(function(s, i){
-      return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start">'
-        + '<input data-sc-sub="' + i + '" value="' + attr(s.sub || '') + '" maxlength="12" placeholder="科目" style="width:80px;flex-shrink:0">'
-        + '<textarea data-sc-txt="' + i + '" rows="2" maxlength="600" placeholder="考试范围" style="flex:1">' + esc(s.txt || '') + '</textarea>'
-        + '<button type="button" class="btn btn-sm btn-ghost" data-sc-del="' + i + '" style="flex-shrink:0">' + svg('x', 13) + '</button>'
-        + '</div>';
-    }).join('');
-  }
-
-  openModal({
-    title: isNew ? '新增重要日期' : ('编辑 ' + (d.name || '')),
-    sub: '跨天事项才填「结束日期」；不考试的事项不用填科目',
-    wide: true,
-    body:
-      '<div class="field"><label for="dtN">名称</label>'
-      + '<input id="dtN" maxlength="30" value="' + attr(d.name || '') + '" placeholder="例如：第一次段考"></div>'
-
-      + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
-      +   '<div class="field" style="flex:1;min-width:200px"><label for="dtD">开始时间</label>'
-      +   '<input id="dtD" type="datetime-local" value="' + attr(toLocalInput(d.date)) + '"></div>'
-      +   '<div class="field" style="flex:1;min-width:180px"><label for="dtE">结束日期（可选）</label>'
-      +   '<input id="dtE" type="date" value="' + attr(toDayInput(d.endDate)) + '">'
-      +   '<p class="hint">仅跨天事项需填写，如段考 13—14 日。</p></div>'
-      + '</div>'
-
-      + '<div class="field"><label>考试范围（可选）</label>'
-      +   '<div id="dtScope">' + scopeRows() + '</div>'
-      +   '<div style="margin-top:8px"><button type="button" class="btn btn-sm btn-ghost" id="dtScopeAdd">'
-      +   svg('plus', 13) + ' 添加科目</button></div>'
-      +   '<p class="hint">填写后，首页该条公告将显示「查看考试范围」入口。</p></div>'
-
-      + '<div class="msg" id="dtMsg"></div>',
-
-    foot: '<button class="btn btn-ghost" data-no>取消</button>'
-        + '<button class="btn" data-yes>' + (isNew ? '新增' : '保存') + '</button>',
-
-    onMount: function(box){
-      var scopeBox = box.querySelector('#dtScope');
-
-      /* 每一次重画都从 scope 数组重新生成，所以先把文本区里的改动收回去 */
-      function harvest(){
-        Array.prototype.forEach.call(box.querySelectorAll('[data-sc-sub]'), function(inp){
-          var i = Number(inp.dataset.scSub);
-          if(scope[i]) scope[i].sub = inp.value;
-        });
-        Array.prototype.forEach.call(box.querySelectorAll('[data-sc-txt]'), function(inp){
-          var i = Number(inp.dataset.scTxt);
-          if(scope[i]) scope[i].txt = inp.value;
-        });
-      }
-      function redraw(){
-        harvest();
-        scopeBox.innerHTML = scopeRows();
-        bind();
-      }
-      function bind(){
-        Array.prototype.forEach.call(scopeBox.querySelectorAll('[data-sc-del]'), function(b){
-          b.onclick = function(){ harvest(); scope.splice(Number(b.dataset.scDel), 1); redraw(); };
-        });
-      }
-      bind();
-
-      box.querySelector('#dtScopeAdd').onclick = function(){
-        harvest();
-        scope.push({ sub: '', txt: '' });
-        redraw();
-      };
-      box.querySelector('[data-no]').onclick = closeModal;
-
-      box.querySelector('[data-yes]').onclick = function(){
-        harvest();
-        var msg = box.querySelector('#dtMsg');
-        var name = (box.querySelector('#dtN').value || '').trim();
-        var date = (box.querySelector('#dtD').value || '').trim();
-        var end  = (box.querySelector('#dtE').value || '').trim();
-
-        if(!name){ msg.textContent = '名称不能为空'; msg.style.color = 'var(--danger,#af410f)'; return; }
-        if(!date){ msg.textContent = '请选择开始时间'; msg.style.color = 'var(--danger,#af410f)'; return; }
-        if(end && end < date.slice(0, 10)){
-          msg.textContent = '结束日期不能早于开始日期'; msg.style.color = 'var(--danger,#af410f)'; return;
-        }
-        /* 同名会被主站 openExamScope() 按 name 查找，重名就取到错的那条，必须拦住 */
-        var dup = (STATE.dates.list || []).some(function(x){
-          return x.name === name && x.name !== key;
-        });
-        if(dup){ msg.textContent = '已经有一条叫「' + name + '」的了，换个名字'; msg.style.color = 'var(--danger,#af410f)'; return; }
-
-        var item = { name: name, date: date };
-        if(end) item.endDate = end;
-        var real = scope.filter(function(s){ return (s.txt || '').trim(); })
-                        .map(function(s){ return { sub: (s.sub || '').trim(), txt: s.txt.trim() }; });
-        if(real.length) item.scope = real;
-
-        var next = (STATE.dates.list || []).slice();
-        if(isNew) next.push(item);
-        else{
-          var at = next.findIndex(function(x){ return x.name === key; });
-          if(at >= 0) next[at] = item; else next.push(item);
-        }
-
-        api('/content', { method:'PUT', body:{ items:{ important_dates: next } } })
-          .then(function(){
-            closeModal();
-            toast(isNew ? '已新增' : '已保存', 'ok', 3000);
-            loadDates();
-          })
-          .catch(function(e){ toast('保存失败：' + e.message, 'err', 4200); });
-      };
-    }
-  });
-}
-
-function dtDelete(key){
-  var list = STATE.dates.list || [];
-  var d = list.find(function(x){ return x.name === key; });
-  if(!d) return;
-  confirmBox({
-    title: '删除重要日期',
-    html: '确定删除 <b>' + esc(d.name || '') + '</b> 吗？',
-    detail: '删除后首页倒计时里不再显示这一条。',
-    danger: true,
-    okText: '删除'
-  }).then(function(ok){
-    if(!ok) return;
-    var next = list.filter(function(x){ return x.name !== key; });
-    api('/content', { method:'PUT', body:{ items:{ important_dates: next } } })
-      .then(function(){ toast('已删除', 'ok'); loadDates(); })
-      .catch(function(e){ toast('删除失败：' + e.message, 'err', 4200); });
-  });
-}
-
-/* ============================================================================
  * ⑫ 面板：班级资料管理（通讯录）
  * ---------------------------------------------------------------------------
  * 后端 /admin?action=profiles 返回：
@@ -3486,6 +3231,19 @@ function renderSettings(){
     +       '<span class="muted" style="font-size:.76rem">开启后：登录 / 注册时要输入图中的 4 位数字验证码（默认开启，建议保持）。关闭后登录页不再显示验证码，仅靠账号密码登录 —— 只建议在教室大屏等封闭环境关闭</span></span>'
     +     '</label>'
     +   '</div>'
+    /* v4.18.6（站主）：登录限流改成后台可配 —— 输错几次、锁多少分钟。
+       数据走 /admin?action=settings 的 login_max_fails / login_lock_minutes 两键。 */
+    +   '<div class="field" style="margin-top:14px;border-top:1px dashed var(--border);padding-top:14px">'
+    +     '<label style="display:block;font-weight:700;margin-bottom:8px">登录限流'
+    +       '<span class="muted" style="font-weight:400;font-size:.76rem"> · 连续输错密码达到次数后，锁定对应分钟数，防暴力破解</span></label>'
+    +     '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">'
+    +       '<span style="font-size:.82rem">输错</span>'
+    +       '<input type="number" id="stMaxFails" min="1" max="20" style="width:72px">'
+    +       '<span style="font-size:.82rem">次后锁定</span>'
+    +       '<input type="number" id="stLockMin" min="1" max="1440" style="width:86px">'
+    +       '<span style="font-size:.82rem">分钟（默认 5 次 / 15 分钟）</span>'
+    +     '</div>'
+    +   '</div>'
     +   '<button class="btn" id="stPolicySave">' + svg('check', 14) + '保存策略</button>'
     +   '<div class="msg" id="stPolicyMsg"></div>'
 
@@ -3494,7 +3252,6 @@ function renderSettings(){
     +       '<div class="muted" style="font-size:.76rem;margin-top:5px">v2.10.0 起：用初始密码登录后只是<b>建议</b>修改，可点「暂不修改」跳过，个人中心会常驻提醒</div></dd>'
     +     '<dt>密码存储</dt><dd><span class="badge badge-gray">PBKDF2-SHA256</span>'
     +       '<div class="muted" style="font-size:.76rem;margin-top:5px">只存哈希，管理员也无法查看明文密码</div></dd>'
-    +     '<dt>登录限流</dt><dd><span class="badge badge-blue">5 次错误锁 15 分钟</span></dd>'
     +   '</dl>'
     + '</div>'
     + '</section>'
@@ -3592,15 +3349,29 @@ function renderSettings(){
     /* v4.10.1：登录安全验证 —— 未设置过按 envDefault（true）展示，默认开着 */
     if(lc) lc.checked = (s.login_captcha === null || s.login_captcha === undefined)
       ? !!(env && env.login_captcha) : !!s.login_captcha;
+    /* v4.18.6：登录限流两项，未设置过用 envDefault（5 / 15） */
+    var mf = $('stMaxFails'), lm = $('stLockMin');
+    if(mf) mf.value = (s.login_max_fails === null || s.login_max_fails === undefined)
+      ? (env.login_max_fails || 5) : s.login_max_fails;
+    if(lm) lm.value = (s.login_lock_minutes === null || s.login_lock_minutes === undefined)
+      ? (env.login_lock_minutes || 15) : s.login_lock_minutes;
   }).catch(function(){ /* 读不到就保持默认勾选态，保存时以界面为准 */ });
 
   $('stPolicySave').onclick = function(){
     var msg = $('stPolicyMsg');
     msg.className = 'msg show warn'; msg.textContent = '保存中…';
+    var mf = Number($('stMaxFails') && $('stMaxFails').value);
+    var lm = Number($('stLockMin') && $('stLockMin').value);
+    if(!(mf >= 1 && mf <= 20) || !(lm >= 1 && lm <= 1440)){
+      msg.className = 'msg err show'; msg.textContent = '输错次数填 1–20，锁定时长填 1–1440 分钟';
+      return;
+    }
     api('/admin?action=set-settings', { method:'POST', body: {
       register_open: $('stRegOpen').checked,
       register_review: $('stRegReview').checked,
       login_captcha: $('stLoginCaptcha').checked,
+      login_max_fails: mf,
+      login_lock_minutes: lm,
     }}).then(function(j){
       msg.className = 'msg ok show'; msg.textContent = j.message || '已保存，立即生效';
     }).catch(function(e){
@@ -4693,7 +4464,12 @@ function renderDj(){
     +     '<button class="btn btn-ghost" id="djClearBtn" style="color:#b3261e">' + svg('trash',14) + ' 清空排期</button>'
     +     '<input type="file" id="djImportFile" accept=".json,application/json" style="display:none">'
     +   '</div>'
-    + '</section>';
+    + '</section>'
+    /* v4.18.6：原「点歌管理」撤销，投稿统计 + 点歌券管理并入排歌周期 */
+    + songExtraHtml();
+
+  /* v4.18.6：绑定并入的投稿统计 / 点歌券管理 */
+  try{ bindSongExtra(); }catch(e){}
 
   /* 备注：沿用本机存的那份（只是输入框的草稿，不算业务数据，不必上云） */
   var ne = $('djCopyNote');
