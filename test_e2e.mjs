@@ -14214,12 +14214,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.3 删除按钮 CSS 齐全（含明暗变量）',
       /\.pg-clear-subj\{/.test(pgCss183) && /\.pg-rec-del\{/.test(pgCss183)
       && /--pg-no-ink/.test(pgCss183));
-    /* ④ 版本号四处一致（随版本升级同步到 4.18.6） */
+    /* ④ 版本号四处一致（随版本升级同步到 4.18.7） */
     t('★版本 前台/后台/SW/API 四处一致',
-      /var SITE_VERSION = '4\.18\.6'/.test(readIdx())
-      && /const SITE_VER = '4\.18\.6'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-      && /const API_VER = '4\.18\.6';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-      && /var SITE_VERSION = '4\.18\.6'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+      /var SITE_VERSION = '4\.18\.7'/.test(readIdx())
+      && /const SITE_VER = '4\.18\.7'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+      && /const API_VER = '4\.18\.7';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+      && /var SITE_VERSION = '4\.18\.7'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
   }
 
   /* ===== v4.18.4 目标双端同步 + 赋分目标 + 排名目标 + AI目标专项 ===== */
@@ -14379,6 +14379,41 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       (function(){
         const pubBlock = rel186.slice(rel186.indexOf("version: '4.18.6'"), rel186.indexOf("version: '4.18.5'"));
         const texts = [...pubBlock.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28);
+      })());
+  }
+
+  /* ===== v4.18.7 首页误报修复 + 手机端弹窗排版 ===== */
+  {
+    const app = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const idx = readIdx();
+    const rel187 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    /* ① 首页看门狗误报根因：esc() 遇数字 id 抛错 → render 中断 → grid 卡骨架屏 */
+    t('★v4.18.7 转义函数 esc 加固为非字符串安全（String）',
+      /function esc\(s\)\{ return String\(s==null\?'':s\)/.test(app));
+    t('★v4.18.7 卡片简介 data-card-desc 用 String(l.id)',
+      /data-card-desc="[^"]*esc\(String\(l\.id\)\)/.test(app));
+    /* ② 手机端重要日期管理弹窗：信息行 + 按钮行分离，文字强制横排 */
+    t('★v4.18.7 弹窗行改为信息块 + 按钮块两行结构',
+      /class="imp-edit-row"/.test(app) && /class="imp-edit-info"/.test(app)
+      && /class="imp-edit-name"/.test(app) && /class="imp-edit-meta"/.test(app)
+      && /class="imp-edit-actions"/.test(app));
+    t('★v4.18.7 弹窗窄屏 CSS 强制横排 + 按钮换行',
+      /\.imp-edit-info\{min-width:0;word-break:break-word/.test(idx)
+      && /\.imp-edit-actions\{display:flex;gap:8px/.test(idx)
+      && /\.imp-edit-head\{[\s\S]*?flex-wrap:wrap/.test(idx));
+    t('★v4.18.7 考试范围录入框窄屏防挤压',
+      /placeholder="科目" style="width:76px;flex:0 0 76px/.test(app)
+      && /placeholder="考试范围" style="flex:1;min-width:0/.test(app));
+    /* ③ 版本记录与公告口径（去内部词、官方简洁） */
+    t('★v4.18.7 版本更新记录与公告口径齐全',
+      /version: '4\.18\.7'/.test(rel187)
+      && /修复首页偶尔误报加载失败的问题/.test(rel187)
+      && /修复手机端日期设置文字竖排的问题/.test(rel187));
+    t('★v4.18.7 公告条目均不超过 28 汉字',
+      (function(){
+        const block = rel187.slice(rel187.indexOf("version: '4.18.7'"), rel187.indexOf("version: '4.18.6'"));
+        const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
         return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28);
       })());
   }

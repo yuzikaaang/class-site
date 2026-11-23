@@ -3023,7 +3023,7 @@ function showVideoTip(msg){
 
 
 /* ---- 渲染主页面 ---- */
-function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 /* ---- 倒计时 ---- */
 function pad2(n){ return (n<10?'0':'') + n; }
@@ -3308,7 +3308,7 @@ function render(){
         /* v3.9.22：标题留在折叠态，其余内容都塞进 .card-detail，打开才显示 */
         var contentHtml = '<div class="card-content"><h3><span class="f-t">'+esc(l.title)+'</span><span class="f-i">'+iconSvg('chevron-down',15)+'</span></h3>'
           + '<div class="card-detail">'+(l.subtitle?'<p class="card-sub">'+esc(l.subtitle)+'</p>':'')
-          + '<p data-card-desc="'+esc(l.id)+'"'+(l.desc?'':' style="display:none"')+'>'+esc(l.desc||'')+'</p>';
+          + '<p data-card-desc="'+esc(String(l.id))+'"'+(l.desc?'':' style="display:none"')+'>'+esc(l.desc||'')+'</p>';
         if(l.paused){
           contentHtml += '<div class="paused-box">'+(l.pausedMsg ? emojiEscHtml(l.pausedMsg) : (iconSvg('ban',15)+' 因网络问题，暂时关闭，恢复开放时间另行通知'))+'</div>';
         }else if(l.gate && !passed){
@@ -12984,19 +12984,26 @@ function impEditFmt(v){
 function impEditRender(){
   var box=document.getElementById('impEditBody'); if(!box) return;
   var list=impEditList();
-  var head='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+  var head='<div class="imp-edit-head">'
     + '<button class="btn btn-sm" onclick="impEditForm(null)">＋ 新增日期</button>'
-    + '<span style="flex:1;font-size:.78rem;color:#8a827b">共 '+list.length+' 项 · 改动即刻同步到首页</span></div>';
+    + '<span class="imp-edit-count">共 '+list.length+' 项 · 改动即刻同步到首页</span></div>';
   if(!list.length){ box.innerHTML=head+'<div style="padding:22px;text-align:center;color:#8a827b;font-size:.85rem">还没有重要日期，点「新增日期」加一条</div>'; return; }
   var sorted=list.slice().sort(function(a,b){ return String(a.date||'')<String(b.date||'')?-1:1; });
   var rows=sorted.map(function(d){
     var dt=impEditFmt(d.date)+(d.endDate?(' — '+impEditFmt(d.endDate)):'');
     var sc=Array.isArray(d.scope)?d.scope.filter(function(x){return x&&x.txt;}):[];
-    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px dashed rgba(140,140,140,.25)">'
-      + '<div style="flex:1;min-width:0"><b style="font-size:.88rem">'+esc(d.name||'(未命名)')+'</b>'
-      +   '<div style="font-size:.74rem;color:#8a827b;margin-top:2px">'+esc(dt)+(sc.length?(' · 范围 '+sc.length+' 科'):'')+'</div></div>'
-      + '<button class="btn btn-sm btn-ghost" onclick="impEditForm(\''+esc(d.name).replace(/'/g,"\\'")+'\')">编辑</button>'
-      + '<button class="btn btn-sm btn-ghost" style="color:#af410f" onclick="impEditDel(\''+esc(d.name).replace(/'/g,"\\'")+'\')">删除</button>'
+    var key=String(d.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    /* v4.18.7：窄屏上「名称 + 日期 + 按钮」挤一行会把中文压成竖排。
+       改成两块：信息独占一行（可换行、不压缩），按钮另起一行右对齐。 */
+    return '<div class="imp-edit-row">'
+      + '<div class="imp-edit-info">'
+      +   '<div class="imp-edit-name">'+esc(d.name||'(未命名)')+'</div>'
+      +   '<div class="imp-edit-meta">'+esc(dt)+(sc.length?(' · 范围 '+sc.length+' 科'):'')+'</div>'
+      + '</div>'
+      + '<div class="imp-edit-actions">'
+      +   '<button class="btn btn-sm btn-ghost" onclick="impEditForm(\''+key+'\')">编辑</button>'
+      +   '<button class="btn btn-sm btn-ghost imp-del" onclick="impEditDel(\''+key+'\')">删除</button>'
+      + '</div>'
       + '</div>';
   }).join('');
   box.innerHTML=head+rows;
@@ -13011,8 +13018,8 @@ function impEditForm(key){
     if(!scope.length) return '<div style="font-size:.76rem;color:#8a827b;padding:4px 0">还没有科目，点「添加科目」</div>';
     return scope.map(function(s,i){
       return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start">'
-        + '<input data-is="' + i + '" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:84px">'
-        + '<textarea data-it="' + i + '" rows="2" maxlength="600" placeholder="考试范围" style="flex:1">'+esc(s.txt||'')+'</textarea>'
+        + '<input data-is="' + i + '" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:76px;flex:0 0 76px;min-width:0">'
+        + '<textarea data-it="' + i + '" rows="2" maxlength="600" placeholder="考试范围" style="flex:1;min-width:0;width:100%">'+esc(s.txt||'')+'</textarea>'
         + '<button type="button" onclick="impScopeDel('+i+')" style="flex-shrink:0">×</button></div>';
     }).join('');
   }
@@ -13046,8 +13053,8 @@ function impScopeRedraw(){
   if(!scope.length){ holder.innerHTML='<div style="font-size:.76rem;color:#8a827b;padding:4px 0">还没有科目，点「添加科目」</div>'; return; }
   holder.innerHTML=scope.map(function(s,i){
     return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start">'
-      + '<input data-is="'+i+'" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:84px">'
-      + '<textarea data-it="'+i+'" rows="2" maxlength="600" placeholder="考试范围" style="flex:1">'+esc(s.txt||'')+'</textarea>'
+      + '<input data-is="'+i+'" value="'+esc(s.sub||'')+'" maxlength="12" placeholder="科目" style="width:76px;flex:0 0 76px;min-width:0">'
+      + '<textarea data-it="'+i+'" rows="2" maxlength="600" placeholder="考试范围" style="flex:1;min-width:0;width:100%">'+esc(s.txt||'')+'</textarea>'
       + '<button type="button" onclick="impScopeDel('+i+')" style="flex-shrink:0">×</button></div>';
   }).join('');
 }

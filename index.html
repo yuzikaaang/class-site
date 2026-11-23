@@ -644,6 +644,20 @@ header p{font-size:clamp(.85rem,2.5vw,1.1rem);opacity:.95;margin-top:8px;positio
 .allboard-box{color:#2b2521;background:#fffdfb;border-radius:20px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);display:flex;flex-direction:column;margin:auto}
 .allboard-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#9a3412,#af410f);color:#fff;font-weight:700;padding:12px 18px;font-size:.95rem}
 .allboard-head button{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:999px;padding:4px 12px;font-size:.75rem;cursor:pointer}
+/* v4.18.7：重要日期管理弹窗在窄屏上「名称/日期/按钮」挤一行会把中文竖排，
+   改为信息一块、按钮另一块；文字强制横排、允许换行、不被压缩。 */
+.imp-edit-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.imp-edit-head .btn{flex:0 0 auto;white-space:nowrap}
+.imp-edit-count{flex:1 1 100%;min-width:0;font-size:.78rem;color:#8a827b}
+.imp-edit-row{padding:10px 2px;border-bottom:1px dashed rgba(140,140,140,.25)}
+.imp-edit-info{min-width:0;word-break:break-word;overflow-wrap:anywhere;white-space:normal;line-height:1.45}
+.imp-edit-name{font-size:.9rem;font-weight:700;color:#2b2521}
+.imp-edit-meta{font-size:.76rem;color:#8a827b;margin-top:3px;word-break:break-word;overflow-wrap:anywhere}
+.imp-edit-actions{display:flex;gap:8px;margin-top:8px}
+.imp-edit-actions .btn{flex:1 1 0;min-width:0;white-space:nowrap}
+.imp-edit-actions .imp-del{color:#af410f}
+.dark .imp-edit-name{color:#f5f0ea}
+.dark .imp-edit-count,.dark .imp-edit-meta{color:#a89e94}
 .allboard-list{overflow-y:auto;list-style:none;margin:0;padding:0;max-height:60vh}
 .allboard-list li{padding:13px 18px;border-bottom:1px solid #f4ede6}
 .allboard-list li:last-child{border-bottom:none}
@@ -6627,7 +6641,7 @@ html[data-lite="1"] .pfx-btn.pfx-done.ready{box-shadow:none}
   }catch(e){}
 })();
 </script>
-<link rel="stylesheet" href="./pg.css?v=4186">
+<link rel="stylesheet" href="./pg.css?v=4187">
 </head>
 <body>
 
@@ -7552,7 +7566,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       <!-- v4.16.0（站主）：大屏一打开就是作业看板，看不到首页页脚那行版本号，
            只好先点返回、回首页翻到底才知道有没有新版。左下角补一个，点一下就能查。 -->
       <button type="button" class="bhw-ver" id="bhwVer" onclick="BIG.verCheck()"
-        title="点击检查是否为最新版本">v4.18.6</button>
+        title="点击检查是否为最新版本">v4.18.7</button>
 
       <nav class="bhw-bar" aria-label="页面工具">
         <span class="bhw-bar-tip">字号与锁定仅作用于本页</span>
@@ -8772,19 +8786,19 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 <script>
 /* v3.9.8：版本号留在 HTML 里 —— 部署门禁与 SW 检查都只读这一处，不用去下载 app.js */
-var SITE_VERSION = '4.18.6';
+var SITE_VERSION = '4.18.7';
 var VER_DATE = '2026-11-17';
 </script>
-<script src="./auth-bus.js?v=4186" defer></script>
+<script src="./auth-bus.js?v=4187" defer></script>
 <script src="./tour.js?v=b2cd14" defer></script>
-<script src="./app.min.js?v=4186" defer></script>
+<script src="./app.min.js?v=4187" defer></script>
 <!-- v3.19.0：大屏模式（图标墙 / 大屏作业页 / 随机点名）。必须在 app.min.js 之后：
      它要在 app 的首屏渲染完成后接管首页，并调用 openCat / goHomeView。 -->
-<script src="./fs-keep.js?v=4186" defer></script>
-<script src="./big.js?v=4186" defer></script>
+<script src="./fs-keep.js?v=4187" defer></script>
+<script src="./big.js?v=4187" defer></script>
 <!-- v4.5.1：抽取动画（盲盒两段式 / 宝箱转盘）。纯 CSS 绘制 + WebAudio 合成，
      不依赖任何外链资源，断网也能完整播放。 -->
-<script src="./pickfx.js?v=4186" defer></script>
+<script src="./pickfx.js?v=4187" defer></script>
 <script>
 /* Service Worker 注册。
    v2.6.4 起改为调用 swRegister() —— 它除了注册，还负责「主动催更新检查」
