@@ -13925,7 +13925,8 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /* v4.16.0：从「返回」右边挪到正下方，字号翻倍，去掉底色与描边 */
     t('★v4.16.0 小当前时间在「返回」下方、无外框、字号翻倍',
       /id="tmNow"/.test(clock5) && /body\.tm-on #tmNow\{display:flex\}/.test(clock5)
-      && /body\.bare #tmNow\{display:none\}/.test(clock5)
+      /* v4.18.11：极简态改为保留时钟，原来的 display:none 已按站主要求取消 */
+      && !/body\.bare #tmNow\{display:none\}/.test(clock5)
       && /top:calc\(62px \+ var\(--clk-top-push\) \+ env\(safe-area-inset-top\)\)/.test(clock5)
       && /font-size:30px/.test(clock5) && /background:none/.test(clock5)
       && /tn\.textContent = two\(hh\)/.test(clock5));
@@ -14214,12 +14215,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.3 删除按钮 CSS 齐全（含明暗变量）',
       /\.pg-clear-subj\{/.test(pgCss183) && /\.pg-rec-del\{/.test(pgCss183)
       && /--pg-no-ink/.test(pgCss183));
-    /* ④ 版本号四处一致（随版本升级同步到 4.18.10） */
+    /* ④ 版本号四处一致（随版本升级同步到 4.18.11） */
     t('★版本 前台/后台/SW/API 四处一致',
-      /var SITE_VERSION = '4\.18\.10'/.test(readIdx())
-      && /const SITE_VER = '4\.18\.10'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-      && /const API_VER = '4\.18\.10';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-      && /var SITE_VERSION = '4\.18\.10'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+      /var SITE_VERSION = '4\.18\.11'/.test(readIdx())
+      && /const SITE_VER = '4\.18\.11'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+      && /const API_VER = '4\.18\.11';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+      && /var SITE_VERSION = '4\.18\.11'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
   }
 
   /* ===== v4.18.4 目标双端同步 + 赋分目标 + 排名目标 + AI目标专项 ===== */
@@ -14535,6 +14536,64 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.10 公告条目均不超过 28 汉字且无禁词',
       (function(){
         const block = rel1810.slice(rel1810.indexOf("version: '4.18.10'"), rel1810.indexOf("version: '4.18.9'"));
+        const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
+          && texts.every(x => !ban.some(w => x.includes(w)));
+      })());
+  }
+
+  /* ===== v4.18.11 专注保留信息 · 考试倒计时 · 文字提醒 ===== */
+  {
+    const clk = fs.readFileSync(new URL('./clock.html', import.meta.url), 'utf8');
+    const rel1811 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    const ver = JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8'));
+    /* ① 极简态保留当前时钟 + 科目事项灰字行 */
+    t('★v4.18.11 极简态不再隐藏返回下方时钟',
+      !/body\.bare #tmNow\{display:none\}/.test(clk)
+      && /极简（专注）态也保留返回下方这个当前时钟/.test(clk));
+    t('★v4.18.11 倒计时上方灰字信息行 bareInfo + 跟随更新',
+      /id="bareInfo"/.test(clk) && /function paintBareInfo\(\)/.test(clk)
+      && /body\.bare #bareInfo\{display:block\}/.test(clk)
+      && /paintBareInfo\(\);/.test(clk));
+    /* ② 考试模式 */
+    t('★v4.18.11 考试时长预设 语150/数英120/物化生75',
+      /var EXAM_MIN = \{ '语文':150, '数学':120, '英语':120, '物理':75, '化学':75, '生物':75 \}/.test(clk));
+    t('★v4.18.11 考试入口按钮 + 进入/退出函数',
+      /id="examRow"/.test(clk) && /id="examExit"/.test(clk)
+      && /function setExam\(on\)/.test(clk) && /function examStart\(subj\)/.test(clk)
+      && /function examExit\(\)/.test(clk) && /examStart\(b\.getAttribute\('data-exam'\)\)/.test(clk));
+    t('★v4.18.11 考试按钮只在倒计时子模式显示',
+      /\.exam-row\.show\{display:flex\}/.test(clk)
+      && /T\.kind === 'down' \? ' show' : ''/.test(clk));
+    t('★v4.18.11 考试事项自动填考试 + 套用预设时长',
+      /CFG\.doing = '考试'/.test(clk) && /CFG\.downSec = mins \* 60/.test(clk));
+    t('★v4.18.11 考试结束全屏提示改考试结束',
+      /T\.exam \? '考试结束！' : toastText\(\)/.test(clk));
+    /* ③ 考试提醒 + 全局文字提醒开关 */
+    t('★v4.18.11 考试专属提醒 结束前N分钟 铃声+文字 可分别开关',
+      /CFG\.examOn === 1/.test(clk) && /CFG\.examRing\) ring\(CFG\.examSnd/.test(clk)
+      && /CFG\.examText\) fullWord/.test(clk) && /距离考试还有 ' \+ lead/.test(clk));
+    t('★v4.18.11 通用提前提醒文字开关 与铃声独立',
+      /function alertWord\(min, at\)/.test(clk) && /txtOn = a\.txt === 1/.test(clk)
+      && /if\(txtOn\) fullWord\(alertWord/.test(clk) && /var txtBtn = document\.createElement\('button'\)/.test(clk));
+    t('★v4.18.11 文字按场景区分 距离结束/距离开始/距离考试',
+      /T\.kind === 'pomo' && T\.phase === 'rest'\) return '距离开始还有/.test(clk)
+      && /T\.exam && T\.kind === 'down'\) return '距离考试还有/.test(clk)
+      && /return '距离结束还有/.test(clk));
+    t('★v4.18.11 考试模式设置面板（提前分钟/铃声/文字开关）',
+      /function paintExamOpts\(\)/.test(clk) && /paintExamOpts\(\);/.test(clk)
+      && /id="examOptList"/.test(clk) && /CFG\.examLead = Math\.max/.test(clk));
+    t('★v4.18.11 默认提醒与新增提醒带 txt 字段',
+      (clk.match(/txt:1/g) || []).length >= 2);
+    /* ④ 版本记录与公告门禁 */
+    t('★v4.18.11 版本记录齐全',
+      /version: '4\.18\.11'/.test(rel1811)
+      && /专注保留信息/.test(rel1811) && /考试倒计时/.test(rel1811)
+      && ver.v === '4.18.11' && ver.items.length >= 4);
+    t('★v4.18.11 公告条目均不超过 28 汉字且无禁词',
+      (function(){
+        const block = rel1811.slice(rel1811.indexOf("version: '4.18.11'"), rel1811.indexOf("version: '4.18.10'"));
         const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
         const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
         return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)

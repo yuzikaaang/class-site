@@ -84,7 +84,7 @@ body.bg-dark #tmNow,body.bg-black #tmNow,body.bg-navy #tmNow,
 body.bg-green #tmNow,body.bg-gray #tmNow{
   text-shadow:0 1px 3px rgba(0,0,0,.55)}
 body.tm-on #tmNow{display:flex}
-body.bare #tmNow{display:none}
+/* v4.18.11：极简（专注）态也保留返回下方这个当前时钟 —— 站主要求时钟不隐藏 */
 /* 窄屏（手机竖屏）：顶部一行放不下「数字 / 翻页 | 正计时 / 倒计时 / 番茄钟」
    这五个子标签，会被右边的「记录」压掉半个字。这里把子标签整体挪到第二行，
    小时间也排到这一行**下方**（v4.16.0：原来放在 58px，正好压住第二行的
@@ -472,6 +472,19 @@ body.bg-dark #hint,body.bg-black #hint,body.bg-navy #hint,body.bg-green #hint,bo
   text-indent:.16em;min-height:0;
 }
 #modeName:empty{display:none}
+/* v4.18.11：倒计时里的「考试」快捷按钮行（只在倒计时子模式显示，JS 加 .show） */
+.exam-row{display:none;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:2vh}
+.exam-row.show{display:flex}
+.exam-row .exam-label{font-size:calc(var(--fs) * .09);opacity:.45;margin-right:4px;white-space:nowrap}
+.exam-row button{
+  height:32px;min-width:52px;padding:0 13px;border-radius:9px;border:1px solid rgba(0,0,0,.14);
+  background:rgba(0,0,0,.04);color:inherit;font-family:inherit;font-size:13px;cursor:pointer;
+  opacity:.78;transition:all .15s;
+}
+.exam-row button.on-exam{background:#c2410c;border-color:#c2410c;color:#fff;opacity:1;font-weight:700}
+body.bg-dark .exam-row button,body.bg-black .exam-row button,body.bg-navy .exam-row button,
+body.bg-green .exam-row button,body.bg-gray .exam-row button{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08)}
+body.bare .exam-row{display:none}
 /* 自习的科目快捷行 */
 .subj-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:2.4vh}
 .subj-row button{
@@ -866,7 +879,9 @@ body.bg-dark .ds-loop input,body.bg-black .ds-loop input,body.bg-navy .ds-loop i
   background:transparent;color:inherit;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
 .ds-actions button.primary{background:#e08a4c;border-color:#e08a4c;color:#fff;flex:0 0 130px;margin:0 auto}
 
-/* v3.11.1：计时跑起来后只留数字（点击才出现操作区） */
+/* v3.11.1：计时跑起来后只留数字（点击才出现操作区）
+   v4.18.11：科目 / 事项 / 当前时钟改为「倒计时上方灰字」保留，见 #bareInfo，
+   原来的 .subj-row / .doing-inp 在极简态继续收起（不是把它们原样留下）。 */
 body.bare #modeName,
 body.bare #tmHead,
 body.bare #tmBar,
@@ -880,6 +895,19 @@ body.bare #timerTime{cursor:pointer}
 /* v4.10.13：极简模式（开始计时后只剩数字）整块回到屏幕正中。
    v4.10.5 把内容统一顶到上面之后，这条一直缺着，数字会偏在高处。 */
 body.bare #stage{justify-content:center;padding-top:0;padding-bottom:0}
+/* v4.18.11：极简态下倒计时数字上方的灰字信息行（科目 · 事项 / 考试）。
+   跟随倒计时数字，不隐藏；灰色小字，样式与「设置之前」的淡灰说明文字一致。 */
+#bareInfo{
+  display:none;text-align:center;font-size:calc(var(--fs) * .12);line-height:1.3;
+  font-weight:600;letter-spacing:.04em;opacity:.5;margin-bottom:.6vh;
+  min-height:1em;
+}
+body.bare #bareInfo{display:block}
+#bareInfo .bi-subj{opacity:.95}
+#bareInfo .bi-doing{opacity:.7}
+#bareInfo .bi-dot{opacity:.4;margin:0 .32em}
+#bareInfo .bi-exam{color:#c2410c;font-weight:800;opacity:1}
+body.bg-dark #bareInfo .bi-exam,body.bg-black #bareInfo .bi-exam,body.bg-navy #bareInfo .bi-exam{color:#fdba74}
 
 /* 提醒设置行 */
 .al-row{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px;text-align:left}
@@ -955,6 +983,8 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
     <div class="tm-col">
       <!-- 计时：正计时 / 倒计时 / 番茄钟 -->
   <div class="view" id="timerView">
+    <!-- v4.18.11：极简态下不隐藏、以灰字显示在倒计时上方的科目/事项信息 -->
+    <div id="bareInfo" aria-hidden="true"></div>
     <div id="timerTime">00:00</div>
     <div id="tmBar"><i id="tmBarIn"></i></div>
     <div id="tmHead"><span id="tmRound"></span><span id="tmPhase" class="hide">专注</span></div>
@@ -968,6 +998,18 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 
     <div id="timerHint">点击数字设定时长；直接开始则为正计时</div>
     <div id="markList"></div>
+
+    <!-- v4.18.11：倒计时内的考试模式快捷入口 -->
+    <div class="exam-row" id="examRow">
+      <span class="exam-label">考试</span>
+      <button data-exam="语文">语文</button>
+      <button data-exam="数学">数学</button>
+      <button data-exam="英语">英语</button>
+      <button data-exam="物理">物理</button>
+      <button data-exam="化学">化学</button>
+      <button data-exam="生物">生物</button>
+      <button id="examExit" title="退出考试模式">退出</button>
+    </div>
 
     <div class="subj-row" id="subjRow">
       <button data-subj="语文">语文</button><button data-subj="数学">数学</button>
@@ -1140,7 +1182,12 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
     <div class="ab-sec">
       <h4>提醒（可开多条，各用不同铃声）</h4>
       <div id="alertList"></div>
-      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">点击右侧铃声按钮更换音效，更换后即时试听。</p>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">每条提醒的「开/关」管铃声；「文字」按钮管全屏文字提醒，两者独立。提前提醒的文字会按场景显示「距离结束 / 距离开始 / 距离考试还有 N 分钟」。</p>
+    </div>
+    <div class="ab-sec">
+      <h4>考试模式提醒</h4>
+      <div id="examOptList"></div>
+      <p style="font-size:11.5px;opacity:.6;margin:8px 0 0">考试倒计时结束前 N 分钟全屏文字 + 铃声提醒。铃声与文字可分别开关；考试时长在倒计时页点科目一键套用。</p>
     </div>
     <p><b>本页面仿照 <a href="https://yingming006.cn/time/?m=timer" target="_blank" rel="noopener">yingming006.cn/time</a> 制作</b>，功能与操作方式对齐原站，代码为本站自己实现。</p>
     <p style="font-size:12px;opacity:.7">快捷键：空格 开始 / 暂停 · R 重置 · M 记录 · F 全屏 · Esc 退出全屏 · 1~3 切换模式</p>
@@ -1193,7 +1240,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=41810" defer></script>
+<script src="./fs-keep.js?v=41811" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -1218,10 +1265,13 @@ var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5
   /* v3.16.3：站主要求 —— 正计时默认只看「时:分:秒」，百分秒可自己开；
      白噪音音量可调（之前写死 0.9 / 0.7 / 0.8，跟听歌打架） */
   msShow:0, noiseVol:0.7,
+  /* v4.18.11：考试模式 —— 倒计时内一键套用各科时长预设，结束前 N 分钟全屏文字+铃声提醒。
+     examOn 是否启用考试提醒；examLead 提前多少分钟；examSnd 考试提醒铃声；examText 是否文字提醒；examRing 是否铃声提醒 */
+  examOn:1, examLead:15, examSnd:'bell', examText:1, examRing:1,
   alerts:[
     { at:'end',     snd:'blue',  on:true  },
     { at:'restEnd', snd:'chime', on:true  },
-    { at:'before',  snd:'ding',  on:false, min:5 }
+    { at:'before',  snd:'ding',  on:false, min:5, txt:1 }
   ] };
 var SAVED = null;
 try{
@@ -1254,7 +1304,7 @@ try{
     CFG.alerts = [
       { at:'end', snd:CFG.sound || 'blue', on:true },
       { at:'restEnd', snd:'chime', on:true },
-      { at:'before', snd:'ding', on:false, min:5 }
+      { at:'before', snd:'ding', on:false, min:5, txt:1 }
     ];
   }
 })();
@@ -1307,6 +1357,24 @@ function applyName(){
   }
   var di = $('doingInp');
   if(di && document.activeElement !== di) di.value = CFG.doing || '';
+  paintBareInfo();
+}
+/* v4.18.11：极简态下倒计时数字上方的灰字信息行。
+   普通计时 = 「科目 · 事项」，考试模式 = 「科目 · 考试」（灰字、跟随倒计时，不隐藏）。 */
+function paintBareInfo(){
+  var box = $('bareInfo');
+  if(!box) return;
+  var isExam = !!(T && T.exam);
+  var subj = String(CFG.subj || '').trim();
+  var doing = isExam ? '考试' : String(CFG.doing || '').trim();
+  if(subj === '其他') subj = '';
+  var parts = [];
+  if(subj) parts.push('<span class="bi-subj">' + esc(subj) + '</span>');
+  if(doing){
+    if(parts.length) parts.push('<span class="bi-dot">·</span>');
+    parts.push('<span class="bi-doing' + (isExam ? ' bi-exam' : '') + '">' + esc(doing) + '</span>');
+  }
+  box.innerHTML = parts.join('');
 }
 /* 这一段记录该叫什么：自习是「科目 · 这次做什么」（如 语文·试卷，
    选「其他」就只记做的事，如 家务）；其它模式仍用「更多」里起的名字。
@@ -1563,8 +1631,11 @@ var T = {
   left:0, total:0, end:0,    /* 倒计时 */
   upAcc:0, upStart:0,        /* 正计时 */
   phase:'focus', round:1, rounds:0,
-  hits:{}, marks:[], markFrom:0
+  hits:{}, marks:[], markFrom:0,
+  exam:false                 /* v4.18.11：当前倒计时是否为考试模式 */
 };
+/* v4.18.11：考试时长预设（分钟）—— 语文150 / 数学120 / 英语120 / 物化生各75 */
+var EXAM_MIN = { '语文':150, '数学':120, '英语':120, '物理':75, '化学':75, '生物':75 };
 /* v4.16.9：暂停记录状态（声明必须早于 tmIdle —— 初始化就会调它） */
 var PAUSE = { at: 0, rec: null, tick: null, onDone: null };
 function focusMs(){ return Math.max(0, Math.min(99 * 3600, Number(CFG.focusSec) || 0)) * 1000; }
@@ -1647,10 +1718,16 @@ function tmDetailPaint(){
   if(m) m.style.display = (T.kind === 'up') ? '' : 'none';
   if(s) s.style.display = (T.kind === 'pomo') ? '' : 'none';
   if(bar) bar.style.display = (T.kind === 'up') ? 'none' : '';
+  /* v4.18.11：考试快捷行只在倒计时子模式显示 */
+  var er = $('examRow');
+  if(er) er.className = 'exam-row' + (T.kind === 'down' ? ' show' : '');
   if(hint){
     hint.textContent = (T.kind === 'up')
       ? '开始后自动累计，可随时「记一笔」记录本段内容'
-      : (T.kind === 'down' ? '点数字设时长 · 设好按开始' : '点数字改专注 / 休息时长 · 跳过进下一段');
+      : (T.kind === 'down'
+          ? (T.exam ? '考试倒计时 · 结束前 ' + (Number(CFG.examLead) || 15) + ' 分钟提醒 · 可点数字改时长'
+                    : '点数字设时长 · 设好按开始（可点上方「考试」快速设定）')
+          : '点数字改专注 / 休息时长 · 跳过进下一段');
   }
 }
 function tmPaint(){
@@ -1690,9 +1767,45 @@ function tmSetKind(k){
   saveCfg();
   T.marks = [];
   paintMarks();
+  if(k !== 'down') setExam(false);   /* 只有倒计时才有考试模式 */
   tmIdle();
   setBare(false);
   syncLogRun();                /* v4.16.0：切到倒计时只是设定时长，还没开始 */
+}
+
+/* ---------------- v4.18.11：考试模式（倒计时的快捷形态） ----------------
+   本质就是倒计时，额外做两件事：① 点科目一键套用各科时长预设 + 事项填「考试」；
+   ② 结束前 examLead 分钟全屏文字 + 铃声提醒（铃声可单独配置）。 */
+function setExam(on){
+  T.exam = !!on;
+  var row = $('examRow');
+  if(row){
+    Array.prototype.forEach.call(row.getElementsByTagName('button'), function(b){
+      if(b.id === 'examExit') return;
+      b.className = (T.exam && b.getAttribute('data-exam') === CFG.subj) ? 'on-exam' : '';
+    });
+  }
+  paintBareInfo();
+  tmDetailPaint();
+}
+function examStart(subj){
+  var mins = EXAM_MIN[subj];
+  if(!mins) return;
+  if(!T.exam) T.exam = true;
+  CFG.subj = subj;
+  CFG.doing = '考试';
+  CFG.downSec = mins * 60;              /* 套用预设；用户仍可点数字滚轮盘自定义 */
+  saveCfg();
+  applyName();
+  setExam(true);
+  /* 没在跑就立刻把大数字换成新时长，所见即所得 */
+  if(!T.run){ T.total = CFG.downSec * 1000; T.left = T.total; tmPaint(); }
+  toast(subj + '考试 · ' + mins + ' 分钟（可点数字改）');
+}
+function examExit(){
+  setExam(false);
+  if(CFG.doing === '考试'){ CFG.doing = ''; saveCfg(); var di = $('doingInp'); if(di) di.value = ''; applyName(); }
+  toast('已退出考试模式');
 }
 function tmReset(){
   T.marks = [];
@@ -1814,7 +1927,7 @@ function tmDone(){
   if(key) ring(key, CFG.alertTimes);
   if(navigator.vibrate){ try{ navigator.vibrate([280, 140, 280, 140, 280]); }catch(e){} }
   logStop();
-  fullAlert(wasRest ? '休息结束！' : toastText());
+  fullAlert(wasRest ? '休息结束！' : (T.exam ? '考试结束！' : toastText()));
 
   if(T.kind === 'down'){
     /* 单次倒计时：停在 00:00，再按开始重来 */
@@ -1954,17 +2067,43 @@ function ring(key, times){
     });
   })();
 }
+/* v4.18.11：提前提醒的文字内容 —— 按场景区分口径。
+   at='before' 的通用提醒：考试模式说「距离考试还有 N 分钟」；
+   番茄钟休息阶段说「距离开始还有 N 分钟」（休息结束后进入下一段专注）；
+   其余（普通倒计时 / 番茄钟专注）说「距离结束还有 N 分钟」。 */
+function alertWord(min, at){
+  var n = Math.max(1, Number(min) || 5);
+  if(T.exam && T.kind === 'down') return '距离考试还有 ' + n + ' 分钟';
+  if(T.kind === 'pomo' && T.phase === 'rest') return '距离开始还有 ' + n + ' 分钟';
+  if(at === 'restEnd') return '距离休息结束还有 ' + n + ' 分钟';
+  return '距离结束还有 ' + n + ' 分钟';
+}
+/* v4.18.11：触发一次全屏文字提醒（复用 #fullAlert，自动 3 秒收起，点击可提前关） */
+function fullWord(text){ fullAlert(text); }
 function tmCheckAlerts(leftMs){
   var A = CFG.alerts || [];
   for(var i = 0; i < A.length; i++){
     var a = A[i];
-    if(!a || !a.on || a.at !== 'before') continue;
+    if(!a || a.at !== 'before') continue;
+    var ringOn = !!a.on, txtOn = a.txt === 1;
+    if(!ringOn && !txtOn) continue;
     var th = Math.max(1, Number(a.min) || 5) * 60000;
     var k = T.phase + ':' + i + ':' + T.round;
     if(T.hits[k]) continue;
     if(leftMs <= th && leftMs > th - 2500){
       T.hits[k] = 1;
-      beep(a.snd || 'ding');
+      if(ringOn) beep(a.snd || 'ding');
+      if(txtOn) fullWord(alertWord(a.min, a.at));
+    }
+  }
+  /* 考试模式专属提醒：结束前 examLead 分钟，独立于通用提醒列表，铃声可单独配置 */
+  if(T.exam && CFG.examOn){
+    var lead = Math.max(1, Number(CFG.examLead) || 15);
+    var eth = lead * 60000;
+    if(!T.hits['exam:' + lead] && leftMs <= eth && leftMs > eth - 2500){
+      T.hits['exam:' + lead] = 1;
+      if(CFG.examRing) ring(CFG.examSnd || 'bell', CFG.alertTimes);
+      if(CFG.examText) fullWord('距离考试还有 ' + lead + ' 分钟');
     }
   }
 }
@@ -2064,7 +2203,20 @@ function paintAlerts(){
     snd.textContent = SND_LABEL[a.snd] || '蓝牙';
     snd.onclick = function(){ nextSnd(a, snd); };
 
-    row.appendChild(sw); row.appendChild(tx); row.appendChild(snd);
+    /* v4.18.11：文字提醒开关，与铃声开关独立。on 高亮=开文字提醒 */
+    var txtBtn = document.createElement('button');
+    txtBtn.className = 'snd al-txt' + (a.txt === 1 ? ' on' : '');
+    txtBtn.textContent = '文字';
+    txtBtn.title = '全屏文字提醒（开/关）';
+    txtBtn.onclick = function(){
+      a.txt = (a.txt === 1) ? 0 : 1;
+      saveCfg(); paintAlerts();
+      if(a.txt === 1) fullWord(alertWord(a.min || 5, a.at));
+    };
+
+    /* 铃声开关在左：把第一格 segSwitch 的标题补清楚（提示它管的是铃声） */
+    if(sw && sw.childNodes && sw.childNodes[0]) sw.title = '铃声提醒（开/关）';
+    row.appendChild(sw); row.appendChild(tx); row.appendChild(snd); row.appendChild(txtBtn);
     if(a.at === 'before'){
       var del = document.createElement('button');
       del.className = 'snd';
@@ -2083,7 +2235,7 @@ function paintAlerts(){
   add.textContent = '+ 再加一条「提前提醒」';
   add.onclick = function(){
     if(A.filter(function(x){ return x.at === 'before'; }).length >= 3){ toast('最多三条提前提醒'); return; }
-    A.push({ at:'before', min:5, snd:'ding', on:true });
+    A.push({ at:'before', min:5, snd:'ding', on:true, txt:1 });
     saveCfg(); paintAlerts();
   };
   box.appendChild(add);
@@ -2095,6 +2247,53 @@ function nextSnd(a, btn){
   btn.textContent = SND_LABEL[a.snd];
   saveCfg();
   beep(a.snd);
+}
+/* v4.18.11：考试模式设置面板 —— 提前分钟 / 铃声 / 铃声开关 / 文字开关 */
+function paintExamOpts(){
+  var box = $('examOptList');
+  if(!box) return;
+  box.innerHTML = '';
+  /* 启用开关 */
+  var r0 = document.createElement('div');
+  r0.className = 'al-row';
+  r0.appendChild(segSwitch(CFG.examOn === 1, function(v){ CFG.examOn = v ? 1 : 0; saveCfg(); paintExamOpts(); }));
+  var t0 = document.createElement('div'); t0.className = 'tx'; t0.textContent = '启用考试提醒';
+  r0.appendChild(t0); box.appendChild(r0);
+  /* 提前分钟 */
+  var r1 = document.createElement('div');
+  r1.className = 'al-row';
+  var t1 = document.createElement('div'); t1.className = 'tx';
+  t1.innerHTML = '结束前 <input type="number" min="1" max="60" value="' + (Math.max(1, Number(CFG.examLead) || 15)) + '"> 分';
+  var inp1 = t1.getElementsByTagName('input')[0];
+  inp1.onchange = function(){ CFG.examLead = Math.max(1, Math.min(60, parseInt(inp1.value, 10) || 15)); saveCfg(); };
+  r1.appendChild(t1); box.appendChild(r1);
+  /* 铃声开关 */
+  var r2 = document.createElement('div');
+  r2.className = 'al-row';
+  r2.appendChild(segSwitch(CFG.examRing === 1, function(v){ CFG.examRing = v ? 1 : 0; saveCfg(); paintExamOpts(); if(v) beep(CFG.examSnd); }));
+  var t2 = document.createElement('div'); t2.className = 'tx'; t2.textContent = '铃声提醒';
+  r2.appendChild(t2); box.appendChild(r2);
+  /* 铃声选择 */
+  var r3 = document.createElement('div');
+  r3.className = 'al-row';
+  var t3 = document.createElement('div'); t3.className = 'tx'; t3.textContent = '考试提醒铃声';
+  r3.appendChild(t3);
+  var snd3 = document.createElement('button');
+  snd3.className = 'snd';
+  snd3.textContent = SND_LABEL[CFG.examSnd] || '铃声';
+  snd3.onclick = function(){
+    var i = SND_ORDER.indexOf(CFG.examSnd);
+    CFG.examSnd = SND_ORDER[(i + 1) % SND_ORDER.length];
+    snd3.textContent = SND_LABEL[CFG.examSnd];
+    saveCfg(); beep(CFG.examSnd);
+  };
+  r3.appendChild(snd3); box.appendChild(r3);
+  /* 文字开关 */
+  var r4 = document.createElement('div');
+  r4.className = 'al-row';
+  r4.appendChild(segSwitch(CFG.examText === 1, function(v){ CFG.examText = v ? 1 : 0; saveCfg(); paintExamOpts(); if(v) fullWord('距离考试还有 ' + (Number(CFG.examLead) || 15) + ' 分钟'); }));
+  var t4 = document.createElement('div'); t4.className = 'tx'; t4.textContent = '全屏文字提醒';
+  r4.appendChild(t4); box.appendChild(r4);
 }
 
 /* ---------------- 时长设置（只有一个轮盘） ----------------
@@ -4092,6 +4291,17 @@ function bindSettings(){
       if(LOG.cur) logStart(logModeOf());   /* 换了做的事，从现在起算新的一段 */
     };
   }
+  /* v4.18.11：考试模式按钮（点科目套用时长预设 / 退出） */
+  var er = $('examRow');
+  if(er){
+    Array.prototype.forEach.call(er.getElementsByTagName('button'), function(b){
+      b.onclick = function(e){
+        if(e && e.stopPropagation) e.stopPropagation();
+        if(b.id === 'examExit'){ examExit(); return; }
+        examStart(b.getAttribute('data-exam'));
+      };
+    });
+  }
   var nr = $('noiseRow');
   if(nr){
     Array.prototype.forEach.call(nr.getElementsByTagName('button'), function(b){
@@ -4226,6 +4436,7 @@ paintFlipSnd();
 paintNoise();
 fillCol('wH', 99); fillCol('wM', 59); fillCol('wS', 59);
 paintAlerts();
+paintExamOpts();
 paintTmOpts();
 logEnsure();
 logPomo(pomoDoneToday());   /* 把今天的番茄数补进记录，后台能直接看到 */
