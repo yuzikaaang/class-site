@@ -258,3 +258,11 @@ html.dark .pg-gmask{background:rgba(0,0,0,.74)}
   .pg-onegoal2 .pg-og-cell input{width:100%}
 }
 
+/* v4.19.0：目标设置统一到「我的画像」——平时成绩里的目标进度角标 + 底部引导 */
+.pg-gset-hint{font-size:.66rem;color:var(--pg-warn);font-weight:700;white-space:nowrap}
+.pg-goal-tip{display:flex;align-items:center;gap:11px;flex-wrap:wrap;background:var(--tint);border:1px dashed var(--pg-warn);margin-top:14px}
+.pg-goal-tip-ico{font-size:1.25rem;line-height:1;flex:none}
+.pg-goal-tip>div{flex:1;min-width:180px}
+.pg-goal-tip b{font-size:.82rem;font-weight:800;color:var(--pg-brand)}
+.pg-goal-tip-sub{font-size:.7rem;color:var(--fg-2);line-height:1.65;margin-top:3px}
+.pg-goal-tip .pg-btn{flex:none}

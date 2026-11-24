@@ -15841,8 +15841,9 @@ var PG = (function(){
     var rkRaw = goals._rank.raw || {}, rkAsg = goals._rank.asg || {};
     function rankTxt(r){ var a=[]; if(r.grade!==''&&r.grade!=null) a.push('年级前'+r.grade); if(r['class']!==''&&r['class']!=null) a.push('班级前'+r['class']); return a.length?a.join(' · '):''; }
     var rkRawT = rankTxt(rkRaw), rkAsgT = rankTxt(rkAsg);
+    /* v4.19.0：目标设置入口统一到「我的画像」，平时成绩只展示目标、不提供设置按钮 */
     h += '<div class="pg-card"><div class="pg-card-h"><b>目标进度</b>'
-      + '<button class="pg-gset-btn" onclick="PG.openGoalSheet()">⚙ 设置目标</button></div>'
+      + '<span class="pg-gset-hint">在我的画像设置</span></div>'
       + '<div class="pg-goal-num">'+total+'<small>/ 目标 '+gt+'</small></div>'
       + '<div class="pg-bar-track"><i id="pg_goalBar"></i><em></em></div>'
       + '<div class="pg-goal-meta"><span>总得分率 '+(fullTotal?(total/fullTotal*100).toFixed(1):'0')+'%</span>'
@@ -15995,22 +15996,10 @@ var PG = (function(){
     h += '<div class="pg-onehead"><span class="big">'+(arr.length?cur:'—')+' <small>/ 满分 '+SUBJG[s]+'</small></span>'
       + '<span class="goal">目标 '+goal+'</span>'+rawTag(s)+srTxt
       + (arr.length?('<span class="gap '+(cur>=goal?'up':'dn')+'">'+(cur>=goal?('已达标 +'+(cur-goal)):('距目标 '+(goal-cur)))+'</span>'):'')+'</div>';
-    /* v4.18.3 目标输入区：无记录时也要显示，否则新用户看不到、改不了默认目标 */
-    function goalBlock(){
-      var rawInput = '<div class="pg-og-cell"><label>'+s+' 原始分目标</label><input type="number" data-og="'+s+'" value="'+goal+'"></div>';
-      var asgInput = '';
-      if(RAW[s]){
-        var av = goals._asg && goals._asg[s]!=null ? goals._asg[s] : '';
-        asgInput = '<div class="pg-og-cell"><label>'+s+' 赋分后目标 <span class="pg-og-tip">仅大考画像用</span></label>'
-          + '<input type="number" data-oa="'+s+'" value="'+av+'" placeholder="留空"></div>';
-      }
-      return '<div class="pg-onegoal'+' pg-onegoal2'+'">'+rawInput+asgInput
-        + '<button class="pg-btn ghost pg-og-save" onclick="PG.saveOneGoal(\''+s+'\')">保存目标</button></div>';
-    }
     if(!arr.length){
+      /* v4.19.0：目标设置统一到「我的画像」，平时成绩不再提供单科目标输入区 */
       h += '<div class="pg-empty"><div class="ico">📈</div><p>还没有「'+s+'」的记录</p>'
         + '<p style="font-size:.75rem">点上方「记一次成绩」录入，或切到别的学期看看</p></div>';
-      h += goalBlock();
       h += '</div>';
       return h;
     }
@@ -16035,8 +16024,7 @@ var PG = (function(){
       + '<button class="pg-clear-subj" title="清空「'+s+'」的全部记录" onclick="PG.clearSubj(\''+s+'\')">清空本科</button></div>';
     h += '<div class="pg-sub-recs" id="pg_recs_'+s+'">'+rows+'</div>';
     if(arr.length>4) h += '<button class="pg-rec-more" id="pg_recMore_'+s+'" onclick="PG.toggleRecs(\''+s+'\')">展开全部 '+arr.length+' 次记录 ▾</button>';
-    /* 本科目标（单独改一科的） */
-    h += goalBlock();
+    /* v4.19.0：本科目标输入区已移除，目标设置统一到「我的画像」；目标展示（顶部）保留 */
     /* 本科一句话分析 */
     var d = vals.length>1 ? (cur-vals[vals.length-2]) : 0;
     h += '<div class="pg-sub-ai">✨ '+s+' 最近 '+cur+' 分，'+(cur>=goal?('已达标，近 '+vals.length+' 次'+(d>=0?'保持上升':'略有波动')):('距目标 '+(goal-cur)+' 分，近 '+vals.length+' 次'+(d>0?'在稳步追赶':'提升偏慢')))+'，按每次小目标逐步逼近。</div>';
@@ -16156,6 +16144,10 @@ var PG = (function(){
       + '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="pg-btn" id="pg_aiBtn" onclick="PG.aiAnalyze()">生成 AI 分析</button>'
       + '<button class="pg-btn ghost" onclick="PG.aiStop()">收起 / 停止</button></div>'
       + '<div class="pg-note" style="margin:10px 0 0">AI 会把脱敏后的分数发给已配置的接口（不含姓名），也可以只用上面的本地规则分析。</div></div>'
+      /* v4.19.0：底部引导——分数目标统一到「我的画像」设置，此处不再提供设置入口 */
+      + '<div class="pg-card pg-span2 pg-goal-tip"><span class="pg-goal-tip-ico">🎯</span>'
+      + '<div><b>想调整分数目标？</b><div class="pg-goal-tip-sub">分数目标与排名目标请到「成绩分析 → 我的画像」里设置，设置后这里的目标进度、达标判断会同步更新。</div></div>'
+      + '<button class="pg-btn ghost" onclick="PG.goProfile()">去我的画像设置 →</button></div>'
       + '</div>'
       + '<div class="pg-mask" id="pg_mask"><div class="pg-sheet">'
       + '<div class="pg-sheet-h"><b>记一次成绩</b><button onclick="PG.closeSheet()" aria-label="关闭">×</button></div>'
@@ -16339,8 +16331,11 @@ var PG = (function(){
     return '<p>'+s+'</p>';
   }
 
+  /* v4.19.0：从平时成绩底部引导跳到「我的画像」设置目标 */
+  function goProfile(){ if(typeof scSetTab === 'function') scSetTab('me'); }
+
   return {
-    mount:mount, tab:tab, openSheet:openSheet, closeSheet:closeSheet, addRow:addRow, delRow:delRow, rowSubj:rowSubj, saveRec:saveRec,
+    mount:mount, tab:tab, goProfile:goProfile, openSheet:openSheet, closeSheet:closeSheet, addRow:addRow, delRow:delRow, rowSubj:rowSubj, saveRec:saveRec,
     openEdit:openEdit, closeEdit:closeEdit, renderEditList:renderEditList, saveEditRow:saveEditRow, delEditRow:delEditRow,
     toggleBoard:toggleBoard, toggleRecs:toggleRecs, foldAll:foldAll, chartMode:chartMode, ptClick:ptClick,
     saveGoals:saveGoals, aiAnalyze:aiAnalyze, aiStop:aiStop, curType:curType,

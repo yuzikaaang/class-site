@@ -14195,11 +14195,11 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /* ① 导览遮罩放行点击 */
     t('★v4.18.3 导览遮罩 pointer-events:none 不挡输入',
       /\.tour-hit\{[^}]*pointer-events:none/.test(tourV183));
-    /* ② 无记录科目也渲染目标输入框 */
-    t('★v4.18.3 无记录时显示目标框（goalBlock 提前定义并在空态调用）',
-      /function goalBlock\(\)/.test(appV183)
-      && /if\(!arr\.length\)\{[\s\S]{0,200}h \+= goalBlock\(\)/.test(appV183)
-      && /逐次记录[\s\S]{0,900}h \+= goalBlock\(\)/.test(appV183));
+    /* ② v4.19.0 起目标设置统一到「我的画像」，平时成绩不再有单科目标输入框（原 goalBlock 已移除） */
+    t('★v4.19.0 平时成绩已移除单科目标输入框 goalBlock',
+      !/function goalBlock\(\)/.test(appV183)
+      && !/h \+= goalBlock\(\)/.test(appV183)
+      && /function saveOneGoal\(s\)/.test(appV183));
     /* ③ 删除：单条 + 清空本科 + 暴露接口 */
     t('★v4.18.3 单条删除 delOneRec（确认 + splice + save）',
       /function delOneRec\(id\)/.test(appV183) && /confirm\(/.test(appV183)
@@ -14214,12 +14214,12 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.3 删除按钮 CSS 齐全（含明暗变量）',
       /\.pg-clear-subj\{/.test(pgCss183) && /\.pg-rec-del\{/.test(pgCss183)
       && /--pg-no-ink/.test(pgCss183));
-    /* ④ 版本号四处一致（随版本升级同步到 4.18.9） */
+    /* ④ 版本号四处一致（随版本升级同步到 4.18.10） */
     t('★版本 前台/后台/SW/API 四处一致',
-      /var SITE_VERSION = '4\.18\.9'/.test(readIdx())
-      && /const SITE_VER = '4\.18\.9'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-      && /const API_VER = '4\.18\.9';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-      && /var SITE_VERSION = '4\.18\.9'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+      /var SITE_VERSION = '4\.18\.10'/.test(readIdx())
+      && /const SITE_VER = '4\.18\.10'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
+      && /const API_VER = '4\.18\.10';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
+      && /var SITE_VERSION = '4\.18\.10'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
   }
 
   /* ===== v4.18.4 目标双端同步 + 赋分目标 + 排名目标 + AI目标专项 ===== */
@@ -14239,12 +14239,13 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /function asgGoalsFilled\(\)/.test(appV184)
       && /function goalView\(basis\)/.test(appV184));
     /* ② 平时成绩目标卡：设置按钮 + 双口径目标总分格 + 双目标输入 */
-    t('★v4.18.4 平时成绩目标进度卡双口径展示 + 设置入口',
-      /pg-gset-btn/.test(appV184) && /PG\.openGoalSheet\(\)/.test(appV184)
+    t('★v4.19.0 平时成绩目标进度卡保留双口径展示、移除设置入口',
+      !/class="pg-gset-btn"/.test(appV184)
+      && /pg-gset-hint/.test(appV184) && /在我的画像设置/.test(appV184)
       && /pg-gt-grid/.test(appV184) && /赋分前目标总分/.test(appV184) && /赋分后目标总分/.test(appV184));
-    t('★v4.18.4 化学生物双目标输入（data-og + data-oa）',
-      /data-oa="/.test(appV184) && /goals\._asg\[s\] = av/.test(appV184)
-      && /pg-onegoal2/.test(appV184));
+    t('★v4.19.0 平时成绩单科目标输入区已移除（化学生物双目标移到统一弹窗，见下条）',
+      !/pg-onegoal2/.test(appV184)
+      && /data-gsa=/.test(appV184) && /data-gca=/.test(appV184));
     /* ③ 统一弹窗：一个弹窗全填 + 保存双端同步 */
     t('★v4.18.4 统一目标弹窗（分数/排名/班级目标分区）',
       /function openGoalSheet\(\)/.test(appV184) && /function saveGoalSheet\(\)/.test(appV184)
@@ -14492,6 +14493,48 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.18.9 公告条目均不超过 28 汉字且无禁词',
       (function(){
         const block = rel189.slice(rel189.indexOf("version: '4.18.9'"), rel189.indexOf("version: '4.18.8'"));
+        const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
+          && texts.every(x => !ban.some(w => x.includes(w)));
+      })());
+  }
+
+  /* ===== v4.18.10 目标设置入口统一到「我的画像」 ===== */
+  {
+    const app = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const pgCss = fs.readFileSync(new URL('./pg.css', import.meta.url), 'utf8');
+    const rel1810 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    /* ① 平时成绩总览：设置按钮移除，改角标提示 */
+    t('★v4.18.10 平时成绩总览移除设置按钮、改角标提示',
+      !/class="pg-gset-btn"/.test(app)
+      && /pg-gset-hint">在我的画像设置/.test(app));
+    /* ② 单科目标输入区 goalBlock 彻底移除 */
+    t('★v4.18.10 平时成绩单科目标输入区已移除',
+      !/function goalBlock\(\)/.test(app) && !/h \+= goalBlock\(\)/.test(app));
+    /* ③ 底部引导卡 + 跳转函数 */
+    t('★v4.18.10 平时成绩底部新增设置引导与跳转',
+      /class="pg-card pg-span2 pg-goal-tip"/.test(app)
+      && /PG\.goProfile\(\)/.test(app)
+      && /function goProfile\(\)/.test(app)
+      && /scSetTab\('me'\)/.test(app));
+    /* ④ 个人画像目标入口保留（同一 openGoalSheet 弹窗） */
+    t('★v4.18.10 个人画像设置目标入口保留',
+      /class="sc-ov-set" onclick="PG\.openGoalSheet\(\)"/.test(app));
+    /* ⑤ 目标展示仍保留（进度双口径 + 达标判断） */
+    t('★v4.18.10 平时成绩目标展示仍保留',
+      /目标进度/.test(app) && /赋分前目标总分/.test(app) && /赋分后目标总分/.test(app));
+    /* ⑥ 引导样式（明暗适配） */
+    t('★v4.18.10 引导卡样式齐全',
+      /\.pg-goal-tip\{/.test(pgCss) && /\.pg-goal-tip-sub\{/.test(pgCss) && /\.pg-gset-hint\{/.test(pgCss));
+    /* ⑦ 版本记录与公告口径 */
+    t('★v4.18.10 版本更新记录与公告口径齐全',
+      /version: '4\.18\.10'/.test(rel1810)
+      && /分数目标设置统一到我的画像/.test(rel1810)
+      && /平时成绩保留目标展示，设置入口已合并/.test(rel1810));
+    t('★v4.18.10 公告条目均不超过 28 汉字且无禁词',
+      (function(){
+        const block = rel1810.slice(rel1810.indexOf("version: '4.18.10'"), rel1810.indexOf("version: '4.18.9'"));
         const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
         const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
         return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
