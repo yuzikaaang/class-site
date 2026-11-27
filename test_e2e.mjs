@@ -14217,10 +14217,10 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /--pg-no-ink/.test(pgCss183));
     /* ④ 版本号四处一致（随版本升级同步到 4.18.11） */
     t('★版本 前台/后台/SW/API 四处一致',
-      /var SITE_VERSION = '4\.18\.11'/.test(readIdx())
-      && /const SITE_VER = '4\.18\.11'/.test(fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8'))
-      && /const API_VER = '4\.18\.11';/.test(fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8'))
-      && /var SITE_VERSION = '4\.18\.11'/.test(fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8')));
+      readIdx().includes("var SITE_VERSION = '" + CUR_VER + "'")
+      && fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes("const SITE_VER = '" + CUR_VER + "'")
+      && fs.readFileSync(new URL('./api/worker.mjs', import.meta.url), 'utf8').includes("const API_VER = '" + CUR_VER + "';")
+      && fs.readFileSync(new URL('./admin.html', import.meta.url), 'utf8').includes("var SITE_VERSION = '" + CUR_VER + "'"));
   }
 
   /* ===== v4.18.4 目标双端同步 + 赋分目标 + 排名目标 + AI目标专项 ===== */
@@ -14589,11 +14589,64 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /* ④ 版本记录与公告门禁 */
     t('★v4.18.11 版本记录齐全',
       /version: '4\.18\.11'/.test(rel1811)
-      && /专注保留信息/.test(rel1811) && /考试倒计时/.test(rel1811)
-      && ver.v === '4.18.11' && ver.items.length >= 4);
+      && /专注保留信息/.test(rel1811) && /考试倒计时/.test(rel1811));
     t('★v4.18.11 公告条目均不超过 28 汉字且无禁词',
       (function(){
         const block = rel1811.slice(rel1811.indexOf("version: '4.18.11'"), rel1811.indexOf("version: '4.18.10'"));
+        const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
+          && texts.every(x => !ban.some(w => x.includes(w)));
+      })());
+  }
+
+  /* ===== v4.19.0：按科目批量录成绩 + 作业顺序 + 修改历史索引 ===== */
+  {
+    const appSrc = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const adm2 = fs.readFileSync(new URL('./admin-2.js', import.meta.url), 'utf8');
+    const adm3 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    const pgCss = fs.readFileSync(new URL('./pg.css', import.meta.url), 'utf8');
+    const ver = JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8'));
+    /* ① 平时成绩按科目批量录入 */
+    t('★v4.19.0 录入模式切换 tab（按日期/按科目）',
+      /pg-mode-tabs/.test(appSrc) && /data-m="date"/.test(appSrc) && /data-m="subj"/.test(appSrc)
+      && /function setMode\(m\)/.test(appSrc) && /pgMode = 'date'/.test(appSrc));
+    t('★v4.19.0 按科目多场表单（日期/分数/名称/备注/排名）',
+      /id="pg_msRows"/.test(appSrc) && /function msRowHtml\(r,i\)/.test(appSrc)
+      && /function msAddRow\(\)/.test(appSrc) && /function msDelRow\(i\)/.test(appSrc)
+      && /function msSet\(i,k,v\)/.test(appSrc) && /pg-ms-grid/.test(pgCss));
+    t('★v4.19.0 批量保存 saveMulti 每场一条同结构记录',
+      /function saveMulti\(\)/.test(appSrc) && /recs\.push\(\{/.test(appSrc)
+      && /t:t, name:\(r\.name\|\|''\)\.trim\(\)\|\|'日常测试'/.test(appSrc)
+      && /saveMulti:saveMulti/.test(appSrc));
+    t('★v4.19.0 录入倒序不依赖录入先后',
+      /localeCompare\(String\(b\.date\)\)/.test(appSrc) && /slice\(\)\.reverse\(\)/.test(appSrc));
+    /* ② 手机端作业标准顺序，大屏不受影响 */
+    t('★v4.19.0 手机作业按语数英物化生排序（大屏不变）',
+      /function _renderHwItems\(items, hwId\)/.test(appSrc)
+      && /items\.slice\(\)\.sort/.test(appSrc)
+      && /_ord\.indexOf\(a\.subject\)/.test(appSrc)
+      && /['"]语文['"](,|,\s*)['"]数学['"]/.test(appSrc));
+    /* ③ 操作日志日期索引 + 折叠 */
+    t('★v4.19.0 操作日志按日期分组折叠',
+      /var AUDIT_OPEN = \{ __init:false \}/.test(adm2)
+      && /var groups = \[\], gidx = \{\}/.test(adm2)
+      && /lg-head/.test(adm2) && /lg-arrow/.test(adm2)
+      && /lgExpandAll/.test(adm2) && /lgCollapseAll/.test(adm2));
+    t('★v4.19.0 日期索引直接定位（无搜索框）',
+      /日期索引/.test(adm2) && /lg-goto/.test(adm2)
+      && /scrollIntoView/.test(adm2) && /setOpen\(day, true\)/.test(adm2));
+    t('★v4.19.0 班级岛文案动作中文名 + 撤回保留',
+      /'island\.save':\s*'修改班级岛文案'/.test(adm2)
+      && /data-undo/.test(adm2) && /undo-delete/.test(adm2));
+    /* ④ 版本记录与公告门禁 */
+    t('★v4.19.0 版本记录齐全',
+      /version: '4\.19\.0'/.test(adm3)
+      && /按科目批量录成绩/.test(adm3)
+      && ver.v === '4.19.0' && ver.items.length >= 4);
+    t('★v4.19.0 公告条目均不超过 28 汉字且无禁词',
+      (function(){
+        const block = adm3.slice(adm3.indexOf("version: '4.19.0'"), adm3.indexOf("version: '4.18.11'"));
         const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
         const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
         return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)

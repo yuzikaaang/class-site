@@ -14236,6 +14236,15 @@ function hwDueFold(btn, key){
 /* 把作业 items 渲染成美化后的科目卡片（任务可点选「已完成」；支持单条配图，点击放大） */
 function _renderHwItems(items, hwId){
   if(!items || !items.length) return '<div style="padding:18px;text-align:center;color:#6e635a">该作业暂无具体科目内容。</div>';
+  /* v4.19.0（站主）：手机端 / 普通模式的作业按「语数英物化生」标准顺序展示。
+     大屏为了让左右两栏卡片长度平均，用的是 hw.items 原始录入顺序（big.js 自己那套），
+     这里只在展示层排序，绝不改动 SITE_DATA 里的原始数据，大屏不受影响。 */
+  var _ord = (typeof HWA_SUBJ !== 'undefined') ? HWA_SUBJ : ['语文','数学','英语','物理','化学','生物','其他'];
+  items = items.slice().sort(function(a,b){
+    var ia = _ord.indexOf(a.subject), ib = _ord.indexOf(b.subject);
+    if(ia < 0) ia = 99; if(ib < 0) ib = 99;
+    return ia - ib;
+  });
   return items.map(function(it){
     var s = HW_SUBJECT_STYLE[it.subject] || { c:'#6e635a', e:'square-pen' };
     var all = it.tasks || [];
@@ -16151,6 +16160,9 @@ var PG = (function(){
       + '</div>'
       + '<div class="pg-mask" id="pg_mask"><div class="pg-sheet">'
       + '<div class="pg-sheet-h"><b>记一次成绩</b><button onclick="PG.closeSheet()" aria-label="关闭">×</button></div>'
+      + '<div class="pg-mode-tabs"><button class="on" data-m="date" onclick="PG.setMode(\'date\')">按日期记（当天多科）</button><button data-m="subj" onclick="PG.setMode(\'subj\')">按科目记（一次多场）</button></div>'
+      /* ---- 模式一：按日期记（原样） ---- */
+      + '<div id="pg_modeByDate">'
       + '<div class="pg-two"><div class="pg-fld" style="flex:1"><label>日期</label><input type="date" id="pg_fDate"></div>'
       + '<div class="pg-fld" style="flex:1"><label>考试类型</label><div class="pg-type-pick"><button class="on" data-t="班级性测试">班级性测试</button><button data-t="校级周考">校级周考</button></div></div></div>'
       + '<div class="pg-fld"><label>考试名称（自己起，如「第13周周末心理训练」「第2单元测试」）</label><input id="pg_fName" placeholder="如：第13周周末心理训练"></div>'
@@ -16158,13 +16170,24 @@ var PG = (function(){
       + '<button class="pg-add-row" onclick="PG.addRow()">＋ 添加一科</button></div>'
       + '<div class="pg-fld"><label>班级排名 / 年级排名（选填，有排名时才填）</label><div class="pg-two"><input id="pg_fRankC" type="number" placeholder="班级名次"><input id="pg_fRankS" type="number" placeholder="年级名次"></div></div>'
       + '<div class="pg-note">数据仅保存在当前账号下，其他人无法查看。每次只记当天实际考的科目，留空的科目不会保存、不计入趋势。</div>'
-      + '<button class="pg-btn" style="width:100%" onclick="PG.saveRec()">保存成绩</button></div></div>'
+      + '<button class="pg-btn" style="width:100%" onclick="PG.saveRec()">保存成绩</button>'
+      + '</div>'
+      /* ---- 模式二：按科目记（v4.19.0 新增，一次录同一科多场） ---- */
+      + '<div id="pg_modeBySubj" style="display:none">'
+      + '<div class="pg-fld"><label>科目</label><select id="pg_msSubj" onchange="PG.msSubjChange()">' + SUBJ.map(function(s){ return '<option value="'+s+'"'+(s===curSubj?' selected':'')+'>'+s+(RAW[s]?'（原始分）':'')+'</option>'; }).join('') + '</select></div>'
+      + '<div class="pg-fld"><label>考试类型</label><div class="pg-type-pick"><button class="on" data-t="班级性测试">班级性测试</button><button data-t="校级周考">校级周考</button></div></div>'
+      + '<div class="pg-fld"><label>这一科的多场考试（每场填日期、分数、名称、备注，排名选填）</label><div id="pg_msRows"></div>'
+      + '<button class="pg-add-row" onclick="PG.msAddRow()">＋ 添加一场</button></div>'
+      + '<div class="pg-note">同一科考了好几次忘了记，可以这里一次补齐。每场独立名称与备注；按日期自动排序，录入先后不影响。只填了分数的场次才会保存。</div>'
+      + '<button class="pg-btn" style="width:100%" onclick="PG.saveMulti()">保存全部场次</button>'
+      + '</div>'
+      + '</div></div>'
       + '<div class="pg-mask" id="pg_editMask"><div class="pg-sheet">'
       + '<div class="pg-sheet-h"><b>按科目编辑历史成绩</b><button onclick="PG.closeEdit()" aria-label="关闭">×</button></div>'
       + '<div class="pg-fld"><label>选择科目</label><select id="pg_edSubj" onchange="PG.renderEditList()">'+SUBJ.map(function(s){ return '<option>'+s+'</option>'; }).join('')+'</select></div>'
       + '<div class="pg-note" style="margin-top:0">改分数、改排名、改备注、删错录的都在这里。保存后趋势图和总览会一起更新。</div>'
       + '<div id="pg_edList"></div></div></div>';
-    /* 录入弹层的类型按钮绑定 */
+    /* 录入弹层的类型按钮绑定（两套表单各自独立） */
     Array.prototype.forEach.call(document.querySelectorAll('#pg_mask .pg-type-pick button'), function(b){
       b.onclick = function(){ Array.prototype.forEach.call(b.parentNode.children, function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
     });
@@ -16181,6 +16204,48 @@ var PG = (function(){
 
   /* ---------- 录入弹层 ---------- */
   var sheetRows = [];
+  /* v4.19.0 模式切换：date=按日期记（原样）/ subj=按科目记（一次多场） */
+  var pgMode = 'date';
+  function setMode(m){
+    pgMode = (m==='subj') ? 'subj' : 'date';
+    Array.prototype.forEach.call(document.querySelectorAll('#pg_mask .pg-mode-tabs button'), function(b){
+      b.classList.toggle('on', b.getAttribute('data-m')===pgMode);
+    });
+    var bd=document.getElementById('pg_modeByDate'), bs=document.getElementById('pg_modeBySubj');
+    if(bd) bd.style.display = pgMode==='date' ? '' : 'none';
+    if(bs) bs.style.display = pgMode==='subj' ? '' : 'none';
+    if(pgMode==='subj') renderMsRows();
+  }
+  /* ---------- 按科目记：多场行 ---------- */
+  var msRows = [];
+  function msBlank(s){ return { date:'', v:'', f:SUBJG[s]||100, name:'', rf:'', rc:'', rs:'' }; }
+  function msRowHtml(r,i){
+    var s = (document.getElementById('pg_msSubj')||{}).value || '语文';
+    return '<div class="pg-ms-card"><div class="pg-ms-head"><b>第 '+(i+1)+' 场</b>'
+      + '<button class="del" onclick="PG.msDelRow('+i+')" aria-label="删除本场">×</button></div>'
+      + '<div class="pg-ms-grid">'
+      + '<div class="pg-ms-cell"><label>日期</label><input type="date" value="'+esc(r.date)+'" onchange="PG.msSet('+i+',\'date\',this.value)"></div>'
+      + '<div class="pg-ms-cell"><label>分数</label><input type="number" placeholder="分数" value="'+esc(r.v)+'" oninput="PG.msSet('+i+',\'v\',this.value)"></div>'
+      + '<div class="pg-ms-cell"><label>满分</label><input type="number" value="'+esc(r.f)+'" oninput="PG.msSet('+i+',\'f\',this.value)"></div>'
+      + '<div class="pg-ms-cell"><label>名称（如第二单元）</label><input value="'+esc(r.name)+'" placeholder="如：第二单元" oninput="PG.msSet('+i+',\'name\',this.value)"></div>'
+      + '</div>'
+      + '<div class="pg-ms-grid" style="margin-top:8px">'
+      + '<div class="pg-ms-cell"><label>班级排名（选填）</label><input type="number" placeholder="班名次" value="'+esc(r.rc)+'" oninput="PG.msSet('+i+',\'rc\',this.value)"></div>'
+      + '<div class="pg-ms-cell"><label>年级排名（选填）</label><input type="number" placeholder="年名次" value="'+esc(r.rs)+'" oninput="PG.msSet('+i+',\'rs\',this.value)"></div>'
+      + '</div>'
+      + '<textarea placeholder="这一场的备注 / 反思（选填）" oninput="PG.msSet('+i+',\'rf\',this.value)">'+esc(r.rf)+'</textarea>'
+      + '</div>';
+  }
+  function renderMsRows(){ var el=document.getElementById('pg_msRows'); if(el) el.innerHTML=msRows.map(msRowHtml).join(''); }
+  function msSet(i,k,v){ if(msRows[i]) msRows[i][k]=v; }
+  function msAddRow(){ msRows.push(msBlank()); renderMsRows(); }
+  function msDelRow(i){ if(msRows.length>1) msRows.splice(i,1); renderMsRows(); }
+  function msSubjChange(){ var s=document.getElementById('pg_msSubj').value; msRows.forEach(function(r){ r.f=SUBJG[s]||100; }); renderMsRows(); }
+  function curTypeIn(prefix){
+    var scope = prefix==='ms' ? '#pg_modeBySubj' : '#pg_modeByDate';
+    var b=document.querySelector(scope+' .pg-type-pick button.on');
+    return b ? b.getAttribute('data-t') : '班级性测试';
+  }
   function rowHtml(r,i){
     var opts = SUBJ.map(function(s){ return '<option value="'+s+'"'+(s===r.s?' selected':'')+'>'+s+(RAW[s]?'（原始分）':'')+'</option>'; }).join('');
     return '<div class="pg-srow-card"><div class="pg-srow-top">'
@@ -16199,6 +16264,11 @@ var PG = (function(){
   function openSheet(){
     if(typeof isLoggedIn==='function' && !isLoggedIn()){ if(typeof needLogin==='function') needLogin(); return; }
     setRows([{s:'语文',v:'',f:150,rf:''},{s:'数学',v:'',f:150,rf:''}]);
+    /* v4.19.0：默认按日期模式；按科目模式预置两场空白行 */
+    setMode('date');
+    var msSel=document.getElementById('pg_msSubj');
+    if(msSel) msSel.value = curSubj || '语文';
+    msRows = [ msBlank(msSel ? msSel.value : '语文'), msBlank(msSel ? msSel.value : '语文') ];
     var d=document.getElementById('pg_fDate');
     if(d){
       var today=new Date().toLocaleDateString('sv-SE');
@@ -16230,6 +16300,33 @@ var PG = (function(){
     if(dest && dest!==TERM_CUR) TERM_CUR=dest;
     tab('overview'); mount();
     if(typeof syncNotice==='function') syncNotice('ok','✓ 已保存到'+curTermName()+'，仅自己可见');
+  }
+  /* v4.19.0：按科目一次保存多场——每场生成一条同结构记录 */
+  function saveMulti(){
+    var sel=document.getElementById('pg_msSubj');
+    var s=sel ? sel.value : '语文';
+    if(!s){ if(typeof syncNotice==='function') syncNotice('err','请选择科目'); return; }
+    var t=curTypeIn('ms'), added=0, lastDate='';
+    msRows.forEach(function(r){
+      if(r.v!=='' && r.v!=null && !isNaN(Number(r.v))){
+        var date = r.date || new Date().toLocaleDateString('sv-SE');
+        recs.push({
+          id:'r'+(++seq), date:date, subj:s, v:Number(r.v), full:Number(r.f)||SUBJG[s],
+          t:t, name:(r.name||'').trim()||'日常测试', rc:(r.rc?Number(r.rc):undefined),
+          rs:(r.rs?Number(r.rs):undefined), rf:r.rf||''
+        });
+        lastDate = date; added++;
+      }
+    });
+    if(!added){ if(typeof syncNotice==='function') syncNotice('err','没填任何分数，未保存'); return; }
+    save();
+    msRows=[msBlank(s),msBlank(s)]; renderMsRows();
+    closeSheet();
+    /* 跳到有录入的学期，保证刚录的能立刻看到 */
+    var dest = termOf(lastDate);
+    if(dest && dest!==TERM_CUR) TERM_CUR=dest;
+    tab('overview'); mount();
+    if(typeof syncNotice==='function') syncNotice('ok','✓ 已保存 '+added+' 场到'+curTermName()+'，按日期自动排序');
   }
 
   /* ---------- 按科目编辑 ---------- */
@@ -16336,6 +16433,8 @@ var PG = (function(){
 
   return {
     mount:mount, tab:tab, goProfile:goProfile, openSheet:openSheet, closeSheet:closeSheet, addRow:addRow, delRow:delRow, rowSubj:rowSubj, saveRec:saveRec,
+    /* v4.19.0 按科目批量录入 */
+    setMode:setMode, msSet:msSet, msAddRow:msAddRow, msDelRow:msDelRow, msSubjChange:msSubjChange, saveMulti:saveMulti,
     openEdit:openEdit, closeEdit:closeEdit, renderEditList:renderEditList, saveEditRow:saveEditRow, delEditRow:delEditRow,
     toggleBoard:toggleBoard, toggleRecs:toggleRecs, foldAll:foldAll, chartMode:chartMode, ptClick:ptClick,
     saveGoals:saveGoals, aiAnalyze:aiAnalyze, aiStop:aiStop, curType:curType,

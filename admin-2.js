@@ -2693,9 +2693,14 @@ var ACTION_LABEL = {
   'data.backup_delete': '删除备份',
   'data.restore':       '从备份回档',
   'field.repair':       '字段体检恢复',
-  'field.self_edit':    '字段本人可编辑'
+  'field.self_edit':    '字段本人可编辑',
+  'island.save':        '修改班级岛文案',
+  'site_setting.save':  '修改站点文案'
 };
 
+/* v4.19.0（站主）：修改历史按日期分组折叠 + 日期索引定位。
+   AUDIT_OPEN 记住每组展开状态，切走再回来/刷新后仍保持，避免重新找。 */
+var AUDIT_OPEN = { __init:false };
 function loadAudit(){
   api('/admin?action=audit&limit=120').then(function(j){
     var logs = j.logs || [];
@@ -2705,35 +2710,95 @@ function loadAudit(){
       body.innerHTML = '<div class="empty">' + svg('file', 38) + '<p>还没有操作记录</p></div>';
       return;
     }
-    body.innerHTML =
-      '<div class="table-wrap"><table><thead><tr>'
-      + '<th class="nowrap">时间</th><th>操作人</th><th>动作</th><th>对象</th><th>备注</th><th></th>'
-      + '</tr></thead><tbody>'
-      + logs.map(function(l){
-          /* v3.6.4（站主 #3）：删除后 30 分钟内，这行右侧出现「撤回」。
-             deletedId 写在 detail 里（格式 deletedId:123），没有就是普通日志。 */
-          var mm = /deletedId:(\d+)/.exec(String(l.detail || ''));
-          var undoBtn = '';
-          if(mm && l.action === 'field.delete'){
-            var mins = Math.floor((Date.now() - new Date(l.created_at).getTime()) / 60000);
-            var left = 30 - mins;
-            undoBtn = left > 0
-              ? '<button class="btn btn-xs" data-undo="' + mm[1] + '" data-label="' + attr(l.target_id || '') + '">撤回<span class="muted" style="font-size:.68rem;margin-left:3px">剩 ' + left + ' 分</span></button>'
-              : '<span class="muted" style="font-size:.72rem">已过期</span>';
-          }
-          return '<tr>'
-            + '<td class="nowrap"><span class="mono" style="font-size:.76rem">' + esc(fmt(l.created_at)) + '</span></td>'
-            + '<td class="nowrap">' + (l.actor ? '<b>' + esc(l.actor) + '</b>' : '<span class="muted">系统</span>') + '</td>'
-            + '<td class="nowrap"><span class="badge badge-orange">' + esc(ACTION_LABEL[l.action] || l.action) + '</span></td>'
-            + '<td class="nowrap muted mono" style="font-size:.76rem">' + esc(l.target_id || '—') + '</td>'
-            + '<td class="muted" style="font-size:.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(l.detail || '—') + '</td>'
-            + '<td class="nowrap">' + undoBtn + '</td>'
-            + '</tr>';
-        }).join('')
-      + '</tbody></table></div>'
-      + '<p class="muted" style="padding:12px 14px 0;font-size:.76rem">显示最近 ' + logs.length + ' 条记录</p>';
+    /* 按日期倒序分组（后端已按时间倒序返回） */
+    var groups = [], gidx = {};
+    logs.forEach(function(l){
+      var day = fmt(l.created_at, 'date') || '未知日期';
+      if(!(day in gidx)){ gidx[day] = groups.length; groups.push({ day:day, rows:[] }); }
+      groups[gidx[day]].rows.push(l);
+    });
+    if(!AUDIT_OPEN.__init){ AUDIT_OPEN.__init = true; if(groups.length) AUDIT_OPEN[groups[0].day] = true; }
 
-    /* v3.6.4：撤回按钮 */
+    function rowHtml(l){
+      var mm = /deletedId:(\d+)/.exec(String(l.detail || ''));
+      var undoBtn = '';
+      if(mm && l.action === 'field.delete'){
+        var mins = Math.floor((Date.now() - new Date(l.created_at).getTime()) / 60000);
+        var left = 30 - mins;
+        undoBtn = left > 0
+          ? '<button class="btn btn-xs" data-undo="' + mm[1] + '" data-label="' + attr(l.target_id || '') + '">撤回<span class="muted" style="font-size:.68rem;margin-left:3px">剩 ' + left + ' 分</span></button>'
+          : '<span class="muted" style="font-size:.72rem">已过期</span>';
+      }
+      return '<tr>'
+        + '<td class="nowrap"><span class="mono" style="font-size:.76rem">' + esc(fmt(l.created_at)) + '</span></td>'
+        + '<td class="nowrap">' + (l.actor ? '<b>' + esc(l.actor) + '</b>' : '<span class="muted">系统</span>') + '</td>'
+        + '<td class="nowrap"><span class="badge badge-orange">' + esc(ACTION_LABEL[l.action] || l.action) + '</span></td>'
+        + '<td class="nowrap muted mono" style="font-size:.76rem">' + esc(l.target_id || '—') + '</td>'
+        + '<td class="muted" style="font-size:.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(l.detail || '—') + '</td>'
+        + '<td class="nowrap">' + undoBtn + '</td>'
+        + '</tr>';
+    }
+
+    var html = '';
+    /* 日期索引条：点日期定位并展开对应分组 */
+    html += '<div style="padding:12px 14px;border-bottom:1px solid var(--line)">'
+      + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+      + '<span class="muted" style="font-size:.76rem;margin-right:2px">日期索引</span>'
+      + groups.map(function(g){
+          return '<button class="btn btn-xs lg-goto" data-goto="' + attr(g.day) + '" title="定位到 ' + esc(g.day) + '" style="' + (AUDIT_OPEN[g.day] ? 'border-color:var(--brand)' : '') + '">' + esc(g.day.slice(5)) + '<span class="muted" style="margin-left:3px">(' + g.rows.length + ')</span></button>';
+        }).join('')
+      + '<span style="flex:1"></span>'
+      + '<button class="btn btn-xs" id="lgExpandAll">展开全部</button>'
+      + '<button class="btn btn-xs" id="lgCollapseAll">收起全部</button>'
+      + '</div></div>';
+    /* 分组列表 */
+    groups.forEach(function(g){
+      var open = !!AUDIT_OPEN[g.day];
+      html += '<div class="lg-group" data-day="' + attr(g.day) + '" style="border-bottom:1px solid var(--line)">'
+        + '<div class="lg-head" data-toggle="' + attr(g.day) + '" style="display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;user-select:none">'
+        + '<span class="lg-arrow" style="font-size:.7rem;color:var(--muted);width:10px">' + (open ? '▾' : '▸') + '</span>'
+        + '<b style="font-size:.84rem">' + esc(g.day) + '</b>'
+        + '<span class="muted" style="font-size:.74rem">' + g.rows.length + ' 条</span>'
+        + '</div>'
+        + '<div class="lg-body" data-body="' + attr(g.day) + '"' + (open ? '' : ' style="display:none"') + '>'
+        + '<div class="table-wrap"><table><thead><tr>'
+        + '<th class="nowrap">时间</th><th>操作人</th><th>动作</th><th>对象</th><th>备注</th><th></th>'
+        + '</tr></thead><tbody>'
+        + g.rows.map(rowHtml).join('')
+        + '</tbody></table></div></div></div>';
+    });
+    html += '<p class="muted" style="padding:12px 14px 0;font-size:.76rem">共 ' + logs.length + ' 条记录 · 按日期分组，点日期索引可直接定位</p>';
+    body.innerHTML = html;
+
+    function setOpen(day, open){
+      AUDIT_OPEN[day] = open;
+      Array.prototype.forEach.call(body.querySelectorAll('.lg-head'), function(h){
+        if(h.dataset.toggle === day){
+          var a = h.querySelector('.lg-arrow'); if(a) a.textContent = open ? '▾' : '▸';
+        }
+      });
+      Array.prototype.forEach.call(body.querySelectorAll('.lg-body'), function(bd){
+        if(bd.dataset.body === day) bd.style.display = open ? '' : 'none';
+      });
+      Array.prototype.forEach.call(body.querySelectorAll('.lg-goto'), function(btn){
+        if(btn.dataset.goto === day) btn.style.borderColor = open ? 'var(--brand)' : '';
+      });
+    }
+    Array.prototype.forEach.call(body.querySelectorAll('.lg-head'), function(h){
+      h.onclick = function(){ setOpen(h.dataset.toggle, !AUDIT_OPEN[h.dataset.toggle]); };
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('.lg-goto'), function(btn){
+      btn.onclick = function(){
+        var day = btn.dataset.goto;
+        setOpen(day, true);
+        var grp = body.querySelector('.lg-group[data-day="' + day + '"]');
+        if(grp && grp.scrollIntoView) grp.scrollIntoView({ behavior:'smooth', block:'start' });
+      };
+    });
+    if($('lgExpandAll')) $('lgExpandAll').onclick = function(){ groups.forEach(function(g){ setOpen(g.day, true); }); };
+    if($('lgCollapseAll')) $('lgCollapseAll').onclick = function(){ groups.forEach(function(g){ setOpen(g.day, false); }); };
+
+    /* v3.6.4：撤回按钮（保留） */
     Array.prototype.forEach.call(body.querySelectorAll('[data-undo]'), function(btn){
       btn.onclick = function(){
         var id = btn.dataset.undo;

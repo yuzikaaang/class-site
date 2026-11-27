@@ -201,6 +201,19 @@
 .pg-srow-top .del{border:0;background:var(--pg-no-bg);color:var(--pg-no-ink);width:34px;height:34px;border-radius:9px;font-size:1.1rem;cursor:pointer;flex-shrink:0}
 .pg-srow-card textarea{width:100%;background:var(--bg-1);border:1px solid var(--pg-line);color:var(--fg);border-radius:9px;padding:9px 10px;font-size:.76rem;font-family:inherit;margin-top:9px;resize:vertical;min-height:46px;outline:none}
 .pg-add-row{width:100%;border:1px dashed var(--pg-brand);background:var(--tint);color:var(--pg-brand);border-radius:12px;padding:11px;font-size:.82rem;font-weight:800;cursor:pointer;margin-bottom:14px;font-family:inherit}
+/* v4.19.0 录入模式切换 */
+.pg-mode-tabs{display:flex;gap:8px;margin-bottom:16px;background:var(--bg-2);border:1px solid var(--pg-line);border-radius:12px;padding:4px}
+.pg-mode-tabs button{flex:1;border:0;background:transparent;color:var(--fg-2);padding:10px;border-radius:9px;font-size:.8rem;font-weight:800;cursor:pointer;font-family:inherit;transition:.18s}
+.pg-mode-tabs button.on{background:var(--pg-brand);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+/* 按科目批量录入：每场一行 */
+.pg-ms-card{background:var(--bg-2);border:1px solid var(--pg-line);border-radius:13px;padding:12px;margin-bottom:11px}
+.pg-ms-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.pg-ms-head b{font-size:.78rem;color:var(--pg-brand)}
+.pg-ms-head .del{border:0;background:var(--pg-no-bg);color:var(--pg-no-ink);width:30px;height:30px;border-radius:9px;font-size:1rem;cursor:pointer;flex-shrink:0}
+.pg-ms-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.pg-ms-grid .pg-ms-cell label{font-size:.62rem;color:var(--fg-3);display:block;margin-bottom:4px}
+.pg-ms-grid .pg-ms-cell input{width:100%;background:var(--bg-1);border:1px solid var(--pg-line);color:var(--fg);border-radius:9px;padding:9px;font-size:.78rem;font-family:inherit;outline:none;min-width:0}
+.pg-ms-card textarea{width:100%;background:var(--bg-1);border:1px solid var(--pg-line);color:var(--fg);border-radius:9px;padding:9px 10px;font-size:.76rem;font-family:inherit;margin-top:9px;resize:vertical;min-height:42px;outline:none}
 .pg-eitem{background:var(--bg-2);border:1px solid var(--pg-line);border-radius:13px;padding:13px;margin-bottom:11px}
 .pg-eitem .eh{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
 .pg-eitem .eh b{font-size:.82rem;color:var(--pg-brand)}
