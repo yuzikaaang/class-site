@@ -312,6 +312,24 @@ body.bg-dark .actions button.primary,body.bg-black .actions button.primary,
 body.bg-navy .actions button.primary,body.bg-green .actions button.primary,
 body.bg-gray .actions button.primary{background:#f5f5f5;color:#111}
 .actions .kbd{font-size:.68em;opacity:.5;margin-left:.5em;font-weight:400}
+/* v4.19.3：「更多」操作菜单——记一笔/跳过/重置/定时收进这里，主界面只留「开始」 */
+.tm-more{position:relative;display:inline-flex}
+.tm-more #tmMore{min-width:0;padding:0 3.2vw;font-size:1.9vw;line-height:1}
+.tm-more-menu{
+  display:none;position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);
+  z-index:30;min-width:132px;padding:6px;flex-direction:column;gap:2px;
+  background:rgba(255,255,255,.98);border:1px solid rgba(0,0,0,.12);border-radius:12px;
+  box-shadow:0 10px 32px rgba(0,0,0,.18)
+}
+.tm-more-menu.show{display:flex}
+.tm-more-menu button{
+  min-width:0;width:100%;height:38px;min-height:0;padding:0 12px;margin:0;border:none;border-radius:8px;
+  background:transparent;color:inherit;font-size:13.5px;text-align:left;white-space:nowrap;justify-content:flex-start
+}
+.tm-more-menu button:hover{background:rgba(224,138,76,.14)}
+.tm-more-menu button:active{transform:none}
+body.bg-dark .tm-more-menu,body.bg-black .tm-more-menu,body.bg-navy .tm-more-menu,
+body.bg-green .tm-more-menu,body.bg-gray .tm-more-menu{background:#232329;border-color:rgba(255,255,255,.18)}
 
 /* ---------- 工具栏 ---------- */
 #bar{
@@ -528,10 +546,16 @@ body.bg-dark .as-row input,body.bg-black .as-row input,body.bg-navy .as-row inpu
   opacity:.7;transition:all .15s;
 }
 .subj-row button.on{background:rgba(224,138,76,.16);border-color:#e08a4c;color:#c2410c;opacity:1;font-weight:700}
+/* v4.19.3：考试开关（常驻首格）；进入考试态后高亮，科目按钮改判 on-exam */
+.subj-row button.exam-toggle{border-style:dashed;opacity:.8}
+.subj-row button.exam-toggle.on-exam{background:#c2410c;border-style:solid;border-color:#c2410c;color:#fff;opacity:1;font-weight:700}
+.subj-row button.on-exam{background:#c2410c;border-color:#c2410c;color:#fff;opacity:1;font-weight:700}
 body.bg-dark .subj-row button,body.bg-black .subj-row button,body.bg-navy .subj-row button,
 body.bg-green .subj-row button,body.bg-gray .subj-row button{border-color:rgba(255,255,255,.18)}
 body.bg-dark .subj-row button.on,body.bg-black .subj-row button.on,body.bg-navy .subj-row button.on,
 body.bg-green .subj-row button.on,body.bg-gray .subj-row button.on{color:#fdba74;border-color:#fb923c}
+body.bg-dark .subj-row button.on-exam,body.bg-black .subj-row button.on-exam,body.bg-navy .subj-row button.on-exam,
+body.bg-green .subj-row button.on-exam,body.bg-gray .subj-row button.on-exam{background:#c2410c;border-color:#c2410c;color:#fff}
 /* 自习「这次做什么」输入框 */
 .doing-inp{
   display:block;width:min(72vw,340px);margin:1.8vh auto 0;height:38px;padding:0 12px;
@@ -1026,37 +1050,34 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 
     <div class="actions">
       <button id="timerBtn" class="primary">开始<span class="kbd">Space</span></button>
-      <button id="markBtn">记一笔</button>
-      <button id="skipBtn">跳过</button>
-      <button id="timerReset">重置</button>
+      <!-- v4.19.3：次要操作收进「更多」，只留开始主按钮；功能一个不删 -->
+      <div class="tm-more" id="tmMoreWrap">
+        <button id="tmMore" title="更多操作" aria-label="更多操作">⋯</button>
+        <div class="tm-more-menu" id="tmMoreMenu">
+          <button id="markBtn">记一笔</button>
+          <button id="skipBtn">跳过</button>
+          <button id="timerReset">重置</button>
+          <button id="autoBtn" title="设定到点自动开始">⏱ 定时开始</button>
+        </div>
+      </div>
     </div>
 
     <div id="timerHint">点击数字设定时长；直接开始则为正计时</div>
     <div id="markList"></div>
 
-    <!-- v4.18.11：倒计时内的考试模式快捷入口 -->
-    <div class="exam-row" id="examRow">
-      <span class="exam-label">考试</span>
-      <button data-exam="语文">语文</button>
-      <button data-exam="数学">数学</button>
-      <button data-exam="英语">英语</button>
-      <button data-exam="物理">物理</button>
-      <button data-exam="化学">化学</button>
-      <button data-exam="生物">生物</button>
-      <button id="examExit" title="退出考试模式">退出</button>
-    </div>
-
-    <!-- v4.19.2：定时自动开始（倒计时 / 考试模式共用，JS 加 .show） -->
-    <div class="auto-row" id="autoRow">
-      <button id="autoBtn" title="设定到点自动开始">⏱ 定时开始</button>
-      <span class="auto-state" id="autoState"></span>
-    </div>
-
+    <!-- v4.19.3：两排科目合并为一排、考试改为开关。
+         考试态点科目 = 套考试时长；自习态点科目 = 选本次科目。考试开关再点一次退出。 -->
     <div class="subj-row" id="subjRow">
+      <button id="examToggle" class="exam-toggle" title="进入 / 退出考试模式">考试</button>
       <button data-subj="语文">语文</button><button data-subj="数学">数学</button>
       <button data-subj="英语">英语</button><button data-subj="物理">物理</button>
       <button data-subj="化学">化学</button><button data-subj="生物">生物</button>
       <button data-subj="其他">其他</button>
+    </div>
+
+    <!-- v4.19.2→v4.19.3：定时按钮已收进「更多」，这里只留状态提示文字 -->
+    <div class="auto-row" id="autoRow">
+      <span class="auto-state" id="autoState"></span>
     </div>
     <input class="doing-inp" id="doingInp" maxlength="12" placeholder="本次事项（如：试卷、练习）">
   </div>
@@ -1302,7 +1323,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=4192" defer></script>
+<script src="./fs-keep.js?v=4193" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -1417,7 +1438,13 @@ function applyName(){
   if(row){
     var bs = row.getElementsByTagName('button');
     for(var i = 0; i < bs.length; i++){
-      bs[i].className = (bs[i].getAttribute('data-subj') === CFG.subj) ? 'on' : '';
+      var b = bs[i];
+      if(b.id === 'examToggle'){
+        b.className = 'exam-toggle' + (T.exam ? ' on-exam' : '');
+        continue;
+      }
+      var sel = (b.getAttribute('data-subj') === CFG.subj);
+      b.className = sel ? (T.exam ? 'on-exam' : 'on') : '';
     }
   }
   var di = $('doingInp');
@@ -1783,10 +1810,10 @@ function tmDetailPaint(){
   if(m) m.style.display = (T.kind === 'up') ? '' : 'none';
   if(s) s.style.display = (T.kind === 'pomo') ? '' : 'none';
   if(bar) bar.style.display = (T.kind === 'up') ? 'none' : '';
-  /* v4.18.11：考试快捷行只在倒计时子模式显示 */
-  var er = $('examRow');
-  if(er) er.className = 'exam-row' + (T.kind === 'down' ? ' show' : '');
-  /* v4.19.2：定时自动开始入口同样只在倒计时子模式显示 */
+  /* v4.19.3：考试开关只在倒计时子模式显示（已并入科目行首格） */
+  var et = $('examToggle');
+  if(et) et.style.display = (T.kind === 'down') ? '' : 'none';
+  /* 定时状态文字同样只在倒计时子模式显示 */
   var ar = $('autoRow');
   if(ar) ar.className = 'auto-row' + (T.kind === 'down' ? ' show' : '');
   autoPaint();
@@ -1795,7 +1822,7 @@ function tmDetailPaint(){
       ? '开始后自动累计，可随时「记一笔」记录本段内容'
       : (T.kind === 'down'
           ? (T.exam ? '考试倒计时 · 结束前 ' + (Number(CFG.examLead) || 15) + ' 分钟提醒 · 可点数字改时长'
-                    : '点数字设时长 · 设好按开始（可点上方「考试」快速设定）')
+                    : '点数字设时长 · 设好按开始（可点下方「考试」快速设定）')
           : '点数字改专注 / 休息时长 · 跳过进下一段');
   }
 }
@@ -1847,15 +1874,25 @@ function tmSetKind(k){
    ② 结束前 examLead 分钟全屏文字 + 铃声提醒（铃声可单独配置）。 */
 function setExam(on){
   T.exam = !!on;
-  var row = $('examRow');
+  /* v4.19.3：考试态高亮改到合并后的科目行——考试开关 + 当前科目各高亮 */
+  var row = $('subjRow');
   if(row){
     Array.prototype.forEach.call(row.getElementsByTagName('button'), function(b){
-      if(b.id === 'examExit') return;
-      b.className = (T.exam && b.getAttribute('data-exam') === CFG.subj) ? 'on-exam' : '';
+      var subj = b.getAttribute('data-subj');
+      if(subj){
+        b.className = (T.exam && subj === CFG.subj) ? 'on-exam' : (subj === CFG.subj ? 'on' : '');
+      }else if(b.id === 'examToggle'){
+        b.className = 'exam-toggle' + (T.exam ? ' on-exam' : '');
+      }
     });
   }
   paintBareInfo();
   tmDetailPaint();
+}
+/* v4.19.3：考试开关——点一下进考试态，再点一下退出（替代原独立「退出」键） */
+function examToggle(){
+  if(T.exam) examExit();
+  else setExam(true);
 }
 function examStart(subj){
   var mins = EXAM_MIN[subj];
@@ -4349,9 +4386,23 @@ $('timerTime').onclick = function(e){
   openDur('focus');
 };
 $('timerBtn').onclick = function(){ if(T.run || T.paused) tmToggle(); else tmStart(); };
-$('timerReset').onclick = function(){ tmReset(); };
-$('markBtn').onclick = function(){ tmMark(); };
-$('skipBtn').onclick = function(){ tmSkip(); };
+$('timerReset').onclick = function(){ tmReset(); closeTmMore(); };
+$('markBtn').onclick = function(){ tmMark(); closeTmMore(); };
+$('skipBtn').onclick = function(){ tmSkip(); closeTmMore(); };
+/* v4.19.3：「更多」菜单开合——点开显示、点菜单项或点外部收起 */
+function closeTmMore(){ var m = $('tmMoreMenu'); if(m) m.className = 'tm-more-menu'; }
+$('tmMore').onclick = function(e){
+  if(e && e.stopPropagation) e.stopPropagation();
+  var m = $('tmMoreMenu');
+  if(m) m.className = (m.className === 'tm-more-menu show') ? 'tm-more-menu' : 'tm-more-menu show';
+};
+document.addEventListener('click', function(e){
+  var m = $('tmMoreMenu'), w = $('tmMoreWrap');
+  if(!m || !w) return;
+  if(m.className.indexOf('show') < 0) return;
+  if(e.target && e.target.closest && e.target.closest('#tmMoreWrap')) return;
+  closeTmMore();
+});
 /* v3.13：极简态下点背景任意一处都能把操作区叫回来（iPad 上点数字不一定灵） */
 document.addEventListener('click', function(e){
   if(!UI.bare) return;
@@ -4367,8 +4418,8 @@ $('dsClose').onclick = closeDur;
 $('dsOk').onclick = saveDur;
 $('durSheet').onclick = function(e){ if(e.target === this) closeDur(); };
 
-/* v4.19.2：定时自动开始面板 */
-$('autoBtn').onclick = autoOpen;
+/* v4.19.2：定时自动开始面板（v4.19.3 入口移入「更多」菜单） */
+$('autoBtn').onclick = function(){ closeTmMore(); autoOpen(); };
 $('asClose').onclick = autoClose;
 $('asOk').onclick = autoArm;
 $('asClear').onclick = function(){ autoClear(); autoClose(); toast('已取消定时'); };
@@ -4455,13 +4506,23 @@ function bindSettings(){
       if(LOG.cur) logStart(logModeOf());   /* 名字变了，从现在起算新的一段 */
     };
   });
+  /* v4.19.3：一排科目智能识别——考试开关 + 科目共用一行。
+     考试开关：进/出考试态；科目：考试态套考试时长，自习态选本次科目。 */
   var sr = $('subjRow');
   if(sr){
     Array.prototype.forEach.call(sr.getElementsByTagName('button'), function(b){
       b.onclick = function(e){
         if(e && e.stopPropagation) e.stopPropagation();
+        if(b.id === 'examToggle'){ examToggle(); return; }
         var v = b.getAttribute('data-subj');
-        CFG.subj = (CFG.subj === v) ? '' : v;   /* 再点一次取消 */
+        if(T.exam){
+          /* 考试态：点科目套用该科考试时长 preset */
+          if(v === '其他'){ toast('考试预设只有语数英物化生'); return; }
+          examStart(v);
+          return;
+        }
+        /* 自习态：原逻辑——选本次科目，再点一次取消 */
+        CFG.subj = (CFG.subj === v) ? '' : v;
         saveCfg(); applyName();
         if(LOG.cur) logStart(logModeOf());
       };
@@ -4475,17 +4536,6 @@ function bindSettings(){
       saveCfg(); applyName();
       if(LOG.cur) logStart(logModeOf());   /* 换了做的事，从现在起算新的一段 */
     };
-  }
-  /* v4.18.11：考试模式按钮（点科目套用时长预设 / 退出） */
-  var er = $('examRow');
-  if(er){
-    Array.prototype.forEach.call(er.getElementsByTagName('button'), function(b){
-      b.onclick = function(e){
-        if(e && e.stopPropagation) e.stopPropagation();
-        if(b.id === 'examExit'){ examExit(); return; }
-        examStart(b.getAttribute('data-exam'));
-      };
-    });
   }
   var nr = $('noiseRow');
   if(nr){

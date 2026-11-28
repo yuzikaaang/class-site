@@ -14355,11 +14355,18 @@ function openCaEditor(hwId, subject){
 
   var taVal = orig.map(function(t){
     if(t && typeof t === 'object'){
+      /* v4.19.3 修复：只有真正带附件直链（img/audio/video 有值）的对象任务，
+         才还原成「📎 [类型] 描述 | 链接」占位行。
+         纯文字任务即便因设了截止时间而被存成 {text, due} 对象，也一律还原成
+         纯文字——旧写法不检查附件字段、一律默认判成「图片」，导致没挂任何
+         附件的文字作业在编辑弹层里显示成「📎 [图片] xxx」；删掉前缀保存后
+         又被转成对象，下次打开再次误判，形成「删了又回来」的闭环。 */
+      var u = t.audio || t.video || t.img || '';
+      if(!u) return String(t.text == null ? '' : t.text);
       /* ⚠️ 顺序别调：audio 优先于 video 优先于 img。
          一个任务理论上只挂一个附件，这里按「哪个字段有值」判类别。 */
       var kind = t.audio ? '音频' : (t.video ? '视频' : '图片');
-      var u = t.audio || t.video || t.img || '';
-      return '📎 [' + kind + '] ' + (t.text || '') + (u ? ' | ' + u : '');
+      return '📎 [' + kind + '] ' + (t.text || '') + ' | ' + u;
     }
     return String(t == null ? '' : t);
   }).join('\n');

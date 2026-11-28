@@ -14559,13 +14559,15 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /* ② 考试模式 */
     t('★v4.18.11 考试时长预设 语150/数英120/物化生75',
       /var EXAM_MIN = \{ '语文':150, '数学':120, '英语':120, '物理':75, '化学':75, '生物':75 \}/.test(clk));
-    t('★v4.18.11 考试入口按钮 + 进入/退出函数',
-      /id="examRow"/.test(clk) && /id="examExit"/.test(clk)
+    /* v4.19.3：考试入口由独立 examRow 改为科目行首格 examToggle（功能等价） */
+    t('★v4.18.11 考试入口按钮 + 进入/退出函数（v4.19.3 改为开关）',
+      /id="examToggle"/.test(clk)
       && /function setExam\(on\)/.test(clk) && /function examStart\(subj\)/.test(clk)
-      && /function examExit\(\)/.test(clk) && /examStart\(b\.getAttribute\('data-exam'\)\)/.test(clk));
+      && /function examExit\(\)/.test(clk) && /function examToggle\(\)/.test(clk)
+      && /examStart\(v\)/.test(clk));
     t('★v4.18.11 考试按钮只在倒计时子模式显示',
-      /\.exam-row\.show\{display:flex\}/.test(clk)
-      && /T\.kind === 'down' \? ' show' : ''/.test(clk));
+      /examToggle/.test(clk)
+      && /et\.style\.display = \(T\.kind === 'down'\)/.test(clk));
     t('★v4.18.11 考试事项自动填考试 + 套用预设时长',
       /CFG\.doing = '考试'/.test(clk) && /CFG\.downSec = mins \* 60/.test(clk));
     t('★v4.18.11 考试结束全屏提示改考试结束',
@@ -14726,7 +14728,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       && /setTimeout\(function\(\)\{ if\(CFG\.autoFired === 2\)/.test(clk));
     t('★v4.19.2 挂进主循环与显示刷新',
       /try\{ autoWatch\(\); \}catch\(e\)\{\}/.test(clk)
-      && /autoPaint\(\);/.test(clk) && /\$\('autoBtn'\)\.onclick = autoOpen/.test(clk)
+      && /autoPaint\(\);/.test(clk) && /\$\('autoBtn'\)\.onclick = function\(\)\{ closeTmMore\(\); autoOpen\(\); \}/.test(clk)
       && /\$\('asOk'\)\.onclick = autoArm/.test(clk));
     t('★v4.19.2 倒计时与考试模式通用（同一入口）',
       /定时自动开始（倒计时 \/ 考试模式共用）/.test(clk)
@@ -14737,6 +14739,38 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     t('★v4.19.2 公告条目均不超过 28 汉字且无禁词',
       (function(){
         const block = adm3.slice(adm3.indexOf("version: '4.19.2'"), adm3.indexOf("version: '4.19.1'"));
+        const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
+          && texts.every(x => !ban.some(w => x.includes(w)));
+      })());
+  }
+
+  /* ===== v4.19.3：作业附件误判修复 + 倒计时界面简化 ===== */
+  {
+    const clk = fs.readFileSync(new URL('./clock.html', import.meta.url), 'utf8');
+    const app = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+    const adm3 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    const ver = JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8'));
+    t('★v4.19.3 作业编辑纯文字不再误判为图片附件',
+      /var u = t\.audio \|\| t\.video \|\| t\.img \|\| '';/.test(app)
+      && /if\(!u\) return String\(t\.text == null \? '' : t\.text\);/.test(app));
+    t('★v4.19.3 倒计时两排科目合并为一排+考试开关',
+      /id="examToggle"/.test(clk) && !/id="examRow"/.test(clk)
+      && !/data-exam=/.test(clk) && /function examToggle\(\)/.test(clk));
+    t('★v4.19.3 考试态智能识别（点科目套考试时长）',
+      /if\(T\.exam\)\{[\s\S]{0,200}examStart\(v\)/.test(clk)
+      && /subj === CFG\.subj\) \? 'on-exam'/.test(clk));
+    t('★v4.19.3 次要操作收进「更多」菜单但功能保留',
+      /id="tmMoreMenu"/.test(clk) && /id="markBtn"/.test(clk)
+      && /id="skipBtn"/.test(clk) && /id="timerReset"/.test(clk)
+      && /id="autoBtn"/.test(clk) && /function closeTmMore\(\)/.test(clk));
+    t('★v4.19.3 版本记录齐全',
+      /version: '4\.19\.3'/.test(adm3) && /作业附件修复/.test(adm3)
+      && ver.v === CUR_VER && ver.items.length >= 4);
+    t('★v4.19.3 公告条目均不超过 28 汉字且无禁词',
+      (function(){
+        const block = adm3.slice(adm3.indexOf("version: '4.19.3'"), adm3.indexOf("version: '4.19.2'"));
         const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
         const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
         return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
