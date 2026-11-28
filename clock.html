@@ -485,6 +485,41 @@ body.bg-dark #hint,body.bg-black #hint,body.bg-navy #hint,body.bg-green #hint,bo
 body.bg-dark .exam-row button,body.bg-black .exam-row button,body.bg-navy .exam-row button,
 body.bg-green .exam-row button,body.bg-gray .exam-row button{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08)}
 body.bare .exam-row{display:none}
+/* v4.19.2：定时自动开始（倒计时 / 考试模式共用）——只在倒计时子模式显示 */
+.auto-row{display:none;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:1.2vh}
+.auto-row.show{display:flex}
+.auto-row button{
+  height:30px;padding:0 12px;border-radius:9px;border:1px solid rgba(0,0,0,.14);
+  background:rgba(0,0,0,.04);color:inherit;font-family:inherit;font-size:12.5px;cursor:pointer;opacity:.8
+}
+.auto-row button.auto-pending{background:#c2410c;border-color:#c2410c;color:#fff;opacity:1;font-weight:700}
+body.bg-dark .auto-row button,body.bg-black .auto-row button,body.bg-navy .auto-row button,
+body.bg-green .auto-row button,body.bg-gray .auto-row button{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08)}
+.auto-row .auto-state{font-size:12px;opacity:.62;white-space:nowrap}
+body.bare .auto-row{display:none}
+/* v4.19.2：定时自动开始设置面板 */
+#autoSheet{position:fixed;left:0;right:0;top:0;bottom:0;z-index:92;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.42);opacity:0;visibility:hidden;transition:opacity .18s,visibility .18s;padding:18px}
+#autoSheet.show{opacity:1;visibility:visible}
+.as-box{width:100%;max-width:380px;background:#fff;color:#222;border-radius:18px;padding:18px 20px calc(16px + env(safe-area-inset-bottom));
+  box-shadow:0 18px 60px rgba(0,0,0,.28);transform:translateY(10px) scale(.985);transition:transform .22s cubic-bezier(.2,.8,.3,1)}
+#autoSheet.show .as-box{transform:none}
+body.bg-dark .as-box,body.bg-black .as-box,body.bg-navy .as-box{background:#1d1d22;color:#eee}
+.as-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.as-head b{font-size:16px}
+.as-head button{width:30px;height:30px;border:none;border-radius:50%;background:rgba(0,0,0,.06);color:inherit;font-size:14px;cursor:pointer}
+body.bg-dark .as-head button,body.bg-black .as-head button,body.bg-navy .as-head button{background:rgba(255,255,255,.1)}
+.as-row{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13.5px}
+.as-row .as-lab{flex:0 0 76px;opacity:.82}
+.as-row input{height:38px;border-radius:9px;border:1px solid rgba(0,0,0,.14);background:transparent;color:inherit;
+  font:inherit;font-size:15px;padding:0 10px;flex:1;min-width:0}
+.as-row input[type=number]{flex:0 0 88px;text-align:center}
+body.bg-dark .as-row input,body.bg-black .as-row input,body.bg-navy .as-row input{border-color:rgba(255,255,255,.18)}
+.as-note{font-size:11.5px;opacity:.58;line-height:1.7;margin:8px 0 14px}
+.as-acts{display:flex;gap:10px}
+.as-acts button{flex:1;height:42px;border-radius:11px;border:1px solid rgba(0,0,0,.12);background:transparent;color:inherit;
+  font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.as-acts .as-ok{background:#e08a4c;border-color:#e08a4c;color:#fff;flex:0 0 122px;margin:0 auto}
 /* 自习的科目快捷行 */
 .subj-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:2.4vh}
 .subj-row button{
@@ -1011,6 +1046,12 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
       <button id="examExit" title="退出考试模式">退出</button>
     </div>
 
+    <!-- v4.19.2：定时自动开始（倒计时 / 考试模式共用，JS 加 .show） -->
+    <div class="auto-row" id="autoRow">
+      <button id="autoBtn" title="设定到点自动开始">⏱ 定时开始</button>
+      <span class="auto-state" id="autoState"></span>
+    </div>
+
     <div class="subj-row" id="subjRow">
       <button data-subj="语文">语文</button><button data-subj="数学">数学</button>
       <button data-subj="英语">英语</button><button data-subj="物理">物理</button>
@@ -1225,6 +1266,27 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
   </div>
 </div>
 
+<!-- v4.19.2：定时自动开始设置面板 -->
+<div id="autoSheet" aria-hidden="true">
+  <div class="as-box">
+    <div class="as-head"><b>定时自动开始</b><button id="asClose" aria-label="关闭">✕</button></div>
+    <div class="as-row">
+      <span class="as-lab">开始时刻</span>
+      <input id="asAt" type="time" inputmode="numeric" aria-label="自动开始时刻">
+    </div>
+    <div class="as-row">
+      <span class="as-lab">提前开始</span>
+      <input id="asLead" type="number" min="0" max="60" inputmode="numeric" aria-label="提前几分钟开始">
+      <span style="opacity:.7">分钟（0 = 准点走表）</span>
+    </div>
+    <p class="as-note">系统会在「开始时刻 − 提前开始」自动走表，无需手点。例：开始时刻 7:50、提前 5 分钟 → 7:45 自动开始，可提前作答；提前填 0 则 7:50 准点走表。开始时全屏文字+铃声提示一次。设定只生效这一次，触发后自动清空。</p>
+    <div class="as-acts">
+      <button id="asClear">取消定时</button>
+      <button id="asOk" class="as-ok">设定</button>
+    </div>
+  </div>
+</div>
+
 <!-- v4.16.9：暂停理由弹窗（暂停后点「继续」弹出；10 秒无输入自动跳过） -->
 <div id="pauseSheet" aria-hidden="true">
   <div class="ps-box">
@@ -1240,7 +1302,7 @@ body.bg-dark .al-row .tx input,body.bg-black .al-row .tx input,body.bg-navy .al-
 </div>
 
 <script src="./auth-bus.js"></script>
-<script src="./fs-keep.js?v=4191" defer></script>
+<script src="./fs-keep.js?v=4192" defer></script>
 <script>
 /* ============================================================================
  * 全屏时钟逻辑（ES5，无依赖）
@@ -1268,6 +1330,9 @@ var CFG = { mode:'timer', font:'auto', bg:'light', h12:false, size:2, th:0, tm:5
   /* v4.18.11：考试模式 —— 倒计时内一键套用各科时长预设，结束前 N 分钟全屏文字+铃声提醒。
      examOn 是否启用考试提醒；examLead 提前多少分钟；examSnd 考试提醒铃声；examText 是否文字提醒；examRing 是否铃声提醒 */
   examOn:1, examLead:15, examSnd:'bell', examText:1, examRing:1,
+  /* v4.19.2：定时自动开始 —— at='HH:MM' 开始时刻，lead=提前分钟，day=设定日期(YYYY-MM-DD)，
+     fired=是否已触发(1/0)。一次性：触发后清空 at/lead/day，fired 归 0。跨天自动作废。 */
+  autoAt:'', autoLead:0, autoDay:'', autoFired:0, autoText:1, autoRing:1,
   alerts:[
     { at:'end',     snd:'blue',  on:true  },
     { at:'restEnd', snd:'chime', on:true  },
@@ -1721,6 +1786,10 @@ function tmDetailPaint(){
   /* v4.18.11：考试快捷行只在倒计时子模式显示 */
   var er = $('examRow');
   if(er) er.className = 'exam-row' + (T.kind === 'down' ? ' show' : '');
+  /* v4.19.2：定时自动开始入口同样只在倒计时子模式显示 */
+  var ar = $('autoRow');
+  if(ar) ar.className = 'auto-row' + (T.kind === 'down' ? ' show' : '');
+  autoPaint();
   if(hint){
     hint.textContent = (T.kind === 'up')
       ? '开始后自动累计，可随时「记一笔」记录本段内容'
@@ -1806,6 +1875,113 @@ function examExit(){
   setExam(false);
   if(CFG.doing === '考试'){ CFG.doing = ''; saveCfg(); var di = $('doingInp'); if(di) di.value = ''; applyName(); }
   toast('已退出考试模式');
+}
+
+/* ---------------- v4.19.2：定时自动开始（倒计时 / 考试模式共用） ----------------
+   设一个「开始时刻」+「提前分钟」，到 (开始时刻 - 提前分钟) 本机时间自动走表。
+   一次性：触发后清空，默认不提前；跨天或时间已过自动作废。 */
+function autoClear(){
+  CFG.autoAt = ''; CFG.autoLead = 0; CFG.autoDay = ''; CFG.autoFired = 0;
+  saveCfg(); autoPaint();
+}
+/* 把 HH:MM 解析成当天零点起的分钟数；无效返回 -1 */
+function autoParseHM(s){
+  var m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
+  if(!m) return -1;
+  var h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+  if(h < 0 || h > 23 || mi < 0 || mi > 59) return -1;
+  return h * 60 + mi;
+}
+/* 实际触发时刻（当天分钟数）= 开始时刻 - 提前分钟 */
+function autoFireMin(){
+  var start = autoParseHM(CFG.autoAt);
+  if(start < 0) return -1;
+  return start - Math.max(0, Math.min(60, Number(CFG.autoLead) || 0));
+}
+function autoPaint(){
+  var btn = $('autoBtn'), st = $('autoState');
+  var fire = autoFireMin();
+  var armed = !!(CFG.autoAt && fire >= 0 && CFG.autoDay === todayKey());
+  if(btn) btn.className = armed ? 'auto-pending' : '';
+  if(!st) return;
+  if(!armed){
+    st.textContent = (CFG.autoFired === 2) ? '刚刚已自动开始' : '';
+    return;
+  }
+  var hh = Math.floor(fire / 60), mm = fire % 60;
+  if(hh < 0){ hh += 24; }
+  var label = two(hh) + ':' + two(mm) + ' 自动开始';
+  if(Number(CFG.autoLead) > 0) label += '（提前 ' + Number(CFG.autoLead) + ' 分）';
+  st.textContent = label;
+}
+/* 打开面板时把当前设定填回去；没有就填默认值 */
+function autoOpen(){
+  var at = $('asAt'), lead = $('asLead');
+  if(at) at.value = (CFG.autoAt && autoParseHM(CFG.autoAt) >= 0) ? CFG.autoAt : '';
+  if(lead) lead.value = (Number(CFG.autoLead) || 0);
+  var box = $('autoSheet');
+  if(box){ box.className = 'show'; box.setAttribute('aria-hidden', 'false'); }
+  autoPaint();
+}
+function autoClose(){
+  var box = $('autoSheet');
+  if(box){ box.className = ''; box.setAttribute('aria-hidden', 'true'); }
+}
+/* 点「设定」：校验时刻，写进 CFG。允许设过去的时刻吗？不允许——提示重设。 */
+function autoArm(){
+  var at = $('asAt'), lead = $('asLead');
+  var val = at ? at.value : '';
+  if(autoParseHM(val) < 0){ toast('请选一个有效的开始时刻'); if(at) at.focus(); return; }
+  var fire = autoParseHM(val) - Math.max(0, Math.min(60, parseInt(lead && lead.value, 10) || 0));
+  var d = new Date();
+  var nowMin = d.getHours() * 60 + d.getMinutes();
+  if(fire <= nowMin){ toast('该时刻已过，请设之后的时间'); return; }
+  CFG.autoAt = val;
+  CFG.autoLead = Math.max(0, Math.min(60, parseInt(lead && lead.value, 10) || 0));
+  CFG.autoDay = todayKey();
+  CFG.autoFired = 0;
+  saveCfg();
+  autoClose();
+  autoPaint();
+  var hh = Math.floor(fire / 60), mm = fire % 60;
+  toast('已设定 ' + two(hh) + ':' + two(mm) + ' 自动开始（仅这一次）');
+}
+/* 主循环里每帧检查：到点则自动开始一次 */
+function autoWatch(){
+  if(CFG.autoFired === 2) return;              /* 已触发过，本轮不再管 */
+  if(!CFG.autoAt) return;
+  if(CFG.autoDay !== todayKey()) { autoClear(); return; }   /* 跨天作废 */
+  var fire = autoFireMin();
+  if(fire < 0){ autoClear(); return; }
+  var d = new Date();
+  var nowMin = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+  if(nowMin < fire) return;                    /* 还没到点 */
+  if(nowMin > fire + 2){ autoClear(); return; }/* 错过窗口（页面刚打开/后台很久）→ 作废 */
+  /* —— 到点了，触发一次 —— */
+  CFG.autoFired = 2;                            /* 先占住，防止重复触发 */
+  var startMin = autoParseHM(CFG.autoAt);
+  var firedAt = two(Math.floor(fire / 60)) + ':' + two(fire % 60);
+  var planned = two(Math.floor(startMin / 60)) + ':' + two(startMin % 60);
+  autoClearButKeepFired();                      /* 清空设定，但保留「刚触发」标记给状态显示 */
+  /* 确保处于倒计时模式；没时长就套一个默认，避免到点弹不出表 */
+  if(T.kind !== 'down'){ T.kind = 'down'; CFG.tk = 'down'; }
+  if(downMs() <= 0){ CFG.downSec = 15 * 60; }
+  saveCfg();
+  if(!T.run && !T.paused){
+    tmIdle();                                   /* 回到未开始、用最新时长 */
+    tmStart();                                  /* 自动走表 */
+  }
+  var word = '已到 ' + firedAt + ' · 自动开始';
+  if(CFG.autoLead > 0) word += '（提前 ' + CFG.autoLead + ' 分，计划 ' + planned + '）';
+  if(CFG.autoText) fullWord(word);
+  if(CFG.autoRing) ring(CFG.examSnd || 'bell', CFG.alertTimes);
+  try{ logSyncNow(); }catch(e){}
+}
+/* 触发后清空设定字段，但把 autoFired 留在 2 一会儿，供状态行显示「刚刚已自动开始」 */
+function autoClearButKeepFired(){
+  CFG.autoAt = ''; CFG.autoLead = 0; CFG.autoDay = '';
+  saveCfg(); autoPaint();
+  setTimeout(function(){ if(CFG.autoFired === 2){ CFG.autoFired = 0; saveCfg(); autoPaint(); } }, 30000);
 }
 function tmReset(){
   T.marks = [];
@@ -3900,6 +4076,8 @@ function loop(){
   /* v4.10.13：计时器只在计时页面出现，但计时在后台照样走（切去看时钟不停表），
      所以这里照旧一直画，切回来就是对的。 */
   if(T.run) tmPaint();
+  /* v4.19.2：定时自动开始 —— 每帧看一下是否到点（到点才真正动作，平时开销极小） */
+  try{ autoWatch(); }catch(e){}
   requestAnimationFrame ? requestAnimationFrame(loop) : setTimeout(loop, 100);
 }
 
@@ -4188,6 +4366,13 @@ document.addEventListener('click', function(e){
 $('dsClose').onclick = closeDur;
 $('dsOk').onclick = saveDur;
 $('durSheet').onclick = function(e){ if(e.target === this) closeDur(); };
+
+/* v4.19.2：定时自动开始面板 */
+$('autoBtn').onclick = autoOpen;
+$('asClose').onclick = autoClose;
+$('asOk').onclick = autoArm;
+$('asClear').onclick = function(){ autoClear(); autoClose(); toast('已取消定时'); };
+$('autoSheet').onclick = function(e){ if(e.target === this) autoClose(); };
 
 /* v4.16.9：暂停理由弹窗 —— 确定保存理由、跳过不保存，两者都恢复计时；
    输入框一有内容就停掉 10 秒自动跳过，避免打字打到一半被跳过。 */

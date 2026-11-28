@@ -14701,6 +14701,49 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
       })());
   }
 
+  /* ===== v4.19.2：定时自动开始 · 提前作答 · 一次性 ===== */
+  {
+    const clk = fs.readFileSync(new URL('./clock.html', import.meta.url), 'utf8');
+    const adm3 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    const ver = JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8'));
+    t('★v4.19.2 定时入口与面板 DOM 齐全',
+      /id="autoRow"/.test(clk) && /id="autoBtn"/.test(clk)
+      && /id="autoSheet"/.test(clk) && /id="asAt"/.test(clk)
+      && /id="asLead"/.test(clk) && /id="asOk"/.test(clk) && /id="asClear"/.test(clk));
+    t('★v4.19.2 面板文案讲清提前开始语义与一次性',
+      /提前开始/.test(clk) && /自动走表，无需手点/.test(clk)
+      && /开始时刻 − 提前开始/.test(clk) && /只生效这一次/.test(clk)
+      && /提前填 0 则/.test(clk));
+    t('★v4.19.2 配置字段齐全且默认不提前',
+      /autoAt:'', autoLead:0, autoDay:'', autoFired:0/.test(clk));
+    t('★v4.19.2 到点自动开始核心逻辑',
+      /function autoFireMin\(\)/.test(clk) && /start - Math\.max\(0, Math\.min\(60/.test(clk)
+      && /function autoWatch\(\)/.test(clk) && /nowMin < fire\) return/.test(clk)
+      && /nowMin > fire \+ 2/.test(clk) && /tmStart\(\);/.test(clk));
+    t('★v4.19.2 一次性清空+跨天作废+防重复触发',
+      /function autoClear\(\)/.test(clk) && /CFG\.autoDay !== todayKey\(\)/.test(clk)
+      && /CFG\.autoFired = 2/.test(clk) && /autoClearButKeepFired\(\)/.test(clk)
+      && /setTimeout\(function\(\)\{ if\(CFG\.autoFired === 2\)/.test(clk));
+    t('★v4.19.2 挂进主循环与显示刷新',
+      /try\{ autoWatch\(\); \}catch\(e\)\{\}/.test(clk)
+      && /autoPaint\(\);/.test(clk) && /\$\('autoBtn'\)\.onclick = autoOpen/.test(clk)
+      && /\$\('asOk'\)\.onclick = autoArm/.test(clk));
+    t('★v4.19.2 倒计时与考试模式通用（同一入口）',
+      /定时自动开始（倒计时 \/ 考试模式共用）/.test(clk)
+      && /T\.kind === 'down' \? ' show' : ''/.test(clk));
+    t('★v4.19.2 版本记录齐全',
+      /version: '4\.19\.2'/.test(adm3) && /定时自动开始/.test(adm3)
+      && ver.v === CUR_VER && ver.items.length >= 4);
+    t('★v4.19.2 公告条目均不超过 28 汉字且无禁词',
+      (function(){
+        const block = adm3.slice(adm3.indexOf("version: '4.19.2'"), adm3.indexOf("version: '4.19.1'"));
+        const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
+          && texts.every(x => !ban.some(w => x.includes(w)));
+      })());
+  }
+
   /* ===== 全量语法自检 =====
      v4.10.2 教训：一次改文案时把中文标点写进了单引号字符串，
      整个 big.js 语法报废 —— 而 e2e 全是正则断言，抓不到。
